@@ -168,3 +168,14 @@
 .gitem .wi-sm { width: 1.25rem; height: 1.25rem; }
 .wt-grid.rows5 { grid-auto-rows: 3.6rem; }
 @media (max-width: 900px) { .racials li { grid-template-columns: 1fr; gap: .1rem; } .racials li i { justify-self: start; } }
+
+.slot.est .s-rank { border-style: dashed; }
+.racials li .wi-sm { justify-self: start; }
+.racials li { grid-template-columns: auto 10rem 1fr auto; }
+@media (max-width: 900px) { .racials li { grid-template-columns: auto 1fr; } }
+
+.caps { display: inline-flex; gap: .25rem; margin-left: .4rem; }
+.capbtn { cursor: pointer; background: var(--card); border: 1px solid var(--card-border); border-radius: 2px; color: var(--card-text); font: 700 .74rem var(--heading); padding: .35rem .55rem; }
+.capbtn.on { color: #000; background: var(--gold); border-color: var(--gold); }
+.bookbtn { font-size: .72rem; padding: .45rem .7rem; }
+.roster span[data-tip] { text-decoration: underline dotted rgba(229,204,128,.6); cursor: help; }

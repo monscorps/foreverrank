@@ -5,7 +5,9 @@
 (function () {
   "use strict";
 
-  var CAP = 30, POINTS = 21, ROWS = 5;
+  var CAPS = { 20: 11, 30: 21, 60: 51 };
+  var cap = 30;
+  function POINTSNOW() { return CAPS[cap]; }
   var CDN = "https://wow.zamimg.com/images/wow/icons/large/";
 
   var CLASS_COLOUR = {
@@ -180,7 +182,7 @@
   function code() {
     return [S.race, S.cls, S.t.map(function (a) { return a.join(""); }).join("-"),
       S.gear.map(function (g) { return g == null ? "x" : g; }).join("~"),
-      encodeURIComponent(S.name || "")].join(".");
+      encodeURIComponent(S.name || ""), cap].join(".");
   }
   function parseCode(str) {
     var p = String(str || "").split(".");
@@ -195,6 +197,7 @@
     String(p[3] || "").split("~").forEach(function (ch, g) {
       o.gear[g] = (ch === "x" || ch === "") ? null : +ch;
     });
+    o.cap = CAPS[+p[5]] ? +p[5] : 30;
     return o;
   }
   function clampToData(o) {
@@ -212,7 +215,7 @@
     var total = 0;
     for (ti = 0; ti < 3; ti++) for (var i2 = 0; i2 < o.t[ti].length; i2++) {
       total += o.t[ti][i2];
-      if (total > POINTS) { o.t[ti][i2] -= (total - POINTS); total = POINTS; }
+      if (total > POINTSNOW()) { o.t[ti][i2] -= (total - POINTSNOW()); total = POINTSNOW(); }
     }
     return o;
   }
@@ -253,9 +256,13 @@
     } else {
       parts.push("<b>Stats:</b> Skyborne base stats are unpublished. You traded numbers for wings.");
     }
-    var an = A.rx.map(function (r) { return r[0]; }), bn = B.rx.map(function (r) { return r[0]; });
-    var gained = B.rx.filter(function (r) { return an.indexOf(r[0]) === -1; }).map(function (r) { return r[0]; });
-    var lost = A.rx.filter(function (r) { return bn.indexOf(r[0]) === -1; }).map(function (r) { return r[0]; });
+    function abilNames(R) {
+      var tf = tfRace(R.n);
+      return tf && tf.abilities.length ? tf.abilities.map(function (a) { return a[0]; }) : R.rx.map(function (r) { return r[0]; });
+    }
+    var an = abilNames(A), bn = abilNames(B);
+    var gained = bn.filter(function (x) { return an.indexOf(x) === -1; });
+    var lost = an.filter(function (x) { return bn.indexOf(x) === -1; });
     if (gained.length) parts.push('<b>Gained:</b> <span class="gain">' + esc(gained.join(", ")) + "</span>");
     if (lost.length) parts.push('<b>Lost:</b> <span class="loss">' + esc(lost.join(", ")) + "</span>");
     return { title: A.n + " → " + B.n + ", build kept", parts: parts };
@@ -304,7 +311,20 @@
     wire(st); bindTips(st);
   }
 
+  function tfRace(name) {
+    if (!DATA || !DATA.races) return null;
+    for (var i = 0; i < DATA.races.length; i++) if (DATA.races[i].n === name) return DATA.races[i];
+    return null;
+  }
   function racialList(r) {
+    var tf = tfRace(r.n);
+    if (tf && tf.abilities.length) {
+      return '<ul class="racials">' + tf.abilities.map(function (a) {
+        return "<li>" + (a[2] ? icon(a[2], "wi wi-sm") : "") + '<b>' + esc(a[0]) + '</b><span>' +
+          esc(a[1]) + '</span><i class="tag shared">demo</i></li>';
+      }).join("") + "</ul>" +
+      '<p class="line finenote">Racials transcribed from BlizzCon footage; sources credited on GitHub.</p>';
+    }
     return '<ul class="racials">' + r.rx.map(function (x) {
       return "<li>" + '<b>' + esc(x[0]) + '</b><span>' + esc(x[1]) + '</span><i class="tag ' + x[2] + '">' + x[2] + "</i></li>";
     }).join("") + "</ul>";
@@ -345,17 +365,24 @@
 
   function talentsHTML() {
     var c = clsData(), sp = specNow();
-    var html = '<div class="talenthead"><h3>Talents</h3><span class="pts">' + (POINTS - spent()) +
-      ' points left</span><span class="specnow">' + esc(sp.split) + " → <b>" + esc(sp.name) + "</b> (" + sp.role + ')</span>' +
-      '<i class="finenote">full vanilla rows 1–5; Forever numbers adopted as they firm up</i></div><div class="wtrees">';
+    var html = '<div class="talenthead"><h3>Talents</h3><span class="pts">' + (POINTSNOW() - spent()) +
+      ' points left</span><span class="specnow">' + esc(sp.split) + " \u2192 <b>" + esc(sp.name) + "</b> (" + sp.role + ')</span>' +
+      '<span class="caps">' + [20, 30, 60].map(function (l) {
+        return '<button type="button" class="capbtn' + (cap === l ? " on" : "") + '" data-cap="' + l + '">' + l + "</button>";
+      }).join("") + '</span>' +
+      '<button type="button" class="share bookbtn" id="bookbtn">Demo spellbook</button>' +
+      '<i class="finenote">real Forever trees, BlizzCon transcription; estimates marked</i></div><div class="wtrees">';
     c.trees.forEach(function (tr, ti) {
       var pts = treePts(ti);
       html += '<div class="wtree"><div class="wt-head">' + icon(tr.icon, "wi wi-sm") + "<b>" + esc(tr.name) + '</b><u>' + pts + "</u></div><div class=\"wt-grid rows5\">";
       tr.talents.forEach(function (t, i) {
         var r = S.t[ti][i] || 0, gate = (t.row - 1) * 5, open = pts >= gate;
-        html += '<div class="slot' + (r >= t.r ? " maxed" : r > 0 ? " part" : "") + (open ? "" : " locked") +
+        var d = t.desc && t.desc.length ? t.desc[Math.min(r < t.r ? r : t.r - 1, t.desc.length - 1)] : (t.tip || "");
+        var extra = (t.est ? " [numbers still estimates]" : "") + (t.cn ? " \u00b7 " + t.cn + "." : "");
+        var how = open ? " \u2014 Left click adds; right click removes." : " \u2014 Needs " + gate + " points in " + tr.name + ".";
+        html += '<div class="slot' + (r >= t.r ? " maxed" : r > 0 ? " part" : "") + (open ? "" : " locked") + (t.est ? " est" : "") +
           '" style="grid-column:' + t.col + ";grid-row:" + t.row + '" data-tal="' + ti + ":" + i + '" ' +
-          dt(t.n + " (" + r + "/" + t.r + ")", t.tip + (open ? " Left click adds; right click removes." : " Needs " + gate + " points in " + tr.name + ".")) + ">" +
+          dt(t.n + " (" + r + "/" + t.r + ")" + (r < t.r && t.desc && t.desc.length > 1 ? " \u2014 next rank:" : ""), d + extra + how) + ">" +
           icon(t.icon, "wi") + '<span class="s-rank">' + r + "/" + t.r + "</span></div>";
       });
       html += "</div></div>";
@@ -397,15 +424,15 @@
     var tal = talentList();
     return '<div class="buildcard"><h3>' + esc(S.name || "Unnamed " + CLASS_LABEL[k]) + "</h3>" +
       '<p class="line">' + icon(r.i, "wi wi-sm") + " " + esc(r.n) + ' · <span style="color:' + cc(k) + '">' + CLASS_LABEL[k] + "</span> · " +
-      esc(sp.name) + " (" + esc(sp.split) + ') · <span class="rolechip ' + sp.role + '">' + sp.role + "</span> · level " + CAP + "</p>" +
-      '<p class="line"><i>Talents (' + spent() + "/" + POINTS + "):</i> " + (tal.length ? esc(tal.join(", ")) : "none yet, a purist") + "</p>" +
+      esc(sp.name) + " (" + esc(sp.split) + ') · <span class="rolechip ' + sp.role + '">' + sp.role + "</span> · level " + cap + "</p>" +
+      '<p class="line"><i>Talents (' + spent() + "/" + POINTSNOW() + "):</i> " + (tal.length ? esc(tal.join(", ")) : "none yet, a purist") + "</p>" +
       '<p class="line"><i>Gear:</i> ' + (gear.length ? esc(gear.join(", ")) : "honest and naked") + "</p></div>";
   }
   function buildText() {
     var r = RACES[S.race], k = CLASS_ORDER[S.cls], c = clsData(), sp = specNow();
     var gear = c.gear.map(function (g, i) { return S.gear[i] != null ? "  " + g.slot + ": " + g.items[S.gear[i]].n : null; }).filter(Boolean);
-    return (S.name || "Unnamed") + " — " + r.n + " " + sp.name + " " + CLASS_LABEL[k] + " (" + sp.role + ", " + sp.split + ", cap " + CAP + ")\n" +
-      "Talents (" + spent() + "/" + POINTS + "):\n" + (talentList().map(function (t) { return "  " + t; }).join("\n") || "  none") +
+    return (S.name || "Unnamed") + " — " + r.n + " " + sp.name + " " + CLASS_LABEL[k] + " (" + sp.role + ", " + sp.split + ", cap " + cap + ")\n" +
+      "Talents (" + spent() + "/" + POINTSNOW() + "):\n" + (talentList().map(function (t) { return "  " + t; }).join("\n") || "  none") +
       "\nGear:\n" + (gear.join("\n") || "  none") + "\n" + location.origin + location.pathname + "?b=" + code();
   }
 
@@ -431,7 +458,7 @@
     var race = allowed.slice().sort(function (a, b) { return (score[b] || 0) - (score[a] || 0); })[0];
     S = { race: RACES.map(function (r) { return r.n; }).indexOf(race), cls: CLASS_ORDER.indexOf(k), t: [[], [], []], gear: [], name: QUIZ_NAMES[(answers[0] * 4 + answers[1] + answers[2]) % QUIZ_NAMES.length] };
     // Dump the 21 points down the first tree like a tourist with a map.
-    var tal = DATA.classes[S.cls].trees[0].talents, left = POINTS;
+    var tal = DATA.classes[S.cls].trees[0].talents, left = POINTSNOW();
     tal.forEach(function (t, i) {
       if (!left) return;
       var pts = treePts(0), gate = (t.row - 1) * 5;
@@ -483,7 +510,7 @@
       var p = el.getAttribute("data-tal").split(":"), ti = +p[0], i = +p[1];
       var t = clsData().trees[ti].talents[i];
       el.addEventListener("click", function () {
-        if (treePts(ti) < (t.row - 1) * 5 || spent() >= POINTS) return;
+        if (treePts(ti) < (t.row - 1) * 5 || spent() >= POINTSNOW()) return;
         S.t[ti][i] = Math.min(t.r, (S.t[ti][i] || 0) + 1); render();
       });
       el.addEventListener("contextmenu", function (e) {
@@ -497,6 +524,34 @@
         S.gear[+p[0]] = S.gear[+p[0]] === +p[1] ? null : +p[1]; render();
       });
     });
+    st.querySelectorAll(".capbtn").forEach(function (b) {
+      b.addEventListener("click", function () {
+        cap = +b.getAttribute("data-cap");
+        S = clampToData(S) || S;   // shed points over the new budget
+        render();
+      });
+    });
+    var bk = st.querySelector("#bookbtn");
+    if (bk) bk.addEventListener("click", function () {
+      var c = clsData(), book = c.book || {};
+      var html = '<h2 class="in-name">Demo spellbook</h2>' +
+        '<p class="in-h">Read off the BlizzCon demo at level ' + (book.level || "?") + ". What exists, not what it costs.</p>";
+      (book.tabs || []).forEach(function (tb) {
+        html += '<p class="qq">' + esc(tb.name) + "</p><div class=\"roster\">" +
+          tb.spells.map(function (sp2) {
+            var d2 = (book.desc || {})[sp2[0]];
+            return '<span' + (d2 ? " " + dt(sp2[0] + (sp2[1] ? " (" + sp2[1] + ")" : ""), d2) : "") + ">" + esc(sp2[0]) + "</span>";
+          }).join("") + "</div>";
+      });
+      if ((book.general || []).length) {
+        html += '<p class="qq">General</p><div class="roster">' +
+          book.general.map(function (sp2) { return "<span>" + esc(sp2[0]) + "</span>"; }).join("") + "</div>";
+      }
+      $("insight-body").innerHTML = html;
+      $("insight").hidden = false;
+      bindTips($("insight-body"));
+    });
+
     var nm = st.querySelector("#cname");
     if (nm) nm.addEventListener("input", function () { S.name = nm.value; syncURL(); });
     function copyBtn(id, textFn) {
@@ -578,7 +633,7 @@
       roles[sp.role]++; classes[k] = (classes[k] || 0) + 1;
       return "<tr><td>" + icon(CLASS_ICON[k], "wi wi-sm") + ' <b style="color:' + cc(k) + '">' + esc(b.name || "Unnamed") + "</b></td>" +
         "<td>" + icon(RACES[b.race].i, "wi wi-sm") + " " + esc(RACES[b.race].n) + "</td><td>" + esc(sp.name) + " " + CLASS_LABEL[k] + "</td>" +
-        '<td><span class="rolechip ' + sp.role + '">' + sp.role + "</span></td><td>" + sp.pts + "/" + POINTS + " pts</td></tr>";
+        '<td><span class="rolechip ' + sp.role + '">' + sp.role + "</span></td><td>" + sp.pts + "/" + POINTSNOW() + " pts</td></tr>";
     }).join("");
     var v = [];
     v.push("<b>" + builds.length + "</b> forged: " + roles.tank + " tank" + (roles.tank === 1 ? "" : "s") + ", " +
@@ -606,6 +661,15 @@
     render();
     fetch("plan-data.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
       DATA = d;
+      if (d.races && d.races.length) {
+        Object.keys(COMBOS).forEach(function (k) { COMBOS[k] = []; });
+        d.races.forEach(function (r) {
+          r.classes.forEach(function (cn) {
+            var k = cn.toUpperCase();
+            if (COMBOS[k] && COMBOS[k].indexOf(r.n) === -1) COMBOS[k].push(r.n);
+          });
+        });
+      }
       var p = new URLSearchParams(location.search);
       if (p.get("raid")) {
         $("raid-in").value = location.href;
@@ -614,7 +678,7 @@
       } else {
         var use = (p.get("b") && parseCode(p.get("b"))) || null;
         if (!use) { try { use = parseCode(localStorage.getItem("forge3")); } catch (e) {} }
-        if (use) S = clampToData(use) || S;
+        if (use) { cap = use.cap || 30; S = clampToData(use) || S; }
         render();
       }
     }).catch(function () {
