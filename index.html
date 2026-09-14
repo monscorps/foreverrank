@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ForeverRank</title>
+<meta name="description" content="WarcraftLogs-style boards for World of Warcraft: Forever — levelling, hardcore, PvP and character progression. Beta-ready, waiting for launch.">
+<link rel="icon" href="mark.svg" type="image/svg+xml">
+<link rel="canonical" href="https://foreverrank.com/">
+<meta property="og:url" content="https://foreverrank.com/">
+<meta property="og:title" content="ForeverRank">
+<meta property="og:description" content="The race ladder for WoW: Forever. Levelling, hardcore, PvP, progression.">
+<meta name="theme-color" content="#060608">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="forever.css">
+</head>
+<body>
+
+<div class="sky" aria-hidden="true"><span class="sky-gold"></span><span class="sky-teal"></span><span class="sky-stars"></span></div>
+
+<header class="top">
+  <a class="brand" href="./">
+    <span class="sigil" aria-hidden="true">&#8734;</span>
+    <span class="brand-word">LEVELPACE <b>FOREVER</b></span>
+  </a>
+  <nav class="top-nav">
+    <span class="phase" id="phase-chip">…</span>
+    <a class="pill" href="https://monscorps.github.io/levelpace/">3.3.5a board</a>
+    <button class="pill pill-gear" id="gear" aria-haspopup="true" aria-expanded="false" title="Settings">&#9881;</button>
+  </nav>
+  <div class="settings" id="settings" hidden>
+    <label><input type="checkbox" id="demo-toggle"> Show demo data</label>
+    <p>Demo rows are invented, watermarked, and vanish the moment real uploads exist.</p>
+  </div>
+</header>
+
+<section class="countdown" id="countdown">
+  <p class="count-kick" id="count-kick">…</p>
+  <div class="count-grid" id="count-grid" role="timer">
+    <div><b id="cd-d">–</b><span>days</span></div>
+    <div><b id="cd-h">–</b><span>hours</span></div>
+    <div><b id="cd-m">–</b><span>min</span></div>
+    <div><b id="cd-s">–</b><span>sec</span></div>
+  </div>
+  <p class="count-note" id="count-note"></p>
+</section>
+
+<main class="wrap">
+  <div class="board-title">
+    <h1 class="display">The <span>Eternal</span> Ladder</h1>
+    <p class="board-note" id="cap-note">Beta caps at <b>level 30</b> — every board ranks 1–30 until launch.</p>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Boards">
+    <button role="tab" class="tab is-active" data-view="levelling" aria-selected="true">Levelling</button>
+    <button role="tab" class="tab" data-view="hardcore" aria-selected="false">Hardcore</button>
+    <button role="tab" class="tab" data-view="pvp" aria-selected="false">PvP</button>
+    <button role="tab" class="tab" data-view="progression" aria-selected="false">Progression</button>
+  </nav>
+  <p class="board-sub" id="board-sub"></p>
+
+  <section id="board" class="board" aria-live="polite"></section>
+
+  <ol class="scale" aria-label="Parse colour scale">
+    <li style="--c:var(--q-common)"><b></b>0</li>
+    <li style="--c:var(--q-uncommon)"><b></b>25</li>
+    <li style="--c:var(--q-rare)"><b></b>50</li>
+    <li style="--c:var(--q-epic)"><b></b>75</li>
+    <li style="--c:var(--q-legendary)"><b></b>95</li>
+    <li style="--c:var(--q-pink)"><b></b>99</li>
+    <li style="--c:var(--q-artifact)"><b></b>100</li>
+  </ol>
+</main>
+
+<aside class="insight" id="insight" hidden>
+  <div class="insight-card" role="dialog" aria-modal="true" aria-label="Character insight">
+    <button class="insight-x" id="insight-x" aria-label="Close">&times;</button>
+    <div id="insight-body"></div>
+  </div>
+</aside>
+
+<section class="api-note">
+  <h2>We do not know the addon API yet.</h2>
+  <p>Blizzard has published <b>no addon details for Forever</b> — no folder path, no
+  API notes. This whole page is the plan, built on the Classic Era client the game
+  is based on, and every number on it is a placeholder. The beta on
+  <b>September&nbsp;17</b> is where we find out what an addon can actually measure —
+  the boards go live the day real uploads exist, and anything the API cannot
+  support gets removed rather than faked.</p>
+</section>
+
+<footer>
+  <span class="sigil sigil-sm" aria-hidden="true">&#8734;</span>
+  <span>Level first, speed breaks ties — a race ladder, not a stopwatch contest.</span>
+  <a href="https://github.com/monscorps/levelpace">source</a>
+</footer>
+
+<script src="forever.js"></script>
+</body>
+</html>
