@@ -220,6 +220,7 @@
     return o;
   }
   function syncURL() {
+    if (!DATA) return;   // the boot render must not strip an unread ?b link
     var done = S.race >= 0 && S.cls >= 0;
     history.replaceState(null, "", done ? "?b=" + code() : location.pathname);
     try { localStorage.setItem("forge3", done ? code() : ""); } catch (e) {}
@@ -371,6 +372,7 @@
         return '<button type="button" class="capbtn' + (cap === l ? " on" : "") + '" data-cap="' + l + '">' + l + "</button>";
       }).join("") + '</span>' +
       '<button type="button" class="share bookbtn" id="bookbtn">Demo spellbook</button>' +
+      (spent() > 0 ? '<button type="button" class="share bookbtn treset" id="treset">Reset talents</button>' : "") +
       '<i class="finenote">real Forever trees, BlizzCon transcription; estimates marked</i></div><div class="wtrees">';
     c.trees.forEach(function (tr, ti) {
       var pts = treePts(ti);
@@ -457,17 +459,8 @@
     var allowed = COMBOS[k];
     var race = allowed.slice().sort(function (a, b) { return (score[b] || 0) - (score[a] || 0); })[0];
     S = { race: RACES.map(function (r) { return r.n; }).indexOf(race), cls: CLASS_ORDER.indexOf(k), t: [[], [], []], gear: [], name: QUIZ_NAMES[(answers[0] * 4 + answers[1] + answers[2]) % QUIZ_NAMES.length] };
-    // Dump the 21 points down the first tree like a tourist with a map.
-    var tal = DATA.classes[S.cls].trees[0].talents, left = POINTSNOW();
-    tal.forEach(function (t, i) {
-      if (!left) return;
-      var pts = treePts(0), gate = (t.row - 1) * 5;
-      if (pts < gate) return;
-      var take = Math.min(t.r, left);
-      S.t[0][i] = take; left -= take;
-    });
     lastSwap = { title: "The Forge has spoken: " + race + " " + CLASS_LABEL[k],
-      parts: [esc(CLASS_JOKE[k]), '<i class="finenote">Points were poured into the first tree. Rearrange them; the Forge will pretend it agrees.</i>'] };
+      parts: [esc(CLASS_JOKE[k]), '<i class="finenote">The trees below are empty on purpose: the Forge picks the body and the job, the points are yours to place.</i>'] };
     viewStep = null;
     $("insight").hidden = true;
     render(); window.scrollTo(0, 0);
@@ -530,6 +523,11 @@
         S = clampToData(S) || S;   // shed points over the new budget
         render();
       });
+    });
+    var tr2 = st.querySelector("#treset");
+    if (tr2) tr2.addEventListener("click", function () {
+      S.t = [[], [], []];           // just the points; race, gear and name stay
+      render();
     });
     var bk = st.querySelector("#bookbtn");
     if (bk) bk.addEventListener("click", function () {
@@ -658,6 +656,7 @@
 
   // ---- boot -----------------------------------------------------------------
   document.addEventListener("DOMContentLoaded", function () {
+    var boot_p = new URLSearchParams(location.search);
     render();
     fetch("plan-data.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
       DATA = d;
@@ -670,7 +669,7 @@
           });
         });
       }
-      var p = new URLSearchParams(location.search);
+      var p = boot_p;
       if (p.get("raid")) {
         $("raid-in").value = location.href;
         render(); compose();

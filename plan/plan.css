@@ -179,3 +179,6 @@
 .capbtn.on { color: #000; background: var(--gold); border-color: var(--gold); }
 .bookbtn { font-size: .72rem; padding: .45rem .7rem; }
 .roster span[data-tip] { text-decoration: underline dotted rgba(229,204,128,.6); cursor: help; }
+
+.treset { color: var(--sale); border-color: rgba(254,112,77,.45); }
+.treset:hover { border-color: var(--sale); }
