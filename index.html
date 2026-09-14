@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="forever.css">
+<link rel="stylesheet" href="forever.css?v=4">
 </head>
 <body>
 
@@ -95,13 +95,30 @@
   </div>
 
   <div class="controls">
-    <select id="view-select" class="viewsel" aria-label="Choose a ladder">
-      <option value="levelling" selected>Levelling</option>
-      <option value="hardcore">Hardcore</option>
-      <option value="pvp">PvP</option>
-      <option value="progression">Progression</option>
-      <option value="guilds">Guilds</option>
-    </select>
+    <div class="dd" id="dd-view">
+      <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
+        <small>Ladder</small><span id="dd-view-label">Levelling</span><i class="dd-car" aria-hidden="true"></i>
+      </button>
+      <ul class="dd-list" role="listbox" hidden>
+        <li role="option" data-v="levelling" class="is-sel" aria-selected="true">Levelling</li>
+        <li role="option" data-v="hardcore">Hardcore</li>
+        <li role="option" data-v="pvp">World PvP</li>
+        <li role="option" data-v="progression">Progression</li>
+        <li role="option" data-v="guilds">Guilds</li>
+      </ul>
+    </div>
+    <div class="dd" id="dd-realm">
+      <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
+        <small>Realm</small><span id="dd-realm-label">All realms</span><i class="dd-car" aria-hidden="true"></i>
+      </button>
+      <ul class="dd-list" role="listbox" hidden>
+        <li role="option" data-v="all" class="is-sel" aria-selected="true">All realms</li>
+        <li role="option" data-v="Normal">Normal</li>
+        <li role="option" data-v="PvP">PvP</li>
+        <li role="option" data-v="Hardcore">Hardcore</li>
+        <li role="option" data-v="RP">RP</li>
+      </ul>
+    </div>
     <input id="search" class="search" type="search" placeholder="Find a player&hellip;" aria-label="Search players" autocomplete="off" spellcheck="false">
   </div>
   <p class="board-sub" id="board-sub"></p>
@@ -138,6 +155,6 @@
   <a href="https://github.com/monscorps/foreverrank">source</a>
 </footer>
 
-<script src="forever.js"></script>
+<script src="forever.js?v=4"></script>
 </body>
 </html>

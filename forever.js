@@ -44,6 +44,8 @@
     return function () { seed = (seed * 1103515245 + 12345) >>> 0; return seed / 4294967296; };
   }
   var CLASSES = ["WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID"];
+  // Four serverless servers. Names unknown until Blizzard says; types are the plan.
+  var REALMS = ["Normal", "PvP", "Hardcore", "RP"];
   function gen(name, ov) {
     ov = ov || {};
     var r = rng(hash(name));
@@ -54,16 +56,18 @@
     var hks = Math.floor(r() * r() * 260);
     var dungeons = Math.min(9, Math.floor(r() * 10));
     var alive = r() > 0.12;
-    return mk(name, ov.cls || cls, ov.level != null ? ov.level : level, ov.pace || pace,
+    var out = mk(name, ov.cls || cls, ov.level != null ? ov.level : level, ov.pace || pace,
               ov.deaths != null ? ov.deaths : deaths, ov.hks != null ? ov.hks : hks,
               ov.dungeons != null ? ov.dungeons : dungeons, ov.alive != null ? ov.alive : alive, ov.tag);
+    out.realm = ov.realm || REALMS[Math.floor(r() * REALMS.length)];
+    return out;
   }
   var ROSTER = ["Tpau", "Treefy", "Uglysin", "Ultranstinct", "Upn", "Villepou", "Whiterock",
     "Willamok", "Xynnz", "Yezin", "Zjolnir", "Zuprise", "Eldritch", "Sebzki", "Shiruy",
     "Shockill", "Sjongejonge", "Slons", "Sne", "Stoupe", "Stumfa", "Suki", "Swissotel",
     "Swobuda", "Tony", "Noakesy", "Noximos", "Pain", "Petteri", "Phazed", "Pobs",
     "Poffgone", "Priestage", "Ratiok", "Rezola", "Rhero", "Roach", "Roshlock", "Korjin",
-    "Korns", "Kranny", "Lachesis", "Mahito", "Marrion", "Meryla", "Mikhaeraw", "Mingles",
+    "Korns", "Lachesis", "Mahito", "Marrion", "Meryla", "Mikhaeraw", "Mingles",
     "Mitre", "Naty", "Nissehaderen", "Fladdo", "Flower", "Flurst", "Gambino", "Gnomwarlock",
     "Goldy", "Happymeal", "Jayme", "Johnsen", "Turalionovna", "Jaegerinden", "Kizerine", "Kony",
     "Chikn", "Christina", "Ckodi", "Clav", "Cloakedblade", "Colonelkitten", "Daddysupreme",
@@ -79,13 +83,17 @@
   var DEMO = [
     // Ordained, not rolled: the two the guild would riot over.
     gen("Athgaar", { cls: "WARRIOR", level: 30, pace: 560, deaths: 1, hks: 244, dungeons: 9,
-                     alive: true, tag: "Top warrior of the guild. Noob Slayer" }),
+                     alive: true, realm: "PvP", tag: "Top warrior of the guild, Noob Slayer" }),
     gen("Mutuwa", { cls: "WARRIOR", level: 30, pace: 705, deaths: 0, hks: 88, dungeons: 9,
-                    alive: true, tag: "Main tank: nine of nine, zero deaths" }),
-    gen("Rickmyrolls", { cls: "PRIEST", level: 30, pace: 648, deaths: 2, hks: 130, dungeons: 7 })
+                    alive: true, realm: "Hardcore", tag: "Main tank: nine of nine, zero deaths" }),
+    gen("Rickmyrolls", { cls: "PRIEST", level: 30, pace: 648, deaths: 2, hks: 130, dungeons: 7, realm: "Normal" }),
+    // Fastest in his own bracket, mid-pack on the ladder: rank 1 for his
+    // level and class belongs to Kranny; rank 1 overall stays Athgaar's.
+    gen("Kranny", { pace: 590, level: 24 })
   ];
   ROSTER.forEach(function (n) { DEMO.push(gen(n)); });
   var query = "";
+  var realmFilter = "all";
 
   // ---- demo guilds ----------------------------------------------------------
   // WarcraftLogs ranks combat logs; this ranks GUILD PROGRESS overall, broken
@@ -98,17 +106,18 @@
     { key: "hardcore", label: "Hardcore survival", w: 1 },
     { key: "quests", label: "Quests", w: 1 }
   ];
-  function mkGuild(name, tag, members, sc, roster) {
+  function mkGuild(name, tag, members, sc, roster, realm) {
     var total = 0, wsum = 0;
     GUILD_CATS.forEach(function (c) { total += (sc[c.key] || 0) * c.w; wsum += c.w; });
     return { name: name, tag: tag, members: members, cats: sc,
-             overall: total / wsum, roster: roster };
+             overall: total / wsum, roster: roster, realm: realm || "Normal" };
   }
   var GUILDS = [
-    mkGuild("Eternal Vanguard", "EV", 24, { levelling: 91, dungeons: 88, pvp: 64, hardcore: 70, quests: 84 }, ["Athgaar", "Mutuwa", "Rickmyrolls", "Willamok"]),
-    mkGuild("Skyborne Pact", "SKY", 15, { levelling: 78, dungeons: 92, pvp: 41, hardcore: 88, quests: 71 }, ["Mikhaeraw", "Eldritch", "Kizerine"]),
-    mkGuild("Ashes of Lordaeron", "ASH", 14, { levelling: 66, dungeons: 71, pvp: 90, hardcore: 35, quests: 62 }, ["Pain", "Yezin", "Xynnz", "Roach"]),
-    mkGuild("Riverglade Company", "RGC", 12, { levelling: 52, dungeons: 44, pvp: 22, hardcore: 95, quests: 90 }, ["Flower", "Goldy", "Sne", "Naty"])
+    mkGuild("Eternal Vanguard", "EV", 24, { levelling: 91, dungeons: 88, pvp: 64, hardcore: 70, quests: 84 }, ["Athgaar", "Mutuwa", "Rickmyrolls", "Willamok"], "PvP"),
+    mkGuild("Skyborne Pact", "SKY", 15, { levelling: 78, dungeons: 92, pvp: 41, hardcore: 88, quests: 71 }, ["Mikhaeraw", "Eldritch", "Kizerine"], "Normal"),
+    mkGuild("Ashes of Lordaeron", "ASH", 14, { levelling: 66, dungeons: 71, pvp: 90, hardcore: 35, quests: 62 }, ["Pain", "Yezin", "Xynnz", "Roach"], "PvP"),
+    mkGuild("Riverglade Company", "RGC", 12, { levelling: 52, dungeons: 44, pvp: 22, hardcore: 95, quests: 90 }, ["Flower", "Goldy", "Sne", "Naty"], "RP"),
+    mkGuild("Gravebound", "GRV", 11, { levelling: 60, dungeons: 58, pvp: 12, hardcore: 97, quests: 74 }, ["Mutuwa", "Hal", "Thices"], "Hardcore")
   ];
 
   // ---- tiny utils -----------------------------------------------------------
@@ -166,19 +175,19 @@
 
   var VIEWS = {
     levelling: {
-      sub: "The race to " + CAP + ": highest level first, time played breaks ties. The coloured parse is your levels-per-hour percentile among everyone on the ladder.",
+      sub: "The race to " + CAP + ": highest level first, time played breaks ties. The coloured parse is your pace against everyone at your level.",
       render: function (d) {
-        var rates = d.map(function (c) { return c.lph; });
+        var byLvl = {};
+        d.forEach(function (c) { (byLvl[c.level] = byLvl[c.level] || []).push(c.lph); });
         var rows = d.slice().sort(function (a, b) { return b.level - a.level || a.seconds - b.seconds; })
           .map(function (c, i) {
-            var p = pctile(c.lph, rates), v = bandVar(p);
+            var p = pctile(c.lph, byLvl[c.level]), v = bandVar(p);
             return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (i + 1) + "</td>" + nameCell(c) +
               '<td class="r lvl">' + c.level + "</td>" +
-              '<td class="r">' + hm(c.seconds) + "</td>" +
               '<td class="r">' + c.lph.toFixed(2) + "</td>" +
-              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + "</td></tr>";
+              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Time played", "r"], ["Lvl/hr", "r"], ["Parse", "r"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Lvl/hr", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
       }
     },
     hardcore: {
@@ -188,10 +197,9 @@
           .map(function (c, i) {
             return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (i + 1) + "</td>" + nameCell(c) +
               '<td class="r lvl">' + c.level + "</td>" +
-              '<td class="r">' + hm(c.seconds) + "</td>" +
-              '<td class="r">' + (c.alive ? '<span class="alive">Alive</span>' : '<span class="dead">Fallen</span>') + "</td></tr>";
+              '<td class="r">' + (c.alive ? '<span class="alive">Alive</span>' : '<span class="dead">Fallen</span>') + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Time played", "r"], ["Status", "r"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Status", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
       }
     },
     pvp: {
@@ -206,9 +214,9 @@
               '<td class="r">' + esc(rank) + "</td>" +
               '<td class="r">' + c.hks + "</td>" +
               '<td class="r">' + (c.pvpDeaths > 0 ? (c.kills / c.pvpDeaths).toFixed(2) : c.kills.toFixed(0)) + "</td>" +
-              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + "</td></tr>";
+              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Rank", "r"], ["HKs", "r"], ["K/D", "r"], ["Parse", "r"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Rank", "r"], ["HKs", "r"], ["K/D", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
       }
     },
     progression: {
@@ -224,9 +232,9 @@
               '<td class="r">' + c.dungeons + "/9</td>" +
               '<td class="r">' + c.quests + "</td>" +
               '<td class="r">' + c.ilvl + "</td>" +
-              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + "</td></tr>";
+              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Dungeons", "r"], ["Quests", "r"], ["Gear", "r"], ["Parse", "r"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Dungeons", "r"], ["Quests", "r"], ["Gear", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
       }
     }
   ,
@@ -234,6 +242,7 @@
       sub: "Guild progress overall, not one lucky log: levelling pace, the nine dungeons, PvP, hardcore survival and quests, weighted into one score. Click a guild for the breakdown.",
       render: function () {
         var pool = GUILDS;
+        if (realmFilter !== "all") pool = pool.filter(function (g) { return g.realm === realmFilter; });
         if (query) {
           var q = query.toLowerCase();
           pool = GUILDS.filter(function (g) {
@@ -248,14 +257,14 @@
             var p = pctile(g.overall, all), v = bandVar(p);
             return '<tr data-g="' + esc(g.name) + '"><td class="rank">' + (i + 1) + "</td>" +
               '<td><span class="name">&lt;<span class="gtag">' + esc(g.name) + "</span>&gt;</span>" +
-              '<span class="meta">' + g.members + " members</span></td>" +
+              '<span class="meta">' + g.members + " members. " + esc(g.realm) + "</span></td>" +
               '<td class="r lvl">' + g.overall.toFixed(1) + "</td>" +
               '<td class="r">' + g.cats.levelling + "</td>" +
               '<td class="r">' + g.cats.dungeons + "</td>" +
               '<td class="r">' + g.cats.pvp + "</td>" +
-              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + "</td></tr>";
+              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Guild"], ["Overall", "r"], ["Lvl", "r"], ["Dng", "r"], ["PvP", "r"], ["Parse", "r"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Guild"], ["Overall", "r"], ["Lvl", "r"], ["Dng", "r"], ["PvP", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
       }
     }
   };
@@ -271,12 +280,20 @@
     }).join("");
     $("insight-body").innerHTML =
       '<h2 class="in-name">&lt;<span class="gtag">' + esc(g.name) + "</span>&gt;</h2>" +
-      '<div class="in-meta"><span class="chip">' + g.members + ' members</span><span class="chip">overall ' + g.overall.toFixed(1) + '</span><span class="demo-flag">Demo</span></div>' +
+      '<div class="in-meta"><span class="chip">' + g.members + ' members</span><span class="chip">' + esc(g.realm) + ' realm</span><span class="chip">overall ' + g.overall.toFixed(1) + '</span><span class="demo-flag">Demo</span></div>' +
       '<p class="in-h">Category breakdown: colour is the score band</p>' +
       '<ol class="gbars">' + bars + "</ol>" +
       '<p class="in-h">Notable members</p><div class="roster">' + roster + "</div>" +
       '<p class="in-note">Weights: levelling and dungeons 3, PvP 2, hardcore and quests 1. Real categories get argued about in the open once uploads exist.</p>';
     $("insight").hidden = false;
+  }
+
+  function bracketChip(c) {
+    var peers = DEMO.filter(function (x) { return x.level === c.level && x.cls === c.cls; });
+    if (peers.length < 2) return "";
+    var better = peers.filter(function (x) { return x.lph > c.lph; }).length;
+    if (better > 0) return "";
+    return '<span class="chip chip-gold">#1 ' + esc(c.cls.toLowerCase()) + " at level " + c.level + "</span>";
   }
 
   // ---- character insight ----------------------------------------------------
@@ -301,7 +318,7 @@
       : "At the cap.";
     $("insight-body").innerHTML =
       '<h2 class="in-name" style="--cc:' + cc(c.cls) + '">' + esc(c.name) + "</h2>" +
-      '<div class="in-meta"><span class="chip">' + esc(c.cls.toLowerCase()) + '</span><span class="chip">' + esc(c.realm) + '</span><span class="chip">' + (c.alive ? "alive" : "fallen") + '</span>' + (c.tag ? '<span class="chip chip-gold">' + esc(c.tag) + "</span>" : "") + '<span class="demo-flag">Demo</span></div>' +
+      '<div class="in-meta"><span class="chip">' + esc(c.cls.toLowerCase()) + '</span><span class="chip">' + esc(c.realm) + '</span><span class="chip">' + (c.alive ? "alive" : "fallen") + '</span>' + bracketChip(c) + (c.tag ? '<span class="chip chip-gold">' + esc(c.tag) + "</span>" : "") + '<span class="demo-flag">Demo</span></div>' +
       '<div class="in-stats">' +
         "<div><b>" + c.level + "</b><span>level</span></div>" +
         "<div><b>" + hm(c.seconds) + "</b><span>time played</span></div>" +
@@ -319,13 +336,34 @@
   // ---- rendering ------------------------------------------------------------
   var view = "levelling";
   function filtered() {
-    if (!query) return DEMO;
-    var q = query.toLowerCase();
-    return DEMO.filter(function (c) { return c.name.toLowerCase().indexOf(q) !== -1; });
+    var pool = DEMO;
+    // Some ladders only exist where their rules do: one life is a Hardcore-
+    // realm rule, world PvP a PvP-realm one. Even "All realms" respects that.
+    if (view === "hardcore") pool = pool.filter(function (c) { return c.realm === "Hardcore"; });
+    if (view === "pvp") pool = pool.filter(function (c) { return c.realm === "PvP"; });
+    if (realmFilter !== "all") pool = pool.filter(function (c) { return c.realm === realmFilter; });
+    if (query) {
+      var q = query.toLowerCase();
+      pool = pool.filter(function (c) { return c.name.toLowerCase().indexOf(q) !== -1; });
+    }
+    return pool;
+  }
+  function realmClash() {
+    if (view === "pvp" && realmFilter !== "all" && realmFilter !== "PvP")
+      return ["World PvP lives on the", "PvP realm", "Duels are all a " + realmFilter + " realm allows. Switch the realm box to PvP or All realms."];
+    if (view === "hardcore" && realmFilter !== "all" && realmFilter !== "Hardcore")
+      return ["One life is a", "Hardcore rule", "The " + realmFilter + " realm resurrects you. Switch the realm box to Hardcore or All realms."];
+    return null;
   }
   function render() {
     var v = VIEWS[view];
-    $("board-sub").textContent = v.sub;
+    var scope = realmFilter === "all"
+      ? (view === "pvp" ? " Across all realms; only PvP-realm characters fight for it."
+        : view === "hardcore" ? " Across all realms; only Hardcore-realm characters qualify."
+        : " Across all four realms.")
+      : " " + realmFilter + " realm only.";
+    var hint = view === "guilds" ? " Click a guild for its breakdown." : " Click a name for the full character.";
+    $("board-sub").textContent = v.sub + scope + hint;
     $("cap-note").innerHTML = Date.now() < LAUNCH
       ? "Beta caps at <b>level 30</b>: every board ranks 1&ndash;30 until launch."
       : "Launched: the ladder runs to <b>level 60</b>.";
@@ -334,6 +372,11 @@
       b.innerHTML = '<div class="empty"><h3>No uploads have <span>happened yet</span></h3>' +
         "<p>The game is not out. The countdown above is real; everything else waits for it.</p>" +
         '<p>Curious how it will look? The gear (top right) switches the demo back on.</p></div>';
+      return;
+    }
+    var clash = realmClash();
+    if (clash) {
+      b.innerHTML = '<div class="empty"><h3>' + clash[0] + ' <span>' + clash[1] + '</span></h3><p>' + clash[2] + "</p></div>";
       return;
     }
     var data = filtered();
@@ -365,8 +408,37 @@
   document.addEventListener("DOMContentLoaded", function () {
     tickCountdown(); setInterval(tickCountdown, 1000);
 
-    var sel = $("view-select");
-    if (sel) sel.addEventListener("change", function () { view = sel.value; render(); });
+    function dropdown(id, onPick) {
+      var root = $(id);
+      if (!root) return;
+      var btn = root.querySelector(".dd-btn"), list = root.querySelector(".dd-list"),
+          label = root.querySelector(".dd-btn span");
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var open = !list.hidden;
+        Array.prototype.forEach.call(document.querySelectorAll(".dd-list"), function (l) { l.hidden = true; });
+        Array.prototype.forEach.call(document.querySelectorAll(".dd"), function (d) { d.classList.remove("open"); });
+        list.hidden = open;
+        root.classList.toggle("open", !open);
+        btn.setAttribute("aria-expanded", String(!open));
+      });
+      list.addEventListener("click", function (e) {
+        var li = e.target;
+        while (li && li !== list && !li.getAttribute("data-v")) li = li.parentNode;
+        if (!li || li === list) return;
+        Array.prototype.forEach.call(list.querySelectorAll("li"), function (o) { o.classList.remove("is-sel"); o.setAttribute("aria-selected", "false"); });
+        li.classList.add("is-sel"); li.setAttribute("aria-selected", "true");
+        label.textContent = li.textContent;
+        list.hidden = true; root.classList.remove("open");
+        onPick(li.getAttribute("data-v"));
+      });
+    }
+    dropdown("dd-view", function (v) { view = v; render(); });
+    dropdown("dd-realm", function (v) { realmFilter = v; render(); });
+    document.addEventListener("click", function () {
+      Array.prototype.forEach.call(document.querySelectorAll(".dd-list"), function (l) { l.hidden = true; });
+      Array.prototype.forEach.call(document.querySelectorAll(".dd"), function (d) { d.classList.remove("open"); });
+    });
 
     var search = $("search");
     if (search) {
