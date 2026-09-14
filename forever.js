@@ -184,10 +184,10 @@
             var p = pctile(c.lph, byLvl[c.level]), v = bandVar(p);
             return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (i + 1) + "</td>" + nameCell(c) +
               '<td class="r lvl">' + c.level + "</td>" +
-              '<td class="r">' + c.lph.toFixed(2) + "</td>" +
+              '<td class="r xs">' + c.lph.toFixed(2) + "</td>" +
               '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Lvl/hr", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Lvl/hr", "r xs"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
       }
     },
     hardcore: {
@@ -211,12 +211,12 @@
             var p = pctile(c.hks, hks), v = bandVar(p);
             var rank = PVP_RANKS[Math.min(PVP_RANKS.length - 1, Math.floor(c.hks / 18))];
             return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (i + 1) + "</td>" + nameCell(c) +
-              '<td class="r">' + esc(rank) + "</td>" +
+              '<td class="r xs">' + esc(rank) + "</td>" +
               '<td class="r">' + c.hks + "</td>" +
               '<td class="r">' + (c.pvpDeaths > 0 ? (c.kills / c.pvpDeaths).toFixed(2) : c.kills.toFixed(0)) + "</td>" +
               '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Rank", "r"], ["HKs", "r"], ["K/D", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Rank", "r xs"], ["HKs", "r"], ["K/D", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
       }
     },
     progression: {
@@ -230,11 +230,11 @@
             return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (i + 1) + "</td>" + nameCell(c) +
               '<td class="r lvl">' + c.level + "</td>" +
               '<td class="r">' + c.dungeons + "/9</td>" +
-              '<td class="r">' + c.quests + "</td>" +
-              '<td class="r">' + c.ilvl + "</td>" +
+              '<td class="r xs">' + c.quests + "</td>" +
+              '<td class="r xs">' + c.ilvl + "</td>" +
               '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Dungeons", "r"], ["Quests", "r"], ["Gear", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Dungeons", "r"], ["Quests", "r xs"], ["Gear", "r xs"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
       }
     }
   ,
@@ -259,12 +259,12 @@
               '<td><span class="name">&lt;<span class="gtag">' + esc(g.name) + "</span>&gt;</span>" +
               '<span class="meta">' + g.members + " members. " + esc(g.realm) + "</span></td>" +
               '<td class="r lvl">' + g.overall.toFixed(1) + "</td>" +
-              '<td class="r">' + g.cats.levelling + "</td>" +
-              '<td class="r">' + g.cats.dungeons + "</td>" +
-              '<td class="r">' + g.cats.pvp + "</td>" +
+              '<td class="r xs">' + g.cats.levelling + "</td>" +
+              '<td class="r xs">' + g.cats.dungeons + "</td>" +
+              '<td class="r xs">' + g.cats.pvp + "</td>" +
               '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Guild"], ["Overall", "r"], ["Lvl", "r"], ["Dng", "r"], ["PvP", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Guild"], ["Overall", "r"], ["Lvl", "r xs"], ["Dng", "r xs"], ["PvP", "r xs"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
       }
     }
   };
