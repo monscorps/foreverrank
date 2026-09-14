@@ -56,7 +56,8 @@
           return '<div class="lgtree"><div class="lg-head">' + img(t.icon) + "<b>" + esc(t.name) +
             '</b><u>' + pts + "</u></div><div class=\"lg-grid\">" + slots + "</div></div>";
         }).join("") + "</div>" +
-        '<p class="board-sub">Left click adds a point, right click removes. Hover a perk for the tooltip. ' + esc(lg.treeNote) + "</p>";
+        '<p class="board-sub">Left click adds a point, right click removes. Hover a perk for the tooltip. ' + esc(lg.treeNote) +
+        " In game the trees are tiered like talent trees, with some perks locked behind earlier choices; the demo footage never showed which perk sits in which tier, so this calculator leaves every perk open until the beta client settles the layout.</p>";
     }
     var lgTip = null;
     function lgTipShow(slot, x, y) {
