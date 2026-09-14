@@ -125,32 +125,50 @@
     // Class changes
     var cc = d.classChanges;
     var ccHtml = Object.keys(cc).map(function (k) {
-      return "<details><summary style=\"color:" + (CLASS_COLOUR[k] || "#fff") + '">' + esc(k) + " (" + cc[k].length + " changes seen)</summary>" +
+      return "<details><summary style=\"color:" + (CLASS_COLOUR[k] || "#fff") + '">' +
+        '<img class="clsico" src="https://wow.zamimg.com/images/wow/icons/large/classicon_' + k.toLowerCase() + '.jpg" alt="">' +
+        esc(k) + " <i>" + cc[k].length + " changes seen</i></summary>" +
         cc[k].map(function (a) {
           return '<div class="abil">' + img(a[2] || "inv_misc_questionmark") + "<div><b>" + esc(a[0]) + "</b><p>" + esc(a[1]) + "</p></div></div>";
         }).join("") + "</details>";
     }).join("");
     section("classes", "Class changes, as seen in the demo", ccHtml);
 
-    // World
+    // World: cards, not tables.
     var w = d.world;
-    function wtable(rows) {
-      return '<table class="wtable">' + rows.map(function (r) {
-        return "<tr><td>" + esc(r[0]) + "</td><td>" + esc(r[1] || "") + "</td></tr>";
-      }).join("") + "</table>";
+    function placecards(rows) {
+      return '<div class="placecards">' + rows.map(function (r) {
+        var shot = r[4] ? '<div class="place-shot"><img src="' + esc(r[4]) + '" alt="" loading="lazy">' +
+          (r[3] ? '<span class="lvlchip">' + esc(r[3]) + "</span>" : "") + "</div>" : "";
+        return '<div class="place' + (r[4] ? " hasimg" : "") + '">' + shot + img(r[2] || "inv_misc_map_01") +
+          '<div class="place-t"><b>' + esc(r[0]) + "</b>" +
+          (!r[4] && r[3] ? '<span class="lvlchip">' + esc(r[3]) + "</span>" : "") +
+          '</div><p>' + esc(r[1] || "") + "</p></div>";
+      }).join("") + "</div>";
     }
     section("world", "The new world",
       (w.facts ? facts(w.facts) : "") +
-      "<h3>Zones</h3>" + wtable(w.zones) + "<h3>Dungeons</h3>" + wtable(w.dungeons) +
-      "<h3>Raids</h3>" + wtable(w.raids) + "<h3>Battlegrounds</h3>" + wtable(w.battlegrounds));
+      "<h3>Zones</h3>" + placecards(w.zones) + "<h3>Dungeons</h3>" + placecards(w.dungeons) +
+      "<h3>Raids</h3>" + placecards(w.raids) + "<h3>Battlegrounds</h3>" + placecards(w.battlegrounds));
 
-    // Systems
-    d.systems.forEach(function (sys, i) {
-      section("sys" + i, sys.t, facts(sys.facts));
-    });
+    // Systems: one card each, icon in the header.
+    var sysHtml = '<div class="syscards">' + d.systems.map(function (sys, i) {
+      return '<div class="syscard" id="sys' + i + '"><div class="sys-head">' + img(sys.icon || "inv_misc_book_09") +
+        "<b>" + esc(sys.t) + "</b></div>" + facts(sys.facts) + "</div>";
+    }).join("") + "</div>";
+    section("systems", "Systems", sysHtml);
+
+    // Hero stat band: the Codex counts itself.
+    var nDun = w.dungeons.length, nRaid = w.raids.length,
+      nPerk = d.legacy.trees.reduce(function (a, t) { return a + t.perks.length; }, 0),
+      nCC = Object.keys(d.classChanges).reduce(function (a, k) { return a + d.classChanges[k].length; }, 0),
+      nSpell = (d.unseen.new || []).length + (d.unseen.granted || []).length + (d.unseen.higher || []).length;
+    var hero = '<div class="cxstats">' +
+      [[nPerk, "Legacy perks"], [nDun, "new dungeons"], [nRaid, "raids"], [nCC, "class changes"], [nSpell, "spells foretold"]]
+        .map(function (s) { return '<div class="cxstat"><b>' + s[0] + "</b><span>" + s[1] + "</span></div>"; }).join("") + "</div>";
 
     document.getElementById("cxnav").innerHTML = nav.join("");
-    document.getElementById("cx").innerHTML = out.join("");
+    document.getElementById("cx").innerHTML = hero + out.join("");
     drawLegacy();
     // Scrollspy: the nav knows where you are.
     var links = document.querySelectorAll(".cxnav a");
