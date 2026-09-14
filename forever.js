@@ -44,6 +44,14 @@
     return function () { seed = (seed * 1103515245 + 12345) >>> 0; return seed / 4294967296; };
   }
   var CLASSES = ["WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID"];
+  // Primary professions, icon per trade. Two each, like the game hands out.
+  var PROFS = [
+    ["Alchemy", "trade_alchemy"], ["Blacksmithing", "trade_blacksmithing"],
+    ["Enchanting", "trade_engraving"], ["Engineering", "trade_engineering"],
+    ["Herbalism", "spell_nature_naturetouchgrow"], ["Leatherworking", "inv_misc_armorkit_17"],
+    ["Mining", "trade_mining"], ["Skinning", "inv_misc_pelt_wolf_01"], ["Tailoring", "trade_tailoring"]
+  ];
+  function profCap(level) { return level >= 35 ? 300 : level >= 20 ? 225 : level >= 10 ? 150 : 75; }
   // Four serverless servers. Names unknown until Blizzard says; types are the plan.
   var REALMS = ["Normal", "PvP", "Hardcore", "RP"];
   function gen(name, ov) {
@@ -60,6 +68,12 @@
               ov.deaths != null ? ov.deaths : deaths, ov.hks != null ? ov.hks : hks,
               ov.dungeons != null ? ov.dungeons : dungeons, ov.alive != null ? ov.alive : alive, ov.tag);
     out.realm = ov.realm || REALMS[Math.floor(r() * REALMS.length)];
+    var p1 = Math.floor(r() * PROFS.length), p2 = (p1 + 1 + Math.floor(r() * (PROFS.length - 1))) % PROFS.length;
+    var capSk = profCap(out.level);
+    out.profs = [
+      { n: PROFS[p1][0], i: PROFS[p1][1], sk: Math.max(1, Math.round(capSk * (0.45 + 0.55 * r()))), cap: capSk },
+      { n: PROFS[p2][0], i: PROFS[p2][1], sk: Math.max(1, Math.round(capSk * (0.30 + 0.55 * r()))), cap: capSk }
+    ];
     return out;
   }
   var ROSTER = ["Tpau", "Treefy", "Uglysin", "Ultranstinct", "Upn", "Villepou", "Whiterock",
@@ -190,7 +204,30 @@
   }
   function demoFlag() { return '<p class="demo-flag">Demo data: nothing real yet</p>'; }
 
+  function profCell(c) {
+    if (!c.profs) return "";
+    return c.profs.map(function (pr) {
+      return '<img class="profico" src="https://wow.zamimg.com/images/wow/icons/large/' + pr.i + '.jpg" alt="" title="' + esc(pr.n) + " " + pr.sk + "/" + pr.cap + '"> ' + pr.sk;
+    }).join(" ");
+  }
   var VIEWS = {
+    professions: {
+      sub: "The tradesfolk's ladder: both primaries added up. Camps made professions part of progress, so the ladder treats them that way.",
+      render: function (d) {
+        var sum = function (c) { return c.profs ? c.profs[0].sk + c.profs[1].sk : 0; };
+        var all = d.map(sum);
+        var sorted = d.slice().sort(function (a, b) { return sum(b) - sum(a) || b.level - a.level; });
+        var rows = pageSlice(sorted).map(function (c, i) {
+            var p = pctile(sum(c), all), v = bandVar(p);
+            return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (page * PAGE + i + 1) + "</td>" + nameCell(c) +
+              '<td class="r lvl">' + c.level + "</td>" +
+              '<td class="r">' + profCell(c) + "</td>" +
+              '<td class="r">' + sum(c) + "</td>" +
+              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
+          }).join("");
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Trades", "r"], ["Total", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>" + pager(sorted.length);
+      }
+    },
     levelling: {
       sub: "The race to " + CAP + ": highest level first, time played breaks ties. The coloured parse is your pace against everyone at your level.",
       render: function (d) {
@@ -239,7 +276,7 @@
     progression: {
       sub: "The whole character, not one number: dungeons of the nine cleared, quests done, gear. Weights get honest once the beta shows what an addon can read.",
       render: function (d) {
-        var score = function (c) { return c.level * 10 + c.dungeons * 14 + c.quests / 10 + c.ilvl; };
+        var score = function (c) { return c.level * 10 + c.dungeons * 14 + c.quests / 10 + c.ilvl + (c.profs ? (c.profs[0].sk + c.profs[1].sk) / 12 : 0); };
         var all = d.map(score);
         var sorted = d.slice().sort(function (a, b) { return score(b) - score(a); });
         var rows = pageSlice(sorted).map(function (c, i) {
@@ -249,9 +286,10 @@
               '<td class="r">' + c.dungeons + "/9</td>" +
               '<td class="r xs">' + c.quests + "</td>" +
               '<td class="r xs">' + c.ilvl + "</td>" +
+              '<td class="r xs">' + profCell(c) + "</td>" +
               '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Dungeons", "r"], ["Quests", "r xs"], ["Gear", "r xs"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>" + pager(sorted.length);
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Dungeons", "r"], ["Quests", "r xs"], ["Gear", "r xs"], ["Trades", "r xs"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>" + pager(sorted.length);
       }
     }
   ,
@@ -344,6 +382,11 @@
         "<div><b>" + c.hks + "</b><span>honor kills</span></div>" +
         "<div><b>" + c.dungeons + "/9</b><span>dungeons</span></div>" +
       "</div>" +
+      (c.profs ? '<p class="in-h">Professions</p><ol class="lvlbars profbars">' + c.profs.map(function (pr) {
+        return "<li><b>" + esc(pr.n) + "</b>" +
+          '<i style="--w:' + Math.max(4, (pr.sk / pr.cap) * 100) + '%;--c:var(--gold)"></i>' +
+          "<u>" + pr.sk + "/" + pr.cap + "</u></li>";
+      }).join("") + "</ol>" : "") +
       '<p class="in-h">Every level, timed: colour is the percentile at that level</p>' +
       '<ol class="lvlbars">' + bars + "</ol>" +
       '<p class="in-note">' + proj + " Real insights use exactly this layout once uploads exist.</p>";
