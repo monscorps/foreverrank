@@ -531,22 +531,15 @@
       html += "</div></div>";
     });
     html += "</div>";
-    if (done) html += '<p class="line alldone-note">Fully forged. Gear it, name it, hit <b>Share build</b>.</p>';
+    if (done) html += '<p class="line alldone-note">Fully forged. Name it, hit <b>Share build</b>. Gear comes with the beta.</p>';
     return html;
   }
 
   function gearHTML() {
-    var c = clsData();
-    var html = '<div class="talenthead"><h3>Gear</h3><i class="finenote">what a ' + esc(CLASS_LABEL[CLASS_ORDER[S.cls]]) +
-      ' actually wears at 15–33; datamined Forever loot replaces this</i></div>';
-    c.gear.forEach(function (g, gi) {
-      html += '<div class="gearrow"><label>' + esc(g.slot) + '</label><div class="gearopts">' +
-        g.items.map(function (o, oi) {
-          return '<button class="gitem' + (S.gear[gi] === oi ? " sel" : "") + '" style="--q:' + qv(o.q) + '" data-gear="' + gi + ":" + oi + '" ' +
-            dt(o.n, o.stats + " — " + o.src) + ">" + icon(o.icon, "wi wi-sm") + "<span>" + esc(o.n) + "</span></button>";
-        }).join("") + "</div></div>";
-    });
-    return html;
+    return '<div class="talenthead"><h3>Gear</h3><i class="finenote">waits for the beta</i></div>' +
+      '<p class="board-sub">Forever reworked itemization: new on-use and on-equip effects, unified hit and crit, ' +
+      'spell power on caster weapons, hundreds of new drops. Guessing with Classic loot would be fake gear, ' +
+      'so this step stays empty until the beta client shows the real items.</p>';
   }
 
   function nameHTML() {
@@ -565,20 +558,18 @@
   }
   function buildHTML() {
     var r = RACES[S.race], k = CLASS_ORDER[S.cls], c = clsData(), sp = specNow();
-    var gear = c.gear.map(function (g, i) { return S.gear[i] != null ? g.items[S.gear[i]].n : null; }).filter(Boolean);
     var tal = talentList();
     return '<div class="buildcard"><h3>' + esc(S.name || "Unnamed " + CLASS_LABEL[k]) + "</h3>" +
       '<p class="line">' + icon(r.i, "wi wi-sm") + " " + esc(r.n) + ' · <span style="color:' + cc(k) + '">' + CLASS_LABEL[k] + "</span> · " +
       esc(sp.name) + " (" + esc(sp.split) + ') · <span class="rolechip ' + sp.role + '">' + sp.role + "</span> · level " + cap + "</p>" +
       '<p class="line"><i>Talents (' + spent() + "/" + POINTSNOW() + "):</i> " + (tal.length ? esc(tal.join(", ")) : "none yet, a purist") + "</p>" +
-      '<p class="line"><i>Gear:</i> ' + (gear.length ? esc(gear.join(", ")) : "honest and naked") + "</p></div>";
+      '<p class="line"><i>Gear:</i> honest and naked until the beta</p></div>';
   }
   function buildText() {
     var r = RACES[S.race], k = CLASS_ORDER[S.cls], c = clsData(), sp = specNow();
-    var gear = c.gear.map(function (g, i) { return S.gear[i] != null ? "  " + g.slot + ": " + g.items[S.gear[i]].n : null; }).filter(Boolean);
     return (S.name || "Unnamed") + " — " + r.n + " " + sp.name + " " + CLASS_LABEL[k] + " (" + sp.role + ", " + sp.split + ", cap " + cap + ")\n" +
       "Talents (" + spent() + "/" + POINTSNOW() + "):\n" + (talentList().map(function (t) { return "  " + t; }).join("\n") || "  none") +
-      "\nGear:\n" + (gear.join("\n") || "  none") + "\n" + location.origin + location.pathname + "?b=" + code();
+      "\nGear: waits for the beta\n" + location.origin + location.pathname + "?b=" + code();
   }
 
   // ---- the coward's button --------------------------------------------------
