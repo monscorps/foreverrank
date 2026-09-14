@@ -153,6 +153,24 @@
       "<h3>Raids</h3>" + placecards(w.raids) + "<h3>Battlegrounds</h3>" + placecards(w.battlegrounds));
 
     // Systems: one card each, icon in the header.
+    // Roadmap: a timeline, with the next milestone lit.
+    if (d.roadmap) {
+      var now = Date.now();
+      var DATES = { "Beta": "2026-09-17", "Name reservation": "2026-10-27", "Launch": "2026-11-04",
+        "Raids unlock": "2026-12-09", "Hardcore": "2026-12-21", "First major update": "2027-04-01", "Second major update": "2027-07-01" };
+      var nextIdx = -1;
+      d.roadmap.forEach(function (m, i) {
+        if (nextIdx === -1 && Date.parse(DATES[m.title] || 0) > now) nextIdx = i;
+      });
+      section("roadmap", "Roadmap", '<div class="rmap">' + d.roadmap.map(function (m, i) {
+        var past = Date.parse(DATES[m.title] || 0) <= now;
+        return '<div class="rm' + (i === nextIdx ? " next" : past ? " past" : "") + '">' +
+          '<div class="rm-dot"></div><div class="rm-body"><span class="rm-when">' + esc(m.when) +
+          (i === nextIdx ? '<em class="rm-next">next</em>' : "") + "</span><b>" + esc(m.title) + "</b>" +
+          '<ul>' + m.items.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div></div>";
+      }).join("") + '</div><p class="board-sub">Content and timing per Blizzard’s published plan; all of it subject to change.</p>');
+    }
+
     var sysHtml = '<div class="syscards">' + d.systems.map(function (sys, i) {
       return '<div class="syscard" id="sys' + i + '"><div class="sys-head">' + img(sys.icon || "inv_misc_book_09") +
         "<b>" + esc(sys.t) + "</b></div>" + facts(sys.facts) + "</div>";

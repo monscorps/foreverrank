@@ -77,6 +77,21 @@
 .place-t b { font: 600 .86rem var(--heading); }
 .lvlchip { font: 700 .6rem/1 var(--heading); letter-spacing: .05em; color: #06131c; background: var(--gold); border-radius: 3px; padding: .2rem .35rem; white-space: nowrap; }
 .place p { margin: 0; grid-column: 2; font-size: .76rem; color: var(--card-text); }
+.rmap { position: relative; margin: .6rem 0 .4rem; padding-left: 1.4rem; }
+.rmap::before { content: ""; position: absolute; left: .45rem; top: .6rem; bottom: .6rem; width: 2px;
+  background: linear-gradient(180deg, rgba(229,204,128,.5), rgba(229,204,128,.08)); }
+.rm { position: relative; display: flex; gap: .8rem; margin-bottom: 1rem; }
+.rm-dot { position: absolute; left: -1.4rem; top: .35rem; width: .9rem; height: .9rem; border-radius: 50%;
+  background: #0b1c26; border: 2px solid #5a6a75; }
+.rm.past .rm-dot { border-color: rgba(229,204,128,.5); background: rgba(229,204,128,.25); }
+.rm.next .rm-dot { border-color: var(--gold); background: var(--gold); box-shadow: 0 0 12px rgba(229,204,128,.7); }
+.rm-body { flex: 1; border: 1px solid var(--card-border); border-radius: var(--r-panel); background: var(--card); padding: .7rem .9rem; }
+.rm.next .rm-body { border-color: rgba(229,204,128,.55); background: rgba(229,204,128,.05); }
+.rm-when { display: block; font: 600 .66rem/1 var(--heading); letter-spacing: .1em; text-transform: uppercase; color: var(--subtle); margin-bottom: .25rem; }
+.rm-next { font-style: normal; color: #06131c; background: var(--gold); border-radius: 3px; padding: .12rem .35rem; margin-left: .5rem; font-size: .6rem; }
+.rm-body b { font-family: var(--heading); font-size: .95rem; }
+.rm-body ul { margin: .35rem 0 0; padding-left: 1rem; }
+.rm-body li { font-size: .82rem; margin: .2rem 0; color: var(--card-text); }
 .syscards { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: .7rem; margin-top: .6rem; }
 .syscard { border: 1px solid var(--card-border); border-radius: var(--r-panel); background: linear-gradient(180deg, rgba(7,50,74,.55), rgba(5,30,45,.85)); padding: .9rem 1rem; box-shadow: var(--shadow); }
 .sys-head { display: flex; align-items: center; gap: .55rem; border-bottom: 1px solid var(--surface-border); padding-bottom: .5rem; margin-bottom: .4rem; }
@@ -136,6 +151,6 @@
   <span>Compiled, credited, corrected. Screenshots from Blizzard's BlizzCon footage.</span>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>
-<script src="codex.js?v=8"></script>
+<script src="codex.js?v=9"></script>
 </body>
 </html>
