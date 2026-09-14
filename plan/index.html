@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../forever.css?v=7">
-<link rel="stylesheet" href="plan.css?v=3">
+<link rel="stylesheet" href="plan.css?v=4">
 </head>
 <body>
 
@@ -42,6 +42,13 @@
   <div class="guide" id="guide" aria-live="polite"></div>
   <section id="stage" class="stage"></section>
 </main>
+
+<aside class="insight" id="insight" hidden>
+  <div class="insight-card" role="dialog" aria-modal="true" aria-label="The Forge decides">
+    <button class="insight-x" id="insight-x" aria-label="Close">&times;</button>
+    <div id="insight-body"></div>
+  </div>
+</aside>
 
 <section class="composer wrap" id="composer">
   <h2 class="display display-sm">Raid <span>Composer</span></h2>
@@ -74,6 +81,6 @@
 </footer>
 
 <div class="tip" id="tip" hidden></div>
-<script src="plan.js?v=2"></script>
+<script src="plan.js?v=5"></script>
 </body>
 </html>
