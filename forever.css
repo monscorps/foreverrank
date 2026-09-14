@@ -255,3 +255,10 @@ footer a { margin-left: auto; color: var(--card-text); }
 .ranktable .go { width: 1.6rem; text-align: right; color: var(--subtle); font-size: 1.1rem; }
 .ranktable tbody tr:hover .go { color: var(--gold); }
 th.go { color: transparent; }
+
+/* pager */
+.pager { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-top: 1rem; }
+.pager button { cursor: pointer; background: var(--card); color: var(--surface-text); border: 1px solid rgba(229,204,128,.45); border-radius: 2px; font: 600 .85rem/1 var(--heading); padding: .55rem .95rem; }
+.pager button:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.pager button:disabled { opacity: .35; cursor: default; }
+.pager span { font-size: .74rem; color: var(--subtle); }

@@ -94,6 +94,23 @@
   ROSTER.forEach(function (n) { DEMO.push(gen(n)); });
   var query = "";
   var realmFilter = "all";
+  var PAGE = 50;
+  var page = 0;
+  // Ranks and percentiles come from the WHOLE pool; only the display is cut.
+  function pageSlice(arr) {
+    var pages = Math.max(1, Math.ceil(arr.length / PAGE));
+    if (page >= pages) page = pages - 1;
+    if (page < 0) page = 0;
+    return arr.slice(page * PAGE, (page + 1) * PAGE);
+  }
+  function pager(total) {
+    if (total <= PAGE) return "";
+    var pages = Math.ceil(total / PAGE);
+    return '<div class="pager">' +
+      '<button type="button" data-pg="-1"' + (page === 0 ? " disabled" : "") + ">&lsaquo; Prev</button>" +
+      "<span>Page " + (page + 1) + " of " + pages + ". " + total + " ranked</span>" +
+      '<button type="button" data-pg="1"' + (page >= pages - 1 ? " disabled" : "") + ">Next &rsaquo;</button></div>";
+  }
 
   // ---- demo guilds ----------------------------------------------------------
   // WarcraftLogs ranks combat logs; this ranks GUILD PROGRESS overall, broken
@@ -179,44 +196,44 @@
       render: function (d) {
         var byLvl = {};
         d.forEach(function (c) { (byLvl[c.level] = byLvl[c.level] || []).push(c.lph); });
-        var rows = d.slice().sort(function (a, b) { return b.level - a.level || a.seconds - b.seconds; })
-          .map(function (c, i) {
+        var sorted = d.slice().sort(function (a, b) { return b.level - a.level || a.seconds - b.seconds; });
+        var rows = pageSlice(sorted).map(function (c, i) {
             var p = pctile(c.lph, byLvl[c.level]), v = bandVar(p);
-            return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (i + 1) + "</td>" + nameCell(c) +
+            return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (page * PAGE + i + 1) + "</td>" + nameCell(c) +
               '<td class="r lvl">' + c.level + "</td>" +
               '<td class="r xs">' + c.lph.toFixed(2) + "</td>" +
               '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Lvl/hr", "r xs"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Lvl/hr", "r xs"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>" + pager(sorted.length);
       }
     },
     hardcore: {
       sub: "One life. The ladder ranks the living by level; the fallen keep their place in the record at the level death found them.",
       render: function (d) {
-        var rows = d.slice().sort(function (a, b) { return (b.alive - a.alive) || b.level - a.level || a.seconds - b.seconds; })
-          .map(function (c, i) {
-            return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (i + 1) + "</td>" + nameCell(c) +
+        var sorted = d.slice().sort(function (a, b) { return (b.alive - a.alive) || b.level - a.level || a.seconds - b.seconds; });
+        var rows = pageSlice(sorted).map(function (c, i) {
+            return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (page * PAGE + i + 1) + "</td>" + nameCell(c) +
               '<td class="r lvl">' + c.level + "</td>" +
               '<td class="r">' + (c.alive ? '<span class="alive">Alive</span>' : '<span class="dead">Fallen</span>') + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Status", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Status", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>" + pager(sorted.length);
       }
     },
     pvp: {
       sub: "Honorable kills, vanilla rank titles, and an honest K/D. Nemesis tracking follows once the beta shows what the combat log carries.",
       render: function (d) {
         var hks = d.map(function (c) { return c.hks; });
-        var rows = d.slice().sort(function (a, b) { return b.hks - a.hks; })
-          .map(function (c, i) {
+        var sorted = d.slice().sort(function (a, b) { return b.hks - a.hks; });
+        var rows = pageSlice(sorted).map(function (c, i) {
             var p = pctile(c.hks, hks), v = bandVar(p);
             var rank = PVP_RANKS[Math.min(PVP_RANKS.length - 1, Math.floor(c.hks / 18))];
-            return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (i + 1) + "</td>" + nameCell(c) +
+            return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (page * PAGE + i + 1) + "</td>" + nameCell(c) +
               '<td class="r xs">' + esc(rank) + "</td>" +
               '<td class="r">' + c.hks + "</td>" +
               '<td class="r">' + (c.pvpDeaths > 0 ? (c.kills / c.pvpDeaths).toFixed(2) : c.kills.toFixed(0)) + "</td>" +
               '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Rank", "r xs"], ["HKs", "r"], ["K/D", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Rank", "r xs"], ["HKs", "r"], ["K/D", "r"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>" + pager(sorted.length);
       }
     },
     progression: {
@@ -224,17 +241,17 @@
       render: function (d) {
         var score = function (c) { return c.level * 10 + c.dungeons * 14 + c.quests / 10 + c.ilvl; };
         var all = d.map(score);
-        var rows = d.slice().sort(function (a, b) { return score(b) - score(a); })
-          .map(function (c, i) {
+        var sorted = d.slice().sort(function (a, b) { return score(b) - score(a); });
+        var rows = pageSlice(sorted).map(function (c, i) {
             var p = pctile(score(c), all), v = bandVar(p);
-            return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (i + 1) + "</td>" + nameCell(c) +
+            return '<tr data-c="' + esc(c.name) + '"><td class="rank">' + (page * PAGE + i + 1) + "</td>" + nameCell(c) +
               '<td class="r lvl">' + c.level + "</td>" +
               '<td class="r">' + c.dungeons + "/9</td>" +
               '<td class="r xs">' + c.quests + "</td>" +
               '<td class="r xs">' + c.ilvl + "</td>" +
               '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + '</td><td class="go">&rsaquo;</td></tr>';
           }).join("");
-        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Dungeons", "r"], ["Quests", "r xs"], ["Gear", "r xs"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>";
+        return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Dungeons", "r"], ["Quests", "r xs"], ["Gear", "r xs"], ["Parse", "r"], ["", "go"]]) + "<tbody>" + rows + "</tbody></table>" + pager(sorted.length);
       }
     }
   ,
@@ -395,6 +412,13 @@
         if (c) insight(c);
       });
     });
+    Array.prototype.forEach.call(b.querySelectorAll("button[data-pg]"), function (btn) {
+      btn.addEventListener("click", function () {
+        page += Number(btn.getAttribute("data-pg"));
+        render();
+        b.scrollIntoView({ block: "start" });
+      });
+    });
     var grows = b.querySelectorAll("tr[data-g]");
     Array.prototype.forEach.call(grows, function (r) {
       r.addEventListener("click", function () {
@@ -433,8 +457,8 @@
         onPick(li.getAttribute("data-v"));
       });
     }
-    dropdown("dd-view", function (v) { view = v; render(); });
-    dropdown("dd-realm", function (v) { realmFilter = v; render(); });
+    dropdown("dd-view", function (v) { view = v; page = 0; render(); });
+    dropdown("dd-realm", function (v) { realmFilter = v; page = 0; render(); });
     document.addEventListener("click", function () {
       Array.prototype.forEach.call(document.querySelectorAll(".dd-list"), function (l) { l.hidden = true; });
       Array.prototype.forEach.call(document.querySelectorAll(".dd"), function (d) { d.classList.remove("open"); });
@@ -445,7 +469,7 @@
       var deb = null;
       search.addEventListener("input", function () {
         clearTimeout(deb);
-        deb = setTimeout(function () { query = search.value.trim(); render(); }, 120);
+        deb = setTimeout(function () { query = search.value.trim(); page = 0; render(); }, 120);
       });
     }
 
