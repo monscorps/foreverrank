@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="forever.css?v=6">
+<link rel="stylesheet" href="forever.css?v=7">
 </head>
 <body>
 
@@ -97,13 +97,13 @@
   <div class="controls">
     <div class="dd" id="dd-view">
       <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
-        <small>Ladder</small><span id="dd-view-label">Levelling</span><i class="dd-car" aria-hidden="true"></i>
+        <small>Ladder</small><span id="dd-view-label">Progression</span><i class="dd-car" aria-hidden="true"></i>
       </button>
       <ul class="dd-list" role="listbox" hidden>
-        <li role="option" data-v="levelling" class="is-sel" aria-selected="true">Levelling</li>
+        <li role="option" data-v="levelling">Levelling</li>
         <li role="option" data-v="hardcore">Hardcore</li>
         <li role="option" data-v="pvp">World PvP</li>
-        <li role="option" data-v="progression">Progression</li>
+        <li role="option" data-v="progression" class="is-sel" aria-selected="true">Progression</li>
         <li role="option" data-v="guilds">Guilds</li>
       </ul>
     </div>
@@ -120,6 +120,7 @@
       </ul>
     </div>
     <input id="search" class="search" type="search" placeholder="Find a player&hellip;" aria-label="Search players" autocomplete="off" spellcheck="false">
+    <button type="button" class="share" id="share">Share view</button>
   </div>
   <p class="board-sub" id="board-sub"></p>
 
@@ -155,6 +156,6 @@
   <a href="https://github.com/monscorps/foreverrank">source</a>
 </footer>
 
-<script src="forever.js?v=6"></script>
+<script src="forever.js?v=7"></script>
 </body>
 </html>

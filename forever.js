@@ -351,7 +351,7 @@
   }
 
   // ---- rendering ------------------------------------------------------------
-  var view = "levelling";
+  var view = "progression";
   function filtered() {
     var pool = DEMO;
     // Some ladders only exist where their rules do: one life is a Hardcore-
@@ -372,7 +372,43 @@
       return ["One life is a", "Hardcore rule", "The " + realmFilter + " realm resurrects you. Switch the realm box to Hardcore or All realms."];
     return null;
   }
+  var REALM_OPTS = ["all", "Normal", "PvP", "Hardcore", "RP"];
+  function syncURL() {
+    var p = new URLSearchParams();
+    if (view !== "progression") p.set("ladder", view);
+    if (realmFilter !== "all") p.set("realm", realmFilter);
+    if (query) p.set("q", query);
+    if (page > 0) p.set("p", String(page + 1));
+    var qs = p.toString();
+    history.replaceState(null, "", qs ? "?" + qs : location.pathname);
+  }
+  function readURL() {
+    var p = new URLSearchParams(location.search);
+    var l = p.get("ladder");
+    if (l && VIEWS[l]) view = l;
+    var r = p.get("realm");
+    if (r && REALM_OPTS.indexOf(r) !== -1) realmFilter = r;
+    query = (p.get("q") || "").trim();
+    var pg = parseInt(p.get("p"), 10);
+    if (pg > 1) page = pg - 1;
+  }
+  function syncControls() {
+    [["dd-view", view], ["dd-realm", realmFilter]].forEach(function (pair) {
+      var root = $(pair[0]);
+      if (!root) return;
+      var label = root.querySelector(".dd-btn span");
+      Array.prototype.forEach.call(root.querySelectorAll("li[data-v]"), function (li) {
+        var on = li.getAttribute("data-v") === pair[1];
+        li.classList.toggle("is-sel", on);
+        li.setAttribute("aria-selected", String(on));
+        if (on && label) label.textContent = li.textContent;
+      });
+    });
+    var search = $("search");
+    if (search) search.value = query;
+  }
   function render() {
+    syncURL();
     var v = VIEWS[view];
     var scope = realmFilter === "all"
       ? (view === "pvp" ? " Across all realms; only PvP-realm characters fight for it."
@@ -487,10 +523,24 @@
       render();
     });
 
+    var share = $("share");
+    if (share) share.addEventListener("click", function () {
+      var url = location.href;
+      function done() {
+        share.textContent = "Link copied";
+        setTimeout(function () { share.textContent = "Share view"; }, 1600);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, function () { window.prompt("Copy this link:", url); });
+      } else { window.prompt("Copy this link:", url); }
+    });
+
     $("insight-x").addEventListener("click", function () { $("insight").hidden = true; });
     $("insight").addEventListener("click", function (e) { if (e.target === $("insight")) $("insight").hidden = true; });
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") $("insight").hidden = true; });
 
+    readURL();
+    syncControls();
     render();
   });
 })();

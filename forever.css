@@ -262,3 +262,7 @@ th.go { color: transparent; }
 .pager button:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
 .pager button:disabled { opacity: .35; cursor: default; }
 .pager span { font-size: .74rem; color: var(--subtle); }
+
+.share { cursor: pointer; background: var(--card); color: var(--gold); border: 1px solid rgba(229,204,128,.45); border-radius: 2px; font: 600 .8rem/1 var(--heading); padding: .62rem .9rem; white-space: nowrap; }
+.share:hover { border-color: var(--gold); }
+@media (max-width: 820px) { .share { flex: 1 1 auto; } }
