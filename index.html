@@ -4,49 +4,93 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ForeverRank</title>
-<meta name="description" content="WarcraftLogs-style boards for World of Warcraft: Forever — levelling, hardcore, PvP and character progression. Beta-ready, waiting for launch.">
+<meta name="description" content="The ladder for World of Warcraft: Forever — levelling, hardcore, PvP, character and guild progression. Ranked WarcraftLogs-style, waiting for launch.">
 <link rel="icon" href="mark.svg" type="image/svg+xml">
 <link rel="canonical" href="https://foreverrank.com/">
 <meta property="og:url" content="https://foreverrank.com/">
 <meta property="og:title" content="ForeverRank">
-<meta property="og:description" content="The race ladder for WoW: Forever. Levelling, hardcore, PvP, progression.">
-<meta name="theme-color" content="#0a0a0a">
+<meta property="og:description" content="Rank. Forever. The ladder for World of Warcraft: Forever.">
+<meta property="og:image" content="https://foreverrank.com/assets/hero.jpg">
+<meta name="theme-color" content="#0b1517">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="forever.css">
 </head>
 <body>
 
-<header class="top">
-  <a class="brand" href="./">
-    <span class="sigil" aria-hidden="true">&#8734;</span>
-    <span class="brand-word">LEVELPACE <b>FOREVER</b></span>
-  </a>
-  <nav class="top-nav">
-    <span class="phase" id="phase-chip">…</span>
-    <button class="pill pill-gear" id="gear" aria-haspopup="true" aria-expanded="false" title="Settings">&#9881;</button>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="goldgrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f4e7bd"/><stop offset="55%" stop-color="#e5cc80"/><stop offset="100%" stop-color="#a8925b"/>
+    </linearGradient>
+    <!-- Corner filigree, drawn once, mirrored everywhere. The signature of
+         Blizzard's Forever page is exactly this kind of gold flourish. -->
+    <symbol id="fili" viewBox="0 0 120 40">
+      <path d="M2 38 L2 14 Q2 6 10 6 L52 6" fill="none" stroke="url(#goldgrad)" stroke-width="2"/>
+      <path d="M52 6 q10 0 14 -4 q2 6 10 6 l14 0" fill="none" stroke="url(#goldgrad)" stroke-width="1.4"/>
+      <path d="M8 32 Q8 14 26 12" fill="none" stroke="url(#goldgrad)" stroke-width="1" opacity=".65"/>
+      <circle cx="94" cy="8" r="1.8" fill="url(#goldgrad)"/>
+      <circle cx="2" cy="38" r="2.2" fill="url(#goldgrad)"/>
+      <path d="M26 12 q6 -1 8 -6" fill="none" stroke="url(#goldgrad)" stroke-width="1" opacity=".65"/>
+    </symbol>
+    <symbol id="rune" viewBox="0 0 200 12">
+      <path d="M0 6 H82 M118 6 H200" stroke="url(#goldgrad)" stroke-width="1.2"/>
+      <path d="M100 0 l7 6 -7 6 -7 -6 z" fill="none" stroke="url(#goldgrad)" stroke-width="1.4"/>
+      <circle cx="88" cy="6" r="1.6" fill="url(#goldgrad)"/><circle cx="112" cy="6" r="1.6" fill="url(#goldgrad)"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- ============================================================== hero -->
+<header class="hero">
+  <div class="hero-art" aria-hidden="true"></div>
+  <div class="hero-veil" aria-hidden="true"></div>
+
+  <nav class="top">
+    <a class="brand" href="./">
+      <img src="mark.svg" alt="" width="42" height="42">
+      <span class="brand-word">FOREVER<b>RANK</b></span>
+    </a>
+    <div class="top-nav">
+      <span class="phase" id="phase-chip">…</span>
+      <button class="pill pill-gear" id="gear" aria-haspopup="true" aria-expanded="false" title="Settings">&#9881;</button>
+    </div>
   </nav>
   <div class="settings" id="settings" hidden>
     <label><input type="checkbox" id="demo-toggle"> Show demo data</label>
     <p>Demo rows are invented, watermarked, and vanish the moment real uploads exist.</p>
   </div>
+
+  <div class="hero-inner">
+    <svg class="fili fili-tl" aria-hidden="true"><use href="#fili"/></svg>
+    <svg class="fili fili-tr" aria-hidden="true"><use href="#fili"/></svg>
+    <p class="eyebrow">A ladder reborn</p>
+    <h1 class="logotype">Rank. <span>Forever.</span></h1>
+    <p class="hero-sub">Levelling, hardcore, PvP, characters and guilds — measured in the
+    world, ranked like a WarcraftLogs parse.</p>
+
+    <div class="countdown" id="countdown">
+      <p class="count-kick" id="count-kick">…</p>
+      <div class="count-grid" id="count-grid" role="timer">
+        <div><b id="cd-d">–</b><span>days</span></div>
+        <div><b id="cd-h">–</b><span>hours</span></div>
+        <div><b id="cd-m">–</b><span>min</span></div>
+        <div><b id="cd-s">–</b><span>sec</span></div>
+      </div>
+      <p class="count-note" id="count-note"></p>
+    </div>
+    <svg class="fili fili-bl" aria-hidden="true"><use href="#fili"/></svg>
+    <svg class="fili fili-br" aria-hidden="true"><use href="#fili"/></svg>
+  </div>
 </header>
 
-<section class="countdown" id="countdown">
-  <p class="count-kick" id="count-kick">…</p>
-  <div class="count-grid" id="count-grid" role="timer">
-    <div><b id="cd-d">–</b><span>days</span></div>
-    <div><b id="cd-h">–</b><span>hours</span></div>
-    <div><b id="cd-m">–</b><span>min</span></div>
-    <div><b id="cd-s">–</b><span>sec</span></div>
-  </div>
-  <p class="count-note" id="count-note"></p>
-</section>
+<div class="divider" aria-hidden="true"><svg><use href="#rune"/></svg></div>
 
-<main class="wrap">
+<!-- ============================================================= board -->
+<main id="top" class="wrap">
   <div class="board-title">
-    <h1 class="display">The <span>Eternal</span> Ladder</h1>
+    <h2 class="display">The <span>Eternal</span> Ladder</h2>
     <p class="board-note" id="cap-note">Beta caps at <b>level 30</b> — every board ranks 1–30 until launch.</p>
   </div>
 
@@ -55,28 +99,25 @@
     <button role="tab" class="tab" data-view="hardcore" aria-selected="false">Hardcore</button>
     <button role="tab" class="tab" data-view="pvp" aria-selected="false">PvP</button>
     <button role="tab" class="tab" data-view="progression" aria-selected="false">Progression</button>
+    <button role="tab" class="tab" data-view="guilds" aria-selected="false">Guilds</button>
   </nav>
   <p class="board-sub" id="board-sub"></p>
 
-  <section id="board" class="board" aria-live="polite"></section>
-
-  <ol class="scale" aria-label="Parse colour scale">
-    <li style="--c:var(--q-common)"><b></b>0</li>
-    <li style="--c:var(--q-uncommon)"><b></b>25</li>
-    <li style="--c:var(--q-rare)"><b></b>50</li>
-    <li style="--c:var(--q-epic)"><b></b>75</li>
-    <li style="--c:var(--q-legendary)"><b></b>95</li>
-    <li style="--c:var(--q-pink)"><b></b>99</li>
-    <li style="--c:var(--q-artifact)"><b></b>100</li>
-  </ol>
+  <section class="panel">
+    <svg class="fili fili-panel-tl" aria-hidden="true"><use href="#fili"/></svg>
+    <svg class="fili fili-panel-br" aria-hidden="true"><use href="#fili"/></svg>
+    <div id="board" class="board" aria-live="polite"></div>
+  </section>
 </main>
 
 <aside class="insight" id="insight" hidden>
-  <div class="insight-card" role="dialog" aria-modal="true" aria-label="Character insight">
+  <div class="insight-card" role="dialog" aria-modal="true" aria-label="Insight">
     <button class="insight-x" id="insight-x" aria-label="Close">&times;</button>
     <div id="insight-body"></div>
   </div>
 </aside>
+
+<div class="divider" aria-hidden="true"><svg><use href="#rune"/></svg></div>
 
 <section class="api-note">
   <h2>We do not know the addon API yet.</h2>
@@ -89,9 +130,9 @@
 </section>
 
 <footer>
-  <span class="sigil sigil-sm" aria-hidden="true">&#8734;</span>
+  <img src="mark.svg" alt="" width="24" height="24">
   <span>Level first, speed breaks ties — a race ladder, not a stopwatch contest.</span>
-  <a href="https://github.com/monscorps/levelpace">source</a>
+  <a href="https://github.com/monscorps/foreverrank">source</a>
 </footer>
 
 <script src="forever.js"></script>

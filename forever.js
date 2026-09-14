@@ -46,6 +46,30 @@
     mk("Whisperwind", "PRIEST", 14, 930, 1, 5, 1, true)
   ];
 
+  // ---- demo guilds ----------------------------------------------------------
+  // WarcraftLogs ranks combat logs; this ranks GUILD PROGRESS overall, broken
+  // into categories. Each category is a 0-100 score; overall is the weighted
+  // mean, so a guild that only PvPs does not top a levelling ladder.
+  var GUILD_CATS = [
+    { key: "levelling", label: "Levelling pace", w: 3 },
+    { key: "dungeons", label: "Dungeons of the Nine", w: 3 },
+    { key: "pvp", label: "PvP", w: 2 },
+    { key: "hardcore", label: "Hardcore survival", w: 1 },
+    { key: "quests", label: "Quests", w: 1 }
+  ];
+  function mkGuild(name, tag, members, sc, roster) {
+    var total = 0, wsum = 0;
+    GUILD_CATS.forEach(function (c) { total += (sc[c.key] || 0) * c.w; wsum += c.w; });
+    return { name: name, tag: tag, members: members, cats: sc,
+             overall: total / wsum, roster: roster };
+  }
+  var GUILDS = [
+    mkGuild("Eternal Vanguard", "EV", 42, { levelling: 91, dungeons: 88, pvp: 64, hardcore: 70, quests: 84 }, ["Rickmyrolls", "Thundermaw", "Sunblade"]),
+    mkGuild("Skyborne Pact", "SKY", 31, { levelling: 78, dungeons: 92, pvp: 41, hardcore: 88, quests: 71 }, ["Skydancer", "Oakenheart"]),
+    mkGuild("Ashes of Lordaeron", "ASH", 55, { levelling: 66, dungeons: 71, pvp: 90, hardcore: 35, quests: 62 }, ["Vexley", "Emberlyn", "Ironjaw"]),
+    mkGuild("Riverglade Company", "RGC", 18, { levelling: 52, dungeons: 44, pvp: 22, hardcore: 95, quests: 90 }, ["Whisperwind", "Grimveil"])
+  ];
+
   // ---- tiny utils -----------------------------------------------------------
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
@@ -164,7 +188,46 @@
         return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Dungeons", "r"], ["Quests", "r"], ["Gear", "r"], ["Parse", "r"]]) + "<tbody>" + rows + "</tbody></table>";
       }
     }
+  ,
+    guilds: {
+      sub: "Guild progress overall, not one lucky log: levelling pace, the nine dungeons, PvP, hardcore survival and quests, weighted into one score. Click a guild for the breakdown.",
+      render: function () {
+        var all = GUILDS.map(function (g) { return g.overall; });
+        var rows = GUILDS.slice().sort(function (a, b) { return b.overall - a.overall; })
+          .map(function (g, i) {
+            var p = pctile(g.overall, all), v = bandVar(p);
+            return '<tr data-g="' + esc(g.name) + '"><td class="rank">' + (i + 1) + "</td>" +
+              '<td><span class="name">&lt;<span class="gtag">' + esc(g.name) + "</span>&gt;</span>" +
+              '<span class="meta">' + g.members + " members</span></td>" +
+              '<td class="r lvl">' + g.overall.toFixed(1) + "</td>" +
+              '<td class="r">' + g.cats.levelling + "</td>" +
+              '<td class="r">' + g.cats.dungeons + "</td>" +
+              '<td class="r">' + g.cats.pvp + "</td>" +
+              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "\u2014" : Math.round(p)) + "</td></tr>";
+          }).join("");
+        return '<table class="ranktable">' + head([["#", "rank"], ["Guild"], ["Overall", "r"], ["Lvl", "r"], ["Dng", "r"], ["PvP", "r"], ["Parse", "r"]]) + "<tbody>" + rows + "</tbody></table>";
+      }
+    }
   };
+
+  function guildInsight(g) {
+    var bars = GUILD_CATS.map(function (c) {
+      var val = g.cats[c.key] || 0, v = bandVar(val);
+      return "<li><b>" + esc(c.label) + '</b><i style="--w:' + Math.max(4, val) + "%;--c:" + v + '"></i><u style="--c:' + v + '">' + val + "</u></li>";
+    }).join("");
+    var roster = g.roster.map(function (n) {
+      var c = DEMO.filter(function (x) { return x.name === n; })[0];
+      return '<span style="--cc:' + (c ? cc(c.cls) : "inherit") + '">' + esc(n) + "</span>";
+    }).join("");
+    $("insight-body").innerHTML =
+      '<h2 class="in-name">&lt;<span class="gtag">' + esc(g.name) + "</span>&gt;</h2>" +
+      '<div class="in-meta"><span class="chip">' + g.members + ' members</span><span class="chip">overall ' + g.overall.toFixed(1) + '</span><span class="demo-flag">Demo</span></div>' +
+      '<p class="in-h">Category breakdown — colour is the score band</p>' +
+      '<ol class="gbars">' + bars + "</ol>" +
+      '<p class="in-h">Notable members</p><div class="roster">' + roster + "</div>" +
+      '<p class="in-note">Weights: levelling and dungeons 3, PvP 2, hardcore and quests 1. Real categories get argued about in the open once uploads exist.</p>';
+    $("insight").hidden = false;
+  }
 
   // ---- character insight ----------------------------------------------------
   function insight(c) {
@@ -226,6 +289,13 @@
       r.addEventListener("click", function () {
         var c = DEMO.filter(function (x) { return x.name === r.getAttribute("data-c"); })[0];
         if (c) insight(c);
+      });
+    });
+    var grows = b.querySelectorAll("tr[data-g]");
+    Array.prototype.forEach.call(grows, function (r) {
+      r.addEventListener("click", function () {
+        var g = GUILDS.filter(function (x) { return x.name === r.getAttribute("data-g"); })[0];
+        if (g) guildInsight(g);
       });
     });
   }
