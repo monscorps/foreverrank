@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Forge</title>
+<meta name="description" content="Plan your World of Warcraft: Forever beta character. Race, class, spec, talents, gear. Share the build as a link; compose a whole raid from links.">
+<link rel="icon" href="../mark.svg" type="image/svg+xml">
+<link rel="canonical" href="https://foreverrank.com/plan/">
+<meta property="og:title" content="The Forge">
+<meta property="og:description" content="Forge your Forever beta character and share it as a link.">
+<meta name="theme-color" content="#1C2325">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../forever.css?v=7">
+<link rel="stylesheet" href="plan.css?v=2">
+</head>
+<body>
+
+<nav class="top">
+  <a class="brand" href="../">
+    <img src="../mark.svg" alt="" width="42" height="42">
+    <span class="brand-word">FOREVER<b>RANK</b></span>
+  </a>
+  <div class="top-nav">
+    <span class="phase">The Forge</span>
+    <a class="pill" href="../">The ladder</a>
+  </div>
+</nav>
+
+<header class="forge-head">
+  <p class="eyebrow">Beta prep, level cap 30</p>
+  <h1 class="display">The <span>Forge</span></h1>
+  <p class="board-sub">Hammer out a Forever character before the beta does it to you.
+  Follow the goblin, or skip ahead and pick freely. Every choice has a tooltip;
+  none of them can be wrong, though several can be funny.</p>
+</header>
+
+<main class="forge">
+  <ol class="fsteps" id="fsteps"></ol>
+  <div class="guide" id="guide" aria-live="polite"></div>
+  <section id="stage" class="stage"></section>
+</main>
+
+<section class="composer wrap" id="composer">
+  <h2 class="display display-sm">Raid <span>Composer</span></h2>
+  <p class="board-sub">Everyone forges a build and sends you their link. Paste the
+  links below, one per line, and see what you are actually taking into the beta.</p>
+  <textarea id="raid-in" rows="5" spellcheck="false" placeholder="https://foreverrank.com/plan/?b=..."></textarea>
+  <div class="c-actions">
+    <button type="button" class="share" id="compose">Compose the raid</button>
+    <button type="button" class="share" id="raid-link" hidden>Copy raid link</button>
+  </div>
+  <div id="raid-out"></div>
+</section>
+
+<section class="api-note">
+  <h2>Shared, not yet datamined.</h2>
+  <p>Races, the class matrix and the racial rework above come from what Blizzard
+  has <b>shared</b>: the BlizzCon reveal and the fansite compilations of it
+  (Wowhead, Icy Veins, Warcraft Tavern). Talent trees and gear are still the
+  vanilla skeleton Forever is built from, condensed to the beta's 21 points;
+  Wowhead and Icy Veins already run Forever calculators from the same reveal,
+  and this page adopts real numbers the moment they firm up. Beta opens
+  September&nbsp;17; everything here gets corrected against the client itself.</p>
+</section>
+
+<footer>
+  <img src="../mark.svg" alt="" width="24" height="24">
+  <span>Forged here, measured on the ladder later.</span>
+  <a href="https://foreverrank.com/">foreverrank.com</a>
+</footer>
+
+<div class="tip" id="tip" hidden></div>
+<script src="plan.js?v=2"></script>
+</body>
+</html>

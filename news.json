@@ -1,0 +1,24 @@
+{
+  "note": "The Forever wire. Append new entries at the top: {d: ISO date, t: headline, s: source}. The site renders this file as-is.",
+  "items": [
+    { "d": "2026-09-14", "t": "New toggles let you choose your WoW experience", "s": "Icy Veins" },
+    { "d": "2026-09-14", "t": "Blizzard hosting a post-BlizzCon WoW Q&A; questions open", "s": "Icy Veins" },
+    { "d": "2026-09-14", "t": "Fansite talent calculators for Forever are live", "s": "Icy Veins / Wowhead" },
+    { "d": "2026-09-14", "t": "“No plans” for WoW Token or character boosts in Forever", "s": "Icy Veins" },
+    { "d": "2026-09-14", "t": "Beta opens at level cap 20; cap 30 after “a couple of weeks”", "s": "Icy Veins" },
+    { "d": "2026-09-13", "t": "First look at Forsaken Paladin mounts", "s": "Icy Veins" },
+    { "d": "2026-09-13", "t": "Massive graphics changes: HD and SD toggles", "s": "Icy Veins" },
+    { "d": "2026-09-13", "t": "Racial rework gives every race a reason to matter", "s": "Icy Veins" },
+    { "d": "2026-09-13", "t": "Four new zones coming to Forever", "s": "Icy Veins" },
+    { "d": "2026-09-13", "t": "There will be no server realms in Forever", "s": "Icy Veins" },
+    { "d": "2026-09-13", "t": "Official controller support confirmed", "s": "Icy Veins" },
+    { "d": "2026-09-13", "t": "Two new raids revealed, Legendary teased", "s": "Icy Veins" },
+    { "d": "2026-09-12", "t": "The new levelling dungeons, listed", "s": "Icy Veins" },
+    { "d": "2026-09-12", "t": "Hardcore mode confirmed for Forever", "s": "Icy Veins" },
+    { "d": "2026-09-12", "t": "Collector's Edition and digital bundles up for pre-purchase", "s": "Icy Veins" },
+    { "d": "2026-09-12", "t": "Skyborne race requires the Skyborne Heroic Pack", "s": "Icy Veins" },
+    { "d": "2026-09-12", "t": "Meet the Skyborne: everything known about the new race", "s": "Icy Veins" },
+    { "d": "2026-09-12", "t": "Roadmap unveils raid unlocks and major updates", "s": "Icy Veins" },
+    { "d": "2026-09-12", "t": "Blizzard's new take on Classic is called Warcraft Forever, releasing November 4", "s": "Icy Veins" }
+  ]
+}
