@@ -518,14 +518,17 @@
       html += '<div class="wtree"><div class="wt-head">' + icon(tr.icon, "wi wi-sm") + "<b>" + esc(tr.name) + '</b><u>' + pts + "</u></div><div class=\"wt-grid rows5\">";
       tr.talents.forEach(function (t, i) {
         var r = S.t[ti][i] || 0, gate = (t.row - 1) * 5, open = pts >= gate;
-        var d = t.desc && t.desc.length ? t.desc[Math.min(r < t.r ? r : t.r - 1, t.desc.length - 1)] : (t.tip || "");
-        var extra = (t.est ? " [numbers still estimates]" : "") + (t.cn ? " \u00b7 " + t.cn + "." : "");
+        var want = r < t.r ? r : t.r - 1, have = t.desc ? t.desc.length : 0, idx = Math.min(want, have - 1);
+        var d = have ? t.desc[idx] : (t.tip || "");
+        var clamped = have > 0 && idx < want;
+        var extra = (clamped ? " [rank " + (idx + 1) + " text; the demo never showed the higher ranks]" : "") +
+          (t.est ? " [numbers still estimates]" : "") + (t.cn ? " \u00b7 " + t.cn + "." : "");
         var how = !open ? " \u2014 Needs " + gate + " points in " + tr.name + "."
           : (done && r < t.r) ? " \u2014 No points left; right-click something to take one back."
           : " \u2014 Left click adds; right click removes.";
         html += '<div class="slot' + (r >= t.r ? " maxed" : r > 0 ? " part" : "") + (open ? "" : " locked") + (t.est ? " est" : "") + (done && r === 0 && open ? " tapped" : "") +
           '" style="grid-column:' + t.col + ";grid-row:" + t.row + '" data-tal="' + ti + ":" + i + '" ' +
-          dt(t.n + " (" + r + "/" + t.r + ")" + (r < t.r && t.desc && t.desc.length > 1 ? " \u2014 next rank:" : ""), d + extra + how) + ">" +
+          dt(t.n + " (" + r + "/" + t.r + ")" + (r < t.r && have > 0 && !clamped ? " \u2014 rank " + (want + 1) + ":" : ""), d + extra + how) + ">" +
           icon(t.icon, "wi") + '<span class="s-rank">' + r + "/" + t.r + "</span></div>";
       });
       html += "</div></div>";
