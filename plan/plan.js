@@ -23,8 +23,8 @@
     { n: "Undead", f: "Horde", i: "achievement_character_undead_male", tip: "Will of the Forsaken clears fear, charm and sleep but no longer grants immunity. Cannibalize restores mana AND health; Touch of the Grave drains life. Still the PvP menace." },
     { n: "Tauren", f: "Horde", i: "achievement_character_tauren_male", tip: "War Stomp, +5% health, and Cultivation: bonus herbs with no Herbalism needed. The economy moos." },
     { n: "Troll", f: "Horde", i: "achievement_character_troll_male", tip: "Berserking and beast slaying, rework details still landing. The percentages are shy; the aggression is not." },
-    { n: "Skyborne (High Order)", f: "Alliance", i: "inv_feather_02", nu: true, tip: "Alliance Skyborne. Walk on Air (10s glide), Wind Blessed (+1% haste), Elemental Insight (+5% vs elementals), Read Ley Line (double regen 15s). Announced, not yet datamined." },
-    { n: "Skyborne (Windshaper)", f: "Horde", i: "inv_feather_04", nu: true, tip: "Horde Skyborne. Walk on Air, Wind Blessed, Elemental Insight, and Skysight (+10% run speed). Announced, not yet datamined." }
+    { n: "Skyborne (High Order)", f: "Alliance", i: "inv_feather_02", nu: true, tip: "Alliance Skyborne. Walk on Air (10s glide), Wind Blessed (+1% haste), Elemental Insight (+5% vs elementals), Read Ley Line (double regen 15s). Requires the Skyborne Heroic Pack. Announced, not yet datamined." },
+    { n: "Skyborne (Windshaper)", f: "Horde", i: "inv_feather_04", nu: true, tip: "Horde Skyborne. Walk on Air, Wind Blessed, Elemental Insight, and Skysight (+10% run speed). Requires the Skyborne Heroic Pack. Announced, not yet datamined." }
   ];
 
   var COMBOS = {

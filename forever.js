@@ -297,7 +297,7 @@
     }).join("");
     $("insight-body").innerHTML =
       '<h2 class="in-name">&lt;<span class="gtag">' + esc(g.name) + "</span>&gt;</h2>" +
-      '<div class="in-meta"><span class="chip">' + g.members + ' members</span><span class="chip">' + esc(g.realm) + ' realm</span><span class="chip">overall ' + g.overall.toFixed(1) + '</span><span class="demo-flag">Demo</span></div>' +
+      '<div class="in-meta"><span class="chip">' + g.members + ' members</span><span class="chip">' + esc(g.realm) + ' server</span><span class="chip">overall ' + g.overall.toFixed(1) + '</span><span class="demo-flag">Demo</span></div>' +
       '<p class="in-h">Category breakdown: colour is the score band</p>' +
       '<ol class="gbars">' + bars + "</ol>" +
       '<p class="in-h">Notable members</p><div class="roster">' + roster + "</div>" +
@@ -367,9 +367,9 @@
   }
   function realmClash() {
     if (view === "pvp" && realmFilter !== "all" && realmFilter !== "PvP")
-      return ["World PvP lives on the", "PvP realm", "Duels are all a " + realmFilter + " realm allows. Switch the realm box to PvP or All realms."];
+      return ["World PvP lives on the", "PvP server", "Duels are all a " + realmFilter + " server allows. Switch the server box to PvP or All servers."];
     if (view === "hardcore" && realmFilter !== "all" && realmFilter !== "Hardcore")
-      return ["One life is a", "Hardcore rule", "The " + realmFilter + " realm resurrects you. Switch the realm box to Hardcore or All realms."];
+      return ["One life is a", "Hardcore rule", "The " + realmFilter + " server resurrects you. Switch the server box to Hardcore or All servers."];
     return null;
   }
   var REALM_OPTS = ["all", "Normal", "PvP", "Hardcore", "RP"];
@@ -411,14 +411,14 @@
     syncURL();
     var v = VIEWS[view];
     var scope = realmFilter === "all"
-      ? (view === "pvp" ? " Across all realms; only PvP-realm characters fight for it."
-        : view === "hardcore" ? " Across all realms; only Hardcore-realm characters qualify."
-        : " Across all four realms.")
-      : " " + realmFilter + " realm only.";
+      ? (view === "pvp" ? " Across all realms; only PvP-server characters fight for it."
+        : view === "hardcore" ? " Across all realms; only Hardcore-server characters qualify."
+        : " Across all four servers.")
+      : " " + realmFilter + " server only.";
     var hint = view === "guilds" ? " Click a guild for its breakdown." : " Click a name for the full character.";
     $("board-sub").textContent = v.sub + scope + hint;
     $("cap-note").innerHTML = Date.now() < LAUNCH
-      ? "Beta caps at <b>level 30</b>: every board ranks 1&ndash;30 until launch."
+      ? "Beta opens capped at <b>level 20</b>, rising to 30 after a couple of weeks. Boards rank to the live cap."
       : "Launched: the ladder runs to <b>level 60</b>.";
     var b = $("board");
     if (!demoOn()) {
@@ -538,6 +538,14 @@
     $("insight-x").addEventListener("click", function () { $("insight").hidden = true; });
     $("insight").addEventListener("click", function (e) { if (e.target === $("insight")) $("insight").hidden = true; });
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") $("insight").hidden = true; });
+
+    fetch("news.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (n) {
+      var w = $("wire");
+      if (!w || !n.items) return;
+      w.innerHTML = n.items.map(function (it) {
+        return "<li><span>" + esc(it.d.slice(5)) + "</span><b>" + esc(it.t) + "</b><i>" + esc(it.s) + "</i></li>";
+      }).join("");
+    }).catch(function () {});
 
     readURL();
     syncControls();

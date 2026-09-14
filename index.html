@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="forever.css?v=7">
+<link rel="stylesheet" href="forever.css?v=8">
 </head>
 <body>
 
@@ -92,7 +92,7 @@
 <main id="top" class="wrap">
   <div class="board-title">
     <h2 class="display">The <span>Eternal</span> Ladder</h2>
-    <p class="board-note" id="cap-note">Beta caps at <b>level 30</b>: every board ranks 1 to 30 until launch.</p>
+    <p class="board-note" id="cap-note">Beta opens capped at <b>level 20</b>, rising to 30. Boards rank to the live cap.</p>
   </div>
 
   <div class="controls">
@@ -110,10 +110,10 @@
     </div>
     <div class="dd" id="dd-realm">
       <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
-        <small>Realm</small><span id="dd-realm-label">All realms</span><i class="dd-car" aria-hidden="true"></i>
+        <small>Server</small><span id="dd-realm-label">All servers</span><i class="dd-car" aria-hidden="true"></i>
       </button>
       <ul class="dd-list" role="listbox" hidden>
-        <li role="option" data-v="all" class="is-sel" aria-selected="true">All realms</li>
+        <li role="option" data-v="all" class="is-sel" aria-selected="true">All servers</li>
         <li role="option" data-v="Normal">Normal</li>
         <li role="option" data-v="PvP">PvP</li>
         <li role="option" data-v="Hardcore">Hardcore</li>
@@ -141,6 +141,12 @@
 
 <div class="divider" aria-hidden="true"><svg><use href="#rune"/></svg></div>
 
+<section class="wire-sec">
+  <h2 class="display display-sm">The <span>Wire</span></h2>
+  <p class="board-sub">What Blizzard and the fansites have said about Forever, newest first. A living file; it grows as the news does.</p>
+  <ol class="wire" id="wire"></ol>
+</section>
+
 <section class="api-note">
   <h2>We do not know the addon API yet.</h2>
   <p>Blizzard has published <b>no addon details for Forever</b>: no folder path, no
@@ -152,11 +158,12 @@
 </section>
 
 <footer>
+  <a class="pill donate" href="https://paypal.me/MikalSteenMonslaup" rel="noopener">Buy the smith a mead</a>
   <img src="mark.svg" alt="" width="24" height="24">
   <span>Level first, speed breaks ties: a race ladder, not a stopwatch contest.</span>
   <a href="https://github.com/monscorps/foreverrank">source</a>
 </footer>
 
-<script src="forever.js?v=7"></script>
+<script src="forever.js?v=8"></script>
 </body>
 </html>
