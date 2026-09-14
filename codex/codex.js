@@ -153,22 +153,57 @@
       "<h3>Raids</h3>" + placecards(w.raids) + "<h3>Battlegrounds</h3>" + placecards(w.battlegrounds));
 
     // Systems: one card each, icon in the header.
-    // Roadmap: a timeline, with the next milestone lit.
+    // Roadmap: seasons, icons, a live pulse and a progress bar.
     if (d.roadmap) {
       var now = Date.now();
-      var DATES = { "Beta": "2026-09-17", "Name reservation": "2026-10-27", "Launch": "2026-11-04",
-        "Raids unlock": "2026-12-09", "Hardcore": "2026-12-21", "First major update": "2027-04-01", "Second major update": "2027-07-01" };
-      var nextIdx = -1;
+      var META = {
+        "Beta": { on: "2026-09-17", icon: "inv_scroll_11", season: "Autumn 2026" },
+        "Name reservation": { on: "2026-10-27", icon: "inv_scroll_02", season: "Autumn 2026" },
+        "Launch": { on: "2026-11-04", icon: "inv_misc_rune_01", season: "Autumn 2026", featured: true },
+        "Raids unlock": { on: "2026-12-09", icon: "inv_misc_head_dragon_01", season: "Winter 2026" },
+        "Hardcore": { on: "2026-12-21", icon: "inv_misc_bone_humanskull_01", season: "Winter 2026", featured: true },
+        "First major update": { on: "2027-04-01", icon: "spell_nature_naturetouchgrow", season: "Spring 2027" },
+        "Second major update": { on: "2027-07-01", icon: "spell_fire_fire", season: "Summer 2027" }
+      };
+      var passed = 0, nextIdx = -1;
       d.roadmap.forEach(function (m, i) {
-        if (nextIdx === -1 && Date.parse(DATES[m.title] || 0) > now) nextIdx = i;
+        var t = Date.parse((META[m.title] || {}).on || 0);
+        if (t <= now) passed++;
+        else if (nextIdx === -1) nextIdx = i;
       });
-      section("roadmap", "Roadmap", '<div class="rmap">' + d.roadmap.map(function (m, i) {
-        var past = Date.parse(DATES[m.title] || 0) <= now;
-        return '<div class="rm' + (i === nextIdx ? " next" : past ? " past" : "") + '">' +
-          '<div class="rm-dot"></div><div class="rm-body"><span class="rm-when">' + esc(m.when) +
-          (i === nextIdx ? '<em class="rm-next">next</em>' : "") + "</span><b>" + esc(m.title) + "</b>" +
-          '<ul>' + m.items.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div></div>";
-      }).join("") + '</div><p class="board-sub">Content and timing per Blizzard’s published plan; all of it subject to change.</p>');
+      var nextM = nextIdx >= 0 ? d.roadmap[nextIdx] : null;
+      var launchDays = Math.max(0, Math.floor((Date.parse("2026-11-04T23:00:00Z") - now) / 86400000));
+      var hero = '<p class="rm-years">2026–2027</p>' +
+        '<p class="rm-intro">The official year-one plan, beat by beat, as Blizzard laid it out at BlizzCon.</p>' +
+        (nextM ? '<p class="rm-now"><span class="rm-pulse"></span>Next: <b>' + esc(nextM.title) + "</b>, " + esc(nextM.when) + "." +
+          (launchDays > 0 ? " Launch is <b>" + launchDays + " days</b> away." : "") + "</p>" : "") +
+        '<div class="rm-progress"><span style="width:' + Math.round(passed / d.roadmap.length * 100) + '%"></span></div>' +
+        '<p class="rm-count">' + passed + " of " + d.roadmap.length + " milestones passed</p>" +
+        '<div class="rm-stills">' +
+        ["img/city-of-dalaran.jpg", "img/hyjal-summit.jpg", "img/the-drowned-city.jpg", "img/shaper-s-terrace.jpg"].map(function (u) {
+          return '<img src="' + u + '" alt="" loading="lazy">';
+        }).join("") + "</div>";
+      var seasons = [], byS = {};
+      d.roadmap.forEach(function (m) {
+        var sn = (META[m.title] || {}).season || "Later";
+        if (!byS[sn]) { byS[sn] = []; seasons.push(sn); }
+        byS[sn].push(m);
+      });
+      var body = seasons.map(function (sn) {
+        return '<div class="rm-season"><div class="rm-season-head"><b>' + esc(sn.split(" ")[0]) +
+          '</b><span>' + esc(sn.split(" ")[1]) + "</span></div><div class=\"rm-marks\">" +
+          byS[sn].map(function (m) {
+            var mt = META[m.title] || {}, i = d.roadmap.indexOf(m);
+            var t = Date.parse(mt.on || 0), state = t <= now ? " past" : i === nextIdx ? " next" : "";
+            return '<div class="rm' + state + (mt.featured ? " featured" : "") + '">' +
+              '<div class="rm-dot"></div><div class="rm-body"><div class="rm-mark-head">' + img(mt.icon || "inv_misc_questionmark") +
+              '<div><span class="rm-when">' + esc(m.when) + (i === nextIdx ? '<em class="rm-next">next</em>' : "") +
+              "</span><b>" + esc(m.title) + "</b></div></div>" +
+              '<ul>' + m.items.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div></div>";
+          }).join("") + "</div></div>";
+      }).join("");
+      section("roadmap", "Roadmap", hero + '<div class="rmap">' + body +
+        '</div><p class="board-sub">Content and timing per Blizzard’s published plan; all of it subject to change.</p>');
     }
 
     var sysHtml = '<div class="syscards">' + d.systems.map(function (sys, i) {
