@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ForeverRank</title>
-<meta name="description" content="The ladder for World of Warcraft: Forever — levelling, hardcore, PvP, character and guild progression. Ranked WarcraftLogs-style, waiting for launch.">
+<meta name="description" content="The ladder for World of Warcraft: Forever: levelling, hardcore, PvP, character and guild progression. Ranked WarcraftLogs-style, waiting for launch.">
 <link rel="icon" href="mark.svg" type="image/svg+xml">
 <link rel="canonical" href="https://foreverrank.com/">
 <meta property="og:url" content="https://foreverrank.com/">
@@ -67,7 +67,7 @@
     <svg class="fili fili-tr" aria-hidden="true"><use href="#fili"/></svg>
     <p class="eyebrow">A ladder reborn</p>
     <h1 class="logotype">Rank. <span>Forever.</span></h1>
-    <p class="hero-sub">Levelling, hardcore, PvP, characters and guilds — measured in the
+    <p class="hero-sub">Levelling, hardcore, PvP, characters and guilds: measured in the
     world, ranked like a WarcraftLogs parse.</p>
 
     <div class="countdown" id="countdown">
@@ -91,16 +91,19 @@
 <main id="top" class="wrap">
   <div class="board-title">
     <h2 class="display">The <span>Eternal</span> Ladder</h2>
-    <p class="board-note" id="cap-note">Beta caps at <b>level 30</b> — every board ranks 1–30 until launch.</p>
+    <p class="board-note" id="cap-note">Beta caps at <b>level 30</b>: every board ranks 1 to 30 until launch.</p>
   </div>
 
-  <nav class="tabs" role="tablist" aria-label="Boards">
-    <button role="tab" class="tab is-active" data-view="levelling" aria-selected="true">Levelling</button>
-    <button role="tab" class="tab" data-view="hardcore" aria-selected="false">Hardcore</button>
-    <button role="tab" class="tab" data-view="pvp" aria-selected="false">PvP</button>
-    <button role="tab" class="tab" data-view="progression" aria-selected="false">Progression</button>
-    <button role="tab" class="tab" data-view="guilds" aria-selected="false">Guilds</button>
-  </nav>
+  <div class="controls">
+    <select id="view-select" class="viewsel" aria-label="Choose a ladder">
+      <option value="levelling" selected>Levelling</option>
+      <option value="hardcore">Hardcore</option>
+      <option value="pvp">PvP</option>
+      <option value="progression">Progression</option>
+      <option value="guilds">Guilds</option>
+    </select>
+    <input id="search" class="search" type="search" placeholder="Find a player&hellip;" aria-label="Search players" autocomplete="off" spellcheck="false">
+  </div>
   <p class="board-sub" id="board-sub"></p>
 
   <section class="panel">
@@ -121,17 +124,17 @@
 
 <section class="api-note">
   <h2>We do not know the addon API yet.</h2>
-  <p>Blizzard has published <b>no addon details for Forever</b> — no folder path, no
+  <p>Blizzard has published <b>no addon details for Forever</b>: no folder path, no
   API notes. This whole page is the plan, built on the Classic Era client the game
   is based on, and every number on it is a placeholder. The beta on
-  <b>September&nbsp;17</b> is where we find out what an addon can actually measure —
+  <b>September&nbsp;17</b> is where we find out what an addon can actually measure.
   the boards go live the day real uploads exist, and anything the API cannot
   support gets removed rather than faked.</p>
 </section>
 
 <footer>
   <img src="mark.svg" alt="" width="24" height="24">
-  <span>Level first, speed breaks ties — a race ladder, not a stopwatch contest.</span>
+  <span>Level first, speed breaks ties: a race ladder, not a stopwatch contest.</span>
   <a href="https://github.com/monscorps/foreverrank">source</a>
 </footer>
 

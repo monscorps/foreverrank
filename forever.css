@@ -108,7 +108,7 @@ tr:nth-child(1) .rank { color: var(--gold); }
 .bar { display: block; height: 6px; border-radius: 99px; background: var(--card); overflow: hidden; }
 .bar i { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--c); transition: width .8s cubic-bezier(.2,.8,.2,1); }
 .is-drawn .bar i { width: var(--w); }
-.pct { font-weight: 700; color: var(--c); }
+.ranktable td.pct, .pct { font-weight: 700; color: var(--c); }
 .dead { color: var(--sale); font-family: var(--heading); font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
 .alive { color: var(--q-uncommon); font-family: var(--heading); font-size: .66rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
 
@@ -204,3 +204,21 @@ footer a { margin-left: auto; color: var(--card-text); }
   .hero { min-height: 70vh; }
   .gbars li { grid-template-columns: 7rem 1fr 2.6rem; }
 }
+
+/* search + honours */
+.search { margin-left: auto; background: var(--card); border: .5px solid var(--card-border); border-radius: 9999px; color: var(--surface-text); font: 500 .85rem/1 var(--body); padding: .5rem .95rem; min-width: 12rem; outline: none; transition: border-color .15s; }
+.search::placeholder { color: var(--subtle); }
+.search:focus { border-color: var(--gold); }
+.chip-gold { border-color: rgba(229,204,128,.55); color: var(--gold); background: rgba(229,204,128,.1); }
+@media (max-width: 820px) { .search { min-width: 100%; margin-top: .3rem; } }
+
+/* view select: squared, like a tool, not a pill */
+.controls { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .2rem 0 .8rem; }
+.viewsel { appearance: none; -webkit-appearance: none; background: var(--card); color: var(--surface-text);
+  border: 1px solid var(--card-border); border-radius: 2px; font: 600 .95rem/1 var(--heading);
+  padding: .6rem 2.2rem .55rem .9rem; cursor: pointer; outline: none;
+  background-image: linear-gradient(45deg, transparent 49%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 51%);
+  background-position: calc(100% - 1.15rem) 55%, calc(100% - .85rem) 55%; background-size: .32rem .32rem; background-repeat: no-repeat; }
+.viewsel:focus { border-color: var(--gold); }
+.viewsel option { background: #0b2436; color: var(--surface-text); }
+.controls .search { margin-left: auto; border-radius: 2px; }

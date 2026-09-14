@@ -1,4 +1,4 @@
-/* LevelPace Forever — plan-stage board. No framework, no build step.
+/* LevelPace Forever: plan-stage board. No framework, no build step.
  * Every row is demo data until the game exists; the gear toggles it off.
  * Rendering follows WarcraftLogs' discipline: class colour on the name,
  * band colour on the parse, everything else muted. No chips, no badges. */
@@ -18,33 +18,74 @@
     "Knight", "Knight-Lieutenant", "Knight-Captain", "Knight-Champion", "Lieutenant Commander",
     "Commander", "Marshal", "Field Marshal", "Grand Marshal"];
 
-  // ---- demo characters (deterministic, obviously invented) ------------------
-  function mk(name, cls, level, pace, deaths, hks, dungeons, alive) {
-    // pace: rough seconds per level at level 10, grows ~9%/level
+  // ---- the roster -----------------------------------------------------------
+  // The guild's own Discord, name for name (mains before the slash). Stats
+  // are seeded from each name so the ladder is stable across reloads -- and
+  // invented, like everything here, until the game exists.
+  function mk(name, cls, level, pace, deaths, hks, dungeons, alive, tag) {
     var perLevel = [], total = 0;
     for (var l = 1; l < level; l++) {
-      var s = Math.round(pace * Math.pow(1.09, l - 10) * (1 + 0.18 * Math.sin(l * 2.3 + name.length)));
-      if (s < 120) s = 120;
-      perLevel.push(s); total += s;
+      var sec = Math.round(pace * Math.pow(1.09, l - 10) * (1 + 0.18 * Math.sin(l * 2.3 + name.length)));
+      if (sec < 120) sec = 120;
+      perLevel.push(sec); total += sec;
     }
     return { name: name, cls: cls, level: level, perLevel: perLevel, seconds: total,
              lph: total > 0 ? (level - 1) / (total / 3600) : 0, deaths: deaths, hks: hks,
-             kills: Math.round(hks * 1.18), pvpDeaths: Math.round(hks / (1.1 + name.length % 3)),
+             kills: Math.round(hks * 1.18), pvpDeaths: Math.max(1, Math.round(hks / (1.1 + name.length % 3))),
              dungeons: dungeons, quests: 40 + level * 9 + (name.length * 7) % 60,
-             ilvl: 8 + Math.round(level * 0.85), alive: alive, realm: "Beta 1" };
+             ilvl: 8 + Math.round(level * 0.85), alive: alive, realm: "Beta 1", tag: tag };
   }
+  function hash(str) {
+    var h = 5381;
+    for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+    return h;
+  }
+  function rng(seed) {
+    return function () { seed = (seed * 1103515245 + 12345) >>> 0; return seed / 4294967296; };
+  }
+  var CLASSES = ["WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID"];
+  function gen(name, ov) {
+    ov = ov || {};
+    var r = rng(hash(name));
+    var cls = CLASSES[Math.floor(r() * CLASSES.length)];
+    var level = 8 + Math.floor(r() * 23);
+    var pace = 620 + Math.floor(r() * 520);
+    var deaths = Math.floor(r() * 10);
+    var hks = Math.floor(r() * r() * 260);
+    var dungeons = Math.min(9, Math.floor(r() * 10));
+    var alive = r() > 0.12;
+    return mk(name, ov.cls || cls, ov.level != null ? ov.level : level, ov.pace || pace,
+              ov.deaths != null ? ov.deaths : deaths, ov.hks != null ? ov.hks : hks,
+              ov.dungeons != null ? ov.dungeons : dungeons, ov.alive != null ? ov.alive : alive, ov.tag);
+  }
+  var ROSTER = ["Tpau", "Treefy", "Uglysin", "Ultranstinct", "Upn", "Villepou", "Whiterock",
+    "Willamok", "Xynnz", "Yezin", "Zjolnir", "Zuprise", "Eldritch", "Sebzki", "Shiruy",
+    "Shockill", "Sjongejonge", "Slons", "Sne", "Stoupe", "Stumfa", "Suki", "Swissotel",
+    "Swobuda", "Tony", "Noakesy", "Noximos", "Pain", "Petteri", "Phazed", "Pobs",
+    "Poffgone", "Priestage", "Ratiok", "Rezola", "Rhero", "Roach", "Roshlock", "Korjin",
+    "Korns", "Kranny", "Lachesis", "Mahito", "Marrion", "Meryla", "Mikhaeraw", "Mingles",
+    "Mitre", "Naty", "Nissehaderen", "Fladdo", "Flower", "Flurst", "Gambino", "Gnomwarlock",
+    "Goldy", "Happymeal", "Jayme", "Johnsen", "Turalionovna", "Jaegerinden", "Kizerine", "Kony",
+    "Chikn", "Christina", "Ckodi", "Clav", "Cloakedblade", "Colonelkitten", "Daddysupreme",
+    "Darkmaster", "Didster", "Epowk", "Executia", "Exoxo", "Fake", "Alsong", "Alz",
+    "Antigoon", "Anzu", "Arcanehealer", "Ashebarrett", "Bari", "Boynic", "Celuna",
+    "Piven", "Prythegywy", "Sauriel", "Shaggrath", "Shazzers", "Trajan", "Vendji",
+    "Zhnon", "Crnky", "Emei", "Shins", "Zablefahr", "Aev", "Annsie", "Atropos",
+    "Chaipaku", "Collymonk", "Helpstepbro", "Imnotatroll", "Isah", "Maetel", "Peremi",
+    "Boopsy", "Colter", "Luseria", "Mandragoran", "Mudpeefrgogo", "Noula", "Suu",
+    "Valentina", "Xullue", "Hal", "Koebjeste", "Lanten", "Mular", "Odlid",
+    "Orosmomentet", "Pepegasussy", "Thices", "Zerash", "Sixflags", "Timmy",
+    "Emillionaire", "Faint", "Zucco", "Ahri", "Ares", "Dreadelf", "Exapt"];
   var DEMO = [
-    mk("Rickmyrolls", "PRIEST", 30, 680, 2, 214, 6, true),
-    mk("Thundermaw", "SHAMAN", 30, 760, 5, 158, 5, true),
-    mk("Skydancer", "HUNTER", 29, 705, 1, 96, 4, true),
-    mk("Grimveil", "WARLOCK", 28, 810, 7, 61, 4, true),
-    mk("Oakenheart", "DRUID", 27, 890, 3, 44, 3, true),
-    mk("Sunblade", "PALADIN", 26, 940, 0, 39, 3, true),
-    mk("Vexley", "ROGUE", 24, 870, 9, 122, 2, false),
-    mk("Emberlyn", "MAGE", 22, 795, 4, 71, 2, true),
-    mk("Ironjaw", "WARRIOR", 19, 1010, 6, 18, 1, false),
-    mk("Whisperwind", "PRIEST", 14, 930, 1, 5, 1, true)
+    // Ordained, not rolled: the two the guild would riot over.
+    gen("Athgaar", { cls: "WARRIOR", level: 30, pace: 560, deaths: 1, hks: 244, dungeons: 9,
+                     alive: true, tag: "Top warrior of the guild. Noob Slayer" }),
+    gen("Mutuwa", { cls: "WARRIOR", level: 30, pace: 705, deaths: 0, hks: 88, dungeons: 9,
+                    alive: true, tag: "Main tank: nine of nine, zero deaths" }),
+    gen("Rickmyrolls", { cls: "PRIEST", level: 30, pace: 648, deaths: 2, hks: 130, dungeons: 7 })
   ];
+  ROSTER.forEach(function (n) { DEMO.push(gen(n)); });
+  var query = "";
 
   // ---- demo guilds ----------------------------------------------------------
   // WarcraftLogs ranks combat logs; this ranks GUILD PROGRESS overall, broken
@@ -64,10 +105,10 @@
              overall: total / wsum, roster: roster };
   }
   var GUILDS = [
-    mkGuild("Eternal Vanguard", "EV", 42, { levelling: 91, dungeons: 88, pvp: 64, hardcore: 70, quests: 84 }, ["Rickmyrolls", "Thundermaw", "Sunblade"]),
-    mkGuild("Skyborne Pact", "SKY", 31, { levelling: 78, dungeons: 92, pvp: 41, hardcore: 88, quests: 71 }, ["Skydancer", "Oakenheart"]),
-    mkGuild("Ashes of Lordaeron", "ASH", 55, { levelling: 66, dungeons: 71, pvp: 90, hardcore: 35, quests: 62 }, ["Vexley", "Emberlyn", "Ironjaw"]),
-    mkGuild("Riverglade Company", "RGC", 18, { levelling: 52, dungeons: 44, pvp: 22, hardcore: 95, quests: 90 }, ["Whisperwind", "Grimveil"])
+    mkGuild("Eternal Vanguard", "EV", 24, { levelling: 91, dungeons: 88, pvp: 64, hardcore: 70, quests: 84 }, ["Athgaar", "Mutuwa", "Rickmyrolls", "Willamok"]),
+    mkGuild("Skyborne Pact", "SKY", 15, { levelling: 78, dungeons: 92, pvp: 41, hardcore: 88, quests: 71 }, ["Mikhaeraw", "Eldritch", "Kizerine"]),
+    mkGuild("Ashes of Lordaeron", "ASH", 14, { levelling: 66, dungeons: 71, pvp: 90, hardcore: 35, quests: 62 }, ["Pain", "Yezin", "Xynnz", "Roach"]),
+    mkGuild("Riverglade Company", "RGC", 12, { levelling: 52, dungeons: 44, pvp: 22, hardcore: 95, quests: 90 }, ["Flower", "Goldy", "Sne", "Naty"])
   ];
 
   // ---- tiny utils -----------------------------------------------------------
@@ -97,9 +138,9 @@
   // ---- countdown ------------------------------------------------------------
   function tickCountdown() {
     var now = Date.now(), target, kick, note, phase;
-    if (now < BETA) { target = BETA; kick = "The <b>beta</b> opens in"; phase = "PRE-BETA"; note = "Beta Sept 17 – Oct 21, level cap 30 · Launch Nov 4 (times estimated)"; }
-    else if (now < LAUNCH) { target = LAUNCH; kick = "<b>Forever</b> launches in"; phase = "BETA · CAP 30"; note = "Beta is live until Oct 21 · launch Nov 4 (times estimated)"; }
-    else { target = null; kick = "<b>Forever</b> is live"; phase = "LIVE · CAP 60"; note = ""; }
+    if (now < BETA) { target = BETA; kick = "The <b>beta</b> opens in"; phase = "PRE-BETA"; note = "Beta Sept 17 to Oct 21, level cap 30. Launch Nov 4 (times estimated)"; }
+    else if (now < LAUNCH) { target = LAUNCH; kick = "<b>Forever</b> launches in"; phase = "BETA. CAP 30"; note = "Beta is live until Oct 21. launch Nov 4 (times estimated)"; }
+    else { target = null; kick = "<b>Forever</b> is live"; phase = "LIVE. CAP 60"; note = ""; }
     $("count-kick").innerHTML = kick;
     $("phase-chip").textContent = phase;
     $("count-note").textContent = note;
@@ -121,7 +162,7 @@
       return '<th class="' + (h[1] || "") + '">' + h[0] + "</th>";
     }).join("") + "</tr></thead>";
   }
-  function demoFlag() { return '<p class="demo-flag">Demo data — nothing real yet</p>'; }
+  function demoFlag() { return '<p class="demo-flag">Demo data: nothing real yet</p>'; }
 
   var VIEWS = {
     levelling: {
@@ -135,7 +176,7 @@
               '<td class="r lvl">' + c.level + "</td>" +
               '<td class="r">' + hm(c.seconds) + "</td>" +
               '<td class="r">' + c.lph.toFixed(2) + "</td>" +
-              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "—" : Math.round(p)) + "</td></tr>";
+              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + "</td></tr>";
           }).join("");
         return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Time played", "r"], ["Lvl/hr", "r"], ["Parse", "r"]]) + "<tbody>" + rows + "</tbody></table>";
       }
@@ -165,7 +206,7 @@
               '<td class="r">' + esc(rank) + "</td>" +
               '<td class="r">' + c.hks + "</td>" +
               '<td class="r">' + (c.pvpDeaths > 0 ? (c.kills / c.pvpDeaths).toFixed(2) : c.kills.toFixed(0)) + "</td>" +
-              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "—" : Math.round(p)) + "</td></tr>";
+              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + "</td></tr>";
           }).join("");
         return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Rank", "r"], ["HKs", "r"], ["K/D", "r"], ["Parse", "r"]]) + "<tbody>" + rows + "</tbody></table>";
       }
@@ -183,7 +224,7 @@
               '<td class="r">' + c.dungeons + "/9</td>" +
               '<td class="r">' + c.quests + "</td>" +
               '<td class="r">' + c.ilvl + "</td>" +
-              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "—" : Math.round(p)) + "</td></tr>";
+              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + "</td></tr>";
           }).join("");
         return '<table class="ranktable">' + head([["#", "rank"], ["Character"], ["Lvl", "r"], ["Dungeons", "r"], ["Quests", "r"], ["Gear", "r"], ["Parse", "r"]]) + "<tbody>" + rows + "</tbody></table>";
       }
@@ -192,8 +233,17 @@
     guilds: {
       sub: "Guild progress overall, not one lucky log: levelling pace, the nine dungeons, PvP, hardcore survival and quests, weighted into one score. Click a guild for the breakdown.",
       render: function () {
+        var pool = GUILDS;
+        if (query) {
+          var q = query.toLowerCase();
+          pool = GUILDS.filter(function (g) {
+            return g.name.toLowerCase().indexOf(q) !== -1 ||
+              g.roster.some(function (m) { return m.toLowerCase().indexOf(q) !== -1; });
+          });
+        }
+        if (!pool.length) return '<div class="empty"><h3>No guild or member called <span>\u201c' + esc(query) + '\u201d</span></h3></div>';
         var all = GUILDS.map(function (g) { return g.overall; });
-        var rows = GUILDS.slice().sort(function (a, b) { return b.overall - a.overall; })
+        var rows = pool.slice().sort(function (a, b) { return b.overall - a.overall; })
           .map(function (g, i) {
             var p = pctile(g.overall, all), v = bandVar(p);
             return '<tr data-g="' + esc(g.name) + '"><td class="rank">' + (i + 1) + "</td>" +
@@ -203,7 +253,7 @@
               '<td class="r">' + g.cats.levelling + "</td>" +
               '<td class="r">' + g.cats.dungeons + "</td>" +
               '<td class="r">' + g.cats.pvp + "</td>" +
-              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "\u2014" : Math.round(p)) + "</td></tr>";
+              '<td class="r pct" style="--c:' + v + '">' + (p == null ? "" : Math.round(p)) + "</td></tr>";
           }).join("");
         return '<table class="ranktable">' + head([["#", "rank"], ["Guild"], ["Overall", "r"], ["Lvl", "r"], ["Dng", "r"], ["PvP", "r"], ["Parse", "r"]]) + "<tbody>" + rows + "</tbody></table>";
       }
@@ -222,7 +272,7 @@
     $("insight-body").innerHTML =
       '<h2 class="in-name">&lt;<span class="gtag">' + esc(g.name) + "</span>&gt;</h2>" +
       '<div class="in-meta"><span class="chip">' + g.members + ' members</span><span class="chip">overall ' + g.overall.toFixed(1) + '</span><span class="demo-flag">Demo</span></div>' +
-      '<p class="in-h">Category breakdown — colour is the score band</p>' +
+      '<p class="in-h">Category breakdown: colour is the score band</p>' +
       '<ol class="gbars">' + bars + "</ol>" +
       '<p class="in-h">Notable members</p><div class="roster">' + roster + "</div>" +
       '<p class="in-note">Weights: levelling and dungeons 3, PvP 2, hardcore and quests 1. Real categories get argued about in the open once uploads exist.</p>';
@@ -251,7 +301,7 @@
       : "At the cap.";
     $("insight-body").innerHTML =
       '<h2 class="in-name" style="--cc:' + cc(c.cls) + '">' + esc(c.name) + "</h2>" +
-      '<div class="in-meta"><span class="chip">' + esc(c.cls.toLowerCase()) + '</span><span class="chip">' + esc(c.realm) + '</span><span class="chip">' + (c.alive ? "alive" : "fallen") + '</span><span class="demo-flag">Demo</span></div>' +
+      '<div class="in-meta"><span class="chip">' + esc(c.cls.toLowerCase()) + '</span><span class="chip">' + esc(c.realm) + '</span><span class="chip">' + (c.alive ? "alive" : "fallen") + '</span>' + (c.tag ? '<span class="chip chip-gold">' + esc(c.tag) + "</span>" : "") + '<span class="demo-flag">Demo</span></div>' +
       '<div class="in-stats">' +
         "<div><b>" + c.level + "</b><span>level</span></div>" +
         "<div><b>" + hm(c.seconds) + "</b><span>time played</span></div>" +
@@ -260,7 +310,7 @@
         "<div><b>" + c.hks + "</b><span>honor kills</span></div>" +
         "<div><b>" + c.dungeons + "/9</b><span>dungeons</span></div>" +
       "</div>" +
-      '<p class="in-h">Every level, timed — colour is the percentile at that level</p>' +
+      '<p class="in-h">Every level, timed: colour is the percentile at that level</p>' +
       '<ol class="lvlbars">' + bars + "</ol>" +
       '<p class="in-note">' + proj + " Real insights use exactly this layout once uploads exist.</p>";
     $("insight").hidden = false;
@@ -268,12 +318,17 @@
 
   // ---- rendering ------------------------------------------------------------
   var view = "levelling";
+  function filtered() {
+    if (!query) return DEMO;
+    var q = query.toLowerCase();
+    return DEMO.filter(function (c) { return c.name.toLowerCase().indexOf(q) !== -1; });
+  }
   function render() {
     var v = VIEWS[view];
     $("board-sub").textContent = v.sub;
     $("cap-note").innerHTML = Date.now() < LAUNCH
-      ? "Beta caps at <b>level 30</b> — every board ranks 1&ndash;30 until launch."
-      : "Launched — the ladder runs to <b>level 60</b>.";
+      ? "Beta caps at <b>level 30</b>: every board ranks 1&ndash;30 until launch."
+      : "Launched: the ladder runs to <b>level 60</b>.";
     var b = $("board");
     if (!demoOn()) {
       b.innerHTML = '<div class="empty"><h3>No uploads have <span>happened yet</span></h3>' +
@@ -281,8 +336,14 @@
         '<p>Curious how it will look? The gear (top right) switches the demo back on.</p></div>';
       return;
     }
+    var data = filtered();
+    if (!data.length && view !== "guilds") {
+      b.innerHTML = '<div class="empty"><h3>No one called <span>\u201c' + esc(query) + '\u201d</span></h3>' +
+        "<p>" + DEMO.length + " players are on the ladder. Try fewer letters.</p></div>";
+      return;
+    }
     b.classList.remove("is-drawn");
-    b.innerHTML = demoFlag() + v.render(DEMO);
+    b.innerHTML = demoFlag() + v.render(data);
     requestAnimationFrame(function () { requestAnimationFrame(function () { b.classList.add("is-drawn"); }); });
     var rows = b.querySelectorAll("tr[data-c]");
     Array.prototype.forEach.call(rows, function (r) {
@@ -304,14 +365,17 @@
   document.addEventListener("DOMContentLoaded", function () {
     tickCountdown(); setInterval(tickCountdown, 1000);
 
-    var tabs = document.querySelectorAll(".tab[data-view]");
-    Array.prototype.forEach.call(tabs, function (t) {
-      t.addEventListener("click", function () {
-        Array.prototype.forEach.call(tabs, function (o) { o.classList.remove("is-active"); o.setAttribute("aria-selected", "false"); });
-        t.classList.add("is-active"); t.setAttribute("aria-selected", "true");
-        view = t.getAttribute("data-view"); render();
+    var sel = $("view-select");
+    if (sel) sel.addEventListener("change", function () { view = sel.value; render(); });
+
+    var search = $("search");
+    if (search) {
+      var deb = null;
+      search.addEventListener("input", function () {
+        clearTimeout(deb);
+        deb = setTimeout(function () { query = search.value.trim(); render(); }, 120);
       });
-    });
+    }
 
     var gear = $("gear"), settings = $("settings"), toggle = $("demo-toggle");
     toggle.checked = demoOn();
