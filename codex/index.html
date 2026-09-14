@@ -63,7 +63,7 @@
   transition: border-color .12s, transform .12s; }
 .place:hover { border-color: rgba(229,204,128,.5); transform: translateY(-2px); }
 .place > img { grid-row: 1 / 3; width: 2.6rem; height: 2.6rem; border-radius: 7px; border: 1px solid rgba(229,204,128,.3); }
-.place.hasimg { grid-template-rows: auto auto auto; padding-top: 0; padding-left: 0; padding-right: 0; overflow: hidden; }
+.place.hasimg { grid-template-columns: 3.6rem 1fr; grid-template-rows: auto auto auto; padding-top: 0; padding-left: 0; padding-right: 0; overflow: hidden; }
 .place.hasimg .place-shot { grid-column: 1 / -1; position: relative; margin-bottom: .5rem; }
 .place.hasimg .place-shot img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
 .place.hasimg .place-shot::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(5,30,45,.85)); }
@@ -136,6 +136,6 @@
   <span>Compiled, credited, corrected. Screenshots from Blizzard's BlizzCon footage.</span>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>
-<script src="codex.js?v=7"></script>
+<script src="codex.js?v=8"></script>
 </body>
 </html>

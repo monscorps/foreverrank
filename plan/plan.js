@@ -506,7 +506,10 @@
     var c = clsData(), sp = specNow();
     var done = spent() >= POINTSNOW();
     var html = '<div class="talenthead"><h3>Talents</h3><span class="pts' + (done ? " alldone" : "") + '">' +
-      (done ? "All " + POINTSNOW() + " points placed" : (POINTSNOW() - spent()) + " points left") + '</span><span class="specnow">' + esc(sp.split) + " \u2192 <b>" + esc(sp.name) + "</b> (" + sp.role + ')</span>' +
+      (done ? "All " + POINTSNOW() + " points placed" : (POINTSNOW() - spent()) + " points left") + '</span>' +
+      '<span class="tsplit">' + treePts(0) + "/" + treePts(1) + "/" + treePts(2) +
+      ' \u00b7 level needed <b>' + (spent() ? 9 + spent() : 10) + "</b></span>" +
+      '<span class="specnow">' + esc(sp.split) + " \u2192 <b>" + esc(sp.name) + "</b> (" + sp.role + ')</span>' +
       '<span class="caps">' + [20, 30, 60].map(function (l) {
         return '<button type="button" class="capbtn' + (cap === l ? " on" : "") + '" data-cap="' + l + '">' + l + "</button>";
       }).join("") + '</span>' +
@@ -515,15 +518,38 @@
       '<i class="finenote">real Forever trees, BlizzCon transcription; estimates marked</i></div><div class="wtrees">';
     c.trees.forEach(function (tr, ti) {
       var pts = treePts(ti);
-      html += '<div class="wtree"><div class="wt-head">' + icon(tr.icon, "wi wi-sm") + "<b>" + esc(tr.name) + '</b><u>' + pts + "</u></div><div class=\"wt-grid rows5\">";
+      var byName = {}, maxRow = 1;
+      tr.talents.forEach(function (t, i) { byName[t.n] = i; if (t.row > maxRow) maxRow = t.row; });
+      var nextGate = null;
+      for (var rw = 2; rw <= maxRow; rw++) if (pts < (rw - 1) * 5) { nextGate = (rw - 1) * 5; break; }
+      html += '<div class="wtree"' + (tr.bg ? ' style="background-image:url(' + tr.bg + ')"' : "") +
+        '><div class="wt-head">' + icon(tr.icon, "wi wi-sm") + "<b>" + esc(tr.name) +
+        (nextGate != null ? '<s class="nextrow">next row at ' + nextGate + "</s>" : "") + '</b><u>' + pts + "</u>" +
+        (pts > 0 ? '<button type="button" class="tre-reset" data-treset="' + ti + '" title="Reset ' + esc(tr.name) + '">\u21ba</button>' : "") +
+        '</div><div class="wt-grid rows5">';
+      // Prerequisite arrows, drawn behind the icons.
+      var arrows = "";
+      tr.talents.forEach(function (t) {
+        if (!t.req || byName[t.req] == null) return;
+        var s = tr.talents[byName[t.req]];
+        var ok = (S.t[ti][byName[t.req]] || 0) >= s.r;
+        var x1 = (s.col - 1) * 36 + 15.5, y1 = (s.row - 1) * 41 + 15.5;
+        var x2 = (t.col - 1) * 36 + 15.5, y2 = (t.row - 1) * 41 + 15.5;
+        arrows += '<line class="tarrow' + (ok ? " ok" : "") + '" x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '"/>' +
+          '<polygon class="tarrow-h' + (ok ? " ok" : "") + '" points="' + (x2 - 4) + "," + (y2 - 22) + " " + (x2 + 4) + "," + (y2 - 22) + " " + x2 + "," + (y2 - 16) + '"/>';
+      });
+      if (arrows) html += '<svg class="warrows" viewBox="0 0 139 ' + (maxRow * 41 - 5) + '" preserveAspectRatio="none">' + arrows + "</svg>";
       tr.talents.forEach(function (t, i) {
-        var r = S.t[ti][i] || 0, gate = (t.row - 1) * 5, open = pts >= gate;
+        var r = S.t[ti][i] || 0, gate = (t.row - 1) * 5;
+        var reqOk = !t.req || byName[t.req] == null || (S.t[ti][byName[t.req]] || 0) >= tr.talents[byName[t.req]].r;
+        var open = pts >= gate && reqOk;
         var want = r < t.r ? r : t.r - 1, have = t.desc ? t.desc.length : 0, idx = Math.min(want, have - 1);
         var d = have ? t.desc[idx] : (t.tip || "");
         var clamped = have > 0 && idx < want;
         var extra = (clamped ? " [rank " + (idx + 1) + " text; the demo never showed the higher ranks]" : "") +
           (t.est ? " [numbers still estimates]" : "") + (t.cn ? " \u00b7 " + t.cn + "." : "");
-        var how = !open ? " \u2014 Needs " + gate + " points in " + tr.name + "."
+        var how = pts < gate ? " \u2014 Needs " + gate + " points in " + tr.name + "."
+          : !reqOk ? " \u2014 Requires " + t.req + " maxed." + (t.reqText ? " " + t.reqText + "." : "")
           : (done && r < t.r) ? " \u2014 No points left; right-click something to take one back."
           : " \u2014 Left click adds; right click removes.";
         html += '<div class="slot' + (r >= t.r ? " maxed" : r > 0 ? " part" : "") + (open ? "" : " locked") + (t.est ? " est" : "") + (done && r === 0 && open ? " tapped" : "") +
@@ -638,14 +664,37 @@
     });
     st.querySelectorAll(".slot[data-tal]").forEach(function (el) {
       var p = el.getAttribute("data-tal").split(":"), ti = +p[0], i = +p[1];
-      var t = clsData().trees[ti].talents[i];
+      var tree = clsData().trees[ti], t = tree.talents[i];
+      var byName = {}; tree.talents.forEach(function (x, j) { byName[x.n] = j; });
       el.addEventListener("click", function () {
-        if (treePts(ti) < (t.row - 1) * 5 || spent() >= POINTSNOW()) return;
+        var reqOk = !t.req || byName[t.req] == null || (S.t[ti][byName[t.req]] || 0) >= tree.talents[byName[t.req]].r;
+        if (treePts(ti) < (t.row - 1) * 5 || !reqOk || spent() >= POINTSNOW()) return;
         S.t[ti][i] = Math.min(t.r, (S.t[ti][i] || 0) + 1); render();
       });
       el.addEventListener("contextmenu", function (e) {
         e.preventDefault();
-        if ((S.t[ti][i] || 0) > 0) { S.t[ti][i]--; render(); }
+        if ((S.t[ti][i] || 0) === 0) return;
+        // A point cannot leave if a dependent talent leans on it...
+        var blocked = tree.talents.some(function (x, j) {
+          return x.req === t.n && (S.t[ti][j] || 0) > 0 && (S.t[ti][i] || 0) - 1 < t.r;
+        });
+        // ...or if a higher row would lose its gate.
+        if (!blocked) {
+          var below = 0;
+          for (var rw = 1; rw <= t.row; rw++) tree.talents.forEach(function (x, j) {
+            if (x.row === rw) below += (S.t[ti][j] || 0);
+          });
+          blocked = tree.talents.some(function (x, j) {
+            return x.row > t.row && (S.t[ti][j] || 0) > 0 && (below - 1) < (x.row - 1) * 5;
+          });
+        }
+        if (blocked) return;
+        S.t[ti][i]--; render();
+      });
+    });
+    st.querySelectorAll(".tre-reset").forEach(function (b) {
+      b.addEventListener("click", function () {
+        S.t[+b.getAttribute("data-treset")] = []; render();
       });
     });
     st.querySelectorAll("[data-gear]").forEach(function (el) {
@@ -671,27 +720,47 @@
       var c = clsData(), book = c.book || {}, k = CLASS_ORDER[S.cls];
       var treeIcon = {};
       c.trees.forEach(function (tr3) { treeIcon[tr3.name] = tr3.icon; });
-      function section(title, spells, fb) {
-        if (!spells || !spells.length) return "";
-        var cells = spells.map(function (sp2) {
-          var d2 = (book.desc || {})[sp2[0]];
-          var ic = spellIcon(sp2[0], fb);
-          return '<div class="bkspell"' + (d2 ? " " + dt(sp2[0] + (sp2[1] ? " (" + sp2[1] + ")" : ""), d2) : "") + ">" +
-            iconFB(ic, fb) + '<span class="bk-n">' + esc(sp2[0]) + "</span>" +
-            (sp2[1] ? '<span class="bk-r">' + esc(sp2[1]) + "</span>" : "") + "</div>";
-        }).join("");
-        return '<div class="bktab"><div class="bk-head">' + iconFB(fb, CLASS_ICON[k], "wi wi-sm") +
-          "<b>" + esc(title) + "</b></div><div class=\"bkgrid\">" + cells + "</div></div>";
-      }
-      var html = '<h2 class="in-name">' + iconFB(CLASS_ICON[k], CLASS_ICON[k], "wi wi-sm") + " Demo spellbook</h2>" +
-        '<p class="in-h">Read off the BlizzCon demo at level ' + (book.level || "?") + ". What exists, not what it costs.</p>";
-      (book.tabs || []).forEach(function (tb) {
-        html += section(tb.name, tb.spells, treeIcon[tb.name] || CLASS_ICON[k]);
+      var tabs = (book.tabs || []).map(function (tb) {
+        return { name: tb.name, icon: treeIcon[tb.name] || CLASS_ICON[k], spells: tb.spells || [] };
       });
-      html += section("General", book.general, CLASS_ICON[k]);
-      $("insight-body").innerHTML = html;
-      $("insight").hidden = false;
-      bindTips($("insight-body"));
+      if (book.general && book.general.length) tabs.push({ name: "General", icon: CLASS_ICON[k], spells: book.general });
+      tabs = tabs.filter(function (tb) { return tb.spells.length; });
+      var PER = 14, cur = { tab: 0, page: 0 };
+      function cell(sp2, fb) {
+        var d2 = (book.desc || {})[sp2[0]];
+        var ic = spellIcon(sp2[0], fb);
+        return '<div class="bkspell"' + (d2 ? " " + dt(sp2[0] + (sp2[1] ? " (" + sp2[1] + ")" : ""), d2) : "") + ">" +
+          iconFB(ic, fb) + '<span class="bk-n">' + esc(sp2[0]) + "</span>" +
+          (sp2[1] ? '<span class="bk-r">' + esc(sp2[1]) + "</span>" : "") + "</div>";
+      }
+      function draw() {
+        var tb = tabs[cur.tab], pages = Math.max(1, Math.ceil(tb.spells.length / PER));
+        if (cur.page >= pages) cur.page = pages - 1;
+        var slice = tb.spells.slice(cur.page * PER, cur.page * PER + PER);
+        var html = '<h2 class="in-name">' + iconFB(CLASS_ICON[k], CLASS_ICON[k], "wi wi-sm") + " Demo spellbook</h2>" +
+          '<p class="in-h">Read off the BlizzCon demo at level ' + (book.level || "?") + ". What exists, not what it costs. Hover a spell for its tooltip.</p>" +
+          '<div class="bookui"><div class="btabs">' +
+          tabs.map(function (t2, i2) {
+            return '<button type="button" class="btab' + (i2 === cur.tab ? " on" : "") + '" data-btab="' + i2 + '" title="' + esc(t2.name) + '">' +
+              iconFB(t2.icon, CLASS_ICON[k]) + "</button>";
+          }).join("") + "</div>" +
+          '<div class="bookpg"><div class="bk-head">' + iconFB(tb.icon, CLASS_ICON[k], "wi wi-sm") + "<b>" + esc(tb.name) +
+          '</b><span class="bk-count">' + tb.spells.length + " spells</span></div>" +
+          '<div class="bkgrid bookspread">' + slice.map(function (s2) { return cell(s2, tb.icon); }).join("") + "</div>" +
+          '<div class="pgfoot"><button type="button" id="bk-prev"' + (cur.page === 0 ? " disabled" : "") + '>‹</button>' +
+          "Page " + (cur.page + 1) + " of " + pages +
+          '<button type="button" id="bk-next"' + (cur.page >= pages - 1 ? " disabled" : "") + '>›</button></div></div></div>';
+        $("insight-body").innerHTML = html;
+        $("insight").hidden = false;
+        bindTips($("insight-body"));
+        $("insight-body").querySelectorAll(".btab").forEach(function (b2) {
+          b2.addEventListener("click", function () { cur = { tab: +b2.getAttribute("data-btab"), page: 0 }; draw(); });
+        });
+        var pv = $("insight-body").querySelector("#bk-prev"), nx = $("insight-body").querySelector("#bk-next");
+        if (pv) pv.addEventListener("click", function () { if (cur.page > 0) { cur.page--; draw(); } });
+        if (nx) nx.addEventListener("click", function () { cur.page++; draw(); });
+      }
+      draw();
     });
 
     var nm = st.querySelector("#cname");
