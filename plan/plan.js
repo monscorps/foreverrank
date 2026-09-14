@@ -366,8 +366,9 @@
 
   function talentsHTML() {
     var c = clsData(), sp = specNow();
-    var html = '<div class="talenthead"><h3>Talents</h3><span class="pts">' + (POINTSNOW() - spent()) +
-      ' points left</span><span class="specnow">' + esc(sp.split) + " \u2192 <b>" + esc(sp.name) + "</b> (" + sp.role + ')</span>' +
+    var done = spent() >= POINTSNOW();
+    var html = '<div class="talenthead"><h3>Talents</h3><span class="pts' + (done ? " alldone" : "") + '">' +
+      (done ? "All " + POINTSNOW() + " points placed" : (POINTSNOW() - spent()) + " points left") + '</span><span class="specnow">' + esc(sp.split) + " \u2192 <b>" + esc(sp.name) + "</b> (" + sp.role + ')</span>' +
       '<span class="caps">' + [20, 30, 60].map(function (l) {
         return '<button type="button" class="capbtn' + (cap === l ? " on" : "") + '" data-cap="' + l + '">' + l + "</button>";
       }).join("") + '</span>' +
@@ -381,15 +382,19 @@
         var r = S.t[ti][i] || 0, gate = (t.row - 1) * 5, open = pts >= gate;
         var d = t.desc && t.desc.length ? t.desc[Math.min(r < t.r ? r : t.r - 1, t.desc.length - 1)] : (t.tip || "");
         var extra = (t.est ? " [numbers still estimates]" : "") + (t.cn ? " \u00b7 " + t.cn + "." : "");
-        var how = open ? " \u2014 Left click adds; right click removes." : " \u2014 Needs " + gate + " points in " + tr.name + ".";
-        html += '<div class="slot' + (r >= t.r ? " maxed" : r > 0 ? " part" : "") + (open ? "" : " locked") + (t.est ? " est" : "") +
+        var how = !open ? " \u2014 Needs " + gate + " points in " + tr.name + "."
+          : (done && r < t.r) ? " \u2014 No points left; right-click something to take one back."
+          : " \u2014 Left click adds; right click removes.";
+        html += '<div class="slot' + (r >= t.r ? " maxed" : r > 0 ? " part" : "") + (open ? "" : " locked") + (t.est ? " est" : "") + (done && r === 0 && open ? " tapped" : "") +
           '" style="grid-column:' + t.col + ";grid-row:" + t.row + '" data-tal="' + ti + ":" + i + '" ' +
           dt(t.n + " (" + r + "/" + t.r + ")" + (r < t.r && t.desc && t.desc.length > 1 ? " \u2014 next rank:" : ""), d + extra + how) + ">" +
           icon(t.icon, "wi") + '<span class="s-rank">' + r + "/" + t.r + "</span></div>";
       });
       html += "</div></div>";
     });
-    return html + "</div>";
+    html += "</div>";
+    if (done) html += '<p class="line alldone-note">Fully forged. Gear it, name it, hit <b>Share build</b>.</p>';
+    return html;
   }
 
   function gearHTML() {

@@ -182,3 +182,9 @@
 
 .treset { color: var(--sale); border-color: rgba(254,112,77,.45); }
 .treset:hover { border-color: var(--sale); }
+
+/* no points left: say it, show it */
+.pts.alldone { color: #1eff00; }
+.slot.tapped .wi { filter: saturate(.3) brightness(.55); }
+.slot.tapped:hover .wi { filter: none; }
+.alldone-note { margin: .2rem 0 1.2rem; font-size: .84rem; color: var(--gold); }
