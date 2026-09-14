@@ -1,0 +1,6 @@
+## Interface: 11507
+## Title: ForeverProbe
+## Notes: Dumps what the Forever beta client actually exposes to addons. Type /probe.
+## Version: 0.1.0
+## SavedVariables: ForeverProbeDB
+ForeverProbe.lua

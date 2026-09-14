@@ -1,0 +1,11 @@
+{
+  // ForeverRank API. Separate service, separate database: nothing here
+  // touches the 3.3.5 levelpace Worker or its D1. Deploy: npx wrangler deploy
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "foreverrank",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "levelpace-forever", "database_id": "8d6d34cc-4916-45bd-b57d-136d95dbb0a8" }
+  ]
+}
