@@ -178,8 +178,8 @@
   // ---- countdown ------------------------------------------------------------
   function tickCountdown() {
     var now = Date.now(), target, kick, note, phase;
-    if (now < BETA) { target = BETA; kick = "The <b>beta</b> opens in"; phase = "PRE-BETA"; note = "Beta Sept 17 to Oct 21, level cap 30. Launch Nov 4 (times estimated)"; }
-    else if (now < LAUNCH) { target = LAUNCH; kick = "<b>Forever</b> launches in"; phase = "BETA. CAP 30"; note = "Beta is live until Oct 21. launch Nov 4 (times estimated)"; }
+    if (now < BETA) { target = BETA; kick = "The <b>beta</b> opens in"; phase = "PRE-BETA"; note = "Beta Sept 17 to Oct 22, level cap 30. Launch Nov 4 (times estimated)"; }
+    else if (now < LAUNCH) { target = LAUNCH; kick = "<b>Forever</b> launches in"; phase = "BETA. CAP 30"; note = "Beta is live until Oct 22. launch Nov 4 (times estimated)"; }
     else { target = null; kick = "<b>Forever</b> is live"; phase = "LIVE. CAP 60"; note = ""; }
     $("count-kick").innerHTML = kick;
     $("phase-chip").textContent = phase;

@@ -179,19 +179,19 @@
           (launchDays > 0 ? " Launch is <b>" + launchDays + " days</b> away." : "") + "</p>" : "") +
         '<div class="rm-progress"><span style="width:' + Math.round(passed / d.roadmap.length * 100) + '%"></span></div>' +
         '<p class="rm-count">' + passed + " of " + d.roadmap.length + " milestones passed</p>" +
-        '<div class="rm-stills">' +
-        ["img/city-of-dalaran.jpg", "img/hyjal-summit.jpg", "img/the-drowned-city.jpg", "img/shaper-s-terrace.jpg"].map(function (u) {
-          return '<img src="' + u + '" alt="" loading="lazy">';
-        }).join("") + "</div>";
+        '<a class="rm-slide" href="img/roadmap-slide.jpg" target="_blank" rel="noopener">' +
+        '<img src="img/roadmap-slide.jpg" alt="The official Forever roadmap slide" loading="lazy"></a>';
       var seasons = [], byS = {};
       d.roadmap.forEach(function (m) {
         var sn = (META[m.title] || {}).season || "Later";
         if (!byS[sn]) { byS[sn] = []; seasons.push(sn); }
         byS[sn].push(m);
       });
+      var SICON = { "Autumn": "inv_misc_herb_04", "Winter": "inv_ammo_snowball", "Spring": "inv_misc_flower_02", "Summer": "inv_summerfest_firespirit" };
       var body = seasons.map(function (sn) {
-        return '<div class="rm-season"><div class="rm-season-head"><b>' + esc(sn.split(" ")[0]) +
-          '</b><span>' + esc(sn.split(" ")[1]) + "</span></div><div class=\"rm-marks\">" +
+        var sw = sn.split(" ");
+        return '<div class="rm-season"><div class="rm-season-head">' + img(SICON[sw[0]] || "inv_misc_map_01") +
+          "<b>" + esc(sw[0]) + '</b><span>' + esc(sw[1]) + "</span></div><div class=\"rm-marks\">" +
           byS[sn].map(function (m) {
             var mt = META[m.title] || {}, i = d.roadmap.indexOf(m);
             var t = Date.parse(mt.on || 0), state = t <= now ? " past" : i === nextIdx ? " next" : "";
@@ -203,7 +203,7 @@
           }).join("") + "</div></div>";
       }).join("");
       section("roadmap", "Roadmap", hero + '<div class="rmap">' + body +
-        '</div><p class="board-sub">Content and timing per Blizzard’s published plan; all of it subject to change.</p>');
+        '</div><p class="board-sub">Off the official slide: more news beyond this roadmap to be shared, features will evolve based on player feedback, content and timing subject to change.</p>');
     }
 
     var sysHtml = '<div class="syscards">' + d.systems.map(function (sys, i) {
