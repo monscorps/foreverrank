@@ -181,6 +181,6 @@
     }, { rootMargin: "-20% 0px -70% 0px" });
     document.querySelectorAll(".cx section").forEach(function (sec) { obs.observe(sec); });
   }).catch(function (e) {
-    document.getElementById("cx").innerHTML = "<p>The Codex failed to load. Refresh; the scribes are embarrassed.</p>";
+    document.getElementById("cx").innerHTML = "<p>The Database failed to load. Refresh; the scribes are embarrassed.</p>";
   });
 })();
