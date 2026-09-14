@@ -68,9 +68,11 @@
 .place.hasimg .place-shot img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
 .place.hasimg .place-shot::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(5,30,45,.85)); }
 .place.hasimg .place-shot .lvlchip { position: absolute; right: .6rem; bottom: .5rem; z-index: 1; box-shadow: 0 2px 8px rgba(0,0,0,.6); }
-.place.hasimg > img { margin-left: .8rem; }
-.place.hasimg .place-t, .place.hasimg p { padding-right: .8rem; }
-.place.hasimg p { padding-bottom: .7rem; }
+.place.hasimg > img { grid-row: auto; margin-left: .8rem; align-self: start; }
+.place.hasimg p { grid-column: 2; padding-right: .8rem; padding-bottom: .7rem; }
+.place-name { position: absolute; inset: 0; z-index: 1; display: flex; align-items: center; justify-content: center;
+  text-align: center; padding: 0 .6rem; font-family: var(--display-serif); font-size: 1.15rem; color: #fff;
+  letter-spacing: .04em; text-shadow: 0 2px 10px rgba(0,0,0,.95), 0 0 24px rgba(0,0,0,.8); }
 .place-t { display: flex; align-items: center; gap: .5rem; min-width: 0; }
 .place-t b { font: 600 .86rem var(--heading); }
 .lvlchip { font: 700 .6rem/1 var(--heading); letter-spacing: .05em; color: #06131c; background: var(--gold); border-radius: 3px; padding: .2rem .35rem; white-space: nowrap; }
@@ -134,6 +136,6 @@
   <span>Compiled, credited, corrected. Screenshots from Blizzard's BlizzCon footage.</span>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>
-<script src="codex.js?v=6"></script>
+<script src="codex.js?v=7"></script>
 </body>
 </html>

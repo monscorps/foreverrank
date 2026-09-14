@@ -139,11 +139,12 @@
     function placecards(rows) {
       return '<div class="placecards">' + rows.map(function (r) {
         var shot = r[4] ? '<div class="place-shot"><img src="' + esc(r[4]) + '" alt="" loading="lazy">' +
+          '<span class="place-name">' + esc(r[0]) + "</span>" +
           (r[3] ? '<span class="lvlchip">' + esc(r[3]) + "</span>" : "") + "</div>" : "";
         return '<div class="place' + (r[4] ? " hasimg" : "") + '">' + shot + img(r[2] || "inv_misc_map_01") +
-          '<div class="place-t"><b>' + esc(r[0]) + "</b>" +
-          (!r[4] && r[3] ? '<span class="lvlchip">' + esc(r[3]) + "</span>" : "") +
-          '</div><p>' + esc(r[1] || "") + "</p></div>";
+          (r[4] ? "" : '<div class="place-t"><b>' + esc(r[0]) + "</b>" +
+            (r[3] ? '<span class="lvlchip">' + esc(r[3]) + "</span>" : "") + "</div>") +
+          '<p>' + esc(r[1] || "") + "</p></div>";
       }).join("") + "</div>";
     }
     section("world", "The new world",
