@@ -140,6 +140,7 @@
       }).join("") + "</table>";
     }
     section("world", "The new world",
+      (w.facts ? facts(w.facts) : "") +
       "<h3>Zones</h3>" + wtable(w.zones) + "<h3>Dungeons</h3>" + wtable(w.dungeons) +
       "<h3>Raids</h3>" + wtable(w.raids) + "<h3>Battlegrounds</h3>" + wtable(w.battlegrounds));
 
