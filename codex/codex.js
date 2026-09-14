@@ -41,22 +41,44 @@
         (left === 0 ? "All 16 placed" : left + " points left") + "</span>" +
         '<button type="button" class="share" id="lg-share">Share legacy build</button>' +
         '<button type="button" class="share" id="lg-reset">Reset</button></div>' +
+        '<div class="lgtrees">' +
         lg.trees.map(function (t, ti) {
-          return "<h3>" + img(t.icon) + " " + esc(t.name) + "</h3><div class=\"perks\">" +
-            (t.perks || []).map(function (p, i) {
-              var r = LG[ti][i] || 0;
-              return '<div class="perk lgp' + (r >= p[1] ? " maxed" : r > 0 ? " part" : "") + '" data-lg="' + ti + ":" + i + '">' +
-                img(p[3] || "inv_misc_questionmark") +
-                "<div><b>" + esc(p[0]) + '</b><u>' + r + "/" + p[1] + "</u><p>" + esc(p[2]) + "</p></div></div>";
-            }).join("") + "</div>";
-        }).join("") +
-        '<p class="board-sub">Left click adds a point, right click removes. ' + esc(lg.treeNote) + "</p>";
+          var pts = LG[ti].reduce(function (a, b) { return a + b; }, 0);
+          var slots = (t.perks || []).map(function (p, i) {
+            var r = LG[ti][i] || 0;
+            return '<div class="lslot' + (r >= p[1] ? " maxed" : r > 0 ? " part" : "") + '" data-lg="' + ti + ":" + i + '" ' +
+              'data-tip="' + esc(p[0]) + "|Rank " + r + "/" + p[1] + "|" + esc(p[2]) + '">' +
+              img(p[3] || "inv_misc_questionmark") + '<span class="l-rank">' + r + "/" + p[1] + "</span></div>";
+          }).join("");
+          if (t.name === "Professions")
+            slots += '<div class="lslot locked" data-tip="Placeholder||To be added in future patch content."></div>' +
+                     '<div class="lslot locked" data-tip="Placeholder||To be added in future patch content."></div>';
+          return '<div class="lgtree"><div class="lg-head">' + img(t.icon) + "<b>" + esc(t.name) +
+            '</b><u>' + pts + "</u></div><div class=\"lg-grid\">" + slots + "</div></div>";
+        }).join("") + "</div>" +
+        '<p class="board-sub">Left click adds a point, right click removes. Hover a perk for the tooltip. ' + esc(lg.treeNote) + "</p>";
     }
+    var lgTip = null;
+    function lgTipShow(slot, x, y) {
+      var parts = (slot.getAttribute("data-tip") || "").split("|");
+      if (!lgTip) { lgTip = document.createElement("div"); lgTip.className = "tip"; document.body.appendChild(lgTip); }
+      lgTip.innerHTML = "<b>" + parts[0] + "</b>" + (parts[1] ? '<u>' + parts[1] + "</u>" : "") + "<p>" + (parts[2] || "") + "</p>";
+      lgTip.style.display = "block";
+      var w = lgTip.offsetWidth, h = lgTip.offsetHeight;
+      lgTip.style.left = Math.min(x + 14, window.innerWidth - w - 8) + "px";
+      lgTip.style.top = Math.max(8, Math.min(y + 14, window.innerHeight - h - 8)) + "px";
+    }
+    function lgTipHide() { if (lgTip) lgTip.style.display = "none"; }
     function drawLegacy() {
       var el = document.getElementById("legacy");
+      lgTipHide();
       el.innerHTML = "<h2>The Legacy system</h2>" + facts(lg.facts) + legacyHTML();
       lgURL();
-      el.querySelectorAll(".lgp").forEach(function (card) {
+      el.querySelectorAll(".lslot").forEach(function (s) {
+        s.addEventListener("mousemove", function (e) { lgTipShow(s, e.clientX, e.clientY); });
+        s.addEventListener("mouseleave", lgTipHide);
+      });
+      el.querySelectorAll(".lslot:not(.locked)").forEach(function (card) {
         var pr = card.getAttribute("data-lg").split(":"), ti = +pr[0], i = +pr[1];
         card.addEventListener("click", function () {
           if (lgSpent() >= BUDGET) return;

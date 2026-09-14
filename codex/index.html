@@ -24,10 +24,27 @@
 .talenthead h3 { margin: 0; font-family: var(--heading); font-size: 1.05rem; }
 .pts { font: 700 1rem var(--heading); color: var(--gold); }
 .pts.alldone { color: #1eff00; }
-.perk.lgp { cursor: pointer; user-select: none; transition: border-color .12s, transform .12s; }
-.perk.lgp:hover { border-color: var(--gold); transform: translateY(-1px); }
-.perk.lgp.part { border-color: rgba(0,175,215,.55); }
-.perk.lgp.maxed { border-color: var(--gold); background: rgba(229,204,128,.07); }
+.lgtrees { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8rem; margin: .4rem 0 .8rem; }
+.lgtree { border: 1px solid var(--card-border); border-radius: var(--r-panel); background: linear-gradient(180deg, rgba(7,50,74,.75), rgba(5,30,45,.9)); padding: .8rem; box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.lg-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .7rem; border-bottom: 1px solid var(--card-border); padding-bottom: .5rem; }
+.lg-head img { width: 1.6rem; height: 1.6rem; border-radius: 5px; }
+.lg-head b { font-family: var(--heading); font-size: .92rem; }
+.lg-head u { text-decoration: none; margin-left: auto; font: 700 .85rem var(--heading); color: var(--gold); }
+.lg-grid { display: grid; grid-template-columns: repeat(3, 3.1rem); grid-auto-rows: 3.6rem; gap: .55rem; justify-content: center; }
+.lslot { position: relative; cursor: pointer; user-select: none; width: 3.1rem; height: 3.1rem; }
+.lslot img { width: 100%; height: 100%; border-radius: 8px; border: 2px solid #3a4a55; box-shadow: inset 0 0 12px rgba(0,0,0,.55); transition: border-color .12s, filter .12s; }
+.lslot:hover img { border-color: var(--gold); box-shadow: 0 0 14px -4px var(--gold), inset 0 0 12px rgba(0,0,0,.55); }
+.lslot.part img { border-color: #1eff00; }
+.lslot.maxed img { border-color: var(--gold); box-shadow: 0 0 12px -3px var(--gold); }
+.l-rank { position: absolute; right: -4px; bottom: -6px; font: 700 .62rem/1 var(--heading); color: #1eff00; background: #06131c; border: 1px solid #3a4a55; border-radius: 3px; padding: .12rem .22rem; }
+.lslot.part .l-rank { color: #1eff00; }
+.lslot.maxed .l-rank { color: var(--gold); border-color: var(--gold); }
+.lslot.locked { cursor: default; width: 3.1rem; height: 3.1rem; border-radius: 8px; border: 2px dashed #2a3138; background: rgba(0,0,0,.35); }
+.tip { position: fixed; z-index: 60; display: none; max-width: 18rem; background: #082a3f; border: 1px solid rgba(229,204,128,.5); border-radius: 2px; padding: .55rem .65rem; font-size: .76rem; pointer-events: none; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+.tip b { color: var(--gold); display: block; margin-bottom: .15rem; font-family: var(--heading); }
+.tip u { text-decoration: none; color: #1eff00; display: block; margin-bottom: .2rem; font-size: .7rem; }
+.tip p { margin: 0; color: var(--card-text); }
+@media (max-width: 900px) { .lgtrees { grid-template-columns: 1fr; } .lg-grid { grid-template-columns: repeat(4, 3.4rem); } }
 .cx h3 { font-family: var(--heading); font-size: 1.02rem; margin: 1.1rem 0 .4rem; display: flex; align-items: center; gap: .5rem; }
 .cx h3 img { width: 1.6rem; height: 1.6rem; border-radius: 5px; }
 .cx h2 { font-family: var(--display-serif); font-weight: 400; font-size: 1.8rem; color: var(--gold); margin: 2rem 0 .6rem; }
@@ -84,6 +101,6 @@
   <span>Compiled, credited, corrected.</span>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>
-<script src="codex.js?v=2"></script>
+<script src="codex.js?v=3"></script>
 </body>
 </html>
