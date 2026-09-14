@@ -13,6 +13,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../forever.css?v=7">
 <style>
+.newscards { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .7rem; margin-top: .6rem; }
+.newscard { display: grid; grid-template-rows: 8.5rem auto; text-decoration: none; border: 1px solid var(--card-border); border-radius: var(--r-panel); overflow: hidden; background: var(--card); transition: border-color .15s, transform .15s; }
+.newscard:hover { border-color: var(--gold); transform: translateY(-2px); }
+.newscard .im { background-size: cover; background-position: center; }
+.newscard .bd { padding: .55rem .75rem .65rem; display: grid; gap: .25rem; }
+.newscard b { font: 600 .86rem/1.3 var(--heading); color: var(--surface-text); }
+.newscard i { font-style: normal; font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; color: var(--subtle); }
 .newslist { list-style: none; margin: 1rem 0 0; padding: 0; }
 .newsday { font-family: var(--display-serif); font-size: 1.3rem; color: var(--gold); margin: 1.4rem 0 .4rem; }
 .newslist li { display: grid; grid-template-columns: 1fr auto; gap: .8rem; align-items: baseline; padding: .45rem 0; border-bottom: 1px solid var(--surface-border); font-size: .9rem; }
@@ -48,10 +55,18 @@ fetch("../news.json", { cache: "no-store" }).then(function (r) { return r.json()
   n.items.forEach(function (it) { (byDay[it.d] = byDay[it.d] || []).push(it); });
   var days = Object.keys(byDay).sort().reverse();
   document.getElementById("list").innerHTML = days.map(function (d) {
-    return '<h2 class="newsday">' + d + '</h2><ul class="newslist">' + byDay[d].map(function (it) {
+    var withImg = byDay[d].filter(function (it) { return it.img; });
+    var plain = byDay[d].filter(function (it) { return !it.img; });
+    var cards = withImg.length ? '<div class="newscards">' + withImg.map(function (it) {
+      return '<a class="newscard" href="' + esc(it.l || "#") + '" rel="noopener">' +
+        '<span class="im" style="background-image:url(&quot;' + esc(it.img) + '&quot;)"></span>' +
+        '<span class="bd"><b>' + esc(it.t) + "</b><i>" + esc(it.s) + "</i></span></a>";
+    }).join("") + "</div>" : "";
+    var rows = plain.length ? '<ul class="newslist">' + plain.map(function (it) {
       var t = it.l ? '<a href="' + esc(it.l) + '" rel="noopener">' + esc(it.t) + "</a>" : esc(it.t);
       return "<li><span>" + t + '</span><span class="src">' + esc(it.s) + "</span></li>";
-    }).join("") + "</ul>";
+    }).join("") + "</ul>" : "";
+    return '<h2 class="newsday">' + d + "</h2>" + cards + rows;
   }).join("");
 });
 </script>

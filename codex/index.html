@@ -13,9 +13,23 @@
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../forever.css?v=7">
 <style>
-.cxnav { display: flex; gap: .35rem; flex-wrap: wrap; margin: 1rem 0; }
-.cxnav a { text-decoration: none; font: 600 .74rem/1 var(--heading); letter-spacing: .06em; color: var(--card-text); border: 1px solid var(--card-border); border-radius: 2px; padding: .45rem .7rem; }
-.cxnav a:hover { border-color: var(--gold); color: var(--gold); }
+.cxnav { position: sticky; top: 0; z-index: 20; display: flex; gap: .3rem; flex-wrap: wrap; margin: 1rem 0;
+  padding: .6rem .7rem; background: rgba(16,26,28,.92); backdrop-filter: blur(8px);
+  border: 1px solid var(--card-border); border-radius: var(--r-panel); box-shadow: var(--shadow); }
+.cxnav a { text-decoration: none; font: 600 .74rem/1 var(--heading); letter-spacing: .05em; color: var(--card-text);
+  border: 1px solid transparent; border-radius: 9999px; padding: .45rem .8rem; transition: color .12s, background .12s; }
+.cxnav a:hover { color: var(--gold); background: rgba(229,204,128,.08); }
+.cxnav a.on { color: #000; background: var(--gold); }
+.talenthead { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin: 1rem 0 .6rem; }
+.talenthead h3 { margin: 0; font-family: var(--heading); font-size: 1.05rem; }
+.pts { font: 700 1rem var(--heading); color: var(--gold); }
+.pts.alldone { color: #1eff00; }
+.perk.lgp { cursor: pointer; user-select: none; transition: border-color .12s, transform .12s; }
+.perk.lgp:hover { border-color: var(--gold); transform: translateY(-1px); }
+.perk.lgp.part { border-color: rgba(0,175,215,.55); }
+.perk.lgp.maxed { border-color: var(--gold); background: rgba(229,204,128,.07); }
+.cx h3 { font-family: var(--heading); font-size: 1.02rem; margin: 1.1rem 0 .4rem; display: flex; align-items: center; gap: .5rem; }
+.cx h3 img { width: 1.6rem; height: 1.6rem; border-radius: 5px; }
 .cx h2 { font-family: var(--display-serif); font-weight: 400; font-size: 1.8rem; color: var(--gold); margin: 2rem 0 .6rem; }
 .cx ul.facts { margin: .4rem 0 0; padding-left: 1.1rem; }
 .cx ul.facts li { margin: .3rem 0; font-size: .9rem; }
@@ -70,6 +84,6 @@
   <span>Compiled, credited, corrected.</span>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>
-<script src="codex.js?v=1"></script>
+<script src="codex.js?v=2"></script>
 </body>
 </html>

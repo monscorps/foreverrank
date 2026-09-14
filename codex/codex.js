@@ -19,17 +19,71 @@
       out.push('<section id="' + id + '"><h2>' + title + "</h2>" + html + "</section>");
     }
 
-    // Legacy
+    // Legacy: not a list, a CALCULATOR. 16 points, spend them, share the link.
     var lg = d.legacy;
-    var trees = lg.trees.map(function (t) {
-      return "<h3>" + img(t.icon) + " " + esc(t.name) + "</h3><div class=\"perks\">" +
-        (t.perks || []).map(function (p) {
-          return '<div class="perk">' + img(p[3] || "inv_misc_questionmark") +
-            "<div><b>" + esc(p[0]) + "</b><u>" + p[1] + (p[1] === 1 ? " rank" : " ranks") + "</u><p>" + esc(p[2]) + "</p></div></div>";
-        }).join("") + "</div>";
-    }).join("");
-    section("legacy", "The Legacy system", facts(lg.facts) + trees +
-      '<p class="board-sub">' + esc(lg.treeNote) + "</p>");
+    var BUDGET = 16;
+    var LG = lg.trees.map(function (t) { return (t.perks || []).map(function () { return 0; }); });
+    (function () {
+      var p = new URLSearchParams(location.search).get("lg");
+      if (!p) return;
+      p.split("-").forEach(function (seg, ti) {
+        for (var i = 0; i < seg.length; i++) if (LG[ti]) LG[ti][i] = +seg[i] || 0;
+      });
+    })();
+    function lgSpent() { return LG.reduce(function (a, t) { return a + t.reduce(function (x, y) { return x + y; }, 0); }, 0); }
+    function lgURL() {
+      var code = LG.map(function (t) { return t.join(""); }).join("-");
+      history.replaceState(null, "", lgSpent() ? "?lg=" + code + "#legacy" : location.pathname + "#legacy");
+    }
+    function legacyHTML() {
+      var left = BUDGET - lgSpent();
+      return '<div class="talenthead"><h3>Spend your 16</h3><span class="pts' + (left === 0 ? " alldone" : "") + '">' +
+        (left === 0 ? "All 16 placed" : left + " points left") + "</span>" +
+        '<button type="button" class="share" id="lg-share">Share legacy build</button>' +
+        '<button type="button" class="share" id="lg-reset">Reset</button></div>' +
+        lg.trees.map(function (t, ti) {
+          return "<h3>" + img(t.icon) + " " + esc(t.name) + "</h3><div class=\"perks\">" +
+            (t.perks || []).map(function (p, i) {
+              var r = LG[ti][i] || 0;
+              return '<div class="perk lgp' + (r >= p[1] ? " maxed" : r > 0 ? " part" : "") + '" data-lg="' + ti + ":" + i + '">' +
+                img(p[3] || "inv_misc_questionmark") +
+                "<div><b>" + esc(p[0]) + '</b><u>' + r + "/" + p[1] + "</u><p>" + esc(p[2]) + "</p></div></div>";
+            }).join("") + "</div>";
+        }).join("") +
+        '<p class="board-sub">Left click adds a point, right click removes. ' + esc(lg.treeNote) + "</p>";
+    }
+    function drawLegacy() {
+      var el = document.getElementById("legacy");
+      el.innerHTML = "<h2>The Legacy system</h2>" + facts(lg.facts) + legacyHTML();
+      lgURL();
+      el.querySelectorAll(".lgp").forEach(function (card) {
+        var pr = card.getAttribute("data-lg").split(":"), ti = +pr[0], i = +pr[1];
+        card.addEventListener("click", function () {
+          if (lgSpent() >= BUDGET) return;
+          LG[ti][i] = Math.min(lg.trees[ti].perks[i][1], (LG[ti][i] || 0) + 1);
+          drawLegacy();
+        });
+        card.addEventListener("contextmenu", function (e) {
+          e.preventDefault();
+          if ((LG[ti][i] || 0) > 0) { LG[ti][i]--; drawLegacy(); }
+        });
+      });
+      var sh = document.getElementById("lg-share");
+      if (sh) sh.addEventListener("click", function () {
+        var url = location.href;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(function () {
+            sh.textContent = "Link copied"; setTimeout(function () { sh.textContent = "Share legacy build"; }, 1600);
+          });
+        } else prompt("Copy this:", url);
+      });
+      var rs = document.getElementById("lg-reset");
+      if (rs) rs.addEventListener("click", function () {
+        LG = lg.trees.map(function (t) { return (t.perks || []).map(function () { return 0; }); });
+        drawLegacy();
+      });
+    }
+    section("legacy", "The Legacy system", "");
 
     // Unseen spells
     var un = d.unseen;
@@ -41,7 +95,8 @@
       }).join("") + "</div>";
     }
     section("unseen", "Spells the tooltips admit to", "<p class=\"board-sub\">" + esc(un.note) + "</p>" +
-      "<h3>New to Forever</h3>" + sprows(un.new, true) +
+      "<h3>Genuinely new spells</h3>" + sprows(un.new, true) +
+      "<h3>Granted by talents (already in the trees)</h3>" + sprows(un.granted || [], true) +
       "<h3>Classic spells above the demo's level</h3>" + sprows(un.higher, false));
 
     // Class changes
@@ -72,6 +127,16 @@
 
     document.getElementById("cxnav").innerHTML = nav.join("");
     document.getElementById("cx").innerHTML = out.join("");
+    drawLegacy();
+    // Scrollspy: the nav knows where you are.
+    var links = document.querySelectorAll(".cxnav a");
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        links.forEach(function (a) { a.classList.toggle("on", a.getAttribute("href") === "#" + en.target.id); });
+      });
+    }, { rootMargin: "-20% 0px -70% 0px" });
+    document.querySelectorAll(".cx section").forEach(function (sec) { obs.observe(sec); });
   }).catch(function (e) {
     document.getElementById("cx").innerHTML = "<p>The Codex failed to load. Refresh; the scribes are embarrassed.</p>";
   });

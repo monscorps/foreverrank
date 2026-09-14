@@ -542,9 +542,30 @@
     fetch("news.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (n) {
       var w = $("wire");
       if (!w || !n.items) return;
-      w.innerHTML = n.items.map(function (it) {
-        return "<li><span>" + esc(it.d.slice(5)) + "</span><b>" + esc(it.t) + "</b><i>" + esc(it.s) + "</i></li>";
-      }).join("");
+      function card(it) {
+        var inner = (it.img ? '<span class="wc-img" style="background-image:url(\'' + it.img.replace(/'/g, "%27") + '\')"></span>' : '<span class="wc-img wc-noimg"></span>') +
+          '<span class="wc-body"><b>' + esc(it.t) + '</b><i>' + esc(it.d.slice(5)) + " \u00b7 " + esc(it.s) + "</i></span>";
+        return it.l ? '<a class="wirecard" href="' + esc(it.l) + '" rel="noopener">' + inner + "</a>"
+                    : '<span class="wirecard">' + inner + "</span>";
+      }
+      // The three cards prefer stories with art, drawn from the freshest eight.
+      var pool = n.items.slice(0, 8);
+      var top = pool.filter(function (it) { return it.img; }).slice(0, 3);
+      if (top.length < 3) top = top.concat(pool.filter(function (it) { return top.indexOf(it) === -1; }).slice(0, 3 - top.length));
+      var rest = n.items.filter(function (it) { return top.indexOf(it) === -1; });
+      w.innerHTML = '<div class="wirecards">' + top.map(card).join("") + "</div>" +
+        (rest.length ? '<div id="wire-rest" hidden>' + rest.map(function (it) {
+          var t = it.l ? '<a href="' + esc(it.l) + '" rel="noopener">' + esc(it.t) + "</a>" : "<b>" + esc(it.t) + "</b>";
+          return "<li><span>" + esc(it.d.slice(5)) + "</span>" + t + "<i>" + esc(it.s) + "</i></li>";
+        }).join("") + "</div>" +
+        '<div class="c-actions"><button type="button" class="share" id="wire-more">More news (' + rest.length + ')</button>' +
+        '<a class="share" href="news/" style="text-decoration:none">The full wire</a></div>' : "");
+      var btn = document.getElementById("wire-more");
+      if (btn) btn.addEventListener("click", function () {
+        var r2 = document.getElementById("wire-rest");
+        r2.hidden = !r2.hidden;
+        btn.textContent = r2.hidden ? "More news (" + rest.length + ")" : "Fewer";
+      });
     }).catch(function () {});
 
     readURL();
