@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forever News</title>
+<meta name="description" content="Every Warcraft Forever headline in one place, newest first.">
+<link rel="icon" href="../mark.svg" type="image/svg+xml">
+<link rel="canonical" href="https://foreverrank.com/news/">
+<meta name="theme-color" content="#1C2325">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../forever.css?v=7">
+<style>
+.newslist { list-style: none; margin: 1rem 0 0; padding: 0; }
+.newsday { font-family: var(--display-serif); font-size: 1.3rem; color: var(--gold); margin: 1.4rem 0 .4rem; }
+.newslist li { display: grid; grid-template-columns: 1fr auto; gap: .8rem; align-items: baseline; padding: .45rem 0; border-bottom: 1px solid var(--surface-border); font-size: .9rem; }
+.newslist a { color: var(--surface-text); text-decoration: none; }
+.newslist a:hover { color: var(--gold); text-decoration: underline; }
+.newslist .src { font: 600 .62rem/1 var(--heading); letter-spacing: .1em; text-transform: uppercase; color: var(--subtle); }
+</style>
+</head>
+<body>
+<nav class="top">
+  <a class="brand" href="../"><img src="../mark.svg" alt="" width="42" height="42"><span class="brand-word">FOREVER<b>RANK</b></span></a>
+  <div class="top-nav">
+    <a class="pill" href="../">The ladder</a>
+    <a class="pill" href="../plan/">The Forge</a>
+    <a class="pill" href="../codex/">Codex</a>
+    <span class="phase">News</span>
+  </div>
+</nav>
+<main class="wrap">
+  <h1 class="display">The <span>Wire</span>, in full</h1>
+  <p class="board-sub">Every Forever headline gathered so far, newest first. Linked ones open the article; the rest are on file. Sources credited on GitHub.</p>
+  <div id="list"></div>
+</main>
+<footer>
+  <img src="../mark.svg" alt="" width="22" height="22">
+  <span>The news grows; so does this file.</span>
+  <a href="https://foreverrank.com/">foreverrank.com</a>
+</footer>
+<script>
+fetch("../news.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (n) {
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  var byDay = {};
+  n.items.forEach(function (it) { (byDay[it.d] = byDay[it.d] || []).push(it); });
+  var days = Object.keys(byDay).sort().reverse();
+  document.getElementById("list").innerHTML = days.map(function (d) {
+    return '<h2 class="newsday">' + d + '</h2><ul class="newslist">' + byDay[d].map(function (it) {
+      var t = it.l ? '<a href="' + esc(it.l) + '" rel="noopener">' + esc(it.t) + "</a>" : esc(it.t);
+      return "<li><span>" + t + '</span><span class="src">' + esc(it.s) + "</span></li>";
+    }).join("") + "</ul>";
+  }).join("");
+});
+</script>
+</body>
+</html>
