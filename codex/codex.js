@@ -115,7 +115,7 @@
   function drawSearch() {
     var box = document.getElementById("dbs");
     if (!box) return;
-    var active = SQ.q.trim() || SQ.cat !== "all";
+    var active = true; // results always show; typing or a chip narrows them
     var pool = IDX.filter(function (e) { return SQ.cat === "all" || e.cat === SQ.cat; });
     var subs = [];
     pool.forEach(function (e) { if (SQ.cat !== "all" && subs.indexOf(e.sub) === -1) subs.push(e.sub); });

@@ -354,26 +354,28 @@ html.ts-open body { padding-bottom: 40vh; }
 .demo-flag { background: none; color: var(--gold); padding: 0; border-radius: 0; }
 
 /* ---- Top menu sections (nav.js) ---- */
-.dd { position: relative; display: inline-flex; align-items: stretch; }
-.dd > .pill, .dd > .phase { border-top-right-radius: 0; border-bottom-right-radius: 0; display: inline-flex; align-items: center; }
-.dd-btn { display: inline-grid; place-items: center; width: 1.45rem; margin-left: -1px; cursor: pointer; color: var(--card-text); background: var(--card);
+.mdd { position: relative; display: inline-flex; align-items: stretch; }
+.mdd > .pill, .mdd > .phase { border-top-right-radius: 0; border-bottom-right-radius: 0; display: inline-flex; align-items: center; }
+.mdd-btn { display: inline-grid; place-items: center; width: 1.45rem; margin-left: -1px; cursor: pointer; color: var(--card-text); background: var(--card);
   border: .5px solid var(--card-border); border-radius: 0 var(--r-btn) var(--r-btn) 0; padding: 0; }
-.dd.here .dd-btn { background: var(--gold); color: #000; border-color: var(--gold); border-left: 1px solid rgba(0,0,0,.25); }
-.dd-btn:hover, .dd.open .dd-btn { color: var(--gold); border-color: var(--gold); }
-.dd.here .dd-btn:hover, .dd.here.open .dd-btn { color: #000; }
-.dd-btn svg { transition: transform .15s; }
-.dd.open .dd-btn svg { transform: rotate(180deg); }
-.dd-menu { display: none; position: absolute; top: 100%; left: 0; z-index: 70; min-width: 12.5rem; margin-top: .35rem; padding: .3rem;
+.mdd.here .mdd-btn { background: var(--gold); color: #000; border-color: var(--gold); border-left: 1px solid rgba(0,0,0,.25); }
+.mdd-btn:hover, .mdd.open .mdd-btn { color: var(--gold); border-color: var(--gold); }
+.mdd.here .mdd-btn:hover, .mdd.here.open .mdd-btn { color: #000; }
+.mdd-btn svg { transition: transform .15s; }
+.mdd.open .mdd-btn svg { transform: rotate(180deg); }
+.mdd-menu { display: none; position: absolute; top: 100%; left: 0; z-index: 70; min-width: 12.5rem; margin-top: .35rem; padding: .3rem;
   background: #081721; border: 1px solid var(--card-border); border-radius: var(--r-btn); box-shadow: 0 14px 34px rgba(0,0,0,.6); }
-.dd-menu::before { content: ""; position: absolute; left: 0; right: 0; top: -.45rem; height: .45rem; }
-.dd-menu a { display: block; text-decoration: none; white-space: nowrap; font: 600 .74rem/1 var(--heading); letter-spacing: .03em; color: var(--card-text); padding: .55rem .65rem; border-radius: 2px; }
-.dd-menu a:hover, .dd-menu a:focus-visible { color: #1a1204; background: var(--gold); outline: none; }
-.dd.open .dd-menu, .dd:focus-within .dd-menu { display: block; }
-@media (hover: hover) and (pointer: fine) { .dd:hover .dd-menu { display: block; } }
-.top-nav .dd:nth-last-child(-n+2) .dd-menu { left: auto; right: 0; }
+.mdd-menu::before { content: ""; position: absolute; left: 0; right: 0; top: -.45rem; height: .45rem; }
+.mdd-menu a { display: block; text-decoration: none; white-space: nowrap; font: 600 .74rem/1 var(--heading); letter-spacing: .03em; color: var(--card-text); padding: .55rem .65rem; border-radius: 2px; }
+.mdd-menu a:hover, .mdd-menu a:focus-visible { color: #1a1204; background: var(--gold); outline: none; }
+.mdd.open .mdd-menu, .mdd:focus-within .mdd-menu { display: block; }
+@media (hover: hover) and (pointer: fine) { .mdd:hover .mdd-menu { display: block; } }
+.top-nav .mdd:nth-last-child(-n+2) .mdd-menu { left: auto; right: 0; }
 @media (max-width: 480px) {
   .top-nav { flex-wrap: wrap; row-gap: .35rem; }
-  .dd-btn { width: 1.3rem; }
-  .dd-menu { position: fixed; top: auto; left: 1rem; right: 1rem; min-width: 0; }
-  .top-nav .dd:nth-last-child(-n+2) .dd-menu { left: 1rem; right: 1rem; }
+  .mdd-btn { width: 1.3rem; }
+  .mdd-menu { position: fixed; top: auto; left: 1rem; right: 1rem; min-width: 0; }
+  .top-nav .mdd:nth-last-child(-n+2) .mdd-menu { left: 1rem; right: 1rem; }
 }
+
+.top-nav .pill, .top-nav .phase { white-space: nowrap; }

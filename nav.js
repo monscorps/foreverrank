@@ -38,18 +38,18 @@
     if (!m) return;
     var isHere = key === hereKey;
     var dd = document.createElement("div");
-    dd.className = "dd" + (isHere ? " here" : "");
+    dd.className = "mdd" + (isHere ? " here" : "");
     el.parentNode.insertBefore(dd, el);
     dd.appendChild(el);
     var btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "dd-btn";
+    btn.className = "mdd-btn";
     btn.setAttribute("aria-expanded", "false");
     btn.setAttribute("aria-label", m.label + " sections");
     btn.innerHTML = '<svg viewBox="0 0 10 6" width="10" height="6" aria-hidden="true"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
     var menu = document.createElement("div");
-    menu.className = "dd-menu";
-    menu.id = "dd-menu-" + (++uid);
+    menu.className = "mdd-menu";
+    menu.id = "mdd-menu-" + (++uid);
     btn.setAttribute("aria-controls", menu.id);
     menu.innerHTML = m.items.map(function (it) {
       var href = it[1] === "WIRE" ? root + "#wire" : (isHere && it[1].charAt(0) === "#" ? it[1] : root + m.path + it[1]);
@@ -67,12 +67,12 @@
     menu.addEventListener("click", function () { closeAll(); });
   });
   function closeAll() {
-    Array.prototype.slice.call(nav.querySelectorAll(".dd.open")).forEach(function (d) {
+    Array.prototype.slice.call(nav.querySelectorAll(".mdd.open")).forEach(function (d) {
       d.classList.remove("open");
-      var b = d.querySelector(".dd-btn");
+      var b = d.querySelector(".mdd-btn");
       if (b) b.setAttribute("aria-expanded", "false");
     });
   }
-  document.addEventListener("click", function (e) { if (!e.target.closest || !e.target.closest(".dd")) closeAll(); });
+  document.addEventListener("click", function (e) { if (!e.target.closest || !e.target.closest(".mdd")) closeAll(); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeAll(); });
 })();
