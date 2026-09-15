@@ -19,92 +19,15 @@
       out.push('<section id="' + id + '"><h2>' + title + "</h2>" + html + "</section>");
     }
 
-    // Legacy: not a list, a CALCULATOR. 16 points, spend them, share the link.
-    var lg = d.legacy;
-    var BUDGET = 16;
-    var LG = lg.trees.map(function (t) { return (t.perks || []).map(function () { return 0; }); });
-    (function () {
-      var p = new URLSearchParams(location.search).get("lg");
-      if (!p) return;
-      p.split("-").forEach(function (seg, ti) {
-        for (var i = 0; i < seg.length; i++) if (LG[ti]) LG[ti][i] = +seg[i] || 0;
-      });
-    })();
-    function lgSpent() { return LG.reduce(function (a, t) { return a + t.reduce(function (x, y) { return x + y; }, 0); }, 0); }
-    function lgURL() {
-      var code = LG.map(function (t) { return t.join(""); }).join("-");
-      history.replaceState(null, "", lgSpent() ? "?lg=" + code + "#legacy" : location.pathname + "#legacy");
-    }
-    function legacyHTML() {
-      var left = BUDGET - lgSpent();
-      return '<div class="talenthead"><h3>Spend your 16</h3><span class="pts' + (left === 0 ? " alldone" : "") + '">' +
-        (left === 0 ? "All 16 placed" : left + " points left") + "</span>" +
-        '<button type="button" class="share" id="lg-share">Share legacy build</button>' +
-        '<button type="button" class="share" id="lg-reset">Reset</button></div>' +
-        '<div class="lgtrees">' +
-        lg.trees.map(function (t, ti) {
-          var pts = LG[ti].reduce(function (a, b) { return a + b; }, 0);
-          var slots = (t.perks || []).map(function (p, i) {
-            var r = LG[ti][i] || 0;
-            return '<div class="lslot' + (r >= p[1] ? " maxed" : r > 0 ? " part" : "") + '" data-lg="' + ti + ":" + i + '" ' +
-              'data-tip="' + esc(p[0]) + "|Rank " + r + "/" + p[1] + "|" + esc(p[2]) + '">' +
-              img(p[3] || "inv_misc_questionmark") + '<span class="l-rank">' + r + "/" + p[1] + "</span></div>";
-          }).join("");
-          if (t.name === "Professions")
-            slots += '<div class="lslot locked" data-tip="Placeholder||To be added in future patch content."></div>' +
-                     '<div class="lslot locked" data-tip="Placeholder||To be added in future patch content."></div>';
-          return '<div class="lgtree"><div class="lg-head">' + img(t.icon) + "<b>" + esc(t.name) +
-            '</b><u>' + pts + "</u></div><div class=\"lg-grid\">" + slots + "</div></div>";
-        }).join("") + "</div>" +
-        '<p class="board-sub">Left click adds a point, right click removes. Hover a perk for the tooltip. ' + esc(lg.treeNote) +
-        " In game the trees are tiered like talent trees, with some perks locked behind earlier choices; the demo footage never showed which perk sits in which tier, so this calculator leaves every perk open until the beta client settles the layout.</p>";
-    }
-    var lgTip = null;
-    function lgTipShow(slot, x, y) {
-      var parts = (slot.getAttribute("data-tip") || "").split("|");
-      if (!lgTip) { lgTip = document.createElement("div"); lgTip.className = "tip"; document.body.appendChild(lgTip); }
-      lgTip.innerHTML = "<b>" + parts[0] + "</b>" + (parts[1] ? '<u>' + parts[1] + "</u>" : "") + "<p>" + (parts[2] || "") + "</p>";
-      lgTip.style.display = "block";
-      var w = lgTip.offsetWidth, h = lgTip.offsetHeight;
-      lgTip.style.left = Math.min(x + 14, window.innerWidth - w - 8) + "px";
-      lgTip.style.top = Math.max(8, Math.min(y + 14, window.innerHeight - h - 8)) + "px";
-    }
-    function lgTipHide() { if (lgTip) lgTip.style.display = "none"; }
+    // Legacy: the shared in-game window (legacy.js), with facts on top and ?lg= sharing.
+    var lg = d.legacy, LW = null;
     function drawLegacy() {
-      var el = document.getElementById("legacy");
-      lgTipHide();
-      el.innerHTML = "<h2>The Legacy system</h2>" + facts(lg.facts) + legacyHTML();
-      lgURL();
-      el.querySelectorAll(".lslot").forEach(function (s) {
-        s.addEventListener("mousemove", function (e) { lgTipShow(s, e.clientX, e.clientY); });
-        s.addEventListener("mouseleave", lgTipHide);
+      if (!LW) LW = LegacyWindow(lg, {
+        root: document.getElementById("legacy"), code: new URLSearchParams(location.search).get("lg"),
+        full: true, share: true, header: "<h2>The Legacy system</h2>" + facts(lg.facts),
+        onApply: function (code) { history.replaceState(null, "", code ? "?lg=" + code + "#legacy" : location.pathname + location.hash); }
       });
-      el.querySelectorAll(".lslot:not(.locked)").forEach(function (card) {
-        var pr = card.getAttribute("data-lg").split(":"), ti = +pr[0], i = +pr[1];
-        card.addEventListener("click", function () {
-          if (lgSpent() >= BUDGET) return;
-          LG[ti][i] = Math.min(lg.trees[ti].perks[i][1], (LG[ti][i] || 0) + 1);
-          drawLegacy();
-        });
-        card.addEventListener("contextmenu", function (e) {
-          e.preventDefault();
-          if ((LG[ti][i] || 0) > 0) { LG[ti][i]--; drawLegacy(); }
-        });
-      });
-      var sh = document.getElementById("lg-share");
-      if (sh) sh.addEventListener("click", function () {
-        var url = location.href;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(url).then(function () {
-            sh.textContent = "Link copied"; setTimeout(function () { sh.textContent = "Share legacy build"; }, 1600);
-          });
-        } else prompt("Copy this:", url);
-      });
-      var rs = document.getElementById("lg-reset");
-      if (rs) rs.addEventListener("click", function () {
-        LG = lg.trees.map(function (t) { return (t.perks || []).map(function () { return 0; }); });
-        drawLegacy();
-      });
+      LW.draw();
     }
     section("legacy", "The Legacy system", "");
 
@@ -119,6 +42,7 @@
     }
     section("unseen", "Spells the tooltips admit to", "<p class=\"board-sub\">" + esc(un.note) + "</p>" +
       "<h3>Genuinely new spells</h3>" + sprows(un.new, true) +
+      (un.confirmed && un.confirmed.length ? "<h3>Confirmed in the demo spellbook since</h3>" + sprows(un.confirmed, true) : "") +
       "<h3>Granted by talents (already in the trees)</h3>" + sprows(un.granted || [], true) +
       "<h3>Classic spells above the demo's level</h3>" + sprows(un.higher, false));
 

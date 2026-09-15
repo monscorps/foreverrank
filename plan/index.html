@@ -13,8 +13,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../forever.css?v=7">
-<link rel="stylesheet" href="plan.css?v=13">
+<link rel="stylesheet" href="../forever.css?v=11">
+<link rel="stylesheet" href="../legacy.css?v=2">
+<link rel="stylesheet" href="plan.css?v=23">
 </head>
 <body>
 
@@ -34,13 +35,17 @@
 <header class="forge-head">
   <p class="eyebrow">Beta prep: cap 20 at open, 30 soon after</p>
   <h1 class="display">The <span>Forge</span></h1>
-  <p class="board-sub">Hammer out a Forever character before the beta does it to you.
-  Follow the goblin, or skip ahead and pick freely. Every choice has a tooltip;
-  none of them can be wrong, though several can be funny.</p>
+  <p class="board-sub">Plan a Forever character from real demo data, then share it as a link.</p>
 </header>
 
 <main class="forge">
-  <ol class="fsteps" id="fsteps"></ol>
+  <div class="forge-bar">
+    <ol class="fsteps" id="fsteps"></ol>
+    <div class="forge-tools">
+      <button type="button" class="tb-btn lgbtn" id="lg-open"><img class="wi" src="https://wow.zamimg.com/images/wow/icons/large/inv_shield_06.jpg" alt=""><span>Legacy</span><em>0 / 16</em></button>
+      <button type="button" class="tb-btn cmpswitch" id="cmp-global" aria-pressed="false"><i></i><span>Compare to Classic</span></button>
+    </div>
+  </div>
   <div class="guide" id="guide" aria-live="polite"></div>
   <section id="stage" class="stage"></section>
 </main>
@@ -80,6 +85,9 @@
 </footer>
 
 <div class="tip" id="tip" hidden></div>
-<script src="plan.js?v=16"></script>
+<script src="../tipkit.js?v=4"></script>
+<script src="../legacy.js?v=2"></script>
+<script src="gear.js?v=1"></script>
+<script src="plan.js?v=27"></script>
 </body>
 </html>

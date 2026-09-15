@@ -298,3 +298,43 @@ a.wirecard:hover { border-color: var(--gold); transform: translateY(-2px); }
 /* Tradesfolk */
 .profico { width: 1.05rem; height: 1.05rem; border-radius: 3px; vertical-align: -.2rem; border: 1px solid rgba(229,204,128,.3); }
 .profbars li b { min-width: 7.5rem; }
+
+/* ---- TipKit: hover tips on mouse, bottom sheet on touch ---- */
+.tip { pointer-events: none; }
+.tsheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 90; max-height: 62vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background: #0a1622; border-top: 1px solid rgba(229,204,128,.55); border-radius: 16px 16px 0 0;
+  padding: .55rem 1rem calc(1rem + env(safe-area-inset-bottom)); box-shadow: 0 -14px 40px rgba(0,0,0,.65);
+  animation: tsUp .18s ease-out; font-size: .9rem; color: #e8edf0; }
+@keyframes tsUp { from { transform: translateY(40%); opacity: 0; } to { transform: none; opacity: 1; } }
+.tsheet[hidden] { display: none; }
+.ts-grip { width: 2.6rem; height: .28rem; border-radius: 999px; background: #3b4a55; margin: 0 auto .55rem; }
+.ts-x { position: absolute; right: .55rem; top: .35rem; width: 2.4rem; height: 2.4rem; border: 0; background: none; color: #9fb0bb; font-size: 1.6rem; line-height: 1; cursor: pointer; }
+.ts-body { padding-right: 2rem; }
+.ts-body > b, .ts-body .cmp-h b { display: block; color: var(--gold, #e5cc80); font-size: 1.05rem; margin-bottom: .3rem; font-family: var(--heading, inherit); }
+.ts-body p { margin: .3rem 0 0; line-height: 1.45; }
+.ts-body .cmp-cols { grid-template-columns: 1fr; }
+.ts-acts { display: grid; grid-template-columns: 1fr auto 1fr; gap: .6rem; margin-top: .9rem; }
+.ts-acts[hidden] { display: none; }
+.ts-act { min-height: 2.9rem; border-radius: 10px; font: 700 1rem var(--heading, inherit); cursor: pointer; border: 1px solid; }
+.ts-act.learn { color: #06131c; background: #3cd35a; border-color: #3cd35a; }
+.ts-act.unlearn { color: #ffd9d4; background: rgba(255,90,70,.14); border-color: rgba(255,90,70,.55); }
+.ts-act.count { color: #e5cc80; background: none; border-color: transparent; min-width: 4.2rem; }
+.ts-act:disabled { opacity: .35; cursor: default; }
+.ts-act.count:disabled { opacity: 1; }
+.tsheet.lgsheet { background: #0a1220; border-top-color: #5d6b7e; }
+.tsheet.lgsheet .ts-body b { color: #fff; }
+.tsheet.lgsheet .lt-w { display: block; color: #fff; font-size: .9rem; }
+.tsheet.lgsheet .lt-gap { display: block; height: .45rem; }
+.tsheet.lgsheet .lt-y { color: #ffd100; }
+.tsheet.lgsheet .lt-r { display: block; font-style: normal; color: #ff5a4d; margin-top: .45rem; }
+.tsheet.lgsheet .lt-note { font-size: .78rem; color: #8aa0b5; }
+html.ts-open body { padding-bottom: 40vh; }
+@media (hover: hover) and (pointer: fine) { .tsheet { left: auto; right: 1rem; bottom: 1rem; width: 26rem; border-radius: 12px; border: 1px solid rgba(229,204,128,.45); } html.ts-open body { padding-bottom: 0; } }
+
+.tip .hint, .tsheet .hint { display: block; margin-top: .35rem; font-size: .72rem; color: #9fb0bb; }
+.tip .hint.lock, .tsheet .hint.lock { color: #ff7a6b; }
+.tsheet .mouse-only, .tip .touch-only { display: none; }
+@media (max-width: 480px) {
+  .top-nav { gap: .35rem; }
+  .top-nav .pill, .top-nav .phase { white-space: nowrap; font-size: .68rem; padding: .45rem .7rem; }
+}

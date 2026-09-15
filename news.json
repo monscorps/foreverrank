@@ -2,6 +2,142 @@
  "note": "The Forever wire. Append new entries at the top: {d: ISO date, t: headline, s: source}. The site renders this file as-is.",
  "items": [
   {
+   "d": "2026-09-15",
+   "t": "New Cooking Recipes for World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/new-cooking-recipes-for-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-blizzcon-cooking-recipes.webp"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "New Enchanting Formulas for World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/new-enchanting-formulas-for-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-blizzcon-enchanting-recipes.webp"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "New Alchemy Recipes for World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/new-alchemy-recipes-for-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-three-corners-alchemy-vendor.webp"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "Blizzard Clarifies Krol’dok Stronghold Level Range in Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/news=382895/blizzard-clarifies-krol-dok-stronghold-level-range-in-forever",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55265-blizzard-clarifies-krol-dok-stronghold-level-range-in-forever.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "Krol’dok Stronghold Dungeon Level Range Change, All 9 Dungeons Listed",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/kroldok-stronghold-dungeon-level-range-change-all-9-dungeons-listed/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/WoW_Forever_Announce_Dungeon_DrownedCity_060.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "Krol’dok Stronghold (blue post: all nine dungeon level ranges)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/krol%E2%80%99dok-stronghold/2349672"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "8 New Things We Learned About World Of Warcraft: Forever",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/new-things-learned-world-of-warcraft-forever-2000734005",
+   "img": "https://kotaku.com/app/uploads/2026/09/wow-forever-5-1-1200x675.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "Who are the raid bosses of World of Warcraft: Forever?",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/14/raid-bosses-world-warcraft-forever/"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "How to join the World of Warcraft: Forever beta, which starts on September 17",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/14/world-warcraft-forever-beta/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/09/bw-wow-forever-hyjal-zone.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "Everything I learned from running as far as I could through the Skyborne starting area in WoW: Forever",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/14/skyborne-starting-zone-wow-forever/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/09/wow_forever_zephas_isle_collage.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "World of Warcraft: Forever gives you transmog options, including turning it off",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/14/world-warcraft-forever-transmog/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/09/BlizzCon-2026-Forever-Transmog-header.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "Waylaid Supplies Factions From SoD Spotted in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/waylaid-supplies-factions-from-sod-spotted-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-azeroth-commerce-authority-three-corners-redridge-mountains.webp"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "No Group Finder or Summoning Stones in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/no-group-finder-or-summoning-stones-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-dungeon-shaper-terrace.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "Dungeon Mob XP Drastically Lowered in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/dungeon-mob-xp-drastically-lowered-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-dungeon-xp-featured-image.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "Weapon Skills in World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/weapon-skills-in-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-gameplay-trailer-horde-vs-alliance.webp"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "Exclusive Ion & Holly Interview at BlizzCon 2026: Forever, Add-Ons, and the Future of WoW",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/ion-holly-interview-blizzcon-2026/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/holly-longdale-and-ion-hazzikostas-interview-blizzcon-2026-warcraft-tavern.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "The Drowned City Dungeon Preview in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/the-drowned-city-dungeon-preview-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/the-drowned-city-dungeon-preview-featured-image-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "World of Warcraft Forever Was Designed With Hardcore in Mind",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/world-of-warcraft-forever-was-designed-with-hardcore-in-mind/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-classic-hardcore-key-art.webp"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "World of Warcraft: Forever Beta Opt-in Now Available",
+   "s": "MMO-Champion",
+   "l": "https://www.mmo-champion.com/content/14520-World-of-Warcraft-Forever-Beta-Opt-in-Now-Available"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "WoW Forever presentation outlines fog, lighting and water rendering changes",
+   "s": "classicwow.gg",
+   "l": "https://classicwow.gg/forever/news/wow-forever-presentation-outlines-fog-lighting-and-water-rendering-changes-source-326"
+  },
+  {
    "d": "2026-09-14",
    "t": "No WoW Token or Boosts & The Future of Forever - Destin Interview with Blizzard on WoW Forever",
    "s": "Wowhead",
@@ -39,6 +175,82 @@
    "d": "2026-09-14",
    "t": "Beta opens at level cap 20; cap 30 after “a couple of weeks”",
    "s": "Icy Veins"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "World of Warcraft: Forever Deep Dive Panel Recap",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24303313",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_header/3l/3LTZUH2EFN4J1789293458662.png"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "World of Warcraft: Forever Found Photos Panel Recap",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24304071",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_header/6i/6IHESZC8SP111789292807115.png"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "BlizzCon 2026 - World of Warcraft: Forever - Evolving a Timeless World",
+   "s": "MMO-Champion",
+   "l": "https://www.mmo-champion.com/content/14516-BlizzCon-2026-World-of-Warcraft-Forever-Evolving-a-Timeless-World"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "Legacy Tree & Rewards in World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/legacy-tree-rewards-in-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-legacy-tree-rewards.jpg"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "The Barbershop is in World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/the-barbershop-is-in-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/barber-shop-wow-forever-blizzcon.webp"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "First Aid Profession Preview for World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/first-aid-profession-preview-for-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-horde-camping.webp"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "Cooked Food Provides an XP Buff in World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/cooked-food-provides-an-xp-buff-in-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/world-of-warcraft-forever-blizzcon-cooking-profession.webp"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "How much does World of Warcraft: Forever cost?",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/13/cost-world-warcraft-forever/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/09/wowforever_dwarf-and-bear_header.jpg"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "What we know about the World of Warcraft: Forever's new zones, quests, dungeons, and raids",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/13/know-world-warcraft-forevers-new-zones-quests-dungeons-raids/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/09/WoWForever_Dalaran_still_header.jpg"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "How does World of Warcraft: Forever fit into current Warcraft lore?",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/13/world-warcraft-forever-fit-current-lore/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/09/WoW_Camelot_Announce_Zones_Dalaran_021.jpg"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "World Of Warcraft: Forever Is An Alt-Universe Worth Exploring",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/world-of-warcraft-forever-alternate-universe-worth-exploring-2000733865",
+   "img": "https://kotaku.com/app/uploads/2026/09/WoW-forever-5-1200x675.jpg"
   },
   {
    "d": "2026-09-13",
@@ -179,6 +391,19 @@
    "d": "2026-09-13",
    "t": "Two new raids revealed, Legendary teased",
    "s": "Icy Veins"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "Pre-Purchase World of Warcraft: Forever Upgrades and Begin Your Next Journey in Azeroth",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24301508",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_header/4f/4FC5K327AVF01789243118942.png"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "Submit Your Questions for the World of Warcraft Live Q&A September 17",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24303312"
   },
   {
    "d": "2026-09-12",
