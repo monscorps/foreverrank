@@ -890,7 +890,8 @@
         var d = have ? ds[idx] : (t.tip || "");
         var clamped = have > 0 && idx !== want;
         var extra = (clamped ? " [rank " + (idx + 1) + " text; the demo never showed rank " + (want + 1) + "]" : "") +
-          (t.est ? " [numbers still estimates]" : "") + (t.cn ? " \u00b7 " + t.cn + "." : "");
+          (have && t.de && t.de.indexOf(idx) !== -1 ? " [rank " + (idx + 1) + " estimated from Classic's rank progression until beta]" : t.est ? " [numbers still estimates]" : "") +
+          (t.cn ? " \u00b7 " + t.cn + "." : "");
         var how = pts < gate ? '<span class="hint lock">Needs ' + gate + " points in " + esc(tr.name) + ".</span>"
           : !reqOk ? '<span class="hint lock">Requires ' + esc(t.req) + " maxed." + (t.reqText ? " " + esc(t.reqText) + "." : "") + "</span>"
           : (done && r < t.r) ? '<span class="hint lock mouse-only">No points left; right-click something to take one back.</span><span class="hint lock touch-only">No points left; unlearn something first.</span>'
@@ -916,7 +917,8 @@
       var bRow = BASE && li >= 0 && BASE.stats[ck] ? BASE.stats[ck][li] : null;
       var hmRow = bRow && BASE.base[CLASS_LABEL[K0]] ? BASE.base[CLASS_LABEL[K0]][li] : null;
       return GEAR.html({ raceIcon: R0 && raceIcon(R0, S.g), gender: S.g, modelKey: modelKey(R0, S.g), standIn: !!(R0 && R0.nu),
-        cls: K0, classLabel: CLASS_LABEL[K0], specName: spent() ? sp0.name : "", classIcon: CLASS_ICON[K0], classColour: cc(K0), name: S.name || "Unnamed " + CLASS_LABEL[K0],
+        cls: K0, classLabel: CLASS_LABEL[K0], specName: spent() ? sp0.name : "",
+        formula: FORM ? FORM.classes[CLASS_LABEL[K0]] : null, levelIdx: FORM ? FORM.levels.indexOf(cap) : -1, talentFx: talentFx(), classIcon: CLASS_ICON[K0], classColour: cc(K0), name: S.name || "Unnamed " + CLASS_LABEL[K0],
         line: (R0 ? R0.n + " " : "") + CLASS_LABEL[K0] + (spent() ? ", " + sp0.name : "") + ", level " + cap,
         base: bRow, baseHM: hmRow, level: cap, raceClass: R0 ? R0.n + " " + CLASS_LABEL[K0] : "",
         derived: BASE && BASE.derived ? BASE.derived[ck] : null,
@@ -997,7 +999,19 @@
 
   // ---- wiring ---------------------------------------------------------------
   // ---- 3D character stage (viewer3d.js, loaded the first time the gear view shows) ----
-  var M3D = null, M3D_BOOT = null, M3D_EVENTS = false;
+  var M3D = null, M3D_BOOT = null, M3D_EVENTS = false, FORM = null;
+  // Stat effects of learned talents at their current rank: [stat, mode, value, when].
+  function talentFx() {
+    var c = clsData(), out = [];
+    if (!c) return out;
+    c.trees.forEach(function (tr, ti) {
+      tr.talents.forEach(function (t, i) {
+        var r = S.t[ti][i] || 0;
+        if (r && t.fx && t.fx[r - 1]) t.fx[r - 1].forEach(function (e) { out.push(e); });
+      });
+    });
+    return out;
+  }
   function syncAnims(root, clips, clip) {
     root.querySelectorAll("[data-anim]").forEach(function (b) {
       var n = b.getAttribute("data-anim");
@@ -1550,10 +1564,12 @@
           }
           return Promise.all([
             fetch("basestats.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
-            fetch("racials.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+            fetch("racials.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+            fetch("formulas.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
           ]).then(function (x) {
             BASE = x[0] && x[0].stats && x[0].levels ? x[0] : null;
             RACIALS = x[1] && x[1].races ? x[1] : null;
+            FORM = x[2] && x[2].classes ? x[2] : null;
             return d;
           });
         });

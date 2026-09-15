@@ -16,7 +16,7 @@
       ["Race and class", "#race"], ["Talents", "#talents"], ["Legacy tree", "#legacy"], ["Gear and stats", "#gear"],
       ["Consumables", "#consumables"], ["Name and share", "#share"], ["Raid composer", "#composer"]] },
     database: { path: "codex/", label: "Database", items: [
-      ["Search", "#dbs"], ["The Legacy system", "#legacy"], ["Spells", "#unseen"], ["Class changes", "#classes"],
+      ["Search", "#dbs"], ["The Legacy system", "#legacy"], ["Spells", "#unseen"], ["Class changes", "#classes"], ["Spec rankings", "#ranks"],
       ["The new world", "#world"], ["Roadmap", "#roadmap"], ["Systems", "#systems"]] },
     news: { path: "news/", label: "News", items: [["All headlines", ""], ["The Wire on the ladder", "WIRE"]] }
   };

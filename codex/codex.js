@@ -254,6 +254,7 @@
         }).join("") + "</details>";
     }).join("");
     section("classes", "Class changes, as seen in the demo", ccHtml);
+    section("ranks", "Spec rankings, estimated", '<div id="ranks-body"><p class="board-sub">Loading the estimates\u2026</p></div>');
 
     // World: cards, not tables.
     var w = d.world;
@@ -349,11 +350,43 @@
     document.getElementById("cxnav").innerHTML = nav.join("");
     var cxEl = document.getElementById("cx");
     cxEl.innerHTML = hero + out.join("");
+    if (location.hash && /^#[a-z0-9-]+$/.test(location.hash)) {
+      var hashTarget = document.querySelector(location.hash);
+      if (hashTarget) setTimeout(function () { hashTarget.scrollIntoView({ block: "start" }); }, 80);
+    }
     cxEl.addEventListener("click", function (e) {
       var t = e.target.closest && e.target.closest("[data-topic]");
       if (t) openTopic(t.getAttribute("data-topic"));
     });
     drawLegacy();
+    fetch("rankings.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (rk) {
+      var box = document.getElementById("ranks-body");
+      if (!box) return;
+      if (!rk || !rk.lists) { box.innerHTML = '<p class="board-sub">The estimates could not load.</p>'; return; }
+      var TABS = [["dps_30", "Damage, level 30"], ["dps_60", "Damage, level 60"], ["heal_30", "Healing, level 30"], ["heal_60", "Healing, level 60"]], cur = "dps_30";
+      function draw() {
+        var list = rk.lists[cur] || [], top = list.length ? list[0].score : 100;
+        box.innerHTML = '<p class="rk-warn"><b>Estimate, not measurement.</b> ' + esc(rk.note) + "</p>" +
+          '<div class="rk-tabs" role="tablist">' + TABS.map(function (tb) { return '<button type="button" role="tab" data-rk="' + tb[0] + '"' + (tb[0] === cur ? ' class="on" aria-selected="true"' : "") + ">" + tb[1] + "</button>"; }).join("") + "</div>" +
+          '<ol class="rk-list">' + list.map(function (e) {
+            var p = e.pulse ? (e.pulse.strong || e.pulse.weak ? "Community: " + e.pulse.strong + " strong, " + e.pulse.weak + " weak" : "") : "";
+            return '<li class="rk-row"><span class="rk-n">' + e.rank + "</span>" + img(e.icon) +
+              '<span class="rk-t"><b style="color:' + (CLASS_COLOUR[e.cls] || "#fff") + '">' + esc(e.spec) + " " + esc(e.cls) + "</b>" +
+              "<em>" + esc(e.why) + "</em></span>" +
+              '<span class="rk-s"><span class="rk-bar"><i style="width:' + Math.max(4, Math.round(e.score / top * 100)) + '%"></i></span><b>' + e.score + "</b>" +
+              "<small>" + esc(e.conf) + " confidence" + (p ? " \u00b7 " + esc(p) : "") + "</small></span></li>";
+          }).join("") + "</ol>" +
+          (rk.quotes && rk.quotes.length ? '<h3>What demo players reported</h3><ul class="facts">' + rk.quotes.map(function (q) {
+            return "<li>" + esc(q.quote) + ' <span class="rk-who">(' + esc(q.who) + ", " + esc(q.where) + ", " + esc(q.date) + ", not checked against footage)</span></li>";
+          }).join("") + "</ul>" : "") +
+          '<p class="rk-small">' + (rk.caveats || []).map(esc).join(" ") + "</p>";
+      }
+      box.addEventListener("click", function (e) {
+        var b = e.target.closest && e.target.closest("[data-rk]");
+        if (b) { cur = b.getAttribute("data-rk"); draw(); }
+      });
+      draw();
+    });
     fetch("../plan/items.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (it) {
       var items = it && Array.isArray(it.items) ? it.items : [];
       if (window.ForgeGear && items.length) { try { GK = ForgeGear({ items: it, get: function () { return {}; } }); } catch (e) { GK = null; } }

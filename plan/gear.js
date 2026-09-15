@@ -241,31 +241,77 @@
       LEVEL = ctx.level || 60;
       var t = totals(), count = SLOT_KEYS.filter(function (k) { return byId[eq()[k]]; }).length;
       var M = racialMods(ctx.racials), base = ctx.base, lv = ctx.level;
-      var ATTR = [["strength", "Strength"], ["agility", "Agility"], ["stamina", "Stamina"], ["intellect", "Intellect"], ["spirit", "Spirit"]];
+      // Talent effects at the learned rank; conditional ones count when a matching weapon is equipped.
+      var TP = {}, TA = {}, TC = [];
+      (ctx.talentFx || []).forEach(function (e) {
+        var stat = e[0] === "spellCrit" ? "crit" : e[0] === "spellHit" ? "hit" : e[0], on = !e[3] || weaponMatches(e[3]);
+        if (!on) { TC.push(e); return; }
+        if (e[1] === "pct") TP[stat] = (TP[stat] || 0) + e[2]; else TA[stat] = (TA[stat] || 0) + e[2];
+      });
+      var F = ctx.formula || null, li = ctx.levelIdx != null ? ctx.levelIdx : -1, EST = " WoW Classic 1.12 formula, an estimate until Forever publishes its own.";
+      var ATTR = [["strength", "Strength"], ["agility", "Agility"], ["stamina", "Stamina"], ["intellect", "Intellect"], ["spirit", "Spirit"]], A = {};
       var attrs = ATTR.map(function (x, i) {
-        var b0 = base ? base[i] : null, g = t[x[0]] || 0, pct = M.pct[x[0]] || 0;
+        var b0 = base ? base[i] : null, g = (t[x[0]] || 0) + (TA[x[0]] || 0), pct = (M.pct[x[0]] || 0) + (TP[x[0]] || 0);
         var tot = b0 == null ? null : Math.floor((b0 + g) * (1 + pct / 100));
-        var tip = (b0 == null ? "Base value unpublished for this race. " : "Base " + b0 + " at level " + lv + ". ") + "Gear and set bonuses +" + (g - (t.__c[x[0]] || 0)) + "." + (t.__c[x[0]] ? " Consumables +" + t.__c[x[0]] + "." : "") + (pct ? " Racial +" + pct + "%." : "");
+        A[x[0]] = tot;
+        var tip = (b0 == null ? "Base value unpublished for this race. " : "Base " + b0 + " at level " + lv + ". ") + "Gear and set bonuses +" + ((t[x[0]] || 0) - (t.__c[x[0]] || 0)) + "." + (t.__c[x[0]] ? " Consumables +" + t.__c[x[0]] + "." : "") +
+          (M.pct[x[0]] ? " Racial +" + M.pct[x[0]] + "%." : "") + (TP[x[0]] || TA[x[0]] ? " Talents " + (TA[x[0]] ? "+" + TA[x[0]] : "") + (TP[x[0]] ? " +" + TP[x[0]] + "%" : "") + "." : "");
         return row(x[1], tot == null ? (g ? "+" + g : "?") : tot + (pct ? '<i class="rx">+' + pct + "%</i>" : ""), tip, tot || g, "");
       }).join("");
-      var hm = ctx.baseHM;
-      var power = ctx.power || "mana";
-      var pools = hm ? row("Base health", Math.round(hm[0] * (1 + (M.pct.health || 0) / 100)) + (M.pct.health ? '<i class="rx">+' + M.pct.health + "%</i>" : ""),
-          "WoW Classic 1.12 class base health at level " + lv + ", before Stamina. Forever has not published its own base health or Stamina rate." + (M.pct.health ? " Racial +" + M.pct.health + "% applied." : ""), true, "") +
-        (power === "mana" && hm[1] ? row("Base mana", Math.round(hm[1] * (1 + (M.pct.mana || 0) / 100)) + (M.pct.mana ? '<i class="rx">+' + M.pct.mana + "%</i>" : ""),
-          "WoW Classic 1.12 class base mana at level " + lv + ", before Intellect. Forever has not published its own." + (M.pct.mana ? " Racial +" + M.pct.mana + "% applied." : ""), true, "") :
-          (M.pct[power] ? row("Max " + power, '<i class="rx">+' + M.pct[power] + "%</i>", "Racial bonus to maximum " + power + ".", true, "") : "")) : "";
-      if (t.health) pools += row("Bonus health", "+" + t.health, "From consumables" + (t.__c.health !== t.health ? " and gear" : "") + ".", true, "");
+      function r1(v) { return Math.round(v * 100) / 100; }
+      var known = A.strength != null, hm = ctx.baseHM, power = ctx.power || "mana", pools = "";
+      if (hm) {
+        var hpPct = (M.pct.health || 0) + (TP.health || 0), sta = A.stamina;
+        var hp = sta == null ? null : Math.round((hm[0] + Math.min(sta, 20) + Math.max(sta - 20, 0) * 10) * (1 + hpPct / 100)) + (t.health || 0) + (TA.health || 0);
+        pools += row("Health", hp == null ? "?" : hp + (hpPct ? '<i class="rx">+' + hpPct + "%</i>" : ""), "Base " + hm[0] + ", the first 20 Stamina add 1 health each and the rest 10 each" + (t.health ? ", plus " + t.health + " from consumables" : "") + "." + EST, true, "");
+        if (power === "mana" && hm[1]) {
+          var mpPct = (M.pct.mana || 0) + (TP.mana || 0), int = A.intellect;
+          var mp = int == null ? null : Math.round((hm[1] + Math.min(int, 20) + Math.max(int - 20, 0) * 15) * (1 + mpPct / 100));
+          pools += row("Mana", mp == null ? "?" : mp + (mpPct ? '<i class="rx">+' + mpPct + "%</i>" : ""), "Base " + hm[1] + ", the first 20 Intellect add 1 mana each and the rest 15 each." + EST, true, "");
+        } else if (M.pct[power]) pools += row("Max " + power, '<i class="rx">+' + M.pct[power] + "%</i>", "Racial bonus to maximum " + power + ".", true, "");
+      }
       var wc = M.weaponCrit.filter(function (w) { return weaponMatches(w.when); }).reduce(function (a, w) { return a + w.value; }, 0);
-      var OFF = [["attackPower", "Attack Power"], ["spellPower", "Spell Power"], ["healing", "Bonus Healing"], ["spellDamage", "Spell Damage"], ["weaponDamage", "Weapon Damage"], ["weaponSkill", "Weapon Skill"]];
-      var off = [["hit", "Hit"], ["crit", "Crit"], ["expertise", "Expertise"], ["haste", "Haste"]].map(function (x) {
-        var g = t[x[0]] || 0, rr = (M.add[x[0]] || 0) + (x[0] === "crit" ? wc : 0), v = g + rr;
-        var tip = "Bonus from gear +" + (g - (t.__c[x[0]] || 0)) + "%." + (t.__c[x[0]] ? " Consumables +" + t.__c[x[0]] + "%." : "") + (rr ? " Racial +" + rr + "%." : "") + (x[0] === "crit" && M.weaponCrit.length ? " " + M.weaponCrit.map(function (w) { return w.from + ": +" + w.value + "% with " + w.when + (weaponMatches(w.when) ? " (active)" : " (no matching weapon)"); }).join(" ") : "");
-        return row(x[1], "+" + v + "%", tip + " Base values from attributes are unpublished for Forever.", v, "");
-      }).join("") + OFF.map(function (x) { var v = t[x[0]] || 0; return v ? row(x[1], v, "From equipped items and active set bonuses" + (t.__c[x[0]] ? ", including consumables +" + t.__c[x[0]] : "") + ".", true, "") : ""; }).join("");
-      var def = row("Armor", "+" + (t.armor || 0), "From equipped items" + (t.__c.armor ? " and consumables +" + t.__c.armor : "") + ". Armor from Agility is unpublished for Forever.", t.armor, "") +
-        ((M.add.dodge || t.dodge) ? row("Dodge", "+" + ((M.add.dodge || 0) + (t.dodge || 0)) + "%", "Racial and gear dodge bonuses only. Dodge from Agility is unpublished for Forever.", true, "") : "") +
-        ["defense", "block", "mp5", "hp5"].map(function (k) { var v = t[k] || 0; return v ? row({ defense: "Defense", block: "Block", mp5: "Mana per 5", hp5: "Health per 5" }[k], v, "From equipped items and active set bonuses" + (t.__c[k] ? ", including consumables +" + t.__c[k] : "") + ".", true, "") : ""; }).join("");
+      function bonusTip(k, racial) {
+        return "Gear +" + r1((t[k] || 0) - (t.__c[k] || 0)) + (t.__c[k] ? ", consumables +" + t.__c[k] : "") + (racial ? ", racial +" + racial : "") + (TA[k] ? ", talents +" + TA[k] : "") + ".";
+      }
+      var off = "";
+      if (F && F.ap && known) {
+        var ap = Math.max(0, Math.round(A.strength * F.ap[0] + A.agility * F.ap[1] + lv * F.ap[2] + F.ap[3])) + (t.attackPower || 0) + (TA.attackPower || 0);
+        off += row("Attack Power", ap, "Strength x" + F.ap[0] + (F.ap[1] ? " + Agility x" + F.ap[1] : "") + (F.ap[2] ? " + level x" + F.ap[2] : "") + " " + F.ap[3] + ", plus " + bonusTip("attackPower") + EST, true, "");
+      }
+      if (F && F.rap && known && ctx.cls === "HUNTER") {
+        off += row("Ranged Attack Power", Math.max(0, Math.round(A.agility * F.rap[1] + lv * F.rap[2] + F.rap[3])) + (t.attackPower || 0) + (TA.rangedAttackPower || 0), "Agility x" + F.rap[1] + " + level x" + F.rap[2] + " " + F.rap[3] + ", plus gear." + EST, true, "");
+      }
+      var critBonus = (t.crit || 0) + (M.add.crit || 0) + wc + (TA.crit || 0);
+      if (F && F.mc && known && li >= 0) {
+        var mc = F.mc[0][li] + A.agility / F.mc[1][li] + critBonus;
+        off += row("Crit", r1(mc) + "%", "Base " + F.mc[0][li] + "% + Agility / " + F.mc[1][li] + " at level " + lv + ", plus " + bonusTip("crit", (M.add.crit || 0) + wc) + EST +
+          (M.weaponCrit.length ? " " + M.weaponCrit.map(function (w) { return w.from + ": +" + w.value + "% with " + w.when + (weaponMatches(w.when) ? " (active)" : " (no matching weapon)"); }).join(" ") : ""), true, "");
+      } else off += row("Crit", "+" + r1(critBonus) + "%", bonusTip("crit", (M.add.crit || 0) + wc) + " Crit from Agility is unknown for this race.", critBonus, "");
+      if (F && F.sc && known && li >= 0) {
+        off += row("Spell crit", r1(F.sc[0][li] + A.intellect / F.sc[1][li] + critBonus) + "%", "Base " + F.sc[0][li] + "% + Intellect / " + F.sc[1][li] + " at level " + lv + ", plus crit from gear, racials and talents (Forever unifies crit)." + EST, true, "");
+      }
+      [["hit", "Hit"], ["expertise", "Expertise"], ["haste", "Haste"]].forEach(function (x) {
+        var v = (t[x[0]] || 0) + (M.add[x[0]] || 0) + (TA[x[0]] || 0);
+        off += row(x[1], "+" + r1(v) + "%", bonusTip(x[0], M.add[x[0]]) + " Base values are unpublished for Forever.", v, "");
+      });
+      off += [["spellPower", "Spell Power"], ["healing", "Bonus Healing"], ["spellDamage", "Spell Damage"], ["weaponDamage", "Weapon Damage"], ["weaponSkill", "Weapon Skill"]].map(function (x) {
+        var v = (t[x[0]] || 0) + (TA[x[0]] || 0); return v ? row(x[1], v, bonusTip(x[0]), true, "") : "";
+      }).join("");
+      var armorItems = (t.armor || 0) + (TA.armor || 0), armorPct = TP.armor || 0;
+      var armor = known ? Math.round((armorItems + A.agility * 2) * (1 + armorPct / 100)) : null;
+      var def = row("Armor", armor == null ? "+" + armorItems : armor + (armorPct ? '<i class="rx">+' + armorPct + "%</i>" : ""), "Items " + armorItems + (known ? " + Agility x2" : "") + (armorPct ? ", talents +" + armorPct + "%" : "") + "." + (known ? EST : ""), true, "");
+      var dgBonus = (M.add.dodge || 0) + (t.dodge || 0) + (TA.dodge || 0);
+      if (F && F.dg && known && li >= 0) def += row("Dodge", r1(F.dg[0][li] + A.agility / F.dg[1][li] + dgBonus) + "%", "Base " + F.dg[0][li] + "% + Agility / " + F.dg[1][li] + ", plus " + bonusTip("dodge", M.add.dodge) + EST, true, "");
+      else if (dgBonus) def += row("Dodge", "+" + r1(dgBonus) + "%", bonusTip("dodge", M.add.dodge), true, "");
+      if (F && F.pa) def += row("Parry", r1(F.pa + (TA.parry || 0)) + "%", "Base " + F.pa + "%" + (TA.parry ? ", talents +" + TA.parry : "") + "." + EST, true, "");
+      var shield = byId[eq().offhand] && byId[eq().offhand].type === "Shield";
+      if (F && F.bl && shield) def += row("Block", r1(F.bl + (TA.block || 0)) + "%", "Base " + F.bl + "% with a shield" + (TA.block ? ", talents +" + TA.block : "") + ". Shield block value " + (t.block || 0) + "." + EST, true, "");
+      if (t.defense || TA.defense) def += row("Defense", (t.defense || 0) + (TA.defense || 0), bonusTip("defense"), true, "");
+      if (F && F.mp5 && known && power === "mana") def += row("Mana per 5", Math.round(A.spirit * F.mp5[0] + F.mp5[1]) + (t.mp5 ? " + " + (t.mp5 + (TA.mp5 || 0)) : ""), "From Spirit while not casting: Spirit x" + F.mp5[0] + " + " + F.mp5[1] + "." + EST + (t.mp5 ? " The second number is gear and consumable mp5, which also works while casting." : ""), true, "");
+      else if (t.mp5) def += row("Mana per 5", t.mp5, bonusTip("mp5"), true, "");
+      if (t.hp5) def += row("Health per 5", t.hp5, bonusTip("hp5"), true, "");
+      if (TC.length) def += row("Conditional talents", TC.length, TC.map(function (e) { return "+" + e[2] + (e[1] === "pct" ? "% " : " ") + e[0] + " when " + e[3]; }).join("; ") + ". Not counted above.", false, "");
       var rx = (ctx.racials || []).map(function (r) {
         var SHOWN = ["strength", "agility", "stamina", "intellect", "spirit", "health", "mana", "rage", "energy", "hit", "crit", "dodge", "haste"];
         var fx = r.fx || [];
@@ -280,8 +326,8 @@
         return '<div class="rxchip' + (applied ? " on" : "") + '" data-tip="' + attr("<b>" + esc(r.n) + "</b>" + '<span class="it-l">' + (r.kind === "passive" ? "Passive" : "Active") + "</span>" + esc(r.tip || "") + line) + '">' +
           img(r.icon) + "<span><b>" + esc(r.n) + "</b><em>" + esc(r.summary || (r.kind === "active" ? "Active ability" : "")) + "</em></span></div>";
       }).join("");
-      var note = (base ? "Base attributes, health and mana: WoW Classic 1.12 values for a level " + lv + " " + esc(ctx.raceClass || "") + (ctx.derived ? " (combo new in Forever, derived from " + esc(ctx.derived) + " plus race offsets)" : "") +
-        ". Forever has not published its own." : "Base attributes, health and mana for this race are unpublished.") + " Offense and Defense show gear and racial bonuses only.";
+      var note = (base ? "Base attributes and the formulas for health, mana, attack power, crit, dodge, armor and regen: WoW Classic 1.12 values for a level " + lv + " " + esc(ctx.raceClass || "") + (ctx.derived ? " (combo new in Forever, derived from " + esc(ctx.derived) + " plus race offsets)" : "") +
+        ". Forever has not published its own; talent ranks past what the demo showed are estimated too." : "Base attributes for this race are unpublished, so formula totals show as ?; bonuses from gear, racials and talents still count.");
       return '<div class="gear2" id="gear"><div class="g2-head"><b>Gear</b><span class="g2-count">' + count + " / " + SLOT_KEYS.length + " equipped</span>" +
         '<span class="g2-db">' + wearable + " Forever items to wear so far</span>" +
         (count ? '<button type="button" class="nm-btn ghost" data-gclear="1">Clear gear</button>' : "") + "</div>" +
