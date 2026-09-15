@@ -1,0 +1,549 @@
+{
+ "generated": "2026-09-15T14:03:07.234Z foreverrank build tools/build-all.mjs",
+ "source": {
+  "classicEra": "1.15.9.69722",
+  "anniversary": "2.5.6.69795"
+ },
+ "models": {
+  "human-male": {
+   "file": "human-male.glb",
+   "bytes": 402552,
+   "gzipBytes": 189310,
+   "anims": {
+    "file": "human-male-anims.glb",
+    "bytes": 467780,
+    "gzipBytes": 126247,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.0267,
+   "standIn": false,
+   "note": "HumanMale (M2 119940) from Classic Era 1.15.9.69722; default look Skin Color 1/12, Face 1/12, Hair Style 2/12, Hair Color 1/10, Facial Hair 1/9; Hair Style: choice 1 is bald (hair geoset 0 or 1, no hair texture), using choice 2"
+  },
+  "human-female": {
+   "file": "human-female.glb",
+   "bytes": 422568,
+   "gzipBytes": 199650,
+   "anims": {
+    "file": "human-female-anims.glb",
+    "bytes": 454788,
+    "gzipBytes": 119068,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 1.9063,
+   "standIn": false,
+   "note": "HumanFemale (M2 119563) from Classic Era 1.15.9.69722; default look Skin Color 1/12, Face 1/15, Hair Style 1/19, Hair Color 1/10, Piercings 1/7"
+  },
+  "dwarf-male": {
+   "file": "dwarf-male.glb",
+   "bytes": 483600,
+   "gzipBytes": 230228,
+   "anims": {
+    "file": "dwarf-male-anims.glb",
+    "bytes": 613696,
+    "gzipBytes": 113150,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 1.5912,
+   "standIn": false,
+   "note": "DwarfMale (M2 118355) from Classic Era 1.15.9.69722; default look Skin Color 1/19, Face 1/10, Hair Style 2/11, Hair Color 1/10, Facial Hair 1/11; Hair Style: choice 1 is bald (hair geoset 0 or 1, no hair texture), using choice 2"
+  },
+  "dwarf-female": {
+   "file": "dwarf-female.glb",
+   "bytes": 470824,
+   "gzipBytes": 231753,
+   "anims": {
+    "file": "dwarf-female-anims.glb",
+    "bytes": 538848,
+    "gzipBytes": 133856,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 1.5245,
+   "standIn": false,
+   "note": "DwarfFemale (M2 118135) from Classic Era 1.15.9.69722; default look Skin Color 1/11, Face 1/10, Hair Style 1/14, Hair Color 1/10, Piercings 1/6"
+  },
+  "nightelf-male": {
+   "file": "nightelf-male.glb",
+   "bytes": 402776,
+   "gzipBytes": 210002,
+   "anims": {
+    "file": "nightelf-male-anims.glb",
+    "bytes": 570028,
+    "gzipBytes": 173157,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.4463,
+   "standIn": false,
+   "note": "NightElfMale (M2 120791) from Classic Era 1.15.9.69722; default look Skin Color 1/9, Face 1/9, Hair Style 1/7, Hair Color 1/8, Facial Hair 1/6; 2 billboard bones (eye glow quads) exported without billboarding, marked extras.billboard"
+  },
+  "nightelf-female": {
+   "file": "nightelf-female.glb",
+   "bytes": 551904,
+   "gzipBytes": 226452,
+   "anims": {
+    "file": "nightelf-female-anims.glb",
+    "bytes": 804808,
+    "gzipBytes": 232330,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.2748,
+   "standIn": false,
+   "note": "NightElfFemale (M2 120590) from Classic Era 1.15.9.69722; default look Skin Color 1/9, Face 1/9, Hair Style 1/7, Hair Color 1/8, Markings 1/10; 2 billboard bones (eye glow quads) exported without billboarding, marked extras.billboard"
+  },
+  "gnome-male": {
+   "file": "gnome-male.glb",
+   "bytes": 466056,
+   "gzipBytes": 251501,
+   "anims": {
+    "file": "gnome-male-anims.glb",
+    "bytes": 584368,
+    "gzipBytes": 136513,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 1.0426,
+   "standIn": false,
+   "note": "GnomeMale (M2 119159) from Classic Era 1.15.9.69722; default look Skin Color 1/7, Face 1/7, Hair Style 2/7, Hair Color 1/9, Facial Hair 1/8; Hair Style: choice 1 is bald (hair geoset 0 or 1, no hair texture), using choice 2"
+  },
+  "gnome-female": {
+   "file": "gnome-female.glb",
+   "bytes": 433676,
+   "gzipBytes": 207530,
+   "anims": {
+    "file": "gnome-female-anims.glb",
+    "bytes": 524580,
+    "gzipBytes": 112401,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 1.1753,
+   "standIn": false,
+   "note": "GnomeFemale (M2 119063) from Classic Era 1.15.9.69722; default look Skin Color 1/7, Face 1/7, Hair Style 1/7, Hair Color 1/9, Earrings 1/7"
+  },
+  "orc-male": {
+   "file": "orc-male.glb",
+   "bytes": 451352,
+   "gzipBytes": 231749,
+   "anims": {
+    "file": "orc-male-anims.glb",
+    "bytes": 516128,
+    "gzipBytes": 126610,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.5358,
+   "standIn": false,
+   "note": "OrcMale (M2 121287) from Classic Era 1.15.9.69722; default look Skin Color 1/15, Face 1/9, Hair Style 2/7, Hair Color 1/8, Facial Hair 1/11; Hair Style: choice 1 is bald (hair geoset 0 or 1, no hair texture), using choice 2"
+  },
+  "orc-female": {
+   "file": "orc-female.glb",
+   "bytes": 395188,
+   "gzipBytes": 195930,
+   "anims": {
+    "file": "orc-female-anims.glb",
+    "bytes": 542088,
+    "gzipBytes": 150308,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.1338,
+   "standIn": false,
+   "note": "OrcFemale (M2 121087) from Classic Era 1.15.9.69722; default look Skin Color 1/11, Face 1/9, Hair Style 1/8, Hair Color 1/8, Piercings 1/7"
+  },
+  "scourge-male": {
+   "file": "scourge-male.glb",
+   "bytes": 475392,
+   "gzipBytes": 223161,
+   "anims": {
+    "file": "scourge-male-anims.glb",
+    "bytes": 573532,
+    "gzipBytes": 157984,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.3598,
+   "standIn": false,
+   "note": "ScourgeMale (M2 121768) from Classic Era 1.15.9.69722; default look Skin Color 1/6, Face 1/10, Hair Style 2/10, Hair Color 1/10, Features 1/17; Hair Style: choice 1 is bald (hair geoset 0 or 1, no hair texture), using choice 2; 2 billboard bones (eye glow quads) exported without billboarding, marked extras.billboard"
+  },
+  "scourge-female": {
+   "file": "scourge-female.glb",
+   "bytes": 494788,
+   "gzipBytes": 238619,
+   "anims": {
+    "file": "scourge-female-anims.glb",
+    "bytes": 563412,
+    "gzipBytes": 130799,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 1.9736,
+   "standIn": false,
+   "note": "ScourgeFemale (M2 121608) from Classic Era 1.15.9.69722; default look Skin Color 1/6, Face 1/10, Hair Style 1/10, Hair Color 1/10, Features 1/8; 2 billboard bones (eye glow quads) exported without billboarding, marked extras.billboard"
+  },
+  "tauren-male": {
+   "file": "tauren-male.glb",
+   "bytes": 477160,
+   "gzipBytes": 247434,
+   "anims": {
+    "file": "tauren-male-anims.glb",
+    "bytes": 523560,
+    "gzipBytes": 121398,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.3821,
+   "standIn": false,
+   "note": "TaurenMale (M2 122055) from Classic Era 1.15.9.69722; default look Skin Color 1/19, Face 1/5, Horn Style 1/8, Horn Color 1/3, Facial Hair 1/7"
+  },
+  "tauren-female": {
+   "file": "tauren-female.glb",
+   "bytes": 396452,
+   "gzipBytes": 211143,
+   "anims": {
+    "file": "tauren-female-anims.glb",
+    "bytes": 687512,
+    "gzipBytes": 232170,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.2327,
+   "standIn": false,
+   "note": "TaurenFemale (M2 121961) from Classic Era 1.15.9.69722; default look Skin Color 1/11, Face 1/4, Horn Style 1/7, Horn Color 1/3, Hair 1/5"
+  },
+  "troll-male": {
+   "file": "troll-male.glb",
+   "bytes": 476800,
+   "gzipBytes": 243502,
+   "anims": {
+    "file": "troll-male-anims.glb",
+    "bytes": 546112,
+    "gzipBytes": 149070,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.8733,
+   "standIn": false,
+   "note": "TrollMale (M2 122560) from Classic Era 1.15.9.69722; default look Skin Color 1/15, Face 1/5, Hair Style 2/6, Hair Color 1/10, Tusks 1/11; Hair Style: choice 1 is bald (hair geoset 0 or 1, no hair texture), using choice 2"
+  },
+  "troll-female": {
+   "file": "troll-female.glb",
+   "bytes": 382720,
+   "gzipBytes": 198622,
+   "anims": {
+    "file": "troll-female-anims.glb",
+    "bytes": 416360,
+    "gzipBytes": 83900,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.3837,
+   "standIn": false,
+   "note": "TrollFemale (M2 122414) from Classic Era 1.15.9.69722; default look Skin Color 1/15, Face 1/6, Hair Style 1/5, Hair Color 1/10, Tusks 1/6"
+  },
+  "skyborne-highorder-male": {
+   "file": "skyborne-highorder-male.glb",
+   "bytes": 600376,
+   "gzipBytes": 289522,
+   "anims": {
+    "file": "skyborne-highorder-male-anims.glb",
+    "bytes": 780560,
+    "gzipBytes": 224928,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.1842,
+   "standIn": true,
+   "note": "BloodElfMale (M2 117170) from TBC Anniversary 2.5.6.69795; default look Skin Color 1/16, Face 1/10, Hair Style 1/11, Hair Color 2/10, Facial Hair 1/10; stand-in: blood elf with High Order #A1D6D9 recolored skin, silver-white hair, gold eye glow; stand-in textures: skin #A1D6D9 recolor of skin color choice 1 (117383/117171/117271/117372) with non-skin details kept, hair color choice 2 (117159) pushed to silver-white, eye glow 117168 gold; 2 billboard bones (eye glow quads) exported without billboarding, marked extras.billboard"
+  },
+  "skyborne-highorder-female": {
+   "file": "skyborne-highorder-female.glb",
+   "bytes": 691920,
+   "gzipBytes": 323961,
+   "anims": {
+    "file": "skyborne-highorder-female-anims.glb",
+    "bytes": 844240,
+    "gzipBytes": 236786,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 1.9914,
+   "standIn": true,
+   "note": "BloodElfFemale (M2 116921) from TBC Anniversary 2.5.6.69795; default look Skin Color 1/16, Face 1/10, Hair Style 1/14, Hair Color 2/10, Earrings 1/11; stand-in: blood elf with High Order #A1D6D9 recolored skin, silver-white hair, gold eye glow; stand-in textures: skin #A1D6D9 recolor of skin color choice 1 (117142/116922/117022/117122/117132) with non-skin details kept, hair color choice 2 (117159) pushed to silver-white, eye glow 117168 gold; 8 billboard bones (eye glow quads and earring geosets) exported without billboarding, marked extras.billboard"
+  },
+  "skyborne-windshaper-male": {
+   "file": "skyborne-windshaper-male.glb",
+   "bytes": 601680,
+   "gzipBytes": 290864,
+   "anims": {
+    "file": "skyborne-windshaper-male-anims.glb",
+    "bytes": 780564,
+    "gzipBytes": 224934,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 2.1842,
+   "standIn": true,
+   "note": "BloodElfMale (M2 117170) from TBC Anniversary 2.5.6.69795; default look Skin Color 1/16, Face 1/10, Hair Style 1/11, Hair Color 2/10, Facial Hair 1/10; stand-in: blood elf with Windshaper #97B2DF recolored skin, silver-white hair, gold eye glow; stand-in textures: skin #97B2DF recolor of skin color choice 1 (117383/117171/117271/117372) with non-skin details kept, hair color choice 2 (117159) pushed to silver-white, eye glow 117168 gold; 2 billboard bones (eye glow quads) exported without billboarding, marked extras.billboard"
+  },
+  "skyborne-windshaper-female": {
+   "file": "skyborne-windshaper-female.glb",
+   "bytes": 693408,
+   "gzipBytes": 325362,
+   "anims": {
+    "file": "skyborne-windshaper-female-anims.glb",
+    "bytes": 844244,
+    "gzipBytes": 236789,
+    "clips": [
+     "Walk",
+     "Run",
+     "Dance",
+     "Cheer",
+     "Wave",
+     "Laugh",
+     "Roar",
+     "Flex",
+     "SitGround",
+     "ReadySpell",
+     "CastSpell",
+     "Attack"
+    ]
+   },
+   "height": 1.9914,
+   "standIn": true,
+   "note": "BloodElfFemale (M2 116921) from TBC Anniversary 2.5.6.69795; default look Skin Color 1/16, Face 1/10, Hair Style 1/14, Hair Color 2/10, Earrings 1/11; stand-in: blood elf with Windshaper #97B2DF recolored skin, silver-white hair, gold eye glow; stand-in textures: skin #97B2DF recolor of skin color choice 1 (117142/116922/117022/117122/117132) with non-skin details kept, hair color choice 2 (117159) pushed to silver-white, eye glow 117168 gold; 8 billboard bones (eye glow quads and earring geosets) exported without billboarding, marked extras.billboard"
+  }
+ }
+}

@@ -143,7 +143,12 @@
     if (e.pointerType !== "mouse" && e.target.closest && e.target.closest("[data-tipkit]")) return;
     closeSheet();
   }, true);
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { closeSheet(); hide(); } });
+  // One layer per Escape: capture phase runs before page listeners, and an open sheet swallows the key.
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    if (sheetOpen()) { closeSheet(); hide(); e.stopPropagation(); return; }
+    hide();
+  }, true);
   window.addEventListener("scroll", hide, { passive: true });
 
   window.TipKit = { touchy: touchy, hover: hover, show: show, hide: hide,

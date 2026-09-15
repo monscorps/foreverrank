@@ -55,7 +55,7 @@
            ["Find Treasure", "See treasure on the minimap; stacks with tracking", "shared"]],
       tip: "A pocket no to half the dungeon's mechanics." },
     { n: "Night Elf", f: "Alliance", i: "achievement_character_nightelf_male",
-      st: { str: -4, agi: 4, sta: -1, int: 0, spi: 0 },
+      st: { str: -3, agi: 5, sta: -1, int: 0, spi: 0 },
       rx: [["Shadowmeld", "Vanish into shadow while still", "shared"],
            ["Wisp Spirit", "Faster ghost. Planning ahead", "shared"],
            ["Elune's Light", "New combat racial; details unrevealed", "shared"],
@@ -96,13 +96,13 @@
            ["Bow and Throwing Specialization", "Reworked toward critical strike", "assumed"],
            ["Regeneration", "Extra health regen, some of it in combat", "assumed"]],
       tip: "The levelling racials nobody reads and everybody feels." },
-    { n: "Skyborne (High Order)", f: "Alliance", i: "inv_feather_02", nu: true, st: null,
+    { n: "Skyborne (High Order)", f: "Alliance", i: "img/race/skyborne-highorder-male.png", nu: true, st: null,
       rx: [["Walk on Air", "Glide downward for 10 seconds", "shared"],
            ["Read Ley Line", "Double Health and Mana regeneration for 15s", "shared"],
            ["Wind Blessed", "+1% melee, ranged and spell haste", "shared"],
            ["Elemental Insight", "+5% damage to Elementals", "shared"]],
       tip: "Requires the Skyborne Heroic Pack. Base stats unpublished; the sky keeps secrets." },
-    { n: "Skyborne (Windshaper)", f: "Horde", i: "inv_feather_04", nu: true, st: null,
+    { n: "Skyborne (Windshaper)", f: "Horde", i: "img/race/skyborne-windshaper-male.png", nu: true, st: null,
       rx: [["Walk on Air", "Glide downward for 10 seconds", "shared"],
            ["Skysight", "+10% run speed", "shared"],
            ["Wind Blessed", "+1% melee, ranged and spell haste", "shared"],
@@ -289,9 +289,10 @@
 
   // ---- state ----------------------------------------------------------------
   var DATA = null;                       // plan-data.json: full trees + gear per class
-  var S = { race: -1, cls: -1, t: [[], [], []], gear: [], name: "", lg: "" };
+  var S = { race: -1, cls: -1, t: [[], [], []], gear: [], name: "", lg: "", g: "m" };
   var LEGACY = null, LEGACY_LOADING = null;   // codex.json legacy block, fetched on first open
   var GEAR = null;                            // ForgeGear over plan/items.json
+  var BASE = null, RACIALS = null;            // Classic base attributes and racial effects (optional files)
   var lastSwap = null;
   var CMP = false;
   var CMPF = "";                         // light only one compare status                       // the Classic layer: both tooltips, differences marked
@@ -403,7 +404,12 @@
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
   function cc(k) { return CLASS_COLOUR[k] || "#fff"; }
-  function icon(name, cls) { return '<img class="' + (cls || "wi") + '" src="' + CDN + name + '.jpg" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">'; }
+  function icon(name, cls) { return '<img class="' + (cls || "wi") + '" src="' + (name.indexOf("/") !== -1 ? name : CDN + name + ".jpg") + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">'; }
+  // Race portrait for the chosen body: classic races use the female achievement icon, Skyborne the female demo portrait.
+  function raceIcon(r, g) { return g === "f" ? r.i.replace(/([_-])male(\.png)?$/, "$1female$2") : r.i; }
+  var MODEL_KEY = { "Human": "human", "Dwarf": "dwarf", "Night Elf": "nightelf", "Gnome": "gnome", "Orc": "orc", "Undead": "scourge",
+    "Tauren": "tauren", "Troll": "troll", "Skyborne (High Order)": "skyborne-highorder", "Skyborne (Windshaper)": "skyborne-windshaper" };
+  function modelKey(r, g) { return r && MODEL_KEY[r.n] ? MODEL_KEY[r.n] + "-" + (g === "f" ? "female" : "male") : ""; }
   function attrEnc(v) { return esc(v).replace(/"/g, "&quot;"); }
   function dt(title, body) { return 'data-tip="' + attrEnc("<b>" + esc(title) + "</b>" + esc(body)) + '"'; }
   function qv(band) { return "var(--q-" + ({ grey: "common", uncommon: "uncommon", rare: "rare", epic: "epic" }[band] || "common") + ")"; }
@@ -422,13 +428,17 @@
   function code() {
     return [S.race, S.cls, S.t.map(function (a) { var o = ""; for (var i = 0; i < a.length; i++) o += (a[i] || 0); return o; }).join("-"),
       (GEAR ? GEAR.encode(S.eq || {}) : (S.eqRaw || "")),
-      encodeURIComponent(S.name || "").replace(/\./g, "%2E"), cap, S.lg || ""].join(".").replace(/\.$/, "");
+      encodeURIComponent(S.name || "").replace(/\./g, "%2E"), cap, S.lg || "", S.g === "f" ? "f" : "",
+      (S.cons || []).filter(function (id) { return /^[A-Za-z0-9_-]+$/.test(id); }).join("~")].join(".").replace(/\.+$/, "");
   }
   function parseCode(str) {
     var p = String(str || "").split(".");
-    if (p.length >= 6 && String(p[3]).indexOf("-") !== -1) p.splice(2, 1); // v1 codes carried a spec index
-    var o = { race: +p[0], cls: +p[1], t: [[], [], []], gear: [], name: decodeURIComponent(p[4] || "") };
+    // v1 codes carried a spec digit before the talents; v2 talent segments always contain "-".
+    if (p.length >= 6 && /^\d$/.test(p[2]) && String(p[3]).indexOf("-") !== -1) p.splice(2, 1);
+    var o = { race: +p[0], cls: +p[1], t: [[], [], []], gear: [], name: "" };
     if (!(o.race >= 0 && o.race < RACES.length && o.cls >= 0 && o.cls < 9)) return null;
+    o.name = String(p[4] || "");
+    try { o.name = decodeURIComponent(o.name); } catch (e) {}
     var segs = String(p[2] || "").split("-");
     for (var ti = 0; ti < 3; ti++) {
       var seg = segs[ti] || "";
@@ -437,11 +447,14 @@
     o.eqRaw = String(p[3] || "");
     o.eq = GEAR ? GEAR.decode(o.eqRaw) : {};
     o.cap = CAPS[+p[5]] ? +p[5] : 30;
-    o.lg = /^[0-5]{1,12}(-[0-5]{0,12}){0,4}$/.test(p[6] || "") ? p[6] : "";
+    o.lg = CAPS[+p[5]] && /^[0-5]{1,12}(-[0-5]{0,12}){0,4}$/.test(p[6] || "") ? p[6] : "";
+    o.g = CAPS[+p[5]] && p[7] === "f" ? "f" : "m";
+    o.cons = CAPS[+p[5]] ? String(p[8] || "").split("~").filter(function (id) { return /^[A-Za-z0-9_-]+$/.test(id); }).slice(0, 20) : [];
     return o;
   }
-  function clampToData(o) {
+  function clampToData(o, budget) {
     if (!DATA || !o) return o;
+    budget = budget || POINTSNOW();
     var c = DATA.classes[o.cls];
     if (!c) return o;
     for (var ti = 0; ti < 3; ti++) {
@@ -455,7 +468,7 @@
     var total = 0;
     for (ti = 0; ti < 3; ti++) for (var i2 = 0; i2 < o.t[ti].length; i2++) {
       total += o.t[ti][i2];
-      if (total > POINTSNOW()) { o.t[ti][i2] -= (total - POINTSNOW()); total = POINTSNOW(); }
+      if (total > budget) { o.t[ti][i2] -= (total - budget); total = budget; }
     }
     // A budget cut can orphan a talent: drop anything whose row gate or prerequisite no longer holds.
     for (ti = 0; ti < 3; ti++) {
@@ -530,7 +543,10 @@
   }
   function loadLegacy() {
     if (LEGACY) return Promise.resolve(LEGACY);
-    if (!LEGACY_LOADING) LEGACY_LOADING = fetch("../codex/codex.json").then(function (r) { return r.json(); }).then(function (d) { LEGACY = d.legacy; return LEGACY; });
+    if (!LEGACY_LOADING) LEGACY_LOADING = fetch("../codex/codex.json")
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (d) { LEGACY = d.legacy; return LEGACY; })
+      .catch(function (e) { LEGACY_LOADING = null; throw e; });
     return LEGACY_LOADING;
   }
   function legacyLines() {
@@ -542,7 +558,7 @@
     if (!GEAR) return [];
     return GEAR.SLOT_KEYS.map(function (k) { var it = GEAR.byId[(S.eq || {})[k]]; return it ? it.name : null; }).filter(Boolean);
   }
-  var lgCloser = null;
+  var lgCloser = null, BOOT = null;
   function closeInsight() {
     if ($("insight").classList.contains("lgmode") && lgCloser) { lgCloser(); return; }
     $("insight").hidden = true;
@@ -552,7 +568,8 @@
   }
   function openLegacy() {
     hideTip();
-    loadLegacy().then(function (lgData) {
+    Promise.all([loadLegacy(), BOOT || Promise.resolve()]).then(function (r) {
+      var lgData = r[0];
       $("insight").classList.remove("sbmode", "pkmode");
       $("insight").classList.add("lgmode");
       $("insight").hidden = false;
@@ -563,6 +580,10 @@
       });
       lgCloser = w.close;
       w.draw();
+    }, function () {
+      $("insight").classList.remove("sbmode", "pkmode", "lgmode");
+      $("insight-body").innerHTML = '<div class="verdict">Could not load the Legacy tree. Check the connection and press Legacy again.</div>';
+      $("insight").hidden = false;
     });
   }
   function updateLegacyBtn() {
@@ -571,6 +592,7 @@
   }
   function openPicker(slot, q, qual) {
     hideTip();
+    if (window.TipKit) TipKit.closeSheet();
     $("insight").classList.remove("sbmode", "lgmode");
     $("insight").classList.add("pkmode");
     $("insight-body").innerHTML = GEAR.pickerHTML(slot, q, qual);
@@ -579,13 +601,21 @@
     bindTips(box);
     function close() { $("insight").hidden = true; $("insight").classList.remove("pkmode"); hideTip(); render(); }
     box.querySelectorAll("[data-gpick]").forEach(function (b) {
+      b.setAttribute("data-tipkit", "1");
       b.addEventListener("click", function () {
         var id = b.getAttribute("data-gpick"), it = GEAR.byId[id];
-        S.eq = S.eq || {};
-        S.eq[slot] = id;
-        if (slot === "mainhand" && it && it.slot === "two-hand") delete S.eq.offhand;
-        if (slot === "offhand" && S.eq.mainhand && GEAR.byId[S.eq.mainhand] && GEAR.byId[S.eq.mainhand].slot === "two-hand") delete S.eq.mainhand;
-        close();
+        function equip() {
+          S.eq = S.eq || {};
+          S.eq[slot] = id;
+          if (slot === "mainhand" && it && it.slot === "two-hand") delete S.eq.offhand;
+          if (slot === "offhand" && S.eq.mainhand && GEAR.byId[S.eq.mainhand] && GEAR.byId[S.eq.mainhand].slot === "two-hand") delete S.eq.mainhand;
+          close();
+        }
+        if (TipKit.touchy()) {
+          TipKit.openSheet(GEAR.itemTip(it), [{ label: "Equip", cls: "learn", onClick: function () { TipKit.closeSheet(); equip(); } }], { cls: "itemtip", owner: "gp:" + id });
+          return;
+        }
+        equip();
       });
     });
     var qi = box.querySelector("[data-gpq]");
@@ -667,7 +697,7 @@
     var now = viewStep != null ? viewStep : stepNow();
     var R = S.race >= 0 ? RACES[S.race] : null, K = S.cls >= 0 ? CLASS_ORDER[S.cls] : null;
     var sub = [R ? R.n : "Choose", K ? CLASS_LABEL[K] : "Choose", K && DATA ? spent() + " / " + POINTSNOW() : "Points", lgPoints(S.lg) + " / 16 LP", GEAR ? Object.keys(S.eq || {}).length + " / " + GEAR.SLOT_KEYS.length : "At beta", S.name || "Share"];
-    var ico = [R ? icon(R.i, "st-ic") : "", K ? icon(CLASS_ICON[K], "st-ic") : "", "", icon("inv_shield_06", "st-ic"), "", ""];
+    var ico = [R ? icon(raceIcon(R, S.g), "st-ic") : "", K ? icon(CLASS_ICON[K], "st-ic") : "", "", icon("inv_shield_06", "st-ic"), "", ""];
     $("fsteps").innerHTML = STEPS.map(function (n, i) {
       var logical = i <= 1 ? i : 2;
       var cls = logical < now ? "done" : logical === now ? (i > 2 ? "done" : "now") : "locked";
@@ -701,7 +731,19 @@
     hideTip();
     st.innerHTML = html;
     wire(st); bindTips(st);
+    if (pendingHash) goHash();
   }
+  // Menu links land on a part of the one-page builder: #race, #talents, #legacy, #gear, #consumables, #share, #composer.
+  var pendingHash = (location.hash || "").slice(1);
+  function goHash() {
+    var h = pendingHash; pendingHash = "";
+    if (!h) return;
+    if (h === "race") { if (viewStep !== 0) { viewStep = 0; render(); } $("fsteps").scrollIntoView({ block: "start" }); return; }
+    if (h === "legacy") { setTimeout(openLegacy, 0); return; }
+    var el = document.getElementById(h);
+    if (el) setTimeout(function () { el.scrollIntoView({ block: "start" }); }, 60);
+  }
+  window.addEventListener("hashchange", function () { pendingHash = (location.hash || "").slice(1); goHash(); });
 
   function tfRace(name) {
     if (!DATA || !DATA.races) return null;
@@ -733,7 +775,7 @@
       '<i class="finenote">Three questions. The Forge decides. No refunds.</i></div>';
     html += '<div class="cards">' + RACES.map(function (r, i) {
       return '<button class="card' + (S.race === i ? " sel" : "") + '" data-race="' + i + '" ' + dt(r.n, r.tip) + ">" +
-        icon(r.i, "wi wi-lg") + "<b>" + esc(r.n) + "</b><i>" + r.f + (r.nu ? " (probably)" : "") + "</i></button>";
+        icon(raceIcon(r, S.g), "wi wi-lg") + "<b>" + esc(r.n) + "</b><i>" + r.f + (r.nu ? " (probably)" : "") + "</i></button>";
     }).join("") + "</div>";
     return html;
   }
@@ -745,7 +787,7 @@
           var v = r.st[k]; return (v > 0 ? "+" : "") + v + " " + k.charAt(0).toUpperCase() + k.slice(1);
         }).join(", ") + "</p>"
       : '<p class="line finenote">Base stats unpublished. The sky keeps its spreadsheet.</p>';
-    return '<div class="race-x">' + '<div class="rx-head">' + icon(r.i, "wi") + "<b>" + esc(r.n) + "</b><span>" + esc(r.f) + "</span></div>" +
+    return '<div class="race-x">' + '<div class="rx-head">' + icon(raceIcon(r, S.g), "wi") + "<b>" + esc(r.n) + "</b><span>" + esc(r.f) + "</span></div>" +
       racialList(r) + st +
       '<div class="b-actions"><button type="button" class="share" id="rcont">' +
       (S.cls < 0 ? "Continue: pick the class" : "Back to the anvil") + "</button></div>" +
@@ -789,7 +831,7 @@
     var done = spent() >= POINTSNOW();
     var K = CLASS_ORDER[S.cls], total = POINTSNOW(), used = spent(), left = total - used;
     var RR = 18, CIRC = 2 * Math.PI * RR, frac = total ? used / total : 0;
-    var html = '<div class="tbar">' +
+    var html = '<div class="tbar" id="talents">' +
       '<div class="tb-spec">' + icon(CLASS_ICON[K], "tb-cls") + '<div><b style="color:' + cc(K) + '">' + esc(used ? sp.name : CLASS_LABEL[K]) + "</b>" +
         '<span class="rolechip ' + (used ? sp.role : "") + '">' + (used ? sp.role : "no points yet") + "</span></div></div>" +
       '<div class="tb-points' + (done ? " alldone" : "") + '"><svg class="pring" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="18" class="pr-bg"/>' +
@@ -870,8 +912,16 @@
   function gearHTML() {
     if (GEAR) {
       var R0 = RACES[S.race], K0 = CLASS_ORDER[S.cls], sp0 = specNow();
-      return GEAR.html({ raceIcon: R0 && R0.i, classIcon: CLASS_ICON[K0], classColour: cc(K0), name: S.name || "Unnamed " + CLASS_LABEL[K0],
-        line: (R0 ? R0.n + " " : "") + CLASS_LABEL[K0] + (spent() ? ", " + sp0.name : "") + ", level " + cap });
+      var ck = R0 ? R0.n + "|" + CLASS_LABEL[K0] : "", li = BASE ? BASE.levels.indexOf(cap) : -1;
+      var bRow = BASE && li >= 0 && BASE.stats[ck] ? BASE.stats[ck][li] : null;
+      var hmRow = bRow && BASE.base[CLASS_LABEL[K0]] ? BASE.base[CLASS_LABEL[K0]][li] : null;
+      return GEAR.html({ raceIcon: R0 && raceIcon(R0, S.g), gender: S.g, modelKey: modelKey(R0, S.g), standIn: !!(R0 && R0.nu),
+        cls: K0, classLabel: CLASS_LABEL[K0], specName: spent() ? sp0.name : "", classIcon: CLASS_ICON[K0], classColour: cc(K0), name: S.name || "Unnamed " + CLASS_LABEL[K0],
+        line: (R0 ? R0.n + " " : "") + CLASS_LABEL[K0] + (spent() ? ", " + sp0.name : "") + ", level " + cap,
+        base: bRow, baseHM: hmRow, level: cap, raceClass: R0 ? R0.n + " " + CLASS_LABEL[K0] : "",
+        derived: BASE && BASE.derived ? BASE.derived[ck] : null,
+        power: K0 === "WARRIOR" ? "rage" : K0 === "ROGUE" ? "energy" : "mana",
+        racials: RACIALS && R0 ? RACIALS.races[R0.n] || [] : [] });
     }
     var slots = ["inv_helmet_03", "inv_jewelry_necklace_07", "inv_shoulder_02", "inv_misc_cape_02", "inv_chest_chain", "inv_bracer_07", "inv_gauntlets_05",
       "inv_belt_03", "inv_pants_03", "inv_boots_05", "inv_jewelry_ring_03", "inv_jewelry_talisman_07", "inv_sword_04", "inv_shield_04"];
@@ -881,7 +931,7 @@
   }
 
   function nameHTML() {
-    return '<div class="namer"><input id="cname" maxlength="16" placeholder="Name your character" value="' + esc(S.name) + '">' +
+    return '<div class="namer" id="share"><input id="cname" maxlength="16" placeholder="Name your character" value="' + esc(S.name) + '">' +
       '<button type="button" class="nm-btn primary" id="bshare">Copy share link</button>' +
       '<button type="button" class="nm-btn" id="bcopy">Copy as text</button>' +
       '<button type="button" class="nm-btn ghost" id="breset">Start over</button></div>';
@@ -894,22 +944,27 @@
     });
     return out;
   }
+  function consNames() {
+    return GEAR ? (S.cons || []).map(function (id) { return GEAR.byId[id]; }).filter(function (it) { return it && it.cat === "consumable"; }).map(function (it) { return it.name; }) : [];
+  }
   function buildHTML() {
     var r = RACES[S.race], k = CLASS_ORDER[S.cls], c = clsData(), sp = specNow();
     var tal = talentList();
     return '<div class="buildcard"><h3>' + esc(S.name || "Unnamed " + CLASS_LABEL[k]) + "</h3>" +
-      '<p class="line">' + icon(r.i, "wi wi-sm") + " " + esc(r.n) + ' · <span style="color:' + cc(k) + '">' + CLASS_LABEL[k] + "</span> · " +
+      '<p class="line">' + icon(raceIcon(r, S.g), "wi wi-sm") + " " + esc(r.n) + ' · <span style="color:' + cc(k) + '">' + CLASS_LABEL[k] + "</span> · " +
       esc(sp.name) + " (" + esc(sp.split) + ') · <span class="rolechip ' + sp.role + '">' + sp.role + "</span> · level " + cap + "</p>" +
       '<p class="line"><i>Talents (' + spent() + "/" + POINTSNOW() + "):</i> " + (tal.length ? esc(tal.join(", ")) : "none yet, a purist") + "</p>" +
       (S.lg ? '<p class="line"><i>Legacy (' + lgPoints(S.lg) + "/16):</i> " + esc(legacyLines().join(" \u00b7 ") || lgPoints(S.lg) + " points") + "</p>" : "") +
-      '<p class="line"><i>Gear:</i> ' + esc(gearNames().join(", ") || "none equipped") + "</p></div>";
+      '<p class="line"><i>Gear:</i> ' + esc(gearNames().join(", ") || "none equipped") + "</p>" +
+      (consNames().length ? '<p class="line"><i>Consumables:</i> ' + esc(consNames().join(", ")) + "</p>" : "") + "</div>";
   }
   function buildText() {
     var r = RACES[S.race], k = CLASS_ORDER[S.cls], c = clsData(), sp = specNow();
     return (S.name || "Unnamed") + ": " + r.n + " " + sp.name + " " + CLASS_LABEL[k] + " (" + sp.role + ", " + sp.split + ", cap " + cap + ")\n" +
       "Talents (" + spent() + "/" + POINTSNOW() + "):\n" + (talentList().map(function (t) { return "  " + t; }).join("\n") || "  none") +
       (S.lg ? "\nLegacy (" + lgPoints(S.lg) + "/16):\n" + (legacyLines().map(function (l) { return "  " + l; }).join("\n") || "  " + lgPoints(S.lg) + " points") : "") +
-      "\nGear:\n" + (gearNames().map(function (g) { return "  " + g; }).join("\n") || "  none") + "\n" + location.origin + location.pathname + "?b=" + code();
+      "\nGear:\n" + (gearNames().map(function (g) { return "  " + g; }).join("\n") || "  none") +
+      (consNames().length ? "\nConsumables:\n" + consNames().map(function (g) { return "  " + g; }).join("\n") : "") + "\n" + location.origin + location.pathname + "?b=" + code();
   }
 
   // ---- the coward's button --------------------------------------------------
@@ -932,7 +987,7 @@
     var k = CLASS_ORDER.slice().sort(function (a, b) { return (score[b] || 0) - (score[a] || 0); })[0];
     var allowed = COMBOS[k];
     var race = allowed.slice().sort(function (a, b) { return (score[b] || 0) - (score[a] || 0); })[0];
-    S = { race: RACES.map(function (r) { return r.n; }).indexOf(race), cls: CLASS_ORDER.indexOf(k), t: [[], [], []], gear: [], name: QUIZ_NAMES[(answers[0] * 4 + answers[1] + answers[2]) % QUIZ_NAMES.length] };
+    S = { race: RACES.map(function (r) { return r.n; }).indexOf(race), cls: CLASS_ORDER.indexOf(k), t: [[], [], []], gear: [], name: QUIZ_NAMES[(answers[0] * 4 + answers[1] + answers[2]) % QUIZ_NAMES.length], lg: S.lg || "", eq: {}, g: S.g || "m", cons: [] };
     lastSwap = { title: "The Forge has spoken: " + race + " " + CLASS_LABEL[k],
       parts: [esc(CLASS_JOKE[k]), '<i class="finenote">The trees below are empty on purpose: the Forge picks the body and the job, the points are yours to place.</i>'] };
     viewStep = null;
@@ -941,13 +996,116 @@
   }
 
   // ---- wiring ---------------------------------------------------------------
+  // ---- 3D character stage (viewer3d.js, loaded the first time the gear view shows) ----
+  var M3D = null, M3D_BOOT = null, M3D_EVENTS = false;
+  function syncAnims(root, clips, clip) {
+    root.querySelectorAll("[data-anim]").forEach(function (b) {
+      var n = b.getAttribute("data-anim");
+      if (clips) b.disabled = clips.indexOf(n) === -1;
+      b.classList.toggle("on", n === (clip && clip.indexOf("Stand") === 0 ? "Stand" : clip));
+    });
+  }
+  function mountModel(host) {
+    var key = host.getAttribute("data-model");
+    if (!key) return;
+    if (!M3D_EVENTS) {
+      M3D_EVENTS = true;
+      document.addEventListener("fm3d:model", function (e) {
+        var stage = e.target.closest && e.target.closest(".g2-stage");
+        if (!stage) return;
+        stage.classList.toggle("nomodel", !!e.detail.missing);
+        syncAnims(stage, e.detail.clips, "Stand");
+      });
+      document.addEventListener("fm3d:clip", function (e) {
+        var stage = e.target.closest && e.target.closest(".g2-stage");
+        if (stage) syncAnims(stage, e.detail.clips, e.detail.clip);
+      });
+      document.addEventListener("fm3d:zoom", function (e) {
+        var stage = e.target.closest && e.target.closest(".g2-stage"), zb = stage && stage.querySelector("[data-m3d-zoom]");
+        if (zb) zb.classList.toggle("on", !!e.detail.on);
+      });
+    }
+    if (!M3D_BOOT) {
+      M3D_BOOT = new Promise(function (res, rej) {
+        var imp;
+        try { imp = new Function("u", "return import(u)"); } catch (e) { rej(e); return; }
+        imp(new URL("viewer3d.js?v=4", document.baseURI).href).then(function (m) {
+          M3D = m.create({ base: new URL("models/", document.baseURI).href });
+          if (!M3D) { var err = new Error("WebGL unavailable"); err.nogl = true; throw err; }
+          res(M3D);
+        }).catch(rej);
+      });
+    }
+    var boot = M3D_BOOT;
+    boot.then(function (v) {
+      return v.ready().then(function () {
+        if (!host.isConnected) return;
+        if (!v.has(key)) { host.parentNode.classList.add("nomodel"); v.show(key); return; }
+        host.classList.add("live");
+        v.attach(host);
+        v.show(key);
+        var cur = v.current(), zb = host.parentNode.querySelector("[data-m3d-zoom]");
+        if (zb) zb.classList.toggle("on", v.isCloseUp());
+        if (cur && cur.key === key) syncAnims(host.parentNode, cur.clips, cur.clip);
+      });
+    }).catch(function (err) {
+      // A failed download of the viewer can be retried on the next render; missing WebGL cannot.
+      if (!(err && err.nogl) && M3D_BOOT === boot) M3D_BOOT = null;
+      host.classList.add("nogl");
+      if (host.parentNode) host.parentNode.classList.add("nomodel");
+    });
+  }
+
   function wire(st) {
-    st.querySelectorAll("[data-gslot]").forEach(function (b) {
+    var mh = st.querySelector(".g2-model");
+    if (mh) mountModel(mh);
+    st.querySelectorAll("[data-gender]").forEach(function (b) {
+      b.addEventListener("click", function () { var g = b.getAttribute("data-gender"); if (S.g !== g) { S.g = g; render(); } });
+    });
+    st.querySelectorAll("[data-anim]").forEach(function (b) {
       b.addEventListener("click", function () {
-        if (b.classList.contains("blocked")) return;
-        openPicker(b.getAttribute("data-gslot"), "", "");
+        if (M3D) M3D.play(b.getAttribute("data-anim"));
       });
     });
+    var anb = st.querySelector(".g2-anims");
+    // A mouse wheel scrolls the animation strip sideways.
+    if (anb) anb.addEventListener("wheel", function (e) {
+      if (anb.scrollWidth > anb.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) { anb.scrollLeft += e.deltaY; e.preventDefault(); }
+    }, { passive: false });
+    st.querySelectorAll("[data-cons]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var id = b.getAttribute("data-cons"), list = (S.cons || []).slice(), at = list.indexOf(id);
+        if (at !== -1) list.splice(at, 1);
+        else {
+          // One well-fed buff at a time: a new food replaces the old one.
+          var inf = GEAR && GEAR.consumeInfo(GEAR.byId[id]);
+          if (inf && inf.kind === "food") list = list.filter(function (x) { var o = GEAR.consumeInfo(GEAR.byId[x]); return !o || o.kind !== "food"; });
+          list.push(id);
+        }
+        S.cons = list; hideTip(); render();
+      });
+    });
+    var ccl = st.querySelector("[data-cons-clear]");
+    if (ccl) ccl.addEventListener("click", function () { S.cons = []; render(); });
+    var zb = st.querySelector("[data-m3d-zoom]");
+    if (zb) zb.addEventListener("click", function () { if (M3D) M3D.toggleClose(); });
+    st.querySelectorAll("[data-gslot]").forEach(function (b) {
+      b.setAttribute("data-tipkit", "1");
+      b.addEventListener("click", function () {
+        if (b.classList.contains("blocked")) return;
+        var slot = b.getAttribute("data-gslot"), it = GEAR && GEAR.byId[(S.eq || {})[slot]];
+        if (it && TipKit.touchy()) {
+          TipKit.openSheet(GEAR.itemTip(it), [
+            { label: "Unequip", cls: "unlearn", onClick: function () { TipKit.closeSheet(); delete S.eq[slot]; render(); } },
+            { label: "Change", cls: "learn", onClick: function () { TipKit.closeSheet(); openPicker(slot, "", ""); } }
+          ], { cls: "itemtip", owner: "g:" + slot });
+          return;
+        }
+        openPicker(slot, "", "");
+      });
+    });
+    var gr = st.querySelector("[data-goto-race]");
+    if (gr) gr.addEventListener("click", function () { viewStep = 0; render(); window.scrollTo(0, 0); });
     var gcl = st.querySelector("[data-gclear]");
     if (gcl) gcl.addEventListener("click", function () { S.eq = {}; render(); });
     var cb = st.querySelector("#cmpbtn");
@@ -1158,7 +1316,7 @@
     copyBtn("#bshare", function () { return location.origin + location.pathname + "?b=" + code(); });
     copyBtn("#bcopy", buildText);
     var br = st.querySelector("#breset");
-    if (br) br.addEventListener("click", function () { S = { race: -1, cls: -1, t: [[], [], []], gear: [], name: "" }; lastSwap = null; render(); window.scrollTo(0, 0); });
+    if (br) br.addEventListener("click", function () { S = { race: -1, cls: -1, t: [[], [], []], gear: [], name: "", lg: "", eq: {}, g: S.g || "m", cons: [] }; lastSwap = null; render(); window.scrollTo(0, 0); });
     var dk = st.querySelector("#dunno");
     if (dk) dk.addEventListener("click", function () {
       $("insight").classList.remove("sbmode", "lgmode", "pkmode");
@@ -1306,14 +1464,15 @@
   }
   function bcode(b) {
     return [b.race, b.cls, b.t.map(function (a) { return a.join(""); }).join("-"),
-      (GEAR ? GEAR.encode(b.eq || {}) : (b.eqRaw || "")), encodeURIComponent(b.name || "").replace(/\./g, "%2E"), b.cap || cap, b.lg || ""].join(".").replace(/\.$/, "");
+      (GEAR ? GEAR.encode(b.eq || {}) : (b.eqRaw || "")), encodeURIComponent(b.name || "").replace(/\./g, "%2E"), b.cap || cap, b.lg || "",
+      b.g === "f" ? "f" : "", (b.cons || []).filter(function (id) { return /^[A-Za-z0-9_-]+$/.test(id); }).join("~")].join(".").replace(/\.+$/, "");
   }
   function compose() {
     if (!DATA) return;
     var lines = $("raid-in").value.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
     var builds = [];
-    lines.forEach(function (l) { builds = builds.concat(parseAny(l)); });
-    builds = builds.map(clampToData).filter(Boolean);
+    lines.forEach(function (l) { try { builds = builds.concat(parseAny(l)); } catch (e) {} });
+    builds = builds.map(function (b) { return clampToData(b, CAPS[b.cap] || CAPS[30]); }).filter(Boolean);
     var out = $("raid-out");
     if (!builds.length) {
       out.innerHTML = '<div class="verdict">Nothing parseable in there. Paste build links from The Forge, one per line.</div>';
@@ -1324,8 +1483,8 @@
       var k = CLASS_ORDER[b.cls], sp = specOf(b);
       roles[sp.role]++; classes[k] = (classes[k] || 0) + 1;
       return "<tr><td>" + icon(CLASS_ICON[k], "wi wi-sm") + ' <b style="color:' + cc(k) + '">' + esc(b.name || "Unnamed") + "</b></td>" +
-        "<td>" + icon(RACES[b.race].i, "wi wi-sm") + " " + esc(RACES[b.race].n) + "</td><td>" + esc(sp.name) + " " + CLASS_LABEL[k] + ' <span class="meta">' + sp.split + "</span></td>" +
-        '<td><span class="rolechip ' + sp.role + '">' + sp.role + "</span></td><td>" + sp.pts + "/" + POINTSNOW() + " pts</td></tr>";
+        "<td>" + icon(raceIcon(RACES[b.race], b.g), "wi wi-sm") + " " + esc(RACES[b.race].n) + "</td><td>" + esc(sp.name) + " " + CLASS_LABEL[k] + ' <span class="meta">' + sp.split + "</span></td>" +
+        '<td><span class="rolechip ' + sp.role + '">' + sp.role + "</span></td><td>" + sp.pts + "/" + (CAPS[b.cap] || CAPS[30]) + " pts</td></tr>";
     }).join("");
     var v = [];
     v.push("<b>" + builds.length + "</b> forged: " + roles.tank + " tank" + (roles.tank === 1 ? "" : "s") + ", " +
@@ -1380,9 +1539,24 @@
       TipKit.hover(gbtn, function () { return "<b>Compare to Classic</b>Marks what is new, changed, moved or gone against WoW Classic, on talents, spells and racials."; });
     }
     render();
-    fetch("plan-data.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
-      return fetch("items.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : { items: [] }; }, function () { return { items: [] }; })
-        .then(function (it) { GEAR = ForgeGear({ items: it, get: function () { return S.eq; } }); return d; });
+    BOOT = fetch("plan-data.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+      return fetch("items.json", { cache: "no-store" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; })
+        .then(function (it) {
+          GEAR = null;
+          if (it && Array.isArray(it.items)) {
+            try { GEAR = ForgeGear({ items: it, get: function () { return S.eq; }, cons: function () { return S.cons || []; } }); } catch (e) { GEAR = null; }
+          }
+          return Promise.all([
+            fetch("basestats.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+            fetch("racials.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+          ]).then(function (x) {
+            BASE = x[0] && x[0].stats && x[0].levels ? x[0] : null;
+            RACIALS = x[1] && x[1].races ? x[1] : null;
+            return d;
+          });
+        });
     }).then(function (d) {
       DATA = d;
       if (d.races && d.races.length) {
@@ -1401,7 +1575,8 @@
         $("composer").scrollIntoView();
       } else {
         var rawB = /[?&]b=([^&#]*)/.exec(location.search);
-        var use = (rawB && parseCode(rawB[1])) || null;
+        var use = null;
+        try { use = (rawB && parseCode(rawB[1])) || null; } catch (e) { use = null; }
         if (!use) { try { use = parseCode(localStorage.getItem("forge3")); } catch (e) {} }
         if (use) { cap = use.cap || 30; S = clampToData(use) || S; }
         render();

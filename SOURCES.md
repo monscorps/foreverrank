@@ -128,3 +128,10 @@ carry their own links in news.json.
 - https://wowforever.quest/guides/wow-forever-talent-changes
 
 Corrections welcome: open an issue.
+
+## Added 2026-09-15
+- 3D character models: converted from the World of Warcraft Classic Era client (1.15.9) and TBC Anniversary blood elf models (Skyborne stand-ins, recoloured) via Blizzard's public CDN and wago.tools. Game assets belong to Blizzard Entertainment.
+- three.js r186 (MIT), bundled in plan/vendor.
+- Skyborne race portraits: cropped from Warcraft Tavern's capture of the BlizzCon 2026 Forever demo character creator.
+- Forever items, consumables and set bonuses: BlizzCon 2026 panel slides and videos, Blizzard recaps, Warcraft Tavern, Wowhead, Output Lag, Reddit captures and Savix's demo streams. Icons matched from footage or same-name Classic items.
+- Database stat tile art: Blizzard's Forever site and panel recap posts.
