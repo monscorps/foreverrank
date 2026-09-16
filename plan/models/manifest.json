@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-15T14:03:07.234Z foreverrank build tools/build-all.mjs",
+ "generated": "2026-09-16T18:25:45.674Z foreverrank build tools/build-all.mjs",
  "source": {
   "classicEra": "1.15.9.69722",
   "anniversary": "2.5.6.69795"
@@ -439,8 +439,8 @@
   },
   "skyborne-highorder-male": {
    "file": "skyborne-highorder-male.glb",
-   "bytes": 600376,
-   "gzipBytes": 289522,
+   "bytes": 600012,
+   "gzipBytes": 289102,
    "anims": {
     "file": "skyborne-highorder-male-anims.glb",
     "bytes": 780560,
@@ -493,8 +493,8 @@
   },
   "skyborne-windshaper-male": {
    "file": "skyborne-windshaper-male.glb",
-   "bytes": 601680,
-   "gzipBytes": 290864,
+   "bytes": 601412,
+   "gzipBytes": 290620,
    "anims": {
     "file": "skyborne-windshaper-male-anims.glb",
     "bytes": 780564,

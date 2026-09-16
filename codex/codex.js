@@ -374,7 +374,8 @@
               '<span class="rk-t"><b style="color:' + (CLASS_COLOUR[e.cls] || "#fff") + '">' + esc(e.spec) + " " + esc(e.cls) + "</b>" +
               "<em>" + esc(e.why) + "</em></span>" +
               '<span class="rk-s"><span class="rk-bar"><i style="width:' + Math.max(4, Math.round(e.score / top * 100)) + '%"></i></span><b>' + e.score + "</b>" +
-              "<small>" + esc(e.conf) + " confidence" + (p ? " \u00b7 " + esc(p) : "") + "</small></span></li>";
+              "<small>" + esc(e.conf) + " confidence" + (p ? " \u00b7 " + esc(p) : "") +
+              (e.meas && e.meas.samples ? " \u00b7 Demo meters: " + e.meas.samples + (e.meas.samples === 1 ? " reading" : " readings") + (e.meas.avg ? ", about " + e.meas.avg + (cur.indexOf("heal") === 0 ? " hps" : " dps") : "") : "") + "</small></span></li>";
           }).join("") + "</ol>" +
           (rk.quotes && rk.quotes.length ? '<h3>What demo players reported</h3><ul class="facts">' + rk.quotes.map(function (q) {
             return "<li>" + esc(q.quote) + ' <span class="rk-who">(' + esc(q.who) + ", " + esc(q.where) + ", " + esc(q.date) + ", not checked against footage)</span></li>";

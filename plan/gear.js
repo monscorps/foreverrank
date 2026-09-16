@@ -70,6 +70,7 @@
       if (it.reqLevel) L.push('<span class="it-l">Requires Level ' + esc(it.reqLevel) + "</span>");
       if (it.itemLevel) L.push('<span class="it-y">Item Level ' + esc(it.itemLevel) + "</span>");
       if (it.source) L.push('<span class="it-src">' + esc(it.source) + "</span>");
+      if (it.reagents) L.push('<span class="it-src">Reagents: ' + esc(it.reagents) + "</span>");
       if (it.iconFrom === "placeholder") L.push('<span class="it-conf">Stand-in icon until the real one is seen</span>');
       L.push('<span class="it-conf">' + (it.confidence === "tooltip" ? "Tooltip read from Forever footage" : it.confidence === "partial" ? "Partly seen: some lines never shown" : "Named by Blizzard or previews; no tooltip shown yet") + "</span>");
       return L.join("");

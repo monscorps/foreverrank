@@ -2,6 +2,103 @@
  "note": "The Forever wire. Append new entries at the top: {d: ISO date, t: headline, s: source}. The site renders this file as-is.",
  "items": [
   {
+   "d": "2026-09-16",
+   "t": "WoW: Forever Will Have Addon Changes from Midnight",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-will-have-addon-changes-from-midnight-382921",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55291-wow-forever-will-have-addon-changes-from-midnight.jpg"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "Designing Classic+ & New Quests - Gamespot Interview with Blizzard",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/designing-classic-and-new-quests-gamespot-interview-with-blizzard-382913",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55282-designing-classic-and-new-quests-gamespot-interview-with-blizzard.jpg"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "WoW Forever Adds a Useful Warning for When You're Being Phased Into a New Layer",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-adds-a-useful-warning-for-when-youre-being-phased-into-a-new-layer/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/wow-forever-zones.jpg"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "WoW Forever Is Turning the Humble Campfire Into a Major New System",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-is-turning-the-humble-campfire-into-a-major-new-system/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/camping.jpg"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "Scalping At BlizzCon Is Out Of Control, And Blizzard Isn't Helping",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/blizzards-got-a-serious-scalping-problem-on-its-hands-2000734796",
+   "img": "https://kotaku.com/app/uploads/2026/09/2344.jpg"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "Bad news for shaman tank hopefuls: World of Warcraft: Forever won't have Season of Discovery's zany class design just yet",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/bad-news-for-shaman-tank-hopefuls-world-of-warcraft-forever-wont-have-season-of-discoverys-zany-class-design-just-yet-but-never-say-never-yknow/",
+   "img": "https://cdn.mos.cms.futurecdn.net/4a9oyQdrXFpY6keN5AagHb-2560-80.png"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "Who Are the Skyborne? The Lore Behind WoW Forever's New Race",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/who-are-the-skyborne-the-lore-behind-wow-forevers-new-race/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/skyborne.png"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "Chris Metzen Wanted to \"Get a Little Crazy\" with The Skyborne in WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/chris-metzen-wanted-to-get-a-little-crazy-with-the-skyborne-in-wow-forever/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/61_zephras_map.png"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "WoW: Forever Beta Starts Tomorrow! Here's How to Get In and What You Need to Know",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-beta-starts-tomorrow-heres-how-to-get-in-and-what-you-need-to-know/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/wow-forever.webp"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "Players are Earning WoW Forever Beta Codes by Buying Australian McDonald's",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/players-are-earning-wow-forever-beta-codes-by-buying-australians-mcdonalds/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/Wow-Forever-Maccas-Promotion.png"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "Changes to Bags & Banks in World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/changes-to-bags-banks-in-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/07/dal-alliance-bank.jpg"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "Familiar Faces to Simulate Realms in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/familiar-faces-to-simulate-realms-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-familiar-faces-featured-image.jpg"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "Item Stats Will Not Be Known in Advance for WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/item-stats-will-not-be-known-in-advance-for-wow-forever/"
+  },
+  {
+   "d": "2026-09-16",
+   "t": "New Tailoring Patterns for World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/new-tailoring-patterns-for-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-tailoring-vendor.webp"
+  },
+  {
    "d": "2026-09-15",
    "t": "New Cooking Recipes for World of Warcraft Forever",
    "s": "Warcraft Tavern",
@@ -21,6 +118,110 @@
    "s": "Warcraft Tavern",
    "l": "https://www.warcrafttavern.com/forever/news/new-alchemy-recipes-for-world-of-warcraft-forever/",
    "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-three-corners-alchemy-vendor.webp"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "McDonald's Australia Offering WoW: Forever Beta Access with Reward Points",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/mcdonalds-australia-offering-wow-forever-beta-access-with-reward-points-382912",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55279-mcdonalds-australia-offering-wow-forever-beta-access-with-reward-points.png"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "WoW Forever Beta Keys Are Now a McDonald's Reward in Australia",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-beta-keys-are-now-a-mcdonalds-reward-in-australia/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/MyMaccas-WoW_banner_PHASE-01.png"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "WoW: Forever Legacy System Calculator Now Live",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-legacy-system-calculator-now-live-382903",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55270-wow-forever-legacy-system-calculator-now-live.png"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "Watch the World of Warcraft Live Q&A September 17",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24302544",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_header/it/ITQ5NQ3CGKNQ1789241354276.png"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "Watch the World of Warcraft Live Q&A on September 17",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/watch-the-world-of-warcraft-live-q-a-on-september-17-382906",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55273-watch-the-world-of-warcraft-live-q-a-on-september-17.jpg"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "World of Warcraft Live Q&A Set for September 17",
+   "s": "classicwow.gg",
+   "l": "https://classicwow.gg/forever/news/world-of-warcraft-live-qa-set-for-september-17-source-613"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "Blizzard Wants to Keep Loot a Surprise in WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/blizzard-wants-to-keep-loot-a-surprise-in-wow-forever/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/39_itemization_rare_creatures.png"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "WoW Forever's New Loading Screens Are Packed With Interesting Details",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forevers-new-loading-screens-are-packed-with-interesting-details/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/WoW-Forever-Cinematic-Still-4.webp"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "What you need to know about WoW Forever's Campfire system and how it works",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/15/need-know-wow-forevers-campfire-system-works/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/09/bw-wow-forever-campfire-header.jpg"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "New Engineering Schematics for World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/new-engineering-schematics-for-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-engineering-vendor.webp"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "Dungeon Experience Changes in World of Warcraft: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/dungeon-experience-changes-in-world-of-warcraft-forever-382898",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55268-dungeon-experience-changes-in-world-of-warcraft-forever.jpg"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "WoW Forever Cuts Dungeon Kill XP but Makes Dungeon Quests More Rewarding",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-cuts-dungeon-kill-xp-but-makes-dungeon-quests-more-rewarding/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/WoW_Forever_Announce_Dungeon_Dalaran_074.jpg"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "Crafted Food in WoW Forever Gives You 5% More XP From Kills",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/crafted-food-in-wow-forever-gives-you-5-more-xp-from-kills/",
+   "img": "https://static.icy-veins.com/wp/wp-content/uploads/2026/09/WoW_Forever_SCENIC_Announce_Camping_Players_064.jpg"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "Three New Ship Routes Debuting in Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/three-new-ship-routes-debuting-in-forever-382891",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55261-three-new-ship-routes-debuting-in-forever.png"
+  },
+  {
+   "d": "2026-09-15",
+   "t": "Chase Items on Every Raid Boss: The Sun Interview on WoW Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/chase-items-on-every-raid-boss-the-sun-interview-on-wow-forever-382892",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55264-chase-items-on-every-raid-boss-the-sun-interview-on-wow-forever.png"
   },
   {
    "d": "2026-09-14",
@@ -175,6 +376,13 @@
    "d": "2026-09-14",
    "t": "Beta opens at level cap 20; cap 30 after “a couple of weeks”",
    "s": "Icy Veins"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "Flying Mounts Won't Exist in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/flying-mounts-wont-exist-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/no-flying-mounts-in-wow-forever.jpeg"
   },
   {
    "d": "2026-09-13",
@@ -393,6 +601,26 @@
    "s": "Icy Veins"
   },
   {
+   "d": "2026-09-13",
+   "t": "World of Warcraft Forever Roadmap: Beta, Launch Date & Raids",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/world-of-warcraft-forever-roadmap-beta-launch-date-raids/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/world-of-warcraft-forever-2026-2027-roadmap.webp"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "WoW Forever Announced: November 4 Release, September Beta",
+   "s": "classicwow.gg",
+   "l": "https://classicwow.gg/forever/news/forever-announced-release-date-beta-raids"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "Everything New in World of Warcraft Hardcore",
+   "s": "Output Lag",
+   "l": "https://outputlag.com/news/everything-new-world-of-warcraft-hardcore-blizzcon-2026/",
+   "img": "https://outputlag.com/wp-content/uploads/2026/09/world-of-warcraft-hardcore-what-s-next-panel-at-blizzcon-2026-key-art.jpg"
+  },
+  {
    "d": "2026-09-12",
    "t": "Pre-Purchase World of Warcraft: Forever Upgrades and Begin Your Next Journey in Azeroth",
    "s": "Blizzard",
@@ -551,6 +779,27 @@
    "d": "2026-09-12",
    "t": "Blizzard's new take on Classic is called Warcraft Forever, releasing November 4",
    "s": "Icy Veins"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "World of Warcraft: Forever What's Next Panel Recap",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24303862",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_header/7u/7UA1PXMMBZV61789247586051.png"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "Carve a New Path with World of Warcraft: Forever",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24302093",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_header/p9/P9HCAU7X9HSV1789250934116.png"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "World Of Warcraft: Forever Revealed As WoW's Rumored Classic+",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/world-of-warcraft-forever-classic-plus-revealed-2000733774",
+   "img": "https://kotaku.com/app/uploads/2026/09/BlizzCon-2026-_-Day-1-Main-Stage-2-21-39-screenshot-1200x675.jpg"
   },
   {
    "d": "2026-09-11",
