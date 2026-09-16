@@ -919,7 +919,7 @@
       var hmRow = bRow && BASE.base[CLASS_LABEL[K0]] ? BASE.base[CLASS_LABEL[K0]][li] : null;
       return GEAR.html({ raceIcon: R0 && raceIcon(R0, S.g), gender: S.g, modelKey: modelKey(R0, S.g), standIn: !!(R0 && R0.nu),
         cls: K0, classLabel: CLASS_LABEL[K0], specName: spent() ? sp0.name : "",
-        formula: FORM ? FORM.classes[CLASS_LABEL[K0]] : null, levelIdx: FORM ? FORM.levels.indexOf(cap) : -1, talentFx: talentFx(), classIcon: CLASS_ICON[K0], classColour: cc(K0), name: S.name || "Unnamed " + CLASS_LABEL[K0],
+        formula: FORM ? FORM.classes[CLASS_LABEL[K0]] : null, armorK: FORM ? FORM.armorK : null, levelIdx: FORM ? FORM.levels.indexOf(cap) : -1, talentFx: talentFx(), classIcon: CLASS_ICON[K0], classColour: cc(K0), name: S.name || "Unnamed " + CLASS_LABEL[K0],
         line: (R0 ? R0.n + " " : "") + CLASS_LABEL[K0] + (spent() ? ", " + sp0.name : "") + ", level " + cap,
         base: bRow, baseHM: hmRow, level: cap, raceClass: R0 ? R0.n + " " + CLASS_LABEL[K0] : "",
         derived: BASE && BASE.derived ? BASE.derived[ck] : null,

@@ -264,11 +264,11 @@
       if (hm) {
         var hpPct = (M.pct.health || 0) + (TP.health || 0), sta = A.stamina;
         var hp = sta == null ? null : Math.round((hm[0] + Math.min(sta, 20) + Math.max(sta - 20, 0) * 10) * (1 + hpPct / 100)) + (t.health || 0) + (TA.health || 0);
-        pools += row("Health", hp == null ? "?" : hp + (hpPct ? '<i class="rx">+' + hpPct + "%</i>" : ""), "Base " + hm[0] + ", the first 20 Stamina add 1 health each and the rest 10 each" + (t.health ? ", plus " + t.health + " from consumables" : "") + "." + EST, true, "");
+        pools += row("Health", hp == null ? "?" : hp + (hpPct ? '<i class="rx">+' + hpPct + "%</i>" : ""), "Base " + hm[0] + ", the first 20 Stamina add 1 health each and the rest 10 each" + (t.health ? ", plus " + t.health + " from consumables" : "") + ". 10 health per Stamina matches the beta client's gametables; base health and the first-20 rule are Classic 1.12 estimates.", true, "");
         if (power === "mana" && hm[1]) {
           var mpPct = (M.pct.mana || 0) + (TP.mana || 0), int = A.intellect;
           var mp = int == null ? null : Math.round((hm[1] + Math.min(int, 20) + Math.max(int - 20, 0) * 15) * (1 + mpPct / 100));
-          pools += row("Mana", mp == null ? "?" : mp + (mpPct ? '<i class="rx">+' + mpPct + "%</i>" : ""), "Base " + hm[1] + ", the first 20 Intellect add 1 mana each and the rest 15 each." + EST, true, "");
+          pools += row("Mana", mp == null ? "?" : mp + (mpPct ? '<i class="rx">+' + mpPct + "%</i>" : ""), "Base " + hm[1] + " straight from the beta client (build 1.60.1.69876); the first 20 Intellect add 1 mana each and the rest 15 each, a Classic rule.", true, "");
         } else if (M.pct[power]) pools += row("Max " + power, '<i class="rx">+' + M.pct[power] + "%</i>", "Racial bonus to maximum " + power + ".", true, "");
       }
       var wc = M.weaponCrit.filter(function (w) { return weaponMatches(w.when); }).reduce(function (a, w) { return a + w.value; }, 0);
@@ -301,7 +301,8 @@
       }).join("");
       var armorItems = (t.armor || 0) + (TA.armor || 0), armorPct = TP.armor || 0;
       var armor = known ? Math.round((armorItems + A.agility * 2) * (1 + armorPct / 100)) : null;
-      var def = row("Armor", armor == null ? "+" + armorItems : armor + (armorPct ? '<i class="rx">+' + armorPct + "%</i>" : ""), "Items " + armorItems + (known ? " + Agility x2" : "") + (armorPct ? ", talents +" + armorPct + "%" : "") + "." + (known ? EST : ""), true, "");
+      var aK = ctx.armorK ? ctx.armorK[String(lv)] : null, aDR = armor != null && aK ? r1(100 * armor / (armor + aK)) : null;
+      var def = row("Armor", armor == null ? "+" + armorItems : armor + (armorPct ? '<i class="rx">+' + armorPct + "%</i>" : ""), "Items " + armorItems + (known ? " + Agility x2 (Classic rule)" : "") + (armorPct ? ", talents +" + armorPct + "%" : "") + "." + (aDR != null ? " Cuts physical damage from level " + lv + " enemies by " + aDR + "%, using the beta client's armor table." : ""), true, "");
       var dgBonus = (M.add.dodge || 0) + (t.dodge || 0) + (TA.dodge || 0);
       if (F && F.dg && known && li >= 0) def += row("Dodge", r1(F.dg[0][li] + A.agility / F.dg[1][li] + dgBonus) + "%", "Base " + F.dg[0][li] + "% + Agility / " + F.dg[1][li] + ", plus " + bonusTip("dodge", M.add.dodge) + EST, true, "");
       else if (dgBonus) def += row("Dodge", "+" + r1(dgBonus) + "%", bonusTip("dodge", M.add.dodge), true, "");
@@ -327,8 +328,7 @@
         return '<div class="rxchip' + (applied ? " on" : "") + '" data-tip="' + attr("<b>" + esc(r.n) + "</b>" + '<span class="it-l">' + (r.kind === "passive" ? "Passive" : "Active") + "</span>" + esc(r.tip || "") + line) + '">' +
           img(r.icon) + "<span><b>" + esc(r.n) + "</b><em>" + esc(r.summary || (r.kind === "active" ? "Active ability" : "")) + "</em></span></div>";
       }).join("");
-      var note = (base ? "Base attributes and the formulas for health, mana, attack power, crit, dodge, armor and regen: WoW Classic 1.12 values for a level " + lv + " " + esc(ctx.raceClass || "") + (ctx.derived ? " (combo new in Forever, derived from " + esc(ctx.derived) + " plus race offsets)" : "") +
-        ". Forever has not published its own; talent ranks past what the demo showed are estimated too." : "Base attributes for this race are unpublished, so formula totals show as ?; bonuses from gear, racials and talents still count.");
+      var note = (base ? "Base mana, armor mitigation, rating conversions and 10-health-per-Stamina come from the Forever beta client, build 1.60.1.69876. Base attributes and the crit, dodge, attack power and regen formulas are still WoW Classic 1.12 values for a level " + lv + " " + esc(ctx.raceClass || "") + (ctx.derived ? " (combo new in Forever, derived from " + esc(ctx.derived) + " plus race offsets)" : "") + "." : "Base attributes for this race are unpublished, so formula totals show as ?; bonuses from gear, racials and talents still count.");
       return '<div class="gear2" id="gear"><div class="g2-head"><b>Gear</b><span class="g2-count">' + count + " / " + SLOT_KEYS.length + " equipped</span>" +
         '<span class="g2-db">' + wearable + " Forever items to wear so far</span>" +
         (count ? '<button type="button" class="nm-btn ghost" data-gclear="1">Clear gear</button>' : "") + "</div>" +
