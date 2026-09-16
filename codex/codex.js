@@ -398,6 +398,14 @@
       if (window.ForgeGear && items.length) { try { GK = ForgeGear({ items: it, get: function () { return {}; } }); } catch (e) { GK = null; } }
       buildIndex(d, items);
       initSearch();
+      // Then the full client database replaces the curated seed.
+      fetch("../plan/items-db.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (db) {
+        if (!db || !Array.isArray(db.items) || !db.items.length) return;
+        try { GK = ForgeGear({ items: db, get: function () { return {}; } }); } catch (e) {}
+        IDX = IDX.filter(function (e) { return e.kind !== "item"; });
+        buildIndex({ world: { zones: [], dungeons: [], raids: [], battlegrounds: [] }, legacy: { trees: [] }, unseen: {}, systems: [] }, db.items);
+        drawSearch();
+      });
     });
     // Scrollspy: the nav knows where you are.
     var links = document.querySelectorAll(".cxnav a");

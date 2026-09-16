@@ -82,6 +82,7 @@
       return true;
     }
     function rankText(p, r) {
+      if (p[5] && p[5][r - 1]) return p[5][r - 1];
       var tpl = (lg.rankTpl || {})[p[0]];
       if (!tpl) return r <= 1 ? p[2] : null;
       return tpl.replace(/\{10-r\}/g, String(10 - r)).replace(/\{r\}/g, String(r));
@@ -89,7 +90,7 @@
     function tipHTML(ti, i, touch) {
       var p = lg.trees[ti].perks[i], r = ST[ti][i], max = p[1];
       var shown = rankText(p, Math.max(1, r)) || p[2];
-      var guessed = (r > 1 && !(lg.rankTpl || {})[p[0]]);
+      var guessed = (r > 1 && !(p[5] && p[5][r - 1]) && !(lg.rankTpl || {})[p[0]]);
       var act = p[4] && p[4].active;
       var kind = act ? '<span class="lt-w lt-split"><i>' + esc(act[0]) + "</i><i>" + esc(act[1]) + "</i></span>" : '<span class="lt-w">Passive</span>';
       var h = "<b>" + esc(p[0]) + '</b><span class="lt-w">Rank ' + r + "/" + max + '</span><span class="lt-gap"></span>' +

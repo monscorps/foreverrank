@@ -136,3 +136,4 @@ Corrections welcome: open an issue.
 - Forever items, consumables and set bonuses: BlizzCon 2026 panel slides and videos, Blizzard recaps, Warcraft Tavern, Wowhead, Output Lag, Reddit captures and Savix's demo streams. Icons matched from footage or same-name Classic items.
 - Database stat tile art: Blizzard's Forever site and panel recap posts.
 - 2026-09-16 sweep: Wowhead Forever news, Icy Veins, Warcraft Tavern (Engineering and Tailoring vendor tooltips), Blizzard news, Kotaku, PC Gamer, Blizzard Watch, classicwow.gg, Output Lag, MMORPG.com.
+- 2026-09-17: WoW: Forever beta client build 1.60.1.69876, datamined via wow.export from the owner's own install. Talents, Legacy trees, spellbooks, item database, instances, currencies and Legacy challenges rebuilt from client tables. Game data belongs to Blizzard Entertainment.

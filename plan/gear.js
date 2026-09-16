@@ -31,7 +31,7 @@
     var items = (opts.items && Array.isArray(opts.items.items)) ? opts.items.items : [];
     var byId = {}, ALLSLOTS = [].concat.apply([], Object.keys(ACCEPT).map(function (k) { return ACCEPT[k]; }));
     var wearable = items.filter(function (it) { return ALLSLOTS.indexOf(it.slot) !== -1; }).length;
-    items.forEach(function (it) { byId[it.id] = it; });
+    items.forEach(function (it) { byId[it.id] = it; if (it.alias) byId[it.alias] = it; });
 
     function eq() { return opts.get() || {}; }
     function itemTip(it) {
@@ -369,6 +369,7 @@
       var def = [].concat(SLOTS.left, SLOTS.right, SLOTS.bottom).filter(function (s) { return s[0] === slotKey; })[0];
       var acc = ACCEPT[slotKey] || [];
       var pool = items.filter(function (it) { return acc.indexOf(it.slot) !== -1; });
+      var CAP = 90;
       var ql = (q || "").toLowerCase();
       var list = pool.filter(function (it) {
         if (qual && it.quality !== qual) return false;
@@ -377,11 +378,14 @@
       }).sort(function (a, b) { return (QUALITY.indexOf(b.quality) - QUALITY.indexOf(a.quality)) || ((b.itemLevel || 0) - (a.itemLevel || 0)) || a.name.localeCompare(b.name); });
       var cur = eq()[slotKey];
       var quals = QUALITY.filter(function (x) { return pool.some(function (it) { return it.quality === x; }); });
+      list = list.slice().sort(function (a, b) {
+        return (b.nw || 0) - (a.nw || 0) || QUALITY.indexOf(b.quality) - QUALITY.indexOf(a.quality) || (b.reqLevel || 0) - (a.reqLevel || 0);
+      });
       return '<div class="gpick"><div class="gp-top">' + img(def[2], "gp-slotic") + "<b>" + esc(def[1]) + '</b><span class="gp-n">' + pool.length + " known</span>" +
         '<button type="button" class="gp-x" data-gpx="1" aria-label="Close">&times;</button></div>' +
         '<div class="gp-bar"><input type="search" data-gpq="1" placeholder="Search name, effect, source" value="' + esc(q || "") + '">' +
           '<div class="gp-quals">' + quals.map(function (x) { return '<button type="button" class="gp-q q-' + x + (qual === x ? " on" : "") + '" data-gpqual="' + x + '">' + x + "</button>"; }).join("") + "</div></div>" +
-        '<div class="gp-list">' + (list.length ? list.map(function (it) {
+        '<div class="gp-list">' + (list.length ? list.slice(0, CAP).map(function (it) {
           var st = it.stats || {}, bits = [];
           Object.keys(st).forEach(function (k) { if (typeof st[k] === "number" && st[k]) bits.push("+" + st[k] + " " + (k === "attackPower" ? "AP" : k === "spellPower" ? "SP" : k.slice(0, 3))); });
           return '<button type="button" class="gp-row' + (cur === it.id ? " on" : "") + '" data-gpick="' + attr(it.id) + '" data-tipcls="itemtip" data-tip="' + attr(itemTip(it)) + '">' +
@@ -389,7 +393,7 @@
             '<span class="gp-t"><b class="q-' + esc(it.quality || "common") + '">' + esc(it.name) + "</b><em>" + esc([slotLabel(it.slot), it.type, it.itemLevel ? "ilvl " + it.itemLevel : ""].filter(Boolean).join(" · ")) + "</em></span>" +
             '<span class="gp-s">' + esc(bits.slice(0, 4).join("  ") || ((it.effects || [])[0] || "").slice(0, 48)) + "</span>" +
             '<span class="gp-conf c-' + esc(it.confidence || "mention") + '" title="' + (it.confidence === "tooltip" ? "Tooltip seen" : it.confidence === "partial" ? "Partly seen" : "Named only") + '"></span></button>';
-        }).join("") : '<div class="gp-empty">' + img(def[2]) + "<b>No Forever " + esc(def[1].toLowerCase()) + " items shown yet.</b><span>The beta opens September 17; items land here as soon as they are seen in the client.</span></div>") + "</div>" +
+        }).join("") + (list.length > CAP ? '<div class="gp-empty"><b>' + (list.length - CAP) + " more match.</b><span>Narrow it with the search box or a quality filter.</span></div>" : "") : '<div class="gp-empty">' + img(def[2]) + "<b>No Forever " + esc(def[1].toLowerCase()) + " items shown yet.</b><span>The beta opens September 17; items land here as soon as they are seen in the client.</span></div>") + "</div>" +
         (cur ? '<div class="gp-foot"><button type="button" class="nm-btn ghost" data-gpclear="1">Unequip</button></div>' : "") + "</div>";
     }
     function encode(E) {

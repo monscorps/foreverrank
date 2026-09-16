@@ -848,7 +848,7 @@
       '<div class="tb-acts">' +
         '<button type="button" class="tb-btn cmpswitch' + (CMP ? " on" : "") + '" id="cmpbtn" aria-pressed="' + CMP + '" data-tip="' +
           attrEnc("<b>Compare to Classic</b>Badges every talent that is new, changed or moved, with both tooltips side by side.") + '"><i></i><span>Classic</span></button>' +
-        '<button type="button" class="tb-btn" id="bookbtn" data-tip="' + attrEnc("<b>Spellbook</b>Every spell the level 38 demo character had.") + '">' + icon("inv_misc_book_11", "wi") + "<span>Spellbook</span></button>" +
+        '<button type="button" class="tb-btn" id="bookbtn" data-tip="' + attrEnc("<b>Spellbook</b>Every trainable spell in the beta client, with learn levels.") + '">' + icon("inv_misc_book_11", "wi") + "<span>Spellbook</span></button>" +
         (used ? '<button type="button" class="tb-btn danger" id="treset" data-tip="' + attrEnc("<b>Reset talents</b>Refund every point.") + '"><span class="tb-glyph">\u21ba</span><span>Reset</span></button>' : "") +
       "</div></div>" +
       (CMP ? cmpLegend(c) : "") + '<div class="wtrees">';
@@ -911,6 +911,7 @@
   }
 
   function gearHTML() {
+    if (GEAR && !window.GEARDB) loadFullDB();
     if (GEAR) {
       var R0 = RACES[S.race], K0 = CLASS_ORDER[S.cls], sp0 = specNow();
       var ck = R0 ? R0.n + "|" + CLASS_LABEL[K0] : "", li = BASE ? BASE.levels.indexOf(cap) : -1;
@@ -999,7 +1000,21 @@
 
   // ---- wiring ---------------------------------------------------------------
   // ---- 3D character stage (viewer3d.js, loaded the first time the gear view shows) ----
-  var M3D = null, M3D_BOOT = null, M3D_EVENTS = false, FORM = null;
+  var M3D = null, M3D_BOOT = null, M3D_EVENTS = false, FORM = null, DBFULL = false;
+  // The full client item database loads after boot and swaps into the picker seamlessly.
+  function loadFullDB() {
+    if (DBFULL) return;
+    DBFULL = true;
+    fetch("items-db.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (db) {
+      if (!db || !Array.isArray(db.items) || !db.items.length) { DBFULL = false; return; }
+      try {
+        var g = ForgeGear({ items: db, get: function () { return S.eq; }, cons: function () { return S.cons || []; } });
+        GEAR = g; window.GEARDB = db;
+        if (S.eqRaw && GEAR) S.eq = GEAR.decode(S.eqRaw);
+        render();
+      } catch (e) { DBFULL = false; }
+    });
+  }
   // Stat effects of learned talents at their current rank: [stat, mode, value, when].
   function talentFx() {
     var c = clsData(), out = [];
