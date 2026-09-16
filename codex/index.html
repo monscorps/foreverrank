@@ -128,6 +128,10 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 .rk-s small { grid-column: 1 / -1; font-size: .62rem; color: var(--subtle); }
 .rk-who { color: var(--subtle); font-size: .72rem; }
 .rk-small { font-size: .7rem; color: var(--subtle); margin-top: .7rem; }
+.rk-mt-wrap { overflow-x: auto; }
+.rk-mt { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.rk-mt th { text-align: left; font: 600 .6rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: var(--subtle); padding: .4rem .5rem; border-bottom: 1px solid var(--card-border); }
+.rk-mt td { padding: .38rem .5rem; border-bottom: 1px solid rgba(255,255,255,.05); white-space: nowrap; }
 @media (max-width: 640px) { .rk-row { grid-template-columns: 1.3rem 2rem minmax(0, 1fr); } .rk-s { grid-column: 2 / -1; } }
 .dbs-flash { animation: dbsflash 1.6s ease-out; }
 @keyframes dbsflash { 0%, 30% { box-shadow: 0 0 0 2px var(--gold), 0 0 24px rgba(229,204,128,.45); } 100% { box-shadow: none; } }
@@ -289,6 +293,6 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 <script src="../tipkit.js?v=5"></script>
 <script src="../legacy.js?v=2"></script>
 <script src="../plan/gear.js?v=15"></script>
-<script src="codex.js?v=25"></script>
+<script src="codex.js?v=26"></script>
 </body>
 </html>

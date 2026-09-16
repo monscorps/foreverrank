@@ -377,6 +377,11 @@
               "<small>" + esc(e.conf) + " confidence" + (p ? " \u00b7 " + esc(p) : "") +
               (e.meas && e.meas.samples ? " \u00b7 Demo meters: " + e.meas.samples + (e.meas.samples === 1 ? " reading" : " readings") + (e.meas.avg ? ", about " + e.meas.avg + (cur.indexOf("heal") === 0 ? " hps" : " dps") : "") : "") + "</small></span></li>";
           }).join("") + "</ol>" +
+          (cur.indexOf("dps") === 0 && rk.meters && rk.meters.length ? '<h3>Measured in the demo</h3><p class="rk-small">Damage meter readings from BlizzCon demo streams (premade level 38 characters, mostly Drowned City trash), read by eye from the video. Most rows show the class but not the spec, and many classes rest on one to three players. No healing meter appeared in any frame.</p>' +
+            '<div class="rk-mt-wrap"><table class="rk-mt"><thead><tr><th>Class</th><th>Spec or role</th><th>Readings</th><th>Players</th><th>Avg dps</th><th>Top of meter</th></tr></thead><tbody>' +
+            rk.meters.map(function (m) {
+              return '<tr><td style="color:' + (CLASS_COLOUR[m.cls] || "#fff") + '">' + esc(m.cls) + "</td><td>" + esc(m.spec || m.role || "") + "</td><td>" + m.samples + "</td><td>" + m.players + "</td><td>" + (m.avgDps == null ? "" : m.avgDps) + "</td><td>" + (m.topShare == null ? "" : Math.round(m.topShare * 100) + "%") + "</td></tr>";
+            }).join("") + "</tbody></table></div>" : "") +
           (rk.quotes && rk.quotes.length ? '<h3>What demo players reported</h3><ul class="facts">' + rk.quotes.map(function (q) {
             return "<li>" + esc(q.quote) + ' <span class="rk-who">(' + esc(q.who) + ", " + esc(q.where) + ", " + esc(q.date) + ", not checked against footage)</span></li>";
           }).join("") + "</ul>" : "") +
