@@ -3,10 +3,31 @@
  "items": [
   {
    "d": "2026-09-17",
+   "t": "The systems Forever is hiding: a spell research profession, transmog plumbing, cross-race priest racials",
+   "s": "FOREVERRANK",
+   "l": "/news/hidden-systems/",
+   "img": "/codex/img/city-of-dalaran.jpg"
+  },
+  {
+   "d": "2026-09-17",
+   "t": "What is Forever and what is leftover: the era method behind every row on this site",
+   "s": "FOREVERRANK",
+   "l": "/news/era-verdict/",
+   "img": "/codex/img/ruins-of-lordaeron.jpg"
+  },
+  {
+   "d": "2026-09-17",
+   "t": "203 souls, one hidden system: Soul Engraving is built, hidden, and quietly assumes a mage healer",
+   "s": "FOREVERRANK",
+   "l": "/news/soul-engraving/",
+   "img": "/codex/img/the-barrow-deeps.jpg"
+  },
+  {
+   "d": "2026-09-17",
    "t": "Every dungeon set rebuilt: five bonuses, role-split Tier 1, and 278 SoD copies left in the data",
    "s": "FOREVERRANK",
    "l": "/news/set-rework/",
-   "img": "https://wow.zamimg.com/images/wow/icons/large/inv_chest_chain_12.jpg"
+   "img": "/codex/img/halls-of-thanes.jpg"
   },
   {
    "d": "2026-09-16",

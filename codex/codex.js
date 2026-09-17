@@ -417,6 +417,7 @@
       }).join("");
       section("souls", "Soul Engraving",
         '<p class="soul-warn">DATAMINED, HIDDEN IN THE CLIENT. In active development; nothing here is confirmed for launch.</p>' +
+        '<p class="board-sub">202 of the 204 souls share one placeholder icon in the client, so the class crest stands in. Pick a class and the crests step aside.</p>' +
         '<p class="board-sub">' + esc(d.souls.note) + "</p>" +
         '<div class="soulchips">' + chips + '</div><div class="soulgrid">' + cards + "</div>");
     }
@@ -523,12 +524,22 @@
       nPerk = d.legacy.trees.reduce(function (a, t) { return a + t.perks.length; }, 0),
       nCC = Object.keys(d.classChanges).reduce(function (a, k) { return a + d.classChanges[k].length; }, 0),
       nSpell = (d.unseen.new || []).length + (d.unseen.granted || []).length + (d.unseen.higher || []).length;
-    var hero = '<div class="cxstrip">' +
-      [[nPerk, "Legacy perks", "/codex/#legacy"], [nDun, "dungeons", "/world/#world"], [nRaid, "raids", "/world/#world"],
-        [nCC, "class changes", "/classes/#classes"], [nSpell, "spells foretold", "/classes/#unseen"]]
-        .map(function (s) {
-          return '<a href="' + s[2] + '"><b>' + s[0] + "</b> " + s[1] + "</a>";
-        }).join("") + "</div>";
+    function stripChip(s) {
+      return '<a href="' + s[2] + '" style="--img:url(/codex/img/' + s[3] + '.jpg)"><b>' + s[0] + "</b><span>" + s[1] + "</span></a>";
+    }
+    var nSouls = d.souls && d.souls.list ? d.souls.list.length : 0;
+    var hero = '<div class="cxstrip" id="cxstrip">' +
+      [[nPerk, "Legacy perks", "/codex/#legacy", "stat-legacy"], [nDun, "dungeons", "/world/#world", "stat-dungeons"], [nRaid, "raids", "/world/#world", "stat-raids"],
+        [nCC, "class changes", "/classes/#classes", "stat-classes"], [nSpell, "spells foretold", "/classes/#unseen", "stat-spells"]]
+        .concat(nSouls ? [[nSouls, "shoulder souls", "/classes/#souls", "the-barrow-deeps"]] : [])
+        .map(stripChip).join("") + "</div>";
+    fetch("/codex/counts.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (n) {
+      var el = document.getElementById("cxstrip");
+      if (!n || !el) return;
+      el.innerHTML += [[n.book, "spells in the book", "/codex/?cat=spell", "city-of-dalaran"],
+        [n.talents, "talents", "/codex/?cat=talent", "halls-of-thanes"],
+        [n.sets, "item sets", "/codex/?cat=set", "blackmaw-hold"]].map(stripChip).join("");
+    });
 
     document.getElementById("cxnav").innerHTML = nav.join("");
     var cxEl = document.getElementById("cx");
@@ -547,6 +558,7 @@
       if (!b) return;
       var f = b.getAttribute("data-soulf");
       sg.querySelectorAll(".soulchip").forEach(function (x) { x.classList.toggle("on", x === b); });
+      document.querySelectorAll(".soulgrid").forEach(function (gr) { gr.classList.toggle("onecls", !!f && f !== "_"); });
       document.querySelectorAll(".soulgrid .soulc").forEach(function (card) {
         card.hidden = !!f && card.getAttribute("data-sk") !== f;
       });

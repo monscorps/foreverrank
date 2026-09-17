@@ -50,7 +50,7 @@ a { color: inherit; }
 b, strong { font-weight: 700; }
 
 /* top (sits over the hero art) */
-.top { max-width: var(--wide); margin: 0 auto; padding: 1.1rem var(--pad) 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; position: relative; z-index: 3; }
+.top { max-width: var(--wide); margin: 0 auto; padding: 1.1rem var(--pad) 0; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; position: relative; z-index: 30; }
 .brand { display: inline-flex; align-items: center; gap: .65rem; text-decoration: none; }
 .sigil { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--card-border); background: var(--card); font-size: 1.4rem; color: var(--gold); }
 .sigil-sm { width: 26px; height: 26px; font-size: .95rem; }

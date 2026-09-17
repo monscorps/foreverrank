@@ -86,3 +86,18 @@ json.dump(out, open("codex/spellbook.json", "w"), ensure_ascii=False, separators
 print("spells", len(spells), "talents", len(talents), "racials", len(racials))
 dupes = [k for k, v in collections.Counter((s["c"], s["n"]) for s in spells).items() if v > 1]
 print("remaining same-class dupes:", dupes)
+
+# --- counts for the cross-page banner strip ------------------------------
+try:
+    sets = json.load(open("codex/sets.json"))["sets"]
+    live = sum(1 for s in sets if not s.get("era"))
+    hidden = len(sets) - live
+except Exception:
+    live = hidden = 0
+counts = {
+    "book": sum(1 for s in spells if s["src"] != "classiconly"),
+    "talents": len(talents), "racials": len(racials),
+    "sets": live, "setsHidden": hidden,
+}
+json.dump(counts, open("codex/counts.json", "w"))
+print("counts.json:", counts)

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Era Verdict</title>
+<meta name="description" content="Forever's beta client carries Season of Discovery and retail data wholesale. Here is the method that separates what ships from what is debris, with the ID bands to prove it.">
+<link rel="icon" href="../../mark.svg" type="image/svg+xml">
+<link rel="canonical" href="https://foreverrank.com/news/era-verdict/">
+<meta name="theme-color" content="#1C2325">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../forever.css?v=20">
+<style>
+.story { max-width: 46rem; }
+.story h2 { font-family: var(--display-serif); color: var(--gold); font-size: 1.5rem; margin: 2rem 0 .6rem; }
+.story p { font-size: .92rem; line-height: 1.65; color: var(--surface-text); }
+.story .kicker { font: 600 .68rem/1 var(--heading); letter-spacing: .14em; text-transform: uppercase; color: var(--subtle); margin-bottom: .4rem; }
+.setcard { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--r-panel); padding: .9rem 1.1rem; margin: 1rem 0; }
+.setcard h3 { margin: 0 0 .5rem; font: 600 1rem var(--heading); color: #a335ee; }
+.setcard .bonus { display: grid; grid-template-columns: 2rem 1fr; gap: .5rem; padding: .3rem 0; font-size: .82rem; line-height: 1.5; border-top: 1px solid var(--surface-border); }
+.setcard .bonus:first-of-type { border-top: 0; }
+.setcard .bonus b { color: var(--gold); font-family: var(--heading); }
+.era { font: 600 .58rem/1 var(--heading); letter-spacing: .05em; padding: .12rem .35rem; border-radius: 3px; white-space: nowrap; margin-left: .3rem; vertical-align: 1px; display: inline-block; }
+.era-forever { background: rgba(229,204,128,.15); color: #e5cc80; }
+.era-sod { background: rgba(255,140,60,.15); color: #ff9d5c; }
+.era-classic { background: rgba(140,150,170,.12); color: #9aa3b8; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .6rem; margin: 1.2rem 0; }
+.fact { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--r-panel); padding: .7rem .8rem; text-align: center; }
+.fact b { display: block; font: 700 1.5rem var(--heading); color: var(--gold); }
+.fact span { font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--subtle); }
+.story .note { font-size: .74rem; color: var(--subtle); border-left: 3px solid var(--card-border); padding: .4rem .8rem; margin: 1.2rem 0; }
+.story a { color: var(--gold); }
+</style>
+</head>
+<body>
+<nav class="top">
+  <a class="brand" href="../../"><img src="../../mark.svg" alt="" width="42" height="42"><span class="brand-word">FOREVER<b>RANK</b></span></a>
+  <div class="top-nav">
+    <a class="pill" href="../../">The ladder</a>
+    <a class="pill" href="../../plan/">The Forge</a>
+    <a class="pill" href="../../codex/">Database</a>
+    <span class="phase">News</span>
+    <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  </div>
+</nav>
+<script src="../../nav.js?v=5"></script>
+<main class="wrap story">
+  <p class="kicker">ForeverRank datamine, beta client 1.60.1.69876, September 17 2026</p>
+  <h1 class="display">What is Forever, what is <span>leftover</span></h1>
+  <p class="board-sub">Half of what you can datamine out of the Forever beta client is not Forever. The branch carries Season of Discovery and stray retail data wholesale, and any fansite that does not separate the eras is showing you a lie by accident. This is the method we use on every row of this site.</p>
+
+  <div class="facts">
+    <div class="fact"><b>4</b><span>eras in one client</span></div>
+    <div class="fact"><b>278</b><span>SoD set copies</span></div>
+    <div class="fact"><b>1.2M+</b><span>Forever spell IDs</span></div>
+    <div class="fact"><b>239k+</b><span>Forever item IDs</span></div>
+  </div>
+
+  <h2>The ID bands</h2>
+  <p>Blizzard allocates IDs in ranges, and the ranges tell on them. Items below 100,000 are Classic. 100,000 to 199,000 are retail leftovers. 199,000 to 239,000 is the Season of Discovery band. From 239,000 up is Forever's own work. Spells follow the same logic: 400,000 to 470,000 is SoD, above 1.2 million is Forever-authored. Instance maps split cleanly too; Demon Fall Canyon, the Scarlet Enclave and Karazhan Crypts shipped in SoD and carry map IDs at or below 2921, while Forever's new instances start at 2959.</p>
+
+  <h2>Wired versus inert</h2>
+  <p>A row existing means nothing; SoD's entire spellbook exists in this client. What matters is wiring. A spell with a class mask, a learn level, a trainer row or a talent reference is curated into the branch: someone connected it. A spell with none of that is inert, either debris or content hidden until discovery. Rune of the World Tree exists in the data, unwired, and is exactly the SoD leftover it looks like. The chronomancy kit exists in the data, class-masked to Mage, which is why it gets reported instead of deleted.</p>
+
+  <h2>The proof case</h2>
+  <p>The item set tables made the cleanest demonstration yet: every reworked dungeon set appears twice. The live copy rides the original Classic item IDs and carries the new five-bonus layout. The shadow copy sits entirely in the 199,000 to 239,000 SoD band with the old 2, 4, 6, 8 layout, 278 sets of pure debris, riding along because deleting data is work nobody was assigned.</p>
+
+  <h2>What this buys you</h2>
+  <p>Every row on <a href="/codex/">the Database</a> answers for its era. SoD and retail leftovers hide behind one labeled toggle instead of polluting the defaults, Forever-authored rows say so, and when a bonus reuses a SoD spell inside a live Forever set, the chip says that too. When the beta opens the gates further, the bands will sort the flood on day one.</p>
+
+  <p class="note">Method: ID band analysis across Item, Spell, Map and ItemSet tables of beta client 1.60.1.69876, wiring checks against class masks, learn levels, trainer rows and talent references. Bands are inferred from observed data and refined as the beta patches.</p>
+</main>
+<footer>
+  <img src="../../mark.svg" alt="" width="22" height="22">
+  <span>Datamined honestly; labeled or it does not ship.</span>
+  <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  <a href="https://foreverrank.com/">foreverrank.com</a>
+</footer>
+<script src="/map.js?v=6" defer></script>
+</body>
+</html>

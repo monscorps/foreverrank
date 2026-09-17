@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../forever.css?v=19">
+<link rel="stylesheet" href="../forever.css?v=20">
 <link rel="stylesheet" href="../legacy.css?v=4">
 <style>
 .cxnav { position: sticky; top: 0; z-index: 20; display: flex; gap: .3rem; flex-wrap: wrap; margin: 1rem 0;
@@ -21,19 +21,24 @@
   border: 1px solid transparent; border-radius: var(--r-btn); padding: .45rem .8rem; transition: color .12s, background .12s; }
 .cxnav a:hover { color: var(--gold); background: rgba(229,204,128,.08); }
 .cxnav a.on { color: #000; background: var(--gold); }
-.cxstrip { display: flex; flex-wrap: wrap; gap: .3rem; margin: .9rem 0 .2rem; }
-.cxstrip a { text-decoration: none; font: 600 .66rem/1 var(--heading); letter-spacing: .05em; text-transform: uppercase; color: var(--card-text); background: rgba(0,0,0,.28); border: 1px solid var(--card-border); border-radius: var(--r-btn); padding: .42rem .6rem; }
-.cxstrip a b { color: var(--gold); font-size: .8rem; }
-.cxstrip a:hover { border-color: var(--gold); color: var(--gold); }
+.cxstrip { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: .45rem; margin: .9rem 0 .2rem; }
+.cxstrip a { position: relative; display: flex; align-items: center; gap: .5rem; min-height: 3.1rem; padding: .5rem .75rem; overflow: hidden; text-decoration: none; font: 600 .64rem/1.25 var(--heading); letter-spacing: .05em; text-transform: uppercase; color: #e8f4f8; text-shadow: 0 1px 3px rgba(0,0,0,.9); border: 1px solid var(--card-border); border-radius: var(--r-btn); background: var(--img, linear-gradient(180deg, rgba(7,50,74,.6), rgba(5,30,45,.85))) center / cover no-repeat; transition: border-color .15s, transform .15s; }
+.cxstrip a::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(3,14,22,.85), rgba(3,14,22,.4)); transition: background .2s; }
+.cxstrip a b, .cxstrip a span { position: relative; z-index: 1; }
+.cxstrip a b { color: var(--gold); font-size: 1.15rem; line-height: 1; }
+.cxstrip a:hover { border-color: var(--gold); transform: translateY(-1px); }
+.cxstrip a:hover::before { background: linear-gradient(90deg, rgba(3,14,22,.7), rgba(3,14,22,.25)); }
 .soul-warn { display: inline-block; font: 700 .64rem/1 var(--heading); letter-spacing: .1em; color: #0d1626; background: var(--gold); border-radius: 2px; padding: .35rem .55rem; margin: .2rem 0 .1rem; }
 .soulchips { display: flex; flex-wrap: wrap; gap: .3rem; margin: .8rem 0; }
 .soulchip { cursor: pointer; font: 600 .68rem/1 var(--heading); letter-spacing: .03em; color: var(--cc, var(--card-text)); background: rgba(0,0,0,.28); border: 1px solid var(--card-border); border-radius: var(--r-btn); padding: .4rem .6rem; }
 .soulchip.on { border-color: var(--gold); color: var(--gold); }
 .soulgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: .55rem; }
-.soulc { background: linear-gradient(135deg, rgba(0,0,0,.28), rgba(0,0,0,.28) 60%, color-mix(in srgb, var(--cc, #8b93a7) 8%, transparent)); border: 1px solid var(--card-border); border-left: 3px solid var(--cc, var(--card-border)); border-radius: 2px; padding: .6rem .75rem; display: grid; grid-template-columns: 2.1rem 1fr; grid-template-rows: auto auto; gap: .15rem .6rem; align-items: center; }
-.soulring { grid-row: 1; width: 1.9rem; height: 1.9rem; border-radius: 50%; overflow: hidden; border: 2px solid var(--cc, var(--card-border)); box-shadow: 0 0 8px color-mix(in srgb, var(--cc, #000) 35%, transparent); }
+.soulc { background: linear-gradient(135deg, rgba(0,0,0,.28), rgba(0,0,0,.28) 60%, color-mix(in srgb, var(--cc, #8b93a7) 8%, transparent)); border: 1px solid var(--card-border); border-left: 3px solid var(--cc, var(--card-border)); border-radius: 2px; padding: .6rem .75rem; display: grid; grid-template-columns: 1fr 2.1rem; grid-template-rows: auto auto; gap: .15rem .6rem; align-items: center; }
+.soulring { grid-row: 1; grid-column: 2; justify-self: end; width: 1.9rem; height: 1.9rem; border-radius: 50%; overflow: hidden; border: 2px solid var(--cc, var(--card-border)); box-shadow: 0 0 8px color-mix(in srgb, var(--cc, #000) 35%, transparent); }
+.soulgrid.onecls .soulring { display: none; }
+.soulgrid.onecls .soulc { grid-template-columns: 1fr; }
 .soulring .soulico { width: 100%; height: 100%; object-fit: cover; display: block; }
-.soulhead { grid-row: 1; min-width: 0; }
+.soulhead { grid-row: 1; grid-column: 1; min-width: 0; }
 .soulc b { display: block; color: var(--gold); font: 600 .8rem/1.25 var(--heading); }
 .soulc i { font-style: normal; font: 600 .58rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: var(--cc, var(--subtle)); }
 .soulc p { grid-column: 1 / -1; margin: .3rem 0 0; font-size: .72rem; line-height: 1.45; color: var(--card-text); }
@@ -319,7 +324,7 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 </footer>
 <script src="../tipkit.js?v=5"></script>
 <script>window.CODEX_PAGE="classes";</script>
-<script src="../codex/codex.js?v=39"></script>
+<script src="../codex/codex.js?v=40"></script>
 <script src="/map.js?v=6" defer></script>
 </body>
 </html>
