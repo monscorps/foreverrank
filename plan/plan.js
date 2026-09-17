@@ -929,8 +929,54 @@
       "<p>Forever reworked every item. Real loot lands here when the beta opens on September 17.</p></div>";
   }
 
+  // ---- name roller: two-part Forever names, race-themed first, class-themed last ----
+  var NAME_FIRST = {
+    "Human": { s: ["Al", "Ber", "Cal", "Ced", "Dar", "Ed", "Fal", "Gar", "Jos", "Lan", "Mar", "Mor", "Os", "Ren", "Rod", "Ther", "Wil", "Var"], m: ["dric", "win", "ric", "bert", "den", "ton", "ard", "mund", "fred", "ley"], f: ["a", "ia", "wyn", "beth", "dora", "lyn", "essa", "ara", "elle", "ine"] },
+    "Dwarf": { s: ["Bael", "Bran", "Brom", "Dag", "Dur", "Fal", "Gral", "Har", "Kaz", "Mag", "Mor", "Thar", "Thur"], m: ["gar", "din", "grim", "nir", "mak", "dan", "gan", "rik", "bek"], f: ["a", "dra", "hild", "run", "nia", "ga", "lin"] },
+    "Night Elf": { s: ["Ael", "Ash", "Cael", "Del", "Elu", "Fae", "Ill", "Kal", "Lor", "Mai", "Nal", "Sha", "Syl", "Tyr"], m: ["andros", "dan", "ion", "rion", "dris", "thas", "aris"], f: ["andra", "wen", "aria", "dria", "synn", "thea", "ora"] },
+    "Gnome": { s: ["Bink", "Cog", "Fizz", "Giz", "Iz", "Krin", "Nib", "Piz", "Spro", "Tink", "Wiz", "Zap"], m: ["ble", "bit", "gle", "wick", "zle", "spark", "bolt"], f: ["bella", "gidget", "ette", "ina", "zle", "binka"] },
+    "Orc": { s: ["Bro", "Dra", "Gar", "Gor", "Grom", "Kar", "Mok", "Nar", "Rag", "Thok", "Ur", "Zug"], m: ["gash", "nak", "thar", "gore", "mash", "rok", "dan"], f: ["gra", "sha", "zala", "ka", "tha", "bara"] },
+    "Undead": { s: ["Bel", "Cor", "Dread", "Grim", "Mal", "Mor", "Nath", "Ros", "Ser", "Vel"], m: ["amus", "dric", "ius", "mont", "grave", "los", "ren"], f: ["issa", "anda", "ette", "mira", "ola", "wen"] },
+    "Tauren": { s: ["Ahan", "Bran", "Grum", "Hul", "Kon", "Mah", "Nok", "Oro", "Tak", "Wam"], m: ["kan", "tah", "gon", "dur", "ro", "toa"], f: ["na", "wa", "sha", "ti", "la", "mi"] },
+    "Troll": { s: ["Jin", "Kaz", "Mal", "Raz", "Sen", "Tik", "Vol", "Zal", "Zen", "Zul"], m: ["jin", "zul", "kai", "dan", "jo", "rik"], f: ["ji", "za", "mi", "ala", "ashi", "ari"] },
+    "Skyborne (High Order)": { s: ["Aer", "Alt", "Cael", "Cir", "Nim", "Sera", "Sky", "Sol", "Val", "Zeph"], m: ["ion", "ius", "onis", "ael", "urin", "eas"], f: ["a", "ia", "elle", "ara", "yra", "ine"] },
+    "Skyborne (Windshaper)": { s: ["Ari", "Bora", "Gale", "Kir", "Mist", "Nuvo", "Ras", "Torr", "Vay", "Zeph"], m: ["rok", "gust", "rin", "dar", "van"], f: ["a", "la", "ri", "essa", "ya"] }
+  };
+  var NAME_LAST = {
+    WARRIOR: [["Iron", "Grim", "Battle", "Stone", "War", "Steel", "Blood", "Shield"], ["jaw", "forge", "born", "cleaver", "helm", "guard", "brand", "fist"]],
+    PALADIN: [["Light", "Dawn", "Sun", "True", "Silver", "Faith", "Hallow"], ["bringer", "ward", "shield", "forge", "vow", "mantle", "born"]],
+    HUNTER: [["Swift", "Eagle", "Wolf", "Long", "Sharp", "Wild", "Track"], ["eye", "shot", "runner", "strider", "arrow", "fang", "stalker"]],
+    ROGUE: [["Shadow", "Quick", "Silent", "Night", "Sly", "Dark", "Cut"], ["blade", "step", "purse", "shiv", "cloak", "whisper"]],
+    PRIEST: [["Holy", "Bright", "Soul", "Grace", "White", "Prayer"], ["mend", "light", "song", "ward", "shepherd", "veil"]],
+    SHAMAN: [["Storm", "Earth", "Thunder", "Spirit", "Rain", "Flame"], ["caller", "speaker", "totem", "seer", "walker", "fury"]],
+    MAGE: [["Spell", "Frost", "Ember", "Arcane", "Star", "Rune"], ["weaver", "bind", "gaze", "flare", "scribe", "wander"]],
+    WARLOCK: [["Fel", "Doom", "Soul", "Void", "Grim", "Shadow"], ["whisper", "pact", "taker", "binder", "gloom", "hex"]],
+    DRUID: [["Moon", "Wild", "Oak", "Claw", "Leaf", "Thorn"], ["shifter", "grove", "paw", "shade", "warden", "root"]]
+  };
+  var NAME_FUN = {
+    WARRIOR: ["Parryhotter", "Rendhausen", "Chargesworth", "Sixtyrage"],
+    PALADIN: ["Bubblehearth", "Laydown", "Retlawyer", "Blessedbe"],
+    HUNTER: ["Feignsworth", "Petpuller", "Missclick", "Aspectson"],
+    ROGUE: ["Sapchat", "Vanishton", "Pickpockets", "Cheapshotte"],
+    PRIEST: ["Fadeworthy", "Dispellina", "Bubblebeth", "Spiritape"],
+    SHAMAN: ["Ankhagain", "Totemtoter", "Windfurious", "Reincarnate"],
+    MAGE: ["Sheepson", "Blinkfast", "Portmaster", "Critnovas"],
+    WARLOCK: ["Dotcaster", "Soulstoned", "Fearspam", "Tapdancer"],
+    DRUID: ["Innervates", "Bearform", "Hotstack", "Powershift"]
+  };
+  function rnd(a) { return a[Math.floor(Math.random() * a.length)]; }
+  function rollName() {
+    var rn = S.race >= 0 ? RACES[S.race].n : rnd(Object.keys(NAME_FIRST));
+    var pool = NAME_FIRST[rn] || NAME_FIRST.Human;
+    var first = rnd(pool.s) + rnd(S.g === "f" ? pool.f : pool.m);
+    var k = S.cls >= 0 ? CLASS_ORDER[S.cls] : rnd(CLASS_ORDER);
+    var last = Math.random() < 0.15 ? rnd(NAME_FUN[k]) : (function (p) { return rnd(p[0]) + rnd(p[1]); })(NAME_LAST[k]);
+    if (last.toLowerCase().indexOf(first.slice(-3).toLowerCase()) === 0) return rollName(); // no stuttering seams
+    return first.charAt(0).toUpperCase() + first.slice(1) + " " + last;
+  }
   function nameHTML() {
-    return '<div class="namer" id="share"><input id="cname" maxlength="16" placeholder="Name your character" value="' + esc(S.name) + '">' +
+    return '<div class="namer" id="share"><input id="cname" maxlength="25" placeholder="First and last name" value="' + esc(S.name) + '">' +
+      '<button type="button" class="nm-btn" id="broll" data-tip="Two-part names are the Forever way. Themed by your race and class; roll until one sticks.">Roll a name</button>' +
       '<button type="button" class="nm-btn primary" id="bshare">Copy share link</button>' +
       '<button type="button" class="nm-btn" id="bcopy">Copy as text</button>' +
       '<button type="button" class="nm-btn ghost" id="breset">Start over</button></div>';
@@ -1327,6 +1373,14 @@
 
     var nm = st.querySelector("#cname");
     if (nm) nm.addEventListener("input", function () { S.name = nm.value; syncURL(); });
+    var br = st.querySelector("#broll");
+    if (br) br.addEventListener("click", function () {
+      S.name = rollName();
+      if (nm) nm.value = S.name;
+      var h = st.querySelector(".buildcard h3");
+      if (h) h.textContent = S.name;
+      drawSteps(); syncURL();
+    });
     function copyBtn(id, textFn) {
       var b = st.querySelector(id);
       if (!b) return;
