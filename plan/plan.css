@@ -733,3 +733,7 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
   .g2-anims::-webkit-scrollbar { display: block; height: 4px; }
   .g2-anims::-webkit-scrollbar-thumb { background: rgba(229,204,128,.45); }
 }
+
+/* Combined race and class picker */
+.pick-h { font: 600 .72rem/1 var(--heading); letter-spacing: .1em; text-transform: uppercase; color: var(--subtle); margin: 1.4rem 0 .55rem; }
+.pick-h:first-child { margin-top: .2rem; }

@@ -396,8 +396,8 @@
   var viewStep = null;   // revisit a step without losing the build                   // the compare panel's food
   var STEPS = ["Race", "Class", "Talents", "Legacy", "Gear", "Name it"];
   var GUIDE = {
-    0: "<b>Pick a race.</b> Its racials unfold below.",
-    1: "<b>Pick a class.</b> NEW marks combos Classic never allowed.",
+    0: "<b>Pick the race and the class, either order.</b> Racials unfold under the race; NEW marks combos Classic never allowed.",
+    1: "<b>Pick the race and the class, either order.</b> Racials unfold under the race; NEW marks combos Classic never allowed.",
     2: "<b>Your points are your spec.</b>"
   };
 
@@ -692,7 +692,7 @@
   }
 
   // ---- rendering ------------------------------------------------------------
-  function stepNow() { return S.race < 0 ? 0 : S.cls < 0 ? 1 : 2; }
+  function stepNow() { return S.cls < 0 ? 0 : 2; }  // race and class live on one screen; only a class gates the anvil
   function drawSteps() {
     var now = viewStep != null ? viewStep : stepNow();
     var R = S.race >= 0 ? RACES[S.race] : null, K = S.cls >= 0 ? CLASS_ORDER[S.cls] : null;
@@ -720,13 +720,10 @@
       return;
     }
     if (viewStep === 0 && S.cls < 0 && S.race >= 0)
-      $("guide").innerHTML = "<p>Racials below. <b>Continue to the class.</b></p>";
+      $("guide").innerHTML = "<p>Racials below. <b>Now the class.</b></p>";
     if (viewStep === 0 && S.cls >= 0)
-      $("guide").innerHTML = "<p><b>Swap the race, keep the build.</b></p>";
-    if (viewStep === 1 && S.cls >= 0)
-      $("guide").innerHTML = "<p><b>Changing class resets talents.</b></p>";
-    if (now === 0) html += raceStage() + (S.race >= 0 ? raceExpand(S.race) : "");
-    else if (now === 1) html += classStage();
+      $("guide").innerHTML = "<p><b>Swap either freely; the build stays.</b> Changing class resets talents.</p>";
+    if (now === 0 || now === 1) html += '<h3 class="pick-h">The race</h3>' + raceStage() + (S.race >= 0 ? raceExpand(S.race) : "") + '<h3 class="pick-h">The class</h3>' + classStage();
     else html += talentsHTML() + gearHTML() + nameHTML() + buildHTML();
     hideTip();
     st.innerHTML = html;
@@ -789,18 +786,17 @@
       : '<p class="line finenote">Base stats unpublished. The sky keeps its spreadsheet.</p>';
     return '<div class="race-x">' + '<div class="rx-head">' + icon(raceIcon(r, S.g), "wi") + "<b>" + esc(r.n) + "</b><span>" + esc(r.f) + "</span></div>" +
       racialList(r) + st +
-      '<div class="b-actions"><button type="button" class="share" id="rcont">' +
-      (S.cls < 0 ? "Continue: pick the class" : "Back to the anvil") + "</button></div>" +
+      (S.cls >= 0 ? '<div class="b-actions"><button type="button" class="share" id="rcont">Back to the anvil</button></div>' : "") +
       '<p class="line finenote">Swap races any time; the build stays and the compare panel totals the damage.</p></div>';
   }
   function classStage() {
-    var rn = RACES[S.race].n;
+    var rn = S.race >= 0 ? RACES[S.race].n : null;
     return '<div class="cards">' + CLASS_ORDER.map(function (k, i) {
-      var ok = COMBOS[k].indexOf(rn) !== -1;
+      var ok = !rn || COMBOS[k].indexOf(rn) !== -1;
       return '<button class="card' + (ok ? "" : " dis") + (S.cls === i ? " sel" : "") + '"' + (ok ? ' data-cls="' + i + '"' : "") + " " +
-        dt(CLASS_LABEL[k], ok ? CLASS_JOKE[k] + (isNewCombo(rn, k) ? " NEW in Forever: vanilla never allowed this." : "") : "A " + rn + " cannot be a " + CLASS_LABEL[k] + ". Even Forever did not go that far.") + ">" +
+        dt(CLASS_LABEL[k], ok ? CLASS_JOKE[k] + (rn && isNewCombo(rn, k) ? " NEW in Forever: vanilla never allowed this." : "") : "A " + rn + " cannot be a " + CLASS_LABEL[k] + ". Even Forever did not go that far.") + ">" +
         icon(CLASS_ICON[k], "wi wi-lg") + '<b class="cc" style="--cc:' + cc(k) + '">' + CLASS_LABEL[k] + "</b><i>" +
-        (ok ? (isNewCombo(rn, k) ? '<span class="newtag">NEW</span>' : "") : "not for " + rn) + "</i></button>";
+        (ok ? (rn && isNewCombo(rn, k) ? '<span class="newtag">NEW</span>' : "") : "not for " + rn) + "</i></button>";
     }).join("") + "</div>";
   }
 
@@ -1169,7 +1165,7 @@
         if (S.cls === i) { viewStep = null; render(); return; }
         if (S.cls >= 0) lastSwap = classDelta(CLASS_ORDER[S.cls], CLASS_ORDER[i]);
         S.cls = i; S.t = [[], [], []]; S.gear = []; S.eq = {};
-        viewStep = null;
+        viewStep = S.race >= 0 ? null : 0;
         render();
       });
     });
@@ -1626,8 +1622,7 @@
       if (!li) return;
       var i = +li.getAttribute("data-step");
       if (i === 3) { openLegacy(); return; }
-      if (i === 0) { viewStep = 0; }
-      else if (i === 1 && S.race >= 0) { viewStep = 1; }
+      if (i === 0 || i === 1) { viewStep = 0; }
       else if (S.cls >= 0) { viewStep = null; }
       else return;
       render(); window.scrollTo(0, 0);
