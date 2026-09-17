@@ -11,8 +11,7 @@
   var CONT = { ek: { name: "Eastern Kingdoms" }, kal: { name: "Kalimdor" } };
   var BGS = ["2597", "3277", "3358"];
   var NEWZ = ["16593", "16591", "16606", "16651"];
-  var css = ".atlas-btn{position:fixed;right:16px;top:74px;z-index:900;display:flex;flex-direction:column;align-items:center;gap:.25rem;width:52px;height:52px;justify-content:center;color:#e5cc80;background:rgba(13,22,38,.95);border:1px solid rgba(229,204,128,.7);border-radius:2px;cursor:pointer;box-shadow:0 2px 14px rgba(0,0,0,.55)}" +
-    ".atlas-btn span{font:700 .5rem/1 var(--heading,inherit);letter-spacing:.12em;text-transform:uppercase}" +
+  var css = ".atlas-pill svg{margin-right:.35rem;vertical-align:-2px}" +
     ".atlas-btn:hover{border-color:#e5cc80}" +
     ".atlas{position:fixed;inset:0;z-index:950;background:rgba(5,9,18,.99);overflow:auto;padding:1.1rem;-webkit-overflow-scrolling:touch}" +
     ".atlas[hidden]{display:none}" +
@@ -60,10 +59,15 @@
     ".atlas-view img{display:block;width:100%;max-width:1002px;margin:0 auto;border:1px solid rgba(139,147,167,.3);border-radius:2px}" +
     ".atlas-meta{max-width:1002px;margin:.6rem auto 0;color:#8b93a7;font-size:.8rem}";
   var st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
-  var btn = document.createElement("button"); btn.type = "button"; btn.className = "atlas-btn";
-  btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M1 3.5 5.5 2l5 1.5L15 2v10.5L10.5 14l-5-1.5L1 14zM5.5 2v10.5M10.5 3.5V14"/></svg><span>Map</span>';
-  btn.setAttribute("aria-label", "Open the zone atlas");
-  document.body.appendChild(btn);
+  var btn = document.createElement("a");
+  btn.className = "pill atlas-pill"; btn.href = "#atlas";
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M1 3.5 5.5 2l5 1.5L15 2v10.5L10.5 14l-5-1.5L1 14zM5.5 2v10.5M10.5 3.5V14"/></svg><span>Atlas</span>';
+  btn.setAttribute("aria-label", "Open the world atlas");
+  var topnav = document.querySelector("nav.top .top-nav");
+  if (topnav) {
+    var disc = topnav.querySelector(".discord");
+    topnav.insertBefore(btn, disc || null);
+  } else document.body.appendChild(btn);
   var ov = document.createElement("div"); ov.className = "atlas"; ov.hidden = true; document.body.appendChild(ov);
   var view = { lvl: "world", cont: null, zone: null };
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
@@ -125,7 +129,7 @@
     else close();
   }
   function openAtlas() { view = { lvl: "world", cont: null, zone: null }; draw(); ov.hidden = false; document.body.style.overflow = "hidden"; }
-  btn.addEventListener("click", openAtlas);
+  btn.addEventListener("click", function (e) { e.preventDefault(); openAtlas(); });
   if (location.hash === "#atlas") openAtlas();
   window.addEventListener("hashchange", function () { if (location.hash === "#atlas") openAtlas(); });
   ov.addEventListener("contextmenu", function (e) { e.preventDefault(); up(); });
