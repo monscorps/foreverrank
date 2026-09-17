@@ -741,3 +741,7 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 .pickcol .card { padding: .6rem .7rem; }
 .pickcol .card b { font-size: .88rem; }
 @media (max-width: 880px) { .pickwrap { grid-template-columns: 1fr; } }
+.card { position: relative; }
+.card.sel::after { content: "\00d7"; position: absolute; top: .3rem; right: .55rem; font-size: .95rem; line-height: 1; color: var(--subtle); }
+.card.sel:hover::after { color: var(--gold); }
+.card.dis { cursor: pointer; }

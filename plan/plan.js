@@ -396,8 +396,8 @@
   var viewStep = null;   // revisit a step without losing the build                   // the compare panel's food
   var STEPS = ["Race", "Class", "Talents", "Legacy", "Gear", "Name it"];
   var GUIDE = {
-    0: "<b>Pick the race and the class, either order.</b> Racials unfold under the race; NEW marks combos Classic never allowed.",
-    1: "<b>Pick the race and the class, either order.</b> Racials unfold under the race; NEW marks combos Classic never allowed.",
+    0: "<b>Pick the race and the class, either order.</b> Click a picked card again to clear it; nothing here can strand you.",
+    1: "<b>Pick the race and the class, either order.</b> Click a picked card again to clear it; nothing here can strand you.",
     2: "<b>Your points are your spec.</b>"
   };
 
@@ -795,8 +795,8 @@
     var rn = S.race >= 0 ? RACES[S.race].n : null;
     return '<div class="cards">' + CLASS_ORDER.map(function (k, i) {
       var ok = !rn || COMBOS[k].indexOf(rn) !== -1;
-      return '<button class="card' + (ok ? "" : " dis") + (S.cls === i ? " sel" : "") + '"' + (ok ? ' data-cls="' + i + '"' : "") + " " +
-        dt(CLASS_LABEL[k], ok ? CLASS_JOKE[k] + (rn && isNewCombo(rn, k) ? " NEW in Forever: vanilla never allowed this." : "") : "A " + rn + " cannot be a " + CLASS_LABEL[k] + ". Even Forever did not go that far.") + ">" +
+      return '<button class="card' + (ok ? "" : " dis") + (S.cls === i ? " sel" : "") + '" data-cls="' + i + '" ' +
+        dt(CLASS_LABEL[k], ok ? CLASS_JOKE[k] + (rn && isNewCombo(rn, k) ? " NEW in Forever: vanilla never allowed this." : "") : "A " + rn + " cannot be a " + CLASS_LABEL[k] + ". Pick it anyway and the race steps aside.") + ">" +
         icon(CLASS_ICON[k], "wi wi-lg") + '<b class="cc" style="--cc:' + cc(k) + '">' + CLASS_LABEL[k] + "</b><i>" +
         (ok ? (rn && isNewCombo(rn, k) ? '<span class="newtag">NEW</span>' : "") : "not for " + rn) + "</i></button>";
     }).join("") + "</div>";
@@ -967,6 +967,8 @@
     DRUID: ["Innervates", "Bearform", "Hotstack", "Powershift"]
   };
   function rnd(a) { return a[Math.floor(Math.random() * a.length)]; }
+  var clsStash = null;   // a cleared class keeps its build; re-pick it and everything returns
+  function stashCls() { if (S.cls >= 0) clsStash = { cls: S.cls, t: S.t, gear: S.gear, eq: S.eq }; }
   function rollName() {
     var rn = S.race >= 0 ? RACES[S.race].n : rnd(Object.keys(NAME_FIRST));
     var pool = NAME_FIRST[rn] || NAME_FIRST.Human;
@@ -1191,14 +1193,16 @@
     st.querySelectorAll("[data-race]").forEach(function (el) {
       el.addEventListener("click", function () {
         var i = +el.getAttribute("data-race");
-        if (S.race === i) return;
-        if (S.race >= 0 && S.cls >= 0) {
+        if (S.race === i) { S.race = -1; viewStep = 0; render(); return; }   // click again: race unpicked
+        if (S.cls >= 0) {
           var k = CLASS_ORDER[S.cls];
           if (COMBOS[k].indexOf(RACES[i].n) === -1) {
-            lastSwap = { title: RACES[i].n + " refused", parts: ["A " + esc(RACES[i].n) + " cannot be a " + CLASS_LABEL[k] + ". The build stays as it was."] };
-            render(); return;
+            stashCls();
+            lastSwap = { title: "Class stepped aside", parts: ["A " + esc(RACES[i].n) + " cannot be a " + CLASS_LABEL[k] + ", so the class is cleared. Pick a new one; re-pick " + CLASS_LABEL[k] + " later and that build returns."] };
+            S.race = i; S.cls = -1; S.t = [[], [], []]; S.gear = []; S.eq = {};
+            viewStep = 0; render(); return;
           }
-          lastSwap = raceDelta(S.race, i);   // build kept, compare shown
+          if (S.race >= 0) lastSwap = raceDelta(S.race, i);   // build kept, compare shown
         }
         S.race = i;
         viewStep = 0;                        // stay: the racials unfold first
@@ -1210,10 +1214,20 @@
     st.querySelectorAll("[data-cls]").forEach(function (el) {
       el.addEventListener("click", function () {
         var i = +el.getAttribute("data-cls");
-        if (S.cls === i) { viewStep = null; render(); return; }
-        if (S.cls >= 0) lastSwap = classDelta(CLASS_ORDER[S.cls], CLASS_ORDER[i]);
-        S.cls = i; S.t = [[], [], []]; S.gear = []; S.eq = {};
-        viewStep = S.race >= 0 ? null : 0;
+        if (S.cls === i) {          // click again: class unpicked, build stashed
+          stashCls();
+          S.cls = -1; S.t = [[], [], []]; S.gear = []; S.eq = {};
+          viewStep = 0; render(); return;
+        }
+        var wasInvalid = S.race >= 0 && COMBOS[CLASS_ORDER[i]].indexOf(RACES[S.race].n) === -1;
+        if (S.cls >= 0 && !wasInvalid) lastSwap = classDelta(CLASS_ORDER[S.cls], CLASS_ORDER[i]);
+        stashCls();
+        if (clsStash && clsStash.cls === i) { S.cls = i; S.t = clsStash.t; S.gear = clsStash.gear; S.eq = clsStash.eq; clsStash = null; }
+        else { S.cls = i; S.t = [[], [], []]; S.gear = []; S.eq = {}; }
+        if (wasInvalid) {
+          lastSwap = { title: "Race stepped aside", parts: ["A " + esc(RACES[S.race].n) + " cannot be a " + CLASS_LABEL[CLASS_ORDER[i]] + ", so the race is cleared. Pick one that fits."] };
+          S.race = -1; viewStep = 0;
+        } else viewStep = S.race >= 0 ? null : 0;
         render();
       });
     });
