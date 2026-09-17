@@ -354,8 +354,8 @@
           (launchDays > 0 ? " Launch is <b>" + launchDays + " days</b> away." : "") + "</p>" : "") +
         '<div class="rm-progress"><span style="width:' + Math.round(passed / d.roadmap.length * 100) + '%"></span></div>' +
         '<p class="rm-count">' + passed + " of " + d.roadmap.length + " milestones passed</p>" +
-        '<a class="rm-slide" href="img/roadmap-slide.jpg" target="_blank" rel="noopener">' +
-        '<img src="img/roadmap-slide.jpg" alt="The official Forever roadmap slide" loading="lazy"></a>';
+        '<a class="rm-slide" href="/codex/img/roadmap-slide.jpg" target="_blank" rel="noopener">' +
+        '<img src="/codex/img/roadmap-slide.jpg" alt="The official Forever roadmap slide" loading="lazy"></a>';
       var seasons = [], byS = {};
       d.roadmap.forEach(function (m) {
         var sn = (META[m.title] || {}).season || "Later";
@@ -394,10 +394,10 @@
       nCC = Object.keys(d.classChanges).reduce(function (a, k) { return a + d.classChanges[k].length; }, 0),
       nSpell = (d.unseen.new || []).length + (d.unseen.granted || []).length + (d.unseen.higher || []).length;
     var hero = '<div class="cxstats">' +
-      [[nPerk, "Legacy perks", "legacy", "legacy"], [nDun, "new dungeons", "world", "dungeons"], [nRaid, "raids", "world", "raids"],
-        [nCC, "class changes", "classes", "classes"], [nSpell, "spells foretold", "unseen", "spells"]]
+      [[nPerk, "Legacy perks", "/codex/#legacy", "legacy"], [nDun, "dungeons", "/world/#world", "dungeons"], [nRaid, "raids", "/world/#world", "raids"],
+        [nCC, "class changes", "/classes/#classes", "classes"], [nSpell, "spells foretold", "/classes/#unseen", "spells"]]
         .map(function (s) {
-          return '<a class="cxstat" href="#' + s[2] + '" style="--img:url(img/stat-' + s[3] + '.jpg)"><span class="cxstat-box"><b>' + s[0] + "</b><span>" + s[1] + "</span></span></a>";
+          return '<a class="cxstat" href="' + s[2] + '" style="--img:url(/codex/img/stat-' + s[3] + '.jpg)"><span class="cxstat-box"><b>' + s[0] + "</b><span>" + s[1] + "</span></span></a>";
         }).join("") + "</div>";
 
     document.getElementById("cxnav").innerHTML = nav.join("");
