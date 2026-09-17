@@ -86,6 +86,16 @@ for base, _, files in os.walk("addon/ForeverProbe"):
 for f in ("ForeverProbe-Sync.ps1", "Install.bat", "Uninstall.bat", "README.txt", "ForeverProbe.ico"):
     zf.write(os.path.join("addon/companion", f), "Companion/" + f)
 
+# The double-click installer face, compiled on Windows by the companion's
+# Build-Installer.bat (csc.exe + Launcher.cs + the sigil ico). When the exe
+# is in the repo it rides at the zip root so it is the first thing seen.
+setup_exe = "addon/companion/ForeverProbe Setup.exe"
+if os.path.exists(setup_exe):
+    zf.write(setup_exe, "ForeverProbe Setup.exe")
+    print("ForeverProbe Setup.exe bundled at the zip root.")
+else:
+    print("no ForeverProbe Setup.exe yet: build it on Windows with addon/companion/Build-Installer.bat.")
+
 # The guild key: webhook + mark, base64-packed as Companion/guild.key so the
 # install needs zero typing. webhook.txt and guildmark.txt stay gitignored;
 # the encoded key inside the zip survives GitHub/Discord secret scanning,

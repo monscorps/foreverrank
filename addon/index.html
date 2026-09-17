@@ -61,9 +61,9 @@
   <div class="fp-bar-demo">Lv 23&nbsp;&nbsp;41.7%&nbsp;&nbsp;12.4k XP/h&nbsp;&nbsp;up in 1h 12m</div>
 
   <div class="fp-steps">
-    <div class="fp-step"><b>1</b><p>Download and unzip. You get two folders: <code>ForeverProbe</code>, the addon, and <code>Companion</code>, the optional Windows auto-sync.</p></div>
+    <div class="fp-step"><b>1</b><p>Download and unzip. You get <code>ForeverProbe</code>, the addon; <code>Companion</code>, the optional Windows auto-sync; and its installer, <code>ForeverProbe Setup.exe</code>, right at the top.</p></div>
     <div class="fp-step"><b>2</b><p>Drop <code>ForeverProbe</code> into <code>World of Warcraft/_beta_/Interface/AddOns/</code> and restart the game. The pace bar appears; that is the whole addon install.</p></div>
-    <div class="fp-step"><b>3</b><p>Feeding the guild too? Double-click <code>Companion\Install.bat</code>, done; the guild key is already in the download. A ForeverProbe icon lands on your desktop; clicking it shows sync status and a sync-now button.</p></div>
+    <div class="fp-step"><b>3</b><p>Feeding the guild too? Double-click <code>ForeverProbe Setup.exe</code> (or <code>Companion\Install.bat</code>, the same installer), done; the guild key is already in the download. The sigil lands in your system tray and syncs on its own from then on.</p></div>
   </div>
 
   <div class="fp-cols">
@@ -97,7 +97,7 @@
     <h3>The Sync companion, already in your download</h3>
     <ul>
       <li>The <code>Companion</code> folder in the zip holds one readable PowerShell script and its installer. It watches your ForeverProbe SavedVariables file and posts it to the guild's private Discord webhook whenever the game writes it, hash-checked so nothing ever sends twice.</li>
-      <li>Double-click <code>Install.bat</code>; the guild key ships in the download, so there is nothing to type or configure. It runs every 30 minutes in the background, and the desktop icon answers a click with status and a sync-now button. <code>Uninstall.bat</code> removes every trace.</li>
+      <li>Double-click <code>ForeverProbe Setup.exe</code> (or <code>Companion\Install.bat</code>); the guild key ships in the download, so there is nothing to type or configure. The sigil then lives in your system tray: it syncs every 30 minutes, shows a balloon when an update ships, comes back at every login, and right-click offers Sync now, Status and Exit. <code>Uninstall.bat</code> removes every trace.</li>
       <li>The addon still never touches the network; the game cannot and does not send anything. The companion runs outside WoW, reads one file, and every line of it is yours to read.</li>
     </ul>
   </div>

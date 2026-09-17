@@ -9,7 +9,8 @@ read-only, nothing automated, nothing sent anywhere on its own.
    optional `Companion` folder (Windows auto-sync for the guild).
 2. Drop `ForeverProbe` into `World of Warcraft/_beta_/Interface/AddOns/`.
 3. Restart the game. Done. A small pace bar appears at the top of the screen.
-   Guild contributors: see `Companion/README.txt` for the two-click auto-sync.
+   Guild contributors: double-click `ForeverProbe Setup.exe` in the zip for
+   the tray auto-sync; details in `Companion/README.txt`.
 
 ## What you get
 

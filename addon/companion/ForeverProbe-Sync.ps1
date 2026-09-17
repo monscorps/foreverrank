@@ -5,8 +5,9 @@
 # /reload), posts it to the guild's private Discord webhook. Nothing else is
 # read, nothing runs inside the game, and you can read every line below.
 #
-# Install:   double-click Install.bat (or: .\ForeverProbe-Sync.ps1 -Install)
-# Status:    click the ForeverProbe Sync icon (or: -Status)
+# Install:   ForeverProbe Setup.exe or Install.bat (or: .\ForeverProbe-Sync.ps1 -Install)
+# Running:   the sigil sits in your system tray and syncs every 30 minutes;
+#            right-click it for Sync now / Status / Exit. Returns at login.
 # Remove:    double-click Uninstall.bat (or: -Uninstall)
 
 param(
@@ -14,13 +15,14 @@ param(
   [switch]$Uninstall,
   [switch]$Status,
   [switch]$SyncNow,
+  [switch]$Tray,
   [string]$WowPath = ""
 )
 
 $AppDir   = Join-Path $env:APPDATA "ForeverProbe"
 $CfgFile  = Join-Path $AppDir "config.json"
 $LogFile  = Join-Path $AppDir "sync.log"
-$TaskName = "ForeverProbe Sync"
+$TaskName = "ForeverProbe Sync"   # older builds ran as a scheduled task
 
 function Log([string]$msg) {
   $line = (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  " + $msg
@@ -90,10 +92,42 @@ function Run-Sync {
   return "Everything already sent. Nothing new since your last session."
 }
 
+function Stop-Tray {
+  # Ends any running tray instance (an older build's included) so install and
+  # uninstall never leave a stale sigil behind.
+  try {
+    Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+      Where-Object { $_.CommandLine -match "ForeverProbe-Sync" -and $_.CommandLine -match "-Tray" -and $_.ProcessId -ne $PID } |
+      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  } catch { }
+}
+
+function Show-Status {
+  Add-Type -AssemblyName System.Windows.Forms | Out-Null
+  if (-not (Test-Path $CfgFile)) {
+    [System.Windows.Forms.MessageBox]::Show("ForeverProbe Sync is not installed. Run ForeverProbe Setup.exe or Install.bat first.", "ForeverProbe Sync") | Out-Null
+    return
+  }
+  $last = "never"
+  if (Test-Path $LogFile) {
+    $tail = Get-Content $LogFile -Tail 1
+    if ($tail) { $last = $tail }
+  }
+  $files = @(Find-SavedVariables -Root ((Get-Content $CfgFile -Raw | ConvertFrom-Json).wowPath))
+  $msg = "Watching " + $files.Count + " ForeverProbe file(s).`n`nLast activity:`n" + $last + "`n`nSync now?"
+  $r = [System.Windows.Forms.MessageBox]::Show($msg, "ForeverProbe Sync", [System.Windows.Forms.MessageBoxButtons]::YesNo)
+  if ($r -eq [System.Windows.Forms.DialogResult]::Yes) {
+    $result = Run-Sync
+    [System.Windows.Forms.MessageBox]::Show($result, "ForeverProbe Sync") | Out-Null
+  }
+}
+
 if ($Uninstall) {
   schtasks /Delete /TN "$TaskName" /F 2>$null | Out-Null
+  Stop-Tray
   foreach ($lnk in @((Join-Path ([Environment]::GetFolderPath("Programs")) "ForeverProbe Sync.lnk"),
-                     (Join-Path ([Environment]::GetFolderPath("Desktop")) "ForeverProbe Sync.lnk"))) {
+                     (Join-Path ([Environment]::GetFolderPath("Desktop")) "ForeverProbe Sync.lnk"),
+                     (Join-Path ([Environment]::GetFolderPath("Startup")) "ForeverProbe Sync.lnk"))) {
     if (Test-Path $lnk) { Remove-Item -Force $lnk }
   }
   if (Test-Path $AppDir) { Remove-Item -Recurse -Force $AppDir }
@@ -149,11 +183,28 @@ if ($Install) {
   $srcIco = Join-Path (Split-Path $MyInvocation.MyCommand.Path) "ForeverProbe.ico"
   $ico = Join-Path $AppDir "ForeverProbe.ico"
   if (Test-Path $srcIco) { Copy-Item -Force $srcIco $ico }
-  $action = "powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$self`""
-  schtasks /Create /TN "$TaskName" /TR $action /SC MINUTE /MO 30 /F | Out-Null
+  # The tray replaced the scheduled task; retire one an older build left behind.
+  schtasks /Delete /TN "$TaskName" /F 2>$null | Out-Null
+  Stop-Tray
+  $trayArgs = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$self`" -Tray"
   # A clickable face: Start Menu and Desktop shortcuts that open the status box.
   # The shell's own folder answers are used, so OneDrive-redirected Desktops work.
   $ws = New-Object -ComObject WScript.Shell
+  # The tray at every login: a shortcut in the Startup folder.
+  try {
+    $startupDir = [string]$ws.SpecialFolders.Item("Startup")
+    if ($startupDir) {
+      $lnk = $ws.CreateShortcut((Join-Path $startupDir "ForeverProbe Sync.lnk"))
+      $lnk.TargetPath = "powershell.exe"
+      $lnk.Arguments = $trayArgs
+      $lnk.WorkingDirectory = $AppDir
+      if (Test-Path $ico) { $lnk.IconLocation = "$ico,0" }
+      $lnk.Description = "ForeverProbe Sync tray"
+      $lnk.Save()
+    }
+  } catch {
+    Write-Host ("  Could not add the Startup entry :: " + $_.Exception.Message) -ForegroundColor Red
+  }
   $spots = @()
   try { $spots += [string]$ws.SpecialFolders.Item("Programs") } catch { }
   try { $spots += [string]$ws.SpecialFolders.Item("Desktop") } catch { }
@@ -176,10 +227,13 @@ if ($Install) {
     }
   }
   Log "installed"
+  Start-Process powershell -ArgumentList "-NoProfile","-WindowStyle","Hidden","-ExecutionPolicy","Bypass","-File",$self,"-Tray" -WindowStyle Hidden
   Write-Host ""
   Write-Host "  Installed." -ForegroundColor Green
-  Write-Host "  It runs quietly every 30 minutes. Click the ForeverProbe Sync icon"
-  Write-Host "  on your desktop any time to see status or push a sync right now."
+  Write-Host "  The sigil is in your system tray by the clock. It syncs every 30"
+  Write-Host "  minutes and shows a balloon when an update ships; right-click it"
+  Write-Host "  for Sync now, Status and Exit. It comes back at every login, and"
+  Write-Host "  the desktop icon opens the same status box."
   $found = @(Find-SavedVariables -Root $WowPath)
   if ($found.Count -eq 0) { Write-Host "  Note: no ForeverProbe data found yet; it appears after your first logout with the addon." }
   else { Write-Host ("  Watching: " + ($found -join ", ")) }
@@ -189,25 +243,64 @@ if ($Install) {
 }
 
 if ($Status) {
-  Add-Type -AssemblyName System.Windows.Forms | Out-Null
-  if (-not (Test-Path $CfgFile)) {
-    [System.Windows.Forms.MessageBox]::Show("ForeverProbe Sync is not installed. Run Install.bat first.", "ForeverProbe Sync") | Out-Null
-    exit
-  }
-  $last = "never"
-  if (Test-Path $LogFile) {
-    $tail = Get-Content $LogFile -Tail 1
-    if ($tail) { $last = $tail }
-  }
-  $files = @(Find-SavedVariables -Root ((Get-Content $CfgFile -Raw | ConvertFrom-Json).wowPath))
-  $msg = "Watching " + $files.Count + " ForeverProbe file(s).`n`nLast activity:`n" + $last + "`n`nSync now?"
-  $r = [System.Windows.Forms.MessageBox]::Show($msg, "ForeverProbe Sync", [System.Windows.Forms.MessageBoxButtons]::YesNo)
-  if ($r -eq [System.Windows.Forms.DialogResult]::Yes) {
-    $result = Run-Sync
-    [System.Windows.Forms.MessageBox]::Show($result, "ForeverProbe Sync") | Out-Null
-  }
+  Show-Status
   exit
 }
 
-# Default (and -SyncNow): one quiet sync pass; this is what the task runs.
+if ($Tray) {
+  Add-Type -AssemblyName System.Windows.Forms | Out-Null
+  Add-Type -AssemblyName System.Drawing | Out-Null
+
+  # One sigil in the tray is plenty; a second launch bows out quietly.
+  $fresh = $false
+  $mutex = New-Object System.Threading.Mutex($true, "ForeverProbeSyncTray", [ref]$fresh)
+  if (-not $fresh) { exit }
+
+  $icoFile = Join-Path $AppDir "ForeverProbe.ico"
+  if (-not (Test-Path $icoFile)) { $icoFile = Join-Path (Split-Path $MyInvocation.MyCommand.Path) "ForeverProbe.ico" }
+  $script:notify = New-Object System.Windows.Forms.NotifyIcon
+  if (Test-Path $icoFile) { $script:notify.Icon = New-Object System.Drawing.Icon($icoFile) }
+  else { $script:notify.Icon = [System.Drawing.SystemIcons]::Application }
+  $script:notify.Text = "ForeverProbe Sync"
+
+  # $loud balloons every outcome (manual sync); quiet passes balloon only sends.
+  $script:doSync = {
+    param([bool]$loud)
+    $msg = Run-Sync
+    if ($loud -or $msg -like "Sent *") {
+      $script:notify.BalloonTipTitle = "ForeverProbe Sync"
+      $script:notify.BalloonTipText  = $msg
+      $script:notify.ShowBalloonTip(4000)
+    }
+  }
+
+  $menu = New-Object System.Windows.Forms.ContextMenuStrip
+  [void]$menu.Items.Add("Sync now", $null, { & $script:doSync $true })
+  [void]$menu.Items.Add("Status", $null, { Show-Status })
+  [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+  [void]$menu.Items.Add("Exit", $null, {
+    $script:timer.Stop()
+    $script:notify.Visible = $false
+    $script:notify.Dispose()
+    [System.Windows.Forms.Application]::Exit()
+  })
+  $script:notify.ContextMenuStrip = $menu
+  $script:notify.Visible = $true
+
+  # First pass shortly after the sigil appears, then every 30 minutes.
+  $script:timer = New-Object System.Windows.Forms.Timer
+  $script:timer.Interval = 15000
+  $script:timer.Add_Tick({
+    $script:timer.Interval = 1800000
+    & $script:doSync $false
+  })
+  $script:timer.Start()
+  Log "tray up"
+
+  [System.Windows.Forms.Application]::Run((New-Object System.Windows.Forms.ApplicationContext))
+  $mutex.ReleaseMutex()
+  exit
+}
+
+# Default (and -SyncNow): one quiet sync pass, for shortcuts and old tasks.
 Run-Sync | Out-Null
