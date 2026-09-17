@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ForeverProbe</title>
+<meta name="description" content="ForeverProbe: the quiet companion addon for foreverrank.com. A pace bar you keep, snapshots you export yourself.">
+<link rel="icon" href="/mark.svg">
+<link rel="stylesheet" href="/forever.css?v=19">
+<style>
+.fp-wrap { max-width: 860px; margin: 0 auto; padding: 2.2rem 1rem 4rem; }
+.fp-hero { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.fp-ico { width: 64px; height: 64px; border: 1px solid rgba(229,204,128,.55); border-radius: 2px; background: #0d1626; display: grid; place-items: center; }
+.fp-ico svg { color: #e5cc80; }
+.fp-hero h1 { margin: 0; font-size: 2rem; }
+.fp-hero h1 span { color: var(--gold, #e5cc80); }
+.fp-sub { color: var(--subtle, #8b93a7); margin: .3rem 0 0; max-width: 46rem; }
+.fp-dl { display: inline-block; margin: 1.4rem 0 .4rem; font: 700 .85rem/1 var(--heading, inherit); letter-spacing: .08em; text-transform: uppercase; color: #0d1626; background: var(--gold, #e5cc80); border-radius: 2px; padding: .8rem 1.3rem; text-decoration: none; }
+.fp-dl:hover { filter: brightness(1.08); }
+.fp-ver { color: var(--subtle, #8b93a7); font-size: .75rem; margin-left: .8rem; }
+.fp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; margin: 1.6rem 0; }
+.fp-step { background: rgba(0,0,0,.28); border: 1px solid var(--card-border, rgba(139,147,167,.25)); border-radius: 2px; padding: .9rem; }
+.fp-step b { display: block; color: var(--gold, #e5cc80); font: 700 1.2rem/1 var(--heading, inherit); margin-bottom: .4rem; }
+.fp-step p { margin: 0; font-size: .82rem; line-height: 1.5; color: var(--card-text, #c8cede); }
+.fp-step code { color: #e8e2d0; font-size: .78rem; }
+.fp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; margin-top: 1rem; }
+.fp-card { background: rgba(0,0,0,.28); border: 1px solid var(--card-border, rgba(139,147,167,.25)); border-radius: 2px; padding: 1rem; }
+.fp-card h3 { margin: 0 0 .5rem; font-size: .95rem; color: #e8e2d0; }
+.fp-card ul { margin: 0; padding-left: 1.1rem; }
+.fp-card li { font-size: .82rem; line-height: 1.55; color: var(--card-text, #c8cede); margin-bottom: .3rem; }
+.fp-bar-demo { margin: 1.6rem 0 0; border: 1px solid rgba(229,204,128,.35); background: #070d18; border-radius: 2px; padding: .45rem .8rem; display: inline-block; font: 600 .78rem/1 var(--heading, inherit); color: #efe9d4; letter-spacing: .04em; }
+@media (max-width: 700px) { .fp-steps, .fp-cols { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body class="board">
+  <nav class="top">
+    <a class="brand" href="/">
+      <img src="/mark.svg" alt="" width="42" height="42">
+      <span class="brand-word">FOREVER<b>RANK</b></span>
+    </a>
+    <div class="top-nav">
+      <a class="pill" href="/plan/">The Forge</a>
+      <a class="pill" href="/codex/">Database</a>
+      <a class="pill" href="/news/">News</a>
+      <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener"><span>Discord</span></a>
+      <span class="phase">Addon</span>
+    </div>
+  </nav>
+<main class="fp-wrap">
+  <div class="fp-hero">
+    <div class="fp-ico"><svg width="34" height="34" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="8" cy="8" r="6.4"/><path d="M8 4.2V8l2.6 1.6"/></svg></div>
+    <div>
+      <h1>Forever<span>Probe</span></h1>
+      <p class="fp-sub">The quiet companion. One pace bar you will not want to turn off, and character snapshots that only leave the game when you paste them here yourself.</p>
+    </div>
+  </div>
+
+  <a class="fp-dl" href="/addon/ForeverProbe.zip" download>Download ForeverProbe</a><span class="fp-ver">v0.1.0 for the Forever beta</span>
+  <div class="fp-bar-demo">Lv 23&nbsp;&nbsp;41.7%&nbsp;&nbsp;12.4k XP/h&nbsp;&nbsp;up in 1h 12m</div>
+
+  <div class="fp-steps">
+    <div class="fp-step"><b>1</b><p>Download and unzip. You get a single folder named <code>ForeverProbe</code>.</p></div>
+    <div class="fp-step"><b>2</b><p>Drop it into <code>World of Warcraft/_beta_/Interface/AddOns/</code></p></div>
+    <div class="fp-step"><b>3</b><p>Restart the game. The pace bar appears. That is the whole install.</p></div>
+  </div>
+
+  <div class="fp-cols">
+    <div class="fp-card">
+      <h3>What you get</h3>
+      <ul>
+        <li>Pace bar: level, percent, XP per hour, time to level. Drag it anywhere; right-click hides it.</li>
+        <li><code>/probe</code> opens one small panel: status, pace toggle, export.</li>
+        <li>Nothing else on your screen, ever. No chat messages, no popups.</li>
+      </ul>
+    </div>
+    <div class="fp-card">
+      <h3>What it does underneath</h3>
+      <ul>
+        <li>Snapshots your character at login and level-up: spells, gear, zone.</li>
+        <li>Notes what class trainers offer when you open one.</li>
+        <li>Everything stays on your machine until you press Export and paste the text here. Read-only, no automation, nothing sent on its own. Terms-of-service safe by construction.</li>
+      </ul>
+    </div>
+  </div>
+</main>
+<script src="/nav.js?v=5"></script>
+<script src="/map.js?v=6" defer></script>
+</body>
+</html>

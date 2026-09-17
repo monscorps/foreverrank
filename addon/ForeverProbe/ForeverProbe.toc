@@ -1,0 +1,12 @@
+## Interface: 16001
+## Title: |cffe5cc80Forever|cffffffffProbe|r
+## Notes: Reads your character for foreverrank.com. Quiet, read-only, one export button. Type /probe
+## Author: ForeverRank
+## Version: 0.1.0
+## IconTexture: Interface\Icons\inv_misc_pocketwatch_01
+## SavedVariables: ForeverProbeDB
+## X-Website: https://foreverrank.com
+
+Probe.lua
+Pace.lua
+Export.lua

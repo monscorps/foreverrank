@@ -11,7 +11,7 @@
   var MENUS = {
     ladder: { path: "", label: "The ladder", items: [
       ["Progression", "?ladder=progression"], ["Levelling", "?ladder=levelling"], ["Hardcore", "?ladder=hardcore"],
-      ["PvP", "?ladder=pvp"], ["Professions", "?ladder=professions"], ["Guilds", "?ladder=guilds"], ["The Wire", "#wire"]] },
+      ["PvP", "?ladder=pvp"], ["Professions", "?ladder=professions"], ["Guilds", "?ladder=guilds"], ["The Wire", "#wire"], ["ForeverProbe addon", "@addon/"]] },
     forge: { path: "plan/", label: "The Forge", items: [
       ["Race and class", "#race"], ["Talents", "#talents"], ["Legacy tree", "#legacy"], ["Gear and stats", "#gear"],
       ["Consumables", "#consumables"], ["Name and share", "#share"], ["Raid composer", "#composer"]] },
