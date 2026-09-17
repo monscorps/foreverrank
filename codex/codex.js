@@ -85,7 +85,7 @@
     if (!d.souls || !d.souls.list) return;
     headList(d.souls.list.map(function (s) { return s[0] + ": " + s[1]; }), "souls", "Soul Engraving: 204 shoulder souls", "spell_shadow_soulleech_3");
     d.souls.list.forEach(function (s) {
-      IDX.push({ kind: "soul", cat: "soul", sub: "Shoulder soul", name: s[0], icon: s[2] ? "classicon_" + s[2].toLowerCase() : "spell_shadow_soulleech_3", q: "unknown",
+      IDX.push({ kind: "soul", cat: "soul", sub: "Shoulder soul", name: s[0], icon: s[3] || (s[2] ? "classicon_" + s[2].toLowerCase() : "spell_shadow_soulleech_3"), q: "unknown",
         cls: s[2] ? s[2].charAt(0) + s[2].slice(1).toLowerCase() : undefined,
         meta: "Soul Engraving \u00b7 " + (s[2] ? s[2].charAt(0) + s[2].slice(1).toLowerCase() : "class unsorted"), topic: "souls", text: (s[0] + " " + s[1] + " " + (s[2] || "")).toLowerCase() });
     });
@@ -412,12 +412,13 @@
         (sCounts._ ? '<button type="button" class="soulchip" data-soulf="_">' + crest("_") + "Unsorted " + sCounts._ + "</button>" : "");
       var cards = sl.map(function (s) {
         var k = s[2] || "_";
-        return '<div class="soulc" data-sk="' + k + '" style="--cc:' + (SOUL_CC[s[2]] || "#8b93a7") + '">' +
-          '<span class="soulring">' + crest(k) + "</span><span class=\"soulhead\"><b>" + esc(s[0]) + "</b><i>" + soulLabel(s[2]) + "</i></span><p>" + fxHtml(s[1]) + "</p></div>";
+        var ring = s[3] ? '<img class="soulico" src="' + CDN + esc(s[3]) + '.jpg" alt="" loading="lazy">' : crest(k);
+        return '<div class="soulc' + (s[3] ? " hasspell" : "") + '" data-sk="' + k + '" style="--cc:' + (SOUL_CC[s[2]] || "#8b93a7") + '">' +
+          '<span class="soulring">' + ring + "</span><span class=\"soulhead\"><b>" + esc(s[0]) + "</b><i>" + soulLabel(s[2]) + "</i></span><p>" + fxHtml(s[1]) + "</p></div>";
       }).join("");
       section("souls", "Soul Engraving",
         '<p class="soul-warn">DATAMINED, HIDDEN IN THE CLIENT. In active development; nothing here is confirmed for launch.</p>' +
-        '<p class="board-sub">202 of the 204 souls share one placeholder icon in the client, so the class crest stands in. Pick a class and the crests step aside.</p>' +
+        '<p class="board-sub">The client gives nearly every soul the same placeholder icon, so where the effect text names a spell, the card wears that spell\u2019s icon; the rest wear their class crest.</p>' +
         '<p class="board-sub">' + esc(d.souls.note) + "</p>" +
         '<div class="soulchips">' + chips + '</div><div class="soulgrid">' + cards + "</div>");
     }

@@ -35,8 +35,8 @@
 .soulgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: .55rem; }
 .soulc { background: linear-gradient(135deg, rgba(0,0,0,.28), rgba(0,0,0,.28) 60%, color-mix(in srgb, var(--cc, #8b93a7) 8%, transparent)); border: 1px solid var(--card-border); border-left: 3px solid var(--cc, var(--card-border)); border-radius: 2px; padding: .6rem .75rem; display: grid; grid-template-columns: 1fr 2.1rem; grid-template-rows: auto auto; gap: .15rem .6rem; align-items: center; }
 .soulring { grid-row: 1; grid-column: 2; justify-self: end; width: 1.9rem; height: 1.9rem; border-radius: 50%; overflow: hidden; border: 2px solid var(--cc, var(--card-border)); box-shadow: 0 0 8px color-mix(in srgb, var(--cc, #000) 35%, transparent); }
-.soulgrid.onecls .soulring { display: none; }
-.soulgrid.onecls .soulc { grid-template-columns: 1fr; }
+.soulgrid.onecls .soulc:not(.hasspell) .soulring { display: none; }
+.soulgrid.onecls .soulc:not(.hasspell) { grid-template-columns: 1fr; }
 .soulring .soulico { width: 100%; height: 100%; object-fit: cover; display: block; }
 .soulhead { grid-row: 1; grid-column: 1; min-width: 0; }
 .soulc b { display: block; color: var(--gold); font: 600 .8rem/1.25 var(--heading); }
@@ -324,7 +324,7 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 </footer>
 <script src="../tipkit.js?v=5"></script>
 <script>window.CODEX_PAGE="classes";</script>
-<script src="../codex/codex.js?v=40"></script>
+<script src="../codex/codex.js?v=41"></script>
 <script src="/map.js?v=6" defer></script>
 </body>
 </html>
