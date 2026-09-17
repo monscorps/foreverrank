@@ -723,7 +723,7 @@
       $("guide").innerHTML = "<p>Racials below. <b>Now the class.</b></p>";
     if (viewStep === 0 && S.cls >= 0)
       $("guide").innerHTML = "<p><b>Swap either freely; the build stays.</b> Changing class resets talents.</p>";
-    if (now === 0 || now === 1) html += '<h3 class="pick-h">The race</h3>' + raceStage() + (S.race >= 0 ? raceExpand(S.race) : "") + '<h3 class="pick-h">The class</h3>' + classStage();
+    if (now === 0 || now === 1) html += dunnoRow() + '<div class="pickwrap"><div class="pickcol"><h3 class="pick-h">The race</h3>' + raceStage() + '</div><div class="pickcol"><h3 class="pick-h">The class</h3>' + classStage() + '</div></div>' + (S.race >= 0 ? raceExpand(S.race) : "");
     else html += talentsHTML() + gearHTML() + nameHTML() + buildHTML();
     hideTip();
     st.innerHTML = html;
@@ -767,10 +767,12 @@
       return "<li>" + '<b>' + esc(x[0]) + '</b><span>' + esc(x[1]) + '</span><i class="tag ' + x[2] + '">' + x[2] + "</i></li>";
     }).join("") + "</ul>";
   }
-  function raceStage() {
-    var html = '<div class="dunno-row"><button type="button" class="share dunno" id="dunno">I don’t know what to play</button>' +
+  function dunnoRow() {
+    return '<div class="dunno-row"><button type="button" class="share dunno" id="dunno">I don’t know what to play</button>' +
       '<i class="finenote">Three questions. The Forge decides. No refunds.</i></div>';
-    html += '<div class="cards">' + RACES.map(function (r, i) {
+  }
+  function raceStage() {
+    var html = '<div class="cards">' + RACES.map(function (r, i) {
       return '<button class="card' + (S.race === i ? " sel" : "") + '" data-race="' + i + '" ' + dt(r.n, r.tip) + ">" +
         icon(raceIcon(r, S.g), "wi wi-lg") + "<b>" + esc(r.n) + "</b><i>" + r.f + (r.nu ? " (probably)" : "") + "</i></button>";
     }).join("") + "</div>";
