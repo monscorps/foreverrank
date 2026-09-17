@@ -425,11 +425,11 @@
       nPerk = d.legacy.trees.reduce(function (a, t) { return a + t.perks.length; }, 0),
       nCC = Object.keys(d.classChanges).reduce(function (a, k) { return a + d.classChanges[k].length; }, 0),
       nSpell = (d.unseen.new || []).length + (d.unseen.granted || []).length + (d.unseen.higher || []).length;
-    var hero = '<div class="cxstats">' +
-      [[nPerk, "Legacy perks", "/codex/#legacy", "legacy"], [nDun, "dungeons", "/world/#world", "dungeons"], [nRaid, "raids", "/world/#world", "raids"],
-        [nCC, "class changes", "/classes/#classes", "classes"], [nSpell, "spells foretold", "/classes/#unseen", "spells"]]
+    var hero = '<div class="cxstrip">' +
+      [[nPerk, "Legacy perks", "/codex/#legacy"], [nDun, "dungeons", "/world/#world"], [nRaid, "raids", "/world/#world"],
+        [nCC, "class changes", "/classes/#classes"], [nSpell, "spells foretold", "/classes/#unseen"]]
         .map(function (s) {
-          return '<a class="cxstat" href="' + s[2] + '" style="--img:url(/codex/img/stat-' + s[3] + '.jpg)"><span class="cxstat-box"><b>' + s[0] + "</b><span>" + s[1] + "</span></span></a>";
+          return '<a href="' + s[2] + '"><b>' + s[0] + "</b> " + s[1] + "</a>";
         }).join("") + "</div>";
 
     document.getElementById("cxnav").innerHTML = nav.join("");

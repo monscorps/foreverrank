@@ -21,6 +21,10 @@
   border: 1px solid transparent; border-radius: var(--r-btn); padding: .45rem .8rem; transition: color .12s, background .12s; }
 .cxnav a:hover { color: var(--gold); background: rgba(229,204,128,.08); }
 .cxnav a.on { color: #000; background: var(--gold); }
+.cxstrip { display: flex; flex-wrap: wrap; gap: .3rem; margin: .9rem 0 .2rem; }
+.cxstrip a { text-decoration: none; font: 600 .66rem/1 var(--heading); letter-spacing: .05em; text-transform: uppercase; color: var(--card-text); background: rgba(0,0,0,.28); border: 1px solid var(--card-border); border-radius: var(--r-btn); padding: .42rem .6rem; }
+.cxstrip a b { color: var(--gold); font-size: .8rem; }
+.cxstrip a:hover { border-color: var(--gold); color: var(--gold); }
 .talenthead { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin: 1rem 0 .6rem; }
 .talenthead h3 { margin: 0; font-family: var(--heading); font-size: 1.05rem; }
 .pts { font: 700 1rem var(--heading); color: var(--gold); }
@@ -271,8 +275,9 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
   <div class="top-nav">
     <a class="pill" href="../">The ladder</a>
     <a class="pill" href="../plan/">The Forge</a>
-    <span class="phase">World</span>
+    <a class="pill" href="../codex/">Database</a>
     <a class="pill" href="../news/">News</a>
+    <span class="phase">World</span>
     <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener" title="Join the ForeverRank Discord"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.32 4.37A19.8 19.8 0 0 0 15.39 2.8a13.7 13.7 0 0 0-.63 1.3 18.4 18.4 0 0 0-5.52 0 13.2 13.2 0 0 0-.64-1.3 19.7 19.7 0 0 0-4.93 1.53C.53 9.05-.32 13.6.1 18.1a19.9 19.9 0 0 0 6.04 3.05 14.7 14.7 0 0 0 1.29-2.1 12.9 12.9 0 0 1-2.03-.97c.17-.13.34-.26.5-.4a14.2 14.2 0 0 0 12.2 0l.5.4c-.65.38-1.33.7-2.04.97.37.74.8 1.44 1.29 2.1a19.8 19.8 0 0 0 6.05-3.05c.5-5.22-.84-9.73-3.58-13.73ZM8.02 15.33c-1.18 0-2.15-1.08-2.15-2.42s.95-2.42 2.15-2.42c1.21 0 2.17 1.09 2.15 2.42 0 1.34-.95 2.42-2.15 2.42Zm7.96 0c-1.18 0-2.15-1.08-2.15-2.42s.95-2.42 2.15-2.42c1.21 0 2.17 1.09 2.15 2.42 0 1.34-.94 2.42-2.15 2.42Z"/></svg><span>Discord</span></a>
   </div>
 </nav>
@@ -298,7 +303,7 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 </footer>
 <script src="../tipkit.js?v=5"></script>
 <script>window.CODEX_PAGE="world";</script>
-<script src="../codex/codex.js?v=35"></script>
+<script src="../codex/codex.js?v=36"></script>
 <script src="/map.js?v=6" defer></script>
 </body>
 </html>
