@@ -74,6 +74,10 @@
     <h1 class="logotype">Rank. <span>Forever.</span></h1>
     <p class="hero-sub">Levelling, hardcore, PvP, characters and guilds: measured in the
     world, ranked like a WarcraftLogs parse.</p>
+    <button type="button" class="probe-cta" id="probe-cta">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="6.4"/><path d="M8 4.2V8l2.6 1.6"/></svg>
+      Get ForeverProbe<span class="probe-cta-sub">the companion addon</span>
+    </button>
 
     <div class="countdown" id="countdown">
       <p class="count-kick" id="count-kick">…</p>
@@ -172,5 +176,60 @@
 
 <script src="forever.js?v=11"></script>
 <script src="/map.js?v=8" defer></script>
+<div class="probe-modal" id="probe-modal" hidden>
+  <div class="probe-card" role="dialog" aria-modal="true" aria-labelledby="probe-t" tabindex="-1">
+    <button type="button" class="probe-x" id="probe-x" aria-label="Close">&times;</button>
+    <b id="probe-t">Forever<span>Probe</span></b>
+    <p class="probe-sub">A pace bar you will not want to turn off, and character snapshots that only leave the game when you paste them yourself. Read-only, no automation, terms-of-service safe by construction.</p>
+    <div class="probe-demo">Lv 23&nbsp;&nbsp;41.7%&nbsp;&nbsp;12.4k XP/h&nbsp;&nbsp;up in 1h 12m</div>
+    <ol class="probe-steps">
+      <li>Download and unzip: one folder, <code>ForeverProbe</code>.</li>
+      <li>Drop it into <code>World of Warcraft/_beta_/Interface/AddOns/</code></li>
+      <li>Restart the game. The pace bar appears. That is the whole install.</li>
+    </ol>
+    <a class="probe-dl" href="/addon/ForeverProbe.zip" download>Download ForeverProbe</a>
+    <p class="probe-foot"><a href="/addon/">Full details and the guild programme</a></p>
+  </div>
+</div>
+<style>
+.probe-cta { display: inline-flex; align-items: center; gap: .5rem; margin-top: 1.1rem; cursor: pointer;
+  font: 700 .8rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: #14100a;
+  background: linear-gradient(180deg, #f0dfa8, #d9b96a); border: 1px solid rgba(255,240,200,.5); border-radius: 3px;
+  padding: .75rem 1.1rem; box-shadow: 0 4px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.35); transition: filter .15s, transform .15s; }
+.probe-cta:hover { filter: brightness(1.06); transform: translateY(-1px); }
+.probe-cta-sub { font: 600 .62rem/1 var(--heading); letter-spacing: .06em; text-transform: none; color: rgba(20,16,10,.7); }
+.probe-modal { position: fixed; inset: 0; z-index: 960; display: grid; place-items: center; background: rgba(5,8,10,.75); padding: 1rem; }
+.probe-modal[hidden] { display: none; }
+.probe-card { position: relative; width: min(30rem, 94vw); background: #0d1a22; border: 1px solid rgba(229,204,128,.4); border-radius: 8px;
+  box-shadow: 0 18px 50px rgba(0,0,0,.7); padding: 1.3rem 1.4rem 1.2rem; }
+.probe-card:focus { outline: none; }
+.probe-card > b { font: 700 1.3rem var(--heading); color: #e5cc80; }
+.probe-card > b span { color: #f4f0eb; }
+.probe-x { position: absolute; right: .5rem; top: .4rem; width: 2rem; height: 2rem; border: 0; background: none; color: #8b93a7; font-size: 1.4rem; cursor: pointer; }
+.probe-x:hover { color: #e5cc80; }
+.probe-sub { margin: .5rem 0 0; font-size: .8rem; line-height: 1.55; color: #b9c0d0; }
+.probe-demo { margin: .8rem 0 0; border: 1px solid rgba(229,204,128,.35); background: #070d18; border-radius: 2px; padding: .45rem .8rem; display: inline-block; font: 600 .76rem/1 var(--heading); color: #efe9d4; letter-spacing: .04em; }
+.probe-steps { margin: .8rem 0 0; padding-left: 1.2rem; }
+.probe-steps li { font-size: .8rem; line-height: 1.6; color: #c8cede; margin-bottom: .25rem; }
+.probe-steps code { color: #e8e2d0; font-size: .74rem; }
+.probe-dl { display: inline-block; margin-top: .9rem; font: 700 .78rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase;
+  color: #14100a; background: #e5cc80; border-radius: 2px; padding: .7rem 1.1rem; text-decoration: none; }
+.probe-dl:hover { filter: brightness(1.08); }
+.probe-foot { margin: .7rem 0 0; font-size: .74rem; }
+.probe-foot a { color: #e5cc80; }
+@media (max-width: 640px) { .probe-modal { place-items: end stretch; padding: 0; } .probe-card { width: 100%; border-radius: 8px 8px 0 0; } }
+</style>
+<script>
+(function () {
+  var m = document.getElementById("probe-modal"), b = document.getElementById("probe-cta");
+  if (!m || !b) return;
+  function open() { m.hidden = false; m.querySelector(".probe-card").focus(); }
+  function close() { m.hidden = true; }
+  b.addEventListener("click", open);
+  document.getElementById("probe-x").addEventListener("click", close);
+  m.addEventListener("click", function (e) { if (e.target === m) close(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !m.hidden) close(); });
+})();
+</script>
 </body>
 </html>

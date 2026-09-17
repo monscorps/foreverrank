@@ -114,5 +114,15 @@ SlashCmdList.FOREVERPROBE = function(msg)
   msg = (msg or ""):lower():gsub("%s+", "")
   if msg == "export" then NS.export()
   elseif msg == "bar" then NS.paceToggle()
+  elseif msg == "debug" then
+    local dbg = NS.Ledger.debug or {}
+    local r = NS.Estimator.result or {}
+    local rec = NS.History:Current() or {}
+    print("|cffe5cc80ForeverProbe|r debug")
+    print("  chat patterns compiled: " .. NS.Ledger:PatternCount())
+    print("  XP events this session: " .. (dbg.parsed or 0) .. " kills parsed, " .. (dbg.quests or 0) .. " quests, " .. (dbg.unknown or 0) .. " reconciled (" .. (dbg.unknownXP or 0) .. " XP the patterns missed)")
+    print("  this level: " .. (rec.killCount or 0) .. " kills, " .. (rec.questCount or 0) .. " quests, base XP " .. (rec.baseXP or 0))
+    print("  estimate: rate source " .. (r.rateSource or "none") .. ", confidence " .. (r.confidence or "none"))
+    print("  A high reconciled count means this client changed its combat messages; export and report it.")
   else NS.showPanel() end
 end

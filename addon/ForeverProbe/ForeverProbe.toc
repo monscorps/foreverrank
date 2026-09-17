@@ -2,8 +2,8 @@
 ## Title: |cffe5cc80Forever|cffffffffProbe|r
 ## Notes: Reads your character for foreverrank.com. Quiet, read-only, one export button. Type /probe
 ## Author: ForeverRank
-## Version: 0.2.0
-## IconTexture: Interface\Icons\inv_misc_pocketwatch_01
+## Version: 0.2.1
+## IconTexture: Interface\AddOns\ForeverProbe\icon
 ## SavedVariables: ForeverProbeDB
 ## X-Website: https://foreverrank.com
 

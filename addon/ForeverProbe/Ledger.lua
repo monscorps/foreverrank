@@ -42,10 +42,20 @@ function Ledger:Prime()
   accounted = 0
 end
 
+Ledger.debug = { parsed = 0, quests = 0, unknown = 0, unknownXP = 0 }
 local function emit(e)
   accounted = accounted + (e.total or 0)
+  local dbg = Ledger.debug
+  if e.source == "kill" then dbg.parsed = dbg.parsed + 1
+  elseif e.source == "quest" then dbg.quests = dbg.quests + 1
+  else dbg.unknown = dbg.unknown + 1; dbg.unknownXP = dbg.unknownXP + (e.total or 0) end
   NS.History:AddEvent(e)
   if NS.onXPEvent then NS.onXPEvent(e) end
+end
+
+function Ledger:PatternCount()
+  if #patterns == 0 then self:BuildPatterns() end
+  return #patterns
 end
 
 function Ledger:OnChatXP(msg)
