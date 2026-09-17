@@ -137,6 +137,12 @@
     }).sort(function (a, b) {
       var ql = SQ.q.toLowerCase(), as = ql && a.name.toLowerCase().indexOf(ql) === 0 ? 0 : 1, bs = ql && b.name.toLowerCase().indexOf(ql) === 0 ? 0 : 1;
       if (as !== bs) return as - bs;
+      if (SQ.lvl) {
+        // A level cap is set: gear nearest the cap first, so the filter is
+        // visibly doing its job instead of re-showing the same level 1 epics.
+        var al = a.it && a.it.reqLevel || 0, bl = b.it && b.it.reqLevel || 0;
+        if (al !== bl) return bl - al;
+      }
       var aq = QUAL.indexOf(a.q), bq = QUAL.indexOf(b.q);
       if (aq !== bq) return bq - aq;
       return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
@@ -166,7 +172,7 @@
       (quals.length > 1 ? '<span class="dbs-q">' + quals.map(function (q) { return '<button type="button" class="q-' + q + (SQ.qual === q ? " on" : "") + '" data-dbqual="' + q + '">' + q + "</button>"; }).join("") + "</span>" : "");
     if (window.TipKit) TipKit.hide();
     var out = document.getElementById("dbs-out"), res = active ? matches() : [];
-    document.getElementById("dbs-n").textContent = active ? res.length + (res.length === 1 ? " result" : " results") : IDX.length + " entries";
+    document.getElementById("dbs-n").textContent = active ? res.length + (res.length === 1 ? " result" : " results") + (SQ.lvl ? " usable at " + SQ.lvl : "") : IDX.length + " entries";
     out.hidden = !active;
     if (!active) return;
     out.innerHTML = res.length ? res.slice(0, SHOWN).map(function (e) {
@@ -184,7 +190,7 @@
   function syncUrl() {
     try {
       var u = new URL(location.href);
-      ["q", "cat", "sub", "qual"].forEach(function (k) { var v = k === "q" ? SQ.q.trim() : SQ[k]; if (v && v !== "all") u.searchParams.set(k, v); else u.searchParams.delete(k); });
+      ["q", "cat", "sub", "qual", "lvl"].forEach(function (k) { var v = k === "q" ? SQ.q.trim() : SQ[k]; if (v && v !== "all") u.searchParams.set(k, v); else u.searchParams.delete(k); });
       history.replaceState(null, "", u.pathname + u.search + u.hash);
     } catch (e) {}
   }
@@ -193,7 +199,7 @@
     if (!box) return;
     box.innerHTML = '<div class="dbs-bar"><input type="search" id="dbs-qi" placeholder="Search items, dungeons, perks, spells" autocomplete="off" spellcheck="false" aria-label="Search the Database">' +
       '<span id="dbs-n"></span></div><div class="dbs-cats" id="dbs-cats" role="group" aria-label="Type"></div>' +
-      '<div class="dbs-filt" id="dbs-filt"><input type="number" id="dbf-lvl" min="1" max="60" placeholder="Usable at" aria-label="Usable at level">' +
+      '<div class="dbs-filt" id="dbs-filt"><input type="number" id="dbf-lvl" min="1" max="60" placeholder="Max level" aria-label="Max level: show only gear usable at that level">' +
       '<select id="dbf-cls" aria-label="Class"><option value="">Any class</option>' + CLASSES9.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<select id="dbf-prof" aria-label="Profession"><option value="">Any profession</option>' + PROFS.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<input type="number" id="dbf-sk" min="1" max="300" placeholder="Skill" aria-label="Maximum profession skill">' +
@@ -203,13 +209,14 @@
     try {
       var sp = new URLSearchParams(location.search);
       SQ.q = sp.get("q") || ""; SQ.cat = sp.get("cat") || "all"; SQ.sub = sp.get("sub") || ""; SQ.qual = sp.get("qual") || "";
+      SQ.lvl = sp.get("lvl") || "";
     } catch (e) {}
     var qi = document.getElementById("dbs-qi"), tmr = null;
     function fEl(id) { return document.getElementById(id); }
     function readFilt() {
       SQ.lvl = fEl("dbf-lvl").value; SQ.cls = fEl("dbf-cls").value; SQ.prof = fEl("dbf-prof").value; SQ.sk = fEl("dbf-sk").value;
       fEl("dbf-x").hidden = !(SQ.lvl || SQ.cls || SQ.prof || SQ.sk);
-      SHOWN = 60; drawSearch();
+      SHOWN = 60; drawSearch(); syncUrl();
     }
     var ftmr = null;
     ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).addEventListener("input", function () { clearTimeout(ftmr); ftmr = setTimeout(readFilt, 200); }); });
@@ -228,6 +235,7 @@
       readFilt();
     });
     qi.value = SQ.q;
+    if (SQ.lvl) { fEl("dbf-lvl").value = SQ.lvl; fEl("dbf-x").hidden = false; }
     qi.addEventListener("input", function () {
       clearTimeout(tmr);
       tmr = setTimeout(function () { SQ.q = qi.value; SHOWN = 60; drawSearch(); syncUrl(); }, 120);
