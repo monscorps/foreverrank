@@ -87,6 +87,41 @@ print("spells", len(spells), "talents", len(talents), "racials", len(racials))
 dupes = [k for k, v in collections.Counter((s["c"], s["n"]) for s in spells).items() if v > 1]
 print("remaining same-class dupes:", dupes)
 
+# --- icon backfill from the client + community listfile ------------------
+# Optional: runs when the export folder and tools/icon-listfile.csv exist.
+try:
+    import csv
+    EXP = "/Users/mikalbot/Documents/All so far export forever 1.6/"
+    lf = {}
+    for line in open("tools/icon-listfile.csv"):
+        fdid, path = line.strip().split(";", 1)
+        lf[fdid] = path.rsplit("/", 1)[1].replace(".blp", "")
+    with open(EXP + "SpellName.csv", encoding="utf-8-sig", errors="replace") as fh:
+        by_name = {}
+        for r in csv.DictReader(fh, delimiter=";"):
+            by_name.setdefault(r["Name_lang"], []).append(r["ID"])
+    with open(EXP + "SpellMisc.csv", encoding="utf-8-sig", errors="replace") as fh:
+        fdid_of = {r["SpellID"]: r["SpellIconFileDataID"] for r in csv.DictReader(fh, delimiter=";")}
+    import os
+    local_png = set(f[:-4] for f in os.listdir("plan/img/icons") if f.endswith(".png"))
+    filled = 0
+    for s in spells:
+        if s.get("icon"): continue
+        for sid in sorted(by_name.get(s["n"], []), key=int):
+            fd = fdid_of.get(sid)
+            name = lf.get(fd or "")
+            if name and not name.startswith("unknown"):
+                # Classic-era names live on the icon CDN; new files need a local png.
+                if int(fd) < 4000000:
+                    s["icon"] = name; filled += 1
+                elif fd in local_png:
+                    s["icon"] = "/plan/img/icons/" + fd + ".png"; filled += 1
+                break
+    print("icons backfilled from client+listfile:", filled)
+    json.dump(out, open("codex/spellbook.json", "w"), ensure_ascii=False, separators=(",", ":"))
+except FileNotFoundError as e:
+    print("icon backfill skipped:", e)
+
 # --- counts for the cross-page banner strip ------------------------------
 try:
     sets = json.load(open("codex/sets.json"))["sets"]
