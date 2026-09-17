@@ -91,7 +91,15 @@
   <div class="fp-steps">
     <div class="fp-step"><b>1</b><p>Everyone installs the same zip. Same three steps, one minute per person.</p></div>
     <div class="fp-step"><b>2</b><p>Play the beta like you normally would. The addon quietly notes learn levels, trainer offers and your levelling pace while you do.</p></div>
-    <div class="fp-step"><b>3</b><p>Once a week, or when the Discord asks, type <code>/probe export</code>, copy the text, and paste it in the guild <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>. Ten seconds, done.</p></div>
+    <div class="fp-step"><b>3</b><p>Pick a lane: fully automatic with the <a href="/addon/companion/ForeverProbe-Sync.ps1" download>Sync companion</a> below, or manual, typing <code>/probe export</code> and pasting in the guild <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a> when asked.</p></div>
+  </div>
+  <div class="fp-card" style="margin-top:.7rem">
+    <h3>Fully automatic: the Sync companion (Windows)</h3>
+    <ul>
+      <li>A single readable PowerShell script, not an installer: it watches your ForeverProbe SavedVariables file and posts it to the guild's private Discord webhook whenever the game writes it. <a href="/addon/companion/ForeverProbe-Sync.ps1" download>Download ForeverProbe-Sync.ps1</a>.</li>
+      <li>Set up once: open PowerShell in your download folder, run <code>.\ForeverProbe-Sync.ps1 -Install</code>, paste the webhook from the guild Discord. After that, zero clicks forever; it checks every 30 minutes in the background.</li>
+      <li>The addon still never touches the network; the game cannot and does not send anything. The companion runs outside WoW, reads one file, and you can read its every line. Remove it any time with <code>-Uninstall</code>.</li>
+    </ul>
   </div>
   <div class="fp-cols">
     <div class="fp-card">
