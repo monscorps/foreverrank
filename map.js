@@ -11,7 +11,8 @@
   var CONT = { ek: { name: "Eastern Kingdoms" }, kal: { name: "Kalimdor" } };
   var BGS = ["2597", "3277", "3358"];
   var NEWZ = ["16593", "16591", "16606", "16651"];
-  var css = ".atlas-btn{position:fixed;right:18px;bottom:18px;z-index:900;display:flex;align-items:center;gap:.45rem;font:700 .78rem/1 var(--heading,inherit);letter-spacing:.1em;text-transform:uppercase;color:#e5cc80;background:rgba(13,22,38,.94);border:1px solid rgba(229,204,128,.65);border-radius:2px;padding:.7rem .95rem;cursor:pointer;box-shadow:0 2px 14px rgba(0,0,0,.5)}" +
+  var css = ".atlas-btn{position:fixed;right:16px;top:74px;z-index:900;display:flex;flex-direction:column;align-items:center;gap:.25rem;width:52px;height:52px;justify-content:center;color:#e5cc80;background:rgba(13,22,38,.95);border:1px solid rgba(229,204,128,.7);border-radius:2px;cursor:pointer;box-shadow:0 2px 14px rgba(0,0,0,.55)}" +
+    ".atlas-btn span{font:700 .5rem/1 var(--heading,inherit);letter-spacing:.12em;text-transform:uppercase}" +
     ".atlas-btn:hover{border-color:#e5cc80}" +
     ".atlas{position:fixed;inset:0;z-index:950;background:rgba(5,9,18,.99);overflow:auto;padding:1.1rem;-webkit-overflow-scrolling:touch}" +
     ".atlas[hidden]{display:none}" +
@@ -23,7 +24,13 @@
     ".atlas-hint{margin-left:auto;color:#5c657a;font-size:.68rem}" +
     ".atlas-x{color:#8b93a7;background:none;border:1px solid rgba(139,147,167,.4);border-radius:2px;padding:.35rem .7rem;cursor:pointer;font-size:1rem}" +
     ".atlas-x:hover{color:#e5cc80;border-color:#e5cc80}" +
-    ".atlas-world{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;max-width:1100px;margin:0 auto}" +
+    ".atlas-az{position:relative;height:calc(100vh - 250px);min-height:380px;aspect-ratio:1.5;margin:0 auto;background:radial-gradient(ellipse at 50% 45%, rgba(16,28,50,.8), rgba(5,9,18,.2) 75%);border:1px solid rgba(139,147,167,.18);border-radius:2px}" +
+".az-cont{position:absolute;background:none;border:0;padding:0;cursor:pointer}" +
+".az-cont img{position:absolute;opacity:.62;filter:saturate(.8);transition:opacity .15s,filter .15s}" +
+".az-cont:hover img{opacity:1;filter:none}" +
+".az-cont b{position:absolute;left:50%;bottom:-1.6rem;transform:translateX(-50%);font:700 .8rem/1 var(--heading,inherit);letter-spacing:.12em;text-transform:uppercase;color:#8b93a7;transition:color .15s;white-space:nowrap}" +
+".az-cont:hover b{color:#e5cc80;text-shadow:0 0 14px rgba(229,204,128,.4)}" +
+".atlas-world{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;max-width:1100px;margin:0 auto}" +
     ".atlas-cont{position:relative;cursor:pointer;border:1px solid rgba(139,147,167,.3);border-radius:2px;overflow:hidden;background:#0d1626;padding:0;min-height:230px}" +
     ".atlas-cont:hover{border-color:#e5cc80}" +
     ".atlas-cont .mosaic{display:grid;grid-template-columns:1fr 1fr;height:230px;filter:saturate(.85) brightness(.8)}" +
@@ -54,7 +61,7 @@
     ".atlas-meta{max-width:1002px;margin:.6rem auto 0;color:#8b93a7;font-size:.8rem}";
   var st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
   var btn = document.createElement("button"); btn.type = "button"; btn.className = "atlas-btn";
-  btn.innerHTML = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M1 3.5 5.5 2l5 1.5L15 2v10.5L10.5 14l-5-1.5L1 14zM5.5 2v10.5M10.5 3.5V14"/></svg><span>Atlas</span>';
+  btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M1 3.5 5.5 2l5 1.5L15 2v10.5L10.5 14l-5-1.5L1 14zM5.5 2v10.5M10.5 3.5V14"/></svg><span>Map</span>';
   btn.setAttribute("aria-label", "Open the zone atlas");
   document.body.appendChild(btn);
   var ov = document.createElement("div"); ov.className = "atlas"; ov.hidden = true; document.body.appendChild(ov);
@@ -93,11 +100,19 @@
       }).join("");
       ov.innerHTML = crumb() + '<div class="atlas-geo" style="aspect-ratio:' + GEO.aspect[view.cont] + '">' + tiles2 + "</div>";
     } else {
-      function mosaic(ids) { return '<span class="mosaic">' + ids.map(function (id) { return '<img loading="lazy" src="/map/img/' + id + '.jpg" alt="">'; }).join("") + "</span>"; }
+      // Azeroth: both continents in the ocean at their UiMapAssignment positions
+      function contInner(key) {
+        return (GEO.zones[key] || []).map(function (g) {
+          var z = byId[g.a];
+          if (!z || g.w < 5) return "";
+          return '<img loading="lazy" src="/map/img/' + z.id + '.jpg" alt="" style="left:' + g.u + '%;top:' + g.v + '%;width:' + g.w + '%;height:' + g.h + '%">';
+        }).join("");
+      }
       ov.innerHTML = crumb() +
-        '<div class="atlas-world">' +
-        '<button type="button" class="atlas-cont" data-cont="ek">' + mosaic(["85", "12", "33", "139"]) + "<b>Eastern Kingdoms</b></button>" +
-        '<button type="button" class="atlas-cont" data-cont="kal">' + mosaic(["141", "17", "440", "616"]) + "<b>Kalimdor</b></button></div>" +
+        '<div class="atlas-az">' +
+        '<button type="button" class="az-cont" data-cont="kal" style="left:3.99%;top:8.55%;width:36.84%;height:83.79%">' + contInner("kal") + "<b>Kalimdor</b></button>" +
+        '<button type="button" class="az-cont" data-cont="ek" style="left:55.05%;top:9.94%;width:34.61%;height:76.97%">' + contInner("ek") + "<b>Eastern Kingdoms</b></button>" +
+        "</div>" +
         '<div class="atlas-row"><h4>New in Forever</h4><div class="atlas-tiles">' + NEWZ.map(function (id) { return tile(byId[id]); }).join("") + "</div></div>" +
         '<div class="atlas-row"><h4>Battlegrounds</h4><div class="atlas-tiles">' + BGS.map(function (id) { return tile(byId[id]); }).join("") + "</div></div>";
     }
