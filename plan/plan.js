@@ -1302,7 +1302,7 @@
         var flag = cs && CMP_LABEL[cs] ? '<i class="cmpf cmp-' + cs + '">' + CMP_LABEL[cs] + "</i>" : cs === "removed" ? '<i class="cmpf cmp-removed">CL</i>' : "";
         return '<div class="sbs' + (cs ? " cmp-" + cs : "") + (co ? " gone" : "") + '" data-tipcls="sbtip" data-tip="' + attrEnc("<b>" + esc(sp2[0]) + "</b>" + body) +
           '" data-cmp="' + (co ? "co:" : "s:") + encodeURIComponent(sp2[0]) + '">' +
-          '<span class="sbs-ic">' + iconFB(spellIcon(sp2[0], fb), fb) + flag + "</span>" +
+          '<span class="sbs-ic">' + iconFB(sp2[3] || spellIcon(sp2[0], fb), fb) + flag + "</span>" +
           '<span class="sbs-t"><b>' + esc(sp2[0]) + "</b>" + (sp2[1] ? "<em>" + esc(sp2[1]) + "</em>" : "") + "</span></div>";
       }
       function bookTabs() {
