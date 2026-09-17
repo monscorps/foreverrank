@@ -152,15 +152,28 @@ if ($Install) {
   $action = "powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$self`""
   schtasks /Create /TN "$TaskName" /TR $action /SC MINUTE /MO 30 /F | Out-Null
   # A clickable face: Start Menu and Desktop shortcuts that open the status box.
+  # The shell's own folder answers are used, so OneDrive-redirected Desktops work.
   $ws = New-Object -ComObject WScript.Shell
-  foreach ($dest in @((Join-Path ([Environment]::GetFolderPath("Programs")) "ForeverProbe Sync.lnk"),
-                      (Join-Path ([Environment]::GetFolderPath("Desktop")) "ForeverProbe Sync.lnk"))) {
-    $lnk = $ws.CreateShortcut($dest)
-    $lnk.TargetPath = "powershell.exe"
-    $lnk.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$self`" -Status"
-    if (Test-Path $ico) { $lnk.IconLocation = "$ico,0" }
-    $lnk.Description = "ForeverProbe Sync: click for status and a manual sync"
-    $lnk.Save()
+  $spots = @()
+  try { $spots += [string]$ws.SpecialFolders.Item("Programs") } catch { }
+  try { $spots += [string]$ws.SpecialFolders.Item("Desktop") } catch { }
+  $od = Join-Path $env:USERPROFILE "OneDrive\Desktop"
+  if ((Test-Path $od) -and ($spots -notcontains $od)) { $spots += $od }
+  foreach ($dir in $spots) {
+    if (-not $dir -or -not (Test-Path $dir)) { continue }
+    $dest = Join-Path $dir "ForeverProbe Sync.lnk"
+    try {
+      $lnk = $ws.CreateShortcut($dest)
+      $lnk.TargetPath = "powershell.exe"
+      $lnk.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$self`" -Status"
+      $lnk.WorkingDirectory = $AppDir
+      if (Test-Path $ico) { $lnk.IconLocation = "$ico,0" }
+      $lnk.Description = "ForeverProbe Sync: click for status and a manual sync"
+      $lnk.Save()
+      Write-Host ("  Icon created: " + $dest) -ForegroundColor Green
+    } catch {
+      Write-Host ("  Could not create icon at " + $dest + " :: " + $_.Exception.Message) -ForegroundColor Red
+    }
   }
   Log "installed"
   Write-Host ""
