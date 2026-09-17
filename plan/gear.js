@@ -69,6 +69,11 @@
         pieces.forEach(function (p) { L.push('<span class="it-sp' + (worn[p] ? " on" : "") + '">' + esc(p) + "</span>"); });
         (it.setBonuses || []).forEach(function (b) { L.push('<span class="it-sb' + (have >= b[0] ? " on" : "") + '">(' + esc(b[0]) + ") Set: " + esc(b[1]) + "</span>"); });
       }
+      var GEARCATS = { weapon: 1, armor: 1, accessory: 1, offhand: 1 };
+      if (GEARCATS[it.cat] && !it.damage && (!it.effects || !it.effects.length) && !Object.keys(s).length &&
+          { uncommon: 1, rare: 1, epic: 1, legendary: 1 }[it.quality]) {
+        L.push('<span class="it-src">Not itemized yet: the piece exists in the client, its stat values do not. They land in a later build.</span>');
+      }
       if (it.reqLevel) L.push('<span class="it-l">Requires Level ' + esc(it.reqLevel) + "</span>");
       if (it.itemLevel) L.push('<span class="it-y">Item Level ' + esc(it.itemLevel) + "</span>");
       if (it.source) L.push('<span class="it-src">' + esc(it.source) + "</span>");
