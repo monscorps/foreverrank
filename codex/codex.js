@@ -390,10 +390,11 @@
     // Unseen spells
     var un = d.unseen;
     function sprows(list, withIcon) {
-      return '<div class="spellrows">' + list.map(function (r) {
-        return '<div class="sprow" data-name="' + esc(r[1]) + '">' + img(withIcon ? (r[3] || "inv_misc_questionmark") : "inv_misc_questionmark") +
-          '<b style="color:' + (CLASS_COLOUR[r[0]] || "#fff") + '">' + esc(r[1]) + '</b><span class="cls">' + esc(r[0]) +
-          '</span><span class="why">' + esc(r[2]) + "</span></div>";
+      return '<div class="soulgrid">' + list.map(function (r) {
+        return '<div class="soulc hasspell" data-name="' + esc(r[1]) + '" style="--cc:' + (CLASS_COLOUR[r[0]] || "#8b93a7") + '">' +
+          '<span class="soulring"><img class="soulico" src="' + CDN + esc(withIcon ? (r[3] || "inv_misc_questionmark") : "inv_misc_questionmark") + '.jpg" alt="" loading="lazy"></span>' +
+          '<span class="soulhead"><b>' + esc(r[1]) + "</b><i>" + esc(r[0]) + "</i></span>" +
+          "<p>" + esc(r[2]) + "</p></div>";
       }).join("") + "</div>";
     }
     var SOUL_CC = { WARRIOR: "#C79C6E", PALADIN: "#F58CBA", HUNTER: "#ABD473", ROGUE: "#FFF569", PRIEST: "#FFFFFF", SHAMAN: "#0070DE", MAGE: "#69CCF0", WARLOCK: "#9482C9", DRUID: "#FF7D0A" };
@@ -430,14 +431,22 @@
 
     // Class changes
     var cc = d.classChanges;
-    var ccHtml = Object.keys(cc).map(function (k) {
-      return "<details><summary style=\"color:" + (CLASS_COLOUR[k] || "#fff") + '">' +
-        '<img class="clsico" src="https://wow.zamimg.com/images/wow/icons/large/classicon_' + k.toLowerCase() + '.jpg" alt="">' +
-        esc(k) + " <i>" + cc[k].length + " changes seen</i></summary>" +
-        cc[k].map(function (a) {
-          return '<div class="abil">' + img(a[2] || "inv_misc_questionmark") + "<div><b>" + esc(a[0]) + "</b><p>" + esc(a[1]) + "</p></div></div>";
-        }).join("") + "</details>";
-    }).join("");
+    var ccKeys = Object.keys(cc);
+    var ccTotal = ccKeys.reduce(function (n, k) { return n + cc[k].length; }, 0);
+    var ccHtml = '<div class="soulchips">' +
+      '<button type="button" class="soulchip on" data-ccf="">All ' + ccTotal + "</button>" +
+      ccKeys.map(function (k) {
+        return '<button type="button" class="soulchip" data-ccf="' + esc(k) + '" style="--cc:' + (CLASS_COLOUR[k] || "#8b93a7") + '">' +
+          '<img class="soulico" src="' + CDN + 'classicon_' + k.toLowerCase() + '.jpg" alt="" loading="lazy">' + esc(k) + " " + cc[k].length + "</button>";
+      }).join("") + "</div>" +
+      '<div class="soulgrid" id="ccgrid">' + ccKeys.map(function (k) {
+        return cc[k].map(function (a) {
+          return '<div class="soulc hasspell" data-ck="' + esc(k) + '" data-name="' + esc(a[0]) + '" style="--cc:' + (CLASS_COLOUR[k] || "#8b93a7") + '">' +
+            '<span class="soulring"><img class="soulico" src="' + CDN + esc(a[2] || "inv_misc_questionmark") + '.jpg" alt="" loading="lazy"></span>' +
+            '<span class="soulhead"><b>' + esc(a[0]) + "</b><i>" + esc(k) + "</i></span>" +
+            "<p>" + esc(a[1]) + "</p></div>";
+        }).join("");
+      }).join("") + "</div>";
     if (PAGE === "classes") section("classes", "Class changes, as seen in the demo", ccHtml);
     if (PAGE === "rankings") section("ranks", "Spec rankings, estimated", '<div id="ranks-body"><p class="board-sub">Loading the estimates\u2026</p></div>');
 
@@ -562,6 +571,17 @@
       document.querySelectorAll(".soulgrid").forEach(function (gr) { gr.classList.toggle("onecls", !!f && f !== "_"); });
       document.querySelectorAll(".soulgrid .soulc").forEach(function (card) {
         card.hidden = !!f && card.getAttribute("data-sk") !== f;
+      });
+    });
+    document.addEventListener("click", function (e) {
+      var b = e.target.closest && e.target.closest("[data-ccf]");
+      if (!b) return;
+      var f = b.getAttribute("data-ccf");
+      var grid = document.getElementById("ccgrid");
+      if (!grid) return;
+      b.parentNode.querySelectorAll(".soulchip").forEach(function (x) { x.classList.toggle("on", x === b); });
+      grid.querySelectorAll(".soulc").forEach(function (card) {
+        card.hidden = !!f && card.getAttribute("data-ck") !== f;
       });
     });
     if (document.getElementById("legacy-win")) drawLegacy();
