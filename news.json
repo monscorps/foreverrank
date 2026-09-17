@@ -2,6 +2,13 @@
  "note": "The Forever wire. Append new entries at the top: {d: ISO date, t: headline, s: source}. The site renders this file as-is.",
  "items": [
   {
+   "d": "2026-09-17",
+   "t": "Every dungeon set rebuilt: five bonuses, role-split Tier 1, and 278 SoD copies left in the data",
+   "s": "FOREVERRANK",
+   "l": "/news/set-rework/",
+   "img": "https://wow.zamimg.com/images/wow/icons/large/inv_chest_chain_12.jpg"
+  },
+  {
    "d": "2026-09-16",
    "t": "WoW: Forever Will Have Addon Changes from Midnight",
    "s": "Wowhead",

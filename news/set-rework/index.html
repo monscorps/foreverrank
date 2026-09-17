@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Every Dungeon Set Rebuilt</title>
+<meta name="description" content="Client data confirms the item set rework: five bonuses on dungeon sets, role-split Tier 1 raid sets, and 278 Season of Discovery leftovers riding along.">
+<link rel="icon" href="../../mark.svg" type="image/svg+xml">
+<link rel="canonical" href="https://foreverrank.com/news/set-rework/">
+<meta name="theme-color" content="#1C2325">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../forever.css?v=19">
+<style>
+.story { max-width: 46rem; }
+.story h2 { font-family: var(--display-serif); color: var(--gold); font-size: 1.5rem; margin: 2rem 0 .6rem; }
+.story p { font-size: .92rem; line-height: 1.65; color: var(--surface-text); }
+.story .kicker { font: 600 .68rem/1 var(--heading); letter-spacing: .14em; text-transform: uppercase; color: var(--subtle); margin-bottom: .4rem; }
+.setcard { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--r-panel); padding: .9rem 1.1rem; margin: 1rem 0; }
+.setcard h3 { margin: 0 0 .5rem; font: 600 1rem var(--heading); color: #a335ee; }
+.setcard .bonus { display: grid; grid-template-columns: 2rem 1fr; gap: .5rem; padding: .3rem 0; font-size: .82rem; line-height: 1.5; border-top: 1px solid var(--surface-border); }
+.setcard .bonus:first-of-type { border-top: 0; }
+.setcard .bonus b { color: var(--gold); font-family: var(--heading); }
+.era { font: 600 .58rem/1 var(--heading); letter-spacing: .05em; padding: .12rem .35rem; border-radius: 3px; white-space: nowrap; margin-left: .3rem; vertical-align: 1px; display: inline-block; }
+.era-forever { background: rgba(229,204,128,.15); color: #e5cc80; }
+.era-sod { background: rgba(255,140,60,.15); color: #ff9d5c; }
+.era-classic { background: rgba(140,150,170,.12); color: #9aa3b8; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .6rem; margin: 1.2rem 0; }
+.fact { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--r-panel); padding: .7rem .8rem; text-align: center; }
+.fact b { display: block; font: 700 1.5rem var(--heading); color: var(--gold); }
+.fact span { font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--subtle); }
+.story .note { font-size: .74rem; color: var(--subtle); border-left: 3px solid var(--card-border); padding: .4rem .8rem; margin: 1.2rem 0; }
+.story a { color: var(--gold); }
+</style>
+</head>
+<body>
+<nav class="top">
+  <a class="brand" href="../../"><img src="../../mark.svg" alt="" width="42" height="42"><span class="brand-word">FOREVER<b>RANK</b></span></a>
+  <div class="top-nav">
+    <a class="pill" href="../../">The ladder</a>
+    <a class="pill" href="../../plan/">The Forge</a>
+    <a class="pill" href="../../codex/">Database</a>
+    <span class="phase">News</span>
+    <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  </div>
+</nav>
+<script src="../../nav.js?v=5"></script>
+<main class="wrap story">
+  <p class="kicker">ForeverRank datamine, beta client 1.60.1.69876, September 17 2026</p>
+  <h1 class="display">Every dungeon set <span>rebuilt</span></h1>
+  <p class="board-sub">The client's ItemSet tables confirm the community set-bonus datamine and add a few things the coverage missed: which spells power the new bonuses, which era each one comes from, and a full shadow copy of the old Season of Discovery sets riding along in the data.</p>
+
+  <div class="facts">
+    <div class="fact"><b>254</b><span>live sets</span></div>
+    <div class="fact"><b>18</b><span>role-split Tier 1</span></div>
+    <div class="fact"><b>278</b><span>SoD leftover copies</span></div>
+    <div class="fact"><b>1,462</b><span>set bonuses read</span></div>
+  </div>
+
+  <h2>Dungeon sets: five bonuses, not four</h2>
+  <p>Tier 0 and 0.5 now pay out at 2, 3, 4, 5 and 6 pieces instead of the old 2, 4, 6 and 8. The pattern across all nine classes: a resistance opener, cheap stat bonuses early, a class proc at 4 pieces authored fresh for Forever, a resource engine at 5 pieces lifted straight from Season of Discovery's spell data, and mana regen or a stat block to close.</p>
+  <div class="setcard">
+    <h3>Wildheart Raiment, as the client pays it now</h3>
+    <div class="bonus"><b>(2)</b><span>+8 All Resistances.<i class="era era-classic">Classic spell</i></span></div>
+    <div class="bonus"><b>(3)</b><span>+30 Attack Power, and spell damage and healing up to 18.<i class="era era-classic">Classic spells</i></span></div>
+    <div class="bonus"><b>(4)</b><span>When struck in combat has a 5% chance to increase your movement speed by 10% for 8 sec. Once every 60 sec.<i class="era era-forever">Forever-authored</i></span></div>
+    <div class="bonus"><b>(5)</b><span>Chance on spellcast to restore 200 mana, on melee attack to regenerate 20 energy over 5 sec, and when struck to generate 10 rage.<i class="era era-sod">SoD spell reused</i></span></div>
+    <div class="bonus"><b>(6)</b><span>Restores 8 mana per 5 sec.<i class="era era-classic">Classic spell</i></span></div>
+  </div>
+  <p>The era chips are read from spell IDs. The 4-piece proc is spell 1302708, deep in Forever's own 1.2 million range. The 5-piece engine is spell 450608, a Season of Discovery ID whose internal name still starts with "S03". Blizzard is openly recycling SoD's set-bonus payloads where they fit and writing new ones where they do not.</p>
+
+  <h2>Tier 1 splits by role</h2>
+  <p>The new Hyjal-tier raid sets are role-specific sets, not shared ones. Druids get four: Grovekeeper Raiment for Restoration, Rage for Guardian, Eclipse for Balance, Ferocity for Feral. Warriors, Paladins, Priests and Shamans get one per role; pure damage classes get one. The internal bonus names spell it out, "1.60.0 - Item - Tier 1 - Druid - Guardian 4P Bonus - Expertise", and each set carries four bonuses at 2 through 5 pieces.</p>
+  <p>Nothing in the data suggests bonuses swap with your spec. These read as separate pieces of gear per role, the Burning Crusade way, not the modern dynamic way.</p>
+
+  <h2>The shadow copies</h2>
+  <p>The biggest thing the coverage did not mention: more than half the ItemSet table is duplicates. 278 sets sit entirely in the 199,000 to 239,000 item ID band, the Season of Discovery range, and still carry the old 2, 4, 6, 8 bonus layout. The live rework rides the original classic item IDs instead. Wildheart Raiment appears twice: once with classic IDs and the new five-bonus structure, once as an untouched SoD copy.</p>
+  <p>This matches everything else we have traced in the branch: Forever is built on a codebase that carries SoD's data wholesale, and what matters is what gets re-wired versus what sits inert. On <a href="/codex/?cat=set">the Database</a> the SoD copies hide behind the era toggle, labeled, like every other leftover.</p>
+
+  <h2>Six sets nobody can place</h2>
+  <p>Blessed Plate, Stormcloth Regalia, Teachings of the Furbolgs, Rider of the Plaguelands, Partners in Crime, and Blessing of Kalimdor are new set names with no known source. Rider of the Plaguelands grants mount speed and something called Lash of the Dark Rider at 3 pieces. Partners in Crime pays out at 2 pieces twice, which smells like a duo levelling set. Blessing of Kalimdor grants Kalimdor Speed, whatever that turns out to be.</p>
+
+  <h2>One honest caveat</h2>
+  <p>The reworked dungeon set bonuses are in the client, but the reworked piece items are not in this build's item export. The set definitions point at item IDs that do not resolve yet. The bonuses are real; the gear that wears them is still being itemized, so drop sources and stats remain unknown.</p>
+
+  <p class="note">Method: ItemSet and ItemSetSpell tables from beta client 1.60.1.69876, bonus text resolved through Spell, SpellEffect, SpellAuraOptions and SpellDuration, eras read from spell and item ID bands. Set groupings cross-checked against community coverage of the 1.60.0 set datamine. Browse everything with sources on <a href="/codex/?cat=set">the Database</a>.</p>
+</main>
+<footer>
+  <img src="../../mark.svg" alt="" width="22" height="22">
+  <span>Datamined honestly; labeled or it does not ship.</span>
+  <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  <a href="https://foreverrank.com/">foreverrank.com</a>
+</footer>
+<script src="/map.js?v=6" defer></script>
+</body>
+</html>
