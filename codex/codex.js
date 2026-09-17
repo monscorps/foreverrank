@@ -70,7 +70,7 @@
   var PAGE = window.CODEX_PAGE || "db";
   var CATS = [["all", "All"], ["weapon", "Weapons"], ["armor", "Armor"], ["accessory", "Accessories"], ["offhand", "Off-hands and relics"],
     ["consumable", "Consumables"], ["recipe", "Recipes"], ["pvp", "PvP"], ["misc", "Misc"], ["place", "Places"], ["perk", "Legacy perks"],
-    ["soul", "Souls"], ["spell", "Spells"], ["system", "Systems"]];
+    ["soul", "Souls"], ["spell", "Spells"], ["talent", "Talents"], ["racial", "Racials"], ["set", "Item sets"], ["system", "Systems"]];
   var SUBFIRST = ["Cloth", "Leather", "Mail", "Plate", "Shield", "Neck", "Ring", "Trinket", "Cloak", "Alchemy", "Cooking", "First Aid", "Zone", "Dungeon", "Raid", "Battleground"];
   var QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary"];
   var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "", era: false }, SHOWN = 60;
@@ -86,8 +86,78 @@
     headList(d.souls.list.map(function (s) { return s[0] + ": " + s[1]; }), "souls", "Soul Engraving: 204 shoulder souls", "spell_shadow_soulleech_3");
     d.souls.list.forEach(function (s) {
       IDX.push({ kind: "soul", cat: "soul", sub: "Shoulder soul", name: s[0], icon: "spell_shadow_soulleech_3", q: "unknown",
+        cls: s[2] ? s[2].charAt(0) + s[2].slice(1).toLowerCase() : undefined,
         meta: "Soul Engraving \u00b7 " + (s[2] ? s[2].charAt(0) + s[2].slice(1).toLowerCase() : "class unsorted"), topic: "souls", text: (s[0] + " " + s[1] + " " + (s[2] || "")).toLowerCase() });
     });
+  }
+  var SRC_LABEL = { client: "Beta client", sod: "SoD wiring", classic: "Classic text", basic: "Demo book", classiconly: "Not in Forever" };
+  var SRC_TIP = {
+    client: "Tooltip read from beta client data, build 1.60.1.69876.",
+    sod: "Season of Discovery wiring in the client: class-masked but with no Forever learn level yet. May change before launch.",
+    classic: "Classic placeholder text; the demo tooltip was never captured, so the Forever version is unverified.",
+    basic: "Listed in the level-38 demo spellbook. Universal basics.",
+    classiconly: "A Classic spell the Forever demo book does not list: possibly cut, moved above the demo level, or hidden until discovered."
+  };
+  var VERDICT = { "same": "matches Classic", "changed": "changed from Classic", "new": "new in Forever", "rank": "rank layout differs", "renamed": "renamed from Classic", "moved": "moved from Classic", "unverified": "unverified vs Classic" };
+  var ERA_LABEL = { forever: "Forever-authored", sod: "SoD spell reused", retail: "Retail-era spell", classic: "Classic-era spell" };
+  function buildBook(sb) {
+    (sb.spells || []).forEach(function (p) {
+      IDX.push({ kind: "bookspell", cat: "spell", sub: p.c, name: p.n, icon: p.icon || "inv_misc_questionmark", q: "unknown",
+        cls: p.c, lvlKey: typeof p.lvl === "number" ? p.lvl : undefined, sb: p, side: SRC_LABEL[p.src] || "",
+        meta: [p.c, p.tab, p.lvl ? "Level " + p.lvl : (p.src === "sod" ? "no learn level yet" : ""), p.tag, VERDICT[p.s] || ""].filter(Boolean).join(" \u00b7 "),
+        text: (p.n + " " + p.c + " " + p.tab + " " + (p.d || "")).toLowerCase() });
+    });
+    (sb.talents || []).forEach(function (t) {
+      IDX.push({ kind: "talent", cat: "talent", sub: t.c, name: t.n, icon: t.icon || "inv_misc_questionmark", q: "unknown",
+        cls: t.c, lvlKey: 10 + (t.row - 1) * 5, tl: t, side: "Demo transcription",
+        meta: [t.c, t.tree + " tree", "Tier " + t.row, t.r + (t.r === 1 ? " rank" : " ranks"), VERDICT[t.s] || ""].filter(Boolean).join(" \u00b7 "),
+        text: (t.n + " " + t.c + " " + t.tree + " " + (t.d || "")).toLowerCase() });
+    });
+    (sb.racials || []).forEach(function (r) {
+      IDX.push({ kind: "racial", cat: "racial", sub: r.race, name: r.n, icon: r.icon || "inv_misc_questionmark", q: "unknown",
+        lvlKey: 1, rc: r, side: "Demo transcription",
+        meta: [r.race, r.kind === "active" ? "Active racial" : "Passive racial"].filter(Boolean).join(" \u00b7 "),
+        text: (r.n + " " + r.race + " " + (r.d || "")).toLowerCase() });
+    });
+  }
+  function buildSets(st) {
+    (st.sets || []).forEach(function (p) {
+      IDX.push({ kind: "itemset", cat: "set", sub: p.cat, name: p.n, icon: (p.pieces[0] && p.pieces[0].icon) || "inv_chest_chain_07", q: "unknown",
+        cls: p.cls.length === 1 ? p.cls[0] : undefined, lvlKey: p.reqLevel || undefined, st: p, era: p.era,
+        side: p.era === "sod" ? "SoD-era data" : p.era === "retail" ? "Retail-era data" : p.touched ? "Reworked for Forever" : "Classic data",
+        meta: [p.cat, p.era === "sod" ? "SoD-era duplicate" : "", p.pieces.length + " pieces", p.cls.join("/"), p.reqLevel ? "Level " + p.reqLevel : ""].filter(Boolean).join(" \u00b7 "),
+        text: (p.n + " " + p.cat + " " + p.cls.join(" ") + " " + p.bonuses.map(function (b) { return b.spell + " " + (b.fx || ""); }).join(" ")).toLowerCase() });
+    });
+  }
+  function sbTip(e) {
+    var h = "<b>" + esc(e.name) + "</b>" + '<span class="sbt-m">' + esc(e.meta) + "</span>";
+    if (e.kind === "bookspell") {
+      var p = e.sb;
+      if (p.d) h += "<p>" + esc(p.d) + "</p>";
+      if (p.note) h += '<p class="sbt-note">' + esc(p.note) + "</p>";
+      if (p.cl && p.s && p.s !== "same") h += '<p class="sbt-note">Classic trains it at level ' + p.cl + ".</p>";
+      h += '<p class="sbt-src">' + esc(SRC_TIP[p.src] || "") + "</p>";
+    } else if (e.kind === "talent") {
+      var t = e.tl;
+      if (t.d) h += "<p>" + esc(t.d) + (t.r > 1 ? " (rank 1 of " + t.r + ")" : "") + "</p>";
+      h += '<p class="sbt-note">Tier ' + t.row + ": earliest around level " + e.lvlKey + " by Classic one-point-per-level pacing. An estimate, not Forever data.</p>";
+      h += '<p class="sbt-src">Transcribed from BlizzCon demo footage (talentsforever.com export, CC BY 4.0).</p>';
+    } else if (e.kind === "racial") {
+      if (e.rc.d) h += "<p>" + esc(e.rc.d) + "</p>";
+      h += '<p class="sbt-src">Transcribed from BlizzCon demo footage and reveal panels (talentsforever.com export, CC BY 4.0).</p>';
+    } else if (e.kind === "itemset") {
+      var st = e.st;
+      h += '<ul class="sbt-pieces">' + st.pieces.map(function (pc) {
+        return '<li class="q-' + esc(pc.q) + '">' + esc(pc.n) + (pc.slot ? " \u2013 " + esc(slotName(pc.slot) || pc.slot) : "") + "</li>";
+      }).join("") + "</ul>";
+      st.bonuses.forEach(function (b) {
+        h += '<p class="sbt-bonus"><b>(' + b.p + ")</b> " + esc(b.fx || b.spell) +
+          (b.fx ? "" : ' <i class="sbt-int">internal name, no tooltip text in the client</i>') +
+          ' <i class="sbt-era sbt-era-' + b.era + '">' + ERA_LABEL[b.era] + "</i></p>";
+      });
+      h += '<p class="sbt-src">ItemSet tables from beta client 1.60.1.69876. Era per bonus read from spell ID bands.</p>';
+    }
+    return h;
   }
   function buildIndex(d, items) {
     (items || []).forEach(function (it) {
@@ -122,15 +192,21 @@
       if (SQ.cat !== "all" && e.cat !== SQ.cat) return false;
       if (SQ.sub && e.sub !== SQ.sub) return false;
       if (SQ.qual && e.q !== SQ.qual) return false;
-      if (e.kind === "item" && e.it.era && !SQ.era) return false;
-      if (SQ.lvl || SQ.cls || SQ.prof) {
+      if (((e.kind === "item" && e.it.era) || e.era) && !SQ.era) return false;
+      if (SQ.prof) {
         if (e.kind !== "item") return false;
-        if (SQ.lvl && (!e.it.reqLevel || e.it.reqLevel > +SQ.lvl)) return false;
-        if (SQ.cls && e.it.cls && e.it.cls.indexOf(SQ.cls) === -1) return false;
-        if (SQ.prof) {
-          if (!e.it.sk || e.it.sk[0] !== SQ.prof) return false;
-          if (SQ.sk && e.it.sk[1] > +SQ.sk) return false;
-        }
+        if (!e.it.sk || e.it.sk[0] !== SQ.prof) return false;
+        if (SQ.sk && e.it.sk[1] > +SQ.sk) return false;
+      }
+      if (SQ.lvl) {
+        if (e.kind === "item") { if (!e.it.reqLevel || e.it.reqLevel > +SQ.lvl) return false; }
+        else if (typeof e.lvlKey === "number") { if (e.lvlKey > +SQ.lvl) return false; }
+        else return false;
+      }
+      if (SQ.cls) {
+        if (e.kind === "item") { if (e.it.cls && e.it.cls.indexOf(SQ.cls) === -1) return false; }
+        else if (e.cls) { if (e.cls !== SQ.cls) return false; }
+        else if (e.kind !== "racial") return false;
       }
       for (var i = 0; i < words.length; i++) if (e.text.indexOf(words[i]) === -1) return false;
       return true;
@@ -140,7 +216,7 @@
       if (SQ.lvl) {
         // A level cap is set: gear nearest the cap first, so the filter is
         // visibly doing its job instead of re-showing the same level 1 epics.
-        var al = a.it && a.it.reqLevel || 0, bl = b.it && b.it.reqLevel || 0;
+        var al = (a.it && a.it.reqLevel) || a.lvlKey || 0, bl = (b.it && b.it.reqLevel) || b.lvlKey || 0;
         if (al !== bl) return bl - al;
       }
       var aq = QUAL.indexOf(a.q), bq = QUAL.indexOf(b.q);
@@ -152,7 +228,7 @@
     var box = document.getElementById("dbs");
     if (!box) return;
     var active = true; // results always show; typing or a chip narrows them
-    function eraOK(e) { return !(e.kind === "item" && e.it.era && !SQ.era); }
+    function eraOK(e) { return !(((e.kind === "item" && e.it.era) || e.era) && !SQ.era); }
     var pool = IDX.filter(function (e) { return eraOK(e) && (SQ.cat === "all" || e.cat === SQ.cat); });
     var subs = [];
     pool.forEach(function (e) { if (SQ.cat !== "all" && subs.indexOf(e.sub) === -1) subs.push(e.sub); });
@@ -177,14 +253,18 @@
     if (!active) return;
     out.innerHTML = res.length ? res.slice(0, SHOWN).map(function (e) {
       var i = IDX.indexOf(e);
-      return '<button type="button" class="dbs-row' + (e.kind === "item" ? " q-" + esc(e.q) : "") + '" data-dbi="' + i + '"' + (e.kind === "item" ? ' data-tipkit="1"' : "") + ">" +
+      var hasSbt = e.kind === "bookspell" || e.kind === "talent" || e.kind === "racial" || e.kind === "itemset";
+      return '<button type="button" class="dbs-row' + (e.kind === "item" ? " q-" + esc(e.q) : "") + '" data-dbi="' + i + '"' + (e.kind === "item" ? ' data-tipkit="1"' : hasSbt ? ' data-sbt="1"' : "") + ">" +
         '<span class="dbs-ic">' + img(e.icon || "inv_misc_questionmark") + "</span>" +
         '<span class="dbs-t"><b>' + esc(e.name) + "</b><em>" + esc(e.meta) + "</em></span>" +
-        '<span class="dbs-s">' + esc(e.kind === "item" ? e.side : ({ place: "The new world", perk: "The Legacy system", spell: "Spells", system: "Systems" }[e.cat] || "")) + "</span></button>";
+        '<span class="dbs-s">' + esc(e.kind === "item" ? e.side : (e.side || { place: "The new world", perk: "The Legacy system", spell: "Spells", system: "Systems" }[e.cat] || "")) + "</span></button>";
     }).join("") + (res.length > SHOWN ? '<button type="button" class="dbs-more" data-dbmore="1">Show all ' + res.length + "</button>" : "")
       : '<p class="dbs-none">Nothing matches yet. Forever has shown only so much; the beta adds the rest.</p>';
     if (window.TipKit && GK) out.querySelectorAll(".dbs-row[data-tipkit]").forEach(function (row) {
       TipKit.hover(row, function (el) { return GK.itemTip(IDX[+el.getAttribute("data-dbi")].it); }, function () { return "itemtip"; });
+    });
+    if (window.TipKit) out.querySelectorAll(".dbs-row[data-sbt]").forEach(function (row) {
+      TipKit.hover(row, function (el) { return sbTip(IDX[+el.getAttribute("data-dbi")]); }, function () { return "itemtip"; });
     });
   }
   function syncUrl() {
@@ -251,6 +331,10 @@
         var en = IDX[+b.getAttribute("data-dbi")];
         if (en.kind === "item") {
           if (window.TipKit && GK && (TipKit.touchy() || e.detail === 0)) TipKit.openSheet(GK.itemTip(en.it), [], { cls: "itemtip", owner: "db:" + en.name });
+          return;
+        }
+        if (en.kind === "bookspell" || en.kind === "talent" || en.kind === "racial" || en.kind === "itemset") {
+          if (window.TipKit && (TipKit.touchy() || e.detail === 0)) TipKit.openSheet(sbTip(en), [], { cls: "itemtip", owner: "db:" + en.name });
           return;
         }
         if (en.topic) { openTopic(en.topic); return; }
@@ -503,6 +587,12 @@
       buildSouls(d);
       buildIndex(d, items);
       initSearch();
+      fetch("/codex/spellbook.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (sb) {
+        if (sb) { buildBook(sb); drawSearch(); }
+      });
+      fetch("/codex/sets.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (st) {
+        if (st) { buildSets(st); drawSearch(); }
+      });
       // Then the full client database replaces the curated seed.
       fetch("/plan/items-db.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (db) {
         if (!db || !Array.isArray(db.items) || !db.items.length) return;
