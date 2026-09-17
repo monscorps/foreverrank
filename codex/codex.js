@@ -115,7 +115,7 @@
       if (SQ.qual && e.q !== SQ.qual) return false;
       if (SQ.lvl || SQ.cls || SQ.prof) {
         if (e.kind !== "item") return false;
-        if (SQ.lvl && (e.it.reqLevel || 0) > +SQ.lvl) return false;
+        if (SQ.lvl && (!e.it.reqLevel || e.it.reqLevel > +SQ.lvl)) return false;
         if (SQ.cls && e.it.cls && e.it.cls.indexOf(SQ.cls) === -1) return false;
         if (SQ.prof) {
           if (!e.it.sk || e.it.sk[0] !== SQ.prof) return false;
@@ -182,7 +182,7 @@
     if (!box) return;
     box.innerHTML = '<div class="dbs-bar"><input type="search" id="dbs-qi" placeholder="Search items, dungeons, perks, spells" autocomplete="off" spellcheck="false" aria-label="Search the Database">' +
       '<span id="dbs-n"></span></div><div class="dbs-cats" id="dbs-cats" role="group" aria-label="Type"></div>' +
-      '<div class="dbs-filt" id="dbs-filt"><input type="number" id="dbf-lvl" min="1" max="60" placeholder="Level" aria-label="Usable at level">' +
+      '<div class="dbs-filt" id="dbs-filt"><input type="number" id="dbf-lvl" min="1" max="60" placeholder="Usable at" aria-label="Usable at level">' +
       '<select id="dbf-cls" aria-label="Class"><option value="">Any class</option>' + CLASSES9.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<select id="dbf-prof" aria-label="Profession"><option value="">Any profession</option>' + PROFS.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<input type="number" id="dbf-sk" min="1" max="300" placeholder="Skill" aria-label="Maximum profession skill">' +
