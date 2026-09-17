@@ -379,3 +379,8 @@ html.ts-open body { padding-bottom: 40vh; }
 }
 
 .top-nav .pill, .top-nav .phase { white-space: nowrap; }
+
+/* Fact cards: the card language for plain statements. */
+.factgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: .55rem; margin: .8rem 0 .4rem; }
+.factc { background: rgba(0,0,0,.28); border: 1px solid var(--card-border); border-left: 3px solid var(--gold); border-radius: 2px; padding: .6rem .75rem; }
+.factc p { margin: 0; font-size: .78rem; line-height: 1.5; color: var(--card-text); }

@@ -6,7 +6,7 @@
 <title>ForeverProbe</title>
 <meta name="description" content="ForeverProbe: the quiet companion addon for foreverrank.com. A pace bar you keep, snapshots you export yourself.">
 <link rel="icon" href="/mark.svg">
-<link rel="stylesheet" href="/forever.css?v=20">
+<link rel="stylesheet" href="/forever.css?v=21">
 <style>
 .fp-wrap { max-width: 860px; margin: 0 auto; padding: 2.2rem 1rem 4rem; }
 .fp-hero { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
@@ -29,6 +29,8 @@
 .fp-card ul { margin: 0; padding-left: 1.1rem; }
 .fp-card li { font-size: .82rem; line-height: 1.55; color: var(--card-text, #c8cede); margin-bottom: .3rem; }
 .fp-bar-demo { margin: 1.6rem 0 0; border: 1px solid rgba(229,204,128,.35); background: #070d18; border-radius: 2px; padding: .45rem .8rem; display: inline-block; font: 600 .78rem/1 var(--heading, inherit); color: #efe9d4; letter-spacing: .04em; }
+.fp-h2 { font-family: var(--display-serif, inherit); color: var(--gold, #e5cc80); font-size: 1.5rem; margin: 2.4rem 0 .2rem; }
+.fp-card a { color: var(--gold, #e5cc80); }
 @media (max-width: 700px) { .fp-steps, .fp-cols { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -79,6 +81,33 @@
         <li>Snapshots your character at login and level-up: spells, gear, zone.</li>
         <li>Notes what class trainers offer when you open one.</li>
         <li>Everything stays on your machine until you press Export and paste the text here. Read-only, no automation, nothing sent on its own. Terms-of-service safe by construction.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 class="fp-h2">Run it as a guild</h2>
+  <p class="fp-sub">The beta is the one window where a guild can map Forever before everyone else plays it. Three habits, nothing else.</p>
+  <div class="fp-steps">
+    <div class="fp-step"><b>1</b><p>Everyone installs the same zip. Same three steps, one minute per person.</p></div>
+    <div class="fp-step"><b>2</b><p>Play the beta like you normally would. The addon quietly notes learn levels, trainer offers and your levelling pace while you do.</p></div>
+    <div class="fp-step"><b>3</b><p>Once a week, or when the Discord asks, type <code>/probe export</code>, copy the text, and paste it in the guild <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>. Ten seconds, done.</p></div>
+  </div>
+  <div class="fp-cols">
+    <div class="fp-card">
+      <h3>What your exports teach the site</h3>
+      <ul>
+        <li>Real learn levels past 38, the demo's ceiling. Every trainer visit confirms rows the datamine can only guess at.</li>
+        <li>Which SoD-wired spells actually train, settling the biggest open question in the Database.</li>
+        <li>The XP curve, level by level, from real pace data instead of the Classic assumption.</li>
+        <li>Soul Engraving the moment anyone finds it live, plus items seen in the wild before they hit any list.</li>
+      </ul>
+    </div>
+    <div class="fp-card">
+      <h3>The deal</h3>
+      <ul>
+        <li>Every confirmed fact lands on the Database labeled as beta-confirmed, and the guild gets the credit line.</li>
+        <li>Nothing is collected without you pressing Export. Skip a week, nothing happens; there is no tracking to opt out of because there is no tracking.</li>
+        <li>More characters and classes covered means fewer question marks for everyone at launch. That is the whole pitch.</li>
       </ul>
     </div>
   </div>

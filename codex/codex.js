@@ -24,8 +24,9 @@
   function topic(key, title, icon, list) { TOPICS[key] = { title: title, icon: icon, list: list || [] }; }
   function headList(list, key, title, icon) {
     topic(key, title, icon, list);
-    return '<ul class="facts heads">' + heads(list, key).map(function (h) { return "<li>" + esc(h) + "</li>"; }).join("") + "</ul>" +
-      '<button type="button" class="cx-more" data-topic="' + esc(key) + '">All details</button>';
+    return '<div class="factgrid">' + list.map(function (f) {
+      return '<div class="factc"><p>' + esc(f) + "</p></div>";
+    }).join("") + "</div>";
   }
   function openTopic(key) {
     var t = TOPICS[key]; if (!t) return;
