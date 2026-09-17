@@ -73,7 +73,7 @@
     ["soul", "Souls"], ["spell", "Spells"], ["system", "Systems"]];
   var SUBFIRST = ["Cloth", "Leather", "Mail", "Plate", "Shield", "Neck", "Ring", "Trinket", "Cloak", "Alchemy", "Cooking", "First Aid", "Zone", "Dungeon", "Raid", "Battleground"];
   var QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary"];
-  var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "" }, SHOWN = 60;
+  var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "", era: false }, SHOWN = 60;
   var CLASSES9 = ["Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Shaman", "Mage", "Warlock", "Druid"];
   var PROFS = ["Alchemy", "Blacksmithing", "Comprehension", "Cooking", "Enchanting", "Engineering", "First Aid", "Fishing", "Herbalism", "Leatherworking", "Mining", "Poisons", "Skinning", "Tailoring"];
   function slotName(sl) {
@@ -91,7 +91,7 @@
   }
   function buildIndex(d, items) {
     (items || []).forEach(function (it) {
-      var meta = [it.sub, slotName(it.slot), it.reqLevel ? "Level " + it.reqLevel : "", it.sk ? it.sk[0] + (it.sk[1] ? " " + it.sk[1] : "") : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+      var meta = [it.era === "sod" ? "SoD-era data" : it.era === "retail" ? "Retail-era data" : "", it.sub, slotName(it.slot), it.reqLevel ? "Level " + it.reqLevel : "", it.sk ? it.sk[0] + (it.sk[1] ? " " + it.sk[1] : "") : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
       IDX.push({ kind: "item", cat: it.cat || "misc", sub: it.sub || "Other", name: it.name, icon: it.icon, q: it.quality || "unknown", it: it, meta: meta.join(" \u00b7 "), side: it.source,
         text: [it.name, it.sub, it.type, slotName(it.slot), it.source, it.setName, (it.effects || []).join(" ")].join(" ").toLowerCase() });
     });
@@ -122,6 +122,7 @@
       if (SQ.cat !== "all" && e.cat !== SQ.cat) return false;
       if (SQ.sub && e.sub !== SQ.sub) return false;
       if (SQ.qual && e.q !== SQ.qual) return false;
+      if (e.kind === "item" && e.it.era && !SQ.era) return false;
       if (SQ.lvl || SQ.cls || SQ.prof) {
         if (e.kind !== "item") return false;
         if (SQ.lvl && (!e.it.reqLevel || e.it.reqLevel > +SQ.lvl)) return false;
@@ -145,7 +146,8 @@
     var box = document.getElementById("dbs");
     if (!box) return;
     var active = true; // results always show; typing or a chip narrows them
-    var pool = IDX.filter(function (e) { return SQ.cat === "all" || e.cat === SQ.cat; });
+    function eraOK(e) { return !(e.kind === "item" && e.it.era && !SQ.era); }
+    var pool = IDX.filter(function (e) { return eraOK(e) && (SQ.cat === "all" || e.cat === SQ.cat); });
     var subs = [];
     pool.forEach(function (e) { if (SQ.cat !== "all" && subs.indexOf(e.sub) === -1) subs.push(e.sub); });
     subs.sort(function (a, b) {
@@ -155,7 +157,7 @@
     });
     var quals = QUAL.filter(function (q) { return pool.some(function (e) { return e.q === q; }); });
     document.getElementById("dbs-cats").innerHTML = CATS.map(function (c) {
-      var n = c[0] === "all" ? IDX.length : IDX.filter(function (e) { return e.cat === c[0]; }).length;
+      var n = IDX.filter(function (e) { return eraOK(e) && (c[0] === "all" || e.cat === c[0]); }).length;
       return n ? '<button type="button" data-dbcat="' + c[0] + '"' + (SQ.cat === c[0] ? ' class="on"' : "") + ">" + esc(c[1]) + "<i>" + n + "</i></button>" : "";
     }).join("");
     var sr = document.getElementById("dbs-subs");
@@ -195,6 +197,7 @@
       '<select id="dbf-cls" aria-label="Class"><option value="">Any class</option>' + CLASSES9.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<select id="dbf-prof" aria-label="Profession"><option value="">Any profession</option>' + PROFS.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<input type="number" id="dbf-sk" min="1" max="300" placeholder="Skill" aria-label="Maximum profession skill">' +
+      '<button type="button" id="dbf-era" aria-pressed="false" data-tip="The branch carries Season of Discovery and retail leftovers. Hidden unless you ask; every such row is labeled.">SoD and retail data: hidden</button>' +
       '<button type="button" id="dbf-x" hidden>Clear</button></div>' +
       '<div class="dbs-subs" id="dbs-subs" hidden></div><div class="dbs-out" id="dbs-out" hidden></div>';
     try {
@@ -211,6 +214,14 @@
     var ftmr = null;
     ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).addEventListener("input", function () { clearTimeout(ftmr); ftmr = setTimeout(readFilt, 200); }); });
     ["dbf-cls", "dbf-prof"].forEach(function (id) { fEl(id).addEventListener("change", readFilt); });
+    fEl("dbf-era").addEventListener("click", function () {
+      SQ.era = !SQ.era;
+      var b = fEl("dbf-era");
+      b.textContent = SQ.era ? "SoD and retail data: shown" : "SoD and retail data: hidden";
+      b.setAttribute("aria-pressed", String(SQ.era));
+      b.classList.toggle("on", SQ.era);
+      SHOWN = 60; drawSearch();
+    });
     fEl("dbf-x").addEventListener("click", function () {
       ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).value = ""; });
       ["dbf-cls", "dbf-prof"].forEach(function (id) { fEl(id).value = ""; });

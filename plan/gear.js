@@ -28,10 +28,12 @@
   var QUALITY = ["poor", "common", "uncommon", "rare", "epic", "legendary"];
 
   window.ForgeGear = function (opts) {
-    var items = (opts.items && Array.isArray(opts.items.items)) ? opts.items.items : [];
+    var allItems = (opts.items && Array.isArray(opts.items.items)) ? opts.items.items : [];
     var byId = {}, ALLSLOTS = [].concat.apply([], Object.keys(ACCEPT).map(function (k) { return ACCEPT[k]; }));
+    allItems.forEach(function (it) { byId[it.id] = it; if (it.alias) byId[it.alias] = it; });
+    // The Forge plans for Forever: rows the client marks as SoD-era or retail-era data stay out of the pickers.
+    var items = allItems.filter(function (it) { return !it.era; });
     var wearable = items.filter(function (it) { return ALLSLOTS.indexOf(it.slot) !== -1; }).length;
-    items.forEach(function (it) { byId[it.id] = it; if (it.alias) byId[it.alias] = it; });
 
     function eq() { return opts.get() || {}; }
     function itemTip(it) {

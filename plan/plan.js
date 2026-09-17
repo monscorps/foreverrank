@@ -1298,7 +1298,7 @@
         var body = (sp2[1] ? '<span class="sbt-r">' + esc(sp2[1]) + "</span>" : "") +
           hdr.map(function (h) { return '<span class="sbt-l"><i>' + esc(h[0]) + "</i><i>" + esc(h[1]) + "</i></span>"; }).join("") +
           (d2 ? '<span class="sbt-d">' + esc(d2) + "</span>" : "") +
-          ((book.src || {})[sp2[0]] === "classic" ? '<span class="sbt-n">Classic placeholder text: the demo tooltip was not captured.</span>' : "");
+          ((book.src || {})[sp2[0]] === "classic" ? '<span class="sbt-n">Classic placeholder text: the demo tooltip was not captured.</span>' : (book.src || {})[sp2[0]] === "sod" ? '<span class="sbt-n">Season of Discovery wiring in the client, no Forever learn level yet. May change before launch.</span>' : "");
         var flag = cs && CMP_LABEL[cs] ? '<i class="cmpf cmp-' + cs + '">' + CMP_LABEL[cs] + "</i>" : cs === "removed" ? '<i class="cmpf cmp-removed">CL</i>' : "";
         return '<div class="sbs' + (cs ? " cmp-" + cs : "") + (co ? " gone" : "") + '" data-tipcls="sbtip" data-tip="' + attrEnc("<b>" + esc(sp2[0]) + "</b>" + body) +
           '" data-cmp="' + (co ? "co:" : "s:") + encodeURIComponent(sp2[0]) + '">' +
