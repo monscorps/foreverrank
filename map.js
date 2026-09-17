@@ -6,20 +6,14 @@
   "use strict";
   var Z = [{"id":"16606","n":"Darkspear Islands","c":"New in Forever","sz":4,"new":1},{"id":"16591","n":"Riverglades","c":"New in Forever","sz":19,"new":1},{"id":"16651","n":"Shen'dralas","c":"New in Forever","sz":6,"new":1},{"id":"16593","n":"Zephras Isle","c":"New in Forever","sz":27,"new":1},{"id":"36","n":"Alterac Mountains","c":"Eastern Kingdoms","sz":21,"new":0},{"id":"45","n":"Arathi Highlands","c":"Eastern Kingdoms","sz":24,"new":0},{"id":"3","n":"Badlands","c":"Eastern Kingdoms","sz":17,"new":0},{"id":"4","n":"Blasted Lands","c":"Eastern Kingdoms","sz":9,"new":0},{"id":"46","n":"Burning Steppes","c":"Eastern Kingdoms","sz":13,"new":0},{"id":"41","n":"Deadwind Pass","c":"Eastern Kingdoms","sz":10,"new":0},{"id":"1","n":"Dun Morogh","c":"Eastern Kingdoms","sz":25,"new":0},{"id":"10","n":"Duskwood","c":"Eastern Kingdoms","sz":20,"new":0},{"id":"139","n":"Eastern Plaguelands","c":"Eastern Kingdoms","sz":34,"new":0},{"id":"12","n":"Elwynn Forest","c":"Eastern Kingdoms","sz":26,"new":0},{"id":"267","n":"Hillsbrad Foothills","c":"Eastern Kingdoms","sz":16,"new":0},{"id":"38","n":"Loch Modan","c":"Eastern Kingdoms","sz":16,"new":0},{"id":"44","n":"Redridge Mountains","c":"Eastern Kingdoms","sz":16,"new":0},{"id":"51","n":"Searing Gorge","c":"Eastern Kingdoms","sz":12,"new":0},{"id":"130","n":"Silverpine Forest","c":"Eastern Kingdoms","sz":24,"new":0},{"id":"33","n":"Stranglethorn Vale","c":"Eastern Kingdoms","sz":45,"new":0},{"id":"8","n":"Swamp of Sorrows","c":"Eastern Kingdoms","sz":15,"new":0},{"id":"47","n":"The Hinterlands","c":"Eastern Kingdoms","sz":22,"new":0},{"id":"85","n":"Tirisfal Glades","c":"Eastern Kingdoms","sz":30,"new":0},{"id":"28","n":"Western Plaguelands","c":"Eastern Kingdoms","sz":17,"new":0},{"id":"40","n":"Westfall","c":"Eastern Kingdoms","sz":19,"new":0},{"id":"11","n":"Wetlands","c":"Eastern Kingdoms","sz":28,"new":0},{"id":"331","n":"Ashenvale","c":"Kalimdor","sz":42,"new":0},{"id":"16","n":"Azshara","c":"Kalimdor","sz":31,"new":0},{"id":"148","n":"Darkshore","c":"Kalimdor","sz":17,"new":0},{"id":"405","n":"Desolace","c":"Kalimdor","sz":21,"new":0},{"id":"14","n":"Durotar","c":"Kalimdor","sz":28,"new":0},{"id":"15","n":"Dustwallow Marsh","c":"Kalimdor","sz":28,"new":0},{"id":"361","n":"Felwood","c":"Kalimdor","sz":18,"new":0},{"id":"357","n":"Feralas","c":"Kalimdor","sz":35,"new":0},{"id":"493","n":"Moonglade","c":"Kalimdor","sz":5,"new":0},{"id":"616","n":"Mount Hyjal","c":"Kalimdor","sz":9,"new":1},{"id":"215","n":"Mulgore","c":"Kalimdor","sz":29,"new":0},{"id":"1377","n":"Silithus","c":"Kalimdor","sz":21,"new":0},{"id":"406","n":"Stonetalon Mountains","c":"Kalimdor","sz":19,"new":0},{"id":"440","n":"Tanaris","c":"Kalimdor","sz":25,"new":0},{"id":"141","n":"Teldrassil","c":"Kalimdor","sz":24,"new":0},{"id":"17","n":"The Barrens","c":"Kalimdor","sz":44,"new":0},{"id":"400","n":"Thousand Needles","c":"Kalimdor","sz":22,"new":0},{"id":"490","n":"Un'Goro Crater","c":"Kalimdor","sz":12,"new":0},{"id":"618","n":"Winterspring","c":"Kalimdor","sz":18,"new":0},{"id":"1657","n":"Darnassus","c":"Cities","sz":5,"new":0},{"id":"1537","n":"Ironforge","c":"Cities","sz":0,"new":0},{"id":"1637","n":"Orgrimmar","c":"Cities","sz":0,"new":0},{"id":"1519","n":"Stormwind City","c":"Cities","sz":2,"new":0},{"id":"1638","n":"Thunder Bluff","c":"Cities","sz":4,"new":0},{"id":"1497","n":"Undercity","c":"Cities","sz":0,"new":0},{"id":"2597","n":"Alterac Valley","c":"Battlegrounds","sz":26,"new":0},{"id":"3358","n":"Arathi Basin","c":"Battlegrounds","sz":7,"new":0},{"id":"3277","n":"Warsong Gulch","c":"Battlegrounds","sz":2,"new":0}];
   var byId = {}; Z.forEach(function (z) { byId[z.id] = z; });
-  // rough geography: 4-column grids, north at the top
-  var EK = [[0, 85, 28, 139], [130, 36, 0, 47], [0, 267, 45, 0], [0, 11, 38, 0], [0, 1, 3, 0],
-            [0, 51, 46, 16591], [40, 12, 44, 0], [0, 10, 41, 8], [0, 33, 0, 4]];
-  var KAL = [[141, 148, 493, 618], [0, 361, 616, 16], [0, 331, 0, 14], [406, 17, 0, 16606],
-             [405, 215, 15, 0], [357, 16651, 400, 0], [0, 490, 440, 0], [0, 1377, 0, 16593]];
-  var CONT = {
-    ek: { name: "Eastern Kingdoms", grid: EK, cities: ["1519", "1537", "1497"] },
-    kal: { name: "Kalimdor", grid: KAL, cities: ["1637", "1638", "1657"] }
-  };
+  // true geography: UiMapAssignment rectangles, normalized to the landmass crop
+  var GEO = {"zones":{"ek":[{"a":"33","u":14.53,"v":77.25,"w":58.56,"h":21.56},{"a":"1","u":18.38,"v":40.29,"w":45.19,"h":16.64},{"a":"16591","u":52.26,"v":53.41,"w":44.51,"h":16.39},{"a":"85","u":7.07,"v":1.19,"w":41.47,"h":15.27},{"a":"28","u":31.07,"v":3.58,"w":39.47,"h":14.53},{"a":"139","u":55.59,"v":1.94,"w":39.47,"h":14.53},{"a":"130","u":3.23,"v":12.2,"w":38.53,"h":14.19},{"a":"11","u":38.47,"v":31.53,"w":37.95,"h":13.97},{"a":"47","u":49.35,"v":13.21,"w":35.34,"h":13.01},{"a":"45","u":42.86,"v":21.32,"w":33.04,"h":12.17},{"a":"40","u":7.2,"v":68.28,"w":32.11,"h":11.82},{"a":"12","u":20.8,"v":60.88,"w":31.85,"h":11.73},{"a":"4","u":46.29,"v":74.2,"w":30.75,"h":11.32},{"a":"267","u":25.1,"v":18.61,"w":29.36,"h":10.81},{"a":"46","u":37.34,"v":56.28,"w":26.87,"h":9.9},{"a":"36","u":27.71,"v":13.05,"w":25.68,"h":9.46},{"a":"38","u":53.2,"v":43.39,"w":25.32,"h":9.32},{"a":"10","u":27.26,"v":69.89,"w":24.77,"h":9.12},{"a":"41","u":42.54,"v":70.65,"w":22.93,"h":8.44},{"a":"3","u":53.97,"v":50.5,"w":22.84,"h":8.41},{"a":"8","u":55.3,"v":69.41,"w":21.06,"h":7.75},{"a":"51","u":37.86,"v":51.56,"w":20.48,"h":7.54},{"a":"44","u":50.32,"v":64.11,"w":19.93,"h":7.34},{"a":"1519","u":19.09,"v":61.17,"w":15.96,"h":5.88},{"a":"1497","u":26.87,"v":11.13,"w":8.82,"h":3.25},{"a":"1537","u":41.44,"v":43.8,"w":7.27,"h":2.68}],"kal":[{"a":"17","u":21.94,"v":45.9,"w":69.77,"h":29.64},{"a":"618","u":42.18,"v":15.54,"w":48.87,"h":20.76},{"a":"357","u":2.53,"v":63.36,"w":47.86,"h":20.33},{"a":"440","u":41.5,"v":78.75,"w":47.5,"h":20.18},{"a":"148","u":19.74,"v":16.42,"w":45.1,"h":19.16},{"a":"215","u":22.93,"v":51.81,"w":42.36,"h":17.99},{"a":"331","u":28.3,"v":32.48,"w":39.7,"h":16.86},{"a":"361","u":28.71,"v":21.69,"w":39.6,"h":16.82},{"a":"14","u":53.51,"v":45.04,"w":36.41,"h":15.46},{"a":"15","u":46.72,"v":61.89,"w":36.15,"h":15.36},{"a":"141","u":13.73,"v":1.08,"w":35.06,"h":14.88},{"a":"16","u":62.55,"v":29.54,"w":34.91,"h":14.83},{"a":"406","u":17.66,"v":40.19,"w":33.62,"h":14.28},{"a":"405","u":10.84,"v":50.99,"w":30.96,"h":13.15},{"a":"400","u":42.97,"v":70.37,"w":30.3,"h":12.87},{"a":"490","u":36.33,"v":79.14,"w":25.46,"h":10.82},{"a":"1377","u":22.52,"v":79.11,"w":23.99,"h":10.19},{"a":"616","u":46.34,"v":25.32,"w":23.92,"h":10.15},{"a":"493","u":49.51,"v":15.72,"w":15.89,"h":6.76},{"a":"16651","u":26.05,"v":61.31,"w":14.11,"h":5.99},{"a":"1637","u":65.34,"v":43.0,"w":9.65,"h":4.1},{"a":"1657","u":19.76,"v":8.06,"w":7.3,"h":3.1},{"a":"1638","u":36.43,"v":56.7,"w":7.2,"h":3.06}]},"aspect":{"ek":0.3682,"kal":0.4248}};
+  var CONT = { ek: { name: "Eastern Kingdoms" }, kal: { name: "Kalimdor" } };
   var BGS = ["2597", "3277", "3358"];
   var NEWZ = ["16593", "16591", "16606", "16651"];
   var css = ".atlas-btn{position:fixed;right:18px;bottom:18px;z-index:900;display:flex;align-items:center;gap:.45rem;font:700 .78rem/1 var(--heading,inherit);letter-spacing:.1em;text-transform:uppercase;color:#e5cc80;background:rgba(13,22,38,.94);border:1px solid rgba(229,204,128,.65);border-radius:2px;padding:.7rem .95rem;cursor:pointer;box-shadow:0 2px 14px rgba(0,0,0,.5)}" +
     ".atlas-btn:hover{border-color:#e5cc80}" +
-    ".atlas{position:fixed;inset:0;z-index:950;background:rgba(5,9,18,.97);overflow:auto;padding:1.1rem;-webkit-overflow-scrolling:touch}" +
+    ".atlas{position:fixed;inset:0;z-index:950;background:rgba(5,9,18,.99);overflow:auto;padding:1.1rem;-webkit-overflow-scrolling:touch}" +
     ".atlas[hidden]{display:none}" +
     ".atlas-head{display:flex;align-items:center;gap:.6rem;max-width:1100px;margin:0 auto .8rem}" +
     ".atlas-crumb{display:flex;align-items:center;gap:.4rem;font:600 .8rem/1 var(--heading,inherit);color:#8b93a7}" +
@@ -44,8 +38,17 @@
     ".atlas-t:hover{border-color:#e5cc80;z-index:2}.atlas-t:hover img{opacity:1;transform:scale(1.06)}" +
     ".atlas-t b{position:absolute;left:0;right:0;bottom:0;padding:.35rem .45rem;font:600 .64rem/1.15 var(--heading,inherit);color:#e8e2d0;background:linear-gradient(transparent,rgba(5,9,18,.94))}" +
     ".atlas-t .nb{position:absolute;top:.3rem;left:.3rem;font:700 .55rem/1 var(--heading,inherit);letter-spacing:.05em;color:#0d1626;background:#e5cc80;border-radius:2px;padding:.18rem .3rem}" +
-    ".atlas-cgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:.45rem;max-width:1100px;margin:0 auto}" +
-    ".atlas-cgrid .blank{border:0;background:none}" +
+    ".atlas-geo{position:relative;height:calc(100vh - 130px);min-height:420px;margin:0 auto;background:radial-gradient(ellipse at 50% 40%, rgba(20,32,54,.65), rgba(5,9,18,0) 70%)}" +
+".atlas-g{position:absolute;cursor:pointer;border:1px solid rgba(139,147,167,.16);border-radius:2px;overflow:hidden;background:#0b1322;padding:0}" +
+".atlas-g img{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;opacity:.8;transition:opacity .12s}" +
+".atlas-g:hover{border-color:#e5cc80;z-index:60!important;box-shadow:0 0 0 1px rgba(229,204,128,.4),0 4px 18px rgba(0,0,0,.55)}" +
+".atlas-g:hover img{opacity:1}" +
+".atlas-g b{position:absolute;left:0;right:0;bottom:0;padding:.25rem .35rem;font:600 .6rem/1.1 var(--heading,inherit);color:#e8e2d0;background:linear-gradient(transparent,rgba(5,9,18,.9));opacity:0;transition:opacity .12s}" +
+".atlas-g:hover b{opacity:1}" +
+".atlas-g .nb{position:absolute;top:.2rem;left:.2rem;font:700 .5rem/1 var(--heading,inherit);color:#0d1626;background:#e5cc80;border-radius:2px;padding:.14rem .24rem}" +
+".atlas-g.city{border:1px solid rgba(229,204,128,.75);background:rgba(229,204,128,.28);border-radius:50%;min-width:11px;min-height:11px}" +
+".atlas-g.city:hover{background:#e5cc80}" +
+".atlas-g.city b{left:110%;right:auto;bottom:-30%;background:rgba(5,9,18,.92);border:1px solid rgba(229,204,128,.4);border-radius:2px;padding:.2rem .35rem;white-space:nowrap;font-size:.58rem}" +
     ".atlas-view{max-width:1100px;margin:0 auto}" +
     ".atlas-view img{display:block;width:100%;max-width:1002px;margin:0 auto;border:1px solid rgba(139,147,167,.3);border-radius:2px}" +
     ".atlas-meta{max-width:1002px;margin:.6rem auto 0;color:#8b93a7;font-size:.8rem}";
@@ -77,16 +80,18 @@
         '<p class="atlas-meta"><b style="color:#e8e2d0">' + esc(z.n) + "</b> · " + esc(z.c) +
         (z.sz ? " · " + z.sz + " named subzones in the client" : "") + ". More lands here as the beta gives it up.</p></div>";
     } else if (view.lvl === "cont") {
-      var c = CONT[view.cont];
-      var cells = c.grid.map(function (row) {
-        return row.map(function (id) {
-          var z = byId[String(id)];
-          return z ? tile(z) : '<span class="blank"></span>';
-        }).join("");
+      var zs = GEO.zones[view.cont] || [];
+      var tiles2 = zs.map(function (g) {
+        var z = byId[g.a];
+        if (!z) return "";
+        var city = {"1519":1,"1537":1,"1497":1,"1637":1,"1638":1,"1657":1}[g.a] === 1;
+        return '<button type="button" class="atlas-g' + (city ? " city" : "") + '" data-z="' + z.id +
+          '" style="left:' + g.u + '%;top:' + g.v + '%;width:' + g.w + '%;height:' + g.h + '%">' +
+          (city ? "" : '<img loading="lazy" src="/map/img/' + z.id + '.jpg" alt="">') +
+          (z["new"] && !city ? '<i class="nb">NEW</i>' : "") +
+          "<b>" + esc(z.n) + "</b></button>";
       }).join("");
-      var cities = c.cities.map(function (id) { return byId[id] ? tile(byId[id]) : ""; }).join("");
-      ov.innerHTML = crumb() + '<div class="atlas-cgrid">' + cells + "</div>" +
-        '<div class="atlas-row"><h4>Cities</h4><div class="atlas-tiles">' + cities + "</div></div>";
+      ov.innerHTML = crumb() + '<div class="atlas-geo" style="aspect-ratio:' + GEO.aspect[view.cont] + '">' + tiles2 + "</div>";
     } else {
       function mosaic(ids) { return '<span class="mosaic">' + ids.map(function (id) { return '<img loading="lazy" src="/map/img/' + id + '.jpg" alt="">'; }).join("") + "</span>"; }
       ov.innerHTML = crumb() +
