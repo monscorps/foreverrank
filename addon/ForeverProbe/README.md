@@ -18,7 +18,11 @@ read-only, nothing automated, nothing sent anywhere on its own.
 
 ## What it does underneath
 
-- Takes a snapshot at login and level-up: level, spells, gear, zone.
+- Takes a snapshot at login and level-up: level, spells, gear, zone,
+  professions and money.
+- Quietly keeps the record future site features will need: PvP kills you
+  land and take (your nemesis list), and one guild roster snapshot per
+  session. Dormant until foreverrank.com grows the pages for them.
 - Notes what class trainers offer when you open one.
 - Everything stays in your SavedVariables until you type `/probe export`
   and paste the text at foreverrank.com yourself.

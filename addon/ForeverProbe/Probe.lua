@@ -101,6 +101,13 @@ function NS.snapshot(reason)
   }
   d.meta.addon = NS.version
   d.meta.lastSnapshot = snap.at
+  if NS.progExtras then
+    local ex = NS.progExtras()
+    snap.money = ex.money
+    snap.skills = ex.skills
+  end
+  local g = safe(GetGuildInfo, "player")
+  if g then snap.guild = g end
   d.snapshots[#d.snapshots + 1] = snap
   while #d.snapshots > 20 do table.remove(d.snapshots, 1) end
   return snap

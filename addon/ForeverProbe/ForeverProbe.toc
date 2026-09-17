@@ -2,7 +2,7 @@
 ## Title: |cffe5cc80Forever|cffffffffProbe|r
 ## Notes: Reads your character for foreverrank.com. Quiet, read-only, one export button. Type /probe
 ## Author: ForeverRank
-## Version: 0.2.1
+## Version: 0.3.0
 ## IconTexture: Interface\AddOns\ForeverProbe\icon
 ## SavedVariables: ForeverProbeDB
 ## X-Website: https://foreverrank.com
@@ -13,4 +13,5 @@ Ledger.lua
 History.lua
 Estimator.lua
 Pace.lua
+Nemesis.lua
 Export.lua

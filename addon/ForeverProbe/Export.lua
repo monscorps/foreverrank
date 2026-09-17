@@ -100,7 +100,7 @@ end
 
 function NS.export()
   local d = NS.db()
-  local blob = "FPROBE1:" .. serialize({ meta = d.meta, snapshots = d.snapshots, trainers = d.trainers })
+  local blob = "FPROBE1:" .. serialize({ meta = d.meta, snapshots = d.snapshots, trainers = d.trainers, nemesis = d.nemesis, guild = d.guild })
   d.meta.lastExport = date("!%Y-%m-%dT%H:%M:%SZ")
   NS.showPanel(true)
   panel.box:SetText(blob)
