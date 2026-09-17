@@ -11,7 +11,9 @@ read-only, nothing automated, nothing sent anywhere on its own.
 
 ## What you get
 
-- A pace bar: level, percent, XP per hour, time to level. Drag it anywhere,
+- A pace bar: level, percent, XP per hour, time to level. The estimate is
+  rested-aware and blends this level with your past levels; hover it for a
+  mobs-to-level range and how confident the number is. Drag it anywhere,
   right-click hides it, `/probe bar` brings it back.
 
 ## What it does underneath

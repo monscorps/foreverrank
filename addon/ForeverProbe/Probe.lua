@@ -17,6 +17,7 @@ NS.events = f
 
 local function db()
   ForeverProbeDB = ForeverProbeDB or { meta = {}, snapshots = {}, trainers = {}, seenItems = {}, pace = {} }
+  ForeverProbeDB.pace = ForeverProbeDB.pace or {}
   return ForeverProbeDB
 end
 NS.db = db
