@@ -85,7 +85,7 @@
     if (!d.souls || !d.souls.list) return;
     headList(d.souls.list.map(function (s) { return s[0] + ": " + s[1]; }), "souls", "Soul Engraving: 204 shoulder souls", "spell_shadow_soulleech_3");
     d.souls.list.forEach(function (s) {
-      IDX.push({ kind: "soul", cat: "soul", sub: "Shoulder soul", name: s[0], icon: "spell_shadow_soulleech_3", q: "unknown",
+      IDX.push({ kind: "soul", cat: "soul", sub: "Shoulder soul", name: s[0], icon: s[2] ? "classicon_" + s[2].toLowerCase() : "spell_shadow_soulleech_3", q: "unknown",
         cls: s[2] ? s[2].charAt(0) + s[2].slice(1).toLowerCase() : undefined,
         meta: "Soul Engraving \u00b7 " + (s[2] ? s[2].charAt(0) + s[2].slice(1).toLowerCase() : "class unsorted"), topic: "souls", text: (s[0] + " " + s[1] + " " + (s[2] || "")).toLowerCase() });
     });
@@ -98,7 +98,7 @@
     basic: "Listed in the level-38 demo spellbook. Universal basics.",
     classiconly: "A Classic spell the Forever demo book does not list: possibly cut, moved above the demo level, or hidden until discovered."
   };
-  var VERDICT = { "same": "matches Classic", "changed": "changed from Classic", "new": "new in Forever", "rank": "rank layout differs", "renamed": "renamed from Classic", "moved": "moved from Classic", "unverified": "unverified vs Classic" };
+  var VERDICT = { "same": "same text as Classic", "changed": "text changed from Classic", "new": "new in Forever", "rank": "rank layout differs", "renamed": "renamed from Classic", "moved": "moved from Classic", "unverified": "tooltip unverified" };
   var ERA_LABEL = { forever: "Forever-authored", sod: "SoD spell reused", retail: "Retail-era spell", classic: "Classic-era spell" };
   function buildBook(sb) {
     (sb.spells || []).forEach(function (p) {
@@ -204,7 +204,10 @@
         else return false;
       }
       if (SQ.cls) {
-        if (e.kind === "item") { if (e.it.cls && e.it.cls.indexOf(SQ.cls) === -1) return false; }
+        if (e.kind === "item") {
+          if (e.it.cls && e.it.cls.indexOf(SQ.cls) === -1) return false;
+          if (GK && GK.canUse && !GK.canUse(SQ.cls, e.it, +SQ.lvl || 60)) return false;
+        }
         else if (e.cls) { if (e.cls !== SQ.cls) return false; }
         else if (e.kind !== "racial") return false;
       }
@@ -277,9 +280,9 @@
   function initSearch() {
     var box = document.getElementById("dbs");
     if (!box) return;
-    box.innerHTML = '<div class="dbs-bar"><input type="search" id="dbs-qi" placeholder="Search items, dungeons, perks, spells" autocomplete="off" spellcheck="false" aria-label="Search the Database">' +
+    box.innerHTML = '<div class="dbs-bar"><input type="search" id="dbs-qi" placeholder="Search items, spells, talents, sets, souls, dungeons" autocomplete="off" spellcheck="false" aria-label="Search the Database">' +
       '<span id="dbs-n"></span></div><div class="dbs-cats" id="dbs-cats" role="group" aria-label="Type"></div>' +
-      '<div class="dbs-filt" id="dbs-filt"><input type="number" id="dbf-lvl" min="1" max="60" placeholder="Max level" aria-label="Max level: show only gear usable at that level">' +
+      '<div class="dbs-filt" id="dbs-filt"><input type="number" id="dbf-lvl" min="1" max="60" placeholder="Max level" aria-label="Max level: show only what is usable at that level">' +
       '<select id="dbf-cls" aria-label="Class"><option value="">Any class</option>' + CLASSES9.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<select id="dbf-prof" aria-label="Profession"><option value="">Any profession</option>' + PROFS.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<input type="number" id="dbf-sk" min="1" max="300" placeholder="Skill" aria-label="Maximum profession skill">' +
@@ -400,14 +403,17 @@
       var sCounts = {};
       sl.forEach(function (s) { var k = s[2] || "_"; sCounts[k] = (sCounts[k] || 0) + 1; });
       var chipKeys = Object.keys(SOUL_CC).filter(function (k) { return sCounts[k]; });
+      function crest(k) { return k && k !== "_" ? '<img class="soulico" src="' + CDN + "classicon_" + k.toLowerCase() + '.jpg" alt="" loading="lazy">' : '<img class="soulico" src="' + CDN + 'spell_shadow_soulleech_3.jpg" alt="" loading="lazy">'; }
+      function fxHtml(t) { return esc(t).replace(/(\d+(?:\.\d+)?%?)/g, "<em>$1</em>"); }
       var chips = '<button type="button" class="soulchip on" data-soulf="">All ' + sl.length + "</button>" +
         chipKeys.map(function (k) {
-          return '<button type="button" class="soulchip" data-soulf="' + k + '" style="--cc:' + SOUL_CC[k] + '">' + soulLabel(k) + " " + sCounts[k] + "</button>";
+          return '<button type="button" class="soulchip" data-soulf="' + k + '" style="--cc:' + SOUL_CC[k] + '">' + crest(k) + soulLabel(k) + " " + sCounts[k] + "</button>";
         }).join("") +
-        (sCounts._ ? '<button type="button" class="soulchip" data-soulf="_">Unsorted ' + sCounts._ + "</button>" : "");
+        (sCounts._ ? '<button type="button" class="soulchip" data-soulf="_">' + crest("_") + "Unsorted " + sCounts._ + "</button>" : "");
       var cards = sl.map(function (s) {
         var k = s[2] || "_";
-        return '<div class="soulc" data-sk="' + k + '" style="--cc:' + (SOUL_CC[s[2]] || "#8b93a7") + '"><b>' + esc(s[0]) + "</b><i>" + soulLabel(s[2]) + "</i><p>" + esc(s[1]) + "</p></div>";
+        return '<div class="soulc" data-sk="' + k + '" style="--cc:' + (SOUL_CC[s[2]] || "#8b93a7") + '">' +
+          '<span class="soulring">' + crest(k) + "</span><span class=\"soulhead\"><b>" + esc(s[0]) + "</b><i>" + soulLabel(s[2]) + "</i></span><p>" + fxHtml(s[1]) + "</p></div>";
       }).join("");
       section("souls", "Soul Engraving",
         '<p class="soul-warn">DATAMINED, HIDDEN IN THE CLIENT. In active development; nothing here is confirmed for launch.</p>' +

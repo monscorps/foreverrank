@@ -145,7 +145,7 @@
     }
     function consumesHTML(ctx) {
       var lv = ctx.level || 60, chosen = cons(), w = wantFor(ctx.cls, ctx.specName);
-      var all = items.filter(function (it) { return it.cat === "consumable" && !((it.reqLevel || 0) > LEVEL); }).map(function (it) { return { it: it, inf: consumeInfo(it) }; });
+      var all = items.filter(function (it) { return it.cat === "consumable" && (!window.FORGE_LVLCAP || !((it.reqLevel || 0) > LEVEL)); }).map(function (it) { return { it: it, inf: consumeInfo(it) }; });
       function usable(x) { return !x.it.reqLevel || x.it.reqLevel <= lv; }
       function chip(x) {
         var on = chosen.indexOf(x.it.id) !== -1, lock = !usable(x);
@@ -172,7 +172,38 @@
         (active.length ? '<div class="cc-need"><h6>What you need</h6><ul>' + need + "</ul></div>" : "") +
         '<p class="g2-note">Elixirs and food count in the stats above; potions show as on use. Effects are read from Forever tooltips; stacking rules are unconfirmed until beta.</p></div>';
     }
-    var LEVEL = 60;
+    var LEVEL = 60, CLS = "";
+  if (typeof window.FORGE_LVLCAP === "undefined") window.FORGE_LVLCAP = false;
+  if (typeof window.FORGE_ANYGEAR === "undefined") window.FORGE_ANYGEAR = false;
+  // Classic proficiencies as the default lens; the picker toggle lifts it.
+  var ARMOR_RANK = { Cloth: 1, Leather: 2, Mail: 3, Plate: 4 };
+  var ARMOR_MAX = { WARRIOR: 4, PALADIN: 4, HUNTER: 3, SHAMAN: 3, DRUID: 2, ROGUE: 2, MAGE: 1, WARLOCK: 1, PRIEST: 1 };
+  var WEAP = {
+    WARRIOR: { t: ["Sword", "Axe", "Mace", "Dagger", "Staff", "Polearm", "Fist Weapon", "Bow", "Gun", "Crossbow", "Thrown", "Shield"], two: true },
+    PALADIN: { t: ["Sword", "Mace", "Polearm", "Shield", "Libram"], two: true },
+    HUNTER: { t: ["Sword", "Axe", "Dagger", "Staff", "Polearm", "Fist Weapon", "Bow", "Gun", "Crossbow", "Thrown"], two: true },
+    ROGUE: { t: ["Sword", "Mace", "Dagger", "Fist Weapon", "Bow", "Gun", "Crossbow", "Thrown"], two: false },
+    PRIEST: { t: ["Mace", "Dagger", "Staff", "Wand"], two: false },
+    SHAMAN: { t: ["Axe", "Mace", "Dagger", "Staff", "Fist Weapon", "Shield", "Totem"], two: true },
+    MAGE: { t: ["Sword", "Dagger", "Staff", "Wand"], two: false },
+    WARLOCK: { t: ["Sword", "Dagger", "Staff", "Wand"], two: false },
+    DRUID: { t: ["Mace", "Dagger", "Staff", "Fist Weapon", "Idol"], two: true }
+  };
+  function canUse(cls, it, lvl) {
+    cls = String(cls || "").toUpperCase();
+    if (!WEAP[cls]) return true;
+    var t = it.type || "";
+    if (!t || t === "Fishing Pole") return true;
+    if (ARMOR_RANK[t]) {
+      var m = ARMOR_MAX[cls] || 4;
+      // Plate wearers hold mail below 40; mail wearers hold leather below 40.
+      if ((lvl || 60) < 40 && (m === 4 || m === 3)) m--;
+      return ARMOR_RANK[t] <= m;
+    }
+    if (WEAP[cls].t.indexOf(t) === -1) return false;
+    if (it.slot === "two-hand" && !WEAP[cls].two && t !== "Staff" && t !== "Polearm") return false;
+    return true;
+  }
     function totals() {
       var t = { __c: {} }, E = eq();
       SLOT_KEYS.forEach(function (k) {
@@ -242,6 +273,7 @@
     }
     function html(ctx) {
       LEVEL = ctx.level || 60;
+      CLS = ctx.cls || "";
       var t = totals(), count = SLOT_KEYS.filter(function (k) { return byId[eq()[k]]; }).length;
       var M = racialMods(ctx.racials), base = ctx.base, lv = ctx.level;
       // Talent effects at the learned rank; conditional ones count when a matching weapon is equipped.
@@ -370,7 +402,13 @@
     function pickerHTML(slotKey, q, qual) {
       var def = [].concat(SLOTS.left, SLOTS.right, SLOTS.bottom).filter(function (s) { return s[0] === slotKey; })[0];
       var acc = ACCEPT[slotKey] || [];
-      var pool = items.filter(function (it) { return acc.indexOf(it.slot) !== -1 && !((it.reqLevel || 0) > LEVEL); });
+      var pool = items.filter(function (it) {
+        if (acc.indexOf(it.slot) === -1) return false;
+        if (window.FORGE_LVLCAP && (it.reqLevel || 0) > LEVEL) return false;
+        if (!window.FORGE_ANYGEAR && CLS && !canUse(CLS, it, LEVEL)) return false;
+        if (it.cls && CLS && it.cls.indexOf(CLS.charAt(0) + CLS.slice(1).toLowerCase()) === -1 && !window.FORGE_ANYGEAR) return false;
+        return true;
+      });
       var CAP = 90;
       var ql = (q || "").toLowerCase();
       var list = pool.filter(function (it) {
@@ -383,14 +421,17 @@
       list = list.slice().sort(function (a, b) {
         return (b.nw || 0) - (a.nw || 0) || QUALITY.indexOf(b.quality) - QUALITY.indexOf(a.quality) || (b.reqLevel || 0) - (a.reqLevel || 0);
       });
-      return '<div class="gpick"><div class="gp-top">' + img(def[2], "gp-slotic") + "<b>" + esc(def[1]) + '</b><span class="gp-n">' + pool.length + " usable at " + LEVEL + "</span>" +
+      return '<div class="gpick"><div class="gp-top">' + img(def[2], "gp-slotic") + "<b>" + esc(def[1]) + '</b><span class="gp-n">' + pool.length + (window.FORGE_ANYGEAR ? " items, any class" : " for your class") + (window.FORGE_LVLCAP ? ", usable at " + LEVEL : ", every level") + "</span>" +
         '<button type="button" class="gp-x" data-gpx="1" aria-label="Close">&times;</button></div>' +
         '<div class="gp-bar"><input type="search" data-gpq="1" placeholder="Search name, effect, source" value="' + esc(q || "") + '">' +
-          '<div class="gp-quals">' + quals.map(function (x) { return '<button type="button" class="gp-q q-' + x + (qual === x ? " on" : "") + '" data-gpqual="' + x + '">' + x + "</button>"; }).join("") + "</div></div>" +
+          '<div class="gp-quals">' + quals.map(function (x) { return '<button type="button" class="gp-q q-' + x + (qual === x ? " on" : "") + '" data-gpqual="' + x + '">' + x + "</button>"; }).join("") +
+          '<button type="button" class="gp-q gp-cap' + (window.FORGE_LVLCAP ? " on" : "") + '" data-gpcap="1" aria-pressed="' + (window.FORGE_LVLCAP ? "true" : "false") + '">Only level ' + LEVEL + "</button>" +
+          '<button type="button" class="gp-q gp-cap' + (window.FORGE_ANYGEAR ? " on" : "") + '" data-gpany="1" aria-pressed="' + (window.FORGE_ANYGEAR ? "true" : "false") + '" data-tip="Classic proficiencies assumed; Forever may differ. Toggle to browse every armor and weapon type.">Any class</button></div></div>' +
         '<div class="gp-list">' + (list.length ? list.slice(0, CAP).map(function (it) {
           var st = it.stats || {}, bits = [];
           Object.keys(st).forEach(function (k) { if (typeof st[k] === "number" && st[k]) bits.push("+" + st[k] + " " + (k === "attackPower" ? "AP" : k === "spellPower" ? "SP" : k.slice(0, 3))); });
-          return '<button type="button" class="gp-row' + (cur === it.id ? " on" : "") + '" data-gpick="' + attr(it.id) + '" data-tipcls="itemtip" data-tip="' + attr(itemTip(it)) + '">' +
+          var lock = (it.reqLevel || 0) > LEVEL;
+          return '<button type="button" class="gp-row' + (cur === it.id ? " on" : "") + (lock ? " lock" : "") + '" data-gpick="' + attr(it.id) + '" data-tipcls="itemtip" data-tip="' + attr(itemTip(it) + (lock ? '<span class="it-src">Needs level ' + esc(it.reqLevel) + ".</span>" : "")) + '">' +
             '<span class="gp-ic q-' + esc(it.quality || "common") + '">' + img(it.icon) + "</span>" +
             '<span class="gp-t"><b class="q-' + esc(it.quality || "common") + '">' + esc(it.name) + "</b><em>" + esc([slotLabel(it.slot), it.type, it.itemLevel ? "ilvl " + it.itemLevel : ""].filter(Boolean).join(" · ")) + "</em></span>" +
             '<span class="gp-s">' + esc(bits.slice(0, 4).join("  ") || ((it.effects || [])[0] || "").slice(0, 48)) + "</span>" +
@@ -412,6 +453,6 @@
       if (E.mainhand && byId[E.mainhand].slot === "two-hand") delete E.offhand;
       return E;
     }
-    return { html: html, pickerHTML: pickerHTML, itemTip: itemTip, consumeInfo: consumeInfo, encode: encode, decode: decode, byId: byId, count: items.length, SLOT_KEYS: SLOT_KEYS };
+    return { html: html, pickerHTML: pickerHTML, itemTip: itemTip, consumeInfo: consumeInfo, encode: encode, decode: decode, byId: byId, count: items.length, SLOT_KEYS: SLOT_KEYS, canUse: canUse };
   };
 })();

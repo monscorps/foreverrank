@@ -618,6 +618,8 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 .gp-row { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto .6rem; align-items: center; gap: .6rem; width: 100%; text-align: left; cursor: pointer;
   padding: .35rem .5rem; border-radius: 8px; background: none; border: 1px solid transparent; color: var(--surface-text); }
 .gp-row:hover, .gp-row.on { background: rgba(229,204,128,.06); border-color: rgba(229,204,128,.35); }
+.gp-row.lock { opacity: .5; }
+.gp-cap { white-space: nowrap; }
 .gp-ic { width: 2.4rem; height: 2.4rem; border-radius: 6px; padding: 2px; background: var(--q); }
 .gp-ic img { width: 100%; height: 100%; border-radius: 4px; display: block; }
 .gp-t { min-width: 0; display: flex; flex-direction: column; }

@@ -628,6 +628,10 @@
     box.querySelectorAll("[data-gpqual]").forEach(function (b) {
       b.addEventListener("click", function () { var v = b.getAttribute("data-gpqual"); openPicker(slot, q, qual === v ? "" : v); });
     });
+    var capb = box.querySelector("[data-gpcap]");
+    if (capb) capb.addEventListener("click", function () { window.FORGE_LVLCAP = !window.FORGE_LVLCAP; hideTip(); openPicker(slot, q, qual); });
+    var anyb = box.querySelector("[data-gpany]");
+    if (anyb) anyb.addEventListener("click", function () { window.FORGE_ANYGEAR = !window.FORGE_ANYGEAR; hideTip(); openPicker(slot, q, qual); });
     var un = box.querySelector("[data-gpclear]");
     if (un) un.addEventListener("click", function () { if (S.eq) delete S.eq[slot]; close(); });
     var x = box.querySelector("[data-gpx]");
@@ -1290,7 +1294,7 @@
         function w(t) { return t.name === "General" ? 0 : /^Pet/.test(t.name) ? 2 : 1; }
         return w(a) - w(b);
       });
-      var PER = 21, cur = { tab: tabs.length > 1 ? 1 : 0, page: 0, q: "", hi: false };
+      var PER = 21, cur = { tab: tabs.length > 1 ? 1 : 0, page: 0, q: "" };
       function lvlOf(nm) {
         var rows2 = (book.hdr || {})[nm] || [];
         for (var i3 = 0; i3 < rows2.length; i3++) {
@@ -1345,7 +1349,7 @@
           list = tb.spells.map(function (s) { return { s: s, icon: tb.icon }; });
           title = tb.name;
         }
-        if (!cur.hi) list = list.filter(function (x) { return lvlOf(x.s[0]) <= cap; });
+        if (window.FORGE_LVLCAP) list = list.filter(function (x) { return lvlOf(x.s[0]) <= cap; });
         list = list.slice().sort(function (a, b) { return a.s[0].localeCompare(b.s[0]); });
         var pages = Math.max(1, Math.ceil(list.length / PER));
         if (cur.page >= pages) cur.page = pages - 1;
@@ -1366,7 +1370,7 @@
           '<button type="button" class="sb-pg" id="bk-prev"' + (cur.page === 0 ? " disabled" : "") + ' aria-label="Previous page">&#9664;</button>' +
           '<button type="button" class="sb-pg" id="bk-next"' + (cur.page >= pages - 1 ? " disabled" : "") + ' aria-label="Next page">&#9654;</button></div></div>' +
           '<div class="sb-under"><span class="sb-cap">Level ' + (book.level || "?") + " " + esc(book.race || "") + " " + esc(CLASS_LABEL[k]) + ", beta client</span>" +
-          '<button type="button" class="sb-cmp' + (cur.hi ? " on" : "") + '" id="bk-lvl" aria-pressed="' + cur.hi + '"><i></i>' + (cur.hi ? "Showing every level" : "Up to level " + cap) + "</button>" +
+          '<button type="button" class="sb-cmp' + (window.FORGE_LVLCAP ? " on" : "") + '" id="bk-lvl" aria-pressed="' + (window.FORGE_LVLCAP ? "true" : "false") + '"><i></i>' + (window.FORGE_LVLCAP ? "Up to level " + cap : "Every level") + "</button>" +
           (CMP && book.cmp ? bookTally() : "") +
           (book.cmp ? '<button type="button" class="sb-cmp' + (CMP ? " on" : "") + '" id="bk-cmp" aria-pressed="' + CMP + '"><i></i>Compare to Classic</button>' : "") +
           "</div></div>";
@@ -1389,7 +1393,7 @@
         var sx = box.querySelector("#sb-x");
         if (sx) sx.addEventListener("click", function () { $("insight").hidden = true; hideTip(); });
         var bkl = box.querySelector("#bk-lvl");
-        if (bkl) bkl.addEventListener("click", function () { cur.hi = !cur.hi; cur.page = 0; hideTip(); draw(); });
+        if (bkl) bkl.addEventListener("click", function () { window.FORGE_LVLCAP = !window.FORGE_LVLCAP; cur.page = 0; hideTip(); draw(); });
         var bkc = box.querySelector("#bk-cmp");
         if (bkc) bkc.addEventListener("click", function () { CMP = !CMP; hideTip(); draw(); render(); });
         var pv = box.querySelector("#bk-prev"), nx = box.querySelector("#bk-next");
