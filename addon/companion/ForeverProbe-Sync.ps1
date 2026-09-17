@@ -1,25 +1,31 @@
 # ForeverProbe Sync: ships your ForeverProbe data to the guild automatically.
 #
 # What it does, in full: finds ForeverProbeDB.lua under your WoW beta's
-# SavedVariables, and when the file changes (WoW writes it at logout and on
+# SavedVariables and, when the file changes (WoW writes it at logout and on
 # /reload), posts it to the guild's private Discord webhook. Nothing else is
 # read, nothing runs inside the game, and you can read every line below.
 #
-# One-time setup (PowerShell):
-#   .\ForeverProbe-Sync.ps1 -Install
-# It asks for the webhook URL (get it from the guild Discord), then registers
-# a background task that checks every 30 minutes.
-# Remove completely with: .\ForeverProbe-Sync.ps1 -Uninstall
+# Install:   double-click Install.bat (or: .\ForeverProbe-Sync.ps1 -Install)
+# Status:    click the ForeverProbe Sync icon (or: -Status)
+# Remove:    double-click Uninstall.bat (or: -Uninstall)
 
 param(
   [switch]$Install,
   [switch]$Uninstall,
+  [switch]$Status,
+  [switch]$SyncNow,
   [string]$WowPath = ""
 )
 
-$AppDir  = Join-Path $env:APPDATA "ForeverProbe"
-$CfgFile = Join-Path $AppDir "config.json"
+$AppDir   = Join-Path $env:APPDATA "ForeverProbe"
+$CfgFile  = Join-Path $AppDir "config.json"
+$LogFile  = Join-Path $AppDir "sync.log"
 $TaskName = "ForeverProbe Sync"
+
+function Log([string]$msg) {
+  $line = (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "  " + $msg
+  Add-Content -Path $LogFile -Value $line -ErrorAction SilentlyContinue
+}
 
 function Find-SavedVariables {
   param([string]$Root)
@@ -54,46 +60,105 @@ function Send-ToWebhook {
   Invoke-RestMethod -Uri $Webhook -Method Post -ContentType "multipart/form-data; boundary=$boundary" -Body $body | Out-Null
 }
 
+function Run-Sync {
+  if (-not (Test-Path $CfgFile)) { return "Not installed." }
+  $cfg = Get-Content $CfgFile -Raw | ConvertFrom-Json
+  $sentHashes = @{}
+  if ($cfg.sent) { $cfg.sent.PSObject.Properties | ForEach-Object { $sentHashes[$_.Name] = $_.Value } }
+  $files = @(Find-SavedVariables -Root $cfg.wowPath)
+  if ($files.Count -eq 0) { Log "no ForeverProbeDB.lua found"; return "No ForeverProbe data found yet. Log a character out once with the addon installed." }
+  $posted = 0; $skipped = 0; $failed = 0
+  foreach ($f in $files) {
+    $hash = (Get-FileHash -Path $f -Algorithm SHA256).Hash
+    if ($sentHashes[$f] -eq $hash) { $skipped++; continue }
+    try {
+      Send-ToWebhook -Webhook $cfg.webhook -File $f
+      $sentHashes[$f] = $hash
+      $posted++
+      Log ("sent " + $f)
+    } catch {
+      $failed++
+      Log ("FAILED " + $f + " :: " + $_.Exception.Message)
+    }
+  }
+  $cfg.sent = $sentHashes
+  $cfg | ConvertTo-Json | Set-Content -Path $CfgFile
+  if ($failed -gt 0) { return "Sent $posted, failed $failed. See sync.log in $AppDir." }
+  if ($posted -gt 0) { return "Sent $posted update(s) to the guild." }
+  return "Everything already sent. Nothing new since your last session."
+}
+
 if ($Uninstall) {
-  schtasks /Delete /TN "$TaskName" /F 2>$null
+  schtasks /Delete /TN "$TaskName" /F 2>$null | Out-Null
+  foreach ($lnk in @((Join-Path ([Environment]::GetFolderPath("Programs")) "ForeverProbe Sync.lnk"),
+                     (Join-Path ([Environment]::GetFolderPath("Desktop")) "ForeverProbe Sync.lnk"))) {
+    if (Test-Path $lnk) { Remove-Item -Force $lnk }
+  }
   if (Test-Path $AppDir) { Remove-Item -Recurse -Force $AppDir }
-  Write-Host "ForeverProbe Sync removed."
+  Write-Host "ForeverProbe Sync removed completely."
   exit
 }
 
 if ($Install) {
   New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
-  $hook = Read-Host "Paste the guild's Discord webhook URL"
-  if (-not $hook.StartsWith("https://discord.com/api/webhooks/")) { Write-Host "That does not look like a Discord webhook URL."; exit 1 }
+  Write-Host ""
+  Write-Host "  ForeverProbe Sync setup" -ForegroundColor Yellow
+  Write-Host "  Your play data ships to the guild automatically after each session."
+  Write-Host ""
+  $hook = Read-Host "  Paste the guild's Discord webhook URL"
+  if (-not $hook.StartsWith("https://discord.com/api/webhooks/")) { Write-Host "  That does not look like a Discord webhook URL."; exit 1 }
   @{ webhook = $hook; wowPath = $WowPath; sent = @{} } | ConvertTo-Json | Set-Content -Path $CfgFile
   $self = Join-Path $AppDir "ForeverProbe-Sync.ps1"
   Copy-Item -Force $MyInvocation.MyCommand.Path $self
+  $srcIco = Join-Path (Split-Path $MyInvocation.MyCommand.Path) "ForeverProbe.ico"
+  $ico = Join-Path $AppDir "ForeverProbe.ico"
+  if (Test-Path $srcIco) { Copy-Item -Force $srcIco $ico }
   $action = "powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$self`""
   schtasks /Create /TN "$TaskName" /TR $action /SC MINUTE /MO 30 /F | Out-Null
-  Write-Host "Installed. Your ForeverProbe data now ships to the guild automatically after each session."
+  # A clickable face: Start Menu and Desktop shortcuts that open the status box.
+  $ws = New-Object -ComObject WScript.Shell
+  foreach ($dest in @((Join-Path ([Environment]::GetFolderPath("Programs")) "ForeverProbe Sync.lnk"),
+                      (Join-Path ([Environment]::GetFolderPath("Desktop")) "ForeverProbe Sync.lnk"))) {
+    $lnk = $ws.CreateShortcut($dest)
+    $lnk.TargetPath = "powershell.exe"
+    $lnk.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$self`" -Status"
+    if (Test-Path $ico) { $lnk.IconLocation = $ico }
+    $lnk.Description = "ForeverProbe Sync: click for status and a manual sync"
+    $lnk.Save()
+  }
+  Log "installed"
+  Write-Host ""
+  Write-Host "  Installed." -ForegroundColor Green
+  Write-Host "  It runs quietly every 30 minutes. Click the ForeverProbe Sync icon"
+  Write-Host "  on your desktop any time to see status or push a sync right now."
   $found = @(Find-SavedVariables -Root $WowPath)
-  if ($found.Count -eq 0) { Write-Host "Note: no ForeverProbeDB.lua found yet. It appears after your first logout with the addon." }
-  else { Write-Host ("Watching: " + ($found -join ", ")) }
+  if ($found.Count -eq 0) { Write-Host "  Note: no ForeverProbe data found yet; it appears after your first logout with the addon." }
+  else { Write-Host ("  Watching: " + ($found -join ", ")) }
+  Write-Host ""
+  Read-Host "  Press Enter to close"
   exit
 }
 
-# ---- sync run (what the scheduled task executes) --------------------------
-if (-not (Test-Path $CfgFile)) { exit }
-$cfg = Get-Content $CfgFile -Raw | ConvertFrom-Json
-$sentHashes = @{}
-if ($cfg.sent) { $cfg.sent.PSObject.Properties | ForEach-Object { $sentHashes[$_.Name] = $_.Value } }
-$changed = $false
-foreach ($f in @(Find-SavedVariables -Root $cfg.wowPath)) {
-  $hash = (Get-FileHash -Path $f -Algorithm SHA256).Hash
-  if ($sentHashes[$f] -ne $hash) {
-    try {
-      Send-ToWebhook -Webhook $cfg.webhook -File $f
-      $sentHashes[$f] = $hash
-      $changed = $true
-    } catch { }
+if ($Status) {
+  Add-Type -AssemblyName System.Windows.Forms | Out-Null
+  if (-not (Test-Path $CfgFile)) {
+    [System.Windows.Forms.MessageBox]::Show("ForeverProbe Sync is not installed. Run Install.bat first.", "ForeverProbe Sync") | Out-Null
+    exit
   }
+  $last = "never"
+  if (Test-Path $LogFile) {
+    $tail = Get-Content $LogFile -Tail 1
+    if ($tail) { $last = $tail }
+  }
+  $files = @(Find-SavedVariables -Root ((Get-Content $CfgFile -Raw | ConvertFrom-Json).wowPath))
+  $msg = "Watching " + $files.Count + " ForeverProbe file(s).`n`nLast activity:`n" + $last + "`n`nSync now?"
+  $r = [System.Windows.Forms.MessageBox]::Show($msg, "ForeverProbe Sync", [System.Windows.Forms.MessageBoxButtons]::YesNo)
+  if ($r -eq [System.Windows.Forms.DialogResult]::Yes) {
+    $result = Run-Sync
+    [System.Windows.Forms.MessageBox]::Show($result, "ForeverProbe Sync") | Out-Null
+  }
+  exit
 }
-if ($changed) {
-  $cfg.sent = $sentHashes
-  $cfg | ConvertTo-Json | Set-Content -Path $CfgFile
-}
+
+# Default (and -SyncNow): one quiet sync pass; this is what the task runs.
+Run-Sync | Out-Null

@@ -5,9 +5,11 @@ read-only, nothing automated, nothing sent anywhere on its own.
 
 ## Install, three steps
 
-1. Download and unzip. You get one folder called `ForeverProbe`.
-2. Drop it into `World of Warcraft/_beta_/Interface/AddOns/`.
+1. Download and unzip. You get this `ForeverProbe` folder, plus an
+   optional `Companion` folder (Windows auto-sync for the guild).
+2. Drop `ForeverProbe` into `World of Warcraft/_beta_/Interface/AddOns/`.
 3. Restart the game. Done. A small pace bar appears at the top of the screen.
+   Guild contributors: see `Companion/README.txt` for the two-click auto-sync.
 
 ## What you get
 

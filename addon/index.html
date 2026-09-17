@@ -61,9 +61,9 @@
   <div class="fp-bar-demo">Lv 23&nbsp;&nbsp;41.7%&nbsp;&nbsp;12.4k XP/h&nbsp;&nbsp;up in 1h 12m</div>
 
   <div class="fp-steps">
-    <div class="fp-step"><b>1</b><p>Download and unzip. You get a single folder named <code>ForeverProbe</code>.</p></div>
-    <div class="fp-step"><b>2</b><p>Drop it into <code>World of Warcraft/_beta_/Interface/AddOns/</code></p></div>
-    <div class="fp-step"><b>3</b><p>Restart the game. The pace bar appears. That is the whole install.</p></div>
+    <div class="fp-step"><b>1</b><p>Download and unzip. You get two folders: <code>ForeverProbe</code>, the addon, and <code>Companion</code>, the optional Windows auto-sync.</p></div>
+    <div class="fp-step"><b>2</b><p>Drop <code>ForeverProbe</code> into <code>World of Warcraft/_beta_/Interface/AddOns/</code> and restart the game. The pace bar appears; that is the whole addon install.</p></div>
+    <div class="fp-step"><b>3</b><p>Feeding the guild too? Double-click <code>Companion\Install.bat</code>, paste the webhook from the guild Discord once, done. A ForeverProbe icon lands on your desktop; clicking it shows sync status and a sync-now button.</p></div>
   </div>
 
   <div class="fp-cols">
@@ -91,14 +91,14 @@
   <div class="fp-steps">
     <div class="fp-step"><b>1</b><p>Everyone installs the same zip. Same three steps, one minute per person.</p></div>
     <div class="fp-step"><b>2</b><p>Play the beta like you normally would. The addon quietly notes learn levels, trainer offers and your levelling pace while you do.</p></div>
-    <div class="fp-step"><b>3</b><p>Pick a lane: fully automatic with the <a href="/addon/companion/ForeverProbe-Sync.ps1" download>Sync companion</a> below, or manual, typing <code>/probe export</code> and pasting in the guild <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a> when asked.</p></div>
+    <div class="fp-step"><b>3</b><p>Pick a lane: fully automatic with the Sync companion already in the zip (details below), or manual, typing <code>/probe export</code> and pasting in the guild <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a> when asked.</p></div>
   </div>
   <div class="fp-card" style="margin-top:.7rem">
-    <h3>Fully automatic: the Sync companion (Windows)</h3>
+    <h3>The Sync companion, already in your download</h3>
     <ul>
-      <li>A single readable PowerShell script, not an installer: it watches your ForeverProbe SavedVariables file and posts it to the guild's private Discord webhook whenever the game writes it. <a href="/addon/companion/ForeverProbe-Sync.ps1" download>Download ForeverProbe-Sync.ps1</a>.</li>
-      <li>Set up once: open PowerShell in your download folder, run <code>.\ForeverProbe-Sync.ps1 -Install</code>, paste the webhook from the guild Discord. After that, zero clicks forever; it checks every 30 minutes in the background.</li>
-      <li>The addon still never touches the network; the game cannot and does not send anything. The companion runs outside WoW, reads one file, and you can read its every line. Remove it any time with <code>-Uninstall</code>.</li>
+      <li>The <code>Companion</code> folder in the zip holds one readable PowerShell script and its installer. It watches your ForeverProbe SavedVariables file and posts it to the guild's private Discord webhook whenever the game writes it, hash-checked so nothing ever sends twice.</li>
+      <li>Double-click <code>Install.bat</code>, paste the webhook once. It runs every 30 minutes in the background, and the desktop icon answers a click with status and a sync-now button. <code>Uninstall.bat</code> removes every trace.</li>
+      <li>The addon still never touches the network; the game cannot and does not send anything. The companion runs outside WoW, reads one file, and every line of it is yours to read.</li>
     </ul>
   </div>
   <div class="fp-cols">
