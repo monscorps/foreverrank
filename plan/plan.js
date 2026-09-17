@@ -1290,7 +1290,15 @@
         function w(t) { return t.name === "General" ? 0 : /^Pet/.test(t.name) ? 2 : 1; }
         return w(a) - w(b);
       });
-      var PER = 21, cur = { tab: tabs.length > 1 ? 1 : 0, page: 0, q: "" };
+      var PER = 21, cur = { tab: tabs.length > 1 ? 1 : 0, page: 0, q: "", hi: false };
+      function lvlOf(nm) {
+        var rows2 = (book.hdr || {})[nm] || [];
+        for (var i3 = 0; i3 < rows2.length; i3++) {
+          var m3 = /^Level (\d+)$/.exec(rows2[i3][0] || "");
+          if (m3) return +m3[1];
+        }
+        return 0;
+      }
       function cell(sp2, fb) {
         var d2 = (book.desc || {})[sp2[0]], co = sp2[2] === "co";
         var cs = CMP ? (co ? "removed" : ((book.cmp || {})[sp2[0]] || {}).s || "") : "";
@@ -1337,6 +1345,7 @@
           list = tb.spells.map(function (s) { return { s: s, icon: tb.icon }; });
           title = tb.name;
         }
+        if (!cur.hi) list = list.filter(function (x) { return lvlOf(x.s[0]) <= cap; });
         list = list.slice().sort(function (a, b) { return a.s[0].localeCompare(b.s[0]); });
         var pages = Math.max(1, Math.ceil(list.length / PER));
         if (cur.page >= pages) cur.page = pages - 1;
@@ -1356,7 +1365,8 @@
           '<div class="sb-foot"><span>Page ' + (cur.page + 1) + "/" + pages + "</span>" +
           '<button type="button" class="sb-pg" id="bk-prev"' + (cur.page === 0 ? " disabled" : "") + ' aria-label="Previous page">&#9664;</button>' +
           '<button type="button" class="sb-pg" id="bk-next"' + (cur.page >= pages - 1 ? " disabled" : "") + ' aria-label="Next page">&#9654;</button></div></div>' +
-          '<div class="sb-under"><span class="sb-cap">Level ' + (book.level || "?") + " " + esc(book.race || "") + " " + esc(CLASS_LABEL[k]) + ", BlizzCon demo</span>" +
+          '<div class="sb-under"><span class="sb-cap">Level ' + (book.level || "?") + " " + esc(book.race || "") + " " + esc(CLASS_LABEL[k]) + ", beta client</span>" +
+          '<button type="button" class="sb-cmp' + (cur.hi ? " on" : "") + '" id="bk-lvl" aria-pressed="' + cur.hi + '"><i></i>' + (cur.hi ? "Showing every level" : "Up to level " + cap) + "</button>" +
           (CMP && book.cmp ? bookTally() : "") +
           (book.cmp ? '<button type="button" class="sb-cmp' + (CMP ? " on" : "") + '" id="bk-cmp" aria-pressed="' + CMP + '"><i></i>Compare to Classic</button>' : "") +
           "</div></div>";
@@ -1378,6 +1388,8 @@
         });
         var sx = box.querySelector("#sb-x");
         if (sx) sx.addEventListener("click", function () { $("insight").hidden = true; hideTip(); });
+        var bkl = box.querySelector("#bk-lvl");
+        if (bkl) bkl.addEventListener("click", function () { cur.hi = !cur.hi; cur.page = 0; hideTip(); draw(); });
         var bkc = box.querySelector("#bk-cmp");
         if (bkc) bkc.addEventListener("click", function () { CMP = !CMP; hideTip(); draw(); render(); });
         var pv = box.querySelector("#bk-prev"), nx = box.querySelector("#bk-next");

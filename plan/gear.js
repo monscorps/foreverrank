@@ -145,7 +145,7 @@
     }
     function consumesHTML(ctx) {
       var lv = ctx.level || 60, chosen = cons(), w = wantFor(ctx.cls, ctx.specName);
-      var all = items.filter(function (it) { return it.cat === "consumable"; }).map(function (it) { return { it: it, inf: consumeInfo(it) }; });
+      var all = items.filter(function (it) { return it.cat === "consumable" && !((it.reqLevel || 0) > LEVEL); }).map(function (it) { return { it: it, inf: consumeInfo(it) }; });
       function usable(x) { return !x.it.reqLevel || x.it.reqLevel <= lv; }
       function chip(x) {
         var on = chosen.indexOf(x.it.id) !== -1, lock = !usable(x);
@@ -370,7 +370,7 @@
     function pickerHTML(slotKey, q, qual) {
       var def = [].concat(SLOTS.left, SLOTS.right, SLOTS.bottom).filter(function (s) { return s[0] === slotKey; })[0];
       var acc = ACCEPT[slotKey] || [];
-      var pool = items.filter(function (it) { return acc.indexOf(it.slot) !== -1; });
+      var pool = items.filter(function (it) { return acc.indexOf(it.slot) !== -1 && !((it.reqLevel || 0) > LEVEL); });
       var CAP = 90;
       var ql = (q || "").toLowerCase();
       var list = pool.filter(function (it) {
@@ -383,7 +383,7 @@
       list = list.slice().sort(function (a, b) {
         return (b.nw || 0) - (a.nw || 0) || QUALITY.indexOf(b.quality) - QUALITY.indexOf(a.quality) || (b.reqLevel || 0) - (a.reqLevel || 0);
       });
-      return '<div class="gpick"><div class="gp-top">' + img(def[2], "gp-slotic") + "<b>" + esc(def[1]) + '</b><span class="gp-n">' + pool.length + " known</span>" +
+      return '<div class="gpick"><div class="gp-top">' + img(def[2], "gp-slotic") + "<b>" + esc(def[1]) + '</b><span class="gp-n">' + pool.length + " usable at " + LEVEL + "</span>" +
         '<button type="button" class="gp-x" data-gpx="1" aria-label="Close">&times;</button></div>' +
         '<div class="gp-bar"><input type="search" data-gpq="1" placeholder="Search name, effect, source" value="' + esc(q || "") + '">' +
           '<div class="gp-quals">' + quals.map(function (x) { return '<button type="button" class="gp-q q-' + x + (qual === x ? " on" : "") + '" data-gpqual="' + x + '">' + x + "</button>"; }).join("") + "</div></div>" +

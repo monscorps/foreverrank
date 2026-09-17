@@ -318,6 +318,7 @@
         return '<div class="soulc" data-sk="' + k + '" style="--cc:' + (SOUL_CC[s[2]] || "#8b93a7") + '"><b>' + esc(s[0]) + "</b><i>" + soulLabel(s[2]) + "</i><p>" + esc(s[1]) + "</p></div>";
       }).join("");
       section("souls", "Soul Engraving",
+        '<p class="soul-warn">DATAMINED, HIDDEN IN THE CLIENT. In active development; nothing here is confirmed for launch.</p>' +
         '<p class="board-sub">' + esc(d.souls.note) + "</p>" +
         '<div class="soulchips">' + chips + '</div><div class="soulgrid">' + cards + "</div>");
     }
