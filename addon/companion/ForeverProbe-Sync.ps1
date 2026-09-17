@@ -43,15 +43,17 @@ function Find-SavedVariables {
 }
 
 function Send-ToWebhook {
-  param([string]$Webhook, [string]$File)
+  param([string]$Webhook, [string]$File, [string]$Mark)
   $boundary = [System.Guid]::NewGuid().ToString()
   $LF = "`r`n"
   $bytes = [System.IO.File]::ReadAllBytes($File)
   $enc = [System.Text.Encoding]::GetEncoding("ISO-8859-1")
   $who = $env:USERNAME
+  $tag = ""
+  if ($Mark) { $tag = "[" + $Mark + "] " }
   $pre = "--$boundary$LF" +
     "Content-Disposition: form-data; name=`"payload_json`"$LF$LF" +
-    ('{"content":"ForeverProbe drop from **' + $who + '**, ' + (Get-Date -Format "yyyy-MM-dd HH:mm") + '"}') + $LF +
+    ('{"content":"' + $tag + 'ForeverProbe drop from **' + $who + '**, ' + (Get-Date -Format "yyyy-MM-dd HH:mm") + '"}') + $LF +
     "--$boundary$LF" +
     "Content-Disposition: form-data; name=`"file`"; filename=`"ForeverProbeDB.lua`"$LF" +
     "Content-Type: application/octet-stream$LF$LF"
@@ -72,7 +74,7 @@ function Run-Sync {
     $hash = (Get-FileHash -Path $f -Algorithm SHA256).Hash
     if ($sentHashes[$f] -eq $hash) { $skipped++; continue }
     try {
-      Send-ToWebhook -Webhook $cfg.webhook -File $f
+      Send-ToWebhook -Webhook $cfg.webhook -File $f -Mark $cfg.mark
       $sentHashes[$f] = $hash
       $posted++
       Log ("sent " + $f)
@@ -99,15 +101,49 @@ if ($Uninstall) {
   exit
 }
 
+function Show-Banner {
+  $sigil = @'
+
+           ..o000o..           ..o000o..
+        o0'         '0o     o0'         '0o
+       0               '0o0'              0
+       0               .o0o.              0
+        o0.         .0o     o0.         .0o
+           ''o000o''           ''o000o''
+
+        F O R E V E R P R O B E   S Y N C
+'@
+  Write-Host $sigil -ForegroundColor Yellow
+  Write-Host "        foreverrank.com  ::  the guild sees what you see" -ForegroundColor DarkGray
+  Write-Host ""
+}
+
 if ($Install) {
   New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
-  Write-Host ""
-  Write-Host "  ForeverProbe Sync setup" -ForegroundColor Yellow
+  Show-Banner
   Write-Host "  Your play data ships to the guild automatically after each session."
   Write-Host ""
-  $hook = Read-Host "  Paste the guild's Discord webhook URL"
+  # The guild key ships in the download; nobody types anything.
+  $here = Split-Path $MyInvocation.MyCommand.Path
+  $hook = ""; $mark = ""
+  $keyFile = Join-Path $here "guild.key"
+  $hookFile = Join-Path $here "webhook.txt"
+  if (Test-Path $keyFile) {
+    try {
+      $raw = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Get-Content $keyFile -Raw).Trim()))
+      $parts = $raw.Split("|")
+      $hook = $parts[0]
+      if ($parts.Count -gt 1) { $mark = $parts[1] }
+      Write-Host "  Guild key found. No typing needed." -ForegroundColor Green
+    } catch { }
+  }
+  if (-not $hook -and (Test-Path $hookFile)) {
+    $hook = (Get-Content $hookFile -Raw).Trim()
+    Write-Host "  Found webhook.txt. No typing needed." -ForegroundColor Green
+  }
+  if (-not $hook) { $hook = Read-Host "  Paste the guild's Discord webhook URL" }
   if (-not $hook.StartsWith("https://discord.com/api/webhooks/")) { Write-Host "  That does not look like a Discord webhook URL."; exit 1 }
-  @{ webhook = $hook; wowPath = $WowPath; sent = @{} } | ConvertTo-Json | Set-Content -Path $CfgFile
+  @{ webhook = $hook; mark = $mark; wowPath = $WowPath; sent = @{} } | ConvertTo-Json | Set-Content -Path $CfgFile
   $self = Join-Path $AppDir "ForeverProbe-Sync.ps1"
   Copy-Item -Force $MyInvocation.MyCommand.Path $self
   $srcIco = Join-Path (Split-Path $MyInvocation.MyCommand.Path) "ForeverProbe.ico"
@@ -122,7 +158,7 @@ if ($Install) {
     $lnk = $ws.CreateShortcut($dest)
     $lnk.TargetPath = "powershell.exe"
     $lnk.Arguments = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$self`" -Status"
-    if (Test-Path $ico) { $lnk.IconLocation = $ico }
+    if (Test-Path $ico) { $lnk.IconLocation = "$ico,0" }
     $lnk.Description = "ForeverProbe Sync: click for status and a manual sync"
     $lnk.Save()
   }

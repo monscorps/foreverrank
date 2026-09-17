@@ -1,2 +1,6 @@
 worker/node_modules/
 probe/ForeverProbe.zip
+# The guild webhook is a credential. It never enters the repo: Discord
+# auto-revokes webhooks that show up in public repositories.
+addon/companion/webhook.txt
+addon/companion/guildmark.txt

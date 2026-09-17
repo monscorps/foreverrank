@@ -7,9 +7,9 @@ this small script runs outside WoW, watches one file, and posts it to
 the guild's private Discord when it changes.
 
 Setup, once:
-  1. Double-click Install.bat
-  2. Paste the guild's Discord webhook URL when asked
-  That's it. It checks every 30 minutes in the background.
+  Double-click Install.bat. That's it. The guild key ships in this
+  folder (guild.key), so there is nothing to type or configure.
+  It checks every 30 minutes in the background.
 
 The ForeverProbe Sync icon on your desktop shows status when clicked,
 and offers a "sync right now" button.
