@@ -61,18 +61,28 @@
   // ---- Database search: Forever items (../plan/items.json) plus this page's places, perks, spells and systems ----
   var CATS = [["all", "All"], ["weapon", "Weapons"], ["armor", "Armor"], ["accessory", "Accessories"], ["offhand", "Off-hands and relics"],
     ["consumable", "Consumables"], ["recipe", "Recipes"], ["pvp", "PvP"], ["misc", "Misc"], ["place", "Places"], ["perk", "Legacy perks"],
-    ["spell", "Spells"], ["system", "Systems"]];
+    ["soul", "Souls"], ["spell", "Spells"], ["system", "Systems"]];
   var SUBFIRST = ["Cloth", "Leather", "Mail", "Plate", "Shield", "Neck", "Ring", "Trinket", "Cloak", "Alchemy", "Cooking", "First Aid", "Zone", "Dungeon", "Raid", "Battleground"];
   var QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary"];
-  var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "" }, SHOWN = 60;
+  var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "" }, SHOWN = 60;
+  var CLASSES9 = ["Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Shaman", "Mage", "Warlock", "Druid"];
+  var PROFS = ["Alchemy", "Blacksmithing", "Comprehension", "Cooking", "Enchanting", "Engineering", "First Aid", "Fishing", "Herbalism", "Leatherworking", "Mining", "Poisons", "Skinning", "Tailoring"];
   function slotName(sl) {
     return { "main-hand": "Main Hand", "off-hand": "Off Hand", "one-hand": "One-Hand", "two-hand": "Two-Hand", head: "Head", neck: "Neck", shoulder: "Shoulder",
       back: "Back", chest: "Chest", wrist: "Wrist", hands: "Hands", waist: "Waist", legs: "Legs", feet: "Feet", finger: "Finger", trinket: "Trinket",
       ranged: "Ranged", relic: "Relic", thrown: "Thrown", tabard: "Tabard", shirt: "Shirt" }[sl] || "";
   }
+  function buildSouls(d) {
+    if (!d.souls || !d.souls.list) return;
+    headList(d.souls.list.map(function (s) { return s[0] + ": " + s[1]; }), "souls", "Soul Engraving: 204 shoulder souls", "spell_shadow_soulleech_3");
+    d.souls.list.forEach(function (s) {
+      IDX.push({ kind: "soul", cat: "soul", sub: "Shoulder soul", name: s[0], icon: "spell_shadow_soulleech_3", q: "unknown",
+        meta: "Soul Engraving \u00b7 hidden in the client", topic: "souls", text: (s[0] + " " + s[1]).toLowerCase() });
+    });
+  }
   function buildIndex(d, items) {
     (items || []).forEach(function (it) {
-      var meta = [it.sub, slotName(it.slot), it.reqLevel ? "Level " + it.reqLevel : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+      var meta = [it.sub, slotName(it.slot), it.reqLevel ? "Level " + it.reqLevel : "", it.sk ? it.sk[0] + (it.sk[1] ? " " + it.sk[1] : "") : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
       IDX.push({ kind: "item", cat: it.cat || "misc", sub: it.sub || "Other", name: it.name, icon: it.icon, q: it.quality || "unknown", it: it, meta: meta.join(" \u00b7 "), side: it.source,
         text: [it.name, it.sub, it.type, slotName(it.slot), it.source, it.setName, (it.effects || []).join(" ")].join(" ").toLowerCase() });
     });
@@ -103,6 +113,15 @@
       if (SQ.cat !== "all" && e.cat !== SQ.cat) return false;
       if (SQ.sub && e.sub !== SQ.sub) return false;
       if (SQ.qual && e.q !== SQ.qual) return false;
+      if (SQ.lvl || SQ.cls || SQ.prof) {
+        if (e.kind !== "item") return false;
+        if (SQ.lvl && (e.it.reqLevel || 0) > +SQ.lvl) return false;
+        if (SQ.cls && e.it.cls && e.it.cls.indexOf(SQ.cls) === -1) return false;
+        if (SQ.prof) {
+          if (!e.it.sk || e.it.sk[0] !== SQ.prof) return false;
+          if (SQ.sk && e.it.sk[1] > +SQ.sk) return false;
+        }
+      }
       for (var i = 0; i < words.length; i++) if (e.text.indexOf(words[i]) === -1) return false;
       return true;
     }).sort(function (a, b) {
@@ -162,12 +181,32 @@
     var box = document.getElementById("dbs");
     if (!box) return;
     box.innerHTML = '<div class="dbs-bar"><input type="search" id="dbs-qi" placeholder="Search items, dungeons, perks, spells" autocomplete="off" spellcheck="false" aria-label="Search the Database">' +
-      '<span id="dbs-n"></span></div><div class="dbs-cats" id="dbs-cats" role="group" aria-label="Type"></div><div class="dbs-subs" id="dbs-subs" hidden></div><div class="dbs-out" id="dbs-out" hidden></div>';
+      '<span id="dbs-n"></span></div><div class="dbs-cats" id="dbs-cats" role="group" aria-label="Type"></div>' +
+      '<div class="dbs-filt" id="dbs-filt"><input type="number" id="dbf-lvl" min="1" max="60" placeholder="Level" aria-label="Usable at level">' +
+      '<select id="dbf-cls" aria-label="Class"><option value="">Any class</option>' + CLASSES9.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
+      '<select id="dbf-prof" aria-label="Profession"><option value="">Any profession</option>' + PROFS.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
+      '<input type="number" id="dbf-sk" min="1" max="300" placeholder="Skill" aria-label="Maximum profession skill">' +
+      '<button type="button" id="dbf-x" hidden>Clear</button></div>' +
+      '<div class="dbs-subs" id="dbs-subs" hidden></div><div class="dbs-out" id="dbs-out" hidden></div>';
     try {
       var sp = new URLSearchParams(location.search);
       SQ.q = sp.get("q") || ""; SQ.cat = sp.get("cat") || "all"; SQ.sub = sp.get("sub") || ""; SQ.qual = sp.get("qual") || "";
     } catch (e) {}
     var qi = document.getElementById("dbs-qi"), tmr = null;
+    function fEl(id) { return document.getElementById(id); }
+    function readFilt() {
+      SQ.lvl = fEl("dbf-lvl").value; SQ.cls = fEl("dbf-cls").value; SQ.prof = fEl("dbf-prof").value; SQ.sk = fEl("dbf-sk").value;
+      fEl("dbf-x").hidden = !(SQ.lvl || SQ.cls || SQ.prof || SQ.sk);
+      SHOWN = 60; drawSearch();
+    }
+    var ftmr = null;
+    ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).addEventListener("input", function () { clearTimeout(ftmr); ftmr = setTimeout(readFilt, 200); }); });
+    ["dbf-cls", "dbf-prof"].forEach(function (id) { fEl(id).addEventListener("change", readFilt); });
+    fEl("dbf-x").addEventListener("click", function () {
+      ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).value = ""; });
+      ["dbf-cls", "dbf-prof"].forEach(function (id) { fEl(id).value = ""; });
+      readFilt();
+    });
     qi.value = SQ.q;
     qi.addEventListener("input", function () {
       clearTimeout(tmr);
@@ -397,6 +436,7 @@
     fetch("../plan/items.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (it) {
       var items = it && Array.isArray(it.items) ? it.items : [];
       if (window.ForgeGear && items.length) { try { GK = ForgeGear({ items: it, get: function () { return {}; } }); } catch (e) { GK = null; } }
+      buildSouls(d);
       buildIndex(d, items);
       initSearch();
       // Then the full client database replaces the curated seed.
