@@ -51,14 +51,23 @@
     }
     if (m.hidden) m._prev = document.activeElement;
     var hs = heads(t.list, key);
-    m.querySelector(".cxm-body").innerHTML = '<div class="cxm-head">' + img(t.icon || "inv_misc_book_09") + "<b id=\"cxm-title\">" + esc(t.title) + "</b></div>" +
-      '<ol class="cxm-list">' + t.list.map(function (f, i) { return "<li><b>" + esc(hs[i]) + "</b><p>" + esc(f) + "</p></li>"; }).join("") + "</ol>";
+    var bodyHtml;
+    if (key === "souls") {
+      bodyHtml = '<div class="cxm-souls">' + t.list.map(function (f) {
+        var cut = f.indexOf(": ");
+        return '<div class="soulcard"><b>' + esc(cut > 0 ? f.slice(0, cut) : f) + "</b><p>" + esc(cut > 0 ? f.slice(cut + 2) : "") + "</p></div>";
+      }).join("") + "</div>";
+    } else {
+      bodyHtml = '<ol class="cxm-list">' + t.list.map(function (f, i) { return "<li><b>" + esc(hs[i]) + "</b><p>" + esc(f) + "</p></li>"; }).join("") + "</ol>";
+    }
+    m.querySelector(".cxm-body").innerHTML = '<div class="cxm-head">' + img(t.icon || "inv_misc_book_09") + "<b id=\"cxm-title\">" + esc(t.title) + "</b></div>" + bodyHtml;
     m.hidden = false;
     m.querySelector(".cxm-card").scrollTop = 0;
     m.querySelector(".cxm-card").focus();
   }
 
   // ---- Database search: Forever items (../plan/items.json) plus this page's places, perks, spells and systems ----
+  var PAGE = window.CODEX_PAGE || "db";
   var CATS = [["all", "All"], ["weapon", "Weapons"], ["armor", "Armor"], ["accessory", "Accessories"], ["offhand", "Off-hands and relics"],
     ["consumable", "Consumables"], ["recipe", "Recipes"], ["pvp", "PvP"], ["misc", "Misc"], ["place", "Places"], ["perk", "Legacy perks"],
     ["soul", "Souls"], ["spell", "Spells"], ["system", "Systems"]];
@@ -226,6 +235,10 @@
           return;
         }
         if (en.topic) { openTopic(en.topic); return; }
+        if (en.href && !document.querySelector(en.href)) {
+          var PAGE_OF = { "#world": "/world/", "#unseen": "/classes/", "#classes": "/classes/", "#ranks": "/rankings/" };
+          if (PAGE_OF[en.href]) { location.href = PAGE_OF[en.href] + en.href; return; }
+        }
         var target = null;
         document.querySelectorAll(en.href + " [data-name]").forEach(function (el) { if (!target && el.getAttribute("data-name") === en.name) target = el; });
         if (target) {
@@ -242,7 +255,7 @@
     drawSearch();
   }
 
-  fetch("codex.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
+  fetch("/codex/codex.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
     ROWS = d.rows || {};
     var out = [], nav = [];
     function section(id, title, html) {
@@ -266,7 +279,7 @@
       });
       LW.draw();
     }
-    section("legacy", "The Legacy system", headList(lg.facts, "legacy", "The Legacy system", "inv_misc_book_07") + '<div id="legacy-win"></div>');
+    if (PAGE === "db") section("legacy", "The Legacy system", headList(lg.facts, "legacy", "The Legacy system", "inv_misc_book_07") + '<div id="legacy-win"></div>');
 
     // Unseen spells
     var un = d.unseen;
@@ -277,7 +290,7 @@
           '</span><span class="why">' + esc(r[2]) + "</span></div>";
       }).join("") + "</div>";
     }
-    section("unseen", "Spells the tooltips admit to", "<p class=\"board-sub\">" + esc(un.note) + "</p>" +
+    if (PAGE === "classes") section("unseen", "Spells the tooltips admit to", "<p class=\"board-sub\">" + esc(un.note) + "</p>" +
       "<h3>Genuinely new spells</h3>" + sprows(un.new, true) +
       (un.confirmed && un.confirmed.length ? "<h3>Confirmed in the demo spellbook since</h3>" + sprows(un.confirmed, true) : "") +
       "<h3>Granted by talents (already in the trees)</h3>" + sprows(un.granted || [], true) +
@@ -293,8 +306,8 @@
           return '<div class="abil">' + img(a[2] || "inv_misc_questionmark") + "<div><b>" + esc(a[0]) + "</b><p>" + esc(a[1]) + "</p></div></div>";
         }).join("") + "</details>";
     }).join("");
-    section("classes", "Class changes, as seen in the demo", ccHtml);
-    section("ranks", "Spec rankings, estimated", '<div id="ranks-body"><p class="board-sub">Loading the estimates\u2026</p></div>');
+    if (PAGE === "classes") section("classes", "Class changes, as seen in the demo", ccHtml);
+    if (PAGE === "rankings") section("ranks", "Spec rankings, estimated", '<div id="ranks-body"><p class="board-sub">Loading the estimates\u2026</p></div>');
 
     // World: cards, not tables.
     var w = d.world;
@@ -309,7 +322,7 @@
           '<p>' + esc(r[1] || "") + "</p></div>";
       }).join("") + "</div>";
     }
-    section("world", "The new world",
+    if (PAGE === "world") section("world", "The new world",
       (w.facts ? headList(w.facts, "world", "The new world", "inv_misc_map_01") : "") +
       "<h3>Zones</h3>" + placecards(w.zones) + "<h3>Dungeons</h3>" + placecards(w.dungeons) +
       "<h3>Raids</h3>" + placecards(w.raids) + "<h3>Battlegrounds</h3>" + placecards(w.battlegrounds));
@@ -364,7 +377,7 @@
               '<ul>' + m.items.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div></div>";
           }).join("") + "</div></div>";
       }).join("");
-      section("roadmap", "Roadmap", hero + '<div class="rmap">' + body +
+      if (PAGE === "db") section("roadmap", "Roadmap", hero + '<div class="rmap">' + body +
         '</div><p class="board-sub">Off the official slide: more news beyond this roadmap to be shared, features will evolve based on player feedback, content and timing subject to change.</p>');
     }
 
@@ -373,7 +386,7 @@
       return '<button type="button" class="systile" id="sys' + i + '" data-topic="systems:' + i + '">' + img(sys.icon || "inv_misc_book_09") +
         "<b>" + esc(sys.t) + "</b><span>" + sys.facts.length + " facts</span></button>";
     }).join("") + "</div>";
-    section("systems", "Systems", sysHtml);
+    if (PAGE === "db") section("systems", "Systems", sysHtml);
 
     // Hero stat band: the Codex counts itself.
     var nDun = w.dungeons.length, nRaid = w.raids.length,
@@ -398,8 +411,8 @@
       var t = e.target.closest && e.target.closest("[data-topic]");
       if (t) openTopic(t.getAttribute("data-topic"));
     });
-    drawLegacy();
-    fetch("rankings.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (rk) {
+    if (document.getElementById("legacy-win")) drawLegacy();
+    fetch("/codex/rankings.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (rk) {
       var box = document.getElementById("ranks-body");
       if (!box) return;
       if (!rk || !rk.lists) { box.innerHTML = '<p class="board-sub">The estimates could not load.</p>'; return; }
@@ -433,14 +446,15 @@
       });
       draw();
     });
-    fetch("../plan/items.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (it) {
+    if (PAGE === "db") fetch("/plan/items.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (it) {
       var items = it && Array.isArray(it.items) ? it.items : [];
       if (window.ForgeGear && items.length) { try { GK = ForgeGear({ items: it, get: function () { return {}; } }); } catch (e) { GK = null; } }
+      if (PAGE !== "db") return;
       buildSouls(d);
       buildIndex(d, items);
       initSearch();
       // Then the full client database replaces the curated seed.
-      fetch("../plan/items-db.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (db) {
+      fetch("/plan/items-db.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (db) {
         if (!db || !Array.isArray(db.items) || !db.items.length) return;
         try { GK = ForgeGear({ items: db, get: function () { return {}; } }); } catch (e) {}
         IDX = IDX.filter(function (e) { return e.kind !== "item"; });

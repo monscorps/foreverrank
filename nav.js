@@ -16,8 +16,8 @@
       ["Race and class", "#race"], ["Talents", "#talents"], ["Legacy tree", "#legacy"], ["Gear and stats", "#gear"],
       ["Consumables", "#consumables"], ["Name and share", "#share"], ["Raid composer", "#composer"]] },
     database: { path: "codex/", label: "Database", items: [
-      ["Search", "#dbs"], ["The Legacy system", "#legacy"], ["Spells", "#unseen"], ["Class changes", "#classes"], ["Spec rankings", "#ranks"],
-      ["The new world", "#world"], ["Roadmap", "#roadmap"], ["Systems", "#systems"]] },
+      ["Search", "#dbs"], ["The Legacy system", "#legacy"], ["Systems", "#systems"], ["Roadmap", "#roadmap"],
+      ["The World", "@world/"], ["The Classes", "@classes/"], ["Rankings", "@rankings/"], ["The Atlas", "#atlas"]] },
     news: { path: "news/", label: "News", items: [["All headlines", ""], ["The Wire on the ladder", "WIRE"]] }
   };
   function keyFor(el) {
@@ -52,7 +52,7 @@
     menu.id = "mdd-menu-" + (++uid);
     btn.setAttribute("aria-controls", menu.id);
     menu.innerHTML = m.items.map(function (it) {
-      var href = it[1] === "WIRE" ? root + "#wire" : (isHere && it[1].charAt(0) === "#" ? it[1] : root + m.path + it[1]);
+      var href = it[1] === "WIRE" ? root + "#wire" : it[1].charAt(0) === "@" ? root + it[1].slice(1) : (it[1] === "#atlas" ? "#atlas" : (isHere && it[1].charAt(0) === "#" ? it[1] : root + m.path + it[1]));
       return '<a href="' + href + '">' + it[0] + "</a>";
     }).join("");
     dd.appendChild(btn);
