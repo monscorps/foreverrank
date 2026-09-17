@@ -86,7 +86,7 @@
     headList(d.souls.list.map(function (s) { return s[0] + ": " + s[1]; }), "souls", "Soul Engraving: 204 shoulder souls", "spell_shadow_soulleech_3");
     d.souls.list.forEach(function (s) {
       IDX.push({ kind: "soul", cat: "soul", sub: "Shoulder soul", name: s[0], icon: "spell_shadow_soulleech_3", q: "unknown",
-        meta: "Soul Engraving \u00b7 hidden in the client", topic: "souls", text: (s[0] + " " + s[1]).toLowerCase() });
+        meta: "Soul Engraving \u00b7 " + (s[2] ? s[2].charAt(0) + s[2].slice(1).toLowerCase() : "class unsorted"), topic: "souls", text: (s[0] + " " + s[1] + " " + (s[2] || "")).toLowerCase() });
     });
   }
   function buildIndex(d, items) {
@@ -290,6 +290,26 @@
           '</span><span class="why">' + esc(r[2]) + "</span></div>";
       }).join("") + "</div>";
     }
+    var SOUL_CC = { WARRIOR: "#C79C6E", PALADIN: "#F58CBA", HUNTER: "#ABD473", ROGUE: "#FFF569", PRIEST: "#FFFFFF", SHAMAN: "#0070DE", MAGE: "#69CCF0", WARLOCK: "#9482C9", DRUID: "#FF7D0A" };
+    function soulLabel(k) { return k ? k.charAt(0) + k.slice(1).toLowerCase() : "Unsorted"; }
+    if (PAGE === "classes" && d.souls && d.souls.list.length) {
+      var sl = d.souls.list;
+      var sCounts = {};
+      sl.forEach(function (s) { var k = s[2] || "_"; sCounts[k] = (sCounts[k] || 0) + 1; });
+      var chipKeys = Object.keys(SOUL_CC).filter(function (k) { return sCounts[k]; });
+      var chips = '<button type="button" class="soulchip on" data-soulf="">All ' + sl.length + "</button>" +
+        chipKeys.map(function (k) {
+          return '<button type="button" class="soulchip" data-soulf="' + k + '" style="--cc:' + SOUL_CC[k] + '">' + soulLabel(k) + " " + sCounts[k] + "</button>";
+        }).join("") +
+        (sCounts._ ? '<button type="button" class="soulchip" data-soulf="_">Unsorted ' + sCounts._ + "</button>" : "");
+      var cards = sl.map(function (s) {
+        var k = s[2] || "_";
+        return '<div class="soulc" data-sk="' + k + '" style="--cc:' + (SOUL_CC[s[2]] || "#8b93a7") + '"><b>' + esc(s[0]) + "</b><i>" + soulLabel(s[2]) + "</i><p>" + esc(s[1]) + "</p></div>";
+      }).join("");
+      section("souls", "Soul Engraving",
+        '<p class="board-sub">' + esc(d.souls.note) + "</p>" +
+        '<div class="soulchips">' + chips + '</div><div class="soulgrid">' + cards + "</div>");
+    }
     if (PAGE === "classes") section("unseen", "Spells the tooltips admit to", "<p class=\"board-sub\">" + esc(un.note) + "</p>" +
       "<h3>Genuinely new spells</h3>" + sprows(un.new, true) +
       (un.confirmed && un.confirmed.length ? "<h3>Confirmed in the demo spellbook since</h3>" + sprows(un.confirmed, true) : "") +
@@ -410,6 +430,16 @@
     cxEl.addEventListener("click", function (e) {
       var t = e.target.closest && e.target.closest("[data-topic]");
       if (t) openTopic(t.getAttribute("data-topic"));
+    });
+    var sg = document.querySelector(".soulchips");
+    if (sg) sg.addEventListener("click", function (e) {
+      var b = e.target.closest && e.target.closest("[data-soulf]");
+      if (!b) return;
+      var f = b.getAttribute("data-soulf");
+      sg.querySelectorAll(".soulchip").forEach(function (x) { x.classList.toggle("on", x === b); });
+      document.querySelectorAll(".soulgrid .soulc").forEach(function (card) {
+        card.hidden = !!f && card.getAttribute("data-sk") !== f;
+      });
     });
     if (document.getElementById("legacy-win")) drawLegacy();
     fetch("/codex/rankings.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (rk) {
