@@ -72,6 +72,11 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 .bis-cred { margin: 1.4rem 0 0; font-size: .78rem; color: var(--subtle); border-top: 1px solid var(--surface-border); padding-top: .8rem; }
 .bis-cred a { color: var(--gold); }
 @media (max-width: 900px) { .bis-grid { grid-template-columns: 1fr; } .clsstrip { grid-template-columns: repeat(5, 1fr); } .bis-slotcard { scroll-margin-top: 5.5rem; } }
+@media (max-width: 640px) {
+  .bis-r { grid-template-columns: 1.1rem 2.1rem minmax(0, 1fr); }
+  .bis-mats { grid-column: 3; justify-content: flex-start; flex-wrap: wrap; margin-top: .15rem; }
+  .bis-nc b { white-space: normal; }
+}
 </style>
 </head>
 <body>
