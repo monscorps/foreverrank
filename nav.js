@@ -17,7 +17,7 @@
       ["Consumables", "#consumables"], ["Name and share", "#share"], ["Raid composer", "#composer"]] },
     database: { path: "codex/", label: "Database", items: [
       ["Search", "#dbs"], ["The Legacy system", "#legacy"], ["Systems", "#systems"], ["Roadmap", "#roadmap"],
-      ["The World", "@world/"], ["The Classes", "@classes/"], ["Rankings", "@rankings/"], ["The Atlas", "#atlas"]] },
+      ["The World", "@world/"], ["The Classes", "@classes/"], ["Rankings", "@rankings/"], ["BiS lists", "@bis/"], ["The Atlas", "#atlas"]] },
     news: { path: "news/", label: "News", items: [["All headlines", ""], ["The Wire on the ladder", "WIRE"]] }
   };
   function keyFor(el) {

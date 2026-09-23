@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forever BiS lists</title>
+<meta name="description" content="Best-in-slot gear for every class and spec at the WoW Forever beta's level-20 cap, with sources, mats and datamined tooltips.">
+<link rel="icon" href="../mark.svg" type="image/svg+xml">
+<link rel="canonical" href="https://foreverrank.com/bis/">
+<meta name="theme-color" content="#1C2325">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../forever.css?v=21">
+<link rel="stylesheet" href="../legacy.css?v=4">
+<style>
+.tip { position: fixed; z-index: 60; display: none; max-width: 18rem; background: #082a3f; border: 1px solid rgba(229,204,128,.5); border-radius: 2px; padding: .55rem .65rem; font-size: .76rem; pointer-events: none; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+.tip b { color: var(--gold); display: block; margin-bottom: .15rem; font-family: var(--heading); }
+.tip p { margin: 0; color: var(--card-text); }
+.tip.itemtip { background: #070d14; border: 1px solid #5d6b7e; border-radius: 4px; max-width: 20rem; }
+.itemtip b { font-size: .95rem; margin-bottom: .1rem; }
+.itemtip .it-l, .itemtip .it-y, .itemtip .it-g, .itemtip .it-sp, .itemtip .it-sb, .itemtip .it-src, .itemtip .it-conf, .itemtip .it-row, .itemtip .it-f,
+.tsheet .it-l, .tsheet .it-y, .tsheet .it-g, .tsheet .it-sp, .tsheet .it-sb, .tsheet .it-src, .tsheet .it-conf, .tsheet .it-row, .tsheet .it-f { display: block; font-size: .78rem; color: #fff; line-height: 1.35; }
+.it-row { display: flex !important; justify-content: space-between; gap: 1rem; }
+.it-row i { font-style: normal; }
+.it-g { color: #1eff00 !important; }
+.it-y { color: #ffd100 !important; }
+.it-f { color: #ffd100 !important; font-style: italic; }
+.it-src { color: #9fb0bb !important; margin-top: .3rem; font-size: .72rem !important; }
+.it-conf { color: #6f8594 !important; font-size: .66rem !important; margin-top: .15rem; }
+.q-poor { --q: #9d9d9d; } .q-common { --q: #ffffff; } .q-uncommon { --q: #1eff00; } .q-rare { --q: #0070dd; } .q-epic { --q: #a335ee; } .q-legendary { --q: #ff8000; } .q-unknown { --q: #c8c8c8; }
+b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unknown { color: var(--q); }
+
+.rk-warn { font-size: .8rem; color: var(--card-text); border-left: 3px solid var(--gold); padding: .2rem 0 .2rem .7rem; margin: .4rem 0 .9rem; }
+.rk-warn b { color: var(--gold); }
+.bis-kick { margin: 0 0 .7rem; font: 600 .72rem/1.5 var(--heading); letter-spacing: .18em; text-transform: uppercase; color: var(--subtle); }
+.bis-kick b { color: var(--gold); letter-spacing: normal; }
+
+.clsstrip { display: grid; grid-template-columns: repeat(9, 1fr); gap: .4rem; margin: 1rem 0 .6rem; }
+.clsstrip button { display: flex; flex-direction: column; align-items: center; gap: .35rem; cursor: pointer; padding: .55rem .2rem .5rem;
+  background: rgba(0,0,0,.28); border: 1px solid var(--card-border); border-radius: var(--r-btn);
+  font: 600 .62rem/1 var(--heading); letter-spacing: .05em; text-transform: uppercase; color: var(--card-text); transition: border-color .12s, background .12s; }
+.clsstrip img { width: 2.2rem; height: 2.2rem; border-radius: 6px; border: 1px solid #3a4a55; }
+.clsstrip button:hover { border-color: var(--gold); color: #fff; }
+.clsstrip button.on { border-color: var(--cc, var(--gold)); background: rgba(229,204,128,.07); color: var(--cc, var(--gold)); }
+.clsstrip button.on img { border-color: var(--cc, var(--gold)); box-shadow: 0 0 12px -4px var(--cc, var(--gold)); }
+.spec-tabs { display: flex; flex-wrap: wrap; gap: .3rem; margin: .2rem 0 1rem; }
+.spec-tabs button { cursor: pointer; font: 600 .74rem/1 var(--heading); color: var(--card-text); background: rgba(0,0,0,.28); border: 1px solid var(--card-border); border-radius: var(--r-btn); padding: .5rem .8rem; }
+.spec-tabs button.on { color: #1a1204; background: var(--gold); border-color: var(--gold); }
+
+.bis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
+.bis-slotcard { border: 1px solid var(--card-border); border-radius: var(--r-panel); background: linear-gradient(180deg, rgba(7,50,74,.55), rgba(5,30,45,.85)); padding: .7rem .8rem .6rem; box-shadow: var(--shadow); scroll-margin-top: 4.5rem; }
+.bis-slotcard h2 { margin: 0 0 .5rem; font: 600 .8rem/1 var(--heading); letter-spacing: .12em; text-transform: uppercase; color: var(--gold); border-bottom: 1px solid var(--surface-border); padding-bottom: .45rem; display: flex; align-items: baseline; gap: .5rem; }
+.bis-slotcard h2 a { margin-left: auto; text-decoration: none; color: var(--subtle); font-size: .62rem; letter-spacing: .04em; }
+.bis-slotcard h2 a:hover { color: var(--gold); }
+.bis-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
+.bis-r { display: grid; grid-template-columns: 1.2rem 2.1rem minmax(0, 1fr) auto; gap: .55rem; align-items: center; padding: .32rem .45rem; background: rgba(0,0,0,.25); border: 1px solid var(--card-border); border-radius: var(--r-btn); }
+.bis-r:first-child { border-color: rgba(229,204,128,.45); background: rgba(229,204,128,.05); }
+.bis-rank { font: 700 .78rem var(--heading); color: var(--gold); text-align: center; }
+.bis-r:first-child .bis-rank { color: #fff; }
+.bis-ic { width: 2.1rem; height: 2.1rem; padding: 1px; border-radius: 5px; background: #1b262d; border: 1px solid var(--q, #3a4a55); }
+.bis-ic img { display: block; width: 100%; height: 100%; border-radius: 3px; }
+.bis-nc { display: flex; flex-direction: column; min-width: 0; }
+.bis-nc b { font: 600 .8rem/1.25 var(--heading); color: var(--q, #fff); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bis-nc em { font-style: normal; font-size: .64rem; color: var(--subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bis-nc em u { text-decoration: none; color: #7f93a0; }
+.bis-mats { display: flex; gap: .22rem; align-items: center; }
+.bis-mat { position: relative; width: 1.5rem; height: 1.5rem; border-radius: 4px; border: 1px solid #3a4a55; background: #1b262d; }
+.bis-mat img { display: block; width: 100%; height: 100%; border-radius: 3px; }
+.bis-mat b { position: absolute; right: -2px; bottom: -3px; font: 700 .56rem/1 var(--heading); color: #fff; text-shadow: 0 1px 2px #000, 0 0 3px #000; }
+.bis-src { margin: .15rem 0 0; font-size: .7rem; color: var(--subtle); }
+.bis-cred { margin: 1.4rem 0 0; font-size: .78rem; color: var(--subtle); border-top: 1px solid var(--surface-border); padding-top: .8rem; }
+.bis-cred a { color: var(--gold); }
+@media (max-width: 900px) { .bis-grid { grid-template-columns: 1fr; } .clsstrip { grid-template-columns: repeat(5, 1fr); } .bis-slotcard { scroll-margin-top: 5.5rem; } }
+</style>
+</head>
+<body>
+<nav class="top">
+  <a class="brand" href="../"><img src="../mark.svg" alt="" width="42" height="42"><span class="brand-word">FOREVER<b>RANK</b></span></a>
+  <div class="top-nav">
+    <a class="pill" href="../">The ladder</a>
+    <a class="pill" href="../plan/">The Forge</a>
+    <a class="pill" href="../codex/">Database</a>
+    <a class="pill" href="../news/">News</a>
+    <span class="phase">BiS</span>
+    <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener" title="Join the ForeverRank Discord"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.32 4.37A19.8 19.8 0 0 0 15.39 2.8a13.7 13.7 0 0 0-.63 1.3 18.4 18.4 0 0 0-5.52 0 13.2 13.2 0 0 0-.64-1.3 19.7 19.7 0 0 0-4.93 1.53C.53 9.05-.32 13.6.1 18.1a19.9 19.9 0 0 0 6.04 3.05 14.7 14.7 0 0 0 1.29-2.1 12.9 12.9 0 0 1-2.03-.97c.17-.13.34-.26.5-.4a14.2 14.2 0 0 0 12.2 0l.5.4c-.65.38-1.33.7-2.04.97.37.74.8 1.44 1.29 2.1a19.8 19.8 0 0 0 6.05-3.05c.5-5.22-.84-9.73-3.58-13.73ZM8.02 15.33c-1.18 0-2.15-1.08-2.15-2.42s.95-2.42 2.15-2.42c1.21 0 2.17 1.09 2.15 2.42 0 1.34-.95 2.42-2.15 2.42Zm7.96 0c-1.18 0-2.15-1.08-2.15-2.42s.95-2.42 2.15-2.42c1.21 0 2.17 1.09 2.15 2.42 0 1.34-.94 2.42-2.15 2.42Z"/></svg><span>Discord</span></a>
+  </div>
+</nav>
+<script src="../nav.js?v=6"></script>
+<main class="wrap cx">
+  <h1 class="display"><span>Best in slot</span></h1>
+  <p class="board-sub">The best gear per slot at the beta's level-20 cap, every class and spec, with where each
+  piece comes from and what it costs to craft. Hover anything for the full tooltip out of our datamined item database.</p>
+  <p class="bis-kick" id="bis-kick"></p>
+  <p class="rk-warn"><b>Early beta lists.</b> Builds are landing weekly and items move around; treat the order as
+  today's answer, not launch's. Spotted a mistake? Say so in the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>.</p>
+  <div class="clsstrip" id="clsstrip" role="tablist" aria-label="Class"></div>
+  <div class="spec-tabs" id="spectabs" role="tablist" aria-label="Spec"></div>
+  <div class="bis-grid" id="bisgrid"></div>
+  <p class="bis-cred">Slot rankings compiled from <a href="https://foreverchanges.pro/bis/warrior" rel="noopener">ForeverChanges</a>'
+  hand-ranked beta lists, credited with thanks; tooltips and stats join our own datamined item database by the client's item ids,
+  topped up from their item pages for pieces newer than our last datamine. Item names and icons are Blizzard's. Full ledger in
+  <a href="https://github.com/monscorps/foreverrank/blob/main/SOURCES.md" rel="noopener">SOURCES.md</a>.</p>
+</main>
+<footer>
+  <img src="../mark.svg" alt="" width="22" height="22">
+  <span>Compiled, credited, corrected.</span>
+  <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  <a href="https://foreverrank.com/">foreverrank.com</a>
+</footer>
+<script src="../tipkit.js?v=5"></script>
+<script src="bis.js?v=1"></script>
+<script src="/map.js?v=8" defer></script>
+<script src="/support.js?v=1" defer></script>
+</body>
+</html>

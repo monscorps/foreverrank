@@ -149,3 +149,18 @@ Corrections welcome: open an issue.
 - 2026-09-17, Atlas v4: UiMap.csv + UiMapAssignment.csv give every zone its true rectangle on its continent; the Atlas now assembles Eastern Kingdoms and Kalimdor from the zone maps at real positions and sizes, cities as markers, WoW-style navigation (left-click in, right-click out).
 - 2026-09-17, era defaults: the Database now hides SoD-era and retail-era rows unless the "SoD and retail data" toggle reveals them (every such row wears its era in the result line); the Forge pickers and item counts exclude era-tagged rows entirely; ten spellbook entries with SoD wiring and no Forever learn level carry an in-cell caution.
 - 2026-09-17, ForeverProbe v0.1.0: the companion addon ships from /addon/ (three-file Lua, read-only collectors, pace bar QoL, manual export only). LevelPace v2 in spirit; the 3.3.5 LevelPace repo stays untouched.
+
+## Added 2026-09-23
+
+- **ForeverChanges** (foreverchanges.pro) — the /bis/ page's slot rankings are
+  compiled from their hand-ranked per-class beta BiS lists, credited on the
+  page itself. Tooltips join our own datamined item database by item id; for
+  the 152 items newer than our last client read (build 1.60.1.69876), stats
+  are read from their item pages (bis/bis-items.json), which they in turn
+  datamine from the current beta client via wago.tools. Their goblin-corner
+  support popup also inspired ours; the code and words are our own.
+- 2026-09-23 wire sweep: Wowhead Forever RSS (Sept 18-23), Warcraft Tavern
+  (Sept 16-21), Icy Veins (Sept 22-23). 66 outlet headlines added to the Wire
+  with their own links; the beta is on client build 1.60.1.69977 (per
+  ForeverChanges' build tracker and Icy Veins' report), two builds past our
+  datamine, and the Database banner now says so.

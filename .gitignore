@@ -4,3 +4,4 @@ probe/ForeverProbe.zip
 # auto-revokes webhooks that show up in public repositories.
 addon/companion/webhook.txt
 addon/companion/guildmark.txt
+tools/.bis-cache/
