@@ -90,9 +90,10 @@
     }).join("");
     var tabs = document.getElementById("spectabs");
     tabs.innerHTML = cls.specs.map(function (s) {
-      return '<button type="button" role="tab" aria-selected="' + (s.key === spec.key) + '" data-s="' + s.key + '" class="' + (s.key === spec.key ? "on" : "") + '">' + esc(s.name) + "</button>";
+      return '<button type="button" role="tab" aria-selected="' + (s.key === spec.key) + '" data-s="' + s.key + '" class="' + (s.key === spec.key ? "on" : "") + '">' +
+        (s.icon ? '<img src="' + CDN + esc(s.icon) + '.jpg" alt="">' : "") + esc(s.name) + "</button>";
     }).join("");
-    var grid = document.getElementById("bisgrid");
+    var grid = document.getElementById("bisgrid"), flat = [];
     grid.innerHTML = spec.slots.map(function (sl) {
       return '<section class="bis-slotcard" id="slot-' + esc(sl.slot) + '"><h2>' + esc(sl.label) +
         '<a href="#slot-' + esc(sl.slot) + '" title="Link to this slot">#</a></h2>' +
@@ -101,10 +102,12 @@
           var q = (it && it.quality) || r.q || "unknown";
           var icon = (it && it.icon) || r.icon;
           var src = fromText(r);
-          return '<li class="bis-r q-' + esc(q) + '" data-i="' + esc(r.id) + '">' +
+          flat.push(r);
+          var label = (r.eslot ? r.eslot + ": " : "") + r.name;
+          return '<li class="bis-r q-' + esc(q) + '" data-i="' + esc(r.id) + '" data-n="' + i + '">' +
             '<span class="bis-rank">' + (r.enchant ? "✦" : i + 1) + "</span>" +
             '<span class="bis-ic">' + img(icon) + "</span>" +
-            '<span class="bis-nc"><b>' + esc(r.name) + "</b>" + (src ? "<em>" + esc(src) + "</em>" : "") + "</span>" +
+            '<span class="bis-nc"><b>' + esc(label) + "</b>" + (src ? "<em>" + esc(src) + "</em>" : "") + "</span>" +
             (r.mats ? '<span class="bis-mats">' + r.mats.map(function (m) {
               return '<span class="bis-mat" data-m="' + esc(m.id) + '" title="' + esc(m.name + (m.n ? " ×" + m.n : "")) + '">' + img(m.icon) + (m.n ? "<b>" + m.n + "</b>" : "") + "</span>";
             }).join("") + "</span>" : "") +
@@ -114,9 +117,9 @@
     var kick = document.getElementById("bis-kick");
     kick.innerHTML = "Level <b>" + esc(DATA.level) + "</b> cap &nbsp;·&nbsp; beta build <b>" + esc(DATA.build) + "</b> &nbsp;·&nbsp; lists pulled <b>" + esc(DATA.pulled) + "</b>";
     if (window.TipKit) {
-      grid.querySelectorAll(".bis-r").forEach(function (rowEl) {
-        var row = null, sl = spec.slots, id = rowEl.getAttribute("data-i");
-        for (var a = 0; a < sl.length && !row; a++) for (var b = 0; b < sl[a].rows.length; b++) if (sl[a].rows[b].id === id) { row = sl[a].rows[b]; break; }
+      // rows bind in document order, which is exactly the order they rendered
+      grid.querySelectorAll(".bis-r").forEach(function (rowEl, idx) {
+        var row = flat[idx];
         if (!row) return;
         TipKit.hover(rowEl, function () { return itemTip(row); }, function () { return "itemtip"; });
       });
@@ -144,8 +147,10 @@
     fetch("bis-items.json").then(function (r) { return r.ok ? r.json() : { items: [] }; }).catch(function () { return { items: [] }; })
   ]).then(function (rs) {
     DATA = rs[0];
+    // the supplement carries the current build's tooltips, so it wins over
+    // the main db, which is pinned to our last full client datamine
     rs[1].items.forEach(function (it) { BYID[String(it.id)] = it; });
-    rs[2].items.forEach(function (it) { if (!BYID[String(it.id)]) BYID[String(it.id)] = it; });
+    rs[2].items.forEach(function (it) { BYID[String(it.id)] = it; });
     wire();
     render();
     if (location.hash) {

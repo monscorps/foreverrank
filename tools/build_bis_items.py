@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Fill the BiS item gaps: bis/bis-items.json for items our db does not have.
+"""Current tooltips for the BiS page: bis/bis-items.json.
 
-Our plan/items-db.json is the beta client at build 1.60.1.69876; the BiS
-lists reference items later builds added. For every item bis/bis.json
-mentions that our db lacks, this reads its foreverchanges.pro item page
-(server-rendered tooltip, itself datamined from the newer client) and
-writes an items-db-shaped supplement the BiS page merges for tooltips.
-The main db stays pure: it holds only what we datamined ourselves.
+Our plan/items-db.json is the beta client at build 1.60.1.69876 and the
+beta keeps moving; items on the lists change between builds. So EVERY
+item bis/bis.json cites - row or crafting mat - gets its tooltip read
+fresh from its foreverchanges.pro item page (server-rendered, itself
+datamined from the current client), and the BiS page prefers this file
+over the older db. The main db stays pure: only what we datamined.
 
 Run from the repo root, after build_bis.py:  python3 tools/build_bis_items.py
-Pages cache in tools/.bis-cache/ next to the list pages.
+Pages cache in tools/.bis-cache/ next to the list pages; delete that
+folder to force a fresh pull.
 """
 import html as htmlmod
 import json, os, re, time, urllib.request
@@ -29,7 +30,7 @@ def fetch(path):
     req = urllib.request.Request(BASE + path, headers={"User-Agent": "foreverrank.com data compile (contact via site Discord)"})
     html = urllib.request.urlopen(req, timeout=30).read().decode("utf-8")
     open(cached, "w", encoding="utf-8").write(html)
-    time.sleep(1)
+    time.sleep(0.6)
     return html
 
 def clean(s):
@@ -55,6 +56,8 @@ def parse_item(html, iid):
     if for_tip is None or "Not in" in for_tip[:400] and "it-empty" in for_tip[:200]:
         return None
     it = {"id": iid}
+    label_m = re.search(r'<div class="it-label">([^<]*)</div>', for_tip)
+    label = clean(label_m.group(1)) if label_m else ""
     m = re.search(r'<div class="it-name (q\d)">([^<]+)</div>', for_tip)
     if not m:
         return None
@@ -163,23 +166,23 @@ def parse_item(html, iid):
             if head:
                 srcs.append(head[:110])
     joined = "; ".join(srcs[:2])
-    it["source"] = (joined[:160] + " · " if joined else "") + "via foreverchanges.pro"
+    it["source"] = (joined[:160] + " · " if joined else "") + (label + ", " if label else "") + "via foreverchanges.pro"
     it["cat"] = "armor" if it.get("armor") or it.get("slot") in ("neck", "finger", "trinket", "back") else ("weapon" if dmg_seen else "misc")
     it["nw"] = 1
     return it
 
-db_ids = {str(i["id"]) for i in json.load(open("plan/items-db.json"))["items"]}
 bis = json.load(open("bis/bis.json"))
 need = {}
 for c in bis["classes"]:
     for sp in c["specs"]:
         for sl in sp["slots"]:
             for r in sl["rows"]:
-                if r["id"] not in db_ids:
+                if r.get("id"):
                     need[r["id"]] = r["name"]
                 for mt in r.get("mats", []):
-                    if mt["id"] not in db_ids:
+                    if mt.get("id"):
                         need[mt["id"]] = mt["name"]
+print("fetching", len(need), "item pages (everything the lists cite)")
 
 items, failed = [], []
 for iid in sorted(need, key=int):
@@ -192,9 +195,10 @@ for iid in sorted(need, key=int):
     else:
         failed.append(iid + " " + need[iid])
 
-out = {"note": "Supplement for the BiS page only: items the BiS lists cite that post-date our own "
-               "datamined items-db (beta build 1.60.1.69876). Tooltips read from foreverchanges.pro "
-               "item pages, themselves datamined from newer beta builds. Credited in SOURCES.md.",
+out = {"note": "Current tooltips for the BiS page: every item its lists cite, read from "
+               "foreverchanges.pro item pages (themselves datamined from the current beta client). "
+               "The BiS page prefers these over plan/items-db.json, which is pinned to build "
+               "1.60.1.69876. Credited in SOURCES.md.",
        "items": items}
 json.dump(out, open("bis/bis-items.json", "w"), separators=(",", ":"))
 print("wrote bis/bis-items.json: %d items (%d KB)" % (len(items), os.path.getsize("bis/bis-items.json") // 1024))

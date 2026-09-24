@@ -164,3 +164,9 @@ Corrections welcome: open an issue.
   with their own links; the beta is on client build 1.60.1.69977 (per
   ForeverChanges' build tracker and Icy Veins' report), two builds past our
   datamine, and the Database banner now says so.
+- 2026-09-24: BiS recompiled against ForeverChanges' overnight expansion (31
+  spec lists, PvE/PvP splits and Tank lists; 2,124 rows). Every cited item's
+  tooltip is now read fresh from their item pages at compile time and
+  preferred over our build-69876 datamine, so changed items (Staff of
+  Westfall and friends) show current stats. Enchant recommendations parse
+  as their own row type.

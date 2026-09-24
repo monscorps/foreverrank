@@ -45,7 +45,8 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 .clsstrip button.on { border-color: var(--cc, var(--gold)); background: rgba(229,204,128,.07); color: var(--cc, var(--gold)); }
 .clsstrip button.on img { border-color: var(--cc, var(--gold)); box-shadow: 0 0 12px -4px var(--cc, var(--gold)); }
 .spec-tabs { display: flex; flex-wrap: wrap; gap: .3rem; margin: .2rem 0 1rem; }
-.spec-tabs button { cursor: pointer; font: 600 .74rem/1 var(--heading); color: var(--card-text); background: rgba(0,0,0,.28); border: 1px solid var(--card-border); border-radius: var(--r-btn); padding: .5rem .8rem; }
+.spec-tabs button { display: inline-flex; align-items: center; gap: .4rem; cursor: pointer; font: 600 .74rem/1 var(--heading); color: var(--card-text); background: rgba(0,0,0,.28); border: 1px solid var(--card-border); border-radius: var(--r-btn); padding: .4rem .7rem; }
+.spec-tabs button img { width: 1.35rem; height: 1.35rem; border-radius: 4px; border: 1px solid rgba(0,0,0,.4); }
 .spec-tabs button.on { color: #1a1204; background: var(--gold); border-color: var(--gold); }
 
 .bis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; }
@@ -103,8 +104,9 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
   <div class="spec-tabs" id="spectabs" role="tablist" aria-label="Spec"></div>
   <div class="bis-grid" id="bisgrid"></div>
   <p class="bis-cred">Slot rankings compiled from <a href="https://foreverchanges.pro/bis/warrior" rel="noopener">ForeverChanges</a>'
-  hand-ranked beta lists, credited with thanks; tooltips and stats join our own datamined item database by the client's item ids,
-  topped up from their item pages for pieces newer than our last datamine. Item names and icons are Blizzard's. Full ledger in
+  hand-ranked beta lists, credited with thanks. Every tooltip is read fresh from the current beta build's item data at compile
+  time, so a piece that changed in last night's build shows last night's stats; our own datamined item database backs anything
+  the refresh misses. Item names and icons are Blizzard's. Full ledger in
   <a href="https://github.com/monscorps/foreverrank/blob/main/SOURCES.md" rel="noopener">SOURCES.md</a>.</p>
 </main>
 <footer>
@@ -114,7 +116,7 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>
 <script src="../tipkit.js?v=5"></script>
-<script src="bis.js?v=1"></script>
+<script src="bis.js?v=2"></script>
 <script src="/map.js?v=8" defer></script>
 <script src="/support.js?v=1" defer></script>
 </body>

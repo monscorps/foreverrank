@@ -43,54 +43,71 @@ def strip_tags(s):
 def parse_specs(html, cls):
     """Spec tabs are plain links: /bis/<class> is the first spec, /bis/<class>/<spec> the rest."""
     specs = []
-    for m in re.finditer(r'<a[^>]*class="bis-spec[^"]*"[^>]*href="(/bis/[^"#]+)"[^>]*>(.*?)</a>', html, re.S):
+    for m in re.finditer(r'<a class="bis-spec"[^>]*href="(/bis/[^"#]+)"[^>]*>(.*?)</a>', html, re.S):
         path, label = m.group(1), strip_tags(m.group(2))
+        icon = re.search(r'src="/icon/([a-z0-9_-]+)\.jpg"', m.group(2))
         key = path.rstrip("/").split("/")[-1]
         if key == cls:
             key = label.lower().replace(" ", "-")
         if not any(s["path"] == path for s in specs):
-            specs.append({"key": key, "name": label, "path": path})
+            specs.append({"key": key, "name": label, "path": path, "icon": icon.group(1) if icon else ""})
     return specs
 
+def parse_from(li):
+    """The bis-from cell: a link (or plain text), trailing text, and note spans,
+    with separators kept between nested spans and duplicates collapsed."""
+    from_m = re.search(r'<div class="bis-from">(.*?)</div>', li, re.S)
+    if not from_m:
+        return []
+    src = []
+    for p in re.findall(r"<p>(.*?)</p>", from_m.group(1), re.S):
+        link = re.search(r"<a[^>]*>(.*?)</a>", p, re.S)
+        rest = re.sub(r"<a[^>]*>.*?</a>", "", p, flags=re.S)
+        rest = re.sub(r"(</span>|</em>|</b>|</i>)\s*(<span[^>]*>|<em>|<b>|<i>)", " · ", rest)
+        pieces, seen = [], set()
+        for frag in strip_tags(rest).split(" · "):
+            frag = frag.strip(" ·.")
+            if frag and frag not in seen:
+                seen.add(frag)
+                pieces.append(frag)
+        entry = {"t": strip_tags(link.group(1)) if link else (pieces.pop(0) if pieces else "")}
+        if pieces:
+            entry["n"] = " · ".join(pieces)
+        if entry["t"] or entry.get("n"):
+            src.append(entry)
+    blob = " ".join(e.get("t", "") + " " + e.get("n", "") for e in src)
+    if re.search(r"not known yet|nothing places it yet", blob, re.I):
+        src = [{"t": "Source not yet known"}]
+    return src
+
 def parse_rows(ol_html):
-    rows = []
+    rows, dropped = [], 0
     for li in re.split(r'<li class="bis-row', ol_html)[1:]:
-        enchant = li.startswith(" bis-enchant-row")
-        name_m = re.search(r'<a data-tip="(\d+)" class="bis-name (q\d)"[^>]*>([^<]+)</a>', li)
-        if not name_m:
-            continue
-        icon_m = re.search(r'src="/icon/([a-z0-9_-]+)\.jpg"[^>]*class="bis-icon', li)
-        row = {"id": name_m.group(1), "name": htmlmod.unescape(name_m.group(3)),
-               "q": QUAL.get(name_m.group(2), "unknown"),
-               "icon": icon_m.group(1) if icon_m else ""}
-        if enchant:
+        icon_m = re.search(r'src="/icon/([a-z0-9_-]+)\.jpg"[^>]*class="bis-icon (?:bq(\d))?', li)
+        row = {"icon": icon_m.group(1) if icon_m else ""}
+        ench_m = re.search(r'<small class="bis-enchant-slots">([^<]*)</small>\s*<p class="bis-enchant-line">([^<]*)</p>', li)
+        name_m = re.search(r'<a([^>]*)class="bis-name (q\d)"([^>]*)>([^<]+)</a>', li)
+        if name_m:
+            attrs = name_m.group(1) + name_m.group(3)
+            tid = re.search(r'data-tip="(\d+)"', attrs) or re.search(r'href="/item/(\d+)"', attrs)
+            row["id"] = tid.group(1) if tid else ""
+            row["name"] = htmlmod.unescape(name_m.group(4))
+            row["q"] = QUAL.get(name_m.group(2), "unknown")
+        elif ench_m:
+            # an enchant row names no item; the enchant consumable sits in bis-from
             row["enchant"] = 1
-        from_m = re.search(r'<div class="bis-from">(.*?)</div>', li, re.S)
-        if from_m:
-            src = []
-            for p in re.findall(r"<p>(.*?)</p>", from_m.group(1), re.S):
-                link = re.search(r"<a[^>]*>(.*?)</a>", p, re.S)
-                # the rest of the paragraph is the note; nested spans get a
-                # separator so "the Wetlands</span><span>Alliance only" stays
-                # two thoughts, and repeated fragments collapse to one
-                rest = re.sub(r"<a[^>]*>.*?</a>", "", p, flags=re.S)
-                rest = re.sub(r"(</span>|</em>|</b>|</i>)\s*(<span[^>]*>|<em>|<b>|<i>)", " · ", rest)
-                pieces, seen = [], set()
-                for frag in strip_tags(rest).split(" · "):
-                    frag = frag.strip(" ·")
-                    if frag and frag not in seen:
-                        seen.add(frag)
-                        pieces.append(frag)
-                entry = {"t": strip_tags(link.group(1)) if link else (pieces.pop(0) if pieces else "")}
-                if pieces:
-                    entry["n"] = " · ".join(pieces)
-                if entry["t"] or entry.get("n"):
-                    src.append(entry)
-            blob = " ".join(e.get("t", "") + " " + e.get("n", "") for e in src)
-            if re.search(r"not known yet|nothing places it yet", blob, re.I):
-                src = [{"t": "Source not yet known"}]
-            if src:
-                row["from"] = src
+            row["eslot"] = strip_tags(ench_m.group(1))
+            row["name"] = htmlmod.unescape(ench_m.group(2)).replace("Enchanted: ", "")
+            fid = re.search(r'<div class="bis-from">.*?<a href="/item/(\d+)"', li, re.S)
+            row["id"] = fid.group(1) if fid else ""
+            row["q"] = "q" + icon_m.group(2) if icon_m and icon_m.group(2) else "common"
+            row["q"] = QUAL.get(row["q"], row["q"])
+        else:
+            dropped += 1
+            continue
+        src = parse_from(li)
+        if src:
+            row["from"] = src
         mats = []
         for mat in re.finditer(r'<span class="bis-mat[^"]*" data-tip="(\d+)">(.*?)</span>', li, re.S):
             alt = re.search(r'alt="([^"]*)"', mat.group(2))
@@ -102,17 +119,24 @@ def parse_rows(ol_html):
         if mats:
             row["mats"] = mats
         rows.append(row)
-    return rows
+    return rows, dropped
 
 def parse_page(html):
-    slots = []
+    slots, dropped = [], 0
     for sec in re.split(r'<section class="bis-slot', html)[1:]:
         sec = sec.split("</section>")[0]
         id_m = re.search(r'id="([a-z-]+)"', sec)
         h2_m = re.search(r"<h2>([^<]+)</h2>", sec)
+        rows, drop = parse_rows(sec)
+        dropped += drop
         slots.append({"slot": id_m.group(1).replace("slot-", "") if id_m else "enchants",
                       "label": h2_m.group(1) if h2_m else "Enchants",
-                      "rows": parse_rows(sec)})
+                      "rows": rows})
+    # every bis-row in the HTML must land in a slot, or the run says so
+    total_li = html.count('<li class="bis-row')
+    parsed = sum(len(s["rows"]) for s in slots)
+    if parsed + dropped != total_li or dropped:
+        print("  WARNING: page has %d rows, parsed %d, dropped %d" % (total_li, parsed, dropped))
     return slots
 
 # our item db, for the coverage report and to confirm the id join holds
@@ -148,7 +172,7 @@ for cls in CLASSES:
         missing += len(miss)
         print("%-8s %-14s %2d slots %3d rows%s" % (cls, spec["name"], len(slots), n,
               ("  NOT IN OUR DB: " + ", ".join(miss[:4]) + ("..." if len(miss) > 4 else "")) if miss else ""))
-        centry["specs"].append({"key": spec["key"], "name": spec["name"], "slots": slots})
+        centry["specs"].append({"key": spec["key"], "name": spec["name"], "icon": spec.get("icon", ""), "slots": slots})
     out["classes"].append(centry)
 
 out["level"] = int(level_m.group(1)) if level_m else 20
