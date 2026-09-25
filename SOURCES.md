@@ -184,3 +184,9 @@ Corrections welcome: open an issue.
   Friend of the Library) and the Research profession, for the build 70009
   article; the candidate rewards past twenty books are our own inference from
   client item IDs and flags, labeled as such.
+- 2026-09-25, second pass on build 70009: 60 more client tables (GlobalStrings,
+  GameObjects, GroupFinderActivity, Achievement_Category, CreatureModelData,
+  UiTextureAtlasMember and others) and the full game file list per build
+  (wago.tools/api/files?build=..., 1.42 million entries) diffed against
+  69876. The build article is now a data-driven page built from
+  tools/articles/build-70009.src.html + .data.json by tools/articles/build.py.
