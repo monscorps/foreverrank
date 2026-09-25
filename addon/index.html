@@ -3,8 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ForeverProbe</title>
-<meta name="description" content="ForeverProbe: the quiet companion addon for foreverrank.com. A pace bar you keep, snapshots you export yourself.">
+<title>ForeverProbe, the WoW Forever Addon · ForeverRank</title>
+<meta name="description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar and character snapshots you export yourself. The download returns soon.">
+<link rel="canonical" href="https://foreverrank.com/addon/">
+<!-- seo:begin -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ForeverRank">
+<meta property="og:url" content="https://foreverrank.com/addon/">
+<meta property="og:title" content="ForeverProbe, the WoW Forever Addon · ForeverRank">
+<meta property="og:description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar and character snapshots you export yourself. The download returns soon.">
+<meta property="og:image" content="https://foreverrank.com/assets/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ForeverProbe, the WoW Forever Addon · ForeverRank">
+<meta name="twitter:description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar and character snapshots you export yourself. The download returns soon.">
+<meta name="twitter:image" content="https://foreverrank.com/assets/og.jpg">
+<!-- seo:end -->
 <link rel="icon" href="/mark.svg">
 <link rel="stylesheet" href="/forever.css?v=21">
 <style>
@@ -17,6 +30,9 @@
 .fp-sub { color: var(--subtle, #8b93a7); margin: .3rem 0 0; max-width: 46rem; }
 .fp-dl { display: inline-block; margin: 1.4rem 0 .4rem; font: 700 .85rem/1 var(--heading, inherit); letter-spacing: .08em; text-transform: uppercase; color: #0d1626; background: var(--gold, #e5cc80); border-radius: 2px; padding: .8rem 1.3rem; text-decoration: none; }
 .fp-dl:hover { filter: brightness(1.08); }
+.fp-dl.soon { cursor: default; color: var(--gold, #e5cc80); background: transparent; border: 1px dashed rgba(229,204,128,.55); }
+.fp-dl.soon:hover { filter: none; }
+.fp-ver a { color: var(--gold, #e5cc80); }
 .fp-ver { color: var(--subtle, #8b93a7); font-size: .75rem; margin-left: .8rem; }
 .fp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; margin: 1.6rem 0; }
 .fp-step { background: rgba(0,0,0,.28); border: 1px solid var(--card-border, rgba(139,147,167,.25)); border-radius: 2px; padding: .9rem; }
@@ -57,7 +73,7 @@
     </div>
   </div>
 
-  <a class="fp-dl" href="/addon/ForeverProbe.zip" download>Download ForeverProbe</a><span class="fp-ver">v0.3.0 for the Forever beta</span>
+  <span class="fp-dl soon" aria-disabled="true">Coming soon</span><span class="fp-ver">The download is paused while we get it working on the current beta build. It returns here, and the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a> hears first.</span>
   <div class="fp-bar-demo">Lv 23&nbsp;&nbsp;41.7%&nbsp;&nbsp;12.4k XP/h&nbsp;&nbsp;up in 1h 12m</div>
 
   <div class="fp-steps">
@@ -123,6 +139,6 @@
 </main>
 <script src="/nav.js?v=6"></script>
 <script src="/map.js?v=8" defer></script>
-<script src="/support.js?v=1" defer></script>
+<script src="/support.js?v=2" defer></script>
 </body>
 </html>

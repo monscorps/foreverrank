@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /tools/
+Disallow: /worker/
+Disallow: /probe/
+Disallow: /addon/companion/
+
+Sitemap: https://foreverrank.com/sitemap.xml

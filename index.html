@@ -3,14 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ForeverRank</title>
-<meta name="description" content="The ladder for World of Warcraft: Forever: levelling, hardcore, PvP, character and guild progression. Ranked WarcraftLogs-style, waiting for launch.">
+<title>ForeverRank: WoW Forever Ladder, Database and Tools</title>
+<meta name="description" content="ForeverRank is the WoW Forever ladder and toolkit: a talent calculator, a datamined item and spell database, BiS lists, news, and a levelling, hardcore and PvP ladder for launch.">
 <link rel="icon" href="mark.svg" type="image/svg+xml">
 <link rel="canonical" href="https://foreverrank.com/">
+<!-- seo:begin -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ForeverRank">
 <meta property="og:url" content="https://foreverrank.com/">
-<meta property="og:title" content="ForeverRank">
-<meta property="og:description" content="Rank. Forever. The ladder for World of Warcraft: Forever.">
-<meta property="og:image" content="https://foreverrank.com/assets/hero.jpg">
+<meta property="og:title" content="ForeverRank: WoW Forever Ladder, Database and Tools">
+<meta property="og:description" content="ForeverRank is the WoW Forever ladder and toolkit: a talent calculator, a datamined item and spell database, BiS lists, news, and a levelling, hardcore and PvP ladder for launch.">
+<meta property="og:image" content="https://foreverrank.com/assets/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ForeverRank: WoW Forever Ladder, Database and Tools">
+<meta name="twitter:description" content="ForeverRank is the WoW Forever ladder and toolkit: a talent calculator, a datamined item and spell database, BiS lists, news, and a levelling, hardcore and PvP ladder for launch.">
+<meta name="twitter:image" content="https://foreverrank.com/assets/og.jpg">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "ForeverRank", "url": "https://foreverrank.com/", "description": "ForeverRank is the WoW Forever ladder and toolkit: a talent calculator, a datamined item and spell database, BiS lists, news, and a levelling, hardcore and PvP ladder for launch.", "publisher": {"@type": "Organization", "name": "ForeverRank", "url": "https://foreverrank.com/"}}</script>
+<!-- seo:end -->
 <meta name="theme-color" content="#0b1517">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -76,7 +85,7 @@
     world, ranked like a WarcraftLogs parse.</p>
     <button type="button" class="probe-cta" id="probe-cta">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="6.4"/><path d="M8 4.2V8l2.6 1.6"/></svg>
-      Download addon
+      Addon coming soon
     </button>
 
     <div class="countdown" id="countdown">
@@ -182,12 +191,8 @@
     <b id="probe-t">Forever<span>Probe</span></b>
     <p class="probe-sub">A pace bar you will not want to turn off, and character snapshots that only leave the game when you paste them yourself. Read-only, no automation, terms-of-service safe by construction.</p>
     <div class="probe-demo">Lv 23&nbsp;&nbsp;41.7%&nbsp;&nbsp;12.4k XP/h&nbsp;&nbsp;up in 1h 12m</div>
-    <ol class="probe-steps">
-      <li>Download and unzip: the <code>ForeverProbe</code> addon, plus an optional Windows <code>Companion</code> for guild auto-sync.</li>
-      <li>Drop <code>ForeverProbe</code> into <code>World of Warcraft/_beta_/Interface/AddOns/</code></li>
-      <li>Restart the game. The pace bar appears. That is the whole install.</li>
-    </ol>
-    <a class="probe-dl" href="/addon/ForeverProbe.zip" download>Download ForeverProbe</a>
+    <p class="probe-sub">The download is paused while we get it working on the current beta build. It comes back here the moment it does; the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a> hears first.</p>
+    <span class="probe-dl soon" aria-disabled="true">Coming soon</span>
     <p class="probe-foot"><a href="/addon/">Full details and the guild programme</a></p>
   </div>
 </div>
@@ -215,6 +220,9 @@
 .probe-dl { display: inline-block; margin-top: .9rem; font: 700 .78rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase;
   color: #14100a; background: #e5cc80; border-radius: 2px; padding: .7rem 1.1rem; text-decoration: none; }
 .probe-dl:hover { filter: brightness(1.08); }
+.probe-dl.soon { cursor: default; color: #e5cc80; background: transparent; border: 1px dashed rgba(229,204,128,.55); }
+.probe-dl.soon:hover { filter: none; }
+.probe-sub a { color: #e5cc80; }
 .probe-foot { margin: .7rem 0 0; font-size: .74rem; }
 .probe-foot a { color: #e5cc80; }
 @media (max-width: 640px) { .probe-modal { place-items: end stretch; padding: 0; } .probe-card { width: 100%; border-radius: 8px 8px 0 0; } }
@@ -231,6 +239,6 @@
   document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !m.hidden) close(); });
 })();
 </script>
-<script src="/support.js?v=1" defer></script>
+<script src="/support.js?v=2" defer></script>
 </body>
 </html>

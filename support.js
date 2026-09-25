@@ -6,7 +6,8 @@
   "use strict";
   var DONATE_URL = "https://paypal.me/MikalSteenMonslaup";
   var FEEDBACK_URL = "https://discord.gg/DZUZj66zh";  // the guild Discord
-  var HUSH_KEY = "fr-support-hush", HUSH_DAYS = 21, USED_DAYS = 45;
+  // new key when the card changes, so a reader who dismissed the old one sees it once more
+  var HUSH_KEY = "fr-support-hush-2", HUSH_DAYS = 21, USED_DAYS = 45;
 
   function hushed() {
     try {
@@ -56,8 +57,8 @@
       "<p>ForeverRank is rebuilt after every beta build, for free, by people who should be sleeping. " +
       "Tell us what is wrong or missing" + (DONATE_URL ? ", or toss a coin at the hosting bill." : ".") + "</p>" +
       '<div class="fr-acts">' +
-      '<a href="' + FEEDBACK_URL + '" rel="noopener" data-act="feedback">Give feedback</a>' +
-      (DONATE_URL ? '<a class="fr-don" href="' + DONATE_URL + '" target="_blank" rel="noopener" data-act="donate">Buy the smith a mead</a>' : "") +
+      '<a href="' + FEEDBACK_URL + '" rel="noopener" data-act="feedback" title="Tell us on the ForeverRank Discord">Feedback</a>' +
+      (DONATE_URL ? '<a class="fr-don" href="' + DONATE_URL + '" target="_blank" rel="noopener" data-act="donate" title="Buy the smith a mead on PayPal">Support</a>' : "") +
       "</div>";
     document.body.appendChild(el);
     requestAnimationFrame(function () { requestAnimationFrame(function () { el.classList.remove("fr-in"); }); });
