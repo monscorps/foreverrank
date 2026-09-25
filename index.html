@@ -24,7 +24,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="forever.css?v=21">
+<link rel="stylesheet" href="forever.css?v=23">
 <style>
 /* ---- home: news first, the ladder by invitation ---- */
 .ico { display: inline-block; flex: none; width: 2rem; height: 2rem; border-radius: 5px; border: 1px solid #0a0f13; box-shadow: 0 0 0 1px rgba(229,204,128,.35), 0 2px 8px rgba(0,0,0,.45); background: #10181e center/cover no-repeat; }
@@ -124,6 +124,7 @@ a.hn-feature:hover { border-color: var(--gold); transform: translateY(-2px); }
 .hx-cats em { font-style: normal; height: .55rem; border-radius: 3px; background: rgba(255,255,255,.07); overflow: hidden; }
 .hx-cats em u { display: block; height: 100%; width: var(--w); background: var(--c); box-shadow: 0 0 10px color-mix(in srgb, var(--c) 40%, transparent); }
 .hx-cats b { text-align: right; color: var(--c); }
+.hx-cats.wide div { grid-template-columns: 8.5rem 1fr 7.2rem; }
 .hx-race { display: flex; flex-wrap: wrap; gap: .3rem; }
 .hx-race span { width: 1.55rem; height: 1.55rem; border-radius: 50%; border: 2px solid var(--cc); background: conic-gradient(var(--cc) calc(var(--p) * 360deg), rgba(255,255,255,.06) 0); }
 .hx-race span.fell { filter: grayscale(1) brightness(.6); }
@@ -142,8 +143,9 @@ a.hn-feature:hover { border-color: var(--gold); transform: translateY(-2px); }
 .hx-steps p { margin: .25rem 0 0; font-size: .76rem; line-height: 1.5; color: #b9c6cd; }
 .hx-steps em { font-style: normal; color: var(--gold); }
 .hx-ladders { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1rem 0 0; }
-.hx-ladders span { display: inline-flex; align-items: center; gap: .45rem; padding: .38rem .7rem .38rem .38rem; border-radius: 99px; font: 600 .72rem/1 var(--heading); color: #dfe7eb; background: rgba(0,0,0,.28); border: 1px solid var(--card-border); }
+.hx-ladders button { cursor: pointer; transition: border-color .15s, color .15s; display: inline-flex; align-items: center; gap: .45rem; padding: .38rem .7rem .38rem .38rem; border-radius: 99px; font: 600 .72rem/1 var(--heading); color: #dfe7eb; background: rgba(0,0,0,.28); border: 1px solid var(--card-border); }
 .hx-ladders .ico.s { border-radius: 50%; }
+.hx-ladders button:hover { border-color: var(--gold); color: #fff; }
 .hx-cta { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 1.3rem 0 .4rem; padding: 1rem 1.1rem; border-radius: 12px; background: linear-gradient(90deg, rgba(229,204,128,.16), rgba(229,204,128,.03)); border: 1px solid rgba(229,204,128,.5); }
 .hx-go { cursor: pointer; font: 700 .8rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: #14100a; background: linear-gradient(180deg, #f0dfa8, #d9b96a); border: 1px solid rgba(255,240,200,.5); border-radius: 4px; padding: .85rem 1.2rem; box-shadow: 0 4px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.35); transition: filter .15s, transform .15s; }
 .hx-go:hover { filter: brightness(1.07); transform: translateY(-1px); }
@@ -154,10 +156,206 @@ a.hn-feature:hover { border-color: var(--gold); transform: translateY(-2px); }
 .lad-switch button.on { color: #14100a; background: linear-gradient(180deg, #f0dfa8, #d9b96a); box-shadow: 0 2px 10px rgba(0,0,0,.35); }
 .lad-switch button .ico.s { width: 1.3rem; height: 1.3rem; }
 @media (max-width: 620px) { .lad-switch { display: flex; } .lad-switch button { flex: 1; justify-content: center; padding: .6rem .5rem; font-size: .7rem; } .lad-switch button .ico.s { display: none; } }
-.lad-bar { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin: 0 0 .9rem; padding: .6rem .8rem; border-radius: 8px; background: rgba(226,104,168,.08); border: 1px dashed rgba(226,104,168,.45); font-size: .78rem; color: #e8d6e0; }
-.lad-flag { font: 700 .6rem/1 var(--heading); letter-spacing: .12em; text-transform: uppercase; color: #1b0a14; background: var(--q-pink); padding: .3rem .45rem; border-radius: 3px; }
-.lad-bar button { margin-left: auto; cursor: pointer; font: 600 .72rem/1 var(--heading); color: var(--gold); background: none; border: 1px solid rgba(229,204,128,.45); border-radius: 4px; padding: .45rem .7rem; }
-.lad-bar button:hover { background: rgba(229,204,128,.1); }
+/* ---- the live ladder: a rail of ladders, then one framed board ---- */
+.lb-rail { position: relative; display: flex; gap: .25rem; margin: 0 0 .8rem; padding: .3rem; overflow-x: auto; scrollbar-width: none; border-radius: 12px; background: rgba(0,0,0,.3); border: 1px solid var(--card-border); }
+.lb-rail::-webkit-scrollbar { display: none; }
+.lb-rail button { flex: 1 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: .5rem; cursor: pointer; white-space: nowrap; padding: .55rem .8rem .55rem .55rem; border: 1px solid transparent; border-radius: 9px; background: none; font: 600 .78rem/1 var(--heading); color: #b9c6cd; transition: color .15s, background .15s, border-color .15s; }
+.lb-rail button:hover { color: #fff; background: rgba(255,255,255,.04); }
+.lb-rail button.on { color: var(--gold); background: linear-gradient(180deg, rgba(229,204,128,.15), rgba(229,204,128,.03)); border-color: rgba(229,204,128,.5); box-shadow: inset 0 -2px 0 var(--gold); }
+.lb-rail .ico.s { width: 1.45rem; height: 1.45rem; transition: filter .15s; }
+.lb-rail button:not(.on) .ico.s { filter: saturate(.5) brightness(.8); }
+.lb-rail button:hover .ico.s { filter: none; }
+.lb { padding: 1.15rem 1.25rem 1rem; }
+.lb::before { content: ""; position: absolute; left: 12%; right: 12%; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+.lb-head { display: flex; align-items: center; gap: .85rem; padding-bottom: .9rem; margin-bottom: .85rem; border-bottom: 1px solid rgba(229,204,128,.14); }
+.lb-ico { width: 2.7rem; height: 2.7rem; border-radius: 7px; }
+.lb-t { flex: 1; min-width: 0; }
+.lb-t h3 { margin: 0; font: 400 1.5rem/1.1 var(--display-serif); color: #fff; }
+.lb-t p { margin: .3rem 0 0; font-size: .8rem; line-height: 1.4; color: var(--subtle); }
+.lb-demo { flex: none; align-self: flex-start; font: 700 .56rem/1 var(--heading); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); padding: .4rem .55rem; border: 1px dashed rgba(229,204,128,.55); border-radius: 4px; background: rgba(229,204,128,.06); }
+.lb-tools { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; margin: 0 0 .7rem; }
+.rd-normal { --rc: #9fb0bb; } .rd-pvp { --rc: #e5534b; } .rd-hardcore { --rc: #ff8a3d; } .rd-rp { --rc: #b38ce8; }
+.lb-find { margin-left: auto; display: flex; align-items: center; gap: .45rem; height: 2.2rem; box-sizing: border-box; padding: 0 .7rem; border-radius: 8px; background: rgba(0,0,0,.3); border: 1px solid var(--card-border); transition: border-color .15s; }
+.lb-find:focus-within { border-color: var(--gold); }
+.lb-find svg, .lb-share svg { flex: none; width: .95rem; height: .95rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.lb-find svg { color: var(--subtle); }
+.lb-find input { width: 10rem; min-width: 0; background: none; border: 0; outline: none; color: var(--surface-text); font: 500 .8rem var(--body); }
+.lb-find input::placeholder { color: var(--subtle); }
+.lb-find input::-webkit-search-cancel-button { filter: invert(.7); }
+.lb-share { display: inline-flex; align-items: center; gap: .4rem; height: 2.2rem; box-sizing: border-box; padding: 0 .8rem; cursor: pointer; border-radius: 8px; background: none; border: 1px solid rgba(229,204,128,.4); color: var(--gold); font: 600 .72rem/1 var(--heading); white-space: nowrap; transition: background .15s, border-color .15s; }
+.lb-share:hover { background: rgba(229,204,128,.08); border-color: var(--gold); }
+/* the table: numbers packed right, the name column takes the rest */
+.lb .ranktable th { padding-top: .2rem; }
+.lb .ranktable th.r, .lb .ranktable td.r { padding-left: 1.25rem; white-space: nowrap; }
+.lb .ranktable th.r { width: 1%; }
+.lb .ranktable td { padding-top: .5rem; padding-bottom: .5rem; }
+.lb .rank { width: 2.2rem; text-align: center; font-size: .95rem; }
+.lb tr:nth-child(1) .rank { color: var(--subtle); }
+.lb tr.p1 .rank { color: #f2d98a; } .lb tr.p2 .rank { color: #d3dde3; } .lb tr.p3 .rank { color: #dba577; }
+.lb tr.p1 td:first-child { box-shadow: inset 3px 0 0 #e5cc80; } .lb tr.p2 td:first-child { box-shadow: inset 3px 0 0 #aab7bf; } .lb tr.p3 td:first-child { box-shadow: inset 3px 0 0 #b9794a; }
+.lb .ranktable tbody tr:hover { background: rgba(229,204,128,.045); }
+.lb .ranktable td:nth-child(2) { width: 100%; max-width: 0; }
+.who { display: flex; align-items: center; gap: .65rem; min-width: 0; }
+.who .cl { flex: none; width: 1.95rem; height: 1.95rem; border-radius: 5px; background: #10181e center / cover no-repeat; border: 1px solid #0a0f13; box-shadow: 0 0 0 1px color-mix(in srgb, var(--cc) 55%, transparent); }
+.who > span:last-child { min-width: 0; }
+.who b { display: block; font: 600 .88rem/1.2 var(--heading); color: var(--cc, #fff); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who small { display: flex; align-items: center; gap: .35rem; margin-top: .12rem; font-size: .68rem; color: var(--subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who small i { flex: none; width: .38rem; height: .38rem; border-radius: 50%; background: var(--rc); }
+.who small em { font-style: italic; color: #9aa9b1; overflow: hidden; text-overflow: ellipsis; }
+.who.fell b { text-decoration: line-through; text-decoration-color: rgba(229,83,75,.7); }
+.gshield { position: relative; flex: none; display: grid; place-items: center; width: 1.95rem; height: 2.25rem; padding-bottom: .35rem; box-sizing: border-box; background: linear-gradient(180deg, #f0dfa8, #8f7a45); clip-path: polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%); }
+.gshield::before { content: ""; position: absolute; inset: 1.5px; background: linear-gradient(180deg, #1a3a4d, #0a1822); clip-path: polygon(0 0, 100% 0, 100% 62%, 50% 100%, 0 62%); }
+.gshield span { position: relative; font: 700 .5rem/1 var(--heading); letter-spacing: .02em; color: var(--gold); }
+.gshield.lg { width: 3.1rem; height: 3.6rem; padding-bottom: .55rem; } .gshield.lg span { font-size: .78rem; }
+.st { display: inline-flex; align-items: center; gap: .35rem; font: 700 .64rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; }
+.st.alive { color: var(--q-uncommon); } .st.fell { color: #e5534b; }
+.st.alive::before { content: ""; width: .45rem; height: .45rem; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+.st.fell::before { content: "\2620"; font-size: .85rem; }
+.lb .empty { box-shadow: none; background: rgba(0,0,0,.2); }
+@media (max-width: 760px) {
+  .lb { padding: .9rem .75rem .8rem; }
+  .lb-rail button { flex: 0 0 auto; }
+  .lb-t h3 { font-size: 1.25rem; } .lb-ico { width: 2.2rem; height: 2.2rem; }
+  .lb-demo { display: none; }
+  .lb-tools .seg { order: 3; width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .lb-tools .seg button { flex: 1 0 auto; justify-content: center; padding: 0 .55rem; }
+  .lb-find { flex: 1; margin-left: 0; } .lb-find input { width: 100%; }
+  .lb .ranktable th.r, .lb .ranktable td.r { padding-left: .7rem; }
+  .who .cl { width: 1.6rem; height: 1.6rem; } .who b { font-size: .82rem; }
+  .lb-rail { -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); }
+}
+@media (max-width: 560px) {
+  .hx-cats.wide div, .ch-sec .hx-cats div { grid-template-columns: 1fr auto; row-gap: .3rem; }
+  .hx-cats.wide em, .ch-sec .hx-cats em { grid-column: 1 / -1; grid-row: 2; }
+  .hx-cats.wide b, .ch-sec .hx-cats b { grid-column: 2; grid-row: 1; }
+  .lb .ranktable .sm, .lb .ranktable .go { display: none; }
+  .lb .rank { width: 1.6rem; }
+  .seg .wide-only { display: none; }
+  .who small em { display: none; }
+  .lb-tools .seg button { padding: 0 .45rem; font-size: .68rem; }
+}
+/* ---- demo dashboards (explainer tabs + insight) ---- */
+.hx-tabs { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 .7rem; }
+.hx-tabs button { display: inline-flex; align-items: center; gap: .5rem; cursor: pointer; padding: .55rem .9rem .55rem .55rem; border-radius: 8px; font: 600 .8rem/1 var(--heading); color: #dfe7eb; background: rgba(0,0,0,.3); border: 1px solid var(--card-border); transition: border-color .15s, color .15s, background .15s; }
+.hx-tabs button:hover { border-color: rgba(229,204,128,.6); color: #fff; }
+.hx-tabs button.on { color: var(--gold); border-color: var(--gold); background: rgba(229,204,128,.1); box-shadow: inset 0 -2px 0 var(--gold); }
+.hx-tabs .ico.s { width: 1.35rem; height: 1.35rem; }
+.hx-dash { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; padding: 1.1rem 1.15rem 1.1rem; border-radius: 12px; background: radial-gradient(110% 90% at 100% 0%, rgba(229,204,128,.08), transparent 55%), linear-gradient(180deg, rgba(7,50,74,.6), rgba(5,30,45,.92)); border: 1px solid rgba(229,204,128,.3); box-shadow: var(--shadow); animation: dashin .35s ease; }
+.hx-dash[hidden] { display: none; }
+@keyframes dashin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.hx-col { min-width: 0; display: flex; flex-direction: column; gap: .35rem; }
+.hx-kick small { margin-left: .4rem; font: 500 .66rem var(--body); letter-spacing: 0; text-transform: none; color: var(--subtle); }
+.hx-ring.big { width: 5rem; height: 5rem; }
+.hx-ring.big b { font-size: 1.3rem; }
+.hx-racer { margin-top: auto; padding: .7rem .75rem; border-radius: 8px; background: rgba(0,0,0,.25); border: 1px dashed rgba(255,255,255,.12); display: grid; gap: .45rem; }
+.hx-racer .hx-bars { height: 2.2rem; opacity: .85; }
+.hx-members { display: grid; gap: .3rem; }
+.hx-members div { display: grid; grid-template-columns: 9.5rem 1fr 2.6rem; gap: .5rem; align-items: center; font: 600 .72rem var(--heading); }
+.hx-members em { font-style: normal; height: .5rem; border-radius: 3px; background: rgba(255,255,255,.07); overflow: hidden; }
+.hx-members em u { display: block; height: 100%; width: var(--w); background: var(--c); }
+.hx-members small { text-align: right; font: 700 .7rem var(--heading); color: var(--c); }
+.hx-members .fell b { text-decoration: line-through; opacity: .6; }
+.awards { display: grid; grid-template-columns: 1fr 1fr; gap: .45rem; }
+.award { display: flex; gap: .6rem; align-items: center; padding: .55rem .6rem; border-radius: 8px; background: rgba(0,0,0,.28); border: 1px solid rgba(229,204,128,.2); }
+.award .ico { width: 2.2rem; height: 2.2rem; }
+.award em { display: block; font-style: normal; font: 700 .58rem/1 var(--heading); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+.award b { display: block; margin-top: .25rem; font: 600 .8rem/1.2 var(--heading); }
+.award span { display: block; margin-top: .15rem; font-size: .68rem; color: var(--subtle); }
+.heat { position: relative; width: 100%; max-width: 22rem; margin: .2rem auto 0; aspect-ratio: 1281 / 2214; border-radius: 10px; overflow: hidden; border: 1px solid rgba(229,204,128,.3); background: #0a1420; }
+.heat img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: saturate(.7) brightness(.72); }
+.heat .spots i { position: absolute; left: var(--x); top: var(--y); width: var(--s); height: var(--s); transform: translate(-50%, -50%); border-radius: 50%; background: radial-gradient(circle, rgba(255,90,50,.9), rgba(255,60,30,.45) 45%, rgba(255,40,20,0) 70%); animation: pulse 2.6s ease-in-out infinite; animation-delay: var(--d); }
+.heat .spots i b { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: 700 .62rem var(--heading); color: #fff; text-shadow: 0 1px 3px #000; }
+.heat .spots i span { position: absolute; left: 50%; top: calc(50% + .75rem); transform: translateX(-50%); white-space: nowrap; font: 600 .56rem var(--heading); color: #ffd9c9; text-shadow: 0 1px 4px #000, 0 0 6px #000; }
+.heat .spots i span.up { top: auto; bottom: calc(50% + .75rem); }
+.heat .spots i span.l, .heat .spots i span.r { top: 50%; transform: translateY(-50%); }
+.heat .spots i span.l { left: auto; right: calc(50% + var(--s) * .3); }
+.heat .spots i span.r { left: calc(50% + var(--s) * .3); }
+@keyframes pulse { 50% { transform: translate(-50%, -50%) scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { .heat .spots i, .hx-dash { animation: none; } }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; margin: .2rem 0 .3rem; }
+.tiles div { padding: .55rem .5rem; border-radius: 8px; text-align: center; background: rgba(0,0,0,.28); border: 1px solid var(--card-border); }
+.tiles b { display: block; font: 700 1.05rem/1.1 var(--heading); color: var(--gold); }
+.tiles span { font: 600 .56rem/1.2 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: var(--subtle); }
+.nem { display: grid; gap: .3rem; }
+.nem div { display: grid; grid-template-columns: 1.4rem 1fr auto; gap: .5rem; align-items: center; padding: .4rem .55rem; border-radius: 6px; background: rgba(160,20,10,.12); border: 1px solid rgba(255,90,70,.22); font-size: .74rem; }
+.nem .skull { color: #ff5a4a; font-size: 1rem; text-align: center; }
+.nem b { font: 600 .8rem var(--heading); }
+.nem span:last-child { color: #d8b9b3; font-size: .7rem; }
+.bounty { margin: .25rem 0 0; padding: .55rem .7rem; border-radius: 8px; font-size: .76rem; color: #ffe2c9; background: linear-gradient(90deg, rgba(255,140,60,.18), rgba(255,140,60,.04)); border: 1px solid rgba(255,157,92,.45); }
+.bounty:empty { display: none; }
+.bounty b { color: #fff; }
+.toast { display: flex; gap: .7rem; align-items: center; padding: .6rem .75rem; border-radius: 6px; background: rgba(8,10,14,.92); border: 1px solid #5d6b7e; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.toast b { display: block; font: 700 .72rem/1 var(--heading); letter-spacing: .06em; color: #ff5a4a; }
+.toast.friendly b { color: #7ee0a0; }
+.toast span:not(.skullbadge) { display: block; margin-top: .25rem; font-size: .78rem; color: #f2e9d8; }
+.skullbadge { flex: none; display: grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: 50%; background: #000; color: #e0271f; box-shadow: 0 0 0 1px #3a0d0a, 0 0 12px rgba(224,39,31,.35); }
+.toast.friendly .skullbadge { color: #4fd07f; box-shadow: 0 0 0 1px #0d3a1c, 0 0 12px rgba(79,208,127,.3); }
+.skullbadge svg { width: 1.3rem; height: 1.3rem; }
+.consent { margin: .3rem 0 0; font-size: .7rem; color: var(--subtle); padding-left: .7rem; border-left: 2px solid var(--q-pink); }
+.soc { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; }
+.soc div { padding: .45rem .5rem; border-radius: 6px; background: rgba(0,0,0,.25); border: 1px solid var(--card-border); }
+.soc b { display: block; font: 600 .78rem/1.2 var(--heading); color: var(--gold); }
+.soc span { font-size: .66rem; color: var(--subtle); }
+/* ---- profile sheets: a character or a guild, opened from a ladder row ---- */
+#insight .insight-card { width: min(46rem, 96vw); padding: 0; border-radius: 14px; border-color: rgba(229,204,128,.35); background: linear-gradient(180deg, #0d2231, #0a1822 40%); }
+#insight-body { padding: 1.3rem 1.4rem 1.2rem; }
+#insight .insight-x { z-index: 2; top: .75rem; right: .9rem; }
+.ch-head { display: flex; align-items: center; gap: .95rem; margin: -1.3rem -1.4rem 1.1rem; padding: 1.35rem 3.3rem 1.15rem 1.4rem; border-bottom: 1px solid rgba(229,204,128,.16); background: radial-gradient(120% 150% at 0% 0%, color-mix(in srgb, var(--cc, #e5cc80) 17%, transparent), transparent 62%); }
+.ch-av { flex: none; width: 3.7rem; height: 3.7rem; border-radius: 10px; background: #10181e center / cover no-repeat; border: 2px solid #0a0f13; box-shadow: 0 0 0 1.5px var(--cc), 0 6px 18px rgba(0,0,0,.5); }
+.ch-t { flex: 1; min-width: 0; }
+.ch-t .in-name { font-size: 1.8rem; line-height: 1.1; }
+.ch-sub { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin: .35rem 0 0; font-size: .8rem; color: #c3ced4; }
+.ch-sub > i { width: .45rem; height: .45rem; border-radius: 50%; background: var(--rc); }
+.ch-tag { margin: .3rem 0 0; font: italic 400 .82rem var(--body); color: var(--gold); }
+.ch-head .lb-demo { align-self: flex-start; margin-top: .15rem; }
+.ch-hero { display: flex; align-items: center; gap: 1.1rem; margin: 0 0 .9rem; }
+.ch-hero .hx-ring.big { flex: none; width: 5.5rem; height: 5.5rem; }
+.ch-hero .hx-ring.big b { font-size: 1.35rem; }
+#insight .hx-ring::before { background: #0c1f2c; }
+.ch-stats { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: .45rem; }
+.ch-stats div { padding: .65rem .4rem .55rem; border-radius: 8px; text-align: center; background: rgba(0,0,0,.28); border: 1px solid var(--card-border); }
+.ch-stats b { display: block; font: 700 1.3rem/1.1 var(--heading); color: #fff; }
+.ch-stats b small, .tiles b small { margin-left: .1rem; font-size: .66rem; font-weight: 600; color: var(--subtle); }
+.ch-stats span { display: block; margin-top: .25rem; font: 600 .54rem/1.25 var(--heading); letter-spacing: .1em; text-transform: uppercase; color: var(--subtle); }
+.ch-stats .pp, .tiles .pp { border-color: color-mix(in srgb, var(--c) 45%, transparent); background: color-mix(in srgb, var(--c) 9%, rgba(0,0,0,.28)); }
+.ch-stats .pp b, .tiles .pp b { color: var(--c); }
+.ch-sec { margin: 0 0 .75rem; padding: .85rem .95rem .8rem; border-radius: 10px; background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.07); }
+.ch-sec h4, .ch-sec summary { display: flex; align-items: center; gap: .5rem; margin: 0 0 .75rem; font: 700 .66rem/1 var(--heading); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+.ch-sec h4 small, .ch-sec summary small { margin-left: auto; font: 500 .7rem/1.2 var(--body); letter-spacing: 0; text-transform: none; color: var(--subtle); text-align: right; }
+.ch-sec .ico.s { width: 1.35rem; height: 1.35rem; }
+.ch-sec.pvp { background: linear-gradient(180deg, rgba(160,20,10,.12), rgba(0,0,0,.22)); border-color: rgba(255,90,70,.2); }
+.ch-sec .hx-prof { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid rgba(255,255,255,.06); }
+.ch-sec .tiles { margin: .7rem 0 0; }
+.ch-sec .tiles:first-of-type { margin-top: 0; }
+.ch-sec .nem { margin-top: .6rem; }
+.ch-duo { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.ch-duo .hx-cats div { grid-template-columns: 7.8rem 1fr 1.8rem; }
+.ch-duo .hx-members div { grid-template-columns: minmax(0, 8.5rem) 1fr 2.4rem; }
+details.ch-sec summary { cursor: pointer; margin: 0; list-style: none; color: var(--card-text); }
+details.ch-sec summary::-webkit-details-marker { display: none; }
+details.ch-sec summary::after { content: "+"; flex: none; width: 1.2rem; text-align: center; font-size: 1rem; color: var(--gold); }
+details.ch-sec[open] summary { margin-bottom: .75rem; }
+details.ch-sec[open] summary::after { content: "\2013"; }
+details.ch-sec summary:hover { color: var(--gold); }
+#insight .in-note { margin: .5rem 0 0; }
+@media (max-width: 640px) {
+  #insight-body { padding: 1rem .85rem; }
+  .ch-head { margin: -1rem -.85rem .9rem; padding: 1rem 2.9rem .9rem .85rem; gap: .7rem; }
+  .ch-av { width: 2.9rem; height: 2.9rem; }
+  .ch-t .in-name { font-size: 1.35rem; }
+  .ch-head .lb-demo { display: none; }
+  .ch-hero { flex-direction: column; align-items: stretch; } .ch-hero .hx-ring.big { align-self: center; }
+  .ch-stats { grid-template-columns: repeat(3, 1fr); } .ch-stats .pp { grid-column: span 2; }
+  .ch-duo { grid-template-columns: 1fr; }
+  .ch-sec h4 small, .ch-sec summary small { display: none; }
+}
+.cmp { display: inline-flex; align-items: center; gap: .5rem; font: 700 .76rem var(--heading); color: #f3e3b3; }
+.cmp i { display: block; width: 3.6rem; height: .38rem; border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden; }
+.cmp i::before { content: ""; display: block; height: 100%; width: var(--w); background: linear-gradient(90deg, #a8925b, #e5cc80); box-shadow: 0 0 8px rgba(229,204,128,.4); }
+@media (max-width: 640px) { .cmp i { width: 2.2rem; } }
+.bty { color: #ff5a4a; }
+@media (max-width: 980px) { .hx-dash { grid-template-columns: 1fr; } }
+@media (max-width: 620px) { .awards, .tiles { grid-template-columns: 1fr 1fr; } .soc { grid-template-columns: 1fr 1fr; } .hx-members div { grid-template-columns: 7.5rem 1fr 2.4rem; } .hx-tabs button { flex: 1; justify-content: center; padding: .55rem .4rem; font-size: .72rem; } }
 @media (max-width: 980px) {
   .hn-feature { grid-template-columns: 1fr; } .hn-art::after { background: linear-gradient(0deg, rgba(11,20,24,.8), rgba(11,20,24,0) 55%); }
   .hn-grid { grid-template-columns: 1fr 1fr; }
@@ -229,8 +427,8 @@ a.hn-feature:hover { border-color: var(--gold); transform: translateY(-2px); }
     <svg class="fili fili-tr" aria-hidden="true"><use href="#fili"/></svg>
     <p class="eyebrow">A ladder reborn</p>
     <h1 class="logotype">Rank. <span>Forever.</span></h1>
-    <p class="hero-sub">Levelling, hardcore, PvP, characters and guilds: measured in the
-    world, ranked like a WarcraftLogs parse.</p>
+    <p class="hero-sub">How complete your character and your guild are, plus PvP,
+    hardcore and the race to the cap: measured in the world, ranked like a WarcraftLogs parse.</p>
     <button type="button" class="probe-cta" id="probe-cta">
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="6.4"/><path d="M8 4.2V8l2.6 1.6"/></svg>
       Addon coming soon
@@ -296,44 +494,89 @@ a.hn-feature:hover { border-color: var(--gold); transform: translateY(-2px); }
     <button type="button" role="tab" data-mode="preview" aria-selected="false"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_trophy_argent.jpg)"></span>Preview with placeholder data</button>
   </div>
   <section class="hx" id="explain">
-    <p class="hx-lede">When Forever launches, ForeverRank turns what you do in the world into <b>two dashboards</b>: one for your character, one for your guild. Nothing here is real yet; this is what the ladder is for.</p>
-    <div class="hx-duo">
-      <article class="hx-card">
-        <p class="hx-kick">Character progression</p>
+    <p class="hx-lede">When Forever launches, ForeverRank shows <b>how complete</b> your character and your guild are, not just how fast you levelled. Four dashboards, all placeholder for now: pick one.</p>
+    <div class="hx-tabs" id="hx-tabs" role="tablist" aria-label="Demo dashboards">
+      <button type="button" role="tab" data-t="char" class="on" aria-selected="true"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_paladin.jpg)"></span>Character</button>
+      <button type="button" role="tab" data-t="guild" aria-selected="false"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_tabardpvp_01.jpg)"></span>Guild</button>
+      <button type="button" role="tab" data-t="pvp" aria-selected="false"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_bannerpvp_01.jpg)"></span>PvP</button>
+      <button type="button" role="tab" data-t="social" aria-selected="false"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_letter_15.jpg)"></span>Social</button>
+    </div>
+
+    <article class="hx-dash" data-p="char">
+      <div class="hx-col">
         <div class="hx-char">
           <span class="hx-port" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_paladin.jpg)"></span>
-          <div><b class="hx-name" style="color:#f58cba" data-x="c-name">Aldric Stormhollow</b><span class="hx-sub" data-x="c-sub">Paladin · RP server</span></div>
-          <div class="hx-ring" data-x="c-ring" style="--p:.9"><b data-x="c-lvl">27</b><span>level</span></div>
+          <div><b class="hx-name" style="color:#f58cba">Aldric Stormhollow</b><span class="hx-sub" data-x="c-sub">Paladin · RP server</span></div>
+          <div class="hx-ring big" data-x="c-ring" style="--p:.6"><b data-x="c-pct">60%</b><span>complete</span></div>
         </div>
-        <div class="hx-row"><span class="hx-lab">Dungeons of the Nine</span><span class="hx-pips" data-x="c-pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></div>
-        <div class="hx-row"><span class="hx-lab">Progression parse</span><span class="hx-parse" data-x="c-parse" style="--c:var(--q-epic)">91</span></div>
-        <div class="hx-row col"><span class="hx-lab">Every level, timed <small>colour = your pace against everyone at that level</small></span><span class="hx-bars" data-x="c-bars"></span></div>
+        <p class="hx-kick">Character completion</p>
+        <div class="hx-cats wide" data-x="c-parts"></div>
+      </div>
+      <div class="hx-col">
         <div class="hx-row col"><span class="hx-lab">Professions</span><span class="hx-prof" data-x="c-profs"></span></div>
-        <ul class="hx-list">
-          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/ability_rogue_sprint.jpg)"></span>Levelling pace, level by level</li>
-          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_key_11.jpg)"></span>The nine dungeons cleared</li>
-          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/trade_blacksmithing.jpg)"></span>Professions and camps</li>
-          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/spell_holy_resurrection.jpg)"></span>Hardcore: alive, or the level death found you</li>
-          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_bannerpvp_01.jpg)"></span>PvP rank and honor</li>
-        </ul>
-      </article>
-      <article class="hx-card">
-        <p class="hx-kick">Guild progression</p>
+        <div class="hx-row"><span class="hx-lab">Dungeons of the Nine</span><span class="hx-pips" data-x="c-pips"></span></div>
+        <div class="hx-row"><span class="hx-lab">Completion parse <small>against every character on the ladder</small></span><span class="hx-parse" data-x="c-parse" style="--c:var(--q-epic)">–</span></div>
+        <div class="hx-racer">
+          <span class="hx-lab">For the racers: every level, timed <small>one ladder of several; colour is pace against everyone at that level</small></span>
+          <span class="hx-bars" data-x="c-bars"></span>
+        </div>
+      </div>
+    </article>
+
+    <article class="hx-dash" data-p="guild" hidden>
+      <div class="hx-col">
         <div class="hx-char">
           <span class="hx-port gtab" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_tabardpvp_01.jpg)"></span>
-          <div><b class="hx-name">&lt;<span data-x="g-name">Riverglade Company</span>&gt;</b><span class="hx-sub" data-x="g-sub">12 members · RP server</span></div>
-          <div class="hx-ring gold" data-x="g-ring" style="--p:.62"><b data-x="g-overall">62</b><span>overall</span></div>
+          <div><b class="hx-name">&lt;<span>Riverglade Company</span>&gt;</b><span class="hx-sub" data-x="g-sub">12 members · RP server</span></div>
+          <div class="hx-ring gold big" data-x="g-ring" style="--p:.6"><b data-x="g-overall">60</b><span>overall</span></div>
         </div>
+        <p class="hx-kick">Guild completion</p>
         <div class="hx-cats" data-x="g-cats"></div>
-        <div class="hx-row col"><span class="hx-lab">Race to the cap <small>each dot a member, filled to their level</small></span><span class="hx-race" data-x="g-race"></span></div>
-        <ul class="hx-list">
-          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/ability_warrior_rallyingcry.jpg)"></span>Levelling as a guild, not one runner</li>
-          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_head_dragon_01.jpg)"></span>Dungeons cleared together</li>
-          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_bone_humanskull_01.jpg)"></span>Hardcore survival and PvP</li>
-          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_note_01.jpg)"></span>One weighted score, broken down</li>
-        </ul>
-      </article>
-    </div>
+        <div class="hx-row col"><span class="hx-lab">Members, by completion</span><span class="hx-members" data-x="g-members"></span></div>
+      </div>
+      <div class="hx-col">
+        <p class="hx-kick">Notable members <small>picked by what they do in the world</small></p>
+        <div class="awards" data-x="g-awards"></div>
+      </div>
+    </article>
+
+    <article class="hx-dash" data-p="pvp" hidden>
+      <div class="hx-col">
+        <p class="hx-kick">Where <span data-x="p-first">Crit</span> fights <small>kills by zone, on the Eastern Kingdoms</small></p>
+        <div class="heat"><img src="map/img/cont-ek.jpg" alt="Eastern Kingdoms" loading="lazy"><div class="spots" data-x="p-heat"></div></div>
+      </div>
+      <div class="hx-col">
+        <div class="hx-char">
+          <span class="hx-port" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_rogue.jpg)"></span>
+          <div><b class="hx-name" style="color:#fff569" data-x="p-name">Crit Happens</b><span class="hx-sub" data-x="p-sub">Rogue · PvP server</span></div>
+        </div>
+        <div class="tiles" data-x="p-tiles"></div>
+        <p class="hx-kick">Nemeses <small>the enemies who killed you most</small></p>
+        <div class="nem" data-x="p-nem"></div>
+        <div class="bounty" data-x="p-bounty"></div>
+        <p class="hx-kick">In game, with the addon <small>planned</small></p>
+        <div class="toast"><span class="skullbadge"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2C6.9 2 3 5.6 3 10.4c0 2.7 1.3 5 3.3 6.4V20c0 .6.4 1 1 1h1.5v-2h1.5v2h3.4v-2h1.5v2h1.5c.6 0 1-.4 1-1v-3.2c2-1.4 3.3-3.7 3.3-6.4C21 5.6 17.1 2 12 2Zm-3.5 11.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm7 0a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z"/></svg></span><div><b>ForeverProbe</b><span data-x="p-toast">2 of your nemeses are in Hillsbrad Foothills.</span></div></div>
+        <p class="consent">Opt-in only: PvP sharing is its own switch, because it names other players.</p>
+      </div>
+    </article>
+
+    <article class="hx-dash" data-p="social" hidden>
+      <div class="hx-col">
+        <div class="hx-char">
+          <span class="hx-port" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_priest.jpg)"></span>
+          <div><b class="hx-name" style="color:#ffffff" data-x="s-name">Justin Case</b><span class="hx-sub" data-x="s-sub">Priest · Normal server</span></div>
+          <div class="hx-ring gold big" data-x="s-ring" style="--p:.5"><b data-x="s-grouped">40</b><span>grouped</span></div>
+        </div>
+        <p class="hx-kick">Runs most with</p>
+        <div class="hx-cats" data-x="s-partners"></div>
+      </div>
+      <div class="hx-col">
+        <div class="tiles" data-x="s-tiles"></div>
+        <p class="hx-kick">In game, with the addon <small>planned</small></p>
+        <div class="toast friendly"><span class="skullbadge"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.2 4.3 2.4.7-1.2 2.2-2.4 4.3-2.4 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21Z"/></svg></span><div><b>ForeverProbe</b><span data-x="s-toast">Tank Sinatra is online. You have run 7 dungeons together.</span></div></div>
+        <p class="consent">Opt-in only, like PvP: social stats name the people you play with.</p>
+      </div>
+    </article>
 
     <div class="hx-parse-scale">
       <p class="hx-kick">How a parse reads</p>
@@ -348,12 +591,13 @@ a.hn-feature:hover { border-color: var(--gold); transform: translateY(-2px); }
     </div>
 
     <div class="hx-ladders">
-      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_note_01.jpg)"></i>Progression</span>
-      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/ability_rogue_sprint.jpg)"></i>Levelling</span>
-      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/spell_holy_resurrection.jpg)"></i>Hardcore</span>
-      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_bannerpvp_01.jpg)"></i>World PvP</span>
-      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/trade_blacksmithing.jpg)"></i>Professions</span>
-      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_tabardpvp_01.jpg)"></i>Guilds</span>
+      <button type="button" data-open="progression"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_trophy_argent.jpg)"></i>Completion</button>
+      <button type="button" data-open="pvp"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_bannerpvp_01.jpg)"></i>World PvP</button>
+      <button type="button" data-open="social"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_letter_15.jpg)"></i>Social</button>
+      <button type="button" data-open="hardcore"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_bone_humanskull_01.jpg)"></i>Hardcore</button>
+      <button type="button" data-open="professions"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/trade_blacksmithing.jpg)"></i>Professions</button>
+      <button type="button" data-open="guilds"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_tabardpvp_01.jpg)"></i>Guilds</button>
+      <button type="button" data-open="levelling"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/ability_rogue_sprint.jpg)"></i>Levelling speed, for the racers</button>
     </div>
 
     <div class="hx-cta">
@@ -363,40 +607,32 @@ a.hn-feature:hover { border-color: var(--gold); transform: translateY(-2px); }
   </section>
 
   <div class="lad-live" id="lad-live" hidden>
-    <div class="controls">
-      <div class="dd" id="dd-view">
-        <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
-          <small>Ladder</small><span id="dd-view-label">Progression</span><i class="dd-car" aria-hidden="true"></i>
-        </button>
-        <ul class="dd-list" role="listbox" hidden>
-          <li role="option" data-v="levelling">Levelling</li>
-          <li role="option" data-v="hardcore">Hardcore</li>
-          <li role="option" data-v="pvp">World PvP</li>
-          <li role="option" data-v="progression" class="is-sel" aria-selected="true">Progression</li>
-          <li role="option" data-v="professions">Professions</li>
-          <li role="option" data-v="guilds">Guilds</li>
-        </ul>
+    <nav class="lb-rail" id="lb-rail" role="tablist" aria-label="Ladder">
+      <button type="button" role="tab" data-v="progression" aria-selected="false"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_trophy_argent.jpg)"></i>Completion</button>
+      <button type="button" role="tab" data-v="pvp" aria-selected="false"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_bannerpvp_01.jpg)"></i>World PvP</button>
+      <button type="button" role="tab" data-v="social" aria-selected="false"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_letter_15.jpg)"></i>Social</button>
+      <button type="button" role="tab" data-v="hardcore" aria-selected="false"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_bone_humanskull_01.jpg)"></i>Hardcore</button>
+      <button type="button" role="tab" data-v="professions" aria-selected="false"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/trade_blacksmithing.jpg)"></i>Professions</button>
+      <button type="button" role="tab" data-v="guilds" aria-selected="false"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_tabardpvp_01.jpg)"></i>Guilds</button>
+      <button type="button" role="tab" data-v="levelling" aria-selected="false"><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/ability_rogue_sprint.jpg)"></i>Levelling speed</button>
+    </nav>
+    <section class="panel lb">
+      <header class="lb-head">
+        <i class="ico lb-ico" id="lb-ico" aria-hidden="true"></i>
+        <div class="lb-t"><h3 id="lb-name">Completion</h3><p id="board-sub"></p></div>
+        <span class="lb-demo" title="Invented characters and guilds. Nothing real until launch.">Placeholder data</span>
+      </header>
+      <div class="lb-tools">
+        <div class="seg" id="lb-realm" role="radiogroup" aria-label="Server">
+          <button type="button" role="radio" data-r="all" aria-checked="false">All<span class="wide-only"> servers</span></button>
+          <button type="button" role="radio" data-r="Normal" aria-checked="false" class="rd-normal">Normal</button>
+          <button type="button" role="radio" data-r="PvP" aria-checked="false" class="rd-pvp">PvP</button>
+          <button type="button" role="radio" data-r="Hardcore" aria-checked="false" class="rd-hardcore">Hardcore</button>
+          <button type="button" role="radio" data-r="RP" aria-checked="false" class="rd-rp">RP</button>
+        </div>
+        <label class="lb-find"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><input id="search" type="search" placeholder="Find a player" aria-label="Find a player" autocomplete="off" spellcheck="false"></label>
+        <button type="button" class="lb-share" id="share"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4L12 5.6"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/></svg><span>Copy link</span></button>
       </div>
-      <div class="dd" id="dd-realm">
-        <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
-          <small>Server</small><span id="dd-realm-label">All servers</span><i class="dd-car" aria-hidden="true"></i>
-        </button>
-        <ul class="dd-list" role="listbox" hidden>
-          <li role="option" data-v="all" class="is-sel" aria-selected="true">All servers</li>
-          <li role="option" data-v="Normal">Normal</li>
-          <li role="option" data-v="PvP">PvP</li>
-          <li role="option" data-v="Hardcore">Hardcore</li>
-          <li role="option" data-v="RP">RP</li>
-        </ul>
-      </div>
-      <input id="search" class="search" type="search" placeholder="Find a player&hellip;" aria-label="Search players" autocomplete="off" spellcheck="false">
-      <button type="button" class="share" id="share">Share view</button>
-    </div>
-    <p class="board-sub" id="board-sub"></p>
-
-    <section class="panel">
-      <svg class="fili fili-panel-tl" aria-hidden="true"><use href="#fili"/></svg>
-      <svg class="fili fili-panel-br" aria-hidden="true"><use href="#fili"/></svg>
       <div id="board" class="board" aria-live="polite"></div>
     </section>
   </div>
@@ -417,7 +653,7 @@ a.hn-feature:hover { border-color: var(--gold); transform: translateY(-2px); }
   <a href="https://github.com/monscorps/foreverrank">source</a>
 </footer>
 
-<script src="forever.js?v=12"></script>
+<script src="forever.js?v=14"></script>
 <script src="/map.js?v=8" defer></script>
 <div class="probe-modal" id="probe-modal" hidden>
   <div class="probe-card" role="dialog" aria-modal="true" aria-labelledby="probe-t" tabindex="-1">

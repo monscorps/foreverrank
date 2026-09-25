@@ -90,7 +90,6 @@ b, strong { font-weight: 700; }
 .tab.is-active:hover { background: var(--blue-hover); border-color: var(--blue-hover); }
 .board-sub { margin: 0 0 1rem; color: var(--subtle); font-size: .84rem; max-width: 60rem; }
 
-.demo-flag { display: inline-flex; align-items: center; margin-bottom: .8rem; font-family: var(--heading); font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: #000; background: var(--gold); border-radius: var(--r-btn); padding: .3rem .6rem; font-weight: 600; }
 
 .ranktable { width: 100%; border-collapse: collapse; font-size: .9rem; }
 .ranktable th { text-align: left; font-family: var(--heading); font-weight: 600; font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; color: var(--subtle); padding: .3rem .55rem .5rem; border-bottom: 1px solid var(--card-border); }
@@ -127,7 +126,7 @@ tr:nth-child(1) .rank { color: var(--gold); }
 .in-name { font-family: var(--display-serif); font-weight: 400; font-size: 1.7rem; margin: 0; color: var(--cc, #ffffff); }
 .in-meta { display: flex; gap: .4rem; flex-wrap: wrap; margin: .5rem 0 1rem; align-items: center; }
 .chip { font-family: var(--heading); font-weight: 600; font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; padding: .22rem .5rem; border-radius: var(--r-btn); border: 1px solid var(--card-border); color: var(--card-text); }
-.in-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .5rem; margin-bottom: 1.1rem; }
+.in-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr)); gap: .5rem; margin-bottom: 1.1rem; }
 .in-stats div { border: 1px solid var(--card-border); border-radius: var(--r-panel); background: rgba(28,35,37,.5); padding: .6rem .7rem .5rem; }
 .in-stats b { display: block; font-family: var(--heading); font-weight: 600; font-size: 1.3rem; line-height: 1.15; color: var(--gold); }
 .in-stats span { font-size: .58rem; letter-spacing: .14em; text-transform: uppercase; color: var(--subtle); }
@@ -212,44 +211,24 @@ footer a { margin-left: auto; color: var(--card-text); }
 .chip-gold { border-color: rgba(229,204,128,.55); color: var(--gold); background: rgba(229,204,128,.1); }
 @media (max-width: 820px) { .search { min-width: 100%; margin-top: .3rem; } }
 
-/* view select: squared, like a tool, not a pill */
-.controls { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .2rem 0 .8rem; }
-.viewsel { appearance: none; -webkit-appearance: none; background: var(--card); color: var(--surface-text);
-  border: 1px solid var(--card-border); border-radius: 2px; font: 600 .95rem/1 var(--heading);
-  padding: .6rem 2.2rem .55rem .9rem; cursor: pointer; outline: none;
-  background-image: linear-gradient(45deg, transparent 49%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 51%);
-  background-position: calc(100% - 1.15rem) 55%, calc(100% - .85rem) 55%; background-size: .32rem .32rem; background-repeat: no-repeat; }
-.viewsel:focus { border-color: var(--gold); }
-.viewsel option { background: #0b2436; color: var(--surface-text); }
-.controls .search { margin-left: auto; border-radius: 2px; }
-
-/* big squared dropdowns, drawn for the theme (native selects cannot be) */
-.dd { position: relative; }
-.dd-btn { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; column-gap: .9rem; align-items: center;
-  text-align: left; cursor: pointer; min-width: 13.5rem; padding: .55rem 1rem .5rem; border-radius: 2px;
-  background: linear-gradient(180deg, rgba(7,50,74,.95), rgba(6,38,56,.95)); color: var(--surface-text);
-  border: 1px solid rgba(229,204,128,.45); box-shadow: inset 0 0 0 1px rgba(0,0,0,.35), var(--shadow); }
-.dd-btn small { grid-column: 1; font: 600 .56rem/1 var(--heading); letter-spacing: .28em; text-transform: uppercase; color: var(--gold); }
-.dd-btn span { grid-column: 1; font: 600 1.05rem/1.25 var(--heading); }
-.dd-btn .dd-car { grid-column: 2; grid-row: 1 / span 2; width: 0; height: 0; border-left: .38rem solid transparent; border-right: .38rem solid transparent; border-top: .46rem solid var(--gold); transition: transform .15s; }
-.dd.open .dd-car { transform: rotate(180deg); }
-.dd-btn:hover, .dd.open .dd-btn { border-color: var(--gold); }
-.dd-list { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; margin: 0; padding: .25rem; list-style: none;
-  min-width: 100%; background: #082a3f; border: 1px solid rgba(229,204,128,.45); border-radius: 2px; box-shadow: 0 16px 40px -10px rgba(0,0,0,.85); }
-.dd-list li { padding: .62rem .9rem; cursor: pointer; font: 600 .95rem/1 var(--heading); color: var(--surface-text); border-radius: 2px; }
-.dd-list li:hover { background: rgba(0,175,215,.14); }
-.dd-list li.is-sel { color: var(--gold); }
-.dd-list li.is-sel::after { content: " \2726"; }
+/* segmented control: one choice of a few, e.g. server type or role */
+.seg { display: inline-flex; height: 2.2rem; box-sizing: border-box; padding: 3px; gap: 2px; border-radius: 8px; background: rgba(0,0,0,.3); border: 1px solid var(--card-border); }
+.seg button { display: inline-flex; align-items: center; gap: .4rem; height: 100%; cursor: pointer; padding: 0 .7rem; border: 0; border-radius: 6px; background: none; font: 600 .72rem/1 var(--heading); color: #b3c1c8; white-space: nowrap; transition: color .15s, background .15s; }
+.seg button[class^="rd-"]::before { content: ""; width: .42rem; height: .42rem; border-radius: 50%; background: var(--rc); }
+.seg button:hover:not(:disabled):not(.on) { color: #fff; background: rgba(255,255,255,.05); }
+.seg button.on { color: #14100a; background: linear-gradient(180deg, #f0dfa8, #d9b96a); box-shadow: 0 1px 6px rgba(0,0,0,.35); }
+.seg button.on::before { box-shadow: 0 0 0 1.5px rgba(20,16,10,.45); }
+.seg button:disabled { opacity: .28; cursor: not-allowed; }
 
 /* nothing may leave the frame on a phone: wide tables scroll inside the panel */
 .board { overflow-x: auto; overscroll-behavior-x: contain; }
 @media (max-width: 820px) {
   .ranktable .xs { display: none; }
   .ranktable td, .ranktable th { padding-left: .35rem; padding-right: .35rem; }
-  .controls .dd { flex: 1 1 46%; }
-  .dd-btn { min-width: 100%; }
   .insight-card { padding: 1.1rem .9rem; }
-  .in-stats { grid-template-columns: repeat(2, 1fr); }
+  .in-stats { grid-template-columns: repeat(3, 1fr); }
+  .profbars li { grid-template-columns: 6.8rem 1fr 6.4rem; gap: .45rem; font-size: .7rem; }
+  .profbars li u { white-space: normal; }
 }
 
 .ranktable .go { width: 1.6rem; text-align: right; color: var(--subtle); font-size: 1.1rem; }
@@ -302,7 +281,8 @@ a.wirecard:hover { border-color: var(--gold); transform: translateY(-2px); }
 
 /* Tradesfolk */
 .profico { width: 1.05rem; height: 1.05rem; border-radius: 3px; vertical-align: -.2rem; border: 1px solid rgba(229,204,128,.3); }
-.profbars li b { min-width: 7.5rem; }
+.profbars li { grid-template-columns: 9.5rem 1fr 8.6rem; }
+.profbars li u { white-space: nowrap; }
 
 /* ---- TipKit: hover tips on mouse, bottom sheet on touch ---- */
 .tip { pointer-events: none; }
@@ -351,7 +331,6 @@ html.ts-open body { padding-bottom: 40vh; }
 .bar, .bar i, .ts-grip { border-radius: 1px; }
 .chip, .chip-gold { border: 0; background: none; padding: 0; border-radius: 0; }
 .chip + .chip::before { content: "\00b7"; margin: 0 .45rem 0 -.1rem; color: var(--subtle); }
-.demo-flag { background: none; color: var(--gold); padding: 0; border-radius: 0; }
 
 /* ---- Top menu sections (nav.js) ---- */
 .mdd { position: relative; display: inline-flex; align-items: stretch; }
