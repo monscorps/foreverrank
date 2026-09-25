@@ -170,3 +170,17 @@ Corrections welcome: open an issue.
   preferred over our build-69876 datamine, so changed items (Staff of
   Westfall and friends) show current stats. Enchant recommendations parse
   as their own row type.
+- 2026-09-25, build 1.60.1.70009: the datamine no longer needs a local client
+  export. **wago.tools** (wago.tools) mirrors every Forever beta build (product
+  wow_classic_beta, 1.60.1.69876 through 70009) and serves each client table
+  as CSV; tools/fetch_wago.py pulls them, tools/diff_builds.py diffs builds,
+  and tools/apply_talents.py, apply_spellbook.py and apply_items.py carry the
+  Forge, spellbooks, item database and sets forward. Tooltip text comes from
+  our own resolver (tools/spelltext.py), checked by reproducing the previous
+  build's site text exactly (414 of 470 talents) before any new text is used.
+  Server-sent items (most quest rewards) are in no client table; the BiS
+  page's copies of those still come from ForeverChanges' item pages.
+- Warcraft Tavern: library book quest tiers (Friend of the Library, Greater
+  Friend of the Library) and the Research profession, for the build 70009
+  article; the candidate rewards past twenty books are our own inference from
+  client item IDs and flags, labeled as such.

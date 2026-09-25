@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build 70009 Datamined</title>
+<meta name="description" content="Forever beta build 1.60.1.70009 against day one: Season of Discovery runes kept and retuned as baseline, Forever's own drafts cut, a Statistics panel, new dungeon sets, and what the library books might pay past twenty.">
+<link rel="icon" href="../../mark.svg" type="image/svg+xml">
+<link rel="canonical" href="https://foreverrank.com/news/build-70009/">
+<meta name="theme-color" content="#1C2325">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../forever.css?v=21">
+<style>
+.story { max-width: 46rem; }
+.story h2 { font-family: var(--display-serif); color: var(--gold); font-size: 1.5rem; margin: 2rem 0 .6rem; }
+.story h3 { font: 600 .95rem var(--heading); color: var(--card-text); margin: 1.3rem 0 .4rem; }
+.story p, .story li { font-size: .92rem; line-height: 1.65; color: var(--surface-text); }
+.story ul { padding-left: 1.2rem; margin: .4rem 0 .8rem; }
+.story li { margin: .3rem 0; }
+.story .kicker { font: 600 .68rem/1 var(--heading); letter-spacing: .14em; text-transform: uppercase; color: var(--subtle); margin-bottom: .4rem; }
+.setcard { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--r-panel); padding: .9rem 1.1rem; margin: 1rem 0; }
+.setcard h3 { margin: 0 0 .5rem; font: 600 1rem var(--heading); color: #0070dd; }
+.setcard .bonus { display: grid; grid-template-columns: 2.4rem 1fr; gap: .5rem; padding: .3rem 0; font-size: .82rem; line-height: 1.5; border-top: 1px solid var(--surface-border); }
+.setcard .bonus:first-of-type { border-top: 0; }
+.setcard .bonus b { color: var(--gold); font-family: var(--heading); }
+.era { font: 600 .58rem/1 var(--heading); letter-spacing: .05em; padding: .12rem .35rem; border-radius: 3px; white-space: nowrap; margin-left: .3rem; vertical-align: 1px; display: inline-block; }
+.era-forever { background: rgba(229,204,128,.15); color: #e5cc80; }
+.era-sod { background: rgba(255,140,60,.15); color: #ff9d5c; }
+.era-classic { background: rgba(140,150,170,.12); color: #9aa3b8; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.6rem, 1fr)); gap: .6rem; margin: 1.2rem 0; }
+.fact { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--r-panel); padding: .7rem .8rem; text-align: center; }
+.fact b { display: block; font: 700 1.5rem var(--heading); color: var(--gold); }
+.fact span { font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--subtle); }
+.chg { display: grid; grid-template-columns: minmax(8rem, 11rem) 1fr; gap: .2rem .9rem; margin: .5rem 0 1rem; font-size: .84rem; line-height: 1.5; }
+.chg b { font-family: var(--heading); color: var(--card-text); }
+.chg span { color: var(--surface-text); }
+.chg em { font-style: normal; color: var(--subtle); }
+.loot { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .5rem; margin: .8rem 0; }
+.loot div { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--r-panel); padding: .6rem .75rem; font-size: .8rem; line-height: 1.45; }
+.loot b { display: block; color: #0070dd; font: 600 .86rem var(--heading); }
+.loot i { font-style: normal; color: var(--subtle); font-size: .72rem; }
+.loot .maybe { border-style: dashed; border-color: rgba(229,204,128,.45); }
+.story .note { font-size: .74rem; color: var(--subtle); border-left: 3px solid var(--card-border); padding: .4rem .8rem; margin: 1.2rem 0; }
+.story a { color: var(--gold); }
+@media (max-width: 640px) { .chg { grid-template-columns: 1fr; gap: 0; } .chg b { margin-top: .5rem; } }
+</style>
+</head>
+<body>
+<nav class="top">
+  <a class="brand" href="../../"><img src="../../mark.svg" alt="" width="42" height="42"><span class="brand-word">FOREVER<b>RANK</b></span></a>
+  <div class="top-nav">
+    <a class="pill" href="../../">The ladder</a>
+    <a class="pill" href="../../plan/">The Forge</a>
+    <a class="pill" href="../../codex/">Database</a>
+    <span class="phase">News</span>
+    <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  </div>
+</nav>
+<script src="../../nav.js?v=6"></script>
+<main class="wrap story">
+  <p class="kicker">ForeverRank datamine, beta client 1.60.1.70009 against 1.60.1.69876, September 25 2026</p>
+  <h1 class="display">Build 70009: <span>kept, cut, rewired</span></h1>
+  <p class="board-sub">Forever is Season of Discovery's codebase, which is Classic on the modern engine, with Blizzard deciding piece by piece what stays. Four beta builds have landed since day one. Diffing the newest against the first shows that sorting in motion: SoD's rune spells being renamed and tuned into baseline kits, Forever's own early drafts being thrown out, and new systems arriving that nobody has announced.</p>
+
+  <div class="facts">
+    <div class="fact"><b>41</b><span>new spells</span></div>
+    <div class="fact"><b>88</b><span>of Forever's own spells cut</span></div>
+    <div class="fact"><b>197</b><span>new statistics</span></div>
+    <div class="fact"><b>4</b><span>new item sets</span></div>
+    <div class="fact"><b>23</b><span>talents changed</span></div>
+  </div>
+
+  <h2>How to read this</h2>
+  <p>Every claim below comes from a row that changed between the two client builds. The chips say which era a thing's ID belongs to: <i class="era era-classic">Classic</i> for original 2004 content, <i class="era era-sod">SoD</i> for Season of Discovery's ID range, <i class="era era-forever">Forever</i> for work authored for this game. That is the question everyone is asking of this branch, so it is the axis this piece is sorted on.</p>
+  <p>One number to throw away first: the diff shows 1,054 changed spell power coefficients. That sounds like a balance pass and is not one. Nearly all of them are coefficients reset from 1 to 0 on passives, food buffs and talent modifiers that never scaled with spell power. Not one spell in a class spellbook moved. It is housekeeping.</p>
+
+  <h2>Kept and worked on: SoD's runes become the kit</h2>
+  <p>In Season of Discovery, runes handed out spells for engraving. Forever gives several of those spells to classes outright, and this build keeps shaping them like baseline abilities rather than leftovers.</p>
+  <div class="chg">
+    <b>Primal Bite <i class="era era-sod">SoD</i></b><span>Mangle is renamed. The rune spell (ID 407995) now reads "Bite the target" under a new icon, Forever's own three copies were renamed with it, and Ferocity and Berserk were reworded to match. <em>Druid, Feral.</em></span>
+    <b>Lava Burst <i class="era era-sod">SoD</i></b><span>Base damage 113 → 164 on the rune version, 179 → 196 on the Forever version. The Forge talent now reads 164. <em>Shaman.</em></span>
+    <b>Lightning Bolt <i class="era era-sod">SoD</i></b><span>The SoD-range Lightning Bolt variants were rebased: less damage per level, more base damage, tighter variance. Classic's own ranks 3 and 4 also gained base damage (35 → 45, 50 → 56). <em>Shaman.</em></span>
+    <b>Hot Streak <i class="era era-sod">SoD</i></b><span>Lasts 20 sec instead of 15. Wake of Fire's post-kill window grows from 20 to 30 sec. <em>Mage, Fire.</em></span>
+  </div>
+  <p>The other kept system is the book hunt. SoD's Mage rune quest, forty books scattered across Azeroth, survives in Forever and is open to every class; hand books to your faction's library for rewards. That one gets its own section below.</p>
+
+  <h2>Cut: Forever's own drafts</h2>
+  <p>The surprise of this build is what left. Of 92 spells removed, 88 carry Forever IDs. These were never SoD leftovers; they were Forever's own early work.</p>
+  <ul>
+    <li><b>An "Adaptive" armor system</b> <i class="era era-forever">Forever</i>. 24 armor pieces named for a hunt (Slimeslayer's, Beastculler's, Dinodestroyer's, Earthcrusher's, and healer versions Slimetender's, Beastmender's, Dinomender's, Earthweaver's), plus 12 "Adaptation" spells and 11 "Contribute Reagent" spells. It reads like a gear line that adapted as you fed it materials. All 47 spells are gone.</li>
+    <li><b>A slime encounter and a Devilsaur hunt</b> <i class="era era-forever">Forever</i>. Slime Nova, Slimecontrolled, Experimental Plague, Coagulate, Sludge Suppressor; an Enormous Tranquilizer Dart, a Spike Trap, Devilsaur Hide. Un'Goro themed and removed together with the armor.</li>
+    <li><b>Fruit consumables</b> <i class="era era-forever">Forever</i>. Shiny Green Apple, Sweetsour Grapes, Wayward Pomegranate, Tel'Abim Plantains, Flame Papaya and three kinds of Fruit Pulp are out of the item table.</li>
+  </ul>
+  <p>Classic content left too. <i class="era era-classic">Classic</i> Linken's Sword of Mastery and Spirit of Aquementas, the two rewards of Un'Goro's Linken chain, are gone, along with Tempestria's Frozen Necklace, the Frigid Ring and the Hardened Stone Band. With the Un'Goro drafts gone as well, that region looks mid-rebuild. Black Dragon Mail lost its boots and its 4-piece bonus, and the developers' test map, Development Land, was deleted.</p>
+
+  <h2>New: things nobody announced</h2>
+  <h3>A Statistics panel</h3>
+  <p>197 statistics arrived at once: deaths by cause, battleground wins, quests completed, largest hit and heal, and kill counts per dungeon boss. That last group names bosses the dungeon previews did not:</p>
+  <div class="chg">
+    <b>Ruins of Lordaeron</b><span>Rath'mael</span>
+    <b>Hall of Thanes</b><span>Durgen Dirgehammer</span>
+    <b>City of Dalaran</b><span>Shade of the Archmage, and Lyn the Ignored</span>
+    <b>Shaper's Terrace</b><span>Nanaya, Cinder, Bolt and Snowtalon</span>
+    <b>Alcaz Prison</b><span>Blazeroar</span>
+  </div>
+  <p>Darkspear Islands, the 15v15 battleground, gets its own battles, honorable kills, killing blows and deaths rows. For the ladder this matters more than it looks: a statistic is something an addon can read.</p>
+
+  <h3>Four dungeon sets</h3>
+  <p>Rotmender's Raiment, Violet Sorcerer's Vestments, Krol'dok Battlegear and Defias Enforcer's Garb, all <i class="era era-forever">Forever</i>, five pieces each. Only Rotmender's Raiment has bonuses yet; the other three are defined with no payouts, which reads as work in progress.</p>
+  <div class="setcard">
+    <h3>Rotmender's Raiment</h3>
+    <div class="bonus"><b>(2)</b><span>+10 Intellect.<i class="era era-classic">Classic spell</i></span></div>
+    <div class="bonus"><b>(3)</b><span>Reduces all threat generated by 5%.<i class="era era-forever">Forever-authored</i></span></div>
+    <div class="bonus"><b>(4)</b><span>When your Mana falls below 15% restore 600 Mana over 15 sec. This effect can only trigger once every 5 min.<i class="era era-forever">Forever-authored</i></span></div>
+    <div class="bonus"><b>(5)</b><span>Grant your healing spells a chance to apply Rotmending, restoring 40 Health every 3 sec for 15 sec.<i class="era era-forever">Forever-authored</i></span></div>
+  </div>
+
+  <h3>Smaller things</h3>
+  <ul>
+    <li><b>Nightclaw Druids</b> of Shadowgale Forest on Zephras Isle, the Skyborne starting island, became a real reputation: the eight classic races were added to it, capped at Exalted.</li>
+    <li><b>Kirin Tor</b> reputation now starts at neutral instead of deep in the negatives, which fits a Dalaran you are meant to visit.</li>
+    <li><b>Talent resets are tracked</b> by two hidden currencies, and their windows swapped: class talent resets now count per hour, Legacy tree resets per week. Expect Legacy respecs to be the rationed ones.</li>
+    <li><b>Undead Paladins</b> no longer start with Holy Light. Humans and Dwarves still get it automatically; Undead get their own row, which is not granted at creation.</li>
+    <li><b>Five low-level items gained spell power</b>, including Harvester's Robe, Buckler of the Seas and the Leggings of the People's Militia, with part of their Spirit or Stamina budget shifted over.</li>
+    <li><b>66 new items, 64 of them quest items</b>, which is how new quest chains show up before anyone plays them: a Titanic Keystone with four hearts named Ados, Modr, Golm and Neru, Menethil Statuettes, Mulgore Expansion Plans, Dragonmaw Armaments.</li>
+    <li><b>Armor kits got names</b>, among them new Forceful kits (attack power) and Mystic kits (spell power). Potions were renamed (Demon Slaying, Beast Slaying, Elemental Purging) and retuned: Frenzy potions doubled, Spellblasting and Mender's potions up, Dragonfire and Elemental Purging down.</li>
+    <li><b>Eureka!</b>, the proc from the spell research system, was cut down: its resource discount on your next damaging abilities is now a flat 10% for everyone, from 50% for Mages and Warlocks, 40% for Warriors, 20% for Rogues and 15% for Priests.</li>
+  </ul>
+
+  <h2>Class changes</h2>
+  <div class="chg">
+    <b>Druid</b><span>Wrath hits about 50% harder on every rank: rank 1 base 10 → 15, top rank 61 → 91, with more per level too. Mangle is Primal Bite; Primal Fury is Blood Frenzy.</span>
+    <b>Paladin</b><span>Holy Strike hits harder on seven of its eight ranks and its cooldown drops from 12 to 10 sec. Improved Holy Strike and Crusade are removed from the trees. Holy Power's crit bonus now covers Holy Strike too. Sacred Arbiter 10% → 20%. Two-Handed Weapon Specialization 3% → 2% per rank. Vengeance now needs a non-periodic crit and stacks to 3 instead of 5. Twist of Light also cuts Seal mana costs by 20%. Righteous Fury drops from 90% to Classic's 60%.</span>
+    <b>Warrior</b><span>Slam's cooldown rises from 15 to 18 sec, and Improved Slam now takes 3 sec off it at 2/2, so talented Arms lands back at 15. Bloodthrill is Main Hand only but doubles to 20% at 5/5. Sunder Armor still strips the same armor, but its bonus threat was cut by about 80% on ranks 2 to 5 (top rank 1013 → 206).</span>
+    <b>Shaman</b><span>Elemental Fury and Elemental Alacrity swapped tiers: Alacrity sits where Fury was and Fury moved down behind Call of Thunder. Rage of the Farseer now speeds attacks only, not casting. Flametongue and Windfury Totem were rebuilt from passive dummies into proper proc effects.</span>
+    <b>Warlock</b><span>Life Tap's health cost now scales with Spirit as well, so it costs as much health as the mana it returns.</span>
+    <b>Hunter</b><span>Strider Kick adds 30% movement speed for 3 sec.</span>
+  </div>
+  <p>All of it is live on the site now. <a href="/plan/">The Forge</a> carries the new talent texts and the Shaman layout, and shows the two removed Paladin talents struck out in place, so older shared build links still line up. <a href="/codex/">The Database</a> has the new sets, items and spellbook text.</p>
+
+  <h2>The library, and what comes after twenty books</h2>
+  <p>Turn in 10 books and the Friend of the Library quest offers a neck: Scholarly Pendant or Erudite's Amulet. Turn in 20 and Greater Friend of the Library offers a ring: Philanthropist's Ring or Field Researcher's Loop. The book counting happens server-side, so no client table says what happens next. The item table has a strong hint, though.</p>
+  <p>The four known rewards share a signature: rare, bind on pickup, no level requirement, no sell price, one particular flag. They also sit in tight ID blocks. Two more items share the signature in the ID slots directly after the 20-book rings, and a third sits directly before the 10-book necks:</p>
+  <div class="loot">
+    <div><b>Scholarly Pendant</b><i>10 books · item level 25 · ID 277203</i><br>+6 Stamina, +4 Spirit</div>
+    <div><b>Erudite's Amulet</b><i>10 books · item level 25 · ID 277204</i><br>+6 Stamina, +4 Agility</div>
+    <div><b>Philanthropist's Ring</b><i>20 books · item level 40 · ID 281635</i><br>+6 Intellect, +10 spell power</div>
+    <div><b>Field Researcher's Loop</b><i>20 books · item level 40 · ID 281634</i><br>+7 Stamina, +7 Agility, +7 Strength. The client flags it Rogue-only.</div>
+    <div class="maybe"><b>Museum Keeper's Chain</b><i>candidate · item level 58 · ID 281636</i><br>+10 Stamina, +10 Intellect, +10 spell power</div>
+    <div class="maybe"><b>Antique Bulwark</b><i>candidate · item level 58 · ID 281637</i><br>Shield, +16 Stamina, +10 Defense</div>
+    <div class="maybe"><b>Artifact Seeker's Pendant</b><i>candidate · item level 58 · ID 277202</i><br>+10 Stamina, +10 Strength, +10 Agility</div>
+  </div>
+  <p>Item level climbs 25, then 40, then 58, and all three candidates carry no level requirement. If they are the next tier, that is a remarkable reward at a level-20 cap. This is an inference from IDs and flags, not a confirmation. The names lean Explorers' League museum rather than library, so they may belong to a sibling quest drawing on the same reward pool. The test is simple: turn in book 21 through 30 and see whether a third quest appears. If you try it, tell us in the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>.</p>
+  <p>Mages get something more from the same hunt: the hidden Research profession, whose Study ability turns Light Feathers into spell scrolls. It is the spell research system the client has carried since day one, and <a href="/news/hidden-systems/">we wrote about it then</a>.</p>
+
+  <p class="note">Method: over 70 client tables for both builds, pulled from wago.tools, diffed row by row; tables the older build exports without column names were matched by position and checked by near-total row equality. Tooltips resolved from Spell, SpellEffect, SpellMisc, SpellAuraOptions and the Trait curve tables by our own resolver, which reproduces 414 of 470 Forge talents exactly; a talent's new text is only published where its old text reproduced. Eras read from ID bands. Server-sent items, most quest rewards among them, are not in any client table. Sources for the book tiers: Warcraft Tavern's coverage of the library quests; everything else is client data.</p>
+</main>
+<footer>
+  <img src="../../mark.svg" alt="" width="22" height="22">
+  <span>Datamined honestly; labeled or it does not ship.</span>
+  <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  <a href="https://foreverrank.com/">foreverrank.com</a>
+</footer>
+<script src="/map.js?v=8" defer></script>
+<script src="/support.js?v=1" defer></script>
+</body>
+</html>

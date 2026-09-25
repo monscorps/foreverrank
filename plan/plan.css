@@ -143,6 +143,9 @@
 .slot.maxed .wi { border-color: var(--gold); box-shadow: 0 0 12px -3px var(--gold); }
 .slot.locked { cursor: default; }
 .slot.locked .wi { filter: grayscale(1) brightness(.5); border-color: #2a3138; }
+.slot.gone { opacity: .45; }
+.slot.gone .wi { filter: grayscale(1) brightness(.4); border-style: dashed; border-color: #5a4040; }
+.slot.gone::after { content: ""; position: absolute; left: 12%; right: 12%; top: 50%; height: 2px; background: #c0504a; transform: rotate(-35deg); pointer-events: none; }
 .s-rank { position: absolute; right: -4px; bottom: -6px; font: 700 .62rem/1 var(--heading); color: #1eff00; background: #06131c; border: 1px solid #3a4a55; border-radius: 3px; padding: .12rem .22rem; }
 .slot.maxed .s-rank { color: var(--gold); border-color: var(--gold); }
 .slot.locked .s-rank { color: var(--subtle); }

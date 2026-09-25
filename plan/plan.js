@@ -414,7 +414,12 @@
   function dt(title, body) { return 'data-tip="' + attrEnc("<b>" + esc(title) + "</b>" + esc(body)) + '"'; }
   function qv(band) { return "var(--q-" + ({ grey: "common", uncommon: "uncommon", rare: "rare", epic: "epic" }[band] || "common") + ")"; }
   function clsData() { return DATA && S.cls >= 0 ? DATA.classes[S.cls] : null; }
-  function treePts(ti) { return (S.t[ti] || []).reduce(function (a, b) { return a + (b || 0); }, 0); }
+  function treePts(ti) {
+    // talents a later build removed keep their slot (links are positional) but hold no points
+    var c = clsData(), a = S.t[ti] || [];
+    if (c && c.trees[ti]) c.trees[ti].talents.forEach(function (t, i) { if (t.gone && a[i]) a[i] = 0; });
+    return a.reduce(function (x, b) { return x + (b || 0); }, 0);
+  }
   function spent() { return treePts(0) + treePts(1) + treePts(2); }
   function specNow() {
     var c = clsData();
@@ -523,6 +528,7 @@
   }
   function canAdd(ti, i) {
     var R = talentRefs(ti, i), t = R.t;
+    if (t.gone) return false;
     var reqOk = !t.req || R.byName[t.req] == null || (S.t[ti][R.byName[t.req]] || 0) >= R.tree.talents[R.byName[t.req]].r;
     return treePts(ti) >= (t.row - 1) * 5 && reqOk && spent() < POINTSNOW() && (S.t[ti][i] || 0) < t.r;
   }
@@ -894,12 +900,14 @@
         var extra = (clamped ? " [rank " + (idx + 1) + " text; the demo never showed rank " + (want + 1) + "]" : "") +
           (have && t.de && t.de.indexOf(idx) !== -1 ? " [rank " + (idx + 1) + " estimated from Classic's rank progression until beta]" : t.est ? " [numbers still estimates]" : "") +
           (t.cn ? " \u00b7 " + t.cn + "." : "");
-        var how = pts < gate ? '<span class="hint lock">Needs ' + gate + " points in " + esc(tr.name) + ".</span>"
+        var how = t.gone ? '<span class="hint lock">Removed from the tree in beta build ' + esc(t.gone) + ". It stays here so older shared builds still line up.</span>"
+          : pts < gate ? '<span class="hint lock">Needs ' + gate + " points in " + esc(tr.name) + ".</span>"
           : !reqOk ? '<span class="hint lock">Requires ' + esc(t.req) + " maxed." + (t.reqText ? " " + esc(t.reqText) + "." : "") + "</span>"
           : (done && r < t.r) ? '<span class="hint lock mouse-only">No points left; right-click something to take one back.</span><span class="hint lock touch-only">No points left; unlearn something first.</span>'
           : '<span class="hint mouse-only">Left click adds, right click removes, shift fills or empties.</span>';
         var cs = (t.c && t.c.s) || "same";
-        html += '<div class="slot' + (r >= t.r ? " maxed" : r > 0 ? " part" : "") + (open ? "" : " locked") + (t.est ? " est" : "") + (done && r === 0 && open ? " tapped" : "") +
+        if (t.gone) open = false;
+        html += '<div class="slot' + (t.gone ? " gone" : "") + (r >= t.r ? " maxed" : r > 0 ? " part" : "") + (open ? "" : " locked") + (t.est ? " est" : "") + (done && r === 0 && open ? " tapped" : "") +
           (CMP ? " cmp cmp-" + cs + (CMPF && CMPF !== cs ? " cmpdim" : "") : "") +
           '" style="grid-column:' + t.col + ";grid-row:" + t.row + '" data-tal="' + ti + ":" + i + '" data-tipkit="1" data-cmp="t:' + ti + ":" + i + '" ' +
           'data-tip="' + attrEnc("<b>" + esc(t.n + " (" + r + "/" + t.r + ")" + (r < t.r && have > 0 && !clamped ? ", rank " + (want + 1) + ":" : "")) + "</b>" + esc(d + extra) + how) + '">' +

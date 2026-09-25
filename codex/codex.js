@@ -93,13 +93,13 @@
   }
   var SRC_LABEL = { client: "Beta client", sod: "SoD wiring", classic: "Classic text", basic: "Demo book", classiconly: "Not in Forever" };
   var SRC_TIP = {
-    client: "Tooltip read from beta client data, build 1.60.1.69876.",
+    client: "Tooltip read from beta client data, build 1.60.1.70009.",
     sod: "Season of Discovery wiring in the client: class-masked but with no Forever learn level yet. May change before launch.",
     classic: "Classic placeholder text; the demo tooltip was never captured, so the Forever version is unverified.",
     basic: "Listed in the level-38 demo spellbook. Universal basics.",
     classiconly: "A Classic spell the Forever demo book does not list: possibly cut, moved above the demo level, or hidden until discovered."
   };
-  var VERDICT = { "same": "same text as Classic", "changed": "text changed from Classic", "new": "new in Forever", "rank": "rank layout differs", "renamed": "renamed from Classic", "moved": "moved from Classic", "unverified": "tooltip unverified" };
+  var VERDICT = { "same": "same text as Classic", "changed": "text changed from Classic", "new": "new in Forever", "rank": "rank layout differs", "renamed": "renamed from Classic", "moved": "moved from Classic", "unverified": "tooltip unverified", "removed": "removed in a later beta build" };
   var ERA_LABEL = { forever: "Forever-authored", sod: "SoD spell reused", retail: "Retail-era spell", classic: "Classic-era spell" };
   function buildBook(sb) {
     (sb.spells || []).forEach(function (p) {
@@ -156,7 +156,7 @@
           (b.fx ? "" : ' <i class="sbt-int">internal name, no tooltip text in the client</i>') +
           ' <i class="sbt-era sbt-era-' + b.era + '">' + ERA_LABEL[b.era] + "</i></p>";
       });
-      h += '<p class="sbt-src">ItemSet tables from beta client 1.60.1.69876. Era per bonus read from spell ID bands.</p>';
+      h += '<p class="sbt-src">ItemSet tables from beta client 1.60.1.70009. Era per bonus read from spell ID bands.</p>';
     }
     return h;
   }
