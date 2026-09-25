@@ -1,5 +1,6 @@
 /* LevelPace Forever: plan-stage board. No framework, no build step.
- * Every row is demo data until the game exists; the gear toggles it off.
+ * Until the game exists the board opens on an explainer; placeholder rows
+ * are one click (or ?preview=1) away, and the gear toggles the same switch.
  * Rendering follows WarcraftLogs' discipline: class colour on the name,
  * band colour on the parse, everything else muted. No chips, no badges. */
 (function () {
@@ -19,9 +20,8 @@
     "Commander", "Marshal", "Field Marshal", "Grand Marshal"];
 
   // ---- the roster -----------------------------------------------------------
-  // The guild's own Discord, name for name (mains before the slash). Stats
-  // are seeded from each name so the ladder is stable across reloads -- and
-  // invented, like everything here, until the game exists.
+  // Stats are seeded from each name so the ladder is stable across reloads,
+  // and invented, like everything here, until the game exists.
   function mk(name, cls, level, pace, deaths, hks, dungeons, alive, tag) {
     var perLevel = [], total = 0;
     for (var l = 1; l < level; l++) {
@@ -76,36 +76,31 @@
     ];
     return out;
   }
-  var ROSTER = ["Tpau", "Treefy", "Uglysin", "Ultranstinct", "Upn", "Villepou", "Whiterock",
-    "Willamok", "Xynnz", "Yezin", "Zjolnir", "Zuprise", "Eldritch", "Sebzki", "Shiruy",
-    "Shockill", "Sjongejonge", "Slons", "Sne", "Stoupe", "Stumfa", "Suki", "Swissotel",
-    "Swobuda", "Tony", "Noakesy", "Noximos", "Pain", "Petteri", "Phazed", "Pobs",
-    "Poffgone", "Priestage", "Ratiok", "Rezola", "Rhero", "Roach", "Roshlock", "Korjin",
-    "Korns", "Lachesis", "Mahito", "Marrion", "Meryla", "Mikhaeraw", "Mingles",
-    "Mitre", "Naty", "Nissehaderen", "Fladdo", "Flower", "Flurst", "Gambino", "Gnomwarlock",
-    "Goldy", "Happymeal", "Jayme", "Johnsen", "Turalionovna", "Jaegerinden", "Kizerine", "Kony",
-    "Chikn", "Christina", "Ckodi", "Clav", "Cloakedblade", "Colonelkitten", "Daddysupreme",
-    "Darkmaster", "Didster", "Epowk", "Executia", "Exoxo", "Fake", "Alsong", "Alz",
-    "Antigoon", "Anzu", "Arcanehealer", "Ashebarrett", "Bari", "Boynic", "Celuna",
-    "Piven", "Prythegywy", "Sauriel", "Shaggrath", "Shazzers", "Trajan", "Vendji",
-    "Zhnon", "Crnky", "Emei", "Shins", "Zablefahr", "Aev", "Annsie", "Atropos",
-    "Chaipaku", "Collymonk", "Helpstepbro", "Imnotatroll", "Isah", "Maetel", "Peremi",
-    "Boopsy", "Colter", "Luseria", "Mandragoran", "Mudpeefrgogo", "Noula", "Suu",
-    "Valentina", "Xullue", "Hal", "Koebjeste", "Lanten", "Mular", "Odlid",
-    "Orosmomentet", "Pepegasussy", "Thices", "Zerash", "Sixflags", "Timmy",
-    "Emillionaire", "Faint", "Zucco", "Ahri", "Ares", "Dreadelf", "Exapt"];
+  // Twenty invented characters. Forever gives every character a first and a
+  // second name, so the placeholders do too: some played in character, some
+  // one-life, some for the joke. Every realm and class is represented.
   var DEMO = [
-    // Ordained, not rolled: the two the guild would riot over.
-    gen("Athgaar", { cls: "WARRIOR", level: 30, pace: 560, deaths: 1, hks: 244, dungeons: 9,
-                     alive: true, realm: "PvP", tag: "Top warrior of the guild, Noob Slayer" }),
-    gen("Mutuwa", { cls: "WARRIOR", level: 30, pace: 705, deaths: 0, hks: 88, dungeons: 9,
-                    alive: true, realm: "Hardcore", tag: "Main tank: nine of nine, zero deaths" }),
-    gen("Rickmyrolls", { cls: "PRIEST", level: 30, pace: 648, deaths: 2, hks: 130, dungeons: 7, realm: "Normal" }),
-    // Fastest in his own bracket, mid-pack on the ladder: rank 1 for his
-    // level and class belongs to Kranny; rank 1 overall stays Athgaar's.
-    gen("Kranny", { pace: 590, level: 24 })
+    gen("Aldric Stormhollow", { cls: "PALADIN", level: 27, pace: 640, dungeons: 6, realm: "RP", alive: true, tag: "Never breaks character" }),
+    gen("Seraphine Duskwhisper", { cls: "PRIEST", level: 24, realm: "RP", alive: true }),
+    gen("Morwen Ashgrove", { cls: "WARLOCK", level: 22, realm: "RP", alive: true, tag: "Runs the Undercity book club" }),
+    gen("Thalindra Moonbrook", { cls: "DRUID", level: 26, realm: "RP", alive: true }),
+    gen("Garrosk Emberhide", { cls: "SHAMAN", level: 19, realm: "RP", alive: true }),
+    gen("Hilde Lastlight", { cls: "PRIEST", level: 30, pace: 700, deaths: 0, dungeons: 9, realm: "Hardcore", alive: true, tag: "Zero deaths, zero risks" }),
+    gen("Varek Deathless", { cls: "WARRIOR", level: 28, pace: 610, deaths: 0, realm: "Hardcore", alive: true }),
+    gen("Rook Stillbreathing", { cls: "ROGUE", level: 25, deaths: 0, realm: "Hardcore", alive: true, tag: "Still breathing" }),
+    gen("Oskar Onelife", { cls: "HUNTER", level: 17, realm: "Hardcore", alive: false, tag: "Fell at 17 in the Ruins of Lordaeron" }),
+    gen("Nyx Nightsworn", { cls: "MAGE", level: 22, realm: "Hardcore", alive: false, tag: "Pulled two packs, met the third" }),
+    gen("Tamsin Carefulstep", { cls: "PALADIN", level: 21, deaths: 0, realm: "Hardcore", alive: true }),
+    gen("Brannoc Ironvein", { cls: "WARRIOR", level: 30, pace: 580, hks: 240, dungeons: 8, realm: "PvP", alive: true }),
+    gen("Crit Happens", { cls: "ROGUE", level: 29, pace: 600, hks: 255, realm: "PvP", alive: true, tag: "Top of the PvP ladder" }),
+    gen("Sir Loin", { cls: "DRUID", level: 26, hks: 150, realm: "PvP", alive: true, tag: "A Tauren of taste" }),
+    gen("Arrow Dynamic", { cls: "HUNTER", level: 27, hks: 180, realm: "PvP", alive: true }),
+    gen("Gnome Chomsky", { cls: "MAGE", level: 23, hks: 90, realm: "PvP", alive: true, tag: "Theorycrafter" }),
+    gen("Tank Sinatra", { cls: "WARRIOR", level: 26, dungeons: 9, realm: "Normal", alive: true, tag: "Does it his way" }),
+    gen("Barry Hotfix", { cls: "SHAMAN", level: 20, realm: "Normal", alive: true }),
+    gen("Holly Wood", { cls: "DRUID", level: 18, realm: "Normal", alive: true }),
+    gen("Justin Case", { cls: "PRIEST", level: 24, dungeons: 8, realm: "Normal", alive: true, tag: "Heals just in case" })
   ];
-  ROSTER.forEach(function (n) { DEMO.push(gen(n)); });
   var query = "";
   var realmFilter = "all";
   var PAGE = 50;
@@ -144,11 +139,11 @@
              overall: total / wsum, roster: roster, realm: realm || "Normal" };
   }
   var GUILDS = [
-    mkGuild("Eternal Vanguard", "EV", 24, { levelling: 91, dungeons: 88, pvp: 64, hardcore: 70, quests: 84 }, ["Athgaar", "Mutuwa", "Rickmyrolls", "Willamok"], "PvP"),
-    mkGuild("Skyborne Pact", "SKY", 15, { levelling: 78, dungeons: 92, pvp: 41, hardcore: 88, quests: 71 }, ["Mikhaeraw", "Eldritch", "Kizerine"], "Normal"),
-    mkGuild("Ashes of Lordaeron", "ASH", 14, { levelling: 66, dungeons: 71, pvp: 90, hardcore: 35, quests: 62 }, ["Pain", "Yezin", "Xynnz", "Roach"], "PvP"),
-    mkGuild("Riverglade Company", "RGC", 12, { levelling: 52, dungeons: 44, pvp: 22, hardcore: 95, quests: 90 }, ["Flower", "Goldy", "Sne", "Naty"], "RP"),
-    mkGuild("Gravebound", "GRV", 11, { levelling: 60, dungeons: 58, pvp: 12, hardcore: 97, quests: 74 }, ["Mutuwa", "Hal", "Thices"], "Hardcore")
+    mkGuild("Eternal Vanguard", "EV", 24, { levelling: 91, dungeons: 88, pvp: 94, hardcore: 20, quests: 72 }, ["Brannoc Ironvein", "Crit Happens", "Arrow Dynamic"], "PvP"),
+    mkGuild("Skyborne Pact", "SKY", 15, { levelling: 78, dungeons: 92, pvp: 31, hardcore: 30, quests: 71 }, ["Tank Sinatra", "Justin Case", "Barry Hotfix", "Holly Wood"], "Normal"),
+    mkGuild("Ashes of Lordaeron", "ASH", 14, { levelling: 66, dungeons: 61, pvp: 86, hardcore: 25, quests: 62 }, ["Sir Loin", "Gnome Chomsky"], "PvP"),
+    mkGuild("Riverglade Company", "RGC", 12, { levelling: 58, dungeons: 64, pvp: 12, hardcore: 40, quests: 93 }, ["Aldric Stormhollow", "Seraphine Duskwhisper", "Morwen Ashgrove", "Thalindra Moonbrook", "Garrosk Emberhide"], "RP"),
+    mkGuild("Gravebound", "GRV", 11, { levelling: 70, dungeons: 66, pvp: 8, hardcore: 97, quests: 74 }, ["Hilde Lastlight", "Varek Deathless", "Rook Stillbreathing", "Tamsin Carefulstep", "Oskar Onelife", "Nyx Nightsworn"], "Hardcore")
   ];
 
   // ---- tiny utils -----------------------------------------------------------
@@ -171,8 +166,15 @@
     for (var k = 0; k < t.length; k++) if (p >= t[k]) i = k;
     return "var(" + BANDS[i] + ")";
   }
-  function demoOn() {
-    try { return localStorage.getItem("lpf-demo") !== "off"; } catch (e) { return true; }
+  // Placeholder preview is opt-in: the explainer is what a first visit sees.
+  var preview = false;
+  try { preview = localStorage.getItem("fr-preview") === "on"; } catch (e) {}
+  function demoOn() { return preview; }
+  function setPreview(on) {
+    preview = !!on;
+    try { localStorage.setItem("fr-preview", preview ? "on" : "off"); } catch (e) {}
+    var t = $("demo-toggle");
+    if (t) t.checked = preview;
   }
 
   // ---- countdown ------------------------------------------------------------
@@ -204,6 +206,7 @@
   }
   function demoFlag() { return '<p class="demo-flag">Demo data: nothing real yet</p>'; }
 
+  function progScore(c) { return c.level * 10 + c.dungeons * 14 + c.quests / 10 + c.ilvl + (c.profs ? (c.profs[0].sk + c.profs[1].sk) / 12 : 0); }
   function profCell(c) {
     if (!c.profs) return "";
     return c.profs.map(function (pr) {
@@ -276,7 +279,7 @@
     progression: {
       sub: "The whole character, not one number: dungeons of the nine cleared, quests done, gear. Weights get honest once the beta shows what an addon can read.",
       render: function (d) {
-        var score = function (c) { return c.level * 10 + c.dungeons * 14 + c.quests / 10 + c.ilvl + (c.profs ? (c.profs[0].sk + c.profs[1].sk) / 12 : 0); };
+        var score = progScore;
         var all = d.map(score);
         var sorted = d.slice().sort(function (a, b) { return score(b) - score(a); });
         var rows = pageSlice(sorted).map(function (c, i) {
@@ -393,6 +396,53 @@
     $("insight").hidden = false;
   }
 
+  // ---- the explainer's two mock dashboards ----------------------------------
+  // Drawn from the same placeholder people the preview ranks, so the numbers
+  // agree wherever Aldric or his guild show up.
+  var ICON = "https://wow.zamimg.com/images/wow/icons/large/";
+  function hydrateExplainer() {
+    function x(k) { return document.querySelector('[data-x="' + k + '"]'); }
+    if (!x("c-lvl")) return;
+    var c = DEMO.filter(function (d) { return d.name === "Aldric Stormhollow"; })[0];
+    if (c) {
+      x("c-lvl").textContent = c.level;
+      x("c-ring").style.setProperty("--p", Math.min(1, c.level / CAP));
+      x("c-sub").textContent = c.cls.charAt(0) + c.cls.slice(1).toLowerCase() + " · " + c.realm + " server · " + (c.alive ? "alive" : "fallen");
+      var pips = "";
+      for (var i = 0; i < 9; i++) pips += '<i class="' + (i < c.dungeons ? "on" : "") + '"></i>';
+      x("c-pips").innerHTML = pips;
+      var pp = pctile(progScore(c), DEMO.map(progScore));
+      x("c-parse").textContent = Math.round(pp);
+      x("c-parse").style.setProperty("--c", bandVar(pp));
+      var worst = Math.max.apply(null, c.perLevel), bars = "";
+      c.perLevel.forEach(function (sec, li) {
+        var others = [];
+        DEMO.forEach(function (o) { if (o.perLevel[li] != null) others.push(3600 / o.perLevel[li]); });
+        bars += '<i title="Level ' + (li + 1) + " to " + (li + 2) + ": " + hm(sec) + '" style="--h:' + Math.max(12, sec / worst * 100) + "%;--c:" + bandVar(pctile(3600 / sec, others)) + '"></i>';
+      });
+      x("c-bars").innerHTML = bars;
+      x("c-profs").innerHTML = (c.profs || []).map(function (pr) {
+        return '<div><span class="ico s" style="background-image:url(' + ICON + pr.i + '.jpg)"></span>' + esc(pr.n) +
+          '<em><u style="--w:' + Math.round(pr.sk / pr.cap * 100) + '%"></u></em><small>' + pr.sk + "/" + pr.cap + "</small></div>";
+      }).join("");
+    }
+    var g = GUILDS.filter(function (d) { return d.name === "Riverglade Company"; })[0];
+    if (g) {
+      x("g-overall").textContent = Math.round(g.overall);
+      x("g-ring").style.setProperty("--p", g.overall / 100);
+      x("g-sub").textContent = g.members + " members · " + g.realm + " server";
+      x("g-cats").innerHTML = GUILD_CATS.map(function (k) {
+        var v = g.cats[k.key] || 0, col = bandVar(v);
+        return "<div>" + esc(k.label) + '<em><u style="--w:' + v + "%;--c:" + col + '"></u></em><b style="--c:' + col + '">' + v + "</b></div>";
+      }).join("");
+      x("g-race").innerHTML = g.roster.map(function (n) {
+        var m = DEMO.filter(function (d) { return d.name === n; })[0];
+        if (!m) return "";
+        return '<span class="' + (m.alive ? "" : "fell") + '" title="' + esc(n) + ", level " + m.level + '" style="--cc:' + cc(m.cls) + ";--p:" + Math.min(1, m.level / CAP) + '"></span>';
+      }).join("");
+    }
+  }
+
   // ---- rendering ------------------------------------------------------------
   var view = "progression";
   function filtered() {
@@ -418,15 +468,20 @@
   var REALM_OPTS = ["all", "Normal", "PvP", "Hardcore", "RP"];
   function syncURL() {
     var p = new URLSearchParams();
-    if (view !== "progression") p.set("ladder", view);
-    if (realmFilter !== "all") p.set("realm", realmFilter);
-    if (query) p.set("q", query);
-    if (page > 0) p.set("p", String(page + 1));
+    if (demoOn()) {
+      p.set("preview", "1");
+      if (view !== "progression") p.set("ladder", view);
+      if (realmFilter !== "all") p.set("realm", realmFilter);
+      if (query) p.set("q", query);
+      if (page > 0) p.set("p", String(page + 1));
+    }
     var qs = p.toString();
-    history.replaceState(null, "", qs ? "?" + qs : location.pathname);
+    history.replaceState(null, "", (qs ? "?" + qs : location.pathname) + location.hash);
   }
   function readURL() {
     var p = new URLSearchParams(location.search);
+    // A shared preview link opens the placeholder ladder for this visit only.
+    if (p.get("preview") === "1" || p.get("ladder")) preview = true;
     var l = p.get("ladder");
     if (l && VIEWS[l]) view = l;
     var r = p.get("realm");
@@ -464,12 +519,14 @@
       ? "Beta opens capped at <b>level 20</b>, rising to 30 after a couple of weeks. Boards rank to the live cap."
       : "Launched: the ladder runs to <b>level 60</b>.";
     var b = $("board");
-    if (!demoOn()) {
-      b.innerHTML = '<div class="empty"><h3>No uploads have <span>happened yet</span></h3>' +
-        "<p>The game is not out. The countdown above is real; everything else waits for it.</p>" +
-        '<p>Curious how it will look? The gear (top right) switches the demo back on.</p></div>';
-      return;
-    }
+    $("explain").hidden = demoOn();
+    $("lad-live").hidden = !demoOn();
+    Array.prototype.forEach.call(document.querySelectorAll("#lad-switch button"), function (btn) {
+      var on = (btn.getAttribute("data-mode") === "preview") === demoOn();
+      btn.classList.toggle("on", on);
+      btn.setAttribute("aria-selected", String(on));
+    });
+    if (!demoOn()) { hydrateExplainer(); return; }
     var clash = realmClash();
     if (clash) {
       b.innerHTML = '<div class="empty"><h3>' + clash[0] + ' <span>' + clash[1] + '</span></h3><p>' + clash[2] + "</p></div>";
@@ -505,6 +562,62 @@
         if (g) guildInsight(g);
       });
     });
+  }
+
+  // ---- latest news ----------------------------------------------------------
+  // Our own datamine leads; outlet headlines fill the grid; the rest of our
+  // pieces ride a rail; everything else folds into a list.
+  var SRC = { "FOREVERRANK": ["#e5cc80", "FR"], "Wowhead": ["#f06a5e", "WH"], "Icy Veins": ["#6cc0ff", "IV"],
+    "Warcraft Tavern": ["#e9ad52", "WT"], "Blizzard": ["#35b5ff", "B"], "Blizzard Forums": ["#35b5ff", "B"],
+    "Blizzard Watch": ["#8fd3ff", "BW"], "Kotaku": ["#ffd84d", "K"] };
+  function srcTag(s) {
+    var m = SRC[s] || ["#9fb0bb", (s || "?").slice(0, 2).toUpperCase()];
+    return '<span class="hn-src" style="--sc:' + m[0] + '">' + esc(s === "FOREVERRANK" ? "ForeverRank" : s) + "</span>";
+  }
+  function when(d) {
+    var dt = new Date(d + "T12:00:00Z");
+    return isNaN(dt) ? d : dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  }
+  function bg(url) { return "--img:url('" + String(url).replace(/'/g, "%27") + "')"; }
+  // Outlets without a picture borrow tinted site art, picked by headline.
+  var ART = ["/codex/img/hyjal-summit.jpg", "/codex/img/the-drowned-city.jpg", "/codex/img/krol-dok-stronghold.jpg",
+    "/codex/img/blackmaw-hold.jpg", "/codex/img/the-barrow-deeps.jpg", "/codex/img/halls-of-thanes.jpg",
+    "/codex/img/ruins-of-lordaeron.jpg", "/codex/img/city-of-dalaran.jpg"];
+  function renderNews(n) {
+    if (!n || !n.items || !$("hn-feature")) return;
+    var items = n.items;
+    var ours = items.filter(function (i) { return i.s === "FOREVERRANK"; });
+    var theirs = items.filter(function (i) { return i.s !== "FOREVERRANK"; });
+    var f = ours[0];
+    if (f) {
+      var hl = (f.hl || []).map(function (h) {
+        return '<li><span class="ico s" style="background-image:url(' + ICON + esc(h.i) + '.jpg)"></span>' + esc(h.t) + "</li>";
+      }).join("");
+      var box = $("hn-feature");
+      box.outerHTML = '<a class="hn-feature" id="hn-feature" href="' + esc(f.l) + '">' +
+        '<div class="hn-art" style="' + bg(f.img || "/assets/og.jpg") + '">' + srcTag(f.s) + "<h3>" + esc(f.t) + "</h3></div>" +
+        '<div class="hn-side"><span class="hn-date">' + esc(when(f.d)) + " · our datamine</span>" +
+        (hl ? '<ul class="hn-hl">' + hl + "</ul>" : "") + '<span class="hn-read">Read the datamine &rsaquo;</span></div></a>';
+    }
+    // Six from the freshest twenty: art first, but at most three per outlet.
+    var per = {}, grid = [];
+    theirs.slice(0, 20).sort(function (a, b) { return (b.img ? 1 : 0) - (a.img ? 1 : 0); }).forEach(function (it) {
+      if (grid.length < 6 && (per[it.s] || 0) < 3) { grid.push(it); per[it.s] = (per[it.s] || 0) + 1; }
+    });
+    grid.sort(function (a, b) { return a.d < b.d ? 1 : a.d > b.d ? -1 : 0; });
+    $("hn-grid").innerHTML = grid.map(function (it) {
+      var m = SRC[it.s] || ["#9fb0bb", "?"];
+      var art = ART[hash(it.t) % ART.length];
+      return '<a class="hn-card" href="' + esc(it.l) + '" rel="noopener"><span class="pic' + (it.img ? "" : " none") + '" data-mark="' + esc(m[1]) + '" style="--sc:' + m[0] + ";" + (it.img ? bg(it.img) : "--art:url('" + art + "')") + '">' + srcTag(it.s) + "</span>" +
+        '<span class="txt"><b>' + esc(it.t) + "</b><i>" + esc(when(it.d)) + "</i></span></a>";
+    }).join("");
+    $("hn-rail").innerHTML = ours.slice(1).map(function (it) {
+      return '<a class="hn-mini" href="' + esc(it.l) + '" style="' + bg(it.img || "/assets/og.jpg") + '"><i>' + esc(when(it.d)) + "</i><b>" + esc(it.t) + "</b></a>";
+    }).join("");
+    var rest = theirs.filter(function (i) { return grid.indexOf(i) === -1; }).slice(0, 40);
+    $("hn-list").innerHTML = rest.map(function (it) {
+      return "<li><span>" + esc(when(it.d)) + '</span><a href="' + esc(it.l) + '" rel="noopener">' + esc(it.t) + "</a><em>" + esc(it.s) + "</em></li>";
+    }).join("") + '<li><span></span><a href="news/">Every headline on the news page &rsaquo;</a><em></em></li>';
   }
 
   // ---- wiring ---------------------------------------------------------------
@@ -561,8 +674,14 @@
     document.addEventListener("click", function (e) {
       if (!settings.hidden && !settings.contains(e.target) && e.target !== gear) settings.hidden = true;
     });
-    toggle.addEventListener("change", function () {
-      try { localStorage.setItem("lpf-demo", toggle.checked ? "on" : "off"); } catch (e) {}
+    toggle.addEventListener("change", function () { setPreview(toggle.checked); render(); });
+    function goLadder() { var l = $("ladder"); if (l) l.scrollIntoView({ block: "start" }); }
+    $("preview-on").addEventListener("click", function () { setPreview(true); render(); goLadder(); });
+    $("lad-switch").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-mode]");
+      if (!b) return;
+      setPreview(b.getAttribute("data-mode") === "preview");
+      page = 0;
       render();
     });
 
@@ -582,36 +701,10 @@
     $("insight").addEventListener("click", function (e) { if (e.target === $("insight")) $("insight").hidden = true; });
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") $("insight").hidden = true; });
 
-    fetch("news.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (n) {
-      var w = $("wire");
-      if (!w || !n.items) return;
-      function card(it) {
-        var inner = (it.img ? '<span class="wc-img" style="background-image:url(\'' + it.img.replace(/'/g, "%27") + '\')"></span>' : '<span class="wc-img wc-noimg"></span>') +
-          '<span class="wc-body"><b>' + esc(it.t) + '</b><i>' + esc(it.d.slice(5)) + " \u00b7 " + esc(it.s) + "</i></span>";
-        return it.l ? '<a class="wirecard" href="' + esc(it.l) + '" rel="noopener">' + inner + "</a>"
-                    : '<span class="wirecard">' + inner + "</span>";
-      }
-      // The three cards prefer stories with art, drawn from the freshest eight.
-      var pool = n.items.slice(0, 8);
-      var top = pool.filter(function (it) { return it.img; }).slice(0, 3);
-      if (top.length < 3) top = top.concat(pool.filter(function (it) { return top.indexOf(it) === -1; }).slice(0, 3 - top.length));
-      var rest = n.items.filter(function (it) { return top.indexOf(it) === -1; });
-      w.innerHTML = '<div class="wirecards">' + top.map(card).join("") + "</div>" +
-        (rest.length ? '<div id="wire-rest" hidden>' + rest.map(function (it) {
-          var t = it.l ? '<a href="' + esc(it.l) + '" rel="noopener">' + esc(it.t) + "</a>" : "<b>" + esc(it.t) + "</b>";
-          return "<li><span>" + esc(it.d.slice(5)) + "</span>" + t + "<i>" + esc(it.s) + "</i></li>";
-        }).join("") + "</div>" +
-        '<div class="c-actions"><button type="button" class="share" id="wire-more">More news (' + rest.length + ')</button>' +
-        '<a class="share" href="news/" style="text-decoration:none">The full wire</a></div>' : "");
-      var btn = document.getElementById("wire-more");
-      if (btn) btn.addEventListener("click", function () {
-        var r2 = document.getElementById("wire-rest");
-        r2.hidden = !r2.hidden;
-        btn.textContent = r2.hidden ? "More news (" + rest.length + ")" : "Fewer";
-      });
-    }).catch(function () {});
+    fetch("news.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(renderNews).catch(function () {});
 
     readURL();
+    toggle.checked = demoOn();
     syncControls();
     render();
   });

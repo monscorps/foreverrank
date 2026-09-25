@@ -17,8 +17,8 @@ SITE = "https://foreverrank.com"
 DEFAULT_IMG = "/assets/og.jpg"  # 1200x630 crop of the hero art
 
 PAGES = {
-    "/": ("ForeverRank: WoW Forever Ladder, Database and Tools",
-          "ForeverRank is the WoW Forever ladder and toolkit: a talent calculator, a datamined item and spell database, BiS lists, news, and a levelling, hardcore and PvP ladder for launch.",
+    "/": ("ForeverRank: WoW Forever News, Datamines and Tools",
+          "WoW Forever news and beta datamines, plus a talent calculator, a datamined item and spell database, BiS lists, and the character and guild progression ladder for launch.",
           DEFAULT_IMG),
     "/plan/": ("WoW Forever Talent Calculator and Planner · The Forge",
                "WoW Forever talent calculator and character planner: race, class, talents, Legacy trees and gear from the beta client. Share builds as links and compose whole raids.",

@@ -9,9 +9,9 @@
   if (root.charAt(root.length - 1) !== "/") root += "/";
 
   var MENUS = {
-    ladder: { path: "", label: "The ladder", items: [
-      ["Progression", "?ladder=progression"], ["Levelling", "?ladder=levelling"], ["Hardcore", "?ladder=hardcore"],
-      ["PvP", "?ladder=pvp"], ["Professions", "?ladder=professions"], ["Guilds", "?ladder=guilds"], ["The Wire", "#wire"], ["ForeverProbe addon", "@addon/"]] },
+    ladder: { path: "", label: "Home", items: [
+      ["Latest news", "#latest"], ["Dig in", "#explore"], ["The ladder, explained", "#ladder"],
+      ["Ladder preview", "?preview=1#ladder"], ["ForeverProbe addon", "@addon/"]] },
     forge: { path: "plan/", label: "The Forge", items: [
       ["Race and class", "#race"], ["Talents", "#talents"], ["Legacy tree", "#legacy"], ["Gear and stats", "#gear"],
       ["Consumables", "#consumables"], ["Name and share", "#share"], ["Raid composer", "#composer"]] },
@@ -22,7 +22,7 @@
   };
   function keyFor(el) {
     var t = (el.textContent || "").trim().toLowerCase();
-    if (t.indexOf("ladder") !== -1) return "ladder";
+    if (t.indexOf("ladder") !== -1 || t === "home") return "ladder";
     if (t.indexOf("forge") !== -1) return "forge";
     if (t.indexOf("database") !== -1) return "database";
     if (t.indexOf("news") !== -1) return "news";

@@ -3,28 +3,176 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ForeverRank: WoW Forever Ladder, Database and Tools</title>
-<meta name="description" content="ForeverRank is the WoW Forever ladder and toolkit: a talent calculator, a datamined item and spell database, BiS lists, news, and a levelling, hardcore and PvP ladder for launch.">
+<title>ForeverRank: WoW Forever News, Datamines and Tools</title>
+<meta name="description" content="WoW Forever news and beta datamines, plus a talent calculator, a datamined item and spell database, BiS lists, and the character and guild progression ladder for launch.">
 <link rel="icon" href="mark.svg" type="image/svg+xml">
 <link rel="canonical" href="https://foreverrank.com/">
 <!-- seo:begin -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ForeverRank">
 <meta property="og:url" content="https://foreverrank.com/">
-<meta property="og:title" content="ForeverRank: WoW Forever Ladder, Database and Tools">
-<meta property="og:description" content="ForeverRank is the WoW Forever ladder and toolkit: a talent calculator, a datamined item and spell database, BiS lists, news, and a levelling, hardcore and PvP ladder for launch.">
+<meta property="og:title" content="ForeverRank: WoW Forever News, Datamines and Tools">
+<meta property="og:description" content="WoW Forever news and beta datamines, plus a talent calculator, a datamined item and spell database, BiS lists, and the character and guild progression ladder for launch.">
 <meta property="og:image" content="https://foreverrank.com/assets/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="ForeverRank: WoW Forever Ladder, Database and Tools">
-<meta name="twitter:description" content="ForeverRank is the WoW Forever ladder and toolkit: a talent calculator, a datamined item and spell database, BiS lists, news, and a levelling, hardcore and PvP ladder for launch.">
+<meta name="twitter:title" content="ForeverRank: WoW Forever News, Datamines and Tools">
+<meta name="twitter:description" content="WoW Forever news and beta datamines, plus a talent calculator, a datamined item and spell database, BiS lists, and the character and guild progression ladder for launch.">
 <meta name="twitter:image" content="https://foreverrank.com/assets/og.jpg">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "ForeverRank", "url": "https://foreverrank.com/", "description": "ForeverRank is the WoW Forever ladder and toolkit: a talent calculator, a datamined item and spell database, BiS lists, news, and a levelling, hardcore and PvP ladder for launch.", "publisher": {"@type": "Organization", "name": "ForeverRank", "url": "https://foreverrank.com/"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "ForeverRank", "url": "https://foreverrank.com/", "description": "WoW Forever news and beta datamines, plus a talent calculator, a datamined item and spell database, BiS lists, and the character and guild progression ladder for launch.", "publisher": {"@type": "Organization", "name": "ForeverRank", "url": "https://foreverrank.com/"}}</script>
 <!-- seo:end -->
 <meta name="theme-color" content="#0b1517">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="forever.css?v=21">
+<style>
+/* ---- home: news first, the ladder by invitation ---- */
+.ico { display: inline-block; flex: none; width: 2rem; height: 2rem; border-radius: 5px; border: 1px solid #0a0f13; box-shadow: 0 0 0 1px rgba(229,204,128,.35), 0 2px 8px rgba(0,0,0,.45); background: #10181e center/cover no-repeat; }
+.ico.s { width: 1.25rem; height: 1.25rem; border-radius: 3px; }
+.hn { padding-top: .4rem; }
+.hn-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 0 0 1rem; }
+.hn-all { font: 600 .74rem/1 var(--heading); letter-spacing: .06em; color: var(--gold); text-decoration: none; }
+.hn-all:hover { text-decoration: underline; }
+.hn-feature { display: grid; grid-template-columns: 1.25fr 1fr; min-height: 21rem; border-radius: 12px; overflow: hidden; border: 1px solid rgba(229,204,128,.4); background: #0b1418; box-shadow: var(--shadow); text-decoration: none; color: inherit; transition: border-color .2s, transform .2s; }
+a.hn-feature:hover { border-color: var(--gold); transform: translateY(-2px); }
+.hn-art { position: relative; background: var(--img) center/cover no-repeat; min-height: 14rem; }
+.hn-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(11,20,24,0) 55%, #0b1418), linear-gradient(0deg, rgba(11,20,24,.78), rgba(11,20,24,0) 48%); }
+.hn-art .hn-src { position: absolute; left: 1rem; top: 1rem; z-index: 1; }
+.hn-art h3 { position: absolute; left: 1.1rem; right: 1.1rem; bottom: 1rem; z-index: 1; margin: 0; font: 400 clamp(1.4rem, 3vw, 2.1rem)/1.12 var(--display-serif); color: #fff; text-shadow: 0 2px 16px rgba(0,0,0,.8); }
+.hn-side { display: flex; flex-direction: column; gap: .7rem; padding: 1.1rem 1.2rem 1.2rem; }
+.hn-side .hn-date { font: 600 .64rem/1 var(--heading); letter-spacing: .14em; text-transform: uppercase; color: var(--subtle); }
+.hn-hl { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+.hn-hl li { display: flex; align-items: center; gap: .65rem; padding: .45rem .55rem; border-radius: 6px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.05); font: 600 .8rem/1.3 var(--heading); color: #e9eef1; }
+.hn-read { margin-top: auto; align-self: flex-start; font: 700 .72rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: #1a1204; background: var(--gold); padding: .6rem .85rem; border-radius: 4px; }
+.hn-src { display: inline-flex; align-items: center; gap: .3rem; font: 700 .58rem/1 var(--heading); letter-spacing: .1em; text-transform: uppercase; padding: .3rem .45rem; border-radius: 3px; color: #081014; background: var(--sc, #9fb0bb); }
+.hn-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; margin: .8rem 0 0; }
+.hn-card { display: grid; grid-template-rows: 8.2rem auto; border-radius: 10px; overflow: hidden; text-decoration: none; color: inherit; background: var(--card); border: 1px solid var(--card-border); transition: border-color .15s, transform .15s; }
+.hn-card:hover { border-color: var(--gold); transform: translateY(-2px); }
+.hn-card .pic { position: relative; background: var(--img, linear-gradient(135deg, color-mix(in srgb, var(--sc, #07324a) 45%, #0b1418), #0b1418)) center/cover no-repeat; }
+.hn-card .pic .hn-src { position: absolute; left: .6rem; top: .6rem; }
+.hn-card .pic.none { background-image: linear-gradient(135deg, color-mix(in srgb, var(--sc) 55%, rgba(8,16,20,.35)), rgba(8,16,20,.85)), var(--art); background-size: cover; background-position: center; }
+.hn-card .pic.none::after { content: attr(data-mark); position: absolute; right: .7rem; bottom: .4rem; font: 400 2.6rem/1 var(--display-serif); color: rgba(255,255,255,.13); }
+.hn-card .txt { padding: .7rem .8rem .8rem; display: flex; flex-direction: column; gap: .4rem; }
+.hn-card b { font: 600 .86rem/1.35 var(--heading); color: #eef2f4; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hn-card i { font-style: normal; font: 600 .62rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: var(--subtle); margin-top: auto; }
+.hn-railhead { display: flex; align-items: baseline; gap: .9rem; flex-wrap: wrap; margin: 1.6rem 0 .6rem; }
+.hn-railhead h3 { margin: 0; font: 400 1.35rem var(--display-serif); color: var(--surface-text); }
+.hn-railhead h3 span { color: var(--gold); }
+.hn-railhead p { margin: 0; font-size: .8rem; color: var(--subtle); }
+.hn-rail { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(15rem, 1fr); gap: .6rem; overflow-x: auto; padding-bottom: .5rem; scroll-snap-type: x proximity; }
+.hn-mini { scroll-snap-align: start; position: relative; min-height: 9rem; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: .75rem .8rem; text-decoration: none; background: var(--img) center/cover no-repeat; border: 1px solid rgba(229,204,128,.3); transition: border-color .15s, transform .15s; }
+.hn-mini::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,16,20,.15), rgba(8,16,20,.92) 70%); }
+.hn-mini > * { position: relative; }
+.hn-mini:hover { border-color: var(--gold); transform: translateY(-2px); }
+.hn-mini b { font: 600 .82rem/1.3 var(--heading); color: #fff; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hn-mini i { font-style: normal; font: 600 .6rem/1 var(--heading); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); margin-bottom: .35rem; }
+.hn-more { margin: 1rem 0 0; border-top: 1px solid var(--surface-border); }
+.hn-more summary { cursor: pointer; padding: .8rem 0 .4rem; font: 600 .78rem var(--heading); color: var(--gold); }
+.hn-more ol { list-style: none; margin: 0; padding: 0; }
+.hn-more li { display: grid; grid-template-columns: 3.2rem 1fr auto; gap: .8rem; align-items: baseline; padding: .45rem 0; border-bottom: 1px solid var(--surface-border); font-size: .84rem; }
+.hn-more li span { color: var(--gold); font: 700 .7rem var(--heading); }
+.hn-more li a { color: var(--surface-text); text-decoration: none; }
+.hn-more li a:hover { color: var(--gold); }
+.hn-more li em { font-style: normal; font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; color: var(--subtle); }
+.ex { padding-top: .6rem; }
+.ex-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .6rem; }
+.ex-tile { position: relative; min-height: 9.2rem; display: flex; flex-direction: column; justify-content: flex-end; gap: .3rem; padding: .8rem .85rem; border-radius: 10px; overflow: hidden; text-decoration: none; background: var(--img) center/cover no-repeat; border: 1px solid var(--card-border); transition: border-color .2s, transform .2s; }
+.ex-tile::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,14,20,.25), rgba(5,14,20,.9) 72%); transition: background .2s; }
+.ex-tile > * { position: relative; }
+.ex-tile:hover { border-color: var(--gold); transform: translateY(-3px); }
+.ex-tile:hover::before { background: linear-gradient(180deg, rgba(5,14,20,.1), rgba(5,14,20,.85) 72%); }
+.ex-tile.big { grid-column: span 2; grid-row: span 2; min-height: 19rem; }
+.ex-tile.wide { grid-column: span 2; }
+.ex-ico { width: 2.4rem; height: 2.4rem; border-radius: 6px; border: 1px solid #0a0f13; box-shadow: 0 0 0 1px rgba(229,204,128,.55); background: center/cover no-repeat; margin-bottom: auto; }
+.ex-tile b { font: 400 1.25rem/1.1 var(--display-serif); color: #fff; }
+.ex-tile.big b { font-size: 1.9rem; }
+.ex-d { font-size: .76rem; line-height: 1.4; color: #cfdbe0; }
+.hx-lede { max-width: 46rem; margin: 0 0 1.2rem; font-size: 1rem; line-height: 1.65; color: #d4dde2; }
+.hx-lede b { color: var(--gold); font-weight: 600; }
+.hx-duo { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
+.hx-card { position: relative; padding: 1.1rem 1.1rem 1rem; border-radius: 12px; background: radial-gradient(120% 90% at 100% 0%, rgba(229,204,128,.08), transparent 55%), linear-gradient(180deg, rgba(7,50,74,.6), rgba(5,30,45,.9)); border: 1px solid rgba(229,204,128,.28); box-shadow: var(--shadow); }
+.hx-kick { margin: 0 0 .8rem; font: 700 .64rem/1 var(--heading); letter-spacing: .16em; text-transform: uppercase; color: var(--gold); }
+.hx-char { display: grid; grid-template-columns: auto 1fr auto; gap: .8rem; align-items: center; padding-bottom: .8rem; margin-bottom: .6rem; border-bottom: 1px solid rgba(255,255,255,.07); }
+.hx-port { width: 3.2rem; height: 3.2rem; border-radius: 50%; background: center/cover no-repeat; box-shadow: 0 0 0 2px rgba(229,204,128,.6), 0 4px 14px rgba(0,0,0,.5); }
+.hx-port.gtab { border-radius: 8px; }
+.hx-name { display: block; font: 600 1.05rem/1.2 var(--heading); color: #fff; }
+.hx-name span { color: var(--gold); }
+.hx-sub { display: block; margin-top: .2rem; font-size: .74rem; color: var(--subtle); }
+.hx-ring { position: relative; width: 4.2rem; height: 4.2rem; border-radius: 50%; display: grid; place-content: center; text-align: center; background: conic-gradient(var(--ring, var(--q-uncommon)) calc(var(--p) * 360deg), rgba(255,255,255,.08) 0); }
+.hx-ring::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: #0b1c26; }
+.hx-ring.gold { --ring: var(--gold); }
+.hx-ring b, .hx-ring span { position: relative; }
+.hx-ring b { font: 700 1.15rem/1 var(--heading); color: #fff; }
+.hx-ring span { font: 600 .5rem/1 var(--heading); letter-spacing: .1em; text-transform: uppercase; color: var(--subtle); margin-top: .15rem; }
+.hx-row { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .45rem 0; }
+.hx-row.col { flex-direction: column; align-items: stretch; gap: .45rem; }
+.hx-lab { font: 600 .7rem/1.3 var(--heading); letter-spacing: .04em; color: #c9d4da; }
+.hx-lab small { display: block; font: 500 .64rem/1.3 var(--body); letter-spacing: 0; color: var(--subtle); }
+.hx-pips { display: flex; gap: .3rem; }
+.hx-pips i { width: .72rem; height: .72rem; transform: rotate(45deg); border: 1px solid rgba(229,204,128,.45); background: rgba(0,0,0,.3); }
+.hx-pips i.on { background: linear-gradient(135deg, #f0dc9a, #c9a95a); border-color: #f0dc9a; box-shadow: 0 0 8px rgba(229,204,128,.4); }
+.hx-parse { font: 700 1.25rem/1 var(--heading); color: var(--c); text-shadow: 0 0 14px color-mix(in srgb, var(--c) 45%, transparent); }
+.hx-bars { display: flex; align-items: flex-end; gap: 2px; height: 3.2rem; }
+.hx-bars i { flex: 1; border-radius: 2px 2px 0 0; background: var(--c); height: var(--h); opacity: .9; }
+.hx-prof { display: grid; gap: .35rem; }
+.hx-prof div { display: grid; grid-template-columns: 1.3rem 6.5rem 1fr 3.4rem; gap: .5rem; align-items: center; font: 600 .7rem var(--heading); color: #dfe7eb; }
+.hx-prof em { font-style: normal; height: .45rem; border-radius: 3px; background: rgba(255,255,255,.07); overflow: hidden; }
+.hx-prof em u { display: block; height: 100%; width: var(--w); background: linear-gradient(90deg, #a8925b, var(--gold)); }
+.hx-prof small { font: 600 .64rem var(--heading); color: var(--subtle); text-align: right; }
+.hx-cats { display: grid; gap: .4rem; margin: .2rem 0 .4rem; }
+.hx-cats div { display: grid; grid-template-columns: 8.5rem 1fr 2rem; gap: .6rem; align-items: center; font: 600 .7rem var(--heading); color: #dfe7eb; }
+.hx-cats em { font-style: normal; height: .55rem; border-radius: 3px; background: rgba(255,255,255,.07); overflow: hidden; }
+.hx-cats em u { display: block; height: 100%; width: var(--w); background: var(--c); box-shadow: 0 0 10px color-mix(in srgb, var(--c) 40%, transparent); }
+.hx-cats b { text-align: right; color: var(--c); }
+.hx-race { display: flex; flex-wrap: wrap; gap: .3rem; }
+.hx-race span { width: 1.55rem; height: 1.55rem; border-radius: 50%; border: 2px solid var(--cc); background: conic-gradient(var(--cc) calc(var(--p) * 360deg), rgba(255,255,255,.06) 0); }
+.hx-race span.fell { filter: grayscale(1) brightness(.6); }
+.hx-list { list-style: none; margin: .7rem 0 0; padding: .7rem 0 0; border-top: 1px solid rgba(255,255,255,.07); display: grid; gap: .35rem; }
+.hx-list li { display: flex; align-items: center; gap: .55rem; font-size: .78rem; color: #cdd7dc; }
+.hx-list .ico { width: 1.35rem; height: 1.35rem; border-radius: 4px; }
+.hx-parse-scale { margin: 1rem 0 0; padding: .9rem 1rem; border-radius: 10px; background: rgba(0,0,0,.22); border: 1px solid var(--card-border); }
+.hx-parse-scale p:last-child { margin: .55rem 0 0; font-size: .8rem; color: var(--subtle); }
+.hx-bands { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.hx-bands span { height: 1.9rem; display: flex; align-items: flex-end; padding: 0 .35rem .25rem; font: 700 .66rem var(--heading); color: #0b1418; background: var(--c); border-radius: 3px; }
+.hx-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; margin: 1rem 0 0; }
+.hx-steps div { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; column-gap: .75rem; padding: .9rem; border-radius: 10px; background: linear-gradient(180deg, rgba(7,50,74,.5), rgba(5,30,45,.85)); border: 1px solid var(--card-border); }
+.hx-steps b { position: absolute; right: .7rem; top: .45rem; font: 400 2rem/1 var(--display-serif); color: rgba(229,204,128,.2); }
+.hx-steps .ico { grid-row: span 2; width: 2.4rem; height: 2.4rem; }
+.hx-steps h4 { margin: 0; font: 600 .95rem var(--heading); color: #f3efe2; }
+.hx-steps p { margin: .25rem 0 0; font-size: .76rem; line-height: 1.5; color: #b9c6cd; }
+.hx-steps em { font-style: normal; color: var(--gold); }
+.hx-ladders { display: flex; flex-wrap: wrap; gap: .4rem; margin: 1rem 0 0; }
+.hx-ladders span { display: inline-flex; align-items: center; gap: .45rem; padding: .38rem .7rem .38rem .38rem; border-radius: 99px; font: 600 .72rem/1 var(--heading); color: #dfe7eb; background: rgba(0,0,0,.28); border: 1px solid var(--card-border); }
+.hx-ladders .ico.s { border-radius: 50%; }
+.hx-cta { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 1.3rem 0 .4rem; padding: 1rem 1.1rem; border-radius: 12px; background: linear-gradient(90deg, rgba(229,204,128,.16), rgba(229,204,128,.03)); border: 1px solid rgba(229,204,128,.5); }
+.hx-go { cursor: pointer; font: 700 .8rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: #14100a; background: linear-gradient(180deg, #f0dfa8, #d9b96a); border: 1px solid rgba(255,240,200,.5); border-radius: 4px; padding: .85rem 1.2rem; box-shadow: 0 4px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.35); transition: filter .15s, transform .15s; }
+.hx-go:hover { filter: brightness(1.07); transform: translateY(-1px); }
+.hx-cta p { margin: 0; font-size: .8rem; color: #d8cfb5; }
+.lad-switch { display: inline-flex; gap: 4px; padding: 4px; margin: 0 0 1.1rem; border-radius: 10px; background: rgba(0,0,0,.35); border: 1px solid rgba(229,204,128,.35); }
+.lad-switch button { display: inline-flex; align-items: center; gap: .5rem; cursor: pointer; padding: .6rem .95rem .6rem .6rem; border: 0; border-radius: 7px; background: none; font: 600 .78rem/1 var(--heading); color: #cdd7dc; transition: background .15s, color .15s; }
+.lad-switch button:hover { color: #fff; background: rgba(255,255,255,.05); }
+.lad-switch button.on { color: #14100a; background: linear-gradient(180deg, #f0dfa8, #d9b96a); box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+.lad-switch button .ico.s { width: 1.3rem; height: 1.3rem; }
+@media (max-width: 620px) { .lad-switch { display: flex; } .lad-switch button { flex: 1; justify-content: center; padding: .6rem .5rem; font-size: .7rem; } .lad-switch button .ico.s { display: none; } }
+.lad-bar { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin: 0 0 .9rem; padding: .6rem .8rem; border-radius: 8px; background: rgba(226,104,168,.08); border: 1px dashed rgba(226,104,168,.45); font-size: .78rem; color: #e8d6e0; }
+.lad-flag { font: 700 .6rem/1 var(--heading); letter-spacing: .12em; text-transform: uppercase; color: #1b0a14; background: var(--q-pink); padding: .3rem .45rem; border-radius: 3px; }
+.lad-bar button { margin-left: auto; cursor: pointer; font: 600 .72rem/1 var(--heading); color: var(--gold); background: none; border: 1px solid rgba(229,204,128,.45); border-radius: 4px; padding: .45rem .7rem; }
+.lad-bar button:hover { background: rgba(229,204,128,.1); }
+@media (max-width: 980px) {
+  .hn-feature { grid-template-columns: 1fr; } .hn-art::after { background: linear-gradient(0deg, rgba(11,20,24,.8), rgba(11,20,24,0) 55%); }
+  .hn-grid { grid-template-columns: 1fr 1fr; }
+  .ex-grid { grid-template-columns: 1fr 1fr; } .ex-tile.big { grid-row: auto; min-height: 12rem; }
+  .hx-duo, .hx-steps { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .hn-grid { grid-template-columns: 1fr; }
+  .ex-grid { grid-template-columns: 1fr; } .ex-tile.big { grid-column: auto; }
+  .hx-bands span { font-size: .56rem; padding: 0 .2rem .2rem; }
+  .hx-prof div { grid-template-columns: 1.3rem 5.2rem 1fr 3rem; }
+  .hx-cats div { grid-template-columns: 7rem 1fr 1.8rem; }
+  .hn-more li { grid-template-columns: 3rem 1fr; } .hn-more li em { display: none; }
+}
+</style>
 </head>
 <body>
 
@@ -70,7 +218,7 @@
       <button class="pill pill-gear" id="gear" aria-haspopup="true" aria-expanded="false" title="Settings">&#9881;</button>
     </div>
   </nav>
-<script src="nav.js?v=6"></script>
+<script src="nav.js?v=7"></script>
   <div class="settings" id="settings" hidden>
     <label><input type="checkbox" id="demo-toggle"> Show demo data</label>
     <p>Demo rows are invented, watermarked, and vanish the moment real uploads exist.</p>
@@ -105,49 +253,153 @@
 
 <div class="divider" aria-hidden="true"><svg><use href="#rune"/></svg></div>
 
-<!-- ============================================================= board -->
-<main id="top" class="wrap">
+<!-- ============================================================= news -->
+<section class="hn wrap" id="latest">
+  <div class="hn-head">
+    <h2 class="display">Latest <span>news</span></h2>
+    <a class="hn-all" href="news/">Every headline &rsaquo;</a>
+  </div>
+  <div id="hn-feature" class="hn-feature"></div>
+  <div class="hn-grid" id="hn-grid"></div>
+  <div class="hn-railhead"><h3>Our <span>datamines</span></h3><p>Read straight from the beta client, build by build.</p></div>
+  <div class="hn-rail" id="hn-rail"></div>
+  <details class="hn-more" id="hn-more"><summary>More headlines</summary><ol id="hn-list"></ol></details>
+  <noscript><p class="board-sub">The news loads with JavaScript. Every headline is also on <a href="news/">the news page</a>.</p></noscript>
+</section>
+
+<!-- ============================================================= explore -->
+<section class="ex wrap" id="explore">
+  <div class="hn-head"><h2 class="display display-sm">Dig <span>in</span></h2></div>
+  <div class="ex-grid">
+    <a class="ex-tile big" href="plan/" style="--img:url(/codex/img/stat-legacy.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_hammer_20.jpg)"></span><b>The Forge</b><span class="ex-d">Talent calculator and character planner: race, class, talents, Legacy trees and gear, shared as a link.</span></a>
+    <a class="ex-tile" href="codex/" style="--img:url(/codex/img/stat-spells.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg)"></span><b>Database</b><span class="ex-d">17,000 datamined items and spells, sets and hidden systems.</span></a>
+    <a class="ex-tile" href="bis/" style="--img:url(/codex/img/excavation-site.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_chest_plate16.jpg)"></span><b>BiS lists</b><span class="ex-d">Best in slot for all 31 specs at the beta cap.</span></a>
+    <a class="ex-tile" href="classes/" style="--img:url(/codex/img/stat-classes.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_paladin.jpg)"></span><b>Classes</b><span class="ex-d">What changed per class, and the spells Forever hides.</span></a>
+    <a class="ex-tile" href="world/" style="--img:url(/codex/img/stat-dungeons.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg)"></span><b>World and Atlas</b><span class="ex-d">Zones, dungeons, raids and the zone map.</span></a>
+    <a class="ex-tile" href="rankings/" style="--img:url(/codex/img/stat-raids.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/achievement_bg_winwsg.jpg)"></span><b>Spec rankings</b><span class="ex-d">Honest estimates until real parses exist.</span></a>
+    <a class="ex-tile" href="news/" style="--img:url(/codex/img/city-of-dalaran.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_scroll_03.jpg)"></span><b>News</b><span class="ex-d">Every Forever headline, and our datamines.</span></a>
+    <a class="ex-tile wide" href="#ladder" style="--img:url(/assets/og.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_trophy_argent.jpg)"></span><b>The ladder</b><span class="ex-d">Character and guild progression, ranked. What it will be.</span></a>
+  </div>
+</section>
+
+<div class="divider" aria-hidden="true"><svg><use href="#rune"/></svg></div>
+
+<!-- ============================================================= ladder -->
+<main id="ladder" class="wrap lad">
   <div class="board-title">
     <h2 class="display">The <span>Eternal</span> Ladder</h2>
     <p class="board-note" id="cap-note">Beta opens capped at <b>level 20</b>, rising to 30. Boards rank to the live cap.</p>
   </div>
 
-  <div class="controls">
-    <div class="dd" id="dd-view">
-      <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
-        <small>Ladder</small><span id="dd-view-label">Progression</span><i class="dd-car" aria-hidden="true"></i>
-      </button>
-      <ul class="dd-list" role="listbox" hidden>
-        <li role="option" data-v="levelling">Levelling</li>
-        <li role="option" data-v="hardcore">Hardcore</li>
-        <li role="option" data-v="pvp">World PvP</li>
-        <li role="option" data-v="progression" class="is-sel" aria-selected="true">Progression</li>
-        <li role="option" data-v="professions">Professions</li>
-        <li role="option" data-v="guilds">Guilds</li>
-      </ul>
-    </div>
-    <div class="dd" id="dd-realm">
-      <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
-        <small>Server</small><span id="dd-realm-label">All servers</span><i class="dd-car" aria-hidden="true"></i>
-      </button>
-      <ul class="dd-list" role="listbox" hidden>
-        <li role="option" data-v="all" class="is-sel" aria-selected="true">All servers</li>
-        <li role="option" data-v="Normal">Normal</li>
-        <li role="option" data-v="PvP">PvP</li>
-        <li role="option" data-v="Hardcore">Hardcore</li>
-        <li role="option" data-v="RP">RP</li>
-      </ul>
-    </div>
-    <input id="search" class="search" type="search" placeholder="Find a player&hellip;" aria-label="Search players" autocomplete="off" spellcheck="false">
-    <button type="button" class="share" id="share">Share view</button>
+  <div class="lad-switch" id="lad-switch" role="tablist" aria-label="Ladder view">
+    <button type="button" role="tab" data-mode="explain" aria-selected="true" class="on"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg)"></span>What the ladder is</button>
+    <button type="button" role="tab" data-mode="preview" aria-selected="false"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_trophy_argent.jpg)"></span>Preview with placeholder data</button>
   </div>
-  <p class="board-sub" id="board-sub"></p>
+  <section class="hx" id="explain">
+    <p class="hx-lede">When Forever launches, ForeverRank turns what you do in the world into <b>two dashboards</b>: one for your character, one for your guild. Nothing here is real yet; this is what the ladder is for.</p>
+    <div class="hx-duo">
+      <article class="hx-card">
+        <p class="hx-kick">Character progression</p>
+        <div class="hx-char">
+          <span class="hx-port" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_paladin.jpg)"></span>
+          <div><b class="hx-name" style="color:#f58cba" data-x="c-name">Aldric Stormhollow</b><span class="hx-sub" data-x="c-sub">Paladin · RP server</span></div>
+          <div class="hx-ring" data-x="c-ring" style="--p:.9"><b data-x="c-lvl">27</b><span>level</span></div>
+        </div>
+        <div class="hx-row"><span class="hx-lab">Dungeons of the Nine</span><span class="hx-pips" data-x="c-pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span></div>
+        <div class="hx-row"><span class="hx-lab">Progression parse</span><span class="hx-parse" data-x="c-parse" style="--c:var(--q-epic)">91</span></div>
+        <div class="hx-row col"><span class="hx-lab">Every level, timed <small>colour = your pace against everyone at that level</small></span><span class="hx-bars" data-x="c-bars"></span></div>
+        <div class="hx-row col"><span class="hx-lab">Professions</span><span class="hx-prof" data-x="c-profs"></span></div>
+        <ul class="hx-list">
+          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/ability_rogue_sprint.jpg)"></span>Levelling pace, level by level</li>
+          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_key_11.jpg)"></span>The nine dungeons cleared</li>
+          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/trade_blacksmithing.jpg)"></span>Professions and camps</li>
+          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/spell_holy_resurrection.jpg)"></span>Hardcore: alive, or the level death found you</li>
+          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_bannerpvp_01.jpg)"></span>PvP rank and honor</li>
+        </ul>
+      </article>
+      <article class="hx-card">
+        <p class="hx-kick">Guild progression</p>
+        <div class="hx-char">
+          <span class="hx-port gtab" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_tabardpvp_01.jpg)"></span>
+          <div><b class="hx-name">&lt;<span data-x="g-name">Riverglade Company</span>&gt;</b><span class="hx-sub" data-x="g-sub">12 members · RP server</span></div>
+          <div class="hx-ring gold" data-x="g-ring" style="--p:.62"><b data-x="g-overall">62</b><span>overall</span></div>
+        </div>
+        <div class="hx-cats" data-x="g-cats"></div>
+        <div class="hx-row col"><span class="hx-lab">Race to the cap <small>each dot a member, filled to their level</small></span><span class="hx-race" data-x="g-race"></span></div>
+        <ul class="hx-list">
+          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/ability_warrior_rallyingcry.jpg)"></span>Levelling as a guild, not one runner</li>
+          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_head_dragon_01.jpg)"></span>Dungeons cleared together</li>
+          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_bone_humanskull_01.jpg)"></span>Hardcore survival and PvP</li>
+          <li><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_note_01.jpg)"></span>One weighted score, broken down</li>
+        </ul>
+      </article>
+    </div>
 
-  <section class="panel">
-    <svg class="fili fili-panel-tl" aria-hidden="true"><use href="#fili"/></svg>
-    <svg class="fili fili-panel-br" aria-hidden="true"><use href="#fili"/></svg>
-    <div id="board" class="board" aria-live="polite"></div>
+    <div class="hx-parse-scale">
+      <p class="hx-kick">How a parse reads</p>
+      <div class="hx-bands"><span style="--c:var(--q-common)">0</span><span style="--c:var(--q-uncommon)">25</span><span style="--c:var(--q-rare)">50</span><span style="--c:var(--q-epic)">75</span><span style="--c:var(--q-legendary)">95</span><span style="--c:var(--q-pink)">99</span><span style="--c:var(--q-artifact)">100</span></div>
+      <p>Like WarcraftLogs: your colour is where you stand against everyone at the same level, on the same ladder. Level first, speed breaks ties: a race, not a stopwatch.</p>
+    </div>
+
+    <div class="hx-steps">
+      <div><b>1</b><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_spyglass_03.jpg)"></span><h4>Play</h4><p>The ForeverProbe addon quietly notes your pace and progress. Read-only; it never plays for you. <em>Coming soon.</em></p></div>
+      <div><b>2</b><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_letter_15.jpg)"></span><h4>Share</h4><p>Export in two clicks, or let your guild's companion sync it after each session.</p></div>
+      <div><b>3</b><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_trophy_argent.jpg)"></span><h4>Rank</h4><p>Ladders per ruleset: Normal, PvP, Hardcore and RP, and a guild board across all four.</p></div>
+    </div>
+
+    <div class="hx-ladders">
+      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_note_01.jpg)"></i>Progression</span>
+      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/ability_rogue_sprint.jpg)"></i>Levelling</span>
+      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/spell_holy_resurrection.jpg)"></i>Hardcore</span>
+      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_bannerpvp_01.jpg)"></i>World PvP</span>
+      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/trade_blacksmithing.jpg)"></i>Professions</span>
+      <span><i class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_tabardpvp_01.jpg)"></i>Guilds</span>
+    </div>
+
+    <div class="hx-cta">
+      <button type="button" class="hx-go" id="preview-on">Preview the ladder with placeholder data</button>
+      <p>20 invented characters and 5 guilds, clearly marked. Nothing real until launch.</p>
+    </div>
   </section>
+
+  <div class="lad-live" id="lad-live" hidden>
+    <div class="controls">
+      <div class="dd" id="dd-view">
+        <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
+          <small>Ladder</small><span id="dd-view-label">Progression</span><i class="dd-car" aria-hidden="true"></i>
+        </button>
+        <ul class="dd-list" role="listbox" hidden>
+          <li role="option" data-v="levelling">Levelling</li>
+          <li role="option" data-v="hardcore">Hardcore</li>
+          <li role="option" data-v="pvp">World PvP</li>
+          <li role="option" data-v="progression" class="is-sel" aria-selected="true">Progression</li>
+          <li role="option" data-v="professions">Professions</li>
+          <li role="option" data-v="guilds">Guilds</li>
+        </ul>
+      </div>
+      <div class="dd" id="dd-realm">
+        <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">
+          <small>Server</small><span id="dd-realm-label">All servers</span><i class="dd-car" aria-hidden="true"></i>
+        </button>
+        <ul class="dd-list" role="listbox" hidden>
+          <li role="option" data-v="all" class="is-sel" aria-selected="true">All servers</li>
+          <li role="option" data-v="Normal">Normal</li>
+          <li role="option" data-v="PvP">PvP</li>
+          <li role="option" data-v="Hardcore">Hardcore</li>
+          <li role="option" data-v="RP">RP</li>
+        </ul>
+      </div>
+      <input id="search" class="search" type="search" placeholder="Find a player&hellip;" aria-label="Search players" autocomplete="off" spellcheck="false">
+      <button type="button" class="share" id="share">Share view</button>
+    </div>
+    <p class="board-sub" id="board-sub"></p>
+
+    <section class="panel">
+      <svg class="fili fili-panel-tl" aria-hidden="true"><use href="#fili"/></svg>
+      <svg class="fili fili-panel-br" aria-hidden="true"><use href="#fili"/></svg>
+      <div id="board" class="board" aria-live="polite"></div>
+    </section>
+  </div>
 </main>
 
 <aside class="insight" id="insight" hidden>
@@ -157,24 +409,6 @@
   </div>
 </aside>
 
-<div class="divider" aria-hidden="true"><svg><use href="#rune"/></svg></div>
-
-<section class="wire-sec">
-  <h2 class="display display-sm">The <span>Wire</span></h2>
-  <p class="board-sub">What Blizzard and the fansites have said about Forever, newest first. A living file; it grows as the news does.</p>
-  <ol class="wire" id="wire"></ol>
-</section>
-
-<section class="api-note">
-  <h2>We do not know the addon API yet.</h2>
-  <p>Blizzard has published <b>no addon details for Forever</b>: no folder path, no
-  API notes. This whole page is the plan, built on the Classic Era client the game
-  is based on, and every number on it is a placeholder. The beta on
-  <b>September&nbsp;17</b> is where we find out what an addon can actually measure.
-  the boards go live the day real uploads exist, and anything the API cannot
-  support gets removed rather than faked.</p>
-</section>
-
 <footer>
   <a class="pill donate" href="https://paypal.me/MikalSteenMonslaup" rel="noopener">Buy the smith a mead</a>
   <img src="mark.svg" alt="" width="24" height="24">
@@ -183,7 +417,7 @@
   <a href="https://github.com/monscorps/foreverrank">source</a>
 </footer>
 
-<script src="forever.js?v=11"></script>
+<script src="forever.js?v=12"></script>
 <script src="/map.js?v=8" defer></script>
 <div class="probe-modal" id="probe-modal" hidden>
   <div class="probe-card" role="dialog" aria-modal="true" aria-labelledby="probe-t" tabindex="-1">
