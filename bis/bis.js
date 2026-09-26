@@ -1,6 +1,6 @@
 /* The BiS page: renders bis.json (slot rankings compiled from ForeverChanges,
- * credited on the page) with tooltips joined from our own datamined item
- * database plus bis-items.json for pieces newer than our last datamine.
+ * credited on the page) with tooltips from our item database, drawn by the
+ * shared tooltip in plan/gear.js; bis-items.json fills pieces it lacks.
  * Deep links: /bis/?c=priest&s=holy#slot-legs */
 (function () {
   "use strict";
@@ -9,13 +9,6 @@
     warlock: "Warlock", paladin: "Paladin", druid: "Druid", shaman: "Shaman" };
   var CLASSCOLOR = { warrior: "#c69b6d", hunter: "#aad372", mage: "#3fc7eb", rogue: "#fff468", priest: "#ffffff",
     warlock: "#8788ee", paladin: "#f48cba", druid: "#ff7c0a", shaman: "#0070dd" };
-  var STAT_LINE = { strength: "Strength", agility: "Agility", stamina: "Stamina", intellect: "Intellect", spirit: "Spirit" };
-  var EQUIPS = [["attackPower", "Equip: +%s Attack Power."], ["spellPower", "Equip: Increases damage and healing done by magical spells and effects by up to %s."],
-    ["healing", "Equip: Increases healing done by up to %s."], ["spellDamage", "Equip: Increases damage done by magical spells and effects by up to %s."],
-    ["hit", "Equip: Improves your chance to hit by %s%."], ["crit", "Equip: Improves your chance to get a critical strike by %s%."],
-    ["mp5", "Equip: Restores %s mana per 5 sec."], ["defense", "Equip: Increased Defense +%s."]];
-  var SCHOOL_DMG = { holySpellDamage: "Holy", fireSpellDamage: "Fire", natureSpellDamage: "Nature", frostSpellDamage: "Frost",
-    shadowSpellDamage: "Shadow", arcaneSpellDamage: "Arcane" };
   var SLOTLABEL = { "main-hand": "Main Hand", "off-hand": "Off Hand", "one-hand": "One-Hand", "two-hand": "Two-Hand", held: "Held In Off-hand" };
 
   function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
@@ -24,40 +17,17 @@
 
   var DATA = null, BYID = {};
 
+  var GK = null;
   function itemTip(row) {
     var it = BYID[row.id];
-    if (!it) {
+    if (!it || !GK) {
       return '<b class="q-' + esc(row.q || "unknown") + '">' + esc(row.name) + "</b>" +
         '<span class="it-src">' + esc(fromText(row) || "") + "</span>" +
         '<span class="it-conf">On the list, not in the datamine yet: stats land with a later client read.</span>';
     }
-    var s = it.stats || {}, L = [];
-    L.push('<b class="q-' + esc(it.quality || "common") + '">' + esc(it.name) + "</b>");
-    if (it.binding) L.push('<span class="it-l">' + (it.binding === "BoP" ? "Binds when picked up" : "Binds when equipped") + "</span>");
-    if (it.unique) L.push('<span class="it-l">' + esc(it.unique === true ? "Unique" : it.unique) + "</span>");
-    if ((it.slot && it.slot !== "unknown") || it.type) L.push('<span class="it-row"><i>' + esc(it.slot === "unknown" ? "" : slotLabel(it.slot)) + "</i><i>" + esc(it.type || "") + "</i></span>");
-    if (it.damage) L.push('<span class="it-row"><i>' + esc(it.damage) + " Damage</i><i>" + (it.speed ? "Speed " + Number(it.speed).toFixed(2) : "") + "</i></span>");
-    if (it.dps) L.push('<span class="it-l">(' + esc(it.dps) + " damage per second)</span>");
-    if (it.armor) L.push('<span class="it-l">' + esc(it.armor) + " Armor</span>");
-    if (it.block) L.push('<span class="it-l">' + esc(it.block) + " Block</span>");
-    Object.keys(STAT_LINE).forEach(function (k) { if (s[k]) L.push('<span class="it-l">+' + esc(s[k]) + " " + STAT_LINE[k] + "</span>"); });
-    if (s.resist) Object.keys(s.resist).forEach(function (r) { L.push('<span class="it-l">+' + esc(s.resist[r]) + " " + esc(r.charAt(0).toUpperCase() + r.slice(1)) + " Resistance</span>"); });
-    (it.effects || []).forEach(function (e) { L.push('<span class="it-g">' + esc(e) + "</span>"); });
-    EQUIPS.forEach(function (x) {
-      if (!s[x[0]]) return;
-      var already = (it.effects || []).some(function (e) { return e.indexOf(String(s[x[0]])) !== -1; });
-      if (!already) L.push('<span class="it-g">' + esc(x[1].replace("%s", s[x[0]])) + "</span>");
-    });
-    Object.keys(SCHOOL_DMG).forEach(function (k) {
-      if (s[k]) L.push('<span class="it-g">Equip: Increases damage done by ' + SCHOOL_DMG[k] + ' spells and effects by up to ' + esc(s[k]) + ".</span>");
-    });
-    if (it.flavor) L.push('<span class="it-f">"' + esc(it.flavor) + '"</span>');
-    if (it.reqLevel) L.push('<span class="it-l">Requires Level ' + esc(it.reqLevel) + "</span>");
-    if (it.itemLevel) L.push('<span class="it-y">Item Level ' + esc(it.itemLevel) + "</span>");
     var src = fromText(row) || "";
-    if (src && (!it.source || it.source.indexOf(src.slice(0, 24)) === -1)) L.push('<span class="it-src">' + esc(src) + "</span>");
-    L.push('<span class="it-conf">' + esc(it.source || "") + "</span>");
-    return L.join("");
+    var from = src && !(it.drops || it.quests) ? '<span class="it-drop">' + esc(src) + "</span>" : "";
+    return GK.itemTip(it) + from;
   }
   function fromText(row) {
     return (row.from || []).map(function (f) { return f.t + (f.n ? " · " + f.n : ""); }).join("; ");
@@ -147,10 +117,13 @@
     fetch("bis-items.json").then(function (r) { return r.ok ? r.json() : { items: [] }; }).catch(function () { return { items: [] }; })
   ]).then(function (rs) {
     DATA = rs[0];
-    // the supplement carries the current build's tooltips, so it wins over
-    // the main db, which is pinned to our last full client datamine
-    rs[1].items.forEach(function (it) { BYID[String(it.id)] = it; });
+    // The main database carries the current build's tooltips (tools/scavenge_items.py);
+    // bis-items.json only fills pieces it lacks.
     rs[2].items.forEach(function (it) { BYID[String(it.id)] = it; });
+    rs[1].items.forEach(function (it) { BYID[String(it.id)] = it; });
+    if (window.ForgeGear) {
+      try { GK = ForgeGear({ items: { items: Object.keys(BYID).map(function (k) { return BYID[k]; }) }, get: function () { return {}; } }); } catch (e) { GK = null; }
+    }
     wire();
     render();
     if (location.hash) {

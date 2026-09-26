@@ -1,24 +1,25 @@
 #!/usr/bin/env python3
-"""Fill plan/items-db.json with what the client does not carry.
+"""Fill plan/items-db.json with the current Forever tooltip of every item.
 
-Blizzard sends most new Forever items from the server: the client has an Item
-row (class, slot, icon) but no ItemSparse row, so no name, stats or tooltip.
-Wowhead's Forever database has them, and its tooltip service is public, so:
+The client holds only part of it: Blizzard sends most new Forever items from
+the server (Item row, no ItemSparse row), and changed Classic items get their
+new numbers the same way, so a client datamine shows old or no stats. Three
+sources, in this order, each used only where the one above has nothing:
 
-  1. candidates  every item a dungeon or quest in codex/loot.json names, and
-                 every client Item row without ItemSparse in the Classic or
-                 Forever ID bands (SoD-era rows stay out unless loot names them)
-  2. fetch       nether.wowhead.com/forever/tooltip/item/<id>, cached per item
-                 in tools/.wh-cache/ (gitignored), four at a time
-  3. parse       the tooltip into the database's own fields (stats, effects,
-                 damage, armor, set, requirements)
-  4. merge       new items join; items already in the database take Wowhead's
-                 numbers where it has them (it reads the live server data our
-                 budget decode approximates); every item a boss or quest gives
-                 gets `drops` / `quests` from codex/loot.json
+  1. ForeverChanges  foreverchanges.pro/items/{new,changed,same}.json: the
+                     current beta tooltip of ~19,500 items in Forever's own
+                     wording ("+14 Critical Strike Rating"), with the Classic
+                     version of every changed item alongside
+  2. Wowhead         nether.wowhead.com/forever/tooltip/item/<id>, the public
+                     tooltip service; complete but behind on changed items
+  3. our datamine    the client's own rows
+
+Every item a dungeon boss or quest gives (codex/loot.json) gets drops/quests.
+Caches: tools/.wh-cache/ and tools/.loot-cache/ (both gitignored).
 
   python3 tools/scavenge_items.py            # fetch what is missing, then merge
-  python3 tools/scavenge_items.py --all      # also refresh every gear item
+  python3 tools/scavenge_items.py --all      # also check Wowhead for every gear item
+  python3 tools/scavenge_items.py --refresh  # re-download ForeverChanges' item files
   python3 tools/scavenge_items.py --dry      # report only
 """
 import collections, concurrent.futures, csv, html, json, os, re, sys, threading, time, urllib.request
@@ -201,6 +202,100 @@ def parse(tt):
     return r
 
 
+FC_FILES = ("new", "changed", "same", "missing")
+RATING = {"Critical Strike": ("critRating", "crit", 14), "Hit": ("hitRating", "hit", 10), "Dodge": ("dodgeRating", "dodge", 12),
+          "Parry": ("parryRating", "parry", 15), "Block": ("blockRating", "blockChance", 5), "Defense": ("defenseRating", "defense", 1),
+          "Haste": ("hasteRating", None, 0), "Expertise": ("expertiseRating", None, 0)}
+FC_EQUIP = [(r"Spell Power", "spellPower"), (r"Healing", "healing"), (r"Spell Damage", "spellDamage"), (r"Attack Power", "attackPower"),
+            (r"Ranged Attack Power", "rangedAttackPower"), (r"Mana Regeneration", "mp5"), (r"Health Regeneration", "hp5"),
+            (r"Block Value", "blockValue"), (r"Spell Penetration", "spellPiercing"), (r"Armor Penetration", "armorPen"),
+            (r"Fishing", "fishing")]
+
+
+def fc_items(refresh=False):
+    """ForeverChanges' item files, cached. Returns ({id: record}, meta)."""
+    out, meta = {}, {}
+    for name in FC_FILES:
+        path = os.path.join(ROOT, "tools", ".loot-cache", "fc-items-%s.json" % name)
+        if refresh or not os.path.exists(path):
+            body = urllib.request.urlopen(urllib.request.Request("https://foreverchanges.pro/items/%s.json" % name, headers=UA), timeout=120).read()
+            open(path, "wb").write(body)
+        d = json.load(open(path))
+        meta = {k: d[k] for k in ("forever_build", "forever_build_date") if k in d}
+        for it in d.get("items") or []:
+            out[str(it["i"])] = it
+    return out, meta
+
+
+def fc_parse(f, sets):
+    """One ForeverChanges record in the database's fields, wording kept."""
+    r = {"stats": {}, "effects": []}
+    st = r["stats"]
+    def add(k, v):
+        st[k] = round(st.get(k, 0) + v, 2)
+    for line in f.get("x") or []:
+        if line in ("Binds when picked up", "Soulbound"): r["binding"] = "BoP"; continue
+        if line == "Binds when equipped": r["binding"] = "BoE"; continue
+        if line == "Binds when used": r["binding"] = "BoU"; continue
+        if line == "Quest Item": r["binding"] = "Quest"; continue
+        if line.startswith("Unique"): r["unique"] = True if line == "Unique" else line; continue
+        if line == "This Item Begins a Quest": r["startsQuest"] = True; continue
+        if line.startswith("Sell Price") or "\t" in line and not re.search(r"Damage\tSpeed", line): continue
+        m = re.match(r"^([\d,]+) - ([\d,]+) Damage\tSpeed ([\d.]+)", line)
+        if m: r["damage"], r["speed"] = "%s-%s" % (m.group(1).replace(",", ""), m.group(2).replace(",", "")), float(m.group(3)); continue
+        m = re.match(r"^\(([\d.,]+) damage per second\)", line)
+        if m: r["dps"] = float(m.group(1).replace(",", "")); continue
+        m = re.match(r"^\+[\d,]+ - [\d,]+ \w+ Damage$", line)
+        if m: r["dmgExtra"] = line; continue
+        m = re.match(r"^([\d,]+) Armor$", line)
+        if m: r["armor"] = int(m.group(1).replace(",", "")); continue
+        m = re.match(r"^\+([\d,]+) Armor$", line)
+        if m: add("bonusArmor", int(m.group(1).replace(",", ""))); continue
+        m = re.match(r"^([\d,]+) Block$", line)
+        if m: r["block"] = int(m.group(1).replace(",", "")); continue
+        m = re.match(r"^([+-]\d+) (Strength|Agility|Stamina|Intellect|Spirit)$", line)
+        if m: add(m.group(2).lower(), int(m.group(1))); continue
+        m = re.match(r"^\+(\d+) (Fire|Frost|Nature|Shadow|Arcane|Holy) Resistance$", line)
+        if m: add(m.group(2).lower() + "Resist", int(m.group(1))); continue
+        m = re.match(r"^\+(\d+) All Resistances$", line)
+        if m: add("allResist", int(m.group(1))); continue
+        m = re.match(r"^Requires Level (\d+)", line)
+        if m: r["reqLevel"] = int(m.group(1)); continue
+        m = re.match(r"^Requires ([A-Z][A-Za-z' ]+) \((\d+)\)$", line)
+        if m: r["reqSkill"] = "%s %s" % (m.group(1), m.group(2)); continue
+        m = re.match(r"^Classes: (.+)$", line)
+        if m: r["cls"] = [c.strip() for c in m.group(1).split(",")]; continue
+        m = re.match(r"^(.+) \(0/(\d+)\)$", line)
+        if m: r["setName"] = m.group(1); continue
+        m = re.match(r"^\((\d+)\) Set: (.+)$", line)
+        if m: r.setdefault("setBonuses", []).append([int(m.group(1)), m.group(2)]); continue
+        if line.startswith('"') and line.endswith('"'): r["flavor"] = line.strip('"'); continue
+        if re.match(r"^(Equip|Use|Chance on hit):", line):
+            r["effects"].append(line)
+            m = re.match(r"^Equip: ([+-]\d+) (.+?)(?: Rating)?$", line)
+            if m and line.endswith("Rating"):
+                key = RATING.get(m.group(2))
+                if key:
+                    add(key[0], int(m.group(1)))
+                    if key[1]: add(key[1], int(m.group(1)) / key[2])
+                continue
+            if m:
+                v, what = int(m.group(1)), m.group(2)
+                sm = re.match(r"^(Fire|Frost|Nature|Shadow|Arcane|Holy) Spell Damage$", what)
+                if sm: add(sm.group(1).lower() + "SpellDamage", v); continue
+                for pat, key in FC_EQUIP:
+                    if what == pat: add(key, v); break
+                else:
+                    km = re.match(r"^(Axes|Swords|Maces|Daggers|Fist Weapons|Staves|Polearms|Bows|Guns|Crossbows|Two-Handed Axes|Two-Handed Swords|Two-Handed Maces) Skill$", what)
+                    if km:
+                        add({"Axes": "axeSkill", "Swords": "swordSkill", "Maces": "maceSkill", "Daggers": "daggerSkill", "Fist Weapons": "unarmedSkill"}.get(km.group(1).replace("Two-Handed ", ""), "weaponSkill"), v)
+    if f.get("o"): r["cls"] = [c.strip() for c in str(f["o"]).split(",")]
+    if f.get("e") and sets.get(f["e"]): r["setPieces"] = sets[f["e"]]
+    if f.get("l"): r["itemLevel"] = f["l"]
+    if f.get("r") and "reqLevel" not in r: r["reqLevel"] = f["r"]
+    return r
+
+
 def main():
     dry, refresh_all = "--dry" in sys.argv, "--all" in sys.argv
     os.makedirs(CACHE, exist_ok=True)
@@ -210,6 +305,14 @@ def main():
     site = json.load(open(SITE)) if os.path.exists(SITE) else {"fc": {}, "wtbc": {}}
     item = {r["ID"]: r for r in rows("Item")}
     sparse = {r["ID"] for r in rows("ItemSparse")}
+    FC, fc_meta = fc_items("--refresh" in sys.argv)
+    fc_live = {k: v for k, v in FC.items() if v.get("t") in ("new", "changed", "same")}
+    # Classic items ForeverChanges finds nowhere in Forever's data, and the client has no row for either
+    fc_gone = {k for k, v in FC.items() if v.get("t") == "missing" and k not in sparse and k not in fc_live}
+    sets = collections.defaultdict(list)
+    for v in fc_live.values():
+        if v.get("e"): sets[v["e"]].append(html.unescape(v["n"]))
+    print("ForeverChanges: %d live items, build %s (%s)" % (len(fc_live), fc_meta.get("forever_build"), fc_meta.get("forever_build_date")))
 
     # who gives what
     drops, quests = collections.defaultdict(list), collections.defaultdict(list)
@@ -228,11 +331,11 @@ def main():
         n = int(i)
         return n < 100000 or n >= 239000
     missing = {i for i in item if i not in sparse and i not in by and band_ok(i)}
-    want = looted | missing
+    want = looted | missing | set(fc_live)
     if refresh_all:
         want |= {i for i, it in by.items() if it.get("cat") in ("weapon", "armor", "accessory", "offhand", "consumable")
                  or "..." in " ".join(it.get("effects") or [])}
-    todo = sorted((i for i in want if not os.path.exists(os.path.join(CACHE, i + ".json"))), key=int)
+    todo = sorted((i for i in want if i not in fc_live and not os.path.exists(os.path.join(CACHE, i + ".json"))), key=int)
     print("candidates %d (loot %d, server-sent %d); to fetch %d" % (len(want), len(looted), len(missing), len(todo)))
     done = [0]
     t0 = time.time()
@@ -255,20 +358,25 @@ def main():
             vote3[(ir["ClassID"], ir["SubclassID"], ir["InventoryType"])][(it["cat"], it["sub"], it.get("type"))] += 1
             vote2[(ir["ClassID"], ir["SubclassID"])][(it["cat"], it["sub"], it.get("type"))] += 1
 
-    added, refreshed, junk, unknown, absent = [], 0, 0, 0, {}
+    added, refreshed, from_fc, junk, unknown, absent, dropped = [], 0, 0, 0, 0, {}, set()
     for iid in sorted(want, key=int):
         path = os.path.join(CACHE, iid + ".json")
         wh = json.load(open(path)) if os.path.exists(path) else None
         ok = wh and "tooltip" in wh
         p = parse(wh["tooltip"]) if ok else None
+        fc = fc_live.get(iid)
         old = by.get(iid)
+        if iid in fc_gone:
+            if old is not None: dropped.add(iid)
+            if iid in looted: absent[iid] = html.unescape(FC[iid]["n"])
+            continue
         is_new = old is None
-        if iid in looted and not ok and iid not in sparse and is_new:
+        if iid in looted and not ok and not fc and iid not in sparse and is_new:
             fcn = (site["fc"].get(iid) or {}).get("n") or (site["wtbc"].get(iid) or {}).get("name") or ""
             absent[iid] = html.unescape(fcn)
             continue
         if is_new:
-            name = wh["name"] if ok else (site["fc"].get(iid) or {}).get("n") or (site["wtbc"].get(iid) or {}).get("name")
+            name = (fc or {}).get("n") or (wh["name"] if ok else (site["fc"].get(iid) or {}).get("n") or (site["wtbc"].get(iid) or {}).get("name"))
             if not name:
                 unknown += 1
                 continue
@@ -278,7 +386,7 @@ def main():
             ir = item.get(iid, {})
             key3 = (ir.get("ClassID"), ir.get("SubclassID"), ir.get("InventoryType"))
             cat, sub, typ = (vote3.get(key3) or vote2.get(key3[:2]) or collections.Counter({("misc", "Other", None): 1})).most_common(1)[0][0]
-            qn = wh.get("quality") if ok else (site["fc"].get(iid) or {}).get("q", 1)
+            qn = fc["q"] if fc else wh.get("quality") if ok else (site["fc"].get(iid) or {}).get("q", 1)
             old = {"id": iid, "name": html.unescape(name), "quality": QUAL[int(qn or 1)],
                    "slot": SLOT.get(ir.get("InventoryType", ""), "unknown"), "cat": cat, "sub": sub,
                    "icon": (wh.get("icon") if ok else (site["fc"].get(iid) or {}).get("k")) or "inv_misc_questionmark"}
@@ -287,8 +395,27 @@ def main():
             elif 199000 <= int(iid) < 239000: old["era"] = "sod"
             old["source"] = "Loot record (foreverchanges.pro / wowtbc.gg)"
             added.append(old)
-        if ok:
-            # Wowhead reads the live server data; where it has an item, its numbers win.
+        if fc:
+            # ForeverChanges' tooltip is the current build's, in Forever's own wording: it replaces
+            # every tooltip field, and what it does not show goes.
+            p2 = fc_parse(fc, sets)
+            for k in ("itemLevel", "reqLevel", "binding", "damage", "speed", "dps", "dmgExtra", "armor", "block", "unique", "flavor", "cls",
+                      "reqSkill", "startsQuest", "setName", "setPieces", "setBonuses"):
+                if p2.get(k) is not None: old[k] = p2[k]
+                elif k not in ("itemLevel", "cls"): old.pop(k, None)
+            old["stats"] = p2["stats"] or None
+            old["effects"] = p2["effects"] or None
+            old["name"] = html.unescape(fc["n"])
+            old["quality"] = QUAL[int(fc.get("q") or 1)]
+            if fc.get("k"): old["icon"] = fc["k"]
+            old["tt"] = "forever"
+            old["ft"] = fc["t"]
+            old.pop("wh", None)
+            old.pop("rand", None)
+            old["source"] = "Beta build %s, via foreverchanges.pro" % fc_meta.get("forever_build", BUILD)
+            from_fc += 1
+        elif ok:
+            # Wowhead: complete, but behind on changed items; used where ForeverChanges has nothing.
             for k in ("itemLevel", "reqLevel", "binding", "damage", "speed", "dps", "armor", "block", "unique", "flavor", "cls", "reqSkill", "startsQuest"):
                 if p.get(k) is not None: old[k] = p[k]
             wearable = old.get("slot") not in (None, "unknown")
@@ -308,13 +435,16 @@ def main():
         for k in ("stats", "effects"):
             if not old.get(k): old.pop(k, None)
         # Classic's suffix greens and blues ("of the Eagle"): the base item carries no stats
-        if ok and is_new and int(iid) < 100000 and old.get("slot") not in (None, "unknown") and old["quality"] in ("uncommon", "rare") \
+        if (ok or fc) and int(iid) < 100000 and old.get("slot") not in (None, "unknown") and old["quality"] in ("uncommon", "rare") \
                 and not old.get("stats") and not old.get("effects"):
             old["rand"] = 1
+        elif old.get("rand") and (old.get("stats") or old.get("effects")):
+            old.pop("rand")
         if drops.get(iid): old["drops"] = drops[iid]
         if quests.get(iid): old["quests"] = quests[iid]
     # loot links for items that never needed a refetch
     for iid, it in by.items():
+        if iid in dropped: continue
         if drops.get(iid): it["drops"] = drops[iid]
         if quests.get(iid): it["quests"] = quests[iid]
         # a recorded Forever drop is wired loot, whatever ID band it sits in
@@ -322,18 +452,20 @@ def main():
             it.pop("era", None)
             it["eraNote"] = "Recorded as Forever loot"
 
-    have = set(by) | {e["id"] for e in added}
-    print("added %d, refreshed from Wowhead %d, junk skipped %d, unknown (no name anywhere) %d" % (len(added), refreshed, junk, unknown))
+    have = (set(by) - dropped) | {e["id"] for e in added}
+    print("dropped %d Classic items ForeverChanges finds nowhere in Forever" % len(dropped))
+    print("added %d; tooltips from ForeverChanges %d, from Wowhead %d; junk skipped %d, unknown (no name anywhere) %d" % (len(added), from_fc, refreshed, junk, unknown))
     print("loot items covered %d/%d; %d are Classic loot absent from Forever's data" % (len(looted & have), len(looted), len(absent)))
     print("new by cat", collections.Counter(e["cat"] for e in added).most_common())
     if dry:
         print("(dry run)")
         return
-    db["items"] = db["items"] + added
+    db["items"] = [i for i in db["items"] if str(i["id"]) not in dropped] + added
     db["items"].sort(key=lambda i: int(i["id"]))
     db["note"] = re.sub(r"\s*Server-sent items.*$", "", db["note"]) + (
-        " Server-sent items (most new dungeon loot and quest rewards: the client holds no stats for them) and live tooltip "
-        "text come from Wowhead's Forever database; who drops what comes from codex/loot.json (tools/scavenge_items.py).")
+        " Server-sent items and current tooltips: ForeverChanges' item files for the current build first (Forever's own wording), "
+        "Wowhead's Forever database where they have nothing, the client datamine last; who drops what comes from codex/loot.json "
+        "(tools/scavenge_items.py).")
     db["scavenged"] = time.strftime("%Y-%m-%d")
     with open(DB, "w") as f:
         json.dump(db, f, ensure_ascii=False, separators=(",", ":"))

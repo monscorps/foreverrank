@@ -102,8 +102,10 @@
     if (s.healing) bits.push("+" + s.healing + " healing");
     [["strength", "Str"], ["agility", "Agi"], ["stamina", "Sta"], ["intellect", "Int"], ["spirit", "Spi"]].forEach(function (k) { if (s[k[0]]) bits.push("+" + s[k[0]] + " " + k[1]); });
     if (s.attackPower) bits.push("+" + s.attackPower + " AP");
-    if (s.crit) bits.push(s.crit + "% crit");
-    if (s.hit) bits.push(s.hit + "% hit");
+    if (s.critRating) bits.push("+" + s.critRating + " crit rating"); else if (s.crit) bits.push(s.crit + "% crit");
+    if (s.hitRating) bits.push("+" + s.hitRating + " hit rating"); else if (s.hit) bits.push(s.hit + "% hit");
+    if (s.defenseRating) bits.push("+" + s.defenseRating + " defense");
+    if (s.bonusArmor) bits.push("+" + s.bonusArmor + " armor");
     if (s.mp5) bits.push(s.mp5 + " mp5");
     return bits.slice(0, 4).join(" \u00b7 ");
   }
@@ -186,7 +188,9 @@
     return f ? (f[3] ? f[3](s) : sv(s, f[0])) : 0;
   }
   var STATWORDS = { spellPower: "spell power spell damage spelldmg healing", spellDamage: "spell damage spelldmg", healing: "healing", attackPower: "attack power ap",
-    mp5: "mp5 mana regen", crit: "crit", hit: "hit", spellCrit: "spell crit", spellHit: "spell hit", defense: "defense", dodge: "dodge" };
+    mp5: "mp5 mana regen regeneration", crit: "crit", hit: "hit", spellCrit: "spell crit", spellHit: "spell hit", defense: "defense", dodge: "dodge",
+    critRating: "crit critical strike rating", hitRating: "hit rating", defenseRating: "defense rating", dodgeRating: "dodge rating", parryRating: "parry rating",
+    blockRating: "block rating", hasteRating: "haste rating", expertiseRating: "expertise rating", bonusArmor: "armor bonus armor", spellPiercing: "spell penetration" };
   var LOOT = null;
   var CLASSES9 = ["Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Shaman", "Mage", "Warlock", "Druid"];
   var PROFS = ["Alchemy", "Blacksmithing", "Comprehension", "Cooking", "Enchanting", "Engineering", "First Aid", "Fishing", "Herbalism", "Leatherworking", "Mining", "Poisons", "Skinning", "Tailoring"];
@@ -275,7 +279,7 @@
   }
   function buildIndex(d, items) {
     (items || []).forEach(function (it) {
-      var meta = [it.era === "sod" ? "SoD-era data" : it.era === "retail" ? "Retail-era data" : "", it.sub, slotName(it.slot), it.reqLevel ? "Level " + it.reqLevel : "", it.sk ? it.sk[0] + (it.sk[1] ? " " + it.sk[1] : "") : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+      var meta = [it.era === "sod" ? "SoD-era data" : it.era === "retail" ? "Retail-era data" : "", it.ft === "new" ? "New" : it.ft === "changed" ? "Changed" : "", it.sub, slotName(it.slot), it.reqLevel ? "Level " + it.reqLevel : "", it.sk ? it.sk[0] + (it.sk[1] ? " " + it.sk[1] : "") : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
       var st = it.stats || {}, words = Object.keys(st).map(function (k) { return STATWORDS[k] || (/SpellDamage$/.test(k) ? "spell damage spelldmg " + k.replace("SpellDamage", "") : k); });
       var from = (it.drops || []).map(function (d) { return d[1] + " " + d[0]; }).concat((it.quests || []).map(function (q) { return q[0] + " " + q[1] + " quest"; }));
       IDX.push({ kind: "item", cat: it.cat || "misc", sub: it.sub || "Other", name: it.name, icon: it.icon, q: it.quality || "unknown", it: it, meta: meta.join(" \u00b7 "),
@@ -314,6 +318,7 @@
         if (e.kind !== "item") return false;
         var dr = e.it.drops || [], qs = e.it.quests || [];
         if (SQ.src === "dungeon") { if (!dr.length) return false; }
+        else if (SQ.src.indexOf("ft:") === 0) { if (e.it.ft !== SQ.src.slice(3)) return false; }
         else if (SQ.src === "quest") { if (!qs.length) return false; }
         else if (!dr.some(function (d) { return d[0] === SQ.src; }) && !qs.some(function (q) { return q[1] === SQ.src; })) return false;
       }
@@ -427,7 +432,7 @@
       '<select id="dbf-prof" aria-label="Profession"><option value="">Any profession</option>' + PROFS.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<input type="number" id="dbf-sk" min="1" max="300" placeholder="Skill" aria-label="Maximum profession skill">' +
       '<select id="dbf-stat" aria-label="Stat"><option value="">Any stat</option>' + STATF.map(function (f) { return '<option value="' + f[0] + '">' + f[1] + "</option>"; }).join("") + "</select>" +
-      '<select id="dbf-src" aria-label="Where it comes from"><option value="">Any source</option><option value="dungeon">Any dungeon drop</option><option value="quest">Any quest reward</option></select>' +
+      '<select id="dbf-src" aria-label="Where it comes from"><option value="">Any source</option><option value="dungeon">Any dungeon drop</option><option value="quest">Any quest reward</option><option value="ft:new">New in Forever</option><option value="ft:changed">Changed from Classic</option></select>' +
       '<button type="button" id="dbf-era" aria-pressed="false" data-tip="The branch carries Season of Discovery and retail leftovers. Hidden unless you ask; every such row is labeled.">SoD and retail data: hidden</button>' +
       '<button type="button" id="dbf-x" hidden>Clear</button></div>' +
       '<div class="dbs-subs" id="dbs-subs" hidden></div><div class="dbs-out" id="dbs-out" hidden></div>';

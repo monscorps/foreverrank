@@ -10,6 +10,9 @@ Each boss and quest keeps the sites that list it. Raw pages are cached in
 tools/.loot-cache/ (gitignored); --refresh refetches them.
 
   python3 tools/scavenge_loot.py [--refresh]
+
+Then run tools/scavenge_items.py: it links items to these tables and marks
+what Forever's data does not have under "absent".
 """
 import datetime, html as htmlmod, json, os, re, sys, time, urllib.request
 
@@ -94,6 +97,8 @@ def main():
         return dungeons[k]
 
     def boss(d, name, kind, level, ids, site):
+        if re.match(r"(?i)^trash( mobs)?$", name.strip()):
+            name = "Trash mobs"
         for b in d["bosses"]:
             if norm(b["name"]) == norm(name):
                 b["items"] += [i for i in ids if i not in b["items"]]

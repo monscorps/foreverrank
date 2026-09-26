@@ -210,3 +210,15 @@ Corrections welcome: open an issue.
   sites. Items either site lists that are in neither the client's item tables
   nor Wowhead's Forever database are kept apart as "not yet seen in Forever"
   (mostly loot above the beta's level cap), never shown as Forever loot.
+- 2026-09-27, current tooltips: **ForeverChanges' item files**
+  (foreverchanges.pro/items/new.json, changed.json, same.json, missing.json;
+  build 1.60.1.70009, dated 2026-09-24) are now the first source for every
+  item's tooltip: about 19,500 Forever items in Forever's own wording
+  ("+14 Critical Strike Rating", "+48 Healing"). Cross-checked against
+  wowtbc.gg, they are current where Wowhead's Forever database still carries
+  Classic or earlier-build numbers for changed items (Blackwater Cutlass,
+  Stonemason Trousers, Goblin Hammer and more), so Wowhead now only fills
+  items ForeverChanges does not list. Classic items ForeverChanges finds
+  nowhere in Forever, and that the client has no row for, left the database.
+  The BiS page no longer keeps its own tooltip copy: it draws the shared
+  tooltip from plan/gear.js over the same database.

@@ -43,7 +43,8 @@
       if (it.binding) L.push('<span class="it-l">' + (it.binding === "BoP" ? "Binds when picked up" : "Binds when equipped") + "</span>");
       if (it.unique) L.push('<span class="it-l">' + esc(it.unique === true ? "Unique" : it.unique) + "</span>");
       if ((it.slot && it.slot !== "unknown") || it.type) L.push('<span class="it-row"><i>' + esc(it.slot === "unknown" ? "" : slotLabel(it.slot)) + "</i><i>" + esc(it.type || "") + "</i></span>");
-      if (it.damage) L.push('<span class="it-row"><i>' + esc(it.damage) + " Damage</i><i>" + (it.speed ? "Speed " + Number(it.speed).toFixed(2) : "") + "</i></span>");
+      if (it.damage) L.push('<span class="it-row"><i>' + esc(String(it.damage).replace("-", " - ")) + " Damage</i><i>" + (it.speed ? "Speed " + Number(it.speed).toFixed(2) : "") + "</i></span>");
+      if (it.dmgExtra) L.push('<span class="it-l">' + esc(it.dmgExtra) + "</span>");
       if (it.dps) L.push('<span class="it-l">(' + esc(it.dps) + " damage per second)</span>");
       if (it.armor) L.push('<span class="it-l">' + esc(it.armor) + " Armor</span>");
       if (it.block) L.push('<span class="it-l">' + esc(it.block) + " Block</span>");
@@ -51,6 +52,7 @@
       if (s.resist) Object.keys(s.resist).forEach(function (r) { L.push('<span class="it-l">+' + esc(s.resist[r]) + " " + esc(r.charAt(0).toUpperCase() + r.slice(1)) + " Resistance</span>"); });
       ["fire", "frost", "nature", "shadow", "arcane"].forEach(function (r) { if (s[r + "Resist"]) L.push('<span class="it-l">+' + esc(s[r + "Resist"]) + " " + r.charAt(0).toUpperCase() + r.slice(1) + " Resistance</span>"); });
       if (s.allResist) L.push('<span class="it-l">+' + esc(s.allResist) + " All Resistances</span>");
+      if (s.bonusArmor) L.push('<span class="it-l">+' + esc(s.bonusArmor) + " Armor</span>");
       (it.effects || []).forEach(function (e) { L.push('<span class="it-g">' + esc(e) + "</span>"); });
       [["attackPower", "Equip: +%s Attack Power.", /attack power/i], ["spellPower", "Equip: Increases damage and healing done by magical spells and effects by up to %s.", /damage and healing/i],
         ["healing", "Equip: Increases healing done by up to %s.", /increases healing/i], ["spellDamage", "Equip: Increases damage done by magical spells and effects by up to %s.", /spell|magical/i],
@@ -58,7 +60,7 @@
         ["expertise", "Equip: Reduces chance to be Dodged or Parried by %s%.", /dodged or parried|expertise/i], ["weaponDamage", "Equip: +%s Weapon Damage.", /weapon damage/i],
         ["mp5", "Equip: Restores %s mana per 5 sec.", /mana per 5/i], ["defense", "Equip: Increased Defense +%s.", /defense/i], ["spellPiercing", "Equip: Your spells pierce %s Magical Resistances.", /pierce/i]]
         .forEach(function (x) {
-          if (!s[x[0]]) return;
+          if (!s[x[0]] || it.tt === "forever") return;
           var num = new RegExp("(^|[^0-9.])" + String(s[x[0]]).replace(".", "\\.") + "([^0-9]|$)");
           var named = (it.effects || []).some(function (e) { return x[2].test(e) && num.test(e); });
           if (!named) L.push('<span class="it-g">' + esc(x[1].replace("%s", s[x[0]])) + "</span>");
@@ -77,8 +79,12 @@
           { uncommon: 1, rare: 1, epic: 1, legendary: 1 }[it.quality]) {
         L.push('<span class="it-src">Not itemized yet: the piece exists in the client, its stat values do not. They land in a later build.</span>');
       }
+      if (it.startsQuest) L.push('<span class="it-l">This Item Begins a Quest</span>');
       if (it.reqLevel) L.push('<span class="it-l">Requires Level ' + esc(it.reqLevel) + "</span>");
+      if (it.reqSkill) L.push('<span class="it-l">Requires ' + esc(String(it.reqSkill).replace(/ (\d+)$/, " ($1)")) + "</span>");
+      if (it.flavor) L.push('<span class="it-f">"' + esc(it.flavor) + '"</span>');
       if (it.itemLevel) L.push('<span class="it-y">Item Level ' + esc(it.itemLevel) + "</span>");
+      if (it.ft === "new" || it.ft === "changed") L.push('<span class="it-ft">' + (it.ft === "new" ? "New in Forever" : "Changed from Classic") + "</span>");
       (it.drops || []).forEach(function (d) { L.push('<span class="it-drop">Drops from ' + esc(d[1]) + (d[2] === "rare" ? " (rare)" : "") + ", " + esc(d[0]) + "</span>"); });
       (it.quests || []).forEach(function (q) { L.push('<span class="it-drop">Quest reward: ' + esc(q[0]) + " (" + esc(q[1]) + ")</span>"); });
       if (it.source) L.push('<span class="it-src">' + esc(it.source) + "</span>");
@@ -221,6 +227,7 @@
         var s = it.stats || {};
         Object.keys(s).forEach(function (x) { if (typeof s[x] === "number") t[x] = (t[x] || 0) + s[x]; });
         if (it.armor) t.armor = (t.armor || 0) + it.armor;
+        if (s.bonusArmor) t.armor = (t.armor || 0) + s.bonusArmor;
         if (it.block) t.block = (t.block || 0) + it.block;
       });
       setBonusStats().forEach(function (b) { t[b[0]] = (t[b[0]] || 0) + b[1]; });
