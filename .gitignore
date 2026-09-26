@@ -6,3 +6,5 @@ addon/companion/webhook.txt
 addon/companion/guildmark.txt
 tools/.bis-cache/
 research/
+tools/.loot-cache/
+tools/.wh-cache/

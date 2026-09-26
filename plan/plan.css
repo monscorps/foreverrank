@@ -652,6 +652,7 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 .it-sb.on { color: #1eff00 !important; }
 .it-sb:first-of-type { margin-top: .2rem; }
 .it-src { color: #9fb0bb !important; margin-top: .3rem; font-size: .72rem !important; }
+.it-drop { display: block; color: #e5cc80 !important; margin-top: .25rem; font-size: .74rem !important; }
 .it-conf { color: #6f8594 !important; font-size: .66rem !important; margin-top: .15rem; }
 @media (max-width: 760px) {
   .g2-doll { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

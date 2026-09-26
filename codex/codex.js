@@ -28,8 +28,7 @@
       return '<div class="factc"><p>' + esc(f) + "</p></div>";
     }).join("") + "</div>";
   }
-  function openTopic(key) {
-    var t = TOPICS[key]; if (!t) return;
+  function modal() {
     var m = document.getElementById("cxmodal");
     if (!m) {
       m = document.createElement("div"); m.id = "cxmodal"; m.className = "cxmodal"; m.hidden = true;
@@ -38,6 +37,7 @@
       var shut = function () {
         if (m.hidden) return;
         m.hidden = true;
+        if (window.TipKit) TipKit.hide();
         if (m._prev && m._prev.focus) m._prev.focus();
       };
       m.addEventListener("click", function (e) { if (e.target === m || e.target.closest(".cxm-x")) shut(); });
@@ -50,6 +50,17 @@
         else if (!e.shiftKey && (document.activeElement === x || !m.contains(document.activeElement))) { e.preventDefault(); card.focus(); }
       });
     }
+    return m;
+  }
+  function showModal(m, wide) {
+    m.querySelector(".cxm-card").classList.toggle("wide", !!wide);
+    m.hidden = false;
+    m.querySelector(".cxm-card").scrollTop = 0;
+    m.querySelector(".cxm-card").focus();
+  }
+  function openTopic(key) {
+    var t = TOPICS[key]; if (!t) return;
+    var m = modal();
     if (m.hidden) m._prev = document.activeElement;
     var hs = heads(t.list, key);
     var bodyHtml;
@@ -62,9 +73,88 @@
       bodyHtml = '<ol class="cxm-list">' + t.list.map(function (f, i) { return "<li><b>" + esc(hs[i]) + "</b><p>" + esc(f) + "</p></li>"; }).join("") + "</ol>";
     }
     m.querySelector(".cxm-body").innerHTML = '<div class="cxm-head">' + img(t.icon || "inv_misc_book_09") + "<b id=\"cxm-title\">" + esc(t.title) + "</b></div>" + bodyHtml;
-    m.hidden = false;
-    m.querySelector(".cxm-card").scrollTop = 0;
-    m.querySelector(".cxm-card").focus();
+    showModal(m, false);
+  }
+
+  // ---- dungeon loot tables: codex/loot.json, items from codex/loot-items.json ----
+  var LOOTITEMS = null, LGK = null;
+  function absent(i) { return !!(LOOT.absent && LOOT.absent[i] != null); }
+  function lootCount(d) {
+    var ids = {}, qids = {};
+    d.bosses.forEach(function (b) { b.items.forEach(function (i) { if (!absent(i)) ids[i] = 1; }); });
+    d.quests.forEach(function (q) { q.items.forEach(function (i) { if (!absent(i)) qids[i] = 1; }); });
+    return { drops: Object.keys(ids).length, quests: Object.keys(qids).length,
+      bosses: d.bosses.filter(function (b) { return b.kind !== "rare"; }).length, rares: d.bosses.filter(function (b) { return b.kind === "rare"; }).length };
+  }
+  function lootTiles() {
+    return '<div class="loottiles">' + LOOT.dungeons.map(function (d) {
+      var n = lootCount(d), empty = !n.drops && !n.quests;
+      return '<button type="button" class="loottile' + (empty ? " empty" : "") + '" data-loot="' + esc(d.name) + '"' + (empty ? " disabled" : "") + ">" +
+        '<span class="lt-h"><b>' + esc(d.name) + "</b>" + (d.new ? '<i class="lt-new">New</i>' : "") + "</span>" +
+        '<span class="lt-m">' + (d.levels ? "Levels " + d.levels[0] + "\u2013" + d.levels[1] : "") + "</span>" +
+        '<span class="lt-c">' + (empty ? "No loot recorded yet" : [n.bosses + (n.bosses === 1 ? " boss" : " bosses"), n.drops + " drops", n.rares ? n.rares + (n.rares === 1 ? " rare" : " rares") : "", n.quests ? n.quests + " quest rewards" : ""].filter(Boolean).join(" \u00b7 ")) + "</span></button>";
+    }).join("") + "</div>";
+  }
+  function gist(it) {
+    var s = it.stats || {}, bits = [], sp = sv(s, "spellPower"), sd = sv(s, "spellDamage") + schoolMax(s);
+    if (sp) bits.push("+" + sp + " spell power");
+    if (sd) bits.push("+" + sd + " spell damage");
+    if (s.healing) bits.push("+" + s.healing + " healing");
+    [["strength", "Str"], ["agility", "Agi"], ["stamina", "Sta"], ["intellect", "Int"], ["spirit", "Spi"]].forEach(function (k) { if (s[k[0]]) bits.push("+" + s[k[0]] + " " + k[1]); });
+    if (s.attackPower) bits.push("+" + s.attackPower + " AP");
+    if (s.crit) bits.push(s.crit + "% crit");
+    if (s.hit) bits.push(s.hit + "% hit");
+    if (s.mp5) bits.push(s.mp5 + " mp5");
+    return bits.slice(0, 4).join(" \u00b7 ");
+  }
+  function lootRow(id) {
+    var it = LOOTITEMS[id];
+    if (!it) return "";
+    var kind = [slotName(it.slot), it.type && it.type !== slotName(it.slot) ? it.type : ""].filter(Boolean).join(" ");
+    var g = gist(it);
+    return '<button type="button" class="lr q-' + esc(it.quality || "common") + '" data-lid="' + esc(id) + '"><span class="lr-ic">' + img(it.icon) + "</span>" +
+      '<span class="lr-t"><b>' + esc(it.name) + "</b><em>" + esc([kind, g].filter(Boolean).join(" \u00b7 ") || (it.sub && it.sub !== "Other" ? it.sub : "Item")) + "</em></span></button>";
+  }
+  function openLoot(name) {
+    var d = LOOT && LOOT.dungeons.filter(function (x) { return x.name === name; })[0];
+    if (!d) return;
+    if (!LOOTITEMS) {
+      fetch("/codex/loot-items.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
+        LOOTITEMS = {};
+        ((j && j.items) || []).forEach(function (it) { LOOTITEMS[it.id] = it; });
+        if (window.ForgeGear) { try { LGK = ForgeGear({ items: { items: (j && j.items) || [] }, get: function () { return {}; } }); } catch (e) { LGK = null; } }
+        openLoot(name);
+      });
+      return;
+    }
+    var n = lootCount(d), m = modal();
+    var html = '<div class="cxm-head loot-head"><b id="cxm-title">' + esc(d.name) + "</b>" +
+      (d.levels ? '<span class="lvlchip">Levels ' + d.levels[0] + "\u2013" + d.levels[1] + "</span>" : "") + (d.new ? '<span class="lt-new">New in Forever</span>' : "") + "</div>" +
+      '<p class="loot-sub">' + [n.bosses + (n.bosses === 1 ? " boss" : " bosses"), n.drops + " drops", n.quests ? n.quests + " quest rewards" : ""].filter(Boolean).join(" \u00b7 ") +
+      ". Recorded by players in the beta, as published by " + esc(d.src.join(" and ")) + ". Bosses and drops can still change.</p>";
+    function here(ids) { return ids.filter(function (i) { return !absent(i) && LOOTITEMS[i]; }); }
+    function gone(ids) { return ids.filter(absent).map(function (i) { return LOOT.absent[i]; }).filter(Boolean); }
+    html += d.bosses.filter(function (b) { return b.items.length; }).map(function (b) {
+      var h = here(b.items), g = gone(b.items);
+      return '<section class="loot-boss' + (b.kind === "rare" ? " rare" : "") + (h.length ? "" : " bare") + '"><h4>' + esc(b.name) + (b.kind === "rare" ? '<i class="lt-rare">Rare spawn</i>' : "") +
+        (b.level ? "<small>Level " + b.level + "</small>" : "") + "</h4>" +
+        (h.length ? '<div class="lr-grid">' + h.map(lootRow).join("") + "</div>" : '<p class="lr-none">No Forever drop recorded yet.</p>') +
+        (g.length ? '<p class="lr-gone"><b>From Classic\'s table, not yet seen in Forever:</b> ' + g.map(esc).join(", ") + ".</p>" : "") + "</section>";
+    }).join("");
+    var qs = d.quests.filter(function (q) { return here(q.items).length; });
+    if (qs.length) html += '<section class="loot-boss quests"><h4>Quest rewards</h4>' + qs.map(function (q) {
+      return '<p class="lq">' + esc(q.name) + (q.level ? " <small>level " + q.level + (q.side === "a" ? ", Alliance" : q.side === "h" ? ", Horde" : "") + "</small>" : "") + '</p><div class="lr-grid">' + here(q.items).map(lootRow).join("") + "</div>";
+    }).join("") + "</section>";
+    html += '<p class="loot-foot"><a href="/codex/?src=' + encodeURIComponent(d.name) + '">Search this dungeon in the Database &rsaquo;</a></p>';
+    m.querySelector(".cxm-body").innerHTML = html;
+    if (m.hidden) m._prev = document.activeElement;
+    showModal(m, true);
+    if (window.TipKit && LGK) m.querySelectorAll(".lr[data-lid]").forEach(function (row) {
+      TipKit.hover(row, function (el) { return LGK.itemTip(LOOTITEMS[el.getAttribute("data-lid")]); }, function () { return "itemtip"; });
+      row.addEventListener("click", function (e) {
+        if (TipKit.touchy() || e.detail === 0) TipKit.openSheet(LGK.itemTip(LOOTITEMS[row.getAttribute("data-lid")]), [], { cls: "itemtip", owner: "loot:" + row.getAttribute("data-lid") });
+      });
+    });
   }
 
   // ---- Database search: Forever items (../plan/items.json) plus this page's places, perks, spells and systems ----
@@ -74,7 +164,30 @@
     ["soul", "Souls"], ["spell", "Spells"], ["talent", "Talents"], ["racial", "Racials"], ["set", "Item sets"], ["system", "Systems"]];
   var SUBFIRST = ["Cloth", "Leather", "Mail", "Plate", "Shield", "Neck", "Ring", "Trinket", "Cloak", "Alchemy", "Cooking", "First Aid", "Zone", "Dungeon", "Raid", "Battleground"];
   var QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary"];
-  var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "", era: false }, SHOWN = 60;
+  var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "", era: false, stat: "", src: "" }, SHOWN = 60;
+  function sv(s, k) { return s[k] || 0; }
+  function schoolMax(s) { return Math.max(sv(s, "fireSpellDamage"), sv(s, "frostSpellDamage"), sv(s, "natureSpellDamage"), sv(s, "shadowSpellDamage"), sv(s, "arcaneSpellDamage"), sv(s, "holySpellDamage")); }
+  // What people search gear by. Spell damage counts damage-and-healing and
+  // school damage too, since that is what a caster means by it.
+  var STATF = [
+    ["spelldmg", "Spell damage", " spell damage", function (s) { return sv(s, "spellPower") + sv(s, "spellDamage") + schoolMax(s); }],
+    ["healing", "Healing", " healing", function (s) { return sv(s, "healing") + sv(s, "spellPower"); }],
+    ["strength", "Strength", " Strength"], ["agility", "Agility", " Agility"], ["stamina", "Stamina", " Stamina"],
+    ["intellect", "Intellect", " Intellect"], ["spirit", "Spirit", " Spirit"],
+    ["attackPower", "Attack power", " attack power", function (s) { return sv(s, "attackPower") + sv(s, "rangedAttackPower"); }],
+    ["crit", "Crit", "% crit"], ["hit", "Hit", "% hit"], ["spellCrit", "Spell crit", "% spell crit"], ["spellHit", "Spell hit", "% spell hit"],
+    ["mp5", "Mana per 5 sec", " mp5"], ["defense", "Defense", " defense"], ["dodge", "Dodge", "% dodge"],
+    ["resist", "Resistance", " resistance", function (s) { return Math.max(sv(s, "fireResist"), sv(s, "frostResist"), sv(s, "natureResist"), sv(s, "shadowResist"), sv(s, "arcaneResist")) + sv(s, "allResist"); }]
+  ];
+  var STATBY = {};
+  STATF.forEach(function (f) { STATBY[f[0]] = f; });
+  function statOf(it, key) {
+    var f = STATBY[key], s = (it && it.stats) || {};
+    return f ? (f[3] ? f[3](s) : sv(s, f[0])) : 0;
+  }
+  var STATWORDS = { spellPower: "spell power spell damage spelldmg healing", spellDamage: "spell damage spelldmg", healing: "healing", attackPower: "attack power ap",
+    mp5: "mp5 mana regen", crit: "crit", hit: "hit", spellCrit: "spell crit", spellHit: "spell hit", defense: "defense", dodge: "dodge" };
+  var LOOT = null;
   var CLASSES9 = ["Warrior", "Paladin", "Hunter", "Rogue", "Priest", "Shaman", "Mage", "Warlock", "Druid"];
   var PROFS = ["Alchemy", "Blacksmithing", "Comprehension", "Cooking", "Enchanting", "Engineering", "First Aid", "Fishing", "Herbalism", "Leatherworking", "Mining", "Poisons", "Skinning", "Tailoring"];
   function slotName(sl) {
@@ -163,8 +276,11 @@
   function buildIndex(d, items) {
     (items || []).forEach(function (it) {
       var meta = [it.era === "sod" ? "SoD-era data" : it.era === "retail" ? "Retail-era data" : "", it.sub, slotName(it.slot), it.reqLevel ? "Level " + it.reqLevel : "", it.sk ? it.sk[0] + (it.sk[1] ? " " + it.sk[1] : "") : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
-      IDX.push({ kind: "item", cat: it.cat || "misc", sub: it.sub || "Other", name: it.name, icon: it.icon, q: it.quality || "unknown", it: it, meta: meta.join(" \u00b7 "), side: it.source,
-        text: [it.name, it.sub, it.type, slotName(it.slot), it.source, it.setName, (it.effects || []).join(" ")].join(" ").toLowerCase() });
+      var st = it.stats || {}, words = Object.keys(st).map(function (k) { return STATWORDS[k] || (/SpellDamage$/.test(k) ? "spell damage spelldmg " + k.replace("SpellDamage", "") : k); });
+      var from = (it.drops || []).map(function (d) { return d[1] + " " + d[0]; }).concat((it.quests || []).map(function (q) { return q[0] + " " + q[1] + " quest"; }));
+      IDX.push({ kind: "item", cat: it.cat || "misc", sub: it.sub || "Other", name: it.name, icon: it.icon, q: it.quality || "unknown", it: it, meta: meta.join(" \u00b7 "),
+        side: it.drops ? it.drops[0][1] + " \u00b7 " + it.drops[0][0] : it.quests ? "Quest: " + it.quests[0][0] : it.source,
+        text: [it.name, it.sub, it.type, slotName(it.slot), it.source, it.setName, (it.effects || []).join(" "), words.join(" "), from.join(" ")].join(" ").toLowerCase() });
     });
     var w = d.world;
     [["zones", "Zone"], ["dungeons", "Dungeon"], ["raids", "Raid"], ["battlegrounds", "Battleground"]].forEach(function (g) {
@@ -193,6 +309,14 @@
       if (SQ.cat !== "all" && e.cat !== SQ.cat) return false;
       if (SQ.sub && e.sub !== SQ.sub) return false;
       if (SQ.qual && e.q !== SQ.qual) return false;
+      if (SQ.stat && (e.kind !== "item" || statOf(e.it, SQ.stat) <= 0)) return false;
+      if (SQ.src) {
+        if (e.kind !== "item") return false;
+        var dr = e.it.drops || [], qs = e.it.quests || [];
+        if (SQ.src === "dungeon") { if (!dr.length) return false; }
+        else if (SQ.src === "quest") { if (!qs.length) return false; }
+        else if (!dr.some(function (d) { return d[0] === SQ.src; }) && !qs.some(function (q) { return q[1] === SQ.src; })) return false;
+      }
       if (((e.kind === "item" && e.it.era) || e.era) && !SQ.era) return false;
       if (SQ.prof) {
         if (e.kind !== "item") return false;
@@ -217,6 +341,10 @@
     }).sort(function (a, b) {
       var ql = SQ.q.toLowerCase(), as = ql && a.name.toLowerCase().indexOf(ql) === 0 ? 0 : 1, bs = ql && b.name.toLowerCase().indexOf(ql) === 0 ? 0 : 1;
       if (as !== bs) return as - bs;
+      if (SQ.stat) {
+        var av = statOf(a.it, SQ.stat), bv = statOf(b.it, SQ.stat);
+        if (av !== bv) return bv - av;
+      }
       if (SQ.lvl) {
         // A level cap is set: gear nearest the cap first, so the filter is
         // visibly doing its job instead of re-showing the same level 1 epics.
@@ -227,6 +355,16 @@
       if (aq !== bq) return bq - aq;
       return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
+  }
+  // Dungeons in level order, from codex/loot.json; only those with known loot.
+  function fillSources() {
+    var sel = document.getElementById("dbf-src");
+    if (!sel || !LOOT || sel.getAttribute("data-filled")) return;
+    sel.setAttribute("data-filled", "1");
+    sel.innerHTML += LOOT.dungeons.filter(function (d) { return d.bosses.some(function (b) { return b.items.length; }); }).map(function (d) {
+      return '<option value="' + esc(d.name) + '">' + esc(d.name) + (d.levels ? " (" + d.levels[0] + "\u2013" + d.levels[1] + ")" : "") + "</option>";
+    }).join("");
+    sel.value = SQ.src;
   }
   function drawSearch() {
     var box = document.getElementById("dbs");
@@ -253,6 +391,7 @@
     if (window.TipKit) TipKit.hide();
     var out = document.getElementById("dbs-out"), res = active ? matches() : [];
     document.getElementById("dbs-n").textContent = active ? res.length + (res.length === 1 ? " result" : " results") + (SQ.lvl ? " usable at " + SQ.lvl : "") : IDX.length + " entries";
+    fillSources();
     out.hidden = !active;
     if (!active) return;
     out.innerHTML = res.length ? res.slice(0, SHOWN).map(function (e) {
@@ -260,7 +399,7 @@
       var hasSbt = e.kind === "bookspell" || e.kind === "talent" || e.kind === "racial" || e.kind === "itemset";
       return '<button type="button" class="dbs-row' + (e.kind === "item" ? " q-" + esc(e.q) : "") + '" data-dbi="' + i + '"' + (e.kind === "item" ? ' data-tipkit="1"' : hasSbt ? ' data-sbt="1"' : "") + ">" +
         '<span class="dbs-ic">' + img(e.icon || "inv_misc_questionmark") + "</span>" +
-        '<span class="dbs-t"><b>' + esc(e.name) + "</b><em>" + esc(e.meta) + "</em></span>" +
+        '<span class="dbs-t"><b>' + esc(e.name) + "</b><em>" + (SQ.stat && e.kind === "item" ? '<i class="dbs-sv">+' + statOf(e.it, SQ.stat) + esc(STATBY[SQ.stat][2]) + "</i> " : "") + esc(e.meta) + "</em></span>" +
         '<span class="dbs-s">' + esc(e.kind === "item" ? e.side : (e.side || { place: "The new world", perk: "The Legacy system", spell: "Spells", system: "Systems" }[e.cat] || "")) + "</span></button>";
     }).join("") + (res.length > SHOWN ? '<button type="button" class="dbs-more" data-dbmore="1">Show all ' + res.length + "</button>" : "")
       : '<p class="dbs-none">Nothing matches yet. Forever has shown only so much; the beta adds the rest.</p>';
@@ -274,7 +413,7 @@
   function syncUrl() {
     try {
       var u = new URL(location.href);
-      ["q", "cat", "sub", "qual", "lvl"].forEach(function (k) { var v = k === "q" ? SQ.q.trim() : SQ[k]; if (v && v !== "all") u.searchParams.set(k, v); else u.searchParams.delete(k); });
+      ["q", "cat", "sub", "qual", "lvl", "stat", "src"].forEach(function (k) { var v = k === "q" ? SQ.q.trim() : SQ[k]; if (v && v !== "all") u.searchParams.set(k, v); else u.searchParams.delete(k); });
       history.replaceState(null, "", u.pathname + u.search + u.hash);
     } catch (e) {}
   }
@@ -287,24 +426,29 @@
       '<select id="dbf-cls" aria-label="Class"><option value="">Any class</option>' + CLASSES9.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<select id="dbf-prof" aria-label="Profession"><option value="">Any profession</option>' + PROFS.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<input type="number" id="dbf-sk" min="1" max="300" placeholder="Skill" aria-label="Maximum profession skill">' +
+      '<select id="dbf-stat" aria-label="Stat"><option value="">Any stat</option>' + STATF.map(function (f) { return '<option value="' + f[0] + '">' + f[1] + "</option>"; }).join("") + "</select>" +
+      '<select id="dbf-src" aria-label="Where it comes from"><option value="">Any source</option><option value="dungeon">Any dungeon drop</option><option value="quest">Any quest reward</option></select>' +
       '<button type="button" id="dbf-era" aria-pressed="false" data-tip="The branch carries Season of Discovery and retail leftovers. Hidden unless you ask; every such row is labeled.">SoD and retail data: hidden</button>' +
       '<button type="button" id="dbf-x" hidden>Clear</button></div>' +
       '<div class="dbs-subs" id="dbs-subs" hidden></div><div class="dbs-out" id="dbs-out" hidden></div>';
     try {
       var sp = new URLSearchParams(location.search);
       SQ.q = sp.get("q") || ""; SQ.cat = sp.get("cat") || "all"; SQ.sub = sp.get("sub") || ""; SQ.qual = sp.get("qual") || "";
-      SQ.lvl = sp.get("lvl") || "";
+      SQ.lvl = sp.get("lvl") || ""; SQ.stat = STATBY[sp.get("stat")] ? sp.get("stat") : ""; SQ.src = sp.get("src") || "";
     } catch (e) {}
     var qi = document.getElementById("dbs-qi"), tmr = null;
     function fEl(id) { return document.getElementById(id); }
     function readFilt() {
       SQ.lvl = fEl("dbf-lvl").value; SQ.cls = fEl("dbf-cls").value; SQ.prof = fEl("dbf-prof").value; SQ.sk = fEl("dbf-sk").value;
-      fEl("dbf-x").hidden = !(SQ.lvl || SQ.cls || SQ.prof || SQ.sk);
+      SQ.stat = fEl("dbf-stat").value;
+      var srcSel = fEl("dbf-src");
+      if (srcSel.getAttribute("data-filled") || srcSel.value || !SQ.src) SQ.src = srcSel.value;
+      fEl("dbf-x").hidden = !(SQ.lvl || SQ.cls || SQ.prof || SQ.sk || SQ.stat || SQ.src);
       SHOWN = 60; drawSearch(); syncUrl();
     }
     var ftmr = null;
     ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).addEventListener("input", function () { clearTimeout(ftmr); ftmr = setTimeout(readFilt, 200); }); });
-    ["dbf-cls", "dbf-prof"].forEach(function (id) { fEl(id).addEventListener("change", readFilt); });
+    ["dbf-cls", "dbf-prof", "dbf-stat", "dbf-src"].forEach(function (id) { fEl(id).addEventListener("change", readFilt); });
     fEl("dbf-era").addEventListener("click", function () {
       SQ.era = !SQ.era;
       var b = fEl("dbf-era");
@@ -315,11 +459,13 @@
     });
     fEl("dbf-x").addEventListener("click", function () {
       ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).value = ""; });
-      ["dbf-cls", "dbf-prof"].forEach(function (id) { fEl(id).value = ""; });
+      ["dbf-cls", "dbf-prof", "dbf-stat", "dbf-src"].forEach(function (id) { fEl(id).value = ""; });
       readFilt();
     });
     qi.value = SQ.q;
     if (SQ.lvl) { fEl("dbf-lvl").value = SQ.lvl; fEl("dbf-x").hidden = false; }
+    if (SQ.stat) { fEl("dbf-stat").value = SQ.stat; fEl("dbf-x").hidden = false; }
+    if (SQ.src) fEl("dbf-x").hidden = false;
     qi.addEventListener("input", function () {
       clearTimeout(tmr);
       tmr = setTimeout(function () { SQ.q = qi.value; SHOWN = 60; drawSearch(); syncUrl(); }, 120);
@@ -465,8 +611,12 @@
     }
     if (PAGE === "world") section("world", "The new world",
       (w.facts ? headList(w.facts, "world", "The new world", "inv_misc_map_01") : "") +
-      "<h3>Zones</h3>" + placecards(w.zones) + "<h3>Dungeons</h3>" + placecards(w.dungeons) +
-      "<h3>Raids</h3>" + placecards(w.raids) + "<h3>Battlegrounds</h3>" + placecards(w.battlegrounds));
+      '<h3 id="zones">Zones</h3>' + placecards(w.zones) + '<h3 id="dungeons">Dungeons</h3>' + placecards(w.dungeons) +
+      '<h3 id="loot">Dungeon loot</h3><p class="loot-lede">Every dungeon in level order: who drops what, rare spawns and quest rewards. The client has no Dungeon Journal, so these are players\' loot records from the beta.</p><div id="lootbox"><p class="loot-lede">Loading the loot tables\u2026</p></div>' +
+      '<h3 id="raids">Raids</h3>' + placecards(w.raids) + '<h3 id="battlegrounds">Battlegrounds</h3>' + placecards(w.battlegrounds));
+    // One section on this page, so the bar jumps between its parts instead.
+    if (PAGE === "world") nav = [["zones", "Zones"], ["dungeons", "New dungeons"], ["loot", "Dungeon loot"], ["raids", "Raids"], ["battlegrounds", "Battlegrounds"]]
+      .map(function (x) { return '<a href="#' + x[0] + '">' + x[1] + "</a>"; });
 
     // Systems: one card each, icon in the header.
     // Roadmap: seasons, icons, a live pulse and a progress bar.
@@ -585,6 +735,32 @@
       });
     });
     if (document.getElementById("legacy-win")) drawLegacy();
+    if (PAGE === "db" || PAGE === "world") fetch("/codex/loot.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
+      if (!j || !j.dungeons) return;
+      LOOT = j;
+      fillSources();
+      var box = document.getElementById("lootbox");
+      if (box) {
+        box.innerHTML = lootTiles();
+        box.addEventListener("click", function (e) {
+          var b = e.target.closest && e.target.closest("[data-loot]");
+          if (b && !b.disabled) openLoot(b.getAttribute("data-loot"));
+        });
+        var key = function (n) { return String(n).toLowerCase().replace(/^the /, ""); }, byKey = {};
+        LOOT.dungeons.forEach(function (d) { if (lootCount(d).drops) byKey[key(d.name)] = d; });
+        document.querySelectorAll(".place[data-name]").forEach(function (card) {
+          var d = byKey[key(card.getAttribute("data-name"))];
+          if (!d) return;
+          var b = document.createElement("button");
+          b.type = "button"; b.className = "place-loot"; b.setAttribute("data-loot", d.name);
+          b.textContent = "Loot table: " + lootCount(d).drops + " drops";
+          b.addEventListener("click", function () { openLoot(d.name); });
+          card.appendChild(b);
+        });
+        var want = /[?&]loot=([^&]+)/.exec(location.search);
+        if (want) openLoot(decodeURIComponent(want[1].replace(/\+/g, " ")));
+      }
+    });
     if (PAGE === "db") fetch("/plan/items.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (it) {
       var items = it && Array.isArray(it.items) ? it.items : [];
       if (window.ForgeGear && items.length) { try { GK = ForgeGear({ items: it, get: function () { return {}; } }); } catch (e) { GK = null; } }

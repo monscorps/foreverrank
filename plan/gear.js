@@ -49,6 +49,8 @@
       if (it.block) L.push('<span class="it-l">' + esc(it.block) + " Block</span>");
       Object.keys(STAT_LINE).forEach(function (k) { if (s[k]) L.push('<span class="it-l">+' + esc(s[k]) + " " + STAT_LINE[k] + "</span>"); });
       if (s.resist) Object.keys(s.resist).forEach(function (r) { L.push('<span class="it-l">+' + esc(s.resist[r]) + " " + esc(r.charAt(0).toUpperCase() + r.slice(1)) + " Resistance</span>"); });
+      ["fire", "frost", "nature", "shadow", "arcane"].forEach(function (r) { if (s[r + "Resist"]) L.push('<span class="it-l">+' + esc(s[r + "Resist"]) + " " + r.charAt(0).toUpperCase() + r.slice(1) + " Resistance</span>"); });
+      if (s.allResist) L.push('<span class="it-l">+' + esc(s.allResist) + " All Resistances</span>");
       (it.effects || []).forEach(function (e) { L.push('<span class="it-g">' + esc(e) + "</span>"); });
       [["attackPower", "Equip: +%s Attack Power.", /attack power/i], ["spellPower", "Equip: Increases damage and healing done by magical spells and effects by up to %s.", /damage and healing/i],
         ["healing", "Equip: Increases healing done by up to %s.", /increases healing/i], ["spellDamage", "Equip: Increases damage done by magical spells and effects by up to %s.", /spell|magical/i],
@@ -70,16 +72,19 @@
         (it.setBonuses || []).forEach(function (b) { L.push('<span class="it-sb' + (have >= b[0] ? " on" : "") + '">(' + esc(b[0]) + ") Set: " + esc(b[1]) + "</span>"); });
       }
       var GEARCATS = { weapon: 1, armor: 1, accessory: 1, offhand: 1 };
-      if (GEARCATS[it.cat] && !it.damage && (!it.effects || !it.effects.length) && !Object.keys(s).length &&
+      if (it.rand) L.push('<span class="it-g">&lt;Random enchantment&gt;</span>');
+      else if (GEARCATS[it.cat] && !it.damage && (!it.effects || !it.effects.length) && !Object.keys(s).length &&
           { uncommon: 1, rare: 1, epic: 1, legendary: 1 }[it.quality]) {
         L.push('<span class="it-src">Not itemized yet: the piece exists in the client, its stat values do not. They land in a later build.</span>');
       }
       if (it.reqLevel) L.push('<span class="it-l">Requires Level ' + esc(it.reqLevel) + "</span>");
       if (it.itemLevel) L.push('<span class="it-y">Item Level ' + esc(it.itemLevel) + "</span>");
+      (it.drops || []).forEach(function (d) { L.push('<span class="it-drop">Drops from ' + esc(d[1]) + (d[2] === "rare" ? " (rare)" : "") + ", " + esc(d[0]) + "</span>"); });
+      (it.quests || []).forEach(function (q) { L.push('<span class="it-drop">Quest reward: ' + esc(q[0]) + " (" + esc(q[1]) + ")</span>"); });
       if (it.source) L.push('<span class="it-src">' + esc(it.source) + "</span>");
       if (it.reagents) L.push('<span class="it-src">Reagents: ' + esc(it.reagents) + "</span>");
       if (it.iconFrom === "placeholder") L.push('<span class="it-conf">Stand-in icon until the real one is seen</span>');
-      L.push('<span class="it-conf">' + (it.confidence === "tooltip" ? "Tooltip read from Forever footage" : it.confidence === "partial" ? "Partly seen: some lines never shown" : "Named by Blizzard or previews; no tooltip shown yet") + "</span>");
+      if (it.confidence) L.push('<span class="it-conf">' + (it.confidence === "tooltip" ? "Tooltip read from Forever footage" : it.confidence === "partial" ? "Partly seen: some lines never shown" : "Named by Blizzard or previews; no tooltip shown yet") + "</span>");
       return L.join("");
     }
     function slotLabel(slot) {
@@ -419,7 +424,8 @@
       var list = pool.filter(function (it) {
         if (qual && it.quality !== qual) return false;
         if (!ql) return true;
-        return (it.name + " " + (it.type || "") + " " + (it.source || "") + " " + (it.effects || []).join(" ")).toLowerCase().indexOf(ql) !== -1;
+        return (it.name + " " + (it.type || "") + " " + (it.source || "") + " " + (it.effects || []).join(" ") + " " +
+          (it.drops || []).map(function (d) { return d[1] + " " + d[0]; }).join(" ") + " " + (it.quests || []).map(function (q) { return q[0] + " " + q[1]; }).join(" ")).toLowerCase().indexOf(ql) !== -1;
       }).sort(function (a, b) { return (QUALITY.indexOf(b.quality) - QUALITY.indexOf(a.quality)) || ((b.itemLevel || 0) - (a.itemLevel || 0)) || a.name.localeCompare(b.name); });
       var cur = eq()[slotKey];
       var quals = QUALITY.filter(function (x) { return pool.some(function (it) { return it.quality === x; }); });

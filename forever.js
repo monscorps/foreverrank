@@ -7,6 +7,7 @@
   "use strict";
 
   var BETA = Date.parse("2026-09-17T17:00:00Z");    // announced date; hour estimated
+  var CAP30 = Date.parse("2026-10-01T17:00:00Z");   // two weeks into the beta; hour estimated
   var LAUNCH = Date.parse("2026-11-04T15:00:00Z");  // announced date; hour estimated
   var CAP = Date.now() < LAUNCH ? 30 : 60;
 
@@ -269,8 +270,8 @@
   // ---- countdown ------------------------------------------------------------
   function tickCountdown() {
     var now = Date.now(), target, kick, note, phase;
-    if (now < BETA) { target = BETA; kick = "The <b>beta</b> opens in"; phase = "PRE-BETA"; note = "Beta Sept 17 to Oct 22, level cap 30. Launch Nov 4 (times estimated)"; }
-    else if (now < LAUNCH) { target = LAUNCH; kick = "<b>Forever</b> launches in"; phase = "BETA. CAP 30"; note = "Beta is live until Oct 22. launch Nov 4 (times estimated)"; }
+    if (now < BETA) { target = BETA; kick = "The <b>beta</b> opens in"; phase = "PRE-BETA"; note = "Beta Sept 17 to Oct 22, capped at level 20, then 30 from Oct 1. Launch Nov 4 (times estimated)"; }
+    else if (now < LAUNCH) { target = LAUNCH; kick = "<b>Forever</b> launches in"; phase = now < CAP30 ? "BETA. CAP 20" : "BETA. CAP 30"; note = "Beta is live until Oct 22" + (now < CAP30 ? ", level 30 opens Oct 1" : "") + ". Launch Nov 4 (times estimated)"; }
     else { target = null; kick = "<b>Forever</b> is live"; phase = "LIVE. CAP 60"; note = ""; }
     $("count-kick").innerHTML = kick;
     $("phase-chip").textContent = phase;
@@ -710,8 +711,9 @@
     $("lb-name").textContent = v.label;
     $("lb-ico").style.backgroundImage = "url(" + ICON + v.icon + ".jpg)";
     $("board-sub").textContent = v.sub;
-    $("cap-note").innerHTML = Date.now() < LAUNCH
-      ? "Beta opens capped at <b>level 20</b>, rising to 30 after a couple of weeks. Boards rank to the live cap."
+    var now = Date.now();
+    $("cap-note").innerHTML = now < CAP30 ? "The beta is capped at <b>level 20</b> until Oct 1, then 30. Boards rank to the live cap."
+      : now < LAUNCH ? "The beta is capped at <b>level 30</b>. Boards rank to the live cap."
       : "Launched: the ladder runs to <b>level 60</b>.";
     var b = $("board");
     $("explain").hidden = demoOn();

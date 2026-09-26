@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WoW Forever Database: Items, Spells, Legacy · ForeverRank</title>
-<meta name="description" content="The WoW Forever database: search over 17,000 datamined items and spells, the Legacy system, item sets, hidden systems and the roadmap, from beta build 1.60.1.70009.">
+<meta name="description" content="The WoW Forever database: over 21,000 items with stats, drop sources and dungeon loot, plus spells, the Legacy system, item sets and hidden systems. Filter gear by stat and dungeon.">
 <link rel="icon" href="../mark.svg" type="image/svg+xml">
 <link rel="canonical" href="https://foreverrank.com/codex/">
 <!-- seo:begin -->
@@ -12,11 +12,11 @@
 <meta property="og:site_name" content="ForeverRank">
 <meta property="og:url" content="https://foreverrank.com/codex/">
 <meta property="og:title" content="WoW Forever Database: Items, Spells, Legacy · ForeverRank">
-<meta property="og:description" content="The WoW Forever database: search over 17,000 datamined items and spells, the Legacy system, item sets, hidden systems and the roadmap, from beta build 1.60.1.70009.">
+<meta property="og:description" content="The WoW Forever database: over 21,000 items with stats, drop sources and dungeon loot, plus spells, the Legacy system, item sets and hidden systems. Filter gear by stat and dungeon.">
 <meta property="og:image" content="https://foreverrank.com/assets/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="WoW Forever Database: Items, Spells, Legacy · ForeverRank">
-<meta name="twitter:description" content="The WoW Forever database: search over 17,000 datamined items and spells, the Legacy system, item sets, hidden systems and the roadmap, from beta build 1.60.1.70009.">
+<meta name="twitter:description" content="The WoW Forever database: over 21,000 items with stats, drop sources and dungeon loot, plus spells, the Legacy system, item sets and hidden systems. Filter gear by stat and dungeon.">
 <meta name="twitter:image" content="https://foreverrank.com/assets/og.jpg">
 <!-- seo:end -->
 <meta name="theme-color" content="#1C2325">
@@ -114,6 +114,7 @@
 .dbs-filt input[type=number] { width: 4.6rem; -moz-appearance: textfield; }
 .dbs-filt input::-webkit-outer-spin-button, .dbs-filt input::-webkit-inner-spin-button { -webkit-appearance: none; }
 .dbs-filt select { max-width: 10rem; }
+.dbs-filt #dbf-src { max-width: 15rem; }
 .dbs-filt button { cursor: pointer; font: 600 .68rem/1 var(--heading); color: var(--gold); background: rgba(0,0,0,.28); border: 1px solid var(--gold-border, var(--card-border)); border-radius: var(--r-btn); padding: .4rem .6rem; }
 #dbf-era { color: var(--subtle); border-color: var(--card-border); }
 #dbf-era.on { color: var(--gold); border-color: var(--gold); }
@@ -152,6 +153,8 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 .it-sp { color: #7c7c7c !important; padding-left: .6rem; }
 .it-sb { color: #7c7c7c !important; }
 .it-src { color: #9fb0bb !important; margin-top: .3rem; font-size: .72rem !important; }
+.it-drop { display: block; color: #e5cc80 !important; margin-top: .25rem; font-size: .74rem !important; }
+.dbs-sv { font-style: normal; font-weight: 700; color: #7ee0a0; }
 .it-conf { color: #6f8594 !important; font-size: .66rem !important; margin-top: .15rem; }
 .cx section { scroll-margin-top: 4.5rem; }
 .rk-warn { font-size: .8rem; color: var(--card-text); border-left: 3px solid var(--gold); padding: .2rem 0 .2rem .7rem; margin: .4rem 0 .8rem; }
@@ -306,7 +309,7 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 <script src="../nav.js?v=7"></script>
 <main class="wrap cx">
   <h1 class="display">The <span>Database</span></h1>
-  <p class="board-sub">Everything known about Forever, compiled and kept honest: datamined from the beta client, now at build 1.60.1.70009 (first read from 1.60.1.69876 on day one, every change since carried over by diffing the two), plus reveal panels and fansite transcriptions. What moved in between is in <a href="../news/build-70009/">the build 70009 datamine</a>. Sources credited on GitHub.</p>
+  <p class="board-sub">Everything known about Forever, compiled and kept honest. Items come from the beta client (build 1.60.1.70009) plus the ones the server sends and the client never stores, read from Wowhead's Forever database; who drops what comes from players' dungeon loot records. Filter by stat, dungeon, class or level below. What moved between builds is in <a href="../news/build-70009/">the build 70009 datamine</a>. Sources credited on GitHub.</p>
   <div class="dbs" id="dbs"></div>
   <nav class="cxnav" id="cxnav"></nav>
   <div id="cx"></div>
@@ -326,9 +329,9 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 </footer>
 <script src="../tipkit.js?v=5"></script>
 <script src="../legacy.js?v=3"></script>
-<script src="../plan/gear.js?v=21"></script>
+<script src="../plan/gear.js?v=23"></script>
 <script>window.CODEX_PAGE="db";</script>
-<script src="codex.js?v=45"></script>
+<script src="codex.js?v=47"></script>
 <script src="/map.js?v=8" defer></script>
 <script src="/support.js?v=2" defer></script>
 </body>

@@ -190,3 +190,23 @@ Corrections welcome: open an issue.
   (wago.tools/api/files?build=..., 1.42 million entries) diffed against
   69876. The build article is now a data-driven page built from
   tools/articles/build-70009.src.html + .data.json by tools/articles/build.py.
+
+## Added 2026-09-26
+
+- **Server-sent items and live tooltips: Wowhead's Forever database**
+  (nether.wowhead.com/forever/tooltip/item/<id>, the public tooltip service
+  fansites embed). Most new Forever loot is sent by the server: the client has
+  an Item row but no ItemSparse row, so no name, stats or text. 2,353 such rows
+  sat in the Forever ID range alone, including every Ruins of Lordaeron drop.
+  tools/scavenge_items.py reads each item's tooltip once (cached), parses it
+  into our own fields, and prefers its numbers over our item-budget decode
+  where both exist, since it reflects live server data.
+- **Dungeon loot tables: ForeverChanges and wowtbc.gg.** The Forever client has
+  no Dungeon Journal, so who drops what is players' loot records.
+  tools/scavenge_loot.py reads ForeverChanges' dungeon pages
+  (foreverchanges.pro/dungeons/<slug>: bosses, rare spawns, quests and
+  rewards) and wowtbc.gg's loot tables (their public page-data JSON), and
+  merges them in codex/loot.json with each boss and quest crediting its
+  sites. Items either site lists that are in neither the client's item tables
+  nor Wowhead's Forever database are kept apart as "not yet seen in Forever"
+  (mostly loot above the beta's level cap), never shown as Forever loot.
