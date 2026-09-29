@@ -108,6 +108,22 @@ end
 
 local function setIcon(t, icon) t:SetTexture(icon or T.questGeneric) end
 
+-- UI-WorldMap-QuestIcon holds three question marks; the yellow one sits in the top-left quarter
+-- (its pixels: 11 to 23 across, 7 to 24 down, of 64), cropped square around it
+local PIN_TC = { 0.1172, 0.4141, 0.0938, 0.3906 }
+local function pinButton(parent, size)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(size, size)
+  b.t = tex(b, "ARTWORK", T.mapPin)
+  b.t:SetAllPoints()
+  b.t:SetTexCoord(PIN_TC[1], PIN_TC[2], PIN_TC[3], PIN_TC[4])
+  b.hi = tex(b, "HIGHLIGHT", T.mapPin)
+  b.hi:SetAllPoints()
+  b.hi:SetTexCoord(PIN_TC[1], PIN_TC[2], PIN_TC[3], PIN_TC[4])
+  b.hi:SetBlendMode("ADD")
+  return b
+end
+
 local function pool(parent, make)
   local p = { items = {}, used = 0 }
   function p:Get()
@@ -312,6 +328,8 @@ function UI:ShowMenu(title, items)
       b.hi = tex(b, "HIGHLIGHT", T.rowHi)
       b.hi:SetAllPoints()
       b.hi:SetBlendMode("ADD")
+
+      b.hi:SetAlpha(0.6)
       b.label = text(b, "GameFontHighlightSmall", 12, WHITE, "LEFT", 220)
       b.label:SetPoint("LEFT", 8, 0)
       b:SetScript("OnClick", function(self)
@@ -767,6 +785,8 @@ function UI:CreateLogView(parent)
     r.hi = tex(r, "HIGHLIGHT", T.rowHi)
     r.hi:SetAllPoints()
     r.hi:SetBlendMode("ADD")
+
+    r.hi:SetAlpha(0.6)
     r.addIcon = tex(r, "ARTWORK", nil, 30, 30)
     r.addIcon:SetPoint("LEFT", 2, 0)
     r.addIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
@@ -1029,6 +1049,8 @@ local function makeRow(parent)
   r.hi = tex(r, "HIGHLIGHT", T.rowHi)
   r.hi:SetAllPoints()
   r.hi:SetBlendMode("ADD")
+
+  r.hi:SetAlpha(0.6)
   r.mark = tex(r, "ARTWORK", nil, 14, 14)
   r.mark:SetPoint("LEFT", 4, 0)
   r.icon = tex(r, "ARTWORK", nil, 18, 18)
@@ -1086,12 +1108,8 @@ local function makeCard(parent)
   c.gain:SetPoint("TOPRIGHT", -40, -9)
   c.count = text(c, "GameFontHighlightSmall", 11, WHITE, "RIGHT", 150)
   c.count:SetPoint("TOPRIGHT", -40, -28)
-  c.pin = CreateFrame("Button", nil, c)
-  c.pin:SetSize(20, 20)
-  c.pin:SetPoint("TOPRIGHT", -12, -12)
-  c.pin.t = tex(c.pin, "ARTWORK", T.mapPin)
-  c.pin.t:SetAllPoints()
-  c.pin:SetHighlightTexture(T.hilite, "ADD")
+  c.pin = pinButton(c, 22)
+  c.pin:SetPoint("TOPRIGHT", -12, -11)
   c.pin:SetScript("OnClick", function(self)
     local e = self.entrance
     if e then QB.API.SetWaypoint(e.m, e.x, e.y, self.label) end
@@ -1362,11 +1380,7 @@ local function makeLeg(parent)
   l.travel = text(l, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 300)
   l.name = text(l, "GameFontNormalLarge", 15, INK, "LEFT", 330)
   l.level = text(l, "GameFontNormal", 12, INK_SOFT, "RIGHT", 150)
-  l.pin = CreateFrame("Button", nil, l)
-  l.pin:SetSize(18, 18)
-  l.pin.t = tex(l.pin, "ARTWORK", T.mapPin)
-  l.pin.t:SetAllPoints()
-  l.pin:SetHighlightTexture(T.hilite, "ADD")
+  l.pin = pinButton(l, 20)
   l.pin:SetScript("OnClick", function(self)
     local s = self.stop
     if s and s.m and s.m > 0 then QB.API.SetWaypoint(s.m, s.x, s.y, s.name) end
@@ -1385,6 +1399,8 @@ local function legRow(l, i)
   r.hi = tex(r, "HIGHLIGHT", T.rowHi)
   r.hi:SetAllPoints()
   r.hi:SetBlendMode("ADD")
+
+  r.hi:SetAlpha(0.6)
   r.icon = tex(r, "ARTWORK", nil, 16, 16)
   r.icon:SetPoint("LEFT", 2, 0)
   r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
@@ -1660,6 +1676,8 @@ local function makeMember(parent)
   m.hi = tex(m, "HIGHLIGHT", T.rowHi)
   m.hi:SetAllPoints()
   m.hi:SetBlendMode("ADD")
+
+  m.hi:SetAlpha(0.6)
   m.class = tex(m, "ARTWORK", T.classes, 30, 30)
   m.class:SetPoint("LEFT", 6, 0)
   m.dot = tex(m, "OVERLAY", T.dotGreen, 12, 12)
@@ -1706,6 +1724,8 @@ local function makeDungeonRow(parent)
   r.hi = tex(r, "HIGHLIGHT", T.rowHi)
   r.hi:SetAllPoints()
   r.hi:SetBlendMode("ADD")
+
+  r.hi:SetAlpha(0.6)
   r.icon = tex(r, "ARTWORK", nil, 18, 18)
   r.icon:SetPoint("TOPLEFT", 4, -3)
   r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)

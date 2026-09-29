@@ -95,9 +95,12 @@ local function newObj(kind, template, parent)
         elseif k == "SetTexture" then self.__tex = a[1]; self.__color = nil
         elseif k == "SetColorTexture" then self.__tex = "color"; self.__color = { a[1], a[2], a[3], a[4] }
         elseif k == "SetVertexColor" then self.__vertex = { a[1], a[2], a[3] }
+        elseif k == "SetTexCoord" then self.__tc = { a[1], a[2], a[3], a[4] }
+        elseif k == "SetBlendMode" then self.__blend = a[1]
+        elseif k == "SetDesaturated" then self.__desat = a[1] and true or false
         elseif k == "SetScrollChild" then a[1].__scrollParent = self; self.__child = a[1]
         elseif k == "SetVerticalScroll" then self.__scroll = a[1]
-        elseif k == "SetHighlightTexture" then self.__hiTex = a[1]
+        elseif k == "SetHighlightTexture" then self.__hiTex = a[1]; self.__hiBlend = a[2]
         elseif k == "ClearAllPoints" then self.__points = {}
         elseif k == "SetAllPoints" then
           local rel = a[1] or self.__parent
@@ -523,11 +526,12 @@ local function dumpLayout(root, label)
             it.text, it.size, it.j, it.wrap = plain(o.__text), o.__size, o.__justify, o.__wrap
             it.c = o.__color
           elseif o.__kind == "Texture" then
-            if o.__layer == "HIGHLIGHT" then it = nil
+            if o.__layer == "HIGHLIGHT" and not (o.__parent and o.__parent.__hover) then it = nil
             else
               it.layer = o.__layer
               it.tex = o.__tex == "color" and "color" or (texNames[o.__tex] or (o.__tex and "icon") or nil)
               it.c = o.__color or o.__vertex
+              it.tc, it.blend, it.desat = o.__tc, o.__blend, o.__desat or nil
               if not it.tex then it = nil end
             end
           else
@@ -538,6 +542,12 @@ local function dumpLayout(root, label)
           if it then
             for _, a in ipairs(anc) do if a.__child then local c = rectOf(a); it.clip = { x = c.l - rr.l, y = rr.t - c.t, w = c.r - c.l, h = c.t - c.b }; break end end
             items[#items + 1] = it
+            -- a hovered button's own highlight texture, the way the game draws it: over the whole button
+            if o.__hover and o.__hiTex then
+              local hi = { k = "Texture", x = it.x, y = it.y, w = it.w, h = it.h, i = idx + 0.5, a = 1, depth = it.depth + 1,
+                           layer = "HIGHLIGHT", tex = texNames[o.__hiTex] or "icon", blend = o.__hiBlend or "ADD", clip = it.clip }
+              items[#items + 1] = hi
+            end
           end
         end
       end
@@ -653,12 +663,36 @@ QB.Model.Finish()
 
 -- the layout of every page, checked and drawn
 local layouts, problems = {}, {}
+local function hoverFirst(list, n)
+  local k = 0
+  for _, f in ipairs(list) do
+    if f:IsShown() then f.__hover = true; k = k + 1; if k >= (n or 1) then break end end
+  end
+end
+local function unhover() for _, o in ipairs(ALL) do o.__hover = nil end end
 for tab = 1, 4 do
   UI:ShowTab(tab)
   QB.Model.Finish()
   UI:Refresh()
   for _, p in ipairs(checkLayout(UI.frame, "tab " .. tab)) do problems[#problems + 1] = p end
-  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Prep", "Hand-in Route", "Party" })[tab])
+  unhover()
+  if tab == 1 then
+    v1.slots[2].__hover = true
+    hoverFirst(v1.swaps)
+  elseif tab == 2 then
+    for _, c in ipairs(v2.cards.items) do
+      if c:IsShown() and c.pin:IsShown() then c.pin.__hover = true break end
+    end
+    local shown = 0
+    for _, c in ipairs(v2.cards.items) do
+      if c:IsShown() then shown = shown + 1; if shown == 3 then hoverFirst(c.rows.items) end end
+    end
+  elseif tab == 3 then
+    local l = v3.legs.items[2]
+    if l then l.pin.__hover = true; hoverFirst(l.rows) end
+  end
+  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Prep", "Hand-in Route", "Party" })[tab] .. " (one row hovered)")
+  unhover()
 end
 
 -- right-click: the menu of what you can do with a quest

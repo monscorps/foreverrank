@@ -738,7 +738,7 @@ T = {k: tex(v) for k, v in {
     "questActive": "interface/gossipframe/activequesticon", "taxiY": "interface/taxiframe/ui-taxi-icon-yellow",
     "taxiG": "interface/taxiframe/ui-taxi-icon-green", "taxiGray": "interface/taxiframe/ui-taxi-icon-gray",
     "mapPin": "interface/worldmap/ui-worldmap-questicon", "book": "interface/questframe/ui-questlog-bookicon",
-    "rowHi": "interface/questframe/ui-questitemhighlight", "minimapBg": "interface/minimap/ui-minimap-background",
+    "rowHi": "interface/questframe/ui-questtitlehighlight", "minimapBg": "interface/minimap/ui-minimap-background",
     "minimapHi": "interface/minimap/ui-minimap-zoombutton-highlight", "knob": "interface/buttons/ui-scrollbar-knob",
     "classes": "interface/glues/charactercreate/ui-charactercreate-classes", "leader": "interface/groupframe/ui-group-leadericon",
     "ping": "interface/minimap/ui-minimap-ping-center", "dotGreen": "interface/common/indicator-green",
