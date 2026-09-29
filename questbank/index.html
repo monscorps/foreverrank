@@ -285,7 +285,7 @@
     </div>
     <div class="dl">
       <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-      <span class="dl-meta">Version 3.0.0 · 29 September 2026 · 135 KB</span>
+      <span class="dl-meta">Version 3.0.1 · 29 September 2026 · 137 KB</span>
       <span class="dl-meta">Open it in game with <code>/qb</code></span>
     </div>
   </div>
@@ -410,7 +410,7 @@
         <li><span><b>A mark on each slot.</b> Green: finished, banked. Yellow: not finished yet. Red: you cut it from the plan, or QuestBank doesn't know the quest. Shift-click a slot to cut it or keep it.</span></li>
         <li><span><b>Items that don't need a slot.</b> Items that start a quest can wait in your bags without taking a log slot until the cap goes up. The count shows how far along you are, like 4 of 10 Bloodied Insignias. Below them, QuestBank lists any quest that left your log without a hand-in, so an accidental abandon doesn't go unnoticed.</span></li>
         <li><span><b>Better use of a slot.</b> Three kinds of move, biggest gain first. Advance a chain: you hold one step, a later step pays more, so hand this one in now and bank that one. Fill a free slot with the best quest you can pick up. Swap a weak quest for a better one. Click a row to pin the quest giver.</span></li>
-        <li><span><b>Hover anything.</b> The tooltip shows where the XP number comes from, the XP at the level you'll hand it in, the whole chain it belongs to and what it leads on to, and the giver and turn-in NPC with coordinates.</span></li>
+        <li><span><b>Hover anything, right-click for more.</b> The tooltip shows where the XP number comes from, the XP at the level you'll hand it in, the whole chain it belongs to and what it leads on to, and the giver and turn-in NPC with coordinates. Right-click opens a menu: waypoints, cut or keep, and the Wowhead link.</span></li>
       </ol>
     </div>
   </div>
@@ -695,6 +695,8 @@
         <tr><td><code>/qb minimap</code></td><td>Hide or show the minimap button</td></tr>
         <tr><td><code>/qb reset</code></td><td>Move the window back to the middle of the screen</td></tr>
         <tr><td>Click a quest</td><td>Waypoint on its giver, or on its turn-in NPC once it's in your log</td></tr>
+        <tr><td>Right-click a quest</td><td>A menu: waypoint on the giver or the turn-in, cut or keep (add or drop), and the quest's Wowhead link to copy</td></tr>
+        <tr><td><code>/qb done</code> and a quest name or ID</td><td>What the game says about a quest: whether it's in your completed list, and what QuestBank makes of it</td></tr>
         <tr><td>Shift-click a quest</td><td>In your log: cut it from the plan or keep it. Anywhere else: add it to the plan or drop it</td></tr>
         <tr><td>Click or right-click the mount and sleeping bag buttons</td><td>Set it yourself, or go back to automatic</td></tr>
         <tr><td>Drag the title area</td><td>Move the window. <kbd>Esc</kbd> closes it.</td></tr>
@@ -708,8 +710,9 @@
   <h2>Troubleshooting</h2>
   <div class="faq">
     <details><summary>It says the addon is out of date</summary><p>Tick Load out of date AddOns on the character screen. Blizzard hasn't published Forever's interface number yet, so every beta addon shows up like this.</p></details>
-    <details><summary>Nothing happens, or I see a Lua error</summary><p>Type <code>/console scriptErrors 1</code> and then <code>/reload</code>. Copy the error text into the Discord and it gets fixed. Check the whole QuestBank folder went in: the five files sit directly in <code>Interface\AddOns\QuestBank</code>.</p></details>
+    <details><summary>Nothing happens, or I see a Lua error</summary><p>Type <code>/console scriptErrors 1</code> and then <code>/reload</code>. Copy the error text into the Discord and it gets fixed. Check the whole QuestBank folder went in: the nine files sit directly in <code>Interface\AddOns\QuestBank</code>.</p></details>
     <details><summary>The XP I got is different from the plan</summary><p>The chat line after each hand-in shows both numbers. From then on QuestBank uses the game's number for that quest, and passes it on to your party. Beta patches can change quest XP, and the addon's file records every hand-in so the data can be updated.</p></details>
+    <details><summary>It offers a quest I've already done</summary><p>Type <code>/qb done</code> and the quest's name, like <code>/qb done glowing shard</code>. It shows what the game says: the list of quests you've completed, and the quest's own completed flag. The two can disagree; since 3.0.1 QuestBank counts a quest as done when either says so. If both say no and you're sure, tell us in the Discord with the quest's name.</p></details>
     <details><summary>A quest says "Not on the route"</summary><p>Either it's handed in inside a dungeon, or QuestBank has no position for its NPC. It's listed at the end of the route with its XP so you can fit it in yourself. The <a href="https://github.com/monscorps/foreverrank/blob/main/tools/questbank/GAPS.md" rel="noopener">gap report</a> lists every such quest.</p></details>
     <details><summary>My party doesn't show up on the Party page</summary><p>They need QuestBank 3.0 or newer, and sharing on. Party members appear within a few seconds of grouping; guild members when they log in or change their bank. <b>Send now</b> or <code>/qb sync</code> shares straight away, and <code>/qb sync Name</code> works for a friend who isn't in your group.</p></details>
     <details><summary>Do I need TomTom?</summary><p>No. Map pins use the game's own map pin. If TomTom is installed, QuestBank uses that instead.</p></details>
@@ -722,7 +725,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 3.0.0. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 3.0.1. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>

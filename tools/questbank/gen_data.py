@@ -620,11 +620,11 @@ for qid in IDS:
         b = extra["bag"]
         BAGQ[qid] = [b[0], b[1], 2 if len(b) > 2 else 1]
     elif d.get("startType") == "item" and d.get("startId"):
-        BAGQ[qid] = [d["startId"], 1, 0]
+        BAGQ[qid] = [d["startId"], 1, 0, d.get("start") or (CM_ITEMS.get(d["startId"]) or {}).get("name")]
     else:
         for kind, i in cmq.get("starts", []):
             if kind == "item":
-                BAGQ[qid] = [i, 1, 0]
+                BAGQ[qid] = [i, 1, 0, (CM_ITEMS.get(i) or {}).get("name")]
                 break
     rm = races(qid)
     if rm:
@@ -759,7 +759,7 @@ lines.append("D.QITEM = " + keyed(QITEM))
 lines.append("D.QICON = " + keyed(QICON))
 lines.append("D.TIPS = " + keyed(TIPS))
 lines.append("D.PRE = " + keyed(PRE))
-lines.append("-- [id] = {item, count, 1 banked with the item in your bags | 2 the item is needed to finish | 0 starts from the item}")
+lines.append("-- [id] = {item, count, 1 banked with the item in your bags | 2 the item is needed to finish | 0 starts from the item, item name}")
 lines.append("D.BAGQ = " + keyed(BAGQ))
 lines.append("D.FOLLOW = " + keyed(FOLLOW))
 lines.append("-- quests both factions take, handed in to a different NPC by the Horde")

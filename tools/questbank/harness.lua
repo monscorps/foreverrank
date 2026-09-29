@@ -19,7 +19,8 @@ EnableMouseWheel SetMovable SetClampedToScreen RegisterForDrag StartMoving StopM
 SetScrollChild SetVerticalScroll GetVerticalScroll SetText GetText SetNormalTexture SetHighlightTexture SetPushedTexture
 RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThumbTexture SetMinMaxValues GetMinMaxValues
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
-SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight]])
+SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
+SetAutoFocus HighlightText SetFocus ClearFocus]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12 }
 
@@ -151,7 +152,7 @@ BASE.geterrorhandler = function() return error end
 BASE.UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { m = m, x = x, y = y } end }
 BASE.C_SuperTrack = { SetSuperTrackedUserWaypoint = function() end }
 BASE.CreateVector2D = function(x, y) return { x = x, y = y } end
-BASE.Ambiguate = function(name) return (name:gsub("%-.*$", "")) end
+BASE.Ambiguate = function(name) return name end
 BASE.CLASS_ICON_TCOORDS = { PALADIN = { 0, 0.25, 0.5, 0.75 }, WARRIOR = { 0, 0.25, 0, 0.25 }, SHAMAN = { 0.25, 0.49, 0.25, 0.5 } }
 BASE.RAID_CLASS_COLORS = { PALADIN = { r = 0.96, g = 0.55, b = 0.73 }, WARRIOR = { r = 0.78, g = 0.61, b = 0.43 }, SHAMAN = { r = 0, g = 0.44, b = 0.87 } }
 BASE.CreateFromMixins = function(...)
@@ -204,10 +205,7 @@ local function newClient(o)
   -- the Classic way: the selected entry's XP, whatever ID is passed
   env.GetQuestLogSelection = function() return c.selected or 0 end
   env.SelectQuestLogEntry = function(i) c.selected = i end
-  env.GetQuestLogRewardXP = function()
-    local e = c.log[(c.selected or 0) - 2]
-    return e and o.liveXP and o.liveXP[e[1]] or 0
-  end
+  env.GetQuestLogRewardXP = function() error("QuestBank must not read the quest log's XP (it means selecting entries in the game's quest log)") end
   env.C_Container = {
     GetContainerNumSlots = function(bag) return bag == 0 and #(o.bagSlots or {}) or 0 end,
     GetContainerItemID = function(_, slot) return o.bagSlots[slot] and o.bagSlots[slot][1] end,
@@ -308,11 +306,11 @@ local function deliver()
     from.outbox = {}
     for _, m in ipairs(box) do
       for _, to in ipairs(clients) do
-        if to ~= from and to.QB.Sync.frame then
-          local reach = (m[3] == "WHISPER" and m[4] == to.o.name) or ((m[3] == "PARTY" or m[3] == "RAID") and from.o.group and to.o.group)
+        if to.QB.Sync.frame then
+          local reach = (m[3] == "WHISPER" and m[4] == to.o.name and to ~= from) or ((m[3] == "PARTY" or m[3] == "RAID") and from.o.group and to.o.group)
             or (m[3] == "GUILD" and from.o.guild and to.o.guild)
           if reach then
-            to.QB.Sync.frame.__scripts.OnEvent(to.QB.Sync.frame, "CHAT_MSG_ADDON", m[1], m[2], m[3], from.o.name .. "-ForeverNormal")
+            to.QB.Sync.frame.__scripts.OnEvent(to.QB.Sync.frame, "CHAT_MSG_ADDON", m[1], m[2], m[3], from.o.name .. "-Forever Normal")
             moved = moved + 1
           end
         end
@@ -652,6 +650,34 @@ for tab = 1, 4 do
   layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Prep", "Hand-in Route", "Party" })[tab])
 end
 
+-- right-click: the menu of what you can do with a quest
+do
+  UI:ShowTab(1)
+  local b = v1.slots[1]
+  b.__scripts.OnClick(b, "RightButton")
+  local m = owner.env.QuestBankMenu
+  assert(m and m:IsShown(), "right-click opens the menu")
+  local labels = {}
+  for _, it in ipairs(m.items) do if it:IsShown() then labels[#labels + 1] = it.label:GetText() end end
+  print("menu for " .. m.title:GetText() .. ": " .. table.concat(labels, " | "))
+  local copy
+  for _, it in ipairs(m.items) do if it:IsShown() and it.label:GetText():find("Wowhead") then copy = it end end
+  copy.__scripts.OnClick(copy)
+  assert(not m:IsShown(), "choosing an item closes the menu")
+  local lf = owner.env.QuestBankLink
+  assert(lf and lf:IsShown() and lf.eb:GetText():find("wowhead.com/forever/quest="), "the link box shows the quest's link")
+  print("link box:", lf.eb:GetText())
+  lf:Hide()
+  -- cut from the menu, and keep again
+  local id = b.q.id
+  b.__scripts.OnClick(b, "RightButton")
+  for _, it in ipairs(m.items) do if it:IsShown() and it.label:GetText() == "Cut it from the plan" then it.__scripts.OnClick(it) end end
+  assert(QB:IsCut(id), "the menu cuts a quest")
+  QB:ToggleAdd(id)
+  assert(not QB:IsCut(id))
+  m.catcher.__scripts.OnClick(m.catcher)
+end
+
 -- the Prep page scrolled to the Redridge card
 do
   UI:ShowTab(2)
@@ -723,6 +749,24 @@ layouts[#layouts + 1] = dumpLayout(UI.frame, "Hand-in Route, during the run")
 print("chat:", owner.chat[#owner.chat])
 print("live XP from the game:", QB.Live.Source(QB.Quest.Get(firstQ)))
 
+-- handed in: the game's list of completed quests counts even when the quest's flag says no
+do
+  local flag = owner.env.C_QuestLog.IsQuestFlaggedCompleted
+  owner.env.C_QuestLog.IsQuestFlaggedCompleted = function(id) if id == 6981 then return false end return flag(id) end
+  QB.API.RefreshDone()
+  local st = QB:Status(QB.Quest.Get(6981))
+  assert(st.code == "done", "The Glowing Shard in the completed list is done: " .. st.text)
+  owner.env.SlashCmdList.QUESTBANK("done glowing shard")
+  print("/qb done:", owner.chat[#owner.chat])
+  owner.env.C_QuestLog.IsQuestFlaggedCompleted = flag
+  -- a quest that starts from a drop says so
+  owner.done[6981] = nil
+  QB.API.RefreshDone()
+  print("Glowing Shard, not done:", QB:Status(QB.Quest.Get(6981)).text)
+  owner.done[6981] = true
+  QB.API.RefreshDone()
+end
+
 -- chains: Morganth waits behind A Watchful Eye and Looking Further, and says so
 do
   local morganth = QB.Quest.Get(249)
@@ -766,15 +810,20 @@ local friend = newClient({
   log = { { 166, 0 }, { 214, 1 }, { 2040, 1 }, { 167, 1 }, { 101, 1 }, { 58, 0 }, { 90, 1 }, { 1199, 0 }, { 1200, 0 }, { 128, 1 }, { 219, 0 }, { 91, 1 } },
   done = { [65] = true, [132] = true, [135] = true, [141] = true, [142] = true, [155] = true, [56] = true, [57] = true, [1198] = true },
   group = true, guild = true, world = { 0, -10500, 1050 }, bind = "Sentinel Hill", riding = false,
-  liveXP = { [128] = 2000, [91] = 1850 }, bagSlots = {},
+  bagSlots = {},
 })
 login(friend)
+-- the friend talks to Guard Howe: the quest window shows Blackrock Bounty's XP, and the party hears it
+friend.window = { id = 128, xp = 2000 }
+friend.ev(friend.QB.eventFrame, "QUEST_COMPLETE")
+friend.window = nil
 for _ = 1, 6 do tick(owner, 5); tick(friend, 5); deliver() end
 friend.QB.Model.Finish()
 owner.QB.Model.Finish()
 for _ = 1, 4 do tick(owner, 5); tick(friend, 5); deliver() end
 local mem = owner.QB.Sync:Members()
-assert(#mem == 1 and mem[1].name == "Brann", "the owner sees the friend")
+for _, m in ipairs(mem) do print("  member:", m.name, m.key) end
+assert(#mem == 1 and mem[1].name == "Brann", "the owner sees the friend by name, and not itself")
 assert(mem[1].quests, "and the friend's quests")
 print(string.format("sync: owner sees %s level %d, banked %.2f, plan %.2f, %d quests", mem[1].name, mem[1].level, mem[1].banked, mem[1].plan,
   (function() local n = 0 for _ in pairs(mem[1].quests) do n = n + 1 end return n end)()))
@@ -785,7 +834,9 @@ for _, d in ipairs(runs) do
   for _, p in ipairs(d.people) do who[#who + 1] = p.name .. " " .. p.n end
   print(string.format("  run together: %-22s +%s  %s", d.cat.name, QB.Comma(d.xp), table.concat(who, ", ")))
 end
-print("  live XP shared by the friend:", owner.env.QuestBankDB.live and owner.env.QuestBankDB.live[128] and owner.env.QuestBankDB.live[128].src)
+local shared = owner.env.QuestBankDB.live and owner.env.QuestBankDB.live[128]
+assert(shared and shared.src == "party" and shared.full == 2000, "the friend's quest window XP reaches the owner")
+print("  live XP shared by the friend:", shared.full, shared.src)
 UI:ShowTab(4)
 UI:Refresh()
 for _, m in ipairs(v4.members.items) do if m:IsShown() then poke(m); lines = {}; m.copy.__scripts.OnEnter(m.copy) end end

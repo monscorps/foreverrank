@@ -21,7 +21,7 @@ local QUALITY = {
 }
 local STATUS = {
   done = { 0.45, 0.42, 0.38 }, banked = GOOD, active = { 0.60, 0.36, 0.0 }, partial = { 0.60, 0.36, 0.0 },
-  bagstart = { 0.60, 0.36, 0.0 }, locked = BAD, prereq = BAD, todo = INK_SOFT, follow = { 0.25, 0.25, 0.45 },
+  bagstart = { 0.60, 0.36, 0.0 }, item = INK_SOFT, locked = BAD, prereq = BAD, todo = INK_SOFT, follow = { 0.25, 0.25, 0.45 },
   wrong = { 0.45, 0.42, 0.38 },
 }
 local BD = BackdropTemplateMixin and "BackdropTemplate" or nil
@@ -226,14 +226,17 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   npcLine(tip, "From", q.give)
   npcLine(tip, "Hand in", q.turn)
   local inLog = QB.state.log[q.id]
+  local shift
   if inLog or (st and st.bag) then
-    tip:AddLine(QB:IsCut(q.id) and "Cut from the plan. Shift-click to keep it." or "Click: map pin.  Shift-click: cut it from the plan.", 0.5, 0.5, 0.5)
+    shift = QB:IsCut(q.id) and "Shift-click: keep it" or "Shift-click: cut it"
   else
-    tip:AddLine(QB:IsAdded(q.id) and "In the plan. Shift-click to drop it." or "Click: map pin.  Shift-click: add it to the plan.", 0.5, 0.5, 0.5)
+    shift = QB:IsAdded(q.id) and "Shift-click: drop it" or "Shift-click: add it to the plan"
   end
+  tip:AddLine("Click: waypoint.  " .. shift .. ".  Right-click: more.", 0.5, 0.5, 0.5, true)
 end
 
-function UI.QuestClick(q, st)
+function UI.QuestClick(q, st, which)
+  if which == "RightButton" then UI.QuestMenu(q, st) return end
   if IsShiftKeyDown and IsShiftKeyDown() then
     QB:ToggleAdd(q.id)
     UI:Refresh()
@@ -242,6 +245,127 @@ function UI.QuestClick(q, st)
   local target = q.turn
   if st and (st.code == "todo" or st.code == "locked" or st.code == "prereq") and q.give then target = q.give end
   if target and not target.inside then QB.API.SetWaypoint(target.m, target.x, target.y, target.n) end
+end
+
+----------------------------------------------------------------------------
+-- right-click menu: what you can do with a quest
+----------------------------------------------------------------------------
+local menu
+local function menuFrame()
+  if menu then return menu end
+  menu = CreateFrame("Frame", "QuestBankMenu", UIParent, BD)
+  menu:SetFrameStrata("DIALOG")
+  menu:SetFrameLevel(20)
+  menu:SetClampedToScreen(true)
+  menu:EnableMouse(true)
+  backdrop(menu, T.tipBg, T.tipBorder, 12, 3)
+  if menu.SetBackdropColor then menu:SetBackdropColor(0.06, 0.05, 0.04, 0.96) end
+  menu.title = text(menu, "GameFontNormal", 12, GOLD, "LEFT", 224)
+  menu.title:SetPoint("TOPLEFT", 10, -9)
+  menu.items = {}
+  -- a click anywhere else closes it
+  menu.catcher = CreateFrame("Button", nil, UIParent)
+  menu.catcher:SetAllPoints(UIParent)
+  menu.catcher:SetFrameStrata("DIALOG")
+  menu.catcher:SetFrameLevel(10)
+  menu.catcher:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  menu.catcher:SetScript("OnClick", function() menu:Hide() end)
+  menu.catcher:Hide()
+  menu:SetScript("OnHide", function() menu.catcher:Hide() end)
+  if UISpecialFrames then table.insert(UISpecialFrames, "QuestBankMenu") end
+  menu:Hide()
+  return menu
+end
+
+function UI:ShowMenu(title, items)
+  local m = menuFrame()
+  m.title:SetText(title)
+  local y = -30
+  for i, it in ipairs(items) do
+    local b = m.items[i]
+    if not b then
+      b = CreateFrame("Button", nil, m)
+      b:SetSize(232, 20)
+      b.hi = tex(b, "HIGHLIGHT", T.rowHi)
+      b.hi:SetAllPoints()
+      b.hi:SetBlendMode("ADD")
+      b.label = text(b, "GameFontHighlightSmall", 12, WHITE, "LEFT", 220)
+      b.label:SetPoint("LEFT", 8, 0)
+      b:SetScript("OnClick", function(self)
+        m:Hide()
+        if self.func then self.func() end
+      end)
+      m.items[i] = b
+    end
+    b:ClearAllPoints()
+    b:SetPoint("TOPLEFT", 6, y)
+    b.label:SetText(it[1])
+    b.func = it[2]
+    b:Show()
+    y = y - 20
+  end
+  for i = #items + 1, #m.items do m.items[i]:Hide() end
+  m:SetSize(244, -y + 10)
+  local x, cy = GetCursorPosition()
+  local scale = UIParent:GetEffectiveScale()
+  m:ClearAllPoints()
+  m:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale + 6, cy / scale - 6)
+  m.catcher:Show()
+  m:Show()
+end
+
+-- a box with the link selected, ready for Ctrl+C
+function UI:CopyLink(title, url)
+  local f = self.linkFrame
+  if not f then
+    f = CreateFrame("Frame", "QuestBankLink", UIParent, BD)
+    self.linkFrame = f
+    f:SetSize(380, 84)
+    f:SetPoint("CENTER", 0, 120)
+    f:SetFrameStrata("DIALOG")
+    f:SetFrameLevel(30)
+    f:EnableMouse(true)
+    backdrop(f, T.bg, T.border, 24, 7, true)
+    f.title = text(f, "GameFontNormal", 12, GOLD, "LEFT", 320)
+    f.title:SetPoint("TOPLEFT", 16, -16)
+    f.hint = text(f, "GameFontHighlightSmall", 10, WHITE, "LEFT", 320)
+    f.hint:SetPoint("TOPLEFT", 16, -60)
+    f.hint:SetText("Ctrl+C copies it. Esc closes.")
+    f.eb = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
+    f.eb:SetSize(340, 20)
+    f.eb:SetPoint("TOPLEFT", 20, -34)
+    f.eb:SetAutoFocus(false)
+    f.eb:SetScript("OnEscapePressed", function() f:Hide() end)
+    f.eb:SetScript("OnEnterPressed", function() f:Hide() end)
+    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -2, -2)
+    if UISpecialFrames then table.insert(UISpecialFrames, "QuestBankLink") end
+  end
+  f.title:SetText(title)
+  f.eb:SetText(url)
+  f:Show()
+  f.eb:SetFocus()
+  f.eb:HighlightText()
+end
+
+function UI.QuestMenu(q, st)
+  st = st or QB:Status(q)
+  local items = {}
+  local function way(n, what)
+    if n and not n.inside and n.m and n.m > 0 then
+      items[#items + 1] = { string.format("Waypoint: %s (%s)", n.n, what), function() QB.API.SetWaypoint(n.m, n.x, n.y, n.n) end }
+    end
+  end
+  way(q.give, "gives it")
+  if not (q.give and q.turn and q.give.idx == q.turn.idx) then way(q.turn, "hand in") end
+  local held = QB.state.log[q.id] or st.bag
+  if held then
+    items[#items + 1] = { QB:IsCut(q.id) and "Keep it in the plan" or "Cut it from the plan", function() QB:ToggleAdd(q.id); UI:Refresh() end }
+  elseif st.code ~= "done" and st.code ~= "wrong" then
+    items[#items + 1] = { QB:IsAdded(q.id) and "Drop it from the plan" or "Add it to the plan", function() QB:ToggleAdd(q.id); UI:Refresh() end }
+  end
+  items[#items + 1] = { "Copy the Wowhead link", function() UI:CopyLink(q.name, "https://www.wowhead.com/forever/quest=" .. q.id) end }
+  UI:ShowMenu(q.name, items)
 end
 
 ----------------------------------------------------------------------------
@@ -555,7 +679,8 @@ function UI:CreateLogView(parent)
     b.xp:SetPoint("BOTTOMRIGHT", 0, 2)
     b.mark = tex(b, "OVERLAY", nil, 14, 14)
     b.mark:SetPoint("TOPLEFT", 1, -1)
-    b:SetScript("OnClick", function(self) if self.q then UI.QuestClick(self.q, self.st) end end)
+    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    b:SetScript("OnClick", function(self, which) if self.q then UI.QuestClick(self.q, self.st, which) end end)
     tooltip(b, function(tip, self)
       if self.q then
         UI.QuestTooltip(tip, self.q, self.st, self.value, self.pct, self.plvl)
@@ -587,7 +712,8 @@ function UI:CreateLogView(parent)
       if it.q then UI.QuestTooltip(tip, it.q, QB:Status(it.q), (QB:Value(it.q.id))) end
       if it.id == 211527 then tip:AddLine("Lie in it three minutes before the first hand-in: +3% for two hours.", 0.8, 0.8, 0.8, true) end
     end)
-    b:SetScript("OnClick", function(self) if self.item and self.item.q then UI.QuestClick(self.item.q, QB:Status(self.item.q)) end end)
+    b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    b:SetScript("OnClick", function(self, which) if self.item and self.item.q then UI.QuestClick(self.item.q, QB:Status(self.item.q), which) end end)
     v.bagSlots[i] = b
   end
   v.dropTitle = text(v, "GameFontNormal", 12, BAD, "LEFT", 300)
@@ -627,10 +753,11 @@ function UI:CreateLogView(parent)
     r.cutName:SetPoint("TOPLEFT", 40, -21)
     r.gain = text(r, "GameFontNormal", 13, GOOD, "RIGHT", 52)
     r.gain:SetPoint("RIGHT", -4, 0)
-    r:SetScript("OnClick", function(self)
+    r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    r:SetScript("OnClick", function(self, which)
       local q = self.add
       if not q then return end
-      if IsShiftKeyDown and IsShiftKeyDown() then UI.QuestClick(q, QB:Status(q)) return end
+      if which == "RightButton" or (IsShiftKeyDown and IsShiftKeyDown()) then UI.QuestClick(q, QB:Status(q), which) return end
       if q.give and not q.give.inside then QB.API.SetWaypoint(q.give.m, q.give.x, q.give.y, q.give.n) end
     end)
     tooltip(r, function(tip, self)
@@ -640,7 +767,6 @@ function UI:CreateLogView(parent)
         tip:AddLine(" ")
       end
       if self.add then UI.QuestTooltip(tip, self.add, QB:Status(self.add), self.addValue) end
-      tip:AddLine("Click: pin the quest giver.  Shift-click: add it to the plan.", 0.5, 0.5, 0.5)
     end)
     v.swaps[i] = r
   end
@@ -749,7 +875,8 @@ function UI:RefreshLogView(v)
     local q = Q.Get(id)
     local dup = false
     for _, b in ipairs(bagItems) do if b.q and b.q.id == id then dup = true end end
-    if q and not dup then bagItems[#bagItems + 1] = { id = q.bag and q.bag[1], name = q.name, q = q, icon = q.icon } end
+    -- an item for a quest you already handed in starts nothing any more
+    if q and not dup and not QB.API.IsDone(id) then bagItems[#bagItems + 1] = { id = q.bag and q.bag[1], name = q.name, q = q, icon = q.icon } end
   end
   for i, b in ipairs(v.bagSlots) do
     local it = bagItems[i]
@@ -892,8 +1019,12 @@ local function makeRow(parent)
   r.status:SetPoint("LEFT", 348, 0)
   r.xp = text(r, "GameFontNormal", 12, INK, "RIGHT", 60)
   r.xp:SetPoint("RIGHT", -8, 0)
-  r:SetScript("OnClick", function(self)
-    if self.q then UI.QuestClick(self.q, self.st)
+  r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  r:SetScript("OnClick", function(self, which)
+    if self.q then UI.QuestClick(self.q, self.st, which)
+    elseif self.entry then
+      local q = Q.Get(self.entry.id)
+      if q then UI.QuestClick(q, QB:Status(q), which) end
     elseif self.step and self.step.m then QB.API.SetWaypoint(self.step.m, self.step.x, self.step.y, self.step.name) end
   end)
   tooltip(r, function(tip, self)
@@ -1026,7 +1157,8 @@ function UI:RefreshPrepView(v)
   for id in pairs(QB:Plan().add) do local q = Q.Get(id); if q then add(q, true) end end
   for id in pairs(D.BAGQ) do
     local q = Q.Get(id)
-    if q and Q.ForMe(q) and (q.bag[3] ~= 1 or QB.API.ItemCount(q.bag[1]) > 0) then add(q, true) end
+    -- quests you hold as an item in your bags; the rest are ordinary candidates below
+    if q and Q.ForMe(q) and (s.bagStarts[id] or QB.API.ItemCount(q.bag[1]) > 0) then add(q, true) end
   end
   local extra = {}
   for _, c in ipairs(self:Candidates(nil, level)) do
@@ -1241,7 +1373,8 @@ local function legRow(l, i)
   r.npc:SetPoint("LEFT", 320, 0)
   r.xp = text(r, "GameFontNormal", 12, INK, "RIGHT", 110)
   r.xp:SetPoint("RIGHT", -6, 0)
-  r:SetScript("OnClick", function(self) if self.q then UI.QuestClick(self.q, self.st) end end)
+  r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  r:SetScript("OnClick", function(self, which) if self.q then UI.QuestClick(self.q, self.st, which) end end)
   tooltip(r, function(tip, self)
     if self.q then UI.QuestTooltip(tip, self.q, self.st, self.xpv, self.pct, self.plvl) end
     if self.doneXP then tip:AddLine(string.format("Handed in: +%s XP", QB.Comma(self.doneXP)), 0.4, 1, 0.4) end

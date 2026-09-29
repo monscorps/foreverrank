@@ -15,12 +15,6 @@ local STALE = 30 * 60
 
 local function now() return GetTime and GetTime() or 0 end
 
-local function me()
-  local name = UnitName("player") or "?"
-  local realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or ""
-  return name, realm ~= "" and (name .. "-" .. realm) or name
-end
-
 -- true when the game took the message; false when its addon throttle turned it away
 local function send(msg, channel, target)
   if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return true end
@@ -161,15 +155,20 @@ local function split(s, sep)
   return out
 end
 
+-- the game echoes party and guild messages back to the sender; the name decides, not how the realm is written
+local function isMe(sender)
+  local name = sender and sender:match("^([^%-]+)")
+  return name ~= nil and name == UnitName("player")
+end
+S.IsMe = isMe
+
 function S:Receive(msg, channel, sender)
   if not sender or type(msg) ~= "string" or #msg > 255 then return end
-  local _, full = me()
-  local short = Ambiguate and Ambiguate(sender, "none") or sender
-  if sender == full or short == (UnitName("player")) then return end
+  if isMe(sender) then return end
   local kind = msg:sub(1, 2)
   local m = self.members[sender]
   if not m and kind ~= "1R" then
-    m = { key = sender, name = Ambiguate and Ambiguate(sender, "short") or sender }
+    m = { key = sender, name = sender:match("^([^%-]+)") or sender }
     self.members[sender] = m
   end
   if m then m.seen, m.via = now(), channel end

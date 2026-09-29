@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.0.0"
+QB.version = "3.0.1"
 QB.CAP = 30
 
 local D = QB.Data
@@ -12,11 +12,68 @@ QB.API = API
 ----------------------------------------------------------------------------
 -- API shims: the Forever client carries the modern API, Classic names are the fallback
 ----------------------------------------------------------------------------
-function API.IsDone(id)
-  if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
-    return C_QuestLog.IsQuestFlaggedCompleted(id) and true or false
+-- A quest counts as handed in when the game's list of completed quests has it, or its flag says so.
+-- The two can disagree (a player's Glowing Shard was in the list while the flag said no), so both
+-- are asked. The list is read once and kept up to date on every hand-in.
+local doneSet, doneCount, doneRead = nil, 0, -100
+
+local function readDone()
+  local t, n = {}, 0
+  if C_QuestLog and C_QuestLog.GetAllCompletedQuestIDs then
+    local ok, ids = pcall(C_QuestLog.GetAllCompletedQuestIDs)
+    if ok and type(ids) == "table" then for i = 1, #ids do t[ids[i]] = true; n = n + 1 end end
   end
-  if IsQuestFlaggedCompleted then return IsQuestFlaggedCompleted(id) and true or false end
+  if n == 0 and GetQuestsCompleted then
+    local ok, list = pcall(GetQuestsCompleted)
+    if ok and type(list) == "table" then for id in pairs(list) do t[id] = true; n = n + 1 end end
+  end
+  return t, n
+end
+
+function API.RefreshDone()
+  doneSet, doneCount = readDone()
+  doneRead = GetTime and GetTime() or 0
+end
+
+function API.MarkDone(id)
+  if not doneSet then API.RefreshDone() end
+  if not doneSet[id] then doneSet[id] = true; doneCount = doneCount + 1 end
+end
+
+function API.DoneList()
+  if not doneSet or doneCount == 0 then API.RefreshDone() end
+  local out = {}
+  for id in pairs(doneSet) do out[#out + 1] = id end
+  table.sort(out)
+  return out
+end
+
+-- what each source says, for /qb done
+function API.DoneSources(id)
+  if not doneSet or doneCount == 0 then API.RefreshDone() end
+  local flag
+  if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
+    local ok, v = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
+    flag = ok and v and true or false
+  elseif IsQuestFlaggedCompleted then
+    local ok, v = pcall(IsQuestFlaggedCompleted, id)
+    flag = ok and v and true or false
+  end
+  return doneSet[id] and true or false, flag, doneCount
+end
+
+function API.IsDone(id)
+  -- an empty list usually means the game hasn't sent it yet: look again, but not on every call
+  if not doneSet or (doneCount == 0 and (GetTime and GetTime() or 0) - doneRead > 5) then API.RefreshDone() end
+  if doneSet[id] then return true end
+  if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
+    local ok, v = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
+    return ok and v and true or false
+  end
+  if IsQuestFlaggedCompleted then
+    local ok, v = pcall(IsQuestFlaggedCompleted, id)
+    return ok and v and true or false
+  end
   return false
 end
 
@@ -52,34 +109,9 @@ function API.Objectives(questID, index)
   return out
 end
 
--- The XP the game itself shows for a quest in your log. At the level cap it shows 0, so the
--- catalog's Forever values stand in until the cap goes up. Classic-style clients read the selected
--- log entry and ignore a quest ID, so the entry is selected first and the selection put back.
--- Read once per quest and level.
-local liveCache = {}
-function API.LiveXP(questID, index)
-  if not GetQuestLogRewardXP then return nil end
-  local level = UnitLevel("player") or 0
-  local c = liveCache[questID]
-  if c and c.level == level then return c.xp end
-  local v
-  if C_QuestLog and C_QuestLog.GetSelectedQuest and C_QuestLog.SetSelectedQuest then
-    local sel = C_QuestLog.GetSelectedQuest()
-    C_QuestLog.SetSelectedQuest(questID)
-    local ok, x = pcall(GetQuestLogRewardXP, questID)
-    v = ok and x or nil
-    if sel and sel ~= questID then C_QuestLog.SetSelectedQuest(sel) end
-  elseif SelectQuestLogEntry and GetQuestLogSelection and index then
-    local sel = GetQuestLogSelection()
-    SelectQuestLogEntry(index)
-    local ok, x = pcall(GetQuestLogRewardXP)
-    v = ok and x or nil
-    SelectQuestLogEntry(sel or 0)
-  end
-  if type(v) ~= "number" or v <= 0 then v = nil end
-  liveCache[questID] = { level = level, xp = v }
-  return v
-end
+-- The quest log's own XP number is not read: on Classic-style clients that means selecting each
+-- entry in the game's quest log, which disturbs the log (and at the cap it shows 0 anyway). The
+-- quest window at the NPC and the hand-in itself give the game's number without touching the log.
 
 function API.LogQuests()
   local out, order = {}, {}
@@ -101,7 +133,6 @@ function API.LogQuests()
     if title and not isHeader and questID and questID > 0 then
       local e = { id = questID, title = title, level = level, index = i, complete = isComplete(questID, flag) }
       e.objectives = API.Objectives(questID, i)
-      e.live = API.LiveXP(questID, i)
       out[questID] = e
       order[#order + 1] = e
     end
@@ -510,10 +541,6 @@ function QB:ReadState()
   s.class = class
   s.name = UnitName("player")
   QB.faction = API.Faction()
-  -- the game's own number wins once the quest pays full XP at your level
-  for _, e in ipairs(s.logOrder) do
-    if e.live then Live.Record(e.id, e.live, s.level, "log") end
-  end
   trackRemovals(s)
   return s
 end
@@ -533,7 +560,7 @@ local function progressText(entry)
   return "In your log: " .. table.concat(parts, ", ")
 end
 
--- code: done | banked | active | partial | bagstart | locked | prereq | todo | wrong
+-- code: done | banked | active | partial | bagstart | item | locked | prereq | todo | wrong
 function QB:Status(q)
   local s = self.state
   if API.IsDone(q.id) then return { code = "done", text = "Handed in already" } end
@@ -550,6 +577,7 @@ function QB:Status(q)
   elseif s.bagStarts[q.id] or (bag and bag[3] == 0 and API.ItemCount(bag[1]) > 0) then
     return { code = "bagstart", text = "Starts from an item in your bags" }
   end
+  local fromItem = bag and bag[3] == 0
   if not Q.ForMe(q) then return { code = "wrong", text = "Not for your faction, race or class" } end
   if q.excl then
     for _, other in ipairs(q.excl) do
@@ -578,6 +606,7 @@ function QB:Status(q)
       end
     end
   end
+  if fromItem then return { code = "item", text = "Starts from an item: " .. (bag[4] or "a drop") } end
   return { code = "todo", text = "Not started" }
 end
 
@@ -793,17 +822,8 @@ end
 -- export: the file someone can read to check your plan
 ----------------------------------------------------------------------------
 local function completedIDs()
-  local out = {}
-  if C_QuestLog and C_QuestLog.GetAllCompletedQuestIDs then
-    local ids = C_QuestLog.GetAllCompletedQuestIDs()
-    if ids then for i = 1, #ids do out[#out + 1] = ids[i] end end
-  end
-  if #out == 0 and GetQuestsCompleted then
-    local t = GetQuestsCompleted()
-    if t then for id in pairs(t) do out[#out + 1] = id end end
-  end
-  table.sort(out)
-  return out
+  API.RefreshDone()
+  return API.DoneList()
 end
 
 local function bagItems()
@@ -846,7 +866,7 @@ function QB:Snapshot(reason)
   local _, race = UnitRace("player")
   local log = {}
   for _, e in ipairs(s.logOrder) do
-    log[#log + 1] = { id = e.id, title = e.title, level = e.level, complete = e.complete, objectives = e.objectives, live = e.live }
+    log[#log + 1] = { id = e.id, title = e.title, level = e.level, complete = e.complete, objectives = e.objectives }
   end
   local done = completedIDs()
   QuestBankDB.chars[self:CharKey()] = {
@@ -884,6 +904,7 @@ end
 
 local function onTurnIn(questID, xpReward)
   turnedIn[questID] = true
+  API.MarkDone(questID)
   local q = Q.Get(questID)
   Live.Record(questID, xpReward, QB.state.level or UnitLevel("player"), "turnin", API.HasWellRested())
   local predicted = QB.routeNow and QB.routeNow.byQuest and QB.routeNow.byQuest[questID]
@@ -926,6 +947,7 @@ frame:SetScript("OnEvent", function(_, event, a1, a2, a3)
     return
   elseif event == "QUEST_LOG_UPDATE" then
     if not QB.logReady then
+      API.RefreshDone()
       QB.logReady = true
       QB:ReadState()
       QB.loggedIn = true
@@ -982,6 +1004,27 @@ SlashCmdList.QUESTBANK = function(msg)
     QB.Pins:Toggle()
   elseif cmd == "next" and QB.Pins then
     QB.Pins:PinNext(true)
+  elseif cmd == "done" then
+    QB:ReadState()
+    local ids = {}
+    if tonumber(rest) then
+      ids[1] = tonumber(rest)
+    elseif rest ~= "" then
+      local want = rest:lower()
+      for id, name in pairs(D.QN) do
+        if name:lower():find(want, 1, true) then ids[#ids + 1] = id end
+      end
+      table.sort(ids)
+    end
+    if #ids == 0 then QB:Print("Type /qb done and a quest name or ID, like /qb done Glowing Shard.") end
+    for i = 1, math.min(6, #ids) do
+      local id = ids[i]
+      local q = Q.Get(id)
+      local inList, flag, count = API.DoneSources(id)
+      QB:Print(string.format("%d %s: %s. The game's list of %d completed quests: %s. The quest's own flag: %s.", id,
+        D.QN[id] or "?", q and QB:Status(q).text or "not in QuestBank's catalog", count, inList and "yes" or "no",
+        flag == nil and "can't ask" or (flag and "yes" or "no")))
+    end
   else
     QB.UI:Toggle()
   end
