@@ -211,6 +211,29 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
     local c = STATUS[st.code] or WHITE
     tip:AddLine(st.text, math.min(1, c[1] * 1.6 + 0.25), math.min(1, c[2] * 1.6 + 0.25), math.min(1, c[3] * 1.6 + 0.25), true)
   end
+  -- every objective, and what it asks you to bring: in your bags and in your bank
+  local e = QB.state.log[q.id]
+  if e and e.objectives and #e.objectives > 0 then
+    for _, o in ipairs(e.objectives) do
+      if o.text and o.text ~= "" then
+        if o.done then tip:AddLine("  " .. o.text, 0.4, 0.9, 0.4, true) else tip:AddLine("  " .. o.text, 0.9, 0.9, 0.9, true) end
+      end
+    end
+  end
+  local items = QB.Bank.Items(q)
+  if items then
+    local _, at = QB.Bank.Count(items[1].id)
+    for _, it in ipairs(items) do
+      local have = it.bags + it.bank
+      local line = string.format("%s: %d of %d in your bags", it.name, math.min(it.bags, it.need), it.need)
+      if it.bank > 0 then line = line .. string.format(", %d more in your bank", it.bank) end
+      local enough = it.bags >= it.need
+      local r, g, b = 0.9, 0.9, 0.9
+      if enough then r, g, b = 0.4, 0.9, 0.4 elseif have >= it.need then r, g, b = 1, 0.82, 0 end
+      tip:AddDoubleLine(line, enough and "all here" or (have >= it.need and "in your bank" or string.format("%d to go", it.need - have)), r, g, b, r, g, b)
+    end
+    if not at then tip:AddLine("Open your bank once and QuestBank remembers what's in it.", 0.6, 0.6, 0.6, true) end
+  end
   if q.tip then tip:AddLine(q.tip, 0.85, 0.8, 0.7, true) end
   if q.group then tip:AddLine("Group quest.", 1, 0.5, 0.3) end
   local chain = Q.ChainText(q)
@@ -791,7 +814,7 @@ function UI:Candidates(limit, level)
     local side, cls = r[3], r[9]
     if (side == 0 or (side == 1 and fac == "A") or (side == 2 and fac == "H"))
       and (cls == 0 or bit == 0 or math.floor(cls / bit) % 2 == 1)
-      and r[2] <= math.max(s.level, 20) and r[1] >= level - 7 and not s.log[id] and not D.FOLLOW[id] then
+      and r[2] <= math.max(s.level, 20) + 2 and r[1] >= level - 7 and not s.log[id] and not D.FOLLOW[id] then
       local live = QuestBankDB.live and QuestBankDB.live[id]
       out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], cat = r[8] }
     end
@@ -1664,33 +1687,82 @@ local function makeMember(parent)
   return m
 end
 
-local function makeRun(parent)
+local STATE = { a = "in log", p = "to pick up", b = "banked" }
+
+local function whoText(e)
+  local parts = {}
+  for _, w in ipairs(e.who) do
+    local state = w.code == "a" and (w.prog or "in log") or STATE[w.code] or ""
+    local s = w.name .. " " .. state
+    if w.me then s = "|cff0a4a8a" .. s .. "|r" elseif w.code == "b" then s = "|cff6f6a61" .. s .. "|r" end
+    parts[#parts + 1] = s
+  end
+  return table.concat(parts, ",  ")
+end
+
+local function makeDungeonRow(parent)
   local r = CreateFrame("Button", nil, parent)
-  r:SetHeight(46)
+  r:SetHeight(32)
   r.hi = tex(r, "HIGHLIGHT", T.rowHi)
   r.hi:SetAllPoints()
   r.hi:SetBlendMode("ADD")
-  r.icon = tex(r, "ARTWORK", nil, 32, 32)
-  r.icon:SetPoint("TOPLEFT", 4, -6)
-  r.name = text(r, "GameFontNormal", 13, INK, "LEFT", 220)
-  r.name:SetPoint("TOPLEFT", 42, -6)
-  r.gain = text(r, "GameFontNormal", 12, GOOD, "RIGHT", 90)
-  r.gain:SetPoint("TOPRIGHT", -6, -6)
-  r.who = text(r, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 290)
-  r.who:SetPoint("TOPLEFT", 42, -24)
-  r:SetScript("OnClick", function(self)
+  r.icon = tex(r, "ARTWORK", nil, 18, 18)
+  r.icon:SetPoint("TOPLEFT", 4, -3)
+  r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+  r.name = text(r, "GameFontNormal", 12, INK, "LEFT", 240)
+  r.name:SetPoint("TOPLEFT", 28, -4)
+  r.who = text(r, "GameFontNormalSmall", 10, INK_SOFT, "LEFT", 256)
+  r.who:SetPoint("TOPLEFT", 28, -18)
+  r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  r:SetScript("OnClick", function(self, which) if self.q then UI.QuestClick(self.q, QB:Status(self.q), which) end end)
+  tooltip(r, function(tip, self)
+    if not self.q then return end
+    UI.QuestTooltip(tip, self.q, QB:Status(self.q))
+    tip:AddLine(" ")
+    for _, w in ipairs(self.e.who) do
+      local state = w.code == "a" and ("in their log" .. (w.prog and (", " .. w.prog) or "")) or STATE[w.code] or ""
+      if w.me then state = w.code == "a" and ("in your log" .. (w.prog and (", " .. w.prog) or "")) or (w.code == "p" and "yours to pick up" or state) end
+      tip:AddDoubleLine(w.name, state, 1, 1, 1, w.code == "b" and 0.6 or 0.4, w.code == "b" and 0.6 or 1, w.code == "b" and 0.6 or 0.4)
+    end
+  end)
+  return r
+end
+
+local function makeDungeonCard(parent)
+  local c = CreateFrame("Frame", nil, parent, BD)
+  backdrop(c, nil, T.tipBorder, 12, 3)
+  if c.SetBackdropBorderColor then c:SetBackdropBorderColor(0.45, 0.33, 0.16, 0.9) end
+  c.head = CreateFrame("Button", nil, c)
+  c.head:SetPoint("TOPLEFT", 3, -3)
+  c.head:SetPoint("TOPRIGHT", -3, -3)
+  c.head:SetHeight(36)
+  c.art = tex(c.head, "BACKGROUND")
+  c.art:SetAllPoints()
+  c.shade = tex(c.head, "BORDER")
+  c.shade:SetColorTexture(0.06, 0.04, 0.02, 0.6)
+  c.shade:SetAllPoints()
+  c.icon = tex(c.head, "ARTWORK", nil, 26, 26)
+  c.icon:SetPoint("LEFT", 6, 0)
+  c.title = text(c.head, "GameFontNormal", 13, GOLD, "LEFT", 170)
+  c.title:SetPoint("TOPLEFT", 38, -4)
+  c.people = text(c.head, "GameFontHighlightSmall", 10, WHITE, "LEFT", 170)
+  c.people:SetPoint("TOPLEFT", 38, -20)
+  c.gain = text(c.head, "GameFontNormal", 12, GOLD, "RIGHT", 70)
+  c.gain:SetPoint("TOPRIGHT", -8, -4)
+  c.left = text(c.head, "GameFontHighlightSmall", 10, WHITE, "RIGHT", 90)
+  c.left:SetPoint("TOPRIGHT", -8, -20)
+  c.head:SetScript("OnClick", function(self)
     local e = self.cat and self.cat.entrance
     if e then QB.API.SetWaypoint(e.m, e.x, e.y, self.cat.name .. " entrance") end
   end)
-  tooltip(r, function(tip, self)
-    if not self.data then return end
+  tooltip(c.head, function(tip, self)
+    if not self.cat then return end
     tip:AddLine(self.cat.name, GOLD[1], GOLD[2], GOLD[3])
-    for _, p in ipairs(self.data.people) do
-      tip:AddDoubleLine(p.name, string.format("%d quests, %s XP", p.n, QB.Comma(p.xp)), 1, 1, 1, 0.6, 1, 0.6)
-    end
-    if self.cat.entrance then tip:AddLine("Click: pin the entrance.", 0.5, 0.5, 0.5) end
+    tip:AddLine(string.format("%d quests still to do among %s, worth about %s XP together.", self.data.left, table.concat(self.data.people, ", "), QB.Comma(self.data.xp)), 1, 1, 1, true)
+    if self.cat.entrance then tip:AddLine("Click: waypoint on the entrance.", 0.5, 0.5, 0.5) end
   end)
-  return r
+  c.rows = pool(c, makeDungeonRow)
+  return c
 end
 
 function UI:CreatePartyView(parent)
@@ -1720,14 +1792,18 @@ function UI:CreatePartyView(parent)
 
   v.runTitle = text(v, "GameFontNormalLarge", 15, INK, "LEFT", 330)
   v.runTitle:SetPoint("TOPLEFT", RIGHT, -12)
-  v.runTitle:SetText("Run together")
+  v.runTitle:SetText("Dungeons")
   v.runHint = para(v, "GameFontNormalSmall", 11, INK_SOFT, 330)
   v.runHint:SetPoint("TOPLEFT", RIGHT, -32)
-  v.runHint:SetHeight(30)
-  v.runHint:SetText("Dungeons where you and the people below still have quests to bank.")
-  v.runs = pool(v, makeRun)
-  v.noRuns = para(v, "GameFontNormal", 12, INK_SOFT, 330)
-  v.noRuns:SetPoint("TOPLEFT", RIGHT, -72)
+  v.runHint:SetHeight(28)
+  v.runHint:SetText("The quests each of you still has to do there, and how far along you are.")
+  local holder = CreateFrame("Frame", nil, v)
+  holder:SetPoint("TOPLEFT", RIGHT - 10, -58)
+  holder:SetPoint("BOTTOMRIGHT", 0, 0)
+  v.dscroll = scrollArea(holder)
+  v.dcards = pool(v.dscroll.child, makeDungeonCard)
+  v.noRuns = para(v.dscroll.child, "GameFontNormal", 12, INK_SOFT, 300)
+  v.noRuns:SetPoint("TOPLEFT", 8, -8)
   v.Refresh = function() UI:RefreshPartyView(v) end
   return v
 end
@@ -1769,25 +1845,47 @@ function UI:RefreshPartyView(v)
   v.empty:SetShown(#members == 0)
   v.empty:SetText("Nobody with QuestBank in your party or guild yet. When friends install it and group up, their banks show here and you can plan dungeon runs together. To share with one friend outside your group: /qb sync Name")
 
-  local runs = S and S:GroupRuns() or {}
-  v.runs:Reset()
-  for i, d in ipairs(runs) do
-    if i > 7 then break end
-    local r = v.runs:Get()
-    r:ClearAllPoints()
-    r:SetPoint("TOPLEFT", RIGHT - 4, -66 - (i - 1) * 48)
-    r:SetWidth(340)
-    r.cat, r.data = d.cat, d
-    r.icon:SetTexture(d.cat.icon)
-    r.name:SetText(d.cat.name)
-    r.gain:SetText("+" .. QB.Short(d.xp))
-    local names = {}
-    for _, p in ipairs(d.people) do names[#names + 1] = string.format("%s %d", p.name, p.n) end
-    r.who:SetText(table.concat(names, ",  "))
+  local dungeons = S and S:Dungeons() or {}
+  local width = v.dscroll:Width() - 4
+  if width > 330 then width = 316 end
+  v.dcards:Reset()
+  local y = 0
+  for _, d in ipairs(dungeons) do
+    local c = v.dcards:Get()
+    c.rows:Reset()
+    c.head.cat, c.head.data = d.cat, d
+    if d.cat.bg then c.art:SetTexture(d.cat.bg); c.art:SetTexCoord(0, 1, 0.2, 0.45) else c.art:SetColorTexture(0.16, 0.12, 0.08, 1) end
+    c.icon:SetTexture(d.cat.icon)
+    c.title:SetText(d.cat.name)
+    c.people:SetText(table.concat(d.people, ", "))
+    c.gain:SetText("+" .. QB.Short(d.xp))
+    c.left:SetText(d.left == 1 and "1 still to do" or string.format("%d still to do", d.left))
+    local ry = 42
+    for _, e in ipairs(d.quests) do
+      if e.need > 0 and e.q then
+        local r = c.rows:Get()
+        r:ClearAllPoints()
+        r:SetPoint("TOPLEFT", 4, -ry)
+        r:SetWidth(width - 8)
+        r.name:SetWidth(width - 44)
+        r.who:SetWidth(width - 36)
+        r.q, r.e = e.q, e
+        setIcon(r.icon, e.q.icon)
+        r.name:SetText(string.format("%s  |cff6b4d28L%d|r", e.q.name, e.q.lvl))
+        r.who:SetText(whoText(e))
+        ry = ry + 32
+      end
+    end
+    c.rows:HideRest()
+    c:ClearAllPoints()
+    c:SetPoint("TOPLEFT", v.dscroll.child, "TOPLEFT", 0, -y)
+    c:SetSize(width, ry + 6)
+    y = y + ry + 14
   end
-  v.runs:HideRest()
-  v.noRuns:SetShown(#runs == 0)
-  v.noRuns:SetText(#members == 0 and "Group runs show up when other QuestBank users share their plans." or "No dungeon has quests for two of you yet.")
+  v.dcards:HideRest()
+  v.noRuns:SetShown(#dungeons == 0)
+  v.noRuns:SetText("No dungeon quests in your plan yet. Add some on the Prep page, and your party's show up here too.")
+  v.dscroll:SetContentHeight(math.max(y, 40))
 end
 
 ----------------------------------------------------------------------------

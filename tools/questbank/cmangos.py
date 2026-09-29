@@ -84,6 +84,7 @@ def main():
             "excl": g("ExclusiveGroup"), "breadcrumb": g("BreadcrumbForQuestId"), "chain": g("NextQuestInChain"),
             "src": g("SrcItemId"), "flags": g("QuestFlags"), "special": g("SpecialFlags"), "objectives": reqs,
             "rep": g("RepObjectiveFaction"), "text": (g("Objectives") or "")[:200], "starts": [], "ends": [],
+            "items": [[g("ReqItemId%d" % k), g("ReqItemCount%d" % k)] for k in range(1, 5) if g("ReqItemId%d" % k) and g("ReqItemCount%d" % k)],
         }
     for key, table, kind in (("starts", "creature_questrelation", "npc"), ("ends", "creature_involvedrelation", "npc"),
                              ("starts", "gameobject_questrelation", "object"), ("ends", "gameobject_involvedrelation", "object")):
@@ -91,13 +92,16 @@ def main():
             q = quests.get(r[idx["quest"]])
             if q:
                 q[key].append([kind, r[idx["id"]]])
-    items = {}
+    items, itemnames = {}, {}
+    needed = {i for q in quests.values() for i, _ in q["items"]}
     for idx, r in data["item_template"]:
         sq = r[idx["startquest"]]
         if sq:
             items[r[idx["entry"]]] = {"name": r[idx["name"]], "quest": sq}
             if sq in quests:
                 quests[sq]["starts"].append(["item", r[idx["entry"]]])
+        if r[idx["entry"]] in needed:
+            itemnames[r[idx["entry"]]] = r[idx["name"]]
     names = {"npc": {}, "object": {}}
     questgivers = set()
     for idx, r in data["creature_template"]:
@@ -118,7 +122,7 @@ def main():
             i = r[idx["id"]]
             if i in wanted[kind] and r[idx["map"]] in (0, 1):
                 spawns[kind].setdefault(i, []).append([r[idx["map"]], round(r[idx["position_x"]], 1), round(r[idx["position_y"]], 1)])
-    out = {"quests": quests, "items": items,
+    out = {"quests": quests, "items": items, "itemnames": itemnames,
            "names": {k: {i: names[k].get(i) for i in wanted[k]} for k in names},
            "spawns": spawns}
     json.dump(out, open(OUT, "w"), separators=(",", ":"))

@@ -215,7 +215,12 @@ local function newClient(o)
     GetItemCooldown = function() return c.hearthCD or 0, c.hearthCD and 3600 or 0, 1 end,
   }
   env.C_Item = {
-    GetItemCount = function(id) local n = 0; for _, s in ipairs(o.bagSlots or {}) do if s[1] == id then n = n + s[2] end end return n end,
+    GetItemCount = function(id, includeBank)
+      local n = 0
+      for _, s in ipairs(o.bagSlots or {}) do if s[1] == id then n = n + s[2] end end
+      if includeBank and o.bank then n = n + (o.bank[id] or 0) end
+      return n
+    end,
     GetItemIconByID = function(id) return id and 133328 or nil end,
   }
   env.C_QuestLog = {
@@ -819,6 +824,35 @@ local friend = newClient({
   bagSlots = {},
 })
 login(friend)
+-- the friend has 7 Twilight Pendants on them and 3 in the bank: QuestBank remembers the bank once it's been open
+do
+  local F = friend.QB
+  friend.o.bagSlots = { { 5879, 7 } }
+  friend.o.bank = { [5879] = 3 }
+  local q = F.Quest.Get(1199)
+  F:ReadState()
+  print("Twilight Falls before the bank was opened:", F:Status(q).text)
+  friend.ev(F.eventFrame, "BANKFRAME_OPENED")
+  friend.ev(F.eventFrame, "BANKFRAME_CLOSED")
+  F:ReadState()
+  local st = F:Status(q)
+  print("after the bank was opened:", st.text)
+  assert(st.text:find("Take 3 out of your bank"), "bank items count toward the quest")
+  lines = {}
+  F.UI.QuestTooltip(friend.env.GameTooltip, q, st)
+  local itemLine = false
+  for _, l in ipairs(lines) do if l:find("Twilight Pendant") then itemLine = true; print("  tooltip:", l) end end
+  assert(itemLine, "the tooltip counts the item in bags and bank")
+  -- the quest turns complete: chat says so
+  for _, e in ipairs(friend.log) do if e[1] == 1199 then e[2] = 1 end end
+  friend.o.bagSlots = { { 5879, 10 } }
+  friend.o.bank = {}
+  friend.ev(F.eventFrame, "QUEST_LOG_UPDATE")
+  tick(friend, 1)
+  print("friend's chat:", friend.chat[#friend.chat])
+  assert(friend.chat[#friend.chat]:find("is complete: banked"), "completing a quest is announced")
+end
+
 -- the friend talks to Guard Howe: the quest window shows Blackrock Bounty's XP, and the party hears it
 friend.window = { id = 128, xp = 2000 }
 friend.ev(friend.QB.eventFrame, "QUEST_COMPLETE")
@@ -834,19 +868,32 @@ assert(mem[1].quests, "and the friend's quests")
 print(string.format("sync: owner sees %s level %d, banked %.2f, plan %.2f, %d quests", mem[1].name, mem[1].level, mem[1].banked, mem[1].plan,
   (function() local n = 0 for _ in pairs(mem[1].quests) do n = n + 1 end return n end)()))
 assert(#friend.QB.Sync:Members() == 1, "the friend sees the owner")
-local runs = owner.QB.Sync:GroupRuns()
-for _, d in ipairs(runs) do
-  local who = {}
-  for _, p in ipairs(d.people) do who[#who + 1] = p.name .. " " .. p.n end
-  print(string.format("  run together: %-22s +%s  %s", d.cat.name, QB.Comma(d.xp), table.concat(who, ", ")))
+local dungeons = owner.QB.Sync:Dungeons()
+for _, d in ipairs(dungeons) do
+  print(string.format("  dungeon: %-20s %s  +%s", d.cat.name, table.concat(d.people, ", "), QB.Comma(d.xp)))
+  for _, e in ipairs(d.quests) do
+    if e.need > 0 then
+      local who = {}
+      for _, w in ipairs(e.who) do who[#who + 1] = w.name .. " " .. (w.code == "a" and (w.prog or "in log") or w.code) end
+      print(string.format("      %-32s %s", e.q and e.q.name or e.id, table.concat(who, ", ")))
+    end
+  end
 end
+-- the friend's progress arrives with the quest list
+local brann = owner.QB.Sync:Members()[1]
+assert(brann.quests[166] and brann.quests[166].code == "a" and brann.quests[166].prog, "progress on a quest in their log comes along")
 local shared = owner.env.QuestBankDB.live and owner.env.QuestBankDB.live[128]
 assert(shared and shared.src == "party" and shared.full == 2000, "the friend's quest window XP reaches the owner")
 print("  live XP shared by the friend:", shared.full, shared.src)
 UI:ShowTab(4)
 UI:Refresh()
 for _, m in ipairs(v4.members.items) do if m:IsShown() then poke(m); lines = {}; m.copy.__scripts.OnEnter(m.copy) end end
-for _, r in ipairs(v4.runs.items) do if r:IsShown() then poke(r) end end
+for _, c in ipairs(v4.dcards.items) do
+  if c:IsShown() then
+    poke(c.head)
+    for _, r in ipairs(c.rows.items) do if r:IsShown() then poke(r) end end
+  end
+end
 local n = owner.QB.Sync:CopyPlan(mem[1].key)
 print("  copy plan added:", n)
 for _, p in ipairs(checkLayout(UI.frame, "party")) do problems[#problems + 1] = p end

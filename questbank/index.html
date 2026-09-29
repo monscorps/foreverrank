@@ -209,6 +209,17 @@
 .mem small { display: block; font-size: 10.5px; color: var(--parch-soft); margin-top: 2px; }
 .mem small.ok { color: #0e6b16; font-weight: 600; }
 .mem .cp img { width: 22px; height: 22px; box-shadow: 0 0 0 2px #2f2616, 0 0 0 3px #8a7348; }
+.dc { border: 1px solid #7a6036; border-radius: 4px; margin-bottom: 8px; overflow: hidden; background: rgba(255,255,255,.12); }
+.dh { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 5px 8px; background: linear-gradient(90deg, rgba(20,12,6,.9), rgba(40,24,10,.75)); color: #f6efdc; }
+.dh img { width: 26px; height: 26px; border-radius: 50%; border: 1px solid #c9a55a; display: block; }
+.dh b { display: block; font: 600 13px/1.1 var(--heading); color: var(--wow-gold); }
+.dh small { display: block; font-size: 10px; color: #e8e2d0; }
+.dh .g { text-align: right; font: 700 12px/1.1 var(--heading); color: var(--wow-gold); }
+.dq { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 7px; align-items: start; padding: 4px 8px; border-top: 1px solid rgba(90,60,20,.14); font-size: 11.5px; color: var(--parch-ink); }
+.dq img { width: 18px; height: 18px; border-radius: 2px; display: block; margin-top: 1px; }
+.dq i { font-style: normal; font-size: 10px; color: var(--parch-soft); }
+.dq small { display: block; font-size: 10px; color: var(--parch-soft); }
+.dq em { font-style: normal; color: #0a4a8a; font-weight: 600; }
 .rt { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 4px; border-bottom: 1px solid rgba(90,60,20,.18); }
 .rt img { width: 32px; height: 32px; border-radius: 50%; border: 1px solid #c9a55a; display: block; }
 .rt b { display: block; font: 600 13px/1.1 var(--heading); color: var(--parch-ink); }
@@ -285,7 +296,7 @@
     </div>
     <div class="dl">
       <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-      <span class="dl-meta">Version 3.0.2 · 30 September 2026 · 137 KB</span>
+      <span class="dl-meta">Version 3.1.0 · 30 September 2026 · 151 KB</span>
       <span class="dl-meta">Open it in game with <code>/qb</code></span>
     </div>
   </div>
@@ -552,11 +563,18 @@
                   <div class="modes" style="margin-top:118px"><span>Party: on</span><span>Guild: on</span><span>Send now</span></div>
                 </div>
                 <div>
-                  <div class="pt">Run together</div>
-                  <div style="font-size:11px;color:#6b4d28;margin:4px 0 8px">Dungeons where you and the people beside you still have quests to bank.</div>
-                  <div class="rt"><img src="https://wow.zamimg.com/images/wow/icons/large/achievement_boss_edwinvancleef.jpg" alt=""><div><b>The Deadmines</b><small>You 3, Brann 2, Sela 4</small></div><span class="g">+71.4k</span></div>
-                  <div class="rt"><img src="https://wow.zamimg.com/images/wow/icons/large/achievement_boss_bazil_akumai.jpg" alt=""><div><b>Blackfathom Deeps</b><small>You 1, Tovan 3</small></div><span class="g">+39.6k</span></div>
-                  <div class="rt"><img src="https://wow.zamimg.com/images/wow/icons/large/achievement_boss_mutanus_the_devourer.jpg" alt=""><div><b>Wailing Caverns</b><small>Sela 2, Tovan 2</small></div><span class="g">+22.9k</span></div>
+                  <div class="pt">Dungeons</div>
+                  <div style="font-size:11px;color:#6b4d28;margin:4px 0 8px">The quests each of you still has to do there, and how far along you are.</div>
+                  <div class="dc">
+                    <div class="dh"><img src="https://wow.zamimg.com/images/wow/icons/large/achievement_boss_edwinvancleef.jpg" alt=""><div><b>The Deadmines</b><small>You, Brann, Sela</small></div><span class="g">+71.4k<small>5 still to do</small></span></div>
+                    <div class="dq"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_bandana_03.jpg" alt=""><div>Red Silk Bandanas <i>L17</i><small><em>You 6/10</em>, Brann to pick up, Sela banked</small></div></div>
+                    <div class="dq"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_head_human_01.jpg" alt=""><div>The Defias Brotherhood <i>L22</i><small><em>You in log</em>, Sela 0/1</small></div></div>
+                    <div class="dq"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_gizmo_01.jpg" alt=""><div>Underground Assault <i>L20</i><small>Brann to pick up</small></div></div>
+                  </div>
+                  <div class="dc">
+                    <div class="dh"><img src="https://wow.zamimg.com/images/wow/icons/large/achievement_boss_bazil_akumai.jpg" alt=""><div><b>Blackfathom Deeps</b><small>You, Tovan</small></div><span class="g">+39.6k<small>3 still to do</small></span></div>
+                    <div class="dq"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_jewelry_amulet_06.jpg" alt=""><div>Twilight Falls <i>L25</i><small><em>You 7/10</em>, Tovan 4/10</small></div></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -568,7 +586,7 @@
       <ol class="legend">
         <li><span><b>Everyone with QuestBank in your party, raid and guild.</b> Their level, where their bank takes them, and where their full plan takes them. Hover a name for the quests they're banking, marked where you hold the same one.</span></li>
         <li><span><b>Copy their plan.</b> The letter adds every quest they're banking that you can take too: same faction, your class and race, not done yet.</span></li>
-        <li><span><b>Run together.</b> Dungeons where at least two of you still have quests to finish, with who needs how many and the XP the whole group banks from one run. Click for a pin on the entrance.</span></li>
+        <li><span><b>Dungeons.</b> Every dungeon where you or the others still have quests to do: each quest, who still needs it, and how far along they are ("6/10", "to pick up", "banked"). Your own are there even when you play alone. Click a dungeon for a waypoint on its entrance.</span></li>
         <li><span><b>Sharing.</b> Party and guild sharing each switch off with one click. <b>Send now</b> shares straight away; <code>/qb sync Name</code> shares with one friend outside your group.</span></li>
       </ol>
       <p class="note">On the day, a member who is handing in shows a live run: time, quests handed in and XP so far. What each game reports as a quest's XP is shared too, so one person's hand-in corrects the numbers for everyone. Nothing leaves the game: it's the addon channel your party and guild already use.</p>
@@ -712,6 +730,9 @@
     <details><summary>It says the addon is out of date</summary><p>Tick Load out of date AddOns on the character screen. Blizzard hasn't published Forever's interface number yet, so every beta addon shows up like this.</p></details>
     <details><summary>Nothing happens, or I see a Lua error</summary><p>Type <code>/console scriptErrors 1</code> and then <code>/reload</code>. Copy the error text into the Discord and it gets fixed. Check the whole QuestBank folder went in: the nine files sit directly in <code>Interface\AddOns\QuestBank</code>.</p></details>
     <details><summary>The XP I got is different from the plan</summary><p>The chat line after each hand-in shows both numbers. From then on QuestBank uses the game's number for that quest, and passes it on to your party. Beta patches can change quest XP, and the addon's file records every hand-in so the data can be updated.</p></details>
+    <details><summary>How do I know I have everything a quest asks for?</summary><p>The Quest Log page marks a finished quest with a green tick, and chat says so the moment one completes: "Red Silk Bandanas is complete: banked". Hover any quest for each objective and each item it asks for, counted in your bags and in your bank. If what's missing is in your bank, the status says how many to take out. A quest you haven't picked up yet says so too when you already have everything it asks for.</p></details>
+    <details><summary>Does it know what's in my bank?</summary><p>Yes, once you've opened your bank. QuestBank reads it every time you do and remembers it until the next visit, for every character. Quest items only count for a quest from your bags, so it tells you what to take out.</p></details>
+    <details><summary>What happens as I level up?</summary><p>Everything follows your level: the XP each quest pays on the day, which quests you can pick up, and the order of the route. Quests that open within the next two levels show up on the Prep page marked "Needs level 22" and so on, so you can plan ahead; they move into the suggestions the moment you reach that level.</p></details>
     <details><summary>It offers a quest I've already done</summary><p>Type <code>/qb done</code> and the quest's name, like <code>/qb done glowing shard</code>. It shows what the game says: the list of quests you've completed, and the quest's own completed flag. The two can disagree; since 3.0.1 QuestBank counts a quest as done when either says so. If both say no and you're sure, tell us in the Discord with the quest's name.</p></details>
     <details><summary>A quest says "Not on the route"</summary><p>Either it's handed in inside a dungeon, or QuestBank has no position for its NPC. It's listed at the end of the route with its XP so you can fit it in yourself. The <a href="https://github.com/monscorps/foreverrank/blob/main/tools/questbank/GAPS.md" rel="noopener">gap report</a> lists every such quest.</p></details>
     <details><summary>My party doesn't show up on the Party page</summary><p>They need QuestBank 3.0 or newer, and sharing on. Party members appear within a few seconds of grouping; guild members when they log in or change their bank. <b>Send now</b> or <code>/qb sync</code> shares straight away, and <code>/qb sync Name</code> works for a friend who isn't in your group.</p></details>
@@ -725,7 +746,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 3.0.2. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 3.1.0. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>

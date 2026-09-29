@@ -4,7 +4,7 @@
 -- friend's plan, and follow each other's run. It also passes on the XP numbers each game reports.
 -- Small messages on the addon channel, a few a second at most; nothing goes out while sharing is off.
 --   1S|level|xp|fac|class|banked*100|plan*100|at60*100|runMin|runN|runXP     status
---   1Q|part|parts|id.code,id.code,...                                          quests (b banked, a active, p to fetch)
+--   1Q|part|parts|id.code[have/need],...                                    quests (b banked, a in the log with progress, p to fetch)
 --   1L|id:xp:level,...                                                         XP the game reported
 --   1R                                                                         please send yours
 local _, QB = ...
@@ -82,7 +82,10 @@ local function questMsgs()
   local codes = { banked = "b", active = "a" }
   for _, e in ipairs(QB:RouteEntries("plan")) do
     local c = codes[e.st.code] or (e.st.code ~= "follow" and "p") or nil
-    if c then parts[#parts + 1] = e.q.id .. "." .. c end
+    if c then
+      local have, need = QB:Progress(e.q.id)
+      parts[#parts + 1] = e.q.id .. "." .. c .. ((c == "a" and need) and (have .. "/" .. need) or "")
+    end
   end
   local msgs, cur = {}, {}
   local len = 0
@@ -184,7 +187,9 @@ function S:Receive(msg, channel, sender)
     part, parts = tonumber(part), tonumber(parts)
     if not (part and parts) or parts > 20 or part > parts then return end
     if part == 1 or not m.pending then m.pending = {} end
-    for id, code in body:gmatch("(%d+)%.(%a)") do m.pending[tonumber(id)] = code end
+    for id, code, prog in body:gmatch("(%d+)%.(%a)([%d/]*)") do
+      m.pending[tonumber(id)] = { code = code, prog = prog ~= "" and prog or nil }
+    end
     if part == parts then m.quests, m.pending = m.pending, nil end
   elseif kind == "1L" then
     for id, xp, lvl in msg:gmatch("(%d+):(%d+):(%d+)") do
@@ -221,36 +226,62 @@ function S:Members()
   return out
 end
 
--- dungeons where at least two of you still have quests to bank
-function S:GroupRuns()
+-- every dungeon where you or the others still have quests to do: which quests, who needs each one,
+-- and how far along they are. Yours are there when you're on your own too.
+function S:Dungeons()
   local D = QB.Data
-  local cats = {}
-  local function count(who, name, level, quests)
-    for id, code in pairs(quests) do
-      local r = D.Q[id]
-      local cat = r and D.CAT[r[8]]
-      if cat and cat.dungeon and code ~= "b" then
-        local c = cats[r[8]]
-        if not c then c = { cat = cat, people = {}, by = {}, xp = 0 }; cats[r[8]] = c end
-        local p = c.by[who]
-        if not p then p = { name = name, n = 0, xp = 0 }; c.by[who] = p; c.people[#c.people + 1] = p end
-        local q = QB.Quest.Get(id)
-        local x = q and QB.Model.XpAt(q, math.max(level or 20, 20)) or 0
-        p.n, p.xp, c.xp = p.n + 1, p.xp + x, c.xp + x
+  local level = math.max(QB.state.level or 20, 20)
+  local cats, list = {}, {}
+  local function note(catIdx, qid, who, name, me, code, prog)
+    local cat = D.CAT[catIdx]
+    if not (cat and cat.dungeon) then return end
+    local c = cats[catIdx]
+    if not c then
+      c = { cat = cat, quests = {}, byQ = {}, people = {}, seen = {}, xp = 0, left = 0 }
+      cats[catIdx] = c
+      list[#list + 1] = c
+    end
+    local e = c.byQ[qid]
+    if not e then
+      e = { id = qid, q = QB.Quest.Get(qid), who = {}, need = 0 }
+      c.byQ[qid] = e
+      c.quests[#c.quests + 1] = e
+    end
+    e.who[#e.who + 1] = { name = name, me = me, code = code, prog = prog }
+    if code ~= "b" then
+      e.need = e.need + 1
+      c.left = c.left + 1
+      if e.q then c.xp = c.xp + QB.Model.XpAt(e.q, level) end
+    end
+    if not c.seen[who] then c.seen[who] = true; c.people[#c.people + 1] = name end
+  end
+  for _, e in ipairs(QB:RouteEntries("plan")) do
+    local code = e.st.code == "banked" and "b" or (e.st.code == "active" and "a" or "p")
+    local have, need = QB:Progress(e.q.id)
+    note(D.Q[e.q.id][8], e.q.id, "me", "You", true, code, need and (have .. "/" .. need) or nil)
+  end
+  for key, m in pairs(self.members) do
+    if m.quests and m.fac == QB.faction then
+      for id, v in pairs(m.quests) do
+        local r = D.Q[id]
+        if r then note(r[8], id, key, m.name, false, v.code, v.prog) end
       end
     end
   end
-  local mine = {}
-  for _, e in ipairs(QB:RouteEntries("plan")) do
-    mine[e.q.id] = e.st.code == "banked" and "b" or (e.st.code == "active" and "a" or "p")
-  end
-  count("me", "You", QB.state.level, mine)
-  for key, m in pairs(self.members) do
-    if m.quests and m.fac == QB.faction then count(key, m.name, m.level, m.quests) end
-  end
   local out = {}
-  for _, c in pairs(cats) do if #c.people >= 2 then out[#out + 1] = c end end
-  table.sort(out, function(a, b) return a.xp > b.xp end)
+  for _, c in ipairs(list) do
+    if c.left > 0 then
+      table.sort(c.quests, function(a, b)
+        if a.need ~= b.need then return a.need > b.need end
+        return (a.q and a.q.lvl or 0) < (b.q and b.q.lvl or 0)
+      end)
+      out[#out + 1] = c
+    end
+  end
+  table.sort(out, function(a, b)
+    if #a.people ~= #b.people then return #a.people > #b.people end
+    return a.xp > b.xp
+  end)
   return out
 end
 
@@ -262,16 +293,17 @@ function S:MemberTooltip(tip, key)
   if m.runStart then tip:AddLine(string.format("Running for %s: %d handed in, +%s XP", QB.Clock(m.runMin), m.runN, QB.Comma(m.runXP)), 0.4, 1, 0.4) end
   if not m.quests then tip:AddLine("Their quest list hasn't arrived yet.", 0.6, 0.6, 0.6) return end
   local list = {}
-  for id, code in pairs(m.quests) do
+  for id, v in pairs(m.quests) do
     local q = QB.Quest.Get(id)
-    if q then list[#list + 1] = { q = q, code = code, xp = QB.Model.XpAt(q, math.max(m.level or 20, 20)) } end
+    if q then list[#list + 1] = { q = q, code = v.code, prog = v.prog, xp = QB.Model.XpAt(q, math.max(m.level or 20, 20)) } end
   end
   table.sort(list, function(a, b) return a.xp > b.xp end)
-  local label = { b = "banked", a = "in their log", p = "to fetch" }
+  local label = { b = "banked", a = "in their log", p = "to pick up" }
   for i = 1, math.min(12, #list) do
     local it = list[i]
     local shared = QB.state.log[it.q.id] and "  (you too)" or ""
-    tip:AddDoubleLine(it.q.name .. shared, label[it.code] .. ", " .. QB.Short(it.xp), 1, 1, 1, 0.6, 1, 0.6)
+    local state = it.code == "a" and it.prog and ("in their log, " .. it.prog) or (label[it.code] or "")
+    tip:AddDoubleLine(it.q.name .. shared, state .. ", " .. QB.Short(it.xp), 1, 1, 1, 0.6, 1, 0.6)
   end
   if #list > 12 then tip:AddLine(string.format("and %d more", #list - 12), 0.6, 0.6, 0.6) end
 end

@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.0.2"
+QB.version = "3.1.0"
 QB.CAP = 30
 
 local D = QB.Data
@@ -140,10 +140,11 @@ function API.LogQuests()
   return out, order
 end
 
-function API.ItemCount(itemID)
+-- how many you carry (bags), or with includeBank, bags and bank together
+function API.ItemCount(itemID, includeBank)
   local f = (C_Item and C_Item.GetItemCount) or GetItemCount
   if not f then return 0 end
-  local ok, n = pcall(f, itemID)
+  local ok, n = pcall(f, itemID, includeBank and true or false)
   return ok and n or 0
 end
 
@@ -261,6 +262,55 @@ function API.SetWaypoint(m, x, y, title, quiet)
   end
   QB:Print(string.format("%s: %.1f, %.1f", title or "", x, y))
   return false
+end
+
+----------------------------------------------------------------------------
+-- the bank: what each character keeps there, read whenever the bank is open and remembered
+-- QuestBankDB.bank[character] = { at = time read, items = { [itemID] = count } }
+----------------------------------------------------------------------------
+local Bank = {}
+QB.Bank = Bank
+
+function Bank.Scan()
+  if not QB.bankOpen then return end
+  local items = {}
+  for _, list in pairs(D.REQ) do
+    for _, it in ipairs(list) do
+      local id = it[1]
+      if items[id] == nil then
+        local extra = API.ItemCount(id, true) - API.ItemCount(id)
+        items[id] = extra > 0 and extra or false
+      end
+    end
+  end
+  for _, it in ipairs(D.TRACKED_ITEMS) do
+    local extra = API.ItemCount(it.id, true) - API.ItemCount(it.id)
+    items[it.id] = extra > 0 and extra or false
+  end
+  local keep = {}
+  for id, n in pairs(items) do if n then keep[id] = n end end
+  QuestBankDB.bank = QuestBankDB.bank or {}
+  QuestBankDB.bank[QB:CharKey()] = { at = time(), items = keep }
+end
+
+-- how many sit in your bank, and when that was read (nil: never)
+function Bank.Count(itemID)
+  if QB.bankOpen then return math.max(0, API.ItemCount(itemID, true) - API.ItemCount(itemID)), time() end
+  local b = QuestBankDB and QuestBankDB.bank and QuestBankDB.bank[QB:CharKey()]
+  if not b then return 0, nil end
+  return b.items[itemID] or 0, b.at
+end
+
+-- what a quest asks you to bring: { id, name, need, bags, bank }
+function Bank.Items(q)
+  local list = D.REQ[q.id]
+  if not list then return nil end
+  local out = {}
+  for _, it in ipairs(list) do
+    local bank = Bank.Count(it[1])
+    out[#out + 1] = { id = it[1], need = it[2], name = it[3] ~= "" and it[3] or ("item " .. it[1]), bags = API.ItemCount(it[1]), bank = bank }
+  end
+  return out
 end
 
 ----------------------------------------------------------------------------
@@ -542,6 +592,18 @@ function QB:ReadState()
   s.name = UnitName("player")
   QB.faction = API.Faction()
   trackRemovals(s)
+  -- a quest that just turned complete: say so once
+  QB.wasComplete = QB.wasComplete or {}
+  for _, e in ipairs(s.logOrder) do
+    local before = QB.wasComplete[e.id]
+    if e.complete and before == false and QB.loggedIn then
+      local q = Q.Get(e.id)
+      local value = q and QB.Model.XpAt(q, math.max(s.level, 20))
+      QB:Print(string.format("%s is complete: banked%s.", e.title,
+        value and value > 0 and (", worth about " .. QB.Comma(value) .. " XP on the day") or ""))
+    end
+    QB.wasComplete[e.id] = e.complete and true or false
+  end
   return s
 end
 
@@ -565,9 +627,18 @@ function QB:Status(q)
   local s = self.state
   if API.IsDone(q.id) then return { code = "done", text = "Handed in already" } end
   local e = s.log[q.id]
+  local items = Bank.Items(q)
   if e then
     if e.complete then return { code = "banked", text = "Banked, ready to hand in" } end
-    return { code = "active", text = progressText(e) }
+    local text = progressText(e)
+    if items then
+      local fromBank = 0
+      for _, it in ipairs(items) do
+        if it.bags < it.need and it.bags + it.bank >= it.need then fromBank = fromBank + (it.need - it.bags) end
+      end
+      if fromBank > 0 then text = text .. string.format(". Take %d out of your bank", fromBank) end
+    end
+    return { code = "active", text = text }
   end
   local bag = q.bag
   if bag and bag[3] == 1 then
@@ -607,6 +678,16 @@ function QB:Status(q)
     end
   end
   if fromItem then return { code = "item", text = "Starts from an item: " .. (bag[4] or "a drop") } end
+  if items then
+    local all, bank = true, 0
+    for _, it in ipairs(items) do
+      if it.bags + it.bank < it.need then all = false end
+      bank = bank + math.max(0, math.min(it.bank, it.need - it.bags))
+    end
+    if all then
+      return { code = "todo", text = "Not started, and you already have what it asks for" .. (bank > 0 and string.format(" (%d in your bank)", bank) or "") }
+    end
+  end
   return { code = "todo", text = "Not started" }
 end
 
@@ -670,6 +751,20 @@ function QB:RouteEntries(mode)
     end
   end
   return list
+end
+
+-- how far along a quest in your log is, summed over its counted objectives: have, need
+function QB:Progress(id)
+  local e = self.state.log[id]
+  if not e then return nil end
+  local have, need = 0, 0
+  for _, o in ipairs(e.objectives or {}) do
+    if o.need and o.need > 0 then
+      have, need = have + math.min(o.have or 0, o.need), need + o.need
+    end
+  end
+  if need == 0 then return nil end
+  return have, need
 end
 
 -- quests in your log the catalog does not know
@@ -959,13 +1054,22 @@ frame:SetScript("OnEvent", function(_, event, a1, a2, a3)
     if (a3 == 8690 or a3 == 556) and Run.Get() then Run.Get().hearthUsed = true end
   elseif event == "UNIT_AURA" and a1 ~= "player" then
     return
+  elseif event == "BANKFRAME_OPENED" then
+    QB.bankOpen = true
+    Bank.Scan()
+  elseif event == "BANKFRAME_CLOSED" then
+    Bank.Scan()
+    QB.bankOpen = false
+  elseif event == "PLAYERBANKSLOTS_CHANGED" or (event == "BAG_UPDATE_DELAYED" and QB.bankOpen) then
+    Bank.Scan()
   end
   QB:MarkDirty()
 end)
 
 for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_LOGOUT", "QUEST_LOG_UPDATE", "QUEST_TURNED_IN",
   "QUEST_ACCEPTED", "QUEST_REMOVED", "BAG_UPDATE_DELAYED", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE",
-  "ZONE_CHANGED_NEW_AREA", "UNIT_AURA", "HEARTHSTONE_BOUND", "UNIT_SPELLCAST_SUCCEEDED", "QUEST_DETAIL", "QUEST_COMPLETE" }) do
+  "ZONE_CHANGED_NEW_AREA", "UNIT_AURA", "HEARTHSTONE_BOUND", "UNIT_SPELLCAST_SUCCEEDED", "QUEST_DETAIL", "QUEST_COMPLETE",
+  "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED" }) do
   pcall(frame.RegisterEvent, frame, e)
 end
 

@@ -268,6 +268,7 @@ CM = {int(k): v for k, v in _cm["quests"].items()}
 CM_NAMES = {k: {int(i): n for i, n in v.items()} for k, v in _cm["names"].items()}
 CM_SPAWNS = {k: {int(i): n for i, n in v.items()} for k, v in _cm["spawns"].items()}
 CM_ITEMS = {int(k): v for k, v in _cm["items"].items()}
+CM_ITEMNAMES = {int(k): v for k, v in (_cm.get("itemnames") or {}).items()}
 CM_NEXT = {}
 for _qid, _q in CM.items():
     if _q["next"] and _q["next"] > 0:
@@ -549,6 +550,7 @@ def cat_for(qid):
 # ---------------------------------------------------------------------------
 Q, QN, QITEM, QICON, TIPS, PRE, BAGQ, FOLLOW, RACE, EXCL_GROUPS = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
 FROM_FC, DISAGREE = [], []
+REQ = {}
 TURNH = {}
 unconfirmed = 0
 for qid in IDS:
@@ -629,6 +631,8 @@ for qid in IDS:
     rm = races(qid)
     if rm:
         RACE[qid] = rm
+    if cmq.get("items"):  # what it asks you to bring: counted in bags and bank
+        REQ[qid] = [[i, n, CM_ITEMNAMES.get(i) or ""] for i, n in cmq["items"]]
     if cmq.get("excl") and cmq["excl"] > 0:
         EXCL_GROUPS.setdefault(cmq["excl"], []).append(qid)
     if extra.get("follow"):
@@ -767,6 +771,8 @@ lines.append("D.TURNH = " + keyed(TURNH))
 lines.append("-- steps that follow a quest in its chain, races that may take a race-limited quest (1 Human, 2 Orc, 4 Dwarf, 8 Night Elf,")
 lines.append("-- 16 Undead, 32 Tauren, 64 Gnome, 128 Troll), and quests that rule each other out")
 lines.append("D.NEXT = " + keyed(NEXT))
+lines.append("-- [id] = {{item, how many, name}, ...}: what the quest asks you to bring")
+lines.append("D.REQ = " + keyed(REQ))
 lines.append("D.RACE = " + keyed(RACE))
 lines.append("D.EXCL = " + keyed(EXCL))
 lines.append("-- {name, uiMap, x, y, continent (-1 inside an instance), world x, world y, Alliance hub, minutes on foot from it, Horde hub, minutes, place}")
