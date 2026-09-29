@@ -36,13 +36,10 @@ end
 
 function Pin:OnMouseLeave() GameTooltip:Hide() end
 
-function Pin:OnMouseClickAction()
+-- the map canvas calls this on a click (it owns the pin's mouse scripts)
+function Pin:OnMouseClickAction(button)
   local d = self.data
-  if d then QB.API.SetWaypoint(d.m, d.x, d.y, d.name) end
-end
-
-function Pin:OnClickHandler()
-  self:OnMouseClickAction()
+  if d and button ~= "RightButton" then QB.API.SetWaypoint(d.m, d.x, d.y, d.name) end
 end
 
 -- a point on one map, placed on another (a city on its continent, a zone on the world map)

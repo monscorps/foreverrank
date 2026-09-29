@@ -13,11 +13,10 @@
         </FontString>
       </Layer>
     </Layers>
+    <!-- only OnLoad: the map canvas sets the mouse scripts itself and calls the mixin's
+         OnMouseEnter, OnMouseLeave and OnMouseClickAction; a template that sets them trips its assert -->
     <Scripts>
       <OnLoad method="OnLoad"/>
-      <OnEnter method="OnMouseEnter"/>
-      <OnLeave method="OnMouseLeave"/>
-      <OnMouseUp method="OnClickHandler"/>
     </Scripts>
   </Frame>
 </Ui>

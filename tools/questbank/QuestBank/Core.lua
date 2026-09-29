@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.0.1"
+QB.version = "3.0.2"
 QB.CAP = 30
 
 local D = QB.Data

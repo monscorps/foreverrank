@@ -255,8 +255,14 @@ local function newClient(o)
   }
   function map:GetMapID() return 1453 end
   function map:RemoveAllPinsByTemplate() self.pins = {} end
+  -- Blizzard_MapCanvas: a new pin whose template set OnEnter or OnLeave trips an assert (it sets them itself)
+  local xml = io.open(HERE .. "/QuestBank/Pins.xml"):read("*a"):gsub("<!%-%-.-%-%->", "")
+  local templateScripts = {}
+  for tag in xml:gmatch("<(On%a+)") do templateScripts[tag] = true end
   function map:AcquirePin(template, d, x, y)
     assert(template == "QuestBankPinTemplate")
+    assert(not templateScripts.OnEnter and not templateScripts.OnLeave, "Blizzard_MapCanvas.lua:309: assertion failed! (the pin template sets OnEnter/OnLeave)")
+    assert(not templateScripts.OnMouseUp and not templateScripts.OnMouseDown, "the map canvas owns a pin's mouse scripts")
     local pin = newObj("Frame")
     pin.Icon, pin.Num = newObj("Texture", nil, pin), newObj("FontString", nil, pin)
     for k, v in pairs(env.QuestBankPinMixin) do pin[k] = v end
