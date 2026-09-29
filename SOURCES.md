@@ -222,3 +222,9 @@ Corrections welcome: open an issue.
   nowhere in Forever, and that the client has no row for, left the database.
   The BiS page no longer keeps its own tooltip copy: it draws the shared
   tooltip from plan/gear.js over the same database.
+
+## QuestBank (/questbank/)
+
+- Forever quest XP (Classic base and each quest's multiplier), quest levels, givers and turn-in NPCs: Wowhead's Forever quest database, read September 29, 2026.
+- Forever and Classic XP side by side for dungeon quests, and the Cozy Sleeping Bag chain: ForeverChanges.
+- Textures, icons, map IDs and item IDs: the Forever beta client, build 1.60.1.70009.

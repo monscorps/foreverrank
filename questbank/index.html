@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuestBank · WoW Forever quest bank planner · ForeverRank</title>
+<meta name="description" content="QuestBank is an in-game planner for the WoW Forever level cap raise: bank the right quests, cut the weak ones, and hand them in along the fastest route.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="../mark.svg" type="image/svg+xml">
+<link rel="canonical" href="https://foreverrank.com/questbank/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ForeverRank">
+<meta property="og:url" content="https://foreverrank.com/questbank/">
+<meta property="og:title" content="QuestBank · the quest bank planner for WoW Forever">
+<meta property="og:description" content="Bank the right quests, cut the weak ones, and hand them in along the fastest route when the level cap goes up.">
+<meta property="og:image" content="https://foreverrank.com/codex/img/ruins-of-lordaeron.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#1C2325">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@500;600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../forever.css?v=23">
+<!-- Screenshot slots: drop in-game images into questbank/img/ with these names and they
+     appear next to the matching illustration on their own: window.jpg, log.jpg, prep.jpg,
+     route.jpg, minimap.jpg (any size; 1600px wide is plenty). -->
+<style>
+.qb { --w: 68rem; --ink: #e9eef1; --dim: #9fb0bb; --line: rgba(0,175,215,.22);
+  --panel: linear-gradient(180deg, rgba(7,50,74,.72), rgba(5,30,45,.92));
+  --parch: #e7d6ae; --parch-2: #d6bd8a; --parch-ink: #3a2410; --parch-soft: #6b4d28;
+  --wow-gold: #ffd100; --q-poor: #9d9d9d; --q-common: #fff; --q-uncommon: #1eff00; --q-rare: #0070dd; --q-epic: #a335ee; --q-leg: #ff8000; }
+.qb * { box-sizing: border-box; }
+.qb a { color: var(--gold); }
+.wrapx { max-width: var(--w); margin: 0 auto; padding-left: 1rem; padding-right: 1rem; }
+.qb section { margin: 3.4rem auto 0; }
+.qb h2 { font: 400 clamp(1.7rem, 3.4vw, 2.3rem)/1.1 var(--display-serif); color: #f6f1e4; margin: 0 0 .5rem; text-wrap: balance; }
+.qb h3 { font: 600 1rem/1.3 var(--heading); color: #f6f1e4; margin: 0 0 .35rem; }
+.qb p { max-width: 66ch; }
+.qb-eye { font: 600 .68rem/1 var(--heading); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); margin: 0 0 .7rem; }
+.sub { color: var(--dim); margin: 0 0 1.4rem; }
+
+/* hero */
+.qbh { position: relative; overflow: hidden; border-bottom: 1px solid rgba(229,204,128,.25); background: #081218; }
+.qbh::before { content: ""; position: absolute; inset: -6%; background: var(--img) center 35%/cover no-repeat; filter: saturate(1.05); }
+.qbh::after { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 90% at 18% 30%, rgba(4,12,17,.35), rgba(4,12,17,.93) 70%), linear-gradient(180deg, rgba(4,12,17,.2), #0c171d 97%); }
+.qbh-in { position: relative; z-index: 1; padding-top: 3.2rem; padding-bottom: 2.6rem; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2rem; align-items: end; }
+.kick { display: flex; align-items: center; gap: .6rem; font: 600 .68rem/1 var(--heading); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); margin: 0 0 1rem; flex-wrap: wrap; }
+.kick .tag { color: #000; background: var(--gold); border-radius: var(--r-btn); padding: .28rem .55rem; letter-spacing: .08em; }
+.qbh h1 { margin: 0; font: 400 clamp(2.8rem, 7vw, 5rem)/.95 var(--display-serif); color: #f6f1e4; text-shadow: 0 4px 30px rgba(0,0,0,.6); }
+.qbh .lede { margin: 1rem 0 0; font-size: 1.08rem; color: #dfe7ea; max-width: 44rem; }
+.dl { display: grid; gap: .55rem; justify-items: start; }
+.dl-btn { display: inline-flex; align-items: center; gap: .7rem; font: 700 .85rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: #120c02; background: linear-gradient(180deg, #ffe38a, #e5b64a); border: 1px solid #fff0b8; border-radius: var(--r-btn); padding: .95rem 1.4rem; text-decoration: none; box-shadow: 0 8px 24px rgba(0,0,0,.45), inset 0 -2px 0 rgba(120,80,10,.35); }
+.qb a.dl-btn { color: #120c02; }
+.dl-btn:hover { filter: brightness(1.06); }
+.dl-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.dl-btn img { width: 26px; height: 26px; border-radius: 3px; border: 1px solid rgba(0,0,0,.35); }
+.dl-meta { font-size: .78rem; color: var(--dim); }
+@media (max-width: 760px) { .qbh-in { grid-template-columns: 1fr; } }
+
+/* install */
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 1.1rem 1.1rem 1.2rem; display: grid; gap: .5rem; align-content: start; }
+.step .n { font: 400 2rem/1 var(--display-serif); color: var(--gold); }
+.step p { margin: 0; color: #d6e0e4; font-size: .92rem; }
+.step code, .qb code { font: 500 .85em/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #fff3cf; background: rgba(0,0,0,.35); border: 1px solid rgba(229,204,128,.18); border-radius: 3px; padding: .05rem .35rem; }
+.note { margin-top: .9rem; font-size: .88rem; color: var(--dim); }
+@media (max-width: 760px) { .steps { grid-template-columns: 1fr; } }
+
+/* tour */
+.rail { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 1.1rem; }
+.rail button { font: 600 .82rem/1 var(--heading); color: var(--dim); background: rgba(7,50,74,.45); border: 1px solid var(--line); border-radius: 999px; padding: .6rem 1rem; cursor: pointer; }
+.rail button[aria-selected="true"] { color: #07121a; background: var(--gold); border-color: var(--gold); }
+.rail button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 20rem; gap: 1.4rem; align-items: start; }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: .75rem; counter-reset: c; }
+.legend li { display: grid; grid-template-columns: 1.7rem minmax(0, 1fr); gap: .6rem; font-size: .9rem; color: #d6e0e4; }
+.legend li::before { counter-increment: c; content: counter(c); display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--wow-gold); color: #1b1203; font: 700 .78rem/1 var(--heading); box-shadow: 0 0 0 2px #1b1203; }
+.legend b { color: #f6f1e4; font-weight: 600; }
+.pane[hidden] { display: none !important; }
+.fig-label { font: 600 .62rem/1 var(--heading); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin: 0 0 .5rem; }
+.shot { margin: 1.2rem 0 0; }
+.shot img { display: block; width: 100%; height: auto; border-radius: 6px; border: 1px solid rgba(229,204,128,.3); box-shadow: 0 16px 40px rgba(0,0,0,.45); }
+.shot[hidden] { display: none !important; }
+.stage > * { min-width: 0; }
+@media (max-width: 980px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+
+/* the illustrated addon window */
+.fit { width: 100%; min-width: 0; overflow: hidden; }
+.fit-inner { width: 760px; transform-origin: top left; }
+.win { position: relative; width: 760px; background: radial-gradient(120% 90% at 50% 0%, #211811, #0b0806 70%); border: 3px solid #b8913c; border-radius: 10px; box-shadow: inset 0 0 0 1px #5a4520, inset 0 0 0 4px #1a1209, inset 0 0 0 5px #7d6230, 0 24px 60px rgba(0,0,0,.6); padding: 14px 16px 12px; color: #f0e6d2; font: 500 12px/1.35 var(--body); }
+.win .plate { position: absolute; top: -14px; left: 50%; transform: translateX(-50%); padding: 6px 34px 7px; border-radius: 4px 4px 14px 14px; background: linear-gradient(180deg, #7a5a22, #3d2b0d); border: 2px solid #d8b35a; font: 400 15px/1 var(--display-serif); color: var(--wow-gold); letter-spacing: .04em; box-shadow: 0 4px 10px rgba(0,0,0,.5); }
+.win .x { position: absolute; top: 8px; right: 10px; width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #c9392a, #6b1209); border: 1px solid #d9b25e; color: #ffd9a8; font: 700 12px/18px var(--heading); text-align: center; }
+.w-head { display: grid; grid-template-columns: 60px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px 4px 8px; }
+.portrait { width: 58px; height: 58px; border-radius: 50%; overflow: hidden; border: 2px solid #b8913c; box-shadow: 0 0 0 2px #1a1209; }
+.portrait img { width: 100%; height: 100%; display: block; }
+.w-name { font: 600 16px/1.1 var(--heading); color: var(--wow-gold); }
+.w-sub { color: #e8e2d0; font-size: 11px; margin-top: 3px; }
+.w-leg { margin-top: 8px; font-size: 11px; display: flex; gap: 12px; flex-wrap: wrap; }
+.w-bar { position: relative; margin-top: 4px; height: 20px; border: 1px solid #6b5a3a; border-radius: 3px; background: #050403; box-shadow: inset 0 0 0 1px #000; }
+.w-bar i { position: absolute; top: 3px; bottom: 3px; left: 3px; border-radius: 1px; }
+.w-bar .plan { background: rgba(191,140,255,.35); }
+.w-bar .now { background: linear-gradient(180deg, #a02aa0, #5c0d5a); }
+.w-bar .cur { background: #3f7fff; }
+.w-bar .ticks { position: absolute; inset: 3px; display: grid; grid-template-columns: repeat(10, 1fr); }
+.w-bar .ticks span { border-right: 1px solid rgba(0,0,0,.85); }
+.w-bar .ticks span:last-child { border-right: 0; }
+.w-scale { display: grid; grid-template-columns: repeat(10, 1fr); font-size: 10px; color: #bdb49e; margin-top: 2px; position: relative; }
+.w-scale .end { position: absolute; right: 0; }
+.toggles { display: flex; gap: 20px; padding-top: 10px; }
+.tg { display: grid; justify-items: center; gap: 7px; width: 42px; }
+.tg .ic { width: 34px; height: 34px; border-radius: 3px; border: 2px solid #3b3122; box-shadow: 0 0 0 2px #0a0806, 0 0 0 3px #6f5b39; overflow: hidden; }
+.tg .ic img { width: 100%; height: 100%; display: block; }
+.tg .ic.off img { filter: grayscale(1) brightness(.7); }
+.tg span { font-size: 10px; color: #e8e2d0; white-space: nowrap; }
+.parch { position: relative; margin-top: 6px; border-radius: 4px; border: 2px solid #6d5733; background: radial-gradient(140% 110% at 30% 20%, #f2e4bf, var(--parch) 45%, var(--parch-2)); box-shadow: inset 0 0 40px rgba(110,70,20,.35), inset 0 0 0 1px rgba(255,255,255,.25); color: var(--parch-ink); min-height: 360px; padding: 12px 14px 14px; }
+.wtabs { display: flex; gap: 2px; padding-left: 18px; margin-top: -2px; }
+.wtabs span:not(.call) { font: 600 11px/1 var(--heading); color: var(--wow-gold); background: linear-gradient(180deg, #2a2016, #120d08); border: 1px solid #6d5733; border-top: 0; border-radius: 0 0 8px 8px; padding: 9px 18px 8px; }
+.wtabs span.on:not(.call) { color: #fff; background: linear-gradient(180deg, #4a3a22, #1b140c); padding-bottom: 11px; }
+.pt { font: 600 15px/1.2 var(--heading); color: var(--parch-ink); }
+.pt small { font: 500 12px/1 var(--body); color: var(--parch-soft); margin-left: 8px; }
+.grid { display: grid; grid-template-columns: repeat(8, 36px); gap: 10px; margin-top: 12px; }
+.slot { position: relative; width: 36px; height: 36px; border-radius: 3px; background: #1a150e; box-shadow: 0 0 0 2px #2f2616, 0 0 0 3px #8a7348; }
+.slot img { width: 100%; height: 100%; display: block; border-radius: 2px; }
+.slot::after { content: ""; position: absolute; inset: 0; border: 2px solid var(--qc, transparent); border-radius: 3px; mix-blend-mode: screen; }
+.slot b { position: absolute; right: 1px; bottom: 0; font: 700 10px/1 var(--heading); color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000, 1px 1px 0 #000; }
+.slot em { position: absolute; left: -5px; top: -5px; width: 14px; height: 14px; border-radius: 50%; font: 700 9px/14px var(--heading); text-align: center; font-style: normal; color: #fff; box-shadow: 0 0 0 1px #000; }
+.slot em.ok { background: #1f9a2a; } .slot em.ok::before { content: "✓"; }
+.slot em.wait { background: #c79a12; } .slot em.wait::before { content: "…"; }
+.slot em.cut { background: #b32416; } .slot em.cut::before { content: "×"; }
+.slot.vacant { background: #2b2418; box-shadow: 0 0 0 2px #2f2616, 0 0 0 3px #6f5d3c; opacity: .55; }
+.q1 { --qc: var(--q-poor); } .q2 { --qc: var(--q-common); } .q3 { --qc: var(--q-uncommon); } .q4 { --qc: var(--q-rare); } .q5 { --qc: var(--q-epic); } .q6 { --qc: var(--q-leg); }
+.logcols { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 18px; }
+.bagrow { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.bagit { display: flex; align-items: center; gap: 6px; width: 86px; font: 600 10px/1.15 var(--body); color: var(--parch-ink); }
+.bagit .slot { flex: none; }
+.bagit.off .slot img { filter: grayscale(1); }
+.lab { font: 600 13px/1.2 var(--heading); color: var(--parch-ink); margin-top: 16px; }
+.qleg { font-size: 10px; color: var(--parch-soft); margin-top: 10px; }
+.swap { display: grid; grid-template-columns: 22px 92px 12px 22px minmax(0, 1fr) auto; gap: 4px 5px; align-items: center; padding: 4px 3px; border-bottom: 1px solid rgba(90,60,20,.18); font-size: 11px; }
+.swap img { width: 22px; height: 22px; border-radius: 2px; }
+.swap .gone img { filter: grayscale(1); opacity: .8; }
+.swap .cutn { color: var(--parch-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.swap .addn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.swap .gain { color: #0e6b16; font-weight: 700; }
+.card { border: 1px solid #7a6036; border-radius: 4px; margin-bottom: 8px; overflow: hidden; background: rgba(255,255,255,.12); }
+.card-h { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto 22px; gap: 8px; align-items: center; padding: 6px 8px; color: #f6efdc; background: linear-gradient(90deg, rgba(20,12,6,.88), rgba(40,24,10,.7)), var(--bg, #3a2a16) center/cover; }
+.card-h img.ic { width: 32px; height: 32px; border-radius: 50%; border: 1px solid #c9a55a; }
+.card-h .t { font: 600 14px/1.1 var(--heading); color: var(--wow-gold); }
+.card-h .w { font-size: 10px; color: #e8e2d0; }
+.card-h .gxp { text-align: right; font: 700 15px/1 var(--heading); color: var(--wow-gold); }
+.card-h .gxp small { display: block; font: 500 10px/1.3 var(--body); color: #e8e2d0; }
+.pin { width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #ffe36b, #c79212); box-shadow: 0 0 0 1px #3a2a0a; position: relative; }
+.pin::after { content: "!"; position: absolute; inset: 0; text-align: center; font: 800 12px/18px var(--heading); color: #3a2206; }
+.row { display: grid; grid-template-columns: 16px 18px minmax(0, 1fr) 34px 180px 50px; gap: 6px; align-items: center; padding: 3px 6px; font-size: 11.5px; }
+.row img { width: 18px; height: 18px; border-radius: 2px; }
+.row .lv { color: var(--parch-soft); font-size: 10px; }
+.row .st { font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .xp { text-align: right; font-weight: 600; }
+.mk { width: 14px; height: 14px; border-radius: 50%; font: 700 9px/14px var(--heading); color: #fff; text-align: center; }
+.mk.ok { background: #1f9a2a; } .mk.ok::before { content: "✓"; }
+.mk.wait { background: #c79a12; } .mk.wait::before { content: "…"; }
+.mk.no { background: #b32416; } .mk.no::before { content: "×"; }
+.mk.new { background: #d8a51a; color: #3a2206; } .mk.new::before { content: "!"; }
+.s-bank { color: #0e6b16; } .s-act { color: #9c5d00; } .s-todo { color: #8d1f0c; } .s-done { color: #6f6a61; }
+.modes { display: flex; gap: 4px; }
+.modes span { font: 600 11px/1 var(--heading); padding: 6px 14px; border-radius: 3px; border: 1px solid #5c1a0d; background: linear-gradient(180deg, #b52c16, #6b1409); color: #ffd9a8; }
+.modes span.dim { filter: grayscale(.6) brightness(.8); }
+.rtop { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.rsum { font-size: 11.5px; color: var(--parch-ink); }
+.setup { font-size: 12px; margin: 8px 2px 6px; }
+.setup b { color: #7a2e0a; }
+.legs { position: relative; }
+.leg { display: grid; grid-template-columns: 36px 22px minmax(0, 1fr); gap: 0 8px; position: relative; padding-bottom: 8px; }
+.leg .clk { text-align: right; font: 600 12px/1 var(--heading); padding-top: 10px; color: var(--parch-ink); }
+.leg .node { position: relative; }
+.leg .node::before { content: ""; position: absolute; left: 10px; top: 0; bottom: -8px; width: 2px; background: rgba(140,105,50,.6); }
+.leg:last-child .node::before { bottom: 20px; }
+.leg .node i { position: absolute; left: 3px; top: 7px; width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #cfcfcf, #6b6b6b); box-shadow: 0 0 0 1px #2a2a2a; }
+.leg.next .node i { background: radial-gradient(circle at 40% 35%, #fff27a, #c99a0f); box-shadow: 0 0 0 1px #4a3a06, 0 0 10px rgba(255,210,60,.9); }
+.leg .body { border-bottom: 1px solid rgba(90,60,20,.18); padding: 4px 0 6px; }
+.leg .how { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--parch-soft); }
+.leg .how img { width: 16px; height: 16px; border-radius: 2px; }
+.leg .nm { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 2px; }
+.leg .nm b { font: 600 15px/1.2 var(--heading); color: var(--parch-ink); }
+.leg .nm .hereq { font-size: 10px; color: #0e6b16; margin-left: 8px; font-weight: 600; }
+.leg .nm span.lvlr { font-size: 11px; color: var(--parch-soft); white-space: nowrap; }
+.leg .qr { display: grid; grid-template-columns: 16px minmax(0, 1fr) 150px 70px; gap: 6px; align-items: center; font-size: 11.5px; padding: 2px 0; }
+.leg .qr img { width: 16px; height: 16px; border-radius: 2px; }
+.leg .qr .npc { color: var(--parch-soft); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.leg .qr .xp { text-align: right; font-weight: 600; }
+.leg .qr .pen { color: #a0400a; font-size: 10px; margin-right: 4px; }
+.mm { position: relative; width: 760px; height: 300px; border-radius: 10px; background: radial-gradient(60% 80% at 70% 40%, #1d2a1a, #0b1009); border: 1px solid #3b4a33; overflow: hidden; }
+.mm .map { position: absolute; right: 70px; top: 40px; width: 180px; height: 180px; border-radius: 50%; background: radial-gradient(circle at 45% 40%, #5f7a3c, #2d4020 70%); box-shadow: 0 0 0 6px #3a2d16, 0 0 0 8px #b8913c, 0 0 0 10px #1a1209; }
+.mm .btn { position: absolute; right: 228px; top: 150px; width: 36px; height: 36px; border-radius: 50%; background: #0c0a06; box-shadow: 0 0 0 3px #b8913c, 0 0 0 5px #3a2d16; overflow: hidden; }
+.mm .btn img { width: 26px; height: 26px; margin: 5px; border-radius: 50%; }
+.mm .mmtip { position: absolute; left: 90px; top: 70px; width: 300px; background: rgba(10,14,30,.94); border: 1px solid #5d6f99; border-radius: 5px; padding: 10px 12px; color: #fff; font-size: 12px; line-height: 1.45; box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+.mm .mmtip b { color: var(--wow-gold); font-weight: 600; }
+.mm .mmtip i { color: #a8a8a8; font-style: normal; }
+.call.inl { position: relative; left: auto; top: auto; display: inline-block; align-self: center; margin: 0 4px 0 -8px; }
+.call { position: absolute; z-index: 5; width: 22px; height: 22px; border-radius: 50%; background: var(--wow-gold); color: #1b1203; font: 700 12px/22px var(--heading); text-align: center; box-shadow: 0 0 0 2px #1b1203, 0 4px 10px rgba(0,0,0,.5); pointer-events: none; transform: scale(var(--inv, 1)); transform-origin: top left; }
+
+/* how it thinks */
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; align-items: start; }
+.hc { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 1.2rem 1.25rem 1.3rem; display: grid; gap: .7rem; align-content: start; }
+.hc p { margin: 0; color: #d6e0e4; font-size: .92rem; }
+.hc .eq { font: 500 .95rem/1.5 var(--body); color: #f6f1e4; background: rgba(0,0,0,.28); border: 1px solid rgba(229,204,128,.18); border-radius: 4px; padding: .6rem .8rem; }
+.hc .eq b { color: var(--gold); }
+.mtab { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.mtab td { padding: .32rem 0; border-bottom: 1px solid rgba(0,175,215,.14); color: #d6e0e4; }
+.mtab td.n { text-align: right; color: var(--cyan); font-variant-numeric: tabular-nums; font-weight: 600; }
+.grey { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .35rem; align-items: end; height: 8.5rem; padding-top: .4rem; }
+.grey div { display: grid; grid-template-rows: auto 1fr auto; justify-items: center; height: 100%; }
+.grey .b { width: 70%; align-self: end; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #ffd96b, #c28a12); }
+.grey .v { font: 600 .78rem/1 var(--heading); color: #f6f1e4; margin-bottom: .25rem; font-variant-numeric: tabular-nums; }
+.grey .k { font-size: .72rem; color: var(--dim); margin-top: .35rem; text-align: center; }
+.flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .6rem; align-items: center; }
+.cont { border: 1px solid rgba(229,204,128,.25); border-radius: 6px; padding: .6rem .7rem; background: rgba(0,0,0,.22); }
+.cont h4 { margin: 0 0 .4rem; font: 600 .7rem/1 var(--heading); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); }
+.cont ol { margin: 0; padding-left: 1.1rem; font-size: .84rem; color: #e8eef0; }
+.hs { display: grid; justify-items: center; gap: .3rem; font-size: .72rem; color: var(--gold); text-align: center; }
+.hs img { width: 36px; height: 36px; border-radius: 4px; border: 1px solid rgba(229,204,128,.5); }
+@media (max-width: 760px) { .cards { grid-template-columns: 1fr; } .flow { grid-template-columns: 1fr; } .hs { grid-auto-flow: column; justify-content: start; } }
+
+/* routine, controls, help */
+.routine { list-style: none; margin: 0; padding: 0; display: grid; gap: .6rem; counter-reset: r; }
+.routine li { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr); gap: .8rem; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel); padding: .9rem 1rem; }
+.routine li::before { counter-increment: r; content: counter(r); font: 400 1.7rem/1 var(--display-serif); color: var(--gold); }
+.routine b { color: #f6f1e4; }
+.routine p { margin: .2rem 0 0; color: #d6e0e4; font-size: .9rem; }
+.ctl { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.ctl th { text-align: left; font: 600 .68rem/1 var(--heading); letter-spacing: .12em; text-transform: uppercase; color: var(--dim); padding: .55rem .7rem; border-bottom: 1px solid var(--line); }
+.ctl td { padding: .6rem .7rem; border-bottom: 1px solid rgba(0,175,215,.12); color: #d6e0e4; vertical-align: top; }
+.ctl td:first-child { white-space: nowrap; }
+.tbox { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel); }
+.faq { display: grid; gap: .5rem; }
+.faq details { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel); padding: .85rem 1rem; }
+.faq summary { cursor: pointer; font: 600 .95rem/1.3 var(--heading); color: #f6f1e4; }
+.faq summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.faq p { margin: .6rem 0 0; color: #d6e0e4; font-size: .92rem; }
+.credits { margin-top: 2.4rem; font-size: .8rem; color: var(--dim); }
+</style>
+</head>
+<body>
+<nav class="top">
+  <a class="brand" href="../"><img src="../mark.svg" alt="" width="42" height="42"><span class="brand-word">FOREVER<b>RANK</b></span></a>
+  <div class="top-nav">
+    <a class="pill" href="../">Home</a>
+    <a class="pill" href="../plan/">The Forge</a>
+    <a class="pill" href="../codex/">Database</a>
+    <a class="pill" href="../news/">News</a>
+    <span class="phase">QuestBank</span>
+    <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  </div>
+</nav>
+<script src="../nav.js?v=7"></script>
+
+<main class="qb">
+<header class="qbh" style="--img:url(/codex/img/ruins-of-lordaeron.jpg)">
+  <div class="wrapx qbh-in">
+    <div>
+      <p class="kick"><span class="tag">Addon</span>For the level cap raise · WoW Forever beta</p>
+      <h1>QuestBank</h1>
+      <p class="lede">Forever pays dungeon quests up to 3.75 times their Classic XP, so what you hold when the cap goes up decides how far you jump. QuestBank shows what your log is worth, what to swap, and hands you a turn-in route that gets the most levels out of the first hour.</p>
+    </div>
+    <div class="dl">
+      <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
+      <span class="dl-meta">Version 2.0.0 · 29 September 2026 · 32 KB</span>
+      <span class="dl-meta">Open it in game with <code>/qb</code></span>
+    </div>
+  </div>
+</header>
+
+<section class="wrapx" id="install">
+  <p class="qb-eye">Install</p>
+  <h2>Up and running in a minute</h2>
+  <div class="steps">
+    <div class="step"><span class="n">1</span><h3>Download and unzip</h3><p>You get one folder, <code>QuestBank</code>. Inside are five files, all plain text.</p></div>
+    <div class="step"><span class="n">2</span><h3>Put it in AddOns</h3><p>Move the folder into the Forever beta's <code>Interface\AddOns</code>. That's the same folder the other beta addons use, so you end up with <code>Interface\AddOns\QuestBank\QuestBank.toc</code>.</p></div>
+    <div class="step"><span class="n">3</span><h3>Log in and type /qb</h3><p>The window opens on your quest log. A book button on the minimap does the same. If an older QuestBank is installed, replace the whole folder.</p></div>
+  </div>
+  <p class="note">If the character screen lists it as out of date, tick <b>Load out of date AddOns</b>. Blizzard hasn't published Forever's interface number yet.</p>
+</section>
+
+<section class="wrapx" id="tour">
+  <p class="qb-eye">A tour of the window</p>
+  <h2>What every part does</h2>
+  <p class="sub">The pictures are illustrations with example numbers, drawn from the addon's layout. Screenshots from the game appear next to them as they're added.</p>
+  <div class="rail" role="tablist" aria-label="Parts of the window">
+    <button type="button" role="tab" id="t-window" aria-controls="p-window" aria-selected="true">Header and toggles</button>
+    <button type="button" role="tab" id="t-log" aria-controls="p-log" aria-selected="false">Quest Log</button>
+    <button type="button" role="tab" id="t-prep" aria-controls="p-prep" aria-selected="false">Prep</button>
+    <button type="button" role="tab" id="t-route" aria-controls="p-route" aria-selected="false">Hand-in Route</button>
+    <button type="button" role="tab" id="t-mini" aria-controls="p-mini" aria-selected="false">Minimap button</button>
+  </div>
+
+  <!-- 1: header and toggles -->
+  <div class="pane" id="p-window" role="tabpanel" aria-labelledby="t-window">
+    <div class="stage">
+      <div>
+        <p class="fig-label">Illustration</p>
+        <div class="fit"><div class="fit-inner">
+          <div class="win">
+            <span class="plate">QuestBank</span><span class="x">×</span>
+            <span class="call" style="left:18px;top:26px">1</span>
+            <span class="call" style="left:64px;top:96px">2</span>
+            <span class="call" style="left:532px;top:24px">3</span>
+            <span class="call" style="left:594px;top:24px">4</span>
+            <span class="call" style="left:656px;top:24px">5</span>
+            <span class="call" style="left:718px;top:24px">6</span>
+            <div class="w-head">
+              <div class="portrait"><img src="https://wow.zamimg.com/images/wow/icons/large/classicon_paladin.jpg" alt=""></div>
+              <div>
+                <div class="w-name">Your character</div>
+                <div class="w-sub">Level 20 Paladin · Hearthstone: Stormwind City</div>
+                <div class="w-leg"><span style="color:#6f9fff">Now 20.0</span><span style="color:#c080c0">Banked 23.0</span><span style="color:#d8c8ff">Plan 26.8</span><span style="color:#aaa">Plan at 60 min 26.8</span></div>
+                <div class="w-bar"><i class="plan" style="width:67.4%"></i><i class="now" style="width:29.4%"></i><i class="cur" style="width:.6%"></i><div class="ticks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
+                <div class="w-scale"><span>20</span><span>21</span><span>22</span><span>23</span><span>24</span><span>25</span><span>26</span><span>27</span><span>28</span><span>29</span><span class="end">30</span></div>
+              </div>
+              <div class="toggles">
+                <div class="tg"><div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/ability_mount_ridinghorse.jpg" alt=""></div><span>Mounted</span></div>
+                <div class="tg"><div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_bag_bigbagofenchantments.jpg" alt=""></div><span>+3% XP</span></div>
+                <div class="tg"><div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_pocketwatch_01.jpg" alt=""></div><span>First hour</span></div>
+                <div class="tg"><div class="ic"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg" alt=""></div><span>Next stop</span></div>
+              </div>
+            </div>
+            <div class="parch" style="min-height:0">
+              <div class="pt">The page you have open</div>
+              <p style="max-width:none;margin:.5rem 0 0;color:#6b4d28;font-size:12px">The parchment holds whichever page the tabs underneath have open: your Quest Log, Prep, or the Hand-in Route. The other tour tabs above show each one.</p>
+            </div>
+            <div class="wtabs"><span class="call inl">7</span><span class="on">Quest Log</span><span>Prep</span><span>Hand-in Route</span></div>
+          </div>
+        </div></div>
+        <figure class="shot" data-shot="img/window.jpg" hidden><p class="fig-label">In game</p></figure>
+      </div>
+      <ol class="legend">
+        <li><span><b>You and your hearthstone.</b> Your portrait, level, and where your hearthstone is bound right now.</span></li>
+        <li><span><b>The XP bar from 20 to 30.</b> Blue is where you are now. Purple is where you land after handing in everything you're holding. Pale is where the full plan takes you. The numbers above it spell that out, plus your level at the 60-minute mark.</span></li>
+        <li><span><b>Mounted or on foot.</b> It reads your riding skill. A mount cuts every run between NPCs to 62%, which changes both the clock and the best order. Click to set it yourself, right-click to go back to automatic.</span></li>
+        <li><span><b>Cozy Sleeping Bag.</b> Lights up while the Well Rested buff is on you: +3% XP from quests for two hours. Click or right-click works the same way as the mount button.</span></li>
+        <li><span><b>Plan for the first hour or the whole route.</b> First hour picks the order that leaves you highest at minute 60. Whole route picks the highest level at the end.</span></li>
+        <li><span><b>Next stop.</b> One click puts a map pin on the next stop of your route. It uses TomTom if you have it, the game's own map pin if you don't.</span></li>
+        <li><span><b>Three pages.</b> Quest Log, Prep and Hand-in Route, like the tabs under the character window.</span></li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- 2: quest log -->
+  <div class="pane" id="p-log" role="tabpanel" aria-labelledby="t-log" hidden>
+    <div class="stage">
+      <div>
+        <p class="fig-label">Illustration</p>
+        <div class="fit"><div class="fit-inner">
+          <div class="win">
+            <span class="plate">QuestBank</span><span class="x">×</span>
+            <span class="call" style="left:6px;top:40px">1</span>
+            <span class="call" style="left:6px;top:76px">2</span>
+            <span class="call" style="left:6px;top:346px">3</span>
+            <span class="call" style="left:404px;top:40px">4</span>
+            <span class="call" style="left:398px;top:150px">5</span>
+            <div class="parch" style="margin-top:14px">
+              <div class="logcols">
+                <div>
+                  <div class="pt">Quest log  38 / 40<small>worth about 97,920 XP on the day</small></div>
+                  <div class="grid" id="demo-grid"></div>
+                  <div class="lab">In your bags, no log slot needed</div>
+                  <div class="bagrow">
+                    <div class="bagit"><span class="slot"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_letter_15.jpg" alt=""></span>Blood-Stained Letter</div>
+                    <div class="bagit"><span class="slot"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_jewelry_necklace_37.jpg" alt=""><b>4/10</b></span>Bloodied Insignia</div>
+                    <div class="bagit off"><span class="slot"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_gizmo_pipe_01.jpg" alt=""></span>Bronze Tube</div>
+                    <div class="bagit off"><span class="slot"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_bag_bigbagofenchantments.jpg" alt=""></span>Cozy Sleeping Bag</div>
+                  </div>
+                  <div class="qleg"><span style="color:#a335ee">Purple</span> 9k+ · <span style="color:#0070dd">Blue</span> 6k+ · <span style="color:#138a06">Green</span> 3k+ · White 1.5k+ · <span style="color:#7d7d7d">Grey</span> less · <span style="color:#d96b00">Orange</span> 12k+</div>
+                </div>
+                <div>
+                  <div class="pt">Swaps that gain XP</div>
+                  <div style="font-size:11px;color:#6b4d28;margin:4px 0 6px">Drop the left one, fetch the right one.</div>
+                  <div id="demo-swaps"></div>
+                </div>
+              </div>
+            </div>
+            <div class="wtabs"><span class="on">Quest Log</span><span>Prep</span><span>Hand-in Route</span></div>
+          </div>
+        </div></div>
+        <figure class="shot" data-shot="img/log.jpg" hidden><p class="fig-label">In game</p></figure>
+      </div>
+      <ol class="legend">
+        <li><span><b>Your 40 slots, best first.</b> Every quest in your log, sorted by what it pays on the day. The border colour follows item quality, from grey under 1,500 XP to orange over 12,000. The number is the XP.</span></li>
+        <li><span><b>A mark on each slot.</b> Green: finished and part of the plan. Yellow: part of the plan but not finished. Red: not part of the plan, so it's a candidate to cut.</span></li>
+        <li><span><b>Items that don't need a slot.</b> Items that start a quest can wait in your bags without taking a log slot until the cap goes up. The count shows how far along you are, like 4 of 10 Bloodied Insignias.</span></li>
+        <li><span><b>Swaps that gain XP.</b> Your weakest quests lined up against the best quests you haven't fetched yet, with the gain. Free slots come first. A quest whose earlier step is in your log takes that step's slot. Click a row to put a pin on the new quest's giver.</span></li>
+        <li><span><b>Hover anything.</b> The tooltip shows the Forever multiplier, the XP at the level you'll hand it in, how to finish it, and the giver and turn-in NPC with coordinates.</span></li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- 3: prep -->
+  <div class="pane" id="p-prep" role="tabpanel" aria-labelledby="t-prep" hidden>
+    <div class="stage">
+      <div>
+        <p class="fig-label">Illustration</p>
+        <div class="fit"><div class="fit-inner">
+          <div class="win">
+            <span class="plate">QuestBank</span><span class="x">×</span>
+            <span class="call" style="left:6px;top:50px">1</span>
+            <span class="call" style="left:736px;top:50px">2</span>
+            <span class="call" style="left:452px;top:58px">3</span>
+            <span class="call" style="left:6px;top:198px">4</span>
+            <span class="call" style="left:6px;top:298px">5</span>
+            <div class="parch" style="margin-top:14px">
+              <div class="card">
+                <div class="card-h" style="--bg:#2a1e10"><img class="ic" src="https://wow.zamimg.com/images/wow/icons/large/achievement_boss_edwinvancleef.jpg" alt=""><div><div class="t">The Deadmines</div><div class="w">Westfall</div></div><div class="gxp">+24,300<small>1 of 5 banked</small></div><span class="pin"></span></div>
+                <div class="row"><span class="mk new"></span><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_head_human_01.jpg" alt=""><span>The Defias Brotherhood</span><span class="lv">L22</span><span class="st s-todo">First: the traitor escort</span><span class="xp">9,750</span></div>
+                <div class="row"><span class="mk new"></span><img src="https://wow.zamimg.com/images/wow/icons/large/inv_gizmo_01.jpg" alt=""><span>Underground Assault</span><span class="lv">L20</span><span class="st s-todo">Not started</span><span class="xp">5,800</span></div>
+                <div class="row"><span class="mk wait"></span><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_bandana_03.jpg" alt=""><span>Red Silk Bandanas</span><span class="lv">L17</span><span class="st s-act">In your log: 6/10</span><span class="xp">4,700</span></div>
+                <div class="row"><span class="mk ok"></span><img src="https://wow.zamimg.com/images/wow/icons/large/inv_jewelry_amulet_03.jpg" alt=""><span>Oh Brother...</span><span class="lv">L20</span><span class="st s-bank">Banked, ready to hand in</span><span class="xp">1,550</span></div>
+              </div>
+              <div class="card">
+                <div class="card-h" style="--bg:#3a1208"><img class="ic" src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_questionmark.jpg" alt=""><div><div class="t">Make room</div><div class="w">In your log but not in the plan. Hand in the finished ones now, abandon the rest.</div></div><div class="gxp">19 slots</div><span></span></div>
+                <div class="row"><span class="mk ok"></span><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_note_05.jpg" alt=""><span>The Test of Righteousness</span><span class="lv">L22</span><span class="st s-todo">Hand it to Jordan now, keep the forge step</span><span class="xp">870</span></div>
+                <div class="row"><span class="mk no"></span><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_note_05.jpg" alt=""><span>Tramping Paws</span><span class="lv">L21</span><span class="st s-todo">Open: abandon it</span><span class="xp">0</span></div>
+              </div>
+              <div class="card">
+                <div class="card-h" style="--bg:#12162a"><img class="ic" src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_bag_bigbagofenchantments.jpg" alt=""><div><div class="t">Cozy Sleeping Bag</div><div class="w">Finish the Stepping Stones chain: +3% XP from quests for two hours.</div></div><div class="gxp">+3%</div><span class="pin"></span></div>
+                <div class="row"><span class="mk ok"></span><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg" alt=""><span>Stepping Stones</span><span class="lv"></span><span class="st s-bank">Done</span><span class="xp"></span></div>
+                <div class="row"><span class="mk new"></span><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg" alt=""><span>Scramble</span><span class="lv"></span><span class="st">Mound of Dirt, Stonetalon Mountains</span><span class="xp"></span></div>
+              </div>
+            </div>
+            <div class="wtabs"><span>Quest Log</span><span class="on">Prep</span><span>Hand-in Route</span></div>
+          </div>
+        </div></div>
+        <figure class="shot" data-shot="img/prep.jpg" hidden><p class="fig-label">In game</p></figure>
+      </div>
+      <ol class="legend">
+        <li><span><b>One card per dungeon or zone.</b> Sorted by XP still to collect, so the top card is the best use of your evening. In game the header carries that dungeon's own art.</span></li>
+        <li><span><b>What's left and where.</b> XP still to get and how many quests are banked. The pin marks the dungeon entrance on your map.</span></li>
+        <li><span><b>Live status for every quest</b>, read from your game: banked, in your log with the count, the step you need first, the level it needs, or turned in already.</span></li>
+        <li><span><b>Make room.</b> Quests in your log that aren't part of the plan, and what to do with each one: hand it in now or abandon it. Special cases say so, like handing the item step to Jordan and keeping the forge step.</span></li>
+        <li><span><b>The sleeping bag chain.</b> Every step of Stepping Stones, with a pin on the next one.</span></li>
+      </ol>
+      <p class="note">Click a quest for a map pin on its giver. Shift-click to take it in or out of your plan. The route and the swaps follow straight away.</p>
+    </div>
+  </div>
+
+  <!-- 4: route -->
+  <div class="pane" id="p-route" role="tabpanel" aria-labelledby="t-route" hidden>
+    <div class="stage">
+      <div>
+        <p class="fig-label">Illustration</p>
+        <div class="fit"><div class="fit-inner">
+          <div class="win">
+            <span class="plate">QuestBank</span><span class="x">×</span>
+            <span class="call" style="left:6px;top:44px">1</span>
+            <span class="call" style="left:6px;top:74px">2</span>
+            <span class="call" style="left:6px;top:112px">3</span>
+            <span class="call" style="left:738px;top:126px">4</span>
+            <span class="call" style="left:330px;top:150px">5</span>
+            <span class="call" style="left:376px;top:102px">6</span>
+            <div class="parch" style="margin-top:14px">
+              <div class="rtop"><div class="modes"><span class="dim">Banked now</span><span>Full plan</span></div><div class="rsum">200,686 XP · level 26.82 · about 59 min · at 60 min: 26.82</div></div>
+              <div class="setup">Log out at <b>Wailing Caverns mound</b>. Bind your hearthstone in <b>Sentinel Hill</b> (it is set to Stormwind City now).</div>
+              <div class="legs">
+                <div class="leg next"><div class="clk">0:02</div><div class="node"><i></i></div><div class="body">
+                  <div class="how"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Start here</div>
+                  <div class="nm"><span><b>Wailing Caverns mound</b><span class="hereq">You are here</span></span><span class="lvlr">level 20.0 &gt; 20.5</span></div>
+                  <div class="qr"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_pelt_wolf_ruin_03.jpg" alt=""><span>Deviate Hides</span><span class="npc">Nalpak</span><span class="xp">4,790</span></div>
+                  <div class="qr"><img src="https://wow.zamimg.com/images/wow/icons/large/ability_hunter_pet_raptor.jpg" alt=""><span>Deviate Eradication</span><span class="npc">Ebru</span><span class="xp">6,130</span></div>
+                </div></div>
+                <div class="leg"><div class="clk">0:07</div><div class="node"><i></i></div><div class="body">
+                  <div class="how"><img src="https://wow.zamimg.com/images/wow/icons/large/ability_mount_ridinghorse.jpg" alt="">On foot, about 3 min</div>
+                  <div class="nm"><b>Ratchet</b><span class="lvlr">level 20.5 &gt; 21.9</span></div>
+                  <div class="qr"><img src="https://wow.zamimg.com/images/wow/icons/large/spell_nature_corrosivebreath.jpg" alt=""><span>Smart Drinks</span><span class="npc">Mebok Mizzyrix</span><span class="xp">4,020</span></div>
+                  <div class="qr"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_herb_07.jpg" alt=""><span>Blueleaf Tubers</span><span class="npc">Mebok Mizzyrix</span><span class="xp">8,140</span></div>
+                </div></div>
+                <div class="leg"><div class="clk">0:30</div><div class="node"><i></i></div><div class="body">
+                  <div class="how"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_rune_01.jpg" alt="">Hearthstone, about 1 min</div>
+                  <div class="nm"><b>Sentinel Hill</b><span class="lvlr">level 23.6 &gt; 24.0</span></div>
+                  <div class="qr"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_bandana_03.jpg" alt=""><span>Red Silk Bandanas</span><span class="npc">Scout Riell</span><span class="xp"><span class="pen">60%</span>2,900</span></div>
+                  <div class="qr"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_head_human_01.jpg" alt=""><span>The Defias Brotherhood</span><span class="npc">Gryan Stoutmantle</span><span class="xp">10,040</span></div>
+                </div></div>
+                <div class="leg"><div class="clk">0:44</div><div class="node"><i></i></div><div class="body">
+                  <div class="how"><img src="https://wow.zamimg.com/images/wow/icons/large/ability_mount_gryphon_01.jpg" alt="">Flight, about 3 min</div>
+                  <div class="nm"><b>Stormwind</b><span class="lvlr">level 25.1 &gt; 26.3</span></div>
+                  <div class="qr"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_letter_06.jpg" alt=""><span>Remember That I Love You</span><span class="npc">Orphan Matron Nightingale</span><span class="xp">10,040</span></div>
+                </div></div>
+              </div>
+            </div>
+            <div class="wtabs"><span>Quest Log</span><span>Prep</span><span class="on">Hand-in Route</span></div>
+          </div>
+        </div></div>
+        <figure class="shot" data-shot="img/route.jpg" hidden><p class="fig-label">In game</p></figure>
+      </div>
+      <ol class="legend">
+        <li><span><b>Banked now or Full plan.</b> Banked now is the route for what you hold today. Full plan is the route you're building towards.</span></li>
+        <li><span><b>Setup.</b> Where to log out before the cap goes up, and which inn to bind your hearthstone at. It warns you when your hearthstone is set somewhere else.</span></li>
+        <li><span><b>The clock and how you travel.</b> Minutes from your first turn-in, and how you reach each stop: hearthstone, flight, tram, boat, or on foot or mounted.</span></li>
+        <li><span><b>Your level at each stop</b>, arriving and leaving.</span></li>
+        <li><span><b>The quests to hand in there</b>, lowest level first, with the NPC and the XP. An orange percentage means you've out-levelled that quest by then and it pays less.</span></li>
+        <li><span><b>You are here.</b> It follows your zone. Click a stop's pin or a quest for a map pin on it.</span></li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- 5: minimap -->
+  <div class="pane" id="p-mini" role="tabpanel" aria-labelledby="t-mini" hidden>
+    <div class="stage">
+      <div>
+        <p class="fig-label">Illustration</p>
+        <div class="fit"><div class="fit-inner">
+          <div class="mm">
+            <div class="map"></div>
+            <div class="btn"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt=""></div>
+            <span class="call" style="left:500px;top:140px">1</span>
+            <span class="call" style="left:80px;top:60px">2</span>
+            <div class="mmtip"><b>QuestBank</b><br>Banked: 75,030 XP, level 23.0<br><i>Next stop: Wailing Caverns mound</i><br><i>Click: open. Right-click: hand-in route. Drag: move.</i></div>
+          </div>
+        </div></div>
+        <figure class="shot" data-shot="img/minimap.jpg" hidden><p class="fig-label">In game</p></figure>
+      </div>
+      <ol class="legend">
+        <li><span><b>The book on your minimap.</b> Click to open QuestBank, right-click to jump straight to the hand-in route, drag it round the edge to move it. <code>/qb minimap</code> hides or shows it.</span></li>
+        <li><span><b>Its tooltip</b> shows what your bank is worth right now and the next stop, without opening anything.</span></li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="wrapx" id="how">
+  <p class="qb-eye">How it thinks</p>
+  <h2>The numbers behind the plan</h2>
+  <div class="cards">
+    <div class="hc">
+      <h3>What a quest is worth</h3>
+      <p>Forever keeps each quest's Classic XP and multiplies it. Ordinary zone quests stay at ×1. Dungeon quests get 2.6 to 3.75 times as much. The multipliers come from Wowhead's Forever quest data, 705 quests checked, and ForeverChanges agrees on every dungeon quest.</p>
+      <div class="eq">Knowledge in the Deeps: <b>2,750</b> × <b>3.75</b> = 10,312, rounded to <b>10,300 XP</b></div>
+      <table class="mtab">
+        <tr><td>Deadmines, Blackfathom Deeps, Razorfen Kraul, Ruins of Lordaeron</td><td class="n">×3.75</td></tr>
+        <tr><td>Hall of Thanes</td><td class="n">×3.4</td></tr>
+        <tr><td>The Stockade</td><td class="n">×3.2</td></tr>
+        <tr><td>Wailing Caverns</td><td class="n">×2.9</td></tr>
+        <tr><td>Gnomeregan</td><td class="n">×2.6</td></tr>
+        <tr><td>Most zone quests</td><td class="n">×1</td></tr>
+      </table>
+    </div>
+    <div class="hc">
+      <h3>Why the order matters</h3>
+      <p>A quest pays in full until you're 6 levels above it, then less with every level. As you level up during the hour, low-level quests lose value, so QuestBank hands them in first and saves the high-level ones for later.</p>
+      <div class="grey" aria-label="XP paid by how many levels you are above the quest">
+        <div><span class="v">100%</span><span class="b" style="height:100%"></span><span class="k">0 to 5 above</span></div>
+        <div><span class="v">80%</span><span class="b" style="height:80%"></span><span class="k">6</span></div>
+        <div><span class="v">60%</span><span class="b" style="height:60%"></span><span class="k">7</span></div>
+        <div><span class="v">40%</span><span class="b" style="height:40%"></span><span class="k">8</span></div>
+        <div><span class="v">20%</span><span class="b" style="height:20%"></span><span class="k">9</span></div>
+        <div><span class="v">10%</span><span class="b" style="height:10%"></span><span class="k">10+</span></div>
+      </div>
+      <p>Example: Dry Times is level 15. Hand it in at level 23 and it pays 40%, 420 of its 1,050 XP.</p>
+    </div>
+    <div class="hc">
+      <h3>How the route is planned</h3>
+      <p>Every order of the stops within each continent, crossing with your hearthstone in either direction. Each order is scored on your level at minute 60, or at the end if you plan for the whole route. Flights, the tram and boats take fixed times. Runs between NPCs shrink to 62% with a mount.</p>
+      <div class="flow">
+        <div class="cont"><h4>Kalimdor</h4><ol><li>Wailing Caverns mound</li><li>Ratchet</li><li>Auberdine</li><li>Darnassus</li></ol></div>
+        <div class="hs"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_rune_01.jpg" alt="">Hearthstone</div>
+        <div class="cont"><h4>Eastern Kingdoms</h4><ol><li>Sentinel Hill</li><li>Darkshire</li><li>Lakeshire</li><li>Stormwind</li><li>Ironforge</li></ol></div>
+      </div>
+      <p>One example, mounted: the whole bank is handed in by about minute 59. On foot the same route takes about 80 minutes, so QuestBank reorders it for the best first hour instead.</p>
+    </div>
+    <div class="hc">
+      <h3>What it reads, and what it doesn't</h3>
+      <p>It reads your quest log, the quests you've already turned in, your bags, your level and XP, your riding skill, your buffs and your zone. It sends nothing anywhere and never acts for you. The only thing it writes is its own settings file.</p>
+      <p>When you hand in a quest from the plan, a line in chat shows the XP it paid. If that differs from the prediction, the line says so, and the file keeps a record, so the numbers can be checked after a beta patch.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrapx" id="day">
+  <p class="qb-eye">When the cap goes up</p>
+  <h2>The routine</h2>
+  <ol class="routine">
+    <li><div><b>Before you log out</b><p>Open the Hand-in Route on Full plan. Bind your hearthstone at the inn the setup line names, and log out at the first stop.</p></div></li>
+    <li><div><b>Before the first turn-in</b><p>If you have the Cozy Sleeping Bag, lie in it for three minutes. The sleeping bag button lights up once the buff is on.</p></div></li>
+    <li><div><b>When the cap goes up</b><p>Type <code>/qb route</code> and switch to Banked now. That's the order for what you're really holding.</p></div></li>
+    <li><div><b>Stop by stop</b><p>Click Next stop for a map pin. Hand in the lowest level first. Finished quests drop off the list, and the next stop moves to the top.</p></div></li>
+    <li><div><b>Afterwards</b><p>Group quests like the Stockade wait until you're 26 or 27. At quest levels 25 to 27 they still pay in full, and the route already had you pick them up as you passed.</p></div></li>
+  </ol>
+</section>
+
+<section class="wrapx" id="controls">
+  <p class="qb-eye">Reference</p>
+  <h2>Commands and clicks</h2>
+  <div class="tbox">
+    <table class="ctl">
+      <thead><tr><th>Do this</th><th>To</th></tr></thead>
+      <tbody>
+        <tr><td><code>/qb</code> or <code>/questbank</code></td><td>Open or close the window</td></tr>
+        <tr><td><code>/qb route</code></td><td>Open the Hand-in Route</td></tr>
+        <tr><td><code>/qb prep</code></td><td>Open Prep</td></tr>
+        <tr><td><code>/qb export</code>, then <code>/reload</code></td><td>Save a snapshot of your quests, log and bags to <code>WTF\Account\&lt;account&gt;\SavedVariables\QuestBank.lua</code>, for when someone checks your plan</td></tr>
+        <tr><td><code>/qb minimap</code></td><td>Hide or show the minimap button</td></tr>
+        <tr><td><code>/qb reset</code></td><td>Move the window back to the middle of the screen</td></tr>
+        <tr><td>Click a quest</td><td>Map pin on its giver, or on its turn-in NPC once it's banked</td></tr>
+        <tr><td>Shift-click a quest</td><td>Take it in or out of your plan</td></tr>
+        <tr><td>Click or right-click the mount and sleeping bag buttons</td><td>Set it yourself, or go back to automatic</td></tr>
+        <tr><td>Drag the title area</td><td>Move the window. <kbd>Esc</kbd> closes it.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="wrapx" id="help">
+  <p class="qb-eye">Help</p>
+  <h2>Troubleshooting</h2>
+  <div class="faq">
+    <details><summary>It says the addon is out of date</summary><p>Tick Load out of date AddOns on the character screen. Blizzard hasn't published Forever's interface number yet, so every beta addon shows up like this.</p></details>
+    <details><summary>Nothing happens, or I see a Lua error</summary><p>Type <code>/console scriptErrors 1</code> and then <code>/reload</code>. Copy the error text into the Discord and it gets fixed. Check the whole QuestBank folder went in: the five files sit directly in <code>Interface\AddOns\QuestBank</code>.</p></details>
+    <details><summary>The XP I got is different from the plan</summary><p>The chat line after each turn-in shows both numbers. Beta patches can change quest XP, and the addon's file records every turn-in so the numbers can be updated.</p></details>
+    <details><summary>Do I need TomTom?</summary><p>No. Map pins use the game's own map pin. If TomTom is installed, QuestBank uses that instead.</p></details>
+    <details><summary>Does the plan fit my character?</summary><p>The built-in plan is for an Alliance character at the level 20 cap, going to 30. The Quest Log page values any quest it knows, 756 of them, and the XP bar and swaps follow your own log. Horde quests aren't in the plan.</p></details>
+    <details><summary>Is it safe to use?</summary><p>It only reads what the game shows you. It never clicks, accepts or hands in anything for you, and it sends nothing out of the game.</p></details>
+  </div>
+  <p class="credits">XP data read from Wowhead's Forever database and ForeverChanges. Game art and icons by Blizzard Entertainment. Beta data can change with any build.</p>
+</section>
+</main>
+
+<footer>
+  <img src="../mark.svg" alt="" width="22" height="22">
+  <span>QuestBank 2.0.0. Datamined honestly; labeled or it does not ship.</span>
+  <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  <a href="https://foreverrank.com/">foreverrank.com</a>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+  var ICON = "https://wow.zamimg.com/images/wow/icons/large/";
+
+  // illustrated 40-slot grid and swaps, example numbers
+  var slots = [
+    ["inv_misc_note_01", "10.3k", 5, "ok"], ["inv_jewelry_amulet_06", "9.6k", 5, "ok"], ["inv_misc_note_02", "9.8k", 5, "ok"],
+    ["inv_misc_head_human_01", "7.5k", 4, "ok"], ["inv_battery_01", "6.9k", 4, "wait"], ["inv_gizmo_02", "6.3k", 4, "wait"],
+    ["ability_hunter_pet_raptor", "6.1k", 4, "ok"], ["inv_drink_01", "5.7k", 3, "wait"], ["inv_misc_pelt_wolf_ruin_03", "4.8k", 3, "ok"],
+    ["inv_misc_monsterclaw_04", "2.7k", 2, "ok"], ["inv_misc_head_orc_01", "2.7k", 2, "ok"], ["inv_staff_08", "2.6k", 2, "ok"],
+    ["inv_misc_organ_03", "2.4k", 2, "ok"], ["inv_misc_head_orc_01", "2.1k", 2, "wait"], ["inv_misc_horn_01", "2.0k", 2, "wait"],
+    ["inv_jewelry_necklace_04", "1.9k", 2, "wait"], ["inv_banner_03", "1.7k", 2, "ok"], ["inv_misc_fish_02", "1.6k", 2, "ok"],
+    ["inv_jewelry_amulet_03", "1.6k", 2, "ok"], ["inv_misc_note_05", "1.4k", 1, "cut"], ["inv_misc_fish_05", "1.3k", 1, "cut"],
+    ["inv_misc_food_14", "1.1k", 1, "cut"], ["inv_letter_13", "1.1k", 1, "cut"], ["inv_misc_note_05", "900", 1, "cut"],
+    ["inv_misc_note_05", "870", 1, "cut"], ["inv_drink_05", "430", 1, "cut"], ["inv_misc_note_05", "340", 1, "cut"],
+    ["inv_misc_note_05", "270", 1, "cut"], ["inv_misc_note_05", "200", 1, "cut"], ["inv_misc_note_05", "110", 1, "cut"],
+    ["inv_misc_note_05", "?", 1, "cut"], ["inv_misc_note_05", "?", 1, "cut"], ["inv_misc_note_05", "0", 1, "cut"],
+    ["inv_misc_note_05", "0", 1, "cut"], ["inv_misc_note_05", "0", 1, "cut"], ["inv_misc_note_05", "0", 1, "cut"],
+    ["inv_misc_note_05", "0", 1, "cut"], ["inv_misc_note_05", "0", 1, "cut"]
+  ];
+  var grid = document.getElementById("demo-grid");
+  for (var i = 0; i < 40; i++) {
+    var s = slots[i], el = document.createElement("span");
+    if (s) {
+      el.className = "slot q" + s[2];
+      el.innerHTML = '<img src="' + ICON + s[0] + '.jpg" alt=""><b>' + s[1] + '</b><em class="' + s[3] + '"></em>';
+    } else {
+      el.className = "slot vacant";
+    }
+    grid.appendChild(el);
+  }
+  var swaps = [
+    ["inv_misc_note_05", "Test of Righteousness", "spell_holy_sealofmight", "The Test of Righteousness", "+4.6k"],
+    [null, "Free slot", "inv_misc_head_orc_01", "Blackfathom Villainy", "+12.4k"],
+    [null, "Free slot", "inv_misc_head_human_01", "The Defias Brotherhood", "+9.8k"],
+    ["inv_misc_note_05", "Business in Auberdine", "inv_misc_herb_07", "Blueleaf Tubers", "+7.9k"],
+    ["inv_misc_note_05", "After the Ambush", "inv_misc_monsterfang_01", "Chol'aruk the Ravener", "+6.1k"],
+    ["inv_misc_note_05", "Delivering Daffodils", "inv_gizmo_01", "Underground Assault", "+5.8k"],
+    ["inv_misc_note_05", "Messenger to Westfall", "inv_misc_bandana_03", "Red Silk Bandanas", "+4.7k"],
+    ["inv_misc_note_05", "Humble Beginnings", "inv_misc_bomb_05", "Destruction in Deadmines", "+3.9k"],
+    ["inv_misc_note_05", "Stormpike's Delivery", "spell_nature_corrosivebreath", "Smart Drinks", "+3.8k"]
+  ];
+  var sw = document.getElementById("demo-swaps");
+  swaps.forEach(function (r) {
+    var d = document.createElement("div");
+    d.className = "swap";
+    d.innerHTML = '<span class="gone">' + (r[0] ? '<img src="' + ICON + r[0] + '.jpg" alt="">' : '<span class="slot vacant" style="display:block;width:22px;height:22px"></span>') + '</span>' +
+      '<span class="cutn">' + r[1] + '</span><span>&rsaquo;</span><img src="' + ICON + r[2] + '.jpg" alt=""><span class="addn">' + r[3] + '</span><span class="gain">' + r[4] + '</span>';
+    sw.appendChild(d);
+  });
+
+  // tab rail
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.rail [role="tab"]'));
+  function select(tab) {
+    tabs.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+    });
+    fit();
+  }
+  tabs.forEach(function (t, i) {
+    t.addEventListener("click", function () { select(t); });
+    t.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        var n = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+        select(n); n.focus(); e.preventDefault();
+      }
+    });
+  });
+  function fromHash() {
+    var hash = (location.hash || "").slice(1);
+    var t = tabs.filter(function (x) { return x.id === "t-" + hash; })[0];
+    if (t) { select(t); document.getElementById("tour").scrollIntoView(); }
+  }
+  window.addEventListener("hashchange", fromHash);
+  fromHash();
+
+  // scale the 760px illustrations down to fit narrow screens
+  function fit() {
+    Array.prototype.slice.call(document.querySelectorAll(".fit")).forEach(function (box) {
+      var inner = box.firstElementChild;
+      if (!box.offsetParent) return;
+      var w = box.clientWidth, s = Math.min(1, w / 760);
+      inner.style.transform = s < 1 ? "scale(" + s + ")" : "";
+      inner.style.setProperty("--inv", s < 1 ? Math.min(1.9, 1 / s) : 1);
+      box.style.height = s < 1 ? (inner.scrollHeight * s) + "px" : "";
+    });
+  }
+  window.addEventListener("resize", fit);
+  fit();
+
+  // in-game screenshots appear beside the illustrations once they exist
+  Array.prototype.slice.call(document.querySelectorAll("[data-shot]")).forEach(function (fig) {
+    var img = new Image();
+    img.alt = "QuestBank in game";
+    img.loading = "lazy";
+    img.onload = function () { fig.appendChild(img); fig.hidden = false; };
+    img.src = fig.getAttribute("data-shot");
+  });
+})();
+</script>
+<script src="/map.js?v=8" defer></script>
+<script src="/support.js?v=2" defer></script>
+</body>
+</html>

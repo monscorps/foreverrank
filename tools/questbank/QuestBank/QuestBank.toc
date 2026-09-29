@@ -1,0 +1,12 @@
+## Interface: 16001, 11507
+## Title: |cffc6af8dQuestBank|r
+## Notes: Plans your quest bank for the level cap raise: what to fetch, what to cut, and the hand-in route. /qb
+## Author: Mikal
+## Version: 2.0.0
+## IconTexture: Interface\QuestFrame\UI-QuestLog-BookIcon
+## SavedVariables: QuestBankDB
+
+Data.lua
+Core.lua
+Model.lua
+UI.lua
