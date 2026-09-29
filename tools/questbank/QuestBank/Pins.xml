@@ -1,0 +1,23 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+  <Frame name="QuestBankPinTemplate" mixin="QuestBankPinMixin" virtual="true" enableMouse="true">
+    <Size x="22" y="22"/>
+    <Layers>
+      <Layer level="ARTWORK">
+        <Texture parentKey="Icon" setAllPoints="true"/>
+      </Layer>
+      <Layer level="OVERLAY">
+        <FontString parentKey="Num" inherits="NumberFontNormal" justifyH="CENTER">
+          <Anchors>
+            <Anchor point="BOTTOM" relativePoint="TOP" x="0" y="-4"/>
+          </Anchors>
+        </FontString>
+      </Layer>
+    </Layers>
+    <Scripts>
+      <OnLoad method="OnLoad"/>
+      <OnEnter method="OnMouseEnter"/>
+      <OnLeave method="OnMouseLeave"/>
+      <OnMouseUp method="OnClickHandler"/>
+    </Scripts>
+  </Frame>
+</Ui>

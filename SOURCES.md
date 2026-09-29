@@ -225,6 +225,8 @@ Corrections welcome: open an issue.
 
 ## QuestBank (/questbank/)
 
-- Forever quest XP (Classic base and each quest's multiplier), quest levels, givers and turn-in NPCs: Wowhead's Forever quest database, read September 29, 2026.
+- Forever quest XP (Classic base and each quest's multiplier), quest levels, givers and turn-in NPCs, and the chains Forever changed: Wowhead's Forever quest database, both factions, read September 29, 2026.
+- Quest chains (which quest needs which), mutually exclusive quests, race limits, quests that start from items, quest givers and enders, and spawn points where Wowhead has no position: the CMaNGOS Classic database (github.com/cmangos/classic-db, GPL-3.0). QuestBank is released under the GPL-3.0 for this reason.
 - Forever and Classic XP side by side for dungeon quests, and the Cozy Sleeping Bag chain: ForeverChanges.
-- Textures, icons, map IDs and item IDs: the Forever beta client, build 1.60.1.70009.
+- Flight paths (TaxiNodes, TaxiPath, TaxiPathNode), maps (UiMap, UiMapAssignment, AreaTable), the quest XP table (QuestXP) and textures and icons: the Forever beta client, build 1.60.1.70058, via wago.tools. The Classic Era client (1.15.9.70003) for comparison: its QuestXP table is identical, and its map frames show where Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind.
+- Gaps still open, quest by quest: tools/questbank/GAPS.md, written on every build.

@@ -1,7 +1,14 @@
--- Mock WoW client for QuestBank: loads the addon, drives every page, fails on any
--- widget method outside a whitelist of real API methods.
+-- Mock WoW client for QuestBank. Loads the addon into separate clients (each its own globals),
+-- drives every page, sends party sync between them, and fails on any widget method outside a
+-- whitelist of real API methods. It also lays the window out like the game does (anchors,
+-- sizes, text widths in Friz Quadrata) and reports clipped text, overlapping text and anything
+-- that runs out of its box.
+--   luajit tools/questbank/harness.lua                  run every scenario
+--   luajit tools/questbank/harness.lua --layout out.json  also write the owner's window, page by page
 math.randomseed = nil  -- the client has none
-local unpack = unpack or table.unpack
+local HERE = (arg and arg[0] and arg[0]:match("^(.*)/") or ".")
+local LAYOUT_OUT
+for i = 1, #arg do if arg[i] == "--layout" then LAYOUT_OUT = arg[i + 1] end end
 
 local METHODS = {}
 local function allow(list) for m in list:gmatch("%S+") do METHODS[m] = true end end
@@ -14,36 +21,67 @@ RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThum
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
+local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12 }
 
+----------------------------------------------------------------------------
+-- text width in Friz Quadrata, close enough to see what doesn't fit
+----------------------------------------------------------------------------
+local CHAR = {}
+for c in ("iljtfr'.,:;|!I ()[]"):gmatch(".") do CHAR[c] = 0.30 end
+for c in ("mwMW"):gmatch(".") do CHAR[c] = 0.86 end
+for c in ("ABCDEFGHJKLNOPQRSTUVXYZ"):gmatch(".") do CHAR[c] = 0.66 end
+for c in ("0123456789"):gmatch(".") do CHAR[c] = 0.56 end
+local function plain(s) return (s or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") end
+local function textWidth(s, size)
+  local w = 0
+  for c in plain(s):gmatch(".") do w = w + (CHAR[c] or 0.53) end
+  return w * (size or 12)
+end
+
+----------------------------------------------------------------------------
+-- widgets
+----------------------------------------------------------------------------
 local created = 0
-local function newObj(kind, template)
+local ALL = {}
+local function newObj(kind, template, parent)
   created = created + 1
-  local o = { __kind = kind, __scripts = {}, __shown = kind ~= "Frame-hidden", __w = 0, __h = 0, __text = "", __value = 0, __min = 0, __max = 0 }
+  local o = { __kind = kind, __scripts = {}, __shown = true, __w = 0, __h = 0, __text = "", __value = 0, __min = 0,
+              __max = 0, __points = {}, __parent = parent, __alpha = 1, __size = 12, __wrap = true, __justify = "CENTER" }
   o.__backdrop = template and template:find("BackdropTemplate") and true or false
+  o.__template = template
+  if template == "UIPanelCloseButton" then o.__w, o.__h = 32, 32 end
+  ALL[#ALL + 1] = o
   local mt = {}
   mt.__index = function(t, k)
     if METHODS[k] or (BACKDROP[k] and t.__backdrop) then
       return function(self, ...)
         local a = { ... }
+        local n = select("#", ...)
         if k == "SetScript" then self.__scripts[a[1]] = a[2]
         elseif k == "GetScript" then return self.__scripts[a[1]]
         elseif k == "HookScript" then local old = self.__scripts[a[1]]; self.__scripts[a[1]] = function(...) if old then old(...) end a[2](...) end
-        elseif k == "CreateTexture" then return newObj("Texture")
-        elseif k == "CreateFontString" then return newObj("FontString")
+        elseif k == "CreateTexture" then local x = newObj("Texture", nil, self); x.__layer = a[2] or "ARTWORK"; return x
+        elseif k == "CreateFontString" then local x = newObj("FontString", nil, self); x.__layer = a[2] or "OVERLAY"; return x
         elseif k == "Show" then local was = self.__shown; self.__shown = true; if not was and self.__scripts.OnShow then self.__scripts.OnShow(self) end
         elseif k == "Hide" then local was = self.__shown; self.__shown = false; if was and self.__scripts.OnHide then self.__scripts.OnHide(self) end
         elseif k == "SetShown" then if a[1] then self:Show() else self:Hide() end
         elseif k == "IsShown" or k == "IsVisible" then return self.__shown
-        elseif k == "SetSize" then self.__w, self.__h = a[1], a[2]
-        elseif k == "SetWidth" then self.__w = a[1]
-        elseif k == "SetHeight" then self.__h = a[1]
-        elseif k == "GetWidth" then return self.__w
-        elseif k == "GetHeight" then return self.__h
+        elseif k == "SetSize" then self.__w, self.__h = a[1], a[2] or a[1]; self.__wset, self.__hset = true, true
+        elseif k == "SetWidth" then self.__w = a[1]; self.__wset = true
+        elseif k == "SetHeight" then self.__h = a[1]; self.__hset = true
+        elseif k == "GetWidth" then return self.__rw or self.__w
+        elseif k == "GetHeight" then return self.__rh or self.__h
         elseif k == "SetText" then self.__text = a[1] == nil and "" or tostring(a[1])
         elseif k == "GetText" then return self.__text
-        elseif k == "GetStringWidth" then return #self.__text * 6
-        elseif k == "GetStringHeight" then return 14
-        elseif k == "GetFont" then return "Fonts\\FRIZQT__.TTF", 12, ""
+        elseif k == "GetStringWidth" then return textWidth(self.__text, self.__size)
+        elseif k == "GetStringHeight" then return self.__size + 2
+        elseif k == "GetFont" then return "Fonts\\FRIZQT__.TTF", self.__size, ""
+        elseif k == "SetFont" then self.__size = a[2] or self.__size
+        elseif k == "SetFontObject" then self.__size = a[1] and a[1].__fontSize or 12
+        elseif k == "SetJustifyH" then self.__justify = a[1]
+        elseif k == "SetWordWrap" then self.__wrap = a[1] and true or false
+        elseif k == "SetTextColor" then self.__color = { a[1], a[2], a[3] }
+        elseif k == "SetAlpha" then self.__alpha = a[1]
         elseif k == "SetMinMaxValues" then self.__min, self.__max = a[1], a[2]
         elseif k == "GetMinMaxValues" then return self.__min, self.__max
         elseif k == "SetValue" then self.__value = a[1]; if self.__scripts.OnValueChanged then self.__scripts.OnValueChanged(self, a[1]) end
@@ -52,135 +90,528 @@ local function newObj(kind, template)
         elseif k == "GetEffectiveScale" then return 1
         elseif k == "GetPoint" then return "CENTER", nil, "CENTER", 0, 0
         elseif k == "GetName" then return self.__name
-        elseif k == "SetTexture" then self.__tex = a[1]
-        elseif k == "SetColorTexture" then self.__tex = "color"
+        elseif k == "GetParent" then return self.__parent
+        elseif k == "SetTexture" then self.__tex = a[1]; self.__color = nil
+        elseif k == "SetColorTexture" then self.__tex = "color"; self.__color = { a[1], a[2], a[3], a[4] }
+        elseif k == "SetVertexColor" then self.__vertex = { a[1], a[2], a[3] }
+        elseif k == "SetScrollChild" then a[1].__scrollParent = self; self.__child = a[1]
+        elseif k == "SetVerticalScroll" then self.__scroll = a[1]
+        elseif k == "SetHighlightTexture" then self.__hiTex = a[1]
+        elseif k == "ClearAllPoints" then self.__points = {}
+        elseif k == "SetAllPoints" then
+          local rel = a[1] or self.__parent
+          self.__points = { { point = "TOPLEFT", rel = rel, relPoint = "TOPLEFT", x = 0, y = 0 },
+                            { point = "BOTTOMRIGHT", rel = rel, relPoint = "BOTTOMRIGHT", x = 0, y = 0 } }
+        elseif k == "SetPoint" then
+          local point, rel, relPoint, x, y = a[1], nil, nil, 0, 0
+          if n >= 2 then
+            if type(a[2]) == "number" then x, y = a[2], a[3] or 0
+            else
+              rel = a[2]
+              if type(a[3]) == "string" then relPoint, x, y = a[3], a[4] or 0, a[5] or 0
+              else x, y = a[3] or 0, a[4] or 0 end
+            end
+          end
+          assert(type(point) == "string", "SetPoint needs a point")
+          for i = #self.__points, 1, -1 do if self.__points[i].point == point then table.remove(self.__points, i) end end
+          table.insert(self.__points, { point = point, rel = rel, relPoint = relPoint or point, x = x, y = y })
         end
         return nil
       end
     end
-    if type(k) == "string" and k:match("^%l") then return nil end  -- plain fields read nil, like on a real frame
+    if type(k) == "string" and (k:match("^%l") or k:match("^__")) then return nil end  -- plain fields read nil, like on a real frame
     error("unknown widget method: " .. tostring(k) .. " on " .. kind, 2)
   end
   return setmetatable(o, mt)
 end
 
-local function fontObj() local f = newObj("Font"); return f end
-_G.GameFontNormal = fontObj(); _G.GameFontNormalLarge = fontObj(); _G.GameFontHighlightSmall = fontObj()
-_G.GameFontNormalSmall = fontObj(); _G.NumberFontNormal = fontObj()
-_G.BackdropTemplateMixin = {}
-_G.UIParent = newObj("Frame"); _G.Minimap = newObj("Frame"); Minimap:SetSize(140, 140)
-_G.UISpecialFrames = {}
-local lines = {}
-_G.GameTooltip = setmetatable({}, { __index = function(_, k)
-  return function(_, ...) if k == "AddLine" or k == "AddDoubleLine" then lines[#lines + 1] = table.concat({ tostring((...)) }, " ") end end
-end })
-function _G.CreateFrame(kind, name, parent, template)
-  local o = newObj(kind, template)
-  o.__name = name
-  if name then _G[name] = o end
-  if kind == "Frame" or kind == "Button" then end
-  return o
+local function fontObj(name)
+  local f = newObj("Font")
+  f.__fontSize = FONT_SIZE[name] or 12
+  return f
 end
-local timers = {}
-_G.C_Timer = { After = function(_, f) timers[#timers + 1] = f end }
-local function runTimers() local t = timers; timers = {}; for _, f in ipairs(t) do f() end end
-local chat = {}
-_G.DEFAULT_CHAT_FRAME = { AddMessage = function(_, m) chat[#chat + 1] = m end }
-_G.SlashCmdList = {}
-_G.date = os.date
-_G.IsShiftKeyDown = function() return _G.__shift end
-_G.GetCursorPosition = function() return 600, 500 end
-_G.SetPortraitTexture = function() end
-_G.GetBindLocation = function() return "Stormwind City" end
-_G.IsPlayerSpell = function() return _G.__riding or false end
-_G.AuraUtil = { FindAuraByName = function(name) if _G.__rested and name == "Well Rested" then return name end end }
-_G.UnitName = function() return "Mikal" end
-_G.UnitLevel = function() return _G.__level or 20 end
-_G.UnitXP = function() return _G.__xp or 0 end
-_G.UnitXPMax = function() return 23200 end
-_G.UnitClass = function() return "Paladin", "PALADIN" end
-_G.UnitRace = function() return "Human", "Human" end
-_G.UnitFactionGroup = function() return "Alliance" end
-_G.GetNormalizedRealmName = function() return "ForeverNormal" end
-local pins = {}
-_G.UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { m = m, x = x, y = y } end }
-_G.C_SuperTrack = { SetSuperTrackedUserWaypoint = function() end }
 
--- the user's log: C = objectives done
-local LOG = {
+----------------------------------------------------------------------------
+-- one game client: its own globals, character, log, bags, party channel and clock
+----------------------------------------------------------------------------
+local clients = {}
+local lines = {}
+local BASE = setmetatable({}, { __index = _G })
+BASE.BackdropTemplateMixin = {}
+for name in pairs(FONT_SIZE) do BASE[name] = fontObj(name) end
+BASE.GameTooltip = setmetatable({}, { __index = function(_, k)
+  return function(_, ...) if k == "AddLine" or k == "AddDoubleLine" then lines[#lines + 1] = tostring((...)) end end
+end })
+BASE.date = os.date
+BASE.time = os.time
+BASE.debugprofilestop = function() return os.clock() * 1000 end
+BASE.GetCursorPosition = function() return 600, 500 end
+BASE.SetPortraitTexture = function() end
+BASE.geterrorhandler = function() return error end
+BASE.UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { m = m, x = x, y = y } end }
+BASE.C_SuperTrack = { SetSuperTrackedUserWaypoint = function() end }
+BASE.CreateVector2D = function(x, y) return { x = x, y = y } end
+BASE.Ambiguate = function(name) return (name:gsub("%-.*$", "")) end
+BASE.CLASS_ICON_TCOORDS = { PALADIN = { 0, 0.25, 0.5, 0.75 }, WARRIOR = { 0, 0.25, 0, 0.25 }, SHAMAN = { 0.25, 0.49, 0.25, 0.5 } }
+BASE.RAID_CLASS_COLORS = { PALADIN = { r = 0.96, g = 0.55, b = 0.73 }, WARRIOR = { r = 0.78, g = 0.61, b = 0.43 }, SHAMAN = { r = 0, g = 0.44, b = 0.87 } }
+BASE.CreateFromMixins = function(...)
+  local t = {}
+  for i = 1, select("#", ...) do for k, v in pairs(select(i, ...)) do t[k] = v end end
+  return t
+end
+BASE.MapCanvasPinMixin = {
+  SetPosition = function(self, x, y) self.__pos = { x, y } end,
+  UseFrameLevelType = function() end, SetScalingLimits = function() end,
+}
+BASE.MapCanvasDataProviderMixin = { GetMap = function(self) return self.owningMap end }
+
+local function newClient(o)
+  local env = setmetatable({}, { __index = BASE })
+  env._G = env
+  local c = { env = env, o = o, timers = {}, clock = 1000, outbox = {}, pins = {}, chat = {}, frames = {}, QB = {} }
+  env.UIParent = newObj("Frame"); env.UIParent:SetSize(1600, 1000); env.UIParent.__points = {}
+  env.UIParent.__root = true
+  env.Minimap = newObj("Frame"); env.Minimap:SetSize(140, 140)
+  env.UISpecialFrames = {}
+  env.SlashCmdList = {}
+  env.DEFAULT_CHAT_FRAME = { AddMessage = function(_, m) c.chat[#c.chat + 1] = m end }
+  env.CreateFrame = function(kind, name, parent, template)
+    local f = newObj(kind, template, parent)
+    f.__name = name
+    if name then env[name] = f end
+    c.frames[#c.frames + 1] = f
+    return f
+  end
+  env.C_Timer = { After = function(sec, f) c.timers[#c.timers + 1] = { t = c.clock + sec, f = f } end }
+  env.GetTime = function() return c.clock end
+  env.IsShiftKeyDown = function() return c.shift end
+  env.GetBindLocation = function() return o.bind or "Stormwind City" end
+  env.IsPlayerSpell = function() return o.riding or false end
+  env.AuraUtil = { FindAuraByName = function(name) if c.rested and name == "Well Rested" then return name end end }
+  env.UnitName = function() return o.name end
+  env.UnitLevel = function() return c.level or o.level end
+  env.UnitXP = function() return c.xp or 0 end
+  env.UnitXPMax = function() return 23200 end
+  env.UnitClass = function() return o.className, o.class, o.classID end
+  env.UnitRace = function() return o.race, o.race end
+  env.UnitFactionGroup = function() return o.faction end
+  env.GetNormalizedRealmName = function() return "ForeverNormal" end
+  env.IsInGroup = function() return o.group or false end
+  env.IsInRaid = function() return false end
+  env.IsInGuild = function() return o.guild or false end
+  env.GetQuestID = function() return c.window and c.window.id or 0 end
+  env.GetRewardXP = function() return c.window and c.window.xp or 0 end
+  -- the Classic way: the selected entry's XP, whatever ID is passed
+  env.GetQuestLogSelection = function() return c.selected or 0 end
+  env.SelectQuestLogEntry = function(i) c.selected = i end
+  env.GetQuestLogRewardXP = function()
+    local e = c.log[(c.selected or 0) - 2]
+    return e and o.liveXP and o.liveXP[e[1]] or 0
+  end
+  env.C_Container = {
+    GetContainerNumSlots = function(bag) return bag == 0 and #(o.bagSlots or {}) or 0 end,
+    GetContainerItemID = function(_, slot) return o.bagSlots[slot] and o.bagSlots[slot][1] end,
+    GetContainerItemLink = function(_, slot) return o.bagSlots[slot] and ("[Item " .. o.bagSlots[slot][1] .. "]") end,
+    GetContainerItemInfo = function(_, slot) return o.bagSlots[slot] and { stackCount = o.bagSlots[slot][2] } end,
+    GetContainerItemQuestInfo = function(_, slot) local s = o.bagSlots[slot]; return { questID = s and s[3], isActive = false } end,
+    GetItemCooldown = function() return c.hearthCD or 0, c.hearthCD and 3600 or 0, 1 end,
+  }
+  env.C_Item = {
+    GetItemCount = function(id) local n = 0; for _, s in ipairs(o.bagSlots or {}) do if s[1] == id then n = n + s[2] end end return n end,
+    GetItemIconByID = function(id) return id and 133328 or nil end,
+  }
+  env.C_QuestLog = {
+    IsQuestFlaggedCompleted = function(id) return c.done[id] or false end,
+    GetNumQuestLogEntries = function() return c.logReady == false and 0 or #c.log + 2 end,
+    GetInfo = function(i)
+      if i == 1 then return { title = "Zone", isHeader = true } end
+      if i == 2 then return { title = "Dungeons", isHeader = true } end
+      local e = c.log[i - 2]
+      if not e then return nil end
+      return { title = "Quest " .. e[1], level = 20, questID = e[1], isHeader = false }
+    end,
+    IsComplete = function(id) for _, e in ipairs(c.log) do if e[1] == id then return e[2] == 1 end end return false end,
+    GetQuestObjectives = function() return { { text = "thing", finished = false, numFulfilled = 3, numRequired = 10 } } end,
+    GetAllCompletedQuestIDs = function() local t = {} for k, v in pairs(c.done) do if v then t[#t + 1] = k end end return t end,
+  }
+  env.C_Map = {
+    GetBestMapForUnit = function() return o.map or 1453 end,
+    CanSetUserWaypointOnMap = function() return true end,
+    SetUserWaypoint = function(p) c.pins[#c.pins + 1] = p end,
+    GetPlayerMapPosition = function() return { x = 0.66, y = 0.62, GetXY = function(self) return self.x, self.y end } end,
+    GetWorldPosFromMapPos = function() return o.world[1], { x = o.world[2], y = o.world[3], GetXY = function(self) return self.x, self.y end } end,
+    GetMapRectOnMap = function() return 0.4, 0.6, 0.4, 0.6 end,
+  }
+  env.C_ChatInfo = {
+    RegisterAddonMessagePrefix = function() return true end,
+    SendAddonMessage = function(prefix, msg, channel, target)
+      assert(#msg <= 255, "addon message too long: " .. #msg)
+      c.outbox[#c.outbox + 1] = { prefix, msg, channel, target }
+    end,
+  }
+  -- the world map, with a data provider and pins made from the XML template
+  local map = { shown = true, pins = {}, providers = {} }
+  env.WorldMapFrame = {
+    AddDataProvider = function(_, p) p.owningMap = map; map.providers[#map.providers + 1] = p end,
+    IsShown = function() return map.shown end,
+  }
+  function map:GetMapID() return 1453 end
+  function map:RemoveAllPinsByTemplate() self.pins = {} end
+  function map:AcquirePin(template, d, x, y)
+    assert(template == "QuestBankPinTemplate")
+    local pin = newObj("Frame")
+    pin.Icon, pin.Num = newObj("Texture", nil, pin), newObj("FontString", nil, pin)
+    for k, v in pairs(env.QuestBankPinMixin) do pin[k] = v end
+    pin:OnLoad()
+    pin:OnAcquired(d, x, y)
+    self.pins[#self.pins + 1] = pin
+  end
+  c.map = map
+  c.log, c.done, c.level, c.xp = o.log, o.done, o.level, o.xp or 0
+  for _, f in ipairs({ "Data.lua", "Core.lua", "Model.lua", "Pins.lua", "Sync.lua", "UI.lua" }) do
+    local chunk = assert(loadfile(HERE .. "/QuestBank/" .. f))
+    setfenv(chunk, env)
+    chunk("QuestBank", c.QB)
+  end
+  c.ev = c.QB.eventFrame.__scripts.OnEvent
+  clients[#clients + 1] = c
+  return c
+end
+
+-- run what is due on the client's clock, then advance it
+local function tick(c, seconds)
+  local target = c.clock + (seconds or 0)
+  for _ = 1, 1000 do
+    table.sort(c.timers, function(a, b) return a.t < b.t end)
+    local nxt = c.timers[1]
+    if not nxt or nxt.t > target then break end
+    table.remove(c.timers, 1)
+    c.clock = math.max(c.clock, nxt.t)
+    nxt.f()
+  end
+  c.clock = target
+  for _, f in ipairs(c.frames) do
+    local u = f.__scripts.OnUpdate
+    for _ = 1, 400 do
+      u = f.__scripts.OnUpdate
+      if not u then break end
+      u(f, 0.016)
+    end
+  end
+end
+
+-- deliver every client's addon messages to the others in the same group
+local function deliver()
+  local moved = 0
+  for _, from in ipairs(clients) do
+    local box = from.outbox
+    from.outbox = {}
+    for _, m in ipairs(box) do
+      for _, to in ipairs(clients) do
+        if to ~= from and to.QB.Sync.frame then
+          local reach = (m[3] == "WHISPER" and m[4] == to.o.name) or ((m[3] == "PARTY" or m[3] == "RAID") and from.o.group and to.o.group)
+            or (m[3] == "GUILD" and from.o.guild and to.o.guild)
+          if reach then
+            to.QB.Sync.frame.__scripts.OnEvent(to.QB.Sync.frame, "CHAT_MSG_ADDON", m[1], m[2], m[3], from.o.name .. "-ForeverNormal")
+            moved = moved + 1
+          end
+        end
+      end
+    end
+  end
+  return moved
+end
+
+local function login(c)
+  c.ev(c.QB.eventFrame, "ADDON_LOADED", "QuestBank")
+  c.ev(c.QB.eventFrame, "PLAYER_LOGIN")
+  c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE")
+  tick(c, 15)
+  assert(c.env.QuestBankDB.chars[c.o.name .. "-ForeverNormal"], "login snapshot")
+end
+
+local function poke(obj)
+  local s = obj.__scripts
+  if s.OnEnter then lines = {}; s.OnEnter(obj); assert(#lines > 0, "tooltip empty"); if s.OnLeave then s.OnLeave(obj) end end
+  if s.OnClick then s.OnClick(obj, "LeftButton") end
+end
+
+----------------------------------------------------------------------------
+-- layout: resolve anchors to boxes like the game does
+----------------------------------------------------------------------------
+local GEN = 0
+local function anchorXY(r, point)
+  local x = point:find("LEFT") and r.l or (point:find("RIGHT") and r.r or (r.l + r.r) / 2)
+  local y = point:find("TOP") and r.t or (point:find("BOTTOM") and r.b or (r.t + r.b) / 2)
+  return x, y
+end
+
+local rectOf
+function rectOf(o, depth)
+  depth = (depth or 0) + 1
+  if depth > 60 then error("anchor loop") end
+  if o.__gen == GEN then return o.__rect end
+  o.__gen = GEN
+  if o.__root then
+    o.__rect = { l = 0, r = o.__w, t = o.__h, b = 0 }
+    return o.__rect
+  end
+  local L, R, T, B, CX, CY
+  if o.__scrollParent then
+    local sr = rectOf(o.__scrollParent, depth)
+    if sr then L, T = sr.l, sr.t + (o.__scrollParent.__scroll or 0) end
+  end
+  for _, p in ipairs(o.__points) do
+    local rel = p.rel or o.__parent
+    local rr = rel and rectOf(rel, depth)
+    if rr then
+      local ax, ay = anchorXY(rr, p.relPoint)
+      ax, ay = ax + (p.x or 0), ay + (p.y or 0)
+      local pt = p.point
+      if pt:find("LEFT") then L = ax elseif pt:find("RIGHT") then R = ax else CX = ax end
+      if pt:find("TOP") then T = ay elseif pt:find("BOTTOM") then B = ay else CY = ay end
+    end
+  end
+  if not (L or R or CX) or not (T or B or CY) then o.__rect = nil; return nil end
+  local w, h = o.__w or 0, o.__h or 0
+  local isText = o.__kind == "FontString"
+  if isText then
+    local tw = textWidth(o.__text, o.__size)
+    if not o.__wset and not (L and R) then w = tw end
+    if not o.__hset and not (T and B) then
+      local lines = 1
+      if o.__wrap and o.__wset and w > 0 then lines = math.max(1, math.ceil(tw / w)) end
+      h = lines * (o.__size + 2)
+    end
+  end
+  if L and R then w = R - L elseif L then R = L + w elseif R then L = R - w else L = CX - w / 2; R = CX + w / 2 end
+  if T and B then h = T - B elseif T then B = T - h elseif B then T = B + h else T = CY + h / 2; B = CY - h / 2 end
+  o.__rw, o.__rh = w, h
+  o.__rect = { l = L, r = R, t = T, b = B }
+  return o.__rect
+end
+
+local function visible(o)
+  while o do
+    if not o.__shown then return false end
+    if o.__root then return true end
+    o = o.__parent or o.__scrollParent
+  end
+  return false
+end
+
+local function ancestors(o)
+  local list = {}
+  local p = o.__parent or o.__scrollParent
+  while p do list[#list + 1] = p; p = p.__parent or p.__scrollParent end
+  return list
+end
+
+-- the part of a label that has ink: the text, not the box, on the side its justify puts it
+local function ink(o, r)
+  local tw = textWidth(o.__text, o.__size)
+  local w = r.r - r.l
+  if o.__wrap and o.__wset then return r end
+  local used = math.min(tw, w > 0 and w or tw)
+  if o.__justify == "RIGHT" then return { l = r.r - used, r = r.r, t = r.t, b = r.b }
+  elseif o.__justify == "CENTER" then local cx = (r.l + r.r) / 2; return { l = cx - used / 2, r = cx + used / 2, t = r.t, b = r.b } end
+  return { l = r.l, r = r.l + used, t = r.t, b = r.b }
+end
+
+local function overlap(a, b, pad)
+  pad = pad or 1
+  return a.l < b.r - pad and b.l < a.r - pad and a.b < b.t - pad and b.b < a.t - pad
+end
+
+-- every problem with the window as it is on screen now
+local function checkLayout(root, label)
+  GEN = GEN + 1
+  local problems, texts = {}, {}
+  local rootRect = rectOf(root)
+  for _, o in ipairs(ALL) do
+    if o.__kind == "FontString" and o.__text ~= "" and visible(o) then
+      local anc = ancestors(o)
+      local inside = false
+      for _, a in ipairs(anc) do if a == root then inside = true end end
+      if inside then
+        local r = rectOf(o)
+        if r then
+          local tw = textWidth(o.__text, o.__size)
+          if o.__wset and not o.__wrap and tw > (r.r - r.l) + 3 then
+            problems[#problems + 1] = string.format("%s: clipped '%s' (%.0f of %.0f px)", label, plain(o.__text):sub(1, 60), r.r - r.l, tw)
+          end
+          local ir = ink(o, r)
+          -- inside a scroll view: across it must fit, down it scrolls
+          local clip
+          for _, a in ipairs(anc) do if a.__child then clip = rectOf(a); break end end
+          if clip and (ir.r > clip.r + 2 or ir.l < clip.l - 2) then
+            problems[#problems + 1] = string.format("%s: '%s' runs out of the scroll view", label, plain(o.__text):sub(1, 50))
+          end
+          local inView = not clip or (ir.b < clip.t and ir.t > clip.b)
+          if clip and inView then
+            -- what shows is cut to the scroll view
+            ir = { l = math.max(ir.l, clip.l), r = math.min(ir.r, clip.r), t = math.min(ir.t, clip.t), b = math.max(ir.b, clip.b) }
+          end
+          if not clip and (ir.r > rootRect.r - 10 or ir.l < rootRect.l + 10 or ir.b < rootRect.b + 8 or ir.t > rootRect.t) then
+            problems[#problems + 1] = string.format("%s: '%s' runs out of the window", label, plain(o.__text):sub(1, 50))
+          end
+          if inView then texts[#texts + 1] = { o = o, r = ir, clip = clip } end
+        end
+      end
+    end
+  end
+  -- buttons with a label or an icon take room too
+  for _, o in ipairs(ALL) do
+    if (o.__template == "UIPanelButtonTemplate" or (o.__kind == "Button" and o.__wset and o.__w <= 40 and o.__w >= 16)) and visible(o) then
+      local anc = ancestors(o)
+      local inside = false
+      for _, a in ipairs(anc) do if a == root then inside = true end end
+      local r = inside and rectOf(o)
+      if r then
+        local clip
+        for _, a in ipairs(anc) do if a.__child then clip = rectOf(a); break end end
+        if not clip or (r.b < clip.t and r.t > clip.b) then
+          texts[#texts + 1] = { o = o, r = r, button = true }
+        end
+      end
+    end
+  end
+  for i = 1, #texts do
+    for j = i + 1, #texts do
+      local a, b = texts[i], texts[j]
+      local nested = false
+      if a.button or b.button then
+        local btn, other = a.button and a or b, a.button and b or a
+        for _, x in ipairs(ancestors(other.o)) do if x == btn.o then nested = true end end
+        if a.button and b.button then nested = false end
+      end
+      if not nested and overlap(a.r, b.r, 1.5) then
+        local name = function(t) return t.button and ("[button " .. plain(t.o.__text or ""):sub(1, 20) .. "]") or plain(t.o.__text):sub(1, 40) end
+        problems[#problems + 1] = string.format("%s: '%s' overlaps '%s'", label, name(a), name(b))
+      end
+    end
+  end
+  return problems
+end
+
+-- a drawing of the window for the layout page
+local function dumpLayout(root, label)
+  GEN = GEN + 1
+  local rr = rectOf(root)
+  local items = {}
+  local texNames = {}
+  for k, v in pairs(clients[1].QB.Data.TEX) do texNames[v] = k end
+  for idx, o in ipairs(ALL) do
+    if visible(o) and o ~= root then
+      local anc = ancestors(o)
+      local inside = false
+      for _, a in ipairs(anc) do if a == root then inside = true end end
+      if inside then
+        local r = rectOf(o)
+        if r and (r.r - r.l) > 0 and (r.t - r.b) > 0 then
+          local it = { k = o.__kind, x = r.l - rr.l, y = rr.t - r.t, w = r.r - r.l, h = r.t - r.b, i = idx, a = o.__alpha, depth = #anc }
+          if o.__kind == "FontString" then
+            it.text, it.size, it.j, it.wrap = plain(o.__text), o.__size, o.__justify, o.__wrap
+            it.c = o.__color
+          elseif o.__kind == "Texture" then
+            if o.__layer == "HIGHLIGHT" then it = nil
+            else
+              it.layer = o.__layer
+              it.tex = o.__tex == "color" and "color" or (texNames[o.__tex] or (o.__tex and "icon") or nil)
+              it.c = o.__color or o.__vertex
+              if not it.tex then it = nil end
+            end
+          else
+            it.bd = o.__backdrop or nil
+            it.tpl = o.__template
+            it.text = o.__template and o.__text ~= "" and o.__text or nil
+          end
+          if it then
+            for _, a in ipairs(anc) do if a.__child then local c = rectOf(a); it.clip = { x = c.l - rr.l, y = rr.t - c.t, w = c.r - c.l, h = c.t - c.b }; break end end
+            items[#items + 1] = it
+          end
+        end
+      end
+    end
+  end
+  return { label = label, w = rr.r - rr.l, h = rr.t - rr.b, items = items }
+end
+
+local function json(v)
+  local t = type(v)
+  if t == "table" then
+    if #v > 0 or next(v) == nil then
+      local parts = {}
+      for i = 1, #v do parts[i] = json(v[i]) end
+      return "[" .. table.concat(parts, ",") .. "]"
+    end
+    local parts = {}
+    for k, x in pairs(v) do parts[#parts + 1] = string.format("%q:%s", tostring(k), json(x)) end
+    return "{" .. table.concat(parts, ",") .. "}"
+  elseif t == "string" then return string.format("%q", v):gsub("\\\n", "\\n")
+  elseif t == "number" then return string.format("%.1f", v)
+  elseif t == "boolean" then return tostring(v) end
+  return "null"
+end
+
+----------------------------------------------------------------------------
+-- scenario 1: the owner, an Alliance paladin at the level 20 cap with a full bank
+----------------------------------------------------------------------------
+local OWNER_LOG = {
   { 971, 1 }, { 1275, 1 }, { 1199, 1 }, { 97894, 1 }, { 2922, 0 }, { 2926, 0 }, { 2928, 0 }, { 454, 1 }, { 217, 0 }, { 297, 0 },
   { 255, 0 }, { 143, 1 }, { 131, 1 }, { 116, 1 }, { 92, 0 }, { 118, 1 }, { 150, 1 }, { 98387, 1 }, { 127, 0 }, { 91, 0 },
   { 34, 0 }, { 128, 0 }, { 95999, 1 }, { 169, 1 }, { 180, 1 }, { 95189, 1 }, { 399, 1 }, { 353, 1 }, { 343, 1 }, { 79192, 1 },
   { 168, 1 }, { 167, 1 }, { 391, 1 }, { 1486, 1 }, { 1487, 1 }, { 276, 0 }, { 470, 0 }, { 1654, 1 },
 }
-local DONE = { [96393] = true, [96394] = true, [96395] = true, [96403] = true, [98423] = true, [96391] = true, [6981] = true,
-  [155] = true, [142] = true, [141] = true, [135] = true, [132] = true, [65] = true, [1198] = false, [389] = true, [373] = true }
-local BAGS = { [268540] = 4, [251522] = 1 }
-_G.C_QuestLog = {
-  IsQuestFlaggedCompleted = function(id) return DONE[id] or false end,
-  GetNumQuestLogEntries = function() return #LOG + 3 end,
-  GetInfo = function(i)
-    if i == 1 then return { title = "Redridge Mountains", isHeader = true } end
-    if i == 2 then return { title = "Dungeons", isHeader = true } end
-    if i == 3 then return { title = "Loch Modan", isHeader = true } end
-    local e = LOG[i - 3]
-    if not e then return nil end
-    return { title = "Quest " .. e[1], level = 20, questID = e[1], isHeader = false }
-  end,
-  IsComplete = function(id) for _, e in ipairs(LOG) do if e[1] == id then return e[2] == 1 end end return false end,
-  GetQuestObjectives = function(id) return { { text = "thing", finished = false, numFulfilled = 3, numRequired = 10 } } end,
-  GetAllCompletedQuestIDs = function() local t = {} for k, v in pairs(DONE) do if v then t[#t + 1] = k end end return t end,
-}
-_G.C_Item = { GetItemCount = function(id) return BAGS[id] or 0 end, GetItemIconByID = function(id) return 133328 end }
-_G.C_Map = { GetBestMapForUnit = function() return 1453 end, CanSetUserWaypointOnMap = function() return true end,
-  SetUserWaypoint = function(p) pins[#pins + 1] = p end }
-_G.C_Container = {
-  GetContainerNumSlots = function(bag) return bag == 0 and 2 or 0 end,
-  GetContainerItemID = function(_, slot) return slot == 1 and 268540 or 251522 end,
-  GetContainerItemLink = function(_, slot) return slot == 1 and "[Bloodied Insignia]" or "[Blood-Stained Letter]" end,
-  GetContainerItemInfo = function(_, slot) return { stackCount = slot == 1 and 4 or 1 } end,
-}
-
--- load the addon in TOC order
-local QB = {}
-for _, f in ipairs({ "Data.lua", "Core.lua", "Model.lua", "UI.lua" }) do
-  local chunk = assert(loadfile((arg and arg[0] and arg[0]:match("^(.*)/") or ".") .. "/QuestBank/" .. f))
-  chunk("QuestBank", QB)
-end
-local ev = QB.eventFrame.__scripts.OnEvent
-ev(QB.eventFrame, "ADDON_LOADED", "QuestBank")
-ev(QB.eventFrame, "PLAYER_LOGIN")
-runTimers()
-assert(QuestBankDB.chars["Mikal-ForeverNormal"], "login snapshot")
-
--- open and walk every page
-SlashCmdList.QUESTBANK("")
+local owner = newClient({
+  name = "Mikal", level = 20, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2, race = "Human",
+  log = OWNER_LOG, group = true, guild = true, world = { 0, -8830, 480 },
+  done = { [96393] = true, [96394] = true, [96395] = true, [96403] = true, [98423] = true, [96391] = true, [6981] = true,
+           [155] = true, [142] = true, [141] = true, [135] = true, [132] = true, [65] = true, [389] = true, [373] = true },
+  bagSlots = { { 268540, 4 }, { 251522, 1 } },
+})
+local QB = owner.QB
+login(owner)
+owner.env.SlashCmdList.QUESTBANK("")
 local UI = QB.UI
 assert(UI.frame:IsShown(), "window opens")
-for tab = 1, 3 do UI:ShowTab(tab) end
-local v1, v2, v3 = UI.views[1], UI.views[2], UI.views[3]
+QB.Model.Finish()
+for tab = 1, 4 do UI:ShowTab(tab) end
+local v1, v2, v3, v4 = UI.views[1], UI.views[2], UI.views[3], UI.views[4]
 print("log title:", v1.title:GetText(), "|", v1.worth:GetText())
 print("header:", UI.header.legend:GetText())
 
--- hover and click everything that has a script
-local function poke(obj)
-  local s = obj.__scripts
-  if s.OnEnter then lines = {}; s.OnEnter(obj); assert(#lines > 0, "tooltip empty"); s.OnLeave(obj) end
-  if s.OnClick then s.OnClick(obj, "LeftButton") end
-end
 UI:ShowTab(1)
 for _, b in ipairs(v1.slots) do poke(b) end
-for _, b in ipairs(v1.bagSlots) do poke(b) end
+for _, b in ipairs(v1.bagSlots) do if b:IsShown() then poke(b) end end
 for _, r in ipairs(v1.swaps) do if r:IsShown() then poke(r) end end
-local shown = 0
-for _, r in ipairs(v1.swaps) do if r:IsShown() then shown = shown + 1; print(string.format("  swap: %-28s -> %-32s %s", r.cutName:GetText(), r.addName:GetText(), r.gain:GetText())) end end
-print("swaps shown:", shown)
+for _, r in ipairs(v1.swaps) do if r:IsShown() then print(string.format("  swap: %-28s -> %-32s %s", r.cutName:GetText(), r.addName:GetText(), r.gain:GetText())) end end
 UI:ShowTab(2)
+local cards = 0
 for _, c in ipairs(v2.cards.items) do
   if c:IsShown() then
-    print(string.format("  card %-26s %-12s %s", c.title:GetText(), c.gain:GetText(), c.count:GetText()))
+    cards = cards + 1
+    if cards <= 8 then print(string.format("  card %-26s %-12s %s", c.title:GetText(), c.gain:GetText(), c.count:GetText())) end
     poke(c.pin)
     for _, r in ipairs(c.rows.items) do if r:IsShown() then poke(r) end end
+  end
+end
+print("prep cards:", cards)
+-- open a card to see every quest in it, and close it again
+for _, c in ipairs(v2.cards.items) do
+  if c:IsShown() and c.more:IsShown() then
+    local before = 0
+    for _, r in ipairs(c.rows.items) do if r:IsShown() then before = before + 1 end end
+    local title = c.title:GetText()
+    c.more.__scripts.OnClick(c.more)
+    local after = 0
+    for _, cc in ipairs(v2.cards.items) do
+      if cc:IsShown() and cc.title:GetText() == title then for _, r in ipairs(cc.rows.items) do if r:IsShown() then after = after + 1 end end end
+    end
+    print(string.format("  opened %s: %d rows, then %d", title, before, after))
+    assert(after > before, "opening a card shows more")
+    for _, cc in ipairs(v2.cards.items) do if cc:IsShown() and cc.title:GetText() == title then cc.more.__scripts.OnClick(cc.more) end end
+    break
   end
 end
 UI:ShowTab(3)
@@ -188,61 +619,250 @@ print("route now:", v3.summary:GetText())
 print("setup:", v3.setup:GetText())
 for _, l in ipairs(v3.legs.items) do
   if l:IsShown() then
-    print(string.format("  %s %-22s %-28s %s", l.clock:GetText(), l.name:GetText(), l.travel:GetText(), l.level:GetText()))
+    print(string.format("  %5s %-26s %-34s %s", l.clock:GetText(), l.name:GetText(), l.travel:GetText(), l.level:GetText()))
     poke(l.pin)
     for _, r in ipairs(l.rows) do if r:IsShown() then poke(r) end end
   end
 end
 v3.modePlan.__scripts.OnClick(v3.modePlan)
+QB.Model.Finish()
+UI:Refresh()
 print("route plan:", v3.summary:GetText())
 print("setup:", v3.setup:GetText())
-
--- header toggles, left and right click
-for _, key in ipairs({ "mounted", "bag", "goal", "pin" }) do
+for _, key in ipairs({ "mounted", "bag", "goal", "pins" }) do
   local b = UI.header.toggles[key]
   lines = {}; b.__scripts.OnEnter(b); assert(#lines > 0)
   b.__scripts.OnClick(b, "LeftButton")
   b.__scripts.OnClick(b, "RightButton")
 end
-UI:ShowTab(3)
-print("after toggles:", v3.summary:GetText())
+QB:Settings().pins = true
+QB.Model.Finish()
+UI:Refresh()
+print("after switches:", v3.summary:GetText())
+v3.modeNow.__scripts.OnClick(v3.modeNow)
+QB.Model.Finish()
 
--- shift-click a prep row out of the plan and back
+-- the layout of every page, checked and drawn
+local layouts, problems = {}, {}
+for tab = 1, 4 do
+  UI:ShowTab(tab)
+  QB.Model.Finish()
+  UI:Refresh()
+  for _, p in ipairs(checkLayout(UI.frame, "tab " .. tab)) do problems[#problems + 1] = p end
+  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Prep", "Hand-in Route", "Party" })[tab])
+end
+
+-- the Prep page scrolled to the Redridge card
+do
+  UI:ShowTab(2)
+  UI:Refresh()
+  for _, c in ipairs(v2.cards.items) do
+    if c:IsShown() and c.title:GetText() == "Redridge Mountains" then
+      local _, _, _, _, y = c.__points[1].point, nil, nil, nil, c.__points[1].y
+      v2.scroll.bar:SetValue(-c.__points[1].y)
+      layouts[#layouts + 1] = dumpLayout(UI.frame, "Prep, scrolled to Redridge")
+      v2.scroll.bar:SetValue(0)
+    end
+  end
+end
+
+-- shift-click: cut a quest in the log, fetch one that isn't
+owner.shift = true
+local slot = v1.slots[1]
+UI:ShowTab(1)
+local cutID = v1.slots[1].q.id
+slot.__scripts.OnClick(slot, "LeftButton")
+assert(QB:IsCut(cutID), "shift-click cuts a quest in the log")
+for _, b in ipairs(v1.slots) do if b.q and b.q.id == cutID then slot = b end end
+slot.__scripts.OnClick(slot, "LeftButton")
+assert(not QB:IsCut(cutID), "and keeps it again")
 UI:ShowTab(2)
-_G.__shift = true
-local row
-for _, c in ipairs(v2.cards.items) do for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q then row = row or r end end end
-local id = row.q.id
-row.__scripts.OnClick(row, "LeftButton")
-assert(QuestBankDB.settings.plan[id] ~= nil, "shift-click toggles the plan")
-_G.__shift = false
+local fetchRow
+for _, c in ipairs(v2.cards.items) do for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q and not QB.state.log[r.q.id] and r.st.code == "todo" then fetchRow = fetchRow or r end end end
+assert(fetchRow, "a quest to fetch on the Prep page")
+local fetchID = fetchRow.q.id
+fetchRow.__scripts.OnClick(fetchRow, "LeftButton")
+assert(QB:IsAdded(fetchID), "shift-click adds it to the plan")
+print("fetch:", QB.Quest.Get(fetchID).name, "added to the plan")
+owner.shift = false
+tick(owner, 1)
+QB.Model.Finish()
 
--- events during the turn-in hour
-ev(QB.eventFrame, "QUEST_TURNED_IN", 971, 10300)
-ev(QB.eventFrame, "BAG_UPDATE_DELAYED")
-ev(QB.eventFrame, "UNIT_AURA", "target")
-ev(QB.eventFrame, "UNIT_AURA", "player")
-runTimers()
-print("chat:", chat[#chat])
+-- a quest leaves the log without a hand-in, and one is handed in
+local before = #owner.chat
+table.remove(owner.log, 9) -- 217
+owner.ev(QB.eventFrame, "QUEST_REMOVED", 217)
+owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+tick(owner, 1)
+assert(QB:Plan().removed[217], "an abandoned quest is noticed")
+print("abandon:", owner.chat[#owner.chat])
+UI:ShowTab(1)
+print("dropped:", v1.dropTitle:GetText(), "|", v1.drops:GetText())
 
--- minimap button: drag and click
+-- the cap goes up: the first hand-in starts the run, the route re-plans from here
+owner.level, owner.xp = 20, 0
+QB.Model.Finish()
+local firstLeg = QB.routeNow.legs[1]
+local firstQ = firstLeg.rows[1].q.id
+owner.window = { id = firstQ, xp = firstLeg.rows[1].xp }
+owner.ev(QB.eventFrame, "QUEST_COMPLETE")
+for i, e in ipairs(owner.log) do if e[1] == firstQ then table.remove(owner.log, i) break end end
+owner.done[firstQ] = true
+owner.ev(QB.eventFrame, "QUEST_TURNED_IN", firstQ, firstLeg.rows[1].xp)
+owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+tick(owner, 1)
+assert(QB.Run.Get(), "the first hand-in above the old cap starts the run")
+QB.Model.Finish()
+UI:ShowTab(3)
+UI:Refresh()
+print("run:", v3.setup:GetText())
+local handed = v3.legs.items[1]
+print("  first leg:", handed.travel:GetText(), handed.name:GetText())
+for _, p in ipairs(checkLayout(UI.frame, "run")) do problems[#problems + 1] = p end
+layouts[#layouts + 1] = dumpLayout(UI.frame, "Hand-in Route, during the run")
+print("chat:", owner.chat[#owner.chat])
+print("live XP from the game:", QB.Live.Source(QB.Quest.Get(firstQ)))
+
+-- chains: Morganth waits behind A Watchful Eye and Looking Further, and says so
+do
+  local morganth = QB.Quest.Get(249)
+  local st = QB:Status(morganth)
+  assert(st.code == "prereq" and st.text:find("A Watchful Eye"), "Morganth needs its chain first: " .. st.text)
+  owner.done[94], owner.done[248] = true, true
+  st = QB:Status(morganth)
+  assert(st.code == "todo", "Morganth opens once Looking Further is done")
+  owner.done[94], owner.done[248] = nil, nil
+  lines = {}
+  UI.QuestTooltip(owner.env.GameTooltip, morganth, QB:Status(morganth))
+  local chain = false
+  for _, l in ipairs(lines) do if l:find("Looking Further") then chain = true end end
+  assert(chain, "the tooltip shows the chain")
+  print("Morganth:", QB:Status(morganth).text)
+  local tz = QB:Status(QB.Quest.Get(19))
+  assert(tz.text:find("Hand in Blackrock Blockade first"), "holding Blackrock Blockade puts it next in line: " .. tz.text)
+  print("Tharil'zun:", tz.text)
+end
+
+-- map pins
+QB.Pins:Update()
+print("world map pins:", #owner.map.pins, "waypoints:", #owner.pins)
+assert(#owner.map.pins > 0, "the route has pins on the world map")
+for _, pin in ipairs(owner.map.pins) do lines = {}; pin:OnMouseEnter(); assert(#lines > 0); pin:OnMouseLeave() end
+
+-- minimap button, slash commands, export
 local mb = QB.Minimap.button
-assert(mb, "minimap button")
 mb.__scripts.OnDragStart(mb); mb.__scripts.OnUpdate(mb); mb.__scripts.OnDragStop(mb)
 mb.__scripts.OnClick(mb, "RightButton")
 lines = {}; mb.__scripts.OnEnter(mb); assert(#lines > 0)
+for _, cmd in ipairs({ "export", "route", "prep", "party", "minimap", "minimap", "reset", "next", "pins", "pins", "stop" }) do owner.env.SlashCmdList.QUESTBANK(cmd) end
+assert(not QB.Run.Get(), "/qb stop ends the run")
+owner.ev(QB.eventFrame, "PLAYER_LOGOUT")
 
--- slash commands and export
-SlashCmdList.QUESTBANK("export")
-SlashCmdList.QUESTBANK("route")
-SlashCmdList.QUESTBANK("prep")
-SlashCmdList.QUESTBANK("minimap")
-SlashCmdList.QUESTBANK("reset")
-ev(QB.eventFrame, "PLAYER_LOGOUT")
-print("map pins set:", #pins, "widgets created:", created)
+----------------------------------------------------------------------------
+-- scenario 2: a friend, Alliance warrior at 18, other quests; party sync both ways
+----------------------------------------------------------------------------
+local friend = newClient({
+  name = "Brann", level = 18, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Dwarf",
+  log = { { 166, 0 }, { 214, 1 }, { 2040, 1 }, { 167, 1 }, { 101, 1 }, { 58, 0 }, { 90, 1 }, { 1199, 0 }, { 1200, 0 }, { 128, 1 }, { 219, 0 }, { 91, 1 } },
+  done = { [65] = true, [132] = true, [135] = true, [141] = true, [142] = true, [155] = true, [56] = true, [57] = true, [1198] = true },
+  group = true, guild = true, world = { 0, -10500, 1050 }, bind = "Sentinel Hill", riding = false,
+  liveXP = { [128] = 2000, [91] = 1850 }, bagSlots = {},
+})
+login(friend)
+for _ = 1, 6 do tick(owner, 5); tick(friend, 5); deliver() end
+friend.QB.Model.Finish()
+owner.QB.Model.Finish()
+for _ = 1, 4 do tick(owner, 5); tick(friend, 5); deliver() end
+local mem = owner.QB.Sync:Members()
+assert(#mem == 1 and mem[1].name == "Brann", "the owner sees the friend")
+assert(mem[1].quests, "and the friend's quests")
+print(string.format("sync: owner sees %s level %d, banked %.2f, plan %.2f, %d quests", mem[1].name, mem[1].level, mem[1].banked, mem[1].plan,
+  (function() local n = 0 for _ in pairs(mem[1].quests) do n = n + 1 end return n end)()))
+assert(#friend.QB.Sync:Members() == 1, "the friend sees the owner")
+local runs = owner.QB.Sync:GroupRuns()
+for _, d in ipairs(runs) do
+  local who = {}
+  for _, p in ipairs(d.people) do who[#who + 1] = p.name .. " " .. p.n end
+  print(string.format("  run together: %-22s +%s  %s", d.cat.name, QB.Comma(d.xp), table.concat(who, ", ")))
+end
+print("  live XP shared by the friend:", owner.env.QuestBankDB.live and owner.env.QuestBankDB.live[128] and owner.env.QuestBankDB.live[128].src)
+UI:ShowTab(4)
+UI:Refresh()
+for _, m in ipairs(v4.members.items) do if m:IsShown() then poke(m); lines = {}; m.copy.__scripts.OnEnter(m.copy) end end
+for _, r in ipairs(v4.runs.items) do if r:IsShown() then poke(r) end end
+local n = owner.QB.Sync:CopyPlan(mem[1].key)
+print("  copy plan added:", n)
+for _, p in ipairs(checkLayout(UI.frame, "party")) do problems[#problems + 1] = p end
+layouts[#layouts + 1] = dumpLayout(UI.frame, "Party, with a friend")
+friend.env.SlashCmdList.QUESTBANK("")
+friend.QB.Model.Finish()
+for tab = 1, 4 do
+  friend.QB.UI:ShowTab(tab)
+  friend.QB.Model.Finish()
+  friend.QB.UI:Refresh()
+  for _, p in ipairs(checkLayout(friend.QB.UI.frame, "friend tab " .. tab)) do problems[#problems + 1] = p end
+end
+print("friend route:", friend.QB.UI.views[3].summary:GetText())
+layouts[#layouts + 1] = dumpLayout(friend.QB.UI.frame, "Friend: Party")
 
--- level 24 with some XP: the planner follows the character
-_G.__level, _G.__xp = 24, 12000
-QB:MarkDirty(); UI:Refresh()
-print("at level 24:", v3.summary:GetText())
-print("OK")
+----------------------------------------------------------------------------
+-- scenario 3: a Horde shaman at 20
+----------------------------------------------------------------------------
+local horde = newClient({
+  name = "Zultak", level = 20, faction = "Horde", className = "Shaman", class = "SHAMAN", classID = 7, race = "Orc",
+  log = { { 1014, 1 }, { 1098, 1 }, { 5722, 1 }, { 5723, 1 }, { 5725, 1 }, { 5728, 0 }, { 855, 1 }, { 848, 1 }, { 882, 1 }, { 883, 0 },
+          { 914, 0 }, { 1486, 1 }, { 1487, 1 }, { 1491, 1 }, { 959, 1 }, { 6981, 0 } },
+  done = { [865] = true }, group = false, guild = false, world = { 1, 1320, -4649 }, bind = "Orgrimmar", riding = true, bagSlots = {},
+})
+login(horde)
+horde.env.SlashCmdList.QUESTBANK("")
+horde.QB.Model.Finish()
+for tab = 1, 4 do
+  horde.QB.UI:ShowTab(tab)
+  horde.QB.Model.Finish()
+  horde.QB.UI:Refresh()
+  for _, p in ipairs(checkLayout(horde.QB.UI.frame, "horde tab " .. tab)) do problems[#problems + 1] = p end
+end
+horde.QB.UI:ShowTab(3)
+local hv = horde.QB.UI.views[3]
+print("horde route:", hv.summary:GetText())
+for _, l in ipairs(hv.legs.items) do
+  if l:IsShown() then print(string.format("  %5s %-26s %-34s %s", l.clock:GetText(), l.name:GetText(), l.travel:GetText(), l.level:GetText())) end
+end
+for _, e in ipairs(horde.QB:RouteEntries("plan")) do
+  assert(e.q.side ~= 1, "no Alliance quest in a Horde plan: " .. e.q.name)
+end
+for _, c in ipairs(horde.QB.UI:Candidates(400)) do
+  local q = horde.QB.Quest.Get(c.id)
+  assert(q.side ~= 1, "no Alliance quest offered to the Horde: " .. q.name)
+  assert(horde.QB.Quest.ForMe(q), "only quests an orc shaman can take: " .. q.name)
+end
+horde.QB.UI:ShowTab(2)
+layouts[#layouts + 1] = dumpLayout(horde.QB.UI.frame, "Horde: Prep")
+horde.QB.UI:ShowTab(3)
+layouts[#layouts + 1] = dumpLayout(horde.QB.UI.frame, "Horde: Hand-in Route")
+
+----------------------------------------------------------------------------
+-- how long planning takes (LuaJIT here; the game's Lua 5.1 is several times slower, and plans in slices)
+do
+  local t0 = os.clock()
+  for _ = 1, 5 do owner.QB.sigNow, owner.QB.sigPlan = nil, nil; owner.QB:Recompute(true) end
+  local ms = (os.clock() - t0) * 1000 / 5
+  local r = owner.QB.routePlan
+  local stops = 0
+  for _ in ipairs(r.legs) do stops = stops + 1 end
+  print(string.format("planning both routes: %.1f ms (plan: %d stops, %d quests)", ms, stops, r.count))
+end
+print("widgets created:", created)
+local seen = {}
+local unique = {}
+for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
+print("layout problems:", #unique)
+for i = 1, math.min(80, #unique) do print("  " .. unique[i]) end
+if LAYOUT_OUT then
+  local f = assert(io.open(LAYOUT_OUT, "w"))
+  f:write(json(layouts))
+  f:close()
+  print("layout written to " .. LAYOUT_OUT)
+end
+print(#unique == 0 and "OK" or "OK, with layout problems above")
