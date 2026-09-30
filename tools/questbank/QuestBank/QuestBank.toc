@@ -2,7 +2,7 @@
 ## Title: |cffc6af8dQuestBank|r
 ## Notes: Bank quests for the level cap raise: what to fetch, what to cut, the hand-in route with map pins, and party sync. /qb
 ## Author: Mikal
-## Version: 3.2.0
+## Version: 3.2.1
 ## X-License: GPL-3.0-or-later
 ## IconTexture: Interface\QuestFrame\UI-QuestLog-BookIcon
 ## SavedVariables: QuestBankDB

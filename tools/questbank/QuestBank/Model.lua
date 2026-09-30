@@ -513,11 +513,49 @@ local function improve(P, order, score, budget)
   return order, { b60, bf, bt }, evals
 end
 
+-- the last route as a seed: its stops in the same order, the hearthstone where it was, new stops after
+-- the old ones and before the cheap tail. Without it a fresh search can land on a worse order than the
+-- one it had (adding Ratchet once cost 0.2 levels in the first hour).
+local function carried(P, prev)
+  if not (prev and prev.legs and #prev.legs > 0) then return nil end
+  local byKey = {}
+  for i, s in ipairs(P.stops) do
+    if s.town then byKey["t" .. s.town] = i end
+    for _, npc in ipairs(s.npcs) do byKey["n" .. npc] = byKey["n" .. npc] or i end
+  end
+  local main, tail, used = {}, {}, {}
+  for _, l in ipairs(prev.legs) do
+    local st = l.stop
+    local i = st and st.town and byKey["t" .. st.town]
+    if st and not i then
+      for _, npc in ipairs(st.npcs or {}) do i = byKey["n" .. npc]; if i then break end end
+    end
+    if i and not used[i] then
+      used[i] = true
+      if P.cheap[i] then
+        tail[#tail + 1] = i
+      else
+        if l.kind == "hearth" then main[#main + 1] = 0 end
+        main[#main + 1] = i
+      end
+    end
+  end
+  if #main + #tail == 0 then return nil end
+  for i = 1, P.n do
+    if not used[i] then
+      if P.cheap[i] then tail[#tail + 1] = i else main[#main + 1] = i end
+    end
+  end
+  for _, i in ipairs(tail) do main[#main + 1] = i end
+  return main
+end
+
 ----------------------------------------------------------------------------
 -- plan: entries = { {q=, st=, after=parentId}, ... }
 -- opts = { level, xp, mounted, bonus, goal ("hour" | "route"), fac, start = {c, wx, wy}, noHearth }
+-- prev: the route planned last time, to start from
 ----------------------------------------------------------------------------
-function M.Plan(entries, opts)
+function M.Plan(entries, opts, prev)
   D = QB.Data
   local P = problem(entries, opts)
   local startFrac = M.Frac(opts.level, opts.xp)
@@ -526,7 +564,10 @@ function M.Plan(entries, opts)
   if P.n == 0 then return route end
 
   local scored = {}
-  for _, s in ipairs(seeds(P)) do
+  local all = seeds(P)
+  local warm = carried(P, prev)
+  if warm then all[#all + 1] = warm end
+  for _, s in ipairs(all) do
     local a60, af, at = evaluate(P, s)
     scored[#scored + 1] = { order = s, score = { a60, af, at } }
     step()

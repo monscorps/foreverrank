@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.2.0"
+QB.version = "3.2.1"
 QB.CAP = 30
 
 local D = QB.Data
@@ -997,8 +997,9 @@ function QB:Recompute(sync)
   local want = sigNow .. "|" .. sigPlan
   if self.pending == want and not sync then return self.routeNow, self.routePlan end
   local function work()
-    if needNow then self.routeNow, self.sigNow = QB.Model.Plan(now, nowOpts), sigNow end
-    if needPlan then self.routePlan, self.sigPlan = QB.Model.Plan(plan, opts), sigPlan end
+    -- each starts from the last route, so a change can only move it to a better one
+    if needNow then self.routeNow, self.sigNow = QB.Model.Plan(now, nowOpts, self.routeNow), sigNow end
+    if needPlan then self.routePlan, self.sigPlan = QB.Model.Plan(plan, opts, self.routePlan), sigPlan end
   end
   if sync then
     self.pending = nil

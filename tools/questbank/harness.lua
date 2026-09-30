@@ -639,6 +639,24 @@ for _, c in ipairs(UI:Candidates(400)) do
   local q = QB.Quest.Get(c.id)
   assert(not (q.turn and q.turn.inside), "no quest handed in inside a dungeon is offered to fetch: " .. q.name)
 end
+-- adding a quest never makes the plan worse: each plan starts from the last route
+do
+  local p = QB:Plan()
+  -- the owner's swaps, one by one: Deadmines and Blackfathom into the free slots, then two swaps
+  local steps = { { 166 }, { 1200 }, { 2040, 353 }, { 2904, 97894 }, { 1221, 454 } }
+  QB.Model.Finish()
+  for _, st in ipairs(steps) do
+    local before60, beforeL = QB.routePlan.at60, QB.routePlan.level
+    p.add[st[1]] = true
+    if st[2] then p.cut[st[2]] = true end
+    QB:Recompute(true)
+    local r = QB.routePlan
+    print(string.format("  add %-30s at 60 min %.2f -> %.2f, in all %.2f -> %.2f", QB.Quest.Get(st[1]).name, before60, r.at60, beforeL, r.level))
+    assert(r.at60 >= before60 - 1e-6, "adding a quest never costs the first hour: " .. QB.Quest.Get(st[1]).name)
+  end
+  for _, st in ipairs(steps) do p.add[st[1]] = nil; if st[2] then p.cut[st[2]] = nil end end
+  QB:Recompute(true)
+end
 do
   local villainy
   for _, r in ipairs(v1.swaps) do if r:IsShown() and r.add.id == 1200 then villainy = r end end
