@@ -20,9 +20,9 @@ SetScrollChild SetVerticalScroll GetVerticalScroll SetText GetText SetNormalText
 RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThumbTexture SetMinMaxValues GetMinMaxValues
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
-SetAutoFocus HighlightText SetFocus ClearFocus]])
+SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
-local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12 }
+local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
 ----------------------------------------------------------------------------
 -- text width in Friz Quadrata, close enough to see what doesn't fit
@@ -142,6 +142,7 @@ local clients = {}
 local lines = {}
 local BASE = setmetatable({}, { __index = _G })
 BASE.BackdropTemplateMixin = {}
+BASE.QUESTBANK_DEV = true -- errors stay fatal here; one test below turns it off to check the safety net
 for name in pairs(FONT_SIZE) do BASE[name] = fontObj(name) end
 BASE.GameTooltip = setmetatable({}, { __index = function(_, k)
   return function(_, ...) if k == "AddLine" or k == "AddDoubleLine" then lines[#lines + 1] = tostring((...)) end end
@@ -252,7 +253,9 @@ local function newClient(o)
     RegisterAddonMessagePrefix = function() return true end,
     SendAddonMessage = function(prefix, msg, channel, target)
       assert(#msg <= 255, "addon message too long: " .. #msg)
+      if (channel == "PARTY" or channel == "RAID") and not o.group then return 5 end -- NotInGroup
       c.outbox[#c.outbox + 1] = { prefix, msg, channel, target }
+      return 0
     end,
   }
   -- the world map, with a data provider and pins made from the XML template
@@ -812,6 +815,28 @@ do
   QB.API.RefreshDone()
 end
 
+-- the safety net: with QUESTBANK_DEV off, an error is recorded and QuestBank carries on
+do
+  owner.env.SlashCmdList.QUESTBANK("errors")
+  assert(owner.env.QuestBankErrors and owner.env.QuestBankErrors:IsShown(), "/qb errors opens its box")
+  assert(owner.env.QuestBankErrors.eb:GetText():find("Nothing recorded"), "and says when nothing went wrong")
+  owner.env.QuestBankErrors:Hide()
+  owner.env.QUESTBANK_DEV = false
+  local boom = QB.Safe(function() local t = nil; return t.field end, "test")
+  boom()
+  boom()
+  owner.env.QUESTBANK_DEV = true
+  local list = owner.env.QuestBankDB.errors
+  assert(list and #list == 1 and list[1].count == 2 and list[1].msg:find("attempt to index"), "the error is recorded once, counted twice")
+  print("error net:", owner.chat[#owner.chat])
+  owner.env.SlashCmdList.QUESTBANK("errors")
+  local text = owner.env.QuestBankErrors.eb:GetText()
+  assert(text:find("attempt to index") and text:find("2x, test"), "/qb errors shows it with where and how often")
+  owner.env.QuestBankErrors:Hide()
+  owner.env.SlashCmdList.QUESTBANK("errors clear")
+  assert(#owner.env.QuestBankDB.errors == 0, "/qb errors clear empties the list")
+end
+
 -- chains: Morganth waits behind A Watchful Eye and Looking Further, and says so
 do
   local morganth = QB.Quest.Get(249)
@@ -912,6 +937,19 @@ for _, d in ipairs(dungeons) do
       print(string.format("      %-32s %s", e.q and e.q.name or e.id, table.concat(who, ", ")))
     end
   end
+end
+-- leaving the group: what was waiting for the party is dropped, not tried forever
+do
+  local S = owner.QB.Sync
+  deliver()
+  S:Broadcast(true)            -- queued for the party and the guild
+  owner.o.group = false        -- then you leave the group before they go out
+  for _ = 1, 12 do tick(owner, 2) end
+  local left = 0
+  for _, m in ipairs(S.out) do if m[2] == "PARTY" then left = left + 1 end end
+  assert(left == 0, "messages for a party you left are dropped, not retried forever")
+  owner.o.group = true
+  owner.outbox = {}
 end
 -- the friend's progress arrives with the quest list
 local brann = owner.QB.Sync:Members()[1]

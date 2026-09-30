@@ -296,7 +296,7 @@
     </div>
     <div class="dl">
       <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-      <span class="dl-meta">Version 3.1.1 · 30 September 2026 · 151 KB</span>
+      <span class="dl-meta">Version 3.1.2 · 30 September 2026 · 153 KB</span>
       <span class="dl-meta">Open it in game with <code>/qb</code></span>
     </div>
   </div>
@@ -714,6 +714,7 @@
         <tr><td><code>/qb reset</code></td><td>Move the window back to the middle of the screen</td></tr>
         <tr><td>Click a quest</td><td>Waypoint on its giver, or on its turn-in NPC once it's in your log</td></tr>
         <tr><td>Right-click a quest</td><td>A menu: waypoint on the giver or the turn-in, cut or keep (add or drop), and the quest's Wowhead link to copy</td></tr>
+        <tr><td><code>/qb errors</code></td><td>Every problem QuestBank caught, with where it happened, ready to copy. <code>/qb errors clear</code> empties the list</td></tr>
         <tr><td><code>/qb done</code> and a quest name or ID</td><td>What the game says about a quest: whether it's in your completed list, and what QuestBank makes of it</td></tr>
         <tr><td>Shift-click a quest</td><td>In your log: cut it from the plan or keep it. Anywhere else: add it to the plan or drop it</td></tr>
         <tr><td>Click or right-click the mount and sleeping bag buttons</td><td>Set it yourself, or go back to automatic</td></tr>
@@ -728,7 +729,7 @@
   <h2>Troubleshooting</h2>
   <div class="faq">
     <details><summary>It says the addon is out of date</summary><p>Tick Load out of date AddOns on the character screen. Blizzard hasn't published Forever's interface number yet, so every beta addon shows up like this.</p></details>
-    <details><summary>Nothing happens, or I see a Lua error</summary><p>Type <code>/console scriptErrors 1</code> and then <code>/reload</code>. Copy the error text into the Discord and it gets fixed. Check the whole QuestBank folder went in: the nine files sit directly in <code>Interface\AddOns\QuestBank</code>.</p></details>
+    <details><summary>Nothing happens, or I see a Lua error</summary><p>QuestBank catches its own errors and carries on, and chat says so once. Type <code>/qb errors</code>: a box opens with each problem, where it happened and the full stack, already selected, so Ctrl+C copies it for the Discord. If Blizzard's error window shows one instead, copy that text. Check the whole QuestBank folder went in: the nine files sit directly in <code>Interface\AddOns\QuestBank</code>.</p></details>
     <details><summary>The XP I got is different from the plan</summary><p>The chat line after each hand-in shows both numbers. From then on QuestBank uses the game's number for that quest, and passes it on to your party. Beta patches can change quest XP, and the addon's file records every hand-in so the data can be updated.</p></details>
     <details><summary>How do I know I have everything a quest asks for?</summary><p>The Quest Log page marks a finished quest with a green tick, and chat says so the moment one completes: "Red Silk Bandanas is complete: banked". Hover any quest for each objective and each item it asks for, counted in your bags and in your bank. If what's missing is in your bank, the status says how many to take out. A quest you haven't picked up yet says so too when you already have everything it asks for.</p></details>
     <details><summary>Does it know what's in my bank?</summary><p>Yes, once you've opened your bank. QuestBank reads it every time you do and remembers it until the next visit, for every character. Quest items only count for a quest from your bags, so it tells you what to take out.</p></details>
@@ -746,7 +747,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 3.1.1. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 3.1.2. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>

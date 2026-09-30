@@ -2,12 +2,58 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.1.1"
+QB.version = "3.1.2"
 QB.CAP = 30
 
 local D = QB.Data
 local API = {}
 QB.API = API
+
+----------------------------------------------------------------------------
+-- errors: caught where QuestBank runs code, recorded with the stack, and never in your way.
+-- /qb errors shows them to copy. (QUESTBANK_DEV makes them fatal again, for the test harness.)
+----------------------------------------------------------------------------
+local Err = {}
+QB.Err = Err
+local toldErrors = false
+
+local function catch(e)
+  local stack = (debugstack and debugstack(2, 16, 4)) or (debug and debug.traceback and debug.traceback("", 2)) or ""
+  return { msg = tostring(e), stack = stack }
+end
+
+function Err.Record(msg, stack, where)
+  QuestBankDB = QuestBankDB or {}
+  QuestBankDB.errors = QuestBankDB.errors or {}
+  local list = QuestBankDB.errors
+  local now = date and date("%Y-%m-%d %H:%M:%S") or ""
+  for _, e in ipairs(list) do
+    if e.msg == msg then e.count, e.last = e.count + 1, now; return end
+  end
+  table.insert(list, 1, { msg = msg, stack = stack, where = where, count = 1, first = now, last = now, version = QB.version })
+  while #list > 20 do table.remove(list) end
+  if not toldErrors then
+    toldErrors = true
+    if QB.Print then QB:Print("ran into a problem and carried on. /qb errors shows the details to copy into the Discord.") end
+  end
+end
+
+-- a function that records its errors instead of raising them
+function QB.Safe(fn, where)
+  return function(...)
+    local n, args = select("#", ...), { ... }
+    local ok, err = xpcall(function() return fn(unpack(args, 1, n)) end, catch)
+    if not ok then
+      if QUESTBANK_DEV then error(err.msg .. "\n" .. err.stack, 0) end
+      Err.Record(err.msg, err.stack, where)
+    end
+  end
+end
+
+-- call now, the same way
+function QB.Try(where, fn, ...)
+  return QB.Safe(fn, where)(...)
+end
 
 ----------------------------------------------------------------------------
 -- API shims: the Forever client carries the modern API, Classic names are the fallback
@@ -984,17 +1030,17 @@ function QB:MarkDirty()
   self.dirty = true
   if pending then return end
   pending = true
-  C_Timer.After(0.3, function()
+  C_Timer.After(0.3, QB.Safe(function()
     pending = false
     QB:Changed()
-  end)
+  end, "refresh"))
 end
 
 function QB:Changed()
-  QB:Recompute()
-  if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.UI:Refresh() end
-  if QB.Pins then QB.Pins:Update() end
-  if QB.Sync then QB.Sync:Changed() end
+  QB.Try("plan", QB.Recompute, QB)
+  if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.Try("window", QB.UI.Refresh, QB.UI) end
+  if QB.Pins then QB.Try("map pins", QB.Pins.Update, QB.Pins) end
+  if QB.Sync then QB.Try("party sync", QB.Sync.Changed, QB.Sync) end
 end
 
 local function onTurnIn(questID, xpReward)
@@ -1022,7 +1068,7 @@ local function onTurnIn(questID, xpReward)
   QB:Print(msg)
 end
 
-frame:SetScript("OnEvent", function(_, event, a1, a2, a3)
+frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
   if event == "ADDON_LOADED" then
     if a1 == ADDON then QB:Settings(); Live.Apply() end
     return
@@ -1034,8 +1080,8 @@ frame:SetScript("OnEvent", function(_, event, a1, a2, a3)
     if QB.Minimap then QB.Minimap:Create() end
     if QB.Pins then QB.Pins:Init() end
     if QB.Sync then QB.Sync:Init() end
-    C_Timer.After(8, function() QB:Snapshot("login") end)
-    C_Timer.After(4, function() QB:Changed() end)
+    C_Timer.After(8, QB.Safe(function() QB:Snapshot("login") end, "login snapshot"))
+    C_Timer.After(4, QB.Safe(function() QB:Changed() end, "login"))
     return
   elseif event == "PLAYER_LOGOUT" then
     QB:Snapshot("logout")
@@ -1064,7 +1110,7 @@ frame:SetScript("OnEvent", function(_, event, a1, a2, a3)
     Bank.Scan()
   end
   QB:MarkDirty()
-end)
+end, "game event"))
 
 for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_LOGOUT", "QUEST_LOG_UPDATE", "QUEST_TURNED_IN",
   "QUEST_ACCEPTED", "QUEST_REMOVED", "BAG_UPDATE_DELAYED", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE",
@@ -1078,7 +1124,9 @@ end
 ----------------------------------------------------------------------------
 SLASH_QUESTBANK1 = "/questbank"
 SLASH_QUESTBANK2 = "/qb"
-SlashCmdList.QUESTBANK = function(msg)
+local slash
+SlashCmdList.QUESTBANK = function(msg) QB.Try("/qb " .. tostring(msg or ""), slash, msg) end
+slash = function(msg)
   msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
   local cmd, rest = msg:match("^(%S*)%s*(.-)$")
   cmd = (cmd or ""):lower()
@@ -1108,6 +1156,13 @@ SlashCmdList.QUESTBANK = function(msg)
     QB.Pins:Toggle()
   elseif cmd == "next" and QB.Pins then
     QB.Pins:PinNext(true)
+  elseif cmd == "errors" then
+    if rest == "clear" then
+      QuestBankDB.errors = {}
+      QB:Print("Error list cleared.")
+    elseif QB.UI then
+      QB.UI:ShowErrors()
+    end
   elseif cmd == "done" then
     QB:ReadState()
     local ids = {}

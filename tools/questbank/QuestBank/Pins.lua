@@ -15,15 +15,15 @@ function Pin:OnLoad()
   if self.SetScalingLimits then self:SetScalingLimits(1, 1.0, 1.25) end
 end
 
-function Pin:OnAcquired(data, x, y)
+Pin.OnAcquired = QB.Safe(function(self, data, x, y)
   self.data = data
   self:SetPosition(x, y)
   self.Icon:SetTexture(data.icon)
   self.Icon:SetDesaturated(data.late or false)
   self.Num:SetText(data.num and tostring(data.num) or "")
-end
+end, "map pin")
 
-function Pin:OnMouseEnter()
+Pin.OnMouseEnter = QB.Safe(function(self)
   local d = self.data
   if not d then return end
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -32,7 +32,7 @@ function Pin:OnMouseEnter()
   for _, line in ipairs(d.lines or {}) do GameTooltip:AddDoubleLine(line[1], line[2], 1, 1, 1, 0.6, 1, 0.6) end
   GameTooltip:AddLine("Click: waypoint here.", 0.5, 0.5, 0.5)
   GameTooltip:Show()
-end
+end, "map pin tooltip")
 
 function Pin:OnMouseLeave() GameTooltip:Hide() end
 
@@ -68,7 +68,8 @@ function P:Init()
   QuestBankPinMixin = CreateFromMixins(MapCanvasPinMixin, Pin)
   local provider = CreateFromMixins(MapCanvasDataProviderMixin)
   function provider:RemoveAllData() self:GetMap():RemoveAllPinsByTemplate("QuestBankPinTemplate") end
-  function provider:RefreshAllData()
+  -- whatever goes wrong here stays here: the map runs every provider in one loop
+  provider.RefreshAllData = QB.Safe(function(self)
     self:RemoveAllData()
     if not QB:Settings().pins then return end
     local map = self:GetMap()
@@ -78,7 +79,7 @@ function P:Init()
       local x, y = project(d, shown)
       if x then map:AcquirePin("QuestBankPinTemplate", d, x, y) end
     end
-  end
+  end, "map pins")
   function provider:OnMapChanged() self:RefreshAllData() end
   WorldMapFrame:AddDataProvider(provider)
   self.provider = provider

@@ -568,7 +568,8 @@ function M.Async(fn, done)
     M.async = false
     if not ok then
       self:SetScript("OnUpdate", nil)
-      if geterrorhandler then geterrorhandler()(err) else error(err) end
+      if QUESTBANK_DEV then error(err, 0) end
+      QB.Err.Record(tostring(err), debugstack and debugstack(self.co) or "", "route planner")
     elseif coroutine.status(self.co) == "dead" then
       self:SetScript("OnUpdate", nil)
       if self.done then self.done() end

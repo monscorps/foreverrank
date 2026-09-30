@@ -79,11 +79,11 @@ local function backdrop(frame, bg, edge, edgeSize, inset, tile)
 end
 
 local function tooltip(owner, fill)
-  owner:SetScript("OnEnter", function(self)
+  owner:SetScript("OnEnter", QB.Safe(function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     fill(GameTooltip, self)
     GameTooltip:Show()
-  end)
+  end, "tooltip"))
   owner:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
@@ -274,7 +274,9 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   tip:AddLine("Click: waypoint.  " .. shift .. ".  Right-click: more.", 0.5, 0.5, 0.5, true)
 end
 
-function UI.QuestClick(q, st, which)
+local questClick
+function UI.QuestClick(q, st, which) QB.Try("click", questClick, q, st, which) end
+questClick = function(q, st, which)
   if which == "RightButton" then UI.QuestMenu(q, st) return end
   if IsShiftKeyDown and IsShiftKeyDown() then
     QB:ToggleAdd(q.id)
@@ -292,6 +294,7 @@ end
 local menu
 local function menuFrame()
   if menu then return menu end
+  T = T or QB.Data.TEX
   menu = CreateFrame("Frame", "QuestBankMenu", UIParent, BD)
   menu:SetFrameStrata("DIALOG")
   menu:SetFrameLevel(20)
@@ -357,6 +360,7 @@ end
 
 -- a box with the link selected, ready for Ctrl+C
 function UI:CopyLink(title, url)
+  T = T or QB.Data.TEX
   local f = self.linkFrame
   if not f then
     f = CreateFrame("Frame", "QuestBankLink", UIParent, BD)
@@ -630,6 +634,54 @@ function UI:CreateTabs(f)
   end
 end
 
+function UI:ShowErrors()
+  T = T or QB.Data.TEX
+  local list = QuestBankDB.errors or {}
+  local out = { string.format("QuestBank %s, %d problem%s recorded (Ctrl+A then Ctrl+C copies all):", QB.version, #list, #list == 1 and "" or "s"), "" }
+  for _, e in ipairs(list) do
+    out[#out + 1] = string.format("[%s] %sx, %s, version %s", e.last or "", e.count or 1, e.where or "?", e.version or "?")
+    out[#out + 1] = e.msg or ""
+    out[#out + 1] = e.stack or ""
+    out[#out + 1] = ""
+  end
+  if #list == 0 then out[#out + 1] = "Nothing recorded. If Blizzard's error window showed one, copy its text instead." end
+  local f = self.errFrame
+  if not f then
+    f = CreateFrame("Frame", "QuestBankErrors", UIParent, BD)
+    self.errFrame = f
+    f:SetSize(560, 360)
+    f:SetPoint("CENTER")
+    f:SetFrameStrata("DIALOG")
+    f:SetFrameLevel(30)
+    f:EnableMouse(true)
+    f:SetMovable(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    backdrop(f, T.bg, T.border, 24, 7, true)
+    f.title = text(f, "GameFontNormal", 13, GOLD, "LEFT", 480)
+    f.title:SetPoint("TOPLEFT", 18, -16)
+    f.title:SetText("QuestBank problems")
+    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -2, -2)
+    local sf = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    sf:SetPoint("TOPLEFT", 18, -40)
+    sf:SetPoint("BOTTOMRIGHT", -36, 18)
+    f.eb = CreateFrame("EditBox", nil, sf)
+    f.eb:SetMultiLine(true)
+    f.eb:SetAutoFocus(false)
+    f.eb:SetFontObject(ChatFontNormal or GameFontHighlightSmall)
+    f.eb:SetWidth(490)
+    f.eb:SetScript("OnEscapePressed", function() f:Hide() end)
+    sf:SetScrollChild(f.eb)
+    if UISpecialFrames then table.insert(UISpecialFrames, "QuestBankErrors") end
+  end
+  f.eb:SetText(table.concat(out, "\n"))
+  f:Show()
+  f.eb:SetFocus()
+  f.eb:HighlightText()
+end
+
 function UI:ShowTab(i)
   QB:Settings().tab = i
   self.tab = i
@@ -657,7 +709,9 @@ end
 ----------------------------------------------------------------------------
 -- refresh
 ----------------------------------------------------------------------------
-function UI:Refresh()
+local refresh
+function UI:Refresh() QB.Try("window", refresh, self) end
+refresh = function(self)
   if not (self.frame and self.frame:IsShown()) then return end
   QB:Recompute()
   self:RefreshHeader()

@@ -15,31 +15,35 @@ local STALE = 30 * 60
 
 local function now() return GetTime and GetTime() or 0 end
 
--- true when the game took the message; false when its addon throttle turned it away
+-- "sent", "later" (the game's addon throttle said too fast) or "drop" (not in a group any more,
+-- no such player, a bad channel: trying again won't help)
 local function send(msg, channel, target)
-  if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return true end
+  if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return "sent" end
   if ChatThrottleLib and ChatThrottleLib.SendAddonMessage then
     ChatThrottleLib:SendAddonMessage("NORMAL", PREFIX, msg, channel, target)
-    return true
+    return "sent"
   end
   local ok, res = pcall(C_ChatInfo.SendAddonMessage, PREFIX, msg, channel, target)
-  if not ok or res == false then return false end
-  if type(res) == "number" and res ~= 0 then return false end -- Enum.SendAddonMessageResult: 0 is Success
-  return true
+  if not ok then return "drop" end
+  if res == nil or res == true or res == 0 then return "sent" end
+  if res == 3 or res == 8 then return "later" end -- Enum.SendAddonMessageResult AddonMessageThrottle, ChannelThrottle
+  return "drop"
 end
 
 -- the queue: about one message a second, the rate the game refills its addon allowance
 local pumping = false
-local function pump()
+local pump
+pump = QB.Safe(function()
   local m = S.out[1]
   if not m then pumping = false return end
-  if send(m[1], m[2], m[3]) then
+  local r = send(m[1], m[2], m[3])
+  if r == "later" then
+    C_Timer.After(3.0, pump)
+  else
     table.remove(S.out, 1)
     C_Timer.After(1.0, pump)
-  else
-    C_Timer.After(3.0, pump)
   end
-end
+end, "party sync: sending")
 local function queue(msg, channel, target)
   for _, m in ipairs(S.out) do
     if m[1] == msg and m[2] == channel and m[3] == target then return end
@@ -128,17 +132,17 @@ end
 function S:Changed()
   if not self.ready or self.waiting then return end
   self.waiting = true
-  C_Timer.After(3, function()
+  C_Timer.After(3, QB.Safe(function()
     S.waiting = false
     S:Broadcast(false)
-  end)
+  end, "party sync: sharing"))
 end
 
 function S:QueueLive(id, xp, level)
   self.live[#self.live + 1] = id .. ":" .. xp .. ":" .. level
   if self.liveWaiting then return end
   self.liveWaiting = true
-  C_Timer.After(5, function()
+  C_Timer.After(5, QB.Safe(function()
     S.liveWaiting = false
     local chans = channels()
     while #S.live > 0 do
@@ -146,7 +150,7 @@ function S:QueueLive(id, xp, level)
       while #S.live > 0 and #batch < 14 do batch[#batch + 1] = table.remove(S.live, 1) end
       for _, ch in ipairs(chans) do queue("1L|" .. table.concat(batch, ","), ch) end
     end
-  end)
+  end, "party sync: XP"))
 end
 
 ----------------------------------------------------------------------------
@@ -335,7 +339,7 @@ function S:Init()
   self.ready = true
   local f = CreateFrame("Frame")
   self.frame = f
-  f:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
+  f:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3, a4)
     if event == "CHAT_MSG_ADDON" then
       if a1 == PREFIX then S:Receive(a2, a3, a4) end
     elseif event == "GROUP_ROSTER_UPDATE" then
@@ -347,18 +351,19 @@ function S:Init()
       end
       S.lastGroup = ch
     end
-  end)
+  end, "party sync: receiving"))
   f:RegisterEvent("CHAT_MSG_ADDON")
   f:RegisterEvent("GROUP_ROSTER_UPDATE")
   -- say hello once the plan is ready, and keep a run visible to the others
-  C_Timer.After(12, function()
+  C_Timer.After(12, QB.Safe(function()
     local chans = channels()
     for _, ch in ipairs(chans) do queue("1R", ch) end
     S:Changed()
-  end)
-  local function beat()
-    if QB.Run.Get() then S.lastStatus = nil; S:Broadcast(false) end
+  end, "party sync: hello"))
+  local beat
+  beat = QB.Safe(function()
     C_Timer.After(60, beat)
-  end
+    if QB.Run.Get() then S.lastStatus = nil; S:Broadcast(false) end
+  end, "party sync: run")
   C_Timer.After(60, beat)
 end
