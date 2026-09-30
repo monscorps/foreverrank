@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.1.2"
+QB.version = "3.2.0"
 QB.CAP = 30
 
 local D = QB.Data
@@ -529,6 +529,7 @@ QB.WindowXP = windowXP
 local DEFAULTS = {
   mounted = "auto", bag = "auto", goal = "hour", routeMode = "now", tab = 1, pins = true,
   minimap = { angle = 205, hide = false }, share = { party = true, guild = true },
+  post = { party = true, guild = true, auto = true },
 }
 
 function QB:Settings()
@@ -844,6 +845,7 @@ function Run.Start()
   end
   QuestBankDB.run = run
   QB:Print("Hand-in run started. Each quest is ticked off with the XP it paid; the route re-plans from where you stand.")
+  Run.ArmHour()
   QB:MarkDirty()
 end
 
@@ -857,6 +859,7 @@ function Run.Stop()
   table.insert(QuestBankDB.runs, run)
   QuestBankDB.run = nil
   QB:Print(string.format("Run ended: %d quests, %s XP in %s.", n, QB.Comma(got), QB.Clock((run.ended - run.started) / 60)))
+  if n > 0 then Run.Offer("done", run) end
   QB:MarkDirty()
 end
 
@@ -892,6 +895,69 @@ function Run.Totals()
   local got, n = 0, 0
   for _, d in pairs(run.done) do got, n = got + (d.xp or 0), n + 1 end
   return got, n
+end
+
+----------------------------------------------------------------------------
+-- telling your party and guild: QuestBank offers a post, you read it and press Post (UI:PostDialog).
+-- Offered at each level of a hand-in run, when its first hour is up, and when it ends.
+----------------------------------------------------------------------------
+local function levelNow()
+  return QB.Model.Frac(UnitLevel("player") or QB.state.level, UnitXP("player") or 0)
+end
+
+local function quests(n) return n == 1 and "1 quest" or (n .. " quests") end
+local function minutes(m) return math.max(1, math.floor(m + 0.5)) end
+
+-- the message, and a line on why it's offered. kind: level (arg: the new level), hour, done (arg: the ended run), status
+function Run.PostText(kind, arg)
+  local run = kind == "done" and arg or Run.Get()
+  if run and kind == "level" then
+    local got, n = Run.Totals()
+    return string.format("Level %d, %d min into my hand-in run: %s handed in, +%s XP. (QuestBank)", arg,
+      minutes(Run.Elapsed()), quests(n), QB.Comma(got)), "You reached level " .. arg .. "."
+  elseif run and kind == "hour" and run.hour then
+    return string.format("First hour of my hand-in run: level %.1f, %s handed in, +%s XP. (QuestBank)",
+      run.hour.level, quests(run.hour.n), QB.Comma(run.hour.xp)), "The first hour of your hand-in run is up."
+  elseif run and kind == "done" then
+    return string.format("Hand-in run done: level %.1f to %.1f in %d min, %s, +%s XP. (QuestBank)",
+      QB.Model.Frac(run.level or 20, run.xp or 0), levelNow(), minutes((run.ended - run.started) / 60),
+      quests(run.count or 0), QB.Comma(run.got or 0)), "Your hand-in run is over."
+  elseif run then
+    local got, n = Run.Totals()
+    return string.format("%d min into my hand-in run: level %.1f, %s handed in, +%s XP. (QuestBank)",
+      minutes(Run.Elapsed()), levelNow(), quests(n), QB.Comma(got)), "Your hand-in run so far."
+  end
+  local now, plan = QB.routeNow, QB.routePlan
+  local banked = (now and not now.empty) and now.level or levelNow()
+  local full = (plan and not plan.empty) and plan.level or banked
+  local hour = (plan and not plan.empty) and plan.at60 or banked
+  return string.format("My banked quests take me to level %.1f when the cap goes up, my full plan to %.1f (%.1f inside the first hour). (QuestBank)",
+    banked, full, hour), "Your bank and your plan."
+end
+
+-- only an offer: nothing is posted until you press Post
+function Run.Offer(kind, arg)
+  if not (QB:Settings().post.auto and QB.UI and QB.Sync) then return end
+  local ch = QB.Sync.PostChannels()
+  if not (ch.party or ch.guild) then return end
+  local msg, why = Run.PostText(kind, arg)
+  QB.UI:PostDialog(msg, why, true)
+end
+
+-- the first hour: noted once, when it's up (again after a /reload, if it hasn't passed)
+function Run.ArmHour()
+  local run = Run.Get()
+  if not run or run.hour then return end
+  local left = 3600 - (time() - run.started)
+  if left <= 0 then return end
+  local started = run.started
+  C_Timer.After(left, QB.Safe(function()
+    local r = Run.Get()
+    if not r or r.started ~= started or r.hour then return end
+    local got, n = Run.Totals()
+    r.hour = { level = levelNow(), n = n, xp = got }
+    Run.Offer("hour")
+  end, "run: the first hour"))
 end
 
 ----------------------------------------------------------------------------
@@ -1080,6 +1146,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Minimap then QB.Minimap:Create() end
     if QB.Pins then QB.Pins:Init() end
     if QB.Sync then QB.Sync:Init() end
+    Run.ArmHour()
     C_Timer.After(8, QB.Safe(function() QB:Snapshot("login") end, "login snapshot"))
     C_Timer.After(4, QB.Safe(function() QB:Changed() end, "login"))
     return
@@ -1095,6 +1162,10 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     end
   elseif event == "QUEST_TURNED_IN" then
     onTurnIn(a1, a2)
+  elseif event == "PLAYER_LEVEL_UP" then
+    -- a moment later, once the XP bar has caught up
+    local level = a1
+    if Run.Get() and level then C_Timer.After(1, QB.Safe(function() Run.Offer("level", level) end, "run: level up")) end
   elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
     if a1 ~= "player" then return end
     if (a3 == 8690 or a3 == 556) and Run.Get() then Run.Get().hearthUsed = true end
@@ -1134,8 +1205,9 @@ slash = function(msg)
     local done, inLog = QB:Snapshot("manual")
     QB:Print(done .. " completed quests and " .. inLog .. " in your log saved. Type /reload to write the file.")
   elseif cmd == "reset" then
-    QB:Settings().pos = nil
+    QB:Settings().pos, QB:Settings().post.pos = nil, nil
     if QB.UI.frame then QB.UI.frame:ClearAllPoints(); QB.UI.frame:SetPoint("CENTER") end
+    if QB.UI.postFrame then QB.UI.postFrame:ClearAllPoints(); QB.UI.postFrame:SetPoint("TOP", 0, -120) end
   elseif cmd == "minimap" then
     local m = QB:Settings().minimap
     m.hide = not m.hide
@@ -1150,6 +1222,8 @@ slash = function(msg)
     QB:Recompute(true); Run.Start()
   elseif cmd == "stop" then
     Run.Stop()
+  elseif cmd == "post" then
+    QB.UI:PostDialog(Run.PostText("status"))
   elseif cmd == "sync" and QB.Sync then
     if rest ~= "" then QB.Sync:Whisper(rest) else QB.Sync:Broadcast(true) end
   elseif cmd == "pins" and QB.Pins then

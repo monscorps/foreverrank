@@ -296,7 +296,7 @@
     </div>
     <div class="dl">
       <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-      <span class="dl-meta">Version 3.1.2 · 30 September 2026 · 153 KB</span>
+      <span class="dl-meta">Version 3.2.0 · 30 September 2026 · 157 KB</span>
       <span class="dl-meta">Open it in game with <code>/qb</code></span>
     </div>
   </div>
@@ -420,7 +420,7 @@
         <li><span><b>Your 40 slots, best first.</b> Every quest in your log, sorted by what it pays on the day. The border colour follows item quality, from grey under 1,500 XP to orange over 12,000. The number is the XP.</span></li>
         <li><span><b>A mark on each slot.</b> Green: finished, banked. Yellow: not finished yet. Red: you cut it from the plan, or QuestBank doesn't know the quest. Shift-click a slot to cut it or keep it.</span></li>
         <li><span><b>Items that don't need a slot.</b> Items that start a quest can wait in your bags without taking a log slot until the cap goes up. The count shows how far along you are, like 4 of 10 Bloodied Insignias. Below them, QuestBank lists any quest that left your log without a hand-in, so an accidental abandon doesn't go unnoticed.</span></li>
-        <li><span><b>Better use of a slot.</b> Three kinds of move, biggest gain first. Advance a chain: you hold one step, a later step pays more, so hand this one in now and bank that one. Fill a free slot with the best quest you can pick up. Swap a weak quest for a better one. Click a row to pin the quest giver.</span></li>
+        <li><span><b>Better use of a slot.</b> Three kinds of move, biggest gain first. Advance a chain: you hold one step, a later step pays more, so hand this one in now and bank that one. Fill a free slot with the best quest you can pick up, or with what a dungeon step leads to: take In Search of Thaelrid, hand it in to Thaelrid inside Blackfathom Deeps, and bank the Blackfathom Villainy he gives you. Swap a weak quest for a better one. Click a row to pin the quest giver.</span></li>
         <li><span><b>Hover anything, right-click for more.</b> The tooltip shows where the XP number comes from, the XP at the level you'll hand it in, the whole chain it belongs to and what it leads on to, and the giver and turn-in NPC with coordinates. Right-click opens a menu: waypoints, cut or keep, and the Wowhead link.</span></li>
       </ol>
     </div>
@@ -495,7 +495,7 @@
             <span class="call" style="left:330px;top:150px">5</span>
             <span class="call" style="left:376px;top:102px">6</span>
             <div class="parch" style="margin-top:14px">
-              <div class="rtop"><div class="modes"><span class="dim">Banked now</span><span>Full plan</span></div><div class="rsum">200,686 XP · level 26.82 · 59 min · at 60 min 26.82</div><div class="modes"><span>Start run</span></div></div>
+              <div class="rtop"><div class="modes"><span class="dim">Banked now</span><span>Full plan</span></div><div class="rsum">200,686 XP · level 26.82 · 59 min · at 60 min 26.82</div><div class="modes"><span>Post</span><span>Start run</span></div></div>
               <div class="setup">Log out at <b>Wailing Caverns mound</b>. Bind your hearthstone in <b>Sentinel Hill</b> (it is set to Stormwind City now).</div>
               <div class="legs">
                 <div class="leg next"><div class="clk">0:02</div><div class="node"><i></i></div><div class="body">
@@ -529,7 +529,7 @@
         <figure class="shot" data-shot="img/route.jpg" hidden><p class="fig-label">In game</p></figure>
       </div>
       <ol class="legend">
-        <li><span><b>Banked now or Full plan.</b> Banked now is the route for what you hold today. Full plan is the route you're building towards. Start run starts the clock; the first hand-in above the old cap starts it by itself.</span></li>
+        <li><span><b>Banked now or Full plan.</b> Banked now is the route for what you hold today. Full plan is the route you're building towards. Start run starts the clock; the first hand-in above the old cap starts it by itself. <b>Post</b> puts where you stand in party or guild chat: your run so far, or where your bank and plan take you. You see the message first.</span></li>
         <li><span><b>Setup.</b> Where to log out before the cap goes up, and which inn to bind your hearthstone at. It warns you when your hearthstone is set somewhere else.</span></li>
         <li><span><b>The clock and how you travel.</b> Minutes from your first turn-in, and how you reach each stop: hearthstone, flight, tram, boat, or on foot or mounted.</span></li>
         <li><span><b>Your level at each stop</b>, arriving and leaving.</span></li>
@@ -586,10 +586,10 @@
       <ol class="legend">
         <li><span><b>Everyone with QuestBank in your party, raid and guild.</b> Their level, where their bank takes them, and where their full plan takes them. Hover a name for the quests they're banking, marked where you hold the same one.</span></li>
         <li><span><b>Copy their plan.</b> The letter adds every quest they're banking that you can take too: same faction, your class and race, not done yet.</span></li>
-        <li><span><b>Dungeons.</b> Every dungeon where you or the others still have quests to do: each quest, who still needs it, and how far along they are ("6/10", "to pick up", "banked"). Your own are there even when you play alone. Click a dungeon for a waypoint on its entrance.</span></li>
+        <li><span><b>Dungeons.</b> Every dungeon where you or the others still have quests to do: each quest, who still needs it, and how far along they are ("6/10", "to pick up", "banked"). Your own are there even when you play alone. Click a dungeon for a waypoint on its entrance. Right-click it to ask your party or guild along: QuestBank writes "Anyone up for Deadmines? I still need…" with the quests you still need, and nothing goes out until you press Post.</span></li>
         <li><span><b>Sharing.</b> Party and guild sharing each switch off with one click. <b>Send now</b> shares straight away; <code>/qb sync Name</code> shares with one friend outside your group.</span></li>
       </ol>
-      <p class="note">On the day, a member who is handing in shows a live run: time, quests handed in and XP so far. What each game reports as a quest's XP is shared too, so one person's hand-in corrects the numbers for everyone. Nothing leaves the game: it's the addon channel your party and guild already use.</p>
+      <p class="note">On the day, a member who is handing in shows a live run: time, quests handed in and XP so far. What each game reports as a quest's XP is shared too, so one person's hand-in corrects the numbers for everyone. Nothing leaves the game: it's the addon channel your party and guild already use, and nobody sees it in chat. QuestBank only writes in chat when you press Post.</p>
     </div>
   </div>
 
@@ -689,8 +689,8 @@
     <li><div><b>Before you log out</b><p>Open the Hand-in Route on Banked now. Bind your hearthstone at the inn the setup line names, and log out at the first stop.</p></div></li>
     <li><div><b>Before the first hand-in</b><p>If you have the Cozy Sleeping Bag, lie in it for three minutes. The sleeping bag button lights up once the buff is on.</p></div></li>
     <li><div><b>When the cap goes up</b><p>Hand in the first quest. The run starts by itself: the clock runs, the page ticks each quest off with the XP it paid, and the waypoint jumps to the next stop.</p></div></li>
-    <li><div><b>Stop by stop</b><p>Follow the numbered pins. Hand in the lowest level first, and take the deliveries you're handed to the stop the route lists them at. If you wander off, the route re-plans from where you stand.</p></div></li>
-    <li><div><b>Afterwards</b><p>End the run to save it. Group quests like the Stockade wait until you're 26 or 27; at quest levels 25 to 27 they still pay in full.</p></div></li>
+    <li><div><b>Stop by stop</b><p>Follow the numbered pins. Hand in the lowest level first, and take the deliveries you're handed to the stop the route lists them at. If you wander off, the route re-plans from where you stand. Each time you level, QuestBank offers to post it in party and guild chat; ignore the box, or press Post.</p></div></li>
+    <li><div><b>Afterwards</b><p>End the run to save it. QuestBank offers one last post with your whole run: from what level to what, in how long, and the XP. Group quests like the Stockade wait until you're 26 or 27; at quest levels 25 to 27 they still pay in full.</p></div></li>
   </ol>
 </section>
 
@@ -709,9 +709,11 @@
         <tr><td><code>/qb next</code></td><td>Waypoint on the next stop</td></tr>
         <tr><td><code>/qb pins</code></td><td>Turn the world map pins off or on</td></tr>
         <tr><td><code>/qb sync</code>, <code>/qb sync Name</code></td><td>Share your bank with your party and guild now, or with one friend</td></tr>
+        <tr><td><code>/qb post</code>, or <b>Post</b> on the Hand-in Route</td><td>Post your run so far, or where your bank and plan take you, in party or guild chat. A box shows the message first: edit it, tick party, guild or both, then press Post</td></tr>
+        <tr><td>Right-click a dungeon on the Party page</td><td>Ask your party or guild along, with the quests you still need in there</td></tr>
         <tr><td><code>/qb export</code>, then <code>/reload</code></td><td>Save a snapshot of your quests, log and bags to <code>WTF\Account\&lt;account&gt;\SavedVariables\QuestBank.lua</code>, for when someone checks your plan</td></tr>
         <tr><td><code>/qb minimap</code></td><td>Hide or show the minimap button</td></tr>
-        <tr><td><code>/qb reset</code></td><td>Move the window back to the middle of the screen</td></tr>
+        <tr><td><code>/qb reset</code></td><td>Move the window back to the middle of the screen, and the post box back to the top</td></tr>
         <tr><td>Click a quest</td><td>Waypoint on its giver, or on its turn-in NPC once it's in your log</td></tr>
         <tr><td>Right-click a quest</td><td>A menu: waypoint on the giver or the turn-in, cut or keep (add or drop), and the quest's Wowhead link to copy</td></tr>
         <tr><td><code>/qb errors</code></td><td>Every problem QuestBank caught, with where it happened, ready to copy. <code>/qb errors clear</code> empties the list</td></tr>
@@ -737,9 +739,10 @@
     <details><summary>It offers a quest I've already done</summary><p>Type <code>/qb done</code> and the quest's name, like <code>/qb done glowing shard</code>. It shows what the game says: the list of quests you've completed, and the quest's own completed flag. The two can disagree; since 3.0.1 QuestBank counts a quest as done when either says so. If both say no and you're sure, tell us in the Discord with the quest's name.</p></details>
     <details><summary>A quest says "Not on the route"</summary><p>Either it's handed in inside a dungeon, or QuestBank has no position for its NPC. It's listed at the end of the route with its XP so you can fit it in yourself. The <a href="https://github.com/monscorps/foreverrank/blob/main/tools/questbank/GAPS.md" rel="noopener">gap report</a> lists every such quest.</p></details>
     <details><summary>My party doesn't show up on the Party page</summary><p>They need QuestBank 3.0 or newer, and sharing on. Party members appear within a few seconds of grouping; guild members when they log in or change their bank. <b>Send now</b> or <code>/qb sync</code> shares straight away, and <code>/qb sync Name</code> works for a friend who isn't in your group.</p></details>
+    <details><summary>Will it post in chat on its own?</summary><p>No. During a hand-in run it offers a post when you level up, when the first hour is up and when the run ends, like "Level 23, 18 min into my hand-in run: 12 quests handed in, +54,300 XP". The box shows the message and where it goes, and nothing is sent until you press Post. Untick "Offer a post during hand-in runs" in that box and it stops offering; <code>/qb post</code> still works.</p></details>
     <details><summary>Do I need TomTom?</summary><p>No. Map pins use the game's own map pin. If TomTom is installed, QuestBank uses that instead.</p></details>
     <details><summary>Does the plan fit my character?</summary><p>Yes. There's no built-in plan any more: your plan is what's in your log and bags, plus what you add. QuestBank knows every Forever quest from level 10 to 40 for both factions, and only suggests what your faction, class and race can take.</p></details>
-    <details><summary>Is it safe to use?</summary><p>It only reads what the game shows you. It never clicks, accepts or hands in anything for you. What it shares goes over the game's own addon channel to your party and guild, and only while sharing is on.</p></details>
+    <details><summary>Is it safe to use?</summary><p>It only reads what the game shows you. It never clicks, accepts or hands in anything for you. What it shares goes over the game's own addon channel to your party and guild, and only while sharing is on. It only writes in chat when you press Post.</p></details>
   </div>
   <p class="credits">XP data from Wowhead's Forever database and ForeverChanges. Quest chains, quest givers and spawn points from the <a href="https://github.com/cmangos/classic-db" rel="noopener">CMaNGOS Classic database</a> (GPL-3.0). Flight paths, maps and icons from the Forever client. QuestBank is free software under the GPL-3.0; the licence text ships in the download. Game art and icons by Blizzard Entertainment. Beta data can change with any build.</p>
 </section>
@@ -747,7 +750,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 3.1.2. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 3.2.0. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>

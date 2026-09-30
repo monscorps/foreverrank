@@ -20,7 +20,7 @@ SetScrollChild SetVerticalScroll GetVerticalScroll SetText GetText SetNormalText
 RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThumbTexture SetMinMaxValues GetMinMaxValues
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
-SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine]])
+SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
@@ -101,6 +101,16 @@ local function newObj(kind, template, parent)
         elseif k == "SetScrollChild" then a[1].__scrollParent = self; self.__child = a[1]
         elseif k == "SetVerticalScroll" then self.__scroll = a[1]
         elseif k == "SetHighlightTexture" then self.__hiTex = a[1]; self.__hiBlend = a[2]
+        elseif k == "SetEnabled" then self.__disabled = not a[1]
+        elseif k == "Enable" then self.__disabled = false
+        elseif k == "Disable" then self.__disabled = true
+        elseif k == "IsEnabled" then return not self.__disabled
+        elseif k == "SetChecked" then self.__checked = a[1] and true or false
+        elseif k == "GetChecked" then return self.__checked or false
+        elseif k == "SetFocus" then self.__focus = true
+        elseif k == "ClearFocus" then self.__focus = false
+        elseif k == "HasFocus" then return self.__focus or false
+        elseif k == "SetMaxLetters" then self.__maxLetters = a[1]
         elseif k == "ClearAllPoints" then self.__points = {}
         elseif k == "SetAllPoints" then
           local rel = a[1] or self.__parent
@@ -189,6 +199,8 @@ local function newClient(o)
   end
   env.C_Timer = { After = function(sec, f) c.timers[#c.timers + 1] = { t = c.clock + sec, f = f } end }
   env.GetTime = function() return c.clock end
+  local t0 = os.time()
+  env.time = function() return t0 + math.floor(c.clock - 1000) end
   env.IsShiftKeyDown = function() return c.shift end
   env.GetBindLocation = function() return o.bind or "Stormwind City" end
   env.IsPlayerSpell = function() return o.riding or false end
@@ -249,6 +261,17 @@ local function newClient(o)
     GetWorldPosFromMapPos = function() return o.world[1], { x = o.world[2], y = o.world[3], GetXY = function(self) return self.x, self.y end } end,
     GetMapRectOnMap = function() return 0.4, 0.6, 0.4, 0.6 end,
   }
+  -- chat people read: one line of at most 255 bytes, no escape codes, only to a channel you're in
+  c.said = {}
+  env.SendChatMessage = function(msg, chatType)
+    assert(type(msg) == "string" and #msg > 0 and #msg <= 255, "chat message empty or over 255 bytes")
+    assert(not msg:find("[\r\n]"), "chat message with a line break")
+    assert(not msg:find("|"), "chat message with an escape code")
+    assert(chatType == "PARTY" or chatType == "RAID" or chatType == "GUILD" or chatType == "INSTANCE_CHAT", "posted to " .. tostring(chatType))
+    assert(chatType ~= "GUILD" or o.guild, "posted to a guild you're not in")
+    assert(chatType == "GUILD" or o.group, "posted to a group you're not in")
+    c.said[#c.said + 1] = { msg, chatType }
+  end
   env.C_ChatInfo = {
     RegisterAddonMessagePrefix = function() return true end,
     SendAddonMessage = function(prefix, msg, channel, target)
@@ -477,7 +500,7 @@ local function checkLayout(root, label)
   end
   -- buttons with a label or an icon take room too
   for _, o in ipairs(ALL) do
-    if (o.__template == "UIPanelButtonTemplate" or (o.__kind == "Button" and o.__wset and o.__w <= 40 and o.__w >= 16)) and visible(o) then
+    if (o.__template == "UIPanelButtonTemplate" or ((o.__kind == "Button" or o.__kind == "CheckButton") and o.__wset and o.__w <= 40 and o.__w >= 16)) and visible(o) then
       local anc = ancestors(o)
       local inside = false
       for _, a in ipairs(anc) do if a == root then inside = true end end
@@ -540,7 +563,8 @@ local function dumpLayout(root, label)
           else
             it.bd = o.__backdrop or nil
             it.tpl = o.__template
-            it.text = o.__template and o.__text ~= "" and o.__text or nil
+            it.text = (o.__template or o.__kind == "EditBox") and o.__text ~= "" and o.__text or nil
+            it.checked, it.off = o.__checked or nil, o.__disabled or nil
           end
           if it then
             for _, a in ipairs(anc) do if a.__child then local c = rectOf(a); it.clip = { x = c.l - rr.l, y = rr.t - c.t, w = c.r - c.l, h = c.t - c.b }; break end end
@@ -607,7 +631,21 @@ UI:ShowTab(1)
 for _, b in ipairs(v1.slots) do poke(b) end
 for _, b in ipairs(v1.bagSlots) do if b:IsShown() then poke(b) end end
 for _, r in ipairs(v1.swaps) do if r:IsShown() then poke(r) end end
-for _, r in ipairs(v1.swaps) do if r:IsShown() then print(string.format("  swap: %-28s -> %-32s %s", r.cutName:GetText(), r.addName:GetText(), r.gain:GetText())) end end
+for _, r in ipairs(v1.swaps) do if r:IsShown() then print(string.format("  swap: %-28s -> %-32s %s%s", r.cutName:GetText(), r.addName:GetText(), r.gain:GetText(), r.via and ("  (via " .. r.via.name .. ")") or "")) end end
+for _, r in ipairs(v1.swaps) do
+  if r:IsShown() then assert(not (r.add.turn and r.add.turn.inside), "a swap never banks a quest handed in inside a dungeon: " .. r.add.name) end
+end
+for _, c in ipairs(UI:Candidates(400)) do
+  local q = QB.Quest.Get(c.id)
+  assert(not (q.turn and q.turn.inside), "no quest handed in inside a dungeon is offered to fetch: " .. q.name)
+end
+do
+  local villainy
+  for _, r in ipairs(v1.swaps) do if r:IsShown() and r.add.id == 1200 then villainy = r end end
+  assert(villainy and villainy.via and villainy.via.id == 1198, "Blackfathom Villainy is offered, by way of In Search of Thaelrid")
+  lines = {}; villainy.__scripts.OnEnter(villainy)
+  assert(lines[1]:find("hand it in inside Blackfathom Deeps"), "and its tooltip says how: " .. lines[1])
+end
 UI:ShowTab(2)
 local cards = 0
 for _, c in ipairs(v2.cards.items) do
@@ -797,6 +835,88 @@ layouts[#layouts + 1] = dumpLayout(UI.frame, "Hand-in Route, during the run")
 print("chat:", owner.chat[#owner.chat])
 print("live XP from the game:", QB.Live.Source(QB.Quest.Get(firstQ)))
 
+-- telling the party and guild: offered during the run, shown first, sent only by Post
+do
+  local S = owner.QB.Sync
+  local function click(b) b.__scripts.OnClick(b, "LeftButton") end
+  local function tickBox(b, on) b:SetChecked(on); b.__scripts.OnClick(b, "LeftButton") end
+  UI:ShowTab(3)
+  UI:Refresh()
+  poke(v3.post)
+  local P = owner.env.QuestBankPost
+  assert(P and P:IsShown(), "Post opens the dialog")
+  print("post, during the run:", P.eb:GetText())
+  assert(P.eb:GetText():find("min into my hand%-in run"), "during a run it says how the run goes")
+  assert(P.party:GetChecked() and P.guild:GetChecked() and P.post:IsEnabled(), "party and guild ticked, Post ready")
+  assert(not P.eb:HasFocus(), "the message box doesn't take the keyboard from you")
+  for _, pr in ipairs(checkLayout(P, "post dialog")) do problems[#problems + 1] = pr end
+  layouts[#layouts + 1] = dumpLayout(P, "Post in chat")
+  click(P.cancel)
+  assert(not P:IsShown() and #owner.said == 0, "Cancel posts nothing")
+  P.__scripts.OnDragStart(P); P.__scripts.OnDragStop(P)
+  assert(QB:Settings().post.pos, "dragged somewhere, it opens there next time")
+  -- a level-up in the run offers it; Post sends it to both
+  owner.level, owner.xp = 21, 4000
+  owner.ev(QB.eventFrame, "PLAYER_LEVEL_UP", 21)
+  tick(owner, 2)
+  assert(P:IsShown() and P.eb:GetText():find("^Level 21, %d+ min into my hand%-in run"), "a level-up in the run is offered: " .. P.eb:GetText())
+  print("offered at level 21:", P.why:GetText(), "|", P.eb:GetText())
+  click(P.post)
+  assert(not P:IsShown(), "Post closes it")
+  assert(#owner.said == 2 and owner.said[1][2] == "PARTY" and owner.said[2][2] == "GUILD", "Post sends it to party and guild")
+  assert(owner.said[1][1] == owner.said[2][1], "the same words to both")
+  -- untick the guild: only the party, and it stays unticked next time
+  owner.said = {}
+  poke(v3.post)
+  tickBox(P.guild, false)
+  click(P.post)
+  assert(#owner.said == 1 and owner.said[1][2] == "PARTY", "only where it's ticked")
+  poke(v3.post)
+  assert(not P.guild:GetChecked(), "the tick is remembered")
+  tickBox(P.guild, true)
+  tickBox(P.party, false)
+  tickBox(P.guild, false)
+  assert(not P.post:IsEnabled(), "nothing ticked: Post is off")
+  tickBox(P.party, true)
+  tickBox(P.guild, true)
+  -- your own words: one line, no escape codes, and an offer doesn't write over them
+  P.eb:SetText("Ding!|cff\nsee you in Deadmines")
+  P.eb.__scripts.OnTextChanged(P.eb, true)
+  assert(P.eb:GetText() == "Ding!cffsee you in Deadmines", "line breaks and escape codes go: " .. P.eb:GetText())
+  owner.level = 22
+  owner.ev(QB.eventFrame, "PLAYER_LEVEL_UP", 22)
+  tick(owner, 2)
+  assert(P.eb:GetText() == "Ding!cffsee you in Deadmines", "an offer doesn't write over what you typed")
+  owner.said = {}
+  click(P.post)
+  assert(#owner.said == 2 and owner.said[1][1] == "Ding!cffsee you in Deadmines", "your words go out as typed")
+  -- too long for chat: cut at 255 bytes, on a whole letter
+  local long = S.CleanPost(("\195\184"):rep(200))
+  assert(#long == 254 and long == ("\195\184"):rep(127), "cut at 255 bytes on a whole letter")
+  assert(S.CleanPost(" a|b\r\nc ") == "a/b c", "one clean line")
+  -- the first hour of the run is offered when it's up
+  owner.said = {}
+  tick(owner, 3600)
+  assert(QB.Run.Get().hour and P:IsShown() and P.eb:GetText():find("^First hour of my hand%-in run: level 22%.%d"), "the first hour is offered: " .. P.eb:GetText())
+  print("offered at the hour:", P.eb:GetText())
+  click(P.cancel)
+  -- offers switched off: a level-up says nothing
+  poke(v3.post)
+  tickBox(P.auto, false)
+  click(P.cancel)
+  assert(QB:Settings().post.auto == false)
+  owner.level = 23
+  owner.ev(QB.eventFrame, "PLAYER_LEVEL_UP", 23)
+  tick(owner, 2)
+  assert(not P:IsShown(), "no offers when they're switched off")
+  QB:Settings().post.auto = true
+  assert(#owner.said == 0, "nothing is ever posted on its own")
+  -- /qb post opens it too
+  owner.env.SlashCmdList.QUESTBANK("post")
+  assert(P:IsShown() and P.eb:GetText():find("into my hand%-in run"), "/qb post opens it")
+  click(P.cancel)
+end
+
 -- handed in: the game's list of completed quests counts even when the quest's flag says no
 do
   local flag = owner.env.C_QuestLog.IsQuestFlaggedCompleted
@@ -870,6 +990,17 @@ mb.__scripts.OnClick(mb, "RightButton")
 lines = {}; mb.__scripts.OnEnter(mb); assert(#lines > 0)
 for _, cmd in ipairs({ "export", "route", "prep", "party", "minimap", "minimap", "reset", "next", "pins", "pins", "stop" }) do owner.env.SlashCmdList.QUESTBANK(cmd) end
 assert(not QB.Run.Get(), "/qb stop ends the run")
+do
+  local P = owner.env.QuestBankPost
+  assert(P:IsShown() and P.eb:GetText():find("^Hand%-in run done: level 20%.0 to 23%.%d in %d+ min, %d+ quests?, %+"), "the end of the run is offered: " .. P.eb:GetText())
+  print("offered at the end:", P.eb:GetText())
+  P.cancel.__scripts.OnClick(P.cancel)
+  -- without a run: where the bank and the plan take you
+  owner.env.SlashCmdList.QUESTBANK("post")
+  assert(P.eb:GetText():find("^My banked quests take me to level"), "without a run it posts the bank and the plan")
+  print("post, no run:", P.eb:GetText())
+  P.cancel.__scripts.OnClick(P.cancel)
+end
 owner.ev(QB.eventFrame, "PLAYER_LOGOUT")
 
 ----------------------------------------------------------------------------
@@ -966,6 +1097,18 @@ for _, c in ipairs(v4.dcards.items) do
     for _, r in ipairs(c.rows.items) do if r:IsShown() then poke(r) end end
   end
 end
+do
+  local P = owner.env.QuestBankPost
+  for _, c in ipairs(v4.dcards.items) do
+    if c:IsShown() then
+      c.head.__scripts.OnClick(c.head, "RightButton")
+      assert(P:IsShown() and P.eb:GetText():find("^Anyone up for " .. c.title:GetText():gsub("^The ", ""):gsub("%p", "%%%0") .. "%? "), "right-click on a dungeon asks for a group: " .. P.eb:GetText())
+      assert(#P.eb:GetText() <= 255)
+      print("dungeon post:", P.eb:GetText())
+      P.cancel.__scripts.OnClick(P.cancel)
+    end
+  end
+end
 local n = owner.QB.Sync:CopyPlan(mem[1].key)
 print("  copy plan added:", n)
 for _, p in ipairs(checkLayout(UI.frame, "party")) do problems[#problems + 1] = p end
@@ -1012,6 +1155,16 @@ for _, c in ipairs(horde.QB.UI:Candidates(400)) do
   local q = horde.QB.Quest.Get(c.id)
   assert(q.side ~= 1, "no Alliance quest offered to the Horde: " .. q.name)
   assert(horde.QB.Quest.ForMe(q), "only quests an orc shaman can take: " .. q.name)
+end
+do
+  horde.env.SlashCmdList.QUESTBANK("post")
+  local P = horde.env.QuestBankPost
+  assert(P:IsShown() and not P.party:IsEnabled() and not P.guild:IsEnabled() and not P.post:IsEnabled(), "outside a group and a guild there's nowhere to post")
+  print("horde post:", P.party.label:GetText(), "|", P.guild.label:GetText())
+  for _, pr in ipairs(checkLayout(P, "horde post dialog")) do problems[#problems + 1] = pr end
+  P.cancel.__scripts.OnClick(P.cancel)
+  horde.QB.Run.Offer("level", 21)
+  assert(not P:IsShown(), "and nothing is offered")
 end
 horde.QB.UI:ShowTab(2)
 layouts[#layouts + 1] = dumpLayout(horde.QB.UI.frame, "Horde: Prep")

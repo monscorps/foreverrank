@@ -393,6 +393,135 @@ function UI:CopyLink(title, url)
   f.eb:HighlightText()
 end
 
+-- posting in party and guild chat: the message as people will read it (yours to edit), where it goes,
+-- and nothing is sent until you press Post
+local GREY = { 0.62, 0.6, 0.56 }
+function UI:PostDialog(msg, why, offered)
+  T = T or QB.Data.TEX
+  local f = self.postFrame
+  -- an offer never replaces a message you're writing
+  if f and offered and f:IsShown() and (f.edited or f.eb:HasFocus()) then return end
+  if not f then
+    f = CreateFrame("Frame", "QuestBankPost", UIParent, BD)
+    self.postFrame = f
+    f:SetSize(420, 256)
+    local pos = QB:Settings().post.pos
+    if pos then f:SetPoint(pos[1], UIParent, pos[1], pos[2], pos[3]) else f:SetPoint("TOP", 0, -120) end
+    f:SetFrameStrata("DIALOG")
+    f:SetFrameLevel(30)
+    f:EnableMouse(true)
+    -- drag it out of your way; it opens there next time
+    f:SetMovable(true)
+    f:SetClampedToScreen(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", function(self)
+      self:StopMovingOrSizing()
+      local p, _, _, x, y = self:GetPoint()
+      QB:Settings().post.pos = { p, x, y }
+    end)
+    backdrop(f, T.bg, T.border, 24, 7, true)
+    f.title = text(f, "GameFontNormal", 13, GOLD, "LEFT", 380)
+    f.title:SetPoint("TOPLEFT", 20, -18)
+    f.title:SetText("Post in chat")
+    f.why = text(f, "GameFontHighlightSmall", 11, WHITE, "LEFT", 380)
+    f.why:SetPoint("TOPLEFT", 20, -36)
+    f.box = CreateFrame("Frame", nil, f, BD)
+    f.box:SetPoint("TOPLEFT", 16, -54)
+    f.box:SetSize(388, 96)
+    backdrop(f.box, T.tipBg, T.tipBorder, 12, 3)
+    if f.box.SetBackdropColor then f.box:SetBackdropColor(0, 0, 0, 0.6) end
+    f.box:EnableMouse(true)
+    f.eb = CreateFrame("EditBox", nil, f.box)
+    f.eb:SetFontObject(ChatFontNormal)
+    f.eb:SetPoint("TOPLEFT", 10, -8)
+    f.eb:SetSize(368, 80)
+    f.eb:SetMultiLine(true)
+    f.eb:SetMaxLetters(255)
+    f.eb:SetAutoFocus(false)
+    f.eb:EnableMouse(true)
+    f.eb:SetTextColor(1, 1, 1)
+    f.box:SetScript("OnMouseDown", function() f.eb:SetFocus() end)
+    f.eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    f.eb:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    f.eb:SetScript("OnTextChanged", function(self, typed)
+      if not typed then return end
+      -- one line, no escape codes: the chat box doesn't take them
+      local t = self:GetText()
+      local one = t:gsub("[\r\n|]", "")
+      if one ~= t then self:SetText(one) end
+      f.edited = true
+      UI:PostState()
+    end)
+    local function check(x, key)
+      local c = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+      c:SetSize(24, 24)
+      c:SetPoint("TOPLEFT", x, -156)
+      c.label = text(f, "GameFontNormal", 12, WHITE, "LEFT", 150)
+      c.label:SetPoint("LEFT", c, "RIGHT", 2, 0)
+      c.key = key
+      c:SetScript("OnClick", function() UI:PostState() end)
+      return c
+    end
+    f.party = check(16, "party")
+    f.guild = check(210, "guild")
+    f.auto = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    f.auto:SetSize(20, 20)
+    f.auto:SetPoint("TOPLEFT", 18, -184)
+    f.autoLabel = text(f, "GameFontHighlightSmall", 11, GREY, "LEFT", 356)
+    f.autoLabel:SetPoint("LEFT", f.auto, "RIGHT", 2, 0)
+    f.autoLabel:SetText("Offer a post during hand-in runs: each level, the hour, the end")
+    f.auto:SetScript("OnClick", function(self) QB:Settings().post.auto = self:GetChecked() and true or false end)
+    f.post = button(f, "Post", 110)
+    f.post:SetPoint("BOTTOMRIGHT", f, "BOTTOM", -4, 18)
+    f.post:SetScript("OnClick", QB.Safe(function() UI:PostSend() end, "posting in chat"))
+    f.cancel = button(f, "Cancel", 110)
+    f.cancel:SetPoint("BOTTOMLEFT", f, "BOTTOM", 4, 18)
+    f.cancel:SetScript("OnClick", function() f:Hide() end)
+    f:SetScript("OnHide", function() f.eb:ClearFocus() end)
+    if UISpecialFrames then table.insert(UISpecialFrames, "QuestBankPost") end
+  end
+  f.why:SetText(why or "")
+  f.eb:SetText(msg or "")
+  f.edited = false
+  -- ticked the way you left them, where you can post right now
+  local set = QB:Settings().post
+  local ch = QB.Sync and QB.Sync.PostChannels() or {}
+  for _, c in ipairs({ f.party, f.guild }) do
+    local where = ch[c.key]
+    c:SetEnabled(where ~= nil)
+    c:SetChecked((where ~= nil and set[c.key]) and true or false)
+    if where then
+      c.label:SetText(where.label)
+      c.label:SetTextColor(WHITE[1], WHITE[2], WHITE[3])
+    else
+      c.label:SetText(c.key == "party" and "Party (not in a group)" or "Guild (not in one)")
+      c.label:SetTextColor(GREY[1], GREY[2], GREY[3])
+    end
+  end
+  f.auto:SetChecked(set.auto and true or false)
+  self:PostState()
+  f:Show()
+end
+
+-- Post works when a ticked channel can take it and there's something to say
+function UI:PostState()
+  local f = self.postFrame
+  local on = (f.party:GetChecked() and f.party:IsEnabled()) or (f.guild:GetChecked() and f.guild:IsEnabled())
+  f.post:SetEnabled((on and QB.Sync.CleanPost(f.eb:GetText()) ~= "") and true or false)
+end
+
+function UI:PostSend()
+  local f = self.postFrame
+  local want = { party = f.party:GetChecked() and true or false, guild = f.guild:GetChecked() and true or false }
+  -- next time it's ticked the way you left it
+  local set, ch = QB:Settings().post, QB.Sync.PostChannels()
+  for key, on in pairs(want) do if ch[key] then set[key] = on end end
+  local n = QB.Sync:Post(f.eb:GetText(), want)
+  f:Hide()
+  if n == 0 then QB:Print("Nothing was posted: you're not in that group or guild any more.") end
+end
+
 function UI.QuestMenu(q, st)
   st = st or QB:Status(q)
   local items = {}
@@ -855,12 +984,18 @@ function UI:CreateLogView(parent)
       local q = self.add
       if not q then return end
       if which == "RightButton" or (IsShiftKeyDown and IsShiftKeyDown()) then UI.QuestClick(q, QB:Status(q), which) return end
-      if q.give and not q.give.inside then QB.API.SetWaypoint(q.give.m, q.give.x, q.give.y, q.give.n) end
+      local give = self.via and self.via.give or q.give
+      if give and not give.inside then QB.API.SetWaypoint(give.m, give.x, give.y, give.n) end
     end)
     tooltip(r, function(tip, self)
       if self.cutTitle then
         tip:AddLine("Drop: " .. self.cutTitle, 1, 0.5, 0.4)
         tip:AddLine(QB.Comma(self.cutValue or 0) .. " XP on the day", 0.8, 0.8, 0.8)
+        tip:AddLine(" ")
+      end
+      if self.via then
+        tip:AddLine(string.format("Take %s now and hand it in inside %s. That gives you %s to bank.", self.via.name,
+          self.via.cat and self.via.cat.name or "the dungeon", self.add.name), 1, 0.82, 0, true)
         tip:AddLine(" ")
       end
       if self.add then UI.QuestTooltip(tip, self.add, QB:Status(self.add), self.addValue) end
@@ -876,7 +1011,8 @@ function UI:CreateLogView(parent)
   return v
 end
 
--- the best quests to fetch: for your faction and class, not done, not held, most XP on the day first
+-- the best quests to fetch: for your faction and class, not done, not held, most XP on the day first.
+-- Not the ones handed in inside a dungeon: those can't wait in your log for the day.
 function UI:Candidates(limit, level)
   local D = QB.Data
   local s = QB.state
@@ -886,9 +1022,11 @@ function UI:Candidates(limit, level)
   local out = {}
   for id, r in pairs(D.Q) do
     local side, cls = r[3], r[9]
+    local turn = D.NPC[(fac == "H" and D.TURNH and D.TURNH[id]) or r[6]]
     if (side == 0 or (side == 1 and fac == "A") or (side == 2 and fac == "H"))
       and (cls == 0 or bit == 0 or math.floor(cls / bit) % 2 == 1)
-      and r[2] <= math.max(s.level, 20) + 2 and r[1] >= level - 7 and not s.log[id] and not D.FOLLOW[id] then
+      and r[2] <= math.max(s.level, 20) + 2 and r[1] >= level - 7 and not s.log[id] and not D.FOLLOW[id]
+      and not (turn and turn[5] < 0) then
       local live = QuestBankDB.live and QuestBankDB.live[id]
       out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], cat = r[8] }
     end
@@ -1027,7 +1165,8 @@ function UI:RefreshLogView(v)
           local nq = Q.Get(nid)
           if nq and Q.ForMe(nq) and not QB.API.IsDone(nid) and not s.log[nid] and (nq.req or 1) <= lvl then
             local v = QB.Model.XpAt(nq, lvl)
-            if not bestV or v > bestV then best, bestV, bestDepth = nq, v, depth end
+            -- a step handed in inside a dungeon can't be banked; the one after it can
+            if not (nq.turn and nq.turn.inside) and (not bestV or v > bestV) then best, bestV, bestDepth = nq, v, depth end
             walk(nq, depth + 1)
           end
         end
@@ -1052,9 +1191,16 @@ function UI:RefreshLogView(v)
   for _, c in ipairs(self:Candidates(40)) do
     local q = Q.Get(c.id)
     local st = q and QB:Status(q)
-    -- quests you can pick up now and that need a log slot; chains and bag quests live on the Prep page
-    if q and not used[q.id] and st.code == "todo" and not (q.bag and q.bag[3] == 1) then
-      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st }
+    -- quests you can pick up now and that need a log slot, and the ones a single step handed in inside
+    -- the dungeon stands before (Blackfathom Villainy after In Search of Thaelrid): take that step, finish
+    -- it in there, bank what it gives you. Longer chains and bag quests live on the Prep page.
+    local via
+    if q and st.code == "prereq" and type(st.pre) == "number" then
+      local p = Q.Get(st.pre)
+      if p and p.turn and p.turn.inside and QB:Status(p).code == "todo" then via = p end
+    end
+    if q and not used[q.id] and (st.code == "todo" or via) and not (q.bag and q.bag[3] == 1) then
+      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via }
     end
   end
   local ai = 1
@@ -1075,7 +1221,7 @@ function UI:RefreshLogView(v)
     local d = rows[i]
     if d then
       r:Show()
-      r.add, r.addValue = d.add.q, d.add.value
+      r.add, r.addValue, r.via = d.add.q, d.add.value, d.add.via
       r.cutTitle = d.cut and d.cut.e.title or nil
       r.cutValue = d.cutValue
       if d.chain then
@@ -1500,8 +1646,17 @@ function UI:CreateRouteView(parent)
       tip:AddLine("Starts a clock, ticks each quest off with the XP it paid, and re-plans the rest from where you stand. The first hand-in above the old cap starts it by itself.", 1, 1, 1, true)
     end
   end)
-  v.summary = text(v, "GameFontNormal", 12, INK, "RIGHT", 400)
-  v.summary:SetPoint("TOPRIGHT", -118, -14)
+  v.post = button(v, "Post", 64)
+  v.post:SetPoint("TOPRIGHT", -114, -10)
+  v.post:SetScript("OnClick", function() UI:PostDialog(QB.Run.PostText("status")) end)
+  tooltip(v.post, function(tip)
+    tip:AddLine("Post in party or guild chat", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine(QB.Run.Get() and "How your hand-in run is going: minutes, level, quests and XP."
+      or "The level your banked quests take you to, and your plan's.", 1, 1, 1, true)
+    tip:AddLine("You see the message first. Nothing is posted until you press Post.", 0.6, 0.6, 0.6, true)
+  end)
+  v.summary = text(v, "GameFontNormal", 12, INK, "RIGHT", 336)
+  v.summary:SetPoint("TOPRIGHT", -184, -14)
   v.setup = para(v, "GameFontNormal", 12, INK, W - 64)
   v.setup:SetPoint("TOPLEFT", 16, -40)
   v.setup:SetHeight(30)
@@ -1772,6 +1927,41 @@ local function whoText(e)
   return table.concat(parts, ",  ")
 end
 
+-- "A, B and C", as many as fit in room bytes, then "and 2 more"
+local function nameList(names, room)
+  for n = #names, 1, -1 do
+    local shown = {}
+    for i = 1, n do shown[i] = names[i] end
+    local s
+    if n == #names then
+      s = #shown > 1 and (table.concat(shown, ", ", 1, n - 1) .. " and " .. shown[n]) or shown[1]
+    else
+      s = table.concat(shown, ", ") .. string.format(" and %d more", #names - n)
+    end
+    if #s <= room then return s end
+  end
+  return string.format("%d quests", #names)
+end
+
+-- a post asking for a group: the quests you still need in there, or the group's if you have none left
+function UI.DungeonPost(d)
+  local mine, theirs = {}, {}
+  for _, e in ipairs(d.quests) do
+    if e.need > 0 and e.q then
+      local me = false
+      for _, w in ipairs(e.who) do if w.me and w.code ~= "b" then me = true end end
+      if me then mine[#mine + 1] = e.q.name else theirs[#theirs + 1] = e.q.name end
+    end
+  end
+  local head = "Anyone up for " .. d.cat.name:gsub("^The ", "") .. "? "
+  if #mine > 0 then
+    local lead = "I still need "
+    return head .. lead .. nameList(mine, 254 - #head - #lead) .. ".", d.cat.name .. ": the quests you still need in there."
+  end
+  local lead = "Quests still to do: "
+  return head .. lead .. nameList(theirs, 254 - #head - #lead) .. ".", d.cat.name .. ": the quests your group still needs in there."
+end
+
 local function makeDungeonRow(parent)
   local r = CreateFrame("Button", nil, parent)
   r:SetHeight(32)
@@ -1825,7 +2015,12 @@ local function makeDungeonCard(parent)
   c.gain:SetPoint("TOPRIGHT", -8, -4)
   c.left = text(c.head, "GameFontHighlightSmall", 10, WHITE, "RIGHT", 90)
   c.left:SetPoint("TOPRIGHT", -8, -20)
-  c.head:SetScript("OnClick", function(self)
+  c.head:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  c.head:SetScript("OnClick", function(self, which)
+    if which == "RightButton" then
+      if self.data then UI:PostDialog(UI.DungeonPost(self.data)) end
+      return
+    end
     local e = self.cat and self.cat.entrance
     if e then QB.API.SetWaypoint(e.m, e.x, e.y, self.cat.name .. " entrance") end
   end)
@@ -1833,7 +2028,7 @@ local function makeDungeonCard(parent)
     if not self.cat then return end
     tip:AddLine(self.cat.name, GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine(string.format("%d quests still to do among %s, worth about %s XP together.", self.data.left, table.concat(self.data.people, ", "), QB.Comma(self.data.xp)), 1, 1, 1, true)
-    if self.cat.entrance then tip:AddLine("Click: waypoint on the entrance.", 0.5, 0.5, 0.5) end
+    tip:AddLine((self.cat.entrance and "Click: waypoint on the entrance.  " or "") .. "Right-click: ask your party or guild to come along.", 0.5, 0.5, 0.5, true)
   end)
   c.rows = pool(c, makeDungeonRow)
   return c

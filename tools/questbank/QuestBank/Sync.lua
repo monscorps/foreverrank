@@ -154,6 +154,39 @@ function S:QueueLive(id, xp, level)
 end
 
 ----------------------------------------------------------------------------
+-- posts in party and guild chat, which people read: only ever sent from the Post button (UI:PostDialog)
+----------------------------------------------------------------------------
+function S.PostChannels()
+  local out = {}
+  local g = groupChannel()
+  if g then out.party = { channel = g, label = g == "RAID" and "Raid" or (g == "INSTANCE_CHAT" and "Instance" or "Party") } end
+  if IsInGuild and IsInGuild() then out.guild = { channel = "GUILD", label = "Guild" } end
+  return out
+end
+
+-- chat takes one line of at most 255 bytes, and no escape codes
+function S.CleanPost(msg)
+  msg = (msg or ""):gsub("[\r\n]+", " "):gsub("|", "/"):gsub("^%s+", ""):gsub("%s+$", "")
+  if #msg > 255 then msg = msg:sub(1, 255):gsub("[\192-\255][\128-\191]*$", "") end
+  return msg
+end
+
+-- post it where you ticked; how many channels took it
+function S:Post(msg, want)
+  msg = S.CleanPost(msg)
+  if msg == "" then return 0 end
+  local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+  local ch, n = S.PostChannels(), 0
+  for _, key in ipairs({ "party", "guild" }) do
+    if want[key] and ch[key] then
+      local ok, err = pcall(send, msg, ch[key].channel)
+      if ok then n = n + 1 else QB.Err.Record(tostring(err), "", "posting in " .. ch[key].label:lower() .. " chat") end
+    end
+  end
+  return n
+end
+
+----------------------------------------------------------------------------
 -- what we receive
 ----------------------------------------------------------------------------
 local function split(s, sep)
