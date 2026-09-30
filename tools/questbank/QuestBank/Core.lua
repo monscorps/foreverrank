@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.3.2"
+QB.version = "3.3.3"
 QB.MAXLEVEL = 60
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
 
@@ -577,6 +577,10 @@ local DEFAULTS = {
   mounted = "auto", bag = "auto", goal = "hour", routeMode = "now", tab = 1, pins = true,
   minimap = { angle = 205, hide = false }, share = { party = true, guild = true },
   post = { party = true, guild = true, auto = true }, updates = true,
+  -- how far above and below your level suggestions reach ("auto": 12 above while banking, 4 while
+  -- questing, 7 below), and the zones, dungeons (by D.CAT key) and continents (0 Eastern Kingdoms,
+  -- 1 Kalimdor) you told QuestBank to leave out of its suggestions
+  rangeAbove = "auto", rangeBelow = "auto", skipCat = {}, skipCont = {},
 }
 
 function QB:Settings()
@@ -749,6 +753,7 @@ function QB:Upgrade(q)
     for _, nid in ipairs(x.nextSteps) do
       local nq = Q.Get(nid)
       if nq and not seen[nid] and Q.ForMe(nq) and not API.IsDone(nid) and not s.log[nid]
+        and not nq.sodLeftover and not QB:SkipsQuest(nq)
         and (nq.req or 1) <= lvl + (banking and 0 or 2) then
         seen[nid] = true
         local v = QB.Model.XpAt(nq, lvl)
@@ -766,6 +771,88 @@ end
 
 -- banking words only where banking happens
 function QB:Banking() return self:Mode() ~= "quest" end
+
+----------------------------------------------------------------------------
+-- what may be suggested: the level window and the skipped places (Settings, the Plan cards, /qb skip)
+----------------------------------------------------------------------------
+-- levels above and below yours that suggestions reach, and whether each is QuestBank's own choice
+function QB:Range()
+  local s = self:Settings()
+  local autoA, autoB = s.rangeAbove == "auto", s.rangeBelow == "auto"
+  local above = autoA and (self:Banking() and 12 or 4) or s.rangeAbove
+  local below = autoB and 7 or s.rangeBelow
+  return above, below, autoA, autoB
+end
+
+QB.CONTINENTS = { [0] = "Eastern Kingdoms", [1] = "Kalimdor" }
+
+-- is this category (and, for class and other quests, the turn-in NPC's continent) skipped?
+function QB:Skipped(catIdx, cont)
+  local s = self:Settings()
+  local c = catIdx and D.CAT[catIdx]
+  if c then
+    if s.skipCat[c.key] then return true end
+    -- a place knows its continent; a dungeon that doesn't (a battleground, a new one) is never split
+    -- quest by quest over its turn-in NPCs
+    if c.cont ~= nil then cont = c.cont elseif c.dungeon then return false end
+  end
+  return cont ~= nil and cont >= 0 and s.skipCont[cont] == true
+end
+
+function QB:SkipsQuest(q)
+  local r = D.Q[q.id]
+  local turn = D.NPC[q.turnIdx]
+  return r ~= nil and self:Skipped(r[8], turn and turn[5])
+end
+
+-- one string for everything skipped, so cached suggestion lists know when to refresh
+function QB:SkipSignature()
+  local s, parts = self:Settings(), {}
+  for k in pairs(s.skipCat) do parts[#parts + 1] = k end
+  for k in pairs(s.skipCont) do parts[#parts + 1] = "c" .. k end
+  table.sort(parts)
+  return table.concat(parts, ",")
+end
+
+-- the skipped places by name, continents first
+function QB:SkipList()
+  local s, names = self:Settings(), {}
+  for k = 0, 1 do if s.skipCont[k] then names[#names + 1] = QB.CONTINENTS[k] end end
+  local zones = {}
+  for _, c in ipairs(D.CAT) do if s.skipCat[c.key] then zones[#zones + 1] = c.name end end
+  table.sort(zones)
+  for _, n in ipairs(zones) do names[#names + 1] = n end
+  return names
+end
+
+function QB:SetSkip(key, on)
+  local s = self:Settings()
+  if type(key) == "number" then s.skipCont[key] = on and true or nil else s.skipCat[key] = on and true or nil end
+  if QB.UI then QB.UI:Refresh() end
+end
+
+-- a continent, zone or dungeon by name (or part of one): flips it, and says what and which way
+function QB:ToggleSkip(want)
+  want = (want or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+  if want == "" then return nil end
+  local s = self:Settings()
+  for k = 0, 1 do
+    local n = QB.CONTINENTS[k]:lower()
+    if n == want or (#want >= 4 and n:find(want, 1, true) == 1) then
+      self:SetSkip(k, not s.skipCont[k])
+      return QB.CONTINENTS[k], s.skipCont[k] == true
+    end
+  end
+  local best
+  for _, c in ipairs(D.CAT) do
+    local n = c.name:lower()
+    if n == want then best = c break end
+    if n:find(want, 1, true) and (not best or #c.name < #best.name) then best = c end
+  end
+  if not best then return nil end
+  self:SetSkip(best.key, not s.skipCat[best.key])
+  return best.name, s.skipCat[best.key] == true
+end
 function QB:OnTheDay() return self:Banking() and "on the day" or "at your level" end
 
 ----------------------------------------------------------------------------
@@ -1526,6 +1613,23 @@ slash = function(msg)
       QB:Print("Error list cleared.")
     elseif QB.UI then
       QB.UI:ShowErrors()
+    end
+  elseif cmd == "skip" then
+    local want = rest:lower():gsub("^%s+", ""):gsub("%s+$", "")
+    if want == "" then
+      local names = QB:SkipList()
+      QB:Print(#names > 0 and ("Skipping " .. table.concat(names, ", ") .. ": nothing there is suggested. /qb skip and a name puts one back; /qb skip none clears the list.")
+        or "Nothing skipped. Type /qb skip and a zone, dungeon or continent, like /qb skip Kalimdor or /qb skip Wailing Caverns, and QuestBank stops suggesting quests there. Settings has the same, and each Plan card has a Skip button.")
+    elseif want == "none" or want == "clear" then
+      local s = QB:Settings()
+      s.skipCat, s.skipCont = {}, {}
+      if QB.UI then QB.UI:Refresh() end
+      QB:Print("Nothing is skipped any more.")
+    else
+      local label, on = QB:ToggleSkip(want)
+      if not label then QB:Print(string.format("No zone, dungeon or continent called \"%s\". /qb skip Kalimdor, /qb skip Eastern Kingdoms, or a zone or dungeon name.", rest))
+      elseif on then QB:Print(label .. " is skipped: nothing there is suggested. /qb skip " .. label .. " brings it back.")
+      else QB:Print(label .. " is back in the suggestions.") end
     end
   elseif cmd == "done" then
     QB:ReadState()

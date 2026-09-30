@@ -1176,15 +1176,17 @@ function UI:Candidates(limit, level)
   level = level or s.level
   local fac = QB.faction
   local banking = QB:Banking()
+  local above, below = QB:Range()
   -- the same question asked several times a refresh: answer it once a second
-  local key = table.concat({ limit or 0, level, s.level, s.logCount or 0, tostring(banking), fac or "", s.mapID or 0 }, ":")
+  local key = table.concat({ limit or 0, level, s.level, s.logCount or 0, tostring(banking), fac or "", s.mapID or 0, above, below, QB:SkipSignature() }, ":")
   local now = GetTime and GetTime() or 0
   UI.candMemo = UI.candMemo or {}
   local memo = UI.candMemo[key]
   if memo and now - memo.t < 1 then return memo.list end
   local bit, rbit = QB.API.ClassBit(), QB.API.RaceBit()
-  -- questing: nothing far above you; banking: dungeon quests well above you are the big payers
-  local ceiling = level + (banking and 12 or 4)
+  -- questing: nothing far above you; banking: dungeon quests well above you are the big payers.
+  -- Settings can widen or narrow both ends (QB:Range)
+  local ceiling = level + above
   -- questing: how far each giver is from you, so nearby quests come first
   local here, mf
   if not banking then
@@ -1203,9 +1205,10 @@ function UI:Candidates(limit, level)
     if (side == 0 or (side == 1 and fac == "A") or (side == 2 and fac == "H"))
       and (cls == 0 or bit == 0 or math.floor(cls / bit) % 2 == 1)
       and (not race or rbit == 0 or rbit > 128 or math.floor(race / rbit) % 2 == 1)
-      and r[2] <= s.level + 2 and r[1] >= level - 7 and r[1] <= ceiling and not s.log[id] and not D.FOLLOW[id]
+      and r[2] <= s.level + 2 and r[1] >= level - below and r[1] <= ceiling and not s.log[id] and not D.FOLLOW[id]
       and math.floor(r[10] / 128) % 2 == 0 -- never suggest Season of Discovery leftovers
-      and not (turn and turn[5] < 0) then
+      and not (turn and turn[5] < 0)
+      and not QB:Skipped(r[8], turn and turn[5]) then -- nor anything where you said to skip
       local live = QuestBankDB.live and QuestBankDB.live[id]
       out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], cat = r[8], give = r[7] }
     end
@@ -1362,7 +1365,8 @@ function UI:RefreshLogView(v)
         if depth > 3 or not q.nextSteps then return end
         for _, nid in ipairs(q.nextSteps) do
           local nq = Q.Get(nid)
-          if nq and Q.ForMe(nq) and not QB.API.IsDone(nid) and not s.log[nid] and (nq.req or 1) <= lvl then
+          if nq and Q.ForMe(nq) and not QB.API.IsDone(nid) and not s.log[nid] and (nq.req or 1) <= lvl
+            and not nq.sodLeftover and not QB:SkipsQuest(nq) then
             local v = QB.Model.XpAt(nq, lvl)
             -- a step handed in inside a dungeon can't be banked; the one after it can
             if not (nq.turn and nq.turn.inside) and (not bestV or v > bestV) then best, bestV, bestDepth = nq, v, depth end
@@ -1431,7 +1435,8 @@ function UI:RefreshLogView(v)
       if d.chain then
         r.cutName:SetText("hand in " .. d.cut.e.title .. " now, " .. (d.chain > 1 and string.format("%d steps on", d.chain) or "bank the next step"))
       else
-        r.cutName:SetText(d.cut and ("instead of " .. d.cut.e.title .. (d.cutValue > 0 and ("  " .. QB.Short(d.cutValue)) or "")) or "into a free slot")
+        r.cutName:SetText((d.cut and ("instead of " .. d.cut.e.title .. (d.cutValue > 0 and ("  " .. QB.Short(d.cutValue)) or "")) or "into a free slot")
+          .. ((d.add.q.classic and not d.add.q.liveFull) and " · Classic only" or ""))
       end
       setIcon(r.addIcon, d.add.q.icon)
       r.addName:SetText(d.add.q.name)
@@ -1460,12 +1465,12 @@ local function makeRow(parent)
   r.icon = tex(r, "ARTWORK", nil, 18, 18)
   r.icon:SetPoint("LEFT", 22, 0)
   r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-  r.name = text(r, "GameFontNormal", 12, INK, "LEFT", 262)
+  r.name = text(r, "GameFontNormal", 12, INK, "LEFT", 290)
   r.name:SetPoint("LEFT", 46, 0)
   r.lvl = text(r, "GameFontNormalSmall", 10, INK_SOFT, "LEFT", 30)
-  r.lvl:SetPoint("LEFT", 314, 0)
+  r.lvl:SetPoint("LEFT", 340, 0)
   r.status = text(r, "GameFontNormalSmall", 11, INK, "LEFT", 250)
-  r.status:SetPoint("LEFT", 348, 0)
+  r.status:SetPoint("LEFT", 374, 0)
   r.xp = text(r, "GameFontNormal", 12, INK, "RIGHT", 60)
   r.xp:SetPoint("RIGHT", -8, 0)
   r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -1509,16 +1514,30 @@ local function makeCard(parent)
   c.where = text(c, "GameFontHighlightSmall", 11, WHITE, "LEFT", 420)
   c.where:SetPoint("TOPLEFT", 50, -28)
   c.gain = text(c, "GameFontNormalLarge", 15, GOLD, "RIGHT", 150)
-  c.gain:SetPoint("TOPRIGHT", -40, -9)
+  c.gain:SetPoint("TOPRIGHT", -50, -9)
   c.count = text(c, "GameFontHighlightSmall", 11, WHITE, "RIGHT", 150)
-  c.count:SetPoint("TOPRIGHT", -40, -28)
+  c.count:SetPoint("TOPRIGHT", -50, -28)
   c.pin = pinButton(c, 22)
-  c.pin:SetPoint("TOPRIGHT", -12, -11)
+  c.pin:SetPoint("TOPRIGHT", -12, -7)
   c.pin:SetScript("OnClick", function(self)
     local e = self.entrance
     if e then QB.API.SetWaypoint(e.m, e.x, e.y, self.label) end
   end)
   tooltip(c.pin, function(tip, self) tip:AddLine("Map pin: " .. (self.label or ""), GOLD[1], GOLD[2], GOLD[3]) end)
+  -- skip this place: nothing here is suggested until you click again (Settings lists the skipped ones)
+  c.skip = CreateFrame("Button", nil, c)
+  c.skip:SetSize(34, 14)
+  c.skip:SetPoint("TOPRIGHT", -8, -31)
+  c.skip.label = text(c.skip, "GameFontNormalSmall", 11, WHITE, "RIGHT", 34)
+  c.skip.label:SetPoint("RIGHT", 0, 0)
+  c.skip:SetScript("OnClick", QB.Safe(function(self)
+    if self.key then QB:SetSkip(self.key, not QB:Settings().skipCat[self.key]) end
+  end, "plan: skip"))
+  tooltip(c.skip, function(tip, self)
+    local on = self.key and QB:Settings().skipCat[self.key]
+    tip:AddLine(on and "Skipped: nothing here is suggested." or "Skip this place: QuestBank stops suggesting quests here.", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine(on and "Click to bring it back." or "Click again to bring it back; Settings and /qb skip list them.", 0.8, 0.8, 0.8, true)
+  end)
   c.rows = pool(c, makeRow)
   c.more = CreateFrame("Button", nil, c)
   c.more:SetSize(400, 18)
@@ -1545,8 +1564,11 @@ local function fillRow(r, q, st, width, value)
   local c = planned and INK or INK_SOFT
   r.name:SetTextColor(c[1], c[2], c[3])
   r.lvl:SetText("L" .. q.lvl)
-  r.status:SetWidth(math.max(120, width - 348 - 76))
-  r.status:SetText((planned and st.code ~= "banked" and st.code ~= "active") and ("In the plan. " .. st.text) or st.text)
+  r.status:SetWidth(math.max(120, width - 374 - 76))
+  local status = (planned and st.code ~= "banked" and st.code ~= "active") and ("In the plan. " .. st.text) or st.text
+  -- from the Classic database, not seen in Forever yet: said in the row, not only the tooltip
+  if q.classic and not q.liveFull and st.code ~= "done" and st.code ~= "banked" and st.code ~= "active" and st.code ~= "partial" then status = status .. " · Classic only" end
+  r.status:SetText(status)
   local sc = STATUS[st.code] or INK
   r.status:SetTextColor(sc[1], sc[2], sc[3])
   r.xp:SetText(QB.Comma(value or Q.Full(q)))
@@ -1574,7 +1596,7 @@ function UI:RefreshPrepView(v)
   local function group(cat)
     local g = groups[cat]
     if not g then
-      g = { cat = D.CAT[cat], quests = {}, left = 0, score = 0, banked = 0, total = 0, planned = 0 }
+      g = { cat = D.CAT[cat], idx = cat, quests = {}, left = 0, fetch = 0, avail = 0, score = 0, banked = 0, total = 0, planned = 0 }
       groups[cat] = g
       order[#order + 1] = g
     end
@@ -1595,7 +1617,9 @@ function UI:RefreshPrepView(v)
       if st.code == "banked" then g.banked = g.banked + 1 else g.left = g.left + value; g.planned = g.planned + 1 end
       g.score = g.score + value
     elseif st.code ~= "done" and not mine then
-      -- questing, a zone near you outranks a richer one across the world
+      -- what you could still fetch here; questing, a zone near you outranks a richer one across the world
+      g.fetch = g.fetch + value
+      g.avail = g.avail + value * (near or 1)
       g.score = g.score + value * 0.25 * (near or 1)
     end
   end
@@ -1606,13 +1630,16 @@ function UI:RefreshPrepView(v)
     -- quests you hold as an item in your bags; the rest are ordinary candidates below
     if q and (s.bagStarts[id] or QB.API.ItemCount(q.bag[1]) > 0) then add(q, true) end
   end
-  local extra = {}
+  -- every quest you could fetch, so a card's total is the whole zone; the card shows a few until opened
   for _, c in ipairs(self:Candidates(nil, level)) do
-    extra[c.cat] = (extra[c.cat] or 0) + 1
-    local open = UI.expanded and D.CAT[c.cat] and UI.expanded[D.CAT[c.cat].key]
-    if open or extra[c.cat] <= PER_CARD + 6 then add(Q.Get(c.id), false, c.value > 0 and c.rank / c.value or 1) end
+    add(Q.Get(c.id), false, c.value > 0 and c.rank / c.value or 1)
   end
-  table.sort(order, function(a, b) return a.score > b.score end)
+  -- the richest place first: the XP still to collect there, what you hold plus what you could fetch
+  table.sort(order, function(a, b)
+    local ka, kb = a.left + a.avail, b.left + b.avail
+    if ka ~= kb then return ka > kb end
+    return a.score > b.score
+  end)
 
   local y = 0
   local function place(card, h)
@@ -1633,6 +1660,8 @@ function UI:RefreshPrepView(v)
     c.count:SetText(count or "")
     c.pin:Hide()
     c.more:Hide()
+    c.skip:Hide()
+    c.skip.key = nil
     c:SetAlpha(1)
   end
 
@@ -1664,7 +1693,7 @@ function UI:RefreshPrepView(v)
       r.name:SetText(it.e.title)
       r.name:SetTextColor(INK[1], INK[2], INK[3])
       r.lvl:SetText(it.e.level and ("L" .. it.e.level) or "")
-      r.status:SetWidth(math.max(120, width - 348 - 76))
+      r.status:SetWidth(math.max(120, width - 374 - 76))
       r.status:SetText(note or (it.e.complete and "Complete: hand it in now" or "Open: abandon it"))
       r.status:SetTextColor(BAD[1], BAD[2], BAD[3])
       r.xp:SetText(it.value and QB.Comma(it.value) or "?")
@@ -1703,7 +1732,7 @@ function UI:RefreshPrepView(v)
         r.name:SetText(step.name)
         r.name:SetTextColor(INK[1], INK[2], INK[3])
         r.lvl:SetText("")
-        r.status:SetWidth(math.max(120, width - 348 - 76))
+        r.status:SetWidth(math.max(120, width - 374 - 76))
         r.status:SetText(done and "Done" or step.where)
         local sc = done and GOOD or INK_SOFT
         r.status:SetTextColor(sc[1], sc[2], sc[3])
@@ -1715,14 +1744,31 @@ function UI:RefreshPrepView(v)
     place(c, ry + 8)
   end
 
-  for n, g in ipairs(order) do
-    if n > 14 and g.total == 0 then break end
+  -- every place you hold or planned quests in gets a card, wherever it sorts; places with nothing of
+  -- yours stop after the 14 richest
+  local fetchOnly = 0
+  for _, g in ipairs(order) do
+    if g.total == 0 then fetchOnly = fetchOnly + 1 end
+    if g.total > 0 or fetchOnly <= 14 then
     local c = v.cards:Get()
     local a = g.cat
+    -- the XP still to collect there: what you hold that isn't banked yet, plus everything you could fetch
+    local worth = math.floor((g.left + g.fetch) / 10 + 0.5) * 10
     header(c, a.bg or { 0.16, 0.12, 0.08 }, a.icon, a.name, a.dungeon and ((a.where ~= "" and (a.where .. ". ") or "") .. "Dungeon quests: bring a group.") or a.where,
-      g.planned > 0 and ("+" .. QB.Comma(math.floor(g.left / 10 + 0.5) * 10)) or (g.total > 0 and (QB:Banking() and "All banked" or "All ready") or ""),
+      worth > 0 and ("+" .. QB.Comma(worth)) or (g.total > 0 and (QB:Banking() and "All banked" or "All ready") or ""),
       g.total > 0 and string.format(QB:Banking() and "%d of %d banked" or "%d of %d ready", g.banked, g.total) or "Nothing planned here yet")
-    if g.total > 0 and g.planned == 0 then c.gain:SetTextColor(0.4, 0.9, 0.4) end
+    if g.total > 0 and g.planned == 0 and worth == 0 then c.gain:SetTextColor(0.4, 0.9, 0.4) end
+    if a.key ~= "class" and a.key ~= "misc" then
+      -- skipped here (the button flips it) or with its whole continent (Settings does)
+      local set = QB:Settings()
+      local viaCat = set.skipCat[a.key] == true
+      local viaCont = a.cont ~= nil and set.skipCont[a.cont] == true
+      c.skip.key = a.key
+      c.skip.label:SetText(viaCat and "Back" or "Skip")
+      c.skip:SetShown(viaCat or not viaCont)
+      if viaCat or viaCont then c.gain:SetText("Skipped"); c.gain:SetTextColor(0.75, 0.75, 0.75); c:SetAlpha(0.8) end
+      if viaCont and not viaCat then c.where:SetText((a.dungeon and a.where ~= "" and (a.where .. ". ") or "") .. QB.CONTINENTS[a.cont] .. " is skipped in Settings.") end
+    end
     c.pin:SetShown(a.entrance and true or false)
     c.pin.entrance, c.pin.label = a.entrance, a.name .. " entrance"
     table.sort(g.quests, function(x, z)
@@ -1757,6 +1803,7 @@ function UI:RefreshPrepView(v)
     end
     c.rows:HideRest()
     place(c, ry + 8)
+    end
   end
   v.cards:HideRest()
   v.scroll:SetContentHeight(y)
@@ -2453,7 +2500,7 @@ function UI:CreateSettingsView(parent)
   heading(v, LEFT, -304, "Discoveries", 370)
   v.discText = para(v, "GameFontNormal", 12, INK_SOFT, 370)
   v.discText:SetPoint("TOPLEFT", LEFT, -328)
-  v.discText:SetHeight(60)
+  v.discText:SetHeight(88)
 
   -- updates: what the others in your party and guild run
   heading(v, RIGHT, -12, "Updates")
@@ -2466,19 +2513,60 @@ function UI:CreateSettingsView(parent)
   v.link:SetPoint("TOPLEFT", RIGHT + 4, -116)
   v.link:SetScript("OnClick", function() UI:CopyLink("QuestBank download page", QB.DOWNLOAD) end)
 
-  heading(v, RIGHT, -154, "Chat")
-  v.offers = checkRow(v, RIGHT, -178, "Offer a post during hand-in runs", 300)
-  v.offers:SetScript("OnClick", function(self) QB:Settings().post.auto = self:GetChecked() and true or false end)
-
-  heading(v, RIGHT, -216, "Sharing")
-  v.shareParty = checkRow(v, RIGHT, -240, "Share my bank and plan with my party", 300)
+  heading(v, RIGHT, -154, "Sharing and chat")
+  v.shareParty = checkRow(v, RIGHT, -178, "Share my bank and plan with my party", 300)
   v.shareParty:SetScript("OnClick", function(self) QB:Settings().share.party = self:GetChecked() and true or false; UI:Refresh() end)
-  v.shareGuild = checkRow(v, RIGHT, -266, "Share them with my guild", 300)
+  v.shareGuild = checkRow(v, RIGHT, -204, "Share them with my guild", 300)
   v.shareGuild:SetScript("OnClick", function(self) QB:Settings().share.guild = self:GetChecked() and true or false; UI:Refresh() end)
+  v.offers = checkRow(v, RIGHT, -230, "Offer a post during hand-in runs", 300)
+  v.offers:SetScript("OnClick", function(self) QB:Settings().post.auto = self:GetChecked() and true or false end)
   v.shareHint = para(v, "GameFontNormalSmall", 11, INK_SOFT, 330)
-  v.shareHint:SetPoint("TOPLEFT", RIGHT, -296)
-  v.shareHint:SetHeight(44)
-  v.shareHint:SetText("Only QuestBank users see it, over the game's addon channel; nothing shows in chat. Your level and version go along, so friends see who needs an update.")
+  v.shareHint:SetPoint("TOPLEFT", RIGHT, -258)
+  v.shareHint:SetHeight(30)
+  v.shareHint:SetText("Over the game's addon channel, to QuestBank users only; nothing shows in chat. Posts go out only when you press Post.")
+
+  -- suggestions: how far the Plan page and the swaps look, and where they never look
+  heading(v, RIGHT, -298, "Suggestions")
+  v.rangeAboveLabel = text(v, "GameFontNormal", 12, INK, "LEFT", 210)
+  v.rangeAboveLabel:SetPoint("TOPLEFT", RIGHT, -324)
+  v.rangeAboveDown = button(v, "-", 26)
+  v.rangeAboveDown:SetPoint("TOPLEFT", RIGHT + 214, -320)
+  v.rangeAboveUp = button(v, "+", 26)
+  v.rangeAboveUp:SetPoint("TOPLEFT", RIGHT + 244, -320)
+  v.rangeAuto = button(v, "Auto", 48)
+  v.rangeAuto:SetPoint("TOPLEFT", RIGHT + 276, -320)
+  v.rangeBelowLabel = text(v, "GameFontNormal", 12, INK, "LEFT", 210)
+  v.rangeBelowLabel:SetPoint("TOPLEFT", RIGHT, -350)
+  v.rangeBelowDown = button(v, "-", 26)
+  v.rangeBelowDown:SetPoint("TOPLEFT", RIGHT + 214, -346)
+  v.rangeBelowUp = button(v, "+", 26)
+  v.rangeBelowUp:SetPoint("TOPLEFT", RIGHT + 244, -346)
+  local function moveRange(key, d)
+    local above, below = QB:Range()
+    local cur = key == "rangeAbove" and above or below
+    QB:Settings()[key] = math.max(0, math.min(40, cur + d))
+    UI:Refresh()
+  end
+  v.rangeAboveDown:SetScript("OnClick", function() moveRange("rangeAbove", -1) end)
+  v.rangeAboveUp:SetScript("OnClick", function() moveRange("rangeAbove", 1) end)
+  v.rangeBelowDown:SetScript("OnClick", function() moveRange("rangeBelow", -1) end)
+  v.rangeBelowUp:SetScript("OnClick", function() moveRange("rangeBelow", 1) end)
+  v.rangeAuto:SetScript("OnClick", function()
+    local set = QB:Settings()
+    set.rangeAbove, set.rangeBelow = "auto", "auto"
+    UI:Refresh()
+  end)
+  tooltip(v.rangeAuto, function(tip)
+    tip:AddLine("Auto", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("QuestBank's own window: 12 levels above you while banking (dungeon quests well above you are the big payers), 4 while questing, 7 below.", 0.8, 0.8, 0.8, true)
+  end)
+  v.skipKal = checkRow(v, RIGHT, -372, "Skip Kalimdor", 110)
+  v.skipKal:SetScript("OnClick", function(self) QB:SetSkip(1, self:GetChecked() and true or false) end)
+  v.skipEK = checkRow(v, RIGHT + 146, -372, "Skip Eastern Kingdoms", 170)
+  v.skipEK:SetScript("OnClick", function(self) QB:SetSkip(0, self:GetChecked() and true or false) end)
+  v.skipText = para(v, "GameFontNormalSmall", 11, INK_SOFT, 330)
+  v.skipText:SetPoint("TOPLEFT", RIGHT, -400)
+  v.skipText:SetHeight(44)
   v.Refresh = function() UI:RefreshSettingsView(v) end
   return v
 end
@@ -2520,6 +2608,20 @@ function UI:RefreshSettingsView(v)
   v.offers:SetChecked(set.post.auto and true or false)
   v.shareParty:SetChecked(set.share.party and true or false)
   v.shareGuild:SetChecked(set.share.guild and true or false)
+  local above, below, autoA, autoB = QB:Range()
+  v.rangeAboveLabel:SetText(string.format("Up to %d levels above me%s", above, autoA and " (auto)" or ""))
+  v.rangeBelowLabel:SetText(string.format("Down to %d below%s", below, autoB and " (auto)" or ""))
+  v.skipKal:SetChecked(set.skipCont[1] == true)
+  v.skipEK:SetChecked(set.skipCont[0] == true)
+  local zones = {}
+  for _, c in ipairs(QB.Data.CAT) do if set.skipCat[c.key] then zones[#zones + 1] = c.name end end
+  table.sort(zones)
+  local first = {}
+  for i = 1, math.min(3, #zones) do first[i] = zones[i] end
+  local more = #zones - #first
+  v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
+      .. ". Back on the Plan card, or /qb skip and the name, brings one back; /qb skip lists them all.")
+    or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
 end
 
 ----------------------------------------------------------------------------

@@ -498,6 +498,13 @@ local function checkLayout(root, label)
           if o.__wset and not o.__wrap and tw > (r.r - r.l) + 3 then
             problems[#problems + 1] = string.format("%s: clipped '%s' (%.0f of %.0f px)", label, plain(o.__text):sub(1, 60), r.r - r.l, tw)
           end
+          -- a wrapped paragraph in a box of set height: the game cuts the lines that don't fit
+          if o.__wset and o.__wrap and o.__hset and (o.__h or 0) > 0 then
+            local lines = math.max(1, math.ceil(tw / math.max(1, r.r - r.l)))
+            if lines * (o.__size + 2) > o.__h + 3 then
+              problems[#problems + 1] = string.format("%s: '%s' needs %d lines, its box holds %d", label, plain(o.__text):sub(1, 50), lines, math.floor((o.__h + 3) / (o.__size + 2)))
+            end
+          end
           local ir = ink(o, r)
           -- inside a scroll view: across it must fit, down it scrolls
           local clip
@@ -637,6 +644,11 @@ local owner = newClient({
   bagSlots = { { 268540, 4 }, { 251522, 1 } },
 })
 local QB = owner.QB
+-- 3.3.3: A Fine Mess pretends to come from the Classic seed (flag 16), so the "Classic only" labels show at level 20
+local fineMess
+for id, name in pairs(QB.Data.QN) do if name == "A Fine Mess" then fineMess = id end end
+assert(fineMess and QB.Data.Q[fineMess], "A Fine Mess is in the catalog")
+if math.floor(QB.Data.Q[fineMess][10] / 16) % 2 == 0 then QB.Data.Q[fineMess][10] = QB.Data.Q[fineMess][10] + 16 end
 login(owner)
 owner.env.SlashCmdList.QUESTBANK("")
 local UI = QB.UI
@@ -661,6 +673,145 @@ for _, c in ipairs(UI:Candidates(400)) do
   assert(not q.sodLeftover, "no Season of Discovery leftover is offered: " .. q.name)
 end
 assert(not QB.Data.Q[78132] and not QB.Data.Q[78133] and not QB.Data.Q[78134], "Alonso's Dragonslayer quests aren't in Forever")
+-- 3.3.3: the suggestion window and the skipped places. Defaults first, then each setting, then back to auto.
+do
+  local set = QB:Settings()
+  local function lvls(list) local lo, hi = 99, 0 for _, c in ipairs(list) do lo = math.min(lo, c.lvl); hi = math.max(hi, c.lvl) end return lo, hi end
+  local function has(list, id) for _, c in ipairs(list) do if c.id == id then return true end end return false end
+  local base = UI:Candidates(400)
+  local lo, hi = lvls(base)
+  print(string.format("candidates at 20, banking: %d quests, levels %d to %d", #base, lo, hi))
+  assert(lo >= 13 and hi <= 32 and hi > 24, "banking at 20 suggests quest levels 13 to 32 by default")
+  set.rangeAbove = 4
+  local narrow = UI:Candidates(400)
+  local _, hi2 = lvls(narrow)
+  assert(#narrow > 0 and hi2 <= 24 and #narrow < #base, "up to 4 above: nothing past 24, and fewer suggestions")
+  set.rangeBelow = 0
+  local tight = UI:Candidates(400)
+  local lo3 = lvls(tight)
+  assert(#tight > 0 and lo3 >= 20, "down to 0 below: nothing under 20")
+  set.rangeAbove, set.rangeBelow = "auto", "auto"
+  assert(#UI:Candidates(400) == #base, "auto brings the default window back")
+  -- skip a dungeon: Blackfathom Villainy leaves the candidates and the swap list, and comes back
+  assert(has(base, 1200), "Blackfathom Villainy is a candidate before skipping")
+  UI:ShowTab(1); UI:Refresh()
+  local had, fineRow = false, nil
+  for _, r in ipairs(v1.swaps) do
+    if r:IsShown() and r.add.id == 1200 then had = true end
+    if r:IsShown() and r.add.id == fineMess then fineRow = r end
+  end
+  assert(had, "Blackfathom Villainy is in the swap list before skipping")
+  assert(fineRow and fineRow.cutName:GetText():find("Classic only", 1, true), "a swap from the Classic seed says Classic only: " .. tostring(fineRow and fineRow.cutName:GetText()))
+  local label, on = QB:ToggleSkip("blackfathom")
+  assert(label == "Blackfathom Deeps" and on, "/qb skip finds the dungeon by part of its name")
+  assert(not has(UI:Candidates(400), 1200), "a skipped dungeon's quests are never suggested")
+  UI:Refresh()
+  for _, r in ipairs(v1.swaps) do if r:IsShown() then assert(r.add.id ~= 1200, "nor offered as a swap") end end
+  UI:ShowTab(2); UI:Refresh()
+  local function card(title) for _, c in ipairs(UI.views[2].cards.items) do if c:IsShown() and c.title:GetText() == title then return c end end end
+  local bfd = card("Blackfathom Deeps")
+  assert(bfd, "the skipped Blackfathom Deeps card stays: you hold quests there")
+  assert(bfd.skip:IsShown() and bfd.skip.label:GetText() == "Back" and bfd.gain:GetText() == "Skipped", "and it says so, with a Back button")
+  bfd.skip.__scripts.OnClick(bfd.skip)
+  assert(has(UI:Candidates(400), 1200) and QB:SkipSignature() == "", "Back on the card un-skips it")
+  bfd = card("Blackfathom Deeps")
+  assert(bfd and bfd.skip.label:GetText() == "Skip" and bfd.gain:GetText() ~= "Skipped", "and the card reads normally again")
+  -- a place with nothing of yours: Skip on its card makes it vanish, /qb skip brings it back
+  local fetchOnly
+  for _, c in ipairs(UI.views[2].cards.items) do if c:IsShown() and c.skip:IsShown() and c.count:GetText() == "Nothing planned here yet" then fetchOnly = fetchOnly or c end end
+  assert(fetchOnly, "a card with nothing planned")
+  local foTitle, foKey = fetchOnly.title:GetText(), fetchOnly.skip.key
+  fetchOnly.skip.__scripts.OnClick(fetchOnly.skip)
+  assert(QB:Settings().skipCat[foKey] and not card(foTitle), "Skip on a card with nothing of yours: the card goes")
+  for _, c in ipairs(UI:Candidates(400)) do assert(QB.Data.CAT[c.cat].key ~= foKey, "and nothing there is suggested: " .. QB.Data.QN[c.id]) end
+  local l0, on0 = QB:ToggleSkip(foTitle)
+  assert(l0 == foTitle and on0 == false and card(foTitle), "/qb skip and its name brings the card back")
+  -- every place you hold or planned quests in has a card, wherever the XP puts it
+  for _, e in ipairs(QB.state.logOrder) do
+    local q = QB.Quest.Get(e.id)
+    if q and q.cat and QB:InPlan(q, QB:Status(q)) then assert(card(q.cat.name), "a card for every place you hold quests: " .. q.cat.name) end
+  end
+  -- the richest place first: the header number never grows down the list (banking: no distance discount)
+  do
+    local last = math.huge
+    for _, c in ipairs(UI.views[2].cards.items) do
+      if c:IsShown() and c.skip:IsShown() and c.gain:GetText():sub(1, 1) == "+" then
+        local n = tonumber((c.gain:GetText():gsub("[^%d]", "")))
+        assert(n and n <= last, "cards sort by the XP still to collect: " .. c.title:GetText() .. " shows +" .. n .. " below +" .. tostring(last))
+        last = n
+      end
+    end
+  end
+  -- the Classic seed's quests say so in their Plan row
+  do
+    local fineShown
+    for _, c in ipairs(UI.views[2].cards.items) do for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q and r.q.id == fineMess then fineShown = r end end end
+    assert(fineShown, "A Fine Mess has a Plan row")
+    assert(fineShown.status:GetText():find("Classic only", 1, true), "and its row says Classic only: " .. fineShown.status:GetText())
+  end
+  -- skip a continent: Razorfen Kraul's Blueleaf Tubers (Kalimdor) goes, nothing from Kalimdor stays
+  local tubers
+  for id, name in pairs(QB.Data.QN) do if name == "Blueleaf Tubers" then tubers = id end end
+  assert(tubers and has(base, tubers), "Blueleaf Tubers is a candidate for the owner in Stormwind")
+  -- class and other quests take their continent from the turn-in NPC: some of the owner's are handed in on Kalimdor
+  local viaNPC = 0
+  for _, c in ipairs(base) do
+    local cat, q = QB.Data.CAT[c.cat], QB.Quest.Get(c.id)
+    if cat.cont == nil and q.turnIdx and QB.Data.NPC[q.turnIdx] and QB.Data.NPC[q.turnIdx][5] == 1 then viaNPC = viaNPC + 1 end
+  end
+  assert(viaNPC > 0, "the owner has class or other quests handed in on Kalimdor")
+  local l3, on3 = QB:ToggleSkip("Kalimdor")
+  assert(l3 == "Kalimdor" and on3, "/qb skip Kalimdor")
+  local noKal = UI:Candidates(400)
+  assert(not has(noKal, tubers) and #noKal < #base, "skipping Kalimdor drops Razorfen Kraul's quests")
+  for _, c in ipairs(noKal) do
+    local cat, q = QB.Data.CAT[c.cat], QB.Quest.Get(c.id)
+    assert(not (cat and cat.cont == 1), "nothing from Kalimdor is left: " .. QB.Data.QN[c.id])
+    if cat.cont == nil and not cat.dungeon then assert(not (q.turnIdx and QB.Data.NPC[q.turnIdx] and QB.Data.NPC[q.turnIdx][5] == 1), "nor a class or other quest handed in there: " .. QB.Data.QN[c.id]) end
+  end
+  UI:Refresh()
+  bfd = card("Blackfathom Deeps")
+  assert(bfd and bfd.gain:GetText() == "Skipped" and not bfd.skip:IsShown() and bfd.where:GetText():find("Kalimdor is skipped in Settings", 1, true), "a card in a skipped continent says so, and its own Skip button steps aside: " .. tostring(bfd and bfd.where:GetText()))
+  QB:ToggleSkip("kali")
+  assert(#UI:Candidates(400) == #base, "and everything is back")
+  -- the slash command and its answers
+  local before = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("skip Wailing Caverns")
+  assert(owner.chat[#owner.chat]:find("Wailing Caverns is skipped"), "/qb skip says what it did: " .. owner.chat[#owner.chat])
+  owner.env.SlashCmdList.QUESTBANK("skip")
+  assert(owner.chat[#owner.chat]:find("Skipping Wailing Caverns"), "/qb skip lists the skipped places: " .. owner.chat[#owner.chat])
+  owner.env.SlashCmdList.QUESTBANK("skip nowhere at all")
+  assert(owner.chat[#owner.chat]:find("No zone, dungeon or continent called"), "an unknown name is said")
+  owner.env.SlashCmdList.QUESTBANK("skip none")
+  assert(QB:SkipSignature() == "" and #UI:Candidates(400) == #base, "/qb skip none clears the list")
+  -- the Settings page: steppers, Auto, the continent boxes, and nothing clipped
+  UI:ShowTab(5); UI:Refresh()
+  local v5 = UI.views[5]
+  assert(v5.rangeAboveLabel:GetText():find("12 levels above me %(auto%)"), "Settings shows the auto window: " .. v5.rangeAboveLabel:GetText())
+  v5.rangeAboveUp.__scripts.OnClick(v5.rangeAboveUp)
+  assert(QB:Settings().rangeAbove == 13 and v5.rangeAboveLabel:GetText():find("13 levels above me$"), "+ makes it 13, no longer auto")
+  v5.rangeBelowDown.__scripts.OnClick(v5.rangeBelowDown)
+  assert(QB:Settings().rangeBelow == 6, "- makes below 6")
+  v5.rangeAuto.__scripts.OnClick(v5.rangeAuto)
+  assert(QB:Settings().rangeAbove == "auto" and QB:Settings().rangeBelow == "auto", "Auto puts both back")
+  v5.skipKal:SetChecked(true); v5.skipKal.__scripts.OnClick(v5.skipKal)
+  assert(QB:Settings().skipCont[1] == true and v5.skipKal:GetChecked(), "the Kalimdor box skips Kalimdor")
+  v5.skipKal:SetChecked(false); v5.skipKal.__scripts.OnClick(v5.skipKal)
+  assert(not QB:Settings().skipCont[1], "and un-skips it")
+  QB:ToggleSkip("Wailing Caverns")
+  UI:Refresh()
+  assert(v5.skipText:GetText():find("Skipped: Wailing Caverns", 1, true), "Settings lists the skipped dungeon: " .. v5.skipText:GetText())
+  local lay = checkLayout(UI.frame, "settings with a skip")
+  assert(#lay == 0, "the Suggestions block fits: " .. table.concat(lay, "; "))
+  for _, z in ipairs({ "The Deadmines", "Redridge Mountains", "Duskwood", "Westfall", "Stonetalon Mountains" }) do QB:ToggleSkip(z) end
+  UI:Refresh()
+  assert(v5.skipText:GetText():find(" and 3 more", 1, true), "six skips: three named and the rest counted: " .. v5.skipText:GetText())
+  lay = checkLayout(UI.frame, "settings with six skips")
+  assert(#lay == 0, "and the list still fits its box: " .. table.concat(lay, "; "))
+  owner.env.SlashCmdList.QUESTBANK("skip none")
+  assert(QB:SkipSignature() == "", "clean again")
+  UI:ShowTab(1); UI:Refresh()
+end
 -- adding a quest never makes the plan worse: each plan starts from the last route
 do
   local p = QB:Plan()
@@ -865,8 +1016,12 @@ do
   b.__scripts.OnClick(b, "LeftButton")
   assert(owner.chatLinks[#owner.chatLinks]:find("|Hquest:" .. id .. ":"), "a quest in your log: the game's own link")
   assert(not QB:IsCut(id), "and nothing is cut")
-  fetchRow.__scripts.OnClick(fetchRow, "LeftButton")
-  assert(owner.chatLinks[#owner.chatLinks] == "[" .. fetchRow.q.name .. "]", "a quest the game hasn't sent yet: its name")
+  -- rows are pooled and the page was refreshed when the quest joined the plan: find its row again
+  local row2
+  for _, c in ipairs(v2.cards.items) do for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q and r.q.id == fetchID then row2 = row2 or r end end end
+  assert(row2, "the fetched quest still has a row on the Prep page")
+  row2.__scripts.OnClick(row2, "LeftButton")
+  assert(owner.chatLinks[#owner.chatLinks] == "[" .. row2.q.name .. "]", "a quest the game hasn't sent yet: its name")
   for _, bs in ipairs(v1.bagSlots) do
     if bs:IsShown() and bs.item and bs.item.id then
       bs.__scripts.OnClick(bs, "LeftButton")
@@ -1362,6 +1517,18 @@ do
     if l:find("Leads on to: Investigate Echo Ridge") then nextStep = true end
   end
   assert(carry and nextStep, "and its tooltip names the next step and the best one further on")
+  -- 3.3.3: a skipped zone's chain steps are no upgrade either
+  do
+    local best = N:Upgrade(seven.q)
+    assert(best and best.name == "Skirmish at Echo Ridge", "the best later step before any skip: " .. tostring(best and best.name))
+    local l, on = N:ToggleSkip("Elwynn")
+    assert(l == "Elwynn Forest" and on, "/qb skip Elwynn")
+    local after = N:Upgrade(seven.q)
+    assert(not after or after.name ~= "Skirmish at Echo Ridge", "a skipped zone's chain steps aren't suggested: " .. tostring(after and after.name))
+    N:ToggleSkip("Elwynn Forest")
+    local back = N:Upgrade(seven.q)
+    assert(back and back.name == "Skirmish at Echo Ridge", "and back")
+  end
   -- the Plan page: quests for a level 3
   U:ShowTab(2); N.Model.Finish(); U:Refresh()
   local shown, tooHigh = 0, 0

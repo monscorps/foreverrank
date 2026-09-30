@@ -164,11 +164,13 @@ STEPNAME = {1654: "the item step of The Test of Righteousness", 155: "The Defias
 DUNGEON = {  # area: (lfg icon, zone, entrance)
     1581: ("deadmines", "Westfall", (1436, 42.5, 71.7)), 718: ("wailingcaverns", "The Barrens", (1413, 46.0, 36.4)),
     209: ("shadowfangkeep", "Silverpine Forest", (1421, 44.8, 67.8)), 719: ("blackfathomdeeps", "Ashenvale", (1440, 14.2, 14.0)),
-    717: ("stormwindstockades", "Stormwind", None), 721: ("gnomeregan", "Dun Morogh", (1426, 24.4, 39.8)),
+    717: ("stormwindstockades", "Stormwind City", None), 721: ("gnomeregan", "Dun Morogh", (1426, 24.4, 39.8)),
     491: ("razorfenkraul", "The Barrens", (1413, 42.3, 89.9)), 796: ("scarletmonastery", "Tirisfal Glades", None),
     722: ("razorfendowns", "The Barrens", None), 1337: ("uldaman", "Badlands", None), 2437: ("ragefirechasm", "Orgrimmar", None),
     16611: ("ruinsoflordaeron", "Tirisfal Glades", None), 16919: ("dungeon", "", None),
-    1176: ("zulfarak", "Tanaris", None), 2100: ("maraudon", "Desolace", None), 1477: ("sunkentemple", "Swamp of Sorrows", None),
+    1176: ("zulfarak", "Tanaris", None), 2100: ("maraudon", "Desolace", None),
+    # Wowhead files the Sunken Temple quests under area 1417; 1477 is the instance's own row
+    1417: ("sunkentemple", "Swamp of Sorrows", None), 1477: ("sunkentemple", "Swamp of Sorrows", None),
     1584: ("blackrockdepths", "Searing Gorge", None), 1583: ("blackrockspire", "Burning Steppes", None),
     2557: ("diremaul", "Feralas", None), 2017: ("stratholme", "Eastern Plaguelands", None),
     2057: ("scholomance", "Western Plaguelands", None),
@@ -628,6 +630,17 @@ def races(qid):
 # categories: a dungeon, a zone, class quests or the rest
 # ---------------------------------------------------------------------------
 CATS, CAT_AT = [], {}
+# a zone name back to its area, for the continent of a dungeon's parent zone (0 Eastern Kingdoms, 1 Kalimdor)
+_AREA_BY_NAME = {}
+for _aid, _name in AREAS.items():
+    _row = AREA_ROW.get(_aid)
+    if _row and int(_row["ContinentID"]) in (0, 1):
+        _AREA_BY_NAME.setdefault(_name, int(_row["ContinentID"]))
+
+
+def continent_of(where):
+    """0 or 1 for a zone name on either continent; None for instances and the rest."""
+    return _AREA_BY_NAME.get(where)
 
 
 def cat_for(qid):
@@ -638,7 +651,7 @@ def cat_for(qid):
         if key not in CAT_AT:
             lfg, where, ent = DUNGEON.get(area, ("dungeon", "", None))
             bgname = "interface/lfgframe/ui-lfg-background-%s" % lfg
-            CATS.append({"key": key, "name": AREAS.get(area, "Dungeon"), "where": where, "dungeon": True,
+            CATS.append({"key": key, "name": AREAS.get(area, "Dungeon"), "where": where, "dungeon": True, "cont": continent_of(where),
                          "icon": tex("interface/lfgframe/lfgicon-%s" % lfg),
                          "bg": tex(bgname) if (bgname + ".blp") in MAN else None,
                          "entrance": {"m": ent[0], "x": ent[1], "y": ent[2]} if ent else None})
@@ -647,7 +660,7 @@ def cat_for(qid):
     if c2 in (0, 1) and area in AREAS:
         key = "z%d" % area
         if key not in CAT_AT:
-            CATS.append({"key": key, "name": AREAS[area], "where": "Kalimdor" if c2 == 1 else "Eastern Kingdoms",
+            CATS.append({"key": key, "name": AREAS[area], "where": "Kalimdor" if c2 == 1 else "Eastern Kingdoms", "cont": c2,
                          "icon": zone_icon(AREAS[area])})
             CAT_AT[key] = len(CATS)
         return CAT_AT[key]

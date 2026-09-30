@@ -337,8 +337,8 @@
       <p class="lede">In Forever, quests are where the XP is: dungeon quests pay up to 4.35 times their Classic XP. QuestBank shows what every quest in your log is worth at your level, which chains to carry on, the best quests near you, and the quickest way to hand them in, with map pins. When the game holds your level at a cap, it banks your log and plans the hour after the cap goes up. Alliance and Horde, and it plans dungeon runs with your party.</p>
       <div class="dl">
         <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-        <span class="dl-meta">Version 3.3.2 · 30 September 2026 · 265 KB</span>
-        <span class="dl-meta">Open it in game with <code>/qb</code>. New in 3.3.2: <a href="#share">upload what you discover</a>; the Party page no longer lists you as a second member.</span>
+        <span class="dl-meta">Version 3.3.3 · 30 September 2026 · 269 KB</span>
+        <span class="dl-meta">Open it in game with <code>/qb</code>. New in 3.3.3: Settings sets how far above and below your level suggestions reach and whether to skip a continent, each Plan card has a Skip button for its zone or dungeon and shows the XP you could still collect there, and Classic-only quests say so in the row. 3.3.2 brought <a href="#share">uploading what you discover</a>.</span>
       </div>
     </div>
     <figure class="hero-shot">
@@ -570,9 +570,9 @@
         </details>
       </div>
       <ol class="legend">
-        <li><span><b>One card per dungeon or zone.</b> Every quest you hold or planned there, then the best quests there you could still fetch, for your faction, class and race, and no more than a few levels above you while questing. Sorted by XP still to collect; while questing, zones near you come first, so the top card is the best use of your evening.</span></li>
-        <li><span><b>What's left and where.</b> XP still to get and how many quests are banked. The pin marks the dungeon entrance on your map.</span></li>
-        <li><span><b>Live status for every quest</b>, read from your game: banked, in your log with the count, the chain step you need first and how many steps are left, the level it needs, or turned in already.</span></li>
+        <li><span><b>One card per dungeon or zone.</b> Every quest you hold or planned there, then every quest there you could still fetch, for your faction, class and race, within the level range Settings allows: 12 levels above you while banking, 4 while questing, 7 below, unless you change it. Cards are sorted by the XP still to collect there, what you hold plus what you could fetch, so the top card is the richest place for you right now; while questing, zones near you count for more. Every place you hold quests in keeps its card, wherever it sorts. <b>Skip</b> turns a card off: nothing there is suggested any more, the quests you already hold stay, and the card says Skipped with a <b>Back</b> button. A card with nothing of yours in it disappears instead; <code>/qb skip</code> and its name brings it back.</span></li>
+        <li><span><b>What's left and where.</b> The XP still to collect there: everything you hold that isn't banked yet, plus every quest there within your level range that you haven't done, including the ones a level or two away and the later steps of chains. Underneath, how many of your planned quests are banked. The pin marks the dungeon entrance on your map.</span></li>
+        <li><span><b>Live status for every quest</b>, read from your game: banked, in your log with the count, the chain step you need first and how many steps are left, the level it needs, or turned in already. A quest from the Classic database that nobody has met in Forever yet says <b>Classic only</b> right in the row.</span></li>
         <li><span><b>Make room.</b> Quests you cut, quests QuestBank doesn't know, and quests that pay next to nothing at your level, with what to do about each: hand it in now for the rewards, or abandon it.</span></li>
         <li><span><b>The sleeping bag chain.</b> Every step of Stepping Stones, with a pin on the next one.</span></li>
       </ol>
@@ -720,8 +720,9 @@
             <span class="call" style="left:6px;top:40px">1</span>
             <span class="call" style="left:6px;top:196px">2</span>
             <span class="call" style="left:404px;top:40px">3</span>
-            <span class="call" style="left:404px;top:180px">4</span>
+            <span class="call" style="left:404px;top:161px">4</span>
             <span class="call" style="left:6px;top:318px">5</span>
+            <span class="call" style="left:404px;top:262px">6</span>
             <div class="parch" style="margin-top:14px">
               <div class="logcols">
                 <div>
@@ -738,14 +739,18 @@
                 </div>
                 <div>
                   <div class="pt">Updates</div>
-                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 3.3.1. <span style="color:#0a6a0a">Brann runs 3.3.2: time to update.</span></div>
+                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 3.3.2. <span style="color:#0a6a0a">Brann runs 3.3.3: time to update.</span></div>
                   <div class="cbl"><span class="cb on"></span>Tell me when my party or guild has a newer one</div>
                   <div class="modes" style="margin:6px 0 0"><span>Copy the download link</span></div>
-                  <div class="pt" style="margin-top:14px">Chat</div>
-                  <div class="cbl"><span class="cb on"></span>Offer a post during hand-in runs</div>
-                  <div class="pt" style="margin-top:14px">Sharing</div>
+                  <div class="pt" style="margin-top:14px">Sharing and chat</div>
                   <div class="cbl"><span class="cb on"></span>Share my bank and plan with my party</div>
                   <div class="cbl"><span class="cb on"></span>Share them with my guild</div>
+                  <div class="cbl"><span class="cb on"></span>Offer a post during hand-in runs</div>
+                  <div class="pt" style="margin-top:14px">Suggestions</div>
+                  <div style="font-size:12px;color:#3a2410;margin:6px 0 0;display:flex;align-items:center;gap:8px">Up to 12 levels above me (auto) <span class="modes"><span>-</span><span>+</span><span class="dim">Auto</span></span></div>
+                  <div style="font-size:12px;color:#3a2410;margin:6px 0 0;display:flex;align-items:center;gap:8px">Down to 7 below (auto) <span class="modes"><span>-</span><span>+</span></span></div>
+                  <div class="cbl"><span class="cb"></span>Skip Kalimdor<span class="cb" style="margin-left:14px"></span>Skip Eastern Kingdoms</div>
+                  <div style="font-size:11px;color:#6b4d28;line-height:1.35;margin-top:4px">Skipped: Wailing Caverns. Back on the Plan card, or /qb skip and the name, brings one back; /qb skip lists them all.</div>
                 </div>
               </div>
             </div>
@@ -757,8 +762,9 @@
         <li><span><b>Mode.</b> Auto finds a level lock by itself: the game reports your level as its highest for now, or a hand-in at your level pays no XP while your bar sits at 0. Questing and Banking set it yourself; Banking holds until you level past it.</span></li>
         <li><span><b>Map.</b> Route pins on the world map, the book on your minimap, and the direction arrow to the next stop, each on or off.</span></li>
         <li><span><b>Updates.</b> QuestBank users in your party and guild tell each other which version they run. When someone has a newer one, chat says so once, and the button copies the download link. <code>/qb update</code> does the same.</span></li>
-        <li><span><b>Chat and sharing.</b> Whether QuestBank offers a post when you level during a hand-in run, and whether your bank and plan go to your party and guild over the addon channel.</span></li>
+        <li><span><b>Sharing and chat.</b> Whether your bank and plan go to your party and guild over the addon channel, and whether QuestBank offers a post when you level during a hand-in run.</span></li>
         <li><span><b>Discoveries.</b> How much QuestBank has noted in game so far: quests, the NPCs who give and take them, and chain steps, and where to send it.</span></li>
+        <li><span><b>Suggestions.</b> How far above and below your level the Plan page and the swap list look. Auto is QuestBank's own window: 12 levels above you while banking, because dungeon quests well above you are the big payers, 4 while questing, and 7 below. Skip Kalimdor or Skip Eastern Kingdoms takes a whole continent out; zones and dungeons are skipped from their Plan card or with <code>/qb skip</code>, and the list shows here.</span></li>
       </ol>
     </div>
   </div>
@@ -875,7 +881,7 @@
         <tr><td><code>/qb</code> or <code>/questbank</code></td><td>Open or close the window</td></tr>
         <tr><td><code>/qb route</code></td><td>Open the Hand-in Route</td></tr>
         <tr><td><code>/qb plan</code></td><td>Open Plan</td></tr>
-        <tr><td><code>/qb settings</code></td><td>Open Settings: mode, next cap, updates, chat, sharing, map</td></tr>
+        <tr><td><code>/qb settings</code></td><td>Open Settings: mode, next cap, map, discoveries, updates, sharing and chat, suggestions</td></tr>
         <tr><td><code>/qb update</code></td><td>Your version, the newest your party and guild run, and the download link to copy</td></tr>
         <tr><td><code>/qb party</code></td><td>Open Party</td></tr>
         <tr><td><code>/qb start</code>, <code>/qb stop</code></td><td>Start or end a hand-in run yourself</td></tr>
@@ -883,6 +889,7 @@
         <tr><td><code>/qb pins</code></td><td>Turn the world map pins off or on</td></tr>
         <tr><td><code>/qb arrow</code></td><td>The direction arrow to the next stop on your route, on or off</td></tr>
         <tr><td><code>/qb discoveries</code></td><td>How much QuestBank has noted in game: quests, the NPCs who give and take them, chain steps</td></tr>
+        <tr><td><code>/qb skip</code>, <code>/qb skip Kalimdor</code>, <code>/qb skip Wailing Caverns</code></td><td>List the skipped places, or skip a continent, zone or dungeon so nothing there is suggested; say it again to bring it back, <code>/qb skip none</code> clears the list. The Skip button on a Plan card does the same for its zone or dungeon; Settings has the continent boxes and lists what is skipped</td></tr>
         <tr><td><code>/qb sync</code>, <code>/qb sync Name</code></td><td>Share your bank with your party and guild now, or with one friend</td></tr>
         <tr><td><code>/qb post</code>, or <b>Post</b> on the Hand-in Route</td><td>Post your run so far, or where your bank and plan take you, in party or guild chat. A box shows the message first: edit it, tick party, guild or both, then press Post</td></tr>
         <tr><td>Right-click a dungeon on the Party page</td><td>Ask your party or guild along, with the quests you still need in there</td></tr>
@@ -921,7 +928,8 @@
     <details><summary>What does QuestBank note while I play?</summary><p>Forever is still being discovered, so QuestBank keeps what the game shows you: who gives and takes each quest and where they stand, which quests an NPC offers you and at what level, the XP each quest window and hand-in shows, and the follow-up an NPC offers straight after a hand-in. No player, guild or realm names. It stays in QuestBank's own saved file; <code>/qb discoveries</code> counts it. Upload that file in <a href="#share">Share what you discover</a>, or run ForeverProbe (optional, never required) and its export carries the notes; everyone's are merged into the next QuestBank release.</p></details>
     <details><summary>Do the map pins show where to do a quest?</summary><p>Not yet. The numbered pins show where to hand in, in route order, and the ! pins where planned quests start. The game only allows one waypoint, so it follows your route, and the direction arrow points to it. Next: objective areas on the map (where to kill or collect, from the Classic database and then from what players see), the game's own quest icons on the map, and pins on the minimap.</p></details>
     <details><summary>Do I need TomTom?</summary><p>No. Map pins use the game's own map pin. If TomTom is installed, QuestBank uses that instead.</p></details>
-    <details><summary>Does the plan fit my character?</summary><p>Yes. There's no built-in plan: your plan is what's in your log and bags, plus what you add. QuestBank knows about 3,700 quests from level 1 to 60 for both factions, and only suggests what your faction, class and race can take. Wowhead Forever only knows the quests players have met, which stops near the beta's cap, so above that QuestBank starts from the Classic database and marks those quests "from Classic, not seen in Forever yet" until someone does. Forever's data also carries leftovers from Season of Discovery whose NPCs were never put into Forever, like Alonso's Dragonslayer quests in Ashenvale: QuestBank drops the ones players report missing and never suggests the rest until someone meets their NPC in game.</p></details>
+    <details><summary>Does the plan fit my character?</summary><p>Yes. There's no built-in plan: your plan is what's in your log and bags, plus what you add. QuestBank knows about 3,700 quests from level 1 to 60 for both factions, and only suggests what your faction, class and race can take. Wowhead Forever only knows the quests players have met, which stops near the beta's cap, so above that QuestBank starts from the Classic database and marks those quests "Classic only" in the row until someone meets them in Forever and uploads the notes. Forever's data also carries leftovers from Season of Discovery whose NPCs were never put into Forever, like Alonso's Dragonslayer quests in Ashenvale: QuestBank drops the ones players report missing and never suggests the rest until someone meets their NPC in game.</p></details>
+    <details><summary>Can I skip a zone, or look further ahead?</summary><p>Yes. Settings has a Suggestions block: how many levels above and below you the Plan page and the swap list look (Auto is 12 above while banking, since dungeon quests well above you are the big payers, 4 while questing, and 7 below), and Skip Kalimdor or Skip Eastern Kingdoms. Each Plan card has a Skip button for that zone or dungeon, and <code>/qb skip</code> with a name does the same from chat. What you already hold in a skipped place stays in your plan; only new suggestions stop.</p></details>
     <details><summary>Is it safe to use?</summary><p>It only reads what the game shows you. It never clicks, accepts or hands in anything for you. What it shares goes over the game's own addon channel to your party and guild, and only while sharing is on. It only writes in chat when you press Post.</p></details>
   </div>
   <p class="credits">XP data from Wowhead's Forever database and ForeverChanges. Quest chains, quest givers and spawn points from the <a href="https://github.com/cmangos/classic-db" rel="noopener">CMaNGOS Classic database</a> (GPL-3.0). Flight paths, maps and icons from the Forever client. QuestBank is free software under the GPL-3.0; the licence text ships in the download. Game art and icons by Blizzard Entertainment. Beta data can change with any build.</p>
@@ -930,7 +938,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 3.3.2. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 3.3.3. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>

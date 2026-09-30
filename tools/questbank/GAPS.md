@@ -24,6 +24,8 @@ Classic frame and were moved to Forever's; 58 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 26.
 
+Seen in Forever by players (3 uploads merged by probe_pull.py, 2026-09-30T18:38:28Z): 0 quests, 0 of them Classic seeds now confirmed.
+
 Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both have a number, they disagree on 0:
 
 
