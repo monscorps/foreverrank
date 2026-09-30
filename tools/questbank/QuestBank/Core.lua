@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.3.1"
+QB.version = "3.3.2"
 QB.MAXLEVEL = 60
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
 
@@ -319,17 +319,31 @@ end
 local Bank = {}
 QB.Bank = Bank
 
+-- the items quests for your faction ask for, worked out once
+local bankItems
+local function bankItemList()
+  if bankItems then return bankItems end
+  local fac = QB.faction or API.Faction()
+  local seen, out = {}, {}
+  for qid, list in pairs(D.REQ) do
+    local r = D.Q[qid]
+    local side = r and r[3] or 0
+    if side == 0 or (side == 1 and fac == "A") or (side == 2 and fac == "H") then
+      for _, it in ipairs(list) do
+        if not seen[it[1]] then seen[it[1]] = true; out[#out + 1] = it[1] end
+      end
+    end
+  end
+  bankItems = out
+  return out
+end
+
 function Bank.Scan()
   if not QB.bankOpen then return end
   local items = {}
-  for _, list in pairs(D.REQ) do
-    for _, it in ipairs(list) do
-      local id = it[1]
-      if items[id] == nil then
-        local extra = API.ItemCount(id, true) - API.ItemCount(id)
-        items[id] = extra > 0 and extra or false
-      end
-    end
+  for _, id in ipairs(bankItemList()) do
+    local extra = API.ItemCount(id, true) - API.ItemCount(id)
+    items[id] = extra > 0 and extra or false
   end
   for _, it in ipairs(D.TRACKED_ITEMS) do
     local extra = API.ItemCount(it.id, true) - API.ItemCount(it.id)
@@ -949,6 +963,20 @@ function QB:ToggleAdd(id)
   self:MarkDirty()
 end
 
+-- quests kept as items in your bags, for your faction, class and race: worked out once
+local bagQuests
+function QB:BagQuests()
+  if bagQuests then return bagQuests end
+  local out = {}
+  for id in pairs(D.BAGQ) do
+    local q = Q.Get(id)
+    if q and Q.ForMe(q) then out[#out + 1] = id end
+  end
+  table.sort(out)
+  bagQuests = out
+  return out
+end
+
 -- entries for the planner: { q, st, after }
 function QB:RouteEntries(mode)
   local list, seen = {}, {}
@@ -971,7 +999,7 @@ function QB:RouteEntries(mode)
   end
   for _, e in ipairs(s.logOrder) do consider(e.id) end
   for id in pairs(s.bagStarts) do consider(id) end
-  for id in pairs(D.BAGQ) do consider(id) end
+  for _, id in ipairs(QB:BagQuests()) do consider(id) end
   if mode == "plan" then for id in pairs(self:Plan().add) do consider(id) end end
   -- quests handed to you on the day by another hand-in, delivered at once
   local inList = {}
@@ -1479,7 +1507,7 @@ slash = function(msg)
   elseif cmd == "discoveries" then
     local nq, nn, nc = QB.Discover.Count()
     local function n(k, one, many) return k == 1 and ("1 " .. one) or (k .. " " .. many) end
-    QB:Print(string.format("Noted in game so far: %s, %s, %s. They stay in your saved file; ForeverProbe (optional) puts them in its export for everyone.",
+    QB:Print(string.format("Noted in game so far: %s, %s, %s. They stay in your saved file, QuestBank.lua. Upload it at foreverrank.com/questbank/ (or let ForeverProbe, optional, carry it) and it goes into the next release for everyone.",
       n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps")))
   elseif cmd == "update" or cmd == "version" then
     QB:Print("You run QuestBank " .. QB.version .. (QB.newest and (". Newest seen: " .. QB.newest.version .. " (" .. (QB.newest.who or "?") .. ").") or "."))

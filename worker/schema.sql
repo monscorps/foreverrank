@@ -143,3 +143,21 @@ CREATE TABLE IF NOT EXISTS clients (
   last_seen   INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_clients_seen ON clients(last_seen DESC);
+
+-- ForeverProbe and QuestBank uploads: the text players send (an FPROBE2 export or a
+-- SavedVariables file), gzipped, with a short summary. Merged into QuestBank's data offline.
+CREATE TABLE IF NOT EXISTS probe_uploads (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  received INTEGER NOT NULL,
+  ip_hash  TEXT,
+  source   TEXT,
+  kind     TEXT NOT NULL,
+  filename TEXT,
+  size     INTEGER NOT NULL,
+  hash     TEXT NOT NULL,
+  summary  TEXT,
+  body     BLOB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_probe_hash ON probe_uploads(hash);
+CREATE INDEX IF NOT EXISTS idx_probe_received ON probe_uploads(received DESC);
+

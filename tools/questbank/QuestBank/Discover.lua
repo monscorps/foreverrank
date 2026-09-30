@@ -6,8 +6,8 @@
 --   offers   which quests an NPC offers you, and the lowest level you were offered each at
 --   chains   a quest offered straight after you hand one in, by the same NPC
 -- No player, guild or realm names; just your level, race and class for what you were offered.
--- It never leaves your PC on its own. ForeverProbe (optional) puts it in its export, and everyone's
--- notes are merged into the next QuestBank release.
+-- It never leaves your PC on its own: upload QuestBank.lua at foreverrank.com/questbank/, or let ForeverProbe
+-- (optional) carry it in its export. Everyone's notes are merged into the next QuestBank release.
 local _, QB = ...
 local Disc = {}
 QB.Discover = Disc

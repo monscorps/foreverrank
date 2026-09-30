@@ -4,6 +4,8 @@
 Run from the repo root:  python3 tools/build_companion.py
 Writes addon/companion/ForeverProbe.ico and addon/ForeverProbe.zip
 (zip holds ForeverProbe/ for AddOns plus Companion/ for the Windows sync).
+The zip carries no key or webhook: the companion posts to the site's open
+upload endpoint, so nothing in the download is a credential.
 """
 import os, zipfile
 from PIL import Image, ImageDraw, ImageFilter
@@ -95,23 +97,6 @@ if os.path.exists(setup_exe):
     print("ForeverProbe Setup.exe bundled at the zip root.")
 else:
     print("no ForeverProbe Setup.exe yet: build it on Windows with addon/companion/Build-Installer.bat.")
-
-# The guild key: webhook + mark, base64-packed as Companion/guild.key so the
-# install needs zero typing. webhook.txt and guildmark.txt stay gitignored;
-# the encoded key inside the zip survives GitHub/Discord secret scanning,
-# which auto-revokes plaintext webhooks in public repos. Posts carry the
-# mark, so anything in the channel without it is not ours.
-import base64
-wh = "addon/companion/webhook.txt"
-gm = "addon/companion/guildmark.txt"
-if os.path.exists(wh):
-    hook = open(wh).read().strip()
-    mark = open(gm).read().strip() if os.path.exists(gm) else ""
-    key = base64.b64encode((hook + "|" + mark).encode()).decode()
-    zf.writestr("Companion/guild.key", key + "\n")
-    print("guild.key baked in (webhook + mark, encoded). Zero-typing installs.")
-else:
-    print("no webhook.txt: building without a baked key; installer will prompt.")
 
 zf.close()
 print("wrote", zip_path, os.path.getsize(zip_path) // 1024, "KB")

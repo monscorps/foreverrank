@@ -42,7 +42,7 @@ PAGES = {
                "WoW Forever news in one place, newest first: Blizzard posts, fansite coverage and ForeverRank's own beta client datamines.",
                DEFAULT_IMG),
     "/addon/": ("ForeverProbe, the WoW Forever Addon · ForeverRank",
-                "ForeverProbe is ForeverRank's WoW Forever addon: a levelling pace bar and character snapshots you export yourself. The download returns soon.",
+                "ForeverProbe is ForeverRank's WoW Forever addon: a levelling pace bar, character snapshots and QuestBank's discoveries, uploaded by you or by the optional Windows companion.",
                 DEFAULT_IMG),
 }
 ARTICLES = ["/news/build-70009/", "/news/hidden-systems/", "/news/era-verdict/",

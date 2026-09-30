@@ -207,7 +207,8 @@ local function newClient(o)
   env.IsPlayerSpell = function() return o.riding or false end
   env.AuraUtil = { FindAuraByName = function(name) if c.rested and name == "Well Rested" then return name end end }
   env.UnitName = function(unit) if unit == "npc" then return c.npcName end return o.name end
-  env.UnitGUID = function(unit) if unit == "npc" then return c.npcGUID end return "Player-1234-00000001" end
+  env.UnitGUID = function(unit) if unit == "npc" then return c.npcGUID end return "Player-1234-" .. string.format("%08X", #o.name * 7919 + (o.level or 1)) end
+  env.UnitFullName = function() return o.name, "ForeverNormal" end
   env.GetTitleText = function() return c.window and c.window.title or "" end
   env.GetSuggestedGroupNum = function() return 0 end
   env.GetBuildInfo = function() return "1.60.1", "70058", "Sep 29 2026", 16001 end
@@ -368,7 +369,8 @@ local function deliver()
           local reach = (m[3] == "WHISPER" and m[4] == to.o.name and to ~= from) or ((m[3] == "PARTY" or m[3] == "RAID") and from.o.group and to.o.group)
             or (m[3] == "GUILD" and from.o.guild and to.o.guild)
           if reach then
-            to.QB.Sync.frame.__scripts.OnEvent(to.QB.Sync.frame, "CHAT_MSG_ADDON", m[1], m[2], m[3], from.o.name .. "-Forever Normal")
+            -- chat senders carry a surname the name API doesn't, and the realm written with a space
+            to.QB.Sync.frame.__scripts.OnEvent(to.QB.Sync.frame, "CHAT_MSG_ADDON", m[1], m[2], m[3], from.o.name .. " " .. (from.o.surname or "Steelhand") .. "-Forever Normal")
             moved = moved + 1
           end
         end
@@ -1137,7 +1139,8 @@ owner.QB.Model.Finish()
 for _ = 1, 4 do tick(owner, 5); tick(friend, 5); deliver() end
 local mem = owner.QB.Sync:Members()
 for _, m in ipairs(mem) do print("  member:", m.name, m.key) end
-assert(#mem == 1 and mem[1].name == "Brann", "the owner sees the friend by name, and not itself")
+assert(#mem == 1 and mem[1].name == "Brann Steelhand", "the owner sees the friend by name (with the surname chat gives), and not itself: " .. table.concat((function() local t = {} for _, m in ipairs(mem) do t[#t + 1] = m.name end return t end)(), ", "))
+assert(owner.QB.Sync.mySender == "Mikal Steelhand-Forever Normal", "the owner learned its own sender string from the echo")
 assert(mem[1].quests, "and the friend's quests")
 print(string.format("sync: owner sees %s level %d, banked %.2f, plan %.2f, %d quests", mem[1].name, mem[1].level, mem[1].banked, mem[1].plan,
   (function() local n = 0 for _ in pairs(mem[1].quests) do n = n + 1 end return n end)()))
@@ -1203,7 +1206,7 @@ do
   for _ = 1, 4 do tick(friend, 2); deliver(); tick(owner, 1) end
   fQB.version = real
   local told
-  for _, line in ipairs(owner.chat) do if line:find("QuestBank 9.9.9 is out %(Brann runs it%)") then told = (told or 0) + 1 end end
+  for _, line in ipairs(owner.chat) do if line:find("QuestBank 9.9.9 is out %(Brann Steelhand runs it%)") then told = (told or 0) + 1 end end
   assert(told == 1, "a newer version in the party is told once")
   assert(owner.QB.newest and owner.QB.newest.version == "9.9.9", "and remembered for Settings")
   lines = {}; owner.QB.Sync:MemberTooltip(owner.env.GameTooltip, mem[1].key)
@@ -1216,7 +1219,7 @@ do
   local v5 = UI.views[5]
   print("settings mode:", v5.modeText:GetText())
   print("settings version:", v5.verText:GetText())
-  assert(v5.verText:GetText():find("Brann runs 9.9.9"), "Settings says who runs the newer one")
+  assert(v5.verText:GetText():find("Brann Steelhand runs 9.9.9"), "Settings says who runs the newer one")
   for _, pr in ipairs(checkLayout(UI.frame, "settings")) do problems[#problems + 1] = pr end
   layouts[#layouts + 1] = dumpLayout(UI.frame, "Settings")
   local before = QB:Mode()

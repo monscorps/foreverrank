@@ -1601,10 +1601,10 @@ function UI:RefreshPrepView(v)
   end
   for _, e in ipairs(s.logOrder) do local q = Q.Get(e.id); if q then add(q, true) end end
   for id in pairs(QB:Plan().add) do local q = Q.Get(id); if q then add(q, true) end end
-  for id in pairs(D.BAGQ) do
+  for _, id in ipairs(QB:BagQuests()) do
     local q = Q.Get(id)
     -- quests you hold as an item in your bags; the rest are ordinary candidates below
-    if q and Q.ForMe(q) and (s.bagStarts[id] or QB.API.ItemCount(q.bag[1]) > 0) then add(q, true) end
+    if q and (s.bagStarts[id] or QB.API.ItemCount(q.bag[1]) > 0) then add(q, true) end
   end
   local extra = {}
   for _, c in ipairs(self:Candidates(nil, level)) do
@@ -2516,7 +2516,7 @@ function UI:RefreshSettingsView(v)
     or string.format("You run QuestBank %s, the newest your party and guild have shown.", QB.version))
   v.updates:SetChecked(set.updates and true or false)
   local nq, nn, nc = QB.Discover.Count()
-  v.discText:SetText(string.format("Noted in game so far: %d quests, %d quest NPCs, %d chain steps. Forever is still being discovered, so QuestBank keeps what the game shows you. ForeverProbe (optional) puts it in its export for everyone.", nq, nn, nc))
+  v.discText:SetText(string.format("Noted in game so far: %d quests, %d quest NPCs, %d chain steps. Forever is still being discovered, so QuestBank keeps what the game shows you. Upload your QuestBank.lua at foreverrank.com/questbank/, or run ForeverProbe (optional), and it goes into the next release for everyone.", nq, nn, nc))
   v.offers:SetChecked(set.post.auto and true or false)
   v.shareParty:SetChecked(set.share.party and true or false)
   v.shareGuild:SetChecked(set.share.guild and true or false)

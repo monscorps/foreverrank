@@ -1,11 +1,12 @@
-# ForeverProbe Sync: ships your ForeverProbe data to the guild automatically.
+# ForeverProbe Sync: sends what your addons noted to foreverrank.com, automatically.
 #
-# What it does, in full: finds SavedVariables\ForeverProbe.lua under your WoW game folders
-# SavedVariables and, when the file changes (WoW writes it at logout and on
-# /reload), posts it to the guild's private Discord webhook. Nothing else is
-# read, nothing runs inside the game, and you can read every line below.
+# What it does, in full: finds SavedVariables\ForeverProbe.lua and SavedVariables\QuestBank.lua
+# under your WoW game folders and, when either file changes (WoW writes them at logout and on
+# /reload), uploads it to foreverrank.com's data endpoint. Nothing else is read, nothing runs
+# inside the game, no account or login is involved, and you can read every line below.
+# The site keeps no player names: only what the addons noted about quests, NPCs and XP.
 #
-# Install:   ForeverProbe Setup.exe or Install.bat (or: .\ForeverProbe-Sync.ps1 -Install)
+# Install:   Install.bat (or: .\ForeverProbe-Sync.ps1 -Install)
 # Running:   the sigil sits in your system tray and syncs every 30 minutes;
 #            right-click it for Sync now / Status / Exit. Returns at login.
 # Remove:    double-click Uninstall.bat (or: -Uninstall)
@@ -16,8 +17,13 @@ param(
   [switch]$Status,
   [switch]$SyncNow,
   [switch]$Tray,
-  [string]$WowPath = ""
+  [string]$WowPath = "",
+  [string]$Endpoint = ""
 )
+
+$DefaultEndpoint = "https://foreverrank.andustemme.workers.dev/api/probe"
+$WatchFiles = @("ForeverProbe.lua", "QuestBank.lua")
+$MaxBytes   = 6 * 1024 * 1024   # the endpoint's limit
 
 $AppDir   = Join-Path $env:APPDATA "ForeverProbe"
 $CfgFile  = Join-Path $AppDir "config.json"
@@ -29,12 +35,30 @@ function Log([string]$msg) {
   Add-Content -Path $LogFile -Value $line -ErrorAction SilentlyContinue
 }
 
+function Read-Config {
+  if (-not (Test-Path $CfgFile)) { return $null }
+  $cfg = Get-Content $CfgFile -Raw | ConvertFrom-Json
+  # older builds (0.3) posted to a guild webhook; that key is dropped, the endpoint is the site's
+  $endpoint = $DefaultEndpoint
+  if ($cfg.PSObject.Properties["endpoint"] -and $cfg.endpoint) { $endpoint = [string]$cfg.endpoint }
+  $sent = @{}
+  if ($cfg.PSObject.Properties["sent"] -and $cfg.sent) { $cfg.sent.PSObject.Properties | ForEach-Object { $sent[$_.Name] = $_.Value } }
+  $wow = ""
+  if ($cfg.PSObject.Properties["wowPath"] -and $cfg.wowPath) { $wow = [string]$cfg.wowPath }
+  return @{ endpoint = $endpoint; wowPath = $wow; sent = $sent }
+}
+
+function Save-Config($cfg) {
+  @{ endpoint = $cfg.endpoint; wowPath = $cfg.wowPath; sent = $cfg.sent } | ConvertTo-Json | Set-Content -Path $CfgFile
+}
+
 function Find-SavedVariables {
   param([string]$Root)
   $roots = @()
   if ($Root) { $roots += $Root }
   $roots += @("C:\Program Files (x86)\World of Warcraft", "C:\Program Files\World of Warcraft", "D:\World of Warcraft", "$env:USERPROFILE\World of Warcraft")
   foreach ($r in $roots) {
+    if (-not (Test-Path -LiteralPath $r)) { continue }
     # every game folder (_classic_beta_ for the Forever beta, and whatever live Forever gets); the root
     # itself counts too, when it is a game folder
     $flavors = @(Get-ChildItem -Path $r -Directory -Filter "_*_" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
@@ -42,59 +66,84 @@ function Find-SavedVariables {
     foreach ($f in $flavors) {
       $acct = Join-Path $f "WTF\Account"
       if (Test-Path $acct) {
-        # WoW names the file after the addon (ForeverProbe.lua), not after the variable inside it
-        Get-ChildItem -Path $acct -Recurse -Filter "ForeverProbe.lua" -File -ErrorAction SilentlyContinue |
+        # WoW names each file after the addon (ForeverProbe.lua, QuestBank.lua), not after the variable inside it
+        Get-ChildItem -Path $acct -Recurse -File -Include $WatchFiles -ErrorAction SilentlyContinue |
           Where-Object { $_.Directory.Name -eq "SavedVariables" } | ForEach-Object { $_.FullName }
       }
     }
   }
 }
 
-function Send-ToWebhook {
-  param([string]$Webhook, [string]$File, [string]$Mark)
+# One multipart POST: source=companion, file=<the saved file>. The reply is JSON:
+# { ok, id, kind, summary, message } or { ok, duplicate } or { error }.
+function Send-ToForeverRank {
+  param([string]$Url, [string]$File)
   $boundary = [System.Guid]::NewGuid().ToString()
   $LF = "`r`n"
   $bytes = [System.IO.File]::ReadAllBytes($File)
   $enc = [System.Text.Encoding]::GetEncoding("ISO-8859-1")
-  $who = $env:USERNAME
-  $tag = ""
-  if ($Mark) { $tag = "[" + $Mark + "] " }
+  $name = [System.IO.Path]::GetFileName($File)
   $pre = "--$boundary$LF" +
-    "Content-Disposition: form-data; name=`"payload_json`"$LF$LF" +
-    ('{"content":"' + $tag + 'ForeverProbe drop from **' + $who + '**, ' + (Get-Date -Format "yyyy-MM-dd HH:mm") + '"}') + $LF +
+    "Content-Disposition: form-data; name=`"source`"$LF$LF" + "companion" + $LF +
     "--$boundary$LF" +
-    "Content-Disposition: form-data; name=`"file`"; filename=`"ForeverProbe.lua`"$LF" +
-    "Content-Type: application/octet-stream$LF$LF"
+    "Content-Disposition: form-data; name=`"file`"; filename=`"$name`"$LF" +
+    "Content-Type: text/plain$LF$LF"
   $post = "$LF--$boundary--$LF"
-  $body = $enc.GetBytes($pre) + $bytes + $enc.GetBytes($post)
-  Invoke-RestMethod -Uri $Webhook -Method Post -ContentType "multipart/form-data; boundary=$boundary" -Body $body | Out-Null
+  # one byte array: PowerShell's + on two arrays makes an object[], which the web cmdlets would stringify
+  [byte[]]$body = $enc.GetBytes($pre) + $bytes + $enc.GetBytes($post)
+  try {
+    return Invoke-RestMethod -Uri $Url -Method Post -ContentType "multipart/form-data; boundary=$boundary" -Body $body -TimeoutSec 60
+  } catch {
+    # the endpoint answers refusals with a JSON error line; surface it instead of the bare status
+    $detail = ""
+    if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $detail = $_.ErrorDetails.Message }
+    elseif ($_.Exception.Response -and ($_.Exception.Response | Get-Member -Name GetResponseStream)) {
+      try { $sr = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream()); $detail = $sr.ReadToEnd() } catch { }
+    }
+    $code = ""
+    try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+    throw ("HTTP " + $code + " " + $detail).Trim()
+  }
 }
 
 function Run-Sync {
-  if (-not (Test-Path $CfgFile)) { return "Not installed." }
-  $cfg = Get-Content $CfgFile -Raw | ConvertFrom-Json
-  $sentHashes = @{}
-  if ($cfg.sent) { $cfg.sent.PSObject.Properties | ForEach-Object { $sentHashes[$_.Name] = $_.Value } }
+  $cfg = Read-Config
+  if (-not $cfg) { return "Not installed." }
   $files = @(Find-SavedVariables -Root $cfg.wowPath)
-  if ($files.Count -eq 0) { Log "no SavedVariables\ForeverProbe.lua found"; return "No ForeverProbe data found yet. Log a character out once with the addon installed." }
+  if ($files.Count -eq 0) {
+    Log "no SavedVariables\ForeverProbe.lua or QuestBank.lua found"
+    return "No ForeverProbe or QuestBank data found yet. Log a character out once with either addon installed."
+  }
   $posted = 0; $skipped = 0; $failed = 0
   foreach ($f in $files) {
     $hash = (Get-FileHash -Path $f -Algorithm SHA256).Hash
-    if ($sentHashes[$f] -eq $hash) { $skipped++; continue }
+    if ($cfg.sent[$f] -eq $hash) { $skipped++; continue }
+    $size = (Get-Item $f).Length
+    if ($size -gt $MaxBytes) { $failed++; Log ("SKIPPED " + $f + " :: " + [math]::Round($size / 1MB, 1) + " MB is over the 6 MB limit"); continue }
     try {
-      Send-ToWebhook -Webhook $cfg.webhook -File $f -Mark $cfg.mark
-      $sentHashes[$f] = $hash
-      $posted++
-      Log ("sent " + $f)
+      $r = Send-ToForeverRank -Url $cfg.endpoint -File $f
+      if ($r -and $r.ok) {
+        $cfg.sent[$f] = $hash
+        $posted++
+        if ($r.duplicate) { Log ("already there: " + $f) }
+        else {
+          $bits = @()
+          if ($r.summary -and $r.summary.quests -ne $null) { $bits += ($r.summary.quests.ToString() + " quests noted") }
+          if ($r.summary -and $r.summary.level -ne $null) { $bits += ("level " + $r.summary.level) }
+          Log ("sent " + $f + " :: upload #" + $r.id + " (" + $r.kind + ") " + ($bits -join ", "))
+        }
+      } else {
+        $failed++
+        Log ("FAILED " + $f + " :: " + ($r | ConvertTo-Json -Compress))
+      }
     } catch {
       $failed++
       Log ("FAILED " + $f + " :: " + $_.Exception.Message)
     }
   }
-  $cfg.sent = $sentHashes
-  $cfg | ConvertTo-Json | Set-Content -Path $CfgFile
+  Save-Config $cfg
   if ($failed -gt 0) { return "Sent $posted, failed $failed. See sync.log in $AppDir." }
-  if ($posted -gt 0) { return "Sent $posted update(s) to the guild." }
+  if ($posted -gt 0) { return "Sent $posted update(s) to foreverrank.com." }
   return "Everything already sent. Nothing new since your last session."
 }
 
@@ -110,8 +159,9 @@ function Stop-Tray {
 
 function Show-Status {
   Add-Type -AssemblyName System.Windows.Forms | Out-Null
-  if (-not (Test-Path $CfgFile)) {
-    [System.Windows.Forms.MessageBox]::Show("ForeverProbe Sync is not installed. Run ForeverProbe Setup.exe or Install.bat first.", "ForeverProbe Sync") | Out-Null
+  $cfg = Read-Config
+  if (-not $cfg) {
+    [System.Windows.Forms.MessageBox]::Show("ForeverProbe Sync is not installed. Run Install.bat first.", "ForeverProbe Sync") | Out-Null
     return
   }
   $last = "never"
@@ -119,8 +169,8 @@ function Show-Status {
     $tail = Get-Content $LogFile -Tail 1
     if ($tail) { $last = $tail }
   }
-  $files = @(Find-SavedVariables -Root ((Get-Content $CfgFile -Raw | ConvertFrom-Json).wowPath))
-  $msg = "Watching " + $files.Count + " ForeverProbe file(s).`n`nLast activity:`n" + $last + "`n`nSync now?"
+  $files = @(Find-SavedVariables -Root $cfg.wowPath)
+  $msg = "Watching " + $files.Count + " saved file(s) for foreverrank.com.`n`nLast activity:`n" + $last + "`n`nSync now?"
   $r = [System.Windows.Forms.MessageBox]::Show($msg, "ForeverProbe Sync", [System.Windows.Forms.MessageBoxButtons]::YesNo)
   if ($r -eq [System.Windows.Forms.DialogResult]::Yes) {
     $result = Run-Sync
@@ -154,36 +204,19 @@ function Show-Banner {
         F O R E V E R P R O B E   S Y N C
 '@
   Write-Host $sigil -ForegroundColor Yellow
-  Write-Host "        foreverrank.com  ::  the guild sees what you see" -ForegroundColor DarkGray
+  Write-Host "        foreverrank.com  ::  what you see, everyone learns" -ForegroundColor DarkGray
   Write-Host ""
 }
 
 if ($Install) {
   New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
   Show-Banner
-  Write-Host "  Your play data ships to the guild automatically after each session."
+  Write-Host "  What ForeverProbe and QuestBank note in game ships to foreverrank.com"
+  Write-Host "  automatically after each session. Nothing to type, no account."
   Write-Host ""
-  # The guild key ships in the download; nobody types anything.
-  $here = Split-Path $MyInvocation.MyCommand.Path
-  $hook = ""; $mark = ""
-  $keyFile = Join-Path $here "guild.key"
-  $hookFile = Join-Path $here "webhook.txt"
-  if (Test-Path $keyFile) {
-    try {
-      $raw = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String((Get-Content $keyFile -Raw).Trim()))
-      $parts = $raw.Split("|")
-      $hook = $parts[0]
-      if ($parts.Count -gt 1) { $mark = $parts[1] }
-      Write-Host "  Guild key found. No typing needed." -ForegroundColor Green
-    } catch { }
-  }
-  if (-not $hook -and (Test-Path $hookFile)) {
-    $hook = (Get-Content $hookFile -Raw).Trim()
-    Write-Host "  Found webhook.txt. No typing needed." -ForegroundColor Green
-  }
-  if (-not $hook) { $hook = Read-Host "  Paste the guild's Discord webhook URL" }
-  if (-not $hook.StartsWith("https://discord.com/api/webhooks/")) { Write-Host "  That does not look like a Discord webhook URL."; exit 1 }
-  @{ webhook = $hook; mark = $mark; wowPath = $WowPath; sent = @{} } | ConvertTo-Json | Set-Content -Path $CfgFile
+  $ep = $DefaultEndpoint
+  if ($Endpoint) { $ep = $Endpoint }
+  Save-Config @{ endpoint = $ep; wowPath = $WowPath; sent = @{} }
   $self = Join-Path $AppDir "ForeverProbe-Sync.ps1"
   Copy-Item -Force $MyInvocation.MyCommand.Path $self
   $srcIco = Join-Path (Split-Path $MyInvocation.MyCommand.Path) "ForeverProbe.ico"
@@ -241,7 +274,7 @@ if ($Install) {
   Write-Host "  for Sync now, Status and Exit. It comes back at every login, and"
   Write-Host "  the desktop icon opens the same status box."
   $found = @(Find-SavedVariables -Root $WowPath)
-  if ($found.Count -eq 0) { Write-Host "  Note: no ForeverProbe data found yet; it appears after your first logout with the addon." }
+  if ($found.Count -eq 0) { Write-Host "  Note: no ForeverProbe or QuestBank data found yet; it appears after your first logout with either addon." }
   else { Write-Host ("  Watching: " + ($found -join ", ")) }
   Write-Host ""
   Read-Host "  Press Enter to close"
@@ -309,4 +342,5 @@ if ($Tray) {
 }
 
 # Default (and -SyncNow): one quiet sync pass, for shortcuts and old tasks.
-Run-Sync | Out-Null
+$result = Run-Sync
+if ($SyncNow) { Write-Host $result }

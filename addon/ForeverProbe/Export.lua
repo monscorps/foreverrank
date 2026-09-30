@@ -1,7 +1,8 @@
 --[[ /probe        one small panel: status, export, pace toggle
      /probe export straight to the copy box
      Export = a text blob the player copies and pastes at
-     foreverrank.com. Nothing leaves the game on its own.             ]]
+     foreverrank.com/questbank (or the Windows companion uploads the
+     saved file). Nothing leaves the game on its own.                ]]
 
 local ADDON, NS = ...
 
@@ -123,7 +124,7 @@ local function buildPanel()
   hint:SetFont(STANDARD_TEXT_FONT, 9)
   hint:SetPoint("BOTTOMLEFT", 12, 30)
   hint:SetTextColor(0.55, 0.58, 0.68)
-  hint:SetText("Ctrl+A then Ctrl+C, then paste it to ForeverRank (the Discord, for now)")
+  hint:SetText("Ctrl+A then Ctrl+C, then paste it in the upload box at foreverrank.com/questbank")
 
   local function btn(label, x, onClick)
     local b = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")

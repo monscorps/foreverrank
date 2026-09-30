@@ -34,6 +34,7 @@ const LIMITS = {
   enrol: { n: 5, windowMs: 3600_000 },
   submit: { n: 60, windowMs: 3600_000 },
   legacy: { n: 10, windowMs: 3600_000 },
+  probe: { n: 40, windowMs: 3600_000 },
 };
 
 // Bounds. Reject the impossible; flag the merely implausible. Deliberately
@@ -692,8 +693,169 @@ async function handleStats(env) {
   });
 }
 
+/* ------------------------------------------------------------------------
+ * ForeverProbe / QuestBank uploads: what players saw in the game, crowdsourced.
+ *
+ * Anyone may POST. What is accepted: a ForeverProbe export ("FPROBE2:" + JSON,
+ * the text /probe export shows), or a SavedVariables file straight from WoW
+ * (ForeverProbe.lua or QuestBank.lua). Everything else is refused. The text is
+ * stored gzipped in D1 with a short summary; the merge into QuestBank's data
+ * happens offline (tools/probe_pull.py, behind PROBE_ADMIN_KEY). Uploads carry
+ * no account identity: only what the addon noted. Duplicates (same bytes) are
+ * acknowledged, not stored twice.
+ * ---------------------------------------------------------------------- */
+const PROBE_MAX_TEXT = 6 * 1024 * 1024;   // bytes of text accepted
+const PROBE_MAX_GZ = 900 * 1024;           // bytes stored per row (D1 keeps rows under 1 MB)
+const PROBE_KINDS = {
+  export: /^FPROBE[12]:/,
+  'probe-savedvars': /^\s*ForeverProbeDB\s*=/,
+  'questbank-savedvars': /^\s*QuestBankDB\s*=/,
+};
+
+async function gzipText(text) {
+  const cs = new CompressionStream('gzip');
+  const w = cs.writable.getWriter();
+  w.write(new TextEncoder().encode(text));
+  w.close();
+  return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+}
+
+async function gunzipToText(bytes) {
+  const ds = new DecompressionStream('gzip');
+  const w = ds.writable.getWriter();
+  w.write(bytes);
+  w.close();
+  return await new Response(ds.readable).text();
+}
+
+/** A few facts for the listing: character, level, build, versions, how much was noted. */
+function probeSummary(kind, text) {
+  const out = { kind };
+  const grab = (re) => { const m = text.match(re); return m ? m[1] : null; };
+  if (kind === 'export') {
+    try {
+      const data = JSON.parse(text.slice(text.indexOf(':') + 1));
+      const snaps = asArray(data.snapshots);
+      const last = snaps[snaps.length - 1] || {};
+      out.char = last.char || last.name || null;
+      out.level = last.level ?? null;
+      out.build = last.build || null;
+      out.addon = data.meta && data.meta.addon || null;
+      out.snapshots = snaps.length;
+      out.trainers = asArray(data.trainers).length;
+      const disc = data.questbank && data.questbank.disc;
+      if (disc) {
+        out.questbank = data.questbank.version || null;
+        out.quests = Object.keys(disc.q || {}).length;
+        out.npcs = Object.keys(disc.npc || {}).length;
+      }
+    } catch (e) {
+      out.parse = 'export JSON did not parse';
+    }
+  } else {
+    // a SavedVariables file: a light read, no Lua parsing here
+    out.build = grab(/\["build"\]\s*=\s*"([^"]+)"/);
+    out.addon = grab(/\["addon"\]\s*=\s*"([^"]+)"/) || grab(/\["ver"\]\s*=\s*"([^"]+)"/);
+    // WoW writes numeric keys bare ([7] = {) and string keys quoted; QuestBankDB.disc.q sits three
+    // tabs deep in QuestBank.lua and four deep (under ["questbank"]) in ForeverProbe.lua
+    const quests = text.match(/\["q"\]\s*=\s*\{/);
+    if (kind === 'questbank-savedvars') {
+      out.quests = (text.match(/\n\t\t\t\["?\d+"?\]\s*=\s*\{/g) || []).length || null;
+      if (!quests) out.note = 'no discoveries table in this file';
+    } else if (text.indexOf('["questbank"]') >= 0) {
+      out.quests = (text.match(/\n\t\t\t\t\["?\d+"?\]\s*=\s*\{/g) || []).length || null;
+    }
+  }
+  return out;
+}
+
+async function handleProbeUpload(req, env, ctx) {
+  const ip = req.headers.get('cf-connecting-ip') || 'unknown';
+  const ipHash = (await sha256Hex('probe:' + ip)).slice(0, 16);
+  if (await rateLimited(env, 'probe', ipHash, LIMITS.probe))
+    return json({ error: 'too many uploads from here for now; try again in an hour' }, 429);
+  const declared = Number(req.headers.get('content-length') || 0);
+  if (declared > PROBE_MAX_TEXT + 4096) return json({ error: 'too large (6 MB at most)' }, 413);
+
+  let text = null, filename = null, source = 'paste';
+  const ct = req.headers.get('content-type') || '';
+  if (ct.startsWith('multipart/form-data')) {
+    const form = await req.formData().catch(() => null);
+    if (!form) return json({ error: 'bad form' }, 400);
+    const f = form.get('file');
+    if (f && typeof f !== 'string') { text = await f.text(); filename = String(f.name || '').slice(0, 80); }
+    else text = String(form.get('text') || f || '');
+    source = String(form.get('source') || 'page').slice(0, 24);
+  } else {
+    text = await req.text();
+    source = String(req.headers.get('x-probe-source') || 'paste').slice(0, 24);
+  }
+  if (!text || text.length > PROBE_MAX_TEXT) return json({ error: text ? 'too large (6 MB at most)' : 'nothing to upload' }, text ? 413 : 400);
+  // the addon's copy box is one line; a pasted SavedVariables file is many. Trim only the ends.
+  const trimmed = text.replace(/^\uFEFF/, '').trim();
+  const kind = Object.keys(PROBE_KINDS).find((k) => PROBE_KINDS[k].test(trimmed));
+  if (!kind) return json({ error: 'not a ForeverProbe export (starts with FPROBE2:) or a ForeverProbe.lua / QuestBank.lua SavedVariables file' }, 400);
+
+  const hash = await sha256Hex(trimmed);
+  const dup = await env.DB.prepare('SELECT id, received FROM probe_uploads WHERE hash = ?').bind(hash).first();
+  if (dup) return json({ ok: true, duplicate: true, id: dup.id, message: 'Already received, thanks. Nothing new since then.' });
+
+  const gz = await gzipText(trimmed);
+  if (gz.byteLength > PROBE_MAX_GZ) return json({ error: 'too large once compressed; export again after a /reload to shrink it' }, 413);
+  const summary = probeSummary(kind, trimmed);
+  const res = await env.DB.prepare(
+    'INSERT INTO probe_uploads (received, ip_hash, source, kind, filename, size, hash, summary, body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  )
+    .bind(now(), ipHash, source, kind, filename, trimmed.length, hash, JSON.stringify(summary), gz.buffer.slice(gz.byteOffset, gz.byteOffset + gz.byteLength))
+    .run();
+  const id = res.meta && res.meta.last_row_id;
+
+  // a one-line note to the guild's channel, when one is configured (the file itself never goes there)
+  if (env.PROBE_WEBHOOK && /^https:\/\/discord\.com\/api\/webhooks\//.test(env.PROBE_WEBHOOK)) {
+    const bits = [summary.char || 'someone', summary.level != null ? `level ${summary.level}` : null,
+      summary.quests != null ? `${summary.quests} quests noted` : null, summary.build ? `build ${summary.build}` : null].filter(Boolean);
+    const line = `ForeverRank upload #${id} (${kind}, ${source}): ${bits.join(', ')}`;
+    const post = fetch(env.PROBE_WEBHOOK, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content: line }) }).catch(() => {});
+    if (ctx && ctx.waitUntil) ctx.waitUntil(post);
+  }
+  return json({ ok: true, id, kind, summary, message: 'Received, thank you. It goes into the next QuestBank data release.' });
+}
+
+async function handleProbeStats(env) {
+  const row = await env.DB.prepare('SELECT COUNT(*) AS n, MAX(received) AS last FROM probe_uploads').first();
+  const kinds = await env.DB.prepare('SELECT kind, COUNT(*) AS n FROM probe_uploads GROUP BY kind').all();
+  return json({ uploads: row?.n ?? 0, last: row?.last ?? null, kinds: Object.fromEntries((kinds.results || []).map((r) => [r.kind, r.n])) },
+    200, { 'cache-control': 'public, max-age=120' });
+}
+
+/** The merge tool's read: rows after an id, bodies as base64 gzip. Only with the admin key. */
+async function handleProbePull(req, url, env) {
+  const key = req.headers.get('x-admin-key') || '';
+  if (!env.PROBE_ADMIN_KEY || !key || (await sha256Hex(key)) !== (await sha256Hex(env.PROBE_ADMIN_KEY)))
+    return json({ error: 'unauthorised' }, 401);
+  const after = Math.max(0, Number(url.searchParams.get('after') || 0));
+  const limit = Math.min(20, Math.max(1, Number(url.searchParams.get('limit') || 10)));
+  const withBody = url.searchParams.get('body') !== '0';
+  const rows = await env.DB.prepare(
+    `SELECT id, received, source, kind, filename, size, hash, summary${withBody ? ', body' : ''} FROM probe_uploads WHERE id > ? ORDER BY id LIMIT ?`
+  ).bind(after, limit).all();
+  const out = [];
+  for (const r of rows.results || []) {
+    const item = { id: r.id, received: r.received, source: r.source, kind: r.kind, filename: r.filename, size: r.size, hash: r.hash,
+      summary: (() => { try { return JSON.parse(r.summary); } catch { return null; } })() };
+    if (withBody && r.body) {
+      const bytes = new Uint8Array(r.body);
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      item.body_gzip_base64 = btoa(bin);
+    }
+    out.push(item);
+  }
+  return json({ rows: out, next: out.length ? out[out.length - 1].id : after });
+}
+
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
 
     if (req.method === 'OPTIONS') {
@@ -701,7 +863,7 @@ export default {
         headers: {
           'access-control-allow-origin': '*',
           'access-control-allow-methods': 'GET, POST, OPTIONS',
-          'access-control-allow-headers': 'authorization, content-type, x-levelpace-token',
+          'access-control-allow-headers': 'authorization, content-type, x-levelpace-token, x-probe-source, x-admin-key',
         },
       });
     }
@@ -718,10 +880,13 @@ export default {
       if (url.pathname === '/api/rares') return await handleRareLog(url, env);
       if (url.pathname === '/api/baseline') return await handleBaseline(env);
       if (url.pathname === '/api/stats') return await handleStats(env);
+      if (url.pathname === '/api/probe' && req.method === 'POST') return await handleProbeUpload(req, env, ctx);
+      if (url.pathname === '/api/probe/stats') return await handleProbeStats(env);
+      if (url.pathname === '/api/probe/pull') return await handleProbePull(req, url, env);
       if (url.pathname === '/' || url.pathname === '/api')
         return json({
           service: 'foreverrank',
-          routes: ['/api/stats', '/api/leaderboard', '/api/baseline', '/api/rares', '/api/enrol', '/api/submit', '/api/hello', '/api/clients'],
+          routes: ['/api/stats', '/api/leaderboard', '/api/baseline', '/api/rares', '/api/enrol', '/api/submit', '/api/hello', '/api/clients', '/api/probe', '/api/probe/stats'],
           board: 'https://foreverrank.com',
         });
       return json({ error: 'not found' }, 404);

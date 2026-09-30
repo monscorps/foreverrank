@@ -13,16 +13,15 @@
 <meta property="og:url" content="https://foreverrank.com/questbank/">
 <meta property="og:title" content="QuestBank · the free questing addon for WoW Forever">
 <meta property="og:description" content="What every quest pays at your level, which chains to carry on, the best quests near you and the quickest hand-in route, level 1 to 60. Banks your log at level caps.">
-<meta property="og:image" content="https://foreverrank.com/codex/img/ruins-of-lordaeron.jpg">
+<meta property="og:image" content="https://foreverrank.com/questbank/img/route.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#1C2325">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@500;600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../forever.css?v=23">
-<!-- Screenshot slots: drop in-game images into questbank/img/ with these names and they
-     appear next to the matching illustration on their own: window.jpg, log.jpg, prep.jpg,
-     route.jpg, party.jpg, map.jpg (any size; 1600px wide is plenty). -->
+<!-- In-game screenshots live in questbank/img/ (route, log, prep, party are in). Two slots still
+     fill themselves when the file appears: window.jpg (header and toggles) and map.jpg. -->
 <style>
 .qb { --w: 68rem; --ink: #e9eef1; --dim: #9fb0bb; --line: rgba(0,175,215,.22);
   --panel: linear-gradient(180deg, rgba(7,50,74,.72), rgba(5,30,45,.92));
@@ -60,7 +59,31 @@
 .fpcard p { margin: 0 0 .7rem; max-width: 68ch; }
 .fpcard .fpnote { color: var(--dim); font-size: .88rem; margin: 0; }
 @media (max-width: 720px) { .fpcard { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .qbh-in { grid-template-columns: 1fr; } }
+.sharegrid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: .9rem; align-items: start; }
+.upbox, .fpside { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel); padding: 1.2rem 1.25rem 1.3rem; display: grid; gap: .8rem; align-content: start; }
+.upbox p, .fpside p { margin: 0; color: #d6e0e4; font-size: .92rem; }
+.upbox form { display: grid; gap: .7rem; }
+.drop { display: grid; place-items: center; gap: .3rem; min-height: 5.2rem; padding: 1rem; border: 1px dashed rgba(229,204,128,.5); border-radius: 6px; background: rgba(0,0,0,.25); color: #f2d98a; font: 600 .88rem/1.3 var(--heading); text-align: center; cursor: pointer; }
+.drop:hover, .drop.over { border-color: var(--gold); background: rgba(229,204,128,.08); }
+.drop input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.drop small { display: block; font: 500 .78rem/1.3 var(--body); color: var(--dim); }
+.drop:focus-within { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.upbox textarea { width: 100%; min-height: 4.6rem; resize: vertical; font: 500 .82rem/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #fff3cf; background: rgba(0,0,0,.35); border: 1px solid rgba(229,204,128,.25); border-radius: 6px; padding: .6rem .7rem; }
+.upbox textarea:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+.uprow { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.uprow .dl-btn { cursor: pointer; padding: .8rem 1.3rem; }
+.uprow .dl-btn[disabled] { opacity: .6; cursor: progress; }
+.upstat { font-size: .9rem; color: #d6e0e4; }
+.upstat.ok { color: #7fe08a; } .upstat.err { color: #ff9b8a; }
+.upcount { color: var(--dim); font-size: .85rem; }
+.fpside .dl { margin-top: .2rem; }
+@media (max-width: 800px) { .sharegrid { grid-template-columns: 1fr; } }
+.qbh-in { grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 2.6rem; align-items: center; }
+.qbh-copy .dl { margin-top: 1.6rem; }
+.hero-shot { margin: 0; }
+.hero-shot img { display: block; width: 100%; height: auto; border-radius: 8px; border: 1px solid rgba(229,204,128,.5); box-shadow: 0 30px 70px rgba(0,0,0,.65), 0 0 0 1px rgba(0,0,0,.7); }
+.hero-shot figcaption { font-size: .78rem; color: var(--dim); margin-top: .65rem; }
+@media (max-width: 900px) { .qbh-in { grid-template-columns: 1fr; gap: 1.8rem; } .hero-shot { max-width: 40rem; } }
 
 /* install */
 .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
@@ -86,6 +109,15 @@
 .shot { margin: 1.2rem 0 0; }
 .shot img { display: block; width: 100%; height: auto; border-radius: 6px; border: 1px solid rgba(229,204,128,.3); box-shadow: 0 16px 40px rgba(0,0,0,.45); }
 .shot[hidden] { display: none !important; }
+.shotbox { margin: 0; }
+.shotwrap { position: relative; }
+.shotwrap img { display: block; width: 100%; height: auto; border-radius: 6px; border: 1px solid rgba(229,204,128,.3); box-shadow: 0 16px 40px rgba(0,0,0,.45); }
+.shotwrap .call { transform: translate(-50%, -50%); transform-origin: center; }
+.illus { margin-top: 1.1rem; }
+.illus summary { cursor: pointer; font: 600 .78rem/1 var(--heading); letter-spacing: .06em; color: var(--dim); padding: .55rem 0; list-style-position: inside; }
+.illus summary:hover { color: #f6f1e4; }
+.illus summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.illus[open] summary { margin-bottom: .7rem; }
 .stage > * { min-width: 0; }
 @media (max-width: 980px) { .stage { grid-template-columns: minmax(0, 1fr); } }
 
@@ -299,16 +331,20 @@
 <main class="qb">
 <header class="qbh" style="--img:url(/codex/img/ruins-of-lordaeron.jpg)">
   <div class="wrapx qbh-in">
-    <div>
+    <div class="qbh-copy">
       <p class="kick"><span class="tag">Addon</span>Free · Level 1 to 60 · WoW Forever</p>
       <h1>QuestBank</h1>
       <p class="lede">In Forever, quests are where the XP is: dungeon quests pay up to 4.35 times their Classic XP. QuestBank shows what every quest in your log is worth at your level, which chains to carry on, the best quests near you, and the quickest way to hand them in, with map pins. When the game holds your level at a cap, it banks your log and plans the hour after the cap goes up. Alliance and Horde, and it plans dungeon runs with your party.</p>
+      <div class="dl">
+        <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
+        <span class="dl-meta">Version 3.3.2 · 30 September 2026 · 265 KB</span>
+        <span class="dl-meta">Open it in game with <code>/qb</code>. New in 3.3.2: <a href="#share">upload what you discover</a>; the Party page no longer lists you as a second member.</span>
+      </div>
     </div>
-    <div class="dl">
-      <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-      <span class="dl-meta">Version 3.3.1 · 30 September 2026 · 265 KB</span>
-      <span class="dl-meta">Open it in game with <code>/qb</code></span>
-    </div>
+    <figure class="hero-shot">
+      <img src="img/route.jpg" width="998" height="764" alt="QuestBank's Hand-in Route page in the game: the stops in order, how you travel between them, your level at each, and the quests to hand in there with their XP" fetchpriority="high">
+      <figcaption>In game: the Hand-in Route for a level 20 paladin's bank, planned for the hour the cap goes up.</figcaption>
+    </figure>
   </div>
 </header>
 
@@ -337,14 +373,27 @@
 <section class="wrapx" id="share">
   <p class="qb-eye">Optional</p>
   <h2>Share what you discover</h2>
-  <div class="fpcard">
-    <div>
-      <p>Forever is still being discovered: quests move, pay more or less than in Classic, and new ones turn up above every cap. QuestBank notes what the game shows you as you play, and uses it for you straight away. <b>ForeverProbe</b> is our second addon: if you run it too, it puts those notes in its export, and everyone's exports are merged into the next QuestBank release. It also adds a small pace bar (XP per hour, time to level).</p>
-      <p class="fpnote">Never required: QuestBank works fully without it. ForeverProbe only reads and sends nothing on its own: <code>/probe export</code> gives you the text to copy. For now, paste it to us in the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>; an upload page on foreverrank.com comes next. This build is being tested on the beta, so tell us there if it misbehaves (<code>/probe debug</code> lists what went wrong).</p>
+  <p class="sub">Forever is still being discovered: quests move, pay more or less than in Classic, and new ones turn up above every cap. QuestBank notes what the game shows you as you play, uses it for you straight away, and keeps it in its own saved file: who gives and takes each quest and where they stand, what each quest paid at your level, which quests an NPC offers at what level, and chain steps. No player, guild or realm names. Send those notes in, and they go into the next QuestBank release for everyone.</p>
+  <div class="sharegrid">
+    <div class="upbox">
+      <h3>Upload your notes</h3>
+      <p>Your notes are in <code>WTF\Account\&lt;account&gt;\SavedVariables\QuestBank.lua</code> under the game folder, written when you log out or <code>/reload</code>. Drop that file here. A ForeverProbe export (the text <code>/probe export</code> shows, starting <code>FPROBE2:</code>) or its <code>ForeverProbe.lua</code> works the same way.</p>
+      <form id="upform" novalidate>
+        <label class="drop" id="drop"><input type="file" id="upfile" accept=".lua,.txt,text/plain"><span id="dropText">Choose QuestBank.lua, or drop it here</span><small>or ForeverProbe.lua, or an export saved as text</small></label>
+        <textarea id="uptext" rows="3" placeholder="…or paste a ForeverProbe export here (it starts with FPROBE2:)" spellcheck="false"></textarea>
+        <div class="uprow"><button type="submit" class="dl-btn" id="upbtn">Upload</button><span class="upstat" id="upstat" role="status" aria-live="polite"></span></div>
+      </form>
+      <p class="upcount" id="upcount">No account, no login. The same file can be sent again after every session; only what's new counts.</p>
     </div>
-    <div class="dl">
-      <a class="dl-btn alt" href="ForeverProbe.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_spyglass_03.jpg" alt="">Download ForeverProbe</a>
-      <span class="dl-meta">Version 0.4.0 · 28 KB · optional</span>
+    <div class="fpside">
+      <h3>Or let ForeverProbe do it</h3>
+      <p><b>ForeverProbe</b> is our second addon, never required: a small pace bar (XP per hour, time to level), a snapshot of your character at login and level-up, and QuestBank's notes in one export. On Windows, the <b>Companion</b> in the same download watches both saved files and uploads them here on its own every 30 minutes. Nothing to type, no key, no account; one readable script.</p>
+      <div class="dl">
+        <a class="dl-btn alt" href="/addon/ForeverProbe.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_spyglass_03.jpg" alt="">Download ForeverProbe</a>
+        <span class="dl-meta">Version 0.4.1 · addon and Windows companion · 158 KB · optional</span>
+        <span class="dl-meta">A new build, being tested on the beta. <code>/probe debug</code> lists anything that went wrong; tell the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>.</span>
+      </div>
+      <p class="fpnote">ForeverProbe's file carries your character's name and level with its snapshots; QuestBank's carries no names at all. <a href="/addon/">More about ForeverProbe</a>.</p>
     </div>
   </div>
 </section>
@@ -352,7 +401,7 @@
 <section class="wrapx" id="tour">
   <p class="qb-eye">A tour of the window</p>
   <h2>What every part does</h2>
-  <p class="sub">The pictures are illustrations with example numbers, drawn from the addon's layout. Screenshots from the game appear next to them as they're added.</p>
+  <p class="sub">Screenshots from the beta, a level 20 Alliance paladin banking for the next cap. The numbers on a picture match the list beside it; where a screenshot doesn't show a part, the illustration folded underneath does, with example numbers.</p>
   <div class="rail" role="tablist" aria-label="Parts of the window">
     <button type="button" role="tab" id="t-window" aria-controls="p-window" aria-selected="true">Header and toggles</button>
     <button type="button" role="tab" id="t-log" aria-controls="p-log" aria-selected="false">Quest Log</button>
@@ -418,7 +467,14 @@
   <div class="pane" id="p-log" role="tabpanel" aria-labelledby="t-log" hidden>
     <div class="stage">
       <div>
-        <p class="fig-label">Illustration</p>
+        <figure class="shotbox"><p class="fig-label">In game</p><div class="shotwrap">
+          <img src="img/log.jpg" width="1003" height="776" alt="QuestBank's Quest Log page in the game: 38 of 40 slots as icons with their XP, the marks on each, the quest items in your bags, and the Better use of a slot list" loading="lazy">
+          <span class="call" style="left:9%;top:24.2%">1</span>
+          <span class="call" style="left:6.4%;top:29%">2</span>
+          <span class="call" style="left:6%;top:70.5%">4</span>
+          <span class="call" style="left:55.8%;top:24%">5</span>
+        </div></figure>
+        <details class="illus"><summary>The illustration, with example numbers</summary>
         <div class="fit"><div class="fit-inner">
           <div class="win">
             <span class="plate">QuestBank</span><span class="x">×</span>
@@ -451,7 +507,7 @@
             <div class="wtabs"><span class="on">Quest Log</span><span>Plan</span><span>Hand-in Route</span><span>Party</span><span>Settings</span></div>
           </div>
         </div></div>
-        <figure class="shot" data-shot="img/log.jpg" hidden><p class="fig-label">In game</p></figure>
+        </details>
       </div>
       <ol class="legend">
         <li><span><b>Your 40 slots, best first.</b> Every quest in your log, sorted by what it pays at your level (on the day, while banking). The border colour follows item quality, from grey under 1,500 XP to orange over 12,000. The number is the XP.</span></li>
@@ -468,7 +524,13 @@
   <div class="pane" id="p-prep" role="tabpanel" aria-labelledby="t-prep" hidden>
     <div class="stage">
       <div>
-        <p class="fig-label">Illustration</p>
+        <figure class="shotbox"><p class="fig-label">In game</p><div class="shotwrap">
+          <img src="img/prep.jpg" width="995" height="770" alt="QuestBank's Plan page in the game: one card per dungeon or zone with every quest's status and XP, Blackfathom Deeps all banked at the top" loading="lazy">
+          <span class="call" style="left:18%;top:24.3%">1</span>
+          <span class="call" style="left:83.4%;top:25.4%">2</span>
+          <span class="call" style="left:54.8%;top:31.5%">3</span>
+        </div></figure>
+        <details class="illus"><summary>The illustration, with example numbers</summary>
         <div class="fit"><div class="fit-inner">
           <div class="win">
             <span class="plate">QuestBank</span><span class="x">×</span>
@@ -505,7 +567,7 @@
             <div class="wtabs"><span>Quest Log</span><span class="on">Plan</span><span>Hand-in Route</span><span>Party</span><span>Settings</span></div>
           </div>
         </div></div>
-        <figure class="shot" data-shot="img/prep.jpg" hidden><p class="fig-label">In game</p></figure>
+        </details>
       </div>
       <ol class="legend">
         <li><span><b>One card per dungeon or zone.</b> Every quest you hold or planned there, then the best quests there you could still fetch, for your faction, class and race, and no more than a few levels above you while questing. Sorted by XP still to collect; while questing, zones near you come first, so the top card is the best use of your evening.</span></li>
@@ -522,7 +584,16 @@
   <div class="pane" id="p-route" role="tabpanel" aria-labelledby="t-route" hidden>
     <div class="stage">
       <div>
-        <p class="fig-label">Illustration</p>
+        <figure class="shotbox"><p class="fig-label">In game</p><div class="shotwrap">
+          <img src="img/route.jpg" width="998" height="764" alt="QuestBank's Hand-in Route page in the game: Banked now and Full plan, the setup line, the clock, each stop's travel, level range and quests" loading="lazy">
+          <span class="call" style="left:11.2%;top:24%">1</span>
+          <span class="call" style="left:4.8%;top:28.4%">2</span>
+          <span class="call" style="left:6.6%;top:47.4%">3</span>
+          <span class="call" style="left:82.6%;top:50.4%">4</span>
+          <span class="call" style="left:56%;top:60.2%">5</span>
+          <span class="call" style="left:90.7%;top:38%">6</span>
+        </div></figure>
+        <details class="illus"><summary>The illustration, with example numbers</summary>
         <div class="fit"><div class="fit-inner">
           <div class="win">
             <span class="plate">QuestBank</span><span class="x">×</span>
@@ -564,7 +635,7 @@
             <div class="wtabs"><span>Quest Log</span><span>Plan</span><span class="on">Hand-in Route</span><span>Party</span><span>Settings</span></div>
           </div>
         </div></div>
-        <figure class="shot" data-shot="img/route.jpg" hidden><p class="fig-label">In game</p></figure>
+        </details>
       </div>
       <ol class="legend">
         <li><span><b>Banked now or Full plan.</b> Banked now is the route for what you hold today. Full plan is the route you're building towards. Start run starts the clock; the first hand-in above the old cap starts it by itself. <b>Post</b> puts where you stand in party or guild chat: your run so far, or where your bank and plan take you. You see the message first.</span></li>
@@ -582,7 +653,14 @@
   <div class="pane" id="p-party" role="tabpanel" aria-labelledby="t-party" hidden>
     <div class="stage">
       <div>
-        <p class="fig-label">Illustration</p>
+        <figure class="shotbox"><p class="fig-label">In game</p><div class="shotwrap">
+          <img src="img/party.jpg" width="1023" height="779" alt="QuestBank's Party page in the game: the QuestBank users with their bank and plan, the copy-plan letter, the Dungeons cards, and the sharing switches" loading="lazy">
+          <span class="call" style="left:16.6%;top:33.6%">1</span>
+          <span class="call" style="left:49%;top:34.7%">2</span>
+          <span class="call" style="left:63.5%;top:33.6%">3</span>
+          <span class="call" style="left:11.3%;top:88.2%">4</span>
+        </div></figure>
+        <details class="illus"><summary>The illustration, with example numbers</summary>
         <div class="fit"><div class="fit-inner">
           <div class="win">
             <span class="plate">QuestBank</span><span class="x">×</span>
@@ -619,7 +697,7 @@
             <div class="wtabs"><span>Quest Log</span><span>Plan</span><span>Hand-in Route</span><span class="on">Party</span><span>Settings</span></div>
           </div>
         </div></div>
-        <figure class="shot" data-shot="img/party.jpg" hidden><p class="fig-label">In game</p></figure>
+        </details>
       </div>
       <ol class="legend">
         <li><span><b>Everyone with QuestBank in your party, raid and guild.</b> Their level, where their bank takes them, and where their full plan takes them. Hover a name for the quests they're banking, marked where you hold the same one.</span></li>
@@ -656,11 +734,11 @@
                   <div class="cbl"><span class="cb on"></span>Button on the minimap</div>
                   <div class="cbl"><span class="cb"></span>Direction arrow to the next stop on your route</div>
                   <div class="pt" style="margin-top:14px">Discoveries</div>
-                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">Noted in game so far: 142 quests, 96 quest NPCs, 11 chain steps. ForeverProbe (optional) puts them in its export for everyone.</div>
+                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">Noted in game so far: 142 quests, 96 quest NPCs, 11 chain steps. Upload QuestBank.lua at foreverrank.com/questbank/, or run ForeverProbe (optional).</div>
                 </div>
                 <div>
                   <div class="pt">Updates</div>
-                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 3.3.0. <span style="color:#0a6a0a">Brann runs 3.3.1: time to update.</span></div>
+                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 3.3.1. <span style="color:#0a6a0a">Brann runs 3.3.2: time to update.</span></div>
                   <div class="cbl"><span class="cb on"></span>Tell me when my party or guild has a newer one</div>
                   <div class="modes" style="margin:6px 0 0"><span>Copy the download link</span></div>
                   <div class="pt" style="margin-top:14px">Chat</div>
@@ -680,7 +758,7 @@
         <li><span><b>Map.</b> Route pins on the world map, the book on your minimap, and the direction arrow to the next stop, each on or off.</span></li>
         <li><span><b>Updates.</b> QuestBank users in your party and guild tell each other which version they run. When someone has a newer one, chat says so once, and the button copies the download link. <code>/qb update</code> does the same.</span></li>
         <li><span><b>Chat and sharing.</b> Whether QuestBank offers a post when you level during a hand-in run, and whether your bank and plan go to your party and guild over the addon channel.</span></li>
-        <li><span><b>Discoveries.</b> How much QuestBank has noted in game so far: quests, the NPCs who give and take them, and chain steps.</span></li>
+        <li><span><b>Discoveries.</b> How much QuestBank has noted in game so far: quests, the NPCs who give and take them, and chain steps, and where to send it.</span></li>
       </ol>
     </div>
   </div>
@@ -808,7 +886,7 @@
         <tr><td><code>/qb sync</code>, <code>/qb sync Name</code></td><td>Share your bank with your party and guild now, or with one friend</td></tr>
         <tr><td><code>/qb post</code>, or <b>Post</b> on the Hand-in Route</td><td>Post your run so far, or where your bank and plan take you, in party or guild chat. A box shows the message first: edit it, tick party, guild or both, then press Post</td></tr>
         <tr><td>Right-click a dungeon on the Party page</td><td>Ask your party or guild along, with the quests you still need in there</td></tr>
-        <tr><td><code>/qb export</code>, then <code>/reload</code></td><td>Save a snapshot of your quests, log and bags to <code>WTF\Account\&lt;account&gt;\SavedVariables\QuestBank.lua</code>, for when someone checks your plan</td></tr>
+        <tr><td><code>/qb export</code>, then <code>/reload</code></td><td>Save a snapshot of your quests, log and bags to <code>WTF\Account\&lt;account&gt;\SavedVariables\QuestBank.lua</code>, the file you can <a href="#share">upload</a>, for when someone checks your plan</td></tr>
         <tr><td><code>/qb minimap</code></td><td>Hide or show the minimap button</td></tr>
         <tr><td><code>/qb reset</code></td><td>Move the window back to the middle of the screen, and the post box back to the top</td></tr>
         <tr><td>Click a quest</td><td>Waypoint on its giver, or on its turn-in NPC once it's in your log</td></tr>
@@ -840,7 +918,7 @@
     <details><summary>A quest says "Not on the route"</summary><p>Either it's handed in inside a dungeon, or QuestBank has no position for its NPC. It's listed at the end of the route with its XP so you can fit it in yourself. The <a href="https://github.com/monscorps/foreverrank/blob/main/tools/questbank/GAPS.md" rel="noopener">gap report</a> lists every such quest.</p></details>
     <details><summary>My party doesn't show up on the Party page</summary><p>They need QuestBank 3.0 or newer, and sharing on. Party members appear within a few seconds of grouping; guild members when they log in or change their bank. <b>Send now</b> or <code>/qb sync</code> shares straight away, and <code>/qb sync Name</code> works for a friend who isn't in your group.</p></details>
     <details><summary>Will it post in chat on its own?</summary><p>No. During a hand-in run it offers a post when you level up, when the first hour is up and when the run ends, like "Level 23, 18 min into my hand-in run: 12 quests handed in, +54,300 XP". The box shows the message and where it goes, and nothing is sent until you press Post. Untick "Offer a post during hand-in runs" in that box and it stops offering; <code>/qb post</code> still works.</p></details>
-    <details><summary>What does QuestBank note while I play?</summary><p>Forever is still being discovered, so QuestBank keeps what the game shows you: who gives and takes each quest and where they stand, which quests an NPC offers you and at what level, the XP each quest window and hand-in shows, and the follow-up an NPC offers straight after a hand-in. No player, guild or realm names. It stays in QuestBank's own saved file; <code>/qb discoveries</code> counts it. If you also run ForeverProbe (optional, never required), its export carries the notes too, and everyone's are merged into the next QuestBank release (paste the export in the Discord for now; an upload page is coming).</p></details>
+    <details><summary>What does QuestBank note while I play?</summary><p>Forever is still being discovered, so QuestBank keeps what the game shows you: who gives and takes each quest and where they stand, which quests an NPC offers you and at what level, the XP each quest window and hand-in shows, and the follow-up an NPC offers straight after a hand-in. No player, guild or realm names. It stays in QuestBank's own saved file; <code>/qb discoveries</code> counts it. Upload that file in <a href="#share">Share what you discover</a>, or run ForeverProbe (optional, never required) and its export carries the notes; everyone's are merged into the next QuestBank release.</p></details>
     <details><summary>Do the map pins show where to do a quest?</summary><p>Not yet. The numbered pins show where to hand in, in route order, and the ! pins where planned quests start. The game only allows one waypoint, so it follows your route, and the direction arrow points to it. Next: objective areas on the map (where to kill or collect, from the Classic database and then from what players see), the game's own quest icons on the map, and pins on the minimap.</p></details>
     <details><summary>Do I need TomTom?</summary><p>No. Map pins use the game's own map pin. If TomTom is installed, QuestBank uses that instead.</p></details>
     <details><summary>Does the plan fit my character?</summary><p>Yes. There's no built-in plan: your plan is what's in your log and bags, plus what you add. QuestBank knows about 3,700 quests from level 1 to 60 for both factions, and only suggests what your faction, class and race can take. Wowhead Forever only knows the quests players have met, which stops near the beta's cap, so above that QuestBank starts from the Classic database and marks those quests "from Classic, not seen in Forever yet" until someone does. Forever's data also carries leftovers from Season of Discovery whose NPCs were never put into Forever, like Alonso's Dragonslayer quests in Ashenvale: QuestBank drops the ones players report missing and never suggests the rest until someone meets their NPC in game.</p></details>
@@ -852,7 +930,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 3.3.1. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 3.3.2. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>
@@ -946,6 +1024,64 @@
   }
   window.addEventListener("resize", fit);
   fit();
+  Array.prototype.slice.call(document.querySelectorAll(".illus")).forEach(function (d) { d.addEventListener("toggle", fit); });
+
+  // the upload box: one POST to the ForeverRank Worker, which keeps the text and answers with a summary.
+  // ?api=http://127.0.0.1:8787 points it at a local Worker while testing.
+  var API = (new URLSearchParams(location.search).get("api") || "https://foreverrank.andustemme.workers.dev").replace(/\/$/, "");
+  var form = document.getElementById("upform"), file = document.getElementById("upfile"), text = document.getElementById("uptext");
+  var drop = document.getElementById("drop"), dropText = document.getElementById("dropText"), stat = document.getElementById("upstat");
+  var btn = document.getElementById("upbtn"), count = document.getElementById("upcount");
+  var countDefault = count.textContent;
+  function ago(ts) {
+    var m = Math.round((Date.now() / 1000 - ts) / 60);
+    if (m < 2) return "just now";
+    if (m < 60) return m + " minutes ago";
+    if (m < 2880) return Math.round(m / 60) + " hours ago";
+    return Math.round(m / 1440) + " days ago";
+  }
+  function refreshCount() {
+    fetch(API + "/api/probe/stats", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (st) {
+      if (!st || typeof st.uploads !== "number") return;
+      var n = st.uploads;
+      count.textContent = (n ? n + " upload" + (n === 1 ? "" : "s") + " so far" + (st.last ? ", the last " + ago(st.last) : "") + ". " : "No uploads yet; yours would be the first. ") + countDefault;
+    }).catch(function () {});
+  }
+  refreshCount();
+  function pickName() {
+    var f = file.files && file.files[0];
+    dropText.textContent = f ? f.name + " (" + Math.max(1, Math.round(f.size / 1024)) + " KB), ready to upload" : "Choose QuestBank.lua, or drop it here";
+  }
+  file.addEventListener("change", pickName);
+  ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+  drop.addEventListener("drop", function (e) {
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) { file.files = e.dataTransfer.files; pickName(); }
+  });
+  function say(msg, cls) { stat.textContent = msg; stat.className = "upstat" + (cls ? " " + cls : ""); }
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var f = file.files && file.files[0], t = text.value.trim();
+    if (!f && !t) { say("Choose your QuestBank.lua, or paste a ForeverProbe export first.", "err"); return; }
+    if (f && f.size > 6 * 1024 * 1024) { say("That file is over 6 MB. Type /reload in game to shrink it, then try again.", "err"); return; }
+    var fd = new FormData();
+    fd.append("source", "page");
+    if (f) fd.append("file", f); else fd.append("text", t);
+    btn.disabled = true; say("Uploading…");
+    fetch(API + "/api/probe", { method: "POST", body: fd }).then(function (r) {
+      return r.json().then(function (j) { return j; }, function () { return { error: "The server answered with something unexpected (" + r.status + ")." }; });
+    }).then(function (j) {
+      if (j && j.ok) {
+        var q = j.summary && j.summary.quests;
+        say((j.message || "Received, thank you.") + (q ? " " + q + " quest" + (q === 1 ? "" : "s") + " noted." : ""), "ok");
+        file.value = ""; text.value = ""; pickName(); refreshCount();
+      } else {
+        say((j && j.error) || "Something went wrong. Try again in a minute.", "err");
+      }
+    }).catch(function () {
+      say("Could not reach foreverrank.com's server. Check your connection and try again.", "err");
+    }).then(function () { btn.disabled = false; });
+  });
 
   // in-game screenshots appear beside the illustrations once they exist
   Array.prototype.slice.call(document.querySelectorAll("[data-shot]")).forEach(function (fig) {

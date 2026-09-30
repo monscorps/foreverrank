@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ForeverProbe, the WoW Forever Addon · ForeverRank</title>
-<meta name="description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar and character snapshots you export yourself. The download returns soon.">
+<meta name="description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar, character snapshots and QuestBank&#x27;s discoveries, uploaded by you or by the optional Windows companion.">
 <link rel="canonical" href="https://foreverrank.com/addon/">
 <!-- seo:begin -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ForeverRank">
 <meta property="og:url" content="https://foreverrank.com/addon/">
 <meta property="og:title" content="ForeverProbe, the WoW Forever Addon · ForeverRank">
-<meta property="og:description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar and character snapshots you export yourself. The download returns soon.">
+<meta property="og:description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar, character snapshots and QuestBank&#x27;s discoveries, uploaded by you or by the optional Windows companion.">
 <meta property="og:image" content="https://foreverrank.com/assets/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="ForeverProbe, the WoW Forever Addon · ForeverRank">
-<meta name="twitter:description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar and character snapshots you export yourself. The download returns soon.">
+<meta name="twitter:description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar, character snapshots and QuestBank&#x27;s discoveries, uploaded by you or by the optional Windows companion.">
 <meta name="twitter:image" content="https://foreverrank.com/assets/og.jpg">
 <!-- seo:end -->
 <link rel="icon" href="/mark.svg">
@@ -69,17 +69,17 @@
     <div class="fp-ico"><svg width="34" height="34" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="8" cy="8" r="6.4"/><path d="M8 4.2V8l2.6 1.6"/></svg></div>
     <div>
       <h1>Forever<span>Probe</span></h1>
-      <p class="fp-sub">The quiet companion. One pace bar you will not want to turn off, and character snapshots that only leave the game when you paste them here yourself.</p>
+      <p class="fp-sub">The quiet companion. One pace bar you will not want to turn off, character snapshots, and <a href="/questbank/">QuestBank</a>'s discoveries, which only leave the game when you upload them yourself, or let the Windows companion do it.</p>
     </div>
   </div>
 
-  <span class="fp-dl soon" aria-disabled="true">Coming soon</span><span class="fp-ver">The download is paused while we get it working on the current beta build. It returns here, and the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a> hears first.</span>
+  <a class="fp-dl" href="/addon/ForeverProbe.zip" download>Download ForeverProbe</a><span class="fp-ver">Version 0.4.1 · addon and Windows companion · 158 KB. A new build, being tested on the beta: <code>/probe debug</code> lists anything that went wrong; tell the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>.</span>
   <div class="fp-bar-demo">Lv 23&nbsp;&nbsp;41.7%&nbsp;&nbsp;12.4k XP/h&nbsp;&nbsp;up in 1h 12m</div>
 
   <div class="fp-steps">
-    <div class="fp-step"><b>1</b><p>Download and unzip. You get <code>ForeverProbe</code>, the addon; <code>Companion</code>, the optional Windows auto-sync; and its installer, <code>ForeverProbe Setup.exe</code>, right at the top.</p></div>
+    <div class="fp-step"><b>1</b><p>Download and unzip. You get <code>ForeverProbe</code>, the addon, and <code>Companion</code>, the optional Windows auto-upload with its installer, <code>Install.bat</code>.</p></div>
     <div class="fp-step"><b>2</b><p>Drop <code>ForeverProbe</code> into the Forever beta's <code>Interface/AddOns/</code> folder, the same one QuestBank goes in (usually <code>World of Warcraft/_classic_beta_/</code>), and restart the game. The pace bar appears; that is the whole addon install.</p></div>
-    <div class="fp-step"><b>3</b><p>Feeding the guild too? Double-click <code>ForeverProbe Setup.exe</code> (or <code>Companion\Install.bat</code>, the same installer), done; the guild key is already in the download. The sigil lands in your system tray and syncs on its own from then on.</p></div>
+    <div class="fp-step"><b>3</b><p>Want the uploads automatic? Double-click <code>Companion\Install.bat</code>, done. The sigil lands in your system tray and sends your ForeverProbe and QuestBank saved files to foreverrank.com whenever they change. Nothing to type, no key, no account.</p></div>
   </div>
 
   <div class="fp-cols">
@@ -95,9 +95,10 @@
       <h3>What it does underneath</h3>
       <ul>
         <li>Snapshots your character at login and level-up: spells, gear, zone.</li>
+        <li>Carries QuestBank's discoveries (quests, the NPCs who give and take them, what each paid) in the same export, when QuestBank runs too. Neither addon needs the other.</li>
         <li>Notes what class trainers offer when you open one.</li>
         <li>Keeps the quiet record future features feed on: your PvP nemesis list, a guild roster snapshot per session, professions and progression. Dormant until the site grows those pages.</li>
-        <li>Everything stays on your machine until you press Export and paste the text here. Read-only, no automation, nothing sent on its own. Terms-of-service safe by construction.</li>
+        <li>Everything stays on your machine until you press Export and paste the text into the <a href="/questbank/#share">upload box</a>, or the Windows companion uploads the saved file for you outside the game. Read-only, no automation, the game itself never sends anything. Terms-of-service safe by construction.</li>
       </ul>
     </div>
   </div>
@@ -107,14 +108,14 @@
   <div class="fp-steps">
     <div class="fp-step"><b>1</b><p>Everyone installs the same zip. Same three steps, one minute per person.</p></div>
     <div class="fp-step"><b>2</b><p>Play the beta like you normally would. The addon quietly notes learn levels, trainer offers and your levelling pace while you do.</p></div>
-    <div class="fp-step"><b>3</b><p>Pick a lane: fully automatic with the Sync companion already in the zip (details below), or manual, typing <code>/probe export</code> and pasting in the guild <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a> when asked.</p></div>
+    <div class="fp-step"><b>3</b><p>Pick a lane: fully automatic with the Sync companion in the zip (details below), or manual, typing <code>/probe export</code> and pasting the text into the <a href="/questbank/#share">upload box</a> now and then.</p></div>
   </div>
   <div class="fp-card" style="margin-top:.7rem">
     <h3>The Sync companion, already in your download</h3>
     <ul>
-      <li>The <code>Companion</code> folder in the zip holds one readable PowerShell script and its installer. It watches your ForeverProbe SavedVariables file and posts it to the guild's private Discord webhook whenever the game writes it, hash-checked so nothing ever sends twice.</li>
-      <li>Double-click <code>ForeverProbe Setup.exe</code> (or <code>Companion\Install.bat</code>); the guild key ships in the download, so there is nothing to type or configure. The sigil then lives in your system tray: it syncs every 30 minutes, shows a balloon when an update ships, comes back at every login, and right-click offers Sync now, Status and Exit. <code>Uninstall.bat</code> removes every trace.</li>
-      <li>The addon still never touches the network; the game cannot and does not send anything. The companion runs outside WoW, reads one file, and every line of it is yours to read.</li>
+      <li>The <code>Companion</code> folder in the zip holds one readable PowerShell script and its installer. It watches your <code>ForeverProbe.lua</code> and <code>QuestBank.lua</code> saved files and uploads each to foreverrank.com whenever the game writes it, hash-checked so nothing ever sends twice.</li>
+      <li>Double-click <code>Companion\Install.bat</code>; there is nothing to type or configure, no key and no account. The sigil then lives in your system tray: it syncs every 30 minutes, shows a balloon when an update ships, comes back at every login, and right-click offers Sync now, Status and Exit. <code>Uninstall.bat</code> removes every trace.</li>
+      <li>The addon still never touches the network; the game cannot and does not send anything. The companion runs outside WoW, reads two files, and every line of it is yours to read. The site keeps no player names from QuestBank's notes; ForeverProbe's snapshots carry your character's name and level.</li>
     </ul>
   </div>
   <div class="fp-cols">

@@ -47,6 +47,7 @@ for src in (load("wowhead.json", {}) or {}).values():
 for src in (load("extra.json", {}) or {}).values():
     for q in src:
         LIST.setdefault(q["id"], q)
+LIST_WOWHEAD = set(LIST)  # what Wowhead Forever lists, before the Classic seed below
 DET = {}
 for name in ("det2.json", "det3.json"):
     for k, d in (load(name, {}) or {}).items():
@@ -304,6 +305,17 @@ for _k, _c in ((load("cmangos.json", {}) or {}).get("quests") or {}).items():
         continue  # raids, battlegrounds, and quests with no level or no XP to plan
     LIST[_qid] = _rec
     CLASSIC.add(_qid)
+
+# What players' addons saw in game: tools/probe_pull.py merges every upload into disc.json (votes,
+# not winners). A quest anyone met in Forever is no longer "Classic only", whatever Wowhead has read.
+DISC = load("disc.json", {}) or {}
+SEEN = set()
+for _k, _q in (DISC.get("q") or {}).items():
+    if isinstance(_q, dict) and (_q.get("xp") or _q.get("from") or _q.get("to") or (_q.get("n") or 0) > 0):
+        SEEN.add(int(_k))
+for _offers in (DISC.get("offer") or {}).values():
+    SEEN.update(int(_k) for _k in _offers)
+CLASSIC -= SEEN
 
 IDS = []
 for qid, q in LIST.items():
@@ -993,6 +1005,16 @@ def gap_report():
            "Instant follow-ups planned on the day: %d. Race-limited quests: %d. Quests in mutually exclusive groups: %d." % (
                len(FOLLOW), len(RACE), len(EXCL)),
            "Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: %d." % len(TEXT_NAMED), ""]
+    if DISC:
+        _in = set(IDS)
+        _unknown = sorted(q for q in SEEN if q not in _in)
+        out.append("Seen in Forever by players (%d uploads merged by probe_pull.py, %s): %d quests, %d of them Classic seeds now confirmed." % (
+            (DISC.get("meta") or {}).get("uploads") or 0, (DISC.get("meta") or {}).get("pulled") or "?", len(SEEN),
+            sum(1 for q in SEEN if q in _CMQ_IDS and q not in LIST_WOWHEAD)))
+        if _unknown:
+            out.append("Seen in game but not in the catalog (%d), to add: %s." % (len(_unknown), ", ".join(
+                "%d %s" % (q, (DISC["q"].get(str(q)) or {}).get("t") or "?") for q in _unknown[:60])))
+        out.append("")
     out.append("Multipliers from ForeverChanges where Wowhead's page wasn't read: %d. Where both have a number, they disagree on %d:" % (
         len(FROM_FC), len(DISAGREE)))
     out.append("")

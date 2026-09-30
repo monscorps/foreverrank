@@ -22,11 +22,13 @@ The data, all raw inputs in `research/` (gitignored):
 - `travel.py` builds each faction's travel network from the Forever client's taxi tables (`research/wago/<build>/`, fetched by `tools/fetch_wago.py`) and knows where Forever redrew a map (`research/wago/era/UiMapAssignment.csv`).
 - `cmangos.py` extracts chains, quest givers, spawn points and item starts from `research/cmangos/ClassicDB.sql.gz` (github.com/cmangos/classic-db, Full_DB) into `research/questbank/cmangos.json`.
 - `gen_data.py` writes `QuestBank/Data.lua` from those, the Wowhead Forever quest data (`all3.json`, `det2.json`, `det3.json`, `wowhead.json`, `extra.json`) and NPC tooltips (`npcloc.json`; `--fetch` reads the missing ones through `npcloc.py`). Every icon and texture is checked against the client manifest. It also writes `GAPS.md`, the list of quests it can't fully plan yet.
+- `../probe_pull.py` pulls players' uploads from the Worker (ForeverProbe exports, ForeverProbe.lua and QuestBank.lua SavedVariables, all carrying QuestBankDB.disc) and merges every discovery into `research/questbank/disc.json`, votes kept; `gen_data.py` reads it: a quest anyone met in Forever is no longer "Classic only", and quests seen in game but missing from the catalog are listed in `GAPS.md`. `--merge FILE` takes a file by hand, `--selftest` checks the parser against `tools/fixtures/probe/`.
 - `harness.lua` loads the addon into three mocked clients (an Alliance paladin with a full bank, a friend at 18, a Horde shaman), drives every page, syncs the party between them, lays the window out like the game and reports clipped or overlapping text, and fails on any widget method outside a whitelist of real API methods.
 
 Rebuild and publish:
 
 ```
+python3 tools/probe_pull.py            # admin key in worker/.probe-admin-key
 python3 tools/questbank/cmangos.py
 python3 tools/questbank/gen_data.py --fetch
 luajit tools/questbank/harness.lua

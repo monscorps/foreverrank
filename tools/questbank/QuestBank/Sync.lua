@@ -3,7 +3,7 @@
 -- plan and hand-in run, so you can see who needs which dungeon and run it together, copy a
 -- friend's plan, and follow each other's run. It also passes on the XP numbers each game reports.
 -- Small messages on the addon channel, a few a second at most; nothing goes out while sharing is off.
---   1S|level|xp|fac|class|banked*100|plan*100|at60*100|runMin|runN|runXP|version     status
+--   1S|level|xp|fac|class|banked*100|plan*100|at60*100|runMin|runN|runXP|version|guid   status
 --   1Q|part|parts|id.code[have/need],...                                    quests (b banked, a in the log with progress, p to fetch)
 --   1L|id:xp:level,...                                                         XP the game reported
 --   1R                                                                         please send yours
@@ -76,9 +76,11 @@ local function statusMsg()
   local run = QB.Run.Get()
   local got, n = QB.Run.Totals()
   local _, class = UnitClass("player")
-  return string.format("1S|%d|%d|%s|%s|%d|%d|%d|%d|%d|%d|%s", s.level or 0, s.xp or 0, QB.faction or "A", class or "",
+  -- the GUID's tail names this character even when chat gives the sender a surname the name API doesn't
+  local guid = (UnitGUID and UnitGUID("player")) or ""
+  return string.format("1S|%d|%d|%s|%s|%d|%d|%d|%d|%d|%d|%s|%s", s.level or 0, s.xp or 0, QB.faction or "A", class or "",
     math.floor((nowR and nowR.level or 0) * 100), math.floor((plan and plan.level or 0) * 100), math.floor((plan and plan.at60 or 0) * 100),
-    run and math.floor(QB.Run.Elapsed()) or -1, n or 0, got or 0, QB.version)
+    run and math.floor(QB.Run.Elapsed()) or -1, n or 0, got or 0, QB.version, guid:sub(-10))
 end
 
 local function questMsgs()
@@ -195,17 +197,36 @@ local function split(s, sep)
   return out
 end
 
--- the game echoes party and guild messages back to the sender; the name decides, not how the realm is written
+-- the game echoes party and guild messages back to the sender. The realm may be written any way, and in
+-- Forever the sender carries a surname the name API doesn't ("Helga Bluntforce" against "Helga"), so a
+-- name match isn't enough: the first echoed status message carries our GUID, and that names the sender
+-- string that is us from then on.
 local function isMe(sender)
-  local name = sender and sender:match("^([^%-]+)")
-  return name ~= nil and name == UnitName("player")
+  if not sender then return false end
+  if S.mySender and sender == S.mySender then return true end
+  local name = sender:match("^([^%-]+)")
+  if name == UnitName("player") then return true end
+  local full = UnitFullName and UnitFullName("player")
+  return full ~= nil and name == full
 end
 S.IsMe = isMe
+
+local function statusIsMine(msg)
+  local tail = msg:match("^1S|.-|([^|]*)$")
+  local guid = (UnitGUID and UnitGUID("player")) or ""
+  return tail ~= nil and tail ~= "" and #guid >= 10 and tail == guid:sub(-10)
+end
 
 function S:Receive(msg, channel, sender)
   if not sender or type(msg) ~= "string" or #msg > 255 then return end
   if isMe(sender) then return end
   local kind = msg:sub(1, 2)
+  if kind == "1S" and statusIsMine(msg) then
+    -- our own echo, under a sender string we didn't recognise: it is us from now on
+    S.mySender = sender
+    self.members[sender] = nil
+    return
+  end
   local m = self.members[sender]
   if not m and kind ~= "1R" then
     m = { key = sender, name = sender:match("^([^%-]+)") or sender }
