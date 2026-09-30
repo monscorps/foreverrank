@@ -810,7 +810,7 @@ async function handleProbeUpload(req, env, ctx) {
     .run();
   const id = res.meta && res.meta.last_row_id;
 
-  // a one-line note to the guild's channel, when one is configured (the file itself never goes there)
+  // a one-line note to ForeverRank's own Discord (a locked channel), when one is configured; the file itself never goes there
   if (env.PROBE_WEBHOOK && /^https:\/\/discord\.com\/api\/webhooks\//.test(env.PROBE_WEBHOOK)) {
     const bits = [summary.char || 'someone', summary.level != null ? `level ${summary.level}` : null,
       summary.quests != null ? `${summary.quests} quests noted` : null, summary.build ? `build ${summary.build}` : null].filter(Boolean);
