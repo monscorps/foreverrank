@@ -19,7 +19,7 @@ disc.json records how many uploads reported each XP value and each NPC position.
 The admin key is read from worker/.probe-admin-key (gitignored) or the PROBE_ADMIN_KEY
 environment variable; it is never printed. Nothing here writes to the Worker.
 """
-import argparse, base64, collections, datetime, gzip, json, os, re, sys, urllib.request
+import argparse, base64, datetime, gzip, json, os, re, sys, urllib.error, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -286,10 +286,17 @@ def pull(acc, endpoint, key, raw_dir, limit=20):
     new = 0
     os.makedirs(raw_dir, exist_ok=True)
     while True:
+        # a named user agent: Cloudflare answers the bare Python one with 403 before the Worker runs
         req = urllib.request.Request("%s/api/probe/pull?after=%d&limit=%d" % (endpoint.rstrip("/"), after, limit),
-                                     headers={"x-admin-key": key})
-        with urllib.request.urlopen(req, timeout=60) as r:
-            page = json.load(r)
+                                     headers={"x-admin-key": key, "user-agent": "foreverrank-probe-pull/1.0 (tools/probe_pull.py)"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                page = json.load(r)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", "replace")[:200]
+            if e.code == 401:
+                sys.exit("the Worker refused the admin key (401): check worker/.probe-admin-key against the PROBE_ADMIN_KEY secret")
+            sys.exit("HTTP %d from %s: %s" % (e.code, endpoint, body or e.reason))
         rows = page.get("rows") or []
         if not rows:
             break
