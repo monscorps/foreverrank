@@ -54,6 +54,12 @@
 .dl-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 .dl-btn img { width: 26px; height: 26px; border-radius: 3px; border: 1px solid rgba(0,0,0,.35); }
 .dl-meta { font-size: .78rem; color: var(--dim); }
+.dl-btn.alt { background: transparent; color: #f2d98a; border: 1px solid rgba(229,204,128,.6); box-shadow: none; }
+.qb a.dl-btn.alt { color: #f2d98a; }
+.fpcard { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1.2rem 2rem; align-items: center; background: rgba(7,50,74,.35); border: 1px solid var(--line); border-radius: 6px; padding: 1.2rem 1.4rem; }
+.fpcard p { margin: 0 0 .7rem; max-width: 68ch; }
+.fpcard .fpnote { color: var(--dim); font-size: .88rem; margin: 0; }
+@media (max-width: 720px) { .fpcard { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .qbh-in { grid-template-columns: 1fr; } }
 
 /* install */
@@ -300,7 +306,7 @@
     </div>
     <div class="dl">
       <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-      <span class="dl-meta">Version 3.3.0 · 30 September 2026 · 265 KB</span>
+      <span class="dl-meta">Version 3.3.1 · 30 September 2026 · 265 KB</span>
       <span class="dl-meta">Open it in game with <code>/qb</code></span>
     </div>
   </div>
@@ -325,6 +331,21 @@
     <div class="step"><span class="n">1</span><h3>Questing</h3><p>You can level, so you hand quests in as you go. QuestBank values your log at your level, marks the chains worth carrying on with a green arrow, suggests the best quests near you, and plans the quickest way to hand in what's finished, from where you stand.</p></div>
     <div class="step"><span class="n">2</span><h3>Banking</h3><p>The game holds your level at a cap. QuestBank sees it (or learns it the first time a hand-in pays nothing) and switches to banking: finish quests, keep them, and plan the hour after the cap goes up, with where to log out and where to bind your hearthstone.</p></div>
     <div class="step"><span class="n">3</span><h3>The rush</h3><p>The cap goes up. Your first hand-in starts the run: a clock, every quest ticked off with the XP it paid, and the rest of the route planned again from where you stand. When you end the run, it's back to questing.</p></div>
+  </div>
+</section>
+
+<section class="wrapx" id="share">
+  <p class="qb-eye">Optional</p>
+  <h2>Share what you discover</h2>
+  <div class="fpcard">
+    <div>
+      <p>Forever is still being discovered: quests move, pay more or less than in Classic, and new ones turn up above every cap. QuestBank notes what the game shows you as you play, and uses it for you straight away. <b>ForeverProbe</b> is our second addon: if you run it too, it puts those notes in its export, and everyone's exports are merged into the next QuestBank release. It also adds a small pace bar (XP per hour, time to level).</p>
+      <p class="fpnote">Never required: QuestBank works fully without it. ForeverProbe only reads and sends nothing on its own: <code>/probe export</code> gives you the text to copy. For now, paste it to us in the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>; an upload page on foreverrank.com comes next. This build is being tested on the beta, so tell us there if it misbehaves (<code>/probe debug</code> lists what went wrong).</p>
+    </div>
+    <div class="dl">
+      <a class="dl-btn alt" href="ForeverProbe.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_spyglass_03.jpg" alt="">Download ForeverProbe</a>
+      <span class="dl-meta">Version 0.4.0 · 28 KB · optional</span>
+    </div>
   </div>
 </section>
 
@@ -635,7 +656,7 @@
                   <div class="cbl"><span class="cb on"></span>Button on the minimap</div>
                   <div class="cbl"><span class="cb"></span>Direction arrow to the next stop on your route</div>
                   <div class="pt" style="margin-top:14px">Discoveries</div>
-                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">Noted in game so far: 142 quests, 96 quest NPCs, 11 chain steps. ForeverProbe (optional) can carry them to foreverrank.com for everyone.</div>
+                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">Noted in game so far: 142 quests, 96 quest NPCs, 11 chain steps. ForeverProbe (optional) puts them in its export for everyone.</div>
                 </div>
                 <div>
                   <div class="pt">Updates</div>
@@ -819,10 +840,10 @@
     <details><summary>A quest says "Not on the route"</summary><p>Either it's handed in inside a dungeon, or QuestBank has no position for its NPC. It's listed at the end of the route with its XP so you can fit it in yourself. The <a href="https://github.com/monscorps/foreverrank/blob/main/tools/questbank/GAPS.md" rel="noopener">gap report</a> lists every such quest.</p></details>
     <details><summary>My party doesn't show up on the Party page</summary><p>They need QuestBank 3.0 or newer, and sharing on. Party members appear within a few seconds of grouping; guild members when they log in or change their bank. <b>Send now</b> or <code>/qb sync</code> shares straight away, and <code>/qb sync Name</code> works for a friend who isn't in your group.</p></details>
     <details><summary>Will it post in chat on its own?</summary><p>No. During a hand-in run it offers a post when you level up, when the first hour is up and when the run ends, like "Level 23, 18 min into my hand-in run: 12 quests handed in, +54,300 XP". The box shows the message and where it goes, and nothing is sent until you press Post. Untick "Offer a post during hand-in runs" in that box and it stops offering; <code>/qb post</code> still works.</p></details>
-    <details><summary>What does QuestBank note while I play?</summary><p>Forever is still being discovered, so QuestBank keeps what the game shows you: who gives and takes each quest and where they stand, which quests an NPC offers you and at what level, the XP each quest window and hand-in shows, and the follow-up an NPC offers straight after a hand-in. No player, guild or realm names. It stays in QuestBank's own saved file; <code>/qb discoveries</code> counts it. If you also run ForeverProbe (optional, never required), it can carry the notes to foreverrank.com, where everyone's are merged into the next QuestBank release.</p></details>
+    <details><summary>What does QuestBank note while I play?</summary><p>Forever is still being discovered, so QuestBank keeps what the game shows you: who gives and takes each quest and where they stand, which quests an NPC offers you and at what level, the XP each quest window and hand-in shows, and the follow-up an NPC offers straight after a hand-in. No player, guild or realm names. It stays in QuestBank's own saved file; <code>/qb discoveries</code> counts it. If you also run ForeverProbe (optional, never required), its export carries the notes too, and everyone's are merged into the next QuestBank release (paste the export in the Discord for now; an upload page is coming).</p></details>
     <details><summary>Do the map pins show where to do a quest?</summary><p>Not yet. The numbered pins show where to hand in, in route order, and the ! pins where planned quests start. The game only allows one waypoint, so it follows your route, and the direction arrow points to it. Next: objective areas on the map (where to kill or collect, from the Classic database and then from what players see), the game's own quest icons on the map, and pins on the minimap.</p></details>
     <details><summary>Do I need TomTom?</summary><p>No. Map pins use the game's own map pin. If TomTom is installed, QuestBank uses that instead.</p></details>
-    <details><summary>Does the plan fit my character?</summary><p>Yes. There's no built-in plan: your plan is what's in your log and bags, plus what you add. QuestBank knows about 3,700 quests from level 1 to 60 for both factions, and only suggests what your faction, class and race can take. Wowhead Forever only knows the quests players have met, which stops near the beta's cap, so above that QuestBank starts from the Classic database and marks those quests "from Classic, not seen in Forever yet" until someone does.</p></details>
+    <details><summary>Does the plan fit my character?</summary><p>Yes. There's no built-in plan: your plan is what's in your log and bags, plus what you add. QuestBank knows about 3,700 quests from level 1 to 60 for both factions, and only suggests what your faction, class and race can take. Wowhead Forever only knows the quests players have met, which stops near the beta's cap, so above that QuestBank starts from the Classic database and marks those quests "from Classic, not seen in Forever yet" until someone does. Forever's data also carries leftovers from Season of Discovery whose NPCs were never put into Forever, like Alonso's Dragonslayer quests in Ashenvale: QuestBank drops the ones players report missing and never suggests the rest until someone meets their NPC in game.</p></details>
     <details><summary>Is it safe to use?</summary><p>It only reads what the game shows you. It never clicks, accepts or hands in anything for you. What it shares goes over the game's own addon channel to your party and guild, and only while sharing is on. It only writes in chat when you press Post.</p></details>
   </div>
   <p class="credits">XP data from Wowhead's Forever database and ForeverChanges. Quest chains, quest givers and spawn points from the <a href="https://github.com/cmangos/classic-db" rel="noopener">CMaNGOS Classic database</a> (GPL-3.0). Flight paths, maps and icons from the Forever client. QuestBank is free software under the GPL-3.0; the licence text ships in the download. Game art and icons by Blizzard Entertainment. Beta data can change with any build.</p>
@@ -831,7 +852,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 3.3.0. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 3.3.1. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>

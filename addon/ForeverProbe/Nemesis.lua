@@ -3,7 +3,13 @@
 -- Nemesis (PvP kills taken and dealt), guild roster snapshots, and richer
 -- character progression. All of it sits quietly in SavedVariables and only
 -- leaves the game inside the manual export, like everything else here.
+--
+-- Nemesis needs the combat log. Under the restricted-combat rules Forever runs
+-- (the ones that brought secret values), addons can't have it, so on this
+-- client nemesis simply stays empty; it never tries.
 local ADDON, NS = ...
+local util = NS.util
+local safe = util.Safe
 local Nemesis = {}
 NS.Nemesis = Nemesis
 
@@ -11,11 +17,6 @@ local band = bit.band
 local HOSTILE = COMBATLOG_OBJECT_REACTION_HOSTILE or 0x40
 local IS_PLAYER = COMBATLOG_OBJECT_TYPE_PLAYER or 0x400
 local lastHit
-
-local function safe(fn, ...)
-  local ok, a, b, c = pcall(fn, ...)
-  if ok then return a, b, c end
-end
 
 local function stamp() return date("!%Y-%m-%dT%H:%M:%SZ") end
 
@@ -39,14 +40,15 @@ end
 
 function Nemesis:OnCLEU()
   if not CombatLogGetCurrentEventInfo then return end
-  local _, sub, _, srcGUID, srcName, srcFlags, _, dstGUID, dstName, dstFlags = CombatLogGetCurrentEventInfo()
+  local _, sub, _, srcGUID, srcName, srcFlags, _, dstGUID, dstName, dstFlags = safe(CombatLogGetCurrentEventInfo)
+  if util.Secret(sub) or util.Secret(srcGUID) or util.Secret(dstGUID) then return end
   local me = UnitGUID("player")
   if dstGUID == me and srcGUID and srcGUID ~= me and sub and sub:find("_DAMAGE") then
     if band(srcFlags or 0, IS_PLAYER) > 0 and band(srcFlags or 0, HOSTILE) > 0 then
       lastHit = { name = srcName, guid = srcGUID, t = GetTime() }
     end
   elseif sub == "PARTY_KILL" and srcGUID == me and band(dstFlags or 0, IS_PLAYER) > 0 then
-    push(store().kills, { t = stamp(), who = dstName, cls = classOf(dstGUID),
+    push(store().kills, { t = stamp(), who = dstName, cls = classOf(dstGUID), char = util.CharKey(),
       zone = safe(GetRealZoneText), lvl = UnitLevel("player") })
   end
 end
@@ -54,7 +56,7 @@ end
 function Nemesis:OnDeath()
   -- Only a player who hit you inside the last 10 seconds counts as a nemesis.
   if lastHit and GetTime() - lastHit.t < 10 then
-    push(store().deaths, { t = stamp(), who = lastHit.name, cls = classOf(lastHit.guid),
+    push(store().deaths, { t = stamp(), who = lastHit.name, cls = classOf(lastHit.guid), char = util.CharKey(),
       zone = safe(GetRealZoneText), lvl = UnitLevel("player") })
   end
   lastHit = nil
@@ -70,6 +72,7 @@ function Nemesis:OnGuildRoster()
   if n == 0 then return end
   local roster = {}
   for i = 1, math.min(n, 300) do
+    -- name, rank, rank index, level, class, zone, note, officer note, online, ...
     local name, _, _, lvl, _, _, _, _, online = safe(GetGuildRosterInfo, i)
     if name then roster[#roster + 1] = { n = name, lvl = lvl, on = online and 1 or nil } end
   end
@@ -82,29 +85,31 @@ end
 function NS.progExtras()
   local out = { money = safe(GetMoney) }
   local skills = {}
-  if GetNumSkillLines then
-    for i = 1, (safe(GetNumSkillLines) or 0) do
-      local name, isHeader, _, rank, _, _, maxRank = safe(GetSkillLineInfo, i)
-      if name and not isHeader and (rank or 0) > 0 then skills[#skills + 1] = { n = name, r = rank, m = maxRank } end
-    end
-  elseif GetProfessions then
-    local idx = { safe(GetProfessions) }
-    for _, i in ipairs(idx) do
+  if GetProfessions then
+    -- primary, primary, archaeology, fishing, cooking: any of them may be missing
+    local idx = { n = select("#", safe(GetProfessions)), safe(GetProfessions) }
+    for k = 1, idx.n do
+      local i = idx[k]
       if i then
         local name, _, rank, maxRank = safe(GetProfessionInfo, i)
         if name then skills[#skills + 1] = { n = name, r = rank, m = maxRank } end
       end
+    end
+  elseif GetNumSkillLines then
+    for i = 1, (safe(GetNumSkillLines) or 0) do
+      local name, isHeader, _, rank, _, _, maxRank = safe(GetSkillLineInfo, i)
+      if name and not isHeader and (rank or 0) > 0 then skills[#skills + 1] = { n = name, r = rank, m = maxRank } end
     end
   end
   if #skills > 0 then out.skills = skills end
   return out
 end
 
-NS.events:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+-- everything that can't fail first, then the combat log only where addons may still have it
 NS.events:RegisterEvent("GUILD_ROSTER_UPDATE")
 local prev = NS.onEvent
-NS.onEvent = function(event, a1, a2)
-  if prev then prev(event, a1, a2) end
+NS.onEvent = function(event, ...)
+  if prev then prev(event, ...) end
   if event == "COMBAT_LOG_EVENT_UNFILTERED" then Nemesis:OnCLEU()
   elseif event == "PLAYER_DEAD" then Nemesis:OnDeath()
   elseif event == "GUILD_ROSTER_UPDATE" then Nemesis:OnGuildRoster()
@@ -113,3 +118,10 @@ NS.onEvent = function(event, a1, a2)
     elseif GuildRoster then C_Timer.After(8, function() pcall(GuildRoster) end) end
   end
 end
+
+local restricted = issecretvalue ~= nil
+  or (C_EventUtils and C_EventUtils.IsEventValid and not C_EventUtils.IsEventValid("COMBAT_LOG_EVENT_UNFILTERED"))
+if not restricted then
+  pcall(NS.events.RegisterEvent, NS.events, "COMBAT_LOG_EVENT_UNFILTERED")
+end
+NS.nemesisLive = not restricted

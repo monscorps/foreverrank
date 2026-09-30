@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.3.0"
+QB.version = "3.3.1"
 QB.MAXLEVEL = 60
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
 
@@ -448,6 +448,7 @@ function Q.Get(id)
   c.classic = math.floor(c.flags / 16) % 2 == 1      -- from the Classic database, not seen in Forever yet
   c.dungeonMult = math.floor(c.flags / 32) % 2 == 1  -- multiplier taken from its dungeon's other quests
   c.xpUnknown = math.floor(c.flags / 64) % 2 == 1
+  c.sodLeftover = math.floor(c.flags / 128) % 2 == 1 -- Season of Discovery data whose NPC isn't known in Forever
   c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and API.ItemIcon(c.bag[1])) or API.ItemIcon(D.QITEM[id])
     or (c.cat and c.cat.icon) or D.TEX.questGeneric
   cache[id] = c
@@ -1478,7 +1479,7 @@ slash = function(msg)
   elseif cmd == "discoveries" then
     local nq, nn, nc = QB.Discover.Count()
     local function n(k, one, many) return k == 1 and ("1 " .. one) or (k .. " " .. many) end
-    QB:Print(string.format("Noted in game so far: %s, %s, %s. They stay in your saved file; ForeverProbe (optional) can carry them to foreverrank.com.",
+    QB:Print(string.format("Noted in game so far: %s, %s, %s. They stay in your saved file; ForeverProbe (optional) puts them in its export for everyone.",
       n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps")))
   elseif cmd == "update" or cmd == "version" then
     QB:Print("You run QuestBank " .. QB.version .. (QB.newest and (". Newest seen: " .. QB.newest.version .. " (" .. (QB.newest.who or "?") .. ").") or "."))

@@ -1,6 +1,6 @@
 # ForeverProbe Sync: ships your ForeverProbe data to the guild automatically.
 #
-# What it does, in full: finds ForeverProbeDB.lua under your WoW beta's
+# What it does, in full: finds SavedVariables\ForeverProbe.lua under your WoW game folders
 # SavedVariables and, when the file changes (WoW writes it at logout and on
 # /reload), posts it to the guild's private Discord webhook. Nothing else is
 # read, nothing runs inside the game, and you can read every line below.
@@ -35,10 +35,16 @@ function Find-SavedVariables {
   if ($Root) { $roots += $Root }
   $roots += @("C:\Program Files (x86)\World of Warcraft", "C:\Program Files\World of Warcraft", "D:\World of Warcraft", "$env:USERPROFILE\World of Warcraft")
   foreach ($r in $roots) {
-    foreach ($flavor in @("_beta_", "_ptr_", "_retail_")) {
-      $acct = Join-Path (Join-Path $r $flavor) "WTF\Account"
+    # every game folder (_classic_beta_ for the Forever beta, and whatever live Forever gets); the root
+    # itself counts too, when it is a game folder
+    $flavors = @(Get-ChildItem -Path $r -Directory -Filter "_*_" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    $flavors += $r
+    foreach ($f in $flavors) {
+      $acct = Join-Path $f "WTF\Account"
       if (Test-Path $acct) {
-        Get-ChildItem -Path $acct -Recurse -Filter "ForeverProbeDB.lua" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+        # WoW names the file after the addon (ForeverProbe.lua), not after the variable inside it
+        Get-ChildItem -Path $acct -Recurse -Filter "ForeverProbe.lua" -File -ErrorAction SilentlyContinue |
+          Where-Object { $_.Directory.Name -eq "SavedVariables" } | ForEach-Object { $_.FullName }
       }
     }
   }
@@ -57,7 +63,7 @@ function Send-ToWebhook {
     "Content-Disposition: form-data; name=`"payload_json`"$LF$LF" +
     ('{"content":"' + $tag + 'ForeverProbe drop from **' + $who + '**, ' + (Get-Date -Format "yyyy-MM-dd HH:mm") + '"}') + $LF +
     "--$boundary$LF" +
-    "Content-Disposition: form-data; name=`"file`"; filename=`"ForeverProbeDB.lua`"$LF" +
+    "Content-Disposition: form-data; name=`"file`"; filename=`"ForeverProbe.lua`"$LF" +
     "Content-Type: application/octet-stream$LF$LF"
   $post = "$LF--$boundary--$LF"
   $body = $enc.GetBytes($pre) + $bytes + $enc.GetBytes($post)
@@ -70,7 +76,7 @@ function Run-Sync {
   $sentHashes = @{}
   if ($cfg.sent) { $cfg.sent.PSObject.Properties | ForEach-Object { $sentHashes[$_.Name] = $_.Value } }
   $files = @(Find-SavedVariables -Root $cfg.wowPath)
-  if ($files.Count -eq 0) { Log "no ForeverProbeDB.lua found"; return "No ForeverProbe data found yet. Log a character out once with the addon installed." }
+  if ($files.Count -eq 0) { Log "no SavedVariables\ForeverProbe.lua found"; return "No ForeverProbe data found yet. Log a character out once with the addon installed." }
   $posted = 0; $skipped = 0; $failed = 0
   foreach ($f in $files) {
     $hash = (Get-FileHash -Path $f -Algorithm SHA256).Hash

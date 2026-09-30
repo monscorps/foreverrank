@@ -41,12 +41,23 @@ function Estimator:Update(state)
   r.killRatePerHour = state.killRate and (state.killRate * 3600) or nil
 
   local pool = state.restedPool or 0
+  -- killing only: what the kills must supply (rested doubles every kill while the pool lasts)
   local xpCoveredByRested = math.min(2 * pool, r.xpRemaining)
   local baseNeeded = (xpCoveredByRested / 2) + (r.xpRemaining - xpCoveredByRested)
   r.baseNeeded = baseNeeded
   r.restedCovered = xpCoveredByRested
 
-  if baseRate and baseRate > 0 then r.timeToLevel = baseNeeded / baseRate end
+  -- time: rested doubles kill XP only; quest and exploration XP neither use it nor gain from it.
+  -- With phi the share of base XP from kills, the level takes the longer of (R - P) / b (the pool
+  -- runs out first) and R / (b (1 + phi)) (it lasts the level). phi = 1 is the grinder's old formula.
+  local phi = state.killFraction
+  if phi == nil then phi = 1 end
+  if phi < 0 then phi = 0 elseif phi > 1 then phi = 1 end
+  r.killFraction = phi
+  if baseRate and baseRate > 0 then
+    local R = r.xpRemaining
+    r.timeToLevel = math.max((R - pool) / baseRate, R / (baseRate * (1 + phi)))
+  end
 
   local kills = state.killXPSamples or {}
   r.killSampleCount = #kills
@@ -75,5 +86,11 @@ function Estimator:Refresh()
     killXPSamples = H:KillXPSamples(),
     historyRate = H:MedianBaseRate(),
     observedFraction = H:ObservedFraction(),
+    killFraction = (function()
+      local live, hist = H:KillFraction()
+      local f = H:ObservedFraction()
+      if live and hist then return live * f + hist * (1 - f) end
+      return live or hist
+    end)(),
   })
 end

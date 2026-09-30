@@ -7,18 +7,18 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 
 | Check | Forever data | Missing | Classic seed | Missing |
 |---|---|---|---|---|
-| Forever XP multiplier read from its Wowhead Forever page | 2138 | 192 | 1459 | 1457 |
-| Turn-in NPC with a position | 2138 | 152 | 1459 | 7 |
-| Turn-in inside a dungeon (hand in on the way, not on the route) | 2138 | 94 | 1459 | 59 |
-| Quest giver with a position (quests that start from an item don't need one) | 2138 | 250 | 1459 | 12 |
-| Chain known (Wowhead Forever series or the Classic database) | 2138 | 431 | 1459 | 0 |
+| Forever XP multiplier read from its Wowhead Forever page | 2135 | 192 | 1459 | 1457 |
+| Turn-in NPC with a position | 2135 | 152 | 1459 | 7 |
+| Turn-in inside a dungeon (hand in on the way, not on the route) | 2135 | 94 | 1459 | 59 |
+| Quest giver with a position (quests that start from an item don't need one) | 2135 | 250 | 1459 | 12 |
+| Chain known (Wowhead Forever series or the Classic database) | 2135 | 428 | 1459 | 0 |
 
 Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree: Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
 
 Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,
 holidays, repeatable turn-ins, raids and battlegrounds are left out.
 
-NPC positions: 361 from Wowhead Forever, 1332 from the CMaNGOS spawn table where Wowhead has none.
+NPC positions: 360 from Wowhead Forever, 1332 from the CMaNGOS spawn table where Wowhead has none.
 Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: 244 Wowhead coordinates there were in the old
 Classic frame and were moved to Forever's; 58 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
@@ -727,7 +727,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 99191 A Donation of Wool (level 60, Alliance)
 - 99196 A Donation of Wool (level 60, Horde)
 
-## Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own (431)
+## Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own (428)
 
 - 490 Bounty: Gnarlpine Furbolg (level 8, Alliance)
 - 5640 Desperate Prayer (level 10, Alliance)
@@ -737,9 +737,6 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 76240 Stalk With The Earthmother (level 11, Horde)
 - 78124 Nar'thalas Almanac (level 20, both)
 - 78127 The Dalaran Digest (level 20, both)
-- 78132 Dragonslayer's Helm (level 25, both)
-- 78133 Dragonslayer's Shield (level 25, both)
-- 78134 Dragonslayer's Lance (level 25, both)
 - 78142 Bewitchments and Glamours (level 20, both)
 - 78143 Secrets of the Dreamers (level 20, both)
 - 78145 Arcanic Systems Manual (level 20, both)
@@ -1129,7 +1126,10 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98459 A Lack of Virtue (level 21, Alliance)
 - 98461 Unrequited Love (level 21, Alliance)
 - 98517 Call of Fire (level 10, Horde)
-- and 31 more
+- 98574 Hallowed Memorandum (level 1, Alliance)
+- 98575 Tainted Tablet (level 1, Horde)
+- 98576 Glyphic Parchment (level 1, Horde)
+- and 28 more
 
 ## Classic seed: no turn-in position (7)
 

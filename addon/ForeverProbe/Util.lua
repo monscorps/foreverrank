@@ -13,8 +13,35 @@ function util.ConvertGlobalString(fmt)
   p = string.gsub(p, "%%d", "\2")
   p = string.gsub(p, "%$", "%%$")
   p = string.gsub(p, "\1", "(.-)")
-  p = string.gsub(p, "\2", "(%%d+)")
+  -- numbers may carry thousands separators ("1,234" or "1.234")
+  p = string.gsub(p, "\2", "(%%d[%%d,%%.]*)")
   return "^" .. p .. "$"
+end
+
+-- "1,234" -> 1234; nil stays nil
+function util.Num(v)
+  if v == nil then return nil end
+  return tonumber((tostring(v):gsub("[^%d]", "")))
+end
+
+-- pcall that hands back every return value (a three-value version dropped guild levels and professions)
+local function pass(ok, ...)
+  if ok then return ... end
+end
+function util.Safe(fn, ...)
+  if not fn then return nil end
+  return pass(pcall(fn, ...))
+end
+
+-- a value Blizzard's restricted-combat rules hide from addons
+function util.Secret(x)
+  return issecretvalue ~= nil and issecretvalue(x) and true or false
+end
+
+-- the character this is about: name-realm, the way the pace history has always keyed it
+function util.CharKey()
+  local realm = GetRealmName and GetRealmName() or "?"
+  return (UnitName("player") or "?") .. "-" .. realm
 end
 
 function util.FormatTime(sec)
@@ -59,3 +86,24 @@ function util.PushBounded(list, value, maxN)
   list[#list + 1] = value
   while #list > maxN do table.remove(list, 1) end
 end
+
+-- run it; if it fails, note where and why (once per message, with a count) and carry on.
+-- /probe debug lists them, so "it didn't work" comes with the reason.
+function util.Try(where, fn, ...)
+  local ok, err = pcall(fn, ...)
+  if not ok and NS.db then
+    local okDb, d = pcall(NS.db)
+    if okDb and d and d.meta then
+      local list = d.meta.errors or {}
+      d.meta.errors = list
+      local msg = tostring(err)
+      for _, e in ipairs(list) do
+        if e.msg == msg then e.n = (e.n or 1) + 1; return false end
+      end
+      list[#list + 1] = { where = where, msg = msg, n = 1, v = NS.version }
+      while #list > 20 do table.remove(list, 1) end
+    end
+  end
+  return ok
+end
+

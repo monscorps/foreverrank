@@ -235,6 +235,9 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
     src = QB.Comma(q.base) .. " x 1"
   end
   tip:AddDoubleLine("Forever XP " .. ((q.xpUnknown and not q.liveFull) and "?" or QB.Comma(full)), src, 1, 1, 1, 0.55, 0.75, 1)
+  if q.sodLeftover then
+    tip:AddLine("A Season of Discovery leftover in Forever's data: nobody has met its NPC in Forever yet, so QuestBank doesn't suggest it.", 1, 0.5, 0.3, true)
+  end
   if q.classic and not q.liveFull then
     tip:AddLine("From the Classic database: not seen in Forever yet, so it may differ or not exist.", 1, 0.6, 0.3, true)
   end
@@ -1201,6 +1204,7 @@ function UI:Candidates(limit, level)
       and (cls == 0 or bit == 0 or math.floor(cls / bit) % 2 == 1)
       and (not race or rbit == 0 or rbit > 128 or math.floor(race / rbit) % 2 == 1)
       and r[2] <= s.level + 2 and r[1] >= level - 7 and r[1] <= ceiling and not s.log[id] and not D.FOLLOW[id]
+      and math.floor(r[10] / 128) % 2 == 0 -- never suggest Season of Discovery leftovers
       and not (turn and turn[5] < 0) then
       local live = QuestBankDB.live and QuestBankDB.live[id]
       out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], cat = r[8], give = r[7] }
@@ -2512,7 +2516,7 @@ function UI:RefreshSettingsView(v)
     or string.format("You run QuestBank %s, the newest your party and guild have shown.", QB.version))
   v.updates:SetChecked(set.updates and true or false)
   local nq, nn, nc = QB.Discover.Count()
-  v.discText:SetText(string.format("Noted in game so far: %d quests, %d quest NPCs, %d chain steps. Forever is still being discovered, so QuestBank keeps what the game shows you. ForeverProbe (optional) can carry it to foreverrank.com for everyone.", nq, nn, nc))
+  v.discText:SetText(string.format("Noted in game so far: %d quests, %d quest NPCs, %d chain steps. Forever is still being discovered, so QuestBank keeps what the game shows you. ForeverProbe (optional) puts it in its export for everyone.", nq, nn, nc))
   v.offers:SetChecked(set.post.auto and true or false)
   v.shareParty:SetChecked(set.share.party and true or false)
   v.shareGuild:SetChecked(set.share.guild and true or false)

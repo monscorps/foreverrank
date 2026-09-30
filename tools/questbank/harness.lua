@@ -656,7 +656,9 @@ end
 for _, c in ipairs(UI:Candidates(400)) do
   local q = QB.Quest.Get(c.id)
   assert(not (q.turn and q.turn.inside), "no quest handed in inside a dungeon is offered to fetch: " .. q.name)
+  assert(not q.sodLeftover, "no Season of Discovery leftover is offered: " .. q.name)
 end
+assert(not QB.Data.Q[78132] and not QB.Data.Q[78133] and not QB.Data.Q[78134], "Alonso's Dragonslayer quests aren't in Forever")
 -- adding a quest never makes the plan worse: each plan starts from the last route
 do
   local p = QB:Plan()

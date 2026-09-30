@@ -34,6 +34,8 @@ end
 function History:Init()
   local now = GetTime()
   local level = UnitLevel("player") or 1
+  -- a loading screen: the level clock and the kill samples carry on as they were
+  if self.record and self.record.level == level then return end
   local s = self:Store()
   if not s.current or s.current.level ~= level then
     s.current = newRecord(level, now)
@@ -51,6 +53,18 @@ function History:Current()
   return self.record
 end
 
+-- the level's time so far, live (the stored figure moves only with XP events)
+function History:LiveElapsed()
+  local r = self:Current()
+  return r and math.max(0, GetTime() - (r.startedAt or GetTime())) or 0
+end
+
+-- logging out or reloading: keep the time since the last XP event too
+function History:OnLogout()
+  local r = self.record
+  if r then r.elapsed = GetTime() - (r.startedAt or GetTime()) end
+end
+
 function History:AddEvent(e)
   local r = self:Current()
   local now = e.t or GetTime()
@@ -64,6 +78,10 @@ function History:AddEvent(e)
   r.xpBySource[bucket] = r.xpBySource[bucket] + (e.total or 0)
   r.baseXP = r.baseXP + (e.base or 0)
   r.restedConsumed = r.restedConsumed + (e.rested or 0)
+  if e.source == "unknown" and (e.rested or 0) > 0 then
+    -- reconciled XP the rested pool paid a bonus on: kills (rested pays on nothing else)
+    r.killBaseXP = r.killBaseXP + (e.base or 0)
+  end
   if e.source == "kill" then
     r.killCount = r.killCount + 1
     r.killBaseXP = r.killBaseXP + (e.base or 0)
@@ -116,6 +134,16 @@ function History:BaseRateSamples()
 end
 
 function History:KillXPSamples() return self.killXPSamples or {} end
+
+-- how much of the base XP came from kills (only kill XP is doubled by rested): this level, and
+-- your past levels
+function History:KillFraction()
+  local r = self:Current()
+  local live = (r and (r.baseXP or 0) > 0) and math.min(1, (r.killBaseXP or 0) / r.baseXP) or nil
+  local kb, b = 0, 0
+  for _, h in ipairs(self:Store().history or {}) do kb, b = kb + (h.killBaseXP or 0), b + (h.baseXP or 0) end
+  return live, (b > 0 and math.min(1, kb / b) or nil)
+end
 
 function History:MedianBaseRate()
   local rates = {}

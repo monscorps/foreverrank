@@ -242,6 +242,19 @@ def classic_base(c):
 
 
 CLASSIC = set()
+# Forever's client descends from Season of Discovery and carries its leftovers: Wowhead lists quests
+# whose NPCs were never put into Forever. Players' reports settle it quest by quest:
+NOT_IN_FOREVER = {78132, 78133, 78134}  # Alonso's Dragonslayer quests: no Alonso in Ashenvale (owner, 2026-09-30)
+SOD_NPC_OK = {211033, 211022}            # Garion Wendell and Owen Thadd take library books in Forever (owner)
+
+
+def sod_leftover(qid):
+    """A giver or ender from Season of Discovery's NPC range that nobody has met in Forever."""
+    d = DET.get(qid) or {}
+    for i, t in ((d.get("startId"), d.get("startType")), (d.get("endId"), d.get("endType"))):
+        if i and t in ("npc", None) and 200000 <= i < 240000 and i not in SOD_NPC_OK:
+            return True
+    return False
 
 
 def classic_record(qid, c):
@@ -294,6 +307,8 @@ for _k, _c in ((load("cmangos.json", {}) or {}).get("quests") or {}).items():
 
 IDS = []
 for qid, q in LIST.items():
+    if qid in NOT_IN_FOREVER:
+        continue
     if qid in CURATED:
         IDS.append(qid)
         continue
@@ -710,6 +725,8 @@ for qid in IDS:
         flags |= 16
     if not base:
         flags |= 64
+    if sod_leftover(qid):
+        flags |= 128
     side = {1: 1, 2: 2}.get(q.get("side"), 0)
     Q[qid] = [qlevel(qid), q.get("reqlevel") or 1, side, base, mult, turn, give, cat_for(qid), q.get("reqclass") or 0, flags]
     QN[qid] = q["name"]
@@ -868,7 +885,7 @@ lines.append("D.CAT = {\n" + "\n".join("  " + lua(c) + "," for c in CATS) + "\n}
 lines.append("-- [id] = {quest level, required level, side (1 Alliance, 2 Horde, 0 both), Classic base XP, Forever multiplier,")
 lines.append("--         turn-in NPC, quest giver, category, class mask, flags (1 dungeon, 2 group, 4 starts from an item, 8 multiplier not read,")
 lines.append("--         16 Classic only: not in Wowhead Forever's data yet, 32 multiplier taken from its dungeon's other quests,")
-lines.append("--         64 XP not known yet)}")
+lines.append("--         64 XP not known yet, 128 a Season of Discovery leftover: its NPC hasn't been met in Forever)}")
 lines.append("D.Q = {\n" + ",\n".join("[%d]=%s" % (k, lua(v)) for k, v in sorted(Q.items())) + "\n}")
 lines.append("D.QN = " + keyed(QN))
 lines.append("D.STEPNAME = " + keyed(STEPNAME))

@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: |cffe5cc80Forever|cffffffffProbe|r
-## Notes: Reads your character for foreverrank.com. Quiet, read-only, one export button. Type /probe
+## Notes: Reads your character for foreverrank.com: a pace bar, snapshots, and QuestBank's discoveries if you run it. Read-only; exports only when you ask. Type /probe
 ## Author: ForeverRank
-## Version: 0.3.0
+## Version: 0.4.0
 ## IconTexture: Interface\AddOns\ForeverProbe\icon
 ## SavedVariables: ForeverProbeDB
 ## X-Website: https://foreverrank.com

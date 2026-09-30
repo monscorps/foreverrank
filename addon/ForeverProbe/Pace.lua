@@ -61,7 +61,7 @@ local function tip()
   end
   if rec then
     GameTooltip:AddLine(" ")
-    GameTooltip:AddDoubleLine("This level", util.FormatTime(rec.elapsed), 0.6, 0.62, 0.72, 0.9, 0.9, 0.9)
+    GameTooltip:AddDoubleLine("This level", util.FormatTime(NS.History:LiveElapsed()), 0.6, 0.62, 0.72, 0.9, 0.9, 0.9)
     GameTooltip:AddDoubleLine("Kills / quests", (rec.killCount or 0) .. " / " .. (rec.questCount or 0), 0.6, 0.62, 0.72, 0.9, 0.9, 0.9)
     if (rec.deaths or 0) > 0 then GameTooltip:AddDoubleLine("Deaths", rec.deaths, 0.6, 0.62, 0.72, 0.9, 0.9, 0.9) end
     if (rec.largestGap or 0) > 600 then
@@ -75,7 +75,8 @@ bar:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
 local function refresh()
   local r = NS.Estimator:Refresh()
-  if r.maxLevel then bar:Hide() return end
+  -- at max level, or with XP turned off, there's no pace to show
+  if r.maxLevel or (IsXPUserDisabled and IsXPUserDisabled()) then bar:Hide() return end
   local xp, xpMax = UnitXP("player") or 0, UnitXPMax("player") or 1
   local w = bar:GetWidth() - 2
   fill:SetWidth(math.max(1, w * xp / xpMax))
@@ -97,7 +98,7 @@ function NS.paceInit()
   NS.History:Init()
   NS.Ledger:Prime()
   if p.hidden then bar:Hide() else refresh() end
-  if not NS.paceTicker then NS.paceTicker = C_Timer.NewTicker(2, refresh) end
+  if not NS.paceTicker then NS.paceTicker = C_Timer.NewTicker(2, function() util.Try("pace bar", refresh) end) end
 end
 
 function NS.paceToggle()
@@ -111,11 +112,15 @@ NS.events:RegisterEvent("PLAYER_XP_UPDATE")
 NS.events:RegisterEvent("CHAT_MSG_COMBAT_XP_GAIN")
 NS.events:RegisterEvent("QUEST_TURNED_IN")
 NS.events:RegisterEvent("PLAYER_DEAD")
+NS.events:RegisterEvent("UPDATE_EXHAUSTION")
+NS.onLogout = function() NS.History:OnLogout() end
+
 local prev = NS.onEvent
-NS.onEvent = function(event, a1, a2)
-  if prev then prev(event, a1, a2) end
+NS.onEvent = function(event, ...)
+  if prev then prev(event, ...) end
+  local a1, a2 = ...
   if event == "PLAYER_ENTERING_WORLD" then
-    C_Timer.After(2, NS.paceInit)
+    C_Timer.After(2, function() util.Try("pace init", NS.paceInit) end)
   elseif event == "CHAT_MSG_COMBAT_XP_GAIN" then
     NS.Ledger:OnChatXP(a1)
   elseif event == "QUEST_TURNED_IN" then
@@ -125,8 +130,10 @@ NS.onEvent = function(event, a1, a2)
     refresh()
   elseif event == "PLAYER_LEVEL_UP" then
     NS.History:OnLevelUp(a1)
-    C_Timer.After(1, refresh)
+    C_Timer.After(1, function() util.Try("pace bar", refresh) end)
   elseif event == "PLAYER_DEAD" then
     NS.History:OnDeath()
+  elseif event == "UPDATE_EXHAUSTION" then
+    NS.Ledger.WatchPool()
   end
 end
