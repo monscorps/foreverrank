@@ -3,7 +3,7 @@
 -- plan and hand-in run, so you can see who needs which dungeon and run it together, copy a
 -- friend's plan, and follow each other's run. It also passes on the XP numbers each game reports.
 -- Small messages on the addon channel, a few a second at most; nothing goes out while sharing is off.
---   1S|level|xp|fac|class|banked*100|plan*100|at60*100|runMin|runN|runXP     status
+--   1S|level|xp|fac|class|banked*100|plan*100|at60*100|runMin|runN|runXP|version     status
 --   1Q|part|parts|id.code[have/need],...                                    quests (b banked, a in the log with progress, p to fetch)
 --   1L|id:xp:level,...                                                         XP the game reported
 --   1R                                                                         please send yours
@@ -76,9 +76,9 @@ local function statusMsg()
   local run = QB.Run.Get()
   local got, n = QB.Run.Totals()
   local _, class = UnitClass("player")
-  return string.format("1S|%d|%d|%s|%s|%d|%d|%d|%d|%d|%d", s.level or 0, s.xp or 0, QB.faction or "A", class or "",
+  return string.format("1S|%d|%d|%s|%s|%d|%d|%d|%d|%d|%d|%s", s.level or 0, s.xp or 0, QB.faction or "A", class or "",
     math.floor((nowR and nowR.level or 0) * 100), math.floor((plan and plan.level or 0) * 100), math.floor((plan and plan.at60 or 0) * 100),
-    run and math.floor(QB.Run.Elapsed()) or -1, n or 0, got or 0)
+    run and math.floor(QB.Run.Elapsed()) or -1, n or 0, got or 0, QB.version)
 end
 
 local function questMsgs()
@@ -219,6 +219,8 @@ function S:Receive(msg, channel, sender)
     local runMin = tonumber(f[9]) or -1
     m.runStart = runMin >= 0 or nil
     m.runMin, m.runN, m.runXP = runMin, tonumber(f[10]) or 0, tonumber(f[11]) or 0
+    m.version = f[12] and f[12]:match("^%d+%.%d+%.?%d*$") or m.version
+    if m.version then QB:SawVersion(m.version, m.name) end
   elseif kind == "1Q" then
     local part, parts, body = msg:match("^1Q|(%d+)|(%d+)|(.*)$")
     part, parts = tonumber(part), tonumber(parts)
@@ -229,9 +231,11 @@ function S:Receive(msg, channel, sender)
     end
     if part == parts then m.quests, m.pending = m.pending, nil end
   elseif kind == "1L" then
+    local before = QB.liveVer
     for id, xp, lvl in msg:gmatch("(%d+):(%d+):(%d+)") do
       QB.Live.Record(tonumber(id), tonumber(xp), tonumber(lvl), "party")
     end
+    if QB.liveVer ~= before then QB:MarkDirty() end
   elseif kind == "1R" then
     local target = channel == "WHISPER" and sender or nil
     if target then
@@ -267,7 +271,7 @@ end
 -- and how far along they are. Yours are there when you're on your own too.
 function S:Dungeons()
   local D = QB.Data
-  local level = math.max(QB.state.level or 20, 20)
+  local level = QB.state.level or 1
   local cats, list = {}, {}
   local function note(catIdx, qid, who, name, me, code, prog)
     local cat = D.CAT[catIdx]
@@ -325,14 +329,14 @@ end
 function S:MemberTooltip(tip, key)
   local m = self.members[key]
   if not m then return end
-  tip:AddLine(m.name, 1, 0.82, 0)
+  tip:AddDoubleLine(m.name, m.version and ("QuestBank " .. m.version) or "", 1, 0.82, 0, 0.6, 0.6, 0.6)
   tip:AddLine(string.format("Level %s, banked to %.1f, plan to %.1f (%.1f in the first hour)", m.level or "?", m.banked or 0, m.plan or 0, m.at60 or 0), 1, 1, 1, true)
   if m.runStart then tip:AddLine(string.format("Running for %s: %d handed in, +%s XP", QB.Clock(m.runMin), m.runN, QB.Comma(m.runXP)), 0.4, 1, 0.4) end
   if not m.quests then tip:AddLine("Their quest list hasn't arrived yet.", 0.6, 0.6, 0.6) return end
   local list = {}
   for id, v in pairs(m.quests) do
     local q = QB.Quest.Get(id)
-    if q then list[#list + 1] = { q = q, code = v.code, prog = v.prog, xp = QB.Model.XpAt(q, math.max(m.level or 20, 20)) } end
+    if q then list[#list + 1] = { q = q, code = v.code, prog = v.prog, xp = QB.Model.XpAt(q, m.level or QB.state.level or 1) } end
   end
   table.sort(list, function(a, b) return a.xp > b.xp end)
   local label = { b = "banked", a = "in their log", p = "to pick up" }

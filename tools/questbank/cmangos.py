@@ -84,6 +84,7 @@ def main():
             "excl": g("ExclusiveGroup"), "breadcrumb": g("BreadcrumbForQuestId"), "chain": g("NextQuestInChain"),
             "src": g("SrcItemId"), "flags": g("QuestFlags"), "special": g("SpecialFlags"), "objectives": reqs,
             "rep": g("RepObjectiveFaction"), "text": (g("Objectives") or "")[:200], "starts": [], "ends": [],
+            "moneymax": g("RewMoneyMaxLevel"), "sort": g("ZoneOrSort"),
             "items": [[g("ReqItemId%d" % k), g("ReqItemCount%d" % k)] for k in range(1, 5) if g("ReqItemId%d" % k) and g("ReqItemCount%d" % k)],
         }
     for key, table, kind in (("starts", "creature_questrelation", "npc"), ("ends", "creature_involvedrelation", "npc"),

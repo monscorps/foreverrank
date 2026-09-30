@@ -1,7 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- QuestBank window: a quest-log-styled toolbox with four pages.
 --   Quest Log  - your 40 slots as a bank, your bags, and swaps that gain XP
---   Prep       - what to fetch before the cap, by dungeon and zone, for your faction and class
+--   Plan       - the best quests for your level, by dungeon and zone, for your faction, class and race
+--   Settings   - mode (auto, questing, banking), next cap, updates, chat, sharing, map
 --   Hand-in    - the turn-in route with a clock and your level at every stop, and the run as you go
 --   Party      - QuestBank users in your group and guild: banks, runs, dungeons worth running together
 -- Built on first open, rows are pooled, and nothing updates while it is hidden.
@@ -30,6 +31,7 @@ local Q = QB.Quest
 
 local function tier(xp)
   if not xp then return 1 end
+  xp = xp / QB.Scale(QB.state.level) -- the colours were set at level 20; a level 3's quests pay less
   if xp >= 12000 then return 6 elseif xp >= 9000 then return 5 elseif xp >= 6000 then return 4
   elseif xp >= 3000 then return 3 elseif xp >= 1500 then return 2 end
   return 1
@@ -107,6 +109,15 @@ local function button(parent, label, w)
 end
 
 local function setIcon(t, icon) t:SetTexture(icon or T.questGeneric) end
+
+-- the bags' green upgrade arrow (atlas bags-greenarrow in Interface\ContainerFrame\Bags)
+local UPGRADE_TC = { 66 / 512, 86 / 512, 93 / 256, 115 / 256 }
+local function upgradeMark(parent, w, h)
+  local t = tex(parent, "OVERLAY", T.upgrade, w, h)
+  t:SetTexCoord(UPGRADE_TC[1], UPGRADE_TC[2], UPGRADE_TC[3], UPGRADE_TC[4])
+  t:Hide()
+  return t
+end
 
 -- UI-WorldMap-QuestIcon holds three question marks; the yellow one sits in the top-left quarter
 -- (its pixels: 11 to 23 across, 7 to 24 down, of 64), cropped square around it
@@ -199,6 +210,11 @@ local function npcLine(tip, label, n)
   tip:AddDoubleLine(label, where, 0.6, 0.6, 0.6, 1, 1, 1)
 end
 
+-- shift-click with the chat box open puts a link in it, as the game's own quest log and bags do
+local function chatOpen()
+  return ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() and ChatEdit_InsertLink and true or false
+end
+
 function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   tip:AddLine(q.name, GOLD[1], GOLD[2], GOLD[3])
   local cat = q.cat and q.cat.name or ""
@@ -207,6 +223,10 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   local src
   if q.liveFull then
     src = QB.Live.Source(q) or "the game's own number"
+  elseif q.xpUnknown then
+    src = "not known yet"
+  elseif q.dungeonMult then
+    src = string.format("%s x %s, as its dungeon's other quests", QB.Comma(q.base), (tostring(q.mult):gsub("%.?0+$", "")))
   elseif q.unconfirmed then
     src = string.format("Classic %s, Forever multiplier not read yet", QB.Comma(q.base))
   elseif q.mult ~= 1 then
@@ -214,12 +234,15 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   else
     src = QB.Comma(q.base) .. " x 1"
   end
-  tip:AddDoubleLine("Forever XP " .. QB.Comma(full), src, 1, 1, 1, 0.55, 0.75, 1)
+  tip:AddDoubleLine("Forever XP " .. ((q.xpUnknown and not q.liveFull) and "?" or QB.Comma(full)), src, 1, 1, 1, 0.55, 0.75, 1)
+  if q.classic and not q.liveFull then
+    tip:AddLine("From the Classic database: not seen in Forever yet, so it may differ or not exist.", 1, 0.6, 0.3, true)
+  end
   if q.liveFull and math.abs(q.liveFull - QB.Model.Listed(q)) > 25 then
     tip:AddLine(string.format("Wowhead lists %s. QuestBank uses the game's number.", QB.Comma(QB.Model.Listed(q))), 1, 0.6, 0.3, true)
   end
   if xp then
-    local line = QB.Comma(xp) .. " XP on the day"
+    local line = QB.Comma(xp) .. " XP " .. QB:OnTheDay()
     if pct and pct < 100 then line = line .. string.format(" (%d%% at level %d)", pct, plvl) end
     tip:AddLine(line, pct and pct < 100 and 1 or 0.6, pct and pct < 100 and 0.6 or 1, pct and pct < 100 and 0.3 or 0.6)
   end
@@ -258,9 +281,19 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
     local names = {}
     for _, n in ipairs(q.nextSteps) do
       local nq = Q.Get(n)
-      if nq and Q.ForMe(nq) then names[#names + 1] = string.format("%s (%s)", nq.name, QB.Short(QB.Model.XpAt(nq, math.max(QB.state.level, 20)))) end
+      if nq and Q.ForMe(nq) then names[#names + 1] = string.format("%s (%s)", nq.name, QB.Short(QB.Model.XpAt(nq, QB.state.level))) end
     end
     if #names > 0 then tip:AddLine("Leads on to: " .. table.concat(names, ", "), 0.75, 0.75, 1, true) end
+  end
+  local up, upV, upDepth = QB:Upgrade(q)
+  if up then
+    if QB:Banking() then
+      tip:AddLine(string.format("Upgrade: hand it in now and bank %s instead%s, +%s XP.", up.name,
+        upDepth > 1 and string.format(" (%d steps on)", upDepth) or "", QB.Comma(upV - (xp or QB.Model.XpAt(q, QB.state.level)))), 0.3, 1, 0.3, true)
+    else
+      tip:AddLine(string.format("Carry the chain on: %s pays %s XP%s.", up.name, QB.Comma(upV),
+        upDepth > 1 and string.format(", %d steps on", upDepth) or ""), 0.3, 1, 0.3, true)
+    end
   end
   npcLine(tip, "From", q.give)
   npcLine(tip, "Hand in", q.turn)
@@ -271,7 +304,37 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   else
     shift = QB:IsAdded(q.id) and "Shift-click: drop it" or "Shift-click: add it to the plan"
   end
+  if chatOpen() then shift = "Shift-click: link it in chat" end
   tip:AddLine("Click: waypoint.  " .. shift .. ".  Right-click: more.", 0.5, 0.5, 0.5, true)
+end
+
+function UI.QuestLink(q)
+  local link
+  if GetQuestLink then
+    local ok, l = pcall(GetQuestLink, q.id)
+    if ok and type(l) == "string" and l:find("|Hquest:") then link = l end
+  end
+  if not link and C_QuestLog and C_QuestLog.RequestLoadQuestByID then pcall(C_QuestLog.RequestLoadQuestByID, q.id) end
+  -- the game makes the link once it knows the quest; until then, its name in brackets
+  return link or ("[" .. q.name .. "]")
+end
+
+function UI.LinkQuest(q)
+  if not chatOpen() then return false end
+  ChatEdit_InsertLink(UI.QuestLink(q))
+  return true
+end
+
+function UI.LinkItem(id, name)
+  if not (id and chatOpen()) then return false end
+  local link
+  local info = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+  if info then
+    local ok, _, l = pcall(info, id)
+    if ok and type(l) == "string" then link = l end
+  end
+  ChatEdit_InsertLink(link or ("[" .. (name or ("Item " .. id)) .. "]"))
+  return true
 end
 
 local questClick
@@ -279,6 +342,7 @@ function UI.QuestClick(q, st, which) QB.Try("click", questClick, q, st, which) e
 questClick = function(q, st, which)
   if which == "RightButton" then UI.QuestMenu(q, st) return end
   if IsShiftKeyDown and IsShiftKeyDown() then
+    if UI.LinkQuest(q) then return end
     QB:ToggleAdd(q.id)
     UI:Refresh()
     return
@@ -619,29 +683,41 @@ function UI:CreateHeader(f)
   h.fillPlan = fill("BORDER", 0.75, 0.55, 1, 0.35)
   h.fillNow = fill("ARTWORK", 0.58, 0.0, 0.55, 0.85)
   h.fillCur = fill("OVERLAY", 0.25, 0.5, 1, 1)
-  for i = 1, 9 do
+  h.bar = bar
+  h.ticks, h.labels = {}, {}
+  for i = 1, 20 do
     local tick = tex(bar, "OVERLAY")
     tick:SetColorTexture(0, 0, 0, 0.8)
     tick:SetSize(1, 14)
-    tick:SetPoint("TOPLEFT", 4 + BAR_W * i / 10, -4)
+    h.ticks[i] = tick
   end
-  for i = 0, 10, 2 do
-    local lab = text(f, "GameFontHighlightSmall", 10, { 0.75, 0.72, 0.65 }, "CENTER", 24)
-    lab:SetPoint("TOP", bar, "BOTTOMLEFT", 4 + BAR_W * i / 10, 0)
-    lab:SetText(20 + i)
-  end
+  for i = 1, 11 do h.labels[i] = text(f, "GameFontHighlightSmall", 10, { 0.75, 0.72, 0.65 }, "CENTER", 24) end
   tooltip(bar, function(tip)
-    tip:AddLine("Level 20 to 30", GOLD[1], GOLD[2], GOLD[3])
+    local lo, hi = UI.barLo or 1, UI.barHi or 2
+    tip:AddLine(string.format("Level %d to %d", lo, hi), GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Blue: where you are now.", 0.5, 0.7, 1)
-    tip:AddLine("Purple: after handing in everything banked now.", 0.8, 0.4, 0.8)
+    tip:AddLine(QB:Banking() and "Purple: after handing in everything banked now." or "Purple: after handing in the quests that are ready.", 0.8, 0.4, 0.8)
     tip:AddLine("Pale: after the whole plan.", 0.85, 0.75, 1)
-    tip:AddLine("Level 20 to 30 takes 331,800 XP.", 0.8, 0.8, 0.8)
+    local need = 0
+    for l = lo, hi - 1 do need = need + (QB.Data.TO_NEXT[l] or 0) end
+    tip:AddLine(string.format("Level %d to %d takes %s XP.", lo, hi, QB.Comma(need)), 0.8, 0.8, 0.8)
+    local held, nextCap = QB:Lock()
+    if held then
+      tip:AddLine(string.format("The game holds you at level %d for now. QuestBank banks your log for the cap going up to %d.", held, nextCap), 1, 0.82, 0, true)
+    elseif QB:Mode() == "rush" then
+      tip:AddLine("The level cap went up: time to cash your bank in.", 1, 0.82, 0, true)
+    else
+      tip:AddLine(string.format("Questing: the game lets you level to %d, so hand quests in as you go.", QB.CAP), 0.8, 0.8, 0.8, true)
+    end
     local D, st = QB.Data, QB.Data.STATS
     if st then
       tip:AddLine(" ")
       tip:AddLine(string.format("Quest data read %s, Forever client %s.", D.READ or "", D.BUILD or ""), 0.6, 0.6, 0.6, true)
-      tip:AddLine(string.format("Of %d quests worth banking: %d without a read multiplier, %d without a known turn-in spot, %d handed in inside a dungeon.",
+      tip:AddLine(string.format("Of %d quests players have met in Forever: %d without a read multiplier, %d without a known turn-in spot, %d handed in inside a dungeon.",
         st.quests, st.noMult, st.noTurn, st.inside), 0.6, 0.6, 0.6, true)
+      if st.classic and st.classic > 0 then
+        tip:AddLine(string.format("%d more come from the Classic database and are marked until someone sees them in Forever.", st.classic), 0.6, 0.6, 0.6, true)
+      end
     end
   end)
 
@@ -657,7 +733,7 @@ function UI:CreateHeader(f)
     b.caption:SetPoint("TOP", b, "BOTTOM", 0, -8)
     b.key = d.key
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    b:SetScript("OnClick", function(self, which) UI:Switch(self.key, which) end)
+    b:SetScript("OnClick", QB.Safe(function(self, which) UI:Switch(self.key, which) end, "header switch"))
     tooltip(b, function(tip, self) UI:SwitchTooltip(tip, self.key) end)
     h.toggles[d.key] = b
   end
@@ -673,7 +749,14 @@ function UI:Switch(key, which)
       set[key] = not on
     end
   elseif key == "goal" then
-    set.goal = set.goal == "hour" and "route" or "hour"
+    if which == "RightButton" then
+      -- stop banking: back to looking for a lock if you forced one, else questing from here
+      QB:SetLock(QB:LockChoice() == "on" and "auto" or "off")
+    else
+      set.goal = set.goal == "hour" and "route" or "hour"
+    end
+  elseif key == "lock" then
+    QB:SetLock(QB:LockChoice() == "off" and "auto" or "on")
   elseif key == "pins" then
     if which == "RightButton" then
       if QB.Pins then QB.Pins:PinNext(true) end
@@ -700,6 +783,16 @@ function UI:SwitchTooltip(tip, key)
   elseif key == "goal" then
     tip:AddLine(set.goal == "hour" and "Plan for the first hour" or "Plan for the whole route", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("First hour: the highest level at the 60-minute mark, whatever comes after. Whole route: the highest level at the end, in the least time.", 1, 1, 1, true)
+    local held, nextCap = QB:Lock()
+    if held then
+      tip:AddLine(string.format("Banking: the game holds you at level %d, and the plan is for the cap going up to %d.", held, nextCap), 0.8, 0.8, 0.8, true)
+    end
+    tip:AddLine("Right-click: stop banking and plan for questing.", 0.6, 0.6, 0.6, true)
+  elseif key == "lock" then
+    tip:AddLine("Questing", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("No level lock: the game lets you level, so hand quests in as you go. The route plans the quickest way to hand in what's ready, and the green arrows mark chains worth carrying on.", 1, 1, 1, true)
+    tip:AddLine(QB:LockChoice() == "off" and "You turned banking off. Click to let QuestBank look for a level lock again."
+      or "Banking only pays off while the game holds your level at a cap. Click to bank anyway.", 0.6, 0.6, 0.6, true)
   elseif key == "pins" then
     tip:AddLine(set.pins and "Map pins on" or "Map pins off", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Numbered pins on the world map for every stop on the route, and ! pins where planned quests start.", 1, 1, 1, true)
@@ -721,12 +814,13 @@ function UI:CreateContent(f)
     self:CreatePrepView(c),
     self:CreateRouteView(c),
     self:CreatePartyView(c),
+    self:CreateSettingsView(c),
   }
 end
 
 function UI:CreateTabs(f)
   self.tabs = {}
-  local names = { "Quest Log", "Prep", "Hand-in Route", "Party" }
+  local names = { "Quest Log", "Plan", "Hand-in Route", "Party", "Settings" }
   local x = 20
   for i, name in ipairs(names) do
     local b = CreateFrame("Button", nil, f)
@@ -842,7 +936,7 @@ local refresh
 function UI:Refresh() QB.Try("window", refresh, self) end
 refresh = function(self)
   if not (self.frame and self.frame:IsShown()) then return end
-  QB:Recompute()
+  if not QB.fresh then QB:Recompute() end
   self:RefreshHeader()
   local v = self.views[self.tab or 1]
   if v and v.Refresh then v:Refresh() end
@@ -858,15 +952,58 @@ function UI:RefreshHeader()
     bind ~= "" and bind or "not set"))
   local cur = QB.Model.Frac(s.level, s.xp)
   local now, plan = QB.routeNow, QB.routePlan
-  local function w(level) return math.max(1, math.min(BAR_W, BAR_W * (level - 20) / 10)) end
+  local banking = QB:Banking()
+  -- the bar's window: from the lock to the next cap when banking, else your next ten levels
+  local lo, hi
+  if banking then
+    local held = QB:Lock()
+    local was = QB:Held()
+    lo = held or (was and was.level) or math.floor(cur)
+    hi = QB.CAP
+  else
+    lo = math.floor(cur)
+    hi = math.min(lo + 10, QB.CAP)
+  end
+  if lo >= QB.MAXLEVEL then lo = QB.MAXLEVEL - 1 end
+  if hi <= lo then hi = lo + 1 end
+  UI.barLo, UI.barHi = lo, hi
+  local span = hi - lo
+  local function w(level) return math.max(1, math.min(BAR_W, BAR_W * (level - lo) / span)) end
+  local tstep = span <= 20 and 1 or 5
+  local ti = 0
+  for l = lo + tstep, hi - 1, tstep do
+    ti = ti + 1
+    local t = h.ticks[ti]
+    if not t then break end
+    t:ClearAllPoints()
+    t:SetPoint("TOPLEFT", 4 + BAR_W * (l - lo) / span, -4)
+    t:Show()
+  end
+  for i = ti + 1, #h.ticks do h.ticks[i]:Hide() end
+  local step = span <= 5 and 1 or (span <= 10 and 2 or 5)
+  local k = 0
+  for l = lo, hi, step do
+    k = k + 1
+    local lab = h.labels[k]
+    if not lab then break end
+    lab:ClearAllPoints()
+    lab:SetPoint("TOP", h.bar, "BOTTOMLEFT", 4 + BAR_W * (l - lo) / span, 0)
+    lab:SetText(l)
+    lab:Show()
+  end
+  for i = k + 1, #h.labels do h.labels[i]:Hide() end
   h.fillCur:SetWidth(w(cur))
   local nowL = (now and not now.empty) and now.level or cur
   local planL = (plan and not plan.empty) and plan.level or cur
   local plan60 = (plan and not plan.empty) and plan.at60 or cur
   h.fillNow:SetWidth(w(nowL))
   h.fillPlan:SetWidth(w(planL))
-  h.legend:SetText(string.format("|cff6f9fffNow %.1f|r    |cffc080c0Banked %.1f|r    |cffd8c8ffPlan %.1f|r    |cffaaaaaaPlan at 60 min %.1f|r",
-    cur, nowL, planL, plan60))
+  if banking then
+    h.legend:SetText(string.format("|cff6f9fffNow %.1f|r    |cffc080c0Banked %.1f|r    |cffd8c8ffPlan %.1f|r    |cffaaaaaaPlan at 60 min %.1f|r",
+      cur, nowL, planL, plan60))
+  else
+    h.legend:SetText(string.format("|cff6f9fffNow %.1f|r    |cffc080c0Ready %.1f|r    |cffd8c8ffPlan %.1f|r", cur, nowL, planL))
+  end
   local set = QB:Settings()
   local tg = h.toggles
   local mounted = QB:Mounted()
@@ -875,7 +1012,17 @@ function UI:RefreshHeader()
   local bag = QB:BagBonus()
   tg.bag.icon:SetDesaturated(not bag)
   tg.bag.caption:SetText(bag and "+3% XP" or "No bag")
-  tg.goal.caption:SetText(set.goal == "hour" and "First hour" or "Whole route")
+  -- the third switch: the hour's goal when banking, the lock itself when questing
+  local g = tg.goal
+  if banking then
+    g.key = "goal"
+    setIcon(g.icon, T.hourglass)
+    g.caption:SetText(set.goal == "hour" and "First hour" or "Whole route")
+  else
+    g.key = "lock"
+    setIcon(g.icon, T.questGeneric)
+    g.caption:SetText("Questing")
+  end
   tg.pins.icon:SetDesaturated(not set.pins)
   tg.pins.caption:SetText(set.pins and "Pins on" or "Pins off")
 end
@@ -903,6 +1050,8 @@ function UI:CreateLogView(parent)
     b.xp:SetPoint("BOTTOMRIGHT", 0, 2)
     b.mark = tex(b, "OVERLAY", nil, 14, 14)
     b.mark:SetPoint("TOPLEFT", 1, -1)
+    b.up = upgradeMark(b, 13, 14)
+    b.up:SetPoint("TOPRIGHT", -1, -1)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     b:SetScript("OnClick", function(self, which) if self.q then UI.QuestClick(self.q, self.st, which) end end)
     tooltip(b, function(tip, self)
@@ -937,7 +1086,12 @@ function UI:CreateLogView(parent)
       if it.id == 211527 then tip:AddLine("Lie in it three minutes before the first hand-in: +3% for two hours.", 0.8, 0.8, 0.8, true) end
     end)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    b:SetScript("OnClick", function(self, which) if self.item and self.item.q then UI.QuestClick(self.item.q, QB:Status(self.item.q), which) end end)
+    b:SetScript("OnClick", QB.Safe(function(self, which)
+      local it = self.item
+      if not it then return end
+      if IsShiftKeyDown and IsShiftKeyDown() and UI.LinkItem(it.id, it.name) then return end
+      if it.q then UI.QuestClick(it.q, QB:Status(it.q), which) end
+    end, "bag slot"))
     v.bagSlots[i] = b
   end
   v.dropTitle = text(v, "GameFontNormal", 12, BAD, "LEFT", 300)
@@ -990,11 +1144,11 @@ function UI:CreateLogView(parent)
     tooltip(r, function(tip, self)
       if self.cutTitle then
         tip:AddLine("Drop: " .. self.cutTitle, 1, 0.5, 0.4)
-        tip:AddLine(QB.Comma(self.cutValue or 0) .. " XP on the day", 0.8, 0.8, 0.8)
+        tip:AddLine(QB.Comma(self.cutValue or 0) .. " XP " .. QB:OnTheDay(), 0.8, 0.8, 0.8)
         tip:AddLine(" ")
       end
       if self.via then
-        tip:AddLine(string.format("Take %s now and hand it in inside %s. That gives you %s to bank.", self.via.name,
+        tip:AddLine(string.format("Take %s now and hand it in inside %s. That gives you %s" .. (QB:Banking() and " to bank." or "."), self.via.name,
           self.via.cat and self.via.cat.name or "the dungeon", self.add.name), 1, 0.82, 0, true)
         tip:AddLine(" ")
       end
@@ -1006,7 +1160,7 @@ function UI:CreateLogView(parent)
   v.noSwaps:SetPoint("TOPLEFT", RIGHT, -58)
   v.legend = text(v, "GameFontNormalSmall", 10, INK_SOFT, "LEFT", 334)
   v.legend:SetPoint("TOPLEFT", RIGHT, -376)
-  v.legend:SetText("|cffff8000Orange|r 12k+  |cffa335eePurple|r 9k+  |cff0070ddBlue|r 6k+  |cff1eff00Green|r 3k+  White 1.5k+")
+
   v.Refresh = function() UI:RefreshLogView(v) end
   return v
 end
@@ -1016,28 +1170,55 @@ end
 function UI:Candidates(limit, level)
   local D = QB.Data
   local s = QB.state
-  level = math.max(level or s.level, 20)
+  level = level or s.level
   local fac = QB.faction
-  local bit = QB.API.ClassBit()
+  local banking = QB:Banking()
+  -- the same question asked several times a refresh: answer it once a second
+  local key = table.concat({ limit or 0, level, s.level, s.logCount or 0, tostring(banking), fac or "", s.mapID or 0 }, ":")
+  local now = GetTime and GetTime() or 0
+  UI.candMemo = UI.candMemo or {}
+  local memo = UI.candMemo[key]
+  if memo and now - memo.t < 1 then return memo.list end
+  local bit, rbit = QB.API.ClassBit(), QB.API.RaceBit()
+  -- questing: nothing far above you; banking: dungeon quests well above you are the big payers
+  local ceiling = level + (banking and 12 or 4)
+  -- questing: how far each giver is from you, so nearby quests come first
+  local here, mf
+  if not banking then
+    local wp = QB.API.WorldPosition()
+    if wp then
+      here = QB.Model.Place(fac, wp.c, wp.wx, wp.wy)
+      if here.hub == 0 then here = nil end
+    end
+    mf = QB:Mounted() and 0.625 or 1
+  end
   local out = {}
   for id, r in pairs(D.Q) do
     local side, cls = r[3], r[9]
     local turn = D.NPC[(fac == "H" and D.TURNH and D.TURNH[id]) or r[6]]
+    local race = D.RACE[id]
     if (side == 0 or (side == 1 and fac == "A") or (side == 2 and fac == "H"))
       and (cls == 0 or bit == 0 or math.floor(cls / bit) % 2 == 1)
-      and r[2] <= math.max(s.level, 20) + 2 and r[1] >= level - 7 and not s.log[id] and not D.FOLLOW[id]
+      and (not race or rbit == 0 or rbit > 128 or math.floor(race / rbit) % 2 == 1)
+      and r[2] <= s.level + 2 and r[1] >= level - 7 and r[1] <= ceiling and not s.log[id] and not D.FOLLOW[id]
       and not (turn and turn[5] < 0) then
       local live = QuestBankDB.live and QuestBankDB.live[id]
-      out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], cat = r[8] }
+      out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], cat = r[8], give = r[7] }
     end
   end
   for _, c in ipairs(out) do
     local m = level - c.lvl
     local f = c.full
     if m >= 10 then f = f * 0.1 elseif m >= 6 then f = f * (1 - (m - 5) * 0.2) end
-    c.value = f
+    c.value, c.rank = f, f
+    if here then
+      -- XP for the trip: a quest a flight away counts for less than one down the road
+      local p = c.give and c.give > 0 and QB.Model.NpcPlace(c.give, fac)
+      c.away = p and QB.Model.Between(here, p, fac, mf) or 60
+      c.rank = f / (1 + c.away / 15)
+    end
   end
-  table.sort(out, function(a, b) return a.value > b.value end)
+  table.sort(out, function(a, b) return a.rank > b.rank end)
   local kept = {}
   for _, c in ipairs(out) do
     if not QB.API.IsDone(c.id) then
@@ -1045,6 +1226,9 @@ function UI:Candidates(limit, level)
       if limit and #kept >= limit then break end
     end
   end
+  local n = 0
+  for k, m in pairs(UI.candMemo) do if now - m.t >= 1 then UI.candMemo[k] = nil else n = n + 1 end end
+  UI.candMemo[key] = { t = now, list = kept }
   return kept
 end
 
@@ -1067,7 +1251,16 @@ function UI:RefreshLogView(v)
     return (a.value or -1) > (b.value or -1)
   end)
   v.title:SetText(string.format("Quest log  %d/40", #entries))
-  v.worth:SetText(string.format("worth about %s XP on the day", QB.Comma(total)))
+  -- the colour steps, at your level
+  local k = QB.Scale(s.level)
+  local function step(x)
+    x = x * k
+    if x >= 1000 then return QB.Short(math.floor(x / 100 + 0.5) * 100) end
+    return tostring(math.floor(x / 10 + 0.5) * 10)
+  end
+  v.legend:SetText(string.format("|cffff8000Orange|r %s+  |cffa335eePurple|r %s+  |cff0070ddBlue|r %s+  |cff1eff00Green|r %s+  White %s+",
+    step(12000), step(9000), step(6000), step(3000), step(1500)))
+  v.worth:SetText(string.format("worth about %s XP %s", QB.Comma(total), QB:OnTheDay()))
   for i, b in ipairs(v.slots) do
     local it = entries[i]
     b.q, b.st, b.entry, b.value, b.pct, b.plvl = nil, nil, nil, nil, nil, nil
@@ -1079,7 +1272,7 @@ function UI:RefreshLogView(v)
       local c = QUALITY[tier(it.value)]
       b.frame:SetVertexColor(c[1], c[2], c[3])
       b.frame:SetShown(not it.cut)
-      b.xp:SetText(it.value and QB.Short(it.value) or "?")
+      b.xp:SetText((it.value and not (it.q and it.q.xpUnknown and not it.q.liveFull)) and QB.Short(it.value) or "?")
       if it.cut or not it.q then
         b.mark:SetTexture(T.notready)
       elseif it.e.complete then
@@ -1088,11 +1281,13 @@ function UI:RefreshLogView(v)
         b.mark:SetTexture(T.waiting)
       end
       b.mark:Show()
+      b.up:SetShown(it.q ~= nil and not it.cut and QB:Upgrade(it.q) ~= nil)
     else
       b.icon:SetTexture(nil)
       b.frame:Hide()
       b.xp:SetText("")
       b.mark:Hide()
+      b.up:Hide()
     end
   end
 
@@ -1153,11 +1348,11 @@ function UI:RefreshLogView(v)
   end
 
   -- swaps: advance a chain you hold, fill a free slot, or swap a weak quest for a better one
-  local lvl = math.max(s.level, 20)
+  local lvl = s.level
   local rows, used = {}, {}
-  -- a chain you hold: the best later step you could bank instead
+  -- a chain you hold: the best later step you could bank instead (questing, the arrows show chains)
   for _, it in ipairs(entries) do
-    if it.q and it.q.nextSteps and not it.cut then
+    if QB:Banking() and it.q and it.q.nextSteps and not it.cut then
       local best, bestV, bestDepth
       local function walk(q, depth)
         if depth > 3 or not q.nextSteps then return end
@@ -1172,7 +1367,7 @@ function UI:RefreshLogView(v)
         end
       end
       walk(it.q, 1)
-      if best and bestV > (it.value or 0) + 300 then
+      if best and bestV > (it.value or 0) + 300 * QB.Scale(lvl) then
         rows[#rows + 1] = { add = { q = best, value = bestV }, cut = it, cutValue = it.value or 0, gain = bestV - (it.value or 0),
                             chain = bestDepth }
         used[best.id] = true
@@ -1181,7 +1376,7 @@ function UI:RefreshLogView(v)
   end
   local cuts = {}
   for _, it in ipairs(entries) do
-    if it.cut or not it.q or (it.value or 0) < 1500 then cuts[#cuts + 1] = it end
+    if it.cut or not it.q or (it.value or 0) < 1500 * QB.Scale(lvl) then cuts[#cuts + 1] = it end
   end
   table.sort(cuts, function(a, b)
     if (a.cut or false) ~= (b.cut or false) then return a.cut end
@@ -1193,14 +1388,14 @@ function UI:RefreshLogView(v)
     local st = q and QB:Status(q)
     -- quests you can pick up now and that need a log slot, and the ones a single step handed in inside
     -- the dungeon stands before (Blackfathom Villainy after In Search of Thaelrid): take that step, finish
-    -- it in there, bank what it gives you. Longer chains and bag quests live on the Prep page.
+    -- it in there, bank what it gives you. Longer chains and bag quests live on the Plan page.
     local via
     if q and st.code == "prereq" and type(st.pre) == "number" then
       local p = Q.Get(st.pre)
       if p and p.turn and p.turn.inside and QB:Status(p).code == "todo" then via = p end
     end
     if q and not used[q.id] and (st.code == "todo" or via) and not (q.bag and q.bag[3] == 1) then
-      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via }
+      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via, rank = c.rank }
     end
   end
   local ai = 1
@@ -1211,12 +1406,17 @@ function UI:RefreshLogView(v)
     local a = adds[ai]
     if not a then break end
     local cv = c.cut and 0 or (c.value or 0)
-    if a.value > cv + 300 then
+    if a.value > cv + 300 * QB.Scale(lvl) then
       rows[#rows + 1] = { cut = c, add = a, cutValue = cv, gain = a.value - cv }
       ai = ai + 1
     end
   end
-  table.sort(rows, function(a, b) return a.gain > b.gain end)
+  -- banking: the biggest gain first; questing: the gain for the trip (nearby first)
+  for _, r in ipairs(rows) do
+    local near = (not QB:Banking() and r.add.rank and r.add.value and r.add.value > 0) and r.add.rank / r.add.value or 1
+    r.key = r.gain * near
+  end
+  table.sort(rows, function(a, b) return a.key > b.key end)
   for i, r in ipairs(v.swaps) do
     local d = rows[i]
     if d then
@@ -1361,7 +1561,7 @@ local PER_CARD = 8
 function UI:RefreshPrepView(v)
   local D = QB.Data
   local s = QB.state
-  local level = math.max(s.level, 20)
+  local level = s.level
   local width = v.scroll:Width() - 6
   v.cards:Reset()
 
@@ -1377,7 +1577,7 @@ function UI:RefreshPrepView(v)
     return g
   end
   local seen = {}
-  local function add(q, mine)
+  local function add(q, mine, near)
     if seen[q.id] then return end
     seen[q.id] = true
     local st = QB:Status(q)
@@ -1391,7 +1591,8 @@ function UI:RefreshPrepView(v)
       if st.code == "banked" then g.banked = g.banked + 1 else g.left = g.left + value; g.planned = g.planned + 1 end
       g.score = g.score + value
     elseif st.code ~= "done" and not mine then
-      g.score = g.score + value * 0.25
+      -- questing, a zone near you outranks a richer one across the world
+      g.score = g.score + value * 0.25 * (near or 1)
     end
   end
   for _, e in ipairs(s.logOrder) do local q = Q.Get(e.id); if q then add(q, true) end end
@@ -1405,7 +1606,7 @@ function UI:RefreshPrepView(v)
   for _, c in ipairs(self:Candidates(nil, level)) do
     extra[c.cat] = (extra[c.cat] or 0) + 1
     local open = UI.expanded and D.CAT[c.cat] and UI.expanded[D.CAT[c.cat].key]
-    if open or extra[c.cat] <= PER_CARD + 6 then add(Q.Get(c.id)) end
+    if open or extra[c.cat] <= PER_CARD + 6 then add(Q.Get(c.id), false, c.value > 0 and c.rank / c.value or 1) end
   end
   table.sort(order, function(a, b) return a.score > b.score end)
 
@@ -1436,11 +1637,11 @@ function UI:RefreshPrepView(v)
   for _, e in ipairs(s.logOrder) do
     local q = Q.Get(e.id)
     local value = q and QB.Model.XpAt(q, level)
-    if not q or QB:IsCut(e.id) or (value and value < 500) then cutList[#cutList + 1] = { e = e, q = q, value = value } end
+    if not q or QB:IsCut(e.id) or (value and value < 500 * QB.Scale(level)) then cutList[#cutList + 1] = { e = e, q = q, value = value } end
   end
   if #cutList > 0 then
     local c = v.cards:Get()
-    header(c, { 0.30, 0.08, 0.05 }, T.notready, "Make room", "Cut from the plan, unknown, or next to no XP on the day. Hand in or abandon them.",
+    header(c, { 0.30, 0.08, 0.05 }, T.notready, "Make room", "Cut from the plan, unknown, or next to no XP " .. QB:OnTheDay() .. ". Hand in or abandon them.",
       #cutList .. (#cutList == 1 and " slot" or " slots"))
     local ry = 50
     for _, it in ipairs(cutList) do
@@ -1515,8 +1716,8 @@ function UI:RefreshPrepView(v)
     local c = v.cards:Get()
     local a = g.cat
     header(c, a.bg or { 0.16, 0.12, 0.08 }, a.icon, a.name, a.dungeon and ((a.where ~= "" and (a.where .. ". ") or "") .. "Dungeon quests: bring a group.") or a.where,
-      g.planned > 0 and ("+" .. QB.Comma(math.floor(g.left / 10 + 0.5) * 10)) or (g.total > 0 and "All banked" or ""),
-      g.total > 0 and string.format("%d of %d banked", g.banked, g.total) or "Nothing planned here yet")
+      g.planned > 0 and ("+" .. QB.Comma(math.floor(g.left / 10 + 0.5) * 10)) or (g.total > 0 and (QB:Banking() and "All banked" or "All ready") or ""),
+      g.total > 0 and string.format(QB:Banking() and "%d of %d banked" or "%d of %d ready", g.banked, g.total) or "Nothing planned here yet")
     if g.total > 0 and g.planned == 0 then c.gain:SetTextColor(0.4, 0.9, 0.4) end
     c.pin:SetShown(a.entrance and true or false)
     c.pin.entrance, c.pin.label = a.entrance, a.name .. " entrance"
@@ -1633,17 +1834,18 @@ function UI:CreateRouteView(parent)
   v.modePlan:SetScript("OnClick", function() QB:Settings().routeMode = "plan"; UI:Refresh() end)
   v.run = button(v, "Start run", 96)
   v.run:SetPoint("TOPRIGHT", -14, -10)
-  v.run:SetScript("OnClick", function()
+  v.run:SetScript("OnClick", QB.Safe(function()
     if QB.Run.Get() then QB.Run.Stop() else QB:Recompute(true); QB.Run.Start() end
     UI:Refresh()
-  end)
+  end, "run button"))
   tooltip(v.run, function(tip)
     if QB.Run.Get() then
       tip:AddLine("End the run", GOLD[1], GOLD[2], GOLD[3])
       tip:AddLine("Saves it with its times and XP.", 1, 1, 1)
     else
       tip:AddLine("Start the hand-in run", GOLD[1], GOLD[2], GOLD[3])
-      tip:AddLine("Starts a clock, ticks each quest off with the XP it paid, and re-plans the rest from where you stand. The first hand-in above the old cap starts it by itself.", 1, 1, 1, true)
+      tip:AddLine("Starts a clock, ticks each quest off with the XP it paid, and re-plans the rest from where you stand.", 1, 1, 1, true)
+      if QB:Banking() then tip:AddLine("When the level cap goes up, your first hand-in starts it by itself.", 1, 1, 1, true) end
     end
   end)
   v.post = button(v, "Post", 64)
@@ -1652,7 +1854,7 @@ function UI:CreateRouteView(parent)
   tooltip(v.post, function(tip)
     tip:AddLine("Post in party or guild chat", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine(QB.Run.Get() and "How your hand-in run is going: minutes, level, quests and XP."
-      or "The level your banked quests take you to, and your plan's.", 1, 1, 1, true)
+      or (QB:Banking() and "The level your banked quests take you to, and your plan's." or "The level the quests ready in your log take you to, and your plan's."), 1, 1, 1, true)
     tip:AddLine("You see the message first. Nothing is posted until you press Post.", 0.6, 0.6, 0.6, true)
   end)
   v.summary = text(v, "GameFontNormal", 12, INK, "RIGHT", 336)
@@ -1703,11 +1905,17 @@ function UI:RefreshRouteView(v)
   local r = mode == "plan" and QB.routePlan or QB.routeNow
   v.modeNow:SetEnabled(mode ~= "now")
   v.modePlan:SetEnabled(mode ~= "plan" and not run)
+  local banking = QB:Banking()
+  v.modeNow:SetText(banking and "Banked now" or "Ready now")
   v.run:SetText(run and "End run" or "Start run")
   local width = v.scroll:Width() - 6
   local busy = QB.Model.Busy() and "  |cff8a6a3aplanning...|r" or ""
-  v.summary:SetText(string.format("%s XP  |  level %.2f  |  %d min  |  at 60 min %.2f%s",
-    QB.Comma(r.xp or 0), r.level or 0, math.floor((r.t or 0) + 0.5), r.at60 or 0, busy))
+  if banking then
+    v.summary:SetText(string.format("%s XP  |  level %.2f  |  %d min  |  at 60 min %.2f%s",
+      QB.Comma(r.xp or 0), r.level or 0, math.floor((r.t or 0) + 0.5), r.at60 or 0, busy))
+  else
+    v.summary:SetText(string.format("%s XP  |  level %.2f  |  %d min%s", QB.Comma(r.xp or 0), r.level or 0, math.floor((r.t or 0) + 0.5), busy))
+  end
   v.legs:Reset()
 
   -- the setup line: where to log out and where to bind, or how the run is going
@@ -1722,8 +1930,11 @@ function UI:RefreshRouteView(v)
       else line = line .. string.format("  |cffa0400a%.0f min behind the plan.|r", -pace) end
     end
     if r.legs[1] then line = line .. "  Next: |cff7a2e0a" .. r.legs[1].stop.name .. "|r." end
+  elseif not banking then
+    line = r.legs and r.legs[1] and ("From where you stand. First stop: |cff7a2e0a" .. r.legs[1].stop.name .. "|r.")
+      or (mode == "now" and "Nothing in your log is ready to hand in yet." or "Nothing planned yet: add quests on the Plan page.")
   elseif r.legs and r.legs[1] then
-    line = "Log out at |cff7a2e0a" .. r.legs[1].stop.name .. "|r."
+    line = (QB.mode == "rush" and "Start at |cff7a2e0a" or "Log out at |cff7a2e0a") .. r.legs[1].stop.name .. "|r."
     if r.bind then
       local bind = QB.API.BindName()
       line = line .. " Bind your hearthstone in |cff7a2e0a" .. r.bind.town .. "|r"
@@ -1777,8 +1988,8 @@ function UI:RefreshRouteView(v)
 
   if not r.legs or #r.legs == 0 then
     v.empty:SetText(run and "Everything banked is handed in. End the run to save it." or
-      (mode == "now" and "Nothing is banked yet. Finished quests and quest items in your bags show up here in hand-in order. Full plan shows the route you're building towards." or
-        "The plan is empty. Shift-click quests on the Prep page to add them."))
+      (mode == "now" and ((QB:Banking() and "Nothing is banked yet." or "Nothing is ready to hand in yet.") .. " Finished quests and quest items in your bags show up here in hand-in order. Full plan shows the route you're building towards.") or
+        "The plan is empty. Shift-click quests on the Plan page to add them."))
     v.empty:ClearAllPoints()
     v.empty:SetPoint("TOPLEFT", 60, -y - 20)
     v.empty:Show()
@@ -1799,7 +2010,7 @@ function UI:RefreshRouteView(v)
     l.travelIcon:SetTexture(travelIcon(kind))
     local label = KIND[kind] or kind
     if kind == "start" then
-      label = "Log in here"
+      label = QB.mode == "lock" and "Log in here" or "Start here"
     else
       label = label .. string.format(", about %d min", math.max(1, math.floor(leg.travel + 0.5)))
       if kind == "hearth" and leg.inn then label = label .. " to " .. QB.Data.HUB[r.fac][leg.inn][1] end
@@ -2053,7 +2264,7 @@ function UI:CreatePartyView(parent)
   v.shareGuildBtn:SetScript("OnClick", function() local s = QB:Settings().share; s.guild = not s.guild; UI:Refresh() end)
   v.syncBtn = button(v, "Send now", 96)
   v.syncBtn:SetPoint("BOTTOMLEFT", LEFT + 204, 12)
-  v.syncBtn:SetScript("OnClick", function() if QB.Sync then QB.Sync:Broadcast(true) end end)
+  v.syncBtn:SetScript("OnClick", QB.Safe(function() if QB.Sync then QB.Sync:Broadcast(true) end end, "send now"))
   tooltip(v.syncBtn, function(tip)
     tip:AddLine("Share your bank now", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Sends your level, banked XP and plan to QuestBank users in your party and guild. /qb sync Name whispers one friend.", 1, 1, 1, true)
@@ -2153,8 +2364,158 @@ function UI:RefreshPartyView(v)
   end
   v.dcards:HideRest()
   v.noRuns:SetShown(#dungeons == 0)
-  v.noRuns:SetText("No dungeon quests in your plan yet. Add some on the Prep page, and your party's show up here too.")
+  v.noRuns:SetText("No dungeon quests in your plan yet. Add some on the Plan page, and your party's show up here too.")
   v.dscroll:SetContentHeight(math.max(y, 40))
+end
+
+----------------------------------------------------------------------------
+-- page 5: settings
+----------------------------------------------------------------------------
+local function checkRow(parent, x, y, label, width)
+  local c = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+  c:SetSize(24, 24)
+  c:SetPoint("TOPLEFT", x, y)
+  c.label = text(parent, "GameFontNormal", 12, INK, "LEFT", width or 320)
+  c.label:SetPoint("LEFT", c, "RIGHT", 2, 0)
+  c.label:SetText(label)
+  return c
+end
+
+local function heading(parent, x, y, label, width)
+  local t = text(parent, "GameFontNormalLarge", 15, INK, "LEFT", width or 330)
+  t:SetPoint("TOPLEFT", x, y)
+  t:SetText(label)
+  return t
+end
+
+function UI:CreateSettingsView(parent)
+  local v = CreateFrame("Frame", nil, parent)
+  v:SetAllPoints()
+  -- mode: found for you, or set by you
+  heading(v, LEFT, -12, "Mode", 370)
+  v.modeBtns = {}
+  for i, m in ipairs({ { "auto", "Auto" }, { "off", "Questing" }, { "on", "Banking" } }) do
+    local b = button(v, m[2], 110)
+    b:SetPoint("TOPLEFT", LEFT + (i - 1) * 116, -38)
+    b.val = m[1]
+    b:SetScript("OnClick", QB.Safe(function(self)
+      QB:SetLock(self.val)
+      UI:Refresh()
+    end, "settings: mode"))
+    v.modeBtns[i] = b
+  end
+  v.modeText = para(v, "GameFontNormal", 12, INK_SOFT, 370)
+  v.modeText:SetPoint("TOPLEFT", LEFT, -68)
+  v.modeText:SetHeight(64)
+  v.capLabel = text(v, "GameFontNormal", 12, INK, "LEFT", 250)
+  v.capLabel:SetPoint("TOPLEFT", LEFT, -144)
+  v.capDown = button(v, "-", 26)
+  v.capDown:SetPoint("TOPLEFT", LEFT + 262, -140)
+  v.capUp = button(v, "+", 26)
+  v.capUp:SetPoint("TOPLEFT", LEFT + 292, -140)
+  local function moveCap(d)
+    local _, p = QB:LockChoice()
+    local held, nextCap = QB:Lock()
+    local was = QB:Held()
+    local base = held or (was and was.level) or QB.state.level
+    local cur = nextCap or (was and was.next) or math.min(base + 10, QB.MAXLEVEL)
+    local new = math.max(base + 1, math.min(QB.MAXLEVEL, cur + d))
+    p.nextCap = new
+    if was and not held then was.next = new end -- the rush: the cap it went to
+    QB:MarkDirty()
+    UI:Refresh()
+  end
+  v.capDown:SetScript("OnClick", function() moveCap(-1) end)
+  v.capUp:SetScript("OnClick", function() moveCap(1) end)
+
+  heading(v, LEFT, -188, "Map", 370)
+  v.pins = checkRow(v, LEFT, -212, "Numbered route pins on the world map")
+  v.pins:SetScript("OnClick", function(self)
+    if QB.Pins then
+      if (self:GetChecked() and true or false) ~= (QB:Settings().pins and true or false) then QB.Pins:Toggle() end
+    else
+      QB:Settings().pins = self:GetChecked() and true or false
+    end
+    UI:Refresh()
+  end)
+  v.minimap = checkRow(v, LEFT, -240, "Button on the minimap")
+  v.minimap:SetScript("OnClick", function(self)
+    QB:Settings().minimap.hide = not self:GetChecked()
+    if QB.Minimap then QB.Minimap:Update() end
+  end)
+  v.arrow = checkRow(v, LEFT, -268, "Direction arrow to the next stop on your route")
+  v.arrow:SetScript("OnClick", function(self) if QB.Arrow then QB.Arrow:Set(self:GetChecked() and true or false) end end)
+
+  heading(v, LEFT, -304, "Discoveries", 370)
+  v.discText = para(v, "GameFontNormal", 12, INK_SOFT, 370)
+  v.discText:SetPoint("TOPLEFT", LEFT, -328)
+  v.discText:SetHeight(60)
+
+  -- updates: what the others in your party and guild run
+  heading(v, RIGHT, -12, "Updates")
+  v.verText = para(v, "GameFontNormal", 12, INK_SOFT, 330)
+  v.verText:SetPoint("TOPLEFT", RIGHT, -38)
+  v.verText:SetHeight(46)
+  v.updates = checkRow(v, RIGHT, -86, "Tell me when my party or guild has a newer one", 300)
+  v.updates:SetScript("OnClick", function(self) QB:Settings().updates = self:GetChecked() and true or false end)
+  v.link = button(v, "Copy the download link", 190)
+  v.link:SetPoint("TOPLEFT", RIGHT + 4, -116)
+  v.link:SetScript("OnClick", function() UI:CopyLink("QuestBank download page", QB.DOWNLOAD) end)
+
+  heading(v, RIGHT, -154, "Chat")
+  v.offers = checkRow(v, RIGHT, -178, "Offer a post during hand-in runs", 300)
+  v.offers:SetScript("OnClick", function(self) QB:Settings().post.auto = self:GetChecked() and true or false end)
+
+  heading(v, RIGHT, -216, "Sharing")
+  v.shareParty = checkRow(v, RIGHT, -240, "Share my bank and plan with my party", 300)
+  v.shareParty:SetScript("OnClick", function(self) QB:Settings().share.party = self:GetChecked() and true or false; UI:Refresh() end)
+  v.shareGuild = checkRow(v, RIGHT, -266, "Share them with my guild", 300)
+  v.shareGuild:SetScript("OnClick", function(self) QB:Settings().share.guild = self:GetChecked() and true or false; UI:Refresh() end)
+  v.shareHint = para(v, "GameFontNormalSmall", 11, INK_SOFT, 330)
+  v.shareHint:SetPoint("TOPLEFT", RIGHT, -296)
+  v.shareHint:SetHeight(44)
+  v.shareHint:SetText("Only QuestBank users see it, over the game's addon channel; nothing shows in chat. Your level and version go along, so friends see who needs an update.")
+  v.Refresh = function() UI:RefreshSettingsView(v) end
+  return v
+end
+
+function UI:RefreshSettingsView(v)
+  local set = QB:Settings()
+  local choice = QB:LockChoice()
+  local vals = { auto = 1, off = 2, on = 3 }
+  for i, b in ipairs(v.modeBtns) do b:SetEnabled(vals[choice] ~= i) end
+  local mode = QB:Mode()
+  local held, nextCap = QB:Lock()
+  local was = QB:Held()
+  local line
+  if mode == "lock" then
+    line = string.format("Banking: the game holds you at level %d. Keep finished quests in your log and hand them all in when the cap goes up to %d; the Hand-in Route plans that hour.", held, nextCap)
+  elseif mode == "rush" then
+    line = "The cap went up: cash your bank in. Your first hand-in starts the run and the route re-plans as you go."
+  elseif choice == "off" then
+    line = "Questing, chosen by you: hand quests in as you go. No banking, no hand-in hour."
+  else
+    line = string.format("Questing: the game lets you level to %d, so hand quests in as you go. QuestBank switches to banking by itself when the game holds your level at a cap.", QB.CAP)
+  end
+  if choice == "auto" then line = "Auto. " .. line end
+  v.modeText:SetText(line)
+  local banking = mode ~= "quest"
+  local capNow = nextCap or (was and was.next)
+  v.capLabel:SetText(banking and capNow and string.format("When the cap goes up, it goes to %d", capNow) or "Next cap: only used while banking")
+  v.capDown:SetEnabled(banking)
+  v.capUp:SetEnabled(banking)
+  v.pins:SetChecked(set.pins and true or false)
+  v.minimap:SetChecked(not (set.minimap and set.minimap.hide))
+  v.arrow:SetChecked(set.arrow and true or false)
+  local newest = QB.newest
+  v.verText:SetText(newest and string.format("You run QuestBank %s. |cff0a6a0a%s runs %s: time to update.|r", QB.version, newest.who or "Someone", newest.version)
+    or string.format("You run QuestBank %s, the newest your party and guild have shown.", QB.version))
+  v.updates:SetChecked(set.updates and true or false)
+  local nq, nn, nc = QB.Discover.Count()
+  v.discText:SetText(string.format("Noted in game so far: %d quests, %d quest NPCs, %d chain steps. Forever is still being discovered, so QuestBank keeps what the game shows you. ForeverProbe (optional) can carry it to foreverrank.com for everyone.", nq, nn, nc))
+  v.offers:SetChecked(set.post.auto and true or false)
+  v.shareParty:SetChecked(set.share.party and true or false)
+  v.shareGuild:SetChecked(set.share.guild and true or false)
 end
 
 ----------------------------------------------------------------------------
@@ -2180,9 +2541,9 @@ function MB:Create()
   icon:SetPoint("TOPLEFT", 7, -6)
   local ring = tex(b, "OVERLAY", T.ring, 53, 53)
   ring:SetPoint("TOPLEFT")
-  b:SetScript("OnClick", function(_, which)
+  b:SetScript("OnClick", QB.Safe(function(_, which)
     if which == "RightButton" then UI:Open(3) else UI:Toggle() end
-  end)
+  end, "minimap button"))
   b:SetScript("OnDragStart", function(self)
     self:SetScript("OnUpdate", function()
       local mx, my = Minimap:GetCenter()
@@ -2197,7 +2558,7 @@ function MB:Create()
     tip:AddLine("QuestBank", GOLD[1], GOLD[2], GOLD[3])
     local r = QB.routeNow
     if r and r.legs and r.legs[1] then
-      tip:AddLine(string.format("Banked: %s XP, level %.1f", QB.Comma(r.xp), r.level), 1, 1, 1)
+      tip:AddLine(string.format("%s: %s XP, level %.1f", QB:Banking() and "Banked" or "Ready to hand in", QB.Comma(r.xp), r.level), 1, 1, 1)
       tip:AddLine("Next stop: " .. r.legs[1].stop.name, 0.8, 0.8, 0.8)
     end
     if QB.Run.Get() then

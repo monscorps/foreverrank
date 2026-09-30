@@ -250,7 +250,7 @@ local function problem(entries, opts)
   for i = 1, n do
     local worth = 0
     for r = 1, #P.rowFull[i] do worth = worth + xpAt(P.rowFull[i][r], P.rowLvl[i][r], opts.level) end
-    P.cheap[i] = worth < CHEAP
+    P.cheap[i] = worth < CHEAP * QB.Scale(opts.level)
   end
   -- where the run starts: free (log out at the first stop) or from where you stand
   local here = opts.start and M.Place(fac, opts.start.c, opts.start.wx, opts.start.wy)

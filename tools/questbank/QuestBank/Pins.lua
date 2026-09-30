@@ -59,7 +59,7 @@ function P:Init()
     -- the world map can load after us: try again when it does
     if not self.waiting and CreateFrame then
       self.waiting = CreateFrame("Frame")
-      self.waiting:SetScript("OnEvent", function(_, _, name) if name == "Blizzard_WorldMap" or name == "Blizzard_MapCanvas" then P:Init() end end)
+      self.waiting:SetScript("OnEvent", QB.Safe(function(_, _, name) if name == "Blizzard_WorldMap" or name == "Blizzard_MapCanvas" then P:Init() end end, "map pins: waiting for the map"))
       self.waiting:RegisterEvent("ADDON_LOADED")
     end
     return
@@ -121,7 +121,7 @@ function P:Build()
           givers[key] = g
           list[#list + 1] = g
         end
-        g.lines[#g.lines + 1] = { q.name, st.code == "prereq" and "chain first" or QB.Comma(QB.Model.XpAt(q, math.max(QB.state.level, 20))) }
+        g.lines[#g.lines + 1] = { q.name, st.code == "prereq" and "chain first" or QB.Comma(QB.Model.XpAt(q, QB.state.level)) }
       end
     end
   end

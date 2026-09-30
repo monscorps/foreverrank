@@ -1,7 +1,10 @@
 # QuestBank
 
-The in-game quest bank planner behind https://foreverrank.com/questbank/ (an unlisted page). Both factions,
-every quest a level 20 character can bank, the hand-in route with map pins, the run tracker and party sync.
+The free questing addon behind https://foreverrank.com/questbank/ (an unlisted page). Both factions, levels 1 to 60:
+what every quest pays at your level, which chains to carry on, the best quests near you, the hand-in route with map
+pins, party sync, and banking with a hand-in run when the game holds your level at a cap (QB:Mode() "lock", "rush",
+"quest"). Wowhead Forever's quests seed the catalog up to the beta's cap; above it the CMaNGOS Classic database does,
+flagged "Classic only" until players see the quests in Forever.
 Free software under the GPL-3.0 (`QuestBank/LICENSE.txt`): its quest chains and spawn points come from the
 CMaNGOS Classic database, which is GPL-3.0.
 
@@ -12,7 +15,7 @@ The addon, `QuestBank/`:
 - `Model.lua`: Forever quest XP, travel over the flight network, and the route planner (planned a few milliseconds a frame).
 - `Pins.lua`, `Pins.xml`: numbered pins on the world map and the waypoint that follows the route.
 - `Sync.lua`: sharing banks, plans, runs and reported XP with QuestBank users in the party and guild.
-- `UI.lua`: the window with its four pages, and the minimap button.
+- `UI.lua`: the window with its five pages (Quest Log, Plan, Hand-in Route, Party, Settings), the post box, and the minimap button.
 
 The data, all raw inputs in `research/` (gitignored):
 

@@ -2,8 +2,9 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.2.1"
-QB.CAP = 30
+QB.version = "3.3.0"
+QB.MAXLEVEL = 60
+QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
 
 local D = QB.Data
 local API = {}
@@ -171,7 +172,8 @@ function API.LogQuests()
     local title, level, isHeader, flag, questID
     if C_QuestLog and C_QuestLog.GetInfo then
       local info = C_QuestLog.GetInfo(i)
-      if info then title, level, isHeader, questID = info.title, info.level, info.isHeader, info.questID end
+      -- (hidden entries are the game's own bookkeeping, not quests you hold)
+      if info and not info.isHidden then title, level, isHeader, questID = info.title, info.level, info.isHeader, info.questID end
     elseif GetQuestLogTitle then
       local t, l, _, h, _, c, _, id = GetQuestLogTitle(i)
       title, level, isHeader, flag, questID = t, l, h, c, id
@@ -383,6 +385,32 @@ function QB.Short(n)
   return tostring(n)
 end
 
+-- is version a newer than b ("3.3.0" against "3.2.1")
+function QB.Newer(a, b)
+  local function parts(v)
+    local x, y, z = tostring(v or ""):match("^(%d+)%.(%d+)%.?(%d*)")
+    return tonumber(x) or 0, tonumber(y) or 0, tonumber(z) or 0
+  end
+  local a1, a2, a3 = parts(a)
+  local b1, b2, b3 = parts(b)
+  if a1 ~= b1 then return a1 > b1 end
+  if a2 ~= b2 then return a2 > b2 end
+  return a3 > b3
+end
+
+QB.DOWNLOAD = "https://foreverrank.com/questbank/"
+
+-- a party or guild member runs a newer QuestBank: say so once a session (Settings can turn it off)
+function QB:SawVersion(v, who)
+  if not v or not v:match("^%d+%.%d+") or not QB.Newer(v, QB.version) then return end
+  if QB.newest and not QB.Newer(v, QB.newest.version) then return end
+  QB.newest = { version = v, who = who }
+  if self:Settings().updates and not QB.toldNewer then
+    QB.toldNewer = true
+    QB:Print(string.format("QuestBank %s is out (%s runs it); you have %s. Type /qb update for the download link.", v, who or "someone", QB.version))
+  end
+end
+
 function QB.Clock(minutes)
   local m = math.floor((minutes or 0) + 0.5)
   return string.format("%d:%02d", math.floor(m / 60), m % 60)
@@ -417,6 +445,9 @@ function Q.Get(id)
   c.dungeon = c.flags % 2 == 1
   c.group = math.floor(c.flags / 2) % 2 == 1
   c.unconfirmed = math.floor(c.flags / 8) % 2 == 1
+  c.classic = math.floor(c.flags / 16) % 2 == 1      -- from the Classic database, not seen in Forever yet
+  c.dungeonMult = math.floor(c.flags / 32) % 2 == 1  -- multiplier taken from its dungeon's other quests
+  c.xpUnknown = math.floor(c.flags / 64) % 2 == 1
   c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and API.ItemIcon(c.bag[1])) or API.ItemIcon(D.QITEM[id])
     or (c.cat and c.cat.icon) or D.TEX.questGeneric
   cache[id] = c
@@ -497,6 +528,7 @@ function Live.Record(id, xp, level, src, rested)
   local old = QuestBankDB.live[id]
   if old and old.src ~= "party" and src == "party" then return end
   QuestBankDB.live[id] = { full = full, lvl = level, src = src }
+  if q.liveFull ~= full then QB.liveVer = (QB.liveVer or 0) + 1 end
   q.liveFull = full
   if QB.Sync and src ~= "party" then QB.Sync:QueueLive(id, full, level) end
 end
@@ -529,7 +561,7 @@ QB.WindowXP = windowXP
 local DEFAULTS = {
   mounted = "auto", bag = "auto", goal = "hour", routeMode = "now", tab = 1, pins = true,
   minimap = { angle = 205, hide = false }, share = { party = true, guild = true },
-  post = { party = true, guild = true, auto = true },
+  post = { party = true, guild = true, auto = true }, updates = true,
 }
 
 function QB:Settings()
@@ -594,6 +626,134 @@ function QB:BagBonus()
 end
 
 ----------------------------------------------------------------------------
+-- the level lock. Banking a log only makes sense while the game holds your level at a cap: you
+-- finish quests, keep them, and hand them all in the hour the cap goes up. QuestBank finds the lock
+-- three ways: you turned XP off, the game reports your level as its highest for now (Season of
+-- Discovery's clients reported their phase caps like that), or a hand-in at your level paid no XP
+-- when it should have. Otherwise you're questing: hand in as you go, and no rush.
+--   lock   held at a cap: bank, and plan the hour after it lifts
+--   rush   the cap went up: cash the bank in, until the hand-in run ends
+--   quest  levelling as usual
+----------------------------------------------------------------------------
+-- the highest level the game lets you reach for now
+function API.GameCap()
+  local cap = QB.MAXLEVEL
+  for _, name in ipairs({ "GetMaxPlayerLevel", "GetMaxLevelForPlayerExpansion" }) do
+    local fn = _G[name]
+    if fn then
+      local ok, v = pcall(fn)
+      if ok and type(v) == "number" and v >= 10 and v < cap then cap = v end
+    end
+  end
+  return cap
+end
+
+-- the lock learned from hand-ins, for this realm, and only while it's fresh (caps last weeks, not months)
+local function learnedLock()
+  local all = QuestBankDB and QuestBankDB.lock
+  local mine = type(all) == "table" and all[QB.RealmKey()]
+  if type(mine) == "table" and mine.level and (time() - (mine.at or 0)) < 30 * 86400 then return mine.level end
+end
+
+function QB.RealmKey()
+  return (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or "?"
+end
+
+-- your choice, per character: "auto" (QuestBank looks), "on" (bank at the level you chose it), "off"
+function QB:LockChoice()
+  local p = self:Plan()
+  return p.lock or "auto", p
+end
+
+function QB:SetLock(value)
+  local p = self:Plan()
+  p.lock = value ~= "auto" and value or nil
+  p.lockAt = value == "on" and self.state.level or nil
+  -- whatever the last lock was, your choice replaces it; a lock found again is noted again
+  if QuestBankDB.held then QuestBankDB.held[self:CharKey()] = nil end
+  self:MarkDirty()
+end
+
+-- nil, or the level the game holds you at and the level XP runs to once it lifts. Reads only.
+function QB:Lock()
+  local choice, p = self:LockChoice()
+  local level = self.state.level or 1
+  if choice == "off" or level >= QB.MAXLEVEL then return nil end
+  local held
+  if choice == "on" then
+    if p.lockAt and level > p.lockAt then return nil end -- you levelled past it (ReadState tidies up)
+    held = p.lockAt or level
+  elseif IsXPUserDisabled and IsXPUserDisabled() then
+    held = level
+  else
+    local cap = API.GameCap()
+    if level >= cap then held = cap
+    elseif learnedLock() == level then held = level end
+  end
+  if not held then return nil end
+  local nextCap = (p.nextCap and p.nextCap > held) and p.nextCap or math.min(held + 10, QB.MAXLEVEL)
+  return held, nextCap
+end
+
+-- what the last lock was, for the rush after it lifts
+function QB:Held()
+  return QuestBankDB and QuestBankDB.held and QuestBankDB.held[self:CharKey()]
+end
+
+function QB:Mode()
+  if self:Lock() then return "lock" end
+  local run = QB.Run and QB.Run.Get()
+  if run then return run.mode == "quest" and "quest" or "rush" end
+  -- the lock just lifted and you haven't levelled since: your first hand-in starts the run
+  local held = self:Held()
+  if held and self:LockChoice() ~= "off" and (self.state.level or 1) <= held.level then return "rush" end
+  return "quest"
+end
+
+-- XP amounts that matter scale with the level: 500 XP is a lot at level 3 and nothing at 50. These
+-- were tuned at level 20, so the factor is 1 there.
+function QB.Scale(level)
+  local T = QB.Data.TO_NEXT
+  level = math.max(1, math.min(level or 20, #T))
+  return T[level] / T[20]
+end
+
+-- a chain worth carrying on: the best later step you could take (up to three steps on), what it
+-- pays and how many steps on. At a lock it's the step to bank instead, and only when it pays more
+-- than this one; questing, it's where the chain leads next.
+function QB:Upgrade(q)
+  if not (q and q.nextSteps) then return nil end
+  local s = self.state
+  local lvl = s.level or 1
+  local banking = self:Banking()
+  local here = QB.Model.XpAt(q, lvl)
+  local best, bestV, bestDepth
+  local seen = {}
+  local function walk(x, depth)
+    if depth > 3 or not x.nextSteps then return end
+    for _, nid in ipairs(x.nextSteps) do
+      local nq = Q.Get(nid)
+      if nq and not seen[nid] and Q.ForMe(nq) and not API.IsDone(nid) and not s.log[nid]
+        and (nq.req or 1) <= lvl + (banking and 0 or 2) then
+        seen[nid] = true
+        local v = QB.Model.XpAt(nq, lvl)
+        -- a step handed in inside a dungeon can't be banked; the one after it can
+        if not (banking and nq.turn and nq.turn.inside) and (not bestV or v > bestV) then best, bestV, bestDepth = nq, v, depth end
+        walk(nq, depth + 1)
+      end
+    end
+  end
+  walk(q, 1)
+  if not best or bestV <= 0 then return nil end
+  if banking and bestV <= here + 300 * QB.Scale(lvl) then return nil end
+  return best, bestV, bestDepth
+end
+
+-- banking words only where banking happens
+function QB:Banking() return self:Mode() ~= "quest" end
+function QB:OnTheDay() return self:Banking() and "on the day" or "at your level" end
+
+----------------------------------------------------------------------------
 -- state
 ----------------------------------------------------------------------------
 QB.state = { level = 1, xp = 0, log = {}, logOrder = {}, bagStarts = {} }
@@ -609,7 +769,7 @@ local function trackRemovals(s)
     if not s.log[id] then
       if not turnedIn[id] and not API.IsDone(id) then
         local q = Q.Get(id)
-        local value = q and QB.Model.XpAt(q, math.max(s.level, 20)) or nil
+        local value = q and QB.Model.XpAt(q, s.level) or nil
         p.removed[id] = { title = title, at = time and time() or 0, value = value }
         if QB.loggedIn then
           QB:Print(string.format("%s left your log without a hand-in%s. The plan no longer counts it.", title,
@@ -638,6 +798,30 @@ function QB:ReadState()
   s.class = class
   s.name = UnitName("player")
   QB.faction = API.Faction()
+  local choice, p = QB:LockChoice()
+  if choice == "on" and p.lockAt and s.level > p.lockAt then p.lock, p.lockAt = nil, nil end
+  local held, nextCap = QB:Lock()
+  QuestBankDB.held = QuestBankDB.held or {}
+  local key = QB:CharKey()
+  local run = QB.Run and QB.Run.Get()
+  if held then
+    QuestBankDB.held[key] = { level = held, next = nextCap }
+  elseif QuestBankDB.held[key] and not run and (s.level > QuestBankDB.held[key].level or choice == "off") then
+    QuestBankDB.held[key] = nil -- the bank is behind you
+  end
+  local was = QB:Held()
+  local cap
+  if nextCap then
+    cap = nextCap
+  elseif was and (run or s.level <= was.level) then
+    -- the rush: the new cap if the game says, else the one you expected
+    local game = API.GameCap()
+    cap = (game > was.level and game < QB.MAXLEVEL) and game or was.next
+  else
+    cap = API.GameCap()
+  end
+  QB.CAP = math.max(cap or QB.MAXLEVEL, s.level)
+  QB.mode = QB:Mode()
   trackRemovals(s)
   -- a quest that just turned complete: say so once
   QB.wasComplete = QB.wasComplete or {}
@@ -645,9 +829,9 @@ function QB:ReadState()
     local before = QB.wasComplete[e.id]
     if e.complete and before == false and QB.loggedIn then
       local q = Q.Get(e.id)
-      local value = q and QB.Model.XpAt(q, math.max(s.level, 20))
-      QB:Print(string.format("%s is complete: banked%s.", e.title,
-        value and value > 0 and (", worth about " .. QB.Comma(value) .. " XP on the day") or ""))
+      local value = q and QB.Model.XpAt(q, s.level)
+      QB:Print(string.format("%s is complete%s%s.", e.title, QB:Banking() and ": banked" or ", hand it in",
+        value and value > 0 and (", worth about " .. QB.Comma(value) .. " XP " .. QB:OnTheDay()) or ""))
     end
     QB.wasComplete[e.id] = e.complete and true or false
   end
@@ -676,7 +860,7 @@ function QB:Status(q)
   local e = s.log[q.id]
   local items = Bank.Items(q)
   if e then
-    if e.complete then return { code = "banked", text = "Banked, ready to hand in" } end
+    if e.complete then return { code = "banked", text = QB:Banking() and "Banked, ready to hand in" or "Ready to hand in" } end
     local text = progressText(e)
     if items then
       local fromBank = 0
@@ -690,7 +874,7 @@ function QB:Status(q)
   local bag = q.bag
   if bag and bag[3] == 1 then
     local n = API.ItemCount(bag[1])
-    if n >= bag[2] then return { code = "banked", text = "Banked in your bags", bag = true } end
+    if n >= bag[2] then return { code = "banked", text = QB:Banking() and "Banked in your bags" or "In your bags, ready", bag = true } end
     if n > 0 then return { code = "partial", text = n .. "/" .. bag[2] .. " in your bags" } end
   elseif s.bagStarts[q.id] or (bag and bag[3] == 0 and API.ItemCount(bag[1]) > 0) then
     return { code = "bagstart", text = "Starts from an item in your bags" }
@@ -837,6 +1021,7 @@ end
 function Run.Start()
   local r = QB.routeNow
   local run = { started = time(), key = QB:CharKey(), level = QB.state.level, xp = QB.state.xp, done = {}, plan = {},
+                mode = QB.mode == "quest" and "quest" or "rush",
                 predicted = r and r.xp or 0, predictedT = r and r.t or 0, hearthUsed = false }
   if r then
     for _, leg in ipairs(r.legs) do
@@ -858,6 +1043,9 @@ function Run.Stop()
   run.got, run.count = got, n
   table.insert(QuestBankDB.runs, run)
   QuestBankDB.run = nil
+  -- the bank is cashed in: questing from here, until the next lock
+  if QuestBankDB.held and not QB:Lock() then QuestBankDB.held[QB:CharKey()] = nil end
+  QB.mode = QB:Mode()
   QB:Print(string.format("Run ended: %d quests, %s XP in %s.", n, QB.Comma(got), QB.Clock((run.ended - run.started) / 60)))
   if n > 0 then Run.Offer("done", run) end
   QB:MarkDirty()
@@ -920,7 +1108,7 @@ function Run.PostText(kind, arg)
       run.hour.level, quests(run.hour.n), QB.Comma(run.hour.xp)), "The first hour of your hand-in run is up."
   elseif run and kind == "done" then
     return string.format("Hand-in run done: level %.1f to %.1f in %d min, %s, +%s XP. (QuestBank)",
-      QB.Model.Frac(run.level or 20, run.xp or 0), levelNow(), minutes((run.ended - run.started) / 60),
+      QB.Model.Frac(run.level or 1, run.xp or 0), levelNow(), minutes((run.ended - run.started) / 60),
       quests(run.count or 0), QB.Comma(run.got or 0)), "Your hand-in run is over."
   elseif run then
     local got, n = Run.Totals()
@@ -931,6 +1119,14 @@ function Run.PostText(kind, arg)
   local banked = (now and not now.empty) and now.level or levelNow()
   local full = (plan and not plan.empty) and plan.level or banked
   local hour = (plan and not plan.empty) and plan.at60 or banked
+  if not QB:Banking() then
+    return string.format("Level %.1f: the quests ready in my log take me to %.1f, my plan to %.1f. (QuestBank)",
+      levelNow(), banked, full), "Your quest log and your plan."
+  end
+  if QB.mode == "rush" then
+    return string.format("The cap is up: my bank takes me to level %.1f, my full plan to %.1f (%.1f inside the first hour). (QuestBank)",
+      banked, full, hour), "Your bank and your plan."
+  end
   return string.format("My banked quests take me to level %.1f when the cap goes up, my full plan to %.1f (%.1f inside the first hour). (QuestBank)",
     banked, full, hour), "Your bank and your plan."
 end
@@ -964,8 +1160,12 @@ end
 -- recompute: two routes, cached until something they depend on changes, planned in the background
 ----------------------------------------------------------------------------
 local function signature(list, opts)
-  local parts = { opts.level, opts.xp, tostring(opts.mounted), tostring(opts.bonus), opts.goal, opts.fac,
-                  opts.startHub or "-", tostring(opts.noHearth) }
+  -- XP counts in fiftieths of a level (every kill would re-plan otherwise); XP numbers the game
+  -- reported count by how many there have been
+  local T = QB.Data.TO_NEXT
+  local xpq = math.floor((opts.xp or 0) * 50 / (T[opts.level] or 1))
+  local parts = { opts.level, xpq, tostring(opts.mounted), tostring(opts.bonus), opts.goal, opts.fac,
+                  opts.startHub or "-", tostring(opts.noHearth), opts.cap or 0, opts.mode or "", QB.liveVer or 0 }
   for _, e in ipairs(list) do parts[#parts + 1] = e.q.id .. (e.st and e.st.code or "") end
   return table.concat(parts, ":")
 end
@@ -973,21 +1173,24 @@ end
 function QB:Recompute(sync)
   self:ReadState()
   local set = self:Settings()
+  local mode = QB.mode
   local opts = {
     level = self.state.level, xp = self.state.xp, mounted = (self:Mounted()), bonus = (self:BagBonus()),
-    goal = set.goal, fac = QB.faction,
+    goal = mode == "quest" and "route" or set.goal, fac = QB.faction, cap = QB.CAP, mode = mode,
   }
   local nowOpts = {}
   for k, v in pairs(opts) do nowOpts[k] = v end
-  if Run.Get() then
-    -- mid-run: the rest of the route from where you stand
+  -- mid-run, or questing: the route from where you stand. (At a lock you log out where the route starts.)
+  local run = Run.Get()
+  if run or mode == "quest" then
     local wp = API.WorldPosition()
     if wp then
       local place = QB.Model.Place(QB.faction, wp.c, wp.wx, wp.wy)
       if place.hub > 0 then nowOpts.start, nowOpts.startHub = wp, place.hub end
     end
-    nowOpts.noHearth = Run.Get().hearthUsed or not API.HearthReady()
+    nowOpts.noHearth = (run and run.hearthUsed) or not API.HearthReady()
     nowOpts.goal = "route"
+    if mode == "quest" then opts.start, opts.startHub, opts.noHearth = nowOpts.start, nowOpts.startHub, nowOpts.noHearth end
   end
   local now, plan = self:RouteEntries("now"), self:RouteEntries("plan")
   local sigNow, sigPlan = signature(now, nowOpts), signature(plan, opts)
@@ -1016,14 +1219,14 @@ function QB:Recompute(sync)
   return self.routeNow, self.routePlan
 end
 
--- XP a quest is worth on the day: from a route, else at your level (20 at the least)
+-- XP a quest is worth on the day: from a route, else at your level
 function QB:Value(id)
   for _, r in ipairs({ self.routePlan, self.routeNow }) do
     if r and r.byQuest and r.byQuest[id] then return r.byQuest[id], true end
   end
   local q = Q.Get(id)
   if not q then return nil end
-  return QB.Model.XpAt(q, math.max(self.state.level, 20)), false
+  return QB.Model.XpAt(q, self.state.level), false
 end
 
 ----------------------------------------------------------------------------
@@ -1105,7 +1308,10 @@ end
 
 function QB:Changed()
   QB.Try("plan", QB.Recompute, QB)
+  -- the window shows what was just worked out, without working it out again
+  QB.fresh = true
   if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.Try("window", QB.UI.Refresh, QB.UI) end
+  QB.fresh = false
   if QB.Pins then QB.Try("map pins", QB.Pins.Update, QB.Pins) end
   if QB.Sync then QB.Try("party sync", QB.Sync.Changed, QB.Sync) end
 end
@@ -1121,7 +1327,21 @@ local function onTurnIn(questID, xpReward)
     mult = q and q.mult, base = q and q.base,
   })
   local level = UnitLevel("player") or 0
-  if not Run.Get() and predicted and level < QB.CAP and (xpReward or 0) > 0 then Run.Start() end
+  -- the lock, learned: a quest worth XP at this level paid none (the cap holds for every character on
+  -- the realm, so it counts account-wide), until a hand-in at that level pays again
+  local expected = q and QB.Model.XpAt(q, level) or 0
+  -- (at a cap the game throws XP away, so the bar sits at 0: a stray quest that pays nothing isn't a lock)
+  local locks = type(QuestBankDB.lock) == "table" and not QuestBankDB.lock.level and QuestBankDB.lock or {}
+  QuestBankDB.lock = locks
+  local realm = QB.RealmKey()
+  if (xpReward or 0) == 0 and expected >= 100 * QB.Scale(level) and level < QB.MAXLEVEL and (UnitXP("player") or 0) == 0
+    and not (IsXPUserDisabled and IsXPUserDisabled()) then
+    locks[realm] = { level = level, at = time() }
+  elseif (xpReward or 0) > 0 and locks[realm] and level >= locks[realm].level then
+    locks[realm] = nil
+  end
+  -- the first banked quest that pays after a lock starts the hand-in run by itself
+  if not Run.Get() and predicted and QB.mode ~= "quest" and (xpReward or 0) > 0 then Run.Start() end
   Run.Record(questID, xpReward, q and q.name)
   if not q then return end
   if (xpReward or 0) == 0 and predicted and predicted > 0 then
@@ -1140,13 +1360,16 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if a1 == ADDON then QB:Settings(); Live.Apply() end
     return
   elseif event == "QUEST_DETAIL" or event == "QUEST_COMPLETE" then
+    local before = QB.liveVer
     windowXP("npc")
-    return
+    if QB.liveVer == before then return end -- nothing new: the plan stands
   elseif event == "PLAYER_LOGIN" then
     QB:ReadState()
     if QB.Minimap then QB.Minimap:Create() end
     if QB.Pins then QB.Pins:Init() end
     if QB.Sync then QB.Sync:Init() end
+    if QB.Discover then QB.Discover:Init() end
+    if QB.Arrow then QB.Arrow:Init() end
     Run.ArmHour()
     C_Timer.After(8, QB.Safe(function() QB:Snapshot("login") end, "login snapshot"))
     C_Timer.After(4, QB.Safe(function() QB:Changed() end, "login"))
@@ -1168,10 +1391,22 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     local level = a1
     if Run.Get() and level then C_Timer.After(1, QB.Safe(function() Run.Offer("level", level) end, "run: level up")) end
   elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+    -- only the hearthstone (and astral recall) matter: the route can't use it again this run
+    if a1 ~= "player" or not (a3 == 8690 or a3 == 556) then return end
+    if Run.Get() then Run.Get().hearthUsed = true end
+  elseif event == "UNIT_AURA" then
+    -- only the sleeping bag's Well Rested changes a plan
     if a1 ~= "player" then return end
-    if (a3 == 8690 or a3 == 556) and Run.Get() then Run.Get().hearthUsed = true end
-  elseif event == "UNIT_AURA" and a1 ~= "player" then
-    return
+    local rested = API.HasWellRested() and true or false
+    if rested == QB.lastRested then return end
+    QB.lastRested = rested
+  elseif event == "PLAYER_XP_UPDATE" then
+    -- kills move the bar all the time: re-plan when it has moved a fiftieth of a level
+    local T = QB.Data.TO_NEXT
+    local lvl = UnitLevel("player") or 1
+    local step = math.floor((UnitXP("player") or 0) * 50 / (T[lvl] or 1))
+    if step == QB.xpStep then return end
+    QB.xpStep = step
   elseif event == "BANKFRAME_OPENED" then
     QB.bankOpen = true
     Bank.Scan()
@@ -1179,7 +1414,15 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     Bank.Scan()
     QB.bankOpen = false
   elseif event == "PLAYERBANKSLOTS_CHANGED" or (event == "BAG_UPDATE_DELAYED" and QB.bankOpen) then
-    Bank.Scan()
+    -- moving a stack fires this for every slot: scan once, a moment later
+    if QB.bankScanSoon then return end
+    QB.bankScanSoon = true
+    C_Timer.After(0.5, QB.Safe(function()
+      QB.bankScanSoon = false
+      if QB.bankOpen then Bank.Scan() end
+      QB:MarkDirty()
+    end, "bank scan"))
+    return
   end
   QB:MarkDirty()
 end, "game event"))
@@ -1188,7 +1431,11 @@ for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_LOGOUT", "QUEST_LOG
   "QUEST_ACCEPTED", "QUEST_REMOVED", "BAG_UPDATE_DELAYED", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE",
   "ZONE_CHANGED_NEW_AREA", "UNIT_AURA", "HEARTHSTONE_BOUND", "UNIT_SPELLCAST_SUCCEEDED", "QUEST_DETAIL", "QUEST_COMPLETE",
   "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED" }) do
-  pcall(frame.RegisterEvent, frame, e)
+  if (e == "UNIT_AURA" or e == "UNIT_SPELLCAST_SUCCEEDED") and frame.RegisterUnitEvent then
+    pcall(frame.RegisterUnitEvent, frame, e, "player") -- not every unit in sight
+  else
+    pcall(frame.RegisterEvent, frame, e)
+  end
 end
 
 ----------------------------------------------------------------------------
@@ -1215,7 +1462,7 @@ slash = function(msg)
     if QB.Minimap then QB.Minimap:Update() end
   elseif cmd == "route" then
     QB.UI:Open(3)
-  elseif cmd == "prep" then
+  elseif cmd == "prep" or cmd == "plan" then
     QB.UI:Open(2)
   elseif cmd == "party" then
     QB.UI:Open(4)
@@ -1225,6 +1472,19 @@ slash = function(msg)
     Run.Stop()
   elseif cmd == "post" then
     QB.UI:PostDialog(Run.PostText("status"))
+  elseif cmd == "arrow" then
+    QB.Arrow:Set(not QB:Settings().arrow)
+    QB:Print(QB:Settings().arrow and "Direction arrow on: it points to the next stop on your route. Drag it where you like." or "Direction arrow off.")
+  elseif cmd == "discoveries" then
+    local nq, nn, nc = QB.Discover.Count()
+    local function n(k, one, many) return k == 1 and ("1 " .. one) or (k .. " " .. many) end
+    QB:Print(string.format("Noted in game so far: %s, %s, %s. They stay in your saved file; ForeverProbe (optional) can carry them to foreverrank.com.",
+      n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps")))
+  elseif cmd == "update" or cmd == "version" then
+    QB:Print("You run QuestBank " .. QB.version .. (QB.newest and (". Newest seen: " .. QB.newest.version .. " (" .. (QB.newest.who or "?") .. ").") or "."))
+    QB.UI:CopyLink("QuestBank download page", QB.DOWNLOAD)
+  elseif cmd == "settings" or cmd == "options" then
+    QB.UI:Open(5)
   elseif cmd == "sync" and QB.Sync then
     if rest ~= "" then QB.Sync:Whisper(rest) else QB.Sync:Broadcast(true) end
   elseif cmd == "pins" and QB.Pins then

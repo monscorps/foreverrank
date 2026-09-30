@@ -1,9 +1,12 @@
 """Generate QuestBank/Data.lua for both factions.
 
-Catalog: every quest a character around level 20 can hold (quest level 10 to 40, required level
-up to 30), with its Forever XP: the Classic base times the multiplier on its Wowhead Forever page
-(WH.Wow.Quest.setupScalingRewards). A quest whose page we have not read keeps a multiplier of 1
-and a flag, and the addon says so.
+Catalog: every quest from level 1 to 60, with its Forever XP: the Classic base times the multiplier
+on its Wowhead Forever page (WH.Wow.Quest.setupScalingRewards). A quest whose page we have not read
+keeps a multiplier of 1 (a dungeon quest takes its dungeon's, when the others agree) and a flag, and
+the addon says so. Wowhead Forever only knows the quests its players have met, which ends near the
+beta's level cap; above that the CMaNGOS Classic database seeds the catalog, flagged "Classic only"
+until players see the quest in Forever. Its base XP is Classic's money-at-60 / 0.6, snapped to the
+Forever client's QuestXP table (that rebuilds Wowhead's base exactly for 1,562 of 1,597 quests).
 NPCs: where each quest starts and ends (Wowhead Forever tooltips, npcloc.py), placed on the
 continent and tied to the nearest flight master of each faction. Where Wowhead has no position,
 the CMaNGOS Classic database's spawn point stands in.
@@ -164,6 +167,10 @@ DUNGEON = {  # area: (lfg icon, zone, entrance)
     491: ("razorfenkraul", "The Barrens", (1413, 42.3, 89.9)), 796: ("scarletmonastery", "Tirisfal Glades", None),
     722: ("razorfendowns", "The Barrens", None), 1337: ("uldaman", "Badlands", None), 2437: ("ragefirechasm", "Orgrimmar", None),
     16611: ("ruinsoflordaeron", "Tirisfal Glades", None), 16919: ("dungeon", "", None),
+    1176: ("zulfarak", "Tanaris", None), 2100: ("maraudon", "Desolace", None), 1477: ("sunkentemple", "Swamp of Sorrows", None),
+    1584: ("blackrockdepths", "Searing Gorge", None), 1583: ("blackrockspire", "Burning Steppes", None),
+    2557: ("diremaul", "Feralas", None), 2017: ("stratholme", "Eastern Plaguelands", None),
+    2057: ("scholomance", "Western Plaguelands", None),
 }
 ZONE_ICON = {"Stranglethorn Vale": "achievement_zone_stranglethorn_01", "Swamp of Sorrows": "achievement_zone_swampsorrows_01",
              "Stonetalon Mountains": "achievement_zone_stonetalon_01", "Silverpine Forest": "achievement_zone_silverpine_01",
@@ -194,10 +201,71 @@ def qlevel(qid):
 
 def base_xp(qid):
     d = DET.get(qid) or {}
-    return d.get("base") or LIST[qid].get("xp") or 0
+    c = ((load_cm_quests() or {}).get(str(qid))) or {}
+    return d.get("base") or LIST[qid].get("xp") or classic_base(c) if c else (d.get("base") or LIST[qid].get("xp") or 0)
+
+
+_CMQ_CACHE = None
+
+
+def load_cm_quests():
+    global _CMQ_CACHE
+    if _CMQ_CACHE is None:
+        _CMQ_CACHE = (load("cmangos.json", {}) or {}).get("quests") or {}
+    return _CMQ_CACHE
 
 
 _CMQ_IDS = {int(k) for k in ((load("cmangos.json", {}) or {}).get("quests") or {})}
+MAXLVL = 60
+# the client's quest XP table: the XP of each difficulty at each quest level
+XPT = {int(r["ID"]): [int(r["Difficulty_%d" % i]) for i in range(10)]
+       for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "QuestXP.csv")))}
+AREA_ROW = {int(r["ID"]): r for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "AreaTable.csv")))}
+RAID_AREAS = {2159, 2717, 1977, 2677, 3429, 3428, 3456}
+CLASS_SORT = {-61, -81, -82, -141, -161, -162, -261, -262, -263}
+PROF_SORT = {-24, -101, -121, -181, -182, -201, -264, -304, -324}
+
+
+def classic_base(c):
+    """Classic pays money at level 60 instead of XP: money / 0.6 is the XP, snapped to the client's table."""
+    mm = c.get("moneymax") or 0
+    if mm <= 0:
+        return 0
+    guess = mm / 0.6
+    lvl = c["level"] if c["level"] and c["level"] > 0 else c["min"]
+    row = XPT.get(lvl)
+    if row:
+        best = min((v for v in row if v > 0), key=lambda v: abs(v - guess), default=None)
+        if best and abs(best - guess) <= max(10, guess * 0.05):
+            return best
+    return int(round(guess / 5.0) * 5)
+
+
+CLASSIC = set()
+
+
+def classic_record(qid, c):
+    """A LIST-shaped record from the Classic database, for a quest Wowhead Forever doesn't list."""
+    lvl = c["level"] if c["level"] and c["level"] > 0 else c["min"]
+    sort = c.get("sort") if c.get("sort") is not None else c.get("zone")
+    cat2 = 7
+    if sort and sort > 0:
+        if sort in RAID_AREAS:
+            cat2 = 3
+        elif sort in DUNGEON:
+            cat2 = 2
+        else:
+            row = AREA_ROW.get(sort)
+            cont = int(row["ContinentID"]) if row else None
+            cat2 = cont if cont in (0, 1) else (2 if cont is not None else 7)
+    elif sort in CLASS_SORT:
+        cat2 = 4
+    elif sort in PROF_SORT:
+        cat2 = 5
+    r = c.get("races") or 0
+    side = 1 if (r & 77 and not r & 178) else (2 if (r & 178 and not r & 77) else 0)
+    return {"id": qid, "name": c["title"], "level": lvl, "reqlevel": c["min"] or 1, "side": side, "category": sort,
+            "category2": cat2, "type": c.get("type") or 0, "xp": classic_base(c), "reqclass": c.get("classes") or 0}
 JUNK = ("<", "[", "UNUSED", "NYI", "REUSE", "test quest", "Test Quest")
 EVENTS = {-22, -364, -365, -366, -367, -368, -369, -370, -1001, -1002, -1003, -1005}
 
@@ -206,6 +274,23 @@ def junk(q):
     """Placeholder quests the game never offers, and war efforts, invasions and holidays."""
     return any(t in q["name"] for t in JUNK) or q.get("category") in EVENTS or q.get("category2") == 9
 
+
+# the Classic seed: quests Wowhead Forever hasn't met yet
+for _k, _c in ((load("cmangos.json", {}) or {}).get("quests") or {}).items():
+    _qid = int(_k)
+    if _qid in LIST or not _c.get("title") or any(t in _c["title"] for t in JUNK):
+        continue
+    _lvl = _c["level"] if _c["level"] and _c["level"] > 0 else _c["min"]
+    _sort = _c.get("sort") if _c.get("sort") is not None else _c.get("zone")
+    if not (1 <= (_lvl or 0) <= MAXLVL) or (_c["min"] or 0) > MAXLVL or _sort in EVENTS or (_c.get("special") or 0) & 1:
+        continue
+    if _c.get("type") in (41, 62, 88, 89) or not _c.get("starts") or not _c.get("ends"):
+        continue
+    _rec = classic_record(_qid, _c)
+    if _rec["category2"] in (3, 6) or _rec["xp"] <= 0 or not (_c["level"] and _c["level"] > 0):
+        continue  # raids, battlegrounds, and quests with no level or no XP to plan
+    LIST[_qid] = _rec
+    CLASSIC.add(_qid)
 
 IDS = []
 for qid, q in LIST.items():
@@ -217,8 +302,10 @@ for qid, q in LIST.items():
     _d = DET.get(qid) or {}
     if qid < 20000 and qid not in _CMQ_IDS and not _d.get("startId") and not _d.get("endId"):
         continue  # a retired Classic ID (The Glowing Shard is 6981, not 3366): nobody gives or takes it
-    if not (10 <= qlevel(qid) <= 40) or (q.get("reqlevel") or 0) > 30:
+    if not (1 <= qlevel(qid) <= MAXLVL) or (q.get("reqlevel") or 0) > MAXLVL:
         continue
+    if qlevel(qid) >= MAXLVL and not base_xp(qid):
+        continue  # client leftovers Wowhead lists at level 60 with no XP (Craftsman's Writs and the like)
     IDS.append(qid)
 IDS.sort()
 
@@ -549,6 +636,16 @@ def cat_for(qid):
 # records
 # ---------------------------------------------------------------------------
 Q, QN, QITEM, QICON, TIPS, PRE, BAGQ, FOLLOW, RACE, EXCL_GROUPS = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+DMULT = {}
+_seen_mult = {}
+for _qid in IDS:
+    _q, _d = LIST[_qid], DET.get(_qid) or {}
+    if (_q.get("category2") == 2 or _q.get("type") == 81) and _d.get("mult") is not None:
+        _seen_mult.setdefault(cat_for(_qid), []).append(_d["mult"])
+for _cat, _ms in _seen_mult.items():
+    _top = max(set(_ms), key=_ms.count)
+    if len(_ms) >= 2 and _ms.count(_top) >= 0.6 * len(_ms) and _top != 1:
+        DMULT[_cat] = _top
 FROM_FC, DISAGREE = [], []
 REQ = {}
 TURNH = {}
@@ -606,6 +703,13 @@ for qid in IDS:
         flags |= 8
         mult = 1
         unconfirmed += 1
+        if (flags & 1) and DMULT.get(cat_for(qid)):
+            mult = DMULT[cat_for(qid)]
+            flags |= 32
+    if qid in CLASSIC:
+        flags |= 16
+    if not base:
+        flags |= 64
     side = {1: 1, 2: 2}.get(q.get("side"), 0)
     Q[qid] = [qlevel(qid), q.get("reqlevel") or 1, side, base, mult, turn, give, cat_for(qid), q.get("reqclass") or 0, flags]
     QN[qid] = q["name"]
@@ -674,7 +778,7 @@ for qid in IDS:
     if len(groups) != 1 or len(groups[0]) != 1:
         continue
     parent = groups[0][0]
-    if parent in Q and ender_ids(parent) & starter_ids(qid) and Q[qid][1] <= 30:
+    if parent in Q and ender_ids(parent) & starter_ids(qid):
         FOLLOW[qid] = parent
 EXCL = {}
 for members in EXCL_GROUPS.values():
@@ -724,7 +828,12 @@ lines = ["-- Generated by gen_data.py from Wowhead Forever quest data (read %s),
          "local _, QB = ...", "local D = {}", "QB.Data = D", ""]
 lines.append('D.BUILD = "%s"' % BUILD)
 lines.append('D.READ = "%s"' % READ)
-lines.append("D.TO_NEXT = " + lua([400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600, 8800, 10100, 11400, 12900, 14400, 16000, 17700, 19400, 21300, 23200, 25200, 27300, 29400, 31700, 34000, 36400, 38900, 41400, 44300, 47400, 50800, 54500, 58600, 62800, 67100, 71600, 76100, 80800, 85700, 90700]))
+TO_NEXT = [400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600, 8800, 10100, 11400, 12900, 14400, 16000, 17700, 19400,
+           21300, 23200, 25200, 27300, 29400, 31700, 34000, 36400, 38900, 41400, 44300, 47400, 50800, 54500, 58600, 62800,
+           67100, 71600, 76100, 80800, 85700, 90700, 95800, 101000, 106300, 111800, 117500, 123200, 129100, 135100, 141200,
+           147500, 153900, 160400, 167100, 173900, 180800, 187900, 195000, 202300, 209800]
+assert len(TO_NEXT) == 59 and sum(TO_NEXT) == 4084700, "the Classic curve, 1 to 60 (the Forever client's GameTable)"
+lines.append("D.TO_NEXT = " + lua(TO_NEXT))
 T = {k: tex(v) for k, v in {
     "bg": "interface/dialogframe/ui-dialogbox-background-dark", "border": "interface/dialogframe/ui-dialogbox-gold-border",
     "header": "interface/dialogframe/ui-dialogbox-gold-header", "parchH": "interface/achievementframe/ui-achievement-parchment-horizontal",
@@ -744,6 +853,8 @@ T = {k: tex(v) for k, v in {
     "ping": "interface/minimap/ui-minimap-ping-center", "dotGreen": "interface/common/indicator-green",
     "dotGray": "interface/common/indicator-gray", "dotYellow": "interface/common/indicator-yellow",
     "dotRed": "interface/common/indicator-red",
+    "upgrade": "interface/containerframe/bags",  # the bags' green upgrade arrow (atlas bags-greenarrow)
+    "questArrow": "interface/minimap/minimap-questarrow",
 }.items()}
 T.update({"hearth": icon("inv_misc_rune_01"), "mount": icon("ability_mount_ridinghorse"), "foot": icon("ability_rogue_sprint"),
           "sleep": 133662, "hourglass": icon("inv_misc_pocketwatch_01"), "gryphon": icon("ability_mount_gryphon_01"),
@@ -755,7 +866,9 @@ T.update({"hearth": icon("inv_misc_rune_01"), "mount": icon("ability_mount_ridin
 lines.append("D.TEX = " + lua(T))
 lines.append("D.CAT = {\n" + "\n".join("  " + lua(c) + "," for c in CATS) + "\n}")
 lines.append("-- [id] = {quest level, required level, side (1 Alliance, 2 Horde, 0 both), Classic base XP, Forever multiplier,")
-lines.append("--         turn-in NPC, quest giver, category, class mask, flags (1 dungeon, 2 group, 4 starts from an item, 8 multiplier not read)}")
+lines.append("--         turn-in NPC, quest giver, category, class mask, flags (1 dungeon, 2 group, 4 starts from an item, 8 multiplier not read,")
+lines.append("--         16 Classic only: not in Wowhead Forever's data yet, 32 multiplier taken from its dungeon's other quests,")
+lines.append("--         64 XP not known yet)}")
 lines.append("D.Q = {\n" + ",\n".join("[%d]=%s" % (k, lua(v)) for k, v in sorted(Q.items())) + "\n}")
 lines.append("D.QN = " + keyed(QN))
 lines.append("D.STEPNAME = " + keyed(STEPNAME))
@@ -827,25 +940,35 @@ def gap_report():
     def name(q):
         return "%d %s" % (q, LIST[q]["name"])
     side_name = {0: "both", 1: "Alliance", 2: "Horde"}
-    relevant = [q for q in IDS if Q[q][1] <= 30 and 14 <= Q[q][0] <= 35 and Q[q][3] > 0]
-    no_page = [q for q in relevant if Q[q][9] & 8]
-    no_turn = [q for q in relevant if not Q[q][5]]
-    inside = [q for q in relevant if Q[q][5] and NPCS[Q[q][5] - 1][4] < 0]
-    no_give = [q for q in relevant if not Q[q][6] and not (Q[q][9] & 4)]
-    no_chain = [q for q in relevant if not chain_known(q)]
+    with_xp = [q for q in IDS if Q[q][3] > 0]
+    forever = [q for q in with_xp if q not in CLASSIC]
+    classic = [q for q in with_xp if q in CLASSIC]
+
+    def checks(lst):
+        return {
+            "no_page": [q for q in lst if Q[q][9] & 8],
+            "no_turn": [q for q in lst if not Q[q][5]],
+            "inside": [q for q in lst if Q[q][5] and NPCS[Q[q][5] - 1][4] < 0],
+            "no_give": [q for q in lst if not Q[q][6] and not (Q[q][9] & 4)],
+            "no_chain": [q for q in lst if not chain_known(q)],
+        }
+    F, C = checks(forever), checks(classic)
     from_cm = sorted({i for i, src in SOURCE.items() if src == "cmangos"})
     out = ["# QuestBank data gaps", "",
            "Written by `gen_data.py` on every run from the inputs it had (Wowhead Forever read %s, Forever client %s," % (READ, BUILD),
-           "CMaNGOS Classic database). Counts cover the quests that matter for banking: quest level 14 to 35, required level up to 30,",
-           "some XP. Anything listed here is a quest the addon can't fully plan yet.", "",
-           "| Check | Quests | Missing |", "|---|---|---|",
-           "| Forever XP multiplier read from its Wowhead Forever page | %d | %d |" % (len(relevant), len(no_page)),
-           "| Turn-in NPC with a position | %d | %d |" % (len(relevant), len(no_turn)),
-           "| Turn-in inside a dungeon (hand in on the way, not on the route) | %d | %d |" % (len(relevant), len(inside)),
-           "| Quest giver with a position (quests that start from an item don't need one) | %d | %d |" % (len(relevant), len(no_give)),
-           "| Chain known (Wowhead Forever series or the Classic database) | %d | %d |" % (len(relevant), len(no_chain)),
-           "", "Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions and",
-           "holidays are left out.",
+           "CMaNGOS Classic database). The catalog covers levels 1 to %d. Wowhead Forever only knows the quests its players have met," % MAXLVL,
+           "which stops near the beta's level cap; the Classic database seeds the rest, labelled \"Classic only\" in the addon until",
+           "players see those quests in Forever. Anything listed here is a quest the addon can't fully plan yet.", "",
+           "| Check | Forever data | Missing | Classic seed | Missing |", "|---|---|---|---|---|",
+           "| Forever XP multiplier read from its Wowhead Forever page | %d | %d | %d | %d |" % (len(forever), len(F["no_page"]), len(classic), len(C["no_page"])),
+           "| Turn-in NPC with a position | %d | %d | %d | %d |" % (len(forever), len(F["no_turn"]), len(classic), len(C["no_turn"])),
+           "| Turn-in inside a dungeon (hand in on the way, not on the route) | %d | %d | %d | %d |" % (len(forever), len(F["inside"]), len(classic), len(C["inside"])),
+           "| Quest giver with a position (quests that start from an item don't need one) | %d | %d | %d | %d |" % (len(forever), len(F["no_give"]), len(classic), len(C["no_give"])),
+           "| Chain known (Wowhead Forever series or the Classic database) | %d | %d | %d | %d |" % (len(forever), len(F["no_chain"]), len(classic), len(C["no_chain"])),
+           "", "Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree: %s." % (
+               ", ".join("%s x%s" % (CATS[c - 1]["name"], m) for c, m in sorted(DMULT.items(), key=lambda kv: CATS[kv[0] - 1]["name"])) or "none"),
+           "", "Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,",
+           "holidays, repeatable turn-ins, raids and battlegrounds are left out.",
            "", "NPC positions: %d from Wowhead Forever, %d from the CMaNGOS spawn table where Wowhead has none." % (
                sum(1 for v in SOURCE.values() if v == "wowhead"), len(from_cm)),
            "Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: %d Wowhead coordinates there were in the old" % FRAME.fixed,
@@ -859,8 +982,11 @@ def gap_report():
     for qid, wh, fc in DISAGREE:
         out.append("- %s: Wowhead %d, ForeverChanges %d" % (name(qid), wh, fc))
     out.append("")
-    for title, lst in (("Multiplier not read", no_page), ("No turn-in position", no_turn), ("Turned in inside a dungeon", inside),
-                       ("No quest giver position", no_give), ("New in Forever with no chain on Wowhead: planned as a quest on its own", no_chain)):
+    sections = (("Forever data: multiplier not read", F["no_page"]), ("Forever data: no turn-in position", F["no_turn"]),
+                ("Forever data: turned in inside a dungeon", F["inside"]), ("Forever data: no quest giver position", F["no_give"]),
+                ("Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own", F["no_chain"]),
+                ("Classic seed: no turn-in position", C["no_turn"]), ("Classic seed: turned in inside a dungeon", C["inside"]))
+    for title, lst in sections:
         out.append("## %s (%d)" % (title, len(lst)))
         out.append("")
         for q in lst[:400]:
@@ -869,12 +995,12 @@ def gap_report():
             out.append("- and %d more" % (len(lst) - 400))
         out.append("")
     open(os.path.join(HERE, "GAPS.md"), "w").write("\n".join(out))
-    return len(relevant), len(no_page), len(no_turn), len(inside), len(no_give), len(no_chain)
+    return len(forever), len(F["no_page"]), len(F["no_turn"]), len(F["inside"]), len(F["no_give"]), len(F["no_chain"]), len(classic)
 
 
 g = gap_report()
 # how complete the data is, for the addon's own tooltip
 with open(OUT, "a") as f:
-    f.write("D.STATS = %s\n" % lua({"quests": g[0], "noMult": g[1], "noTurn": g[2], "inside": g[3], "noChain": g[5]}))
-print("gaps over %d quests: %d multipliers, %d turn-ins, %d inside dungeons, %d givers, %d chains (GAPS.md)" % g)
+    f.write("D.STATS = %s\n" % lua({"quests": g[0], "noMult": g[1], "noTurn": g[2], "inside": g[3], "noChain": g[5], "classic": g[6]}))
+print("gaps over %d Forever quests: %d multipliers, %d turn-ins, %d inside dungeons, %d givers, %d chains; %d Classic-only quests (GAPS.md)" % g)
 print("redrawn maps: %d Wowhead coordinates moved from the Classic frame to Forever's, %d already in Forever's" % (FRAME.fixed, FRAME.kept))

@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QuestBank · WoW Forever quest bank planner · ForeverRank</title>
-<meta name="description" content="QuestBank is an in-game planner for the WoW Forever level cap raise, for both factions: bank the right quests, advance the right chains, and hand them in along the fastest route, with map pins and party sync.">
+<title>QuestBank · free WoW Forever questing addon · ForeverRank</title>
+<meta name="description" content="QuestBank is a free questing addon for WoW Forever, level 1 to 60, both factions: what every quest pays, which chains to carry on, the fastest hand-in route with map pins, party sync, and banking for level cap raises.">
 <meta name="robots" content="noindex">
 <link rel="icon" href="../mark.svg" type="image/svg+xml">
 <link rel="canonical" href="https://foreverrank.com/questbank/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ForeverRank">
 <meta property="og:url" content="https://foreverrank.com/questbank/">
-<meta property="og:title" content="QuestBank · the quest bank planner for WoW Forever">
-<meta property="og:description" content="Bank the right quests, cut the weak ones, and hand them in along the fastest route when the level cap goes up.">
+<meta property="og:title" content="QuestBank · the free questing addon for WoW Forever">
+<meta property="og:description" content="What every quest pays at your level, which chains to carry on, the best quests near you and the quickest hand-in route, level 1 to 60. Banks your log at level caps.">
 <meta property="og:image" content="https://foreverrank.com/codex/img/ruins-of-lordaeron.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#1C2325">
@@ -126,6 +126,7 @@
 .slot em.ok { background: #1f9a2a; } .slot em.ok::before { content: "✓"; }
 .slot em.wait { background: #c79a12; } .slot em.wait::before { content: "…"; }
 .slot em.cut { background: #b32416; } .slot em.cut::before { content: "×"; }
+.slot i.up { position: absolute; right: 1px; top: 1px; width: 11px; height: 12px; background: url(img/upgrade-arrow.png) center / contain no-repeat; filter: drop-shadow(0 0 1px #000); }
 .slot.vacant { background: #2b2418; box-shadow: 0 0 0 2px #2f2616, 0 0 0 3px #6f5d3c; opacity: .55; }
 .q1 { --qc: var(--q-poor); } .q2 { --qc: var(--q-common); } .q3 { --qc: var(--q-uncommon); } .q4 { --qc: var(--q-rare); } .q5 { --qc: var(--q-epic); } .q6 { --qc: var(--q-leg); }
 .logcols { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 18px; }
@@ -169,6 +170,9 @@
 .modes { display: flex; gap: 4px; }
 .modes span { font: 600 11px/1 var(--heading); padding: 6px 14px; border-radius: 3px; border: 1px solid #5c1a0d; background: linear-gradient(180deg, #b52c16, #6b1409); color: #ffd9a8; }
 .modes span.dim { filter: grayscale(.6) brightness(.8); }
+.cbl { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #3a2410; margin: 7px 0 0; }
+.cb { width: 14px; height: 14px; border: 1px solid #5a4424; border-radius: 2px; background: #1c150c; position: relative; flex: none; }
+.cb.on::after { content: "✓"; position: absolute; inset: -3px 0 0 1px; color: #f2c230; font: 700 13px/1 var(--heading); }
 .rtop { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .rsum { font-size: 11.5px; color: var(--parch-ink); }
 .setup { font-size: 12px; margin: 8px 2px 6px; }
@@ -290,13 +294,13 @@
 <header class="qbh" style="--img:url(/codex/img/ruins-of-lordaeron.jpg)">
   <div class="wrapx qbh-in">
     <div>
-      <p class="kick"><span class="tag">Addon</span>For the level cap raise · WoW Forever beta</p>
+      <p class="kick"><span class="tag">Addon</span>Free · Level 1 to 60 · WoW Forever</p>
       <h1>QuestBank</h1>
-      <p class="lede">Forever pays dungeon quests up to 4.35 times their Classic XP, so what you hold when the cap goes up decides how far you jump. QuestBank shows what your log is worth, which chains to push further and what to swap, then hands you a turn-in route with map pins that gets the most levels out of the first hour. Alliance and Horde, and it plans dungeon runs with your party.</p>
+      <p class="lede">In Forever, quests are where the XP is: dungeon quests pay up to 4.35 times their Classic XP. QuestBank shows what every quest in your log is worth at your level, which chains to carry on, the best quests near you, and the quickest way to hand them in, with map pins. When the game holds your level at a cap, it banks your log and plans the hour after the cap goes up. Alliance and Horde, and it plans dungeon runs with your party.</p>
     </div>
     <div class="dl">
       <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-      <span class="dl-meta">Version 3.2.1 · 30 September 2026 · 157 KB</span>
+      <span class="dl-meta">Version 3.3.0 · 30 September 2026 · 265 KB</span>
       <span class="dl-meta">Open it in game with <code>/qb</code></span>
     </div>
   </div>
@@ -306,11 +310,22 @@
   <p class="qb-eye">Install</p>
   <h2>Up and running in a minute</h2>
   <div class="steps">
-    <div class="step"><span class="n">1</span><h3>Download and unzip</h3><p>You get one folder, <code>QuestBank</code>. Inside are nine files, all plain text.</p></div>
+    <div class="step"><span class="n">1</span><h3>Download and unzip</h3><p>You get one folder, <code>QuestBank</code>. Inside are eleven files, all plain text.</p></div>
     <div class="step"><span class="n">2</span><h3>Put it in AddOns</h3><p>Move the folder into the Forever beta's <code>Interface\AddOns</code>. That's the same folder the other beta addons use, so you end up with <code>Interface\AddOns\QuestBank\QuestBank.toc</code>.</p></div>
     <div class="step"><span class="n">3</span><h3>Log in and type /qb</h3><p>The window opens on your quest log. A book button on the minimap does the same. Replacing an older QuestBank? Delete the old folder first; your plan and settings are kept.</p></div>
   </div>
   <p class="note">If the character screen lists it as out of date, tick <b>Load out of date AddOns</b>. Blizzard hasn't published Forever's interface number yet.</p>
+</section>
+
+<section class="wrapx" id="modes">
+  <p class="qb-eye">Every level</p>
+  <h2>Questing, banking and the rush</h2>
+  <p class="sub">QuestBank works out which of the three applies to you. Settings lets you choose one yourself.</p>
+  <div class="steps">
+    <div class="step"><span class="n">1</span><h3>Questing</h3><p>You can level, so you hand quests in as you go. QuestBank values your log at your level, marks the chains worth carrying on with a green arrow, suggests the best quests near you, and plans the quickest way to hand in what's finished, from where you stand.</p></div>
+    <div class="step"><span class="n">2</span><h3>Banking</h3><p>The game holds your level at a cap. QuestBank sees it (or learns it the first time a hand-in pays nothing) and switches to banking: finish quests, keep them, and plan the hour after the cap goes up, with where to log out and where to bind your hearthstone.</p></div>
+    <div class="step"><span class="n">3</span><h3>The rush</h3><p>The cap goes up. Your first hand-in starts the run: a clock, every quest ticked off with the XP it paid, and the rest of the route planned again from where you stand. When you end the run, it's back to questing.</p></div>
+  </div>
 </section>
 
 <section class="wrapx" id="tour">
@@ -320,9 +335,10 @@
   <div class="rail" role="tablist" aria-label="Parts of the window">
     <button type="button" role="tab" id="t-window" aria-controls="p-window" aria-selected="true">Header and toggles</button>
     <button type="button" role="tab" id="t-log" aria-controls="p-log" aria-selected="false">Quest Log</button>
-    <button type="button" role="tab" id="t-prep" aria-controls="p-prep" aria-selected="false">Prep</button>
+    <button type="button" role="tab" id="t-prep" aria-controls="p-prep" aria-selected="false">Plan</button>
     <button type="button" role="tab" id="t-route" aria-controls="p-route" aria-selected="false">Hand-in Route</button>
     <button type="button" role="tab" id="t-party" aria-controls="p-party" aria-selected="false">Party</button>
+    <button type="button" role="tab" id="t-settings" aria-controls="p-settings" aria-selected="false">Settings</button>
     <button type="button" role="tab" id="t-map" aria-controls="p-map" aria-selected="false">Map and minimap</button>
   </div>
 
@@ -358,21 +374,21 @@
             </div>
             <div class="parch" style="min-height:0">
               <div class="pt">The page you have open</div>
-              <p style="max-width:none;margin:.5rem 0 0;color:#6b4d28;font-size:12px">The parchment holds whichever page the tabs underneath have open: your Quest Log, Prep, the Hand-in Route or your Party. The other tour tabs above show each one.</p>
+              <p style="max-width:none;margin:.5rem 0 0;color:#6b4d28;font-size:12px">The parchment holds whichever page the tabs underneath have open: your Quest Log, Plan, the Hand-in Route, your Party or Settings. The other tour tabs above show each one.</p>
             </div>
-            <div class="wtabs"><span class="call inl">7</span><span class="on">Quest Log</span><span>Prep</span><span>Hand-in Route</span><span>Party</span></div>
+            <div class="wtabs"><span class="call inl">7</span><span class="on">Quest Log</span><span>Plan</span><span>Hand-in Route</span><span>Party</span><span>Settings</span></div>
           </div>
         </div></div>
         <figure class="shot" data-shot="img/window.jpg" hidden><p class="fig-label">In game</p></figure>
       </div>
       <ol class="legend">
         <li><span><b>You and your hearthstone.</b> Your portrait, level, faction, and where your hearthstone is bound right now. Everything below follows your own character: faction, class and race.</span></li>
-        <li><span><b>The XP bar from 20 to 30.</b> Blue is where you are now. Purple is where you land after handing in everything you're holding. Pale is where the full plan takes you. The numbers above it spell that out, plus your level at the 60-minute mark.</span></li>
+        <li><span><b>The XP bar.</b> Your next ten levels while questing; from the lock to the next cap while banking (20 to 30 in the picture). Blue is where you are now. Purple is where you land after handing in what's finished. Pale is where the full plan takes you. The numbers above it spell that out, and while banking, your level at the 60-minute mark too.</span></li>
         <li><span><b>Mounted or on foot.</b> It reads your riding skill. A mount cuts every run between NPCs to 62%, which changes both the clock and the best order. Click to set it yourself, right-click to go back to automatic.</span></li>
         <li><span><b>Cozy Sleeping Bag.</b> Lights up while the Well Rested buff is on you: +3% XP from quests for two hours. Click or right-click works the same way as the mount button.</span></li>
-        <li><span><b>Plan for the first hour or the whole route.</b> First hour picks the order that leaves you highest at minute 60. Whole route picks the highest level at the end.</span></li>
+        <li><span><b>The third switch.</b> While banking: plan for the first hour (the order that leaves you highest at minute 60) or the whole route (the highest level at the end); right-click it to stop banking. While questing it reads <b>Questing</b>; click it to bank anyway.</span></li>
         <li><span><b>Map pins.</b> Numbered pins on your world map for every stop of the route, and a ! where the quests you plan to fetch start. Click to turn them on or off, right-click for a waypoint on the next stop.</span></li>
-        <li><span><b>Four pages.</b> Quest Log, Prep, Hand-in Route and Party, like the tabs under the character window.</span></li>
+        <li><span><b>Five pages.</b> Quest Log, Plan, Hand-in Route, Party and Settings, like the tabs under the character window.</span></li>
       </ol>
     </div>
   </div>
@@ -411,14 +427,15 @@
                 </div>
               </div>
             </div>
-            <div class="wtabs"><span class="on">Quest Log</span><span>Prep</span><span>Hand-in Route</span><span>Party</span></div>
+            <div class="wtabs"><span class="on">Quest Log</span><span>Plan</span><span>Hand-in Route</span><span>Party</span><span>Settings</span></div>
           </div>
         </div></div>
         <figure class="shot" data-shot="img/log.jpg" hidden><p class="fig-label">In game</p></figure>
       </div>
       <ol class="legend">
-        <li><span><b>Your 40 slots, best first.</b> Every quest in your log, sorted by what it pays on the day. The border colour follows item quality, from grey under 1,500 XP to orange over 12,000. The number is the XP.</span></li>
-        <li><span><b>A mark on each slot.</b> Green: finished, banked. Yellow: not finished yet. Red: you cut it from the plan, or QuestBank doesn't know the quest. Shift-click a slot to cut it or keep it.</span></li>
+        <li><span><b>Your 40 slots, best first.</b> Every quest in your log, sorted by what it pays at your level (on the day, while banking). The border colour follows item quality, from grey under 1,500 XP to orange over 12,000. The number is the XP.</span></li>
+        <li><span><b>A mark on each slot.</b> Green: finished. Yellow: not finished yet. Red: you cut it from the plan, or QuestBank doesn't know the quest. Shift-click a slot to cut it or keep it.</span></li>
+        <li><span><b>The green arrow: carry the chain on.</b> The game's own bag upgrade arrow, on quests that lead somewhere. Questing, it marks the chains worth doing, and the tooltip says what the chain leads to and what the best step further on pays. While banking it only shows where a later step pays more than this one: hand this one in now and bank that step instead. The others are plain hand-ins.</span></li>
         <li><span><b>Items that don't need a slot.</b> Items that start a quest can wait in your bags without taking a log slot until the cap goes up. The count shows how far along you are, like 4 of 10 Bloodied Insignias. Below them, QuestBank lists any quest that left your log without a hand-in, so an accidental abandon doesn't go unnoticed.</span></li>
         <li><span><b>Better use of a slot.</b> Three kinds of move, biggest gain first. Advance a chain: you hold one step, a later step pays more, so hand this one in now and bank that one. Fill a free slot with the best quest you can pick up, or with what a dungeon step leads to: take In Search of Thaelrid, hand it in to Thaelrid inside Blackfathom Deeps, and bank the Blackfathom Villainy he gives you. Swap a weak quest for a better one. Click a row to pin the quest giver.</span></li>
         <li><span><b>Hover anything, right-click for more.</b> The tooltip shows where the XP number comes from, the XP at the level you'll hand it in, the whole chain it belongs to and what it leads on to, and the giver and turn-in NPC with coordinates. Right-click opens a menu: waypoints, cut or keep, and the Wowhead link.</span></li>
@@ -464,16 +481,16 @@
                 <div class="row"><span class="mk new"></span><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg" alt=""><span>Scramble</span><span class="lv"></span><span class="st">Mound of Dirt, Stonetalon Mountains</span><span class="xp"></span></div>
               </div>
             </div>
-            <div class="wtabs"><span>Quest Log</span><span class="on">Prep</span><span>Hand-in Route</span><span>Party</span></div>
+            <div class="wtabs"><span>Quest Log</span><span class="on">Plan</span><span>Hand-in Route</span><span>Party</span><span>Settings</span></div>
           </div>
         </div></div>
         <figure class="shot" data-shot="img/prep.jpg" hidden><p class="fig-label">In game</p></figure>
       </div>
       <ol class="legend">
-        <li><span><b>One card per dungeon or zone.</b> Every quest you hold or planned there, then the best quests there you could still fetch, for your faction, class and race. Sorted by XP still to collect, so the top card is the best use of your evening.</span></li>
+        <li><span><b>One card per dungeon or zone.</b> Every quest you hold or planned there, then the best quests there you could still fetch, for your faction, class and race, and no more than a few levels above you while questing. Sorted by XP still to collect; while questing, zones near you come first, so the top card is the best use of your evening.</span></li>
         <li><span><b>What's left and where.</b> XP still to get and how many quests are banked. The pin marks the dungeon entrance on your map.</span></li>
         <li><span><b>Live status for every quest</b>, read from your game: banked, in your log with the count, the chain step you need first and how many steps are left, the level it needs, or turned in already.</span></li>
-        <li><span><b>Make room.</b> Quests you cut, quests QuestBank doesn't know, and quests that pay next to nothing on the day, with what to do about each: hand it in now for the rewards, or abandon it.</span></li>
+        <li><span><b>Make room.</b> Quests you cut, quests QuestBank doesn't know, and quests that pay next to nothing at your level, with what to do about each: hand it in now for the rewards, or abandon it.</span></li>
         <li><span><b>The sleeping bag chain.</b> Every step of Stepping Stones, with a pin on the next one.</span></li>
       </ol>
       <p class="note">Click a quest for a map pin on its giver. Shift-click to add it to your plan or drop it. The route, the swaps and the ! pins on your map follow straight away.</p>
@@ -523,7 +540,7 @@
                 </div></div>
               </div>
             </div>
-            <div class="wtabs"><span>Quest Log</span><span>Prep</span><span class="on">Hand-in Route</span><span>Party</span></div>
+            <div class="wtabs"><span>Quest Log</span><span>Plan</span><span class="on">Hand-in Route</span><span>Party</span><span>Settings</span></div>
           </div>
         </div></div>
         <figure class="shot" data-shot="img/route.jpg" hidden><p class="fig-label">In game</p></figure>
@@ -578,7 +595,7 @@
                 </div>
               </div>
             </div>
-            <div class="wtabs"><span>Quest Log</span><span>Prep</span><span>Hand-in Route</span><span class="on">Party</span></div>
+            <div class="wtabs"><span>Quest Log</span><span>Plan</span><span>Hand-in Route</span><span class="on">Party</span><span>Settings</span></div>
           </div>
         </div></div>
         <figure class="shot" data-shot="img/party.jpg" hidden><p class="fig-label">In game</p></figure>
@@ -590,6 +607,60 @@
         <li><span><b>Sharing.</b> Party and guild sharing each switch off with one click. <b>Send now</b> shares straight away; <code>/qb sync Name</code> shares with one friend outside your group.</span></li>
       </ol>
       <p class="note">On the day, a member who is handing in shows a live run: time, quests handed in and XP so far. What each game reports as a quest's XP is shared too, so one person's hand-in corrects the numbers for everyone. Nothing leaves the game: it's the addon channel your party and guild already use, and nobody sees it in chat. QuestBank only writes in chat when you press Post.</p>
+    </div>
+  </div>
+
+  <!-- settings -->
+  <div class="pane" id="p-settings" role="tabpanel" aria-labelledby="t-settings" hidden>
+    <div class="stage">
+      <div>
+        <p class="fig-label">Illustration</p>
+        <div class="fit"><div class="fit-inner">
+          <div class="win">
+            <span class="plate">QuestBank</span><span class="x">×</span>
+            <span class="call" style="left:6px;top:40px">1</span>
+            <span class="call" style="left:6px;top:196px">2</span>
+            <span class="call" style="left:404px;top:40px">3</span>
+            <span class="call" style="left:404px;top:180px">4</span>
+            <span class="call" style="left:6px;top:318px">5</span>
+            <div class="parch" style="margin-top:14px">
+              <div class="logcols">
+                <div>
+                  <div class="pt">Mode</div>
+                  <div class="modes" style="margin:8px 0"><span class="dim">Auto</span><span>Questing</span><span>Banking</span></div>
+                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">Auto. Banking: the game holds you at level 20. Keep finished quests in your log and hand them all in when the cap goes up to 30; the Hand-in Route plans that hour.</div>
+                  <div style="font-size:12px;color:#3a2410;margin:12px 0 0;display:flex;align-items:center;gap:8px">When the cap goes up, it goes to 30 <span class="modes"><span>-</span><span>+</span></span></div>
+                  <div class="pt" style="margin-top:16px">Map</div>
+                  <div class="cbl"><span class="cb on"></span>Numbered route pins on the world map</div>
+                  <div class="cbl"><span class="cb on"></span>Button on the minimap</div>
+                  <div class="cbl"><span class="cb"></span>Direction arrow to the next stop on your route</div>
+                  <div class="pt" style="margin-top:14px">Discoveries</div>
+                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">Noted in game so far: 142 quests, 96 quest NPCs, 11 chain steps. ForeverProbe (optional) can carry them to foreverrank.com for everyone.</div>
+                </div>
+                <div>
+                  <div class="pt">Updates</div>
+                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 3.3.0. <span style="color:#0a6a0a">Brann runs 3.3.1: time to update.</span></div>
+                  <div class="cbl"><span class="cb on"></span>Tell me when my party or guild has a newer one</div>
+                  <div class="modes" style="margin:6px 0 0"><span>Copy the download link</span></div>
+                  <div class="pt" style="margin-top:14px">Chat</div>
+                  <div class="cbl"><span class="cb on"></span>Offer a post during hand-in runs</div>
+                  <div class="pt" style="margin-top:14px">Sharing</div>
+                  <div class="cbl"><span class="cb on"></span>Share my bank and plan with my party</div>
+                  <div class="cbl"><span class="cb on"></span>Share them with my guild</div>
+                </div>
+              </div>
+            </div>
+            <div class="wtabs"><span>Quest Log</span><span>Plan</span><span>Hand-in Route</span><span>Party</span><span class="on">Settings</span></div>
+          </div>
+        </div></div>
+      </div>
+      <ol class="legend">
+        <li><span><b>Mode.</b> Auto finds a level lock by itself: the game reports your level as its highest for now, or a hand-in at your level pays no XP while your bar sits at 0. Questing and Banking set it yourself; Banking holds until you level past it.</span></li>
+        <li><span><b>Map.</b> Route pins on the world map, the book on your minimap, and the direction arrow to the next stop, each on or off.</span></li>
+        <li><span><b>Updates.</b> QuestBank users in your party and guild tell each other which version they run. When someone has a newer one, chat says so once, and the button copies the download link. <code>/qb update</code> does the same.</span></li>
+        <li><span><b>Chat and sharing.</b> Whether QuestBank offers a post when you level during a hand-in run, and whether your bank and plan go to your party and guild over the addon channel.</span></li>
+        <li><span><b>Discoveries.</b> How much QuestBank has noted in game so far: quests, the NPCs who give and take them, and chain steps.</span></li>
+      </ol>
     </div>
   </div>
 
@@ -620,7 +691,7 @@
         <li><span><b>A ! where a quest you plan to fetch starts.</b> Hover it for the quests that NPC gives and what they pay.</span></li>
         <li><span><b>The book on your minimap.</b> Click to open QuestBank, right-click to jump straight to the hand-in route, drag it round the edge to move it. Its tooltip shows what your bank is worth, the next stop, and your run so far.</span></li>
       </ol>
-      <p class="note">During a run the waypoint moves to the next stop by itself as you hand in. With TomTom installed you get its arrow; without it, the game's own map pin. <code>/qb pins</code> turns the map pins off and on.</p>
+      <p class="note">During a run the waypoint moves to the next stop by itself as you hand in. With TomTom installed you get its arrow; without it, the game's own map pin. <code>/qb pins</code> turns the map pins off and on. <code>/qb arrow</code> (or Settings) adds a direction arrow on screen that points to the next stop from where you stand and the way you face, with its distance; drag it anywhere, right-click it to hide it.</p>
     </div>
   </div>
 </section>
@@ -683,9 +754,10 @@
 
 <section class="wrapx" id="day">
   <p class="qb-eye">When the cap goes up</p>
-  <h2>The routine</h2>
+  <h2>The routine at a level cap</h2>
+  <p class="sub">Questing, there's no routine to learn: hand in as you go, follow the arrows up the chains, and open the Plan page for what's worth doing near you. This is for the days the game holds your level.</p>
   <ol class="routine">
-    <li><div><b>The evenings before</b><p>Work down the Prep cards. Advance the chains the Quest Log suggests, fill free slots, and check the Party page for dungeons worth running together.</p></div></li>
+    <li><div><b>The evenings before</b><p>Work down the Plan cards. Advance the chains the Quest Log suggests, fill free slots, and check the Party page for dungeons worth running together.</p></div></li>
     <li><div><b>Before you log out</b><p>Open the Hand-in Route on Banked now. Bind your hearthstone at the inn the setup line names, and log out at the first stop.</p></div></li>
     <li><div><b>Before the first hand-in</b><p>If you have the Cozy Sleeping Bag, lie in it for three minutes. The sleeping bag button lights up once the buff is on.</p></div></li>
     <li><div><b>When the cap goes up</b><p>Hand in the first quest. The run starts by itself: the clock runs, the page ticks each quest off with the XP it paid, and the waypoint jumps to the next stop.</p></div></li>
@@ -703,11 +775,15 @@
       <tbody>
         <tr><td><code>/qb</code> or <code>/questbank</code></td><td>Open or close the window</td></tr>
         <tr><td><code>/qb route</code></td><td>Open the Hand-in Route</td></tr>
-        <tr><td><code>/qb prep</code></td><td>Open Prep</td></tr>
+        <tr><td><code>/qb plan</code></td><td>Open Plan</td></tr>
+        <tr><td><code>/qb settings</code></td><td>Open Settings: mode, next cap, updates, chat, sharing, map</td></tr>
+        <tr><td><code>/qb update</code></td><td>Your version, the newest your party and guild run, and the download link to copy</td></tr>
         <tr><td><code>/qb party</code></td><td>Open Party</td></tr>
         <tr><td><code>/qb start</code>, <code>/qb stop</code></td><td>Start or end a hand-in run yourself</td></tr>
         <tr><td><code>/qb next</code></td><td>Waypoint on the next stop</td></tr>
         <tr><td><code>/qb pins</code></td><td>Turn the world map pins off or on</td></tr>
+        <tr><td><code>/qb arrow</code></td><td>The direction arrow to the next stop on your route, on or off</td></tr>
+        <tr><td><code>/qb discoveries</code></td><td>How much QuestBank has noted in game: quests, the NPCs who give and take them, chain steps</td></tr>
         <tr><td><code>/qb sync</code>, <code>/qb sync Name</code></td><td>Share your bank with your party and guild now, or with one friend</td></tr>
         <tr><td><code>/qb post</code>, or <b>Post</b> on the Hand-in Route</td><td>Post your run so far, or where your bank and plan take you, in party or guild chat. A box shows the message first: edit it, tick party, guild or both, then press Post</td></tr>
         <tr><td>Right-click a dungeon on the Party page</td><td>Ask your party or guild along, with the quests you still need in there</td></tr>
@@ -718,7 +794,7 @@
         <tr><td>Right-click a quest</td><td>A menu: waypoint on the giver or the turn-in, cut or keep (add or drop), and the quest's Wowhead link to copy</td></tr>
         <tr><td><code>/qb errors</code></td><td>Every problem QuestBank caught, with where it happened, ready to copy. <code>/qb errors clear</code> empties the list</td></tr>
         <tr><td><code>/qb done</code> and a quest name or ID</td><td>What the game says about a quest: whether it's in your completed list, and what QuestBank makes of it</td></tr>
-        <tr><td>Shift-click a quest</td><td>In your log: cut it from the plan or keep it. Anywhere else: add it to the plan or drop it</td></tr>
+        <tr><td>Shift-click a quest or item</td><td>With the chat box open: put its link in chat, like the game's quest log. Otherwise, in your log: cut it from the plan or keep it; anywhere else: add it to the plan or drop it</td></tr>
         <tr><td>Click or right-click the mount and sleeping bag buttons</td><td>Set it yourself, or go back to automatic</td></tr>
         <tr><td>Drag the title area</td><td>Move the window. <kbd>Esc</kbd> closes it.</td></tr>
       </tbody>
@@ -731,17 +807,22 @@
   <h2>Troubleshooting</h2>
   <div class="faq">
     <details><summary>It says the addon is out of date</summary><p>Tick Load out of date AddOns on the character screen. Blizzard hasn't published Forever's interface number yet, so every beta addon shows up like this.</p></details>
-    <details><summary>Nothing happens, or I see a Lua error</summary><p>QuestBank catches its own errors and carries on, and chat says so once. Type <code>/qb errors</code>: a box opens with each problem, where it happened and the full stack, already selected, so Ctrl+C copies it for the Discord. If Blizzard's error window shows one instead, copy that text. Check the whole QuestBank folder went in: the nine files sit directly in <code>Interface\AddOns\QuestBank</code>.</p></details>
+    <details><summary>Nothing happens, or I see a Lua error</summary><p>QuestBank catches its own errors and carries on, and chat says so once. Type <code>/qb errors</code>: a box opens with each problem, where it happened and the full stack, already selected, so Ctrl+C copies it for the Discord. If Blizzard's error window shows one instead, copy that text. Check the whole QuestBank folder went in: the eleven files sit directly in <code>Interface\AddOns\QuestBank</code>.</p></details>
     <details><summary>The XP I got is different from the plan</summary><p>The chat line after each hand-in shows both numbers. From then on QuestBank uses the game's number for that quest, and passes it on to your party. Beta patches can change quest XP, and the addon's file records every hand-in so the data can be updated.</p></details>
     <details><summary>How do I know I have everything a quest asks for?</summary><p>The Quest Log page marks a finished quest with a green tick, and chat says so the moment one completes: "Red Silk Bandanas is complete: banked". Hover any quest for each objective and each item it asks for, counted in your bags and in your bank. If what's missing is in your bank, the status says how many to take out. A quest you haven't picked up yet says so too when you already have everything it asks for.</p></details>
     <details><summary>Does it know what's in my bank?</summary><p>Yes, once you've opened your bank. QuestBank reads it every time you do and remembers it until the next visit, for every character. Quest items only count for a quest from your bags, so it tells you what to take out.</p></details>
-    <details><summary>What happens as I level up?</summary><p>Everything follows your level: the XP each quest pays on the day, which quests you can pick up, and the order of the route. Quests that open within the next two levels show up on the Prep page marked "Needs level 22" and so on, so you can plan ahead; they move into the suggestions the moment you reach that level.</p></details>
+    <details><summary>What happens as I level up?</summary><p>Everything follows your level: the XP each quest pays, which quests you can pick up, what's too high for you yet, and the order of the route. Quests that open within the next two levels show up on the Plan page marked "Needs level 8" and so on, so you can plan ahead; they move into the suggestions the moment you reach that level.</p></details>
+    <details><summary>Which mode am I in?</summary><p>The third switch in the header says: <b>Questing</b>, or the hour's goal (<b>First hour</b> or <b>Whole route</b>) while banking. Hover the XP bar for the reason: the level the game holds you at, or the level it lets you reach. Settings lets you pick Auto, Questing or Banking yourself.</p></details>
+    <details><summary>What does the green arrow on a quest mean?</summary><p>The quest leads somewhere: carry the chain on after you hand it in. The tooltip names the next step and the best step further on, with its XP. While banking, the arrow only shows where a later step pays more than the one you hold, so hand that one in now and bank the later step instead.</p></details>
+    <details><summary>How do I know I'm running the newest version?</summary><p>QuestBank users in your party and guild tell each other which version they run. When someone has a newer one, chat says so once and Settings shows who. <code>/qb update</code> copies the download link.</p></details>
     <details><summary>It offers a quest I've already done</summary><p>Type <code>/qb done</code> and the quest's name, like <code>/qb done glowing shard</code>. It shows what the game says: the list of quests you've completed, and the quest's own completed flag. The two can disagree; since 3.0.1 QuestBank counts a quest as done when either says so. If both say no and you're sure, tell us in the Discord with the quest's name.</p></details>
     <details><summary>A quest says "Not on the route"</summary><p>Either it's handed in inside a dungeon, or QuestBank has no position for its NPC. It's listed at the end of the route with its XP so you can fit it in yourself. The <a href="https://github.com/monscorps/foreverrank/blob/main/tools/questbank/GAPS.md" rel="noopener">gap report</a> lists every such quest.</p></details>
     <details><summary>My party doesn't show up on the Party page</summary><p>They need QuestBank 3.0 or newer, and sharing on. Party members appear within a few seconds of grouping; guild members when they log in or change their bank. <b>Send now</b> or <code>/qb sync</code> shares straight away, and <code>/qb sync Name</code> works for a friend who isn't in your group.</p></details>
     <details><summary>Will it post in chat on its own?</summary><p>No. During a hand-in run it offers a post when you level up, when the first hour is up and when the run ends, like "Level 23, 18 min into my hand-in run: 12 quests handed in, +54,300 XP". The box shows the message and where it goes, and nothing is sent until you press Post. Untick "Offer a post during hand-in runs" in that box and it stops offering; <code>/qb post</code> still works.</p></details>
+    <details><summary>What does QuestBank note while I play?</summary><p>Forever is still being discovered, so QuestBank keeps what the game shows you: who gives and takes each quest and where they stand, which quests an NPC offers you and at what level, the XP each quest window and hand-in shows, and the follow-up an NPC offers straight after a hand-in. No player, guild or realm names. It stays in QuestBank's own saved file; <code>/qb discoveries</code> counts it. If you also run ForeverProbe (optional, never required), it can carry the notes to foreverrank.com, where everyone's are merged into the next QuestBank release.</p></details>
+    <details><summary>Do the map pins show where to do a quest?</summary><p>Not yet. The numbered pins show where to hand in, in route order, and the ! pins where planned quests start. The game only allows one waypoint, so it follows your route, and the direction arrow points to it. Next: objective areas on the map (where to kill or collect, from the Classic database and then from what players see), the game's own quest icons on the map, and pins on the minimap.</p></details>
     <details><summary>Do I need TomTom?</summary><p>No. Map pins use the game's own map pin. If TomTom is installed, QuestBank uses that instead.</p></details>
-    <details><summary>Does the plan fit my character?</summary><p>Yes. There's no built-in plan any more: your plan is what's in your log and bags, plus what you add. QuestBank knows every Forever quest from level 10 to 40 for both factions, and only suggests what your faction, class and race can take.</p></details>
+    <details><summary>Does the plan fit my character?</summary><p>Yes. There's no built-in plan: your plan is what's in your log and bags, plus what you add. QuestBank knows about 3,700 quests from level 1 to 60 for both factions, and only suggests what your faction, class and race can take. Wowhead Forever only knows the quests players have met, which stops near the beta's cap, so above that QuestBank starts from the Classic database and marks those quests "from Classic, not seen in Forever yet" until someone does.</p></details>
     <details><summary>Is it safe to use?</summary><p>It only reads what the game shows you. It never clicks, accepts or hands in anything for you. What it shares goes over the game's own addon channel to your party and guild, and only while sharing is on. It only writes in chat when you press Post.</p></details>
   </div>
   <p class="credits">XP data from Wowhead's Forever database and ForeverChanges. Quest chains, quest givers and spawn points from the <a href="https://github.com/cmangos/classic-db" rel="noopener">CMaNGOS Classic database</a> (GPL-3.0). Flight paths, maps and icons from the Forever client. QuestBank is free software under the GPL-3.0; the licence text ships in the download. Game art and icons by Blizzard Entertainment. Beta data can change with any build.</p>
@@ -750,7 +831,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 3.2.1. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 3.3.0. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>
@@ -763,12 +844,12 @@
   // illustrated 40-slot grid and swaps, example numbers
   var slots = [
     ["inv_misc_note_01", "10.3k", 5, "ok"], ["inv_jewelry_amulet_06", "9.6k", 5, "ok"], ["inv_misc_note_02", "9.8k", 5, "ok"],
-    ["inv_misc_head_human_01", "7.5k", 4, "ok"], ["inv_battery_01", "6.9k", 4, "wait"], ["inv_gizmo_02", "6.3k", 4, "wait"],
+    ["inv_misc_head_human_01", "7.5k", 4, "ok"], ["inv_battery_01", "6.9k", 4, "wait", 1], ["inv_gizmo_02", "6.3k", 4, "wait"],
     ["ability_hunter_pet_raptor", "6.1k", 4, "ok"], ["inv_drink_01", "5.7k", 3, "wait"], ["inv_misc_pelt_wolf_ruin_03", "4.8k", 3, "ok"],
     ["inv_misc_monsterclaw_04", "2.7k", 2, "ok"], ["inv_misc_head_orc_01", "2.7k", 2, "ok"], ["inv_staff_08", "2.6k", 2, "ok"],
-    ["inv_misc_organ_03", "2.4k", 2, "ok"], ["inv_misc_head_orc_01", "2.1k", 2, "wait"], ["inv_misc_horn_01", "2.0k", 2, "wait"],
+    ["inv_misc_organ_03", "2.4k", 2, "ok", 1], ["inv_misc_head_orc_01", "2.1k", 2, "wait"], ["inv_misc_horn_01", "2.0k", 2, "wait"],
     ["inv_jewelry_necklace_04", "1.9k", 2, "wait"], ["inv_banner_03", "1.7k", 2, "ok"], ["inv_misc_fish_02", "1.6k", 2, "ok"],
-    ["inv_jewelry_amulet_03", "1.6k", 2, "ok"], ["inv_misc_note_05", "1.4k", 1, "cut"], ["inv_misc_fish_05", "1.3k", 1, "cut"],
+    ["inv_jewelry_amulet_03", "1.6k", 2, "ok", 1], ["inv_misc_note_05", "1.4k", 1, "cut"], ["inv_misc_fish_05", "1.3k", 1, "cut"],
     ["inv_misc_food_14", "1.1k", 1, "cut"], ["inv_letter_13", "1.1k", 1, "cut"], ["inv_misc_note_05", "900", 1, "cut"],
     ["inv_misc_note_05", "870", 1, "cut"], ["inv_drink_05", "430", 1, "cut"], ["inv_misc_note_05", "340", 1, "cut"],
     ["inv_misc_note_05", "270", 1, "cut"], ["inv_misc_note_05", "200", 1, "cut"], ["inv_misc_note_05", "110", 1, "cut"],
@@ -781,7 +862,7 @@
     var s = slots[i], el = document.createElement("span");
     if (s) {
       el.className = "slot q" + s[2];
-      el.innerHTML = '<img src="' + ICON + s[0] + '.jpg" alt=""><b>' + s[1] + '</b><em class="' + s[3] + '"></em>';
+      el.innerHTML = '<img src="' + ICON + s[0] + '.jpg" alt=""><b>' + s[1] + '</b><em class="' + s[3] + '"></em>' + (s[4] ? '<i class="up"></i>' : '');
     } else {
       el.className = "slot vacant";
     }

@@ -175,27 +175,34 @@ class Travel:
         u = (m["maxy"] - wy) / (m["maxy"] - m["miny"])
         return round((m["u0"] + u * (m["u1"] - m["u0"])) * 100, 1), round((m["v0"] + v * (m["v1"] - m["v0"])) * 100, 1)
 
+    def _pct(self, m, wx, wy):
+        v = (m["maxx"] - wx) / (m["maxx"] - m["minx"])
+        u = (m["maxy"] - wy) / (m["maxy"] - m["miny"])
+        return (m["u0"] + u * (m["u1"] - m["u0"])) * 100, (m["v0"] + v * (m["v1"] - m["v0"])) * 100
+
     def locate(self, cont, wx, wy, prefer=None):
         """The zone or city map a world point lies on: (uiMap, x, y) in map percent. Map rectangles
-        overlap (Ratchet lies inside Durotar's), so a hinted map wins when it holds the point,
-        then the smallest map that does."""
-        best = None
+        overlap (Ratchet lies inside Durotar's, the Hinterlands' south edge inside Arathi's), so a
+        hinted map wins when it holds the point; a map lying well inside a bigger one (a city in its
+        zone) wins next; otherwise the map the point sits deepest in, away from its edges."""
+        cands = []
         for mid, m in self.maps.items():
             if m["cont"] != cont or mid in (947, 1414, 1415, 1945) or not m["area"]:
                 continue
             if m["minx"] <= wx <= m["maxx"] and m["miny"] <= wy <= m["maxy"]:
-                size = (m["maxx"] - m["minx"]) * (m["maxy"] - m["miny"])
                 if mid in (prefer or ()):
-                    size = -1
-                if best is None or size < best[0]:
-                    best = (size, mid, m)
-        if not best:
+                    x, y = self._pct(m, wx, wy)
+                    return mid, round(x, 1), round(y, 1)
+                size = (m["maxx"] - m["minx"]) * (m["maxy"] - m["miny"])
+                x, y = self._pct(m, wx, wy)
+                cands.append((size, mid, x, y, min(x, 100 - x, y, 100 - y)))
+        if not cands:
             return None
-        _, mid, m = best
-        v = (m["maxx"] - wx) / (m["maxx"] - m["minx"])
-        u = (m["maxy"] - wy) / (m["maxy"] - m["miny"])
-        x = (m["u0"] + u * (m["u1"] - m["u0"])) * 100
-        y = (m["v0"] + v * (m["v1"] - m["v0"])) * 100
+        cands.sort()
+        if len(cands) == 1 or cands[0][0] <= 0.4 * cands[1][0]:
+            _, mid, x, y, _ = cands[0]
+        else:
+            _, mid, x, y, _ = max(cands, key=lambda c: c[4])
         return mid, round(x, 1), round(y, 1)
 
     def nearest_hub(self, fac, cont, wx, wy):

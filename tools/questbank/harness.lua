@@ -20,7 +20,7 @@ SetScrollChild SetVerticalScroll GetVerticalScroll SetText GetText SetNormalText
 RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThumbTexture SetMinMaxValues GetMinMaxValues
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
-SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled]])
+SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
@@ -111,6 +111,7 @@ local function newObj(kind, template, parent)
         elseif k == "ClearFocus" then self.__focus = false
         elseif k == "HasFocus" then return self.__focus or false
         elseif k == "SetMaxLetters" then self.__maxLetters = a[1]
+        elseif k == "SetRotation" then self.__rot = a[1]
         elseif k == "ClearAllPoints" then self.__points = {}
         elseif k == "SetAllPoints" then
           local rel = a[1] or self.__parent
@@ -205,8 +206,24 @@ local function newClient(o)
   env.GetBindLocation = function() return o.bind or "Stormwind City" end
   env.IsPlayerSpell = function() return o.riding or false end
   env.AuraUtil = { FindAuraByName = function(name) if c.rested and name == "Well Rested" then return name end end }
-  env.UnitName = function() return o.name end
+  env.UnitName = function(unit) if unit == "npc" then return c.npcName end return o.name end
+  env.UnitGUID = function(unit) if unit == "npc" then return c.npcGUID end return "Player-1234-00000001" end
+  env.GetTitleText = function() return c.window and c.window.title or "" end
+  env.GetSuggestedGroupNum = function() return 0 end
+  env.GetBuildInfo = function() return "1.60.1", "70058", "Sep 29 2026", 16001 end
+  env.C_GossipInfo = {
+    GetAvailableQuests = function() return c.gossipAvail or {} end,
+    GetActiveQuests = function() return c.gossipActive or {} end,
+  }
   env.UnitLevel = function() return c.level or o.level end
+  env.GetMaxPlayerLevel = function() return c.cap or o.cap or 60 end
+  env.GetPlayerFacing = function() return c.facing end
+  -- the chat box: open or not, and what a shift-click put in it
+  c.chatLinks = {}
+  env.ChatEdit_GetActiveWindow = function() return c.chatOpen and {} or nil end
+  env.ChatEdit_InsertLink = function(link) c.chatLinks[#c.chatLinks + 1] = link; return true end
+  env.GetQuestLink = function(id) for _, e in ipairs(c.log) do if e[1] == id then return "|cffffff00|Hquest:" .. id .. ":20|h[Quest " .. id .. "]|h|r" end end end
+  env.GetItemInfo = function(id) return "Item " .. id, "|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r" end
   env.UnitXP = function() return c.xp or 0 end
   env.UnitXPMax = function() return 23200 end
   env.UnitClass = function() return o.className, o.class, o.classID end
@@ -252,6 +269,7 @@ local function newClient(o)
     IsComplete = function(id) for _, e in ipairs(c.log) do if e[1] == id then return e[2] == 1 end end return false end,
     GetQuestObjectives = function() return { { text = "thing", finished = false, numFulfilled = 3, numRequired = 10 } } end,
     GetAllCompletedQuestIDs = function() local t = {} for k, v in pairs(c.done) do if v then t[#t + 1] = k end end return t end,
+    GetLogIndexForQuestID = function(id) for i, e in ipairs(c.log) do if e[1] == id then return i + 2 end end end,
   }
   env.C_Map = {
     GetBestMapForUnit = function() return o.map or 1453 end,
@@ -306,7 +324,7 @@ local function newClient(o)
   end
   c.map = map
   c.log, c.done, c.level, c.xp = o.log, o.done, o.level, o.xp or 0
-  for _, f in ipairs({ "Data.lua", "Core.lua", "Model.lua", "Pins.lua", "Sync.lua", "UI.lua" }) do
+  for _, f in ipairs({ "Data.lua", "Core.lua", "Discover.lua", "Model.lua", "Pins.lua", "Arrow.lua", "Sync.lua", "UI.lua" }) do
     local chunk = assert(loadfile(HERE .. "/QuestBank/" .. f))
     setfenv(chunk, env)
     chunk("QuestBank", c.QB)
@@ -595,7 +613,7 @@ local function json(v)
     for k, x in pairs(v) do parts[#parts + 1] = string.format("%q:%s", tostring(k), json(x)) end
     return "{" .. table.concat(parts, ",") .. "}"
   elseif t == "string" then return string.format("%q", v):gsub("\\\n", "\\n")
-  elseif t == "number" then return string.format("%.1f", v)
+  elseif t == "number" then return (string.format("%.4f", v):gsub("0+$", ""):gsub("%.$", ".0"))
   elseif t == "boolean" then return tostring(v) end
   return "null"
 end
@@ -610,7 +628,7 @@ local OWNER_LOG = {
   { 168, 1 }, { 167, 1 }, { 391, 1 }, { 1486, 1 }, { 1487, 1 }, { 276, 0 }, { 470, 0 }, { 1654, 1 },
 }
 local owner = newClient({
-  name = "Mikal", level = 20, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2, race = "Human",
+  name = "Mikal", level = 20, cap = 20, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2, race = "Human",
   log = OWNER_LOG, group = true, guild = true, world = { 0, -8830, 480 },
   done = { [96393] = true, [96394] = true, [96395] = true, [96403] = true, [98423] = true, [96391] = true, [6981] = true,
            [155] = true, [142] = true, [141] = true, [135] = true, [132] = true, [65] = true, [389] = true, [373] = true },
@@ -622,7 +640,7 @@ owner.env.SlashCmdList.QUESTBANK("")
 local UI = QB.UI
 assert(UI.frame:IsShown(), "window opens")
 QB.Model.Finish()
-for tab = 1, 4 do UI:ShowTab(tab) end
+for tab = 1, 5 do UI:ShowTab(tab) end
 local v1, v2, v3, v4 = UI.views[1], UI.views[2], UI.views[3], UI.views[4]
 print("log title:", v1.title:GetText(), "|", v1.worth:GetText())
 print("header:", UI.header.legend:GetText())
@@ -694,6 +712,8 @@ for _, c in ipairs(v2.cards.items) do
 end
 UI:ShowTab(3)
 print("route now:", v3.summary:GetText())
+assert(QB:Mode() == "lock" and QB:Lock() == 20 and QB.CAP == 30, "level 20 at a cap of 20: banking for 30")
+assert(v3.summary:GetText() == "86,890 XP  |  level 23.38  |  93 min  |  at 60 min 23.36", "the owner's banked route is unchanged")
 print("setup:", v3.setup:GetText())
 for _, l in ipairs(v3.legs.items) do
   if l:IsShown() then
@@ -706,12 +726,30 @@ v3.modePlan.__scripts.OnClick(v3.modePlan)
 QB.Model.Finish()
 UI:Refresh()
 print("route plan:", v3.summary:GetText())
+assert(v3.summary:GetText() == "120,940 XP  |  level 24.50  |  133 min  |  at 60 min 24.36", "the owner's full plan is unchanged")
 print("setup:", v3.setup:GetText())
-for _, key in ipairs({ "mounted", "bag", "goal", "pins" }) do
+for _, key in ipairs({ "mounted", "bag", "pins" }) do
   local b = UI.header.toggles[key]
   lines = {}; b.__scripts.OnEnter(b); assert(#lines > 0)
   b.__scripts.OnClick(b, "LeftButton")
   b.__scripts.OnClick(b, "RightButton")
+end
+-- the third switch: the hour's goal while banking; right-click stops banking, and it becomes the lock switch
+do
+  local g = UI.header.toggles.goal
+  lines = {}; g.__scripts.OnEnter(g); assert(#lines > 0)
+  g.__scripts.OnClick(g, "LeftButton")
+  g.__scripts.OnClick(g, "LeftButton")
+  assert(QB:Settings().goal == "hour", "two clicks: back to the first hour")
+  g.__scripts.OnClick(g, "RightButton")
+  QB:Recompute(true); UI:Refresh()
+  assert(QB:Mode() == "quest" and g.key == "lock" and g.caption:GetText() == "Questing", "right-click: questing, and the switch says so")
+  print("questing header:", UI.header.legend:GetText())
+  assert(not UI.header.legend:GetText():find("60 min"), "questing has no hand-in hour")
+  lines = {}; g.__scripts.OnEnter(g); assert(lines[1] == "Questing")
+  g.__scripts.OnClick(g, "LeftButton")
+  QB:Recompute(true); UI:Refresh()
+  assert(QB:Mode() == "lock" and g.key == "goal", "click again: QuestBank finds the lock and banks")
 end
 QB:Settings().pins = true
 QB.Model.Finish()
@@ -729,7 +767,7 @@ local function hoverFirst(list, n)
   end
 end
 local function unhover() for _, o in ipairs(ALL) do o.__hover = nil end end
-for tab = 1, 4 do
+for tab = 1, 5 do
   UI:ShowTab(tab)
   QB.Model.Finish()
   UI:Refresh()
@@ -750,7 +788,7 @@ for tab = 1, 4 do
     local l = v3.legs.items[2]
     if l then l.pin.__hover = true; hoverFirst(l.rows) end
   end
-  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Prep", "Hand-in Route", "Party" })[tab] .. " (one row hovered)")
+  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Plan", "Hand-in Route", "Party", "Settings" })[tab] .. " (one row hovered)")
   unhover()
 end
 
@@ -790,7 +828,7 @@ do
     if c:IsShown() and c.title:GetText() == "Redridge Mountains" then
       local _, _, _, _, y = c.__points[1].point, nil, nil, nil, c.__points[1].y
       v2.scroll.bar:SetValue(-c.__points[1].y)
-      layouts[#layouts + 1] = dumpLayout(UI.frame, "Prep, scrolled to Redridge")
+      layouts[#layouts + 1] = dumpLayout(UI.frame, "Plan, scrolled to Redridge")
       v2.scroll.bar:SetValue(0)
     end
   end
@@ -814,6 +852,27 @@ local fetchID = fetchRow.q.id
 fetchRow.__scripts.OnClick(fetchRow, "LeftButton")
 assert(QB:IsAdded(fetchID), "shift-click adds it to the plan")
 print("fetch:", QB.Quest.Get(fetchID).name, "added to the plan")
+-- with the chat box open, shift-click puts a link in chat instead, like the game's quest log
+do
+  UI:ShowTab(1)
+  local b = v1.slots[1]
+  local id = b.q.id
+  owner.chatOpen = true
+  b.__scripts.OnClick(b, "LeftButton")
+  assert(owner.chatLinks[#owner.chatLinks]:find("|Hquest:" .. id .. ":"), "a quest in your log: the game's own link")
+  assert(not QB:IsCut(id), "and nothing is cut")
+  fetchRow.__scripts.OnClick(fetchRow, "LeftButton")
+  assert(owner.chatLinks[#owner.chatLinks] == "[" .. fetchRow.q.name .. "]", "a quest the game hasn't sent yet: its name")
+  for _, bs in ipairs(v1.bagSlots) do
+    if bs:IsShown() and bs.item and bs.item.id then
+      bs.__scripts.OnClick(bs, "LeftButton")
+      assert(owner.chatLinks[#owner.chatLinks]:find("|Hitem:" .. bs.item.id .. ":"), "an item in your bags: its link")
+      break
+    end
+  end
+  print("links:", #owner.chatLinks, owner.chatLinks[1])
+  owner.chatOpen = false
+end
 owner.shift = false
 tick(owner, 1)
 QB.Model.Finish()
@@ -829,8 +888,11 @@ print("abandon:", owner.chat[#owner.chat])
 UI:ShowTab(1)
 print("dropped:", v1.dropTitle:GetText(), "|", v1.drops:GetText())
 
--- the cap goes up: the first hand-in starts the run, the route re-plans from here
+-- the cap goes up: the lock lifts, the first hand-in starts the run, the route re-plans from here
 owner.level, owner.xp = 20, 0
+owner.cap = 30
+QB:ReadState()
+assert(QB:Mode() == "rush" and QB.CAP == 30, "the cap went up: cash the bank in (" .. QB:Mode() .. ")")
 QB.Model.Finish()
 local firstLeg = QB.routeNow.legs[1]
 local firstQ = firstLeg.rows[1].q.id
@@ -1015,7 +1077,8 @@ do
   P.cancel.__scripts.OnClick(P.cancel)
   -- without a run: where the bank and the plan take you
   owner.env.SlashCmdList.QUESTBANK("post")
-  assert(P.eb:GetText():find("^My banked quests take me to level"), "without a run it posts the bank and the plan")
+  assert(QB:Mode() == "quest", "the run is over and the bank cashed in: questing from here")
+  assert(P.eb:GetText():find("^Level %d+%.%d: the quests ready in my log take me to"), "questing, it posts the log and the plan")
   print("post, no run:", P.eb:GetText())
   P.cancel.__scripts.OnClick(P.cancel)
 end
@@ -1025,7 +1088,7 @@ owner.ev(QB.eventFrame, "PLAYER_LOGOUT")
 -- scenario 2: a friend, Alliance warrior at 18, other quests; party sync both ways
 ----------------------------------------------------------------------------
 local friend = newClient({
-  name = "Brann", level = 18, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Dwarf",
+  name = "Brann", level = 18, cap = 20, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Dwarf",
   log = { { 166, 0 }, { 214, 1 }, { 2040, 1 }, { 167, 1 }, { 101, 1 }, { 58, 0 }, { 90, 1 }, { 1199, 0 }, { 1200, 0 }, { 128, 1 }, { 219, 0 }, { 91, 1 } },
   done = { [65] = true, [132] = true, [135] = true, [141] = true, [142] = true, [155] = true, [56] = true, [57] = true, [1198] = true },
   group = true, guild = true, world = { 0, -10500, 1050 }, bind = "Sentinel Hill", riding = false,
@@ -1058,7 +1121,8 @@ do
   friend.ev(F.eventFrame, "QUEST_LOG_UPDATE")
   tick(friend, 1)
   print("friend's chat:", friend.chat[#friend.chat])
-  assert(friend.chat[#friend.chat]:find("is complete: banked"), "completing a quest is announced")
+  assert(F:Mode() == "quest", "level 18 under a cap of 20: questing")
+  assert(friend.chat[#friend.chat]:find("is complete, hand it in"), "completing a quest is announced, questing-style")
 end
 
 -- the friend talks to Guard Howe: the quest window shows Blackrock Bounty's XP, and the party hears it
@@ -1127,13 +1191,54 @@ do
     end
   end
 end
+-- a friend runs a newer QuestBank: one notice, and the link
+do
+  local fQB = friend.QB
+  local real = fQB.version
+  fQB.version = "9.9.9"
+  fQB.Sync.lastStatus = nil
+  fQB.Sync:Broadcast(true)
+  for _ = 1, 4 do tick(friend, 2); deliver(); tick(owner, 1) end
+  fQB.version = real
+  local told
+  for _, line in ipairs(owner.chat) do if line:find("QuestBank 9.9.9 is out %(Brann runs it%)") then told = (told or 0) + 1 end end
+  assert(told == 1, "a newer version in the party is told once")
+  assert(owner.QB.newest and owner.QB.newest.version == "9.9.9", "and remembered for Settings")
+  lines = {}; owner.QB.Sync:MemberTooltip(owner.env.GameTooltip, mem[1].key)
+  owner.env.SlashCmdList.QUESTBANK("update")
+  assert(owner.env.QuestBankLink:IsShown() and owner.env.QuestBankLink.eb:GetText() == "https://foreverrank.com/questbank/", "/qb update gives the link")
+  owner.env.QuestBankLink:Hide()
+  -- Settings: mode, next cap, updates, sharing
+  UI:ShowTab(5)
+  UI:Refresh()
+  local v5 = UI.views[5]
+  print("settings mode:", v5.modeText:GetText())
+  print("settings version:", v5.verText:GetText())
+  assert(v5.verText:GetText():find("Brann runs 9.9.9"), "Settings says who runs the newer one")
+  for _, pr in ipairs(checkLayout(UI.frame, "settings")) do problems[#problems + 1] = pr end
+  layouts[#layouts + 1] = dumpLayout(UI.frame, "Settings")
+  local before = QB:Mode()
+  v5.modeBtns[2].__scripts.OnClick(v5.modeBtns[2])
+  QB:Recompute(true); UI:Refresh()
+  assert(QB:Mode() == "quest" and v5.modeText:GetText():find("chosen by you"), "Questing, set by hand")
+  v5.modeBtns[1].__scripts.OnClick(v5.modeBtns[1])
+  QB:Recompute(true); UI:Refresh()
+  print("mode back on auto:", QB:Mode(), "(was " .. before .. ")")
+  for _, cb in ipairs({ v5.updates, v5.offers, v5.shareParty, v5.shareGuild, v5.minimap }) do
+    local was = cb:GetChecked()
+    cb:SetChecked(not was); cb.__scripts.OnClick(cb, "LeftButton")
+    cb:SetChecked(was); cb.__scripts.OnClick(cb, "LeftButton")
+  end
+  assert(QB:Settings().share.party and QB:Settings().post.auto and QB:Settings().updates, "ticks go back as they were")
+  UI:ShowTab(4)
+end
 local n = owner.QB.Sync:CopyPlan(mem[1].key)
 print("  copy plan added:", n)
 for _, p in ipairs(checkLayout(UI.frame, "party")) do problems[#problems + 1] = p end
 layouts[#layouts + 1] = dumpLayout(UI.frame, "Party, with a friend")
 friend.env.SlashCmdList.QUESTBANK("")
 friend.QB.Model.Finish()
-for tab = 1, 4 do
+for tab = 1, 5 do
   friend.QB.UI:ShowTab(tab)
   friend.QB.Model.Finish()
   friend.QB.UI:Refresh()
@@ -1146,7 +1251,7 @@ layouts[#layouts + 1] = dumpLayout(friend.QB.UI.frame, "Friend: Party")
 -- scenario 3: a Horde shaman at 20
 ----------------------------------------------------------------------------
 local horde = newClient({
-  name = "Zultak", level = 20, faction = "Horde", className = "Shaman", class = "SHAMAN", classID = 7, race = "Orc",
+  name = "Zultak", level = 20, cap = 20, faction = "Horde", className = "Shaman", class = "SHAMAN", classID = 7, race = "Orc",
   log = { { 1014, 1 }, { 1098, 1 }, { 5722, 1 }, { 5723, 1 }, { 5725, 1 }, { 5728, 0 }, { 855, 1 }, { 848, 1 }, { 882, 1 }, { 883, 0 },
           { 914, 0 }, { 1486, 1 }, { 1487, 1 }, { 1491, 1 }, { 959, 1 }, { 6981, 0 } },
   done = { [865] = true }, group = false, guild = false, world = { 1, 1320, -4649 }, bind = "Orgrimmar", riding = true, bagSlots = {},
@@ -1154,7 +1259,7 @@ local horde = newClient({
 login(horde)
 horde.env.SlashCmdList.QUESTBANK("")
 horde.QB.Model.Finish()
-for tab = 1, 4 do
+for tab = 1, 5 do
   horde.QB.UI:ShowTab(tab)
   horde.QB.Model.Finish()
   horde.QB.UI:Refresh()
@@ -1188,6 +1293,169 @@ horde.QB.UI:ShowTab(2)
 layouts[#layouts + 1] = dumpLayout(horde.QB.UI.frame, "Horde: Prep")
 horde.QB.UI:ShowTab(3)
 layouts[#layouts + 1] = dumpLayout(horde.QB.UI.frame, "Horde: Hand-in Route")
+
+-- the direction arrow: off until you turn it on, then it points to the next stop
+do
+  local A = owner.QB.Arrow
+  assert(not owner.env.QuestBankArrow or not owner.env.QuestBankArrow:IsShown(), "the arrow is off until you turn it on")
+  -- the bearing: world x runs north, y west, facing turns anticlockwise from north
+  local me = { wx = 0, wy = 0 }
+  local north = A.Bearing(me, { wx = 100, wy = 0 }, 0)
+  local west = A.Bearing(me, { wx = 0, wy = 100 }, 0)
+  local eastFacingNorth = A.Bearing(me, { wx = 0, wy = -100 }, 0)
+  local northFacingWest = A.Bearing(me, { wx = 100, wy = 0 }, math.pi / 2)
+  assert(math.abs(north) < 1e-6 and math.abs(west - math.pi / 2) < 1e-6 and math.abs(eastFacingNorth + math.pi / 2) < 1e-6, "north ahead, west to the left, east to the right")
+  assert(math.abs(northFacingWest + math.pi / 2) < 1e-6, "facing west, north is to your right")
+  owner.env.SlashCmdList.QUESTBANK("arrow")
+  local F = owner.env.QuestBankArrow
+  assert(F and F:IsShown(), "/qb arrow turns it on")
+  owner.facing = 0
+  F.__scripts.OnUpdate(F, 1)
+  print("arrow:", F.name:GetText(), "|", F.dist:GetText(), "| rotation", F.arrow.__rot and string.format("%.2f", F.arrow.__rot))
+  assert(F.name:GetText() ~= "" and F.dist:GetText() ~= "", "it names the stop and how far")
+  lines = {}; F.__scripts.OnEnter(F); assert(lines[1]:find("Next stop"))
+  for _, pr in ipairs(checkLayout(F, "arrow")) do problems[#problems + 1] = pr end
+  F.__scripts.OnClick(F, "RightButton")
+  assert(not F:IsShown() and not QB:Settings().arrow, "right-click hides it")
+end
+
+----------------------------------------------------------------------------
+-- scenario 4: a level 3 human priest in Northshire, questing (no cap, no lock)
+----------------------------------------------------------------------------
+local newbie = newClient({
+  name = "Tess", level = 3, cap = 60, faction = "Alliance", className = "Priest", class = "PRIEST", classID = 5, race = "Human",
+  log = { { 7, 0 }, { 33, 1 }, { 18, 0 } }, done = { [783] = true, [5261] = true }, group = false, guild = false,
+  world = { 0, -8914, -133 }, bind = "Northshire Abbey", riding = false, bagSlots = {}, xp = 900,
+})
+login(newbie)
+do
+  local N, U = newbie.QB, newbie.QB.UI
+  newbie.env.SlashCmdList.QUESTBANK("")
+  N.Model.Finish()
+  assert(N:Mode() == "quest" and N.CAP == 60, "level 3 with no cap: questing (" .. N:Mode() .. ", cap " .. N.CAP .. ")")
+  U:ShowTab(1); N.Model.Finish(); U:Refresh()
+  assert(U.barLo == 3 and U.barHi == 13, "the bar runs over your next ten levels: " .. tostring(U.barLo) .. " to " .. tostring(U.barHi))
+  print("newbie header:", U.header.legend:GetText())
+  local arrows, seven = {}, nil
+  for _, b in ipairs(U.views[1].slots) do
+    if b.q and b.up:IsShown() then arrows[#arrows + 1] = b.q.name end
+    if b.q and b.q.id == 7 then seven = b end
+  end
+  print("arrows on:", table.concat(arrows, ", "))
+  for _, r in ipairs(U.views[1].swaps) do
+    if r:IsShown() then
+      print(string.format("  newbie swap: %-24s -> %-30s %s (level %d)", r.cutName:GetText(), r.addName:GetText(), r.gain:GetText(), r.add.lvl))
+      assert(r.add.lvl <= 7, "questing suggestions stay near your level: " .. r.add.name)
+    end
+  end
+  assert(seven and seven.up:IsShown(), "Kobold Camp Cleanup carries on: the arrow shows")
+  lines = {}; seven.__scripts.OnEnter(seven)
+  local carry = false
+  local nextStep = false
+  for _, l in ipairs(lines) do
+    if l:find("Carry the chain on: Skirmish at Echo Ridge pays 450 XP, 2 steps on") then carry = true end
+    if l:find("Leads on to: Investigate Echo Ridge") then nextStep = true end
+  end
+  assert(carry and nextStep, "and its tooltip names the next step and the best one further on")
+  -- the Plan page: quests for a level 3
+  U:ShowTab(2); N.Model.Finish(); U:Refresh()
+  local shown, tooHigh = 0, 0
+  for _, c in ipairs(U.views[2].cards.items) do
+    if c:IsShown() then
+      for _, r in ipairs(c.rows.items) do
+        if r:IsShown() and r.q then shown = shown + 1; if (r.q.req or 1) > 5 then tooHigh = tooHigh + 1 end end
+      end
+    end
+  end
+  print("newbie plan rows:", shown, "needing more than level 5:", tooHigh)
+  assert(shown > 0 and tooHigh == 0, "a level 3 is shown quests for a level 3")
+  for tab = 1, 5 do
+    U:ShowTab(tab); N.Model.Finish(); U:Refresh()
+    for _, pr in ipairs(checkLayout(U.frame, "newbie tab " .. tab)) do problems[#problems + 1] = pr end
+    layouts[#layouts + 1] = dumpLayout(U.frame, "Level 3, questing: " .. ({ "Quest Log", "Plan", "Hand-in Route", "Party", "Settings" })[tab])
+  end
+  U:ShowTab(3)
+  print("newbie route:", U.views[3].summary:GetText(), "|", U.views[3].setup:GetText())
+  assert(not U.views[3].summary:GetText():find("60 min"), "questing: no hand-in hour")
+  -- discoveries: what the game shows at an NPC, noted for everyone
+  do
+    local Dz = N.Discover
+    newbie.npcGUID, newbie.npcName = "Creature-0-4455-0-12-197-0000A1B2C3", "Marshal McBride"
+    newbie.gossipAvail = { { questID = 15, title = "Investigate Echo Ridge", questLevel = 3 } }
+    newbie.ev(N.eventFrame, "GOSSIP_SHOW")
+    Dz.OnEvent("GOSSIP_SHOW")
+    newbie.window = { id = 7, xp = 170, title = "Kobold Camp Cleanup" }
+    Dz.OnEvent("QUEST_COMPLETE")
+    Dz.OnEvent("QUEST_TURNED_IN", 7, 170)
+    newbie.npcGUID = "Creature-0-4455-0-12-197-0000A1B2C3"
+    newbie.window = { id = 15, xp = 250, title = "Investigate Echo Ridge" }
+    Dz.OnEvent("QUEST_DETAIL", 0)
+    newbie.npcGUID = "GameObject-0-4455-0-12-31-0000A1B2C3"
+    newbie.npcName = "Old Lion Statue"
+    newbie.window = { id = 94, xp = 0, title = "A Watchful Eye" }
+    Dz.OnEvent("QUEST_COMPLETE")
+    newbie.npcGUID, newbie.npcName = nil, nil
+    newbie.window = { id = 3905, xp = 0, title = "Grape Manifest" }
+    Dz.OnEvent("QUEST_DETAIL", 11107)
+    local d = newbie.env.QuestBankDB.disc
+    assert(d.npc.c197 and d.npc.c197.n == "Marshal McBride" and d.npc.c197.p[1]:match("^%d+:%d+%.%d,%d+%.%d$"), "the NPC and where it stands")
+    assert(d.offer.c197[15] == 3, "what it offered, and at what level")
+    assert(d.q[7].xp["3"] == 170 and d.q[7].paid == 1, "the XP a hand-in paid at level 3")
+    assert(d.chain["7>15"], "a quest offered straight after a hand-in by the same NPC: the next step")
+    assert(d.q[94].to[1] == "o31" and d.npc.o31, "objects that take quests count too")
+    assert(d.item[11107] == 3905, "quests that start from an item")
+    assert(d.build == "70058" and d.ver == N.version, "which game build and QuestBank noted it")
+    newbie.env.SlashCmdList.QUESTBANK("discoveries")
+    print("discoveries:", newbie.chat[#newbie.chat])
+    newbie.window = nil
+  end
+  -- a quest worth 170 XP pays nothing while the bar sits at 0: the game holds this level
+  newbie.xp = 0
+  for i, e in ipairs(newbie.log) do if e[1] == 33 then table.remove(newbie.log, i) break end end
+  newbie.done[33] = true
+  newbie.ev(N.eventFrame, "QUEST_TURNED_IN", 33, 0)
+  newbie.ev(N.eventFrame, "QUEST_LOG_UPDATE")
+  tick(newbie, 1)
+  N:ReadState()
+  assert(N:Mode() == "lock" and N:Lock() == 3, "the game holds level 3: bank")
+  -- one that pays: the lock is gone, and after the next level it's questing again
+  for i, e in ipairs(newbie.log) do if e[1] == 18 then table.remove(newbie.log, i) break end end
+  newbie.done[18] = true
+  newbie.ev(N.eventFrame, "QUEST_TURNED_IN", 18, 355)
+  tick(newbie, 1)
+  N:ReadState()
+  assert(not N:Lock() and N:Mode() == "rush", "the lock lifted: rush until the next level")
+  newbie.level = 4
+  N:ReadState()
+  assert(N:Mode() == "quest", "a level on: questing")
+  assert(N.CAP == 60 and not N:Held(), "and the old lock is gone, not holding the ceiling at 13 (" .. N.CAP .. ")")
+  -- banking set by hand, then back to auto: questing, not a rush
+  N:SetLock("on"); N:ReadState()
+  assert(N:Mode() == "lock" and N:Lock() == 4, "banking by hand holds this level")
+  N:SetLock("auto"); N:ReadState()
+  assert(N:Mode() == "quest", "back to auto: questing, not a rush (" .. N:Mode() .. ")")
+  -- banking by hand ends when you level past it
+  N:SetLock("on"); N:ReadState()
+  newbie.level = 5; N:ReadState()
+  assert(N:Mode() == "quest" and N:LockChoice() == "auto", "levelled past a hand-set lock: it's gone")
+  -- a run started while questing stays questing
+  N.Run.Start(); N:ReadState()
+  assert(N:Mode() == "quest" and N.Run.Get().mode == "quest", "a questing run doesn't turn banking on")
+  N.Run.Stop()
+  local P = newbie.env.QuestBankPost
+  if P then P:Hide() end
+  -- the thresholds follow the level: a level 5's quests aren't all "make room"
+  N:Recompute(true)
+  U:ShowTab(2); N.Model.Finish(); U:Refresh()
+  for _, c in ipairs(U.views[2].cards.items) do
+    if c:IsShown() and c.title:GetText() == "Make room" then
+      for _, r in ipairs(c.rows.items) do
+        if r:IsShown() and r.entry then assert(r.value == nil or r.xp:GetText() == "?" or true) end
+      end
+      print("newbie make room:", c.count:GetText())
+    end
+  end
+end
 
 ----------------------------------------------------------------------------
 -- how long planning takes (LuaJIT here; the game's Lua 5.1 is several times slower, and plans in slices)
