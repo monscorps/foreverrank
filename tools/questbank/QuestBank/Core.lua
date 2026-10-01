@@ -2,8 +2,9 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.3.3"
+QB.version = "3.3.4"
 QB.MAXLEVEL = 60
+QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
 
 local D = QB.Data
@@ -581,6 +582,7 @@ local DEFAULTS = {
   -- questing, 7 below), and the zones, dungeons (by D.CAT key) and continents (0 Eastern Kingdoms,
   -- 1 Kalimdor) you told QuestBank to leave out of its suggestions
   rangeAbove = "auto", rangeBelow = "auto", skipCat = {}, skipCont = {},
+  escort = true, -- keep the join prompt for escort quests working with 25 or more quests in the log
 }
 
 function QB:Settings()
@@ -852,6 +854,47 @@ function QB:ToggleSkip(want)
   if not best then return nil end
   self:SetSkip(best.key, not s.skipCat[best.key])
   return best.name, s.skipCat[best.key] == true
+end
+
+----------------------------------------------------------------------------
+-- the join prompt for escort quests. When a party member accepts an escort, the game asks the others
+-- ("X has started a quest", QUEST_ACCEPT_CONFIRM). Which prompt it shows is decided by the UI's MAX_QUESTS
+-- constant: at or above it, "your quest log is full" with Yes greyed out, and Yes stays grey by the same
+-- comparison. Forever's UI still carries 25 there (Blizzard_FrameXMLBase/Constants.lua on the wow-ui-source
+-- forever branch; Blizzard_Game/Mainline/EventImplementation.lua reads it) while the log holds 40, so anyone
+-- with 25 or more quests can't join. Both reads happen the moment the prompt opens, so the real size in
+-- that constant is enough. The server still has the last word.
+----------------------------------------------------------------------------
+function QB:FixEscortPrompt()
+  if not self:Settings().escort or type(MAX_QUESTS) ~= "number" then return false end
+  local api = C_QuestLog and C_QuestLog.GetMaxNumQuestsCanAccept and tonumber(C_QuestLog.GetMaxNumQuestsCanAccept()) or 0
+  local real = math.max(QB.LOG_SLOTS, api)
+  if MAX_QUESTS < real then
+    QB.escortWas = QB.escortWas or MAX_QUESTS
+    MAX_QUESTS = real
+    if type(MAX_QUESTLOG_QUESTS) == "number" and MAX_QUESTLOG_QUESTS < real then MAX_QUESTLOG_QUESTS = real end
+    -- a prompt already open with its Yes greyed out re-reads the constant when told
+    if UpdateQuestAcceptLogFullDialog then pcall(UpdateQuestAcceptLogFullDialog) end
+  end
+  return true
+end
+
+function QB:UnfixEscortPrompt()
+  if QB.escortWas and type(MAX_QUESTS) == "number" then
+    MAX_QUESTS = QB.escortWas
+    if type(MAX_QUESTLOG_QUESTS) == "number" then MAX_QUESTLOG_QUESTS = QB.escortWas end
+    if UpdateQuestAcceptLogFullDialog then pcall(UpdateQuestAcceptLogFullDialog) end
+  end
+end
+
+local toldEscort
+function QB:EscortPrompt(who, title)
+  if not self:FixEscortPrompt() or toldEscort or not QB.escortWas then return end
+  if (self.state.logCount or 0) >= QB.escortWas then
+    toldEscort = true
+    self:Print(string.format("%s started %s. The game's prompt counts %d quests as a full log; the log holds %d, so QuestBank corrected it and you can say yes. /qb escort for the details.",
+      who or "Someone", title or "a quest", QB.escortWas, MAX_QUESTS))
+  end
 end
 function QB:OnTheDay() return self:Banking() and "on the day" or "at your level" end
 
@@ -1475,6 +1518,9 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
   if event == "ADDON_LOADED" then
     if a1 == ADDON then QB:Settings(); Live.Apply() end
     return
+  elseif event == "QUEST_ACCEPT_CONFIRM" then
+    QB:EscortPrompt(a1, a2)
+    return
   elseif event == "QUEST_DETAIL" or event == "QUEST_COMPLETE" then
     local before = QB.liveVer
     windowXP("npc")
@@ -1486,6 +1532,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Sync then QB.Sync:Init() end
     if QB.Discover then QB.Discover:Init() end
     if QB.Arrow then QB.Arrow:Init() end
+    QB:FixEscortPrompt()
     Run.ArmHour()
     C_Timer.After(8, QB.Safe(function() QB:Snapshot("login") end, "login snapshot"))
     C_Timer.After(4, QB.Safe(function() QB:Changed() end, "login"))
@@ -1543,7 +1590,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
   QB:MarkDirty()
 end, "game event"))
 
-for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_LOGOUT", "QUEST_LOG_UPDATE", "QUEST_TURNED_IN",
+for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_LOGOUT", "QUEST_LOG_UPDATE", "QUEST_TURNED_IN", "QUEST_ACCEPT_CONFIRM",
   "QUEST_ACCEPTED", "QUEST_REMOVED", "BAG_UPDATE_DELAYED", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE",
   "ZONE_CHANGED_NEW_AREA", "UNIT_AURA", "HEARTHSTONE_BOUND", "UNIT_SPELLCAST_SUCCEEDED", "QUEST_DETAIL", "QUEST_COMPLETE",
   "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED" }) do
@@ -1613,6 +1660,23 @@ slash = function(msg)
       QB:Print("Error list cleared.")
     elseif QB.UI then
       QB.UI:ShowErrors()
+    end
+  elseif cmd == "escort" then
+    local s = QB:Settings()
+    local want = rest:lower():gsub("^%s+", ""):gsub("%s+$", "")
+    if want == "off" then
+      s.escort = false
+      QB:UnfixEscortPrompt()
+    elseif want == "on" then
+      s.escort = true
+      QB:FixEscortPrompt()
+    end
+    local was = QB.escortWas or (type(MAX_QUESTS) == "number" and MAX_QUESTS) or 25
+    if s.escort then
+      QB:Print(string.format("The join prompt for escort quests works with %d or more quests in your log: the game's prompt counts %d as a full log, the log holds %d, QuestBank corrects that when you log in. /qb escort off leaves the game's number alone.",
+        was, was, type(MAX_QUESTS) == "number" and MAX_QUESTS or QB.LOG_SLOTS))
+    else
+      QB:Print(string.format("The escort prompt fix is off: with %d or more quests in your log the game's prompt won't let you join an escort a party member starts. /qb escort on turns it back on.", was))
     end
   elseif cmd == "skip" then
     local want = rest:lower():gsub("^%s+", ""):gsub("%s+$", "")

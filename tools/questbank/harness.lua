@@ -209,6 +209,10 @@ local function newClient(o)
   env.UnitName = function(unit) if unit == "npc" then return c.npcName end return o.name end
   env.UnitGUID = function(unit) if unit == "npc" then return c.npcGUID end return "Player-1234-" .. string.format("%08X", #o.name * 7919 + (o.level or 1)) end
   env.UnitFullName = function() return o.name, "ForeverNormal" end
+  -- the UI's quest-log constants as Forever ships them (25) against a log that holds 40, and the
+  -- dialog refresher the fix pokes
+  env.MAX_QUESTS, env.MAX_QUESTLOG_QUESTS = 25, 25
+  env.UpdateQuestAcceptLogFullDialog = function() c.logFullUpdates = (c.logFullUpdates or 0) + 1 end
   env.GetTitleText = function() return c.window and c.window.title or "" end
   env.GetSuggestedGroupNum = function() return 0 end
   env.GetBuildInfo = function() return "1.60.1", "70058", "Sep 29 2026", 16001 end
@@ -259,7 +263,8 @@ local function newClient(o)
   }
   env.C_QuestLog = {
     IsQuestFlaggedCompleted = function(id) return c.done[id] or false end,
-    GetNumQuestLogEntries = function() return c.logReady == false and 0 or #c.log + 2 end,
+    GetNumQuestLogEntries = function() if c.logReady == false then return 0, 0 end return #c.log + 2, #c.log end,
+    GetMaxNumQuestsCanAccept = function() return 25 end, -- stale too, the worst case
     GetInfo = function(i)
       if i == 1 then return { title = "Zone", isHeader = true } end
       if i == 2 then return { title = "Dungeons", isHeader = true } end
@@ -673,6 +678,25 @@ for _, c in ipairs(UI:Candidates(400)) do
   assert(not q.sodLeftover, "no Season of Discovery leftover is offered: " .. q.name)
 end
 assert(not QB.Data.Q[78132] and not QB.Data.Q[78133] and not QB.Data.Q[78134], "Alonso's Dragonslayer quests aren't in Forever")
+-- 3.3.4: the join prompt for escort quests. The game's MAX_QUESTS says 25 while the log holds 40.
+do
+  assert(owner.env.MAX_QUESTS == 40 and owner.env.MAX_QUESTLOG_QUESTS == 40, "login puts the log's real size into MAX_QUESTS: " .. tostring(owner.env.MAX_QUESTS))
+  assert(QB.escortWas == 25 and (owner.logFullUpdates or 0) >= 1, "remembers what the game said, and pokes an open prompt")
+  local n = #owner.chat
+  owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435)
+  local said = owner.chat[#owner.chat]
+  assert(#owner.chat == n + 1 and said:find("Brann Steelhand started Escorting Erland", 1, true) and said:find("counts 25 quests as a full log; the log holds 40", 1, true), "the first prompt of the session says what QuestBank did: " .. tostring(said))
+  owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435)
+  assert(#owner.chat == n + 1, "and says it once")
+  owner.env.SlashCmdList.QUESTBANK("escort off")
+  assert(owner.env.MAX_QUESTS == 25 and owner.env.MAX_QUESTLOG_QUESTS == 25 and not QB:Settings().escort, "/qb escort off gives the game its number back")
+  assert(owner.chat[#owner.chat]:find("fix is off", 1, true), "and says so: " .. owner.chat[#owner.chat])
+  owner.env.SlashCmdList.QUESTBANK("escort on")
+  assert(owner.env.MAX_QUESTS == 40 and QB:Settings().escort, "/qb escort on corrects it again")
+  owner.env.SlashCmdList.QUESTBANK("escort")
+  assert(owner.chat[#owner.chat]:find("the log holds 40", 1, true), "/qb escort says where things stand: " .. owner.chat[#owner.chat])
+  print("escort prompt:", owner.chat[#owner.chat])
+end
 -- 3.3.3: the suggestion window and the skipped places. Defaults first, then each setting, then back to auto.
 do
   local set = QB:Settings()

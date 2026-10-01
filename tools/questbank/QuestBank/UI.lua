@@ -1043,7 +1043,7 @@ function UI:CreateLogView(parent)
   v.worth = text(v, "GameFontNormal", 12, INK_SOFT, "LEFT", 230)
   v.worth:SetPoint("TOPLEFT", LEFT + 150, -14)
   v.slots = {}
-  for i = 1, 40 do
+  for i = 1, QB.LOG_SLOTS do
     local b = iconButton(v, 36, nil)
     local col, row = (i - 1) % 8, math.floor((i - 1) / 8)
     b:SetPoint("TOPLEFT", LEFT + 4 + col * 46, -42 - row * 46)
@@ -1257,7 +1257,7 @@ function UI:RefreshLogView(v)
     if (a.cut or false) ~= (b.cut or false) then return not a.cut end
     return (a.value or -1) > (b.value or -1)
   end)
-  v.title:SetText(string.format("Quest log  %d/40", #entries))
+  v.title:SetText(string.format("Quest log  %d/%d", #entries, QB.LOG_SLOTS))
   -- the colour steps, at your level
   local k = QB.Scale(s.level)
   local function step(x)
@@ -1407,7 +1407,7 @@ function UI:RefreshLogView(v)
     end
   end
   local ai = 1
-  for _ = 1, 40 - #entries do
+  for _ = 1, QB.LOG_SLOTS - #entries do
     if adds[ai] then rows[#rows + 1] = { add = adds[ai], cutValue = 0, gain = adds[ai].value }; ai = ai + 1 end
   end
   for _, c in ipairs(cuts) do
