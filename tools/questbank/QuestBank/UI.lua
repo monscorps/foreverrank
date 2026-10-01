@@ -284,9 +284,13 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   if st and st.code == "prereq" then
     local cc = QB:ChainCost(q)
     if cc then
+      local pay = ""
+      if cc.xp > 0 then
+        pay = QB:Mode() == "lock" and string.format("; the steps pay nothing at the cap (%s XP otherwise)", QB.Comma(cc.xp))
+          or string.format("; the steps pay %s XP along the way", QB.Comma(cc.xp))
+      end
       tip:AddLine(string.format("%d step%s first%s%s.", cc.n, cc.n == 1 and "" or "s",
-        cc.minutes and cc.minutes > 0 and string.format(", about %d min of moving from where you stand", cc.minutes) or "",
-        cc.xp > 0 and string.format("; the steps pay %s XP %s", QB.Comma(cc.xp), QB:OnTheDay()) or ""), 0.75, 0.75, 1, true)
+        cc.minutes and cc.minutes > 0 and string.format(", about %d min of moving from where you stand", cc.minutes) or "", pay), 0.75, 0.75, 1, true)
     end
   end
   if q.nextSteps then
@@ -362,8 +366,9 @@ questClick = function(q, st, which)
   local target = q.turn
   if st and (st.code == "todo" or st.code == "locked" or st.code == "prereq") and q.give then target = q.give end
   if st and st.code == "prereq" and QB.Arrow then
-    local first = QB.Arrow.FirstStep(q, st)
-    if first and first.give then target = first.give end
+    -- a chain: the giver of its first open step, or the turn-in of the step you hold
+    local first, held = QB.Arrow.FirstStep(q, st)
+    if first then target = (held and first.turn) or first.give or target end
   end
   if target and not target.inside then
     QB.API.SetWaypoint(target.m, target.x, target.y, target.n, nil, QB.Model.NpcPlace(target.idx, QB.faction))
@@ -1155,9 +1160,8 @@ function UI:CreateLogView(parent)
     r:SetScript("OnClick", function(self, which)
       local q = self.add
       if not q then return end
-      if which == "RightButton" or (IsShiftKeyDown and IsShiftKeyDown()) then UI.QuestClick(q, QB:Status(q), which) return end
-      local give = self.via and self.via.give or q.give
-      if give and not give.inside then QB.API.SetWaypoint(give.m, give.x, give.y, give.n) end
+      -- one path decides where a click sends you: the giver, a chain's first step, a held step's turn-in
+      UI.QuestClick(q, QB:Status(q), which)
     end)
     tooltip(r, function(tip, self)
       if self.cutTitle then
@@ -1465,12 +1469,20 @@ function UI:RefreshLogView(v)
       if d.chain then
         r.cutName:SetText("hand in " .. d.cut.e.title .. " now, " .. (d.chain > 1 and string.format("%d steps on", d.chain) or "bank the next step"))
       else
-        local steps = d.add.chain and string.format(" · %d step%s first%s", d.add.chain.n, d.add.chain.n == 1 and "" or "s",
-          d.add.chain.minutes and d.add.chain.minutes > 0 and string.format(", ~%d min", d.add.chain.minutes) or "") or ""
+        -- the line under the name: what it replaces, then what it costs or leads to, as far as the room allows
+        local base = d.cut and ("instead of " .. d.cut.e.title .. (d.cutValue > 0 and ("  " .. QB.Short(d.cutValue)) or "")) or "into a free slot"
+        local ch = d.add.chain
+        local mins = ch and ch.minutes and ch.minutes > 0 and string.format(", ~%d min", ch.minutes) or ""
+        local long = ch and string.format(" · %d step%s first%s", ch.n, ch.n == 1 and "" or "s", mins) or ""
+        local short = ch and string.format(" · %d step%s%s", ch.n, ch.n == 1 and "" or "s", mins) or ""
         -- questing: what the quest leads on to is part of why it's here
-        local lead = (not QB:Banking() and d.add.lead and d.add.lead > 0 and steps == "") and (" · leads to +" .. QB.Short(d.add.lead)) or ""
-        r.cutName:SetText((d.cut and ("instead of " .. d.cut.e.title .. (d.cutValue > 0 and ("  " .. QB.Short(d.cutValue)) or "")) or "into a free slot")
-          .. steps .. lead .. ((d.add.q.classic and not d.add.q.liveFull) and " · Classic only" or ""))
+        local lead = (not QB:Banking() and d.add.lead and d.add.lead > 0 and not ch) and (" · leads to +" .. QB.Short(d.add.lead)) or ""
+        local classic = (d.add.q.classic and not d.add.q.liveFull) and " · Classic only" or ""
+        local room = r.cutName:GetWidth() - 2
+        for _, line in ipairs({ base .. long .. lead .. classic, base .. short .. classic, base .. short .. lead, base .. short, base .. lead, base }) do
+          r.cutName:SetText(line)
+          if r.cutName:GetStringWidth() <= room then break end
+        end
       end
       setIcon(r.addIcon, d.add.q.icon)
       r.addName:SetText(d.add.q.name)
@@ -2226,7 +2238,7 @@ local function whoText(e)
   local parts = {}
   for _, w in ipairs(e.who) do
     local state = w.code == "a" and (w.prog or "in log") or STATE[w.code] or ""
-    local name = QB.Sync and QB.Sync.ColorName(w.name, w.class) or w.name
+    local name = QB.Sync and QB.Sync.ColorName(w.name, w.class, true) or w.name -- the dark cut: this sits on parchment
     if w.me then state = "|cff0a4a8a" .. state .. "|r" elseif w.code == "b" then state = "|cff6f6a61" .. state .. "|r" end
     parts[#parts + 1] = name .. " " .. state
   end
@@ -2401,7 +2413,7 @@ function UI:RefreshPartyView(v)
     row.who = m.key
     local coords = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[m.class or ""]
     if coords then row.class:SetTexCoord(coords[1], coords[2], coords[3], coords[4]) else row.class:SetTexCoord(0, 0.25, 0, 0.25) end
-    local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[m.class or ""]
+    local cc = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS) and (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[m.class or ""]
     row.name:SetText(m.name or m.key)
     if cc then row.name:SetTextColor(cc.r * 0.7, cc.g * 0.7, cc.b * 0.7) else row.name:SetTextColor(INK[1], INK[2], INK[3]) end
     row.sub:SetText(string.format("Level %s %s", m.level or "?", m.fac == "H" and "Horde" or "Alliance"))

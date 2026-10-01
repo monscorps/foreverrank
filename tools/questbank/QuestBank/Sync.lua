@@ -348,25 +348,31 @@ function S:Dungeons()
   return out
 end
 
--- "ffRRGGBB" for a class, from the game's table
-function S.ClassColor(class)
-  local c = RAID_CLASS_COLORS and class and RAID_CLASS_COLORS[class]
+-- the class colour table the player's other frames use, then the game's own
+local function classColors() return CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS end
+S.ClassColors = classColors
+
+-- "ffRRGGBB" for a class; dark cuts it to 70%, for text on the parchment
+function S.ClassColor(class, dark)
+  local t = classColors()
+  local c = t and class and t[class]
   if not c then return nil end
-  if c.colorStr then return c.colorStr end
-  return string.format("ff%02x%02x%02x", math.floor(c.r * 255 + 0.5), math.floor(c.g * 255 + 0.5), math.floor(c.b * 255 + 0.5))
+  if c.colorStr and not dark then return c.colorStr end
+  local k = dark and 0.7 or 1
+  return string.format("ff%02x%02x%02x", math.floor(c.r * k * 255 + 0.5), math.floor(c.g * k * 255 + 0.5), math.floor(c.b * k * 255 + 0.5))
 end
 
 -- a name in its class colour, for text that mixes several people
-function S.ColorName(name, class)
-  local hex = S.ClassColor(class)
+function S.ColorName(name, class, dark)
+  local hex = S.ClassColor(class, dark)
   if not hex then return name end
   return "|c" .. hex .. name .. "|r"
 end
 
--- everyone here who holds this quest, you included: { { name, class, me }, ... }
+-- everyone here who holds this quest, you included (held, or planned and not yet done): { { name, class, me }, ... }
 function S:WhoHas(id, exceptKey)
   local out = {}
-  if QB.state.log[id] or QB:Plan().add[id] then out[#out + 1] = { name = "you", class = select(2, UnitClass("player")), me = true } end
+  if QB.state.log[id] or (QB:Plan().add[id] and not QB.API.IsDone(id)) then out[#out + 1] = { name = "you", class = select(2, UnitClass("player")), me = true } end
   for key, m in pairs(self.members) do
     if key ~= exceptKey and m.quests and m.quests[id] then out[#out + 1] = { name = m.name or key, class = m.class } end
   end
@@ -376,7 +382,7 @@ end
 function S:MemberTooltip(tip, key)
   local m = self.members[key]
   if not m then return end
-  local cc = RAID_CLASS_COLORS and m.class and RAID_CLASS_COLORS[m.class]
+  local cc = classColors() and m.class and classColors()[m.class]
   tip:AddDoubleLine(m.name, m.version and ("QuestBank " .. m.version) or "", cc and cc.r or 1, cc and cc.g or 0.82, cc and cc.b or 0, 0.6, 0.6, 0.6)
   tip:AddLine(string.format("Level %s, banked to %.1f, plan to %.1f (%.1f in the first hour)", m.level or "?", m.banked or 0, m.plan or 0, m.at60 or 0), 1, 1, 1, true)
   if m.runStart then tip:AddLine(string.format("Running for %s: %d handed in, +%s XP", QB.Clock(m.runMin), m.runN, QB.Comma(m.runXP)), 0.4, 1, 0.4) end
@@ -388,8 +394,10 @@ function S:MemberTooltip(tip, key)
   end
   table.sort(list, function(a, b) return a.xp > b.xp end)
   local label = { b = "banked", a = "in their log", p = "to pick up" }
+  -- twenty at a time, so the tooltip stays a tooltip; Shift held while hovering shows them all
+  local cap = (IsShiftKeyDown and IsShiftKeyDown()) and #list or 20
   tip:AddLine(string.format("%d quest%s. Who else here holds each one, in their class colour:", #list, #list == 1 and "" or "s"), 0.6, 0.6, 0.6, true)
-  for i = 1, math.min(40, #list) do
+  for i = 1, math.min(cap, #list) do
     local it = list[i]
     local others = {}
     for _, w in ipairs(self:WhoHas(it.q.id, key)) do others[#others + 1] = S.ColorName(w.name, w.class) end
@@ -397,7 +405,7 @@ function S:MemberTooltip(tip, key)
     local state = it.code == "a" and it.prog and ("in their log, " .. it.prog) or (label[it.code] or "")
     tip:AddDoubleLine(it.q.name .. shared, state .. ", " .. QB.Short(it.xp), 1, 1, 1, 0.6, 1, 0.6)
   end
-  if #list > 40 then tip:AddLine(string.format("and %d more", #list - 40), 0.6, 0.6, 0.6) end
+  if #list > cap then tip:AddLine(string.format("and %d more (hold Shift for all)", #list - cap), 0.6, 0.6, 0.6) end
 end
 
 -- add their quests that you can do to your plan

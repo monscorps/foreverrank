@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.4.1"
+QB.version = "3.4.2"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -296,7 +296,8 @@ end
 -- one waypoint at a time: TomTom's arrow if you have it, else the game's own map pin
 local tomtomUid
 function API.SetWaypoint(m, x, y, title, quiet, place)
-  if not quiet and QB.Arrow then
+  -- a waypoint you asked for is one the arrow remembers; place == false says: not this one (the route's own)
+  if not quiet and place ~= false and QB.Arrow then
     local p = place or (QB.Model and QB.Model.World and QB.Model.World(m, x, y))
     if p then QB.Arrow:Pin(title, p.c, p.wx, p.wy) end
   end
@@ -1121,9 +1122,22 @@ function QB:ChainLead(id)
   return sum
 end
 
--- what a quest behind a chain costs you first: the steps left, the XP they pay at your level, and the
--- minutes of moving between their NPCs from where you stand, by the hand-in route's own travel model
-function QB:ChainCost(q)
+-- the alternative of an either-or prerequisite that is yours: one you hold, else one for your faction,
+-- class and race, else the first
+function QB:PreStep(p)
+  if type(p) ~= "table" then return Q.Get(p) end
+  local s = self.state
+  for _, id in ipairs(p) do if s.log[id] then return Q.Get(id) end end
+  for _, id in ipairs(p) do
+    local q = Q.Get(id)
+    if q and Q.ForMe(q) then return q end
+  end
+  return Q.Get(p[1])
+end
+
+-- the steps of a chain still ahead of this quest, in order: { q = the step (false if the catalog lacks
+-- it), held = it is in your log, so what is left of it is the hand-in }
+function QB:ChainSteps(q)
   if not (q and q.pre) then return nil end
   local s = self.state
   local from = 1
@@ -1134,9 +1148,20 @@ function QB:ChainCost(q)
   local steps = {}
   for k = from, #q.pre do
     local p = q.pre[k]
-    if not preDone(p) then steps[#steps + 1] = Q.Get(type(p) == "table" and p[1] or p) or false end
+    if not preDone(p) then
+      local sq = self:PreStep(p)
+      steps[#steps + 1] = { q = sq or false, held = (sq and s.log[sq.id]) and true or false }
+    end
   end
-  if #steps == 0 then return nil end
+  return #steps > 0 and steps or nil
+end
+
+-- what a quest behind a chain costs you first: the steps left, the XP they pay at your level, and the
+-- minutes of moving between their NPCs from where you stand, by the hand-in route's own travel model
+function QB:ChainCost(q)
+  local steps = self:ChainSteps(q)
+  if not steps then return nil end
+  local s = self.state
   local M, fac = QB.Model, self.faction or API.Faction()
   local mf = self:Mounted() and 0.625 or 1
   local wp = API.WorldPosition()
@@ -1147,17 +1172,18 @@ function QB:ChainCost(q)
     if prev then minutes = minutes + M.Between(prev, to, fac, mf) end
     prev = to
   end
-  for _, sq in ipairs(steps) do
+  for _, st in ipairs(steps) do
+    local sq = st.q
     if sq then
       xp = xp + M.XpAt(sq, s.level or 1)
-      if not s.log[sq.id] then hop(M.NpcPlace(sq.giveIdx, fac)) end
+      if not st.held then hop(M.NpcPlace(sq.giveIdx, fac)) end
       hop(M.NpcPlace(sq.turnIdx, fac))
     else
       known = false
     end
   end
   hop(M.NpcPlace(q.giveIdx, fac))
-  return { n = #steps, xp = xp, minutes = known and math.floor(minutes + 0.5) or nil, first = steps[1] or nil }
+  return { n = #steps, xp = xp, minutes = known and math.floor(minutes + 0.5) or nil, first = steps[1].q or nil }
 end
 function QB:IsAdded(id) return self:Plan().add[id] and true or false end
 
@@ -1544,6 +1570,7 @@ local pending = false
 
 -- something the plan depends on changed: refresh what is on screen a moment later
 function QB:MarkDirty()
+  if QB.Arrow and QB.Arrow.Invalidate then QB.Arrow.Invalidate() end
   self.dirty = true
   if pending then return end
   pending = true

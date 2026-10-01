@@ -5,7 +5,8 @@
 --   route    the next stop on your route, as it re-plans (questing and mid-run, from where you stand;
 --            banking, the one you'll run)
 --   handin   the nearest NPC you can hand a finished quest in to
---   pickup   the nearest giver of a quest in your plan you haven't taken yet (a chain: its first step)
+--   pickup   the nearest giver of a quest in your plan you haven't taken yet (a chain: its first open
+--            step; a chain whose only step left is one you hold is a hand-in, which handin covers)
 --   pin      whatever you last clicked a waypoint for in QuestBank: a quest, a stop, an entrance.
 --            Clicking one while the arrow is up switches to this by itself.
 local _, QB = ...
@@ -22,9 +23,9 @@ function A.Mode()
   return MODES[m] and m or "route"
 end
 
--- the nearest of several places; another continent counts as far
-local function nearest(list)
-  local here = QB.API.WorldPosition()
+-- the nearest of several places from where you stand; another continent counts as far
+local function nearest(list, here)
+  if not list then return nil end
   local best, bd
   for _, t in ipairs(list) do
     local d = 1e9
@@ -45,7 +46,7 @@ local function routeTarget()
 end
 
 -- finished quests in your log, by the NPC who takes them, outside dungeons
-local function handinTarget()
+local function handinList()
   local Q, M = QB.Quest, QB.Model
   local byNpc, list = {}, {}
   for _, e in ipairs(QB.state.logOrder or {}) do
@@ -63,21 +64,23 @@ local function handinTarget()
       end
     end
   end
-  return nearest(list)
+  return list
 end
 
--- the first step of a chain, or the quest itself
+-- where a chain sends you next: the first step neither done nor held (go to its giver), or, when all
+-- that is left is a step you hold, that step and true (go to its turn-in)
 local function firstStep(q, st)
-  if st.code == "prereq" and st.pre then
-    local p = type(st.pre) == "table" and st.pre[1] or st.pre
-    return QB.Quest.Get(p) or q
-  end
-  return q
+  if not (st and st.code == "prereq") then return q, false end
+  local steps = QB:ChainSteps(q)
+  if not steps then return q, false end
+  for _, s in ipairs(steps) do if s.q and not s.held then return s.q, false end end
+  for _, s in ipairs(steps) do if s.q then return s.q, true end end
+  return q, false
 end
 A.FirstStep = firstStep
 
--- quests in your plan you haven't taken yet, by the NPC who gives them (or gives their first step)
-local function pickupTarget()
+-- quests in your plan you haven't taken yet, by the NPC who gives them (or gives their first open step)
+local function pickupList()
   local Q, M = QB.Quest, QB.Model
   local byNpc, list = {}, {}
   for id in pairs(QB:Plan().add) do
@@ -85,8 +88,8 @@ local function pickupTarget()
     if q and not QB.state.log[id] and not QB.API.IsDone(id) then
       local st = QB:Status(q)
       if st.code == "todo" or st.code == "prereq" then
-        local g = firstStep(q, st)
-        local p = g.give and not g.give.inside and M.NpcPlace(g.giveIdx, QB.faction)
+        local g, held = firstStep(q, st)
+        local p = not held and g.give and not g.give.inside and M.NpcPlace(g.giveIdx, QB.faction)
         if p then
           local t = byNpc[g.giveIdx]
           if not t then
@@ -99,18 +102,30 @@ local function pickupTarget()
       end
     end
   end
-  return nearest(list)
+  return list
 end
 
--- what the arrow points at
-function A.Target()
+-- the hand-in and pick-up lists cost a scan of your log or plan: kept for a second, and dropped the
+-- moment the plan changes (QB:MarkDirty), the mode changes or you pin something
+local cache = { t = -1 }
+function A.Invalidate() cache.t = -1 end
+local function listFor(m)
+  local now = GetTime and GetTime() or 0
+  if cache.mode == m and now - cache.t < 1 then return cache.list end
+  cache.t, cache.mode = now, m
+  cache.list = (m == "handin" and handinList()) or (m == "pickup" and pickupList()) or nil
+  return cache.list
+end
+
+-- what the arrow points at, judged from where you stand (passed in, so one read serves the whole tick)
+function A.Target(here)
   local m = A.Mode()
   if m == "pin" then
     local p = QB:Settings().arrowPin
     if p and p.c and p.wx and p.wy then return { name = p.name or "your waypoint", c = p.c, wx = p.wx, wy = p.wy, kind = "pin" } end
     return nil
-  elseif m == "handin" then return handinTarget()
-  elseif m == "pickup" then return pickupTarget()
+  elseif m == "handin" or m == "pickup" then
+    return nearest(listFor(m), here or QB.API.WorldPosition())
   end
   return routeTarget()
 end
@@ -135,6 +150,7 @@ function A:Pin(name, c, wx, wy)
   if not (c and wx and wy) then return end
   local set = QB:Settings()
   set.arrowPin = { name = name, c = c, wx = wx, wy = wy }
+  A.Invalidate()
   if set.arrow and A.Mode() ~= "pin" then
     set.arrowMode = "pin"
     if not self.toldPin then
@@ -148,6 +164,7 @@ end
 function A:SetMode(m)
   if not MODES[m] then return end
   QB:Settings().arrowMode = m
+  A.Invalidate()
   self:Update()
 end
 
@@ -157,7 +174,7 @@ function A:Menu()
   for _, m in ipairs(ORDER) do
     local label = (MODES[m]:gsub("^%l", string.upper))
     if A.Mode() == m then label = label .. "  (now)" end
-    if m == "pin" and not QB:Settings().arrowPin then label = label .. " (nothing yet)" end
+    if m == "pin" and not QB:Settings().arrowPin and A.Mode() ~= m then label = label .. " (nothing yet)" end
     items[#items + 1] = { label, function() A:SetMode(m) end }
   end
   items[#items + 1] = { "Hide the arrow", function()
@@ -229,7 +246,8 @@ end
 function A:Update()
   local f = self.frame
   if not f then return end
-  local t = A.Target()
+  local me = QB.API.WorldPosition()
+  local t = A.Target(me)
   if not t then
     local m = A.Mode()
     f.name:SetText(NOTHING[m][1])
@@ -238,7 +256,6 @@ function A:Update()
     return
   end
   f.name:SetText(t.name)
-  local me = QB.API.WorldPosition()
   if not me then
     f.dist:SetText("")
     f.arrow:SetAlpha(0.3)

@@ -709,6 +709,11 @@ do
   end
   print(string.format("chains among the candidates: %d, %d with travel known", chained, withMinutes))
   assert(chained > 0 and withMinutes > 0, "the owner has chain quests with known travel")
+  local pledge = QB.Quest.Get(3638)
+  if pledge then
+    local cc = QB:ChainCost(pledge)
+    assert(cc and cc.first and QB.Quest.ForMe(cc.first) and cc.first.id ~= 3526, "an either-or prerequisite names a step for your faction: " .. tostring(cc and cc.first and cc.first.name))
+  end
 end
 UI:ShowTab(1)
 for _, b in ipairs(v1.slots) do poke(b) end
@@ -730,12 +735,6 @@ do
   print("chain row:", moving.q.name, "|", moving.status:GetText())
   UI.expanded = nil
   UI:ShowTab(1); UI:Refresh()
-  -- in the swap list the chain's steps show in the row text whenever such a quest ranks among the rows
-  for _, r in ipairs(v1.swaps) do
-    if r:IsShown() and r.add and QB:Status(r.add).code == "prereq" and not r.via and not r.cutName:GetText():find("hand in") then
-      assert(r.cutName:GetText():find("step%a* first"), "a chain quest in the swap list says its steps first: " .. r.cutName:GetText())
-    end
-  end
 end
 for _, c in ipairs(UI:Candidates(400)) do
   local q = QB.Quest.Get(c.id)
@@ -1667,6 +1666,12 @@ do
   assert(who, "and says who else here holds each quest")
   local you = owner.QB.Sync.ColorName("you", "PALADIN")
   assert(you:find("^|cff") and you:find("|r$"), "your name comes in your class colour: " .. you)
+  assert(owner.QB.Sync.ColorName("you", "PALADIN", true) ~= you and owner.QB.Sync.ColorName("you", "PALADIN", true):find("^|cff"), "the parchment cut is darker")
+  local doneId
+  for id, v in pairs(owner.done) do if v then doneId = id break end end
+  QB:Plan().add[doneId] = true
+  for _, w in ipairs(owner.QB.Sync:WhoHas(doneId)) do assert(not w.me, "a planned quest you already handed in isn't one you hold") end
+  QB:Plan().add[doneId] = nil
   local shared
   for _, l in ipairs(lines) do if l:find(you, 1, true) then shared = l end end
   assert(shared, "a quest you both hold names you in your colour")
@@ -1794,13 +1799,77 @@ do
   local plan = QB:Plan()
   local keep = plan.add
   plan.add = {}
+  A.Invalidate() -- the plan changed behind QuestBank's back; QB:MarkDirty does this in play
   assert(A.Mode() == "pickup" and A.Target() == nil, "an empty plan: nothing to pick up")
   F.__scripts.OnUpdate(F, 1)
   assert(F.name:GetText():find("Nothing in your plan"), "and the arrow says so: " .. F.name:GetText())
   plan.add[1221] = true
+  A.Invalidate() -- QB:MarkDirty does this when the plan changes through QuestBank
   t = A.Target()
   assert(t and t.kind == "pickup" and t.name == QB.Quest.Get(1221).give.n, "a planned quest: the arrow finds its giver: " .. tostring(t and t.name))
+  -- a chain whose only open step you already hold: nothing to pick up, the hand-in covers it
+  local q346, q343 = QB.Quest.Get(346), QB.Quest.Get(343)
+  assert(q346 and q343 and QB.state.log[343] and QB:Status(q346).code == "prereq", "Return to Kristoff waits on Speaking of Fortitude, which the owner holds")
+  plan.add = { [346] = true }
+  A.Invalidate()
+  t = A.Target()
+  local first, held = A.FirstStep(q346, QB:Status(q346))
+  assert(first and first.id ~= 343 or held, "the chain's next move is never the giver of the step you already hold")
+  if held then
+    assert(t == nil, "pickup mode: when only the held step is left it is a hand-in, not a pick-up: " .. tostring(t and t.name))
+  else
+    assert(t and t.name == first.give.n and t.name ~= q343.give.n, "pickup mode: the giver of the first open step, past the one you hold: " .. tostring(t and t.name))
+  end
+  UI.QuestClick(q346, QB:Status(q346), "LeftButton")
+  local expect = held and q343.turn.n or first.give.n
+  assert(QB:Settings().arrowPin and QB:Settings().arrowPin.name == expect, "clicking the chain quest sets the waypoint on " .. (held and "the held step's turn-in" or "the first open step's giver") .. ": " .. tostring(QB:Settings().arrowPin and QB:Settings().arrowPin.name))
+  print("chain with a held step:", QB:Status(q346).text, "-> waypoint", expect)
+  assert(A.Mode() == "pin", "the click re-aimed the arrow at what was clicked")
+  A:SetMode("pickup")
+  -- a chain whose only open step is the one you hold: a hand-in, not a pick-up
+  do
+    local only
+    for _, e in ipairs(QB.state.logOrder) do
+      local hq = QB.Quest.Get(e.id)
+      if hq and hq.nextSteps then
+        for _, nid in ipairs(hq.nextSteps) do
+          local nq = QB.Quest.Get(nid)
+          if nq and not QB.state.log[nid] and not QB.API.IsDone(nid) and QB.Quest.ForMe(nq) then
+            local f2, h2 = A.FirstStep(nq, QB:Status(nq))
+            if h2 and f2.id == e.id and hq.turn and not hq.turn.inside then only = only or { q = nq, step = hq } end
+          end
+        end
+      end
+    end
+    if only then
+      plan.add = { [only.q.id] = true }
+      A.Invalidate()
+      assert(A.Target() == nil, "pickup mode: nothing to pick up when the only step left is one you hold: " .. only.q.name)
+      UI.QuestClick(only.q, QB:Status(only.q), "LeftButton")
+      assert(QB:Settings().arrowPin.name == only.step.turn.n, "and a click aims at the held step's turn-in: " .. tostring(QB:Settings().arrowPin.name))
+      print("chain with only a held step left:", only.q.name, "-> hand in", only.step.name, "to", only.step.turn.n)
+    else
+      print("(no chain with only a held step left in the owner's log; the held-step rule is covered by FirstStep's held flag above)")
+    end
+  end
   plan.add = keep
+  A.Invalidate()
+  -- the route's own pins never re-aim the arrow
+  owner.env.SlashCmdList.QUESTBANK("arrow route")
+  QB.Pins:PinNext(true)
+  assert(A.Mode() == "route", "/qb next leaves the arrow on the route")
+  -- the menu with 'where you last clicked' chosen and nothing clicked yet fits its width
+  QB:Settings().arrowPin = nil
+  A:SetMode("pin")
+  F.__scripts.OnClick(F, "RightButton")
+  local Mn = owner.env.QuestBankMenu
+  local pinLabel
+  for _, b in ipairs(Mn.items) do if b:IsShown() and b.label:GetText():find("^Where you last clicked") then pinLabel = b.label:GetText() end end
+  assert(pinLabel and pinLabel:find("%(now%)") and not pinLabel:find("nothing yet"), "the chosen pin entry says (now) and no more: " .. tostring(pinLabel))
+  for _, pr in ipairs(checkLayout(Mn, "arrow menu, pin chosen")) do problems[#problems + 1] = pr end
+  Mn:Hide()
+  F.__scripts.OnUpdate(F, 1)
+  assert(F.name:GetText() == "Nothing chosen yet", "the arrow itself says nothing is chosen: " .. F.name:GetText())
   -- clicking a waypoint in QuestBank pins the arrow to it
   owner.env.SlashCmdList.QUESTBANK("arrow route")
   QB:Settings().arrowPin = nil -- earlier clicks in this run pinned things while the arrow was off, as they should
@@ -1812,9 +1881,7 @@ do
   row.__scripts.OnClick(row, "LeftButton")
   t = A.Target()
   assert(A.Mode() == "pin" and t and t.kind == "pin" and t.name == row.q.give.n, "a click on a quest pins the arrow to its giver: " .. tostring(t and t.name))
-  local told
-  for i = math.max(1, #owner.chat - 2), #owner.chat do if owner.chat[i]:find("The arrow points at " .. row.q.give.n:gsub("%p", "%%%0") .. " now") then told = true end end
-  assert(told, "and says so once: " .. owner.chat[#owner.chat])
+  assert(A.toldPin, "and it said so, once this session (the first pin above did)")
   -- the right-click menu: the four targets and Hide
   F.__scripts.OnClick(F, "RightButton")
   local M = owner.env.QuestBankMenu
@@ -1890,6 +1957,34 @@ do
     for _, r in ipairs(U.views[1].swaps) do if r:IsShown() and r.cutName:GetText():find("leads to +", 1, true) then leadRow = leadRow or r end end
     assert(leadRow, "a swap row says what the quest leads on to")
     print("newbie lead row:", leadRow.addName:GetText(), "|", leadRow.cutName:GetText())
+    -- chain quests in the swap list: their steps in the text, and a left click aiming at the right NPC
+    local stepRows, chainRow = 0, nil
+    for _, r in ipairs(U.views[1].swaps) do
+      if r:IsShown() and r.add and N:Status(r.add).code == "prereq" and not r.via and not r.cutName:GetText():find("hand in") then
+        local cc = N:ChainCost(r.add)
+        assert(cc and r.cutName:GetText():find(" · " .. cc.n .. " step"), "a chain quest's row counts its steps: " .. r.cutName:GetText())
+        stepRows = stepRows + 1
+        chainRow = chainRow or r
+      end
+    end
+    assert(stepRows > 0, "the newbie's swap list has chain quests with their steps")
+    -- a left click aims at the right NPC: the first open step's giver, or a held step's turn-in (a row whose
+    -- step the catalog has no NPC for can't be tested that way)
+    local clicked
+    for _, r in ipairs(U.views[1].swaps) do
+      if not clicked and r:IsShown() and r.add and N:Status(r.add).code == "prereq" and not r.via and not r.cutName:GetText():find("hand in") then
+        local first, held = N.Arrow.FirstStep(r.add, N:Status(r.add))
+        local expect = first and (held and first.turn or first.give)
+        if expect and not expect.inside then
+          N:Settings().arrowPin = nil
+          r.__scripts.OnClick(r, "LeftButton")
+          assert(N:Settings().arrowPin and N:Settings().arrowPin.name == expect.n, "a left click on a chain row aims at " .. (held and "the held step's turn-in" or "the first step's giver") .. ": " .. tostring(N:Settings().arrowPin and N:Settings().arrowPin.name))
+          print("newbie chain row:", r.addName:GetText(), "|", r.cutName:GetText(), "-> waypoint", expect.n)
+          clicked = true
+        end
+      end
+    end
+    assert(clicked, "a chain row with a known NPC to aim at")
   end
   assert(seven and seven.up:IsShown(), "Kobold Camp Cleanup carries on: the arrow shows")
   lines = {}; seven.__scripts.OnEnter(seven)

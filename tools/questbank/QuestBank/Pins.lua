@@ -152,7 +152,7 @@ function P:PinNext(announce)
     return
   end
   local s = leg.stop
-  QB.API.SetWaypoint(s.m, s.x, s.y, s.name, not announce)
+  QB.API.SetWaypoint(s.m, s.x, s.y, s.name, not announce, false) -- the route's own: the arrow stays as it is
 end
 
 function P:Toggle()
