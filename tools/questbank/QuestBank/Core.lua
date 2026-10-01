@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.4.0"
+QB.version = "3.4.1"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -1098,6 +1098,28 @@ end
 -- the plan: what you hold (minus what you cut) plus what you chose to fetch
 ----------------------------------------------------------------------------
 function QB:IsCut(id) return self:Plan().cut[id] and true or false end
+
+-- what a quest leads on to, for you: the XP of its follow-up steps (three on at most) at your level,
+-- the ones you haven't done or taken. Questing, a quest that opens a chain is worth more than it pays.
+function QB:ChainLead(id)
+  local q = Q.Get(id)
+  if not (q and q.nextSteps) then return 0 end
+  local s, level = self.state, self.state.level or 1
+  local seen, sum = { [id] = true }, 0
+  local function walk(x, depth)
+    if depth > 3 or not x.nextSteps then return end
+    for _, nid in ipairs(x.nextSteps) do
+      local nq = Q.Get(nid)
+      if nq and not seen[nid] and Q.ForMe(nq) and not API.IsDone(nid) and not s.log[nid] then
+        seen[nid] = true
+        sum = sum + QB.Model.XpAt(nq, level)
+        walk(nq, depth + 1)
+      end
+    end
+  end
+  walk(q, 1)
+  return sum
+end
 
 -- what a quest behind a chain costs you first: the steps left, the XP they pay at your level, and the
 -- minutes of moving between their NPCs from where you stand, by the hand-in route's own travel model

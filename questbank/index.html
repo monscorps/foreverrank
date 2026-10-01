@@ -337,8 +337,8 @@
       <p class="lede">In Forever, quests are where the XP is: dungeon quests pay up to 4.35 times their Classic XP. QuestBank shows what every quest in your log is worth at your level, which chains to carry on, the best quests near you, and the quickest way to hand them in, with map pins. When the game holds your level at a cap, it banks your log and plans the hour after the cap goes up. Alliance and Horde, and it plans dungeon runs with your party.</p>
       <div class="dl">
         <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-        <span class="dl-meta">Version 3.4.0 · 1 October 2026 · 277 KB</span>
-        <span class="dl-meta">Open it in game with <code>/qb</code>. New in 3.4.0: the direction arrow points where you choose: the route, the nearest hand-in, the nearest pick-up, or whatever you last clicked (right-click it); big quests behind a chain show up in the swap list and on the Plan page with the steps and the minutes of moving they cost; party names come in their class colour, and hovering a player lists every quest they hold and who else here has it. 3.3.5 and 3.3.6 added the accept and hand-in switches and the party-chat lines, off until you tick them. 3.3.4 made joining escorts work with 25 or more quests in your log; 3.3.3 brought the Suggestions settings and Skip on Plan cards; 3.3.2 <a href="#share">uploading what you discover</a>.</span>
+        <span class="dl-meta">Version 3.4.1 · 1 October 2026 · 277 KB</span>
+        <span class="dl-meta">Open it in game with <code>/qb</code>. New in 3.4.1: questing and banking think differently now. Banking still chases raw XP; questing ranks every suggestion by XP for the time, the trip to the giver, the quest's own loop and what its chain leads on to, and a long run for little drops out. 3.4.0: the direction arrow points where you choose: the route, the nearest hand-in, the nearest pick-up, or whatever you last clicked (right-click it); big quests behind a chain show up in the swap list and on the Plan page with the steps and the minutes of moving they cost; party names come in their class colour, and hovering a player lists every quest they hold and who else here has it. 3.3.5 and 3.3.6 added the accept and hand-in switches and the party-chat lines, off until you tick them. 3.3.4 made joining escorts work with 25 or more quests in your log; 3.3.3 brought the Suggestions settings and Skip on Plan cards; 3.3.2 <a href="#share">uploading what you discover</a>.</span>
       </div>
     </div>
     <figure class="hero-shot">
@@ -362,7 +362,7 @@
 <section class="wrapx" id="modes">
   <p class="qb-eye">Every level</p>
   <h2>Questing, banking and the rush</h2>
-  <p class="sub">QuestBank works out which of the three applies to you. Settings lets you choose one yourself.</p>
+  <p class="sub">QuestBank works out which of the three applies to you, and weighs quests differently in each: banking chases raw XP to bank, questing chases XP for the time, what's close and what leads on to more. Settings lets you choose a mode yourself.</p>
   <div class="steps">
     <div class="step"><span class="n">1</span><h3>Questing</h3><p>You can level, so you hand quests in as you go. QuestBank values your log at your level, marks the chains worth carrying on with a green arrow, suggests the best quests near you, and plans the quickest way to hand in what's finished, from where you stand.</p></div>
     <div class="step"><span class="n">2</span><h3>Banking</h3><p>The game holds your level at a cap. QuestBank sees it (or learns it the first time a hand-in pays nothing) and switches to banking: finish quests, keep them, and plan the hour after the cap goes up, with where to log out and where to bind your hearthstone.</p></div>
@@ -514,7 +514,7 @@
         <li><span><b>A mark on each slot.</b> Green: finished. Yellow: not finished yet. Red: you cut it from the plan, or QuestBank doesn't know the quest. Shift-click a slot to cut it or keep it.</span></li>
         <li><span><b>The green arrow: carry the chain on.</b> The game's own bag upgrade arrow, on quests that lead somewhere. Questing, it marks the chains worth doing, and the tooltip says what the chain leads to and what the best step further on pays. While banking it only shows where a later step pays more than this one: hand this one in now and bank that step instead. The others are plain hand-ins.</span></li>
         <li><span><b>Items that don't need a slot.</b> Items that start a quest can wait in your bags without taking a log slot until the cap goes up. The count shows how far along you are, like 4 of 10 Bloodied Insignias. Below them, QuestBank lists any quest that left your log without a hand-in, so an accidental abandon doesn't go unnoticed.</span></li>
-        <li><span><b>Better use of a slot.</b> Three kinds of move, biggest gain first. Advance a chain: you hold one step, a later step pays more, so hand this one in now and bank that one. Fill a free slot with the best quest you can pick up, or with what a dungeon step leads to: take In Search of Thaelrid, hand it in to Thaelrid inside Blackfathom Deeps, and bank the Blackfathom Villainy he gives you. A big quest behind a chain shows up too, with what it costs first: "3 steps first, ~12 min" is the steps you still have to do and the minutes of moving between their NPCs from where you stand. Swap a weak quest for a better one. Click a row to pin the quest giver; for a chain, the giver of its first step.</span></li>
+        <li><span><b>Better use of a slot.</b> Three kinds of move, biggest gain first. Advance a chain: you hold one step, a later step pays more, so hand this one in now and bank that one. Fill a free slot with the best quest you can pick up (questing, the best for the time; "leads to +5.5k" says what its chain goes on to), or with what a dungeon step leads to: take In Search of Thaelrid, hand it in to Thaelrid inside Blackfathom Deeps, and bank the Blackfathom Villainy he gives you. A big quest behind a chain shows up too, with what it costs first: "3 steps first, ~12 min" is the steps you still have to do and the minutes of moving between their NPCs from where you stand. Swap a weak quest for a better one. Click a row to pin the quest giver; for a chain, the giver of its first step.</span></li>
         <li><span><b>Hover anything, right-click for more.</b> The tooltip shows where the XP number comes from, the XP at the level you'll hand it in, the whole chain it belongs to and what it leads on to, and the giver and turn-in NPC with coordinates. Right-click opens a menu: waypoints, cut or keep, and the Wowhead link.</span></li>
       </ol>
     </div>
@@ -570,7 +570,7 @@
         </details>
       </div>
       <ol class="legend">
-        <li><span><b>One card per dungeon or zone.</b> Every quest you hold or planned there, then every quest there you could still fetch, for your faction, class and race, within the level range Settings allows: 12 levels above you while banking, 4 while questing, 7 below, unless you change it. Cards are sorted by the XP still to collect there, what you hold plus what you could fetch, so the top card is the richest place for you right now; while questing, zones near you count for more. Every place you hold quests in keeps its card, wherever it sorts. <b>Skip</b> turns a card off: nothing there is suggested any more, the quests you already hold stay, and the card says Skipped with a <b>Back</b> button. A card with nothing of yours in it disappears instead; <code>/qb skip</code> and its name brings it back.</span></li>
+        <li><span><b>One card per dungeon or zone.</b> Every quest you hold or planned there, then every quest there you could still fetch, for your faction, class and race, within the level range Settings allows: 12 levels above you while banking, 4 while questing, 7 below, unless you change it. Cards are sorted by the XP still to collect there, what you hold plus what you could fetch, so the top card is the richest place for you right now. While questing the weighing is different: each quest counts by XP for the time, the trip to its giver, its own loop from giver to turn-in, and half of what its chain leads on to, so what's close and what leads somewhere rises, and anything more than about twenty minutes away, or a long run for little, drops out of the suggestions altogether. Every place you hold quests in keeps its card, wherever it sorts. <b>Skip</b> turns a card off: nothing there is suggested any more, the quests you already hold stay, and the card says Skipped with a <b>Back</b> button. A card with nothing of yours in it disappears instead; <code>/qb skip</code> and its name brings it back.</span></li>
         <li><span><b>What's left and where.</b> The XP still to collect there: everything you hold that isn't banked yet, plus every quest there within your level range that you haven't done, including the ones a level or two away and the later steps of chains. Underneath, how many of your planned quests are banked. The pin marks the dungeon entrance on your map.</span></li>
         <li><span><b>Live status for every quest</b>, read from your game: banked, in your log with the count, the chain step you need first with how many steps are left and the minutes of moving they take, the level it needs, or turned in already. A quest from the Classic database that nobody has met in Forever yet says <b>Classic only</b> right in the row.</span></li>
         <li><span><b>Make room.</b> Quests you cut, quests QuestBank doesn't know, and quests that pay next to nothing at your level, with what to do about each: hand it in now for the rewards, or abandon it.</span></li>
@@ -746,7 +746,7 @@
                 </div>
                 <div>
                   <div class="pt">Updates</div>
-                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 3.3.6. <span style="color:#0a6a0a">Brann runs 3.4.0: time to update.</span></div>
+                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 3.4.0. <span style="color:#0a6a0a">Brann runs 3.4.1: time to update.</span></div>
                   <div class="cbl"><span class="cb on"></span>Tell me when my party or guild has a newer one</div>
                   <div class="modes" style="margin:6px 0 0"><span>Copy the download link</span></div>
                   <div class="pt" style="margin-top:14px">Sharing and chat</div>
@@ -953,7 +953,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 3.4.0. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 3.4.1. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>

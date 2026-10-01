@@ -1225,25 +1225,38 @@ function UI:Candidates(limit, level)
       and not (turn and turn[5] < 0)
       and not QB:Skipped(r[8], turn and turn[5]) then -- nor anything where you said to skip
       local live = QuestBankDB.live and QuestBankDB.live[id]
-      out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], cat = r[8], give = r[7] }
+      out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], cat = r[8], give = r[7],
+                        turn = (fac == "H" and D.TURNH and D.TURNH[id]) or r[6] }
     end
   end
+  local M = QB.Model
+  local dropped = 0
   for _, c in ipairs(out) do
     local m = level - c.lvl
     local f = c.full
     if m >= 10 then f = f * 0.1 elseif m >= 6 then f = f * (1 - (m - 5) * 0.2) end
     c.value, c.rank = f, f
-    if here then
-      -- XP for the trip: a quest a flight away counts for less than one down the road
-      local p = c.give and c.give > 0 and QB.Model.NpcPlace(c.give, fac)
-      c.away = p and QB.Model.Between(here, p, fac, mf) or 60
-      c.rank = f / (1 + c.away / 15)
+    if not banking then
+      -- questing: XP for the time. The trip to the giver, the quest's own loop from giver to turn-in,
+      -- and half of what its chain leads on to. A long run for little is a waste, not a suggestion.
+      local give = c.give and c.give > 0 and M.NpcPlace(c.give, fac)
+      local turnP = c.turn and c.turn > 0 and M.NpcPlace(c.turn, fac)
+      c.away = (here and give) and M.Between(here, give, fac, mf) or (here and 60 or 0)
+      c.back = (give and turnP) and M.Between(give, turnP, fac, mf) or 0
+      c.lead = QB:ChainLead(c.id)
+      local minutes = c.away + c.back + 3 -- three for the quest itself, so one at your feet isn't infinite
+      c.rank = (f + c.lead * 0.5) / (1 + minutes / 10)
+      -- more than twenty minutes to the giver, or over eight for less than 60 XP a minute (at level 20's
+      -- scale): not something to go and do now
+      c.waste = here ~= nil and (c.away > 20 or (c.away > 8 and (f + c.lead) / minutes < 60 * QB.Scale(level)))
+      if c.waste then dropped = dropped + 1 end
     end
   end
+  UI.candDropped = dropped
   table.sort(out, function(a, b) return a.rank > b.rank end)
   local kept = {}
   for _, c in ipairs(out) do
-    if not QB.API.IsDone(c.id) then
+    if not c.waste and not QB.API.IsDone(c.id) then
       kept[#kept + 1] = c
       if limit and #kept >= limit then break end
     end
@@ -1420,7 +1433,7 @@ function UI:RefreshLogView(v)
     local chain
     if q and st.code == "prereq" and not via then chain = QB:ChainCost(q) end
     if q and not used[q.id] and (st.code == "todo" or via or chain) and not (q.bag and q.bag[3] == 1) then
-      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via, chain = chain, rank = c.rank }
+      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via, chain = chain, rank = c.rank, lead = c.lead }
     end
   end
   local ai = 1
@@ -1454,8 +1467,10 @@ function UI:RefreshLogView(v)
       else
         local steps = d.add.chain and string.format(" · %d step%s first%s", d.add.chain.n, d.add.chain.n == 1 and "" or "s",
           d.add.chain.minutes and d.add.chain.minutes > 0 and string.format(", ~%d min", d.add.chain.minutes) or "") or ""
+        -- questing: what the quest leads on to is part of why it's here
+        local lead = (not QB:Banking() and d.add.lead and d.add.lead > 0 and steps == "") and (" · leads to +" .. QB.Short(d.add.lead)) or ""
         r.cutName:SetText((d.cut and ("instead of " .. d.cut.e.title .. (d.cutValue > 0 and ("  " .. QB.Short(d.cutValue)) or "")) or "into a free slot")
-          .. steps .. ((d.add.q.classic and not d.add.q.liveFull) and " · Classic only" or ""))
+          .. steps .. lead .. ((d.add.q.classic and not d.add.q.liveFull) and " · Classic only" or ""))
       end
       setIcon(r.addIcon, d.add.q.icon)
       r.addName:SetText(d.add.q.name)

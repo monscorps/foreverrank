@@ -1867,6 +1867,30 @@ do
       assert(r.add.lvl <= 7, "questing suggestions stay near your level: " .. r.add.name)
     end
   end
+  -- 3.4.1: questing ranks by XP for the time, counts what a chain leads on to, and drops long runs for little
+  do
+    local cands = U:Candidates(400)
+    assert(#cands > 0 and N:Mode() == "quest", "the newbie quests")
+    local withLead, far = 0, nil
+    for _, c in ipairs(cands) do
+      assert(c.away and c.back and c.lead and c.rank and not c.waste, "every questing candidate carries its trip, loop and lead: " .. QB.Data.QN[c.id])
+      if c.lead > 0 then withLead = withLead + 1 end
+      if c.away > 8 then far = far or c end
+    end
+    assert(withLead > 0, "a chain's first step counts what it leads on to")
+    assert(U.candDropped and U.candDropped > 0, "long runs for little were dropped: " .. tostring(U.candDropped))
+    if far then assert(far.away <= 20 and (far.value + far.lead) / (far.away + far.back + 3) >= 60 * N.Scale(N.state.level), "the far ones that stay are within twenty minutes and pay for the time: " .. QB.Data.QN[far.id]) end
+    for _, c in ipairs(cands) do assert(c.away <= 20, "questing: nothing more than twenty minutes away is suggested: " .. QB.Data.QN[c.id]) end
+    -- a quest that leads on ranks above its own XP for the time
+    local leader
+    for _, c in ipairs(cands) do if c.lead > 0 then leader = leader or c end end
+    assert(leader and leader.rank > leader.value / (1 + (leader.away + leader.back + 3) / 10), "a quest that leads on ranks above its own XP for the time: " .. QB.Data.QN[leader.id])
+    print(string.format("newbie candidates: %d kept, %d dropped as a waste, %d lead somewhere", #cands, U.candDropped, withLead))
+    local leadRow
+    for _, r in ipairs(U.views[1].swaps) do if r:IsShown() and r.cutName:GetText():find("leads to +", 1, true) then leadRow = leadRow or r end end
+    assert(leadRow, "a swap row says what the quest leads on to")
+    print("newbie lead row:", leadRow.addName:GetText(), "|", leadRow.cutName:GetText())
+  end
   assert(seven and seven.up:IsShown(), "Kobold Camp Cleanup carries on: the arrow shows")
   lines = {}; seven.__scripts.OnEnter(seven)
   local carry = false
