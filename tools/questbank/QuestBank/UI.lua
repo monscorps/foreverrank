@@ -1242,17 +1242,30 @@ function UI:Candidates(limit, level)
     c.value, c.rank = f, f
     if not banking then
       -- questing: XP for the time. The trip to the giver, the quest's own loop from giver to turn-in,
-      -- and half of what its chain leads on to. A long run for little is a waste, not a suggestion.
-      local give = c.give and c.give > 0 and M.NpcPlace(c.give, fac)
-      local turnP = c.turn and c.turn > 0 and M.NpcPlace(c.turn, fac)
-      c.away = (here and give) and M.Between(here, give, fac, mf) or (here and 60 or 0)
+      -- and half of what its chain leads on to.
+      local giveIdx = c.give and c.give > 0 and c.give or nil
+      local give = giveIdx and M.NpcPlace(giveIdx, fac) or nil
+      local turnP = c.turn and c.turn > 0 and M.NpcPlace(c.turn, fac) or nil
+      local to = give
+      if not to and giveIdx and D.NPC[giveIdx] and D.NPC[giveIdx][5] < 0 then
+        -- a giver inside a dungeon: the trip is to its entrance, or failing that to where it is handed in
+        local ent = D.CAT[c.cat] and D.CAT[c.cat].entrance
+        local w = ent and M.World and M.World(ent.m, ent.x, ent.y)
+        to = (w and M.Place(fac, w.c, w.wx, w.wy)) or turnP
+      end
+      -- a giver the catalog can't place (an item drop, a Forever quest nobody has met): no trip is known,
+      -- so a modest ten minutes stands in, and it is never dropped on ignorance
+      c.away = (here and to) and M.Between(here, to, fac, mf) or ((here and not to) and 10 or 0)
       c.back = (give and turnP) and M.Between(give, turnP, fac, mf) or 0
       c.lead = QB:ChainLead(c.id)
       local minutes = c.away + c.back + 3 -- three for the quest itself, so one at your feet isn't infinite
-      c.rank = (f + c.lead * 0.5) / (1 + minutes / 10)
-      -- more than twenty minutes to the giver, or over eight for less than 60 XP a minute (at level 20's
-      -- scale): not something to go and do now
-      c.waste = here ~= nil and (c.away > 20 or (c.away > 8 and (f + c.lead) / minutes < 60 * QB.Scale(level)))
+      c.time = 1 / (1 + minutes / 10)
+      c.rank = (f + c.lead * 0.5) * c.time
+      -- a waste, for the swap list only (the Plan page still lists it in its zone): more than twenty minutes
+      -- to a placed giver, or too little XP for the time, judged more strictly the further away: nothing
+      -- under four minutes, the full 60 XP a minute (at level 20's scale) from sixteen
+      local strict = math.max(0, math.min(1, (c.away - 4) / 12))
+      c.waste = here ~= nil and to ~= nil and (c.away > 20 or (strict > 0 and (f + c.lead) / minutes < 60 * QB.Scale(level) * strict))
       if c.waste then dropped = dropped + 1 end
     end
   end
@@ -1260,7 +1273,7 @@ function UI:Candidates(limit, level)
   table.sort(out, function(a, b) return a.rank > b.rank end)
   local kept = {}
   for _, c in ipairs(out) do
-    if not c.waste and not QB.API.IsDone(c.id) then
+    if not QB.API.IsDone(c.id) then
       kept[#kept + 1] = c
       if limit and #kept >= limit then break end
     end
@@ -1423,7 +1436,9 @@ function UI:RefreshLogView(v)
     return (a.value or 0) < (b.value or 0)
   end)
   local adds = {}
-  for _, c in ipairs(self:Candidates(40)) do
+  for _, c in ipairs(self:Candidates(60)) do
+    if c.waste then c = nil end -- questing: a long run for little is no suggestion
+    if c then
     local q = Q.Get(c.id)
     local st = q and QB:Status(q)
     -- quests you can pick up now and that need a log slot, and the ones a single step handed in inside
@@ -1438,6 +1453,7 @@ function UI:RefreshLogView(v)
     if q and st.code == "prereq" and not via then chain = QB:ChainCost(q) end
     if q and not used[q.id] and (st.code == "todo" or via or chain) and not (q.bag and q.bag[3] == 1) then
       adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via, chain = chain, rank = c.rank, lead = c.lead }
+    end
     end
   end
   local ai = 1
@@ -1687,8 +1703,10 @@ function UI:RefreshPrepView(v)
     if q and (s.bagStarts[id] or QB.API.ItemCount(q.bag[1]) > 0) then add(q, true) end
   end
   -- every quest you could fetch, so a card's total is the whole zone; the card shows a few until opened
+  -- questing, the time to a quest weighs it on its card and in the card order (never above one: the lead
+  -- is for the swap list); banking, every quest counts in full
   for _, c in ipairs(self:Candidates(nil, level)) do
-    add(Q.Get(c.id), false, c.value > 0 and c.rank / c.value or 1)
+    add(Q.Get(c.id), false, c.time or 1)
   end
   -- the richest place first: the XP still to collect there, what you hold plus what you could fetch
   table.sort(order, function(a, b)

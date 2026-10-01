@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.4.2"
+QB.version = "3.4.3"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -748,6 +748,14 @@ function QB.Scale(level)
   return T[level] / T[20]
 end
 
+-- a follow-up step worth walking to: for you, not done or held, not a Season of Discovery leftover, not
+-- in a place you skipped, and within reach of your level (two above while questing, none at a lock).
+-- One gate for the arrow's chain walk and for what a quest leads on to, so the two can't drift apart.
+local function stepOpen(nq, lvl, banking, s)
+  return nq ~= nil and Q.ForMe(nq) and not API.IsDone(nq.id) and not s.log[nq.id] and not nq.sodLeftover
+    and not QB:SkipsQuest(nq) and (nq.req or 1) <= lvl + (banking and 0 or 2)
+end
+
 -- a chain worth carrying on: the best later step you could take (up to three steps on), what it
 -- pays and how many steps on. At a lock it's the step to bank instead, and only when it pays more
 -- than this one; questing, it's where the chain leads next.
@@ -763,9 +771,7 @@ function QB:Upgrade(q)
     if depth > 3 or not x.nextSteps then return end
     for _, nid in ipairs(x.nextSteps) do
       local nq = Q.Get(nid)
-      if nq and not seen[nid] and Q.ForMe(nq) and not API.IsDone(nid) and not s.log[nid]
-        and not nq.sodLeftover and not QB:SkipsQuest(nq)
-        and (nq.req or 1) <= lvl + (banking and 0 or 2) then
+      if nq and not seen[nid] and stepOpen(nq, lvl, banking, s) then
         seen[nid] = true
         local v = QB.Model.XpAt(nq, lvl)
         -- a step handed in inside a dungeon can't be banked; the one after it can
@@ -1107,11 +1113,17 @@ function QB:ChainLead(id)
   if not (q and q.nextSteps) then return 0 end
   local s, level = self.state, self.state.level or 1
   local seen, sum = { [id] = true }, 0
+  -- of two steps that rule each other out, only the first met counts
+  local function exclTaken(nq)
+    if not nq.excl then return false end
+    for _, o in ipairs(nq.excl) do if seen[o] then return true end end
+    return false
+  end
   local function walk(x, depth)
     if depth > 3 or not x.nextSteps then return end
     for _, nid in ipairs(x.nextSteps) do
       local nq = Q.Get(nid)
-      if nq and not seen[nid] and Q.ForMe(nq) and not API.IsDone(nid) and not s.log[nid] then
+      if nq and not seen[nid] and stepOpen(nq, level, false, s) and not exclTaken(nq) then
         seen[nid] = true
         sum = sum + QB.Model.XpAt(nq, level)
         walk(nq, depth + 1)

@@ -968,6 +968,35 @@ do
   sf.bar:SetValue(0)
   UI:ShowTab(1); UI:Refresh()
 end
+-- 3.4.3: questing, a quest given inside a dungeon is measured to the entrance, kept, and shown on its card
+do
+  QB:SetLock("off"); QB:Recompute(true)
+  assert(QB:Mode() == "quest", "questing by hand")
+  QB:Settings().rangeAbove = 12 -- as a player may set it: the dungeon quests above you come into view
+  UI.candMemo = nil
+  local villainy, inside = nil, 0
+  for _, c in ipairs(UI:Candidates(400)) do
+    if c.id == 1200 then villainy = c end
+    if c.give > 0 and QB.Data.NPC[c.give][5] < 0 then
+      inside = inside + 1
+      assert(c.away ~= 60 and c.away ~= 10, "a giver inside a dungeon is measured to the entrance, not invented: " .. QB.Data.QN[c.id] .. " " .. tostring(c.away))
+    end
+  end
+  assert(inside > 0 and villainy, "Blackfathom Villainy, given inside the dungeon, is a candidate while questing")
+  UI:ShowTab(2)
+  UI.expanded = {}
+  for _, cat in ipairs(QB.Data.CAT) do UI.expanded[cat.key] = true end
+  UI:Refresh()
+  local onCard
+  for _, c in ipairs(UI.views[2].cards.items) do for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q and r.q.id == 1200 then onCard = true end end end
+  assert(onCard, "and it is listed on the Blackfathom Deeps card while questing")
+  UI.expanded = nil
+  QB:Settings().rangeAbove = "auto"
+  QB:SetLock("auto"); QB:Recompute(true)
+  assert(QB:Mode() == "lock", "back to banking")
+  UI.candMemo = nil
+  UI:ShowTab(1); UI:Refresh()
+end
 -- 3.3.3: the suggestion window and the skipped places. Defaults first, then each setting, then back to auto.
 do
   local set = QB:Settings()
@@ -1742,6 +1771,19 @@ print("horde route:", hv.summary:GetText())
 for _, l in ipairs(hv.legs.items) do
   if l:IsShown() then print(string.format("  %5s %-26s %-34s %s", l.clock:GetText(), l.name:GetText(), l.travel:GetText(), l.level:GetText())) end
 end
+-- banking keeps raw XP: no trip, no lead, nothing flagged
+do
+  local HU = horde.QB.UI
+  HU.candMemo = nil
+  local n = 0
+  for _, c in ipairs(HU:Candidates(400)) do
+    n = n + 1
+    assert(c.rank == c.value and c.away == nil and c.back == nil and c.lead == nil and c.time == nil and not c.waste, "banking keeps raw XP and no trip: " .. QB.Data.QN[c.id])
+  end
+  assert(n > 0 and HU.candDropped == 0, "banking drops nothing")
+  HU:ShowTab(1); HU:Refresh()
+  for _, r in ipairs(HU.views[1].swaps) do if r:IsShown() then assert(not r.cutName:GetText():find("leads to", 1, true), "banking rows don't say what a quest leads to") end end
+end
 for _, e in ipairs(horde.QB:RouteEntries("plan")) do
   assert(e.q.side ~= 1, "no Alliance quest in a Horde plan: " .. e.q.name)
 end
@@ -1934,25 +1976,52 @@ do
       assert(r.add.lvl <= 7, "questing suggestions stay near your level: " .. r.add.name)
     end
   end
-  -- 3.4.1: questing ranks by XP for the time, counts what a chain leads on to, and drops long runs for little
+  -- 3.4.1/3.4.3: questing ranks by XP for the time, counts what a chain leads on to, and keeps long runs
+  -- for little off the swap list (flagged, still on the Plan page)
   do
+    U.candMemo = nil
     local cands = U:Candidates(400)
     assert(#cands > 0 and N:Mode() == "quest", "the newbie quests")
-    local withLead, far = 0, nil
+    local kept, waste, withLead, unknown = 0, 0, 0, 0
     for _, c in ipairs(cands) do
-      assert(c.away and c.back and c.lead and c.rank and not c.waste, "every questing candidate carries its trip, loop and lead: " .. QB.Data.QN[c.id])
+      assert(c.away and c.back and c.lead and c.rank and c.time and c.time <= 1, "every questing candidate carries its trip, loop, lead and time: " .. QB.Data.QN[c.id])
+      if c.waste then waste = waste + 1; assert(c.away > 4, "nothing under four minutes is a waste: " .. QB.Data.QN[c.id]) else kept = kept + 1; assert(c.away <= 20, "a suggestion is within twenty minutes: " .. QB.Data.QN[c.id]) end
       if c.lead > 0 then withLead = withLead + 1 end
-      if c.away > 8 then far = far or c end
+      if c.give == 0 then unknown = unknown + 1; assert(not c.waste and c.away == 10, "an unknown giver stands in as ten minutes and is never a waste: " .. QB.Data.QN[c.id]) end
     end
+    assert(kept > 0 and waste > 0 and U.candDropped == waste, "candidates come back flagged, and the flags are counted: " .. kept .. " kept, " .. waste .. " waste")
     assert(withLead > 0, "a chain's first step counts what it leads on to")
-    assert(U.candDropped and U.candDropped > 0, "long runs for little were dropped: " .. tostring(U.candDropped))
-    if far then assert(far.away <= 20 and (far.value + far.lead) / (far.away + far.back + 3) >= 60 * N.Scale(N.state.level), "the far ones that stay are within twenty minutes and pay for the time: " .. QB.Data.QN[far.id]) end
-    for _, c in ipairs(cands) do assert(c.away <= 20, "questing: nothing more than twenty minutes away is suggested: " .. QB.Data.QN[c.id]) end
+    assert(unknown > 0, "the newbie has candidates whose giver the catalog lacks, and they stay")
+    for _, r in ipairs(U.views[1].swaps) do
+      if r:IsShown() then for _, c in ipairs(cands) do if c.id == r.add.id then assert(not c.waste, "the swap list never offers a waste: " .. r.add.name) end end end
+    end
     -- a quest that leads on ranks above its own XP for the time
     local leader
     for _, c in ipairs(cands) do if c.lead > 0 then leader = leader or c end end
-    assert(leader and leader.rank > leader.value / (1 + (leader.away + leader.back + 3) / 10), "a quest that leads on ranks above its own XP for the time: " .. QB.Data.QN[leader.id])
-    print(string.format("newbie candidates: %d kept, %d dropped as a waste, %d lead somewhere", #cands, U.candDropped, withLead))
+    assert(leader and leader.rank > leader.value * leader.time, "a quest that leads on ranks above its own XP for the time: " .. QB.Data.QN[leader.id])
+    -- no position: nothing is a waste and nothing is away
+    local savePos = newbie.env.C_Map.GetPlayerMapPosition
+    newbie.env.C_Map.GetPlayerMapPosition = function() return nil end
+    U.candMemo = nil
+    local blind = U:Candidates(400)
+    assert(U.candDropped == 0 and blind[1].away == 0, "no position known: nothing is dropped and nothing is away")
+    newbie.env.C_Map.GetPlayerMapPosition = savePos
+    U.candMemo = nil
+    -- close beats far: the same quest ranks higher from Ironforge than from Northshire when it stands in Dun Morogh
+    local pick
+    for _, c in ipairs(cands) do if QB.Data.CAT[c.cat].key == "z1" and c.lead == 0 and c.value > 0 and c.give > 0 then pick = pick or c end end
+    assert(pick, "a Dun Morogh quest with no lead and a placed giver")
+    local hereRank = pick.rank
+    local saveWorld = newbie.o.world
+    newbie.o.world = { 0, -4822, -1155 } -- Ironforge
+    U.candMemo = nil
+    local there
+    for _, c in ipairs(U:Candidates(400)) do if c.id == pick.id then there = c end end
+    assert(there and there.rank > hereRank and there.away < pick.away, "closer to its giver, the same quest ranks higher: " .. QB.Data.QN[pick.id])
+    newbie.o.world = saveWorld
+    U.candMemo = nil
+    cands = U:Candidates(400)
+    print(string.format("newbie candidates: %d kept, %d flagged as a waste, %d lead somewhere", #cands - U.candDropped, U.candDropped, withLead))
     local leadRow
     for _, r in ipairs(U.views[1].swaps) do if r:IsShown() and r.cutName:GetText():find("leads to +", 1, true) then leadRow = leadRow or r end end
     assert(leadRow, "a swap row says what the quest leads on to")
