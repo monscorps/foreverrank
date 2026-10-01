@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.3.6"
+QB.version = "3.4.0"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -295,7 +295,11 @@ end
 
 -- one waypoint at a time: TomTom's arrow if you have it, else the game's own map pin
 local tomtomUid
-function API.SetWaypoint(m, x, y, title, quiet)
+function API.SetWaypoint(m, x, y, title, quiet, place)
+  if not quiet and QB.Arrow then
+    local p = place or (QB.Model and QB.Model.World and QB.Model.World(m, x, y))
+    if p then QB.Arrow:Pin(title, p.c, p.wx, p.wy) end
+  end
   if not (m and x and y) or m == 0 then return false end
   if TomTom and TomTom.AddWaypoint then
     if tomtomUid and TomTom.RemoveWaypoint then pcall(TomTom.RemoveWaypoint, TomTom, tomtomUid) end
@@ -586,6 +590,7 @@ local DEFAULTS = {
   -- off until asked for: accept quests for you (pick-ups, and escorts a party member starts), hand finished
   -- ones in for you (Auto.lua decides when that is wise), and two party-chat lines
   autoAccept = false, autoTurnIn = false, sayAccept = false, sayComplete = false,
+  arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
 }
 
 function QB:Settings()
@@ -1093,6 +1098,45 @@ end
 -- the plan: what you hold (minus what you cut) plus what you chose to fetch
 ----------------------------------------------------------------------------
 function QB:IsCut(id) return self:Plan().cut[id] and true or false end
+
+-- what a quest behind a chain costs you first: the steps left, the XP they pay at your level, and the
+-- minutes of moving between their NPCs from where you stand, by the hand-in route's own travel model
+function QB:ChainCost(q)
+  if not (q and q.pre) then return nil end
+  local s = self.state
+  local from = 1
+  for k = #q.pre, 1, -1 do
+    local p = q.pre[k]
+    if preDone(p) or (type(p) ~= "table" and s.log[p]) then from = k break end
+  end
+  local steps = {}
+  for k = from, #q.pre do
+    local p = q.pre[k]
+    if not preDone(p) then steps[#steps + 1] = Q.Get(type(p) == "table" and p[1] or p) or false end
+  end
+  if #steps == 0 then return nil end
+  local M, fac = QB.Model, self.faction or API.Faction()
+  local mf = self:Mounted() and 0.625 or 1
+  local wp = API.WorldPosition()
+  local prev = wp and M.Place(fac, wp.c, wp.wx, wp.wy) or nil
+  local minutes, known, xp = 0, true, 0
+  local function hop(to)
+    if not to then known = false return end
+    if prev then minutes = minutes + M.Between(prev, to, fac, mf) end
+    prev = to
+  end
+  for _, sq in ipairs(steps) do
+    if sq then
+      xp = xp + M.XpAt(sq, s.level or 1)
+      if not s.log[sq.id] then hop(M.NpcPlace(sq.giveIdx, fac)) end
+      hop(M.NpcPlace(sq.turnIdx, fac))
+    else
+      known = false
+    end
+  end
+  hop(M.NpcPlace(q.giveIdx, fac))
+  return { n = #steps, xp = xp, minutes = known and math.floor(minutes + 0.5) or nil, first = steps[1] or nil }
+end
 function QB:IsAdded(id) return self:Plan().add[id] and true or false end
 
 function QB:InPlan(q, st)
@@ -1664,8 +1708,18 @@ slash = function(msg)
   elseif cmd == "post" then
     QB.UI:PostDialog(Run.PostText("status"))
   elseif cmd == "arrow" then
-    QB.Arrow:Set(not QB:Settings().arrow)
-    QB:Print(QB:Settings().arrow and "Direction arrow on: it points to the next stop on your route. Drag it where you like." or "Direction arrow off.")
+    local want = rest:lower():gsub("^%s+", ""):gsub("%s+$", "")
+    if QB.Arrow.MODES[want] then
+      QB.Arrow:SetMode(want)
+      if not QB:Settings().arrow then QB.Arrow:Set(true) end
+      QB:Print("The arrow points at " .. QB.Arrow.MODES[want] .. ".")
+    elseif want == "on" or want == "off" then
+      QB.Arrow:Set(want == "on")
+      QB:Print(want == "on" and ("Direction arrow on: it points at " .. QB.Arrow.MODES[QB.Arrow.Mode()] .. ".") or "Direction arrow off.")
+    else
+      QB.Arrow:Set(not QB:Settings().arrow)
+      QB:Print(QB:Settings().arrow and ("Direction arrow on: it points at " .. QB.Arrow.MODES[QB.Arrow.Mode()] .. ". Right-click it to choose: the route, the nearest hand-in or pick-up, or where you last clicked; /qb arrow route, handin, pickup or pin does the same. Drag it where you like.") or "Direction arrow off.")
+    end
   elseif cmd == "discoveries" then
     local nq, nn, nc = QB.Discover.Count()
     local function n(k, one, many) return k == 1 and ("1 " .. one) or (k .. " " .. many) end

@@ -281,6 +281,14 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   if q.group then tip:AddLine("Group quest.", 1, 0.5, 0.3) end
   local chain = Q.ChainText(q)
   if chain then tip:AddLine("Chain: " .. chain, 0.75, 0.75, 1, true) end
+  if st and st.code == "prereq" then
+    local cc = QB:ChainCost(q)
+    if cc then
+      tip:AddLine(string.format("%d step%s first%s%s.", cc.n, cc.n == 1 and "" or "s",
+        cc.minutes and cc.minutes > 0 and string.format(", about %d min of moving from where you stand", cc.minutes) or "",
+        cc.xp > 0 and string.format("; the steps pay %s XP %s", QB.Comma(cc.xp), QB:OnTheDay()) or ""), 0.75, 0.75, 1, true)
+    end
+  end
   if q.nextSteps then
     local names = {}
     for _, n in ipairs(q.nextSteps) do
@@ -353,7 +361,13 @@ questClick = function(q, st, which)
   end
   local target = q.turn
   if st and (st.code == "todo" or st.code == "locked" or st.code == "prereq") and q.give then target = q.give end
-  if target and not target.inside then QB.API.SetWaypoint(target.m, target.x, target.y, target.n) end
+  if st and st.code == "prereq" and QB.Arrow then
+    local first = QB.Arrow.FirstStep(q, st)
+    if first and first.give then target = first.give end
+  end
+  if target and not target.inside then
+    QB.API.SetWaypoint(target.m, target.x, target.y, target.n, nil, QB.Model.NpcPlace(target.idx, QB.faction))
+  end
 end
 
 ----------------------------------------------------------------------------
@@ -1403,8 +1417,10 @@ function UI:RefreshLogView(v)
       local p = Q.Get(st.pre)
       if p and p.turn and p.turn.inside and QB:Status(p).code == "todo" then via = p end
     end
-    if q and not used[q.id] and (st.code == "todo" or via) and not (q.bag and q.bag[3] == 1) then
-      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via, rank = c.rank }
+    local chain
+    if q and st.code == "prereq" and not via then chain = QB:ChainCost(q) end
+    if q and not used[q.id] and (st.code == "todo" or via or chain) and not (q.bag and q.bag[3] == 1) then
+      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via, chain = chain, rank = c.rank }
     end
   end
   local ai = 1
@@ -1436,8 +1452,10 @@ function UI:RefreshLogView(v)
       if d.chain then
         r.cutName:SetText("hand in " .. d.cut.e.title .. " now, " .. (d.chain > 1 and string.format("%d steps on", d.chain) or "bank the next step"))
       else
+        local steps = d.add.chain and string.format(" · %d step%s first%s", d.add.chain.n, d.add.chain.n == 1 and "" or "s",
+          d.add.chain.minutes and d.add.chain.minutes > 0 and string.format(", ~%d min", d.add.chain.minutes) or "") or ""
         r.cutName:SetText((d.cut and ("instead of " .. d.cut.e.title .. (d.cutValue > 0 and ("  " .. QB.Short(d.cutValue)) or "")) or "into a free slot")
-          .. ((d.add.q.classic and not d.add.q.liveFull) and " · Classic only" or ""))
+          .. steps .. ((d.add.q.classic and not d.add.q.liveFull) and " · Classic only" or ""))
       end
       setIcon(r.addIcon, d.add.q.icon)
       r.addName:SetText(d.add.q.name)
@@ -1569,6 +1587,16 @@ local function fillRow(r, q, st, width, value)
   local status = (planned and st.code ~= "banked" and st.code ~= "active") and ("In the plan. " .. st.text) or st.text
   -- from the Classic database, not seen in Forever yet: said in the row, not only the tooltip
   if q.classic and not q.liveFull and st.code ~= "done" and st.code ~= "banked" and st.code ~= "active" and st.code ~= "partial" then status = status .. " · Classic only" end
+  if st.code == "prereq" then
+    local cc = QB:ChainCost(q)
+    if cc and cc.minutes and cc.minutes > 0 then
+      local room = r.status:GetWidth() - 4
+      for _, suffix in ipairs({ string.format(", ~%d min on the move", cc.minutes), string.format(", ~%d min", cc.minutes) }) do
+        r.status:SetText(status .. suffix)
+        if r.status:GetStringWidth() <= room then status = status .. suffix break end
+      end
+    end
+  end
   r.status:SetText(status)
   local sc = STATUS[st.code] or INK
   r.status:SetTextColor(sc[1], sc[2], sc[3])
@@ -2183,9 +2211,9 @@ local function whoText(e)
   local parts = {}
   for _, w in ipairs(e.who) do
     local state = w.code == "a" and (w.prog or "in log") or STATE[w.code] or ""
-    local s = w.name .. " " .. state
-    if w.me then s = "|cff0a4a8a" .. s .. "|r" elseif w.code == "b" then s = "|cff6f6a61" .. s .. "|r" end
-    parts[#parts + 1] = s
+    local name = QB.Sync and QB.Sync.ColorName(w.name, w.class) or w.name
+    if w.me then state = "|cff0a4a8a" .. state .. "|r" elseif w.code == "b" then state = "|cff6f6a61" .. state .. "|r" end
+    parts[#parts + 1] = name .. " " .. state
   end
   return table.concat(parts, ",  ")
 end
@@ -2389,7 +2417,9 @@ function UI:RefreshPartyView(v)
     if d.cat.bg then c.art:SetTexture(d.cat.bg); c.art:SetTexCoord(0, 1, 0.2, 0.45) else c.art:SetColorTexture(0.16, 0.12, 0.08, 1) end
     c.icon:SetTexture(d.cat.icon)
     c.title:SetText(d.cat.name)
-    c.people:SetText(table.concat(d.people, ", "))
+    local people = {}
+    for i, n in ipairs(d.people) do people[i] = QB.Sync and QB.Sync.ColorName(n, d.classOf and d.classOf[n]) or n end
+    c.people:SetText(table.concat(people, ", "))
     c.gain:SetText("+" .. QB.Short(d.xp))
     c.left:SetText(d.left == 1 and "1 still to do" or string.format("%d still to do", d.left))
     local ry = 42
@@ -2499,7 +2529,7 @@ function UI:CreateSettingsView(parent)
     QB:Settings().minimap.hide = not self:GetChecked()
     if QB.Minimap then QB.Minimap:Update() end
   end)
-  v.arrow = checkRow(p, LEFT, -268, "Direction arrow to the next stop on your route")
+  v.arrow = checkRow(p, LEFT, -268, "Direction arrow (right-click it for what it points at)")
   v.arrow:SetScript("OnClick", function(self) if QB.Arrow then QB.Arrow:Set(self:GetChecked() and true or false) end end)
 
   heading(p, LEFT, -304, "Discoveries", 370)

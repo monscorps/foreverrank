@@ -294,12 +294,12 @@ function S:Dungeons()
   local D = QB.Data
   local level = QB.state.level or 1
   local cats, list = {}, {}
-  local function note(catIdx, qid, who, name, me, code, prog)
+  local function note(catIdx, qid, who, name, me, code, prog, class)
     local cat = D.CAT[catIdx]
     if not (cat and cat.dungeon) then return end
     local c = cats[catIdx]
     if not c then
-      c = { cat = cat, quests = {}, byQ = {}, people = {}, seen = {}, xp = 0, left = 0 }
+      c = { cat = cat, quests = {}, byQ = {}, people = {}, classOf = {}, seen = {}, xp = 0, left = 0 }
       cats[catIdx] = c
       list[#list + 1] = c
     end
@@ -309,24 +309,25 @@ function S:Dungeons()
       c.byQ[qid] = e
       c.quests[#c.quests + 1] = e
     end
-    e.who[#e.who + 1] = { name = name, me = me, code = code, prog = prog }
+    e.who[#e.who + 1] = { name = name, me = me, code = code, prog = prog, class = class }
     if code ~= "b" then
       e.need = e.need + 1
       c.left = c.left + 1
       if e.q then c.xp = c.xp + QB.Model.XpAt(e.q, level) end
     end
-    if not c.seen[who] then c.seen[who] = true; c.people[#c.people + 1] = name end
+    if not c.seen[who] then c.seen[who] = true; c.people[#c.people + 1] = name; c.classOf[name] = class end
   end
+  local myClass = select(2, UnitClass("player"))
   for _, e in ipairs(QB:RouteEntries("plan")) do
     local code = e.st.code == "banked" and "b" or (e.st.code == "active" and "a" or "p")
     local have, need = QB:Progress(e.q.id)
-    note(D.Q[e.q.id][8], e.q.id, "me", "You", true, code, need and (have .. "/" .. need) or nil)
+    note(D.Q[e.q.id][8], e.q.id, "me", "You", true, code, need and (have .. "/" .. need) or nil, myClass)
   end
   for key, m in pairs(self.members) do
     if m.quests and m.fac == QB.faction then
       for id, v in pairs(m.quests) do
         local r = D.Q[id]
-        if r then note(r[8], id, key, m.name, false, v.code, v.prog) end
+        if r then note(r[8], id, key, m.name, false, v.code, v.prog, m.class) end
       end
     end
   end
@@ -347,10 +348,36 @@ function S:Dungeons()
   return out
 end
 
+-- "ffRRGGBB" for a class, from the game's table
+function S.ClassColor(class)
+  local c = RAID_CLASS_COLORS and class and RAID_CLASS_COLORS[class]
+  if not c then return nil end
+  if c.colorStr then return c.colorStr end
+  return string.format("ff%02x%02x%02x", math.floor(c.r * 255 + 0.5), math.floor(c.g * 255 + 0.5), math.floor(c.b * 255 + 0.5))
+end
+
+-- a name in its class colour, for text that mixes several people
+function S.ColorName(name, class)
+  local hex = S.ClassColor(class)
+  if not hex then return name end
+  return "|c" .. hex .. name .. "|r"
+end
+
+-- everyone here who holds this quest, you included: { { name, class, me }, ... }
+function S:WhoHas(id, exceptKey)
+  local out = {}
+  if QB.state.log[id] or QB:Plan().add[id] then out[#out + 1] = { name = "you", class = select(2, UnitClass("player")), me = true } end
+  for key, m in pairs(self.members) do
+    if key ~= exceptKey and m.quests and m.quests[id] then out[#out + 1] = { name = m.name or key, class = m.class } end
+  end
+  return out
+end
+
 function S:MemberTooltip(tip, key)
   local m = self.members[key]
   if not m then return end
-  tip:AddDoubleLine(m.name, m.version and ("QuestBank " .. m.version) or "", 1, 0.82, 0, 0.6, 0.6, 0.6)
+  local cc = RAID_CLASS_COLORS and m.class and RAID_CLASS_COLORS[m.class]
+  tip:AddDoubleLine(m.name, m.version and ("QuestBank " .. m.version) or "", cc and cc.r or 1, cc and cc.g or 0.82, cc and cc.b or 0, 0.6, 0.6, 0.6)
   tip:AddLine(string.format("Level %s, banked to %.1f, plan to %.1f (%.1f in the first hour)", m.level or "?", m.banked or 0, m.plan or 0, m.at60 or 0), 1, 1, 1, true)
   if m.runStart then tip:AddLine(string.format("Running for %s: %d handed in, +%s XP", QB.Clock(m.runMin), m.runN, QB.Comma(m.runXP)), 0.4, 1, 0.4) end
   if not m.quests then tip:AddLine("Their quest list hasn't arrived yet.", 0.6, 0.6, 0.6) return end
@@ -361,13 +388,16 @@ function S:MemberTooltip(tip, key)
   end
   table.sort(list, function(a, b) return a.xp > b.xp end)
   local label = { b = "banked", a = "in their log", p = "to pick up" }
-  for i = 1, math.min(12, #list) do
+  tip:AddLine(string.format("%d quest%s. Who else here holds each one, in their class colour:", #list, #list == 1 and "" or "s"), 0.6, 0.6, 0.6, true)
+  for i = 1, math.min(40, #list) do
     local it = list[i]
-    local shared = QB.state.log[it.q.id] and "  (you too)" or ""
+    local others = {}
+    for _, w in ipairs(self:WhoHas(it.q.id, key)) do others[#others + 1] = S.ColorName(w.name, w.class) end
+    local shared = #others > 0 and ("  " .. table.concat(others, ", ")) or ""
     local state = it.code == "a" and it.prog and ("in their log, " .. it.prog) or (label[it.code] or "")
     tip:AddDoubleLine(it.q.name .. shared, state .. ", " .. QB.Short(it.xp), 1, 1, 1, 0.6, 1, 0.6)
   end
-  if #list > 12 then tip:AddLine(string.format("and %d more", #list - 12), 0.6, 0.6, 0.6) end
+  if #list > 40 then tip:AddLine(string.format("and %d more", #list - 40), 0.6, 0.6, 0.6) end
 end
 
 -- add their quests that you can do to your plan

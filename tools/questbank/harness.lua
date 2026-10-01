@@ -694,6 +694,22 @@ local v1, v2, v3, v4 = UI.views[1], UI.views[2], UI.views[3], UI.views[4]
 print("log title:", v1.title:GetText(), "|", v1.worth:GetText())
 print("header:", UI.header.legend:GetText())
 
+-- 3.4.0: a quest behind a chain says what it costs first: steps, and minutes of moving
+do
+  local chained, withMinutes = 0, 0
+  for _, c in ipairs(UI:Candidates(400)) do
+    local q = QB.Quest.Get(c.id)
+    local st = QB:Status(q)
+    if st.code == "prereq" then
+      local cc = QB:ChainCost(q)
+      assert(cc and cc.n >= 1 and cc.xp >= 0, "a chain quest has a cost: " .. q.name) -- first may be a step the catalog lacks
+      chained = chained + 1
+      if cc.minutes and cc.minutes > 0 then withMinutes = withMinutes + 1 end
+    end
+  end
+  print(string.format("chains among the candidates: %d, %d with travel known", chained, withMinutes))
+  assert(chained > 0 and withMinutes > 0, "the owner has chain quests with known travel")
+end
 UI:ShowTab(1)
 for _, b in ipairs(v1.slots) do poke(b) end
 for _, b in ipairs(v1.bagSlots) do if b:IsShown() then poke(b) end end
@@ -701,6 +717,25 @@ for _, r in ipairs(v1.swaps) do if r:IsShown() then poke(r) end end
 for _, r in ipairs(v1.swaps) do if r:IsShown() then print(string.format("  swap: %-28s -> %-32s %s%s", r.cutName:GetText(), r.addName:GetText(), r.gain:GetText(), r.via and ("  (via " .. r.via.name .. ")") or "")) end end
 for _, r in ipairs(v1.swaps) do
   if r:IsShown() then assert(not (r.add.turn and r.add.turn.inside), "a swap never banks a quest handed in inside a dungeon: " .. r.add.name) end
+end
+do
+  -- a chain quest's Plan row says how long the moving takes; every card opened so the rows exist
+  UI:ShowTab(2)
+  UI.expanded = {}
+  for _, cat in ipairs(QB.Data.CAT) do UI.expanded[cat.key] = true end
+  UI:Refresh()
+  local moving
+  for _, c in ipairs(v2.cards.items) do for _, r in ipairs(c.rows.items) do if r:IsShown() and r.st and r.st.code == "prereq" and r.status:GetText():find("min on the move", 1, true) then moving = moving or r end end end
+  assert(moving, "a chain quest on the Plan page says the minutes of moving its steps take")
+  print("chain row:", moving.q.name, "|", moving.status:GetText())
+  UI.expanded = nil
+  UI:ShowTab(1); UI:Refresh()
+  -- in the swap list the chain's steps show in the row text whenever such a quest ranks among the rows
+  for _, r in ipairs(v1.swaps) do
+    if r:IsShown() and r.add and QB:Status(r.add).code == "prereq" and not r.via and not r.cutName:GetText():find("hand in") then
+      assert(r.cutName:GetText():find("step%a* first"), "a chain quest in the swap list says its steps first: " .. r.cutName:GetText())
+    end
+  end
 end
 for _, c in ipairs(UI:Candidates(400)) do
   local q = QB.Quest.Get(c.id)
@@ -1626,6 +1661,16 @@ do
   assert(told == 1, "a newer version in the party is told once")
   assert(owner.QB.newest and owner.QB.newest.version == "9.9.9", "and remembered for Settings")
   lines = {}; owner.QB.Sync:MemberTooltip(owner.env.GameTooltip, mem[1].key)
+  assert(lines[1]:find("Brann Steelhand", 1, true), "the tooltip opens with their name: " .. lines[1])
+  local who
+  for _, l in ipairs(lines) do if l:find("Who else here holds", 1, true) then who = true end end
+  assert(who, "and says who else here holds each quest")
+  local you = owner.QB.Sync.ColorName("you", "PALADIN")
+  assert(you:find("^|cff") and you:find("|r$"), "your name comes in your class colour: " .. you)
+  local shared
+  for _, l in ipairs(lines) do if l:find(you, 1, true) then shared = l end end
+  assert(shared, "a quest you both hold names you in your colour")
+  print("tooltip, shared:", shared)
   owner.env.SlashCmdList.QUESTBANK("update")
   assert(owner.env.QuestBankLink:IsShown() and owner.env.QuestBankLink.eb:GetText() == "https://foreverrank.com/questbank/", "/qb update gives the link")
   owner.env.QuestBankLink:Hide()
@@ -1736,8 +1781,61 @@ do
   assert(F.name:GetText() ~= "" and F.dist:GetText() ~= "", "it names the stop and how far")
   lines = {}; F.__scripts.OnEnter(F); assert(lines[1]:find("Next stop"))
   for _, pr in ipairs(checkLayout(F, "arrow")) do problems[#problems + 1] = pr end
+  -- 3.4.0: what it points at is yours to choose
+  assert(A.Mode() == "route" and A.Target().kind == "route", "it starts on the route")
+  owner.env.SlashCmdList.QUESTBANK("arrow handin")
+  local t = A.Target()
+  assert(A.Mode() == "handin" and t and t.kind == "handin" and t.name ~= "" and t.quests >= 1, "the nearest hand-in: an NPC who takes a finished quest of yours")
+  F.__scripts.OnUpdate(F, 1)
+  assert(F.name:GetText() == t.name, "the arrow names that NPC: " .. F.name:GetText())
+  lines = {}; F.__scripts.OnEnter(F); assert(lines[1]:find("Hand in at " .. t.name:gsub("%p", "%%%0"), 1), "and the tooltip says so: " .. lines[1])
+  print("arrow, hand in:", t.name, t.quests)
+  owner.env.SlashCmdList.QUESTBANK("arrow pickup")
+  local plan = QB:Plan()
+  local keep = plan.add
+  plan.add = {}
+  assert(A.Mode() == "pickup" and A.Target() == nil, "an empty plan: nothing to pick up")
+  F.__scripts.OnUpdate(F, 1)
+  assert(F.name:GetText():find("Nothing in your plan"), "and the arrow says so: " .. F.name:GetText())
+  plan.add[1221] = true
+  t = A.Target()
+  assert(t and t.kind == "pickup" and t.name == QB.Quest.Get(1221).give.n, "a planned quest: the arrow finds its giver: " .. tostring(t and t.name))
+  plan.add = keep
+  -- clicking a waypoint in QuestBank pins the arrow to it
+  owner.env.SlashCmdList.QUESTBANK("arrow route")
+  QB:Settings().arrowPin = nil -- earlier clicks in this run pinned things while the arrow was off, as they should
+  assert(A.Mode() == "route", "back on the route")
+  UI:ShowTab(2); UI:Refresh()
+  local row
+  for _, c in ipairs(v2.cards.items) do for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q and r.st.code == "todo" and r.q.give and not r.q.give.inside then row = row or r end end end
+  assert(row, "a fetchable quest row with a giver outside")
+  row.__scripts.OnClick(row, "LeftButton")
+  t = A.Target()
+  assert(A.Mode() == "pin" and t and t.kind == "pin" and t.name == row.q.give.n, "a click on a quest pins the arrow to its giver: " .. tostring(t and t.name))
+  local told
+  for i = math.max(1, #owner.chat - 2), #owner.chat do if owner.chat[i]:find("The arrow points at " .. row.q.give.n:gsub("%p", "%%%0") .. " now") then told = true end end
+  assert(told, "and says so once: " .. owner.chat[#owner.chat])
+  -- the right-click menu: the four targets and Hide
   F.__scripts.OnClick(F, "RightButton")
-  assert(not F:IsShown() and not QB:Settings().arrow, "right-click hides it")
+  local M = owner.env.QuestBankMenu
+  assert(M and M:IsShown(), "right-click opens the menu")
+  local labels, hide, route = {}, nil, nil
+  for _, b in ipairs(M.items) do
+    if b:IsShown() then
+      labels[#labels + 1] = b.label:GetText()
+      if b.label:GetText() == "Hide the arrow" then hide = b end
+      if b.label:GetText():find("^The next stop") then route = b end
+    end
+  end
+  print("arrow menu: " .. table.concat(labels, " | "))
+  assert(#labels == 5 and hide and route and labels[4]:find("%(now%)"), "the menu lists the four targets, the current one marked, and Hide: " .. table.concat(labels, " | "))
+  for _, pr in ipairs(checkLayout(M, "arrow menu")) do problems[#problems + 1] = pr end
+  route.__scripts.OnClick(route)
+  assert(not M:IsShown() and A.Mode() == "route", "choosing the route from the menu")
+  F.__scripts.OnClick(F, "RightButton")
+  for _, b in ipairs(M.items) do if b:IsShown() and b.label:GetText() == "Hide the arrow" then b.__scripts.OnClick(b) end end
+  assert(not F:IsShown() and not QB:Settings().arrow, "Hide in the menu hides it")
+  QB:Settings().arrowPin = nil
 end
 
 ----------------------------------------------------------------------------

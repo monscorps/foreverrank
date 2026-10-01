@@ -337,8 +337,8 @@
       <p class="lede">In Forever, quests are where the XP is: dungeon quests pay up to 4.35 times their Classic XP. QuestBank shows what every quest in your log is worth at your level, which chains to carry on, the best quests near you, and the quickest way to hand them in, with map pins. When the game holds your level at a cap, it banks your log and plans the hour after the cap goes up. Alliance and Horde, and it plans dungeon runs with your party.</p>
       <div class="dl">
         <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-        <span class="dl-meta">Version 3.3.6 · 1 October 2026 · 274 KB</span>
-        <span class="dl-meta">Open it in game with <code>/qb</code>. New in 3.3.6: the review of 3.3.5's new switches: hand-ins judge by the XP the window shows, a quest QuestBank can't value stays banked, accept skips repeatable and grey quests and places you skip, and the game's PvP and money questions are left to you. 3.3.5 added those switches: accept quests for you, hand finished ones in for you, smart about banking, and party-chat lines, all off until you tick them. 3.3.4 made joining escorts work with 25 or more quests in your log; 3.3.3 brought the Suggestions settings and Skip on Plan cards; 3.3.2 <a href="#share">uploading what you discover</a>.</span>
+        <span class="dl-meta">Version 3.4.0 · 1 October 2026 · 277 KB</span>
+        <span class="dl-meta">Open it in game with <code>/qb</code>. New in 3.4.0: the direction arrow points where you choose: the route, the nearest hand-in, the nearest pick-up, or whatever you last clicked (right-click it); big quests behind a chain show up in the swap list and on the Plan page with the steps and the minutes of moving they cost; party names come in their class colour, and hovering a player lists every quest they hold and who else here has it. 3.3.5 and 3.3.6 added the accept and hand-in switches and the party-chat lines, off until you tick them. 3.3.4 made joining escorts work with 25 or more quests in your log; 3.3.3 brought the Suggestions settings and Skip on Plan cards; 3.3.2 <a href="#share">uploading what you discover</a>.</span>
       </div>
     </div>
     <figure class="hero-shot">
@@ -514,7 +514,7 @@
         <li><span><b>A mark on each slot.</b> Green: finished. Yellow: not finished yet. Red: you cut it from the plan, or QuestBank doesn't know the quest. Shift-click a slot to cut it or keep it.</span></li>
         <li><span><b>The green arrow: carry the chain on.</b> The game's own bag upgrade arrow, on quests that lead somewhere. Questing, it marks the chains worth doing, and the tooltip says what the chain leads to and what the best step further on pays. While banking it only shows where a later step pays more than this one: hand this one in now and bank that step instead. The others are plain hand-ins.</span></li>
         <li><span><b>Items that don't need a slot.</b> Items that start a quest can wait in your bags without taking a log slot until the cap goes up. The count shows how far along you are, like 4 of 10 Bloodied Insignias. Below them, QuestBank lists any quest that left your log without a hand-in, so an accidental abandon doesn't go unnoticed.</span></li>
-        <li><span><b>Better use of a slot.</b> Three kinds of move, biggest gain first. Advance a chain: you hold one step, a later step pays more, so hand this one in now and bank that one. Fill a free slot with the best quest you can pick up, or with what a dungeon step leads to: take In Search of Thaelrid, hand it in to Thaelrid inside Blackfathom Deeps, and bank the Blackfathom Villainy he gives you. Swap a weak quest for a better one. Click a row to pin the quest giver.</span></li>
+        <li><span><b>Better use of a slot.</b> Three kinds of move, biggest gain first. Advance a chain: you hold one step, a later step pays more, so hand this one in now and bank that one. Fill a free slot with the best quest you can pick up, or with what a dungeon step leads to: take In Search of Thaelrid, hand it in to Thaelrid inside Blackfathom Deeps, and bank the Blackfathom Villainy he gives you. A big quest behind a chain shows up too, with what it costs first: "3 steps first, ~12 min" is the steps you still have to do and the minutes of moving between their NPCs from where you stand. Swap a weak quest for a better one. Click a row to pin the quest giver; for a chain, the giver of its first step.</span></li>
         <li><span><b>Hover anything, right-click for more.</b> The tooltip shows where the XP number comes from, the XP at the level you'll hand it in, the whole chain it belongs to and what it leads on to, and the giver and turn-in NPC with coordinates. Right-click opens a menu: waypoints, cut or keep, and the Wowhead link.</span></li>
       </ol>
     </div>
@@ -572,7 +572,7 @@
       <ol class="legend">
         <li><span><b>One card per dungeon or zone.</b> Every quest you hold or planned there, then every quest there you could still fetch, for your faction, class and race, within the level range Settings allows: 12 levels above you while banking, 4 while questing, 7 below, unless you change it. Cards are sorted by the XP still to collect there, what you hold plus what you could fetch, so the top card is the richest place for you right now; while questing, zones near you count for more. Every place you hold quests in keeps its card, wherever it sorts. <b>Skip</b> turns a card off: nothing there is suggested any more, the quests you already hold stay, and the card says Skipped with a <b>Back</b> button. A card with nothing of yours in it disappears instead; <code>/qb skip</code> and its name brings it back.</span></li>
         <li><span><b>What's left and where.</b> The XP still to collect there: everything you hold that isn't banked yet, plus every quest there within your level range that you haven't done, including the ones a level or two away and the later steps of chains. Underneath, how many of your planned quests are banked. The pin marks the dungeon entrance on your map.</span></li>
-        <li><span><b>Live status for every quest</b>, read from your game: banked, in your log with the count, the chain step you need first and how many steps are left, the level it needs, or turned in already. A quest from the Classic database that nobody has met in Forever yet says <b>Classic only</b> right in the row.</span></li>
+        <li><span><b>Live status for every quest</b>, read from your game: banked, in your log with the count, the chain step you need first with how many steps are left and the minutes of moving they take, the level it needs, or turned in already. A quest from the Classic database that nobody has met in Forever yet says <b>Classic only</b> right in the row.</span></li>
         <li><span><b>Make room.</b> Quests you cut, quests QuestBank doesn't know, and quests that pay next to nothing at your level, with what to do about each: hand it in now for the rewards, or abandon it.</span></li>
         <li><span><b>The sleeping bag chain.</b> Every step of Stepping Stones, with a pin on the next one.</span></li>
       </ol>
@@ -700,9 +700,9 @@
         </details>
       </div>
       <ol class="legend">
-        <li><span><b>Everyone with QuestBank in your party, raid and guild.</b> Their level, where their bank takes them, and where their full plan takes them. Hover a name for the quests they're banking, marked where you hold the same one.</span></li>
+        <li><span><b>Everyone with QuestBank in your party, raid and guild.</b> Their level, where their bank takes them, and where their full plan takes them. Hover a name for every quest they hold, with who else here holds each one next to it, you included, names in their class colour.</span></li>
         <li><span><b>Copy their plan.</b> The letter adds every quest they're banking that you can take too: same faction, your class and race, not done yet.</span></li>
-        <li><span><b>Dungeons.</b> Every dungeon where you or the others still have quests to do: each quest, who still needs it, and how far along they are ("6/10", "to pick up", "banked"). Your own are there even when you play alone. Click a dungeon for a waypoint on its entrance. Right-click it to ask your party or guild along: QuestBank writes "Anyone up for Deadmines? I still need…" with the quests you still need, and nothing goes out until you press Post.</span></li>
+        <li><span><b>Dungeons.</b> Every dungeon where you or the others still have quests to do: each quest, who still needs it, names in their class colour, and how far along they are ("6/10", "to pick up", "banked"). Your own are there even when you play alone. Click a dungeon for a waypoint on its entrance. Right-click it to ask your party or guild along: QuestBank writes "Anyone up for Deadmines? I still need…" with the quests you still need, and nothing goes out until you press Post.</span></li>
         <li><span><b>Sharing.</b> Party and guild sharing each switch off with one click. <b>Send now</b> shares straight away; <code>/qb sync Name</code> shares with one friend outside your group.</span></li>
       </ol>
       <p class="note">On the day, a member who is handing in shows a live run: time, quests handed in and XP so far. What each game reports as a quest's XP is shared too, so one person's hand-in corrects the numbers for everyone. Nothing leaves the game: it's the addon channel your party and guild already use, and nobody sees it in chat. QuestBank only writes in chat when you press Post.</p>
@@ -735,7 +735,7 @@
                   <div class="pt" style="margin-top:16px">Map</div>
                   <div class="cbl"><span class="cb on"></span>Numbered route pins on the world map</div>
                   <div class="cbl"><span class="cb on"></span>Button on the minimap</div>
-                  <div class="cbl"><span class="cb"></span>Direction arrow to the next stop on your route</div>
+                  <div class="cbl"><span class="cb"></span>Direction arrow (right-click it to choose what it points at)</div>
                   <div class="pt" style="margin-top:14px">Discoveries</div>
                   <div style="font-size:12px;color:#6b4d28;line-height:1.35">Noted in game so far: 142 quests, 96 quest NPCs, 11 chain steps. Upload QuestBank.lua at foreverrank.com/questbank/, or run ForeverProbe (optional).</div>
                   <div class="pt" style="margin-top:14px">At the quest giver</div>
@@ -746,7 +746,7 @@
                 </div>
                 <div>
                   <div class="pt">Updates</div>
-                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 3.3.5. <span style="color:#0a6a0a">Brann runs 3.3.6: time to update.</span></div>
+                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 3.3.6. <span style="color:#0a6a0a">Brann runs 3.4.0: time to update.</span></div>
                   <div class="cbl"><span class="cb on"></span>Tell me when my party or guild has a newer one</div>
                   <div class="modes" style="margin:6px 0 0"><span>Copy the download link</span></div>
                   <div class="pt" style="margin-top:14px">Sharing and chat</div>
@@ -771,7 +771,7 @@
       </div>
       <ol class="legend">
         <li><span><b>Mode.</b> Auto finds a level lock by itself: the game reports your level as its highest for now, or a hand-in at your level pays no XP while your bar sits at 0. Questing and Banking set it yourself; Banking holds until you level past it.</span></li>
-        <li><span><b>Map.</b> Route pins on the world map, the book on your minimap, and the direction arrow to the next stop, each on or off.</span></li>
+        <li><span><b>Map.</b> Route pins on the world map, the book on your minimap, and the direction arrow, each on or off. Right-click the arrow to choose what it points at: the next stop on your route, the nearest NPC you can hand a finished quest in to, the nearest giver of a quest in your plan, or whatever you last clicked a waypoint for in QuestBank; clicking one while the arrow is up switches to that by itself.</span></li>
         <li><span><b>Updates.</b> QuestBank users in your party and guild tell each other which version they run. When someone has a newer one, chat says so once, and the button copies the download link. <code>/qb update</code> does the same.</span></li>
         <li><span><b>Sharing and chat.</b> Whether your bank and plan go to your party and guild over the addon channel, and whether QuestBank offers a post when you level during a hand-in run.</span></li>
         <li><span><b>Discoveries.</b> How much QuestBank has noted in game so far: quests, the NPCs who give and take them, and chain steps, and where to send it.</span></li>
@@ -809,7 +809,7 @@
         <li><span><b>A ! where a quest you plan to fetch starts.</b> Hover it for the quests that NPC gives and what they pay.</span></li>
         <li><span><b>The book on your minimap.</b> Click to open QuestBank, right-click to jump straight to the hand-in route, drag it round the edge to move it. Its tooltip shows what your bank is worth, the next stop, and your run so far.</span></li>
       </ol>
-      <p class="note">During a run the waypoint moves to the next stop by itself as you hand in. With TomTom installed you get its arrow; without it, the game's own map pin. <code>/qb pins</code> turns the map pins off and on. <code>/qb arrow</code> (or Settings) adds a direction arrow on screen that points to the next stop from where you stand and the way you face, with its distance; drag it anywhere, right-click it to hide it.</p>
+      <p class="note">During a run the waypoint moves to the next stop by itself as you hand in. With TomTom installed you get its arrow; without it, the game's own map pin. <code>/qb pins</code> turns the map pins off and on. <code>/qb arrow</code> (or Settings) adds a direction arrow on screen that points from where you stand and the way you face, with the distance; drag it anywhere. Right-click it to choose what it points at: the next stop on your route, the nearest hand-in, the nearest pick-up, or whatever you last clicked in QuestBank (<code>/qb arrow route</code>, <code>handin</code>, <code>pickup</code> or <code>pin</code> does the same), or to hide it.</p>
     </div>
   </div>
 </section>
@@ -900,7 +900,7 @@
         <tr><td><code>/qb start</code>, <code>/qb stop</code></td><td>Start or end a hand-in run yourself</td></tr>
         <tr><td><code>/qb next</code></td><td>Waypoint on the next stop</td></tr>
         <tr><td><code>/qb pins</code></td><td>Turn the world map pins off or on</td></tr>
-        <tr><td><code>/qb arrow</code></td><td>The direction arrow to the next stop on your route, on or off</td></tr>
+        <tr><td><code>/qb arrow</code>, <code>/qb arrow handin</code></td><td>The direction arrow on or off; <code>route</code>, <code>handin</code>, <code>pickup</code> or <code>pin</code> chooses what it points at (the right-click menu on the arrow does the same)</td></tr>
         <tr><td><code>/qb discoveries</code></td><td>How much QuestBank has noted in game: quests, the NPCs who give and take them, chain steps</td></tr>
         <tr><td><code>/qb escort</code>, <code>/qb escort off</code></td><td>Where the escort-prompt fix stands, or turn it off: the game's "X has started a quest, accept?" prompt greys out Yes once you hold 25 quests, because its own constant still says 25 while the log holds 40. QuestBank puts the real number in at login</td></tr>
         <tr><td><code>/qb skip</code>, <code>/qb skip Kalimdor</code>, <code>/qb skip Wailing Caverns</code></td><td>List the skipped places, or skip a continent, zone or dungeon so nothing there is suggested; say it again to bring it back, <code>/qb skip none</code> clears the list. The Skip button on a Plan card does the same for its zone or dungeon; Settings has the continent boxes and lists what is skipped</td></tr>
@@ -953,7 +953,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 3.3.6. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 3.4.0. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>
