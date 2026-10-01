@@ -219,7 +219,19 @@ local function newClient(o)
   env.C_GossipInfo = {
     GetAvailableQuests = function() return c.gossipAvail or {} end,
     GetActiveQuests = function() return c.gossipActive or {} end,
+    SelectAvailableQuest = function(id) c.auto[#c.auto + 1] = "SelectAvailableQuest " .. id end,
+    SelectActiveQuest = function(id) c.auto[#c.auto + 1] = "SelectActiveQuest " .. id end,
   }
+  -- the quest windows, for the accept-and-hand-in-for-me switches: what QuestBank clicked, in order
+  c.auto = {}
+  env.AcceptQuest = function() c.auto[#c.auto + 1] = "AcceptQuest " .. (c.window and c.window.id or 0) end
+  env.CompleteQuest = function() c.auto[#c.auto + 1] = "CompleteQuest " .. (c.window and c.window.id or 0) end
+  env.GetQuestReward = function(i) c.auto[#c.auto + 1] = "GetQuestReward " .. tostring(i) end
+  env.GetNumQuestChoices = function() return c.choices or 0 end
+  env.IsQuestCompletable = function() return c.completable and true or false end
+  env.QuestGetAutoAccept = function() return false end
+  env.ConfirmAcceptQuest = function() c.auto[#c.auto + 1] = "ConfirmAcceptQuest" end
+  env.StaticPopup_Hide = function() end
   env.UnitLevel = function() return c.level or o.level end
   env.GetMaxPlayerLevel = function() return c.cap or o.cap or 60 end
   env.GetPlayerFacing = function() return c.facing end
@@ -330,7 +342,14 @@ local function newClient(o)
   end
   c.map = map
   c.log, c.done, c.level, c.xp = o.log, o.done, o.level, o.xp or 0
-  for _, f in ipairs({ "Data.lua", "Core.lua", "Discover.lua", "Model.lua", "Pins.lua", "Arrow.lua", "Sync.lua", "UI.lua" }) do
+  -- the files the TOC lists, in its order, so a new file is tested the day it is added
+  local files = {}
+  for line in io.lines(HERE .. "/QuestBank/QuestBank.toc") do
+    local f = line:match("^%s*([%w_]+%.lua)%s*$")
+    if f then files[#files + 1] = f end
+  end
+  assert(#files >= 8 and files[1] == "Data.lua" and files[#files] == "UI.lua", "the TOC lists the addon's Lua files, Data first and UI last")
+  for _, f in ipairs(files) do
     local chunk = assert(loadfile(HERE .. "/QuestBank/" .. f))
     setfenv(chunk, env)
     chunk("QuestBank", c.QB)
@@ -696,6 +715,104 @@ do
   owner.env.SlashCmdList.QUESTBANK("escort")
   assert(owner.chat[#owner.chat]:find("the log holds 40", 1, true), "/qb escort says where things stand: " .. owner.chat[#owner.chat])
   print("escort prompt:", owner.chat[#owner.chat])
+end
+-- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
+do
+  local set = QB:Settings()
+  assert(not set.autoAccept and not set.autoTurnIn and not set.sayAccept and not set.sayComplete, "all four off by default")
+  local function last() return owner.auto[#owner.auto] end
+  owner.window = { id = 7, xp = 0, title = "Kobold Camp Cleanup" }
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
+  assert(#owner.auto == 0, "off: the quest window is left alone")
+  set.autoAccept = true
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
+  assert(last() == "AcceptQuest 7", "accept for me takes the quest in the window: " .. tostring(last()))
+  owner.shift = true
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
+  assert(#owner.auto == 1, "with Shift held it keeps its hands off")
+  owner.shift = false
+  owner.window = { id = 363, xp = 0, title = "Rude Awakening" }
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
+  assert(#owner.auto == 1, "a Horde quest is left alone for an Alliance paladin")
+  owner.window = { id = 7777777, xp = 0, title = "Something New" }
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
+  assert(last() == "AcceptQuest 7777777", "a quest QuestBank doesn't know is new to Forever: taken")
+  owner.gossipAvail = { { questID = 363, title = "Rude Awakening" }, { questID = 7, title = "Kobold Camp Cleanup" } }
+  owner.ev(QB.eventFrame, "GOSSIP_SHOW"); tick(owner, 1)
+  assert(last() == "SelectAvailableQuest 7", "at a gossip NPC the first quest for you is picked: " .. tostring(last()))
+  owner.gossipAvail = nil
+  -- an escort a party member starts: joined, while the log has room
+  local n = #owner.auto
+  owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(owner, 1)
+  assert(last() == "ConfirmAcceptQuest" and owner.chat[#owner.chat]:find("Joined Escorting Erland, which Brann Steelhand started", 1, true), "an escort a party member starts is joined: " .. tostring(owner.chat[#owner.chat]))
+  -- hand in for me, smart about banking: the owner is banking at 20
+  set.autoTurnIn = true
+  owner.completable = true
+  assert(QB:Mode() == "lock", "the owner banks")
+  owner.window = { id = 971, xp = 0, title = "Knowledge in the Deeps" } -- banked, in the plan, worth a lot
+  owner.ev(QB.eventFrame, "QUEST_PROGRESS"); tick(owner, 1)
+  assert(not tostring(last()):find("CompleteQuest"), "banking: a banked quest in the plan is not handed in")
+  owner.choices = 0
+  owner.ev(QB.eventFrame, "QUEST_COMPLETE"); tick(owner, 1)
+  assert(not tostring(last()):find("GetQuestReward"), "banking: nor finished at the reward window")
+  QB:Plan().cut[2922] = true
+  owner.window = { id = 2922, xp = 0, title = "Cut one" }
+  owner.ev(QB.eventFrame, "QUEST_PROGRESS"); tick(owner, 1)
+  assert(last() == "CompleteQuest 2922", "banking: a quest you cut from the plan is handed in: " .. tostring(last()))
+  QB:Plan().cut[2922] = nil
+  QB:SetLock("off"); QB:Recompute(true)
+  assert(QB:Mode() == "quest", "questing by hand")
+  owner.window = { id = 971, xp = 0, title = "Knowledge in the Deeps" }
+  owner.ev(QB.eventFrame, "QUEST_PROGRESS"); tick(owner, 1)
+  assert(last() == "CompleteQuest 971", "questing: a finished quest is handed in")
+  owner.choices = 2
+  owner.ev(QB.eventFrame, "QUEST_COMPLETE"); tick(owner, 1)
+  assert(not tostring(last()):find("GetQuestReward"), "two rewards to choose from: left to you")
+  owner.choices = 1
+  owner.ev(QB.eventFrame, "QUEST_COMPLETE"); tick(owner, 1)
+  assert(last() == "GetQuestReward 1", "one reward: taken")
+  owner.choices = 0
+  owner.ev(QB.eventFrame, "QUEST_COMPLETE"); tick(owner, 1)
+  assert(last() == "GetQuestReward 0", "nothing to choose: finished")
+  owner.gossipActive = { { questID = 971, title = "Knowledge in the Deeps", isComplete = true } }
+  owner.ev(QB.eventFrame, "GOSSIP_SHOW"); tick(owner, 1)
+  assert(last() == "SelectActiveQuest 971", "at a gossip NPC a finished quest is handed in first: " .. tostring(last()))
+  owner.gossipActive = nil
+  QB:SetLock("auto"); QB:Recompute(true)
+  assert(QB:Mode() == "lock", "back to banking")
+  set.autoAccept, set.autoTurnIn = false, false
+  owner.window, owner.completable, owner.choices = nil, nil, nil
+  -- party chat: a quest arriving in the log, and one turning complete, as plain lines to the party
+  local said = #owner.said
+  table.insert(owner.log, { 7, 0 })
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
+  assert(#owner.said == said, "off: nothing said in party chat")
+  set.sayAccept, set.sayComplete = true, true
+  table.insert(owner.log, { 15, 0 })
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
+  assert(#owner.said == said + 1 and owner.said[#owner.said][1] == "Quest accepted: Quest 15" and owner.said[#owner.said][2] == "PARTY", "a new quest in the log is said in party chat: " .. tostring(owner.said[#owner.said] and owner.said[#owner.said][1]))
+  for _, e in ipairs(owner.log) do if e[1] == 15 then e[2] = 1 end end
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
+  assert(#owner.said == said + 2 and owner.said[#owner.said][1] == "Quest complete: Quest 15", "and so is a quest turning complete: " .. tostring(owner.said[#owner.said][1]))
+  for _ = 1, 2 do for i, e in ipairs(owner.log) do if e[1] == 7 or e[1] == 15 then table.remove(owner.log, i) break end end end
+  set.sayAccept, set.sayComplete = false, false
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
+  assert(#owner.log == #OWNER_LOG, "the log is as it was")
+  owner.said = {} -- the two lines above were this block's own; later tests count from nothing
+  -- the four boxes on the Settings page
+  UI:ShowTab(5); UI:Refresh()
+  local v5 = UI.views[5]
+  for _, name in ipairs({ "autoAccept", "autoTurnIn", "sayAccept", "sayComplete" }) do
+    local cb = v5[name]
+    assert(cb and not cb:GetChecked(), name .. " starts unticked")
+    cb:SetChecked(true); cb.__scripts.OnClick(cb, "LeftButton")
+    assert(QB:Settings()[name] == true, name .. " ticks on")
+    cb:SetChecked(false); cb.__scripts.OnClick(cb, "LeftButton")
+    assert(QB:Settings()[name] == false, name .. " ticks off")
+  end
+  local lay = checkLayout(UI.frame, "settings, scrolled")
+  assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
+  UI:ShowTab(1); UI:Refresh()
 end
 -- 3.3.3: the suggestion window and the skipped places. Defaults first, then each setting, then back to auto.
 do

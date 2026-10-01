@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.3.4"
+QB.version = "3.3.5"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -583,6 +583,9 @@ local DEFAULTS = {
   -- 1 Kalimdor) you told QuestBank to leave out of its suggestions
   rangeAbove = "auto", rangeBelow = "auto", skipCat = {}, skipCont = {},
   escort = true, -- keep the join prompt for escort quests working with 25 or more quests in the log
+  -- off until asked for: accept quests for you (pick-ups, and escorts a party member starts), hand finished
+  -- ones in for you (Auto.lua decides when that is wise), and two party-chat lines
+  autoAccept = false, autoTurnIn = false, sayAccept = false, sayComplete = false,
 }
 
 function QB:Settings()
@@ -773,6 +776,17 @@ end
 
 -- banking words only where banking happens
 function QB:Banking() return self:Mode() ~= "quest" end
+
+-- two plain lines in party chat (raid chat in a raid), only when asked for in Settings and only while grouped
+function QB:Announce(kind, title)
+  local s = self:Settings()
+  if kind == "accept" and not s.sayAccept then return end
+  if kind == "complete" and not s.sayComplete then return end
+  local channel = (IsInRaid and IsInRaid()) and "RAID" or ((IsInGroup and IsInGroup()) and "PARTY") or nil
+  if not channel or not SendChatMessage then return end
+  local clean = tostring(title or "a quest"):gsub("|", ""):sub(1, 200)
+  pcall(SendChatMessage, (kind == "accept" and "Quest accepted: " or "Quest complete: ") .. clean, channel)
+end
 
 ----------------------------------------------------------------------------
 -- what may be suggested: the level window and the skipped places (Settings, the Plan cards, /qb skip)
@@ -968,18 +982,25 @@ function QB:ReadState()
   QB.CAP = math.max(cap or QB.MAXLEVEL, s.level)
   QB.mode = QB:Mode()
   trackRemovals(s)
-  -- a quest that just turned complete: say so once
+  -- a quest that just turned complete: say so once. A quest that just arrived: party chat, if asked
   QB.wasComplete = QB.wasComplete or {}
+  local firstRead = QB.wasInLog == nil
+  QB.wasInLog = QB.wasInLog or {}
+  local inLog = {}
   for _, e in ipairs(s.logOrder) do
+    inLog[e.id] = true
+    if not firstRead and not QB.wasInLog[e.id] and QB.loggedIn then QB:Announce("accept", e.title) end
     local before = QB.wasComplete[e.id]
     if e.complete and before == false and QB.loggedIn then
       local q = Q.Get(e.id)
       local value = q and QB.Model.XpAt(q, s.level)
       QB:Print(string.format("%s is complete%s%s.", e.title, QB:Banking() and ": banked" or ", hand it in",
         value and value > 0 and (", worth about " .. QB.Comma(value) .. " XP " .. QB:OnTheDay()) or ""))
+      QB:Announce("complete", e.title)
     end
     QB.wasComplete[e.id] = e.complete and true or false
   end
+  QB.wasInLog = inLog
   return s
 end
 
@@ -1520,8 +1541,13 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     return
   elseif event == "QUEST_ACCEPT_CONFIRM" then
     QB:EscortPrompt(a1, a2)
+    if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end
+    return
+  elseif event == "QUEST_PROGRESS" or event == "QUEST_GREETING" or event == "GOSSIP_SHOW" then
+    if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end
     return
   elseif event == "QUEST_DETAIL" or event == "QUEST_COMPLETE" then
+    if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end
     local before = QB.liveVer
     windowXP("npc")
     if QB.liveVer == before then return end -- nothing new: the plan stands
@@ -1593,6 +1619,7 @@ end, "game event"))
 for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_LOGOUT", "QUEST_LOG_UPDATE", "QUEST_TURNED_IN", "QUEST_ACCEPT_CONFIRM",
   "QUEST_ACCEPTED", "QUEST_REMOVED", "BAG_UPDATE_DELAYED", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE",
   "ZONE_CHANGED_NEW_AREA", "UNIT_AURA", "HEARTHSTONE_BOUND", "UNIT_SPELLCAST_SUCCEEDED", "QUEST_DETAIL", "QUEST_COMPLETE",
+  "QUEST_PROGRESS", "QUEST_GREETING", "GOSSIP_SHOW",
   "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED" }) do
   if (e == "UNIT_AURA" or e == "UNIT_SPELLCAST_SUCCEEDED") and frame.RegisterUnitEvent then
     pcall(frame.RegisterUnitEvent, frame, e, "player") -- not every unit in sight
