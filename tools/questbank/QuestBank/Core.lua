@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.3.5"
+QB.version = "3.3.6"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -782,7 +782,8 @@ function QB:Announce(kind, title)
   local s = self:Settings()
   if kind == "accept" and not s.sayAccept then return end
   if kind == "complete" and not s.sayComplete then return end
-  local channel = (IsInRaid and IsInRaid()) and "RAID" or ((IsInGroup and IsInGroup()) and "PARTY") or nil
+  local channel = (IsInGroup and LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE)) and "INSTANCE_CHAT"
+    or ((IsInRaid and IsInRaid()) and "RAID") or ((IsInGroup and IsInGroup()) and "PARTY") or nil
   if not channel or not SendChatMessage then return end
   local clean = tostring(title or "a quest"):gsub("|", ""):sub(1, 200)
   pcall(SendChatMessage, (kind == "accept" and "Quest accepted: " or "Quest complete: ") .. clean, channel)
@@ -1540,16 +1541,16 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if a1 == ADDON then QB:Settings(); Live.Apply() end
     return
   elseif event == "QUEST_ACCEPT_CONFIRM" then
-    QB:EscortPrompt(a1, a2)
+    if not (QB.Auto and QB.Auto.WillJoin()) then QB:EscortPrompt(a1, a2) else QB:FixEscortPrompt() end
     if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end
     return
   elseif event == "QUEST_PROGRESS" or event == "QUEST_GREETING" or event == "GOSSIP_SHOW" then
     if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end
     return
   elseif event == "QUEST_DETAIL" or event == "QUEST_COMPLETE" then
-    if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end
     local before = QB.liveVer
     windowXP("npc")
+    if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end -- after the window's XP is on record
     if QB.liveVer == before then return end -- nothing new: the plan stands
   elseif event == "PLAYER_LOGIN" then
     QB:ReadState()

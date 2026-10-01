@@ -2,7 +2,7 @@
 ## Title: |cffc6af8dQuestBank|r
 ## Notes: Free questing for every level: what each quest pays, chains to carry on, the best quests near you, the hand-in route with map pins, party sync, and banking at level caps. /qb
 ## Author: Mikal
-## Version: 3.3.5
+## Version: 3.3.6
 ## X-License: GPL-3.0-or-later
 ## IconTexture: Interface\QuestFrame\UI-QuestLog-BookIcon
 ## SavedVariables: QuestBankDB

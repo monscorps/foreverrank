@@ -182,6 +182,7 @@ local function scrollArea(parent)
   function sf:SetContentHeight(h)
     child:SetHeight(math.max(h, 1))
     local view = self:GetHeight() or 0
+    if view < 100 then view = (H - 128 - 42) - 12 end -- not laid out yet: the content area less the insets
     local max = math.max(0, h - view)
     bar:SetMinMaxValues(0, max)
     bar:SetShown(max > 0)
@@ -1694,7 +1695,7 @@ function UI:RefreshPrepView(v)
       r.name:SetTextColor(INK[1], INK[2], INK[3])
       r.lvl:SetText(it.e.level and ("L" .. it.e.level) or "")
       r.status:SetWidth(math.max(120, width - 374 - 76))
-      r.status:SetText(note or (it.e.complete and "Complete: hand it in now" or "Open: abandon it"))
+      r.status:SetText(note or (it.e.complete and (it.q and "Complete: hand it in now" or "Complete: unknown to QuestBank, your call") or "Open: abandon it"))
       r.status:SetTextColor(BAD[1], BAD[2], BAD[3])
       r.xp:SetText(it.value and QB.Comma(it.value) or "?")
       ry = ry + 22
@@ -2578,14 +2579,14 @@ function UI:CreateSettingsView(parent)
   v.autoAccept:SetScript("OnClick", function(self) QB:Settings().autoAccept = self:GetChecked() and true or false end)
   v.acceptHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
   v.acceptHint:SetPoint("TOPLEFT", LEFT, -482)
-  v.acceptHint:SetHeight(30)
-  v.acceptHint:SetText("Pick-ups at an NPC, and escorts a party member starts. Hold Shift at the NPC to do it by hand. Quests not for your class or race are left alone.")
-  v.autoTurnIn = checkRow(p, LEFT, -516, "Hand in finished quests for me", 340)
+  v.acceptHint:SetHeight(44)
+  v.acceptHint:SetText("At an NPC, from a party member who shares one, and escorts a party member starts. Hold Shift to do it by hand. Not repeatable or grey quests, nor places you skip.")
+  v.autoTurnIn = checkRow(p, LEFT, -530, "Hand in finished quests for me", 340)
   v.autoTurnIn:SetScript("OnClick", function(self) QB:Settings().autoTurnIn = self:GetChecked() and true or false end)
   v.turnInHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.turnInHint:SetPoint("TOPLEFT", LEFT, -542)
+  v.turnInHint:SetPoint("TOPLEFT", LEFT, -556)
   v.turnInHint:SetHeight(58)
-  v.turnInHint:SetText("Questing and the rush: everything. While you bank: only what the Plan page says to hand in now, quests you cut, ones that pay next to nothing on the day, and a step you hand in to bank a better one. A reward you must choose waits for you.")
+  v.turnInHint:SetText("Questing and the rush: everything. While you bank: only what the Plan page says to hand in now, quests you cut, ones that pay next to nothing on the day, and a step you hand in to bank a better one. A reward to choose, or a quest QuestBank can't value, waits for you.")
 
   -- party chat: two plain lines, off until asked for
   heading(p, RIGHT, -460, "Party chat")
@@ -2597,7 +2598,6 @@ function UI:CreateSettingsView(parent)
   v.sayHint:SetPoint("TOPLEFT", RIGHT, -538)
   v.sayHint:SetHeight(30)
   v.sayHint:SetText("Only while you are in a party or raid, as plain lines. Nothing else goes to chat without Post.")
-  v.scroll:SetContentHeight(612)
   v.Refresh = function() UI:RefreshSettingsView(v) end
   return v
 end
@@ -2657,6 +2657,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on the Plan card, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
+  v.scroll:SetContentHeight(628) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------

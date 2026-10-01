@@ -232,6 +232,15 @@ local function newClient(o)
   env.QuestGetAutoAccept = function() return false end
   env.ConfirmAcceptQuest = function() c.auto[#c.auto + 1] = "ConfirmAcceptQuest" end
   env.StaticPopup_Hide = function() end
+  env.QuestFlagsPVP = function() return c.pvpQuest or false end
+  env.GetQuestMoneyToGet = function() return c.questCost or 0 end
+  env.GetNumActiveQuests = function() return #(c.greetActive or {}) end
+  env.GetActiveTitle = function(i) local e = c.greetActive[i]; return e.title, e.isComplete end
+  env.GetActiveQuestID = function(i) return c.greetActive[i].questID end
+  env.SelectActiveQuest = function(i) c.auto[#c.auto + 1] = "SelectActiveQuest #" .. i end
+  env.GetNumAvailableQuests = function() return #(c.greetAvail or {}) end
+  env.GetAvailableQuestInfo = function(i) local e = c.greetAvail[i]; return e.isTrivial or false, 0, e.repeatable or false, false, e.questID end
+  env.SelectAvailableQuest = function(i) c.auto[#c.auto + 1] = "SelectAvailableQuest #" .. i end
   env.UnitLevel = function() return c.level or o.level end
   env.GetMaxPlayerLevel = function() return c.cap or o.cap or 60 end
   env.GetPlayerFacing = function() return c.facing end
@@ -298,14 +307,16 @@ local function newClient(o)
     GetMapRectOnMap = function() return 0.4, 0.6, 0.4, 0.6 end,
   }
   -- chat people read: one line of at most 255 bytes, no escape codes, only to a channel you're in
-  c.said = {}
+  c.said, c.chatErrors = {}, {}
   env.SendChatMessage = function(msg, chatType)
-    assert(type(msg) == "string" and #msg > 0 and #msg <= 255, "chat message empty or over 255 bytes")
-    assert(not msg:find("[\r\n]"), "chat message with a line break")
-    assert(not msg:find("|"), "chat message with an escape code")
-    assert(chatType == "PARTY" or chatType == "RAID" or chatType == "GUILD" or chatType == "INSTANCE_CHAT", "posted to " .. tostring(chatType))
-    assert(chatType ~= "GUILD" or o.guild, "posted to a guild you're not in")
-    assert(chatType == "GUILD" or o.group, "posted to a group you're not in")
+    -- recorded, not raised: the addon pcalls this, so a raised check would vanish
+    local function bad(why) c.chatErrors[#c.chatErrors + 1] = why; error(why) end
+    if not (type(msg) == "string" and #msg > 0 and #msg <= 255) then bad("chat message empty or over 255 bytes") end
+    if msg:find("[\r\n]") then bad("chat message with a line break") end
+    if msg:find("|") then bad("chat message with an escape code") end
+    if not (chatType == "PARTY" or chatType == "RAID" or chatType == "GUILD" or chatType == "INSTANCE_CHAT") then bad("posted to " .. tostring(chatType)) end
+    if chatType == "GUILD" and not o.guild then bad("posted to a guild you're not in") end
+    if chatType ~= "GUILD" and not o.group then bad("posted to a group you're not in") end
     c.said[#c.said + 1] = { msg, chatType }
   end
   env.C_ChatInfo = {
@@ -721,12 +732,12 @@ do
   local set = QB:Settings()
   assert(not set.autoAccept and not set.autoTurnIn and not set.sayAccept and not set.sayComplete, "all four off by default")
   local function last() return owner.auto[#owner.auto] end
-  owner.window = { id = 7, xp = 0, title = "Kobold Camp Cleanup" }
+  owner.window = { id = 1654, xp = 0, title = "The Test of Righteousness" }
   owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
   assert(#owner.auto == 0, "off: the quest window is left alone")
   set.autoAccept = true
   owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
-  assert(last() == "AcceptQuest 7", "accept for me takes the quest in the window: " .. tostring(last()))
+  assert(last() == "AcceptQuest 1654", "accept for me takes the quest in the window: " .. tostring(last()))
   owner.shift = true
   owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
   assert(#owner.auto == 1, "with Shift held it keeps its hands off")
@@ -737,14 +748,52 @@ do
   owner.window = { id = 7777777, xp = 0, title = "Something New" }
   owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
   assert(last() == "AcceptQuest 7777777", "a quest QuestBank doesn't know is new to Forever: taken")
-  owner.gossipAvail = { { questID = 363, title = "Rude Awakening" }, { questID = 7, title = "Kobold Camp Cleanup" } }
-  owner.ev(QB.eventFrame, "GOSSIP_SHOW"); tick(owner, 1)
-  assert(last() == "SelectAvailableQuest 7", "at a gossip NPC the first quest for you is picked: " .. tostring(last()))
-  owner.gossipAvail = nil
-  -- an escort a party member starts: joined, while the log has room
+  -- Shift pressed after the window opened: the deferred step stands down; a window that changed is left alone
   local n = #owner.auto
+  owner.window = { id = 1654, xp = 0, title = "The Test of Righteousness" }
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); owner.shift = true; tick(owner, 1); owner.shift = false
+  assert(#owner.auto == n, "Shift after the window opened: the deferred accept stands down")
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); owner.window = { id = 1221, xp = 0, title = "Blueleaf Tubers" }; tick(owner, 1)
+  assert(#owner.auto == n, "the window changed before the click: left alone")
+  -- the game would ask about PvP first: so does QuestBank
+  owner.pvpQuest = true
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
+  assert(#owner.auto == n, "a quest that flags you for PvP waits for you")
+  owner.pvpQuest = false
+  -- a place you skipped: left alone; back in: taken
+  QB:ToggleSkip("Razorfen Kraul")
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
+  assert(#owner.auto == n, "a quest in a place you skipped is left alone")
+  QB:ToggleSkip("Razorfen Kraul")
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
+  assert(last() == "AcceptQuest 1221", "and taken once the place is back")
+  -- banking: a pick-up that pays nothing on the day is left on the NPC
+  n = #owner.auto
+  owner.window = { id = 7, xp = 0, title = "Kobold Camp Cleanup" }
+  owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
+  assert(#owner.auto == n, "banking: a quest the Plan page would cut is left alone")
+  owner.gossipAvail = { { questID = 363, title = "Rude Awakening" }, { questID = 1221, title = "Blueleaf Tubers", repeatable = true }, { questID = 2904, title = "Grey one", isTrivial = true }, { questID = 7, title = "Kobold Camp Cleanup" }, { questID = 1654, title = "The Test of Righteousness" } }
+  owner.ev(QB.eventFrame, "GOSSIP_SHOW"); tick(owner, 1)
+  assert(last() == "SelectAvailableQuest 1654", "at a gossip NPC: not the Horde one, not the repeatable, not the grey one, not the one worth nothing today, the first you should take: " .. tostring(last()))
+  owner.gossipAvail = nil
+  -- the classic greeting window, the same way
+  owner.greetAvail = { { questID = 363, title = "Rude Awakening" }, { questID = 1221, title = "Blueleaf Tubers", repeatable = true }, { questID = 1654, title = "The Test of Righteousness" } }
+  owner.ev(QB.eventFrame, "QUEST_GREETING"); tick(owner, 1)
+  assert(last() == "SelectAvailableQuest #3", "a greeting NPC: the third entry is the first you should take: " .. tostring(last()))
+  owner.greetAvail = nil
+  -- an escort a party member starts: joined, while the log has room; once; not with a full log
+  n = #owner.auto
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(owner, 1)
-  assert(last() == "ConfirmAcceptQuest" and owner.chat[#owner.chat]:find("Joined Escorting Erland, which Brann Steelhand started", 1, true), "an escort a party member starts is joined: " .. tostring(owner.chat[#owner.chat]))
+  assert(#owner.auto == n + 1 and last() == "ConfirmAcceptQuest" and owner.chat[#owner.chat]:find("Said yes to Escorting Erland, which Brann Steelhand started", 1, true), "an escort a party member starts is said yes to: " .. tostring(owner.chat[#owner.chat]))
+  assert(not owner.chat[#owner.chat - 1]:find("you can say yes", 1, true), "and the 3.3.4 line stays quiet when Auto answers")
+  for i = 1, QB.LOG_SLOTS - #owner.log do table.insert(owner.log, { 9000000 + i, 0 }) end
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
+  assert(QB.state.logCount == QB.LOG_SLOTS, "the log is full")
+  owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(owner, 1)
+  assert(#owner.auto == n + 1, "a full log: not joined")
+  for i = #owner.log, 1, -1 do if owner.log[i][1] > 9000000 then table.remove(owner.log, i) end end
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
+  assert(#owner.log == #OWNER_LOG, "the log is as it was")
   -- hand in for me, smart about banking: the owner is banking at 20
   set.autoTurnIn = true
   owner.completable = true
@@ -760,6 +809,45 @@ do
   owner.ev(QB.eventFrame, "QUEST_PROGRESS"); tick(owner, 1)
   assert(last() == "CompleteQuest 2922", "banking: a quest you cut from the plan is handed in: " .. tostring(last()))
   QB:Plan().cut[2922] = nil
+  -- banking: the other things the Plan page says to hand in now, and the ones it doesn't
+  n = #owner.auto
+  owner.window = { id = 7777777, xp = 0, title = "Something New" }
+  owner.ev(QB.eventFrame, "QUEST_PROGRESS"); tick(owner, 1)
+  assert(#owner.auto == n, "banking: a quest QuestBank doesn't know stays banked, you decide")
+  local q131, q1654, q1793, q410 = QB.Quest.Get(131), QB.Quest.Get(1654), QB.Quest.Get(1793), QB.Quest.Get(410)
+  assert(QB.Model.XpAt(q131, 20) < 500 * QB.Scale(20) and not QB:Upgrade(q131), "Delivering Daffodils pays next to nothing on the day")
+  owner.window = { id = 131, xp = 0, title = "Delivering Daffodils" }
+  owner.ev(QB.eventFrame, "QUEST_PROGRESS"); tick(owner, 1)
+  assert(last() == "CompleteQuest 131", "banking: a quest that pays next to nothing is handed in")
+  assert(QB:Upgrade(q1654), "The Test of Righteousness leads to a better step")
+  owner.window = { id = 1654, xp = 0, title = "The Test of Righteousness" }
+  owner.ev(QB.eventFrame, "QUEST_PROGRESS"); tick(owner, 1)
+  assert(last() == "CompleteQuest 1654", "banking: the step you hand in to bank a better one is handed in")
+  assert(q1793 and q1793.xpUnknown and not q1793.liveFull, "The Tome of Valor's XP is unknown to the catalog")
+  owner.window = { id = 1793, xp = 1100, title = "The Tome of Valor" }
+  owner.ev(QB.eventFrame, "QUEST_COMPLETE"); tick(owner, 1)
+  assert(q1793.liveFull == 1100 and not tostring(last()):find("GetQuestReward"), "banking: the reward window's XP is read first, 1,100 is not nothing, it stays banked")
+  assert(q410 and q410.xpUnknown, "The Dormant Shade's XP is unknown too")
+  owner.window = { id = 410, xp = 300, title = "The Dormant Shade" }
+  owner.ev(QB.eventFrame, "QUEST_COMPLETE"); tick(owner, 1)
+  assert(not q410.liveFull and not tostring(last()):find("GetQuestReward"), "banking: ten levels down the window isn't recorded, and no number means it stays banked")
+  owner.window = { id = 131, xp = 0, title = "Delivering Daffodils" }; owner.questCost = 50
+  owner.ev(QB.eventFrame, "QUEST_COMPLETE"); tick(owner, 1)
+  assert(not tostring(last()):find("GetQuestReward"), "a quest that costs money: the game asks, QuestBank waits")
+  owner.questCost = 0
+  owner.gossipActive = { { questID = 971, title = "Knowledge in the Deeps", isComplete = true }, { questID = 131, title = "Delivering Daffodils", isComplete = false }, { questID = 2922, title = "Cut one", isComplete = true } }
+  owner.gossipAvail = { { questID = 7, title = "Kobold Camp Cleanup" } }
+  QB:Plan().cut[2922] = true
+  owner.ev(QB.eventFrame, "GOSSIP_SHOW"); tick(owner, 1)
+  assert(last() == "SelectActiveQuest 2922", "banking at a gossip NPC: the one the Plan says to hand in, before any pick-up, never the banked one: " .. tostring(last()))
+  QB:Plan().cut[2922] = nil
+  owner.gossipActive, owner.gossipAvail = nil, nil
+  -- banking: a pick-up the Plan page would cut is left on the NPC, one leading somewhere is taken
+  assert(QB.Model.XpAt(QB.Quest.Get(131), 20) < 500 and QB.Model.XpAt(QB.Quest.Get(7), 20) < 500, "both pay next to nothing at 20")
+  owner.gossipAvail = { { questID = 131, title = "Delivering Daffodils" }, { questID = 1654, title = "The Test of Righteousness" } }
+  owner.ev(QB.eventFrame, "GOSSIP_SHOW"); tick(owner, 1)
+  assert(last() == "SelectAvailableQuest 1654", "banking: the quest that leads somewhere is picked over one the Plan would cut: " .. tostring(last()))
+  owner.gossipAvail = nil
   QB:SetLock("off"); QB:Recompute(true)
   assert(QB:Mode() == "quest", "questing by hand")
   owner.window = { id = 971, xp = 0, title = "Knowledge in the Deeps" }
@@ -774,10 +862,25 @@ do
   owner.choices = 0
   owner.ev(QB.eventFrame, "QUEST_COMPLETE"); tick(owner, 1)
   assert(last() == "GetQuestReward 0", "nothing to choose: finished")
-  owner.gossipActive = { { questID = 971, title = "Knowledge in the Deeps", isComplete = true } }
+  owner.gossipActive = { { questID = 131, title = "Delivering Daffodils", isComplete = false }, { questID = 971, title = "Knowledge in the Deeps", isComplete = true } }
+  owner.gossipAvail = { { questID = 7, title = "Kobold Camp Cleanup" } }
   owner.ev(QB.eventFrame, "GOSSIP_SHOW"); tick(owner, 1)
-  assert(last() == "SelectActiveQuest 971", "at a gossip NPC a finished quest is handed in first: " .. tostring(last()))
-  owner.gossipActive = nil
+  assert(last() == "SelectActiveQuest 971", "at a gossip NPC a finished quest is handed in before any pick-up, an unfinished one skipped: " .. tostring(last()))
+  owner.gossipActive, owner.gossipAvail = nil, nil
+  owner.greetActive = { { questID = 131, title = "Delivering Daffodils", isComplete = false }, { questID = 971, title = "Knowledge in the Deeps", isComplete = true } }
+  owner.ev(QB.eventFrame, "QUEST_GREETING"); tick(owner, 1)
+  assert(last() == "SelectActiveQuest #2", "a greeting NPC: the finished one, by its place in the list: " .. tostring(last()))
+  owner.greetActive = nil
+  -- Shift after the progress and reward windows opened
+  owner.window = { id = 971, xp = 0, title = "Knowledge in the Deeps" }
+  n = #owner.auto
+  owner.ev(QB.eventFrame, "QUEST_PROGRESS"); owner.shift = true; tick(owner, 1); owner.shift = false
+  assert(#owner.auto == n, "Shift after the progress window opened: no hand-in")
+  owner.choices = 0
+  owner.ev(QB.eventFrame, "QUEST_COMPLETE"); owner.shift = true; tick(owner, 1); owner.shift = false
+  assert(#owner.auto == n, "Shift after the reward window opened: not finished")
+  owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); owner.shift = true; tick(owner, 1); owner.shift = false
+  assert(#owner.auto == n, "Shift after the escort prompt: not joined")
   QB:SetLock("auto"); QB:Recompute(true)
   assert(QB:Mode() == "lock", "back to banking")
   set.autoAccept, set.autoTurnIn = false, false
@@ -795,10 +898,18 @@ do
   owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
   assert(#owner.said == said + 2 and owner.said[#owner.said][1] == "Quest complete: Quest 15", "and so is a quest turning complete: " .. tostring(owner.said[#owner.said][1]))
   for _ = 1, 2 do for i, e in ipairs(owner.log) do if e[1] == 7 or e[1] == 15 then table.remove(owner.log, i) break end end end
+  -- not grouped: nothing is sent, and nothing is tried against a channel you're not in
+  owner.o.group = false
+  table.insert(owner.log, { 7, 0 })
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
+  assert(#owner.said == said + 2 and #owner.chatErrors == 0, "alone: nothing said, nothing tried")
+  for i, e in ipairs(owner.log) do if e[1] == 7 then table.remove(owner.log, i) break end end
+  owner.o.group = true
   set.sayAccept, set.sayComplete = false, false
   owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
   assert(#owner.log == #OWNER_LOG, "the log is as it was")
-  owner.said = {} -- the two lines above were this block's own; later tests count from nothing
+  assert(#owner.chatErrors == 0, "every line sent was a line the game would take")
+  owner.said = {} -- the lines above were this block's own; later tests count from nothing
   -- the four boxes on the Settings page
   UI:ShowTab(5); UI:Refresh()
   local v5 = UI.views[5]
@@ -812,6 +923,15 @@ do
   end
   local lay = checkLayout(UI.frame, "settings, scrolled")
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
+  local sf = v5.scroll
+  local lo, hi = sf.bar:GetMinMaxValues()
+  assert(sf.bar:IsShown() and hi > 0 and hi == 628 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  sf.__scripts.OnMouseWheel(sf, -1)
+  assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
+  sf.bar:SetValue(hi); UI:Refresh()
+  lay = checkLayout(UI.frame, "settings, scrolled to the bottom")
+  assert(#lay == 0, "and the bottom of the page, in view, fits: " .. table.concat(lay, "; "))
+  sf.bar:SetValue(0)
   UI:ShowTab(1); UI:Refresh()
 end
 -- 3.3.3: the suggestion window and the skipped places. Defaults first, then each setting, then back to auto.
