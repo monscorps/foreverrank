@@ -734,7 +734,7 @@ for _cat, _ms in _seen_mult.items():
     _top = max(set(_ms), key=_ms.count)
     if len(_ms) >= 2 and _ms.count(_top) >= 0.6 * len(_ms) and _top != 1:
         DMULT[_cat] = _top
-FROM_FC, DISAGREE, SEEN_OK, SEEN_FIX, SEEN_FILL = [], [], [], [], []
+FROM_FC, DISAGREE, SEEN_OK, SEEN_FIX, SEEN_FILL, SEEN_NEAR = [], [], [], [], [], []
 REQ = {}
 TURNH = {}
 unconfirmed = 0
@@ -809,8 +809,12 @@ for qid in IDS:
     if seen:
         if base:
             computed = round_xp(lua_round(base * mult))
-            if seen in (computed, round_xp(lua_round(computed * 1.03))):
+            # within 5% (or 50 XP) the game agrees: the odd stack of the old build's rest bonus, a base a few points
+            # off, or the game's own rounding; only a real difference replaces the number
+            if abs(seen - computed) <= max(50, computed * 0.05):
                 SEEN_OK.append(qid)
+                if seen != computed:
+                    SEEN_NEAR.append((qid, computed, seen))
             else:
                 SEEN_FIX.append((qid, computed, seen))
                 mult = round(seen / base, 4)
@@ -1085,10 +1089,11 @@ def gap_report():
                 "still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x %s until they are re-read; "
                 "the addon says so in the quest tooltip. Hand-ins on 2026-10-02 paid exactly that on every multiplied quest, dungeon-typed "
                 "or not.") % (NERF_DATE, NERF) if NERF != 1 else "",
-           ("What the game paid after the cut (players' hand-ins and quest windows on build %d or later, flag 512): %d quests confirmed, "
-            "%d corrected to the game's number%s, %d with no XP in the catalog filled in%s.") % (
-               NERF_BUILD, len(SEEN_OK), len(SEEN_FIX),
-               (": " + ", ".join("%d %s %s -> %s" % (q, QN[q], c, g) for q, c, g in SEEN_FIX)) if SEEN_FIX else "",
+           ("What the game paid after the cut (players' hand-ins and quest windows on build %d or later, flag 512): %d quests confirmed "
+            "(within 5%% counts as agreement%s), %d corrected to the game's number%s, %d with no XP in the catalog filled in%s.") % (
+               NERF_BUILD, len(SEEN_OK),
+               ("; small differences kept as read: " + ", ".join("%d %s %s, paid %s" % (q, QN[q], c, g) for q, c, g in SEEN_NEAR)) if SEEN_NEAR else "",
+               len(SEEN_FIX), (": " + ", ".join("%d %s %s -> %s" % (q, QN[q], c, g) for q, c, g in SEEN_FIX)) if SEEN_FIX else "",
                len(SEEN_FILL), (": " + ", ".join("%d %s" % (q, QN[q]) for q in SEEN_FILL)) if SEEN_FILL else ""),
            "", "Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read, before the cut): %s." % (
                ", ".join("%s x%s" % (CATS[c - 1]["name"], m) for c, m in sorted(DMULT.items(), key=lambda kv: CATS[kv[0] - 1]["name"])) or "none"),

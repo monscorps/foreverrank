@@ -1209,7 +1209,7 @@ end
 UI:ShowTab(3)
 print("route now:", v3.summary:GetText())
 assert(QB:Mode() == "lock" and QB:Lock() == 20 and QB.CAP == 30, "level 20 at a cap of 20: banking for 30")
-assert(v3.summary:GetText() == "64,970 XP  |  level 22.61  |  93 min  |  at 60 min 22.58", "the owner's banked route is unchanged, got: " .. tostring(v3.summary:GetText()))
+assert(v3.summary:GetText() == "64,960 XP  |  level 22.61  |  93 min  |  at 60 min 22.58", "the owner's banked route is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
 for _, l in ipairs(v3.legs.items) do
   if l:IsShown() then
@@ -1222,9 +1222,9 @@ v3.modePlan.__scripts.OnClick(v3.modePlan)
 QB.Model.Finish()
 UI:Refresh()
 print("route plan:", v3.summary:GetText())
-assert(v3.summary:GetText() == "93,610 XP  |  level 23.61  |  138 min  |  at 60 min 23.45", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
+assert(v3.summary:GetText() == "93,600 XP  |  level 23.61  |  138 min  |  at 60 min 23.45", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
-for _, key in ipairs({ "mounted", "bag", "pins" }) do
+for _, key in ipairs({ "mounted", "pins" }) do
   local b = UI.header.toggles[key]
   lines = {}; b.__scripts.OnEnter(b); assert(#lines > 0)
   b.__scripts.OnClick(b, "LeftButton")
@@ -1626,7 +1626,7 @@ do
 end
 
 -- the friend talks to Guard Howe: the quest window shows Blackrock Bounty's XP, and the party hears it
-friend.window = { id = 128, xp = 2000 }
+friend.window = { id = 128, xp = 2300 } -- well off the catalog's 2,000: a near match would only confirm it (3.4.7)
 friend.ev(friend.QB.eventFrame, "QUEST_COMPLETE")
 friend.window = nil
 for _ = 1, 6 do tick(owner, 5); tick(friend, 5); deliver() end
@@ -1669,7 +1669,7 @@ end
 local brann = owner.QB.Sync:Members()[1]
 assert(brann.quests[166] and brann.quests[166].code == "a" and brann.quests[166].prog, "progress on a quest in their log comes along")
 local shared = owner.env.QuestBankDB.live and owner.env.QuestBankDB.live[128]
-assert(shared and shared.src == "party" and shared.full == 2000, "the friend's quest window XP reaches the owner")
+assert(shared and shared.src == "party" and shared.full == 2300, "the friend's quest window XP reaches the owner")
 print("  live XP shared by the friend:", shared.full, shared.src)
 UI:ShowTab(4)
 UI:Refresh()
@@ -2319,6 +2319,33 @@ do
   assert(#diag == 12, "the ring keeps a dozen")
   newbie.npcGUID, newbie.npcName, newbie.window = nil, nil, nil
   N2.Print = print0
+end
+
+-- 3.4.7: the sleeping bag's 3% is gone. The level-30 build's Well Rested speeds up rested XP instead of adding to
+-- quest hand-ins (Wowhead's spell 1225478; the owner's hand-ins paid the unboosted number while the plan counted 3%
+-- more), so numbers are taken as the game shows them, and a party member's near match confirms rather than corrects
+do
+  local N2 = newbie.QB
+  local ndb = newbie.env.QuestBankDB
+  assert(QB.BagBonus == nil and N2.BagBonus == nil, "no sleeping bag bonus anywhere")
+  local n = 0
+  for _ in pairs(owner.QB.UI.header and owner.QB.UI.header.toggles or {}) do n = n + 1 end
+  assert(n == 0 or n == 3, "the header has three switches: mount, goal, pins (got " .. n .. ")")
+  newbie.rested = true
+  newbie.window = { id = 15, xp = 250, title = "Investigate Echo Ridge" }
+  newbie.ev(N2.eventFrame, "QUEST_DETAIL")
+  assert(N2.Quest.Get(15).liveFull == 250 and ndb.live[15] and ndb.live[15].full == 250 and ndb.live[15].at, "a window seen while Well Rested is recorded as shown, not divided by 1.03, and dated")
+  newbie.rested, newbie.window = nil, nil
+  local k = N2.Quest.Get(971)
+  local before = ndb.live[971]
+  N2.Live.Record(971, 6650, 22, "party")
+  assert(ndb.live[971] == before, "a party number within 5% of the catalog's 6,550 confirms it and is not recorded")
+  N2.Live.Record(971, 7500, 22, "party")
+  assert(ndb.live[971] and ndb.live[971].full == 7500 and k.liveFull == 7500, "a party number well off the catalog's is recorded")
+  N2.Live.Record(971, 6550, 22, "npc")
+  assert(ndb.live[971].full == 6550 and ndb.live[971].src == "npc", "your own window wins over a party number")
+  ndb.live[971] = before; k.liveFull = before and before.full or nil
+  ndb.live[15] = nil; N2.Quest.Get(15).liveFull = nil
 end
 
 local seen = {}

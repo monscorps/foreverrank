@@ -751,12 +751,11 @@ function UI:CreateHeader(f)
 
   h.toggles = {}
   local defs = {
-    { key = "mounted", icon = T.mount }, { key = "bag", icon = T.sleep },
-    { key = "goal", icon = T.hourglass }, { key = "pins", icon = T.map },
+    { key = "mounted", icon = T.mount }, { key = "goal", icon = T.hourglass }, { key = "pins", icon = T.map },
   }
   for i, d in ipairs(defs) do
     local b = iconButton(f, 30, d.icon)
-    b:SetPoint("TOPRIGHT", -(34 + (4 - i) * 66), -46)
+    b:SetPoint("TOPRIGHT", -(34 + (#defs - i) * 66), -46)
     b.caption = text(f, "GameFontHighlightSmall", 10, WHITE, "CENTER", 64)
     b.caption:SetPoint("TOP", b, "BOTTOM", 0, -8)
     b.key = d.key
@@ -769,12 +768,11 @@ end
 
 function UI:Switch(key, which)
   local set = QB:Settings()
-  if key == "mounted" or key == "bag" then
+  if key == "mounted" then
     if which == "RightButton" then
       set[key] = "auto"
     else
-      local on = (key == "mounted") and QB:Mounted() or QB:BagBonus()
-      set[key] = not on
+      set[key] = not QB:Mounted()
     end
   elseif key == "goal" then
     if which == "RightButton" then
@@ -803,11 +801,6 @@ function UI:SwitchTooltip(tip, key)
     tip:AddLine(on and "Mounted" or "On foot", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("A mount cuts every stretch on foot to 62%. Flights, boats and zeppelins take as long as they take.", 1, 1, 1, true)
     tip:AddLine(auto and "Set from your riding skill. Right-click keeps it on auto." or "Set by you. Right-click goes back to auto.", 0.6, 0.6, 0.6, true)
-  elseif key == "bag" then
-    local on, auto = QB:BagBonus()
-    tip:AddLine(on and "Cozy Sleeping Bag: +3%" or "No sleeping bag bonus", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("Lie in the bag for three minutes before the first hand-in: +3% XP from quests for two hours.", 1, 1, 1, true)
-    tip:AddLine(auto and "Follows the Well Rested buff. Right-click keeps it on auto." or "Set by you. Right-click goes back to auto.", 0.6, 0.6, 0.6, true)
   elseif key == "goal" then
     tip:AddLine(set.goal == "hour" and "Plan for the first hour" or "Plan for the whole route", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("First hour: the highest level at the 60-minute mark, whatever comes after. Whole route: the highest level at the end, in the least time.", 1, 1, 1, true)
@@ -1037,9 +1030,6 @@ function UI:RefreshHeader()
   local mounted = QB:Mounted()
   setIcon(tg.mounted.icon, mounted and T.mount or T.foot)
   tg.mounted.caption:SetText(mounted and "Mounted" or "On foot")
-  local bag = QB:BagBonus()
-  tg.bag.icon:SetDesaturated(not bag)
-  tg.bag.caption:SetText(bag and "+3% XP" or "No bag")
   -- the third switch: the hour's goal when banking, the lock itself when questing
   local g = tg.goal
   if banking then
@@ -1787,8 +1777,8 @@ function UI:RefreshPrepView(v)
     local c = v.cards:Get()
     local have = QB.API.ItemCount(211527) > 0
     header(c, { 0.10, 0.12, 0.22 }, T.sleep, "Cozy Sleeping Bag",
-      have and "You have it. Lie in it three minutes before the first hand-in." or "Finish the Stepping Stones chain: +3% XP from quests for two hours.",
-      have and "Done" or "+3%")
+      have and "You have it. Camp in it: your rested XP builds faster." or "Finish Stepping Stones: a bag that builds rested XP faster.",
+      have and "Done" or "Bag")
     local nextStep
     for _, step in ipairs(D.SLEEP_CHAIN) do
       if not QB.API.IsDone(step.id) then nextStep = step break end

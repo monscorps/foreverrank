@@ -14,7 +14,7 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 | Chain known (Wowhead Forever series or the Classic database) | 2135 | 428 | 1459 | 0 |
 
 On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip. Hand-ins on 2026-10-02 paid exactly that on every multiplied quest, dungeon-typed or not.
-What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 38 quests confirmed, 2 corrected to the game's number: 392 The Curious Visitor 590 -> 600, 1654 The Test of Righteousness 870 -> 875, 0 with no XP in the catalog filled in.
+What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 40 quests confirmed (within 5% counts as agreement; small differences kept as read: 392 The Curious Visitor 590, paid 600, 1654 The Test of Righteousness 870, paid 875), 0 corrected to the game's number, 0 with no XP in the catalog filled in.
 
 Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read, before the cut): Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
 

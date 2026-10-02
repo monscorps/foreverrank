@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.4.6"
+QB.version = "3.4.7"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -537,16 +537,19 @@ end
 local Live = {}
 QB.Live = Live
 
-function Live.Record(id, xp, level, src, rested)
+function Live.Record(id, xp, level, src)
   local q = Q.Get(id)
   if not (q and xp and xp > 0 and level) then return end
   local pct = QB.Model.Pct(q.lvl, level)
   if pct < 100 then return end -- a grey quest's number says little about its full value
+  -- (the level-30 build's Well Rested speeds up rested XP and no longer adds to quest XP, so the number is taken as is)
   local full = xp
-  if rested then full = math.floor(xp / 1.03 / 10 + 0.5) * 10 end
   -- a number far off what the quest could pay is someone else's quest, not this one's
   local listed = QB.Model.Listed(q)
   if listed > 0 and (full > listed * 6 or full < listed * 0.2) then return end
+  -- a party member's number within a few percent of the catalog's confirms it rather than correcting it: their
+  -- game may carry a bonus yours doesn't (the old build's rest stacks), and your own windows and hand-ins still win
+  if src == "party" and listed > 0 and math.abs(full - listed) <= listed * 0.05 then return end
   QuestBankDB.live = QuestBankDB.live or {}
   local old = QuestBankDB.live[id]
   if old and old.src ~= "party" and src == "party" then return end
@@ -620,7 +623,7 @@ local function windowXP(src, event)
   local xp = GetRewardXP and GetRewardXP()
   QB.NoteXPSeen(event == "QUEST_DETAIL" and "detail" or "complete", id, xp)
   if issecretvalue and (issecretvalue(id) or issecretvalue(xp)) then return end -- hidden from addons: nothing to learn
-  if id and id > 0 and xp and xp > 0 then Live.Record(id, xp, UnitLevel("player"), src, API.HasWellRested()) end
+  if id and id > 0 and xp and xp > 0 then Live.Record(id, xp, UnitLevel("player"), src) end
 end
 QB.WindowXP = windowXP
 
@@ -628,7 +631,7 @@ QB.WindowXP = windowXP
 -- settings: account-wide switches, and one plan per character
 ----------------------------------------------------------------------------
 local DEFAULTS = {
-  mounted = "auto", bag = "auto", goal = "hour", routeMode = "now", tab = 1, pins = true,
+  mounted = "auto", goal = "hour", routeMode = "now", tab = 1, pins = true,
   minimap = { angle = 205, hide = false }, share = { party = true, guild = true },
   post = { party = true, guild = true, auto = true }, updates = true,
   -- how far above and below your level suggestions reach ("auto": 12 above while banking, 4 while
@@ -694,12 +697,6 @@ end
 function QB:Mounted()
   local s = self:Settings().mounted
   if s == "auto" then return API.KnowsRiding(), true end
-  return s == true, false
-end
-
-function QB:BagBonus()
-  local s = self:Settings().bag
-  if s == "auto" then return API.HasWellRested(), true end
   return s == true, false
 end
 
@@ -1497,7 +1494,7 @@ local function signature(list, opts)
   -- reported count by how many there have been
   local T = QB.Data.TO_NEXT
   local xpq = math.floor((opts.xp or 0) * 50 / (T[opts.level] or 1))
-  local parts = { opts.level, xpq, tostring(opts.mounted), tostring(opts.bonus), opts.goal, opts.fac,
+  local parts = { opts.level, xpq, tostring(opts.mounted), opts.goal, opts.fac,
                   opts.startHub or "-", tostring(opts.noHearth), opts.cap or 0, opts.mode or "", QB.liveVer or 0 }
   for _, e in ipairs(list) do parts[#parts + 1] = e.q.id .. (e.st and e.st.code or "") end
   return table.concat(parts, ":")
@@ -1508,7 +1505,7 @@ function QB:Recompute(sync)
   local set = self:Settings()
   local mode = QB.mode
   local opts = {
-    level = self.state.level, xp = self.state.xp, mounted = (self:Mounted()), bonus = (self:BagBonus()),
+    level = self.state.level, xp = self.state.xp, mounted = (self:Mounted()),
     goal = mode == "quest" and "route" or set.goal, fac = QB.faction, cap = QB.CAP, mode = mode,
   }
   local nowOpts = {}
@@ -1658,7 +1655,7 @@ local function onTurnIn(questID, xpReward)
   turnedIn[questID] = true
   API.MarkDone(questID)
   local q = Q.Get(questID)
-  Live.Record(questID, xpReward, QB.state.level or UnitLevel("player"), "turnin", API.HasWellRested())
+  Live.Record(questID, xpReward, QB.state.level or UnitLevel("player"), "turnin")
   local predicted = QB.routeNow and QB.routeNow.byQuest and QB.routeNow.byQuest[questID]
   table.insert(QuestBankDB.turnins, {
     id = questID, xp = xpReward, predicted = predicted, level = UnitLevel("player"), at = date("%Y-%m-%d %H:%M:%S"),

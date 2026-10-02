@@ -228,7 +228,7 @@ local function problem(entries, opts)
   local stops, unplaced = buildStops(entries, fac)
   local n = #stops
   local P = { stops = stops, unplaced = unplaced, n = n, fac = fac, mf = mf, level = opts.level, xp = opts.xp,
-              bonus = opts.bonus, goal = opts.goal or "hour", C = {}, K = {}, start = {}, startKind = {}, hearth = {},
+              goal = opts.goal or "hour", C = {}, K = {}, start = {}, startKind = {}, hearth = {},
               inn = {}, work = {}, rowFull = {}, rowLvl = {}, rowAfter = {}, rowId = {} }
   for i = 1, n do
     local a = stops[i]
@@ -295,7 +295,6 @@ local function evaluate(P, order, keep)
   local prev, hearthNext = nil, false
   local cheapSeen, outOfOrder = false, false
   local handed = P.hasAfter and {} or nil
-  local bonus = P.bonus
   local legs = keep and {} or nil
   for k = 1, #order do
     local s = order[k]
@@ -324,7 +323,6 @@ local function evaluate(P, order, keep)
           if m >= 10 then f = f * 0.1 elseif m >= 6 then f = f * (1 - (m - 5) * 0.2) end
           local tt = f < 1000 and 10 or 50
           local x = floor(f / tt + 0.5) * tt
-          if bonus then x = floor(x * 1.03 + 0.5) end
           if rows then rows[#rows + 1] = { e = P.stops[s].rows[r], q = P.stops[s].rows[r].q, xp = x, pct = M.Pct(lvl[r], level), plvl = level } end
           total = total + x
           if level < CAP then
@@ -552,7 +550,7 @@ end
 
 ----------------------------------------------------------------------------
 -- plan: entries = { {q=, st=, after=parentId}, ... }
--- opts = { level, xp, mounted, bonus, goal ("hour" | "route"), fac, start = {c, wx, wy}, noHearth }
+-- opts = { level, xp, mounted, goal ("hour" | "route"), fac, start = {c, wx, wy}, noHearth }
 -- prev: the route planned last time, to start from
 ----------------------------------------------------------------------------
 function M.Plan(entries, opts, prev)
