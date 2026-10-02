@@ -42,5 +42,5 @@ read-only, nothing automated, nothing sent anywhere on its own.
 - `/probe debug` lists anything that went wrong, with where, so a report
   comes with the reason.
 
-No combat automation, no chat messages, no network calls. Just reading and
-one copy box.
+No combat automation, no network calls, and one chat line only: the first time a new
+version loads, to say it is running. Just reading and one copy box.

@@ -239,6 +239,22 @@ local function newClient(o)
   env.GetTitleText = function() return c.window and c.window.title or "" end
   env.GetSuggestedGroupNum = function() return 0 end
   env.GetBuildInfo = function() return "1.60.1", "70170", "Oct 1 2026", 16001 end
+  -- the AddOns list: c.addons[name] = { version, loaded, enabled (0/1/2), reason }; absent = not installed
+  env.C_AddOns = {
+    DoesAddOnExist = function(n) return (c.addons or {})[n] ~= nil end,
+    GetAddOnInfo = function(n)
+      local a = (c.addons or {})[n]
+      if not a then return n, nil, nil, false, "MISSING", "INSECURE" end
+      return n, n, "", a.reason == nil, a.reason, "INSECURE"
+    end,
+    IsAddOnLoaded = function(n) local a = (c.addons or {})[n]; local l = a and a.loaded or false; return l, l end,
+    GetAddOnEnableState = function(n, who) local a = (c.addons or {})[n]; return a and (a.enabled or 2) or 0 end,
+    GetAddOnMetadata = function(n, key) local a = (c.addons or {})[n]; return a and key == "Version" and a.version or nil end,
+    GetAddOnInterfaceVersion = function(n) return (c.addons or {})[n] and 16001 or 0 end,
+    IsAddOnLoadable = function(n, who) local a = (c.addons or {})[n]; if not a then return false, "MISSING" end; return a.reason == nil, a.reason end,
+    DoesAddOnHaveLoadError = function(n) local a = (c.addons or {})[n]; return a and a.loadError or false end,
+    IsAddonVersionCheckEnabled = function() return true end,
+  }
   env.C_GossipInfo = {
     GetAvailableQuests = function() return c.gossipAvail or {} end,
     GetActiveQuests = function() return c.gossipActive or {} end,
@@ -2699,6 +2715,70 @@ do
   -- back to the swaps
   poke(mode("xp"))
   for _, r in ipairs(shown()) do assert(r.gain:GetText():sub(1, 1) == "+", "the XP mode is back") end
+end
+
+-- 3.5.2: QuestBank notes whether ForeverProbe is installed, switched on and loaded, so the next upload of
+-- QuestBank's own file says why ForeverProbe's file never changes; /qb probe says it in chat
+do
+  local c, Q2 = owner, owner.QB
+  local function probe() c.env.SlashCmdList.QUESTBANK("probe"); return c.chat[#c.chat] end
+  assert(c.env.QuestBankDB.diag.addons and c.env.QuestBankDB.diag.addons.qb == Q2.version, "noted at login, without asking")
+  c.addons = nil
+  local said = probe()
+  assert(said:find("not installed for this game", 1, true), "no ForeverProbe: " .. said)
+  local a = c.env.QuestBankDB.diag.addons
+  assert(a and a.probe.exists == false and a.probe.loaded == false and a.build == "70170" and a.iface == 16001, "the note is in the saved file")
+  c.addons = { ForeverProbe = { version = "0.4.2", loaded = false, enabled = 0, reason = "DISABLED" } }
+  said = probe()
+  assert(said:find("switched off for this character", 1, true), "disabled: " .. said)
+  c.addons.ForeverProbe = { version = "0.4.1", loaded = false, enabled = 2, reason = "INTERFACE_VERSION" }
+  said = probe()
+  assert(said:find("did not load it: INTERFACE_VERSION", 1, true) and said:find("Load out of date AddOns", 1, true), "out of date: " .. said)
+  c.addons.ForeverProbe = { version = "0.4.2", loaded = false, enabled = 2, loadError = true, reason = "DEP_MISSING" }
+  said = probe()
+  assert(said:find("hit an error while loading", 1, true), "a load error: " .. said)
+  assert(c.env.QuestBankDB.diag.addons.versionCheck == true and c.env.QuestBankDB.diag.addons.probe.forMe == false, "the version-check setting and the per-character answer")
+  c.addons.ForeverProbe = { version = "0.4.2", loaded = true, enabled = 2 }
+  c.env.ForeverProbeDB = { meta = { addon = "0.4.2" } }
+  said = probe()
+  assert(said:find("ForeverProbe 0.4.2 is running.", 1, true), "running: " .. said)
+  c.env.ForeverProbeDB = { meta = { addon = "0.4.1" } }
+  said = probe()
+  assert(said:find("(its saved file says 0.4.1)", 1, true), "an older file under a newer addon: " .. said)
+  a = c.env.QuestBankDB.diag.addons
+  assert(a.probe.version == "0.4.2" and a.probe.loaded and a.probe.running == "0.4.1" and a.qb == Q2.version, "the note carries versions")
+  -- switched on in the list but not loaded yet: a /reload away
+  c.env.ForeverProbeDB = nil
+  c.addons.ForeverProbe = { version = "0.4.3", loaded = false, enabled = 2 }
+  said = probe()
+  assert(said:find("switched on and loads at the next /reload", 1, true), "ticked, not loaded yet: " .. said)
+  -- an empty reason is no reason
+  c.addons.ForeverProbe = { version = "0.4.3", loaded = false, enabled = 2, reason = "" }
+  said = probe()
+  assert(not said:find(": .", 1, true), "no empty reason in the text: " .. said)
+  -- a hidden character name: the per-character calls degrade, nothing throws
+  local realName = c.env.UnitName
+  c.env.UnitName = function() return SECRET.str() end
+  c.addons.ForeverProbe = { version = "0.4.3", loaded = true, enabled = 2 }
+  said = probe()
+  assert(said:find("is running", 1, true), "a hidden name changes nothing: " .. said)
+  c.env.UnitName = realName
+  -- no AddOns API at all: say so instead of "not installed"
+  local api, info = c.env.C_AddOns, c.env.GetAddOnInfo
+  c.env.C_AddOns, c.env.GetAddOnInfo = nil, nil
+  said = probe()
+  assert(said:find("Couldn't read the AddOns list", 1, true), "no API: " .. said)
+  c.env.C_AddOns, c.env.GetAddOnInfo = api, info
+  -- nothing in the note is a name
+  local function walk(t) for k, v in pairs(t) do
+    if type(v) == "table" then walk(v) else
+      assert(v ~= c.o.name and not tostring(v):find("Forever Normal", 1, true) and not tostring(v):find("ForeverNormal", 1, true), "no names in the note: " .. tostring(k))
+    end
+  end end
+  walk(c.env.QuestBankDB.diag.addons)
+  -- the login note is armed
+  c.env.ForeverProbeDB = nil; c.addons = nil
+  print("addon note:", said)
 end
 
 local seen = {}

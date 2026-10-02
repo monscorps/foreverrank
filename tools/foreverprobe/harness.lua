@@ -949,6 +949,10 @@ step(c1, "direct call, unreachable in the client: Nemesis:OnGuildRoster()", func
 end)
 playChecks(c1)
 check(c1, "pace bar visible", bar(c1) and bar(c1).__shown, "")
+do
+  local n = 0; for _, line in ipairs(c1.printed) do if line:find("is running. The game writes its file", 1, true) then n = n + 1 end end
+  check(c1, "says once in chat that it is running", n == 1, ("%d time(s)"):format(n))
+end
 local saved1 = logout(c1)
 
 -- 1b. the next session with 1's SavedVariables
@@ -960,6 +964,8 @@ step(c1b, "/probe debug", function() slash(c1b, "/probe debug") end)
 step(c1b, "/probe", function() slash(c1b, "/probe") end)
 do
   local s = charStore(c1b)
+  local n = 0; for _, line in ipairs(c1b.printed) do if line:find("is running. The game writes its file", 1, true) then n = n + 1 end end
+  check(c1b, "the same version doesn't say it again", n == 0, ("%d time(s)"):format(n))
   check(c1b, "level record carried over (level 13 current, level 12 in history)",
     s and s.current and s.current.level == 13 and s.history and s.history[1] and s.history[1].level == 12,
     s and ("current %s, history %d"):format(tostring(s.current and s.current.level), #(s.history or {})) or "no store")

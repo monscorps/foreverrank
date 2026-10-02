@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.5.1"
+QB.version = "3.5.2"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -677,6 +677,58 @@ function QB.NoteXPSeen(how, id, xp)
   d[#d + 1] = { how = how, id = secret(id) and -1 or id, kind = kind, v = kind == "number" and xp or nil,
                 lvl = UnitLevel("player"), at = date("%Y-%m-%d %H:%M") }
   while #d > 12 do table.remove(d, 1) end
+end
+
+-- whether ForeverProbe, the optional uploader's in-game half, is present and running for this character: the
+-- uploads have shown QuestBank's file changing for days while ForeverProbe's never did, and this note in
+-- QuestBank's own saved file says why (missing, disabled, not loadable and the game's reason, or loaded and which
+-- version). The client's build and interface number ride along; no names
+function QB.NoteAddons()
+  local db = QuestBankDB
+  if not db then return end
+  db.diag = db.diag or {}
+  local A = C_AddOns or {}
+  local function call(f, ...)
+    if type(f) ~= "function" then return nil end
+    local ok, a, b, c, d, e, g = pcall(f, ...)
+    if not ok then return nil end
+    return a, b, c, d, e, g
+  end
+  local plain = function(v) return QB.Plain(v) end
+  local name = "ForeverProbe"
+  local exists = call(A.DoesAddOnExist, name)
+  local info = A.GetAddOnInfo or GetAddOnInfo
+  local _, title, _, loadable, reason = call(info, name)
+  -- nil, not false, when the client gave no way to ask: then /qb probe says it couldn't read the list
+  if exists == nil and type(info) == "function" then exists = title ~= nil end
+  local function flag(v) if v == nil or (issecretvalue and issecretvalue(v)) then return nil end return v and true or false end
+  exists = flag(exists)
+  local function why(v) v = plain(v); return type(v) == "string" and v ~= "" and v or nil end
+  local loading, loaded = call(A.IsAddOnLoaded or IsAddOnLoaded, name)
+  local me = plain(UnitName("player")) -- a hidden name would make these calls error; nil asks for all characters
+  local state = call(A.GetAddOnEnableState, name, me)
+  local forMe, forMeWhy = call(A.IsAddOnLoadable, name, me)
+  local loadError = call(A.DoesAddOnHaveLoadError, name)
+  local checkOn = flag(call(A.IsAddonVersionCheckEnabled)) -- true: out-of-date addons are blocked
+  forMe = flag(forMe)
+  local _, build, _, iface = GetBuildInfo()
+  db.diag.addons = {
+    at = date("%Y-%m-%d %H:%M"), build = plain(build), iface = plain(iface), qb = QB.version,
+    versionCheck = checkOn,
+    probe = {
+      exists = exists, -- true, false, or nil when the client gave no way to ask
+      loaded = flag(loaded) or flag(loading) or false,
+      loadable = flag(loadable) or false,
+      reason = why(reason),
+      enabled = type(plain(state)) == "number" and state or nil, -- 0 off, 1 some characters, 2 all
+      forMe = forMe, forMeWhy = why(forMeWhy),
+      loadError = flag(loadError) or nil,
+      version = exists and plain(call(A.GetAddOnMetadata or GetAddOnMetadata, name, "Version")) or nil,
+      iface = exists and plain(call(A.GetAddOnInterfaceVersion, name)) or nil,
+      running = ForeverProbeDB ~= nil and type(ForeverProbeDB) == "table" and type(ForeverProbeDB.meta) == "table"
+        and plain(ForeverProbeDB.meta.addon) or nil, -- what the loaded probe wrote last; nil when it never ran
+    },
+  }
 end
 
 function Live.Source(q)
@@ -1891,6 +1943,8 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Discover then QB.Discover:Init() end
     if QB.Arrow then QB.Arrow:Init() end
     QB:FixEscortPrompt()
+    -- after the other addons have loaded and run their own login code
+    C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
     Run.ArmHour()
     C_Timer.After(8, QB.Safe(function() QB:Snapshot("login") end, "login snapshot"))
     C_Timer.After(4, QB.Safe(function() QB:Changed() end, "login"))
@@ -2031,6 +2085,29 @@ slash = function(msg)
       QB:Print("Error list cleared.")
     elseif QB.UI then
       QB.UI:ShowErrors()
+    end
+  elseif cmd == "probe" then
+    QB.NoteAddons()
+    local a = QuestBankDB.diag and QuestBankDB.diag.addons
+    local p = a and a.probe
+    if not p or p.exists == nil then
+      QB:Print("Couldn't read the AddOns list on this client.")
+    elseif not p.exists then
+      QB:Print("ForeverProbe is not installed for this game: the game finds no Interface\\AddOns\\ForeverProbe\\ForeverProbe.toc. It is optional; QuestBank's own file uploads without it.")
+    elseif p.loadError then
+      QB:Print(string.format("ForeverProbe %s is installed but hit an error while loading. /reload, and if it says so again, tell the Discord.", p.version or ""))
+    elseif p.loaded then
+      QB:Print(string.format("ForeverProbe %s is running%s. It writes its file, ForeverProbe.lua, when you log out or /reload.",
+        p.version or "?", p.running and p.running ~= p.version and string.format(" (its saved file says %s)", p.running) or ""))
+    elseif p.enabled == 0 then
+      QB:Print(string.format("ForeverProbe %s is installed but switched off for this character. Turn it on in the AddOns list at the character screen.", p.version or ""))
+    elseif (p.loadable or p.forMe) and not (p.reason or p.forMeWhy) then
+      QB:Print(string.format("ForeverProbe %s is switched on and loads at the next /reload or login.", p.version or ""))
+    else
+      local why = p.reason or p.forMeWhy
+      QB:Print(string.format("ForeverProbe %s is installed but the game did not load it%s. %s", p.version or "",
+        why and (": " .. why) or "",
+        why == "INTERFACE_VERSION" and "Tick Load out of date AddOns in the AddOns list, or update it from foreverrank.com." or "Check the AddOns list at the character screen."))
     end
   elseif cmd == "escort" then
     local s = QB:Settings()

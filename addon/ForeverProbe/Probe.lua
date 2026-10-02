@@ -1,9 +1,9 @@
 --[[ ForeverProbe: quiet, read-only character snapshots for foreverrank.com.
-     Nothing automated, nothing sent, no chat output. Data sits in
+     Nothing automated, nothing sent; one chat line the first time a new version loads. Data sits in
      SavedVariables until the player exports it themselves.            ]]
 
 local ADDON, NS = ...
-NS.version = "0.4.2"
+NS.version = "0.4.3"
 
 local safe = NS.util.Safe
 
@@ -208,6 +208,13 @@ f:SetScript("OnEvent", function(_, event, ...)
     local initial, reload = ...
     if initial or reload or initial == nil then
       C_Timer.After(5, function() NS.util.Try("login snapshot", NS.snapshot, "login") end)
+      -- once per version: say it's running and where its file goes, so nobody has to guess whether it loaded
+      C_Timer.After(6, function() NS.util.Try("hello", function()
+        local m = db().meta
+        if m.greeted == NS.version then return end
+        DEFAULT_CHAT_FRAME:AddMessage(("|cffe5cc80ForeverProbe|r %s is running. The game writes its file, ForeverProbe.lua, when you log out or /reload; if you run the Companion, it uploads it from there. /probe for the panel."):format(NS.version))
+        m.greeted = NS.version
+      end) end)
     end
   elseif event == "PLAYER_LEVEL_UP" then
     C_Timer.After(2, function() NS.util.Try("level-up snapshot", NS.snapshot, "levelup") end)

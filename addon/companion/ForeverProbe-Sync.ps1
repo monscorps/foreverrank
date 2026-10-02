@@ -57,18 +57,27 @@ function Find-SavedVariables {
   $roots = @()
   if ($Root) { $roots += $Root }
   $roots += @("C:\Program Files (x86)\World of Warcraft", "C:\Program Files\World of Warcraft", "D:\World of Warcraft", "$env:USERPROFILE\World of Warcraft")
+  $seen = @{}
   foreach ($r in $roots) {
     if (-not (Test-Path -LiteralPath $r)) { continue }
     # every game folder (_classic_beta_ for the Forever beta, and whatever live Forever gets); the root
-    # itself counts too, when it is a game folder
-    $flavors = @(Get-ChildItem -Path $r -Directory -Filter "_*_" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    # itself counts too, when it is a game folder. A chosen folder that is also under a default root is
+    # scanned once.
+    $flavors = @(Get-ChildItem -LiteralPath $r -Directory -Filter "_*_" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
     $flavors += $r
     foreach ($f in $flavors) {
       $acct = Join-Path $f "WTF\Account"
-      if (Test-Path $acct) {
-        # WoW names each file after the addon (ForeverProbe.lua, QuestBank.lua), not after the variable inside it
-        Get-ChildItem -Path $acct -Recurse -File -Include $WatchFiles -ErrorAction SilentlyContinue |
-          Where-Object { $_.Directory.Name -eq "SavedVariables" } | ForEach-Object { $_.FullName }
+      if (-not (Test-Path -LiteralPath $acct)) { continue }
+      $key = (Resolve-Path -LiteralPath $acct).Path
+      if ($seen[$key]) { continue }
+      $seen[$key] = $true
+      # WoW names each file after the addon (ForeverProbe.lua, QuestBank.lua), not after the variable inside
+      # it; both are account-wide, so only Account\<account>\SavedVariables counts (never a character's folder)
+      foreach ($a in @(Get-ChildItem -LiteralPath $acct -Directory -ErrorAction SilentlyContinue)) {
+        foreach ($w in $WatchFiles) {
+          $p = Join-Path $a.FullName (Join-Path "SavedVariables" $w)
+          if (Test-Path -LiteralPath $p) { $p }
+        }
       }
     }
   }
@@ -109,6 +118,11 @@ function Send-ToForeverRank {
 function Run-Sync {
   $cfg = Read-Config
   if (-not $cfg) { return "Not installed." }
+  if (-not $script:failedLast) { $script:failedLast = @{} }
+  if (-not $script:fileState) {
+    $script:fileState = @{}
+    foreach ($line in @(Find-AddonInstalls -Root $cfg.wowPath)) { Log $line }
+  }
   $files = @(Find-SavedVariables -Root $cfg.wowPath)
   if ($files.Count -eq 0) {
     Log "no SavedVariables\ForeverProbe.lua or QuestBank.lua found"
@@ -124,11 +138,12 @@ function Run-Sync {
     $hash = (Get-FileHash -Path $f -Algorithm SHA256).Hash
     if ($cfg.sent[$f] -eq $hash) { $skipped++; continue }
     $size = (Get-Item $f).Length
-    if ($size -gt $MaxBytes) { $failed++; Log ("SKIPPED " + $f + " :: " + [math]::Round($size / 1MB, 1) + " MB is over the 6 MB limit"); continue }
+    if ($size -gt $MaxBytes) { $failed++; $script:failedLast[$f] = "over the 6 MB limit"; Log ("SKIPPED " + $f + " :: " + [math]::Round($size / 1MB, 1) + " MB is over the 6 MB limit"); continue }
     try {
       $r = Send-ToForeverRank -Url $cfg.endpoint -File $f
       if ($r -and $r.ok) {
         $cfg.sent[$f] = $hash
+        $script:failedLast.Remove($f)
         $posted++
         if ($r.duplicate) { Log ("already there: " + $f) }
         else {
@@ -139,17 +154,33 @@ function Run-Sync {
         }
       } else {
         $failed++
+        $script:failedLast[$f] = "no ok in the reply"
         Log ("FAILED " + $f + " :: " + ($r | ConvertTo-Json -Compress))
       }
     } catch {
       $failed++
+      $script:failedLast[$f] = $_.Exception.Message
       Log ("FAILED " + $f + " :: " + $_.Exception.Message)
     }
   }
   Save-Config $cfg
+  # each file's state in the log when it changes (and once per tray start), never on every pass
+  $descs = @($files | ForEach-Object { Describe-File $_ $cfg })
+  # (the tray only: a Status click or -SyncNow is a process of its own and would log them all again)
+  if ($Tray) {
+    foreach ($d in $descs) {
+      if ($script:fileState[$d.path] -ne $d.key) {
+        $script:fileState[$d.path] = $d.key
+        Log ($d.text -replace "`n\s*", " :: ")
+      }
+    }
+  }
+  $stale = @($descs | Where-Object { $_.stale })
+  $note = ""
+  if ($stale.Count -gt 0) { $note = " ForeverProbe.lua hasn't changed since " + $stale[0].when + ": right-click the sigil, Status." }
   if ($failed -gt 0) { return "Sent $posted, failed $failed. See sync.log in $AppDir." }
-  if ($posted -gt 0) { return "Sent $posted update(s) to foreverrank.com." }
-  if ($skipped -gt 0 -and $posted -eq 0) { return "Nothing new in $skipped file(s) since the last upload." }
+  if ($posted -gt 0) { return "Sent $posted update(s) to foreverrank.com." + $note }
+  if ($skipped -gt 0 -and $posted -eq 0) { return "Nothing new in $skipped file(s) since the last upload." + $note }
   return "Everything already sent. Nothing new since your last session."
 }
 
@@ -163,6 +194,114 @@ function Stop-Tray {
   } catch { }
 }
 
+# What each watched file is: which account, how big, when the game last wrote it, which addon version wrote
+# it, and whether it changed since it was last sent. Only version fields and dates are read; never names.
+# ForeverProbe.lua written by a ForeverProbe older than 0.4 is stale: 0.4 has not saved on that account since.
+function Describe-File($f, $cfg) {
+  $item = Get-Item -LiteralPath $f -ErrorAction SilentlyContinue
+  if (-not $item) { return @{ text = $f + "`n   gone"; stale = $false; key = "gone" } }
+  # <game folder>\WTF\Account\<account>\SavedVariables\<file>: the names after WTF\Account, never a character's
+  $acctDir = Split-Path (Split-Path $f -Parent) -Parent
+  $acct = Split-Path $acctDir -Leaf
+  $flavor = Split-Path (Split-Path (Split-Path (Split-Path $acctDir -Parent) -Parent) -Parent) -Leaf
+  $kb = [math]::Max(1, [math]::Round($item.Length / 1KB))
+  $inv = [System.Globalization.CultureInfo]::InvariantCulture
+  $when = $item.LastWriteTime.ToString("yyyy-MM-dd HH:mm", $inv)
+  $writer = "an unknown version"
+  $stale = $false
+  try {
+    $body = [System.IO.File]::ReadAllText($f)
+    if ($item.Name -eq "ForeverProbe.lua") {
+      if ($body -match '\["cleu"\]|\["c_namespaces"\]') { $writer = "the beta-day probe (0.1.0)"; $stale = $true }
+      elseif ($body -match '\["schema"\]') {
+        # 0.4 sets schema on first use but writes its version only with a snapshot (and 0.4.3 when it greets)
+        $writer = "ForeverProbe 0.4 or newer (no snapshot saved yet)"
+        if ($body -match '\["greeted"\]\s*=\s*"(\d+\.\d+\.\d+)"') { $writer = "ForeverProbe " + $Matches[1] }
+        elseif ($body -match '\["addon"\]\s*=\s*"(\d+\.\d+\.\d+)"' -and [version]$Matches[1] -ge [version]"0.4.0") { $writer = "ForeverProbe " + $Matches[1] }
+      }
+      elseif ($body -match '\["addon"\]\s*=\s*"([^"]+)"') { $writer = "ForeverProbe 0.3 or older (it called itself " + $Matches[1] + ")"; $stale = $true }
+    } else {
+      # QuestBank keeps the version in every snapshot it saved; the highest is the one that wrote the file
+      $vs = @([regex]::Matches($body, '\["(?:version|qb)"\]\s*=\s*"(\d+\.\d+\.\d+)"') | ForEach-Object { [version]$_.Groups[1].Value } | Sort-Object -Descending)
+      if ($vs.Count -gt 0) { $writer = "QuestBank " + $vs[0].ToString() }
+    }
+  } catch { }
+  $state = "not sent yet"
+  try {
+    $hash = (Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash
+    if ($cfg.sent[$f] -eq $hash) { $state = "sent, unchanged since" } elseif ($cfg.sent[$f]) { $state = "changed since the last send" }
+  } catch { }
+  if ($script:failedLast -and $script:failedLast[$f]) { $state = "failed last time: " + $script:failedLast[$f] }
+  $text = $item.Name + " (" + $flavor + ", account " + $acct + ")`n   " + $kb + " KB, written " + $when + " by " + $writer + "; " + $state
+  return @{ text = $text; stale = $stale; name = $item.Name; when = $when; written = $item.LastWriteTime; writer = $writer; acct = $acct; flavor = $flavor; path = $f; dir = (Split-Path $f -Parent); key = ($when + "|" + $writer + "|" + $state) }
+}
+
+# Where the ForeverProbe addon itself sits in each game folder: right, one folder too deep, under another
+# folder name, or missing. Reads only the .toc's Version and Interface lines.
+function Find-AddonInstalls {
+  param([string]$Root)
+  $out = @()
+  $roots = @()
+  if ($Root) { $roots += $Root }
+  $roots += @("C:\Program Files (x86)\World of Warcraft", "C:\Program Files\World of Warcraft", "D:\World of Warcraft", "$env:USERPROFILE\World of Warcraft")
+  $seen = @{}
+  foreach ($r in $roots) {
+    if (-not (Test-Path -LiteralPath $r)) { continue }
+    $flavors = @(Get-ChildItem -LiteralPath $r -Directory -Filter "_*_" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    $flavors += $r
+    foreach ($fl in $flavors) {
+      $addons = Join-Path $fl "Interface\AddOns"
+      if (-not (Test-Path -LiteralPath $addons)) { continue }
+      $full = (Resolve-Path -LiteralPath $addons).Path
+      if ($seen[$full]) { continue }
+      $seen[$full] = $true
+      $label = Split-Path $fl -Leaf
+      $toc = Join-Path $addons "ForeverProbe\ForeverProbe.toc"
+      $deep = Join-Path $addons "ForeverProbe\ForeverProbe\ForeverProbe.toc"
+      if (Test-Path -LiteralPath $toc) {
+        $lines = @(Get-Content -LiteralPath $toc -TotalCount 12 -ErrorAction SilentlyContinue)
+        $ver = ($lines | Where-Object { $_ -match '^##\s*Version:\s*(.+)$' } | ForEach-Object { $Matches[1].Trim() } | Select-Object -First 1)
+        $ifc = ($lines | Where-Object { $_ -match '^##\s*Interface:\s*(.+)$' } | ForEach-Object { $Matches[1].Trim() } | Select-Object -First 1)
+        $out += ("ForeverProbe addon " + $ver + " (interface " + $ifc + ") in " + $label)
+      } elseif (Test-Path -LiteralPath $deep) {
+        $out += ("ForeverProbe addon in " + $label + " is one folder too deep: AddOns\ForeverProbe\ForeverProbe. Move the inner ForeverProbe folder up one level, into AddOns.")
+      } else {
+        $other = @(Get-ChildItem -LiteralPath $addons -Directory -ErrorAction SilentlyContinue |
+          Where-Object { $_.Name -ne "ForeverProbe" -and (Test-Path -LiteralPath (Join-Path $_.FullName "ForeverProbe.toc")) } | Select-Object -First 1)
+        if ($other.Count -gt 0) {
+          $out += ("ForeverProbe addon in " + $label + " sits in AddOns\" + $other[0].Name + ". The game only loads it from a folder named exactly ForeverProbe: rename it.")
+        } elseif (Test-Path -LiteralPath (Join-Path $fl "WTF\Account")) {
+          $out += ("ForeverProbe addon: not found in " + $label + "\Interface\AddOns")
+        }
+      }
+    }
+  }
+  return $out
+}
+
+# The sentence that says why ForeverProbe.lua isn't uploading, or "" when nothing looks wrong
+function Probe-Hint($descs) {
+  $fp = @($descs | Where-Object { $_.name -eq "ForeverProbe.lua" })
+  $qb = @($descs | Where-Object { $_.name -eq "QuestBank.lua" })
+  foreach ($d in $fp) {
+    if ($d.stale) {
+      return ("ForeverProbe.lua was last written " + $d.when + " by " + $d.writer + ". The ForeverProbe addon has not saved on this account since, so there is nothing new to send. In game, type /qb probe (QuestBank 3.5.2 or newer): it says whether ForeverProbe is missing, switched off or out of date. QuestBank.lua uploads either way.")
+    }
+    foreach ($q in $qb) {
+      if ($q.dir -eq $d.dir -and ($q.written - $d.written).TotalDays -gt 3) {
+        return ("ForeverProbe.lua was last written " + $d.when + ", " + [math]::Floor(($q.written - $d.written).TotalDays) + " days before QuestBank.lua next to it: QuestBank has saved since, ForeverProbe has not. In game, type /qb probe to see why.")
+      }
+    }
+  }
+  # no ForeverProbe.lua anywhere: say it once, gently (it is optional)
+  foreach ($q in $qb) {
+    if ($fp.Count -eq 0) {
+      return ("No ForeverProbe.lua in " + $q.flavor + ", account " + $q.acct + ": ForeverProbe has never saved there. That's fine if you don't run it; QuestBank.lua uploads on its own.")
+    }
+  }
+  return ""
+}
+
 function Show-Status {
   Add-Type -AssemblyName System.Windows.Forms | Out-Null
   $cfg = Read-Config
@@ -170,24 +309,28 @@ function Show-Status {
     [System.Windows.Forms.MessageBox]::Show("ForeverProbe Sync is not installed. Run Install.bat first.", "ForeverProbe Sync") | Out-Null
     return
   }
-  $last = "never"
-  if (Test-Path $LogFile) {
-    $tail = Get-Content $LogFile -Tail 1
-    if ($tail) { $last = $tail }
-  }
   $files = @(Find-SavedVariables -Root $cfg.wowPath)
   $where = "the usual install folders"
   if ($cfg.wowPath) { $where = $cfg.wowPath }
   $list = "none found yet: log a character out once with ForeverProbe or QuestBank installed"
-  if ($files.Count -gt 0) { $list = ($files | Select-Object -First 8) -join "`n" }
-  if ($files.Count -gt 8) { $list = $list + "`n... and " + ($files.Count - 8) + " more" }
-  $tail3 = "never"
-  if (Test-Path $LogFile) {
-    $t = @(Get-Content $LogFile -Tail 3)
-    if ($t.Count -gt 0) { $tail3 = $t -join "`n" }
+  $hint = ""
+  if ($files.Count -gt 0) {
+    $descs = @($files | Select-Object -First 6 | ForEach-Object { Describe-File $_ $cfg })
+    $list = (@($descs | ForEach-Object { $_.text })) -join "`n"
+    $h = Probe-Hint $descs
+    if ($h) { $hint = "`n`n" + $h }
   }
-  $msg = "WoW folder: " + $where + "`n`nWatching " + $files.Count + " saved file(s), every account under WTF\Account:`n" + $list +
-    "`n`nLast activity:`n" + $tail3 + "`n`nIf your game lives elsewhere, right-click the sigil and pick Choose WoW folder.`n`nSync now?"
+  if ($files.Count -gt 6) { $list = $list + "`n... and " + ($files.Count - 6) + " more" }
+  $installs = @(Find-AddonInstalls -Root $cfg.wowPath)
+  $addonLines = ""
+  if ($installs.Count -gt 0) { $addonLines = "`n`n" + ($installs -join "`n") }
+  $tail = "never"
+  if (Test-Path $LogFile) {
+    $t = @(Get-Content $LogFile -Tail 5)
+    if ($t.Count -gt 0) { $tail = $t -join "`n" }
+  }
+  $msg = "WoW folder: " + $where + "`n`nWatching " + $files.Count + " saved file(s), every account under WTF\Account:`n" + $list + $hint + $addonLines +
+    "`n`nLast activity:`n" + $tail + "`n`nIf your game lives elsewhere, right-click the sigil and pick Choose WoW folder.`n`nSync now?"
   $r = [System.Windows.Forms.MessageBox]::Show($msg, "ForeverProbe Sync", [System.Windows.Forms.MessageBoxButtons]::YesNo)
   if ($r -eq [System.Windows.Forms.DialogResult]::Yes) {
     $result = Run-Sync
