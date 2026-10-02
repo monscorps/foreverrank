@@ -3,7 +3,7 @@
      SavedVariables until the player exports it themselves.            ]]
 
 local ADDON, NS = ...
-NS.version = "0.4.3"
+NS.version = "0.4.4"
 
 local safe = NS.util.Safe
 

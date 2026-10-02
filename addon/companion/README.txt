@@ -37,7 +37,7 @@ If Status says ForeverProbe.lua hasn't changed in days: the game only
 writes that file while the ForeverProbe addon is loaded. In game, type
 /qb probe (QuestBank 3.5.2 or newer) to see whether it is missing,
 switched off for that character, or out of date. The addon also says
-"ForeverProbe 0.4.3 is running" in chat the first time it loads.
+"ForeverProbe 0.4.4 is running" in chat the first time it loads.
 The log of what was sent is %APPDATA%\ForeverProbe\sync.log.
 
 Remove completely any time: double-click Uninstall.bat.
