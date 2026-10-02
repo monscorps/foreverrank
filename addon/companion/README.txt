@@ -20,9 +20,12 @@ After install the sigil sits in your system tray, by the clock. It
 syncs every 30 minutes on its own, shows a balloon when an update
 ships, and starts again with Windows. Right-click it:
 
-  Sync now   push an update this second
-  Status     what it watches and when it last ran
-  Exit       stop it until the next login
+  Sync now            push an update this second
+  Status              the WoW folder, every saved file it watches (all
+                      accounts under WTF\Account), the last log lines
+  Choose WoW folder   point it at your game folder when WoW lives
+                      somewhere other than the usual install paths
+  Exit                stop it until the next login
 
 The ForeverProbe Sync icon on your desktop opens the same status box.
 The log of what was sent is %APPDATA%\ForeverProbe\sync.log.

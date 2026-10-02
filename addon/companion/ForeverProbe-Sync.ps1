@@ -114,6 +114,11 @@ function Run-Sync {
     Log "no SavedVariables\ForeverProbe.lua or QuestBank.lua found"
     return "No ForeverProbe or QuestBank data found yet. Log a character out once with either addon installed."
   }
+  $watched = ($files -join "; ")
+  if ($script:lastWatched -ne $watched) {
+    Log ("watching " + $files.Count + " file(s): " + $watched)
+    $script:lastWatched = $watched
+  }
   $posted = 0; $skipped = 0; $failed = 0
   foreach ($f in $files) {
     $hash = (Get-FileHash -Path $f -Algorithm SHA256).Hash
@@ -144,6 +149,7 @@ function Run-Sync {
   Save-Config $cfg
   if ($failed -gt 0) { return "Sent $posted, failed $failed. See sync.log in $AppDir." }
   if ($posted -gt 0) { return "Sent $posted update(s) to foreverrank.com." }
+  if ($skipped -gt 0 -and $posted -eq 0) { return "Nothing new in $skipped file(s) since the last upload." }
   return "Everything already sent. Nothing new since your last session."
 }
 
@@ -170,7 +176,18 @@ function Show-Status {
     if ($tail) { $last = $tail }
   }
   $files = @(Find-SavedVariables -Root $cfg.wowPath)
-  $msg = "Watching " + $files.Count + " saved file(s) for foreverrank.com.`n`nLast activity:`n" + $last + "`n`nSync now?"
+  $where = "the usual install folders"
+  if ($cfg.wowPath) { $where = $cfg.wowPath }
+  $list = "none found yet: log a character out once with ForeverProbe or QuestBank installed"
+  if ($files.Count -gt 0) { $list = ($files | Select-Object -First 8) -join "`n" }
+  if ($files.Count -gt 8) { $list = $list + "`n... and " + ($files.Count - 8) + " more" }
+  $tail3 = "never"
+  if (Test-Path $LogFile) {
+    $t = @(Get-Content $LogFile -Tail 3)
+    if ($t.Count -gt 0) { $tail3 = $t -join "`n" }
+  }
+  $msg = "WoW folder: " + $where + "`n`nWatching " + $files.Count + " saved file(s), every account under WTF\Account:`n" + $list +
+    "`n`nLast activity:`n" + $tail3 + "`n`nIf your game lives elsewhere, right-click the sigil and pick Choose WoW folder.`n`nSync now?"
   $r = [System.Windows.Forms.MessageBox]::Show($msg, "ForeverProbe Sync", [System.Windows.Forms.MessageBoxButtons]::YesNo)
   if ($r -eq [System.Windows.Forms.DialogResult]::Yes) {
     $result = Run-Sync
@@ -316,6 +333,20 @@ if ($Tray) {
   $menu = New-Object System.Windows.Forms.ContextMenuStrip
   [void]$menu.Items.Add("Sync now", $null, { & $script:doSync $true })
   [void]$menu.Items.Add("Status", $null, { Show-Status })
+  [void]$menu.Items.Add("Choose WoW folder...", $null, {
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = "Pick your World of Warcraft folder (the one holding _classic_beta_), or the _classic_beta_ folder itself."
+    $dlg.ShowNewFolderButton = $false
+    if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+      $cfg = Read-Config
+      if ($cfg) {
+        $cfg.wowPath = $dlg.SelectedPath
+        Save-Config $cfg
+        Log ("WoW folder set to " + $dlg.SelectedPath)
+        & $script:doSync $true
+      }
+    }
+  })
   [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
   [void]$menu.Items.Add("Exit", $null, {
     $script:timer.Stop()
