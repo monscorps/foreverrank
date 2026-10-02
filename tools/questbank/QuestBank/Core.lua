@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.4.5"
+QB.version = "3.4.6"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -470,6 +470,7 @@ function Q.Get(id)
   c.xpUnknown = math.floor(c.flags / 64) % 2 == 1
   c.sodLeftover = math.floor(c.flags / 128) % 2 == 1 -- Season of Discovery data whose NPC isn't known in Forever
   c.nerfed = math.floor(c.flags / 256) % 2 == 1      -- multiplier computed from the pre-cut read (D.NERF): the extra above x1 halved
+  c.confirmed = math.floor(c.flags / 512) % 2 == 1   -- XP as the game paid it after the cut (a hand-in or quest window, build 70170+)
   c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and API.ItemIcon(c.bag[1])) or API.ItemIcon(D.QITEM[id])
     or (c.cat and c.cat.icon) or D.TEX.questGeneric
   cache[id] = c
@@ -549,7 +550,7 @@ function Live.Record(id, xp, level, src, rested)
   QuestBankDB.live = QuestBankDB.live or {}
   local old = QuestBankDB.live[id]
   if old and old.src ~= "party" and src == "party" then return end
-  QuestBankDB.live[id] = { full = full, lvl = level, src = src }
+  QuestBankDB.live[id] = { full = full, lvl = level, src = src, at = date("%Y-%m-%d") }
   if q.liveFull ~= full then QB.liveVer = (QB.liveVer or 0) + 1 end
   q.liveFull = full
   if QB.Sync and src ~= "party" then QB.Sync:QueueLive(id, full, level) end
@@ -559,14 +560,25 @@ function Live.Apply()
   local db = QuestBankDB
   db.live = db.live or {}
   -- Blizzard cut dungeon quests' extra XP (D.NERF, 2026-10-01): what the game said about those quests before the
-  -- cut is stale, so it is forgotten once; fresh quest windows and hand-ins teach the new numbers
-  if D.NERF and (db.liveEra or 0) < 2 then
-    for id in pairs(db.live) do
+  -- cut is stale, so it is forgotten once; fresh quest windows and hand-ins teach the new numbers. A pre-cut
+  -- number is at least 1.4 times the cut one, so a reading well above the catalog's value is the stale kind and
+  -- one at or below it is fresh and stays. (Era 2 was 3.4.4's purge; 3.4.6 runs once more for the quests it
+  -- left out, keeping what 3.4.4 and 3.4.5 users learned since.)
+  local era = db.liveEra or 0
+  if D.NERF and era < 3 then
+    for id, v in pairs(db.live) do
       local q = Q.Get(id)
-      -- (a dungeon quest whose multiplier was read as x1 had no extra to lose: its reading stays)
-      if q and (q.nerfed or (q.dungeon and q.unconfirmed)) then db.live[id] = nil; q.liveFull = nil end
+      if q then
+        local stale = false
+        if q.nerfed or q.confirmed or (q.mult or 1) > 1 then
+          stale = (v.full or 0) > QB.Model.Listed(q) * 1.15
+        elseif q.dungeon and q.unconfirmed and era < 2 then
+          stale = true -- an unread dungeon quest: the old reading may carry the old extra
+        end
+        if stale then db.live[id] = nil; q.liveFull = nil end
+      end
     end
-    db.liveEra = 2
+    db.liveEra = 3
   end
   for id, v in pairs(db.live) do
     local q = Q.Get(id)

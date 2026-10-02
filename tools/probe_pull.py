@@ -196,7 +196,52 @@ def disc_of(kind, data):
 # --------------------------------------------------------------------------------------- the merge
 def empty():
     return {"meta": {"last_id": 0, "uploads": 0, "with_notes": 0, "sources": {}, "pulled": None},
-            "q": {}, "npc": {}, "offer": {}, "chain": {}, "item": {}}
+            "q": {}, "npc": {}, "offer": {}, "chain": {}, "item": {}, "seen": {}}
+
+
+# ----------------------------------------------------------------------------------- the XP seen
+def merge_seen(acc, kind, data):
+    """What the game paid: QuestBankDB.turnins (every hand-in, with the XP the event reported) and the
+    player's own quest-window readings in QuestBankDB.live (src npc/log/turnin; party-shared ones are
+    someone else's reading and are left out). Votes per quest, keyed "xp:level:build:src:era" where
+    build is the client build the upload ran on (disc.build) and era is QuestBankDB.liveEra (the
+    addon's purge of pre-cut readings: 0 means the table may still hold them; hand-ins carry 9, each
+    one is dated). gen_data.py decides what counts."""
+    if kind != "questbank-savedvars" or not isinstance(data, dict):
+        return 0
+    disc = data.get("disc") if isinstance(data.get("disc"), dict) else {}
+    try:
+        build = int(disc.get("build") or 0)
+    except (TypeError, ValueError):
+        build = 0
+    try:
+        era = int(data.get("liveEra") or 0)
+    except (TypeError, ValueError):
+        era = 0
+    seen = acc.setdefault("seen", {})
+    n = 0
+
+    def vote(qid, xp, lvl, src, e):
+        nonlocal n
+        try:
+            qid, xp, lvl = int(qid), int(xp), int(lvl or 0)
+        except (TypeError, ValueError):
+            return
+        if qid <= 0 or xp <= 0:
+            return
+        key = "%d:%d:%d:%s:%d" % (xp, lvl, build, src, e)
+        q = seen.setdefault(str(qid), {})
+        q[key] = q.get(key, 0) + 1
+        n += 1
+
+    for t in data.get("turnins") or []:
+        if isinstance(t, dict) and not t.get("hidden") and isinstance(t.get("xp"), (int, float)):
+            vote(t.get("id"), t["xp"], t.get("level"), "turnin", 9)
+    live = data.get("live") if isinstance(data.get("live"), dict) else {}
+    for qid, v in live.items():
+        if isinstance(v, dict) and v.get("src") in ("npc", "log", "turnin") and isinstance(v.get("full"), (int, float)):
+            vote(qid, v["full"], v.get("lvl"), v["src"], era)
+    return n
 
 
 def _vote(table, key, value):
@@ -256,6 +301,7 @@ def merge_upload(acc, text, source="local"):
     kind, data = decode(text)
     acc["meta"]["uploads"] += 1
     acc["meta"]["sources"][source] = acc["meta"]["sources"].get(source, 0) + 1
+    merge_seen(acc, kind, data)
     d = disc_of(kind, data)
     if d is None:
         return kind, False
@@ -266,9 +312,10 @@ def merge_upload(acc, text, source="local"):
 
 def summary(acc):
     contested = sum(1 for q in acc["q"].values() for votes in q["xp"].values() if len(votes) > 1)
-    return "%d uploads (%d with notes): %d quests, %d NPCs, %d offering NPCs, %d chain steps, %d item starts; %d XP readings disagree" % (
+    sightings = sum(sum(v.values()) for v in (acc.get("seen") or {}).values())
+    return "%d uploads (%d with notes): %d quests, %d NPCs, %d offering NPCs, %d chain steps, %d item starts; %d XP readings disagree; %d XP sightings on %d quests" % (
         acc["meta"]["uploads"], acc["meta"]["with_notes"], len(acc["q"]), len(acc["npc"]), len(acc["offer"]),
-        len(acc["chain"]), len(acc["item"]), contested)
+        len(acc["chain"]), len(acc["item"]), contested, sightings, len(acc.get("seen") or {}))
 
 
 # ----------------------------------------------------------------------------------------- the pull
@@ -358,6 +405,15 @@ def selftest():
     assert acc["offer"]["c197"] == {"7": 2, "15": 3} and acc["offer"]["c240"] == {"62": 6}
     assert acc["item"] == {"1000": 2158} and acc["q"]["2158"]["from"] == ["i1000", "c823"]
     assert acc["meta"]["uploads"] == 3 and acc["meta"]["with_notes"] == 3 and acc["meta"]["sources"] == {"fixture": 3}
+    # what the game paid: hand-ins and own window readings vote, party readings and hidden numbers don't
+    acc2 = empty()
+    n = merge_seen(acc2, "questbank-savedvars", {
+        "disc": {"v": 1, "q": {}, "build": 70170}, "liveEra": 3,
+        "turnins": [{"id": 971, "xp": 6550, "level": 22}, {"id": 971, "xp": 6550, "level": 22}, {"id": 5, "xp": 0, "level": 3},
+                    {"id": 1200, "xp": None, "level": 24, "hidden": True}],
+        "live": {"386": {"full": 4200, "lvl": 22, "src": "npc"}, "1200": {"full": 8007, "lvl": 20, "src": "party"}}})
+    assert n == 3 and acc2["seen"] == {"971": {"6550:22:70170:turnin:9": 2}, "386": {"4200:22:70170:npc:3": 1}}, acc2["seen"]
+    assert merge_seen(acc2, "export", {"turnins": [{"id": 1, "xp": 5, "level": 1}]}) == 0, "exports carry no hand-ins"
     json.dumps(acc)  # everything JSON-clean
     print("selftest OK:", summary(acc))
 
@@ -370,6 +426,7 @@ def main():
     ap.add_argument("--merge", nargs="+", metavar="FILE", help="merge these local files instead of pulling")
     ap.add_argument("--parse", metavar="FILE", help="print one file as JSON and exit")
     ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--rebuild", action="store_true", help="start over from the decoded uploads in --raw-dir, then pull")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
@@ -378,6 +435,15 @@ def main():
         print(json.dumps({"kind": kind, "data": data}, indent=1, ensure_ascii=False))
         return
     acc = json.load(open(a.out)) if os.path.exists(a.out) else empty()
+    if a.rebuild:
+        acc = empty()
+        for f in sorted(os.listdir(a.raw_dir)):
+            m = re.match(r"^(\d+)-", f)
+            if not m:
+                continue
+            acc["meta"]["last_id"] = max(acc["meta"]["last_id"], int(m.group(1)))
+            kind, notes = merge_upload(acc, open(os.path.join(a.raw_dir, f), encoding="utf-8").read(), "rebuild")
+        print("rebuilt from %d decoded upload(s)" % acc["meta"]["uploads"])
     if a.merge:
         for f in a.merge:
             kind, notes = merge_upload(acc, open(f, encoding="utf-8").read(), "local")

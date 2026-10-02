@@ -226,6 +226,8 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
     src = QB.Live.Source(q) or "the game's own number"
   elseif q.xpUnknown then
     src = "not known yet"
+  elseif q.confirmed then
+    src = string.format("%s x %s, as the game paid after the cut", QB.Comma(q.base), (tostring(q.mult):gsub("%.?0+$", "")))
   elseif q.dungeonMult then
     src = string.format("%s x %s, as its dungeon's other quests", QB.Comma(q.base), (tostring(q.mult):gsub("%.?0+$", "")))
   elseif q.unconfirmed then
@@ -242,7 +244,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   if q.classic and not q.liveFull then
     tip:AddLine("From the Classic database: not seen in Forever yet, so it may differ or not exist.", 1, 0.6, 0.3, true)
   end
-  if q.nerfed and not q.liveFull and not q.xpUnknown then
+  if q.nerfed and not q.confirmed and not q.liveFull and not q.xpUnknown then
     tip:AddLine("Blizzard halved the extra XP of dungeon quests on 1 October 2026. This is the earlier reading with that cut applied; the game's own number takes over when you see the quest window or hand it in.", 1, 0.6, 0.3, true)
   end
   if q.liveFull and math.abs(q.liveFull - QB.Model.Listed(q)) > 25 then

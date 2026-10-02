@@ -13,8 +13,8 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 | Quest giver with a position (quests that start from an item don't need one) | 2135 | 250 | 1459 | 12 |
 | Chain known (Wowhead Forever series or the Classic database) | 2135 | 428 | 1459 | 0 |
 
-On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every dungeon quest's multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip.
-Multiplied quests Wowhead does not type as dungeon quests, left as read until someone hands one in after the cut: 1806 The Test of Righteousness x2.5, 78307 The Horn of Xelthos x3, 97003 Chol'aruk the Ravener x3, 97005 Chol'aruk the Ravener x3, 98423 The Treaty of Understanding x3.4.
+On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip. Hand-ins on 2026-10-02 paid exactly that on every multiplied quest, dungeon-typed or not.
+What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 38 quests confirmed, 2 corrected to the game's number: 392 The Curious Visitor 590 -> 600, 1654 The Test of Righteousness 870 -> 875, 0 with no XP in the catalog filled in.
 
 Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read, before the cut): Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
 
@@ -27,7 +27,7 @@ Classic frame and were moved to Forever's; 58 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 26.
 
-Seen in Forever by players (13 uploads merged by probe_pull.py, 2026-10-02T00:26:49Z): 31 quests, 0 of them Classic seeds now confirmed.
+Seen in Forever by players (16 uploads merged by probe_pull.py, 2026-10-02T06:38:28Z): 82 quests, 0 of them Classic seeds now confirmed.
 Seen in game but not in the catalog (1), to add: 91904 A Sealed Crate.
 
 Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both have a number, they disagree on 0:

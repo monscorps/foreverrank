@@ -1209,7 +1209,7 @@ end
 UI:ShowTab(3)
 print("route now:", v3.summary:GetText())
 assert(QB:Mode() == "lock" and QB:Lock() == 20 and QB.CAP == 30, "level 20 at a cap of 20: banking for 30")
-assert(v3.summary:GetText() == "66,610 XP  |  level 22.67  |  93 min  |  at 60 min 22.64", "the owner's banked route is unchanged, got: " .. tostring(v3.summary:GetText()))
+assert(v3.summary:GetText() == "64,970 XP  |  level 22.61  |  93 min  |  at 60 min 22.58", "the owner's banked route is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
 for _, l in ipairs(v3.legs.items) do
   if l:IsShown() then
@@ -1222,7 +1222,7 @@ v3.modePlan.__scripts.OnClick(v3.modePlan)
 QB.Model.Finish()
 UI:Refresh()
 print("route plan:", v3.summary:GetText())
-assert(v3.summary:GetText() == "95,250 XP  |  level 23.66  |  138 min  |  at 60 min 23.50", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
+assert(v3.summary:GetText() == "93,610 XP  |  level 23.61  |  138 min  |  at 60 min 23.45", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
 for _, key in ipairs({ "mounted", "bag", "pins" }) do
   local b = UI.header.toggles[key]
@@ -2218,9 +2218,16 @@ do
   assert(arugal.mult == 2.675 and arugal.nerfed, "Arugal Must Die: 4.35 -> 2.675")
   assert(satchel.mult == 2.025 and satchel.nerfed, "Returning the Lost Satchel: 3.05 -> 2.025")
   assert(brother.mult == 1 and not brother.nerfed and brother.dungeon, "Oh Brother... stays at x1: no extra to cut")
-  local righteous, cholaruk = Qs.Get(1806), Qs.Get(97005)
-  assert(righteous.mult == 2.5 and not righteous.nerfed and not righteous.dungeon, "The Test of Righteousness, a class quest with a multiplier, keeps its reading")
-  assert(cholaruk.mult == 3 and not cholaruk.nerfed and cholaruk.group, "Chol'aruk the Ravener, an outdoor group quest, keeps its reading")
+  -- hand-ins uploaded on 2026-10-02 paid the cut value on multiplied quests outside dungeons too, so the cut
+  -- covers every multiplied quest, and a quest the game paid is marked confirmed
+  local righteous, cholaruk, knowledge = Qs.Get(1806), Qs.Get(97005), Qs.Get(971)
+  assert(righteous.mult == 1.75 and righteous.nerfed and righteous.confirmed and not righteous.dungeon, "The Test of Righteousness: 2.5 -> 1.75, as a hand-in paid")
+  assert(cholaruk.mult == 2 and cholaruk.nerfed and cholaruk.confirmed and cholaruk.group, "Chol'aruk the Ravener: 3 -> 2, as a hand-in paid")
+  assert(knowledge.confirmed and QB.Model.Full(knowledge) == 6550, "Knowledge in the Deeps: 6,550, as the hand-in paid")
+  assert(not villainy.confirmed, "Blackfathom Villainy: only a party member's number so far, still computed")
+  lines = {}
+  QB.UI.QuestTooltip(owner.env.GameTooltip, knowledge, QB:Status(knowledge), QB.Model.XpAt(knowledge, 20), 100, 20)
+  assert(not table.concat(lines, "\n"):find("halved", 1, true), "a confirmed quest no longer says its number is computed")
   assert(QB.Model.Full(villainy) == 7850, "3,300 x 2.375 = 7,837.5, rounded to 7,850 (was 12,400), got " .. tostring(QB.Model.Full(villainy)))
   -- the tooltip says the number is computed, and whose number wins
   lines = {}
@@ -2239,15 +2246,23 @@ do
   end
   assert(unread, "a dungeon quest whose multiplier nobody has read")
   db.live = { [166] = { full = 9750, lvl = 20, src = "party" }, [5] = { full = 400, lvl = 20, src = "npc" },
-              [167] = { full = 1550, lvl = 20, src = "npc" }, [unread] = { full = 4000, lvl = 30, src = "party" } }
+              [167] = { full = 1550, lvl = 20, src = "npc" }, [unread] = { full = 4000, lvl = 30, src = "party" },
+              [971] = { full = 6550, lvl = 22, src = "turnin" }, [1200] = { full = 8007, lvl = 20, src = "party" } }
   db.liveEra = nil
   Qs.Get(166).liveFull = 9750
   QB.Live.Apply()
   assert(db.live[166] == nil and Qs.Get(166).liveFull == nil, "The Defias Brotherhood's pre-cut number is forgotten")
-  assert(db.live[5] and db.live[5].full == 400 and Qs.Get(5).liveFull == 400 and db.liveEra == 2, "a zone quest's number stays; the purge is marked done")
+  assert(db.live[5] and db.live[5].full == 400 and Qs.Get(5).liveFull == 400 and db.liveEra == 3, "a zone quest's number stays; the purge is marked done")
   assert(db.live[167] and Qs.Get(167).liveFull == 1550, "Oh Brother..., read at x1, had no extra to lose: its number stays")
   assert(db.live[unread] == nil and Qs.Get(unread).liveFull == nil, "an unread dungeon quest's number may have carried the old extra: forgotten")
-  Qs.Get(167).liveFull = nil
+  assert(db.live[971] and Qs.Get(971).liveFull == 6550, "a fresh post-cut hand-in number stays")
+  assert(db.live[1200] and Qs.Get(1200).liveFull == 8007, "a party number near the cut value (8,007 against 7,850) is fresh and stays")
+  -- 3.4.4 and 3.4.5 users (era 2) keep what they learned since, including unread dungeon quests
+  db.live = { [unread] = { full = 4000, lvl = 30, src = "npc" }, [166] = { full = 9750, lvl = 20, src = "party" } }
+  db.liveEra = 2
+  QB.Live.Apply()
+  assert(db.live[unread] and db.live[166] == nil and db.liveEra == 3, "era 2: the unread dungeon reading stays, the stale pre-cut number goes")
+  Qs.Get(unread).liveFull, Qs.Get(971).liveFull, Qs.Get(1200).liveFull, Qs.Get(167).liveFull = nil, nil, nil, nil
   db.live[166] = { full = 6200, lvl = 20, src = "party" }
   QB.Live.Apply()
   assert(db.live[166] and Qs.Get(166).liveFull == 6200, "after the purge, new numbers for the same quest are kept")
