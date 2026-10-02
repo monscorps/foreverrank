@@ -1054,6 +1054,64 @@ end
 ----------------------------------------------------------------------------
 local LEFT, RIGHT = 16, 420
 
+-- what the finder looks for among the quests you could still take
+UI.FINDS = {
+  { key = "xp", name = "Highest XP", tip = "The quests that pay the most XP for a slot: advance a chain, fill a free slot, or swap out a weak quest." },
+  { key = "gear", name = "Best gear", tip = "Quests whose reward is a piece you can wear or wield, the highest item level first." },
+  { key = "trinket", name = "Trinkets", tip = "Quests that reward a trinket, a ring or a necklace, the highest item level first." },
+  { key = "recipe", name = "Recipes", tip = "Quests that reward a recipe, pattern, plan or formula." },
+}
+UI.findMode = "xp"
+
+-- the heaviest armour you can wear, by class: everything lighter fits too. Warriors and paladins wear mail
+-- until plate at 40; hunters and shamans leather until mail at 40
+local ARMOR = { WARRIOR = 512, PALADIN = 512, HUNTER = 256, SHAMAN = 256, ROGUE = 128, DRUID = 128, MAGE = 64, PRIEST = 64, WARLOCK = 64 }
+local function wearable(kinds, level)
+  local offered = 0
+  for _, bit in ipairs({ 512, 256, 128, 64 }) do if math.floor(kinds / bit) % 2 == 1 then offered = offered + bit end end
+  if offered == 0 then return true end -- weapons, rings, trinkets, cloaks: no armour class
+  local mine = ARMOR[QB.state.class or ""] or 512
+  if (level or 60) < 40 and mine >= 256 then mine = mine / 2 end
+  for _, bit in ipairs({ 64, 128, 256, 512 }) do
+    if math.floor(offered / bit) % 2 == 1 and bit <= mine then return true end
+  end
+  return false
+end
+
+local function itemName(id)
+  if not id or id == 0 then return nil end
+  local name = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(id)
+  if not name and GetItemInfo then name = GetItemInfo(id) end
+  return name
+end
+
+-- the finder's rows for a reward kind: quests you could take (any status but done, wrong or held) whose rewards
+-- fit the kind, the best item level first; { q, value, st, reward = { ilvl, kinds, id } }
+function UI:FindRewards(kind, level)
+  local R = QB.Data.REWARD
+  if not R then return {} end
+  local out = {}
+  for _, c in ipairs(self:Candidates(nil, level)) do
+    local r = R[c.id]
+    if r and not c.behind then
+      local kinds = r[2]
+      local hit
+      if kind == "gear" then hit = kinds % 2 == 1 and r[1] > 0 and wearable(kinds, level)
+      elseif kind == "trinket" then hit = math.floor(kinds / 2) % 2 == 1 or math.floor(kinds / 4) % 2 == 1
+      elseif kind == "recipe" then hit = math.floor(kinds / 8) % 2 == 1 end
+      if hit then
+        local q = Q.Get(c.id)
+        if q then out[#out + 1] = { q = q, value = QB.Model.XpAt(q, level), st = QB:Status(q), reward = r, mins = c.mins } end
+      end
+    end
+  end
+  table.sort(out, function(a, b)
+    if a.reward[1] ~= b.reward[1] then return a.reward[1] > b.reward[1] end
+    return a.value > b.value
+  end)
+  return out
+end
+
 function UI:CreateLogView(parent)
   local v = CreateFrame("Frame", nil, parent)
   v:SetAllPoints()
@@ -1132,18 +1190,35 @@ function UI:CreateLogView(parent)
   v.drops:SetPoint("TOPLEFT", LEFT, -366)
   v.drops:SetHeight(50)
 
-  -- swaps
+  -- the finder: what to look for in the quests you could still take
   local st = text(v, "GameFontNormalLarge", 15, INK, "LEFT", 320)
   st:SetPoint("TOPLEFT", RIGHT, -12)
-  st:SetText("Better use of a slot")
-  v.swapHint = text(v, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 330)
-  v.swapHint:SetPoint("TOPLEFT", RIGHT, -32)
-  v.swapHint:SetText("Advance a chain, fill a free slot, or swap a weak quest.")
+  st:SetText("Find quests")
+  v.finds = {}
+  for i, m in ipairs(UI.FINDS) do
+    local b = CreateFrame("Button", nil, v)
+    b:SetSize(80, 18)
+    b:SetPoint("TOPLEFT", RIGHT + (i - 1) * 84, -34)
+    b.hi = tex(b, "HIGHLIGHT", T.rowHi)
+    b.hi:SetAllPoints()
+    b.hi:SetBlendMode("ADD")
+    b.label = text(b, "GameFontNormalSmall", 10, INK_SOFT, "CENTER", 80)
+    b.label:SetPoint("CENTER", 0, 0)
+    b.label:SetText(m.name)
+    b.label.base = m.name
+    b.key = m.key
+    b:SetScript("OnClick", function(self) UI.findMode = self.key; UI:Refresh() end)
+    tooltip(b, function(tip, self)
+      tip:AddLine(m.name, GOLD[1], GOLD[2], GOLD[3])
+      tip:AddLine(m.tip, 1, 1, 1, true)
+    end)
+    v.finds[i] = b
+  end
   v.swaps = {}
   for i = 1, 8 do
     local r = CreateFrame("Button", nil, v)
     r:SetSize(334, 38)
-    r:SetPoint("TOPLEFT", RIGHT, -52 - (i - 1) * 40)
+    r:SetPoint("TOPLEFT", RIGHT, -58 - (i - 1) * 40)
     r.hi = tex(r, "HIGHLIGHT", T.rowHi)
     r.hi:SetAllPoints()
     r.hi:SetBlendMode("ADD")
@@ -1177,13 +1252,15 @@ function UI:CreateLogView(parent)
         tip:AddLine(" ")
       end
       if self.add then UI.QuestTooltip(tip, self.add, QB:Status(self.add), self.addValue) end
+      if self.reward then tip:AddLine(self.reward, 0.75, 0.75, 1, true) end
     end)
     v.swaps[i] = r
   end
   v.noSwaps = para(v, "GameFontNormal", 12, INK_SOFT, 320)
-  v.noSwaps:SetPoint("TOPLEFT", RIGHT, -58)
+  v.noSwaps:SetPoint("TOPLEFT", RIGHT, -64)
+  v.noSwaps:SetHeight(44)
   v.legend = text(v, "GameFontNormalSmall", 10, INK_SOFT, "LEFT", 334)
-  v.legend:SetPoint("TOPLEFT", RIGHT, -376)
+  v.legend:SetPoint("TOPLEFT", RIGHT, -384)
 
   v.Refresh = function() UI:RefreshLogView(v) end
   return v
@@ -1465,6 +1542,45 @@ function UI:RefreshLogView(v)
   else
     v.drops:SetText("")
   end
+
+  -- the finder's mode buttons
+  for _, b in ipairs(v.finds) do
+    local on = b.key == UI.findMode
+    local col = on and INK or INK_SOFT
+    b.label:SetTextColor(col[1], col[2], col[3])
+    b.label:SetText(on and ("[" .. b.label.base .. "]") or b.label.base)
+  end
+  if UI.findMode ~= "xp" then
+    local found = self:FindRewards(UI.findMode, s.level)
+    for i, r in ipairs(v.swaps) do
+      local d = found[i]
+      if d then
+        r:Show()
+        r.add, r.addValue, r.via, r.cutTitle, r.cutValue = d.q, d.value, nil, nil, nil
+        local id = d.reward[3]
+        local name = itemName(id) or (id and id > 0 and ("item " .. id)) or (UI.findMode == "recipe" and "a recipe" or "a reward")
+        setIcon(r.addIcon, (id and id > 0 and QB.API.ItemIcon(id, d.q.icon)) or d.q.icon)
+        r.addName:SetText(d.q.name)
+        local place = d.q.cat and d.q.cat.name or ""
+        local mins = d.mins and string.format(", %d min", math.floor(d.mins + 0.5)) or ""
+        local room = r.cutName:GetWidth() - 2
+        for _, line in ipairs({ name .. " · " .. place .. mins, name .. " · " .. place, name }) do
+          r.cutName:SetText(line)
+          if r.cutName:GetStringWidth() <= room then break end
+        end
+        r.gain:SetText(d.reward[1] > 0 and ("iL " .. d.reward[1]) or QB.Short(d.value))
+        r.reward = string.format("Rewards %s%s. %s XP %s.", name, d.reward[1] > 0 and string.format(" (item level %d)", d.reward[1]) or "", QB.Comma(d.value), QB:OnTheDay())
+      else
+        r:Hide()
+      end
+    end
+    v.noSwaps:SetShown(#found == 0)
+    v.noSwaps:SetText(UI.findMode == "gear" and "No quest within your level range rewards a piece you can wear. Settings widens the range."
+      or UI.findMode == "trinket" and "No quest within your level range rewards a trinket, ring or necklace."
+      or "No quest within your level range rewards a recipe.")
+    return
+  end
+  for _, r in ipairs(v.swaps) do r.reward = nil end
 
   -- swaps: advance a chain you hold, fill a free slot, or swap a weak quest for a better one
   local lvl = s.level

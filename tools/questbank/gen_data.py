@@ -1071,7 +1071,7 @@ lines.append("-- [id] = { {continent, world x, world y, radius}, ... }: where th
 lines.append("D.OBJ = " + keyed(OBJ))
 
 # what a quest rewards, for the finder: the best item level among its reward items, what kinds they are
-# (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable), and the id of the best piece
+# (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable, 64 cloth, 128 leather, 256 mail, 512 plate offered), and the id of the best piece
 _ITEMS = (load_json(os.path.join(REPO, "plan", "items-db.json")) or {})
 _ITEMS = _ITEMS.get("items") or _ITEMS
 if isinstance(_ITEMS, list):
@@ -1091,6 +1091,8 @@ for qid in IDS:
             kinds |= 1
             if ilvl > best:
                 best, bestId = ilvl, int(iid)
+        # the armour class of the pieces offered, so the finder can leave out what you can't wear
+        kinds |= {"Cloth": 64, "Leather": 128, "Mail": 256, "Plate": 512}.get(str(it.get("type") or ""), 0)
         if slot == "trinket":
             kinds |= 2
         if slot in ("finger", "neck"):
@@ -1103,7 +1105,7 @@ for qid in IDS:
             kinds |= 32
     if kinds:
         REWARD[qid] = [best, kinds, bestId]
-lines.append("-- [id] = { best item level among the rewards, kinds (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable), best item }")
+lines.append("-- [id] = { best item level among the rewards, kinds (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable, 64 cloth, 128 leather, 256 mail, 512 plate), best item }")
 lines.append("D.REWARD = " + keyed(REWARD))
 lines.append("-- [id] = {{item, how many, name}, ...}: what the quest asks you to bring")
 lines.append("D.REQ = " + keyed(REQ))

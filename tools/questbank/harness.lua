@@ -2641,6 +2641,66 @@ do
   assert(#items == before, "Together leaves the list as it was")
 end
 
+-- 3.5.1: the Quest Log's right column is a finder: highest XP (the swaps), the best gear you can wear,
+-- trinkets and jewellery, recipes
+do
+  local U, R = QB.UI, QB.Data.REWARD
+  assert(R and next(R), "reward data is in the catalog")
+  U:ShowTab(1); U:Refresh()
+  assert(#v1.finds == 4, "four finder modes")
+  local function mode(key) for _, b in ipairs(v1.finds) do if b.key == key then return b end end end
+  local function shown() local out = {} for _, r in ipairs(v1.swaps) do if r:IsShown() then out[#out + 1] = r end end return out end
+  assert(mode("xp").label:GetText() == "[Highest XP]", "the current mode is bracketed: " .. tostring(mode("xp").label:GetText()))
+  for _, r in ipairs(shown()) do assert(r.gain:GetText():sub(1, 1) == "+", "the XP mode shows gains") end
+  -- best gear: pieces you can wear, the highest item level first
+  poke(mode("gear"))
+  assert(U.findMode == "gear" and mode("gear").label:GetText() == "[Best gear]", "clicking a mode selects it")
+  local rows = shown()
+  assert(#rows > 0, "a level-20 paladin finds gear quests")
+  local prev
+  for _, r in ipairs(rows) do
+    local rw = R[r.add.id]
+    assert(rw and rw[2] % 2 == 1 and rw[1] > 0, "a gear row rewards a piece: " .. r.add.name)
+    assert(math.floor(rw[2] / 512) % 2 == 0, "no plate before 40: " .. r.add.name)
+    assert(prev == nil or rw[1] <= prev, "the highest item level first: " .. r.add.name)
+    prev = rw[1]
+    assert(r.gain:GetText() == "iL " .. rw[1], "the right column shows the item level: " .. r.gain:GetText())
+    assert(r.cutName:GetText():find("Item " .. rw[3], 1, true), "the second line names the item: " .. r.cutName:GetText())
+    assert(not QB.Quest.Behind(r.add.id), "a quest you are probably past is not offered")
+    assert(not QB.state.log[r.add.id], "nor one already in your log")
+  end
+  lines = {}; rows[1].__scripts.OnEnter(rows[1])
+  assert(table.concat(lines, "\n"):find("Rewards Item " .. R[rows[1].add.id][3] .. " (item level", 1, true), "the tooltip names the reward")
+  print(string.format("finder gear: %d rows, best %s (iL %d)", #rows, rows[1].add.name, R[rows[1].add.id][1]))
+  -- trinkets, rings and necklaces
+  poke(mode("trinket"))
+  rows = shown()
+  for _, r in ipairs(rows) do
+    local k = R[r.add.id][2]
+    assert(math.floor(k / 2) % 2 == 1 or math.floor(k / 4) % 2 == 1, "a trinket row rewards a trinket, ring or necklace: " .. r.add.name)
+  end
+  print(string.format("finder trinkets: %d rows%s", #rows, rows[1] and (", first " .. rows[1].add.name) or ""))
+  if #rows == 0 then assert(v1.noSwaps:IsShown() and v1.noSwaps:GetText():find("trinket", 1, true), "an empty mode says so") end
+  -- recipes
+  poke(mode("recipe"))
+  rows = shown()
+  for _, r in ipairs(rows) do assert(math.floor(R[r.add.id][2] / 8) % 2 == 1, "a recipe row rewards a recipe: " .. r.add.name) end
+  print(string.format("finder recipes: %d rows%s", #rows, rows[1] and (", first " .. rows[1].add.name) or ""))
+  -- a cloth wearer never sees mail
+  local T2, TU = newbie.QB, newbie.QB.UI
+  TU:ShowTab(1); TU.findMode = "gear"; TU:Refresh()
+  for _, r in ipairs(TU.views[1].swaps) do
+    if r:IsShown() then
+      local k = T2.Data.REWARD[r.add.id][2]
+      assert(math.floor(k / 256) % 2 == 0 and math.floor(k / 512) % 2 == 0 or math.floor(k / 64) % 2 == 1, "a priest is offered nothing in mail or plate alone: " .. r.add.name)
+    end
+  end
+  TU.findMode = "xp"
+  -- back to the swaps
+  poke(mode("xp"))
+  for _, r in ipairs(shown()) do assert(r.gain:GetText():sub(1, 1) == "+", "the XP mode is back") end
+end
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
