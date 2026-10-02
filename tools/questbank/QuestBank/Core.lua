@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.4.4"
+QB.version = "3.4.5"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -563,7 +563,8 @@ function Live.Apply()
   if D.NERF and (db.liveEra or 0) < 2 then
     for id in pairs(db.live) do
       local q = Q.Get(id)
-      if q and (q.nerfed or q.dungeon) then db.live[id] = nil; q.liveFull = nil end
+      -- (a dungeon quest whose multiplier was read as x1 had no extra to lose: its reading stays)
+      if q and (q.nerfed or (q.dungeon and q.unconfirmed)) then db.live[id] = nil; q.liveFull = nil end
     end
     db.liveEra = 2
   end
@@ -571,6 +572,12 @@ function Live.Apply()
     local q = Q.Get(id)
     if q then q.liveFull = v.full end
   end
+end
+
+-- a value from the client, or nil when the client hides it (a secret value): for ids and names before any use
+function QB.Plain(v)
+  if issecretvalue and issecretvalue(v) then return nil end
+  return v
 end
 
 -- what the game hands addons for a quest's XP on this client, the last dozen times (window and hand-in): the
@@ -1634,7 +1641,8 @@ end
 local function onTurnIn(questID, xpReward)
   QB.NoteXPSeen("turnin", questID, xpReward)
   if issecretvalue and issecretvalue(questID) then return end
-  if issecretvalue and issecretvalue(xpReward) then xpReward = nil end -- hidden: treated as "not told", not as 0
+  local hidden = (issecretvalue and issecretvalue(xpReward)) and true or false
+  if hidden then xpReward = nil end -- hidden from addons: "not told", never 0 (see below)
   turnedIn[questID] = true
   API.MarkDone(questID)
   local q = Q.Get(questID)
@@ -1642,12 +1650,21 @@ local function onTurnIn(questID, xpReward)
   local predicted = QB.routeNow and QB.routeNow.byQuest and QB.routeNow.byQuest[questID]
   table.insert(QuestBankDB.turnins, {
     id = questID, xp = xpReward, predicted = predicted, level = UnitLevel("player"), at = date("%Y-%m-%d %H:%M:%S"),
-    mult = q and q.mult, base = q and q.base,
+    mult = q and q.mult, base = q and q.base, hidden = hidden or nil,
   })
   local level = UnitLevel("player") or 0
   -- the lock, learned: a quest worth XP at this level paid none (the cap holds for every character on
   -- the realm, so it counts account-wide), until a hand-in at that level pays again
   local expected = q and QB.Model.XpAt(q, level) or 0
+  if hidden then
+    -- the game hid the number: nothing to learn about locks, no run to start; a run under way counts the plan's figure
+    Run.Record(questID, predicted or 0, q and q.name)
+    if q then
+      QB:Print(string.format("%s handed in. The game hides its XP from addons%s.", q.name,
+        (predicted and predicted > 0) and string.format("; the plan counted %s", QB.Comma(predicted)) or ""))
+    end
+    return
+  end
   -- (at a cap the game throws XP away, so the bar sits at 0: a stray quest that pays nothing isn't a lock)
   local locks = type(QuestBankDB.lock) == "table" and not QuestBankDB.lock.level and QuestBankDB.lock or {}
   QuestBankDB.lock = locks

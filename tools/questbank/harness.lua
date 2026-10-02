@@ -1209,7 +1209,7 @@ end
 UI:ShowTab(3)
 print("route now:", v3.summary:GetText())
 assert(QB:Mode() == "lock" and QB:Lock() == 20 and QB.CAP == 30, "level 20 at a cap of 20: banking for 30")
-assert(v3.summary:GetText() == "64,960 XP  |  level 22.61  |  93 min  |  at 60 min 22.58", "the owner's banked route is unchanged, got: " .. tostring(v3.summary:GetText()))
+assert(v3.summary:GetText() == "66,610 XP  |  level 22.67  |  93 min  |  at 60 min 22.64", "the owner's banked route is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
 for _, l in ipairs(v3.legs.items) do
   if l:IsShown() then
@@ -1222,7 +1222,7 @@ v3.modePlan.__scripts.OnClick(v3.modePlan)
 QB.Model.Finish()
 UI:Refresh()
 print("route plan:", v3.summary:GetText())
-assert(v3.summary:GetText() == "93,600 XP  |  level 23.61  |  138 min  |  at 60 min 23.45", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
+assert(v3.summary:GetText() == "95,250 XP  |  level 23.66  |  138 min  |  at 60 min 23.50", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
 for _, key in ipairs({ "mounted", "bag", "pins" }) do
   local b = UI.header.toggles[key]
@@ -2218,6 +2218,9 @@ do
   assert(arugal.mult == 2.675 and arugal.nerfed, "Arugal Must Die: 4.35 -> 2.675")
   assert(satchel.mult == 2.025 and satchel.nerfed, "Returning the Lost Satchel: 3.05 -> 2.025")
   assert(brother.mult == 1 and not brother.nerfed and brother.dungeon, "Oh Brother... stays at x1: no extra to cut")
+  local righteous, cholaruk = Qs.Get(1806), Qs.Get(97005)
+  assert(righteous.mult == 2.5 and not righteous.nerfed and not righteous.dungeon, "The Test of Righteousness, a class quest with a multiplier, keeps its reading")
+  assert(cholaruk.mult == 3 and not cholaruk.nerfed and cholaruk.group, "Chol'aruk the Ravener, an outdoor group quest, keeps its reading")
   assert(QB.Model.Full(villainy) == 7850, "3,300 x 2.375 = 7,837.5, rounded to 7,850 (was 12,400), got " .. tostring(QB.Model.Full(villainy)))
   -- the tooltip says the number is computed, and whose number wins
   lines = {}
@@ -2230,12 +2233,21 @@ do
   -- stale live XP: a party member's pre-cut Deadmines number goes, a zone quest's number stays, once
   local db = owner.env.QuestBankDB
   local keep = db.live
-  db.live = { [166] = { full = 9750, lvl = 20, src = "party" }, [5] = { full = 400, lvl = 20, src = "npc" } }
+  local unread
+  for id, r in pairs(D.Q) do
+    if r[10] % 2 == 1 and math.floor(r[10] / 8) % 2 == 1 and r[5] == 1 and (not unread or id < unread) then unread = id end
+  end
+  assert(unread, "a dungeon quest whose multiplier nobody has read")
+  db.live = { [166] = { full = 9750, lvl = 20, src = "party" }, [5] = { full = 400, lvl = 20, src = "npc" },
+              [167] = { full = 1550, lvl = 20, src = "npc" }, [unread] = { full = 4000, lvl = 30, src = "party" } }
   db.liveEra = nil
   Qs.Get(166).liveFull = 9750
   QB.Live.Apply()
   assert(db.live[166] == nil and Qs.Get(166).liveFull == nil, "The Defias Brotherhood's pre-cut number is forgotten")
   assert(db.live[5] and db.live[5].full == 400 and Qs.Get(5).liveFull == 400 and db.liveEra == 2, "a zone quest's number stays; the purge is marked done")
+  assert(db.live[167] and Qs.Get(167).liveFull == 1550, "Oh Brother..., read at x1, had no extra to lose: its number stays")
+  assert(db.live[unread] == nil and Qs.Get(unread).liveFull == nil, "an unread dungeon quest's number may have carried the old extra: forgotten")
+  Qs.Get(167).liveFull = nil
   db.live[166] = { full = 6200, lvl = 20, src = "party" }
   QB.Live.Apply()
   assert(db.live[166] and Qs.Get(166).liveFull == 6200, "after the purge, new numbers for the same quest are kept")
@@ -2245,7 +2257,12 @@ do
   -- secret values: the NPC's id (3.3.5's upload error at Discover.lua:33), a window's XP, a hand-in's XP
   local N2 = newbie.QB
   local ndb = newbie.env.QuestBankDB
-  local lock = ndb.lock
+  local realm = N2.RealmKey()
+  local lockBefore = ndb.lock and ndb.lock[realm]
+  local modeBefore = N2.mode
+  local said
+  local print0 = N2.Print
+  N2.Print = function(_, msg) said = msg end
   local liveBefore = N2.Quest.Get(15).liveFull
   local function noted() local q = ndb.disc.q[15]; local n = 0; for _ in pairs(q and q.xp or {}) do n = n + 1 end; return n end
   local notedBefore = noted()
@@ -2261,13 +2278,32 @@ do
   assert(N2.Quest.Get(15).liveFull == liveBefore and noted() == notedBefore, "a hidden number teaches nothing")
   newbie.ev(N2.eventFrame, "QUEST_TURNED_IN", 15, SECRET.num())
   assert(diag[#diag].how == "turnin" and diag[#diag].kind == "secret", "a hidden hand-in number is noted the same way")
+  assert((ndb.lock and ndb.lock[realm]) == lockBefore and N2.mode == modeBefore, "a hidden hand-in number is not a level lock")
+  assert(said and said:find("hides its XP", 1, true) and not said:find("+0 XP", 1, true) and not said:find("paid no XP", 1, true), "chat says the game hid the number: " .. tostring(said))
+  assert(ndb.turnins[#ndb.turnins].hidden == true and ndb.turnins[#ndb.turnins].xp == nil, "the hand-in record says hidden, not 0")
+  -- a hidden quest id: the windows note nothing, no table ever gets it as a key, Auto doesn't click
+  local st = N2:Settings()
+  local acc, turn = st.autoAccept, st.autoTurnIn
+  st.autoAccept, st.autoTurnIn = true, true
+  local clicks = #newbie.auto
+  newbie.window = { id = SECRET.num(), xp = 250, title = "Investigate Echo Ridge" }
+  newbie.ev(N2.eventFrame, "QUEST_DETAIL")
+  N2.Discover.OnEvent("QUEST_DETAIL", 0)
+  newbie.ev(N2.eventFrame, "QUEST_COMPLETE")
+  N2.Discover.OnEvent("QUEST_COMPLETE")
+  N2.Discover.OnEvent("QUEST_ACCEPTED", SECRET.num(), SECRET.num())
+  newbie.ev(N2.eventFrame, "QUEST_ACCEPTED", SECRET.num(), SECRET.num())
+  for k in pairs(ndb.disc.q) do assert(type(k) == "number", "a hidden id never becomes a discovery key") end
+  assert(diag[#diag].id == -1 and diag[#diag].kind == "number", "the ring notes a hidden id as -1")
+  assert(#newbie.auto == clicks, "Auto never clicks on a hidden id")
+  st.autoAccept, st.autoTurnIn = acc, turn
   newbie.window = { id = 15, xp = 250, title = "Investigate Echo Ridge" }
   newbie.ev(N2.eventFrame, "QUEST_DETAIL")
   assert(diag[#diag].how == "detail" and diag[#diag].kind == "number" and diag[#diag].v == 250, "a plain number is noted with its value")
   for _ = 1, 14 do newbie.ev(N2.eventFrame, "QUEST_DETAIL") end
   assert(#diag == 12, "the ring keeps a dozen")
   newbie.npcGUID, newbie.npcName, newbie.window = nil, nil, nil
-  ndb.lock = lock
+  N2.Print = print0
 end
 
 local seen = {}

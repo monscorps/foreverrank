@@ -101,11 +101,11 @@ local function now() return GetTime and GetTime() or 0 end
 
 function Disc.OnEvent(event, a1, a2)
   if event == "QUEST_DETAIL" then
-    local id = GetQuestID and GetQuestID()
+    local id = QB.Plain(GetQuestID and GetQuestID())
     if not id or id == 0 then return end
-    local q = quest(id, GetTitleText and GetTitleText())
+    local q = quest(id, QB.Plain(GetTitleText and GetTitleText()))
     local npc = who("npc")
-    local item = tonumber(a1)
+    local item = tonumber(QB.Plain(a1))
     if item and item > 0 then
       db().item[item] = id
       q.from = q.from or {}
@@ -121,9 +121,9 @@ function Disc.OnEvent(event, a1, a2)
     noteXP(q, GetRewardXP and GetRewardXP(), "window")
     if GetSuggestedGroupNum then q.g = GetSuggestedGroupNum() or q.g end
   elseif event == "QUEST_COMPLETE" then
-    local id = GetQuestID and GetQuestID()
+    local id = QB.Plain(GetQuestID and GetQuestID())
     if not id or id == 0 then return end
-    local q = quest(id, GetTitleText and GetTitleText())
+    local q = quest(id, QB.Plain(GetTitleText and GetTitleText()))
     local npc = who("npc")
     if npc then
       noteNpc(npc, UnitName and UnitName("npc"), here())
@@ -141,7 +141,7 @@ function Disc.OnEvent(event, a1, a2)
     lastTurnIn = { id = id, npc = npc, t = now() }
   elseif event == "QUEST_ACCEPTED" then
     -- (questID in the modern event; the log index first on Classic-style clients)
-    local id = a2 or a1
+    local id = QB.Plain(a2 or a1)
     if not id or not C_QuestLog then return end
     local q = quest(id)
     if C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetInfo then

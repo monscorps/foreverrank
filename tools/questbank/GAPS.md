@@ -13,9 +13,10 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 | Quest giver with a position (quests that start from an item don't need one) | 2135 | 250 | 1459 | 12 |
 | Chain known (Wowhead Forever series or the Classic database) | 2135 | 428 | 1459 | 0 |
 
-On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip.
+On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every dungeon quest's multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip.
+Multiplied quests Wowhead does not type as dungeon quests, left as read until someone hands one in after the cut: 1806 The Test of Righteousness x2.5, 78307 The Horn of Xelthos x3, 97003 Chol'aruk the Ravener x3, 97005 Chol'aruk the Ravener x3, 98423 The Treaty of Understanding x3.4.
 
-Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree: Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
+Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read, before the cut): Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
 
 Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,
 holidays, repeatable turn-ins, raids and battlegrounds are left out.

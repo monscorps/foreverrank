@@ -17,6 +17,13 @@ QB.Auto = Auto
 local Q = QB.Quest
 
 local function on(key) return QB:Settings()[key] == true end
+-- the quest the window shows: 0 when there is none, or when the client hides the id (a secret value)
+local function qid()
+  local id = GetQuestID and GetQuestID()
+  if not id or (issecretvalue and issecretvalue(id)) then return 0 end
+  return id
+end
+
 local function byHand() return (IsShiftKeyDown and IsShiftKeyDown()) and true or false end
 local function later(where, fn) C_Timer.After(0.05, QB.Safe(fn, "auto: " .. where)) end
 local function banking() return QB:Mode() == "lock" end
@@ -87,10 +94,10 @@ end
 -- the quest window: take it, unless the game would first ask you about PvP
 function Auto.Detail()
   if not on("autoAccept") or byHand() then return end
-  local id = GetQuestID and GetQuestID() or 0
+  local id = qid()
   if id == 0 then return end
   later("accept", function()
-    if byHand() or (GetQuestID and GetQuestID()) ~= id then return end
+    if byHand() or qid() ~= id then return end
     if QuestGetAutoAccept and QuestGetAutoAccept() then return end -- the game took it already
     if QuestFlagsPVP and QuestFlagsPVP() then return end -- the game asks first; so should you
     local repeatable = C_QuestLog and C_QuestLog.IsRepeatableQuest and C_QuestLog.IsRepeatableQuest(id)
@@ -102,9 +109,9 @@ end
 -- the progress window: hand it in when it is finished and QuestBank agrees, judged once the window is read
 function Auto.Progress()
   if byHand() or not on("autoTurnIn") then return end
-  local id = GetQuestID and GetQuestID() or 0
+  local id = qid()
   later("hand in", function()
-    if byHand() or (GetQuestID and GetQuestID()) ~= id or not Auto.MayTurnIn(id) then return end
+    if byHand() or qid() ~= id or not Auto.MayTurnIn(id) then return end
     if IsQuestCompletable and IsQuestCompletable() then CompleteQuest() end
   end)
 end
@@ -112,9 +119,9 @@ end
 -- the reward window: finish when there is nothing to choose and nothing to pay
 function Auto.Complete()
   if byHand() or not on("autoTurnIn") then return end
-  local id = GetQuestID and GetQuestID() or 0
+  local id = qid()
   later("reward", function()
-    if byHand() or (GetQuestID and GetQuestID()) ~= id or not Auto.MayTurnIn(id) then return end
+    if byHand() or qid() ~= id or not Auto.MayTurnIn(id) then return end
     if GetQuestMoneyToGet and (GetQuestMoneyToGet() or 0) > 0 then return end -- it costs money: the game asks
     local choices = (GetNumQuestChoices and GetNumQuestChoices()) or 0
     if choices <= 1 then GetQuestReward(choices) end -- one reward: take it; none: finish; several: yours to pick

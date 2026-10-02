@@ -700,7 +700,7 @@ for _cat, _ms in _seen_mult.items():
     _top = max(set(_ms), key=_ms.count)
     if len(_ms) >= 2 and _ms.count(_top) >= 0.6 * len(_ms) and _top != 1:
         DMULT[_cat] = _top
-FROM_FC, DISAGREE = [], []
+FROM_FC, DISAGREE, UNCUT = [], [], []
 REQ = {}
 TURNH = {}
 unconfirmed = 0
@@ -767,8 +767,11 @@ for qid in IDS:
     if sod_leftover(qid):
         flags |= 128
     if NERF != 1 and mult and mult > 1:
-        mult = nerfed(mult)  # the 2026-10-01 cut, computed until Wowhead's pages show the new numbers
-        flags |= 256
+        if flags & 1:
+            mult = nerfed(mult)  # the 2026-10-01 cut, computed until Wowhead's pages show the new numbers
+            flags |= 256
+        else:
+            UNCUT.append(qid)  # multiplied, but not a dungeon quest by type: Blizzard's note names dungeon quests
     side = {1: 1, 2: 2}.get(q.get("side"), 0)
     Q[qid] = [qlevel(qid), q.get("reqlevel") or 1, side, base, mult, turn, give, cat_for(qid), q.get("reqclass") or 0, flags]
     QN[qid] = q["name"]
@@ -859,7 +862,7 @@ def lua(v):
     if v is False: return "false"
     if isinstance(v, int): return str(v)
     if isinstance(v, float):
-        return str(int(v)) if v == int(v) else ("%.3f" % v).rstrip("0").rstrip(".")  # 3 decimals: the cut multipliers (2.375)
+        return str(int(v)) if v == int(v) else ("%.4f" % v).rstrip("0").rstrip(".")  # 4 decimals, as nerfed() rounds
     if isinstance(v, str): return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
     if isinstance(v, list): return "{" + ",".join(lua(x) for x in v) + "}"
     if isinstance(v, dict): return "{" + ",".join("%s=%s" % (k, lua(x)) for k, x in v.items() if x is not None) + "}"
@@ -1028,9 +1031,11 @@ def gap_report():
            "| Quest giver with a position (quests that start from an item don't need one) | %d | %d | %d | %d |" % (len(forever), len(F["no_give"]), len(classic), len(C["no_give"])),
            "| Chain known (Wowhead Forever series or the Classic database) | %d | %d | %d | %d |" % (len(forever), len(F["no_chain"]), len(classic), len(C["no_chain"])),
            "", ("On %s Blizzard cut dungeon-quest XP: \"50%% less extra experience beyond normal quest values\". Wowhead Forever's pages "
-                "still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x %s until they are re-read; "
-                "the addon says so in the quest tooltip.") % (NERF_DATE, NERF) if NERF != 1 else "",
-           "", "Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree: %s." % (
+                "still show the old multipliers, so every dungeon quest's multiplier above x1 is computed as 1 + (read - 1) x %s until they "
+                "are re-read; the addon says so in the quest tooltip.") % (NERF_DATE, NERF) if NERF != 1 else "",
+           ("Multiplied quests Wowhead does not type as dungeon quests, left as read until someone hands one in after the cut: %s." % (
+               ", ".join("%d %s x%s" % (q, QN[q], Q[q][4]) for q in UNCUT) or "none")) if NERF != 1 else "",
+           "", "Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read, before the cut): %s." % (
                ", ".join("%s x%s" % (CATS[c - 1]["name"], m) for c, m in sorted(DMULT.items(), key=lambda kv: CATS[kv[0] - 1]["name"])) or "none"),
            "", "Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,",
            "holidays, repeatable turn-ins, raids and battlegrounds are left out.",
