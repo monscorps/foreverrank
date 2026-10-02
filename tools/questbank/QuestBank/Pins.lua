@@ -102,7 +102,7 @@ function P:Build()
       if s.m and s.m > 0 then
         local lines = {}
         for _, row in ipairs(leg.rows) do lines[#lines + 1] = { row.q.name, QB.Comma(row.xp) } end
-        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, icon = T.questActive, late = leg.late,
+        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, icon = T.questActive, late = (leg.late and r.goal == "hour") or nil,
                             when = string.format("At %s, level %.1f to %.1f", QB.Clock(leg.t), leg.arrive, leg.leave), lines = lines }
       end
     end

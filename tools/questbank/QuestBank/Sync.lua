@@ -119,7 +119,7 @@ function S:Broadcast(force)
     if force or sig ~= self.lastQuests then for _, m in ipairs(msgs) do queue(m, ch) end end
   end
   self.lastStatus, self.lastQuests = status, sig
-  if force then QB:Print("Shared your bank with " .. table.concat(chans, " and "):lower() .. ".") end
+  if force then QB:Print("Shared your quests with " .. table.concat(chans, " and "):lower() .. ".") end
 end
 
 function S:Whisper(name)
@@ -127,7 +127,7 @@ function S:Whisper(name)
   queue(statusMsg(), "WHISPER", name)
   for _, m in ipairs((questMsgs())) do queue(m, "WHISPER", name) end
   queue("1R", "WHISPER", name)
-  QB:Print("Sent your bank to " .. name .. " and asked for theirs. They need QuestBank too.")
+  QB:Print("Sent your quests to " .. name .. " and asked for theirs. They need QuestBank too.")
 end
 
 -- a change: tell the others a few seconds later, once
@@ -390,7 +390,8 @@ function S:MemberTooltip(tip, key)
   if not m then return end
   local cc = classColors() and m.class and classColors()[m.class]
   tip:AddDoubleLine(m.name, m.version and ("QuestBank " .. m.version) or "", cc and cc.r or 1, cc and cc.g or 0.82, cc and cc.b or 0, 0.6, 0.6, 0.6)
-  tip:AddLine(string.format("Level %s, banked to %.1f, plan to %.1f (%.1f in the first hour)", m.level or "?", m.banked or 0, m.plan or 0, m.at60 or 0), 1, 1, 1, true)
+  tip:AddLine(string.format(QB:Banking() and "Level %s, banked to %.1f, plan to %.1f (%.1f in the first hour)" or "Level %s, ready quests take them to %.1f, their plan to %.1f",
+    m.level or "?", m.banked or 0, m.plan or 0, m.at60 or 0), 1, 1, 1, true)
   if m.runStart then tip:AddLine(string.format("Running for %s: %d handed in, +%s XP", QB.Clock(m.runMin), m.runN, QB.Comma(m.runXP)), 0.4, 1, 0.4) end
   if not m.quests then tip:AddLine("Their quest list hasn't arrived yet.", 0.6, 0.6, 0.6) return end
   local list = {}
@@ -399,7 +400,7 @@ function S:MemberTooltip(tip, key)
     if q then list[#list + 1] = { q = q, code = v.code, prog = v.prog, xp = QB.Model.XpAt(q, m.level or QB.state.level or 1) } end
   end
   table.sort(list, function(a, b) return a.xp > b.xp end)
-  local label = { b = "banked", a = "in their log", p = "to pick up" }
+  local label = { b = QB:Banking() and "banked" or "ready to hand in", a = "in their log", p = "to pick up" }
   -- twenty at a time, so the tooltip stays a tooltip; Shift held while hovering shows them all
   local cap = (IsShiftKeyDown and IsShiftKeyDown()) and #list or 20
   tip:AddLine(string.format("%d quest%s. Who else here holds each one, in their class colour:", #list, #list == 1 and "" or "s"), 0.6, 0.6, 0.6, true)

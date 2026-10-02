@@ -131,7 +131,7 @@ function A.Target(here)
 end
 
 local NOTHING = { route = { "No stop to go to", nil }, handin = { "Nothing finished to hand in", "Finish a quest and the arrow finds its NPC" },
-                  pickup = { "Nothing in your plan to pick up", "Add quests on the Plan page" }, pin = { "Nothing chosen yet", "Click a quest or a stop in QuestBank" } }
+                  pickup = { "Nothing on your pick-up list", "The ! on a quest on Available puts it there" }, pin = { "Nothing chosen yet", "Click a quest or a stop in QuestBank" } }
 local HEAD = { route = "Next stop: %s", handin = "Hand in at %s", pickup = "Pick up at %s", pin = "You chose: %s" }
 
 -- world x runs north and world y west; facing counts anticlockwise from north, as SetRotation turns

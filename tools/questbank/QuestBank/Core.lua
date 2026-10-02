@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.4.8"
+QB.version = "3.4.9"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -1098,7 +1098,7 @@ local function trackRemovals(s)
         local value = q and QB.Model.XpAt(q, s.level) or nil
         p.removed[id] = { title = title, at = time and time() or 0, value = value }
         if QB.loggedIn then
-          QB:Print(string.format("%s left your log without a hand-in%s. The plan no longer counts it.", title,
+          QB:Print(string.format("%s left your log without a hand-in%s. The route no longer counts it.", title,
             value and (" (worth about " .. QB.Comma(value) .. " XP)") or ""))
         end
       end
@@ -1146,6 +1146,7 @@ function QB:ReadState()
   s.xpMax = UnitXPMax("player") or 1
   s.log, s.logOrder = API.LogQuests()
   QB.ReadLogXp(s)
+  if QB.Run and QB.Run.Check then QB.Run.Check(s.level) end
   s.logCount = #s.logOrder
   s.mapID = API.MapID()
   s.bagStarts = API.BagQuestStarts()
@@ -1528,6 +1529,20 @@ function Run.Stop()
   QB:Print(string.format("Run ended: %d quests, %s XP in %s.", n, QB.Comma(got), QB.Clock((run.ended - run.started) / 60)))
   if n > 0 then Run.Offer("done", run) end
   QB:MarkDirty()
+end
+
+-- a hand-in run ends by itself when it has outlived the hour it was for: two hours have passed, or an hour and
+-- a half with you three levels past where it started. (The owner's run from the level-20 cap was still
+-- on at level 24, and everything spoke of banking.)
+function Run.Check(level)
+  local run = Run.Get()
+  if not run or run.mode == "quest" then return end
+  local mins = (time() - run.started) / 60
+  if mins > 120 or (mins > 90 and (level or 0) >= (run.level or level or 0) + 3) then
+    QB:Print(mins > 120 and "Your hand-in run ended by itself: two hours have passed. Questing from here."
+      or "Your hand-in run ended by itself: the hour is over and you are three levels on. Questing from here.")
+    Run.Stop()
+  end
 end
 
 function Run.Elapsed()
@@ -1971,7 +1986,7 @@ slash = function(msg)
     if QB.Minimap then QB.Minimap:Update() end
   elseif cmd == "route" then
     QB.UI:Open(3)
-  elseif cmd == "prep" or cmd == "plan" then
+  elseif cmd == "prep" or cmd == "plan" or cmd == "available" then
     QB.UI:Open(2)
   elseif cmd == "party" then
     QB.UI:Open(4)

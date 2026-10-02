@@ -1075,8 +1075,11 @@ do
   assert(bfd and bfd.skip.label:GetText() == "Skip" and bfd.gain:GetText() ~= "Skipped", "and the card reads normally again")
   -- a place with nothing of yours: Skip on its card makes it vanish, /qb skip brings it back
   local fetchOnly
-  for _, c in ipairs(UI.views[2].cards.items) do if c:IsShown() and c.skip:IsShown() and c.count:GetText() == "Nothing planned here yet" then fetchOnly = fetchOnly or c end end
-  assert(fetchOnly, "a card with nothing planned")
+  for _, c in ipairs(UI.views[2].cards.items) do
+    local t = c.count:GetText() or ""
+    if c:IsShown() and c.skip:IsShown() and t:find("available") and not t:find("in your log") and not t:find("to pick up") then fetchOnly = fetchOnly or c end
+  end
+  assert(fetchOnly, "a card with nothing of yours")
   local foTitle, foKey = fetchOnly.title:GetText(), fetchOnly.skip.key
   fetchOnly.skip.__scripts.OnClick(fetchOnly.skip)
   assert(QB:Settings().skipCat[foKey] and not card(foTitle), "Skip on a card with nothing of yours: the card goes")
@@ -1300,7 +1303,7 @@ for tab = 1, 5 do
     local l = v3.legs.items[2]
     if l then l.pin.__hover = true; hoverFirst(l.rows) end
   end
-  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Plan", "Hand-in Route", "Party", "Settings" })[tab] .. " (one row hovered)")
+  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Available", "Hand-in Route", "Party", "Settings" })[tab] .. " (one row hovered)")
   unhover()
 end
 
@@ -1325,7 +1328,7 @@ do
   -- cut from the menu, and keep again
   local id = b.q.id
   b.__scripts.OnClick(b, "RightButton")
-  for _, it in ipairs(m.items) do if it:IsShown() and it.label:GetText() == "Cut it from the plan" then it.__scripts.OnClick(it) end end
+  for _, it in ipairs(m.items) do if it:IsShown() and it.label:GetText() == "Leave it out of the route" then it.__scripts.OnClick(it) end end
   assert(QB:IsCut(id), "the menu cuts a quest")
   QB:ToggleAdd(id)
   assert(not QB:IsCut(id))
@@ -1811,7 +1814,7 @@ do
   local n = 0
   for _, c in ipairs(HU:Candidates(400)) do
     n = n + 1
-    assert(c.rank == c.value and c.away == nil and c.back == nil and c.lead == nil and c.time == nil and not c.waste, "banking keeps raw XP and no trip: " .. QB.Data.QN[c.id])
+    assert(c.rank == c.value and c.back == nil and c.lead == nil and c.time == nil and not c.waste, "banking keeps raw XP and weighs no trip: " .. QB.Data.QN[c.id])
   end
   assert(n > 0 and HU.candDropped == 0, "banking drops nothing")
   HU:ShowTab(1); HU:Refresh()
@@ -1877,7 +1880,7 @@ do
   A.Invalidate() -- the plan changed behind QuestBank's back; QB:MarkDirty does this in play
   assert(A.Mode() == "pickup" and A.Target() == nil, "an empty plan: nothing to pick up")
   F.__scripts.OnUpdate(F, 1)
-  assert(F.name:GetText():find("Nothing in your plan"), "and the arrow says so: " .. F.name:GetText())
+  assert(F.name:GetText():find("Nothing on your pick%-up list"), "and the arrow says so: " .. F.name:GetText())
   plan.add[1221] = true
   A.Invalidate() -- QB:MarkDirty does this when the plan changes through QuestBank
   t = A.Target()
@@ -2124,7 +2127,7 @@ do
   for tab = 1, 5 do
     U:ShowTab(tab); N.Model.Finish(); U:Refresh()
     for _, pr in ipairs(checkLayout(U.frame, "newbie tab " .. tab)) do problems[#problems + 1] = pr end
-    layouts[#layouts + 1] = dumpLayout(U.frame, "Level 3, questing: " .. ({ "Quest Log", "Plan", "Hand-in Route", "Party", "Settings" })[tab])
+    layouts[#layouts + 1] = dumpLayout(U.frame, "Level 3, questing: " .. ({ "Quest Log", "Available", "Hand-in Route", "Party", "Settings" })[tab])
   end
   U:ShowTab(3)
   print("newbie route:", U.views[3].summary:GetText(), "|", U.views[3].setup:GetText())
@@ -2200,12 +2203,7 @@ do
   N:Recompute(true)
   U:ShowTab(2); N.Model.Finish(); U:Refresh()
   for _, c in ipairs(U.views[2].cards.items) do
-    if c:IsShown() and c.title:GetText() == "Make room" then
-      for _, r in ipairs(c.rows.items) do
-        if r:IsShown() and r.entry then assert(r.value == nil or r.xp:GetText() == "?" or true) end
-      end
-      print("newbie make room:", c.count:GetText())
-    end
+    assert(not (c:IsShown() and c.title:GetText() == "Make room"), "no Make room card any more: the Quest Log slot tooltip carries that advice")
   end
 end
 
@@ -2487,6 +2485,97 @@ do
   assert(owner.env.QuestBankDB.plans["Mikal-Forever Normal"] == nil and QB:Plan().add[5], "the two spellings of the realm are one plan again")
   QB:Plan().add[5] = nil
   assert(tostring(owner.env.QuestBankDB.disc.build) == "70170", "the recorder notes the client build")
+end
+
+
+-- quests you chose to pick up show in the Quest Log grid's free slots, faded, with the pick-up mark
+do
+  local U = QB.UI
+  U.candMemo = nil
+  local pick
+  for _, c in ipairs(U:Candidates(60)) do
+    local q = QB.Quest.Get(c.id)
+    if q and not QB.state.log[c.id] and QB:Status(q).code == "todo" and not QB:Plan().add[c.id] then pick = q break end
+  end
+  assert(pick, "a quest to choose")
+  QB:Plan().add[pick.id] = true
+  U:ShowTab(1); U:Refresh()
+  local v1 = U.views[1]
+  local slot
+  for _, b in ipairs(v1.slots) do if b.pick and b.q and b.q.id == pick.id then slot = b end end
+  assert(slot and slot:IsShown() and slot.mark:IsShown() and slot.mark.__tex == QB.Data.TEX.questAvail, "the chosen quest fills a free slot with the pick-up mark")
+  assert(slot.xp:GetText() ~= "", "with its XP at your level")
+  lines = {}; slot.__scripts.OnEnter(slot)
+  assert(table.concat(lines, "\n"):find("To pick up: not in your log yet", 1, true), "its tooltip says it is still to pick up")
+  QB:Plan().add[pick.id] = nil
+  U:Refresh()
+  local still = false
+  for _, b in ipairs(v1.slots) do if b.pick and b.q and b.q.id == pick.id then still = true end end
+  assert(not still, "dropping the choice clears the slot")
+end
+
+
+-- 3.4.9: the Available tab. The game's own marks, a ! that puts a quest on your pick-up list, counts per card,
+-- and a hand-in run that ends by itself once it has outlived its hour
+do
+  local U, Dt = QB.UI, QB.Data.TEX
+  U.candMemo = nil
+  U:ShowTab(2); QB.Model.Finish(); U:Refresh()
+  assert(U.tabs[2].label:GetText() == "Available", "the tab is called Available")
+  local v2 = U.views[2]
+  assert(v2.intro:GetText():find("^Quests for you, level %d+ to %d+"), "the intro names the level window: " .. tostring(v2.intro:GetText()))
+  local todoRow, heldRow
+  for _, c in ipairs(v2.cards.items) do
+    if c:IsShown() then
+      assert(c.title:GetText() ~= "Make room", "no Make room card: the Quest Log slot tooltip carries that advice")
+      for _, r in ipairs(c.rows.items) do
+        if r:IsShown() and r.q then
+          assert(r.mark.__tex ~= Dt.questActive, "the game's ? is never a mark on Available")
+          if r.st.code == "todo" and not QB.state.log[r.q.id] and not QB:IsAdded(r.q.id) and not r.st.behind then todoRow = todoRow or r end
+          if QB.state.log[r.q.id] then heldRow = heldRow or r end
+        end
+      end
+    end
+  end
+  assert(todoRow and todoRow.mark.__tex == Dt.questAvail and todoRow.pick.pickable, "a quest you can pick up carries the game's ! and a live pick button")
+  assert(heldRow and (heldRow.mark.__tex == Dt.ready or heldRow.mark.__tex == Dt.waiting) and not heldRow.pick.pickable, "a quest in your log carries the check or the waiting disc")
+  assert(heldRow.away:GetText() == "", "no minutes on a quest you hold")
+  local id = todoRow.q.id
+  todoRow.pick.__scripts.OnClick(todoRow.pick)
+  assert(QB:IsAdded(id), "the ! puts it on the pick-up list")
+  U:Refresh()
+  local row
+  for _, c in ipairs(v2.cards.items) do for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q and r.q.id == id then row = r end end end
+  assert(row and row.status:GetText() == "To pick up" and row.mark.__tex == Dt.questAvail, "chosen: To pick up, still with the !: " .. tostring(row and row.status:GetText()))
+  assert(row:GetParent().count:GetText():find("to pick up", 1, true), "its card counts it: " .. row:GetParent().count:GetText())
+  assert(v2.introR:GetText():find("to pick up", 1, true), "and so does the intro: " .. v2.introR:GetText())
+  lines = {}; row.pick.__scripts.OnEnter(row.pick)
+  assert(lines[1] == "To pick up" and lines[2]:find("take it off", 1, true), "the pick button's tooltip says what a click does")
+  -- the Quest Log: in a free slot, not in the swap list
+  U:ShowTab(1); U:Refresh()
+  local v1 = U.views[1]
+  for _, r in ipairs(v1.swaps) do if r:IsShown() and r.add then assert(r.add.id ~= id, "a chosen quest is not offered as a swap") end end
+  local inGrid = false
+  for _, b in ipairs(v1.slots) do if b.pick and b.q and b.q.id == id then inGrid = true end end
+  assert(inGrid or #QB.state.logOrder >= QB.LOG_SLOTS, "it fills a free slot of the grid")
+  QB:ToggleAdd(id)
+  assert(not QB:IsAdded(id))
+  U:ShowTab(2); U:Refresh()
+  -- the Hand-in Route speaks of the log and pick-ups, not of a plan
+  assert(U.views[3].modePlan:GetText() == "Log and pick-ups", "the route's second button: " .. tostring(U.views[3].modePlan:GetText()))
+  -- a hand-in run ends by itself: two hours on, or an hour and a half with three levels gained
+  local N2, ndb = newbie.QB, newbie.env.QuestBankDB
+  local tnow = newbie.env.time()
+  ndb.run = { started = tnow - 100 * 60, key = N2:CharKey(), level = (newbie.level or 3) - 2, xp = 0, done = {}, plan = {}, mode = "rush", predicted = 0, predictedT = 0 }
+  N2:ReadState()
+  assert(ndb.run, "100 minutes and two levels on: the run goes on")
+  ndb.run.level = (newbie.level or 3) - 3
+  N2:ReadState()
+  assert(ndb.run == nil and N2:Mode() == "quest", "100 minutes and three levels on: the run ended by itself, questing from here")
+  ndb.run = { started = tnow - 130 * 60, key = N2:CharKey(), level = newbie.level or 3, xp = 0, done = {}, plan = {}, mode = "rush", predicted = 0, predictedT = 0 }
+  N2:ReadState()
+  assert(ndb.run == nil, "two hours on: the run ended by itself")
+  if newbie.env.QuestBankPost then newbie.env.QuestBankPost:Hide() end
 end
 
 local seen = {}
