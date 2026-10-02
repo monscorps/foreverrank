@@ -29,7 +29,8 @@ Disc.DB = db
 local function who(unit)
   if not UnitGUID then return nil end
   local ok, guid = pcall(UnitGUID, unit)
-  if not ok or type(guid) ~= "string" then return nil end
+  -- the Forever client hands addons a secret value for some units (seen in uploads): nobody, not an error
+  if not ok or type(guid) ~= "string" or (issecretvalue and issecretvalue(guid)) then return nil end
   local kind, id = guid:match("^(%a+)%-%d+%-%d+%-%d+%-%d+%-(%d+)")
   if kind == "Creature" or kind == "Vehicle" then return "c" .. id, guid end
   if kind == "GameObject" then return "o" .. id, guid end
@@ -86,6 +87,7 @@ end
 
 -- the XP a quest pays at a level: the quest window's and the hand-in's, with the sleeping bag noted
 local function noteXP(q, xp, how)
+  if issecretvalue and issecretvalue(xp) then return end
   if not xp or xp <= 0 then return end
   local key = level() .. ((QB.API and QB.API.HasWellRested and QB.API.HasWellRested()) and "b" or "")
   q.xp[key] = xp
@@ -132,7 +134,7 @@ function Disc.OnEvent(event, a1, a2)
     noteXP(q, GetRewardXP and GetRewardXP(), "window")
   elseif event == "QUEST_TURNED_IN" then
     local id, xp = a1, a2
-    if not id then return end
+    if not id or (issecretvalue and issecretvalue(id)) then return end
     local q = quest(id)
     noteXP(q, xp, "turnin")
     local npc = who("npc") or (lastComplete and lastComplete.id == id and lastComplete.npc) or nil

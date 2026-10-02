@@ -1,6 +1,6 @@
 # QuestBank data gaps
 
-Written by `gen_data.py` on every run from the inputs it had (Wowhead Forever read 2026-09-29, Forever client 1.60.1.70058,
+Written by `gen_data.py` on every run from the inputs it had (Wowhead Forever read 2026-09-29, Forever client 1.60.1.70170,
 CMaNGOS Classic database). The catalog covers levels 1 to 60. Wowhead Forever only knows the quests its players have met,
 which stops near the beta's level cap; the Classic database seeds the rest, labelled "Classic only" in the addon until
 players see those quests in Forever. Anything listed here is a quest the addon can't fully plan yet.
@@ -13,6 +13,8 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 | Quest giver with a position (quests that start from an item don't need one) | 2135 | 250 | 1459 | 12 |
 | Chain known (Wowhead Forever series or the Classic database) | 2135 | 428 | 1459 | 0 |
 
+On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip.
+
 Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree: Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
 
 Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,
@@ -24,7 +26,8 @@ Classic frame and were moved to Forever's; 58 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 26.
 
-Seen in Forever by players (3 uploads merged by probe_pull.py, 2026-09-30T18:38:28Z): 0 quests, 0 of them Classic seeds now confirmed.
+Seen in Forever by players (13 uploads merged by probe_pull.py, 2026-10-02T00:26:49Z): 31 quests, 0 of them Classic seeds now confirmed.
+Seen in game but not in the catalog (1), to add: 91904 A Sealed Crate.
 
 Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both have a number, they disagree on 0:
 

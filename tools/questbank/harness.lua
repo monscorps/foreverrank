@@ -181,6 +181,19 @@ BASE.MapCanvasPinMixin = {
 }
 BASE.MapCanvasDataProviderMixin = { GetMap = function(self) return self.owningMap end }
 
+SECRET_MT = {
+  __index = function(t, k) error(string.format("attempt to index a secret %s value", rawget(t, "__kind")), 2) end,
+  __lt = function() error("attempt to compare a secret value", 2) end,
+  __le = function() error("attempt to compare a secret value", 2) end,
+  __add = function() error("attempt to perform arithmetic on a secret value", 2) end,
+  __concat = function() error("attempt to concatenate a secret value", 2) end,
+  __tostring = function() return "<secret>" end,
+}
+SECRET = {
+  str = function() return setmetatable({ __kind = "string" }, SECRET_MT) end,
+  num = function() return setmetatable({ __kind = "number" }, SECRET_MT) end,
+}
+
 local function newClient(o)
   local env = setmetatable({}, { __index = BASE })
   env._G = env
@@ -208,6 +221,10 @@ local function newClient(o)
   env.AuraUtil = { FindAuraByName = function(name) if c.rested and name == "Well Rested" then return name end end }
   env.UnitName = function(unit) if unit == "npc" then return c.npcName end return o.name end
   env.UnitGUID = function(unit) if unit == "npc" then return c.npcGUID end return "Player-1234-" .. string.format("%08X", #o.name * 7919 + (o.level or 1)) end
+  -- Midnight's secret values, as the Forever client hands them out: type() says "string" or "number", any use
+  -- errors, and issecretvalue tells. SECRET.str() / SECRET.num() make one.
+  env.issecretvalue = function(v) return getmetatable(v) == SECRET_MT end
+  env.type = function(v) if getmetatable(v) == SECRET_MT then return rawget(v, "__kind") end return type(v) end
   env.UnitFullName = function() return o.name, "ForeverNormal" end
   -- the UI's quest-log constants as Forever ships them (25) against a log that holds 40, and the
   -- dialog refresher the fix pokes
@@ -1192,7 +1209,7 @@ end
 UI:ShowTab(3)
 print("route now:", v3.summary:GetText())
 assert(QB:Mode() == "lock" and QB:Lock() == 20 and QB.CAP == 30, "level 20 at a cap of 20: banking for 30")
-assert(v3.summary:GetText() == "86,890 XP  |  level 23.38  |  93 min  |  at 60 min 23.36", "the owner's banked route is unchanged")
+assert(v3.summary:GetText() == "64,960 XP  |  level 22.61  |  93 min  |  at 60 min 22.58", "the owner's banked route is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
 for _, l in ipairs(v3.legs.items) do
   if l:IsShown() then
@@ -1205,7 +1222,7 @@ v3.modePlan.__scripts.OnClick(v3.modePlan)
 QB.Model.Finish()
 UI:Refresh()
 print("route plan:", v3.summary:GetText())
-assert(v3.summary:GetText() == "120,940 XP  |  level 24.50  |  133 min  |  at 60 min 24.36", "the owner's full plan is unchanged")
+assert(v3.summary:GetText() == "93,600 XP  |  level 23.61  |  138 min  |  at 60 min 23.45", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
 for _, key in ipairs({ "mounted", "bag", "pins" }) do
   local b = UI.header.toggles[key]
@@ -2188,6 +2205,71 @@ do
   print(string.format("planning both routes: %.1f ms (plan: %d stops, %d quests)", ms, stops, r.count))
 end
 print("widgets created:", created)
+
+-- 3.4.4: Blizzard's 2026-10-01 cut to dungeon-quest XP ("50% less extra experience beyond normal quest values"):
+-- every multiplier above x1 is computed from the earlier read, 1 + (m - 1) / 2, flagged, and said in the tooltip;
+-- what the game said about those quests before the cut is forgotten once; secret values from the client are nobody
+do
+  local D = QB.Data
+  assert(D.NERF and D.NERF.factor == 0.5 and D.NERF.date == "2026-10-01", "the cut is in the data")
+  local Qs = QB.Quest
+  local villainy, brother, arugal, satchel = Qs.Get(1200), Qs.Get(167), Qs.Get(1014), Qs.Get(5724)
+  assert(villainy.mult == 2.375 and villainy.nerfed and villainy.dungeon, "Blackfathom Villainy: 3.75 -> 2.375, flagged")
+  assert(arugal.mult == 2.675 and arugal.nerfed, "Arugal Must Die: 4.35 -> 2.675")
+  assert(satchel.mult == 2.025 and satchel.nerfed, "Returning the Lost Satchel: 3.05 -> 2.025")
+  assert(brother.mult == 1 and not brother.nerfed and brother.dungeon, "Oh Brother... stays at x1: no extra to cut")
+  assert(QB.Model.Full(villainy) == 7850, "3,300 x 2.375 = 7,837.5, rounded to 7,850 (was 12,400), got " .. tostring(QB.Model.Full(villainy)))
+  -- the tooltip says the number is computed, and whose number wins
+  lines = {}
+  QB.UI.QuestTooltip(owner.env.GameTooltip, villainy, QB:Status(villainy), QB.Model.XpAt(villainy, 20), 100, 20)
+  local text = table.concat(lines, "\n")
+  assert(text:find("Forever XP 7,850", 1, true) and text:find("halved the extra XP", 1, true), "the tooltip shows the cut XP and says why: " .. text:gsub("\n", " / "))
+  lines = {}
+  QB.UI.QuestTooltip(owner.env.GameTooltip, brother, QB:Status(brother), QB.Model.XpAt(brother, 20), 100, 20)
+  assert(not table.concat(lines, "\n"):find("halved", 1, true), "an unmultiplied dungeon quest says nothing about the cut")
+  -- stale live XP: a party member's pre-cut Deadmines number goes, a zone quest's number stays, once
+  local db = owner.env.QuestBankDB
+  local keep = db.live
+  db.live = { [166] = { full = 9750, lvl = 20, src = "party" }, [5] = { full = 400, lvl = 20, src = "npc" } }
+  db.liveEra = nil
+  Qs.Get(166).liveFull = 9750
+  QB.Live.Apply()
+  assert(db.live[166] == nil and Qs.Get(166).liveFull == nil, "The Defias Brotherhood's pre-cut number is forgotten")
+  assert(db.live[5] and db.live[5].full == 400 and Qs.Get(5).liveFull == 400 and db.liveEra == 2, "a zone quest's number stays; the purge is marked done")
+  db.live[166] = { full = 6200, lvl = 20, src = "party" }
+  QB.Live.Apply()
+  assert(db.live[166] and Qs.Get(166).liveFull == 6200, "after the purge, new numbers for the same quest are kept")
+  Qs.Get(166).liveFull, Qs.Get(5).liveFull = nil, nil
+  db.live = keep
+  QB.Live.Apply()
+  -- secret values: the NPC's id (3.3.5's upload error at Discover.lua:33), a window's XP, a hand-in's XP
+  local N2 = newbie.QB
+  local ndb = newbie.env.QuestBankDB
+  local lock = ndb.lock
+  local liveBefore = N2.Quest.Get(15).liveFull
+  local function noted() local q = ndb.disc.q[15]; local n = 0; for _ in pairs(q and q.xp or {}) do n = n + 1 end; return n end
+  local notedBefore = noted()
+  newbie.npcGUID, newbie.npcName = SECRET.str(), "Marshal McBride"
+  newbie.window = { id = 15, xp = 0, title = "Investigate Echo Ridge" }
+  assert(N2.Discover.Who("npc") == nil, "a secret NPC id is nobody, not an error")
+  N2.Discover.OnEvent("QUEST_DETAIL", 0)
+  newbie.window = { id = 15, xp = SECRET.num(), title = "Investigate Echo Ridge" }
+  newbie.ev(N2.eventFrame, "QUEST_COMPLETE")
+  N2.Discover.OnEvent("QUEST_COMPLETE")
+  local diag = ndb.diag and ndb.diag.xp
+  assert(diag and diag[#diag].how == "complete" and diag[#diag].kind == "secret" and diag[#diag].id == 15, "the diagnostic ring notes a hidden XP number")
+  assert(N2.Quest.Get(15).liveFull == liveBefore and noted() == notedBefore, "a hidden number teaches nothing")
+  newbie.ev(N2.eventFrame, "QUEST_TURNED_IN", 15, SECRET.num())
+  assert(diag[#diag].how == "turnin" and diag[#diag].kind == "secret", "a hidden hand-in number is noted the same way")
+  newbie.window = { id = 15, xp = 250, title = "Investigate Echo Ridge" }
+  newbie.ev(N2.eventFrame, "QUEST_DETAIL")
+  assert(diag[#diag].how == "detail" and diag[#diag].kind == "number" and diag[#diag].v == 250, "a plain number is noted with its value")
+  for _ = 1, 14 do newbie.ev(N2.eventFrame, "QUEST_DETAIL") end
+  assert(#diag == 12, "the ring keeps a dozen")
+  newbie.npcGUID, newbie.npcName, newbie.window = nil, nil, nil
+  ndb.lock = lock
+end
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end

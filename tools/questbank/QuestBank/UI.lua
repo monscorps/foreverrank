@@ -242,8 +242,11 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   if q.classic and not q.liveFull then
     tip:AddLine("From the Classic database: not seen in Forever yet, so it may differ or not exist.", 1, 0.6, 0.3, true)
   end
+  if q.nerfed and not q.liveFull and not q.xpUnknown then
+    tip:AddLine("Blizzard halved the extra XP of dungeon quests on 1 October 2026. This is the earlier reading with that cut applied; the game's own number takes over when you see the quest window or hand it in.", 1, 0.6, 0.3, true)
+  end
   if q.liveFull and math.abs(q.liveFull - QB.Model.Listed(q)) > 25 then
-    tip:AddLine(string.format("Wowhead lists %s. QuestBank uses the game's number.", QB.Comma(QB.Model.Listed(q))), 1, 0.6, 0.3, true)
+    tip:AddLine(string.format(q.nerfed and "The catalog lists %s. QuestBank uses the game's number." or "Wowhead lists %s. QuestBank uses the game's number.", QB.Comma(QB.Model.Listed(q))), 1, 0.6, 0.3, true)
   end
   if xp then
     local line = QB.Comma(xp) .. " XP " .. QB:OnTheDay()

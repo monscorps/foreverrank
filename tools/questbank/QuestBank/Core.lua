@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.4.3"
+QB.version = "3.4.4"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -469,6 +469,7 @@ function Q.Get(id)
   c.dungeonMult = math.floor(c.flags / 32) % 2 == 1  -- multiplier taken from its dungeon's other quests
   c.xpUnknown = math.floor(c.flags / 64) % 2 == 1
   c.sodLeftover = math.floor(c.flags / 128) % 2 == 1 -- Season of Discovery data whose NPC isn't known in Forever
+  c.nerfed = math.floor(c.flags / 256) % 2 == 1      -- multiplier computed from the pre-cut read (D.NERF): the extra above x1 halved
   c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and API.ItemIcon(c.bag[1])) or API.ItemIcon(D.QITEM[id])
     or (c.cat and c.cat.icon) or D.TEX.questGeneric
   cache[id] = c
@@ -555,10 +556,36 @@ function Live.Record(id, xp, level, src, rested)
 end
 
 function Live.Apply()
-  for id, v in pairs(QuestBankDB.live or {}) do
+  local db = QuestBankDB
+  db.live = db.live or {}
+  -- Blizzard cut dungeon quests' extra XP (D.NERF, 2026-10-01): what the game said about those quests before the
+  -- cut is stale, so it is forgotten once; fresh quest windows and hand-ins teach the new numbers
+  if D.NERF and (db.liveEra or 0) < 2 then
+    for id in pairs(db.live) do
+      local q = Q.Get(id)
+      if q and (q.nerfed or q.dungeon) then db.live[id] = nil; q.liveFull = nil end
+    end
+    db.liveEra = 2
+  end
+  for id, v in pairs(db.live) do
     local q = Q.Get(id)
     if q then q.liveFull = v.full end
   end
+end
+
+-- what the game hands addons for a quest's XP on this client, the last dozen times (window and hand-in): the
+-- uploads show whether the number is there, hidden (a secret value) or missing, which decides how the catalog learns
+function QB.NoteXPSeen(how, id, xp)
+  local db = QuestBankDB
+  if not db then return end
+  db.diag = db.diag or {}
+  local d = db.diag.xp or {}
+  db.diag.xp = d
+  local secret = issecretvalue or function() return false end
+  local kind = secret(xp) and "secret" or type(xp)
+  d[#d + 1] = { how = how, id = secret(id) and -1 or id, kind = kind, v = kind == "number" and xp or nil,
+                lvl = UnitLevel("player"), at = date("%Y-%m-%d %H:%M") }
+  while #d > 12 do table.remove(d, 1) end
 end
 
 function Live.Source(q)
@@ -569,9 +596,11 @@ function Live.Source(q)
 end
 
 -- the quest the NPC window shows, and the XP it offers
-local function windowXP(src)
+local function windowXP(src, event)
   local id = GetQuestID and GetQuestID()
   local xp = GetRewardXP and GetRewardXP()
+  QB.NoteXPSeen(event == "QUEST_DETAIL" and "detail" or "complete", id, xp)
+  if issecretvalue and (issecretvalue(id) or issecretvalue(xp)) then return end -- hidden from addons: nothing to learn
   if id and id > 0 and xp and xp > 0 then Live.Record(id, xp, UnitLevel("player"), src, API.HasWellRested()) end
 end
 QB.WindowXP = windowXP
@@ -1603,6 +1632,9 @@ function QB:Changed()
 end
 
 local function onTurnIn(questID, xpReward)
+  QB.NoteXPSeen("turnin", questID, xpReward)
+  if issecretvalue and issecretvalue(questID) then return end
+  if issecretvalue and issecretvalue(xpReward) then xpReward = nil end -- hidden: treated as "not told", not as 0
   turnedIn[questID] = true
   API.MarkDone(questID)
   local q = Q.Get(questID)
@@ -1654,7 +1686,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     return
   elseif event == "QUEST_DETAIL" or event == "QUEST_COMPLETE" then
     local before = QB.liveVer
-    windowXP("npc")
+    windowXP("npc", event)
     if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end -- after the window's XP is on record
     if QB.liveVer == before then return end -- nothing new: the plan stands
   elseif event == "PLAYER_LOGIN" then
