@@ -1625,11 +1625,30 @@ local function makeRow(parent)
   r.lvl = text(r, "GameFontNormalSmall", 10, INK_SOFT, "LEFT", 30)
   r.lvl:SetPoint("LEFT", 340, 0)
   r.status = text(r, "GameFontNormalSmall", 11, INK, "LEFT", 250)
-  r.status:SetPoint("LEFT", 374, 0)
+  r.status:SetPoint("LEFT", 392, 0)
   r.away = text(r, "GameFontNormalSmall", 11, INK_SOFT, "RIGHT", 40)
   r.away:SetPoint("RIGHT", -72, 0)
   r.xp = text(r, "GameFontNormal", 12, INK, "RIGHT", 60)
   r.xp:SetPoint("RIGHT", -8, 0)
+  -- a chain: open it to see every step, done, held, next and later
+  r.chain = CreateFrame("Button", nil, r)
+  r.chain:SetSize(16, 16)
+  r.chain:SetPoint("LEFT", 372, 0)
+  r.chain.label = text(r.chain, "GameFontNormalSmall", 11, { 0.45, 0.25, 0.05 }, "CENTER", 16)
+  r.chain.label:SetPoint("CENTER", 0, 0)
+  r.chain:SetScript("OnClick", QB.Safe(function(self)
+    local row = self:GetParent()
+    if not row.q then return end
+    UI.chainOpen = UI.chainOpen or {}
+    UI.chainOpen[row.q.id] = not UI.chainOpen[row.q.id] or nil
+    UI:Refresh()
+  end, "chain"))
+  tooltip(r.chain, function(tip, self)
+    local row = self:GetParent()
+    tip:AddLine("The chain", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine((UI.chainOpen and row.q and UI.chainOpen[row.q.id]) and "Click: fold it away." or "Click: every step of it, done, in your log, next and later, under this row.", 1, 1, 1, true)
+  end)
+  r.chain:Hide()
   r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   r:SetScript("OnClick", function(self, which)
     if self.q then UI.QuestClick(self.q, self.st, which)
@@ -1641,6 +1660,7 @@ local function makeRow(parent)
   tooltip(r, function(tip, self)
     if self.q then
       UI.QuestTooltip(tip, self.q, self.st, self.value)
+      if self.together then tip:AddLine("Done in the same spot as: " .. table.concat(self.together, ", ") .. ". Do them together.", 0.75, 0.75, 1, true) end
     elseif self.entry then
       tip:AddLine(self.entry.title, GOLD[1], GOLD[2], GOLD[3])
       tip:AddLine(self.advice or "", 1, 0.55, 0.45, true)
@@ -1713,10 +1733,10 @@ end
 local MARK = { banked = "ready", active = "waiting", partial = "waiting", bagstart = "waiting" }
 STATUS.pickup = { 0.25, 0.25, 0.45 }
 
--- it = { q, st, value, held, chosen, cut, mins }
+-- it = { q, st, value, held, chosen, cut, mins, sub (a step shown under its chain), together (names) }
 local function fillRow(r, it, width)
   local q, st = it.q, it.st
-  r.q, r.st, r.entry, r.step, r.value = q, st, nil, nil, it.value
+  r.q, r.st, r.entry, r.step, r.value, r.together = q, st, nil, nil, it.value, it.together
   r:SetWidth(width)
   local held, chosen = it.held, it.chosen
   local pickable = not held and st.code ~= "done" and not st.behind and (st.code == "todo" or st.code == "item")
@@ -1729,15 +1749,25 @@ local function fillRow(r, it, width)
   r.pick:EnableMouse(pickable and true or false)
   setIcon(r.icon, q.icon)
   r.icon:SetDesaturated(st.code == "done" or st.code == "locked" or st.behind or false)
-  r.name:SetText(q.name)
+  r.name:SetText((it.sub and "\226\134\179 " or "") .. q.name)
   local c = (held or chosen) and INK or INK_SOFT
   r.name:SetTextColor(c[1], c[2], c[3])
   r.up:SetShown(held and not it.cut and QB:Upgrade(q) ~= nil)
   r.lvl:SetText("L" .. q.lvl)
   local mins = (not held and st.code ~= "done" and not st.behind) and it.mins or nil
   local awayText = mins and (mins < 1 and "here" or string.format("%d min", math.floor(mins + 0.5))) or ""
+  -- a chain opens under its row; a step shown under one carries no toggle of its own
+  local chained = not it.sub and ((q.pre ~= nil) or (q.nextSteps ~= nil and #q.nextSteps > 0))
+  if chained then
+    r.chain.label:SetText((UI.chainOpen and UI.chainOpen[q.id]) and "\226\150\190" or "\226\150\184")
+    r.chain:Show()
+  else
+    r.chain:Hide()
+  end
+  -- a chain's row says what its steps cost; the minutes to its giver would only crowd that out
+  if st.code == "prereq" then awayText = "" end
   -- the minutes column takes room from the status only when it has something to say
-  r.status:SetWidth(math.max(120, width - 374 - 76 - (awayText ~= "" and 48 or 0)))
+  r.status:SetWidth(math.max(120, width - 392 - 76 - (awayText ~= "" and 48 or 0)))
   local status, color = st.text, STATUS[st.code] or INK
   if chosen and not st.behind then
     if st.code == "todo" or st.code == "item" then status, color = "To pick up", STATUS.pickup
@@ -1755,10 +1785,81 @@ local function fillRow(r, it, width)
       end
     end
   end
+  if it.together and #it.together > 0 then
+    local room = r.status:GetWidth() - 4
+    local suffix = string.format(" · with %d", #it.together)
+    r.status:SetText(status .. suffix)
+    if r.status:GetStringWidth() <= room then status = status .. suffix end
+  end
   r.status:SetText(status)
   r.status:SetTextColor(color[1], color[2], color[3])
   r.away:SetText(awayText)
   r.xp:SetText(QB.Comma(it.value or Q.Full(q)))
+end
+
+-- the whole line of a chain, for the drill-down: the steps before this quest (done, in your log, or still to
+-- take), then the steps after it along the best-paying branch, three on at most
+function UI.ChainLine(q, here, mf)
+  local s, D = QB.state, QB.Data
+  local out, seen = {}, { [q.id] = true }
+  local function item(sq, done)
+    if not sq or seen[sq.id] then return end
+    seen[sq.id] = true
+    local held = s.log[sq.id] ~= nil
+    local st = (done and not held) and { code = "done", text = "Done" } or QB:Status(sq)
+    out[#out + 1] = { q = sq, st = st, value = QB.Model.XpAt(sq, s.level), held = held or st.bag or false,
+                      chosen = (not held) and st.code ~= "done" and QB:IsAdded(sq.id) or false, cut = held and QB:IsCut(sq.id) or false,
+                      mins = UI.MinutesTo(sq, here, mf), sub = true }
+  end
+  for _, p in ipairs(q.pre or {}) do
+    local sq = QB:PreStep(p) or (type(p) ~= "table" and Q.Get(p)) or nil
+    item(sq, Q.PreDone(p))
+  end
+  local cur, hops = q, 0
+  while cur and cur.nextSteps and hops < 3 do
+    local best, bestV
+    for _, nid in ipairs(cur.nextSteps) do
+      local nq = Q.Get(nid)
+      if nq and Q.ForMe(nq) and not seen[nid] then
+        local v = QB.Model.XpAt(nq, s.level)
+        if not bestV or v > bestV then best, bestV = nq, v end
+      end
+    end
+    if not best then break end
+    item(best, false)
+    cur, hops = best, hops + 1
+  end
+  return out
+end
+
+-- the quests among these done in the same spot (their objective areas within 300 yards, from D.OBJ):
+-- sets it.together = { names of the others } on each member of a group
+function UI.Together(items)
+  local OBJ = QB.Data.OBJ
+  if not OBJ then return end
+  local placed = {}
+  for _, it in ipairs(items) do
+    if it.q and it.st.code ~= "done" and OBJ[it.q.id] then placed[#placed + 1] = it end
+  end
+  for i = 1, #placed do
+    for j = i + 1, #placed do
+      local a, b = placed[i], placed[j]
+      local near = false
+      for _, pa in ipairs(OBJ[a.q.id]) do
+        for _, pb in ipairs(OBJ[b.q.id]) do
+          if pa[1] == pb[1] then
+            local dx, dy = pa[2] - pb[2], pa[3] - pb[3]
+            if dx * dx + dy * dy <= 300 * 300 then near = true end
+          end
+        end
+      end
+      if near then
+        a.together = a.together or {}; b.together = b.together or {}
+        a.together[#a.together + 1] = b.q.name
+        b.together[#b.together + 1] = a.q.name
+      end
+    end
+  end
 end
 
 function UI:CreatePrepView(parent)
@@ -1766,10 +1867,10 @@ function UI:CreatePrepView(parent)
   v:SetAllPoints()
   v.scroll = scrollArea(v)
   local child = v.scroll.child
-  v.intro = text(child, "GameFontNormal", 12, INK_SOFT, "LEFT", 440)
+  v.intro = text(child, "GameFontNormal", 12, INK_SOFT, "LEFT", 470)
   v.intro:SetPoint("TOPLEFT", 4, -4)
-  v.introR = text(child, "GameFontNormal", 12, INK_SOFT, "RIGHT", 240)
-  v.introR:SetPoint("TOPLEFT", 460, -4)
+  v.introR = text(child, "GameFontNormal", 12, INK_SOFT, "RIGHT", 200)
+  v.introR:SetPoint("TOPLEFT", 486, -4)
   v.cards = pool(child, makeCard)
   v.foot = text(child, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 660)
   v.foot:Hide()
@@ -1800,7 +1901,7 @@ function UI:RefreshPrepView(v)
     local g = groups[cat]
     if not g then
       g = { cat = D.CAT[cat], idx = cat, quests = {}, left = 0, fetch = 0, avail = 0, score = 0,
-            held = 0, ready = 0, picks = 0, open = 0, notyet = 0, behind = 0, done = 0, nearest = nil }
+            held = 0, ready = 0, picks = 0, open = 0, notyet = 0, behind = 0, done = 0, nearest = nil, lvlSum = 0, lvlN = 0 }
       groups[cat] = g
       order[#order + 1] = g
     end
@@ -1843,6 +1944,7 @@ function UI:RefreshPrepView(v)
       g.score = g.score + value * 0.25 * (near or 1)
     end
     if mins and not held and st.code ~= "done" and (not g.nearest or mins < g.nearest) then g.nearest = mins end
+    if st.code ~= "done" then g.lvlSum, g.lvlN = g.lvlSum + q.lvl, g.lvlN + 1 end
   end
   for _, e in ipairs(s.logOrder) do local q = Q.Get(e.id); if q then add(q, 1) end end
   for _, id in ipairs(QB:BagQuests()) do
@@ -1872,14 +1974,13 @@ function UI:RefreshPrepView(v)
         and QB.API.IsDone(id) then g.done = g.done + 1 end
     end
   end
-  -- questing: the nearest place first, a place with only your own quests after the ones with something to fetch;
-  -- banking: the richest place first, what you hold plus what you could fetch
+  -- questing: zone by zone from the lowest, an order that holds still while you move (the minutes column says
+  -- what is near); banking: the richest place first, what you hold plus what you could fetch
+  for _, g in ipairs(order) do g.band = g.lvlN > 0 and g.lvlSum / g.lvlN or 99 end
   table.sort(order, function(a, b)
     if not banking then
-      local fa, fb = a.open + a.notyet + a.picks > 0, b.open + b.notyet + b.picks > 0
-      if fa ~= fb then return fa end
-      if fa and a.nearest and b.nearest and math.abs(a.nearest - b.nearest) >= 1 then return a.nearest < b.nearest end
-      if fa and (a.nearest == nil) ~= (b.nearest == nil) then return a.nearest ~= nil end
+      if math.abs(a.band - b.band) >= 0.5 then return a.band < b.band end
+      return (a.cat.name or "") < (b.cat.name or "")
     end
     local ka, kb = a.left + a.avail, b.left + b.avail
     if ka ~= kb then return ka > kb end
@@ -1890,8 +1991,9 @@ function UI:RefreshPrepView(v)
   local above, below = QB:Range()
   local picksAll, openAll = 0, 0
   for _, g in ipairs(order) do picksAll, openAll = picksAll + g.picks, openAll + g.open end
-  v.intro:SetText(hubName and string.format("Quests for you, level %d to %d. Minutes are from %s.", level - below, level + above, hubName)
-    or string.format("Quests for you, level %d to %d.", level - below, level + above))
+  local order_word = banking and "richest place first" or "zone by zone from the lowest"
+  v.intro:SetText(hubName and string.format("Level %d to %d, %s. Minutes from %s.", level - below, level + above, order_word, hubName)
+    or string.format("Level %d to %d, %s.", level - below, level + above, order_word))
   v.introR:SetText(string.format("%d available" .. (picksAll > 0 and " · %d to pick up" or ""), openAll, picksAll))
 
   local y = 24
@@ -1978,6 +2080,8 @@ function UI:RefreshPrepView(v)
         if x.grp == 3 and (x.st.code == "banked") ~= (z.st.code == "banked") then return x.st.code == "banked" end
         return x.value > z.value
       end)
+      UI.Together(g.quests)
+      c.band = g.band
       local ry = 50
       local extra, hidden = 0, 0
       local open = UI.expanded and UI.expanded[a.key]
@@ -1995,6 +2099,16 @@ function UI:RefreshPrepView(v)
           r:SetPoint("TOPLEFT", 4, -ry)
           fillRow(r, it, width - 8)
           ry = ry + 22
+          -- the chain, opened: its steps under the row
+          if UI.chainOpen and UI.chainOpen[it.q.id] then
+            for _, sit in ipairs(UI.ChainLine(it.q, here, mf)) do
+              local r2 = c.rows:Get()
+              r2:ClearAllPoints()
+              r2:SetPoint("TOPLEFT", 4, -ry)
+              fillRow(r2, sit, width - 8)
+              ry = ry + 22
+            end
+          end
         end
       end
       if hidden > 0 or open then
@@ -2047,14 +2161,19 @@ function UI:RefreshPrepView(v)
       r.mark:Show()
       r.pick.pickable = nil
       r.pick:EnableMouse(false)
+      r.chain:Hide()
+      r.together = nil
       setIcon(r.icon, T.map)
       r.icon:SetDesaturated(done)
       r.name:SetText(step.name)
       r.name:SetTextColor(INK[1], INK[2], INK[3])
       r.up:Hide()
       r.lvl:SetText("")
-      r.status:SetWidth(math.max(120, width - 374 - 76)) -- no minutes column on these rows: the whole width for where the step is
-      r.status:SetText(done and "Done" or (s.log[step.id] and "In your log" or step.where))
+      r.status:SetWidth(math.max(120, width - 392 - 76)) -- no minutes column on these rows: the whole width for where the step is
+      local where = step.where or ""
+      r.status:SetText(where)
+      if r.status:GetStringWidth() > r.status:GetWidth() - 4 then where = (where:gsub(",[^,]*$", "")) end -- without the zone when it is tight
+      r.status:SetText(done and "Done" or (s.log[step.id] and "In your log" or where))
       local sc = done and GOOD or INK_SOFT
       r.status:SetTextColor(sc[1], sc[2], sc[3])
       r.away:SetText("")

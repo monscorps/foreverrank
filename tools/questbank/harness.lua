@@ -2523,7 +2523,7 @@ do
   U:ShowTab(2); QB.Model.Finish(); U:Refresh()
   assert(U.tabs[2].label:GetText() == "Available", "the tab is called Available")
   local v2 = U.views[2]
-  assert(v2.intro:GetText():find("^Quests for you, level %d+ to %d+"), "the intro names the level window: " .. tostring(v2.intro:GetText()))
+  assert(v2.intro:GetText():find("^Level %d+ to %d+, "), "the intro names the level window and the order: " .. tostring(v2.intro:GetText()))
   local todoRow, heldRow
   for _, c in ipairs(v2.cards.items) do
     if c:IsShown() then
@@ -2546,7 +2546,7 @@ do
   U:Refresh()
   local row
   for _, c in ipairs(v2.cards.items) do for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q and r.q.id == id then row = r end end end
-  assert(row and row.status:GetText() == "To pick up" and row.mark.__tex == Dt.questAvail, "chosen: To pick up, still with the !: " .. tostring(row and row.status:GetText()))
+  assert(row and row.status:GetText():find("^To pick up") and row.mark.__tex == Dt.questAvail, "chosen: To pick up, still with the !: " .. tostring(row and row.status:GetText()))
   assert(row:GetParent().count:GetText():find("to pick up", 1, true), "its card counts it: " .. row:GetParent().count:GetText())
   assert(v2.introR:GetText():find("to pick up", 1, true), "and so does the intro: " .. v2.introR:GetText())
   lines = {}; row.pick.__scripts.OnEnter(row.pick)
@@ -2557,7 +2557,8 @@ do
   for _, r in ipairs(v1.swaps) do if r:IsShown() and r.add then assert(r.add.id ~= id, "a chosen quest is not offered as a swap") end end
   local inGrid = false
   for _, b in ipairs(v1.slots) do if b.pick and b.q and b.q.id == id then inGrid = true end end
-  assert(inGrid or #QB.state.logOrder >= QB.LOG_SLOTS, "it fills a free slot of the grid")
+  -- it fills a free slot, or, when the log and the earlier picks already fill the grid, the worth line counts it
+  assert(inGrid or v1.worth:GetText():find("more to pick up", 1, true), "it fills a free slot of the grid, or is counted as more to pick up: " .. v1.worth:GetText())
   QB:ToggleAdd(id)
   assert(not QB:IsAdded(id))
   U:ShowTab(2); U:Refresh()
@@ -2576,6 +2577,68 @@ do
   N2:ReadState()
   assert(ndb.run == nil, "two hours on: the run ended by itself")
   if newbie.env.QuestBankPost then newbie.env.QuestBankPost:Hide() end
+end
+
+
+-- 3.5.0: the Available tab holds still while you quest (zone by zone from the lowest), a chain opens under its
+-- row, and quests done in the same spot say so
+do
+  local U, Dt = QB.UI, QB.Data.TEX
+  -- the newbie quests: cards in level order, not by where they stand
+  local N2, NU = newbie.QB, newbie.QB.UI
+  NU.candMemo = nil
+  NU:ShowTab(2); N2.Model.Finish(); NU:Refresh()
+  local bands, prev = 0, nil
+  for _, c in ipairs(NU.views[2].cards.items) do
+    if c:IsShown() and c.band and c.band < 99 and c.title:GetText() ~= "Cozy Sleeping Bag" then
+      assert(prev == nil or c.band >= prev - 0.5, "cards come zone by zone from the lowest level: " .. c.title:GetText())
+      prev = c.band; bands = bands + 1
+    end
+  end
+  assert(bands >= 2, "several cards to order")
+  assert(NU.views[2].intro:GetText():find("zone by zone from the lowest", 1, true), "the intro says the order")
+  -- a chain opens under its row
+  U.candMemo = nil
+  U:ShowTab(2); QB.Model.Finish(); U:Refresh()
+  local v2 = U.views[2]
+  local chainRow
+  for _, c in ipairs(v2.cards.items) do if c:IsShown() then for _, r in ipairs(c.rows.items) do
+    if r:IsShown() and r.q and r.chain:IsShown() and not chainRow then chainRow = r end
+  end end end
+  assert(chainRow, "a chain quest shows the toggle")
+  assert(chainRow.chain.label:GetText() == "\226\150\184", "folded: a right-pointing chevron")
+  local id, card = chainRow.q.id, chainRow:GetParent()
+  chainRow.chain.__scripts.OnClick(chainRow.chain)
+  assert(U.chainOpen and U.chainOpen[id], "the click opens it")
+  local subs, headRow = 0, nil
+  for _, r in ipairs(card.rows.items) do
+    if r:IsShown() and r.q and r.q.id == id then headRow = r end
+    if r:IsShown() and r.name:GetText():find("^\226\134\179 ") then subs = subs + 1; assert(not r.chain:IsShown(), "a step under a chain carries no toggle of its own") end
+  end
+  assert(subs >= 1 and headRow and headRow.chain.label:GetText() == "\226\150\190", "its steps show under the row, the chevron points down (" .. subs .. " steps)")
+  lines = {}; headRow.chain.__scripts.OnEnter(headRow.chain)
+  assert(lines[1] == "The chain" and lines[2]:find("fold it away", 1, true), "the toggle's tooltip")
+  headRow.chain.__scripts.OnClick(headRow.chain)
+  subs = 0
+  for _, r in ipairs(card.rows.items) do if r:IsShown() and r.name:GetText():find("^\226\134\179 ") then subs = subs + 1 end end
+  assert(subs == 0 and not (U.chainOpen and U.chainOpen[id]), "a second click folds it")
+  -- quests done in the same spot: the row tooltip says so
+  local items = { { q = QB.Quest.Get(7), st = { code = "todo", text = "" } }, { q = QB.Quest.Get(62), st = { code = "todo", text = "" } } }
+  assert(QB.Data.OBJ and QB.Data.OBJ[7], "objective areas are in the data")
+  local together
+  for _, c in ipairs(v2.cards.items) do if c:IsShown() then for _, r in ipairs(c.rows.items) do
+    if r:IsShown() and r.together and not together then together = r end
+  end end end
+  if together then
+    lines = {}; together.__scripts.OnEnter(together)
+    assert(table.concat(lines, "\n"):find("Done in the same spot as: ", 1, true), "the tooltip names the quests done in the same spot")
+    print("together:", together.q.name, "|", table.concat(together.together, ", "))
+  else
+    print("together: no two shown quests share a spot in this fixture")
+  end
+  local before = #items
+  U.Together(items)
+  assert(#items == before, "Together leaves the list as it was")
 end
 
 local seen = {}

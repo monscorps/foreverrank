@@ -46,6 +46,13 @@ def nerfed(m):
 
 
 
+def load_json(path, default=None):
+    if not os.path.exists(path):
+        return default
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
 def load(name, default=None):
     p = os.path.join(RAW, name)
     return json.load(open(p)) if os.path.exists(p) else default
@@ -1037,6 +1044,67 @@ lines.append("D.TURNH = " + keyed(TURNH))
 lines.append("-- steps that follow a quest in its chain, races that may take a race-limited quest (1 Human, 2 Orc, 4 Dwarf, 8 Night Elf,")
 lines.append("-- 16 Undead, 32 Tauren, 64 Gnome, 128 Troll), and quests that rule each other out")
 lines.append("D.NEXT = " + keyed(NEXT))
+
+# where each quest is done: up to three spawn areas per quest from the Classic database (objectives.py),
+# {continent, world x, world y, radius in yards}, the busiest first. The Available tab uses them to say which
+# quests are done in the same spot.
+_OBJ_SRC = load("objectives.json", {}) or {}
+OBJ = {}
+for qid in IDS:
+    areas = []
+    for e in _OBJ_SRC.get(str(qid)) or []:
+        for a in e.get("areas") or []:
+            if len(a) >= 5 and a[0] in (0, 1):
+                areas.append((a[4], [int(a[0]), int(round(a[1])), int(round(a[2])), int(round(a[3]))]))
+    if areas:
+        areas.sort(key=lambda t: -t[0])
+        seen_a, out_a = set(), []
+        for _, a in areas:
+            k = (a[0], a[1] // 60, a[2] // 60)
+            if k not in seen_a:
+                seen_a.add(k)
+                out_a.append(a)
+            if len(out_a) == 3:
+                break
+        OBJ[qid] = out_a
+lines.append("-- [id] = { {continent, world x, world y, radius}, ... }: where the quest is done, from the Classic database")
+lines.append("D.OBJ = " + keyed(OBJ))
+
+# what a quest rewards, for the finder: the best item level among its reward items, what kinds they are
+# (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable), and the id of the best piece
+_ITEMS = (load_json(os.path.join(REPO, "plan", "items-db.json")) or {})
+_ITEMS = _ITEMS.get("items") or _ITEMS
+if isinstance(_ITEMS, list):
+    _ITEMS = {str(i.get("id")): i for i in _ITEMS}
+REWARD = {}
+for qid in IDS:
+    q = LIST[qid]
+    ids = [x[0] for x in (q.get("itemrewards") or []) + (q.get("itemchoices") or []) if isinstance(x, list) and x]
+    best, kinds, bestId = 0, 0, 0
+    for iid in ids:
+        it = _ITEMS.get(str(iid))
+        if not it:
+            continue
+        cat, slot = str(it.get("cat") or ""), str(it.get("slot") or "")
+        ilvl = int(it.get("itemLevel") or 0)
+        if cat in ("armor", "weapon", "accessory", "offhand"):
+            kinds |= 1
+            if ilvl > best:
+                best, bestId = ilvl, int(iid)
+        if slot == "trinket":
+            kinds |= 2
+        if slot in ("finger", "neck"):
+            kinds |= 4
+        if cat == "recipe":
+            kinds |= 8
+        if slot == "bag":
+            kinds |= 16
+        if cat == "consumable":
+            kinds |= 32
+    if kinds:
+        REWARD[qid] = [best, kinds, bestId]
+lines.append("-- [id] = { best item level among the rewards, kinds (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable), best item }")
+lines.append("D.REWARD = " + keyed(REWARD))
 lines.append("-- [id] = {{item, how many, name}, ...}: what the quest asks you to bring")
 lines.append("D.REQ = " + keyed(REQ))
 lines.append("D.RACE = " + keyed(RACE))
