@@ -36,7 +36,7 @@ function Auto.MayAccept(id, trivial, repeatable)
   if trivial or repeatable or logFull() then return false end
   local q = id and id ~= 0 and Q.Get(id)
   if not q then return true end
-  if not Q.ForMe(q) or QB:SkipsQuest(q) then return false end
+  if q.repeatable or not Q.ForMe(q) or QB:SkipsQuest(q) then return false end
   if banking() and QB.Model.XpAt(q, level()) < 500 * QB.Scale(level()) and not QB:Upgrade(q) then return false end
   return true
 end
@@ -65,26 +65,29 @@ function Auto.Greeting(event)
     if event == "GOSSIP_SHOW" and C_GossipInfo then
       if turnIn and C_GossipInfo.GetActiveQuests and C_GossipInfo.SelectActiveQuest then
         for _, info in ipairs(C_GossipInfo.GetActiveQuests() or {}) do
-          if info.isComplete and info.questID and Auto.MayTurnIn(info.questID) then C_GossipInfo.SelectActiveQuest(info.questID) return end
+          local id = QB.Plain(info.questID)
+          if QB.Plain(info.isComplete) and id and Auto.MayTurnIn(id) then C_GossipInfo.SelectActiveQuest(id) return end
         end
       end
       if accept and C_GossipInfo.GetAvailableQuests and C_GossipInfo.SelectAvailableQuest then
         for _, info in ipairs(C_GossipInfo.GetAvailableQuests() or {}) do
-          if info.questID and Auto.MayAccept(info.questID, info.isTrivial, info.repeatable) then C_GossipInfo.SelectAvailableQuest(info.questID) return end
+          local id = QB.Plain(info.questID)
+          if id and Auto.MayAccept(id, QB.Plain(info.isTrivial), QB.Plain(info.repeatable)) then C_GossipInfo.SelectAvailableQuest(id) return end
         end
       end
     elseif event == "QUEST_GREETING" then
       if turnIn and GetNumActiveQuests and GetActiveTitle and SelectActiveQuest then
         for i = 1, GetNumActiveQuests() or 0 do
           local _, complete = GetActiveTitle(i)
-          local id = GetActiveQuestID and GetActiveQuestID(i)
-          if complete and Auto.MayTurnIn(id) then SelectActiveQuest(i) return end
+          local id = QB.Plain(GetActiveQuestID and GetActiveQuestID(i))
+          if QB.Plain(complete) and id and Auto.MayTurnIn(id) then SelectActiveQuest(i) return end
         end
       end
       if accept and GetNumAvailableQuests and GetAvailableQuestInfo and SelectAvailableQuest then
         for i = 1, GetNumAvailableQuests() or 0 do
           local trivial, _, repeatable, _, id = GetAvailableQuestInfo(i)
-          if Auto.MayAccept(id, trivial, repeatable) then SelectAvailableQuest(i) return end
+          id = QB.Plain(id)
+          if Auto.MayAccept(id, QB.Plain(trivial), QB.Plain(repeatable)) then SelectAvailableQuest(i) return end
         end
       end
     end

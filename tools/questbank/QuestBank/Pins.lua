@@ -111,17 +111,28 @@ function P:Build()
   local givers = {}
   for id in pairs(QB:Plan().add) do
     local q = QB.Quest.Get(id)
-    if q and q.give and not q.give.inside and q.give.m > 0 and not QB.state.log[id] then
+    if q and not q.repeatable and not QB.state.log[id] then
       local st = QB:Status(q)
       if st.code == "todo" or st.code == "prereq" then
-        local key = q.give.n .. q.give.m
-        local g = givers[key]
-        if not g then
-          g = { m = q.give.m, x = q.give.x, y = q.give.y, name = q.give.n, icon = T.questAvail, when = "Pick up", lines = {} }
-          givers[key] = g
-          list[#list + 1] = g
+        -- a chain: the first open step's giver, or the held step's hand-in (what the click and the arrow aim at)
+        local at, label = q.give, nil
+        if st.code == "prereq" and QB.Arrow and QB.Arrow.FirstStep then
+          local first, held = QB.Arrow.FirstStep(q, st)
+          if first and first ~= q then
+            at = held and first.turn or first.give
+            label = (held and "chain: hand in " or "chain: pick up ") .. first.name
+          end
         end
-        g.lines[#g.lines + 1] = { q.name, st.code == "prereq" and "chain first" or QB.Comma(QB.Model.XpAt(q, QB.state.level)) }
+        if at and not at.inside and at.m and at.m > 0 then
+          local key = at.n .. at.m
+          local g = givers[key]
+          if not g then
+            g = { m = at.m, x = at.x, y = at.y, name = at.n, icon = T.questAvail, when = "Pick up", lines = {} }
+            givers[key] = g
+            list[#list + 1] = g
+          end
+          g.lines[#g.lines + 1] = { q.name, label or (st.code == "prereq" and "chain first" or QB.Comma(QB.Model.XpAt(q, QB.state.level))) }
+        end
       end
     end
   end

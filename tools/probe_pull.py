@@ -196,10 +196,13 @@ def disc_of(kind, data):
 # --------------------------------------------------------------------------------------- the merge
 def empty():
     return {"meta": {"last_id": 0, "uploads": 0, "with_notes": 0, "sources": {}, "pulled": None},
-            "q": {}, "npc": {}, "offer": {}, "chain": {}, "item": {}, "seen": {}}
+            "q": {}, "npc": {}, "offer": {}, "chain": {}, "item": {}, "seen": {}, "seen_at": {}}
 
 
 # ----------------------------------------------------------------------------------- the XP seen
+CUT_DAY = "2026-10-02"  # Blizzard's dungeon-XP cut landed with build 70170 late on 2026-10-01; hand-ins dated before this day are pre-cut
+
+
 def merge_seen(acc, kind, data):
     """What the game paid: QuestBankDB.turnins (every hand-in, with the XP the event reported) and the
     player's own quest-window readings in QuestBankDB.live (src npc/log/turnin; party-shared ones are
@@ -219,9 +222,10 @@ def merge_seen(acc, kind, data):
     except (TypeError, ValueError):
         era = 0
     seen = acc.setdefault("seen", {})
+    counted = acc.setdefault("seen_at", {})  # "qid:at" of hand-ins already counted: the same growing file comes back upload after upload
     n = 0
 
-    def vote(qid, xp, lvl, src, e):
+    def vote(qid, xp, lvl, src, e, at=None):
         nonlocal n
         try:
             qid, xp, lvl = int(qid), int(xp), int(lvl or 0)
@@ -229,18 +233,40 @@ def merge_seen(acc, kind, data):
             return
         if qid <= 0 or xp <= 0:
             return
-        key = "%d:%d:%d:%s:%d" % (xp, lvl, build, src, e)
+        # a dated row speaks for itself: a hand-in before the cut is pre-cut whatever build uploaded it (the client
+        # writes the build at login, and QuestBankDB.turnins is never pruned); build 0 marks it
+        b = 0 if (isinstance(at, str) and at[:10] < CUT_DAY) else build
+        key = "%d:%d:%d:%s:%d" % (xp, lvl, b, src, e)
         q = seen.setdefault(str(qid), {})
         q[key] = q.get(key, 0) + 1
         n += 1
 
+    mine = set()
     for t in data.get("turnins") or []:
         if isinstance(t, dict) and not t.get("hidden") and isinstance(t.get("xp"), (int, float)):
-            vote(t.get("id"), t["xp"], t.get("level"), "turnin", 9)
+            tag = "%s:%s" % (t.get("id"), t.get("at"))
+            try:
+                mine.add((int(t.get("id")), int(t["xp"])))
+            except (TypeError, ValueError):
+                pass
+            if t.get("at") and tag in counted:
+                continue
+            counted[tag] = 1
+            vote(t.get("id"), t["xp"], t.get("level"), "turnin", 9, t.get("at"))
     live = data.get("live") if isinstance(data.get("live"), dict) else {}
     for qid, v in live.items():
         if isinstance(v, dict) and v.get("src") in ("npc", "log", "turnin") and isinstance(v.get("full"), (int, float)):
-            vote(qid, v["full"], v.get("lvl"), v["src"], era)
+            try:
+                if (int(qid), int(v["full"])) in mine:
+                    continue  # the hand-in's own copy, counted above
+            except (TypeError, ValueError):
+                pass
+            if v.get("at"):  # a dated reading (3.4.6+) counts once across uploads; older ones carry no date
+                tag = "live:%s:%s:%s" % (qid, v["full"], v["at"])
+                if tag in counted:
+                    continue
+                counted[tag] = 1
+            vote(qid, v["full"], v.get("lvl"), v["src"], era, v.get("at"))
     return n
 
 
@@ -407,12 +433,19 @@ def selftest():
     assert acc["meta"]["uploads"] == 3 and acc["meta"]["with_notes"] == 3 and acc["meta"]["sources"] == {"fixture": 3}
     # what the game paid: hand-ins and own window readings vote, party readings and hidden numbers don't
     acc2 = empty()
-    n = merge_seen(acc2, "questbank-savedvars", {
+    upload = {
         "disc": {"v": 1, "q": {}, "build": 70170}, "liveEra": 3,
-        "turnins": [{"id": 971, "xp": 6550, "level": 22}, {"id": 971, "xp": 6550, "level": 22}, {"id": 5, "xp": 0, "level": 3},
-                    {"id": 1200, "xp": None, "level": 24, "hidden": True}],
-        "live": {"386": {"full": 4200, "lvl": 22, "src": "npc"}, "1200": {"full": 8007, "lvl": 20, "src": "party"}}})
-    assert n == 3 and acc2["seen"] == {"971": {"6550:22:70170:turnin:9": 2}, "386": {"4200:22:70170:npc:3": 1}}, acc2["seen"]
+        "turnins": [{"id": 971, "xp": 6550, "level": 22, "at": "2026-10-02 03:10:05"}, {"id": 971, "xp": 6550, "level": 22, "at": "2026-10-02 03:10:05"},
+                    {"id": 971, "xp": 6550, "level": 22, "at": "2026-10-02 04:00:00"}, {"id": 5, "xp": 0, "level": 3, "at": "2026-10-02 01:00:00"},
+                    {"id": 166, "xp": 9750, "level": 20, "at": "2026-09-30 22:00:00"},
+                    {"id": 1200, "xp": None, "level": 24, "hidden": True, "at": "2026-10-02 05:00:00"}],
+        "live": {"386": {"full": 4200, "lvl": 22, "src": "npc", "at": "2026-10-02"}, "971": {"full": 6550, "lvl": 22, "src": "turnin"},
+                 "1200": {"full": 8007, "lvl": 20, "src": "party"}}}
+    n = merge_seen(acc2, "questbank-savedvars", upload)
+    # the two identical dated rows count once, the second hand-in counts, the pre-cut one is keyed build 0, the live
+    # copy of a counted hand-in is skipped, party readings and hidden numbers are left out
+    assert n == 4 and acc2["seen"] == {"971": {"6550:22:70170:turnin:9": 2}, "166": {"9750:20:0:turnin:9": 1}, "386": {"4200:22:70170:npc:3": 1}}, acc2["seen"]
+    assert merge_seen(acc2, "questbank-savedvars", upload) == 0, "the same file uploaded again adds no votes"
     assert merge_seen(acc2, "export", {"turnins": [{"id": 1, "xp": 5, "level": 1}]}) == 0, "exports carry no hand-ins"
     json.dumps(acc)  # everything JSON-clean
     print("selftest OK:", summary(acc))
@@ -442,7 +475,10 @@ def main():
             if not m:
                 continue
             acc["meta"]["last_id"] = max(acc["meta"]["last_id"], int(m.group(1)))
-            kind, notes = merge_upload(acc, open(os.path.join(a.raw_dir, f), encoding="utf-8").read(), "rebuild")
+            try:
+                kind, notes = merge_upload(acc, open(os.path.join(a.raw_dir, f), encoding="utf-8").read(), "rebuild")
+            except (ValueError, KeyError) as e:
+                print("  %s could not be read, skipped: %s" % (f, e))
         print("rebuilt from %d decoded upload(s)" % acc["meta"]["uploads"])
     if a.merge:
         for f in a.merge:

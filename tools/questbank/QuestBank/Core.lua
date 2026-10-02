@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.4.7"
+QB.version = "3.4.8"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -78,14 +78,40 @@ local function readDone()
   return t, n
 end
 
+-- what this character handed in with QuestBank watching, kept per character: uploads showed quests handed in one
+-- day and missing from the game's list the next (Seeking the Kor Gem, Bailor's Ore Shipment), offered again as new
+local function handedSet(create)
+  local db = QuestBankDB
+  if not (db and db.plans) then return nil end
+  local key = QB.charKey or (UnitName and UnitName("player") and QB:CharKey()) or nil
+  if not key then return nil end
+  local p = db.plans[key]
+  if not p and create then p = QB:Plan() end
+  if p then p.handed = p.handed or {} end
+  return p and p.handed or nil
+end
+
+local doneSig
 function API.RefreshDone()
-  doneSet, doneCount = readDone()
+  local t, n = readDone()
+  local sig = n
+  for id in pairs(t) do sig = sig + id end
+  local h = handedSet(false)
+  if h then for id in pairs(h) do t[id] = true end end
+  local changed = doneSet ~= nil and sig ~= doneSig
+  doneSet, doneCount, doneSig = t, n, sig
   doneRead = GetTime and GetTime() or 0
+  if changed then
+    QB.doneVer = (QB.doneVer or 0) + 1
+    if QB.loggedIn and QB.MarkDirty then QB:MarkDirty() end
+  end
 end
 
 function API.MarkDone(id)
   if not doneSet then API.RefreshDone() end
-  if not doneSet[id] then doneSet[id] = true; doneCount = doneCount + 1 end
+  if not doneSet[id] then doneSet[id] = true; doneCount = doneCount + 1; QB.doneVer = (QB.doneVer or 0) + 1 end
+  local h = handedSet(true)
+  if h then h[id] = (time and time()) or 0 end
 end
 
 function API.DoneList()
@@ -102,10 +128,10 @@ function API.DoneSources(id)
   local flag
   if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
     local ok, v = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
-    flag = ok and v and true or false
+    flag = ok and not (issecretvalue and issecretvalue(v)) and v == true
   elseif IsQuestFlaggedCompleted then
     local ok, v = pcall(IsQuestFlaggedCompleted, id)
-    flag = ok and v and true or false
+    flag = ok and not (issecretvalue and issecretvalue(v)) and v == true
   end
   return doneSet[id] and true or false, flag, doneCount
 end
@@ -116,11 +142,11 @@ function API.IsDone(id)
   if doneSet[id] then return true end
   if C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted then
     local ok, v = pcall(C_QuestLog.IsQuestFlaggedCompleted, id)
-    return ok and v and true or false
+    return ok and not (issecretvalue and issecretvalue(v)) and v == true
   end
   if IsQuestFlaggedCompleted then
     local ok, v = pcall(IsQuestFlaggedCompleted, id)
-    return ok and v and true or false
+    return ok and not (issecretvalue and issecretvalue(v)) and v == true
   end
   return false
 end
@@ -471,6 +497,10 @@ function Q.Get(id)
   c.sodLeftover = math.floor(c.flags / 128) % 2 == 1 -- Season of Discovery data whose NPC isn't known in Forever
   c.nerfed = math.floor(c.flags / 256) % 2 == 1      -- multiplier computed from the pre-cut read (D.NERF): the extra above x1 halved
   c.confirmed = math.floor(c.flags / 512) % 2 == 1   -- XP as the game paid it after the cut (a hand-in or quest window, build 70170+)
+  c.wanted = math.floor(c.flags / 1024) % 2 == 1     -- a wanted poster
+  c.escort = math.floor(c.flags / 2048) % 2 == 1     -- an escort
+  c.repeatable = math.floor(c.flags / 4096) % 2 == 1 -- repeatable: never suggested
+  c.near = math.floor(c.flags / 8192) % 2 == 1       -- kept as read: the game paid within a few percent of this number
   c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and API.ItemIcon(c.bag[1])) or API.ItemIcon(D.QITEM[id])
     or (c.cat and c.cat.icon) or D.TEX.questGeneric
   cache[id] = c
@@ -489,22 +519,60 @@ end
 
 function Q.Label(id)
   if type(id) == "table" then
-    local names = {}
-    for _, x in ipairs(id) do names[#names + 1] = Q.Label(x) end
+    local names, seen = {}, {}
+    for _, x in ipairs(id) do
+      local n = Q.Label(x)
+      if not seen[n] then seen[n] = true; names[#names + 1] = n end
+    end
     return table.concat(names, " or ")
   end
   return D.STEPNAME[id] or D.QN[id] or ("quest " .. id)
 end
 
 -- a prerequisite: one quest, or a list of which any one will do
+-- the quests each plain step leads to (every quest whose chain lists it), built once from D.PRE
+local laterOf
+local function laterSteps(id)
+  if not laterOf then
+    laterOf = {}
+    for x, pre in pairs(D.PRE or {}) do
+      for _, p in ipairs(pre) do
+        if type(p) ~= "table" then laterOf[p] = laterOf[p] or {}; table.insert(laterOf[p], x) end
+      end
+    end
+  end
+  return laterOf[id]
+end
+
+-- a later step of this quest's chain is in your log or done: the game offers a step only once the ones before it
+-- are handed in, so this one is behind you. Returns that later step and "held" or "done".
+function Q.Behind(id)
+  local s = QB.state
+  for _, x in ipairs(laterSteps(id) or {}) do
+    if s and s.log and s.log[x] then return x, "held" end
+    if API.IsDone(x) then return x, "done" end
+  end
+  return nil
+end
+
 local function preDone(p)
   if type(p) == "table" then
-    for _, x in ipairs(p) do if API.IsDone(x) then return true end end
+    for _, x in ipairs(p) do if API.IsDone(x) or Q.Behind(x) then return true end end
     return false
   end
-  return API.IsDone(p)
+  return API.IsDone(p) or Q.Behind(p) ~= nil
 end
 Q.PreDone = preDone
+
+-- the step of this group (or the step itself) that is in your log
+local function heldOf(p)
+  local s = QB.state
+  if not (s and s.log) then return nil end
+  if type(p) ~= "table" then return s.log[p] and p or nil end
+  for _, x in ipairs(p) do if s.log[x] then return x end end
+  return nil
+end
+Q.HeldOf = heldOf
 
 -- the chain up to and including this quest, for tooltips: "A Watchful Eye > Looking Further > Morganth"
 function Q.ChainText(q)
@@ -568,15 +636,16 @@ function Live.Apply()
   -- one at or below it is fresh and stays. (Era 2 was 3.4.4's purge; 3.4.6 runs once more for the quests it
   -- left out, keeping what 3.4.4 and 3.4.5 users learned since.)
   local era = db.liveEra or 0
-  if D.NERF and era < 3 then
+  if era < 3 then -- (by era, not by D.NERF: the cut happened whatever the catalog's later state)
     for id, v in pairs(db.live) do
       local q = Q.Get(id)
       if q then
         local stale = false
         if q.nerfed or q.confirmed or (q.mult or 1) > 1 then
           stale = (v.full or 0) > QB.Model.Listed(q) * 1.15
-        elseif q.dungeon and q.unconfirmed and era < 2 then
-          stale = true -- an unread dungeon quest: the old reading may carry the old extra
+        elseif q.dungeon and q.unconfirmed and not q.xpUnknown and era < 2 then
+          stale = true -- an unread dungeon quest: the old reading may carry the old extra (a quest with no XP in
+                       -- the catalog keeps its reading: a high number beats none)
         end
         if stale then db.live[id] = nil; q.liveFull = nil end
       end
@@ -672,8 +741,46 @@ function QB:Settings()
 end
 
 function QB:CharKey()
+  if QB.charKey then return QB.charKey end
   local realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or "?"
   return (UnitName("player") or "?") .. "-" .. realm
+end
+
+-- the realm's name comes two ways (with spaces, and without), and at logout only the spaced one answers, so a
+-- character's saved tables could split in two keys: fold the spaced one into the normalized one, once, at login
+function QB:MergeCharKeys()
+  local db, key = QuestBankDB, QB.charKey
+  local plain = GetRealmName and GetRealmName()
+  if not (db and key and plain) then return end
+  local other = (UnitName("player") or "?") .. "-" .. plain
+  if other == key then return end
+  for _, name in ipairs({ "plans", "chars", "held", "bank" }) do
+    local t = db[name]
+    if type(t) == "table" and t[other] ~= nil then
+      if t[key] == nil then
+        t[key] = t[other]
+      elseif name == "plans" and type(t[key]) == "table" and type(t[other]) == "table" then
+        local a, b = t[key], t[other]
+        for _, f in ipairs({ "add", "cut", "seen", "removed", "handed", "rep" }) do
+          if type(b[f]) == "table" then
+            a[f] = a[f] or {}
+            for k, v in pairs(b[f]) do if a[f][k] == nil then a[f][k] = v end end
+          end
+        end
+        for k, v in pairs(b) do if a[k] == nil then a[k] = v end end
+      elseif name == "chars" and type(t[key]) == "table" and type(t[other]) == "table" then
+        local a, b = t[key], t[other]
+        local na, nb = #(a.completed or {}), #(b.completed or {})
+        if (b.saved or "") > (a.saved or "") then
+          if nb < na then b.completed = a.completed end
+          t[key] = b
+        elseif nb > na then
+          a.completed = b.completed
+        end
+      end
+      t[other] = nil
+    end
+  end
 end
 
 function QB:Plan()
@@ -691,6 +798,7 @@ function QB:Plan()
     db.plans[key] = p
   end
   p.add, p.cut, p.seen, p.removed = p.add or {}, p.cut or {}, p.seen or {}, p.removed or {}
+  p.handed, p.rep = p.handed or {}, p.rep or {}
   return p
 end
 
@@ -797,8 +905,8 @@ end
 -- in a place you skipped, and within reach of your level (two above while questing, none at a lock).
 -- One gate for the arrow's chain walk and for what a quest leads on to, so the two can't drift apart.
 local function stepOpen(nq, lvl, banking, s)
-  return nq ~= nil and Q.ForMe(nq) and not API.IsDone(nq.id) and not s.log[nq.id] and not nq.sodLeftover
-    and not QB:SkipsQuest(nq) and (nq.req or 1) <= lvl + (banking and 0 or 2)
+  return nq ~= nil and Q.ForMe(nq) and not API.IsDone(nq.id) and not s.log[nq.id] and not nq.sodLeftover and not nq.repeatable
+    and not Q.Behind(nq.id) and not QB:SkipsQuest(nq) and (nq.req or 1) <= lvl + (banking and 0 or 2)
 end
 
 -- a chain worth carrying on: the best later step you could take (up to three steps on), what it
@@ -982,6 +1090,7 @@ local turnedIn = {} -- this session, so a hand-in is never mistaken for an aband
 local function trackRemovals(s)
   if not QB.logReady then return end
   local p = QB:Plan()
+  for id in pairs(p.add) do if API.IsDone(id) then p.add[id] = nil end end
   for id, title in pairs(p.seen) do
     if not s.log[id] then
       if not turnedIn[id] and not API.IsDone(id) then
@@ -1002,12 +1111,41 @@ local function trackRemovals(s)
   end
 end
 
+-- the game's own number for every quest you hold: the quest log shows each quest's XP at your level. Exact for
+-- this level (q.logXp), and the full value is learned from it when the quest is not grey (Live, source "log").
+function QB.ReadLogXp(s)
+  if not GetQuestLogRewardXP then return end
+  local vals, seen, dup, valued = {}, {}, 0, 0
+  for _, e in ipairs(s.logOrder) do
+    local ok, xp = pcall(GetQuestLogRewardXP, e.id)
+    if ok and type(xp) == "number" and not (issecretvalue and issecretvalue(xp)) and xp > 0 then
+      vals[e.id] = xp
+      valued = valued + 1
+      if seen[xp] then dup = dup + 1 end
+      seen[xp] = true
+    end
+  end
+  -- a client answering with the selected quest's number for every id repeats one value: trust none of it then
+  if valued >= 3 and dup + 1 >= valued then vals = {} end
+  for _, e in ipairs(s.logOrder) do
+    local q = Q.Get(e.id)
+    local xp = vals[e.id]
+    if q then q.logXp = xp end
+    if xp then
+      e.xp = xp
+      Live.Record(e.id, xp, s.level, "log")
+    end
+  end
+  for id, q in pairs(cache) do if q and q.logXp and not s.log[id] then q.logXp = nil end end
+end
+
 function QB:ReadState()
   local s = self.state
   s.level = UnitLevel("player") or 1
   s.xp = UnitXP("player") or 0
   s.xpMax = UnitXPMax("player") or 1
   s.log, s.logOrder = API.LogQuests()
+  QB.ReadLogXp(s)
   s.logCount = #s.logOrder
   s.mapID = API.MapID()
   s.bagStarts = API.BagQuestStarts()
@@ -1095,6 +1233,12 @@ function QB:Status(q)
     end
     return { code = "active", text = text }
   end
+  if not q.excl then
+    local x, how = Q.Behind(q.id)
+    if x then
+      return { code = "todo", text = "Probably behind you", behind = true, later = x, how = how }
+    end
+  end
   local bag = q.bag
   if bag and bag[3] == 1 then
     local n = API.ItemCount(bag[1])
@@ -1118,16 +1262,16 @@ function QB:Status(q)
     local from = 1
     for k = #q.pre, 1, -1 do
       local p = q.pre[k]
-      if preDone(p) or (type(p) ~= "table" and s.log[p]) then from = k break end
+      if preDone(p) or heldOf(p) then from = k break end
     end
     local left = 0
     for k = from, #q.pre do if not preDone(q.pre[k]) then left = left + 1 end end
     for k = from, #q.pre do
       local p = q.pre[k]
       if not preDone(p) then
-        local held = type(p) ~= "table" and s.log[p]
+        local held = heldOf(p)
         local steps = left > 1 and string.format(" (%d steps)", left) or ""
-        if held then return { code = "prereq", text = "Hand in " .. Q.Label(p) .. " first" .. steps, pre = p } end
+        if held then return { code = "prereq", text = "Hand in " .. Q.Label(held) .. " first" .. steps, pre = p } end
         return { code = "prereq", text = "First: " .. Q.Label(p) .. steps, pre = p }
       end
     end
@@ -1184,7 +1328,7 @@ end
 function QB:PreStep(p)
   if type(p) ~= "table" then return Q.Get(p) end
   local s = self.state
-  for _, id in ipairs(p) do if s.log[id] then return Q.Get(id) end end
+  for _, id in ipairs(p) do if s.log[id] and Q.Get(id) then return Q.Get(id) end end
   for _, id in ipairs(p) do
     local q = Q.Get(id)
     if q and Q.ForMe(q) then return q end
@@ -1200,14 +1344,19 @@ function QB:ChainSteps(q)
   local from = 1
   for k = #q.pre, 1, -1 do
     local p = q.pre[k]
-    if preDone(p) or (type(p) ~= "table" and s.log[p]) then from = k break end
+    if preDone(p) or heldOf(p) then from = k break end
   end
   local steps = {}
   for k = from, #q.pre do
     local p = q.pre[k]
     if not preDone(p) then
-      local sq = self:PreStep(p)
-      steps[#steps + 1] = { q = sq or false, held = (sq and s.log[sq.id]) and true or false }
+      local h = heldOf(p)
+      if h and not Q.Get(h) then
+        steps[#steps + 1] = { q = false, held = true } -- you hold a step the catalog lacks: nothing to aim at but its hand-in
+      else
+        local sq = self:PreStep(p)
+        steps[#steps + 1] = { q = sq or false, held = (sq and s.log[sq.id]) and true or false }
+      end
     end
   end
   return #steps > 0 and steps or nil
@@ -1495,7 +1644,7 @@ local function signature(list, opts)
   local T = QB.Data.TO_NEXT
   local xpq = math.floor((opts.xp or 0) * 50 / (T[opts.level] or 1))
   local parts = { opts.level, xpq, tostring(opts.mounted), opts.goal, opts.fac,
-                  opts.startHub or "-", tostring(opts.noHearth), opts.cap or 0, opts.mode or "", QB.liveVer or 0 }
+                  opts.startHub or "-", tostring(opts.noHearth), opts.cap or 0, opts.mode or "", QB.liveVer or 0, QB.doneVer or 0 }
   for _, e in ipairs(list) do parts[#parts + 1] = e.q.id .. (e.st and e.st.code or "") end
   return table.concat(parts, ":")
 end
@@ -1610,10 +1759,12 @@ function QB:Snapshot(reason)
     log[#log + 1] = { id = e.id, title = e.title, level = e.level, complete = e.complete, objectives = e.objectives }
   end
   local done = completedIDs()
+  local prev, stale = QuestBankDB.chars[self:CharKey()], nil
+  if #done == 0 and prev and type(prev.completed) == "table" and #prev.completed > 0 then done, stale = prev.completed, true end
   QuestBankDB.chars[self:CharKey()] = {
     saved = date("%Y-%m-%d %H:%M"), reason = reason, version = QB.version,
     level = s.level, xp = s.xp, xpMax = s.xpMax, class = s.class, race = race,
-    faction = UnitFactionGroup("player"), completed = done, log = log, bags = bagItems(),
+    faction = UnitFactionGroup("player"), completed = done, completedStale = stale, log = log, bags = bagItems(),
   }
   return #done, #log
 end
@@ -1716,6 +1867,8 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end -- after the window's XP is on record
     if QB.liveVer == before then return end -- nothing new: the plan stands
   elseif event == "PLAYER_LOGIN" then
+    local nr = GetNormalizedRealmName and GetNormalizedRealmName()
+    if nr then QB.charKey = (UnitName("player") or "?") .. "-" .. nr; QB:MergeCharKeys() end
     QB:ReadState()
     if QB.Minimap then QB.Minimap:Create() end
     if QB.Pins then QB.Pins:Init() end
@@ -1736,6 +1889,8 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
       QB.logReady = true
       QB:ReadState()
       QB.loggedIn = true
+    elseif doneCount == 0 then
+      API.RefreshDone() -- the game's completed list arrives a little after login; look again on every update until it does
     end
   elseif event == "QUEST_TURNED_IN" then
     onTurnIn(a1, a2)

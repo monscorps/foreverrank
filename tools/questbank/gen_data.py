@@ -20,7 +20,7 @@ Icons and textures: file IDs from the Forever client's interface manifest; a mis
   python3 tools/questbank/gen_data.py            # write Data.lua
   python3 tools/questbank/gen_data.py --fetch    # first fetch the NPC tooltips we lack (nether.wowhead.com)
 """
-import csv, json, math, os, sys
+import csv, json, math, os, re, sys
 from travel import Travel, DETOUR, RUN
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -158,7 +158,9 @@ CURATED = {
     219: ("inv_misc_note_02", "Escort Corporal Keeshan back from Render's Rock.", {}),
     115: ("inv_misc_orb_01", "3 Midnight Orbs from Blackrock Shadowcasters.", {}),
     126: ("inv_misc_monsterclaw_02", "Yowler's paw. A Baying of Gnolls first.", {"pre": [124]}),
-    19: ("inv_misc_head_orc_01", "Hand in Blackrock Blockade first, then kill Tharil'zun.", {"pre": [20, 98386, 98387]}),
+    19: ("inv_misc_head_orc_01", "Hand in Blackrock Blockade first, then kill Tharil'zun.", {"pre": [20, 98387]}),
+    98386: (None, None, {"pre": [20]}),
+    98387: (None, None, {"pre": [20]}),
     101: ("spell_nature_stoneclawtotem", "10 Ghoul Fangs, 10 Skeleton Fingers, 5 Vials of Spider Venom.", {}),
     58: ("inv_misc_bone_humanskull_01", "20 Plague Spreaders at Raven Hill. Parts 1 and 2 first.", {"pre": [56, 57]}),
     98447: ("spell_shadow_haunting", "The Valor family ghosts at Raven Hill. Part 1 first.", {"pre": [96139], "give": ("Sirra Von'Indi", 1431, 72.4, 47.4, None), "turn": ("Sirra Von'Indi", 1431, 72.4, 47.4, None)}),
@@ -263,6 +265,9 @@ CLASSIC = set()
 # Forever's client descends from Season of Discovery and carries its leftovers: Wowhead lists quests
 # whose NPCs were never put into Forever. Players' reports settle it quest by quest:
 NOT_IN_FOREVER = {78132, 78133, 78134}  # Alonso's Dragonslayer quests: no Alonso in Ashenvale (owner, 2026-09-30)
+# City of Dalaran (Wowhead area 16544): its quests are in the data, the dungeon is not open yet (Blizzard, 2026-10-01:
+# "will come in a future beta update"); drop this line when it opens
+NOT_IN_FOREVER |= {92456, 92489, 96986, 96987, 96988}
 SOD_NPC_OK = {211033, 211022}            # Garion Wendell and Owen Thadd take library books in Forever (owner)
 
 
@@ -345,9 +350,16 @@ def lua_round(x):
 
 
 def round_xp(e):
-    """The game's rounding of quest XP: to 10 below 1,000, to 50 from there (Model.lua roundQuestXp)."""
-    t = 10 if e < 1000 else 50
-    return lua_round(e / t) * t
+    """The game's rounding of quest XP (the server's RoundXPValue; Model.lua roundQuestXp): to 5 up to 100, to 10 up
+    to 500, to 25 up to 1,000, to 50 above. Hand-ins on 2026-10-02 showed it: 590 paid 600, 870 paid 875."""
+    e = int(math.floor(e))
+    if e <= 100:
+        return 5 * ((e + 2) // 5)
+    if e <= 500:
+        return 10 * ((e + 5) // 10)
+    if e <= 1000:
+        return 25 * ((e + 12) // 25)
+    return 50 * ((e + 25) // 50)
 
 
 def seen_full(qid, ql):
@@ -725,15 +737,18 @@ def cat_for(qid):
 # ---------------------------------------------------------------------------
 Q, QN, QITEM, QICON, TIPS, PRE, BAGQ, FOLLOW, RACE, EXCL_GROUPS = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
 DMULT = {}
-_seen_mult = {}
+DMULT_POST = {}  # the category's reads were all made on or after the cut: the value is already post-cut
+_seen_mult, _seen_post = {}, {}
 for _qid in IDS:
     _q, _d = LIST[_qid], DET.get(_qid) or {}
     if (_q.get("category2") == 2 or _q.get("type") == 81) and _d.get("mult") is not None:
         _seen_mult.setdefault(cat_for(_qid), []).append(_d["mult"])
+        _seen_post.setdefault(cat_for(_qid), []).append((_d.get("read") or "") >= NERF_DATE)
 for _cat, _ms in _seen_mult.items():
     _top = max(set(_ms), key=_ms.count)
     if len(_ms) >= 2 and _ms.count(_top) >= 0.6 * len(_ms) and _top != 1:
         DMULT[_cat] = _top
+        DMULT_POST[_cat] = all(_seen_post[_cat])
 FROM_FC, DISAGREE, SEEN_OK, SEEN_FIX, SEEN_FILL, SEEN_NEAR = [], [], [], [], [], []
 REQ = {}
 TURNH = {}
@@ -783,16 +798,17 @@ for qid in IDS:
         mult = round(FC[qid] / base, 2)  # ForeverChanges' Forever XP over the Classic base
         FROM_FC.append(qid)
     elif mult is not None and FC.get(qid) and base:
-        f = round(base * mult)
-        t = 10 if f < 1000 else 50
-        if abs(round(f / t) * t - FC[qid]) > max(60, FC[qid] * 0.02):
-            DISAGREE.append((qid, round(f / t) * t, FC[qid]))
+        f = round_xp(lua_round(base * mult))
+        if abs(f - FC[qid]) > max(60, FC[qid] * 0.02):
+            DISAGREE.append((qid, f, FC[qid]))
+    postcut = (d.get("read") or "") >= NERF_DATE  # a page read after the cut already shows the new multiplier
     if not d and mult is None or mult is None:
         flags |= 8
         mult = 1
         unconfirmed += 1
         if (flags & 1) and DMULT.get(cat_for(qid)):
             mult = DMULT[cat_for(qid)]
+            postcut = DMULT_POST.get(cat_for(qid), False)
             flags |= 32
     if qid in CLASSIC:
         flags |= 16
@@ -800,21 +816,30 @@ for qid in IDS:
         flags |= 64
     if sod_leftover(qid):
         flags |= 128
-    if NERF != 1 and mult and mult > 1:
+    if re.match(r"^(WANTED|Wanted)\b", q.get("name") or ""):
+        flags |= 1024  # a wanted poster
+    if ((CM.get(qid) or {}).get("flags") or 0) & 2:
+        flags |= 2048  # an escort (the Classic database's party-accept flag)
+    if ((CM.get(qid) or {}).get("special") or 0) & 1:
+        flags |= 4096  # repeatable: never suggested (the Classic seed drops these; Wowhead-listed ones slipped through)
+    if NERF != 1 and mult and mult > 1 and not postcut:
         # the 2026-10-01 cut, computed until Wowhead's pages show the new numbers. Hand-ins on 2026-10-02 paid the
         # cut value on every multiplied quest, dungeon-typed or not (The Test of Righteousness, Chol'aruk the Ravener).
+        # A page read on or after the cut (det "read" date) already shows the new multiplier: the Excavation Site
+        # quests read 1.95 and 2.2 on 2026-10-02 while the old pages still said 2.9 and 3.4.
         mult = nerfed(mult)
         flags |= 256
     seen = seen_full(qid, qlevel(qid))
     if seen:
         if base:
             computed = round_xp(lua_round(base * mult))
-            # within 5% (or 50 XP) the game agrees: the odd stack of the old build's rest bonus, a base a few points
-            # off, or the game's own rounding; only a real difference replaces the number
-            if abs(seen - computed) <= max(50, computed * 0.05):
+            # within 5% (or 15 XP) the game agrees (an odd bonus on the player's side); only a real difference
+            # replaces the number, and a near miss is kept as read but marked (flag 1024) so the tooltip is honest
+            if abs(seen - computed) <= max(15, computed * 0.05):
                 SEEN_OK.append(qid)
                 if seen != computed:
                     SEEN_NEAR.append((qid, computed, seen))
+                    flags |= 8192
             else:
                 SEEN_FIX.append((qid, computed, seen))
                 mult = round(seen / base, 4)
@@ -832,7 +857,7 @@ for qid in IDS:
     items = [x[0] for x in (q.get("itemrewards") or []) + (q.get("itemchoices") or []) if isinstance(x, list)]
     if items:
         QITEM[qid] = items[0]
-    if cur:
+    if cur and cur[0]:
         QICON[qid] = icon(cur[0])
         TIPS[qid] = cur[1]
     p = prereqs(qid)
@@ -863,6 +888,13 @@ for qid in IDS:
     for g in immediate_pre(qid):
         for p in g:
             if p in Q:
+                NEXT.setdefault(p, []).append(qid)
+for qid, cur in CURATED.items():
+    pre = cur[2].get("pre") if cur and cur[2] else None
+    if pre and qid in Q:
+        last = pre[-1]
+        for p in (last if isinstance(last, list) else [last]):
+            if p in Q and qid not in NEXT.get(p, []):
                 NEXT.setdefault(p, []).append(qid)
 
 
@@ -988,7 +1020,8 @@ lines.append("--         turn-in NPC, quest giver, category, class mask, flags (
 lines.append("--         16 Classic only: not in Wowhead Forever's data yet, 32 multiplier taken from its dungeon's other quests,")
 lines.append("--         64 XP not known yet, 128 a Season of Discovery leftover: its NPC hasn't been met in Forever,")
 lines.append("--         256 multiplier computed from the pre-2026-10-01 read: the extra above x1 halved, not yet re-read,")
-lines.append("--         512 XP as the game paid it after the cut: a hand-in or quest window on build 70170 or later)}")
+lines.append("--         512 XP as the game paid it after the cut: a hand-in or quest window on build 70170 or later,")
+lines.append("--         1024 a wanted poster, 2048 an escort, 4096 repeatable (never suggested), 8192 kept as read: the game paid within a few percent of it after the cut)}")
 lines.append("D.Q = {\n" + ",\n".join("[%d]=%s" % (k, lua(v)) for k, v in sorted(Q.items())) + "\n}")
 lines.append("D.QN = " + keyed(QN))
 lines.append("D.STEPNAME = " + keyed(STEPNAME))
@@ -1095,8 +1128,8 @@ def gap_report():
                ("; small differences kept as read: " + ", ".join("%d %s %s, paid %s" % (q, QN[q], c, g) for q, c, g in SEEN_NEAR)) if SEEN_NEAR else "",
                len(SEEN_FIX), (": " + ", ".join("%d %s %s -> %s" % (q, QN[q], c, g) for q, c, g in SEEN_FIX)) if SEEN_FIX else "",
                len(SEEN_FILL), (": " + ", ".join("%d %s" % (q, QN[q]) for q in SEEN_FILL)) if SEEN_FILL else ""),
-           "", "Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read, before the cut): %s." % (
-               ", ".join("%s x%s" % (CATS[c - 1]["name"], m) for c, m in sorted(DMULT.items(), key=lambda kv: CATS[kv[0] - 1]["name"])) or "none"),
+           "", "Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read; before the cut unless marked): %s." % (
+               ", ".join("%s x%s%s" % (CATS[c - 1]["name"], m, " (read after the cut)" if DMULT_POST.get(c) else "") for c, m in sorted(DMULT.items(), key=lambda kv: CATS[kv[0] - 1]["name"])) or "none"),
            "", "Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,",
            "holidays, repeatable turn-ins, raids and battlegrounds are left out.",
            "", "NPC positions: %d from Wowhead Forever, %d from the CMaNGOS spawn table where Wowhead has none." % (

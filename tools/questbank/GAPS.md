@@ -7,16 +7,16 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 
 | Check | Forever data | Missing | Classic seed | Missing |
 |---|---|---|---|---|
-| Forever XP multiplier read from its Wowhead Forever page | 2135 | 192 | 1459 | 1457 |
-| Turn-in NPC with a position | 2135 | 152 | 1459 | 7 |
-| Turn-in inside a dungeon (hand in on the way, not on the route) | 2135 | 94 | 1459 | 59 |
-| Quest giver with a position (quests that start from an item don't need one) | 2135 | 250 | 1459 | 12 |
-| Chain known (Wowhead Forever series or the Classic database) | 2135 | 428 | 1459 | 0 |
+| Forever XP multiplier read from its Wowhead Forever page | 2144 | 192 | 1459 | 1457 |
+| Turn-in NPC with a position | 2144 | 161 | 1459 | 7 |
+| Turn-in inside a dungeon (hand in on the way, not on the route) | 2144 | 94 | 1459 | 59 |
+| Quest giver with a position (quests that start from an item don't need one) | 2144 | 259 | 1459 | 12 |
+| Chain known (Wowhead Forever series or the Classic database) | 2144 | 437 | 1459 | 0 |
 
 On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip. Hand-ins on 2026-10-02 paid exactly that on every multiplied quest, dungeon-typed or not.
-What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 40 quests confirmed (within 5% counts as agreement; small differences kept as read: 392 The Curious Visitor 590, paid 600, 1654 The Test of Righteousness 870, paid 875), 0 corrected to the game's number, 0 with no XP in the catalog filled in.
+What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 40 quests confirmed (within 5% counts as agreement), 0 corrected to the game's number, 0 with no XP in the catalog filled in.
 
-Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read, before the cut): Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
+Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read; before the cut unless marked): Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
 
 Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,
 holidays, repeatable turn-ins, raids and battlegrounds are left out.
@@ -27,7 +27,7 @@ Classic frame and were moved to Forever's; 58 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 26.
 
-Seen in Forever by players (16 uploads merged by probe_pull.py, 2026-10-02T06:38:28Z): 82 quests, 0 of them Classic seeds now confirmed.
+Seen in Forever by players (16 uploads merged by probe_pull.py, 2026-10-02T07:20:16Z): 82 quests, 0 of them Classic seeds now confirmed.
 Seen in game but not in the catalog (1), to add: 91904 A Sealed Crate.
 
 Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both have a number, they disagree on 0:
@@ -228,7 +228,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98581 Archaic Rune (level 1, Alliance)
 - 98601 A Difficult Path (level 1, Horde)
 
-## Forever data: no turn-in position (152)
+## Forever data: no turn-in position (161)
 
 - 6661 Deeprun Rat Roundup (level 12, Alliance)
 - 6662 Me Brother, Nipsy (level 12, Alliance)
@@ -298,8 +298,16 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 94901 Hopping Helpers (level 11, both)
 - 94902 Valanaar Vintages (level 11, both)
 - 95250 Abominable Creatures (level 21, Alliance)
+- 95646 Horrors in the Highland (level 31, Alliance)
+- 95647 Lost in the Thicket Things (level 31, Alliance)
+- 95663 Dragonmaw Rumors (level 31, both)
+- 95664 Elder Knowledge (level 31, Horde)
+- 95697 Changing Tastes (level 31, Horde)
+- 95737 Seeking Caitlin (level 31, both)
 - 95771 A Taste of Darkness (level 10, both)
+- 95772 Songblade Search (level 31, both)
 - 95805 Grace of An'she and Mu'sha (level 4, Horde)
+- 95810 Lost Relic Carry (level 31, Alliance)
 - 95816 Sign Me Up! (level 60, both)
 - 95819 Sign Me Up! (level 60, both)
 - 95883 The Tortured Soul (level 23, Horde)
@@ -377,6 +385,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98576 Glyphic Parchment (level 1, Horde)
 - 98581 Archaic Rune (level 1, Alliance)
 - 98601 A Difficult Path (level 1, Horde)
+- 98815 Highland Hides (level 28, both)
 - 99079 Longwalker Malah (level 9, Horde)
 - 99081 Grim Tidings (level 9, Horde)
 - 99143 Bottles and Baubles (level 7, Alliance)
@@ -480,7 +489,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98517 Call of Fire (level 10, Horde)
 - 99260 Fillion's Mission (level 10, Alliance)
 
-## Forever data: no quest giver position (250)
+## Forever data: no quest giver position (259)
 
 - 934 Crown of the Earth (level 11, both)
 - 78307 The Horn of Xelthos (level 23, both)
@@ -575,8 +584,16 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 95213 Stolen Blasting Powder (level 10, Alliance)
 - 95250 Abominable Creatures (level 21, Alliance)
 - 95328 Whispering Horror Residue (level 10, Horde)
+- 95646 Horrors in the Highland (level 31, Alliance)
+- 95647 Lost in the Thicket Things (level 31, Alliance)
+- 95663 Dragonmaw Rumors (level 31, both)
+- 95664 Elder Knowledge (level 31, Horde)
+- 95697 Changing Tastes (level 31, Horde)
+- 95737 Seeking Caitlin (level 31, both)
 - 95771 A Taste of Darkness (level 10, both)
+- 95772 Songblade Search (level 31, both)
 - 95805 Grace of An'she and Mu'sha (level 4, Horde)
+- 95810 Lost Relic Carry (level 31, Alliance)
 - 95816 Sign Me Up! (level 60, both)
 - 95819 Sign Me Up! (level 60, both)
 - 95883 The Tortured Soul (level 23, Horde)
@@ -724,6 +741,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98576 Glyphic Parchment (level 1, Horde)
 - 98581 Archaic Rune (level 1, Alliance)
 - 98601 A Difficult Path (level 1, Horde)
+- 98815 Highland Hides (level 28, both)
 - 99079 Longwalker Malah (level 9, Horde)
 - 99081 Grim Tidings (level 9, Horde)
 - 99101 Our Ancient Enemy (level 9, Horde)
@@ -733,7 +751,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 99191 A Donation of Wool (level 60, Alliance)
 - 99196 A Donation of Wool (level 60, Horde)
 
-## Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own (428)
+## Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own (437)
 
 - 490 Bounty: Gnarlpine Furbolg (level 8, Alliance)
 - 5640 Desperate Prayer (level 10, Alliance)
@@ -960,9 +978,17 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 95314 That Shadowvale Green Elixir (level 10, Horde)
 - 95328 Whispering Horror Residue (level 10, Horde)
 - 95508 Unwelcome Guests (level 18, Horde)
+- 95646 Horrors in the Highland (level 31, Alliance)
+- 95647 Lost in the Thicket Things (level 31, Alliance)
+- 95663 Dragonmaw Rumors (level 31, both)
+- 95664 Elder Knowledge (level 31, Horde)
+- 95697 Changing Tastes (level 31, Horde)
+- 95737 Seeking Caitlin (level 31, both)
 - 95771 A Taste of Darkness (level 10, both)
+- 95772 Songblade Search (level 31, both)
 - 95803 A Token of Good Faith (level 12, Horde)
 - 95805 Grace of An'she and Mu'sha (level 4, Horde)
+- 95810 Lost Relic Carry (level 31, Alliance)
 - 95816 Sign Me Up! (level 60, both)
 - 95819 Sign Me Up! (level 60, both)
 - 95998 The Great Outdoors (level 6, Alliance)
@@ -1127,15 +1153,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98389 A Light in the Darkness (level 4, Horde)
 - 98407 Show of Force (level 17, Alliance)
 - 98423 The Treaty of Understanding (level 16, Alliance)
-- 98430 The Longwalkers (level 8, Horde)
-- 98447 The Valor Family (level 27, both)
-- 98459 A Lack of Virtue (level 21, Alliance)
-- 98461 Unrequited Love (level 21, Alliance)
-- 98517 Call of Fire (level 10, Horde)
-- 98574 Hallowed Memorandum (level 1, Alliance)
-- 98575 Tainted Tablet (level 1, Horde)
-- 98576 Glyphic Parchment (level 1, Horde)
-- and 28 more
+- and 37 more
 
 ## Classic seed: no turn-in position (7)
 

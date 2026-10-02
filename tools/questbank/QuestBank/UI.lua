@@ -227,7 +227,8 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   elseif q.xpUnknown then
     src = "not known yet"
   elseif q.confirmed then
-    src = string.format("%s x %s, as the game paid after the cut", QB.Comma(q.base), (tostring(q.mult):gsub("%.?0+$", "")))
+    src = string.format(q.near and "%s x %s; the game paid within a few percent of this after the cut" or "%s x %s, as the game paid after the cut",
+      QB.Comma(q.base), (tostring(q.mult):gsub("%.?0+$", "")))
   elseif q.dungeonMult then
     src = string.format("%s x %s, as its dungeon's other quests", QB.Comma(q.base), (tostring(q.mult):gsub("%.?0+$", "")))
   elseif q.unconfirmed then
@@ -238,6 +239,9 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
     src = QB.Comma(q.base) .. " x 1"
   end
   tip:AddDoubleLine("Forever XP " .. ((q.xpUnknown and not q.liveFull) and "?" or QB.Comma(full)), src, 1, 1, 1, 0.55, 0.75, 1)
+  if st and st.behind and st.later then
+    tip:AddLine(string.format("Probably behind you: %s, a later step of this chain, is %s, and the game only offers a step once the ones before it are handed in.", QB.Quest.Label(st.later), st.how == "held" and "in your log" or "done"), 1, 0.6, 0.3, true)
+  end
   if q.sodLeftover then
     tip:AddLine("A Season of Discovery leftover in Forever's data: nobody has met its NPC in Forever yet, so QuestBank doesn't suggest it.", 1, 0.5, 0.3, true)
   end
@@ -245,7 +249,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
     tip:AddLine("From the Classic database: not seen in Forever yet, so it may differ or not exist.", 1, 0.6, 0.3, true)
   end
   if q.nerfed and not q.confirmed and not q.liveFull and not q.xpUnknown then
-    tip:AddLine("Blizzard halved the extra XP of dungeon quests on 1 October 2026. This is the earlier reading with that cut applied; the game's own number takes over when you see the quest window or hand it in.", 1, 0.6, 0.3, true)
+    tip:AddLine("An estimate: Wowhead's reading from before Blizzard's 1 October cut, with the cut applied. Quests in your log use the game's own number.", 1, 0.6, 0.3, true)
   end
   if q.liveFull and math.abs(q.liveFull - QB.Model.Listed(q)) > 25 then
     tip:AddLine(string.format(q.nerfed and "The catalog lists %s. QuestBank uses the game's number." or "Wowhead lists %s. QuestBank uses the game's number.", QB.Comma(QB.Model.Listed(q))), 1, 0.6, 0.3, true)
@@ -1192,7 +1196,7 @@ function UI:Candidates(limit, level)
   local banking = QB:Banking()
   local above, below = QB:Range()
   -- the same question asked several times a refresh: answer it once a second
-  local key = table.concat({ limit or 0, level, s.level, s.logCount or 0, tostring(banking), fac or "", s.mapID or 0, above, below, QB:SkipSignature() }, ":")
+  local key = table.concat({ limit or 0, level, s.level, s.logCount or 0, tostring(banking), fac or "", s.mapID or 0, above, below, QB:SkipSignature(), QB.doneVer or 0 }, ":")
   local now = GetTime and GetTime() or 0
   UI.candMemo = UI.candMemo or {}
   local memo = UI.candMemo[key]
@@ -1221,6 +1225,7 @@ function UI:Candidates(limit, level)
       and (not race or rbit == 0 or rbit > 128 or math.floor(race / rbit) % 2 == 1)
       and r[2] <= s.level + 2 and r[1] >= level - below and r[1] <= ceiling and not s.log[id] and not D.FOLLOW[id]
       and math.floor(r[10] / 128) % 2 == 0 -- never suggest Season of Discovery leftovers
+      and math.floor(r[10] / 4096) % 2 == 0 -- nor repeatables
       and not (turn and turn[5] < 0)
       and not QB:Skipped(r[8], turn and turn[5]) then -- nor anything where you said to skip
       local live = QuestBankDB.live and QuestBankDB.live[id]
@@ -1235,6 +1240,7 @@ function UI:Candidates(limit, level)
     local f = c.full
     if m >= 10 then f = f * 0.1 elseif m >= 6 then f = f * (1 - (m - 5) * 0.2) end
     c.value, c.rank = f, f
+    c.behind = QB.Quest.Behind(c.id) and true or nil -- a later step is held or done: probably behind you (banking keeps the raw XP; the swap list leaves it out)
     if not banking then
       -- questing: XP for the time. The trip to the giver, the quest's own loop from giver to turn-in,
       -- and half of what its chain leads on to.
@@ -1255,7 +1261,7 @@ function UI:Candidates(limit, level)
       c.lead = QB:ChainLead(c.id)
       local minutes = c.away + c.back + 3 -- three for the quest itself, so one at your feet isn't infinite
       c.time = 1 / (1 + minutes / 10)
-      c.rank = (f + c.lead * 0.5) * c.time
+      c.rank = (f + c.lead * 0.5) * c.time * (c.behind and 0.25 or 1)
       -- a waste, for the swap list only (the Plan page still lists it in its zone): more than twenty minutes
       -- to a placed giver, or too little XP for the time, judged more strictly the further away: nothing
       -- under four minutes, the full 60 XP a minute (at level 20's scale) from sixteen
@@ -1406,7 +1412,7 @@ function UI:RefreshLogView(v)
         for _, nid in ipairs(q.nextSteps) do
           local nq = Q.Get(nid)
           if nq and Q.ForMe(nq) and not QB.API.IsDone(nid) and not s.log[nid] and (nq.req or 1) <= lvl
-            and not nq.sodLeftover and not QB:SkipsQuest(nq) then
+            and not nq.sodLeftover and not nq.repeatable and not QB.Quest.Behind(nq.id) and not QB:SkipsQuest(nq) then
             local v = QB.Model.XpAt(nq, lvl)
             -- a step handed in inside a dungeon can't be banked; the one after it can
             if not (nq.turn and nq.turn.inside) and (not bestV or v > bestV) then best, bestV, bestDepth = nq, v, depth end
@@ -1432,7 +1438,7 @@ function UI:RefreshLogView(v)
   end)
   local adds = {}
   for _, c in ipairs(self:Candidates(60)) do
-    if c.waste then c = nil end -- questing: a long run for little is no suggestion
+    if c.waste or c.behind then c = nil end -- questing: a long run for little is no suggestion
     if c then
     local q = Q.Get(c.id)
     local st = q and QB:Status(q)
@@ -1779,12 +1785,19 @@ function UI:RefreshPrepView(v)
     header(c, { 0.10, 0.12, 0.22 }, T.sleep, "Cozy Sleeping Bag",
       have and "You have it. Camp in it: your rested XP builds faster." or "Finish Stepping Stones: a bag that builds rested XP faster.",
       have and "Done" or "Bag")
-    local nextStep
+    local nextStep, heldStep
     for _, step in ipairs(D.SLEEP_CHAIN) do
-      if not QB.API.IsDone(step.id) then nextStep = step break end
+      if s.log[step.id] then nextStep, heldStep = step, true break end
+      if not QB.API.IsDone(step.id) and not QB.Quest.Behind(step.id) then nextStep = step break end
     end
-    c.pin:SetShown(nextStep and nextStep.m and true or false)
-    if nextStep then c.pin.entrance = nextStep.m and { m = nextStep.m, x = nextStep.x, y = nextStep.y } or nil; c.pin.label = nextStep.where end
+    local hq = heldStep and QB.Quest.Get(nextStep.id)
+    if hq and hq.turn and hq.turn.m and hq.turn.m > 0 and not hq.turn.inside then
+      c.pin:SetShown(true)
+      c.pin.entrance = { m = hq.turn.m, x = hq.turn.x, y = hq.turn.y }; c.pin.label = hq.turn.n
+    else
+      c.pin:SetShown(nextStep and nextStep.m and true or false)
+      if nextStep then c.pin.entrance = nextStep.m and { m = nextStep.m, x = nextStep.x, y = nextStep.y } or nil; c.pin.label = nextStep.where end
+    end
     local ry = 50
     if not have then
       for _, step in ipairs(D.SLEEP_CHAIN) do
@@ -2582,8 +2595,11 @@ function UI:CreateSettingsView(parent)
   v.verText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
   v.verText:SetPoint("TOPLEFT", RIGHT, -38)
   v.verText:SetHeight(46)
-  v.updates = checkRow(p, RIGHT, -86, "Tell me when my party or guild has a newer one", 300)
-  v.updates:SetScript("OnClick", function(self) QB:Settings().updates = self:GetChecked() and true or false end)
+  v.updates = checkRow(p, RIGHT, -86, "Tell me when anyone on the realm runs a newer one", 300)
+  v.updates:SetScript("OnClick", function(self)
+    QB:Settings().updates = self:GetChecked() and true or false
+    if QB.Sync and QB.Sync.ApplyVersionSetting then QB.Sync:ApplyVersionSetting() end
+  end)
   v.link = button(p, "Copy the download link", 190)
   v.link:SetPoint("TOPLEFT", RIGHT + 4, -116)
   v.link:SetScript("OnClick", function() UI:CopyLink("QuestBank download page", QB.DOWNLOAD) end)

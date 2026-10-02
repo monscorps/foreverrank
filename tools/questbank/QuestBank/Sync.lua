@@ -221,6 +221,12 @@ function S:Receive(msg, channel, sender)
   if not sender or type(msg) ~= "string" or #msg > 255 then return end
   if isMe(sender) then return end
   local kind = msg:sub(1, 2)
+  if kind == "1V" then
+    -- the realm-wide version notice: never a party member, never anything else
+    local v = channel == "CHANNEL" and msg:match("^1V|(%d+%.%d+%.?%d*)$")
+    if v then self:HeardVersion(v, sender) end
+    return
+  end
   if kind == "1S" and statusIsMine(msg) then
     -- our own echo, under a sender string we didn't recognise: it is us from now on
     S.mySender = sender
@@ -426,6 +432,75 @@ function S:CopyPlan(key)
 end
 
 ----------------------------------------------------------------------------
+-- the version notice, realm-wide. Every QuestBank joins one quiet chat channel and says its version
+-- there: on arrival, every ten minutes, and when someone older speaks up. So "a newer one is out"
+-- reaches you from anyone on the realm who runs it, not only your party and guild. Nothing else
+-- travels on it, it never shows in a chat window, and Settings' Updates switch keeps you out of it.
+----------------------------------------------------------------------------
+local VCHAN = "QuestBankVer"
+S.ver = { joined = false, lastSaid = -1000, lastAnswer = -1000, quiet = -1000, pending = false }
+
+local function verChannelId()
+  if not GetChannelName then return 0 end
+  local ok, id = pcall(GetChannelName, VCHAN)
+  return (ok and tonumber(id)) or 0
+end
+
+function S:SayVersion()
+  local id = verChannelId()
+  if id == 0 then return false end
+  queue("1V|" .. QB.version, "CHANNEL", tostring(id))
+  self.ver.lastSaid = now()
+  return true
+end
+
+function S:JoinVersionChannel()
+  if self.ver.joined or not QB:Settings().updates then return end
+  if not (JoinTemporaryChannel and GetChannelName) then return end
+  if verChannelId() == 0 then pcall(JoinTemporaryChannel, VCHAN) end
+  if verChannelId() == 0 then return end -- not yet: the heartbeat tries again
+  self.ver.joined = true
+  if ChatFrame_RemoveChannel and DEFAULT_CHAT_FRAME then pcall(ChatFrame_RemoveChannel, DEFAULT_CHAT_FRAME, VCHAN) end
+  self:SayVersion()
+end
+
+function S:LeaveVersionChannel()
+  if not self.ver.joined then return end
+  self.ver.joined = false
+  if LeaveChannelByName then pcall(LeaveChannelByName, VCHAN) end
+end
+
+-- the Updates switch changed: in or out, right away
+function S:ApplyVersionSetting()
+  if QB:Settings().updates then self:JoinVersionChannel() else self:LeaveVersionChannel() end
+end
+
+-- someone said their version on the channel
+function S:HeardVersion(v, sender)
+  QB:SawVersion(v, sender:match("^([^%-]+)") or sender)
+  local t = now()
+  if not QB.Newer(QB.version, v) then
+    self.ver.quiet = t -- someone at least as new as us spoke: nothing to add for a while
+    return
+  end
+  -- they run an older one: say ours, once a minute at most, unless someone newer speaks first
+  if t - self.ver.lastAnswer < 60 or self.ver.pending then return end
+  self.ver.pending = true
+  C_Timer.After(1 + math.random() * 4, QB.Safe(function()
+    S.ver.pending = false
+    local n = now()
+    if n - S.ver.quiet < 6 or n - S.ver.lastSaid < 30 then return end
+    if S:SayVersion() then S.ver.lastAnswer = n end
+  end, "version notice"))
+end
+
+-- the channel's own notices (joined, left, who else came and went) stay out of the chat windows
+local function quietNotice(_, _, ...)
+  local chan, base = select(4, ...), select(9, ...)
+  if (type(chan) == "string" and chan:find(VCHAN, 1, true)) or (type(base) == "string" and base:find(VCHAN, 1, true)) then return true end
+end
+
+----------------------------------------------------------------------------
 -- events
 ----------------------------------------------------------------------------
 function S:Init()
@@ -462,4 +537,19 @@ function S:Init()
     if QB.Run.Get() then S.lastStatus = nil; S:Broadcast(false) end
   end, "party sync: run")
   C_Timer.After(60, beat)
+  -- the version channel: join once the world has settled, say our version every ten minutes
+  if ChatFrame_AddMessageEventFilter then
+    for _, ev in ipairs({ "CHAT_MSG_CHANNEL_NOTICE", "CHAT_MSG_CHANNEL_NOTICE_USER", "CHAT_MSG_CHANNEL_JOIN", "CHAT_MSG_CHANNEL_LEAVE" }) do
+      pcall(ChatFrame_AddMessageEventFilter, ev, quietNotice)
+    end
+  end
+  C_Timer.After(20, QB.Safe(function() S:JoinVersionChannel() end, "version notice: join"))
+  local vbeat
+  vbeat = QB.Safe(function()
+    C_Timer.After(600, vbeat)
+    if not QB:Settings().updates then S:LeaveVersionChannel()
+    elseif not S.ver.joined then S:JoinVersionChannel()
+    else S:SayVersion() end
+  end, "version notice")
+  C_Timer.After(600, vbeat)
 end

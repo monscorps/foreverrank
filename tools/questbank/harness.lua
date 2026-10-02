@@ -156,7 +156,13 @@ BASE.BackdropTemplateMixin = {}
 BASE.QUESTBANK_DEV = true -- errors stay fatal here; one test below turns it off to check the safety net
 for name in pairs(FONT_SIZE) do BASE[name] = fontObj(name) end
 BASE.GameTooltip = setmetatable({}, { __index = function(_, k)
-  return function(_, ...) if k == "AddLine" or k == "AddDoubleLine" then lines[#lines + 1] = tostring((...)) end end
+  return function(_, ...)
+    if k == "AddLine" or k == "AddDoubleLine" then
+      local parts = {}
+      for i = 1, select("#", ...) do local v = select(i, ...); if type(v) == "string" then parts[#parts + 1] = v end end
+      lines[#lines + 1] = table.concat(parts, " | ")
+    end
+  end
 end })
 BASE.date = os.date
 BASE.time = os.time
@@ -232,7 +238,7 @@ local function newClient(o)
   env.UpdateQuestAcceptLogFullDialog = function() c.logFullUpdates = (c.logFullUpdates or 0) + 1 end
   env.GetTitleText = function() return c.window and c.window.title or "" end
   env.GetSuggestedGroupNum = function() return 0 end
-  env.GetBuildInfo = function() return "1.60.1", "70058", "Sep 29 2026", 16001 end
+  env.GetBuildInfo = function() return "1.60.1", "70170", "Oct 1 2026", 16001 end
   env.C_GossipInfo = {
     GetAvailableQuests = function() return c.gossipAvail or {} end,
     GetActiveQuests = function() return c.gossipActive or {} end,
@@ -272,16 +278,25 @@ local function newClient(o)
   env.UnitClass = function() return o.className, o.class, o.classID end
   env.UnitRace = function() return o.race, o.race end
   env.UnitFactionGroup = function() return o.faction end
-  env.GetNormalizedRealmName = function() return "ForeverNormal" end
+  env.GetNormalizedRealmName = function() return c.realmGone and nil or "ForeverNormal" end
+  env.GetRealmName = function() return "Forever Normal" end
   env.IsInGroup = function() return o.group or false end
   env.IsInRaid = function() return false end
   env.IsInGuild = function() return o.guild or false end
+  -- chat channels: the version notice joins one quiet channel; GetChannelName answers 0 until joined
+  c.channels = {}
+  env.JoinTemporaryChannel = function(name) c.channels[name] = true return 5, name end
+  env.LeaveChannelByName = function(name) c.channels[name] = nil end
+  env.GetChannelName = function(name) return c.channels[name] and 5 or 0, c.channels[name] and name or nil end
+  env.ChatFrame_RemoveChannel = function() end
+  env.ChatFrame_AddMessageEventFilter = function(ev, fn) c.chatFilters = c.chatFilters or {}; c.chatFilters[#c.chatFilters + 1] = { ev, fn } end
   env.GetQuestID = function() return c.window and c.window.id or 0 end
   env.GetRewardXP = function() return c.window and c.window.xp or 0 end
   -- the Classic way: the selected entry's XP, whatever ID is passed
   env.GetQuestLogSelection = function() return c.selected or 0 end
   env.SelectQuestLogEntry = function(i) c.selected = i end
-  env.GetQuestLogRewardXP = function() error("QuestBank must not read the quest log's XP (it means selecting entries in the game's quest log)") end
+  -- the quest log's XP per quest (by id, no selecting); a client may hand back one value for every id: c.logXP = { [id] = xp }
+  env.GetQuestLogRewardXP = function(id) return c.logXP and c.logXP[id] or 0 end
   env.C_Container = {
     GetContainerNumSlots = function(bag) return bag == 0 and #(o.bagSlots or {}) or 0 end,
     GetContainerItemID = function(_, slot) return o.bagSlots[slot] and o.bagSlots[slot][1] end,
@@ -420,6 +435,7 @@ local function deliver()
         if to.QB.Sync.frame then
           local reach = (m[3] == "WHISPER" and m[4] == to.o.name and to ~= from) or ((m[3] == "PARTY" or m[3] == "RAID") and from.o.group and to.o.group)
             or (m[3] == "GUILD" and from.o.guild and to.o.guild)
+            or (m[3] == "CHANNEL" and from.channels.QuestBankVer and to.channels.QuestBankVer and to ~= from)
           if reach then
             -- chat senders carry a surname the name API doesn't, and the realm written with a space
             to.QB.Sync.frame.__scripts.OnEvent(to.QB.Sync.frame, "CHAT_MSG_ADDON", m[1], m[2], m[3], from.o.name .. " " .. (from.o.surname or "Steelhand") .. "-Forever Normal")
@@ -1209,7 +1225,7 @@ end
 UI:ShowTab(3)
 print("route now:", v3.summary:GetText())
 assert(QB:Mode() == "lock" and QB:Lock() == 20 and QB.CAP == 30, "level 20 at a cap of 20: banking for 30")
-assert(v3.summary:GetText() == "64,960 XP  |  level 22.61  |  93 min  |  at 60 min 22.58", "the owner's banked route is unchanged, got: " .. tostring(v3.summary:GetText()))
+assert(v3.summary:GetText() == "64,970 XP  |  level 22.61  |  93 min  |  at 60 min 22.58", "the owner's banked route is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
 for _, l in ipairs(v3.legs.items) do
   if l:IsShown() then
@@ -1222,7 +1238,7 @@ v3.modePlan.__scripts.OnClick(v3.modePlan)
 QB.Model.Finish()
 UI:Refresh()
 print("route plan:", v3.summary:GetText())
-assert(v3.summary:GetText() == "93,600 XP  |  level 23.61  |  138 min  |  at 60 min 23.45", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
+assert(v3.summary:GetText() == "93,610 XP  |  level 23.61  |  138 min  |  at 60 min 23.45", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
 for _, key in ipairs({ "mounted", "pins" }) do
   local b = UI.header.toggles[key]
@@ -2140,7 +2156,7 @@ do
     assert(d.chain["7>15"], "a quest offered straight after a hand-in by the same NPC: the next step")
     assert(d.q[94].to[1] == "o31" and d.npc.o31, "objects that take quests count too")
     assert(d.item[11107] == 3905, "quests that start from an item")
-    assert(d.build == "70058" and d.ver == N.version, "which game build and QuestBank noted it")
+    assert(d.build == "70170" and d.ver == N.version, "which game build and QuestBank noted it")
     newbie.env.SlashCmdList.QUESTBANK("discoveries")
     print("discoveries:", newbie.chat[#newbie.chat])
     newbie.window = nil
@@ -2227,16 +2243,17 @@ do
   assert(not villainy.confirmed, "Blackfathom Villainy: only a party member's number so far, still computed")
   lines = {}
   QB.UI.QuestTooltip(owner.env.GameTooltip, knowledge, QB:Status(knowledge), QB.Model.XpAt(knowledge, 20), 100, 20)
-  assert(not table.concat(lines, "\n"):find("halved", 1, true), "a confirmed quest no longer says its number is computed")
+  assert(not table.concat(lines, "\n"):find("An estimate", 1, true), "a confirmed quest no longer says its number is computed")
+  assert(table.concat(lines, "\n"):find("2,750 x 2.375, as the game paid after the cut", 1, true), "and its source line says the game paid it")
   assert(QB.Model.Full(villainy) == 7850, "3,300 x 2.375 = 7,837.5, rounded to 7,850 (was 12,400), got " .. tostring(QB.Model.Full(villainy)))
   -- the tooltip says the number is computed, and whose number wins
   lines = {}
   QB.UI.QuestTooltip(owner.env.GameTooltip, villainy, QB:Status(villainy), QB.Model.XpAt(villainy, 20), 100, 20)
   local text = table.concat(lines, "\n")
-  assert(text:find("Forever XP 7,850", 1, true) and text:find("halved the extra XP", 1, true), "the tooltip shows the cut XP and says why: " .. text:gsub("\n", " / "))
+  assert(text:find("Forever XP 7,850", 1, true) and text:find("An estimate", 1, true), "the tooltip shows the cut XP and says why: " .. text:gsub("\n", " / "))
   lines = {}
   QB.UI.QuestTooltip(owner.env.GameTooltip, brother, QB:Status(brother), QB.Model.XpAt(brother, 20), 100, 20)
-  assert(not table.concat(lines, "\n"):find("halved", 1, true), "an unmultiplied dungeon quest says nothing about the cut")
+  assert(not table.concat(lines, "\n"):find("An estimate", 1, true), "an unmultiplied dungeon quest says nothing about the cut")
   -- stale live XP: a party member's pre-cut Deadmines number goes, a zone quest's number stays, once
   local db = owner.env.QuestBankDB
   local keep = db.live
@@ -2346,6 +2363,130 @@ do
   assert(ndb.live[971].full == 6550 and ndb.live[971].src == "npc", "your own window wins over a party number")
   ndb.live[971] = before; k.liveFull = before and before.full or nil
   ndb.live[15] = nil; N2.Quest.Get(15).liveFull = nil
+end
+
+
+-- 3.4.8: the version notice reaches you from anyone on the realm who runs QuestBank, through one quiet channel
+do
+  local S1, S2 = owner.QB.Sync, newbie.QB.Sync
+  for _ = 1, 3 do tick(owner, 10); tick(newbie, 10) end
+  assert(owner.channels.QuestBankVer and S1.ver.joined, "the owner joined the version channel after logging in")
+  assert(newbie.channels.QuestBankVer and S2.ver.joined, "so did the newbie")
+  assert(owner.chatFilters and #owner.chatFilters >= 2, "the channel's notices are filtered out of the chat windows")
+  local members = 0
+  for _ in pairs(S1.members) do members = members + 1 end
+  local was = newbie.QB.version
+  newbie.QB.version = "9.9.9"
+  owner.outbox, newbie.outbox = {}, {}
+  S2:SayVersion()
+  tick(newbie, 2); deliver(); tick(owner, 2)
+  assert(owner.QB.newest and owner.QB.newest.version == "9.9.9", "a newer version said on the channel is noticed: " .. tostring(owner.QB.newest and owner.QB.newest.version))
+  local after = 0
+  for _ in pairs(S1.members) do after = after + 1 end
+  assert(after == members, "a voice on the channel is not a party member")
+  -- the older one keeps quiet; the newer one answers an older one, once, after a short random wait
+  tick(newbie, 40)
+  newbie.outbox = {}
+  S1:SayVersion()
+  tick(owner, 2); deliver()
+  tick(newbie, 6)
+  local replied = 0
+  for _, m in ipairs(newbie.outbox) do if m[2]:find("^1V|9%.9%.9") and m[3] == "CHANNEL" then replied = replied + 1 end end
+  assert(replied == 1, "the newer client answers the older one on the channel, once (got " .. replied .. ")")
+  newbie.QB.version = was
+  -- the Updates switch: off leaves the channel, on joins it again
+  owner.QB:Settings().updates = false
+  S1:ApplyVersionSetting()
+  assert(not owner.channels.QuestBankVer and not S1.ver.joined, "Updates off leaves the channel")
+  owner.QB:Settings().updates = true
+  S1:ApplyVersionSetting()
+  assert(owner.channels.QuestBankVer and S1.ver.joined, "Updates on joins it again")
+  owner.outbox, newbie.outbox = {}, {}
+end
+
+
+-- 3.4.8: the game's own numbers and your own hand-ins, and chains that know where you are
+do
+  local Qs, U = QB.Quest, QB.UI
+  local A = owner.QB.Arrow
+  -- the quest log's XP for a quest you hold is the number, grey or not, and it is learned as "your quest log"
+  owner.logXP = { [128] = 2000 }
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); QB:ReadState()
+  local q128 = Qs.Get(128)
+  assert(q128.logXp == 2000 and QB.Model.XpAt(q128, 20) == 2000, "the quest log's number is used at this level")
+  assert(owner.env.QuestBankDB.live[128] and owner.env.QuestBankDB.live[128].src == "log" and owner.env.QuestBankDB.live[128].full == 2000, "and learned from your quest log, over a party member's number")
+  lines = {}
+  U.QuestTooltip(owner.env.GameTooltip, q128, QB:Status(q128), QB.Model.XpAt(q128, 20), 100, 20)
+  assert(table.concat(lines, "\n"):find("your quest log", 1, true), "the tooltip names the quest log as the source")
+  -- a client that answers one value for every quest is not believed
+  local held5 = {}
+  for _, e in ipairs(QB.state.logOrder) do if #held5 < 5 and Qs.Get(e.id) then held5[#held5 + 1] = e.id end end
+  assert(#held5 == 5, "five quests in the log")
+  owner.logXP = {}
+  for _, id in ipairs(held5) do owner.logXP[id] = 777 end
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); QB:ReadState()
+  for _, id in ipairs(held5) do assert(Qs.Get(id).logXp == nil, "five quests at 777 XP: the quest log is not read that way (" .. id .. ")") end
+  assert(owner.env.QuestBankDB.live[128].full == 2000, "nothing learned from it either")
+  owner.logXP = nil
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); QB:ReadState()
+  -- a secret completed flag is not a completed quest
+  local flagWas = owner.env.C_QuestLog.IsQuestFlaggedCompleted
+  owner.env.C_QuestLog.IsQuestFlaggedCompleted = function() return SECRET.num() end
+  assert(QB.API.IsDone(2) == false, "a hidden flag means not known, not done")
+  owner.env.C_QuestLog.IsQuestFlaggedCompleted = flagWas
+  -- what you hand in is remembered per character, even when the game's list forgets it
+  owner.log[#owner.log + 1] = { 2926, 1 } -- Gnogaine, part 2 of the Gnomeregan chain
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); QB:ReadState()
+  local st2927 = QB:Status(Qs.Get(2927))
+  assert(st2927.behind and st2927.text == "Probably behind you" and st2927.later == 2926 and st2927.how == "held", "holding part 2 puts part 1 behind you: " .. st2927.text)
+  lines = {}
+  U.QuestTooltip(owner.env.GameTooltip, Qs.Get(2927), st2927, QB.Model.XpAt(Qs.Get(2927), 20), 100, 20)
+  assert(table.concat(lines, "\n"):find("Gnogaine, a later step of this chain, is in your log", 1, true), "and the tooltip says which step and why")
+  local st2962 = QB:Status(Qs.Get(2962))
+  assert(st2962.code == "prereq" and st2962.text == "Hand in Gnogaine first", "part 3 says to hand in part 2, not to start part 1: " .. st2962.text)
+  local first, held = A.FirstStep(Qs.Get(2962), st2962)
+  assert(first and first.id == 2926 and held, "the arrow and the click aim at part 2's hand-in")
+  for i = #owner.log, 1, -1 do if owner.log[i][1] == 2926 then table.remove(owner.log, i) end end
+  owner.ev(QB.eventFrame, "QUEST_TURNED_IN", 2926, 0)
+  owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); QB:ReadState()
+  assert(QB:Plan().handed[2926], "the hand-in is written down for this character")
+  assert(not owner.done[2926], "(the game's list never gets it)")
+  QB.API.RefreshDone()
+  assert(QB.API.IsDone(2926) and QB:Status(Qs.Get(2926)).code == "done", "and it stays done after the list is read again")
+  assert(QB:Status(Qs.Get(2927)).behind, "part 1 is still behind you once part 2 is done")
+  QB:Plan().handed[2926] = nil
+  QB.API.RefreshDone()
+  -- the done list has a version: a change reaches the suggestions within the same second
+  U.candMemo = nil
+  local l1 = U:Candidates(400)
+  assert(#l1 > 0, "candidates")
+  owner.done[l1[1].id] = true
+  QB.API.RefreshDone()
+  local l2 = U:Candidates(400)
+  assert(l2[1].id ~= l1[1].id, "a quest done since is gone from the next answer")
+  owner.done[l1[1].id] = nil
+  QB.API.RefreshDone()
+  -- repeatables are never suggested; a finished quest leaves the fetch list
+  for _, c in ipairs(U:Candidates(400)) do assert(math.floor(QB.Data.Q[c.id][10] / 4096) % 2 == 0, "a repeatable is never a candidate: " .. c.id) end
+  QB:Plan().add[6981] = true
+  QB:ReadState()
+  assert(QB:Plan().add[6981] == nil, "a quest you finished is dropped from the plan's fetch list")
+  -- the character key holds at logout, when the game stops answering the realm's short name
+  local keys = 0
+  for k in pairs(owner.env.QuestBankDB.chars) do if k:find("^Mikal%-") then keys = keys + 1 end end
+  owner.realmGone = true
+  owner.ev(QB.eventFrame, "PLAYER_LOGOUT")
+  owner.realmGone = nil
+  local after = 0
+  for k in pairs(owner.env.QuestBankDB.chars) do if k:find("^Mikal%-") then after = after + 1 end end
+  assert(after == keys and owner.env.QuestBankDB.chars["Mikal-ForeverNormal"], "one record per character, under the normalized key")
+  assert(#owner.env.QuestBankDB.chars["Mikal-ForeverNormal"].completed > 0, "the logout record keeps the completed list")
+  -- an older split: the spaced key's plan folds into the normalized one
+  owner.env.QuestBankDB.plans["Mikal-Forever Normal"] = { add = { [5] = true }, cut = {}, seen = {}, removed = {} }
+  QB:MergeCharKeys()
+  assert(owner.env.QuestBankDB.plans["Mikal-Forever Normal"] == nil and QB:Plan().add[5], "the two spellings of the realm are one plan again")
+  QB:Plan().add[5] = nil
+  assert(tostring(owner.env.QuestBankDB.disc.build) == "70170", "the recorder notes the client build")
 end
 
 local seen = {}

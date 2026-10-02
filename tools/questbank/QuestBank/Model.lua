@@ -25,10 +25,16 @@ local CHEAP = 400      -- a stop worth less XP than this goes last
 M.MOUNT = MOUNT
 
 local function round(x) return floor(x + 0.5) end
+-- the game's own rounding of quest XP (the server's RoundXPValue): to 5 up to 100, to 10 up to 500, to 25 up to
+-- 1,000, to 50 above. Hand-ins on 2026-10-02 showed it: 590 paid 600, 870 paid 875, 4,935 paid 4,950.
 local function roundQuestXp(e)
-  local t = e < 1000 and 10 or 50
-  return round(e / t) * t
+  e = floor(e)
+  if e <= 100 then return floor((e + 2) / 5) * 5
+  elseif e <= 500 then return floor((e + 5) / 10) * 10
+  elseif e <= 1000 then return floor((e + 12) / 25) * 25 end
+  return floor((e + 25) / 50) * 50
 end
+M.RoundXp = roundQuestXp
 
 ----------------------------------------------------------------------------
 -- XP
@@ -46,7 +52,11 @@ local function raw(q)
 end
 M.Raw = raw
 
-function M.XpAt(q, plvl) return xpAt(raw(q), q.lvl, plvl) end
+function M.XpAt(q, plvl)
+  -- the quest log's own number is exact for the level you are now (grey or not)
+  if q.logXp and QB.state and plvl == QB.state.level then return q.logXp end
+  return xpAt(raw(q), q.lvl, plvl)
+end
 
 function M.Pct(qlvl, plvl)
   local m = plvl - qlvl
@@ -321,8 +331,7 @@ local function evaluate(P, order, keep)
           local m = level - lvl[r]
           local f = full[r]
           if m >= 10 then f = f * 0.1 elseif m >= 6 then f = f * (1 - (m - 5) * 0.2) end
-          local tt = f < 1000 and 10 or 50
-          local x = floor(f / tt + 0.5) * tt
+          local x = roundQuestXp(f)
           if rows then rows[#rows + 1] = { e = P.stops[s].rows[r], q = P.stops[s].rows[r].q, xp = x, pct = M.Pct(lvl[r], level), plvl = level } end
           total = total + x
           if level < CAP then
