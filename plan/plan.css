@@ -831,3 +831,10 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 .rf-tg button.on { color: #1a1204; background: var(--gold); border-color: var(--gold); }
 .gst i.rf-sum { font-style: normal; font: 600 .62rem var(--heading); color: var(--subtle); margin-left: .35rem; }
 @media (max-width: 760px) { .g2-col:last-child .gs-ench { left: auto; right: -.3rem; } }
+/* ---- Procs and on-use group ---- */
+.gst.px-r { gap: .6rem; align-items: baseline; }
+.gst.px-r > span { min-width: 0; overflow-wrap: anywhere; }
+.gst.px-r > b { white-space: nowrap; flex: none; }
+.gst em.px-k { font-style: normal; font: 700 .55rem/1 var(--heading); letter-spacing: .06em; text-transform: uppercase; color: var(--subtle); border: 1px solid var(--card-border); border-radius: 3px; padding: .1rem .25rem; margin-right: .35rem; vertical-align: .08rem; }
+.gst i.px-w { font-style: normal; color: #1eff00; }
+.gst:not(.on) i.px-w { color: #8fbf87; }

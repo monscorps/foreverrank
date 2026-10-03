@@ -216,6 +216,23 @@ def wearable(it):
     return it.get("slot") not in (None, "", "unknown")
 
 
+def client_text(c, r):
+    """The spell's own description with its numbers filled in, or None."""
+    sid = str(r.get("sp") or "")
+    d = (c.desc.get(sid) or "").strip()
+    if not d:
+        return None
+    amt = ("%s to %s" % (r["lo"], r["hi"])) if r.get("lo") is not None and r.get("hi") not in (None, r.get("lo")) else str(r["v"])
+    pct = ("%g" % round(r["p"] * 100, 2)) if r.get("p") is not None else None
+    if pct:
+        d = re.sub(r"\$h\d?", pct, d)                 # "$h1% chance"
+        d = re.sub(r"\$[sm]1%", pct + "%", d)          # the spell's own first value used as the chance
+    d = re.sub(r"\$(\d{3,})?[sm]1", amt, d)
+    if re.search(r"\$", d):
+        d = re.sub(r"\$\{[^}]*\}|\$[a-zA-Z]+\d*", "", d)
+    return re.sub(r"\s+", " ", d).strip()
+
+
 def apply_items(items, c):
     """Set rf on every wearable item that reflects damage; returns a report."""
     rep = {"kinds": collections.Counter(), "src": collections.Counter(), "items": 0, "differ": []}
@@ -231,6 +248,13 @@ def apply_items(items, c):
             for a, b in zip(rf, tr):
                 if a["k"] == b["k"] and (abs(a["v"] - b["v"]) > 0.6 or a.get("p") != b.get("p")):
                     rep["differ"].append((it["id"], it["name"], a, b))
+            # where the tooltip shown (often Classic's text) doesn't say it, or says other numbers, keep the client's own
+            # sentence so the page can show what the reflect is (Razorsteel Shoulders, Razor Gauntlets)
+            if len(tr) < len(rf) or any(a["k"] == b["k"] and abs(a["v"] - b["v"]) > 0.6 for a, b in zip(rf, tr)):
+                for r in rf:
+                    t = client_text(c, r)
+                    if t:
+                        r["t"] = t
         else:
             rf = text_rf(eff)
         if rf:

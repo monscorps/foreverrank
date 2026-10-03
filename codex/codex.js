@@ -168,7 +168,7 @@
     ["soul", "Souls"], ["spell", "Spells"], ["talent", "Talents"], ["racial", "Racials"], ["set", "Item sets"], ["system", "Systems"]];
   var SUBFIRST = ["Cloth", "Leather", "Mail", "Plate", "Shield", "Neck", "Ring", "Trinket", "Cloak", "Alchemy", "Cooking", "First Aid", "Zone", "Dungeon", "Raid", "Battleground"];
   var QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary"];
-  var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "", era: false, cl: false, stat: "", src: "", at: [], ms: "", rf: false, sort: "" }, SHOWN = 60;
+  var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "", era: false, cl: false, stat: "", src: "", at: [], ms: "", fx: [], sort: "" }, SHOWN = 60;
   // Classic items Forever has not shown yet (est "classic"): listed only when a Forever loot record names them, unless asked for
   function unseenClassic(it) { return it && it.est === "classic" && !((it.drops && it.drops.length) || (it.quests && it.quests.length)); }
   // Item helpers shared with The Forge (plan/gear.js); pages that do not load it get plain fallbacks.
@@ -183,7 +183,16 @@
     if (ms === "spirit") return !!st.spirit && st.spirit >= Math.max(st.strength || 0, st.agility || 0, st.intellect || 0);
     return m === ms;
   }
-  function hasRf(it) { return !!(FI && FI.reflect(it).length); }
+  // Effects: chance on hit, use, equip procs and reflect (plan/gear.js reads them from the item data or its tooltip text).
+  var FXP = (FI && FI.FXPILLS) || [["rf", "Reflect", "Items that hurt whoever hits you: thorns, damage on block, shield spikes."]];
+  function hasFx(it, k) { return !!FI && (FI.hasFx ? FI.hasFx(it, k) : k === "rf" && FI.reflect(it).length > 0); }
+  function fxChip(it) { // the effect the list is sorted or filtered by comes first, else the strongest proc, else reflect
+    if (!FI || !FI.fxChips) return "";
+    var all = FI.fxChips(it).concat(FI.chips(it).filter(function (x) { return x[0] === "reflect"; }));
+    var want = SQ.sort || SQ.stat || (SQ.fx.length === 1 && SQ.fx[0] === "rf" ? "reflect" : "");
+    var c = all.filter(function (x) { return x[0] === want; })[0] || all[0];
+    return c ? c[1] : "";
+  }
   function sv(s, k) { return s[k] || 0; }
   function schoolMax(s) { return Math.max(sv(s, "fireSpellDamage"), sv(s, "frostSpellDamage"), sv(s, "natureSpellDamage"), sv(s, "shadowSpellDamage"), sv(s, "arcaneSpellDamage"), sv(s, "holySpellDamage")); }
   // What people search gear by. Spell damage counts damage-and-healing and
@@ -200,13 +209,16 @@
     ["blockChance", "Block chance", "% block", function (s, it) { return fiVal(it, "blockChance"); }],
     ["blockValue", "Block value", " block value", function (s, it) { return fiVal(it, "blockValue"); }],
     ["armor", "Armor", " armor", function (s, it) { return fiVal(it, "armor"); }],
-    ["reflectHit", "Reflect per hit", " reflect per hit", function (s, it) { return FI ? FI.rfHit(it) : 0; }],
-    ["reflectBlock", "Reflect per block", " reflect per block", function (s, it) { return FI ? FI.rfBlock(it) : 0; }],
+    ["reflect", "Reflect (per enemy swing, 10% block)", " reflect", function (s, it) { return FI ? Math.round((FI.rfHit(it) + FI.rfBlock(it) * 0.10) * 100) / 100 : 0; }],
+    ["procDps", "Proc damage per second (est.)", " proc DPS (est.)", function (s, it) { return FI && FI.procDps ? FI.procDps(it) : 0; }],
+    ["procDmg", "Proc damage per proc", " per proc", function (s, it) { return FI && FI.procDmg ? FI.procDmg(it) : 0; }],
+    ["useDmg", "On-use damage", " on-use damage", function (s, it) { return FI && FI.useAvg ? FI.useAvg(it) : 0; }],
     ["spellPiercing", "Spell penetration", " spell penetration", function (s, it) { return fiVal(it, "spellPiercing"); }],
     ["resist", "Resistance", " resistance", function (s) { return Math.max(sv(s, "fireResist"), sv(s, "frostResist"), sv(s, "natureResist"), sv(s, "shadowResist"), sv(s, "arcaneResist")) + sv(s, "allResist"); }]
   ];
   var STATBY = {};
   STATF.forEach(function (f) { STATBY[f[0]] = f; });
+  function rfKey(k) { return k === "reflectHit" || k === "reflectBlock" ? "reflect" : k; } // older links
   function statOf(it, key) {
     var f = STATBY[key], s = (it && it.stats) || {};
     var v = f ? (f[3] ? f[3](s, it) : sv(s, f[0])) : 0;
@@ -348,7 +360,7 @@
       if (SQ.sort && STATBY[SQ.sort] && (e.kind !== "item" || statOf(e.it, SQ.sort) <= 0)) return false;
       if (SQ.at.length && (e.kind !== "item" || !FI || SQ.at.indexOf(FI.armorType(e.it)) === -1)) return false;
       if (SQ.ms && (e.kind !== "item" || !mainOK(e.it, SQ.ms))) return false;
-      if (SQ.rf && (e.kind !== "item" || !hasRf(e.it))) return false;
+      if (SQ.fx.length && (e.kind !== "item" || !SQ.fx.some(function (k) { return hasFx(e.it, k); }))) return false;
       if (SQ.src) {
         if (e.kind !== "item") return false;
         var dr = e.it.drops || [], qs = e.it.quests || [];
@@ -447,11 +459,11 @@
     out.hidden = !active;
     if (!active) return;
     out.innerHTML = res.length ? res.slice(0, SHOWN).map(function (e) {
-      var i = IDX.indexOf(e);
+      var i = IDX.indexOf(e), fxc = e.kind === "item" && e.wear ? fxChip(e.it) : "";
       var hasSbt = e.kind === "bookspell" || e.kind === "talent" || e.kind === "racial" || e.kind === "itemset";
       return '<button type="button" class="dbs-row' + (e.kind === "item" ? " q-" + esc(e.q) : "") + '" data-dbi="' + i + '"' + (e.kind === "item" ? ' data-tipkit="1"' : hasSbt ? ' data-sbt="1"' : "") + ">" +
         '<span class="dbs-ic">' + img(e.icon || "inv_misc_questionmark") + "</span>" +
-        '<span class="dbs-t"><b>' + esc(e.name) + "</b><em>" + (SQ.stat && e.kind === "item" ? '<i class="dbs-sv">+' + statOf(e.it, SQ.stat) + esc(STATBY[SQ.stat][2]) + "</i> " : "") + esc(e.meta) + "</em></span>" +
+        '<span class="dbs-t"><b>' + esc(e.name) + "</b><em>" + (SQ.stat && e.kind === "item" ? '<i class="dbs-sv">+' + statOf(e.it, SQ.stat) + esc(STATBY[SQ.stat][2]) + "</i> " : "") + esc(e.meta) + "</em>" + (fxc ? '<i class="dbs-fx">' + esc(fxc) + "</i>" : "") + "</span>" +
         '<span class="dbs-s' + (e.kind === "item" && isEst(e) ? " dbs-est" : "") + '">' + esc(e.kind === "item" ? sideOf(e) : (e.side || { place: "The new world", perk: "The Legacy system", spell: "Spells", system: "Systems" }[e.cat] || "")) + "</span></button>";
     }).join("") + (res.length > SHOWN ? '<button type="button" class="dbs-more" data-dbmore="1">Show all ' + res.length + "</button>" : "")
       : '<p class="dbs-none">Nothing matches yet. Forever has shown only so much; the beta adds the rest.</p>';
@@ -472,7 +484,9 @@
       var u = new URL(location.href);
       ["q", "cat", "sub", "qual", "lvl", "stat", "src", "cls", "prof", "sk", "ms", "sort"].forEach(function (k) { var v = k === "q" ? SQ.q.trim() : SQ[k]; if (v && v !== "all") u.searchParams.set(k, v); else u.searchParams.delete(k); });
       if (SQ.at.length) u.searchParams.set("at", SQ.at.join(",")); else u.searchParams.delete("at");
-      ["era", "rf", "cl"].forEach(function (k) { if (SQ[k]) u.searchParams.set(k, "1"); else u.searchParams.delete(k); });
+      ["era", "cl"].forEach(function (k) { if (SQ[k]) u.searchParams.set(k, "1"); else u.searchParams.delete(k); });
+      u.searchParams.delete("rf");
+      if (SQ.fx.length) u.searchParams.set("fx", SQ.fx.join(",")); else u.searchParams.delete("fx");
       history.replaceState(null, "", u.pathname + u.search + u.hash);
     } catch (e) {}
   }
@@ -489,7 +503,7 @@
       '<select id="dbf-ms" aria-label="Main stat"><option value="">Any main stat</option>' + MAINS.map(function (m) { return '<option value="' + m[0] + '">' + m[1] + (m[0] === "sta" || m[0] === "spirit" ? "" : " main stat") + "</option>"; }).join("") + "</select>" +
       '<select id="dbf-sort" aria-label="Sort items by"><option value="">Sort: best match</option><option value="ilvl">Sort: item level</option><option value="req">Sort: required level</option>' + STATF.map(function (f) { return '<option value="' + f[0] + '">Sort: ' + f[1].toLowerCase() + "</option>"; }).join("") + "</select>" +
       '<span class="dbf-at" role="group" aria-label="Armor type">' + ARMORS.map(function (a) { return '<button type="button" data-dbat="' + a + '" aria-pressed="false">' + a + "</button>"; }).join("") + "</span>" +
-      '<button type="button" id="dbf-rf" aria-pressed="false" data-tip="Items that hurt whoever hits you: thorns, damage on block, shield spikes. Read from the item data, or its tooltip text.">Reflect</button>' +
+      '<span class="dbf-fx" role="group" aria-label="Effects">' + FXP.map(function (f) { return '<button type="button" data-dbfx="' + f[0] + '" aria-pressed="false" data-tip="' + esc(f[2] + " Read from the item data, or its tooltip text.") + '">' + esc(f[1]) + "</button>"; }).join("") + "</span>" +
       '<select id="dbf-src" aria-label="Where it comes from"><option value="">Any source</option><option value="dungeon">Any dungeon drop</option><option value="quest">Any quest reward</option><option value="ft:new">New in Forever</option><option value="ft:changed">Changed from Classic</option></select>' +
       '<button type="button" id="dbf-era" aria-pressed="false" data-tip="The branch carries Season of Discovery and retail leftovers. Hidden unless you ask; every such row is labeled.">SoD and retail data: hidden</button>' +
       '<button type="button" id="dbf-cl" aria-pressed="false" data-tip="Items Forever&#39;s data has an id for but nobody has seen in Forever yet, with their WoW Classic stats. Forever may have changed or removed them. The ones a Forever loot record lists are always shown, labeled Classic stats.">Classic items not seen in Forever: hidden</button>' +
@@ -498,11 +512,13 @@
     try {
       var sp = new URLSearchParams(location.search);
       SQ.q = sp.get("q") || ""; SQ.cat = sp.get("cat") || "all"; SQ.sub = sp.get("sub") || ""; SQ.qual = sp.get("qual") || "";
-      SQ.lvl = sp.get("lvl") || ""; SQ.stat = STATBY[sp.get("stat")] ? sp.get("stat") : ""; SQ.src = sp.get("src") || "";
+      SQ.lvl = sp.get("lvl") || ""; SQ.stat = STATBY[rfKey(sp.get("stat"))] ? rfKey(sp.get("stat")) : ""; SQ.src = sp.get("src") || "";
       SQ.cls = CLASSES9.indexOf(sp.get("cls")) !== -1 ? sp.get("cls") : ""; SQ.prof = PROFS.indexOf(sp.get("prof")) !== -1 ? sp.get("prof") : ""; SQ.sk = sp.get("sk") || "";
-      SQ.era = sp.get("era") === "1"; SQ.rf = sp.get("rf") === "1"; SQ.cl = sp.get("cl") === "1";
+      SQ.era = sp.get("era") === "1"; SQ.cl = sp.get("cl") === "1";
+      SQ.fx = String(sp.get("fx") || "").split(",").filter(function (k, i, a) { return a.indexOf(k) === i && FXP.some(function (f) { return f[0] === k; }); });
+      if (sp.get("rf") === "1" && SQ.fx.indexOf("rf") === -1) SQ.fx.push("rf");   // older links
       SQ.ms = MAINS.some(function (m) { return m[0] === sp.get("ms"); }) ? sp.get("ms") : "";
-      SQ.sort = sp.get("sort") === "ilvl" || sp.get("sort") === "req" || STATBY[sp.get("sort")] ? sp.get("sort") : "";
+      SQ.sort = sp.get("sort") === "ilvl" || sp.get("sort") === "req" || STATBY[rfKey(sp.get("sort"))] ? rfKey(sp.get("sort")) : "";
       SQ.at = String(sp.get("at") || "").split(",").filter(function (a) { return ARMORS.indexOf(a) !== -1; });
     } catch (e) {}
     var qi = document.getElementById("dbs-qi"), tmr = null;
@@ -530,13 +546,19 @@
         bc.setAttribute("aria-pressed", String(SQ.cl));
         bc.classList.toggle("on", SQ.cl);
       }
-      fEl("dbf-rf").classList.toggle("on", SQ.rf); fEl("dbf-rf").setAttribute("aria-pressed", String(SQ.rf));
+      box.querySelectorAll("[data-dbfx]").forEach(function (x) { var on = SQ.fx.indexOf(x.getAttribute("data-dbfx")) !== -1; x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
       box.querySelectorAll("[data-dbat]").forEach(function (x) { var on = SQ.at.indexOf(x.getAttribute("data-dbat")) !== -1; x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
-      fEl("dbf-x").hidden = !(SQ.lvl || SQ.cls || SQ.prof || SQ.sk || SQ.stat || SQ.src || SQ.ms || SQ.sort || SQ.at.length || SQ.rf);
+      fEl("dbf-x").hidden = !(SQ.lvl || SQ.cls || SQ.prof || SQ.sk || SQ.stat || SQ.src || SQ.ms || SQ.sort || SQ.at.length || SQ.fx.length);
     }
     fEl("dbf-era").addEventListener("click", function () { SQ.era = !SQ.era; syncFiltUI(); SHOWN = 60; drawSearch(); syncUrl(); });
     fEl("dbf-cl").addEventListener("click", function () { SQ.cl = !SQ.cl; syncFiltUI(); SHOWN = 60; drawSearch(); syncUrl(); });
-    fEl("dbf-rf").addEventListener("click", function () { SQ.rf = !SQ.rf; syncFiltUI(); SHOWN = 60; drawSearch(); syncUrl(); });
+    box.querySelectorAll("[data-dbfx]").forEach(function (x) {
+      x.addEventListener("click", function () {
+        var k = x.getAttribute("data-dbfx"), i = SQ.fx.indexOf(k);
+        if (i === -1) SQ.fx.push(k); else SQ.fx.splice(i, 1);
+        syncFiltUI(); SHOWN = 60; drawSearch(); syncUrl();
+      });
+    });
     box.querySelectorAll("[data-dbat]").forEach(function (x) {
       x.addEventListener("click", function () {
         var a = x.getAttribute("data-dbat"), i = SQ.at.indexOf(a);
@@ -547,7 +569,7 @@
     fEl("dbf-x").addEventListener("click", function () {
       ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).value = ""; });
       ["dbf-cls", "dbf-prof", "dbf-stat", "dbf-src", "dbf-ms", "dbf-sort"].forEach(function (id) { fEl(id).value = ""; });
-      SQ.at = []; SQ.rf = false;
+      SQ.at = []; SQ.fx = [];
       readFilt();
     });
     qi.value = SQ.q;

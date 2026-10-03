@@ -133,7 +133,216 @@
   function rfPerBlock(e) { return e && e.k === "block" && e.v != null ? e.v * (e.p != null ? e.p : 1) : 0; }
   function rfHit(it) { return reflect(it).reduce(function (a, e) { return a + rfPerHit(e); }, 0); }
   function rfBlock(it) { return reflect(it).reduce(function (a, e) { return a + rfPerBlock(e); }, 0); }
+  // Spikes, thorns and block reflect are one thing to a player: damage back per enemy swing. Damage on block counts
+  // at the block chance: the character's in The Forge (set by the stats panel), 10% where there is no character.
+  var RF_BLOCK = { p: 0.10, mine: false };
+  function rfAll(it) { return rfHit(it) + rfBlock(it) * RF_BLOCK.p; }
   function blockValue(it) { return istats(it).blockValue || 0; }
+  // ---- Procs and on-use effects: fx from the data when it is there, else read from the tooltip text ----
+  // fx rows: { k: hit|use|equip, what: damage|dot|heal|buff|debuff|summon|mana|other, s, v, lo, hi, ticks, dur, p, ppm, cd, icd, aoe, stat, sp, src, t }
+  var C_FX = C_REQ ? new WeakMap() : null;
+  var HANDS = { "main-hand": 1, "off-hand": 1, "one-hand": 1, "two-hand": 1, ranged: 1, thrown: 1 }, RANGED = { ranged: 1, thrown: 1 };
+  function secs(n, unit) { return +n * (/^h/i.test(unit) ? 3600 : /^m(?!s)/i.test(unit) ? 60 : /^ms/i.test(unit) ? 0.001 : 1); }
+  function schoolOf(w) {
+    w = String(w || "").toLowerCase();
+    for (var i = 0; i < SCHOOLS.length; i++) if (w.indexOf(SCHOOLS[i].toLowerCase()) === 0) return SCHOOLS[i];
+    return "";
+  }
+  function avgOf(lo, hi) { return hi != null && hi !== "" ? Math.round((+lo + +hi) / 2 * 100) / 100 : +lo; }
+  var FXSTAT = { strength: "strength", agility: "agility", stamina: "stamina", intellect: "intellect", spirit: "spirit", "attack power": "attackPower",
+    armor: "armor", defense: "defense" };
+  // One tooltip line ("Chance on hit: ...", "Use: ...", a proc-like "Equip: ...") into fx rows.
+  function parseFxLine(line, k) {
+    var body = String(line).replace(/^(Chance on hit|Use|Equip):\s*/i, ""), out = [], m;
+    var cd = null, icd = null, p = null;
+    if ((m = /\((\d+) Min(?:, (\d+) Sec)? Cooldown\)/i.exec(body))) cd = +m[1] * 60 + (+m[2] || 0);
+    else if ((m = /\((\d+) Sec Cooldown\)/i.exec(body))) cd = +m[1];
+    else if ((m = /\((\d+) (?:Hr|Hour)s? Cooldown\)/i.exec(body))) cd = +m[1] * 3600;
+    if ((m = /(\d+(?:\.\d+)?)\s*(ms|s|m)\s+cooldown/i.exec(body))) icd = secs(m[1], m[2]);
+    else if ((m = /(?:more than )?once every (\d+) sec/i.exec(body))) icd = +m[1];
+    if ((m = /Proc chance: (\d+(?:\.\d+)?)%/i.exec(body)) || (m = /(\d+(?:\.\d+)?)% chance/i.exec(body))) p = +m[1] / 100;
+    if (k === "use" && icd != null && cd == null) { cd = icd; icd = null; }
+    var txt = body.replace(/\([^)]*(?:Cooldown|Proc chance)[^)]*\)/gi, " ").replace(/(\d+) ([A-Za-z]+) and (\d+) ([A-Za-z]+) damage/g, "$1 $2 damage and $3 $4 damage");
+    var aoe = /all (?:nearby )?enemies|nearby enemies|all targets|up to \d+ targets|in front of|cone|radius|jump|additional nearby|Affects \d+ targets|around you/i.test(txt);
+    function durIn(s) { var d = /(?:for|Lasts(?: for)?) (\d+(?:\.\d+)?) (sec|min|hour)/i.exec(s); return d ? secs(d[1], d[2]) : null; }
+    function push(o) {
+      o.k = k; o.src = "text"; o.t = line;
+      if (p != null && o.p == null) o.p = p;
+      if (cd != null) o.cd = cd;
+      if (icd != null) o.icd = icd;
+      if (aoe && (o.what === "damage" || o.what === "dot")) o.aoe = true;
+      out.push(o);
+    }
+    var rest = txt, lastS = "", pre = /\d+(?: to \d+)? ([A-Za-z]+) damage/gi, pm;
+    while ((pm = pre.exec(txt))) if (schoolOf(pm[1])) { lastS = schoolOf(pm[1]); break; }
+    // Heals and mana first, so "Heals wielder of 60 damage over 6 sec" is not read as damage.
+    if ((m = /\bHeal(?:s)?(?: yourself| the wielder| wielder| you| your target| friendly target| your pet)? (?:of|for) (\d+)(?: to (\d+))?(?![\d%]| sec| min)(?: damage)?(?: over (\d+) (sec|min))?/i.exec(rest))) {
+      push({ what: "heal", v: avgOf(m[1], m[2]), lo: m[2] ? +m[1] : undefined, hi: m[2] ? +m[2] : undefined, dur: m[3] ? secs(m[3], m[4]) : undefined });
+      rest = rest.replace(m[0], " ");
+    } else if ((m = /Restores? (\d+)(?: to (\d+))? health(?: every (\d+) sec for (\d+) sec)?/i.exec(rest))) {
+      var hticks = m[3] ? Math.floor(+m[4] / +m[3]) : 1;
+      push({ what: "heal", v: avgOf(m[1], m[2]) * hticks, lo: m[2] ? +m[1] * hticks : undefined, hi: m[2] ? +m[2] * hticks : undefined, ticks: m[3] ? hticks : undefined, dur: m[3] ? +m[4] : undefined });
+      rest = rest.replace(m[0], " ");
+    }
+    if ((m = /(?:Restores?|energize you for|gain) (\d+)(?: to (\d+))? mana(?: (?:every|per) (\d+) sec for (\d+) sec)?/i.exec(rest))) {
+      var mt = m[3] ? Math.floor(+m[4] / +m[3]) : 1;
+      push({ what: "mana", v: avgOf(m[1], m[2]) * mt, lo: m[2] ? +m[1] * mt : undefined, hi: m[2] ? +m[2] * mt : undefined, dur: m[3] ? +m[4] : undefined });
+      rest = rest.replace(m[0], " ");
+    }
+    // Direct damage, skipping absorbs, damage buffs and damage over time.
+    var re = /(\d+)(?: to (\d+))? (?:total )?(?:([A-Za-z]+) )?damage(?! over| every| taken| done| caused| is reduced)/gi, dm;
+    while ((dm = re.exec(rest))) {
+      var before = rest.slice(Math.max(0, dm.index - 40), dm.index);
+      if (/absorb\w*(?: up to)?\s*$|protects? you from the next\s*$|up to\s*$|damage by\s*$|reduc\w* [a-z ]*by\s*$|plus\s*$|but deals\s*$|next\s*$/i.test(before)) continue;
+      if (/^ or /i.test(rest.slice(dm.index + dm[0].length))) continue;
+      if (dm[3] && !schoolOf(dm[3]) && !/^(additional|extra|bonus|more|total)$/i.test(dm[3])) continue;
+      var s0 = schoolOf(dm[3]);
+      push({ what: "damage", s: s0 || (dm[3] ? lastS : "") || undefined, v: avgOf(dm[1], dm[2]), lo: dm[2] ? +dm[1] : undefined, hi: dm[2] ? +dm[2] : undefined });
+    }
+    if ((m = /Steals (\d+)(?: to (\d+))? life(?! [^.]*over)/i.exec(rest)) || (m = /stealing (\d+)(?: to (\d+))? life(?! [^.]*over)/i.exec(rest))) push({ what: "damage", s: "Shadow", v: avgOf(m[1], m[2]), lo: m[2] ? +m[1] : undefined, hi: m[2] ? +m[2] : undefined });
+    // Damage over time with a tick: "5 Nature damage every 3 sec for 15 sec", "10 health every 5 seconds ... for 25 sec"
+    var tre = /(\d+)(?: to (\d+))? (?:([A-Za-z]+) )?(damage|health) every (\d+(?:\.\d+)?) sec(?:onds)?/gi, tm;
+    while ((tm = tre.exec(rest))) {
+      if (tm[4] === "health" && /Restores?\s*$|regain\w*\s*$/i.test(rest.slice(0, tm.index))) continue;
+      if (tm[3] && !schoolOf(tm[3]) && !/^(additional|extra|bonus|more)$/i.test(tm[3])) continue;
+      var dur = durIn(rest.slice(tm.index + tm[0].length)) || durIn(txt);
+      if (!dur) continue;
+      var ticks = Math.max(1, Math.floor(dur / +tm[5] + 1e-9)), per = avgOf(tm[1], tm[2]);
+      push({ what: "dot", s: schoolOf(tm[3]) || (tm[4] === "health" ? "Shadow" : lastS) || undefined, v: Math.round(per * ticks * 100) / 100,
+        lo: tm[2] ? +tm[1] * ticks : undefined, hi: tm[2] ? +tm[2] * ticks : undefined, ticks: ticks, dur: dur });
+    }
+    // Damage over time as a total: "bleed for 120 damage over 30 sec", "an additional 18 damage over 6 sec", "steal 30 life ... over 30 sec"
+    var ore = /(\d+)(?: to (\d+))? (?:([A-Za-z]+) )?(?:damage|life(?: from [a-z ]+?)?) over (\d+) (sec|min)/gi, om;
+    while ((om = ore.exec(rest))) {
+      if (/Heals?\b[^.]*$/i.test(rest.slice(Math.max(0, om.index - 30), om.index))) continue;
+      push({ what: "dot", s: schoolOf(om[3]) || (/life/i.test(om[0]) ? "Shadow" : lastS) || undefined, v: avgOf(om[1], om[2]), lo: om[2] ? +om[1] : undefined, hi: om[2] ? +om[2] : undefined, dur: secs(om[4], om[5]) });
+    }
+    var dmgN = out.filter(function (e) { return e.what === "damage" || e.what === "dot"; }).length;
+    // Buffs on you: map to Forge stat keys where the text names one.
+    var st = {}, bm;
+    var reStat = /(?:Increases?|increase|increasing|raise) (?:your |all party member's )?(?:melee and ranged )?(Strength|Agility|Stamina|Intellect|Spirit|attack power|armor|Defense) by (\d+)/gi;
+    var stDur = null;
+    while ((bm = reStat.exec(txt))) if (!/target|enemy/i.test(txt.slice(Math.max(0, bm.index - 25), bm.index))) { st[FXSTAT[bm[1].toLowerCase()]] = +bm[2]; if (stDur == null) stDur = durIn(txt.slice(bm.index)); }
+    if ((bm = /Defense \+(\d+)/i.exec(txt))) st.defense = +bm[1];
+    if ((bm = /grants? (?:the wielder |you )?(\d+) defense and (\d+) armor/i.exec(txt))) { st.defense = +bm[1]; st.armor = +bm[2]; }
+    else if ((bm = /grant you (\d+) armor/i.exec(txt))) st.armor = +bm[1];
+    if ((bm = /chance to Parry attacks by (\d+)%/i.exec(txt))) st.parry = +bm[1];
+    if ((bm = /chance to block by (\d+)%/i.exec(txt)) || (bm = /Increases your Block chance by (\d+)%/i.exec(txt))) st.blockChance = +bm[1];
+    if ((bm = /Increases your chance to Dodge by (\d+)%/i.exec(txt))) st.dodge = +bm[1];
+    if ((bm = /Increases healing done by (?:[a-z ]+ )?up to (\d+)/i.exec(txt)) || (bm = /your healing by up to (\d+)/i.exec(txt))) st.healing = +bm[1];
+    if ((bm = /Increases (?:your spell damage|damage done by magical spells and effects) by up to (\d+)/i.exec(txt))) st.spellDamage = +bm[1];
+    if ((bm = /damage and healing done by magical spells and effects by up to (\d+)/i.exec(txt)) || (bm = /increase the damage of your spells and effects by (\d+)/i.exec(txt))) st.spellPower = +bm[1];
+    if ((bm = /increasing all stats by (\d+)/i.exec(txt)) && !/target|enem/i.test(txt)) ["strength", "agility", "stamina", "intellect", "spirit"].forEach(function (x) { st[x] = +bm[1]; });
+    if ((bm = /^(?:Increases|increase) (?:your )?Attack Power by (\d+)/i.exec(txt)) || (bm = /Increases attack power by (\d+)/i.exec(txt))) st.attackPower = +bm[1];
+    var dur0 = durIn(txt);
+    if (Object.keys(st).length) push({ what: "buff", stat: st, dur: stDur || dur0 || undefined });
+    else if (!dmgN && !out.length && /extra attack|attack speed|Increases (?:your )?damage|increasing his damage|run speed|absorb|shield|invulnerable|cast instantly|critical strikes|guaranteed|Immun|Reflects|resistances? by|mana cost|threat/i.test(txt) &&
+      !/target|enem|attacker|foe/i.test(txt)) push({ what: "buff", dur: dur0 || undefined });
+    if (!out.length) {
+      if (/Summons|Calls forth|Creates a (?:Battle|mobile)|Activates your|to fight for you|to protect you|servants/i.test(txt)) push({ what: "summon", dur: dur0 || undefined });
+      else if (/target|enem|attacker|foe/i.test(txt) && /lower|reduc|decreas|slow|stun|disarm|silence|knock|cripple|armor|interrupt|disorient|curse|taken|time between|sleep|net|Dispels a magic/i.test(txt)) push({ what: "debuff", dur: dur0 || undefined });
+      else push({ what: "other", dur: dur0 || undefined });
+    }
+    return out;
+  }
+  // Equip lines that are procs (not stat lines, not reflect: reflect stays in rf).
+  var EQ_HIT = /^Equip: (?:Chance on hit\b|Chance to (?:strike|bathe|decapitate|discharge)|Grants a chance on striking|\d+(?:\.\d+)?% chance (?:of dealing [^.]* on a successful melee attack|on melee hit))/i;
+  var EQ_PROC = /^Equip: (?:When struck|When damaged|Has a \d+% chance when struck|\d+(?:\.\d+)?% chance (?:when|on successful spellcast)|Harmful spell casts|Chance on harmful spell|Gives a chance when your harmful spells|Chance on landing a damaging spell|Your \w+ spells have a \d+% chance to restore|Causes \w+ to have a \d+% chance)/i;
+  function procs(it) {
+    if (!it || ALLSLOTS.indexOf(it.slot) === -1) return [];
+    if (Array.isArray(it.fx)) return it.fx;
+    return cached(C_FX, it, function (x) {
+      var out = [];
+      (x.effects || []).forEach(function (e) {
+        var k = /^Chance on hit:/i.test(e) ? "hit" : /^Use:/i.test(e) ? "use" : EQ_HIT.test(e) ? "hit" : EQ_PROC.test(e) ? "equip" : "";
+        if (!k) return;
+        if (reflect({ effects: [e] }).length) return;   // reflect and thorns stay in rf
+        if (x.rf && x.rf.length && /when struck/i.test(e)) return; // the client's reflect rows already cover "when struck" lines
+        out = out.concat(parseFxLine(e, k));
+      });
+      return out;
+    });
+  }
+  // Procs that belong together (one spell, one tooltip line) group into one event.
+  function fxGroups(list) {
+    var g = [], by = {};
+    (list || []).forEach(function (e, i) {
+      var key = e.k + "|" + (e.sp || e.t || i);
+      if (!by[key]) { by[key] = { k: e.k, rows: [], t: e.t, sp: e.sp }; g.push(by[key]); }
+      by[key].rows.push(e);
+    });
+    g.forEach(function (x) {
+      function first(f) { for (var i = 0; i < x.rows.length; i++) if (x.rows[i][f] != null) return x.rows[i][f]; return null; }
+      x.p = first("p"); x.ppm = first("ppm"); x.cd = first("cd"); x.icd = first("icd"); x.src = first("src"); x.only = first("only");
+      x.dmg = x.rows.reduce(function (a, e) { return a + ((e.what === "damage" || e.what === "dot") && e.v ? +e.v : 0); }, 0);
+    });
+    return g;
+  }
+  function hasFx(it, k) { return k === "rf" ? reflect(it).length > 0 : procs(it).some(function (e) { return e.k === k; }); }
+  var FXPILLS = [["hit", "Chance on hit", "A chance to fire on a landed melee or ranged hit: damage, a buff or a debuff."],
+    ["use", "Use", "Click to use: trinkets, engineering gear, items with a cooldown."],
+    ["equip", "Equip proc", "Other equip procs: on spell cast, on being hit (not reflect), and similar."],
+    ["rf", "Reflect", "Items that hurt whoever hits you: thorns, damage on block, shield spikes."]];
+  function weaponSpeed(it) { return it && HANDS[it.slot] && +it.speed > 0 ? +it.speed : 0; }
+  // Chance per swing: the client's chance, else procs per minute x speed / 60; null when neither is known.
+  function procChance(g, speed) {
+    if (g.p != null) return Math.min(1, +g.p);
+    if (g.ppm) return Math.min(1, g.ppm * speed / 60);
+    return null;
+  }
+  // Expected damage per second from chance-on-hit damage: a weapon's procs at its own speed, anything else at `speed` (main hand, else 2.0 s).
+  function procDps(it, speed) {
+    var own = weaponSpeed(it), spd = own || +speed || 2.0;
+    return fxGroups(procs(it)).reduce(function (a, g) {
+      if (g.k !== "hit" || !g.dmg || g.only) return a;   // target-type procs ("only against Swine") are not general damage
+      var c = procChance(g, spd); if (c == null) return a;
+      var d = c * g.dmg / spd;
+      if (g.icd) d = Math.min(d, g.dmg / g.icd);
+      return a + d;
+    }, 0);
+  }
+  function procDmg(it) { return fxGroups(procs(it)).reduce(function (a, g) { return g.k !== "use" && g.dmg > a ? g.dmg : a; }, 0); }
+  // Average damage of the strongest on-use effect (direct plus its damage over time).
+  function useAvg(it) { return fxGroups(procs(it)).reduce(function (a, g) { return g.k === "use" && g.dmg > a ? g.dmg : a; }, 0); }
+  function fmtDur(s) { s = +s; return s >= 3600 && s % 3600 === 0 ? s / 3600 + " hr" : s >= 60 && s % 60 === 0 ? s / 60 + " min" : s >= 60 ? Math.floor(s / 60) + " min " + Math.round(s % 60) + " sec" : r2(s) + " sec"; }
+  function fxAmt(e) { return e.v == null ? "" : e.lo != null && e.hi != null && e.lo !== e.hi ? e.lo + "–" + e.hi : String(Math.round(e.v * 10) / 10); }
+  var FXLBL = { strength: "Str", agility: "Agi", stamina: "Sta", intellect: "Int", spirit: "Spi", attackPower: "AP", armor: "Armor", defense: "Defense", parry: "% Parry", dodge: "% Dodge",
+    blockChance: "% Block", spellPower: "Spell power", spellDamage: "Spell dmg", healing: "Healing" };
+  // A short phrase for one row: "30 Holy", "120 Physical over 30 sec", "300–700 heal", "+100 Str for 10 sec".
+  function fxWhat(e) {
+    var a = fxAmt(e);
+    switch (e.what) {
+      case "damage": return a + (e.s ? " " + e.s : " damage") + (e.aoe ? " (area)" : "");
+      case "dot": return a + (e.s ? " " + e.s : " damage") + (e.dur ? " over " + fmtDur(e.dur) : " over time") + (e.aoe ? " (area)" : "");
+      case "heal": return a + " heal" + (e.dur ? " over " + fmtDur(e.dur) : "");
+      case "mana": return a + " mana" + (e.dur ? " over " + fmtDur(e.dur) : "");
+      case "buff": return (e.stat && Object.keys(e.stat).length ? Object.keys(e.stat).map(function (s) { var l = FXLBL[s] || (STATBY[s] ? STATBY[s][2] : s); return "+" + e.stat[s] + (l.charAt(0) === "%" ? l : " " + l); }).join(", ") : "buff") + (e.dur ? " for " + fmtDur(e.dur) : "");
+      case "debuff": return "debuff" + (e.dur ? " " + fmtDur(e.dur) : "");
+      case "summon": return "summon";
+      default: return "effect";
+    }
+  }
+  function grpWhat(g) {
+    var main = g.rows.filter(function (e) { return e.what === "damage" || e.what === "dot" || e.what === "heal" || e.what === "mana" || e.what === "buff"; });
+    return (main.length ? main : g.rows.slice(0, 1)).map(fxWhat).join(" + ") + (g.only ? " (only against " + g.only + ")" : "");
+  }
+  function chanceTxt(g, speed) {
+    if (g.p != null) return Math.round(g.p * 1000) / 10 + "%";
+    if (g.ppm) return speed ? Math.round(procChance(g, speed) * 1000) / 10 + "%" : g.ppm + " PPM";
+    return "chance unknown";
+  }
+  // Chips: "Proc 30 Holy (4%)", "Use 300–700 heal, 30 min", "Equip proc 2%: ...".
+  function paren(t, x) { return /\)$/.test(t) ? t.replace(/\)$/, ", " + x + ")") : t + " (" + x + ")"; } // "(area, 2%)", not "(area) (2%)"
+  function fxChips(it) { // strongest effect first, so a one-chip list shows the one that matters
+    var spd = weaponSpeed(it);
+    return fxGroups(procs(it)).map(function (g, i) { return { g: g, i: i }; })
+      .sort(function (a, b) { return ((b.g.dmg || 0) - (a.g.dmg || 0)) || a.i - b.i; }).map(function (x) {
+        var g = x.g, key = g.k === "use" ? "useDmg" : g.k === "hit" && g.dmg ? "procDps" : "procDmg";
+        if (g.k === "use") return [key, "Use " + grpWhat(g) + (g.cd ? ", " + fmtDur(g.cd) : "")];
+        if (g.k === "hit") return [key, paren("Proc " + grpWhat(g), chanceTxt(g, spd))];
+        return [key, g.p != null || g.ppm ? paren("Equip proc " + grpWhat(g), chanceTxt(g, spd)) : "Equip proc " + grpWhat(g)];
+      });
+  }
   function hasSource(it) { return !!((it.drops && it.drops.length) || (it.quests && it.quests.length)); }
   // Where an item probably comes from when no drop or quest has been seen: always labelled as an estimate.
   function estimateSource(it, dungeons) {
@@ -201,17 +410,19 @@
   var STATS = [
     ["Attributes", [["strength", "Strength", "Str"], ["agility", "Agility", "Agi"], ["stamina", "Stamina", "Sta"], ["intellect", "Intellect", "Int"], ["spirit", "Spirit", "Spi"]]],
     ["Defense", [["armor", "Armor", "Armor"], ["defense", "Defense", "Defense"], ["dodge", "Dodge %", "Dodge"], ["parry", "Parry %", "Parry"], ["blockChance", "Block Chance %", "Block"],
-      ["blockValue", "Block Value", "Block value"], ["reflectHit", "Reflect per hit", "per hit"], ["reflectBlock", "Reflect per block", "per block"]]],
+      ["blockValue", "Block Value", "Block value"], ["reflect", "Reflect (per enemy swing)", "reflect"]]],
     ["Physical", [["attackPower", "Attack Power", "AP"], ["rangedAttackPower", "Ranged Attack Power", "RAP"], ["crit", "Crit %", "Crit"], ["hit", "Hit %", "Hit"],
       ["weaponSkill", "Weapon Skill", "skill"], ["dps", "Weapon DPS", "DPS"]]],
     ["Spell", [["spellPower", "Spell Power", "Spell power"], ["spellDamage", "Spell Damage", "Spell dmg"], ["healing", "Healing", "Healing"], ["holy", "Holy damage", "Holy dmg"],
       ["fire", "Fire damage", "Fire dmg"], ["frost", "Frost damage", "Frost dmg"], ["nature", "Nature damage", "Nature dmg"], ["shadow", "Shadow damage", "Shadow dmg"], ["arcane", "Arcane damage", "Arcane dmg"],
       ["spellPiercing", "Spell Penetration", "Spell pen."], ["mp5", "Mana per 5", "mp5"], ["hp5", "Health per 5", "hp5"]]],
     ["Resistances", [["fireResist", "Fire Resistance", "Fire res."], ["frostResist", "Frost Resistance", "Frost res."], ["natureResist", "Nature Resistance", "Nature res."],
-      ["shadowResist", "Shadow Resistance", "Shadow res."], ["arcaneResist", "Arcane Resistance", "Arcane res."], ["allResist", "All Resistances", "All res."]]]
+      ["shadowResist", "Shadow Resistance", "Shadow res."], ["arcaneResist", "Arcane Resistance", "Arcane res."], ["allResist", "All Resistances", "All res."]]],
+    ["Procs and on-use", [["procDps", "Proc damage per second (est.)", "proc DPS (est.)"], ["procDmg", "Proc damage per proc", "per proc"], ["useDmg", "On-use damage", "per use"]]]
   ];
   var STATBY = {};
   STATS.forEach(function (g) { g[1].forEach(function (x) { STATBY[x[0]] = x; }); });
+  STATBY.reflectHit = STATBY.reflectBlock = STATBY.reflect; // older saved filters and links
   function statVal(it, k) {
     if (!it) return 0;
     var s = istats(it), n = function (x) { return +s[x] || 0; };
@@ -222,8 +433,10 @@
       case "holy": case "fire": case "frost": case "nature": case "shadow": case "arcane": return n(k + "SpellDamage") + n("spellDamage") + n("spellPower");
       case "weaponSkill": return Object.keys(s).reduce(function (a, x) { return /Skill$/.test(x) && x !== "fishing" ? a + n(x) : a; }, 0);
       case "dps": return +it.dps || 0;
-      case "reflectHit": return rfHit(it);
-      case "reflectBlock": return rfBlock(it);
+      case "reflect": case "reflectHit": case "reflectBlock": return rfAll(it); // one reflect value
+      case "procDps": return procDps(it);
+      case "procDmg": return procDmg(it);
+      case "useDmg": return useAvg(it);
       case "fireResist": case "frostResist": case "natureResist": case "shadowResist": case "arcaneResist":
         return n(k) + n("allResist") + (s.resist ? +s.resist[k.replace("Resist", "")] || 0 : 0);
       default: return n(k);
@@ -261,12 +474,13 @@
     if (s.allResist) add("allResist", sgn(s.allResist) + " All res.");
     reflect(it).forEach(function (e) {
       var amt = e.v == null ? "?" : e.lo != null && e.hi != null && e.lo !== e.hi ? e.lo + "–" + e.hi : r2(e.v);
-      if (e.k === "hit") add("reflectHit", amt + " " + e.s + " per hit");
-      else if (e.k === "proc") add("reflectHit", Math.round((e.p || 0) * 1000) / 10 + "%: " + amt + " " + e.s + " on hit");
-      else if (e.k === "use") add("reflectHit", amt + " " + e.s + " per hit (use)");
-      else if (e.k === "block") add("reflectBlock", amt + " " + e.s + " per block");
-      else if (e.k === "crit") add("reflectHit", amt + "% of crits back");
+      if (e.k === "hit") add("reflect", "Reflect " + amt + " " + e.s);
+      else if (e.k === "proc") add("reflect", "Reflect " + Math.round((e.p || 0) * 1000) / 10 + "%: " + amt + " " + e.s);
+      else if (e.k === "use") add("reflect", "Reflect " + amt + " " + e.s + " (use)");
+      else if (e.k === "block") add("reflect", "Reflect " + amt + " " + e.s + " on block");
+      else if (e.k === "crit") add("reflect", "Reflect " + amt + "% of crits");
     });
+    fxChips(it).forEach(function (c) { add(c[0], c[1]); });
     if (first) {
       // The stat being sorted or filtered by leads, with what feeds it (spell power feeds healing and school damage).
       var feeds = function (k) {
@@ -274,6 +488,7 @@
         if (first === "healing") return k === "spellPower";
         if (first === "spellDamage" || SCH.indexOf(first) !== -1) return k === "spellPower" || k === "spellDamage";
         if (/Resist$/.test(first)) return k === "allResist";
+        if (first === "procDps" || first === "procDmg") return k === "procDps" || k === "procDmg";
         return false;
       };
       out = out.filter(function (a) { return feeds(a[0]); }).map(function (a) { return [a[0], a[1], 1]; }).concat(out.filter(function (a) { return !feeds(a[0]); }));
@@ -282,6 +497,8 @@
   }
   window.ForgeItem = { effReq: effReq, mainStat: mainStat, armorType: armorType, reflect: reflect, blockValue: blockValue, estimateSource: estimateSource,
     isJunk: isJunk, istats: istats, statVal: statVal, STATS: STATS, STATBY: STATBY, chips: chips, hasSource: hasSource, canUse: canUse, rfHit: rfHit, rfBlock: rfBlock,
+    procs: procs, procDps: procDps, procDmg: procDmg, useAvg: useAvg, fxGroups: fxGroups, fxChips: fxChips, procChance: procChance, weaponSpeed: weaponSpeed,
+    hasFx: hasFx, FXPILLS: FXPILLS,
     ARMOR_TYPES: ARMOR_TYPES, extras: function () { return EXTRA; } };
 
   window.ForgeGear = function (opts) {
@@ -314,6 +531,13 @@
       if (s.allResist) L.push('<span class="it-l">+' + esc(s.allResist) + " All Resistances</span>");
       if (s.bonusArmor) L.push('<span class="it-l">+' + esc(s.bonusArmor) + " Armor</span>");
       (it.effects || []).forEach(function (e) { L.push('<span class="it-g">' + esc(e) + "</span>"); });
+      // The game client's own effect text, where the tooltip lacks it or says something else (Forever changed the spell).
+      var said = (it.effects || []).map(normTxt), cx = [];
+      (it.rf || []).concat(it.fx || []).forEach(function (e) { if (e && e.t && cx.indexOf(e.t) === -1 && said.indexOf(normTxt(e.t)) === -1) cx.push(e.t); });
+      if (cx.length) {
+        L.push('<span class="it-src">The Forever client data says:</span>');
+        cx.forEach(function (t) { L.push('<span class="it-g">' + esc(/^(Use|Equip|Chance on hit):/.test(t) ? t : "Equip: " + t) + "</span>"); });
+      }
       [["attackPower", "Equip: +%s Attack Power.", /attack power/i], ["spellPower", "Equip: Increases damage and healing done by magical spells and effects by up to %s.", /damage and healing/i],
         ["healing", "Equip: Increases healing done by up to %s.", /increases healing/i], ["spellDamage", "Equip: Increases damage done by magical spells and effects by up to %s.", /spell|magical/i],
         ["hit", "Equip: Improves your chance to hit by %s%.", /chance to hit/i], ["crit", "Equip: Improves your chance to get a critical strike by %s%.", /critical strike/i],
@@ -354,12 +578,13 @@
       (it.drops || []).forEach(function (d) { L.push('<span class="it-drop">Drops from ' + esc(d[1]) + (d[2] === "rare" ? " (rare)" : "") + ", " + esc(d[0]) + "</span>"); });
       (it.quests || []).forEach(function (q) { L.push('<span class="it-drop">Quest reward: ' + esc(q[0]) + " (" + esc(q[1]) + ")</span>"); });
       if (ALLSLOTS.indexOf(it.slot) !== -1) { var es = estimateSource(it); if (es) L.push('<span class="it-src it-est">' + esc(es) + "</span>"); }
-      if (it.source) L.push('<span class="it-src">' + esc(it.source) + "</span>");
+      if (it.source && !(it.est === "classic" && /^Estimate: a WoW Classic item/.test(it.source))) L.push('<span class="it-src">' + esc(it.source) + "</span>"); // the est line above says it
       if (it.reagents) L.push('<span class="it-src">Reagents: ' + esc(it.reagents) + "</span>");
       if (it.iconFrom === "placeholder") L.push('<span class="it-conf">Stand-in icon until the real one is seen</span>');
       if (it.confidence) L.push('<span class="it-conf">' + (it.confidence === "tooltip" ? "Tooltip read from Forever footage" : it.confidence === "partial" ? "Partly seen: some lines never shown" : "Named by Blizzard or previews; no tooltip shown yet") + "</span>");
       return L.join("");
     }
+    function normTxt(t) { return String(t || "").toLowerCase().replace(/^(equip|use|chance on hit):\s*/, "").replace(/[^a-z0-9%]+/g, ""); }
     function slotLabel(slot) {
       var m = { "main-hand": "Main Hand", "off-hand": "Off Hand", "one-hand": "One-Hand", "two-hand": "Two-Hand", finger: "Finger", trinket: "Trinket", ranged: "Ranged", relic: "Relic" };
       return m[slot] || (slot ? slot.charAt(0).toUpperCase() + slot.slice(1) : "");
@@ -655,6 +880,7 @@
       var shieldIt = byId[eq().offhand], shield = !!(shieldIt && shieldIt.type === "Shield" && !overLevel(shieldIt));
       if (shield) {
         vBlock = (F && F.bl ? F.bl : 0) + (TA.block || 0) + (t.blockChance || 0) + defB;
+        RF_BLOCK.p = Math.max(0, Math.min(1, vBlock / 100)); RF_BLOCK.mine = true;
         def += row("Block", r1(vBlock) + "%", (F && F.bl ? "Base " + F.bl + "% with a shield" : "Base block chance unpublished for this class") + (TA.block ? ", talents +" + TA.block : "") + (t.blockChance ? ", gear +" + r1(t.blockChance) + "% (block rating)" : "") + (defB ? ", defense +" + defB + "%" : "") + "." + EST, true, "");
       } else if (t.blockChance) def += row("Block", "+" + r1(t.blockChance) + "%", "Block rating from gear; it only works with a shield equipped.", false, "");
       var ssR = CLS === "PALADIN" ? +TAL["Shield Specialization"] || 0 : 0, ssPct = ssR * 10;
@@ -727,14 +953,60 @@
       var IGN = " Attacker armor and resistances are ignored.";
       var rfHTML = '<div class="rf-tg">' + (CLS === "PALADIN" ? '<button type="button" data-rft="ret" aria-pressed="' + rftOn("ret") + '"' + (rftOn("ret") ? ' class="on"' : "") + ">Retribution Aura</button>" : "") +
           '<button type="button" data-rft="thorns" aria-pressed="' + rftOn("thorns") + '"' + (rftOn("thorns") ? ' class="on"' : "") + ">Thorns (druid)</button></div>" +
-        row("Damage per hit taken", r1(perHit) + parts(hitSrc), (hitSrc.length ? hitSrc.map(function (x) { return '<span class="it-l">' + x[1] + "</span>"; }).join("") : "Nothing equipped or active reflects damage on a hit.") +
-          '<span class="it-src">Triggers on every melee hit that lands, blocked hits included.' + IGN + "</span>", perHit > 0, "") +
-        (shield || blockSrc.length ? row("Damage per block", r1(perBlock) + parts(blockSrc), (blockSrc.length ? blockSrc.map(function (x) { return '<span class="it-l">' + x[1] + "</span>"; }).join("") : "No shield spike or block effect yet.") +
-          '<span class="it-src">On top of the per-hit damage when the hit is blocked.' + IGN + (shield ? "" : " Needs a shield.") + "</span>", perBlock > 0 && shield, "") : "") +
-        row("Expected per enemy swing", r1(perSwing), "Lands " + Math.round(pLand * 1000) / 10 + "% x " + r1(perHit) + (shield ? " + blocked " + Math.round(pBlock * 1000) / 10 + "% x " + r1(perBlock) : "") +
-          ", from this panel's miss " + r1(vMiss) + "%, dodge " + r1(vDodge) + "%, parry " + r1(vParry) + "%" + (shield ? " and block " + r1(vBlock) + "%" : "") + "." + (avKnown ? "" : " Dodge from Agility is unknown here, so this runs high.") + IGN, perSwing > 0, "") +
+        row("Reflect per enemy swing", r1(perSwing),
+          (hitSrc.length ? '<span class="it-l"><b>Every hit that lands: ' + r1(perHit) + "</b></span>" + hitSrc.map(function (x) { return '<span class="it-l">' + x[1] + "</span>"; }).join("") : "") +
+          (blockSrc.length ? '<span class="it-l"><b>Every block: ' + r1(perBlock) + (shield ? "" : " (needs a shield)") + "</b></span>" + blockSrc.map(function (x) { return '<span class="it-l">' + x[1] + "</span>"; }).join("") : "") +
+          (!hitSrc.length && !blockSrc.length ? "Nothing equipped or active hurts whoever hits you." : "") +
+          '<span class="it-src">Spikes, thorns and damage on block, as one number: lands ' + Math.round(pLand * 1000) / 10 + "% x " + r1(perHit) + (shield ? " + blocked " + Math.round(pBlock * 1000) / 10 + "% x " + r1(perBlock) : "") +
+          ", from this panel's miss " + r1(vMiss) + "%, dodge " + r1(vDodge) + "%, parry " + r1(vParry) + "%" + (shield ? " and block " + r1(vBlock) + "%" : "") + "." + (avKnown ? "" : " Dodge from Agility is unknown here, so this runs high.") + IGN + "</span>", perSwing > 0, "") +
         row("Reflect DPS", r1(perSwing / 2), "Expected damage per swing against one attacker swinging every 2.0 s. Each extra attacker adds as much again." + IGN, perSwing > 0, "") +
         (notes.length ? '<p class="g2-note">' + notes.join(" ") + "</p>" : "");
+      // ---- Procs and on-use: chance on hit, use and equip procs of what is equipped ----
+      var E0 = eq(), mhIt = byId[E0.mainhand], mhSpd = mhIt && !overLevel(mhIt) && weaponSpeed(mhIt) ? weaponSpeed(mhIt) : 0, baseSpd = mhSpd || 2.0;
+      var pxRows = "", pxTot = 0, pxUnknown = 0, PXIGN = " Estimate: every swing is assumed to land (misses, dodges, parries and glancing blows are not modelled), target armor and resistances are ignored, and haste or extra attacks do not add swings.";
+      function pct(c) { return Math.round(c * 1000) / 10 + "%"; }
+      function srcTag(g) { return g.src === "client" ? " [client spell tables" + (g.sp ? ", spell " + esc(g.sp) : "") + "]" : " [read from the tooltip]"; }
+      SLOT_KEYS.forEach(function (k) {
+        var it = byId[E0[k]]; if (!it || overLevel(it)) return;
+        var own = weaponSpeed(it), spd = own || baseSpd, spdWhy = own ? "its own speed " + own.toFixed(2) + " s" : mhSpd ? "your main hand's speed " + mhSpd.toFixed(2) + " s" : "2.0 s (no main-hand weapon)";
+        fxGroups(procs(it)).forEach(function (g) {
+          var what = grpWhat(g), L = ['<span class="it-l">' + esc(g.t || what) + "</span>"], val = "", on = false;
+          var c = g.k === "hit" ? procChance(g, spd) : null;
+          if (g.k === "hit") {
+            var cTxt = g.p != null ? pct(c) + " per hit (the client's proc chance)" : g.ppm ? pct(c) + " per swing: " + g.ppm + " procs per minute x " + spdWhy + " / 60" : null;
+            if (g.only && g.dmg) { val = "situational"; L.push('<span class="it-l">Only against ' + esc(g.only) + ": not counted in the total.</span>"); }
+            else if (g.dmg && RANGED[it.slot] && CLS !== "HUNTER") { val = "ranged only"; L.push('<span class="it-l">Procs on ranged attacks (' + pct(c || 0) + " per shot), which this class rarely makes: not counted in the melee total.</span>"); }
+            else if (c == null) { pxUnknown++; L.push('<span class="it-l">Chance unknown: the client gives neither a proc chance nor procs per minute, so it is not counted.</span>'); val = "chance unknown"; }
+            else if (g.dmg) {
+              var d = c * g.dmg / spd, capped = g.icd && g.dmg / g.icd < d;
+              if (capped) d = g.dmg / g.icd;
+              pxTot += d; on = true; val = r1(d) + " dps";
+              L.push('<span class="it-l">Chance ' + esc(cTxt) + ". Average " + r1(g.dmg) + " damage per proc" + (g.rows.some(function (e) { return e.what === "dot"; }) ? " (damage over time counted in full)" : "") + ".</span>");
+              L.push('<span class="it-l">' + pct(c) + " x " + r1(g.dmg) + " / " + spd.toFixed(2) + " s = " + r1(d) + " damage per second" + (capped ? ", capped by the " + g.icd + " s internal cooldown" : "") + ".</span>");
+            } else {
+              var up = null, bd = null;
+              g.rows.forEach(function (e) { if (e.what === "buff" && e.dur) bd = e.dur; });
+              if (bd) { up = Math.min(1, c * bd / spd); val = "~" + Math.round(up * 100) + "% up"; }
+              else val = pct(c);
+              L.push('<span class="it-l">Chance ' + esc(cTxt) + "." + (up != null ? " Estimated uptime " + Math.round(up * 100) + "%: " + pct(c) + " x " + bd + " s / " + spd.toFixed(2) + " s, capped at 100%. Not added to the stats above." : " No damage to count.") + "</span>");
+            }
+          } else if (g.k === "use") {
+            var cdT = g.cd ? fmtDur(g.cd) : "cooldown unknown", main = g.dmg || g.rows.reduce(function (a, e) { return a + ((e.what === "heal" || e.what === "mana") && e.v ? +e.v : 0); }, 0);
+            val = (main ? Math.round(main) + " / use" : "use") ;
+            L.push('<span class="it-l">On use: ' + esc(what) + (main ? ", average " + r1(main) + " per use" : "") + ". Cooldown " + esc(cdT) + "." +
+              (main && g.cd ? " About " + r1(main * 60 / g.cd) + " per minute if used on cooldown." : "") + " Not part of the proc damage per second.</span>");
+          } else {
+            val = g.p != null ? pct(g.p) : "equip";
+            L.push('<span class="it-l">Equip proc' + (g.p != null ? ", " + pct(g.p) + " chance" : ", chance unknown") + (g.icd ? ", at most once every " + fmtDur(g.icd) : "") + ". Triggers on spells, being hit or similar, not on your swings, so it is not part of the proc damage per second.</span>");
+          }
+          L.push('<span class="it-src">' + (g.k === "hit" ? "Chance on hit" : g.k === "use" ? "Use" : "Equip proc") + srcTag(g) + "." + (g.k === "hit" ? PXIGN : "") + "</span>");
+          pxRows += '<div class="gst px-r' + (on ? " on" : "") + '" data-tip="' + attr("<b>" + esc(it.name) + "</b>" + L.join("")) + '"><span><em class="px-k">' + (g.k === "hit" ? "Hit" : g.k === "use" ? "Use" : "Equip") + "</em>" + esc(it.name) + ': <i class="px-w">' + esc(what) + "</i></span><b>" + esc(val) + "</b></div>";
+        });
+      });
+      var pxHTML = row("Proc damage per second (est.)", r1(pxTot), "Sum of the chance-on-hit damage of everything equipped. Weapon procs use that weapon's speed; armor, ring and trinket procs use " +
+          (mhSpd ? "your main hand's speed (" + mhSpd.toFixed(2) + " s)" : "2.0 s, since no main-hand weapon is equipped") + ". Chance per swing is the client's proc chance, else procs per minute x speed / 60." +
+          (pxUnknown ? " " + pxUnknown + " effect" + (pxUnknown === 1 ? " has" : "s have") + " no known chance and " + (pxUnknown === 1 ? "is" : "are") + " not counted." : "") + '<span class="it-src">' + PXIGN.trim() + " On-use and other equip procs are listed, not added.</span>", pxTot > 0, "") +
+        (pxRows || '<p class="g2-note">Nothing equipped has a chance-on-hit, use or equip proc effect.</p>');
       var rx = (ctx.racials || []).map(function (r) {
         var SHOWN = ["strength", "agility", "stamina", "intellect", "spirit", "health", "mana", "rage", "energy", "hit", "crit", "dodge", "haste"];
         var fx = r.fx || [];
@@ -765,6 +1037,7 @@
             '<div class="gst-g"><h6>Defense</h6>' + def + "</div>" +
             (resHTML ? '<div class="gst-g"><h6>Resistances</h6>' + resHTML + "</div>" : "") +
             '<div class="gst-g gst-rf"><h6>Reflect</h6>' + rfHTML + "</div>" +
+            '<div class="gst-g gst-px"><h6>Procs and on-use</h6>' + pxHTML + "</div>" +
             '<p class="g2-note">' + note + "</p></div>" +
           (rx ? '<div class="g2-rx"><div class="g2-rx-h"><h6>Racials</h6><button type="button" class="g2-rx-link" data-goto-race="1">Change race</button></div>' + rx + "</div>" : "") +
         "</div></div>";
@@ -790,16 +1063,21 @@
       "</div>";
     }
     // ---- The gear picker: every wearable item for the slot, filtered, weighted and paged ----
-    var PF_DEF = { at: [], ms: "", stat: "", qual: "", rlo: "", rhi: "", ilo: "", ihi: "", src: "", nw: false, upto: true, any: false, cl: false, sort: "score", preset: "", more: false };
+    var PF_DEF = { at: [], fx: [], ms: "", stat: "", qual: "", rlo: "", rhi: "", ilo: "", ihi: "", src: "", nw: false, upto: true, any: false, cl: false, sort: "score", preset: "", more: false };
     var PF = (function () {
       var o = {}, saved = lsGet("forge-pick") || {};
       Object.keys(PF_DEF).forEach(function (k) { o[k] = saved[k] !== undefined ? saved[k] : PF_DEF[k]; });
       if (!Array.isArray(o.at)) o.at = [];
+      if (!Array.isArray(o.fx)) o.fx = [];
       o.q = ""; o.shown = 60; o.slot = "";
       return o;
     })();
     function savePF() { var o = {}; Object.keys(PF_DEF).forEach(function (k) { o[k] = PF[k]; }); lsSet("forge-pick", o); }
     var CUSTOM = lsGet("forge-weights") || null;
+    if (CUSTOM && (CUSTOM.reflectHit || CUSTOM.reflectBlock)) { // reflect per hit and per block became one Reflect
+      if (!CUSTOM.reflect) CUSTOM.reflect = CUSTOM.reflectHit || CUSTOM.reflectBlock;
+      delete CUSTOM.reflectHit; delete CUSTOM.reflectBlock; lsSet("forge-weights", CUSTOM);
+    }
     // Weight presets: the consumable wants per spec, read as gear weights; armor is per point, so it weighs less.
     function presets() {
       var out = [], byCls = WANT[CLS] || {};
@@ -817,7 +1095,12 @@
       Object.keys(byCls).forEach(function (k) {
         out.push({ id: k === "*" ? "class" : k.toLowerCase(), label: k === "*" ? CLS.charAt(0) + CLS.slice(1).toLowerCase() : k, w: fromWant(byCls[k], k === "Protection") });
       });
-      if (CLS === "PALADIN") out.push({ id: "reflect", label: "Reflect tank", w: { stamina: 3, armor: 0.12, defense: 2, blockValue: 2, blockChance: 5, reflectHit: 10, reflectBlock: 5, strength: 1.5, holy: 1, dodge: 4, parry: 4 } });
+      // Proc damage per second, weighed like 14 attack power per point of DPS (Classic rule: 14 AP = 1 DPS).
+      out.forEach(function (p) {
+        if (!/^(retribution|arms|fury|enhancement|feral)$/.test(p.id) && !(p.id === "class" && (CLS === "ROGUE" || CLS === "HUNTER"))) return;
+        p.w.procDps = Math.round(14 * (p.w.attackPower || 2));
+      });
+      if (CLS === "PALADIN") out.push({ id: "reflect", label: "Reflect tank", w: { stamina: 3, armor: 0.12, defense: 2, blockValue: 2, blockChance: 5, reflect: 10, strength: 1.5, holy: 1, dodge: 4, parry: 4 } });
       out.push({ id: "custom", label: "Custom", w: CUSTOM || {} });
       return out;
     }
@@ -827,10 +1110,11 @@
       if (!p && SPEC) p = ps.filter(function (x) { return SPEC.indexOf(x.label) === 0; })[0];
       return p || ps[0];
     }
-    function score(it, w) { var s = 0; Object.keys(w).forEach(function (k) { if (w[k]) s += w[k] * statVal(it, k); }); return s; }
+    function score(it, w) { // a bow's or thrown weapon's procs only count for Hunters, who shoot all fight
+      var s = 0; Object.keys(w).forEach(function (k) { if (w[k] && !(k === "procDps" && RANGED[it.slot] && CLS !== "HUNTER")) s += w[k] * statVal(it, k); }); return s; }
     function pickSet(name, v) {
       var reset = true;
-      if (name === "at") { var i = PF.at.indexOf(v); if (i === -1) PF.at.push(v); else PF.at.splice(i, 1); }
+      if (name === "at" || name === "fx") { var arr = PF[name], i = arr.indexOf(v); if (i === -1) arr.push(v); else arr.splice(i, 1); }
       else if (name === "ms" || name === "qual") PF[name] = PF[name] === v ? "" : v;
       else if (name === "nw" || name === "upto" || name === "any" || name === "cl") PF[name] = !PF[name];
       else if (name === "more") { PF.shown += 60; reset = false; }
@@ -895,6 +1179,7 @@
           else if (m !== PF.ms) return false;
         }
         if (PF.stat && statVal(it, PF.stat) <= 0) return false;
+        if (PF.fx.length && !PF.fx.some(function (k) { return hasFx(it, k); })) return false;
         // sorting by a stat lists the items that have it, best first
         if (sortKey !== "score" && sortKey !== "ilvl" && sortKey !== "req" && statVal(it, sortKey) <= 0) return false;
         if (ql.length) {
@@ -945,6 +1230,7 @@
             '<span class="gp-grp" role="group" aria-label="Main stat">' + [["strength", "Str"], ["agility", "Agi"], ["intellect", "Int"], ["sta", "Sta only"], ["spirit", "Spi"]].map(function (m) {
               return pill("ms", m[0], m[1], PF.ms === m[0], m[0] === "sta" ? "Stamina with no Strength, Agility or Intellect" : m[0] === "spirit" ? "Spirit is its biggest attribute" : "Main stat: the largest of Strength, Agility and Intellect");
             }).join("") + "</span></div>" +
+          '<div class="gp-line"><span class="gp-grp" role="group" aria-label="Effects">' + FXPILLS.map(function (f) { return pill("fx", f[0], f[1], PF.fx.indexOf(f[0]) !== -1, f[2]); }).join("") + "</span></div>" +
           '<div class="gp-line gp-sel">' +
             '<label><span>Sort</span><select data-pfs="sort">' + statOptions(sortKey, '<option value="score"' + (sortKey === "score" ? " selected" : "") + ">Score (weights)</option><option value=\"ilvl\"" + (sortKey === "ilvl" ? " selected" : "") + ">Item level</option><option value=\"req\"" + (sortKey === "req" ? " selected" : "") + ">Required level</option>") + "</select></label>" +
             '<label><span>Has stat</span><select data-pfs="stat">' + statOptions(PF.stat, '<option value="">Any</option>') + "</select></label>" +

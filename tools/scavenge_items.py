@@ -672,12 +672,15 @@ def main():
     # damage reflected at attackers (thorns, shield spikes, procs when struck), from the client's spell tables
     import apply_reflect
     apply_reflect.run(db)
+    # procs, on-use and chance-on-hit effects (fx), from the same tables; after rf, which it leaves alone
+    import apply_effects
+    apply_effects.run(db)
     db["note"] = re.sub(r"\s*Server-sent items.*$", "", db["note"]) + (
         " Server-sent items and current tooltips: ForeverChanges' item files for the current build first (Forever's own wording), "
         "Wowhead's Forever database where they have nothing, the client datamine last; who drops what comes from codex/loot.json "
         "(tools/scavenge_items.py). Rows with est:\"classic\" are items Forever has (the client's item table lists them) whose "
         "Forever numbers no source has shown yet: their stats are Classic's, an estimate. rf lists damage done back to "
-        "attackers (tools/apply_reflect.py).")
+        "attackers (tools/apply_reflect.py); fx lists procs, on-use and chance-on-hit effects (tools/apply_effects.py).")
     db["scavenged"] = time.strftime("%Y-%m-%d")
     with open(DB, "w") as f:
         json.dump(db, f, ensure_ascii=False, separators=(",", ":"))
