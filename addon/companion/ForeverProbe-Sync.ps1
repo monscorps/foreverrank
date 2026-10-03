@@ -24,7 +24,8 @@ param(
 $DefaultEndpoint = "https://foreverrank.andustemme.workers.dev/api/probe"
 $WatchFiles = @("ForeverProbe.lua", "QuestBank.lua")
 $MaxBytes   = 6 * 1024 * 1024   # the endpoint's limit
-$AddonVersion = "0.4.4"         # the ForeverProbe addon this companion ships with
+$AddonVersion = "0.4.5"         # the ForeverProbe addon this companion ships with
+$QuestBankVersion = "3.5.2"     # the QuestBank that was newest when this companion was built
 
 $AppDir   = Join-Path $env:APPDATA "ForeverProbe"
 $CfgFile  = Join-Path $AppDir "config.json"
@@ -176,7 +177,7 @@ function Run-Sync {
       }
     }
   }
-  $note = (Probe-Verdict $descs).note
+  $note = (Probe-Verdict $descs @(Get-AddonStates -Root $cfg.wowPath)).note
   if ($failed -gt 0) { return "Sent $posted, failed $failed. See sync.log in $AppDir." }
   if ($posted -gt 0) { return "Sent $posted update(s) to foreverrank.com." + $note }
   if ($skipped -gt 0 -and $posted -eq 0) { return "Nothing new in $skipped file(s) since the last upload." + $note }
@@ -207,6 +208,7 @@ function Describe-File($f, $cfg) {
   $inv = [System.Globalization.CultureInfo]::InvariantCulture
   $when = $item.LastWriteTime.ToString("yyyy-MM-dd HH:mm", $inv)
   $writer = "an unknown version"
+  $ver = $null
   $old = $false
   try {
     $body = [System.IO.File]::ReadAllText($f)
@@ -215,14 +217,14 @@ function Describe-File($f, $cfg) {
       elseif ($body -match '\["schema"\]') {
         # 0.4 sets schema on first use but writes its version only with a snapshot (and 0.4.3 when it greets)
         $writer = "ForeverProbe 0.4 or newer (no snapshot saved yet)"
-        if ($body -match '\["greeted"\]\s*=\s*"(\d+\.\d+\.\d+)"') { $writer = "ForeverProbe " + $Matches[1] }
-        elseif ($body -match '\["addon"\]\s*=\s*"(\d+\.\d+\.\d+)"' -and [version]$Matches[1] -ge [version]"0.4.0") { $writer = "ForeverProbe " + $Matches[1] }
+        if ($body -match '\["greeted"\]\s*=\s*"(\d+\.\d+\.\d+)"') { $writer = "ForeverProbe " + $Matches[1]; $ver = $Matches[1] }
+        elseif ($body -match '\["addon"\]\s*=\s*"(\d+\.\d+\.\d+)"' -and [version]$Matches[1] -ge [version]"0.4.0") { $writer = "ForeverProbe " + $Matches[1]; $ver = $Matches[1] }
       }
       elseif ($body -match '\["addon"\]\s*=\s*"([^"]+)"') { $writer = "ForeverProbe 0.3 or older (it called itself " + $Matches[1] + ")"; $old = $true }
     } else {
       # QuestBank keeps the version in every snapshot it saved; the highest is the one that wrote the file
       $vs = @([regex]::Matches($body, '\["(?:version|qb)"\]\s*=\s*"(\d+\.\d+\.\d+)"') | ForEach-Object { [version]$_.Groups[1].Value } | Sort-Object -Descending)
-      if ($vs.Count -gt 0) { $writer = "QuestBank " + $vs[0].ToString() }
+      if ($vs.Count -gt 0) { $writer = "QuestBank " + $vs[0].ToString(); $ver = $vs[0].ToString() }
     }
   } catch { }
   $state = "not sent yet"
@@ -232,21 +234,65 @@ function Describe-File($f, $cfg) {
   } catch { }
   if ($script:failedLast -and $script:failedLast[$f]) { $state = "failed last time: " + $script:failedLast[$f] }
   $text = $item.Name + " (" + $flavor + ", account " + $acct + ")`n   " + $kb + " KB, written " + $when + " by " + $writer + "; " + $state
-  return @{ text = $text; old = $old; name = $item.Name; when = $when; written = $item.LastWriteTime; writer = $writer; acct = $acct; flavor = $flavor; path = $f; dir = (Split-Path $f -Parent); key = ($when + "|" + $writer + "|" + $state) }
+  return @{ text = $text; old = $old; ver = $ver; name = $item.Name; when = $when; written = $item.LastWriteTime; writer = $writer; acct = $acct; flavor = $flavor; path = $f; dir = (Split-Path $f -Parent); key = ($when + "|" + $writer + "|" + $state) }
 }
 
-# Where the ForeverProbe addon itself sits in each game folder: right, out of date, one folder too deep, under
-# another folder name, or missing. Reads only the .toc's Version and Interface lines.
+# Where each addon sits in each game folder: right, out of date, one folder too deep, under another folder
+# name, or missing. Reads only the .toc's Version and Interface lines.
 function Read-Toc($toc) {
   $lines = @(Get-Content -LiteralPath $toc -TotalCount 12 -ErrorAction SilentlyContinue)
   $ver = ($lines | Where-Object { $_ -match '^##\s*Version:\s*(.+)$' } | ForEach-Object { $Matches[1].Trim() } | Select-Object -First 1)
   $ifc = ($lines | Where-Object { $_ -match '^##\s*Interface:\s*(.+)$' } | ForEach-Object { $Matches[1].Trim() } | Select-Object -First 1)
-  $older = $false
-  try { if ($ver -and [version]$ver -lt [version]"0.4.0") { $older = $true } } catch { }
-  return @{ ver = $ver; iface = $ifc; older = $older }
+  return @{ ver = $ver; iface = $ifc }
 }
 
-function Find-AddonInstalls {
+function Older($a, $b) {
+  try { return ($a -and $b -and [version]$a -lt [version]$b) } catch { return $false }
+}
+
+# One addon in one game folder's AddOns: @{ flavor; addon; state (ok, deep, renamed, inside, missing); ver; created; text }
+function Check-Addon($addons, $label, $name, $newest, $saves) {
+  $toc = Join-Path $addons ($name + "\" + $name + ".toc")
+  $deep = Join-Path $addons ($name + "\" + $name + "\" + $name + ".toc")
+  $r = @{ flavor = $label; addon = $name; state = "missing"; ver = $null; created = $null; text = $null }
+  if (Test-Path -LiteralPath $toc) {
+    $t = Read-Toc $toc
+    $r.state = "ok"; $r.ver = $t.ver
+    try { $r.created = (Get-Item -LiteralPath (Join-Path $addons $name)).CreationTime } catch { }
+    $r.text = $name + " addon " + $t.ver + " (interface " + $t.iface + ") in " + $label
+    if (Older $t.ver $newest) {
+      if ($name -eq "ForeverProbe") { $r.text += ": out of date, install " + $AddonVersion + " over it" } else { $r.text += ": older than " + $newest + ", update it" }
+    }
+    if (Test-Path -LiteralPath $deep) {
+      $d = Read-Toc $deep
+      $r.text += ". A copy (" + $d.ver + ") also sits one folder too deep, in AddOns\" + $name + "\" + $name + "; the game loads the outer one. Replace the outer folder with the inner one."
+    }
+    return $r
+  }
+  if (Test-Path -LiteralPath $deep) {
+    $d = Read-Toc $deep
+    $r.state = "deep"; $r.ver = $d.ver
+    $r.text = $name + " addon " + $d.ver + " in " + $label + " is one folder too deep: AddOns\" + $name + "\" + $name + ". Move the inner " + $name + " folder up one level, into AddOns."
+    return $r
+  }
+  foreach ($dir in @(Get-ChildItem -LiteralPath $addons -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne $name })) {
+    if (Test-Path -LiteralPath (Join-Path $dir.FullName ($name + ".toc"))) {
+      $r.state = "renamed"
+      $r.text = $name + " addon in " + $label + " sits in AddOns\" + $dir.Name + ". The game only loads it from a folder named exactly " + $name + ": rename it."
+      return $r
+    }
+    if (Test-Path -LiteralPath (Join-Path $dir.FullName ($name + "\" + $name + ".toc"))) {
+      $r.state = "inside"
+      $r.text = $name + " addon in " + $label + " sits inside AddOns\" + $dir.Name + "\" + $name + ". Move that inner " + $name + " folder into AddOns."
+      return $r
+    }
+  }
+  # "missing" only where QuestBank or ForeverProbe has saved: other game folders are none of our business
+  if ($saves) { $r.text = $name + " addon: not found in " + $label + "\Interface\AddOns" }
+  return $r
+}
+
+function Get-AddonStates {
   param([string]$Root)
   $out = @()
   $roots = @()
@@ -264,74 +310,94 @@ function Find-AddonInstalls {
       if ($seen[$full]) { continue }
       $seen[$full] = $true
       $label = Split-Path $fl -Leaf
-      $toc = Join-Path $addons "ForeverProbe\ForeverProbe.toc"
-      $deep = Join-Path $addons "ForeverProbe\ForeverProbe\ForeverProbe.toc"
-      if (Test-Path -LiteralPath $toc) {
-        $t = Read-Toc $toc
-        $line = "ForeverProbe addon " + $t.ver + " (interface " + $t.iface + ") in " + $label
-        if ($t.older) { $line += ": out of date, install " + $AddonVersion + " over it" }
-        if (Test-Path -LiteralPath $deep) {
-          $d = Read-Toc $deep
-          $line += ". A copy (" + $d.ver + ") also sits one folder too deep, in AddOns\ForeverProbe\ForeverProbe; the game loads the outer one. Replace the outer folder with the inner one."
-        }
-        $out += $line
-      } elseif (Test-Path -LiteralPath $deep) {
-        $d = Read-Toc $deep
-        $out += ("ForeverProbe addon " + $d.ver + " in " + $label + " is one folder too deep: AddOns\ForeverProbe\ForeverProbe. Move the inner ForeverProbe folder up one level, into AddOns.")
-      } else {
-        $hit = $null; $nested = $false
-        foreach ($dir in @(Get-ChildItem -LiteralPath $addons -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne "ForeverProbe" })) {
-          if (Test-Path -LiteralPath (Join-Path $dir.FullName "ForeverProbe.toc")) { $hit = $dir; break }
-          if (Test-Path -LiteralPath (Join-Path $dir.FullName "ForeverProbe\ForeverProbe.toc")) { $hit = $dir; $nested = $true; break }
-        }
-        if ($hit -and $nested) {
-          $out += ("ForeverProbe addon in " + $label + " sits inside AddOns\" + $hit.Name + "\ForeverProbe. Move that inner ForeverProbe folder into AddOns.")
-        } elseif ($hit) {
-          $out += ("ForeverProbe addon in " + $label + " sits in AddOns\" + $hit.Name + ". The game only loads it from a folder named exactly ForeverProbe: rename it.")
-        } else {
-          # "missing" only where QuestBank or ForeverProbe has saved: other game folders are none of our business
-          $saves = @(Get-ChildItem -LiteralPath (Join-Path $fl "WTF\Account") -Directory -ErrorAction SilentlyContinue |
-            Where-Object { (Test-Path -LiteralPath (Join-Path $_.FullName "SavedVariables\QuestBank.lua")) -or (Test-Path -LiteralPath (Join-Path $_.FullName "SavedVariables\ForeverProbe.lua")) })
-          if ($saves.Count -gt 0) { $out += ("ForeverProbe addon: not found in " + $label + "\Interface\AddOns") }
-        }
-      }
+      $saves = @(Get-ChildItem -LiteralPath (Join-Path $fl "WTF\Account") -Directory -ErrorAction SilentlyContinue |
+        Where-Object { (Test-Path -LiteralPath (Join-Path $_.FullName "SavedVariables\QuestBank.lua")) -or (Test-Path -LiteralPath (Join-Path $_.FullName "SavedVariables\ForeverProbe.lua")) }).Count -gt 0
+      $out += (Check-Addon $addons $label "ForeverProbe" "0.4.0" $saves) # 0.4.x all upload alike; older ones don't
+      $q = Check-Addon $addons $label "QuestBank" $QuestBankVersion $false
+      if ($q.state -ne "missing") { $out += $q }
     }
   }
   return $out
 }
 
-# Why ForeverProbe.lua isn't uploading, if something looks wrong: @{ hint = the sentence for Status; note = the
-# few words for the balloon }. An old-format file can be stale (written long ago) or fresh (an old ForeverProbe
-# still loaded and saving); a stale file is moot when a newer 0.4 file exists elsewhere.
-function Probe-Verdict($descs) {
+function Find-AddonInstalls {
+  param([string]$Root)
+  return @(Get-AddonStates -Root $Root | Where-Object { $_.text } | ForEach-Object { $_.text })
+}
+
+# Since when the game has been running, or $null: WoW finds a new addon only when it starts
+function Get-WowStart {
+  try {
+    $p = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like "Wow*" } | Sort-Object StartTime)
+    if ($p.Count -gt 0) { return $p[0].StartTime }
+  } catch { }
+  return $null
+}
+
+# What looks wrong with the uploads, in plain sentences: @{ hint = for Status; note = for the balloon }.
+# An old-format ForeverProbe.lua can be stale (written long ago) or fresh (an old ForeverProbe still loaded);
+# a stale one is moot when a newer 0.4 file saves elsewhere. QuestBank.lua written by an older QuestBank than
+# the one installed means the game hasn't been restarted since the update.
+function Probe-Verdict($descs, $installs) {
   $fp = @($descs | Where-Object { $_.name -eq "ForeverProbe.lua" } | Sort-Object { $_.written } -Descending)
   $qb = @($descs | Where-Object { $_.name -eq "QuestBank.lua" })
   $now = Get-Date
+  $wow = Get-WowStart
+  $hints = @(); $note = ""
   $where = { param($d) $d.flavor + ", account " + $d.acct }
-  $check = "In game, type /qb probe: it says whether ForeverProbe is missing, switched off or out of date."
+  $qbRun = @($qb | Where-Object { $_.ver } | Sort-Object { [version]$_.ver } -Descending | Select-Object -First 1)
   if ($qb.Count -eq 0) { $check = "When ForeverProbe loads it says ""ForeverProbe " + $AddonVersion + " is running"" in chat; /probe opens its panel. If you never see that, check the AddOns list at the character screen." }
+  elseif ($qbRun.Count -gt 0 -and (Older $qbRun[0].ver "3.5.2")) { $check = "The game runs QuestBank " + $qbRun[0].ver + "; with 3.5.2 or newer, /qb probe in game says whether ForeverProbe is missing, switched off or out of date." }
+  else { $check = "In game, type /qb probe: it says whether ForeverProbe is missing, switched off or out of date." }
+  $restart = "WoW finds a newly added addon only when it starts: quit WoW completely (a /reload or logout is not enough) and start it again."
+
+  # QuestBank: installed newer than the one that last saved
+  foreach ($q in $qb) {
+    $inst = @($installs | Where-Object { $_.addon -eq "QuestBank" -and $_.flavor -eq $q.flavor -and $_.state -eq "ok" })
+    if ($inst.Count -gt 0 -and $q.ver -and (Older $q.ver $inst[0].ver)) {
+      $hints += ("QuestBank " + $inst[0].ver + " is installed in " + $q.flavor + ", but QuestBank.lua was last saved by " + $q.ver + " (" + $q.when + "): the game hasn't loaded the update yet. Type /reload in game, or restart WoW.")
+      if (-not $note) { $note = " The game still runs QuestBank " + $q.ver + ": /reload to load " + $inst[0].ver + "." }
+    }
+  }
+
   $modern = @($fp | Where-Object { -not $_.old })
   foreach ($d in $fp) {
     if (-not $d.old) { continue }
     $beside = @($qb | Where-Object { $_.dir -eq $d.dir })
     $fresh = (($now - $d.written).TotalDays -lt 3) -or ($beside.Count -gt 0 -and [math]::Abs(($beside[0].written - $d.written).TotalDays) -lt 1)
     if ($fresh) {
-      return @{ hint = ("ForeverProbe.lua in " + (& $where $d) + " was written " + $d.when + " by " + $d.writer + ": an old ForeverProbe is still loaded there and saving. Install ForeverProbe " + $AddonVersion + " from foreverrank.com/addon over it."); note = (" An old ForeverProbe is loaded in " + $d.flavor + ": install " + $AddonVersion + ".") }
+      $hints += ("ForeverProbe.lua in " + (& $where $d) + " was written " + $d.when + " by " + $d.writer + ": an old ForeverProbe is still loaded there and saving. Install ForeverProbe " + $AddonVersion + " from foreverrank.com/addon over it, then restart WoW.")
+      if (-not $note) { $note = " An old ForeverProbe is loaded in " + $d.flavor + ": install " + $AddonVersion + "." }
+      break
     }
     if (@($modern | Where-Object { $_.written -gt $d.written }).Count -gt 0) { continue } # left behind; a newer one saves elsewhere
-    return @{ hint = ("ForeverProbe.lua in " + (& $where $d) + " was last written " + $d.when + " by " + $d.writer + ". ForeverProbe " + $AddonVersion.Substring(0, 3) + " has not saved there since, so there is nothing new to send. " + $check + " If you no longer use ForeverProbe there, delete that file and this note goes away."); note = (" ForeverProbe.lua in " + $d.flavor + " hasn't changed since " + $d.when.Substring(0, 10) + ": right-click the sigil, Status.") }
+    $inst = @($installs | Where-Object { $_.addon -eq "ForeverProbe" -and $_.flavor -eq $d.flavor -and $_.state -eq "ok" })
+    $h = "ForeverProbe.lua in " + (& $where $d) + " was last written " + $d.when + " by " + $d.writer + ", so there is nothing new to send. "
+    if ($inst.Count -gt 0 -and -not (Older $inst[0].ver "0.4.0")) {
+      # the addon is where it belongs: the game hasn't started with it, or it is switched off
+      $h += "ForeverProbe " + $inst[0].ver + " is in place in " + $d.flavor + "\Interface\AddOns, but the game hasn't loaded it yet. " + $restart
+      if ($wow -and $inst[0].created -and $wow -lt $inst[0].created) {
+        $h += " WoW has been running since " + $wow.ToString("yyyy-MM-dd HH:mm") + ", from before ForeverProbe was put there (" + $inst[0].created.ToString("yyyy-MM-dd HH:mm") + ")."
+      }
+      $h += " If it still doesn't save after that, check that ForeverProbe is ticked in the AddOns list at the character screen; it says ""ForeverProbe " + $inst[0].ver + " is running"" in chat when it loads."
+      $hints += $h
+    } else {
+      $hints += ($h + "ForeverProbe 0.4 has not saved there since. " + $check + " If you no longer use ForeverProbe there, delete that file and this note goes away.")
+    }
+    if (-not $note) { $note = " ForeverProbe.lua in " + $d.flavor + " hasn't changed since " + $d.when.Substring(0, 10) + ": right-click the sigil, Status." }
+    break
   }
   foreach ($d in $modern) {
     foreach ($q in @($qb | Where-Object { $_.dir -eq $d.dir })) {
       if (($q.written - $d.written).TotalDays -gt 3) {
-        return @{ hint = ("ForeverProbe.lua in " + (& $where $d) + " was last written " + $d.when + ", " + [math]::Floor(($q.written - $d.written).TotalDays) + " days before QuestBank.lua next to it: QuestBank has saved since, ForeverProbe has not. " + $check); note = "" }
+        $hints += ("ForeverProbe.lua in " + (& $where $d) + " was last written " + $d.when + ", " + [math]::Floor(($q.written - $d.written).TotalDays) + " days before QuestBank.lua next to it: QuestBank has saved since, ForeverProbe has not. " + $check)
       }
     }
   }
   if ($fp.Count -eq 0 -and $qb.Count -gt 0) {
-    return @{ hint = ("No ForeverProbe.lua anywhere: ForeverProbe has never saved. That's fine if you don't run it; QuestBank.lua uploads on its own."); note = "" }
+    $hints += "No ForeverProbe.lua anywhere: ForeverProbe has never saved. That's fine if you don't run it; QuestBank.lua uploads on its own."
   }
-  return @{ hint = ""; note = "" }
+  return @{ hint = ($hints -join "`n`n"); note = $note }
 }
 
 function Show-Status {
@@ -349,7 +415,7 @@ function Show-Status {
   if ($files.Count -gt 0) {
     $descs = @($files | Select-Object -First 6 | ForEach-Object { Describe-File $_ $cfg })
     $list = (@($descs | ForEach-Object { $_.text })) -join "`n"
-    $v = Probe-Verdict $descs
+    $v = Probe-Verdict $descs @(Get-AddonStates -Root $cfg.wowPath)
     if ($v.hint) { $hint = "`n`n" + $v.hint }
   }
   if ($files.Count -gt 6) { $list = $list + "`n... and " + ($files.Count - 6) + " more" }
