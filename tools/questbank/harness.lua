@@ -157,6 +157,7 @@ BASE.QUESTBANK_DEV = true -- errors stay fatal here; one test below turns it off
 for name in pairs(FONT_SIZE) do BASE[name] = fontObj(name) end
 BASE.GameTooltip = setmetatable({}, { __index = function(_, k)
   return function(_, ...)
+    if k == "SetItemByID" then lines[#lines + 1] = "ITEM:" .. tostring((...)) return end
     if k == "AddLine" or k == "AddDoubleLine" then
       local parts = {}
       for i = 1, select("#", ...) do local v = select(i, ...); if type(v) == "string" then parts[#parts + 1] = v end end
@@ -270,7 +271,18 @@ local function newClient(o)
   env.AcceptQuest = function() c.auto[#c.auto + 1] = "AcceptQuest " .. (c.window and c.window.id or 0) end
   env.CompleteQuest = function() c.auto[#c.auto + 1] = "CompleteQuest " .. (c.window and c.window.id or 0) end
   env.GetQuestReward = function(i) c.auto[#c.auto + 1] = "GetQuestReward " .. tostring(i) end
-  env.GetNumQuestChoices = function() return c.choices or 0 end
+  env.GetNumQuestChoices = function() return (c.window and c.window.rc and #c.window.rc) or c.choices or 0 end
+  -- the window's reward items: window.rc = choose one, window.rr = always given (ids); window.unloaded = a link not ready yet
+  env.GetNumQuestRewards = function() return (c.window and c.window.rr and #c.window.rr) or 0 end
+  env.GetQuestItemLink = function(kind, i)
+    local list = c.window and (kind == "choice" and c.window.rc or c.window.rr)
+    local id = list and list[i]
+    if not id or (c.window.unloaded and c.window.unloaded[id]) then return nil end
+    return "|cff1eff00|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r"
+  end
+  env.GetQuestItemInfo = function(kind, i) return nil end
+  c.openedChat = {}
+  env.ChatFrame_OpenChat = function(text) c.openedChat[#c.openedChat + 1] = text end
   env.IsQuestCompletable = function() return c.completable and true or false end
   env.QuestGetAutoAccept = function() return false end
   env.ConfirmAcceptQuest = function() c.auto[#c.auto + 1] = "ConfirmAcceptQuest" end
@@ -2829,6 +2841,66 @@ do
   assert(last.auras and last.auras[1] == 1225478 and last.auras[2] == 465, "the reading notes the auras up")
   owner.auras = nil
   print("auras noted:", #last.auras)
+end
+
+-- 3.5.7: reward items in game: every quest tooltip lists them (or says nobody knows them yet), the right-click menu
+-- links them in chat, the finder shows a reward row's item on Shift; the quest window teaches QuestBank its rewards
+do
+  local Q2, D2 = owner.QB, owner.QB.Data
+  assert(D2.RITEMS and D2.RUNK, "reward lists are in the catalog")
+  local function tipOf(q) lines = {}; owner.env.GameTooltip:ClearLines(); Q2.UI.QuestTooltip(owner.env.GameTooltip, q, Q2:Status(q), 1000); return table.concat(lines, "\n") end
+  -- a quest with known reward items: names, quality colours, "Choose one"
+  local known
+  for id, rw in pairs(D2.RITEMS) do if rw.c and #rw.c >= 2 and Q2.Quest.Get(id) then known = id; break end end
+  local t = tipOf(Q2.Quest.Get(known))
+  assert(t:find("Choose one:", 1, true) and t:find("Item " .. D2.RITEMS[known].c[1], 1, true), "the tooltip names the reward items: " .. t)
+  -- a quest nobody knows the rewards of says so
+  local unk
+  for id in pairs(D2.RUNK) do if Q2.Quest.Get(id) then unk = id; break end end
+  t = tipOf(Q2.Quest.Get(unk))
+  assert(t:find("Rewards: not known yet", 1, true), "an unknown quest says so: " .. t)
+  -- a quest Wowhead lists with no items
+  local none
+  for id in pairs(D2.Q) do if not D2.RITEMS[id] and not D2.RUNK[id] then none = id; break end end
+  t = tipOf(Q2.Quest.Get(none))
+  assert(t:find("No item rewards.", 1, true), "a quest with no items says so: " .. t)
+  -- the quest window teaches QuestBank the rewards; an unknown quest becomes known for this player at once
+  owner.window = { id = unk, xp = 0, title = "Unknown Rewards Quest", rc = { 280101, 280102 }, rr = { 280103 } }
+  Q2.Discover.OnEvent("QUEST_DETAIL", 0); tick(owner, 1)
+  local rw, how = Q2.Quest.Rewards(Q2.Quest.Get(unk))
+  assert(how == "game" and rw.c[2] == 280102 and rw.r[1] == 280103, "the window's rewards are noted")
+  t = tipOf(Q2.Quest.Get(unk))
+  assert(t:find("You get:", 1, true) and t:find("As your quest window showed them", 1, true), "and shown as the game's: " .. t)
+  -- a window whose item the client hasn't loaded yet is not kept half-read
+  owner.window = { id = known, xp = 0, title = "Half", rc = { 1, 2 }, unloaded = { [2] = true } }
+  Q2.Discover.OnEvent("QUEST_DETAIL", 0); tick(owner, 1)
+  local _, how2 = Q2.Quest.Rewards(Q2.Quest.Get(known))
+  assert(how2 == "catalog", "a half-read window changes nothing")
+  owner.window = nil
+  -- the right-click menu links each reward in chat
+  Q2.UI.QuestMenu(Q2.Quest.Get(unk))
+  local menu = owner.env.QuestBankMenu
+  local link
+  for _, b in ipairs(menu and menu.items or {}) do if b:IsShown() and (b.label and b.label:GetText() or ""):find("^Link Item 28010") then link = b end end
+  assert(link, "the menu offers to link a reward")
+  link.__scripts.OnClick(link)
+  assert(#owner.openedChat >= 1 and owner.openedChat[#owner.openedChat]:find("Hitem:28010", 1, true), "it opens chat with the item's link")
+  if menu then menu:Hide() end
+  -- the finder: Shift over a reward row shows the item itself; Shift-click links it
+  Q2.UI:ShowTab(1); Q2.UI.findMode = "gear"; Q2.UI:Refresh()
+  local row
+  for _, r in ipairs(Q2.UI.views[1].swaps) do if r:IsShown() and r.rewardId then row = r; break end end
+  assert(row, "a gear row has a reward item")
+  owner.env.IsShiftKeyDown = function() return true end
+  lines = {}; row.__scripts.OnEnter(row)
+  assert(lines[1] == "ITEM:" .. row.rewardId, "Shift shows the reward item's own tooltip: " .. tostring(lines[1]))
+  row.__scripts.OnClick(row, "LeftButton")
+  assert(owner.openedChat[#owner.openedChat]:find("Hitem:" .. row.rewardId, 1, true), "Shift-click links the reward")
+  owner.env.IsShiftKeyDown = function() return false end
+  lines = {}; row.__scripts.OnEnter(row)
+  assert(table.concat(lines, "\n"):find("Hold Shift to see the item", 1, true), "without Shift, the quest tooltip says how")
+  Q2.UI.findMode = "xp"; Q2.UI:Refresh()
+  print("rewards:", known, "known,", unk, "learned from the window,", none, "none")
 end
 
 local seen = {}

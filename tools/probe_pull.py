@@ -298,6 +298,10 @@ def merge_disc(acc, d):
             for who in q.get(f) or []:
                 if isinstance(who, str) and who not in a[f]:
                     a[f].append(who)
+        # the reward items the quest window showed (QuestBank 3.5.7+): the newest upload's list stands
+        rw = q.get("rw")
+        if isinstance(rw, dict):
+            a["rw"] = {k: [int(x) for x in (rw.get(k) or []) if isinstance(x, (int, float)) or str(x).isdigit()] for k in ("c", "r")}
     for key, n in (d.get("npc") or {}).items():
         if not isinstance(n, dict):
             continue

@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.5.6"
+QB.version = "3.5.7"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -221,6 +221,21 @@ function API.ItemCount(itemID, includeBank)
   if not f then return 0 end
   local ok, n = pcall(f, itemID, includeBank and true or false)
   return ok and n or 0
+end
+
+-- an item's name, link, quality and icon as the game knows them; no name yet when the client hasn't loaded the item
+-- (it is asked for, and the next look has it)
+function API.ItemInfo(id)
+  local f = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+  if not (f and id) then return nil end
+  local ok, name, link, quality, _, _, _, _, _, _, icon = pcall(f, id)
+  name = ok and QB.Plain(name) or nil
+  if type(name) ~= "string" then
+    if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+    return nil, nil, nil, API.ItemIcon(id)
+  end
+  link, quality, icon = QB.Plain(link), QB.Plain(quality), QB.Plain(icon)
+  return name, type(link) == "string" and link or nil, type(quality) == "number" and quality or nil, icon or API.ItemIcon(id)
 end
 
 function API.ItemIcon(itemID, fallback)
@@ -605,6 +620,17 @@ end
 ----------------------------------------------------------------------------
 local Live = {}
 QB.Live = Live
+
+-- A quest's reward items: what your own quest window showed ("game"), else the catalog's list ("catalog"), else
+-- "unknown" (no source lists them yet) or "none" (the quest gives no items). Returns { c = choose one, r = always }, how
+function Q.Rewards(q)
+  local own = QuestBankDB and QuestBankDB.disc and QuestBankDB.disc.q and QuestBankDB.disc.q[q.id]
+  if own and type(own.rw) == "table" then return own.rw, "game" end
+  local D = QB.Data
+  if D.RITEMS and D.RITEMS[q.id] then return D.RITEMS[q.id], "catalog" end
+  if D.RUNK and D.RUNK[q.id] then return nil, "unknown" end
+  return nil, "none"
+end
 
 -- the game's number behind a reading taken under the +3% buff: the game rounds quest XP to its grid (5 up to 100,
 -- 10 up to 500, 25 up to 1,000, 50 above), and the buff pays that times 1.03, give or take one (390 shows 401,

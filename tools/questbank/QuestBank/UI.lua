@@ -212,8 +212,12 @@ local function npcLine(tip, label, n)
 end
 
 -- shift-click with the chat box open puts a link in it, as the game's own quest log and bags do
+-- chat, through ChatFrameUtil where the client has it (Forever's ChatEdit_* names are deprecation aliases)
+local function chatFn(new, old) return (ChatFrameUtil and ChatFrameUtil[new]) or _G[old] end
+local function chatInsert(link) local f = chatFn("InsertLink", "ChatEdit_InsertLink"); if f then return f(link) end end
 local function chatOpen()
-  return ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() and ChatEdit_InsertLink and true or false
+  local active = chatFn("GetActiveWindow", "ChatEdit_GetActiveWindow")
+  return active and active() and chatFn("InsertLink", "ChatEdit_InsertLink") and true or false
 end
 
 function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
@@ -241,6 +245,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
     src = QB.Comma(q.base) .. " x 1"
   end
   tip:AddDoubleLine("Forever XP " .. ((q.xpUnknown and not q.liveFull) and "?" or QB.Comma(full)), src, 1, 1, 1, 0.55, 0.75, 1)
+  UI.RewardLines(tip, q)
   if st and st.behind and st.later then
     tip:AddLine(string.format("Probably behind you: %s, a later step of this chain, is %s, and the game only offers a step once the ones before it are handed in.", QB.Quest.Label(st.later), st.how == "held" and "in your log" or "done"), 1, 0.6, 0.3, true)
   end
@@ -352,7 +357,7 @@ end
 
 function UI.LinkQuest(q)
   if not chatOpen() then return false end
-  ChatEdit_InsertLink(UI.QuestLink(q))
+  chatInsert(UI.QuestLink(q))
   return true
 end
 
@@ -364,8 +369,52 @@ function UI.LinkItem(id, name)
     local ok, _, l = pcall(info, id)
     if ok and type(l) == "string" then link = l end
   end
-  ChatEdit_InsertLink(link or ("[" .. (name or ("Item " .. id)) .. "]"))
+  chatInsert(link or ("[" .. (name or ("Item " .. id)) .. "]"))
   return true
+end
+
+-- an item's link into chat: into the open chat box, or a new one
+function UI.LinkItemAlways(id)
+  if UI.LinkItem(id) then return true end
+  local name, link = QB.API.ItemInfo(id)
+  local open = chatFn("OpenChat", "ChatFrame_OpenChat")
+  if open then open(link or ("[" .. (name or ("Item " .. id)) .. "]")) return true end
+  return false
+end
+
+-- a quest's reward items in a tooltip, by name in their quality colour; says so plainly when nobody knows them yet
+function UI.RewardLines(tip, q)
+  local rw, how = Q.Rewards(q)
+  if how == "unknown" then
+    tip:AddLine("Rewards: not known yet. Open the quest in game and QuestBank notes them.", 0.75, 0.75, 1, true)
+    return
+  end
+  local c, r = rw and rw.c or {}, rw and rw.r or {}
+  if #c + #r == 0 then
+    tip:AddLine(how == "game" and "No item rewards (as your quest window showed)." or "No item rewards.", 0.6, 0.6, 0.6)
+    return
+  end
+  local function line(id)
+    local name, _, quality, icon = QB.API.ItemInfo(id)
+    local cr, cg, cb = 0.8, 0.8, 0.8
+    if quality and C_Item and C_Item.GetItemQualityColor then
+      local ok, qr, qg, qb = pcall(C_Item.GetItemQualityColor, quality)
+      if ok and qr then cr, cg, cb = qr, qg, qb end
+    elseif quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality] then
+      local col = ITEM_QUALITY_COLORS[quality]
+      cr, cg, cb = col.r, col.g, col.b
+    end
+    tip:AddLine("   " .. (icon and ("|T" .. icon .. ":14:14:0:0:64:64:5:59:5:59|t ") or "") .. (name or ("Item " .. id .. " (the game is loading it)")), cr, cg, cb)
+  end
+  if #r > 0 then
+    tip:AddLine("You get:", 1, 0.82, 0)
+    for i = 1, math.min(#r, 6) do line(r[i]) end
+  end
+  if #c > 0 then
+    tip:AddLine(#c > 1 and "Choose one:" or "Reward:", 1, 0.82, 0)
+    for i = 1, math.min(#c, 6) do line(c[i]) end
+  end
+  tip:AddLine((how == "game" and "As your quest window showed them. " or "") .. "Right-click the quest to link one in chat.", 0.6, 0.6, 0.6, true)
 end
 
 local questClick
@@ -639,6 +688,17 @@ function UI.QuestMenu(q, st)
     items[#items + 1] = { QB:IsCut(q.id) and "Keep it in the route" or "Leave it out of the route", function() QB:ToggleAdd(q.id); UI:Refresh() end }
   elseif st.code ~= "done" and st.code ~= "wrong" then
     items[#items + 1] = { QB:IsAdded(q.id) and "Take it off my pick-up list" or "Put it on my pick-up list", function() QB:ToggleAdd(q.id); UI:Refresh() end }
+  end
+  local rw = Q.Rewards(q)
+  if rw then
+    local ids = {}
+    for _, id in ipairs(rw.r or {}) do ids[#ids + 1] = id end
+    for _, id in ipairs(rw.c or {}) do ids[#ids + 1] = id end
+    for i = 1, math.min(#ids, 6) do
+      local id = ids[i]
+      local name = QB.API.ItemInfo(id)
+      items[#items + 1] = { "Link " .. (name or ("item " .. id)) .. " in chat", function() UI.LinkItemAlways(id) end }
+    end
   end
   items[#items + 1] = { "Copy the Wowhead link", function() UI:CopyLink(q.name, "https://www.wowhead.com/forever/quest=" .. q.id) end }
   UI:ShowMenu(q.name, items)
@@ -1118,6 +1178,16 @@ function UI:FindRewards(kind, level)
   return out
 end
 
+local modWatch = CreateFrame("Frame")
+modWatch:RegisterEvent("MODIFIER_STATE_CHANGED")
+modWatch:SetScript("OnEvent", function()
+  local r = UI.hoverRow
+  if r and r.rewardId and r:IsVisible() and r.IsMouseOver and r:IsMouseOver() then
+    local f = r:GetScript("OnEnter")
+    if f then f(r) end
+  end
+end)
+
 function UI:CreateLogView(parent)
   local v = CreateFrame("Frame", nil, parent)
   v:SetAllPoints()
@@ -1243,10 +1313,17 @@ function UI:CreateLogView(parent)
     r:SetScript("OnClick", function(self, which)
       local q = self.add
       if not q then return end
+      -- on a reward row (Best gear, Trinkets, Recipes), Shift-click links the reward item instead of the quest
+      if self.rewardId and which ~= "RightButton" and IsShiftKeyDown and IsShiftKeyDown() then UI.LinkItemAlways(self.rewardId) return end
       -- one path decides where a click sends you: the giver, a chain's first step, a held step's turn-in
       UI.QuestClick(q, QB:Status(q), which)
     end)
     tooltip(r, function(tip, self)
+      UI.hoverRow = self
+      if self.rewardId and IsShiftKeyDown and IsShiftKeyDown() and tip.SetItemByID then
+        tip:SetItemByID(self.rewardId) -- the item itself, as the game shows it
+        return
+      end
       if self.cutTitle then
         tip:AddLine("Drop: " .. self.cutTitle, 1, 0.5, 0.4)
         tip:AddLine(QB.Comma(self.cutValue or 0) .. " XP " .. QB:OnTheDay(), 0.8, 0.8, 0.8)
@@ -1259,6 +1336,7 @@ function UI:CreateLogView(parent)
       end
       if self.add then UI.QuestTooltip(tip, self.add, QB:Status(self.add), self.addValue) end
       if self.reward then tip:AddLine(self.reward, 0.75, 0.75, 1, true) end
+      if self.rewardId then tip:AddLine("Hold Shift to see the item; Shift-click links it in chat.", 0.6, 0.6, 0.6, true) end
     end)
     v.swaps[i] = r
   end
@@ -1576,6 +1654,7 @@ function UI:RefreshLogView(v)
         end
         r.gain:SetText(d.reward[1] > 0 and ("iL " .. d.reward[1]) or QB.Short(d.value))
         r.reward = string.format("Rewards %s%s. %s XP %s.", name, d.reward[1] > 0 and string.format(" (item level %d)", d.reward[1]) or "", QB.Comma(d.value), QB:OnTheDay())
+        r.rewardId = (id and id > 0) and id or nil
       else
         r:Hide()
       end
@@ -1586,7 +1665,7 @@ function UI:RefreshLogView(v)
       or "No quest within your level range rewards a recipe.")
     return
   end
-  for _, r in ipairs(v.swaps) do r.reward = nil end
+  for _, r in ipairs(v.swaps) do r.reward, r.rewardId = nil, nil end
 
   -- swaps: advance a chain you hold, fill a free slot, or swap a weak quest for a better one
   local lvl = s.level

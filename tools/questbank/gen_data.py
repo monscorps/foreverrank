@@ -20,7 +20,7 @@ Icons and textures: file IDs from the Forever client's interface manifest; a mis
   python3 tools/questbank/gen_data.py            # write Data.lua
   python3 tools/questbank/gen_data.py --fetch    # first fetch the NPC tooltips we lack (nether.wowhead.com)
 """
-import csv, json, math, os, re, sys
+import collections, csv, json, math, os, re, sys
 from travel import Travel, DETOUR, RUN
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1335,6 +1335,36 @@ for qid in IDS:
         REWARD[qid] = [best, kinds, bestId]
 lines.append("-- [id] = { best item level among the rewards, kinds (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable, 64 cloth, 128 leather, 256 mail, 512 plate), best item }")
 lines.append("D.REWARD = " + keyed(REWARD))
+# Every reward item a quest gives, for the tooltip and for linking in chat: what players' quest windows showed
+# (QuestBank 3.5.7+, newest upload), else Wowhead's quest list (it always carries both lists, so an empty pair means
+# no items), else the dungeon loot pages by quest name. c = choose one, r = always given. D.RUNK: nobody knows yet.
+RITEMS, RUNK, RSRC = {}, {}, collections.Counter()
+for qid in IDS:
+    q = LIST[qid]
+    rw = ((DISC.get("q") or {}).get(str(qid)) or {}).get("rw")
+    c = r = None
+    if isinstance(rw, dict) and (isinstance(rw.get("c"), list) or isinstance(rw.get("r"), list)):
+        c = [int(x) for x in rw.get("c") or [] if str(x).isdigit()]
+        r = [int(x) for x in rw.get("r") or [] if str(x).isdigit()]
+        RSRC["game"] += 1
+    elif qid not in DISC_ONLY and ("itemrewards" in q or "itemchoices" in q):
+        r = [x[0] for x in q.get("itemrewards") or [] if isinstance(x, list) and x]
+        c = [x[0] for x in q.get("itemchoices") or [] if isinstance(x, list) and x]
+        RSRC["wowhead"] += 1
+    else:
+        _nm = str(q.get("name") or "").strip().lower()
+        if _nm in _LOOT_Q and _NAME_COUNT.get(_nm) == 1:
+            ids = sorted(_LOOT_Q[_nm])
+            c, r = (ids, []) if len(ids) > 1 else ([], ids)
+            RSRC["loot pages"] += 1
+    if c is None:
+        RUNK[qid] = True
+        RSRC["unknown"] += 1
+    elif c or r:
+        RITEMS[qid] = {"c": c or None, "r": r or None}
+lines.append("-- [id] = { c = { choose one of these }, r = { always given } }; quests in D.RUNK: rewards not known yet")
+lines.append("D.RITEMS = " + keyed(RITEMS))
+lines.append("D.RUNK = " + keyed(RUNK))
 lines.append("-- [id] = {{item, how many, name}, ...}: what the quest asks you to bring")
 lines.append("D.REQ = " + keyed(REQ))
 lines.append("D.RACE = " + keyed(RACE))
@@ -1464,6 +1494,7 @@ def gap_report():
                        len(GAME_AGREE), GAME_MOVE_YD, sorted(GAME_AGREE.values())[len(GAME_AGREE) // 2] if GAME_AGREE else 0, len(set(GAME_MOVED)),
                        (": " + ", ".join("%s %d by %d yd" % (k, i, d) for k, i, d in sorted(set(GAME_MOVED)))) if GAME_MOVED else "",
                        len(set(GAME_FILLED)), (": " + ", ".join("%s %d" % (k, i) for k, i in sorted(set(GAME_FILLED)))) if GAME_FILLED else ""))
+        out.append("Quest reward items: %s." % ", ".join("%s %d" % (k, v) for k, v in RSRC.most_common()))
         if REWARD_FROM_LOOT:
             out.append("Rewards taken from the dungeon loot pages where Wowhead lists none (%d): %s." % (
                 len(REWARD_FROM_LOOT), ", ".join("%d %s" % (q, QN.get(q, "?")) for q in REWARD_FROM_LOOT)))

@@ -94,6 +94,29 @@ local function noteXP(q, xp, how)
   if how == "turnin" then q.paid = (q.paid or 0) + 1 end
 end
 
+-- the reward items the quest window shows: c = choose one of these, r = always given. A reading with an item the
+-- client hasn't loaded yet is not kept (the next window completes it); empty lists mean the quest gives no items
+local function rewardItem(kind, i)
+  local link = GetQuestItemLink and QB.Plain(GetQuestItemLink(kind, i))
+  local id = type(link) == "string" and tonumber(link:match("|Hitem:(%d+)")) or nil
+  if not id and GetQuestItemInfo then
+    local ok, _, _, _, _, _, itemID = pcall(GetQuestItemInfo, kind, i)
+    itemID = ok and QB.Plain(itemID) or nil
+    if type(itemID) == "number" and itemID > 0 then id = itemID end
+  end
+  return id
+end
+
+local function noteRewards(q)
+  if not (GetNumQuestChoices and GetNumQuestRewards) then return end
+  local nc, nr = QB.Plain(GetNumQuestChoices()), QB.Plain(GetNumQuestRewards())
+  if type(nc) ~= "number" or type(nr) ~= "number" then return end
+  local rw = { c = {}, r = {} }
+  for i = 1, nc do local id = rewardItem("choice", i); if not id then return end; rw.c[#rw.c + 1] = id end
+  for i = 1, nr do local id = rewardItem("reward", i); if not id then return end; rw.r[#rw.r + 1] = id end
+  q.rw = rw
+end
+
 local lastTurnIn -- { id, npc, t }: a quest offered by the same NPC right after it is the next step
 local lastComplete -- { id, npc }: the reward window, since the NPC may be gone by the hand-in event
 
@@ -119,6 +142,7 @@ function Disc.OnEvent(event, a1, a2)
       end
     end
     noteXP(q, GetRewardXP and GetRewardXP(), "window")
+    noteRewards(q)
     if GetSuggestedGroupNum then q.g = GetSuggestedGroupNum() or q.g end
   elseif event == "QUEST_COMPLETE" then
     local id = QB.Plain(GetQuestID and GetQuestID())
@@ -132,6 +156,7 @@ function Disc.OnEvent(event, a1, a2)
     end
     lastComplete = { id = id, npc = npc }
     noteXP(q, GetRewardXP and GetRewardXP(), "window")
+    noteRewards(q)
   elseif event == "QUEST_TURNED_IN" then
     local id, xp = a1, a2
     if not id or (issecretvalue and issecretvalue(id)) then return end
