@@ -453,14 +453,24 @@ local function newClient(label, o)
   }
   env.Enum.TooltipDataType = { Item = 0, Spell = 1, Unit = 2 }
   env.TooltipDataProcessor = { AddTooltipPostCall = function(kind, fn) if kind == 0 then c.tipHooks[#c.tipHooks + 1] = fn end end }
+  env.RETRIEVING_ITEM_INFO = "Retrieving item information"
+  env.Enum.TooltipDataLineType = { None = 0, Blank = 1, NestedBlock = 2, Separator = 3 }
+  c.tipLines = {}
   env.C_TooltipInfo = {
     GetItemByID = function(id)
+      if c.tipLines[id] then return { id = id, lines = c.tipLines[id] } end
       return { id = id, lines = { { leftText = "Item " .. id }, { leftText = "Binds when picked up" }, { leftText = "Chest", rightText = "Cloth" },
         { leftText = "39 Armor" }, { leftText = "+5 Stamina" }, { leftText = "Item Level 27" }, { leftText = "Requires Level 22" } } }
     end,
   }
   c.loot = {}
   env.GetNumLootItems = function() return #c.loot end
+  c.questRewards, c.merchant = {}, {}
+  env.GetNumQuestChoices = function() return 0 end
+  env.GetNumQuestRewards = function() return #c.questRewards end
+  env.GetQuestItemLink = function(kind, i) local id = kind == "reward" and c.questRewards[i]; return id and ("|cff1eff00|Hitem:" .. id .. "::::::::12:::::::|h[Item " .. id .. "]|h|r") or nil end
+  env.GetMerchantNumItems = function() return #c.merchant end
+  env.GetMerchantItemID = function(i) return c.merchant[i] end
   env.GetLootSlotLink = function(i) local id = c.loot[i]; return id and ("|cff1eff00|Hitem:" .. id .. "::::::::12:::::::|h[Item " .. id .. "]|h|r") or nil end
   if o.engraving then
     env.C_Engraving = {
@@ -994,6 +1004,47 @@ do
   check(c1, "looted items are kept, the late one once the client has it", it[280002] ~= nil and it[280003] ~= nil and #c1.loadRequests == 1,
     ("280002 %s, 280003 %s, load requests %d"):format(tostring(it[280002] ~= nil), tostring(it[280003] ~= nil), #c1.loadRequests))
   check(c1, "food is not kept (weapons, armor and recipes only)", it[4536] == nil, "")
+end
+step(c1, "items: quest rewards, a vendor, a tooltip still loading, a recipe, a re-read after six hours", function()
+  c1.questRewards = { 280010 }
+  c1.fire("QUEST_DETAIL")
+  c1.merchant = { 280011 }
+  c1.fire("MERCHANT_SHOW")
+  c1.tipLines[280012] = { { leftText = "Item 280012" }, { leftText = "Retrieving item information" } }
+  c1.itemClass[280013] = 9
+  c1.tipLines[280013] = { { leftText = "Item 280013" }, { leftText = "Requires Tailoring (125)" }, { leftText = "Use: Teaches you how to sew a shirt." },
+    { leftText = "", type = 1 }, { leftText = "Crafted Shirt" }, { leftText = "+6 Strength" } }
+  for _, fn in ipairs(c1.tipHooks) do fn({}, { id = 280012 }); fn({}, { id = 280013 }) end
+  tick(c1, 1)
+  c1.tipLines[280012] = nil -- the server's text arrives
+  tick(c1, 4)
+  c1.env.ForeverProbeDB.items[280001].at = c1.env.ForeverProbeDB.items[280001].at - 7 * 3600
+  c1.env.ForeverProbeDB.items[280001].x = { "old text" }
+  for _, fn in ipairs(c1.tipHooks) do fn({}, { id = 280001 }) end
+  tick(c1, 1)
+end)
+do
+  local it = c1.env.ForeverProbeDB.items
+  check(c1, "quest rewards and vendor wares are kept", it[280010] ~= nil and it[280011] ~= nil, "")
+  check(c1, "a tooltip still loading waits for the server's text", it[280012] and it[280012].x[1] == "Binds when picked up", it[280012] and table.concat(it[280012].x, " | ") or "nothing")
+  check(c1, "a recipe keeps its own lines, not the crafted item's", it[280013] and #it[280013].x == 2 and it[280013].x[2]:match("^Use:"), it[280013] and table.concat(it[280013].x, " | ") or "nothing")
+  check(c1, "an item is read again after six hours", it[280001] and it[280001].x[1] == "Binds when picked up", it[280001] and it[280001].x[1] or "")
+end
+step(c1, "items: a full table makes room by dropping an earlier build's oldest item", function()
+  local it = c1.env.ForeverProbeDB.items
+  for i = 1, 3000 do it[300000 + i] = { b = "69000", n = "Old " .. i, x = {}, at = 1000 + i } end
+  c1.fullBefore = 0
+  for _ in pairs(it) do c1.fullBefore = c1.fullBefore + 1 end
+  c1.ns.itemCount = nil
+  for _, fn in ipairs(c1.tipHooks) do fn({}, { id = 280020 }) end
+  tick(c1, 1)
+end)
+do
+  local it, n = c1.env.ForeverProbeDB.items, 0
+  for _ in pairs(it) do n = n + 1 end
+  check(c1, "the new item is kept and the oldest earlier-build one went", it[280020] ~= nil and it[300001] == nil and it[300002] ~= nil and n == c1.fullBefore,
+    ("%d items, %d before"):format(n, c1.fullBefore))
+  for i = 1, 3000 do it[300000 + i] = nil end
 end
 do
   local n = 0; for _, line in ipairs(c1.printed) do if line:find("is running. The game writes its file", 1, true) then n = n + 1 end end

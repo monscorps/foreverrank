@@ -33,6 +33,12 @@ BUILD = "1.60.1.70170"
 WAGO = os.path.join(ROOT, "research", "wago", BUILD)
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36 foreverrank.com"}
 QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary", "artifact", "heirloom"]
+INVTYPE = {"INVTYPE_HEAD": "1", "INVTYPE_NECK": "2", "INVTYPE_SHOULDER": "3", "INVTYPE_BODY": "4", "INVTYPE_CHEST": "5",
+           "INVTYPE_WAIST": "6", "INVTYPE_LEGS": "7", "INVTYPE_FEET": "8", "INVTYPE_WRIST": "9", "INVTYPE_HAND": "10",
+           "INVTYPE_FINGER": "11", "INVTYPE_TRINKET": "12", "INVTYPE_WEAPON": "13", "INVTYPE_SHIELD": "14", "INVTYPE_RANGED": "15",
+           "INVTYPE_CLOAK": "16", "INVTYPE_2HWEAPON": "17", "INVTYPE_BAG": "18", "INVTYPE_TABARD": "19", "INVTYPE_ROBE": "20",
+           "INVTYPE_WEAPONMAINHAND": "21", "INVTYPE_WEAPONOFFHAND": "22", "INVTYPE_HOLDABLE": "23", "INVTYPE_AMMO": "24",
+           "INVTYPE_THROWN": "25", "INVTYPE_RANGEDRIGHT": "26", "INVTYPE_QUIVER": "27", "INVTYPE_RELIC": "28"}
 SLOT = {"1": "head", "2": "neck", "3": "shoulder", "4": "shirt", "5": "chest", "6": "waist", "7": "legs",
         "8": "feet", "9": "wrist", "10": "hands", "11": "finger", "12": "trinket", "13": "one-hand",
         "14": "off-hand", "15": "ranged", "16": "back", "17": "two-hand", "19": "tabard", "20": "chest",
@@ -271,7 +277,7 @@ def fc_parse(f, sets):
         if m: r["reqSkill"] = "%s %s" % (m.group(1), m.group(2)); continue
         m = re.match(r"^Classes: (.+)$", line)
         if m: r["cls"] = [c.strip() for c in m.group(1).split(",")]; continue
-        m = re.match(r"^(.+) \(0/(\d+)\)$", line)
+        m = re.match(r"^(.+) \(\d+/(\d+)\)$", line)
         if m: r["setName"] = m.group(1); continue
         m = re.match(r"^\((\d+)\) Set: (.+)$", line)
         if m: r.setdefault("setBonuses", []).append([int(m.group(1)), m.group(2)]); continue
@@ -325,8 +331,19 @@ def main():
     for k, g in tips.items():
         if k in fc_live and int(g.get("b") or 0) <= fc_build:
             continue
-        fc_live[k] = {"i": int(k), "n": g["n"], "q": g.get("q") if g.get("q") is not None else 1, "l": g.get("l"), "r": g.get("r"),
-                      "c": g.get("c"), "u": g.get("u"), "x": g.get("x") or [], "t": "game", "src": "game", "b": g.get("b")}
+        game = {"n": g["n"], "q": g.get("q") if g.get("q") is not None else 1, "l": g.get("l"), "r": g.get("r"), "c": g.get("c"),
+                "u": g.get("u"), "x": g.get("x") or [], "src": "game", "b": g.get("b"), "el": g.get("el")}
+        base = FC.get(k) if FC.get(k, {}).get("t") in ("new", "changed", "same") else None
+        if base:
+            # the game's newer text over ForeverChanges' record: its verdict (new/changed), set, classes and icon stay
+            rec = dict(base)
+            rec.update(game)
+            rec["fcx"] = base.get("x") or []
+        else:
+            rec = dict(game, i=int(k), t="new" if int(k) >= 239000 else "seen")
+            if g.get("e"):
+                rec["e"] = g["e"]
+        fc_live[k] = rec
         from_game += 1
     if tips:
         print("players' games: %d item tooltips, %d used (not in ForeverChanges, or a newer build)" % (len(tips), from_game))
@@ -358,7 +375,8 @@ def main():
     if refresh_all:
         want |= {i for i, it in by.items() if it.get("cat") in ("weapon", "armor", "accessory", "offhand", "consumable")
                  or "..." in " ".join(it.get("effects") or [])}
-    todo = sorted((i for i in want if i not in fc_live and not os.path.exists(os.path.join(CACHE, i + ".json"))), key=int)
+    todo = sorted((i for i in want if (i not in fc_live or (fc_live[i].get("src") == "game" and not fc_live[i].get("k")))
+                   and not os.path.exists(os.path.join(CACHE, i + ".json"))), key=int)
     print("candidates %d (loot %d, server-sent %d); to fetch %d" % (len(want), len(looted), len(missing), len(todo)))
     done = [0]
     t0 = time.time()
@@ -407,10 +425,13 @@ def main():
                 junk += 1
                 continue
             ir = item.get(iid, {})
+            if not ir and fc and fc.get("src") == "game" and fc.get("c") is not None:
+                ir = {"ClassID": str(fc["c"]), "SubclassID": str(fc.get("u") or 0), "InventoryType": INVTYPE.get(fc.get("el") or "", "0")}
             key3 = (ir.get("ClassID"), ir.get("SubclassID"), ir.get("InventoryType"))
             cat, sub, typ = (vote3.get(key3) or vote2.get(key3[:2]) or collections.Counter({("misc", "Other", None): 1})).most_common(1)[0][0]
             qn = fc["q"] if fc else wh.get("quality") if ok else (site["fc"].get(iid) or {}).get("q", 1)
-            old = {"id": iid, "name": html.unescape(name), "quality": QUAL[int(qn or 1)],
+            qn = 1 if qn is None else qn
+            old = {"id": iid, "name": html.unescape(name), "quality": QUAL[int(qn)],
                    "slot": SLOT.get(ir.get("InventoryType", ""), "unknown"), "cat": cat, "sub": sub,
                    "icon": (wh.get("icon") if ok else (site["fc"].get(iid) or {}).get("k")) or "inv_misc_questionmark"}
             if typ: old["type"] = typ
@@ -422,6 +443,11 @@ def main():
             # ForeverChanges' tooltip is the current build's, in Forever's own wording: it replaces
             # every tooltip field, and what it does not show goes.
             p2 = fc_parse(fc, sets)
+            if fc.get("fcx"):
+                p_fc = fc_parse(dict(fc, x=fc["fcx"]), sets)
+                for k in ("setName", "setPieces", "setBonuses", "cls"):
+                    if p2.get(k) is None and p_fc.get(k) is not None:
+                        p2[k] = p_fc[k]
             for k in ("itemLevel", "reqLevel", "binding", "damage", "speed", "dps", "dmgExtra", "armor", "block", "unique", "flavor", "cls",
                       "reqSkill", "startsQuest", "setName", "setPieces", "setBonuses"):
                 if p2.get(k) is not None: old[k] = p2[k]
@@ -429,7 +455,7 @@ def main():
             old["stats"] = p2["stats"] or None
             old["effects"] = p2["effects"] or None
             old["name"] = html.unescape(fc["n"])
-            old["quality"] = QUAL[int(fc.get("q") or 1)]
+            old["quality"] = QUAL[int(fc["q"] if fc.get("q") is not None else 1)]
             if fc.get("k"): old["icon"] = fc["k"]
             old["tt"] = "forever"
             old["ft"] = fc["t"]
@@ -451,7 +477,7 @@ def main():
             if p.get("setName"):
                 old["setName"], old["setPieces"], old["setBonuses"] = p["setName"], p["setPieces"], p["setBonuses"]
             old["name"] = html.unescape(wh["name"])
-            old["quality"] = QUAL[int(wh.get("quality") or 1)]
+            old["quality"] = QUAL[int(wh["quality"] if wh.get("quality") is not None else 1)]
             if wh.get("icon"): old["icon"] = wh["icon"]
             old["wh"] = 1
             if iid not in sparse: old["source"] = "Server data via Wowhead's Forever database"

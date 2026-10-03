@@ -353,20 +353,28 @@ def merge_probe(acc, kind, data):
             except (TypeError, ValueError):
                 continue
             pr["items"][iid] = pr["items"].get(iid, 0) + 1
-    # item tooltips as the game showed them (ForeverProbe 0.4.7+): the newest build's copy of each wins
+    # item tooltips as the game showed them (ForeverProbe 0.4.7+): the newest build's copy of each wins, then the newest
+    # reading; English clients only, since the site parses the game's English wording
     tips = pr.setdefault("tips", {})
     for iid, it in (data.get("items") or {}).items():
-        if not isinstance(it, dict) or not it.get("n") or not isinstance(it.get("x"), list):
+        if not isinstance(it, dict) or not it.get("n"):
+            continue
+        if it.get("lc") and str(it["lc"]) not in ("enUS", "enGB"):
+            continue
+        x = it.get("x")
+        x = x if isinstance(x, list) else ([] if isinstance(x, dict) and not x else None)
+        if x is None:
             continue
         try:
             b = int(str(it.get("b") or "0").split(".")[-1])
         except ValueError:
             b = 0
+        at = it.get("at") if isinstance(it.get("at"), (int, float)) else 0
         old = tips.get(str(iid))
-        if old and int(old.get("b") or 0) > b:
+        if old and (int(old.get("b") or 0), old.get("at") or 0) > (b, at):
             continue
-        tips[str(iid)] = {"b": b, "n": it["n"], "q": it.get("q"), "l": it.get("l"), "r": it.get("r"), "el": it.get("el"),
-                          "c": it.get("c"), "u": it.get("u"), "x": [str(x) for x in it["x"]][:40]}
+        tips[str(iid)] = {"b": b, "at": at, "n": it["n"], "q": it.get("q"), "l": it.get("l"), "r": it.get("r"), "el": it.get("el"),
+                          "c": it.get("c"), "u": it.get("u"), "e": it.get("e"), "ic": it.get("ic"), "x": [str(v) for v in x][:40]}
     for tr in data.get("trainers") or []:
         if not isinstance(tr, dict):
             continue

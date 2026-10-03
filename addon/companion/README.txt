@@ -41,7 +41,7 @@ newly added addon only when it starts, so quit WoW completely after
 installing it (a /reload is not enough). In game, type
 /qb probe (QuestBank 3.5.2 or newer) to see whether it is missing,
 switched off for that character, or out of date. The addon also says
-"ForeverProbe 0.4.7 is running" in chat the first time it loads.
+"ForeverProbe 0.4.8 is running" in chat the first time it loads.
 The log of what was sent is %APPDATA%\ForeverProbe\sync.log.
 
 Remove completely any time: double-click Uninstall.bat.
