@@ -1078,7 +1078,7 @@ D.Q = {
 [1047]={55,54,1,560,1,474,535,45,0,24},
 [1048]={42,33,2,5150,1,295,295,7,0,25},
 [1049]={38,28,2,3550,1,536,536,7,0,25},
-[1050]={38,28,1,3550,1,537,537,7,0,25},
+[1050]={38,28,1,3550,1,537,537,7,0,9},
 [1051]={33,25,2,3300,1,538,539,7,0,3},
 [1052]={40,34,1,1550,1,540,138,33,0,24},
 [1053]={40,34,1,4700,1,540,540,7,0,25},
@@ -5561,4 +5561,4 @@ D.ALPHA = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+/"
 D.CUT_NOTES = {[1654]="Hand it to Jordan now and keep the forge step instead",[79192]="Carry on up the chain for the Cozy Sleeping Bag",[97894]="Pays 0 XP: abandon it"}
 D.TRACKED_ITEMS = {{id=211527,name="Cozy Sleeping Bag",need=1,icon=133662},{id=251522,name="Blood-Stained Letter",need=1,quest=92415,icon=133471,side=1},{id=268540,name="Bloodied Insignia",need=10,quest=95195,icon=133328,side=1},{id=4371,name="Bronze Tube",need=1,quest=174,icon=133024,side=1}}
 D.SLEEP_CHAIN = {{id=79192,name="Stepping Stones",where="Pocket Litter, Stonetalon Mountains",m=1442,x=40.7,y=52.4},{id=79980,name="Scramble",where="Mound of Dirt, Stonetalon Mountains",m=1442,x=39.6,y=49.9},{id=79974,name="Wet Job",where="Carved Figurine on the Stonewrought Dam, Loch Modan",m=1432,x=49.4,y=12.9},{id=79975,name="Eagle's Fist",where="Messenger Bag on Thoradin's Wall, Arathi Highlands",m=1417,x=22.4,y=24.2},{id=79976,name="This Must Be The Place",where="Rolled-Up Satchel, where the bag's note points"}}
-D.STATS = {quests=2148,noMult=192,noTurn=163,inside=94,noChain=439,classic=1459}
+D.STATS = {quests=2149,noMult=193,noTurn=163,inside=94,noChain=439,classic=1458}

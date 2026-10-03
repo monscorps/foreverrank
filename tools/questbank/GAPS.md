@@ -7,16 +7,16 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 
 | Check | Forever data | Missing | Classic seed | Missing |
 |---|---|---|---|---|
-| Forever XP multiplier read from its Wowhead Forever page | 2148 | 192 | 1459 | 1457 |
-| Turn-in NPC with a position | 2148 | 163 | 1459 | 7 |
-| Turn-in inside a dungeon (hand in on the way, not on the route) | 2148 | 94 | 1459 | 59 |
-| Quest giver with a position (quests that start from an item don't need one) | 2148 | 250 | 1459 | 12 |
-| Chain known (Wowhead Forever series or the Classic database) | 2148 | 439 | 1459 | 0 |
+| Forever XP multiplier read from its Wowhead Forever page | 2149 | 193 | 1458 | 1456 |
+| Turn-in NPC with a position | 2149 | 163 | 1458 | 7 |
+| Turn-in inside a dungeon (hand in on the way, not on the route) | 2149 | 94 | 1458 | 59 |
+| Quest giver with a position (quests that start from an item don't need one) | 2149 | 250 | 1458 | 12 |
+| Chain known (Wowhead Forever series or the Classic database) | 2149 | 439 | 1458 | 0 |
 
 On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip. Hand-ins on 2026-10-02 paid exactly that on every multiplied quest, dungeon-typed or not.
 What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 138 quests confirmed (within 5% counts as agreement; small differences kept as read: 157 Deliver the Thread 1450, paid 1464), 4 corrected to the game's number: 472 Fall of Dun Modr 1000 -> 1200, 2924 Essential Artificials 3050 -> 5500, 2929 The Grand Betrayal 2750 -> 4950, 2930 Data Rescue 3650 -> 6550, 0 with no XP in the catalog filled in.
 
-Readings taken under a temporary +3% XP buff on the player (the game's number times 1.03, give or take one: 390 shows 401) count as the game's number: 81 readings on 68 quests.
+Readings taken under a temporary +3% XP buff on the player (the game's number times 1.03, give or take one: 390 shows 401) count as the game's number: 94 readings on 68 quests.
 
 Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read; before the cut unless marked): Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
 
@@ -29,7 +29,7 @@ Classic frame and were moved to Forever's; 58 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 26.
 
-Seen in Forever by players (27 uploads merged by probe_pull.py, 2026-10-03T04:21:40Z): 190 quests, 0 of them Classic seeds now confirmed.
+Seen in Forever by players (33 uploads merged by probe_pull.py, 2026-10-03T19:18:40Z): 194 quests, 1 of them Classic seeds now confirmed.
 Seen in game but not in the catalog (2): 91904 A Sealed Crate (left out on purpose by the catalog's filters), 95795 Fallen in the Fen (too little to place: no NPC with a position).
 
 Every upload so far is one account's growing QuestBank.lua: what follows rests on one witness.
@@ -45,7 +45,7 @@ Chain steps players' games suggest for quests with no known chain, not taken (th
 Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both have a number, they disagree on 0:
 
 
-## Forever data: multiplier not read (192)
+## Forever data: multiplier not read (193)
 
 - 7 Kobold Camp Cleanup (level 2, Alliance)
 - 15 Investigate Echo Ridge (level 3, Alliance)
@@ -90,6 +90,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 789 Sting of the Scorpid (level 3, Horde)
 - 792 Vile Familiars (level 4, Horde)
 - 916 Webwood Venom (level 4, Alliance)
+- 1050 Mythology of the Titans (level 38, Alliance)
 - 1133 Journey to Astranaar (level 20, Alliance)
 - 1177 Hungry! (level 36, both)
 - 1470 Piercing the Veil (level 3, Horde)
