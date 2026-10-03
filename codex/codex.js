@@ -4,7 +4,7 @@
   var CDN = "https://wow.zamimg.com/images/wow/icons/large/";
   var CLASS_COLOUR = { Warrior: "#c79c6e", Paladin: "#f58cba", Hunter: "#abd473", Rogue: "#fff569",
     Priest: "#ffffff", Shaman: "#0070de", Mage: "#69ccf0", Warlock: "#9482c9", Druid: "#ff7d0a" };
-  function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
   function img(n) {
     var src = n && String(n).indexOf("/") !== -1 ? n : CDN + (n || "inv_misc_questionmark") + ".jpg";
     return '<img src="' + src + '" alt="" loading="lazy" onerror="this.onerror=null;this.src=\'' + CDN + 'inv_misc_questionmark.jpg\'">';
@@ -167,7 +167,7 @@
     ["consumable", "Consumables"], ["recipe", "Recipes"], ["pvp", "PvP"], ["misc", "Misc"], ["place", "Places"], ["perk", "Legacy perks"],
     ["soul", "Souls"], ["spell", "Spells"], ["talent", "Talents"], ["racial", "Racials"], ["set", "Item sets"], ["system", "Systems"]];
   var SUBFIRST = ["Cloth", "Leather", "Mail", "Plate", "Shield", "Neck", "Ring", "Trinket", "Cloak", "Alchemy", "Cooking", "First Aid", "Zone", "Dungeon", "Raid", "Battleground"];
-  var QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary"];
+  var QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary", "heirloom"];
   var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "", era: false, cl: false, stat: "", src: "", at: [], ms: "", fx: [], sort: "" }, SHOWN = 60;
   // Classic items Forever has not shown yet (est "classic"): listed only when a Forever loot record names them, unless asked for
   function unseenClassic(it) { return it && it.est === "classic" && !((it.drops && it.drops.length) || (it.quests && it.quests.length)); }
@@ -176,13 +176,27 @@
   function fiVal(it, k) { return FI ? FI.statVal(it, k) : (+((it && it.stats) || {})[k] || 0); }
   function effLvl(it) { return FI ? FI.effReq(it) : { lvl: +it.reqLevel || 0, est: false }; }
   var ARMORS = ["Cloth", "Leather", "Mail", "Plate", "Shield"];
-  var MAINS = [["strength", "Strength"], ["agility", "Agility"], ["intellect", "Intellect"], ["sta", "Stamina only"], ["spirit", "Spirit"]];
+  var MAINS = [["strength", "Strength"], ["agility", "Agility"], ["intellect", "Intellect"], ["sta", "Stamina, no Str/Agi/Int"], ["spirit", "Spirit"]];
+  // Categories with no items in them: the item-only filters (stat, main stat, armor, effects, source, profession,
+  // sort by stat) mean nothing there, so they are ignored and hidden rather than emptying the list.
+  var NONITEM = { place: 1, perk: 1, soul: 1, spell: 1, talent: 1, racial: 1, set: 1, system: 1 };
+  function itemFilters(cat) { return !NONITEM[cat]; }
+  function armorFilters(cat) { return cat === "all" || cat === "armor"; } // weapons, jewelry and held items have no armor type
+  var GEARCAT = { all: 1, weapon: 1, armor: 1, accessory: 1, offhand: 1 }; // PvP holds one stat-less token
+  function fxKeys(cat) { return GEARCAT[cat] ? SQ.fx : SQ.fx.filter(function (k) { return k === "rf"; }); } // procs are read for gear only
   function mainOK(it, ms) {
-    var st = (FI ? FI.istats(it) : it.stats) || {}, m = FI ? FI.mainStat(it) : "";
-    if (ms === "sta") return !m && !!st.stamina;
-    if (ms === "spirit") return !!st.spirit && st.spirit >= Math.max(st.strength || 0, st.agility || 0, st.intellect || 0);
-    return m === ms;
+    var st = (FI ? FI.istats(it) : it.stats) || {}, m = FI ? FI.mainStat(it) : "", top = Math.max(st.strength || 0, st.agility || 0, st.intellect || 0);
+    if (ms === "sta") return !m && (st.stamina || 0) > 0 && (st.stamina || 0) >= (st.spirit || 0);
+    if (ms === "spirit") return !!st.spirit && st.spirit >= top;
+    return !!st[ms] && st[ms] >= top; // a tie counts for both: +3 Str +3 Agi is a Strength and an Agility item
   }
+  // The level a row is filtered and sorted by: gear without a stored requirement uses the item-level estimate,
+  // anything else without one is usable from level 1.
+  function lvlOf(it) { return slotName(it.slot) ? effLvl(it).lvl : (+it.reqLevel || 1); }
+  // Provenance credits ("Beta build ..., via foreverchanges.pro", the Classic-estimate disclaimer) are not where an
+  // item comes from: kept out of the search text so "forever" or "pro" does not match everything.
+  var PROVENANCE = /foreverchanges\.pro|Wowhead's Forever database|^Beta (build|client)|^Estimate:|^Season of Discovery data|^Server data via/;
+  var SETROWS = {}, ITEMBYID = {}; // set name -> its items-db rows, item id -> row: class and level of sets the set table gives none
   // Effects: chance on hit, use, equip procs and reflect (plan/gear.js reads them from the item data or its tooltip text).
   var FXP = (FI && FI.FXPILLS) || [["rf", "Reflect", "Items that hurt whoever hits you: thorns, damage on block, shield spikes."]];
   function hasFx(it, k) { return !!FI && (FI.hasFx ? FI.hasFx(it, k) : k === "rf" && FI.reflect(it).length > 0); }
@@ -214,6 +228,8 @@
     ["procDmg", "Proc damage per proc", " per proc", function (s, it) { return FI && FI.procDmg ? FI.procDmg(it) : 0; }],
     ["useDmg", "On-use damage", " on-use damage", function (s, it) { return FI && FI.useAvg ? FI.useAvg(it) : 0; }],
     ["spellPiercing", "Spell penetration", " spell penetration", function (s, it) { return fiVal(it, "spellPiercing"); }],
+    ["haste", "Haste %", "% haste", function (s, it) { return fiVal(it, "haste"); }],
+    ["expertise", "Expertise %", "% expertise", function (s, it) { return fiVal(it, "expertise"); }],
     ["resist", "Resistance", " resistance", function (s) { return Math.max(sv(s, "fireResist"), sv(s, "frostResist"), sv(s, "natureResist"), sv(s, "shadowResist"), sv(s, "arcaneResist")) + sv(s, "allResist"); }]
   ];
   var STATBY = {};
@@ -256,6 +272,9 @@
   var VERDICT = { "same": "same text as Classic", "changed": "text changed from Classic", "new": "new in Forever", "rank": "rank layout differs", "renamed": "renamed from Classic", "moved": "moved from Classic", "unverified": "tooltip unverified", "removed": "removed in a later beta build" };
   var ERA_LABEL = { forever: "Forever-authored", sod: "SoD spell reused", retail: "Retail-era spell", classic: "Classic-era spell" };
   function buildBook(sb) {
+    var inBook = {};
+    (sb.spells || []).forEach(function (p) { inBook[p.n + "|" + p.c] = 1; });
+    IDX = IDX.filter(function (e) { return !(e.kind === "page" && e.cat === "spell" && inBook[e.name + "|" + e.sub]); }); // "foretold" rows now in the book
     (sb.spells || []).forEach(function (p) {
       IDX.push({ kind: "bookspell", cat: "spell", sub: p.c, name: p.n, icon: p.icon || "inv_misc_questionmark", q: "unknown",
         cls: p.c, lvlKey: typeof p.lvl === "number" ? p.lvl : undefined, sb: p, side: SRC_LABEL[p.src] || "",
@@ -306,6 +325,8 @@
     } else if (e.kind === "itemset") {
       var st = e.st;
       h += '<ul class="sbt-pieces">' + st.pieces.map(function (pc) {
+        var m = /^Item (\d+)/.exec(pc.n || ""), it = m && ITEMBYID[m[1]]; // "Item 11729 - not itemized..." when the set table has no name
+        if (it) return '<li class="q-' + esc(it.quality || "unknown") + '">' + esc(it.name) + (slotName(it.slot) ? " \u2013 " + esc(slotName(it.slot)) : "") + "</li>";
         return '<li class="q-' + esc(pc.q) + '">' + esc(pc.n) + (pc.slot ? " \u2013 " + esc(slotName(pc.slot) || pc.slot) : "") + "</li>";
       }).join("") + "</ul>";
       st.bonuses.forEach(function (b) {
@@ -318,15 +339,29 @@
     return h;
   }
   function buildIndex(d, items) {
+    var dupName = {}, dupKey = {};
     (items || []).forEach(function (it) {
+      if ((FI && FI.isJunk(it)) || it.era || unseenClassic(it)) return; // twins among the rows shown by default
+      dupName[it.name] = (dupName[it.name] || 0) + 1;
+      var k = it.name + "|" + (it.itemLevel || "");
+      dupKey[k] = (dupKey[k] || 0) + 1;
+    });
+    (items || []).forEach(function (it) {
+      if (FI && FI.isJunk(it)) return; // test, template and placeholder rows, as The Forge leaves them out
+      if (it.setName) (SETROWS[it.setName] = SETROWS[it.setName] || []).push(it);
+      ITEMBYID[it.id] = it;
       var er = effLvl(it), wearable = !!slotName(it.slot);
       var lvlTxt = er.est && wearable ? "Level ~" + er.lvl + " (est.)" : it.reqLevel ? "Level " + it.reqLevel : "";
-      var meta = [it.era === "sod" ? "SoD-era data" : it.era === "retail" ? "Retail-era data" : "", it.ft === "new" ? "New" : it.ft === "changed" ? "Changed" : "", it.est === "classic" ? "Classic stats (est.)" : "", it.sub, slotName(it.slot), lvlTxt, it.sk ? it.sk[0] + (it.sk[1] ? " " + it.sk[1] : "") : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+      var clsTxt = it.cls && it.cls.length && it.cls.length < 9 ? it.cls.map(function (c) { return c.charAt(0) + c.slice(1).toLowerCase(); }).join("/") : "";
+      var meta = [it.era === "sod" ? "SoD-era data" : it.era === "retail" ? "Retail-era data" : "", it.ft === "new" || it.nw ? "New" : it.ft === "changed" ? "Changed" : "", it.est === "classic" ? "Classic stats (est.)" : "", it.sub, slotName(it.slot), lvlTxt, clsTxt,
+        dupName[it.name] > 1 && it.itemLevel ? "ilvl " + it.itemLevel : "", it.sg ? "seen in game" : "",
+        dupKey[it.name + "|" + (it.itemLevel || "")] > 1 ? (gist(it) || String((it.effects || [])[0] || "").replace(/^(Equip|Use|Chance on hit): /, "").slice(0, 60)) : "",
+        it.sk ? it.sk[0] + (it.sk[1] ? " " + it.sk[1] : "") : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
       var st = it.stats || {}, words = Object.keys(st).map(function (k) { return STATWORDS[k] || (/SpellDamage$/.test(k) ? "spell damage spelldmg " + k.replace("SpellDamage", "") : k); });
       var from = (it.drops || []).map(function (d) { return d[1] + " " + d[0]; }).concat((it.quests || []).map(function (q) { return q[0] + " " + q[1] + " quest"; }));
       IDX.push({ kind: "item", cat: it.cat || "misc", sub: it.sub || "Other", name: it.name, icon: it.icon, q: it.quality || "unknown", it: it, meta: meta.join(" \u00b7 "),
         side: it.drops ? it.drops[0][1] + " \u00b7 " + it.drops[0][0] : it.quests ? "Quest: " + it.quests[0][0] : it.source, wear: wearable,
-        text: [it.name, it.sub, it.type, slotName(it.slot), it.source, it.setName, (it.effects || []).join(" "), words.join(" "), from.join(" ")].join(" ").toLowerCase() });
+        text: [it.name, it.sub, it.type, slotName(it.slot), PROVENANCE.test(it.source || "") ? "" : it.source, it.setName, (it.effects || []).join(" "), words.join(" "), from.join(" "), clsTxt].join(" ").toLowerCase() });
     });
     var w = d.world;
     [["zones", "Zone"], ["dungeons", "Dungeon"], ["raids", "Raid"], ["battlegrounds", "Battleground"]].forEach(function (g) {
@@ -349,69 +384,101 @@
       IDX.push({ kind: "page", cat: "system", sub: "System", name: sy.t, icon: sy.icon, meta: (sy.facts || []).length + " facts", topic: "systems:" + i, text: (sy.t + " " + (sy.facts || []).join(" ")).toLowerCase() });
     });
   }
-  function matches() {
-    var words = SQ.q.toLowerCase().split(/\s+/).filter(Boolean);
-    return IDX.filter(function (e) {
-      if (SQ.cat !== "all" && e.cat !== SQ.cat) return false;
+  // A set's classes: the set table's list, else the classes its pieces are limited to, else every class that can
+  // wear all of its pieces (Magister's Regalia is cloth: no class lock in Forever's data).
+  function setRows(st) { // the piece ids the set table names ("Item 16685 - ..."), else wearable rows of that set name
+    var rows = [];
+    (st.pieces || []).forEach(function (pc) {
+      var m = /^Item (\d+)/.exec(pc.n || ""), it = m && ITEMBYID[m[1]];
+      if (it && rows.indexOf(it) === -1) rows.push(it);
+    });
+    if (rows.length) return rows;
+    return (SETROWS[st.n] || []).filter(function (it) { return slotName(it.slot) && !it.era; }); // not its recipes or seed copies
+  }
+  function setClassOK(st, cls, lvl) {
+    if (st.cls && st.cls.length) return st.cls.indexOf(cls) !== -1;
+    var rows = setRows(st), locked = rows.filter(function (it) { return it.cls && it.cls.length; });
+    if (locked.length) return locked.some(function (it) { return it.cls.indexOf(cls) !== -1; });
+    if (!rows.length) return false; // nothing known about its pieces: not shown as fit for a class
+    var hands = rows.filter(function (it) { return it.cat === "weapon" && /^(one-hand|main-hand|off-hand)$/.test(it.slot); });
+    if (hands.length > 1 && ["WARRIOR", "ROGUE", "HUNTER"].indexOf(String(cls).toUpperCase()) === -1) return false; // two weapons: dual wield
+    return !GK || !GK.canUse || rows.every(function (it) { return GK.canUse(cls, it, lvl || 60); });
+  }
+  function setLevel(e) {
+    if (typeof e.lvlKey === "number") return e.lvlKey;
+    var rows = setRows(e.st);
+    return rows.length ? Math.max.apply(null, rows.map(lvlOf)) : null;
+  }
+  // One entry against the filters, as if category `cat` were picked (the chip counts ask per category).
+  function passes(e, words, cat, chips) {
+    if (cat !== "all" && e.cat !== cat) return false;
+    if (!chips) {
       if (SQ.sub && e.sub !== SQ.sub) return false;
       if (SQ.qual && e.q !== SQ.qual) return false;
-      if (SQ.stat && (e.kind !== "item" || statOf(e.it, SQ.stat) <= 0)) return false;
+    }
+    if (((e.kind === "item" && e.it.era) || e.era) && !SQ.era) return false;
+    if (e.kind === "item" && unseenClassic(e.it) && !SQ.cl) return false;
+    if (itemFilters(cat)) {
+      var gear = GEARCAT[cat];
+      if (gear && SQ.stat && (e.kind !== "item" || statOf(e.it, SQ.stat) <= 0)) return false;
       // sorting by a stat lists the items that have it, best first (not the whole database with the stat's owners on top)
-      if (SQ.sort && STATBY[SQ.sort] && (e.kind !== "item" || statOf(e.it, SQ.sort) <= 0)) return false;
-      if (SQ.at.length && (e.kind !== "item" || !FI || SQ.at.indexOf(FI.armorType(e.it)) === -1)) return false;
-      if (SQ.ms && (e.kind !== "item" || !mainOK(e.it, SQ.ms))) return false;
-      if (SQ.fx.length && (e.kind !== "item" || !SQ.fx.some(function (k) { return hasFx(e.it, k); }))) return false;
+      if (gear && SQ.sort && STATBY[SQ.sort] && (e.kind !== "item" || statOf(e.it, SQ.sort) <= 0)) return false;
+      if (armorFilters(cat) && SQ.at.length && (e.kind !== "item" || !FI || SQ.at.indexOf(FI.armorType(e.it)) === -1)) return false;
+      if (gear && SQ.ms && (e.kind !== "item" || !mainOK(e.it, SQ.ms))) return false;
+      var fxk = fxKeys(cat);
+      if (fxk.length && (e.kind !== "item" || !fxk.some(function (k) { return hasFx(e.it, k); }))) return false;
       if (SQ.src) {
         if (e.kind !== "item") return false;
         var dr = e.it.drops || [], qs = e.it.quests || [];
         if (SQ.src === "dungeon") { if (!dr.length) return false; }
+        else if (SQ.src === "ft:new") { if (!(e.it.ft === "new" || e.it.nw)) return false; }
         else if (SQ.src.indexOf("ft:") === 0) { if (e.it.ft !== SQ.src.slice(3)) return false; }
         else if (SQ.src === "quest") { if (!qs.length) return false; }
         else if (!dr.some(function (d) { return d[0] === SQ.src; }) && !qs.some(function (q) { return q[1] === SQ.src; })) return false;
       }
-      if (((e.kind === "item" && e.it.era) || e.era) && !SQ.era) return false;
-      if (e.kind === "item" && unseenClassic(e.it) && !SQ.cl) return false;
-      if (SQ.prof) {
-        if (e.kind !== "item") return false;
-        if (!e.it.sk || e.it.sk[0] !== SQ.prof) return false;
-        if (SQ.sk && e.it.sk[1] > +SQ.sk) return false;
+      if (SQ.prof || SQ.sk) { // a skill cap with no profession: any profession's items up to that skill
+        if (e.kind !== "item" || !e.it.sk) return false;
+        if (SQ.prof && e.it.sk[0] !== SQ.prof) return false;
+        if (SQ.sk && (e.it.sk[1] || 0) > +SQ.sk) return false;
       }
-      if (SQ.lvl) {
-        // Items with no stored requirement use the estimate from item level (Classic: item level - 5).
-        if (e.kind === "item") {
-          // gear without a required level gets one estimated from its item level; everything else without one is left out, as before
-          var el = slotName(e.it.slot) ? effLvl(e.it).lvl : (+e.it.reqLevel || 0);
-          if (!el || el > +SQ.lvl) return false;
-        }
-        else if (typeof e.lvlKey === "number") { if (e.lvlKey > +SQ.lvl) return false; }
-        else return false;
+    }
+    if (SQ.lvl) {
+      if (e.kind === "item") { if (lvlOf(e.it) > +SQ.lvl) return false; }
+      else if (e.kind === "itemset") { var sl = setLevel(e); if (sl && sl > +SQ.lvl) return false; }
+      else if (typeof e.lvlKey === "number") { if (e.lvlKey > +SQ.lvl) return false; } // no known level: no limit
+    }
+    if (SQ.cls) {
+      if (e.kind === "item") {
+        if (e.it.cls && e.it.cls.indexOf(SQ.cls) === -1) return false;
+        if (GK && GK.canUse && !GK.canUse(SQ.cls, e.it, +SQ.lvl || 60)) return false;
       }
-      if (SQ.cls) {
-        if (e.kind === "item") {
-          if (e.it.cls && e.it.cls.indexOf(SQ.cls) === -1) return false;
-          if (GK && GK.canUse && !GK.canUse(SQ.cls, e.it, +SQ.lvl || 60)) return false;
-        }
-        else if (e.cls) { if (e.cls !== SQ.cls) return false; }
-        else if (e.kind !== "racial") return false;
-      }
-      for (var i = 0; i < words.length; i++) if (e.text.indexOf(words[i]) === -1) return false;
-      return true;
-    }).sort(function (a, b) {
-      var ql = SQ.q.toLowerCase(), as = ql && a.name.toLowerCase().indexOf(ql) === 0 ? 0 : 1, bs = ql && b.name.toLowerCase().indexOf(ql) === 0 ? 0 : 1;
+      else if (e.kind === "itemset") { if (!setClassOK(e.st, SQ.cls, +SQ.lvl || 60)) return false; }
+      else if (e.cls) { if (e.cls !== SQ.cls) return false; }
+      else if (e.kind !== "racial") return false;
+    }
+    for (var i = 0; i < words.length; i++) if (e.text.indexOf(words[i]) === -1) return false;
+    return true;
+  }
+  function matches() {
+    var words = SQ.q.toLowerCase().split(/\s+/).filter(Boolean), live = itemFilters(SQ.cat), gear = GEARCAT[SQ.cat];
+    var sortBy = live && (gear || !STATBY[SQ.sort]) ? SQ.sort : "", statBy = live && gear ? SQ.stat : "";
+    return IDX.filter(function (e) { return passes(e, words, SQ.cat, false); }).sort(function (a, b) {
+      // names that start with the search come first, unless a sort, stat or level cap was picked: then that decides
+      var ql = !sortBy && !statBy && !SQ.lvl && SQ.q.toLowerCase(), as = ql && a.name.toLowerCase().indexOf(ql) === 0 ? 0 : 1, bs = ql && b.name.toLowerCase().indexOf(ql) === 0 ? 0 : 1;
       if (as !== bs) return as - bs;
-      if (SQ.sort && a.kind === "item" && b.kind === "item") {
-        var sa = SQ.sort === "ilvl" ? +a.it.itemLevel || 0 : SQ.sort === "req" ? effLvl(a.it).lvl : statOf(a.it, SQ.sort);
-        var sb = SQ.sort === "ilvl" ? +b.it.itemLevel || 0 : SQ.sort === "req" ? effLvl(b.it).lvl : statOf(b.it, SQ.sort);
+      if (sortBy && a.kind === "item" && b.kind === "item") {
+        var sa = sortBy === "ilvl" ? +a.it.itemLevel || 0 : sortBy === "req" ? lvlOf(a.it) : statOf(a.it, sortBy);
+        var sb = sortBy === "ilvl" ? +b.it.itemLevel || 0 : sortBy === "req" ? lvlOf(b.it) : statOf(b.it, sortBy);
         if (sa !== sb) return sb - sa;
-      } else if (SQ.sort && (a.kind === "item") !== (b.kind === "item")) return a.kind === "item" ? -1 : 1;
-      if (SQ.stat) {
-        var av = statOf(a.it, SQ.stat), bv = statOf(b.it, SQ.stat);
+      } else if (sortBy && (a.kind === "item") !== (b.kind === "item")) return a.kind === "item" ? -1 : 1;
+      if (statBy) {
+        var av = statOf(a.it, statBy), bv = statOf(b.it, statBy);
         if (av !== bv) return bv - av;
       }
       if (SQ.lvl) {
         // A level cap is set: gear nearest the cap first, so the filter is
         // visibly doing its job instead of re-showing the same level 1 epics.
-        var al = (a.it && effLvl(a.it).lvl) || a.lvlKey || 0, bl = (b.it && effLvl(b.it).lvl) || b.lvlKey || 0;
+        var al = (a.it && lvlOf(a.it)) || (a.kind === "itemset" && setLevel(a)) || a.lvlKey || 0, bl = (b.it && lvlOf(b.it)) || (b.kind === "itemset" && setLevel(b)) || b.lvlKey || 0;
         if (al !== bl) return bl - al;
       }
       var aq = QUAL.indexOf(a.q), bq = QUAL.indexOf(b.q);
@@ -424,9 +491,16 @@
     var sel = document.getElementById("dbf-src");
     if (!sel || !LOOT || sel.getAttribute("data-filled")) return;
     sel.setAttribute("data-filled", "1");
-    sel.innerHTML += LOOT.dungeons.filter(function (d) { return d.bosses.some(function (b) { return b.items.length; }); }).map(function (d) {
+    [].slice.call(sel.querySelectorAll("option[data-fb]")).forEach(function (o) { o.remove(); }); // a link's stand-in, now listed for real
+    sel.innerHTML += LOOT.dungeons.filter(function (d) { var n = lootCount(d); return n.drops || n.quests; }).map(function (d) {
       return '<option value="' + esc(d.name) + '">' + esc(d.name) + (d.levels ? " (" + d.levels[0] + "\u2013" + d.levels[1] + ")" : "") + "</option>";
     }).join("");
+    ensureSrcOpt(sel);
+  }
+  // A source from a link (?src=...) the list lacks gets its own option, as plain text, so it shows and Clear removes it.
+  function ensureSrcOpt(sel) {
+    if (!sel) return;
+    if (SQ.src && ![].some.call(sel.options, function (o) { return o.value === SQ.src; })) { var o = new Option(SQ.src, SQ.src); o.setAttribute("data-fb", "1"); sel.add(o); }
     sel.value = SQ.src;
   }
   function drawSearch() {
@@ -434,23 +508,32 @@
     if (!box) return;
     var active = true; // results always show; typing or a chip narrows them
     function eraOK(e) { return !(((e.kind === "item" && e.it.era) || e.era) && !SQ.era) && !(e.kind === "item" && unseenClassic(e.it) && !SQ.cl); }
-    var pool = IDX.filter(function (e) { return eraOK(e) && (SQ.cat === "all" || e.cat === SQ.cat); });
+    var words0 = SQ.q.toLowerCase().split(/\s+/).filter(Boolean);
+    var pool = IDX.filter(function (e) { return passes(e, words0, SQ.cat, true); });
     var subs = [];
-    pool.forEach(function (e) { if (SQ.cat !== "all" && subs.indexOf(e.sub) === -1) subs.push(e.sub); });
+    pool.forEach(function (e) { if (SQ.cat !== "all" && (!SQ.qual || e.q === SQ.qual) && subs.indexOf(e.sub) === -1) subs.push(e.sub); });
     subs.sort(function (a, b) {
       var ai = SUBFIRST.indexOf(a), bi = SUBFIRST.indexOf(b);
       if (ai !== -1 || bi !== -1) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       return /^Unknown|^Other/.test(a) ? 1 : /^Unknown|^Other/.test(b) ? -1 : a < b ? -1 : 1;
     });
-    var quals = QUAL.filter(function (q) { return pool.some(function (e) { return e.q === q; }); });
+    if (SQ.sub && SQ.cat !== "all" && subs.indexOf(SQ.sub) === -1) subs.push(SQ.sub);
+    var quals = QUAL.filter(function (q) { return q === SQ.qual || pool.some(function (e) { return e.q === q && (!SQ.sub || e.sub === SQ.sub); }); });
+    // Each chip counts what clicking it would list: the search and the filters applied, sub and quality cleared.
+    var words = words0, perCat = { all: 0 };
+    IDX.forEach(function (e) {
+      if (passes(e, words, e.cat, true)) perCat[e.cat] = (perCat[e.cat] || 0) + 1;
+      if (passes(e, words, "all", true)) perCat.all++;
+    });
     document.getElementById("dbs-cats").innerHTML = CATS.map(function (c) {
-      var n = IDX.filter(function (e) { return eraOK(e) && (c[0] === "all" || e.cat === c[0]); }).length;
+      var n = perCat[c[0]] || 0;
+      if (!n && SQ.cat === c[0]) return '<button type="button" data-dbcat="' + c[0] + '" class="on">' + esc(c[1]) + "<i>0</i></button>"; // the picked chip stays, to unpick
       return n ? '<button type="button" data-dbcat="' + c[0] + '"' + (SQ.cat === c[0] ? ' class="on"' : "") + ">" + esc(c[1]) + "<i>" + n + "</i></button>" : "";
     }).join("");
     var sr = document.getElementById("dbs-subs");
-    sr.hidden = !(subs.length > 1 || (quals.length > 1 && active));
-    sr.innerHTML = (subs.length > 1 ? subs.map(function (x) { return '<button type="button" data-dbsub="' + esc(x) + '"' + (SQ.sub === x ? ' class="on"' : "") + ">" + esc(x) + "</button>"; }).join("") : "") +
-      (quals.length > 1 ? '<span class="dbs-q">' + quals.map(function (q) { return '<button type="button" class="q-' + q + (SQ.qual === q ? " on" : "") + '" data-dbqual="' + q + '">' + q + "</button>"; }).join("") + "</span>" : "");
+    sr.hidden = !(subs.length > 1 || (quals.length > 1 && active) || SQ.sub || SQ.qual);
+    sr.innerHTML = (subs.length > 1 || SQ.sub ? subs.map(function (x) { return '<button type="button" data-dbsub="' + esc(x) + '"' + (SQ.sub === x ? ' class="on"' : "") + ">" + esc(x) + "</button>"; }).join("") : "") +
+      (quals.length > 1 || SQ.qual ? '<span class="dbs-q">' + quals.map(function (q) { return '<button type="button" class="q-' + q + (SQ.qual === q ? " on" : "") + '" data-dbqual="' + q + '">' + q + "</button>"; }).join("") + "</span>" : "");
     if (window.TipKit) TipKit.hide();
     var out = document.getElementById("dbs-out"), res = active ? matches() : [];
     // With a proc filter on, say how many of the procs listed have a known chance; the rest say "not known yet".
@@ -468,7 +551,7 @@
       var hasSbt = e.kind === "bookspell" || e.kind === "talent" || e.kind === "racial" || e.kind === "itemset";
       return '<button type="button" class="dbs-row' + (e.kind === "item" ? " q-" + esc(e.q) : "") + '" data-dbi="' + i + '"' + (e.kind === "item" ? ' data-tipkit="1"' : hasSbt ? ' data-sbt="1"' : "") + ">" +
         '<span class="dbs-ic">' + img(e.icon || "inv_misc_questionmark") + "</span>" +
-        '<span class="dbs-t"><b>' + esc(e.name) + "</b><em>" + (SQ.stat && e.kind === "item" ? '<i class="dbs-sv">+' + statOf(e.it, SQ.stat) + esc(STATBY[SQ.stat][2]) + "</i> " : "") + esc(e.meta) + "</em>" + (fxc ? '<i class="dbs-fx">' + esc(fxc) + "</i>" : "") + "</span>" +
+        '<span class="dbs-t"><b>' + esc(e.name) + "</b><em>" + sortVal(e) + esc(SQ.sort === "ilvl" && e.kind === "item" ? e.meta.split(" \u00b7 ").filter(function (x) { return x !== "ilvl " + e.it.itemLevel; }).join(" \u00b7 ") : e.meta) + "</em>" + (fxc ? '<i class="dbs-fx">' + esc(fxc) + "</i>" : "") + "</span>" +
         '<span class="dbs-s' + (e.kind === "item" && isEst(e) ? " dbs-est" : "") + '">' + esc(e.kind === "item" ? sideOf(e) : (e.side || { place: "The new world", perk: "The Legacy system", spell: "Spells", system: "Systems" }[e.cat] || "")) + "</span></button>";
     }).join("") + (res.length > SHOWN ? '<button type="button" class="dbs-more" data-dbmore="1">Show all ' + res.length + "</button>" : "")
       : '<p class="dbs-none">Nothing matches yet. Forever has shown only so much; the beta adds the rest.</p>';
@@ -478,6 +561,14 @@
     if (window.TipKit) out.querySelectorAll(".dbs-row[data-sbt]").forEach(function (row) {
       TipKit.hover(row, function (el) { return sbTip(IDX[+el.getAttribute("data-dbi")]); }, function () { return "itemtip"; });
     });
+  }
+  // The number a row is filtered or sorted by, shown before its meta ("+24 Stamina", "ilvl 63").
+  function sortVal(e) {
+    if (e.kind !== "item") return "";
+    var gear = GEARCAT[SQ.cat], k = gear && SQ.sort && STATBY[SQ.sort] ? SQ.sort : gear && SQ.stat ? SQ.stat : "";
+    var h = k ? '<i class="dbs-sv">' + (k === "reflect" || k === "armor" || k === "blockValue" || /^proc|^use/.test(k) ? "" : "+") + statOf(e.it, k) + esc(STATBY[k][2]) + "</i> " : "";
+    if (SQ.sort === "ilvl" && e.it.itemLevel) h += '<i class="dbs-sv">ilvl ' + esc(e.it.itemLevel) + "</i> ";
+    return h;
   }
   function isEst(e) { return !!(FI && e.wear && !FI.hasSource(e.it)); }
   function sideOf(e) {
@@ -503,15 +594,15 @@
       '<div class="dbs-filt" id="dbs-filt"><input type="number" id="dbf-lvl" min="1" max="60" placeholder="Max level" aria-label="Max level: show only what is usable at that level">' +
       '<select id="dbf-cls" aria-label="Class"><option value="">Any class</option>' + CLASSES9.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<select id="dbf-prof" aria-label="Profession"><option value="">Any profession</option>' + PROFS.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
-      '<input type="number" id="dbf-sk" min="1" max="300" placeholder="Skill" aria-label="Maximum profession skill">' +
+      '<input type="number" id="dbf-sk" min="1" max="300" placeholder="Max skill" aria-label="Maximum profession skill">' +
       '<select id="dbf-stat" aria-label="Stat"><option value="">Any stat</option>' + STATF.map(function (f) { return '<option value="' + f[0] + '">' + f[1] + "</option>"; }).join("") + "</select>" +
       '<select id="dbf-ms" aria-label="Main stat"><option value="">Any main stat</option>' + MAINS.map(function (m) { return '<option value="' + m[0] + '">' + m[1] + (m[0] === "sta" || m[0] === "spirit" ? "" : " main stat") + "</option>"; }).join("") + "</select>" +
       '<select id="dbf-sort" aria-label="Sort items by"><option value="">Sort: best match</option><option value="ilvl">Sort: item level</option><option value="req">Sort: required level</option>' + STATF.map(function (f) { return '<option value="' + f[0] + '">Sort: ' + f[1].toLowerCase() + "</option>"; }).join("") + "</select>" +
       '<span class="dbf-at" role="group" aria-label="Armor type">' + ARMORS.map(function (a) { return '<button type="button" data-dbat="' + a + '" aria-pressed="false">' + a + "</button>"; }).join("") + "</span>" +
-      '<span class="dbf-fx" role="group" aria-label="Effects">' + FXP.map(function (f) { return '<button type="button" data-dbfx="' + f[0] + '" aria-pressed="false" data-tip="' + esc(f[2] + " Read from the item data, or its tooltip text.") + '">' + esc(f[1]) + "</button>"; }).join("") + "</span>" +
+      '<span class="dbf-fx" role="group" aria-label="Effects">' + FXP.map(function (f) { var tip = esc(f[2] + " Read from the item data, or its tooltip text."); return '<button type="button" data-dbfx="' + f[0] + '" aria-pressed="false" title="' + tip + '" data-tip="' + tip + '">' + esc(f[1]) + "</button>"; }).join("") + "</span>" +
       '<select id="dbf-src" aria-label="Where it comes from"><option value="">Any source</option><option value="dungeon">Any dungeon drop</option><option value="quest">Any quest reward</option><option value="ft:new">New in Forever</option><option value="ft:changed">Changed from Classic</option></select>' +
-      '<button type="button" id="dbf-era" aria-pressed="false" data-tip="The branch carries Season of Discovery and retail leftovers. Hidden unless you ask; every such row is labeled.">SoD and retail data: hidden</button>' +
-      '<button type="button" id="dbf-cl" aria-pressed="false" data-tip="Items Forever&#39;s data has an id for but nobody has seen in Forever yet, with their WoW Classic stats. Forever may have changed or removed them. The ones a Forever loot record lists are always shown, labeled Classic stats.">Classic items not seen in Forever: hidden</button>' +
+      '<button type="button" id="dbf-era" aria-pressed="false" title="The branch carries Season of Discovery and retail leftovers. Hidden unless you ask; every such row is labeled." data-tip="The branch carries Season of Discovery and retail leftovers. Hidden unless you ask; every such row is labeled.">SoD and retail data: hidden</button>' +
+      '<button type="button" id="dbf-cl" aria-pressed="false" title="Items Forever&#39;s data has an id for but nobody has seen in Forever yet, with their WoW Classic stats. The ones a Forever loot record lists are always shown." data-tip="Items Forever&#39;s data has an id for but nobody has seen in Forever yet, with their WoW Classic stats. Forever may have changed or removed them. The ones a Forever loot record lists are always shown, labeled Classic stats.">Classic items not seen in Forever: hidden</button>' +
       '<button type="button" id="dbf-x" hidden>Clear</button></div>' +
       '<div class="dbs-subs" id="dbs-subs" hidden></div><div class="dbs-out" id="dbs-out" hidden></div>';
     try {
@@ -530,9 +621,10 @@
     function fEl(id) { return document.getElementById(id); }
     function readFilt() {
       SQ.lvl = fEl("dbf-lvl").value; SQ.cls = fEl("dbf-cls").value; SQ.prof = fEl("dbf-prof").value; SQ.sk = fEl("dbf-sk").value;
-      SQ.stat = fEl("dbf-stat").value; SQ.ms = fEl("dbf-ms").value; SQ.sort = fEl("dbf-sort").value;
+      SQ.stat = fEl("dbf-stat").value; SQ.ms = fEl("dbf-ms").value;
+      SQ.sort = fEl("dbf-sort").value || (STATBY[SQ.sort] && !GEARCAT[SQ.cat] ? SQ.sort : ""); // a stat sort set aside here is kept
       var srcSel = fEl("dbf-src");
-      if (srcSel.getAttribute("data-filled") || srcSel.value || !SQ.src) SQ.src = srcSel.value;
+      SQ.src = srcSel.value;
       syncFiltUI();
       SHOWN = 60; drawSearch(); syncUrl();
     }
@@ -553,6 +645,15 @@
       }
       box.querySelectorAll("[data-dbfx]").forEach(function (x) { var on = SQ.fx.indexOf(x.getAttribute("data-dbfx")) !== -1; x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
       box.querySelectorAll("[data-dbat]").forEach(function (x) { var on = SQ.at.indexOf(x.getAttribute("data-dbat")) !== -1; x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
+      var live = itemFilters(SQ.cat);
+      ["dbf-prof", "dbf-sk", "dbf-sort", "dbf-src", "dbf-cl"].forEach(function (id) { fEl(id).hidden = !live; });
+      ["dbf-stat", "dbf-ms"].forEach(function (id) { fEl(id).hidden = !live || !GEARCAT[SQ.cat]; }); // gear stats: not on potions or recipes
+      [].forEach.call(fEl("dbf-sort").options, function (o) { o.hidden = o.disabled = !!STATBY[o.value] && !GEARCAT[SQ.cat]; });
+      fEl("dbf-sort").value = STATBY[SQ.sort] && !GEARCAT[SQ.cat] ? "" : SQ.sort;
+      box.querySelector(".dbf-fx").hidden = !live;
+      box.querySelectorAll("[data-dbfx]").forEach(function (x) { x.hidden = !GEARCAT[SQ.cat] && x.getAttribute("data-dbfx") !== "rf"; });
+      box.querySelector(".dbf-at").hidden = !live || !armorFilters(SQ.cat);
+      fEl("dbf-sk").placeholder = SQ.prof ? "Max skill" : "Max skill (any profession)";
       fEl("dbf-x").hidden = !(SQ.lvl || SQ.cls || SQ.prof || SQ.sk || SQ.stat || SQ.src || SQ.ms || SQ.sort || SQ.at.length || SQ.fx.length);
     }
     fEl("dbf-era").addEventListener("click", function () { SQ.era = !SQ.era; syncFiltUI(); SHOWN = 60; drawSearch(); syncUrl(); });
@@ -574,7 +675,7 @@
     fEl("dbf-x").addEventListener("click", function () {
       ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).value = ""; });
       ["dbf-cls", "dbf-prof", "dbf-stat", "dbf-src", "dbf-ms", "dbf-sort"].forEach(function (id) { fEl(id).value = ""; });
-      SQ.at = []; SQ.fx = [];
+      SQ.at = []; SQ.fx = []; SQ.sort = "";
       readFilt();
     });
     qi.value = SQ.q;
@@ -582,6 +683,7 @@
     if (SQ.stat) fEl("dbf-stat").value = SQ.stat;
     fEl("dbf-cls").value = SQ.cls; fEl("dbf-prof").value = SQ.prof; fEl("dbf-sk").value = SQ.sk;
     fEl("dbf-ms").value = SQ.ms; fEl("dbf-sort").value = SQ.sort;
+    ensureSrcOpt(fEl("dbf-src"));
     syncFiltUI();
     qi.addEventListener("input", function () {
       clearTimeout(tmr);
@@ -590,9 +692,9 @@
     box.addEventListener("click", function (e) {
       var b = e.target.closest && e.target.closest("button");
       if (!b || !box.contains(b)) return;
-      if (b.hasAttribute("data-dbcat")) { var c = b.getAttribute("data-dbcat"); SQ.cat = SQ.cat === c && c !== "all" ? "all" : c; SQ.sub = ""; SQ.qual = ""; SHOWN = 60; }
-      else if (b.hasAttribute("data-dbsub")) { var s2 = b.getAttribute("data-dbsub"); SQ.sub = SQ.sub === s2 ? "" : s2; }
-      else if (b.hasAttribute("data-dbqual")) { var q2 = b.getAttribute("data-dbqual"); SQ.qual = SQ.qual === q2 ? "" : q2; }
+      if (b.hasAttribute("data-dbcat")) { var c = b.getAttribute("data-dbcat"); SQ.cat = SQ.cat === c && c !== "all" ? "all" : c; SQ.sub = ""; SQ.qual = ""; SHOWN = 60; syncFiltUI(); }
+      else if (b.hasAttribute("data-dbsub")) { var s2 = b.getAttribute("data-dbsub"); SQ.sub = SQ.sub === s2 ? "" : s2; SHOWN = 60; }
+      else if (b.hasAttribute("data-dbqual")) { var q2 = b.getAttribute("data-dbqual"); SQ.qual = SQ.qual === q2 ? "" : q2; SHOWN = 60; }
       else if (b.hasAttribute("data-dbmore")) { SHOWN = 1e9; }
       else if (b.hasAttribute("data-dbi")) {
         var en = IDX[+b.getAttribute("data-dbi")];
@@ -669,7 +771,7 @@
       sl.forEach(function (s) { var k = s[2] || "_"; sCounts[k] = (sCounts[k] || 0) + 1; });
       var chipKeys = Object.keys(SOUL_CC).filter(function (k) { return sCounts[k]; });
       function crest(k) { return k && k !== "_" ? '<img class="soulico" src="' + CDN + "classicon_" + k.toLowerCase() + '.jpg" alt="" loading="lazy">' : '<img class="soulico" src="' + CDN + 'spell_shadow_soulleech_3.jpg" alt="" loading="lazy">'; }
-      function fxHtml(t) { return esc(t).replace(/(\d+(?:\.\d+)?%?)/g, "<em>$1</em>"); }
+      function fxHtml(t) { return esc(t).replace(/(&#?\w+;)|(\d+(?:\.\d+)?%?)/g, function (m, ent, num) { return ent || "<em>" + num + "</em>"; }); } // never inside an entity
       var chips = '<button type="button" class="soulchip on" data-soulf="">All ' + sl.length + "</button>" +
         chipKeys.map(function (k) {
           return '<button type="button" class="soulchip" data-soulf="' + k + '" style="--cc:' + SOUL_CC[k] + '">' + crest(k) + soulLabel(k) + " " + sCounts[k] + "</button>";
@@ -813,7 +915,7 @@
     fetch("/codex/counts.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (n) {
       var el = document.getElementById("cxstrip");
       if (!n || !el) return;
-      el.innerHTML += [[n.book, "spells in the book", "/codex/?cat=spell", "city-of-dalaran"],
+      el.innerHTML += [[n.book, "class spells", "/codex/?cat=spell", "city-of-dalaran"],
         [n.talents, "talents", "/codex/?cat=talent", "halls-of-thanes"],
         [n.sets, "item sets", "/codex/?cat=set", "blackmaw-hold"]].map(stripChip).join("");
     });
@@ -897,7 +999,7 @@
       fetch("/plan/items-db.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (db) {
         if (!db || !Array.isArray(db.items) || !db.items.length) return;
         try { GK = ForgeGear({ items: db, get: function () { return {}; } }); } catch (e) {}
-        IDX = IDX.filter(function (e) { return e.kind !== "item"; });
+        IDX = IDX.filter(function (e) { return e.kind !== "item"; }); SETROWS = {}; ITEMBYID = {};
         buildIndex({ world: { zones: [], dungeons: [], raids: [], battlegrounds: [] }, legacy: { trees: [] }, unseen: {}, systems: [] }, db.items);
         drawSearch();
       });

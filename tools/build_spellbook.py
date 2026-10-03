@@ -130,7 +130,7 @@ try:
 except Exception:
     live = hidden = 0
 counts = {
-    "book": sum(1 for s in spells if s["src"] != "classiconly"),
+    "book": len(spells),  # what /codex/?cat=spell lists: the book plus the Classic spells marked "Not in Forever"
     "talents": len(talents), "racials": len(racials),
     "sets": live, "setsHidden": hidden,
 }

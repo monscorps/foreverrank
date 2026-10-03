@@ -141,6 +141,9 @@
   // ---- Procs and on-use effects: fx from the data when it is there, else read from the tooltip text ----
   // fx rows: { k: hit|use|equip, what: damage|dot|heal|buff|debuff|summon|mana|other, s, v, lo, hi, ticks, dur, p, ppm, cd, icd, aoe, stat, sp, src, t }
   var C_FX = C_REQ ? new WeakMap() : null;
+  var DUAL = { WARRIOR: 1, ROGUE: 1, HUNTER: 1 };
+  // Provenance credits ("Beta build ..., via foreverchanges.pro") say where the data came from, not the item: not searched.
+  var PROVENANCE = /foreverchanges\.pro|Wowhead's Forever database|^Beta (build|client)|^Estimate:|^Season of Discovery data|^Server data via/;
   var HANDS = { "main-hand": 1, "off-hand": 1, "one-hand": 1, "two-hand": 1, ranged: 1, thrown: 1 }, RANGED = { ranged: 1, thrown: 1 };
   function secs(n, unit) { return +n * (/^h/i.test(unit) ? 3600 : /^m(?!s)/i.test(unit) ? 60 : /^ms/i.test(unit) ? 0.001 : 1); }
   function schoolOf(w) {
@@ -307,7 +310,8 @@
   function fmtDur(s) { s = +s; return s >= 3600 && s % 3600 === 0 ? s / 3600 + " hr" : s >= 60 && s % 60 === 0 ? s / 60 + " min" : s >= 60 ? Math.floor(s / 60) + " min " + Math.round(s % 60) + " sec" : r2(s) + " sec"; }
   function fxAmt(e) { return e.v == null ? "" : e.lo != null && e.hi != null && e.lo !== e.hi ? e.lo + "–" + e.hi : String(Math.round(e.v * 10) / 10); }
   var FXLBL = { strength: "Str", agility: "Agi", stamina: "Sta", intellect: "Int", spirit: "Spi", attackPower: "AP", armor: "Armor", defense: "Defense", parry: "% Parry", dodge: "% Dodge",
-    blockChance: "% Block", spellPower: "Spell power", spellDamage: "Spell dmg", healing: "Healing" };
+    blockChance: "% Block", spellPower: "Spell power", spellDamage: "Spell dmg", healing: "Healing", bonusArmor: "Armor", hit: "% Hit", spellHit: "% Spell hit",
+    spellCrit: "% Spell crit", crit: "% Crit", hp5: "HP5", mp5: "MP5", rangedAttackPower: "RAP" };
   // A short phrase for one row: "30 Holy", "120 Physical over 30 sec", "300–700 heal", "+100 Str for 10 sec".
   function fxWhat(e) {
     var a = fxAmt(e);
@@ -316,7 +320,7 @@
       case "dot": return a + (e.s ? " " + e.s : " damage") + (e.dur ? " over " + fmtDur(e.dur) : " over time") + (e.aoe ? " (area)" : "");
       case "heal": return a + " heal" + (e.dur ? " over " + fmtDur(e.dur) : "");
       case "mana": return a + " mana" + (e.dur ? " over " + fmtDur(e.dur) : "");
-      case "buff": return (e.stat && Object.keys(e.stat).length ? Object.keys(e.stat).map(function (s) { var l = FXLBL[s] || (STATBY[s] ? STATBY[s][2] : s); return "+" + e.stat[s] + (l.charAt(0) === "%" ? l : " " + l); }).join(", ") : "buff") + (e.dur ? " for " + fmtDur(e.dur) : "");
+      case "buff": return (e.stat && Object.keys(e.stat).length ? Object.keys(e.stat).map(function (s) { var l = FXLBL[s] || (STATBY[s] ? STATBY[s][2] : s); return (e.stat[s] < 0 ? "" : "+") + e.stat[s] + (l.charAt(0) === "%" ? l : " " + l); }).join(", ") : "buff") + (e.dur ? " for " + fmtDur(e.dur) : "");
       case "debuff": return "debuff" + (e.dur ? " " + fmtDur(e.dur) : "");
       case "summon": return "summon";
       default: return "effect";
@@ -388,10 +392,22 @@
     return "Estimate: level " + (lo === hi ? lo : lo + "–" + hi) + " content, " + kind + (where.length ? ": " + where.join(", ") : "") + "." +
       (er.est ? " Required level estimated from item level " + il + "." : "");
   }
+  // Developer rows the client still carries: test and template gear, unused or deprecated placeholders, GM items.
+  var JUNK_NAME = new RegExp([
+    "^OLD", "Monster - ", "\\bDNT\\b", "^QA", "\\bPH\\b", "\\bTest\\b", "JEFFTEST",
+    "^\\d+ (Epic|Green|Blue|Rare) ",                    // "90 Epic Frost Belt", "63 Green Rogue Ring": itemization test sets
+    "\\bUNUSED\\b", "NOT USED", "^(Deprecate|Deptecated|Depricated)\\b", " OLD$", " DEP$", " FOO$", "\\(old\\d*\\)$",
+    "^PVP (Plate|Cloth) .*(Alliance|Horde)$", "^Internal .* Kit",
+    "^Gamemaster", "\\(NYI\\)$", "\\(PT\\)$", "^\\[TMP\\]", "^Template Item$", "QUEST ITEM", "^Unknown Reward$",
+    "^Durability Shoulderpads$", "^Engineer's Shield \\d$", "^ggggfg$", "^Leafre's Ring of ", "^Alex's Ring of Audacity$",
+    "^Shawn's Super Special", "^Hyjal Summit Trash Weapon$"].join("|"));
   function isJunk(it) {
     var n = String(it && it.name || "");
     if (/High Test/i.test(n)) return false;
-    return /^OLD|Monster - |\bDNT\b|^QA|\bPH\b|\bTest\b/.test(n);
+    if (!it) return false;
+    return JUNK_NAME.test(n) || it.quality === "artifact" ||                     // artifact quality: GM stones and the Azzinoth blades
+      (it.quality === "poor" && +it.reqLevel > 60) ||                             // grey gear above the level cap: unused Classic placeholders
+      /^NYI\b|internal use only/i.test(String(it.flavor || "")) || (it.effects || []).some(function (e) { return /^Use: NYI\.?$/.test(e); });
   }
   // Classic proficiencies as the default lens; the picker's "Any class" lifts it.
   var ARMOR_RANK = { Cloth: 1, Leather: 2, Mail: 3, Plate: 4 };
@@ -411,7 +427,9 @@
     cls = String(cls || "").toUpperCase();
     if (!WEAP[cls]) return true;
     var t = it.type || "";
-    if (!t || t === "Fishing Pole") return true;
+    if (!t || t === "Fishing Pole" || t === "Bag") return true; // class bags (soul bags, quivers) are narrowed by it.cls
+    if (t === "Arrow") return WEAP[cls].t.indexOf("Bow") !== -1 || WEAP[cls].t.indexOf("Crossbow") !== -1;
+    if (t === "Bullet") return WEAP[cls].t.indexOf("Gun") !== -1;
     if (ARMOR_RANK[t]) {
       var m = ARMOR_MAX[cls] || 4;
       // Plate wearers hold mail below 40; mail wearers hold leather below 40 (Classic rule).
@@ -419,6 +437,7 @@
       return ARMOR_RANK[t] <= m;
     }
     if (WEAP[cls].t.indexOf(t) === -1) return false;
+    if (it.slot === "off-hand" && it.cat === "weapon" && !DUAL[cls]) return false; // off-hand weapons: dual wield only
     if (it.slot === "two-hand" && !WEAP[cls].two && t !== "Staff" && t !== "Polearm") return false;
     return true;
   }
@@ -430,9 +449,11 @@
     ["Defense", [["armor", "Armor", "Armor"], ["defense", "Defense", "Defense"], ["dodge", "Dodge %", "Dodge"], ["parry", "Parry %", "Parry"], ["blockChance", "Block Chance %", "Block"],
       ["blockValue", "Block Value", "Block value"], ["reflect", "Reflect (per enemy swing)", "reflect"]]],
     ["Physical", [["attackPower", "Attack Power", "AP"], ["rangedAttackPower", "Ranged Attack Power", "RAP"], ["crit", "Crit %", "Crit"], ["hit", "Hit %", "Hit"],
-      ["weaponSkill", "Weapon Skill", "skill"], ["dps", "Weapon DPS", "DPS"]]],
+      ["weaponSkill", "Weapon Skill", "skill"], ["dps", "Weapon DPS", "DPS"], ["expertise", "Expertise %", "Expertise"], ["haste", "Haste %", "Haste"],
+      ["expertiseRating", "Expertise Rating", "Expertise rating"], ["hasteRating", "Haste Rating", "Haste rating"]]],
     ["Spell", [["spellPower", "Spell Power", "Spell power"], ["spellDamage", "Spell Damage", "Spell dmg"], ["healing", "Healing", "Healing"], ["holy", "Holy damage", "Holy dmg"],
       ["fire", "Fire damage", "Fire dmg"], ["frost", "Frost damage", "Frost dmg"], ["nature", "Nature damage", "Nature dmg"], ["shadow", "Shadow damage", "Shadow dmg"], ["arcane", "Arcane damage", "Arcane dmg"],
+      ["spellCrit", "Spell Crit %", "Spell crit"], ["spellHit", "Spell Hit %", "Spell hit"],
       ["spellPiercing", "Spell Penetration", "Spell pen."], ["mp5", "Mana per 5", "mp5"], ["hp5", "Health per 5", "hp5"]]],
     ["Resistances", [["fireResist", "Fire Resistance", "Fire res."], ["frostResist", "Frost Resistance", "Frost res."], ["natureResist", "Nature Resistance", "Nature res."],
       ["shadowResist", "Shadow Resistance", "Shadow res."], ["arcaneResist", "Arcane Resistance", "Arcane res."], ["allResist", "All Resistances", "All res."]]],
@@ -451,6 +472,7 @@
       case "holy": case "fire": case "frost": case "nature": case "shadow": case "arcane": return n(k + "SpellDamage") + n("spellDamage") + n("spellPower");
       case "weaponSkill": return Object.keys(s).reduce(function (a, x) { return /Skill$/.test(x) && x !== "fishing" ? a + n(x) : a; }, 0);
       case "dps": return +it.dps || 0;
+      case "blockValue": return (+it.block || 0) + n("blockValue"); // a shield's own block value, plus any bonus
       case "reflect": case "reflectHit": case "reflectBlock": return rfAll(it); // one reflect value
       case "procDps": return procDps(it);
       case "procDmg": return procDmg(it);
@@ -476,6 +498,8 @@
     SCH.forEach(function (x) { if (s[x + "SpellDamage"]) add(x, sgn(s[x + "SpellDamage"]) + " " + cap1(x) + " dmg"); });
     if (s.crit || s.critRating) add("crit", s.crit ? sgn(s.crit) + "% Crit" : sgn(s.critRating) + " Crit rating");
     if (s.hit || s.hitRating) add("hit", s.hit ? sgn(s.hit) + "% Hit" : sgn(s.hitRating) + " Hit rating");
+    if (s.spellCrit) add("spellCrit", sgn(s.spellCrit) + "% Spell crit");
+    if (s.spellHit) add("spellHit", sgn(s.spellHit) + "% Spell hit");
     if (s.defense || s.defenseRating) add("defense", sgn(s.defense || s.defenseRating) + " Defense");
     if (s.dodge || s.dodgeRating) add("dodge", s.dodge ? sgn(s.dodge) + "% Dodge" : sgn(s.dodgeRating) + " Dodge rating");
     if (s.parry || s.parryRating) add("parry", s.parry ? sgn(s.parry) + "% Parry" : sgn(s.parryRating) + " Parry rating");
@@ -484,8 +508,10 @@
     if (s.spellPiercing) add("spellPiercing", sgn(s.spellPiercing) + " Spell pen.");
     if (s.mp5) add("mp5", s.mp5 + " mp5");
     if (s.hp5) add("hp5", s.hp5 + " hp5");
-    if (s.expertiseRating) add("expertise", sgn(s.expertiseRating) + " Expertise rating");
-    if (s.hasteRating) add("haste", sgn(s.hasteRating) + " Haste rating");
+    if (s.expertise) add("expertise", sgn(s.expertise) + "% Expertise");
+    if (s.haste) add("haste", sgn(s.haste) + "% Haste");
+    if (s.expertiseRating) add("expertiseRating", sgn(s.expertiseRating) + " Expertise rating");
+    if (s.hasteRating) add("hasteRating", sgn(s.hasteRating) + " Haste rating");
     var wsk = statVal(it, "weaponSkill");
     if (wsk) add("weaponSkill", sgn(wsk) + " Weapon skill");
     ["fire", "frost", "nature", "shadow", "arcane"].forEach(function (x) { if (s[x + "Resist"]) add(x + "Resist", sgn(s[x + "Resist"]) + " " + cap1(x) + " res."); });
@@ -600,7 +626,8 @@
       if (it.reqSkill) L.push('<span class="it-l">Requires ' + esc(String(it.reqSkill).replace(/ (\d+)$/, " ($1)")) + "</span>");
       if (it.flavor) L.push('<span class="it-f">"' + esc(it.flavor) + '"</span>');
       if (it.itemLevel) L.push('<span class="it-y">Item Level ' + esc(it.itemLevel) + "</span>");
-      if (it.ft === "new" || it.ft === "changed") L.push('<span class="it-ft">' + (it.ft === "new" ? "New in Forever" : "Changed from Classic") + "</span>");
+      if (it.ft === "new" || it.ft === "changed" || it.nw) L.push('<span class="it-ft">' + (it.ft === "new" || it.nw ? "New in Forever" : "Changed from Classic") + "</span>");
+      if (it.sg) L.push('<span class="it-ft">Seen in players\' games (' + esc(it.sg) + (it.sg === 1 ? " upload" : " uploads") + ")</span>");
       if (it.est === "classic") L.push('<span class="it-conf it-est">' + ((it.drops || it.quests)
         ? "Estimate: a Forever loot record lists this item, but its Forever numbers have not been seen yet. These are its WoW Classic stats."
         : "Estimate: not seen in Forever yet. These are its WoW Classic stats; Forever may have changed or removed it.") + "</span>");
@@ -646,6 +673,19 @@
         if ((m = /spell damage by (\d+) against (\w+)\.\s+Lasts (\d+) min/i.exec(txt))) { add("spellDamage", m[1], "against " + m[2]); dur = m[3] + " min"; }
         if (st.length) kind = "potion";
       }
+      if (!st.length) { // the Classic wording of the same buffs
+        var FK = { strength: "strength", agility: "agility", stamina: "stamina", intellect: "intellect", spirit: "spirit", armor: "armor", "attack power": "attackPower",
+          "spell damage": "spellDamage", "spell healing": "healing", healing: "healing", "critical strike chance": "crit" };
+        if ((m = /well fed and gain (\d+)%? (Strength|Agility|Stamina|Intellect|Spirit|Attack Power|Spell Damage|Healing|Critical Strike chance)(?: and (Spirit|Stamina))? for (\d+) min/i.exec(txt))) {
+          kind = "food"; add(FK[m[2].toLowerCase()], m[1]); if (m[3]) add(FK[m[3].toLowerCase()], m[1]); dur = m[4] + " min";
+        } else if ((m = /^Use: Increases (?:your )?(Strength|Agility|Stamina|Intellect|Spirit|armor) by (\d+) for (\d+) (hr|hour|min)/i.exec(txt))) {
+          kind = "elixir"; add(FK[m[1].toLowerCase()], m[2]); dur = /^h/i.test(m[4]) ? +m[3] * 60 + " min" : m[3] + " min";
+        } else if ((m = /^Use: Increases (?:healing done by magical spells|spell damage) by up to (\d+) for (\d+) (hr|hour|min)/i.exec(txt))) {
+          kind = "elixir"; add(/healing/i.test(txt.slice(0, 40)) ? "healing" : "spellDamage", m[1]); dur = /^h/i.test(m[3]) ? +m[2] * 60 + " min" : m[2] + " min";
+        } else if ((m = /^Use: Increases (Attack Power|Spell Damage|Spell Healing) by (\d+) for (\d+) sec/i.exec(txt))) {
+          kind = "potion"; add(FK[m[1].toLowerCase()], m[2]); dur = m[3] + " sec";
+        }
+      }
       return { kind: kind, stats: st, dur: dur };
     }
     var CS = { strength: "Str", agility: "Agi", stamina: "Sta", intellect: "Int", spirit: "Spi", crit: "% crit", health: " health", armor: " armor",
@@ -661,7 +701,8 @@
       ROGUE: { "*": "agility:3 strength:2 attackPower:3 crit:3" },
       PRIEST: { Discipline: "healing:3 intellect:3 mp5:3 spirit:2", Holy: "healing:3 intellect:3 mp5:3 spirit:2", Shadow: "spellDamage:3 intellect:2 crit:2 spirit:2 stamina:1" },
       SHAMAN: { Elemental: "spellDamage:3 nature:3 intellect:2 crit:2 mp5:2", Enhancement: "strength:3 agility:2 attackPower:3 crit:3 intellect:1", Restoration: "healing:3 intellect:3 mp5:3" },
-      MAGE: { "*": "spellDamage:3 intellect:3 crit:2 mp5:1 spirit:1" },
+      MAGE: { "*": "spellDamage:3 intellect:3 crit:2 mp5:1 spirit:1", Arcane: "spellDamage:3 intellect:3 crit:2 mp5:1 spirit:1",
+        Fire: "spellDamage:3 intellect:3 crit:2 mp5:1 spirit:1", Frost: "spellDamage:3 intellect:3 crit:2 mp5:1 spirit:1" },
       WARLOCK: { "*": "spellDamage:3 stamina:2 intellect:2 crit:2 spirit:1" },
       DRUID: { Balance: "spellDamage:3 nature:3 intellect:2 crit:2 mp5:2", Feral: "agility:3 strength:3 attackPower:2 crit:2 stamina:1 armor:1 health:1", Restoration: "healing:3 intellect:3 mp5:3 spirit:2" }
     };
@@ -878,8 +919,9 @@
         off += row("Spell crit", r1(F.sc[0][li] + A.intellect / F.sc[1][li] + critBonus + (t.spellCrit || 0)) + "%", "Base " + F.sc[0][li] + "% + Intellect / " + F.sc[1][li] + " at level " + lv + ", plus crit from gear, racials and talents (Forever unifies crit)" + (t.spellCrit ? " and +" + t.spellCrit + "% spell crit from set bonuses" : "") + "." + EST, true, "");
       }
       [["hit", "Hit"], ["expertise", "Expertise"], ["haste", "Haste"]].forEach(function (x) {
-        var v = (t[x[0]] || 0) + (M.add[x[0]] || 0) + (TA[x[0]] || 0);
-        off += row(x[1], "+" + r1(v) + "%", bonusTip(x[0], M.add[x[0]]) + " Base values are unpublished for Forever.", v, "");
+        var v = (t[x[0]] || 0) + (M.add[x[0]] || 0) + (TA[x[0]] || 0), rv = x[0] === "hit" ? 0 : (t[x[0] + "Rating"] || 0);
+        off += row(x[1], (v || !rv ? "+" + r1(v) + "%" : "") + (rv ? (v ? " " : "") + "+" + rv + " rating" : ""), bonusTip(x[0], M.add[x[0]]) + " Base values are unpublished for Forever." +
+          (rv ? " Gear " + x[1].toLowerCase() + " rating +" + rv + ": no rating-to-% table is published for Forever, so it is shown as rating." : ""), v || rv, "");
       });
       var sp = (t.spellPower || 0) + (TA.spellPower || 0), sdmg = (t.spellDamage || 0) + sp, heal = (t.healing || 0) + sp, holy = sdmg + (t.holySpellDamage || 0);
       if (sdmg) off += row("Spell Damage", sdmg, "Spell damage " + (t.spellDamage || 0) + " + spell power " + sp + " (spell power raises damage and healing)." + (sp ? "" : ""), true, "");
@@ -1099,20 +1141,37 @@
       "</div>";
     }
     // ---- The gear picker: every wearable item for the slot, filtered, weighted and paged ----
-    var PF_DEF = { at: [], fx: [], ms: "", stat: "", qual: "", rlo: "", rhi: "", ilo: "", ihi: "", src: "", nw: false, upto: true, any: false, cl: false, sort: "score", preset: "", more: false };
+    var PF_DEF = { at: [], fx: [], ms: "", stat: "", qual: "", rlo: "", rhi: "", ilo: "", ihi: "", src: "", nw: false, upto: true, any: false, cl: false, sort: "score", preset: {}, more: false };
     var PF = (function () {
       var o = {}, saved = lsGet("forge-pick") || {};
       Object.keys(PF_DEF).forEach(function (k) { o[k] = saved[k] !== undefined ? saved[k] : PF_DEF[k]; });
       if (!Array.isArray(o.at)) o.at = [];
       if (!Array.isArray(o.fx)) o.fx = [];
+      ["sort", "stat"].forEach(function (k) { if (o[k] === "reflectHit" || o[k] === "reflectBlock") o[k] = "reflect"; }); // older saves
+      if (o.sort !== "score" && o.sort !== "ilvl" && o.sort !== "req" && !STATBY[o.sort]) o.sort = "score";
+      if (o.stat && !STATBY[o.stat]) o.stat = "";
+      var pr = o.preset; o.preset = {}; // the weights choice, per class
+      if (pr && typeof pr === "object" && !Array.isArray(pr)) o.preset = pr;
+      else if (typeof pr === "string" && pr.indexOf(":") > 0) o.preset["*"] = pr.slice(pr.indexOf(":") + 1);
+      else if (typeof pr === "string" && pr) o.preset["*"] = pr; // saved before it was per class: the next class to open the picker keeps it
       o.q = ""; o.shown = 60; o.slot = "";
       return o;
     })();
     function savePF() { var o = {}; Object.keys(PF_DEF).forEach(function (k) { o[k] = PF[k]; }); lsSet("forge-pick", o); }
-    var CUSTOM = lsGet("forge-weights") || null;
-    if (CUSTOM && (CUSTOM.reflectHit || CUSTOM.reflectBlock)) { // reflect per hit and per block became one Reflect
-      if (!CUSTOM.reflect) CUSTOM.reflect = CUSTOM.reflectHit || CUSTOM.reflectBlock;
-      delete CUSTOM.reflectHit; delete CUSTOM.reflectBlock; lsSet("forge-weights", CUSTOM);
+    // Custom weights, one set per class: a Mage's Custom does not start from a Warrior's tank weights.
+    var CW = lsGet("forge-weights") || {};
+    if (Object.keys(CW).some(function (k) { return !/^([A-Z]+\/.*|_legacy)$/.test(k); })) CW = { _legacy: CW }; // the old single set
+    Object.keys(CW).forEach(function (k) { // reflect per hit and per block became one Reflect
+      var w = CW[k];
+      if (w && (w.reflectHit || w.reflectBlock)) { if (!w.reflect) w.reflect = w.reflectHit || w.reflectBlock; delete w.reflectHit; delete w.reflectBlock; }
+    });
+    function claimLegacy() { if (!CW[pkey()] && CW._legacy && CLS) { CW[pkey()] = CW._legacy; delete CW._legacy; lsSet("forge-weights", CW); } }
+    function custom() { return CW[pkey()] || null; }
+    // Does the old single Custom set fit this class and spec? (shares more than half its stats with the preset you'd see)
+    function legacyFits() {
+      var L = CW._legacy, ps = presets().filter(function (x) { return x.id !== "custom"; });
+      var base = (SPEC && ps.filter(function (x) { return SPEC.indexOf(x.label) === 0; })[0]) || ps[0];
+      return !!(L && base && Object.keys(L).filter(function (k) { return k in base.w; }).length * 2 > Object.keys(L).length);
     }
     // Weight presets: the consumable wants per spec, read as gear weights; armor is per point, so it weighs less.
     function presets() {
@@ -1131,23 +1190,72 @@
       Object.keys(byCls).forEach(function (k) {
         out.push({ id: k === "*" ? "class" : k.toLowerCase(), label: k === "*" ? CLS.charAt(0) + CLS.slice(1).toLowerCase() : k, w: fromWant(byCls[k], k === "Protection") });
       });
+      if (CLS === "PALADIN") out.push({ id: "reflect", label: "Reflect tank", w: { stamina: 3, armor: 0.12, defense: 2, blockValue: 2, blockChance: 5, reflect: 10, strength: 1.5, holy: 1, dodge: 4, parry: 4 } });
       // Proc damage per second, weighed like 14 attack power per point of DPS (Classic rule: 14 AP = 1 DPS).
+      // Weapon DPS the same way, for the specs that hit with their weapon (a feral druid fights in form: no).
       out.forEach(function (p) {
         if (!/^(retribution|arms|fury|enhancement|feral)$/.test(p.id) && !(p.id === "class" && (CLS === "ROGUE" || CLS === "HUNTER"))) return;
         p.w.procDps = Math.round(14 * (p.w.attackPower || 2));
+        if (p.id !== "feral") p.w.dps = Math.round(14 * (p.w.attackPower || 2));
       });
-      if (CLS === "PALADIN") out.push({ id: "reflect", label: "Reflect tank", w: { stamina: 3, armor: 0.12, defense: 2, blockValue: 2, blockChance: 5, reflect: 10, strength: 1.5, holy: 1, dodge: 4, parry: 4 } });
-      out.push({ id: "custom", label: "Custom", w: CUSTOM || {} });
+      // Casters by school: the school stats count general spell damage too, so a school-only item is no longer
+      // worth nothing to a Mage, and general damage is no longer counted twice for Balance and Elemental.
+      var SCHOOLW = { MAGE: { "class": { fire: 1.5, frost: 1.5, arcane: 0.5 }, arcane: { arcane: 2.5, fire: 0.25, frost: 0.25 }, fire: { fire: 3 }, frost: { frost: 3 } },
+        WARLOCK: { "class": { shadow: 2.5, fire: 1 } },
+        PRIEST: { shadow: { shadow: 3 } }, SHAMAN: { elemental: { nature: 2.5, fire: 1 } }, DRUID: { balance: { nature: 2, arcane: 2 } } };
+      out.forEach(function (p) {
+        var sw = (SCHOOLW[CLS] || {})[p.id];
+        if (!sw) return;
+        delete p.w.spellDamage; delete p.w.nature;
+        Object.keys(sw).forEach(function (k) { p.w[k] = sw[k]; });
+      });
+      if (CLS === "HUNTER") out.forEach(function (p) { if (p.w.attackPower) p.w.rangedAttackPower = p.w.attackPower; });
+      // Percent stats in each preset's own units: the wants above rank stats, but 1% crit is worth far more than one
+      // point of Strength. Classic rules of thumb (estimates): 1% melee crit or hit about 15 Attack Power; 1% spell
+      // crit or hit about 10 spell damage; a healer's 1% crit about 5 healing; for a tank 1% dodge or parry about
+      // 10 Stamina, 1% block about 6 (9 for the Reflect tank, whose blocks hurt), one Defense about 1.6 Stamina.
+      out.forEach(function (p) {
+        var w = p.w;
+        if (p.id === "custom") return;
+        var caster = !w.attackPower && !w.strength && !w.agility && (w.spellDamage || w.healing || w.fire || w.frost || w.arcane || w.shadow || w.nature || w.holy);
+        if (w.attackPower) { w.crit = Math.round(15 * w.attackPower); w.hit = Math.round(15 * w.attackPower); }
+        else if (caster && w.healing) { if (w.crit) { w.crit = w.spellCrit = Math.round(5 * w.healing); } }
+        else if (caster) {
+          var sp = (w.spellDamage || 0) + (w.fire || 0) + (w.frost || 0) + (w.arcane || 0) + (w.shadow || 0) + (w.nature || 0) + (w.holy || 0);
+          if (w.crit) { w.crit = w.spellCrit = Math.round(10 * sp); w.hit = w.spellHit = Math.round(10 * sp); } // plain crit and hit stay: Forever items state them generically
+        }
+        if (w.dodge || w.parry) { var st = w.stamina || 3; w.dodge = w.parry = Math.round(10 * st); if (w.blockChance) w.blockChance = Math.round(6 * st * (p.id === "reflect" ? 1.5 : 1)); w.defense = r2(1.6 * st); }
+      });
+      out.push({ id: "custom", label: "Custom", w: custom() || {} });
       return out;
     }
     var SPEC = "";
+    // The weights choice is kept per class and spec: a Holy Priest's pick does not follow you to a Paladin, and a
+    // Protection Warrior's does not stick when you switch to Fury.
+    function pkey() { return CLS + "/" + (SPEC || ""); }
     function currentPreset() {
-      var ps = presets(), want = PF.preset, p = ps.filter(function (x) { return x.id === want; })[0];
+      var map = PF.preset || {};
+      if (map["*"] && CLS && !map[pkey()]) { // a choice saved before choices were per class
+        var id0 = map["*"], ok = presets().some(function (x) { return x.id === id0; }) && (id0 !== "custom" || legacyFits());
+        if (ok) { map[pkey()] = id0; delete map["*"]; if (id0 === "custom") claimLegacy(); savePF(); }
+      }
+      var want = map[pkey()] || "";
+      var ps = presets(), p = ps.filter(function (x) { return x.id === want; })[0];
       if (!p && SPEC) p = ps.filter(function (x) { return SPEC.indexOf(x.label) === 0; })[0];
       return p || ps[0];
     }
-    function score(it, w) { // a bow's or thrown weapon's procs only count for Hunters, who shoot all fight
-      var s = 0; Object.keys(w).forEach(function (k) { if (w[k] && !(k === "procDps" && RANGED[it.slot] && CLS !== "HUNTER")) s += w[k] * statVal(it, k); }); return s; }
+    function score(it, w, slotKey) {
+      var s = 0;
+      Object.keys(w).forEach(function (k) {
+        if (!w[k]) return;
+        var f = 1;
+        if (RANGED[it.slot] && CLS !== "HUNTER" && (k === "procDps" || (k === "dps" && it.type !== "Wand"))) return; // a bow's damage: Hunters only
+        if (k === "dps" && CLS === "HUNTER" && !RANGED[it.slot]) f = 0.2;                   // a Hunter's melee weapon matters little
+        if (k === "dps" && slotKey === "offhand") f *= 0.5;                                 // the off hand hits for half
+        s += w[k] * statVal(it, k) * f;
+      });
+      return s;
+    }
     function pickSet(name, v) {
       var reset = true;
       if (name === "at" || name === "fx") { var arr = PF[name], i = arr.indexOf(v); if (i === -1) arr.push(v); else arr.splice(i, 1); }
@@ -1156,15 +1264,24 @@
       else if (name === "more") { PF.shown += 60; reset = false; }
       else if (name === "moreopen") { PF.more = !PF.more; reset = false; }
       else if (name === "q") PF.q = String(v || "");
-      else if (name === "reset") { Object.keys(PF_DEF).forEach(function (k) { PF[k] = Array.isArray(PF_DEF[k]) ? [] : PF_DEF[k]; }); PF.q = ""; }
+      else if (name === "reset") { Object.keys(PF_DEF).forEach(function (k) { PF[k] = Array.isArray(PF_DEF[k]) ? [] : PF_DEF[k] && typeof PF_DEF[k] === "object" ? {} : PF_DEF[k]; }); PF.q = ""; }
       else if (name.indexOf("w:") === 0) {
-        CUSTOM = CUSTOM || {};
+        if (!CLS) return;
+        if ((PF.preset || {})[pkey()] === "custom") claimLegacy();
+        var C = custom() || (CW[pkey()] = {});
         var n = parseFloat(v);
-        if (isFinite(n) && n) CUSTOM[name.slice(2)] = n; else delete CUSTOM[name.slice(2)];
-        lsSet("forge-weights", CUSTOM); PF.preset = "custom";
+        if (isFinite(n) && n) C[name.slice(2)] = n; else delete C[name.slice(2)];
+        lsSet("forge-weights", CW); PF.preset[pkey()] = "custom";
       } else if (name === "preset") {
-        PF.preset = v;
-        if (v === "custom" && !CUSTOM) { CUSTOM = {}; var cp = presets().filter(function (x) { return x.id !== "custom"; })[0]; if (cp) Object.keys(cp.w).forEach(function (k) { CUSTOM[k] = cp.w[k]; }); lsSet("forge-weights", CUSTOM); }
+        // Custom starts from the weights you were looking at, not the class's first preset
+        if (!CLS) return;
+        if (v === "custom" && !custom()) {
+          var cp = currentPreset(), L = CW._legacy;
+          // the old single Custom set goes to a class it fits (shares most of its stats), else Custom starts from what is on screen
+          if (L && cp && Object.keys(L).filter(function (k) { return k in cp.w; }).length * 2 > Object.keys(L).length) claimLegacy();
+          else { var C2 = CW[pkey()] = {}; if (cp && cp.id !== "custom") Object.keys(cp.w).forEach(function (k) { C2[k] = cp.w[k]; }); lsSet("forge-weights", CW); }
+        }
+        PF.preset[pkey()] = v;
       }
       else if (PF_DEF.hasOwnProperty(name)) PF[name] = String(v == null ? "" : v);
       if (reset) PF.shown = 60;
@@ -1181,19 +1298,38 @@
       var acc = ACCEPT[slotKey] || [], clsName = CLS ? CLS.charAt(0) + CLS.slice(1).toLowerCase() : "";
       // Proficiency follows the level you browse at: every level means level 60 rules (plate for a paladin).
       var profLvl = PF.upto ? LEVEL : 60;
+      function ugroup(it) { var m = typeof it.unique === "string" && /^Unique-Equipped: (.+) \((\d+)\)$/.exec(it.unique); return m ? [m[1], +m[2]] : null; }
+      var E1 = eq(), wornIds = {}, wornGrp = {};
+      SLOT_KEYS.forEach(function (k) { // what the other slots hold; the slot being changed may swap freely
+        if (k === slotKey) return;
+        var w = byId[E1[k]];
+        if (!w) return;
+        wornIds[w.id] = 1;
+        var g = ugroup(w); if (g) wornGrp[g[0]] = (wornGrp[g[0]] || 0) + 1;
+      });
       var pool = items.filter(function (it) {
         if (acc.indexOf(it.slot) === -1) return false;
         if (!PF.any && CLS && !canUse(CLS, it, profLvl)) return false;
         if (!PF.any && it.cls && clsName && it.cls.indexOf(clsName) === -1) return false;
+        // only Warriors, Rogues and Hunters hold a weapon in the off hand (Forever's books give Dual Wield to those three)
+        if (!PF.any && CLS && slotKey === "offhand" && it.cat === "weapon" && !DUAL[CLS]) return false;
+        if (it.unique && wornIds[it.id]) return false;                                  // a unique item already worn
+        var ug = ugroup(it); if (ug && (wornGrp[ug[0]] || 0) >= ug[1]) return false;    // its Unique-Equipped group is full
         return true;
       });
       var P = currentPreset(), W = P.w, sortKey = PF.sort || "score";
+      // Sort and quality are kept across slots; where this slot has none of that stat or quality they step aside
+      // (Weapon DPS picked on Main Hand must not empty the Head list), and the picker says so.
+      var stepped = [];
+      var QF = PF.qual && pool.some(function (it) { return it.quality === PF.qual; }) ? PF.qual : "";
+      if (PF.qual && !QF) stepped.push(PF.qual + " quality");
       var ql = PF.q.toLowerCase().split(/\s+/).filter(Boolean);
       var rlo = +PF.rlo || 0, rhi = +PF.rhi || 0, ilo = +PF.ilo || 0, ihi = +PF.ihi || 0;
       var hasArmor = pool.some(function (it) { return armorType(it); });
       // Armor pills are saved across slots; only the types this slot can hold filter it (Shield for the off hand).
-      var ARM = slotKey === "offhand" ? ["Shield"] : ["Cloth", "Leather", "Mail", "Plate"];
-      var AT = PF.at.filter(function (a) { return ARM.indexOf(a) !== -1; });
+      var ARM = slotKey === "offhand" ? ["Shield"] : /^(head|shoulder|chest|wrist|hands|waist|legs|feet)$/.test(slotKey) ? ["Cloth", "Leather", "Mail", "Plate"] : [];
+      hasArmor = hasArmor && ARM.length > 0;
+      var AT = hasArmor ? PF.at.filter(function (a) { return ARM.indexOf(a) !== -1; }) : [];
       var list = pool.filter(function (it) {
         var er = effReq(it).lvl;
         if (PF.upto && er > LEVEL) return false;
@@ -1201,7 +1337,7 @@
         if (rhi && er > rhi) return false;
         if (ilo && (+it.itemLevel || 0) < ilo) return false;
         if (ihi && (+it.itemLevel || 0) > ihi) return false;
-        if (PF.qual && it.quality !== PF.qual) return false;
+        if (QF && it.quality !== QF) return false;
         if (PF.nw && !(it.nw || it.ft === "new")) return false;
         // Classic items Forever has not shown yet: only the ones a Forever loot record lists, unless asked for
         if (it.est === "classic" && !PF.cl && !hasSource(it)) return false;
@@ -1210,21 +1346,43 @@
         if (AT.length && AT.indexOf(armorType(it)) === -1) return false; // weapons and held items have no armor type: a pill shows armor only
         if (PF.ms) {
           var s = istats(it), m = mainStat(it);
-          if (PF.ms === "sta") { if (m || !s.stamina) return false; }
-          else if (PF.ms === "spirit") { if (!s.spirit || s.spirit < Math.max(s.strength || 0, s.agility || 0, s.intellect || 0)) return false; }
-          else if (m !== PF.ms) return false;
+          var top = Math.max(s.strength || 0, s.agility || 0, s.intellect || 0);
+          if (PF.ms === "sta") { if (m || !s.stamina || (s.spirit || 0) > s.stamina) return false; }
+          else if (PF.ms === "spirit") { if (!s.spirit || s.spirit < top) return false; }
+          else if (!s[PF.ms] || s[PF.ms] < top) return false; // +3 Str +3 Agi is a Strength and an Agility item
         }
         if (PF.stat && statVal(it, PF.stat) <= 0) return false;
         if (PF.fx.length && !PF.fx.some(function (k) { return hasFx(it, k); })) return false;
-        // sorting by a stat lists the items that have it, best first
-        if (sortKey !== "score" && sortKey !== "ilvl" && sortKey !== "req" && statVal(it, sortKey) <= 0) return false;
         if (ql.length) {
-          var hay = (it.name + " " + (it.type || "") + " " + (it.source || "") + " " + (it.effects || []).join(" ") + " " + (it.setName || "") + " " +
+          var hay = (it.name + " " + (it.type || "") + " " + (PROVENANCE.test(it.source || "") ? "" : it.source || "") + " " + (it.effects || []).join(" ") + " " + (it.setName || "") + " " +
             (it.drops || []).map(function (d) { return d[1] + " " + d[0]; }).join(" ") + " " + (it.quests || []).map(function (q) { return q[0] + " " + q[1]; }).join(" ")).toLowerCase();
           for (var i = 0; i < ql.length; i++) if (hay.indexOf(ql[i]) === -1) return false;
         }
         return true;
-      }).map(function (it) { return { it: it, sc: score(it, W) }; });
+      });
+      // Sorting by a stat lists the items that have it, best first. A sort kept from another slot whose stat nothing
+      // here has (after every other filter) steps aside instead of emptying the list.
+      if (sortKey !== "score" && sortKey !== "ilvl" && sortKey !== "req") {
+        var withStat = list.filter(function (it) { return statVal(it, sortKey) > 0; });
+        if (withStat.length || !list.length) list = withStat;
+        else { stepped.push((STATBY[sortKey] || [0, sortKey])[1] + " sort"); sortKey = "score"; }
+      }
+      // A two-hander also takes the off hand: in Main Hand it is charged the score of what the off hand holds, or of the
+      // best off-hand item for you (a shield for a shield tank), so tanks see one-handers first.
+      var ohCharge = 0;
+      if (slotKey === "mainhand") {
+        var ohIt = byId[eq().offhand];
+        if (ohIt && ohIt.slot !== "two-hand") ohCharge = score(ohIt, W, "offhand");
+        else items.forEach(function (it) { // the best of what the Off Hand picker would offer you
+          if (ACCEPT.offhand.indexOf(it.slot) === -1 || (CLS && !canUse(CLS, it, profLvl))) return;
+          if (it.cls && clsName && it.cls.indexOf(clsName) === -1) return;
+          if (CLS && it.cat === "weapon" && !DUAL[CLS]) return;
+          if (it.est === "classic" && !PF.cl && !hasSource(it)) return;
+          if (PF.upto && effReq(it).lvl > LEVEL) return;
+          ohCharge = Math.max(ohCharge, score(it, W, "offhand"));
+        });
+      }
+      list = list.map(function (it) { return { it: it, sc: score(it, W, slotKey) - (it.slot === "two-hand" ? ohCharge : 0), oh: it.slot === "two-hand" && ohCharge > 0 }; });
       function key(x) {
         if (sortKey === "score") return x.sc;
         if (sortKey === "ilvl") return +x.it.itemLevel || 0;
@@ -1251,7 +1409,7 @@
           '<span class="gp-ic q-' + esc(it.quality || "common") + '">' + img(it.icon) + "</span>" +
           '<span class="gp-t"><b class="q-' + esc(it.quality || "common") + '">' + esc(it.name) + (it.est === "classic" ? ' <i class="gp-est">Classic stats</i>' : "") + "</b><em>" + esc(meta) + "</em></span>" +
           '<span class="gp-s">' + (ch.length ? ch.map(function (c) { return "<i" + (c[2] ? ' class="hl"' : "") + ">" + esc(c[1]) + "</i>"; }).join("") : "<i>" + esc(((it.effects || [])[0] || "").slice(0, 60)) + "</i>") + "</span>" +
-          '<span class="gp-sc" title="Weighted score (' + esc(P.label) + ')">' + (x.sc ? Math.round(x.sc) : "–") + "</span>" +
+          '<span class="gp-sc" title="Weighted score (' + esc(P.label) + ")" + (x.oh ? ", minus the off-hand item it replaces" : "") + '">' + (x.sc ? Math.round(x.sc) : "–") + "</span>" +
           '<span class="gp-src ' + (known ? "k-known" : "k-est") + '" title="' + attr(srcTip) + '">' + (known ? (it.drops && it.drops.length ? "Drop" : "Quest") : "Est.") + "</span></button>";
       }).join("");
       var left = list.length - shownList.length;
@@ -1260,6 +1418,7 @@
         }).join("") + "</div>" : '<p class="gp-wtxt">' + esc(P.label) + " weights: " + esc(Object.keys(W).filter(function (k) { return W[k]; }).map(function (k) { return (STATBY[k] ? STATBY[k][1] : k) + " " + W[k]; }).join(", ")) + ". Pick Custom to set your own.</p>";
       return '<div class="gpick"><div class="gp-top">' + img(def[2], "gp-slotic") + "<b>" + esc(def[1]) + '</b><span class="gp-n">' + list.length + " of " + pool.length + (PF.any ? " items, any class" : " for your class") + (PF.upto ? ", up to level " + LEVEL : ", every level") + "</span>" +
         '<button type="button" class="gp-x" data-gpx="1" aria-label="Close">&times;</button></div>' +
+        (stepped.length ? '<p class="gp-note">Not used in this slot: ' + esc(stepped.join(", ")) + ". It applies again where it fits.</p>" : "") +
         '<div class="gp-bar"><input type="search" data-pfi="q" placeholder="Search name, effect, dungeon, boss" value="' + esc(PF.q) + '" aria-label="Search items">' +
           '<div class="gp-line">' +
             (hasArmor ? '<span class="gp-grp" role="group" aria-label="Armor type">' + ARM.map(function (a) { return pill("at", a, a, PF.at.indexOf(a) !== -1); }).join("") + "</span>" : "") +

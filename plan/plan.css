@@ -798,6 +798,7 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 .gp-foot { align-items: center; gap: .6rem; justify-content: space-between; }
 .gp-legend { font-size: .64rem; color: var(--subtle); line-height: 1.5; }
 .gp-legend .gp-src { display: inline-block; margin: 0 .2rem; }
+.gp-note { margin: .1rem 0 .4rem; font-size: .72rem; color: var(--subtle, #9fb0bb); }
 .it-warn { display: block; color: #ff8a65 !important; margin-top: .3rem; font-size: .74rem !important; }
 .itemtip .it-est, .tsheet .it-est { color: #ffb84d !important; }
 @media (max-width: 640px) {
