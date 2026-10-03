@@ -220,7 +220,7 @@ local function chatOpen()
   return active and active() and chatFn("InsertLink", "ChatEdit_InsertLink") and true or false
 end
 
-function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
+function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
   tip:AddLine(q.name, GOLD[1], GOLD[2], GOLD[3])
   local cat = q.cat and q.cat.name or ""
   tip:AddDoubleLine(string.format("Level %d, needs %d", q.lvl, q.req or 1), cat, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8)
@@ -341,6 +341,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
     shift = QB:IsAdded(q.id) and "Shift-click: take it off your pick-up list" or "Shift-click: put it on your pick-up list"
   end
   if chatOpen() then shift = "Shift-click: link it in chat" end
+  if rewardRow then shift = "Shift-click: link the reward" end -- Find quests' reward rows link the item, not the quest
   tip:AddLine("Click: waypoint.  " .. shift .. ".  Right-click: more.", 0.5, 0.5, 0.5, true)
 end
 
@@ -389,8 +390,8 @@ function UI.RewardLines(tip, q)
     tip:AddLine("Rewards: not known yet. Open the quest in game and QuestBank notes them.", 0.75, 0.75, 1, true)
     return
   end
-  local c, r = rw and rw.c or {}, rw and rw.r or {}
-  if #c + #r == 0 then
+  local c, r, u = rw and rw.c or {}, rw and rw.r or {}, rw and rw.u or {}
+  if #c + #r + #u == 0 then
     tip:AddLine(how == "game" and "No item rewards (as your quest window showed)." or "No item rewards.", 0.6, 0.6, 0.6)
     return
   end
@@ -413,6 +414,10 @@ function UI.RewardLines(tip, q)
   if #c > 0 then
     tip:AddLine(#c > 1 and "Choose one:" or "Reward:", 1, 0.82, 0)
     for i = 1, math.min(#c, 6) do line(c[i]) end
+  end
+  if #u > 0 then
+    tip:AddLine("Rewards include:", 1, 0.82, 0) -- a loot page lists them without saying which are a choice
+    for i = 1, math.min(#u, 6) do line(u[i]) end
   end
   tip:AddLine((how == "game" and "As your quest window showed them. " or "") .. "Right-click the quest to link one in chat.", 0.6, 0.6, 0.6, true)
 end
@@ -691,9 +696,10 @@ function UI.QuestMenu(q, st)
   end
   local rw = Q.Rewards(q)
   if rw then
-    local ids = {}
-    for _, id in ipairs(rw.r or {}) do ids[#ids + 1] = id end
-    for _, id in ipairs(rw.c or {}) do ids[#ids + 1] = id end
+    local ids, seen = {}, {}
+    for _, list in ipairs({ rw.r or {}, rw.c or {}, rw.u or {} }) do
+      for _, id in ipairs(list) do if not seen[id] then seen[id] = true; ids[#ids + 1] = id end end
+    end
     for i = 1, math.min(#ids, 6) do
       local id = ids[i]
       local name = QB.API.ItemInfo(id)
@@ -1334,9 +1340,9 @@ function UI:CreateLogView(parent)
           self.via.cat and self.via.cat.name or "the dungeon", self.add.name), 1, 0.82, 0, true)
         tip:AddLine(" ")
       end
-      if self.add then UI.QuestTooltip(tip, self.add, QB:Status(self.add), self.addValue) end
+      if self.add then UI.QuestTooltip(tip, self.add, QB:Status(self.add), self.addValue, nil, nil, self.rewardId) end
       if self.reward then tip:AddLine(self.reward, 0.75, 0.75, 1, true) end
-      if self.rewardId then tip:AddLine("Hold Shift to see the item; Shift-click links it in chat.", 0.6, 0.6, 0.6, true) end
+      if self.rewardId then tip:AddLine("Hold Shift to see the item. To put the quest on your pick-up list, right-click it.", 0.6, 0.6, 0.6, true) end
     end)
     v.swaps[i] = r
   end

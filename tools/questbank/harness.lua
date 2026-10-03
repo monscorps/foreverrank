@@ -2900,7 +2900,31 @@ do
   lines = {}; row.__scripts.OnEnter(row)
   assert(table.concat(lines, "\n"):find("Hold Shift to see the item", 1, true), "without Shift, the quest tooltip says how")
   Q2.UI.findMode = "xp"; Q2.UI:Refresh()
-  print("rewards:", known, "known,", unk, "learned from the window,", none, "none")
+  -- a loot page's list, split unknown: "Rewards include"
+  local mixed
+  for id, rw in pairs(D2.RITEMS) do if rw.u and Q2.Quest.Get(id) then mixed = id; break end end
+  if mixed then
+    t = tipOf(Q2.Quest.Get(mixed))
+    assert(t:find("Rewards include:", 1, true) and not t:find("Choose one:", 1, true), "an unsplit list is not called a choice: " .. t)
+  end
+  -- no quest lists the same item as given and as a choice
+  for id, rw in pairs(D2.RITEMS) do
+    local inC = {}
+    for _, x in ipairs(rw.c or {}) do inC[x] = true end
+    for _, x in ipairs(rw.r or {}) do assert(not inC[x], "item listed twice for quest " .. id) end
+  end
+  -- a reward row's tooltip says Shift-click links the reward, not the quest
+  Q2.UI:ShowTab(1); Q2.UI.findMode = "gear"; Q2.UI:Refresh()
+  for _, r in ipairs(Q2.UI.views[1].swaps) do
+    if r:IsShown() and r.rewardId then
+      lines = {}; r.__scripts.OnEnter(r)
+      local tt = table.concat(lines, "\n")
+      assert(tt:find("Shift-click: link the reward", 1, true) and not tt:find("Shift-click: put it on your pick-up list", 1, true), "one Shift-click promise: " .. tt)
+      break
+    end
+  end
+  Q2.UI.findMode = "xp"; Q2.UI:Refresh()
+  print("rewards:", known, "known,", unk, "learned from the window,", none, "none,", mixed or "-", "unsplit")
 end
 
 local seen = {}

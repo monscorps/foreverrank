@@ -1343,26 +1343,27 @@ for qid in IDS:
     q = LIST[qid]
     rw = ((DISC.get("q") or {}).get(str(qid)) or {}).get("rw")
     c = r = None
+    u = []
     if isinstance(rw, dict) and (isinstance(rw.get("c"), list) or isinstance(rw.get("r"), list)):
         c = [int(x) for x in rw.get("c") or [] if str(x).isdigit()]
         r = [int(x) for x in rw.get("r") or [] if str(x).isdigit()]
         RSRC["game"] += 1
     elif qid not in DISC_ONLY and ("itemrewards" in q or "itemchoices" in q):
-        r = [x[0] for x in q.get("itemrewards") or [] if isinstance(x, list) and x]
         c = [x[0] for x in q.get("itemchoices") or [] if isinstance(x, list) and x]
+        r = [x[0] for x in q.get("itemrewards") or [] if isinstance(x, list) and x and x[0] not in c]  # Wowhead repeats some
         RSRC["wowhead"] += 1
     else:
         _nm = str(q.get("name") or "").strip().lower()
         if _nm in _LOOT_Q and _NAME_COUNT.get(_nm) == 1:
-            ids = sorted(_LOOT_Q[_nm])
-            c, r = (ids, []) if len(ids) > 1 else ([], ids)
+            u = sorted(_LOOT_Q[_nm])  # the page lists them without saying which are a choice
+            c, r = [], []
             RSRC["loot pages"] += 1
     if c is None:
         RUNK[qid] = True
         RSRC["unknown"] += 1
-    elif c or r:
-        RITEMS[qid] = {"c": c or None, "r": r or None}
-lines.append("-- [id] = { c = { choose one of these }, r = { always given } }; quests in D.RUNK: rewards not known yet")
+    elif c or r or u:
+        RITEMS[qid] = {"c": c or None, "r": r or None, "u": u or None}
+lines.append("-- [id] = { c = { choose one of these }, r = { always given }, u = { given, split unknown } }; quests in D.RUNK: rewards not known yet")
 lines.append("D.RITEMS = " + keyed(RITEMS))
 lines.append("D.RUNK = " + keyed(RUNK))
 lines.append("-- [id] = {{item, how many, name}, ...}: what the quest asks you to bring")
