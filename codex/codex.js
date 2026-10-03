@@ -115,7 +115,7 @@
     var kind = [slotName(it.slot), it.type && it.type !== slotName(it.slot) ? it.type : ""].filter(Boolean).join(" ");
     var g = gist(it);
     return '<button type="button" class="lr q-' + esc(it.quality || "common") + '" data-lid="' + esc(id) + '"><span class="lr-ic">' + img(it.icon) + "</span>" +
-      '<span class="lr-t"><b>' + esc(it.name) + "</b><em>" + esc([kind, g].filter(Boolean).join(" \u00b7 ") || (it.sub && it.sub !== "Other" ? it.sub : "Item")) + "</em></span></button>";
+      '<span class="lr-t"><b>' + esc(it.name) + "</b><em>" + esc([kind, g, it.est === "classic" ? "Classic stats (est.)" : ""].filter(Boolean).join(" \u00b7 ") || (it.sub && it.sub !== "Other" ? it.sub : "Item")) + "</em></span></button>";
   }
   function openLoot(name) {
     var d = LOOT && LOOT.dungeons.filter(function (x) { return x.name === name; })[0];
@@ -133,7 +133,9 @@
     var html = '<div class="cxm-head loot-head"><b id="cxm-title">' + esc(d.name) + "</b>" +
       (d.levels ? '<span class="lvlchip">Levels ' + d.levels[0] + "\u2013" + d.levels[1] + "</span>" : "") + (d.new ? '<span class="lt-new">New in Forever</span>' : "") + "</div>" +
       '<p class="loot-sub">' + [n.bosses + (n.bosses === 1 ? " boss" : " bosses"), n.drops + " drops", n.quests ? n.quests + " quest rewards" : ""].filter(Boolean).join(" \u00b7 ") +
-      ". Recorded by players in the beta, as published by " + esc(d.src.join(" and ")) + ". Bosses and drops can still change.</p>";
+      ". Recorded by players in the beta, as published by " + esc(d.src.join(" and ")) + ". Bosses and drops can still change." +
+      (d.bosses.concat(d.quests || []).some(function (b) { return (b.items || []).some(function (i) { return LOOTITEMS[i] && LOOTITEMS[i].est === "classic"; }); })
+        ? " Items marked Classic stats are on these lists, but nobody has seen their Forever numbers yet: the stats shown are WoW Classic's." : "") + "</p>";
     function here(ids) { return ids.filter(function (i) { return !absent(i) && LOOTITEMS[i]; }); }
     function gone(ids) { return ids.filter(absent).map(function (i) { return LOOT.absent[i]; }).filter(Boolean); }
     html += d.bosses.filter(function (b) { return b.items.length; }).map(function (b) {
@@ -166,7 +168,22 @@
     ["soul", "Souls"], ["spell", "Spells"], ["talent", "Talents"], ["racial", "Racials"], ["set", "Item sets"], ["system", "Systems"]];
   var SUBFIRST = ["Cloth", "Leather", "Mail", "Plate", "Shield", "Neck", "Ring", "Trinket", "Cloak", "Alchemy", "Cooking", "First Aid", "Zone", "Dungeon", "Raid", "Battleground"];
   var QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary"];
-  var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "", era: false, stat: "", src: "" }, SHOWN = 60;
+  var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "", era: false, cl: false, stat: "", src: "", at: [], ms: "", rf: false, sort: "" }, SHOWN = 60;
+  // Classic items Forever has not shown yet (est "classic"): listed only when a Forever loot record names them, unless asked for
+  function unseenClassic(it) { return it && it.est === "classic" && !((it.drops && it.drops.length) || (it.quests && it.quests.length)); }
+  // Item helpers shared with The Forge (plan/gear.js); pages that do not load it get plain fallbacks.
+  var FI = window.ForgeItem || null;
+  function fiVal(it, k) { return FI ? FI.statVal(it, k) : (+((it && it.stats) || {})[k] || 0); }
+  function effLvl(it) { return FI ? FI.effReq(it) : { lvl: +it.reqLevel || 0, est: false }; }
+  var ARMORS = ["Cloth", "Leather", "Mail", "Plate", "Shield"];
+  var MAINS = [["strength", "Strength"], ["agility", "Agility"], ["intellect", "Intellect"], ["sta", "Stamina only"], ["spirit", "Spirit"]];
+  function mainOK(it, ms) {
+    var st = (FI ? FI.istats(it) : it.stats) || {}, m = FI ? FI.mainStat(it) : "";
+    if (ms === "sta") return !m && !!st.stamina;
+    if (ms === "spirit") return !!st.spirit && st.spirit >= Math.max(st.strength || 0, st.agility || 0, st.intellect || 0);
+    return m === ms;
+  }
+  function hasRf(it) { return !!(FI && FI.reflect(it).length); }
   function sv(s, k) { return s[k] || 0; }
   function schoolMax(s) { return Math.max(sv(s, "fireSpellDamage"), sv(s, "frostSpellDamage"), sv(s, "natureSpellDamage"), sv(s, "shadowSpellDamage"), sv(s, "arcaneSpellDamage"), sv(s, "holySpellDamage")); }
   // What people search gear by. Spell damage counts damage-and-healing and
@@ -179,13 +196,21 @@
     ["attackPower", "Attack power", " attack power", function (s) { return sv(s, "attackPower") + sv(s, "rangedAttackPower"); }],
     ["crit", "Crit", "% crit"], ["hit", "Hit", "% hit"], ["spellCrit", "Spell crit", "% spell crit"], ["spellHit", "Spell hit", "% spell hit"],
     ["mp5", "Mana per 5 sec", " mp5"], ["defense", "Defense", " defense"], ["dodge", "Dodge", "% dodge"],
+    ["parry", "Parry", "% parry", function (s, it) { return fiVal(it, "parry"); }],
+    ["blockChance", "Block chance", "% block", function (s, it) { return fiVal(it, "blockChance"); }],
+    ["blockValue", "Block value", " block value", function (s, it) { return fiVal(it, "blockValue"); }],
+    ["armor", "Armor", " armor", function (s, it) { return fiVal(it, "armor"); }],
+    ["reflectHit", "Reflect per hit", " reflect per hit", function (s, it) { return FI ? FI.rfHit(it) : 0; }],
+    ["reflectBlock", "Reflect per block", " reflect per block", function (s, it) { return FI ? FI.rfBlock(it) : 0; }],
+    ["spellPiercing", "Spell penetration", " spell penetration", function (s, it) { return fiVal(it, "spellPiercing"); }],
     ["resist", "Resistance", " resistance", function (s) { return Math.max(sv(s, "fireResist"), sv(s, "frostResist"), sv(s, "natureResist"), sv(s, "shadowResist"), sv(s, "arcaneResist")) + sv(s, "allResist"); }]
   ];
   var STATBY = {};
   STATF.forEach(function (f) { STATBY[f[0]] = f; });
   function statOf(it, key) {
     var f = STATBY[key], s = (it && it.stats) || {};
-    return f ? (f[3] ? f[3](s) : sv(s, f[0])) : 0;
+    var v = f ? (f[3] ? f[3](s, it) : sv(s, f[0])) : 0;
+    return Math.round(v * 100) / 100;
   }
   var STATWORDS = { spellPower: "spell power spell damage spelldmg healing", spellDamage: "spell damage spelldmg", healing: "healing", attackPower: "attack power ap",
     mp5: "mp5 mana regen regeneration", crit: "crit", hit: "hit", spellCrit: "spell crit", spellHit: "spell hit", defense: "defense", dodge: "dodge",
@@ -282,11 +307,13 @@
   }
   function buildIndex(d, items) {
     (items || []).forEach(function (it) {
-      var meta = [it.era === "sod" ? "SoD-era data" : it.era === "retail" ? "Retail-era data" : "", it.ft === "new" ? "New" : it.ft === "changed" ? "Changed" : "", it.sub, slotName(it.slot), it.reqLevel ? "Level " + it.reqLevel : "", it.sk ? it.sk[0] + (it.sk[1] ? " " + it.sk[1] : "") : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+      var er = effLvl(it), wearable = !!slotName(it.slot);
+      var lvlTxt = er.est && wearable ? "Level ~" + er.lvl + " (est.)" : it.reqLevel ? "Level " + it.reqLevel : "";
+      var meta = [it.era === "sod" ? "SoD-era data" : it.era === "retail" ? "Retail-era data" : "", it.ft === "new" ? "New" : it.ft === "changed" ? "Changed" : "", it.est === "classic" ? "Classic stats (est.)" : "", it.sub, slotName(it.slot), lvlTxt, it.sk ? it.sk[0] + (it.sk[1] ? " " + it.sk[1] : "") : ""].filter(function (x, i, a) { return x && a.indexOf(x) === i; });
       var st = it.stats || {}, words = Object.keys(st).map(function (k) { return STATWORDS[k] || (/SpellDamage$/.test(k) ? "spell damage spelldmg " + k.replace("SpellDamage", "") : k); });
       var from = (it.drops || []).map(function (d) { return d[1] + " " + d[0]; }).concat((it.quests || []).map(function (q) { return q[0] + " " + q[1] + " quest"; }));
       IDX.push({ kind: "item", cat: it.cat || "misc", sub: it.sub || "Other", name: it.name, icon: it.icon, q: it.quality || "unknown", it: it, meta: meta.join(" \u00b7 "),
-        side: it.drops ? it.drops[0][1] + " \u00b7 " + it.drops[0][0] : it.quests ? "Quest: " + it.quests[0][0] : it.source,
+        side: it.drops ? it.drops[0][1] + " \u00b7 " + it.drops[0][0] : it.quests ? "Quest: " + it.quests[0][0] : it.source, wear: wearable,
         text: [it.name, it.sub, it.type, slotName(it.slot), it.source, it.setName, (it.effects || []).join(" "), words.join(" "), from.join(" ")].join(" ").toLowerCase() });
     });
     var w = d.world;
@@ -317,6 +344,9 @@
       if (SQ.sub && e.sub !== SQ.sub) return false;
       if (SQ.qual && e.q !== SQ.qual) return false;
       if (SQ.stat && (e.kind !== "item" || statOf(e.it, SQ.stat) <= 0)) return false;
+      if (SQ.at.length && (e.kind !== "item" || !FI || SQ.at.indexOf(FI.armorType(e.it)) === -1)) return false;
+      if (SQ.ms && (e.kind !== "item" || !mainOK(e.it, SQ.ms))) return false;
+      if (SQ.rf && (e.kind !== "item" || !hasRf(e.it))) return false;
       if (SQ.src) {
         if (e.kind !== "item") return false;
         var dr = e.it.drops || [], qs = e.it.quests || [];
@@ -326,13 +356,19 @@
         else if (!dr.some(function (d) { return d[0] === SQ.src; }) && !qs.some(function (q) { return q[1] === SQ.src; })) return false;
       }
       if (((e.kind === "item" && e.it.era) || e.era) && !SQ.era) return false;
+      if (e.kind === "item" && unseenClassic(e.it) && !SQ.cl) return false;
       if (SQ.prof) {
         if (e.kind !== "item") return false;
         if (!e.it.sk || e.it.sk[0] !== SQ.prof) return false;
         if (SQ.sk && e.it.sk[1] > +SQ.sk) return false;
       }
       if (SQ.lvl) {
-        if (e.kind === "item") { if (!e.it.reqLevel || e.it.reqLevel > +SQ.lvl) return false; }
+        // Items with no stored requirement use the estimate from item level (Classic: item level - 5).
+        if (e.kind === "item") {
+          // gear without a required level gets one estimated from its item level; everything else without one is left out, as before
+          var el = slotName(e.it.slot) ? effLvl(e.it).lvl : (+e.it.reqLevel || 0);
+          if (!el || el > +SQ.lvl) return false;
+        }
         else if (typeof e.lvlKey === "number") { if (e.lvlKey > +SQ.lvl) return false; }
         else return false;
       }
@@ -349,6 +385,11 @@
     }).sort(function (a, b) {
       var ql = SQ.q.toLowerCase(), as = ql && a.name.toLowerCase().indexOf(ql) === 0 ? 0 : 1, bs = ql && b.name.toLowerCase().indexOf(ql) === 0 ? 0 : 1;
       if (as !== bs) return as - bs;
+      if (SQ.sort && a.kind === "item" && b.kind === "item") {
+        var sa = SQ.sort === "ilvl" ? +a.it.itemLevel || 0 : SQ.sort === "req" ? effLvl(a.it).lvl : statOf(a.it, SQ.sort);
+        var sb = SQ.sort === "ilvl" ? +b.it.itemLevel || 0 : SQ.sort === "req" ? effLvl(b.it).lvl : statOf(b.it, SQ.sort);
+        if (sa !== sb) return sb - sa;
+      } else if (SQ.sort && (a.kind === "item") !== (b.kind === "item")) return a.kind === "item" ? -1 : 1;
       if (SQ.stat) {
         var av = statOf(a.it, SQ.stat), bv = statOf(b.it, SQ.stat);
         if (av !== bv) return bv - av;
@@ -356,7 +397,7 @@
       if (SQ.lvl) {
         // A level cap is set: gear nearest the cap first, so the filter is
         // visibly doing its job instead of re-showing the same level 1 epics.
-        var al = (a.it && a.it.reqLevel) || a.lvlKey || 0, bl = (b.it && b.it.reqLevel) || b.lvlKey || 0;
+        var al = (a.it && effLvl(a.it).lvl) || a.lvlKey || 0, bl = (b.it && effLvl(b.it).lvl) || b.lvlKey || 0;
         if (al !== bl) return bl - al;
       }
       var aq = QUAL.indexOf(a.q), bq = QUAL.indexOf(b.q);
@@ -378,7 +419,7 @@
     var box = document.getElementById("dbs");
     if (!box) return;
     var active = true; // results always show; typing or a chip narrows them
-    function eraOK(e) { return !(((e.kind === "item" && e.it.era) || e.era) && !SQ.era); }
+    function eraOK(e) { return !(((e.kind === "item" && e.it.era) || e.era) && !SQ.era) && !(e.kind === "item" && unseenClassic(e.it) && !SQ.cl); }
     var pool = IDX.filter(function (e) { return eraOK(e) && (SQ.cat === "all" || e.cat === SQ.cat); });
     var subs = [];
     pool.forEach(function (e) { if (SQ.cat !== "all" && subs.indexOf(e.sub) === -1) subs.push(e.sub); });
@@ -399,6 +440,7 @@
     if (window.TipKit) TipKit.hide();
     var out = document.getElementById("dbs-out"), res = active ? matches() : [];
     document.getElementById("dbs-n").textContent = active ? res.length + (res.length === 1 ? " result" : " results") + (SQ.lvl ? " usable at " + SQ.lvl : "") : IDX.length + " entries";
+    document.getElementById("dbs-n").title = SQ.lvl ? "Items the client stores no required level for use item level - 5; their rows say \"Level ~N (est.)\"." : "";
     fillSources();
     out.hidden = !active;
     if (!active) return;
@@ -408,7 +450,7 @@
       return '<button type="button" class="dbs-row' + (e.kind === "item" ? " q-" + esc(e.q) : "") + '" data-dbi="' + i + '"' + (e.kind === "item" ? ' data-tipkit="1"' : hasSbt ? ' data-sbt="1"' : "") + ">" +
         '<span class="dbs-ic">' + img(e.icon || "inv_misc_questionmark") + "</span>" +
         '<span class="dbs-t"><b>' + esc(e.name) + "</b><em>" + (SQ.stat && e.kind === "item" ? '<i class="dbs-sv">+' + statOf(e.it, SQ.stat) + esc(STATBY[SQ.stat][2]) + "</i> " : "") + esc(e.meta) + "</em></span>" +
-        '<span class="dbs-s">' + esc(e.kind === "item" ? e.side : (e.side || { place: "The new world", perk: "The Legacy system", spell: "Spells", system: "Systems" }[e.cat] || "")) + "</span></button>";
+        '<span class="dbs-s' + (e.kind === "item" && isEst(e) ? " dbs-est" : "") + '">' + esc(e.kind === "item" ? sideOf(e) : (e.side || { place: "The new world", perk: "The Legacy system", spell: "Spells", system: "Systems" }[e.cat] || "")) + "</span></button>";
     }).join("") + (res.length > SHOWN ? '<button type="button" class="dbs-more" data-dbmore="1">Show all ' + res.length + "</button>" : "")
       : '<p class="dbs-none">Nothing matches yet. Forever has shown only so much; the beta adds the rest.</p>';
     if (window.TipKit && GK) out.querySelectorAll(".dbs-row[data-tipkit]").forEach(function (row) {
@@ -418,10 +460,17 @@
       TipKit.hover(row, function (el) { return sbTip(IDX[+el.getAttribute("data-dbi")]); }, function () { return "itemtip"; });
     });
   }
+  function isEst(e) { return !!(FI && e.wear && !FI.hasSource(e.it)); }
+  function sideOf(e) {
+    if (isEst(e)) return FI.estimateSource(e.it, LOOT && LOOT.dungeons) || e.side;
+    return e.side;
+  }
   function syncUrl() {
     try {
       var u = new URL(location.href);
-      ["q", "cat", "sub", "qual", "lvl", "stat", "src"].forEach(function (k) { var v = k === "q" ? SQ.q.trim() : SQ[k]; if (v && v !== "all") u.searchParams.set(k, v); else u.searchParams.delete(k); });
+      ["q", "cat", "sub", "qual", "lvl", "stat", "src", "cls", "prof", "sk", "ms", "sort"].forEach(function (k) { var v = k === "q" ? SQ.q.trim() : SQ[k]; if (v && v !== "all") u.searchParams.set(k, v); else u.searchParams.delete(k); });
+      if (SQ.at.length) u.searchParams.set("at", SQ.at.join(",")); else u.searchParams.delete("at");
+      ["era", "rf", "cl"].forEach(function (k) { if (SQ[k]) u.searchParams.set(k, "1"); else u.searchParams.delete(k); });
       history.replaceState(null, "", u.pathname + u.search + u.hash);
     } catch (e) {}
   }
@@ -435,45 +484,76 @@
       '<select id="dbf-prof" aria-label="Profession"><option value="">Any profession</option>' + PROFS.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
       '<input type="number" id="dbf-sk" min="1" max="300" placeholder="Skill" aria-label="Maximum profession skill">' +
       '<select id="dbf-stat" aria-label="Stat"><option value="">Any stat</option>' + STATF.map(function (f) { return '<option value="' + f[0] + '">' + f[1] + "</option>"; }).join("") + "</select>" +
+      '<select id="dbf-ms" aria-label="Main stat"><option value="">Any main stat</option>' + MAINS.map(function (m) { return '<option value="' + m[0] + '">' + m[1] + (m[0] === "sta" || m[0] === "spirit" ? "" : " main stat") + "</option>"; }).join("") + "</select>" +
+      '<select id="dbf-sort" aria-label="Sort items by"><option value="">Sort: best match</option><option value="ilvl">Sort: item level</option><option value="req">Sort: required level</option>' + STATF.map(function (f) { return '<option value="' + f[0] + '">Sort: ' + f[1].toLowerCase() + "</option>"; }).join("") + "</select>" +
+      '<span class="dbf-at" role="group" aria-label="Armor type">' + ARMORS.map(function (a) { return '<button type="button" data-dbat="' + a + '" aria-pressed="false">' + a + "</button>"; }).join("") + "</span>" +
+      '<button type="button" id="dbf-rf" aria-pressed="false" data-tip="Items that hurt whoever hits you: thorns, damage on block, shield spikes. Read from the item data, or its tooltip text.">Reflect</button>' +
       '<select id="dbf-src" aria-label="Where it comes from"><option value="">Any source</option><option value="dungeon">Any dungeon drop</option><option value="quest">Any quest reward</option><option value="ft:new">New in Forever</option><option value="ft:changed">Changed from Classic</option></select>' +
       '<button type="button" id="dbf-era" aria-pressed="false" data-tip="The branch carries Season of Discovery and retail leftovers. Hidden unless you ask; every such row is labeled.">SoD and retail data: hidden</button>' +
+      '<button type="button" id="dbf-cl" aria-pressed="false" data-tip="Items Forever&#39;s data has an id for but nobody has seen in Forever yet, with their WoW Classic stats. Forever may have changed or removed them. The ones a Forever loot record lists are always shown, labeled Classic stats.">Classic items not seen in Forever: hidden</button>' +
       '<button type="button" id="dbf-x" hidden>Clear</button></div>' +
       '<div class="dbs-subs" id="dbs-subs" hidden></div><div class="dbs-out" id="dbs-out" hidden></div>';
     try {
       var sp = new URLSearchParams(location.search);
       SQ.q = sp.get("q") || ""; SQ.cat = sp.get("cat") || "all"; SQ.sub = sp.get("sub") || ""; SQ.qual = sp.get("qual") || "";
       SQ.lvl = sp.get("lvl") || ""; SQ.stat = STATBY[sp.get("stat")] ? sp.get("stat") : ""; SQ.src = sp.get("src") || "";
+      SQ.cls = CLASSES9.indexOf(sp.get("cls")) !== -1 ? sp.get("cls") : ""; SQ.prof = PROFS.indexOf(sp.get("prof")) !== -1 ? sp.get("prof") : ""; SQ.sk = sp.get("sk") || "";
+      SQ.era = sp.get("era") === "1"; SQ.rf = sp.get("rf") === "1"; SQ.cl = sp.get("cl") === "1";
+      SQ.ms = MAINS.some(function (m) { return m[0] === sp.get("ms"); }) ? sp.get("ms") : "";
+      SQ.sort = sp.get("sort") === "ilvl" || sp.get("sort") === "req" || STATBY[sp.get("sort")] ? sp.get("sort") : "";
+      SQ.at = String(sp.get("at") || "").split(",").filter(function (a) { return ARMORS.indexOf(a) !== -1; });
     } catch (e) {}
     var qi = document.getElementById("dbs-qi"), tmr = null;
     function fEl(id) { return document.getElementById(id); }
     function readFilt() {
       SQ.lvl = fEl("dbf-lvl").value; SQ.cls = fEl("dbf-cls").value; SQ.prof = fEl("dbf-prof").value; SQ.sk = fEl("dbf-sk").value;
-      SQ.stat = fEl("dbf-stat").value;
+      SQ.stat = fEl("dbf-stat").value; SQ.ms = fEl("dbf-ms").value; SQ.sort = fEl("dbf-sort").value;
       var srcSel = fEl("dbf-src");
       if (srcSel.getAttribute("data-filled") || srcSel.value || !SQ.src) SQ.src = srcSel.value;
-      fEl("dbf-x").hidden = !(SQ.lvl || SQ.cls || SQ.prof || SQ.sk || SQ.stat || SQ.src);
+      syncFiltUI();
       SHOWN = 60; drawSearch(); syncUrl();
     }
     var ftmr = null;
     ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).addEventListener("input", function () { clearTimeout(ftmr); ftmr = setTimeout(readFilt, 200); }); });
-    ["dbf-cls", "dbf-prof", "dbf-stat", "dbf-src"].forEach(function (id) { fEl(id).addEventListener("change", readFilt); });
-    fEl("dbf-era").addEventListener("click", function () {
-      SQ.era = !SQ.era;
+    ["dbf-cls", "dbf-prof", "dbf-stat", "dbf-src", "dbf-ms", "dbf-sort"].forEach(function (id) { fEl(id).addEventListener("change", readFilt); });
+    // Toggle buttons and the Clear button follow SQ, so a shared link opens with its filters shown.
+    function syncFiltUI() {
       var b = fEl("dbf-era");
       b.textContent = SQ.era ? "SoD and retail data: shown" : "SoD and retail data: hidden";
       b.setAttribute("aria-pressed", String(SQ.era));
       b.classList.toggle("on", SQ.era);
-      SHOWN = 60; drawSearch();
+      var bc = fEl("dbf-cl");
+      if (bc) {
+        bc.textContent = SQ.cl ? "Classic items not seen in Forever: shown" : "Classic items not seen in Forever: hidden";
+        bc.setAttribute("aria-pressed", String(SQ.cl));
+        bc.classList.toggle("on", SQ.cl);
+      }
+      fEl("dbf-rf").classList.toggle("on", SQ.rf); fEl("dbf-rf").setAttribute("aria-pressed", String(SQ.rf));
+      box.querySelectorAll("[data-dbat]").forEach(function (x) { var on = SQ.at.indexOf(x.getAttribute("data-dbat")) !== -1; x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
+      fEl("dbf-x").hidden = !(SQ.lvl || SQ.cls || SQ.prof || SQ.sk || SQ.stat || SQ.src || SQ.ms || SQ.sort || SQ.at.length || SQ.rf);
+    }
+    fEl("dbf-era").addEventListener("click", function () { SQ.era = !SQ.era; syncFiltUI(); SHOWN = 60; drawSearch(); syncUrl(); });
+    fEl("dbf-cl").addEventListener("click", function () { SQ.cl = !SQ.cl; syncFiltUI(); SHOWN = 60; drawSearch(); syncUrl(); });
+    fEl("dbf-rf").addEventListener("click", function () { SQ.rf = !SQ.rf; syncFiltUI(); SHOWN = 60; drawSearch(); syncUrl(); });
+    box.querySelectorAll("[data-dbat]").forEach(function (x) {
+      x.addEventListener("click", function () {
+        var a = x.getAttribute("data-dbat"), i = SQ.at.indexOf(a);
+        if (i === -1) SQ.at.push(a); else SQ.at.splice(i, 1);
+        syncFiltUI(); SHOWN = 60; drawSearch(); syncUrl();
+      });
     });
     fEl("dbf-x").addEventListener("click", function () {
       ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).value = ""; });
-      ["dbf-cls", "dbf-prof", "dbf-stat", "dbf-src"].forEach(function (id) { fEl(id).value = ""; });
+      ["dbf-cls", "dbf-prof", "dbf-stat", "dbf-src", "dbf-ms", "dbf-sort"].forEach(function (id) { fEl(id).value = ""; });
+      SQ.at = []; SQ.rf = false;
       readFilt();
     });
     qi.value = SQ.q;
-    if (SQ.lvl) { fEl("dbf-lvl").value = SQ.lvl; fEl("dbf-x").hidden = false; }
-    if (SQ.stat) { fEl("dbf-stat").value = SQ.stat; fEl("dbf-x").hidden = false; }
-    if (SQ.src) fEl("dbf-x").hidden = false;
+    if (SQ.lvl) fEl("dbf-lvl").value = SQ.lvl;
+    if (SQ.stat) fEl("dbf-stat").value = SQ.stat;
+    fEl("dbf-cls").value = SQ.cls; fEl("dbf-prof").value = SQ.prof; fEl("dbf-sk").value = SQ.sk;
+    fEl("dbf-ms").value = SQ.ms; fEl("dbf-sort").value = SQ.sort;
+    syncFiltUI();
     qi.addEventListener("input", function () {
       clearTimeout(tmr);
       tmr = setTimeout(function () { SQ.q = qi.value; SHOWN = 60; drawSearch(); syncUrl(); }, 120);
@@ -746,7 +826,9 @@
     if (PAGE === "db" || PAGE === "world") fetch("/codex/loot.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (j) {
       if (!j || !j.dungeons) return;
       LOOT = j;
+      if (window.ForgeGear && window.ForgeGear.extras) window.ForgeGear.extras({ dungeons: j.dungeons });
       fillSources();
+      if (document.getElementById("dbs-out")) drawSearch();
       var box = document.getElementById("lootbox");
       if (box) {
         box.innerHTML = lootTiles();

@@ -1,0 +1,83 @@
+{
+ "note": "Enchants and attachments that damage attackers, numbers from the beta client's spell tables (build 1.60.1.70170, tools/apply_reflect.py). v is the average, lo-hi the range; skill is the profession level needed to make it, not to use it.",
+ "enchants": [
+  {
+   "id": "iron-spike",
+   "item": 6042,
+   "name": "Iron Shield Spike",
+   "slot": "offhand",
+   "needs": "Shield",
+   "rf": {
+    "s": "Physical",
+    "v": 10,
+    "sp": 9784,
+    "lo": 8,
+    "hi": 12,
+    "k": "block"
+   },
+   "stats": {},
+   "skill": [
+    "Blacksmithing",
+    150
+   ],
+   "note": "Blacksmithing attachment; damage on each block, client spell 9784. Anyone can attach it to a shield."
+  },
+  {
+   "id": "mithril-spike",
+   "item": 7967,
+   "name": "Mithril Shield Spike",
+   "slot": "offhand",
+   "needs": "Shield",
+   "rf": {
+    "s": "Physical",
+    "v": 18,
+    "sp": 9782,
+    "lo": 16,
+    "hi": 20,
+    "k": "block"
+   },
+   "stats": {},
+   "skill": [
+    "Blacksmithing",
+    215
+   ],
+   "note": "Blacksmithing attachment; damage on each block, client spell 9782. Anyone can attach it to a shield."
+  },
+  {
+   "id": "thorium-spike",
+   "item": 12645,
+   "name": "Thorium Shield Spike",
+   "slot": "offhand",
+   "needs": "Shield",
+   "rf": {
+    "s": "Physical",
+    "v": 25,
+    "sp": 16624,
+    "lo": 20,
+    "hi": 30,
+    "k": "block"
+   },
+   "stats": {},
+   "skill": [
+    "Blacksmithing",
+    250
+   ],
+   "note": "Blacksmithing attachment; damage on each block, client spell 16624. Anyone can attach it to a shield."
+  },
+  {
+   "id": "retricutioner",
+   "item": 273591,
+   "name": "Enchant Chest - Retricutioner",
+   "slot": "chest",
+   "rf": {
+    "s": "Physical",
+    "v": 9,
+    "sp": 435901,
+    "k": "hit"
+   },
+   "stats": {},
+   "skill": null,
+   "note": "Enchanting formula 273591 teaches Enchant Chest - Retricutioner (spell 435903); the enchant's damage shield is client spell 435901: 9 Physical damage to each melee attacker. The client gives that aura a 5 s recovery time; whether it limits how often it hits is not shown in the tables, so the Forge counts every hit."
+  }
+ ]
+}

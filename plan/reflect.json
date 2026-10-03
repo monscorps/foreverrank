@@ -1,0 +1,117 @@
+{
+ "note": "Damage done back to attackers by class abilities and buffs, from the beta client's spell tables (build 1.60.1.70170, tools/apply_reflect.py) unless a field says otherwise. Retribution Aura ranks are [level learned, damage per hit taken, spell id]. Blessing of Sanctuary is not in the Forever client at all. Improved Retribution Aura (spells 20091/20092) still has spell rows in the client, but no Forever talent teaches it, so nothing raises Retribution Aura's damage.",
+ "classes": {
+  "PALADIN": {
+   "retAura": [
+    [
+     16,
+     7,
+     7294
+    ],
+    [
+     26,
+     12,
+     10298
+    ],
+    [
+     36,
+     18,
+     10299
+    ],
+    [
+     46,
+     24,
+     10300
+    ],
+    [
+     56,
+     30,
+     10301
+    ]
+   ],
+   "retCoef": 0,
+   "holyShield": {
+    "talent": "Holy Shield",
+    "ranks": [
+     [
+      40,
+      110,
+      20925
+     ],
+     [
+      50,
+      153,
+      20927
+     ],
+     [
+      60,
+      221,
+      20928
+     ]
+    ],
+    "coef": 0.08,
+    "charges": 4,
+    "dur": 10.0,
+    "cd": 10.0,
+    "block": 30,
+    "note": "Damage per blocked attack, plus coef x spell power. block is the block chance the client spell adds (30%); the Forge's talent text reads 20%, transcribed from demo footage."
+   },
+   "redoubt": {
+    "talent": "Redoubt",
+    "p": 0.1,
+    "block": [
+     6,
+     12,
+     18,
+     24,
+     30
+    ],
+    "dur": 10.0,
+    "charges": 5,
+    "note": "A 10% chance on a damaging melee hit taken (client spell 20127) to raise block chance; the buff (spell 20128) lasts dur seconds or charges blocks. The block chance per rank comes from the talent text: the client scales it through curve tables our datamine does not have (spell 20128 carries 30, the top rank)."
+   },
+   "eyeForAnEye": {
+    "talent": "Eye for an Eye",
+    "pct": [
+     5,
+     10
+    ],
+    "note": "Percent of a critical strike's damage dealt back, capped at 50% of the paladin's health. From the talent text: the client spell 9799 still carries Classic's 15% and the per-rank curve is not in our datamine."
+   }
+  }
+ },
+ "buffs": {
+  "thorns": {
+   "name": "Thorns (druid)",
+   "ranks": [
+    [
+     6,
+     4
+    ],
+    [
+     14,
+     9
+    ],
+    [
+     24,
+     11
+    ],
+    [
+     34,
+     13
+    ],
+    [
+     44,
+     16
+    ],
+    [
+     54,
+     22
+    ]
+   ],
+   "s": "Nature",
+   "dur": 600.0,
+   "note": "[level learned, damage per hit taken], spells 467/782/1075/8914/9756/9910."
+  }
+ }
+}

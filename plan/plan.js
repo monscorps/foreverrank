@@ -291,7 +291,8 @@
   var DATA = null;                       // plan-data.json: full trees + gear per class
   var S = { race: -1, cls: -1, t: [[], [], []], gear: [], name: "", lg: "", g: "m" };
   var LEGACY = null, LEGACY_LOADING = null;   // codex.json legacy block, fetched on first open
-  var GEAR = null;                            // ForgeGear over plan/items.json
+  var GEAR = null;                            // ForgeGear over plan/items.json, then plan/items-db.json
+  var SMALL = null;                           // plan/items.json: the boot seed; its slug ids stay decodable
   var BASE = null, RACIALS = null;            // Classic base attributes and racial effects (optional files)
   var lastSwap = null;
   var CMP = false;
@@ -432,9 +433,10 @@
   // ---- url as the save (v2 code: race.cls.talents.gear.name) ---------------
   function code() {
     return [S.race, S.cls, S.t.map(function (a) { var o = ""; for (var i = 0; i < a.length; i++) o += (a[i] || 0); return o; }).join("-"),
-      (GEAR ? GEAR.encode(S.eq || {}) : (S.eqRaw || "")),
+      (GEAR ? GEAR.encode(S.eq || {}, window.GEARDB ? "" : S.eqRaw) : (S.eqRaw || "")),
       encodeURIComponent(S.name || "").replace(/\./g, "%2E"), cap, S.lg || "", S.g === "f" ? "f" : "",
-      (S.cons || []).filter(function (id) { return /^[A-Za-z0-9_-]+$/.test(id); }).join("~")].join(".").replace(/\.+$/, "");
+      (S.cons || []).filter(function (id) { return /^[A-Za-z0-9_-]+$/.test(id); }).join("~"),
+      ForgeGear.encodeEnch(S.ench || {})].join(".").replace(/\.+$/, "");
   }
   function parseCode(str) {
     var p = String(str || "").split(".");
@@ -455,6 +457,7 @@
     o.lg = CAPS[+p[5]] && /^[0-5]{1,12}(-[0-5]{0,12}){0,4}$/.test(p[6] || "") ? p[6] : "";
     o.g = CAPS[+p[5]] && p[7] === "f" ? "f" : "m";
     o.cons = CAPS[+p[5]] ? String(p[8] || "").split("~").filter(function (id) { return /^[A-Za-z0-9_-]+$/.test(id); }).slice(0, 20) : [];
+    o.ench = CAPS[+p[5]] ? ForgeGear.decodeEnch(p[9]) : {};
     return o;
   }
   function clampToData(o, budget) {
@@ -562,7 +565,10 @@
   }
   function gearNames() {
     if (!GEAR) return [];
-    return GEAR.SLOT_KEYS.map(function (k) { var it = GEAR.byId[(S.eq || {})[k]]; return it ? it.name : null; }).filter(Boolean);
+    return GEAR.SLOT_KEYS.map(function (k) {
+      var it = GEAR.byId[(S.eq || {})[k]], en = it && GEAR.enchantById((S.ench || {})[k]);
+      return it ? it.name + (en ? " (" + en.name + ")" : "") : null;
+    }).filter(Boolean);
   }
   var lgCloser = null, BOOT = null;
   function closeInsight() {
@@ -596,52 +602,88 @@
     var b = $("lg-open");
     if (b) b.querySelector("em").textContent = lgPoints(S.lg) + " / 16";
   }
-  function openPicker(slot, q, qual) {
+  // The gear picker: filters live in ForgeGear (saved per viewer); this only wires the clicks.
+  function openPicker(slot) {
     hideTip();
     if (window.TipKit) TipKit.closeSheet();
     $("insight").classList.remove("sbmode", "lgmode");
     $("insight").classList.add("pkmode");
-    $("insight-body").innerHTML = GEAR.pickerHTML(slot, q, qual);
+    $("insight-body").innerHTML = GEAR.pickerHTML(slot);
     $("insight").hidden = false;
-    var box = $("insight-body");
+    var box = $("insight-body"), card = box.querySelector(".gpick");
     bindTips(box);
     function close() { $("insight").hidden = true; $("insight").classList.remove("pkmode"); hideTip(); render(); }
-    box.querySelectorAll("[data-gpick]").forEach(function (b) {
-      b.setAttribute("data-tipkit", "1");
-      b.addEventListener("click", function () {
+    // Redraw after a filter change. The card keeps its scroll (phones scroll the whole card);
+    // the list keeps its scroll only when rows were added below.
+    function again(keepList) {
+      hideTip();
+      var lt = card.querySelector(".gp-list"), listTop = keepList && lt ? lt.scrollTop : 0, cardTop = card.scrollTop;
+      openPicker(slot);
+      var nc = box.querySelector(".gpick"), nl = nc && nc.querySelector(".gp-list");
+      if (nc) nc.scrollTop = cardTop;
+      if (nl) nl.scrollTop = listTop;
+    }
+    card.addEventListener("click", function (e) {
+      var b = e.target.closest && e.target.closest("button");
+      if (!b || !card.contains(b)) return;
+      if (b.hasAttribute("data-gpick")) {
         var id = b.getAttribute("data-gpick"), it = GEAR.byId[id];
-        function equip() {
+        var equip = function () {
           S.eq = S.eq || {};
           S.eq[slot] = id;
-          if (slot === "mainhand" && it && it.slot === "two-hand") delete S.eq.offhand;
+          // an enchant that doesn't fit the new item goes (a shield spike on a sword, say), and the off hand's with the off hand
+          if (S.ench && S.ench[slot] && !GEAR.enchantOK(S.ench[slot], it)) delete S.ench[slot];
+          if (slot === "mainhand" && it && it.slot === "two-hand") { delete S.eq.offhand; if (S.ench) delete S.ench.offhand; }
           if (slot === "offhand" && S.eq.mainhand && GEAR.byId[S.eq.mainhand] && GEAR.byId[S.eq.mainhand].slot === "two-hand") delete S.eq.mainhand;
           close();
-        }
+        };
         if (TipKit.touchy()) {
           TipKit.openSheet(GEAR.itemTip(it), [{ label: "Equip", cls: "learn", onClick: function () { TipKit.closeSheet(); equip(); } }], { cls: "itemtip", owner: "gp:" + id });
           return;
         }
         equip();
-      });
+        return;
+      }
+      if (b.hasAttribute("data-pf")) { var n = b.getAttribute("data-pf"); GEAR.pickSet(n, b.getAttribute("data-v")); again(n === "more" || n === "moreopen"); return; }
+      if (b.hasAttribute("data-gpclear")) { if (S.eq) delete S.eq[slot]; if (S.ench) delete S.ench[slot]; close(); return; }
+      if (b.hasAttribute("data-gpx")) close();
     });
-    var qi = box.querySelector("[data-gpq]");
+    card.querySelectorAll("[data-gpick]").forEach(function (b) { b.setAttribute("data-tipkit", "1"); });
+    card.querySelectorAll("[data-pfs]").forEach(function (el) {
+      el.addEventListener("change", function () { GEAR.pickSet(el.getAttribute("data-pfs"), el.value); again(false); });
+    });
+    var qi = card.querySelector("[data-pfi]"), qt = null;
     if (qi) qi.addEventListener("input", function () {
-      var caret = qi.selectionStart;
-      openPicker(slot, qi.value, qual);
-      var q2 = $("insight-body").querySelector("[data-gpq]");
-      if (q2) { q2.focus(); try { q2.setSelectionRange(caret, caret); } catch (e) {} }
+      clearTimeout(qt);
+      qt = setTimeout(function () {
+        var caret = qi.selectionStart;
+        GEAR.pickSet("q", qi.value);
+        again(false);
+        var q2 = box.querySelector("[data-pfi]");
+        if (q2) { q2.focus(); try { q2.setSelectionRange(caret, caret); } catch (e) {} }
+      }, 140);
     });
-    box.querySelectorAll("[data-gpqual]").forEach(function (b) {
-      b.addEventListener("click", function () { var v = b.getAttribute("data-gpqual"); openPicker(slot, q, qual === v ? "" : v); });
+  }
+  // Enchants and shield spikes for one slot.
+  function openEnchant(slot) {
+    hideTip();
+    if (window.TipKit) TipKit.closeSheet();
+    $("insight").classList.remove("sbmode", "lgmode");
+    $("insight").classList.add("pkmode");
+    var box = $("insight-body");
+    box.innerHTML = GEAR.enchantHTML(slot);
+    box.removeAttribute("data-pick");
+    $("insight").hidden = false;
+    bindTips(box);
+    var card = box.querySelector(".gpick");
+    function close() { $("insight").hidden = true; $("insight").classList.remove("pkmode"); hideTip(); render(); }
+    card.addEventListener("click", function (e) {
+      var b = e.target.closest && e.target.closest("button");
+      if (!b || !card.contains(b) || b.disabled) return;
+      if (b.hasAttribute("data-gench-pick")) { S.ench = S.ench || {}; S.ench[slot] = b.getAttribute("data-gench-pick"); close(); }
+      else if (b.hasAttribute("data-gench-clear")) { if (S.ench) delete S.ench[slot]; close(); }
+      else if (b.hasAttribute("data-gpx")) close();
     });
-    var capb = box.querySelector("[data-gpcap]");
-    if (capb) capb.addEventListener("click", function () { window.FORGE_LVLCAP = !window.FORGE_LVLCAP; hideTip(); openPicker(slot, q, qual); });
-    var anyb = box.querySelector("[data-gpany]");
-    if (anyb) anyb.addEventListener("click", function () { window.FORGE_ANYGEAR = !window.FORGE_ANYGEAR; hideTip(); openPicker(slot, q, qual); });
-    var un = box.querySelector("[data-gpclear]");
-    if (un) un.addEventListener("click", function () { if (S.eq) delete S.eq[slot]; close(); });
-    var x = box.querySelector("[data-gpx]");
-    if (x) x.addEventListener("click", close);
   }
   function slotEl(ti, i) { return $("stage").querySelector('.slot[data-tal="' + ti + ":" + i + '"]'); }
   function afterTalent(ti, i) {
@@ -927,7 +969,8 @@
       var ck = R0 ? R0.n + "|" + CLASS_LABEL[K0] : "", li = BASE ? BASE.levels.indexOf(cap) : -1;
       var bRow = BASE && li >= 0 && BASE.stats[ck] ? BASE.stats[ck][li] : null;
       var hmRow = bRow && BASE.base[CLASS_LABEL[K0]] ? BASE.base[CLASS_LABEL[K0]][li] : null;
-      return GEAR.html({ raceIcon: R0 && raceIcon(R0, S.g), gender: S.g, modelKey: modelKey(R0, S.g), standIn: !!(R0 && R0.nu),
+      GEAR.setSpec(spent() ? sp0.name : "", K0, cap);
+      return GEAR.html({ talents: learnedTalents(), raceIcon: R0 && raceIcon(R0, S.g), gender: S.g, modelKey: modelKey(R0, S.g), standIn: !!(R0 && R0.nu),
         cls: K0, classLabel: CLASS_LABEL[K0], specName: spent() ? sp0.name : "",
         formula: FORM ? FORM.classes[CLASS_LABEL[K0]] : null, armorK: FORM ? FORM.armorK : null, levelIdx: FORM ? FORM.levels.indexOf(cap) : -1, talentFx: talentFx(), classIcon: CLASS_ICON[K0], classColour: cc(K0), name: S.name || "Unnamed " + CLASS_LABEL[K0],
         line: (R0 ? R0.n + " " : "") + CLASS_LABEL[K0] + (spent() ? ", " + sp0.name : "") + ", level " + cap,
@@ -980,7 +1023,7 @@
   };
   function rnd(a) { return a[Math.floor(Math.random() * a.length)]; }
   var clsStash = null;   // a cleared class keeps its build; re-pick it and everything returns
-  function stashCls() { if (S.cls >= 0) clsStash = { cls: S.cls, t: S.t, gear: S.gear, eq: S.eq }; }
+  function stashCls() { if (S.cls >= 0) clsStash = { cls: S.cls, t: S.t, gear: S.gear, eq: S.eq, ench: S.ench }; }
   function rollName() {
     var rn = S.race >= 0 ? RACES[S.race].n : rnd(Object.keys(NAME_FIRST));
     var pool = NAME_FIRST[rn] || NAME_FIRST.Human;
@@ -1048,7 +1091,7 @@
     var k = CLASS_ORDER.slice().sort(function (a, b) { return (score[b] || 0) - (score[a] || 0); })[0];
     var allowed = COMBOS[k];
     var race = allowed.slice().sort(function (a, b) { return (score[b] || 0) - (score[a] || 0); })[0];
-    S = { race: RACES.map(function (r) { return r.n; }).indexOf(race), cls: CLASS_ORDER.indexOf(k), t: [[], [], []], gear: [], name: QUIZ_NAMES[(answers[0] * 4 + answers[1] + answers[2]) % QUIZ_NAMES.length], lg: S.lg || "", eq: {}, g: S.g || "m", cons: [] };
+    S = { race: RACES.map(function (r) { return r.n; }).indexOf(race), cls: CLASS_ORDER.indexOf(k), t: [[], [], []], gear: [], name: QUIZ_NAMES[(answers[0] * 4 + answers[1] + answers[2]) % QUIZ_NAMES.length], lg: S.lg || "", eq: {}, ench: {}, g: S.g || "m", cons: [] };
     lastSwap = { title: "The Forge has spoken: " + race + " " + CLASS_LABEL[k],
       parts: [esc(CLASS_JOKE[k]), '<i class="finenote">The trees below are empty on purpose: the Forge picks the body and the job, the points are yours to place.</i>'] };
     viewStep = null;
@@ -1066,12 +1109,20 @@
     fetch("items-db.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (db) {
       if (!db || !Array.isArray(db.items) || !db.items.length) { DBFULL = false; return; }
       try {
-        var g = ForgeGear({ items: db, get: function () { return S.eq; }, cons: function () { return S.cons || []; } });
+        var raw = GEAR ? GEAR.encode(S.eq || {}, S.eqRaw) : (S.eqRaw || "");
+        var g = ForgeGear({ items: db, legacy: SMALL && SMALL.items, get: function () { return S.eq; }, cons: function () { return S.cons || []; }, ench: function () { return S.ench || {}; } });
         GEAR = g; window.GEARDB = db;
-        if (S.eqRaw && GEAR) S.eq = GEAR.decode(S.eqRaw);
+        S.eq = GEAR.decode(raw); S.eqRaw = "";
         render();
       } catch (e) { DBFULL = false; }
     });
+  }
+  // Learned talents by name with their rank, for effects the stat panel reads by name (Holy Shield, Redoubt).
+  function learnedTalents() {
+    var c = clsData(), out = {};
+    if (!c) return out;
+    c.trees.forEach(function (tr, ti) { tr.talents.forEach(function (t, i) { if (S.t[ti][i]) out[t.n] = S.t[ti][i]; }); });
+    return out;
   }
   // Stat effects of learned talents at their current rank: [stat, mode, value, when].
   function talentFx() {
@@ -1183,18 +1234,24 @@
         var slot = b.getAttribute("data-gslot"), it = GEAR && GEAR.byId[(S.eq || {})[slot]];
         if (it && TipKit.touchy()) {
           TipKit.openSheet(GEAR.itemTip(it), [
-            { label: "Unequip", cls: "unlearn", onClick: function () { TipKit.closeSheet(); delete S.eq[slot]; render(); } },
-            { label: "Change", cls: "learn", onClick: function () { TipKit.closeSheet(); openPicker(slot, "", ""); } }
+            { label: "Unequip", cls: "unlearn", onClick: function () { TipKit.closeSheet(); delete S.eq[slot]; if (S.ench) delete S.ench[slot]; render(); } },
+            { label: "Change", cls: "learn", onClick: function () { TipKit.closeSheet(); openPicker(slot); } }
           ], { cls: "itemtip", owner: "g:" + slot });
           return;
         }
-        openPicker(slot, "", "");
+        openPicker(slot);
       });
+    });
+    st.querySelectorAll("[data-gench]").forEach(function (b) {
+      b.addEventListener("click", function (e) { e.stopPropagation(); openEnchant(b.getAttribute("data-gench")); });
+    });
+    st.querySelectorAll("[data-rft]").forEach(function (b) {
+      b.addEventListener("click", function () { GEAR.toggleReflect(b.getAttribute("data-rft")); hideTip(); render(); });
     });
     var gr = st.querySelector("[data-goto-race]");
     if (gr) gr.addEventListener("click", function () { viewStep = 0; render(); window.scrollTo(0, 0); });
     var gcl = st.querySelector("[data-gclear]");
-    if (gcl) gcl.addEventListener("click", function () { S.eq = {}; render(); });
+    if (gcl) gcl.addEventListener("click", function () { S.eq = {}; S.ench = {}; render(); });
     var cb = st.querySelector("#cmpbtn");
     if (cb) cb.addEventListener("click", function () { CMP = !CMP; CMPF = ""; hideTip(); render(); });
     st.querySelectorAll("[data-cmpf]").forEach(function (b) {
@@ -1211,7 +1268,7 @@
           if (COMBOS[k].indexOf(RACES[i].n) === -1) {
             stashCls();
             lastSwap = { title: "Class stepped aside", parts: ["A " + esc(RACES[i].n) + " cannot be a " + CLASS_LABEL[k] + ", so the class is cleared. Pick a new one; re-pick " + CLASS_LABEL[k] + " later and that build returns."] };
-            S.race = i; S.cls = -1; S.t = [[], [], []]; S.gear = []; S.eq = {};
+            S.race = i; S.cls = -1; S.t = [[], [], []]; S.gear = []; S.eq = {}; S.ench = {};
             viewStep = 0; render(); return;
           }
           if (S.race >= 0) lastSwap = raceDelta(S.race, i);   // build kept, compare shown
@@ -1228,14 +1285,14 @@
         var i = +el.getAttribute("data-cls");
         if (S.cls === i) {          // click again: class unpicked, build stashed
           stashCls();
-          S.cls = -1; S.t = [[], [], []]; S.gear = []; S.eq = {};
+          S.cls = -1; S.t = [[], [], []]; S.gear = []; S.eq = {}; S.ench = {};
           viewStep = 0; render(); return;
         }
         var wasInvalid = S.race >= 0 && COMBOS[CLASS_ORDER[i]].indexOf(RACES[S.race].n) === -1;
         if (S.cls >= 0 && !wasInvalid) lastSwap = classDelta(CLASS_ORDER[S.cls], CLASS_ORDER[i]);
         stashCls();
-        if (clsStash && clsStash.cls === i) { S.cls = i; S.t = clsStash.t; S.gear = clsStash.gear; S.eq = clsStash.eq; clsStash = null; }
-        else { S.cls = i; S.t = [[], [], []]; S.gear = []; S.eq = {}; }
+        if (clsStash && clsStash.cls === i) { S.cls = i; S.t = clsStash.t; S.gear = clsStash.gear; S.eq = clsStash.eq; S.ench = clsStash.ench || {}; clsStash = null; }
+        else { S.cls = i; S.t = [[], [], []]; S.gear = []; S.eq = {}; S.ench = {}; }
         if (wasInvalid) {
           lastSwap = { title: "Race stepped aside", parts: ["A " + esc(RACES[S.race].n) + " cannot be a " + CLASS_LABEL[CLASS_ORDER[i]] + ", so the race is cleared. Pick one that fits."] };
           S.race = -1; viewStep = 0;
@@ -1435,7 +1492,7 @@
     copyBtn("#bshare", function () { return location.origin + location.pathname + "?b=" + code(); });
     copyBtn("#bcopy", buildText);
     var br = st.querySelector("#breset");
-    if (br) br.addEventListener("click", function () { S = { race: -1, cls: -1, t: [[], [], []], gear: [], name: "", lg: "", eq: {}, g: S.g || "m", cons: [] }; lastSwap = null; render(); window.scrollTo(0, 0); });
+    if (br) br.addEventListener("click", function () { S = { race: -1, cls: -1, t: [[], [], []], gear: [], name: "", lg: "", eq: {}, ench: {}, g: S.g || "m", cons: [] }; lastSwap = null; render(); window.scrollTo(0, 0); });
     var dk = st.querySelector("#dunno");
     if (dk) dk.addEventListener("click", function () {
       $("insight").classList.remove("sbmode", "lgmode", "pkmode");
@@ -1583,8 +1640,9 @@
   }
   function bcode(b) {
     return [b.race, b.cls, b.t.map(function (a) { return a.join(""); }).join("-"),
-      (GEAR ? GEAR.encode(b.eq || {}) : (b.eqRaw || "")), encodeURIComponent(b.name || "").replace(/\./g, "%2E"), b.cap || cap, b.lg || "",
-      b.g === "f" ? "f" : "", (b.cons || []).filter(function (id) { return /^[A-Za-z0-9_-]+$/.test(id); }).join("~")].join(".").replace(/\.+$/, "");
+      (GEAR ? GEAR.encode(b.eq || {}, window.GEARDB ? "" : b.eqRaw) : (b.eqRaw || "")), encodeURIComponent(b.name || "").replace(/\./g, "%2E"), b.cap || cap, b.lg || "",
+      b.g === "f" ? "f" : "", (b.cons || []).filter(function (id) { return /^[A-Za-z0-9_-]+$/.test(id); }).join("~"),
+      ForgeGear.encodeEnch(b.ench || {})].join(".").replace(/\.+$/, "");
   }
   function compose() {
     if (!DATA) return;
@@ -1658,6 +1716,12 @@
       TipKit.hover(gbtn, function () { return "<b>Compare to Classic</b>Marks what is new, changed, moved or gone against WoW Classic, on talents, spells and racials."; });
     }
     render();
+    // Optional files: the gear step works without them (built-in shield spikes and client spell numbers).
+    function optJSON(u) { return fetch(u, { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }); }
+    Promise.all([optJSON("enchants.json"), optJSON("reflect.json"), optJSON("../codex/loot.json")]).then(function (x) {
+      ForgeGear.extras({ enchants: x[0], reflect: x[1], dungeons: x[2] && x[2].dungeons });
+      if (DATA && GEAR) render();
+    });
     BOOT = fetch("plan-data.json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
       return fetch("items.json", { cache: "no-store" })
         .then(function (r) { return r.ok ? r.json() : null; })
@@ -1665,7 +1729,8 @@
         .then(function (it) {
           GEAR = null;
           if (it && Array.isArray(it.items)) {
-            try { GEAR = ForgeGear({ items: it, get: function () { return S.eq; }, cons: function () { return S.cons || []; } }); } catch (e) { GEAR = null; }
+            SMALL = it;
+            try { GEAR = ForgeGear({ items: it, get: function () { return S.eq; }, cons: function () { return S.cons || []; }, ench: function () { return S.ench || {}; } }); } catch (e) { GEAR = null; }
           }
           return Promise.all([
             fetch("basestats.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),

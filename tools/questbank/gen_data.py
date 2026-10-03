@@ -1311,8 +1311,8 @@ for qid in IDS:
     best, kinds, bestId = 0, 0, 0
     for iid in ids:
         it = _ITEMS.get(str(iid))
-        if not it:
-            continue
+        if not it or it.get("est"):
+            continue  # unknown, or a Classic estimate nobody has seen in Forever: no item level to promise
         cat, slot = str(it.get("cat") or ""), str(it.get("slot") or "")
         ilvl = int(it.get("itemLevel") or 0)
         if cat in ("armor", "weapon", "accessory", "offhand"):

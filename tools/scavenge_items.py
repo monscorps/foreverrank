@@ -47,7 +47,8 @@ PRIMARY = {"3": "agility", "4": "strength", "5": "intellect", "6": "spirit", "7"
 SCHOOL = {"fire": "fireSpellDamage", "frost": "frostSpellDamage", "nature": "natureSpellDamage", "shadow": "shadowSpellDamage",
           "arcane": "arcaneSpellDamage", "holy": "holySpellDamage"}
 # Dev and test rows the database has always left out (SOURCES.md, cleanup passes 1 and 2).
-JUNK = re.compile(r"^(monster -|test|qa |zz|dnt|\[ph\]|ph |deprecated|unused|gm |debug|nyi |old )|\b(test|dnt|deprecated|placeholder)\b|\(old\)|\(test\)", re.I)
+# "High Test" is a real fishing line (19971 High Test Eternium Fishing Line), not a test row.
+JUNK = re.compile(r"^(monster -|test|qa |qaench|zz|dnt|\[ph\]|ph |deprecated|unused|gm |debug|nyi |old )|\b(?<!high )test\b|\b(dnt|deprecated|placeholder)\b|\(old\)|\(test\)|\(nyi\)|\([a-z]*test\)", re.I)
 lock = threading.Lock()
 
 
@@ -55,10 +56,34 @@ def rows(table):
     return list(csv.DictReader(open(os.path.join(WAGO, table + ".csv"), encoding="utf-8")))
 
 
-def fetch(iid):
+NF_DAYS = 3        # a "not found" answer is asked again after this many days: Wowhead adds Forever items as players see them
+SPACING = 3.2      # seconds between requests to Wowhead
+_last = [0.0]
+
+
+def stale_nf(iid):
+    """Is the cached answer a "not found" older than NF_DAYS?"""
     path = os.path.join(CACHE, "%s.json" % iid)
-    if os.path.exists(path):
+    if not os.path.exists(path):
+        return False
+    try:
+        d = json.load(open(path))
+    except ValueError:
+        return True
+    if "error" not in d:
+        return False
+    at = d.get("at") or os.path.getmtime(path)
+    return time.time() - at > NF_DAYS * 86400
+
+
+def fetch(iid, recheck=False):
+    path = os.path.join(CACHE, "%s.json" % iid)
+    if os.path.exists(path) and not (recheck and stale_nf(iid)):
         return json.load(open(path))
+    wait = SPACING - (time.time() - _last[0])
+    if wait > 0:
+        time.sleep(wait)
+    _last[0] = time.time()
     url = "https://nether.wowhead.com/forever/tooltip/item/%s" % iid
     for attempt in range(4):
         try:
@@ -67,7 +92,7 @@ def fetch(iid):
             break
         except urllib.error.HTTPError as e:
             if e.code == 404:
-                d = {"error": "Entity not found"}
+                d = {"error": "Entity not found", "at": int(time.time())}
                 break
             time.sleep(3 + attempt * 5)
         except Exception:
@@ -77,6 +102,17 @@ def fetch(iid):
     with open(path, "w") as f:
         json.dump(d, f)
     return d
+
+
+def cached(iid):
+    """The cached Wowhead answer, or None. A file another run is writing right now reads as None."""
+    path = os.path.join(CACHE, "%s.json" % iid)
+    if not os.path.exists(path):
+        return None
+    try:
+        return json.load(open(path))
+    except ValueError:
+        return None
 
 
 def spans(tt, cls):
@@ -102,25 +138,61 @@ def text(h):
     return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", "", h))).replace("\xa0", " ").strip()
 
 
+def plus_line(line, add):
+    """'Equip: +N <stat>[ Rating][.]' in Forever's wording (ForeverChanges and Wowhead both write it, Wowhead with a
+    full stop). Returns True when the line was a stat line it knows."""
+    m = re.match(r"^Equip: ([+-]\d+) (.+?)\.?$", line.strip())
+    if not m:
+        return False
+    v, what = int(m.group(1)), m.group(2)
+    rm = re.match(r"^(.+) Rating$", what)
+    if rm and RATING.get(rm.group(1)):
+        key = RATING[rm.group(1)]
+        add(key[0], v)
+        if key[1]: add(key[1], v / key[2])
+        return True
+    sm = re.match(r"^(Fire|Frost|Nature|Shadow|Arcane|Holy) Spell Damage$", what)
+    if sm:
+        add(sm.group(1).lower() + "SpellDamage", v)
+        return True
+    for pat, key in FC_EQUIP:
+        if what == pat:
+            add(key, v)
+            return True
+    km = re.match(r"^(Axes|Swords|Maces|Daggers|Fist Weapons|Staves|Polearms|Bows|Guns|Crossbows|Two-Handed Axes|Two-Handed Swords|Two-Handed Maces) Skill$", what)
+    if km:
+        add({"Axes": "axeSkill", "Swords": "swordSkill", "Maces": "maceSkill", "Daggers": "daggerSkill", "Fist Weapons": "unarmedSkill"}.get(km.group(1).replace("Two-Handed ", ""), "weaponSkill"), v)
+        return True
+    return False
+
+
+# Wowhead's Forever tooltips word ratings as "Increases your critical strike by 14." (the same number ForeverChanges
+# writes as "+14 Critical Strike Rating")
+WH_RATING = {"critical strike": "Critical Strike", "hit": "Hit", "haste": "Haste", "expertise": "Expertise", "dodge": "Dodge",
+             "parry": "Parry", "block": "Block"}
+
+
 def equip_stats(line, st):
-    """Stat lines the database searches on, read from an Equip text."""
-    t = line
+    """Stat lines the database searches on, read from an Equip text (Classic's wording or Forever's)."""
+    t = line.strip()
     def add(k, v):
-        st[k] = st.get(k, 0) + v
-    m = re.search(r"damage and healing done by magical spells and effects by up to (\d+)", t, re.I) or re.search(r"^Equip: \+(\d+) Spell Power", t)
+        st[k] = round(st.get(k, 0) + v, 2)
+    if plus_line(t, add): return
+    m = re.search(r"damage and healing done by magical spells and effects by up to (\d+)", t, re.I) or re.search(r"^Equip: \+(\d+) Spell Power\.?$", t)
     if m: add("spellPower", int(m.group(1))); return
     m = re.search(r"Increases healing done by up to (\d+) and damage done by up to (\d+)", t, re.I)
     if m: add("healing", int(m.group(1))); add("spellDamage", int(m.group(2))); return
-    m = re.search(r"Increases healing done by (?:spells and effects )?(?:by )?up to (\d+)", t, re.I)
+    m = re.search(r"Increases healing done by (?:magical )?(?:spells and effects )?(?:by )?up to (\d+)", t, re.I)
     if m: add("healing", int(m.group(1))); return
     m = re.search(r"damage done by (Fire|Frost|Nature|Shadow|Arcane|Holy) spells and effects by up to (\d+)", t, re.I)
     if m: add(SCHOOL[m.group(1).lower()], int(m.group(2))); return
-    m = re.search(r"damage done by magical spells and effects by up to (\d+)", t, re.I) or re.search(r"^Equip: \+(\d+) Spell Damage", t)
+    m = re.search(r"damage done by magical spells and effects by up to (\d+)", t, re.I) or re.search(r"^Equip: \+(\d+) Spell Damage\.?$", t)
     if m: add("spellDamage", int(m.group(1))); return
     m = re.search(r"\+(\d+) ranged Attack Power", t, re.I)
     if m: add("rangedAttackPower", int(m.group(1))); return
     m = re.search(r"\+(\d+) Attack Power", t, re.I)
-    if m and "form" not in t.lower(): add("attackPower", int(m.group(1))); return
+    # "+N Attack Power Vs Beasts", "when fighting Undead", "in Cat, Bear ... forms only" are conditional
+    if m and not re.search(r"form| vs |fighting", t, re.I): add("attackPower", int(m.group(1))); return
     m = re.search(r"chance to hit with spells by (\d+)%", t, re.I)
     if m: add("spellHit", int(m.group(1))); return
     m = re.search(r"critical strike with spells by (\d+)%", t, re.I)
@@ -135,16 +207,28 @@ def equip_stats(line, st):
     if m: add("hp5", int(m.group(1))); return
     m = re.search(r"Increased Defense \+(\d+)", t, re.I)
     if m: add("defense", int(m.group(1))); return
+    m = re.search(r"Increases defense skill by (\d+)", t, re.I)
+    if m:
+        key = RATING["Defense"]
+        add(key[0], int(m.group(1))); add(key[1], int(m.group(1)) / key[2]); return
     m = re.search(r"chance to dodge an attack by (\d+)%", t, re.I)
     if m: add("dodge", int(m.group(1))); return
     m = re.search(r"chance to parry an attack by (\d+)%", t, re.I)
     if m: add("parry", int(m.group(1))); return
     m = re.search(r"chance to block attacks with a shield by (\d+)%", t, re.I)
     if m: add("blockChance", int(m.group(1))); return
-    m = re.search(r"block value of your shield by (\d+)", t, re.I)
+    m = re.search(r"block value of your shield by (\d+)", t, re.I) or re.search(r"Increases your shield block by (\d+)", t, re.I)
     if m: add("blockValue", int(m.group(1))); return
-    m = re.search(r"magical resistances of your spell targets by (\d+)", t, re.I)
+    m = re.search(r"^Equip: Increases your (critical strike|hit|haste|expertise|dodge|parry|block) by (\d+)\.?$", t, re.I)
+    if m:
+        key = RATING[WH_RATING[m.group(1).lower()]]
+        add(key[0], int(m.group(2)))
+        if key[1]: add(key[1], int(m.group(2)) / key[2])
+        return
+    m = re.search(r"magical resistances of your spell targets by (\d+)", t, re.I) or re.search(r"Your spells pierce (\d+) Magical Resistances", t, re.I)
     if m: add("spellPiercing", int(m.group(1))); return
+    m = re.search(r"^Equip: Increases all Resistances by (\d+)", t, re.I)
+    if m: add("allResist", int(m.group(1))); return
     m = re.search(r"Increased (Axes|Swords|Maces|Daggers|Two-handed Axes|Two-handed Swords|Two-handed Maces|Bows|Guns|Crossbows|Fist Weapons|Staves|Polearms) \+(\d+)", t, re.I)
     if m:
         k = {"axes": "axeSkill", "swords": "swordSkill", "maces": "maceSkill", "daggers": "daggerSkill", "fist weapons": "unarmedSkill"}.get(m.group(1).lower().replace("two-handed ", ""), "weaponSkill")
@@ -215,7 +299,7 @@ RATING = {"Critical Strike": ("critRating", "crit", 14), "Hit": ("hitRating", "h
 FC_EQUIP = [(r"Spell Power", "spellPower"), (r"Healing", "healing"), (r"Spell Damage", "spellDamage"), (r"Attack Power", "attackPower"),
             (r"Ranged Attack Power", "rangedAttackPower"), (r"Mana Regeneration", "mp5"), (r"Health Regeneration", "hp5"),
             (r"Block Value", "blockValue"), (r"Spell Penetration", "spellPiercing"), (r"Armor Penetration", "armorPen"),
-            (r"Fishing", "fishing")]
+            (r"Fishing", "fishing"), (r"Bonus Armor", "bonusArmor"), (r"Weapon Damage", "weaponDamage")]
 
 
 def fc_items(refresh=False):
@@ -284,23 +368,10 @@ def fc_parse(f, sets):
         if line.startswith('"') and line.endswith('"'): r["flavor"] = line.strip('"'); continue
         if re.match(r"^(Equip|Use|Chance on hit):", line):
             r["effects"].append(line)
-            m = re.match(r"^Equip: ([+-]\d+) (.+?)(?: Rating)?$", line)
-            if m and line.endswith("Rating"):
-                key = RATING.get(m.group(2))
-                if key:
-                    add(key[0], int(m.group(1)))
-                    if key[1]: add(key[1], int(m.group(1)) / key[2])
-                continue
-            if m:
-                v, what = int(m.group(1)), m.group(2)
-                sm = re.match(r"^(Fire|Frost|Nature|Shadow|Arcane|Holy) Spell Damage$", what)
-                if sm: add(sm.group(1).lower() + "SpellDamage", v); continue
-                for pat, key in FC_EQUIP:
-                    if what == pat: add(key, v); break
-                else:
-                    km = re.match(r"^(Axes|Swords|Maces|Daggers|Fist Weapons|Staves|Polearms|Bows|Guns|Crossbows|Two-Handed Axes|Two-Handed Swords|Two-Handed Maces) Skill$", what)
-                    if km:
-                        add({"Axes": "axeSkill", "Swords": "swordSkill", "Maces": "maceSkill", "Daggers": "daggerSkill", "Fist Weapons": "unarmedSkill"}.get(km.group(1).replace("Two-Handed ", ""), "weaponSkill"), v)
+            if line.startswith("Equip:"):
+                # Forever's "+N <stat>[ Rating]" first, then the Classic wording ForeverChanges keeps for some items
+                # (all of its 'missing' file): "Increases damage and healing done by ... by up to N."
+                equip_stats(line, st)
     if f.get("o"): r["cls"] = [c.strip() for c in str(f["o"]).split(",")]
     if f.get("e") and sets.get(f["e"]): r["setPieces"] = sets[f["e"]]
     if f.get("l"): r["itemLevel"] = f["l"]
@@ -308,8 +379,37 @@ def fc_parse(f, sets):
     return r
 
 
+def recheck_missing():
+    """Ask Wowhead again about every cached "not found" older than NF_DAYS: dungeon loot first, then gear the client
+    has a row for, then the rest. Fetch only; a normal run merges what comes back."""
+    loot = json.load(open(LOOT))
+    looted = set()
+    for d in loot.get("dungeons") or []:
+        for b in d.get("bosses") or []:
+            looted |= {str(i) for i in b.get("items") or []}
+        for q in d.get("quests") or []:
+            looted |= {str(i) for i in q.get("items") or []}
+    looted |= {str(i) for i in (loot.get("absent") or {})}
+    gear = {r["ID"] for r in rows("Item") if r.get("ClassID") in ("2", "4")}
+    stale = [f[:-5] for f in os.listdir(CACHE) if f.endswith(".json") and f[:-5].isdigit() and stale_nf(f[:-5])]
+    order = sorted(stale, key=lambda i: (0 if i in looted else 1 if i in gear else 2, int(i)))
+    buckets = collections.Counter(0 if i in looted else 1 if i in gear else 2 for i in order)
+    print("stale not-found answers: %d (dungeon loot %d, gear %d, other %d); ~%d min at %.1f s each" % (
+        len(order), buckets[0], buckets[1], buckets[2], len(order) * SPACING / 60, SPACING), flush=True)
+    found = collections.Counter()
+    for n, iid in enumerate(order, 1):
+        d = fetch(iid, recheck=True)
+        if d and "tooltip" in d:
+            found[0 if iid in looted else 1 if iid in gear else 2] += 1
+        if n % 50 == 0 or n == len(order):
+            print("  %d/%d checked; now found: loot %d, gear %d, other %d" % (n, len(order), found[0], found[1], found[2]), flush=True)
+
+
 def main():
-    dry, refresh_all = "--dry" in sys.argv, "--all" in sys.argv
+    if "--recheck-missing" in sys.argv:
+        recheck_missing()
+        return
+    dry, refresh_all, no_fetch = "--dry" in sys.argv, "--all" in sys.argv, "--no-fetch" in sys.argv
     os.makedirs(CACHE, exist_ok=True)
     db = json.load(open(DB))
     by = {str(i["id"]): i for i in db["items"]}
@@ -347,8 +447,11 @@ def main():
         from_game += 1
     if tips:
         print("players' games: %d item tooltips, %d used (not in ForeverChanges, or a newer build)" % (len(tips), from_game))
-    # Classic items ForeverChanges finds nowhere in Forever's data, and the client has no row for either
-    fc_gone = {k for k, v in FC.items() if v.get("t") == "missing" and k not in sparse and k not in fc_live}
+    # Classic items ForeverChanges finds nowhere in Forever's data (its 'missing' file), with no client ItemSparse row.
+    # What happens to each depends on what else knows it (main loop): a Wowhead Forever tooltip makes a normal row;
+    # else a client Item row (Forever has the item, its numbers come from the server) makes a Classic estimate;
+    # else it is gone from Forever's data.
+    fc_missing = {k for k, v in FC.items() if v.get("t") == "missing" and k not in sparse and k not in fc_live}
     sets = collections.defaultdict(list)
     for v in fc_live.values():
         if v.get("e"): sets[v["e"]].append(html.unescape(v["n"]))
@@ -371,7 +474,8 @@ def main():
         n = int(i)
         return n < 100000 or n >= 239000
     missing = {i for i in item if i not in sparse and i not in by and band_ok(i)}
-    want = looted | missing | set(fc_live)
+    # rows Wowhead filled before are read again every run, so parser fixes reach them
+    want = looted | missing | set(fc_live) | {i for i, it in by.items() if it.get("wh") or it.get("est")}
     if refresh_all:
         want |= {i for i, it in by.items() if it.get("cat") in ("weapon", "armor", "accessory", "offhand", "consumable")
                  or "..." in " ".join(it.get("effects") or [])}
@@ -388,8 +492,11 @@ def main():
             if done[0] % 250 == 0:
                 rate = done[0] / max(1, time.time() - t0)
                 print("  fetched %d/%d (%.1f/s, ~%d min left)" % (done[0], len(todo), rate, (len(todo) - done[0]) / max(rate, .1) / 60), flush=True)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-        list(ex.map(job, todo))
+    if no_fetch:
+        print("--no-fetch: %d left unfetched; merging from the caches only" % len(todo))
+        todo = []
+    for i in todo:  # one at a time, SPACING apart (fetch waits)
+        job(i)
 
     # classify new rows the way the database already classifies their client class
     vote3, vote2 = collections.defaultdict(collections.Counter), collections.defaultdict(collections.Counter)
@@ -400,24 +507,36 @@ def main():
             vote2[(ir["ClassID"], ir["SubclassID"])][(it["cat"], it["sub"], it.get("type"))] += 1
 
     added, refreshed, from_fc, junk, unknown, absent, dropped = [], 0, 0, 0, 0, {}, set()
+    rescued, estimates = [], []
     for iid in sorted(want, key=int):
-        path = os.path.join(CACHE, iid + ".json")
-        wh = json.load(open(path)) if os.path.exists(path) else None
-        ok = wh and "tooltip" in wh
+        wh = cached(iid)
+        ok = bool(wh and "tooltip" in wh)
         p = parse(wh["tooltip"]) if ok else None
         fc = fc_live.get(iid)
         old = by.get(iid)
-        if iid in fc_gone:
-            if old is not None: dropped.add(iid)
-            if iid in looted: absent[iid] = html.unescape(FC[iid]["n"])
-            continue
+        est = None
+        if iid in fc_missing:
+            if ok:
+                rescued.append(iid)  # Wowhead has Forever's tooltip: a normal row below
+            elif iid in item:
+                est = FC[iid]  # Forever has the item but nobody has shown its numbers: Classic's, as an estimate
+            else:
+                if old is not None: dropped.add(iid)
+                if iid in looted: absent[iid] = html.unescape(FC[iid]["n"])
+                continue
+        if old is not None and old.get("est") and (ok or fc) and not est:
+            old.pop("est", None)  # a real tooltip replaces the estimate, Classic leftovers and all
+            if old.get("ft") == "missing": old.pop("ft", None)
+            for k in ("stats", "effects", "dmgExtra", "flavor", "setName", "setBonuses", "setPieces", "startsQuest", "reqLevel",
+                      "binding", "armor", "block", "damage", "speed", "dps", "unique", "cls", "reqSkill"):
+                old.pop(k, None)
         is_new = old is None
-        if iid in looted and not ok and not fc and iid not in sparse and is_new:
+        if iid in looted and not ok and not fc and not est and iid not in sparse and is_new:
             fcn = (site["fc"].get(iid) or {}).get("n") or (site["wtbc"].get(iid) or {}).get("name") or ""
             absent[iid] = html.unescape(fcn)
             continue
         if is_new:
-            name = (fc or {}).get("n") or (wh["name"] if ok else (site["fc"].get(iid) or {}).get("n") or (site["wtbc"].get(iid) or {}).get("name"))
+            name = (fc or est or {}).get("n") or (wh["name"] if ok else (site["fc"].get(iid) or {}).get("n") or (site["wtbc"].get(iid) or {}).get("name"))
             if not name:
                 unknown += 1
                 continue
@@ -429,11 +548,11 @@ def main():
                 ir = {"ClassID": str(fc["c"]), "SubclassID": str(fc.get("u") or 0), "InventoryType": INVTYPE.get(fc.get("el") or "", "0")}
             key3 = (ir.get("ClassID"), ir.get("SubclassID"), ir.get("InventoryType"))
             cat, sub, typ = (vote3.get(key3) or vote2.get(key3[:2]) or collections.Counter({("misc", "Other", None): 1})).most_common(1)[0][0]
-            qn = fc["q"] if fc else wh.get("quality") if ok else (site["fc"].get(iid) or {}).get("q", 1)
+            qn = fc["q"] if fc else wh.get("quality") if ok else est["q"] if est else (site["fc"].get(iid) or {}).get("q", 1)
             qn = 1 if qn is None else qn
             old = {"id": iid, "name": html.unescape(name), "quality": QUAL[int(qn)],
                    "slot": SLOT.get(ir.get("InventoryType", ""), "unknown"), "cat": cat, "sub": sub,
-                   "icon": (wh.get("icon") if ok else (site["fc"].get(iid) or {}).get("k")) or "inv_misc_questionmark"}
+                   "icon": (wh.get("icon") if ok else (est or site["fc"].get(iid) or {}).get("k")) or "inv_misc_questionmark"}
             if typ: old["type"] = typ
             if int(iid) >= 239000: old["nw"] = 1
             elif 199000 <= int(iid) < 239000: old["era"] = "sod"
@@ -482,10 +601,30 @@ def main():
             old["wh"] = 1
             if iid not in sparse: old["source"] = "Server data via Wowhead's Forever database"
             if not is_new: refreshed += 1
+        elif est:
+            # ForeverChanges' Classic tooltip of an item Forever has: every number is Classic's until a real tooltip comes
+            p2 = fc_parse(est, sets)
+            for k in ("itemLevel", "reqLevel", "binding", "damage", "speed", "dps", "dmgExtra", "armor", "block", "unique", "flavor", "cls",
+                      "reqSkill", "startsQuest", "setName", "setBonuses"):
+                if p2.get(k) is not None: old[k] = p2[k]
+                elif k not in ("itemLevel", "cls"): old.pop(k, None)
+            old["stats"] = p2["stats"] or None
+            old["effects"] = p2["effects"] or None
+            old["name"] = html.unescape(est["n"])
+            old["quality"] = QUAL[int(est["q"] if est.get("q") is not None else 1)]
+            if est.get("k"): old["icon"] = est["k"]
+            old.pop("tt", None)
+            old.pop("wh", None)
+            old["ft"] = "missing"
+            old["est"] = "classic"
+            old["source"] = ("Estimate: a WoW Classic item nobody has seen in Forever yet (Forever's data keeps its id, which does not prove "
+                             "it drops); these are its Classic numbers, from foreverchanges.pro (build %s). Forever may have changed or removed it"
+                             % fc_meta.get("forever_build", BUILD))
+            estimates.append(iid)
         for k in ("stats", "effects"):
             if not old.get(k): old.pop(k, None)
         # Classic's suffix greens and blues ("of the Eagle"): the base item carries no stats
-        if (ok or fc) and int(iid) < 100000 and old.get("slot") not in (None, "unknown") and old["quality"] in ("uncommon", "rare") \
+        if (ok or fc or est) and int(iid) < 100000 and old.get("slot") not in (None, "unknown") and old["quality"] in ("uncommon", "rare") \
                 and not old.get("stats") and not old.get("effects"):
             old["rand"] = 1
         elif old.get("rand") and (old.get("stats") or old.get("effects")):
@@ -502,7 +641,25 @@ def main():
             it.pop("era", None)
             it["eraNote"] = "Recorded as Forever loot"
 
+    # Stat lines only the tooltip text carried (datamine rows keep the text but had no stat for these)
+    filled = collections.Counter()
+    for it in list(by.values()) + added:
+        if str(it["id"]) in dropped or it.get("slot") in (None, "unknown"):
+            continue
+        st = {}
+        for line in it.get("effects") or []:
+            if line.startswith("Equip:"):
+                equip_stats(line, st)
+        for k in ("spellPiercing", "blockValue"):
+            if st.get(k) and not (it.get("stats") or {}).get(k):
+                it.setdefault("stats", {})[k] = st[k]
+                filled[k] += 1
     have = (set(by) - dropped) | {e["id"] for e in added}
+    looted_rescued = [i for i in rescued if i in looted]
+    print("Wowhead tooltips for items ForeverChanges marks missing: %d (dungeon/quest loot %d)" % (len(rescued), len(looted_rescued)))
+    print("Classic estimates (client Item row, no Forever tooltip anywhere): %d (dungeon/quest loot %d)" % (
+        len(estimates), sum(1 for i in estimates if i in looted)))
+    print("stats filled from tooltip text: %s" % dict(filled))
     print("dropped %d Classic items ForeverChanges finds nowhere in Forever" % len(dropped))
     print("added %d; tooltips from ForeverChanges %d, from Wowhead %d; junk skipped %d, unknown (no name anywhere) %d" % (len(added), from_fc, refreshed, junk, unknown))
     print("loot items covered %d/%d; %d are Classic loot absent from Forever's data" % (len(looted & have), len(looted), len(absent)))
@@ -512,18 +669,25 @@ def main():
         return
     db["items"] = [i for i in db["items"] if str(i["id"]) not in dropped] + added
     db["items"].sort(key=lambda i: int(i["id"]))
+    # damage reflected at attackers (thorns, shield spikes, procs when struck), from the client's spell tables
+    import apply_reflect
+    apply_reflect.run(db)
     db["note"] = re.sub(r"\s*Server-sent items.*$", "", db["note"]) + (
         " Server-sent items and current tooltips: ForeverChanges' item files for the current build first (Forever's own wording), "
         "Wowhead's Forever database where they have nothing, the client datamine last; who drops what comes from codex/loot.json "
-        "(tools/scavenge_items.py).")
+        "(tools/scavenge_items.py). Rows with est:\"classic\" are items Forever has (the client's item table lists them) whose "
+        "Forever numbers no source has shown yet: their stats are Classic's, an estimate. rf lists damage done back to "
+        "attackers (tools/apply_reflect.py).")
     db["scavenged"] = time.strftime("%Y-%m-%d")
     with open(DB, "w") as f:
         json.dump(db, f, ensure_ascii=False, separators=(",", ":"))
     print("wrote %s: %d items" % (os.path.relpath(DB, ROOT), len(db["items"])))
     loot["absent"] = {k: absent[k] for k in sorted(absent, key=int)}
     loot["note"] = re.sub(r"\s*Items under absent.*$", "", loot["note"]) + (
-        " Items under absent are in a site's table (usually Classic's) but not yet in Forever's data: not in the client's item "
-        "tables and not in Wowhead's Forever database. Mostly loot above the beta's level cap that nobody has looted yet.")
+        " Items under absent are in a site's loot table (usually Classic's) but no source shows them in Forever yet: "
+        "ForeverChanges finds them nowhere in Forever's data, Wowhead's Forever database and players' games have not shown "
+        "them, and the client has no item row for them. Mostly loot above the beta's level cap that nobody has looted yet. "
+        "Items the client does list but nobody has shown are in the item database as Classic estimates instead.")
     with open(LOOT, "w") as f:
         json.dump(loot, f, ensure_ascii=False, separators=(",", ":"))
     # The World page's loot tables load only the items a dungeon or quest names.
