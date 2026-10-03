@@ -226,6 +226,8 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
     src = QB.Live.Source(q) or "the game's own number"
   elseif q.xpUnknown then
     src = "not known yet"
+  elseif q.confirmed and q.seenOnly then
+    src = QB.Comma(q.base) .. ", as players' games showed it"
   elseif q.confirmed then
     src = string.format(q.near and "%s x %s; the game paid within a few percent of this after the cut" or "%s x %s, as the game paid after the cut",
       QB.Comma(q.base), (tostring(q.mult):gsub("%.?0+$", "")))
@@ -247,6 +249,10 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl)
   end
   if q.classic and not q.liveFull then
     tip:AddLine("From the Classic database: not seen in Forever yet, so it may differ or not exist.", 1, 0.6, 0.3, true)
+  end
+  if q.seenOnly then
+    tip:AddLine(string.format("New in Forever and known only from players' notes: Wowhead doesn't list it yet. Level %d as the game showed it; it may unlock before level %d.%s",
+      q.lvl, q.req or q.lvl, q.turn and "" or " Where it's handed in isn't known yet."), 0.75, 0.75, 1, true)
   end
   if q.nerfed and not q.confirmed and not q.liveFull and not q.xpUnknown then
     tip:AddLine("An estimate: Wowhead's reading from before Blizzard's 1 October cut, with the cut applied. Quests in your log use the game's own number.", 1, 0.6, 0.3, true)

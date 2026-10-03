@@ -369,14 +369,35 @@ def round_xp(e):
     return 50 * ((e + 25) // 50)
 
 
+BUFF = 1.03  # a temporary +3% XP buff on the player (Well Rested from the sleeping bag, it seems): it comes and goes
+UNBUFFED = []  # (qid, read, game's number) for GAPS.md
+
+
+def unbuff(xp):
+    """The game's number behind a reading taken under the +3% buff. The game rounds quest XP to its grid (round_xp) and
+    the buff then pays the grid value * 1.03, give or take one: 390 shows 401, 1,250 shows 1,288, 5,500 shows 5,665. A reading on the
+    grid is taken as it is (a buffed multiple of 5,000 lands on the grid too and can't be told apart)."""
+    if xp <= 0 or round_xp(xp) == xp:
+        return xp
+    g = round_xp(xp / BUFF)
+    for cand in (g, round_xp(g - 1), round_xp(g + 60)):
+        if cand > 0 and abs(cand * BUFF - xp) <= 1:  # the game floors or rounds the boosted value: 1,250 shows 1,288
+            return cand
+    return xp
+
+
 def seen_full(qid, ql):
-    """The XP the game paid for a quest after the cut, at full value, or None."""
+    """The XP the game paid for a quest after the cut, at full value, or None. Buffed readings count as the game's number."""
     best = {}
     for key, n in (SEEN_XP.get(str(qid)) or {}).items():
         parts = key.split(":")
         if len(parts) < 5:
             continue
         xp, lvl, build, src, era = int(parts[0]), int(parts[1]), int(parts[2]), parts[3], int(parts[4])
+        plain = unbuff(xp)
+        if plain != xp:
+            UNBUFFED.append((qid, xp, plain))
+            xp = plain
         if build < NERF_BUILD or lvl > ql + 5 or xp <= 0:
             continue
         if src != "turnin" and era < 2:
@@ -386,11 +407,109 @@ def seen_full(qid, ql):
         return None
     return max(best.items(), key=lambda kv: (kv[1], kv[0]))[0]
 
+# Where players' games saw an NPC (disc.json npc: "uiMap:x,y" spots, where the player stood while talking to it, a
+# few yards off). Already in Forever's frame. Every upload so far is one account's growing file, so a spot's vote
+# count says how often it was re-uploaded, not how many saw it: each spot is one observation, and the one closest
+# to the others (the medoid) stands for the NPC. Spots inside instances are left to the dungeon path.
+GAME_POS = {}  # ("npc"|"object", id) -> (name, uiMap, x, y)
+GAME_SPLIT = []
+for _key, _rec in (DISC.get("npc") or {}).items():
+    if not isinstance(_rec, dict) or _key[:1] not in ("c", "o") or not _key[1:].isdigit():
+        continue
+    _pts = []
+    for _spot in (_rec.get("p") or {}):
+        try:
+            _m, _xy = _spot.split(":")
+            _x, _y = (float(v) for v in _xy.split(","))
+        except ValueError:
+            continue
+        _w = TR.world(int(_m), _x, _y)
+        if _w and _w[0] in (0, 1):
+            _pts.append((int(_m), _w))
+    if not _pts:
+        continue
+    _cont = max({w[0] for _, w in _pts}, key=lambda c: sum(1 for _, w in _pts if w[0] == c))
+    _pts = [p for p in _pts if p[1][0] == _cont]
+    _best = min(_pts, key=lambda p: sum(math.hypot(p[1][1] - o[1][1], p[1][2] - o[1][2]) for o in _pts))
+    if max(math.hypot(a[1][1] - b[1][1], a[1][2] - b[1][2]) for a in _pts for b in _pts) > 40:
+        GAME_SPLIT.append(_key)
+    _loc = TR.locate(_cont, _best[1][1], _best[1][2], (_best[0],))
+    if _loc:
+        GAME_POS[("npc" if _key[0] == "c" else "object", int(_key[1:]))] = (_rec.get("n") or "", _loc[0], _loc[1], _loc[2])
+
+# Quests players met in game that neither Wowhead Forever nor the Classic database has: a record from their notes
+# (flag 16384). Level as the quest log showed it; required level the lowest anyone took it at (an upper bound);
+# XP the game's number (buffed readings undone) when the reading was at full value; zone from where its giver
+# or ender stands; the side shared by every other quest of that NPC, else both. Nothing to place it: left out.
+DISC_ONLY, DISC_UNPLACED = set(), []
+_DISC_Q = DISC.get("q") or {}
+_NPC_SIDES = {}
+for _qid, _q in LIST.items():
+    _d = DET.get(_qid) or {}
+    for _which in ("startId", "endId"):
+        if _d.get(_which):
+            _NPC_SIDES.setdefault(_d[_which], set()).add({1: 1, 2: 2}.get(_q.get("side"), 0))
+
+
+def disc_xp(dq, lv):
+    votes = {}
+    for k, row in (dq.get("xp") or {}).items():
+        try:
+            lvl = int(str(k).rstrip("b"))
+        except ValueError:
+            continue
+        if lvl > lv + 5:
+            continue  # grey for that player: not the full value
+        for v, n in (row or {}).items():
+            try:
+                g = unbuff(int(v))
+            except ValueError:
+                continue
+            if g > 0:
+                votes[g] = votes.get(g, 0) + 1  # one observation, however often re-uploaded
+    return max(votes.items(), key=lambda kv: (kv[1], kv[0]))[0] if votes else 0
+
+
+for _k, _dq in _DISC_Q.items():
+    if not isinstance(_dq, dict) or not str(_k).isdigit():
+        continue
+    _qid = int(_k)
+    if _qid in LIST or _qid in NOT_IN_FOREVER or not _dq.get("lv") or not (1 <= int(_dq["lv"]) <= MAXLVL):
+        continue
+    _lv = int(_dq["lv"])
+    _where, _ids = None, []
+    for _nk in list(_dq.get("from") or []) + list(_dq.get("to") or []):
+        if _nk[:1] in ("c", "o") and _nk[1:].isdigit():
+            _gp = GAME_POS.get(("npc" if _nk[0] == "c" else "object", int(_nk[1:])))
+            _ids.append(int(_nk[1:]))
+            if _gp and not _where:
+                _where = _gp
+    if not _where:
+        DISC_UNPLACED.append(_qid)
+        continue
+    _area = TR.maps.get(_where[1], {}).get("area")
+    _row = AREA_ROW.get(_area) if _area else None
+    _sides = set().union(*[_NPC_SIDES.get(i, set()) for i in _ids]) if _ids else set()
+    LIST[_qid] = {"id": _qid, "name": _dq.get("t") or ("Quest %d" % _qid), "level": _lv,
+                  "reqlevel": min(int(_dq.get("min") or _lv), _lv), "side": _sides.pop() if len(_sides) == 1 else 0,
+                  "category": _area, "category2": int(_row["ContinentID"]) if _row and int(_row["ContinentID"]) in (0, 1) else 7,
+                  "type": 0, "xp": disc_xp(_dq, _lv), "reqclass": 0}
+    DISC_ONLY.add(_qid)
+
+# What one Alliance account's game showed against the catalog's side: 79362 was handed in at Darkshire (c268) for
+# 2,060 XP although Wowhead lists it Horde-only with c6176 in Alterac; 92706 was offered from o3972. Both sides take
+# them; 79362's Alliance ender is c268, the Horde one stays Wowhead's.
+GAME_SIDE = {79362: 0, 92706: 0}
+GAME_ENDER_A = {79362: ("npc", 268)}
+for _qid, _side in GAME_SIDE.items():
+    if _qid in LIST:
+        LIST[_qid]["side"] = _side
+
 IDS = []
 for qid, q in LIST.items():
     if qid in NOT_IN_FOREVER:
         continue
-    if qid in CURATED:
+    if qid in CURATED or qid in DISC_ONLY:
         IDS.append(qid)
         continue
     if q.get("type") in (41, 62) or q.get("category2") in (3, 6) or junk(q):
@@ -491,7 +610,26 @@ def add_npc(name, m, x, y, place=None):
     return len(NPCS)
 
 
-SOURCE = {}  # npc record index -> "wowhead" | "cmangos"
+SOURCE = {}  # npc record index -> "wowhead" | "cmangos" | "game"
+GAME_MOVED, GAME_FILLED, DISC_LINKED = [], [], []
+GAME_AGREE = {}  # (kind, id) -> yards between the catalog's place and the game's
+GAME_MOVE_YD = 25  # the player stands a few yards from the NPC (median 3.7 on 107 NPCs); farther than this, the catalog is off
+
+
+def game_place(kind, i, m, x, y):
+    """The catalog's place for an NPC, or the game's when players saw it more than GAME_MOVE_YD away."""
+    gp = GAME_POS.get((kind, i))
+    if not gp or not m:
+        return m, x, y, False
+    a, b = TR.world(m, x, y), TR.world(gp[1], gp[2], gp[3])
+    if not a or not b:
+        return m, x, y, False
+    d = math.hypot(a[1] - b[1], a[2] - b[2]) if a[0] == b[0] else 99999
+    if d <= GAME_MOVE_YD:
+        GAME_AGREE[(kind, i)] = d
+        return m, x, y, False
+    GAME_MOVED.append((kind, i, int(round(d))))
+    return gp[1], gp[2], gp[3], True
 
 
 class FrameFix:
@@ -536,8 +674,9 @@ def npc_from(kind, i, zone=None, dungeon=False):
             x, y = n["coords"][0][:2]
             if m in TR.redrawn:
                 x, y = FRAME.fix(k, i, m, x, y)
+            m, x, y, moved = game_place(k, i, m, x, y)
             idx = add_npc(n["name"], m, x, y)
-            SOURCE.setdefault(idx, "wowhead")
+            SOURCE.setdefault(idx, "game" if moved else "wowhead")
             return idx
     for k in kinds:
         spawns = CM_SPAWNS.get(k, {}).get(i)
@@ -547,8 +686,18 @@ def npc_from(kind, i, zone=None, dungeon=False):
             hint = (TR.area_map.get(zone),) if zone else None
             loc = TR.locate(cont, wx, wy, hint)
             if loc:
-                idx = add_npc(name, loc[0], loc[1], loc[2])
-                SOURCE.setdefault(idx, "cmangos")
+                m, x, y, moved = game_place(k, i, loc[0], loc[1], loc[2])
+                idx = add_npc(name, m, x, y)
+                SOURCE.setdefault(idx, "game" if moved else "cmangos")
+                return idx
+    for k in kinds:  # only players' games have seen it: a new Forever NPC
+        gp = GAME_POS.get((k, i))
+        if gp:
+            name = CM_NAMES.get(k, {}).get(i) or (LOC.get(npc_key(k, i)) or {}).get("name") or gp[0]
+            if name:
+                idx = add_npc(name, gp[1], gp[2], gp[3])
+                SOURCE.setdefault(idx, "game")
+                GAME_FILLED.append((k, i))
                 return idx
     if dungeon:  # a dungeon quest's NPC with no place on the two continents stands inside
         for k in kinds:
@@ -556,6 +705,17 @@ def npc_from(kind, i, zone=None, dungeon=False):
             if name:
                 idx = add_npc(name, 0, 0, 0)
                 SOURCE.setdefault(idx, "cmangos")
+                return idx
+    return 0
+
+
+def disc_npc(qid, which, zone=None, dungeon=False):
+    """The giver ("from") or ender ("to") players' games showed for a quest the catalog has no NPC for."""
+    for key in ((DISC.get("q") or {}).get(str(qid)) or {}).get(which) or []:
+        if key[:1] in ("c", "o") and key[1:].isdigit():
+            idx = npc_from("npc" if key[0] == "c" else "object", int(key[1:]), zone, dungeon)
+            if idx:
+                DISC_LINKED.append((qid, which, key))
                 return idx
     return 0
 
@@ -648,6 +808,16 @@ def immediate_pre(qid):
                 groups.append([a])
         groups += [sorted(g) for g in excl.values()]
         return groups
+    if not wh and qid in DISC_ONLY:
+        # a quest only players' notes know: the step whose window opened the moment they handed in the one before,
+        # when that one is in the catalog and no later in level (a reopened, already-offered quest fails this)
+        groups = []
+        for pair in (DISC.get("chain") or {}):
+            a, _, b = pair.partition(">")
+            if b == str(qid) and a.isdigit() and int(a) in LIST and int(a) != qid and qlevel(int(a)) <= LIST[qid]["level"] \
+                    and (LIST[int(a)].get("reqlevel") or 1) <= (LIST[qid].get("reqlevel") or 1):
+                groups.append([int(a)])
+        return groups
     return [[wh]] if wh else []
 
 
@@ -673,7 +843,7 @@ def prereqs(qid, seen=None, depth=0):
 
 def chain_known(qid):
     """Do we know this quest's chain at all (a series box, or the Classic database)?"""
-    return qid in CM or bool((DET.get(qid) or {}).get("chain"))
+    return qid in CM or bool((DET.get(qid) or {}).get("chain")) or (qid in DISC_ONLY and bool(immediate_pre(qid)))
 
 
 RACE_BIT = {1: 1, 2: 2, 3: 4, 4: 8, 5: 16, 6: 32, 7: 64, 8: 128}
@@ -775,6 +945,14 @@ for qid in IDS:
                 break
     if not turn:
         turn = npc_by_text(qid, zone)
+    if not turn:
+        turn = disc_npc(qid, "to", zone, dungeon)
+    if qid in GAME_ENDER_A:  # the game showed the Alliance a different ender; Wowhead's stays the Horde one
+        ta = npc_from(GAME_ENDER_A[qid][0], GAME_ENDER_A[qid][1], zone, dungeon)
+        if ta:
+            if turn and turn != ta:
+                TURNH[qid] = turn
+            turn = ta
     ends = d.get("ends") or []
     by_fac = {f: (k, i) for f, k, i in ends if f}
     if "A" in by_fac and "H" in by_fac and by_fac["A"] != by_fac["H"]:
@@ -792,6 +970,8 @@ for qid in IDS:
                 give = npc_from(kind, i, zone, dungeon)
                 if give:
                     break
+    if not give and sk != "item" and not any(k == "item" for k, _ in cmq.get("starts", [])):
+        give = disc_npc(qid, "from", zone, dungeon)
     flags = 0
     if q.get("category2") == 2 or q.get("type") == 81:
         flags |= 1
@@ -858,6 +1038,14 @@ for qid in IDS:
             base, mult = seen, 1  # XP the catalog never had: the game's number is the base
             flags = (flags | 512) & ~64
             SEEN_FILL.append(qid)
+    if qid in DISC_ONLY:
+        # from players' notes alone: the game's own number when they read it, otherwise unknown
+        mult = 1
+        flags = (flags | 16384) & ~(16 | 32 | 256)
+        if base:
+            if flags & 8:
+                unconfirmed -= 1
+            flags = (flags | 512) & ~(8 | 64)
     side = {1: 1, 2: 2}.get(q.get("side"), 0)
     Q[qid] = [qlevel(qid), q.get("reqlevel") or 1, side, base, mult, turn, give, cat_for(qid), q.get("reqclass") or 0, flags]
     QN[qid] = q["name"]
@@ -1028,7 +1216,8 @@ lines.append("--         16 Classic only: not in Wowhead Forever's data yet, 32 
 lines.append("--         64 XP not known yet, 128 a Season of Discovery leftover: its NPC hasn't been met in Forever,")
 lines.append("--         256 multiplier computed from the pre-2026-10-01 read: the extra above x1 halved, not yet re-read,")
 lines.append("--         512 XP as the game paid it after the cut: a hand-in or quest window on build 70170 or later,")
-lines.append("--         1024 a wanted poster, 2048 an escort, 4096 repeatable (never suggested), 8192 kept as read: the game paid within a few percent of it after the cut)}")
+lines.append("--         1024 a wanted poster, 2048 an escort, 4096 repeatable (never suggested), 8192 kept as read: the game paid within a few percent of it after the cut,")
+lines.append("--         16384 known only from players' notes: level, NPCs and XP as their games showed them; needs = the lowest level anyone took it at)}")
 lines.append("D.Q = {\n" + ",\n".join("[%d]=%s" % (k, lua(v)) for k, v in sorted(Q.items())) + "\n}")
 lines.append("D.QN = " + keyed(QN))
 lines.append("D.STEPNAME = " + keyed(STEPNAME))
@@ -1198,6 +1387,8 @@ def gap_report():
                ("; small differences kept as read: " + ", ".join("%d %s %s, paid %s" % (q, QN[q], c, g) for q, c, g in SEEN_NEAR)) if SEEN_NEAR else "",
                len(SEEN_FIX), (": " + ", ".join("%d %s %s -> %s" % (q, QN[q], c, g) for q, c, g in SEEN_FIX)) if SEEN_FIX else "",
                len(SEEN_FILL), (": " + ", ".join("%d %s" % (q, QN[q]) for q in SEEN_FILL)) if SEEN_FILL else ""),
+           "", ("Readings taken under a temporary +3%% XP buff on the player (the game's number times 1.03, give or take one: 390 shows 401) "
+                "count as the game's number: %d readings on %d quests.") % (len(UNBUFFED), len({q for q, _, _ in UNBUFFED})),
            "", "Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read; before the cut unless marked): %s." % (
                ", ".join("%s x%s%s" % (CATS[c - 1]["name"], m, " (read after the cut)" if DMULT_POST.get(c) else "") for c, m in sorted(DMULT.items(), key=lambda kv: CATS[kv[0] - 1]["name"])) or "none"),
            "", "Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,",
@@ -1216,8 +1407,39 @@ def gap_report():
             (DISC.get("meta") or {}).get("uploads") or 0, (DISC.get("meta") or {}).get("pulled") or "?", len(SEEN),
             sum(1 for q in SEEN if q in _CMQ_IDS and q not in LIST_WOWHEAD)))
         if _unknown:
-            out.append("Seen in game but not in the catalog (%d), to add: %s." % (len(_unknown), ", ".join(
-                "%d %s" % (q, (DISC["q"].get(str(q)) or {}).get("t") or "?") for q in _unknown[:60])))
+            out.append("Seen in game but not in the catalog (%d): %s." % (len(_unknown), ", ".join(
+                "%d %s (%s)" % (q, (DISC["q"].get(str(q)) or {}).get("t") or "?",
+                                "too little to place: no NPC with a position" if q in DISC_UNPLACED else "left out on purpose by the catalog's filters")
+                for q in _unknown[:60])))
+        out.append("")
+        out.append("Every upload so far is one account's growing QuestBank.lua: what follows rests on one witness.")
+        if DISC_ONLY:
+            out.append("Added from players' notes alone (flag 16384; required level is the lowest anyone took it at): %s." % ", ".join(
+                "%d %s (level %d, %s, %s)" % (q, QN.get(q, "?"), Q[q][0], ("%d XP" % round_xp(lua_round(Q[q][3] * Q[q][4]))) if Q[q][3] else "XP unknown",
+                                               "ender unknown" if not Q[q][5] else "ender known") for q in sorted(DISC_ONLY) if q in Q))
+        if DISC_LINKED:
+            out.append("Givers and enders filled in from what players' games showed: %s." % ", ".join(
+                "%d %s %s" % (q, "giver" if w == "from" else "ender", k) for q, w, k in DISC_LINKED))
+        out.append("NPC positions from players' games (the spot where they stood, a few yards off): %d agree with the catalog within %d yd "
+                   "(median %.1f yd); %d moved to where the game saw them%s; %d placed from the game alone%s." % (
+                       len(GAME_AGREE), GAME_MOVE_YD, sorted(GAME_AGREE.values())[len(GAME_AGREE) // 2] if GAME_AGREE else 0, len(set(GAME_MOVED)),
+                       (": " + ", ".join("%s %d by %d yd" % (k, i, d) for k, i, d in sorted(set(GAME_MOVED)))) if GAME_MOVED else "",
+                       len(set(GAME_FILLED)), (": " + ", ".join("%s %d" % (k, i) for k, i in sorted(set(GAME_FILLED)))) if GAME_FILLED else ""))
+        if GAME_SIDE:
+            out.append("Sides corrected by what the game showed an Alliance character: %s; 79362's Alliance ender is c268 (Darkshire), the Horde one stays Wowhead's." % (
+                ", ".join("%d %s" % (q, QN.get(q, "?")) for q in sorted(GAME_SIDE))))
+        _pre_of = {q: {p for g in immediate_pre(q) for p in g} for q in Q}
+        _review = []
+        for _pair in sorted(DISC.get("chain") or {}):
+            _a, _, _b = _pair.partition(">")
+            if not (_a.isdigit() and _b.isdigit()):
+                continue
+            _a, _b = int(_a), int(_b)
+            if _a in Q and _b in Q and _b not in DISC_ONLY and _a not in _pre_of.get(_b, set()) and not chain_known(_b):
+                _review.append("%d>%d" % (_a, _b))
+        if _review:
+            out.append("Chain steps players' games suggest for quests with no known chain, not taken (the window of the next quest opened at the same NPC "
+                       "within 8 s of a hand-in, which a reopened quest also does): %s." % ", ".join(_review))
         out.append("")
     out.append("Multipliers from ForeverChanges where Wowhead's page wasn't read: %d. Where both have a number, they disagree on %d:" % (
         len(FROM_FC), len(DISAGREE)))

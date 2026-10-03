@@ -7,28 +7,37 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 
 | Check | Forever data | Missing | Classic seed | Missing |
 |---|---|---|---|---|
-| Forever XP multiplier read from its Wowhead Forever page | 2144 | 192 | 1459 | 1457 |
-| Turn-in NPC with a position | 2144 | 161 | 1459 | 7 |
-| Turn-in inside a dungeon (hand in on the way, not on the route) | 2144 | 94 | 1459 | 59 |
-| Quest giver with a position (quests that start from an item don't need one) | 2144 | 259 | 1459 | 12 |
-| Chain known (Wowhead Forever series or the Classic database) | 2144 | 437 | 1459 | 0 |
+| Forever XP multiplier read from its Wowhead Forever page | 2148 | 192 | 1459 | 1457 |
+| Turn-in NPC with a position | 2148 | 163 | 1459 | 7 |
+| Turn-in inside a dungeon (hand in on the way, not on the route) | 2148 | 94 | 1459 | 59 |
+| Quest giver with a position (quests that start from an item don't need one) | 2148 | 250 | 1459 | 12 |
+| Chain known (Wowhead Forever series or the Classic database) | 2148 | 439 | 1459 | 0 |
 
 On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip. Hand-ins on 2026-10-02 paid exactly that on every multiplied quest, dungeon-typed or not.
-What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 40 quests confirmed (within 5% counts as agreement), 0 corrected to the game's number, 0 with no XP in the catalog filled in.
+What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 138 quests confirmed (within 5% counts as agreement; small differences kept as read: 157 Deliver the Thread 1450, paid 1464), 4 corrected to the game's number: 472 Fall of Dun Modr 1000 -> 1200, 2924 Essential Artificials 3050 -> 5500, 2929 The Grand Betrayal 2750 -> 4950, 2930 Data Rescue 3650 -> 6550, 0 with no XP in the catalog filled in.
+
+Readings taken under a temporary +3% XP buff on the player (the game's number times 1.03, give or take one: 390 shows 401) count as the game's number: 81 readings on 68 quests.
 
 Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read; before the cut unless marked): Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
 
 Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,
 holidays, repeatable turn-ins, raids and battlegrounds are left out.
 
-NPC positions: 360 from Wowhead Forever, 1332 from the CMaNGOS spawn table where Wowhead has none.
+NPC positions: 359 from Wowhead Forever, 1329 from the CMaNGOS spawn table where Wowhead has none.
 Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: 244 Wowhead coordinates there were in the old
 Classic frame and were moved to Forever's; 58 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 26.
 
-Seen in Forever by players (16 uploads merged by probe_pull.py, 2026-10-02T12:03:23Z): 82 quests, 0 of them Classic seeds now confirmed.
-Seen in game but not in the catalog (1), to add: 91904 A Sealed Crate.
+Seen in Forever by players (27 uploads merged by probe_pull.py, 2026-10-03T04:17:56Z): 190 quests, 0 of them Classic seeds now confirmed.
+Seen in game but not in the catalog (2): 91904 A Sealed Crate (left out on purpose by the catalog's filters), 95795 Fallen in the Fen (too little to place: no NPC with a position).
+
+Every upload so far is one account's growing QuestBank.lua: what follows rests on one witness.
+Added from players' notes alone (flag 16384; required level is the lowest anyone took it at): 88756 Bring Back a Bang (level 32, 2550 XP, ender unknown), 95809 Heartwoven (level 31, XP unknown, ender known), 98209 Bloom of the Heavens (level 29, 1200 XP, ender unknown), 98221 From the Ashes (level 28, 2300 XP, ender unknown), 98283 Carnage (level 30, 3050 XP, ender unknown).
+Givers and enders filled in from what players' games showed: 88756 giver c1073, 95646 giver c1244, 95647 giver c1480, 95772 giver c956, 95809 ender c1480, 98072 giver c2094, 98208 ender c270844, 98208 giver c270844, 98209 giver c270844, 98221 giver c2104, 98245 giver c270637, 98246 giver c270637, 98283 giver c1244, 98293 giver o672330, 98815 giver c2094.
+NPC positions from players' games (the spot where they stood, a few yards off): 103 agree with the catalog within 25 yd (median 3.7 yd); 4 moved to where the game saw them: npc 1721 by 51 yd, npc 4982 by 58 yd, npc 5082 by 106 yd, npc 15991 by 41 yd; 5 placed from the game alone: npc 956, npc 256390, npc 270637, npc 270844, object 672330.
+Sides corrected by what the game showed an Alliance character: 79362 Grant's Shield, 92706 WANTED: Bruuz; 79362's Alliance ender is c268 (Darkshire), the Horde one stays Wowhead's.
+Chain steps players' games suggest for quests with no known chain, not taken (the window of the next quest opened at the same NPC within 8 s of a hand-in, which a reopened quest also does): 484>98815, 92744>92745, 92745>92747, 92747>92748, 92748>92749, 92748>92750, 92750>92751, 92751>92752, 92752>92753, 95809>98282.
 
 Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both have a number, they disagree on 0:
 
@@ -228,11 +237,12 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98581 Archaic Rune (level 1, Alliance)
 - 98601 A Difficult Path (level 1, Horde)
 
-## Forever data: no turn-in position (161)
+## Forever data: no turn-in position (163)
 
 - 6661 Deeprun Rat Roundup (level 12, Alliance)
 - 6662 Me Brother, Nipsy (level 12, Alliance)
 - 86784 Sticks and Bones (level 7, Horde)
+- 88756 Bring Back a Bang (level 32, Alliance)
 - 90902 Rediscovering the Light (level 2, Horde)
 - 91208 Coming to Terms (level 4, Horde)
 - 91209 Continue Your Training (level 4, Horde)
@@ -369,11 +379,12 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 97979 The Goddess Provides (level 1, Alliance)
 - 98094 Scout Support (level 25, Horde)
 - 98095 Valuable Vantages (level 25, Horde)
-- 98208 Bloom of the Heavens (level 29, both)
-- 98247 Shipping Label (level 60, Alliance)
+- 98209 Bloom of the Heavens (level 29, both)
+- 98221 From the Ashes (level 28, Alliance)
 - 98248 Shipping Label (level 60, Horde)
 - 98251 Never Coming Back (level 22, Horde)
 - 98252 A Void Path (level 22, Horde)
+- 98283 Carnage (level 30, Alliance)
 - 98284 Camping 101: Enchanting (level 6, Horde)
 - 98286 Camping 101: Enchanting (level 6, Alliance)
 - 98319 Secure the Mountain (level 8, Alliance)
@@ -489,7 +500,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98517 Call of Fire (level 10, Horde)
 - 99260 Fillion's Mission (level 10, Alliance)
 
-## Forever data: no quest giver position (259)
+## Forever data: no quest giver position (250)
 
 - 934 Crown of the Earth (level 11, both)
 - 78307 The Horn of Xelthos (level 23, both)
@@ -584,14 +595,11 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 95213 Stolen Blasting Powder (level 10, Alliance)
 - 95250 Abominable Creatures (level 21, Alliance)
 - 95328 Whispering Horror Residue (level 10, Horde)
-- 95646 Horrors in the Highland (level 31, Alliance)
-- 95647 Lost in the Thicket Things (level 31, Alliance)
 - 95663 Dragonmaw Rumors (level 31, both)
 - 95664 Elder Knowledge (level 31, Horde)
 - 95697 Changing Tastes (level 31, Horde)
 - 95737 Seeking Caitlin (level 31, both)
 - 95771 A Taste of Darkness (level 10, both)
-- 95772 Songblade Search (level 31, both)
 - 95805 Grace of An'she and Mu'sha (level 4, Horde)
 - 95810 Lost Relic Carry (level 31, Alliance)
 - 95816 Sign Me Up! (level 60, both)
@@ -712,16 +720,12 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 97977 Nature's Call (level 3, Alliance)
 - 97979 The Goddess Provides (level 1, Alliance)
 - 98028 Baron Marinous (level 21, Alliance)
-- 98072 Crocs of the Sky (level 27, both)
 - 98094 Scout Support (level 25, Horde)
 - 98095 Valuable Vantages (level 25, Horde)
 - 98189 Return the Statuette (level 25, Alliance)
 - 98191 A Friend of the Family (level 25, Alliance)
-- 98208 Bloom of the Heavens (level 29, both)
 - 98219 The Shamed Lieutenant (level 30, Alliance)
 - 98240 Crimson Crate Delivery (level 29, Alliance)
-- 98245 Razormaw Needling (level 29, Alliance)
-- 98246 Trying Times (level 29, Alliance)
 - 98247 Shipping Label (level 60, Alliance)
 - 98248 Shipping Label (level 60, Horde)
 - 98251 Never Coming Back (level 22, Horde)
@@ -729,7 +733,6 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98284 Camping 101: Enchanting (level 6, Horde)
 - 98286 Camping 101: Enchanting (level 6, Alliance)
 - 98287 Camping 101: Engineering (level 6, Alliance)
-- 98293 Forced Disarmament (level 30, Alliance)
 - 98319 Secure the Mountain (level 8, Alliance)
 - 98323 Secure the Mountain (level 8, Alliance)
 - 98389 A Light in the Darkness (level 4, Horde)
@@ -741,7 +744,6 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98576 Glyphic Parchment (level 1, Horde)
 - 98581 Archaic Rune (level 1, Alliance)
 - 98601 A Difficult Path (level 1, Horde)
-- 98815 Highland Hides (level 28, both)
 - 99079 Longwalker Malah (level 9, Horde)
 - 99081 Grim Tidings (level 9, Horde)
 - 99101 Our Ancient Enemy (level 9, Horde)
@@ -751,7 +753,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 99191 A Donation of Wool (level 60, Alliance)
 - 99196 A Donation of Wool (level 60, Horde)
 
-## Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own (437)
+## Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own (439)
 
 - 490 Bounty: Gnarlpine Furbolg (level 8, Alliance)
 - 5640 Desperate Prayer (level 10, Alliance)
@@ -775,7 +777,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 79094 The Lessons of Ta'zo (level 20, Horde)
 - 79095 The Apothecary's Metaphysical Primer (level 20, Horde)
 - 79097 Baxtan: On Destructive Magics (level 20, both)
-- 79362 Grant's Shield (level 25, Horde)
+- 79362 Grant's Shield (level 25, both)
 - 79363 Silvia's Sword (level 26, Horde)
 - 79535 Basilisks: Should Petrification be Feared? (level 35, both)
 - 79536 Greater Friend of the Library (level 35, both)
@@ -811,6 +813,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 86776 Ingredients for the Forge (level 30, Alliance)
 - 86784 Sticks and Bones (level 7, Horde)
 - 87288 Soft Saber Pelts (level 7, Alliance)
+- 88756 Bring Back a Bang (level 32, Alliance)
 - 90902 Rediscovering the Light (level 2, Horde)
 - 91208 Coming to Terms (level 4, Horde)
 - 91209 Continue Your Training (level 4, Horde)
@@ -878,7 +881,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92699 The Supreme Magister (level 9, Alliance)
 - 92700 The Grand Skyseer (level 9, Horde)
 - 92701 To Valanaar (level 9, Alliance)
-- 92706 WANTED: Bruuz (level 20, Horde)
+- 92706 WANTED: Bruuz (level 20, both)
 - 92708 A Grand Adventure (level 12, Horde)
 - 92709 A Grand Adventure (level 12, Alliance)
 - 92727 The Missing Scholar (level 10, Alliance)
@@ -1138,6 +1141,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98197 Spoils of War (level 22, Alliance)
 - 98208 Bloom of the Heavens (level 29, both)
 - 98219 The Shamed Lieutenant (level 30, Alliance)
+- 98221 From the Ashes (level 28, Alliance)
 - 98246 Trying Times (level 29, Alliance)
 - 98247 Shipping Label (level 60, Alliance)
 - 98248 Shipping Label (level 60, Horde)
@@ -1151,9 +1155,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98321 Flintfire's Shipment (level 7, Alliance)
 - 98326 Frosthowl (level 9, Alliance)
 - 98389 A Light in the Darkness (level 4, Horde)
-- 98407 Show of Force (level 17, Alliance)
-- 98423 The Treaty of Understanding (level 16, Alliance)
-- and 37 more
+- and 39 more
 
 ## Classic seed: no turn-in position (7)
 

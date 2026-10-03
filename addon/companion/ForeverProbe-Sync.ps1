@@ -4,7 +4,8 @@
 # under your WoW game folders and, when either file changes (WoW writes them at logout and on
 # /reload), uploads it to foreverrank.com's data endpoint. Nothing else is read, nothing runs
 # inside the game, no account or login is involved, and you can read every line below.
-# The site keeps no player names: only what the addons noted about quests, NPCs and XP.
+# Uploads are stored privately and never published as they are: the files hold your characters' names (and
+# ForeverProbe's a guild roster snapshot); only what the addons noted about quests, NPCs and XP goes into the releases.
 #
 # Install:   Install.bat (or: .\ForeverProbe-Sync.ps1 -Install)
 # Running:   the sigil sits in your system tray and syncs every 30 minutes;

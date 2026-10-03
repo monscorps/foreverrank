@@ -1257,7 +1257,7 @@ v3.modePlan.__scripts.OnClick(v3.modePlan)
 QB.Model.Finish()
 UI:Refresh()
 print("route plan:", v3.summary:GetText())
-assert(v3.summary:GetText() == "93,610 XP  |  level 23.61  |  138 min  |  at 60 min 23.45", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
+assert(v3.summary:GetText() == "93,610 XP  |  level 23.61  |  121 min  |  at 60 min 23.42", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
 print("setup:", v3.setup:GetText())
 for _, key in ipairs({ "mounted", "pins" }) do
   local b = UI.header.toggles[key]
@@ -2779,6 +2779,31 @@ do
   -- the login note is armed
   c.env.ForeverProbeDB = nil; c.addons = nil
   print("addon note:", said)
+end
+
+-- 3.5.3: a reading taken under the +3% XP buff is the game's number times 1.03 (give or take one); the addon keeps
+-- the game's own number
+do
+  local Q2 = owner.QB
+  for _, c in ipairs({ { 401, 390 }, { 236, 230 }, { 1184, 1150 }, { 1288, 1250 }, { 5665, 5500 }, { 2550, 2550 }, { 875, 875 }, { 1464, 1464 }, { 51, 50 } }) do
+    assert(Q2.Unbuff(c[1]) == c[2], ("Unbuff(%d) is %d, got %s"):format(c[1], c[2], tostring(Q2.Unbuff(c[1]))))
+  end
+  -- a quest window under the buff is stored as the game's number
+  local id
+  for qid, r in pairs(Q2.Data.Q) do
+    local q = Q2.Quest.Get(qid)
+    if q and r[4] > 0 and q.lvl and q.lvl <= Q2.state.level and q.lvl >= Q2.state.level - 3 and Q2.Model.Listed(q) >= 1100 and Q2.Model.Listed(q) <= 4000 then id = qid; break end
+  end
+  assert(id, "a quest to read")
+  local q = Q2.Quest.Get(id)
+  local listed = Q2.Model.Listed(q)
+  local before = owner.env.QuestBankDB.live and owner.env.QuestBankDB.live[id]
+  Q2.Live.Record(id, math.floor(listed * 1.03), Q2.state.level, "npc")
+  local rec = owner.env.QuestBankDB.live[id]
+  assert(rec and rec.full == listed, ("a buffed reading of %d is kept as %d, got %s"):format(math.floor(listed * 1.03), listed, rec and rec.full or "nothing"))
+  owner.env.QuestBankDB.live[id] = before
+  q.liveFull = before and before.full or nil
+  print("unbuff:", math.floor(listed * 1.03), "->", listed)
 end
 
 local seen = {}

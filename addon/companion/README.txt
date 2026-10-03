@@ -10,8 +10,10 @@ two saved files, and uploads each one when it changes:
   WTF\Account\<account>\SavedVariables\QuestBank.lua
 
 Either addon on its own is enough; it uploads whichever files exist.
-No account, no key, nothing to type. The site keeps no player names:
-only what the addons noted about quests, NPCs and XP.
+No account, no key, nothing to type. Uploads are stored privately and
+never published as they are: the files hold your characters' names (and
+ForeverProbe's a snapshot of your guild's roster). Only what the addons
+noted about quests, NPCs and XP goes into the releases.
 
 Setup, once:
   Double-click Install.bat in this folder.

@@ -19,7 +19,7 @@ disc.json records how many uploads reported each XP value and each NPC position.
 The admin key is read from worker/.probe-admin-key (gitignored) or the PROBE_ADMIN_KEY
 environment variable; it is never printed. Nothing here writes to the Worker.
 """
-import argparse, base64, datetime, gzip, json, os, re, sys, urllib.error, urllib.request
+import argparse, base64, datetime, gzip, hashlib, json, os, re, sys, urllib.error, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -322,15 +322,32 @@ def merge_disc(acc, d):
             acc["item"][str(item)] = int(qid)
 
 
+def _digest(v):
+    return hashlib.sha256(json.dumps(v, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:20]
+
+
 def merge_upload(acc, text, source="local"):
-    """Decode one upload and merge its notes. Returns (kind, had_notes)."""
+    """Decode one upload and merge its notes. Returns (kind, had_notes). The same notes arriving again (an unchanged
+    file re-sent, or ForeverProbe's copy of QuestBank's notes next to QuestBank's own file) are merged once."""
     kind, data = decode(text)
     acc["meta"]["uploads"] += 1
     acc["meta"]["sources"][source] = acc["meta"]["sources"].get(source, 0) + 1
+    seen_hashes = acc["meta"].setdefault("hashes", [])
+    if kind == "questbank-savedvars" and isinstance(data, dict):
+        h = _digest({k: data.get(k) for k in ("disc", "turnins", "live", "liveEra")})
+        if h in seen_hashes:
+            acc["meta"]["repeats"] = acc["meta"].get("repeats", 0) + 1
+            return kind, False
+        seen_hashes.append(h)
     merge_seen(acc, kind, data)
     d = disc_of(kind, data)
     if d is None:
         return kind, False
+    h = _digest(d)
+    if h in seen_hashes:
+        acc["meta"]["repeats"] = acc["meta"].get("repeats", 0) + 1
+        return kind, False
+    seen_hashes.append(h)
     acc["meta"]["with_notes"] += 1
     merge_disc(acc, d)
     return kind, True

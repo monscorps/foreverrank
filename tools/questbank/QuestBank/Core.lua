@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.5.2"
+QB.version = "3.5.3"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -501,6 +501,7 @@ function Q.Get(id)
   c.escort = math.floor(c.flags / 2048) % 2 == 1     -- an escort
   c.repeatable = math.floor(c.flags / 4096) % 2 == 1 -- repeatable: never suggested
   c.near = math.floor(c.flags / 8192) % 2 == 1       -- kept as read: the game paid within a few percent of this number
+  c.seenOnly = math.floor(c.flags / 16384) % 2 == 1  -- known only from players' notes (not on Wowhead or in the Classic database)
   c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and API.ItemIcon(c.bag[1])) or API.ItemIcon(D.QITEM[id])
     or (c.cat and c.cat.icon) or D.TEX.questGeneric
   cache[id] = c
@@ -605,13 +606,27 @@ end
 local Live = {}
 QB.Live = Live
 
+-- the game's number behind a reading taken under the +3% buff: the game rounds quest XP to its grid (5 up to 100,
+-- 10 up to 500, 25 up to 1,000, 50 above), and the buff pays that times 1.03, give or take one (390 shows 401,
+-- 1,250 shows 1,288). A reading on the grid is taken as it is
+function QB.Unbuff(xp)
+  local R = QB.Model and QB.Model.RoundXp
+  if not R or type(xp) ~= "number" or xp <= 0 or R(xp) == xp then return xp end
+  local g = R(xp / 1.03)
+  for _, cand in ipairs({ g, R(g - 1), R(g + 60) }) do
+    if cand > 0 and math.abs(cand * 1.03 - xp) <= 1 then return cand end
+  end
+  return xp
+end
+
 function Live.Record(id, xp, level, src)
   local q = Q.Get(id)
   if not (q and xp and xp > 0 and level) then return end
   local pct = QB.Model.Pct(q.lvl, level)
   if pct < 100 then return end -- a grey quest's number says little about its full value
-  -- (the level-30 build's Well Rested speeds up rested XP and no longer adds to quest XP, so the number is taken as is)
-  local full = xp
+  -- a temporary +3% XP buff on the player (Well Rested from the sleeping bag, it seems) shows the game's number times
+  -- 1.03: kept as the game's own number, so the reading stays right once the buff is gone
+  local full = QB.Unbuff(xp)
   -- a number far off what the quest could pay is someone else's quest, not this one's
   local listed = QB.Model.Listed(q)
   if listed > 0 and (full > listed * 6 or full < listed * 0.2) then return end
