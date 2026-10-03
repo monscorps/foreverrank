@@ -312,7 +312,8 @@ def text_fx(line):
         k = "use"
     elif line.startswith("Equip:"):
         body = line[6:]
-        if ar.text_rf([line]) or re.search(r"(improves|increases) your chance to|chance to (get a )?critical|critical effect chance", body, re.I):
+        if ar.text_rf([line]) or re.search(r"(improves|increases) your chance to|chance to (get a )?critical|critical effect chance|"
+                                           r"reduces chance to be dodged|attack speed and casting speed", body, re.I):  # stats, not procs
             return []
         if not re.search(r"chance|sometimes|when struck|when you kill|killing|dying|harmful spell|spells? land|"
                          r"melee attacks|ranged auto-attacks|attacks with this weapon|on hit|on a successful", body, re.I):

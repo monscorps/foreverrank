@@ -21,6 +21,10 @@ Caches: tools/.wh-cache/ and tools/.loot-cache/ (both gitignored).
   python3 tools/scavenge_items.py --all      # also check Wowhead for every gear item
   python3 tools/scavenge_items.py --refresh  # re-download ForeverChanges' item files
   python3 tools/scavenge_items.py --dry      # report only
+  python3 tools/scavenge_items.py --recheck-missing   # ask again about old "not found" answers (fetch only)
+  python3 tools/scavenge_items.py --refresh-found     # ask again about Wowhead-only items older than FOUND_DAYS (fetch only)
+  python3 tools/scavenge_items.py --refresh-found --ids=23577,17943   # just these
+  python3 tools/scavenge_items.py --no-fetch # merge from the caches only
 """
 import collections, concurrent.futures, csv, html, json, os, re, sys, threading, time, urllib.request
 
@@ -57,6 +61,8 @@ def rows(table):
 
 
 NF_DAYS = 3        # a "not found" answer is asked again after this many days: Wowhead adds Forever items as players see them
+FOUND_DAYS = 5     # an item only Wowhead knows is asked again after this many days: the server's numbers move (The Hungering
+                   # Cold read 213 dps for a week after Wowhead had 73)
 SPACING = 3.2      # seconds between requests to Wowhead
 _last = [0.0]
 
@@ -76,9 +82,9 @@ def stale_nf(iid):
     return time.time() - at > NF_DAYS * 86400
 
 
-def fetch(iid, recheck=False):
+def fetch(iid, recheck=False, force=False):
     path = os.path.join(CACHE, "%s.json" % iid)
-    if os.path.exists(path) and not (recheck and stale_nf(iid)):
+    if os.path.exists(path) and not force and not (recheck and stale_nf(iid)):
         return json.load(open(path))
     wait = SPACING - (time.time() - _last[0])
     if wait > 0:
@@ -192,15 +198,20 @@ def equip_stats(line, st):
     if m: add("rangedAttackPower", int(m.group(1))); return
     m = re.search(r"\+(\d+) Attack Power", t, re.I)
     # "+N Attack Power Vs Beasts", "when fighting Undead", "in Cat, Bear ... forms only" are conditional
-    if m and not re.search(r"form| vs |fighting", t, re.I): add("attackPower", int(m.group(1))); return
-    m = re.search(r"chance to hit with spells by (\d+)%", t, re.I)
-    if m: add("spellHit", int(m.group(1))); return
-    m = re.search(r"critical strike with spells by (\d+)%", t, re.I)
-    if m: add("spellCrit", int(m.group(1))); return
-    m = re.search(r"chance to hit by (\d+)%", t, re.I)
-    if m: add("hit", int(m.group(1))); return
-    m = re.search(r"chance to get a critical strike by (\d+)%", t, re.I)
-    if m: add("crit", int(m.group(1))); return
+    if m and not re.search(r"form| vs |fighting|Attack Power against", t, re.I): add("attackPower", int(m.group(1))); return  # "+16 Attack Power against Beasts"
+    m = re.search(r"chance to hit with spells by ([\d.]+)%", t, re.I)
+    if m: add("spellHit", float(m.group(1))); return
+    m = re.search(r"critical strike with spells by ([\d.]+)%", t, re.I)
+    if m: add("spellCrit", float(m.group(1))); return
+    m = re.search(r"chance to hit by ([\d.]+)%", t, re.I)
+    if m: add("hit", float(m.group(1))); return
+    m = re.search(r"chance to get a critical strike by ([\d.]+)%", t, re.I)
+    if m: add("crit", float(m.group(1))); return
+    # Forever's ratings as Wowhead shows them since early October 2026: percentages
+    m = re.search(r"Increases your attack speed and casting speed by ([\d.]+)%", t, re.I)
+    if m: add("haste", float(m.group(1))); return
+    m = re.search(r"Reduces chance to be Dodged or Parried by ([\d.]+)%", t, re.I)
+    if m: add("expertise", float(m.group(1))); return
     m = re.search(r"Restores (\d+) mana per 5 sec", t, re.I)
     if m: add("mp5", int(m.group(1))); return
     m = re.search(r"Restores (\d+) health per 5 sec", t, re.I)
@@ -211,14 +222,14 @@ def equip_stats(line, st):
     if m:
         key = RATING["Defense"]
         add(key[0], int(m.group(1))); add(key[1], int(m.group(1)) / key[2]); return
-    m = re.search(r"chance to dodge an attack by (\d+)%", t, re.I)
-    if m: add("dodge", int(m.group(1))); return
-    m = re.search(r"chance to parry an attack by (\d+)%", t, re.I)
-    if m: add("parry", int(m.group(1))); return
-    m = re.search(r"chance to block attacks with a shield by (\d+)%", t, re.I)
-    if m: add("blockChance", int(m.group(1))); return
-    m = re.search(r"block value of your shield by (\d+)", t, re.I) or re.search(r"Increases your shield block by (\d+)", t, re.I)
-    if m: add("blockValue", int(m.group(1))); return
+    m = re.search(r"chance to dodge an attack by ([\d.]+)%", t, re.I)
+    if m: add("dodge", float(m.group(1))); return
+    m = re.search(r"chance to parry an attack by ([\d.]+)%", t, re.I)
+    if m: add("parry", float(m.group(1))); return
+    m = re.search(r"chance to block attacks with a shield by ([\d.]+)%", t, re.I)
+    if m: add("blockChance", float(m.group(1))); return
+    m = re.search(r"block value of your shield by (\d+)\b(?!\s*%)", t, re.I) or re.search(r"Increases your shield block by (\d+)\b(?!\s*%)", t, re.I)
+    if m and not re.search(r"\bwhile\b", t, re.I): add("blockValue", int(m.group(1))); return  # not Steadfast Libram's 30% during Holy Shield
     m = re.search(r"^Equip: Increases your (critical strike|hit|haste|expertise|dodge|parry|block) by (\d+)\.?$", t, re.I)
     if m:
         key = RATING[WH_RATING[m.group(1).lower()]]
@@ -263,6 +274,8 @@ def parse(tt):
     for sid, v in re.findall(r"<!--stat(\d+)-->([+-]?\d+)", tt):
         if sid in PRIMARY:
             r["stats"][PRIMARY[sid]] = r["stats"].get(PRIMARY[sid], 0) + int(v)
+        elif sid == "50":  # "+140 Armor" in the white stat block: bonus armor (newer Wowhead tooltips)
+            r["stats"]["bonusArmor"] = r["stats"].get("bonusArmor", 0) + int(v)
     for v, school in re.findall(r"\+(\d+) (Fire|Frost|Nature|Shadow|Arcane) Resistance", tt):
         k = school.lower() + "Resist"
         r["stats"][k] = r["stats"].get(k, 0) + int(v)
@@ -405,9 +418,34 @@ def recheck_missing():
             print("  %d/%d checked; now found: loot %d, gear %d, other %d" % (n, len(order), found[0], found[1], found[2]), flush=True)
 
 
+def refresh_found(days=FOUND_DAYS, ids=None):
+    """Ask Wowhead again about the items whose numbers come only from it (source "Server data via Wowhead's Forever
+    database") when the cached answer is older than `days`. Fetch only; a normal run (--no-fetch) merges what comes back."""
+    db = json.load(open(DB))
+    wh = ids or [str(i["id"]) for i in db["items"] if "Wowhead's Forever database" in (i.get("source") or "")]
+    old = []
+    for iid in wh:
+        path = os.path.join(CACHE, "%s.json" % iid)
+        if os.path.exists(path) and (ids or time.time() - os.path.getmtime(path) > days * 86400):
+            old.append(iid)
+    print("Wowhead-only items: %d; asked again: %d (~%d min at %.1f s each)" % (len(wh), len(old), len(old) * SPACING / 60, SPACING), flush=True)
+    changed = 0
+    for n, iid in enumerate(old, 1):
+        before = json.dumps(json.load(open(os.path.join(CACHE, "%s.json" % iid))), sort_keys=True)
+        d = fetch(iid, force=True)
+        if d is not None and json.dumps(d, sort_keys=True) != before:
+            changed += 1
+        if n % 50 == 0 or n == len(old):
+            print("  %d/%d asked; changed %d" % (n, len(old), changed), flush=True)
+
+
 def main():
     if "--recheck-missing" in sys.argv:
         recheck_missing()
+        return
+    if "--refresh-found" in sys.argv:
+        ids = next((a.split("=", 1)[1].split(",") for a in sys.argv if a.startswith("--ids=")), None)
+        refresh_found(ids=ids)
         return
     dry, refresh_all, no_fetch = "--dry" in sys.argv, "--all" in sys.argv, "--no-fetch" in sys.argv
     os.makedirs(CACHE, exist_ok=True)
@@ -423,6 +461,7 @@ def main():
     # where ForeverChanges has no item or reads an older build than the game did
     disc = os.path.join(ROOT, "research", "questbank", "disc.json")
     tips = ((json.load(open(disc)).get("probe") or {}).get("tips") or {}) if os.path.exists(disc) else {}
+    seen_game = {str(k): v for k, v in (((json.load(open(disc)).get("probe") or {}).get("items") or {}) if os.path.exists(disc) else {}).items()}
     try:
         fc_build = int(str(fc_meta.get("forever_build") or "0").split(".")[-1])
     except ValueError:
@@ -640,6 +679,18 @@ def main():
         if iid in looted and it.get("era") in ("sod", "retail"):
             it.pop("era", None)
             it["eraNote"] = "Recorded as Forever loot"
+        # Items players' games had (ForeverProbe snapshots of bags and gear, merged by tools/probe_pull.py): sg is how
+        # many uploads showed it. Seen in Forever settles a leftover-era tag the same way a loot record does.
+        n = seen_game.get(iid)
+        if n:
+            it["sg"] = n
+            if it.get("era") in ("sod", "retail"):
+                it.pop("era", None)
+                it["eraNote"] = "Seen in players' games in Forever"
+                if "treat as leftover" in (it.get("source") or ""):
+                    it["source"] = it["source"].split(";")[0] + "; players' games in Forever have shown it"
+        else:
+            it.pop("sg", None)
 
     # Stat lines only the tooltip text carried (datamine rows keep the text but had no stat for these)
     filled = collections.Counter()
