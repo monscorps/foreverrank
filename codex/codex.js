@@ -453,7 +453,12 @@
       (quals.length > 1 ? '<span class="dbs-q">' + quals.map(function (q) { return '<button type="button" class="q-' + q + (SQ.qual === q ? " on" : "") + '" data-dbqual="' + q + '">' + q + "</button>"; }).join("") + "</span>" : "");
     if (window.TipKit) TipKit.hide();
     var out = document.getElementById("dbs-out"), res = active ? matches() : [];
-    document.getElementById("dbs-n").textContent = active ? res.length + (res.length === 1 ? " result" : " results") + (SQ.lvl ? " usable at " + SQ.lvl : "") : IDX.length + " entries";
+    // With a proc filter on, say how many of the procs listed have a known chance; the rest say "not known yet".
+    var pxAll = FI && FI.chanceKnown && (SQ.fx.indexOf("hit") !== -1 || SQ.fx.indexOf("equip") !== -1)
+      ? res.filter(function (e) { return e.kind === "item" && (hasFx(e.it, "hit") || hasFx(e.it, "equip")); }) : null;
+    var pxk = pxAll ? pxAll.filter(function (e) { return FI.chanceKnown(e.it); }).length : 0;
+    document.getElementById("dbs-n").textContent = active ? res.length + (res.length === 1 ? " result" : " results") + (SQ.lvl ? " usable at " + SQ.lvl : "") +
+      (pxAll && pxAll.length ? "; proc chance known for " + pxk + " of " + pxAll.length : "") : IDX.length + " entries";
     document.getElementById("dbs-n").title = SQ.lvl ? "Items the client stores no required level for use item level - 5; their rows say \"Level ~N (est.)\"." : "";
     fillSources();
     out.hidden = !active;

@@ -42,6 +42,11 @@ def _num(v, default=0.0):
         return default
 
 
+def vrange(v, var):
+    """The low and high end of an amount with variance, as the client rounds them."""
+    return (int(math.floor(round(abs(v) * (1 - var / 2), 4) + 0.5)), int(math.floor(round(abs(v) * (1 + var / 2), 4) + 0.5)))
+
+
 def fmt(v, decimals=None):
     if decimals is not None:
         return ("%." + str(decimals) + "f") % v
@@ -305,7 +310,12 @@ class Client:
                     out.append(self.name.get(sid, ""))
                 elif depth < 3:
                     col = "Description_lang" if m.group(1) == "spelldesc" else "AuraDescription_lang"
-                    out.append(self.resolve((self.spell.get(sid) or {}).get(col, ""), sid, {}, depth + 1))
+                    out.append(self.resolve((self.spell.get(sid) or {}).get(col, ""), sid, {"ranges": ctx.get("ranges")} if ctx.get("ranges") else {}, depth + 1))
+                i += m.end()
+                continue
+            m = re.match(r"\$proccooldown(?!\w)", rest)
+            if m:
+                out.append(fmt(_num((self.aura.get(str(spell)) or {}).get("ProcCategoryRecovery")) / 1000.0))
                 i += m.end()
                 continue
             m = self.VAR.match(rest)
@@ -314,6 +324,16 @@ class Client:
                 v = self.var(sid, m.group(2), int(m.group(3) or 0) or None, ctx)
                 if v is None:
                     raise ValueError("unknown var " + m.group(0))
+                if ctx.get("ranges") and m.group(2) in ("s", "m", "M") and not ctx.get("rank"):
+                    # what the game prints for a spell with variance: "6 to 10" ($s), the low ($m) or high ($M) end,
+                    # half up as the client rounds (the float32 Variance is rounded first: 38.4999999 is 38.5)
+                    e = self.eff.get(str(sid), {}).get((int(m.group(3) or 0) or 1) - 1) or {}
+                    var = _num(e.get("Variance"))
+                    lo, hi = vrange(v, var)
+                    if var > 0 and lo != hi:
+                        out.append("%d to %d" % (lo, hi) if m.group(2) == "s" else str(lo if m.group(2) == "m" else hi))
+                        i += m.end()
+                        continue
                 out.append(fmt_duration(v) if m.group(2) in ("d", "D") else fmt(v))
                 i += m.end()
                 continue
@@ -326,6 +346,10 @@ class Client:
 
     def text(self, spell, col="Description_lang"):
         return self.resolve((self.spell.get(str(spell)) or {}).get(col, ""), spell)
+
+    def item_text(self, spell, col="Description_lang"):
+        """An item effect's text as the game prints it, with damage ranges ("6 to 10") where the effect varies."""
+        return self.resolve((self.spell.get(str(spell)) or {}).get(col, ""), spell, {"ranges": True})
 
     def talent_text(self, spell, rank, maxrank=1, col="Description_lang"):
         return self.resolve((self.spell.get(str(spell)) or {}).get(col, ""), spell,

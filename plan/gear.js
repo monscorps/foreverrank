@@ -273,7 +273,7 @@
     });
     g.forEach(function (x) {
       function first(f) { for (var i = 0; i < x.rows.length; i++) if (x.rows[i][f] != null) return x.rows[i][f]; return null; }
-      x.p = first("p"); x.ppm = first("ppm"); x.cd = first("cd"); x.icd = first("icd"); x.src = first("src"); x.only = first("only");
+      x.p = first("p"); x.ppm = first("ppm"); x.cd = first("cd"); x.icd = first("icd"); x.src = first("src"); x.only = first("only"); x.ps = first("ps"); x.pn = first("pn"); x.ct = first("ct");
       x.dmg = x.rows.reduce(function (a, e) { return a + ((e.what === "damage" || e.what === "dot") && e.v ? +e.v : 0); }, 0);
     });
     return g;
@@ -325,6 +325,24 @@
   function grpWhat(g) {
     var main = g.rows.filter(function (e) { return e.what === "damage" || e.what === "dot" || e.what === "heal" || e.what === "mana" || e.what === "buff"; });
     return (main.length ? main : g.rows.slice(0, 1)).map(fxWhat).join(" + ") + (g.only ? " (only against " + g.only + ")" : "");
+  }
+  // Where a proc chance comes from, said in the tooltip: the game client's tables, Wowhead's Forever tooltip, the item's own text.
+  var PSRC = { client: "game client data", wowhead: "Wowhead's Forever tooltip", tooltip: "the item's tooltip" };
+  function chanceSrc(g) { return PSRC[g.ps || (g.src === "client" ? "client" : "tooltip")] || PSRC.tooltip; }
+  var CH_UNKNOWN = "not known yet. The game server decides it, and neither the game files nor Wowhead state it.";
+  // One sentence per proc: "Proc chance: 4% per hit (game client data)", or that nobody knows it yet.
+  function chanceLine(g, speed) {
+    if (g.k === "use") return "";
+    var cd = g.icd ? ", at most once every " + fmtDur(g.icd) : "";
+    if (g.pn) return "Proc chance: " + g.pn;
+    if (g.p != null) return "Proc chance: " + (g.p >= 1 ? "every time" : Math.round(g.p * 1000) / 10 + "%" + (g.k === "hit" ? " per hit" : "")) + cd + " (" + chanceSrc(g) + ").";
+    if (g.ppm) return "Proc chance: " + g.ppm + " procs per minute" + (speed ? ", " + Math.round(procChance(g, speed) * 1000) / 10 + "% per swing at " + speed.toFixed(2) + " s" : "") + cd + " (" + chanceSrc(g) + ").";
+    var checked = g.src === "client" || !!g.ps;
+    return "Proc chance: " + (checked ? CH_UNKNOWN : "not stated on this item's tooltip.") + (g.icd ? " It can happen at most once every " + fmtDur(g.icd) + (checked ? " (game client data)." : ".") : "");
+  }
+  function chanceKnown(it) {
+    var gs = fxGroups(procs(it)).filter(function (g) { return g.k !== "use"; });
+    return gs.length > 0 && gs.every(function (g) { return g.p != null || !!g.ppm; });
   }
   function chanceTxt(g, speed) {
     if (g.p != null) return Math.round(g.p * 1000) / 10 + "%";
@@ -497,7 +515,7 @@
   }
   window.ForgeItem = { effReq: effReq, mainStat: mainStat, armorType: armorType, reflect: reflect, blockValue: blockValue, estimateSource: estimateSource,
     isJunk: isJunk, istats: istats, statVal: statVal, STATS: STATS, STATBY: STATBY, chips: chips, hasSource: hasSource, canUse: canUse, rfHit: rfHit, rfBlock: rfBlock,
-    procs: procs, procDps: procDps, procDmg: procDmg, useAvg: useAvg, fxGroups: fxGroups, fxChips: fxChips, procChance: procChance, weaponSpeed: weaponSpeed,
+    procs: procs, chanceKnown: chanceKnown, chanceLine: chanceLine, procDps: procDps, procDmg: procDmg, useAvg: useAvg, fxGroups: fxGroups, fxChips: fxChips, procChance: procChance, weaponSpeed: weaponSpeed,
     hasFx: hasFx, FXPILLS: FXPILLS,
     ARMOR_TYPES: ARMOR_TYPES, extras: function () { return EXTRA; } };
 
@@ -533,11 +551,22 @@
       (it.effects || []).forEach(function (e) { L.push('<span class="it-g">' + esc(e) + "</span>"); });
       // The game client's own effect text, where the tooltip lacks it or says something else (Forever changed the spell).
       var said = (it.effects || []).map(normTxt), cx = [];
-      (it.rf || []).concat(it.fx || []).forEach(function (e) { if (e && e.t && cx.indexOf(e.t) === -1 && said.indexOf(normTxt(e.t)) === -1) cx.push(e.t); });
+      (it.rf || []).concat(it.fx || []).forEach(function (e) {
+        var t = e && (e.ct || (e.k === "use" || e.what ? null : e.t)); // fx: the client's sentence (ct); rf: its client text (t)
+        if (t && cx.indexOf(t) === -1 && said.indexOf(normTxt(t)) === -1) cx.push(t);
+      });
       if (cx.length) {
         L.push('<span class="it-src">The Forever client data says:</span>');
         cx.forEach(function (t) { L.push('<span class="it-g">' + esc(/^(Use|Equip|Chance on hit):/.test(t) ? t : "Equip: " + t) + "</span>"); });
       }
+      var tns = [];
+      (it.rf || []).concat(it.fx || []).forEach(function (e) { if (e && e.tn && tns.indexOf(e.tn) === -1) tns.push(e.tn); });
+      tns.forEach(function (t) { L.push('<span class="it-src">' + esc(t) + "</span>"); });
+      var pg = ALLSLOTS.indexOf(it.slot) !== -1 ? fxGroups(procs(it)).filter(function (g) { return g.k !== "use"; }) : [];
+      pg.forEach(function (g) {
+        var line = chanceLine(g, weaponSpeed(it)), known = g.p != null || !!g.ppm;
+        L.push('<span class="it-px' + (known ? "" : " it-unk") + '">' + (pg.length > 1 || (!g.t && !g.ct) ? esc(grpWhat(g)) + ": " : "") + esc(line) + "</span>");
+      });
       [["attackPower", "Equip: +%s Attack Power.", /attack power/i], ["spellPower", "Equip: Increases damage and healing done by magical spells and effects by up to %s.", /damage and healing/i],
         ["healing", "Equip: Increases healing done by up to %s.", /increases healing/i], ["spellDamage", "Equip: Increases damage done by magical spells and effects by up to %s.", /spell|magical/i],
         ["hit", "Equip: Improves your chance to hit by %s%.", /chance to hit/i], ["crit", "Equip: Improves your chance to get a critical strike by %s%.", /critical strike/i],
@@ -970,13 +999,18 @@
         var it = byId[E0[k]]; if (!it || overLevel(it)) return;
         var own = weaponSpeed(it), spd = own || baseSpd, spdWhy = own ? "its own speed " + own.toFixed(2) + " s" : mhSpd ? "your main hand's speed " + mhSpd.toFixed(2) + " s" : "2.0 s (no main-hand weapon)";
         fxGroups(procs(it)).forEach(function (g) {
-          var what = grpWhat(g), L = ['<span class="it-l">' + esc(g.t || what) + "</span>"], val = "", on = false;
+          var what = grpWhat(g), L = ['<span class="it-l">' + esc(g.ct || g.t || what) + "</span>"], val = "", on = false; // the Forever text first
           var c = g.k === "hit" ? procChance(g, spd) : null;
           if (g.k === "hit") {
-            var cTxt = g.p != null ? pct(c) + " per hit (the client's proc chance)" : g.ppm ? pct(c) + " per swing: " + g.ppm + " procs per minute x " + spdWhy + " / 60" : null;
+            var cTxt = g.p != null ? pct(c) + " per hit (" + chanceSrc(g) + ")" : g.ppm ? pct(c) + " per swing: " + g.ppm + " procs per minute x " + spdWhy + " / 60 (" + chanceSrc(g) + ")" : null;
             if (g.only && g.dmg) { val = "situational"; L.push('<span class="it-l">Only against ' + esc(g.only) + ": not counted in the total.</span>"); }
-            else if (g.dmg && RANGED[it.slot] && CLS !== "HUNTER") { val = "ranged only"; L.push('<span class="it-l">Procs on ranged attacks (' + pct(c || 0) + " per shot), which this class rarely makes: not counted in the melee total.</span>"); }
-            else if (c == null) { pxUnknown++; L.push('<span class="it-l">Chance unknown: the client gives neither a proc chance nor procs per minute, so it is not counted.</span>'); val = "chance unknown"; }
+            else if (g.dmg && RANGED[it.slot] && CLS !== "HUNTER") {
+              if (c == null) pxUnknown++;
+              val = "ranged only";
+              L.push('<span class="it-l">Procs on ranged attacks' + (c != null ? " (" + pct(c) + " per shot)" : "") + (it.type === "Wand" ? "" : ", which this class rarely makes") + ": not counted in the melee total." +
+                (c == null ? " " + esc(chanceLine(g, spd)) : "") + "</span>");
+            }
+            else if (c == null) { pxUnknown++; L.push('<span class="it-l">' + esc(chanceLine(g, spd)) + " So it is not counted in the total.</span>"); val = "chance unknown"; }
             else if (g.dmg) {
               var d = c * g.dmg / spd, capped = g.icd && g.dmg / g.icd < d;
               if (capped) d = g.dmg / g.icd;
@@ -986,9 +1020,11 @@
             } else {
               var up = null, bd = null;
               g.rows.forEach(function (e) { if (e.what === "buff" && e.dur) bd = e.dur; });
-              if (bd) { up = Math.min(1, c * bd / spd); val = "~" + Math.round(up * 100) + "% up"; }
+              if (bd) { up = g.icd ? Math.min(1, bd / (g.icd + spd / c)) : Math.min(1, c * bd / spd); val = "~" + Math.round(up * 100) + "% up"; }
               else val = pct(c);
-              L.push('<span class="it-l">Chance ' + esc(cTxt) + "." + (up != null ? " Estimated uptime " + Math.round(up * 100) + "%: " + pct(c) + " x " + bd + " s / " + spd.toFixed(2) + " s, capped at 100%. Not added to the stats above." : " No damage to count.") + "</span>");
+              L.push('<span class="it-l">Chance ' + esc(cTxt) + "." + (up != null ? " Estimated uptime " + Math.round(up * 100) + "%: " +
+                (g.icd ? bd + " s buff / (" + fmtDur(g.icd) + " cooldown + " + spd.toFixed(2) + " s / " + pct(c) + " average wait for the next proc)" : pct(c) + " x " + bd + " s / " + spd.toFixed(2) + " s") +
+                ", capped at 100%. Not added to the stats above." : " No damage to count.") + "</span>");
             }
           } else if (g.k === "use") {
             var cdT = g.cd ? fmtDur(g.cd) : "cooldown unknown", main = g.dmg || g.rows.reduce(function (a, e) { return a + ((e.what === "heal" || e.what === "mana") && e.v ? +e.v : 0); }, 0);
@@ -997,7 +1033,7 @@
               (main && g.cd ? " About " + r1(main * 60 / g.cd) + " per minute if used on cooldown." : "") + " Not part of the proc damage per second.</span>");
           } else {
             val = g.p != null ? pct(g.p) : "equip";
-            L.push('<span class="it-l">Equip proc' + (g.p != null ? ", " + pct(g.p) + " chance" : ", chance unknown") + (g.icd ? ", at most once every " + fmtDur(g.icd) : "") + ". Triggers on spells, being hit or similar, not on your swings, so it is not part of the proc damage per second.</span>");
+            L.push('<span class="it-l">' + esc(chanceLine(g, 0)) + " An equip proc triggers on spells, being hit or similar, not on your swings, so it is not part of the proc damage per second.</span>");
           }
           L.push('<span class="it-src">' + (g.k === "hit" ? "Chance on hit" : g.k === "use" ? "Use" : "Equip proc") + srcTag(g) + "." + (g.k === "hit" ? PXIGN : "") + "</span>");
           pxRows += '<div class="gst px-r' + (on ? " on" : "") + '" data-tip="' + attr("<b>" + esc(it.name) + "</b>" + L.join("")) + '"><span><em class="px-k">' + (g.k === "hit" ? "Hit" : g.k === "use" ? "Use" : "Equip") + "</em>" + esc(it.name) + ': <i class="px-w">' + esc(what) + "</i></span><b>" + esc(val) + "</b></div>";

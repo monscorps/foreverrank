@@ -108,7 +108,8 @@ def dmg(e, school, sid):
     out = {"s": school, "v": v, "sp": int(sid)}
     var = float(e.get("Variance") or 0)
     if var > 0:
-        out["lo"], out["hi"] = int(math.floor(v * (1 - var / 2) + 0.5)), int(math.floor(v * (1 + var / 2) + 0.5))  # half up: 38.5 -> 39
+        # half up: 38.5 -> 39; the float32 Variance is rounded first, else 38.4999999 drops a point
+        out["lo"], out["hi"] = int(math.floor(round(v * (1 - var / 2), 4) + 0.5)), int(math.floor(round(v * (1 + var / 2), 4) + 0.5))
     return out
 
 
@@ -216,12 +217,42 @@ def wearable(it):
     return it.get("slot") not in (None, "", "unknown")
 
 
+_ST = []
+
+
+def amount(r):
+    """"70 to 116" or "50", as the game prints an amount."""
+    return ("%s to %s" % (r["lo"], r["hi"])) if r.get("lo") is not None and r.get("hi") not in (None, r.get("lo")) else ("%g" % r["v"])
+
+
+def stale_note(r, what="damage"):
+    """The note for a text that quotes other numbers than the spell the effect casts."""
+    amt = amount(r)
+    if what == "heal":
+        does = "heals for %s" % amt
+    elif what == "mana":
+        does = "restores %s mana" % amt
+    else:
+        does = "deals %s%s damage" % (amt, (" " + r["s"]) if r.get("s") and r["s"] != "Physical" else "")
+    return "The game's text quotes other numbers. The spell this effect actually casts %s, and ForeverRank counts that." % does
+
+
 def client_text(c, r):
-    """The spell's own description with its numbers filled in, or None."""
+    """The spell's own description with its numbers filled in, or None. tools/spelltext.py fills every token it
+    knows from the tables; this file's own small renderer is the fallback, and nothing with a "$" left is returned."""
     sid = str(r.get("sp") or "")
     d = (c.desc.get(sid) or "").strip()
     if not d:
         return None
+    try:
+        if not _ST:
+            import spelltext
+            _ST.append(spelltext.Client(BUILD))
+        txt = _ST[0].item_text(sid)
+        if txt and "$" not in txt:
+            return txt
+    except Exception:
+        pass
     amt = ("%s to %s" % (r["lo"], r["hi"])) if r.get("lo") is not None and r.get("hi") not in (None, r.get("lo")) else str(r["v"])
     pct = ("%g" % round(r["p"] * 100, 2)) if r.get("p") is not None else None
     if pct:
@@ -229,7 +260,7 @@ def client_text(c, r):
         d = re.sub(r"\$[sm]1%", pct + "%", d)          # the spell's own first value used as the chance
     d = re.sub(r"\$(\d{3,})?[sm]1", amt, d)
     if re.search(r"\$", d):
-        d = re.sub(r"\$\{[^}]*\}|\$[a-zA-Z]+\d*", "", d)
+        return None  # a token this renderer cannot fill: no half sentence
     return re.sub(r"\s+", " ", d).strip()
 
 
@@ -255,6 +286,10 @@ def apply_items(items, c):
                     t = client_text(c, r)
                     if t:
                         r["t"] = t
+            for r in rf:  # the text can quote an older spell than the one the aura casts (Vile Protector)
+                t = client_text(c, r)
+                if t and amount(r) not in t and re.search(r"\d+(?: to \d+)? (?:[A-Z][a-z]+ )?damage", t):  # it quotes a number
+                    r["tn"] = stale_note(r)
         else:
             rf = text_rf(eff)
         if rf:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Proc, on-use and chance-on-hit effects of wearable items: fx in plan/items-db.json and codex/loot-items.json.
 
-fx entries: {k, what, s, v, lo, hi, ticks, dur, p, ppm, cd, icd, aoe, stat, only, sp, src, t}
+fx entries: {k, what, s, v, lo, hi, ticks, dur, p, ppm, ps, cd, icd, aoe, stat, only, sp, src, t}
   k     "hit"   a proc on landing a melee or ranged hit (ItemEffect TriggerType 2 "Chance on hit:", or an equip proc
                 aura whose proc flags are melee/ranged hits done)
         "use"   an on-use effect (TriggerType 0)
@@ -12,6 +12,12 @@ fx entries: {k, what, s, v, lo, hi, ticks, dur, p, ppm, cd, icd, aoe, stat, only
         "mana", "other"
   s     school, for damage and dot; v the average (base points), lo/hi the range (half up, as apply_reflect)
   ticks, dur  ticks and seconds; p chance per hit 0..1; ppm procs per minute (the client's SpellProcsPerMinute)
+  pn    a sentence about the chance where the client's numbers are not usable as they stand (it contradicts itself,
+        or gives only a raised chance); p is then absent
+  ct    the Forever client's own sentence for the effect, where the item shows Classic text or no line at all
+  tn    a note where that sentence quotes an older spell's numbers than the spell the effect casts
+  ps    where p or ppm comes from: "client" (spell tables), "wowhead" (its "(Proc chance: N%)" note on the line),
+        "tooltip" (the line itself says "N% chance"); absent when the chance is not known
   cd    cooldown seconds (use); icd internal cooldown seconds of a proc (SpellAuraOptions.ProcCategoryRecovery,
         or "Ns cooldown" in Wowhead's tooltip), shown only from 1 s up
   aoe   true when it hits several targets
@@ -321,6 +327,7 @@ def text_fx(line):
     m = re.search(r"(\d+(?:\.\d+)?)%\s*chance|chance of (\d+(?:\.\d+)?)%|Proc chance: (\d+(?:\.\d+)?)%", line, re.I)
     if m:
         base["p"] = round(float(next(g for g in m.groups() if g)) / 100, 3)
+        base["ps"] = "wowhead" if m.group(3) else "tooltip"  # "(Proc chance: N%)" is Wowhead's addition to the line
     m = re.search(r"Proc chance: [^)]*?(\d+(?:\.\d+)?)\s*(s|m|h)\w* cooldown", line, re.I) \
         or re.search(r"cannot occur more than once every (\d+) (sec|min)", line, re.I)
     if m:
@@ -403,6 +410,31 @@ def only_vs(text):
     return None
 
 
+
+_ST = []
+AMOUNTS = ("damage", "dot", "heal", "mana")
+SCHOOLS = {"Physical", "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane"}
+
+
+def norm_line(t):
+    """A line reduced to letters, digits and %, with a trailing "(N Min Cooldown)" dropped, for comparing texts."""
+    t = re.sub(r"\s*\(\d+(?:\.\d+)?\s*(?:sec|min|hour|hr|day)s?\s*cooldown\)\s*$", "", (t or "").lower())
+    return re.sub(r"^(equip|use|chance on hit):\s*", "", re.sub(r"[^a-z0-9%:]+", " ", t)).replace(" ", "").replace(":", "")
+
+
+def client_sentence(sid):
+    """The game's own text for an item effect, filled by tools/spelltext.py; None when a token cannot be filled."""
+    if not _ST:
+        import spelltext
+        _ST.append(spelltext.Client(ar.BUILD))
+    if str(sid) == "0":
+        return None  # only loads the resolver
+    try:
+        txt = _ST[0].item_text(sid)
+    except Exception:
+        return None
+    return txt if txt and "$" not in txt else None
+
 def client_fx(c, it, rf_sps):
     """fx for one item from the client's tables; [] when the client has no rows for it."""
     lines = it.get("effects") or []
@@ -444,10 +476,23 @@ def client_fx(c, it, rf_sps):
         reach = [sid] + ([psid] if trig == "1" and psid else [])
         for x in reach:
             payload(c, x, 0, seen)
+        # spells the text names add what the effect does not already do (Strike of the Hydra's Fire and Frost); a named
+        # spell of a kind already cast is an older copy the text still quotes (bomb satchels: 1318061 casts, its text
+        # quotes 1318031), not a second hit
+        # Only amounts can double: a buff the text names still adds its stat (Diamond Flask's +20 Strength). A named
+        # spell whose school is not the one the text prints next to it is borrowed for its number only (Swine Fists
+        # quotes Cursed Murloc Eye's 8 Shadow as "Nature damage" while casting 4 Nature).
+        have = {(r["what"], r.get("s")) for r in comps}
+        direct = any(r["what"] == "damage" for r in comps)
         for x in reach:
-            for ref in re.findall(r"\$(\d{4,})[mso]\d", c.desc.get(x, "") or ""):
+            for ref, word in re.findall(r"\$(\d{4,})[mso]\d(?:\s+(\w+))?", c.desc.get(x, "") or ""):
                 if ref not in seen and ref in c.se:
-                    comps += payload(c, ref, 0, seen)
+                    for r in payload(c, ref, 0, seen):
+                        if r["what"] in AMOUNTS and (r["what"], r.get("s")) in have:
+                            continue
+                        if r["what"] == "damage" and direct and word.capitalize() in SCHOOLS and word.capitalize() != r.get("s"):
+                            continue
+                        comps.append(r)
         # a use whose outcome is one of several (Satchel of Potions): not every outcome at once
         if trig == "0" and re.search(r"random|hope for the best|one of the following", c.desc.get(sid, "") or "", re.I) \
                 and len({r["what"] for r in comps}) > 1:
@@ -462,7 +507,14 @@ def client_fx(c, it, rf_sps):
         if i is not None:
             used.add(i)
         desc = c.desc.get(sid, "")
-        says_chance = re.search(r"chance|sometimes|occasionally", (t or "") + " " + desc, re.I)
+        m = re.search(r"\$@spelldesc(\d+)", desc)
+        if m:  # "$@spelldesc16939": the text lives on another spell
+            desc = desc.replace(m.group(0), c.desc.get(m.group(1), "") or "")
+        # The chance wording is judged on the client's own text; the item line only when the client has none
+        # (an est item's line is Classic text, and Forever may have rewritten the effect: Hurricane).
+        said = desc if desc.strip() else (t or "")
+        says_chance = re.search(r"chance|sometimes|occasionally", said, re.I)
+        pn = None
         if trig in ("1", "2") and pc is not None and pc < 100:
             p = round(pc / 100.0, 3)
             # the tooltip renders formulas such as ${$h/3}%: the number players read is the rendered one
@@ -475,12 +527,24 @@ def client_fx(c, it, rf_sps):
                 m = re.search(r"(\d+(?:\.\d+)?)%\s*chance|chance of (\d+(?:\.\d+)?)%", t)
                 if m:
                     p = round(float(m.group(1) or m.group(2)) / 100, 3)
-        elif trig == "1" and pc is not None and pc >= 100 and not says_chance:
-            p = 1  # every hit ("Adds 4 Fire damage to your weapon attack")
+            lit = re.search(r"(?<![$\d.])(\d+(?:\.\d+)?)%\s*chance|chance of (\d+(?:\.\d+)?)%", desc)
+            if not form and lit and abs(float(lit.group(1) or lit.group(2)) - pc) > 0.01:
+                # Red Whelp Gloves: the text says 5%, the table 10%; nothing says which one the server rolls
+                pn = "the game disagrees with itself: its text says %s%%, its spell table %g%%." % (lit.group(1) or lit.group(2), pc)
+                p = None
+            elif not form and not lit and re.search(r"times as likely|chance is doubled|twice as likely|doubled", desc, re.I):
+                # Ironfoe: "against Orcs ... $s2 times as likely" with no base chance rendered. Where the client renders
+                # both (Hand of Justice, Lion Horn, Uther's Strength), the table holds the raised chance, not the base.
+                pn = "not known in general. The game's spell table gives %g%%, but the text says the chance is higher in some cases and states no base chance, so %g%% is likely the raised chance only." % (pc, pc)
+                p = None
+        elif trig == "1" and pc is not None and pc >= 100 and said.strip() and not says_chance \
+                and (t or client_sentence(sid)):  # with no line to show, "every time" would hide what triggers it
+            p = 1  # every hit ("Adds 4 Fire damage to your weapon attack"); 100 or 101 alone, with no text, proves nothing
+        ps = "client" if p is not None or ppm else None
         if p is None and t:
             m = re.search(r"Proc chance: (\d+(?:\.\d+)?)%", t)
             if m:
-                p = round(float(m.group(1)) / 100, 3)
+                p, ps = round(float(m.group(1)) / 100, 3), "wowhead"
         if icd is None and t:
             m = re.search(r"Proc chance: [^)]*?(\d+(?:\.\d+)?)\s*(s|m|h)\w* cooldown", t) \
                 or re.search(r"cannot occur more than once every (\d+) (sec|min)", t, re.I)
@@ -489,6 +553,36 @@ def client_fx(c, it, rf_sps):
         if k == "hit" and p == 1 and trig == "1" and not t and it.get("cat") == "weapon":
             continue  # the weapon's bonus damage, already in its damage line
         vs = only_vs(t or desc)
+        ct = client_sentence(sid) if (it.get("est") or not t) else None
+        if ct and any(norm_line(ct) in norm_line(l) for l in ([t] if t else []) + list(lines)):
+            ct = None  # one of the item's own lines says it already
+        # the text can quote an older spell than the one the effect casts: say so where its one amount is not in it
+        tn = None
+        nums = [r for r in comps if r.get("v") is not None and r["what"] in AMOUNTS]
+        full = client_sentence(sid)
+        said_nums = [float(x) for x in re.findall(r"(?<![\d.])(\d+(?:\.\d+)?) (?:\w+ )?(?:mana|damage|health)", full or "")]
+        if full and len(nums) == 1 and re.search(r"\d", full) and ar.amount(nums[0]) not in full \
+                and not (len(said_nums) > 1 and abs(sum(said_nums) - nums[0]["v"]) < 0.6):  # "gain 8 and drain 8": 16
+            r0 = nums[0]
+            per = (r0["v"] / r0["ticks"]) if r0.get("ticks") else None
+            per_said = None
+            if per is not None:
+                for a, b in re.findall(r"(?<![\d.])(\d+) to (\d+)(?![\d.])", full):
+                    if abs((int(a) + int(b)) / 2.0 - per) <= 1:
+                        per_said = "%s to %s" % (a, b)  # a per-tick range ("66 to 74 Fire damage for 10 sec")
+                if not per_said and re.search(r"(?<![\d.])%s(?![\d.])" % re.escape("%g" % round(per, 1)), full):
+                    per_said = "%g" % round(per, 1)
+            if per_said:
+                per = per_said
+                if not re.search(r"every|per |each", full, re.I):  # a per-tick number the sentence doesn't call one
+                    tn = "The game's text gives the amount per tick (%s). In total it %s %s%s, and ForeverRank counts that." % (
+                        per, "restores" if r0["what"] == "mana" else "heals" if r0["what"] == "heal" else "deals",
+                        ("about " if " to " in per else "") + ar.amount(r0),
+                        " mana" if r0["what"] == "mana" else (" " + r0["s"] + " damage") if r0.get("s") and r0["what"] == "dot" else "")
+            else:
+                tn = ar.stale_note(r0, "heal" if r0["what"] == "heal" else "mana" if r0["what"] == "mana" else "damage")
+        if ct and not ct.startswith(PREFIX[trig]):
+            ct = PREFIX[trig] + " " + ct  # as the game prints it: "Chance on hit: Blasts a target for 140 Fire damage."
         if not t and not desc.strip():
             comps = [r for r in comps if r["what"] != "other"]  # nothing to show for an unnamed script effect
         for r in comps:
@@ -503,7 +597,7 @@ def client_fx(c, it, rf_sps):
             for f in ("s", "v", "lo", "hi", "ticks", "dur"):
                 if r.get(f) is not None:
                     ent[f] = r[f]
-            for f, v in (("p", p), ("ppm", ppm), ("cd", cd), ("icd", icd)):
+            for f, v in (("p", p), ("ppm", ppm), ("cd", cd), ("icd", icd), ("ps", ps if p is not None or ppm else None)):
                 if v is not None:
                     ent[f] = v
             if r.get("aoe"):
@@ -512,10 +606,16 @@ def client_fx(c, it, rf_sps):
                 ent["stat"] = r["stat"]
             if vs:
                 ent["only"] = vs
+            if pn:
+                ent["pn"] = pn
             ent["sp"] = int(sid)
             ent["src"] = "client"
             if t:
                 ent["t"] = t
+            if ct:
+                ent["ct"] = ct
+            if tn and r.get("v") is not None and r["what"] in AMOUNTS:
+                ent["tn"] = tn
             out.append(ent)
     return out
 
@@ -597,8 +697,41 @@ def proc_dps(it, speed=None):
     return dps, unknown
 
 
+def fill_tokens(items, c):
+    """Effect lines that still carry raw game tokens ("$18798s2", "$@spelldesc1226001"), filled by tools/spelltext.py.
+    A token without a spell id is filled only when every spell of the item gives the same text. Returns the count."""
+    if not client_sentence("0") and not _ST:
+        return 0
+    st, n = _ST[0], 0
+    for it in items:
+        eff = it.get("effects") or []
+        if not any("$" in e for e in eff):
+            continue
+        sids = [ie["SpellID"] for ie in c.ixe.get(str(it["id"]), [])] or ["0"]
+        for i, line in enumerate(eff):
+            if "$" not in line:
+                continue
+            if sids == ["0"] and re.search(r"\$(?!@)(?!\d)|\$\{|\$<", line):
+                continue  # a token without its spell id, and no spell of the item's own to read it from
+            outs = set()
+            for sid in sids:
+                try:
+                    outs.add(st.resolve(line, sid, {"ranges": True}))
+                except Exception:
+                    outs.add(None)
+            if len(outs) == 1 and None not in outs:
+                txt = outs.pop()
+                if txt and "$" not in txt:
+                    eff[i] = txt
+                    n += 1
+    return n
+
+
 def run(db, dry=False, verbose=True):
     c = Client()
+    filled = fill_tokens(db["items"], c)
+    if verbose and filled:
+        print("effects: filled game tokens in %d tooltip lines" % filled)
     rep = apply_items(db["items"], c)
     if verbose:
         print("effects: %d items with fx; by k %s; by what %s; by source %s" % (
@@ -618,6 +751,8 @@ def write_loot_items(db):
         it.pop("fx", None)
         if src and src.get("fx"):
             it["fx"] = src["fx"]
+        if src and any("$" in e for e in it.get("effects") or []) and src.get("effects") and not any("$" in e for e in src["effects"]):
+            it["effects"] = src["effects"]  # the lines fill_tokens filled
     with open(LOOT_ITEMS, "w") as f:
         json.dump(li, f, ensure_ascii=False, separators=(",", ":"))
 
