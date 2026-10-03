@@ -142,7 +142,8 @@ local TEMPLATES = { BackdropTemplate = true, UIPanelButtonTemplate = true, UIPan
 local KNOWN_EVENTS = {}
 allow(KNOWN_EVENTS, [[ADDON_LOADED PLAYER_LOGIN PLAYER_LOGOUT PLAYER_ENTERING_WORLD PLAYER_LEVEL_UP PLAYER_XP_UPDATE
 CHAT_MSG_COMBAT_XP_GAIN CHAT_MSG_SYSTEM QUEST_TURNED_IN QUEST_LOG_UPDATE PLAYER_DEAD TRAINER_SHOW TRAINER_CLOSED
-GUILD_ROSTER_UPDATE UNIT_AURA COMBAT_LOG_EVENT_UNFILTERED COMBAT_LOG_EVENT PLAYER_MONEY SKILL_LINES_CHANGED UPDATE_EXHAUSTION]])
+GUILD_ROSTER_UPDATE UNIT_AURA COMBAT_LOG_EVENT_UNFILTERED COMBAT_LOG_EVENT PLAYER_MONEY SKILL_LINES_CHANGED UPDATE_EXHAUSTION
+LOOT_READY QUEST_DETAIL QUEST_COMPLETE MERCHANT_SHOW ITEM_DATA_LOAD_RESULT]])
 local RESTRICTED_EVENTS = { COMBAT_LOG_EVENT_UNFILTERED = true, COMBAT_LOG_EVENT = true }
 
 local NOOP = function() end
@@ -440,7 +441,27 @@ local function newClient(label, o)
     GetContainerNumSlots = function(bag) return bag == 0 and 16 or 0 end,
     GetContainerItemID = function(bag, slot) if bag == 0 and slot <= 3 then return ({ 6948, 2070, 159 })[slot] end end,
   }
-  env.C_Item = { GetItemInfo = function(id) return "Item " .. id end }
+  -- items: c.itemClass[id] (default 4, armor), c.unloaded[id] = not in the client's cache yet
+  c.itemClass, c.unloaded, c.tipHooks, c.loadRequests = {}, {}, {}, {}
+  env.C_Item = {
+    GetItemInfo = function(id)
+      if c.unloaded[id] then return nil end
+      return "Item " .. id, "|cff1eff00|Hitem:" .. id .. "::::::::12:::::::|h[Item " .. id .. "]|h|r", 2, 27, 22, "Armor", "Cloth", 1,
+        "INVTYPE_CHEST", 132000 + id % 1000, 815, c.itemClass[id] or 4, 1, 1
+    end,
+    RequestLoadItemDataByID = function(id) c.loadRequests[#c.loadRequests + 1] = id end,
+  }
+  env.Enum.TooltipDataType = { Item = 0, Spell = 1, Unit = 2 }
+  env.TooltipDataProcessor = { AddTooltipPostCall = function(kind, fn) if kind == 0 then c.tipHooks[#c.tipHooks + 1] = fn end end }
+  env.C_TooltipInfo = {
+    GetItemByID = function(id)
+      return { id = id, lines = { { leftText = "Item " .. id }, { leftText = "Binds when picked up" }, { leftText = "Chest", rightText = "Cloth" },
+        { leftText = "39 Armor" }, { leftText = "+5 Stamina" }, { leftText = "Item Level 27" }, { leftText = "Requires Level 22" } } }
+    end,
+  }
+  c.loot = {}
+  env.GetNumLootItems = function() return #c.loot end
+  env.GetLootSlotLink = function(i) local id = c.loot[i]; return id and ("|cff1eff00|Hitem:" .. id .. "::::::::12:::::::|h[Item " .. id .. "]|h|r") or nil end
   if o.engraving then
     env.C_Engraving = {
       GetRuneCategories = function() return { 5, 7 } end,
@@ -949,6 +970,31 @@ step(c1, "direct call, unreachable in the client: Nemesis:OnGuildRoster()", func
 end)
 playChecks(c1)
 check(c1, "pace bar visible", bar(c1) and bar(c1).__shown, "")
+step(c1, "items: hover a chest piece, loot two (one the client hasn't loaded), hover a food", function()
+  for _, fn in ipairs(c1.tipHooks) do fn({}, { id = 280001 }) end
+  c1.unloaded[280003] = true
+  c1.loot = { 280002, 280003 }
+  c1.fire("LOOT_READY")
+  c1.itemClass[4536] = 0
+  for _, fn in ipairs(c1.tipHooks) do fn({}, { id = 4536 }) end
+  tick(c1, 1)
+  c1.unloaded[280003] = nil
+  c1.fire("ITEM_DATA_LOAD_RESULT", 280003, true)
+  tick(c1, 1)
+  for _, fn in ipairs(c1.tipHooks) do fn({}, { id = 280001 }) end -- again: kept once
+  tick(c1, 1)
+end)
+do
+  local it = (c1.env.ForeverProbeDB or {}).items or {}
+  local a = it[280001]
+  check(c1, "a hovered item's tooltip is kept", a and a.n == "Item 280001" and a.l == 27 and a.r == 22 and a.c == 4 and a.b == CLIENT.build,
+    a and ("%s ilvl %s req %s class %s build %s"):format(tostring(a.n), tostring(a.l), tostring(a.r), tostring(a.c), tostring(a.b)) or "nothing kept")
+  check(c1, "its lines skip the name and keep the right column", a and a.x[1] == "Binds when picked up" and a.x[2] == "Chest\tCloth" and #a.x == 6,
+    a and table.concat(a.x, " | ") or "")
+  check(c1, "looted items are kept, the late one once the client has it", it[280002] ~= nil and it[280003] ~= nil and #c1.loadRequests == 1,
+    ("280002 %s, 280003 %s, load requests %d"):format(tostring(it[280002] ~= nil), tostring(it[280003] ~= nil), #c1.loadRequests))
+  check(c1, "food is not kept (weapons, armor and recipes only)", it[4536] == nil, "")
+end
 do
   local n = 0; for _, line in ipairs(c1.printed) do if line:find("is running. The game writes its file", 1, true) then n = n + 1 end end
   check(c1, "says once in chat that it is running", n == 1, ("%d time(s)"):format(n))

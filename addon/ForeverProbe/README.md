@@ -32,6 +32,10 @@ read-only, nothing automated, nothing sent anywhere on its own.
   there the nemesis list stays empty. Dormant until foreverrank.com grows
   the pages for them.
 - Notes what class trainers offer when you open one.
+- Keeps the tooltip of every weapon, armor piece and recipe the game shows
+  you (bags, loot, quest rewards, vendors, chat links), once per client build:
+  Blizzard sends most new Forever items from the server, so the Database
+  learns them from players' games. Item data only.
 - Everything stays in your SavedVariables until you type `/probe export`
   and copy the text yourself, then paste it in the upload box at
   https://foreverrank.com/questbank/ (or drop the `ForeverProbe.lua` file

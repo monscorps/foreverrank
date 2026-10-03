@@ -2,13 +2,14 @@
 ## Title: |cffe5cc80Forever|cffffffffProbe|r
 ## Notes: Reads your character for foreverrank.com: a pace bar, snapshots, and QuestBank's discoveries if you run it. Read-only; exports only when you ask. Type /probe
 ## Author: ForeverRank
-## Version: 0.4.6
+## Version: 0.4.7
 ## IconTexture: Interface\AddOns\ForeverProbe\icon
 ## SavedVariables: ForeverProbeDB
 ## X-Website: https://foreverrank.com
 
 Util.lua
 Probe.lua
+Items.lua
 Ledger.lua
 History.lua
 Estimator.lua

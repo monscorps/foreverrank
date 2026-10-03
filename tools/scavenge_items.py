@@ -255,6 +255,12 @@ def fc_parse(f, sets):
         if m: r["block"] = int(m.group(1).replace(",", "")); continue
         m = re.match(r"^([+-]\d+) (Strength|Agility|Stamina|Intellect|Spirit)$", line)
         if m: add(m.group(2).lower(), int(m.group(1))); continue
+        m = re.match(r"^([+-]\d+) (.+?) Rating$", line)  # a rating as a plain green line (ForeverChanges writes "Equip: +N ... Rating")
+        if m and RATING.get(m.group(2)):
+            key = RATING[m.group(2)]
+            add(key[0], int(m.group(1)))
+            if key[1]: add(key[1], int(m.group(1)) / key[2])
+            continue
         m = re.match(r"^\+(\d+) (Fire|Frost|Nature|Shadow|Arcane|Holy) Resistance$", line)
         if m: add(m.group(2).lower() + "Resist", int(m.group(1))); continue
         m = re.match(r"^\+(\d+) All Resistances$", line)
@@ -307,6 +313,23 @@ def main():
     sparse = {r["ID"] for r in rows("ItemSparse")}
     FC, fc_meta = fc_items("--refresh" in sys.argv)
     fc_live = {k: v for k, v in FC.items() if v.get("t") in ("new", "changed", "same")}
+    # Tooltips players' games showed (ForeverProbe 0.4.7+, merged by tools/probe_pull.py): the game's own text, used
+    # where ForeverChanges has no item or reads an older build than the game did
+    disc = os.path.join(ROOT, "research", "questbank", "disc.json")
+    tips = ((json.load(open(disc)).get("probe") or {}).get("tips") or {}) if os.path.exists(disc) else {}
+    try:
+        fc_build = int(str(fc_meta.get("forever_build") or "0").split(".")[-1])
+    except ValueError:
+        fc_build = 0
+    from_game = 0
+    for k, g in tips.items():
+        if k in fc_live and int(g.get("b") or 0) <= fc_build:
+            continue
+        fc_live[k] = {"i": int(k), "n": g["n"], "q": g.get("q") if g.get("q") is not None else 1, "l": g.get("l"), "r": g.get("r"),
+                      "c": g.get("c"), "u": g.get("u"), "x": g.get("x") or [], "t": "game", "src": "game", "b": g.get("b")}
+        from_game += 1
+    if tips:
+        print("players' games: %d item tooltips, %d used (not in ForeverChanges, or a newer build)" % (len(tips), from_game))
     # Classic items ForeverChanges finds nowhere in Forever's data, and the client has no row for either
     fc_gone = {k for k, v in FC.items() if v.get("t") == "missing" and k not in sparse and k not in fc_live}
     sets = collections.defaultdict(list)
@@ -412,7 +435,8 @@ def main():
             old["ft"] = fc["t"]
             old.pop("wh", None)
             old.pop("rand", None)
-            old["source"] = "Beta build %s, via foreverchanges.pro" % fc_meta.get("forever_build", BUILD)
+            old["source"] = ("Beta build 1.60.1.%s, as players' games showed it (ForeverProbe)" % fc.get("b")) if fc.get("src") == "game" \
+                else "Beta build %s, via foreverchanges.pro" % fc_meta.get("forever_build", BUILD)
             from_fc += 1
         elif ok:
             # Wowhead: complete, but behind on changed items; used where ForeverChanges has nothing.

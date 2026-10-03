@@ -353,6 +353,20 @@ def merge_probe(acc, kind, data):
             except (TypeError, ValueError):
                 continue
             pr["items"][iid] = pr["items"].get(iid, 0) + 1
+    # item tooltips as the game showed them (ForeverProbe 0.4.7+): the newest build's copy of each wins
+    tips = pr.setdefault("tips", {})
+    for iid, it in (data.get("items") or {}).items():
+        if not isinstance(it, dict) or not it.get("n") or not isinstance(it.get("x"), list):
+            continue
+        try:
+            b = int(str(it.get("b") or "0").split(".")[-1])
+        except ValueError:
+            b = 0
+        old = tips.get(str(iid))
+        if old and int(old.get("b") or 0) > b:
+            continue
+        tips[str(iid)] = {"b": b, "n": it["n"], "q": it.get("q"), "l": it.get("l"), "r": it.get("r"), "el": it.get("el"),
+                          "c": it.get("c"), "u": it.get("u"), "x": [str(x) for x in it["x"]][:40]}
     for tr in data.get("trainers") or []:
         if not isinstance(tr, dict):
             continue
