@@ -322,6 +322,49 @@ def merge_disc(acc, d):
             acc["item"][str(item)] = int(qid)
 
 
+def merge_probe(acc, kind, data):
+    """What ForeverProbe's own snapshots show, without a name in it: the spells a class (and the racials a race) had
+    learned and the lowest level a character was seen with each, item ids seen, and what profession trainers asked.
+    Kept in disc.json under "probe" (research/, never published); tools/apply_probe_spells.py takes the spells to
+    the site's spellbook."""
+    if kind not in ("probe-savedvars", "export") or not isinstance(data, dict):
+        return
+    pr = acc.setdefault("probe", {"spells": {}, "racials": {}, "items": {}, "trainers": {}})
+    snaps = data.get("snapshots")
+    snaps = list(snaps.values()) if isinstance(snaps, dict) else (snaps or [])
+    for sn in snaps:
+        if not isinstance(sn, dict):
+            continue
+        cls, race, lvl = str(sn.get("class") or "").upper(), str(sn.get("race") or ""), sn.get("level")
+        if not cls or not isinstance(lvl, (int, float)) or lvl < 1:
+            continue
+        book = pr["spells"].setdefault(cls, {})
+        for sid in sn.get("spells") or []:
+            try:
+                sid = str(int(sid.get("id") if isinstance(sid, dict) else sid))
+            except (TypeError, ValueError):
+                continue
+            book[sid] = min(book.get(sid, 99), int(lvl))
+            if race:
+                pr["racials"].setdefault(race, {})[sid] = 1
+        for it in sn.get("items") or []:
+            try:
+                iid = str(int(it.get("id") if isinstance(it, dict) else it))
+            except (TypeError, ValueError):
+                continue
+            pr["items"][iid] = pr["items"].get(iid, 0) + 1
+    for tr in data.get("trainers") or []:
+        if not isinstance(tr, dict):
+            continue
+        for sv in tr.get("services") or []:
+            if not isinstance(sv, dict):
+                continue
+            name, cost = sv.get("n") or sv.get("name"), sv.get("c") if sv.get("c") is not None else sv.get("cost")
+            if name and isinstance(cost, (int, float)):
+                t = pr["trainers"].setdefault(str(name), {})
+                t[str(int(cost))] = t.get(str(int(cost)), 0) + 1
+
+
 def _digest(v):
     return hashlib.sha256(json.dumps(v, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:20]
 
@@ -340,6 +383,7 @@ def merge_upload(acc, text, source="local"):
             return kind, False
         seen_hashes.append(h)
     merge_seen(acc, kind, data)
+    merge_probe(acc, kind, data)
     d = disc_of(kind, data)
     if d is None:
         return kind, False

@@ -222,19 +222,19 @@
     (sb.spells || []).forEach(function (p) {
       IDX.push({ kind: "bookspell", cat: "spell", sub: p.c, name: p.n, icon: p.icon || "inv_misc_questionmark", q: "unknown",
         cls: p.c, lvlKey: typeof p.lvl === "number" ? p.lvl : undefined, sb: p, side: SRC_LABEL[p.src] || "",
-        meta: [p.c, p.tab, p.lvl ? "Level " + p.lvl : (p.src === "sod" ? "no learn level yet" : ""), p.tag, VERDICT[p.s] || ""].filter(Boolean).join(" \u00b7 "),
+        meta: [p.c, p.tab, p.lvl ? "Level " + p.lvl : (p.src === "sod" ? "no learn level yet" : ""), p.tag, VERDICT[p.s] || "", p.seen ? "seen in game" : ""].filter(Boolean).join(" \u00b7 "),
         text: (p.n + " " + p.c + " " + p.tab + " " + (p.d || "")).toLowerCase() });
     });
     (sb.talents || []).forEach(function (t) {
       IDX.push({ kind: "talent", cat: "talent", sub: t.c, name: t.n, icon: t.icon || "inv_misc_questionmark", q: "unknown",
         cls: t.c, lvlKey: 10 + (t.row - 1) * 5, tl: t, side: "Demo transcription",
-        meta: [t.c, t.tree + " tree", "Tier " + t.row, t.r + (t.r === 1 ? " rank" : " ranks"), VERDICT[t.s] || ""].filter(Boolean).join(" \u00b7 "),
+        meta: [t.c, t.tree + " tree", "Tier " + t.row, t.r + (t.r === 1 ? " rank" : " ranks"), VERDICT[t.s] || "", t.seen ? "seen in game" : ""].filter(Boolean).join(" \u00b7 "),
         text: (t.n + " " + t.c + " " + t.tree + " " + (t.d || "")).toLowerCase() });
     });
     (sb.racials || []).forEach(function (r) {
       IDX.push({ kind: "racial", cat: "racial", sub: r.race, name: r.n, icon: r.icon || "inv_misc_questionmark", q: "unknown",
         lvlKey: 1, rc: r, side: "Demo transcription",
-        meta: [r.race, r.kind === "active" ? "Active racial" : "Passive racial"].filter(Boolean).join(" \u00b7 "),
+        meta: [r.race, r.kind === "active" ? "Active racial" : "Passive racial", r.seen ? "seen in game" : ""].filter(Boolean).join(" \u00b7 "),
         text: (r.n + " " + r.race + " " + (r.d || "")).toLowerCase() });
     });
   }
@@ -254,14 +254,17 @@
       if (p.d) h += "<p>" + esc(p.d) + "</p>";
       if (p.note) h += '<p class="sbt-note">' + esc(p.note) + "</p>";
       if (p.cl && p.s && p.s !== "same") h += '<p class="sbt-note">Classic trains it at level ' + p.cl + ".</p>";
+      if (p.seen) h += '<p class="sbt-note">Seen in game: a level ' + p.seen + " " + esc(p.c) + " in players' ForeverProbe snapshots had it.</p>";
       h += '<p class="sbt-src">' + esc(SRC_TIP[p.src] || "") + "</p>";
     } else if (e.kind === "talent") {
       var t = e.tl;
       if (t.d) h += "<p>" + esc(t.d) + (t.r > 1 ? " (rank 1 of " + t.r + ")" : "") + "</p>";
       h += '<p class="sbt-note">Tier ' + t.row + ": earliest around level " + e.lvlKey + " by Classic one-point-per-level pacing. An estimate, not Forever data.</p>";
+      if (t.seen) h += '<p class="sbt-note">Seen in game: a level ' + t.seen + " " + esc(t.c) + " in players' ForeverProbe snapshots had it.</p>";
       h += '<p class="sbt-src">Transcribed from BlizzCon demo footage (talentsforever.com export, CC BY 4.0).</p>';
     } else if (e.kind === "racial") {
       if (e.rc.d) h += "<p>" + esc(e.rc.d) + "</p>";
+      if (e.rc.seen) h += '<p class="sbt-note">Seen in game: a ' + esc(e.rc.race) + " in players' ForeverProbe snapshots had it.</p>";
       h += '<p class="sbt-src">Transcribed from BlizzCon demo footage and reveal panels (talentsforever.com export, CC BY 4.0).</p>';
     } else if (e.kind === "itemset") {
       var st = e.st;
