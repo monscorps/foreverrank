@@ -1288,10 +1288,26 @@ _ITEMS = (load_json(os.path.join(REPO, "plan", "items-db.json")) or {})
 _ITEMS = _ITEMS.get("items") or _ITEMS
 if isinstance(_ITEMS, list):
     _ITEMS = {str(i.get("id")): i for i in _ITEMS}
+# Where Wowhead lists no rewards (new Forever quests), the dungeon loot pages do, by quest name (codex/loot.json, from
+# foreverchanges.pro and wowtbc.gg): taken when the name belongs to one catalog quest only
+_LOOT = load_json(os.path.join(REPO, "codex", "loot.json")) or {}
+_LOOT_Q = {}
+for _dg in (_LOOT.get("dungeons") or {}).values() if isinstance(_LOOT.get("dungeons"), dict) else (_LOOT.get("dungeons") or []):
+    for _lq in _dg.get("quests") or []:
+        if _lq.get("name") and _lq.get("items"):
+            _LOOT_Q.setdefault(_lq["name"].strip().lower(), set()).update(int(i) for i in _lq["items"])
+_NAME_COUNT = {}
+for _qid in IDS:
+    _NAME_COUNT[str(LIST[_qid].get("name") or "").strip().lower()] = _NAME_COUNT.get(str(LIST[_qid].get("name") or "").strip().lower(), 0) + 1
+REWARD_FROM_LOOT = []
 REWARD = {}
 for qid in IDS:
     q = LIST[qid]
     ids = [x[0] for x in (q.get("itemrewards") or []) + (q.get("itemchoices") or []) if isinstance(x, list) and x]
+    _nm = str(q.get("name") or "").strip().lower()
+    if not ids and _nm in _LOOT_Q and _NAME_COUNT.get(_nm) == 1:
+        ids = sorted(_LOOT_Q[_nm])
+        REWARD_FROM_LOOT.append(qid)
     best, kinds, bestId = 0, 0, 0
     for iid in ids:
         it = _ITEMS.get(str(iid))
@@ -1448,6 +1464,9 @@ def gap_report():
                        len(GAME_AGREE), GAME_MOVE_YD, sorted(GAME_AGREE.values())[len(GAME_AGREE) // 2] if GAME_AGREE else 0, len(set(GAME_MOVED)),
                        (": " + ", ".join("%s %d by %d yd" % (k, i, d) for k, i, d in sorted(set(GAME_MOVED)))) if GAME_MOVED else "",
                        len(set(GAME_FILLED)), (": " + ", ".join("%s %d" % (k, i) for k, i in sorted(set(GAME_FILLED)))) if GAME_FILLED else ""))
+        if REWARD_FROM_LOOT:
+            out.append("Rewards taken from the dungeon loot pages where Wowhead lists none (%d): %s." % (
+                len(REWARD_FROM_LOOT), ", ".join("%d %s" % (q, QN.get(q, "?")) for q in REWARD_FROM_LOOT)))
         if GAME_LEVEL_FIX:
             out.append("Quest levels as the game's quest log shows them, where the catalog had another: %s." % ", ".join(
                 "%d %s %d -> %d" % (q, QN.get(q, "?"), a, b) for q, a, b in GAME_LEVEL_FIX))
