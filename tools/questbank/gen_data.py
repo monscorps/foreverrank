@@ -219,7 +219,12 @@ def zone_icon(name):
 # ---------------------------------------------------------------------------
 # the catalog
 # ---------------------------------------------------------------------------
+GAME_LV = {}  # quest -> the level the game's quest log showed players, where it differs from the catalog's (filled below)
+
+
 def qlevel(qid):
+    if qid in GAME_LV:
+        return GAME_LV[qid]
     d = DET.get(qid)
     if d and d.get("ql"):
         return int(d["ql"])
@@ -375,8 +380,10 @@ UNBUFFED = []  # (qid, read, game's number) for GAPS.md
 
 def unbuff(xp):
     """The game's number behind a reading taken under the +3% buff. The game rounds quest XP to its grid (round_xp) and
-    the buff then pays the grid value * 1.03, give or take one: 390 shows 401, 1,250 shows 1,288, 5,500 shows 5,665. A reading on the
-    grid is taken as it is (a buffed multiple of 5,000 lands on the grid too and can't be told apart)."""
+    the buff then pays the grid value * 1.03, give or take one: 390 shows 401, 1,250 shows 1,288, 5,500 shows 5,665.
+    A reading on the grid is taken as it is. Some buffed values land on the grid themselves (850 shows 875, 340 shows
+    350, 5,000 shows 5,150) and arithmetic alone can't tell them from a real number; QuestBank 3.5.4 notes the auras
+    up at each reading so the buff can be named and those cases settled."""
     if xp <= 0 or round_xp(xp) == xp:
         return xp
     g = round_xp(xp / BUFF)
@@ -501,9 +508,25 @@ for _k, _dq in _DISC_Q.items():
 # them; 79362's Alliance ender is c268, the Horde one stays Wowhead's.
 GAME_SIDE = {79362: 0, 92706: 0}
 GAME_ENDER_A = {79362: ("npc", 268)}
+# Grant's Shield is a Shaman quest for the Horde in Wowhead's data, and a Dwarf Paladin completed it in game
+GAME_CLASS = {79362: 64 | 2}
 for _qid, _side in GAME_SIDE.items():
     if _qid in LIST:
         LIST[_qid]["side"] = _side
+for _qid, _cls in GAME_CLASS.items():
+    if _qid in LIST:
+        LIST[_qid]["reqclass"] = _cls
+# The level the game's quest log shows, where players saw one different from the catalog's (Fall of Dun Modr is 30
+# in game, 25 on Wowhead): it decides the grey-quest XP cut and which readings count at full value
+GAME_LEVEL_FIX = []
+for _k, _dq in (DISC.get("q") or {}).items():
+    if isinstance(_dq, dict) and str(_k).isdigit() and int(_k) in LIST and int(_k) not in DISC_ONLY:
+        _lv = _dq.get("lv")
+        if isinstance(_lv, int) and 1 <= _lv <= MAXLVL:
+            _was = qlevel(int(_k))
+            if _lv != _was:
+                GAME_LV[int(_k)] = _lv
+                GAME_LEVEL_FIX.append((int(_k), _was, _lv))
 
 IDS = []
 for qid, q in LIST.items():
@@ -1425,8 +1448,11 @@ def gap_report():
                        len(GAME_AGREE), GAME_MOVE_YD, sorted(GAME_AGREE.values())[len(GAME_AGREE) // 2] if GAME_AGREE else 0, len(set(GAME_MOVED)),
                        (": " + ", ".join("%s %d by %d yd" % (k, i, d) for k, i, d in sorted(set(GAME_MOVED)))) if GAME_MOVED else "",
                        len(set(GAME_FILLED)), (": " + ", ".join("%s %d" % (k, i) for k, i in sorted(set(GAME_FILLED)))) if GAME_FILLED else ""))
+        if GAME_LEVEL_FIX:
+            out.append("Quest levels as the game's quest log shows them, where the catalog had another: %s." % ", ".join(
+                "%d %s %d -> %d" % (q, QN.get(q, "?"), a, b) for q, a, b in GAME_LEVEL_FIX))
         if GAME_SIDE:
-            out.append("Sides corrected by what the game showed an Alliance character: %s; 79362's Alliance ender is c268 (Darkshire), the Horde one stays Wowhead's." % (
+            out.append("Sides corrected by what the game showed an Alliance character: %s; 79362's Alliance ender is c268 (Darkshire), the Horde one stays Wowhead's, and Paladins take it as Shamans do." % (
                 ", ".join("%d %s" % (q, QN.get(q, "?")) for q in sorted(GAME_SIDE))))
         _pre_of = {q: {p for g in immediate_pre(q) for p in g} for q in Q}
         _review = []

@@ -255,6 +255,10 @@ local function newClient(o)
     DoesAddOnHaveLoadError = function(n) local a = (c.addons or {})[n]; return a and a.loadError or false end,
     IsAddonVersionCheckEnabled = function() return true end,
   }
+  -- the player's helpful auras: c.auras = { spellId, ... }
+  env.C_UnitAuras = {
+    GetAuraDataByIndex = function(unit, i, filter) local a = (c.auras or {})[i]; return a and { spellId = a } or nil end,
+  }
   env.C_GossipInfo = {
     GetAvailableQuests = function() return c.gossipAvail or {} end,
     GetActiveQuests = function() return c.gossipActive or {} end,
@@ -2804,6 +2808,27 @@ do
   owner.env.QuestBankDB.live[id] = before
   q.liveFull = before and before.full or nil
   print("unbuff:", math.floor(listed * 1.03), "->", listed)
+end
+
+-- 3.5.4: readings saved before the buff fix are unbuffed when loaded; Grant's Shield is open to an Alliance
+-- Paladin; each XP reading notes the helpful auras up, by spell id
+do
+  local Q2, db = owner.QB, owner.env.QuestBankDB
+  local was = db.live[2924]
+  db.live[2924] = { full = 5665, lvl = 29, src = "npc", at = "2026-10-02" }
+  Q2.Live.Apply()
+  local q = Q2.Quest.Get(2924)
+  assert(q.liveFull == 5500 and db.live[2924].full == 5500, "a saved buffed reading loads as the game's number: " .. tostring(q.liveFull))
+  db.live[2924] = was; q.liveFull = was and was.full or nil
+  local gs = Q2.Quest.Get(79362)
+  assert(gs and Q2.Quest.ForMe(gs), "an Alliance Paladin can take Grant's Shield")
+  owner.auras = { 1225478, 465 }
+  Q2.NoteXPSeen("detail", 2924, 5665)
+  local ring = db.diag.xp
+  local last = ring[#ring]
+  assert(last.auras and last.auras[1] == 1225478 and last.auras[2] == 465, "the reading notes the auras up")
+  owner.auras = nil
+  print("auras noted:", #last.auras)
 end
 
 local seen = {}

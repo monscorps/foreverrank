@@ -29,14 +29,15 @@ Classic frame and were moved to Forever's; 58 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 26.
 
-Seen in Forever by players (27 uploads merged by probe_pull.py, 2026-10-03T04:17:56Z): 190 quests, 0 of them Classic seeds now confirmed.
+Seen in Forever by players (27 uploads merged by probe_pull.py, 2026-10-03T04:21:40Z): 190 quests, 0 of them Classic seeds now confirmed.
 Seen in game but not in the catalog (2): 91904 A Sealed Crate (left out on purpose by the catalog's filters), 95795 Fallen in the Fen (too little to place: no NPC with a position).
 
 Every upload so far is one account's growing QuestBank.lua: what follows rests on one witness.
 Added from players' notes alone (flag 16384; required level is the lowest anyone took it at): 88756 Bring Back a Bang (level 32, 2550 XP, ender unknown), 95809 Heartwoven (level 31, XP unknown, ender known), 98209 Bloom of the Heavens (level 29, 1200 XP, ender unknown), 98221 From the Ashes (level 28, 2300 XP, ender unknown), 98283 Carnage (level 30, 3050 XP, ender unknown).
 Givers and enders filled in from what players' games showed: 88756 giver c1073, 95646 giver c1244, 95647 giver c1480, 95772 giver c956, 95809 ender c1480, 98072 giver c2094, 98208 ender c270844, 98208 giver c270844, 98209 giver c270844, 98221 giver c2104, 98245 giver c270637, 98246 giver c270637, 98283 giver c1244, 98293 giver o672330, 98815 giver c2094.
 NPC positions from players' games (the spot where they stood, a few yards off): 103 agree with the catalog within 25 yd (median 3.7 yd); 4 moved to where the game saw them: npc 1721 by 51 yd, npc 4982 by 58 yd, npc 5082 by 106 yd, npc 15991 by 41 yd; 5 placed from the game alone: npc 956, npc 256390, npc 270637, npc 270844, object 672330.
-Sides corrected by what the game showed an Alliance character: 79362 Grant's Shield, 92706 WANTED: Bruuz; 79362's Alliance ender is c268 (Darkshire), the Horde one stays Wowhead's.
+Quest levels as the game's quest log shows them, where the catalog had another: 472 Fall of Dun Modr 25 -> 30, 92747 Moonbrook Espionage 16 -> 15.
+Sides corrected by what the game showed an Alliance character: 79362 Grant's Shield, 92706 WANTED: Bruuz; 79362's Alliance ender is c268 (Darkshire), the Horde one stays Wowhead's, and Paladins take it as Shamans do.
 Chain steps players' games suggest for quests with no known chain, not taken (the window of the next quest opened at the same NPC within 8 s of a hand-in, which a reopened quest also does): 484>98815, 92744>92745, 92745>92747, 92747>92748, 92748>92749, 92748>92750, 92750>92751, 92751>92752, 92752>92753, 95809>98282.
 
 Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both have a number, they disagree on 0:
@@ -889,7 +890,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92742 Testing the Wells (level 12, Alliance)
 - 92744 Murloc Gills (level 12, Alliance)
 - 92745 The State of the Mines (level 14, Alliance)
-- 92747 Moonbrook Espionage (level 16, Alliance)
+- 92747 Moonbrook Espionage (level 15, Alliance)
 - 92748 Explosive Consultation (level 16, Alliance)
 - 92749 A Dynamite Plan (level 16, Alliance)
 - 92750 Detonation at a Distance (level 16, Alliance)

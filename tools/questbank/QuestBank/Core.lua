@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.5.3"
+QB.version = "3.5.4"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -608,7 +608,8 @@ QB.Live = Live
 
 -- the game's number behind a reading taken under the +3% buff: the game rounds quest XP to its grid (5 up to 100,
 -- 10 up to 500, 25 up to 1,000, 50 above), and the buff pays that times 1.03, give or take one (390 shows 401,
--- 1,250 shows 1,288). A reading on the grid is taken as it is
+-- 1,250 shows 1,288). A reading on the grid is taken as it is: a few buffed values land on the grid themselves
+-- (850 shows 875, 340 shows 350, 5,000 shows 5,150) and can't be told from a real number by arithmetic alone
 function QB.Unbuff(xp)
   local R = QB.Model and QB.Model.RoundXp
   if not R or type(xp) ~= "number" or xp <= 0 or R(xp) == xp then return xp end
@@ -669,7 +670,12 @@ function Live.Apply()
   end
   for id, v in pairs(db.live) do
     local q = Q.Get(id)
-    if q then q.liveFull = v.full end
+    if q then
+      -- a reading saved before 3.5.3 may carry the +3% buff: kept as the game's own number from here on
+      local f = QB.Unbuff(v.full)
+      if f ~= v.full then v.full = f end
+      q.liveFull = f
+    end
   end
 end
 
@@ -689,8 +695,20 @@ function QB.NoteXPSeen(how, id, xp)
   db.diag.xp = d
   local secret = issecretvalue or function() return false end
   local kind = secret(xp) and "secret" or type(xp)
+  -- the helpful auras up at the time, by spell id: a +3% XP buff comes and goes, and these name it
+  local auras
+  if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+    auras = {}
+    for i = 1, 40 do
+      local ok, a = pcall(C_UnitAuras.GetAuraDataByIndex, "player", i, "HELPFUL")
+      if not ok or not a then break end
+      local sid = a.spellId
+      if type(sid) == "number" and not secret(sid) then auras[#auras + 1] = sid end
+      if #auras >= 16 then break end
+    end
+  end
   d[#d + 1] = { how = how, id = secret(id) and -1 or id, kind = kind, v = kind == "number" and xp or nil,
-                lvl = UnitLevel("player"), at = date("%Y-%m-%d %H:%M") }
+                lvl = UnitLevel("player"), at = date("%Y-%m-%d %H:%M"), auras = auras }
   while #d > 12 do table.remove(d, 1) end
 end
 
