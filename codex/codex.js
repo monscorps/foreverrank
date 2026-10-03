@@ -344,6 +344,8 @@
       if (SQ.sub && e.sub !== SQ.sub) return false;
       if (SQ.qual && e.q !== SQ.qual) return false;
       if (SQ.stat && (e.kind !== "item" || statOf(e.it, SQ.stat) <= 0)) return false;
+      // sorting by a stat lists the items that have it, best first (not the whole database with the stat's owners on top)
+      if (SQ.sort && STATBY[SQ.sort] && (e.kind !== "item" || statOf(e.it, SQ.sort) <= 0)) return false;
       if (SQ.at.length && (e.kind !== "item" || !FI || SQ.at.indexOf(FI.armorType(e.it)) === -1)) return false;
       if (SQ.ms && (e.kind !== "item" || !mainOK(e.it, SQ.ms))) return false;
       if (SQ.rf && (e.kind !== "item" || !hasRf(e.it))) return false;

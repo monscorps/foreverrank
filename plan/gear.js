@@ -895,6 +895,8 @@
           else if (m !== PF.ms) return false;
         }
         if (PF.stat && statVal(it, PF.stat) <= 0) return false;
+        // sorting by a stat lists the items that have it, best first
+        if (sortKey !== "score" && sortKey !== "ilvl" && sortKey !== "req" && statVal(it, sortKey) <= 0) return false;
         if (ql.length) {
           var hay = (it.name + " " + (it.type || "") + " " + (it.source || "") + " " + (it.effects || []).join(" ") + " " + (it.setName || "") + " " +
             (it.drops || []).map(function (d) { return d[1] + " " + d[0]; }).join(" ") + " " + (it.quests || []).map(function (q) { return q[0] + " " + q[1]; }).join(" ")).toLowerCase();
