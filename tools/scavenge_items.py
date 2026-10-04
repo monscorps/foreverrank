@@ -457,8 +457,8 @@ def main():
     sparse = {r["ID"] for r in rows("ItemSparse")}
     FC, fc_meta = fc_items("--refresh" in sys.argv)
     fc_live = {k: v for k, v in FC.items() if v.get("t") in ("new", "changed", "same")}
-    # Tooltips players' games showed (ForeverProbe 0.4.7+, merged by tools/probe_pull.py): the game's own text, used
-    # where ForeverChanges has no item or reads an older build than the game did
+    # Tooltips players' games showed (QuestBank 3.6.0+ and ForeverProbe 0.4.7+, merged by tools/probe_pull.py): the
+    # game's own text, used where ForeverChanges has no item or reads an older build than the game did
     disc = os.path.join(ROOT, "research", "questbank", "disc.json")
     tips = ((json.load(open(disc)).get("probe") or {}).get("tips") or {}) if os.path.exists(disc) else {}
     seen_game = {str(k): v for k, v in (((json.load(open(disc)).get("probe") or {}).get("items") or {}) if os.path.exists(disc) else {}).items()}
@@ -471,7 +471,7 @@ def main():
         if k in fc_live and int(g.get("b") or 0) <= fc_build:
             continue
         game = {"n": g["n"], "q": g.get("q") if g.get("q") is not None else 1, "l": g.get("l"), "r": g.get("r"), "c": g.get("c"),
-                "u": g.get("u"), "x": g.get("x") or [], "src": "game", "b": g.get("b"), "el": g.get("el")}
+                "u": g.get("u"), "x": g.get("x") or [], "src": "game", "b": g.get("b"), "cv": g.get("cv"), "el": g.get("el")}
         base = FC.get(k) if FC.get(k, {}).get("t") in ("new", "changed", "same") else None
         if base:
             # the game's newer text over ForeverChanges' record: its verdict (new/changed), set, classes and icon stay
@@ -619,7 +619,9 @@ def main():
             old["ft"] = fc["t"]
             old.pop("wh", None)
             old.pop("rand", None)
-            old["source"] = ("Beta build 1.60.1.%s, as players' games showed it (ForeverProbe)" % fc.get("b")) if fc.get("src") == "game" \
+            # cv: the client version the game reported with the tooltip; ForeverProbe's readings (and QuestBank's copies of
+            # them) carry none, and all were 1.60.1
+            old["source"] = ("Beta build %s.%s, as players' games showed it" % (fc.get("cv") or "1.60.1", fc.get("b"))) if fc.get("src") == "game" \
                 else "Beta build %s, via foreverchanges.pro" % fc_meta.get("forever_build", BUILD)
             from_fc += 1
         elif ok:
@@ -679,8 +681,8 @@ def main():
         if iid in looted and it.get("era") in ("sod", "retail"):
             it.pop("era", None)
             it["eraNote"] = "Recorded as Forever loot"
-        # Items players' games had (ForeverProbe snapshots of bags and gear, merged by tools/probe_pull.py): sg is how
-        # many uploads showed it. Seen in Forever settles a leftover-era tag the same way a loot record does.
+        # Items players' games had (bags and gear in QuestBank's and ForeverProbe's readings, merged by tools/probe_pull.py):
+        # sg is how many uploads showed it. Seen in Forever settles a leftover-era tag the same way a loot record does.
         n = seen_game.get(iid)
         if n:
             it["sg"] = n

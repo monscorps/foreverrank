@@ -5,14 +5,18 @@ What players' addons noted in game (QuestBankDB.disc: quests, the NPCs who give 
 where those stand, the XP each quest showed, which quests an NPC offers at what level, chain
 steps) arrives at the Worker as three kinds of upload: an FPROBE2 export, a ForeverProbe.lua
 SavedVariables file (its ["questbank"] block carries the same notes), or a QuestBank.lua
-SavedVariables file. This tool pulls the new rows, keeps each decoded body under
+SavedVariables file. QuestBank 3.6.0 also keeps QuestBankDB.game on the Forever client: the
+spells and the bag and gear items of each class and race played, and item tooltips (what
+ForeverProbe used to note). This tool pulls the new rows, keeps each decoded body under
 research/probe/, and merges every discovery into research/questbank/disc.json, which
 gen_data.py reads: a quest seen in Forever loses its "Classic only" flag, and quests seen in
 game that are not in the catalog at all are listed in GAPS.md. Votes are kept, not winners:
-disc.json records how many uploads reported each XP value and each NPC position.
+disc.json records how many uploads reported each XP value and each NPC position. QuestBank
+also runs on Classic Era: notes from any client but Forever are left out.
 
   python3 tools/probe_pull.py                      # pull what is new, merge, report
   python3 tools/probe_pull.py --merge FILE...       # merge local files (a friend's QuestBank.lua) without the Worker
+  python3 tools/probe_pull.py --rebuild             # start disc.json over from the uploads kept in research/probe (no pull)
   python3 tools/probe_pull.py --parse FILE          # print a SavedVariables file or export as JSON
   python3 tools/probe_pull.py --selftest            # the parser and the merge against tools/fixtures/probe/
 
@@ -193,6 +197,37 @@ def disc_of(kind, data):
     return None
 
 
+# ------------------------------------------------------------------------------- which client wrote it
+# QuestBank also loads on Classic Era (Interface 11507), and the uploader watches every game folder: what an Era
+# character saw must not count as seen in Forever. The Forever client's interface numbers are 16xxx.
+FIRST_FOREVER_BUILD = 69876  # the oldest Forever build datamined (research/wago/1.60.1.69876): a lower build is another client
+
+
+def forever_iface(v):
+    """True for a Forever interface number, False for another client's, None when there is none."""
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return None
+    return 16000 <= v <= 16999
+
+
+def from_forever(data):
+    """Whether a QuestBank.lua's notes (disc, turnins, live), or ForeverProbe's copy of the disc, came from the Forever
+    client. The interface stamp decides (disc.iface from QuestBank 3.6.0, diag.addons.iface from 3.5.2). An unstamped
+    file goes by its build; with no build either it is kept, since every unstamped upload so far came from Forever."""
+    disc = data.get("disc") if isinstance(data.get("disc"), dict) else {}
+    diag = data.get("diag") if isinstance(data.get("diag"), dict) else {}
+    addons = diag.get("addons") if isinstance(diag.get("addons"), dict) else {}
+    for v in (disc.get("iface"), addons.get("iface")):
+        if forever_iface(v) is not None:
+            return forever_iface(v)
+    try:
+        return int(str(disc.get("build") or addons.get("build")).split(".")[-1]) >= FIRST_FOREVER_BUILD
+    except (TypeError, ValueError):
+        return True
+
+
 # --------------------------------------------------------------------------------------- the merge
 def empty():
     return {"meta": {"last_id": 0, "uploads": 0, "with_notes": 0, "sources": {}, "pulled": None},
@@ -327,17 +362,28 @@ def merge_disc(acc, d):
 
 
 def merge_probe(acc, kind, data):
-    """What ForeverProbe's own snapshots show, without a name in it: the spells a class (and the racials a race) had
-    learned and the lowest level a character was seen with each, item ids seen, and what profession trainers asked.
-    Kept in disc.json under "probe" (research/, never published); tools/apply_probe_spells.py takes the spells to
-    the site's spellbook."""
-    if kind not in ("probe-savedvars", "export") or not isinstance(data, dict):
+    """What players' games showed, without a name in it: the spells a class (and the racials a race) had learned and the
+    lowest level a character was seen with each, the item ids in bags and gear, item tooltips, and what profession
+    trainers asked. Two sources: QuestBankDB.game (QuestBank 3.6.0+, written on the Forever client only: one reading per
+    class and race, and tooltips) and ForeverProbe's own snapshots and tooltips (ForeverProbe.lua and FPROBE2 exports
+    from installs that still have it). Kept in disc.json under "probe" (research/, never published);
+    tools/apply_probe_spells.py takes the spells to the site's spellbook, tools/scavenge_items.py the items and tooltips."""
+    if not isinstance(data, dict):
+        return
+    if kind == "questbank-savedvars":
+        g = data.get("game")
+        if not isinstance(g, dict) or forever_iface(g.get("iface")) is not True:
+            return  # no block, or another client's: QuestBank writes it on Forever only, and an odd file is skipped all the same
+        snaps, tips_in, trainers = g.get("snap"), g.get("items"), None
+    elif kind in ("probe-savedvars", "export"):
+        snaps, tips_in, trainers = data.get("snapshots"), data.get("items"), data.get("trainers")
+    else:
         return
     pr = acc.setdefault("probe", {"spells": {}, "racials": {}, "items": {}, "trainers": {}})
-    snaps = data.get("snapshots")
-    snaps = list(snaps.values()) if isinstance(snaps, dict) else (snaps or [])
+    snaps = list(snaps.values()) if isinstance(snaps, dict) else (snaps if isinstance(snaps, list) else [])
+    had = set()  # the item ids this upload showed: each counts once, however many characters or readings carried it
     for sn in snaps:
-        if not isinstance(sn, dict):
+        if not isinstance(sn, dict) or forever_iface(sn.get("interface")) is False:
             continue
         cls, race, lvl = str(sn.get("class") or "").upper(), str(sn.get("race") or ""), sn.get("level")
         if not cls or not isinstance(lvl, (int, float)) or lvl < 1:
@@ -353,14 +399,18 @@ def merge_probe(acc, kind, data):
                 pr["racials"].setdefault(race, {})[sid] = 1
         for it in sn.get("items") or []:
             try:
-                iid = str(int(it.get("id") if isinstance(it, dict) else it))
+                had.add(str(int(it.get("id") if isinstance(it, dict) else it)))
             except (TypeError, ValueError):
                 continue
-            pr["items"][iid] = pr["items"].get(iid, 0) + 1
-    # item tooltips as the game showed them (ForeverProbe 0.4.7+): the newest build's copy of each wins, then the newest
-    # reading; English clients only, since the site parses the game's English wording
+    for iid in had:
+        pr["items"][iid] = pr["items"].get(iid, 0) + 1
+    # item tooltips as the game showed them: the newest build's copy of each wins, then the newest reading; English
+    # clients only, since the site parses the game's English wording. cv is the client version ("1.60.1") from the
+    # tooltip's own b ("1.60.1.70205"). A b that is a build alone carries none: ForeverProbe wrote those, and QuestBank
+    # keeps them as they were when it copies ForeverProbe's tooltips in, while QuestBankDB.game.client is whatever
+    # client wrote the file last, not the one that read the tooltip
     tips = pr.setdefault("tips", {})
-    for iid, it in (data.get("items") or {}).items():
+    for iid, it in (tips_in.items() if isinstance(tips_in, dict) else []):
         if not isinstance(it, dict) or not it.get("n"):
             continue
         if it.get("lc") and str(it["lc"]) not in ("enUS", "enGB"):
@@ -369,17 +419,23 @@ def merge_probe(acc, kind, data):
         x = x if isinstance(x, list) else ([] if isinstance(x, dict) and not x else None)
         if x is None:
             continue
+        parts = str(it.get("b") or "0").split(".")
         try:
-            b = int(str(it.get("b") or "0").split(".")[-1])
+            b = int(parts[-1])
         except ValueError:
             b = 0
+        cv = ".".join(parts[:-1]) if len(parts) == 4 else None
+        if b and b < FIRST_FOREVER_BUILD:
+            continue  # an older client's tooltip (an Era ForeverProbe.lua or export): not Forever's numbers
         at = it.get("at") if isinstance(it.get("at"), (int, float)) else 0
         old = tips.get(str(iid))
         if old and (int(old.get("b") or 0), old.get("at") or 0) > (b, at):
             continue
         tips[str(iid)] = {"b": b, "at": at, "n": it["n"], "q": it.get("q"), "l": it.get("l"), "r": it.get("r"), "el": it.get("el"),
                           "c": it.get("c"), "u": it.get("u"), "e": it.get("e"), "ic": it.get("ic"), "x": [str(v) for v in x][:40]}
-    for tr in data.get("trainers") or []:
+        if cv:
+            tips[str(iid)]["cv"] = cv
+    for tr in list(trainers.values()) if isinstance(trainers, dict) else (trainers if isinstance(trainers, list) else []):
         if not isinstance(tr, dict):
             continue
         for sv in tr.get("services") or []:
@@ -396,29 +452,51 @@ def _digest(v):
 
 
 def merge_upload(acc, text, source="local"):
-    """Decode one upload and merge its notes. Returns (kind, had_notes). The same notes arriving again (an unchanged
-    file re-sent, or ForeverProbe's copy of QuestBank's notes next to QuestBank's own file) are merged once."""
+    """Decode one upload and merge it. Returns (kind, had_notes). The same notes arriving again (an unchanged file re-sent,
+    or ForeverProbe's copy of QuestBank's notes next to QuestBank's own file) are merged once. A QuestBank.lua has two
+    parts with a digest each, its notes (disc, turnins, live) and QuestBankDB.game, so a file where only a tooltip
+    changed still brings the tooltip, and one where only the notes changed doesn't count its items again. Notes from a
+    client other than Forever are left out."""
     kind, data = decode(text)
-    acc["meta"]["uploads"] += 1
-    acc["meta"]["sources"][source] = acc["meta"]["sources"].get(source, 0) + 1
-    seen_hashes = acc["meta"].setdefault("hashes", [])
+    meta = acc["meta"]
+    meta["uploads"] += 1
+    meta["sources"][source] = meta["sources"].get(source, 0) + 1
+    seen_hashes = meta.setdefault("hashes", [])
     if kind == "questbank-savedvars" and isinstance(data, dict):
+        fresh = False
+        g = data.get("game")
+        if isinstance(g, dict) and g:
+            h = _digest({"game": g})
+            if h not in seen_hashes:
+                seen_hashes.append(h)
+                merge_probe(acc, kind, data)
+                fresh = True
+        if not from_forever(data):
+            meta["other_client"] = meta.get("other_client", 0) + 1
+            return kind, False
+        # the notes' digest is the one earlier pulls stored, so a rebuild isn't needed for old uploads to stay merged once
         h = _digest({k: data.get(k) for k in ("disc", "turnins", "live", "liveEra")})
         if h in seen_hashes:
-            acc["meta"]["repeats"] = acc["meta"].get("repeats", 0) + 1
+            if not fresh:
+                meta["repeats"] = meta.get("repeats", 0) + 1
             return kind, False
         seen_hashes.append(h)
-    merge_seen(acc, kind, data)
-    merge_probe(acc, kind, data)
+        merge_seen(acc, kind, data)
+    else:
+        merge_probe(acc, kind, data)
     d = disc_of(kind, data)
     if d is None:
         return kind, False
+    if kind != "questbank-savedvars" and not from_forever({"disc": d}):
+        # ForeverProbe's copy of the notes carries QuestBank's own stamps: one loaded on Era as an out-of-date addon copies Era's
+        meta["other_client"] = meta.get("other_client", 0) + 1
+        return kind, False
     h = _digest(d)
     if h in seen_hashes:
-        acc["meta"]["repeats"] = acc["meta"].get("repeats", 0) + 1
+        meta["repeats"] = meta.get("repeats", 0) + 1
         return kind, False
     seen_hashes.append(h)
-    acc["meta"]["with_notes"] += 1
+    meta["with_notes"] += 1
     merge_disc(acc, d)
     return kind, True
 
@@ -426,9 +504,15 @@ def merge_upload(acc, text, source="local"):
 def summary(acc):
     contested = sum(1 for q in acc["q"].values() for votes in q["xp"].values() if len(votes) > 1)
     sightings = sum(sum(v.values()) for v in (acc.get("seen") or {}).values())
-    return "%d uploads (%d with notes): %d quests, %d NPCs, %d offering NPCs, %d chain steps, %d item starts; %d XP readings disagree; %d XP sightings on %d quests" % (
+    pr = acc.get("probe") or {}
+    out = "%d uploads (%d with notes): %d quests, %d NPCs, %d offering NPCs, %d chain steps, %d item starts; %d XP readings disagree; %d XP sightings on %d quests" % (
         acc["meta"]["uploads"], acc["meta"]["with_notes"], len(acc["q"]), len(acc["npc"]), len(acc["offer"]),
         len(acc["chain"]), len(acc["item"]), contested, sightings, len(acc.get("seen") or {}))
+    out += "; games: spells of %d classes and %d races, %d items had, %d tooltips" % (
+        len(pr.get("spells") or {}), len(pr.get("racials") or {}), len(pr.get("items") or {}), len(pr.get("tips") or {}))
+    if acc["meta"].get("other_client"):
+        out += "; %d upload(s) from another client left out" % acc["meta"]["other_client"]
+    return out
 
 
 # ----------------------------------------------------------------------------------------- the pull
@@ -534,8 +618,62 @@ def selftest():
     assert n == 4 and acc2["seen"] == {"971": {"6550:22:70170:turnin:9": 2}, "166": {"9750:20:0:turnin:9": 1}, "386": {"4200:22:70170:npc:3": 1}}, acc2["seen"]
     assert merge_seen(acc2, "questbank-savedvars", upload) == 0, "the same file uploaded again adds no votes"
     assert merge_seen(acc2, "export", {"turnins": [{"id": 1, "xp": 5, "level": 1}]}) == 0, "exports carry no hand-ins"
-    json.dumps(acc)  # everything JSON-clean
+
+    # what players' games showed: an old ForeverProbe file still merges, then QuestBank 3.6.0's game block on Forever;
+    # a QuestBank.lua from Classic Era adds nothing, its notes and its game block alike
+    fp_text, qb_text, era_text = (open(os.path.join(fx, n)).read() for n in ("ForeverProbe.lua", "QuestBank-forever.lua", "QuestBank-era.lua"))
+    acc3 = empty()
+    assert merge_upload(acc3, fp_text, "fixture")[1]
+    assert merge_upload(acc3, qb_text, "fixture") == ("questbank-savedvars", True)
+    assert merge_upload(acc3, era_text, "fixture") == ("questbank-savedvars", False)
+    pr = acc3["probe"]
+    assert pr["spells"] == {"PALADIN": {"635": 12, "20271": 12, "20594": 12, "2481": 12}, "MAGE": {"133": 5, "168": 5, "20580": 5}}, pr["spells"]
+    assert set(pr["racials"]) == {"Dwarf", "NightElf"} and pr["racials"]["NightElf"] == {"133": 1, "168": 1, "20580": 1}, pr["racials"]
+    # once per upload: two ForeverProbe snapshots and two QuestBank readings carry 2361, 45 and 159; Era's 25 and 159 don't count
+    assert pr["items"] == {"2361": 2, "45": 2, "2589": 1, "159": 1, "35": 1, "6096": 1}, pr["items"]
+    t = pr["tips"]
+    assert set(t) == {"2361", "45", "159", "2589"}, "the German and the Era tooltips are left out: %s" % sorted(t)
+    assert t["2361"]["b"] == 70205 and t["2361"]["cv"] == "1.60.1" and t["2361"]["x"][1] == "6 - 11 Damage\tSpeed 2.90", t["2361"]
+    assert "cv" not in t["45"] and t["159"]["cv"] == "1.60.0" and t["159"]["b"] == 69990, "the tooltip's own version, never the block's"
+    assert "cv" not in t["2589"] and t["2589"]["x"] == [], "ForeverProbe's tooltips carry no client version"
+    assert "33" in acc3["q"] and "783" not in acc3["q"] and "c823" not in acc3["npc"], "Era's notes are left out"
+    assert set(acc3["seen"]) == {"33"} and acc3["seen"]["33"] == {"170:2:70205:turnin:9": 1}, acc3["seen"]
+    assert acc3["meta"]["other_client"] == 1 and acc3["meta"].get("repeats", 0) == 0, acc3["meta"]
+    # the same file again is a repeat; a new tooltip reading merges the game block alone (its items count again, once);
+    # new notes merge the notes alone
+    assert merge_upload(acc3, qb_text, "fixture") == ("questbank-savedvars", False)
+    assert acc3["meta"]["repeats"] == 1 and pr["items"]["2361"] == 2
+    tip_text = qb_text.replace('["at"] = 1791100000,', '["at"] = 1791100600,')
+    assert tip_text != qb_text
+    assert merge_upload(acc3, tip_text, "fixture") == ("questbank-savedvars", False)
+    assert acc3["meta"]["repeats"] == 1 and pr["items"]["2361"] == 3 and pr["items"]["159"] == 2 and t["2361"]["at"] == 1791100600
+    assert acc3["q"]["33"]["n"] == 1 and acc3["seen"]["33"] == {"170:2:70205:turnin:9": 1}, "the notes were not merged again"
+    notes_text = tip_text.replace('["lv"] = 2,\n\t\t\t\t["min"] = 1,', '["lv"] = 3,\n\t\t\t\t["min"] = 1,')
+    assert notes_text != tip_text
+    assert merge_upload(acc3, notes_text, "fixture") == ("questbank-savedvars", True)
+    assert acc3["q"]["33"]["n"] == 2 and acc3["q"]["33"]["lv"] == 3 and pr["items"]["2361"] == 3, "the game block was not merged again"
+    # ForeverProbe's copy of the notes goes by the disc's own stamp: a copy made on Era adds no notes, its snapshots still
+    # go by their own interface
+    acc4 = empty()
+    ex_text = open(os.path.join(fx, "export.txt")).read()
+    stamp = lambda iface: (fp_text.replace('["disc"] = {\n\t\t\t["v"] = 1,', '["disc"] = {\n\t\t\t["iface"] = %d,\n\t\t\t["v"] = 1,' % iface),
+                           ex_text.replace('"disc":{"v":1,', '"disc":{"v":1,"iface":%d,' % iface))
+    era_fp, era_ex = stamp(11507)
+    assert era_fp != fp_text and era_ex != ex_text
+    assert merge_upload(acc4, era_fp, "fixture") == ("probe-savedvars", False)
+    assert merge_upload(acc4, era_ex, "fixture") == ("export", False)
+    assert acc4["q"] == {} and acc4["meta"]["with_notes"] == 0 and acc4["meta"]["other_client"] == 2, acc4["meta"]
+    assert acc4["probe"]["spells"]["PALADIN"], "the Forever snapshots in the same file still count"
+    assert [merge_upload(acc4, t, "fixture")[1] for t in stamp(16001)] == [True, True] and "62" in acc4["q"]
+    # which client wrote an unstamped file: its build, else Forever
+    assert from_forever({"disc": {"v": 1, "q": {}, "build": "70058"}}) is True
+    assert from_forever({"disc": {"v": 1, "q": {}, "build": "61582"}}) is False, "older than Forever's first build"
+    assert from_forever({"disc": {"v": 1, "q": {}}}) is True and from_forever({}) is True
+    assert from_forever({"disc": {"build": "70205"}, "diag": {"addons": {"iface": 11507}}}) is False, "the stamp decides over the build"
+    assert from_forever({"disc": {"build": "61582", "iface": 16001}}) is True
+    json.dumps(acc), json.dumps(acc3), json.dumps(acc4)  # everything JSON-clean
     print("selftest OK:", summary(acc))
+    print("selftest OK:", summary(acc3))
 
 
 def main():
@@ -546,7 +684,8 @@ def main():
     ap.add_argument("--merge", nargs="+", metavar="FILE", help="merge these local files instead of pulling")
     ap.add_argument("--parse", metavar="FILE", help="print one file as JSON and exit")
     ap.add_argument("--selftest", action="store_true")
-    ap.add_argument("--rebuild", action="store_true", help="start over from the decoded uploads in --raw-dir, then pull")
+    ap.add_argument("--rebuild", action="store_true",
+                    help="start over from the decoded uploads in --raw-dir, without pulling (run plain afterwards for what is new)")
     a = ap.parse_args()
     if a.selftest:
         return selftest()
@@ -555,7 +694,14 @@ def main():
         print(json.dumps({"kind": kind, "data": data}, indent=1, ensure_ascii=False))
         return
     acc = json.load(open(a.out)) if os.path.exists(a.out) else empty()
+    stamp = lambda t: datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    pulled = stamp(datetime.datetime.now(datetime.timezone.utc).timestamp())
     if a.rebuild:
+        # a rebuild alone pulls nothing, so the pull date GAPS.md gives stays the last pull's; with no disc.json, the
+        # newest decoded upload's, since pull() writes each one as it arrives
+        if not a.merge:
+            raw = [os.path.getmtime(os.path.join(a.raw_dir, f)) for f in os.listdir(a.raw_dir) if re.match(r"^\d+-", f)]
+            pulled = acc["meta"].get("pulled") or (stamp(max(raw)) if raw else None)
         acc = empty()
         for f in sorted(os.listdir(a.raw_dir)):
             m = re.match(r"^(\d+)-", f)
@@ -566,16 +712,15 @@ def main():
                 kind, notes = merge_upload(acc, open(os.path.join(a.raw_dir, f), encoding="utf-8").read(), "rebuild")
             except (ValueError, KeyError) as e:
                 print("  %s could not be read, skipped: %s" % (f, e))
-        print("rebuilt from %d decoded upload(s)" % acc["meta"]["uploads"])
+        print("rebuilt from %d decoded upload(s) up to #%d" % (acc["meta"]["uploads"], acc["meta"]["last_id"]))
     if a.merge:
         for f in a.merge:
             kind, notes = merge_upload(acc, open(f, encoding="utf-8").read(), "local")
             print("  %s: %s%s" % (os.path.basename(f), kind, "" if notes else " (no QuestBank notes)"))
-        new = len(a.merge)
-    else:
+    elif not a.rebuild:
         new = pull(acc, a.endpoint, admin_key(), a.raw_dir)
         print("pulled %d new upload(s) after #%d" % (new, acc["meta"]["last_id"]))
-    acc["meta"]["pulled"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    acc["meta"]["pulled"] = pulled
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     json.dump(acc, open(a.out, "w"), indent=0, sort_keys=True)
     print("wrote %s: %s" % (os.path.relpath(a.out, REPO) if a.out.startswith(REPO) else a.out, summary(acc)))
