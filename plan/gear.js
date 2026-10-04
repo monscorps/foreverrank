@@ -627,7 +627,7 @@
       if (it.flavor) L.push('<span class="it-f">"' + esc(it.flavor) + '"</span>');
       if (it.itemLevel) L.push('<span class="it-y">Item Level ' + esc(it.itemLevel) + "</span>");
       if (it.ft === "new" || it.ft === "changed" || it.nw) L.push('<span class="it-ft">' + (it.ft === "new" || it.nw ? "New in Forever" : "Changed from Classic") + "</span>");
-      if (it.sg) L.push('<span class="it-ft">Seen in players\' games (' + esc(it.sg) + (it.sg === 1 ? " upload" : " uploads") + ")</span>");
+      if (it.sg) L.push('<span class="it-ft">Seen in players\' games</span>');
       if (it.est === "classic") L.push('<span class="it-conf it-est">' + ((it.drops || it.quests)
         ? "Estimate: a Forever loot record lists this item, but its Forever numbers have not been seen yet. These are its WoW Classic stats."
         : "Estimate: not seen in Forever yet. These are its WoW Classic stats; Forever may have changed or removed it.") + "</span>");

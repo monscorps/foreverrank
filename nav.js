@@ -11,7 +11,7 @@
   var MENUS = {
     ladder: { path: "", label: "Home", items: [
       ["Latest news", "#latest"], ["Dig in", "#explore"], ["The ladder, explained", "#ladder"],
-      ["Ladder preview", "?preview=1#ladder"], ["ForeverProbe addon", "@addon/"]] },
+      ["Ladder preview", "?preview=1#ladder"], ["QuestBank addon", "@questbank/"]] },
     forge: { path: "plan/", label: "The Forge", items: [
       ["Race and class", "#race"], ["Talents", "#talents"], ["Legacy tree", "#legacy"], ["Gear and stats", "#gear"],
       ["Consumables", "#consumables"], ["Name and share", "#share"], ["Raid composer", "#composer"]] },

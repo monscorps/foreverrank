@@ -694,11 +694,12 @@ async function handleStats(env) {
 }
 
 /* ------------------------------------------------------------------------
- * ForeverProbe / QuestBank uploads: what players saw in the game, crowdsourced.
+ * QuestBank uploads: what players saw in the game, crowdsourced.
  *
- * Anyone may POST. What is accepted: a ForeverProbe export ("FPROBE2:" + JSON,
- * the text /probe export shows), or a SavedVariables file straight from WoW
- * (ForeverProbe.lua or QuestBank.lua). Everything else is refused. The text is
+ * Anyone may POST. What is accepted: QuestBank.lua straight from WoW's
+ * SavedVariables, and from the retired ForeverProbe (old trays never update, so
+ * these stay accepted for good) its export ("FPROBE2:" + JSON) or its
+ * ForeverProbe.lua. Everything else is refused. The text is
  * stored gzipped in D1 with a short summary; the merge into QuestBank's data
  * happens offline (tools/probe_pull.py, behind PROBE_ADMIN_KEY). Uploads carry
  * no account identity: only what the addon noted. Duplicates (same bytes) are
@@ -756,17 +757,52 @@ function probeSummary(kind, text) {
     // a SavedVariables file: a light read, no Lua parsing here
     out.build = grab(/\["build"\]\s*=\s*"([^"]+)"/);
     out.addon = grab(/\["addon"\]\s*=\s*"([^"]+)"/) || grab(/\["ver"\]\s*=\s*"([^"]+)"/);
-    // WoW writes numeric keys bare ([7] = {) and string keys quoted; QuestBankDB.disc.q sits three
-    // tabs deep in QuestBank.lua and four deep (under ["questbank"]) in ForeverProbe.lua
-    const quests = text.match(/\["q"\]\s*=\s*\{/);
-    if (kind === 'questbank-savedvars') {
-      out.quests = (text.match(/\n\t\t\t\["?\d+"?\]\s*=\s*\{/g) || []).length || null;
-      if (!quests) out.note = 'no discoveries table in this file';
-    } else if (text.indexOf('["questbank"]') >= 0) {
-      out.quests = (text.match(/\n\t\t\t\t\["?\d+"?\]\s*=\s*\{/g) || []).length || null;
-    }
+    out.quests = discQuests(text);
+    if (kind === 'questbank-savedvars' && out.quests == null) out.note = 'no discoveries table in this file';
   }
   return out;
+}
+
+// The client writes SavedVariables with no indentation, so a table is found by walking its braces. One native
+// regex steps over strings and the "-- [n]" comments the client writes after array items.
+/** Where the Lua table whose "{" is at open closes, and the commas directly inside it (the client ends every
+ *  entry with one). null when the braces never close: a cut-off file. */
+function luaTable(text, open) {
+  const token = /"(?:[^"\\]|\\.)*"|--[^\n]*|[{},]/g;
+  const commas = [];
+  let depth = 0;
+  token.lastIndex = open;
+  for (let m; (m = token.exec(text)); ) {
+    if (m[0] === '{') depth++;
+    else if (m[0] === '}') { if (--depth === 0) return { close: m.index, commas }; }
+    else if (m[0] === ',' && depth === 1) commas.push(m.index);
+  }
+  return null;
+}
+
+/** How many quests QuestBank noted: the entries of disc["q"] (QuestBankDB.disc in QuestBank.lua, under
+ *  ["questbank"] in ForeverProbe.lua). null when the file has none. */
+function discQuests(text) {
+  const disc = /\["disc"\]\s*=\s*\{/g;
+  for (let d; (d = disc.exec(text)); ) {
+    const open = d.index + d[0].length - 1;
+    const t = luaTable(text, open);
+    if (!t) return null;
+    // ["q"] directly inside disc: right after its "{" or after one of its own commas. A comment runs to its
+    // line end, so a run of dashes has one reading (no backtracking blow-up) and a comment never hides the key.
+    const head = /(?:\s|--[^\n]*\n)*\["q"\]\s*=\s*\{/y;
+    for (const at of [open, ...t.commas]) {
+      head.lastIndex = at + 1;
+      if (!head.test(text)) continue;
+      const q = luaTable(text, head.lastIndex - 1);
+      if (!q) return null;
+      const last = q.commas.length ? q.commas[q.commas.length - 1] : head.lastIndex - 1;
+      // a last entry written without its comma still counts
+      return q.commas.length + (text.slice(last + 1, q.close).replace(/--[^\n]*/g, '').trim() ? 1 : 0);
+    }
+    disc.lastIndex = t.close;
+  }
+  return null;
 }
 
 async function handleProbeUpload(req, env, ctx) {
@@ -794,14 +830,14 @@ async function handleProbeUpload(req, env, ctx) {
   // the addon's copy box is one line; a pasted SavedVariables file is many. Trim only the ends.
   const trimmed = text.replace(/^\uFEFF/, '').trim();
   const kind = Object.keys(PROBE_KINDS).find((k) => PROBE_KINDS[k].test(trimmed));
-  if (!kind) return json({ error: 'not a ForeverProbe export (starts with FPROBE2:) or a ForeverProbe.lua / QuestBank.lua SavedVariables file' }, 400);
+  if (!kind) return json({ error: 'not a QuestBank.lua file (it is in WTF\\Account\\<account>\\SavedVariables under the game folder)' }, 400);
 
   const hash = await sha256Hex(trimmed);
   const dup = await env.DB.prepare('SELECT id, received FROM probe_uploads WHERE hash = ?').bind(hash).first();
   if (dup) return json({ ok: true, duplicate: true, id: dup.id, message: 'Already received, thanks. Nothing new since then.' });
 
   const gz = await gzipText(trimmed);
-  if (gz.byteLength > PROBE_MAX_GZ) return json({ error: 'too large once compressed; export again after a /reload to shrink it' }, 413);
+  if (gz.byteLength > PROBE_MAX_GZ) return json({ error: 'too large once compressed (900 KB at most); please tell the Discord' }, 413);
   const summary = probeSummary(kind, trimmed);
   const res = await env.DB.prepare(
     'INSERT INTO probe_uploads (received, ip_hash, source, kind, filename, size, hash, summary, body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'

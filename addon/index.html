@@ -3,19 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ForeverProbe, the WoW Forever Addon · ForeverRank</title>
-<meta name="description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar, character snapshots and QuestBank&#x27;s discoveries, uploaded by you or by the optional Windows companion.">
+<title>ForeverProbe is part of QuestBank now · ForeverRank</title>
+<meta name="description" content="ForeverProbe is retired: QuestBank 3.6.0 notes the items, spells and gear it did. Get QuestBank (QuestBank Uploader on Windows), log in once with both addons on, then delete the ForeverProbe folder.">
+<meta name="robots" content="noindex">
 <link rel="canonical" href="https://foreverrank.com/addon/">
 <!-- seo:begin -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ForeverRank">
 <meta property="og:url" content="https://foreverrank.com/addon/">
-<meta property="og:title" content="ForeverProbe, the WoW Forever Addon · ForeverRank">
-<meta property="og:description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar, character snapshots and QuestBank&#x27;s discoveries, uploaded by you or by the optional Windows companion.">
+<meta property="og:title" content="ForeverProbe is part of QuestBank now · ForeverRank">
+<meta property="og:description" content="ForeverProbe is retired: QuestBank 3.6.0 notes the items, spells and gear it did. Get QuestBank (QuestBank Uploader on Windows), log in once with both addons on, then delete the ForeverProbe folder.">
 <meta property="og:image" content="https://foreverrank.com/assets/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="ForeverProbe, the WoW Forever Addon · ForeverRank">
-<meta name="twitter:description" content="ForeverProbe is ForeverRank&#x27;s WoW Forever addon: a levelling pace bar, character snapshots and QuestBank&#x27;s discoveries, uploaded by you or by the optional Windows companion.">
+<meta name="twitter:title" content="ForeverProbe is part of QuestBank now · ForeverRank">
+<meta name="twitter:description" content="ForeverProbe is retired: QuestBank 3.6.0 notes the items, spells and gear it did. Get QuestBank (QuestBank Uploader on Windows), log in once with both addons on, then delete the ForeverProbe folder.">
 <meta name="twitter:image" content="https://foreverrank.com/assets/og.jpg">
 <!-- seo:end -->
 <link rel="icon" href="/mark.svg">
@@ -24,14 +25,15 @@
 .fp-wrap { max-width: 860px; margin: 0 auto; padding: 2.2rem 1rem 4rem; }
 .fp-hero { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .fp-ico { width: 64px; height: 64px; border: 1px solid rgba(229,204,128,.55); border-radius: 2px; background: #0d1626; display: grid; place-items: center; }
-.fp-ico svg { color: #e5cc80; }
+.fp-ico img { width: 44px; height: 44px; border-radius: 2px; display: block; }
+.fp-hero > div:last-child { flex: 1 1 18rem; min-width: 0; }
 .fp-hero h1 { margin: 0; font-size: 2rem; }
 .fp-hero h1 span { color: var(--gold, #e5cc80); }
 .fp-sub { color: var(--subtle, #8b93a7); margin: .3rem 0 0; max-width: 46rem; }
+.fp-sub a { color: var(--gold, #e5cc80); }
+.fp-sub code { color: #e8e2d0; }
 .fp-dl { display: inline-block; margin: 1.4rem 0 .4rem; font: 700 .85rem/1 var(--heading, inherit); letter-spacing: .08em; text-transform: uppercase; color: #0d1626; background: var(--gold, #e5cc80); border-radius: 2px; padding: .8rem 1.3rem; text-decoration: none; }
 .fp-dl:hover { filter: brightness(1.08); }
-.fp-dl.soon { cursor: default; color: var(--gold, #e5cc80); background: transparent; border: 1px dashed rgba(229,204,128,.55); }
-.fp-dl.soon:hover { filter: none; }
 .fp-ver a { color: var(--gold, #e5cc80); }
 .fp-ver { color: var(--subtle, #8b93a7); font-size: .75rem; margin-left: .8rem; }
 .fp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; margin: 1.6rem 0; }
@@ -39,15 +41,16 @@
 .fp-step b { display: block; color: var(--gold, #e5cc80); font: 700 1.2rem/1 var(--heading, inherit); margin-bottom: .4rem; }
 .fp-step p { margin: 0; font-size: .82rem; line-height: 1.5; color: var(--card-text, #c8cede); }
 .fp-step code { color: #e8e2d0; font-size: .78rem; }
+.fp-step a { color: var(--gold, #e5cc80); }
 .fp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; margin-top: 1rem; }
 .fp-card { background: rgba(0,0,0,.28); border: 1px solid var(--card-border, rgba(139,147,167,.25)); border-radius: 2px; padding: 1rem; }
 .fp-card h3 { margin: 0 0 .5rem; font-size: .95rem; color: #e8e2d0; }
 .fp-card ul { margin: 0; padding-left: 1.1rem; }
 .fp-card li { font-size: .82rem; line-height: 1.55; color: var(--card-text, #c8cede); margin-bottom: .3rem; }
-.fp-bar-demo { margin: 1.6rem 0 0; border: 1px solid rgba(229,204,128,.35); background: #070d18; border-radius: 2px; padding: .45rem .8rem; display: inline-block; font: 600 .78rem/1 var(--heading, inherit); color: #efe9d4; letter-spacing: .04em; }
+.fp-card code { color: #e8e2d0; font-size: .78rem; }
 .fp-h2 { font-family: var(--display-serif, inherit); color: var(--gold, #e5cc80); font-size: 1.5rem; margin: 2.4rem 0 .2rem; }
 .fp-card a { color: var(--gold, #e5cc80); }
-@media (max-width: 700px) { .fp-steps, .fp-cols { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .fp-steps, .fp-cols { grid-template-columns: 1fr; } .fp-ver { display: block; margin: .2rem 0 0; } }
 </style>
 </head>
 <body class="board">
@@ -57,89 +60,52 @@
       <span class="brand-word">FOREVER<b>RANK</b></span>
     </a>
     <div class="top-nav">
+      <a class="pill" href="/">Home</a>
       <a class="pill" href="/plan/">The Forge</a>
       <a class="pill" href="/codex/">Database</a>
       <a class="pill" href="/news/">News</a>
-      <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener"><span>Discord</span></a>
-      <span class="phase">Addon</span>
+      <a class="pill" href="/questbank/">QuestBank</a>
+      <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
     </div>
   </nav>
 <main class="fp-wrap">
   <div class="fp-hero">
-    <div class="fp-ico"><svg width="34" height="34" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="8" cy="8" r="6.4"/><path d="M8 4.2V8l2.6 1.6"/></svg></div>
+    <div class="fp-ico"><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="" width="44" height="44"></div>
     <div>
-      <h1>Forever<span>Probe</span></h1>
-      <p class="fp-sub">The quiet companion. One pace bar you will not want to turn off, character snapshots, and <a href="/questbank/">QuestBank</a>'s discoveries, which only leave the game when you upload them yourself, or let the Windows companion do it.</p>
+      <h1>ForeverProbe is part of <span>QuestBank</span> now</h1>
+      <p class="fp-sub">One addon instead of two. Since 3.6.0, <a href="/questbank/">QuestBank</a> notes what ForeverProbe did for the site: the items the game shows you, the spells you have learned and the gear you wear and carry, with no names. ForeverProbe's pace bar, guild roster and <code>/probe</code> export are gone with it.</p>
     </div>
   </div>
 
-  <a class="fp-dl" href="/addon/ForeverProbe.zip" download>Download ForeverProbe</a><span class="fp-ver">Version 0.4.8 · addon and Windows companion · 168 KB. A new build, being tested on the beta: it says "ForeverProbe 0.4.8 is running" in chat the first time it loads, and <code>/probe debug</code> lists anything that went wrong; tell the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>. The Companion's Status now shows when the game last wrote each saved file, which version wrote it, and where ForeverProbe and QuestBank sit in your AddOns folder (out of date, one folder too deep, or under the wrong folder name), and when the game needs a restart to load them.</span>
-  <div class="fp-bar-demo">Lv 23&nbsp;&nbsp;41.7%&nbsp;&nbsp;12.4k XP/h&nbsp;&nbsp;up in 1h 12m</div>
+  <a class="fp-dl" href="/questbank/">Get QuestBank</a><span class="fp-ver">Free. On Windows, QuestBank Uploader installs it for you and sends its notes in.</span>
 
+  <h2 class="fp-h2">What to do</h2>
   <div class="fp-steps">
-    <div class="fp-step"><b>1</b><p>Download and unzip. You get <code>ForeverProbe</code>, the addon, and <code>Companion</code>, the optional Windows auto-upload with its installer, <code>Install.bat</code>.</p></div>
-    <div class="fp-step"><b>2</b><p>Drop <code>ForeverProbe</code> into the Forever beta's <code>Interface/AddOns/</code> folder, the same one QuestBank goes in (usually <code>World of Warcraft/_classic_beta_/</code>), and restart the game. The pace bar appears; that is the whole addon install.</p></div>
-    <div class="fp-step"><b>3</b><p>Want the uploads automatic? Double-click <code>Companion\Install.bat</code>, done. The sigil lands in your system tray and sends your ForeverProbe and QuestBank saved files to foreverrank.com whenever they change. Nothing to type, no key, no account.</p></div>
+    <div class="fp-step"><b>1</b><p>Get QuestBank 3.6.0 or newer from the <a href="/questbank/">QuestBank page</a>. On Windows, download QuestBank Uploader and double-click its <code>Install.bat</code>: it installs or updates QuestBank in your game folders, and replaces the old ForeverProbe Sync, keeping your WoW folder and what it already sent.</p></div>
+    <div class="fp-step"><b>2</b><p>Log in once with both addons on. QuestBank brings in what ForeverProbe kept (item tooltips, spells and gear, never names), then says in chat that you can delete ForeverProbe.</p></div>
+    <div class="fp-step"><b>3</b><p>Delete the <code>ForeverProbe</code> folder from <code>Interface\AddOns</code>. From then on QuestBank's own saved file, <code>QuestBank.lua</code>, is the only one to upload.</p></div>
   </div>
 
   <div class="fp-cols">
     <div class="fp-card">
-      <h3>What you get</h3>
+      <h3>Now in QuestBank</h3>
       <ul>
-        <li>Pace bar: level, percent, XP per hour, time to level. The estimate is rested-aware, blends this level with your past levels, and hovers to show a mobs-to-level range plus how sure it is. Drag it anywhere; right-click hides it.</li>
-        <li><code>/probe</code> opens one small panel: status, pace toggle, export.</li>
-        <li>Nothing else on your screen. No popups, and one line in chat only the first time a new version loads, to say it is running.</li>
+        <li>The tooltip of each item the game shows you, the spells you have learned and the gear you wear and carry: one reading per class and race, with no character, realm or guild names. The <a href="/codex/">Database</a> marks what players' games showed.</li>
+        <li>Only on the Forever client. Settings, Discoveries has the switch: <b>Note items and spells you see, for foreverrank.com</b>, on unless you untick it. Unticking forgets what it had noted.</li>
+        <li>It stays on your PC until you upload <code>QuestBank.lua</code> on the <a href="/questbank/#share">QuestBank page</a>, or QuestBank Uploader sends it.</li>
       </ul>
     </div>
     <div class="fp-card">
-      <h3>What it does underneath</h3>
+      <h3>Gone</h3>
       <ul>
-        <li>Snapshots your character at login and level-up: spells, gear, zone.</li>
-        <li>Carries QuestBank's discoveries (quests, the NPCs who give and take them, what each paid) in the same export, when QuestBank runs too. Neither addon needs the other.</li>
-        <li>Notes what class trainers offer when you open one.</li>
-        <li>Keeps the tooltip of every weapon, armor piece and recipe the game shows you (bags, loot, quest rewards, vendors, chat links), once per build. Blizzard sends most new Forever items from the server, so no datamine sees them; this is how the Database learns them the day they turn up.</li>
-        <li>Keeps the quiet record future features feed on: your PvP nemesis list, a guild roster snapshot per session, professions and progression. Dormant until the site grows those pages.</li>
-        <li>Everything stays on your machine until you press Export and paste the text into the <a href="/questbank/#share">upload box</a>, or the Windows companion uploads the saved file for you outside the game. Read-only, no automation, the game itself never sends anything. Terms-of-service safe by construction.</li>
-      </ul>
-    </div>
-  </div>
-
-  <h2 class="fp-h2">Run it as a guild</h2>
-  <p class="fp-sub">The beta is the one window where a guild can map Forever before everyone else plays it. Three habits, nothing else.</p>
-  <div class="fp-steps">
-    <div class="fp-step"><b>1</b><p>Everyone installs the same zip. Same three steps, one minute per person.</p></div>
-    <div class="fp-step"><b>2</b><p>Play the beta like you normally would. The addon quietly notes learn levels, trainer offers and your levelling pace while you do.</p></div>
-    <div class="fp-step"><b>3</b><p>Pick a lane: fully automatic with the Sync companion in the zip (details below), or manual, typing <code>/probe export</code> and pasting the text into the <a href="/questbank/#share">upload box</a> now and then.</p></div>
-  </div>
-  <div class="fp-card" style="margin-top:.7rem">
-    <h3>The Sync companion, already in your download</h3>
-    <ul>
-      <li>The <code>Companion</code> folder in the zip holds one readable PowerShell script and its installer. It watches your <code>ForeverProbe.lua</code> and <code>QuestBank.lua</code> saved files and uploads each to foreverrank.com whenever the game writes it, hash-checked so nothing ever sends twice.</li>
-      <li>Double-click <code>Companion\Install.bat</code>; there is nothing to type or configure, no key and no account. The sigil then lives in your system tray: it syncs every 30 minutes, shows a balloon when an update ships, comes back at every login, and right-click offers Sync now, Status and Exit. <code>Uninstall.bat</code> removes every trace.</li>
-      <li>The addon still never touches the network; the game cannot and does not send anything. The companion runs outside WoW, reads two files, and every line of it is yours to read. Uploads are stored privately and never published as they are: QuestBank's file keeps each character's plan under its name and realm, and ForeverProbe's carries your character's name and level and a snapshot of your guild's roster. Only what the addons noted about quests, NPCs and XP goes into the releases.</li>
-    </ul>
-  </div>
-  <div class="fp-cols">
-    <div class="fp-card">
-      <h3>What your exports teach the site</h3>
-      <ul>
-        <li>Real learn levels past 38, the demo's ceiling. Every trainer visit confirms rows the datamine can only guess at.</li>
-        <li>Which SoD-wired spells actually train, settling the biggest open question in the Database.</li>
-        <li>The XP curve, level by level, from real pace data instead of the Classic assumption.</li>
-        <li>Soul Engraving the moment anyone finds it live, plus items seen in the wild before they hit any list.</li>
-      </ul>
-    </div>
-    <div class="fp-card">
-      <h3>The deal</h3>
-      <ul>
-        <li>Every confirmed fact lands on the Database labeled as beta-confirmed, and the guild gets the credit line.</li>
-        <li>Nothing is collected without you pressing Export. Skip a week, nothing happens; there is no tracking to opt out of because there is no tracking.</li>
-        <li>More characters and classes covered means fewer question marks for everyone at launch. That is the whole pitch.</li>
+        <li>The pace bar, the <code>/probe</code> panel and its export.</li>
+        <li>The nemesis list, the guild roster snapshot and the trainer scans.</li>
+        <li>ForeverProbe Sync: QuestBank Uploader takes its place. Questions go to the <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>.</li>
       </ul>
     </div>
   </div>
 </main>
-<script src="/nav.js?v=7"></script>
+<script src="/nav.js?v=8"></script>
 <script src="/map.js?v=8" defer></script>
 <script src="/support.js?v=2" defer></script>
 </body>

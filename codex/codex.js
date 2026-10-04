@@ -310,17 +310,17 @@
       if (p.d) h += "<p>" + esc(p.d) + "</p>";
       if (p.note) h += '<p class="sbt-note">' + esc(p.note) + "</p>";
       if (p.cl && p.s && p.s !== "same") h += '<p class="sbt-note">Classic trains it at level ' + p.cl + ".</p>";
-      if (p.seen) h += '<p class="sbt-note">Seen in game: a level ' + p.seen + " " + esc(p.c) + " in players' ForeverProbe snapshots had it.</p>";
+      if (p.seen) h += '<p class="sbt-note">Seen in game: a level ' + p.seen + " " + esc(p.c) + " in players' games had it.</p>";
       h += '<p class="sbt-src">' + esc(SRC_TIP[p.src] || "") + "</p>";
     } else if (e.kind === "talent") {
       var t = e.tl;
       if (t.d) h += "<p>" + esc(t.d) + (t.r > 1 ? " (rank 1 of " + t.r + ")" : "") + "</p>";
       h += '<p class="sbt-note">Tier ' + t.row + ": earliest around level " + e.lvlKey + " by Classic one-point-per-level pacing. An estimate, not Forever data.</p>";
-      if (t.seen) h += '<p class="sbt-note">Seen in game: a level ' + t.seen + " " + esc(t.c) + " in players' ForeverProbe snapshots had it.</p>";
+      if (t.seen) h += '<p class="sbt-note">Seen in game: a level ' + t.seen + " " + esc(t.c) + " in players' games had it.</p>";
       h += '<p class="sbt-src">Transcribed from BlizzCon demo footage (talentsforever.com export, CC BY 4.0).</p>';
     } else if (e.kind === "racial") {
       if (e.rc.d) h += "<p>" + esc(e.rc.d) + "</p>";
-      if (e.rc.seen) h += '<p class="sbt-note">Seen in game: a ' + esc(e.rc.race) + " in players' ForeverProbe snapshots had it.</p>";
+      if (e.rc.seen) h += '<p class="sbt-note">Seen in game: a ' + esc(e.rc.race) + " in players' games had it.</p>";
       h += '<p class="sbt-src">Transcribed from BlizzCon demo footage and reveal panels (talentsforever.com export, CC BY 4.0).</p>';
     } else if (e.kind === "itemset") {
       var st = e.st;

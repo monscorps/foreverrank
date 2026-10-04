@@ -2,8 +2,11 @@
 
 The race ladder for World of Warcraft: Forever — levelling, hardcore, PvP
 and character progression, WarcraftLogs-style. Static site, no build step.
-The measurement addon lives with its 3.3.5a sibling until the Forever beta
-reveals the addon API: https://github.com/monscorps/levelpace
+
+The addon is QuestBank (`tools/questbank/`, served at /questbank/), a free
+questing addon for Forever. What it notes in game reaches the site when players
+upload its saved file, by hand or with the optional Windows uploader
+(`uploader/`), and goes into the next QuestBank release and the Database.
 
 Also on the site: the Forge (planner), the Database (datamined beta client),
 the Atlas, and /bis/ — best-in-slot lists per class and spec at the beta cap,
