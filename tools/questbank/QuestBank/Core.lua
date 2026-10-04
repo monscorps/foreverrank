@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.5.10"
+QB.version = "3.6.0"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -738,10 +738,10 @@ function QB.NoteXPSeen(how, id, xp)
   while #d > 12 do table.remove(d, 1) end
 end
 
--- whether ForeverProbe, the optional uploader's in-game half, is present and running for this character: the
--- uploads have shown QuestBank's file changing for days while ForeverProbe's never did, and this note in
--- QuestBank's own saved file says why (missing, disabled, not loadable and the game's reason, or loaded and which
--- version). The client's build and interface number ride along; no names
+-- the client's build and interface number, and whether the retired ForeverProbe addon is still installed for this
+-- character (disabled, not loadable and the game's reason, or loaded and which version). The probe part is only
+-- written while ForeverProbe is there: the old Windows uploader reads it, and once the folder is gone it has
+-- nothing to give advice about. No names
 function QB.NoteAddons()
   local db = QuestBankDB
   if not db then return end
@@ -758,7 +758,7 @@ function QB.NoteAddons()
   local exists = call(A.DoesAddOnExist, name)
   local info = A.GetAddOnInfo or GetAddOnInfo
   local _, title, _, loadable, reason = call(info, name)
-  -- nil, not false, when the client gave no way to ask: then /qb probe says it couldn't read the list
+  -- nil, not false, when the client gave no way to ask
   if exists == nil and type(info) == "function" then exists = title ~= nil end
   local function flag(v) if v == nil or (issecretvalue and issecretvalue(v)) then return nil end return v and true or false end
   exists = flag(exists)
@@ -774,8 +774,8 @@ function QB.NoteAddons()
   db.diag.addons = {
     at = date("%Y-%m-%d %H:%M"), build = plain(build), iface = plain(iface), qb = QB.version,
     versionCheck = checkOn,
-    probe = {
-      exists = exists, -- true, false, or nil when the client gave no way to ask
+    probe = exists and {
+      exists = exists, -- always true: the old uploader reads it
       loaded = flag(loaded) or flag(loading) or false,
       loadable = flag(loadable) or false,
       reason = why(reason),
@@ -786,7 +786,7 @@ function QB.NoteAddons()
       iface = exists and plain(call(A.GetAddOnInterfaceVersion, name)) or nil,
       running = ForeverProbeDB ~= nil and type(ForeverProbeDB) == "table" and type(ForeverProbeDB.meta) == "table"
         and plain(ForeverProbeDB.meta.addon) or nil, -- what the loaded probe wrote last; nil when it never ran
-    },
+    } or nil,
   }
 end
 
@@ -823,6 +823,7 @@ local DEFAULTS = {
   -- ones in for you (Auto.lua decides when that is wise), and two party-chat lines
   autoAccept = false, autoTurnIn = false, sayAccept = false, sayComplete = false,
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
+  noteGame = true, -- note the spells and item tooltips the Forever client shows, for foreverrank.com (Game.lua)
 }
 
 function QB:Settings()
@@ -2000,6 +2001,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Pins then QB.Pins:Init() end
     if QB.Sync then QB.Sync:Init() end
     if QB.Discover then QB.Discover:Init() end
+    if QB.Game then QB.Game:Init() end
     if QB.Arrow then QB.Arrow:Init() end
     QB:FixEscortPrompt()
     -- after the other addons have loaded and run their own login code
@@ -2125,8 +2127,13 @@ slash = function(msg)
   elseif cmd == "discoveries" then
     local nq, nn, nc = QB.Discover.Count()
     local function n(k, one, many) return k == 1 and ("1 " .. one) or (k .. " " .. many) end
-    QB:Print(string.format("Noted in game so far: %s, %s, %s. They stay in your saved file, QuestBank.lua. Upload it at foreverrank.com/questbank/ (or let ForeverProbe, optional, carry it) and it goes into the next release for everyone.",
-      n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps")))
+    local game = ""
+    if QB.Game and QB.Game.On() then
+      local ni, ns = QB.Game.Count()
+      game = ", " .. n(ni, "item", "items") .. ", " .. n(ns, "spellbook", "spellbooks")
+    end
+    QB:Print(string.format("Noted in game so far: %s, %s, %s%s. They stay in your saved file, QuestBank.lua. Upload it at foreverrank.com/questbank/, or let QuestBank Uploader send it on Windows, and it goes into the next release for everyone.",
+      n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps"), game))
   elseif cmd == "update" or cmd == "version" then
     QB:Print("You run QuestBank " .. QB.version .. (QB.newest and (". Newest seen: " .. QB.newest.version .. " (" .. (QB.newest.who or "?") .. ").") or "."))
     QB.UI:CopyLink("QuestBank download page", QB.DOWNLOAD)
@@ -2146,28 +2153,10 @@ slash = function(msg)
       QB.UI:ShowErrors()
     end
   elseif cmd == "probe" then
+    -- not listed anywhere: the old Windows uploader still tells players to type it. ForeverProbe is retired
     QB.NoteAddons()
-    local a = QuestBankDB.diag and QuestBankDB.diag.addons
-    local p = a and a.probe
-    if not p or p.exists == nil then
-      QB:Print("Couldn't read the AddOns list on this client.")
-    elseif not p.exists then
-      QB:Print("ForeverProbe is not installed for this game: the game finds no Interface\\AddOns\\ForeverProbe\\ForeverProbe.toc. It is optional; QuestBank's own file uploads without it.")
-    elseif p.loadError then
-      QB:Print(string.format("ForeverProbe %s is installed but hit an error while loading. /reload, and if it says so again, tell the Discord.", p.version or ""))
-    elseif p.loaded then
-      QB:Print(string.format("ForeverProbe %s is running%s. It writes its file, ForeverProbe.lua, when you log out or /reload.",
-        p.version or "?", p.running and p.running ~= p.version and string.format(" (its saved file says %s)", p.running) or ""))
-    elseif p.enabled == 0 then
-      QB:Print(string.format("ForeverProbe %s is installed but switched off for this character. Turn it on in the AddOns list at the character screen.", p.version or ""))
-    elseif (p.loadable or p.forMe) and not (p.reason or p.forMeWhy) then
-      QB:Print(string.format("ForeverProbe %s is switched on and loads at the next /reload or login.", p.version or ""))
-    else
-      local why = p.reason or p.forMeWhy
-      QB:Print(string.format("ForeverProbe %s is installed but the game did not load it%s. %s", p.version or "",
-        why and (": " .. why) or "",
-        why == "INTERFACE_VERSION" and "Tick Load out of date AddOns in the AddOns list, or update it from foreverrank.com." or "Check the AddOns list at the character screen."))
-    end
+    QB:Print(QB.Game and QB.Game.RETIRED or "QuestBank now notes what ForeverProbe did. You can delete the ForeverProbe folder from Interface\\AddOns.")
+    QB:Print("The Windows uploader is QuestBank Uploader: foreverrank.com/questbank/")
   elseif cmd == "escort" then
     local s = QB:Settings()
     local want = rest:lower():gsub("^%s+", ""):gsub("%s+$", "")

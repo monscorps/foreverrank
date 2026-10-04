@@ -345,7 +345,56 @@ local function newClient(o)
       return n
     end,
     GetItemIconByID = function(id) return id and 133328 or nil end,
+    -- the whole answer, for the item notes (Game.lua): c.itemClass[id] (4, armor, by default), c.itemQuality[id],
+    -- c.itemName[id] (a secret one, say), c.unloaded[id] = not in the client's cache yet
+    GetItemInfo = function(id)
+      if c.unloaded[id] then return nil end
+      return c.itemName[id] or ("Item " .. id), "|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r", c.itemQuality[id],
+        27, 22, "Armor", "Cloth", 1, "INVTYPE_CHEST", 133328, 815, c.itemClass[id] or 4, 1, 1, 0, nil
+    end,
+    RequestLoadItemDataByID = function(id) c.loadRequests[#c.loadRequests + 1] = id end,
   }
+  c.itemClass, c.itemQuality, c.itemName, c.unloaded, c.loadRequests = {}, {}, {}, {}, {}
+  -- the modern spellbook (ported from tools/foreverprobe/harness.lua): a General line and a class line;
+  -- o.book = { { spellID, itemType (1 learned, 2 not yet), isOffSpec }, ... }, the first two in General
+  env.Enum = {
+    SpellBookItemType = { None = 0, Spell = 1, FutureSpell = 2, PetAction = 3, Flyout = 4 },
+    SpellBookSpellBank = { Player = 0, Pet = 1 },
+    TooltipDataType = { Item = 0, Spell = 1, Unit = 2 },
+    TooltipDataLineType = { None = 0, Blank = 1, NestedBlock = 2, Separator = 3 },
+  }
+  c.book = o.book or { { spellID = 6603, itemType = 1 }, { spellID = 20598, itemType = 1 }, { spellID = 635, itemType = 1 }, { spellID = 879, itemType = 2 } }
+  env.C_SpellBook = {
+    GetNumSpellBookSkillLines = function() return 2 end,
+    GetSpellBookSkillLineInfo = function(i)
+      if i == 1 then return { name = "General", itemIndexOffset = 0, numSpellBookItems = 2 } end
+      if i == 2 then return { name = o.className, itemIndexOffset = 2, numSpellBookItems = #c.book - 2 } end
+    end,
+    GetSpellBookItemInfo = function(slot, bank)
+      if bank ~= 0 and bank ~= 1 then error("bad argument #2 to 'GetSpellBookItemInfo' (Enum.SpellBookSpellBank expected)", 2) end
+      return c.book[slot]
+    end,
+  }
+  -- what the character wears: o.gear[slot] = item id
+  env.GetInventoryItemID = function(unit, slot) return unit == "player" and (o.gear or {})[slot] or nil end
+  -- item tooltips: every post-call hook is kept in c.tipHooks; c.tipLines[id] replaces an item's lines
+  c.tipHooks, c.tipLines = {}, {}
+  env.TooltipDataProcessor = { AddTooltipPostCall = function(kind, fn) if kind == 0 then c.tipHooks[#c.tipHooks + 1] = fn end end }
+  env.RETRIEVING_ITEM_INFO = "Retrieving item information"
+  env.C_TooltipInfo = {
+    GetItemByID = function(id)
+      if c.tipLines[id] then return { id = id, lines = c.tipLines[id] } end
+      return { id = id, lines = { { leftText = "Item " .. id }, { leftText = "Binds when picked up" }, { leftText = "Chest", rightText = "Cloth" },
+        { leftText = "39 Armor" }, { leftText = "+5 Stamina" }, { leftText = "Item Level 27" }, { leftText = "Requires Level 22" } } }
+    end,
+  }
+  env.GetLocale = function() return c.locale or "enUS" end
+  -- the loot window and a vendor's wares: c.loot = { id, ... }, c.merchant = { id, ... }
+  c.loot, c.merchant = {}, {}
+  env.GetNumLootItems = function() return #c.loot end
+  env.GetLootSlotLink = function(i) local id = c.loot[i]; return id and ("|cff1eff00|Hitem:" .. id .. "::::::::12:::::::|h[Item " .. id .. "]|h|r") or nil end
+  env.GetMerchantNumItems = function() return #c.merchant end
+  env.GetMerchantItemID = function(i) return c.merchant[i] end
   env.C_QuestLog = {
     IsQuestFlaggedCompleted = function(id) return c.done[id] or false end,
     GetNumQuestLogEntries = function() if c.logReady == false then return 0, 0 end return #c.log + 2, #c.log end,
@@ -2733,57 +2782,48 @@ do
   for _, r in ipairs(shown()) do assert(r.gain:GetText():sub(1, 1) == "+", "the XP mode is back") end
 end
 
--- 3.5.2: QuestBank notes whether ForeverProbe is installed, switched on and loaded, so the next upload of
--- QuestBank's own file says why ForeverProbe's file never changes; /qb probe says it in chat
+-- 3.6.0 (was 3.5.2's ForeverProbe check): QuestBank notes the client's build and interface without asking, and
+-- whether the retired ForeverProbe is installed only while it is (the old Windows uploader reads that part and gives
+-- advice from it); /qb probe, which the old uploader still names, says ForeverProbe is retired and where the new
+-- uploader is
 do
   local c, Q2 = owner, owner.QB
-  local function probe() c.env.SlashCmdList.QUESTBANK("probe"); return c.chat[#c.chat] end
+  local function probe()
+    local n = #c.chat
+    c.env.SlashCmdList.QUESTBANK("probe")
+    local out = {}
+    for i = n + 1, #c.chat do out[#out + 1] = c.chat[i] end
+    return table.concat(out, "\n")
+  end
+  local UPLOADER = "The Windows uploader is QuestBank Uploader: foreverrank.com/questbank/"
   assert(c.env.QuestBankDB.diag.addons and c.env.QuestBankDB.diag.addons.qb == Q2.version, "noted at login, without asking")
   c.addons = nil
   local said = probe()
-  assert(said:find("not installed for this game", 1, true), "no ForeverProbe: " .. said)
+  assert(said:find(Q2.Game.RETIRED, 1, true) and said:find(UPLOADER, 1, true), "/qb probe: " .. said)
   local a = c.env.QuestBankDB.diag.addons
-  assert(a and a.probe.exists == false and a.probe.loaded == false and a.build == "70170" and a.iface == 16001, "the note is in the saved file")
+  assert(a and a.probe == nil and a.build == "70170" and a.iface == 16001, "no ForeverProbe: the build and interface, nothing about it")
   c.addons = { ForeverProbe = { version = "0.4.2", loaded = false, enabled = 0, reason = "DISABLED" } }
-  said = probe()
-  assert(said:find("switched off for this character", 1, true), "disabled: " .. said)
-  c.addons.ForeverProbe = { version = "0.4.1", loaded = false, enabled = 2, reason = "INTERFACE_VERSION" }
-  said = probe()
-  assert(said:find("did not load it: INTERFACE_VERSION", 1, true) and said:find("Load out of date AddOns", 1, true), "out of date: " .. said)
-  c.addons.ForeverProbe = { version = "0.4.2", loaded = false, enabled = 2, loadError = true, reason = "DEP_MISSING" }
-  said = probe()
-  assert(said:find("hit an error while loading", 1, true), "a load error: " .. said)
-  assert(c.env.QuestBankDB.diag.addons.versionCheck == true and c.env.QuestBankDB.diag.addons.probe.forMe == false, "the version-check setting and the per-character answer")
-  c.addons.ForeverProbe = { version = "0.4.2", loaded = true, enabled = 2 }
-  c.env.ForeverProbeDB = { meta = { addon = "0.4.2" } }
-  said = probe()
-  assert(said:find("ForeverProbe 0.4.2 is running.", 1, true), "running: " .. said)
-  c.env.ForeverProbeDB = { meta = { addon = "0.4.1" } }
-  said = probe()
-  assert(said:find("(its saved file says 0.4.1)", 1, true), "an older file under a newer addon: " .. said)
+  Q2.NoteAddons()
   a = c.env.QuestBankDB.diag.addons
-  assert(a.probe.version == "0.4.2" and a.probe.loaded and a.probe.running == "0.4.1" and a.qb == Q2.version, "the note carries versions")
-  -- switched on in the list but not loaded yet: a /reload away
-  c.env.ForeverProbeDB = nil
-  c.addons.ForeverProbe = { version = "0.4.3", loaded = false, enabled = 2 }
+  assert(a.probe and a.probe.exists == true and a.probe.enabled == 0 and a.probe.reason == "DISABLED" and a.probe.loaded == false,
+    "ForeverProbe still installed: the old uploader's part is there")
+  c.addons.ForeverProbe = { version = "0.4.8", loaded = true, enabled = 2 }
+  c.env.ForeverProbeDB = { meta = { addon = "0.4.6" } }
   said = probe()
-  assert(said:find("switched on and loads at the next /reload", 1, true), "ticked, not loaded yet: " .. said)
-  -- an empty reason is no reason
-  c.addons.ForeverProbe = { version = "0.4.3", loaded = false, enabled = 2, reason = "" }
-  said = probe()
-  assert(not said:find(": .", 1, true), "no empty reason in the text: " .. said)
+  assert(said:find(Q2.Game.RETIRED, 1, true) and said:find(UPLOADER, 1, true) and not said:find("is running", 1, true), "loaded or not, the same answer: " .. said)
+  a = c.env.QuestBankDB.diag.addons
+  assert(a.probe.version == "0.4.8" and a.probe.loaded and a.probe.running == "0.4.6" and a.qb == Q2.version, "the note carries versions")
   -- a hidden character name: the per-character calls degrade, nothing throws
   local realName = c.env.UnitName
   c.env.UnitName = function() return SECRET.str() end
-  c.addons.ForeverProbe = { version = "0.4.3", loaded = true, enabled = 2 }
   said = probe()
-  assert(said:find("is running", 1, true), "a hidden name changes nothing: " .. said)
+  assert(said:find(Q2.Game.RETIRED, 1, true), "a hidden name changes nothing: " .. said)
   c.env.UnitName = realName
-  -- no AddOns API at all: say so instead of "not installed"
+  -- no AddOns API at all: nobody knows, so nothing about it
   local api, info = c.env.C_AddOns, c.env.GetAddOnInfo
   c.env.C_AddOns, c.env.GetAddOnInfo = nil, nil
   said = probe()
-  assert(said:find("Couldn't read the AddOns list", 1, true), "no API: " .. said)
+  assert(c.env.QuestBankDB.diag.addons.probe == nil and said:find(Q2.Game.RETIRED, 1, true), "no API: nothing written, the same answer")
   c.env.C_AddOns, c.env.GetAddOnInfo = api, info
   -- nothing in the note is a name
   local function walk(t) for k, v in pairs(t) do
@@ -2792,9 +2832,10 @@ do
     end
   end end
   walk(c.env.QuestBankDB.diag.addons)
-  -- the login note is armed
   c.env.ForeverProbeDB = nil; c.addons = nil
-  print("addon note:", said)
+  Q2.NoteAddons()
+  assert(c.env.QuestBankDB.diag.addons.probe == nil, "gone again with the folder")
+  print("/qb probe:", (said:gsub("\n", " | ")))
 end
 
 -- 3.5.3: a reading taken under the +3% XP buff is the game's number times 1.03 (give or take one); the addon keeps
@@ -2925,6 +2966,361 @@ do
   end
   Q2.UI.findMode = "xp"; Q2.UI:Refresh()
   print("rewards:", known, "known,", unk, "learned from the window,", none, "none,", mixed or "-", "unsplit")
+end
+
+-- 3.6.0: QuestBank takes over what ForeverProbe noted for foreverrank.com (Game.lua): per class and race the spells
+-- learned and the items worn and carried, and the tooltips of weapons, armor and recipes the game shows. Only on
+-- the Forever client, only with the Settings box ticked, never a name. ForeverProbe's own notes are taken over
+-- once, and while it is loaded QuestBank says once a version that its folder can go.
+local function names(c, t, extra)
+  local bad = { c.o.name, "Forever Normal", "ForeverNormal" }
+  for _, x in ipairs(extra or {}) do bad[#bad + 1] = x end
+  local function walk(v, path)
+    if type(v) == "table" then
+      for k, x in pairs(v) do
+        assert(not ({ name = 1, realm = 1, guild = 1, char = 1, zone = 1, money = 1, roster = 1, chars = 1 })[k], "no " .. tostring(k) .. " at " .. path)
+        walk(x, path .. "." .. tostring(k))
+      end
+    elseif type(v) == "string" then
+      for _, b in ipairs(bad) do assert(not v:find(b, 1, true), "no name at " .. path .. ": " .. v) end
+    end
+  end
+  walk(t, "game")
+end
+local function hover(c, id) for _, fn in ipairs(c.tipHooks) do fn({}, { id = id }) end end
+local function fire(c, event, ...) c.QB.Game.frame.__scripts.OnEvent(c.QB.Game.frame, event, ...) end
+local function countOf(t) local n = 0; for _ in pairs(t) do n = n + 1 end; return n end
+
+-- a night elf mage who ran ForeverProbe 0.4.8: its saved notes, with the names it kept, and QuestBank's own notes
+-- from before (one item read at a newer build than ForeverProbe's copy, one at an older)
+local ingrid = newClient({
+  name = "Ingrid", level = 12, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8, race = "NightElf",
+  log = {}, done = {}, group = false, guild = false, world = { 0, 9945, 2610 }, map = 1438, bind = "Dolanaar", riding = false, xp = 100,
+  bagSlots = { { 6948, 1 }, { 2070, 4 }, { 6948, 1 } }, gear = { [1] = 7413, [5] = 6096, [16] = 2132, [18] = 5071 },
+  book = { { spellID = 6603, itemType = 1 }, { spellID = 20582, itemType = 1 }, { spellID = 133, itemType = 1 }, { spellID = 168, itemType = 1 },
+           { spellID = 116, itemType = 1 }, { spellID = 2136, itemType = 2 }, { spellID = 543, itemType = 1, isOffSpec = true },
+           { spellID = 1459, itemType = 1 }, { spellID = SECRET.num(), itemType = 1 } },
+})
+do
+  local fpItems = {
+    [280500] = { b = "70170", n = "Chrome Ring", q = 2, l = 37, r = 32, el = "INVTYPE_FINGER", c = 4, u = 0, ic = 133345, at = 1758000000, lc = "enUS", x = {} },
+    [280501] = { b = "70170", n = "Older Boots", c = 4, at = 1758000000, x = { "theirs" } }, -- QuestBank read it at a newer build: stays
+    [280502] = { b = "70205", n = "Newer Gloves", c = 4, at = 1758000000, x = { "theirs" } }, -- newer than QuestBank's: replaces it
+    [280503] = { b = "70170", n = "Half", c = 4, at = 1758000000 },                            -- no tooltip lines: not a tooltip
+  }
+  for i = 1, 40 do fpItems[280500].x[i] = "line " .. i end
+  for i = 1, 1100 do fpItems[300000 + i] = { b = "69000", n = "Old " .. i, c = 4, at = 1000 + i, x = {} } end
+  ingrid.env.ForeverProbeDB = {
+    meta = { addon = "0.4.8", greeted = "0.4.8" },
+    snapshots = {
+      { at = "2026-09-20T10:00:00Z", why = "login", char = "Ingrid-ForeverNormal", name = "Ingrid", realm = "Forever Normal", guild = "Order of Tests",
+        level = 11, race = "NightElf", class = "MAGE", zone = "Teldrassil", version = "1.60.1", build = "70170", interface = 16001,
+        spells = { 133, 116, 6603, 133 }, futureSpells = { 120 }, items = { 6948, 2070, 6948 }, money = 4200 },
+      { at = "2026-09-21T09:30:00Z", why = "levelup", char = "Ingrid-ForeverNormal", name = "Ingrid", realm = "Forever Normal", guild = "Order of Tests",
+        level = 12, race = "NightElf", class = "MAGE", zone = "Darnassus", version = "1.60.1", build = "70170", interface = 16001,
+        spells = { 133, 116, 6603, 2136 }, items = { 6948, 7413 }, skills = { { n = "Tailoring", r = 40, m = 75 } } },
+      { at = "2026-09-21T08:00:00Z", why = "login", char = "Brynja-ForeverNormal", name = "Brynja", realm = "Forever Normal",
+        level = 8, race = "Dwarf", class = "WARRIOR", build = "70170", interface = 16001, spells = { 78, 6603 }, items = { 25 } },
+      { at = "2026-09-21T08:05:00Z", name = "Eraone", level = 30, race = "Human", class = "PRIEST", interface = 11507, spells = { 1 }, items = {} },
+      { name = "Broken", class = "MAGE" },
+    },
+    items = fpItems,
+    trainers = { { npc = "Some Trainer", zone = "Darnassus", chars = { ["Ingrid-ForeverNormal"] = true }, services = { { n = "Frostbolt", c = 900 } } } },
+    guild = { name = "Order of Tests", members = 2, roster = { { n = "Brynja-ForeverNormal", lvl = 8, on = true } } },
+  }
+  ingrid.env.QuestBankDB = { game = { v = 1, snap = {}, items = {
+    [280501] = { b = "1.60.1.70205", at = 1757000000, n = "Older Boots", c = 4, x = { "mine" } },
+    [280502] = { b = "1.60.1.70170", at = 1759000000, n = "Newer Gloves", c = 4, x = { "mine" } },
+  } } }
+  ingrid.addons = { ForeverProbe = { version = "0.4.8", loaded = true, enabled = 2 } }
+end
+login(ingrid)
+do
+  local c, Q2 = ingrid, ingrid.QB
+  local G = Q2.Game
+  local g = c.env.QuestBankDB.game
+  -- the import
+  assert(g and g.v == 1 and g.imported == true, "ForeverProbe's notes are taken over")
+  assert(g.client == "1.60.1" and g.build == 70170 and g.iface == 16001, "the client: version, build and interface")
+  local s = g.snap["MAGE/NightElf"]
+  assert(s and s.level == 12 and s.class == "MAGE" and s.race == "NightElf" and s.build == 70170, "the highest-level snapshot of a class and race")
+  assert(table.concat(s.spells, ",") == "116,133,2136,6603" and table.concat(s.items, ",") == "6948,7413", "its spells and items, each once and in order: "
+    .. table.concat(s.spells, ",") .. " / " .. table.concat(s.items, ","))
+  assert(s.at == 1789983000, "ForeverProbe's time, as seconds (2026-09-21 09:30 UTC): " .. tostring(s.at))
+  local dwarf = g.snap["WARRIOR/Dwarf"]
+  assert(dwarf and dwarf.level == 8 and dwarf.spells[1] == 78, "another character's class and race")
+  assert(not g.snap["PRIEST/Human"] and countOf(g.snap) == 2, "a Classic Era snapshot and a broken one are left out")
+  assert(g.items[280500] and g.items[280500].n == "Chrome Ring" and g.items[280500].q == 2 and #g.items[280500].x == G.MAX_LINES, "a tooltip, cut to 30 lines")
+  assert(g.items[280501].x[1] == "mine" and g.items[280502].x[1] == "theirs", "the newer reading of an item wins, by build")
+  assert(not g.items[280503], "a record without tooltip lines is not a tooltip")
+  assert(countOf(g.items) == G.MAX_ITEMS and not g.items[300103] and g.items[300104], "over the cap the oldest go: " .. countOf(g.items))
+  names(c, g, { "Brynja", "Order of Tests", "Teldrassil", "Darnassus", "Some Trainer", "Eraone" })
+  -- the line about ForeverProbe: once
+  local function told()
+    local n = 0
+    for _, line in ipairs(c.chat) do if line:find(G.RETIRED, 1, true) then n = n + 1 end end
+    return n
+  end
+  assert(told() == 1, "ForeverProbe loaded: told once that its folder can go (" .. told() .. ")")
+  assert(c.env.QuestBankDB.diag.addons.probe and c.env.QuestBankDB.diag.addons.probe.version == "0.4.8", "and noted for the old uploader while it is there")
+  -- the next session: not again, and nothing imported twice
+  c.env.ForeverProbeDB.items[280599] = { b = "70170", n = "Late", c = 4, at = 1758000000, x = { "late" } }
+  G.Import(); G.Retire()
+  assert(told() == 1 and not g.items[280599], "the next session: the line isn't said again, the notes aren't taken twice")
+  -- a new QuestBank version says it once more
+  local real = Q2.version
+  Q2.version = "3.6.1"
+  G.Retire(); G.Retire()
+  assert(told() == 2, "a new version says it once more")
+  Q2.version = real
+  c.env.ForeverProbeDB, c.addons = nil, nil
+  G.Retire()
+  assert(told() == 2, "and nothing once ForeverProbe is gone")
+
+  -- a reading of this character at login: its own spells and items replace the imported ones
+  fire(c, "PLAYER_ENTERING_WORLD", false, false) -- a loading screen: nothing
+  tick(c, 10)
+  assert(g.snap["MAGE/NightElf"].spells[3] == 2136, "a loading screen takes no reading")
+  fire(c, "PLAYER_ENTERING_WORLD", true, false)
+  tick(c, 9)
+  s = g.snap["MAGE/NightElf"]
+  assert(table.concat(s.spells, ",") == "116,133,168,1459,6603,20582", "learned spells only: not the ones to come, other specs' or hidden ids: " .. table.concat(s.spells, ","))
+  assert(table.concat(s.items, ",") == "2070,2132,5071,6096,6948,7413", "worn and carried, each once: " .. table.concat(s.items, ","))
+  assert(s.level == 12 and s.at > 1790000000 - 400 * 86400 and s.build == 70170, "level, time and build")
+  -- a level up, a lower character of the same class and race, and the logout
+  c.level = 13
+  fire(c, "PLAYER_LEVEL_UP", 13)
+  tick(c, 3)
+  assert(g.snap["MAGE/NightElf"].level == 13, "a level up takes a reading")
+  c.level = 5
+  G.Snap()
+  assert(g.snap["MAGE/NightElf"].level == 13, "a lower character of the same class and race doesn't replace it")
+  c.level = 13
+  c.o.bagSlots[#c.o.bagSlots + 1] = { 4536, 2 }
+  fire(c, "PLAYER_LOGOUT")
+  assert(table.concat(g.snap["MAGE/NightElf"].items, ","):find("4536", 1, true), "the logout takes a reading")
+  -- a hidden race: no reading
+  local realRace = c.env.UnitRace
+  c.env.UnitRace = function() return SECRET.str(), SECRET.str() end
+  c.level = 14
+  G.Snap()
+  c.env.UnitRace = realRace
+  assert(g.snap["MAGE/NightElf"].level == 13 and countOf(g.snap) == 2, "a hidden race is no reading")
+  c.level = 13
+
+  -- tooltips: the hook notes the id, the reading happens a moment later
+  assert(#c.tipHooks == 1, "one tooltip hook")
+  hover(c, 280001)
+  assert(not g.items[280001], "the hook only notes the id")
+  tick(c, 1)
+  local it = g.items[280001]
+  assert(it and it.n == "Item 280001" and it.l == 27 and it.r == 22 and it.c == 4 and it.el == "INVTYPE_CHEST" and it.b == "1.60.1.70170" and it.lc == "enUS",
+    "a hovered item's tooltip is kept: " .. tostring(it and it.b))
+  assert(it.x[1] == "Binds when picked up" and it.x[2] == "Chest\tCloth" and #it.x == 6, "its lines skip the name and keep the right column")
+  assert(countOf(g.items) == G.MAX_ITEMS and not g.items[300104] and g.items[300105], "a full table drops its oldest for a new one")
+  c.itemQuality[280004] = 0
+  c.itemClass[4536] = 0
+  hover(c, 280004); hover(c, 4536)
+  tick(c, 1)
+  assert(g.items[280004] and g.items[280004].q == 0, "a grey item stays grey (quality 0)")
+  assert(not g.items[4536], "food is not kept: weapons, armor and recipes only")
+  -- loot, one the client hasn't loaded yet
+  c.unloaded[280003] = true
+  c.loot = { 280002, 280003 }
+  fire(c, "LOOT_READY")
+  tick(c, 1)
+  assert(g.items[280002] and not g.items[280003] and c.loadRequests[#c.loadRequests] == 280003, "loot is kept; an item not loaded yet is asked for")
+  c.unloaded[280003] = nil
+  fire(c, "ITEM_DATA_LOAD_RESULT", 280003, true)
+  tick(c, 1)
+  assert(g.items[280003], "and kept once the client has it")
+  -- a quest reward (through the quest window's notes) and a vendor's wares
+  c.window = { id = 7, xp = 0, title = "Kobold Camp Cleanup", rr = { 280010 } }
+  Q2.Discover.OnEvent("QUEST_DETAIL", 0)
+  c.window = nil
+  c.merchant = { 280011 }
+  fire(c, "MERCHANT_SHOW")
+  tick(c, 1)
+  assert(g.items[280010] and g.items[280011], "quest rewards and vendor wares are kept")
+  -- a tooltip still loading, a recipe, a long tooltip
+  c.tipLines[280012] = { { leftText = "Item 280012" }, { leftText = "Retrieving item information" } }
+  c.itemClass[280013] = 9
+  c.tipLines[280013] = { { leftText = "Item 280013" }, { leftText = "Requires Tailoring (125)" }, { leftText = "Use: Teaches you how to sew a shirt." },
+    { leftText = "", type = 1 }, { leftText = "Crafted Shirt" }, { leftText = "+6 Strength" } }
+  c.tipLines[280014] = {}
+  for i = 1, 45 do c.tipLines[280014][i] = { leftText = "line " .. i } end
+  hover(c, 280012); hover(c, 280013); hover(c, 280014)
+  tick(c, 1)
+  assert(not g.items[280012], "a tooltip still loading waits")
+  c.tipLines[280012] = nil -- the server's text arrives
+  tick(c, 4)
+  assert(g.items[280012] and g.items[280012].x[1] == "Binds when picked up", "and is read once the server's text is there")
+  assert(g.items[280013] and #g.items[280013].x == 2 and g.items[280013].x[2]:match("^Use:"), "a recipe keeps its own lines, not the crafted item's")
+  assert(#g.items[280014].x == G.MAX_LINES, "at most 30 lines")
+  -- read again after six hours, not before
+  g.items[280001].x = { "kept" }
+  hover(c, 280001); tick(c, 1)
+  assert(g.items[280001].x[1] == "kept", "not read again within six hours")
+  g.items[280001].at = g.items[280001].at - 7 * 3600
+  hover(c, 280001); tick(c, 1)
+  assert(g.items[280001].x[1] == "Binds when picked up", "read again after six hours")
+  -- what the client hides: an id, a name, a line, a class
+  for _, fn in ipairs(c.tipHooks) do fn({}, { id = SECRET.num() }) end
+  c.itemName[280015] = SECRET.str()
+  c.tipLines[280016] = { { leftText = "Item 280016" }, { leftText = SECRET.str() }, { leftText = "+3 Agility", rightText = SECRET.str() } }
+  c.itemClass[280017] = SECRET.num()
+  c.itemClass[280018] = 9
+  c.tipLines[280018] = { { leftText = "Item 280018" }, { leftText = "Requires Cooking (50)", type = SECRET.num() }, { leftText = "Use: Teaches you how to cook a fish." } }
+  hover(c, 280015); hover(c, 280016); hover(c, 280017); hover(c, 280018)
+  tick(c, 1)
+  assert(not g.items[280015] and not g.items[280017], "a hidden name or class: not kept")
+  assert(g.items[280018] and #g.items[280018].x == 2, "a recipe line of a hidden kind is kept, not compared")
+  assert(g.items[280016] and #g.items[280016].x == 1 and g.items[280016].x[1] == "+3 Agility", "hidden lines are left out: " .. table.concat(g.items[280016].x, " | "))
+  assert(countOf(g.items) == G.MAX_ITEMS, "still at most 1000")
+  -- Settings: the box, and what it stops
+  Q2.UI:Open(5); Q2.UI:Refresh()
+  local v5 = Q2.UI.views[5]
+  assert(v5.noteGame and v5.noteGame:GetChecked() and v5.noteGame:IsEnabled() and v5.noteGame.label:GetText() == "Note items and spells you see, for foreverrank.com",
+    "the Settings box, ticked by default")
+  assert(v5.discText:GetText():find(", 1000 items.", 1, true) and not v5.discText:GetText():find("ForeverProbe", 1, true), "the count: " .. v5.discText:GetText())
+  local lay = checkLayout(Q2.UI.frame, "settings with the item notes")
+  assert(#lay == 0, "the Discoveries part fits: " .. table.concat(lay, "; "))
+  local sf = v5.scroll
+  local _, hi = sf.bar:GetMinMaxValues()
+  sf.bar:SetValue(hi); Q2.UI:Refresh()
+  lay = checkLayout(Q2.UI.frame, "settings with the item notes, scrolled")
+  assert(#lay == 0, "and scrolled: " .. table.concat(lay, "; "))
+  sf.bar:SetValue(0)
+  c.env.SlashCmdList.QUESTBANK("discoveries")
+  local said = c.chat[#c.chat]
+  assert(said:find("1000 items, 2 spellbooks", 1, true) and not said:find("ForeverProbe", 1, true), "/qb discoveries counts them: " .. said)
+  names(c, g, { "Brynja", "Order of Tests", "Teldrassil", "Darnassus" })
+  local summary = string.format("item notes: %d tooltips, %d spellbooks; %s", countOf(g.items), countOf(g.snap), said:match("so far: (.-)%. They") or said)
+  -- unticked: what was noted goes (QuestBank.lua is uploaded whole, and the box is the say over what the site gets),
+  -- and nothing new is noted
+  v5.noteGame:SetChecked(false); v5.noteGame.__scripts.OnClick(v5.noteGame, "LeftButton")
+  assert(Q2:Settings().noteGame == false and c.env.QuestBankDB.game == nil and not v5.discText:GetText():find("items", 1, true),
+    "unticked: the notes are cleared")
+  hover(c, 280030); tick(c, 1)
+  c.level = 20
+  G.Snap()
+  fire(c, "PLAYER_ENTERING_WORLD", true, false); tick(c, 9)
+  fire(c, "PLAYER_LOGOUT")
+  assert(c.env.QuestBankDB.game == nil, "unticked: nothing is noted")
+  c.env.SlashCmdList.QUESTBANK("discoveries")
+  assert(not c.chat[#c.chat]:find("items", 1, true), "/qb discoveries leaves them out: " .. c.chat[#c.chat])
+  -- ticked again: noting starts over
+  v5.noteGame:SetChecked(true); v5.noteGame.__scripts.OnClick(v5.noteGame, "LeftButton")
+  local g2 = c.env.QuestBankDB.game
+  assert(Q2:Settings().noteGame == true and g2 and g2.v == 1 and g2.iface == 16001 and countOf(g2.items) == 0 and countOf(g2.snap) == 0,
+    "ticked again: a fresh start")
+  c.level = 13
+  hover(c, 280030); tick(c, 1)
+  G.Snap()
+  assert(g2.items[280030] and g2.snap["MAGE/NightElf"] and g2.snap["MAGE/NightElf"].level == 13, "and noting again")
+  c.env.SlashCmdList.QUESTBANK("discoveries")
+  assert(c.chat[#c.chat]:find("1 item, 1 spellbook", 1, true), "/qb discoveries counts again: " .. c.chat[#c.chat])
+  Q2.UI.frame:Hide()
+  names(c, g2)
+  print(summary)
+end
+
+-- the box unticked while ForeverProbe is still loaded: nothing is taken over and the line about its folder waits
+-- (deleting it then would lose its notes), also when the import fails; ticking the box takes them over and says it
+local solveig = newClient({
+  name = "Solveig", level = 7, cap = 60, faction = "Alliance", className = "Priest", class = "PRIEST", classID = 5, race = "Human",
+  log = {}, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Northshire Abbey", riding = false, xp = 50,
+  bagSlots = { { 6098, 1 } }, gear = { [5] = 6098 }, book = { { spellID = 585, itemType = 1 }, { spellID = 2050, itemType = 1 } },
+})
+solveig.env.QuestBankDB = { settings = { noteGame = false } }
+solveig.env.ForeverProbeDB = {
+  meta = { addon = "0.4.8" },
+  snapshots = { { at = "2026-09-22T18:00:00Z", name = "Solveig", realm = "Forever Normal", guild = "Order of Tests", level = 6, race = "Human",
+                  class = "PRIEST", build = "70170", interface = 16001, spells = { 585, 2050 }, items = { 6098 } } },
+  items = { [280800] = { b = "70170", n = "Priestly Gloves", c = 4, at = 1758000000, x = { "Binds when equipped" } } },
+}
+solveig.addons = { ForeverProbe = { version = "0.4.8", loaded = true, enabled = 2 } }
+login(solveig)
+do
+  local c, Q2 = solveig, solveig.QB
+  local G = Q2.Game
+  local function told()
+    local n = 0
+    for _, line in ipairs(c.chat) do if line:find(G.RETIRED, 1, true) then n = n + 1 end end
+    return n
+  end
+  tick(c, 10)
+  assert(c.env.QuestBankDB.game == nil and told() == 0 and c.env.QuestBankDB.settings.toldRetired == nil,
+    "unticked: nothing taken over, and nothing said about ForeverProbe's folder")
+  Q2.UI:Open(5); Q2.UI:Refresh()
+  local v5 = Q2.UI.views[5]
+  assert(v5.noteGame:IsEnabled() and not v5.noteGame:GetChecked(), "the box shows it unticked")
+  -- ticked, but the import fails: still nothing said
+  local realImport = G.Import
+  G.Import = function() error("test: the import fails") end
+  c.env.QUESTBANK_DEV = false
+  v5.noteGame:SetChecked(true); v5.noteGame.__scripts.OnClick(v5.noteGame, "LeftButton")
+  c.env.QUESTBANK_DEV = true
+  G.Import = realImport
+  local g = c.env.QuestBankDB.game
+  assert(g and not g.imported and told() == 0, "the import failed: nothing said")
+  local errs = c.env.QuestBankDB.errors
+  assert(errs and errs[1] and errs[1].msg:find("the import fails", 1, true), "and the error is noted")
+  -- unticked and ticked again: taken over, then said once
+  v5.noteGame:SetChecked(false); v5.noteGame.__scripts.OnClick(v5.noteGame, "LeftButton")
+  v5.noteGame:SetChecked(true); v5.noteGame.__scripts.OnClick(v5.noteGame, "LeftButton")
+  g = c.env.QuestBankDB.game
+  local s = g and g.snap["PRIEST/Human"]
+  assert(g and g.imported and g.items[280800] and s and s.level == 6 and table.concat(s.spells, ",") == "585,2050",
+    "ticked: ForeverProbe's notes are taken over")
+  assert(told() == 1, "and then the line about its folder, once (" .. told() .. ")")
+  G.Import(); G.Retire()
+  assert(told() == 1, "not twice")
+  names(c, g, { "Order of Tests" })
+  Q2.UI.frame:Hide()
+  print("unticked:", "nothing taken over until the box is ticked, then told " .. told() .. " time")
+end
+
+-- Classic Era (QuestBank runs there too): the game notes stay off, and the quest notes say which client wrote them
+local sigrun = newClient({
+  name = "Sigrun", level = 10, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Dwarf",
+  log = {}, done = {}, group = false, guild = false, world = { 0, -6240, 330 }, bind = "Kharanos", riding = false, xp = 50,
+  bagSlots = { { 25, 1 } }, gear = { [16] = 25 },
+})
+sigrun.env.GetBuildInfo = function() return "1.15.7", "63696", "Sep 1 2026", 11507 end
+sigrun.env.ForeverProbeDB = { meta = { addon = "0.4.8" }, snapshots = { { class = "WARRIOR", race = "Dwarf", level = 9, spells = { 78 }, items = { 25 } } },
+  items = { [280700] = { b = "63696", n = "Era Item", c = 4, at = 1, x = { "x" } } } }
+login(sigrun)
+do
+  local c, Q2 = sigrun, sigrun.QB
+  local G = Q2.Game
+  assert(not G.Forever() and not G.On() and #c.tipHooks == 0, "Classic Era: not the Forever client, no tooltip hook")
+  G.Snap(); G.Want(280001); G.Import()
+  G.OnEvent("PLAYER_ENTERING_WORLD", true, false); G.OnEvent("PLAYER_LOGOUT")
+  c.loot = { 280002 }
+  G.OnEvent("LOOT_READY")
+  tick(c, 10)
+  assert(c.env.QuestBankDB.game == nil, "nothing written: QuestBankDB.game isn't touched")
+  local d = c.env.QuestBankDB.disc
+  assert(d and d.iface == 11507 and d.build == "63696", "the quest notes say which client wrote them")
+  assert(owner.env.QuestBankDB.disc.iface == 16001, "and on Forever: " .. tostring(owner.env.QuestBankDB.disc.iface))
+  assert(c.env.QuestBankDB.diag.addons.iface == 11507 and c.env.QuestBankDB.diag.addons.probe == nil, "the client's stamps, and nothing about ForeverProbe")
+  Q2.UI:Open(5); Q2.UI:Refresh()
+  local v5 = Q2.UI.views[5]
+  assert(not v5.noteGame:IsEnabled() and not v5.noteGame:GetChecked() and v5.noteGame.label:GetText():find("Forever client only", 1, true)
+    and not v5.discText:GetText():find("items", 1, true), "the Settings box is greyed out here, and says why")
+  for _, pr in ipairs(checkLayout(Q2.UI.frame, "settings on Classic Era")) do problems[#problems + 1] = pr end
+  Q2.UI.frame:Hide()
+  c.env.SlashCmdList.QUESTBANK("discoveries")
+  assert(not c.chat[#c.chat]:find("items", 1, true), "/qb discoveries: quests and NPCs only")
+  -- ForeverProbe loaded here: nothing of it is taken over on this client, so the line about its folder is said
+  c.addons = { ForeverProbe = { version = "0.4.8", loaded = true, enabled = 2 } }
+  G.Retire(); G.Retire()
+  local n = 0
+  for _, line in ipairs(c.chat) do if line:find(G.RETIRED, 1, true) then n = n + 1 end end
+  assert(n == 1 and c.env.QuestBankDB.game == nil, "Classic Era with ForeverProbe loaded: told once, nothing written")
+  c.addons = nil
+  print("classic era:", "no game notes; disc.iface " .. tostring(d.iface))
 end
 
 local seen = {}

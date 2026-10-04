@@ -2,7 +2,7 @@
 -- QuestBank window: a quest-log-styled toolbox with four pages.
 --   Quest Log  - your 40 slots as a bank, your bags, and swaps that gain XP
 --   Plan       - the best quests for your level, by dungeon and zone, for your faction, class and race
---   Settings   - mode (auto, questing, banking), next cap, updates, chat, sharing, map
+--   Settings   - mode (auto, questing, banking), next cap, updates, chat, sharing, map, discoveries
 --   Hand-in    - the turn-in route with a clock and your level at every stop, and the run as you go
 --   Party      - QuestBank users in your group and guild: banks, runs, dungeons worth running together
 -- Built on first open, rows are pooled, and nothing updates while it is hidden.
@@ -3124,11 +3124,25 @@ function UI:CreateSettingsView(parent)
   v.arrow:SetScript("OnClick", function(self) if QB.Arrow then QB.Arrow:Set(self:GetChecked() and true or false) end end)
 
   heading(p, LEFT, -304, "Discoveries", 370)
+  -- the spells and item tooltips of the Forever client (Game.lua); quests and NPCs are always noted. Unticking
+  -- clears what was noted, ticking takes over ForeverProbe's notes if it is still there
+  v.noteGame = checkRow(p, LEFT, -328, "Note items and spells you see, for foreverrank.com", 340)
+  v.noteGame:SetScript("OnClick", function(self)
+    if QB.Game then QB.Game.SetOn(self:GetChecked() and true or false) end
+    UI:Refresh()
+  end)
+  v.noteGame:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Note items and spells you see", 1, 1, 1)
+    GameTooltip:AddLine("Tooltips of the items you see and the spells you know, with no names in them, so foreverrank.com can list them. Unticking forgets what was noted.", nil, nil, nil, true)
+    GameTooltip:Show()
+  end)
+  v.noteGame:SetScript("OnLeave", function() GameTooltip:Hide() end)
   v.discText = para(p, "GameFontNormal", 12, INK_SOFT, 370)
-  v.discText:SetPoint("TOPLEFT", LEFT, -328)
-  v.discText:SetHeight(88)
+  v.discText:SetPoint("TOPLEFT", LEFT, -356)
+  v.discText:SetHeight(64)
 
-  -- updates: what the others in your party and guild run
+  -- updates: what others on the realm run
   heading(p, RIGHT, -12, "Updates")
   v.verText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
   v.verText:SetPoint("TOPLEFT", RIGHT, -38)
@@ -3256,10 +3270,19 @@ function UI:RefreshSettingsView(v)
   v.arrow:SetChecked(set.arrow and true or false)
   local newest = QB.newest
   v.verText:SetText(newest and string.format("You run QuestBank %s. |cff0a6a0a%s runs %s: time to update.|r", QB.version, newest.who or "Someone", newest.version)
-    or string.format("You run QuestBank %s, the newest your party and guild have shown.", QB.version))
+    or string.format("You run QuestBank %s, the newest anyone on the realm has shown.", QB.version))
   v.updates:SetChecked(set.updates and true or false)
   local nq, nn, nc = QB.Discover.Count()
-  v.discText:SetText(string.format("Noted in game so far: %d quests, %d quest NPCs, %d chain steps. Forever is still being discovered, so QuestBank keeps what the game shows you. Upload your QuestBank.lua at foreverrank.com/questbank/, or run ForeverProbe (optional), and it goes into the next release for everyone.", nq, nn, nc))
+  -- the box only means something on the Forever client: elsewhere it is greyed out and says so
+  local G = QB.Game -- missing only when the files were swapped under a running game
+  local forever = G and G.Forever() or false
+  v.noteGame:SetEnabled(forever)
+  v.noteGame:SetChecked(forever and set.noteGame ~= false)
+  v.noteGame.label:SetText(forever and "Note items and spells you see, for foreverrank.com" or "Note items and spells you see (Forever client only)")
+  local ink = forever and INK or INK_SOFT
+  v.noteGame.label:SetTextColor(ink[1], ink[2], ink[3])
+  local items = (G and G.On()) and string.format(", %d items", (G.Count())) or ""
+  v.discText:SetText(string.format("Noted in game so far: %d quests, %d quest NPCs, %d chain steps%s. Forever is still being discovered: upload your QuestBank.lua at foreverrank.com/questbank/ and it goes into the next release for everyone.", nq, nn, nc, items))
   v.offers:SetChecked(set.post.auto and true or false)
   v.shareParty:SetChecked(set.share.party and true or false)
   v.shareGuild:SetChecked(set.share.guild and true or false)
