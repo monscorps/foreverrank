@@ -512,7 +512,7 @@ def main():
     def band_ok(i):
         n = int(i)
         return n < 100000 or n >= 239000
-    missing = {i for i in item if i not in sparse and i not in by and band_ok(i)}
+    missing = {i for i in item if i not in sparse and i not in by and (band_ok(i) or i in seen_game)}
     # rows Wowhead filled before are read again every run, so parser fixes reach them
     want = looted | missing | set(fc_live) | {i for i, it in by.items() if it.get("wh") or it.get("est")}
     if refresh_all:
@@ -691,6 +691,13 @@ def main():
                     it["source"] = it["source"].split(";")[0] + "; players' games in Forever have shown it"
         else:
             it.pop("sg", None)
+    for it in added:
+        n = seen_game.get(str(it["id"]))
+        if n:
+            it["sg"] = n
+            if it.get("era") in ("sod", "retail"):
+                it.pop("era", None)
+                it["eraNote"] = "Seen in players' games in Forever"
 
     # Stat lines only the tooltip text carried (datamine rows keep the text but had no stat for these)
     filled = collections.Counter()
