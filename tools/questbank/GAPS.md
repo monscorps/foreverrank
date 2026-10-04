@@ -7,11 +7,11 @@ players see those quests in Forever. Anything listed here is a quest the addon c
 
 | Check | Forever data | Missing | Classic seed | Missing |
 |---|---|---|---|---|
-| Forever XP multiplier read from its Wowhead Forever page | 2149 | 193 | 1458 | 1456 |
-| Turn-in NPC with a position | 2149 | 163 | 1458 | 7 |
-| Turn-in inside a dungeon (hand in on the way, not on the route) | 2149 | 94 | 1458 | 59 |
-| Quest giver with a position (quests that start from an item don't need one) | 2149 | 250 | 1458 | 12 |
-| Chain known (Wowhead Forever series or the Classic database) | 2149 | 439 | 1458 | 0 |
+| Forever XP multiplier read from its Wowhead Forever page | 2150 | 194 | 1457 | 1455 |
+| Turn-in NPC with a position | 2150 | 163 | 1457 | 7 |
+| Turn-in inside a dungeon (hand in on the way, not on the route) | 2150 | 94 | 1457 | 59 |
+| Quest giver with a position (quests that start from an item don't need one) | 2150 | 250 | 1457 | 12 |
+| Chain known (Wowhead Forever series or the Classic database) | 2150 | 439 | 1457 | 0 |
 
 On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip. Hand-ins on 2026-10-02 paid exactly that on every multiplied quest, dungeon-typed or not.
 What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 138 quests confirmed (within 5% counts as agreement; small differences kept as read: 157 Deliver the Thread 1450, paid 1464), 4 corrected to the game's number: 472 Fall of Dun Modr 1000 -> 1200, 2924 Essential Artificials 3050 -> 5500, 2929 The Grand Betrayal 2750 -> 4950, 2930 Data Rescue 3650 -> 6550, 0 with no XP in the catalog filled in.
@@ -23,20 +23,20 @@ Dungeon quests nobody has read take their dungeon's multiplier when the read one
 Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,
 holidays, repeatable turn-ins, raids and battlegrounds are left out.
 
-NPC positions: 359 from Wowhead Forever, 1329 from the CMaNGOS spawn table where Wowhead has none.
+NPC positions: 359 from Wowhead Forever, 1328 from the CMaNGOS spawn table where Wowhead has none.
 Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: 244 Wowhead coordinates there were in the old
 Classic frame and were moved to Forever's; 58 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 26.
 
-Seen in Forever by players (33 uploads merged by probe_pull.py, 2026-10-03T19:18:40Z): 194 quests, 1 of them Classic seeds now confirmed.
-Seen in game but not in the catalog (2): 91904 A Sealed Crate (left out on purpose by the catalog's filters), 95795 Fallen in the Fen (too little to place: no NPC with a position).
+Seen in Forever by players (47 uploads merged by probe_pull.py, 2026-10-04T11:12:17Z): 209 quests, 2 of them Classic seeds now confirmed.
+Seen in game but not in the catalog (5): 91900 A Sealed Crate (left out on purpose by the catalog's filters), 91904 A Sealed Crate (left out on purpose by the catalog's filters), 91905 A Sealed Crate (left out on purpose by the catalog's filters), 95795 Fallen in the Fen (too little to place: no NPC with a position), 98372 An Unfortunate End (left out on purpose by the catalog's filters).
 
 Every upload so far is one account's growing QuestBank.lua: what follows rests on one witness.
-Added from players' notes alone (flag 16384; required level is the lowest anyone took it at): 88756 Bring Back a Bang (level 32, 2550 XP, ender unknown), 95809 Heartwoven (level 31, XP unknown, ender known), 98209 Bloom of the Heavens (level 29, 1200 XP, ender unknown), 98221 From the Ashes (level 28, 2300 XP, ender unknown), 98283 Carnage (level 30, 3050 XP, ender unknown).
-Givers and enders filled in from what players' games showed: 88756 giver c1073, 95646 giver c1244, 95647 giver c1480, 95772 giver c956, 95809 ender c1480, 98072 giver c2094, 98208 ender c270844, 98208 giver c270844, 98209 giver c270844, 98221 giver c2104, 98245 giver c270637, 98246 giver c270637, 98283 giver c1244, 98293 giver o672330, 98815 giver c2094.
-NPC positions from players' games (the spot where they stood, a few yards off): 103 agree with the catalog within 25 yd (median 3.7 yd); 4 moved to where the game saw them: npc 1721 by 51 yd, npc 4982 by 58 yd, npc 5082 by 106 yd, npc 15991 by 41 yd; 5 placed from the game alone: npc 956, npc 256390, npc 270637, npc 270844, object 672330.
-Quest reward items: wowhead 2250, unknown 1392, loot pages 72.
+Added from players' notes alone (flag 16384; required level is the lowest anyone took it at): 88756 Bring Back a Bang (level 32, 2550 XP, ender unknown), 93176 My Little Friends (level 35, XP unknown, ender unknown), 93585 This Light of Mine (level 34, XP unknown, ender known), 95809 Heartwoven (level 31, XP unknown, ender known), 98209 Bloom of the Heavens (level 29, 1200 XP, ender unknown), 98221 From the Ashes (level 28, 2300 XP, ender unknown), 98283 Carnage (level 30, 3050 XP, ender unknown).
+Givers and enders filled in from what players' games showed: 88756 giver c1073, 93176 giver c217412, 93585 ender c1776, 93585 giver c255597, 95646 giver c1244, 95647 giver c1480, 95772 giver c956, 95809 ender c1480, 98072 giver c2094, 98208 ender c270844, 98208 giver c270844, 98209 giver c270844, 98221 giver c2104, 98245 giver c270637, 98246 giver c270637, 98283 giver c1244, 98293 giver o672330, 98815 giver c2094.
+NPC positions from players' games (the spot where they stood, a few yards off): 106 agree with the catalog within 25 yd (median 3.8 yd); 5 moved to where the game saw them: npc 576 by 40 yd, npc 1721 by 51 yd, npc 4982 by 58 yd, npc 5082 by 106 yd, npc 15991 by 41 yd; 7 placed from the game alone: npc 956, npc 217412, npc 255597, npc 256390, npc 270637, npc 270844, object 672330.
+Quest reward items: wowhead 2247, unknown 1391, loot pages 72, game 6.
 Rewards taken from the dungeon loot pages where Wowhead lists none (72): 704 Agmond's Fate, 709 Solution to Doom, 1048 Into The Scarlet Monastery, 1049 Compendium of the Fallen, 1050 Mythology of the Titans, 1053 In the Name of the Light, 1139 The Lost Tablets of Will, 1445 The Temple of Atal'Hakkar, 1446 Jammal'an the Prophet, 1475 Into The Temple of Atal'Hakkar, 2240 The Hidden Chamber, 2341 Necklace Recovery, Take 3, 2768 Divino-matic Rod, 2770 Gahz'rilla, 2846 Tiara of the Deep, 3341 Bring the End, 3447 Secret of the Circle, 3525 Extinguishing the Idol, 3528 The God Hakkar, 3636 Bring the Light, 3907 Disharmony of Fire, 4004 The Princess Saved?, 4126 Hurley Blackbreath, 4132 Operation: Death to Angerforge, 4134 Lost Thunderbrew Recipe, 4136 Ribbly Screwspigot, 4201 The Love Potion, 4242 Abandoned Hope, 4263 Incendius!, 4286 The Good Stuff, 4322 Jail Break!, 4363 The Princess's Surprise, 4701 Put Her Down, 4724 The Pack Mistress, 4729 Kibler's Exotic Pets, 4765 Delivery to Ridgewell, 4771 Dawn's Gambit, 4862 En-Ay-Es-Tee-Why, 4866 Mother's Milk, 4867 Urok Doomhowl, 4903 Warlord's Command, 4983 Bijou's Reconnaissance Report, 5081 Maxwell's Mission, 5125 Aurius' Reckoning, 5127 The Demon Forge, 5213 The Active Agent, 5214 The Great Fras Siabi, 5243 Houses of the Holy, 5384 Kirtonos the Herald, 5466 The Lich, Ras Frostwhisper, 5518 The Gordok Ogre Suit, 5526 Shards of the Felvine, 6163 Ramstein, 7028 Twisted Evils, 7046 The Scepter of Celebras, 7067 The Pariah's Instructions, 7201 The Last Element, 7441 Pusillin and the Elder Azj'Tordin, 7498 Garona: A Study on Stealth and Treachery, 7499 Codex of Defense, 7500 The Arcanist's Cookbook, 7501 The Light and How To Swing It, 7502 Harnessing Shadows, 7503 The Greatest Race of Hunters, 7504 Holy Bologna: What the Light Won't Tell You, 7505 Frost Shock and You, 7506 The Emerald Dream..., 7703 Unfinished Gordok Business, 8413 Da Voodoo, 8425 Voodoo Feathers, 8945 Dead Man's Plea, 8949 Falrin's Vendetta.
 Quest levels as the game's quest log shows them, where the catalog had another: 472 Fall of Dun Modr 25 -> 30, 92747 Moonbrook Espionage 16 -> 15.
 Sides corrected by what the game showed an Alliance character: 79362 Grant's Shield, 92706 WANTED: Bruuz; 79362's Alliance ender is c268 (Darkshire), the Horde one stays Wowhead's, and Paladins take it as Shamans do.
@@ -45,7 +45,7 @@ Chain steps players' games suggest for quests with no known chain, not taken (th
 Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both have a number, they disagree on 0:
 
 
-## Forever data: multiplier not read (193)
+## Forever data: multiplier not read (194)
 
 - 7 Kobold Camp Cleanup (level 2, Alliance)
 - 15 Investigate Echo Ridge (level 3, Alliance)
@@ -93,6 +93,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 1050 Mythology of the Titans (level 38, Alliance)
 - 1133 Journey to Astranaar (level 20, Alliance)
 - 1177 Hungry! (level 36, both)
+- 1396 Encroaching Wildlife (level 37, Alliance)
 - 1470 Piercing the Veil (level 3, Horde)
 - 1485 Vile Familiars (level 4, Horde)
 - 1499 Vile Familiars (level 4, Horde)
