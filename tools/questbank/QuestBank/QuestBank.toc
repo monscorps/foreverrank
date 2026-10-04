@@ -13,6 +13,7 @@ Discover.lua
 Game.lua
 Model.lua
 Pins.lua
+QuestMap.lua
 Pins.xml
 Arrow.lua
 Sync.lua

@@ -15,10 +15,15 @@ you are handed on the day: the CMaNGOS Classic database (GPL-3.0, cmangos.py), w
 Forever's series winning wherever Forever put a new step into a chain.
 Every run writes GAPS.md: what is still missing, quest by quest.
 Travel: travel.py over the client's own taxi tables (build below).
+World map icons: where each objective is done, per objective, from the CMaNGOS spawns and quest POIs
+(objectives.py -> spots.json), else Wowhead Forever's quest-page mapper (mapper.py -> mapper.json, read when
+present), each spot stored on the one map it is drawn on.
 Icons and textures: file IDs from the Forever client's interface manifest; a missing one stops the build.
 
   python3 tools/questbank/gen_data.py            # write Data.lua
   python3 tools/questbank/gen_data.py --fetch    # first fetch the NPC tooltips we lack (nether.wowhead.com)
+  python3 tools/questbank/gen_data.py --selftest-os  # check players' objective spots, probe_pull.py's merge to D.SPOT
+                                                     # (its own fixture and made-up uploads; writes nothing)
 """
 import collections, csv, json, math, os, re, sys
 from travel import Travel, DETOUR, RUN
@@ -604,6 +609,10 @@ for _qid, _q in CM.items():
 # ---------------------------------------------------------------------------
 HUB_INDEX = {fac: {hid: k + 1 for k, hid in enumerate(TR.order[fac])} for fac in ("A", "H")}
 NPCS, NPC_AT, USED_MAPS = [], {}, set()
+# Open maps off the two continents (Zephras Isle, the Darkspear Islands): an NPC there keeps its map and place for
+# the world map's icons, but no continent and no flight hub (continent -1, as inside an instance), so the route
+# leaves it out as before
+ISLANDS = {2521, 2524}
 
 
 def add_npc(name, m, x, y, place=None):
@@ -623,6 +632,8 @@ def add_npc(name, m, x, y, place=None):
             if near:
                 rec[k] = HUB_INDEX[fac][near[0]]
                 rec[k + 1] = round(near[1] * DETOUR / RUN / 60.0, 1)
+        USED_MAPS.add(m)
+    elif m in ISLANDS:
         USED_MAPS.add(m)
     else:
         rec[1] = 0
@@ -683,6 +694,50 @@ class FrameFix:
 
 FRAME = FrameFix()
 
+OVERLAY = {2482, 2548, 2652}  # Mount Hyjal, the Riverglades, Shen'dralas: new in Forever, drawn over Classic zones
+# Zone rectangles reach far into each other, so how deep a point lies inside one (its distance to the nearest edge,
+# in percent of the map) decides. Checked against the CMaNGOS quest outlines, whose map Blizzard's data names: of the
+# 2,488 that lie in more than one rectangle, these rules put 2,214 on Blizzard's map (89%); taking the quest's zone,
+# giver's or ender's map whenever it holds the point, 2,176 (87%); the deepest map alone, 1,985 (80%)
+EDGE = 3        # a preferred map takes a point at least this deep ...
+DEPTH = 0.33    # ... and at least this share as deep as in the map it lies deepest in
+CITY_EDGE = 10  # a city (a map well inside a bigger one) takes a point this deep
+# the Classic WorldMapArea a CMaNGOS quest outline is drawn on (quest_poi.mapAreaId) -> uiMap (1411-1458 came in the
+# same order; each area's outlines lie mostly on its map)
+WMA_UIMAP = dict(zip((4, 9, 11, 15, 16, 17, 19, 20, 21, 22, 23, 24, 26, 27, 28, 29, 30, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+                      43, 61, 81, 101, 121, 141, 161, 181, 182, 201, 241, 261, 281, 301, 321, 341, 362, 381, 382),
+                     [1411, 1412, 1413] + list(range(1416, 1459))))
+
+
+def spot_map(cont, wx, wy, prefer=(), overlay=(), sure=()):
+    """The one map a world point is drawn on: (uiMap, x, y in percent). A map in sure that holds it (Blizzard's for a
+    quest outline); else the first map in prefer that holds it deep enough (EDGE, DEPTH); else a city holding it
+    CITY_EDGE deep; else the map it lies deepest in. The Forever-only maps over Classic zones take a point only when
+    overlay names them."""
+    cands = []
+    for mid, m in TR.maps.items():
+        if m["cont"] != cont or mid in (947, 1414, 1415, 1945) or not m["area"] or (mid in OVERLAY and mid not in overlay):
+            continue
+        if m["minx"] <= wx <= m["maxx"] and m["miny"] <= wy <= m["maxy"]:
+            x, y = TR._pct(m, wx, wy)
+            cands.append(((m["maxx"] - m["minx"]) * (m["maxy"] - m["miny"]), mid, x, y, min(x, 100 - x, y, 100 - y)))
+    if not cands:
+        return None
+    for c in cands:
+        if c[1] in sure:
+            return c[1], c[2], c[3]
+    for p in prefer:
+        for c in cands:
+            if c[1] == p:
+                if c[4] >= EDGE and c[4] >= DEPTH * max([d[4] for d in cands if d is not c] or [0]):
+                    return c[1], c[2], c[3]
+    cands.sort()
+    city = cands[0] if len(cands) > 1 and cands[0][0] <= 0.4 * cands[1][0] else None
+    if city and city[4] >= CITY_EDGE:
+        return city[1], city[2], city[3]
+    best = max((c for c in cands if c is not city), key=lambda c: c[4])
+    return best[1], best[2], best[3]
+
 
 def npc_from(kind, i, zone=None, dungeon=False):
     """Wowhead Forever's position first, else the CMaNGOS spawn point. kind None tries an NPC, then an
@@ -708,6 +763,10 @@ def npc_from(kind, i, zone=None, dungeon=False):
             cont, wx, wy = spawns[0]
             hint = (TR.area_map.get(zone),) if zone else None
             loc = TR.locate(cont, wx, wy, hint)
+            if loc and loc[0] in OVERLAY and loc[0] not in (hint or ()):
+                # a Classic spawn never stands on a Forever-only map over Classic zones (Eridan Bluewind is in Felwood)
+                at = spot_map(cont, wx, wy)
+                loc = (at[0], round(at[1], 1), round(at[2], 1)) if at else loc
             if loc:
                 m, x, y, moved = game_place(k, i, loc[0], loc[1], loc[2])
                 idx = add_npc(name, m, x, y)
@@ -1282,6 +1341,447 @@ for qid in IDS:
 lines.append("-- [id] = { {continent, world x, world y, radius}, ... }: where the quest is done, from the Classic database")
 lines.append("D.OBJ = " + keyed(OBJ))
 
+# ---------------------------------------------------------------------------
+# map icons: where each objective is done and where a quest's starting item drops, each spot in the percent frame
+# of the one map it is drawn on (never projected at runtime: the Forever-only maps lie over Classic zones)
+# ---------------------------------------------------------------------------
+import objectives as OBJECTIVES  # noqa: E402  (the clustering rules, shared with objectives.py)
+_SPOTS = load("spots.json", {}) or {}            # objectives.py: CMaNGOS spawns and quest POIs, in world yards
+_MAPPER = load("mapper.json", {}) or {}          # mapper.py: Wowhead Forever's quest-page mapper; skipped until fetched
+_SPOT_Q = _SPOTS.get("q") or {}
+_SPOT_START = _SPOTS.get("start") or {}
+MAPFIX = FrameFix()  # its own count: GAPS.md's FrameFix numbers stay the NPC tooltips'
+
+
+def map_width(mid):
+    m = TR.maps[mid]
+    return (m["maxy"] - m["miny"]) / ((m["u1"] - m["u0"]) or 1)
+
+
+def permille(v):
+    return max(0, min(1000, int(round(v * 10))))
+
+
+def spot(kind, slot, mid, x, y, r, src, name):
+    """One spot: x and y (map percent) to permille of the map, r (yards) to permille of its width. Written out as
+    "kind,slot,map,x,y,r,src[,name]" once D.SN is known."""
+    return (kind, slot, mid, permille(x), permille(y), int(round(r / map_width(mid) * 1000)), src, name or "")
+
+
+def quest_zone_map(qid):
+    q = LIST[qid]
+    return TR.area_map.get(q.get("category")) if q.get("category2") in (0, 1) else None
+
+
+def npc_world(i):
+    """A placed giver or ender as (continent, world x, world y), islands included, for "nearest the quest"."""
+    n = NPCS[i - 1] if i else None
+    return TR.world(n[1], n[2], n[3]) if n and n[1] else None
+
+
+def tag_world(qid, kind, slot, src, areas, wma=()):
+    """World areas [continent, x, y, radius, name, the WorldMapArea of a quest outline (0 for spawns)] -> spots, each
+    on the one map spot_map picks: Blizzard's for an outline; else, preferred, the maps of the objective's outlines
+    (wma), the quest's own zone, the giver's and the ender's maps."""
+    zone = quest_zone_map(qid)
+    give, turn = Q[qid][6], Q[qid][5]
+    prefer = [m for m in [WMA_UIMAP.get(w) for w in wma] + [zone, give and NPCS[give - 1][1], turn and NPCS[turn - 1][1]] if m]
+    out = []
+    for c, wx, wy, r, name, w in areas:
+        at = spot_map(c, wx, wy, prefer, (zone,) if zone in OVERLAY else (), (WMA_UIMAP.get(w),) if w else ())
+        if at:
+            out.append(spot(kind, slot, at[0], at[1], at[2], r, src, name))
+    return out
+
+
+def wowhead_areas(qid, groups):
+    """Wowhead's points ([{uiMap, coords, type, id, name}], 0-100 of each map) -> clustered spot positions
+    [(uiMap, x, y in percent, radius in yards, name)]. Points on the redrawn maps go through FrameFix (against the
+    creature's CMaNGOS spawns when it has some); only zone maps and the islands count."""
+    near = [w for w in (npc_world(Q[qid][6]), npc_world(Q[qid][5])) if w]
+    # Wowhead names every creature that ever dropped an item: a source with under a tenth of the busiest one's
+    # points is left out
+    size = collections.Counter()
+    for g in groups:
+        size[(g.get("type"), g.get("id"), g.get("name"))] += len(g.get("coords") or [])
+    top = max(size.values()) if size else 0
+    pts = []
+    for g in groups:
+        if size[(g.get("type"), g.get("id"), g.get("name"))] < 0.1 * top:
+            continue
+        m = g.get("uiMap")
+        if m not in TR.maps or (TR.maps[m]["cont"] not in (0, 1) and m not in ISLANDS) or not TR.maps[m]["area"]:
+            continue
+        mine = []
+        for xy in g.get("coords") or []:
+            if not isinstance(xy, list) or len(xy) < 2:
+                continue
+            x, y = xy[0], xy[1]
+            if m in TR.redrawn:
+                x, y = MAPFIX.fix(g.get("type") if g.get("type") in ("npc", "object") else "npc", g.get("id") or 0, m, x, y)
+            w = TR.world(m, x, y)
+            if w:
+                mine.append((w[0], w[1], w[2], (m, g.get("name") or "")))
+        if len(mine) > OBJECTIVES.NODE:  # ore, herbs, critters: near the quest only
+            mine = [p for p in mine if OBJECTIVES.near_dist(p, near) <= OBJECTIVES.NEAR]
+        pts += mine
+    out = []
+    for c, wx, wy, r, _, (m, name) in OBJECTIVES.cluster(pts, near):
+        x, y = TR._pct(TR.maps[m], wx, wy)
+        out.append((m, x, y, r, name))
+    return out
+
+
+# Where players' games saw an objective tick (disc.json "os": QuestBank's discoveries on the Forever client, merged by
+# probe_pull.py): {quest: {the game's objective index: {"t": its type, "p": [[uiMap, x, y, n, votes, last], ...]}}},
+# x and y in permille of the map the player stood on, already in Forever's frame; n the most sightings one upload had
+# there, votes how many uploads had it, last the upload that last had it. Only the first four are read. The same
+# growing file comes back upload after upload, so votes say how often it was re-sent more than how many players saw
+# it: n weighs the points, clustered as the Classic spawns are. gen_data.py --selftest-os runs probe_pull.py's merge
+# on its Forever fixture and made-up uploads through this reader, so a change to that shape shows there.
+SELFTEST_OS = "--selftest-os" in sys.argv
+_OS = DISC.get("os") or {}
+_NEED = _SPOTS.get("need") or {}  # objectives.py: what each of a Classic quest's slots is, placed or not
+GAME_KIND = {"monster": "k", "item": "c", "object": "u", "event": "e", "areatrigger": "e", "log": "e", "progressbar": "e"}
+SLOT_TYPES = {"npc": ("monster",), "cast": ("monster", "object"), "object": ("object",), "item": ("item",)}
+SLOT_KIND = {"npc": "k", "cast": "u", "object": "u", "item": "c"}
+WH_TYPES = {"k": ("monster",), "u": ("object", "monster")}  # a Wowhead slot's kind -> the game's (c: item or object)
+# lines the game may show beside a quest's slots: an event (an escort, a place to reach, a script; the game may count
+# an escort or a talk as a monster line, a scripted object as an object line) and a reputation to reach
+EVENT_LINE = ("event", "areatrigger", "log", "progressbar", "monster", "object")
+REP_LINE = ("reputation",)
+WH_EXTRA = {"e": EVENT_LINE, "k": ("monster",), "u": ("object", "monster"), "c": ("item",)}  # a Wowhead row with no slot
+GAME_R = 15   # permille of the map's width: the smallest players' area (the addon merges sightings this close)
+GAME_W = 20   # sightings one point weighs at most, so one busy camp doesn't push every other area out
+GAME_FOLDED = []  # (quest, slot) of players' areas left out: inside a Classic or Wowhead area of the same objective
+
+
+def os_objectives(qid):
+    """[(the game's objective index, its type or None, [(uiMap, x, y in permille, sightings)])] for one quest."""
+    rec = _OS.get(str(qid))
+    pairs = rec.items() if isinstance(rec, dict) else enumerate(rec, 1) if isinstance(rec, list) else ()
+    out = []
+    for k, ob in pairs:
+        try:
+            idx = int(k)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(ob, dict):
+            continue
+        pts = []
+        for p in ob.get("p") or []:
+            if isinstance(p, dict):
+                p = [p.get(c) for c in "mxyn"]
+            if not isinstance(p, list) or len(p) < 3:
+                continue
+            try:
+                m, x, y, n = int(p[0]), float(p[1]), float(p[2]), int(p[3] or 1) if len(p) > 3 else 1
+            except (TypeError, ValueError):
+                continue
+            if 0 <= x <= 1000 and 0 <= y <= 1000:
+                pts.append((m, x, y, max(1, n)))
+        if pts:
+            out.append((idx, ob.get("t") if isinstance(ob.get("t"), str) else None, pts))
+    return sorted(out)
+
+
+def game_orders(slots, extra=()):
+    """Every order the game may list a quest's lines in (the client's order isn't checked yet): the slots as given,
+    the creature and object slots before the item slots or after them, the object slots before the creature ones,
+    or each objective number's creature or object line beside its item line; and each extra line (an event, a
+    reputation: the types it may come as) left out or at any place among them. An extra line is (None, its types,
+    None, None)."""
+    cre, items = [s for s in slots if s[0] < 5], [s for s in slots if s[0] >= 5]
+    objects = [s for s in cre if "monster" not in s[1]] + [s for s in cre if "monster" in s[1]]
+    bases = {tuple(slots)}
+    for c in (cre, objects):
+        bases |= {tuple(c + items), tuple(items + c)}
+    for item_first in (False, True):
+        bases.add(tuple(sorted(slots, key=lambda s: ((s[0] - 1) % 4, (s[0] < 5) == item_first))))
+    out = set()
+    for base in bases:
+        orders = {base}
+        for x in extra:
+            orders |= {L[:k] + ((None, tuple(x), None, None),) + L[k:] for L in orders for k in range(len(L) + 1)}
+        out |= orders
+    return out
+
+
+def game_slots(slots, objs, extra=()):
+    """Which catalog slot each of the game's objective lines is: slots [(slot, the game's types it can be, kind,
+    name)], objs [(index, type or None)], extra the lines the game may show that no slot is (an event, a reputation:
+    the types each may come as) -> {index: slot}. The lines of one type take that type's slots in order when as many
+    of them were seen and no extra line can be of that type. Else a line's place in the game's list says which, in
+    every order of game_orders that all the seen lines fit (each line's type one its place can be; an untyped line
+    any), when they all agree: an event or reputation line seen pins where the extra lines are. A line nothing is
+    found for (or one two lines took) is no slot: slot 0, shown until the quest is done."""
+    if any(i > len(slots) + len(extra) for i, _ in objs):
+        return {}  # the game lists more lines than the catalog knows: it isn't the game's list, so no line is paired
+    orders = [L for L in game_orders(slots, extra) if all(i <= len(L) and (not t or t in L[i - 1][1]) for i, t in objs)]
+    out = {}
+    for t in sorted({t for _, t in objs if t}):
+        mine = sorted(i for i, tt in objs if tt == t)
+        fit = [s for s in slots if t in s[1]]
+        if len(mine) == len(fit) and not any(t in x for x in extra):
+            out.update(zip(mine, fit))
+        elif len(mine) <= len(fit):
+            for i in mine:
+                at = {L[i - 1] for L in orders}
+                if len(at) == 1 and next(iter(at))[0] is not None:
+                    out[i] = at.pop()
+    took = collections.Counter(s[0] for s in out.values())
+    return {i: s for i, s in out.items() if took[s[0]] == 1}
+
+
+def game_areas(qid, pts):
+    """One objective's points [(uiMap, x, y in permille, sightings)] -> up to five areas [(uiMap, x, y in percent,
+    radius in yards)] on zone maps and the islands, the busiest five, nearest the giver and ender first. Every area
+    counts, near the quest or not: players were there."""
+    near = [w for w in (npc_world(Q[qid][6]), npc_world(Q[qid][5])) if w]
+    world = []
+    for m, x, y, n in pts:
+        tm = TR.maps.get(m)
+        if not tm or not tm["area"] or m in (947, 1414, 1415, 1945) or (tm["cont"] not in (0, 1) and m not in ISLANDS):
+            continue
+        w = TR.world(m, x / 10.0, y / 10.0)
+        world += [(w[0], w[1], w[2], m)] * min(n, GAME_W)
+    areas = OBJECTIVES.cluster(world, [])
+    areas.sort(key=lambda a: (round(OBJECTIVES.near_dist(a, near)), -a[4], a[1], a[2]))
+    out = []
+    for c, wx, wy, r, _, m in areas:
+        x, y = TR._pct(TR.maps[m], wx, wy)
+        out.append((m, x, y, max(r, GAME_R / 1000.0 * map_width(m))))
+    return out
+
+
+def covers(a, b):
+    """Spot b's centre lies inside spot a's circle, on the same map."""
+    if a[2] != b[2]:
+        return False
+    wa, wb = TR.world(a[2], a[3] / 10.0, a[4] / 10.0), TR.world(b[2], b[3] / 10.0, b[4] / 10.0)
+    return math.hypot(wa[1] - wb[1], wa[2] - wb[2]) <= a[5] / 1000.0 * map_width(a[2])
+
+
+# gen_data.py --selftest-os: disc.json's "os" made by probe_pull.py's own merge (its Forever fixture, then made-up
+# uploads) instead of the real one, read by the reader above; os_selftest() below checks what came out and the build
+# stops before writing anything. The made-up points sit on Elwynn (1429), for quests done on other maps (7 and 33 are
+# the fixture's), so no Classic area takes them in.
+# far apart, 9 down to 3 sightings: the least seen are the ones clustering would list first by place alone
+OS_TEST_FAR = [[1429, 100 + 130 * k, 120 + 110 * k, 9 - k] for k in range(7)]
+OS_TEST_BUSY = [[1429, 200, 650, 999], [1429, 800, 650, 30]]  # one camp seen 999 times weighs as much as one seen 30
+OS_TEST_FO = next((q for q in IDS if q >= 60000 and str(q) not in _NEED and str(q) not in _MAPPER and str(q) not in _SPOT_Q), None)
+
+
+def os_selftest_input():
+    sys.path.insert(0, os.path.dirname(HERE))
+    import probe_pull
+    acc = probe_pull.empty()
+    fixture = os.path.join(os.path.dirname(HERE), "fixtures", "probe", "QuestBank-forever.lua")
+    kind, _ = probe_pull.merge_upload(acc, open(fixture, encoding="utf-8").read(), "fixture")
+    assert kind == "questbank-savedvars" and acc["os"].get("7") and acc["os"].get("33"), "the fixture's spots reach disc.json"
+    pt = lambda k: [[1429, 150 + 100 * k, 850, 2]]  # noqa: E731
+    fo = OS_TEST_FO
+    probe_pull.merge_spots(acc, {
+        604: {1: {"t": "monster", "p": pt(1)}, 2: {"t": "item", "p": pt(2)}, 3: {"t": "item", "p": pt(3)}},
+        38: {2: {"t": "item", "p": pt(1)}},                                     # one line of four item lines
+        5088: {2: {"t": "item", "p": pt(1)}},                                   # an event quest: is line 2 slot 5 or 6?
+        1386: {2: {"t": "monster", "p": pt(1)}, 3: {"t": "monster", "p": pt(2)}},  # a reputation one: 1 and 2, or 2 and 3?
+        434: {1: {"t": "event", "p": pt(1)}, 3: {"t": "monster", "p": pt(2)}},  # the event line seen first: line 3 is slot 2
+        fo: {1: {"t": "monster", "p": OS_TEST_FAR},
+             2: {"t": "item", "p": [[1414, 500, 500, 5], [1459, 500, 500, 5], [9999, 500, 500, 5], [2548, 400, 400, 2]]},
+             3: {"t": "object", "p": [[2521, 300, 300, 2]]}, 4: {"t": "event", "p": pt(4)},
+             5: {"t": "reputation", "p": pt(5)}, 6: {"p": pt(6)}, 7: {"t": "spell", "p": pt(7)}, 8: {"t": "monster", "p": OS_TEST_BUSY}}})
+    for _ in range(4):  # the least-sighted far point comes again in four uploads: five votes, still three sightings
+        probe_pull.merge_spots(acc, {fo: {1: {"t": "monster", "p": OS_TEST_FAR[-1:]}}})
+    got = json.loads(json.dumps(acc["os"]))  # as disc.json keeps it
+    again = [p for p in got[str(fo)]["1"]["p"] if p[4] == 5]
+    assert len(again) == 1 and again[0][:4] == OS_TEST_FAR[-1], "probe_pull keeps a point as [uiMap, x, y, n, votes, ...]: %s" % again
+    return got
+
+
+if SELFTEST_OS:
+    assert OS_TEST_FO, "a Forever-only quest the Classic data and Wowhead know nothing of"
+    _OS = os_selftest_input()
+
+SPOT, START, SREQ = {}, {}, {}
+# quests by source: c spawns, p POI outlines only, w Wowhead; players' games: g beside those, G alone
+SPOT_FROM = collections.Counter()
+for qid in IDS:
+    sq = _SPOT_Q.get(str(qid))
+    need = _NEED.get(str(qid)) or {}
+    # each slot: (slot, the game's types it can be, kind, name); and what it asks for: {slot: (count, item name)}
+    cm_slots = [(int(s), SLOT_TYPES[t], SLOT_KIND[t], (need.get("names") or {}).get(s))
+                for s, t in sorted((need.get("ty") or {}).items(), key=lambda kv: int(kv[0])) if t in SLOT_TYPES]
+    cm_req = {int(k): (v, CM_ITEMNAMES.get((need.get("items") or {}).get(k)) if int(k) >= 5 else None)
+              for k, v in (need.get("req") or {}).items()}
+    # the lines the game may show that no slot is: the quest's event, the reputation it asks for
+    cm_extra = [EVENT_LINE] * bool(need.get("event")) + [REP_LINE] * bool(need.get("rep"))
+    parts, req, slots, extra = [], {}, cm_slots, cm_extra
+    if sq:
+        got = set()
+        for o in sq.get("obj") or []:
+            tagged = tag_world(qid, o["k"], o["slot"], o["spots"][0][4], [a[:4] + [a[5], (a[6:] or [0])[0]] for a in o["spots"]],
+                               o.get("wma") or ())
+            if tagged:
+                parts += tagged
+                got.add(o["spots"][0][4])
+        req = {int(k): (v, cm_req.get(int(k), (0, None))[1]) for k, v in (sq.get("req") or {}).items()}
+        if parts:
+            SPOT_FROM["c" if "c" in got else "p"] += 1
+    wq = _MAPPER.get(str(qid)) or {}
+    # nothing in the Classic database: Wowhead Forever's quest page, once mapper.py has read it
+    if not parts and wq.get("objectives"):
+        req, slots, extra = {}, [], []
+        for o in wq.get("objectives") or []:
+            if o.get("kind") not in ("k", "c", "u", "e"):
+                continue
+            if o.get("index") and not ((o.get("slot") or 0) and o["kind"] in ("k", "u", "c")):
+                extra.append(WH_EXTRA[o["kind"]])  # a row of the page's that is no slot: an event, one past four
+            slot = o.get("slot") or 0
+            for m, x, y, r, name in wowhead_areas(qid, o.get("spots") or []):
+                parts.append(spot(o["kind"], slot, m, x, y, r, "w", name or o.get("name")))
+            if slot and o.get("count"):
+                item = o.get("name") if o["kind"] == "c" and slot >= 5 else None
+                req[slot] = (max(req.get(slot, (0,))[0], o["count"]), item or req.get(slot, (0, None))[1])
+            if slot and o["kind"] in ("k", "u", "c"):
+                slots.append((slot, ("item",) if slot >= 5 else WH_TYPES.get(o["kind"], ("object",)), o["kind"],
+                              None if slot >= 5 else o.get("name")))
+        if parts:
+            SPOT_FROM["w"] += 1
+    if not parts and need:  # players' spots alone: the Classic database's slots (else Wowhead's, if its page has any)
+        req, slots, extra = dict(cm_req), cm_slots, cm_extra
+    # players' games: after the Classic and Wowhead spots of the same objective, filling what those have nothing for
+    objs = os_objectives(qid)
+    if objs:
+        pick = game_slots(slots, [(i, t) for i, t, _ in objs], extra)
+        kind_at = {}
+        for p in parts:
+            kind_at.setdefault(p[1], p[0])
+        seen = 0
+        for i, t, pts in objs:
+            s = pick.get(i)
+            slot, kind = (s[0], kind_at.get(s[0], s[2])) if s else (0, GAME_KIND.get(t))
+            if not kind:
+                continue  # a reputation, money or player-kill line: no place to it
+            name = (s[3] if kind in ("k", "u") else (req.get(slot) or (0, None))[1] if kind == "b" else None) if s else None
+            for m, x, y, r in game_areas(qid, pts):
+                sp = spot(kind, slot, m, x, y, r, "g", name)
+                if any(o[1] == slot and o[0] == kind and covers(o, sp) for o in parts if o[6] != "g"):
+                    GAME_FOLDED.append((qid, slot))
+                    continue
+                parts.append(sp)
+                seen += 1
+        if seen:
+            SPOT_FROM["g" if len(parts) > seen else "G"] += 1
+    if parts:
+        SPOT[qid] = parts
+        if req:
+            SREQ[qid] = req
+    if Q[qid][9] & 4:  # starts from an item: where it drops
+        item = BAGQ.get(qid, [0])[0]
+        rec = _SPOT_START.get(str(item)) or next((v for v in _SPOT_START.values() if v.get("quest") == qid), None)
+        st = tag_world(qid, "s", 0, "c", [a[:4] + [a[5], (a[6:] or [0])[0]] for a in rec["spots"]]) if rec else []
+        if not st:
+            # Wowhead's "start" holds the giver's points too: only the points where the item drops count, named after it
+            drops = [dict(g, name=g["item"]) for g in (_MAPPER.get(str(qid)) or {}).get("start") or [] if g.get("item")]
+            for m, x, y, r, name in wowhead_areas(qid, drops):
+                st.append(spot("s", 0, m, x, y, r, "w", name))
+        if st:
+            START[qid] = st
+# names by how often they are used (spots, and the item each item slot asks for), so the busiest get the shortest index
+_uses = collections.Counter(p[7] for v in list(SPOT.values()) + list(START.values()) for p in v if p[7])
+_uses.update(name for v in SREQ.values() for _, name in v.values() if name)
+SN = [n for n, _ in sorted(_uses.items(), key=lambda kv: (-kv[1], kv[0]))]
+SN_AT = {n: k + 1 for k, n in enumerate(SN)}
+
+
+def spots_str(parts):
+    return ";".join("%s,%d,%d,%d,%d,%d,%s%s" % (p[:7] + ((",%d" % SN_AT[p[7]]) if p[7] else "",)) for p in parts)
+
+
+def os_selftest():
+    """--selftest-os: what os_selftest_input's spots became, and game_slots over every Classic quest's slots."""
+    def g(q):
+        return sorted((p[0], p[1]) for p in SPOT.get(q, []) if p[6] == "g")
+
+    def near(p, xy):
+        return abs(p[3] - xy[1]) <= 2 and abs(p[4] - xy[2]) <= 2
+
+    folded = collections.Counter(GAME_FOLDED)
+    # the fixture: 7's point inside its Classic area is left out, the other one is a named kill spot of slot 1; 33's
+    # wolf meat lies inside the Classic wolf areas; 60005's line has no type the probe keeps
+    assert folded[(7, 1)] and g(7) == [("k", 1)], (g(7), GAME_FOLDED)
+    assert [p[7] for p in SPOT[7] if p[6] == "g"] == [(_NEED["7"].get("names") or {}).get("1")], SPOT[7]
+    assert folded[(33, 5)] or g(33) == [("c", 5)], (g(33), GAME_FOLDED)
+    assert not g(60005)
+    # slots: every line of a type seen; one of four; an extra line that may come first; one that is seen first
+    assert g(604) == [("c", 6), ("c", 7), ("k", 1)], g(604)
+    assert g(38) == [("c", 6)], g(38)
+    assert g(5088) == [("c", 0)], g(5088)
+    assert g(1386) == [("k", 0), ("k", 0)], g(1386)
+    assert sorted(s for _, s in g(434)) == [0, 2] and ("e", 0) in g(434), g(434)
+    assert not any(q in (604, 38, 5088, 1386, 434) for q, _ in GAME_FOLDED), GAME_FOLDED
+    # a Forever-only quest: slot 0 and the kind from the type; continents (1414), a battleground (1459) and maps the
+    # client hasn't (9999) left out, the new maps (2548, 2521) kept; reputation, untyped and spell lines no spot; at
+    # most five areas a line, the busiest by sightings (not by votes: the five-vote point has the fewest sightings),
+    # a point weighing at most GAME_W sightings
+    fo = [p for p in SPOT[OS_TEST_FO] if p[6] == "g"]
+    assert sorted(set(g(OS_TEST_FO))) == [("c", 0), ("e", 0), ("k", 0), ("u", 0)], g(OS_TEST_FO)
+    kills = [p for p in fo if p[0] == "k"]
+    assert len(kills) == 7 and all(any(near(p, xy) for p in kills) for xy in OS_TEST_FAR[:5] + OS_TEST_BUSY), kills
+    assert [p[2] for p in fo if p[0] == "c"] == [2548] and [p[2] for p in fo if p[0] == "u"] == [2521], fo
+    for v in SPOT.values():
+        for part in spots_str(v).split(";"):
+            assert re.match(r"^[a-z],\d+,\d+,\d+,\d+,\d+,[a-z](,\d+)?$", part), part
+    # game_slots over every Classic quest's slots, the game listing them in any order game_orders knows, its extra
+    # lines left out, first, between the creature and item lines or last (an event line as an event or as a monster
+    # line), any one or two lines seen and all of them: never the wrong slot
+    seen_as = {"npc": "monster", "cast": "monster", "object": "object", "item": "item"}
+    checked = 0
+    for need in _NEED.values():
+        slots = [(int(k), SLOT_TYPES[t], SLOT_KIND[t], None) for k, t in sorted((need.get("ty") or {}).items(), key=lambda kv: int(kv[0]))
+                 if t in SLOT_TYPES]
+        cre = [(int(k), seen_as[t]) for k, t in sorted(need["ty"].items(), key=lambda kv: int(kv[0])) if int(k) < 5]
+        its = [(int(k), "item") for k, t in sorted(need["ty"].items(), key=lambda kv: int(kv[0])) if int(k) >= 5]
+        extra = [EVENT_LINE] * bool(need.get("event")) + [REP_LINE] * bool(need.get("rep"))
+        inter = sorted(cre + its, key=lambda e: ((e[0] - 1) % 4, e[0]))
+        objects = [e for e in cre if e[1] == "object"] + [e for e in cre if e[1] != "object"]
+        for a, b, ev in [(a, b, ev) for a, b in ((cre, its), (its, cre), (inter, []), (objects, its))
+                         for ev in (("event", "monster") if need.get("event") else ("event",))]:
+            ex = [(0, ev)] * bool(need.get("event")) + [(0, "reputation")] * bool(need.get("rep"))
+            for lines in {tuple(a + b), tuple(ex + a + b), tuple(a + ex + b), tuple(a + b + ex)}:
+                n = len(lines)
+                for seen in [(i,) for i in range(1, n + 1)] + [(i, j) for i in range(1, n + 1) for j in range(i + 1, n + 1)] + [tuple(range(1, n + 1))]:
+                    for i, s in game_slots(slots, [(i, lines[i - 1][1]) for i in seen], extra).items():
+                        assert s[0] == lines[i - 1][0], (need, lines, seen, i, s)
+                        checked += 1
+    print("selftest-os: OK (%d quests' players' spots as expected, %d slot picks over %d Classic quests all right)" % (
+        sum(1 for v in SPOT.values() if any(p[6] == "g" for p in v)), checked, len(_NEED)))
+
+
+if SELFTEST_OS:
+    os_selftest()
+    raise SystemExit(0)
+
+
+SPOT = {q: spots_str(v) for q, v in SPOT.items()}
+START = {q: spots_str(v) for q, v in START.items()}
+SREQ = {q: ",".join("%d:%d" % (k, n) + (":%d" % SN_AT[name] if name else "") for k, (n, name) in sorted(v.items()))
+        for q, v in SREQ.items()}
+lines.append("-- map icons, read when the world map needs them. D.SPOT[id] = where its objectives are done, D.START[id] = where the")
+lines.append("-- item that starts it drops: spots \"kind,slot,map,x,y,r,src[,name]\" joined by \";\". kind: k kill, c collect (a creature's")
+lines.append("-- drop or a chest's loot), u use an object (or cast on a creature), b buy from a vendor, e explore or an event, f fishing,")
+lines.append("-- pickpocketing or skinning, s where the item that starts the quest drops; slot: 1-4 the creature or object objective,")
+lines.append("-- 5-8 the item objective (its ReqItem slot + 4), 0 none; map: the uiMap it is drawn on; x, y: permille of that map;")
+lines.append("-- r: radius in permille of the map's width (0 a point); src: c CMaNGOS spawns, p a CMaNGOS quest POI (both Classic data),")
+lines.append("-- w Wowhead Forever, g players' games (slot 0 where no slot of the catalog's was found for it); name: an index into")
+lines.append("-- D.SN, the creature, chest or fishing hole the spot is named after (the item for b and s). D.SREQ[id] =")
+lines.append("-- \"slot:count[:item],...\", what each slot asks for, and for an item slot the item's name (an index into D.SN).")
+lines.append("D.SPOT = " + keyed(SPOT))
+lines.append("D.START = " + keyed(START))
+lines.append("D.SN = " + lua(SN))
+lines.append("D.SREQ = " + keyed(SREQ))
+
 # what a quest rewards, for the finder: the best item level among its reward items, what kinds they are
 # (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable, 64 cloth, 128 leather, 256 mail, 512 plate offered), and the id of the best piece
 _ITEMS = (load_json(os.path.join(REPO, "plan", "items-db.json")) or {})
@@ -1370,8 +1870,17 @@ lines.append("-- [id] = {{item, how many, name}, ...}: what the quest asks you t
 lines.append("D.REQ = " + keyed(REQ))
 lines.append("D.RACE = " + keyed(RACE))
 lines.append("D.EXCL = " + keyed(EXCL))
-lines.append("-- {name, uiMap, x, y, continent (-1 inside an instance), world x, world y, Alliance hub, minutes on foot from it, Horde hub, minutes, place}")
+# quests the giver offers only to those with a profession or a standing with a faction (the Classic database's
+# RequiredSkill, RequiredMinRep and RequiredMaxRep), which nothing here can check yet
+QLOCK = {q: v for q, v in ((q, (_SPOTS.get("lock") or {}).get(str(q))) for q in IDS) if v}
+lines.append("-- [id] = what the giver checks beyond level, side, class and the chain: \"skill\" a profession, \"rep\" a standing")
+lines.append("-- with a faction (at least or at most), \"skill,rep\" both; from the Classic database")
+lines.append("D.QLOCK = " + keyed(QLOCK))
+lines.append("-- {name, uiMap, x, y, continent (-1 inside an instance, or on an island off the continents: Zephras Isle keeps its uiMap), world x, world y, Alliance hub, minutes on foot from it, Horde hub, minutes, place}")
 lines.append("D.NPC = {\n" + ",\n".join(lua(n) for n in NPCS) + "\n}")
+# hand-placed NPCs (CURATED) have no SOURCE: they read as Classic data, the cautious claim
+lines.append("-- where each D.NPC place comes from, one letter per NPC: w Wowhead Forever, c the CMaNGOS spawn (Classic data), g players' games")
+lines.append('D.NSRC = "%s"' % "".join({"wowhead": "w", "cmangos": "c", "game": "g"}.get(SOURCE.get(i), "c") for i in range(1, len(NPCS) + 1)))
 lines.append("D.MAPNAME = " + keyed({m: UIMAP.get(m, "") for m in USED_MAPS}))
 hubs, dist = {}, {}
 for fac in ("A", "H"):
@@ -1411,10 +1920,6 @@ lines.append("D.SLEEP_CHAIN = " + lua([
 lines.append("")
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 open(OUT, "w").write("\n".join(lines))
-routable = sum(1 for v in Q.values() if v[5] and NPCS[v[5] - 1][4] >= 0)
-by_side = {s: sum(1 for v in Q.values() if v[2] == s) for s in (0, 1, 2)}
-print("wrote %s: %d bytes, %d quests (both %d, Alliance %d, Horde %d), %d routable, %d without a read multiplier, %d NPCs, %d categories"
-      % (OUT, os.path.getsize(OUT), len(Q), by_side[0], by_side[1], by_side[2], routable, unconfirmed, len(NPCS), len(CATS)))
 # ---------------------------------------------------------------------------
 # GAPS.md: everything still missing, so nobody has to take the numbers on trust
 # ---------------------------------------------------------------------------
@@ -1469,7 +1974,11 @@ def gap_report():
            "Classic frame and were moved to Forever's; %d were already in Forever's." % FRAME.kept,
            "Instant follow-ups planned on the day: %d. Race-limited quests: %d. Quests in mutually exclusive groups: %d." % (
                len(FOLLOW), len(RACE), len(EXCL)),
-           "Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: %d." % len(TEXT_NAMED), ""]
+           "Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: %d." % len(TEXT_NAMED),
+           ("World map icons: objective spots for %d quests (%d from CMaNGOS spawns, %d from its quest outlines only, %d from "
+            "Wowhead Forever's quest pages, %d from players' games alone; %d more have players' spots beside those); %d quests "
+            "that start from an item show where it drops. %d quests need a profession or a reputation the addon can't check.") % (
+               len(SPOT), SPOT_FROM["c"], SPOT_FROM["p"], SPOT_FROM["w"], SPOT_FROM["G"], SPOT_FROM["g"], len(START), len(QLOCK)), ""]
     if DISC:
         _in = set(IDS)
         _unknown = sorted(q for q in SEEN if q not in _in)
@@ -1544,5 +2053,16 @@ g = gap_report()
 # how complete the data is, for the addon's own tooltip
 with open(OUT, "a") as f:
     f.write("D.STATS = %s\n" % lua({"quests": g[0], "noMult": g[1], "noTurn": g[2], "inside": g[3], "noChain": g[5], "classic": g[6]}))
+routable = sum(1 for v in Q.values() if v[5] and NPCS[v[5] - 1][4] >= 0)
+by_side = {s: sum(1 for v in Q.values() if v[2] == s) for s in (0, 1, 2)}
+print("wrote %s: %d bytes, %d quests (both %d, Alliance %d, Horde %d), %d routable, %d without a read multiplier, %d NPCs, %d categories"
+      % (OUT, os.path.getsize(OUT), len(Q), by_side[0], by_side[1], by_side[2], routable, unconfirmed, len(NPCS), len(CATS)))
 print("gaps over %d Forever quests: %d multipliers, %d turn-ins, %d inside dungeons, %d givers, %d chains; %d Classic-only quests (GAPS.md)" % g)
 print("redrawn maps: %d Wowhead coordinates moved from the Classic frame to Forever's, %d already in Forever's" % (FRAME.fixed, FRAME.kept))
+print("map icons: objective spots for %d quests (%d from CMaNGOS spawns, %d from its quest POIs only, %d from Wowhead Forever, "
+      "%d from players' games alone, %d more with players' spots; %d players' areas inside a Classic or Wowhead one left out), "
+      "%d spots on %d maps; %d quests that start from an item show where it drops; %d names; islands: %d givers and %d turn-ins on their map" % (
+          len(SPOT), SPOT_FROM["c"], SPOT_FROM["p"], SPOT_FROM["w"], SPOT_FROM["G"], SPOT_FROM["g"], len(GAME_FOLDED),
+          sum(v.count(";") + 1 for v in SPOT.values()),
+          len({p.split(",")[2] for v in SPOT.values() for p in v.split(";")}), len(START), len(SN),
+          sum(1 for v in Q.values() if v[6] and NPCS[v[6] - 1][1] in ISLANDS), sum(1 for v in Q.values() if v[5] and NPCS[v[5] - 1][1] in ISLANDS)))

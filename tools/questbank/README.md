@@ -32,8 +32,10 @@ Rebuild and publish:
 ```
 python3 tools/probe_pull.py            # admin key in worker/.probe-admin-key
 python3 tools/questbank/cmangos.py
+python3 tools/questbank/objectives.py  # objective and quest-item spots (map icons) from the Classic data
 python3 tools/questbank/gen_data.py --fetch
-luajit tools/questbank/harness.lua
+python3 tools/questbank/gen_data.py --selftest-os   # players' objective spots: merge, slots, encoding
+(cd tools/questbank && luajit harness.lua)
 (cd tools/questbank && rm -f ../../questbank/QuestBank.zip && zip -rq ../../questbank/QuestBank.zip QuestBank)
 python3 tools/build_uploader.py       # questbank/QuestBank-Uploader.zip: the Windows uploader with this QuestBank folder
 ```

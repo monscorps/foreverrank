@@ -5,6 +5,7 @@
 --   npcs     who gives and who takes each quest, with where they stand (map and position)
 --   offers   which quests an NPC offers you, and the lowest level you were offered each at
 --   chains   a quest offered straight after you hand one in, by the same NPC
+--   os       where a quest's objective ticks for you (the Forever client only): map and position, no names
 -- No player, guild or realm names; just your level, race and class for what you were offered.
 -- It never leaves your PC on its own: upload QuestBank.lua at foreverrank.com/questbank/, or let QuestBank
 -- Uploader send it on Windows. Everyone's notes are merged into the next QuestBank release.
@@ -123,8 +124,16 @@ local lastComplete -- { id, npc }: the reward window, since the NPC may be gone 
 
 local function now() return GetTime and GetTime() or 0 end
 
-function Disc.OnEvent(event, a1, a2)
-  if event == "QUEST_DETAIL" then
+function Disc.OnEvent(event, a1, a2, a3)
+  if event == "QUEST_LOG_UPDATE" or (event == "UNIT_QUEST_LOG_CHANGED" and a1 == "player") then
+    Disc.LookSoon()
+  elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+    if QB.Plain(a1) == "player" then Disc.Cast(a3) end
+  elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_CLOSE" or event == "CRAFT_SHOW" or event == "CRAFT_CLOSE" then
+    Disc.Crafting()
+  elseif event == "PLAYER_ENTERING_WORLD" or event == "LOADING_SCREEN_DISABLED" then
+    Disc.Settle()
+  elseif event == "QUEST_DETAIL" then
     local id = QB.Plain(GetQuestID and GetQuestID())
     if not id or id == 0 then return end
     local q = quest(id, QB.Plain(GetTitleText and GetTitleText()))
@@ -168,6 +177,7 @@ function Disc.OnEvent(event, a1, a2)
   elseif event == "QUEST_ACCEPTED" then
     -- (questID in the modern event; the log index first on Classic-style clients)
     local id = QB.Plain(a2 or a1)
+    if type(id) == "number" then Disc.Accepted(id) end
     if not id or not C_QuestLog then return end
     local q = quest(id)
     if C_QuestLog.GetLogIndexForQuestID and C_QuestLog.GetInfo then
@@ -214,6 +224,234 @@ function Disc.OnEvent(event, a1, a2)
   end
 end
 
+----------------------------------------------------------------------------
+-- objective spots: where a quest in your log gains progress (a kill, an item looted, an object used, an area
+-- reached), so the map icons can show where Forever's objectives really are, the Forever-only quests above all.
+-- disc.os = { [questId] = { [objective, as the game numbers them] = { t = the game's kind ("monster", "item", ...),
+--   p = { { uiMap, x, y, n }, ... } } } }, x and y in thousandths of the map, n the sightings merged into that point.
+-- Only the map, the place and the game's kind of objective: no names, nothing about you.
+----------------------------------------------------------------------------
+local OS_NEAR = 15    -- thousandths of the map: a sighting this close to a point on the same map is that point
+local OS_POINTS = 8   -- points kept per objective; over that, the one seen fewest times goes
+local OS_QUESTS = 400 -- quests kept; over that, the one touched longest ago goes
+local SETTLE = 10     -- seconds after login, a reload or any loading screen (from when the world shows) when the log
+                      -- only learns where things stand: the server can fill in objectives a moment after the quest
+                      -- list, and that is no progress
+local FRESH = 3       -- seconds a quest new to the log (or accepted again) only learns: an item objective's count for
+                      -- what is in your bags can come a moment after the quest
+local CRAFT = 5       -- seconds after a crafting window shuts, or a craft is cast, when an item that comes was made
+Disc.OS_NEAR, Disc.OS_POINTS, Disc.OS_QUESTS = OS_NEAR, OS_POINTS, OS_QUESTS
+
+local floor = math.floor
+local function secret(v) return (issecretvalue and issecretvalue(v)) and true or false end
+local function forever() return QB.Game and QB.Game.Forever() or false end
+
+-- where you stand for an objective: uiMap, x, y (thousandths), or nil inside an instance, with no position, or
+-- when the client hides any of it
+local function spot()
+  if not (C_Map and C_Map.GetBestMapForUnit and C_Map.GetPlayerMapPosition) then return nil end
+  if IsInInstance then
+    local ok, inside = pcall(IsInInstance)
+    if not ok or secret(inside) or inside then return nil end
+  end
+  local ok, m = pcall(C_Map.GetBestMapForUnit, "player")
+  if not ok or secret(m) or type(m) ~= "number" or m <= 0 then return nil end
+  local ok2, pos = pcall(C_Map.GetPlayerMapPosition, m, "player")
+  if not ok2 or pos == nil or secret(pos) or type(pos) ~= "table" then return nil end
+  local ok3, x, y = pcall(function()
+    if pos.GetXY then return pos:GetXY() end
+    return pos.x, pos.y
+  end)
+  if not ok3 or secret(x) or secret(y) or type(x) ~= "number" or type(y) ~= "number" then return nil end
+  if (x == 0 and y == 0) or x < 0 or x > 1 or y < 0 or y > 1 then return nil end
+  return m, floor(x * 1000 + 0.5), floor(y * 1000 + 0.5)
+end
+Disc.Spot = spot
+
+local function shown(names)
+  for _, name in ipairs(names) do
+    local f = _G[name]
+    if type(f) == "table" and f.IsShown then
+      local ok, on = pcall(f.IsShown, f)
+      if ok and on == true then return true end
+    end
+  end
+  return false
+end
+
+-- progress that wasn't made where you stand: the bank, the mailbox, a trade, the auction house. Not a vendor's:
+-- what you buy there is got there
+local AWAY = { "BankFrame", "MailFrame", "TradeFrame", "AuctionFrame", "AuctionHouseFrame", "GuildBankFrame" }
+local function elsewhere() return QB.bankOpen and true or shown(AWAY) end
+
+-- an item made rather than found (it could be made anywhere): a crafting window is open (Forever's is the
+-- ProfessionsFrame; the other two are Classic's), or shut a moment ago, or a craft was cast a moment ago (its item
+-- comes after the cast, and "create all" can go on with the window shut). A kill meanwhile is still where you stand
+local CRAFTING = { "ProfessionsFrame", "TradeSkillFrame", "CraftFrame" }
+local craftUntil = 0
+local crafts = {} -- [spell] = true: the recipes you cast at a crafting window, so a cast of one later is a craft too
+local function crafting() return now() < craftUntil or shown(CRAFTING) end
+
+-- a crafting window opens or shuts, or a craft is cast: an item in the next seconds was made
+function Disc.Crafting() craftUntil = math.max(craftUntil, now() + CRAFT) end
+
+-- a spell of yours went off: at a crafting window it is a recipe, unless the game says it is none (a heal cast with
+-- the window open); and a recipe cast later, with the window shut, is a craft. (The client hides the spell while
+-- spell casts are restricted: then the window's opening and shutting are all there is to go by)
+function Disc.Cast(spell)
+  spell = QB.Plain(spell)
+  if type(spell) ~= "number" then return end
+  if not crafts[spell] and shown(CRAFTING) then
+    local T, recipe = C_TradeSkillUI, true
+    if T and T.GetRecipeInfo then
+      local ok, info = pcall(T.GetRecipeInfo, spell)
+      recipe = not ok or QB.Plain(info) ~= nil
+    end
+    crafts[spell] = recipe or nil
+  end
+  if crafts[spell] then Disc.Crafting() end
+end
+
+local function osDB()
+  local d = db()
+  if type(d.os) ~= "table" then d.os = {} end
+  if type(d.osAt) ~= "table" then d.osAt = {} end -- [questId] = when it was last touched (a counter, not a time)
+  return d
+end
+
+-- one sighting of objective i of quest id (kind: the game's), at m, x, y: merged into the nearest point within
+-- OS_NEAR on that map (which moves to the mean of its sightings), else a point of its own
+function Disc.NoteSpot(id, i, kind, m, x, y)
+  local d = osDB()
+  local all, at = d.os, d.osAt
+  d.osN = (d.osN or 0) + 1
+  at[id] = d.osN
+  local q = all[id]
+  if type(q) ~= "table" then
+    q = {}
+    all[id] = q
+    local n = 0
+    for _ in pairs(all) do n = n + 1 end
+    while n > OS_QUESTS do
+      local old, when
+      for k in pairs(all) do
+        local t = at[k] or 0
+        if not when or t < when or (t == when and k < old) then old, when = k, t end
+      end
+      all[old], at[old] = nil, nil
+      n = n - 1
+    end
+  end
+  local o = q[i]
+  if type(o) ~= "table" then
+    o = {}
+    q[i] = o
+  end
+  if type(o.p) ~= "table" then o.p = {} end
+  if type(kind) == "string" and kind ~= "" then o.t = kind end
+  local best, bestD
+  for _, p in ipairs(o.p) do
+    if p[1] == m then
+      local dx, dy = p[2] - x, p[3] - y
+      local d2 = dx * dx + dy * dy
+      if d2 <= OS_NEAR * OS_NEAR and (not bestD or d2 < bestD) then best, bestD = p, d2 end
+    end
+  end
+  if best then
+    local n = best[4] or 1
+    best[2], best[3], best[4] = floor((best[2] * n + x) / (n + 1) + 0.5), floor((best[3] * n + y) / (n + 1) + 0.5), n + 1
+    return best
+  end
+  if #o.p >= OS_POINTS then
+    -- full: the point seen fewest times goes, the oldest of them; a new sighting is seen once, so when every
+    -- point was seen more often, it is the one left out
+    local low, li
+    for k, p in ipairs(o.p) do
+      local n = p[4] or 1
+      if not low or n < low then low, li = n, k end
+    end
+    if low > 1 then return nil end
+    table.remove(o.p, li)
+  end
+  local p = { m, x, y, 1 }
+  o.p[#o.p + 1] = p
+  return p
+end
+
+-- the log as the last look saw it: seen[questId][objective] = { have, finished }; nil before the first look.
+-- born[questId]: when a look first saw the quest in the log (or it was accepted again)
+local seen
+local born = {}
+local settleUntil = 0
+
+local function plainNum(v) v = QB.Plain(v); return type(v) == "number" and v or nil end
+
+-- login, a reload, a loading screen, the world showing after one: the next seconds only learn
+function Disc.Settle() settleUntil = math.max(settleUntil, now() + SETTLE) end
+
+-- a quest accepted (again, perhaps, after it was abandoned between two looks): what it has now isn't from here
+function Disc.Accepted(id) born[id] = now() end
+
+-- look at the log: an objective that has more than last time (or is finished now) was ticked where you stand
+local function look()
+  if not forever() then return end
+  local L = C_QuestLog
+  if not (L and L.GetNumQuestLogEntries and L.GetInfo and L.GetQuestObjectives) then return end
+  local okN, n = pcall(L.GetNumQuestLogEntries)
+  n = okN and plainNum(n) or 0
+  local t = now()
+  local settled = t >= settleUntil and seen ~= nil
+  local fresh, since, here = {}, {}, nil
+  for li = 1, n do
+    local okI, info = pcall(L.GetInfo, li)
+    local id = okI and type(info) == "table" and not secret(info) and plainNum(info.questID) or nil
+    if id and id > 0 and not QB.Plain(info.isHeader) and not QB.Plain(info.isHidden) then
+      local okO, objs = pcall(L.GetQuestObjectives, id)
+      if okO and type(objs) == "table" and not secret(objs) then
+        local cur, was = {}, seen and seen[id]
+        since[id] = (was and born[id]) or t
+        local old = settled and t - since[id] >= FRESH
+        for i, o in ipairs(objs) do
+          if type(o) == "table" and not secret(o) then
+            -- finished: true or false, or nil when the client hides it (unknown is not "not finished")
+            local have, done = plainNum(o.numFulfilled), QB.Plain(o.finished)
+            if type(done) ~= "boolean" then done = nil end
+            cur[i] = { have, done }
+            local before = was and was[i]
+            if old and before and ((have and before[1] and have > before[1]) or (done == true and before[2] == false)) then
+              local kind = QB.Plain(o.type)
+              kind = type(kind) == "string" and kind ~= "" and kind or nil
+              -- an item (or a line whose kind is hidden) while crafting: made, not found where you stand
+              if not ((kind == nil or kind == "item") and crafting()) then
+                if here == nil then
+                  here = false
+                  if not elsewhere() then
+                    local m, x, y = spot()
+                    if m then here = { m, x, y } end
+                  end
+                end
+                if here then Disc.NoteSpot(id, i, kind, here[1], here[2], here[3]) end
+              end
+            end
+          end
+        end
+        fresh[id] = cur
+      end
+    end
+  end
+  seen, born = fresh, since
+end
+Disc.Look = look
+
+-- many updates come at once (a loot window, a kill): one look, a moment later
+local soon = false
+local function lookSoon()
+  if soon or not forever() then return end
+  soon = true
+  C_Timer.After(0, QB.Safe(function() soon = false; look() end, "objective spots"))
+end
+Disc.LookSoon = lookSoon
+
 -- how much is noted, for /qb discoveries and the Settings page
 function Disc.Count()
   local d = db()
@@ -228,10 +466,19 @@ function Disc:Init()
   if self.frame then return end
   local f = CreateFrame("Frame")
   self.frame = f
-  f:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2) Disc.OnEvent(event, a1, a2) end, "discoveries"))
-  for _, e in ipairs({ "QUEST_DETAIL", "QUEST_COMPLETE", "QUEST_TURNED_IN", "QUEST_ACCEPTED", "GOSSIP_SHOW", "QUEST_GREETING" }) do
+  f:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3) Disc.OnEvent(event, a1, a2, a3) end, "discoveries"))
+  for _, e in ipairs({ "QUEST_DETAIL", "QUEST_COMPLETE", "QUEST_TURNED_IN", "QUEST_ACCEPTED", "GOSSIP_SHOW", "QUEST_GREETING", "QUEST_LOG_UPDATE" }) do
     pcall(f.RegisterEvent, f, e)
   end
+  if f.RegisterUnitEvent then pcall(f.RegisterUnitEvent, f, "UNIT_QUEST_LOG_CHANGED", "player") end
+  if forever() then
+    -- for the objective spots: loading screens, and crafting (what you make isn't found where you stand)
+    for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "LOADING_SCREEN_DISABLED", "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "CRAFT_SHOW", "CRAFT_CLOSE" }) do
+      pcall(f.RegisterEvent, f, e)
+    end
+    if f.RegisterUnitEvent then pcall(f.RegisterUnitEvent, f, "UNIT_SPELLCAST_SUCCEEDED", "player") end
+  end
+  seen, born, settleUntil = nil, {}, now() + SETTLE
   local d = db()
   d.build = (GetBuildInfo and select(2, GetBuildInfo())) or d.build
   -- which client: Forever is 16xxx; notes from Classic Era must not mark Classic quests as seen in Forever

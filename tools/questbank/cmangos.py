@@ -7,6 +7,8 @@ RequiredRaces, who starts and ends each quest, where every creature and object s
 items start quests. gen_data.py prefers Wowhead Forever wherever Forever changed something.
 
   python3 tools/questbank/cmangos.py     # research/cmangos/ClassicDB.sql.gz -> research/questbank/cmangos.json
+
+objectives.py reads the same dump through read() and spawn_points() for the objective areas and map icons.
 """
 import gzip, json, os, re
 
@@ -16,7 +18,11 @@ SRC = os.path.join(REPO, "research", "cmangos", "ClassicDB.sql.gz")
 OUT = os.path.join(REPO, "research", "questbank", "cmangos.json")
 
 WANT = {"quest_template", "creature_questrelation", "creature_involvedrelation", "gameobject_questrelation",
-        "gameobject_involvedrelation", "creature", "gameobject", "creature_template", "gameobject_template", "item_template"}
+        "gameobject_involvedrelation", "creature", "gameobject", "creature_template", "gameobject_template", "item_template",
+        # for objectives.py: spawns that stand for one of several entries, spawns and quests that only come with a
+        # game event, and the quests' own POI outlines
+        "creature_spawn_entry", "gameobject_spawn_entry", "game_event_creature", "game_event_gameobject",
+        "game_event_quest", "quest_poi", "quest_poi_points"}
 FIELD = re.compile(r"'((?:[^'\\]|\\.)*)'|(NULL)|(-?[\d.eE+-]+)")
 
 
@@ -70,6 +76,26 @@ def read():
                     for r in rows_of(body):
                         data[t].append((idx, r))
     return data
+
+
+def spawn_points(data, kind, maps=(0, 1), event=False):
+    """Where every creature (kind "npc") or object spawns on the given maps (None: every map, instances too):
+    {entry: [(map, x, y), ...]}. A spawn row whose id is 0 stands for one of several entries
+    (creature_spawn_entry / gameobject_spawn_entry), so it counts for each of them. A spawn that only comes with
+    a game event (game_event_creature / game_event_gameobject, event above 0: the Darkmoon Faire, the elemental
+    invasions, the holidays) is left out, or with event=True is all that is given."""
+    table = "creature" if kind == "npc" else "gameobject"
+    entries = {}
+    for idx, r in data[table + "_spawn_entry"]:
+        entries.setdefault(r[idx["guid"]], []).append(r[idx["entry"]])
+    seasonal = {r[idx["guid"]] for idx, r in data["game_event_" + table] if (r[idx["event"]] or 0) > 0}
+    out = {}
+    for idx, r in data[table]:
+        if (maps is not None and r[idx["map"]] not in maps) or (r[idx["guid"]] in seasonal) != event:
+            continue
+        for i in [r[idx["id"]]] if r[idx["id"]] else entries.get(r[idx["guid"]], []):
+            out.setdefault(i, []).append((r[idx["map"]], r[idx["position_x"]], r[idx["position_y"]]))
+    return out
 
 
 def main():

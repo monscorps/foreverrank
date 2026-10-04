@@ -824,6 +824,9 @@ local DEFAULTS = {
   autoAccept = false, autoTurnIn = false, sayAccept = false, sayComplete = false,
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
   noteGame = true, -- note the spells and item tooltips the Forever client shows, for foreverrank.com (Game.lua)
+  -- quest icons on each zone's world map (QuestMap.lua, Forever only): all of them, then where quests you can take
+  -- start (!), where finished ones are handed in (?), and the objectives and quest-item drops of the quests in your log
+  mapIcons = true, mapGive = true, mapTurn = true, mapObj = true,
 }
 
 function QB:Settings()
@@ -1921,7 +1924,7 @@ function QB:Changed()
   QB.fresh = true
   if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.Try("window", QB.UI.Refresh, QB.UI) end
   QB.fresh = false
-  if QB.Pins then QB.Try("map pins", QB.Pins.Update, QB.Pins) end
+  if QB.Pins then QB.Try("map pins", QB.Pins.Update, QB.Pins) end -- and the quest icons after them (Pins.lua)
   if QB.Sync then QB.Try("party sync", QB.Sync.Changed, QB.Sync) end
 end
 
@@ -1999,6 +2002,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     QB:ReadState()
     if QB.Minimap then QB.Minimap:Create() end
     if QB.Pins then QB.Pins:Init() end
+    if QB.QuestMap then QB.QuestMap:Init() end
     if QB.Sync then QB.Sync:Init() end
     if QB.Discover then QB.Discover:Init() end
     if QB.Game then QB.Game:Init() end
@@ -2143,6 +2147,8 @@ slash = function(msg)
     if rest ~= "" then QB.Sync:Whisper(rest) else QB.Sync:Broadcast(true) end
   elseif cmd == "pins" and QB.Pins then
     QB.Pins:Toggle()
+  elseif cmd == "icons" and QB.QuestMap then
+    QB.QuestMap:Toggle()
   elseif cmd == "next" and QB.Pins then
     QB.Pins:PinNext(true)
   elseif cmd == "errors" then

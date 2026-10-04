@@ -3,16 +3,18 @@
 
 What players' addons noted in game (QuestBankDB.disc: quests, the NPCs who give and take them,
 where those stand, the XP each quest showed, which quests an NPC offers at what level, chain
-steps) arrives at the Worker as three kinds of upload: an FPROBE2 export, a ForeverProbe.lua
-SavedVariables file (its ["questbank"] block carries the same notes), or a QuestBank.lua
-SavedVariables file. QuestBank 3.6.0 also keeps QuestBankDB.game on the Forever client: the
-spells and the bag and gear items of each class and race played, and item tooltips (what
-ForeverProbe used to note). This tool pulls the new rows, keeps each decoded body under
-research/probe/, and merges every discovery into research/questbank/disc.json, which
-gen_data.py reads: a quest seen in Forever loses its "Classic only" flag, and quests seen in
-game that are not in the catalog at all are listed in GAPS.md. Votes are kept, not winners:
-disc.json records how many uploads reported each XP value and each NPC position. QuestBank
-also runs on Classic Era: notes from any client but Forever are left out.
+steps, and where each objective of a quest moved on) arrives at the Worker as three kinds of
+upload: an FPROBE2 export, a ForeverProbe.lua SavedVariables file (its ["questbank"] block
+carries the same notes), or a QuestBank.lua SavedVariables file. QuestBank 3.6.0 also keeps
+QuestBankDB.game on the Forever client: the spells and the bag and gear items of each class and
+race played, and item tooltips (what ForeverProbe used to note). This tool pulls the new rows,
+keeps each decoded body under research/probe/, and merges every discovery into
+research/questbank/disc.json, which gen_data.py reads: a quest seen in Forever loses its
+"Classic only" flag, quests seen in game that are not in the catalog at all are listed in
+GAPS.md, and where objectives ticked become the map's "seen in players' games" spots. Votes are
+kept, not winners: disc.json records how many uploads reported each XP value, each NPC position
+and each objective spot. QuestBank also runs on Classic Era: notes from any client but Forever
+are left out.
 
   python3 tools/probe_pull.py                      # pull what is new, merge, report
   python3 tools/probe_pull.py --merge FILE...       # merge local files (a friend's QuestBank.lua) without the Worker
@@ -231,7 +233,7 @@ def from_forever(data):
 # --------------------------------------------------------------------------------------- the merge
 def empty():
     return {"meta": {"last_id": 0, "uploads": 0, "with_notes": 0, "sources": {}, "pulled": None},
-            "q": {}, "npc": {}, "offer": {}, "chain": {}, "item": {}, "seen": {}, "seen_at": {}}
+            "q": {}, "npc": {}, "offer": {}, "chain": {}, "item": {}, "seen": {}, "seen_at": {}, "os": {}}
 
 
 # ----------------------------------------------------------------------------------- the XP seen
@@ -361,6 +363,133 @@ def merge_disc(acc, d):
             acc["item"][str(item)] = int(qid)
 
 
+# ----------------------------------------------------------------------------- where objectives tick
+# QuestBank 3.6.0 notes, on the Forever client, where the player stood each time an objective of a quest in the log
+# moved on: QuestBankDB.disc.os = { [questId] = { [objective index] = { t = "monster", p = { {map, x, y, n}, ... } } } },
+# x and y in permille of that map, n the sightings the addon merged into the point (it merges within 15 permille, keeps
+# 8 points per objective and 400 quests). Kept in disc.json under "os" in the same shape, each point as
+# [map, x, y, n, votes, last]: votes is how many uploads had a point there, n the most sightings one upload had there
+# (the same growing file comes back upload after upload, so adding them up would count the same kills again), last the
+# upload with spots that last had it (meta.with_spots then). gen_data.py turns them into the map's "seen in players'
+# games" spots, weighing each point by n. Next to os the addon keeps osN and osAt, counters it bumps on every sighting
+# (which quest it touched last): they are no spot and no note, so neither digest sees them.
+SPOT_KEYS = ("os", "osAt", "osN")  # what QuestBankDB.disc keeps for the spots
+SPOT_NEAR = 15    # permille: a point this close on the same map is the same point (the addon's own rule)
+SPOT_KEEP = 40    # points kept per objective in disc.json; past that the ones no upload has had for longest go, so a
+                  # spot that moved in a later build gets in and the old one fades, however many votes it had
+SPOT_W = 20       # sightings one point weighs at most on the map (gen_data.py's GAME_W): the tie-break when pruning
+SPOT_UPLOAD = (400, 8)  # quests and points per objective the addon keeps: a file over that is read up to it
+SPOT_TYPES = {"monster", "item", "object", "event", "areatrigger", "log", "reputation", "player", "progressbar", "spell", "currency"}
+
+
+def _pairs(v):
+    """(key, value) of a Lua table read back as an object, or (keys 1..n) as a list."""
+    if isinstance(v, dict):
+        return list(v.items())
+    if isinstance(v, list):
+        return [(i + 1, x) for i, x in enumerate(v)]
+    return []
+
+
+def _whole(v, lo, hi):
+    """A number from a saved file as an int in lo..hi, or None (true/false and strings are not numbers here)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or v in (float("inf"), float("-inf")):
+        return None
+    v = int(v + 0.5) if v >= 0 else -int(-v + 0.5)
+    return v if lo <= v <= hi else None
+
+
+def _key(k, hi):
+    """A table key (a quest id, an objective index) as an int in 1..hi, or None."""
+    try:
+        return _whole(int(k), 1, hi)
+    except (TypeError, ValueError):
+        return None
+
+
+def _spot(p):
+    """(map, x, y, n) of one point {map, x, y, n}, or None."""
+    if isinstance(p, dict):
+        p = [p.get(k, p.get(str(i + 1))) for i, k in enumerate("mxyn")]
+    if not isinstance(p, list) or len(p) < 3:
+        return None
+    m, x, y = _whole(p[0], 1, 99999), _whole(p[1], 0, 1000), _whole(p[2], 0, 1000)
+    n = 1 if len(p) < 4 or p[3] is None else _whole(p[3], 1, 10 ** 9)
+    if None in (m, x, y, n):
+        return None
+    return m, x, y, min(n, 999)  # one odd file's count can't outweigh everyone's
+
+
+def _sans_spots(d):
+    """The disc without its objective spots and the addon's counters for them (os has a digest of its own): an upload
+    whose only change is new spots, or a sighting the addon left out, doesn't count its notes again, and the digests
+    stored before the spots existed still match."""
+    if isinstance(d, dict) and any(k in d for k in SPOT_KEYS):
+        return {k: v for k, v in d.items() if k not in SPOT_KEYS}
+    return d
+
+
+def merge_spots(acc, spots):
+    """One upload's QuestBankDB.disc.os into disc.json's "os". Each stored point gets one vote from an upload however
+    many of its points fall on it; a point no stored one is near is added. Only numbers and the game's objective type
+    are kept. Over SPOT_KEEP points, the ones no upload has had for longest go (then the least seen): this upload's
+    points always stay. Returns the number of points voted for; an upload that votes for any counts in
+    meta.with_spots."""
+    out = acc.setdefault("os", {})
+    meta = acc.setdefault("meta", {})
+    stamp = meta.get("with_spots", 0) + 1
+    quests = {}  # quest -> its objectives; a quest written twice ([33] and ["033"]) is read once
+    for k, objs in _pairs(spots):
+        q = _key(k, 999999)
+        if q and q not in quests:
+            quests[q] = objs
+    voted = 0
+    for qid in sorted(quests)[:SPOT_UPLOAD[0]]:
+        done = set()  # and an objective written twice
+        for idx, ob in _pairs(quests[qid]):
+            idx = _key(idx, 16)
+            if not idx or idx in done or not isinstance(ob, dict):
+                continue
+            done.add(idx)
+            pts = [s for s in (_spot(p) for _, p in _pairs(ob.get("p"))) if s]
+            if not pts:
+                continue
+            pts = sorted(pts, key=lambda s: -s[3])[:SPOT_UPLOAD[1]]
+            a = out.setdefault(str(qid), {}).setdefault(str(idx), {"p": []})
+            t = ob.get("t")
+            if isinstance(t, str) and t.lower() in SPOT_TYPES:
+                a["t"] = t.lower()
+            stored = a["p"]
+            for p in stored:
+                p.extend([0] * (6 - len(p)))  # a point stored without its last upload: the stalest
+            got = {}  # stored point -> [sightings, x * sightings, y * sightings] from this upload
+            for m, x, y, n in pts:
+                near, best = None, SPOT_NEAR * SPOT_NEAR
+                for i, p in enumerate(stored):
+                    d = (p[1] - x) ** 2 + (p[2] - y) ** 2
+                    if p[0] == m and d <= best:
+                        near, best = i, d
+                if near is None:
+                    stored.append([m, x, y, 0, 0, 0])
+                    near = len(stored) - 1
+                g = got.setdefault(near, [0, 0, 0])
+                g[0] += n; g[1] += x * n; g[2] += y * n
+            for i, (n, sx, sy) in got.items():
+                p, v = stored[i], stored[i][4]
+                # the place moves to the mean of the uploads that had it, each upload one share
+                p[1] = int((p[1] * v + sx / n) / (v + 1) + 0.5)
+                p[2] = int((p[2] * v + sy / n) / (v + 1) + 0.5)
+                p[3], p[4], p[5] = max(p[3], n), v + 1, stamp
+            if len(stored) > SPOT_KEEP:
+                stored.sort(key=lambda p: (-p[5], -min(p[3], SPOT_W), -p[4], p[0], p[1], p[2]))
+                del stored[SPOT_KEEP:]
+            stored.sort(key=lambda p: (-p[4], -p[3], p[0], p[1], p[2]))
+            voted += sum(1 for p in stored if p[5] == stamp)
+    if voted:
+        meta["with_spots"] = stamp
+    return voted
+
+
 def merge_probe(acc, kind, data):
     """What players' games showed, without a name in it: the spells a class (and the racials a race) had learned and the
     lowest level a character was seen with each, the item ids in bags and gear, item tooltips, and what profession
@@ -453,17 +582,17 @@ def _digest(v):
 
 def merge_upload(acc, text, source="local"):
     """Decode one upload and merge it. Returns (kind, had_notes). The same notes arriving again (an unchanged file re-sent,
-    or ForeverProbe's copy of QuestBank's notes next to QuestBank's own file) are merged once. A QuestBank.lua has two
-    parts with a digest each, its notes (disc, turnins, live) and QuestBankDB.game, so a file where only a tooltip
-    changed still brings the tooltip, and one where only the notes changed doesn't count its items again. Notes from a
-    client other than Forever are left out."""
+    or ForeverProbe's copy of QuestBank's notes next to QuestBank's own file) are merged once. A QuestBank.lua has three
+    parts with a digest each, its notes (disc, turnins, live), where its objectives ticked (disc.os) and QuestBankDB.game,
+    so a file where only a tooltip or a spot changed still brings that, and one where only the notes changed doesn't
+    count its items or vote for its spots again. Notes from a client other than Forever are left out, spots too."""
     kind, data = decode(text)
     meta = acc["meta"]
     meta["uploads"] += 1
     meta["sources"][source] = meta["sources"].get(source, 0) + 1
     seen_hashes = meta.setdefault("hashes", [])
+    fresh = spotted = False
     if kind == "questbank-savedvars" and isinstance(data, dict):
-        fresh = False
         g = data.get("game")
         if isinstance(g, dict) and g:
             h = _digest({"game": g})
@@ -474,27 +603,37 @@ def merge_upload(acc, text, source="local"):
         if not from_forever(data):
             meta["other_client"] = meta.get("other_client", 0) + 1
             return kind, False
+        # the spots come from QuestBank's own file only: ForeverProbe's copy of the disc carries the same ones, and an
+        # old tray still sends both files
+        spots = (disc_of(kind, data) or {}).get("os")
+        if spots:
+            h = _digest({"os": spots})
+            if h not in seen_hashes:
+                seen_hashes.append(h)
+                spotted = merge_spots(acc, spots) > 0
+                fresh = True
         # the notes' digest is the one earlier pulls stored, so a rebuild isn't needed for old uploads to stay merged once
-        h = _digest({k: data.get(k) for k in ("disc", "turnins", "live", "liveEra")})
+        h = _digest({k: _sans_spots(data.get(k)) if k == "disc" else data.get(k) for k in ("disc", "turnins", "live", "liveEra")})
         if h in seen_hashes:
             if not fresh:
                 meta["repeats"] = meta.get("repeats", 0) + 1
-            return kind, False
+            return kind, spotted
         seen_hashes.append(h)
         merge_seen(acc, kind, data)
     else:
         merge_probe(acc, kind, data)
     d = disc_of(kind, data)
     if d is None:
-        return kind, False
+        return kind, spotted
     if kind != "questbank-savedvars" and not from_forever({"disc": d}):
         # ForeverProbe's copy of the notes carries QuestBank's own stamps: one loaded on Era as an out-of-date addon copies Era's
         meta["other_client"] = meta.get("other_client", 0) + 1
         return kind, False
-    h = _digest(d)
+    h = _digest(_sans_spots(d))
     if h in seen_hashes:
-        meta["repeats"] = meta.get("repeats", 0) + 1
-        return kind, False
+        if not fresh:
+            meta["repeats"] = meta.get("repeats", 0) + 1
+        return kind, spotted
     seen_hashes.append(h)
     meta["with_notes"] += 1
     merge_disc(acc, d)
@@ -510,6 +649,10 @@ def summary(acc):
         len(acc["chain"]), len(acc["item"]), contested, sightings, len(acc.get("seen") or {}))
     out += "; games: spells of %d classes and %d races, %d items had, %d tooltips" % (
         len(pr.get("spells") or {}), len(pr.get("racials") or {}), len(pr.get("items") or {}), len(pr.get("tips") or {}))
+    spots = acc.get("os") or {}
+    out += "; objective spots: %d points on %d objectives of %d quests, from %d upload(s)" % (
+        sum(len(o.get("p") or []) for q in spots.values() for o in q.values()), sum(len(q) for q in spots.values()),
+        len(spots), acc["meta"].get("with_spots", 0))
     if acc["meta"].get("other_client"):
         out += "; %d upload(s) from another client left out" % acc["meta"]["other_client"]
     return out
@@ -578,6 +721,8 @@ def selftest():
     assert qb["settings"]["escaped"] == 'He said "hi"\\n|cffffffffwhite|r', qb["settings"]["escaped"]
     assert qb["settings"]["neg"] == -1.5 and qb["settings"]["big"] == 1e15 and qb["settings"]["arrow"] is False
     assert qb["errors"] == {}
+    assert _sans_spots(qb["disc"]) is qb["disc"], "a disc with no spots digests as it always did"
+    assert _sans_spots({"v": 1, "q": {}, "os": {}, "osN": 3, "osAt": {"7": 3}}) == {"v": 1, "q": {}}, "nor do the addon's spot counters"
     fp = parse_savedvariables(open(os.path.join(fx, "ForeverProbe.lua")).read())["ForeverProbeDB"]
     assert fp["snapshots"][0]["name"] == "Helga" and fp["meta"]["addon"] == "0.4.0"
     assert fp["questbank"]["disc"]["q"]["176"]["t"] == 'Wanted: "Hogger"'
@@ -639,6 +784,12 @@ def selftest():
     assert "33" in acc3["q"] and "783" not in acc3["q"] and "c823" not in acc3["npc"], "Era's notes are left out"
     assert set(acc3["seen"]) == {"33"} and acc3["seen"]["33"] == {"170:2:70205:turnin:9": 1}, acc3["seen"]
     assert acc3["meta"]["other_client"] == 1 and acc3["meta"].get("repeats", 0) == 0, acc3["meta"]
+    # where objectives ticked: numbers and the game's objective type only (the fixture's odd type, name and values are
+    # left out), the two points one upload has close together are one point voted for once; Era's spots stay out
+    spots = {"33": {"1": {"t": "item", "p": [[1429, 472, 395, 6, 1, 1], [1429, 526, 386, 3, 1, 1]]}},
+             "7": {"1": {"t": "monster", "p": [[1429, 493, 363, 9, 1, 1], [1429, 500, 500, 1, 1, 1]]}},
+             "60005": {"2": {"p": [[2482, 300, 701, 2, 1, 1], [2482, 410, 620, 1, 1, 1]]}}}
+    assert acc3["os"] == spots and acc3["meta"]["with_spots"] == 1, acc3["os"]
     # the same file again is a repeat; a new tooltip reading merges the game block alone (its items count again, once);
     # new notes merge the notes alone
     assert merge_upload(acc3, qb_text, "fixture") == ("questbank-savedvars", False)
@@ -648,10 +799,59 @@ def selftest():
     assert merge_upload(acc3, tip_text, "fixture") == ("questbank-savedvars", False)
     assert acc3["meta"]["repeats"] == 1 and pr["items"]["2361"] == 3 and pr["items"]["159"] == 2 and t["2361"]["at"] == 1791100600
     assert acc3["q"]["33"]["n"] == 1 and acc3["seen"]["33"] == {"170:2:70205:turnin:9": 1}, "the notes were not merged again"
-    notes_text = tip_text.replace('["lv"] = 2,\n\t\t\t\t["min"] = 1,', '["lv"] = 3,\n\t\t\t\t["min"] = 1,')
-    assert notes_text != tip_text
+    # (with an undated quest-window reading, as QuestBank before 3.4.6 wrote them: it counts each time the notes merge)
+    notes_text = tip_text.replace('["lv"] = 2,\n\t\t\t\t["min"] = 1,', '["lv"] = 3,\n\t\t\t\t["min"] = 1,').replace(
+        '\t["turnins"] = {', '\t["live"] = {\n\t\t[7] = {\n\t\t\t["full"] = 250,\n\t\t\t["lvl"] = 2,\n\t\t\t["src"] = "npc",\n\t\t},\n\t},\n\t["turnins"] = {', 1)
+    assert notes_text.count('["live"]') == 1
     assert merge_upload(acc3, notes_text, "fixture") == ("questbank-savedvars", True)
     assert acc3["q"]["33"]["n"] == 2 and acc3["q"]["33"]["lv"] == 3 and pr["items"]["2361"] == 3, "the game block was not merged again"
+    assert acc3["os"] == spots, "a repeat, a tooltip or new notes vote for no spot again"
+    # every sighting bumps the addon's counters (osN, and osAt of the quest), also one it left out of a full objective:
+    # with nothing else new that is a repeat
+    def ticked(text, quest, was, to):
+        out = text.replace('["osN"] = %d,' % was, '["osN"] = %d,' % to, 1)
+        out = re.sub(r'(\["osAt"\] = \{[^}]*?\[%d\] = )\d+,' % quest, r"\g<1>%d," % to, out, count=1)
+        assert out.count('= %d,' % to) == 2, "osN and osAt[%d] both moved" % quest
+        return out
+    left_out = ticked(notes_text, 7, 21, 22)
+    assert merge_upload(acc3, left_out, "fixture") == ("questbank-savedvars", False) and acc3["meta"]["repeats"] == 2
+    assert acc3["q"]["33"]["n"] == 2 and acc3["seen"]["7"] == {"250:2:70205:npc:0": 1} and acc3["os"] == spots
+    # new spots alone merge the spots alone: each point of the upload gets one more vote, the most sightings stand
+    spots_text = ticked(re.sub(r"(395, -- \[3\]\s+)6(, -- \[4\])", r"\g<1>7\2", left_out, count=1), 33, 22, 23)
+    assert merge_upload(acc3, spots_text, "fixture") == ("questbank-savedvars", True)
+    assert acc3["q"]["33"]["n"] == 2 and acc3["seen"]["33"] == {"170:2:70205:turnin:9": 1} and acc3["meta"]["repeats"] == 2
+    assert acc3["seen"]["7"] == {"250:2:70205:npc:0": 1} and acc3["meta"]["with_notes"] == 3, "the notes were not merged again"
+    assert acc3["os"]["33"]["1"]["p"] == [[1429, 472, 395, 7, 2, 2], [1429, 526, 386, 3, 2, 2]] and acc3["meta"]["with_spots"] == 2, acc3["os"]
+    assert acc3["os"]["60005"]["2"]["p"] == [[2482, 300, 701, 2, 2, 2], [2482, 410, 620, 1, 2, 2]], acc3["os"]
+    assert merge_upload(acc3, spots_text, "fixture") == ("questbank-savedvars", False) and acc3["meta"]["repeats"] == 3
+    assert all(set(o) <= {"t", "p"} for q in acc3["os"].values() for o in q.values())
+    # merge_spots alone: a near point on the same map is the same place (moved to the uploads' mean), another map's is
+    # not; a file over the addon's caps is read up to them, a quest or objective written twice is read once
+    acc5 = empty()
+    assert merge_spots(acc5, {"7": [{"t": "MONSTER", "p": [[1429, 493, 363, 9]]}]}) == 1
+    assert merge_spots(acc5, {"7": {"1": {"t": "monster", "p": [[1429, 500, 370, 4], [1430, 493, 363, 1], [1429, 600, 600, True], [1429, 600, 600, -1]]}}}) == 2
+    assert acc5["os"]["7"]["1"] == {"t": "monster", "p": [[1429, 497, 367, 9, 2, 2], [1430, 493, 363, 1, 1, 2]]}, acc5["os"]
+    assert merge_spots(acc5, {"7": {"1": {"p": [[1430, 493, 363, 1]]}, "01": {"p": [[1430, 493, 363, 1]]}}, "007": {"1": {"p": [[1430, 493, 363, 1]]}}}) == 1
+    assert acc5["os"]["7"]["1"]["p"][1] == [1430, 493, 363, 1, 2, 3] and acc5["meta"]["with_spots"] == 3, acc5["os"]
+    many = {"1": {"t": "item", "p": [[1429, 30 * i, 0, i + 1] for i in range(10)]}, "17": {"p": [[1429, 1, 1, 1]]}, "0": {"p": [[1429, 1, 1, 1]]}}
+    assert merge_spots(acc5, {"92": many, "x": many, "-3": many}) == 8
+    assert list(acc5["os"]["92"]) == ["1"] and [p[1] for p in acc5["os"]["92"]["1"]["p"]] == [270, 240, 210, 180, 150, 120, 90, 60]
+    assert merge_spots(acc5, {q: {"1": {"p": [[1429, 1, 1, 1]]}} for q in range(1000, 1500)}) == 400
+    assert "1399" in acc5["os"] and "1400" not in acc5["os"]
+    # past 40 points an objective loses the points no upload has had for longest, however many votes they had: five
+    # players' 8 points each, every file sent twice, fill it; a sixth player's spots (a later build moved them) get in
+    # and the first player's go; a player who sends again keeps theirs, and the next new spots push out the stalest
+    for row in range(5):
+        for _ in range(2):
+            assert merge_spots(acc5, {"93": {"1": {"t": "monster", "p": [[1429, 40 * i + 5, 100 * row + 50, 3] for i in range(8)]}}}) == 8
+    p93 = acc5["os"]["93"]["1"]["p"]
+    assert len(p93) == SPOT_KEEP and min(p[4] for p in p93) == 2
+    assert merge_spots(acc5, {"93": {"1": {"p": [[1429, 40 * i + 5, 900, 200] for i in range(8)]}}}) == 8
+    assert len(p93) == SPOT_KEEP and sorted({p[2] for p in p93}) == [150, 250, 350, 450, 900], sorted({p[2] for p in p93})
+    assert merge_spots(acc5, {"93": {"1": {"p": [[1429, 40 * i + 5, 150, 3] for i in range(8)]}}}) == 8
+    assert merge_spots(acc5, {"93": {"1": {"p": [[1429, 40 * i + 5, 800, 1] for i in range(8)]}}}) == 8
+    assert len(p93) == SPOT_KEEP and sorted({p[2] for p in p93}) == [150, 350, 450, 800, 900], sorted({p[2] for p in p93})
+    assert [p[2] for p in p93[:8]] == [150] * 8 and [p[3:5] for p in p93[24:33]] == [[200, 1]] * 8 + [[1, 1]], "by votes, then sightings"
     # ForeverProbe's copy of the notes goes by the disc's own stamp: a copy made on Era adds no notes, its snapshots still
     # go by their own interface
     acc4 = empty()
@@ -665,13 +865,19 @@ def selftest():
     assert acc4["q"] == {} and acc4["meta"]["with_notes"] == 0 and acc4["meta"]["other_client"] == 2, acc4["meta"]
     assert acc4["probe"]["spells"]["PALADIN"], "the Forever snapshots in the same file still count"
     assert [merge_upload(acc4, t, "fixture")[1] for t in stamp(16001)] == [True, True] and "62" in acc4["q"]
+    # ForeverProbe's copy of the disc brings no spots (QuestBank.lua does), and they don't change its digest
+    acc6 = empty()
+    fp_os = fp_text.replace('["disc"] = {\n\t\t\t["v"] = 1,', '["disc"] = {\n\t\t\t["os"] = { [176] = { { ["t"] = "monster", ["p"] = { { 1429, 300, 300, 2 } } } } },'
+                            '\n\t\t\t["osN"] = 2,\n\t\t\t["osAt"] = { [176] = 2 },\n\t\t\t["v"] = 1,')
+    assert fp_os != fp_text and merge_upload(acc6, fp_text, "fixture")[1]
+    assert merge_upload(acc6, fp_os, "fixture") == ("probe-savedvars", False) and acc6["meta"]["repeats"] == 1 and acc6["os"] == {}
     # which client wrote an unstamped file: its build, else Forever
     assert from_forever({"disc": {"v": 1, "q": {}, "build": "70058"}}) is True
     assert from_forever({"disc": {"v": 1, "q": {}, "build": "61582"}}) is False, "older than Forever's first build"
     assert from_forever({"disc": {"v": 1, "q": {}}}) is True and from_forever({}) is True
     assert from_forever({"disc": {"build": "70205"}, "diag": {"addons": {"iface": 11507}}}) is False, "the stamp decides over the build"
     assert from_forever({"disc": {"build": "61582", "iface": 16001}}) is True
-    json.dumps(acc), json.dumps(acc3), json.dumps(acc4)  # everything JSON-clean
+    json.dumps(acc), json.dumps(acc3), json.dumps(acc4), json.dumps(acc5)  # everything JSON-clean
     print("selftest OK:", summary(acc))
     print("selftest OK:", summary(acc3))
 

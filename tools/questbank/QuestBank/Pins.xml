@@ -19,4 +19,37 @@
       <OnLoad method="OnLoad"/>
     </Scripts>
   </Frame>
+  <!-- the quest icons (QuestMap.lua): ! where a quest starts, ? where one is handed in, a mark on an objective or
+       where a quest item drops; sized and given their art when the map hands them out -->
+  <Frame name="QuestBankQuestPinTemplate" mixin="QuestBankQuestPinMixin" virtual="true" enableMouse="true">
+    <Size x="20" y="20"/>
+    <Layers>
+      <Layer level="ARTWORK">
+        <Texture parentKey="Icon" setAllPoints="true"/>
+      </Layer>
+      <Layer level="OVERLAY">
+        <Texture parentKey="Badge" hidden="true">
+          <Size x="10" y="10"/>
+          <Anchors>
+            <Anchor point="TOPRIGHT" x="3" y="3"/>
+          </Anchors>
+        </Texture>
+      </Layer>
+    </Layers>
+    <Scripts>
+      <OnLoad method="OnLoad"/>
+    </Scripts>
+  </Frame>
+  <!-- an objective's area: a soft disc that grows and shrinks with the map. No mouse: the mark on it has the tooltip -->
+  <Frame name="QuestBankAreaPinTemplate" mixin="QuestBankAreaPinMixin" virtual="true" enableMouse="false">
+    <Size x="32" y="32"/>
+    <Layers>
+      <Layer level="BACKGROUND">
+        <Texture parentKey="Circle" setAllPoints="true"/>
+      </Layer>
+    </Layers>
+    <Scripts>
+      <OnLoad method="OnLoad"/>
+    </Scripts>
+  </Frame>
 </Ui>

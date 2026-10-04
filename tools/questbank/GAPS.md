@@ -23,11 +23,12 @@ Dungeon quests nobody has read take their dungeon's multiplier when the read one
 Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,
 holidays, repeatable turn-ins, raids and battlegrounds are left out.
 
-NPC positions: 359 from Wowhead Forever, 1328 from the CMaNGOS spawn table where Wowhead has none.
+NPC positions: 359 from Wowhead Forever, 1326 from the CMaNGOS spawn table where Wowhead has none.
 Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: 244 Wowhead coordinates there were in the old
 Classic frame and were moved to Forever's; 58 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 26.
+World map icons: objective spots for 1448 quests (1141 from CMaNGOS spawns, 306 from its quest outlines only, 1 from Wowhead Forever's quest pages, 0 from players' games alone; 0 more have players' spots beside those); 53 quests that start from an item show where it drops. 176 quests need a profession or a reputation the addon can't check.
 
 Seen in Forever by players (47 uploads merged by probe_pull.py, 2026-10-04T11:12:17Z): 209 quests, 2 of them Classic seeds now confirmed.
 Seen in game but not in the catalog (5): 91900 A Sealed Crate (left out on purpose by the catalog's filters), 91904 A Sealed Crate (left out on purpose by the catalog's filters), 91905 A Sealed Crate (left out on purpose by the catalog's filters), 95795 Fallen in the Fen (too little to place: no NPC with a position), 98372 An Unfortunate End (left out on purpose by the catalog's filters).

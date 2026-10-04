@@ -202,7 +202,8 @@ end
 local function npcLine(tip, label, n)
   if not n then return end
   local where
-  if n.inside then
+  -- (off the two continents but on a map of its own, as on Zephras Isle, an NPC still has a place to name)
+  if n.inside and not (n.m and n.m > 0) then
     where = n.n .. ", inside the dungeon"
   else
     local zone = QB.Data.MAPNAME[n.m] or ""
@@ -3123,24 +3124,35 @@ function UI:CreateSettingsView(parent)
   v.arrow = checkRow(p, LEFT, -268, "Direction arrow (right-click it for what it points at)")
   v.arrow:SetScript("OnClick", function(self) if QB.Arrow then QB.Arrow:Set(self:GetChecked() and true or false) end end)
 
-  heading(p, LEFT, -304, "Discoveries", 370)
-  -- the spells and item tooltips of the Forever client (Game.lua); quests and NPCs are always noted. Unticking
-  -- clears what was noted, ticking takes over ForeverProbe's notes if it is still there
-  v.noteGame = checkRow(p, LEFT, -328, "Note items and spells you see, for foreverrank.com", 340)
-  v.noteGame:SetScript("OnClick", function(self)
-    if QB.Game then QB.Game.SetOn(self:GetChecked() and true or false) end
-    UI:Refresh()
-  end)
-  v.noteGame:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Note items and spells you see", 1, 1, 1)
-    GameTooltip:AddLine("Tooltips of the items you see and the spells you know, with no names in them, so foreverrank.com can list them. Unticking forgets what was noted.", nil, nil, nil, true)
-    GameTooltip:Show()
-  end)
-  v.noteGame:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  v.discText = para(p, "GameFontNormal", 12, INK_SOFT, 370)
-  v.discText:SetPoint("TOPLEFT", LEFT, -356)
-  v.discText:SetHeight(64)
+  -- quest icons on each zone's map (QuestMap.lua), the Forever client only: one switch for all, one for each kind
+  heading(p, LEFT, -304, "Map icons", 370)
+  local MAP_ICONS = {
+    { "mapIcons", LEFT, -328, "Quest icons on the world map", 340,
+      "On each zone's map: a ! where quests you can take start, a ? where finished ones are handed in, and where to do the ones in your log. Click one for a waypoint, Shift-click to track it. The numbered route pins have their own switch above." },
+    { "mapGive", LEFT + 24, -356, "Quests you can pick up", 316,
+      "A yellow ! on the NPCs with quests for your faction, class and level that you haven't done. Grey (low-level) quests are left off, as the game does, and so are quests that need a profession or an item first. Where a numbered route pin stands on the NPC, that pin's tooltip lists the NPC's quests instead." },
+    { "mapTurn", LEFT + 24, -384, "Hand-ins", 316,
+      "A yellow ? on the NPC each finished quest in your log goes to." },
+    { "mapObj", LEFT + 24, -412, "Objectives and quest items", 316,
+      "For the quests in your log, where to do each objective you haven't finished; for quests that start from an item, where it drops. Each tooltip says where the spot comes from: Wowhead Forever, Classic data or players' games." },
+  }
+  for _, r in ipairs(MAP_ICONS) do
+    local key, title, about = r[1], r[4], r[6]
+    local row = checkRow(p, r[2], r[3], title, r[5])
+    row:SetScript("OnClick", function(self)
+      if QB.QuestMap then QB.QuestMap.Set(key, self:GetChecked()) else QB:Settings()[key] = self:GetChecked() and true or false end
+      UI:Refresh()
+    end)
+    row:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:SetText(title, 1, 1, 1)
+      GameTooltip:AddLine(about, nil, nil, nil, true)
+      if not (QB.QuestMap and QB.QuestMap.Available()) then GameTooltip:AddLine("Only on the Forever client.", 1, 0.5, 0.3, true) end
+      GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    v[key] = row
+  end
 
   -- updates: what others on the realm run
   heading(p, RIGHT, -12, "Updates")
@@ -3212,17 +3224,17 @@ function UI:CreateSettingsView(parent)
   v.skipText:SetHeight(44)
 
   -- at the quest giver: accept and hand in for you (Auto.lua), off until asked for
-  heading(p, LEFT, -432, "At the quest giver", 370)
-  v.autoAccept = checkRow(p, LEFT, -456, "Accept quests for me, escorts too", 340)
+  heading(p, LEFT, -460, "At the quest giver", 370)
+  v.autoAccept = checkRow(p, LEFT, -484, "Accept quests for me, escorts too", 340)
   v.autoAccept:SetScript("OnClick", function(self) QB:Settings().autoAccept = self:GetChecked() and true or false end)
   v.acceptHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.acceptHint:SetPoint("TOPLEFT", LEFT, -482)
+  v.acceptHint:SetPoint("TOPLEFT", LEFT, -510)
   v.acceptHint:SetHeight(44)
   v.acceptHint:SetText("At an NPC, from a party member who shares one, and escorts a party member starts. Hold Shift to do it by hand. Not repeatable or grey quests, nor places you skip.")
-  v.autoTurnIn = checkRow(p, LEFT, -530, "Hand in finished quests for me", 340)
+  v.autoTurnIn = checkRow(p, LEFT, -558, "Hand in finished quests for me", 340)
   v.autoTurnIn:SetScript("OnClick", function(self) QB:Settings().autoTurnIn = self:GetChecked() and true or false end)
   v.turnInHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.turnInHint:SetPoint("TOPLEFT", LEFT, -556)
+  v.turnInHint:SetPoint("TOPLEFT", LEFT, -584)
   v.turnInHint:SetHeight(58)
   v.turnInHint:SetText("Questing and the rush: everything. While you bank: only quests you left out of the route, ones that pay next to nothing on the day, and a step you hand in to bank a better one. A reward to choose, or a quest QuestBank can't value, waits for you.")
 
@@ -3236,6 +3248,25 @@ function UI:CreateSettingsView(parent)
   v.sayHint:SetPoint("TOPLEFT", RIGHT, -538)
   v.sayHint:SetHeight(30)
   v.sayHint:SetText("Only while you are in a party or raid, as plain lines. Nothing else goes to chat without Post.")
+
+  heading(p, RIGHT, -584, "Discoveries")
+  -- the spells and item tooltips of the Forever client (Game.lua); quests and NPCs are always noted. Unticking
+  -- clears what was noted, ticking takes over ForeverProbe's notes if it is still there
+  v.noteGame = checkRow(p, RIGHT, -608, "Note items and spells you see, for foreverrank.com", 300)
+  v.noteGame:SetScript("OnClick", function(self)
+    if QB.Game then QB.Game.SetOn(self:GetChecked() and true or false) end
+    UI:Refresh()
+  end)
+  v.noteGame:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Note items and spells you see", 1, 1, 1)
+    GameTooltip:AddLine("Tooltips of the items you see and the spells you know, with no names in them, so foreverrank.com can list them. Unticking forgets what was noted.", nil, nil, nil, true)
+    GameTooltip:Show()
+  end)
+  v.noteGame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  v.discText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
+  v.discText:SetPoint("TOPLEFT", RIGHT, -636)
+  v.discText:SetHeight(72)
   v.Refresh = function() UI:RefreshSettingsView(v) end
   return v
 end
@@ -3281,6 +3312,19 @@ function UI:RefreshSettingsView(v)
   v.noteGame.label:SetText(forever and "Note items and spells you see, for foreverrank.com" or "Note items and spells you see (Forever client only)")
   local ink = forever and INK or INK_SOFT
   v.noteGame.label:SetTextColor(ink[1], ink[2], ink[3])
+  -- the map icons: greyed out off Forever, the three kinds greyed out while the icons are off
+  local icons = forever and QB.QuestMap ~= nil
+  v.mapIcons:SetEnabled(icons)
+  v.mapIcons:SetChecked(icons and set.mapIcons ~= false)
+  v.mapIcons.label:SetText(icons and "Quest icons on the world map" or "Quest icons on the world map (Forever client only)")
+  v.mapIcons.label:SetTextColor(ink[1], ink[2], ink[3])
+  for _, key in ipairs({ "mapGive", "mapTurn", "mapObj" }) do
+    local live = icons and set.mapIcons ~= false
+    local c = live and INK or INK_SOFT
+    v[key]:SetEnabled(live)
+    v[key]:SetChecked(icons and set[key] ~= false)
+    v[key].label:SetTextColor(c[1], c[2], c[3])
+  end
   local items = (G and G.On()) and string.format(", %d items", (G.Count())) or ""
   v.discText:SetText(string.format("Noted in game so far: %d quests, %d quest NPCs, %d chain steps%s. Forever is still being discovered: upload your QuestBank.lua at foreverrank.com/questbank/ and it goes into the next release for everyone.", nq, nn, nc, items))
   v.offers:SetChecked(set.post.auto and true or false)
@@ -3304,7 +3348,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(628) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(722) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------

@@ -5,10 +5,104 @@ local _, QB = ...
 local P = { list = {} }
 QB.Pins = P
 
+----------------------------------------------------------------------------
+-- what every QuestBank layer on the world map shares (this one and the quest icons, QuestMap.lua)
+----------------------------------------------------------------------------
+-- Combat: the map canvas calls SetPassThroughButtons on every pin it hands out (AcquirePin), and on Forever that is
+-- a protected function that can't run in combat; an addon pin acquired in combat raises ADDON_ACTION_BLOCKED, which
+-- no pcall catches (HereBeDragons-Pins stubs it for the same reason). So QuestBank's pins make that call only out of
+-- combat (right-click then passes through to zoom the map out, as on Blizzard's pins), never acquire or release a pin
+-- in combat, and redraw when combat ends.
+local function inCombat() return InCombatLockdown and InCombatLockdown() and true or false end
+P.InCombat = inCombat
+
+-- the frame's own SetPassThroughButtons, under the one each QuestBank pin mixin puts on top
+local function framePassThrough(self, ...)
+  local mt = getmetatable(self)
+  local index = mt and mt.__index
+  local f
+  if type(index) == "table" then f = index.SetPassThroughButtons
+  elseif type(index) == "function" then f = index(self, "SetPassThroughButtons") end
+  if f then f(self, ...) end
+end
+function P.PassThrough(self, ...)
+  if inCombat() then return end
+  framePassThrough(self, ...)
+end
+
+-- providers that asked for a redraw in combat: they get it when combat ends, if the map is still open (opening it
+-- later redraws anyway)
+local afterCombat = {}
+P.combatFrame = CreateFrame and CreateFrame("Frame")
+if P.combatFrame then
+  P.combatFrame:SetScript("OnEvent", QB.Safe(function()
+    local list = {}
+    for provider in pairs(afterCombat) do list[#list + 1] = provider end
+    afterCombat = {}
+    if not (WorldMapFrame and WorldMapFrame:IsShown()) then return end
+    for _, provider in ipairs(list) do provider:RefreshAllData() end
+  end, "map pins: after combat"))
+  P.combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+end
+
+-- run fn once Blizzard's world map is loaded: now, or when it loads after us
+local function mapReady()
+  return WorldMapFrame and WorldMapFrame.AddDataProvider and MapCanvasDataProviderMixin and MapCanvasPinMixin and CreateFromMixins and true or false
+end
+function P.WhenMap(fn, where)
+  if mapReady() then fn() return end
+  if not CreateFrame then return end
+  local wait = CreateFrame("Frame")
+  wait:SetScript("OnEvent", QB.Safe(function(self, _, name)
+    if (name == "Blizzard_WorldMap" or name == "Blizzard_MapCanvas") and mapReady() then
+      self:UnregisterEvent("ADDON_LOADED")
+      fn()
+    end
+  end, where))
+  wait:RegisterEvent("ADDON_LOADED")
+  return wait
+end
+
+-- a data provider on the world map for the pins of these templates: draw(map, mapID) acquires them, after every pin
+-- of the templates has gone. Whatever goes wrong in it stays in it: the map runs every provider in one loop.
+function P.NewProvider(templates, draw, where)
+  local provider = CreateFromMixins(MapCanvasDataProviderMixin)
+  function provider:RemoveAllData()
+    local map = self:GetMap()
+    for _, t in ipairs(templates) do map:RemoveAllPinsByTemplate(t) end
+  end
+  provider.RefreshAllData = QB.Safe(function(self)
+    local map = self:GetMap()
+    if not map then return end
+    local shown = map:GetMapID()
+    if inCombat() then
+      -- nothing acquired or released now: pins drawn for another map hide until the redraw after combat
+      if map.EnumeratePinsByTemplate then
+        for _, t in ipairs(templates) do
+          for pin in map:EnumeratePinsByTemplate(t) do pin:SetShown(shown == self.drawnFor) end
+        end
+      end
+      afterCombat[self] = true
+      return
+    end
+    afterCombat[self] = nil
+    self:RemoveAllData()
+    self.drawnFor = shown
+    if shown then draw(map, shown) end
+  end, where)
+  function provider:OnMapChanged() self:RefreshAllData() end
+  WorldMapFrame:AddDataProvider(provider)
+  return provider
+end
+
+----------------------------------------------------------------------------
+-- the route's pins
+----------------------------------------------------------------------------
 -- the pin template in Pins.xml mixes QuestBankPinMixin in when a pin is made; it is rebuilt on top of
 -- the map's own pin mixin once the world map is loaded
 local Pin = {}
 QuestBankPinMixin = Pin
+Pin.SetPassThroughButtons = P.PassThrough
 
 function Pin:OnLoad()
   if self.UseFrameLevelType then self:UseFrameLevelType("PIN_FRAME_LEVEL_AREA_POI") end
@@ -30,6 +124,11 @@ Pin.OnMouseEnter = QB.Safe(function(self)
   GameTooltip:AddLine((d.num and (d.num .. ". ") or "") .. d.name, 1, 0.82, 0)
   if d.when then GameTooltip:AddLine(d.when, 0.8, 0.8, 0.8) end
   for _, line in ipairs(d.lines or {}) do GameTooltip:AddDoubleLine(line[1], line[2], 1, 1, 1, 0.6, 1, 0.6) end
+  -- the quest icons leave the NPC under this pin to it: what they would have shown there
+  if QB.QuestMap and QB.QuestMap.AlsoHere then
+    local map = self.GetMap and self:GetMap()
+    QB.QuestMap.AlsoHere(GameTooltip, d, map and map:GetMapID())
+  end
   GameTooltip:AddLine("Click: waypoint here.", 0.5, 0.5, 0.5)
   GameTooltip:Show()
 end, "map pin tooltip")
@@ -54,35 +153,18 @@ local function project(d, mapID)
 end
 
 function P:Init()
-  if self.provider then return end
-  if not (WorldMapFrame and WorldMapFrame.AddDataProvider and MapCanvasDataProviderMixin and MapCanvasPinMixin and CreateFromMixins) then
-    -- the world map can load after us: try again when it does
-    if not self.waiting and CreateFrame then
-      self.waiting = CreateFrame("Frame")
-      self.waiting:SetScript("OnEvent", QB.Safe(function(_, _, name) if name == "Blizzard_WorldMap" or name == "Blizzard_MapCanvas" then P:Init() end end, "map pins: waiting for the map"))
-      self.waiting:RegisterEvent("ADDON_LOADED")
-    end
-    return
-  end
-  if self.waiting then self.waiting:UnregisterEvent("ADDON_LOADED") end
-  QuestBankPinMixin = CreateFromMixins(MapCanvasPinMixin, Pin)
-  local provider = CreateFromMixins(MapCanvasDataProviderMixin)
-  function provider:RemoveAllData() self:GetMap():RemoveAllPinsByTemplate("QuestBankPinTemplate") end
-  -- whatever goes wrong here stays here: the map runs every provider in one loop
-  provider.RefreshAllData = QB.Safe(function(self)
-    self:RemoveAllData()
-    if not QB:Settings().pins then return end
-    local map = self:GetMap()
-    local shown = map:GetMapID()
-    if not shown then return end
-    for _, d in ipairs(P.list) do
-      local x, y = project(d, shown)
-      if x then map:AcquirePin("QuestBankPinTemplate", d, x, y) end
-    end
-  end, "map pins")
-  function provider:OnMapChanged() self:RefreshAllData() end
-  WorldMapFrame:AddDataProvider(provider)
-  self.provider = provider
+  if self.provider or self.waiting then return end
+  self.waiting = P.WhenMap(function()
+    if P.provider then return end
+    QuestBankPinMixin = CreateFromMixins(MapCanvasPinMixin, Pin)
+    P.provider = P.NewProvider({ "QuestBankPinTemplate" }, function(map, shown)
+      if not QB:Settings().pins then return end
+      for _, d in ipairs(P.list) do
+        local x, y = project(d, shown)
+        if x then map:AcquirePin("QuestBankPinTemplate", d, x, y) end
+      end
+    end, "map pins")
+  end, "map pins: waiting for the map")
 end
 
 -- the route on screen: the run's rest, or what is banked now, else the full plan
@@ -100,9 +182,16 @@ function P:Build()
     for i, leg in ipairs(r.legs) do
       local s = leg.stop
       if s.m and s.m > 0 then
-        local lines = {}
-        for _, row in ipairs(leg.rows) do lines[#lines + 1] = { row.q.name, QB.Comma(row.xp) } end
-        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, icon = T.questActive, late = (leg.late and r.goal == "hour") or nil,
+        local lines, ids = {}, {}
+        for _, row in ipairs(leg.rows) do
+          lines[#lines + 1] = { row.q.name, QB.Comma(row.xp) }
+          ids[row.q.id] = true
+        end
+        -- who: the NPC the pin stands on (a stop stands at its first NPC, and may be named for its town or place);
+        -- ids: the quests it lists. The quest icons (QuestMap.lua) read both
+        local first = s.npcs and s.npcs[1] and QB.Data.NPC[s.npcs[1]]
+        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, who = first and first[1] or nil, ids = ids, icon = T.questActive,
+                            late = (leg.late and r.goal == "hour") or nil,
                             when = string.format("At %s, level %.1f to %.1f", QB.Clock(leg.t), leg.arrive, leg.leave), lines = lines }
       end
     end
@@ -115,11 +204,11 @@ function P:Build()
       local st = QB:Status(q)
       if st.code == "todo" or st.code == "prereq" then
         -- a chain: the first open step's giver, or the held step's hand-in (what the click and the arrow aim at)
-        local at, label = q.give, nil
+        local at, label, step = q.give, nil, q
         if st.code == "prereq" and QB.Arrow and QB.Arrow.FirstStep then
           local first, held = QB.Arrow.FirstStep(q, st)
           if first and first ~= q then
-            at = held and first.turn or first.give
+            at, step = held and first.turn or first.give, first
             label = (held and "chain: hand in " or "chain: pick up ") .. first.name
           end
         end
@@ -127,10 +216,11 @@ function P:Build()
           local key = at.n .. at.m
           local g = givers[key]
           if not g then
-            g = { m = at.m, x = at.x, y = at.y, name = at.n, icon = T.questAvail, when = "Pick up", lines = {} }
+            g = { m = at.m, x = at.x, y = at.y, name = at.n, who = at.n, ids = {}, icon = T.questAvail, when = "Pick up", lines = {} }
             givers[key] = g
             list[#list + 1] = g
           end
+          g.ids[q.id], g.ids[step.id] = true, true
           g.lines[#g.lines + 1] = { q.name, label or (st.code == "prereq" and "chain first" or QB.Comma(QB.Model.XpAt(q, QB.state.level))) }
         end
       end
@@ -143,6 +233,9 @@ end
 function P:Update()
   self:Build()
   if self.provider and WorldMapFrame:IsShown() then self.provider:RefreshAllData() end
+  -- then the quest icons, whenever these pins change (a new plan, /qb pins, Settings): they leave the NPCs these
+  -- pins stand on to them
+  if QB.QuestMap then QB.Try("map icons", QB.QuestMap.Update, QB.QuestMap) end
   -- during a run the waypoint follows the route
   local r = QB.routeNow
   if QB.Run.Get() and QB:Settings().pins and r and r.legs and r.legs[1] then

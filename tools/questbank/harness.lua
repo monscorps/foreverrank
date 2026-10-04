@@ -20,7 +20,8 @@ SetScrollChild SetVerticalScroll GetVerticalScroll SetText GetText SetNormalText
 RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThumbTexture SetMinMaxValues GetMinMaxValues
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
-SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent]])
+SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
+SetAtlas SetPassThroughButtons SetScale]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
@@ -112,6 +113,12 @@ local function newObj(kind, template, parent)
         elseif k == "HasFocus" then return self.__focus or false
         elseif k == "SetMaxLetters" then self.__maxLetters = a[1]
         elseif k == "SetRotation" then self.__rot = a[1]
+        elseif k == "SetAtlas" then self.__tex = "atlas:" .. tostring(a[1]); self.__atlas = a[1]; self.__color = nil
+        elseif k == "SetScale" then self.__scale = a[1]
+        -- protected on Forever, with combat restrictions: an addon calling it in combat is blocked (ADDON_ACTION_BLOCKED)
+        elseif k == "SetPassThroughButtons" then
+          if self.__client and self.__client.combat then error("ADDON_ACTION_BLOCKED: SetPassThroughButtons in combat", 2) end
+          self.__passThrough = { ... }
         elseif k == "ClearAllPoints" then self.__points = {}
         elseif k == "SetAllPoints" then
           local rel = a[1] or self.__parent
@@ -184,8 +191,18 @@ BASE.CreateFromMixins = function(...)
 end
 BASE.MapCanvasPinMixin = {
   SetPosition = function(self, x, y) self.__pos = { x, y } end,
-  UseFrameLevelType = function() end, SetScalingLimits = function() end,
+  UseFrameLevelType = function(self, level) self.__level = level end, SetScalingLimits = function() end,
+  SetIgnoreGlobalPinScale = function(self, v) self.__ignoreScale = v end,
+  SetScaleStyle = function(self, style) self.__scaleStyle = style; if self.__ignoreScale then self:SetScale(1) end end,
+  GetMap = function(self) return self.owningMap end,
+  OnMouseEnter = function() end, OnMouseLeave = function() end,
+  -- Blizzard_MapCanvas calls this on every pin it hands out, after OnAcquired (MapCanvas_DataProviderBase.lua:288)
+  CheckMouseButtonPassthrough = function(self, ...)
+    self:SetPassThroughButtons()
+    self:SetPassThroughButtons(...)
+  end,
 }
+BASE.AM_PIN_SCALE_STYLE_WITH_TERRAIN = 3
 BASE.MapCanvasDataProviderMixin = { GetMap = function(self) return self.owningMap end }
 
 SECRET_MT = {
@@ -199,6 +216,7 @@ SECRET_MT = {
 SECRET = {
   str = function() return setmetatable({ __kind = "string" }, SECRET_MT) end,
   num = function() return setmetatable({ __kind = "number" }, SECRET_MT) end,
+  bool = function() return setmetatable({ __kind = "boolean" }, SECRET_MT) end,
 }
 
 local function newClient(o)
@@ -407,7 +425,12 @@ local function newClient(o)
       return { title = "Quest " .. e[1], level = 20, questID = e[1], isHeader = false }
     end,
     IsComplete = function(id) for _, e in ipairs(c.log) do if e[1] == id then return e[2] == 1 end end return false end,
-    GetQuestObjectives = function() return { { text = "thing", finished = false, numFulfilled = 3, numRequired = 10 } } end,
+    -- c.objectives[id] = the game's lines for one quest; every other quest has one generic line
+    GetQuestObjectives = function(id) return (c.objectives or {})[id] or { { text = "thing", finished = false, numFulfilled = 3, numRequired = 10 } } end,
+    -- the objective tracker: c.watched[id] = true
+    GetQuestWatchType = function(id) return (c.watched or {})[id] and 0 or nil end,
+    AddQuestWatch = function(id) c.watched = c.watched or {}; c.watched[id] = true; return true end,
+    RemoveQuestWatch = function(id) c.watched = c.watched or {}; c.watched[id] = nil; return true end,
     GetAllCompletedQuestIDs = function() local t = {} for k, v in pairs(c.done) do if v then t[#t + 1] = k end end return t end,
     GetLogIndexForQuestID = function(id) for i, e in ipairs(c.log) do if e[1] == id then return i + 2 end end end,
   }
@@ -418,7 +441,14 @@ local function newClient(o)
     GetPlayerMapPosition = function() return { x = 0.66, y = 0.62, GetXY = function(self) return self.x, self.y end } end,
     GetWorldPosFromMapPos = function() return o.world[1], { x = o.world[2], y = o.world[3], GetXY = function(self) return self.x, self.y end } end,
     GetMapRectOnMap = function() return 0.4, 0.6, 0.4, 0.6 end,
+    -- zones and cities 3, continents 2, the world 1 (Enum.UIMapType); c.mapTypes overrides one
+    GetMapInfo = function(id)
+      local kind = (c.mapTypes or {})[id] or ({ [947] = 1, [1414] = 2, [1415] = 2 })[id] or 3
+      return { mapID = id, mapType = kind, parentMapID = kind == 3 and 1415 or 947, name = "Map " .. id }
+    end,
   }
+  env.C_Texture = { GetAtlasInfo = function(name) if (c.noAtlas or {})[name] then return nil end return { file = 1, width = 32, height = 32 } end }
+  env.InCombatLockdown = function() return c.combat or false end
   -- chat people read: one line of at most 255 bytes, no escape codes, only to a channel you're in
   c.said, c.chatErrors = {}, {}
   env.SendChatMessage = function(msg, chatType)
@@ -441,28 +471,68 @@ local function newClient(o)
       return 0
     end,
   }
-  -- the world map, with a data provider and pins made from the XML template
-  local map = { shown = true, pins = {}, providers = {} }
+  -- the world map, with data providers and pins made from the XML templates: map.pins holds every pin on it,
+  -- map.byTemplate[template] each template's; map.id is the map on show (Stormwind unless a test sets it)
+  local map = { shown = true, pins = {}, byTemplate = {}, providers = {}, acquired = 0, released = 0, id = 1453 }
   env.WorldMapFrame = {
     AddDataProvider = function(_, p) p.owningMap = map; map.providers[#map.providers + 1] = p end,
     IsShown = function() return map.shown end,
   }
-  function map:GetMapID() return 1453 end
-  function map:RemoveAllPinsByTemplate() self.pins = {} end
-  -- Blizzard_MapCanvas: a new pin whose template set OnEnter or OnLeave trips an assert (it sets them itself)
+  function map:GetMapID() return self.id end
+  -- what Blizzard_MapCanvas does on the client's own UI calls (OnShow, a new map): every provider refreshes
+  function map:RefreshAll() for _, p in ipairs(self.providers) do p:RefreshAllData() end end
+  function map:SetMapID(id)
+    if id == self.id then return end
+    self.id = id
+    for _, p in ipairs(self.providers) do p:OnMapChanged() end
+  end
+  local canvas = newObj("Frame"); canvas:SetSize(1002, 668)
+  function map:GetCanvas() return canvas end
+  function map:RemoveAllPinsByTemplate(template)
+    local keep = {}
+    for _, pin in ipairs(self.pins) do
+      if pin.pinTemplate ~= template then keep[#keep + 1] = pin end
+    end
+    local gone = #self.pins - #keep
+    -- the canvas releases pins; in combat that is QuestBank's to avoid (Pins.lua)
+    if gone > 0 and c.combat then error("released " .. gone .. " " .. template .. " pins in combat", 2) end
+    self.released = self.released + gone
+    self.pins = keep
+    self.byTemplate[template] = {}
+  end
+  function map:EnumeratePinsByTemplate(template)
+    local i, list = 0, self.byTemplate[template] or {}
+    return function() i = i + 1; return list[i] end
+  end
+  -- Pins.xml: each template's mixin, scripts and child regions, as the game builds a pin from it
   local xml = io.open(HERE .. "/QuestBank/Pins.xml"):read("*a"):gsub("<!%-%-.-%-%->", "")
-  local templateScripts = {}
-  for tag in xml:gmatch("<(On%a+)") do templateScripts[tag] = true end
-  function map:AcquirePin(template, d, x, y)
-    assert(template == "QuestBankPinTemplate")
-    assert(not templateScripts.OnEnter and not templateScripts.OnLeave, "Blizzard_MapCanvas.lua:309: assertion failed! (the pin template sets OnEnter/OnLeave)")
-    assert(not templateScripts.OnMouseUp and not templateScripts.OnMouseDown, "the map canvas owns a pin's mouse scripts")
+  local templates = {}
+  for attrs, body in xml:gmatch("<Frame (name=\"[^\"]+\"[^>]*)>(.-)</Frame>") do
+    local t = { name = attrs:match('name="([^"]+)"'), mixin = attrs:match('mixin="([^"]+)"'), scripts = {}, regions = {} }
+    for tag in body:gmatch("<(On%a+)") do t.scripts[tag] = true end
+    for kind, key in body:gmatch("<(%a+) parentKey=\"(%a+)\"") do t.regions[key] = kind end
+    templates[t.name] = t
+  end
+  map.templates = templates
+  function map:AcquirePin(template, ...)
+    local t = templates[template]
+    assert(t and t.mixin, "a pin template Pins.xml defines: " .. tostring(template))
+    assert(not t.scripts.OnEnter and not t.scripts.OnLeave, "Blizzard_MapCanvas.lua:309: assertion failed! (the pin template sets OnEnter/OnLeave)")
+    assert(not t.scripts.OnMouseUp and not t.scripts.OnMouseDown, "the map canvas owns a pin's mouse scripts")
     local pin = newObj("Frame")
-    pin.Icon, pin.Num = newObj("Texture", nil, pin), newObj("FontString", nil, pin)
-    for k, v in pairs(env.QuestBankPinMixin) do pin[k] = v end
+    pin.__client, pin.pinTemplate, pin.owningMap = c, template, self
+    for key, kind in pairs(t.regions) do pin[key] = newObj(kind, nil, pin) end
+    local mixin = env[t.mixin]
+    assert(type(mixin) == "table", "the template's mixin exists: " .. t.mixin)
+    for k, v in pairs(mixin) do pin[k] = v end
     pin:OnLoad()
-    pin:OnAcquired(d, x, y)
+    pin:OnAcquired(...)
+    pin:CheckMouseButtonPassthrough("RightButton")
+    self.acquired = self.acquired + 1
     self.pins[#self.pins + 1] = pin
+    self.byTemplate[template] = self.byTemplate[template] or {}
+    table.insert(self.byTemplate[template], pin)
+    return pin
   end
   c.map = map
   c.log, c.done, c.level, c.xp = o.log, o.done, o.level, o.xp or 0
@@ -1073,7 +1143,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 628 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 722 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()
@@ -1659,9 +1729,10 @@ end
 
 -- map pins
 QB.Pins:Update()
-print("world map pins:", #owner.map.pins, "waypoints:", #owner.pins)
-assert(#owner.map.pins > 0, "the route has pins on the world map")
-for _, pin in ipairs(owner.map.pins) do lines = {}; pin:OnMouseEnter(); assert(#lines > 0); pin:OnMouseLeave() end
+local routePins = owner.map.byTemplate.QuestBankPinTemplate or {}
+print("world map pins:", #routePins, "waypoints:", #owner.pins)
+assert(#routePins > 0, "the route has pins on the world map")
+for _, pin in ipairs(routePins) do lines = {}; pin:OnMouseEnter(); assert(#lines > 0); pin:OnMouseLeave() end
 
 -- minimap button, slash commands, export
 local mb = QB.Minimap.button
@@ -3309,8 +3380,21 @@ do
   local v5 = Q2.UI.views[5]
   assert(not v5.noteGame:IsEnabled() and not v5.noteGame:GetChecked() and v5.noteGame.label:GetText():find("Forever client only", 1, true)
     and not v5.discText:GetText():find("items", 1, true), "the Settings box is greyed out here, and says why")
+  assert(not v5.mapIcons:IsEnabled() and not v5.mapIcons:GetChecked() and v5.mapIcons.label:GetText():find("Forever client only", 1, true)
+    and not v5.mapGive:IsEnabled() and not v5.mapTurn:IsEnabled() and not v5.mapObj:IsEnabled(), "the map icon rows are greyed out here, and say why")
   for _, pr in ipairs(checkLayout(Q2.UI.frame, "settings on Classic Era")) do problems[#problems + 1] = pr end
+  layouts[#layouts + 1] = dumpLayout(Q2.UI.frame, "Settings on Classic Era")
   Q2.UI.frame:Hide()
+  -- the map icons: not on this client. No provider, nothing drawn, and the client's missing map calls don't matter
+  local QMe = Q2.QuestMap
+  c.env.C_Map.GetMapInfo = nil
+  c.map.id = 1426
+  Q2:Changed(); c.map:RefreshAll()
+  assert(not QMe.provider and #QMe:Build(1426) == 0 and not QMe.Draws(1426) and #(c.map.byTemplate.QuestBankQuestPinTemplate or {}) == 0,
+    "Classic Era: no map icons")
+  local said = #c.chat
+  c.env.SlashCmdList.QUESTBANK("icons")
+  assert(#c.chat == said + 1 and c.chat[#c.chat]:find("need the Forever client", 1, true) and Q2:Settings().mapIcons == true, "/qb icons says why, and leaves the switch")
   c.env.SlashCmdList.QUESTBANK("discoveries")
   assert(not c.chat[#c.chat]:find("items", 1, true), "/qb discoveries: quests and NPCs only")
   -- ForeverProbe loaded here: nothing of it is taken over on this client, so the line about its folder is said
@@ -3321,6 +3405,915 @@ do
   assert(n == 1 and c.env.QuestBankDB.game == nil, "Classic Era with ForeverProbe loaded: told once, nothing written")
   c.addons = nil
   print("classic era:", "no game notes; disc.iface " .. tostring(d.iface))
+end
+
+
+----------------------------------------------------------------------------
+-- map icons (QuestMap.lua): a level 3 human priest in Elwynn on the Forever client. The spots are injected here
+-- (gen_data builds the real ones); the givers and hand-ins are the catalog's own
+----------------------------------------------------------------------------
+local maren = newClient({
+  name = "Maren", level = 3, cap = 60, faction = "Alliance", className = "Priest", class = "PRIEST", classID = 5, race = "Human",
+  log = { { 7, 0 }, { 33, 1 }, { 18, 0 } }, done = { [783] = true, [5261] = true }, group = false, guild = false,
+  world = { 0, -8914, -133 }, bind = "Northshire Abbey", riding = false, bagSlots = {}, xp = 900, map = 1429,
+})
+maren.map.id = 1429
+do
+  local M, MQ = maren, maren.QB
+  local MD = MQ.Data
+  local QMm = MQ.QuestMap
+  local SPOT = {
+    [7] = "k,1,1429,483,397,25,c,1;k,1,1429,470,350,30,p,1;u,2,1429,450,380,0,g,4",
+    [18] = "c,5,1429,540,300,40,w,2;c,6,1429,560,320,0,g,3;c,5,1453,500,500,20,w,2",
+    [33] = "k,1,1429,600,600,30,c,1", -- complete: none of its spots show
+  }
+  local function inject()
+    MD.SN = { [1] = "Kobold Vermin", [2] = "Red Burlap Bandana", [3] = "Defias Mask", [4] = "Stolen Crate", [5] = "Northshire Gift Voucher" }
+    MD.SPOT, MD.SREQ = {}, { [7] = "1:10,2:1", [18] = "5:12,6:12", [33] = "1:8" }
+    for k, v in pairs(SPOT) do MD.SPOT[k] = v end
+    MD.START = { [5805] = "s,0,1429,420,640,20,w,5;s,0,1453,100,100,20,c,5" }
+  end
+  inject()
+  M.objectives = {
+    [7] = { { text = "Kobold Vermin slain: 3/10", type = "monster", finished = false, numFulfilled = 3, numRequired = 10 } },
+    -- the game lists them the other way round, and the masks are done
+    [18] = { { text = "Defias Mask: 12/12", type = "item", finished = true, numFulfilled = 12, numRequired = 12 },
+             { text = "Red Burlap Bandana: 2/12", type = "item", finished = false, numFulfilled = 2, numRequired = 12 } },
+  }
+  login(M)
+  assert(QMm.provider, "on Forever the icons have their own provider on the world map")
+  local function redraw()
+    MQ:Recompute(true); MQ.Model.Finish(); MQ.Pins:Update(); QMm:Update()
+  end
+  local function icons(kind)
+    local out = {}
+    for _, pin in ipairs(M.map.byTemplate.QuestBankQuestPinTemplate or {}) do
+      if not kind or pin.data.kind == kind then out[#out + 1] = pin end
+    end
+    return out
+  end
+  local function areas() return M.map.byTemplate.QuestBankAreaPinTemplate or {} end
+  local function routePins() return M.map.byTemplate.QuestBankPinTemplate or {} end
+  local function tipOf(pin) lines = {}; pin:OnMouseEnter(); pin:OnMouseLeave(); return table.concat(lines, "\n") end
+  local function marksFor(id) local n = 0; for _, pin in ipairs(icons("obj")) do if pin.data.id == id then n = n + 1 end end return n end
+  local function near(pin, x, y) return math.abs(pin.__pos[1] - x) < 1e-6 and math.abs(pin.__pos[2] - y) < 1e-6 end
+
+  -- the route's own pins off first: this layer then draws every NPC itself
+  MQ:Settings().pins = false
+  redraw()
+  local give, turn, obj, start = icons("give"), icons("turn"), icons("obj"), icons("start")
+  print(string.format("map icons, Elwynn at level 3: %d !, %d ?, %d objective marks, %d item drops, %d areas", #give, #turn, #obj, #start, #areas()))
+  assert(#give > 0 and #turn == 1 and #obj == 4 and #start == 1 and #areas() == 4, "the ! , ? , objectives and the item drop are all there")
+  -- ! only for quests you can take now: todo, not in the log, not done, for your side; under the route pins
+  for _, pin in ipairs(give) do
+    assert(pin.__level == "PIN_FRAME_LEVEL_INVASION" and pin.Icon.__atlas == "QuestNormal", "a ! is the game's own, below the route pins")
+    for _, q in ipairs(pin.data.quests) do
+      local st = MQ:Status(q)
+      assert(st.code == "todo" and not st.behind, "a ! only for a quest you can take now: " .. q.name .. " (" .. st.code .. ")")
+      assert(not MQ.state.log[q.id] and not M.done[q.id] and q.side ~= 2, "never one in the log, done or Horde: " .. q.name)
+    end
+  end
+  -- ? where Wolves Across the Border goes, at Eagan Peltskinner's own spot
+  local eagan = turn[1]
+  assert(eagan.data.title == "Eagan Peltskinner" and eagan.data.quests[1].id == 33 and near(eagan, 0.489, 0.402) and eagan.Icon.__atlas == "QuestTurnin",
+    "a ? where the finished quest is handed in: " .. tostring(eagan.data.title))
+  -- objectives: Kobold Vermin's two areas and the crate no line of the game's fits; the bandanas, not the finished masks
+  assert(marksFor(7) == 3 and marksFor(18) == 1 and marksFor(33) == 0, "the marks: 3 for Kobold Camp Cleanup, 1 for the bandanas, none for a complete quest")
+  for _, pin in ipairs(obj) do
+    assert(pin.__level == "PIN_FRAME_LEVEL_DIG_SITE", "objective marks sit under the ! and ?")
+    if pin.data.id == 18 then assert(pin.data.spot.name == 2 and near(pin, 0.54, 0.30), "the bandanas' spot, not the finished masks'") end
+  end
+  for _, a in ipairs(areas()) do
+    assert(a.__level == "PIN_FRAME_LEVEL_QUEST_BLOB" and a.__scaleStyle == 3 and a.__ignoreScale, "an area grows with the map, under every icon")
+    assert(math.abs(a.__w - 2 * a.data.r * 1002) < 1e-6, "an area is as wide as the ground it covers: " .. a.__w)
+  end
+  -- the item that starts Welcome! (from a Northshire Gift Voucher): where it drops, with the game's ! on the mark
+  assert(MQ:Status(MQ.Quest.Get(5805)).code == "item", "Welcome! starts from an item for Maren")
+  assert(start[1].data.id == 5805 and near(start[1], 0.42, 0.64) and start[1].Badge:IsShown(), "where the item that starts a quest drops")
+  -- tooltips say what and where from
+  local t7 = tipOf(icons("obj")[1])
+  assert(t7:find("Kobold Camp Cleanup", 1, true) and t7:find("Kill Kobold Vermin", 1, true) and t7:find("Kobold Vermin slain: 3/10", 1, true)
+    and t7:find("Position: Classic data (may have moved in Forever)", 1, true) and t7:find("Shift-click: track", 1, true), "the kill mark's tooltip: " .. t7)
+  local sources = {}
+  for _, pin in ipairs(icons()) do
+    local t = tipOf(pin)
+    assert(#t > 0 and t:find("Click: waypoint", 1, true), "every icon has a tooltip")
+    for _, src in pairs(QMm.SOURCE) do if t:find("Position: " .. src, 1, true) then sources[src] = true end end
+  end
+  assert(sources["Wowhead Forever"] and sources["seen in players' games"] and sources["Classic data (may have moved in Forever)"], "tooltips name all three sources")
+  local tStart = tipOf(start[1])
+  assert(tStart:find("Northshire Gift Voucher", 1, true) and tStart:find("Drops here, and starts:\n[1] Welcome!", 1, true), "the drop's tooltip names the item and the quest: " .. tStart)
+  print("map icon tooltip:", (t7:gsub("\n", " | ")))
+  print("map icon tooltip, !:", (tipOf(give[1]):gsub("\n", " | ")))
+  print("map icon tooltip, ?:", (tipOf(eagan):gsub("\n", " | ")))
+  print("map icon tooltip, drop:", (tStart:gsub("\n", " | ")))
+  -- left click: a waypoint there, and the arrow remembers it
+  local mark = icons("obj")[1]
+  local before = #M.pins
+  mark:OnMouseClickAction("LeftButton")
+  local wp = M.pins[#M.pins]
+  assert(#M.pins == before + 1 and wp.m == 1429 and math.abs(wp.x - 0.483) < 1e-6 and math.abs(wp.y - 0.397) < 1e-6, "a click sets a waypoint on the mark")
+  assert(MQ:Settings().arrowPin and MQ:Settings().arrowPin.name == "Kobold Camp Cleanup: Kobold Vermin", "and the arrow can point there")
+  mark:OnMouseClickAction("RightButton")
+  assert(#M.pins == before + 1, "a right-click is the map's (zoom out)")
+  -- Shift-click on a mark or a ?: the game's tracker
+  M.shift = true
+  mark:OnMouseClickAction("LeftButton")
+  assert(M.watched and M.watched[7], "Shift-click on an objective tracks the quest")
+  mark:OnMouseClickAction("LeftButton")
+  assert(not M.watched[7], "and again stops tracking it")
+  eagan:OnMouseClickAction("LeftButton")
+  assert(M.watched[33], "Shift-click on a ? tracks what is handed in there")
+  -- Shift-click on a !: the pick-up list, and the route's own ! takes over that NPC
+  local g = give[1]
+  local gid = g.data.quests[1].id
+  assert(not MQ:IsAdded(gid), "not on the pick-up list yet")
+  g:OnMouseClickAction("LeftButton")
+  M.shift = false
+  assert(MQ:IsAdded(gid) and M.chat[#M.chat]:find("On your pick-up list", 1, true), "Shift-click on a ! puts its quests on the pick-up list")
+  MQ:Settings().pins = true
+  redraw()
+  local routed = false
+  for _, r in ipairs(MQ.Pins.list) do if r.name == g.data.title then routed = true end end
+  assert(routed, "the route's pins show that ! now")
+  for _, pin in ipairs(icons("give")) do assert(pin.data.title ~= g.data.title, "and the map icons leave that NPC to them") end
+  -- with the route's pins on, a hand-in on the route is theirs too
+  -- (a stop is named for its place when NPCs share it: "Elwynn Forest (49, 40)"; it stands where Eagan does)
+  local eaganOnRoute = false
+  for _, r in ipairs(MQ.Pins.list) do if r.num and r.m == 1429 and math.abs(r.x - 48.9) < 0.6 and math.abs(r.y - 40.2) < 0.6 then eaganOnRoute = true end end
+  assert(eaganOnRoute and #icons("turn") == 0, "the route stands on Eagan: no second ? there")
+  for _, id in ipairs(g.data.quests) do if MQ:IsAdded(id.id) then MQ:ToggleAdd(id.id) end end
+  MQ:Settings().pins = false
+  redraw()
+  assert(#icons("give") == #give and #icons("turn") == 1, "off the list and the route pins off: as before")
+
+  -- each switch takes its own kind away and leaves the route's pins be
+  MQ:Settings().pins = true
+  redraw()
+  local nRoute = #routePins()
+  local function counts() return #icons("give"), #icons("turn"), #icons("obj") + #icons("start"), #areas() end
+  local g0, t0, o0, a0 = counts()
+  QMm.Set("mapGive", false)
+  local g1, t1, o1, a1 = counts()
+  assert(g1 == 0 and t1 == t0 and o1 == o0 and a1 == a0 and #routePins() == nRoute, "no ! with Quests you can pick up off")
+  QMm.Set("mapGive", true); QMm.Set("mapObj", false)
+  g1, t1, o1, a1 = counts()
+  assert(g1 == g0 and o1 == 0 and a1 == 0 and #routePins() == nRoute, "no objectives, drops or areas with Objectives and quest items off")
+  QMm.Set("mapObj", true)
+  M.env.SlashCmdList.QUESTBANK("icons")
+  assert(MQ:Settings().mapIcons == false and #icons() == 0 and #areas() == 0 and #routePins() == nRoute and M.chat[#M.chat]:find("off", 1, true), "/qb icons: all off, the route's pins stay")
+  M.env.SlashCmdList.QUESTBANK("icons")
+  g1, t1, o1, a1 = counts()
+  assert(MQ:Settings().mapIcons and g1 == g0 and o1 == o0 and a1 == a0, "/qb icons: back on")
+  -- the Settings page: four rows, the three kinds greyed out while the master is off
+  MQ.UI:Open(5); MQ.Model.Finish(); MQ.UI:Refresh()
+  local v5 = MQ.UI.views[5]
+  assert(v5.mapIcons:IsEnabled() and v5.mapIcons:GetChecked() and v5.mapGive:GetChecked() and v5.mapTurn:GetChecked() and v5.mapObj:GetChecked(), "all four on by default")
+  v5.mapTurn:SetChecked(false); v5.mapTurn.__scripts.OnClick(v5.mapTurn, "LeftButton")
+  assert(MQ:Settings().mapTurn == false and #icons("turn") == 0 and #icons("give") > 0, "Hand-ins off from Settings")
+  v5.mapTurn:SetChecked(true); v5.mapTurn.__scripts.OnClick(v5.mapTurn, "LeftButton")
+  v5.mapIcons:SetChecked(false); v5.mapIcons.__scripts.OnClick(v5.mapIcons, "LeftButton")
+  assert(MQ:Settings().mapIcons == false and #icons() == 0 and not v5.mapGive:IsEnabled() and v5.mapGive:GetChecked(), "master off: no icons, the kinds greyed out and kept")
+  for _, pr in ipairs(checkLayout(MQ.UI.frame, "map icons: settings, master off")) do problems[#problems + 1] = pr end
+  v5.mapIcons:SetChecked(true); v5.mapIcons.__scripts.OnClick(v5.mapIcons, "LeftButton")
+  assert(v5.mapGive:IsEnabled() and #icons("give") == g0, "and back")
+  for _, row in ipairs({ v5.mapIcons, v5.mapGive, v5.mapTurn, v5.mapObj }) do lines = {}; row.__scripts.OnEnter(row); assert(#lines > 0) end
+  for _, pr in ipairs(checkLayout(MQ.UI.frame, "map icons: settings")) do problems[#problems + 1] = pr end
+  MQ.UI.frame:Hide()
+
+  -- objectives finish: their marks go; a slot no line of the game's fits stays until the quest is complete
+  M.objectives[7][1] = { text = "Kobold Vermin slain: 10/10", type = "monster", finished = true, numFulfilled = 10, numRequired = 10 }
+  redraw()
+  assert(marksFor(7) == 1, "Kobold Vermin done: only the crate stays (no line of the game's fits it)")
+  M.log[1] = { 7, 1 }
+  MQ:Settings().pins = false
+  redraw()
+  local mcbride
+  for _, pin in ipairs(icons("turn")) do if pin.data.title == "Marshal McBride" then mcbride = pin end end
+  assert(marksFor(7) == 0 and mcbride, "complete: its marks go, and a ? stands at Marshal McBride")
+  for _, pin in ipairs(icons("give")) do assert(pin.data.title ~= "Marshal McBride", "one icon per NPC: his ! goes on the ?") end
+  if mcbride.data.offers then assert(tipOf(mcbride):find("Also to pick up:", 1, true), "and its tooltip lists them") end
+  M.log[1] = { 7, 0 }
+  M.objectives[7][1] = { text = "Kobold Vermin slain: 3/10", type = "monster", finished = false, numFulfilled = 3, numRequired = 10 }
+  redraw()
+  assert(marksFor(7) == 3, "back as it was")
+
+  -- matching the game's lines: kind and count, then the name, then the name alone when the count changed
+  do
+    local list = QMm.Spots("k,1,1429,1,1,0,c,1;k,2,1429,1,1,0,c,6;c,5,1429,1,1,0,c,2")
+    MD.SN[6] = "Kobold Worker"
+    local objs = {
+      { text = "Kobold Worker slain: 0/10", type = "monster", need = 10, done = true },
+      { text = "Kobold Vermin slain: 2/10", type = "monster", need = 10, done = false },
+      { text = "Red Burlap Bandana: 0/8", type = "item", need = 8, done = false },
+    }
+    local m = QMm.Match(objs, list, { [1] = 10, [2] = 10, [5] = 12 })
+    assert(m[1] == objs[2] and m[2] == objs[1], "two kills of ten: told apart by name")
+    assert(m[5] == objs[3], "the bandanas: the count changed, the name still fits")
+    m = QMm.Match({ { text = "Something else", type = "event", need = 1 } }, list, { [1] = 10, [2] = 10, [5] = 12 })
+    assert(next(m) == nil, "nothing fits: nothing matched, so the spots keep showing")
+  end
+  -- grey quests: the game's own range when the client says, else Classic's rule
+  do
+    local Qg = { lvl = 13 }
+    assert(QMm.Grey(Qg, 20) and not QMm.Grey({ lvl = 14 }, 20) and not QMm.Grey({ lvl = 1 }, 5), "Classic: grey from 7 levels below at 20, never at 5")
+    M.env.UnitQuestTrivialLevelRange = function() return 5 end
+    assert(QMm.Grey({ lvl = 14 }, 20) and not QMm.Grey({ lvl = 15 }, 20), "the client's range when it gives one")
+    M.env.UnitQuestTrivialLevelRange = nil
+  end
+
+  -- only zone maps (and Zephras Isle): not a continent; a spot is drawn on its own map only
+  M.map:SetMapID(1415)
+  assert(#icons() == 0 and #areas() == 0, "no icons on a continent")
+  M.mapTypes = { [2521] = 6 }
+  MD.SPOT[18] = SPOT[18] .. ";c,5,2521,300,300,10,w,2"
+  M.map:SetMapID(2521)
+  assert(#icons("obj") == 1 and icons("obj")[1].data.id == 18 and #icons("give") == 0, "Zephras Isle draws its own spots")
+  M.map:SetMapID(1453)
+  for _, pin in ipairs(icons("obj")) do assert(pin.data.id == 18 and near(pin, 0.5, 0.5), "Stormwind: the spot tagged to Stormwind") end
+  MD.SPOT[18] = SPOT[18]
+  M.map:SetMapID(1429)
+  assert(#icons("obj") == 4, "back on Elwynn")
+  -- a hidden map builds nothing
+  M.map.shown = false
+  local acq = M.map.acquired
+  redraw()
+  assert(M.map.acquired == acq, "a hidden map builds nothing")
+  M.map.shown = true
+  redraw()
+
+  -- combat: nothing acquired or released (the mock errors on a release in combat, and SetPassThroughButtons errors
+  -- like the game's protected call); a refresh waits for the end of combat
+  MQ:Settings().pins = true
+  redraw()
+  for _, pin in ipairs(M.map.pins) do assert(pin.__passThrough and pin.__passThrough[1] == "RightButton", "out of combat a right-click still passes through to zoom out") end
+  M.combat = true
+  acq = M.map.acquired
+  local rel = M.map.released
+  M.objectives[7][1].finished = true
+  redraw()
+  assert(M.map.acquired == acq and M.map.released == rel and marksFor(7) == 3, "in combat the pins stay as they were")
+  -- a pin the canvas hands out in combat anyway: QuestBank's mixins keep the protected call out of it
+  M.map:AcquirePin("QuestBankPinTemplate", { m = 1429, x = 50, y = 50, name = "Test", icon = 1 }, 0.5, 0.5)
+  M.map:AcquirePin("QuestBankQuestPinTemplate", icons("give")[1].data)
+  M.map:AcquirePin("QuestBankAreaPinTemplate", areas()[1].data)
+  local ok = pcall(M.map.AcquirePin, M.map, "QuestBankQuestPinTemplate", icons("give")[1].data)
+  assert(ok, "no ADDON_ACTION_BLOCKED from QuestBank's pins in combat")
+  -- the map changes in combat: the pins drawn for the old one hide, and show again on it
+  M.map:SetMapID(1453)
+  for _, pin in ipairs(M.map.pins) do assert(not pin:IsShown(), "pins drawn for another map hide in combat") end
+  M.map:SetMapID(1429)
+  for _, pin in ipairs(M.map.pins) do assert(pin:IsShown(), "and show again back on their map") end
+  M.map:SetMapID(1453)
+  -- combat ends: both layers draw again, for the map on show
+  M.combat = false
+  local f = MQ.Pins.combatFrame
+  f.__scripts.OnEvent(f, "PLAYER_REGEN_ENABLED")
+  assert(M.map.released > rel and MQ.Pins.provider.drawnFor == 1453 and QMm.provider.drawnFor == 1453, "after combat both layers draw the map on show")
+  for _, pin in ipairs(M.map.pins) do assert(pin:IsShown() and pin.__passThrough[1] == "RightButton", "every pin shown, right-click passing through") end
+  M.map:SetMapID(1429)
+  assert(marksFor(7) == 1, "and the kills done in combat are off the map now")
+  M.objectives[7][1].finished = false
+
+  -- an older Data.lua: no spots at all, still the ! and ?
+  MQ:Settings().pins = false
+  MD.SPOT, MD.START, MD.SN, MD.SREQ = nil, nil, nil, nil
+  redraw()
+  assert(#icons("give") == #give and #icons("turn") == 1 and #icons("obj") == 0 and #icons("start") == 0 and #areas() == 0, "no D.SPOT: the ! and ? still show")
+  inject()
+  redraw()
+  assert(#icons("obj") == 4 and #icons("start") == 1, "and the spots are back")
+  -- the atlas missing: the file id
+  M.noAtlas = { QuestNormal = true }
+  redraw()
+  assert(icons("give")[1].Icon.__tex == MD.TEX.questAvail, "no atlas: the gossip ! file")
+  M.noAtlas = nil
+
+  -- a tie nothing settles is never guessed by order: on a German client the names don't help, so neither slot is
+  -- matched and the spots of both keep showing until the quest is complete
+  do
+    local list = QMm.Spots("c,5,1429,1,1,0,c,2;c,6,1429,1,1,0,c,3")
+    local objs = { { text = "Defiasmaske: 12/12", type = "item", need = 12, done = true },
+                   { text = "Rotes Leinenkopftuch: 2/12", type = "item", need = 12, done = false } }
+    local m = QMm.Match(objs, list, { [5] = 12, [6] = 12 })
+    assert(m[5] == nil and m[6] == nil, "deDE: two items of twelve and no name to tell them apart: neither is guessed")
+    -- one settled leaves the other one line: the kill fits only the monster's, then the use has the object's
+    local l2 = QMm.Spots("u,1,1429,1,1,0,c,4;k,2,1429,1,1,0,c,1")
+    local o2 = { { text = "Kiste benutzt: 0/1", type = "object", need = 1 }, { text = "Koboldungeziefer: 0/1", type = "monster", need = 1 } }
+    m = QMm.Match(o2, l2, { [1] = 1, [2] = 1 })
+    assert(m[2] == o2[2] and m[1] == o2[1], "deDE: the kill settled by its kind, the use by what is left")
+  end
+
+  -- slot 0 is no objective of the catalog's (players' games for a quest it doesn't know, or a spot no slot was found
+  -- for): never matched against the game's lines, so its spots show until the quest is complete
+  do
+    local list = QMm.Spots("k,0,1429,1,1,0,g;e,0,1429,1,1,0,g;k,1,1429,1,1,0,c,1")
+    local objs = { { text = "Kobold Vermin slain: 10/10", type = "monster", need = 10, done = true },
+                   { text = "Camp explored", type = "event", need = 1, done = true } }
+    local m = QMm.Match(objs, list, { [1] = 10 })
+    assert(m[0] == nil and m[1] == objs[1], "slot 0 is never matched; slot 1 is")
+    m = QMm.Match(objs, QMm.Spots("k,0,1429,1,1,0,g"), {})
+    assert(next(m) == nil, "a quest the catalog doesn't know: nothing matched")
+    MD.SPOT[7] = SPOT[7] .. ";k,0,1429,300,300,15,g"
+    M.objectives[7][1] = { text = "Kobold Vermin slain: 10/10", type = "monster", finished = true, numFulfilled = 10, numRequired = 10 }
+    MQ:Settings().pins = false
+    redraw()
+    local zero
+    for _, pin in ipairs(icons("obj")) do if pin.data.id == 7 and pin.data.spot.slot == 0 then zero = pin end end
+    assert(marksFor(7) == 2 and zero and near(zero, 0.3, 0.3) and tipOf(zero):find("Position: seen in players' games", 1, true),
+      "the kills done: the crate and the players' slot-0 spot stay")
+    M.log[1] = { 7, 1 }
+    redraw()
+    assert(marksFor(7) == 0, "until the quest is complete")
+    M.log[1] = { 7, 0 }
+    M.objectives[7][1] = { text = "Kobold Vermin slain: 3/10", type = "monster", finished = false, numFulfilled = 3, numRequired = 10 }
+    MD.SPOT[7] = SPOT[7]
+    redraw()
+    assert(marksFor(7) == 3, "back as it was")
+  end
+
+  -- a quest the catalog doesn't know (Forever's own) has all its spots in slot 0, each of the kind of the game's line
+  -- it was seen for (gen_data: monster k, item c, object u, event e). Where only one line is of that kind and no slot
+  -- of the catalog's could be it, the spots are that line's: they go once it is done, and say how far along it is.
+  -- Two lines of a kind can't be told apart: their spots stay until the quest is complete. Each kind has its nearest
+  -- mark before any has a second, as each slot of the catalog's does
+  do
+    local objs = { { text = "Gnoll slain: 10/10", type = "monster", need = 10, done = true },
+                   { text = "Gnoll Paw: 2/8", type = "item", need = 8 }, { text = "Gnoll Tooth: 0/8", type = "item", need = 8 } }
+    local z = QMm.Loose(objs, QMm.Spots("k,0,1429,1,1,0,g;c,0,1429,1,1,0,g;e,0,1429,1,1,0,g"))
+    assert(z.k == objs[1] and z.c == nil and z.e == nil, "one kill line: the k spots'; two item lines: neither; no event line: none")
+    z = QMm.Loose(objs, QMm.Spots("k,0,1429,1,1,0,g;k,1,1429,1,1,0,c,1"))
+    assert(z.k == nil, "a slot of the catalog's could be the kill line: not guessed")
+    z = QMm.Loose({ { text = "Something: 0/1", need = 1 }, objs[1] }, QMm.Spots("k,0,1429,1,1,0,g"))
+    assert(z.k == nil, "a line whose kind the game doesn't say could be a kill: not guessed")
+    MD.SREQ[7], MD.SPOT[7] = nil, "k,0,1429,300,300,15,g;k,0,1429,340,300,15,g;e,0,1429,700,700,15,g;e,0,1429,740,700,15,g"
+    M.objectives[7] = { { text = "Kobold Vermin slain: 3/10", type = "monster", finished = false, numFulfilled = 3, numRequired = 10 },
+                        { text = "Camp scouted: 0/1", type = "event", finished = false, numFulfilled = 0, numRequired = 1 } }
+    MQ:Settings().pins = false
+    redraw()
+    local order, kill = {}, nil
+    for _, d in ipairs(QMm:Build(1429)) do if d.kind == "obj" and d.id == 7 then order[#order + 1] = d.spot.kind end end
+    for _, pin in ipairs(icons("obj")) do if pin.data.id == 7 and pin.data.spot.kind == "k" then kill = pin end end
+    assert(table.concat(order) == "keke", "each kind its nearest mark first: " .. table.concat(order))
+    assert(kill and tipOf(kill):find("Kill here\nKobold Vermin slain: 3/10\nPosition: seen in players' games", 1, true),
+      "the kills' spot says how far along they are")
+    M.objectives[7][1] = { text = "Kobold Vermin slain: 10/10", type = "monster", finished = true, numFulfilled = 10, numRequired = 10 }
+    redraw()
+    local left = {}
+    for _, pin in ipairs(icons("obj")) do if pin.data.id == 7 then left[#left + 1] = pin.data.spot.kind end end
+    assert(table.concat(left) == "ee", "the kills done: only the event's spots stay")
+    MD.SREQ[7], MD.SPOT[7] = "1:10,2:1", SPOT[7]
+    M.objectives[7] = { { text = "Kobold Vermin slain: 3/10", type = "monster", finished = false, numFulfilled = 3, numRequired = 10 } }
+    redraw()
+    assert(marksFor(7) == 3, "back as it was")
+  end
+
+  -- an item slot is named by its item (D.SREQ's third field, an index into D.SN), not by what drops it: the masks
+  -- (done, listed first) and the bandanas both ask for 12, and the spots are named for the Defias who drop them
+  do
+    MD.SN[11], MD.SN[12] = "Defias Thug", "Defias Footpad"
+    MD.SPOT[18] = "c,5,1429,540,300,40,w,11;c,6,1429,560,320,0,g,12"
+    MQ:Settings().pins = false
+    redraw()
+    assert(marksFor(18) == 2, "named for the creatures: a tie, so both keep showing")
+    MD.SREQ[18] = "5:12:2,6:12:3"
+    redraw()
+    local left
+    for _, pin in ipairs(icons("obj")) do if pin.data.id == 18 then left = pin end end
+    assert(marksFor(18) == 1 and left.data.spot.slot == 5 and near(left, 0.54, 0.30) and left.data.line.text == "Red Burlap Bandana: 2/12",
+      "the masks are done, told by their item's name: only the bandanas' spot")
+    assert(tipOf(left):find("Loot Defias Thug\nRed Burlap Bandana: 2/12", 1, true), "its tooltip: who drops it, and the game's line")
+    local list = QMm.Spots("c,5,1429,1,1,0,c,11;c,6,1429,1,1,0,c,12")
+    local objs = { { text = "Defias Mask: 12/12", type = "item", need = 12, done = true }, { text = "Red Burlap Bandana: 2/12", type = "item", need = 12 } }
+    local m = QMm.Match(objs, list, { [5] = 12, [6] = 12 }, { [5] = "Red Burlap Bandana", [6] = "Defias Mask" })
+    assert(m[5] == objs[2] and m[6] == objs[1], "QM.Match takes the item names")
+    MD.SPOT[18], MD.SREQ[18] = SPOT[18], "5:12,6:12"
+    redraw()
+  end
+
+  -- a log too big for the cap: every ! and ? stays, each objective has its nearest mark first, the areas go first
+  do
+    local keep = MD.SPOT[7]
+    local parts = {}
+    for i = 1, 105 do parts[#parts + 1] = string.format("k,1,1429,%d,%d,20,c,1", 100 + (i % 10) * 70, 100 + math.floor(i / 10) * 70) end
+    parts[#parts + 1] = "u,2,1429,450,380,0,g,4" -- the crate, last of 106
+    MD.SPOT[7] = table.concat(parts, ";")
+    MQ:Settings().pins = false
+    local full = QMm:Build(1429)
+    local n, crate = {}, false
+    for _, d in ipairs(full) do
+      n[d.kind] = (n[d.kind] or 0) + 1
+      if d.kind == "obj" and d.spot.slot == 2 then crate = true end
+    end
+    assert(#full == 200 and full.cut > 0 and n.give == #give and n.turn == 1 and n.start == 1 and n.obj == 107,
+      "at the cap: every !, ? and mark still there, areas left out: " .. #full .. ", " .. tostring(full.cut))
+    assert(crate, "the crate's mark comes in its turn, not after 105 kills")
+    MD.SPOT[7] = keep
+  end
+
+  -- an older Data.lua (no D.QLOCK): the "Other quests" of the Classic database stand in for what QuestBank doesn't
+  -- check (a profession, a book): no !
+  local realLock = MD.QLOCK
+  MD.QLOCK = nil
+  do
+    local gearing, kaldorei, zephras = MQ.Quest.Get(1618), MQ.Quest.Get(4161), MQ.Quest.Get(92514)
+    assert(MQ:Status(gearing).code == "todo" and QMm.Unchecked(gearing) and QMm.Unchecked(kaldorei), "Gearing Redridge: todo, and unchecked")
+    for _, m in ipairs({ gearing.give.m, kaldorei.give.m }) do
+      for _, d in ipairs(QMm:Build(m)) do
+        for _, q in ipairs(d.quests or {}) do assert(q.id ~= 1618 and q.id ~= 4161, "no ! for a profession's quest: " .. q.name) end
+      end
+    end
+    assert(zephras and not QMm.Unchecked(zephras), "Forever's own quests filed under Other quests keep theirs")
+  end
+
+  -- D.QLOCK (gen_data: the quests that need a profession's skill or a reputation) replaces that stand-in: a quest
+  -- it lists gets no !, an "Other quest" it doesn't list gets its !. Read by quest id, as a list or as "id,id"
+  do
+    MQ:Settings().pins = false
+    local gearing = MQ.Quest.Get(1618)
+    local function offered(m, id)
+      for _, d in ipairs(QMm:Build(m)) do
+        for _, q in ipairs(d.quests or {}) do if d.kind == "give" and q.id == id then return true end end
+        for _, q in ipairs(d.offers or {}) do if q.id == id then return true end end
+      end
+      return false
+    end
+    local gid = give[1].data.quests[1].id
+    assert(offered(1429, gid) and not offered(gearing.give.m, 1618), "no D.QLOCK: the stand-in hides Gearing Redridge")
+    MD.QLOCK = { [gid] = "s:202:1" }
+    assert(not offered(1429, gid) and QMm.Unchecked(MQ.Quest.Get(gid)), "a quest D.QLOCK lists: no !")
+    assert(offered(gearing.give.m, 1618) and not QMm.Unchecked(gearing), "with D.QLOCK the stand-in goes: an Other quest it doesn't list keeps its !")
+    MD.QLOCK = { gid, 1618 }
+    assert(not offered(1429, gid) and not offered(gearing.give.m, 1618) and not QMm.Unchecked(MQ.Quest.Get(7)), "D.QLOCK as a list of ids")
+    MD.QLOCK = gid .. ",1618"
+    assert(not offered(1429, gid) and not offered(gearing.give.m, 1618) and not QMm.Unchecked(MQ.Quest.Get(7)), "D.QLOCK as a string")
+    MD.QLOCK = {}
+    assert(offered(1429, gid) and offered(gearing.give.m, 1618), "an empty D.QLOCK locks nothing")
+    MD.QLOCK = nil
+    assert(offered(1429, gid) and QMm.Unchecked(gearing), "and without it, as before")
+    -- gen_data's own, when this Data.lua has it: Gearing Redridge needs Blacksmithing
+    if realLock then
+      MD.QLOCK = realLock
+      assert(realLock[1618] and QMm.Unchecked(gearing) and not offered(gearing.give.m, 1618), "Data.lua's D.QLOCK: Gearing Redridge is locked")
+    end
+  end
+  MD.QLOCK = realLock
+
+  -- where an NPC's place comes from: Data.lua's letter for it; without one, Classic, or Wowhead on a map new in Forever
+  local realSrc = MD.NSRC
+  do
+    MD.NSRC = nil
+    redraw()
+    local e = icons("turn")[1]
+    local idx = e.data.npc
+    assert(e.data.title == "Eagan Peltskinner" and tipOf(e):find("Position: Classic data (may have moved in Forever)", 1, true), "no D.NSRC: Classic")
+    MD.NSRC = { [idx] = "w" }
+    assert(tipOf(e):find("Position: Wowhead Forever", 1, true), "D.NSRC says Wowhead")
+    MD.NSRC = string.rep("c", idx - 1) .. "g"
+    assert(tipOf(e):find("Position: seen in players' games", 1, true), "D.NSRC as a string of letters")
+    MD.NSRC = nil
+    local zi
+    for i, rec in ipairs(MD.NPC) do if rec[2] == 2521 then zi = i break end end
+    assert(zi and QMm.NpcSource({ npc = zi, m = 2521 }) == "w" and QMm.NpcSource({ npc = idx, m = 1429 }) == "c", "Zephras Isle: Wowhead's")
+    -- gen_data's own, when this Data.lua has it: one letter for every NPC
+    if realSrc then
+      assert(type(realSrc) == "string" and #realSrc == #MD.NPC and not realSrc:find("[^wcg]"), "Data.lua's D.NSRC: one of w, c, g per NPC")
+      MD.NSRC = realSrc
+      assert(QMm.NpcSource({ npc = idx, m = 1429 }) == realSrc:sub(idx, idx), "and it is what the tooltip says")
+    end
+  end
+  MD.NSRC = nil -- the tests below name their own
+
+  -- the route's pins, at level 10: the NPC a pin stands on is theirs, and what the pin doesn't list goes on its
+  -- tooltip; an NPC a step away (the Wanted Poster beside Deputy Rainer) keeps its own !; one at the very spot
+  -- (Priestess Josetta where William Pestle stands) goes on the pin's tooltip, as her ! would lie under the pin
+  do
+    M.level = 10
+    MQ:Settings().pins = false
+    redraw()
+    -- the icon an NPC is on (NPCs at the same spot share one), and that NPC's part of it
+    local function iconOf(title)
+      for _, pin in ipairs(icons()) do
+        for _, w in ipairs(pin.data.who or {}) do if w.title == title then return pin, w end end
+      end
+    end
+    local function routeOn(who) for _, pin in ipairs(routePins()) do if pin.data.who == who then return pin end end end
+    local thomas, rainer, pestle = iconOf("Guard Thomas"), iconOf("Deputy Rainer"), iconOf("William Pestle")
+    assert(thomas and #thomas.data.quests == 2 and rainer and pestle and iconOf("Wanted Poster") and iconOf("Priestess Josetta"), "level 10: the NPCs this needs")
+    -- NPCs at the same spot share one icon (two would lie on top of each other, only the top one to hover): Priestess
+    -- Josetta stands where William Pestle does, so one ! lists each of them with their own quests
+    do
+      local _, pw = iconOf("William Pestle")
+      local jp, jw = iconOf("Priestess Josetta")
+      assert(jp == pestle and #pestle.data.who == 2 and #pw.give > 0 and #jw.give > 0 and #pestle.data.quests == #pw.give + #jw.give
+        and pestle.data.kind == "give", "Pestle and Josetta: one ! for both")
+      local t = tipOf(pestle)
+      assert(t:find("William Pestle\nTo pick up:\n", 1, true) and t:find("Priestess Josetta\nTo pick up:\n", 1, true) and t:find(jw.give[1].name, 1, true)
+        and t:find(pw.give[1].name, 1, true), "its tooltip names each NPC with its quests: " .. t)
+      local _, nPos = t:gsub("Position: ", "")
+      assert(nPos == 1 and t:find("Shift-click: put them on your pick-up list", 1, true), "one Position line when both places come from the same data")
+      -- their places from different data: a line under each
+      MD.NSRC = { [pw.npc] = "w", [jw.npc] = "c" } -- (none before this: one line above)
+      t = tipOf(pestle)
+      _, nPos = t:gsub("Position: ", "")
+      assert(nPos == 2 and t:find("To pick up:\n.-Position: Wowhead Forever\nPriestess Josetta", 1) and t:find("Position: Classic data", 1, true), "a Position line under each: " .. t)
+      MD.NSRC = nil
+      print("map icons, two NPCs at one spot:", (tipOf(pestle):gsub("\n", " | ")))
+      -- Kobold Candles done and in the log: Pestle takes it, so their icon is a ?, Josetta's quests on it to pick up
+      table.insert(M.log, { 60, 1 })
+      redraw()
+      local tp = iconOf("Priestess Josetta")
+      t = tipOf(tp)
+      assert(tp.data.kind == "turn" and tp.Icon.__atlas == "QuestTurnin" and #tp.data.quests == 1 and tp.data.quests[1].id == 60 and #tp.data.offers >= #jw.give
+        and t:find("William Pestle\nHand in:\n[7] Kobold Candles", 1, true) and t:find("Priestess Josetta\nTo pick up:\n", 1, true)
+        and t:find("Shift-click: track it.", 1, true), "a ? at the spot, each NPC's part on it: " .. t)
+      print("map icons, a ? and a ! at one spot:", (t:gsub("\n", " | ")))
+      table.remove(M.log)
+      redraw()
+      -- the Stonefields' farm: Ma Stonefield and "Auntie" Bernice, 0.14 % apart, one icon too when both have quests
+      local ma, bernice = iconOf("Ma Stonefield"), iconOf('"Auntie" Bernice Stonefield')
+      assert(not (ma and bernice) or ma == bernice, "the Stonefields share an icon")
+    end
+    local other = thomas.data.quests[2]
+    local _, pw = iconOf("William Pestle")
+    local listed = { thomas.data.quests[1].id, rainer.data.quests[1].id, pw.give[1].id }
+    for _, id in ipairs(listed) do MQ:ToggleAdd(id) end
+    -- /qb pins: the icons follow without being told
+    M.env.SlashCmdList.QUESTBANK("pins")
+    assert(MQ:Settings().pins and routeOn("Guard Thomas") and not iconOf("Guard Thomas"), "/qb pins: Guard Thomas has the route's pin, and no icon")
+    local tip = tipOf(routeOn("Guard Thomas"))
+    assert(tip:find("Also to pick up here:", 1, true) and tip:find(other.name, 1, true), "what his pin doesn't list is on its tooltip: " .. tip)
+    M.map:SetMapID(1415)
+    assert(routeOn("Guard Thomas") and not tipOf(routeOn("Guard Thomas")):find("Also to", 1, true), "on the continent, where no icon draws, his pin says only its own")
+    M.map:SetMapID(1429)
+    assert(routeOn("Deputy Rainer") and iconOf("Wanted Poster") and not tipOf(routeOn("Deputy Rainer")):find("Wanted Poster", 1, true),
+      "the Wanted Poster beside Deputy Rainer keeps its own !")
+    assert(routeOn("William Pestle") and not iconOf("Priestess Josetta") and tipOf(routeOn("William Pestle")):find("Priestess Josetta, to pick up:", 1, true),
+      "Priestess Josetta, at the very spot of William Pestle's pin: on its tooltip")
+    M.env.SlashCmdList.QUESTBANK("pins")
+    assert(not MQ:Settings().pins and #routePins() == 0 and iconOf("Guard Thomas") and iconOf("Priestess Josetta"), "/qb pins off: their icons are back")
+    -- the Settings box: the same, untold
+    MQ.UI:Open(5); MQ.UI:Refresh()
+    local v = MQ.UI.views[5]
+    v.pins:SetChecked(true); v.pins.__scripts.OnClick(v.pins, "LeftButton")
+    assert(MQ:Settings().pins and not iconOf("Guard Thomas") and iconOf("Wanted Poster"), "the Settings box: route pins on, the icons follow")
+    v.pins:SetChecked(false); v.pins.__scripts.OnClick(v.pins, "LeftButton")
+    assert(not MQ:Settings().pins and iconOf("Guard Thomas"), "and off")
+    MQ.UI.frame:Hide()
+    for _, id in ipairs(listed) do MQ:ToggleAdd(id) end
+    M.level = 3
+    redraw()
+    print(string.format("map icons, the route's pin on Guard Thomas: %s", (tip:gsub("\n", " | "))))
+  end
+end
+
+----------------------------------------------------------------------------
+-- players' objective spots (Discover.lua): where an objective of a quest in the log ticks, as the map and the
+-- position in thousandths; a sighting within 15 of a point on the same map is that point; at most 8 points an
+-- objective and 400 quests. The Forever client only, never in an instance, at the bank or mailbox, for an item made
+-- at a crafting window, just after a loading screen or a quest came into the log, or when the client hides the
+-- position; no names. gen_data shows them on the map as "seen in players' games"
+----------------------------------------------------------------------------
+do
+  local M, MQ = maren, maren.QB
+  local Dz = MQ.Discover
+  local f = Dz.frame
+  local DB = M.env.QuestBankDB
+  local C = M.env.C_Map
+  local savePos, saveBest = C.GetPlayerMapPosition, C.GetBestMapForUnit
+  local px, py, map = 0.4, 0.5, 1429
+  C.GetPlayerMapPosition = function(m, unit)
+    assert(m == map and unit == "player", "the position on the map you are on")
+    return { x = px, y = py, GetXY = function(self) return self.x, self.y end }
+  end
+  C.GetBestMapForUnit = function() return map end
+  local function update(event, unit) f.__scripts.OnEvent(f, event or "QUEST_LOG_UPDATE", unit); tick(M, 0) end
+  local kills = M.objectives[7][1]
+  local have = 3
+  local function kill() have = have + 1; kills.numFulfilled = have; kills.text = "Kobold Vermin slain: " .. have .. "/10" end
+  local function spotsOf() return DB.disc.os end
+  local function pts(id, i) local q = spotsOf() and spotsOf()[id]; return q and q[i] and q[i].p or {} end
+  local function total() local n = 0; for _, q in pairs(spotsOf() or {}) do for _, o in pairs(q) do for _, p in ipairs(o.p) do n = n + p[4] end end end; return n end
+  local errs0 = #(DB.errors or {})
+
+  kills.numFulfilled, kills.finished = have, false
+  update()
+  assert(spotsOf() == nil or next(spotsOf()) == nil, "the first look only learns where things stand")
+  tick(M, 4)
+  update()
+  assert(spotsOf() == nil or next(spotsOf()) == nil, "nothing moved: nothing noted")
+  kill()
+  update()
+  local p = pts(7, 1)
+  assert(spotsOf()[7][1].t == "monster" and #p == 1 and p[1][1] == 1429 and p[1][2] == 400 and p[1][3] == 500 and p[1][4] == 1,
+    "a kill: noted where you stand, in thousandths of the map")
+  -- a step away: the same point, now at the middle of its sightings; further: a point of its own; another map: another
+  px = 0.41; kill(); update()
+  p = pts(7, 1)
+  assert(#p == 1 and p[1][2] == 405 and p[1][3] == 500 and p[1][4] == 2, "within 15 thousandths: the same point")
+  px = 0.44; kill(); update()
+  p = pts(7, 1)
+  assert(#p == 2 and p[2][2] == 440 and p[2][4] == 1, "further off: a point of its own")
+  map = 1453; px = 0.405; kill(); update()
+  p = pts(7, 1)
+  assert(#p == 3 and p[3][1] == 1453 and p[1][4] == 2, "the same place on another map is another point")
+  map, px = 1429, 0.4
+  -- many updates at once (a loot window): one look, one sighting
+  kill()
+  for _ = 1, 3 do f.__scripts.OnEvent(f, "QUEST_LOG_UPDATE") end
+  f.__scripts.OnEvent(f, "UNIT_QUEST_LOG_CHANGED", "player")
+  tick(M, 0)
+  assert(pts(7, 1)[1][4] == 3, "four updates, one sighting")
+  kill(); update("UNIT_QUEST_LOG_CHANGED", "player")
+  assert(pts(7, 1)[1][4] == 4, "the log changing for you counts too")
+  -- an item objective, as the game numbers its lines (the bandanas are its second); the masks didn't move
+  local bandanas = M.objectives[18][2]
+  bandanas.numFulfilled, bandanas.text = 3, "Red Burlap Bandana: 3/12"
+  px, py = 0.54, 0.3
+  update()
+  assert(spotsOf()[18][2].t == "item" and #pts(18, 2) == 1 and pts(18, 2)[1][2] == 540 and spotsOf()[18][1] == nil, "an item looted: the game's second line")
+  -- finished without a count (an area reached, an event): noted too
+  M.objectives[7][2] = { text = "Camp scouted", type = "event", finished = false }
+  update()
+  assert(spotsOf()[7][2] == nil, "a new line: where it stands is learned first")
+  M.objectives[7][2].finished = true
+  update()
+  assert(spotsOf()[7][2].t == "event" and #pts(7, 2) == 1, "the event done: noted")
+  M.objectives[7][2] = nil
+  -- a quest new to your log brings what you had already: not noted; nor what comes for it a look later (the server
+  -- can send an item objective's count a moment after the quest); nor what comes just after it is accepted again
+  table.insert(M.log, { 4242, 0 })
+  M.objectives[4242] = { { text = "Linen Cloth: 5/10", type = "item", finished = false, numFulfilled = 5, numRequired = 10 } }
+  update()
+  assert(spotsOf()[4242] == nil, "a quest just taken: its progress so far isn't from here")
+  table.insert(M.log, { 4244, 0 })
+  M.objectives[4244] = { { text = "Wool Cloth: 0/10", type = "item", finished = false, numFulfilled = 0, numRequired = 10 } }
+  update()
+  tick(M, 1)
+  M.objectives[4244][1].numFulfilled, M.objectives[4244][1].text = 6, "Wool Cloth: 6/10"
+  update()
+  assert(spotsOf()[4244] == nil, "its count a look after the quest: not from here either")
+  tick(M, 4)
+  f.__scripts.OnEvent(f, "QUEST_ACCEPTED", 4244)
+  M.objectives[4244][1].numFulfilled = 7
+  update()
+  assert(spotsOf()[4244] == nil, "accepted again (abandoned in between): what it has now isn't from here")
+  tick(M, 4)
+  M.objectives[4244][1].numFulfilled = 8
+  update()
+  assert(#pts(4244, 1) == 1, "a moment later, a rise is")
+  table.remove(M.log)
+  M.objectives[4244] = nil
+  -- less than before (an item sold or destroyed): nothing; back up again: noted
+  M.objectives[4242][1].numFulfilled = 4; update()
+  assert(spotsOf()[4242] == nil, "less: nothing")
+  M.objectives[4242][1].numFulfilled = 5; update()
+  assert(#pts(4242, 1) == 1, "more again: noted")
+  table.remove(M.log)
+  M.objectives[4242] = nil
+
+  -- not where it was found: the bank, the mailbox, a trade; nor in an instance; nor where the client hides the place
+  local n0 = total()
+  M.env.MailFrame = { IsShown = function() return true end }
+  kill(); update()
+  M.env.MailFrame = nil
+  MQ.bankOpen = true
+  kill(); update()
+  MQ.bankOpen = nil
+  M.env.IsInInstance = function() return true, "party" end
+  kill(); update()
+  M.env.IsInInstance = function() return false, "none" end
+  assert(total() == n0, "the mailbox, the bank, an instance: nothing noted")
+  local asking = C.GetPlayerMapPosition
+  C.GetPlayerMapPosition = function() return { x = px, y = py } end -- a place on any map, so only the map id is hidden
+  C.GetBestMapForUnit = function() return SECRET.num() end
+  kill(); update()
+  C.GetBestMapForUnit = function() return nil end
+  kill(); update()
+  C.GetPlayerMapPosition = asking
+  C.GetBestMapForUnit = function() return map end
+  C.GetPlayerMapPosition = function() return SECRET.str() end
+  kill(); update()
+  C.GetPlayerMapPosition = function() return nil end
+  kill(); update()
+  C.GetPlayerMapPosition = function() return { x = SECRET.num(), y = 0.5 } end
+  kill(); update()
+  C.GetPlayerMapPosition = function() return { x = 0, y = 0 } end
+  kill(); update()
+  assert(total() == n0, "a hidden map or position, or none: nothing noted, and no error")
+  -- the client hides the objectives themselves: nothing, no error; once they show again they are a fresh start
+  C.GetPlayerMapPosition = function() return { x = px, y = py } end
+  kills.numFulfilled = SECRET.num(); update()
+  kills.numFulfilled = have; update()
+  assert(total() == n0, "hidden counts: nothing noted")
+  kill(); update()
+  assert(total() == n0 + 1, "and counted again once they show")
+  M.env.IsInInstance = nil
+  -- a hidden "finished" is not "not finished": the line showing finished again, with nothing done, is no progress
+  M.objectives[7][2] = { text = "Camp scouted", type = "event", finished = true }
+  update()
+  M.objectives[7][2].finished = SECRET.bool(); update()
+  M.objectives[7][2].finished = true; update()
+  assert(total() == n0 + 1, "finished, hidden, finished again: nothing noted")
+  M.objectives[7][2].finished = SECRET.bool(); update()
+  M.objectives[7][2].finished = false; update()
+  M.objectives[7][2].finished = true; update()
+  assert(total() == n0 + 2, "not finished, then finished: noted")
+  M.objectives[7][2] = nil
+
+  -- what you make is not found where you stand: an item objective that ticks with a crafting window open, or a moment
+  -- after it shut or after a craft was cast ("create all" can go on with the window shut), is not noted. A kill
+  -- meanwhile is; so is an item bought (the vendor is where it is got), or one that comes after a spell that makes
+  -- nothing (a fish, an herb, a hide are found where you stand)
+  table.insert(M.log, { 4245, 0 })
+  local bandage = { text = "Linen Bandage: 0/10", type = "item", finished = false, numFulfilled = 0, numRequired = 10 }
+  M.objectives[4245] = { bandage }
+  update()
+  tick(M, 4)
+  local function make() bandage.numFulfilled = bandage.numFulfilled + 1; update() end
+  local function cast(spell) f.__scripts.OnEvent(f, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-" .. spell, spell) end
+  local n1 = total()
+  local window = { IsShown = function() return true end }
+  M.env.ProfessionsFrame = window
+  M.env.C_TradeSkillUI = { GetRecipeInfo = function(spell) return spell == 3275 and { recipeID = 3275 } or nil end }
+  f.__scripts.OnEvent(f, "TRADE_SKILL_SHOW")
+  tick(M, 6)
+  make()
+  assert(total() == n1, "made at the crafting window: nothing noted")
+  kill(); update()
+  assert(total() == n1 + 1, "a kill with the window open: noted")
+  cast(3275) -- Linen Bandage, made at the window
+  cast(133) -- a spell cast with the window open that makes nothing: no recipe
+  tick(M, 6)
+  window.IsShown = function() return false end
+  f.__scripts.OnEvent(f, "TRADE_SKILL_CLOSE")
+  tick(M, 1); make()
+  assert(total() == n1 + 1, "made as the window shut: nothing noted")
+  tick(M, 6)
+  cast(3275) -- create all goes on, the window shut
+  tick(M, 1); make()
+  assert(total() == n1 + 1, "made with the window shut: nothing noted")
+  tick(M, 6)
+  f.__scripts.OnEvent(f, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-hidden", SECRET.num()) -- a cast the client hides
+  cast(133)
+  tick(M, 1); make()
+  assert(total() == n1 + 2, "after a spell that makes nothing: noted")
+  M.env.ProfessionsFrame = nil
+  M.env.MerchantFrame = { IsShown = function() return true end }
+  make()
+  assert(total() == n1 + 3, "bought: noted, at the vendor")
+  M.env.MerchantFrame = nil
+  M.env.TradeSkillFrame = { IsShown = function() return true end }
+  make()
+  assert(total() == n1 + 3, "the Classic crafting window too")
+  M.env.TradeSkillFrame, M.env.C_TradeSkillUI = nil, nil
+  table.remove(M.log)
+  M.objectives[4245] = nil
+
+  -- no names: a kind and numbers, nothing else
+  for id, q in pairs(spotsOf()) do
+    assert(type(id) == "number", "by quest id")
+    for i, o in pairs(q) do
+      assert(type(i) == "number" and (o.t == nil or ({ monster = true, item = true, object = true, event = true })[o.t]), "the game's kind of objective")
+      for k in pairs(o) do assert(k == "t" or k == "p", "only t and p: " .. tostring(k)) end
+      for _, pt in ipairs(o.p) do
+        assert(#pt == 4, "map, x, y, sightings")
+        for _, v in ipairs(pt) do assert(type(v) == "number" and v == math.floor(v), "whole numbers") end
+        assert(pt[2] >= 0 and pt[2] <= 1000 and pt[3] >= 0 and pt[3] <= 1000, "in thousandths")
+      end
+    end
+  end
+
+  -- at most 8 points an objective: a ninth place puts out the oldest of those seen fewest times; once every point
+  -- was seen more than once, a new place is the one left out
+  for i = 1, 8 do Dz.NoteSpot(4243, 1, "monster", 1429, i * 100, 100) end
+  Dz.NoteSpot(4243, 1, "monster", 1429, 205, 100) -- the second place, seen twice
+  Dz.NoteSpot(4243, 1, "monster", 1429, 950, 950)
+  p = pts(4243, 1)
+  assert(#p == 8 and p[1][2] == 203 and p[1][4] == 2 and p[2][2] == 300 and p[8][2] == 950, "the first place (seen once) went for the ninth")
+  for _, pt in ipairs(p) do if pt[4] == 1 then Dz.NoteSpot(4243, 1, "monster", pt[1], pt[2], pt[3]) end end
+  assert(Dz.NoteSpot(4243, 1, "monster", 1429, 50, 900) == nil and #pts(4243, 1) == 8, "every point seen twice: the new place is left out")
+  -- at most 400 quests: the one touched longest ago goes
+  local function count(t) local n = 0; for _ in pairs(t) do n = n + 1 end; return n end
+  for id = 500001, 500400 do Dz.NoteSpot(id, 1, "item", 1429, 10, 10) end
+  assert(count(spotsOf()) == 400 and spotsOf()[7] == nil and spotsOf()[4243] == nil and spotsOf()[500001], "400 quests: the oldest went")
+  Dz.NoteSpot(500001, 1, "item", 1429, 10, 10)
+  Dz.NoteSpot(500401, 1, "item", 1429, 10, 10)
+  assert(count(spotsOf()) == 400 and spotsOf()[500001] and spotsOf()[500002] == nil and spotsOf()[500401], "touched again, it stays; the next oldest goes")
+  assert(count(DB.disc.osAt) == 400, "and nothing is kept for a quest that went")
+  print(string.format("objective spots: %d quests kept, %d points for the last", count(spotsOf()), #pts(500401, 1)))
+  assert(#(DB.errors or {}) == errs0, "objective spots: no errors, " .. tostring(((DB.errors or {})[errs0 + 1] or {}).msg))
+  DB.disc.os, DB.disc.osAt, DB.disc.osN = nil, nil, nil
+  C.GetPlayerMapPosition, C.GetBestMapForUnit = savePos, saveBest
+  kills.numFulfilled, kills.text, kills.finished = 3, "Kobold Vermin slain: 3/10", false
+  bandanas.numFulfilled, bandanas.text = 2, "Red Burlap Bandana: 2/12"
+end
+
+-- a fresh login: for its first seconds the log only learns where things stand (the server fills objectives in
+-- after the quest list); then a kill is noted
+do
+  local tam = newClient({
+    name = "Tamsin", level = 3, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8, race = "Human",
+    log = { { 7, 0 } }, done = { [783] = true }, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Northshire Abbey",
+    riding = false, bagSlots = {}, xp = 100, map = 1429,
+  })
+  tam.objectives = { [7] = { { text = "Kobold Vermin slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } } }
+  tam.ev(tam.QB.eventFrame, "ADDON_LOADED", "QuestBank")
+  tam.ev(tam.QB.eventFrame, "PLAYER_LOGIN")
+  local f = tam.QB.Discover.frame
+  local function update() f.__scripts.OnEvent(f, "QUEST_LOG_UPDATE"); tick(tam, 1) end
+  update()
+  tam.objectives[7][1].numFulfilled = 4
+  update()
+  local d = tam.env.QuestBankDB.disc
+  assert(d.os == nil or next(d.os) == nil, "just logged in: the counts the server sends now are no progress")
+  tick(tam, 15)
+  tam.objectives[7][1].numFulfilled = 5
+  update()
+  assert(d.os and d.os[7] and d.os[7][1].p[1][1] == 1429 and d.os[7][1].p[1][2] == 660 and d.os[7][1].p[1][3] == 620, "settled: a kill is noted")
+end
+
+-- a slow load: the loading screen outlasts those first seconds, so the wait starts again when the world shows; and
+-- every loading screen after it (a boat, a portal: the server can send the objectives anew) starts it again
+do
+  local tove = newClient({
+    name = "Tove", level = 3, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8, race = "Human",
+    log = { { 7, 0 } }, done = { [783] = true }, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Northshire Abbey",
+    riding = false, bagSlots = {}, xp = 100, map = 1429,
+  })
+  local line = { text = "Kobold Vermin slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 }
+  tove.objectives = { [7] = { line } }
+  tove.ev(tove.QB.eventFrame, "ADDON_LOADED", "QuestBank")
+  tove.ev(tove.QB.eventFrame, "PLAYER_LOGIN")
+  local f = tove.QB.Discover.frame
+  local function on(event, ...) f.__scripts.OnEvent(f, event, ...) end
+  local function update() on("QUEST_LOG_UPDATE"); tick(tove, 1) end
+  local d = tove.env.QuestBankDB.disc
+  local function noted() local p = d.os and d.os[7] and d.os[7][1] and d.os[7][1].p[1]; return p and p[4] or 0 end
+  on("PLAYER_ENTERING_WORLD", true, false)
+  update()
+  tick(tove, 12) -- still loading
+  on("LOADING_SCREEN_DISABLED")
+  line.numFulfilled = 4
+  update()
+  assert(noted() == 0, "a slow load: the counts that come as the world shows are no progress")
+  tick(tove, 11)
+  line.numFulfilled = 5
+  update()
+  assert(noted() == 1, "then a kill is noted")
+  on("PLAYER_ENTERING_WORLD", false, false)
+  line.numFulfilled = 6
+  update()
+  assert(noted() == 1, "just through a loading screen: not noted")
+  tick(tove, 11)
+  line.numFulfilled = 7
+  update()
+  assert(noted() == 2, "a moment later: noted again")
+  assert(#(tove.env.QuestBankDB.errors or {}) == 0, "loading screens: no errors")
+end
+
+-- Classic Era: nothing noted (gen_data shows these as Forever's)
+do
+  local c = sigrun
+  local f = c.QB.Discover.frame
+  c.log = { { 7, 0 } }
+  c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/10", type = "monster", finished = false, numFulfilled = 3, numRequired = 10 } } }
+  f.__scripts.OnEvent(f, "QUEST_LOG_UPDATE"); tick(c, 0)
+  c.objectives[7][1].numFulfilled = 4
+  f.__scripts.OnEvent(f, "QUEST_LOG_UPDATE"); tick(c, 0)
+  c.QB.Discover.Look(); c.objectives[7][1].numFulfilled = 5; c.QB.Discover.Look()
+  assert(c.env.QuestBankDB.disc.os == nil, "Classic Era: no objective spots")
+  c.log, c.objectives = {}, nil
+end
+
+-- the Horde shaman in the Barrens sees no Alliance quests; the owner in Stormwind, how long a full redraw takes
+do
+  local H = horde.QB
+  horde.map.id = 1413
+  H:Settings().pins = false
+  H:Recompute(true); H.Model.Finish(); H.Pins:Update(); H.QuestMap:Update()
+  local n = 0
+  for _, pin in ipairs(horde.map.byTemplate.QuestBankQuestPinTemplate or {}) do
+    for _, q in ipairs(pin.data.quests or {}) do assert(q.side ~= 1, "no Alliance quest on the Horde's map: " .. q.name) end
+    n = n + 1
+  end
+  assert(n > 0, "the Horde has icons in the Barrens")
+  print("map icons, the Barrens for the Horde shaman:", n)
+  local O = owner.QB
+  owner.map.id = 1453
+  local t0 = owner.env.debugprofilestop()
+  for _ = 1, 10 do O.QuestMap.provider:RefreshAllData() end
+  print(string.format("map icons, Stormwind for the owner: %d icons, %.1f ms a redraw", #(owner.map.byTemplate.QuestBankQuestPinTemplate or {}), (owner.env.debugprofilestop() - t0) / 10))
+  -- the real data, whatever gen_data has written so far: every map with a spot draws without an error
+  local D0 = O.Data
+  if D0.SPOT then
+    local maps, spots = {}, 0
+    for _, str in pairs(D0.SPOT) do for _, sp in ipairs(O.QuestMap.Spots(str) or {}) do maps[sp.m] = true; spots = spots + 1 end end
+    for _, str in pairs(D0.START or {}) do for _, sp in ipairs(O.QuestMap.Spots(str) or {}) do maps[sp.m] = true; spots = spots + 1 end end
+    local drawn = 0
+    for m in pairs(maps) do drawn = drawn + #O.QuestMap:Build(m) end
+    print(string.format("map icons, real data: %d spots on %d maps; %d icons for the owner", spots, (function() local k = 0 for _ in pairs(maps) do k = k + 1 end return k end)(), drawn))
+  end
 end
 
 local seen = {}

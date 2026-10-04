@@ -8,6 +8,7 @@ tools/.bis-cache/
 research/
 tools/.loot-cache/
 tools/.wh-cache/
+tools/.wh-quest-cache/
 
 # local dev secrets and the production admin key: never committed
 worker/.dev.vars
