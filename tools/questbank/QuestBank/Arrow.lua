@@ -9,6 +9,9 @@
 --            step; a chain whose only step left is one you hold is a hand-in, which handin covers)
 --   pin      whatever you last clicked a waypoint for in QuestBank: a quest, a stop, an entrance.
 --            Clicking one while the arrow is up switches to this by itself.
+-- With the arrow switched off, a waypoint you click shows it anyway, for that one place: it points
+-- there until you get there, then goes (the switch stays off). QuestBank never sets the game's own
+-- waypoint (Core.lua, API.SetWaypoint), so this is what shows the way at once.
 local _, QB = ...
 local A = {}
 QB.Arrow = A
@@ -119,6 +122,7 @@ end
 
 -- what the arrow points at, judged from where you stand (passed in, so one read serves the whole tick)
 function A.Target(here)
+  if A.temp and not QB:Settings().arrow then return A.temp end
   local m = A.Mode()
   if m == "pin" then
     local p = QB:Settings().arrowPin
@@ -161,6 +165,25 @@ function A:Pin(name, c, wx, wy)
   self:Update()
 end
 
+-- the arrow switched off: shown for this one waypoint, until you get there. False when it is on (it points there
+-- already, A:Pin) or there is nowhere to point
+function A:ShowFor(name, c, wx, wy)
+  if QB:Settings().arrow or not (c and wx and wy) then return false end
+  A.temp = { name = name or "your waypoint", c = c, wx = wx, wy = wy, kind = "pin", temp = true }
+  A.Invalidate()
+  self:Create()
+  self.frame:Show()
+  self:Update()
+  return true
+end
+
+-- the arrow shown for a waypoint goes (you got there, or hid it); the switch is as it was
+function A:EndTemp()
+  if not A.temp then return end
+  A.temp = nil
+  if self.frame and not QB:Settings().arrow then self.frame:Hide() end
+end
+
 function A:SetMode(m)
   if not MODES[m] then return end
   QB:Settings().arrowMode = m
@@ -171,15 +194,21 @@ end
 function A:Menu()
   if not QB.UI then return end
   local items = {}
+  -- shown for a waypoint only: choosing what it points at keeps it up (the switch goes on)
+  local temp = A.temp and not QB:Settings().arrow
   for _, m in ipairs(ORDER) do
     local label = (MODES[m]:gsub("^%l", string.upper))
-    if A.Mode() == m then label = label .. "  (now)" end
+    if A.Mode() == m and not temp then label = label .. "  (now)" end
     if m == "pin" and not QB:Settings().arrowPin and A.Mode() ~= m then label = label .. " (nothing yet)" end
-    items[#items + 1] = { label, function() A:SetMode(m) end }
+    items[#items + 1] = { label, function()
+      A:SetMode(m)
+      if temp then A:Set(true) end
+    end }
   end
   items[#items + 1] = { "Hide the arrow", function()
     A:Set(false)
-    QB:Print("Direction arrow off. Settings or /qb arrow brings it back.")
+    QB:Print(temp and "Arrow hidden. A waypoint you click shows it again; Settings or /qb arrow keeps it up."
+      or "Direction arrow off. Settings or /qb arrow brings it back.")
   end }
   QB.UI:ShowMenu("The arrow points at", items)
 end
@@ -227,7 +256,11 @@ function A:Create()
     local t, m = A.Target(), A.Mode()
     GameTooltip:AddLine(t and string.format(HEAD[t.kind] or "%s", t.name) or NOTHING[m][1], 1, 0.82, 0)
     if t and t.quests then GameTooltip:AddLine(string.format("%d quest%s %s.", t.quests, t.quests == 1 and "" or "s", t.what or ""), 1, 1, 1) end
-    GameTooltip:AddLine("Pointing at " .. MODES[m] .. ".", 0.8, 0.8, 0.8)
+    if t and t.temp then
+      GameTooltip:AddLine("Shown for this waypoint: it goes when you get there. Settings or /qb arrow keeps it up.", 0.8, 0.8, 0.8, true)
+    else
+      GameTooltip:AddLine("Pointing at " .. MODES[m] .. ".", 0.8, 0.8, 0.8)
+    end
     GameTooltip:AddLine("Click: the Hand-in Route. Drag: move. Right-click: choose what it points at, or hide it.", 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
   end, "arrow tooltip"))
@@ -273,8 +306,15 @@ function A:Update()
     f.dist:SetText("You're there")
     f.arrow:SetRotation(0)
     f.arrow:SetAlpha(0.5)
+    -- shown for a waypoint: it goes a few seconds after you get there
+    if t.temp then
+      local now = GetTime and GetTime() or 0
+      t.there = t.there or now
+      if now - t.there >= 4 then self:EndTemp() end
+    end
     return
   end
+  if t.temp then t.there = nil end
   f.dist:SetText(distanceText(yards))
   -- facing is unknown in some places (instances): show the distance, dim the arrow
   f.arrow:SetRotation(facing and angle or 0)
@@ -283,6 +323,7 @@ end
 
 function A:Set(on)
   QB:Settings().arrow = on and true or false
+  A.temp = nil -- on: it points where its mode says; off: hidden, the waypoint's showing too
   self:Create()
   self.frame:SetShown(on and true or false)
   if on then self:Update() end

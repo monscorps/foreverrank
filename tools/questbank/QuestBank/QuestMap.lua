@@ -559,8 +559,10 @@ function QM:Build(m)
   return list
 end
 
-function QM:Draw(map, m)
-  for _, d in ipairs(self:Build(m)) do map:AcquirePin(d.kind == "area" and AREA or ICON, d) end
+function QM:Draw(layer, m)
+  for _, d in ipairs(self:Build(m)) do
+    if d.kind == "area" then layer:Add(QM.AREA, d, d.x, d.y) else layer:Add(QM.ICON, d, d.x, d.y, d.level) end
+  end
 end
 
 ----------------------------------------------------------------------------
@@ -595,7 +597,9 @@ local function questLines(tip, quests)
 end
 
 local function source(tip, src) tip:AddLine("Position: " .. (SOURCE[src] or CLASSIC), 0.6, 0.6, 0.6, true) end
-local function hint(tip, shift) tip:AddLine("Click: waypoint.  Shift-click: " .. shift .. ".", 0.5, 0.5, 0.5, true) end
+local function hint(tip, shift)
+  tip:AddLine(shift and ("Click: waypoint.  Shift-click: " .. shift .. ".") or "Click: waypoint.", 0.5, 0.5, 0.5, true)
+end
 
 local function allAdded(quests)
   for _, q in ipairs(quests) do if not QB:IsAdded(q.id) then return false end end
@@ -654,7 +658,7 @@ function TIP.turn(tip, d)
     end
     source(tip, npcSource(d))
   end
-  hint(tip, #d.quests > 1 and "track them" or "track it")
+  hint(tip)
 end
 function TIP.obj(tip, d)
   local sp = d.spot
@@ -666,7 +670,7 @@ function TIP.obj(tip, d)
     if line.done then tip:AddLine(line.text, 0.4, 0.9, 0.4, true) else tip:AddLine(line.text, 0.9, 0.9, 0.9, true) end
   end
   source(tip, sp.src)
-  hint(tip, "track the quest")
+  hint(tip)
 end
 function TIP.start(tip, d)
   local q = d.q
@@ -706,75 +710,44 @@ local function names(ids)
   return table.concat(out, ", ")
 end
 
--- the game's quest watch (the objective tracker), by quest id; the Classic client's by log index
-local function watched(id)
-  if C_QuestLog and C_QuestLog.GetQuestWatchType then
-    local ok, w = pcall(C_QuestLog.GetQuestWatchType, id)
-    return ok and QB.Plain(w) ~= nil
-  end
-  local e = QB.state.log[id]
-  if e and IsQuestWatched then
-    local ok, w = pcall(IsQuestWatched, e.index)
-    return ok and w and true or false
-  end
-  return false
-end
-
-local function watch(id, want)
-  if C_QuestLog and C_QuestLog.AddQuestWatch then
-    pcall(want and C_QuestLog.AddQuestWatch or C_QuestLog.RemoveQuestWatch, id)
-    return
-  end
-  local e, f = QB.state.log[id], want and AddQuestWatch or RemoveQuestWatch
-  if e and f then pcall(f, e.index) end
-end
-
--- Shift-click: a quest in your log goes on (or off) the game's tracker; one you haven't taken goes on (or off)
--- QuestBank's pick-up list, as the route's ! pins show it
+-- Shift-click on a ! or where an item that starts a quest drops: on (or off) QuestBank's pick-up list, as the
+-- route's ! pins show it. The ? and the objective marks have no Shift-click any more: 3.6.0 put their quests on the
+-- game's tracker (C_QuestLog.AddQuestWatch), and QUEST_WATCH_LIST_CHANGED (a synchronous event) reaches the open map's
+-- quest pins, the quest log and the objective tracker from inside QuestBank's call. The map's quest pins are then
+-- acquired as QuestBank (SetPassThroughButtons, blocked in combat), and the tracker marks itself dirty as QuestBank;
+-- its quest item buttons keep their quest in secure attributes that UseQuestLogSpecialItem reads. Nothing QuestBank
+-- can do makes that call clean, so it leaves the game's tracker alone: the quest log tracks a quest.
 function QM.Track(d)
+  if not (d.kind == "give" or d.kind == "start") then return false end
   local ids = idsOf(d)
-  if #ids == 0 then return end
-  if d.kind == "give" or d.kind == "start" then
-    local all = true
-    for _, id in ipairs(ids) do if not QB:IsAdded(id) then all = false end end
-    for _, id in ipairs(ids) do if QB:IsAdded(id) == all then QB:ToggleAdd(id) end end
-    QB:Print((all and "Off your pick-up list: " or "On your pick-up list: ") .. names(ids) .. ".")
-  else
-    local all = true
-    for _, id in ipairs(ids) do if not watched(id) then all = false end end
-    for _, id in ipairs(ids) do watch(id, not all) end
-    QB:Print((all and "No longer tracking " or "Tracking ") .. names(ids) .. ".")
-  end
+  if #ids == 0 then return false end
+  local all = true
+  for _, id in ipairs(ids) do if not QB:IsAdded(id) then all = false end end
+  for _, id in ipairs(ids) do if QB:IsAdded(id) == all then QB:ToggleAdd(id) end end
+  QB:Print((all and "Off your pick-up list: " or "On your pick-up list: ") .. names(ids) .. ".")
+  return true
 end
 
 local function click(d, button)
-  -- a right-click passes through to zoom the map out; one that reaches a pin (in combat) is left alone
+  -- a right-click passes through to zoom the map out; one that reaches an icon anyway is left alone
   if not d or button == "RightButton" then return end
-  if IsShiftKeyDown and IsShiftKeyDown() then QM.Track(d) return end
+  if IsShiftKeyDown and IsShiftKeyDown() and QM.Track(d) then return end
   QB.API.SetWaypoint(d.m, d.x * 100, d.y * 100, d.title)
 end
 
 ----------------------------------------------------------------------------
--- the pins (templates in Pins.xml; the mixins are rebuilt on the map's own pin mixin once the map loads)
+-- the frames: QuestBank's own (Pins.lua's layer), from the templates in Pins.xml with these on top
 ----------------------------------------------------------------------------
 local Icon = {}
-QuestBankQuestPinMixin = Icon
-Icon.SetPassThroughButtons = QB.Pins.PassThrough
 
-function Icon:OnLoad()
-  if self.SetScalingLimits then self:SetScalingLimits(1, 1.0, 1.2) end
-end
-
-Icon.OnAcquired = QB.Safe(function(self, d)
-  self.data = d
-  -- under the numbered route pins (AREA_POI): ! and ? on INVASION, objectives below them on DIG_SITE
-  if self.UseFrameLevelType then self:UseFrameLevelType(d.level) end
+-- size and art for what it marks; the layer places it and gives it its frame level (d.level: ! and ? on INVASION,
+-- objectives below them on DIG_SITE, all under the numbered route pins on AREA_POI)
+function Icon:Setup(d)
   local size = d.art.size or 16
   self:SetSize(size, size)
   paint(self.Icon, d.art)
   if d.badge then paint(self.Badge, d.badge); self.Badge:Show() else self.Badge:Hide() end
-  self:SetPosition(d.x, d.y)
-end, "map icon")
+end
 
 Icon.OnMouseEnter = QB.Safe(function(self)
   local d = self.data
@@ -786,40 +759,28 @@ end, "map icon tooltip")
 
 function Icon:OnMouseLeave() GameTooltip:Hide() end
 
--- the map canvas calls this on a click (it owns the pin's mouse scripts)
 function Icon:OnMouseClickAction(button) QB.Try("map icon click", click, self.data, button) end
 
 local Area = {}
-QuestBankAreaPinMixin = Area
-Area.SetPassThroughButtons = QB.Pins.PassThrough
 
-function Area:OnLoad()
-  -- the size of the ground it covers, whatever the zoom; under every icon
-  if self.SetIgnoreGlobalPinScale then self:SetIgnoreGlobalPinScale(true) end
-  if self.SetScaleStyle and AM_PIN_SCALE_STYLE_WITH_TERRAIN then self:SetScaleStyle(AM_PIN_SCALE_STYLE_WITH_TERRAIN) end
-  if self.UseFrameLevelType then self:UseFrameLevelType("PIN_FRAME_LEVEL_QUEST_BLOB") end
+function Area:Setup(d)
+  paint(self.Circle, ART.area)
+  if d.start then self.Circle:SetVertexColor(0.7, 0.85, 1) else self.Circle:SetVertexColor(1, 0.82, 0) end
+  self.Circle:SetAlpha(0.22)
 end
 
--- r is a fraction of the map's width, as the canvas is
-function Area:Fit()
-  local d, map = self.data, self:GetMap()
-  local canvas = d and map and map.GetCanvas and map:GetCanvas()
-  if not canvas then return end
+-- the size of the ground it covers, whatever the zoom: r is a fraction of the map's width, as the canvas is, and
+-- the frame keeps the canvas's own scale (no limits: it grows and shrinks with the terrain)
+function Area:Fit(canvas)
+  local d = self.data
+  if not (d and canvas) then return end
   local size = math.max(4, 2 * d.r * (canvas:GetWidth() or 0))
   self:SetSize(size, size)
 end
 
-Area.OnAcquired = QB.Safe(function(self, d)
-  self.data = d
-  paint(self.Circle, ART.area)
-  if d.start then self.Circle:SetVertexColor(0.7, 0.85, 1) else self.Circle:SetVertexColor(1, 0.82, 0) end
-  self.Circle:SetAlpha(0.22)
-  self:Fit()
-  self:SetPosition(d.x, d.y)
-end, "map area")
-
--- the map was made bigger or smaller: the area keeps its size on the ground
-function Area:OnCanvasSizeChanged() QB.Try("map area", self.Fit, self) end
+-- ! , ? and marks: a little bigger as you zoom in; areas under every icon, no mouse (the mark on one has the tooltip)
+QM.ICON = { template = ICON, level = "PIN_FRAME_LEVEL_INVASION", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Icon }
+QM.AREA = { template = AREA, level = "PIN_FRAME_LEVEL_QUEST_BLOB", mouse = false, methods = Area }
 
 ----------------------------------------------------------------------------
 -- switching
@@ -828,15 +789,13 @@ function QM:Init()
   if self.provider or self.waiting or not QM.Available() then return end
   self.waiting = QB.Pins.WhenMap(function()
     if QM.provider then return end
-    QuestBankQuestPinMixin = CreateFromMixins(MapCanvasPinMixin, Icon)
-    QuestBankAreaPinMixin = CreateFromMixins(MapCanvasPinMixin, Area)
-    QM.provider = QB.Pins.NewProvider({ ICON, AREA }, function(map, m) QM:Draw(map, m) end, "map icons")
+    QM.provider = QB.Pins.NewLayer(function(layer, m) QM:Draw(layer, m) end, "map icons")
   end, "map icons: waiting for the map")
 end
 
 -- after QB:Changed: the open map shows the plan and the log as they are now
 function QM:Update()
-  if self.provider and WorldMapFrame and WorldMapFrame:IsShown() then self.provider:RefreshAllData() end
+  if self.provider and QB.Pins.MapOpen() then self.provider:RefreshAllData() end
 end
 
 -- Settings' rows: mapIcons (all of them), mapGive, mapTurn, mapObj

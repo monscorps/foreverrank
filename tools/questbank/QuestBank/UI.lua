@@ -213,12 +213,18 @@ local function npcLine(tip, label, n)
 end
 
 -- shift-click with the chat box open puts a link in it, as the game's own quest log and bags do
--- chat, through ChatFrameUtil where the client has it (Forever's ChatEdit_* names are deprecation aliases)
+-- chat, through ChatFrameUtil where the client has it (Forever's ChatEdit_* names are deprecation aliases).
+-- Only into a chat box you have open and are typing in: QuestBank never opens one (ChatFrameUtil.OpenChat and
+-- ChatFrame_OpenChat set the game's ACTIVE_CHAT_EDIT_BOX and the box's own fields and chat type, and from QuestBank's
+-- code those carry its taint into what the box does next: sending, Shift-clicking a quest item in the tracker). With
+-- the box focused already, InsertLink adds the text and its SetFocus does nothing
 local function chatFn(new, old) return (ChatFrameUtil and ChatFrameUtil[new]) or _G[old] end
 local function chatInsert(link) local f = chatFn("InsertLink", "ChatEdit_InsertLink"); if f then return f(link) end end
 local function chatOpen()
   local active = chatFn("GetActiveWindow", "ChatEdit_GetActiveWindow")
-  return active and active() and chatFn("InsertLink", "ChatEdit_InsertLink") and true or false
+  local box = active and active()
+  if not (box and box.HasFocus and box:HasFocus()) then return false end
+  return chatFn("InsertLink", "ChatEdit_InsertLink") and true or false
 end
 
 function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
@@ -375,12 +381,16 @@ function UI.LinkItem(id, name)
   return true
 end
 
--- an item's link into chat: into the open chat box, or a new one
+-- an item's link into chat: into the chat box you're typing in; else the link in the chat window, for you to
+-- Shift-click once you open the box (the game's own click: Blizzard's code puts it in)
 function UI.LinkItemAlways(id)
   if UI.LinkItem(id) then return true end
   local name, link = QB.API.ItemInfo(id)
-  local open = chatFn("OpenChat", "ChatFrame_OpenChat")
-  if open then open(link or ("[" .. (name or ("Item " .. id)) .. "]")) return true end
+  if link then
+    QB:Print(link .. ": press Enter to open chat, then Shift-click this link to put it there.")
+  else
+    QB:Print(string.format("%s: the game hasn't sent this item yet. Press Enter to open chat, then try again.", name or ("Item " .. id)))
+  end
   return false
 end
 
@@ -704,7 +714,8 @@ function UI.QuestMenu(q, st)
     for i = 1, math.min(#ids, 6) do
       local id = ids[i]
       local name = QB.API.ItemInfo(id)
-      items[#items + 1] = { "Link " .. (name or ("item " .. id)) .. " in chat", function() UI.LinkItemAlways(id) end }
+      local what = name or ("item " .. id)
+      items[#items + 1] = { chatOpen() and ("Link " .. what .. " in chat") or ("Show " .. what .. "'s link in chat"), function() UI.LinkItemAlways(id) end }
     end
   end
   items[#items + 1] = { "Copy the Wowhead link", function() UI:CopyLink(q.name, "https://www.wowhead.com/forever/quest=" .. q.id) end }
@@ -958,14 +969,24 @@ end
 function UI:ShowErrors()
   T = T or QB.Data.TEX
   local list = QuestBankDB.errors or {}
-  local out = { string.format("QuestBank %s, %d problem%s recorded (Ctrl+A then Ctrl+C copies all):", QB.version, #list, #list == 1 and "" or "s"), "" }
+  -- calls the game blocked and blamed on QuestBank (Core.lua, Err.Blocked), newest first
+  local blocked = type(QuestBankDB.diag) == "table" and type(QuestBankDB.diag.blocked) == "table" and QuestBankDB.diag.blocked or {}
+  local n = #list + #blocked
+  local out = { string.format("QuestBank %s, %d problem%s recorded (Ctrl+A then Ctrl+C copies all):", QB.version, n, n == 1 and "" or "s"), "" }
+  for i = #blocked, 1, -1 do
+    local b = blocked[i]
+    out[#out + 1] = string.format("[%s] %sx, the game %s %s%s, version %s", date and b.at and date("%Y-%m-%d %H:%M:%S", b.at) or "", b.n or 1,
+      b.kind == "forbidden" and "forbade" or "blocked", tostring(b.fn or "?"), b.combat and " in combat" or "", b.qb or "?")
+    out[#out + 1] = b.stack or ""
+    out[#out + 1] = ""
+  end
   for _, e in ipairs(list) do
     out[#out + 1] = string.format("[%s] %sx, %s, version %s", e.last or "", e.count or 1, e.where or "?", e.version or "?")
     out[#out + 1] = e.msg or ""
     out[#out + 1] = e.stack or ""
     out[#out + 1] = ""
   end
-  if #list == 0 then out[#out + 1] = "Nothing recorded. If Blizzard's error window showed one, copy its text instead." end
+  if n == 0 then out[#out + 1] = "Nothing recorded. If Blizzard's error window showed one, copy its text instead." end
   local f = self.errFrame
   if not f then
     f = CreateFrame("Frame", "QuestBankErrors", UIParent, BD)
@@ -1875,7 +1896,7 @@ local function makeRow(parent)
     elseif self.step then
       tip:AddLine(self.step.name, GOLD[1], GOLD[2], GOLD[3])
       tip:AddLine(self.step.where, 1, 1, 1, true)
-      if self.step.m then tip:AddLine("Click: map pin.", 0.5, 0.5, 0.5) end
+      if self.step.m then tip:AddLine("Click: waypoint.", 0.5, 0.5, 0.5) end
     end
   end)
   return r
@@ -1908,7 +1929,7 @@ local function makeCard(parent)
     local e = self.entrance
     if e then QB.API.SetWaypoint(e.m, e.x, e.y, self.label) end
   end)
-  tooltip(c.pin, function(tip, self) tip:AddLine("Map pin: " .. (self.label or ""), GOLD[1], GOLD[2], GOLD[3]) end)
+  tooltip(c.pin, function(tip, self) tip:AddLine("Waypoint: " .. (self.label or ""), GOLD[1], GOLD[2], GOLD[3]) end)
   -- skip this place: nothing here is suggested until you click again (Settings lists the skipped ones)
   c.skip = CreateFrame("Button", nil, c)
   c.skip:SetSize(34, 14)
@@ -3128,7 +3149,7 @@ function UI:CreateSettingsView(parent)
   heading(p, LEFT, -304, "Map icons", 370)
   local MAP_ICONS = {
     { "mapIcons", LEFT, -328, "Quest icons on the world map", 340,
-      "On each zone's map: a ! where quests you can take start, a ? where finished ones are handed in, and where to do the ones in your log. Click one for a waypoint, Shift-click to track it. The numbered route pins have their own switch above." },
+      "On each zone's map: a ! where quests you can take start, a ? where finished ones are handed in, and where to do the ones in your log. Click one for a waypoint; Shift-click a ! to put its quests on your pick-up list. The numbered route pins have their own switch above." },
     { "mapGive", LEFT + 24, -356, "Quests you can pick up", 316,
       "A yellow ! on the NPCs with quests for your faction, class and level that you haven't done. Grey (low-level) quests are left off, as the game does, and so are quests that need a profession or an item first. Where a numbered route pin stands on the NPC, that pin's tooltip lists the NPC's quests instead." },
     { "mapTurn", LEFT + 24, -384, "Hand-ins", 316,
@@ -3225,12 +3246,12 @@ function UI:CreateSettingsView(parent)
 
   -- at the quest giver: accept and hand in for you (Auto.lua), off until asked for
   heading(p, LEFT, -460, "At the quest giver", 370)
-  v.autoAccept = checkRow(p, LEFT, -484, "Accept quests for me, escorts too", 340)
+  v.autoAccept = checkRow(p, LEFT, -484, "Accept quests for me", 340)
   v.autoAccept:SetScript("OnClick", function(self) QB:Settings().autoAccept = self:GetChecked() and true or false end)
   v.acceptHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
   v.acceptHint:SetPoint("TOPLEFT", LEFT, -510)
   v.acceptHint:SetHeight(44)
-  v.acceptHint:SetText("At an NPC, from a party member who shares one, and escorts a party member starts. Hold Shift to do it by hand. Not repeatable or grey quests, nor places you skip.")
+  v.acceptHint:SetText("At an NPC and when a party member shares one; escorts are yours to join in the game's prompt. Hold Shift to do it by hand. Not repeatable or grey quests, nor places you skip.")
   v.autoTurnIn = checkRow(p, LEFT, -558, "Hand in finished quests for me", 340)
   v.autoTurnIn:SetScript("OnClick", function(self) QB:Settings().autoTurnIn = self:GetChecked() and true or false end)
   v.turnInHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)

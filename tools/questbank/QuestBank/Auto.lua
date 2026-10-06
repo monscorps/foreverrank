@@ -1,9 +1,10 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- QuestBank Auto: the two conveniences Questie users know, off until you switch them on in Settings.
 --   Accept for me: at a quest giver, take the quests offered that are for you (faction, class, race),
---     the ones a party member shares, and an escort a party member starts. Not repeatable or grey ones,
---     not in a place you skipped, not when the log is full, and while you bank not a quest the Plan page
---     would cut (next to nothing on the day, leading nowhere). Hold Shift and QuestBank keeps its hands off.
+--     and the ones a party member shares. Not repeatable or grey ones, not in a place you skipped, not
+--     when the log is full, and while you bank not a quest the Plan page would cut (next to nothing on the
+--     day, leading nowhere). Hold Shift and QuestBank keeps its hands off. An escort a party member starts
+--     is yours to join, in the game's own prompt (Auto.Escort says why).
 --   Hand in for me: at the quest taker, hand in what is finished when there is nothing to choose (one
 --     reward or none) and nothing to pay. Smart about banking: while you bank, only what the Plan page
 --     says to hand in now (quests you cut, ones that pay next to nothing on the day, and the step you hand
@@ -131,20 +132,19 @@ function Auto.Complete()
   end)
 end
 
--- a party member started a quest (an escort, mostly): say yes while the log has room. The server decides.
-function Auto.Confirm(who, title)
-  if not on("autoAccept") or byHand() or logFull() then return end
-  later("join", function()
-    if byHand() or logFull() then return end
-    if ConfirmAcceptQuest then ConfirmAcceptQuest() end
-    if StaticPopup_Hide then StaticPopup_Hide("QUEST_ACCEPT"); StaticPopup_Hide("QUEST_ACCEPT_LOG_FULL") end
-    QB:Print(string.format("Said yes to %s, which %s started.", title or "a quest", who or "a party member"))
-  end)
-end
-
--- true when Auto will answer the prompt itself
-function Auto.WillJoin()
-  return on("autoAccept") and not byHand() and not logFull()
+-- a party member started a quest (an escort, mostly). Up to 3.6.0 QuestBank said yes for you: ConfirmAcceptQuest
+-- from a timer, then StaticPopup_Hide on the game's prompt. Hiding a Blizzard popup from QuestBank's code runs the
+-- popup system's bookkeeping as QuestBank (StaticPopup_OnHide, StaticPopup_CollapseTable: table.remove on the list
+-- of popups on screen). Another popup still open keeps a slot written by QuestBank, and the game's next popup (the
+-- one that asks before deleting an item, say) can then run its Yes as QuestBank and be blocked. And ConfirmAcceptQuest
+-- with no click behind it may be refused. So the prompt is the game's and the Yes is yours: QuestBank presses nothing
+-- and hides nothing, and says so once a session to whoever has Accept for me on.
+local toldEscort = false
+function Auto.Escort(who, title)
+  if not on("autoAccept") or toldEscort then return end
+  toldEscort = true
+  QB:Print(string.format("%s started %s: say yes in the game's prompt to join. Accept for me leaves escorts to you.",
+    who or "A party member", title or "a quest"))
 end
 
 function Auto.OnEvent(event, a1, a2)
@@ -152,5 +152,5 @@ function Auto.OnEvent(event, a1, a2)
   elseif event == "QUEST_DETAIL" then Auto.Detail()
   elseif event == "QUEST_PROGRESS" then Auto.Progress()
   elseif event == "QUEST_COMPLETE" then Auto.Complete()
-  elseif event == "QUEST_ACCEPT_CONFIRM" then Auto.Confirm(a1, a2) end
+  elseif event == "QUEST_ACCEPT_CONFIRM" then Auto.Escort(QB.Plain(a1), QB.Plain(a2)) end
 end

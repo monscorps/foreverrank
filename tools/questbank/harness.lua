@@ -115,6 +115,8 @@ local function newObj(kind, template, parent)
         elseif k == "SetRotation" then self.__rot = a[1]
         elseif k == "SetAtlas" then self.__tex = "atlas:" .. tostring(a[1]); self.__atlas = a[1]; self.__color = nil
         elseif k == "SetScale" then self.__scale = a[1]
+        elseif k == "SetFrameLevel" then self.__frameLevel = a[1]
+        elseif k == "EnableMouse" then self.__mouse = a[1] and true or false
         -- protected on Forever, with combat restrictions: an addon calling it in combat is blocked (ADDON_ACTION_BLOCKED)
         elseif k == "SetPassThroughButtons" then
           if self.__client and self.__client.combat then error("ADDON_ACTION_BLOCKED: SetPassThroughButtons in combat", 2) end
@@ -179,7 +181,11 @@ BASE.GetCursorPosition = function() return 600, 500 end
 BASE.SetPortraitTexture = function() end
 BASE.geterrorhandler = function() return error end
 BASE.UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { m = m, x = x, y = y } end }
-BASE.C_SuperTrack = { SetSuperTrackedUserWaypoint = function() end }
+-- the game's super-tracking: QuestBank never touches it (SUPER_TRACKING_CHANGED and the waypoint's listeners would run
+-- as QuestBank). Any use of any of it errors here
+BASE.C_SuperTrack = setmetatable({}, { __index = function(_, k)
+  return function() error("QuestBank called C_SuperTrack." .. tostring(k) .. ": the game's tracking is the player's own", 2) end
+end })
 BASE.CreateVector2D = function(x, y) return { x = x, y = y } end
 BASE.Ambiguate = function(name) return name end
 BASE.CLASS_ICON_TCOORDS = { PALADIN = { 0, 0.25, 0.5, 0.75 }, WARRIOR = { 0, 0.25, 0, 0.25 }, SHAMAN = { 0.25, 0.49, 0.25, 0.5 } }
@@ -189,20 +195,7 @@ BASE.CreateFromMixins = function(...)
   for i = 1, select("#", ...) do for k, v in pairs(select(i, ...)) do t[k] = v end end
   return t
 end
-BASE.MapCanvasPinMixin = {
-  SetPosition = function(self, x, y) self.__pos = { x, y } end,
-  UseFrameLevelType = function(self, level) self.__level = level end, SetScalingLimits = function() end,
-  SetIgnoreGlobalPinScale = function(self, v) self.__ignoreScale = v end,
-  SetScaleStyle = function(self, style) self.__scaleStyle = style; if self.__ignoreScale then self:SetScale(1) end end,
-  GetMap = function(self) return self.owningMap end,
-  OnMouseEnter = function() end, OnMouseLeave = function() end,
-  -- Blizzard_MapCanvas calls this on every pin it hands out, after OnAcquired (MapCanvas_DataProviderBase.lua:288)
-  CheckMouseButtonPassthrough = function(self, ...)
-    self:SetPassThroughButtons()
-    self:SetPassThroughButtons(...)
-  end,
-}
-BASE.AM_PIN_SCALE_STYLE_WITH_TERRAIN = 3
+-- (QuestBank no longer uses the map canvas's pins, so no MapCanvasPinMixin here: a use of it fails)
 BASE.MapCanvasDataProviderMixin = { GetMap = function(self) return self.owningMap end }
 
 SECRET_MT = {
@@ -219,8 +212,15 @@ SECRET = {
   bool = function() return setmetatable({ __kind = "boolean" }, SECRET_MT) end,
 }
 
+-- Blizzard's chat globals: written from QuestBank's code they carry its taint into the chat box (ChatFrameUtil.OpenChat
+-- and ActivateChat write them; QuestBank never calls those). A write errors here
+local BLIZZARD_ONLY = { ACTIVE_CHAT_EDIT_BOX = true, LAST_ACTIVE_CHAT_EDIT_BOX = true, CHAT_FOCUS_OVERRIDE = true }
+
 local function newClient(o)
-  local env = setmetatable({}, { __index = BASE })
+  local env = setmetatable({}, { __index = BASE, __newindex = function(t, k, v)
+    if BLIZZARD_ONLY[k] then error("QuestBank wrote the game's " .. tostring(k), 2) end
+    rawset(t, k, v)
+  end })
   env._G = env
   local c = { env = env, o = o, timers = {}, clock = 1000, outbox = {}, pins = {}, chat = {}, frames = {}, QB = {} }
   env.UIParent = newObj("Frame"); env.UIParent:SetSize(1600, 1000); env.UIParent.__points = {}
@@ -229,10 +229,27 @@ local function newClient(o)
   env.UISpecialFrames = {}
   env.SlashCmdList = {}
   env.DEFAULT_CHAT_FRAME = { AddMessage = function(_, m) c.chat[#c.chat + 1] = m end }
+  -- Pins.xml: each template's child regions, as the game builds a frame from it
+  local xml = io.open(HERE .. "/QuestBank/Pins.xml"):read("*a"):gsub("<!%-%-.-%-%->", "")
+  local templates = {}
+  for attrs, body in xml:gmatch("<Frame (name=\"[^\"]+\"[^>]*)>(.-)</Frame>") do
+    local t = { name = attrs:match('name="([^"]+)"'), mixin = attrs:match('mixin="([^"]+)"'), scripts = {}, regions = {} }
+    for tag in body:gmatch("<(On%a+)") do t.scripts[tag] = true end
+    for kind, key in body:gmatch("<(%a+) parentKey=\"(%a+)\"") do t.regions[key] = kind end
+    templates[t.name] = t
+  end
+  c.templates = templates
   env.CreateFrame = function(kind, name, parent, template)
     local f = newObj(kind, template, parent)
     f.__name = name
+    f.__client = c
     if name then env[name] = f end
+    local t = template and templates[template]
+    if template and template:find("^QuestBank") then
+      assert(t, "a template Pins.xml defines: " .. template)
+      assert(not t.mixin and not next(t.scripts), "QuestBank's map templates carry no mixin or scripts (never the canvas's pins): " .. template)
+      for key, rk in pairs(t.regions) do f[key] = newObj(rk, nil, f) end
+    end
     c.frames[#c.frames + 1] = f
     return f
   end
@@ -251,10 +268,13 @@ local function newClient(o)
   env.issecretvalue = function(v) return getmetatable(v) == SECRET_MT end
   env.type = function(v) if getmetatable(v) == SECRET_MT then return rawget(v, "__kind") end return type(v) end
   env.UnitFullName = function() return o.name, "ForeverNormal" end
-  -- the UI's quest-log constants as Forever ships them (25) against a log that holds 40, and the
-  -- dialog refresher the fix pokes
-  env.MAX_QUESTS, env.MAX_QUESTLOG_QUESTS = 25, 25
-  env.UpdateQuestAcceptLogFullDialog = function() c.logFullUpdates = (c.logFullUpdates or 0) + 1 end
+  -- the UI's quest-log constants as Forever 1.60.1 (70235) sets them, from the log's size (40; older builds said 25),
+  -- and the escort prompt's refresher, which QuestBank never calls: its Yes would be set as QuestBank
+  env.MAX_QUESTS, env.MAX_QUESTLOG_QUESTS = 40, 40
+  env.UpdateQuestAcceptLogFullDialog = function() error("QuestBank called UpdateQuestAcceptLogFullDialog: the escort prompt's Yes would be set as QuestBank", 2) end
+  -- Ctrl, for the game's own map pin (Ctrl+click on the map)
+  env.IsControlKeyDown = function() return c.ctrl or false end
+  env.WaypointLocationDataProviderMixin = {}
   env.GetTitleText = function() return c.window and c.window.title or "" end
   env.GetSuggestedGroupNum = function() return 0 end
   env.GetBuildInfo = function() return "1.60.1", "70170", "Oct 1 2026", 16001 end
@@ -299,12 +319,16 @@ local function newClient(o)
     return "|cff1eff00|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r"
   end
   env.GetQuestItemInfo = function(kind, i) return nil end
-  c.openedChat = {}
-  env.ChatFrame_OpenChat = function(text) c.openedChat[#c.openedChat + 1] = text end
+  -- opening the chat box from QuestBank's code writes the game's chat globals and the box's fields as QuestBank:
+  -- never done (the link goes into a box you have open, or into the chat window for you to Shift-click)
+  env.ChatFrame_OpenChat = function() error("QuestBank opened the chat box (ChatFrame_OpenChat)", 2) end
   env.IsQuestCompletable = function() return c.completable and true or false end
   env.QuestGetAutoAccept = function() return false end
-  env.ConfirmAcceptQuest = function() c.auto[#c.auto + 1] = "ConfirmAcceptQuest" end
-  env.StaticPopup_Hide = function() end
+  -- the escort prompt is the game's: QuestBank neither answers it (no click behind the call) nor hides it (the popup
+  -- system's list of popups on screen would be written as QuestBank)
+  env.ConfirmAcceptQuest = function() error("QuestBank called ConfirmAcceptQuest: the escort prompt is the player's to answer", 2) end
+  env.StaticPopup_Hide = function() error("QuestBank hid a Blizzard popup (StaticPopup_Hide)", 2) end
+  env.StaticPopup_Show = function() error("QuestBank showed a Blizzard popup (StaticPopup_Show)", 2) end
   env.QuestFlagsPVP = function() return c.pvpQuest or false end
   env.GetQuestMoneyToGet = function() return c.questCost or 0 end
   env.GetNumActiveQuests = function() return #(c.greetActive or {}) end
@@ -317,9 +341,11 @@ local function newClient(o)
   env.UnitLevel = function() return c.level or o.level end
   env.GetMaxPlayerLevel = function() return c.cap or o.cap or 60 end
   env.GetPlayerFacing = function() return c.facing end
-  -- the chat box: open or not, and what a shift-click put in it
+  -- the chat box: open or not (c.chatOpen; c.chatFocus = false: open but not typed in, as the IM style leaves it),
+  -- and what a shift-click put in it
   c.chatLinks = {}
-  env.ChatEdit_GetActiveWindow = function() return c.chatOpen and {} or nil end
+  c.chatBox = { HasFocus = function() return c.chatFocus ~= false end }
+  env.ChatEdit_GetActiveWindow = function() return c.chatOpen and c.chatBox or nil end
   env.ChatEdit_InsertLink = function(link) c.chatLinks[#c.chatLinks + 1] = link; return true end
   env.GetQuestLink = function(id) for _, e in ipairs(c.log) do if e[1] == id then return "|cffffff00|Hquest:" .. id .. ":20|h[Quest " .. id .. "]|h|r" end end end
   env.GetItemInfo = function(id) return "Item " .. id, "|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r" end
@@ -427,17 +453,35 @@ local function newClient(o)
     IsComplete = function(id) for _, e in ipairs(c.log) do if e[1] == id then return e[2] == 1 end end return false end,
     -- c.objectives[id] = the game's lines for one quest; every other quest has one generic line
     GetQuestObjectives = function(id) return (c.objectives or {})[id] or { { text = "thing", finished = false, numFulfilled = 3, numRequired = 10 } } end,
-    -- the objective tracker: c.watched[id] = true
+    -- the objective tracker: the game tells the tracker, the quest log and the map's quest pins inside these calls
+    -- (QUEST_WATCH_LIST_CHANGED), so they would redraw as QuestBank. QuestBank never calls them
     GetQuestWatchType = function(id) return (c.watched or {})[id] and 0 or nil end,
-    AddQuestWatch = function(id) c.watched = c.watched or {}; c.watched[id] = true; return true end,
-    RemoveQuestWatch = function(id) c.watched = c.watched or {}; c.watched[id] = nil; return true end,
+    AddQuestWatch = function() error("QuestBank called C_QuestLog.AddQuestWatch: the tracker would redraw as QuestBank", 2) end,
+    RemoveQuestWatch = function() error("QuestBank called C_QuestLog.RemoveQuestWatch: the tracker would redraw as QuestBank", 2) end,
     GetAllCompletedQuestIDs = function() local t = {} for k, v in pairs(c.done) do if v then t[#t + 1] = k end end return t end,
     GetLogIndexForQuestID = function(id) for i, e in ipairs(c.log) do if e[1] == id then return i + 2 end end end,
   }
   env.C_Map = {
     GetBestMapForUnit = function() return o.map or 1453 end,
-    CanSetUserWaypointOnMap = function() return true end,
-    SetUserWaypoint = function(p) c.pins[#c.pins + 1] = p end,
+    -- c.noPins[m]: a map the game has no pins for (an instance's)
+    CanSetUserWaypointOnMap = function(m) return not (c.noPins or {})[m] end,
+    -- the game's waypoint: set only by Blizzard's own code (c.blizzard, the player's click on a map-pin link, below).
+    -- From QuestBank's code it errors: USER_WAYPOINT_UPDATED runs inside the call, and the map's tracking-pin button
+    -- hears it map open or not and hands its state to the waypoint provider, which keeps it, as QuestBank
+    SetUserWaypoint = function(p)
+      if not c.blizzard then error("QuestBank called C_Map.SetUserWaypoint: the game's waypoint listeners would run as QuestBank", 2) end
+      c.pins[#c.pins + 1] = p
+      return true
+    end,
+    ClearUserWaypoint = function()
+      if not c.blizzard then error("QuestBank called C_Map.ClearUserWaypoint: the game's waypoint listeners would run as QuestBank", 2) end
+    end,
+    -- what the game reads from a map-pin link: |Hworldmap:<uiMapID>:<x*10000>:<y*10000>|h
+    GetUserWaypointFromHyperlink = function(link)
+      local m, x, y = tostring(link):match("worldmap:(%d+):(%d+):(%d+)")
+      if not m then return nil end
+      return env.UiMapPoint.CreateFromCoordinates(tonumber(m), tonumber(x) / 10000, tonumber(y) / 10000)
+    end,
     GetPlayerMapPosition = function() return { x = 0.66, y = 0.62, GetXY = function(self) return self.x, self.y end } end,
     GetWorldPosFromMapPos = function() return o.world[1], { x = o.world[2], y = o.world[3], GetXY = function(self) return self.x, self.y end } end,
     GetMapRectOnMap = function() return 0.4, 0.6, 0.4, 0.6 end,
@@ -471,69 +515,51 @@ local function newClient(o)
       return 0
     end,
   }
-  -- the world map, with data providers and pins made from the XML templates: map.pins holds every pin on it,
-  -- map.byTemplate[template] each template's; map.id is the map on show (Stormwind unless a test sets it)
-  local map = { shown = true, pins = {}, byTemplate = {}, providers = {}, acquired = 0, released = 0, id = 1453 }
+  -- the world map. QuestBank's layers are data providers that the map tells of a refresh (its OnShow), a new map and
+  -- a new scale or size; they draw QuestBank's own frames on the canvas. The canvas's own pin calls write into the
+  -- map's tables (pin pools, the scroll container's scale and scroll, the pins to nudge) and so error here: QuestBank's
+  -- code must never make them. map.id is the map on show (Stormwind unless a test sets it), map.shown whether it is
+  -- open, map.scale and map.zoom the canvas's scale and zoom (0 zoomed out, 1 all the way in)
+  -- map.WorldMapTrackingPinButton.isActive: the map's pin button, on (a click on the map places the game's pin)
+  local map = { shown = true, providers = {}, id = 1453, scale = 1, zoom = 0, WorldMapTrackingPinButton = { isActive = false } }
+  local canvas = newObj("Frame"); canvas:SetSize(1002, 668)
   env.WorldMapFrame = {
     AddDataProvider = function(_, p) p.owningMap = map; map.providers[#map.providers + 1] = p end,
     IsShown = function() return map.shown end,
+    IsVisible = function() return map.shown end,
+    GetCanvas = function() return canvas end,
+    -- QuestBank hooks nothing of the map's: its layers hear of the map shutting as its data providers
+    HookScript = function(_, script) error("QuestBank hooked the world map's " .. tostring(script), 2) end,
   }
   function map:GetMapID() return self.id end
-  -- what Blizzard_MapCanvas does on the client's own UI calls (OnShow, a new map): every provider refreshes
+  function map:GetCanvas() return canvas end
+  function map:GetCanvasScale() return self.scale end
+  function map:GetCanvasZoomPercent() return self.zoom end
+  function map:GetGlobalPinScale() return 1 end
+  map.levels = { PIN_FRAME_LEVEL_AREA_POI = 300, PIN_FRAME_LEVEL_INVASION = 250, PIN_FRAME_LEVEL_DIG_SITE = 200, PIN_FRAME_LEVEL_QUEST_BLOB = 100 }
+  local levels = { GetValidFrameLevel = function(_, t) return map.levels[t] or 1 end }
+  function map:GetPinFrameLevelsManager() return levels end
+  -- what Blizzard_MapCanvas does on the client's own UI calls: opening refreshes every provider, a new map tells each,
+  -- zooming tells each, closing tells each (MapCanvasMixin:OnHide, secureexecuterange over the providers' OnHide)
   function map:RefreshAll() for _, p in ipairs(self.providers) do p:RefreshAllData() end end
+  function map:Open() self.shown = true; self:RefreshAll() end
+  function map:Close()
+    self.shown = false
+    for _, p in ipairs(self.providers) do if p.OnHide then p:OnHide() end end
+  end
   function map:SetMapID(id)
     if id == self.id then return end
     self.id = id
     for _, p in ipairs(self.providers) do p:OnMapChanged() end
   end
-  local canvas = newObj("Frame"); canvas:SetSize(1002, 668)
-  function map:GetCanvas() return canvas end
-  function map:RemoveAllPinsByTemplate(template)
-    local keep = {}
-    for _, pin in ipairs(self.pins) do
-      if pin.pinTemplate ~= template then keep[#keep + 1] = pin end
-    end
-    local gone = #self.pins - #keep
-    -- the canvas releases pins; in combat that is QuestBank's to avoid (Pins.lua)
-    if gone > 0 and c.combat then error("released " .. gone .. " " .. template .. " pins in combat", 2) end
-    self.released = self.released + gone
-    self.pins = keep
-    self.byTemplate[template] = {}
+  function map:Zoom(scale, zoom)
+    self.scale, self.zoom = scale, zoom
+    for _, p in ipairs(self.providers) do p:OnCanvasScaleChanged() end
   end
-  function map:EnumeratePinsByTemplate(template)
-    local i, list = 0, self.byTemplate[template] or {}
-    return function() i = i + 1; return list[i] end
+  for _, name in ipairs({ "AcquirePin", "RemoveAllPinsByTemplate", "RemovePin", "EnumeratePinsByTemplate", "SetPinPosition", "ApplyPinPosition" }) do
+    map[name] = function() error("QuestBank called the map canvas's " .. name .. ": that writes QuestBank's taint into the map", 2) end
   end
-  -- Pins.xml: each template's mixin, scripts and child regions, as the game builds a pin from it
-  local xml = io.open(HERE .. "/QuestBank/Pins.xml"):read("*a"):gsub("<!%-%-.-%-%->", "")
-  local templates = {}
-  for attrs, body in xml:gmatch("<Frame (name=\"[^\"]+\"[^>]*)>(.-)</Frame>") do
-    local t = { name = attrs:match('name="([^"]+)"'), mixin = attrs:match('mixin="([^"]+)"'), scripts = {}, regions = {} }
-    for tag in body:gmatch("<(On%a+)") do t.scripts[tag] = true end
-    for kind, key in body:gmatch("<(%a+) parentKey=\"(%a+)\"") do t.regions[key] = kind end
-    templates[t.name] = t
-  end
-  map.templates = templates
-  function map:AcquirePin(template, ...)
-    local t = templates[template]
-    assert(t and t.mixin, "a pin template Pins.xml defines: " .. tostring(template))
-    assert(not t.scripts.OnEnter and not t.scripts.OnLeave, "Blizzard_MapCanvas.lua:309: assertion failed! (the pin template sets OnEnter/OnLeave)")
-    assert(not t.scripts.OnMouseUp and not t.scripts.OnMouseDown, "the map canvas owns a pin's mouse scripts")
-    local pin = newObj("Frame")
-    pin.__client, pin.pinTemplate, pin.owningMap = c, template, self
-    for key, kind in pairs(t.regions) do pin[key] = newObj(kind, nil, pin) end
-    local mixin = env[t.mixin]
-    assert(type(mixin) == "table", "the template's mixin exists: " .. t.mixin)
-    for k, v in pairs(mixin) do pin[k] = v end
-    pin:OnLoad()
-    pin:OnAcquired(...)
-    pin:CheckMouseButtonPassthrough("RightButton")
-    self.acquired = self.acquired + 1
-    self.pins[#self.pins + 1] = pin
-    self.byTemplate[template] = self.byTemplate[template] or {}
-    table.insert(self.byTemplate[template], pin)
-    return pin
-  end
+  map.ScrollContainer = { MarkCanvasDirty = function() error("QuestBank wrote into the map's scroll container", 2) end }
   c.map = map
   c.log, c.done, c.level, c.xp = o.log, o.done, o.level, o.xp or 0
   -- the files the TOC lists, in its order, so a new file is tested the day it is added
@@ -551,6 +577,32 @@ local function newClient(o)
   c.ev = c.QB.eventFrame.__scripts.OnEvent
   clients[#clients + 1] = c
   return c
+end
+
+-- QuestBank's own frames on a client's world map, drawn now: every layer's, or one template's
+local function ours(c, template)
+  local out = {}
+  for _, layer in ipairs({ c.QB.Pins and c.QB.Pins.provider or false, c.QB.QuestMap and c.QB.QuestMap.provider or false }) do
+    if layer then
+      for _, f in ipairs(layer.active) do
+        if not template or f.kind.template == template then out[#out + 1] = f end
+      end
+    end
+  end
+  return out
+end
+
+-- the player clicks the map-pin link in a chat line: Blizzard's handler (ItemRefHandlers.lua, LinkTypes.WorldMapWaypoint)
+-- reads the waypoint from the link, sets it and opens the map on it, as the game's own code. The point set, or nil
+local function clickMapLink(c, line)
+  local link = line and line:match("|H(worldmap:[^|]+)|h")
+  if not link then return nil end
+  c.blizzard = true
+  local wp = c.env.C_Map.GetUserWaypointFromHyperlink("|H" .. link .. "|h")
+  local ok = wp and c.env.C_Map.SetUserWaypoint(wp)
+  c.blizzard = false
+  if ok then c.mapOpenedOn = wp.m end
+  return ok and wp or nil
 end
 
 -- run what is due on the client's clock, then advance it
@@ -926,24 +978,34 @@ for _, c in ipairs(UI:Candidates(400)) do
   assert(not q.sodLeftover, "no Season of Discovery leftover is offered: " .. q.name)
 end
 assert(not QB.Data.Q[78132] and not QB.Data.Q[78133] and not QB.Data.Q[78134], "Alonso's Dragonslayer quests aren't in Forever")
--- 3.3.4: the join prompt for escort quests. The game's MAX_QUESTS says 25 while the log holds 40.
+-- the join prompt for escort quests: the game's MAX_QUESTS decides whether its Yes works. 3.3.4 to 3.6.0 wrote the log's
+-- size into it; QuestBank only reads it now (an addon's write would make the prompt open as QuestBank)
 do
-  assert(owner.env.MAX_QUESTS == 40 and owner.env.MAX_QUESTLOG_QUESTS == 40, "login puts the log's real size into MAX_QUESTS: " .. tostring(owner.env.MAX_QUESTS))
-  assert(QB.escortWas == 25 and (owner.logFullUpdates or 0) >= 1, "remembers what the game said, and pokes an open prompt")
+  local env = owner.env
+  assert(env.MAX_QUESTS == 40 and env.MAX_QUESTLOG_QUESTS == 40, "login leaves the game's numbers alone")
+  assert(QB.state.logCount >= 25, "the owner holds 25 quests or more")
   local n = #owner.chat
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435)
+  assert(#owner.chat == n and env.MAX_QUESTS == 40, "a client that counts 40: nothing to say, nothing written")
+  env.SlashCmdList.QUESTBANK("escort")
+  assert(#owner.chat == n + 1 and owner.chat[#owner.chat]:find("counts 40 quests as a full log: with fewer, its Yes works.", 1, true), "/qb escort says so: " .. owner.chat[#owner.chat])
+  QB.NoteAddons()
+  assert(env.QuestBankDB.diag.addons.maxQuests == 40, "the uploads show the game's number")
+  -- an older build, whose prompt counts 25: said once a session, the number left as the game has it
+  env.MAX_QUESTS, env.MAX_QUESTLOG_QUESTS = 25, 25
+  n = #owner.chat
+  owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435)
   local said = owner.chat[#owner.chat]
-  assert(#owner.chat == n + 1 and said:find("Brann Steelhand started Escorting Erland", 1, true) and said:find("counts 25 quests as a full log; the log holds 40", 1, true), "the first prompt of the session says what QuestBank did: " .. tostring(said))
+  assert(#owner.chat == n + 1 and said:find("Brann Steelhand started Escorting Erland", 1, true)
+    and said:find("counts 25 quests as a full log (yours holds 40), so its Yes stays grey", 1, true), "25 or more quests on such a client: why Yes is grey: " .. tostring(said))
+  print("escort prompt, an older build:", said)
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435)
   assert(#owner.chat == n + 1, "and says it once")
-  owner.env.SlashCmdList.QUESTBANK("escort off")
-  assert(owner.env.MAX_QUESTS == 25 and owner.env.MAX_QUESTLOG_QUESTS == 25 and not QB:Settings().escort, "/qb escort off gives the game its number back")
-  assert(owner.chat[#owner.chat]:find("fix is off", 1, true), "and says so: " .. owner.chat[#owner.chat])
-  owner.env.SlashCmdList.QUESTBANK("escort on")
-  assert(owner.env.MAX_QUESTS == 40 and QB:Settings().escort, "/qb escort on corrects it again")
-  owner.env.SlashCmdList.QUESTBANK("escort")
-  assert(owner.chat[#owner.chat]:find("the log holds 40", 1, true), "/qb escort says where things stand: " .. owner.chat[#owner.chat])
+  assert(env.MAX_QUESTS == 25 and env.MAX_QUESTLOG_QUESTS == 25, "the game's numbers stay as the game has them")
+  for _, arg in ipairs({ "off", "on", "" }) do env.SlashCmdList.QUESTBANK("escort " .. arg) end
+  assert(env.MAX_QUESTS == 25 and owner.chat[#owner.chat]:find("QuestBank leaves the game's number alone", 1, true), "/qb escort, on or off: only says where things stand: " .. owner.chat[#owner.chat])
   print("escort prompt:", owner.chat[#owner.chat])
+  env.MAX_QUESTS, env.MAX_QUESTLOG_QUESTS = 40, 40
 end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
@@ -999,16 +1061,24 @@ do
   owner.ev(QB.eventFrame, "QUEST_GREETING"); tick(owner, 1)
   assert(last() == "SelectAvailableQuest #3", "a greeting NPC: the third entry is the first you should take: " .. tostring(last()))
   owner.greetAvail = nil
-  -- an escort a party member starts: joined, while the log has room; once; not with a full log
+  -- an escort a party member starts: the game's prompt is the player's. QuestBank presses nothing and hides nothing
+  -- (ConfirmAcceptQuest and StaticPopup_Hide error here), and says so once a session
   n = #owner.auto
+  local said = #owner.chat
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(owner, 1)
-  assert(#owner.auto == n + 1 and last() == "ConfirmAcceptQuest" and owner.chat[#owner.chat]:find("Said yes to Escorting Erland, which Brann Steelhand started", 1, true), "an escort a party member starts is said yes to: " .. tostring(owner.chat[#owner.chat]))
-  assert(not owner.chat[#owner.chat - 1]:find("you can say yes", 1, true), "and the 3.3.4 line stays quiet when Auto answers")
+  local escortLine
+  for i = said + 1, #owner.chat do if owner.chat[i]:find("say yes in the game's prompt to join", 1, true) then escortLine = owner.chat[i] end end
+  assert(#owner.auto == n and escortLine and escortLine:find("Brann Steelhand started Escorting Erland", 1, true),
+    "an escort a party member starts: nothing pressed, and it says the prompt is yours: " .. tostring(owner.chat[#owner.chat]))
+  print("escort, Accept for me on:", escortLine)
+  said = #owner.chat
+  owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(owner, 1)
+  assert(#owner.auto == n and #owner.chat == said, "said once a session")
   for i = 1, QB.LOG_SLOTS - #owner.log do table.insert(owner.log, { 9000000 + i, 0 }) end
   owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
   assert(QB.state.logCount == QB.LOG_SLOTS, "the log is full")
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(owner, 1)
-  assert(#owner.auto == n + 1, "a full log: not joined")
+  assert(#owner.auto == n, "a full log: nothing pressed either")
   for i = #owner.log, 1, -1 do if owner.log[i][1] > 9000000 then table.remove(owner.log, i) end end
   owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
   assert(#owner.log == #OWNER_LOG, "the log is as it was")
@@ -1098,7 +1168,7 @@ do
   owner.ev(QB.eventFrame, "QUEST_COMPLETE"); owner.shift = true; tick(owner, 1); owner.shift = false
   assert(#owner.auto == n, "Shift after the reward window opened: not finished")
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); owner.shift = true; tick(owner, 1); owner.shift = false
-  assert(#owner.auto == n, "Shift after the escort prompt: not joined")
+  assert(#owner.auto == n, "the escort prompt with Shift: nothing pressed")
   QB:SetLock("auto"); QB:Recompute(true)
   assert(QB:Mode() == "lock", "back to banking")
   set.autoAccept, set.autoTurnIn = false, false
@@ -1729,10 +1799,110 @@ end
 
 -- map pins
 QB.Pins:Update()
-local routePins = owner.map.byTemplate.QuestBankPinTemplate or {}
+local routePins = ours(owner, "QuestBankPinTemplate")
 print("world map pins:", #routePins, "waypoints:", #owner.pins)
 assert(#routePins > 0, "the route has pins on the world map")
 for _, pin in ipairs(routePins) do lines = {}; pin:OnMouseEnter(); assert(#lines > 0); pin:OnMouseLeave() end
+-- waypoints: QuestBank never sets the game's own (C_Map.SetUserWaypoint, C_SuperTrack error here), map open or shut,
+-- in combat or not. Its arrow points there at once, and the chat line carries the game's map-pin link: the player's
+-- click on it is Blizzard's handler, which sets the pin as the game's own code
+do
+  local A = QB.Arrow
+  local said = #owner.chat
+  assert(owner.map.shown, "the world map is open here")
+  QB.API.SetWaypoint(1429, 42, 65, "Goldshire")
+  local line = owner.chat[#owner.chat]
+  assert(#owner.chat == said + 1 and line:find("Waypoint: Goldshire (42, 65).", 1, true) and line:find("|Hworldmap:1429:4200:6500|h[Map pin]|h", 1, true),
+    "a waypoint: one chat line, with the game's map-pin link for the spot: " .. line)
+  print("waypoint:", line)
+  assert(#owner.pins == 0, "the game's own waypoint is not set by QuestBank")
+  local wp = clickMapLink(owner, line)
+  assert(wp and wp.m == 1429 and math.abs(wp.x - 0.42) < 1e-6 and math.abs(wp.y - 0.65) < 1e-6 and owner.mapOpenedOn == 1429,
+    "the player's click on the link: the game sets its pin there and opens the map on it")
+  -- the arrow switched off: it shows for this waypoint, the switch stays off; the line says so
+  assert(not QB:Settings().arrow and A.temp and A.temp.name == "Goldshire" and owner.env.QuestBankArrow:IsShown(),
+    "the arrow off: it shows for the waypoint")
+  assert(line:find("The arrow shows the way until you get there.", 1, true), "and the line says so")
+  -- the map shut, and in combat: the same, and still nothing set by QuestBank
+  owner.map:Close()
+  owner.combat = true
+  QB.API.SetWaypoint(1429, 30.06, 70.5, "Somewhere")
+  line = owner.chat[#owner.chat]
+  assert(line:find("|Hworldmap:1429:3006:7050|h", 1, true) and #owner.pins == 1, "the map shut, in combat: the link, nothing set: " .. line)
+  owner.combat = false
+  owner.map:Open()
+  -- a map the game has no pins for: no link (the arrow still points)
+  owner.noPins = { [1581] = true }
+  QB.API.SetWaypoint(1581, 50, 50, "Inside")
+  assert(not owner.chat[#owner.chat]:find("worldmap", 1, true) and owner.chat[#owner.chat]:find("Waypoint: Inside", 1, true), "no pins on that map: no link")
+  owner.noPins = nil
+  -- the run's own waypoint, as the next stop changes (quiet): nothing said, nothing set
+  said = #owner.chat
+  QB.API.SetWaypoint(1429, 40, 40, "Next stop", true)
+  assert(#owner.chat == said and #owner.pins == 1, "the run's quiet waypoint: no line, nothing set")
+  -- TomTom's arrow when it is there. Its world-map icon is HereBeDragons-Pins', which calls the map canvas's AcquirePin
+  -- and RemovePin there and then: with the map open that writes the canvas's scale and scroll, so TomTom is never told
+  -- from QuestBank's call then (the mock errors). The newest waypoint waits for the map to shut; shut, at once
+  A:EndTemp()
+  -- stand-ins first: MapPinEnhanced's TomTom (AddWaypoint only), or the real one with MapPinEnhanced hooked on, and
+  -- WaypointTracker's bridge set the game's own waypoint inside the call (the mock errors when QuestBank's code reaches
+  -- C_Map.SetUserWaypoint). QuestBank never calls them: its arrow and the link, as with no TomTom
+  local function standIn(extra)
+    local t = { AddWaypoint = function(_, m, x, y) owner.env.C_Map.SetUserWaypoint({ uiMapID = m, position = { x = x, y = y } }) end }
+    for k, v in pairs(extra or {}) do t[k] = v end
+    return t
+  end
+  for _, case in ipairs({
+    { "MapPinEnhanced's own TomTom", standIn(), nil },
+    { "TomTom with MapPinEnhanced hooked on", standIn({ IsCrazyArrowEmpty = function() return true end }),
+      { TomTom = { loaded = true }, MapPinEnhanced = { loaded = true } } },
+    { "WaypointTracker's bridge", standIn({ IsCrazyArrowEmpty = function() return true end, isWaypointTrackerBridge = true }), nil },
+    { "a TomTom table with the TomTom addon not loaded", standIn({ IsCrazyArrowEmpty = function() return true end }), {} },
+  }) do
+    owner.env.TomTom, owner.addons = case[2], case[3]
+    assert(QB.API.TomTom() == nil, case[1] .. ": not TomTom to QuestBank")
+    said = #owner.chat
+    QB.API.SetWaypoint(1429, 44, 66, "Stand-in")
+    QB.API.SetWaypoint(1429, 45, 67, "Stand-in, quiet", true)
+    owner.map:Close(); tick(owner, 0); QB:Changed(); owner.map:Open()
+    assert(#owner.chat == said + 1 and owner.chat[#owner.chat]:find("worldmap:1429:4400:6600", 1, true), case[1] .. ": the arrow and the link")
+    A:EndTemp()
+  end
+  owner.env.TomTom = nil
+  local tt = {}
+  owner.addons = { TomTom = { loaded = true } }
+  owner.env.TomTom = {
+    AddWaypoint = function(_, m, x, y)
+      assert(not owner.map.shown, "TomTom told of a waypoint with the map open: HereBeDragons acquires its pin inside QuestBank's call")
+      tt[#tt + 1] = { m, x, y }
+      return #tt
+    end,
+    RemoveWaypoint = function() assert(not owner.map.shown, "TomTom's waypoint removed with the map open") end,
+    IsCrazyArrowEmpty = function() return true end,
+  }
+  said = #owner.chat
+  assert(owner.map.shown, "the map is open")
+  QB.API.SetWaypoint(1429, 40, 40, "Next stop", true)
+  assert(#tt == 0 and #owner.chat == said, "the run's quiet waypoint with the map open: TomTom waits, nothing said")
+  QB.API.SetWaypoint(1429, 42, 65, "Goldshire")
+  line = owner.chat[#owner.chat]
+  assert(#tt == 0 and #owner.chat == said + 1 and line:find("Waypoint: Goldshire (42, 65). TomTom gets it when you close the map.", 1, true) and not A.temp,
+    "a click with the map open: TomTom waits, one line says so, no arrow of QuestBank's shown for it: " .. line)
+  print("waypoint, TomTom, the map open:", line)
+  QB:Changed()
+  assert(#tt == 0, "a refresh with the map still open: still waiting")
+  owner.map:Close()
+  assert(#tt == 0, "not inside the map's OnHide")
+  tick(owner, 0)
+  assert(#tt == 1 and tt[1][1] == 1429 and math.abs(tt[1][2] - 0.42) < 1e-9 and math.abs(tt[1][3] - 0.65) < 1e-9, "once the map has shut: TomTom gets the newest, once")
+  tick(owner, 1)
+  assert(#tt == 1, "and not again")
+  QB.API.SetWaypoint(1429, 30, 30, "Shut map", true)
+  QB.API.SetWaypoint(1429, 31, 31, "Shut map")
+  assert(#tt == 3 and #owner.chat == said + 1, "the map shut: at once, quiet or not, nothing said (TomTom says its own)")
+  owner.map:Open()
+  owner.env.TomTom, owner.addons = nil, nil
+end
 
 -- minimap button, slash commands, export
 local mb = QB.Minimap.button
@@ -1998,7 +2168,46 @@ layouts[#layouts + 1] = dumpLayout(horde.QB.UI.frame, "Horde: Hand-in Route")
 -- the direction arrow: off until you turn it on, then it points to the next stop
 do
   local A = owner.QB.Arrow
-  assert(not owner.env.QuestBankArrow or not owner.env.QuestBankArrow:IsShown(), "the arrow is off until you turn it on")
+  -- switched off, it showed only for a waypoint clicked above (Core.lua, API.SetWaypoint): until you get there
+  assert(not QB:Settings().arrow, "the arrow is off until you turn it on")
+  assert(not owner.env.QuestBankArrow or not owner.env.QuestBankArrow:IsShown() or A.temp, "and shows only for a waypoint you click")
+  do
+    local F = owner.env.QuestBankArrow
+    A:EndTemp()
+    assert(not F:IsShown() and not A.temp, "a waypoint's arrow goes")
+    -- the arrow off: a waypoint shows it, pointing there, the switch still off
+    local here = QB.API.WorldPosition()
+    QB.API.SetWaypoint(1429, 42, 65, "Goldshire", nil, { c = here.c, wx = here.wx + 300, wy = here.wy })
+    assert(F:IsShown() and not QB:Settings().arrow and A.Target().name == "Goldshire" and A.Target().temp, "a waypoint with the arrow off: shown for it")
+    owner.facing = 0
+    F.__scripts.OnUpdate(F, 1)
+    assert(F.name:GetText() == "Goldshire" and F.dist:GetText():find("yards", 1, true), "it points there: " .. F.dist:GetText())
+    lines = {}; F.__scripts.OnEnter(F)
+    assert(lines[1] == "You chose: Goldshire" and table.concat(lines, "\n"):find("Shown for this waypoint: it goes when you get there.", 1, true),
+      "its tooltip says it is up for this waypoint: " .. table.concat(lines, " / "))
+    for _, pr in ipairs(checkLayout(F, "arrow for a waypoint")) do problems[#problems + 1] = pr end
+    -- you get there: it says so, and goes a few seconds later; the switch is as it was
+    QB.API.SetWaypoint(1429, 42, 65, "Goldshire", nil, { c = here.c, wx = here.wx + 5, wy = here.wy })
+    F.__scripts.OnUpdate(F, 1)
+    assert(F:IsShown() and F.dist:GetText() == "You're there", "there: it says so")
+    tick(owner, 5)
+    F.__scripts.OnUpdate(F, 1)
+    assert(not F:IsShown() and not A.temp and not QB:Settings().arrow, "and goes, the switch still off")
+    -- shown for a waypoint, Hide in its menu hides it; choosing what it points at keeps it up
+    QB.API.SetWaypoint(1429, 42, 65, "Goldshire", nil, { c = here.c, wx = here.wx + 300, wy = here.wy })
+    F.__scripts.OnClick(F, "RightButton")
+    local Mn = owner.env.QuestBankMenu
+    for _, b in ipairs(Mn.items) do if b:IsShown() and b.label:GetText() == "Hide the arrow" then b.__scripts.OnClick(b) end end
+    assert(not F:IsShown() and not A.temp and not QB:Settings().arrow and owner.chat[#owner.chat]:find("A waypoint you click shows it again", 1, true),
+      "Hide: gone, the switch off: " .. owner.chat[#owner.chat])
+    QB.API.SetWaypoint(1429, 42, 65, "Goldshire", nil, { c = here.c, wx = here.wx + 300, wy = here.wy })
+    F.__scripts.OnClick(F, "RightButton")
+    for _, b in ipairs(Mn.items) do if b:IsShown() and b.label:GetText():find("^The next stop") then b.__scripts.OnClick(b) end end
+    assert(F:IsShown() and QB:Settings().arrow and not A.temp and A.Mode() == "route", "choosing the route from its menu: the arrow stays up")
+    A:Set(false)
+    assert(not F:IsShown(), "off again")
+    QB:Settings().arrowPin = nil
+  end
   -- the bearing: world x runs north, y west, facing turns anticlockwise from north
   local me = { wx = 0, wy = 0 }
   local north = A.Bearing(me, { wx = 100, wy = 0 }, 0)
@@ -2348,6 +2557,10 @@ do
   -- a run started while questing stays questing
   N.Run.Start(); N:ReadState()
   assert(N:Mode() == "quest" and N.Run.Get().mode == "quest", "a questing run doesn't turn banking on")
+  -- the game's pin doesn't follow the route (QuestBank never sets it): with the arrow off, the start says what does
+  local started
+  for i = #newbie.chat, 1, -1 do if newbie.chat[i]:find("Hand-in run started", 1, true) then started = newbie.chat[i]; break end end
+  assert(started and started:find("/qb arrow points you from stop to stop.", 1, true), "the run's start names the arrow: " .. tostring(started))
   N.Run.Stop()
   local P = newbie.env.QuestBankPost
   if P then P:Hide() end
@@ -2989,15 +3202,58 @@ do
   local _, how2 = Q2.Quest.Rewards(Q2.Quest.Get(known))
   assert(how2 == "catalog", "a half-read window changes nothing")
   owner.window = nil
-  -- the right-click menu links each reward in chat
-  Q2.UI.QuestMenu(Q2.Quest.Get(unk))
-  local menu = owner.env.QuestBankMenu
-  local link
-  for _, b in ipairs(menu and menu.items or {}) do if b:IsShown() and (b.label and b.label:GetText() or ""):find("^Link Item 28010") then link = b end end
-  assert(link, "the menu offers to link a reward")
+  -- the right-click menu links each reward in chat: into the box you're typing in; with none, the link goes in the
+  -- chat window for you to Shift-click once you open the box. QuestBank never opens it (ChatFrame_OpenChat, and the
+  -- game's chat globals, error here)
+  local function menuItem(pattern)
+    Q2.UI.QuestMenu(Q2.Quest.Get(unk))
+    local menu = owner.env.QuestBankMenu
+    for _, b in ipairs(menu and menu.items or {}) do if b:IsShown() and (b.label and b.label:GetText() or ""):find(pattern) then return b, menu end end
+    return nil, menu
+  end
+  local link, menu = menuItem("^Show Item 28010%d*'s link in chat$")
+  assert(link, "the chat box shut: the menu offers to show a reward's link in chat")
+  local said = #owner.chat
   link.__scripts.OnClick(link)
-  assert(#owner.openedChat >= 1 and owner.openedChat[#owner.openedChat]:find("Hitem:28010", 1, true), "it opens chat with the item's link")
+  assert(#owner.chat == said + 1 and owner.chat[#owner.chat]:find("Hitem:28010", 1, true) and owner.chat[#owner.chat]:find("press Enter to open chat, then Shift-click this link", 1, true),
+    "it shows the link in the chat window, and how to put it in chat: " .. owner.chat[#owner.chat])
+  print("link, chat shut:", owner.chat[#owner.chat])
   if menu then menu:Hide() end
+  owner.chatOpen = true
+  link, menu = menuItem("^Link Item 28010%d* in chat$")
+  assert(link, "the chat box open: the menu links it")
+  local nLinks = #owner.chatLinks
+  link.__scripts.OnClick(link)
+  assert(#owner.chatLinks == nLinks + 1 and owner.chatLinks[#owner.chatLinks]:find("Hitem:28010", 1, true), "into the box you're typing in")
+  if menu then menu:Hide() end
+  -- open but not typed in (the IM style leaves it so): not touched, the link shown instead
+  owner.chatFocus = false
+  link, menu = menuItem("^Show Item 28010%d*'s link in chat$")
+  assert(link, "a box not typed in counts as shut")
+  said = #owner.chat
+  link.__scripts.OnClick(link)
+  assert(#owner.chatLinks == nLinks + 1 and #owner.chat == said + 1, "not put in that box: shown in the chat window")
+  if menu then menu:Hide() end
+  owner.chatOpen, owner.chatFocus = false, nil
+  -- the modern names (ChatFrameUtil), as Forever has them: InsertLink into the focused box, never OpenChat or LinkItem
+  do
+    local box = { HasFocus = function() return true end }
+    local active
+    owner.env.ChatFrameUtil = {
+      GetActiveWindow = function() return active end,
+      InsertLink = function(text) owner.chatLinks[#owner.chatLinks + 1] = text; return true end,
+      OpenChat = function() error("QuestBank called ChatFrameUtil.OpenChat", 2) end,
+      LinkItem = function() error("QuestBank called ChatFrameUtil.LinkItem", 2) end,
+      ActivateChat = function() error("QuestBank called ChatFrameUtil.ActivateChat", 2) end,
+    }
+    said = #owner.chat
+    Q2.UI.LinkItemAlways(28010)
+    assert(#owner.chatLinks == nLinks + 1 and #owner.chat == said + 1, "ChatFrameUtil, no box: the link in the chat window")
+    active = box
+    Q2.UI.LinkItemAlways(28010)
+    assert(#owner.chatLinks == nLinks + 2, "ChatFrameUtil, a box typed in: InsertLink")
+    owner.env.ChatFrameUtil = nil
+  end
   -- the finder: Shift over a reward row shows the item itself; Shift-click links it
   Q2.UI:ShowTab(1); Q2.UI.findMode = "gear"; Q2.UI:Refresh()
   local row
@@ -3006,8 +3262,14 @@ do
   owner.env.IsShiftKeyDown = function() return true end
   lines = {}; row.__scripts.OnEnter(row)
   assert(lines[1] == "ITEM:" .. row.rewardId, "Shift shows the reward item's own tooltip: " .. tostring(lines[1]))
+  said = #owner.chat
   row.__scripts.OnClick(row, "LeftButton")
-  assert(owner.openedChat[#owner.openedChat]:find("Hitem:" .. row.rewardId, 1, true), "Shift-click links the reward")
+  assert(#owner.chat == said + 1 and owner.chat[#owner.chat]:find("Hitem:" .. row.rewardId, 1, true), "Shift-click links the reward (in the chat window: the box is shut)")
+  owner.chatOpen = true
+  local nl = #owner.chatLinks
+  row.__scripts.OnClick(row, "LeftButton")
+  assert(#owner.chatLinks == nl + 1 and owner.chatLinks[#owner.chatLinks]:find("Hitem:" .. row.rewardId, 1, true), "and into the box when you're typing")
+  owner.chatOpen = false
   owner.env.IsShiftKeyDown = function() return false end
   lines = {}; row.__scripts.OnEnter(row)
   assert(table.concat(lines, "\n"):find("Hold Shift to see the item", 1, true), "without Shift, the quest tooltip says how")
@@ -3140,7 +3402,7 @@ do
   assert(told() == 1 and not g.items[280599], "the next session: the line isn't said again, the notes aren't taken twice")
   -- a new QuestBank version says it once more
   local real = Q2.version
-  Q2.version = "3.6.1"
+  Q2.version = real .. "-next" -- whatever comes after this one
   G.Retire(); G.Retire()
   assert(told() == 2, "a new version says it once more")
   Q2.version = real
@@ -3390,7 +3652,7 @@ do
   c.env.C_Map.GetMapInfo = nil
   c.map.id = 1426
   Q2:Changed(); c.map:RefreshAll()
-  assert(not QMe.provider and #QMe:Build(1426) == 0 and not QMe.Draws(1426) and #(c.map.byTemplate.QuestBankQuestPinTemplate or {}) == 0,
+  assert(not QMe.provider and #QMe:Build(1426) == 0 and not QMe.Draws(1426) and #ours(c, "QuestBankQuestPinTemplate") == 0,
     "Classic Era: no map icons")
   local said = #c.chat
   c.env.SlashCmdList.QUESTBANK("icons")
@@ -3442,21 +3704,23 @@ do
   }
   login(M)
   assert(QMm.provider, "on Forever the icons have their own provider on the world map")
+  assert(#MQ.Pins.layers == 2 and MQ.Pins.watcher and MQ.Pins.watcher.__parent == M.map:GetCanvas(),
+    "no hook on the world map (the mock's HookScript errors): both layers hear it shut as its providers, and a frame of QuestBank's on its canvas watches the keys")
   local function redraw()
     MQ:Recompute(true); MQ.Model.Finish(); MQ.Pins:Update(); QMm:Update()
   end
   local function icons(kind)
     local out = {}
-    for _, pin in ipairs(M.map.byTemplate.QuestBankQuestPinTemplate or {}) do
+    for _, pin in ipairs(ours(M, "QuestBankQuestPinTemplate")) do
       if not kind or pin.data.kind == kind then out[#out + 1] = pin end
     end
     return out
   end
-  local function areas() return M.map.byTemplate.QuestBankAreaPinTemplate or {} end
-  local function routePins() return M.map.byTemplate.QuestBankPinTemplate or {} end
+  local function areas() return ours(M, "QuestBankAreaPinTemplate") end
+  local function routePins() return ours(M, "QuestBankPinTemplate") end
   local function tipOf(pin) lines = {}; pin:OnMouseEnter(); pin:OnMouseLeave(); return table.concat(lines, "\n") end
   local function marksFor(id) local n = 0; for _, pin in ipairs(icons("obj")) do if pin.data.id == id then n = n + 1 end end return n end
-  local function near(pin, x, y) return math.abs(pin.__pos[1] - x) < 1e-6 and math.abs(pin.__pos[2] - y) < 1e-6 end
+  local function near(pin, x, y) return math.abs(pin.mapX - x) < 1e-6 and math.abs(pin.mapY - y) < 1e-6 end
 
   -- the route's own pins off first: this layer then draws every NPC itself
   MQ:Settings().pins = false
@@ -3466,7 +3730,8 @@ do
   assert(#give > 0 and #turn == 1 and #obj == 4 and #start == 1 and #areas() == 4, "the ! , ? , objectives and the item drop are all there")
   -- ! only for quests you can take now: todo, not in the log, not done, for your side; under the route pins
   for _, pin in ipairs(give) do
-    assert(pin.__level == "PIN_FRAME_LEVEL_INVASION" and pin.Icon.__atlas == "QuestNormal", "a ! is the game's own, below the route pins")
+    assert(pin.levelType == "PIN_FRAME_LEVEL_INVASION" and pin.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_INVASION and pin.Icon.__atlas == "QuestNormal",
+      "a ! is the game's own, below the route pins")
     for _, q in ipairs(pin.data.quests) do
       local st = MQ:Status(q)
       assert(st.code == "todo" and not st.behind, "a ! only for a quest you can take now: " .. q.name .. " (" .. st.code .. ")")
@@ -3480,11 +3745,12 @@ do
   -- objectives: Kobold Vermin's two areas and the crate no line of the game's fits; the bandanas, not the finished masks
   assert(marksFor(7) == 3 and marksFor(18) == 1 and marksFor(33) == 0, "the marks: 3 for Kobold Camp Cleanup, 1 for the bandanas, none for a complete quest")
   for _, pin in ipairs(obj) do
-    assert(pin.__level == "PIN_FRAME_LEVEL_DIG_SITE", "objective marks sit under the ! and ?")
+    assert(pin.levelType == "PIN_FRAME_LEVEL_DIG_SITE" and pin.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_DIG_SITE, "objective marks sit under the ! and ?")
     if pin.data.id == 18 then assert(pin.data.spot.name == 2 and near(pin, 0.54, 0.30), "the bandanas' spot, not the finished masks'") end
   end
   for _, a in ipairs(areas()) do
-    assert(a.__level == "PIN_FRAME_LEVEL_QUEST_BLOB" and a.__scaleStyle == 3 and a.__ignoreScale, "an area grows with the map, under every icon")
+    assert(a.levelType == "PIN_FRAME_LEVEL_QUEST_BLOB" and a.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_QUEST_BLOB and a.__scale == nil and a.__mouse == false,
+      "an area grows with the map, under every icon, no mouse")
     assert(math.abs(a.__w - 2 * a.data.r * 1002) < 1e-6, "an area is as wide as the ground it covers: " .. a.__w)
   end
   -- the item that starts Welcome! (from a Northshire Gift Voucher): where it drops, with the game's ! on the mark
@@ -3493,7 +3759,8 @@ do
   -- tooltips say what and where from
   local t7 = tipOf(icons("obj")[1])
   assert(t7:find("Kobold Camp Cleanup", 1, true) and t7:find("Kill Kobold Vermin", 1, true) and t7:find("Kobold Vermin slain: 3/10", 1, true)
-    and t7:find("Position: Classic data (may have moved in Forever)", 1, true) and t7:find("Shift-click: track", 1, true), "the kill mark's tooltip: " .. t7)
+    and t7:find("Position: Classic data (may have moved in Forever)", 1, true) and t7:find("Click: waypoint.", 1, true) and not t7:find("Shift-click", 1, true),
+    "the kill mark's tooltip: " .. t7)
   local sources = {}
   for _, pin in ipairs(icons()) do
     local t = tipOf(pin)
@@ -3507,26 +3774,62 @@ do
   print("map icon tooltip, !:", (tipOf(give[1]):gsub("\n", " | ")))
   print("map icon tooltip, ?:", (tipOf(eagan):gsub("\n", " | ")))
   print("map icon tooltip, drop:", (tStart:gsub("\n", " | ")))
-  -- left click: a waypoint there, and the arrow remembers it
+  -- left click: the arrow points there at once, and a chat line carries the game's map-pin link; the game's own
+  -- waypoint is never set from QuestBank's code (C_Map.SetUserWaypoint errors here), map open or shut, in combat or not
+  local function lastLine() return M.chat[#M.chat] or "" end
   local mark = icons("obj")[1]
-  local before = #M.pins
+  local said = #M.chat
   mark:OnMouseClickAction("LeftButton")
-  local wp = M.pins[#M.pins]
-  assert(#M.pins == before + 1 and wp.m == 1429 and math.abs(wp.x - 0.483) < 1e-6 and math.abs(wp.y - 0.397) < 1e-6, "a click sets a waypoint on the mark")
-  assert(MQ:Settings().arrowPin and MQ:Settings().arrowPin.name == "Kobold Camp Cleanup: Kobold Vermin", "and the arrow can point there")
-  mark:OnMouseClickAction("RightButton")
-  assert(#M.pins == before + 1, "a right-click is the map's (zoom out)")
-  -- Shift-click on a mark or a ?: the game's tracker
+  assert(#M.chat == said + 1 and lastLine():find("Waypoint: Kobold Camp Cleanup: Kobold Vermin (48, 40).", 1, true)
+    and lastLine():find("|Hworldmap:1429:4830:3970|h", 1, true) and #M.pins == 0,
+    "a click with the map open: a waypoint line with the map-pin link, nothing set by QuestBank: " .. lastLine())
+  assert(MQ:Settings().arrowPin and MQ:Settings().arrowPin.name == "Kobold Camp Cleanup: Kobold Vermin", "the arrow points there")
+  local wp = clickMapLink(M, lastLine())
+  assert(wp and wp.m == 1429 and math.abs(wp.x - 0.483) < 1e-6 and math.abs(wp.y - 0.397) < 1e-6, "the link's click: the game's pin on the mark")
+  said = #M.chat
+  icons("obj")[1]:OnMouseClickAction("RightButton")
+  assert(#M.chat == said, "a right-click is the map's (zoom out)")
+  -- the frames' own mouse scripts: let go over an icon is a click, let go elsewhere is not
+  mark = icons("obj")[1]
+  assert(mark.__scripts.OnEnter and mark.__scripts.OnLeave and mark.__scripts.OnMouseUp, "QuestBank's frames have their own mouse scripts")
+  lines = {}; mark.__scripts.OnEnter(mark); assert(#lines > 0, "hovering shows the tooltip"); mark.__scripts.OnLeave(mark)
+  mark.__scripts.OnMouseUp(mark, "LeftButton", false)
+  assert(#M.chat == said, "let go outside the icon: no click")
+  mark.__scripts.OnMouseUp(mark, "LeftButton", true)
+  assert(#M.chat == said + 1 and lastLine():find("worldmap:", 1, true), "let go over it: a click")
+  -- /qb next: the next stop's line and link, the map open or not
+  said = #M.chat
+  MQ.Pins:PinNext(true)
+  assert(#M.chat == said + 1 and (lastLine():find("worldmap:", 1, true) or lastLine():find("Nothing on the route", 1, true)), "/qb next: " .. lastLine())
+  -- in combat, the map shut or open: the same, at once
+  M.map:Close()
+  M.combat = true
+  MQ.API.SetWaypoint(1429, 40, 50, "Test spot")
+  assert(lastLine():find("|Hworldmap:1429:4000:5000|h", 1, true) and #M.pins == 1, "in combat, the map shut: the line at once, nothing set")
+  M.map:Open()
+  MQ.API.SetWaypoint(1429, 41, 51, "Test spot")
+  assert(lastLine():find("|Hworldmap:1429:4100:5100|h", 1, true) and #M.pins == 1, "in combat, the map open: the same")
+  M.combat = false
+  MQ.Pins.combatFrame.__scripts.OnEvent(MQ.Pins.combatFrame, "PLAYER_REGEN_ENABLED")
+  assert(#M.pins == 1, "and nothing set when combat ends either")
+  -- the same frames again, drawn for the map now open
+  give, turn, obj, start = icons("give"), icons("turn"), icons("obj"), icons("start")
+  eagan = turn[1]
+  mark = icons("obj")[1]
+  -- Shift-click on a mark or a ?: the game's tracker is left alone (C_QuestLog.AddQuestWatch errors here); a waypoint
   M.shift = true
+  said = #M.chat
   mark:OnMouseClickAction("LeftButton")
-  assert(M.watched and M.watched[7], "Shift-click on an objective tracks the quest")
-  mark:OnMouseClickAction("LeftButton")
-  assert(not M.watched[7], "and again stops tracking it")
+  assert(#M.chat == said + 1 and lastLine():find("worldmap:", 1, true) and not M.watched, "Shift-click on an objective: a waypoint, the game's tracker untouched")
   eagan:OnMouseClickAction("LeftButton")
-  assert(M.watched[33], "Shift-click on a ? tracks what is handed in there")
+  assert(not M.watched and #tipOf(eagan) > 0 and not tipOf(eagan):find("Shift-click", 1, true), "and on a ?: no Shift-click promised")
+  M.map:Close(); M.map:Open()
+  give, turn, obj, start = icons("give"), icons("turn"), icons("obj"), icons("start")
+  eagan = turn[1]
   -- Shift-click on a !: the pick-up list, and the route's own ! takes over that NPC
   local g = give[1]
-  local gid = g.data.quests[1].id
+  local gd = g.data -- (the frame itself is drawn again for whatever comes next)
+  local gid = gd.quests[1].id
   assert(not MQ:IsAdded(gid), "not on the pick-up list yet")
   g:OnMouseClickAction("LeftButton")
   M.shift = false
@@ -3534,15 +3837,15 @@ do
   MQ:Settings().pins = true
   redraw()
   local routed = false
-  for _, r in ipairs(MQ.Pins.list) do if r.name == g.data.title then routed = true end end
+  for _, r in ipairs(MQ.Pins.list) do if r.name == gd.title then routed = true end end
   assert(routed, "the route's pins show that ! now")
-  for _, pin in ipairs(icons("give")) do assert(pin.data.title ~= g.data.title, "and the map icons leave that NPC to them") end
+  for _, pin in ipairs(icons("give")) do assert(pin.data.title ~= gd.title, "and the map icons leave that NPC to them") end
   -- with the route's pins on, a hand-in on the route is theirs too
   -- (a stop is named for its place when NPCs share it: "Elwynn Forest (49, 40)"; it stands where Eagan does)
   local eaganOnRoute = false
   for _, r in ipairs(MQ.Pins.list) do if r.num and r.m == 1429 and math.abs(r.x - 48.9) < 0.6 and math.abs(r.y - 40.2) < 0.6 then eaganOnRoute = true end end
   assert(eaganOnRoute and #icons("turn") == 0, "the route stands on Eagan: no second ? there")
-  for _, id in ipairs(g.data.quests) do if MQ:IsAdded(id.id) then MQ:ToggleAdd(id.id) end end
+  for _, id in ipairs(gd.quests) do if MQ:IsAdded(id.id) then MQ:ToggleAdd(id.id) end end
   MQ:Settings().pins = false
   redraw()
   assert(#icons("give") == #give and #icons("turn") == 1, "off the list and the route pins off: as before")
@@ -3636,44 +3939,266 @@ do
   assert(#icons("obj") == 4, "back on Elwynn")
   -- a hidden map builds nothing
   M.map.shown = false
-  local acq = M.map.acquired
+  local draws = QMm.provider.draws
   redraw()
-  assert(M.map.acquired == acq, "a hidden map builds nothing")
+  assert(QMm.provider.draws == draws, "a hidden map builds nothing")
   M.map.shown = true
   redraw()
 
-  -- combat: nothing acquired or released (the mock errors on a release in combat, and SetPassThroughButtons errors
-  -- like the game's protected call); a refresh waits for the end of combat
+  -- QuestBank's own frames: on the canvas, at the map's frame level for their kind, placed and scaled as the map's
+  -- own pins are, a right-click passing through to the map; never the canvas's pins (the mock's AcquirePin, its
+  -- RemoveAllPinsByTemplate and the scroll container's MarkCanvasDirty error)
   MQ:Settings().pins = true
   redraw()
-  for _, pin in ipairs(M.map.pins) do assert(pin.__passThrough and pin.__passThrough[1] == "RightButton", "out of combat a right-click still passes through to zoom out") end
+  local canvas = M.map:GetCanvas()
+  assert(#routePins() > 0 and #icons() > 0 and #areas() > 0, "all three kinds drawn")
+  for _, f in ipairs(ours(M)) do
+    assert(f.__parent == canvas and f.__frameLevel == M.map.levels[f.levelType], "on the canvas at its level: " .. tostring(f.levelType))
+    if f.kind.mouse then
+      assert(f.__mouse and f.__passThrough and f.__passThrough[1] == "RightButton", "a right-click passes through to zoom the map out")
+    else
+      assert(f.__mouse == false and not f.__passThrough, "an area takes no mouse")
+    end
+  end
+  -- zoomed halfway in on a canvas at twice its scale: as MapCanvasPinMixin:ApplyCurrentScale and ApplyPinPosition would
+  M.map:Zoom(2, 0.5)
+  local function placed(f, scale)
+    local pt = f.__points[1]
+    return #f.__points == 1 and pt.point == "CENTER" and pt.rel == canvas and pt.relPoint == "TOPLEFT"
+      and math.abs(pt.x - 1002 * f.mapX / scale) < 1e-6 and math.abs(pt.y + 668 * f.mapY / scale) < 1e-6
+  end
+  local ic, rp, ar = icons("give")[1], routePins()[1], areas()[1]
+  local s1, s2 = (1 + 0.2 * 0.5) / 2, (1 + 0.25 * 0.5) / 2
+  assert(math.abs(ic.__scale - s1) < 1e-9 and placed(ic, s1), "an icon: smaller against the canvas zoom, a little bigger zoomed in")
+  assert(math.abs(rp.__scale - s2) < 1e-9 and placed(rp, s2), "a route pin: the same, a little bigger again")
+  assert(ar.__scale == nil and placed(ar, 1) and math.abs(ar.__w - 2 * ar.data.r * 1002) < 1e-6, "an area keeps the terrain's scale")
+  M.map:Zoom(1, 0)
+  assert(math.abs(ic.__scale - 1) < 1e-9 and placed(ic, 1), "zoomed out again")
+
+  -- combat: nothing made or drawn (SetPassThroughButtons errors in combat here, as the game's restricted call is
+  -- blocked); a redraw waits for the end of combat; zooming still moves what is there
+  local made = (MQ.Pins.provider.made or 0) + (QMm.provider.made or 0)
   M.combat = true
-  acq = M.map.acquired
-  local rel = M.map.released
+  local d1, d2 = MQ.Pins.provider.draws, QMm.provider.draws
   M.objectives[7][1].finished = true
   redraw()
-  assert(M.map.acquired == acq and M.map.released == rel and marksFor(7) == 3, "in combat the pins stay as they were")
-  -- a pin the canvas hands out in combat anyway: QuestBank's mixins keep the protected call out of it
-  M.map:AcquirePin("QuestBankPinTemplate", { m = 1429, x = 50, y = 50, name = "Test", icon = 1 }, 0.5, 0.5)
-  M.map:AcquirePin("QuestBankQuestPinTemplate", icons("give")[1].data)
-  M.map:AcquirePin("QuestBankAreaPinTemplate", areas()[1].data)
-  local ok = pcall(M.map.AcquirePin, M.map, "QuestBankQuestPinTemplate", icons("give")[1].data)
-  assert(ok, "no ADDON_ACTION_BLOCKED from QuestBank's pins in combat")
-  -- the map changes in combat: the pins drawn for the old one hide, and show again on it
+  assert(MQ.Pins.provider.draws == d1 and QMm.provider.draws == d2 and marksFor(7) == 3, "in combat the frames stay as they were")
+  M.map:Zoom(1.5, 0.3)
+  assert(math.abs(ic.__scale - (1 + 0.2 * 0.3) / 1.5) < 1e-9, "zooming in combat moves and scales them")
+  M.map:Zoom(1, 0)
+  -- the map changes in combat: the frames drawn for the old one hide, and show again on it
   M.map:SetMapID(1453)
-  for _, pin in ipairs(M.map.pins) do assert(not pin:IsShown(), "pins drawn for another map hide in combat") end
+  for _, f in ipairs(ours(M)) do assert(not f:IsShown(), "frames drawn for another map hide in combat") end
   M.map:SetMapID(1429)
-  for _, pin in ipairs(M.map.pins) do assert(pin:IsShown(), "and show again back on their map") end
+  for _, f in ipairs(ours(M)) do assert(f:IsShown(), "and show again back on their map") end
   M.map:SetMapID(1453)
+  -- the map opened in combat: the same, nothing made
+  M.map:Close(); M.map:Open()
+  assert((MQ.Pins.provider.made or 0) + (QMm.provider.made or 0) == made and MQ.Pins.provider.draws == d1, "no frame made or drawn in combat")
   -- combat ends: both layers draw again, for the map on show
   M.combat = false
   local f = MQ.Pins.combatFrame
   f.__scripts.OnEvent(f, "PLAYER_REGEN_ENABLED")
-  assert(M.map.released > rel and MQ.Pins.provider.drawnFor == 1453 and QMm.provider.drawnFor == 1453, "after combat both layers draw the map on show")
-  for _, pin in ipairs(M.map.pins) do assert(pin:IsShown() and pin.__passThrough[1] == "RightButton", "every pin shown, right-click passing through") end
+  assert(MQ.Pins.provider.draws > d1 and QMm.provider.draws > d2 and MQ.Pins.provider.drawnFor == 1453 and QMm.provider.drawnFor == 1453,
+    "after combat both layers draw the map on show")
+  for _, fr in ipairs(ours(M)) do assert(fr:IsShown() and (not fr.kind.mouse or fr.__passThrough[1] == "RightButton"), "every frame shown, right-click passing through") end
   M.map:SetMapID(1429)
   assert(marksFor(7) == 1, "and the kills done in combat are off the map now")
   M.objectives[7][1].finished = false
+  -- the frames are kept and drawn again, not made anew each time
+  local before = (MQ.Pins.provider.made or 0) + (QMm.provider.made or 0)
+  for _ = 1, 3 do redraw() end
+  assert((MQ.Pins.provider.made or 0) + (QMm.provider.made or 0) == before, "a redraw makes no new frames")
+
+  -- the game's own map pin: with Ctrl held, or the map's pin button on, QuestBank's frames let the mouse through, so the
+  -- player's click lands on the map and the game places its pin as its own code (the cursor over them is the map's pin
+  -- cursor then). Let go, they take it again; in combat too (EnableMouse is restricted on protected frames only).
+  -- Not on a map the game has no pins for: a click there is QuestBank's waypoint, as without Ctrl
+  do
+    local function mice()
+      local on, off = 0, 0
+      for _, fr in ipairs(ours(M)) do
+        if fr.kind.mouse then if fr.__mouse then on = on + 1 else off = off + 1 end end
+      end
+      return on, off
+    end
+    local on0, off0 = mice()
+    assert(on0 > 0 and off0 == 0, "every icon and route pin takes the mouse")
+    M.ctrl = true; tick(M, 0)
+    local on1, off1 = mice()
+    assert(on1 == 0 and off1 == on0, "Ctrl held: each lets the mouse through to the map")
+    for _, fr in ipairs(ours(M)) do if not fr.kind.mouse then assert(fr.__mouse == false, "an area still takes none") end end
+    redraw()
+    assert(mice() == 0, "drawn again with Ctrl held: still through")
+    M.combat = true
+    M.ctrl = false; tick(M, 0)
+    assert(select(2, mice()) == 0, "let go, in combat: they take it again")
+    M.ctrl = true; tick(M, 0)
+    assert(mice() == 0, "and Ctrl again, in combat: through")
+    M.combat = false
+    M.ctrl = false; tick(M, 0)
+    M.map.WorldMapTrackingPinButton.isActive = true; tick(M, 0)
+    assert(mice() == 0, "the map's pin button on: through")
+    M.noPins = { [1453] = true }
+    M.map:SetMapID(1453); tick(M, 0)
+    assert(select(2, mice()) == 0, "a map the game has no pins for: they keep the mouse")
+    M.map:SetMapID(1429); tick(M, 0)
+    assert(mice() == 0, "back on Elwynn: through")
+    M.noPins = nil
+    M.map.WorldMapTrackingPinButton.isActive = false; tick(M, 0)
+    assert(select(2, mice()) == 0, "the button off: they take it again")
+    -- EnableMouse isn't restricted on plain frames: a client whose CheckAllowProtectedFunctions says no (in combat, say)
+    -- changes nothing, and isn't asked. A frame that says it is protected keeps the mouse
+    local asked = 0
+    M.env.C_RestrictedActions = { CheckAllowProtectedFunctions = function() asked = asked + 1; return false end }
+    M.combat = true
+    M.ctrl = true; tick(M, 0); tick(M, 0)
+    assert(mice() == 0 and asked == 0, "a no for protected calls, in combat: through all the same, and not asked")
+    M.ctrl = false; tick(M, 0)
+    assert(select(2, mice()) == 0, "and back")
+    M.combat = false
+    M.env.C_RestrictedActions = nil
+    local prot = ours(M)[1]
+    for _, fr in ipairs(ours(M)) do if fr.kind.mouse then prot = fr; break end end
+    prot.IsProtected = function() return true end
+    M.ctrl = true; tick(M, 0)
+    local on2 = mice()
+    assert(on2 == 1 and prot.__mouse, "a protected one keeps the mouse; the rest let it through")
+    M.ctrl = false; tick(M, 0)
+    prot.IsProtected = nil
+    -- the map shut with Ctrl held: drawn with the mouse when it opens; Ctrl still down, through again
+    M.ctrl = true; tick(M, 0)
+    M.map:Close()
+    assert(select(2, mice()) == 0, "the map shut: they take the mouse again")
+    tick(M, 0)
+    assert(select(2, mice()) == 0, "and the keys aren't watched while it is shut")
+    M.map:Open(); tick(M, 0)
+    assert(mice() == 0, "opened with Ctrl down: through")
+    M.ctrl = false; tick(M, 0)
+    assert(select(2, mice()) == 0 and not MQ.Pins.through, "let go")
+  end
+
+  -- the game holding addons back as in combat without InCombatLockdown (C_RestrictedActions, an encounter): the layers
+  -- wait the same way, and draw when the restriction ends (ADDON_RESTRICTION_STATE_CHANGED, inactive); the frames'
+  -- right-click pass-through is set only when the client allows protected calls on the frame (asked silently)
+  do
+    local E = M.env.Enum
+    E.AddOnRestrictionType = { Combat = 0, Encounter = 1, ChallengeMode = 2, PvPMatch = 3, Map = 4, Chat = 5 }
+    E.AddOnRestrictionState = { Inactive = 0, Activating = 1, Active = 2 }
+    local active, allow = {}, true
+    M.env.C_RestrictedActions = {
+      IsAddOnRestrictionActive = function(kind) return active[kind] or false end,
+      CheckAllowProtectedFunctions = function(obj, silent) assert(silent == true, "asked silently: asking never trips the block"); return allow end,
+    }
+    local pv, cf = MQ.Pins.provider, MQ.Pins.combatFrame
+    assert(not MQ.Pins.InCombat(), "nothing held back: not combat")
+    active[1] = true
+    assert(MQ.Pins.InCombat(), "an encounter's restriction counts as combat")
+    local d = pv.draws
+    M.map:SetMapID(1453)
+    assert(pv.draws == d, "nothing drawn while the game holds addons back")
+    cf.__scripts.OnEvent(cf, "ADDON_RESTRICTION_STATE_CHANGED", 1, 1)
+    assert(pv.draws == d, "the event before a restriction starts: nothing")
+    active[1] = nil
+    cf.__scripts.OnEvent(cf, "ADDON_RESTRICTION_STATE_CHANGED", 1, 0)
+    assert(pv.draws > d and pv.drawnFor == 1453, "drawn when it ends, for the map on show")
+    -- a frame made while the client says no: no pass-through call; set on its next draw once allowed
+    allow = false
+    local fr = pv:Make(MQ.Pins.ROUTE)
+    assert(fr and not fr.passSet and not fr.__passThrough, "made, the protected call left out")
+    pv.free[MQ.Pins.ROUTE] = pv.free[MQ.Pins.ROUTE] or {}
+    table.insert(pv.free[MQ.Pins.ROUTE], fr)
+    allow = true
+    local got = pv:Add(MQ.Pins.ROUTE, { name = "Test stop", num = 1, icon = 1 }, 0.5, 0.5)
+    assert(got == fr and fr.passSet and fr.__passThrough and fr.__passThrough[1] == "RightButton", "allowed again: set when it is next drawn, once")
+    pv:RefreshAllData()
+    M.env.C_RestrictedActions = nil
+    E.AddOnRestrictionType, E.AddOnRestrictionState = nil, nil
+    M.map:SetMapID(1429)
+  end
+
+  -- the recorder: a call the game blocked and blamed on QuestBank is kept in QuestBankDB.diag.blocked, its stack with
+  -- QuestBank's own files by name and no other path, and said once in chat; another addon's is none of QuestBank's
+  do
+    local bf = MQ.blockedFrame
+    M.env.debugstack = function() return table.concat({
+      "[C]: in function 'SetPassThroughButtons'",
+      "[Interface/AddOns/Blizzard_MapCanvas/MapCanvas_DataProviderBase.lua]:290: in function 'CheckMouseButtonPassthrough'",
+      "[Interface/AddOns/Blizzard_MapCanvas/Blizzard_MapCanvas.lua]:331: in function 'AcquirePin'",
+      '[string "@Interface/AddOns/QuestBank/Pins.lua"]:164: in function <Interface/AddOns/QuestBank/Pins.lua:160>',
+      "[Interface/AddOns/SomeOtherAddon/Core.lua]:12: in function 'Thing'",
+      "C:\\Users\\Someone\\World of Warcraft\\_classic_\\Interface\\AddOns\\QuestBank\\Core.lua:50: in function <...aceBlizzard_MapCanvas/Blizzard_MapCanvas.lua:116>",
+      "*Blizzard_WorldMap.xml:78_OnLoad:1: in function 'onCloseCallback'",
+    }, "\n") end
+    local said = #M.chat
+    M.combat = true
+    bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "QuestBank", "Frame:SetPassThroughButtons()")
+    local list = M.env.QuestBankDB.diag.blocked
+    local b = list and list[1]
+    assert(b and b.fn == "Frame:SetPassThroughButtons()" and b.combat == true and type(b.at) == "number" and b.kind == "blocked" and b.qb == MQ.version,
+      "a blocked call is kept: what, when, in combat")
+    local st = b.stack
+    assert(not st:find("Interface", 1, true) and not st:find("SomeOtherAddon", 1, true) and not st:find("Users", 1, true) and not st:find("Blizzard_", 1, true)
+      and st:find("[QuestBank/Pins.lua]:164: in function <QuestBank/Pins.lua:160>", 1, true) and st:find("[(game)]:331: in function 'AcquirePin'", 1, true)
+      and st:find("[(addon)]:12: in function 'Thing'", 1, true) and st:find("QuestBank/Core.lua:50", 1, true) and st:find("[C]: in function 'SetPassThroughButtons'", 1, true),
+      "its stack: QuestBank's files by name, no other path:\n" .. st)
+    assert(#M.chat == said + 1 and M.chat[#M.chat]:find("calling Frame:SetPassThroughButtons() in combat", 1, true) and M.chat[#M.chat]:find("/qb errors", 1, true),
+      "said in chat: " .. M.chat[#M.chat])
+    print("blocked, kept:", (st:gsub("\n", " | ")))
+    -- the same call again: counted. Others: kept, the last 10. Said once
+    bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "QuestBank", "Frame:SetPassThroughButtons()")
+    assert(#list == 1 and list[1].n == 2, "the same call again: counted")
+    M.combat = false
+    for i = 1, 11 do bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "QuestBank", "Thing" .. i .. "()") end
+    assert(#list == 10 and list[10].fn == "Thing11()" and list[1].fn == "Thing2()" and list[1].combat == false, "the last 10 kept")
+    bf.__scripts.OnEvent(bf, "ADDON_ACTION_FORBIDDEN", "QuestBank", "UseQuestLogSpecialItem()")
+    assert(list[#list].kind == "forbidden" and list[#list].fn == "UseQuestLogSpecialItem()", "forbidden ones too")
+    bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "SomeOtherAddon", "CastSpellByName()")
+    bf.__scripts.OnEvent(bf, "ADDON_ACTION_FORBIDDEN", "SomeOtherAddon", "CastSpellByName()")
+    assert(list[#list].fn == "UseQuestLogSpecialItem()" and #M.chat == said + 1, "another addon's: not kept, nothing said")
+    -- /qb errors lists them to copy, newest first; /qb errors clear forgets them
+    M.env.SlashCmdList.QUESTBANK("errors")
+    local text = M.env.QuestBankErrors.eb:GetText()
+    assert(text:find("the game forbade UseQuestLogSpecialItem()", 1, true) and text:find("the game blocked Thing11()", 1, true)
+      and text:find("the game forbade", 1, true) < text:find("the game blocked Thing11()", 1, true), "/qb errors lists them: " .. text:sub(1, 300))
+    M.env.QuestBankErrors:Hide()
+    M.env.SlashCmdList.QUESTBANK("errors clear")
+    assert(M.env.QuestBankDB.diag.blocked == nil, "/qb errors clear forgets them")
+    M.env.debugstack = nil
+    -- a long chain: both ends kept. The game cuts debugstack(2, 8, 8) to the top 8 lines and the bottom 8 with "..."
+    -- between; the top shows the blocked call, the bottom where the chain began (here an event handler, in another
+    -- addon's file: a stale taint has no QuestBank frame in it at all)
+    local chain = { "[C]: in function 'SetPassThroughButtons'" }
+    for i = 2, 20 do chain[#chain + 1] = "[Interface/AddOns/Blizzard_MapCanvas/Blizzard_MapCanvas.lua]:" .. (100 + i) .. ": in function 'Step" .. i .. "'" end
+    chain[#chain + 1] = "[Interface/AddOns/SomeOtherAddon/Libs/AceEvent-3.0.lua]:120: in function <...AceEvent-3.0.lua:119>"
+    local asked
+    M.env.debugstack = function(start, top, bottom)
+      asked = { start, top, bottom }
+      local out = {}
+      for i = 1, top do out[#out + 1] = chain[i] end
+      out[#out + 1] = "..."
+      for i = #chain - bottom + 1, #chain do out[#out + 1] = chain[i] end
+      return table.concat(out, "\n") .. "\n"
+    end
+    bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "QuestBank", "Frame:SetPassThroughButtons()")
+    assert(asked and asked[1] == 2 and asked[2] == 8 and asked[3] == 8, "the recorder asks for both ends: debugstack(2, 8, 8)")
+    local kept = M.env.QuestBankDB.diag.blocked[#M.env.QuestBankDB.diag.blocked].stack
+    local rows = {}
+    for row in kept:gmatch("[^\n]+") do rows[#rows + 1] = row end
+    assert(#rows == 17 and rows[1] == "[C]: in function 'SetPassThroughButtons'" and rows[9] == "..." and rows[17]:find("[(addon)]:120:", 1, true)
+      and kept:find("Step8'", 1, true) and not kept:find("Step9'", 1, true) and not kept:find("Step13'", 1, true) and kept:find("Step14'", 1, true),
+      "the top 8 and the bottom 8 kept, the middle left out:\n" .. kept)
+    -- a stack longer than that however it comes: cut the same way, 16 frames at most
+    local long = {}
+    for i = 1, 30 do long[#long + 1] = "[Interface/AddOns/QuestBank/UI.lua]:" .. i .. ": in function 'f" .. i .. "'" end
+    local cut = MQ.Err.CleanStack(table.concat(long, "\n"))
+    rows = {}
+    for row in cut:gmatch("[^\n]+") do rows[#rows + 1] = row end
+    assert(#rows == 17 and rows[1] == "[QuestBank/UI.lua]:1: in function 'f1'" and rows[8]:find("'f8'", 1, true) and rows[9] == "..."
+      and rows[10]:find("'f23'", 1, true) and rows[17]:find("'f30'", 1, true), "a long stack: its two ends:\n" .. cut)
+    M.env.debugstack = nil
+    M.env.SlashCmdList.QUESTBANK("errors clear")
+  end
 
   -- an older Data.lua: no spots at all, still the ! and ?
   MQ:Settings().pins = false
@@ -3926,7 +4451,7 @@ do
       t = tipOf(tp)
       assert(tp.data.kind == "turn" and tp.Icon.__atlas == "QuestTurnin" and #tp.data.quests == 1 and tp.data.quests[1].id == 60 and #tp.data.offers >= #jw.give
         and t:find("William Pestle\nHand in:\n[7] Kobold Candles", 1, true) and t:find("Priestess Josetta\nTo pick up:\n", 1, true)
-        and t:find("Shift-click: track it.", 1, true), "a ? at the spot, each NPC's part on it: " .. t)
+        and t:find("Click: waypoint.", 1, true) and not t:find("Shift-click", 1, true), "a ? at the spot, each NPC's part on it: " .. t)
       print("map icons, a ? and a ! at one spot:", (t:gsub("\n", " | ")))
       table.remove(M.log)
       redraw()
@@ -4293,7 +4818,7 @@ do
   H:Settings().pins = false
   H:Recompute(true); H.Model.Finish(); H.Pins:Update(); H.QuestMap:Update()
   local n = 0
-  for _, pin in ipairs(horde.map.byTemplate.QuestBankQuestPinTemplate or {}) do
+  for _, pin in ipairs(ours(horde, "QuestBankQuestPinTemplate")) do
     for _, q in ipairs(pin.data.quests or {}) do assert(q.side ~= 1, "no Alliance quest on the Horde's map: " .. q.name) end
     n = n + 1
   end
@@ -4303,7 +4828,7 @@ do
   owner.map.id = 1453
   local t0 = owner.env.debugprofilestop()
   for _ = 1, 10 do O.QuestMap.provider:RefreshAllData() end
-  print(string.format("map icons, Stormwind for the owner: %d icons, %.1f ms a redraw", #(owner.map.byTemplate.QuestBankQuestPinTemplate or {}), (owner.env.debugprofilestop() - t0) / 10))
+  print(string.format("map icons, Stormwind for the owner: %d icons, %.1f ms a redraw", #ours(owner, "QuestBankQuestPinTemplate"), (owner.env.debugprofilestop() - t0) / 10))
   -- the real data, whatever gen_data has written so far: every map with a spot draws without an error
   local D0 = O.Data
   if D0.SPOT then
@@ -4314,6 +4839,61 @@ do
     for m in pairs(maps) do drawn = drawn + #O.QuestMap:Build(m) end
     print(string.format("map icons, real data: %d spots on %d maps; %d icons for the owner", spots, (function() local k = 0 for _ in pairs(maps) do k = k + 1 end return k end)(), drawn))
   end
+end
+
+----------------------------------------------------------------------------
+-- calls QuestBank's code never makes, read from the files themselves (code only, comments left out). Each one runs
+-- the game's own code as QuestBank, where the game later blocks it and blames QuestBank:
+--   the game's waypoint and tracking (USER_WAYPOINT_UPDATED, SUPER_TRACKING_CHANGED and QUEST_WATCH_LIST_CHANGED run
+--   Blizzard's listeners inside the call), Blizzard's popups (their list of popups on screen), opening the chat box
+--   (the game's chat globals), the escort prompt's Yes with no click behind it and its count of a full log (MAX_QUESTS:
+--   read, never written; the prompt reads it as it opens), and the map canvas's pin calls
+----------------------------------------------------------------------------
+do
+  -- whole names (CanSetUserWaypointOnMap, a question, is fine), and the start of a family (StaticPopup_Show, _Hide...)
+  local NEVER = { "SetUserWaypoint", "ClearUserWaypoint", "C_SuperTrack", "AddQuestWatch", "RemoveQuestWatch",
+    "AddWorldQuestWatch", "AddQuestWatchForQuestID", "StaticPopupDialogs", "OpenChat", "ChatFrame_OpenChat", "ActivateChat",
+    "ACTIVE_CHAT_EDIT_BOX", "LAST_ACTIVE_CHAT_EDIT_BOX", "ConfirmAcceptQuest", "AcquirePin", "RemoveAllPinsByTemplate",
+    "RemovePin", "SetPinPosition", "MarkCanvasDirty", "UpdateQuestAcceptLogFullDialog", "MAX_QUESTLOG_QUESTS" }
+  local FAMILIES = { "StaticPopup_", "SetSuperTracked" }
+  local PATTERNS = {}
+  for _, name in ipairs(NEVER) do PATTERNS[#PATTERNS + 1] = { "%f[%w_]" .. name .. "%f[^%w_]", name } end
+  for _, name in ipairs(FAMILIES) do PATTERNS[#PATTERNS + 1] = { "%f[%w_]" .. name, name .. "*" } end
+  -- ChatFrameUtil's LinkItem opens the box when none is open: the name in a string is how QuestBank would reach it
+  PATTERNS[#PATTERNS + 1] = { "[\"']LinkItem[\"']", "ChatFrameUtil LinkItem" }
+  -- the game's MAX_QUESTS is read (the escort prompt's count), never written: the prompt reads it as it opens
+  PATTERNS[#PATTERNS + 1] = { "%f[%w_]MAX_QUESTS%s*=%f[^=]", "MAX_QUESTS =" }
+  -- a line without its comment (a "--" outside a string)
+  local function code(line)
+    local q, i = nil, 1
+    while i <= #line do
+      local ch = line:sub(i, i)
+      if q then
+        if ch == "\\" then i = i + 1 elseif ch == q then q = nil end
+      elseif ch == '"' or ch == "'" then q = ch
+      elseif line:sub(i, i + 1) == "--" then return line:sub(1, i - 1) end
+      i = i + 1
+    end
+    return line
+  end
+  local found, files = {}, 0
+  for line in io.lines(HERE .. "/QuestBank/QuestBank.toc") do
+    local f = line:match("^%s*([%w_]+%.lua)%s*$")
+    if f and f ~= "Data.lua" then
+      files = files + 1
+      local n = 0
+      for src in io.lines(HERE .. "/QuestBank/" .. f) do
+        n = n + 1
+        local c = code(src)
+        for _, pat in ipairs(PATTERNS) do
+          if c:find(pat[1]) then found[#found + 1] = string.format("%s:%d %s", f, n, pat[2]) end
+        end
+      end
+    end
+  end
+  assert(files >= 10, "every Lua file the TOC lists was read")
+  assert(#found == 0, "QuestBank's code makes a call that runs the game's code as QuestBank:\n  " .. table.concat(found, "\n  "))
+  print("calls QuestBank never makes:", #PATTERNS, "names, none in", files, "files")
 end
 
 local seen = {}

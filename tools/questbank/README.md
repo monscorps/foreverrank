@@ -15,7 +15,10 @@ The addon, `QuestBank/`:
 - `Discover.lua`: what the game shows while you quest (quests, the NPCs who give and take them and where they stand, offers, chains, XP, reward items), in `QuestBankDB.disc`, stamped with the client's build and interface number.
 - `Game.lua`: on the Forever client only (interface 16xxx), and while Settings' "Note items and spells you see" is ticked: per class and race the spells learned and the items worn and carried, and the tooltips of the weapons, armor and recipes the game shows (at most 1,000, read again after six hours), in `QuestBankDB.game`. No names. Unticking the box clears what was noted, since `QuestBank.lua` is uploaded whole. It also takes over, once, the notes of the addon it replaces, and once they are in, tells players still running that one that its folder can go.
 - `Model.lua`: Forever quest XP, travel over the flight network, and the route planner (planned a few milliseconds a frame).
-- `Pins.lua`, `Pins.xml`: numbered pins on the world map and the waypoint that follows the route.
+- `Pins.lua`, `Pins.xml`: numbered pins on the world map, drawn as QuestBank's own frames on the map canvas (not the canvas's pins, whose AcquirePin runs a call the game blocks in combat), and the switch that lets Ctrl+clicks through to the game's own map pin.
+- `QuestMap.lua`: the quest icons on each zone's map (where quests start and end, objective areas, quest items), on the same layer.
+- `Arrow.lua`: the direction arrow. Waypoints are QuestBank's arrow, or the real TomTom's; QuestBank never sets the game's own waypoint, it prints a link that does when the player clicks it (`Core.lua`, `API.SetWaypoint`).
+- `Auto.lua`: accepting and handing in quests at NPCs when Settings say so. The game's escort prompt is left to the player.
 - `Sync.lua`: sharing banks, plans, runs and reported XP with QuestBank users in the party and guild.
 - `UI.lua`: the window with its five pages (Quest Log, Plan, Hand-in Route, Party, Settings), the post box, and the minimap button.
 

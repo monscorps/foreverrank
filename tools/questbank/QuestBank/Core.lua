@@ -2,9 +2,9 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.6.0"
+QB.version = "3.6.1"
 QB.MAXLEVEL = 60
-QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's own UI constant still says 25; see QB:FixEscortPrompt)
+QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's escort prompt has said 25: see QB.EscortLimit)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
 
 local D = QB.Data
@@ -56,6 +56,101 @@ end
 function QB.Try(where, fn, ...)
   return QB.Safe(fn, where)(...)
 end
+
+----------------------------------------------------------------------------
+-- blocked actions: the game blocked a protected call and blamed QuestBank. ADDON_ACTION_BLOCKED is the chat line
+-- "Interface action failed because of an AddOn"; ADDON_ACTION_FORBIDDEN the window "QuestBank has been blocked from
+-- an action only available to the Blizzard UI". Both come with the addon blamed and the function, at the moment of
+-- the call, so the stack then is the one that tripped. QuestBankDB.diag.blocked keeps the last 10: the function, when
+-- (time()), in combat or not, and that stack with QuestBank's own files by name and every other file's path left out
+-- ("(game)" for Blizzard's, "(addon)" for anyone else's). No names. Said once a session in chat, so the player can
+-- tell us; /qb errors lists them to copy. (The client has no event for taint itself.)
+----------------------------------------------------------------------------
+local OWN = ADDON:gsub("%p", "%%%0")
+local toldBlocked = false
+
+local function pathOut(path)
+  local p = path:gsub("\\", "/")
+  local own = p:match("^.-[/@]" .. OWN .. "/(.+)$") or p:match("^%.*" .. OWN .. "/(.+)$")
+  if own then return ADDON .. "/" .. own end
+  if p:find("Blizzard_", 1, true) or p:find("FrameXML", 1, true) or p:find("SharedXML", 1, true) then return "(game)" end
+  return "(addon)"
+end
+
+-- every path to a .lua or .xml file in a line: absolute ones (spaces and all) first, then the game's relative ones
+local function scrub(line, ext)
+  local tail = "[^%[%]<>\"']-%." .. ext
+  line = line:gsub("%a:[\\/]" .. tail, pathOut)
+  line = line:gsub("^/" .. tail, pathOut)
+  line = line:gsub("([%s%[<\"'@])(/" .. tail .. ")", function(pre, path) return pre .. pathOut(path) end)
+  line = line:gsub("[^%s%[%]<>\"']+%." .. ext, pathOut)
+  return line
+end
+
+-- a short stack: both ends of it, at most 8 frames from the top (the blocked call and what made it) and 8 from the
+-- bottom (where the chain began: an event, a click, a timer), "..." where the middle is left out. A stale taint has no
+-- QuestBank frame in it at all, and then the two ends are all there is to go on. QuestBank's files by name, no other paths
+local ENDS = 8
+local function gap(line) return line:match("^%.%.%.$") ~= nil end
+function Err.CleanStack(stack)
+  if type(stack) ~= "string" then return nil end
+  local out, frames = {}, 0
+  for line in stack:gmatch("[^\n]+") do
+    line = line:gsub('%[string "@?([^"]*)"%]', "[%1]")
+    line = scrub(scrub(line, "lua"), "xml")
+    line = line:gsub("^%s+", ""):gsub("%s+$", ""):sub(1, 160)
+    if line ~= "" then
+      out[#out + 1] = line
+      if not gap(line) then frames = frames + 1 end
+    end
+  end
+  if frames > 2 * ENDS then
+    local top, bottom = {}, {}
+    for _, line in ipairs(out) do if not gap(line) and #top < ENDS then top[#top + 1] = line end end
+    for i = #out, 1, -1 do if not gap(out[i]) and #bottom < ENDS then table.insert(bottom, 1, out[i]) end end
+    out = top
+    out[#out + 1] = "..."
+    for _, line in ipairs(bottom) do out[#out + 1] = line end
+  end
+  return table.concat(out, "\n")
+end
+
+function Err.Blocked(event, who, fn, stack)
+  who, fn = QB.Plain(who), QB.Plain(fn)
+  if who ~= ADDON then return false end
+  fn = type(fn) == "string" and fn:sub(1, 80) or "?"
+  QuestBankDB = QuestBankDB or {}
+  local db = QuestBankDB
+  db.diag = type(db.diag) == "table" and db.diag or {}
+  local list = type(db.diag.blocked) == "table" and db.diag.blocked or {}
+  db.diag.blocked = list
+  local combat = InCombatLockdown and InCombatLockdown() and true or false
+  local kind = event == "ADDON_ACTION_FORBIDDEN" and "forbidden" or "blocked"
+  local clean = Err.CleanStack(stack)
+  local last = list[#list]
+  if last and last.fn == fn and last.stack == clean and last.combat == combat and last.kind == kind then
+    -- the same call again (a redraw trips it once per frame it touches): counted, not stored twice
+    last.n, last.at = (last.n or 1) + 1, time and time() or last.at
+  else
+    list[#list + 1] = { fn = fn, at = time and time() or 0, combat = combat, stack = clean, kind = kind, qb = QB.version }
+    while #list > 10 do table.remove(list, 1) end
+  end
+  if not toldBlocked then
+    toldBlocked = true
+    QB:Print(string.format("was stopped by the game from calling %s%s. That is a QuestBank bug, not something you did: /qb errors shows what to copy into the Discord.",
+      fn, combat and " in combat" or ""))
+  end
+  return true
+end
+
+QB.blockedFrame = CreateFrame("Frame")
+QB.blockedFrame:SetScript("OnEvent", function(_, event, who, fn)
+  -- the stack first, before anything else is called: the game sends these inside the blocked call. Both ends of it:
+  -- the top 8 lines and the bottom 8, the game puts "..." between them
+  local stack = debugstack and debugstack(2, 8, 8) or nil
+  QB.Try("blocked action", Err.Blocked, event, who, fn, stack)
+end)
+for _, e in ipairs({ "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do pcall(QB.blockedFrame.RegisterEvent, QB.blockedFrame, e) end
 
 ----------------------------------------------------------------------------
 -- API shims: the Forever client carries the modern API, Classic names are the fallback
@@ -274,15 +369,20 @@ function API.MapID()
   end
 end
 
--- where you stand, as a place on the continent: {c, wx, wy}
+-- where you stand, as a place on the continent: {c, wx, wy}. Nil where the client hides it (a secret map id, position
+-- or coordinate: the arrow reads this every tick, so nothing here may touch one)
 function API.WorldPosition()
-  local m = API.MapID()
+  local m = QB.Plain(API.MapID())
   if not (m and C_Map and C_Map.GetPlayerMapPosition) then return nil end
   local ok, pos = pcall(C_Map.GetPlayerMapPosition, m, "player")
-  if not ok or not pos then return nil end
-  local x, y = pos.x, pos.y
-  if pos.GetXY then x, y = pos:GetXY() end
-  if not x then return nil end
+  pos = ok and QB.Plain(pos) or nil
+  if type(pos) ~= "table" then return nil end
+  local x, y = QB.Plain(pos.x), QB.Plain(pos.y)
+  if pos.GetXY then
+    local ok2, gx, gy = pcall(pos.GetXY, pos)
+    if ok2 then x, y = QB.Plain(gx), QB.Plain(gy) end
+  end
+  if type(x) ~= "number" or type(y) ~= "number" then return nil end
   return QB.Model.World(m, x * 100, y * 100)
 end
 
@@ -334,29 +434,104 @@ function API.RaceBit()
   return 2 ^ (id - 1)
 end
 
--- one waypoint at a time: TomTom's arrow if you have it, else the game's own map pin
-local tomtomUid
+-- one waypoint at a time: TomTom's arrow if you have it, else QuestBank's own arrow, and a link in chat that puts the
+-- game's own map pin there when you click it.
+-- QuestBank never sets the game's waypoint itself (C_Map.SetUserWaypoint, C_Map.ClearUserWaypoint, C_SuperTrack): the
+-- game sends USER_WAYPOINT_UPDATED inside that call, and Blizzard's listeners run in it as QuestBank. The open map's
+-- waypoint provider acquires its pin then (SetPassThroughButtons: blocked in combat); and the map's tracking-pin button
+-- listens at all times, map open or not, and hands its state to the waypoint provider, which keeps it. A Ctrl+click on
+-- the map in a later fight then places Blizzard's pin as QuestBank, and the game blocks it and blames QuestBank. No
+-- timing makes the call clean. A click on the link is the player's own: Blizzard's handler (LinkUtil, LinkTypes
+-- WorldMapWaypoint, ItemRefHandlers.lua) sets the pin and opens the map on it, as the game's code
+--
+-- TomTom draws its waypoint on the world map with HereBeDragons-Pins, whose AddWorldMapIconMap and RemoveWorldMapIcon
+-- call the map canvas's AcquirePin and RemovePin there and then, map open or shut (HBD-Pins 2.0: worldmapProvider
+-- HandlePin, RemovePinByIcon). Both run the scroll container's MarkCanvasDirty, which on an open, settled map writes
+-- its scale and scroll. Written inside QuestBank's click, those carry taint that the map's own pins read in combat
+-- (Pins.lua says how that ends), with QuestBank in the chain. On a shut map the scroll container has cleared them (its
+-- OnHide) and MarkCanvasDirty writes nothing. So while the map is open TomTom is told nothing: the newest waypoint
+-- waits, and TomTom hears of it once the map shuts (Pins.lua, P.AfterClose). QuestBank's arrow points at it at once
+--
+-- Only the real TomTom. Stand-ins answer TomTom:AddWaypoint by setting the game's own waypoint inside QuestBank's call,
+-- the thing QuestBank never does: MapPinEnhanced puts in a TomTom of its own that has only AddWaypoint, or hooks the
+-- real one's (C_Map.SetUserWaypoint either way); WaypointTracker's bridge can too (it marks itself). With those, QuestBank
+-- shows its arrow and prints the link, as with no TomTom
+local function addonLoaded(name)
+  local loaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+  if not loaded then return nil end
+  local ok, yes = pcall(loaded, name)
+  if not ok then return nil end
+  return QB.Plain(yes) == true
+end
+function API.TomTom()
+  local t = TomTom
+  if type(t) ~= "table" or not t.AddWaypoint or not t.IsCrazyArrowEmpty or t.isWaypointTrackerBridge then return nil end
+  if MapPinEnhanced or addonLoaded("MapPinEnhanced") or addonLoaded("TomTom") == false then return nil end
+  return t
+end
+local tomtomUid, tomtomLater
+local function toTomTom(t, w)
+  if tomtomUid and t.RemoveWaypoint then pcall(t.RemoveWaypoint, t, tomtomUid) end
+  tomtomUid = t:AddWaypoint(w.m, w.x / 100, w.y / 100, { title = w.title, persistent = false, minimap = true, world = true })
+end
+local function mapOpen() return QB.Pins ~= nil and QB.Pins.MapOpen() end
+
+-- the waypoint TomTom was kept from while the map was open, now that it is shut (nothing while it is still open).
+-- True when TomTom got one
+function API.TomTomLater()
+  local w = tomtomLater
+  if not w or mapOpen() then return false end
+  tomtomLater = nil
+  local t = API.TomTom()
+  if not t then return false end
+  toTomTom(t, w)
+  return true
+end
+
+-- the game's own map-pin link for a spot (x and y 0 to 100), or nil where the game has no pins (an instance's map,
+-- or a client without them): |Hworldmap:<uiMapID>:<x*10000>:<y*10000>|h, the form C_Map.GetUserWaypointHyperlink makes
+function API.WaypointLink(m, x, y)
+  if not (m and x and y) or m == 0 or not C_Map or not C_Map.GetUserWaypointFromHyperlink then return nil end
+  if C_Map.CanSetUserWaypointOnMap then
+    local ok, can = pcall(C_Map.CanSetUserWaypointOnMap, m)
+    if not ok or not QB.Plain(can) then return nil end
+  end
+  local function at(v) return math.floor(math.max(0, math.min(100, v)) * 100 + 0.5) end
+  return string.format("|cffffff00|Hworldmap:%d:%d:%d|h[Map pin]|h|r", m, at(x), at(y))
+end
+
+-- quiet: the run's own, as the next stop changes (Pins.lua): only TomTom hears of it, QuestBank's arrow follows the
+-- route by itself. place: where the arrow points (worked out from m, x, y when not given); false: the route's own, the
+-- arrow stays on what it points at, if it is up
 function API.SetWaypoint(m, x, y, title, quiet, place)
-  -- a waypoint you asked for is one the arrow remembers; place == false says: not this one (the route's own)
-  if not quiet and place ~= false and QB.Arrow then
+  local tomtom = API.TomTom()
+  local shown = false
+  if not quiet and QB.Arrow then
     local p = place or (QB.Model and QB.Model.World and QB.Model.World(m, x, y))
-    if p then QB.Arrow:Pin(title, p.c, p.wx, p.wy) end
+    if p then
+      if place ~= false then QB.Arrow:Pin(title, p.c, p.wx, p.wy) end
+      -- the arrow switched off: shown for this waypoint, until you get there (TomTom's own arrow does that job)
+      if not tomtom then shown = QB.Arrow:ShowFor(title, p.c, p.wx, p.wy) end
+    end
   end
   if not (m and x and y) or m == 0 then return false end
-  if TomTom and TomTom.AddWaypoint then
-    if tomtomUid and TomTom.RemoveWaypoint then pcall(TomTom.RemoveWaypoint, TomTom, tomtomUid) end
-    tomtomUid = TomTom:AddWaypoint(m, x / 100, y / 100, { title = title, persistent = false, minimap = true, world = true })
+  if tomtom then
+    local w = { m = m, x = x, y = y, title = title }
+    if mapOpen() then
+      tomtomLater = w
+      if not quiet then QB:Print(string.format("Waypoint: %s (%.0f, %.0f). TomTom gets it when you close the map.", title or "", x, y)) end
+    else
+      tomtomLater = nil
+      toTomTom(tomtom, w)
+    end
     return true
   end
-  if C_Map and C_Map.SetUserWaypoint and UiMapPoint then
-    if C_Map.CanSetUserWaypointOnMap and not C_Map.CanSetUserWaypointOnMap(m) then return false end
-    C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(m, x / 100, y / 100))
-    if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then C_SuperTrack.SetSuperTrackedUserWaypoint(true) end
-    if not quiet then QB:Print(string.format("Waypoint: %s (%.0f, %.0f)", title or "", x, y)) end
-    return true
-  end
-  QB:Print(string.format("%s: %.1f, %.1f", title or "", x, y))
-  return false
+  if quiet then return false end
+  local link = API.WaypointLink(m, x, y)
+  QB:Print(string.format("Waypoint: %s (%.0f, %.0f).%s%s", title or "", x, y,
+    shown and " The arrow shows the way until you get there." or "",
+    link and (" " .. link .. " puts the game's pin there.") or ""))
+  return true
 end
 
 ----------------------------------------------------------------------------
@@ -774,6 +949,7 @@ function QB.NoteAddons()
   db.diag.addons = {
     at = date("%Y-%m-%d %H:%M"), build = plain(build), iface = plain(iface), qb = QB.version,
     versionCheck = checkOn,
+    maxQuests = (QB.EscortLimit()), -- what the game's escort prompt counts as a full log (25 on older builds, 40 on 70235)
     probe = exists and {
       exists = exists, -- always true: the old uploader reads it
       loaded = flag(loaded) or flag(loading) or false,
@@ -818,9 +994,8 @@ local DEFAULTS = {
   -- questing, 7 below), and the zones, dungeons (by D.CAT key) and continents (0 Eastern Kingdoms,
   -- 1 Kalimdor) you told QuestBank to leave out of its suggestions
   rangeAbove = "auto", rangeBelow = "auto", skipCat = {}, skipCont = {},
-  escort = true, -- keep the join prompt for escort quests working with 25 or more quests in the log
-  -- off until asked for: accept quests for you (pick-ups, and escorts a party member starts), hand finished
-  -- ones in for you (Auto.lua decides when that is wise), and two party-chat lines
+  -- off until asked for: accept quests for you (at an NPC, and ones a party member shares), hand finished ones in
+  -- for you (Auto.lua decides when that is wise), and two party-chat lines
   autoAccept = false, autoTurnIn = false, sayAccept = false, sayComplete = false,
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
   noteGame = true, -- note the spells and item tooltips the Forever client shows, for foreverrank.com (Game.lua)
@@ -1154,42 +1329,31 @@ end
 ----------------------------------------------------------------------------
 -- the join prompt for escort quests. When a party member accepts an escort, the game asks the others
 -- ("X has started a quest", QUEST_ACCEPT_CONFIRM). Which prompt it shows is decided by the UI's MAX_QUESTS
--- constant: at or above it, "your quest log is full" with Yes greyed out, and Yes stays grey by the same
--- comparison. Forever's UI still carries 25 there (Blizzard_FrameXMLBase/Constants.lua on the wow-ui-source
--- forever branch; Blizzard_Game/Mainline/EventImplementation.lua reads it) while the log holds 40, so anyone
--- with 25 or more quests can't join. Both reads happen the moment the prompt opens, so the real size in
--- that constant is enough. The server still has the last word.
+-- (Blizzard_Game/Mainline/EventImplementation.lua): at or above it, "your quest log is full", its Yes greyed out by
+-- the same comparison. Forever's UI carried 25 there while the log holds 40; 1.60.1 (70235) sets it from the log's
+-- size (Blizzard_FrameXMLBase/Constants.lua: Constants.QuestLogConsts.MAXIMUM_NUM_QUESTS_LOG_CAN_ACCEPT, 40).
+-- 3.3.4 to 3.6.0 wrote 40 into MAX_QUESTS themselves. Not any more: a value an addon writes into a global carries
+-- the addon's taint, the game reads it as the prompt opens, and the prompt then opens as QuestBank (StaticPopup_Show
+-- writes the popup system's list of popups on screen as QuestBank: the harm Auto.lua tells of for hiding one). So
+-- QuestBank only reads the number: a client that still counts fewer than the log holds gets told, once a session,
+-- why Yes is grey. The number goes into QuestBankDB.diag.addons too (QB.NoteAddons), so the uploads show which it is.
 ----------------------------------------------------------------------------
-function QB:FixEscortPrompt()
-  if not self:Settings().escort or type(MAX_QUESTS) ~= "number" then return false end
-  local api = C_QuestLog and C_QuestLog.GetMaxNumQuestsCanAccept and tonumber(C_QuestLog.GetMaxNumQuestsCanAccept()) or 0
-  local real = math.max(QB.LOG_SLOTS, api)
-  if MAX_QUESTS < real then
-    QB.escortWas = QB.escortWas or MAX_QUESTS
-    MAX_QUESTS = real
-    if type(MAX_QUESTLOG_QUESTS) == "number" and MAX_QUESTLOG_QUESTS < real then MAX_QUESTLOG_QUESTS = real end
-    -- a prompt already open with its Yes greyed out re-reads the constant when told
-    if UpdateQuestAcceptLogFullDialog then pcall(UpdateQuestAcceptLogFullDialog) end
-  end
-  return true
-end
-
-function QB:UnfixEscortPrompt()
-  if QB.escortWas and type(MAX_QUESTS) == "number" then
-    MAX_QUESTS = QB.escortWas
-    if type(MAX_QUESTLOG_QUESTS) == "number" then MAX_QUESTLOG_QUESTS = QB.escortWas end
-    if UpdateQuestAcceptLogFullDialog then pcall(UpdateQuestAcceptLogFullDialog) end
-  end
+-- the number of quests the game's prompt counts as a full log, and whether that is fewer than the Forever log holds
+function QB.EscortLimit()
+  local n = QB.Plain(MAX_QUESTS)
+  if type(n) ~= "number" then return nil, false end
+  return n, n < QB.LOG_SLOTS and QB.Game ~= nil and QB.Game.Forever()
 end
 
 local toldEscort
+-- true when it said something (Auto.lua's line about the prompt is then left out)
 function QB:EscortPrompt(who, title)
-  if not self:FixEscortPrompt() or toldEscort or not QB.escortWas then return end
-  if (self.state.logCount or 0) >= QB.escortWas then
-    toldEscort = true
-    self:Print(string.format("%s started %s. The game's prompt counts %d quests as a full log; the log holds %d, so QuestBank corrected it and you can say yes. /qb escort for the details.",
-      who or "Someone", title or "a quest", QB.escortWas, MAX_QUESTS))
-  end
+  local limit, short = QB.EscortLimit()
+  if not short or toldEscort or (self.state.logCount or 0) < limit then return false end
+  toldEscort = true
+  self:Print(string.format("%s started %s. The game's prompt counts %d quests as a full log (yours holds %d), so its Yes stays grey: with fewer than %d quests you can join.",
+    who or "Someone", title or "a quest", limit, QB.LOG_SLOTS, limit))
+  return true
 end
 function QB:OnTheDay() return self:Banking() and "on the day" or "at your level" end
 
@@ -1624,7 +1788,10 @@ function Run.Start()
     end
   end
   QuestBankDB.run = run
-  QB:Print("Hand-in run started. Each quest is ticked off with the XP it paid; the route re-plans from where you stand.")
+  -- the game's pin doesn't follow the route (QuestBank never sets it: API.SetWaypoint); the arrow does, and TomTom's
+  local hint = ""
+  if not QB:Settings().arrow and not API.TomTom() then hint = " /qb arrow points you from stop to stop." end
+  QB:Print("Hand-in run started. Each quest is ticked off with the XP it paid; the route re-plans from where you stand." .. hint)
   Run.ArmHour()
   QB:MarkDirty()
 end
@@ -1985,8 +2152,9 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if a1 == ADDON then QB:Settings(); Live.Apply() end
     return
   elseif event == "QUEST_ACCEPT_CONFIRM" then
-    if not (QB.Auto and QB.Auto.WillJoin()) then QB:EscortPrompt(a1, a2) else QB:FixEscortPrompt() end
-    if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end
+    -- the game's own prompt answers it: you say yes there (Auto.lua says why QuestBank no longer does)
+    local said = QB:EscortPrompt(QB.Plain(a1), QB.Plain(a2))
+    if QB.Auto and not said then QB.Auto.OnEvent(event, a1, a2) end
     return
   elseif event == "QUEST_PROGRESS" or event == "QUEST_GREETING" or event == "GOSSIP_SHOW" then
     if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end
@@ -2007,7 +2175,6 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Discover then QB.Discover:Init() end
     if QB.Game then QB.Game:Init() end
     if QB.Arrow then QB.Arrow:Init() end
-    QB:FixEscortPrompt()
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
     Run.ArmHour()
@@ -2154,6 +2321,7 @@ slash = function(msg)
   elseif cmd == "errors" then
     if rest == "clear" then
       QuestBankDB.errors = {}
+      if type(QuestBankDB.diag) == "table" then QuestBankDB.diag.blocked = nil end
       QB:Print("Error list cleared.")
     elseif QB.UI then
       QB.UI:ShowErrors()
@@ -2164,21 +2332,15 @@ slash = function(msg)
     QB:Print(QB.Game and QB.Game.RETIRED or "QuestBank now notes what ForeverProbe did. You can delete the ForeverProbe folder from Interface\\AddOns.")
     QB:Print("The Windows uploader is QuestBank Uploader: foreverrank.com/questbank/")
   elseif cmd == "escort" then
-    local s = QB:Settings()
-    local want = rest:lower():gsub("^%s+", ""):gsub("%s+$", "")
-    if want == "off" then
-      s.escort = false
-      QB:UnfixEscortPrompt()
-    elseif want == "on" then
-      s.escort = true
-      QB:FixEscortPrompt()
-    end
-    local was = QB.escortWas or (type(MAX_QUESTS) == "number" and MAX_QUESTS) or 25
-    if s.escort then
-      QB:Print(string.format("The join prompt for escort quests works with %d or more quests in your log: the game's prompt counts %d as a full log, the log holds %d, QuestBank corrects that when you log in. /qb escort off leaves the game's number alone.",
-        was, was, type(MAX_QUESTS) == "number" and MAX_QUESTS or QB.LOG_SLOTS))
+    -- 3.3.4 to 3.6.0 corrected the game's number here (on, off); QuestBank only reads it now (QB.EscortLimit)
+    local limit, short = QB.EscortLimit()
+    if short then
+      QB:Print(string.format("The game's join prompt for escort quests counts %d quests as a full log; yours holds %d. With %d or more its Yes stays grey. QuestBank leaves the game's number alone: an addon that changes it makes the prompt open as that addon, and the game blames it for what it then blocks.",
+        limit, QB.LOG_SLOTS, limit))
+    elseif limit then
+      QB:Print(string.format("The game's join prompt for escort quests counts %d quests as a full log: with fewer, its Yes works.", limit))
     else
-      QB:Print(string.format("The escort prompt fix is off: with %d or more quests in your log the game's prompt won't let you join an escort a party member starts. /qb escort on turns it back on.", was))
+      QB:Print("This client's join prompt for escort quests has no quest count QuestBank can read.")
     end
   elseif cmd == "skip" then
     local want = rest:lower():gsub("^%s+", ""):gsub("%s+$", "")
