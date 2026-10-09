@@ -5,7 +5,10 @@ credited to:
 
 - **talentsforever.com** — Forever talent trees, per-rank tooltip text,
   racials and race-class matrix, transcribed from BlizzCon 2026 demo footage.
-  Licensed CC BY 4.0. This is the backbone of The Forge's talent data.
+  Licensed CC BY 4.0. The Forge's first talent and racial data, before the
+  beta client; talent, spellbook and racial text now come from the client
+  (build 1.60.1.70291, see the ledger below). Still credited for the
+  race-class matrix the Forge started from.
 - **Blizzard News** (news.blizzard.com) — Deep Dive and What's Next panel
   recaps: Legacy system, professions and camps, itemization, transmog,
   realmless structure, roadmap.
@@ -24,6 +27,7 @@ credited to:
   dungeon names and level ranges, and buyer reports on beta code delivery.
 - **Kotaku, MMO-Champion, classicwow.gg**: developer interview and panel
   reporting (group finding, add-ons, honor ranks, raid sizes, rendering).
+- **PC Gamer, Dexerto**: news headlines in the Wire.
 - **Mobalytics** (mobalytics.gg): euro and pound edition prices, credited as
   theirs until a Blizzard page shows them.
 - **wowforever.quest**: demo talent transcription used to check which buff
@@ -31,8 +35,10 @@ credited to:
 - **Blizzard Entertainment** — World of Warcraft and Warcraft Forever are
   Blizzard's; all game data and icons originate with them. This is an
   unaffiliated fan project.
-- Gear lists are vanilla-era community knowledge, held as placeholders until
-  Forever loot is datamined.
+- Gear and items: the beta client's item tables, ForeverChanges' item files,
+  Wowhead's Forever database and players' QuestBank uploads, as dated in the
+  ledger below. The old vanilla-era placeholder gear lists only decode old
+  share links.
 
 ## Source ledger
 
@@ -43,10 +49,12 @@ carry their own links in news.json.
 
 - https://worldofwarcraft.blizzard.com/en-us/news/24301508
 - https://worldofwarcraft.blizzard.com/en-us/news/24302498
+- https://worldofwarcraft.blizzard.com/en-us/news/24302546
 - https://worldofwarcraft.blizzard.com/en-us/news/24303312
 - https://worldofwarcraft.blizzard.com/en-us/news/24303313
 - https://worldofwarcraft.blizzard.com/en-us/news/24303862
 - https://worldofwarcraft.blizzard.com/en-us/news/24304071
+- https://worldofwarcraft.blizzard.com/en-us/news/24304160
 
 ### Battle.net Shop
 
@@ -56,6 +64,8 @@ carry their own links in news.json.
 
 - https://us.forums.blizzard.com/en/wow/t/krol%E2%80%99dok-stronghold/2349672
 - https://us.forums.blizzard.com/en/wow/t/world-of-warcraft-forever-collectors-edition-beta-access/2347333
+- https://us.forums.blizzard.com/en/wow/t/wow-forever-beta-development-notes-%E2%80%93-updated-october-1/2360696/4
+- https://us.forums.blizzard.com/en/wow/t/2360696/5
 
 ### talentsforever.com
 
@@ -223,10 +233,147 @@ Corrections welcome: open an issue.
   The BiS page no longer keeps its own tooltip copy: it draws the shared
   tooltip from plan/gear.js over the same database.
 
+## Added 2026-10
+
+- 2026-10-01, **build 1.60.1.70170**: the beta's level cap went to 30. Blizzard's
+  development notes of 1 October (us.forums.blizzard.com/en/wow/t/2360696/4)
+  also opened Excavation Site: Wetlands, Razorfen Downs and Uldaman, and cut
+  the extra XP of dungeon quests (the part above a normal quest) by half.
+  QuestBank 3.4.4 applies that cut from 1 October: a multiplier read before
+  it keeps half of its part above 1 (1 + (m - 1) / 2) unless players' hand-ins
+  since show the game's own number.
+- 2026-10-03: items carried from build 70009 to 70170 by client table diff
+  (tools/apply_items.py), with ForeverChanges' build-70170 item files and
+  Wowhead's Forever tooltips for items the server sends
+  (tools/scavenge_items.py); loot for the new dungeons (tools/scavenge_loot.py).
+  Proc, on-use and chance-on-hit effects and Reflect (spikes, thorns and damage
+  on block as one stat) read from the client's spell tables
+  (tools/apply_effects.py, tools/apply_reflect.py).
+- From 2026-10-03, **players' uploads**: ForeverProbe, and since 4 October
+  QuestBank, notes the tooltip of each item the game shows, the spells a
+  character has learned and the gear it wears and carries, with no character,
+  realm or guild names. tools/probe_pull.py merges the uploads; items and
+  spells they showed are marked "seen in game" in the Database and Forge
+  (tools/apply_probe_spells.py), and items no other source has are added
+  "as players' games showed it". QuestBank's quest notes (XP as the game paid
+  it, quest givers, chains) feed its own data releases from 3.5.3 on. By
+  8 October: 136 uploads, 373 items seen in players' games.
+- 2026-10-04: **ForeverProbe folded into QuestBank 3.6.0.** QuestBank Uploader
+  (uploader/) replaces ForeverProbe Sync; /addon/ now only says what to do.
+  The ForeverProbe lines above are history.
+- 2026-10-08, **builds 1.60.1.70205, 70235, 70245 and 70291** via wago.tools.
+  70205 to 70245 serve tables byte-identical to 70170 (our diff; ForeverChanges'
+  patch notes report no talent, spell or item changes in them). 70291
+  carries the changes Blizzard's development notes of 8 October describe
+  (us.forums.blizzard.com/en/wow/t/2360696/5). Items carried from 70170 to
+  70291 (tools/apply_items.py) and re-merged with ForeverChanges' item files,
+  build 70245 on 8 October and build 70291 on 9 October, the day they moved
+  (tools/scavenge_items.py): 23,283 rows, every tooltip at 70291. Reflect and
+  enchants re-read at 70291; dungeon loot refreshed since 3 October
+  (codex/loot.json: 2,019 boss drops, 100 more; 510 quest rewards, 32 more).
+- 2026-10-09, **players' loot records**: QuestBank 3.6.2 notes, on the
+  Forever client, which creature or chest each loot window came from: its id,
+  the item ids and how often, the instance map and difficulty, and the boss
+  fight the kill ended; no name, the player's or the creature's.
+  tools/probe_pull.py merges the uploads' votes into research/questbank/
+  disc.json "loot"; tools/apply_loot.py names the ids through the client's
+  DungeonEncounter and Map tables (1.60.1.70291) and the CMaNGOS Classic
+  database and adds them to codex/loot.json as a third source, "players'
+  games", next to foreverchanges.pro and wowtbc.gg; nothing a site lists is
+  removed, and what stays unnamed is pooled as the dungeon's trash with its
+  ids kept. No upload carries a loot record yet: the addon ships with 3.6.2.
+- Game tables: base mana, armor mitigation, rating conversions and health per
+  Stamina are still the 1.60.1.69876 export of 17 September, labelled "not
+  re-checked since" wherever a page states them. wago.tools serves the
+  client's DB2 tables, not its game tables, and no newer export has been made.
+- Skyborne models: client 70291 has its own Skyborne player models (ChrModel
+  218 and 219, display 139407 and 139408), the high-definition ones, built on
+  the blood elf skeletons; ChrRaces still names the blood elf as their
+  fallback. No standard-definition Skyborne exists yet: Blizzard's post of
+  7 October (worldofwarcraft.blizzard.com/en-us/news/24302546) says those
+  arrive early 2027. The Forge keeps its recoloured blood elf stand-in until
+  then. Tables: ChrRaces, ChrRaceXChrModel, ChrModel, CreatureDisplayInfo and
+  CreatureModelData at 70291 (python3 tools/fetch_wago.py 1.60.1.70291
+  ChrRaceXChrModel ChrModel CreatureDisplayInfo CreatureModelData).
+- 2026-10-08: talents and spellbooks carried from build 70009 to 70291
+  (tools/apply_talents.py, tools/apply_spellbook.py). The 40 racial tooltips
+  were re-read by hand from the client's spell tables at 70291: text rendered
+  with tools/spelltext.py, cast time, range and cooldown from SpellCastTimes,
+  SpellRange and SpellCooldowns, and the few values the renderer leaves blank
+  filled from the spell's own effects. Every racial text on the Forge is the
+  client's now, none from the demo. Hunter and Warlock pet books rebuilt at
+  70291 (tools/build_pets.py), with the Bat's Sonic Blast. Trainer windows in
+  players' games (their uploads) give the level and price of 95 ranks of 37
+  Paladin spells: every level matches the client's; the prices are what those
+  characters paid (140 of 166 are exactly 10% under Classic's, so a reputation
+  discount or a Forever price cut, not known which).
+- Best-in-slot lists at levels 30 and 20 are now our own: every slot ranked
+  by The Forge's scorer over our item database, with sources from our loot
+  tables, QuestBank's quest catalogue and the database's recipes
+  (tools/build_bis.mjs). No hand-picked list is copied. Until 8 October the
+  /bis/ page compiled ForeverChanges' level-20 lists (see 2026-09-23 above);
+  ForeverChanges moved its own lists to level 30 on 2 October. Each list links
+  ForeverChanges' hand-picked list for its spec (their class list where they
+  keep one per class): titles and links only, nothing copied.
+- **ForeverChanges' terms** (foreverchanges.pro/terms, updated 2 October 2026):
+  links and short quotes that mention ForeverChanges are welcome; copying its
+  compiled data wholesale to republish as one's own is not. We use our own
+  client datamine and players' uploads wherever they cover a fact. The item
+  and loot steps keep reading ForeverChanges' item files and dungeon pages,
+  credited here; the best-in-slot lists no longer copy theirs.
+- News: the Wire now runs to 8 October. Dexerto joins it, and PC Gamer and
+  classicwow.gg headlines from mid-September on are added, along with
+  Blizzard's own posts, forum notes and X posts; each headline keeps its own
+  link in news.json.
+- 2026-10-08, items: where the client changed an item after the build
+  ForeverChanges' files read, the client's numbers win and the item says so
+  (131 items on 8 October, when their files were at 70245: Excavation Site
+  and Riverglades rewards, cosmetics' quality, starter armor types,
+  Spiritcaller class locks; none once their files reached 70291 on 9 October). Item sets rebuilt from the 70291
+  client (tools/build_sets.py): 536 sets, 152 broken bonus texts fixed, three
+  sets with their first bonuses. Retribution Aura and Thorns: the client's base
+  damage plus the 6% spell-power ratio from Blizzard's 8 October notes (the
+  client's spell rows carry none).
+- 2026-10-08, the Database: **profession recipes** (codex/recipes.json,
+  tools/build_professions.py) from the 70291 client's SkillLineAbility,
+  SpellReagents, SpellEffect, SpellCastingRequirements, SpellFocusObject,
+  SkillRaceClassInfo and ItemEffect; the Classic Era client 1.15.9.70003's
+  SpellName and SpellEffect to tell Season of Discovery leftovers apart; Classic
+  trainer skills from the CMaNGOS Classic database (GPL-3.0, npc_trainer).
+  **Rare spawns** (codex/rares.json, tools/build_rares.py): CMaNGOS Classic
+  creature spawns, labelled Classic data, drawn on the 70291 maps; dungeon rares
+  from players' loot records. **PvP ranks** (codex/pvp.json, tools/build_pvp.py):
+  the 70291 client's Faction, Curve, CurvePoint and Achievement rows, with the
+  rank rewards from Blizzard's 7 October PvP progression post.
+- 2026-10-08, **the Atlas** (map.js; map/atlas.json written by
+  tools/build_atlas.py): zone levels, flight masters and routes per faction,
+  town labels and dungeon doors, all read from client build 1.60.1.70291.
+  Levels come from AreaTable exploration levels, with one or two far-off places
+  left out and named; flights from TaxiNodes and TaxiPath; towns from AreaPOI;
+  doors from Map corpse points. Naxxramas's door is a client AreaTrigger that
+  CMaNGOS names, and a door's zone comes from the client's place names, else
+  Classic's. The world and continent art is now Forever's own repainted client
+  maps (world_c60, easternkingdoms_c60, kalimdor_c60 from wago.tools,
+  tools/build_maps.py --wago); the old Eastern Kingdoms art did not line up
+  with the client's zone rectangles. The Riverglades read 36-44 in the client,
+  in line with Blizzard's "mid-30s to mid-40s" (12 September recap).
+  2026-10-09: the City of Dalaran door is placed where players' games put the
+  dungeon's quest giver (Image of Archmage Modera, Silverpine Forest 68.7, 45.1,
+  from QuestBank uploads), since the client has no entrance point for it yet;
+  the door says the entrance is inferred.
+- 2026-10-09, item sightings (tools/item_sightings.json): items a player saw and
+  named in game before any tooltip reached us (two City of Dalaran boss drops,
+  Mana-warped Chain Shirt and Refractory Scaleguards), shown with name and slot
+  only and "stats not recorded yet" until a real tooltip arrives.
+- **Blizzard on X** (x.com/Warcraft and developers' accounts): announcements in
+  the Wire, credited as "Blizzard (X)".
+- Players' QuestBank uploads: the quest XP the game paid after the 1 October
+  cut (164 quests agree with the cut), quoted in the level-30 article.
+
 ## QuestBank (/questbank/)
 
 - Forever quest XP (Classic base and each quest's multiplier), quest levels, givers and turn-in NPCs, and the chains Forever changed: Wowhead's Forever quest database, both factions, read September 29, 2026.
 - Quest chains (which quest needs which), mutually exclusive quests, race limits, quests that start from items, quest givers and enders, and spawn points where Wowhead has no position: the CMaNGOS Classic database (github.com/cmangos/classic-db, GPL-3.0). QuestBank is released under the GPL-3.0 for this reason.
 - Forever and Classic XP side by side for dungeon quests, and the Cozy Sleeping Bag chain: ForeverChanges.
-- Flight paths (TaxiNodes, TaxiPath, TaxiPathNode), maps (UiMap, UiMapAssignment, AreaTable), the quest XP table (QuestXP) and textures and icons: the Forever beta client, build 1.60.1.70058, via wago.tools. The Classic Era client (1.15.9.70003) for comparison: its QuestXP table is identical, and its map frames show where Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind.
+- Flight paths (TaxiNodes, TaxiPath, TaxiPathNode), maps (UiMap, UiMapAssignment, AreaTable), the quest XP table (QuestXP), quests that share a completion bit (QuestV2) and textures and icons: the Forever beta client, build 1.60.1.70291, via wago.tools. The Classic Era client (1.15.9.70003) for comparison: its QuestXP table is identical, and its map frames show where Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind.
 - Gaps still open, quest by quest: tools/questbank/GAPS.md, written on every build.

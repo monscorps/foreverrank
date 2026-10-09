@@ -7,7 +7,18 @@
 
   var CAPS = { 20: 11, 30: 21, 60: 51 };
   var cap = 30;
-  function POINTSNOW() { return CAPS[cap]; }
+  // Points at a level cap. The Legacy perk Talented (Adventure tree) starts the points one level earlier per rank,
+  // up to 5, and the total stays capped at 51: the client's TraitCurrencySource rows for talent points.
+  function pointsAt(c, lg) { return Math.min(51, (CAPS[c] || CAPS[30]) + talentedRank(lg)); }
+  function POINTSNOW() { return pointsAt(cap, S.lg); }
+  function talentedRank(lg) {
+    if (!lg) return 0;
+    var ti = 0, pi = 2;   // Adventure, third perk: where codex.json lists Talented, used until the Legacy data loads
+    if (LEGACY && LEGACY.trees) LEGACY.trees.forEach(function (t, i) {
+      (t.perks || []).forEach(function (pk, j) { if (pk[0] === "Talented") { ti = i; pi = j; } });
+    });
+    return Math.min(5, +(String(lg).split("-")[ti] || "").charAt(pi) || 0);
+  }
   var CDN = "https://wow.zamimg.com/images/wow/icons/large/";
 
   var CLASS_COLOUR = {
@@ -300,7 +311,7 @@
   var CMP_LABEL = { "new": "NEW", changed: "CHG", moved: "MOV", renamed: "REN", rank: "RNK", unverified: "?", same: "" };
   var CMP_WORD = { "new": "New in Forever", changed: "Changed from Classic", moved: "Moved in the tree",
     renamed: "Renamed from Classic", rank: "Different rank by 38", same: "Same as Classic", removed: "Classic only",
-    unverified: "Not captured yet" };
+    unverified: "Not compared yet" };
   // Word-level diff (LCS). Returns [classicHTML, foreverHTML] with <del>/<ins> marks.
   function wordDiff(oldT, newT) {
     var a = String(oldT || "").match(/\S+/g) || [], b = String(newT || "").match(/\S+/g) || [];
@@ -361,16 +372,24 @@
         if (!e) return "";
         if (e.hd) meta.push(e.hd);
         if (e.note) meta.push(e.note);
-        return cmpCard(name, "removed", "", e.ct || "Not in the Forever demo book.", meta.join(" "), "A Classic spell a level-38 character could train that the Forever demo book did not list.");
+        return cmpCard(name, "removed", "", e.ct || "Not in the Forever client's spellbook.", meta.join(" "), "A Classic spell the Forever client's trainers do not teach.");
       }
       e = (book.cmp || {})[name];
       if (!e) return "";
       if (e.cn && e.cn !== name) meta.push("Classic name: " + e.cn + ".");
-      if (e.cr) meta.push("Classic at 38: " + e.cr + (e.cl ? ", trained at level " + e.cl : "") + ".");
+      // cb: compared at the same rank in the Classic Era client; older entries compared Classic's rank at level 38
+      if (e.cb) {
+        var m2 = [];
+        if (e.cr) m2.push("Classic " + e.cr + ", the rank the Forever text shows" + (e.crl ? ", learned at level " + e.crl : ""));
+        if (e.cl) m2.push("Classic teaches the spell from level " + e.cl);
+        if (m2.length) meta.push(m2.join("; ") + ".");
+      }
+      else if (e.cr) meta.push("Classic at 38: " + e.cr + (e.cl ? ", trained at level " + e.cl : "") + ".");
       if (e.hd) meta.push("Classic header: " + e.hd + ".");
       if (e.note) meta.push(e.note);
       return cmpCard(name, e.s || "same", (book.desc || {})[name], e.ct, meta.join(" "),
-        e.s === "new" ? "No Classic spell of this name." : "Wowhead Classic tooltip against the BlizzCon demo tooltip" + (e.rk ? " (" + e.rk + ")" : "") + ".");
+        e.s === "new" ? "No Classic spell of this name." : e.cb ? "Classic Era client tooltip against the beta client tooltip" + (e.cr ? ", same rank." : ".") :
+          "Wowhead Classic tooltip against the beta client tooltip" + (e.rk ? " (" + e.rk + ")" : "") + ".");
     }
     if ((p[0] === "r" || p[0] === "rx") && DATA && DATA.races) {
       var R = DATA.races[+p[1]];
@@ -384,7 +403,7 @@
       e = (R.cmp || {})[a[0]] || { s: "same" };
       if (e.cn && e.cn !== a[0]) meta.push("Classic name: " + e.cn + ".");
       if (e.note) meta.push(e.note);
-      return cmpCard(a[0], e.s, a[1], e.ct, meta.join(" "), e.s === "new" ? "Not a Classic racial." : "Wowhead Classic racial tooltip against the demo tooltip.");
+      return cmpCard(a[0], e.s, a[1], e.ct, meta.join(" "), e.s === "new" ? "Not a Classic racial." : "Wowhead Classic racial tooltip against the beta client tooltip.");
     }
     return "";
   }
@@ -462,13 +481,26 @@
   }
   function clampToData(o, budget) {
     if (!DATA || !o) return o;
-    budget = budget || POINTSNOW();
+    // The cap in force now, never a loaded build's own .cap (boot copies that into cap first); Legacy from the build.
+    budget = budget || pointsAt(cap, o.lg);
     var c = DATA.classes[o.cls];
     if (!c) return o;
     for (var ti = 0; ti < 3; ti++) {
       var tal = c.trees[ti].talents;
       o.t[ti] = tal.map(function (t, i) { return Math.min(t.r, o.t[ti][i] || 0); });
     }
+    // points in a talent a later build removed go; one that moved to another tree takes its points along
+    c.trees.forEach(function (tr, ti) {
+      tr.talents.forEach(function (t, i) {
+        if (!t.gone || !o.t[ti][i]) return;
+        c.trees.forEach(function (tr2, tj) {
+          tr2.talents.forEach(function (u, j) {
+            if (t.moved === tr2.name && u.n === t.n && u.from === tr.name && !u.gone && !o.t[tj][j]) o.t[tj][j] = Math.min(u.r, o.t[ti][i]);
+          });
+        });
+        o.t[ti][i] = 0;
+      });
+    });
     o.gear = c.gear.map(function (g, i) {
       var v = o.gear[i];
       return v != null && v >= 0 && v < g.items.length ? v : null;
@@ -481,7 +513,7 @@
     // A budget cut can orphan a talent: drop anything whose row gate or prerequisite no longer holds.
     for (ti = 0; ti < 3; ti++) {
       var tl = c.trees[ti].talents, byN = {};
-      tl.forEach(function (t, j) { byN[t.n] = j; });
+      tl.forEach(function (t, j) { if (!t.gone || byN[t.n] == null) byN[t.n] = j; });
       for (var changed = true; changed;) {
         changed = false;
         tl.forEach(function (t, j) {
@@ -526,7 +558,7 @@
   // ---- talent points: one rulebook for clicks, right clicks and sheet buttons ----
   function talentRefs(ti, i) {
     var tree = clsData().trees[ti], t = tree.talents[i], byName = {};
-    tree.talents.forEach(function (x, j) { byName[x.n] = j; });
+    tree.talents.forEach(function (x, j) { if (!x.gone || byName[x.n] == null) byName[x.n] = j; });
     return { tree: tree, t: t, byName: byName };
   }
   function canAdd(ti, i) {
@@ -587,7 +619,7 @@
       $("insight").hidden = false;
       var w = LegacyWindow(lgData, {
         root: $("insight-body"), code: S.lg, base: "../codex/",
-        onApply: function (c) { S.lg = c; render(); },
+        onApply: function (c) { S.lg = c; S = clampToData(S) || S; render(); },
         onClose: function () { lgCloser = null; $("insight").hidden = true; $("insight").classList.remove("lgmode"); render(); }
       });
       lgCloser = w.close;
@@ -807,13 +839,15 @@
         var cs = CMP && tf.cmp ? ((tf.cmp[a[0]] || {}).s || "same") : "";
         return '<li class="' + (cs ? "cmp-" + cs : "") + '" data-tip="' + esc("<b>" + esc(a[0]) + "</b>" + esc(a[1])) + '" data-cmp="r:' + ri + ":" + ai + '">' +
           (a[2] ? icon(a[2], "wi wi-sm") : "") + '<b>' + esc(a[0]) + (cs && CMP_LABEL[cs] ? ' <i class="cmpf inl cmp-' + cs + '">' + CMP_LABEL[cs] + "</i>" : "") + '</b><span>' +
-          esc(a[1]) + '</span><i class="tag shared">demo</i></li>';
+          esc(a[1]) + '</span><i class="tag shared">' + (a[3] === "client" ? "client" : "demo") + "</i></li>";
       }).join("") +
       (CMP && tf.classicRemoved && tf.classicRemoved.length ? tf.classicRemoved.map(function (x, xi) {
         return '<li class="cmp-removed gone" data-tip="' + esc("<b>" + esc(x.n) + "</b>" + esc(x.ct || "")) + '" data-cmp="rx:' + ri + ":" + xi + '">' +
           '<b>' + esc(x.n) + ' <i class="cmpf inl cmp-removed">CLASSIC</i></b><span>' + esc(x.ct || "") + "</span></li>";
       }).join("") : "") + "</ul>" +
-      '<p class="line finenote">Racials transcribed from BlizzCon footage; sources credited on GitHub.</p>';
+      '<p class="line finenote">' + (tf.abilities.every(function (a) { return a[3] === "client"; })
+        ? "Racial tooltips from the beta client" + ((/1\.60\.1\.\d+/.exec(DATA.source || "") || [""])[0] ? ", build " + (/1\.60\.1\.\d+/.exec(DATA.source || "") || [""])[0] : "") + "."
+        : "Racials marked demo were transcribed from BlizzCon footage; sources credited on GitHub.") + "</p>";
     }
     return '<ul class="racials">' + r.rx.map(function (x) {
       return "<li>" + '<b>' + esc(x[0]) + '</b><span>' + esc(x[1]) + '</span><i class="tag ' + x[2] + '">' + x[2] + "</i></li>";
@@ -856,7 +890,7 @@
 
   function cmpTally(list) {
     var n = { "new": 0, changed: 0, moved: 0, same: 0 };
-    list.forEach(function (t) { var s = (t.c && t.c.s) || "same"; n[s] = (n[s] || 0) + 1; });
+    list.forEach(function (t) { if (t.gone) return; var s = (t.c && t.c.s) || "same"; n[s] = (n[s] || 0) + 1; });
     return n;
   }
   function cmpCounts(list) {
@@ -867,7 +901,7 @@
   }
   function cmpLegend(c) {
     var all = [];
-    c.trees.forEach(function (tr) { all = all.concat(tr.talents); });
+    c.trees.forEach(function (tr) { all = all.concat(tr.talents.filter(function (t) { return !t.gone; })); });
     var n = cmpTally(all), diff = all.length - n.same;
     return '<div class="cmpchips"><span class="cc-sum"><b>' + diff + "</b> of " + all.length + " differ</span>" +
       [["new", "NEW", "Not in Classic"], ["changed", "CHG", "Text or ranks changed"], ["moved", "MOV", "Moved in the tree"], ["same", "SAME", "Same as Classic"]].map(function (x) {
@@ -891,7 +925,9 @@
         var p = treePts(ti);
         return '<span class="' + (p ? "on" : "") + '" data-tip="' + attrEnc("<b>" + esc(tr.name) + "</b>" + p + (p === 1 ? " point" : " points")) + '">' + icon(tr.icon, "wi") + "<b>" + p + "</b></span>";
       }).join("") + "</div>" +
-      '<div class="tb-lvl" data-tip="' + attrEnc("<b>Level needed</b>The first talent point arrives at level 10, then one per level.") + '"><b>' + (used ? 9 + used : 10) + "</b><span>level</span></div>" +
+      '<div class="tb-lvl" data-tip="' + attrEnc("<b>Level needed</b>The first talent point arrives at level 10, then one per level." +
+        (talentedRank(S.lg) ? " Talented " + talentedRank(S.lg) + "/5 in your Legacy starts them " + talentedRank(S.lg) + (talentedRank(S.lg) === 1 ? " level" : " levels") + " earlier." : " The Legacy perk Talented starts them up to 5 levels earlier.")) +
+        '"><b>' + (used ? Math.max(1, 9 + used - talentedRank(S.lg)) : 10 - talentedRank(S.lg)) + "</b><span>level</span></div>" +
       '<div class="tb-cap" role="group" aria-label="Level cap"><span>Cap</span>' + [20, 30, 60].map(function (l) {
         return '<button type="button" class="capbtn' + (cap === l ? " on" : "") + '" data-cap="' + l + '">' + l + "</button>";
       }).join("") + "</div>" +
@@ -905,7 +941,7 @@
     c.trees.forEach(function (tr, ti) {
       var pts = treePts(ti);
       var byName = {}, maxRow = 1;
-      tr.talents.forEach(function (t, i) { byName[t.n] = i; if (t.row > maxRow) maxRow = t.row; });
+      tr.talents.forEach(function (t, i) { if (!t.gone || byName[t.n] == null) byName[t.n] = i; if (t.row > maxRow) maxRow = t.row; });
       var nextGate = null;
       for (var rw = 2; rw <= maxRow; rw++) if (pts < (rw - 1) * 5) { nextGate = (rw - 1) * 5; break; }
       html += '<div class="wtree"' + (tr.bg ? ' style="background-image:url(' + tr.bg + ')"' : "") +
@@ -916,7 +952,7 @@
       // Prerequisite arrows, drawn behind the icons.
       var arrows = "";
       tr.talents.forEach(function (t) {
-        if (!t.req || byName[t.req] == null) return;
+        if (t.gone || !t.req || byName[t.req] == null) return;
         var s = tr.talents[byName[t.req]];
         var ok = (S.t[ti][byName[t.req]] || 0) >= s.r;
         var x1 = (s.col - 1) * 36 + 15.5, y1 = (s.row - 1) * 41 + 15.5;
@@ -925,11 +961,15 @@
           '<polygon class="tarrow-h' + (ok ? " ok" : "") + '" points="' + (x2 - 4) + "," + (y2 - 22) + " " + (x2 + 4) + "," + (y2 - 22) + " " + x2 + "," + (y2 - 16) + '"/>';
       });
       if (arrows) html += '<svg class="warrows" viewBox="0 0 139 ' + (maxRow * 41 - 5) + '" preserveAspectRatio="none">' + arrows + "</svg>";
+      // a later build's talent may sit where a removed one was: the removed one keeps its slot in links, not its square
+      var taken = {};
+      tr.talents.forEach(function (t) { if (!t.gone) taken[t.row + ":" + t.col] = 1; });
       if (CMP) tr.talents.forEach(function (t, i) {
         if (t.c && t.c.s === "moved" && t.c.tr === tr.name && t.c.r && t.c.co)
           html += '<div class="tghost" data-ghost="' + ti + ":" + i + '" style="grid-column:' + t.c.co + ";grid-row:" + t.c.r + '"><span>Classic</span></div>';
       });
       tr.talents.forEach(function (t, i) {
+        if (t.gone && taken[t.row + ":" + t.col]) return;
         var r = S.t[ti][i] || 0, gate = (t.row - 1) * 5;
         var reqOk = !t.req || byName[t.req] == null || (S.t[ti][byName[t.req]] || 0) >= tr.talents[byName[t.req]].r;
         var open = pts >= gate && reqOk;
@@ -939,10 +979,11 @@
         var have = idx >= 0 ? 1 : 0;
         var d = have ? ds[idx] : (t.tip || "");
         var clamped = have > 0 && idx !== want;
-        var extra = (clamped ? " [rank " + (idx + 1) + " text; the demo never showed rank " + (want + 1) + "]" : "") +
-          (have && t.de && t.de.indexOf(idx) !== -1 ? " [rank " + (idx + 1) + " estimated from Classic's rank progression until beta]" : t.est ? " [numbers still estimates]" : "") +
-          (t.cn ? " \u00b7 " + t.cn + "." : "");
-        var how = t.gone ? '<span class="hint lock">Removed from the tree in beta build ' + esc(t.gone) + ". It stays here so older shared builds still line up.</span>"
+        var extra = (clamped ? " [rank " + (idx + 1) + " text; the client has no rank " + (want + 1) + " text]" : "") +
+          (t.cn ? " \u00b7 " + t.cn + "." : "") +
+          (t.from ? " \u00b7 Moved here from " + t.from + " in beta build " + t.added + "." : t.added ? " \u00b7 New in beta build " + t.added + "." : "") +
+          (t.was ? " \u00b7 Called " + t.was + " in earlier builds." : "");
+        var how = t.gone ? '<span class="hint lock">' + (t.moved ? "Moved to " + esc(t.moved) : "Removed from the tree") + " in beta build " + esc(t.gone) + ". It stays here so older shared builds still line up.</span>"
           : pts < gate ? '<span class="hint lock">Needs ' + gate + " points in " + esc(tr.name) + ".</span>"
           : !reqOk ? '<span class="hint lock">Requires ' + esc(t.req) + " maxed." + (t.reqText ? " " + esc(t.reqText) + "." : "") + "</span>"
           : (done && r < t.r) ? '<span class="hint lock mouse-only">No points left; right-click something to take one back.</span><span class="hint lock touch-only">No points left; unlearn something first.</span>'
@@ -958,7 +999,13 @@
       html += "</div></div>";
     });
     html += "</div>";
-    html += '<p class="tfoot">Trees from BlizzCon footage via talentsforever.com. Dashed rank badges are estimates.</p>';
+    var bld = (/1\.60\.1\.\d+/.exec(DATA.source || "") || [""])[0], gone = [];
+    c.trees.forEach(function (tr) {
+      var g = tr.talents.filter(function (t) { return t.gone; }).map(function (t) { return t.n + (t.moved ? " (to " + t.moved + ")" : ""); });
+      if (g.length) gone.push(tr.name + ": " + g.join(", "));
+    });
+    html += '<p class="tfoot">Talent trees from the beta client' + (bld ? ", build " + esc(bld) : "") + "." +
+      (gone.length ? " Gone from the trees in later builds: " + esc(gone.join("; ")) + ". An older shared build still opens: points it had in a gone talent are free again, and a moved talent takes its points along." : "") + "</p>";
     return html;
   }
 
@@ -981,9 +1028,9 @@
     }
     var slots = ["inv_helmet_03", "inv_jewelry_necklace_07", "inv_shoulder_02", "inv_misc_cape_02", "inv_chest_chain", "inv_bracer_07", "inv_gauntlets_05",
       "inv_belt_03", "inv_pants_03", "inv_boots_05", "inv_jewelry_ring_03", "inv_jewelry_talisman_07", "inv_sword_04", "inv_shield_04"];
-    return '<div class="gearlock"><div class="gl-head"><b>Gear</b><span class="gl-badge">Unlocks with the beta</span></div>' +
+    return '<div class="gearlock"><div class="gl-head"><b>Gear</b><span class="gl-badge">Could not load</span></div>' +
       '<div class="gl-slots">' + slots.map(function (sl) { return '<span class="gl-slot">' + icon(sl, "wi") + "</span>"; }).join("") + "</div>" +
-      "<p>Forever reworked every item. Real loot lands here when the beta opens on September 17.</p></div>";
+      "<p>Gear could not load. Refresh the page.</p></div>";
   }
 
   // ---- name roller: two-part Forever names, race-themed first, class-themed last ----
@@ -1375,12 +1422,25 @@
         var body = (sp2[1] ? '<span class="sbt-r">' + esc(sp2[1]) + "</span>" : "") +
           hdr.map(function (h) { return '<span class="sbt-l"><i>' + esc(h[0]) + "</i><i>" + esc(h[1]) + "</i></span>"; }).join("") +
           (d2 ? '<span class="sbt-d">' + esc(d2) + "</span>" : "") +
-          ((book.src || {})[sp2[0]] === "classic" ? '<span class="sbt-n">Classic placeholder text: the demo tooltip was not captured.</span>' : (book.src || {})[sp2[0]] === "sod" ? '<span class="sbt-n">Season of Discovery wiring in the client, no Forever learn level yet. May change before launch.</span>' : "");
+          ((book.chg || {})[sp2[0]] ? '<span class="sbt-n">' + esc(book.chg[sp2[0]]) + "</span>" : "") +
+          trainRows((book.train || {})[sp2[0]]) +
+          ((book.src || {})[sp2[0]] === "sod" ? '<span class="sbt-n">Season of Discovery wiring in the client, no Forever learn level yet. May change before launch.</span>' : "");
         var flag = cs && CMP_LABEL[cs] ? '<i class="cmpf cmp-' + cs + '">' + CMP_LABEL[cs] + "</i>" : cs === "removed" ? '<i class="cmpf cmp-removed">CL</i>' : "";
         return '<div class="sbs' + (cs ? " cmp-" + cs : "") + (co ? " gone" : "") + '" data-tipcls="sbtip" data-tip="' + attrEnc("<b>" + esc(sp2[0]) + "</b>" + body) +
           '" data-cmp="' + (co ? "co:" : "s:") + encodeURIComponent(sp2[0]) + '">' +
           '<span class="sbs-ic">' + iconFB(sp2[3] || spellIcon(sp2[0], fb), fb) + flag + "</span>" +
           '<span class="sbs-t"><b>' + esc(sp2[0]) + "</b>" + (sp2[1] ? "<em>" + esc(sp2[1]) + "</em>" : "") + "</span></div>";
+      }
+      // [[rank, level, copper], ...] from trainer windows in players' games; a price is what that character paid
+      function trainRows(tr) {
+        if (!tr || !tr.length) return "";
+        return '<span class="sbt-n">Trainer windows in players\u2019 games:</span>' + tr.map(function (x) {
+          return '<span class="sbt-l"><i>' + (x[0] ? "Rank " + x[0] + ", " : "") + "level " + x[1] + "</i><i>" + esc(money(x[2])) + "</i></span>";
+        }).join("") + '<span class="sbt-n">' + esc(book.trainPrice || "Prices are what those characters paid; reputation discounts may apply.") + "</span>";
+      }
+      function money(c) {
+        var g = Math.floor(c / 10000), sv = Math.floor(c / 100) % 100, cp = c % 100;
+        return [g ? g + "g" : "", sv ? sv + "s" : "", cp || !(g || sv) ? cp + "c" : ""].filter(Boolean).join(" ");
       }
       function bookTabs() {
         var out = tabs.slice();
@@ -1545,7 +1605,7 @@
       ["Tracking and Feign pulls", ["HUNTER"]]
     ]
   };
-  // Does the level-38 demo spellbook for a class actually contain the spell?
+  // Does the class's spellbook in the beta client contain the spell?
   function bookHas(clsKey, names) {
     var ci = CLASS_ORDER.indexOf(clsKey);
     var book = ci >= 0 && DATA.classes[ci].book;
@@ -1573,7 +1633,7 @@
       return '<span class="cchip good" style="--cc:' + cc(g[1]) + '">' + esc(g[0]) + "</span>";
     }).concat((cov.unseen || []).map(function (g) {
       return '<span class="cchip unseen" style="--cc:' + cc(g[1]) + '" ' +
-        dt(g[0], "The class is here, but this spell was not seen in the level-38 demo spellbook. It may unlock later or have changed.") + ">" + esc(g[0]) + "</span>";
+        dt(g[0], "The class is here, but this spell is not in its spellbook in the beta client.") + ">" + esc(g[0]) + "</span>";
     })).concat(cov.miss.map(function (m) {
       return '<span class="cchip ' + missTone + '">' + esc(m) + "</span>";
     })).join("");
@@ -1584,7 +1644,7 @@
   // talent names in the data, so a wrong guess simply never renders.
   var TALENT_BENEFITS = [
     ["WARRIOR", "Improved Battle Shout", "stronger Battle Shout"],
-    ["WARRIOR", "Booming Voice", "longer, wider shouts"],
+    ["WARRIOR", "Booming Voice", "wider, cheaper shouts"],
     ["PALADIN", "Blessing of Kings", "+10% all stats"],
     ["PALADIN", "Improved Blessing of Might", "stronger Might"],
     ["PALADIN", "Improved Devotion Aura", "more armour for everyone"],
@@ -1649,7 +1709,7 @@
     var lines = $("raid-in").value.split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
     var builds = [];
     lines.forEach(function (l) { try { builds = builds.concat(parseAny(l)); } catch (e) {} });
-    builds = builds.map(function (b) { return clampToData(b, CAPS[b.cap] || CAPS[30]); }).filter(Boolean);
+    builds = builds.map(function (b) { return clampToData(b, pointsAt(b.cap, b.lg)); }).filter(Boolean);
     var out = $("raid-out");
     if (!builds.length) {
       out.innerHTML = '<div class="verdict">Nothing parseable in there. Paste build links from The Forge, one per line.</div>';
@@ -1661,7 +1721,7 @@
       roles[sp.role]++; classes[k] = (classes[k] || 0) + 1;
       return "<tr><td>" + icon(CLASS_ICON[k], "wi wi-sm") + ' <b style="color:' + cc(k) + '">' + esc(b.name || "Unnamed") + "</b></td>" +
         "<td>" + icon(raceIcon(RACES[b.race], b.g), "wi wi-sm") + " " + esc(RACES[b.race].n) + "</td><td>" + esc(sp.name) + " " + CLASS_LABEL[k] + ' <span class="meta">' + sp.split + "</span></td>" +
-        '<td><span class="rolechip ' + sp.role + '">' + sp.role + "</span></td><td>" + sp.pts + "/" + (CAPS[b.cap] || CAPS[30]) + " pts</td></tr>";
+        '<td><span class="rolechip ' + sp.role + '">' + sp.role + "</span></td><td>" + sp.pts + "/" + pointsAt(b.cap, b.lg) + " pts</td></tr>";
     }).join("");
     var v = [];
     v.push("<b>" + builds.length + "</b> forged: " + roles.tank + " tank" + (roles.tank === 1 ? "" : "s") + ", " +
@@ -1688,7 +1748,7 @@
       coverHTML("Interrupts", kicks, "miss") +
       (tbChips ? '<div class="coverrow"><label>Talent benefits</label><div>' + tbChips + "</div></div>" : "") +
       coverHTML("Utility", misc, "soft") +
-      '<p class="line finenote">Green: someone brings it, confirmed in the demo spellbook or their spent talents. Class-coloured dashed: the class is here but the spell was unseen at 38, or the talent sits untaken. Red: nobody\u2019s job.</p></div>';
+      '<p class="line finenote">Green: someone brings it, confirmed in the class spellbook or their spent talents. Class-coloured dashed: the class is here but the spell is not in the class spellbook, or the talent sits untaken. Red: nobody\u2019s job.</p></div>';
     out.innerHTML = '<table class="raidtable"><thead><tr><th>Name</th><th>Race</th><th>Spec</th><th>Role</th><th>Talents</th></tr></thead><tbody>' +
       rows + "</tbody></table>" + audit + '<div class="verdict">' + v.join(" ") + "</div>";
     var rl = $("raid-link");

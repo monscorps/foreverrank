@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WoW Forever Class Changes and Spellbooks · ForeverRank</title>
-<meta name="description" content="WoW Forever class changes by datamine: every class&#x27;s spellbook and talents, hidden spells, Soul Engraving, and what moved since the BlizzCon demo.">
+<meta name="description" content="WoW Forever class changes by datamine: what the level-30 beta builds changed for each class, read from the client&#x27;s own spell and talent tables, and the hidden Soul Engraving catalog.">
 <link rel="icon" href="../mark.svg" type="image/svg+xml">
 <link rel="canonical" href="https://foreverrank.com/classes/">
 <!-- seo:begin -->
@@ -12,11 +12,11 @@
 <meta property="og:site_name" content="ForeverRank">
 <meta property="og:url" content="https://foreverrank.com/classes/">
 <meta property="og:title" content="WoW Forever Class Changes and Spellbooks · ForeverRank">
-<meta property="og:description" content="WoW Forever class changes by datamine: every class&#x27;s spellbook and talents, hidden spells, Soul Engraving, and what moved since the BlizzCon demo.">
+<meta property="og:description" content="WoW Forever class changes by datamine: what the level-30 beta builds changed for each class, read from the client&#x27;s own spell and talent tables, and the hidden Soul Engraving catalog.">
 <meta property="og:image" content="https://foreverrank.com/assets/og.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="WoW Forever Class Changes and Spellbooks · ForeverRank">
-<meta name="twitter:description" content="WoW Forever class changes by datamine: every class&#x27;s spellbook and talents, hidden spells, Soul Engraving, and what moved since the BlizzCon demo.">
+<meta name="twitter:description" content="WoW Forever class changes by datamine: what the level-30 beta builds changed for each class, read from the client&#x27;s own spell and talent tables, and the hidden Soul Engraving catalog.">
 <meta name="twitter:image" content="https://foreverrank.com/assets/og.jpg">
 <!-- seo:end -->
 <meta name="theme-color" content="#1C2325">
@@ -289,6 +289,7 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 @media (max-width: 640px) { .cxmodal { padding: 0; place-items: end stretch; } .cxm-card { width: 100%; max-height: 88vh; border-radius: 14px 14px 0 0; } }
 .cxm-card:focus { outline: none; }
 #legacy-win { margin-top: .6rem; }
+.api-note a { color: var(--gold); }
 </style>
 </head>
 <body>
@@ -303,19 +304,22 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
     <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener" title="Join the ForeverRank Discord"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M20.32 4.37A19.8 19.8 0 0 0 15.39 2.8a13.7 13.7 0 0 0-.63 1.3 18.4 18.4 0 0 0-5.52 0 13.2 13.2 0 0 0-.64-1.3 19.7 19.7 0 0 0-4.93 1.53C.53 9.05-.32 13.6.1 18.1a19.9 19.9 0 0 0 6.04 3.05 14.7 14.7 0 0 0 1.29-2.1 12.9 12.9 0 0 1-2.03-.97c.17-.13.34-.26.5-.4a14.2 14.2 0 0 0 12.2 0l.5.4c-.65.38-1.33.7-2.04.97.37.74.8 1.44 1.29 2.1a19.8 19.8 0 0 0 6.05-3.05c.5-5.22-.84-9.73-3.58-13.73ZM8.02 15.33c-1.18 0-2.15-1.08-2.15-2.42s.95-2.42 2.15-2.42c1.21 0 2.17 1.09 2.15 2.42 0 1.34-.95 2.42-2.15 2.42Zm7.96 0c-1.18 0-2.15-1.08-2.15-2.42s.95-2.42 2.15-2.42c1.21 0 2.17 1.09 2.15 2.42 0 1.34-.94 2.42-2.15 2.42Z"/></svg><span>Discord</span></a>
   </div>
 </nav>
-<script src="../nav.js?v=8"></script>
+<script src="../nav.js?v=9"></script>
 <main class="wrap cx">
   <h1 class="display">The <span>Classes</span></h1>
-  <p class="board-sub">Class design as the datamine tells it: changed spells, hidden spells the tooltips admit to, and what moved since the demo. The trees and spellbooks themselves live in the Forge.</p>
+  <p class="board-sub">Class design as the datamine tells it: what the level-30 builds changed for each class, and the hidden Soul Engraving catalog. The trees and spellbooks themselves live in the Forge.</p>
   <nav class="cxnav" id="cxnav"></nav>
   <div id="cx"></div>
 </main>
 <section class="api-note">
-  <h2>Shared, not datamined.</h2>
-  <p>Every entry here traces to the BlizzCon reveal, Blizzard's panel recaps, or
-  the fansite community's transcriptions of demo footage. Estimates and
-  inferences are labelled as such. The beta will confirm, correct, or embarrass
-  each line, and this page will follow.</p>
+  <h2>Where this comes from</h2>
+  <p>The class-change cards are read from the beta client's own spell and
+  talent tables, and each names the build that brought the change; the beta is
+  on build 1.60.1.70291 (8 October). Where Blizzard's notes explain a change or
+  give another number, the card says so. The Soul Engraving catalog is client
+  data too, and its note names the builds. Every change, with Blizzard's notes
+  beside it, is in <a href="../news/level-30/#classes">our level 30 article</a>.
+  Estimates and inferences are labelled as such.</p>
 </section>
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
@@ -325,8 +329,8 @@ b.q-poor, b.q-common, b.q-uncommon, b.q-rare, b.q-epic, b.q-legendary, b.q-unkno
 </footer>
 <script src="../tipkit.js?v=5"></script>
 <script>window.CODEX_PAGE="classes";</script>
-<script src="../codex/codex.js?v=57"></script>
-<script src="/map.js?v=8" defer></script>
+<script src="../codex/codex.js?v=58"></script>
+<script src="/map.js?v=9" defer></script>
 <script src="/support.js?v=2" defer></script>
 </body>
 </html>

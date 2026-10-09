@@ -1,0 +1,438 @@
+{
+ "note": "Snapshot of the server-sent Dalaran items as the sources had them before the dungeon opened: the 16 quest rewards from ForeverChanges' build-70245 item files, and the ten named rows of the boss-loot block (273031 to 273055) from Wowhead's Forever database, by 2026-10-03. build70291_data.py prints a tooltip's 'was' line from this file where the build-70291 row (ForeverChanges' files since 2026-10-09, or a player's in-game reading) differs in quality, stats, armor or damage. Frozen on 2026-10-09; do not regenerate from the live database.",
+ "items": {
+  "251962": {
+   "name": "Violet Sash",
+   "quality": "rare",
+   "slot": "waist",
+   "type": "Cloth",
+   "itemLevel": 36,
+   "armor": 29,
+   "stats": {
+    "spirit": 7,
+    "intellect": 12
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279849": {
+   "name": "Runebound Gloves",
+   "quality": "rare",
+   "slot": "hands",
+   "type": "Leather",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "armor": 71,
+   "stats": {
+    "stamina": 10,
+    "spirit": 5,
+    "attackPower": 16
+   },
+   "effects": [
+    "Equip: +16 Attack Power"
+   ],
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279839": {
+   "name": "Spellguard Pauldrons",
+   "quality": "rare",
+   "slot": "shoulder",
+   "type": "Mail",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "armor": 178,
+   "stats": {
+    "stamina": 11,
+    "spirit": 7,
+    "strength": 4
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279840": {
+   "name": "Renewing Footpads",
+   "quality": "rare",
+   "slot": "feet",
+   "type": "Leather",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "armor": 78,
+   "stats": {
+    "intellect": 11,
+    "stamina": 5,
+    "healing": 11,
+    "spellDamage": 4
+   },
+   "effects": [
+    "Equip: +11 Healing",
+    "Equip: +4 Spell Damage"
+   ],
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279841": {
+   "name": "Defender of Dalaran",
+   "quality": "rare",
+   "slot": "two-hand",
+   "type": "Mace",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "damage": "82-124",
+   "speed": 3.3,
+   "dps": 31.2,
+   "stats": {
+    "stamina": 13,
+    "agility": 9,
+    "strength": 9
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279835": {
+   "name": "Vine Pruner's Cloak",
+   "quality": "rare",
+   "slot": "back",
+   "type": "Cloth",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "armor": 26,
+   "stats": {
+    "stamina": 8,
+    "spellPower": 6
+   },
+   "effects": [
+    "Equip: +6 Spell Damage Vs Elementals",
+    "Equip: +6 Spell Power"
+   ],
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279836": {
+   "name": "Thorn Protecting Girdle",
+   "quality": "rare",
+   "slot": "waist",
+   "type": "Mail",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "armor": 134,
+   "stats": {
+    "stamina": 12,
+    "attackPower": 12
+   },
+   "effects": [
+    "Equip: +15 Attack Power Vs Elementals",
+    "Equip: +12 Attack Power"
+   ],
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "251963": {
+   "name": "Gravewalker Boots",
+   "quality": "rare",
+   "slot": "feet",
+   "type": "Leather",
+   "itemLevel": 36,
+   "armor": 78,
+   "stats": {
+    "stamina": 10,
+    "agility": 7,
+    "spirit": 7
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "251965": {
+   "name": "Undead Knight's Bracers",
+   "quality": "rare",
+   "slot": "wrist",
+   "type": "Mail",
+   "itemLevel": 36,
+   "armor": 104,
+   "stats": {
+    "stamina": 8,
+    "strength": 4,
+    "agility": 4
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279847": {
+   "name": "Unstable Power Core",
+   "quality": "rare",
+   "slot": "ranged",
+   "type": "Wand",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "damage": "40-76",
+   "speed": 1.7,
+   "dps": 34.1,
+   "stats": {
+    "stamina": 6
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279848": {
+   "name": "Construct Cloak",
+   "quality": "rare",
+   "slot": "back",
+   "type": "Cloth",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "armor": 26,
+   "stats": {
+    "strength": 7,
+    "spirit": 7
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279842": {
+   "name": "Battle Spaulders",
+   "quality": "rare",
+   "slot": "shoulder",
+   "type": "Mail",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "armor": 178,
+   "stats": {
+    "stamina": 11,
+    "spirit": 7,
+    "strength": 4
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279843": {
+   "name": "Enchanted Sandals",
+   "quality": "rare",
+   "slot": "feet",
+   "type": "Cloth",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "armor": 36,
+   "stats": {
+    "stamina": 10,
+    "agility": 5,
+    "intellect": 8
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279844": {
+   "name": "Striking Staff",
+   "quality": "rare",
+   "slot": "two-hand",
+   "type": "Staff",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "damage": "77-117",
+   "speed": 3.1,
+   "dps": 31.3,
+   "stats": {
+    "stamina": 6,
+    "strength": 14,
+    "spirit": 9
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279837": {
+   "name": "Fallen Guard's Pendant",
+   "quality": "rare",
+   "slot": "neck",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "stats": {
+    "stamina": 8,
+    "strength": 6
+   },
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "279838": {
+   "name": "Arcane Infused Rod",
+   "quality": "rare",
+   "slot": "off-hand",
+   "itemLevel": 36,
+   "reqLevel": 1,
+   "stats": {
+    "intellect": 8,
+    "arcaneSpellDamage": 9
+   },
+   "effects": [
+    "Equip: +9 Arcane Spell Damage"
+   ],
+   "at": "ForeverChanges, build 70245",
+   "source": "Beta build 1.60.1.70245, via foreverchanges.pro"
+  },
+  "273036": {
+   "name": "Graveweave Bindings",
+   "quality": "rare",
+   "slot": "wrist",
+   "type": "Cloth",
+   "itemLevel": 31,
+   "reqLevel": 26,
+   "armor": 21,
+   "stats": {
+    "strength": 6,
+    "spellPower": 5
+   },
+   "effects": [
+    "Equip: Increases damage and healing done by magical spells and effects by up to 5."
+   ],
+   "at": "Wowhead's Forever database, by October 3",
+   "source": "Server data via Wowhead's Forever database"
+  },
+  "273038": {
+   "name": "Garb of Fallen Felbark",
+   "quality": "rare",
+   "slot": "chest",
+   "type": "Leather",
+   "itemLevel": 34,
+   "reqLevel": 29,
+   "armor": 110,
+   "stats": {
+    "agility": 13,
+    "stamina": 7,
+    "intellect": 9
+   },
+   "at": "Wowhead's Forever database, by October 3",
+   "source": "Server data via Wowhead's Forever database"
+  },
+  "273039": {
+   "name": "Blightleaf Rope",
+   "quality": "rare",
+   "slot": "waist",
+   "type": "Cloth",
+   "itemLevel": 34,
+   "reqLevel": 29,
+   "armor": 28,
+   "stats": {
+    "stamina": 6,
+    "intellect": 10
+   },
+   "at": "Wowhead's Forever database, by October 3",
+   "source": "Server data via Wowhead's Forever database"
+  },
+  "273041": {
+   "name": "Slitherwrap Girdle",
+   "quality": "rare",
+   "slot": "waist",
+   "type": "Leather",
+   "itemLevel": 33,
+   "reqLevel": 28,
+   "armor": 61,
+   "stats": {
+    "agility": 9,
+    "stamina": 6
+   },
+   "effects": [
+    "Equip: When struck in combat, drain 2 mana from the attacker. (100ms cooldown)"
+   ],
+   "at": "Wowhead's Forever database, by October 3",
+   "source": "Server data via Wowhead's Forever database"
+  },
+  "273042": {
+   "name": "Manascale Treads",
+   "quality": "rare",
+   "slot": "feet",
+   "type": "Mail",
+   "itemLevel": 33,
+   "reqLevel": 28,
+   "armor": 157,
+   "stats": {
+    "strength": 7,
+    "stamina": 7,
+    "crit": 0.5
+   },
+   "effects": [
+    "Equip: Improves your chance to get a critical strike by 0.5%."
+   ],
+   "at": "Wowhead's Forever database, by October 3",
+   "source": "Server data via Wowhead's Forever database"
+  },
+  "273044": {
+   "name": "Arcanowisp Robes",
+   "quality": "rare",
+   "slot": "chest",
+   "type": "Cloth",
+   "itemLevel": 32,
+   "reqLevel": 27,
+   "armor": 49,
+   "stats": {
+    "intellect": 15,
+    "spirit": 8
+   },
+   "effects": [
+    "Equip: When damaged, has a chance to reduce threat level on all enemies by a small amount for 10 sec. (Proc chance: 5%)"
+   ],
+   "at": "Wowhead's Forever database, by October 3",
+   "source": "Server data via Wowhead's Forever database"
+  },
+  "273045": {
+   "name": "Drape of Shifting Energy",
+   "quality": "rare",
+   "slot": "back",
+   "type": "Cloth",
+   "itemLevel": 32,
+   "reqLevel": 27,
+   "armor": 24,
+   "stats": {
+    "spirit": 7,
+    "attackPower": 12
+   },
+   "effects": [
+    "Equip: +12 Attack Power."
+   ],
+   "at": "Wowhead's Forever database, by October 3",
+   "source": "Server data via Wowhead's Forever database"
+  },
+  "273046": {
+   "name": "Guardian's Dualblade",
+   "quality": "rare",
+   "slot": "two-hand",
+   "type": "Axe",
+   "itemLevel": 33,
+   "reqLevel": 28,
+   "damage": "78-117",
+   "speed": 3.5,
+   "dps": 27.86,
+   "effects": [
+    "Equip: When damaged, has a chance to grant you 1080 armor for 12 sec. (Proc chance: 33%, 1m cooldown)"
+   ],
+   "at": "Wowhead's Forever database, by October 3",
+   "source": "Server data via Wowhead's Forever database"
+  },
+  "273047": {
+   "name": "Unstable Crystalline Shoulderpads",
+   "quality": "rare",
+   "slot": "shoulder",
+   "type": "Leather",
+   "itemLevel": 33,
+   "reqLevel": 28,
+   "armor": 81,
+   "stats": {
+    "agility": 9,
+    "stamina": 5
+   },
+   "at": "Wowhead's Forever database, by October 3",
+   "source": "Server data via Wowhead's Forever database"
+  },
+  "273052": {
+   "name": "Ponderous Orb",
+   "quality": "rare",
+   "slot": "off-hand",
+   "itemLevel": 35,
+   "reqLevel": 30,
+   "stats": {
+    "stamina": 5,
+    "intellect": 2,
+    "spirit": 8
+   },
+   "at": "Wowhead's Forever database, by October 3",
+   "source": "Server data via Wowhead's Forever database"
+  }
+ }
+}

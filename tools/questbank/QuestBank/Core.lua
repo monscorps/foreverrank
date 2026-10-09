@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "3.6.1"
+QB.version = "3.6.2"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's escort prompt has said 25: see QB.EscortLimit)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -692,6 +692,8 @@ function Q.Get(id)
   c.repeatable = math.floor(c.flags / 4096) % 2 == 1 -- repeatable: never suggested
   c.near = math.floor(c.flags / 8192) % 2 == 1       -- kept as read: the game paid within a few percent of this number
   c.seenOnly = math.floor(c.flags / 16384) % 2 == 1  -- known only from players' notes (not on Wowhead or in the Classic database)
+  c.reqStated = math.floor(c.flags / 32768) % 2 == 1 -- the required level as Blizzard's notes give it
+  c.note = D.NOTE and D.NOTE[id]                      -- where a number comes from, or what Blizzard changed since
   c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and API.ItemIcon(c.bag[1])) or API.ItemIcon(D.QITEM[id])
     or (c.cat and c.cat.icon) or D.TEX.questGeneric
   cache[id] = c
@@ -2174,6 +2176,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Sync then QB.Sync:Init() end
     if QB.Discover then QB.Discover:Init() end
     if QB.Game then QB.Game:Init() end
+    if QB.Loot then QB.Loot:Init() end
     if QB.Arrow then QB.Arrow:Init() end
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
@@ -2302,7 +2305,12 @@ slash = function(msg)
     if QB.Game and QB.Game.On() then
       local ni, ns = QB.Game.Count()
       game = ", " .. n(ni, "item", "items") .. ", " .. n(ns, "spellbook", "spellbooks")
+      if QB.Loot then
+        local nl = QB.Loot.Count()
+        game = game .. ", " .. n(nl, "drop source", "drop sources")
+      end
     end
+
     QB:Print(string.format("Noted in game so far: %s, %s, %s%s. They stay in your saved file, QuestBank.lua. Upload it at foreverrank.com/questbank/, or let QuestBank Uploader send it on Windows, and it goes into the next release for everyone.",
       n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps"), game))
   elseif cmd == "update" or cmd == "version" then

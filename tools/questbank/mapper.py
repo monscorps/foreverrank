@@ -61,7 +61,7 @@ RAW = os.path.join(REPO, "research", "questbank")
 CACHE = os.path.join(REPO, "tools", ".wh-quest-cache")
 OUT = os.path.join(RAW, "mapper.json")
 DATA = os.path.join(HERE, "QuestBank", "Data.lua")
-BUILD = "1.60.1.70170"
+BUILD = "1.60.1.70291"
 URL = "https://www.wowhead.com/forever/quest=%d"
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36 foreverrank.com",
       "Accept": "text/html,application/xhtml+xml", "Accept-Language": "en-US,en;q=0.9"}

@@ -31,7 +31,7 @@
   var ARMOR_TYPES = ["Cloth", "Leather", "Mail", "Plate", "Shield"];
   var SCHOOLS = ["Physical", "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane"];
   // Shield spikes and the Retricutioner chest enchant, from the beta client's spell tables
-  // (build 1.60.1.70170): base points and variance of the damage-on-block and damage-shield auras.
+  // (build 1.60.1.70291): base points and variance of the damage-on-block and damage-shield auras.
   var DEFAULT_ENCHANTS = { note: "Built-in fallback: plan/enchants.json is missing.", enchants: [
     { id: "iron-spike", item: 6042, name: "Iron Shield Spike", slot: "offhand", needs: "Shield", rf: { k: "block", s: "Physical", v: 10, lo: 8, hi: 12, sp: 9784, src: "client" }, stats: {}, skill: ["Blacksmithing", 150], icon: "inv_misc_armorkit_01" },
     { id: "mithril-spike", item: 7967, name: "Mithril Shield Spike", slot: "offhand", needs: "Shield", rf: { k: "block", s: "Physical", v: 18, lo: 16, hi: 20, sp: 9782, src: "client" }, stats: {}, skill: ["Blacksmithing", 215], icon: "inv_misc_armorkit_02" },
@@ -39,12 +39,14 @@
     { id: "retricutioner", item: 273591, name: "Retricutioner", slot: "chest", rf: { k: "hit", s: "Physical", v: 9, sp: 435901, src: "client" }, stats: {}, skill: ["Enchanting", null], icon: "inv_misc_enchantedscroll",
       note: "New in Forever: reflects damage when you are struck in melee." }
   ] };
-  // Paladin and druid reflect numbers from the same client tables; reflect.json overrides them when present.
-  var DEFAULT_REFLECT = { note: "Built-in fallback: plan/reflect.json is missing. Numbers from the beta client's SpellEffect table, build 1.60.1.70170.", classes: {
-    PALADIN: { retAura: [[16, 7, 7294], [26, 12, 10298], [36, 18, 10299], [46, 24, 10300], [56, 30, 10301]], retCoef: 0,
+  // Paladin and druid reflect numbers from the same client tables; reflect.json overrides them when present. The 6%
+  // spell-power ratios are Blizzard's (development notes, 8 October 2026): the client's spell rows carry none.
+  var NOTES_COEF = "Blizzard's development notes, 8 October 2026 (the client's spell rows carry no ratio)";
+  var DEFAULT_REFLECT = { note: "Built-in fallback: plan/reflect.json is missing. Numbers from the beta client's SpellEffect table, build 1.60.1.70291.", classes: {
+    PALADIN: { retAura: [[16, 5, 7294], [26, 8, 10298], [36, 12, 10299], [46, 16, 10300], [56, 20, 10301]], retCoef: 0.06, retCoefSrc: NOTES_COEF,
       holyShield: { talent: "Holy Shield", ranks: [[40, 110, 20925], [50, 153, 20927], [60, 221, 20928]], coef: 0.08, charges: 4, dur: 10, cd: 10, block: 30 },
       redoubt: { talent: "Redoubt" }, eyeForAnEye: { talent: "Eye for an Eye", pct: [5, 10] } } },
-    buffs: { thorns: { name: "Thorns (druid)", ranks: [[6, 4, 467], [14, 9, 782], [24, 11, 1075], [34, 13, 8914], [44, 16, 9756], [54, 22, 9910]], s: "Nature" } } };
+    buffs: { thorns: { name: "Thorns (druid)", ranks: [[6, 3, 467], [14, 6, 782], [24, 9, 1075], [34, 12, 8914], [44, 15, 9756], [54, 18, 9910]], s: "Nature", coef: 0.06, coefSrc: NOTES_COEF } } };
   // Classic levelling zones by band, for BoE world drops whose source nobody has seen yet.
   var ZONEBAND = [[1, 10, "Elwynn Forest, Dun Morogh, Teldrassil, Durotar, Mulgore, Tirisfal Glades"], [10, 20, "Westfall, Loch Modan, Darkshore, The Barrens, Silverpine Forest"],
     [20, 30, "Redridge Mountains, Duskwood, Wetlands, Ashenvale, Stonetalon Mountains, Hillsbrad Foothills"], [30, 40, "Stranglethorn Vale, Arathi Highlands, Desolace, Thousand Needles, Dustwallow Marsh"],
@@ -61,8 +63,11 @@
   // Required level, or an estimate from the item level (Classic: required = item level - 5) when the client stores none.
   function effReq(it) {
     return cached(C_REQ, it, function (x) {
-      var r = +(x && x.reqLevel) || 0, il = +(x && x.itemLevel) || 0;
-      if (r > 1 || (r === 1 && il < 20)) return { lvl: r, est: false };
+      var r = +(x && x.reqLevel) || 0, il = +(x && x.itemLevel) || 0, q = +(x && x.qr) || 0;
+      if (r > 1) return { lvl: r, est: false };
+      // a quest reward with no level of its own: had from the level its quest can be taken at (QuestBank's catalogue)
+      if (q > 1) return { lvl: q, est: false, quest: true };
+      if (r === 1 && il < 20) return { lvl: r, est: false };
       if (!il) return { lvl: r || 1, est: false };
       return { lvl: Math.max(1, Math.min(60, il - 5)), est: true };
     });
@@ -561,7 +566,8 @@
       if (!it) return "";
       var s = it.stats || {}, L = [];
       L.push('<b class="q-' + esc(it.quality || "common") + '">' + esc(it.name) + "</b>");
-      if (it.binding) L.push('<span class="it-l">' + (it.binding === "BoP" ? "Binds when picked up" : "Binds when equipped") + "</span>");
+      var BINDS = { BoP: "Binds when picked up", BoE: "Binds when equipped", BoU: "Binds when used", Quest: "Quest Item" };
+      if (it.binding) L.push('<span class="it-l">' + esc(BINDS[it.binding] || it.binding) + "</span>");
       if (it.unique) L.push('<span class="it-l">' + esc(it.unique === true ? "Unique" : it.unique) + "</span>");
       if ((it.slot && it.slot !== "unknown") || it.type) L.push('<span class="it-row"><i>' + esc(it.slot === "unknown" ? "" : slotLabel(it.slot)) + "</i><i>" + esc(it.type || "") + "</i></span>");
       if (it.damage) L.push('<span class="it-row"><i>' + esc(String(it.damage).replace("-", " - ")) + " Damage</i><i>" + (it.speed ? "Speed " + Number(it.speed).toFixed(2) : "") + "</i></span>");
@@ -621,7 +627,8 @@
       }
       if (it.startsQuest) L.push('<span class="it-l">This Item Begins a Quest</span>');
       var er = effReq(it);
-      if (it.reqLevel && !er.est) L.push('<span class="it-l">Requires Level ' + esc(it.reqLevel) + "</span>");
+      if (er.quest) L.push('<span class="it-l it-est">No level of its own: its quest needs level ' + er.lvl + "</span>");
+      else if (it.reqLevel && !er.est) L.push('<span class="it-l">Requires Level ' + esc(it.reqLevel) + "</span>");
       else if (er.est && ALLSLOTS.indexOf(it.slot) !== -1) L.push('<span class="it-l it-est">Requires Level ' + er.lvl + " (estimate from item level)</span>");
       if (it.reqSkill) L.push('<span class="it-l">Requires ' + esc(String(it.reqSkill).replace(/ (\d+)$/, " ($1)")) + "</span>");
       if (it.flavor) L.push('<span class="it-f">"' + esc(it.flavor) + '"</span>');
@@ -748,7 +755,7 @@
           return list.length ? "<h6>" + g[1] + '</h6><div class="cc-grid">' + list.map(chip).join("") + "</div>" : "";
         }).join("") + "</details>" +
         (active.length ? '<div class="cc-need"><h6>What you need</h6><ul>' + need + "</ul></div>" : "") +
-        '<p class="g2-note">Elixirs and food count in the stats above; potions show as on use. Effects are read from Forever tooltips; stacking rules are unconfirmed until beta.</p></div>';
+        '<p class="g2-note">Elixirs and food count in the stats above; potions show as on use. Effects are read from Forever tooltips; stacking rules are not confirmed yet.</p></div>';
     }
     var LEVEL = 60, CLS = "";
     if (typeof window.FORGE_LVLCAP === "undefined") window.FORGE_LVLCAP = false;
@@ -894,7 +901,7 @@
         if (power === "mana" && hm[1]) {
           var mpPct = (M.pct.mana || 0) + (TP.mana || 0), int = A.intellect;
           var mp = int == null ? null : Math.round((hm[1] + Math.min(int, 20) + Math.max(int - 20, 0) * 15) * (1 + mpPct / 100));
-          pools += row("Mana", mp == null ? "?" : mp + (mpPct ? '<i class="rx">+' + mpPct + "%</i>" : ""), "Base " + hm[1] + " straight from the beta client (build 1.60.1.69876); the first 20 Intellect add 1 mana each and the rest 15 each, a Classic rule.", true, "");
+          pools += row("Mana", mp == null ? "?" : mp + (mpPct ? '<i class="rx">+' + mpPct + "%</i>" : ""), "Base " + hm[1] + " straight from the beta client's gametables (build 1.60.1.69876, not re-checked since); the first 20 Intellect add 1 mana each and the rest 15 each, a Classic rule.", true, "");
         } else if (M.pct[power]) pools += row("Max " + power, '<i class="rx">+' + M.pct[power] + "%</i>", "Racial bonus to maximum " + power + ".", true, "");
       }
       var wc = M.weaponCrit.filter(function (w) { return weaponMatches(w.when); }).reduce(function (a, w) { return a + w.value; }, 0);
@@ -995,7 +1002,11 @@
       if (CLS === "PALADIN") {
         var ra = rankAt(PAL.retAura, lv), raIdx = ra ? PAL.retAura.indexOf(ra) + 1 : 0;
         if (rftOn("ret")) {
-          if (ra) { var rav = ra[1] + (PAL.retCoef || 0) * holy; hitSrc.push([rav, "Retribution Aura rank " + raIdx + " (learned at " + ra[0] + "): " + r1(rav) + " Holy (spell " + ra[2] + ")" + (PAL.retCoef ? ", " + PAL.retCoef + " x Holy damage" : "")]); }
+          if (ra) { // base damage plus a share of the paladin's own Holy damage (spell power)
+            var rc = PAL.retCoef || 0, rav = ra[1] + rc * holy;
+            hitSrc.push([rav, "Retribution Aura rank " + raIdx + " (learned at " + ra[0] + "): " + ra[1] + (rc ? " + " + r1(rc * 100) + "% of your Holy damage " + holy + " = " + r1(rav) : "") +
+              " Holy (spell " + ra[2] + ")" + (rc ? "; the " + r1(rc * 100) + "% is from " + esc(PAL.retCoefSrc || "Blizzard's notes") : "")]);
+          }
           else notes.push("Retribution Aura is learned at level " + ((PAL.retAura || [[16]])[0][0]) + ".");
         }
         if (TAL["Holy Shield"]) {
@@ -1012,7 +1023,12 @@
       }
       if (rftOn("thorns")) {
         var th = rankAt(BUFF.ranks, lv);
-        if (th) hitSrc.push([th[1], esc(BUFF.name || "Thorns") + " rank " + (BUFF.ranks.indexOf(th) + 1) + " (a level " + th[0] + " druid's): " + th[1] + " " + (BUFF.s || "Nature") + (th[2] ? " (spell " + th[2] + ")" : "")]);
+        // base damage plus a share of the caster's Nature damage: yours when you are the druid, else unknown here
+        var tc = BUFF.coef || 0, own = CLS === "DRUID", nat = sdmg + (t.natureSpellDamage || 0), thv = th ? th[1] + (own ? tc * nat : 0) : 0;
+        if (th) hitSrc.push([thv, esc(BUFF.name || "Thorns") + " rank " + (BUFF.ranks.indexOf(th) + 1) + (own ? " (learned at " + th[0] + "): " : " (a level " + th[0] + " druid's): ") + th[1] +
+          (tc && own ? " + " + r1(tc * 100) + "% of your Nature damage " + nat + " = " + r1(thv) : "") + " " + (BUFF.s || "Nature") + (th[2] ? " (spell " + th[2] + ")" : "") +
+          (tc && !own ? "; plus " + r1(tc * 100) + "% of the casting druid's spell power, which this panel cannot see (not counted)" : "") +
+          (tc ? "; the " + r1(tc * 100) + "% is from " + esc(BUFF.coefSrc || "Blizzard's notes") : "")]);
         else notes.push("Thorns is learned by druids at level " + ((BUFF.ranks || [[6]])[0][0]) + ".");
       }
       function sum(a) { return a.reduce(function (s, x) { return s + x[0]; }, 0); }
@@ -1099,7 +1115,7 @@
         return '<div class="rxchip' + (applied ? " on" : "") + '" data-tip="' + attr("<b>" + esc(r.n) + "</b>" + '<span class="it-l">' + (r.kind === "passive" ? "Passive" : "Active") + "</span>" + esc(r.tip || "") + line) + '">' +
           img(r.icon) + "<span><b>" + esc(r.n) + "</b><em>" + esc(r.summary || (r.kind === "active" ? "Active ability" : "")) + "</em></span></div>";
       }).join("");
-      var note = (base ? "Base mana, armor mitigation, rating conversions and 10-health-per-Stamina come from the Forever beta client, build 1.60.1.69876. Base attributes and the crit, dodge, attack power and regen formulas are still WoW Classic 1.12 values for a level " + lv + " " + esc(ctx.raceClass || "") + (ctx.derived ? " (combo new in Forever, derived from " + esc(ctx.derived) + " plus race offsets)" : "") + "." : "Base attributes for this race are unpublished, so formula totals show as ?; bonuses from gear, racials and talents still count.");
+      var note = (base ? "Base mana, armor mitigation, rating conversions and 10-health-per-Stamina come from the Forever beta client's gametables, build 1.60.1.69876 (not re-checked since). Base attributes and the crit, dodge, attack power and regen formulas are still WoW Classic 1.12 values for a level " + lv + " " + esc(ctx.raceClass || "") + (ctx.derived ? " (combo new in Forever, derived from " + esc(ctx.derived) + " plus race offsets)" : "") + "." : "Base attributes for this race are unpublished, so formula totals show as ?; bonuses from gear, racials and talents still count.");
       var overNote = t.__over.length ? '<p class="g2-warn">Not counted, above your level ' + lv + ": " + t.__over.map(function (it) { return esc(it.name) + " (needs " + effReq(it).lvl + (effReq(it).est ? ", estimated" : "") + ")"; }).join(", ") + ".</p>" : "";
       return '<div class="gear2" id="gear"><div class="g2-head"><b>Gear</b><span class="g2-count">' + count + " / " + SLOT_KEYS.length + " equipped</span>" +
         '<span class="g2-db">' + wearable + " Forever items to wear so far</span>" +
@@ -1133,7 +1149,7 @@
           '<button type="button" data-gender="m"' + (g === "m" ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + ">Male</button>" +
           '<button type="button" data-gender="f"' + (g === "f" ? ' class="on" aria-pressed="true"' : ' aria-pressed="false"') + ">Female</button></div>" +
         '<button type="button" class="g2-zoom" data-m3d-zoom="1" title="Close-up (or double-click the model)">Close-up</button>' +
-        (ctx.standIn ? '<p class="g2-standin">Stand-in model: a recoloured blood elf until Skyborne models are in the client.</p>' : "") +
+        (ctx.standIn ? '<p class="g2-standin">Stand-in model: a recoloured blood elf. The client has only high-definition Skyborne models so far; Blizzard says standard-definition ones come in early 2027.</p>' : "") +
         '<div class="g2-anims" role="group" aria-label="Animation">' + ANIMS.map(function (a) {
           return '<button type="button" data-anim="' + a[0] + '"' + (a[0] === "Stand" ? ' class="on"' : "") + ">" + a[1] + "</button>";
         }).join("") + "</div>" +
@@ -1496,7 +1512,8 @@
       return E;
     }
     function enchantOK(enId, it) { var en = enchantById(enId); return !!en && enchantFits(en, it); }
-    return { html: html, pickerHTML: pickerHTML, enchantHTML: enchantHTML, pickSet: pickSet, enchantOK: enchantOK, setSpec: function (s, cls, lv) { SPEC = s || ""; if (cls) CLS = cls; if (lv) LEVEL = lv; },
+    return { html: html, pickerHTML: pickerHTML, score: score, presets: presets, // score and presets: /bis/ ranks with the same scorer (tools/build_bis.mjs)
+       enchantHTML: enchantHTML, pickSet: pickSet, enchantOK: enchantOK, setSpec: function (s, cls, lv) { SPEC = s || ""; if (cls) CLS = cls; if (lv) LEVEL = lv; },
       itemTip: itemTip, consumeInfo: consumeInfo, encode: encode, decode: decode, byId: byId, count: items.length, SLOT_KEYS: SLOT_KEYS, canUse: canUse,
       toggleReflect: toggleReflect, enchantById: enchantById, enchantsFor: enchantsFor };
   };

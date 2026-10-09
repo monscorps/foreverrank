@@ -9,8 +9,13 @@ effect points follow a curve indexed by rank.
 
     from spelltext import Client
     c = Client("1.60.1.70009")
-    c.text(5923)                 # a spell's description
+    c.text(5923)                 # a spell's description, an amount that varies as its middle
+    c.game_text(5923)            # as the game prints it: "6 to 10" where the amount varies
     c.talent_text(5923, rank=3)  # a talent's description at rank 3
+    c.talent_game_text(5923, 1)  # as the game prints it (ranges for a talent that teaches a spell)
+
+A Classic Era build (1.15.9.70003) reads too, for comparing a spell with
+Classic at the same rank: its SpellEffect still has BasePoints + DieSides.
 
 Checked by tools/verify_spelltext.py, which resolves the previous build and
 compares against the text already on the site; a talent's new text is only
@@ -77,6 +82,12 @@ class Client:
         for r in _rows(build, "SpellEffect"):
             if r.get("DifficultyID", "0") not in ("0", ""):
                 continue
+            if "EffectDieSides" in r:
+                # Classic Era keeps the older integer columns: the amount runs from BasePoints + 1 to BasePoints + DieSides
+                b, ds = _num(r.get("EffectBasePoints")), _num(r.get("EffectDieSides"))
+                lo, hi = b + min(ds, 1), b + ds
+                v = (lo + hi) / 2.0
+                r["EffectBasePointsF"], r["Variance"] = repr(v), repr((hi - lo) / abs(v) if v else 0.0)
             self.eff.setdefault(r["SpellID"], {})[int(r["EffectIndex"])] = r
         self.misc = {}
         for r in _rows(build, "SpellMisc"):
@@ -170,6 +181,9 @@ class Client:
             return _num(r["Radius"]) if r else 0.0
         if L == "x":
             return _num(e["EffectChainTargets"]) if e else 0.0
+        if L == "f":
+            # Classic's damage multiplier (Ferocious Bite's damage per point of energy)
+            return _num(e["EffectChainAmplitude"]) if e else 0.0
         if L == "e":
             return _num(e["EffectAmplitude"]) if e else 0.0
         if L == "q":
@@ -199,6 +213,12 @@ class Client:
             v = self.var(sid, m.group(2), int(m.group(3) or 0) or None, ctx)
             if v is None:
                 raise ValueError("unknown var $" + m.group(0))
+            if m.group(2) in ("m", "M") and not ctx.get("rank"):
+                # in a formula $m/$M are the low and high end of an amount that varies ("${$m2*x} to ${$M2*x}")
+                e = self.eff.get(str(sid), {}).get((int(m.group(3) or 0) or 1) - 1) or {}
+                if _num(e.get("Variance")) > 0:
+                    lo, hi = vrange(v, _num(e.get("Variance")))
+                    v = float(lo if m.group(2) == "m" else hi) * (1 if v >= 0 else -1)
             if m.group(2) in ("d", "D"):
                 v = v / 1000.0
             return "(" + repr(v) + ")"
@@ -253,12 +273,20 @@ class Client:
         s = re.sub(r"\|C[Ff]{2}[0-9A-Fa-f]{6}Re(?:q?u)?ires [^|]*\|R\s*", "", s)
         s = re.sub(r"\|c[0-9A-Fa-f]{8}|\|[rR]|\|C[0-9A-Fa-f]{8}", "", s)
         s = s.replace("|n", "\n")
-        # description variables ($<name>)
+        # description variables ($<name>); a definition may pick by talent ("$?s29192[${1.15}][${1.0}]"), read as "no"
         dvars = {}
         for line in (self.desc_vars.get(str(spell)) or "").splitlines():
             m = re.match(r"\s*\$(\w+)\s*=\s*(.+)", line)
             if m:
-                dvars[m.group(1)] = m.group(2).strip()
+                dvars[m.group(1)] = re.sub(r"^\$\{(.*)\}$", r"\1", self._conditionals(m.group(2).strip()))
+
+        def dv(expr, depth=0):
+            # $<name> inside an expression becomes its definition, in brackets
+            def one(mm):
+                if mm.group(1) not in dvars:
+                    raise ValueError("no desc var " + mm.group(1))
+                return "(" + (dv(dvars[mm.group(1)], depth + 1) if depth < 5 else dvars[mm.group(1)]) + ")"
+            return re.sub(r"\$<(\w+)>", one, expr)
         out, i = [], 0
         while i < len(s):
             c = s[i]
@@ -269,17 +297,13 @@ class Client:
             rest = s[i:]
             m = re.match(r"\$\{(.*?)\}(?:\.(\d))?", rest)
             if m:
-                v = self._value_expr(m.group(1), str(spell), ctx)
+                v = self._value_expr(dv(m.group(1)), str(spell), ctx)
                 out.append(fmt(abs(v), int(m.group(2))) if m.group(2) else fmt(v))
                 i += m.end()
                 continue
             m = re.match(r"\$<(\w+)>", rest)
             if m:
-                expr = dvars.get(m.group(1))
-                if expr is None:
-                    raise ValueError("no desc var " + m.group(1))
-                expr = re.sub(r"\$<(\w+)>", lambda mm: "(" + dvars.get(mm.group(1), "0") + ")", expr)
-                out.append(fmt(self._value_expr(expr, str(spell), ctx)))
+                out.append(fmt(self._value_expr(dv(m.group(0)), str(spell), ctx)))
                 i += m.end()
                 continue
             m = re.match(r"\$([/*])(\d+(?:\.\d+)?);(\d*)([a-zA-Z])(\d?)", rest)
@@ -351,6 +375,17 @@ class Client:
         """An item effect's text as the game prints it, with damage ranges ("6 to 10") where the effect varies."""
         return self.resolve((self.spell.get(str(spell)) or {}).get(col, ""), spell, {"ranges": True})
 
+    # a spell's tooltip as the game prints it: the same ranges (players' captured tooltips show "394 to 506 Fire damage")
+    game_text = item_text
+
     def talent_text(self, spell, rank, maxrank=1, col="Description_lang"):
         return self.resolve((self.spell.get(str(spell)) or {}).get(col, ""), spell,
                             {"rank": rank, "maxrank": maxrank, "root": str(spell)})
+
+    def talent_game_text(self, spell, rank, maxrank=1):
+        """A talent rank as the game prints it: a one-rank talent that teaches a spell (Holy Shock) reads as that spell
+        does, damage ranges and all; other talents read as talent_text."""
+        t = self.talent_text(spell, rank, maxrank)
+        if maxrank == 1 and t == self.text(spell):
+            return self.game_text(spell)
+        return t

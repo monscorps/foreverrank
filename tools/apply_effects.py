@@ -725,6 +725,32 @@ def fill_tokens(items, c):
                 if txt and "$" not in txt:
                     eff[i] = txt
                     n += 1
+    return n + refill_decimals(items, c, st)
+
+
+HALF = re.compile(r"\d+\.\d+\.\d+%")  # "1.2.2%": an older renderer's "${$m1/100}.2%", number and format glued
+
+
+def refill_decimals(items, c, st):
+    """Effect lines an older renderer half filled ("by 1.2.2%"), written again from the item's own spell where that
+    spell's text is the same sentence with other numbers. Returns the count."""
+    n = 0
+    shape = lambda t: re.sub(r"[\d.]+", "#", re.sub(r"\s+", " ", t)).strip()
+    for it in items:
+        eff = it.get("effects") or []
+        for i, line in enumerate(eff):
+            m = re.match(r"^(Use|Equip|Chance on hit): (.*)$", line)
+            if not m or not HALF.search(line):
+                continue
+            for ie in c.ixe.get(str(it["id"]), []):
+                try:
+                    txt = st.item_text(ie["SpellID"])
+                except Exception:
+                    continue
+                if txt and "$" not in txt and not HALF.search(txt) and shape(txt) == shape(m.group(2)):
+                    eff[i] = "%s: %s" % (m.group(1), re.sub(r"\s+", " ", txt).strip())
+                    n += 1
+                    break
     return n
 
 

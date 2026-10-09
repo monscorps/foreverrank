@@ -1,0 +1,5 @@
+{
+  "note": "Items players saw in game whose tooltip no upload or site has yet: name and slot as the player read them, no stats. tools/scavenge_items.py adds them to the item database with that source line until a real tooltip arrives (a players' upload or ForeverChanges), which then wins. Keys are item ids; el is the client's inventory type, c and u its item class and subclass, b the build, at the date, where the place.",
+  "273035": {"n": "Mana-warped Chain Shirt", "el": "INVTYPE_CHEST", "c": 4, "u": 3, "b": 70291, "at": "2026-10-08", "where": "a City of Dalaran run"},
+  "273048": {"n": "Refractory Scaleguards", "el": "INVTYPE_LEGS", "c": 4, "u": 3, "b": 70291, "at": "2026-10-08", "where": "a City of Dalaran run"}
+}

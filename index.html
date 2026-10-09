@@ -416,7 +416,7 @@ details.ch-sec summary:hover { color: var(--gold); }
       <button class="pill pill-gear" id="gear" aria-haspopup="true" aria-expanded="false" title="Settings">&#9881;</button>
     </div>
   </nav>
-<script src="nav.js?v=8"></script>
+<script src="nav.js?v=9"></script>
   <div class="settings" id="settings" hidden>
     <label><input type="checkbox" id="demo-toggle"> Show demo data</label>
     <p>Demo rows are invented, watermarked, and vanish the moment real uploads exist.</p>
@@ -429,10 +429,10 @@ details.ch-sec summary:hover { color: var(--gold); }
     <h1 class="logotype">Rank. <span>Forever.</span></h1>
     <p class="hero-sub">How complete your character and your guild are, plus PvP,
     hardcore and the race to the cap: measured in the world, ranked like a WarcraftLogs parse.</p>
-    <button type="button" class="probe-cta" id="probe-cta">
-      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="6.4"/><path d="M8 4.2V8l2.6 1.6"/></svg>
-      Addon coming soon
-    </button>
+    <a class="probe-cta" href="questbank/">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M8 2.2v8.3M4.6 7.3 8 10.6l3.4-3.3M2.8 13.6h10.4"/></svg>
+      Get QuestBank, free
+    </a>
 
     <div class="countdown" id="countdown">
       <p class="count-kick" id="count-kick">…</p>
@@ -459,7 +459,7 @@ details.ch-sec summary:hover { color: var(--gold); }
   </div>
   <div id="hn-feature" class="hn-feature"></div>
   <div class="hn-grid" id="hn-grid"></div>
-  <div class="hn-railhead"><h3>Our <span>datamines</span></h3><p>Read straight from the beta client, build by build.</p></div>
+  <div class="hn-railhead"><h3>From <span>ForeverRank</span></h3><p>Datamines, articles and addon releases, each with its sources.</p></div>
   <div class="hn-rail" id="hn-rail"></div>
   <details class="hn-more" id="hn-more"><summary>More headlines</summary><ol id="hn-list"></ol></details>
   <noscript><p class="board-sub">The news loads with JavaScript. Every headline is also on <a href="news/">the news page</a>.</p></noscript>
@@ -470,10 +470,10 @@ details.ch-sec summary:hover { color: var(--gold); }
   <div class="hn-head"><h2 class="display display-sm">Dig <span>in</span></h2></div>
   <div class="ex-grid">
     <a class="ex-tile big" href="plan/" style="--img:url(/codex/img/stat-legacy.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_hammer_20.jpg)"></span><b>The Forge</b><span class="ex-d">Talent calculator and character planner: race, class, talents, Legacy trees and gear, shared as a link.</span></a>
-    <a class="ex-tile" href="codex/" style="--img:url(/codex/img/stat-spells.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg)"></span><b>Database</b><span class="ex-d">21,000 items with stats and drop sources, plus spells, sets and hidden systems.</span></a>
-    <a class="ex-tile" href="bis/" style="--img:url(/codex/img/excavation-site.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_chest_plate16.jpg)"></span><b>BiS lists</b><span class="ex-d">Best in slot for all 31 specs at the beta cap.</span></a>
-    <a class="ex-tile" href="classes/" style="--img:url(/codex/img/stat-classes.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_paladin.jpg)"></span><b>Classes</b><span class="ex-d">What changed per class, and the spells Forever hides.</span></a>
-    <a class="ex-tile" href="world/" style="--img:url(/codex/img/stat-dungeons.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg)"></span><b>World and Atlas</b><span class="ex-d">Loot tables for every dungeon, plus zones, raids and the zone map.</span></a>
+    <a class="ex-tile" href="codex/" style="--img:url(/codex/img/stat-spells.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg)"></span><b>Database</b><span class="ex-d">Over 21,000 items with stats and drop sources, plus spells, sets and hidden systems.</span></a>
+    <a class="ex-tile" href="bis/" style="--img:url(/codex/img/excavation-site.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_chest_plate16.jpg)"></span><b>BiS lists</b><span class="ex-d">Best in slot for every class and spec at level 30, ranked from our own item data.</span></a>
+    <a class="ex-tile" href="classes/" style="--img:url(/codex/img/stat-classes.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_paladin.jpg)"></span><b>Classes</b><span class="ex-d">What the level-30 builds changed per class, and the hidden Soul Engraving.</span></a>
+    <a class="ex-tile" href="world/" style="--img:url(/codex/img/stat-dungeons.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg)"></span><b>World and Atlas</b><span class="ex-d">Loot tables for every dungeon, plus the Atlas: zone levels, flight paths and dungeon doors.</span></a>
     <a class="ex-tile" href="rankings/" style="--img:url(/codex/img/stat-raids.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/achievement_bg_winwsg.jpg)"></span><b>Spec rankings</b><span class="ex-d">Honest estimates until real parses exist.</span></a>
     <a class="ex-tile" href="news/" style="--img:url(/codex/img/city-of-dalaran.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_scroll_03.jpg)"></span><b>News</b><span class="ex-d">Every Forever headline, and our datamines.</span></a>
     <a class="ex-tile wide" href="#ladder" style="--img:url(/assets/og.jpg)"><span class="ex-ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_trophy_argent.jpg)"></span><b>The ladder</b><span class="ex-d">Character and guild progression, ranked. What it will be.</span></a>
@@ -486,7 +486,7 @@ details.ch-sec summary:hover { color: var(--gold); }
 <main id="ladder" class="wrap lad">
   <div class="board-title">
     <h2 class="display">The <span>Eternal</span> Ladder</h2>
-    <p class="board-note" id="cap-note">The beta is capped at <b>level 20</b> until Oct 1, then 30. Boards rank to the live cap.</p>
+    <p class="board-note" id="cap-note">The beta is capped at <b>level 30</b>. Boards rank to the live cap.</p>
   </div>
 
   <div class="lad-switch" id="lad-switch" role="tablist" aria-label="Ladder view">
@@ -585,7 +585,7 @@ details.ch-sec summary:hover { color: var(--gold); }
     </div>
 
     <div class="hx-steps">
-      <div><b>1</b><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_spyglass_03.jpg)"></span><h4>Play</h4><p>The addon quietly notes your pace and progress. Read-only; it never plays for you. <em>Coming soon.</em></p></div>
+      <div><b>1</b><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_spyglass_03.jpg)"></span><h4>Play</h4><p><a href="questbank/">QuestBank</a>, the free questing addon, already notes quests, XP, items and spells as you play. Ladder ranking is planned for launch.</p></div>
       <div><b>2</b><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_letter_15.jpg)"></span><h4>Share</h4><p>Upload in two clicks, or let the Windows uploader send it after each session.</p></div>
       <div><b>3</b><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_trophy_argent.jpg)"></span><h4>Rank</h4><p>Ladders per ruleset: Normal, PvP, Hardcore and RP, and a guild board across all four.</p></div>
     </div>
@@ -653,60 +653,15 @@ details.ch-sec summary:hover { color: var(--gold); }
   <a href="https://github.com/monscorps/foreverrank">source</a>
 </footer>
 
-<script src="forever.js?v=15"></script>
-<script src="/map.js?v=8" defer></script>
-<div class="probe-modal" id="probe-modal" hidden>
-  <div class="probe-card" role="dialog" aria-modal="true" aria-labelledby="probe-t" tabindex="-1">
-    <button type="button" class="probe-x" id="probe-x" aria-label="Close">&times;</button>
-    <b id="probe-t">The ladder <span>addon</span></b>
-    <p class="probe-sub">The addon that quietly notes your pace and progress for the ladder. Read-only, no automation, terms-of-service safe by construction.</p>
-    <p class="probe-sub">The <a href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a> hears first.</p>
-    <span class="probe-dl soon" aria-disabled="true">Coming soon</span>
-    <p class="probe-foot">Out now: <a href="/questbank/">QuestBank, the free questing addon</a></p>
-  </div>
-</div>
+<script src="forever.js?v=16"></script>
+<script src="/map.js?v=9" defer></script>
 <style>
-.probe-cta { display: inline-flex; align-items: center; gap: .5rem; margin-top: 1.1rem; cursor: pointer;
+.probe-cta { display: inline-flex; align-items: center; gap: .5rem; margin-top: 1.1rem; cursor: pointer; text-decoration: none;
   font: 700 .8rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: #14100a;
   background: linear-gradient(180deg, #f0dfa8, #d9b96a); border: 1px solid rgba(255,240,200,.5); border-radius: 3px;
   padding: .75rem 1.1rem; box-shadow: 0 4px 18px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.35); transition: filter .15s, transform .15s; }
 .probe-cta:hover { filter: brightness(1.06); transform: translateY(-1px); }
-.probe-cta-sub { font: 600 .62rem/1 var(--heading); letter-spacing: .06em; text-transform: none; color: rgba(20,16,10,.7); }
-.probe-modal { position: fixed; inset: 0; z-index: 960; display: grid; place-items: center; background: rgba(5,8,10,.75); padding: 1rem; }
-.probe-modal[hidden] { display: none; }
-.probe-card { position: relative; width: min(30rem, 94vw); background: #0d1a22; border: 1px solid rgba(229,204,128,.4); border-radius: 8px;
-  box-shadow: 0 18px 50px rgba(0,0,0,.7); padding: 1.3rem 1.4rem 1.2rem; }
-.probe-card:focus { outline: none; }
-.probe-card > b { font: 700 1.3rem var(--heading); color: #e5cc80; }
-.probe-card > b span { color: #f4f0eb; }
-.probe-x { position: absolute; right: .5rem; top: .4rem; width: 2rem; height: 2rem; border: 0; background: none; color: #8b93a7; font-size: 1.4rem; cursor: pointer; }
-.probe-x:hover { color: #e5cc80; }
-.probe-sub { margin: .5rem 0 0; font-size: .8rem; line-height: 1.55; color: #b9c0d0; }
-.probe-steps { margin: .8rem 0 0; padding-left: 1.2rem; }
-.probe-steps li { font-size: .8rem; line-height: 1.6; color: #c8cede; margin-bottom: .25rem; }
-.probe-steps code { color: #e8e2d0; font-size: .74rem; }
-.probe-dl { display: inline-block; margin-top: .9rem; font: 700 .78rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase;
-  color: #14100a; background: #e5cc80; border-radius: 2px; padding: .7rem 1.1rem; text-decoration: none; }
-.probe-dl:hover { filter: brightness(1.08); }
-.probe-dl.soon { cursor: default; color: #e5cc80; background: transparent; border: 1px dashed rgba(229,204,128,.55); }
-.probe-dl.soon:hover { filter: none; }
-.probe-sub a { color: #e5cc80; }
-.probe-foot { margin: .7rem 0 0; font-size: .74rem; color: #b9c0d0; }
-.probe-foot a { color: #e5cc80; }
-@media (max-width: 640px) { .probe-modal { place-items: end stretch; padding: 0; } .probe-card { width: 100%; border-radius: 8px 8px 0 0; } }
 </style>
-<script>
-(function () {
-  var m = document.getElementById("probe-modal"), b = document.getElementById("probe-cta");
-  if (!m || !b) return;
-  function open() { m.hidden = false; m.querySelector(".probe-card").focus(); }
-  function close() { m.hidden = true; }
-  b.addEventListener("click", open);
-  document.getElementById("probe-x").addEventListener("click", close);
-  m.addEventListener("click", function (e) { if (e.target === m) close(); });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !m.hidden) close(); });
-})();
-</script>
 <script src="/support.js?v=2" defer></script>
 </body>
 </html>

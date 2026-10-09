@@ -1,35 +1,36 @@
 {
- "note": "Damage done back to attackers by class abilities and buffs, from the beta client's spell tables (build 1.60.1.70170, tools/apply_reflect.py) unless a field says otherwise. Retribution Aura ranks are [level learned, damage per hit taken, spell id]. Blessing of Sanctuary is not in the Forever client at all. Improved Retribution Aura (spells 20091/20092) still has spell rows in the client, but no Forever talent teaches it, so nothing raises Retribution Aura's damage.",
+ "note": "Damage done back to attackers by class abilities and buffs, from the beta client's spell tables (build 1.60.1.70291, tools/apply_reflect.py) unless a field says otherwise. Retribution Aura ranks are [level learned, base damage per hit taken, spell id]; retCoef is the share of the paladin's Holy spell damage added to it (retCoefSrc says where it comes from). Blessing of Sanctuary is not in the Forever client at all. Improved Retribution Aura (spells 20091/20092) still has spell rows in the client, but no Forever talent teaches it, so nothing raises Retribution Aura's damage.",
  "classes": {
   "PALADIN": {
    "retAura": [
     [
      16,
-     7,
+     5,
      7294
     ],
     [
      26,
-     12,
+     8,
      10298
     ],
     [
      36,
-     18,
+     12,
      10299
     ],
     [
      46,
-     24,
+     16,
      10300
     ],
     [
      56,
-     30,
+     20,
      10301
     ]
    ],
-   "retCoef": 0,
+   "retCoef": 0.06,
+   "retCoefSrc": "Blizzard's development notes, 8 October 2026 (the client's spell rows carry no ratio)",
    "holyShield": {
     "talent": "Holy Shield",
     "ranks": [
@@ -86,32 +87,40 @@
    "ranks": [
     [
      6,
-     4
+     3,
+     467
     ],
     [
      14,
-     9
+     6,
+     782
     ],
     [
      24,
-     11
+     9,
+     1075
     ],
     [
      34,
-     13
+     12,
+     8914
     ],
     [
      44,
-     16
+     15,
+     9756
     ],
     [
      54,
-     22
+     18,
+     9910
     ]
    ],
    "s": "Nature",
    "dur": 600.0,
-   "note": "[level learned, damage per hit taken], spells 467/782/1075/8914/9756/9910."
+   "coef": 0.06,
+   "coefSrc": "Blizzard's development notes, 8 October 2026 (the client's spell rows carry no ratio)",
+   "note": "[level learned, base damage per hit taken, spell id]; coef is the share of the casting druid's Nature spell damage added to it."
   }
  }
 }

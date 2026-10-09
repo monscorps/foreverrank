@@ -263,9 +263,12 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
     tip:AddLine("From the Classic database: not seen in Forever yet, so it may differ or not exist.", 1, 0.6, 0.3, true)
   end
   if q.seenOnly then
-    tip:AddLine(string.format("New in Forever and known only from players' notes: Wowhead doesn't list it yet. Level %d as the game showed it; it may unlock before level %d.%s",
-      q.lvl, q.req or q.lvl, q.turn and "" or " Where it's handed in isn't known yet."), 0.75, 0.75, 1, true)
+    -- the required level is the lowest anyone took it at, unless Blizzard's notes give it (the note below says so)
+    tip:AddLine(string.format("New in Forever and known only from players' notes: Wowhead doesn't list it yet. Level %d as the game showed it%s.%s",
+      q.lvl, q.reqStated and "" or string.format("; it may unlock before level %d", q.req or q.lvl),
+      q.turn and "" or " Where it's handed in isn't known yet."), 0.75, 0.75, 1, true)
   end
+  if q.note then tip:AddLine(q.note, 1, 0.6, 0.3, true) end
   if q.nerfed and not q.confirmed and not q.liveFull and not q.xpUnknown then
     tip:AddLine("An estimate: Wowhead's reading from before Blizzard's 1 October cut, with the cut applied. Quests in your log use the game's own number.", 1, 0.6, 0.3, true)
   end
@@ -3271,17 +3274,18 @@ function UI:CreateSettingsView(parent)
   v.sayHint:SetText("Only while you are in a party or raid, as plain lines. Nothing else goes to chat without Post.")
 
   heading(p, RIGHT, -584, "Discoveries")
-  -- the spells and item tooltips of the Forever client (Game.lua); quests and NPCs are always noted. Unticking
-  -- clears what was noted, ticking takes over ForeverProbe's notes if it is still there
-  v.noteGame = checkRow(p, RIGHT, -608, "Note items and spells you see, for foreverrank.com", 300)
+  -- the spells and item tooltips of the Forever client (Game.lua) and who drops what (Loot.lua); quests and NPCs are
+  -- always noted. The label names all three: this box is the player's one say over them. Unticking clears what was
+  -- noted, ticking takes over ForeverProbe's notes if it is still there
+  v.noteGame = checkRow(p, RIGHT, -608, "Note items, spells and loot, for foreverrank.com", 300)
   v.noteGame:SetScript("OnClick", function(self)
     if QB.Game then QB.Game.SetOn(self:GetChecked() and true or false) end
     UI:Refresh()
   end)
   v.noteGame:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Note items and spells you see", 1, 1, 1)
-    GameTooltip:AddLine("Tooltips of the items you see and the spells you know, with no names in them, so foreverrank.com can list them. Unticking forgets what was noted.", nil, nil, nil, true)
+    GameTooltip:SetText("Note items, spells and loot", 1, 1, 1)
+    GameTooltip:AddLine("Tooltips of the items you loot, carry or see, the spells you know, and which creatures and chests dropped what you loot (by id), with no names in them, so foreverrank.com can list them. Unticking forgets what was noted.", nil, nil, nil, true)
     GameTooltip:Show()
   end)
   v.noteGame:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -3330,7 +3334,7 @@ function UI:RefreshSettingsView(v)
   local forever = G and G.Forever() or false
   v.noteGame:SetEnabled(forever)
   v.noteGame:SetChecked(forever and set.noteGame ~= false)
-  v.noteGame.label:SetText(forever and "Note items and spells you see, for foreverrank.com" or "Note items and spells you see (Forever client only)")
+  v.noteGame.label:SetText(forever and "Note items, spells and loot, for foreverrank.com" or "Note items, spells and loot (Forever client only)")
   local ink = forever and INK or INK_SOFT
   v.noteGame.label:SetTextColor(ink[1], ink[2], ink[3])
   -- the map icons: greyed out off Forever, the three kinds greyed out while the icons are off
@@ -3346,7 +3350,12 @@ function UI:RefreshSettingsView(v)
     v[key]:SetChecked(icons and set[key] ~= false)
     v[key].label:SetTextColor(c[1], c[2], c[3])
   end
-  local items = (G and G.On()) and string.format(", %d items", (G.Count())) or ""
+  local items = ""
+  if G and G.On() then
+    items = string.format(", %d items", (G.Count()))
+    if QB.Loot then items = items .. string.format(", %d drop sources", (QB.Loot.Count())) end
+  end
+
   v.discText:SetText(string.format("Noted in game so far: %d quests, %d quest NPCs, %d chain steps%s. Forever is still being discovered: upload your QuestBank.lua at foreverrank.com/questbank/ and it goes into the next release for everyone.", nq, nn, nc, items))
   v.offers:SetChecked(set.post.auto and true or false)
   v.shareParty:SetChecked(set.share.party and true or false)

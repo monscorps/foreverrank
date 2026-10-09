@@ -32,7 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "QuestBank", "Data.lua")
 REPO = os.path.dirname(os.path.dirname(HERE))
 RAW = os.path.join(REPO, "research", "questbank")
-BUILD = "1.60.1.70170"
+BUILD = "1.60.1.70291"
 READ = "2026-09-29"
 # Blizzard, 2026-10-01 (the level-30 build): "Dungeon quests now reward 50% less extra experience beyond normal
 # quest values." Wowhead Forever's pages still show the old multipliers, so every multiplier above 1 read before
@@ -282,9 +282,8 @@ CLASSIC = set()
 # Forever's client descends from Season of Discovery and carries its leftovers: Wowhead lists quests
 # whose NPCs were never put into Forever. Players' reports settle it quest by quest:
 NOT_IN_FOREVER = {78132, 78133, 78134}  # Alonso's Dragonslayer quests: no Alonso in Ashenvale (owner, 2026-09-30)
-# City of Dalaran (Wowhead area 16544): its quests are in the data, the dungeon is not open yet (Blizzard, 2026-10-01:
-# "will come in a future beta update"); drop this line when it opens
-NOT_IN_FOREVER |= {92456, 92489, 96986, 96987, 96988}
+# (City of Dalaran's quests, Wowhead area 16544, were left out here until the dungeon opened for testing: Blizzard's
+# notes of 2026-10-08)
 SOD_NPC_OK = {211033, 211022}            # Garion Wendell and Owen Thadd take library books in Forever (owner)
 
 
@@ -482,11 +481,24 @@ def disc_xp(dq, lv):
     return max(votes.items(), key=lambda kv: (kv[1], kv[0]))[0] if votes else 0
 
 
+# NPCs that give nothing but PvP quests in the Classic data (the battlemasters' Call to Arms): a new quest of theirs is a
+# battleground one (Darkspear Islands Clash), which the catalog leaves out as it does every battleground quest
+_PVP_GIVERS = {}
+for _c in ((load("cmangos.json", {}) or {}).get("quests") or {}).values():
+    for _kind, _i in _c.get("starts") or []:
+        if _kind == "npc":
+            _PVP_GIVERS[_i] = _PVP_GIVERS.get(_i, True) and _c.get("type") == 41
+_PVP_GIVERS = {i for i, only in _PVP_GIVERS.items() if only}
+DISC_PVP = []
 for _k, _dq in _DISC_Q.items():
     if not isinstance(_dq, dict) or not str(_k).isdigit():
         continue
     _qid = int(_k)
     if _qid in LIST or _qid in NOT_IN_FOREVER or not _dq.get("lv") or not (1 <= int(_dq["lv"]) <= MAXLVL):
+        continue
+    _givers = [int(g[1:]) for g in (_dq.get("from") or []) if g[:1] == "c" and g[1:].isdigit()]
+    if _givers and all(g in _PVP_GIVERS for g in _givers):
+        DISC_PVP.append(_qid)
         continue
     _lv = int(_dq["lv"])
     _where, _ids = None, []
@@ -533,6 +545,65 @@ for _k, _dq in (DISC.get("q") or {}).items():
                 GAME_LV[int(_k)] = _lv
                 GAME_LEVEL_FIX.append((int(_k), _was, _lv))
 
+# A line the quest tooltip adds about where a number comes from, or what Blizzard changed since (D.NOTE)
+NOTE = {}
+# Quests none of the lists above has yet, written here from what is known, each fact with its source. 99411 is in the
+# client's quest table since build 70170, and Blizzard's notes of 2026-10-01 add it to Mulgore. Wowhead's tooltip
+# (qtips.json): "Ahab Wheathoof at Bloodhoof Village in Mulgore wants you to feed his prized puppy, Kyle the Frenzied
+# ... return to Ahab Wheathoof". Level and required level from ForeverChanges' quest list: Wowhead's quest pages turn
+# scripts away and no player has uploaded its quest window yet. Horde, as Bloodhoof Village is. XP not known. Ahab's
+# NPC id isn't known (Wowhead's NPC tooltip for his old id, 23618, answered 404 on 2026-10-08), so neither is his spot:
+# set AHAB once a player's QuestBank has met him or Wowhead shows him.
+AHAB = None
+HAND = {99411: ({"name": "Kyle's Gone Missing!", "level": 7, "reqlevel": 5, "side": 2, "category": 215, "category2": 1,
+                 "type": 0, "xp": 0, "reqclass": 0},
+                {"startType": "npc", "startId": AHAB, "endType": "npc", "endId": AHAB} if AHAB else {},
+                "New in the 1 October build (Blizzard's notes). Ahab Wheathoof gives it in Bloodhoof Village (Wowhead); "
+                "QuestBank doesn't have his spot yet. Level and required level from ForeverChanges' quest list until a "
+                "player's QuestBank sees it.")}
+for _qid, (_rec, _det, _note) in HAND.items():
+    if _qid not in LIST:
+        LIST[_qid] = dict(_rec, id=_qid)
+        if _det:
+            DET.setdefault(_qid, dict(_det, id=_qid, status=200))
+        NOTE[_qid] = _note
+
+# Blizzard's notes, 2026-10-08: "The new quests for the Gelkis and the Magram beginning with "Valley of Bones" now
+# require a minimum level of 35 (was 30)." Valley of Bones, the steps players' games opened right after it, and what
+# the new NPCs it leads to give (Orgrul, who takes it, Hagiak after him). The catalog had the lowest level anyone took
+# them at, 30, from before that build. Flag 32768: the required level is Blizzard's, not that.
+VALLEY_OF_BONES, VOB_REQ = 92841, 35
+REQ_STATED = {}  # quest -> its required level as Blizzard's notes give it
+if VALLEY_OF_BONES in LIST:
+    _next = {}
+    for _pair in (DISC.get("chain") or {}):
+        _a, _, _b = _pair.partition(">")
+        if _a.isdigit() and _b.isdigit():
+            _next.setdefault(int(_a), set()).add(int(_b))
+    _side = lambda q, w: {k for k in ((_DISC_Q.get(str(q)) or {}).get(w) or []) if k[:1] == "c" and k[1:].isdigit()}  # noqa: E731
+    _got, _npcs = {VALLEY_OF_BONES}, set()
+    while True:
+        _npcs |= {k for q in _got for k in _side(q, "to") if int(k[1:]) >= 200000}  # new Forever NPCs only
+        _more = {b for a in _got for b in _next.get(a, ())} | {int(k) for k in _DISC_Q if str(k).isdigit() and _side(k, "from") & _npcs}
+        _more = {q for q in _more if q in LIST} - _got
+        if not _more:
+            break
+        _got |= _more
+    for _qid in sorted(_got):
+        if (LIST[_qid].get("reqlevel") or 0) < VOB_REQ:
+            REQ_STATED[_qid] = VOB_REQ
+            LIST[_qid]["reqlevel"] = VOB_REQ
+            NOTE[_qid] = "Needs level 35 since the 8 October build (Blizzard's notes; it was 30)."
+
+# Blizzard's notes, 2026-10-08, on quests whose numbers nobody has read since: Elixir of Pain now pays the XP Stanley
+# gave when killed, and the quests around Shadowvale and Bandarion Keep (Tirisfal, Forever's new quests there: their
+# NPCs stand around 22, 45) went up in level. Until players' quest logs show the new numbers, the tooltip says so.
+CHANGED_1008 = {502: ("Changed in the 8 October build (Blizzard's notes): it now also pays the XP Stanley gave. The number "
+                      "here is from before; once you hold the quest, QuestBank uses the game's own.")}
+BANDARION = (1420, 22.0, 45.0, 4.0)  # Tirisfal Glades, x, y and how far (map percent) counts as around
+TIRISFAL_NOTE = ("Blizzard raised the level of the quests around Shadowvale and Bandarion Keep in the 8 October build. "
+                 "The level here is from before; your quest log shows the new one.")
+
 IDS = []
 for qid, q in LIST.items():
     if qid in NOT_IN_FOREVER:
@@ -544,13 +615,36 @@ for qid, q in LIST.items():
         continue
     _d = DET.get(qid) or {}
     if qid < 20000 and qid not in _CMQ_IDS and not _d.get("startId") and not _d.get("endId"):
-        continue  # a retired Classic ID (The Glowing Shard is 6981, not 3366): nobody gives or takes it
+        continue  # nobody gives or takes it, by Wowhead or the Classic database: a retired Classic ID (The Glowing
+        # Shard is 6981, not 3366) or a Forever one Wowhead lists bare (999, 1005, 1500: no giver, ender or XP)
     if not (1 <= qlevel(qid) <= MAXLVL) or (q.get("reqlevel") or 0) > MAXLVL:
         continue
     if qlevel(qid) >= MAXLVL and not base_xp(qid):
         continue  # client leftovers Wowhead lists at level 60 with no XP (Craftsman's Writs and the like)
     IDS.append(qid)
 IDS.sort()
+
+# The client's completion bits (QuestV2.UniqueBitFlag): quests that share one are done together, so only one of them is
+# ever handed in, and they rule each other out (D.EXCL). Since build 70291 each step of the shaman's Call of Earth shares
+# one across Durotar, Mulgore, Zephras Isle and the Alliance's version. A quest with no class of its own takes the one
+# its same-named twins share (Wowhead lists the Zephras Isle steps with none).
+BIT = {int(r["ID"]): int(r["UniqueBitFlag"]) for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "QuestV2.csv")))}
+BIT_GROUPS = {}
+for _qid in IDS:
+    if _qid in BIT:
+        BIT_GROUPS.setdefault(BIT[_qid], []).append(_qid)
+BIT_GROUPS = {b: g for b, g in BIT_GROUPS.items() if len(g) > 1}
+BIT_CLASS = []
+for _g in BIT_GROUPS.values():
+    for _qid in _g:
+        if not LIST[_qid].get("reqclass"):
+            _cls = {LIST[o].get("reqclass") for o in _g if o != _qid and LIST[o].get("name") == LIST[_qid].get("name") and LIST[o].get("reqclass")}
+            if len(_cls) == 1:
+                LIST[_qid]["reqclass"] = _cls.pop()
+                BIT_CLASS.append(_qid)
+# the groups the build before had too, for GAPS.md (none when that build's table isn't here)
+_prev = os.path.join(REPO, "research", "wago", "1.60.1.70170", "QuestV2.csv")
+BIT_PREV = {int(r["ID"]): int(r["UniqueBitFlag"]) for r in csv.DictReader(open(_prev))} if os.path.exists(_prev) else {}
 
 
 def npc_key(kind, i):
@@ -1128,6 +1222,8 @@ for qid in IDS:
             if flags & 8:
                 unconfirmed -= 1
             flags = (flags | 512) & ~(8 | 64)
+    if qid in REQ_STATED:
+        flags |= 32768  # the required level is Blizzard's, not the lowest anyone took it at
     side = {1: 1, 2: 2}.get(q.get("side"), 0)
     Q[qid] = [qlevel(qid), q.get("reqlevel") or 1, side, base, mult, turn, give, cat_for(qid), q.get("reqclass") or 0, flags]
     QN[qid] = q["name"]
@@ -1210,6 +1306,25 @@ for members in EXCL_GROUPS.values():
     if len(members) > 1:
         for m in members:
             EXCL[m] = [x for x in members if x != m]
+BIT_EXCL = []  # quests the shared completion bits rule out against quests the Classic database didn't
+for members in BIT_GROUPS.values():
+    for m in members:
+        have = EXCL.get(m, [])
+        add = [x for x in members if x != m and x not in have]
+        if add:
+            EXCL[m] = have + add
+            BIT_EXCL.append(m)
+# what Blizzard's 8 October notes changed that nobody has read since: Elixir of Pain's XP, and the level of Forever's
+# new quests whose giver or ender stands around Bandarion Keep and Shadowvale
+for qid in IDS:
+    if qid in CHANGED_1008:
+        NOTE.setdefault(qid, CHANGED_1008[qid])
+    if qid in CM:
+        continue
+    for i in (Q[qid][5], Q[qid][6]):
+        n = NPCS[i - 1] if i else None
+        if n and n[1] == BANDARION[0] and math.hypot(n[2] - BANDARION[1], n[3] - BANDARION[2]) <= BANDARION[3]:
+            NOTE.setdefault(qid, TIRISFAL_NOTE)
 for qid in list(STEPNAME) + [p for ps in PRE.values() for p in ps for p in (p if isinstance(p, list) else [p])] + \
         [x for xs in EXCL.values() for x in xs] + [x for xs in NEXT.values() for x in xs]:
     if qid not in QN and qid in LIST:
@@ -1299,13 +1414,16 @@ lines.append("--         64 XP not known yet, 128 a Season of Discovery leftover
 lines.append("--         256 multiplier computed from the pre-2026-10-01 read: the extra above x1 halved, not yet re-read,")
 lines.append("--         512 XP as the game paid it after the cut: a hand-in or quest window on build 70170 or later,")
 lines.append("--         1024 a wanted poster, 2048 an escort, 4096 repeatable (never suggested), 8192 kept as read: the game paid within a few percent of it after the cut,")
-lines.append("--         16384 known only from players' notes: level, NPCs and XP as their games showed them; needs = the lowest level anyone took it at)}")
+lines.append("--         16384 known only from players' notes: level, NPCs and XP as their games showed them; needs = the lowest level anyone took it at,")
+lines.append("--         32768 the required level as Blizzard's notes give it)}")
 lines.append("D.Q = {\n" + ",\n".join("[%d]=%s" % (k, lua(v)) for k, v in sorted(Q.items())) + "\n}")
 lines.append("D.QN = " + keyed(QN))
 lines.append("D.STEPNAME = " + keyed(STEPNAME))
 lines.append("D.QITEM = " + keyed(QITEM))
 lines.append("D.QICON = " + keyed(QICON))
 lines.append("D.TIPS = " + keyed(TIPS))
+lines.append("-- [id] = a line for the quest tooltip: where a number comes from, or what Blizzard changed that nobody has read since")
+lines.append("D.NOTE = " + keyed(NOTE))
 lines.append("D.PRE = " + keyed(PRE))
 lines.append("-- [id] = {item, count, 1 banked with the item in your bags | 2 the item is needed to finish | 0 starts from the item, item name}")
 lines.append("D.BAGQ = " + keyed(BAGQ))
@@ -1923,6 +2041,82 @@ open(OUT, "w").write("\n".join(lines))
 # ---------------------------------------------------------------------------
 # GAPS.md: everything still missing, so nobody has to take the numbers on trust
 # ---------------------------------------------------------------------------
+QTIPS = load("qtips.json", {}) or {}  # Wowhead's quest tooltips (npcloc.py --quests): names and text, no level or XP
+
+
+def quest_name(qid):
+    return (QN.get(qid) or (LIST.get(qid) or {}).get("name") or (QTIPS.get(str(qid)) or {}).get("name")
+            or ((DISC.get("q") or {}).get(str(qid)) or {}).get("t") or "?")
+
+
+def why_out(qid):
+    """Why a quest we looked for isn't in the catalog, from what the inputs say about it."""
+    why = []
+    twins = [o for o in IDS if qid in BIT and o != qid and BIT.get(o) == BIT[qid]]
+    if twins:
+        why.append("shares its completion bit with %s, which the catalog has (the game marks both done together)" % (
+            ", ".join("%d %s" % (o, quest_name(o)) for o in twins)))
+    if qid in NOT_IN_FOREVER:
+        why.append("players report it isn't in Forever")
+    elif qid in LIST:
+        d, q = DET.get(qid) or {}, LIST[qid]
+        if not d.get("startId") and not d.get("endId") and qid not in SEEN:
+            what = ", ".join(x for x in ("level %d" % q["level"] if q.get("level") else "",
+                                         "needs %d" % q["reqlevel"] if q.get("reqlevel") else "",
+                                         AREAS.get(q.get("category"), "")) if x)
+            why.append("Wowhead Forever lists it%s with no giver%s, and no player has met it" % (
+                " (%s)" % what if what else "", " or ender" if d.get("base") or q.get("xp") else ", ender or XP"))
+        else:
+            why.append("left out by the catalog's filters")
+    else:
+        where = " and ".join(x for x in ("in the client" if qid in BIT else "",
+                                         "on Wowhead's tooltips" if (QTIPS.get(str(qid)) or {}).get("name") else "") if x)
+        why.append((where + ", " if where else "") + "no level, side or NPC yet")
+    if qid not in BIT:
+        # QuestV2 has no row for some quests the game does offer: players have met catalog quests that lack one
+        why.append("the client's quest table (QuestV2, build %s) has no row for it, which alone doesn't rule it out "
+                   "(%d quests in the catalog have none either)" % (BUILD, sum(1 for o in Q if o not in BIT)))
+    return "; ".join(why)
+
+
+def build_notes():
+    """GAPS.md lines on what the newest build and Blizzard's notes changed, and the quests we looked for."""
+    out = []
+    if HAND:
+        out.append("Written by hand where no list we read has the quest yet (each fact's source is in gen_data.py): %s." % ", ".join(
+            "%d %s (level %d and needs %d from ForeverChanges' quest list, giver %s, XP %s)" % (
+                q, quest_name(q), Q[q][0], Q[q][1], "unknown" if not Q[q][6] else "from Wowhead", "unknown" if Q[q][9] & 64 else "known")
+            for q in sorted(HAND) if q in Q))
+    if REQ_STATED:
+        out.append("Blizzard's notes of 2026-10-08: the new Gelkis and Magram quests \"beginning with Valley of Bones\" need level 35 (was 30), "
+                   "where the catalog had the level players took them at before that build (flag 32768): %s." % (
+                       ", ".join("%d %s" % (q, quest_name(q)) for q in sorted(REQ_STATED))))
+    changed = sorted(q for q in NOTE if q in Q and (q in CHANGED_1008 or NOTE[q] == TIRISFAL_NOTE))
+    if changed:
+        out.append("Changed in the 8 October build and not read since, which the tooltip says (Blizzard's notes): %s." % ", ".join(
+            "%d %s (%s)" % (q, quest_name(q), "its XP" if q in CHANGED_1008 else "its level") for q in changed))
+    groups = sorted(BIT_GROUPS.values())
+    new = [g for g in groups if BIT_PREV and len({BIT_PREV.get(q) for q in g}) > 1]
+    out.append(("Quests that share one completion bit in the client (QuestV2, build %s: doing one marks the others done), ruled out "
+                "against each other: %d groups, %d quests; %d of them weren't paired by the Classic database.%s%s") % (
+        BUILD, len(groups), sum(len(g) for g in groups), len(BIT_EXCL),
+        (" Shared since this build: %s." % "; ".join(", ".join("%d %s" % (q, quest_name(q)) for q in g) for g in new)) if new else "",
+        (" Class taken from same-named twins: %s." % ", ".join("%d %s" % (q, quest_name(q)) for q in sorted(BIT_CLASS))) if BIT_CLASS else ""))
+    look = (load("lookfor.json", {}) or {}).get("ids") or []
+    if look:
+        have = [q for q in look if q in Q]
+        out.append(("Forever quests looked for on 2026-10-08 (lookfor.json, %d): %d in the catalog (%s); %d not yet. A quest's level, "
+                    "side, NPCs and XP come from its Wowhead Forever page, which turns scripts away since 2026-10-04, or from players' "
+                    "games: these come in as soon as someone's QuestBank sees them.") % (
+            len(look), len(have), ", ".join("%d %s" % (q, quest_name(q)) for q in have), len(look) - len(have)))
+        out.append("")
+        for q in look:
+            if q not in Q:
+                out.append("- %d %s: %s" % (q, quest_name(q), why_out(q)))
+    out.append("")
+    return out
+
+
 def gap_report():
     def name(q):
         return "%d %s" % (q, LIST[q]["name"])
@@ -1935,7 +2129,8 @@ def gap_report():
         return {
             "no_page": [q for q in lst if Q[q][9] & 8],
             "no_turn": [q for q in lst if not Q[q][5]],
-            "inside": [q for q in lst if Q[q][5] and NPCS[Q[q][5] - 1][4] < 0],
+            # (an NPC on an island off the continents, Zephras Isle, has no continent either, but isn't inside a dungeon)
+            "inside": [q for q in lst if Q[q][5] and NPCS[Q[q][5] - 1][4] < 0 and NPCS[Q[q][5] - 1][1] not in ISLANDS],
             "no_give": [q for q in lst if not Q[q][6] and not (Q[q][9] & 4)],
             "no_chain": [q for q in lst if not chain_known(q)],
         }
@@ -1988,7 +2183,9 @@ def gap_report():
         if _unknown:
             out.append("Seen in game but not in the catalog (%d): %s." % (len(_unknown), ", ".join(
                 "%d %s (%s)" % (q, (DISC["q"].get(str(q)) or {}).get("t") or "?",
-                                "too little to place: no NPC with a position" if q in DISC_UNPLACED else "left out on purpose by the catalog's filters")
+                                "too little to place: no NPC with a position" if q in DISC_UNPLACED else
+                                "a battleground quest: its giver gives only PvP quests" if q in DISC_PVP else
+                                "left out on purpose by the catalog's filters")
                 for q in _unknown[:60])))
         out.append("")
         out.append("Every upload so far is one account's growing QuestBank.lua: what follows rests on one witness.")
@@ -2027,6 +2224,7 @@ def gap_report():
             out.append("Chain steps players' games suggest for quests with no known chain, not taken (the window of the next quest opened at the same NPC "
                        "within 8 s of a hand-in, which a reopened quest also does): %s." % ", ".join(_review))
         out.append("")
+    out += build_notes()
     out.append("Multipliers from ForeverChanges where Wowhead's page wasn't read: %d. Where both have a number, they disagree on %d:" % (
         len(FROM_FC), len(DISAGREE)))
     out.append("")

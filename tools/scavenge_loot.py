@@ -6,7 +6,11 @@ The Forever client carries no Dungeon Journal, so who drops what cannot be
 datamined: it comes from players' loot records, published by
   - foreverchanges.pro/dungeons/<slug>  bosses, rare spawns, quests and rewards
   - wowtbc.gg page-data JSON            boss tables for every dungeon
-Each boss and quest keeps the sites that list it. Raw pages are cached in
+and, since QuestBank 3.6.2, from our own players' loot windows (research/
+questbank/disc.json "loot", merged by tools/probe_pull.py): tools/apply_loot.py
+names those ids and adds them as the third source, "players' games"; it is
+called here before the file is written, so a refresh never drops them.
+Each boss and quest keeps the sources that list it. Raw pages are cached in
 tools/.loot-cache/ (gitignored); --refresh refetches them.
 
   python3 tools/scavenge_loot.py [--refresh]
@@ -18,9 +22,14 @@ import datetime, html as htmlmod, json, os, re, sys, time, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE = os.path.join(ROOT, "tools", ".loot-cache")
-UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36 foreverrank.com"}
+UA = {"User-Agent": "foreverrank.com data compile (contact via site Discord)"}  # an honest name, for foreverchanges.pro and wowtbc.gg alike
+SPACING = 1.0  # seconds between requests, at least
+_last = [0.0]
 FC = "https://foreverchanges.pro"
 WTBC = "https://wowtbc.gg"
+# Levels that beat the fansites' own: Blizzard's 1 October notes give the Excavation Site 26-31, and the client's
+# ContentTuning pins it at 26 (wowtbc.gg still says 24-29)
+LEVELS = {"Excavation Site: Wetlands": [26, 31]}
 REFRESH = "--refresh" in sys.argv
 
 
@@ -31,9 +40,10 @@ def get(url, name):
         return open(path, encoding="utf-8").read()
     for attempt in range(3):
         try:
+            time.sleep(max(0, SPACING - (time.time() - _last[0])))
+            _last[0] = time.time()
             body = urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60).read().decode("utf-8", "replace")
             open(path, "w", encoding="utf-8").write(body)
-            time.sleep(0.6)
             return body
         except Exception as e:
             err = e
@@ -163,6 +173,10 @@ def main():
                 elif ids:
                     d["quests"].append({"name": q.get("name"), "level": q.get("level"), "items": ids, "src": ["wowtbc.gg"]})
 
+    # Where Blizzard's notes and the client's ContentTuning agree on a range the fansites don't have yet
+    for d in dungeons.values():
+        if d["name"] in LEVELS:
+            d["levels"] = LEVELS[d["name"]]
     out = sorted(dungeons.values(), key=lambda d: ((d["levels"] or [99])[0], d["name"]))
     for d in out:
         if not d["slug"]: d["slug"] = re.sub(r"[^a-z0-9]+", "-", d["name"].lower()).strip("-")
@@ -171,6 +185,11 @@ def main():
                    "published by foreverchanges.pro and wowtbc.gg (each boss and quest lists its sites). Beta data: bosses, drops "
                    "and levels can change before launch.",
            "generated": datetime.date.today().isoformat(), "dungeons": out}
+    # players' own loot records as the third source (tools/apply_loot.py, which also runs alone): merged here so that a
+    # refresh of the sites' tables never drops what players added
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import apply_loot
+    apply_loot.report(apply_loot.merge(doc, apply_loot.load_inputs()))
     json.dump(doc, open(os.path.join(ROOT, "codex", "loot.json"), "w"), ensure_ascii=False, separators=(",", ":"))
     json.dump({"fc": items_fc, "wtbc": items_wt}, open(os.path.join(CACHE, "site-items.json"), "w"), ensure_ascii=False)
     print("codex/loot.json: %d dungeons, %d bosses, %d quests, %d items" % (

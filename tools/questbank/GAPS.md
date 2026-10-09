@@ -1,52 +1,113 @@
 # QuestBank data gaps
 
-Written by `gen_data.py` on every run from the inputs it had (Wowhead Forever read 2026-09-29, Forever client 1.60.1.70170,
+Written by `gen_data.py` on every run from the inputs it had (Wowhead Forever read 2026-09-29, Forever client 1.60.1.70291,
 CMaNGOS Classic database). The catalog covers levels 1 to 60. Wowhead Forever only knows the quests its players have met,
 which stops near the beta's level cap; the Classic database seeds the rest, labelled "Classic only" in the addon until
 players see those quests in Forever. Anything listed here is a quest the addon can't fully plan yet.
 
 | Check | Forever data | Missing | Classic seed | Missing |
 |---|---|---|---|---|
-| Forever XP multiplier read from its Wowhead Forever page | 2150 | 194 | 1457 | 1455 |
-| Turn-in NPC with a position | 2150 | 163 | 1457 | 7 |
-| Turn-in inside a dungeon (hand in on the way, not on the route) | 2150 | 94 | 1457 | 59 |
-| Quest giver with a position (quests that start from an item don't need one) | 2150 | 250 | 1457 | 12 |
-| Chain known (Wowhead Forever series or the Classic database) | 2150 | 439 | 1457 | 0 |
+| Forever XP multiplier read from its Wowhead Forever page | 2169 | 208 | 1443 | 1441 |
+| Turn-in NPC with a position | 2169 | 91 | 1443 | 7 |
+| Turn-in inside a dungeon (hand in on the way, not on the route) | 2169 | 8 | 1443 | 59 |
+| Quest giver with a position (quests that start from an item don't need one) | 2169 | 125 | 1443 | 12 |
+| Chain known (Wowhead Forever series or the Classic database) | 2169 | 444 | 1443 | 0 |
 
 On 2026-10-01 Blizzard cut dungeon-quest XP: "50% less extra experience beyond normal quest values". Wowhead Forever's pages still show the old multipliers, so every multiplier above x1 is computed as 1 + (read - 1) x 0.5 until they are re-read; the addon says so in the quest tooltip. Hand-ins on 2026-10-02 paid exactly that on every multiplied quest, dungeon-typed or not.
-What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 138 quests confirmed (within 5% counts as agreement; small differences kept as read: 157 Deliver the Thread 1450, paid 1464), 4 corrected to the game's number: 472 Fall of Dun Modr 1000 -> 1200, 2924 Essential Artificials 3050 -> 5500, 2929 The Grand Betrayal 2750 -> 4950, 2930 Data Rescue 3650 -> 6550, 0 with no XP in the catalog filled in.
+What the game paid after the cut (players' hand-ins and quest windows on build 70170 or later, flag 512): 164 quests confirmed (within 5% counts as agreement; small differences kept as read: 157 Deliver the Thread 1450, paid 1464), 4 corrected to the game's number: 472 Fall of Dun Modr 1000 -> 1200, 2924 Essential Artificials 3050 -> 5500, 2929 The Grand Betrayal 2750 -> 4950, 2930 Data Rescue 3650 -> 6550, 0 with no XP in the catalog filled in.
 
 Readings taken under a temporary +3% XP buff on the player (the game's number times 1.03, give or take one: 390 shows 401) count as the game's number: 94 readings on 68 quests.
 
-Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read; before the cut unless marked): Blackfathom Deeps x3.75, Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
+Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read; before the cut unless marked): Blackfathom Deeps x3.75, City of Dalaran x2.375 (read after the cut), Ragefire Chasm x3.05, Shadowfang Keep x4.35, The Deadmines x3.75, The Hall of Thanes x3.4, The Stockade x3.2, Wailing Caverns x2.9.
 
 Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,
 holidays, repeatable turn-ins, raids and battlegrounds are left out.
 
-NPC positions: 359 from Wowhead Forever, 1326 from the CMaNGOS spawn table where Wowhead has none.
-Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: 244 Wowhead coordinates there were in the old
-Classic frame and were moved to Forever's; 58 were already in Forever's.
-Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 219.
+NPC positions: 420 from Wowhead Forever, 1328 from the CMaNGOS spawn table where Wowhead has none.
+Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: 246 Wowhead coordinates there were in the old
+Classic frame and were moved to Forever's; 81 were already in Forever's.
+Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 497.
 Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: 26.
 World map icons: objective spots for 1448 quests (1141 from CMaNGOS spawns, 306 from its quest outlines only, 1 from Wowhead Forever's quest pages, 0 from players' games alone; 0 more have players' spots beside those); 53 quests that start from an item show where it drops. 176 quests need a profession or a reputation the addon can't check.
 
-Seen in Forever by players (47 uploads merged by probe_pull.py, 2026-10-04T11:12:17Z): 209 quests, 2 of them Classic seeds now confirmed.
-Seen in game but not in the catalog (5): 91900 A Sealed Crate (left out on purpose by the catalog's filters), 91904 A Sealed Crate (left out on purpose by the catalog's filters), 91905 A Sealed Crate (left out on purpose by the catalog's filters), 95795 Fallen in the Fen (too little to place: no NPC with a position), 98372 An Unfortunate End (left out on purpose by the catalog's filters).
+Seen in Forever by players (140 uploads merged by probe_pull.py, 2026-10-09T02:29:43Z): 296 quests, 16 of them Classic seeds now confirmed.
+Seen in game but not in the catalog (8): 91900 A Sealed Crate (left out on purpose by the catalog's filters), 91904 A Sealed Crate (left out on purpose by the catalog's filters), 91905 A Sealed Crate (left out on purpose by the catalog's filters), 96222 Khan Hratha (too little to place: no NPC with a position), 98372 An Unfortunate End (left out on purpose by the catalog's filters), 98895 Darkspear Islands Clash (a battleground quest: its giver gives only PvP quests), 98896 Darkspear Islands Clash (a battleground quest: its giver gives only PvP quests), 99192 A Donation of Silk (left out on purpose by the catalog's filters).
 
 Every upload so far is one account's growing QuestBank.lua: what follows rests on one witness.
-Added from players' notes alone (flag 16384; required level is the lowest anyone took it at): 88756 Bring Back a Bang (level 32, 2550 XP, ender unknown), 93176 My Little Friends (level 35, XP unknown, ender unknown), 93585 This Light of Mine (level 34, XP unknown, ender known), 95809 Heartwoven (level 31, XP unknown, ender known), 98209 Bloom of the Heavens (level 29, 1200 XP, ender unknown), 98221 From the Ashes (level 28, 2300 XP, ender unknown), 98283 Carnage (level 30, 3050 XP, ender unknown).
-Givers and enders filled in from what players' games showed: 88756 giver c1073, 93176 giver c217412, 93585 ender c1776, 93585 giver c255597, 95646 giver c1244, 95647 giver c1480, 95772 giver c956, 95809 ender c1480, 98072 giver c2094, 98208 ender c270844, 98208 giver c270844, 98209 giver c270844, 98221 giver c2104, 98245 giver c270637, 98246 giver c270637, 98283 giver c1244, 98293 giver o672330, 98815 giver c2094.
-NPC positions from players' games (the spot where they stood, a few yards off): 106 agree with the catalog within 25 yd (median 3.8 yd); 5 moved to where the game saw them: npc 576 by 40 yd, npc 1721 by 51 yd, npc 4982 by 58 yd, npc 5082 by 106 yd, npc 15991 by 41 yd; 7 placed from the game alone: npc 956, npc 217412, npc 255597, npc 256390, npc 270637, npc 270844, object 672330.
-Quest reward items: wowhead 2247, unknown 1391, loot pages 72, game 6.
-Rewards taken from the dungeon loot pages where Wowhead lists none (72): 704 Agmond's Fate, 709 Solution to Doom, 1048 Into The Scarlet Monastery, 1049 Compendium of the Fallen, 1050 Mythology of the Titans, 1053 In the Name of the Light, 1139 The Lost Tablets of Will, 1445 The Temple of Atal'Hakkar, 1446 Jammal'an the Prophet, 1475 Into The Temple of Atal'Hakkar, 2240 The Hidden Chamber, 2341 Necklace Recovery, Take 3, 2768 Divino-matic Rod, 2770 Gahz'rilla, 2846 Tiara of the Deep, 3341 Bring the End, 3447 Secret of the Circle, 3525 Extinguishing the Idol, 3528 The God Hakkar, 3636 Bring the Light, 3907 Disharmony of Fire, 4004 The Princess Saved?, 4126 Hurley Blackbreath, 4132 Operation: Death to Angerforge, 4134 Lost Thunderbrew Recipe, 4136 Ribbly Screwspigot, 4201 The Love Potion, 4242 Abandoned Hope, 4263 Incendius!, 4286 The Good Stuff, 4322 Jail Break!, 4363 The Princess's Surprise, 4701 Put Her Down, 4724 The Pack Mistress, 4729 Kibler's Exotic Pets, 4765 Delivery to Ridgewell, 4771 Dawn's Gambit, 4862 En-Ay-Es-Tee-Why, 4866 Mother's Milk, 4867 Urok Doomhowl, 4903 Warlord's Command, 4983 Bijou's Reconnaissance Report, 5081 Maxwell's Mission, 5125 Aurius' Reckoning, 5127 The Demon Forge, 5213 The Active Agent, 5214 The Great Fras Siabi, 5243 Houses of the Holy, 5384 Kirtonos the Herald, 5466 The Lich, Ras Frostwhisper, 5518 The Gordok Ogre Suit, 5526 Shards of the Felvine, 6163 Ramstein, 7028 Twisted Evils, 7046 The Scepter of Celebras, 7067 The Pariah's Instructions, 7201 The Last Element, 7441 Pusillin and the Elder Azj'Tordin, 7498 Garona: A Study on Stealth and Treachery, 7499 Codex of Defense, 7500 The Arcanist's Cookbook, 7501 The Light and How To Swing It, 7502 Harnessing Shadows, 7503 The Greatest Race of Hunters, 7504 Holy Bologna: What the Light Won't Tell You, 7505 Frost Shock and You, 7506 The Emerald Dream..., 7703 Unfinished Gordok Business, 8413 Da Voodoo, 8425 Voodoo Feathers, 8945 Dead Man's Plea, 8949 Falrin's Vendetta.
+Added from players' notes alone (flag 16384; required level is the lowest anyone took it at): 78088 A Strange Artifact (level 30, XP unknown, ender known), 78089 Advice From Stormwind (level 30, XP unknown, ender known), 78090 A Second Opinion (level 30, XP unknown, ender known), 78091 Earning Your Salt (level 30, XP unknown, ender known), 78092 It Must Be Destroyed (level 30, XP unknown, ender known), 78093 Return to Delgren (level 30, XP unknown, ender known), 79229 Highway Robbery (level 40, XP unknown, ender known), 79235 On the Lam (level 40, XP unknown, ender known), 79236 Cherry for Your Thoughts? (level 40, XP unknown, ender known), 79242 No Honor Among Thieves (level 40, XP unknown, ender unknown), 88756 Bring Back a Bang (level 32, 2550 XP, ender unknown), 92432 An Alarming Request (level 33, XP unknown, ender known), 92457 Starving Arcane (level 33, XP unknown, ender known), 92458 Heart of Disruption (level 33, XP unknown, ender known), 92459 Friend of the Kirin Tor (level 33, XP unknown, ender known), 92743 A Conqueror's Crown (level 40, XP unknown, ender known), 92754 A New Need for Shadow Protection (level 35, XP unknown, ender unknown), 92811 Economic Warfare (level 60, XP unknown, ender known), 92818 Big, No, MASSIVE Iron Axes (level 35, XP unknown, ender unknown), 92841 Valley of Bones (level 40, XP unknown, ender known), 92844 Mountain of Bones (level 42, XP unknown, ender known), 92846 Outcast Necromancers (level 40, XP unknown, ender known), 92847 Corrupting Tears (level 42, XP unknown, ender known), 92873 Proof of Concept (level 41, XP unknown, ender known), 92893 No Mercy for the Weak (level 42, XP unknown, ender known), 92894 Bone Raising (level 40, XP unknown, ender known), 93066 Bristleback Retreat (level 43, XP unknown, ender known), 93072 Long-Term Solutions (level 43, XP unknown, ender known), 93129 Threat of Starvation (level 43, XP unknown, ender known), 93176 My Little Friends (level 35, XP unknown, ender unknown), 93188 Return to Orgrul (level 43, XP unknown, ender known), 93196 Khan Jehn (level 42, XP unknown, ender known), 93224 Carved Centaur Totems (level 40, XP unknown, ender known), 93226 Buying Friendship: Magram (level 45, XP unknown, ender known), 93227 Buying Friendship: Gelkis (level 45, XP unknown, ender unknown), 93585 This Light of Mine (level 34, XP unknown, ender known), 95795 Fallen in the Fen (level 31, XP unknown, ender known), 95809 Heartwoven (level 31, XP unknown, ender known), 96800 Past Due (level 38, XP unknown, ender known), 98209 Bloom of the Heavens (level 29, 1200 XP, ender unknown), 98221 From the Ashes (level 28, 2300 XP, ender unknown), 98283 Carnage (level 30, 3050 XP, ender unknown).
+Givers and enders filled in from what players' games showed: 78088 ender c3663, 78088 giver o409289, 78089 ender c5492, 78089 giver c3663, 78090 ender c5495, 78090 giver c5492, 78091 ender c5495, 78091 giver c5495, 78092 ender o409311, 78092 giver c5495, 78093 ender c3663, 78093 giver o409315, 79229 ender c11438, 79229 giver o417353, 79235 ender c215643, 79235 giver c11438, 79236 ender c215643, 79236 giver c215643, 79242 giver c215643, 88756 giver c1073, 92432 ender c269127, 92432 giver c247264, 92457 ender c269127, 92457 giver c269127, 92458 ender c269127, 92458 giver c269127, 92459 ender c252085, 92459 giver c269127, 92489 giver c5694, 92743 ender c5398, 92743 giver c5398, 92754 giver c253097, 92811 ender c253139, 92811 giver c253139, 92818 giver c253163, 92841 ender c253136, 92841 giver c5398, 92844 ender c253136, 92844 giver c253136, 92846 ender c253136, 92846 giver c253136, 92847 ender c253136, 92847 giver c253136, 92873 ender c253136, 92873 giver c253136, 92893 ender c253136, 92893 giver c253136, 92894 ender c253136, 92894 giver c253136, 93066 ender c253851, 93066 giver c253136, 93072 ender c253851, 93072 giver c253851, 93129 ender c253851, 93129 giver c253851, 93176 giver c217412, 93188 ender c253136, 93188 giver c253851, 93196 ender c254357, 93196 giver c253136, 93224 ender c5396, 93224 giver c5396, 93226 ender c253139, 93226 giver c5396, 93227 giver c5396, 93585 ender c1776, 93585 giver c255597, 95646 ender c1244, 95646 giver c1244, 95647 giver c1480, 95772 giver c956, 95795 ender c956, 95809 ender c1480, 96800 ender c264265, 98072 giver c2094, 98208 ender c270844, 98208 giver c270844, 98209 giver c270844, 98221 giver c2104, 98245 giver c270637, 98246 giver c270637, 98283 giver c1244, 98293 giver o672330, 98815 ender c2094, 98815 giver c2094, 99191 giver c276170.
+NPC positions from players' games (the spot where they stood, a few yards off): 149 agree with the catalog within 25 yd (median 3.6 yd); 6 moved to where the game saw them: npc 576 by 40 yd, npc 1721 by 51 yd, npc 4982 by 58 yd, npc 5082 by 106 yd, npc 15351 by 4018 yd, npc 15991 by 41 yd; 22 placed from the game alone: npc 956, npc 215643, npc 217412, npc 247264, npc 252085, npc 253097, npc 253136, npc 253139, npc 253163, npc 253851, npc 254357, npc 255597, npc 264265, npc 269127, npc 270637, npc 270844, npc 276170, object 409289, object 409311, object 409315, object 417353, object 672330.
+Quest reward items: wowhead 2208, unknown 1379, game 98, loot pages 72.
+Rewards taken from the dungeon loot pages where Wowhead lists none (77): 704 Agmond's Fate, 709 Solution to Doom, 1048 Into The Scarlet Monastery, 1049 Compendium of the Fallen, 1050 Mythology of the Titans, 1053 In the Name of the Light, 1139 The Lost Tablets of Will, 1445 The Temple of Atal'Hakkar, 1446 Jammal'an the Prophet, 1475 Into The Temple of Atal'Hakkar, 2240 The Hidden Chamber, 2341 Necklace Recovery, Take 3, 2768 Divino-matic Rod, 2770 Gahz'rilla, 2846 Tiara of the Deep, 3341 Bring the End, 3447 Secret of the Circle, 3525 Extinguishing the Idol, 3528 The God Hakkar, 3636 Bring the Light, 3907 Disharmony of Fire, 4004 The Princess Saved?, 4126 Hurley Blackbreath, 4132 Operation: Death to Angerforge, 4134 Lost Thunderbrew Recipe, 4136 Ribbly Screwspigot, 4201 The Love Potion, 4242 Abandoned Hope, 4263 Incendius!, 4286 The Good Stuff, 4322 Jail Break!, 4363 The Princess's Surprise, 4701 Put Her Down, 4724 The Pack Mistress, 4729 Kibler's Exotic Pets, 4765 Delivery to Ridgewell, 4771 Dawn's Gambit, 4862 En-Ay-Es-Tee-Why, 4866 Mother's Milk, 4867 Urok Doomhowl, 4903 Warlord's Command, 4983 Bijou's Reconnaissance Report, 5081 Maxwell's Mission, 5125 Aurius' Reckoning, 5127 The Demon Forge, 5213 The Active Agent, 5214 The Great Fras Siabi, 5243 Houses of the Holy, 5384 Kirtonos the Herald, 5466 The Lich, Ras Frostwhisper, 5518 The Gordok Ogre Suit, 5526 Shards of the Felvine, 6163 Ramstein, 7028 Twisted Evils, 7046 The Scepter of Celebras, 7067 The Pariah's Instructions, 7201 The Last Element, 7441 Pusillin and the Elder Azj'Tordin, 7498 Garona: A Study on Stealth and Treachery, 7499 Codex of Defense, 7500 The Arcanist's Cookbook, 7501 The Light and How To Swing It, 7502 Harnessing Shadows, 7503 The Greatest Race of Hunters, 7504 Holy Bologna: What the Light Won't Tell You, 7505 Frost Shock and You, 7506 The Emerald Dream..., 7703 Unfinished Gordok Business, 8413 Da Voodoo, 8425 Voodoo Feathers, 8945 Dead Man's Plea, 8949 Falrin's Vendetta, 92457 Starving Arcane, 92458 Heart of Disruption, 95795 Fallen in the Fen, 95809 Heartwoven, 96800 Past Due.
 Quest levels as the game's quest log shows them, where the catalog had another: 472 Fall of Dun Modr 25 -> 30, 92747 Moonbrook Espionage 16 -> 15.
 Sides corrected by what the game showed an Alliance character: 79362 Grant's Shield, 92706 WANTED: Bruuz; 79362's Alliance ender is c268 (Darkshire), the Horde one stays Wowhead's, and Paladins take it as Shamans do.
 Chain steps players' games suggest for quests with no known chain, not taken (the window of the next quest opened at the same NPC within 8 s of a hand-in, which a reopened quest also does): 484>98815, 92744>92745, 92745>92747, 92747>92748, 92748>92749, 92748>92750, 92750>92751, 92751>92752, 92752>92753, 95809>98282.
 
+Written by hand where no list we read has the quest yet (each fact's source is in gen_data.py): 99411 Kyle's Gone Missing! (level 7 and needs 5 from ForeverChanges' quest list, giver unknown, XP unknown).
+Blizzard's notes of 2026-10-08: the new Gelkis and Magram quests "beginning with Valley of Bones" need level 35 (was 30), where the catalog had the level players took them at before that build (flag 32768): 92841 Valley of Bones, 92844 Mountain of Bones, 92846 Outcast Necromancers, 92847 Corrupting Tears, 92873 Proof of Concept, 92893 No Mercy for the Weak, 92894 Bone Raising, 93066 Bristleback Retreat, 93072 Long-Term Solutions, 93129 Threat of Starvation, 93188 Return to Orgrul, 93196 Khan Jehn.
+Changed in the 8 October build and not read since, which the tooltip says (Blizzard's notes): 502 Elixir of Pain (its XP), 91282 A Second Home (its level), 91285 Murlocs at the Gates (its level), 91294 Touring the Grounds (its level), 91316 Making Repairs (its level), 91317 The Tarnished (its level), 91858 Diplomatic Incident (its level), 94427 A Lesson in Divinity (its level), 94435 A Lesson in Divinity (its level), 94436 A Lesson in Divinity (its level), 94438 A Lesson in Divinity (its level), 94440 A Lesson in Divinity (its level), 94441 A Lesson in Divinity (its level), 95803 A Token of Good Faith (its level), 96896 A Righteous Cause (its level), 96899 Bandarion Keep (its level), 98545 Leonid's Letter (its level), 99152 As Above, So Below (its level), 99153 The One That Got Away (its level).
+Quests that share one completion bit in the client (QuestV2, build 1.60.1.70291: doing one marks the others done), ruled out against each other: 108 groups, 430 quests; 292 of them weren't paired by the Classic database. Shared since this build: 1516 Call of Earth, 1519 Call of Earth, 92466 Call of Earth, 94373 Call of Earth; 1517 Call of Earth, 1520 Call of Earth, 92467 Call of Earth, 94374 Call of Earth; 1518 Call of Earth, 1521 Call of Earth, 92468 Call of Earth, 94375 Call of Earth. Class taken from same-named twins: 6721 The Hunter's Path, 6722 The Hunter's Path, 92466 Call of Earth, 92467 Call of Earth, 92468 Call of Earth, 94013 Taming the Beast, 97243 Call of Fire.
+Forever quests looked for on 2026-10-08 (lookfor.json, 67): 13 in the catalog (92432 An Alarming Request, 92456 A Green Sample, 92457 Starving Arcane, 92458 Heart of Disruption, 92459 Friend of the Kirin Tor, 92489 Power Overwhelming, 92754 A New Need for Shadow Protection, 92818 Big, No, MASSIVE Iron Axes, 95795 Fallen in the Fen, 96986 The Grave Knight, 96987 Opportunistic Education, 96988 Source of Power, 99411 Kyle's Gone Missing!); 54 not yet. A quest's level, side, NPCs and XP come from its Wowhead Forever page, which turns scripts away since 2026-10-04, or from players' games: these come in as soon as someone's QuestBank sees them.
+
+- 908 Amongst the Ruins: shares its completion bit with 6921 Amongst the Ruins, which the catalog has (the game marks both done together); Wowhead Forever lists it (level 27, needs 25, Ashenvale) with no giver or ender, and no player has met it
+- 909 Baron Aquanis: shares its completion bit with 6922 Baron Aquanis, which the catalog has (the game marks both done together); Wowhead Forever lists it (level 30, needs 25, Ashenvale) with no giver or ender, and no player has met it
+- 999 When Dreams Turn to Nightmares: Wowhead Forever lists it (level 25, needs 10, Wailing Caverns) with no giver, ender or XP, and no player has met it; the client's quest table (QuestV2, build 1.60.1.70291) has no row for it, which alone doesn't rule it out (84 quests in the catalog have none either)
+- 1005 What Lurks Beyond: Wowhead Forever lists it (level 20, needs 10, Shadowfang Keep) with no giver, ender or XP, and no player has met it; the client's quest table (QuestV2, build 1.60.1.70291) has no row for it, which alone doesn't rule it out (84 quests in the catalog have none either)
+- 1500 Waking Naralex: Wowhead Forever lists it (level 25, needs 10, Wailing Caverns) with no giver, ender or XP, and no player has met it; the client's quest table (QuestV2, build 1.60.1.70291) has no row for it, which alone doesn't rule it out (84 quests in the catalog have none either)
+- 3366 The Glowing Shard: shares its completion bit with 6981 The Glowing Shard, which the catalog has (the game marks both done together); Wowhead Forever lists it (level 25, needs 15, Wailing Caverns) with no giver or ender, and no player has met it
+- 86757 Slowing the Orc Advance: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 87318 Hearts of the Lost: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 87491 Spark of Freedom: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 88757 Accessories of the Lost: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 88758 Sentiments of the Lost: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 92434 Blood in the Streets: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 92707 The Giant in the Den: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 92755 Mysterious Mysticism: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 92814 I Need a Tailor: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 92817 Leather Technique: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 93429 Blood of My Blood: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 93430 Taking the Bait Back: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 93663 Lost in Transit: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 93680 Key to the City: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 95682 Open the Maw: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 96241 Talkin' bout Toxins, Mon: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 96259 Defending the Dead: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 96260 Stronger than Steel: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 96261 The Broodmother: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 96294 A Darker Truth: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 96984 Heart of Disruption: shares its completion bit with 92458 Heart of Disruption, which the catalog has (the game marks both done together); in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 97265 Hate the Hatefury: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 97284 Vahlarriel's Vengeance: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 97287 Shrewd Negotiations: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 97328 Anything of Value: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 97329 Where's the Key?: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 97331 Zimmix's Great Escape: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 97985 Thundering Hearts: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98027 Gleaming Crescent Necklace: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98059 Hillsbrad's Hoard: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98069 Stolen Freewind Supplies: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98070 Stop the Screeching: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98071 Brewer's Trade: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98155 Pristine Pesterhide Pelts: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98156 Packaged Pristine Pelts: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98216 Understanding Our Present: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98223 Old Habits: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98230 This Land Was Their Land: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98291 Death to the Dragonmaw: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98297 Stopping the Cycle: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98300 Word to Ironforge: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98310 Gleaning Our Future: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98313 For Further Study: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98417 Vengeful Trail: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98418 Shared Fury: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98463 Talk of the Town: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98823 Earthen Echo: in the client and on Wowhead's tooltips, no level, side or NPC yet
+- 98824 Prehistoric Prism: in the client and on Wowhead's tooltips, no level, side or NPC yet
+
 Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both have a number, they disagree on 0:
 
 
-## Forever data: multiplier not read (194)
+## Forever data: multiplier not read (208)
 
 - 7 Kobold Camp Cleanup (level 2, Alliance)
 - 15 Investigate Echo Ridge (level 3, Alliance)
@@ -71,9 +132,20 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 457 The Balance of Nature (level 3, Alliance)
 - 458 The Woodland Protector (level 1, Alliance)
 - 459 The Woodland Protector (level 3, Alliance)
+- 504 Crushridge Warmongers (level 40, Alliance)
+- 522 Assassin's Contract (level 38, Alliance)
+- 523 Baron's Demise (level 40, Alliance)
+- 543 The Perenolde Tiara (level 40, Alliance)
 - 568 The Defense of Grom'gol (level 36, Horde)
 - 577 Some Assembly Required (level 36, both)
+- 606 Scaring Shaky (level 41, both)
+- 607 Return to MacKinley (level 41, both)
+- 609 Voodoo Dues (level 44, both)
+- 613 Cracking Maury's Foot (level 44, both)
 - 663 Land Ho! (level 35, both)
+- 684 Wanted!  Marez Cowl (level 39, Alliance)
+- 685 Wanted!  Otto and Falconcrest (level 40, Alliance)
+- 707 Ironband Wants You! (level 37, Alliance)
 - 719 A Dwarf and His Tools (level 35, Alliance)
 - 720 A Sign of Hope (level 35, Alliance)
 - 721 A Sign of Hope (level 35, Alliance)
@@ -94,7 +166,10 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 1050 Mythology of the Titans (level 38, Alliance)
 - 1133 Journey to Astranaar (level 20, Alliance)
 - 1177 Hungry! (level 36, both)
+- 1252 Lieutenant Paval Reethe (level 40, Alliance)
+- 1392 Noboru the Cudgel (level 39, both)
 - 1396 Encroaching Wildlife (level 37, Alliance)
+- 1454 The Karnitol Shipwreck (level 39, Alliance)
 - 1470 Piercing the Veil (level 3, Horde)
 - 1485 Vile Familiars (level 4, Horde)
 - 1499 Vile Familiars (level 4, Horde)
@@ -243,11 +318,10 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98581 Archaic Rune (level 1, Alliance)
 - 98601 A Difficult Path (level 1, Horde)
 
-## Forever data: no turn-in position (163)
+## Forever data: no turn-in position (91)
 
 - 6661 Deeprun Rat Roundup (level 12, Alliance)
 - 6662 Me Brother, Nipsy (level 12, Alliance)
-- 86784 Sticks and Bones (level 7, Horde)
 - 88756 Bring Back a Bang (level 32, Alliance)
 - 90902 Rediscovering the Light (level 2, Horde)
 - 91208 Coming to Terms (level 4, Horde)
@@ -256,13 +330,13 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 91743 Rascally Rodents (level 2, Alliance)
 - 91745 Mining Consultant (level 3, Alliance)
 - 91752 The Big Picture (level 3, Alliance)
-- 91753 An Enchanting Lesson (level 7, Alliance)
 - 91758 Follow That Kobold! (level 4, Alliance)
 - 91772 Shhh! We're Hunting Kobolds (level 4, Alliance)
 - 91860 A Grim Fate (level 22, Horde)
 - 92109 My First Alchemy Set (level 10, Alliance)
 - 92110 My First Real Potion (level 10, Alliance)
 - 92124 Book Inventory (level 2, Alliance)
+- 92456 A Green Sample (level 33, Alliance)
 - 92460 Coming of Age (level 1, both)
 - 92461 Harmony in Balance (level 1, both)
 - 92462 Infestation Investigation (level 2, both)
@@ -273,7 +347,6 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92467 Call of Earth (level 4, Horde)
 - 92468 Call of Earth (level 4, Horde)
 - 92469 Return to Rorian (level 4, both)
-- 92470 Foul Matriarch (level 5, both)
 - 92471 Aetheen of the Gales (level 4, both)
 - 92473 Aggressive Encroachment (level 4, both)
 - 92474 Falling With Style (level 2, both)
@@ -283,38 +356,21 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92483 At Home in the Shadows (level 2, both)
 - 92484 Embracing the Elements (level 2, Horde)
 - 92485 A Student of Nature (level 2, both)
-- 92515 The Problem With Prideclaws (level 6, both)
-- 92516 Hippogryph Harrassment (level 7, both)
-- 92529 Falaath Village (level 8, both)
+- 92489 Power Overwhelming (level 33, Alliance)
 - 92532 The Warrior's Path (level 2, both)
-- 92544 Al'Aketh Thugs (level 5, both)
-- 92553 Restocking the Larders (level 6, both)
-- 92595 The Windshapers (level 6, Horde)
-- 92596 The High Order (level 6, Alliance)
 - 92597 Reading the Ley Lines (level 4, Alliance)
 - 92598 The Gift of Skysight (level 4, Horde)
 - 92727 The Missing Scholar (level 10, Alliance)
-- 93036 Infiltrating the Cult (level 8, both)
-- 93317 Crab Season (level 9, both)
-- 93319 Pilfered Windstones (level 7, both)
 - 93552 Harvesting Windstones (level 4, both)
-- 93735 The Broken Construct (level 9, Horde)
-- 93736 Unwelcome Spirits (level 9, Horde)
-- 93737 The Broken Construct (level 9, Horde)
-- 93926 The Western Watch (level 8, both)
-- 93951 A Little Beauty (level 7, both)
 - 94373 Call of Earth (level 4, Alliance)
 - 94374 Call of Earth (level 4, Alliance)
 - 94375 Call of Earth (level 4, Alliance)
-- 94411 Meddlesome Mages (level 6, Horde)
-- 94413 A Magical Affront (level 6, Alliance)
 - 94414 The Anchors of Zephras (level 2, both)
 - 94502 Call of Water (level 23, Alliance)
 - 94898 Violent Winds (Temp Disabled) (level 11, both)
 - 94901 Hopping Helpers (level 11, both)
 - 94902 Valanaar Vintages (level 11, both)
 - 95250 Abominable Creatures (level 21, Alliance)
-- 95646 Horrors in the Highland (level 31, Alliance)
 - 95647 Lost in the Thicket Things (level 31, Alliance)
 - 95663 Dragonmaw Rumors (level 31, both)
 - 95664 Elder Knowledge (level 31, Horde)
@@ -329,72 +385,24 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 95883 The Tortured Soul (level 23, Horde)
 - 95884 The Offering Stone (level 23, Horde)
 - 95885 The Offering of Blood (level 23, Horde)
-- 95998 The Great Outdoors (level 6, Alliance)
-- 96045 Camping 101: Alchemy (level 6, Alliance)
-- 96055 Camping 101: Herbalism (level 6, Alliance)
-- 96056 Camping 101: Skinning (level 6, Alliance)
-- 96059 Camping 101: Enchanting (level 6, Alliance)
-- 96101 The Great Outdoors (level 6, both)
 - 96243 Call of Earth (level 10, Alliance)
 - 96395 An Ancient Grudge (level 15, both)
-- 96604 The Great Outdoors (level 6, Horde)
-- 96605 The Great Outdoors (level 6, Horde)
-- 96606 The Great Outdoors (level 6, Alliance)
-- 96607 The Great Outdoors (level 6, Horde)
-- 96608 The Great Outdoors (level 6, Alliance)
-- 96626 Camping 101: Cooking (level 6, Alliance)
-- 96627 The Adventurer (level 6, Alliance)
-- 96628 The Adventurer (level 6, Alliance)
-- 96630 The Adventurer (level 6, Alliance)
-- 96638 The Adventurer (level 6, both)
-- 96646 Camping 101: Cooking (level 6, both)
-- 96652 The Adventurer (level 6, Horde)
-- 96656 The Adventurer (level 6, Horde)
-- 96658 Camping 101: Cooking (level 6, Horde)
-- 96659 The Adventurer (level 6, Horde)
-- 96822 For Honor (level 6, Horde)
-- 96873 A Pain in the Neck (level 8, Horde)
-- 97223 Bloodtalon Matriarch (level 8, Horde)
+- 96986 The Grave Knight (level 33, Horde)
+- 96987 Opportunistic Education (level 33, Horde)
+- 96988 Source of Power (level 33, Horde)
 - 97263 Your Package Has Arrived (level 2, Alliance)
-- 97277 Grund and Gozwin (level 6, Alliance)
 - 97279 Wayward Weapons (level 2, Horde)
 - 97538 Pigments for Paints (level 26, Horde)
 - 97583 WRIGGLE. (level 1, Horde)
-- 97901 Camping 101: Enchanting (level 6, Horde)
-- 97905 Camping 101: Herbalism (level 6, Horde)
-- 97917 Camping 101: Enchanting (level 6, Alliance)
-- 97919 Camping 101: First Aid (level 6, Alliance)
-- 97920 Camping 101: Fishing (level 6, Alliance)
-- 97921 Camping 101: Herbalism (level 6, Alliance)
-- 97922 Camping 101: Leatherworking (level 6, Alliance)
-- 97923 Camping 101: Mining (level 6, Alliance)
-- 97925 Camping 101: Tailoring (level 6, Alliance)
-- 97933 Camping 101: Herbalism (level 6, Horde)
-- 97960 Camping 101: Skinning (level 6, Horde)
-- 97963 Camping 101: Alchemy (level 6, both)
-- 97964 Camping 101: Blacksmithing (level 6, both)
-- 97965 Camping 101: First Aid (level 6, both)
-- 97967 Camping 101: Fishing (level 6, both)
-- 97968 Camping 101: Herbalism (level 6, both)
-- 97969 Camping 101: Leatherworking (level 6, both)
-- 97970 Camping 101: Mining (level 6, both)
-- 97971 Camping 101: Skinning (level 6, both)
-- 97972 Camping 101: Tailoring (level 6, Horde)
-- 97973 Camping 101: Tailoring (level 6, Alliance)
 - 97977 Nature's Call (level 3, Alliance)
 - 97979 The Goddess Provides (level 1, Alliance)
 - 98094 Scout Support (level 25, Horde)
 - 98095 Valuable Vantages (level 25, Horde)
 - 98209 Bloom of the Heavens (level 29, both)
 - 98221 From the Ashes (level 28, Alliance)
-- 98248 Shipping Label (level 60, Horde)
 - 98251 Never Coming Back (level 22, Horde)
 - 98252 A Void Path (level 22, Horde)
 - 98283 Carnage (level 30, Alliance)
-- 98284 Camping 101: Enchanting (level 6, Horde)
-- 98286 Camping 101: Enchanting (level 6, Alliance)
-- 98319 Secure the Mountain (level 8, Alliance)
-- 98322 Secure the Mountain (level 8, Alliance)
 - 98389 A Light in the Darkness (level 4, Horde)
 - 98398 The Oracle Tree (level 12, Alliance)
 - 98574 Hallowed Memorandum (level 1, Alliance)
@@ -402,14 +410,9 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98576 Glyphic Parchment (level 1, Horde)
 - 98581 Archaic Rune (level 1, Alliance)
 - 98601 A Difficult Path (level 1, Horde)
-- 98815 Highland Hides (level 28, both)
-- 99079 Longwalker Malah (level 9, Horde)
-- 99081 Grim Tidings (level 9, Horde)
-- 99143 Bottles and Baubles (level 7, Alliance)
 - 99191 A Donation of Wool (level 60, Alliance)
-- 99196 A Donation of Wool (level 60, Horde)
 
-## Forever data: turned in inside a dungeon (94)
+## Forever data: turned in inside a dungeon (8)
 
 - 1098 Deathstalkers in Shadowfang (level 25, Horde)
 - 1144 Willix the Importer (level 30, both)
@@ -419,94 +422,8 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 4605 The Sparklematic 5200! (level 30, both)
 - 4606 The Sparklematic 5200! (level 30, both)
 - 5722 Searching for the Lost Satchel (level 16, Horde)
-- 92472 The Next Step (level 5, both)
-- 92514 Welcome to Shen'dar Village (level 6, Horde)
-- 92517 The Criminal Element (level 7, both)
-- 92528 Among the Faithful (level 8, both)
-- 92550 Havoc in the Highlands (level 8, both)
-- 92551 Stolen Supplies (level 8, both)
-- 92579 To Valanaar (level 8, Horde)
-- 92640 Desperate Times (level 11, both)
-- 92642 Disrupting Logistics (level 11, both)
-- 92643 The Turncoat (level 11, both)
-- 92644 Unfortunate News (level 11, both)
-- 92645 Breaking the Breaker (level 11, both)
-- 92646 Confront Lorthuna (level 12, Horde)
-- 92679 Blood Tithe (level 9, both)
-- 92682 Make Yourself Useful (level 9, both)
-- 92683 Flutterfly Dust (level 9, both)
-- 92684 Ornery Ornery Galestriders (level 9, both)
-- 92685 The Hills Have Eyes (level 9, both)
-- 92693 Standing Our Ground (level 9, both)
-- 92698 What Is My Purpose? (level 9, both)
-- 92699 The Supreme Magister (level 9, Alliance)
-- 92700 The Grand Skyseer (level 9, Horde)
-- 92701 To Valanaar (level 9, Alliance)
-- 92703 Deliver the News (level 9, both)
-- 92708 A Grand Adventure (level 12, Horde)
-- 92709 A Grand Adventure (level 12, Alliance)
-- 92741 Unwelcome Visitors (level 13, Alliance)
-- 92834 Avenged Tenfold (level 11, Alliance)
-- 92840 Catching Wind (level 11, Alliance)
-- 92849 The Missing Scholar (level 10, Alliance)
-- 92850 The Missing Scholar (level 10, Alliance)
-- 92860 In Service of Zephras (level 12, Alliance)
-- 92871 In Service of Zephras (level 11, Horde)
-- 92880 Return to Valanaar (level 11, both)
-- 92881 The High Elder's Request (level 11, both)
-- 92947 Making Our Move (level 12, both)
-- 93065 Prepare for Battle (level 12, both)
-- 93089 What Comes Next (level 13, Alliance)
-- 93090 What Comes Next (level 13, Horde)
-- 93159 The Strange Hermit (level 13, both)
-- 93160 The Forest's Bounty (level 13, both)
-- 93165 Mercy Falls on Deaf Ears (level 13, both)
-- 93172 Free the Hollows (level 13, both)
-- 93318 WANTED: Vulgara the Insatiable (level 9, both)
-- 93320 Tower Defense (level 11, both)
-- 93461 Welcome to Shen'dar Village (level 6, Alliance)
-- 93738 The Broken Construct (level 9, Horde)
-- 93740 Blood for Blood (level 11, Horde)
-- 93746 A Firm Response (level 9, Horde)
-- 93791 Speak with Belann (level 10, Alliance)
-- 93797 Boughs in the Wind (level 10, Alliance)
-- 93835 Confront Lorthuna (level 12, Alliance)
-- 93836 The Fate of Zephras (level 12, Horde)
-- 93927 A Last Request (level 8, both)
-- 93948 Deliver the Signet (level 9, both)
-- 93949 Bugged (level 8, both)
-- 93958 The Inner Sanctum (level 12, both)
-- 94003 The Skybreaker Bulwark (level 10, both)
-- 94006 The Great Ursera Spirit (level 10, both)
-- 94007 Taming the Beast (level 10, both)
-- 94013 Taming the Beast (level 10, both)
-- 94050 Training the Beast (level 10, both)
-- 94369 The Fate of Zephras (level 12, Alliance)
-- 94484 Unnerving Silence (level 11, both)
-- 94485 Tears of the Lady (level 12, both)
-- 94486 Feathers for Binding (level 11, both)
-- 94487 Unwanted and Unworthy (level 11, both)
-- 94488 The Ties That Bind (level 11, both)
-- 94489 The Wounds of Betrayal (level 12, both)
-- 94490 Ripped Missive (level 12, both)
-- 94491 The Fate of the Den (level 12, both)
-- 94493 A Sacrifice in Vain (level 11, Alliance)
-- 94568 The Cult's True Plans (level 11, both)
-- 94638 Strength and Mercy (level 10, both)
-- 94896 Aid For The Refugees (level 11, both)
-- 94897 The Fate of a Loved One (level 11, both)
-- 94978 Taming the Beast (level 10, both)
-- 94979 Taming the Beast (level 10, both)
-- 97243 Call of Fire (level 10, Horde)
-- 97244 Call of Fire (level 10, Horde)
-- 97245 Call of Fire (level 10, Horde)
-- 97257 Call of Fire (level 10, Horde)
-- 98285 Camping 101: Engineering (level 6, both)
-- 98512 Al'Aketh Assassins (level 11, both)
-- 98517 Call of Fire (level 10, Horde)
-- 99260 Fillion's Mission (level 10, Alliance)
 
-## Forever data: no quest giver position (250)
+## Forever data: no quest giver position (125)
 
 - 934 Crown of the Earth (level 11, both)
 - 78307 The Horn of Xelthos (level 23, both)
@@ -514,7 +431,6 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 86574 Stonetalon Supply Run (level 24, Alliance)
 - 86613 Excavation Tools (level 18, Alliance)
 - 86614 Silver of the Waves (level 20, Alliance)
-- 86784 Sticks and Bones (level 7, Horde)
 - 90902 Rediscovering the Light (level 2, Horde)
 - 91208 Coming to Terms (level 4, Horde)
 - 91209 Continue Your Training (level 4, Horde)
@@ -524,13 +440,13 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 91745 Mining Consultant (level 3, Alliance)
 - 91746 Elmpaw's Head (level 10, Alliance)
 - 91752 The Big Picture (level 3, Alliance)
-- 91753 An Enchanting Lesson (level 7, Alliance)
 - 91758 Follow That Kobold! (level 4, Alliance)
 - 91772 Shhh! We're Hunting Kobolds (level 4, Alliance)
 - 91861 Into Fenris Keep (level 22, Horde)
 - 92109 My First Alchemy Set (level 10, Alliance)
 - 92110 My First Real Potion (level 10, Alliance)
 - 92124 Book Inventory (level 2, Alliance)
+- 92456 A Green Sample (level 33, Alliance)
 - 92460 Coming of Age (level 1, both)
 - 92461 Harmony in Balance (level 1, both)
 - 92462 Infestation Investigation (level 2, both)
@@ -541,9 +457,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92467 Call of Earth (level 4, Horde)
 - 92468 Call of Earth (level 4, Horde)
 - 92469 Return to Rorian (level 4, both)
-- 92470 Foul Matriarch (level 5, both)
 - 92471 Aetheen of the Gales (level 4, both)
-- 92472 The Next Step (level 5, both)
 - 92473 Aggressive Encroachment (level 4, both)
 - 92474 Falling With Style (level 2, both)
 - 92479 A Scribbled Letter (level 1, Alliance)
@@ -552,34 +466,16 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92483 At Home in the Shadows (level 2, both)
 - 92484 Embracing the Elements (level 2, Horde)
 - 92485 A Student of Nature (level 2, both)
-- 92515 The Problem With Prideclaws (level 6, both)
-- 92516 Hippogryph Harrassment (level 7, both)
-- 92528 Among the Faithful (level 8, both)
-- 92529 Falaath Village (level 8, both)
 - 92532 The Warrior's Path (level 2, both)
-- 92544 Al'Aketh Thugs (level 5, both)
-- 92553 Restocking the Larders (level 6, both)
-- 92595 The Windshapers (level 6, Horde)
-- 92596 The High Order (level 6, Alliance)
 - 92597 Reading the Ley Lines (level 4, Alliance)
 - 92598 The Gift of Skysight (level 4, Horde)
-- 92698 What Is My Purpose? (level 9, both)
 - 92849 The Missing Scholar (level 10, Alliance)
 - 92910 Harvesting the Harvesters (level 15, Alliance)
-- 93317 Crab Season (level 9, both)
 - 93318 WANTED: Vulgara the Insatiable (level 9, both)
-- 93319 Pilfered Windstones (level 7, both)
 - 93552 Harvesting Windstones (level 4, both)
-- 93736 Unwelcome Spirits (level 9, Horde)
-- 93737 The Broken Construct (level 9, Horde)
-- 93738 The Broken Construct (level 9, Horde)
-- 93927 A Last Request (level 8, both)
-- 93951 A Little Beauty (level 7, both)
 - 94373 Call of Earth (level 4, Alliance)
 - 94374 Call of Earth (level 4, Alliance)
 - 94375 Call of Earth (level 4, Alliance)
-- 94411 Meddlesome Mages (level 6, Horde)
-- 94413 A Magical Affront (level 6, Alliance)
 - 94414 The Anchors of Zephras (level 2, both)
 - 94490 Ripped Missive (level 12, both)
 - 94503 Call of Water (level 23, Alliance)
@@ -613,116 +509,25 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 95883 The Tortured Soul (level 23, Horde)
 - 95884 The Offering Stone (level 23, Horde)
 - 95885 The Offering of Blood (level 23, Horde)
-- 95998 The Great Outdoors (level 6, Alliance)
 - 95999 WANTED: Incinerator Gar'im (level 25, Alliance)
-- 96031 Camping 101: Leatherworking (level 6, Alliance)
-- 96044 Camping 101: Blacksmithing (level 6, Alliance)
-- 96045 Camping 101: Alchemy (level 6, Alliance)
-- 96046 Camping 101: Mining (level 6, Alliance)
-- 96047 Camping 101: First Aid (level 6, Alliance)
-- 96050 Camping 101: Fishing (level 6, Alliance)
-- 96055 Camping 101: Herbalism (level 6, Alliance)
-- 96056 Camping 101: Skinning (level 6, Alliance)
-- 96057 Camping 101: Tailoring (level 6, Alliance)
-- 96058 Camping 101: Engineering (level 6, Alliance)
-- 96059 Camping 101: Enchanting (level 6, Alliance)
-- 96101 The Great Outdoors (level 6, both)
-- 96102 Camping 101: Tailoring (level 6, Horde)
 - 96138 Merrick's Bow (level 28, Alliance)
 - 96243 Call of Earth (level 10, Alliance)
 - 96391 Underground Map (level 15, Alliance)
 - 96395 An Ancient Grudge (level 15, both)
-- 96604 The Great Outdoors (level 6, Horde)
-- 96605 The Great Outdoors (level 6, Horde)
-- 96606 The Great Outdoors (level 6, Alliance)
-- 96607 The Great Outdoors (level 6, Horde)
-- 96608 The Great Outdoors (level 6, Alliance)
-- 96626 Camping 101: Cooking (level 6, Alliance)
-- 96629 Camping 101: Cooking (level 6, Alliance)
 - 96630 The Adventurer (level 6, Alliance)
-- 96634 Camping 101: Cooking (level 6, Alliance)
-- 96638 The Adventurer (level 6, both)
-- 96646 Camping 101: Cooking (level 6, both)
 - 96652 The Adventurer (level 6, Horde)
-- 96655 Camping 101: Cooking (level 6, Horde)
-- 96658 Camping 101: Cooking (level 6, Horde)
-- 96661 Camping 101: Cooking (level 6, Horde)
-- 96822 For Honor (level 6, Horde)
-- 96873 A Pain in the Neck (level 8, Horde)
 - 96876 Ukor's Lost Pack (level 8, Horde)
 - 96877 Halikor's Hoof (level 12, Horde)
-- 97223 Bloodtalon Matriarch (level 8, Horde)
+- 96986 The Grave Knight (level 33, Horde)
+- 96987 Opportunistic Education (level 33, Horde)
+- 96988 Source of Power (level 33, Horde)
 - 97236 Fang of Githyiss (level 5, Alliance)
 - 97263 Your Package Has Arrived (level 2, Alliance)
-- 97277 Grund and Gozwin (level 6, Alliance)
 - 97279 Wayward Weapons (level 2, Horde)
 - 97281 A Simmering Storm (level 11, Horde)
 - 97288 Unending Torment (level 21, Horde)
 - 97583 WRIGGLE. (level 1, Horde)
-- 97899 Camping 101: Alchemy (level 6, Horde)
-- 97900 Camping 101: Blacksmithing (level 6, Horde)
-- 97901 Camping 101: Enchanting (level 6, Horde)
-- 97902 Camping 101: Engineering (level 6, Horde)
-- 97903 Camping 101: First Aid (level 6, Horde)
-- 97904 Camping 101: Fishing (level 6, Horde)
-- 97905 Camping 101: Herbalism (level 6, Horde)
-- 97906 Camping 101: Leatherworking (level 6, Horde)
-- 97907 Camping 101: Mining (level 6, Horde)
-- 97908 Camping 101: Skinning (level 6, Horde)
-- 97915 Camping 101: Alchemy (level 6, Alliance)
-- 97916 Camping 101: Blacksmithing (level 6, Alliance)
-- 97917 Camping 101: Enchanting (level 6, Alliance)
-- 97918 Camping 101: Engineering (level 6, Alliance)
-- 97919 Camping 101: First Aid (level 6, Alliance)
-- 97920 Camping 101: Fishing (level 6, Alliance)
-- 97921 Camping 101: Herbalism (level 6, Alliance)
-- 97922 Camping 101: Leatherworking (level 6, Alliance)
-- 97923 Camping 101: Mining (level 6, Alliance)
-- 97924 Camping 101: Skinning (level 6, Alliance)
-- 97925 Camping 101: Tailoring (level 6, Alliance)
-- 97927 Camping 101: Alchemy (level 6, Horde)
-- 97928 Camping 101: Blacksmithing (level 6, Horde)
-- 97929 Camping 101: Enchanting (level 6, Horde)
 - 97930 Camping 101: Engineering (level 6, Horde)
-- 97931 Camping 101: First Aid (level 6, Horde)
-- 97932 Camping 101: Fishing (level 6, Horde)
-- 97933 Camping 101: Herbalism (level 6, Horde)
-- 97934 Camping 101: Leatherworking (level 6, Horde)
-- 97935 Camping 101: Mining (level 6, Horde)
-- 97936 Camping 101: Skinning (level 6, Horde)
-- 97937 Camping 101: Tailoring (level 6, Horde)
-- 97938 Camping 101: Alchemy (level 6, Alliance)
-- 97939 Camping 101: Blacksmithing (level 6, Alliance)
-- 97940 Camping 101: Enchanting (level 6, Alliance)
-- 97941 Camping 101: Engineering (level 6, Alliance)
-- 97942 Camping 101: First Aid (level 6, Alliance)
-- 97943 Camping 101: Fishing (level 6, Alliance)
-- 97944 Camping 101: Herbalism (level 6, Alliance)
-- 97946 Camping 101: Leatherworking (level 6, Alliance)
-- 97948 Camping 101: Mining (level 6, Alliance)
-- 97949 Camping 101: Skinning (level 6, Alliance)
-- 97950 Camping 101: Tailoring (level 6, Alliance)
-- 97951 Camping 101: Alchemy (level 6, Horde)
-- 97952 Camping 101: Blacksmithing (level 6, Horde)
-- 97953 Camping 101: Enchanting (level 6, Horde)
-- 97954 Camping 101: Engineering (level 6, Horde)
-- 97955 Camping 101: First Aid (level 6, Horde)
-- 97956 Camping 101: Fishing (level 6, Horde)
-- 97957 Camping 101: Herbalism (level 6, Horde)
-- 97958 Camping 101: Leatherworking (level 6, Horde)
-- 97959 Camping 101: Mining (level 6, Horde)
-- 97960 Camping 101: Skinning (level 6, Horde)
-- 97961 Camping 101: Tailoring (level 6, Horde)
-- 97963 Camping 101: Alchemy (level 6, both)
-- 97964 Camping 101: Blacksmithing (level 6, both)
-- 97965 Camping 101: First Aid (level 6, both)
-- 97967 Camping 101: Fishing (level 6, both)
-- 97968 Camping 101: Herbalism (level 6, both)
-- 97969 Camping 101: Leatherworking (level 6, both)
-- 97970 Camping 101: Mining (level 6, both)
-- 97971 Camping 101: Skinning (level 6, both)
-- 97972 Camping 101: Tailoring (level 6, Horde)
-- 97973 Camping 101: Tailoring (level 6, Alliance)
 - 97977 Nature's Call (level 3, Alliance)
 - 97979 The Goddess Provides (level 1, Alliance)
 - 98028 Baron Marinous (level 21, Alliance)
@@ -736,30 +541,17 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98248 Shipping Label (level 60, Horde)
 - 98251 Never Coming Back (level 22, Horde)
 - 98252 A Void Path (level 22, Horde)
-- 98284 Camping 101: Enchanting (level 6, Horde)
-- 98286 Camping 101: Enchanting (level 6, Alliance)
 - 98287 Camping 101: Engineering (level 6, Alliance)
-- 98319 Secure the Mountain (level 8, Alliance)
-- 98323 Secure the Mountain (level 8, Alliance)
 - 98389 A Light in the Darkness (level 4, Horde)
 - 98424 Fizsprocket's Notes (level 10, Horde)
-- 98430 The Longwalkers (level 8, Horde)
 - 98517 Call of Fire (level 10, Horde)
 - 98574 Hallowed Memorandum (level 1, Alliance)
 - 98575 Tainted Tablet (level 1, Horde)
 - 98576 Glyphic Parchment (level 1, Horde)
 - 98581 Archaic Rune (level 1, Alliance)
 - 98601 A Difficult Path (level 1, Horde)
-- 99079 Longwalker Malah (level 9, Horde)
-- 99081 Grim Tidings (level 9, Horde)
-- 99101 Our Ancient Enemy (level 9, Horde)
-- 99123 Lost in the Shadows (level 8, Horde)
-- 99143 Bottles and Baubles (level 7, Alliance)
-- 99144 Seeking Refuge (level 7, Horde)
-- 99191 A Donation of Wool (level 60, Alliance)
-- 99196 A Donation of Wool (level 60, Horde)
 
-## Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own (439)
+## Forever data: new in Forever with no chain on Wowhead, planned as a quest on its own (444)
 
 - 490 Bounty: Gnarlpine Furbolg (level 8, Alliance)
 - 5640 Desperate Prayer (level 10, Alliance)
@@ -849,6 +641,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92124 Book Inventory (level 2, Alliance)
 - 92401 A Frightened Request (level 22, Horde)
 - 92421 Light's Justice (level 22, Horde)
+- 92456 A Green Sample (level 33, Alliance)
 - 92460 Coming of Age (level 1, both)
 - 92461 Harmony in Balance (level 1, both)
 - 92462 Infestation Investigation (level 2, both)
@@ -868,6 +661,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 92483 At Home in the Shadows (level 2, both)
 - 92484 Embracing the Elements (level 2, Horde)
 - 92485 A Student of Nature (level 2, both)
+- 92489 Power Overwhelming (level 33, Alliance)
 - 92515 The Problem With Prideclaws (level 6, both)
 - 92516 Hippogryph Harrassment (level 7, both)
 - 92532 The Warrior's Path (level 2, both)
@@ -1051,6 +845,9 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 96895 The Argent Emissary (level 13, Horde)
 - 96897 The Cult of the Damned (level 13, Horde)
 - 96898 Remnants of War (level 13, Horde)
+- 96986 The Grave Knight (level 33, Horde)
+- 96987 Opportunistic Education (level 33, Horde)
+- 96988 Source of Power (level 33, Horde)
 - 97003 Chol'aruk the Ravener (level 21, Horde)
 - 97005 Chol'aruk the Ravener (level 21, Alliance)
 - 97223 Bloodtalon Matriarch (level 8, Horde)
@@ -1156,12 +953,7 @@ Multipliers from ForeverChanges where Wowhead's page wasn't read: 0. Where both 
 - 98285 Camping 101: Engineering (level 6, both)
 - 98286 Camping 101: Enchanting (level 6, Alliance)
 - 98287 Camping 101: Engineering (level 6, Alliance)
-- 98293 Forced Disarmament (level 30, Alliance)
-- 98299 Stop the Spread (level 20, Horde)
-- 98321 Flintfire's Shipment (level 7, Alliance)
-- 98326 Frosthowl (level 9, Alliance)
-- 98389 A Light in the Darkness (level 4, Horde)
-- and 39 more
+- and 44 more
 
 ## Classic seed: no turn-in position (7)
 

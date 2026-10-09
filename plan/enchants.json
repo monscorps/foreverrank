@@ -1,5 +1,5 @@
 {
- "note": "Enchants and attachments that damage attackers, numbers from the beta client's spell tables (build 1.60.1.70170, tools/apply_reflect.py). v is the average, lo-hi the range; skill is the profession level needed to make it, not to use it.",
+ "note": "Enchants and attachments that damage attackers, numbers from the beta client's spell tables (build 1.60.1.70291, tools/apply_reflect.py). v is the average, lo-hi the range; skill is the profession level needed to make it, not to use it.",
  "enchants": [
   {
    "id": "iron-spike",

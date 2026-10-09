@@ -3,9 +3,10 @@
 -- Forever spells and items from the server, so no datamine of the client has them; players' games do:
 --   snap    per class and race: the spells learned and the item ids worn and carried, from the highest-level
 --           character's latest reading
---   items   the tooltip of every weapon, armor piece and recipe the game shows you (bags, loot, quest rewards,
---           vendors, chat links), once per build, and again after six hours: Blizzard retunes items without one
--- Only on the Forever client, only while Settings' "Note items and spells you see" is ticked (it is by default;
+--   items   the tooltip of every weapon, armor piece and recipe you loot, carry or see (the loot window, the bags
+--           and what you wear, quest rewards, vendors, chat links, anything hovered), once per build, and again
+--           after six hours: Blizzard retunes items without one. Read a few a second, never in a fight
+-- Only on the Forever client, only while Settings' "Note items, spells and loot" is ticked (it is by default;
 -- unticking it clears what was noted), and never a name: class and race tokens, levels, ids and the item's own
 -- text, in QuestBankDB.game.
 -- It does what the ForeverProbe addon did: that addon's notes are taken over once, and while it is still
@@ -14,11 +15,19 @@ local _, QB = ...
 local Game = {}
 QB.Game = Game
 
-local MAX_ITEMS = 1000  -- tooltips kept: QuestBank.lua is uploaded whole, so it stays a small file
+local MAX_ITEMS = 1000  -- tooltips kept: QuestBank.lua is uploaded whole, so it stays a small file (the oldest
+                        -- build's go first, which an upload has carried by then)
 local MAX_LINES = 30    -- lines kept of one tooltip
 local REREAD = 6 * 3600 -- read an item again after this long
+local PACE = 0.5        -- seconds between reads from the queue, and
+local BATCH = 2         -- tooltips read each time: a few a second, so a bag full of new items never reads in one frame
+local COMBAT_WAIT = 5   -- seconds between looks at whether the fight is over (PLAYER_REGEN_ENABLED ends the wait sooner)
+local LOADS = 2         -- times an item the client hasn't loaded is asked of the server in a session
+local TRIES = 3         -- reads of a tooltip not shown whole (the server hasn't filled it in, or the client hides part of it)
+                        -- before it is left for a later sweep
+local SWEEP_WAIT = 5    -- seconds after the bags change before they are looked through
 local KEEP = { [2] = true, [4] = true, [9] = true } -- weapons, armor, recipes
-Game.MAX_ITEMS, Game.MAX_LINES = MAX_ITEMS, MAX_LINES
+Game.MAX_ITEMS, Game.MAX_LINES, Game.PACE, Game.BATCH, Game.LOADS, Game.TRIES = MAX_ITEMS, MAX_LINES, PACE, BATCH, LOADS, TRIES
 Game.RETIRED = "QuestBank now notes what ForeverProbe did. You can delete the ForeverProbe folder from Interface\\AddOns."
 
 local plain = QB.Plain
@@ -166,10 +175,13 @@ function Game.Snap()
 end
 
 ----------------------------------------------------------------------------
--- item tooltips: the hook only notes the id; reading happens a moment later in QuestBank's own code
+-- item tooltips. Nothing is read where the id turns up: the hover hook, the loot window (Loot.lua), a vendor and the
+-- bag sweep only put the id in a queue, and QuestBank's own code reads a few of them every half second, out of
+-- combat, with C_TooltipInfo.GetItemByID
 ----------------------------------------------------------------------------
-local queue, queued, pending, skip, tries = {}, {}, {}, {}, {}
-local scheduled = false
+local queue, queued = {}, {}   -- ids waiting, in order, and each once
+local pending, loads = {}, {}  -- asked of the server (ITEM_DATA_LOAD_RESULT answers), and how often this session
+local skip, tries = {}, {}     -- not a weapon, armor or recipe; reads of a tooltip the server hasn't filled in
 local count, countOf -- tooltips kept, and in which table
 
 local function buildOf(e)
@@ -221,58 +233,87 @@ end
 
 local want
 
+-- in a fight, or while the game holds addons back as it does in one (the Combat and Encounter restrictions, as
+-- Pins.lua checks them): nothing is read then
+local function inCombat()
+  if QB.Pins and QB.Pins.InCombat then return QB.Pins.InCombat() end
+  return (InCombatLockdown and InCombatLockdown()) and true or false
+end
+
+-- this client's tag on a tooltip: version and build
+local function tagOf(g)
+  return (g.client and (g.client .. ".") or "") .. tostring(g.build or "")
+end
+
+-- a tooltip read at this build within the last six hours: nothing to read
+local function fresh(g, id)
+  local e = g.items[id]
+  return type(e) == "table" and e.b == tagOf(g) and time() - atOf(e) < REREAD
+end
+
 -- one item's tooltip as the game shows it at this build
 local function capture(id)
   local g = db()
   local items = g.items
-  local tag = (g.client and (g.client .. ".") or "") .. tostring(g.build or "")
+  local tag = tagOf(g)
   local e = items[id]
-  if skip[id] or (type(e) == "table" and e.b == tag and time() - atOf(e) < REREAD) then return end
+  if skip[id] or fresh(g, id) then return end
   local info = (C_Item and C_Item.GetItemInfo) or GetItemInfo
   if not info then return end
   local ok, name, _, quality, ilvl, reqLevel, _, _, _, equipLoc, icon, _, classID, subclassID, bindType, _, setID = pcall(info, id)
   name = ok and plain(name) or nil
   if type(name) ~= "string" then
-    -- not in the client's cache yet: asked for, and ITEM_DATA_LOAD_RESULT brings it back
-    if C_Item and C_Item.RequestLoadItemDataByID and not pending[id] then
-      pending[id] = true
+    -- not in the client's cache yet (a server-sent item), or hidden: asked of the server, which answers with
+    -- ITEM_DATA_LOAD_RESULT; at most LOADS times a session, so a hidden name is not asked for again and again.
+    -- Nothing is kept of it meanwhile; the next sweep or hover tries again
+    local asked = loads[id] or 0
+    if C_Item and C_Item.RequestLoadItemDataByID and not pending[id] and asked < LOADS then
+      pending[id], loads[id] = true, asked + 1
       pcall(C_Item.RequestLoadItemDataByID, id)
     end
     return
   end
   classID = plain(classID)
   if not KEEP[classID] then skip[id] = true; return end
+  -- the body, whole or not at all: GetItemByID may return nothing (the client without the item's data yet), and the
+  -- client may hide the data, the list, a line or a line's text. Read half, the tooltip is not kept: a record with
+  -- lines missing would stand in the Database for the item's stats
   local lines, partial = {}, false
+  local function hidden(v) return v ~= nil and plain(v) == nil end
   if C_TooltipInfo and C_TooltipInfo.GetItemByID then
     local okT, data = pcall(C_TooltipInfo.GetItemByID, id)
     data = okT and plain(data) or nil
     local list = type(data) == "table" and plain(data.lines) or nil
-    if type(list) == "table" then
+    if type(list) ~= "table" then
+      partial = true
+    else
       local T = Enum and Enum.TooltipDataLineType
       for i, line in ipairs(list) do
         line = plain(line)
-        if type(line) == "table" then
-          local left, right, kind = plain(line.leftText), plain(line.rightText), plain(line.type)
-          -- a recipe's tooltip goes on with the crafted item's: keep the recipe's own lines only
-          if classID == 9 and T and (kind == T.NestedBlock or kind == T.Blank or kind == T.Separator) and #lines > 0 then break end
-          if type(left) == "string" and left ~= "" and not (i == 1 and left == name) then
-            if left == RETRIEVING_ITEM_INFO or left:match("^%a+:%s*$") then partial = true end
-            lines[#lines + 1] = (type(right) == "string" and right ~= "") and (left .. "\t" .. right) or left
-            if classID == 9 and left:match("^Use:") then break end
-          end
+        if type(line) ~= "table" or hidden(line.leftText) or hidden(line.rightText) then partial = true; break end
+        local left, right, kind = line.leftText, line.rightText, plain(line.type)
+        -- a recipe's tooltip goes on with the crafted item's: keep the recipe's own lines only
+        if classID == 9 and T and (kind == T.NestedBlock or kind == T.Blank or kind == T.Separator) and #lines > 0 then break end
+        if type(left) == "string" and left ~= "" and not (i == 1 and left == name) then
+          if left == RETRIEVING_ITEM_INFO or left:match("^%a+:%s*$") then partial = true end
+          lines[#lines + 1] = (type(right) == "string" and right ~= "") and (left .. "\t" .. right) or left
+          if classID == 9 and left:match("^Use:") then break end
         end
         if #lines >= MAX_LINES then break end
       end
+      if #lines == 0 then partial = true end -- a weapon, armor piece or recipe always has a line past its name
     end
   end
   if partial then
-    -- the server hasn't sent the effect text yet: try again shortly, a few times, then keep what there is
+    -- the server hasn't sent the text yet, or the client holds part of it back: read again shortly, a few times.
+    -- Still not whole after that, it is not kept (a tooltip saying "Retrieving item information", or one with a
+    -- line missing, would tell the Database the wrong thing); the next sweep or hover reads it again, and a whole
+    -- reading then is kept
     tries[id] = (tries[id] or 0) + 1
-    if tries[id] <= 3 then
-      C_Timer.After(3, QB.Safe(function() want(id) end, "item notes"))
-      return
-    end
+    if tries[id] <= TRIES then C_Timer.After(3, QB.Safe(function() want(id) end, "item notes")) end
+    return
   end
+  tries[id] = nil
   local function num(v) v = plain(v); return type(v) == "number" and v or nil end
   local function str(v) v = plain(v); return type(v) == "string" and v ~= "" and v or nil end
   if type(e) ~= "table" then
@@ -287,27 +328,69 @@ local function capture(id)
                 el = str(equipLoc), c = classID, u = num(subclassID), bd = num(bindType), ic = num(icon), e = num(setID), x = lines }
 end
 
-local function flush()
-  scheduled = false
-  local ids = queue
-  queue = {}
-  for _, id in ipairs(ids) do queued[id] = nil end
-  for _, id in ipairs(ids) do
-    if on() then QB.Try("item notes", capture, id) end
-  end
+-- the queue is read BATCH ids at a time, PACE apart, until it is empty; in a fight it waits. One timer at a time: a
+-- later schedule supersedes the one before (gen), so the end of a fight doesn't double the reading
+local flush
+local waiting, gen = false, 0
+local function later(delay)
+  gen = gen + 1
+  local mine = gen
+  waiting = true
+  C_Timer.After(delay, QB.Safe(function()
+    if mine ~= gen then return end
+    waiting = false
+    flush()
+  end, "item notes"))
 end
 
+function flush()
+  if #queue == 0 then return end
+  if inCombat() then later(COMBAT_WAIT); return end
+  for _ = 1, math.min(BATCH, #queue) do
+    local id = table.remove(queue, 1)
+    queued[id] = nil
+    if on() then QB.Try("item notes", capture, id) end
+  end
+  if #queue > 0 then later(PACE) end
+end
+
+-- an item id to read: from the hover hook, the loot window (Loot.lua), a vendor, the bag sweep
 function want(id)
   id = tonumber(plain(id))
   if not id or id <= 0 or queued[id] or skip[id] or not on() then return end
   queued[id] = true
   queue[#queue + 1] = id
-  if not scheduled then
-    scheduled = true
-    C_Timer.After(0.5, QB.Safe(flush, "item notes"))
-  end
+  if not waiting then later(PACE) end
 end
 Game.Want = want
+
+-- the fight is over: the queue goes on at once (the slow wait is superseded)
+local function resume()
+  if #queue > 0 then later(PACE) end
+end
+
+-- the bag sweep: every item worn or carried without a tooltip read at this build within six hours goes into the
+-- queue, so a run's loot is read even when its window was skipped (auto-loot) or another player opened the corpse
+-- and you won the roll. Run at login and a few seconds after the bags change; never in a fight (it waits)
+local sweepWaiting = false
+local function sweepLater(delay)
+  if sweepWaiting then return end
+  sweepWaiting = true
+  C_Timer.After(delay, QB.Safe(function()
+    sweepWaiting = false
+    Game.Sweep()
+  end, "item notes"))
+end
+Game.SweepLater = sweepLater
+
+function Game.Sweep()
+  if not on() then return end
+  if inCombat() then sweepLater(COMBAT_WAIT); return end
+  local g = db()
+  for _, id in ipairs(scanItems()) do
+    if not fresh(g, id) then want(id) end
+  end
+end
 
 local function idOf(link)
   link = plain(link)
@@ -394,8 +477,9 @@ function Game.Retire()
   QB:Print(Game.RETIRED)
 end
 
--- the Settings box. Unticked, what was noted goes too: QuestBank.lua is uploaded whole, and the box is the player's
--- say over what foreverrank.com gets. Ticked, ForeverProbe's notes are taken over if it is still there
+-- the Settings box. Unticked, what was noted goes too (the loot sources of Loot.lua with it): QuestBank.lua is
+-- uploaded whole, and the box is the player's say over what foreverrank.com gets. Ticked, ForeverProbe's notes are
+-- taken over if it is still there; the next loot window records again
 function Game.SetOn(yes)
   QB:Settings().noteGame = yes and true or false
   if not Game.Forever() then return end
@@ -405,25 +489,35 @@ function Game.SetOn(yes)
     QB.Try("old notes", Game.Retire)
   elseif QuestBankDB then
     QuestBankDB.game = nil
+    if QB.Loot then QB.Loot.Clear() end
   end
 end
+
 
 ----------------------------------------------------------------------------
 -- events
 ----------------------------------------------------------------------------
 function Game.OnEvent(event, a1, a2)
   if event == "PLAYER_ENTERING_WORLD" then
-    -- at login and /reload, not on every loading screen
-    if a1 or a2 or a1 == nil then C_Timer.After(8, QB.Safe(Game.Snap, "spell notes")) end
+    -- at login and /reload, not on every loading screen; the bags, once the spellbook reading is done
+    if a1 or a2 or a1 == nil then
+      C_Timer.After(8, QB.Safe(Game.Snap, "spell notes"))
+      sweepLater(9)
+    end
   elseif event == "PLAYER_LEVEL_UP" then
     C_Timer.After(2, QB.Safe(Game.Snap, "spell notes")) -- once the spellbook has the new level's spells
   elseif event == "PLAYER_LOGOUT" then
     Game.Snap()
+  elseif event == "BAG_UPDATE_DELAYED" then
+    sweepLater(SWEEP_WAIT) -- the bags changed (loot, a roll won, a purchase): looked through in a few seconds
+  elseif event == "PLAYER_REGEN_ENABLED" or event == "ADDON_RESTRICTION_STATE_CHANGED" then
+    resume()
   elseif event == "ITEM_DATA_LOAD_RESULT" then
+    -- (itemID, success), as the Forever client's ItemDocumentation has it; a failure is left for a later sweep
     local id = tonumber(plain(a1))
     if id and pending[id] then
       pending[id] = nil
-      if plain(a2) then want(id) end
+      if plain(a2) == true then want(id) end
     end
   elseif event == "LOOT_READY" and GetNumLootItems and GetLootSlotLink then
     for i = 1, (tonumber(plain(GetNumLootItems())) or 0) do want(idOf(GetLootSlotLink(i))) end
@@ -453,8 +547,9 @@ function Game:Init()
   end)
   if not Game.Forever() then return end
   f:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2) Game.OnEvent(event, a1, a2) end, "item notes"))
-  for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_LEVEL_UP", "PLAYER_LOGOUT", "LOOT_READY", "MERCHANT_SHOW", "ITEM_DATA_LOAD_RESULT" }) do
-    pcall(f.RegisterEvent, f, e)
+  for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_LEVEL_UP", "PLAYER_LOGOUT", "LOOT_READY", "MERCHANT_SHOW", "ITEM_DATA_LOAD_RESULT",
+                       "BAG_UPDATE_DELAYED", "PLAYER_REGEN_ENABLED", "ADDON_RESTRICTION_STATE_CHANGED" }) do
+    pcall(f.RegisterEvent, f, e) -- (a client without one of them says no, and nothing more)
   end
   -- every item tooltip the game shows (bags, chat links, anything hovered); quest rewards come through Discover
   if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType and Enum.TooltipDataType.Item then

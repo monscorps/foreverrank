@@ -14,6 +14,13 @@ sources, in this order, each used only where the one above has nothing:
                      tooltip service; complete but behind on changed items
   3. our datamine    the client's own rows
 
+A newer client beats an older tooltip: where the client's item row changed
+after the build ForeverChanges (or Wowhead, or a player's game) read, the
+client's numbers win (quality, levels, stats and their Equip lines, armor,
+damage, binding, classes; tools/apply_items.py carry) and the row's source
+says so ("Beta build 1.60.1.70291 client data; ForeverChanges still shows
+build 70245"). Players' games beat both when they read a build at least as new.
+
 Every item a dungeon boss or quest gives (codex/loot.json) gets drops/quests.
 Caches: tools/.wh-cache/ and tools/.loot-cache/ (both gitignored).
 
@@ -25,6 +32,7 @@ Caches: tools/.wh-cache/ and tools/.loot-cache/ (both gitignored).
   python3 tools/scavenge_items.py --refresh-found     # ask again about Wowhead-only items older than FOUND_DAYS (fetch only)
   python3 tools/scavenge_items.py --refresh-found --ids=23577,17943   # just these
   python3 tools/scavenge_items.py --no-fetch # merge from the caches only
+  python3 tools/scavenge_items.py --test     # check the newer-client rule on the items 70291 changed
 """
 import collections, concurrent.futures, csv, html, json, os, re, sys, threading, time, urllib.request
 
@@ -33,9 +41,10 @@ DB = os.path.join(ROOT, "plan", "items-db.json")
 LOOT = os.path.join(ROOT, "codex", "loot.json")
 CACHE = os.path.join(ROOT, "tools", ".wh-cache")
 SITE = os.path.join(ROOT, "tools", ".loot-cache", "site-items.json")
-BUILD = "1.60.1.70170"
+BUILD = "1.60.1.70291"
 WAGO = os.path.join(ROOT, "research", "wago", BUILD)
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36 foreverrank.com"}
+FC_UA = {"User-Agent": "foreverrank.com data compile (contact via site Discord)"}  # an honest name for foreverchanges.pro (Wowhead keeps UA)
 QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary", "artifact", "heirloom"]
 INVTYPE = {"INVTYPE_HEAD": "1", "INVTYPE_NECK": "2", "INVTYPE_SHOULDER": "3", "INVTYPE_BODY": "4", "INVTYPE_CHEST": "5",
            "INVTYPE_WAIST": "6", "INVTYPE_LEGS": "7", "INVTYPE_FEET": "8", "INVTYPE_WRIST": "9", "INVTYPE_HAND": "10",
@@ -306,6 +315,7 @@ def parse(tt):
 
 
 FC_FILES = ("new", "changed", "same", "missing")
+_fc_last = [0.0]
 RATING = {"Critical Strike": ("critRating", "crit", 14), "Hit": ("hitRating", "hit", 10), "Dodge": ("dodgeRating", "dodge", 12),
           "Parry": ("parryRating", "parry", 15), "Block": ("blockRating", "blockChance", 5), "Defense": ("defenseRating", "defense", 1),
           "Haste": ("hasteRating", None, 0), "Expertise": ("expertiseRating", None, 0)}
@@ -321,11 +331,18 @@ def fc_items(refresh=False):
     for name in FC_FILES:
         path = os.path.join(ROOT, "tools", ".loot-cache", "fc-items-%s.json" % name)
         if refresh or not os.path.exists(path):
-            body = urllib.request.urlopen(urllib.request.Request("https://foreverchanges.pro/items/%s.json" % name, headers=UA), timeout=120).read()
+            if _fc_last[0]:
+                time.sleep(max(0, 1.0 - (time.time() - _fc_last[0])))  # at least 1 s between requests
+            _fc_last[0] = time.time()
+            body = urllib.request.urlopen(urllib.request.Request("https://foreverchanges.pro/items/%s.json" % name, headers=FC_UA), timeout=120).read()
             open(path, "wb").write(body)
         d = json.load(open(path))
         meta = {k: d[k] for k in ("forever_build", "forever_build_date") if k in d}
         for it in d.get("items") or []:
+            # ForeverChanges writes a few icon names with spaces ("jewelcrafting_uncut epic gem_color1"); the icon CDN
+            # serves those with hyphens in the spaces' place, and nothing else
+            if it.get("k") and " " in it["k"]:
+                it["k"] = it["k"].replace(" ", "-")
             out[str(it["i"])] = it
     return out, meta
 
@@ -439,7 +456,198 @@ def refresh_found(days=FOUND_DAYS, ids=None):
             print("  %d/%d asked; changed %d" % (n, len(old), changed), flush=True)
 
 
+def apply_fc(old, fc, sets, fc_meta):
+    """ForeverChanges' tooltip (or a player's game's) onto a database row. It is the current build's, in Forever's own
+    wording: it replaces every tooltip field, and what it does not show goes."""
+    p2 = fc_parse(fc, sets)
+    if fc.get("fcx"):
+        p_fc = fc_parse(dict(fc, x=fc["fcx"]), sets)
+        for k in ("setName", "setPieces", "setBonuses", "cls"):
+            if p2.get(k) is None and p_fc.get(k) is not None:
+                p2[k] = p_fc[k]
+    for k in ("itemLevel", "reqLevel", "binding", "damage", "speed", "dps", "dmgExtra", "armor", "block", "unique", "flavor", "cls",
+              "reqSkill", "startsQuest", "setName", "setPieces", "setBonuses"):
+        if p2.get(k) is not None: old[k] = p2[k]
+        elif k not in ("itemLevel", "cls"): old.pop(k, None)
+    old["stats"] = p2["stats"] or None
+    old["effects"] = p2["effects"] or None
+    old["name"] = html.unescape(fc["n"])
+    old["quality"] = "unknown" if fc.get("src") == "sighting" and fc.get("q") is None else QUAL[int(fc["q"] if fc.get("q") is not None else 1)]
+    if fc.get("k"): old["icon"] = fc["k"]
+    old["tt"] = "forever"
+    old["ft"] = fc["t"]
+    old.pop("wh", None)
+    old.pop("rand", None)
+    # cv: the client version the game reported with the tooltip; ForeverProbe's readings (and QuestBank's copies of
+    # them) carry none, and all were 1.60.1
+    if fc.get("src") == "sighting":
+        old["source"] = "Seen in %s on %s (build %s): name and slot as the player read them; stats not recorded yet" % (fc.get("where"), fc.get("at"), fc.get("b"))
+    else:
+        old["source"] = ("Beta build %s.%s, as players' games showed it" % (fc.get("cv") or "1.60.1", fc.get("b"))) if fc.get("src") == "game" \
+            else "Beta build %s, via foreverchanges.pro" % fc_meta.get("forever_build", BUILD)
+
+
+def build_no(b):
+    try:
+        return int(str(b or "0").split(".")[-1])
+    except ValueError:
+        return 0
+
+
+class Newer:
+    """The client rows that moved after the build the tooltips read (ForeverChanges' build; tools/apply_items.py)."""
+
+    def __init__(self, fc_meta):
+        import apply_items
+        self.carry = apply_items.carry
+        base = os.path.join(ROOT, "research", "wago")
+        fcb = build_no(fc_meta.get("forever_build"))
+        # the newest datamined build at or before ForeverChanges' own (same tables)
+        olds = [b for b in os.listdir(base) if b.startswith("1.") and build_no(b) <= fcb] if fcb else []
+        self.old = max(olds, key=build_no) if olds else None
+        self.fc_build = fcb
+        self.ids, self.A, self.B = set(), None, None
+        if self.old and build_no(self.old) < build_no(BUILD):
+            self.ids = apply_items.view_changes(self.old, BUILD)
+            self.A, self.B = apply_items.Build(self.old), apply_items.Build(BUILD)
+
+    # Fields a tooltip may leave out. The merge then keeps the database's value, which tools/apply_items.py has already
+    # moved to the newer client, so carry() finds nothing to do, yet the row shows the client's value, not the tooltip's
+    # (Spiritcaller pieces: Shaman only since 70291, and ForeverChanges' 70245 tooltip has no Classes line).
+    KEPT = (("itemLevel", "ilvl"), ("reqLevel", "reqlvl"), ("binding", "binding"), ("flavor", "flavor"), ("cls", "classes"))
+
+    def kept(self, row, a, b, tip):
+        """The fields the client moved between the two builds that row shows at the newer value though the tooltip
+        (tip: its parsed fields) did not show it."""
+        out = []
+        for k, kind in self.KEPT:
+            if a.get(k) != b.get(k) and b.get(k) is not None and row.get(k) == b[k] and tip.get(k) is None:
+                out.append((kind, "%s: %s (the client's; the tooltip does not show it)" % (row.get("name"), b[k])))
+        # no tooltip parse gives the armor type: the database's comes from the client's item table
+        if a.get("armorType") != b.get("armorType") and b.get("armorType") and row.get("type") == b["armorType"]:
+            out.append(("type", "%s: %s (the client's item table)" % (row.get("name"), b["armorType"])))
+        return out
+
+    def wins(self, row, iid, fc, wh):
+        """Put the newer client's numbers over the tooltip just merged into row (fc: ForeverChanges' or a game's record;
+        wh: Wowhead's parsed tooltip when fc is None); returns what the client gave ([] if nothing)."""
+        if iid not in self.ids:
+            return []
+        if fc and fc.get("src") == "game" and build_no(fc.get("b")) >= build_no(BUILD):
+            return []  # a player's game read this build or a newer one: it is the newest word
+        a, b = self.A.view(iid), self.B.view(iid)
+        if not a or not b:
+            return []
+        log = self.carry(row, a, b)
+        if fc:
+            tip = fc_parse(fc, {})
+            if fc.get("fcx") and tip.get("cls") is None:  # apply_fc takes ForeverChanges' classes under a game's text
+                tip["cls"] = fc_parse(dict(fc, x=fc["fcx"]), {}).get("cls")
+        else:
+            tip = wh if isinstance(wh, dict) else {}
+        done = {k for k, _ in log}
+        log += [x for x in self.kept(row, a, b, tip) if x[0] not in done]  # once per kind of change
+        if log and not row.get("era"):  # a branch-era row keeps its "Season of Discovery data in the beta client" line
+            seen = ("players' games last showed build %s" % fc.get("b")) if fc and fc.get("src") == "game" \
+                else ("ForeverChanges still shows build %s" % self.fc_build) if fc \
+                else "Wowhead's Forever database still shows older numbers"
+            row["source"] = "Beta build %s client data; %s" % (BUILD, seen)
+        return log
+
+
+# Items 70291 changed after ForeverChanges' build 70245 (Blizzard's 2026-10-08 build), and what the client says now
+TEST = {"271667": {"quality": "uncommon", "stats": {"natureSpellDamage": 19}, "has": "Equip: +19 Nature Spell Damage",
+                   "hasnt": "Equip: +24 Attack Power"},  # Ironwood Destroyer
+        "271664": {"quality": "uncommon", "stats": {"strength": 6}},  # Hornbeam Heft
+        "271670": {"quality": "uncommon", "stats": {"stamina": 5, "spellPower": 5}, "hasnt": "Equip: +5 Health Regeneration"},  # Curl of Life
+        "271740": {"quality": "uncommon", "stats": {"spirit": 4, "spellPower": 6}},  # Knife-Polishing Rag
+        "271732": {"quality": "uncommon", "stats": {"spirit": 4, "attackPower": 10}},  # Dirt-Heavy Bracers
+        "271769": {"quality": "uncommon", "stats": {"spirit": 6, "spellPower": 7}},  # Daewyn's Girdle
+        "272185": {"quality": "uncommon", "stats": {"spirit": 7, "healing": 13, "spellDamage": 4}},  # Amulet of Forgiveness
+        "274957": {"itemLevel": 38, "stats": {"strength": 11}},  # Lumber Luggers, a Riverglades reward
+        "274941": {"itemLevel": 40, "stats": {"intellect": 11, "spellPower": 12}},  # Bristle Hills Mystic Robe
+        "277254": {"reqLevel": 40},  # Truthseeker's Bow
+        "40": {"type": "Mail"},  # Recruit's Boots: Misc until 70291
+        "271668": {"type": "Leather"},  # Thendal Survivalist's Shirt: Misc until 70291; ForeverChanges shows no type
+        # Spiritcaller Kilt, Gloves, Mantle, Boots: Shaman only since 70291; ForeverChanges' tooltips have no Classes line
+        "276538": {"cls": ["Shaman"]}, "276539": {"cls": ["Shaman"]}, "276540": {"cls": ["Shaman"]}, "276541": {"cls": ["Shaman"]}}
+
+
+def test():
+    """The newer-client rule on the items above: ForeverChanges' cached tooltip merged twice, onto a bare row (the
+    client's carry moves every field) and onto the written database row (tools/apply_items.py has already moved the
+    fields the tooltip leaves out), then the written database itself. Every row must show the client's numbers and
+    say the client won. Prints what fails; exits 1 on any failure."""
+    import copy
+    FC, fc_meta = fc_items()
+    newer = Newer(fc_meta)
+    db = {str(i["id"]): i for i in json.load(open(DB))["items"]}
+    bad = 0
+    for iid, want in TEST.items():
+        f, before, cur = FC.get(iid), bad, db.get(iid) or {}
+        rows = []
+        for where, start in (("bare merge", {k: v for k, v in cur.items() if k in ("id", "slot", "cat")}),
+                             ("database merge", copy.deepcopy(cur))):
+            if f and f.get("t") in ("new", "changed", "same"):
+                apply_fc(start, f, {}, fc_meta)
+                newer.wins(start, iid, f, None)
+                rows.append((where, start))
+        rows.append(("database", cur))
+        for where, r in rows:
+            for k, v in want.items():
+                if k == "has":
+                    ok = v in (r.get("effects") or [])
+                elif k == "hasnt":
+                    ok = v not in (r.get("effects") or [])
+                elif k == "stats":  # the client's stats, and none of the old row's left over
+                    keys = set(v) | set(((newer.A.view(iid) if newer.A else None) or {}).get("stats") or {})
+                    ok = {s: x for s, x in (r.get("stats") or {}).items() if s in keys} == v
+                else:
+                    ok = r.get(k) == v
+                if not ok:
+                    bad += 1
+                    print("FAIL %s %s (%s): %s is %r, want %r" % (iid, r.get("name"), where, k, r.get(k) if k not in ("has", "hasnt") else r.get("effects"), v))
+            if "client data" not in (r.get("source") or ""):
+                bad += 1
+                print("FAIL %s %s (%s): the source does not say the client won: %r" % (iid, r.get("name"), where, r.get("source")))
+        print("ok  " if bad == before else "    ", iid, cur.get("name"), "|", cur.get("source"))
+    print("%d failures" % bad)
+    sys.exit(1 if bad else 0)
+
+
+QB_DATA = os.path.join(ROOT, "tools", "questbank", "QuestBank", "Data.lua")
+
+
+def quest_reward_levels():
+    """{item id: the lowest level at which a quest that rewards it can be taken}, from QuestBank's catalogue
+    (tools/questbank/QuestBank/Data.lua: D.Q's second field, D.RITEMS' reward lists). Season of Discovery leftovers
+    (flag 128) are left out, and a quest open from level 1 says nothing."""
+    try:
+        src = open(QB_DATA, encoding="utf-8").read()
+    except OSError:
+        return {}
+    block = re.search(r"^D\.Q = \{\n(.*?)^\}", src, re.M | re.S)
+    rit = re.search(r"^D\.RITEMS = \{(.*)\}\s*$", src, re.M)
+    if not (block and rit):
+        return {}
+    req = {}
+    for m in re.finditer(r"^\[(\d+)\]=\{(-?\d+),(-?\d+),.*?,(\d+)\},?$", block.group(1), re.M):
+        if not int(m.group(4)) & 128:
+            req[int(m.group(1))] = int(m.group(3))
+    out = {}
+    for m in re.finditer(r"\[(\d+)\]=\{((?:[a-z]=\{[\d,]*\},?)+)\}", rit.group(1)):
+        lvl = req.get(int(m.group(1)), 0)
+        if lvl <= 1:
+            continue
+        for ids in re.findall(r"[a-z]=\{([\d,]*)\}", m.group(2)):
+            for i in filter(None, ids.split(",")):
+                out[int(i)] = min(out.get(int(i), 99), lvl)
+    return out
+
+
 def main():
+    if "--test" in sys.argv:
+        test()
     if "--recheck-missing" in sys.argv:
         recheck_missing()
         return
@@ -466,12 +674,23 @@ def main():
         fc_build = int(str(fc_meta.get("forever_build") or "0").split(".")[-1])
     except ValueError:
         fc_build = 0
+    # Items a player saw and named but nobody's tooltip reached us (tools/item_sightings.json): name and slot only, until
+    # a real tooltip (an upload, ForeverChanges) comes in and wins
+    sightings = {k: v for k, v in json.load(open(os.path.join(ROOT, "tools", "item_sightings.json"))).items() if k.isdigit()}
+    for k, v in sightings.items():
+        if k not in tips and k not in fc_live:
+            tips[k] = dict(v, x=[], q=None, src="sighting")
     from_game = 0
     for k, g in tips.items():
         if k in fc_live and int(g.get("b") or 0) <= fc_build:
             continue
-        game = {"n": g["n"], "q": g.get("q") if g.get("q") is not None else 1, "l": g.get("l"), "r": g.get("r"), "c": g.get("c"),
-                "u": g.get("u"), "x": g.get("x") or [], "src": "game", "b": g.get("b"), "cv": g.get("cv"), "el": g.get("el")}
+        # an older addon could keep a tooltip the client hid part of, or none at all: never let that replace a full record
+        if g.get("src") != "sighting" and not g.get("x"):
+            continue
+        sighting = g.get("src") == "sighting"
+        game = {"n": g["n"], "q": g.get("q") if (g.get("q") is not None or sighting) else 1, "l": g.get("l"), "r": g.get("r"), "c": g.get("c"),
+                "u": g.get("u"), "x": g.get("x") or [], "src": "sighting" if sighting else "game", "b": g.get("b"), "cv": g.get("cv"), "el": g.get("el"),
+                "where": g.get("where"), "at": g.get("at")}
         base = FC.get(k) if FC.get(k, {}).get("t") in ("new", "changed", "same") else None
         if base:
             # the game's newer text over ForeverChanges' record: its verdict (new/changed), set, classes and icon stay
@@ -547,6 +766,7 @@ def main():
 
     added, refreshed, from_fc, junk, unknown, absent, dropped = [], 0, 0, 0, 0, {}, set()
     rescued, estimates = [], []
+    newer, client_won = Newer(fc_meta), {}
     for iid in sorted(want, key=int):
         wh = cached(iid)
         ok = bool(wh and "tooltip" in wh)
@@ -598,31 +818,7 @@ def main():
             old["source"] = "Loot record (foreverchanges.pro / wowtbc.gg)"
             added.append(old)
         if fc:
-            # ForeverChanges' tooltip is the current build's, in Forever's own wording: it replaces
-            # every tooltip field, and what it does not show goes.
-            p2 = fc_parse(fc, sets)
-            if fc.get("fcx"):
-                p_fc = fc_parse(dict(fc, x=fc["fcx"]), sets)
-                for k in ("setName", "setPieces", "setBonuses", "cls"):
-                    if p2.get(k) is None and p_fc.get(k) is not None:
-                        p2[k] = p_fc[k]
-            for k in ("itemLevel", "reqLevel", "binding", "damage", "speed", "dps", "dmgExtra", "armor", "block", "unique", "flavor", "cls",
-                      "reqSkill", "startsQuest", "setName", "setPieces", "setBonuses"):
-                if p2.get(k) is not None: old[k] = p2[k]
-                elif k not in ("itemLevel", "cls"): old.pop(k, None)
-            old["stats"] = p2["stats"] or None
-            old["effects"] = p2["effects"] or None
-            old["name"] = html.unescape(fc["n"])
-            old["quality"] = QUAL[int(fc["q"] if fc.get("q") is not None else 1)]
-            if fc.get("k"): old["icon"] = fc["k"]
-            old["tt"] = "forever"
-            old["ft"] = fc["t"]
-            old.pop("wh", None)
-            old.pop("rand", None)
-            # cv: the client version the game reported with the tooltip; ForeverProbe's readings (and QuestBank's copies of
-            # them) carry none, and all were 1.60.1
-            old["source"] = ("Beta build %s.%s, as players' games showed it" % (fc.get("cv") or "1.60.1", fc.get("b"))) if fc.get("src") == "game" \
-                else "Beta build %s, via foreverchanges.pro" % fc_meta.get("forever_build", BUILD)
+            apply_fc(old, fc, sets, fc_meta)
             from_fc += 1
         elif ok:
             # Wowhead: complete, but behind on changed items; used where ForeverChanges has nothing.
@@ -662,6 +858,10 @@ def main():
                              "it drops); these are its Classic numbers, from foreverchanges.pro (build %s). Forever may have changed or removed it"
                              % fc_meta.get("forever_build", BUILD))
             estimates.append(iid)
+        if (fc or ok) and not est:
+            won = newer.wins(old, iid, fc if fc else None, p if not fc else None)
+            if won:
+                client_won[iid] = won
         for k in ("stats", "effects"):
             if not old.get(k): old.pop(k, None)
         # Classic's suffix greens and blues ("of the Eagle"): the base item carries no stats
@@ -675,6 +875,8 @@ def main():
     # loot links for items that never needed a refetch
     for iid, it in by.items():
         if iid in dropped: continue
+        if it.get("icon") and " " in it["icon"]:
+            it["icon"] = it["icon"].replace(" ", "-")  # see fc_items: the CDN's spelling of these
         if drops.get(iid): it["drops"] = drops[iid]
         if quests.get(iid): it["quests"] = quests[iid]
         # a recorded Forever drop is wired loot, whatever ID band it sits in
@@ -701,6 +903,17 @@ def main():
                 it.pop("era", None)
                 it["eraNote"] = "Seen in players' games in Forever"
 
+    # Quest rewards with no level of their own: the level their quest can be taken at (QuestBank's catalogue). The Forge
+    # and /bis/ count that as when the item can be had (plan/gear.js effReq), instead of guessing from item level
+    qreq = quest_reward_levels()
+    for it in list(by.values()) + added:
+        q = qreq.get(int(it["id"]))
+        if q and int(it.get("reqLevel") or 0) <= 1:
+            it["qr"] = q
+        else:
+            it.pop("qr", None)
+    print("quest rewards with no level of their own, placed by their quest's level: %d" % sum(1 for it in list(by.values()) + added if it.get("qr")))
+
     # Stat lines only the tooltip text carried (datamine rows keep the text but had no stat for these)
     filled = collections.Counter()
     for it in list(by.values()) + added:
@@ -720,6 +933,8 @@ def main():
     print("Classic estimates (client Item row, no Forever tooltip anywhere): %d (dungeon/quest loot %d)" % (
         len(estimates), sum(1 for i in estimates if i in looted)))
     print("stats filled from tooltip text: %s" % dict(filled))
+    print("newer client over older tooltips (%s -> %s): %d items; %s" % (newer.old, BUILD, len(client_won),
+          dict(collections.Counter(k for v in client_won.values() for k, _ in v))))
     print("dropped %d Classic items ForeverChanges finds nowhere in Forever" % len(dropped))
     print("added %d; tooltips from ForeverChanges %d, from Wowhead %d; junk skipped %d, unknown (no name anywhere) %d" % (len(added), from_fc, refreshed, junk, unknown))
     print("loot items covered %d/%d; %d are Classic loot absent from Forever's data" % (len(looted & have), len(looted), len(absent)))
@@ -735,10 +950,14 @@ def main():
     # procs, on-use and chance-on-hit effects (fx), from the same tables; after rf, which it leaves alone
     import apply_effects
     apply_effects.run(db)
-    db["note"] = re.sub(r"\s*Server-sent items.*$", "", db["note"]) + (
+    db["note"] = re.sub(r"\s*Server-sent items.*$", "", db["note"]).replace(
+        "armor and weapon dps are reconstructed from Classic tables where the client stores none and can be a point off",
+        "armor and weapon damage are rebuilt from the client's own armor and weapon damage tables where it stores no value "
+        "(armor exact; melee damage can be a point off)") + (
         " Server-sent items and current tooltips: ForeverChanges' item files for the current build first (Forever's own wording), "
-        "Wowhead's Forever database where they have nothing, the client datamine last; who drops what comes from codex/loot.json "
-        "(tools/scavenge_items.py). Rows with est:\"classic\" are items Forever has (the client's item table lists them) whose "
+        "Wowhead's Forever database where they have nothing, the client datamine last; where the client's item row changed "
+        "after the build those sources read, the client's numbers win and the row's source says so. Who drops what comes from "
+        "codex/loot.json (tools/scavenge_items.py). Rows with est:\"classic\" are items Forever has (the client's item table lists them) whose "
         "Forever numbers no source has shown yet: their stats are Classic's, an estimate. rf lists damage done back to "
         "attackers (tools/apply_reflect.py); fx lists procs, on-use and chance-on-hit effects (tools/apply_effects.py).")
     db["scavenged"] = time.strftime("%Y-%m-%d")

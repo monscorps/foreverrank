@@ -15,6 +15,7 @@ ForeverProbeDB = {
 			["class"] = "PALADIN",
 			["race"] = "Dwarf",
 			["level"] = 20,
+			["xpMax"] = 23200,
 			["build"] = "70058",
 			["interface"] = 16001,
 			["zone"] = "Stormwind City",
@@ -35,6 +36,7 @@ ForeverProbeDB = {
 			["class"] = "PALADIN",
 			["race"] = "Dwarf",
 			["level"] = 21,
+			["xpMax"] = 25200,
 			["build"] = "70058",
 			["interface"] = 16001,
 			["spells"] = {
@@ -54,6 +56,7 @@ ForeverProbeDB = {
 			["class"] = "WARRIOR",
 			["race"] = "Human",
 			["level"] = 4,
+			["xpMax"] = 2100,
 			["interface"] = 11507,
 			["spells"] = {
 				6673, -- [1]
@@ -92,10 +95,79 @@ ForeverProbeDB = {
 			["u"] = 5,
 			["ic"] = 132889,
 			["x"] = {
+				"Sell Price: 13c", -- [1]
+			},
+		},
+		[2590] = {
+			["b"] = "70170",
+			["at"] = 1759240100,
+			["lc"] = "enGB",
+			["n"] = "Wool Cloth",
+			["q"] = 1,
+			["l"] = 15,
+			["c"] = 7,
+			["u"] = 5,
+			["ic"] = 132890,
+			["x"] = {
 			},
 		},
 	},
 	["trainers"] = {
+		{
+			["npc"] = "Brother Sammuel",
+			["zone"] = "Elwynn Forest",
+			["at"] = "2026-09-30T14:30:00Z",
+			["chars"] = {
+				["Helga-Forever Normal"] = 1759242600,
+			},
+			["services"] = {
+				{
+					["n"] = "Seal of Righteousness",
+					["r"] = "Rank 3",
+					["lvl"] = 18,
+					["c"] = 300,
+					["t"] = "unavailable",
+				}, -- [1]
+				{
+					["n"] = "Holy Light",
+					["r"] = "Rank 4",
+					["lvl"] = 22,
+					["c"] = 600,
+					["t"] = "unavailable",
+				}, -- [2]
+				{
+					["n"] = "Blessing of Might",
+					["r"] = "Rank 2",
+					["lvl"] = 12,
+					["c"] = 100,
+					["t"] = "available",
+				}, -- [3]
+				{
+					["n"] = "Plate Mail",
+					["r"] = "",
+					["lvl"] = 40,
+					["c"] = 18000,
+					["t"] = "unavailable",
+				}, -- [4]
+			},
+		}, -- [1]
+		{
+			["npc"] = "Tomas",
+			["zone"] = "Elwynn Forest",
+			["at"] = "2026-09-30T14:35:00Z",
+			["chars"] = {
+				["Helga-Forever Normal"] = 1759242900,
+			},
+			["services"] = {
+				{
+					["n"] = "Spiced Wolf Meat",
+					["r"] = "",
+					["lvl"] = 0,
+					["c"] = 100,
+					["t"] = "available",
+				}, -- [1]
+			},
+		}, -- [2]
 	},
 	["questbank"] = {
 		["at"] = 1759240800,

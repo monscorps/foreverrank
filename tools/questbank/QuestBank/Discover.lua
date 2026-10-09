@@ -26,18 +26,30 @@ local function db()
 end
 Disc.DB = db
 
--- "Creature-0-...-<id>-..." -> "c123"; "GameObject-..." -> "o456"; players and pets don't count
+-- a GUID's key: "Creature-0-...-<id>-..." -> "c123"; "GameObject-..." -> "o456"; players, pets and items -> nil, and
+-- so is a GUID the client hides. The same keys name disc.npc's quest NPCs and disc.loot's drop sources (Loot.lua)
+local function key(guid)
+  if type(guid) ~= "string" or (issecretvalue and issecretvalue(guid)) then return nil end
+
+  local kind, id = guid:match("^(%a+)%-%d+%-%d+%-%d+%-%d+%-(%d+)")
+  if kind == "Creature" or kind == "Vehicle" then return "c" .. id end
+  if kind == "GameObject" then return "o" .. id end
+  return nil
+end
+Disc.Key = key
+
+-- a unit's key and GUID; players and pets don't count
 local function who(unit)
   if not UnitGUID then return nil end
   local ok, guid = pcall(UnitGUID, unit)
   -- the Forever client hands addons a secret value for some units (seen in uploads): nobody, not an error
   if not ok or type(guid) ~= "string" or (issecretvalue and issecretvalue(guid)) then return nil end
-  local kind, id = guid:match("^(%a+)%-%d+%-%d+%-%d+%-%d+%-(%d+)")
-  if kind == "Creature" or kind == "Vehicle" then return "c" .. id, guid end
-  if kind == "GameObject" then return "o" .. id, guid end
+  local k = key(guid)
+  if k then return k, guid end
   return nil
 end
 Disc.Who = who
+
 
 -- where you stand: "uiMap:x,y" in map percent, one decimal
 local function here()

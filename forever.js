@@ -6,9 +6,11 @@
 (function () {
   "use strict";
 
-  var BETA = Date.parse("2026-09-17T17:00:00Z");    // announced date; hour estimated
-  var CAP30 = Date.parse("2026-10-01T17:00:00Z");   // two weeks into the beta; hour estimated
-  var LAUNCH = Date.parse("2026-11-04T15:00:00Z");  // announced date; hour estimated
+  var CAP30 = Date.parse("2026-10-01T17:00:00Z");     // two weeks into the beta; hour estimated
+  var BETA_END = Date.parse("2026-10-22T07:00:00Z");  // Oct 21 is Blizzard's last full day of testing; we switch at midnight Pacific
+  var NAMES = Date.parse("2026-10-27T07:00:00Z");     // early name reservation, Oct 27 to Nov 3; hours estimated
+  var NAMES_END = Date.parse("2026-11-04T08:00:00Z"); // the end of Nov 3, Pacific
+  var LAUNCH = Date.parse("2026-11-04T23:00:00Z");    // 3:00 pm PST per Blizzard
   var CAP = Date.now() < LAUNCH ? 30 : 60;
 
   var BANDS = ["--q-common", "--q-uncommon", "--q-rare", "--q-epic", "--q-legendary", "--q-pink", "--q-artifact"];
@@ -269,9 +271,14 @@
 
   // ---- countdown ------------------------------------------------------------
   function tickCountdown() {
-    var now = Date.now(), target, kick, note, phase;
-    if (now < BETA) { target = BETA; kick = "The <b>beta</b> opens in"; phase = "PRE-BETA"; note = "Beta Sept 17 to Oct 22, capped at level 20, then 30 from Oct 1. Launch Nov 4 (times estimated)"; }
-    else if (now < LAUNCH) { target = LAUNCH; kick = "<b>Forever</b> launches in"; phase = now < CAP30 ? "BETA. CAP 20" : "BETA. CAP 30"; note = "Beta is live until Oct 22" + (now < CAP30 ? ", level 30 opens Oct 1" : "") + ". Launch Nov 4 (times estimated)"; }
+    var now = Date.now(), target = LAUNCH, kick = "<b>Forever</b> launches in", note, phase;
+    if (now < BETA_END) { phase = now < CAP30 ? "BETA. CAP 20" : "BETA. CAP 30"; note = "Beta is live until Oct 21" + (now < CAP30 ? ", level 30 opens Oct 1" : "") + ". Launch Nov 4, 3:00 pm PST"; }
+    else if (now < LAUNCH) {
+      phase = "BETA OVER";
+      note = now < NAMES ? "The beta has ended. Name reservation runs Oct 27 to Nov 3; launch Nov 4, 3:00 pm PST"
+        : now < NAMES_END ? "Name reservation is open until Nov 3. Launch Nov 4, 3:00 pm PST"
+        : "Launch today, 3:00 pm PST";
+    }
     else { target = null; kick = "<b>Forever</b> is live"; phase = "LIVE. CAP 60"; note = ""; }
     $("count-kick").innerHTML = kick;
     $("phase-chip").textContent = phase;
@@ -713,7 +720,8 @@
     $("board-sub").textContent = v.sub;
     var now = Date.now();
     $("cap-note").innerHTML = now < CAP30 ? "The beta is capped at <b>level 20</b> until Oct 1, then 30. Boards rank to the live cap."
-      : now < LAUNCH ? "The beta is capped at <b>level 30</b>. Boards rank to the live cap."
+      : now < BETA_END ? "The beta is capped at <b>level 30</b>. Boards rank to the live cap."
+      : now < LAUNCH ? "The beta is over. From launch the ladder runs to <b>level 60</b>."
       : "Launched: the ladder runs to <b>level 60</b>.";
     var b = $("board");
     $("explain").hidden = demoOn();
@@ -766,7 +774,12 @@
   // pieces ride a rail; everything else folds into a list.
   var SRC = { "FOREVERRANK": ["#e5cc80", "FR"], "Wowhead": ["#f06a5e", "WH"], "Icy Veins": ["#6cc0ff", "IV"],
     "Warcraft Tavern": ["#e9ad52", "WT"], "Blizzard": ["#35b5ff", "B"], "Blizzard Forums": ["#35b5ff", "B"],
-    "Blizzard Watch": ["#8fd3ff", "BW"], "Kotaku": ["#ffd84d", "K"] };
+    "Blizzard Watch": ["#8fd3ff", "BW"], "Kotaku": ["#ffd84d", "K"], "Blizzard (X)": ["#35b5ff", "B"],
+    "PC Gamer": ["#e8484b", "PC"], "Dexerto": ["#b388ff", "DX"], "classicwow.gg": ["#7fd1a8", "CW"],
+    "MMO-Champion": ["#f2994a", "MC"] };
+  // The feature card names what it is; a row may say so with kind, else /news/ pages are articles.
+  var KIND = { datamine: ["our datamine", "Read the datamine"], article: ["our article", "Read the article"],
+    addon: ["our addon", "Get the addon"] };
   function srcTag(s) {
     var m = SRC[s] || ["#9fb0bb", (s || "?").slice(0, 2).toUpperCase()];
     return '<span class="hn-src" style="--sc:' + m[0] + '">' + esc(s === "FOREVERRANK" ? "ForeverRank" : s) + "</span>";
@@ -790,11 +803,12 @@
       var hl = (f.hl || []).map(function (h) {
         return '<li><span class="ico s" style="background-image:url(' + ICON + esc(h.i) + '.jpg)"></span>' + esc(h.t) + "</li>";
       }).join("");
+      var kind = KIND[f.kind] || (/^\/news\//.test(f.l || "") ? KIND.article : ["ForeverRank", "Have a look"]);
       var box = $("hn-feature");
       box.outerHTML = '<a class="hn-feature" id="hn-feature" href="' + esc(f.l) + '">' +
         '<div class="hn-art" style="' + bg(f.img || "/assets/og.jpg") + '">' + srcTag(f.s) + "<h3>" + esc(f.t) + "</h3></div>" +
-        '<div class="hn-side"><span class="hn-date">' + esc(when(f.d)) + " · our datamine</span>" +
-        (hl ? '<ul class="hn-hl">' + hl + "</ul>" : "") + '<span class="hn-read">Read the datamine &rsaquo;</span></div></a>';
+        '<div class="hn-side"><span class="hn-date">' + esc(when(f.d)) + " · " + kind[0] + "</span>" +
+        (hl ? '<ul class="hn-hl">' + hl + "</ul>" : "") + '<span class="hn-read">' + kind[1] + " &rsaquo;</span></div></a>";
     }
     // Six from the freshest twenty: art first, but at most three per outlet.
     var per = {}, grid = [];

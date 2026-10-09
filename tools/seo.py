@@ -24,27 +24,30 @@ PAGES = {
                "WoW Forever talent calculator and character planner: race, class, talents, Legacy trees and gear from the beta client. Share builds as links and compose whole raids.",
                DEFAULT_IMG),
     "/codex/": ("WoW Forever Database: Items, Spells, Legacy · ForeverRank",
-                "The WoW Forever database: over 21,000 items with stats, drop sources and dungeon loot, plus spells, the Legacy system, item sets and hidden systems. Filter gear by stat and dungeon.",
+                "The WoW Forever database: over 21,000 items with stats, drop sources and dungeon loot, 2,500 profession recipes, PvP ranks, rare spawns, spells, the Legacy system and item sets. Filter gear by stat and dungeon.",
                 DEFAULT_IMG),
     "/classes/": ("WoW Forever Class Changes and Spellbooks · ForeverRank",
-                  "WoW Forever class changes by datamine: every class's spellbook and talents, hidden spells, Soul Engraving, and what moved since the BlizzCon demo.",
+                  "WoW Forever class changes by datamine: what the level-30 beta builds changed for each class, read from the client's own spell and talent tables, and the hidden Soul Engraving catalog.",
                   DEFAULT_IMG),
     "/rankings/": ("WoW Forever Spec Rankings (Estimates) · ForeverRank",
-                   "WoW Forever spec rankings for PvE and PvP: honest estimates from beta client data and demo footage until the ladder has real parses.",
+                   "WoW Forever spec rankings for damage and healing at levels 30 and 60: honest estimates from Classic logs and BlizzCon demo data until real parses exist.",
                    DEFAULT_IMG),
     "/world/": ("WoW Forever Dungeon Loot, Raids and Zones · ForeverRank",
                 "WoW Forever dungeon loot tables for every dungeon (bosses, rare spawns and quest rewards), plus zones, raids, battlegrounds and the full zone Atlas.",
                 "/codex/img/hyjal-summit.jpg"),
-    "/bis/": ("WoW Forever BiS Lists for Every Class · ForeverRank",
-              "WoW Forever best-in-slot gear for every class and spec at the beta's level-20 cap, with sources, crafting mats and datamined tooltips.",
+    "/bis/": ("WoW Forever BiS Lists at Level 30 · ForeverRank",
+              "WoW Forever best-in-slot gear at the beta's level-30 cap: every slot ranked per class, spec and faction by The Forge's stat weights, with where each piece comes from.",
               "/codex/img/excavation-site.jpg"),
+    "/questbank/": ("QuestBank · free WoW Forever questing addon · ForeverRank",
+                    "QuestBank is a free questing addon for WoW Forever, level 1 to 60, both factions: what every quest pays, which chains to carry on, quest icons on every zone map, the fastest hand-in route, party sync, and banking for level cap raises.",
+                    "/questbank/img/route.jpg"),
     "/news/": ("WoW Forever News and Datamines · ForeverRank",
                "WoW Forever news in one place, newest first: Blizzard posts, fansite coverage and ForeverRank's own beta client datamines.",
                DEFAULT_IMG),
 }
-ARTICLES = ["/news/build-70009/", "/news/hidden-systems/", "/news/era-verdict/",
+ARTICLES = ["/news/level-30/", "/news/build-70291/", "/news/build-70009/", "/news/hidden-systems/", "/news/era-verdict/",
             "/news/soul-engraving/", "/news/set-rework/"]
-NO_CRAWL = ["/tools/", "/worker/", "/probe/", "/addon/companion/"]
+NO_CRAWL = ["/tools/", "/worker/"]
 
 BEGIN, END = "<!-- seo:begin -->", "<!-- seo:end -->"
 

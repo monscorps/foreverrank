@@ -53,7 +53,7 @@ POI_SNAP = 25       # yards: an outline centred this close to one of its objecti
 POI_REAL = 300      # ... with none of them this close on the continent may be in that instance's coordinates
 POI_BOX = 100       # yards around an instance's spawns: its own coordinates, for the outlines of its quests
 ENTRANCE = 1000     # yards: such an outline stands for the instance when it lies this close to its entrance
-BUILD = "1.60.1.70170"  # the client tables gen_data.py reads (research/wago/<build>)
+BUILD = "1.60.1.70291"  # the client tables gen_data.py reads (research/wago/<build>)
 ALLIANCE, HORDE = 1 | 4 | 8 | 64, 2 | 16 | 32 | 128  # RequiredRaces: Human, Dwarf, Night Elf, Gnome; Orc, Undead, Tauren, Troll
 SEASONAL = {-22, -364, -365, -366, -368, -369}  # ZoneOrSort: Seasonal, Darkmoon Faire, Ahn'Qiraj War, Lunar Festival, Invasion, Midsummer
 

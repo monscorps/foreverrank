@@ -9,10 +9,12 @@ upload its saved file, by hand or with the optional Windows uploader
 (`uploader/`), and goes into the next QuestBank release and the Database.
 
 Also on the site: the Forge (planner), the Database (datamined beta client),
-the Atlas, and /bis/ — best-in-slot lists per class and spec at the beta cap,
-slot rankings compiled from ForeverChanges (see SOURCES.md), every cited
-item's tooltip read fresh from the current build at compile time, with our own
-item datamine as backstop. `tools/build_bis.py` then `tools/build_bis_items.py`
-refresh them (delete tools/.bis-cache/ first for a truly fresh pull).
-`support.js` is the sitewide feedback/donate corner card; set its DONATE_URL
-when there is somewhere for coins to go.
+the Atlas, and /bis/ — best-in-slot lists per class and spec at levels 30 and
+20, every slot ranked by the Forge's own scorer over our item database
+(`node tools/build_bis.mjs` rebuilds bis/bis.json; its header says what a list
+may hold).
+Client tables come from wago.tools (`tools/fetch_wago.py BUILD`);
+`tools/diff_builds.py` and the `tools/apply_*.py` scripts carry the data to a
+new build, and SOURCES.md keeps the ledger of what came from where.
+`support.js` is the sitewide feedback/donate corner card; its DONATE_URL points
+at the PayPal link (empty hides the donate button).

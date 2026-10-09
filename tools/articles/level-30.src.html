@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Level 30, Build by Build · WoW Forever · ForeverRank</title>
+<meta name="description" content="What WoW Forever beta builds 70170 and 70291 changed: level 30 and four dungeons, the 1 October cut to dungeon-quest XP, Honor prices, every class's talent changes with old and new numbers, weaker quest rewards, three dungeon sets, and 16 Legacy points for testers.">
+<link rel="icon" href="../../mark.svg" type="image/svg+xml">
+<link rel="canonical" href="https://foreverrank.com/news/level-30/">
+<meta name="theme-color" content="#1C2325">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Poppins:wght@500;600;700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../forever.css?v=23">
+<style>
+:root {
+  --fr: #e5cc80; --fr-bg: rgba(229,204,128,.14);
+  --bz: #6cc8ff; --bz-bg: rgba(53,181,255,.13);
+  --pl: #7be0a6; --pl-bg: rgba(63,208,122,.12);
+  --cl: #a9b3c7; --cl-bg: rgba(160,170,190,.12);
+  --buff: #3fd07a; --nerf: #ff6a5c; --chg: #58c7ef;
+  --panel: linear-gradient(180deg, rgba(7,50,74,.72), rgba(5,30,45,.92));
+  --ink: #e9eef1; --dim: #9fb0bb; --line: rgba(0,175,215,.22);
+  --q-poor: #9d9d9d; --q-common: #ffffff; --q-uncommon: #1eff00; --q-rare: #0070dd; --q-epic: #a335ee;
+}
+.art { --w: 68rem; }
+.art * { box-sizing: border-box; }
+.art a { color: var(--gold); }
+.wrapx { max-width: var(--w); margin: 0 auto; padding-left: 1rem; padding-right: 1rem; }
+.ico { display: inline-block; flex: none; width: 2.4rem; height: 2.4rem; border-radius: 6px; border: 1px solid #0a0f13; box-shadow: 0 0 0 1px rgba(229,204,128,.35), 0 3px 10px rgba(0,0,0,.5); background: #10181e center/cover no-repeat; vertical-align: middle; }
+.ico.s { width: 1.7rem; height: 1.7rem; border-radius: 4px; }
+.ico.l { width: 3.4rem; height: 3.4rem; border-radius: 9px; }
+.ico.q-rare { box-shadow: 0 0 0 1px var(--q-rare), 0 3px 10px rgba(0,0,0,.5); }
+.ico.q-uncommon { box-shadow: 0 0 0 1px var(--q-uncommon), 0 3px 10px rgba(0,0,0,.5); }
+.ico.q-epic { box-shadow: 0 0 0 1px var(--q-epic), 0 3px 10px rgba(0,0,0,.5); }
+[data-k] { cursor: help; }
+
+/* source chips: who says so */
+.sx { display: inline-flex; align-items: center; gap: .25rem; font: 600 .56rem/1 var(--heading); letter-spacing: .06em; text-transform: uppercase; padding: .2rem .38rem; border-radius: 3px; white-space: nowrap; vertical-align: 1px; text-decoration: none; }
+.sx::before { content: ""; width: .34rem; height: .34rem; border-radius: 50%; background: currentColor; }
+.sx.c { color: var(--fr); background: var(--fr-bg); }
+.sx.b { color: var(--bz); background: var(--bz-bg); }
+.sx.p { color: var(--pl); background: var(--pl-bg); }
+.sx.i { color: var(--cl); background: var(--cl-bg); }
+a.sx.b:hover { background: rgba(53,181,255,.28); }
+.legend { display: flex; flex-wrap: wrap; gap: .35rem .9rem; align-items: center; margin: .2rem 0 1rem; font-size: .74rem; color: var(--dim); }
+.bdg { display: inline-flex; align-items: center; gap: .25rem; font: 700 .58rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; padding: .26rem .45rem; border-radius: 3px; white-space: nowrap; }
+.bdg.buff { color: #06210f; background: var(--buff); }
+.bdg.nerf { color: #2a0703; background: var(--nerf); }
+.bdg.chg { color: #04202b; background: var(--chg); }
+.bdg.gone { color: #ffd1cc; background: rgba(255,106,92,.16); border: 1px solid rgba(255,106,92,.5); }
+.bdg.ren { color: #f3e6bd; background: rgba(229,204,128,.14); border: 1px solid rgba(229,204,128,.45); }
+.bdg.new { color: #1a1204; background: var(--gold); }
+
+/* hero */
+.hero { position: relative; overflow: hidden; min-height: 0; display: block; margin: 0 0 1.4rem; border-bottom: 1px solid rgba(229,204,128,.25); background: #081218; } /* the home page's .hero rule in forever.css sets a tall min-height: not for an article */
+.hero::before { content: ""; position: absolute; inset: -6%; background: var(--img) center 40%/cover no-repeat; transform: scale(1.04); filter: saturate(1.05); animation: drift 26s ease-in-out infinite alternate; }
+.hero::after { content: ""; position: absolute; inset: 0; background: radial-gradient(120% 90% at 18% 30%, rgba(4,12,17,.35), rgba(4,12,17,.92) 70%), linear-gradient(180deg, rgba(4,12,17,.25), #0c171d 96%); }
+@keyframes drift { from { transform: scale(1.04) translate3d(0,0,0); } to { transform: scale(1.1) translate3d(-1.5%, -1%, 0); } }
+.hero-in { position: relative; z-index: 1; padding-top: 3.2rem; padding-bottom: 2.4rem; }
+.kick { display: flex; align-items: center; gap: .6rem; font: 600 .68rem/1 var(--heading); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); margin: 0 0 1rem; flex-wrap: wrap; }
+.kick .live { width: .5rem; height: .5rem; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 0 rgba(229,204,128,.6); animation: ping 2.2s infinite; }
+@keyframes ping { 70% { box-shadow: 0 0 0 .6rem rgba(229,204,128,0); } 100% { box-shadow: 0 0 0 0 rgba(229,204,128,0); } }
+.hero h1 { margin: 0; font: 400 clamp(2.6rem, 7vw, 5rem)/.95 var(--display-serif); color: #f6f1e4; letter-spacing: .01em; text-shadow: 0 4px 30px rgba(0,0,0,.6); }
+.hero h1 em { font-style: normal; color: var(--gold); }
+.hero .dek { max-width: 42rem; margin: 1rem 0 0; font-size: 1.02rem; line-height: 1.6; color: #d4dde2; }
+.hero .dek b { color: #fff; font-weight: 600; }
+.builds { position: relative; display: grid; grid-template-columns: repeat(8, 1fr); margin: 2rem 0 0; max-width: 50rem; }
+.builds::before { content: ""; position: absolute; left: 6%; right: 6%; top: .55rem; height: 2px; background: linear-gradient(90deg, rgba(229,204,128,.9), rgba(229,204,128,.25) 14%, rgba(229,204,128,.25) 86%, rgba(229,204,128,.9)); }
+.builds div { position: relative; text-align: center; font: 600 .64rem/1.3 var(--heading); color: var(--dim); letter-spacing: .03em; }
+.builds div::before { content: ""; display: block; width: .85rem; height: .85rem; margin: .15rem auto .5rem; border-radius: 50%; background: #0c171d; border: 2px solid rgba(229,204,128,.45); }
+.builds div.end::before { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 14px rgba(229,204,128,.7); }
+.builds div.q { opacity: .62; }
+.builds div.q::before { width: .55rem; height: .55rem; margin: .3rem auto .65rem; border-style: dashed; }
+.builds div b { display: block; color: #e9eef1; font-size: .74rem; }
+.builds div.end b { color: var(--gold); }
+.quiet { max-width: 44rem; margin: .9rem 0 0; font-size: .78rem; line-height: 1.55; color: #aebbc3; }
+
+/* layout primitives */
+.sec { padding: 1.2rem 0 1.6rem; scroll-margin-top: 4.5rem; }
+.sec-h { display: flex; align-items: flex-end; gap: .9rem; margin: 1.4rem 0 1rem; }
+.sec-h .n { font: 400 3rem/0.8 var(--display-serif); color: rgba(229,204,128,.25); }
+.sec-h h2 { margin: 0; font: 400 1.9rem/1.1 var(--display-serif); color: var(--gold); }
+.sec-h p { margin: .3rem 0 0; font-size: .86rem; color: var(--dim); max-width: 42rem; }
+.lede { font-size: .96rem; line-height: 1.7; color: #d0d9de; max-width: 44rem; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel, 6px); box-shadow: var(--shadow); }
+.subh { margin: 1.4rem 0 .6rem; font: 400 1.2rem var(--display-serif); color: var(--gold); }
+.cap { font-size: .72rem; line-height: 1.5; color: var(--dim); margin: .4rem 0 0; }
+
+/* reveal */
+.rv { opacity: 0; transform: translateY(14px); transition: opacity .6s ease, transform .6s ease; }
+.rv.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) { .rv { opacity: 1; transform: none; transition: none; } .hero::before { animation: none; } .kick .live { animation: none; } }
+
+/* short version */
+.tldr { display: grid; grid-template-columns: repeat(5, 1fr); gap: .6rem; }
+.tl { position: relative; display: flex; flex-direction: column; gap: .6rem; padding: .9rem .85rem 1rem; text-decoration: none; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; transition: transform .18s, border-color .18s; }
+.tl:hover { transform: translateY(-3px); border-color: rgba(229,204,128,.55); }
+.tl b { font: 600 .86rem/1.3 var(--heading); color: #f3efe2; }
+.tl span { font-size: .76rem; line-height: 1.45; color: var(--dim); }
+.tl i { position: absolute; right: .7rem; top: .7rem; font: 400 1.4rem/1 var(--display-serif); font-style: normal; color: rgba(229,204,128,.28); }
+.nums { display: grid; grid-template-columns: repeat(6, 1fr); gap: .5rem; margin: .9rem 0 0; }
+.num { display: flex; align-items: center; gap: .6rem; padding: .6rem .7rem; border-radius: 6px; background: rgba(0,0,0,.25); border: 1px solid var(--line); }
+.num b { display: block; font: 700 1.35rem/1 var(--heading); color: var(--gold); }
+.num span { font: 600 .56rem/1.25 var(--heading); letter-spacing: .07em; text-transform: uppercase; color: var(--dim); }
+
+/* sticky section nav */
+.snav { position: sticky; top: 0; z-index: 30; display: flex; gap: .35rem; flex-wrap: wrap; padding: .55rem .6rem; margin: .8rem 0 0; border-radius: 8px; background: rgba(10,20,26,.92); backdrop-filter: blur(8px); border: 1px solid var(--line); }
+.snav a { display: inline-flex; align-items: center; gap: .4rem; text-decoration: none; font: 600 .7rem/1 var(--heading); letter-spacing: .05em; color: var(--ink); padding: .42rem .65rem; border-radius: 5px; border: 1px solid transparent; }
+.snav a .ico.s { width: 1.15rem; height: 1.15rem; border-radius: 3px; }
+.snav a:hover, .snav a.on { color: #1a1204; background: var(--gold); }
+
+/* dungeons */
+.bosses { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+.boss { position: relative; min-height: 8.4rem; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--img) center/cover no-repeat; display: flex; flex-direction: column; justify-content: flex-end; padding: .6rem .7rem; }
+.boss::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(4,10,14,.05), rgba(4,10,14,.9) 70%); }
+.boss > * { position: relative; }
+.boss small { font: 600 .56rem/1 var(--heading); letter-spacing: .1em; text-transform: uppercase; color: #cfd8dc; }
+.boss b { display: block; margin: .2rem 0 .35rem; font: 400 1.02rem/1.1 var(--display-serif); color: #fff; }
+.boss .plates { display: flex; flex-wrap: wrap; gap: .25rem; }
+.plate { font: 700 .62rem/1 var(--heading); letter-spacing: .03em; color: #ffe9d6; padding: .28rem .45rem .28rem .35rem; border-radius: 3px; background: linear-gradient(180deg, rgba(150,20,10,.85), rgba(80,8,4,.9)); border: 1px solid rgba(255,190,140,.5); box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+.plate::before { content: "\2620"; margin-right: .3rem; color: #ffc9a3; }
+.plate.open { color: #1a1204; background: linear-gradient(180deg, #f0dc9a, #c9a95a); border-color: #7d6326; }
+.plate.open::before { content: "\25B6"; color: #4d3a10; }
+.boss.wide { grid-column: span 2; }
+.boss.tall { grid-row: span 2; min-height: 17.3rem; }
+
+/* small cards */
+.smalls { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-top: 1rem; }
+.sm { display: flex; flex-direction: column; gap: .5rem; padding: .85rem; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); }
+.sm .hd { display: flex; align-items: center; gap: .6rem; }
+.sm .hd b { font: 600 .84rem/1.25 var(--heading); color: #f3efe2; }
+.sm p { margin: 0; font-size: .76rem; line-height: 1.5; color: #c4ced3; }
+
+/* XP */
+.xpgrid { display: grid; grid-template-columns: 1fr 1.25fr; gap: .8rem; align-items: start; }
+.formula { padding: 1rem 1.1rem; }
+.formula .eq { margin: .2rem 0 .7rem; font: 400 1.5rem/1.25 var(--display-serif); color: #f6f1e4; }
+.formula .eq em { font-style: normal; color: var(--gold); }
+.formula p { margin: 0 0 .55rem; font-size: .8rem; line-height: 1.55; color: #c9d3d8; }
+.formula .ex { display: grid; grid-template-columns: 1fr auto; gap: .2rem .8rem; margin: .4rem 0 .8rem; padding: .6rem .7rem; border-radius: 6px; background: rgba(0,0,0,.28); font-size: .76rem; color: #cdd6db; }
+.formula .ex b { font: 700 .8rem var(--heading); color: var(--gold); text-align: right; }
+.proof { display: flex; align-items: center; gap: .8rem; margin-top: .6rem; padding: .7rem .8rem; border-radius: 8px; background: rgba(63,208,122,.07); border: 1px solid rgba(63,208,122,.3); }
+.proof b.big { font: 700 1.9rem/1 var(--heading); color: var(--pl); }
+.proof > span { font-size: .76rem; line-height: 1.45; color: #cfe8da; }
+.bars { padding: 1rem; }
+.bars h3 { margin: 0 0 .2rem; font: 600 .9rem var(--heading); color: #f3efe2; }
+.delta { display: grid; grid-template-columns: 8.2rem 1fr 6.4rem; align-items: center; gap: .5rem; margin: .45rem 0; font-size: .72rem; color: var(--dim); }
+.delta .bar { position: relative; height: .6rem; border-radius: 4px; background: rgba(255,255,255,.06); overflow: hidden; }
+.delta .bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.delta .bar i.o { background: rgba(160,170,190,.45); }
+.delta .bar i.n { background: linear-gradient(90deg, #b8963f, var(--gold)); height: 55%; top: 22%; box-shadow: 0 0 10px rgba(229,204,128,.45); transition: width 1.1s cubic-bezier(.2,.8,.2,1) .2s; }
+.rv:not(.in) .delta .bar i.n { width: 0 !important; }
+.delta b { font: 700 .74rem var(--heading); color: #f3e6bd; white-space: nowrap; text-align: right; }
+.delta b s { color: #8a949b; font-weight: 600; }
+.kills { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: .8rem; }
+.kill { padding: .8rem .9rem; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); }
+.kill b { display: block; font: 600 .86rem/1.3 var(--heading); color: #f3efe2; margin-bottom: .3rem; }
+.kill b em { font-style: normal; color: var(--buff); }
+.kill p { margin: 0; font-size: .76rem; line-height: 1.5; color: #c4ced3; }
+
+/* PvP */
+.fgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; }
+.f { padding: .75rem .8rem; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); }
+.f .v { display: flex; align-items: baseline; gap: .4rem; flex-wrap: wrap; }
+.f .v b { font: 700 1.45rem/1 var(--heading); color: var(--gold); }
+.f .v s { font: 600 .8rem var(--heading); color: #8a949b; }
+.f em { display: block; margin-top: .35rem; font-style: normal; font: 600 .62rem/1.3 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: #cfe0ea; }
+.f > span { display: block; margin-top: .35rem; font-size: .74rem; line-height: 1.45; color: #b9c6cd; }
+.f .sx { margin: .35rem .25rem 0 0; }
+
+/* ranks rebased */
+.reb { display: grid; grid-template-columns: 1.35fr 1fr; gap: .8rem; align-items: start; }
+.stairs { padding: .9rem 1rem 1rem; }
+.sw { display: flex; flex-wrap: wrap; gap: .3rem; margin: .1rem 0 .8rem; }
+.sw button { display: inline-flex; align-items: center; gap: .35rem; cursor: pointer; padding: .3rem .55rem .3rem .3rem; border-radius: 6px; font: 600 .68rem/1 var(--heading); color: var(--ink); background: rgba(0,0,0,.28); border: 1px solid var(--line); }
+.sw button .ico.s { width: 1.2rem; height: 1.2rem; }
+.sw button.on { border-color: var(--gold); color: var(--gold); background: rgba(255,255,255,.04); }
+.st { display: grid; grid-template-columns: 4.3rem 1fr 6.6rem; gap: .5rem; align-items: center; margin: .5rem 0; font-size: .7rem; color: var(--dim); }
+.st > span:first-child b { display: block; font: 700 .74rem/1.2 var(--heading); color: #e7eef2; }
+.lvr { position: relative; height: .75rem; border-radius: 4px; background: rgba(255,255,255,.06); overflow: hidden; }
+.lvr i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+.lvr i.o { background: rgba(160,170,190,.45); }
+.lvr i.n { top: 22%; bottom: 22%; background: linear-gradient(90deg, #b8963f, var(--gold)); box-shadow: 0 0 10px rgba(229,204,128,.45); transition: width .6s cubic-bezier(.2,.8,.2,1); }
+.st > b { font: 700 .72rem/1.3 var(--heading); color: #f3e6bd; text-align: right; white-space: nowrap; }
+.st > b s { color: #8a949b; font-weight: 600; }
+.st > b.up { color: var(--buff); } .st > b.dn { color: var(--nerf); }
+.stkey { display: flex; gap: 1rem; flex-wrap: wrap; font-size: .68rem; color: var(--dim); margin-top: .6rem; }
+.stkey i { display: inline-block; width: 1.2rem; height: .5rem; border-radius: 2px; margin-right: .3rem; vertical-align: 1px; }
+.side { display: grid; gap: .8rem; }
+.card { padding: .9rem 1rem 1rem; }
+.hd2 { display: flex; align-items: center; gap: .6rem; margin-bottom: .7rem; }
+.hd2 b { display: block; font: 600 .9rem/1.2 var(--heading); color: #f3efe2; }
+.hd2 span:not(.ico):not(.sx) { display: block; font-size: .7rem; color: var(--dim); margin-top: .15rem; }
+.pen { display: grid; grid-template-columns: 2.6rem 1fr 1fr 1fr; gap: 1px; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,.06); font-size: .72rem; }
+.pen > span { padding: .38rem .45rem; background: #0a1a23; color: #cdd6db; white-space: nowrap; }
+.pen > span.h { font: 600 .58rem/1.3 var(--heading); letter-spacing: .07em; text-transform: uppercase; color: var(--dim); background: #08141b; }
+.pen s { color: #8a949b; }
+.pen b { color: var(--nerf); font-weight: 700; }
+.pen b.eq { color: #e7eef2; }
+.pen b.up { color: var(--buff); }
+.pen .reach { background: rgba(229,204,128,.08); }
+.aur { display: grid; grid-template-columns: repeat(6, 1fr); gap: .3rem; margin: .4rem 0 .2rem; }
+.aur span { text-align: center; padding: .35rem .2rem; border-radius: 4px; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.06); font: 600 .62rem/1.3 var(--heading); color: var(--dim); }
+.aur span b { display: block; font-size: .78rem; color: #f3e6bd; }
+.aur span s { color: #8a949b; }
+.aur span.reach { border-color: rgba(229,204,128,.5); }
+.rage { margin-top: .8rem; padding: .9rem 1rem; display: grid; grid-template-columns: auto 1fr; gap: .9rem; align-items: start; }
+.rage ul { margin: .3rem 0 0; padding-left: 1.1rem; font-size: .78rem; line-height: 1.55; color: #c9d3d8; }
+.rage p { margin: 0; font-size: .8rem; line-height: 1.5; color: #d8e0e4; }
+
+/* class board */
+.cfilter { display: flex; flex-wrap: wrap; gap: .35rem; margin: 1.2rem 0 .8rem; }
+.cfilter button { display: inline-flex; align-items: center; gap: .4rem; cursor: pointer; padding: .32rem .6rem .32rem .32rem; border-radius: 6px; font: 600 .7rem/1 var(--heading); color: var(--ink); background: rgba(0,0,0,.28); border: 1px solid var(--line); }
+.cfilter button.all { padding: .45rem .7rem; }
+.cfilter button .ico.s { width: 1.3rem; height: 1.3rem; }
+.cfilter button.on { border-color: var(--cc, var(--gold)); color: var(--cc, var(--gold)); background: rgba(255,255,255,.04); }
+.board { display: grid; grid-template-columns: repeat(2, 1fr); gap: .7rem; align-items: start; }
+.ccard { border-radius: 10px; overflow: hidden; background: var(--panel); border: 1px solid var(--line); }
+.ccard[hidden] { display: none; }
+.ccard .top { display: flex; align-items: center; gap: .6rem; padding: .6rem .8rem; background: linear-gradient(90deg, color-mix(in srgb, var(--cc) 22%, transparent), transparent 75%); border-bottom: 1px solid color-mix(in srgb, var(--cc) 40%, transparent); }
+.ccard .top b { font: 400 1.2rem/1 var(--display-serif); color: var(--cc); }
+.ccard .top span { margin-left: auto; font: 600 .6rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.ccard .why { margin: 0; padding: .55rem .8rem; font-size: .72rem; line-height: 1.45; color: #cbd8de; background: rgba(0,0,0,.22); border-bottom: 1px solid rgba(255,255,255,.05); }
+.chg-row { display: grid; grid-template-columns: auto 1fr auto; gap: .65rem; align-items: center; padding: .55rem .8rem; border-top: 1px solid rgba(255,255,255,.05); }
+.chg-row:first-of-type { border-top: 0; }
+.chg-row .what b { display: block; font: 600 .8rem/1.2 var(--heading); color: #f2f0ea; }
+.chg-row .what > span:not(.sx) { display: block; margin: .15rem 0 .1rem; font-size: .72rem; line-height: 1.4; color: #aebbc3; }
+.chg-row .what span strong { color: #fff; font-weight: 600; }
+.chg-row .what .sx { margin: .25rem .25rem 0 0; }
+.chg-row.gone .ico { filter: grayscale(1) brightness(.5); }
+.chg-row.gone .what b { text-decoration: line-through; text-decoration-color: var(--nerf); color: #b7a9a7; }
+.chg-row .icos { display: flex; gap: .2rem; }
+.chg-row .icos .ico { width: 1.25rem; height: 1.25rem; border-radius: 3px; filter: grayscale(1) brightness(.55); }
+.chg-row .noico { width: 2.4rem; height: 2.4rem; border-radius: 6px; border: 1px dashed rgba(229,204,128,.35); display: flex; align-items: center; justify-content: center; font: 700 .7rem var(--heading); color: var(--gold); }
+.vs { display: inline-flex; align-items: center; gap: .3rem; font: 700 .7rem/1 var(--heading); white-space: nowrap; }
+.vs s { color: #8a949b; font-weight: 600; }
+.vs b.up { color: var(--buff); }
+.vs b.dn { color: var(--nerf); }
+
+/* items */
+.itab { display: grid; gap: .35rem; }
+.irow { display: grid; grid-template-columns: auto minmax(0, 1.1fr) 10.5rem minmax(0, 1.5fr); gap: .7rem; align-items: center; padding: .5rem .7rem; border-radius: 7px; background: rgba(0,0,0,.24); border: 1px solid rgba(255,255,255,.05); }
+.irow .nm b { display: block; font: 600 .82rem/1.2 var(--heading); }
+.irow .nm span { display: block; margin-top: .15rem; font-size: .68rem; color: var(--dim); }
+.irow .ql { display: flex; align-items: center; gap: .3rem; font: 700 .58rem/1 var(--heading); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.irow .ql i { font-style: normal; padding: .24rem .4rem; border-radius: 3px; border: 1px solid currentColor; }
+.irow .st2 { font-size: .72rem; line-height: 1.45; color: #cdd6db; }
+.irow .st2 s { color: #8a949b; }
+.irow .st2 b { color: var(--q-uncommon); font-weight: 600; }
+.q-rare { color: var(--q-rare); } .q-uncommon { color: var(--q-uncommon); } .q-epic { color: var(--q-epic); } .q-common { color: #fff; } .q-poor { color: var(--q-poor); }
+.irow .ql .q-rare { color: #4ca3ff; }
+.sets { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; align-items: start; margin-top: .4rem; }
+.wtip { padding: .7rem .85rem .8rem; border-radius: 5px; background: rgba(6,10,20,.96); border: 1px solid #5d6b7e; box-shadow: 0 0 0 1px #0a0e16, 0 18px 40px rgba(0,0,0,.6); font-size: .78rem; line-height: 1.45; color: #fff; }
+.wtip .t { display: flex; align-items: center; gap: .5rem; font: 600 .98rem var(--heading); color: var(--q-rare); }
+.wtip .y { color: #ffd100; margin-top: .45rem; }
+.wtip .p { color: #7c7c7c; }
+.wtip .g { color: var(--q-uncommon); }
+.wtip .g b { color: #ffd100; font-weight: 600; }
+.wtip .src { color: #9fb0bb; font-size: .7rem; margin-top: .45rem; }
+
+/* legacy */
+.leg { display: grid; grid-template-columns: 1.1fr 1fr; gap: .8rem; align-items: start; }
+.ach { position: relative; display: grid; grid-template-columns: auto 1fr auto; gap: .9rem; align-items: center; padding: .9rem 1rem; border-radius: 10px; background: radial-gradient(120% 140% at 0% 0%, rgba(229,204,128,.16), transparent 55%), linear-gradient(180deg, #1c1709, #0d0b05); border: 2px solid #8a6d2a; box-shadow: inset 0 0 0 1px rgba(255,224,150,.2), 0 18px 40px rgba(0,0,0,.55); }
+.ach .ico.l { box-shadow: 0 0 0 2px #c9a24a, 0 0 22px rgba(229,204,128,.35); }
+.ach small { display: block; font: 700 .58rem/1 var(--heading); letter-spacing: .16em; text-transform: uppercase; color: #c9b27a; }
+.ach b { display: block; margin: .3rem 0 .25rem; font: 600 1.05rem/1.2 var(--heading); color: #fff3c6; }
+.ach p { margin: 0; font-size: .76rem; line-height: 1.45; color: #d8ccaa; }
+.ach .shield { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 3.4rem; height: 3.9rem; clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%); background: linear-gradient(180deg, #e8cf88, #9c7a2c); color: #1a1204; font: 700 1.35rem/1 var(--heading); }
+.ach .shield small { color: #3d2e0c; font-size: .48rem; letter-spacing: .1em; margin-top: .15rem; }
+.facts { display: grid; gap: .45rem; }
+.facts div { display: grid; grid-template-columns: 3.4rem 1fr; gap: .7rem; align-items: center; padding: .6rem .7rem; border-radius: 7px; background: rgba(0,0,0,.24); border: 1px solid rgba(255,255,255,.05); font-size: .76rem; line-height: 1.5; color: #cdd6db; }
+.facts div > b { font: 700 1.05rem/1.1 var(--heading); color: var(--gold); text-align: center; }
+.facts div > b small { display: block; font-size: .52rem; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.facts strong { color: #fff; font-weight: 600; }
+
+/* what's next */
+.when { position: relative; list-style: none; margin: 0; padding: 0 0 0 1.3rem; }
+.when::before { content: ""; position: absolute; left: .38rem; top: .5rem; bottom: .5rem; width: 2px; background: linear-gradient(180deg, rgba(229,204,128,.7), rgba(229,204,128,.15)); }
+.when li { position: relative; display: grid; grid-template-columns: 8.6rem 1fr; gap: .8rem; padding: .55rem 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+.when li::before { content: ""; position: absolute; left: -1.22rem; top: .78rem; width: .7rem; height: .7rem; border-radius: 50%; background: #0c171d; border: 2px solid rgba(229,204,128,.6); }
+.when li.big::before { background: var(--gold); box-shadow: 0 0 12px rgba(229,204,128,.7); }
+.when li > b { font: 600 .8rem/1.35 var(--heading); color: var(--gold); }
+.when li span { font-size: .8rem; line-height: 1.5; color: #d0d9de; }
+.nextgrid { display: grid; grid-template-columns: 1.2fr 1fr; gap: .8rem; align-items: start; }
+.hint { display: grid; gap: .4rem; }
+.hint div { display: flex; gap: .6rem; align-items: center; padding: .5rem .6rem; border-radius: 7px; background: rgba(0,0,0,.22); border: 1px dashed rgba(229,204,128,.3); font-size: .76rem; line-height: 1.45; color: #cdd6db; }
+.hint div b { color: #fff; font-weight: 600; }
+.cta { display: flex; align-items: center; gap: .9rem; margin: 1rem 0 0; padding: .9rem 1rem; border-radius: 8px; background: linear-gradient(90deg, rgba(229,204,128,.14), rgba(229,204,128,.03)); border: 1px solid rgba(229,204,128,.45); }
+.cta p { margin: 0; font-size: .86rem; line-height: 1.5; color: #f1ead3; }
+.cta a.go { margin-left: auto; flex: none; font: 700 .72rem/1 var(--heading); letter-spacing: .08em; text-transform: uppercase; text-decoration: none; color: #1a1204; background: var(--gold); padding: .6rem .8rem; border-radius: 4px; }
+
+/* method */
+.method { margin: 1.4rem 0 2rem; border-radius: 8px; border: 1px solid var(--line); background: rgba(0,0,0,.2); }
+.method summary { cursor: pointer; padding: .8rem 1rem; font: 600 .82rem var(--heading); color: var(--ink); }
+.method .in { padding: 0 1rem 1rem; }
+.pipe { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .2rem 0 .8rem; }
+.pipe span { font: 600 .68rem/1 var(--heading); padding: .45rem .6rem; border-radius: 4px; background: rgba(0,175,215,.1); border: 1px solid var(--line); color: #d6eef7; }
+.pipe i { font-style: normal; color: var(--gold); }
+.method p { margin: 0 0 .5rem; font-size: .76rem; line-height: 1.6; color: var(--dim); }
+
+/* tooltips (TipKit) */
+.tip { position: fixed; z-index: 60; display: none; max-width: 21rem; background: rgba(6,10,20,.97); border: 1px solid #5d6b7e; border-radius: 4px; padding: .6rem .7rem; font-size: .78rem; line-height: 1.4; color: #fff; pointer-events: none; box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+.tt b { display: block; font: 600 .92rem var(--heading); margin-bottom: .15rem; }
+.tt .l { display: block; }
+.tt .g { display: block; color: var(--q-uncommon); }
+.tt .y { display: block; color: #ffd100; }
+.tt .was { display: block; margin-top: .4rem; padding-top: .35rem; border-top: 1px solid rgba(255,255,255,.1); color: #8a949b; font-size: .72rem; }
+.tt .was em { display: block; font-style: normal; font: 700 .56rem/1.4 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: #6e7880; }
+.tt .now em { display: block; font-style: normal; font: 700 .56rem/1.4 var(--heading); letter-spacing: .08em; text-transform: uppercase; color: var(--gold); margin-top: .2rem; }
+.tt .rm { display: block; margin-top: .35rem; color: var(--nerf); font: 700 .62rem var(--heading); letter-spacing: .06em; text-transform: uppercase; }
+.tt .nw { display: block; margin-top: .35rem; color: var(--gold); font: 700 .62rem var(--heading); letter-spacing: .06em; text-transform: uppercase; }
+.tt .nt { display: block; margin-top: .4rem; color: #aebbc3; font-size: .72rem; }
+
+@media (max-width: 980px) {
+  .tldr { grid-template-columns: repeat(2, 1fr); } .tldr .tl:last-child { grid-column: 1 / -1; }
+  .nums { grid-template-columns: repeat(3, 1fr); }
+  .xpgrid, .reb, .board, .leg, .nextgrid { grid-template-columns: 1fr; }
+  .bosses { grid-template-columns: 1fr 1fr; } .boss.tall { grid-row: auto; min-height: 8.4rem; }
+  .smalls, .sets { grid-template-columns: 1fr 1fr; }
+  .fgrid { grid-template-columns: 1fr 1fr; }
+  .irow { grid-template-columns: auto minmax(0, 1fr) auto; } .irow .st2 { grid-column: 2 / -1; }
+}
+@media (max-width: 620px) {
+  .hero-in { padding-top: 2.2rem; padding-bottom: 1.8rem; }
+  .builds div { font-size: .5rem; } .builds div b { font-size: .58rem; }
+  .tldr, .smalls, .sets, .kills { grid-template-columns: 1fr; }
+  .nums { grid-template-columns: repeat(2, 1fr); }
+  .bosses { grid-template-columns: 1fr; } .boss.wide { grid-column: auto; }
+  .fgrid { grid-template-columns: 1fr; }
+  .delta { grid-template-columns: 6.6rem 1fr 5.6rem; }
+  .st { grid-template-columns: 3.6rem 1fr 5.6rem; }
+  .aur { grid-template-columns: repeat(3, 1fr); }
+  .irow { grid-template-columns: auto minmax(0, 1fr); } .irow .ql { grid-column: 2; } .irow .st2 { grid-column: 1 / -1; }
+  .when li { grid-template-columns: 1fr; gap: .15rem; }
+  .rage { grid-template-columns: 1fr; }
+  .ach { grid-template-columns: auto 1fr; } .ach .shield { grid-column: 1 / -1; justify-self: start; flex-direction: row; gap: .4rem; width: auto; height: auto; padding: .35rem .6rem; clip-path: none; border-radius: 4px; font-size: 1rem; }
+  .sec-h .n { display: none; }
+  .cta { flex-direction: column; align-items: flex-start; } .cta a.go { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<nav class="top">
+  <a class="brand" href="../../"><img src="../../mark.svg" alt="" width="42" height="42"><span class="brand-word">FOREVER<b>RANK</b></span></a>
+  <div class="top-nav">
+    <a class="pill" href="../../">Home</a>
+    <a class="pill" href="../../plan/">The Forge</a>
+    <a class="pill" href="../../codex/">Database</a>
+    <a class="pill" href="../../news/">News</a>
+    <span class="phase">Datamine</span>
+    <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  </div>
+</nav>
+<script src="../../nav.js?v=8"></script>
+
+<article class="art">
+<header class="hero" style="--img:url(/codex/img/excavation-site.jpg)">
+  <div class="wrapx hero-in">
+    <p class="kick"><span class="live"></span>ForeverRank datamine · October 8, 2026 · client 1.60.1.70009 to 1.60.1.70291</p>
+    <h1>Level <em>30</em>,<br>build by build</h1>
+    <p class="dek">Two beta builds did the work. <b>70170</b> on 1 October raised the cap to 30, opened three dungeons and halved the bonus XP of dungeon quests. <b>70291</b> on 8 October opened the City of Dalaran, cut Penance, Thorns and Retribution Aura back and gave every tester 16 Legacy points. Here is each change with its old and new number, and who says so.</p>
+    <div class="builds" aria-label="Beta builds since our last datamine">
+      <div class="end"><b>70009</b>Sep 24 · last diff</div>
+      <div class="q"><b>70058</b>Sep 29</div>
+      <div class="q"><b>70124</b>Sep 30</div>
+      <div class="end"><b>70170</b>Oct 1 · level 30</div>
+      <div class="q"><b>70205</b>Oct 3</div>
+      <div class="q"><b>70235</b>Oct 5</div>
+      <div class="q"><b>70245</b>Oct 6</div>
+      <div class="end"><b>70291</b>Oct 8 · newest</div>
+    </div>
+    <p class="quiet">The five dim builds, 70058, 70124, 70205, 70235 and 70245, changed none of the client tables we read. Blizzard's restarts on <a href="https://us.forums.blizzard.com/en/wow/t/brief-realm-maintenance-october-5/2373436" rel="noopener">5 October</a> and <a href="https://us.forums.blizzard.com/en/wow/t/brief-beta-realm-maintenance-october-6/2374348" rel="noopener">6 October</a> fixed things on the servers, missing quest items among them.</p>
+  </div>
+</header>
+
+<div class="wrapx">
+  <section class="sec rv" id="short">
+    <div class="tldr">
+      <a class="tl" href="#cap"><i>1</i><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/spell_arcane_teleportdalaran.jpg)"></span><b>Level 30 and four dungeons</b><span>Excavation Site, Razorfen Downs and Uldaman on 1 October; the City of Dalaran on 8 October.</span></a>
+      <a class="tl" href="#xp"><i>2</i><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_note_01.jpg)"></span><b>Dungeon quests pay half the bonus</b><span>Players' uploads match 1 + (m − 1) ÷ 2 on 164 quests.</span></a>
+      <a class="tl" href="#classes"><i>3</i><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/spell_holy_penance.jpg)"></span><b>71 talents touched</b><span>Fury rebuilt; Penance cut; Thorns and Retribution Aura back to Vanilla.</span></a>
+      <a class="tl" href="#items"><i>4</i><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_hammer_16.jpg)"></span><b>Quest rewards turn green</b><span>Six Excavation Site rewards drop to uncommon; 18 Riverglades rewards lose item levels.</span></a>
+      <a class="tl" href="#legacy"><i>5</i><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_gift_01.jpg)"></span><b>16 Legacy points for testers</b><span>A beta achievement pays the full cap; Legacy resets recharge every hour.</span></a>
+    </div>
+    <div class="nums">
+      <div class="num"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/achievement_level_30.jpg)"></span><div><b data-count="30">30</b><span>level cap</span></div></div>
+      <div class="num"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_note_01.jpg)"></span><div><b data-count="164">164</b><span>quests checked by players</span></div></div>
+      <div class="num"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_warrior.jpg)"></span><div><b data-count="71">71</b><span>talents touched</span></div></div>
+      <div class="num"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_hammer_16.jpg)"></span><div><b data-count="66">66</b><span>items changed quality</span></div></div>
+      <div class="num"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_bannerpvp_02.jpg)"></span><div><b data-count="25000">25,000</b><span>Honor cap</span></div></div>
+      <div class="num"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_gift_01.jpg)"></span><div><b data-count="16">16</b><span>Legacy points</span></div></div>
+    </div>
+    <nav class="snav" aria-label="Sections">
+      <a href="#cap"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/spell_arcane_teleportdalaran.jpg)"></span>Level 30</a>
+      <a href="#xp"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_note_01.jpg)"></span>XP</a>
+      <a href="#pvp"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_bannerpvp_02.jpg)"></span>PvP</a>
+      <a href="#classes"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/spell_holy_penance.jpg)"></span>Classes</a>
+      <a href="#items"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_hammer_16.jpg)"></span>Items</a>
+      <a href="#legacy"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_gift_01.jpg)"></span>Legacy</a>
+      <a href="#next"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg)"></span>Next</a>
+    </nav>
+    <p class="legend">Who says so:
+      <span class="sx c">Client</span> the beta client's own tables, by build
+      <span class="sx b">Blizzard</span> Blizzard's notes or posts, linked
+      <span class="sx p">Players</span> what QuestBank users uploaded
+      <span class="sx i">Inferred</span> our reading, not a stated fact</p>
+  </section>
+
+  <section class="sec rv" id="cap">
+    <div class="sec-h"><span class="n">1</span><div><h2>Level 30, and where to spend it</h2><p>Build 70170 went live on 1 October with the cap at 30. Blizzard's beta plan named 20, then 30, and nothing higher; the beta ends on 21 October.</p></div></div>
+    <div class="bosses">
+      <div class="boss tall" style="--img:url(/codex/img/excavation-site.jpg)"><small>Levels 26–31 · Forever dungeon</small><b>Excavation Site: Wetlands</b><div class="plates"><span class="plate open">Open since 1 Oct</span></div></div>
+      <div class="boss" style="--img:url(/map/img/17.jpg)"><small>Level 25 and up</small><b>Razorfen Downs</b><div class="plates"><span class="plate open">Open since 1 Oct</span></div></div>
+      <div class="boss" style="--img:url(/map/img/3.jpg)"><small>Level 30 and up</small><b>Uldaman</b><div class="plates"><span class="plate open">Open since 1 Oct</span></div></div>
+      <div class="boss wide" style="--img:url(/codex/img/city-of-dalaran.jpg)"><small>Levels 28–33 · Forever dungeon · build 70291</small><b>City of Dalaran</b><div class="plates"><span class="plate open">Open since 8 Oct</span><span class="plate">Shade of the Archmage</span><span class="plate">Lyn the Ignored</span></div></div>
+    </div>
+    <p class="cap">Level ranges: <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/wow-forever-beta-development-notes-%E2%80%93-updated-october-1/2360696/4" rel="noopener">Blizzard 1 Oct</a> and Blizzard's <a href="https://us.forums.blizzard.com/en/wow/t/krol%E2%80%99dok-stronghold/2349672" rel="noopener">September dungeon list</a>. <span class="sx c">Client</span> sets Excavation Site at 26 and the City of Dalaran at 28; the boss names are the client's kill statistics. Dalaran opened with the <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/2360696/5" rel="noopener">Blizzard 8 Oct</a> build. They join Ragefire Chasm, the Hall of Thanes, the Ruins of Lordaeron, Wailing Caverns, the Deadmines, Shadowfang Keep, the Stockade, Blackfathom Deeps, Gnomeregan, Razorfen Kraul and the Scarlet Monastery. Nothing in the client points past 30 for the beta: the level, quest XP and talent-point tables are the same as in 70009 <span class="sx i">Inferred</span>.</p>
+    <div class="smalls">
+      <div class="sm"><div class="hd"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_food_19.jpg)"></span><b>Kyle is back in Mulgore</b></div><p>"Kyle's Gone Missing!" returns: feed Kyle the Frenzied some Tender Strider Meat for Ahab Wheathoof. It is one of five new quest IDs since 70009, and the only one with a name so far. <span class="sx c">Client 70170</span> <span class="sx b">Blizzard 1 Oct</span></p></div>
+      <div class="sm"><div class="hd"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/trade_engineering.jpg)"></span><b>Campfires, counted</b></div><p>Campfires no longer hurt players below level 5, and hurt less below 90% health. A new statistic, "Times camped", counts each campfire visit. <span class="sx b">Blizzard 1 Oct</span> <span class="sx c">Client 70291</span></p></div>
+      <div class="sm"><div class="hd"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg)"></span><b>Faster respawns, more barbers</b></div><p>Creatures respawn faster in Hillsbrad, Ashenvale, the Wetlands, Duskwood and Thousand Needles. Darnassus and Thunder Bluff get barbershops; on 8 October city barbers made way for local ones. <span class="sx b">Blizzard 1 and 8 Oct</span></p></div>
+    </div>
+  </section>
+
+  <section class="sec rv" id="xp">
+    <div class="sec-h"><span class="n">2</span><div><h2>Quest XP: half the bonus</h2><p>On 1 October Blizzard halved the extra experience that dungeon quests pay on top of a normal quest. Players' QuestBank uploads show exactly how.</p></div></div>
+    <div class="xpgrid">
+      <div class="formula panel">
+        <div class="hd2"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_note_01.jpg)"></span><div><b>The rule the game pays</b><span>multiplier after the cut, from the one before</span></div></div>
+        <p class="eq">new = 1 + (<em>old</em> − 1) ÷ 2</p>
+        <div class="ex"><span>A ×3.75 quest on a 1,000 XP base, before</span><b>3,750</b><span>The same quest now, ×2.375</span><b>2,375</b></div>
+        <p>It hits every quest with a bonus multiplier, dungeon-typed or not. <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/wow-forever-beta-development-notes-%E2%80%93-updated-october-1/2360696/4" rel="noopener">Blizzard 1 Oct</a> <span class="sx p">Players</span></p>
+        <div class="proof"><b class="big" data-count="164">164</b><span>quests paid what the rule says, within 5%, in quest windows and hand-ins QuestBank users uploaded on build 70170 and later. Four paid something else, and QuestBank now carries the game's own number for them. <span class="sx p">Players</span></span></div>
+      </div>
+      <div class="bars panel">
+        <h3>Dungeon quest multipliers, before and after</h3>
+        <p class="cap" style="margin:0 0 .5rem">Grey: as Wowhead Forever's quest pages showed them before the cut (read 29 September). Gold: the rule above.</p>
+        <div id="xpbars"></div>
+        <p class="cap">The rule is Blizzard's wording turned into arithmetic; the 164 quests are what makes it more than a reading.</p>
+      </div>
+    </div>
+    <div class="kills">
+      <div class="kill"><b>Dungeon kills: <em>about 20% more XP</em></b><p>On 8 October Blizzard raised the experience from killing creatures in dungeons. Aggrend expects dungeons to level about as fast as good questing with both changes in. <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/the-wow-forever-podcast-episode-3-dive-into-dungeons-with-devs-ft-hammerdancegaming/2376010/20" rel="noopener">Blizzard 8 Oct</a></p></div>
+      <div class="kill"><b>Party XP: <em>your own level counts</em></b><p>The penalty for killing lower-level enemies used the highest level in the party. It now uses each player's own level, as Classic Era does. Neither change touches quest XP, so the multipliers above stand. <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/2360696/5" rel="noopener">Blizzard 8 Oct</a> <span class="sx i">Inferred</span></p></div>
+    </div>
+    <div class="cta"><p><b>QuestBank already plans with the cut,</b> quest by quest, and learns the game's own number from every hand-in you upload.</p><a class="go" href="/questbank/">Get QuestBank</a></div>
+  </section>
+
+  <section class="sec rv" id="pvp">
+    <div class="sec-h"><span class="n">3</span><div><h2>PvP: a bigger purse, higher prices</h2><p>The level-30 build raised what you can hold and what gear costs. 8 October gave crits back their full weight.</p></div></div>
+    <div class="fgrid">
+      <div class="f"><div class="v"><s>15,000</s><b>25,000</b></div><em>Honor cap</em><span>The Honor currency's cap in the client. <span class="sx c">Client 70170</span> <span class="sx b">Blizzard 1 Oct</span></span></div>
+      <div class="f"><div class="v"><b>+50%</b></div><em>Honor prices</em><span>Most gear and upgrade tokens cost about half as much Honor again. <span class="sx b">Blizzard 1 Oct</span></span></div>
+      <div class="f"><div class="v"><b>Full</b></div><em>Crits in PvP</em><span>Critical strikes against players no longer do reduced damage. <span class="sx b">Blizzard 8 Oct</span></span></div>
+      <div class="f"><div class="v"><s>1,500</s><b>2,000</b></div><em>Darkspear Islands</em><span>Resources to win the 15v15 battleground for levels 30 to 60. <span class="sx c">Client 70170</span> <a class="sx b" href="https://worldofwarcraft.blizzard.com/en-us/news/24307308" rel="noopener">Blizzard 7 Oct</a></span></div>
+    </div>
+    <p class="cap">How Honor, ranks and seasons fit together is in Blizzard's <a href="https://worldofwarcraft.blizzard.com/en-us/news/24303316" rel="noopener">PvP progression article</a> of 7 October.</p>
+  </section>
+
+  <section class="sec rv" id="classes">
+    <div class="sec-h"><span class="n">4</span><div><h2>Class changes, class by class</h2><p>Old and new numbers from the client's own tooltips unless a Blizzard tag says otherwise. Hover an icon for the full text before and after. Where the client and Blizzard's notes disagree, you get both.</p></div></div>
+
+    <div class="reb">
+      <div class="stairs panel">
+        <div class="hd2"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/spell_fire_flamebolt.jpg)"></span><div><b>Low ranks rebased</b><span>8 October · each rank at the level where it stops growing</span></div></div>
+        <div class="sw" id="sw"></div>
+        <div id="stairs"></div>
+        <div class="stkey"><span><i style="background:rgba(160,170,190,.45)"></i>build 70009</span><span><i style="background:var(--gold)"></i>build 70291</span></div>
+        <p class="cap">Blizzard smoothed ranks 1 to 5 so each new rank is an upgrade <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/2360696/5" rel="noopener">Blizzard 8 Oct</a>. Base and growth per level are <span class="sx c">Client 70291</span>; a rank's top is its base plus growth for each level it grows, Classic's rule <span class="sx i">Inferred</span>. Since 1 October the character sheet also says low ranks get less spell power and fewer talent procs.</p>
+      </div>
+      <div class="side">
+        <div class="card panel">
+          <div class="hd2"><span class="ico" data-k="t:PRIEST:Penance"></span><div><b>Penance, cut back</b><span>per tick · spell power 0.285 → 0.19 per tick</span></div></div>
+          <div class="pen">
+            <span class="h">Rank</span><span class="h">Damage</span><span class="h">Healing</span><span class="h">Mana</span>
+            <span class="reach">1 · 30</span><span class="reach"><s>81</s> <b>42</b></span><span class="reach"><s>184</s> <b>126</b></span><span class="reach"><s>100</s> <b>150</b></span>
+            <span>2 · 40</span><span><s>113</s> <b>50</b></span><span><s>291</s> <b>200</b></span><span><s>185</s> <b>220</b></span>
+            <span>3 · 50</span><span><s>180</s> <b>68</b></span><span><s>482</s> <b>268</b></span><span><s>270</s> <b class="eq">270</b></span>
+            <span>4 · 60</span><span><s>131</s> <b>92</b></span><span><s>673</s> <b>425</b></span><span><s>355</s> <b>385</b></span>
+          </div>
+          <p class="cap">Rank 1, gold, is the one you can train at 30. Blizzard: it had been paid like a 3-second channel instead of 2, and its mana cost should beat the Heal family's efficiency by a steady margin. Its notes also say healing went up on ranks 2 and 4; next to 70009 the client shows every rank lower, so that rise is measured against the cut <span class="sx i">Inferred</span>. <span class="sx c">Client 70291</span> <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/2360696/5" rel="noopener">Blizzard 8 Oct</a></p>
+        </div>
+        <div class="card panel">
+          <div class="hd2"><span class="ico" data-k="Thorns"></span><div><b>Thorns and Retribution Aura, back to Vanilla</b><span>damage per hit taken, by rank · spell power 13.3% → 6%</span></div></div>
+          <p class="cap" style="margin:0"><span class="ico s" data-k="Thorns"></span> Druid Thorns</p>
+          <div class="aur"><span class="reach">R1<b><s>4</s> 3</b></span><span class="reach">R2<b><s>9</s> 6</b></span><span class="reach">R3<b><s>11</s> 9</b></span><span>R4<b><s>13</s> 12</b></span><span>R5<b><s>16</s> 15</b></span><span>R6<b><s>22</s> 18</b></span></div>
+          <p class="cap" style="margin:.6rem 0 0"><span class="ico s" data-k="Retribution Aura"></span> Paladin Retribution Aura</p>
+          <div class="aur"><span class="reach">R1<b><s>7</s> 5</b></span><span class="reach">R2<b><s>12</s> 8</b></span><span>R3<b><s>18</s> 12</b></span><span>R4<b><s>24</s> 16</b></span><span>R5<b><s>30</s> 20</b></span></div>
+          <p class="cap">Gold-edged ranks are trainable by 30. Base damage is <span class="sx c">Client 70291</span>; the 6% ratio and the fix that makes Retribution Aura use the paladin's spell power, not that of the party member being hit, are <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/2360696/5" rel="noopener">Blizzard 8 Oct</a>. The Forge's Reflect stat already uses the new numbers.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="rage panel">
+      <span class="ico l" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/ability_warrior_innerrage.jpg)"></span>
+      <div><p><b>Rage, Warrior and Druid.</b> On 8 October Blizzard fixed how taking damage makes Rage <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/2360696/5" rel="noopener">Blizzard 8 Oct</a>:</p>
+        <ul><li>It was measured against your own health, so more Stamina meant less Rage. It now uses an expected creature's health.</li><li>Crits and crushing blows count, and absorbed damage no longer does.</li><li>It assumes 20 to 40% armor by level instead of 50%, so most Warriors and Druids should get more Rage from hits.</li><li>Demoralizing Shout and Demoralizing Roar now cause threat; the client gave every rank a threat effect. <span class="sx c">Client 70291</span></li></ul></div>
+    </div>
+
+    <div class="cfilter" id="cfilter">
+      <button type="button" class="all on" data-c="all">All classes</button>
+      <button type="button" data-c="warrior" style="--cc:#c69b6d"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_warrior.jpg)"></span>Warrior</button>
+      <button type="button" data-c="druid" style="--cc:#ff7c0a"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_druid.jpg)"></span>Druid</button>
+      <button type="button" data-c="paladin" style="--cc:#f48cba"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_paladin.jpg)"></span>Paladin</button>
+      <button type="button" data-c="hunter" style="--cc:#aad372"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_hunter.jpg)"></span>Hunter</button>
+      <button type="button" data-c="priest" style="--cc:#ffffff"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_priest.jpg)"></span>Priest</button>
+      <button type="button" data-c="shaman" style="--cc:#2e8fff"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_shaman.jpg)"></span>Shaman</button>
+      <button type="button" data-c="mage" style="--cc:#3fc7eb"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_mage.jpg)"></span>Mage</button>
+      <button type="button" data-c="warlock" style="--cc:#8788ee"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_warlock.jpg)"></span>Warlock</button>
+      <button type="button" data-c="rogue" style="--cc:#fff468"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_rogue.jpg)"></span>Rogue</button>
+      <button type="button" data-c="races" style="--cc:#e5cc80"><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/achievement_character_gnome_male.jpg)"></span>Races</button>
+    </div>
+    <div class="board">
+      <div class="ccard" data-c="warrior" style="--cc:#c69b6d"><div class="top"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_warrior.jpg)"></span><b>Warrior</b><span>29 talents touched</span></div>
+        <p class="why">Blizzard put this pass live on 1 October, with a <a href="https://us.forums.blizzard.com/en/wow/t/warrior-updates-in-todays-beta-build/2369360" rel="noopener">second round</a> the same night. The 70170 client already had a few of its numbers, such as Dual Wield Specialization without its off-hand Rage. The tree rework itself, with talents added, cut and moved, first shows in 70291's tables, so until then it probably ran from the servers <span class="sx i">Inferred</span>.</p>
+        <div class="chg-row"><span class="noico">CRIT</span><div class="what"><b>Rage from critical hits</b><span>The first round said 75% more; the second pass made it 100%.</span><a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/warrior-updates-in-todays-beta-build/2369360" rel="noopener">Blizzard 1 Oct</a></div><span class="vs"><s>none</s>→<b class="up">+100%</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARRIOR:Bloodthirst"></span><div class="what"><b>Bloodthirst</b><span>Attack power share; it no longer needs Death Wish.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 1 Oct</span></div><span class="vs"><s>35%</s>→<b class="up">45%</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARRIOR:Dual Wield Specialization"></span><div class="what"><b>Dual Wield Specialization</b><span>On 1 October Blizzard's notes took away its 20–100% off-hand Rage and its off-hand hit; the 70170 client dropped the Rage. Build 70291 drops the <strong>2–10% hit</strong> too and brings the Rage back at <strong>10–50%</strong>, the 50% <a href="https://x.com/Zirene/status/2105700347557867695" rel="noopener">Aidan Moon</a> gave that day.</span><span class="sx b">Blizzard 1 Oct</span><span class="sx c">Client 70170</span><span class="sx c">Client 70291</span></div><span class="vs"><s>+100%</s>→<b class="dn">+50%</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARRIOR:Booming Voice"></span><div class="what"><b>Booming Voice</b><span>Covers every shout, and cuts their Rage cost by <strong>5–25%</strong>.</span><span class="sx c">Client 70291</span></div><span class="bdg buff">▲ Buff</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARRIOR:Improved Slam"></span><div class="what"><b>Improved Slam</b><span>Seconds off Slam's cooldown at 2/2.</span><span class="sx c">Client 70291</span></div><span class="vs"><s>3s</s>→<b class="up">6s</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARRIOR:Raging Blows"></span><div class="what"><b>Raging Blows</b><span>Cleave and Whirlwind cost 3 less Rage. Whirlwind itself now hits with both weapons.</span><span class="sx c">Client 70291</span></div><span class="bdg chg">Rework</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARRIOR:Unbridled Wrath"></span><div class="what"><b>Unbridled Wrath</b><span>No double Rage for two-handers any more.</span><span class="sx c">Client 70291</span></div><span class="bdg nerf">▼ Nerf</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARRIOR:Furious Precision"></span><div class="what"><b>Furious Precision</b><span>New in Fury: <strong>4/7/10%</strong> off-hand hit.</span><span class="sx c">Client 70291</span></div><span class="bdg new">New</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARRIOR:Lingering Rage"></span><div class="what"><b>Lingering Rage</b><span>New: Rage starts to decay <strong>2–10 sec</strong> later after a fight.</span><span class="sx c">Client 70291</span></div><span class="bdg new">New</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARRIOR:Gore Drinker"></span><div class="what"><b>Gore Drinker</b><span>New: your rage abilities make the next 3/6 swings heal 0.5/1% of max health.</span><span class="sx c">Client 70291</span></div><span class="bdg new">New</span></div>
+        <div class="chg-row gone"><span class="icos"><span class="ico" data-k="t:WARRIOR:Improved Cleave"></span><span class="ico" data-k="t:WARRIOR:Boundless Rage"></span><span class="ico" data-k="t:WARRIOR:Precision"></span><span class="ico" data-k="t:WARRIOR:Toughness"></span></span><div class="what"><b>Four talents cut</b><span>Improved Cleave, Boundless Rage and Precision from Fury; Toughness from Protection.</span><span class="sx c">Client 70291</span></div><span class="bdg gone">✕ Removed</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARRIOR:Iron Will"></span><div class="what"><b>Trees reshuffled</b><span>Iron Will moves to Protection row 1; Flurry now needs Death Wish; Impale needs Deep Wounds again; Berserker Rage is trained at 30, was 32.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 1 and 8 Oct</span></div><span class="bdg chg">⇄ Moved</span></div>
+      </div>
+
+      <div class="ccard" data-c="druid" style="--cc:#ff7c0a"><div class="top"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_druid.jpg)"></span><b>Druid</b><span>9 talents touched</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:DRUID:Shifting Power"></span><div class="what"><b>Shifting Power</b><span>New Feral talent: turn <strong>55% of base Mana into 40 Energy</strong>, Cat Form only, 16 sec cooldown. Not usable at full Energy since 8 October.</span><span class="sx c">Client 70170</span><span class="sx b">Blizzard 1 and 8 Oct</span></div><span class="bdg new">New</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:DRUID:Improved Shifting Power"></span><div class="what"><b>Improved Shifting Power</b><span>New: 4/8 sec off its cooldown.</span><span class="sx c">Client 70170</span></div><span class="bdg new">New</span></div>
+        <div class="chg-row gone"><span class="ico" data-k="t:DRUID:King of the Jungle"></span><div class="what"><b>Tiger's Fury and King of the Jungle</b><span>Blizzard removed Tiger's Fury, which the client no longer trains, and the talent that fed it is gone.</span><span class="sx c">Client 70170</span><span class="sx b">Blizzard 1 Oct</span></div><span class="bdg gone">✕ Removed</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:DRUID:Natural Instinct"></span><div class="what"><b>Natural Instinct</b><span>Was Predatory Instincts. Adds spell healing from Intellect: <strong>25/50%</strong> in the client, <strong>12/25%</strong> in Blizzard's notes.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 8 Oct</span></div><span class="bdg ren">Renamed</span></div>
+        <div class="chg-row"><span class="ico" data-k="Thorns"></span><div class="what"><b>Thorns</b><span>Rank 6 shown; back to Vanilla base, 6% spell power.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 8 Oct</span></div><span class="vs"><s>22</s>→<b class="dn">18</b></span></div>
+        <div class="chg-row"><span class="noico">BEAR</span><div class="what"><b>Bear and Dire Bear threat</b><span>Threat bonus of the forms.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 8 Oct</span></div><span class="vs"><s>30%</s>→<b class="up">50%</b></span></div>
+        <div class="chg-row"><span class="noico">CRIT</span><div class="what"><b>Bear Rage from crits</b><span>75% more on 1 October, 100% more on 8 October.</span><span class="sx b">Blizzard 1 and 8 Oct</span></div><span class="vs"><s>none</s>→<b class="up">+100%</b></span></div>
+        <div class="chg-row"><span class="noico">FORM</span><div class="what"><b>Forms</b><span>Immune to Disarm; Swipe gains 3% of attack power; Cat Form no longer lowers max health; mana potions work in forms.</span><span class="sx c">Client 70170</span><span class="sx b">Blizzard 1 and 8 Oct</span></div><span class="bdg buff">▲ Buff</span></div>
+        <div class="chg-row"><span class="ico" data-k="Wrath"></span><div class="what"><b>Wrath ranks 1 to 5</b><span>Rank 4 shown; rebased, see the chart above.</span><span class="sx c">Client 70291</span></div><span class="vs"><s>38</s>→<b class="dn">37</b></span></div>
+      </div>
+
+      <div class="ccard" data-c="paladin" style="--cc:#f48cba"><div class="top"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_paladin.jpg)"></span><b>Paladin</b><span>8 talents touched</span></div>
+        <div class="chg-row"><span class="ico" data-k="Retribution Aura"></span><div class="what"><b>Retribution Aura</b><span>Rank 5 shown; Vanilla base and 6% spell power. It now uses <strong>your</strong> spell power.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 8 Oct</span></div><span class="vs"><s>30</s>→<b class="dn">20</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:PALADIN:Holy Shield"></span><div class="what"><b>Holy Shield</b><span>Block chance while it is up.</span><span class="sx c">Client 70170</span></div><span class="vs"><s>20%</s>→<b class="up">30%</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:PALADIN:Redoubt"></span><div class="what"><b>Redoubt</b><span>Block chance from the proc at 5/5.</span><span class="sx c">Client 70170</span></div><span class="vs"><s>30%</s>→<b class="dn">20%</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:PALADIN:Champion of the Light"></span><div class="what"><b>Champion of the Light</b><span>Intellect turned into spell damage at 3/3; healing no longer counts.</span><span class="sx c">Client 70170</span></div><span class="vs"><s>100%</s>→<b class="dn">60%</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:PALADIN:Reckoning"></span><div class="what"><b>Reckoning</b><span>Can trigger at most once every <strong>1.5 sec</strong>.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 8 Oct</span></div><span class="bdg nerf">▼ Nerf</span></div>
+        <div class="chg-row"><span class="noico">SEAL</span><div class="what"><b>Seal of Fury</b><span>No mana back without Improved Seal of Fury; its mana returns cause no threat.</span><span class="sx b">Blizzard 8 Oct</span></div><span class="bdg chg">Fix</span></div>
+      </div>
+
+      <div class="ccard" data-c="hunter" style="--cc:#aad372"><div class="top"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_hunter.jpg)"></span><b>Hunter</b><span>10 talents touched</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:HUNTER:Sniper Shot"></span><div class="what"><b>Sniper Shot</b><span>Range, and your next 3 shots reach 10 yards further for 10 sec.</span><span class="sx c">Client 70170</span></div><span class="vs"><s>35yd</s>→<b class="up">45yd</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:HUNTER:Deflection"></span><div class="what"><b>Deflection</b><span>Parry chance at 5/5.</span><span class="sx c">Client 70170</span></div><span class="vs"><s>10%</s>→<b class="dn">5%</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:HUNTER:Expose Prey"></span><div class="what"><b>Expose Prey</b><span>How long Mongoose Bite stays usable.</span><span class="sx c">Client 70291</span></div><span class="vs"><s>5s</s>→<b class="up">10s</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="Disengage"></span><div class="what"><b>Disengage</b><span>Threat dropped doubles, rank 1 shown; in the data since 1 October, working since 8 October.</span><span class="sx c">Client 70170</span><span class="sx b">Blizzard 8 Oct</span></div><span class="vs"><s>140</s>→<b class="up">280</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="Furious Howl"></span><div class="what"><b>Wolf: Furious Howl</b><span>Attack power at rank 4. Not in Blizzard's notes.</span><span class="sx c">Client 70170</span></div><span class="vs"><s>136</s>→<b class="dn">82</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="Sonic Blast"></span><div class="what"><b>Bat: Sonic Blast</b><span>Bats learn a Nature shriek that slows casting by 60%.</span><span class="sx c">Client 70170</span></div><span class="bdg new">New</span></div>
+        <div class="chg-row"><span class="noico">PET</span><div class="what"><b>Pets and procs</b><span>Aggressive mode is back; Unleashed Fury, Improved Concussive Shot and Improved Wing Clip work as written; Entrapment gets diminishing returns.</span><span class="sx b">Blizzard 1 and 8 Oct</span></div><span class="bdg chg">Fix</span></div>
+      </div>
+
+      <div class="ccard" data-c="priest" style="--cc:#ffffff"><div class="top"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_priest.jpg)"></span><b>Priest</b><span>6 talents touched</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:PRIEST:Penance"></span><div class="what"><b>Penance</b><span>Rank 1 damage per tick; healing 184 → 126; mana 100 → 150. See the table above.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 8 Oct</span></div><span class="vs"><s>81</s>→<b class="dn">42</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="Lesser Heal"></span><div class="what"><b>Lesser Heal and Heal</b><span>Lesser Heal rank 3 shown; Heal ranks 1–2 lower, 291 → 270 and 405 → 375.</span><span class="sx c">Client 70291</span></div><span class="vs"><s>141</s>→<b class="up">163</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="Smite"></span><div class="what"><b>Smite ranks 1 to 4</b><span>Rank 4 shown; lower growth per level.</span><span class="sx c">Client 70291</span></div><span class="vs"><s>59</s>→<b class="up">60</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:PRIEST:Inner Focus"></span><div class="what"><b>Inner Focus</b><span>Its 25% crit now only helps spells that are not periodic.</span><span class="sx c">Client 70170</span></div><span class="bdg nerf">▼ Nerf</span></div>
+        <div class="chg-row"><span class="noico">SHAD</span><div class="what"><b>Shadow fixes</b><span>Devouring Plague can crit; Shadow Weaving no longer fails to apply; Shadow Word: Death no longer always gets Early Demise.</span><span class="sx b">Blizzard 1 Oct</span></div><span class="bdg chg">Fix</span></div>
+      </div>
+
+      <div class="ccard" data-c="shaman" style="--cc:#2e8fff"><div class="top"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_shaman.jpg)"></span><b>Shaman</b><span>2 talents touched</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:SHAMAN:Mana Tide Totem"></span><div class="what"><b>Mana Tide Totem</b><span>Learn level: within reach of the level-30 cap now.</span><span class="sx c">Client 70291</span></div><span class="vs"><s>40</s>→<b class="up">25</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:SHAMAN:Water Shield"></span><div class="what"><b>Water Shield</b><span>The client drops a 15 sec cooldown that Blizzard says never applied in play; the buff tooltip now shows the mana restored.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 8 Oct</span></div><span class="bdg chg">Fix</span></div>
+        <div class="chg-row"><span class="ico" data-k="Disease Cleansing Totem"></span><div class="what"><b>Disease Cleansing Totem</b><span>Lasts 5 min again; Totemic Recall gives mana back again.</span><span class="sx c">Client 70170</span><span class="sx b">Blizzard 1 Oct</span></div><span class="vs"><s>2m</s>→<b class="up">5m</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="Lightning Bolt"></span><div class="what"><b>Lightning Bolt ranks 1 to 5</b><span>Rank 5 shown; every rank grows less per level.</span><span class="sx c">Client 70291</span></div><span class="vs"><s>72</s>→<b class="up">82</b></span></div>
+      </div>
+
+      <div class="ccard" data-c="mage" style="--cc:#3fc7eb"><div class="top"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_mage.jpg)"></span><b>Mage</b><span>2 talents touched</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:MAGE:Combustion"></span><div class="what"><b>Combustion</b><span>Ends after this many Fire crits.</span><span class="sx c">Client 70170</span></div><span class="vs"><s>4</s>→<b class="dn">3</b></span></div>
+        <div class="chg-row"><span class="ico" data-k="t:MAGE:Heating Up"></span><div class="what"><b>Heating Up</b><span>Was Hot Streak: same effect, new name and icon.</span><span class="sx c">Client 70170</span></div><span class="bdg ren">Renamed</span></div>
+        <div class="chg-row"><span class="ico" data-k="Fireball"></span><div class="what"><b>Fireball, Frostbolt, Arcane Missiles</b><span>Fireball rank 5 shown; Frostbolt rank 4 is 60 → 70, rank 5 95 → 104.</span><span class="sx c">Client 70291</span></div><span class="vs"><s>108</s>→<b class="up">120</b></span></div>
+        <div class="chg-row"><span class="noico">FIRE</span><div class="what"><b>Impact and scrolls</b><span>Impact no longer procs from Flamestrike's burn; Comprehension scrolls were rebalanced and can't be read on the move.</span><span class="sx b">Blizzard 1 and 8 Oct</span></div><span class="bdg nerf">▼ Nerf</span></div>
+      </div>
+
+      <div class="ccard" data-c="warlock" style="--cc:#8788ee"><div class="top"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_warlock.jpg)"></span><b>Warlock</b><span>3 talents touched</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:WARLOCK:Soul Harvest"></span><div class="what"><b>Soul Harvest</b><span>Was Soul Harvesting; now really grants its 50/100% mana regeneration.</span><span class="sx c">Client 70170</span><span class="sx b">Blizzard 1 Oct</span></div><span class="bdg ren">Renamed</span></div>
+        <div class="chg-row"><span class="ico" data-k="Shadow Bolt"></span><div class="what"><b>Shadow Bolt ranks 1 to 4</b><span>Rank 4 shown; ranks 2–3 lower.</span><span class="sx c">Client 70291</span></div><span class="vs"><s>56</s>→<b class="up">58</b></span></div>
+        <div class="chg-row"><span class="noico">FEL</span><div class="what"><b>Hellfire, Demonic Brand, pets</b><span>Hellfire can crit; Demonic Brand is high threat only on Shadow damage; summoning a new demon stuns the old one.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 1 and 8 Oct</span></div><span class="bdg chg">Change</span></div>
+      </div>
+
+      <div class="ccard" data-c="rogue" style="--cc:#fff468"><div class="top"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/classicon_rogue.jpg)"></span><b>Rogue</b><span>2 talents touched</span></div>
+        <div class="chg-row"><span class="ico" data-k="t:ROGUE:Setup"></span><div class="what"><b>Setup</b><span>The combo point lands only on the enemy you dodged or resisted.</span><span class="sx c">Client 70170</span><span class="sx b">Blizzard 1 Oct</span></div><span class="bdg chg">Fix</span></div>
+        <div class="chg-row"><span class="noico">EA</span><div class="what"><b>Expose Armor</b><span>A miss no longer eats all your combo points.</span><span class="sx b">Blizzard 1 Oct</span></div><span class="bdg chg">Fix</span></div>
+      </div>
+
+      <div class="ccard" data-c="races" style="--cc:#e5cc80"><div class="top"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/achievement_character_gnome_male.jpg)"></span><b>Races</b><span>3 changes</span></div>
+        <div class="chg-row"><span class="noico">GN</span><div class="what"><b>Gnome: Eureka!</b><span>Its 10% discount and damage now apply to non-periodic abilities only.</span><span class="sx c">Client 70170</span><span class="sx b">Blizzard 1 Oct</span></div><span class="bdg nerf">▼ Nerf</span></div>
+        <div class="chg-row"><span class="ico" data-k="Will of the Forsaken"></span><div class="what"><b>Undead: Will of the Forsaken</b><span>Works while asleep or charmed.</span><span class="sx c">Client 70291</span><span class="sx b">Blizzard 8 Oct</span></div><span class="bdg chg">Fix</span></div>
+        <div class="chg-row"><span class="noico">UD</span><div class="what"><b>Undead: Cannibalize</b><span>Not usable while immune to Physical damage.</span><span class="sx b">Blizzard 1 Oct</span></div><span class="bdg nerf">▼ Nerf</span></div>
+      </div>
+    </div>
+    <p class="cap">Talents counted as touched: any change to a talent's text, numbers, position or prerequisites in the client between 70009 and 70291. <a href="/plan/">The Forge</a> carries these as its class data moves to 70291.</p>
+  </section>
+
+  <section class="sec rv" id="items">
+    <div class="sec-h"><span class="n">5</span><div><h2>Items: greens, item levels, three new sets</h2><p>Blizzard dropped various dungeon quest rewards from rare to uncommon on 8 October without naming them. The client names them.</p></div></div>
+    <h3 class="subh">Excavation Site: Wetlands quest rewards</h3>
+    <div class="itab">
+      <div class="irow" data-k="i:271667"><span class="ico"></span><div class="nm"><b class="q-uncommon">Ironwood Destroyer</b><span>Two-hand mace · Horrors in the Highland</span></div><span class="ql"><i class="q-rare">Rare</i>→<i class="q-uncommon">Uncommon</i></span><span class="st2"><s>9 Sta, 7 Spi, 24 AP</s> → <b>19 Nature spell damage</b></span></div>
+      <div class="irow" data-k="i:271664"><span class="ico"></span><div class="nm"><b class="q-uncommon">Hornbeam Heft</b><span>One-hand axe · Horrors in the Highland</span></div><span class="ql"><i class="q-rare">Rare</i>→<i class="q-uncommon">Uncommon</i></span><span class="st2"><s>6 Sta, 3 Str, 3 Spi</s> → <b>6 Str</b></span></div>
+      <div class="irow" data-k="i:271670"><span class="ico"></span><div class="nm"><b class="q-uncommon">Curl of Life</b><span>Ring · Horrors in the Highland</span></div><span class="ql"><i class="q-rare">Rare</i>→<i class="q-uncommon">Uncommon</i></span><span class="st2"><s>7 Sta, 5 SP, 5 health per 5</s> → <b>5 Sta, 5 SP</b></span></div>
+      <div class="irow" data-k="i:271740"><span class="ico"></span><div class="nm"><b class="q-uncommon">Knife-Polishing Rag</b><span>Cloth wrist · Open the Maw</span></div><span class="ql"><i class="q-rare">Rare</i>→<i class="q-uncommon">Uncommon</i></span><span class="st2"><s>4 Int, 7 Spi, 5 SP</s> → <b>4 Spi, 6 SP</b></span></div>
+      <div class="irow" data-k="i:271732"><span class="ico"></span><div class="nm"><b class="q-uncommon">Dirt-Heavy Bracers</b><span>Leather wrist · Open the Maw</span></div><span class="ql"><i class="q-rare">Rare</i>→<i class="q-uncommon">Uncommon</i></span><span class="st2"><s>7 Spi, 8 AP, 4 Sta</s> → <b>4 Spi, 10 AP</b></span></div>
+      <div class="irow" data-k="i:271769"><span class="ico"></span><div class="nm"><b class="q-uncommon">Daewyn's Girdle</b><span>Cloth waist · Fallen in the Fen</span></div><span class="ql"><i class="q-rare">Rare</i>→<i class="q-uncommon">Uncommon</i></span><span class="st2"><s>9 Spi, 6 SP, 10 health per 5</s> → <b>6 Spi, 7 SP</b></span></div>
+      <div class="irow" data-k="i:271716"><span class="ico"></span><div class="nm"><b class="q-rare">Explorer's League Dustcover</b><span>Cloak · Prehistoric Prism</span></div><span class="ql"><i class="q-rare">Rare</i></span><span class="st2"><s>7 Int, 4 Str, 4 Agi</s> → <b>5 Int, 5 Spi, 5 Agi</b></span></div>
+      <div class="irow" data-k="i:271719"><span class="ico"></span><div class="nm"><b class="q-rare">Furs of the Earthen Ring</b><span>Cloak · Earthen Echo</span></div><span class="ql"><i class="q-rare">Rare</i></span><span class="st2"><s>5 Int, 3 Sta, 4 Str, 4 Spi</s> → <b>5 Int, 5 Str, 5 Spi</b></span></div>
+      <div class="irow" data-k="i:271766"><span class="ico"></span><div class="nm"><b class="q-rare">Heavehammer</b><span>Two-hand mace · Earthen Echo, Prehistoric Prism</span></div><span class="ql"><i class="q-rare">Rare</i></span><span class="st2"><s>26 AP, 7 Agi, 70 armor</s> → <b>32 AP, 60 armor</b></span></div>
+    </div>
+    <p class="cap">All item level 33. <span class="sx c">Client 70170 vs 70291</span>, stats read with the game's item budget. Each line names the quest that hands the reward out.</p>
+
+    <h3 class="subh">The Riverglades and the rest</h3>
+    <div class="itab">
+      <div class="irow" data-k="i:274957"><span class="ico"></span><div class="nm"><b class="q-uncommon">Lumber Luggers</b><span>Leather hands · item level 43 → 38</span></div><span class="ql"><i class="q-uncommon">Uncommon</i></span><span class="st2"><s>13 Str</s> → <b>11 Str</b></span></div>
+      <div class="irow" data-k="i:274941"><span class="ico"></span><div class="nm"><b class="q-uncommon">Bristle Hills Mystic Robe</b><span>Cloth chest · item level 42 → 40</span></div><span class="ql"><i class="q-uncommon">Uncommon</i></span><span class="st2"><s>11 Int, 13 SP</s> → <b>11 Int, 12 SP</b></span></div>
+      <div class="irow" data-k="i:274944"><span class="ico"></span><div class="nm"><b class="q-uncommon">Bloodsnout Striker</b><span>Polearm · item level 42 → 40</span></div><span class="ql"><i class="q-uncommon">Uncommon</i></span><span class="st2"><s>12 Sta, 20 AP</s> → <b>11 Sta, 18 AP</b></span></div>
+    </div>
+    <p class="cap">18 Riverglades rewards lost 1 to 5 item levels and a point or two of stats. <span class="sx c">Client 70291</span> That they are Riverglades rewards is read from their names and ID block <span class="sx i">Inferred</span>.</p>
+    <div class="smalls">
+      <div class="sm"><div class="hd"><span class="ico" data-k="i:8345"></span><b>Wolfshead Helm</b></div><p>Gives 5 Energy from Shifting Power, was 20; the Rage part stays. The level-30 build had already swapped Tiger's Fury for Shifting Power on it. <span class="sx c">Client 70291</span> <span class="sx b">Blizzard 8 Oct</span></p></div>
+      <div class="sm"><div class="hd"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_weapon_bow_08.jpg)"></span><b>Above the cap, on purpose</b></div><p>Truthseeker's Bow from the library now requires level 40. The Desolace Gelkis and Magram quests need 35, and a coming hotfix sets their 16 rewards to 35 too. <span class="sx c">Client 70291</span> <span class="sx b">Blizzard 8 Oct</span></p></div>
+      <div class="sm"><div class="hd"><span class="ico" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_shirt_guildtabard_01.jpg)"></span><b>Edition cosmetics turn white</b></div><p>42 edition cosmetics, the Shen'dorei and Al'Aketh outfits and two tabards, went from epic to common quality, and 12 more, the Veteran Adventurer's outfit among them, from rare to common. What that changes in play is not known. <span class="sx c">Client 70291</span></p></div>
+    </div>
+
+    <h3 class="subh">Three dungeon sets get their bonuses</h3>
+    <div class="sets">
+      <div class="wtip">
+        <div class="t">Krol'dok Battlegear</div>
+        <div class="p">Plate · 5 pieces · Krol'dok Stronghold <span class="sx i">Inferred</span></div>
+        <div class="y">Set bonuses</div>
+        <div class="g"><b>(2)</b> Set: +100 Armor.</div>
+        <div class="g"><b>(3)</b> Set: Increased Defense +5.</div>
+        <div class="g"><b>(4)</b> Set: Chance on block to heal for 14 to 23. Healing is doubled in Strongholds and Cities.</div>
+        <div class="g"><b>(5)</b> Set: Taking damage has a high chance to increase your Stamina by 1 for 30 sec, stacking up to 20 times.</div>
+      </div>
+      <div class="wtip">
+        <div class="t">Violet Sorcerer's Vestments</div>
+        <div class="p">Cloth · 5 pieces · City of Dalaran <span class="sx i">Inferred</span></div>
+        <div class="y">Set bonuses</div>
+        <div class="g"><b>(2)</b> Set: +5 Arcane Resistance.</div>
+        <div class="g"><b>(3)</b> Set: +10 Spirit.</div>
+        <div class="g"><b>(4)</b> Set: Chance on damaging spell to allow 15% of your Mana regeneration to continue while casting for 15 sec. Mana regen amount is doubled in Strongholds and Cities.</div>
+        <div class="g"><b>(5)</b> Set: Chance on damaging spell to summon an Arcane elemental to aid you in combat.</div>
+      </div>
+      <div class="wtip">
+        <div class="t">Defias Enforcer's Garb</div>
+        <div class="p">Leather · 5 pieces</div>
+        <div class="y">Set bonuses</div>
+        <div class="g"><b>(2)</b> Set: +10 Fire Resistance.</div>
+        <div class="g"><b>(3)</b> Set: +15 Stamina.</div>
+        <div class="g"><b>(4)</b> Set: Increased Swords +1.</div>
+        <div class="g"><b>(5)</b> Set: Melee attacks have a chance to increase your Critical Strike chance by 2% for 20 sec. This effect is doubled in swamps.</div>
+      </div>
+    </div>
+    <p class="cap">All three had pieces and no bonuses in 70009 <span class="sx c">Client 70291</span>. The pieces are sent by the server, so the client has no stats for them yet. Rotmender's Raiment, the Ruins of Lordaeron healer set, was reworked on 1 October: its 4-piece now restores 200 Mana over 10 sec, was 600 over 15 <span class="sx c">Client 70170</span>. Every set is in <a href="/codex/">the Database</a>.</p>
+  </section>
+
+  <section class="sec rv" id="legacy">
+    <div class="sec-h"><span class="n">6</span><div><h2>Legacy: 16 points for testing</h2><p>Blizzard promised on 1 October that every tester would get 16 Legacy points. Build 70291 delivers them as an achievement.</p></div></div>
+    <div class="leg">
+      <div>
+        <div class="ach"><span class="ico l" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_gift_01.jpg)"></span><div><small>Achievement earned</small><b>Played in the WoW: Forever Beta</b><p>Granted for playing in the World of Warcraft: Forever Beta. Thanks for testing!</p></div><span class="shield">16<small>Legacy</small></span></div>
+        <p class="cap">The achievement's own text and reward line. <span class="sx c">Client 70291</span> <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/legacy-points-for-beta-testing/2368776" rel="noopener">Blizzard 1 Oct</a> <a class="sx b" href="https://us.forums.blizzard.com/en/wow/t/2360696/5" rel="noopener">Blizzard 8 Oct</a></p>
+      </div>
+      <div class="facts">
+        <div><b>16<small>of 16</small></b><span>The Legacy currency tops out at 16, so testers can fill the tree. Under the level-30 cap the usual sources could not: the class milestones pay 1 point each at levels 25, 45 and 60. <span class="sx c">Client 70291</span> <span class="sx i">Inferred</span></span></div>
+        <div><b>1h<small>was 1 week</small></b><span><strong>Legacy resets recharge every hour</strong>, the same pace as class talent resets. Blizzard adds that the cheapest Legacy respec costs 1 silver and drops a step each hour, beta only. <span class="sx c">Client 70291</span> <span class="sx b">Blizzard 8 Oct</span></span></div>
+        <div><b>21<small>October</small></b><span>Blizzard says the points stay until the beta ends. Nothing in the client says whether anything carries to launch. <span class="sx b">Blizzard 1 Oct</span></span></div>
+      </div>
+    </div>
+    <div class="cta"><p><b>16 points to spend?</b> Try the whole Legacy tree on a character in the Forge before you spend them in the game.</p><a class="go" href="/plan/">Open the Forge</a></div>
+  </section>
+
+  <section class="sec rv" id="next">
+    <div class="sec-h"><span class="n">7</span><div><h2>What comes next</h2><p>Dates are Blizzard's. The hints from the client are ours, read from what it already holds.</p></div></div>
+    <div class="nextgrid">
+      <ul class="when">
+        <li><b>20 October</b><span>Invite-A-Friend launch codes start going out by email. <a class="sx b" href="https://worldofwarcraft.blizzard.com/en-us/news/24301508" rel="noopener">Blizzard</a></span></li>
+        <li class="big"><b>21 October</b><span>The beta's last full day of testing, still at level 30. <a class="sx b" href="https://worldofwarcraft.blizzard.com/en-us/news/24304160" rel="noopener">Blizzard</a></span></li>
+        <li><b>27 Oct to 3 Nov</b><span>Early name reservation for upgrade owners, up to three characters. <a class="sx b" href="https://worldofwarcraft.blizzard.com/en-us/news/24304161" rel="noopener">Blizzard</a></span></li>
+        <li class="big"><b>4 Nov, 3:00 pm PST</b><span>Launch: levels 1 to 60, with Invite-A-Friend week to 11 November. <a class="sx b" href="https://worldofwarcraft.blizzard.com/en-us/news/24301508" rel="noopener">Blizzard</a></span></li>
+        <li><b>9 December</b><span>New raids open: the Barrow Deeps for 10 and Hyjal Summit for 20. <a class="sx b" href="https://worldofwarcraft.blizzard.com/en-us/news/24303862" rel="noopener">Blizzard</a></span></li>
+      </ul>
+      <div class="hint">
+        <div><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_key_11.jpg)"></span><span>An <b>Old Key</b> that requires level 35, and quests and rewards set to 35 and 40: content past the beta cap is already in. <span class="sx c">Client 70291</span></span></div>
+        <div><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_map_01.jpg)"></span><span><b>Twilight Hollow</b>, a new Riverglades area with exploration level 41. <span class="sx c">Client 70291</span></span></div>
+        <div><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/inv_misc_gear_08.jpg)"></span><span><b>42 server-sent items</b> got appearances and 9 got effects, among them a shield whose damage doubles in swamps. Loot for coming dungeons. <span class="sx c">Client 70291</span> <span class="sx i">Inferred</span></span></div>
+        <div><span class="ico s" style="background-image:url(//wow.zamimg.com/images/wow/icons/large/spell_shadow_summoninfernal.jpg)"></span><span>An intro scene spell for <b>the Wild King</b> and a new <b>Dreambound Pinnacle</b> area: Hyjal Summit work in progress. <span class="sx c">Client 70291</span> <span class="sx i">Inferred</span></span></div>
+      </div>
+    </div>
+    <p class="cap">The City of Dalaran opened with build 70291 on October 8: everything the client, players' loot records, QuestBank uploads and a player's first run show about it, and the full 70291 class, item and set diff with every class's nerfs and buffs at a glance, is in <a href="/news/build-70291/">Build 70291 datamined</a>.</p>
+  </section>
+
+  <details class="method">
+    <summary>How we read it</summary>
+    <div class="in">
+      <div class="pipe"><span>wago.tools · eight client builds</span><i>→</i><span>table diff, build by build</span><i>→</i><span>tooltip resolver, old and new</span><i>→</i><span>Blizzard's notes and players' uploads</span><i>→</i><span>this article</span></div>
+      <p>Every Client tag is a row that changed between two of the eight beta builds wago.tools serves for 70009 to 70291: talents, spells, items, sets, achievements, currencies and maps. Tooltips are rendered from each build's own tables by the resolver that writes the Forge's talent text. Item stats are read with the game's item budget. Server hotfixes are not in those tables, which is probably why the Fury and Protection tree rework shows up only in 70291, a week after Blizzard shipped it <span class="sx i">Inferred</span>.</p>
+      <p>The XP rule was checked against what QuestBank users uploaded: quest windows and hand-ins on build 70170 and later. Blizzard tags link to the post they come from. Inferred tags are our reading and could be wrong; tell us on Discord if they are.</p>
+    </div>
+  </details>
+</div>
+</article>
+
+<footer>
+  <img src="../../mark.svg" alt="" width="22" height="22">
+  <span>Datamined honestly; labeled or it does not ship.</span>
+  <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+  <a href="https://foreverrank.com/">foreverrank.com</a>
+</footer>
+<script type="application/json" id="art-data">/*DATA*/</script>
+<script src="../../tipkit.js?v=5"></script>
+<script>
+(function () {
+  "use strict";
+  var CDN = "https://wow.zamimg.com/images/wow/icons/large/";
+  var D = JSON.parse(document.getElementById("art-data").textContent);
+  var STAT = { strength: "Strength", agility: "Agility", stamina: "Stamina", intellect: "Intellect", spirit: "Spirit" };
+  var SLOT = { neck: "Neck", finger: "Finger", back: "Back", wrist: "Wrist", waist: "Waist", hands: "Hands", head: "Head", chest: "Chest", legs: "Legs", feet: "Feet", "main-hand": "Main Hand", "one-hand": "One-Hand", "two-hand": "Two-Hand" };
+  var QN = { rare: "rare", uncommon: "uncommon", common: "common", epic: "epic" };
+  function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function statLines(s) {
+    var L = [];
+    s = s || {};
+    if (s.bonusArmor) L.push('<span class="l">' + s.bonusArmor + " Armor</span>");
+    Object.keys(STAT).forEach(function (k) { if (s[k]) L.push('<span class="l">+' + s[k] + " " + STAT[k] + "</span>"); });
+    if (s.spellPower) L.push('<span class="g">Equip: Increases damage and healing done by magical spells and effects by up to ' + s.spellPower + ".</span>");
+    if (s.natureSpellDamage) L.push('<span class="g">Equip: Increases damage done by Nature spells and effects by up to ' + s.natureSpellDamage + ".</span>");
+    if (s.attackPower) L.push('<span class="g">Equip: +' + s.attackPower + " Attack Power.</span>");
+    if (s.hp5) L.push('<span class="g">Equip: Restores ' + s.hp5 + " health per 5 sec.</span>");
+    return L.join("");
+  }
+  var SHORTS = { strength: "Str", agility: "Agi", stamina: "Sta", intellect: "Int", spirit: "Spi", spellPower: "SP", attackPower: "AP", natureSpellDamage: "Nature SP", hp5: "Hp5", bonusArmor: "armor" };
+  function brief(s) {
+    var out = [];
+    Object.keys(s || {}).forEach(function (k) { if (s[k]) out.push(s[k] + " " + (SHORTS[k] || k)); });
+    return out.join(", ") || "no stats";
+  }
+  function itemTip(it) {
+    var L = ['<b class="q-' + esc(it.quality || "common") + '">' + esc(it.name) + "</b>"];
+    if (it.binding) L.push('<span class="l">' + (it.binding === "BoP" ? "Binds when picked up" : "Binds when equipped") + "</span>");
+    if (it.slot) L.push('<span class="l">' + esc(SLOT[it.slot] || it.slot) + (it.type ? " · " + esc(it.type) : "") + "</span>");
+    L.push(statLines(it.stats));
+    (it.effects || []).forEach(function (e) { L.push('<span class="g">' + esc(e) + "</span>"); });
+    if (it.reqLevel) L.push('<span class="l">Requires Level ' + it.reqLevel + "</span>");
+    if (it.itemLevel) L.push('<span class="y">Item Level ' + it.itemLevel + "</span>");
+    var was = [];
+    if (it.oldQuality && it.oldQuality !== it.quality) was.push(QN[it.oldQuality] || it.oldQuality);
+    if (it.oldItemLevel) was.push("item level " + it.oldItemLevel);
+    if (it.oldStats) was.push(brief(it.oldStats));
+    if (it.oldEffects) was.push(it.oldEffects.join(" "));
+    if (was.length) L.push('<span class="was"><em>Before build 70291</em>' + esc(was.join(" · ")) + "</span>");
+    return L.join("");
+  }
+  function spellTip(s) {
+    var L = ['<b style="color:#fff">' + esc(s.n || "") + (s.r > 1 ? ' <small style="color:#8a949b;font-weight:600">(' + s.r + "/" + s.r + ")</small>" : "") + "</b>"];
+    if (s.gone) L.push('<span class="rm">Removed from the tree in build ' + esc(s.gone) + "</span>");
+    if (s.added) L.push('<span class="nw">New in build ' + esc(s.added) + "</span>");
+    if (s.oldName) L.push('<span class="l" style="color:#8a949b">Was: ' + esc(s.oldName) + "</span>");
+    var now = s["new"] || "", was = s.old || "";
+    if (now && was && now !== was) {
+      L.push('<span class="now"><em>Build 70291</em><span class="y">' + esc(now) + "</span></span>");
+      L.push('<span class="was"><em>Build 70009</em>' + esc(was) + "</span>");
+    } else {
+      L.push('<span class="y">' + esc(now || was) + "</span>");
+    }
+    if (s.note) L.push('<span class="nt">' + esc(s.note) + "</span>");
+    return L.join("");
+  }
+  function entity(k) {
+    if (k.indexOf("i:") === 0) { var it = D.items[k.slice(2)]; return it ? { icon: it.icon, q: it.quality, tip: function () { return itemTip(it); } } : null; }
+    var s = D.spells[k]; return s ? { icon: s.icon, tip: function () { return spellTip(s); } } : null;
+  }
+  document.querySelectorAll("[data-k]").forEach(function (el) {
+    var e = entity(el.getAttribute("data-k"));
+    if (!e) return;
+    var ico = el.classList.contains("ico") ? el : el.querySelector(".ico");
+    if (ico && !ico.style.backgroundImage && e.icon) {
+      ico.style.backgroundImage = "url(" + CDN + e.icon + ".jpg)";
+      if (e.q && !/q-/.test(ico.className)) ico.classList.add("q-" + e.q);
+    }
+    if (window.TipKit) TipKit.hover(el, function () { return '<div class="tt">' + e.tip() + "</div>"; }, function () { return ""; });
+  });
+
+  // dungeon quest multipliers: as read before the cut, and the rule after it
+  var XP = [["Shadowfang Keep", 4.35], ["The Deadmines", 3.75], ["Blackfathom Deeps", 3.75], ["The Hall of Thanes", 3.4], ["The Stockade", 3.2], ["Ragefire Chasm", 3.05], ["Wailing Caverns", 2.9]];
+  function trim(n) { return String(Math.round(n * 1000) / 1000); }
+  var xb = document.getElementById("xpbars");
+  if (xb) xb.innerHTML = XP.map(function (r) {
+    var after = 1 + (r[1] - 1) / 2;
+    return '<div class="delta"><span>' + esc(r[0]) + '</span><span class="bar"><i class="o" style="width:' + (r[1] / 4.5 * 100).toFixed(1) + '%"></i><i class="n" style="width:' + (after / 4.5 * 100).toFixed(1) + '%"></i></span><b><s>×' + trim(r[1]) + "</s> ×" + trim(after) + "</b></div>";
+  }).join("");
+
+  // low ranks rebased: [rank, learn level, top level, old base, old per level, new base, new per level]
+  var STAIRS = [
+    { n: "Fireball", i: "spell_fire_flamebolt", r: [[1, 1, 5, 18, .6, 18, .2], [2, 6, 10, 37, .7, 32, .3], [3, 12, 16, 53, .9, 51, .6], [4, 18, 22, 74, 1.1, 77, .9], [5, 24, 28, 108, 1.5, 120, 1.4]] },
+    { n: "Frostbolt", i: "spell_frost_frostbolt02", r: [[1, 4, 8, 19, .5, 19, .2], [2, 8, 12, 33, .7, 29, .3], [3, 14, 18, 46, .9, 46, .5], [4, 20, 24, 60, 1.1, 70, .8], [5, 26, 30, 95, 1.5, 104, 1.3]] },
+    { n: "Arcane Missiles", i: "spell_nature_starfall", r: [[1, 8, 12, 24, .3, 24, .2], [2, 16, 20, 31, .4, 34, .3], [3, 24, 28, 44, .5, 47, .4]], unit: "per missile" },
+    { n: "Lightning Bolt", i: "spell_nature_lightning", r: [[1, 1, 6, 14, .4, 15, .1], [2, 8, 13, 29, .5, 27, .1], [3, 14, 19, 45, .6, 45, .3], [4, 20, 25, 56, .6, 61, .4], [5, 26, 31, 72, .7, 82, .5]] },
+    { n: "Shadow Bolt", i: "spell_shadow_shadowbolt", r: [[1, 1, 5, 13, .3, 13, .2], [2, 6, 11, 25, .6, 23, .3], [3, 12, 17, 41, .7, 40, .6], [4, 20, 25, 56, .9, 58, .8]] },
+    { n: "Wrath", i: "spell_nature_abolishmagic", r: [[1, 1, 5, 15, .4, 15, .2], [2, 6, 12, 23, .6, 21, .3], [3, 14, 20, 30, .7, 30, .5], [4, 22, 28, 38, .9, 37, .6], [5, 30, 36, 45, .9, 45, .7]] },
+    { n: "Smite", i: "spell_holy_holysmite", r: [[1, 1, 6, 15, .5, 15, .1], [2, 6, 11, 28, .6, 27, .3], [3, 14, 19, 46, .8, 45, .5], [4, 22, 27, 59, 1, 60, .7]] },
+    { n: "Heals", i: "spell_holy_lesserheal", r: [[1, 1, 3, 51, .9, 51, .3, "Lesser Heal 1"], [2, 4, 9, 78, 1.1, 94, .7, "Lesser Heal 2"], [3, 10, 15, 141, 1.6, 163, 1.2, "Lesser Heal 3"], [1, 16, 21, 291, 2.4, 270, 2, "Heal 1"], [2, 22, 27, 405, 3.2, 375, 2.9, "Heal 2"]] }
+  ];
+  function num(v) { return String(Math.round(v * 10) / 10); }
+  function drawStairs(k) {
+    var s = STAIRS[k], top = 0;
+    s.r.forEach(function (r) { top = Math.max(top, r[3] + r[4] * (r[2] - r[1]), r[5] + r[6] * (r[2] - r[1])); });
+    document.getElementById("stairs").innerHTML = s.r.map(function (r) {
+      var o1 = r[3] + r[4] * (r[2] - r[1]), n1 = r[5] + r[6] * (r[2] - r[1]);
+      var pct = function (v) { return (v / top * 100).toFixed(1) + "%"; };
+      var cls = n1 > o1 + .05 ? "up" : n1 < o1 - .05 ? "dn" : "";
+      return '<div class="st"><span><b>' + esc(r[7] || "Rank " + r[0]) + "</b>lvl " + r[1] + "–" + r[2] + "</span>" +
+        '<span class="lvr"><i class="o" style="width:' + pct(o1) + '"></i><i class="n" style="width:' + pct(n1) + '"></i></span>' +
+        '<b class="' + cls + '"><s>' + num(o1) + "</s> → " + num(n1) + "</b></div>";
+    }).join("") + (s.unit ? '<p class="cap">Numbers ' + esc(s.unit) + ".</p>" : "");
+  }
+  var sw = document.getElementById("sw");
+  if (sw) {
+    sw.innerHTML = STAIRS.map(function (s, k) {
+      return '<button type="button" data-s="' + k + '"' + (k ? "" : ' class="on"') + '><span class="ico s" style="background-image:url(' + CDN + s.i + '.jpg)"></span>' + esc(s.n) + "</button>";
+    }).join("");
+    sw.addEventListener("click", function (ev) {
+      var b = ev.target.closest("button[data-s]");
+      if (!b) return;
+      sw.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); });
+      drawStairs(+b.getAttribute("data-s"));
+    });
+    drawStairs(0);
+  }
+
+  // class filter
+  var cf = document.getElementById("cfilter");
+  if (cf) cf.addEventListener("click", function (ev) {
+    var btn = ev.target.closest("button[data-c]");
+    if (!btn) return;
+    var c = btn.getAttribute("data-c");
+    cf.querySelectorAll("button").forEach(function (b) { b.classList.toggle("on", b === btn); });
+    document.querySelectorAll(".ccard").forEach(function (card) { card.hidden = c !== "all" && card.getAttribute("data-c") !== c; });
+  });
+  // reveal on scroll, count-up numbers, section nav highlight
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function countUp(el) {
+    var to = +el.getAttribute("data-count"), t0 = null;
+    if (reduce || !to) return;
+    function step(t) { if (!t0) t0 = t; var p = Math.min(1, (t - t0) / 900); el.textContent = Math.round(to * (1 - Math.pow(1 - p, 3))).toLocaleString("en-US"); if (p < 1) requestAnimationFrame(step); }
+    requestAnimationFrame(step);
+  }
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        e.target.classList.add("in");
+        e.target.querySelectorAll("[data-count]").forEach(countUp);
+        io.unobserve(e.target);
+      });
+    }, { rootMargin: "0px 0px -12% 0px" });
+    document.querySelectorAll(".rv").forEach(function (el) { io.observe(el); });
+    var links = document.querySelectorAll(".snav a");
+    var so = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        links.forEach(function (a) { a.classList.toggle("on", a.getAttribute("href") === "#" + e.target.id); });
+      });
+    }, { rootMargin: "-40% 0px -55% 0px" });
+    ["cap", "xp", "pvp", "classes", "items", "legacy", "next"].forEach(function (id) { var s = document.getElementById(id); if (s) so.observe(s); });
+  } else {
+    document.querySelectorAll(".rv").forEach(function (el) { el.classList.add("in"); });
+  }
+})();
+</script>
+<script src="/map.js?v=8" defer></script>
+<script src="/support.js?v=2" defer></script>
+</body>
+</html>

@@ -433,10 +433,34 @@ local function newClient(o)
     end,
   }
   env.GetLocale = function() return c.locale or "enUS" end
-  -- the loot window and a vendor's wares: c.loot = { id, ... }, c.merchant = { id, ... }
+  -- the loot window and a vendor's wares: c.loot = { id, ... }, c.merchant = { id, ... }. For the drop-source notes
+  -- (Loot.lua) a loot entry may be a table { id, src = { { guid, qty }, ... }, q = quality, quest = bool, questID = n,
+  -- kind = 1 item, 2 money, 3 currency }; c.lootSrc is the whole window's source when an entry names none
   c.loot, c.merchant = {}, {}
   env.GetNumLootItems = function() return #c.loot end
-  env.GetLootSlotLink = function(i) local id = c.loot[i]; return id and ("|cff1eff00|Hitem:" .. id .. "::::::::12:::::::|h[Item " .. id .. "]|h|r") or nil end
+  env.GetLootSlotLink = function(i)
+    local e = c.loot[i]
+    local id = type(e) == "table" and e.id or e
+    return id and ("|cff1eff00|Hitem:" .. id .. "::::::::12:::::::|h[Item " .. id .. "]|h|r") or nil
+  end
+  env.GetLootSlotType = function(i) local e = c.loot[i]; return type(e) == "table" and e.kind or 1 end
+  env.GetLootSlotInfo = function(i)
+    local e = c.loot[i]
+    if type(e) ~= "table" then return 133328, "Item " .. tostring(e), 1, nil, 2, false, false, nil, false, false end
+    return 133328, "Item " .. tostring(e.id), e.n or 1, nil, e.q == nil and 2 or e.q, false, e.quest or false, e.questID, false, e.kind == 2
+  end
+  env.GetLootSourceInfo = function(i)
+    local e = c.loot[i]
+    local out = {}
+    for _, s in ipairs(type(e) == "table" and e.src or c.lootSrc or {}) do out[#out + 1] = s[1]; out[#out + 1] = s[2] or 1 end
+    return unpack(out)
+  end
+  -- the instance you are in: c.instance = { name, difficultyID, instanceID }; IsInInstance is set per test
+  env.GetInstanceInfo = function()
+    local I = c.instance or { "none", 0, 0 }
+    return I[1], I[1] == "none" and "none" or "party", I[2], "Normal", 5, 0, false, I[3], 5, nil, false
+  end
+  env.IsFishingLoot = function() return c.fishing or false end
   env.GetMerchantNumItems = function() return #c.merchant end
   env.GetMerchantItemID = function(i) return c.merchant[i] end
   env.C_QuestLog = {
@@ -2603,17 +2627,29 @@ do
   assert(righteous.mult == 1.75 and righteous.nerfed and righteous.confirmed and not righteous.dungeon, "The Test of Righteousness: 2.5 -> 1.75, as a hand-in paid")
   assert(cholaruk.mult == 2 and cholaruk.nerfed and cholaruk.confirmed and cholaruk.group, "Chol'aruk the Ravener: 3 -> 2, as a hand-in paid")
   assert(knowledge.confirmed and QB.Model.Full(knowledge) == 6550, "Knowledge in the Deeps: 6,550, as the hand-in paid")
-  assert(not villainy.confirmed, "Blackfathom Villainy: only a party member's number so far, still computed")
+  -- the game's quest log showed 7,850 for it on builds 70205 to 70245 (uploads of 2026-10-06 to 08): confirmed
+  assert(villainy.confirmed, "Blackfathom Villainy: the computed cut value, as the game's quest log showed it")
   lines = {}
   QB.UI.QuestTooltip(owner.env.GameTooltip, knowledge, QB:Status(knowledge), QB.Model.XpAt(knowledge, 20), 100, 20)
   assert(not table.concat(lines, "\n"):find("An estimate", 1, true), "a confirmed quest no longer says its number is computed")
   assert(table.concat(lines, "\n"):find("2,750 x 2.375, as the game paid after the cut", 1, true), "and its source line says the game paid it")
   assert(QB.Model.Full(villainy) == 7850, "3,300 x 2.375 = 7,837.5, rounded to 7,850 (was 12,400), got " .. tostring(QB.Model.Full(villainy)))
-  -- the tooltip says the number is computed, and whose number wins
+  -- a cut quest nobody has confirmed yet: the tooltip says the number is computed, and whose number wins
+  local estId
+  for id in pairs(D.Q) do
+    local q = Qs.Get(id)
+    if q and q.nerfed and not q.confirmed and (not estId or id < estId) then estId = id end
+  end
+  assert(estId, "a cut quest nobody has confirmed yet")
+  local est = Qs.Get(estId)
+  lines = {}
+  QB.UI.QuestTooltip(owner.env.GameTooltip, est, QB:Status(est), QB.Model.XpAt(est, 20), 100, 20)
+  local text = table.concat(lines, "\n")
+  assert(text:find("Forever XP", 1, true) and text:find("An estimate", 1, true), "the tooltip shows the cut XP and says why: " .. text:gsub("\n", " / "))
   lines = {}
   QB.UI.QuestTooltip(owner.env.GameTooltip, villainy, QB:Status(villainy), QB.Model.XpAt(villainy, 20), 100, 20)
-  local text = table.concat(lines, "\n")
-  assert(text:find("Forever XP 7,850", 1, true) and text:find("An estimate", 1, true), "the tooltip shows the cut XP and says why: " .. text:gsub("\n", " / "))
+  text = table.concat(lines, "\n")
+  assert(text:find("Forever XP 7,850", 1, true) and not text:find("An estimate", 1, true), "a confirmed cut quest shows the game's number: " .. text:gsub("\n", " / "))
   lines = {}
   QB.UI.QuestTooltip(owner.env.GameTooltip, brother, QB:Status(brother), QB.Model.XpAt(brother, 20), 100, 20)
   assert(not table.concat(lines, "\n"):find("An estimate", 1, true), "an unmultiplied dungeon quest says nothing about the cut")
@@ -2699,6 +2735,47 @@ do
   assert(#diag == 12, "the ring keeps a dozen")
   newbie.npcGUID, newbie.npcName, newbie.window = nil, nil, nil
   N2.Print = print0
+end
+
+-- 3.6.2, the 8 October build: quests that share one completion bit in the client rule each other out (since that
+-- build each step of Call of Earth: Durotar, Mulgore, Zephras Isle and the Alliance's); a tooltip line says where a
+-- number comes from or what Blizzard changed that nobody has read since; the Valley of Bones quests need level 35 as
+-- Blizzard's notes say, not the lowest level anyone took them at; a battleground quest from players' notes stays out.
+-- The quest ids below are the data as of that build: when new uploads change one, update it with the reason.
+do
+  local D, Qs = QB.Data, QB.Quest
+  local function rules(a, b)
+    for _, x in ipairs(D.EXCL[a] or {}) do if x == b then return true end end
+    return false
+  end
+  for id, others in pairs(D.EXCL) do
+    for _, o in ipairs(others) do assert(rules(o, id), "ruling out goes both ways: " .. id .. " and " .. o) end
+  end
+  for _, pair in ipairs({ { 1516, 1519 }, { 1516, 94373 }, { 1517, 1520 }, { 1517, 92467 }, { 1520, 94374 }, { 1518, 92468 }, { 1521, 94375 } }) do
+    assert(rules(pair[1], pair[2]), "a Call of Earth step rules out its twins: " .. pair[1] .. " and " .. pair[2])
+  end
+  assert(Qs.Get(92467).cls == 64 and Qs.Get(92466).cls == 64, "the Zephras Isle steps are a Shaman's, as their twins are")
+  for id, note in pairs(D.NOTE) do
+    local q = Qs.Get(id)
+    lines = {}
+    QB.UI.QuestTooltip(owner.env.GameTooltip, q, QB:Status(q), QB.Model.XpAt(q, 20), 100, 20)
+    local text = table.concat(lines, "\n")
+    assert(text:find(note, 1, true), "the note is in the tooltip: " .. id)
+    assert(not q.reqStated or not text:find("may unlock before", 1, true), "a required level Blizzard gave isn't called an upper bound: " .. id)
+  end
+  local vob = Qs.Get(92841)
+  assert(vob and vob.req == 35 and vob.reqStated and vob.seenOnly and vob.note, "Valley of Bones needs 35 (Blizzard's notes, 8 October)")
+  for _, id in ipairs({ 92841, 99411 }) do
+    lines = {}
+    QB.UI.QuestTooltip(owner.env.GameTooltip, Qs.Get(id), QB:Status(Qs.Get(id)), nil, nil, nil)
+    print("tooltip, " .. id .. ":", (table.concat(lines, " | "):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")))
+  end
+  -- Kyle's Gone Missing!, written by hand until a player's QuestBank sees it: Horde, XP not known, its sources named
+  local kyle = Qs.Get(99411)
+  assert(kyle and (not kyle.note or (kyle.side == 2 and kyle.xpUnknown and kyle.note:find("ForeverChanges", 1, true))),
+    "Kyle's Gone Missing! says where its level comes from, and that its XP isn't known")
+  assert(not D.Q[98895] and not D.Q[98896], "Darkspear Islands Clash is a battleground quest: left out")
+  assert(D.Q[92456] and D.Q[96986], "the City of Dalaran's quests are in since the dungeon opened for testing")
 end
 
 -- 3.4.7: the sleeping bag's 3% is gone. The level-30 build's Well Rested speeds up rested XP instead of adding to
@@ -3450,7 +3527,9 @@ do
   assert(it and it.n == "Item 280001" and it.l == 27 and it.r == 22 and it.c == 4 and it.el == "INVTYPE_CHEST" and it.b == "1.60.1.70170" and it.lc == "enUS",
     "a hovered item's tooltip is kept: " .. tostring(it and it.b))
   assert(it.x[1] == "Binds when picked up" and it.x[2] == "Chest\tCloth" and #it.x == 6, "its lines skip the name and keep the right column")
-  assert(countOf(g.items) == G.MAX_ITEMS and not g.items[300104] and g.items[300105], "a full table drops its oldest for a new one")
+  -- (the sweep at login read the six items worn and carried first, 300104 to 300109 going for them)
+  assert(countOf(g.items) == G.MAX_ITEMS and not g.items[300110] and g.items[300111] and g.items[7413] and g.items[2070],
+    "a full table drops its oldest for a new one")
   c.itemQuality[280004] = 0
   c.itemClass[4536] = 0
   hover(c, 280004); hover(c, 4536)
@@ -3508,14 +3587,19 @@ do
   tick(c, 1)
   assert(not g.items[280015] and not g.items[280017], "a hidden name or class: not kept")
   assert(g.items[280018] and #g.items[280018].x == 2, "a recipe line of a hidden kind is kept, not compared")
-  assert(g.items[280016] and #g.items[280016].x == 1 and g.items[280016].x[1] == "+3 Agility", "hidden lines are left out: " .. table.concat(g.items[280016].x, " | "))
+  assert(not g.items[280016], "a hidden line: the tooltip is not kept half-read")
+  tick(c, 12)
+  assert(not g.items[280016], "read again a few times, still not kept")
+  c.tipLines[280016] = nil -- the client shows it whole
+  hover(c, 280016); tick(c, 1)
+  assert(g.items[280016] and #g.items[280016].x == 6 and g.items[280016].x[1] == "Binds when picked up", "shown whole, it is kept")
   assert(countOf(g.items) == G.MAX_ITEMS, "still at most 1000")
   -- Settings: the box, and what it stops
   Q2.UI:Open(5); Q2.UI:Refresh()
   local v5 = Q2.UI.views[5]
-  assert(v5.noteGame and v5.noteGame:GetChecked() and v5.noteGame:IsEnabled() and v5.noteGame.label:GetText() == "Note items and spells you see, for foreverrank.com",
+  assert(v5.noteGame and v5.noteGame:GetChecked() and v5.noteGame:IsEnabled() and v5.noteGame.label:GetText() == "Note items, spells and loot, for foreverrank.com",
     "the Settings box, ticked by default")
-  assert(v5.discText:GetText():find(", 1000 items.", 1, true) and not v5.discText:GetText():find("ForeverProbe", 1, true), "the count: " .. v5.discText:GetText())
+  assert(v5.discText:GetText():find(", 1000 items, 0 drop sources.", 1, true) and not v5.discText:GetText():find("ForeverProbe", 1, true), "the count: " .. v5.discText:GetText())
   local lay = checkLayout(Q2.UI.frame, "settings with the item notes")
   assert(#lay == 0, "the Discoveries part fits: " .. table.concat(lay, "; "))
   local sf = v5.scroll
@@ -3632,8 +3716,20 @@ do
   G.OnEvent("PLAYER_ENTERING_WORLD", true, false); G.OnEvent("PLAYER_LOGOUT")
   c.loot = { 280002 }
   G.OnEvent("LOOT_READY")
+  G.OnEvent("BAG_UPDATE_DELAYED"); G.OnEvent("PLAYER_REGEN_ENABLED"); G.Sweep()
   tick(c, 10)
-  assert(c.env.QuestBankDB.game == nil, "nothing written: QuestBankDB.game isn't touched")
+  assert(c.env.QuestBankDB.game == nil and #c.loadRequests == 0 and not G.frame.__scripts.OnEvent,
+    "nothing written: QuestBankDB.game isn't touched, nothing asked of the server, no event registered")
+  -- the drop-source notes (Loot.lua) stay off here too: the frame got no handler, and a loot window with a creature
+  -- behind it notes nothing, so disc.loot stays out of the file
+  local Lo = Q2.Loot
+  assert(Lo and Lo.frame and not Lo.frame.__scripts.OnEvent and not Lo.On(), "Classic Era: the loot notes register nothing")
+  c.loot = { { id = 2589, src = { { "Creature-0-4455-0-12-197-0000A1B2C3", 1 } } } }
+  Lo.OnEvent("LOOT_OPENED", false, false)
+  assert(c.env.QuestBankDB.disc.loot == nil and c.env.QuestBankDB.disc.lootN == nil and (c.env.QuestBankDB.diag or {}).loot == nil, "and a loot window notes nothing")
+  Lo.OnEvent("ENCOUNTER_LOOT_RECEIVED", 3303, 273037, "", 1, "Sigrun", "WARRIOR")
+  tick(c, 10)
+  assert(c.env.QuestBankDB.game == nil and #c.loadRequests == 0, "a drop announced to the group: nothing read here either")
   local d = c.env.QuestBankDB.disc
   assert(d and d.iface == 11507 and d.build == "63696", "the quest notes say which client wrote them")
   assert(owner.env.QuestBankDB.disc.iface == 16001, "and on Forever: " .. tostring(owner.env.QuestBankDB.disc.iface))
@@ -3641,7 +3737,7 @@ do
   Q2.UI:Open(5); Q2.UI:Refresh()
   local v5 = Q2.UI.views[5]
   assert(not v5.noteGame:IsEnabled() and not v5.noteGame:GetChecked() and v5.noteGame.label:GetText():find("Forever client only", 1, true)
-    and not v5.discText:GetText():find("items", 1, true), "the Settings box is greyed out here, and says why")
+    and not v5.discText:GetText():find("items", 1, true) and not v5.discText:GetText():find("drop", 1, true), "the Settings box is greyed out here, and says why")
   assert(not v5.mapIcons:IsEnabled() and not v5.mapIcons:GetChecked() and v5.mapIcons.label:GetText():find("Forever client only", 1, true)
     and not v5.mapGive:IsEnabled() and not v5.mapTurn:IsEnabled() and not v5.mapObj:IsEnabled(), "the map icon rows are greyed out here, and say why")
   for _, pr in ipairs(checkLayout(Q2.UI.frame, "settings on Classic Era")) do problems[#problems + 1] = pr end
@@ -3658,7 +3754,7 @@ do
   c.env.SlashCmdList.QUESTBANK("icons")
   assert(#c.chat == said + 1 and c.chat[#c.chat]:find("need the Forever client", 1, true) and Q2:Settings().mapIcons == true, "/qb icons says why, and leaves the switch")
   c.env.SlashCmdList.QUESTBANK("discoveries")
-  assert(not c.chat[#c.chat]:find("items", 1, true), "/qb discoveries: quests and NPCs only")
+  assert(not c.chat[#c.chat]:find("items", 1, true) and not c.chat[#c.chat]:find("drop", 1, true), "/qb discoveries: quests and NPCs only")
   -- ForeverProbe loaded here: nothing of it is taken over on this client, so the line about its folder is said
   c.addons = { ForeverProbe = { version = "0.4.8", loaded = true, enabled = 2 } }
   G.Retire(); G.Retire()
@@ -3669,6 +3765,520 @@ do
   print("classic era:", "no game notes; disc.iface " .. tostring(d.iface))
 end
 
+
+----------------------------------------------------------------------------
+-- 3.6.2: who drops what (Loot.lua): a dwarf hunter looting in Elwynn and in the City of Dalaran on the Forever
+-- client. Each creature or chest looted is noted by id with the item ids in its window, the map or the dungeon with
+-- its difficulty, and the boss fight it ended; never a name, never a player; under the same Settings box as the
+-- item notes, and gone with them when it is unticked
+----------------------------------------------------------------------------
+local torvald = newClient({
+  name = "Torvald", level = 29, cap = 60, faction = "Alliance", className = "Hunter", class = "HUNTER", classID = 3, race = "Dwarf",
+  log = {}, done = {}, group = false, guild = false, world = { 0, -9450, 60 }, map = 1429, bind = "Goldshire", riding = false, xp = 300,
+  bagSlots = { { 2589, 3 } }, gear = { [16] = 2504 }, book = { { spellID = 75, itemType = 1 } },
+})
+login(torvald)
+do
+  local c, Q2 = torvald, torvald.QB
+  local Lo, G = Q2.Loot, Q2.Game
+  local DB = c.env.QuestBankDB
+  local f = Lo.frame
+  local function open(isFromItem) f.__scripts.OnEvent(f, "LOOT_OPENED", false, isFromItem or false) end
+  local function ev(event, ...) f.__scripts.OnEvent(f, event, ...) end
+  local function loot() return DB.disc.loot or {} end
+  local function diag() return DB.diag and DB.diag.loot or {} end
+  local function src(guid) return { { guid, 1 } } end
+  local errs0 = #(DB.errors or {})
+  assert(Lo.On() and G.On() and f.__scripts.OnEvent, "the Forever client with the box ticked: the loot notes are on")
+  assert(Lo.LOOT_SOURCES == 400 and Lo.LOOT_ITEMS == 40 and Lo.AGAIN == 120 and Lo.KILL_WINDOW == 120, "the caps")
+  local K = Q2.Discover.Key
+  assert(K("Creature-0-4455-0-12-197-0000A1B2C3") == "c197" and K("GameObject-0-4455-0-12-2843-0000A1B2C3") == "o2843"
+    and K("Vehicle-0-4455-0-12-1234-0000A1B2C3") == "c1234" and K("Player-1234-0000ABCD") == nil
+    and K("Pet-0-4455-0-12-197-0000A1B2C3") == nil and K(SECRET.str()) == nil and K(nil) == nil,
+    "a GUID's key: creatures and vehicles c, game objects o, nothing for players, pets and hidden values")
+
+  -- in the world: a kobold's corpse with linen, some copper and a grey
+  c.loot = { { id = 2589, src = src("Creature-0-4455-0-12-197-0000A1B2C3") }, { id = 0, kind = 2 }, { id = 2590, q = 0, src = src("Creature-0-4455-0-12-197-0000A1B2C3") } }
+  open()
+  local r = loot().c197
+  assert(r and r.m == 1429 and r.n == 1 and r.b == 70170 and r.i[2589] == 1 and r.i[2590] == nil and countOf(r.i) == 1
+    and r.im == nil and r.d == nil and r.e == nil and r.ex == nil, "a corpse in the world: the map, looted once, the build, the item; no coin, no grey")
+  assert(diag().w == 1 and diag().s == 1 and not diag().h and not diag().f, "diag: one window, one with a source")
+  assert(DB.disc.lootN == 1 and DB.disc.lootAt.c197 == 1, "the touch counter")
+  -- the same corpse opened again (the window was closed with an item left): items added, not looted again; another
+  -- kobold: looted again; a grey quest item is kept
+  c.loot = { { id = 2589, src = src("Creature-0-4455-0-12-197-0000A1B2C3") }, { id = 2592, src = src("Creature-0-4455-0-12-197-0000A1B2C3") } }
+  open()
+  r = loot().c197
+  assert(r.n == 1 and r.i[2589] == 1 and r.i[2592] == 1, "the same corpse again: a new item, not another time looted")
+  c.loot = { { id = 2589, src = src("Creature-0-4455-0-12-197-0000A1B2C4") }, { id = 2591, q = 0, quest = true, src = src("Creature-0-4455-0-12-197-0000A1B2C4") } }
+  open()
+  r = loot().c197
+  assert(r.n == 2 and r.i[2589] == 2 and r.i[2591] == 1, "another kobold: looted twice, the linen seen in two windows, a grey quest item kept")
+  c.loot = { { id = 2593, q = 0, questID = 7, src = src("Creature-0-4455-0-12-197-0000A1B2C4") } }
+  open()
+  assert(loot().c197.i[2593] == 1 and loot().c197.n == 2, "a grey with a quest id is a quest item too")
+  tick(c, 121)
+  c.loot = { { id = 2589, src = src("Creature-0-4455-0-12-197-0000A1B2C4") } }
+  open()
+  assert(loot().c197.n == 3 and loot().c197.i[2589] == 3, "the same GUID past two minutes: looted again, as far as the notes can tell")
+
+  -- the City of Dalaran: the Shade of the Archmage, whose kill event names its creature
+  c.env.IsInInstance = function() return true, "party" end
+  c.instance = { "City of Dalaran", 1, 2959 }
+  ev("ENCOUNTER_START", 3303, "Shade of the Archmage", 1, 5)
+  ev("ENCOUNTER_END", 3303, "Shade of the Archmage", 1, 5, 1, { { creatureID = 246020, creatureName = "Shade of the Archmage", remainingHealthPercent = 0 } })
+  c.loot = { { id = 273031, src = src("Creature-0-4455-2959-12-246020-0000A1B2C9") }, { id = 273032, src = src("Creature-0-4455-2959-12-246020-0000A1B2C9") } }
+  open()
+  r = loot().c246020
+  assert(r and r.im == 2959 and r.d == 1 and r.e == 3303 and r.ex == true and r.n == 1 and r.b == 70170 and r.i[273031] == 1 and r.i[273032] == 1 and r.m == nil,
+    "a boss in Dalaran: the instance map and difficulty, the fight by its creature list, the items")
+  assert(diag().eu == 1 and not diag().ee, "diag: the kill named its creatures")
+  -- trash looted after it is not the boss: the list named 246020 only
+  c.loot = { { id = 273033, src = src("Creature-0-4455-2959-12-246021-0000A1B2CA") } }
+  open()
+  assert(loot().c246021 and loot().c246021.e == nil and loot().c246021.im == 2959, "a trash creature after the kill: no fight")
+  -- a kill that names no creatures: the first corpse looted within two minutes is taken for it, as a guess
+  ev("ENCOUNTER_END", 3311, "Atrexis the Grave Knight", 1, 5, 1, nil)
+  assert(diag().ee == 1, "diag: a kill without the list")
+  tick(c, 30)
+  c.loot = { { id = 273040, src = src("Creature-0-4455-2959-12-246030-0000A1B2CB") } }
+  open()
+  tick(c, 30)
+  c.loot = { { id = 273041, src = src("Creature-0-4455-2959-12-246031-0000A1B2CC") } }
+  open()
+  assert(loot().c246030.e == 3311 and loot().c246030.ex == nil, "the first corpse after the kill: the fight, as a guess (no ex)")
+  assert(loot().c246031.e == nil, "the second: nothing")
+  tick(c, 121)
+  ev("BOSS_KILL", 3312, "Mana Wraith")
+  tick(c, 125)
+  c.loot = { { id = 273042, src = src("Creature-0-4455-2959-12-246032-0000A1B2CD") } }
+  open()
+  assert(loot().c246032.e == nil, "a corpse more than two minutes after a kill: nothing")
+  -- the game's own link stands over a guess
+  ev("BOSS_KILL", 3310, "Lyn the Ignored")
+  c.loot = { { id = 273031, src = src("Creature-0-4455-2959-12-246020-0000A1B2CE") } }
+  open()
+  assert(loot().c246020.e == 3303 and loot().c246020.ex == true and loot().c246020.n == 2 and loot().c246020.i[273031] == 2,
+    "a creature the game once named for a fight keeps that fight")
+  -- a wipe links nothing; a loading screen forgets the kill; so does a new fight starting
+  ev("PLAYER_ENTERING_WORLD", false, true)
+  ev("ENCOUNTER_END", 3298, "Arcane Anomaly", 1, 5, 0, nil)
+  c.loot = { { id = 273043, src = src("Creature-0-4455-2959-12-246033-0000A1B2CF") } }
+  open()
+  assert(loot().c246033.e == nil, "a wipe: nothing")
+  ev("ENCOUNTER_END", 3299, "Fel Ancient", 1, 5, 1, nil)
+  ev("PLAYER_ENTERING_WORLD", false, true)
+  c.loot = { { id = 273044, src = src("Creature-0-4455-2959-12-246034-0000A1B2D0") } }
+  open()
+  assert(loot().c246034.e == nil, "after a loading screen: the kill is forgotten")
+  ev("ENCOUNTER_END", 3300, "Mana Devourer", 1, 5, 1, nil)
+  ev("ENCOUNTER_START", 3301, "Mana Elemental", 1, 5)
+  c.loot = { { id = 273045, src = src("Creature-0-4455-2959-12-246035-0000A1B2D1") } }
+  open()
+  assert(loot().c246035.e == nil, "a new fight started: the last kill's guess is off")
+
+  -- hidden values: nothing noted, no error
+  local n0 = countOf(loot())
+  local h0 = diag().h or 0
+  c.loot = { { id = 273050, src = src(SECRET.str()) } }
+  open()
+  assert(countOf(loot()) == n0 and diag().h == h0 + 1, "a hidden source: nothing noted, counted as hidden")
+  ev("ENCOUNTER_END", SECRET.num(), "Unstable Sentinel", 1, 5, 1, nil)
+  c.loot = { { id = 273051, src = src("Creature-0-4455-2959-12-246040-0000A1B2D2") } }
+  open()
+  assert(loot().c246040 and loot().c246040.e == nil, "a hidden encounter id: no kill to link")
+  local numItems = c.env.GetNumLootItems
+  c.env.GetNumLootItems = function() return SECRET.num() end
+  c.loot = { { id = 273052, src = src("Creature-0-4455-2959-12-246041-0000A1B2D3") } }
+  open()
+  c.env.GetNumLootItems = numItems
+  assert(not loot().c246041, "a hidden slot count: nothing")
+  -- a hidden place: the items count, the place is unknown; what was noted before stands only where it still can (a
+  -- map from outdoors is wrong for a corpse looted inside, a dungeon is wrong for one looted outdoors)
+  c.env.IsInInstance = function() return false, "none" end
+  c.loot = { { id = 273053, src = src("Creature-0-4455-0-12-246042-0000A1B2D4") } }
+  open()
+  assert(loot().c246042.m == 1429, "a creature first met outdoors: the map")
+  c.env.IsInInstance = function() return true, "party" end
+  c.instance[3] = SECRET.num()
+  c.loot = { { id = 273053, src = src("Creature-0-4455-2959-12-246042-0000A1B2D8") } }
+  open()
+  c.instance[3] = 2959
+  r = loot().c246042
+  assert(r and r.i[273053] == 2 and r.n == 2 and r.im == nil and r.d == nil and r.m == nil, "a hidden instance id: the items count, the place is unknown, the map from outdoors goes")
+  c.instance[2] = SECRET.num()
+  c.loot = { { id = 273053, src = src("Creature-0-4455-2959-12-246021-0000A1B2D9") } }
+  open()
+  c.instance[2] = 1
+  r = loot().c246021
+  assert(r.i[273053] == 1 and r.im == 2959 and r.d == 1, "a hidden difficulty: the dungeon noted before stands, it is the same side")
+  c.env.IsInInstance = function() return false, "none" end
+  local best = c.env.C_Map.GetBestMapForUnit
+  c.env.C_Map.GetBestMapForUnit = function() return SECRET.num() end
+  c.loot = { { id = 273053, src = src("Creature-0-4455-0-12-246021-0000A1B2DA") } }
+  open()
+  assert(loot().c246021.im == nil and loot().c246021.d == nil and loot().c246021.m == nil, "outdoors with the map hidden: the dungeon noted before goes")
+  c.env.C_Map.GetBestMapForUnit = best
+  c.env.IsInInstance = function() return SECRET.num(), SECRET.str() end
+  c.loot = { { id = 273053, src = src("Creature-0-4455-0-12-246020-0000A1B2DB") } }
+  open()
+  assert(loot().c246020.im == 2959 and loot().c246020.d == 1 and loot().c246020.m == nil, "not even inside or out known: the place noted before stands")
+  c.env.IsInInstance = function() return true, "party" end
+  ev("ENCOUNTER_END", 3302, "Unstable Sentinel", 1, 5, 1, SECRET.str())
+  c.loot = { { id = 273054, src = src("Creature-0-4455-2959-12-246043-0000A1B2D5") } }
+  open()
+  assert(loot().c246043.e == 3302 and loot().c246043.ex == nil, "a hidden creature list is no list: the first corpse is a guess")
+  ev("ENCOUNTER_END", 3302, "Unstable Sentinel", 1, 5, 1, { SECRET.str(), { creatureID = SECRET.num(), creatureName = "x" } })
+  c.loot = { { id = 273055, src = src("Creature-0-4455-2959-12-246044-0000A1B2D6") } }
+  open()
+  assert(loot().c246044.e == 3302 and loot().c246044.ex == nil, "a list whose every creature is hidden: the same")
+  -- a hidden source beside a plain one: the plain one is noted, and the window counts as hidden too
+  c.loot = { { id = 273056, src = { { SECRET.str(), 1 }, { "Creature-0-4455-2959-12-246045-0000A1B2D7", 1 } } } }
+  open()
+  assert(loot().c246045 and loot().c246045.i[273056] == 1 and diag().h == h0 + 2, "a window half hidden: what shows is noted")
+
+  -- kinds: a chest is an o key, a vehicle a c key; a player's corpse is nobody (skipped, not hidden); a lockbox,
+  -- fishing, coins only, no source: skipped whole
+  c.env.IsInInstance = function() return false, "none" end
+  c.loot = { { id = 2589, src = src("GameObject-0-4455-0-12-2843-0000A1B2E0") }, { id = 2592, src = src("Vehicle-0-4455-0-12-1234-0000A1B2E1") } }
+  open()
+  assert(loot().o2843 and loot().o2843.i[2589] == 1 and loot().o2843.m == 1429 and loot().o2843.im == nil and loot().c1234 and loot().c1234.i[2592] == 1,
+    "a chest: o; a vehicle: c; outdoors again: the map")
+  n0 = countOf(loot())
+  local f0, hh = diag().f or 0, diag().h
+  c.loot = { { id = 2589, src = src("Player-1234-0000ABCD") } }
+  open()
+  assert(countOf(loot()) == n0 and diag().f == f0 + 1 and diag().h == hh, "a player's corpse: nothing, and not a hidden source")
+  c.loot = { { id = 2589, src = src("Creature-0-4455-0-12-197-0000A1B2E2") } }
+  open(true)
+  assert(countOf(loot()) == n0 and loot().c197.n == 3 and diag().f == f0 + 2, "a window from an item (a lockbox): nothing")
+  c.fishing = true
+  open()
+  c.fishing = nil
+  assert(loot().c197.n == 3 and diag().f == f0 + 3, "fishing: nothing")
+  c.loot = { { id = 0, kind = 2 } }
+  open()
+  assert(diag().f == f0 + 4, "coins only: nothing lootable")
+  c.loot = { { id = 2589 } }
+  c.lootSrc = {}
+  open()
+  c.lootSrc = nil
+  assert(diag().f == f0 + 5 and countOf(loot()) == n0, "no source at all: nothing")
+  local sourceInfo = c.env.GetLootSourceInfo
+  c.env.GetLootSourceInfo = nil
+  c.loot = { { id = 2589, src = src("Creature-0-4455-0-12-197-0000A1B2E3") } }
+  open()
+  c.env.GetLootSourceInfo = sourceInfo
+  assert(countOf(loot()) == n0 and loot().c197.n == 3 and diag().h == hh + 1, "a client without GetLootSourceInfo: nothing, counted as hidden")
+
+  -- the caps: 400 sources, the ones touched longest ago going first; 40 items a source, the least-seen going, and a
+  -- new one left out while every kept item was seen more than once
+  c.loot = { { id = 273060 } }
+  for k = 1, Lo.LOOT_SOURCES + 5 do
+    c.lootSrc = src("Creature-0-4455-0-12-" .. (500000 + k) .. "-0000B" .. string.format("%07X", k))
+    open()
+  end
+  c.lootSrc = nil
+  assert(countOf(loot()) == Lo.LOOT_SOURCES and countOf(DB.disc.lootAt) == Lo.LOOT_SOURCES, "at most 400 sources, and as many touch marks")
+  assert(not loot().c197 and not loot().o2843 and not loot().c246020 and not loot().c500005 and loot().c500006 and loot().c500405,
+    "the ones touched longest ago went first")
+  local function many(a, b, guid)
+    local t = {}
+    for id = a, b do t[#t + 1] = { id = id } end
+    c.loot, c.lootSrc = t, src(guid)
+    open()
+    c.lootSrc = nil
+  end
+  many(273001, 273040, "Creature-0-4455-0-12-600000-0000C000001")
+  many(273001, 273039, "Creature-0-4455-0-12-600000-0000C000002")
+  r = loot().c600000
+  assert(r and countOf(r.i) == 40 and r.i[273001] == 2 and r.i[273040] == 1 and r.n == 2, "40 items on one source")
+  many(273041, 273041, "Creature-0-4455-0-12-600000-0000C000003")
+  assert(countOf(r.i) == 40 and r.i[273040] == nil and r.i[273041] == 1, "a 41st: the one seen fewest times goes")
+  many(273041, 273041, "Creature-0-4455-0-12-600000-0000C000004")
+  many(273042, 273042, "Creature-0-4455-0-12-600000-0000C000005")
+  assert(countOf(r.i) == 40 and r.i[273042] == nil and r.i[273041] == 2 and r.n == 5, "every kept item seen twice: a new one is left out")
+  assert(countOf(loot()) == Lo.LOOT_SOURCES and not loot().c500006, "and the source cap held")
+
+  -- no names anywhere: every value a number, a boolean or a table; every key a source ("c123", "o123"), an item id,
+  -- or one of the record's own fields
+  local FIELDS = { im = true, m = true, d = true, e = true, ex = true, n = true, b = true, i = true }
+  local function clean(v, path)
+    if type(v) == "table" then
+      for k, x in pairs(v) do
+        assert(type(k) == "number" or (type(k) == "string" and (k:match("^[co]%d+$") or FIELDS[k])), "an odd key at " .. path .. ": " .. tostring(k))
+        clean(x, path .. "." .. tostring(k))
+      end
+    else
+      assert(type(v) == "number" or type(v) == "boolean", "a " .. type(v) .. " at " .. path .. ": " .. tostring(v))
+    end
+  end
+  clean(DB.disc.loot, "loot"); clean(DB.disc.lootAt, "lootAt")
+  names(c, DB.disc.loot, { "Shade of the Archmage", "Dalaran", "Torvald" })
+  assert(type(DB.disc.lootN) == "number", "the counter is a number")
+
+  -- the switch: unticked, the notes go with the item notes; a window notes nothing; ticked, the next window does
+  G.SetOn(false)
+  assert(DB.disc.loot == nil and DB.disc.lootAt == nil and DB.disc.lootN == nil and DB.game == nil, "unticked: the loot notes go")
+  c.loot = { { id = 2589, src = src("Creature-0-4455-0-12-197-0000A1B2F0") } }
+  open()
+  assert(DB.disc.loot == nil and not Lo.On(), "and nothing is noted while it is off")
+  G.SetOn(true)
+  open()
+  assert(DB.disc.loot and DB.disc.loot.c197 and DB.disc.loot.c197.n == 1 and DB.disc.lootN == 1 and Lo.Count() == 1, "ticked again: the next window notes")
+  c.env.SlashCmdList.QUESTBANK("discoveries")
+  local said = c.chat[#c.chat]
+  assert(said:find(", 1 drop source.", 1, true), "/qb discoveries counts them: " .. said)
+  c.loot = { { id = 2592, src = src("Creature-0-4455-0-12-198-0000A1B2F1") }, { id = 2593, src = src("Creature-0-4455-0-12-198-0000A1B2F1") } }
+  open()
+  local ns, ni = Lo.Count()
+  assert(ns == 2 and ni == 3, "Count: sources, and the items under them")
+  -- the Settings page: the count, the tooltip, the layout
+  Q2.UI:Open(5); Q2.UI:Refresh()
+  local v5 = Q2.UI.views[5]
+  assert(v5.discText:GetText():find(", 2 drop sources.", 1, true), "the Settings page counts drop sources: " .. v5.discText:GetText())
+  lines = {}
+  v5.noteGame.__scripts.OnEnter(v5.noteGame)
+  assert(table.concat(lines, " "):find("chests", 1, true) and table.concat(lines, " "):find("by id", 1, true), "the tooltip says what is noted: " .. table.concat(lines, " | "))
+  v5.noteGame.__scripts.OnLeave(v5.noteGame)
+  for _, pr in ipairs(checkLayout(Q2.UI.frame, "settings with the loot notes")) do problems[#problems + 1] = pr end
+  local sf = v5.scroll
+  local _, hi = sf.bar:GetMinMaxValues()
+  sf.bar:SetValue(hi); Q2.UI:Refresh()
+  for _, pr in ipairs(checkLayout(Q2.UI.frame, "settings with the loot notes, scrolled")) do problems[#problems + 1] = pr end
+  sf.bar:SetValue(0)
+  Q2.UI.frame:Hide()
+  c.env.SlashCmdList.QUESTBANK("discoveries")
+  said = c.chat[#c.chat]
+  assert(said:find(", 2 drop sources.", 1, true), "/qb discoveries, plural: " .. said)
+  assert(#(DB.errors or {}) == errs0, "no error through all of it")
+  local dg = diag()
+  print(string.format("loot notes: %d sources, %d items; windows %d, with a source %d, hidden %d, skipped %d; kills with a list %d, without %d",
+    ns, ni, dg.w, dg.s, dg.h, dg.f, dg.eu, dg.ee))
+end
+
+----------------------------------------------------------------------------
+-- 3.6.2: tooltips without a hover (Game.lua with Loot.lua). The owner's City of Dalaran run left two boss drops in
+-- the bags with no tooltip in the upload: only hovered items were read. Now every item a loot window shows, every
+-- drop the game announces to the group, and every item worn or carried is read, two every half second, never in a
+-- fight, by the same reader with the same guards and caps
+----------------------------------------------------------------------------
+do
+  local c, Q2 = torvald, torvald.QB
+  local G, Lo = Q2.Game, Q2.Loot
+  local DB = c.env.QuestBankDB
+  local lf = Lo.frame
+  local function src(guid) return { { guid, 1 } } end
+  local function open(isFromItem) lf.__scripts.OnEvent(lf, "LOOT_OPENED", true, isFromItem or false) end -- auto-loot: the window is never seen
+  local function has(ids) local n = 0; for _, id in ipairs(ids) do if DB.game.items[id] then n = n + 1 end end; return n end
+  local reads, asked = { n = 0 }, {}
+  local realTip, realLoad = c.env.C_TooltipInfo.GetItemByID, c.env.C_Item.RequestLoadItemDataByID
+  c.env.C_TooltipInfo.GetItemByID = function(id) reads[id] = (reads[id] or 0) + 1; reads.n = reads.n + 1; return realTip(id) end
+  c.env.C_Item.RequestLoadItemDataByID = function(id) asked[id] = (asked[id] or 0) + 1; return realLoad(id) end
+  tick(c, 60) -- the loot tests' windows left ids in the queue: read out
+  local g = DB.game
+  local errs0 = #(DB.errors or {})
+  assert(G.PACE == 0.5 and G.BATCH == 2 and G.LOADS == 2 and G.TRIES == 3, "the pace: two tooltips every half second")
+  c.env.IsInInstance = function() return true, "party" end
+  c.instance = { "City of Dalaran", 1, 2959 }
+  -- what is worn and carried now, read before the rest (a sweep by hand; the game's comes at login and when the bags change)
+  assert(not g.items[2504], "the worn axe was never hovered")
+  G.Sweep(); tick(c, 1)
+  assert(g.items[2504] and g.items[2504].n == "Item 2504", "the sweep reads what is worn")
+
+  -- the owner's two drops, auto-looted and never hovered: the loot recorder queues them, the reader reads them
+  local boss = "Creature-0-4455-2959-12-246050-0000A1B300"
+  g.items[273035], reads[273035] = nil, nil -- (the loot tests' window of forty read it; forgotten, so the drop is new again)
+  c.loot = { { id = 273035, src = src(boss) }, { id = 273048, src = src(boss) } }
+  open()
+  assert(not g.items[273035] and not g.items[273048] and not reads[273035], "the window only queues: nothing is read inside the event")
+  tick(c, 1)
+  local it = g.items[273035]
+  assert(it and g.items[273048] and it.n == "Item 273035" and it.el == "INVTYPE_CHEST" and it.b == "1.60.1.70170" and #it.x == 6,
+    "both drops have a tooltip without a hover")
+  assert(DB.disc.loot.c246050 and DB.disc.loot.c246050.i[273035] == 1 and DB.disc.loot.c246050.i[273048] == 1, "and the source is noted as before")
+  -- a lockbox's contents: no source to note, the tooltips still read
+  local ns0 = countOf(DB.disc.loot)
+  local f0 = DB.diag.loot.f
+  c.loot = { { id = 273071, src = src("Creature-0-4455-2959-12-246051-0000A1B301") } }
+  open(true)
+  assert(not g.items[273071], "a lockbox's window: only queued")
+  tick(c, 1)
+  assert(g.items[273071] and countOf(DB.disc.loot) == ns0 and not DB.disc.loot.c246051 and DB.diag.loot.f == f0 + 1,
+    "a window from an item: its items are read, no source noted")
+  -- a boss drop another player looted and this one won: the game announces it to the group
+  lf.__scripts.OnEvent(lf, "ENCOUNTER_LOOT_RECEIVED", 3303, 273070, "|cffa335ee|Hitem:273070::::::::29:::::::|h[Item 273070]|h|r", 1, "Torvald", "HUNTER")
+  assert(not g.items[273070], "announced: only queued")
+  tick(c, 1)
+  assert(g.items[273070], "a drop the kill event announces is read, whoever looted the corpse")
+  lf.__scripts.OnEvent(lf, "ENCOUNTER_LOOT_RECEIVED", 3303, SECRET.num(), SECRET.str(), 1, SECRET.str(), "HUNTER")
+  tick(c, 1)
+
+  -- the bags: ten new items, read two every half second, across ticks, so a bag full of new items never reads in
+  -- one frame; the sweep waits five seconds after the bags change
+  local bagged = {}
+  c.o.bagSlots = { { 2589, 3 } }
+  for i = 1, 10 do bagged[i] = 273100 + i; c.o.bagSlots[#c.o.bagSlots + 1] = { 273100 + i, 1 } end
+  fire(c, "BAG_UPDATE_DELAYED")
+  tick(c, 4)
+  assert(has(bagged) == 0, "the bags are looked through five seconds after they change, not at once")
+  tick(c, 1)
+  assert(has(bagged) == 0, "the sweep only queues")
+  tick(c, 0.5)
+  assert(has(bagged) == 2, "half a second on: two read (" .. has(bagged) .. ")")
+  tick(c, 0.5)
+  assert(has(bagged) == 4, "another half second: four (" .. has(bagged) .. ")")
+  tick(c, 1.5)
+  assert(has(bagged) == 10, "and all ten after three seconds (" .. has(bagged) .. ")")
+  for _, id in ipairs(bagged) do assert(reads[id] == 1, "each read once") end
+  -- the bags change again: every tooltip is fresh, nothing is read
+  local n0 = reads.n
+  fire(c, "BAG_UPDATE_DELAYED")
+  tick(c, 6)
+  assert(reads.n == n0, "a sweep with every tooltip fresh reads nothing")
+  -- duplicates collapse: the same id hovered three times, looted and in the bags is read once
+  c.o.bagSlots[#c.o.bagSlots + 1] = { 273120, 1 }
+  hover(c, 273120); hover(c, 273120); hover(c, 273120)
+  c.loot = { { id = 273120, src = src("Creature-0-4455-2959-12-246052-0000A1B302") } }
+  open()
+  fire(c, "BAG_UPDATE_DELAYED")
+  tick(c, 10)
+  assert(g.items[273120] and reads[273120] == 1, "hovered, looted and bagged: read once (" .. tostring(reads[273120]) .. ")")
+  -- six hours on, the sweep reads it again
+  g.items[273120].at = g.items[273120].at - 7 * 3600
+  fire(c, "BAG_UPDATE_DELAYED")
+  tick(c, 6)
+  assert(reads[273120] == 2, "read again after six hours")
+
+  -- the cap holds: a full table, five new items in the bags and the worn axe unread at this build; the oldest six go
+  local full = {}
+  for i = 1, G.MAX_ITEMS do full[400000 + i] = { b = "1.60.1.69000", at = 1000 + i, n = "Old", c = 4, x = {} } end
+  g.items = full
+  c.o.bagSlots = {}
+  for i = 1, 5 do c.o.bagSlots[i] = { 273130 + i, 1 } end
+  fire(c, "BAG_UPDATE_DELAYED")
+  tick(c, 8)
+  assert(countOf(g.items) == G.MAX_ITEMS and g.items[273131] and g.items[273135] and g.items[2504] and not g.items[400001] and not g.items[400006]
+    and g.items[400007], "at most 1000: the oldest six went for the six new (" .. countOf(g.items) .. ")")
+
+  -- an item the client hasn't loaded (server-sent): asked of the server, nothing kept until it answers; a failed
+  -- answer is left for a later sweep, and the asking stops after two in a session
+  c.o.bagSlots = { { 273201, 1 }, { 273202, 1 } }
+  c.unloaded[273201], c.unloaded[273202] = true, true
+  fire(c, "BAG_UPDATE_DELAYED")
+  tick(c, 7)
+  assert(not g.items[273201] and not g.items[273202] and asked[273201] == 1 and asked[273202] == 1, "not loaded: asked for, nothing kept")
+  fire(c, "ITEM_DATA_LOAD_RESULT", 273201, false)
+  tick(c, 2)
+  assert(not g.items[273201] and asked[273201] == 1, "the server said no: nothing kept, not asked again at once")
+  c.unloaded[273202] = nil
+  fire(c, "ITEM_DATA_LOAD_RESULT", 273202, true)
+  assert(not g.items[273202], "the answer only queues")
+  tick(c, 1)
+  assert(g.items[273202] and g.items[273202].n == "Item 273202" and #g.items[273202].x == 6, "loaded: read on the server's answer")
+  fire(c, "BAG_UPDATE_DELAYED"); tick(c, 7)
+  assert(asked[273201] == 2 and not g.items[273201], "the next sweep asks again")
+  fire(c, "ITEM_DATA_LOAD_RESULT", 273201, false)
+  fire(c, "BAG_UPDATE_DELAYED"); tick(c, 7)
+  assert(asked[273201] == 2 and not g.items[273201], "twice a session, then left for the next")
+  fire(c, "ITEM_DATA_LOAD_RESULT", SECRET.num(), true); fire(c, "ITEM_DATA_LOAD_RESULT", 273201, SECRET.bool())
+  tick(c, 1)
+  -- a hidden name: the same, asked twice at most, never kept
+  c.o.bagSlots = { { 273203, 1 } }
+  c.itemName[273203] = SECRET.str()
+  fire(c, "BAG_UPDATE_DELAYED"); tick(c, 7)
+  fire(c, "ITEM_DATA_LOAD_RESULT", 273203, true); tick(c, 1)
+  fire(c, "ITEM_DATA_LOAD_RESULT", 273203, true); tick(c, 1)
+  fire(c, "ITEM_DATA_LOAD_RESULT", 273203, true); tick(c, 1)
+  assert(not g.items[273203] and asked[273203] == 2, "a hidden name: asked twice, never kept (" .. tostring(asked[273203]) .. ")")
+
+  -- a tooltip the server hasn't filled in ("Retrieving item information"): read again three times, three seconds
+  -- apart, then left; nothing half-read is kept. The next sweep reads it whole
+  c.o.bagSlots = { { 273204, 1 } }
+  c.tipLines[273204] = { { leftText = "Item 273204" }, { leftText = "Retrieving item information" } }
+  fire(c, "BAG_UPDATE_DELAYED"); tick(c, 6)
+  assert(reads[273204] == 1 and not g.items[273204], "half-read: not kept")
+  tick(c, 20)
+  assert(reads[273204] == 4 and not g.items[273204], "read again three times, then left (" .. tostring(reads[273204]) .. ")")
+  hover(c, 273204); tick(c, 10)
+  assert(reads[273204] == 5 and not g.items[273204], "a hover reads once more, still not kept")
+  c.tipLines[273204] = nil -- the server's text arrives
+  fire(c, "BAG_UPDATE_DELAYED"); tick(c, 6)
+  assert(g.items[273204] and g.items[273204].x[1] == "Binds when picked up" and reads[273204] == 6, "whole at last: kept")
+
+  -- the body missing or hidden while the client has the name: GetItemByID returning nothing (MayReturnNothing in
+  -- the client's documentation), an empty list, the list hidden, a line hidden, a line's left or right text hidden.
+  -- None is kept half-read or lineless (a record with lines missing would stand for the item's stats in the
+  -- Database): read again three times, then left; a later sweep reads it once more; whole at last, it is kept
+  local gone = {}
+  c.env.C_TooltipInfo.GetItemByID = function(id)
+    reads[id] = (reads[id] or 0) + 1; reads.n = reads.n + 1
+    if gone[id] then return nil end
+    return realTip(id)
+  end
+  local bodies = { 273205, 273206, 273207, 273208, 273209, 273210 }
+  gone[273205] = true
+  c.tipLines[273206] = {}
+  c.tipLines[273207] = SECRET.str()
+  c.tipLines[273208] = { { leftText = "Item 273208" }, SECRET.str(), { leftText = "+5 Stamina" } }
+  c.tipLines[273209] = { { leftText = "Item 273209" }, { leftText = SECRET.str() }, { leftText = "+5 Stamina" } }
+  c.tipLines[273210] = { { leftText = "Item 273210" }, { leftText = "Chest", rightText = SECRET.str() }, { leftText = "+5 Stamina" } }
+  c.o.bagSlots = {}
+  for i, id in ipairs(bodies) do c.o.bagSlots[i] = { id, 1 } end
+  fire(c, "BAG_UPDATE_DELAYED"); tick(c, 7)
+  for _, id in ipairs(bodies) do assert(reads[id] == 1 and not g.items[id], "body missing or hidden: read, not kept (" .. id .. ")") end
+  tick(c, 20)
+  for _, id in ipairs(bodies) do assert(reads[id] == 4 and not g.items[id], "read again three times, then left (" .. id .. ": " .. tostring(reads[id]) .. ")") end
+  fire(c, "BAG_UPDATE_DELAYED"); tick(c, 7)
+  for _, id in ipairs(bodies) do assert(reads[id] == 5 and not g.items[id], "a later sweep reads it once more, still not kept (" .. id .. ")") end
+  gone[273205] = nil
+  for _, id in ipairs(bodies) do c.tipLines[id] = nil end -- the client shows them whole
+  fire(c, "BAG_UPDATE_DELAYED"); tick(c, 7)
+  for _, id in ipairs(bodies) do
+    assert(g.items[id] and #g.items[id].x == 6 and g.items[id].x[1] == "Binds when picked up" and reads[id] == 6, "whole at last: kept (" .. id .. ")")
+  end
+  assert(#(DB.errors or {}) == errs0, "no error from a missing or hidden body")
+
+  -- a fight: nothing is read, nothing looked through, nothing asked of the server, until it ends
+  c.o.bagSlots = { { 273301, 1 }, { 273302, 1 } }
+  c.combat = true
+  n0 = reads.n
+  local a0 = countOf(asked)
+  c.loot = { { id = 273303, src = src("Creature-0-4455-2959-12-246060-0000A1B310") } }
+  open()
+  hover(c, 273304)
+  fire(c, "BAG_UPDATE_DELAYED")
+  tick(c, 30)
+  assert(reads.n == n0 and not g.items[273301] and not g.items[273303] and not g.items[273304] and countOf(asked) == a0, "in a fight: nothing read, nothing asked")
+  assert(DB.disc.loot.c246060 and DB.disc.loot.c246060.i[273303] == 1, "(the loot source is noted as before)")
+  c.combat = false
+  fire(c, "PLAYER_REGEN_ENABLED")
+  tick(c, 0.5)
+  assert(g.items[273303] and g.items[273304], "the fight over: the queue goes on at once")
+  tick(c, 10)
+  assert(g.items[273301] and g.items[273302], "and the bags are looked through")
+  -- the game holding addons back as in combat without InCombatLockdown (an encounter): the same wait
+  c.env.Enum.AddOnRestrictionType = { Combat = 0, Encounter = 1 }
+  local held = true
+  c.env.C_RestrictedActions = { IsAddOnRestrictionActive = function(kind) return kind == 1 and held end }
+  n0 = reads.n
+  hover(c, 273305)
+  tick(c, 30)
+  assert(reads.n == n0 and not g.items[273305], "held back in an encounter: nothing read")
+  held = false
+  fire(c, "ADDON_RESTRICTION_STATE_CHANGED", 1, 0)
+  tick(c, 0.5)
+  assert(g.items[273305], "the encounter over: read")
+  c.env.C_RestrictedActions, c.env.Enum.AddOnRestrictionType = nil, nil
+
+  assert(#(DB.errors or {}) == errs0, "no error through all of it")
+  names(c, g, { "Torvald", "Dalaran" })
+  c.env.C_TooltipInfo.GetItemByID, c.env.C_Item.RequestLoadItemDataByID = realTip, realLoad
+  local nAsked = 0
+  for _ in pairs(asked) do nAsked = nAsked + 1 end
+  print(string.format("tooltips without a hover: %d reads, %d records kept, %d items asked of the server", reads.n, countOf(g.items), nAsked))
+end
 
 ----------------------------------------------------------------------------
 -- map icons (QuestMap.lua): a level 3 human priest in Elwynn on the Forever client. The spots are injected here
@@ -3931,7 +4541,14 @@ do
   M.mapTypes = { [2521] = 6 }
   MD.SPOT[18] = SPOT[18] .. ";c,5,2521,300,300,10,w,2"
   M.map:SetMapID(2521)
-  assert(#icons("obj") == 1 and icons("obj")[1].data.id == 18 and #icons("give") == 0, "Zephras Isle draws its own spots")
+  assert(#icons("obj") == 1 and icons("obj")[1].data.id == 18, "Zephras Isle draws its own spots")
+  -- (since 3.6.2 Wowhead's NPC tooltips place the island's own quest givers too, so their ! show there as well: each
+  -- one for a giver who stands on the island, with a quest you can take now)
+  for _, pin in ipairs(icons("give")) do
+    for _, q in ipairs(pin.data.quests) do
+      assert(q.give and q.give.m == 2521 and MQ:Status(q).code == "todo", "an island ! is for a giver standing there: " .. q.name)
+    end
+  end
   M.map:SetMapID(1453)
   for _, pin in ipairs(icons("obj")) do assert(pin.data.id == 18 and near(pin, 0.5, 0.5), "Stormwind: the spot tagged to Stormwind") end
   MD.SPOT[18] = SPOT[18]
@@ -4847,14 +5464,18 @@ end
 --   the game's waypoint and tracking (USER_WAYPOINT_UPDATED, SUPER_TRACKING_CHANGED and QUEST_WATCH_LIST_CHANGED run
 --   Blizzard's listeners inside the call), Blizzard's popups (their list of popups on screen), opening the chat box
 --   (the game's chat globals), the escort prompt's Yes with no click behind it and its count of a full log (MAX_QUESTS:
---   read, never written; the prompt reads it as it opens), and the map canvas's pin calls
+--   read, never written; the prompt reads it as it opens), the map canvas's pin calls, and the loot window's actions
+--   (taking a slot, closing it, rolling, the loot method: the drop-source notes only read the window)
 ----------------------------------------------------------------------------
 do
-  -- whole names (CanSetUserWaypointOnMap, a question, is fine), and the start of a family (StaticPopup_Show, _Hide...)
+  -- whole names (CanSetUserWaypointOnMap, a question, is fine; so is GetLootSlotInfo next to LootSlot), and the start of
+  -- a family (StaticPopup_Show, _Hide...)
   local NEVER = { "SetUserWaypoint", "ClearUserWaypoint", "C_SuperTrack", "AddQuestWatch", "RemoveQuestWatch",
     "AddWorldQuestWatch", "AddQuestWatchForQuestID", "StaticPopupDialogs", "OpenChat", "ChatFrame_OpenChat", "ActivateChat",
     "ACTIVE_CHAT_EDIT_BOX", "LAST_ACTIVE_CHAT_EDIT_BOX", "ConfirmAcceptQuest", "AcquirePin", "RemoveAllPinsByTemplate",
-    "RemovePin", "SetPinPosition", "MarkCanvasDirty", "UpdateQuestAcceptLogFullDialog", "MAX_QUESTLOG_QUESTS" }
+    "RemovePin", "SetPinPosition", "MarkCanvasDirty", "UpdateQuestAcceptLogFullDialog", "MAX_QUESTLOG_QUESTS",
+    "LootSlot", "CloseLoot", "ConfirmLootSlot", "ConfirmLootRoll", "RollOnLoot", "SetLootMethod" }
+
   local FAMILIES = { "StaticPopup_", "SetSuperTracked" }
   local PATTERNS = {}
   for _, name in ipairs(NEVER) do PATTERNS[#PATTERNS + 1] = { "%f[%w_]" .. name .. "%f[^%w_]", name } end

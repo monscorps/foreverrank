@@ -39,6 +39,8 @@ def check(client, verbose=False):
                 continue
             try:
                 got = client.talent_text(t["sp"], r, t.get("r", 1))
+                if norm(got) != norm(want):   # the site may show the game's ranges ("31 to 36") instead of the middle
+                    got = client.talent_game_text(t["sp"], r, t.get("r", 1))
             except Exception as e:
                 err.append((t["n"], r, str(e)))
                 per = None

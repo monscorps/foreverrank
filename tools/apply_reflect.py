@@ -30,13 +30,18 @@ DB = os.path.join(ROOT, "plan", "items-db.json")
 LOOT_ITEMS = os.path.join(ROOT, "codex", "loot-items.json")
 ENCHANTS = os.path.join(ROOT, "plan", "enchants.json")
 REFLECT = os.path.join(ROOT, "plan", "reflect.json")
-BUILD = "1.60.1.70170"
+BUILD = "1.60.1.70291"
 WAGO = os.path.join(ROOT, "research", "wago", BUILD)
 SCHOOLS = [(1, "Physical"), (2, "Holy"), (4, "Fire"), (8, "Nature"), (16, "Frost"), (32, "Shadow"), (64, "Arcane")]
 SCHOOL_RE = r"(Physical|Holy|Fire|Nature|Frost|Shadow|Arcane)"
 # proc flags for being hit: taken melee swing 0x8, melee ability 0x20, ranged swing 0x80, ranged ability 0x200
 TAKEN = 0x8 | 0x20 | 0x80 | 0x200
 DAMAGE_EFFECTS = ("2", "9")  # SCHOOL_DAMAGE, HEALTH_LEECH
+# Spell-power ratios the server applies and the client's spell rows do not carry (EffectBonusCoefficient 0):
+# Blizzard's development notes of 2026-10-08 put Retribution Aura and Thorns back to Vanilla base damage with a 6%
+# spell-power ratio (was 13.3%), and Retribution Aura now uses the paladin's own spell power.
+NOTES_COEF = {"retAura": 0.06, "thorns": 0.06}
+NOTES_SRC = "Blizzard's development notes, 8 October 2026 (the client's spell rows carry no ratio)"
 
 
 def _rows(table):
@@ -348,6 +353,8 @@ def reflect_tables(c):
         e = next(x for x in c.se[sid] if x["EffectAura"] == "15")
         ret.append([c.learn(sid), num(e["EffectBasePointsF"]), int(sid)])
     ret_coef = num(next(x for x in c.se["7294"] if x["EffectAura"] == "15")["EffectBonusCoefficient"])
+    ret_src = "client spell 7294" if ret_coef else NOTES_SRC
+    ret_coef = ret_coef or NOTES_COEF["retAura"]
     hs = []
     hs_coef, hs_block, hs_charges, hs_dur, hs_cd = 0, 0, 0, 0, 0
     for sid in ("20925", "20927", "20928"):
@@ -363,17 +370,22 @@ def reflect_tables(c):
     red_block = num(red[0]["EffectBasePointsF"]) if red else None
     thorns = []
     for sid in ("467", "782", "1075", "8914", "9756", "9910"):
-        thorns.append([c.learn(sid), num(c.se[sid][0]["EffectBasePointsF"])])
+        thorns.append([c.learn(sid), num(c.se[sid][0]["EffectBasePointsF"]), int(sid)])
+    th_coef = num(c.se["467"][0]["EffectBonusCoefficient"])
+    th_src = "client spell 467" if th_coef else NOTES_SRC
+    th_coef = th_coef or NOTES_COEF["thorns"]
     eye = num(c.se["9799"][0]["EffectBasePointsF"]) if c.se.get("9799") else None
     return {
         "note": "Damage done back to attackers by class abilities and buffs, from the beta client's spell tables (build %s, "
-                "tools/apply_reflect.py) unless a field says otherwise. Retribution Aura ranks are [level learned, damage per "
-                "hit taken, spell id]. Blessing of Sanctuary is not in the Forever client at all. Improved Retribution Aura "
-                "(spells 20091/20092) still has spell rows in the client, but no Forever talent teaches it, so nothing raises "
-                "Retribution Aura's damage." % BUILD,
+                "tools/apply_reflect.py) unless a field says otherwise. Retribution Aura ranks are [level learned, base "
+                "damage per hit taken, spell id]; retCoef is the share of the paladin's Holy spell damage added to it "
+                "(retCoefSrc says where it comes from). Blessing of Sanctuary is not in the Forever client at all. Improved "
+                "Retribution Aura (spells 20091/20092) still has spell rows in the client, but no Forever talent teaches it, "
+                "so nothing raises Retribution Aura's damage." % BUILD,
         "classes": {"PALADIN": {
             "retAura": ret,
             "retCoef": ret_coef,
+            "retCoefSrc": ret_src,
             "holyShield": {"talent": "Holy Shield", "ranks": hs, "coef": hs_coef, "charges": hs_charges, "dur": hs_dur,
                            "cd": hs_cd, "block": hs_block,
                            "note": "Damage per blocked attack, plus coef x spell power. block is the block chance the client "
@@ -390,7 +402,9 @@ def reflect_tables(c):
                                     "curve is not in our datamine." % eye},
         }},
         "buffs": {"thorns": {"name": "Thorns (druid)", "ranks": thorns, "s": c.school("467"), "dur": c.duration_ms("467") / 1000.0,
-                             "note": "[level learned, damage per hit taken], spells 467/782/1075/8914/9756/9910."}},
+                             "coef": th_coef, "coefSrc": th_src,
+                             "note": "[level learned, base damage per hit taken, spell id]; coef is the share of the casting "
+                                     "druid's Nature spell damage added to it."}},
     }
 
 

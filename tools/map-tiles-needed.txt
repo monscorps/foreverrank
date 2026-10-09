@@ -1,5 +1,8 @@
-# Map art tiles for the Atlas: export these from wow.export (File Browser).
-# Paste the paths below into the file browser filter, or use the FDID where no name exists.
+# Map art tiles for the Atlas. No export needed any more: wago.tools serves each file by its
+# FDID (https://wago.tools/api/casc/<FDID>?version=<build>&download, BLP that Pillow reads), and
+# python3 tools/build_maps.py --wago stitches the world and continent art that way.
+# Zone maps in map/img/<AreaID>.jpg still come from the wow.export path; to use it, paste the
+# paths below into wow.export's file browser filter, or use the FDID where no name exists.
 interface/worldmap/hyjal/hyjal1.blp;364696
 interface/worldmap/hyjal/hyjal10.blp;364697
 interface/worldmap/hyjal/hyjal11.blp;364698

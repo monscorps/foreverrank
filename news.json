@@ -1,6 +1,1618 @@
 {
- "note": "The Forever wire. Append new entries at the top: {d: ISO date, t: headline, s: source}. The site renders this file as-is.",
+ "note": "The Forever wire, newest first: {d: ISO date, t: headline, s: source, l: link, img?: picture}. ForeverRank's own entries may add hl (highlights on the home feature) and kind (the feature's label: datamine, article or addon). The site renders this file as-is.",
  "items": [
+  {
+   "d": "2026-10-08",
+   "t": "Build 70291 datamined: the City of Dalaran opens (a first run on video, its nine bosses and first drops, 16 rewards, the Violet Sorcerer's Vestments' first bonuses), every class's nerfs and buffs at a glance, 36 low ranks rebased, Penance halved, Excavation Site and four Dalaran rewards turn green",
+   "s": "FOREVERRANK",
+   "l": "/news/build-70291/",
+   "img": "/codex/img/city-of-dalaran.jpg",
+   "kind": "datamine",
+   "hl": [
+    {
+     "i": "spell_arcane_teleportdalaran",
+     "t": "City of Dalaran, boss by boss: a player's first run on video and its first drops"
+    },
+    {
+     "i": "inv_chest_cloth_17",
+     "t": "Violet Sorcerer's Vestments get their first set bonuses"
+    },
+    {
+     "i": "spell_fire_flamebolt",
+     "t": "36 low spell ranks rebased across nine spells"
+    },
+    {
+     "i": "spell_holy_penance",
+     "t": "Penance rank 1 hits for 42 (was 81); Retribution Aura and Thorns cut a third"
+    },
+    {
+     "i": "inv_hammer_16",
+     "t": "Excavation Site and four Dalaran rewards drop to uncommon"
+    }
+   ]
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Level 30, build by build: four dungeons, half the dungeon-quest bonus, Penance and Thorns cut back, and 16 Legacy points for testers",
+   "s": "FOREVERRANK",
+   "l": "/news/level-30/",
+   "img": "/codex/img/excavation-site.jpg",
+   "kind": "datamine",
+   "hl": [
+    {
+     "i": "spell_arcane_teleportdalaran",
+     "t": "Level 30: Excavation Site, Razorfen Downs, Uldaman, then Dalaran"
+    },
+    {
+     "i": "inv_misc_note_01",
+     "t": "Dungeon quests pay half their bonus; 164 quests agree"
+    },
+    {
+     "i": "spell_holy_penance",
+     "t": "71 talents touched; Penance, Thorns and Retribution Aura cut"
+    },
+    {
+     "i": "inv_hammer_16",
+     "t": "Six Excavation Site rewards drop to uncommon"
+    },
+    {
+     "i": "inv_misc_gift_01",
+     "t": "16 Legacy points for every tester"
+    }
+   ]
+  },
+  {
+   "d": "2026-10-08",
+   "t": "WoW Forever Beta Development Notes – Updated October 8 (City of Dalaran dungeon opens, 16 Legacy points for all, Rage fixes, Penance and Retribution Aura retuned)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/2360696/5"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Dungeon kills now pay XP by your own level, and base kill XP in dungeons rises 20% (Aggrend, blue post)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/the-wow-forever-podcast-episode-3-dive-into-dungeons-with-devs-ft-hammerdancegaming/2376010/20"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Check Out Episode 3 of the WoW: Forever Podcast",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24310653",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/ne/NEB3O3XOQIAH1791477877824.png"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Beta Realm Maintenance - October 8 (blue post: realms down from 9 a.m. PDT for a full suite of bug fixes and gameplay adjustments)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/beta-realm-maintenance-october-8/2375900"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "New Class Changes in Latest WoW: Forever Beta Build",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-class-changes-in-latest-wow-forever-beta-build-383327",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55668-new-class-changes-in-latest-wow-forever-beta-build.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Durability Loss from Resurrection Penalty Reduced in WoW: Forever Beta Build 4",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/durability-loss-from-resurrection-penalty-reduced-in-wow-forever-beta-build-4-383325",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55664-durability-loss-from-resurrection-penalty-reduced-in-wow-forever-beta-build-4.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "WoW: Forever Teases Announces Week 4 Beta Content - City of Dalaran Dungeon Available",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-teases-announces-week-4-beta-content-city-of-dalaran-dungeon-383321",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55661-wow-forever-teases-announces-week-4-beta-content-city-of-dalaran-dungeon.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Changes to Racials Likely Coming Next Week in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/changes-to-racials-likely-coming-next-week-in-wow-forever-383311",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55651-changes-to-racials-likely-coming-next-week-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Dungeon Maps Likely Not Coming to WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/dungeon-maps-likely-not-coming-to-wow-forever-383317",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55659-dungeon-maps-likely-not-coming-to-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Buffs to Dungeon Experience Coming in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/buffs-to-dungeon-experience-coming-in-wow-forever-383312",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55653-buffs-to-dungeon-experience-coming-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "2,100+ Gold Buying Accounts Have Been Banned on WoW: Forever Beta",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/2-100-gold-buying-accounts-have-been-banned-on-wow-forever-beta-383310",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55652-2-100-gold-buying-accounts-have-been-banned-on-wow-forever-beta.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "The WoW: Forever Podcast Episode 3 Now Available - Dungeons and Questing",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/the-wow-forever-podcast-episode-3-now-available-dungeons-and-questing-383309",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55649-the-wow-forever-podcast-episode-3-now-available-dungeons-and-questing.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Mage and Shaman Class Deep Dive for World of Warcraft: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/mage-and-shaman-class-deep-dive-for-world-of-warcraft-forever-383305",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55645-mage-and-shaman-class-deep-dive-for-world-of-warcraft-forever.png"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "WoW: Forever Beta Build Today - Expected Downtime of 6 Hours",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-beta-build-today-expected-downtime-of-6-hours-383306",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55647-wow-forever-beta-build-today-expected-downtime-of-6-hours.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Do We Have Enough Bag Space in WoW: Forever?",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/do-we-have-enough-bag-space-in-wow-forever-383269",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55611-do-we-have-enough-bag-space-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Updated Racial Abilities Coming in Next Week’s WoW Forever Beta",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/updated-racial-abilities-coming-in-next-weeks-wow-forever-beta/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/New-Racials-Featured-Image.webp"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Dungeon Leveling in WoW Forever Is Getting a 20% Mob XP Boost",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/dungeon-leveling-in-wow-forever-is-getting-a-20-mob-xp-boost/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/Scarlet-Monastery-Cathedral-Pond.webp"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Dungeons, Raids, & Updates – WoW: Forever Podcast Episode 3",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/dungeons-raids-updates-wow-forever-podcast-episode-3/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/maxresdefault-1.webp"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Greenhouse Blueprint Found: How Herbalism Seeds Work in WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/greenhouse-blueprint-found-how-herbalism-seeds-work-in-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/Greenhouse-Featured-Photo.webp"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Poisons, Daggers, Pet Scaling and Banes: Rogue and Warlock Forever Deep Dives",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/poisons-daggers-pet-scaling-and-banes-rogue-and-warlock-forever-deep-dives/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/PANTVQO6ISM917913226108571.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Blackmaw Hold Dungeon in WoW Forever is Bigger Than Blackrock Depths",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/blackmaw-hold-dungeon-in-wow-forever-is-bigger-than-blackrock-depths/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/blackmaw-hold-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Changes Coming for Racial Abilities in the WoW Forever Beta",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/changes-coming-for-racial-abilities-in-the-wow-forever-beta/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-troll-race-overview.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Episode 3 of the WoW Forever Podcast Covers Dungeons",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/episode-3-of-the-wow-forever-podcast-covers-dungeons/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/10/wow-forever-podcast-episode-3.webp"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Experience From Dungeon Kills is Going Up in the WoW Forever Beta",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/experience-from-dungeon-kills-is-going-up-in-the-wow-forever-beta/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/10/the-deadmines-dungeon-entrance-portal-wow-forever.webp"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Long Maintenance Today for WoW Forever Beta, Updates Coming",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/long-maintenance-today-for-wow-forever-beta-updates-coming/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/stormwind-keep-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Onyxia’s Lair Raid Will Still Require Attunement in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/onyxias-lair-raid-will-still-require-attunement-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/onyxia-key-art-wow-classic.webp"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Blizzard refuses to let World of Warcraft: Forever's dungeons become the fastest way to grind XP: 'We need to hold firm on these balance adjustments'",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/blizzard-refuses-to-let-world-of-warcraft-forevers-dungeons-become-the-fastest-way-to-grind-xp-we-need-to-hold-firm-on-these-balance-adjustments/",
+   "img": "https://cdn.mos.cms.futurecdn.net/CUe2zNNaTWjwgF3ed6i3H7-1920-80.jpg"
+  },
+  {
+   "d": "2026-10-08",
+   "t": "Blizzard Is Making WoW Forever’s Controversial Skyborne Race Look Worse On Purpose, And That’s A Good Thing",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/blizzard-is-making-wow-forevers-controversial-skyborne-race-look-worse-on-purpose-and-thats-a-good-thing-2000742025",
+   "img": "https://kotaku.com/app/uploads/2026/10/skyborne-1200x675.jpg"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "World of Warcraft: Forever Class Deep Dives — Rogue and Warlock",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24310968",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/ny/NYO22B3CT06C1791322589103.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "World of Warcraft: Forever Class Deep Dives — Mage and Shaman",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24302097",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/w3/W3CHYFXZK02H1791309672171.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "World of Warcraft: Forever- The Future of Skyborne Visual Updates",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24302546",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/sr/SRGU8HIDWYQU1791312885139.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Battle for the Darkspear Islands in World of Warcraft: Forever",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24307308",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/u1/U1OSIX5Z8I5Z1790889139088.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "How PvP Progression in World of Warcraft: Forever Works",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24303316",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/ow/OWXLE8T6SV3O1790901629869.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Rogue and Warlock Class Deep Dive in World of Warcraft: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/rogue-and-warlock-class-deep-dive-in-world-of-warcraft-forever-383299",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55640-rogue-and-warlock-class-deep-dive-in-world-of-warcraft-forever.jpg"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "SD Skyborne Models and Druid Forms Arriving in Early 2027",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/sd-skyborne-models-and-druid-forms-arriving-in-early-2027-383298",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55639-sd-skyborne-models-and-druid-forms-arriving-in-early-2027.jpg"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "New Battleground Preview in World of Warcraft: Forever - Battle for the Darkspear Islands",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-battleground-preview-in-world-of-warcraft-forever-battle-for-the-darkspear-383294",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55637-new-battleground-preview-in-world-of-warcraft-forever-battle-for-the-darkspear.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "How PvP Progression Works in World of Warcraft: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/how-pvp-progression-in-world-of-warcraft-forever-383292",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55633-how-pvp-progression-in-world-of-warcraft-forever.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "WoW: Forever Warrior Deep Dive - What Changed, and What is Still Needed?",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-warrior-deep-dive-what-changed-and-what-is-still-needed-383284",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55626-wow-forever-warrior-deep-dive-what-changed-and-what-is-still-needed.jpg"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "New Required \"Playstyle\" Selection Added To LFG In WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-required-playstyle-selection-added-to-lfg-in-wow-forever-383259",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55604-new-required-playstyle-selection-added-to-lfg-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Stronger Identity, Mixed Schools for Mage, Better Totems for Shamans: WoW Forever Class Deep Dives",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/stronger-identity-mixed-schools-for-mage-better-totems-for-shamans-wow-forever-class-deep-dives/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/T46ED5B4T7V117913096953801.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Skyborne Visual Changes Now and Coming in the Future",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/skyborne-visual-changes-now-and-coming-in-the-future/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/skyborne.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "New 15 v 15 Capture and Hold Battleground Preview",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/new-15-v-15-capture-and-hold-battleground-preview/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/12VVZ0SP9UBM17908891582041.jpg"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Ranks, Honor, Rewards: How Revamped PvP Works in WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/ranks-honor-rewards-how-revamped-pvp-works-in-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/ABQG457IQXQF17909016473231.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Can’t Find That Quest Item? This Addon Puts the Sparkle Back in WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/cant-find-that-quest-item-this-addon-puts-the-sparkle-back-in-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/stratholme.jpg"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "WoW Forever Players Can’t Agree on Blizzard’s New Dungeon XP Nerfs",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-players-cant-agree-on-blizzards-new-dungeon-xp-nerfs/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/07/wow-classic.jpg"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "WoW Forever Beta Has Female Orcs Sleepwalking Across Durotar",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-beta-has-female-orcs-sleepwalking-across-durotar/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/orcsleepy1.webp"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Spider Swarm Banned From $100,000 WoW Forever Tournament",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/spider-swarm-banned-from-100000-wow-forever-tournament/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/spider-swarm-seo.webp"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "New Textures Coming for Skyborne Druid Forms in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/new-textures-coming-for-skyborne-druid-forms-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/10/skyborne-sd-models-wow-forever.webp"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Poison & Pets: Rogue & Warlock Deep Dive for WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/poison-pets-rogue-warlock-deep-dive-for-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/duskwood-warlock.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "PvP Progression in WoW Forever: Ranks, Honor & Seasons",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/pvp-progression-in-wow-forever-ranks-honor-seasons/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/10/alterac-valley-pvp-battleground-wow-forever.webp"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Scrolls & Totems: Mage & Shaman Deep Dive for WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/scrolls-totems-mage-shaman-deep-dive-for-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-dwarf-shaman-totems-all-four-e1791298098248.jpg"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Everything you need to know about early name reservation in World of Warcraft: Forever",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/10/07/early-name-reservation-wow-forever/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/10/wow_forever_coldridge_name_lore_watch.jpg"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "World of Warcraft: Forever drops the PvP grind so normal people can have fancy titles too",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-drops-the-pvp-grind-so-normal-people-can-have-fancy-titles-too/",
+   "img": "https://cdn.mos.cms.futurecdn.net/4a9oyQdrXFpY6keN5AagHb-2560-80.png"
+  },
+  {
+   "d": "2026-10-07",
+   "t": "Blizzard promises to make the blue elves in World of Warcraft: Forever look worse (positive)",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/blizzard-promises-to-make-the-blue-elves-in-world-of-warcraft-forever-look-worse-positive/",
+   "img": "https://cdn.mos.cms.futurecdn.net/An236PXEtiDqwYBC6GRY5-1280-80.png"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "Brief Beta Realm Maintenance - October 6 (blue post: missing chest quest items, transport disconnects, guild join error)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/brief-beta-realm-maintenance-october-6/2374348"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "Class Highlights Video for Druids, Warlocks and Priests in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/class-highlights-video-for-druids-warlocks-and-priests-in-wow-forever-383280",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55623-class-highlights-video-for-druids-warlocks-and-priests-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "WoW: Forever Beta Restarting for \"Priority Fixes\"",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-beta-restarting-for-priority-fixes-383278",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55621-wow-forever-beta-restarting-for-priority-fixes.jpg"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "Booty Bay's Most Entertaining Weapon Just Got Nerfed - WoW Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/booty-bays-most-entertaining-weapon-just-got-nerfed-wow-forever-383276",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55619-booty-bays-most-entertaining-weapon-just-got-nerfed-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "Powershifting is Out, Shifting Power is In: Feral Druid Changes Analysis in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/powershifting-is-out-shifting-power-is-in-feral-druid-changes-analysis-in-wow-383273",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55615-powershifting-is-out-shifting-power-is-in-feral-druid-changes-analysis-in-wow.jpg"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "How to Become Attuned to City of Dalaran Dungeon as Horde in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/how-to-become-attuned-to-city-of-dalaran-dungeon-as-horde-in-wow-forever-383256",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55601-how-to-become-attuned-to-city-of-dalaran-dungeon-as-horde-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "New Library Book Return Quest Unlocked at Level 30 in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-reward-for-handing-in-library-books-at-level-30-383251",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55596-new-reward-for-handing-in-library-books-at-level-30.jpg"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "This Set is Amazing in WoW Forever, But Will Anyone Bother Getting It?",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/this-set-is-amazing-in-wow-forever-but-will-anyone-bother-getting-it/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/Chain-of-the-Scarlet-Crusade.webp"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "Druid, Warlock, and Priest Changes Coming in WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/druid-warlock-and-priest-changes-coming-in-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/druid-warlock-priest.webp"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "New Professions That Could Be Coming to WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/new-professions-that-could-be-coming-to-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/jewelcrafting-seo.webp"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "WoW Forever Player Just Knocked an Orgrimmar Flight Master Into Orbit",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-player-just-knocked-an-orgrimmar-flight-master-into-orbit/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/orgrimmar1.webp"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "New Highlight Video for Druid, Warlock, and Priest for WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/new-highlight-video-for-druid-warlock-and-priest-for-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/10/wow-forever-class-highlight-video-druid-warlock-priest.webp"
+  },
+  {
+   "d": "2026-10-06",
+   "t": "Where to find weapon trainers in WoW Classic and WoW: Forever",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/10/06/weapon-trainers-wow-classic-forever/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2024/02/wow-classic-season-discovery-tauren-sunken-temple.jpg"
+  },
+  {
+   "d": "2026-10-05",
+   "t": "Brief Realm Maintenance - October 5 (blue post: realm restarts to apply service fixes)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/brief-realm-maintenance-october-5/2373436"
+  },
+  {
+   "d": "2026-10-05",
+   "t": "Blizzard Performing Brief Realm Restarts Immediately",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/blizzard-performing-brief-realm-restarts-immediately-383260",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55606-blizzard-performing-brief-realm-restarts-immediately.jpg"
+  },
+  {
+   "d": "2026-10-05",
+   "t": "Johnny Cash Announces that Stitches is Hostile Again in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/johnny-cash-announces-that-stitches-is-hostile-again-in-wow-forever-383257",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55602-johnny-cash-announces-that-stitches-is-hostile-again-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-05",
+   "t": "Blizzard Teases More Information to Come on Skyborne Models",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/blizzard-teases-more-information-to-come-on-skyborne-models-383255",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55599-blizzard-teases-more-information-to-come-on-skyborne-models.jpg"
+  },
+  {
+   "d": "2026-10-05",
+   "t": "What's Best for WoW: Forever - Party Buffs or Raid Buffs?",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/whats-best-for-wow-forever-party-buffs-or-raid-buffs-383246",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55593-whats-best-for-wow-forever-party-buffs-or-raid-buffs.jpg"
+  },
+  {
+   "d": "2026-10-05",
+   "t": "WoW: Forever Character Creation Portraits Now Have SD and HD Versions",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-character-creation-portraits-now-have-sd-and-hd-versions-383248",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55594-wow-forever-character-creation-portraits-now-have-sd-and-hd-versions.jpg"
+  },
+  {
+   "d": "2026-10-05",
+   "t": "Skyborne Could Be Getting a Model Update in WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/skyborne-could-be-getting-a-model-update-in-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/maxresdefault.webp"
+  },
+  {
+   "d": "2026-10-05",
+   "t": "Nerfed Experience Gains From Low-Level Mobs in WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/nerfed-experience-gains-from-low-level-mobs-in-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/wetlands.webp"
+  },
+  {
+   "d": "2026-10-04",
+   "t": "QuestBank 3.6: quest icons on every zone map, and one addon instead of two",
+   "s": "FOREVERRANK",
+   "l": "/questbank/",
+   "img": "/questbank/img/route.jpg",
+   "kind": "addon"
+  },
+  {
+   "d": "2026-10-04",
+   "t": "Professions get Fun Thematic Gear Bonuses in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/professions-get-fun-thematic-gear-bonuses-in-wow-forever-383236",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55586-professions-get-fun-thematic-gear-bonuses-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-04",
+   "t": "Student Fodder Doesn't Give Rested Experience in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/student-fodder-doesnt-give-rested-experience-in-wow-forever-383243",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55592-student-fodder-doesnt-give-rested-experience-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-04",
+   "t": "Did Blizzard Move Shields in WoW Forever by Accident?",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/did-blizzard-move-shields-in-wow-forever-by-accident/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/scenicforever2.webp"
+  },
+  {
+   "d": "2026-10-04",
+   "t": "WoW Forever Players Are Leveling Solo Because Grouping Slows Quests Down",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-players-are-leveling-solo-because-grouping-slows-quests-down/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/wow-quest-line.jpg"
+  },
+  {
+   "d": "2026-10-03",
+   "t": "Gnomeregan, Who broke it?! (blue post: Gnomeregan fixed the same afternoon)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/gnomeregan-who-broke-it/2370922/6"
+  },
+  {
+   "d": "2026-10-03",
+   "t": "Dialog Bug for Australian Testers -- fixed (blue post)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/dialog-bug-for-australian-testers-fixed/2368931"
+  },
+  {
+   "d": "2026-10-03",
+   "t": "Necklace Rewards from Collecting Books Nerfed to Uncommon Quality in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/necklace-rewards-from-collecting-books-nerfed-to-uncommon-quality-in-wow-forever-383231",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55582-necklace-rewards-from-collecting-books-nerfed-to-uncommon-quality-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-03",
+   "t": "Every Quest in Excavation Site: Wetlands - WoW Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/every-quest-in-excavation-site-wetlands-wow-forever-383239",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55587-every-quest-in-excavation-site-wetlands-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-03",
+   "t": "Veteran Players Share What They Wish They Knew Before WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/veteran-players-share-what-they-wish-they-knew-before-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/wowforeverguide1.webp"
+  },
+  {
+   "d": "2026-10-03",
+   "t": "New Abilities For Hunter, Mage, and Paladin in WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/new-abilities-for-hunter-mage-and-paladin-in-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/class-abilities-2.webp"
+  },
+  {
+   "d": "2026-10-03",
+   "t": "Earn the Best Bow in the Game Before Blizzard Changes It",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/earn-the-best-bow-in-the-game-before-blizzard-changes-it/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/truthseeker-seo.webp"
+  },
+  {
+   "d": "2026-10-03",
+   "t": "Goblin Barbers Will Be Replaced in a Future WoW Forever Build",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/goblin-barbers-will-be-replaced-in-a-future-wow-forever-build/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/goblin-barber-darn.webp"
+  },
+  {
+   "d": "2026-10-03",
+   "t": "Hunter, Mage Paladin Get Their Highlight Video for WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/hunter-mage-paladin-get-their-highlight-video-for-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/10/wow-forever-video-hunter-mage-paladin.webp"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "Ghost Wolf Appearance Temporary Until Fixes Are In for WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/ghost-wolf-appearance-temporary-until-fixes-are-in-for-wow-forever-383241",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55589-ghost-wolf-appearance-temporary-until-fixes-are-in-for-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "The Story of Zephras Isle - Horde and Alliance POV",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/the-story-of-zephras-isle-horde-and-alliance-pov-383135",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55538-the-story-of-zephras-isle-horde-and-alliance-pov.jpg"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "Stitches is Currently Neutral, but will Terrorize Duskwood Again Soon in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/stitches-is-currently-neutral-but-will-terrorize-duskwood-again-soon-in-wow-383238",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55585-stitches-is-currently-neutral-but-will-terrorize-duskwood-again-soon-in-wow.jpg"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "Skinning No Longer Group-Wide in Latest WoW: Forever Beta Build",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/skinning-no-longer-group-wide-in-latest-wow-forever-beta-build-383226",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55579-skinning-no-longer-group-wide-in-latest-wow-forever-beta-build.jpg"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "Book Collection Ring No Longer Class Restricted in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/book-collection-ring-no-longer-class-restricted-in-wow-forever-383225",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55577-book-collection-ring-no-longer-class-restricted-in-wow-forever.png"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "WoW Forever Is Turning Scarlet Monastery Junk Loot Into Real Gear",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-is-turning-scarlet-monastery-junk-loot-into-real-gear/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/Scarlet-Monastery-Cathedral-Pond.webp"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "New Level 30 Weapon Quest Found on the WoW Forever Beta",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/new-level-30-weapon-quest-found-on-the-wow-forever-beta/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/thrall-weapon.webp"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "Shaman’s Ghost Wolf Just Got a Glow-Up, But It Won’t Last",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/shamans-ghost-wolf-just-got-a-glow-up-but-it-wont-last/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/spirit-wolf.webp"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "WoW Forever Beta Has Accidentally Given Anduin Wrynn a New Accessory",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-beta-has-accidentally-given-anduin-wrynn-a-new-accessory/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/anduin-wrynn-child.png"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "WoW Forever Players Can Experience Zephras Isle Without Playing Skyborne",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-players-can-experience-zephras-isle-without-playing-skyborne/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/WoW-Forever-Cinematic-Still-4.webp"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "New Big Warrior Changes Added on the Beta",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/new-big-warrior-changes-added-on-the-beta/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/classic-warrior.jpg"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "Carries Get Their Own LFG Category in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/playstyle-selection-now-required-for-lfg-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/10/wow-forever-lfg-playstyles-featured-image.jpg"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "The WoW: Forever beta's nerf to dungeon XP isn't nearly as bad as it seems",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/the-wow-forever-betas-nerf-to-dungeon-xp-isnt-nearly-as-bad-as-it-seems/",
+   "img": "https://cdn.mos.cms.futurecdn.net/MEcbxoCTbRdnZsEr2yLnkd-1920-80.png"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "5 Big Things That Just Changed In The World Of Warcraft: Forever Beta",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/5-big-things-world-of-warcraft-forever-beta-2000739404",
+   "img": "https://kotaku.com/app/uploads/2026/10/on-the-boat.jpg"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "Blizzard Added A Working Torch To WoW: Forever And I Hiked All The Way Across Azeroth To Try To Get It",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/blizzard-world-of-warcraft-forever-torch-hike-2000739020",
+   "img": "https://kotaku.com/app/uploads/2026/10/WoW-Forever-journey17-1200x675.jpg"
+  },
+  {
+   "d": "2026-10-02",
+   "t": "In Praise Of World Of Warcraft’s God-Awful Polygonal Prairie Dog",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/in-praise-of-world-of-warcrafts-god-awful-polygonal-prairie-dog-2000739427",
+   "img": "https://kotaku.com/app/uploads/2026/10/prairie-dog-3.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "FOREVER BETA WEEK 3: level 30, the 15v15 battleground and the new dungeon",
+   "s": "Blizzard (X)",
+   "l": "https://x.com/Warcraft/status/2105796906760786406"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Warrior Updates in Today's Beta Build (blue post: 100% more Rage from crits, Fury and Protection trees reworked)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/warrior-updates-in-todays-beta-build/2369360"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW Forever Beta Development Notes – Updated October 1 (level cap 30, Excavation Site, dungeon quest XP bonus halved, Honor cap 25,000)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/wow-forever-beta-development-notes-%E2%80%93-updated-october-1/2360696/4"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Legacy Points for Beta Testing (blue post: every tester gets 16 Legacy points in a future beta week)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/legacy-points-for-beta-testing/2368776"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Actions Taken Against Botting and RMT (blue post: a warning when trading with strangers is coming)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/actions-taken-against-botting-and-rmt/2368705"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Aidan Moon: a Dual Wield Specialization bug skewed Rage tests; expect +100% Rage on crits, +50% off-hand Rage",
+   "s": "Blizzard (X)",
+   "l": "https://x.com/Zirene/status/2105700347557867695"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Watch Now! WoW: Forever Podcast Ep.2, Speedrunning Classes",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24298592",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/x3/X3B1QPIB3A0E1790880532807.png"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW Forever Beta Known Issues - October 1 (blue post)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/wow-forever-beta-known-issues-october-1/2352687/6"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Beta Service Issue - October 1 (blue post: testers unable to log in after the level 30 build)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/beta-service-issue-october-1/2369114"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Warrior Updates in Today's WoW: Forever Beta Build",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/warrior-updates-in-todays-wow-forever-beta-build-383230",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55581-warrior-updates-in-todays-wow-forever-beta-build.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Gnome Racial Nerfed Again In Latest WoW: Forever Build",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/gnome-racial-nerfed-again-in-latest-wow-forever-build-383222",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55569-gnome-racial-nerfed-again-in-latest-wow-forever-build.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "No More Easy Money with Enchanting Flips in WoW: Forever - Sell Cost Nerfed",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/no-more-easy-money-with-enchanting-flips-in-wow-forever-sell-cost-nerfed-383224",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55572-no-more-easy-money-with-enchanting-flips-in-wow-forever-sell-cost-nerfed.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Blizzard Investigating Beta Login Issues for WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/blizzard-investigating-beta-login-issues-for-wow-forever-383228",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55576-blizzard-investigating-beta-login-issues-for-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "New Proc for Verigan's Fist in WoW: Forever - Alliance Paladin Weapon",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-proc-for-verigans-fist-in-wow-forever-alliance-paladin-weapon-383221",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55571-new-proc-for-verigans-fist-in-wow-forever-alliance-paladin-weapon.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "No More Ogre or Murloc Transformations with Savory Whimsyfin Delight in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/no-more-ogre-or-murloc-transformations-with-savory-whimsyfin-delight-in-wow-383220",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55568-no-more-ogre-or-murloc-transformations-with-savory-whimsyfin-delight-in-wow.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Datamined Class Changes for WoW: Forever Build on October 1st",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/datamined-class-changes-for-wow-forever-build-on-october-1st-383219",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55567-datamined-class-changes-for-wow-forever-build-on-october-1st.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Dungeon Quest XP Nerfed in Latest WoW: Forever Beta Build",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/dungeon-quest-xp-nerfed-in-latest-wow-forever-beta-build-383218",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55566-dungeon-quest-xp-nerfed-in-latest-wow-forever-beta-build.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Level 30 Now Available: Forever Beta Patch Notes",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/level-30-now-available-forever-beta-patch-notes-383217",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55565-level-30-now-available-forever-beta-patch-notes.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Blizzard Giving All Players 16 Legacy Points in Future Beta Build",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/blizzard-giving-all-players-16-legacy-points-in-future-beta-build-383215",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55562-blizzard-giving-all-players-16-legacy-points-in-future-beta-build.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Blizzard Takes Aim at RMT With New WoW: Forever Trade Warning",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/blizzard-takes-aim-at-rmt-with-new-wow-forever-trade-warning-383214",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55560-blizzard-takes-aim-at-rmt-with-new-wow-forever-trade-warning.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Registration for Tips Out $100,000 WoW: Forever Dueling Tournament Closing Tomorrow",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/registration-for-tips-out-100-000-wow-forever-dueling-tournament-closing-early-383153",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55510-registration-for-tips-out-100-000-wow-forever-dueling-tournament-closing-early.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Rogues Will Have the Highest Single Target Damage in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/rogues-will-have-the-highest-single-target-damage-in-wow-forever-383209",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55556-rogues-will-have-the-highest-single-target-damage-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW: Forever Beta Going Down for Maintenance in 45 Minutes",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-beta-going-down-for-maintenance-in-45-minutes-383208",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55555-wow-forever-beta-going-down-for-maintenance-in-45-minutes.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Aidan Moon Confirms Rage Bug for Warriors While Dual Wielding",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/aiden-moon-confirms-rage-bug-for-warriors-while-dual-wielding-383204",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55553-aiden-moon-confirms-rage-bug-for-warriors-while-dual-wielding.png"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "New Wetlands Dungeon Available on WoW: Forever Beta This Week - No Dalaran Dungeon",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-wetlands-dungeon-available-on-wow-forever-beta-this-week-no-dalaran-dungeon-383203",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55552-new-wetlands-dungeon-available-on-wow-forever-beta-this-week-no-dalaran-dungeon.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW: Forever Podcast Ep.2 - Class Design",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-podcast-ep-2-class-design-383202",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55551-wow-forever-podcast-ep-2-class-design.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Enhancement Focused on 2-Handed Weapons in WoW: Forever - Enhancement Shaman Overview Video",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/enhancement-only-uses-2-handed-weapons-in-wow-forever-enhancement-shaman-383200",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55549-enhancement-only-uses-2-handed-weapons-in-wow-forever-enhancement-shaman.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "The Light Initially Damages Forsaken Paladins in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/the-light-initially-damages-forsaken-paladins-in-wow-forever-383177",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55547-the-light-initially-damages-forsaken-paladins-in-wow-forever.png"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Fan-Made Ruins of Lordaeron and Hall of Thanes Dungeon Maps",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/fan-made-ruins-of-lordaeron-and-hall-of-thanes-dungeon-maps-383151",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55508-fan-made-ruins-of-lordaeron-and-hall-of-thanes-dungeon-maps.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW Forever Beta Known Issues List: October 1st",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-beta-known-issues-list-october-1st/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/wow-forever.webp"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Players Getting Free Legacy Points for Testing",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/players-getting-free-legacy-points-for-testing/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/Q7DCITNH6C9A17901339965171.png"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Gold Bot and Trade Bans, Warning When Trading Coming",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/gold-bot-and-trade-bans-warning-when-trading-coming/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2025/03/Gold.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Last Chance to Register for the $100,000 Forever Open",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/last-chance-to-register-for-the-100000-forever-open/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/forever-open.webp"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "The Biggest Class Changes Coming in Today’s Forever Update",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/the-biggest-class-changes-coming-in-todays-forever-update/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/forever-podcast-2.webp"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Everything New in Phase 2 of the WoW Forever Beta – Level Cap, Dungeons & Zones",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/everything-new-in-phase-2-of-the-wow-forever-beta-level-cap-dungeons-zones/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/Dalaran-Cinematic-Still.webp"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "This Is the Only New Dungeon You Can Run in This Week’s WoW Forever Build",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/this-is-the-only-new-dungeon-you-can-run-in-this-weeks-wow-forever-build/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/wetlandsdungseo.webp"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Blizzard Is Taking WoW Forever on a Scandinavian Road Trip and Filming All of It",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/blizzard-is-taking-wow-forever-on-a-scandinavian-road-trip-and-filming-all-of-it/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/Camelot_Nordics_Social_Post_Final_Textless.webp"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW Forever Players Have Found a Brutal Way to Welcome New Characters",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-players-have-found-a-brutal-way-to-welcome-new-characters/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/camping-warlock.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW Forever Survey Teases 11 New Classes Coming to Azeroth",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-survey-teases-11-new-classes-coming-to-azeroth/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/O73TW8W369MK17892477161791.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW Forever Players Are Fixing FPS Drops With This One Setting",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-players-are-fixing-fps-drops-with-this-one-setting/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/10/scenicwowforever.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW Forever Beta Level Cap Raising Soon – What You Need to Know",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-beta-level-cap-raising-soon-what-you-need-to-know/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/WoW_Forever_Announce_Dungeon_ExcavationSite_055.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Blizzard is Taking Further Action Against Botting & RMT in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/blizzard-is-taking-further-action-against-botting-rmt-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2022/11/Wotlk_Gold_Cap_Increase.png"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Blizzard to Grant Legacy Points for WoW Forever Beta Testing",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/blizzard-to-grant-legacy-points-for-wow-forever-beta-testing/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/10/blizzard-official-art-wow-forever-key-art-alliance-hyjal-horley.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Episode 2 of the WoW Forever Podcast Covers Class Design",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/episode-2-of-the-wow-forever-podcast-covers-class-design/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/10/wow-forever-podcast-episode-2.webp"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Level 30 Content is Now Available in the WoW Forever Beta",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/level-30-content-is-now-available-in-the-wow-forever-beta/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/inside-undercity-wow-forever.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Level Cap Increasing to 30 Tomorrow in the WoW Forever Beta",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/level-cap-increasing-to-30-tomorrow-in-the-wow-forever-beta/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-camping-elwynn-forest.webp"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Rage Will Benefit from Crit: Priest & Warrior Deep Dive for WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/rage-will-benefit-from-crit-priest-warrior-deep-dive-for-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-gnome-racial-spell-effect.jpg"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "Warrior, Shaman and Rogue Changes Detailed for World of Warcraft: Forever",
+   "s": "classicwow.gg",
+   "l": "https://classicwow.gg/forever/news/warrior-shaman-and-rogue-changes-detailed-for-world-of-warcraft-forever-source-1521"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW Forever Priest and Warrior Deep Dive Details Baseline and Talent Changes",
+   "s": "classicwow.gg",
+   "l": "https://classicwow.gg/forever/news/wow-forever-priest-and-warrior-deep-dive-details-baseline-and-talent-changes-source-1512"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "WoW Forever Hunter and Druid deep dive details new build paths and shapeshift changes",
+   "s": "classicwow.gg",
+   "l": "https://classicwow.gg/forever/news/wow-forever-hunter-and-druid-deep-dive-details-new-build-paths-and-shapeshift-changes-source-1509"
+  },
+  {
+   "d": "2026-10-01",
+   "t": "World of Warcraft: Forever Heads to PAX Aus With Dungeon Deep Dive",
+   "s": "classicwow.gg",
+   "l": "https://classicwow.gg/forever/news/world-of-warcraft-forever-heads-to-pax-aus-with-dungeon-deep-dive-source-1495"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Beta Update Maintenance - October 1 (blue post: the next build raises the level cap to 30)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/beta-update-maintenance-october-1/2367661"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "World of Warcraft: Forever Class Deep Dives — Priest and Warrior",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24301514",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/ca/CAFWOZ4CKY5X1790725787091.png"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "World of Warcraft: Forever Class Deep Dives — Hunter and Druid",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24301515",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/dr/DRJT38SFJ4WU1790727314555.png"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "New WoW: Forever Beta Build with Level 30 Cap Coming Tomorrow",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-wow-forever-beta-build-with-level-30-cap-coming-tomorrow-383195",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55546-new-wow-forever-beta-build-with-level-30-cap-coming-tomorrow.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Priest and Warrior Class Deep Dives in World of Warcraft: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/priest-and-warrior-class-deep-dives-in-world-of-warcraft-forever-383192",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55543-priest-and-warrior-class-deep-dives-in-world-of-warcraft-forever.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Druid and Hunter Class Deep Dives in World of Warcraft: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/druid-and-hunter-class-deep-dives-in-world-of-warcraft-forever-383190",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55542-druid-and-hunter-class-deep-dives-in-world-of-warcraft-forever.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Class Highlights for Warriors, Rogues and Shamans in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/class-highlights-for-warriors-rogues-and-shamans-in-wow-forever-383189",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55541-class-highlights-for-warriors-rogues-and-shamans-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "How to Get the New Musical Gustjumper Pet in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/how-to-get-the-new-musical-gustjumper-pet-in-wow-forever-383087",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55453-how-to-get-the-new-musical-gustjumper-pet-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Earn Two New Pets in Capital Cities in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/earn-two-new-pets-in-capital-cities-in-wow-forever-383170",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55523-earn-two-new-pets-in-capital-cities-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Priest and Warrior Class Changes Deep Dive",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/priest-and-warrior-class-changes-deep-dive/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/0RWZZTA4YM5I17907257656741.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Brand-New Stats Discovered on the WoW Forever Beta",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/brand-new-stats-discovered-on-the-wow-forever-beta/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/durotar-leveling.webp"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Players Are Already Looting Seeds for a WoW Forever Greenhouse No One Can Craft Yet",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/players-are-already-looting-seeds-for-a-wow-forever-greenhouse-no-one-can-craft-yet/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/Herblism-News.webp"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Class Change Highlights for Warrior, Shaman, and Rogue (Video)",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/class-change-highlights-for-warrior-shaman-and-rogue-video/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/maxresdefault1-3.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Talents as Baseline Abilities, Leveling Changes, and More: Class Deep Dives, Hunter and Druid",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/talents-as-baseline-abilities-leveling-changes-and-more-class-deep-dives-hunter-and-druid/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/Classic-druid.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "WoW Forever Players Are Chasing a Secret Nobody Has Solved Yet",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-players-are-chasing-a-secret-nobody-has-solved-yet/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/sleepingbagseo.webp"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "WoW Players Got Blizzard to Bring Back Kyle’s Quest in WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-players-got-blizzard-to-bring-back-kyles-quest-in-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/KyleMissing3.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Powershifting is Back (Sort of): Hunter & Druid Deep Dive for WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/powershifting-is-back-sort-of-hunter-druid-deep-dive-for-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-skyborne-druid-bear-form.webp"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "World of Warcraft: Forever survey pitches new classes to players, including Bard, Witch, and more",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-survey-pitches-new-classes-to-players-including-bard-witch-and-more/",
+   "img": "https://cdn.mos.cms.futurecdn.net/4a9oyQdrXFpY6keN5AagHb-2560-80.png"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "World Of Warcraft: Forever Isn’t Even Out Yet, But It’s Already Dealing With A Gold Buying Scandal",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/world-of-warcraft-forever-gold-buying-rmt-2000738402",
+   "img": "https://kotaku.com/app/uploads/2026/09/wow-forever-5-1-1200x675.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "Blizzard Seems To Be Surveying Players About Adding Demon Hunter, Witch, Tinker, Bard, And More Classes To WoW: Forever",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/blizzard-survey-players-demon-hunter-wow-forever-2000738699",
+   "img": "https://kotaku.com/app/uploads/2026/09/wow-forever-road-1200x675.jpg"
+  },
+  {
+   "d": "2026-09-30",
+   "t": "WoW Forever player builds “IRS” add-on to audit gold buyers after Blizzard crackdown",
+   "s": "Dexerto",
+   "l": "https://www.dexerto.com/world-of-warcraft/wow-forever-player-builds-irs-add-on-to-audit-gold-buyers-after-blizzard-crackdown-3414218/",
+   "img": "https://www.dexerto.com/cdn-image/wp-content/uploads/2026/09/30/Gold-WoW.jpg"
+  },
+  {
+   "d": "2026-09-29",
+   "t": "What to Do in Dalaran in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/what-to-do-in-dalaran-in-wow-forever-383146",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55504-what-to-do-in-dalaran-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-29",
+   "t": "Enjoy More Fun Transformations in WoW: Forever with the Savory Whimsyfin Delight",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/enjoy-more-fun-transformations-in-wow-forever-with-the-savory-whimsyfin-delight-383121",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55483-enjoy-more-fun-transformations-in-wow-forever-with-the-savory-whimsyfin-delight.jpg"
+  },
+  {
+   "d": "2026-09-29",
+   "t": "WoW: Forever AH Currently Bugged - Too Much Deposit Being Taken",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-ah-currently-bugged-too-much-deposit-being-taken-383134",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55495-wow-forever-ah-currently-bugged-too-much-deposit-being-taken.jpg"
+  },
+  {
+   "d": "2026-09-29",
+   "t": "The WoW: Forever Team is Expanding With a Senior Game Designer",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/the-wow-forever-team-is-expanding-with-a-senior-game-designer/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/hyjal-group.webp"
+  },
+  {
+   "d": "2026-09-29",
+   "t": "Blizzard Takes Action Against Possible RMT on the WoW: Forever Beta",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/blizzard-takes-action-against-possible-rmt-on-the-wow-forever-beta/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/ziqo-rmt.webp"
+  },
+  {
+   "d": "2026-09-29",
+   "t": "Set Up Your WoW Forever UI Before Launch With These 9 Addons",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/set-up-your-wow-forever-ui-before-launch-with-these-9-addons/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/WoW-Forever-Scenic-Screenshot.jpg"
+  },
+  {
+   "d": "2026-09-29",
+   "t": "Every Gathering Node in WoW: Forever Can Drop a Scarce Material You’ll Want",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/every-gathering-node-in-wow-forever-can-drop-a-scarce-material-youll-want/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/Ashenvale-Scenic.webp"
+  },
+  {
+   "d": "2026-09-29",
+   "t": "Forever Open 1v1 PvP Tournament: Dates, Registration & Prize Pool",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/forever-open-1v1-pvp-tournament-dates-registration-prize-pool/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-open-1v1-tournament.webp"
+  },
+  {
+   "d": "2026-09-29",
+   "t": "Secret Finders are Investigating a Keystone Fragment in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/secret-finders-are-investigating-a-keystone-fragment-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2025/04/WoW-Classic-Blackrock-Mountain-Entrance.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Watch Holly Longdale and Clay Stone’s Keynote Presentations Live from PAX Aus 9-11 October",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24302503"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Gold buying rules (blue post: Blizzard will increasingly act against gold buyers' accounts, up to closures)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/gold-buying-rules/2364933/43"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Blizzard Confirms Crit Nerf in PvP is a Bug in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/blizzard-confirms-crit-nerf-in-pvp-is-a-bug-in-wow-forever-383163",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55520-blizzard-confirms-crit-nerf-in-pvp-is-a-bug-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Blizzard Working on Putting Make-a-Wish Quest Back in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/blizzard-working-on-putting-make-a-wish-quest-back-in-wow-forever-383161",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55518-blizzard-working-on-putting-make-a-wish-quest-back-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Holly Longdale and Clay Stone’s at PAX Aus - New WoW: Forever Dungeon",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/news/holly-longdale-and-clay-stone-s-at-pax-aus-new-wow-forever-dungeon-383158",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55516-holly-longdale-and-clay-stone-s-at-pax-aus-new-wow-forever-dungeon.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Cat Form Druid Quest Bug Should Be Resolved",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/cat-form-druid-quest-bug-should-be-resolved-383157",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55515-cat-form-druid-quest-bug-should-be-resolved.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Blizzard Will Be Taking Action Against Gold Buyers - Potential for Bans",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/blizzard-will-be-taking-action-against-gold-buyers-potential-for-bans-383156",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55514-blizzard-will-be-taking-action-against-gold-buyers-potential-for-bans.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Josh Greenfield Teases BRD-Like Mega Dungeon for WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/josh-greenfield-teases-brd-like-mega-dungeon-for-wow-forever-383154",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55511-josh-greenfield-teases-brd-like-mega-dungeon-for-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Players Struggling to Complete Druid Cat Form Quest in Forever Due to Quest Design",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/players-struggling-to-complete-druid-cat-form-quest-in-forever-due-to-quest-383152",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55509-players-struggling-to-complete-druid-cat-form-quest-in-forever-due-to-quest.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Could Arenas be Coming to WoW: Forever?",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/could-arenas-be-coming-to-wow-forever-383090",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55456-could-arenas-be-coming-to-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "The Ruins of Lordaeron: New Dungeon Walkthrough for WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/the-ruins-of-lordaeron-new-dungeon-walkthrough-for-wow-forever-383021",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55390-the-ruins-of-lordaeron-new-dungeon-walkthrough-for-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Everyone Can Collect Books for Rewards in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/everyone-can-collect-books-for-rewards-in-wow-forever-383141",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55499-everyone-can-collect-books-for-rewards-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Elves Can Speak Cross-Faction in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/elves-can-speak-cross-faction-in-wow-forever-383133",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55494-elves-can-speak-cross-faction-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "The Stakes Have Been Raised – $100,000 Dueling Tournament",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/the-stakes-have-been-raised-100000-dueling-tournament/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/100k-tournament.webp"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Blizzard Reiterate Gold Buying Rules for WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/blizzard-reiterated-gold-buying-rules-for-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/forever_loginscreen.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Players Found a Hidden PvP Rule in WoW Forever That Halves Crit Bonuses -Updated",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/players-found-a-hidden-pvp-rule-in-wow-forever-that-halves-crit-bonuses/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/02/wow-news-pvp.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "WoW Forever Hid Over 12,500 Items From Dataminers – Here’s What’s Still Secret",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-hid-over-12500-items-from-dataminers-heres-whats-still-secret/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/WoW_Forever_Announce_Raid_Hyjal_085-1.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "WoW Forever Players Can Now Build Their Perfect UI With EllesmereUI",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-players-can-now-build-their-perfect-ui-with-ellesmereui/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/04/wow-user-interface-ui.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Blizzard Plans a More Aggressive Stance on Gold Buying in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/blizzard-plans-a-more-aggressive-stance-on-gold-buying-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2021/01/World-of-Warcraft-Gold.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Will my progress and characters from the WoW: Forever beta carry over when the game releases?",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/28/will-progress-wow-forever-beta-carry-game-releases/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/09/WoW_Forever_SCENIC_Announce_Skyborne.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "World of Warcraft: Forever dev teases new 'mega dungeon' to get lost in for hours like the good ol' days",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-dev-teases-new-mega-dungeon-to-get-lost-in-for-hours-like-the-good-ol-days/",
+   "img": "https://cdn.mos.cms.futurecdn.net/4a9oyQdrXFpY6keN5AagHb-2560-80.png"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "I'm sure whoever chose to charge for WoW: Forever beta access is feeling very chuffed, given Blizzard's had to expand its server size a second time",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/im-sure-whoever-chose-to-charge-for-wow-forever-beta-access-is-feeling-very-chuffed-given-blizzards-had-to-expand-its-server-size-a-second-time/",
+   "img": "https://cdn.mos.cms.futurecdn.net/yCF26SfzGQAnST4A9QzDAX-1920-80.png"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "World of Warcraft: Forever players find black market NPC who sells a 15-day movement speed buff and other rare items that nobody can afford yet",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-players-find-black-market-npc-who-sells-a-15-day-movement-speed-buff-and-other-rare-items-that-nobody-can-afford-yet/",
+   "img": "https://cdn.mos.cms.futurecdn.net/uWEo4ZYPWjBoJMPvS4hyf6-1920-80.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "WoW: Forever Ban Controversy Forces Blizzard Dev To Delete Account After Asking Players To Be ‘Better Humans’",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/wow-forever-ban-controversy-forces-blizzard-veteran-to-delete-account-after-asking-players-to-be-better-humans-2000737990",
+   "img": "https://kotaku.com/app/uploads/2026/09/wow-forever-6-1200x675.jpg"
+  },
+  {
+   "d": "2026-09-28",
+   "t": "Blizzard warns WoW: Forever players against gold buying and suspicious gifts",
+   "s": "classicwow.gg",
+   "l": "https://classicwow.gg/forever/news/blizzard-warns-wow-forever-players-against-gold-buying-and-suspicious-gifts-source-1490"
+  },
+  {
+   "d": "2026-09-27",
+   "t": "Holly Longdale: the beta population cap had to be raised again",
+   "s": "Blizzard (X)",
+   "l": "https://x.com/TheWindstalker/status/2104270224568541611"
+  },
+  {
+   "d": "2026-09-27",
+   "t": "Blizzard Increases Population Cap for WoW: Forever - Login Queues Fixed",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/blizzard-increases-population-cap-for-wow-forever-login-queues-fixed-383144",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55506-blizzard-increases-population-cap-for-wow-forever-login-queues-fixed.jpg"
+  },
+  {
+   "d": "2026-09-27",
+   "t": "New WoW: Forever Black Market Vendor Caps Prices on High-End Reagents",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-black-market-vendor-caps-prices-on-high-end-reagents-383052",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55420-new-black-market-vendor-caps-prices-on-high-end-reagents.jpg"
+  },
+  {
+   "d": "2026-09-27",
+   "t": "Druids Can Use Consumables While Shapeshifted in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/druids-can-use-consumables-while-shapeshifted-in-wow-forever-383122",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55484-druids-can-use-consumables-while-shapeshifted-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-27",
+   "t": "Buy Gear, Pets, Mounts, and More on the WoW: Forever Black Market Auction House",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/buy-gear-pets-mounts-and-more-on-the-wow-forever-black-market-auction-house-383078",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55498-buy-gear-pets-mounts-and-more-on-the-wow-forever-black-market-auction-house.jpg"
+  },
+  {
+   "d": "2026-09-27",
+   "t": "This Feature Would Make Campfires Even Better in WoW: Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/this-feature-would-make-campfires-even-better-in-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/camping.webp"
+  },
+  {
+   "d": "2026-09-27",
+   "t": "WoW Players Didn’t Abandon Retail for the Forever Beta, and the Data Shows It",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow/news/wow-players-didnt-abandon-retail-for-the-forever-beta-and-the-data-shows-it/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/murder-row-loading-screen.png"
+  },
+  {
+   "d": "2026-09-26",
+   "t": "WoW: Forever Adds Bad Luck Protection on Quest Drops While Grouped",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-adds-bad-luck-protection-on-quest-drops-while-grouped-383138",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55497-wow-forever-adds-bad-luck-protection-on-quest-drops-while-grouped.jpg"
+  },
+  {
+   "d": "2026-09-26",
+   "t": "All Cooking Food that Currently Gives XP Buffs in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/all-cooking-food-that-currently-gives-xp-buffs-in-wow-forever-382928",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55299-all-cooking-food-that-currently-gives-xp-buffs-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-26",
+   "t": "Classic Raid Population Dropping as WoW: Forever Beta Progresses",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/news/classic-raid-population-dropping-as-wow-forever-beta-progresses-383131",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55496-classic-raid-population-dropping-as-wow-forever-beta-progresses.png"
+  },
+  {
+   "d": "2026-09-26",
+   "t": "Blizzard Fights Back Against Bots on the WoW: Forever Beta",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/blizzard-fights-back-against-bots-on-the-wow-forever-beta/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/herbalism-botting.webp"
+  },
+  {
+   "d": "2026-09-26",
+   "t": "Players Have Felt a Change to Group Quest Drops in WoW: Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/players-have-felt-a-change-to-group-quest-drops-in-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/Screenshot-2144.webp"
+  },
+  {
+   "d": "2026-09-26",
+   "t": "One Quick Quest Gives You a Toy That Actually Lights Up WoW Forever",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/one-quick-quest-gives-you-a-toy-that-actually-lights-up-wow-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/torchseo.webp"
+  },
+  {
+   "d": "2026-09-26",
+   "t": "Quest Drops Distribute More Evenly in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/quest-drops-distribute-more-evenly-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-zephras-isle-chest-waterfall.webp"
+  },
   {
    "d": "2026-09-25",
    "t": "Build 70009 datamined: SoD's runes kept and retuned, Forever's own drafts cut, a Statistics panel, and what the library books pay past twenty",
@@ -29,6 +1641,400 @@
      "t": "Library books past twenty may pay item level 58"
     }
    ]
+  },
+  {
+   "d": "2026-09-25",
+   "t": "World of Warcraft®: Forever Escape Together Comes to Toronto",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24302094",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/7u/7U1FKACB7QCQ1790257534010.png"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Beta Realm Restarts Incoming - Sept. 25 (blue post: stability fixes)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/beta-realm-restarts-incoming-sept-25/2362048"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "What insights would you like to see in a future episode of the WoW: Forever Podcast? (Aggrend: episode 2 is about class design)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/what-insights-would-you-like-to-see-in-a-future-episode-of-the-wow-forever-podcast/2361993"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Recent Allies Feature in WoW: Forever Helps with a Sense of Community",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/recent-allies-feature-in-wow-forever-helps-with-a-sense-of-community-383082",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55450-recent-allies-feature-in-wow-forever-helps-with-a-sense-of-community.png"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Escape the Scarlet Monastery in a Toronto-Based WoW: Forever Escape Room",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/escape-the-scarlet-monastery-in-a-toronto-based-wow-forever-escape-room-383129",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55492-escape-the-scarlet-monastery-in-a-toronto-based-wow-forever-escape-room.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Blizzard Asking for Topics for Future Developer Insights on the WoW: Forever Podcast",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/blizzard-asking-for-topics-for-future-developer-insights-on-the-wow-forever-383126",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55490-blizzard-asking-for-topics-for-future-developer-insights-on-the-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Update: Server Restarts Imminent to Fix Issues in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-server-issues-affecting-players-likely-restarts-today-383124",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55487-wow-forever-server-issues-affecting-players-likely-restarts-today.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "0.18% of Names Earned a Ban from WoW: Forever Beta",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/0-18-of-names-earned-a-ban-from-wow-forever-beta-383123",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55485-0-18-of-names-earned-a-ban-from-wow-forever-beta.png"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Inspect Feature Quality of Life Improvements in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/inspect-feature-quality-of-life-improvements-in-wow-forever-383086",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55452-inspect-feature-quality-of-life-improvements-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Profession Quality of Life Improvements in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/profession-quality-of-life-improvements-in-wow-forever-383084",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55451-profession-quality-of-life-improvements-in-wow-forever.png"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Cooldown Manager Now Available in WoW: Forever Beta",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/cooldown-manager-now-available-in-wow-forever-beta-383106",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55476-cooldown-manager-now-available-in-wow-forever-beta.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "New Survey about WoW: Forever on the Battle.net Launcher",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-survey-about-wow-forever-on-the-battle-net-launcher-383104",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55473-new-survey-about-wow-forever-on-the-battle-net-launcher.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "New Sets Discovered on the WoW: Forever Beta",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/new-sets-discovered-on-the-wow-forever-beta/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/Screenshot-2159.webp"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "$50,000 Dueling Tournament Announced – WoW: Forever Beta",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/50000-dueling-tournament-announced-wow-forever-beta/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/Blizzard-Expands-on-What-Happens-When-You-Die-in-Wow-Classic-Hardcore.webp"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "This Fan Artist Is Mapping the WoW Forever Zones Blizzard Never Did",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/this-fan-artist-is-mapping-the-wow-forever-zones-blizzard-never-did/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/reyesmapseo.webp"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Scarlet Monastery-Inspired Escape Room Streaming Event Coming to Toronto!",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/scarlet-monastery-inspired-escape-room-streaming-event-coming-to-toronto/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/96CYIADI0CPD17902575502941.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Blizzard Reveals an Interesting Stat About WoW Forever’s Average Leveling Speed",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/blizzard-reveals-an-interesting-stat-about-wow-forevers-average-leveling-speed/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/O73TW8W369MK17892477161791.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Eureka!: World of Warcraft Forever’s Strongest Racial is Getting a Massive Nerf",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/eureka-world-of-warcraft-forevers-strongest-racial-is-getting-a-massive-nerf/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2025/04/Arcane.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Blizzard’s WoW Forever Name Crackdown Sparks Player Backlash",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/blizzards-wow-forever-name-crackdown-sparks-player-backlash/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/forever_loginscreen.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "WoW Forever Just Reworked Warrior Rage and Players Can’t Stop Talking About It (Updated)",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-just-reworked-warrior-rage-and-players-cant-stop-talking-about-it/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/grommash-roar.webp"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "How to Get a Musical Gustjumper Frog Pet in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/how-to-get-a-musical-gustjumper-frog-pet-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/how-to-get-a-musical-gustjumper-pet-in-wow-forever-featured-image.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "World of Warcraft: Forever dev has 'no sympathy' for players kicked from the beta for offensive names: 'If you're genuinely confused, remember that it's our database, we can see every character you've created'",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-dev-has-no-sympathy-for-players-kicked-from-the-beta-for-offensive-names-if-youre-genuinely-confused-remember-that-its-our-database-we-can-see-every-character-youve-created/",
+   "img": "https://cdn.mos.cms.futurecdn.net/TJXTnMEBeZGYSwDNJNZ4k5-1920-80.jpg"
+  },
+  {
+   "d": "2026-09-25",
+   "t": "Blizzard pulls WoW Forever beta access from players with offensive character names",
+   "s": "Dexerto",
+   "l": "https://www.dexerto.com/world-of-warcraft/blizzard-pulls-wow-forever-beta-access-from-players-with-offensive-character-names-3412554/",
+   "img": "https://www.dexerto.com/cdn-image/wp-content/uploads/2026/09/25/WoW-banned-character.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "[Updated 9/24] Pre-Purchase the World of Warcraft®: Forever Collector’s Edition",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24302498",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/oz/OZ2E1UO4PXVJ1789244605300.png"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Watch the World of Warcraft: Forever Podcast, Ep. 1",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24304076",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/r2/R2HRT9BFC0L31790269165073.png"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "WoW Forever Beta - Account Actions For Name Violations (blue post: forced renames, and beta access removed for the worst names)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/wow-forever-beta-account-actions-for-name-violations/2360739"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "WoW Forever Beta Development Notes – September 24 (blue post: the notes for the Sept. 24 build)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/wow-forever-beta-development-notes-%E2%80%93-updated-october-1/2360696"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "New Leveling Item Set Datamined on WoW: Forever Beta",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-leveling-item-set-datamined-on-wow-forever-beta-383107",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55478-new-leveling-item-set-datamined-on-wow-forever-beta.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Statistics Pane Now Available in WoW: Forever Beta",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/statistics-pane-now-available-in-wow-forever-beta-383102",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55471-statistics-pane-now-available-in-wow-forever-beta.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "New Companion Pet Datamined on WoW: Forever Beta",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-companion-pet-datamined-on-wow-forever-beta-383098",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55475-new-companion-pet-datamined-on-wow-forever-beta.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Talent Reset Prices Nerfed for WoW: Forever Beta",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/talent-reset-prices-nerfed-for-wow-forever-beta-383099",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55467-talent-reset-prices-nerfed-for-wow-forever-beta.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Account Actions and Forced Name Changes Issued in Forever Beta",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/account-actions-and-forced-name-changes-issued-in-forever-beta-383103",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55470-account-actions-and-forced-name-changes-issued-in-forever-beta.png"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Known Issues on WoW: Forever Beta Updated",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/known-issues-on-wow-forever-beta-updated-383096",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55465-known-issues-on-wow-forever-beta-updated.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Cooldown Manager, Class Changes and Temporary Respec Costs - WoW: Forever Beta Development Notes",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/cooldown-manager-class-changes-and-temporary-respec-costs-wow-forever-beta-383095",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55461-cooldown-manager-class-changes-and-temporary-respec-costs-wow-forever-beta.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Gnome Racial Heavily Nerfed in Latest WoW: Forever Beta Build",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/gnome-racial-heavily-nerfed-in-latest-wow-forever-beta-build-383093",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55458-gnome-racial-heavily-nerfed-in-latest-wow-forever-beta-build.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Wrath, Lava Burst and Holy Strike Buffs - WoW: Forever Beta Class Tuning Changes",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wrath-lightning-bolt-and-holy-strike-buffs-wow-forever-beta-class-tuning-changes-383092",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55457-wrath-lightning-bolt-and-holy-strike-buffs-wow-forever-beta-class-tuning-changes.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "New Build for WoW: Forever Beta Coming - Couple Hours Downtime",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/new-build-for-wow-forever-beta-coming-couple-hours-downtime-383088",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55454-new-build-for-wow-forever-beta-coming-couple-hours-downtime.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Additional WoW: Forever Collector's Editions Available Starting Today for Various Regions",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/additional-wow-forever-collectors-editions-available-starting-today-for-various-383081",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55449-additional-wow-forever-collectors-editions-available-starting-today-for-various.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Episode 1 of the World of Warcraft: Forever Podcast Now Live",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/episode-1-of-the-world-of-warcraft-forever-podcast-now-live-383080",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55447-episode-1-of-the-world-of-warcraft-forever-podcast-now-live.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "The Hall of Thanes: New Dungeon Walkthrough for Wow: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/the-hall-of-thanes-new-dungeon-walkthrough-for-wow-forever-382991",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55367-the-hall-of-thanes-new-dungeon-walkthrough-for-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Memory Leak Issues on WoW: Forever Beta Have Been Fixed",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/memory-leak-issues-on-wow-forever-beta-have-been-fixed/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/MD8WVKVK66W31790051503373.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Respec Costs on WoW Forever Beta Down to 1 Silver",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/respec-costs-on-wow-forever-beta-down-to-1-silver/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/respecseo.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Forced Character Name Changes and Bans, New Automated System Coming to Forever Beta",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/forced-character-name-changes-and-bans-new-automated-system-coming-to-forever-beta/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/WoW_Forever_Announce_Raid_BarrowDeeps_079.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Class and Race Changes, Gamepad Support and More: WoW Forever Beta Development Notes, September 24th",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/class-and-race-changes-gamepad-support-and-more-wow-forever-beta-development-notes-september-24th/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/wow-forever.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "World PvP is Back – The WoW: Forever Podcast Episode 1",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/unpacking-beta-launch-the-wow-forever-podcast-episode-1/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/maxresdefault-74.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "WoW Forever Just Gave Us an Ogre and Murloc Version of Savory Deviate Delight",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-just-gave-us-an-ogre-and-murloc-version-of-savory-deviate-delight/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/whimsyfinseo.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "WoW Forever Players Say Layering Is Interrupting Quests and PvP",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-players-say-layering-is-interrupting-quests-and-pvp/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/layerpoptn.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "The WoW Forever Collector’s Edition Sold Out Fast, but It’s Restocking Today",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/the-wow-forever-collectors-edition-sold-out-fast-but-its-restocking-today/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/foreverceseo.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "WoW: Forever May Have Given Us Our First Look at an SD Skyborne",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/wow-forever-may-have-given-us-our-first-look-at-an-sd-skyborne/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/skybornecustomizationseo.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Can’t Tell Which WoW Forever Quests Are New? This Addon Makes It Easy",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/cant-tell-which-wow-forever-quests-are-new-this-addon-makes-it-easy/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/WoW_Forever_SCENIC_Announce_Camping_Players_064-1.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Blizzard Hid WoW: Forever’s First Legendary, but Dataminers Already Found Clues",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/blizzard-hid-wow-forevers-first-legendary-but-dataminers-already-found-clues/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/wowforeverspoiler2.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Classic UI Options Will Be Left to Addons in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/classic-ui-options-will-be-left-to-addons-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-ironforge.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "The First Episode of the Official WoW Forever Podcast is Now Available",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/the-first-episode-of-the-official-wow-forever-podcast-is-now-available/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/official-wow-forever-podcast-episode-1.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "WoW Forever Beta Down, New Build Being Deployed",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/wow-forever-beta-down-new-build-being-deployed/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/new-item-effects-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "WoW Forever Beta Update: Bug Fixes, Class Changes & Gamepad Support",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/wow-forever-beta-update-bug-fixes-class-changes-gamepad-support/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-cinematic-zephras-isle.webp"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "WoW: Forever Is Cranking Up The Weather And Players Are Losing Their Minds",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/wow-forever-cranking-up-weather-2000736958",
+   "img": "https://kotaku.com/app/uploads/2026/09/WoW-Forever-skyborne-island.jpg"
+  },
+  {
+   "d": "2026-09-24",
+   "t": "Watch the World of Warcraft: Forever Podcast, Episode 1",
+   "s": "classicwow.gg",
+   "l": "https://classicwow.gg/forever/news/watch-the-world-of-warcraft-forever-podcast-episode-1-source-1464"
   },
   {
    "d": "2026-09-23",
@@ -116,6 +2122,110 @@
    "l": "https://www.icy-veins.com/wow-forever/news/a-new-beta-client-build-arrives-for-wow-forever/"
   },
   {
+   "d": "2026-09-23",
+   "t": "Get to Know the World of Warcraft: Forever Legacy System",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24307383",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/n2/N2DYDUNG8N9B1790133979334.png"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "Increased Weather Effects (blue post)",
+   "s": "Blizzard Forums",
+   "l": "https://us.forums.blizzard.com/en/wow/t/increased-weather-effects/2359491"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "What is World of Warcraft: Forever? - Official Video",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/what-is-world-of-warcraft-forever-official-video-383074",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55443-what-is-world-of-warcraft-forever-official-video.jpg"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "SPOILERS: Possible Legendary Information Datamined in WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/spoilers-possible-legendary-information-datamined-in-wow-forever-383071",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55439-spoilers-possible-legendary-information-datamined-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "Increased Weather Effects Coming to WoW: Forever Beta",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/increased-weather-effects-coming-to-wow-forever-beta-383072",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55441-increased-weather-effects-coming-to-wow-forever-beta.jpg"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "What is World of Warcraft: Forever?",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/what-is-world-of-warcraft-forever/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/dvueCoFTkCk-HD.webp"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "The Light Burns Forsaken Paladins – Intro Quest Will Be Updated",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/the-light-burns-forsaken-paladins-intro-quest-will-be-updated/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/forsaken-paladin.webp"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "Big Rain! Increased Weather Effects Coming Soon to Forever Beta",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/big-rain-increased-weather-effects-coming-soon-to-forever-beta/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/2026-09-23-22_38_42-Increased-Weather-Effects-WoW_-Forever-_-World-of-Warcraft_-Forever-General-Di.jpg"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "Auto-shoot (and Wand) Bug and Fix Incoming",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/auto-shoot-and-wand-bug-and-fix-incoming/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/wow-forever-zones.jpg"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "Hotfix Incoming for Hunter Auto Shots and Wands in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/hotfix-incoming-for-hunter-auto-shots-and-wands-in-wow-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2024/11/Hunter-Class-Overview.jpg"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "New WoW Forever Video Highlights Launch Content",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/new-wow-forever-video-highlights-launch-content/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/onyxia-key-art-wow-classic.webp"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "Weather Effects Increasing for Some Zones in WoW Forever Beta",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/weather-effects-increasing-for-some-zones-in-wow-forever-beta/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-dwarf-race-kharanos.jpg"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "Lore Watch Podcast: The never-ending faction war in World of Warcraft: Forever",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/23/lore-watch-podcast-faction-war-in-wow-forever/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/09/LWP_435_header.jpg"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "World of Warcraft: Forever's first patch will bring back the number one thing seasoned players missed from the MMO's past: storms",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forevers-first-patch-will-bring-back-the-number-one-thing-seasoned-players-missed-from-the-mmos-past-storms/",
+   "img": "https://cdn.mos.cms.futurecdn.net/GXgmtutrzYoLRrB42EFb9d-1920-80.jpg"
+  },
+  {
+   "d": "2026-09-23",
+   "t": "World of Warcraft: Forever dev addresses the debate over who it's made for: 'I did not spend the last year of my life relearning and mastering how to do things like we did it 20+ years ago for retail players'",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-dev-addresses-the-debate-over-who-its-made-for-i-did-not-spend-the-last-year-of-my-life-relearning-and-mastering-how-to-do-things-like-we-did-it-20-years-ago-for-retail-players/",
+   "img": "https://cdn.mos.cms.futurecdn.net/3yhvmXABMTiUYvTKkm3X27-1920-80.jpg"
+  },
+  {
    "d": "2026-09-22",
    "t": "Controller and Mac Updates - WoW: Forever Beta Client Updated",
    "s": "Wowhead",
@@ -194,6 +2304,41 @@
    "t": "All New Race and Class Combos and Racial Abilities in WoW Forever (Official)",
    "s": "Icy Veins",
    "l": "https://www.icy-veins.com/wow-forever/news/all-new-race-and-class-combos-and-racial-abilities-in-wow-forever-official/"
+  },
+  {
+   "d": "2026-09-22",
+   "t": "WoW: Forever Meet the New Skyborne",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24302071",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/dd/DDKT72QJD7Z31790054782460.png"
+  },
+  {
+   "d": "2026-09-22",
+   "t": "This WoW Forever Campfire System Makes Every Profession Worth Leveling",
+   "s": "Icy Veins",
+   "l": "https://www.icy-veins.com/wow-forever/news/this-wow-forever-campfire-system-makes-every-profession-worth-leveling/",
+   "img": "https://wp.icy-veins.com/wp-content/uploads/2026/09/camping-warlock.jpg"
+  },
+  {
+   "d": "2026-09-22",
+   "t": "World of Warcraft: Forever players find rule-breaking new items that defy 22 years of experience with the classic MMO",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-players-find-rule-breaking-new-items-that-defy-22-years-of-experience-with-the-classic-mmo/",
+   "img": "https://cdn.mos.cms.futurecdn.net/DRAvip4buV4DMD7biWSmJ6-1920-80.jpg"
+  },
+  {
+   "d": "2026-09-22",
+   "t": "I've been doing roleplay for 15+ years, and I don't think WoW: Forever needs a ruleset for it",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/ive-been-doing-roleplay-for-15-years-i-dont-think-wow-forever-needs-a-ruleset-for-it/",
+   "img": "https://cdn.mos.cms.futurecdn.net/hE7JgjVTUoWikKkoXRESbP-1920-80.png"
+  },
+  {
+   "d": "2026-09-22",
+   "t": "Blizzard warns WoW players buying gold with real money risk permanently losing their accounts",
+   "s": "Dexerto",
+   "l": "https://www.dexerto.com/world-of-warcraft/blizzard-warns-wow-players-buying-gold-with-real-money-risk-permanently-losing-their-accounts-3411246/",
+   "img": "https://www.dexerto.com/cdn-image/wp-content/uploads/2026/09/22/Dwarf-w-gold-world-of-warcraft.jpg"
   },
   {
    "d": "2026-09-21",
@@ -301,6 +2446,68 @@
    "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-classic-hardcore-key-art.webp"
   },
   {
+   "d": "2026-09-21",
+   "t": "Create a Name of Your Own in WoW: Forever",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24304161",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/ji/JIBF1BNWRKSE1789963404849.png"
+  },
+  {
+   "d": "2026-09-21",
+   "t": "Choose Your Ruleset in World of Warcraft: Forever",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24302070",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/sa/SAUYK7VOFLAB1789961357048.png"
+  },
+  {
+   "d": "2026-09-21",
+   "t": "Every new enchant in World of Warcraft: Forever",
+   "s": "Blizzard Watch",
+   "l": "https://blizzardwatch.com/2026/09/21/every-new-enchant-world-warcraft-forever/",
+   "img": "https://blizzardwatch.com/wp-content/uploads/2026/09/bw-wow-forever-new-enchants-header.jpg"
+  },
+  {
+   "d": "2026-09-21",
+   "t": "Blizzard warns World of Warcraft: Forever players it will 'very aggressively' punish anyone who buys gold with real money",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/blizzard-warns-world-of-warcraft-forever-players-it-will-very-aggressively-punish-anyone-who-buys-gold-with-real-money/",
+   "img": "https://cdn.mos.cms.futurecdn.net/QhvjjA2BaL9Canv8NwxCsS-1200-80.jpg"
+  },
+  {
+   "d": "2026-09-21",
+   "t": "WoW: Forever has rendered me a min-maxing hypocrite, and here's how you can join me",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/wow-forever-has-rendered-me-a-min-maxing-hypocrite-and-heres-how-you-can-join-me/",
+   "img": "https://cdn.mos.cms.futurecdn.net/qmFQzDrpHvufbi4Lw7ceUD-1920-80.png"
+  },
+  {
+   "d": "2026-09-21",
+   "t": "WoW devs surprised to find pure liquid nostalgia is popular",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/wow-devs-surprised-to-find-pure-liquid-nostalgia-is-popular/",
+   "img": "https://cdn.mos.cms.futurecdn.net/dZ63uY6YcJey8Wnr6q6664-1920-80.png"
+  },
+  {
+   "d": "2026-09-21",
+   "t": "The brave adventurers of WoW: Forever are all called things like Take Meds and Skonch Prime",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/the-brave-adventurers-of-wow-forever-are-all-called-things-like-take-meds-and-skonch-prime/",
+   "img": "https://cdn.mos.cms.futurecdn.net/prYmvnyWqdJvpLnkbECqs3-1920-80.png"
+  },
+  {
+   "d": "2026-09-21",
+   "t": "World of Warcraft: Forever players competing over enemies is 'extremely important' to the experience, Blizzard says: 'This is one of those things that we simply must hold the line on'",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-players-competing-over-enemies-is-extremely-important-to-the-experience-blizzard-says-this-is-one-of-those-things-that-we-simply-must-hold-the-line-on/",
+   "img": "https://cdn.mos.cms.futurecdn.net/nGEgktqvFSg7YMjusbfHAb-2560-80.png"
+  },
+  {
+   "d": "2026-09-21",
+   "t": "WoW Forever Will Follow Its Own Continuity, While Preserving Warcraft RTS Foundations",
+   "s": "classicwow.gg",
+   "l": "https://classicwow.gg/forever/news/wow-forever-will-follow-its-own-continuity-while-preserving-warcraft-rts-foundations-source-1212"
+  },
+  {
    "d": "2026-09-20",
    "t": "Listen to Over Eight Hours of WoW: Forever Music",
    "s": "Wowhead",
@@ -364,6 +2571,13 @@
    "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-classic-ui-featured-image.jpg"
   },
   {
+   "d": "2026-09-19",
+   "t": "World of Warcraft: Forever's convinced me that we lost too much to modern MMO quest design",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forevers-convinced-me-that-we-lost-too-much-to-modern-mmo-quest-design/",
+   "img": "https://cdn.mos.cms.futurecdn.net/R9HzCfFZ6m5xfFUoz9VCf3-1920-80.png"
+  },
+  {
    "d": "2026-09-18",
    "t": "What We Know About the Open World So Far in WoW: Forever",
    "s": "Wowhead",
@@ -404,6 +2618,20 @@
    "s": "Warcraft Tavern",
    "l": "https://www.warcrafttavern.com/forever/news/wow-forever-beta-lag-issues-solved-with-a-vpn/",
    "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-lag-solved-featured-image.jpg"
+  },
+  {
+   "d": "2026-09-18",
+   "t": "World of Warcraft: Forever's devs have fixed EU players suffering major lag, though if you're still having trouble, there is a workaround",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/wow-forever-lag-how-to-fix/",
+   "img": "https://cdn.mos.cms.futurecdn.net/F2Vr74L9EDyrQyczqYRoie-1920-80.png"
+  },
+  {
+   "d": "2026-09-18",
+   "t": "WoW: Forever Players Are Gushing Over Lighting Updates To A 21-Year-Old Game",
+   "s": "Kotaku",
+   "l": "https://kotaku.com/wow-forever-players-lighting-updates-2000735656",
+   "img": "https://kotaku.com/app/uploads/2026/09/WoWScrnShot_091826_103457-1200x675.jpg"
   },
   {
    "d": "2026-09-17",
@@ -460,6 +2688,62 @@
    "s": "Warcraft Tavern",
    "l": "https://www.warcrafttavern.com/forever/news/new-leatherworking-patterns-for-world-of-warcraft-forever/",
    "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-leatherworking-vendor.webp"
+  },
+  {
+   "d": "2026-09-17",
+   "t": "The World of Warcraft: Forever Beta Now Live",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24304160",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/ev/EVFNPP5S77ZN1789667878336.png"
+  },
+  {
+   "d": "2026-09-17",
+   "t": "World of Warcraft: Forever GPU Requirements",
+   "s": "Blizzard",
+   "l": "https://worldofwarcraft.blizzard.com/en-us/news/24301512",
+   "img": "https://bnetcmsus-a.akamaihd.net/cms/blog_thumbnail/di/DILTN5MM6PIG1527786985289.jpg"
+  },
+  {
+   "d": "2026-09-17",
+   "t": "Increased Bank Space, Raid Items Hidden Until It Drops - MMORPG Interview on WoW: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/increased-bank-space-raid-items-hidden-until-it-drops-mmorpg-interview-on-wow-382960",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55334-increased-bank-space-raid-items-hidden-until-it-drops-mmorpg-interview-on-wow.jpg"
+  },
+  {
+   "d": "2026-09-17",
+   "t": "Grab Free Bags in Beginner Zones with Quests",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/grab-free-bags-in-beginner-zones-with-quests-382982",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55361-grab-free-bags-in-beginner-zones-with-quests.jpg"
+  },
+  {
+   "d": "2026-09-17",
+   "t": "WoW: Forever Beta Known Issues",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/wow-forever-beta-known-issues-382980",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55359-wow-forever-beta-known-issues.jpg"
+  },
+  {
+   "d": "2026-09-17",
+   "t": "Barbershops Will Be in World of Warcraft: Forever",
+   "s": "Wowhead",
+   "l": "https://www.wowhead.com/forever/news/barbershops-will-be-in-world-of-warcraft-forever-382922",
+   "img": "https://wow.zamimg.com/uploads/blog/images/55295-barbershops-will-be-in-world-of-warcraft-forever.jpg"
+  },
+  {
+   "d": "2026-09-17",
+   "t": "World of Warcraft: Forever players are reliving 2004 with hour-long queue times to get into the highly-anticipated beta",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-players-are-reliving-2004-with-hour-long-queue-times-to-get-into-the-highly-anticipated-beta/",
+   "img": "https://cdn.mos.cms.futurecdn.net/4ZoPHz43pTk6fFSvtgzZVj-1920-80.jpg"
+  },
+  {
+   "d": "2026-09-17",
+   "t": "WoW Forever dataminers have dug up set bonuses, which are interesting even on low-level gear",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/wow-forever-dataminers-have-dug-up-set-bonuses-which-are-interesting-even-on-low-level-gear/",
+   "img": "https://cdn.mos.cms.futurecdn.net/prYmvnyWqdJvpLnkbECqs3-1920-80.png"
   },
   {
    "d": "2026-09-16",
@@ -901,6 +3185,34 @@
    "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/no-flying-mounts-in-wow-forever.jpeg"
   },
   {
+   "d": "2026-09-14",
+   "t": "Talent calculators have already been assembled for World of Warcraft: Forever, and there's some real interesting stuff in here",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/talent-calculators-have-already-been-assembled-for-world-of-warcraft-forever-and-theres-some-real-interesting-stuff-in-here/",
+   "img": "https://cdn.mos.cms.futurecdn.net/htDvmHJzzCHfWhMyx9ZBnd-1920-80.png"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "10 big World of Warcraft Forever details from BlizzCon: No separate realms, optional transmog, and massively improved items",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/10-big-world-of-warcraft-forever-details-from-blizzcon-no-separate-realms-optional-transmog-and-massively-improved-items/",
+   "img": "https://cdn.mos.cms.futurecdn.net/zXLFv5W5dkpeoozC2sX4v7-2560-80.jpg"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "World of Warcraft: Forever will get a hardcore mode by winter, say devs—which'll be interesting, given all the new and undiscovered ways to die",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-will-get-a-hardcore-mode-by-winter-say-devs-whichll-be-interesting-given-all-the-new-and-undiscovered-ways-to-die/",
+   "img": "https://cdn.mos.cms.futurecdn.net/QpeMyYwaXhg3wvorTLpnnN-1920-80.png"
+  },
+  {
+   "d": "2026-09-14",
+   "t": "World of Warcraft: Forever devs say a direct sequel like Guild Wars 2 is unlikely: 'Why would you throw that away and start over?'",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/world-of-warcraft-forever-devs-say-a-direct-sequel-like-guild-wars-2-is-unlikely-why-would-you-throw-that-away-and-start-over/",
+   "img": "https://cdn.mos.cms.futurecdn.net/R2g2nfNeCoSe5bX8wvJYgY-1920-80.jpg"
+  },
+  {
    "d": "2026-09-13",
    "t": "World of Warcraft: Forever Deep Dive Panel Recap",
    "s": "Blizzard",
@@ -1137,6 +3449,27 @@
    "img": "https://outputlag.com/wp-content/uploads/2026/09/world-of-warcraft-hardcore-what-s-next-panel-at-blizzcon-2026-key-art.jpg"
   },
   {
+   "d": "2026-09-13",
+   "t": "Camping & Profession Buffs in World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/camping-profession-buffs-in-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/wow-forever-camping-alliance.webp"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "Transmog Appearances Awarded to All Eligible Looters in WoW Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/transmog-in-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/transmog-system-in-wow-forever.jpg"
+  },
+  {
+   "d": "2026-09-13",
+   "t": "World of Warcraft Forever hype dampened by $30 elves: New Skyborne race locked behind expansion-tier purchase",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/our-world-of-warcraft-forever-hype-is-dampened-by-usd30-elves-new-skyborne-race-locked-behind-expansion-tier-purchase/",
+   "img": "https://cdn.mos.cms.futurecdn.net/F2Vr74L9EDyrQyczqYRoie-1920-80.png"
+  },
+  {
    "d": "2026-09-12",
    "t": "Pre-Purchase World of Warcraft: Forever Upgrades and Begin Your Next Journey in Azeroth",
    "s": "Blizzard",
@@ -1316,6 +3649,48 @@
    "s": "Kotaku",
    "l": "https://kotaku.com/world-of-warcraft-forever-classic-plus-revealed-2000733774",
    "img": "https://kotaku.com/app/uploads/2026/09/BlizzCon-2026-_-Day-1-Main-Stage-2-21-39-screenshot-1200x675.jpg"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "All Racial Abilities in World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/all-racial-abilities-in-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/world-of-warcraft-forever-skyborne-racials.webp"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "Priest Racials in World of Warcraft Forever: Fear Ward is Baseline",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/priest-racials-in-world-of-warcraft-forever-fear-ward-is-baseline/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/shadow-priest-shadowform-anathema.webp"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "Undead Paladins & Other Race-Class Combos in World of Warcraft Forever",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/undead-paladins-other-race-class-combos-in-world-of-warcraft-forever/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/undead-paladin-wow-forever-trailer.webp"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "World of Warcraft: Forever – Classic+ Announced at BlizzCon 2026",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/warcraft-forever-classic-announced-at-blizzcon-2026/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/blizzcon-warcraft-forever.webp"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "World of Warcraft Forever Editions, Skyborne Race Unlock & Beta Access",
+   "s": "Warcraft Tavern",
+   "l": "https://www.warcrafttavern.com/forever/news/world-of-warcraft-forever-editions-skyborne-race-unlock-beta-access/",
+   "img": "https://www.warcrafttavern.com/wp-content/uploads/2026/09/world-of-warcraft-forever-cinematic-dwarf.webp"
+  },
+  {
+   "d": "2026-09-12",
+   "t": "The WoW 'Classic+' rumors were true: World of Warcraft: Forever promises to be another timeline's version of the MMO",
+   "s": "PC Gamer",
+   "l": "https://www.pcgamer.com/games/world-of-warcraft/the-wow-classic-rumors-were-true-world-of-warcraft-forever-promises-to-be-another-timelines-bizzarro-version-of-the-mmo/",
+   "img": "https://cdn.mos.cms.futurecdn.net/F2Vr74L9EDyrQyczqYRoie-1920-80.png"
   },
   {
    "d": "2026-09-11",

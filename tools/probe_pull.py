@@ -7,7 +7,9 @@ steps, and where each objective of a quest moved on) arrives at the Worker as th
 upload: an FPROBE2 export, a ForeverProbe.lua SavedVariables file (its ["questbank"] block
 carries the same notes), or a QuestBank.lua SavedVariables file. QuestBank 3.6.0 also keeps
 QuestBankDB.game on the Forever client: the spells and the bag and gear items of each class and
-race played, and item tooltips (what ForeverProbe used to note). This tool pulls the new rows,
+race played, and item tooltips (what ForeverProbe used to note); 3.6.2 adds who dropped what
+(QuestBankDB.disc.loot: creature or chest id, item ids, dungeon and difficulty, no names), which
+tools/apply_loot.py takes to codex/loot.json. This tool pulls the new rows,
 keeps each decoded body under research/probe/, and merges every discovery into
 research/questbank/disc.json, which gen_data.py reads: a quest seen in Forever loses its
 "Classic only" flag, quests seen in game that are not in the catalog at all are listed in
@@ -233,7 +235,7 @@ def from_forever(data):
 # --------------------------------------------------------------------------------------- the merge
 def empty():
     return {"meta": {"last_id": 0, "uploads": 0, "with_notes": 0, "sources": {}, "pulled": None},
-            "q": {}, "npc": {}, "offer": {}, "chain": {}, "item": {}, "seen": {}, "seen_at": {}, "os": {}}
+            "q": {}, "npc": {}, "offer": {}, "chain": {}, "item": {}, "seen": {}, "seen_at": {}, "os": {}, "loot": {}}
 
 
 # ----------------------------------------------------------------------------------- the XP seen
@@ -380,6 +382,17 @@ SPOT_KEEP = 40    # points kept per objective in disc.json; past that the ones n
 SPOT_W = 20       # sightings one point weighs at most on the map (gen_data.py's GAME_W): the tie-break when pruning
 SPOT_UPLOAD = (400, 8)  # quests and points per objective the addon keeps: a file over that is read up to it
 SPOT_TYPES = {"monster", "item", "object", "event", "areatrigger", "log", "reputation", "player", "progressbar", "spell", "currency"}
+# QuestBank 3.6.2 also notes, on the Forever client, who dropped what: QuestBankDB.disc.loot = { ["c<creature id>" or
+# "o<object id>"] = { im = instance map, d = difficulty (or m = uiMap outdoors), e = encounter id of the kill it belongs
+# to, ex = true when the game's own creature list said so, n = times looted, b = build, i = { [item id] = windows it was
+# in } } }, with lootN and lootAt as counters like osN and osAt. Never a name, the player's or the creature's: the site
+# names the ids (tools/apply_loot.py). Kept in disc.json under "loot" with votes per upload: u uploads had the source,
+# n the most times one upload had looted it (the same growing file comes back, so adding up would count kills again),
+# b the newest build, m/im/d/e/ei votes per value (ei: an encounter linked by time, not by the game's list), i per item
+# {v uploads, n most windows in one upload}, last the upload with loot that last had it (meta.with_loot then).
+LOOT_KEYS = ("loot", "lootAt", "lootN")  # what QuestBankDB.disc keeps for the loot sources
+LOOT_UPLOAD = (400, 40)                  # sources, and items per source, the addon keeps: a file over that is read up to it
+EXTRA_KEYS = SPOT_KEYS + LOOT_KEYS       # what the notes' digest leaves out
 
 
 def _pairs(v):
@@ -421,11 +434,11 @@ def _spot(p):
 
 
 def _sans_spots(d):
-    """The disc without its objective spots and the addon's counters for them (os has a digest of its own): an upload
-    whose only change is new spots, or a sighting the addon left out, doesn't count its notes again, and the digests
-    stored before the spots existed still match."""
-    if isinstance(d, dict) and any(k in d for k in SPOT_KEYS):
-        return {k: v for k, v in d.items() if k not in SPOT_KEYS}
+    """The disc without its objective spots and loot sources, and the addon's counters for them (os and loot have a
+    digest each): an upload whose only change is new spots or a new loot window, or a sighting the addon left out,
+    doesn't count its notes again, and the digests stored before the spots and the loot existed still match."""
+    if isinstance(d, dict) and any(k in d for k in EXTRA_KEYS):
+        return {k: v for k, v in d.items() if k not in EXTRA_KEYS}
     return d
 
 
@@ -490,10 +503,60 @@ def merge_spots(acc, spots):
     return voted
 
 
+_LOOT_KEY = re.compile(r"^[co]\d{1,8}$")
+
+
+def merge_loot(acc, loot):
+    """One upload's QuestBankDB.disc.loot into disc.json's "loot". One vote per upload per fact (a source had, a map,
+    a difficulty, an encounter, an item), and a max rather than a sum for the counts, since the same growing file comes
+    back upload after upload. Only keys of the addon's shape and numbers in range are read, up to the addon's own caps;
+    a string anywhere is left out, so no name gets in whatever a file holds. Returns the number of sources voted for;
+    an upload that votes for any counts in meta.with_loot."""
+    out = acc.setdefault("loot", {})
+    meta = acc.setdefault("meta", {})
+    stamp = meta.get("with_loot", 0) + 1
+    sources = {}
+    for k, rec in _pairs(loot):
+        if isinstance(k, str) and _LOOT_KEY.match(k) and k not in sources and isinstance(rec, dict):
+            sources[k] = rec
+    voted = 0
+    for key in sorted(sources)[:LOOT_UPLOAD[0]]:
+        rec = sources[key]
+        items = {}
+        for iid, n in _pairs(rec.get("i")):
+            iid, n = _key(iid, 999999), _whole(n, 1, 10 ** 9)
+            if iid and n and iid not in items:
+                items[iid] = min(n, 999)
+        if not items:
+            continue  # a source with no item is no loot record
+        a = out.setdefault(key, {"u": 0, "n": 0, "b": 0, "m": {}, "im": {}, "d": {}, "e": {}, "ei": {}, "i": {}, "last": 0})
+        a["u"] += 1
+        n = _whole(rec.get("n"), 1, 10 ** 9)
+        a["n"] = max(a["n"], min(n, 999) if n else 1)  # one odd file's count can't outweigh everyone's
+        a["b"] = max(a["b"], _whole(rec.get("b"), 1, 9999999) or 0)
+        for f, hi in (("m", 99999), ("im", 99999), ("d", 9999)):
+            v = _whole(rec.get(f), 0 if f == "d" else 1, hi)
+            if v is not None:
+                a[f][str(v)] = a[f].get(str(v), 0) + 1
+        e = _whole(rec.get("e"), 1, 999999)
+        if e:
+            f = "e" if rec.get("ex") is True else "ei"
+            a[f][str(e)] = a[f].get(str(e), 0) + 1
+        for iid in sorted(items, key=lambda i: (-items[i], i))[:LOOT_UPLOAD[1]]:
+            it = a["i"].setdefault(str(iid), {"v": 0, "n": 0})
+            it["v"] += 1
+            it["n"] = max(it["n"], items[iid])
+        a["last"] = stamp
+        voted += 1
+    if voted:
+        meta["with_loot"] = stamp
+    return voted
+
+
 def merge_probe(acc, kind, data):
     """What players' games showed, without a name in it: the spells a class (and the racials a race) had learned and the
-    lowest level a character was seen with each, the item ids in bags and gear, item tooltips, and what profession
-    trainers asked. Two sources: QuestBankDB.game (QuestBank 3.6.0+, written on the Forever client only: one reading per
+    lowest level a character was seen with each, the XP each level needs, the item ids in bags and gear, item tooltips,
+    and what trainers' windows offered (rank, level, cost, whether it could be learned then). Two sources: QuestBankDB.game (QuestBank 3.6.0+, written on the Forever client only: one reading per
     class and race, and tooltips) and ForeverProbe's own snapshots and tooltips (ForeverProbe.lua and FPROBE2 exports
     from installs that still have it). Kept in disc.json under "probe" (research/, never published);
     tools/apply_probe_spells.py takes the spells to the site's spellbook, tools/scavenge_items.py the items and tooltips."""
@@ -509,14 +572,20 @@ def merge_probe(acc, kind, data):
     else:
         return
     pr = acc.setdefault("probe", {"spells": {}, "racials": {}, "items": {}, "trainers": {}})
+    if any(not isinstance(v, dict) or "s" not in v for v in (pr.get("trainers") or {}).values()):
+        # disc.json before 2026-10-09 kept only cost votes per service name; --rebuild reads the uploads again
+        pr["trainers"] = {}
     snaps = list(snaps.values()) if isinstance(snaps, dict) else (snaps if isinstance(snaps, list) else [])
     had = set()  # the item ids this upload showed: each counts once, however many characters or readings carried it
+    xpmax = set()  # (level, XP the level needs) pairs this upload showed, once each like the items
     for sn in snaps:
         if not isinstance(sn, dict) or forever_iface(sn.get("interface")) is False:
             continue
         cls, race, lvl = str(sn.get("class") or "").upper(), str(sn.get("race") or ""), sn.get("level")
         if not cls or not isinstance(lvl, (int, float)) or lvl < 1:
             continue
+        if isinstance(sn.get("xpMax"), (int, float)) and sn["xpMax"] > 0:
+            xpmax.add((str(int(lvl)), str(int(sn["xpMax"]))))
         book = pr["spells"].setdefault(cls, {})
         for sid in sn.get("spells") or []:
             try:
@@ -533,6 +602,9 @@ def merge_probe(acc, kind, data):
                 continue
     for iid in had:
         pr["items"][iid] = pr["items"].get(iid, 0) + 1
+    for lv, need in xpmax:
+        votes = pr.setdefault("xpmax", {}).setdefault(lv, {})
+        votes[need] = votes.get(need, 0) + 1
     # item tooltips as the game showed them: the newest build's copy of each wins, then the newest reading; English
     # clients only, since the site parses the game's English wording. cv is the client version ("1.60.1") from the
     # tooltip's own b ("1.60.1.70205"). A b that is a build alone carries none: ForeverProbe wrote those, and QuestBank
@@ -546,7 +618,7 @@ def merge_probe(acc, kind, data):
             continue
         x = it.get("x")
         x = x if isinstance(x, list) else ([] if isinstance(x, dict) and not x else None)
-        if x is None:
+        if not x:  # no lines: an older addon's half-read record, or an empty table; never a tooltip worth keeping
             continue
         parts = str(it.get("b") or "0").split(".")
         try:
@@ -564,16 +636,76 @@ def merge_probe(acc, kind, data):
                           "c": it.get("c"), "u": it.get("u"), "e": it.get("e"), "ic": it.get("ic"), "x": [str(v) for v in x][:40]}
         if cv:
             tips[str(iid)]["cv"] = cv
+    # trainer windows: per trainer (NPC name and zone, and its id where the addon noted one) and per service (name and
+    # rank) the level, cost and availability it showed, as votes. One visit votes once, however often its file arrives
+    # again. A record's "chars" names the characters who opened the window: never read, never kept.
     for tr in list(trainers.values()) if isinstance(trainers, dict) else (trainers if isinstance(trainers, list) else []):
         if not isinstance(tr, dict):
             continue
-        for sv in tr.get("services") or []:
-            if not isinstance(sv, dict):
-                continue
-            name, cost = sv.get("n") or sv.get("name"), sv.get("c") if sv.get("c") is not None else sv.get("cost")
-            if name and isinstance(cost, (int, float)):
-                t = pr["trainers"].setdefault(str(name), {})
-                t[str(int(cost))] = t.get(str(int(cost)), 0) + 1
+        npc, zone = str(tr.get("npc") or "").strip(), str(tr.get("zone") or "").strip()
+        svcs = [sv for sv in tr.get("services") or [] if isinstance(sv, dict) and (sv.get("n") or sv.get("name"))]
+        if not npc or not svcs:
+            continue
+        rec = pr["trainers"].setdefault(npc + "|" + zone, {"npc": npc, "zone": zone, "visits": [], "s": {}})
+        if isinstance(tr.get("id"), (int, str)) and str(tr["id"]).strip():
+            rec["id"] = str(tr["id"]).strip()
+        visit = _digest({"at": tr.get("at")} if tr.get("at") else {"s": svcs})[:12]
+        if visit in rec["visits"]:
+            continue
+        rec["visits"].append(visit)
+        for sv in svcs:
+            name, rank = str(sv.get("n") or sv.get("name")), str(sv.get("r") or "")
+            s = rec["s"].setdefault(name + "|" + rank, {"n": name, "r": rank, "lvl": {}, "c": {}, "t": {}})
+            cost = sv.get("c") if sv.get("c") is not None else sv.get("cost")
+            for key, val in (("lvl", sv.get("lvl")), ("c", cost), ("t", sv.get("t"))):
+                if isinstance(val, (int, float)) and not isinstance(val, bool):
+                    val = str(int(val))
+                elif isinstance(val, str) and val:
+                    val = val[:20]
+                else:
+                    continue
+                s[key][val] = s[key].get(val, 0) + 1
+
+
+def class_books(path=None):
+    """Each class's spell names from the site's spellbooks (plan/plan-data.json), for telling class trainers apart."""
+    path = path or os.path.join(REPO, "plan", "plan-data.json")
+    if not os.path.exists(path):
+        return {}
+    out = {}
+    for c in json.load(open(path)).get("classes") or []:
+        bk = c.get("book") or {}
+        names = {s[0] for t in bk.get("tabs") or [] for s in t.get("spells") or []} | {s[0] for s in bk.get("general") or []}
+        ranks = {}
+        for n, hdr in (bk.get("hdr") or {}).items():
+            for a, b in hdr:
+                m = re.match(r"Ranks (\d+)$", str(b or "")) or (re.match(r"(\d+)$", str(b or "")) if a == "Ranks" else None)
+                if m:
+                    ranks[n] = int(m.group(1))
+        out[str(c.get("cls")).upper()] = {"names": names, "ranks": ranks}
+    return out
+
+
+def trainer_classes(acc, books):
+    """Which class a trainer teaches: the class whose book holds most of its services by name and rank (a service whose
+    name more than one class's book carries does not vote). The trainer gets "cls", each service it teaches from that
+    book gets "cls" too; a profession trainer matches no book and gets none."""
+    for rec in ((acc.get("probe") or {}).get("trainers") or {}).values():
+        votes = {}
+        for s in rec["s"].values():
+            m = re.match(r"Rank (\d+)$", s["r"])
+            own = [c for c, b in books.items() if s["n"] in b["names"] and (not m or int(m.group(1)) <= b["ranks"].get(s["n"], 99))]
+            if len(own) == 1:
+                votes[own[0]] = votes.get(own[0], 0) + 1
+        best = max(votes, key=votes.get) if votes else None
+        rec.pop("cls", None)
+        for s in rec["s"].values():
+            s.pop("cls", None)
+        if best and votes[best] >= max(3, len(rec["s"]) // 2):
+            rec["cls"] = best
+            for s in rec["s"].values():
+                if s["n"] in books[best]["names"]:
+                    s["cls"] = best
 
 
 def _digest(v):
@@ -612,6 +744,15 @@ def merge_upload(acc, text, source="local"):
                 seen_hashes.append(h)
                 spotted = merge_spots(acc, spots) > 0
                 fresh = True
+        # who dropped what (QuestBank 3.6.2+), a part of its own the same way: a new loot window votes without the
+        # notes counting again, and new notes don't vote for the same windows again
+        loot = (disc_of(kind, data) or {}).get("loot")
+        if loot:
+            h = _digest({"loot": loot})
+            if h not in seen_hashes:
+                seen_hashes.append(h)
+                spotted = merge_loot(acc, loot) > 0 or spotted
+                fresh = True
         # the notes' digest is the one earlier pulls stored, so a rebuild isn't needed for old uploads to stay merged once
         h = _digest({k: _sans_spots(data.get(k)) if k == "disc" else data.get(k) for k in ("disc", "turnins", "live", "liveEra")})
         if h in seen_hashes:
@@ -649,10 +790,16 @@ def summary(acc):
         len(acc["chain"]), len(acc["item"]), contested, sightings, len(acc.get("seen") or {}))
     out += "; games: spells of %d classes and %d races, %d items had, %d tooltips" % (
         len(pr.get("spells") or {}), len(pr.get("racials") or {}), len(pr.get("items") or {}), len(pr.get("tips") or {}))
+    trs = (pr.get("trainers") or {}).values()
+    out += "; trainer windows: %d trainers (%d class), %d services, %d visits" % (
+        len(trs), sum(1 for t in trs if t.get("cls")), sum(len(t["s"]) for t in trs), sum(len(t["visits"]) for t in trs))
     spots = acc.get("os") or {}
     out += "; objective spots: %d points on %d objectives of %d quests, from %d upload(s)" % (
         sum(len(o.get("p") or []) for q in spots.values() for o in q.values()), sum(len(q) for q in spots.values()),
         len(spots), acc["meta"].get("with_spots", 0))
+    loot = acc.get("loot") or {}
+    out += "; loot: %d sources, %d items, from %d upload(s)" % (
+        len(loot), sum(len(s.get("i") or {}) for s in loot.values()), acc["meta"].get("with_loot", 0))
     if acc["meta"].get("other_client"):
         out += "; %d upload(s) from another client left out" % acc["meta"]["other_client"]
     return out
@@ -723,6 +870,7 @@ def selftest():
     assert qb["errors"] == {}
     assert _sans_spots(qb["disc"]) is qb["disc"], "a disc with no spots digests as it always did"
     assert _sans_spots({"v": 1, "q": {}, "os": {}, "osN": 3, "osAt": {"7": 3}}) == {"v": 1, "q": {}}, "nor do the addon's spot counters"
+    assert _sans_spots({"v": 1, "q": {}, "loot": {"c1": {}}, "lootN": 1, "lootAt": {"c1": 1}}) == {"v": 1, "q": {}}, "nor its loot sources"
     fp = parse_savedvariables(open(os.path.join(fx, "ForeverProbe.lua")).read())["ForeverProbeDB"]
     assert fp["snapshots"][0]["name"] == "Helga" and fp["meta"]["addon"] == "0.4.0"
     assert fp["questbank"]["disc"]["q"]["176"]["t"] == 'Wanted: "Hogger"'
@@ -747,6 +895,30 @@ def selftest():
     assert acc["offer"]["c197"] == {"7": 2, "15": 3} and acc["offer"]["c240"] == {"62": 6}
     assert acc["item"] == {"1000": 2158} and acc["q"]["2158"]["from"] == ["i1000", "c823"]
     assert acc["meta"]["uploads"] == 3 and acc["meta"]["with_notes"] == 3 and acc["meta"]["sources"] == {"fixture": 3}
+    # trainer windows: a visit votes once (the export carries ForeverProbe's visit again), a later visit votes again, and
+    # the characters who opened the window are not kept anywhere
+    trs = acc["probe"]["trainers"]
+    assert set(trs) == {"Brother Sammuel|Elwynn Forest", "Tomas|Elwynn Forest"}, sorted(trs)
+    bs = trs["Brother Sammuel|Elwynn Forest"]
+    assert len(bs["visits"]) == 2 and set(bs) == {"npc", "zone", "visits", "s"}, bs
+    assert bs["s"]["Seal of Righteousness|Rank 3"] == {"n": "Seal of Righteousness", "r": "Rank 3", "lvl": {"18": 2}, "c": {"300": 2},
+                                                        "t": {"unavailable": 1, "available": 1}}, bs["s"]
+    assert bs["s"]["Plate Mail|"]["lvl"] == {"40": 1} and bs["s"]["Blessing of Might|Rank 2"]["c"] == {"100": 1}
+    assert "Helga" not in json.dumps(acc) and "Brann" not in json.dumps(acc), "no character name reaches disc.json"
+    books = {"PALADIN": {"names": {"Seal of Righteousness", "Holy Light", "Blessing of Might", "Attack"}, "ranks": {"Holy Light": 9}},
+             "WARRIOR": {"names": {"Battle Shout", "Attack"}, "ranks": {}}}
+    trainer_classes(acc, books)
+    assert bs["cls"] == "PALADIN" and bs["s"]["Holy Light|Rank 4"]["cls"] == "PALADIN" and "cls" not in bs["s"]["Plate Mail|"]
+    assert "cls" not in trs["Tomas|Elwynn Forest"], "a profession trainer matches no class book"
+    books["PALADIN"]["ranks"]["Holy Light"] = 3
+    trainer_classes(acc, books)
+    assert "cls" not in bs and "cls" not in bs["s"]["Holy Light|Rank 4"], "a rank the book does not have is no match; two are too few"
+    # what a level needs, as players' games showed it: once per upload; Era's snapshot is left out
+    assert acc["probe"]["xpmax"] == {"20": {"23200": 1}, "21": {"25200": 2}}, acc["probe"]["xpmax"]
+    # a disc.json from before trainers kept their services starts its trainers over
+    old = {"probe": {"trainers": {"Artisan Mining": {"45000": 57}}}}
+    merge_probe(old, "export", {"trainers": []})
+    assert old["probe"]["trainers"] == {}
     # what the game paid: hand-ins and own window readings vote, party readings and hidden numbers don't
     acc2 = empty()
     upload = {
@@ -777,10 +949,11 @@ def selftest():
     # once per upload: two ForeverProbe snapshots and two QuestBank readings carry 2361, 45 and 159; Era's 25 and 159 don't count
     assert pr["items"] == {"2361": 2, "45": 2, "2589": 1, "159": 1, "35": 1, "6096": 1}, pr["items"]
     t = pr["tips"]
-    assert set(t) == {"2361", "45", "159", "2589"}, "the German and the Era tooltips are left out: %s" % sorted(t)
+    assert set(t) == {"2361", "45", "159", "2589"}, "the German, the Era and the lineless tooltips are left out: %s" % sorted(t)
+    assert "2590" not in t, "a tooltip with no lines (a half-read from an older addon) is never kept"
     assert t["2361"]["b"] == 70205 and t["2361"]["cv"] == "1.60.1" and t["2361"]["x"][1] == "6 - 11 Damage\tSpeed 2.90", t["2361"]
     assert "cv" not in t["45"] and t["159"]["cv"] == "1.60.0" and t["159"]["b"] == 69990, "the tooltip's own version, never the block's"
-    assert "cv" not in t["2589"] and t["2589"]["x"] == [], "ForeverProbe's tooltips carry no client version"
+    assert "cv" not in t["2589"] and t["2589"]["x"] == ["Sell Price: 13c"], "ForeverProbe's tooltips carry no client version"
     assert "33" in acc3["q"] and "783" not in acc3["q"] and "c823" not in acc3["npc"], "Era's notes are left out"
     assert set(acc3["seen"]) == {"33"} and acc3["seen"]["33"] == {"170:2:70205:turnin:9": 1}, acc3["seen"]
     assert acc3["meta"]["other_client"] == 1 and acc3["meta"].get("repeats", 0) == 0, acc3["meta"]
@@ -790,10 +963,18 @@ def selftest():
              "7": {"1": {"t": "monster", "p": [[1429, 493, 363, 9, 1, 1], [1429, 500, 500, 1, 1, 1]]}},
              "60005": {"2": {"p": [[2482, 300, 701, 2, 1, 1], [2482, 410, 620, 1, 1, 1]]}}}
     assert acc3["os"] == spots and acc3["meta"]["with_spots"] == 1, acc3["os"]
+    # who dropped what: one vote per upload, the counts as the file had them, the encounter under e since the game's own
+    # list said so; Era's loot stays out with its notes
+    shade = {"u": 1, "n": 2, "b": 70205, "im": {"2959": 1}, "d": {"1": 1}, "e": {"3303": 1}, "ei": {}, "m": {},
+             "i": {"273031": {"v": 1, "n": 2}, "273032": {"v": 1, "n": 1}}, "last": 1}
+    assert acc3["loot"]["c246020"] == shade, acc3["loot"]
+    assert acc3["loot"]["c197"] == {"u": 1, "n": 1, "b": 70205, "im": {}, "d": {}, "e": {}, "ei": {}, "m": {"1429": 1},
+                                    "i": {"2589": {"v": 1, "n": 1}}, "last": 1}, acc3["loot"]
+    assert set(acc3["loot"]) == {"c246020", "c197"} and acc3["meta"]["with_loot"] == 1, "Era's c823 is left out"
     # the same file again is a repeat; a new tooltip reading merges the game block alone (its items count again, once);
     # new notes merge the notes alone
     assert merge_upload(acc3, qb_text, "fixture") == ("questbank-savedvars", False)
-    assert acc3["meta"]["repeats"] == 1 and pr["items"]["2361"] == 2
+    assert acc3["meta"]["repeats"] == 1 and pr["items"]["2361"] == 2 and acc3["loot"]["c246020"] == shade
     tip_text = qb_text.replace('["at"] = 1791100000,', '["at"] = 1791100600,')
     assert tip_text != qb_text
     assert merge_upload(acc3, tip_text, "fixture") == ("questbank-savedvars", False)
@@ -825,6 +1006,42 @@ def selftest():
     assert acc3["os"]["60005"]["2"]["p"] == [[2482, 300, 701, 2, 2, 2], [2482, 410, 620, 1, 2, 2]], acc3["os"]
     assert merge_upload(acc3, spots_text, "fixture") == ("questbank-savedvars", False) and acc3["meta"]["repeats"] == 3
     assert all(set(o) <= {"t", "p"} for q in acc3["os"].values() for o in q.values())
+    assert acc3["loot"]["c246020"] == shade and acc3["meta"]["with_loot"] == 1, "a repeat, a tooltip, new notes or new spots vote for no loot again"
+    # a loot window alone (the Shade looted once more, a new item in it) merges the loot alone: the source and its items
+    # get one more vote, the most times stand; the addon's counters moving by themselves is a repeat, like osN
+    loot_text = spots_text.replace('["n"] = 2,\n\t\t\t\t["b"] = 70205,\n\t\t\t\t["i"] = {\n\t\t\t\t\t[273031] = 2,',
+                                   '["n"] = 3,\n\t\t\t\t["b"] = 70291,\n\t\t\t\t["i"] = {\n\t\t\t\t\t[273031] = 2,\n\t\t\t\t\t[273035] = 1,', 1)
+    assert loot_text != spots_text
+    assert merge_upload(acc3, loot_text, "fixture") == ("questbank-savedvars", True)
+    assert acc3["loot"]["c246020"] == dict(shade, u=2, n=3, b=70291, last=2, im={"2959": 2}, d={"1": 2}, e={"3303": 2},
+                                           i={"273031": {"v": 2, "n": 2}, "273032": {"v": 2, "n": 1}, "273035": {"v": 1, "n": 1}}), acc3["loot"]
+    assert acc3["loot"]["c197"]["u"] == 2 and acc3["meta"]["with_loot"] == 2
+    assert acc3["meta"]["with_notes"] == 3 and acc3["meta"]["with_spots"] == 2 and pr["items"]["2361"] == 3 and acc3["meta"]["repeats"] == 3, "nothing else merged again"
+    counters = loot_text.replace('["lootN"] = 3,\n\t\t["lootAt"] = {\n\t\t\t["c246020"] = 3,', '["lootN"] = 4,\n\t\t["lootAt"] = {\n\t\t\t["c246020"] = 4,', 1)
+    assert counters != loot_text
+    assert merge_upload(acc3, counters, "fixture") == ("questbank-savedvars", False) and acc3["meta"]["repeats"] == 4
+    assert acc3["loot"]["c246020"]["u"] == 2 and acc3["meta"]["with_loot"] == 2
+    # merge_loot alone: only the addon's shape gets in (keys c<id>/o<id>, numbers in range, ex exactly true), read up to
+    # its caps (the 40 most-seen items of a source, the first 400 sources), a source without items is no record
+    acc7 = empty()
+    odd = {"c197": {"m": 1429, "n": "12", "b": True, "i": {"2589": 1, "x": 1, "0": 1, "2590": "2", "2591": 0, "1000000": 1}},
+           "o2843": {"im": 36, "d": 0, "e": 2741, "ex": "true", "n": 2.4, "i": {"5440": 3}},
+           "x1": {"i": {"1": 1}}, "c-3": {"i": {"1": 1}}, "c": {"i": {"1": 1}}, "c12": {"n": 4}, "c13": "junk",
+           "c14": {"e": 3303, "ex": True, "i": {"7": 1}}, "c15": {"im": 2959, "e": "3303", "i": {"7": 1}}}
+    assert merge_loot(acc7, odd) == 4, acc7["loot"]
+    assert acc7["loot"]["c197"] == {"u": 1, "n": 1, "b": 0, "m": {"1429": 1}, "im": {}, "d": {}, "e": {}, "ei": {}, "i": {"2589": {"v": 1, "n": 1}}, "last": 1}, acc7["loot"]["c197"]
+    assert acc7["loot"]["o2843"] == {"u": 1, "n": 2, "b": 0, "m": {}, "im": {"36": 1}, "d": {"0": 1}, "e": {}, "ei": {"2741": 1}, "i": {"5440": {"v": 1, "n": 3}}, "last": 1}, acc7["loot"]["o2843"]
+    assert acc7["loot"]["c14"]["e"] == {"3303": 1} and acc7["loot"]["c15"]["e"] == {} and acc7["loot"]["c15"]["ei"] == {}
+    assert set(acc7["loot"]) == {"c197", "o2843", "c14", "c15"} and acc7["meta"]["with_loot"] == 1
+    assert merge_loot(acc7, {"c197": {"i": {"2589": 1000}}}) == 1 and acc7["loot"]["c197"]["i"]["2589"] == {"v": 2, "n": 999} and acc7["loot"]["c197"]["u"] == 2
+    full = {"c20": {"n": 1, "i": {str(1000 + i): i + 1 for i in range(41)}}}
+    assert merge_loot(acc7, full) == 1 and len(acc7["loot"]["c20"]["i"]) == LOOT_UPLOAD[1] and "1000" not in acc7["loot"]["c20"]["i"] and "1040" in acc7["loot"]["c20"]["i"]
+    assert merge_loot(acc7, {"c%d" % i: {"i": {"1": 1}} for i in range(100000, 100500)}) == LOOT_UPLOAD[0]
+    assert "c100399" in acc7["loot"] and "c100400" not in acc7["loot"] and acc7["meta"]["with_loot"] == 4
+    assert merge_loot(acc7, {"c1": {"i": {}}, "c2": {"n": 3}}) == 0 and acc7["meta"]["with_loot"] == 4
+    assert "Shade" not in json.dumps(acc7) and all(isinstance(v, (int, dict)) for s in acc7["loot"].values() for v in s.values()), "numbers and votes only"
+    assert "loot: 2 sources, 4 items, from 2 upload(s)" in summary(acc3), summary(acc3)
+    json.dumps(acc7)
     # merge_spots alone: a near point on the same map is the same place (moved to the uploads' mean), another map's is
     # not; a file over the addon's caps is read up to them, a quest or objective written twice is read once
     acc5 = empty()
@@ -927,6 +1144,7 @@ def main():
         new = pull(acc, a.endpoint, admin_key(), a.raw_dir)
         print("pulled %d new upload(s) after #%d" % (new, acc["meta"]["last_id"]))
     acc["meta"]["pulled"] = pulled
+    trainer_classes(acc, class_books())
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     json.dump(acc, open(a.out, "w"), indent=0, sort_keys=True)
     print("wrote %s: %s" % (os.path.relpath(a.out, REPO) if a.out.startswith(REPO) else a.out, summary(acc)))

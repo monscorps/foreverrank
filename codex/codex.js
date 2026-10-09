@@ -109,13 +109,30 @@
     if (s.mp5) bits.push(s.mp5 + " mp5");
     return bits.slice(0, 4).join(" \u00b7 ");
   }
-  function lootRow(id) {
+  // Where a loot table comes from: the fansites that published players' records, and since October 2026 our own
+  // players' loot windows (QuestBank), marked "players' games" in a src list by tools/apply_loot.py.
+  var PG = "players' games";
+  function joinList(a) { return a.length < 3 ? a.join(" and ") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1]; }
+  function lootSrcText(src) {
+    var sites = (src || []).filter(function (s) { return s !== PG; }), ours = sites.length !== (src || []).length;
+    return (sites.length ? "as published by " + joinList(sites) : "") + (ours ? (sites.length ? ", and " : "") + "seen in players' games through QuestBank" : "");
+  }
+  function lootSeen(b) {
+    var g = b.games, n = g && g.kills;
+    if (!n) return "";
+    // link "time": the game named no creature for the fight, so the corpse looted first after the kill was taken for the boss
+    var time = g.link === "time";
+    return "<small" + (time ? ' title="The game did not name this fight\'s creature; the corpse looted first after the kill was taken for the boss."' : "") +
+      ">Seen in players' games: " + (b.kind === "object" || b.kind === "trash" ? "looted " + n + (n === 1 ? " time" : " times") : n + (n === 1 ? " kill" : " kills")) +
+      (time ? " (linked by time)" : "") + "</small>";
+  }
+  function lootRow(id, ours) {
     var it = LOOTITEMS[id];
     if (!it) return "";
     var kind = [slotName(it.slot), it.type && it.type !== slotName(it.slot) ? it.type : ""].filter(Boolean).join(" ");
     var g = gist(it);
     return '<button type="button" class="lr q-' + esc(it.quality || "common") + '" data-lid="' + esc(id) + '"><span class="lr-ic">' + img(it.icon) + "</span>" +
-      '<span class="lr-t"><b>' + esc(it.name) + "</b><em>" + esc([kind, g, it.est === "classic" ? "Classic stats (est.)" : ""].filter(Boolean).join(" \u00b7 ") || (it.sub && it.sub !== "Other" ? it.sub : "Item")) + "</em></span></button>";
+      '<span class="lr-t"><b>' + esc(it.name) + "</b><em>" + esc([kind, g, it.est === "classic" ? "Classic stats (est.)" : "", ours === true ? "players' games only" : ""].filter(Boolean).join(" \u00b7 ") || (it.sub && it.sub !== "Other" ? it.sub : "Item")) + "</em></span></button>";
   }
   function openLoot(name) {
     var d = LOOT && LOOT.dungeons.filter(function (x) { return x.name === name; })[0];
@@ -133,7 +150,7 @@
     var html = '<div class="cxm-head loot-head"><b id="cxm-title">' + esc(d.name) + "</b>" +
       (d.levels ? '<span class="lvlchip">Levels ' + d.levels[0] + "\u2013" + d.levels[1] + "</span>" : "") + (d.new ? '<span class="lt-new">New in Forever</span>' : "") + "</div>" +
       '<p class="loot-sub">' + [n.bosses + (n.bosses === 1 ? " boss" : " bosses"), n.drops + " drops", n.quests ? n.quests + " quest rewards" : ""].filter(Boolean).join(" \u00b7 ") +
-      ". Recorded by players in the beta, as published by " + esc(d.src.join(" and ")) + ". Bosses and drops can still change." +
+      ". Recorded by players in the beta, " + esc(lootSrcText(d.src)) + ". Bosses and drops can still change." +
       (d.bosses.concat(d.quests || []).some(function (b) { return (b.items || []).some(function (i) { return LOOTITEMS[i] && LOOTITEMS[i].est === "classic"; }); })
         ? " Items marked Classic stats are on these lists, but nobody has seen their Forever numbers yet: the stats shown are WoW Classic's." : "") + "</p>";
     function here(ids) { return ids.filter(function (i) { return !absent(i) && LOOTITEMS[i]; }); }
@@ -141,8 +158,8 @@
     html += d.bosses.filter(function (b) { return b.items.length; }).map(function (b) {
       var h = here(b.items), g = gone(b.items);
       return '<section class="loot-boss' + (b.kind === "rare" ? " rare" : "") + (h.length ? "" : " bare") + '"><h4>' + esc(b.name) + (b.kind === "rare" ? '<i class="lt-rare">Rare spawn</i>' : "") +
-        (b.level ? "<small>Level " + b.level + "</small>" : "") + "</h4>" +
-        (h.length ? '<div class="lr-grid">' + h.map(lootRow).join("") + "</div>" : '<p class="lr-none">No Forever drop recorded yet.</p>') +
+        (b.level ? "<small>Level " + b.level + "</small>" : "") + lootSeen(b) + "</h4>" +
+        (h.length ? '<div class="lr-grid">' + h.map(function (i) { return lootRow(i, (b.gamesOnly || []).indexOf(i) !== -1); }).join("") + "</div>" : '<p class="lr-none">No Forever drop recorded yet.</p>') +
         (g.length ? '<p class="lr-gone"><b>From Classic\'s table, not yet seen in Forever:</b> ' + g.map(esc).join(", ") + ".</p>" : "") + "</section>";
     }).join("");
     var qs = d.quests.filter(function (q) { return here(q.items).length; });
@@ -164,10 +181,13 @@
   // ---- Database search: Forever items (../plan/items.json) plus this page's places, perks, spells and systems ----
   var PAGE = window.CODEX_PAGE || "db";
   var CATS = [["all", "All"], ["weapon", "Weapons"], ["armor", "Armor"], ["accessory", "Accessories"], ["offhand", "Off-hands and relics"],
-    ["consumable", "Consumables"], ["recipe", "Recipes"], ["pvp", "PvP"], ["misc", "Misc"], ["place", "Places"], ["perk", "Legacy perks"],
-    ["soul", "Souls"], ["spell", "Spells"], ["talent", "Talents"], ["racial", "Racials"], ["set", "Item sets"], ["system", "Systems"]];
-  var SUBFIRST = ["Cloth", "Leather", "Mail", "Plate", "Shield", "Neck", "Ring", "Trinket", "Cloak", "Alchemy", "Cooking", "First Aid", "Zone", "Dungeon", "Raid", "Battleground"];
+    ["consumable", "Consumables"], ["recipe", "Recipes"], ["craft", "Crafting"], ["pvp", "PvP"], ["misc", "Misc"], ["place", "Places"],
+    ["rare", "Rare spawns"], ["perk", "Legacy perks"], ["soul", "Souls"], ["spell", "Spells"], ["talent", "Talents"], ["racial", "Racials"],
+    ["set", "Item sets"], ["system", "Systems"]];
+  var SUBFIRST = ["Cloth", "Leather", "Mail", "Plate", "Shield", "Neck", "Ring", "Trinket", "Cloak", "Alchemy", "Cooking", "First Aid", "Zone", "Dungeon", "Raid", "Battleground",
+    "Eastern Kingdoms", "Kalimdor", "Dungeons", "Rank"];
   var QUAL = ["poor", "common", "uncommon", "rare", "epic", "legendary", "heirloom"];
+  var SYNC = function () {};
   var IDX = [], GK = null, SQ = { q: "", cat: "all", sub: "", qual: "", lvl: "", cls: "", prof: "", sk: "", era: false, cl: false, stat: "", src: "", at: [], ms: "", fx: [], sort: "" }, SHOWN = 60;
   // Classic items Forever has not shown yet (est "classic"): listed only when a Forever loot record names them, unless asked for
   function unseenClassic(it) { return it && it.est === "classic" && !((it.drops && it.drops.length) || (it.quests && it.quests.length)); }
@@ -179,8 +199,13 @@
   var MAINS = [["strength", "Strength"], ["agility", "Agility"], ["intellect", "Intellect"], ["sta", "Stamina, no Str/Agi/Int"], ["spirit", "Spirit"]];
   // Categories with no items in them: the item-only filters (stat, main stat, armor, effects, source, profession,
   // sort by stat) mean nothing there, so they are ignored and hidden rather than emptying the list.
-  var NONITEM = { place: 1, perk: 1, soul: 1, spell: 1, talent: 1, racial: 1, set: 1, system: 1 };
+  var NONITEM = { place: 1, perk: 1, soul: 1, spell: 1, talent: 1, racial: 1, set: 1, system: 1, craft: 1, rare: 1 };
   function itemFilters(cat) { return !NONITEM[cat]; }
+  // Crafting rows are recipes, not items: of the item filters only profession and skill mean something there.
+  var CRAFTCAT = { craft: 1 };
+  // What any class can have: a class filter keeps these (a racial, a profession's recipes, a PvP rank, a rare spawn).
+  // Recipes of a one-class profession (Poisons, Comprehension) carry that class instead.
+  var CLASSLESS = { racial: 1, craft: 1, pvprank: 1, rare: 1 };
   function armorFilters(cat) { return cat === "all" || cat === "armor"; } // weapons, jewelry and held items have no armor type
   var GEARCAT = { all: 1, weapon: 1, armor: 1, accessory: 1, offhand: 1 }; // PvP holds one stat-less token
   function fxKeys(cat) { return GEARCAT[cat] ? SQ.fx : SQ.fx.filter(function (k) { return k === "rf"; }); } // procs are read for gear only
@@ -254,27 +279,33 @@
   }
   function buildSouls(d) {
     if (!d.souls || !d.souls.list) return;
-    headList(d.souls.list.map(function (s) { return s[0] + ": " + s[1]; }), "souls", "Soul Engraving: 204 shoulder souls", "spell_shadow_soulleech_3");
+    headList(d.souls.list.map(function (s) { return s[0] + ": " + s[1]; }), "souls", "Soul Engraving: " + d.souls.list.length + " shoulder souls", "spell_shadow_soulleech_3");
     d.souls.list.forEach(function (s) {
       IDX.push({ kind: "soul", cat: "soul", sub: "Shoulder soul", name: s[0], icon: s[3] || (s[2] ? "classicon_" + s[2].toLowerCase() : "spell_shadow_soulleech_3"), q: "unknown",
         cls: s[2] ? s[2].charAt(0) + s[2].slice(1).toLowerCase() : undefined,
         meta: "Soul Engraving \u00b7 " + (s[2] ? s[2].charAt(0) + s[2].slice(1).toLowerCase() : "class unsorted"), topic: "souls", text: (s[0] + " " + s[1] + " " + (s[2] || "")).toLowerCase() });
     });
   }
-  var SRC_LABEL = { client: "Beta client", sod: "SoD wiring", classic: "Classic text", basic: "Demo book", classiconly: "Not in Forever" };
-  var SRC_TIP = {
-    client: "Tooltip read from beta client data, build 1.60.1.70009.",
-    sod: "Season of Discovery wiring in the client: class-masked but with no Forever learn level yet. May change before launch.",
-    classic: "Classic placeholder text; the demo tooltip was never captured, so the Forever version is unverified.",
-    basic: "Listed in the level-38 demo spellbook. Universal basics.",
-    classiconly: "A Classic spell the Forever demo book does not list: possibly cut, moved above the demo level, or hidden until discovered."
-  };
+  var SRC_LABEL = { client: "Beta client", sod: "SoD wiring", classic: "Classic text", basic: "General", classiconly: "Not in Forever" };
+  // The client builds the spellbook and set files were read from, when the files say (spellbook.json build, sets.json build).
+  var BOOK_BUILD = "", SET_BUILD = "", BOOK_PRICE = {};
+  function onBuild(b) { return b ? ", build " + b : ""; }
+  function srcTip(src) {
+    return {
+      client: "Tooltip read from the beta client's spell data" + onBuild(BOOK_BUILD) + ".",
+      sod: "Season of Discovery wiring in the client: class-masked but with no Forever learn level yet. May change before launch.",
+      classic: "Classic placeholder text: the Forever tooltip has not been read yet.",
+      basic: "A general spell every class has, from the beta client" + onBuild(BOOK_BUILD) + ".",
+      classiconly: "A Classic spell the Forever client's spellbook does not list: cut, renamed, or learned another way."
+    }[src] || "";
+  }
+  // Racial text still carried from the BlizzCon demo says so in its own last sentence.
+  function racialSrc(r) { return r.src || (/Read from (the demo|a demo)/i.test(r.d || "") ? "demo" : "client"); }
   var VERDICT = { "same": "same text as Classic", "changed": "text changed from Classic", "new": "new in Forever", "rank": "rank layout differs", "renamed": "renamed from Classic", "moved": "moved from Classic", "unverified": "tooltip unverified", "removed": "removed in a later beta build" };
   var ERA_LABEL = { forever: "Forever-authored", sod: "SoD spell reused", retail: "Retail-era spell", classic: "Classic-era spell" };
   function buildBook(sb) {
-    var inBook = {};
-    (sb.spells || []).forEach(function (p) { inBook[p.n + "|" + p.c] = 1; });
-    IDX = IDX.filter(function (e) { return !(e.kind === "page" && e.cat === "spell" && inBook[e.name + "|" + e.sub]); }); // "foretold" rows now in the book
+    BOOK_BUILD = sb.build || "";
+    BOOK_PRICE = sb.trainPrice || {}; // per class: what the trainer prices players saw do and don't tell
     (sb.spells || []).forEach(function (p) {
       IDX.push({ kind: "bookspell", cat: "spell", sub: p.c, name: p.n, icon: p.icon || "inv_misc_questionmark", q: "unknown",
         cls: p.c, lvlKey: typeof p.lvl === "number" ? p.lvl : undefined, sb: p, side: SRC_LABEL[p.src] || "",
@@ -283,18 +314,19 @@
     });
     (sb.talents || []).forEach(function (t) {
       IDX.push({ kind: "talent", cat: "talent", sub: t.c, name: t.n, icon: t.icon || "inv_misc_questionmark", q: "unknown",
-        cls: t.c, lvlKey: 10 + (t.row - 1) * 5, tl: t, side: "Demo transcription",
+        cls: t.c, lvlKey: 10 + (t.row - 1) * 5, tl: t, side: "Beta client",
         meta: [t.c, t.tree + " tree", "Tier " + t.row, t.r + (t.r === 1 ? " rank" : " ranks"), VERDICT[t.s] || "", t.seen ? "seen in game" : ""].filter(Boolean).join(" \u00b7 "),
         text: (t.n + " " + t.c + " " + t.tree + " " + (t.d || "")).toLowerCase() });
     });
     (sb.racials || []).forEach(function (r) {
       IDX.push({ kind: "racial", cat: "racial", sub: r.race, name: r.n, icon: r.icon || "inv_misc_questionmark", q: "unknown",
-        lvlKey: 1, rc: r, side: "Demo transcription",
+        lvlKey: 1, rc: r, side: racialSrc(r) === "demo" ? "BlizzCon demo" : "Beta client",
         meta: [r.race, r.kind === "active" ? "Active racial" : "Passive racial", r.seen ? "seen in game" : ""].filter(Boolean).join(" \u00b7 "),
         text: (r.n + " " + r.race + " " + (r.d || "")).toLowerCase() });
     });
   }
   function buildSets(st) {
+    SET_BUILD = st.build || "";
     (st.sets || []).forEach(function (p) {
       IDX.push({ kind: "itemset", cat: "set", sub: p.cat, name: p.n, icon: (p.pieces[0] && p.pieces[0].icon) || "inv_chest_chain_07", q: "unknown",
         cls: p.cls.length === 1 ? p.cls[0] : undefined, lvlKey: p.reqLevel || undefined, st: p, era: p.era,
@@ -302,6 +334,210 @@
         meta: [p.cat, p.era === "sod" ? "SoD-era duplicate" : "", p.pieces.length + " pieces", p.cls.join("/"), p.reqLevel ? "Level " + p.reqLevel : ""].filter(Boolean).join(" \u00b7 "),
         text: (p.n + " " + p.cat + " " + p.cls.join(" ") + " " + p.bonuses.map(function (b) { return b.spell + " " + (b.fx || ""); }).join(" ")).toLowerCase() });
     });
+  }
+  // ---- Crafting (codex/recipes.json), rare spawns (codex/rares.json), PvP ranks (codex/pvp.json) ----
+  var RC = null, RS = null, PV = null;
+  var PROF_ICON = { Alchemy: "trade_alchemy", Blacksmithing: "trade_blacksmithing", Comprehension: "inv_scroll_03", Cooking: "inv_misc_food_15",
+    Enchanting: "trade_engraving", Engineering: "trade_engineering", "First Aid": "spell_holy_sealofsacrifice", Fishing: "trade_fishing",
+    Herbalism: "trade_herbalism", Leatherworking: "inv_misc_armorkit_17", Mining: "trade_mining", Poisons: "trade_brewpoison",
+    Skinning: "inv_misc_pelt_wolf_01", Tailoring: "trade_tailoring" };
+  function fmtN(v) { return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+  function near(station) { return "Needs " + (/^[aeiou]/i.test(station) ? "an " : "a ") + station + " nearby."; }
+  // The skill a recipe is learned at; where nothing records it, the skill it turns yellow at (never below the real one).
+  function craftSkill(cr) { return cr.sk || (cr.c ? cr.c[0] : 0); }
+  // An item a recipe names: the item database's row when it has one, else the recipe file's own name, quality and icon.
+  // A product in no item table (server-sent) is named after its recipe; the file flags it.
+  function rcItem(id) {
+    var it = ITEMBYID[id], x = RC && RC.items[id];
+    return it ? { name: it.name, q: it.quality || "common", icon: it.icon, it: it } : x ? { name: x[0], q: x[1], icon: x[2], unl: !!x[3] } : { name: "Item " + id, q: "common", icon: "" };
+  }
+  function reagentText(cr) { return (cr.r || []).map(function (r) { return rcItem(r[0]).name + (r[1] > 1 ? " (" + r[1] + ")" : ""); }).join(", "); }
+  // The profession and the skill to learn it; a skill from Classic's trainers says so.
+  function skillTxt(cr) { return cr.p + (cr.sk ? (cr.cl ? " (Classic trainer: skill " + cr.sk + ")" : " " + cr.sk) : ""); }
+  function craftLearn(cr) {
+    if (cr.by) return "Learned from " + rcItem(cr.by[0]).name + (cr.sk ? " at skill " + cr.sk : "") + ".";
+    if (cr.auto) return "Comes with the profession.";
+    if (cr.cl) return "How Forever teaches it is not recorded yet. In Classic, trainers taught it at skill " + cr.sk + ".";
+    return "How it is learned is not recorded yet" + (cr.c ? " (it turns yellow at " + cr.c[0] + ")" : "") + ".";
+  }
+  // The client stores where a recipe turns yellow and grey; green is worked out by Classic's rule (halfway).
+  function craftColours(cr) {
+    var lo = cr.c[0], hi = cr.c[1];
+    return lo && lo < hi ? "Skill-ups: yellow from " + lo + ", grey from " + hi + "; green from about " + Math.floor((lo + hi) / 2) + " by Classic's rule." : "Grey from " + hi + ".";
+  }
+  function buildCrafts(rc) {
+    RC = rc;
+    (rc.recipes || []).forEach(function (cr) {
+      var made = cr.m ? rcItem(cr.m) : null;
+      IDX.push({ kind: "craft", cat: "craft", sub: cr.p, name: cr.n, icon: cr.i || PROF_ICON[cr.p] || "inv_misc_questionmark", q: made ? made.q : "common",
+        cr: cr, era: cr.e, cls: cr.cls, side: cr.e === "sod" ? "SoD-era data" : cr.e === "retail" ? "Retail-era data" : "Beta client",
+        meta: [cr.p + (cr.sk && !cr.cl ? " " + cr.sk : ""), cr.at || "", cr.k > 1 ? "makes " + cr.k : "", cr.nw ? "New" : "",
+          cr.by ? rcItem(cr.by[0]).name : cr.auto ? "comes with the profession" : cr.cl ? "Classic trainer: skill " + cr.sk : ""].filter(Boolean).join(" \u00b7 "),
+        text: [cr.n, cr.p, cr.at || "", reagentText(cr), (cr.by || []).map(function (i) { return rcItem(i).name; }).join(" "), cr.fx || ""].join(" ").toLowerCase() });
+    });
+    addReagents();
+  }
+  // Recipe items and what recipes make show their reagents in the item tooltip, from the client's recipe tables.
+  function addReagents() {
+    if (!RC) return;
+    RC.recipes.forEach(function (cr) {
+      var txt = [reagentText(cr), skillTxt(cr), cr.at || ""].filter(Boolean).join(" \u00b7 ");
+      [cr.m].concat(cr.by || []).forEach(function (id) {
+        var it = id && ITEMBYID[id];
+        if (it && (!it.reagents || it.reagents === "not shown")) it.reagents = txt;
+      });
+    });
+  }
+  function lvTxt(lv) { return Array.isArray(lv) ? lv[0] + "\u2013" + lv[1] : String(lv); }
+  function buildRares(rs) {
+    RS = rs;
+    (rs.rares || []).forEach(function (r) {
+      var z = rs.zones[r.z] || ["", ""];
+      IDX.push({ kind: "rare", cat: "rare", sub: z[1] || "Unknown", name: r.n, icon: r.i || "inv_misc_head_dragon_bronze", q: "unknown", rr: r,
+        lvlKey: Array.isArray(r.lv) ? r.lv[0] : r.lv, side: "Classic data",
+        meta: [r.rk === "rare elite" ? "Rare elite" : "Rare", "Level " + lvTxt(r.lv), z[0], r.fam ? r.fam + (r.tame ? ", tameable" : "") : r.ty || ""].filter(Boolean).join(" \u00b7 "),
+        text: [r.n, r.sub || "", z[0], z[1], r.rk, r.ty || "", r.fam || "", r.tame ? "tameable pet" : ""].join(" ").toLowerCase() });
+    });
+  }
+  // Rares players met in Forever's dungeons: the loot records' rare spawns (codex/loot.json).
+  var LOOT_RARES = false;
+  function addLootRares() {
+    if (LOOT_RARES || !LOOT || PAGE !== "db") return;
+    LOOT_RARES = true;
+    LOOT.dungeons.forEach(function (d) {
+      d.bosses.forEach(function (b) {
+        if (b.kind !== "rare") return;
+        var nd = b.items.filter(function (i) { return !absent(i); }).length;
+        IDX.push({ kind: "rare", cat: "rare", sub: "Dungeons", name: b.name, icon: "inv_misc_head_dragon_bronze", q: "unknown", dun: d.name, lb: b,
+          lvlKey: Array.isArray(b.level) ? b.level[0] : b.level || undefined, side: "Players' loot records",
+          meta: ["Rare", b.level ? "Level " + lvTxt(b.level) : "", d.name, nd + (nd === 1 ? " drop" : " drops")].filter(Boolean).join(" \u00b7 "),
+          text: [b.name, d.name, "dungeon rare"].join(" ").toLowerCase() });
+      });
+    });
+  }
+  // Classic respawn times, as a reader says them.
+  function respawn(rs) {
+    function hr(v) { return Math.round(v / 360) / 10; }
+    function mn(v) { return Math.round(v / 60); }
+    var a = rs[0], b = rs[1];
+    if (!a) return b >= 3600 ? "within " + hr(b) + " hours" : "within " + mn(b) + " min";
+    if (a >= 3600) return a === b ? hr(a) + " hours" : hr(a) + " to " + hr(b) + " hours";
+    if (b < 3600) return a === b ? mn(a) + " min" : mn(a) + " to " + mn(b) + " min";
+    return mn(a) + " min to " + hr(b) + " hours";
+  }
+  function spots(r) { // "The Barrens 62.0, 33.3; 61.2, 34.5", a zone named once per run of its points
+    var out = [], last = null;
+    r.pts.forEach(function (p) {
+      var zn = (RS.zones[p[0]] || [""])[0];
+      out.push((zn !== last ? zn + " " : "") + p[1].toFixed(1) + ", " + p[2].toFixed(1));
+      last = zn;
+    });
+    return out.join("; ");
+  }
+  function rankName(r) { return r.a === r.h ? r.a : r.a + " / " + r.h; }
+  function buildRanks(pv) {
+    PV = pv;
+    (pv.ranks || []).forEach(function (r) {
+      IDX.push({ kind: "pvprank", cat: "pvp", sub: "Rank", name: "Rank " + r.r + ": " + rankName(r), icon: r.icon || "inv_bannerpvp_02", q: "unknown", rk: r, href: "#pvp",
+        side: "Beta client", meta: [fmtN(r.pts) + " rank points", r.reward ? "Blizzard: " + r.reward : "", r.lp ? "Legacy Point" : ""].filter(Boolean).join(" \u00b7 "),
+        text: ["rank " + r.r, r.a, r.h, r.reward || "", "pvp honor rank"].join(" ").toLowerCase() });
+    });
+  }
+  // The PvP ranks section: facts on top, then one row per rank in the rankings' row style.
+  function drawPvp(pv) {
+    var box = document.getElementById("pvpbox");
+    if (!box || !pv.ranks || !pv.ranks.length) return;
+    var top = Math.max.apply(null, pv.ranks.map(function (r) { return r.pts; })) || 1;
+    var lps = pv.ranks.filter(function (r) { return r.lp; }).map(function (r) { return r.r; });
+    var wk = pv.weekly || [], full = wk.filter(function (w) { return w[1] >= 14; })[0];
+    var cards = [
+      "<b>Honor cap " + fmtN(pv.honorCap) + ".</b>" + (pv.honorWas ? " It was " + fmtN(pv.honorWas[0]) + " until build " + esc(pv.honorSince) + ", when Blizzard also raised most Honor costs by about half." : ""),
+      "<b>" + fmtN(pv.total) + " rank points</b> from Private or Scout to Grand Marshal or High Warlord: each rank is its own bar, from " + fmtN(pv.ranks[0].pts) + " points to " + fmtN(top) + ".",
+      wk.length ? "<b>A rank cap that rises each week.</b> Rank " + wk[0][1] + " in week 1" + (full ? ", rank 14 from week " + full[0] : "") + " of a season." : "",
+      lps.length ? "<b>Legacy Points</b> for reaching rank " + lps.join(", ").replace(/, (\d+)$/, " and $1") + "." : "",
+      pv.rankPoints && pv.rankPoints.about ? "<b>Rank Points</b>, in the client's own words: " + esc(pv.rankPoints.about) : ""
+    ].filter(Boolean);
+    var rows = pv.ranks.map(function (r) {
+      return '<li class="rk-row" data-name="' + esc("Rank " + r.r + ": " + rankName(r)) + '"><span class="rk-n">' + r.r + "</span>" + img(r.icon || "inv_bannerpvp_02") +
+        '<span class="rk-t"><b>' + esc(rankName(r)) + "</b><em>" + esc([r.reward ? "Blizzard: " + r.reward : "", r.lp ? "Legacy Point" : "", r.week ? "open from week " + r.week : ""].filter(Boolean).join(" \u00b7 ")) + "</em></span>" +
+        '<span class="rk-s"><span class="rk-bar"><i style="width:' + Math.round(r.pts / top * 100) + '%"></i></span><b>' + fmtN(r.pts) + "</b><small>rank points</small></span></li>";
+    }).join("");
+    box.innerHTML = '<div class="factgrid">' + cards.map(function (c) { return '<div class="factc"><p>' + c + "</p></div>"; }).join("") + "</div>" +
+      '<ul class="rk-list">' + rows + "</ul>" +
+      '<p class="rk-small">Rank names, rank points, weeks, the Honor cap and Legacy Points: beta client' + esc(onBuild(pv.build)) +
+      ". Reading the client's curves as each rank's bar and as weeks of a season is our inference. Rewards per rank are " +
+      '<a href="' + esc(pv.rewardsSrc) + '" rel="noopener">Blizzard\'s, from Oct 7</a>; the seals, sets and vendors behind them are server data.</p>';
+  }
+  // A recipe's item as a loot-table row: hover for its tooltip, click to find it in the Database.
+  function itemRowFor(id, extra) {
+    var x = rcItem(id), it = x.it;
+    var kind = it ? [slotName(it.slot), it.sub && it.sub !== "Other" ? it.sub : ""].filter(Boolean).join(" \u00b7 ") : x.unl ? "Not in the client's item table: named after its recipe" : "";
+    return '<button type="button" class="lr q-' + esc(x.q || "common") + '" data-iid="' + esc(id) + '" data-q="' + esc(x.name) + '"><span class="lr-ic">' + img(x.icon) + "</span>" +
+      '<span class="lr-t"><b>' + esc(x.name) + "</b><em>" + esc([extra || "", kind || (extra ? "" : "Item")].filter(Boolean).join(" \u00b7 ")) + "</em></span></button>";
+  }
+  function wireItemRows(root) {
+    root.querySelectorAll(".lr[data-iid]").forEach(function (row) {
+      function it() { return ITEMBYID[row.getAttribute("data-iid")]; }
+      if (window.TipKit && GK) TipKit.hover(row, function () { return it() ? GK.itemTip(it()) : ""; }, function () { return "itemtip"; });
+      row.addEventListener("click", function (e) {
+        var name = row.getAttribute("data-q");
+        if (window.TipKit && GK && it() && (TipKit.touchy() || e.detail === 0)) {
+          TipKit.openSheet(GK.itemTip(it()), [{ label: "Find in the Database", onClick: function () { showInDb({ q: name, find: it() }); } }], { cls: "itemtip", owner: "craft:" + row.getAttribute("data-iid") });
+          return;
+        }
+        showInDb({ q: name, find: it() });
+      });
+    });
+  }
+  // Point the Database search at something from a popup (a reagent, a profession's recipes) without reloading the page.
+  // Finding an item by name (o.q) clears the filters; its row (o.find) turns on the data toggle it needs, so it is listed.
+  var CLEARF = function () {};
+  function showInDb(o) {
+    var qi = document.getElementById("dbs-qi");
+    if (!qi) {
+      location.href = "/codex/?" + (o.q ? "q=" + encodeURIComponent(o.q) : "cat=" + encodeURIComponent(o.cat || "all")) + (o.prof ? "&prof=" + encodeURIComponent(o.prof) : "");
+      return;
+    }
+    var m = document.getElementById("cxmodal");
+    if (m && !m.hidden) m.hidden = true;
+    if (window.TipKit) { TipKit.hide(); if (TipKit.sheetOpen()) TipKit.closeSheet(); }
+    SQ.q = qi.value = o.q || ""; SQ.cat = o.cat || "all"; SQ.sub = ""; SQ.qual = "";
+    if (o.q) {
+      CLEARF();
+      if (o.find && o.find.era) SQ.era = true;
+      if (unseenClassic(o.find)) SQ.cl = true;
+    }
+    if (o.prof != null) { SQ.prof = o.prof; var ps = document.getElementById("dbf-prof"); if (ps) ps.value = o.prof; }
+    SHOWN = 60; SYNC(); drawSearch(); syncUrl();
+    document.getElementById("dbs").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function openCraft(cr) {
+    var m = modal();
+    if (m.hidden) m._prev = document.activeElement;
+    var html = '<div class="cxm-head loot-head">' + img(cr.i || PROF_ICON[cr.p]) + '<b id="cxm-title">' + esc(cr.n) + "</b>" +
+      '<span class="lvlchip">' + esc(cr.p + (cr.sk && !cr.cl ? " " + cr.sk : "")) + "</span>" + (cr.nw ? '<span class="lt-new">New in Forever</span>' : "") + "</div>" +
+      '<p class="loot-sub">' + esc([craftLearn(cr), cr.at ? near(cr.at) : "", cr.c ? craftColours(cr) : ""].filter(Boolean).join(" ")) + "</p>";
+    if (cr.m) html += '<section class="loot-boss"><h4>Makes' + (cr.k > 1 || cr.kv ? "<small>" + (cr.kv ? "about " : "") + (cr.k || 1) + " per craft</small>" : "") + '</h4><div class="lr-grid">' + itemRowFor(cr.m) + "</div></section>";
+    else if (cr.fx) html += '<section class="loot-boss"><h4>What it does</h4><p class="lr-none">' + esc(cr.fx) + "</p></section>";
+    html += '<section class="loot-boss"><h4>Reagents</h4><div class="lr-grid">' + (cr.r || []).map(function (r) { return itemRowFor(r[0], "\u00d7" + r[1]); }).join("") + "</div></section>";
+    if (cr.by) html += '<section class="loot-boss"><h4>Taught by</h4><div class="lr-grid">' + cr.by.map(function (i) { return itemRowFor(i); }).join("") + "</div></section>";
+    html += '<p class="loot-foot">Recipe, reagents, station and the yellow and grey skill-ups from the beta client' + esc(onBuild(RC && RC.build)) +
+      (cr.cl ? "; the trainer's skill is Classic's, from the CMaNGOS Classic database" : "") +
+      (cr.e ? ". " + (cr.e === "sod" ? "Season of Discovery" : "Retail-era") + " data on the branch: it may not be in Forever" : "") +
+      (cr.rs ? ". The spell is Season of Discovery's; an item new in Forever teaches it" : "") +
+      (cr.m && rcItem(cr.m).unl ? ". What it makes is in no item table yet: the server sends it" : "") +
+      '. <button type="button" class="cx-more" data-craftprof="' + esc(cr.p) + '">All ' + esc(cr.p) + " recipes &rsaquo;</button></p>";
+    m.querySelector(".cxm-body").innerHTML = html;
+    showModal(m, true);
+    wireItemRows(m);
+    var all = m.querySelector("[data-craftprof]");
+    if (all) all.addEventListener("click", function () { showInDb({ cat: "craft", prof: all.getAttribute("data-craftprof") }); });
+  }
+  // Kinds whose rows carry a tooltip of their own (sbTip), shown as a sheet on touch.
+  var SBT = { bookspell: 1, talent: 1, racial: 1, itemset: 1, craft: 1, rare: 1, pvprank: 1 };
+  function coin(c) {
+    var g = Math.floor(c / 10000), s = Math.floor(c / 100) % 100, k = c % 100;
+    return [g ? g + "g" : "", s ? s + "s" : "", k || !(g || s) ? k + "c" : ""].filter(Boolean).join(" ");
   }
   function sbTip(e) {
     var h = "<b>" + esc(e.name) + "</b>" + '<span class="sbt-m">' + esc(e.meta) + "</span>";
@@ -311,30 +547,66 @@
       if (p.note) h += '<p class="sbt-note">' + esc(p.note) + "</p>";
       if (p.cl && p.s && p.s !== "same") h += '<p class="sbt-note">Classic trains it at level ' + p.cl + ".</p>";
       if (p.seen) h += '<p class="sbt-note">Seen in game: a level ' + p.seen + " " + esc(p.c) + " in players' games had it.</p>";
-      h += '<p class="sbt-src">' + esc(SRC_TIP[p.src] || "") + "</p>";
+      // [rank, level, copper] per rank, as trainer windows in players' games showed them
+      if (p.train && p.train.length) h += '<p class="sbt-note">Trainer windows in players\u2019 games: ' + esc(p.train.map(function (x) {
+        return (x[0] ? "rank " + x[0] + ", " : "") + "level " + x[1] + ", " + coin(x[2]);
+      }).join("; ")) + ". " + esc(BOOK_PRICE[p.c] || "Prices are what those characters paid; reputation discounts may apply.") + "</p>";
+      h += '<p class="sbt-src">' + esc(srcTip(p.src)) + "</p>";
     } else if (e.kind === "talent") {
       var t = e.tl;
       if (t.d) h += "<p>" + esc(t.d) + (t.r > 1 ? " (rank 1 of " + t.r + ")" : "") + "</p>";
-      h += '<p class="sbt-note">Tier ' + t.row + ": earliest around level " + e.lvlKey + " by Classic one-point-per-level pacing. An estimate, not Forever data.</p>";
+      // the client's talent-point sources: one point a level from 10, plus one per rank of the Legacy perk Talented
+      h += '<p class="sbt-note">Tier ' + t.row + " needs " + (t.row - 1) * 5 + " points in the tree: level " + e.lvlKey + " at the earliest, up to 5 levels sooner with the Legacy perk Talented.</p>";
+      if (t.added) h += '<p class="sbt-note">' + (t.from ? "Moved here from " + esc(t.from) : "New") + " in beta build " + esc(t.added) + ".</p>";
+      if (t.gone) h += '<p class="sbt-note">Removed from the tree in beta build ' + esc(t.gone) + ".</p>";
+      if (t.was) h += '<p class="sbt-note">Called ' + esc(t.was) + " in earlier builds.</p>";
+      if (t.note) h += '<p class="sbt-note">' + esc(t.note) + "</p>";
       if (t.seen) h += '<p class="sbt-note">Seen in game: a level ' + t.seen + " " + esc(t.c) + " in players' games had it.</p>";
-      h += '<p class="sbt-src">Transcribed from BlizzCon demo footage (talentsforever.com export, CC BY 4.0).</p>';
+      h += '<p class="sbt-src">Talent text from the beta client' + esc(onBuild(BOOK_BUILD)) + ".</p>";
     } else if (e.kind === "racial") {
       if (e.rc.d) h += "<p>" + esc(e.rc.d) + "</p>";
       if (e.rc.seen) h += '<p class="sbt-note">Seen in game: a ' + esc(e.rc.race) + " in players' games had it.</p>";
-      h += '<p class="sbt-src">Transcribed from BlizzCon demo footage and reveal panels (talentsforever.com export, CC BY 4.0).</p>';
+      h += '<p class="sbt-src">' + (racialSrc(e.rc) === "demo"
+        ? "Text read from BlizzCon demo footage (talentsforever.com export, CC BY 4.0); not re-read from the client yet."
+        : "Racial text from the beta client" + esc(onBuild(BOOK_BUILD)) + ".") + "</p>";
     } else if (e.kind === "itemset") {
       var st = e.st;
       h += '<ul class="sbt-pieces">' + st.pieces.map(function (pc) {
-        var m = /^Item (\d+)/.exec(pc.n || ""), it = m && ITEMBYID[m[1]]; // "Item 11729 - not itemized..." when the set table has no name
-        if (it) return '<li class="q-' + esc(it.quality || "unknown") + '">' + esc(it.name) + (slotName(it.slot) ? " \u2013 " + esc(slotName(it.slot)) : "") + "</li>";
-        return '<li class="q-' + esc(pc.q) + '">' + esc(pc.n) + (pc.slot ? " \u2013 " + esc(slotName(pc.slot) || pc.slot) : "") + "</li>";
+        var m = /^Item (\d+)/.exec(pc.n || ""), it = ITEMBYID[pc.id] || (m && ITEMBYID[m[1]]); // "Item 11729 - not itemized..." when the set table has no name
+        var est = pc.est === "classic" || (it && it.est === "classic") ? ' <i class="sbt-int">Classic estimate</i>' : "";
+        if (it) return '<li class="q-' + esc(it.quality || "unknown") + '">' + esc(it.name) + (slotName(it.slot) ? " \u2013 " + esc(slotName(it.slot)) : "") + est + "</li>";
+        return '<li class="q-' + esc(pc.q) + '">' + esc(pc.n) + (pc.slot ? " \u2013 " + esc(slotName(pc.slot) || pc.slot) : "") + est + "</li>";
       }).join("") + "</ul>";
       st.bonuses.forEach(function (b) {
         h += '<p class="sbt-bonus"><b>(' + b.p + ")</b> " + esc(b.fx || b.spell) +
-          (b.fx ? "" : ' <i class="sbt-int">internal name, no tooltip text in the client</i>') +
+          (b.fx ? "" : b.fx0 ? ' <i class="sbt-int">internal name: the client\'s text has a number it fills with 0</i>' : ' <i class="sbt-int">internal name, no tooltip text in the client</i>') +
           ' <i class="sbt-era sbt-era-' + b.era + '">' + ERA_LABEL[b.era] + "</i></p>";
       });
-      h += '<p class="sbt-src">ItemSet tables from beta client 1.60.1.70009. Era per bonus read from spell ID bands.</p>';
+      h += '<p class="sbt-src">Item set tables from the beta client' + esc(onBuild(SET_BUILD)) + ". Era per bonus read from spell ID bands.</p>";
+    } else if (e.kind === "craft") {
+      var cr = e.cr;
+      h += "<p>" + esc(cr.m ? "Makes " + rcItem(cr.m).name + (cr.k > 1 ? " (" + cr.k + ")" : "") + "." : cr.fx || "") + "</p>";
+      h += '<p class="sbt-note">Reagents: ' + esc(reagentText(cr)) + ".</p>";
+      if (cr.at) h += '<p class="sbt-note">' + esc(near(cr.at)) + "</p>";
+      h += '<p class="sbt-note">' + esc(craftLearn(cr)) + (cr.c ? " " + esc(craftColours(cr)) : "") + "</p>";
+      h += '<p class="sbt-src">Recipe from the beta client' + esc(onBuild(RC && RC.build)) + (cr.cl ? "; the trainer's skill is Classic's (CMaNGOS)" : "") +
+        (cr.rs ? "; the spell is Season of Discovery's, taught by an item new in Forever" : "") + ". Click for each reagent's tooltip.</p>";
+    } else if (e.kind === "rare" && e.dun) {
+      var lb = e.lb, got = lb.items.filter(function (i) { return !absent(i) && ITEMBYID[i]; }).map(function (i) { return ITEMBYID[i].name; });
+      h += "<p>A rare spawn in " + esc(e.dun) + "." + (got.length ? " Drops: " + esc(got.join(", ")) + "." : "") + "</p>";
+      h += '<p class="sbt-src">From players\' dungeon loot records, ' + esc(lootSrcText(lb.src)) + ". Click for the loot table.</p>";
+    } else if (e.kind === "rare") {
+      var rr = e.rr;
+      if (rr.sub || rr.ty) h += "<p>" + esc([rr.sub ? "<" + rr.sub + ">" : "", rr.fam ? rr.fam + (rr.tame ? ", tameable by hunters" : "") : rr.ty || ""].filter(Boolean).join(" ")) + "</p>";
+      h += '<p class="sbt-note">Spawn points: ' + esc(spots(rr)) + (rr.more ? ", and " + rr.more + " more" : "") + ".</p>";
+      if (rr.rs) h += '<p class="sbt-note">Respawns ' + esc(respawn(rr.rs)) + " after a kill, in Classic.</p>";
+      h += '<p class="sbt-src">Classic data (CMaNGOS): it may have moved, changed or gone in Forever. Points drawn on the beta client\'s maps' + esc(onBuild(RS && RS.build)) + ".</p>";
+    } else if (e.kind === "pvprank") {
+      var rk = e.rk;
+      h += "<p>" + fmtN(rk.pts) + " rank points fill this rank" + (rk.week ? "; open from week " + rk.week + " of a season" : "") + ".</p>";
+      if (rk.reward) h += '<p class="sbt-note">Reward, per Blizzard: ' + esc(rk.reward) + ".</p>";
+      if (rk.lp) h += '<p class="sbt-note">Reaching it pays a Legacy Point.</p>';
+      h += '<p class="sbt-src">Rank, points, week and Legacy Point from the beta client' + esc(onBuild(PV && PV.build)) + "; reading its curves as points per rank and weeks is ours. Rewards from Blizzard's Oct 7 post.</p>";
     }
     return h;
   }
@@ -351,7 +623,7 @@
       if (it.setName) (SETROWS[it.setName] = SETROWS[it.setName] || []).push(it);
       ITEMBYID[it.id] = it;
       var er = effLvl(it), wearable = !!slotName(it.slot);
-      var lvlTxt = er.est && wearable ? "Level ~" + er.lvl + " (est.)" : it.reqLevel ? "Level " + it.reqLevel : "";
+      var lvlTxt = er.quest ? "Quest level " + er.lvl : er.est && wearable ? "Level ~" + er.lvl + " (est.)" : it.reqLevel ? "Level " + it.reqLevel : "";
       var clsTxt = it.cls && it.cls.length && it.cls.length < 9 ? it.cls.map(function (c) { return c.charAt(0) + c.slice(1).toLowerCase(); }).join("/") : "";
       var meta = [it.era === "sod" ? "SoD-era data" : it.era === "retail" ? "Retail-era data" : "", it.ft === "new" || it.nw ? "New" : it.ft === "changed" ? "Changed" : "", it.est === "classic" ? "Classic stats (est.)" : "", it.sub, slotName(it.slot), lvlTxt, clsTxt,
         dupName[it.name] > 1 && it.itemLevel ? "ilvl " + it.itemLevel : "", it.sg ? "seen in game" : "",
@@ -375,11 +647,6 @@
         IDX.push({ kind: "page", cat: "perk", sub: t.name, name: pk[0], icon: pk[3], meta: t.name + " \u00b7 " + pk[1] + (pk[1] === 1 ? " rank" : " ranks"), href: "#legacy", text: (pk[0] + " " + t.name + " " + pk[2]).toLowerCase() });
       });
     });
-    [["new", "New spell"], ["granted", "Granted by a talent"], ["higher", "Above demo level"], ["confirmed", "Confirmed since"]].forEach(function (b) {
-      (d.unseen[b[0]] || []).forEach(function (x) {
-        IDX.push({ kind: "page", cat: "spell", sub: x[0], name: x[1], icon: x[3], meta: x[0] + " \u00b7 " + b[1], href: "#unseen", text: (x[1] + " " + x[0] + " " + x[2]).toLowerCase() });
-      });
-    });
     (d.systems || []).forEach(function (sy, i) {
       IDX.push({ kind: "page", cat: "system", sub: "System", name: sy.t, icon: sy.icon, meta: (sy.facts || []).length + " facts", topic: "systems:" + i, text: (sy.t + " " + (sy.facts || []).join(" ")).toLowerCase() });
     });
@@ -389,7 +656,7 @@
   function setRows(st) { // the piece ids the set table names ("Item 16685 - ..."), else wearable rows of that set name
     var rows = [];
     (st.pieces || []).forEach(function (pc) {
-      var m = /^Item (\d+)/.exec(pc.n || ""), it = m && ITEMBYID[m[1]];
+      var m = /^Item (\d+)/.exec(pc.n || ""), it = ITEMBYID[pc.id] || (m && ITEMBYID[m[1]]);
       if (it && rows.indexOf(it) === -1) rows.push(it);
     });
     if (rows.length) return rows;
@@ -436,11 +703,12 @@
         else if (SQ.src === "quest") { if (!qs.length) return false; }
         else if (!dr.some(function (d) { return d[0] === SQ.src; }) && !qs.some(function (q) { return q[1] === SQ.src; })) return false;
       }
-      if (SQ.prof || SQ.sk) { // a skill cap with no profession: any profession's items up to that skill
-        if (e.kind !== "item" || !e.it.sk) return false;
-        if (SQ.prof && e.it.sk[0] !== SQ.prof) return false;
-        if (SQ.sk && (e.it.sk[1] || 0) > +SQ.sk) return false;
-      }
+    }
+    if ((SQ.prof || SQ.sk) && (itemFilters(cat) || CRAFTCAT[cat])) { // a skill cap with no profession: any profession's items and recipes up to that skill
+      var skr = e.kind === "item" ? e.it.sk : e.kind === "craft" ? [e.cr.p, craftSkill(e.cr)] : null;
+      if (!skr) return false;
+      if (SQ.prof && skr[0] !== SQ.prof) return false;
+      if (SQ.sk && (skr[1] || 0) > +SQ.sk) return false;
     }
     if (SQ.lvl) {
       if (e.kind === "item") { if (lvlOf(e.it) > +SQ.lvl) return false; }
@@ -454,7 +722,7 @@
       }
       else if (e.kind === "itemset") { if (!setClassOK(e.st, SQ.cls, +SQ.lvl || 60)) return false; }
       else if (e.cls) { if (e.cls !== SQ.cls) return false; }
-      else if (e.kind !== "racial") return false;
+      else if (!CLASSLESS[e.kind]) return false;
     }
     for (var i = 0; i < words.length; i++) if (e.text.indexOf(words[i]) === -1) return false;
     return true;
@@ -481,11 +749,22 @@
         var al = (a.it && lvlOf(a.it)) || (a.kind === "itemset" && setLevel(a)) || a.lvlKey || 0, bl = (b.it && lvlOf(b.it)) || (b.kind === "itemset" && setLevel(b)) || b.lvlKey || 0;
         if (al !== bl) return bl - al;
       }
+      if (a.kind === b.kind && KINDSORT[a.kind]) { var ks = KINDSORT[a.kind](a, b); if (ks) return ks; }
       var aq = QUAL.indexOf(a.q), bq = QUAL.indexOf(b.q);
       if (aq !== bq) return bq - aq;
       return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
     });
   }
+  // Lists that read best in their own order: recipes by skill (nearest a skill cap first), ranks 1 to 14, rares by level.
+  var KINDSORT = {
+    craft: function (a, b) {
+      var x = craftSkill(a.cr), y = craftSkill(b.cr);
+      if (!x !== !y) return x ? -1 : 1; // nothing known about its skill: last either way
+      return SQ.sk ? y - x : x - y;
+    },
+    pvprank: function (a, b) { return a.rk.r - b.rk.r; },
+    rare: function (a, b) { return (a.lvlKey || 0) - (b.lvlKey || 0); }
+  };
   // Dungeons in level order, from codex/loot.json; only those with known loot.
   function fillSources() {
     var sel = document.getElementById("dbf-src");
@@ -513,7 +792,7 @@
     var subs = [];
     pool.forEach(function (e) { if (SQ.cat !== "all" && (!SQ.qual || e.q === SQ.qual) && subs.indexOf(e.sub) === -1) subs.push(e.sub); });
     subs.sort(function (a, b) {
-      var ai = SUBFIRST.indexOf(a), bi = SUBFIRST.indexOf(b);
+      var ai = SQ.cat === "craft" ? -1 : SUBFIRST.indexOf(a), bi = SQ.cat === "craft" ? -1 : SUBFIRST.indexOf(b); // professions: A to Z
       if (ai !== -1 || bi !== -1) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       return /^Unknown|^Other/.test(a) ? 1 : /^Unknown|^Other/.test(b) ? -1 : a < b ? -1 : 1;
     });
@@ -548,13 +827,13 @@
     if (!active) return;
     out.innerHTML = res.length ? res.slice(0, SHOWN).map(function (e) {
       var i = IDX.indexOf(e), fxc = e.kind === "item" && e.wear ? fxChip(e.it) : "";
-      var hasSbt = e.kind === "bookspell" || e.kind === "talent" || e.kind === "racial" || e.kind === "itemset";
-      return '<button type="button" class="dbs-row' + (e.kind === "item" ? " q-" + esc(e.q) : "") + '" data-dbi="' + i + '"' + (e.kind === "item" ? ' data-tipkit="1"' : hasSbt ? ' data-sbt="1"' : "") + ">" +
+      var hasSbt = !!SBT[e.kind];
+      return '<button type="button" class="dbs-row' + (e.kind === "item" || e.kind === "craft" ? " q-" + esc(e.q) : "") + '" data-dbi="' + i + '"' + (e.kind === "item" ? ' data-tipkit="1"' : hasSbt ? ' data-sbt="1"' : "") + ">" +
         '<span class="dbs-ic">' + img(e.icon || "inv_misc_questionmark") + "</span>" +
         '<span class="dbs-t"><b>' + esc(e.name) + "</b><em>" + sortVal(e) + esc(SQ.sort === "ilvl" && e.kind === "item" ? e.meta.split(" \u00b7 ").filter(function (x) { return x !== "ilvl " + e.it.itemLevel; }).join(" \u00b7 ") : e.meta) + "</em>" + (fxc ? '<i class="dbs-fx">' + esc(fxc) + "</i>" : "") + "</span>" +
         '<span class="dbs-s' + (e.kind === "item" && isEst(e) ? " dbs-est" : "") + '">' + esc(e.kind === "item" ? sideOf(e) : (e.side || { place: "The new world", perk: "The Legacy system", spell: "Spells", system: "Systems" }[e.cat] || "")) + "</span></button>";
     }).join("") + (res.length > SHOWN ? '<button type="button" class="dbs-more" data-dbmore="1">Show all ' + res.length + "</button>" : "")
-      : '<p class="dbs-none">Nothing matches yet. Forever has shown only so much; the beta adds the rest.</p>';
+      : '<p class="dbs-none">Nothing matches. Try fewer words or clear a filter.</p>';
     if (window.TipKit && GK) out.querySelectorAll(".dbs-row[data-tipkit]").forEach(function (row) {
       TipKit.hover(row, function (el) { return GK.itemTip(IDX[+el.getAttribute("data-dbi")].it); }, function () { return "itemtip"; });
     });
@@ -589,7 +868,7 @@
   function initSearch() {
     var box = document.getElementById("dbs");
     if (!box) return;
-    box.innerHTML = '<div class="dbs-bar"><input type="search" id="dbs-qi" placeholder="Search items, spells, talents, sets, souls, dungeons" autocomplete="off" spellcheck="false" aria-label="Search the Database">' +
+    box.innerHTML = '<div class="dbs-bar"><input type="search" id="dbs-qi" placeholder="Search items, recipes, spells, talents, rares, dungeons" autocomplete="off" spellcheck="false" aria-label="Search the Database">' +
       '<span id="dbs-n"></span></div><div class="dbs-cats" id="dbs-cats" role="group" aria-label="Type"></div>' +
       '<div class="dbs-filt" id="dbs-filt"><input type="number" id="dbf-lvl" min="1" max="60" placeholder="Max level" aria-label="Max level: show only what is usable at that level">' +
       '<select id="dbf-cls" aria-label="Class"><option value="">Any class</option>' + CLASSES9.map(function (c) { return '<option>' + c + '</option>'; }).join("") + '</select>' +
@@ -632,6 +911,7 @@
     ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).addEventListener("input", function () { clearTimeout(ftmr); ftmr = setTimeout(readFilt, 200); }); });
     ["dbf-cls", "dbf-prof", "dbf-stat", "dbf-src", "dbf-ms", "dbf-sort"].forEach(function (id) { fEl(id).addEventListener("change", readFilt); });
     // Toggle buttons and the Clear button follow SQ, so a shared link opens with its filters shown.
+    SYNC = syncFiltUI; // showInDb switches category from outside this function
     function syncFiltUI() {
       var b = fEl("dbf-era");
       b.textContent = SQ.era ? "SoD and retail data: shown" : "SoD and retail data: hidden";
@@ -646,7 +926,8 @@
       box.querySelectorAll("[data-dbfx]").forEach(function (x) { var on = SQ.fx.indexOf(x.getAttribute("data-dbfx")) !== -1; x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
       box.querySelectorAll("[data-dbat]").forEach(function (x) { var on = SQ.at.indexOf(x.getAttribute("data-dbat")) !== -1; x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on)); });
       var live = itemFilters(SQ.cat);
-      ["dbf-prof", "dbf-sk", "dbf-sort", "dbf-src", "dbf-cl"].forEach(function (id) { fEl(id).hidden = !live; });
+      ["dbf-sort", "dbf-src", "dbf-cl"].forEach(function (id) { fEl(id).hidden = !live; });
+      ["dbf-prof", "dbf-sk"].forEach(function (id) { fEl(id).hidden = !live && !CRAFTCAT[SQ.cat]; }); // recipes filter by them too
       ["dbf-stat", "dbf-ms"].forEach(function (id) { fEl(id).hidden = !live || !GEARCAT[SQ.cat]; }); // gear stats: not on potions or recipes
       [].forEach.call(fEl("dbf-sort").options, function (o) { o.hidden = o.disabled = !!STATBY[o.value] && !GEARCAT[SQ.cat]; });
       fEl("dbf-sort").value = STATBY[SQ.sort] && !GEARCAT[SQ.cat] ? "" : SQ.sort;
@@ -672,12 +953,12 @@
         syncFiltUI(); SHOWN = 60; drawSearch(); syncUrl();
       });
     });
-    fEl("dbf-x").addEventListener("click", function () {
-      ["dbf-lvl", "dbf-sk"].forEach(function (id) { fEl(id).value = ""; });
-      ["dbf-cls", "dbf-prof", "dbf-stat", "dbf-src", "dbf-ms", "dbf-sort"].forEach(function (id) { fEl(id).value = ""; });
-      SQ.at = []; SQ.fx = []; SQ.sort = "";
-      readFilt();
-    });
+    function clearFilt() {
+      ["dbf-lvl", "dbf-sk", "dbf-cls", "dbf-prof", "dbf-stat", "dbf-src", "dbf-ms", "dbf-sort"].forEach(function (id) { fEl(id).value = ""; });
+      SQ.lvl = SQ.cls = SQ.prof = SQ.sk = SQ.stat = SQ.src = SQ.ms = SQ.sort = ""; SQ.at = []; SQ.fx = [];
+    }
+    CLEARF = clearFilt;
+    fEl("dbf-x").addEventListener("click", function () { clearFilt(); readFilt(); });
     qi.value = SQ.q;
     if (SQ.lvl) fEl("dbf-lvl").value = SQ.lvl;
     if (SQ.stat) fEl("dbf-stat").value = SQ.stat;
@@ -702,13 +983,15 @@
           if (window.TipKit && GK && (TipKit.touchy() || e.detail === 0)) TipKit.openSheet(GK.itemTip(en.it), [], { cls: "itemtip", owner: "db:" + en.name });
           return;
         }
-        if (en.kind === "bookspell" || en.kind === "talent" || en.kind === "racial" || en.kind === "itemset") {
-          if (window.TipKit && (TipKit.touchy() || e.detail === 0)) TipKit.openSheet(sbTip(en), [], { cls: "itemtip", owner: "db:" + en.name });
-          return;
+        if (en.kind === "craft") { openCraft(en.cr); return; }
+        if (en.kind === "rare" && en.dun) { openLoot(en.dun); return; }
+        if (SBT[en.kind]) {
+          if (window.TipKit && (TipKit.touchy() || e.detail === 0)) { TipKit.openSheet(sbTip(en), [], { cls: "itemtip", owner: "db:" + en.name }); return; }
+          if (!en.href) return;
         }
         if (en.topic) { openTopic(en.topic); return; }
         if (en.href && !document.querySelector(en.href)) {
-          var PAGE_OF = { "#world": "/world/", "#unseen": "/classes/", "#classes": "/classes/", "#ranks": "/rankings/" };
+          var PAGE_OF = { "#world": "/world/", "#classes": "/classes/", "#ranks": "/rankings/", "#pvp": "/codex/" };
           if (PAGE_OF[en.href]) { location.href = PAGE_OF[en.href] + en.href; return; }
         }
         var target = null;
@@ -753,16 +1036,6 @@
     }
     if (PAGE === "db") section("legacy", "The Legacy system", headList(lg.facts, "legacy", "The Legacy system", "inv_misc_book_07") + '<div id="legacy-win"></div>');
 
-    // Unseen spells
-    var un = d.unseen;
-    function sprows(list, withIcon) {
-      return '<div class="soulgrid">' + list.map(function (r) {
-        return '<div class="soulc hasspell" data-name="' + esc(r[1]) + '" style="--cc:' + (CLASS_COLOUR[r[0]] || "#8b93a7") + '">' +
-          '<span class="soulring"><img class="soulico" src="' + CDN + esc(withIcon ? (r[3] || "inv_misc_questionmark") : "inv_misc_questionmark") + '.jpg" alt="" loading="lazy"></span>' +
-          '<span class="soulhead"><b>' + esc(r[1]) + "</b><i>" + esc(r[0]) + "</i></span>" +
-          "<p>" + esc(r[2]) + "</p></div>";
-      }).join("") + "</div>";
-    }
     var SOUL_CC = { WARRIOR: "#C79C6E", PALADIN: "#F58CBA", HUNTER: "#ABD473", ROGUE: "#FFF569", PRIEST: "#FFFFFF", SHAMAN: "#0070DE", MAGE: "#69CCF0", WARLOCK: "#9482C9", DRUID: "#FF7D0A" };
     function soulLabel(k) { return k ? k.charAt(0) + k.slice(1).toLowerCase() : "Unsorted"; }
     if (PAGE === "classes" && d.souls && d.souls.list.length) {
@@ -789,17 +1062,13 @@
         '<p class="board-sub">' + esc(d.souls.note) + "</p>" +
         '<div class="soulchips">' + chips + '</div><div class="soulgrid">' + cards + "</div>");
     }
-    if (PAGE === "classes") section("unseen", "Spells the tooltips admit to", "<p class=\"board-sub\">" + esc(un.note) + "</p>" +
-      "<h3>Genuinely new spells</h3>" + sprows(un.new, true) +
-      (un.confirmed && un.confirmed.length ? "<h3>Confirmed in the demo spellbook since</h3>" + sprows(un.confirmed, true) : "") +
-      "<h3>Granted by talents (already in the trees)</h3>" + sprows(un.granted || [], true) +
-      "<h3>Classic spells above the demo's level</h3>" + sprows(un.higher, true));
 
-    // Class changes
+    // Class changes: the client diff between the level-20 and level-30 beta builds, per class.
     var cc = d.classChanges;
     var ccKeys = Object.keys(cc);
     var ccTotal = ccKeys.reduce(function (n, k) { return n + cc[k].length; }, 0);
-    var ccHtml = '<div class="soulchips">' +
+    var ccHtml = (d.classNote ? '<p class="board-sub">' + esc(d.classNote) + ' <a href="/news/level-30/#classes">Every change, with Blizzard\'s notes &rsaquo;</a></p>' : "") +
+      '<div class="soulchips">' +
       '<button type="button" class="soulchip on" data-ccf="">All ' + ccTotal + "</button>" +
       ccKeys.map(function (k) {
         return '<button type="button" class="soulchip" data-ccf="' + esc(k) + '" style="--cc:' + (CLASS_COLOUR[k] || "#8b93a7") + '">' +
@@ -809,11 +1078,11 @@
         return cc[k].map(function (a) {
           return '<div class="soulc hasspell" data-ck="' + esc(k) + '" data-name="' + esc(a[0]) + '" style="--cc:' + (CLASS_COLOUR[k] || "#8b93a7") + '">' +
             '<span class="soulring"><img class="soulico" src="' + CDN + esc(a[2] || "inv_misc_questionmark") + '.jpg" alt="" loading="lazy"></span>' +
-            '<span class="soulhead"><b>' + esc(a[0]) + "</b><i>" + esc(k) + "</i></span>" +
+            '<span class="soulhead"><b>' + esc(a[0]) + "</b><i>" + esc(k + (a[3] ? " \u00b7 build " + a[3] : "")) + "</i></span>" +
             "<p>" + esc(a[1]) + "</p></div>";
         }).join("");
       }).join("") + "</div>";
-    if (PAGE === "classes") section("classes", "Class changes, as seen in the demo", ccHtml);
+    if (PAGE === "classes") section("classes", "Class changes in the level-30 builds", ccHtml);
 
     // World: cards, not tables.
     var w = d.world;
@@ -897,19 +1166,20 @@
         "<b>" + esc(sys.t) + "</b><span>" + sys.facts.length + " facts</span></button>";
     }).join("") + "</div>";
     if (PAGE === "db") section("systems", "Systems", sysHtml);
+    if (PAGE === "db") section("pvp", "PvP ranks", '<p class="board-sub">The honor ladder as the beta client defines it. Search a rank by name above; Blizzard\'s rewards sit beside each one.</p>' +
+      '<div id="pvpbox"><p class="board-sub">Loading the rank table\u2026</p></div>');
 
     // Hero stat band: the Codex counts itself.
     var nDun = w.dungeons.length, nRaid = w.raids.length,
       nPerk = d.legacy.trees.reduce(function (a, t) { return a + t.perks.length; }, 0),
-      nCC = Object.keys(d.classChanges).reduce(function (a, k) { return a + d.classChanges[k].length; }, 0),
-      nSpell = (d.unseen.new || []).length + (d.unseen.granted || []).length + (d.unseen.higher || []).length;
+      nCC = Object.keys(d.classChanges).reduce(function (a, k) { return a + d.classChanges[k].length; }, 0);
     function stripChip(s) {
       return '<a href="' + s[2] + '" style="--img:url(/codex/img/' + s[3] + '.jpg)"><b>' + s[0] + "</b><span>" + s[1] + "</span></a>";
     }
     var nSouls = d.souls && d.souls.list ? d.souls.list.length : 0;
     var hero = '<div class="cxstrip" id="cxstrip">' +
       [[nPerk, "Legacy perks", "/codex/#legacy", "stat-legacy"], [nDun, "dungeons", "/world/#world", "stat-dungeons"], [nRaid, "raids", "/world/#world", "stat-raids"],
-        [nCC, "class changes", "/classes/#classes", "stat-classes"], [nSpell, "spells foretold", "/classes/#unseen", "stat-spells"]]
+        [nCC, "class changes", "/classes/#classes", "stat-classes"]]
         .concat(nSouls ? [[nSouls, "shoulder souls", "/classes/#souls", "the-barrow-deeps"]] : [])
         .map(stripChip).join("") + "</div>";
     fetch("/codex/counts.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (n) {
@@ -930,6 +1200,9 @@
     cxEl.addEventListener("click", function (e) {
       var t = e.target.closest && e.target.closest("[data-topic]");
       if (t) openTopic(t.getAttribute("data-topic"));
+      // a strip chip into the Database search switches category in place, without reloading the page
+      var a = e.target.closest && e.target.closest(".cxstrip a[href^='/codex/?cat=']");
+      if (a && document.getElementById("dbs-qi")) { e.preventDefault(); showInDb({ cat: a.getAttribute("href").split("cat=")[1] }); }
     });
     var sg = document.querySelector(".soulchips");
     if (sg) sg.addEventListener("click", function (e) {
@@ -959,6 +1232,7 @@
       LOOT = j;
       if (window.ForgeGear && window.ForgeGear.extras) window.ForgeGear.extras({ dungeons: j.dungeons });
       fillSources();
+      addLootRares();
       if (document.getElementById("dbs-out")) drawSearch();
       var box = document.getElementById("lootbox");
       if (box) {
@@ -995,12 +1269,27 @@
       fetch("/codex/sets.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (st) {
         if (st) { buildSets(st); drawSearch(); }
       });
+      function getJson(u) { return fetch(u, { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }); }
+      var gotRc = getJson("/codex/recipes.json"), gotRs = getJson("/codex/rares.json"), gotPv = getJson("/codex/pvp.json");
+      gotRc.then(function (rc) { if (rc && rc.recipes) { buildCrafts(rc); drawSearch(); } });
+      gotRs.then(function (rs) { if (rs && rs.rares) { buildRares(rs); drawSearch(); } });
+      gotPv.then(function (pv) { if (pv && pv.ranks) { buildRanks(pv); drawPvp(pv); drawSearch(); } });
+      Promise.all([gotRc, gotRs, gotPv]).then(function (g) {
+        var el = document.getElementById("cxstrip");
+        if (!el) return;
+        // the counts the category chips show by default: no branch leftovers, and the dungeon rares when the loot records are in
+        var nDunRare = LOOT ? LOOT.dungeons.reduce(function (a, d) { return a + d.bosses.filter(function (b) { return b.kind === "rare"; }).length; }, 0) : 0;
+        el.innerHTML += [g[0] && g[0].recipes && [fmtN(g[0].recipes.filter(function (x) { return !x.e; }).length), "recipes", "/codex/?cat=craft", "excavation-site"],
+          g[1] && g[1].rares && [g[1].rares.length + nDunRare, "rare spawns", "/codex/?cat=rare", "krol-dok-stronghold"],
+          g[2] && g[2].ranks && [g[2].ranks.length, "PvP ranks", "/codex/#pvp", "ruins-of-lordaeron"]].filter(Boolean).map(stripChip).join("");
+      });
       // Then the full client database replaces the curated seed.
       fetch("/plan/items-db.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (db) {
         if (!db || !Array.isArray(db.items) || !db.items.length) return;
         try { GK = ForgeGear({ items: db, get: function () { return {}; } }); } catch (e) {}
         IDX = IDX.filter(function (e) { return e.kind !== "item"; }); SETROWS = {}; ITEMBYID = {};
-        buildIndex({ world: { zones: [], dungeons: [], raids: [], battlegrounds: [] }, legacy: { trees: [] }, unseen: {}, systems: [] }, db.items);
+        buildIndex({ world: { zones: [], dungeons: [], raids: [], battlegrounds: [] }, legacy: { trees: [] }, systems: [] }, db.items);
+        addReagents();
         drawSearch();
       });
     });

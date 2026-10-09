@@ -1,0 +1,4935 @@
+{
+ "spells": {
+  "Wrath R4": {
+   "id": 5179,
+   "n": "Wrath",
+   "icon": "spell_nature_abolishmagic",
+   "new": "Causes 37 Nature damage to the target.",
+   "old": "Causes 38 Nature damage to the target.",
+   "note": "Rank 4 of 6. Base 38 to 37; growth per level 0.9 to 0.6."
+  },
+  "Fireball R5": {
+   "id": 8400,
+   "n": "Fireball",
+   "icon": "spell_fire_flamebolt",
+   "new": "Hurls a fiery ball that causes 120 Fire damage and an additional 16 Fire damage over 8 sec.",
+   "old": "Hurls a fiery ball that causes 108 Fire damage and an additional 16 Fire damage over 8 sec.",
+   "note": "Rank 5 of 6. Base 108 to 120; growth per level 1.5 to 1.4."
+  },
+  "Frostbolt R5": {
+   "id": 8406,
+   "n": "Frostbolt",
+   "icon": "spell_frost_frostbolt02",
+   "new": "Base damage 104 Frost (rank 5, level 26 to 30), plus 1.3 per level.",
+   "old": "Base damage 95 Frost (rank 5, level 26 to 30), plus 1.5 per level.",
+   "note": "Read from SpellEffect: Frostbolt's tooltip template uses a variable our resolver cannot fill."
+  },
+  "Arcane Missiles R3": {
+   "id": 5145,
+   "n": "Arcane Missiles",
+   "icon": "spell_nature_starfall",
+   "new": "Launches Arcane Missiles at the enemy, causing 47 Arcane damage each second for 5 sec.",
+   "old": "Launches Arcane Missiles at the enemy, causing 44 Arcane damage each second for 5 sec.",
+   "note": "Rank 3 of 4. Per missile: base 44 to 47; growth per level 0.5 to 0.4."
+  },
+  "Smite R4": {
+   "id": 984,
+   "n": "Smite",
+   "icon": "spell_holy_holysmite",
+   "new": "Smite an enemy for 60 Holy damage.",
+   "old": "Smite an enemy for 59 Holy damage.",
+   "note": "Rank 4 of 5. Base 59 to 60; growth per level 1 to 0.7."
+  },
+  "Lesser Heal R3": {
+   "id": 2053,
+   "n": "Lesser Heal",
+   "icon": "spell_holy_lesserheal",
+   "new": "Heal your target for 163.",
+   "old": "Heal your target for 141.",
+   "note": "Rank 3 of 3. Base 141 to 163; growth per level 1.6 to 1.2."
+  },
+  "Heal R2": {
+   "id": 2055,
+   "n": "Heal",
+   "icon": "spell_holy_heal",
+   "new": "Heal your target for 375.",
+   "old": "Heal your target for 405.",
+   "note": "Rank 2 of the Heal ranks under the cap. Base 405 to 375; growth per level 3.2 to 2.9."
+  },
+  "Lightning Bolt R5": {
+   "id": 943,
+   "n": "Lightning Bolt",
+   "icon": "spell_nature_lightning",
+   "new": "Casts a bolt of lightning at the target for 82 Nature damage.",
+   "old": "Casts a bolt of lightning at the target for 72 Nature damage.",
+   "note": "Rank 5 of 6. Base 72 to 82; growth per level 0.7 to 0.5."
+  },
+  "Shadow Bolt R4": {
+   "id": 1088,
+   "n": "Shadow Bolt",
+   "icon": "spell_shadow_shadowbolt",
+   "new": "Sends a shadowy bolt at the enemy, causing 58 Shadow damage.",
+   "old": "Sends a shadowy bolt at the enemy, causing 56 Shadow damage.",
+   "note": "Rank 4 of 5. Base 56 to 58; growth per level 0.9 to 0.8."
+  },
+  "t:WARRIOR:Furious Precision": {
+   "id": 1323963,
+   "n": "Furious Precision",
+   "icon": "ability_warrior_incite",
+   "r": 3,
+   "new": "Increases your chance to hit with off-hand attacks by 10%.",
+   "added": "70291"
+  },
+  "t:WARRIOR:Lingering Rage": {
+   "id": 1323964,
+   "n": "Lingering Rage",
+   "icon": "ability_warrior_secondwind",
+   "r": 5,
+   "new": "Increases the time before your Rage begins to decay after leaving combat by 10 sec.",
+   "added": "70291"
+  },
+  "t:WARRIOR:Gore Drinker": {
+   "id": 1323967,
+   "n": "Gore Drinker",
+   "icon": "racial_troll_berserk",
+   "r": 2,
+   "new": "Your Enrage, Berserker Rage, Bloodrage, Death Wish, and Bloodthirst abilities cause your next 6 melee attacks to restore 1.0% of your maximum Health.",
+   "added": "70291"
+  },
+  "t:WARRIOR:Improved Cleave": {
+   "id": 12329,
+   "n": "Improved Cleave",
+   "icon": "ability_warrior_cleave",
+   "r": 3,
+   "old": "Reduces the Rage cost of your Cleave ability by 3.",
+   "gone": "70291"
+  },
+  "t:WARRIOR:Boundless Rage": {
+   "id": 1310236,
+   "n": "Boundless Rage",
+   "icon": "ability_warrior_intensifyrage",
+   "r": 3,
+   "old": "Increases your maximum Rage by 30.",
+   "gone": "70291"
+  },
+  "t:WARRIOR:Precision": {
+   "id": 1225295,
+   "n": "Precision",
+   "icon": "ability_marksmanship",
+   "r": 3,
+   "old": "Improves your chance to hit by 3%.",
+   "gone": "70291"
+  },
+  "t:WARRIOR:Toughness": {
+   "id": 12299,
+   "n": "Toughness",
+   "icon": "spell_holy_devotion",
+   "r": 5,
+   "old": "Increases your Armor value from items by 10%.",
+   "gone": "70291"
+  },
+  "t:WARRIOR:Iron Will": {
+   "id": 12962,
+   "n": "Iron Will",
+   "icon": "spell_magic_magearmor",
+   "r": 5,
+   "new": "Reduces the duration of Stun and Fear effects inflicted on you by 15%.",
+   "note": "Moved from Fury row 2 to Protection row 1."
+  },
+  "t:WARRIOR:Bloodthirst": {
+   "id": 23881,
+   "n": "Bloodthirst",
+   "icon": "spell_nature_bloodlust",
+   "new": "Instantly attack the target causing damage equal to 45% of your Attack Power plus 30 and increasing your movement speed by 10% for 10 sec.",
+   "old": "Instantly attack the target causing damage equal to 35% of your Attack Power plus 30 and increasing your movement speed by 10% for 10 sec."
+  },
+  "t:WARRIOR:Dual Wield Specialization": {
+   "id": 23584,
+   "n": "Dual Wield Specialization",
+   "icon": "ability_dualwield",
+   "r": 5,
+   "new": "Increases the damage done by your off-hand weapon by 25% and the Rage generated by your off-hand attacks by 50%.",
+   "old": "Increases your off-hand weapon damage by 25% and chance to hit with off-hand attacks by 10%."
+  },
+  "t:WARRIOR:Raging Blows": {
+   "id": 1310315,
+   "n": "Raging Blows",
+   "icon": "ability_whirlwind",
+   "new": "Reduces the Rage cost of your Cleave and Whirlwind abilities by 3.",
+   "old": "Causes your Whirlwind to also strike with your Off Hand weapon, and reduces the Rage cost of your Cleave ability by 2."
+  },
+  "t:WARRIOR:Booming Voice": {
+   "id": 12321,
+   "n": "Booming Voice",
+   "icon": "spell_nature_purge",
+   "r": 5,
+   "new": "Increases the area of effect of your Shouts by 50% and reduces their Rage cost by 25%.",
+   "old": "Increases the radius of your Battle Shout and Demoralizing Shout abilities by 50%."
+  },
+  "t:WARRIOR:Unbridled Wrath": {
+   "id": 12322,
+   "n": "Unbridled Wrath",
+   "icon": "spell_nature_stoneclawtotem",
+   "r": 5,
+   "new": "Gives you a 60% chance to generate 1 additional Rage when you deal melee damage with a weapon.",
+   "old": "Gives you a 60% chance to generate 1 additional Rage when you deal melee damage with a weapon. This effect is increased to 2 Rage for two-handed weapons."
+  },
+  "t:WARRIOR:Blood Craze": {
+   "id": 16487,
+   "n": "Blood Craze",
+   "icon": "spell_shadow_summonimp",
+   "r": 3,
+   "new": "Regenerates 3% of your total Health over 6 sec after being the victim of a critical strike or suffering more than 60% of your maximum Health from a single attack.",
+   "old": "Regenerates 3% of your total Health over 6 sec after being the victim of a critical strike, dealing damage with Bloodthirst, or suffering more than 60% of your maximum Health from a single attack."
+  },
+  "t:WARRIOR:Improved Slam": {
+   "id": 12862,
+   "n": "Improved Slam",
+   "icon": "ability_warrior_decisivestrike",
+   "r": 2,
+   "new": "Reduces the global cooldown and cast time of your Slam ability by 0.50 sec. In addition, Slam no longer interrupts or delays your melee swing and Slam's cooldown is reduced by 6.0 sec.",
+   "old": "Reduces the global cooldown and cast time of your Slam ability by 0.50 sec. In addition, Slam no longer interrupts or delays your melee swing and Slam's cooldown is reduced by 3.0 sec."
+  },
+  "t:WARRIOR:Flurry": {
+   "id": 12319,
+   "n": "Flurry",
+   "icon": "ability_ghoulfrenzy",
+   "r": 5,
+   "new": "Increases your melee attack speed by 25% for your next 3 swings after dealing a melee critical strike.",
+   "note": "Now requires Death Wish (was Enrage), and sits one column left."
+  },
+  "t:WARRIOR:Impale": {
+   "id": 16493,
+   "n": "Impale",
+   "icon": "ability_searingarrow",
+   "r": 2,
+   "new": "Increases the critical strike damage bonus of your abilities by 20%.",
+   "note": "Requires Deep Wounds again."
+  },
+  "Berserker Rage": {
+   "id": 18499,
+   "n": "Berserker Rage",
+   "icon": "spell_nature_ancestralguardian",
+   "new": "The warrior enters a berserker rage, becoming immune to Fear and Incapacitate effects and generating extra rage when taking damage. Lasts 10 sec.",
+   "note": "Trained at level 30 now (was 32)."
+  },
+  "Whirlwind": {
+   "id": 1680,
+   "n": "Whirlwind",
+   "icon": "ability_whirlwind",
+   "new": "In a whirlwind of steel you attack up to 4 enemies within 8 yards, causing weapon damage from both melee weapons to each enemy.",
+   "old": "In a whirlwind of steel you attack up to 4 enemies within 8 yards, causing weapon damage to each enemy."
+  },
+  "Demoralizing Shout": {
+   "id": 1160,
+   "n": "Demoralizing Shout",
+   "icon": "ability_warrior_warcry",
+   "new": "Reduces the melee attack power of all enemies within 10 yards by 49 for 45 sec.",
+   "note": "Rank 1. Every rank gained a threat effect: 11 / 19 / 27 / 35 / 43, plus 0.8 per level."
+  },
+  "Intimidating Shout": {
+   "id": 5246,
+   "n": "Intimidating Shout",
+   "icon": "ability_golemthunderclap",
+   "new": "The warrior shouts, causing the targeted enemy to cower in fear. Up to 5 enemies within 8 yds will flee in fear. Lasts 8 sec.",
+   "old": "The warrior shouts, causing the targeted enemy to cower in fear. Up to 5 total nearby enemies will flee in fear. Lasts 8 sec."
+  },
+  "Piercing Howl": {
+   "id": 12323,
+   "n": "Piercing Howl",
+   "icon": "spell_shadow_deathscream",
+   "new": "Causes all enemies within 0 yds to be Dazed, reducing movement speed by 50% for 6 sec.",
+   "old": "Causes all nearby enemies to be Dazed, reducing movement speed by 50% for 6 sec.",
+   "note": "The client now prints \"within 0 yds\": the template reads a second radius the spell lacks. Its radius is still 10 yards."
+  },
+  "Spearing Strike": {
+   "id": 1310222,
+   "n": "Spearing Strike",
+   "icon": "inv_spear_01",
+   "new": "A brutal attack that deals 40% weapon damage. Deals an additional 80% weapon damage against Giants, Dragonkin, and mounted targets. Mounted targets are dismounted.",
+   "old": "A brutal attack that deals 40% weapon damage, plus an additional 80% weapon damage against Giants, Dragonkin, and mounted targets."
+  },
+  "Retribution Aura R5": {
+   "id": 10301,
+   "n": "Retribution Aura",
+   "icon": "spell_holy_auraoflight",
+   "new": "Causes 20 Holy damage to any creature that strikes a party member within 30 yards. Players may only have one Aura on them per Paladin at any one time.",
+   "old": "Causes 30 Holy damage to any creature that strikes a party member within 30 yards. Players may only have one Aura on them per Paladin at any one time.",
+   "note": "Rank 5. Ranks 1 to 5: 7/12/18/24/30 to 5/8/12/16/20."
+  },
+  "Retribution Aura R2": {
+   "id": 10298,
+   "n": "Retribution Aura",
+   "icon": "spell_holy_auraoflight",
+   "new": "Causes 8 Holy damage to any creature that strikes a party member within 30 yards. Players may only have one Aura on them per Paladin at any one time.",
+   "old": "Causes 12 Holy damage to any creature that strikes a party member within 30 yards. Players may only have one Aura on them per Paladin at any one time.",
+   "note": "Rank 2, the rank from level 26 to 35. Ranks 1 to 5: 7/12/18/24/30 to 5/8/12/16/20."
+  },
+  "t:PALADIN:Redoubt": {
+   "id": 20127,
+   "n": "Redoubt",
+   "icon": "ability_defend",
+   "r": 5,
+   "new": "Damaging melee attacks against you have a 10% chance to increase your chance to block by 20%. Lasts 10 sec or 5 blocks.",
+   "note": "Unchanged between 70170 and 70291. Build 70170 (October 1) cut it from 6/12/18/24/30% to 4/8/12/16/20%, as Blizzard's October 1 notes say."
+  },
+  "Holy Shield": {
+   "id": 20925,
+   "n": "Holy Shield",
+   "icon": "spell_holy_blessingofprotection",
+   "new": "Increases chance to block by 30% for 10 sec, and deals 110 Holy damage for each attack blocked while active. Damage caused by Holy Shield causes 20% additional threat. Each block expends a charge. 4 charges.",
+   "note": "Rank 1. Unchanged between 70170 and 70291. Build 70170 (October 1) raised the block chance from 20% to 30%, as Blizzard's October 1 notes say."
+  },
+  "t:PALADIN:Reckoning": {
+   "id": 20177,
+   "n": "Reckoning",
+   "icon": "spell_holy_blessingofstrength",
+   "r": 5,
+   "new": "Gives you a 40% chance to gain an extra attack after Blocking a melee attack and a 100% chance to gain an extra attack after being the victim of a non-periodic critical strike. Cannot occur more often than once every 1.5 sec.",
+   "old": "Gives you a 40% chance to gain an extra attack after Blocking a melee attack and a 100% chance to gain an extra attack after being the victim of a non-periodic critical strike."
+  },
+  "Vindication buff": {
+   "id": 440668,
+   "n": "Vindication",
+   "icon": "spell_holy_vindication",
+   "new": "Attack Power increased by 3%.",
+   "old": "Attack Power increased by 15%.",
+   "note": "The buff the Vindication talent applies. The talent itself still says 1/2/3%."
+  },
+  "Judgement of Justice": {
+   "id": 20184,
+   "n": "Judgement of Justice",
+   "icon": "spell_holy_sealofwrath",
+   "new": "Prevents the target from fleeing.",
+   "note": "One of the Judgement texts that were blank in 70170."
+  },
+  "Infusion of Light": {
+   "id": 437063,
+   "n": "Infusion of Light",
+   "icon": "ability_paladin_infusionoflight",
+   "new": "Reduces the cast time of your next Holy Light spell by 1 sec."
+  },
+  "Seals": {
+   "id": 1323522,
+   "n": "Seals",
+   "icon": "ability_paladin_empoweredsealstruth",
+   "new": "Fill the Paladin with various divine enhancements. You currently have access to:",
+   "added": "70291",
+   "note": "A spellbook flyout. Not in any skill line yet."
+  },
+  "t:HUNTER:Expose Prey": {
+   "id": 1310532,
+   "n": "Expose Prey",
+   "icon": "ability_hunter_swiftstrike",
+   "r": 2,
+   "new": "Your attacks against targets with Hunter's Mark have a 10% chance to activate your Mongoose Bite for 10 sec.",
+   "old": "Your attacks against targets with Hunter's Mark have a 10% chance to activate your Mongoose Bite for 5 sec."
+  },
+  "Unleashed Fury": {
+   "id": 19616,
+   "n": "Unleashed Fury",
+   "icon": "ability_bullrush",
+   "new": "Increases the damage done by your pets and hawks by 20%.",
+   "note": "Same text; the effect moved from a percent modifier to a flat modifier (aura 108 to 107)."
+  },
+  "Improved Concussive Shot": {
+   "id": 19407,
+   "n": "Improved Concussive Shot",
+   "icon": "spell_frost_stun",
+   "r": 5,
+   "new": "Gives your Concussive Shot a 20% chance to stun the target for 3 sec.",
+   "note": "Same text; the proc entry's chance went from 20 to 100, so the talent's own points now set it (inferred)."
+  },
+  "Improved Wing Clip": {
+   "id": 19228,
+   "n": "Improved Wing Clip",
+   "icon": "ability_rogue_trip",
+   "r": 3,
+   "new": "Gives your Wing Clip ability a 20% chance to immobilize the target for 5 sec.",
+   "note": "Same text; the proc entry's chance went from 4 to 100."
+  },
+  "Freezing Trap": {
+   "id": 14309,
+   "n": "Freezing Trap",
+   "icon": "spell_frost_chainsofice",
+   "new": "Freeze your target for 20 sec.",
+   "note": "Rank 3. Was blank in 70170, and the spell lost the word \"Effect\" from its name."
+  },
+  "Immolation Trap": {
+   "id": 14301,
+   "n": "Immolation Trap",
+   "icon": "spell_fire_flameshock",
+   "new": "Inflict 138 Fire damage every 3 seconds.",
+   "note": "Rank 5. Was blank in 70170."
+  },
+  "Aspects": {
+   "id": 1324056,
+   "n": "Aspects",
+   "icon": "ability_hunter_aspectofthemonkey",
+   "new": "Take on the aspect of various creatures, enhancing your combat abilities in different ways. You currently have access to:",
+   "added": "70291",
+   "note": "A spellbook flyout. Not in any skill line yet."
+  },
+  "Furious Howl": {
+   "id": 24597,
+   "n": "Furious Howl",
+   "icon": "ability_hunter_pet_wolf",
+   "new": "The wolf howls, increasing the melee attack power of all party members within 15 yards by 82. Lasts 1 min.",
+   "note": "Rank 4 of the wolf's howl. Unchanged between 70170 and 70291. Build 70170 (October 1) cut it from 136 to 82 (rank 3: 100 to 60), the 40% Blizzard's September 24 notes announced."
+  },
+  "t:PRIEST:Penance": {
+   "id": 402174,
+   "n": "Penance",
+   "icon": "spell_holy_penance",
+   "new": "Launches a volley of holy light at the target, causing 42 Holy damage to an enemy, or 126 healing to an ally, instantly and every 1 sec for 2 sec.",
+   "old": "Launches a volley of holy light at the target, causing 81 Holy damage to an enemy, or 184 healing to an ally, instantly and every 1 sec for 2 sec.",
+   "note": "Rank 1, the rank under the cap. Mana 100 to 150."
+  },
+  "Touch of Weakness": {
+   "id": 2943,
+   "n": "Touch of Weakness",
+   "icon": "spell_shadow_deadofnight",
+   "new": "The next melee attack against the caster will cause 8 Shadow damage and reduce the attacker's melee attack power by 43 for 2 min."
+  },
+  "Weakened Soul": {
+   "id": 6788,
+   "n": "Weakened Soul",
+   "icon": "spell_holy_ashestoashes",
+   "new": "Cannot benefit from Power Word: Shield."
+  },
+  "Water Shield buff": {
+   "id": 408510,
+   "n": "Water Shield",
+   "icon": "ability_shaman_watershield",
+   "new": "Attacks and spells used against you and your critical heals restore 2% of your maximum mana. 1 charges.",
+   "old": "Attacks and spells used against you and your critical heals restore 0.67% of your maximum mana. 3 charges.",
+   "note": "The buff text. The 15 sec category cooldown is gone from the spell."
+  },
+  "Mana Tide Totem": {
+   "id": 16190,
+   "n": "Mana Tide Totem",
+   "icon": "spell_frost_summonwaterelemental",
+   "new": "Summons a Mana Tide Totem with 5 health at the feet of the caster for 12 sec that restores 88 mana every 3 seconds to group members within 30 yards.",
+   "note": "Trained at level 25 now (was 40)."
+  },
+  "Totemic Recall": {
+   "id": 39104,
+   "n": "Totemic Recall",
+   "icon": "spell_shaman_totemrecall",
+   "new": "Returns your totems to the earth, giving you 25% of the mana required to cast each totem destroyed by Totemic Recall.",
+   "added": "70291",
+   "note": "Spell 39104 is new in 70291. The Forever copy 1323420 still prints 0%."
+  },
+  "Earth Totems": {
+   "id": 1323772,
+   "n": "Earth Totems",
+   "icon": "spell_nature_strengthofearthtotem02",
+   "new": "Provide the Shaman with earth enchanted totems. You currently have access to:",
+   "added": "70291",
+   "note": "One of seven totem flyouts (two Earth, one Air, two Fire, two Water)."
+  },
+  "Ancestral Fortitude": {
+   "id": 16177,
+   "n": "Ancestral Fortitude",
+   "icon": "spell_nature_undyingstrength",
+   "new": "Increases your armor value from items by 8%."
+  },
+  "Chilled": {
+   "id": 6136,
+   "n": "Chilled",
+   "icon": "spell_frost_frostarmor02",
+   "new": "Movement slowed by 30% and time between attacks increased by 25%."
+  },
+  "Demonic Brand": {
+   "id": 1293695,
+   "n": "Demonic Brand",
+   "icon": "ability_demonhunter_chaoticimprint_fire",
+   "new": "Your Searing Pain generates less threat and brands the target. Your pet's next attacks against the target deal Fire or Shadow damage based on the pet. If Shadow damage is dealt, it has high threat.",
+   "old": "Your Searing Pain generates less threat and brands the target. Your pet's next attacks against the target generate high threat and deal Fire or Shadow damage based on the pet.",
+   "note": "The client's wording with its numbers left out: the template uses variables our resolver cannot fill."
+  },
+  "Summoning Disorientation": {
+   "id": 1324106,
+   "n": "Summoning Disorientation",
+   "icon": "spell_shadow_summonimp",
+   "new": "Stunned.",
+   "added": "70291",
+   "note": "A 10 sec stun. Nothing in the client says what casts it."
+  },
+  "Thorns R6": {
+   "id": 9910,
+   "n": "Thorns",
+   "icon": "spell_nature_thorns",
+   "new": "Thorns sprout from the friendly target causing 18 Nature damage to attackers when hit. Lasts 10 min.",
+   "old": "Thorns sprout from the friendly target causing 22 Nature damage to attackers when hit. Lasts 10 min.",
+   "note": "Rank 6. Ranks 1 to 6: 4/9/11/13/16/22 to 3/6/9/12/15/18."
+  },
+  "Thorns R3": {
+   "id": 1075,
+   "n": "Thorns",
+   "icon": "spell_nature_thorns",
+   "new": "Thorns sprout from the friendly target causing 9 Nature damage to attackers when hit. Lasts 10 min.",
+   "old": "Thorns sprout from the friendly target causing 11 Nature damage to attackers when hit. Lasts 10 min.",
+   "note": "Rank 3, the rank from level 24 to 33. Ranks 1 to 6: 4/9/11/13/16/22 to 3/6/9/12/15/18."
+  },
+  "t:DRUID:Natural Instinct": {
+   "id": 1223242,
+   "n": "Natural Instinct",
+   "icon": "ability_druid_predatoryinstincts",
+   "r": 2,
+   "new": "Increases the critical strike damage bonus of your melee abilities by 20% and increases your spell healing by 25% of your Intellect.",
+   "old": "Increases the critical strike damage bonus of your melee abilities by 20%.",
+   "note": "Was Predatory Instincts."
+  },
+  "t:DRUID:Thick Hide": {
+   "id": 16929,
+   "n": "Thick Hide",
+   "icon": "inv_misc_pelt_bear_03",
+   "r": 3,
+   "new": "While in Bear Form, Cat Form, Dire Bear Form, or Moonkin Form, you gain 3 additional base Armor per level and another 2.00 base Armor for each point of defense skill beyond five times your level. This amount can be further increased by multipliers from those forms.",
+   "note": "Same text. Its armor effect now grows 3 per level (levels 1 to 60)."
+  },
+  "t:DRUID:Furor": {
+   "id": 17056,
+   "n": "Furor",
+   "icon": "spell_holy_blessingofstamina",
+   "r": 5,
+   "new": "Gives you a 100% chance to gain 10 Rage when shapeshifting into Bear Form or Dire Bear Form. Shapeshifting into Cat Form restores 100% of the Energy you had when last in Cat Form, plus 10 Energy per sec spent outside Cat Form, up to 100 Energy. Bear Form and Dire Bear Form forfeit this Energy and halt its restoration while active.",
+   "old": "Gives you a 100% chance to gain 10 Rage when you shapeshift into Bear Form or Dire Bear Form. When you shift into Cat Form, you will regain 100% of the Energy you had when you were last in Cat Form, plus 10 Energy for each second you spent not in Bear Form, Cat Form, or Dire Bear Form, up to a maximum of 100 Energy."
+  },
+  "Wolfshead Helm": {
+   "id": 17768,
+   "n": "Wolfshead Helm",
+   "icon": "inv_helmet_04",
+   "new": "You gain an additional 5 Rage from activating Enrage and an additional 5 Energy from activating Shifting Power.",
+   "old": "You gain an additional 5 Rage from activating Enrage and an additional 20 Energy from activating Shifting Power.",
+   "note": "The helm's equip effect."
+  },
+  "Demoralizing Roar": {
+   "id": 99,
+   "n": "Demoralizing Roar",
+   "icon": "ability_druid_demoralizingroar",
+   "new": "The druid roars, decreasing nearby enemies' melee attack power by 46. Lasts 30 sec.",
+   "note": "Rank 1. Every rank gained a threat effect: 8 / 16 / 26 / 34 / 42, plus 0.8 per level."
+  },
+  "Will of the Forsaken": {
+   "id": 7744,
+   "n": "Will of the Forsaken",
+   "icon": "spell_shadow_raisedead",
+   "new": "Instantly removes all Charm, Fear and Sleep effects.",
+   "note": "Same text. Its three dispels became 100 ms immunities, so it works while asleep or charmed."
+  },
+  "Violet Meditation": {
+   "id": 1324318,
+   "n": "Violet Meditation",
+   "icon": "inv_chest_cloth_17",
+   "new": "Chance on damaging spell to allow 15% of your Mana regeneration to continue while casting for 15 sec. Mana regen amount is doubled in Strongholds and Cities.",
+   "added": "70291",
+   "note": "4-piece bonus. Its chance is not in the client."
+  },
+  "Summon Arcane Elemental": {
+   "id": 1324323,
+   "n": "Summon Arcane Elemental",
+   "icon": "inv_chest_cloth_17",
+   "new": "Chance on damaging spell to summon an Arcane elemental to aid you in combat.",
+   "added": "70291",
+   "note": "5-piece bonus. Summons creature 277729 for 20 sec. Its chance is not in the client."
+  },
+  "Archmagister's Wisdom": {
+   "id": 1292997,
+   "n": "Archmagister's Wisdom",
+   "icon": "spell_misc_conjuremanajewel",
+   "new": "Increase experience gained from slaying Undead by 10% for 5 min.",
+   "note": "The use effect of an unnamed neck in the probable Dalaran boss-loot block."
+  },
+  "Arcane Explosion NPC": {
+   "id": 1324306,
+   "n": "Arcane Explosion",
+   "icon": "spell_nature_wispsplode",
+   "new": "Sends out a blast wave of magic, inflicting 57 to 73 Arcane damage to nearby enemies and silencing them for 4 sec.",
+   "added": "70291",
+   "note": "No class owns this copy (inferred: an NPC spell)."
+  },
+  "Mana Void": {
+   "id": 1324282,
+   "n": "Mana Void",
+   "icon": "spell_arcane_arcane04",
+   "new": "2 sec cast. 90 Arcane damage to enemies within 60 yards of the caster, and a 5 sec silence.",
+   "added": "70291",
+   "note": "No tooltip text: read from SpellEffect and SpellCastTimes."
+  },
+  "Krol'dok Resolve": {
+   "id": 1324298,
+   "n": "Krol'dok Resolve",
+   "icon": "inv_chest_plate16",
+   "new": "Chance on block to heal for 14 to 23. Healing is doubled in Strongholds and Cities.",
+   "added": "70291",
+   "note": "As the game prints it: the heal (spell 1324296) is 18 with 0.5 variance."
+  },
+  "Ogre Dominance": {
+   "id": 1324309,
+   "n": "Ogre Dominance",
+   "icon": "inv_chest_plate16",
+   "new": "Taking damage has a high chance to increase your Stamina by 1 for 30 sec, stacking up to 20 times.",
+   "added": "70291"
+  },
+  "Defias Juggernaut": {
+   "id": 1324684,
+   "n": "Defias Juggernaut",
+   "icon": "inv_chest_leather_07",
+   "new": "Melee attacks have a chance to increase your Critical Strike chance by 2% for 20 sec. This effect is doubled in swamps.",
+   "added": "70291"
+  },
+  "Legacy Reputation Reward": {
+   "id": 1324722,
+   "n": "Legacy Reputation Reward",
+   "icon": "achievement_reputation_01",
+   "new": "Increases your Legacy reputation by 16.",
+   "added": "70291"
+  },
+  "Collapsing Star": {
+   "id": 1271414,
+   "n": "Collapsing Star",
+   "icon": "spell_nature_wispsplode",
+   "new": "Anara Chillwind channels the grace of Elune, infusing random enemies with the might of a star and inflicting 10 Arcane damage every 2 sec. Upon removal, a collapsing star is formed. Enemies within the star suffer 15 Arcane damage every 2 sec and have their movement speed reduced by 10%.",
+   "old": "Anara Chillwind channels the grace of Elune, infusing random enemies with the might of a star and inflicting 10 Arcane damage every 2 sec. Upon removal, a collapsing star is formed. Enemies within the star suffer 15 Arcane damage every 2 sec and have their movement speed reduced by 35%.",
+   "note": "Anara Chillwind, Hyjal Summit. The text reads the aura's duration, which the client sets to -1 (no fixed length), so a template reader prints \"for 0 sec\"; we left those words out of both builds' text."
+  },
+  "Lunar Venting": {
+   "id": 1271100,
+   "n": "Lunar Venting",
+   "icon": "spell_nature_wispsplode",
+   "new": "35 Arcane damage inflicted to players within 20 yds.",
+   "old": "25 Arcane damage inflicted to players within 20 yds."
+  },
+  "Dreamfall": {
+   "id": 1269045,
+   "n": "Dreamfall",
+   "icon": "inv_legion_faction_dreamweavers",
+   "new": "Throws the Emerald Dream into turmoil, inflicting 5 Nature damage to all players every 2 sec.",
+   "old": "Throws the Emerald Dream into turmoil, inflicting 10 Nature damage to all players every 1 sec.",
+   "note": "Its encounter is not in its text (inferred: Nythus the Dreambound)."
+  },
+  "Rot": {
+   "id": 1295744,
+   "n": "Rot",
+   "icon": "spell_holy_harmundeadaura",
+   "new": "Diseases target for 24 Nature damage every 1 sec for 7 sec. Deals 2 times as much damage to Aquatic enemies.",
+   "old": "Diseases target for 25 Nature damage every 1 sec for 7 sec. Deals 2 times as much damage to Aquatic enemies.",
+   "note": "The proc of Rot-Covered Harpoon."
+  }
+ },
+ "items": {
+  "251962": {
+   "name": "Violet Sash",
+   "quality": "uncommon",
+   "icon": "inv_belt_04",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Waist\tCloth"
+    ],
+    [
+     "l",
+     "27 Armor"
+    ],
+    [
+     "l",
+     "+9 Intellect"
+    ],
+    [
+     "g",
+     "Equip: Increases damage and healing done by magical spells and effects by up to 6."
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "brief": "Intellect 9, +6 spell power",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 8 October, 23:14 UTC.",
+   "was": "rare · 29 armor, Spirit 7, Intellect 12",
+   "wasAt": "ForeverChanges, build 70245",
+   "oldQuality": "rare"
+  },
+  "279849": {
+   "name": "Runebound Gloves",
+   "quality": "uncommon",
+   "icon": "inv_gauntlets_15",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Hands\tLeather"
+    ],
+    [
+     "l",
+     "64 Armor"
+    ],
+    [
+     "l",
+     "+7 Stamina"
+    ],
+    [
+     "l",
+     "+4 Spirit"
+    ],
+    [
+     "g",
+     "Equip: +12 Attack Power."
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "brief": "Stamina 7, Spirit 4, +12 Attack Power",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 8 October, 23:14 UTC.",
+   "was": "rare · 71 armor, Stamina 10, Spirit 5, +16 Attack Power",
+   "wasAt": "ForeverChanges, build 70245",
+   "oldQuality": "rare"
+  },
+  "279839": {
+   "name": "Spellguard Pauldrons",
+   "quality": "rare",
+   "icon": "inv_shoulder_12",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Shoulder\tMail"
+    ],
+    [
+     "l",
+     "178 Armor"
+    ],
+    [
+     "l",
+     "+4 Strength"
+    ],
+    [
+     "l",
+     "+11 Stamina"
+    ],
+    [
+     "l",
+     "+7 Intellect"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "brief": "Strength 4, Stamina 11, Intellect 7",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 8 October, 23:13 UTC.",
+   "was": "rare · 178 armor, Stamina 11, Spirit 7, Strength 4",
+   "wasAt": "ForeverChanges, build 70245"
+  },
+  "279840": {
+   "name": "Renewing Footpads",
+   "quality": "rare",
+   "icon": "inv_boots_03",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Feet\tLeather"
+    ],
+    [
+     "l",
+     "78 Armor"
+    ],
+    [
+     "l",
+     "+11 Intellect"
+    ],
+    [
+     "l",
+     "+5 Stamina"
+    ],
+    [
+     "g",
+     "Equip: Increases healing done by up to 11 and damage done by up to 4 for all magical spells and effects."
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "brief": "Intellect 11, Stamina 5, +11 healing, +4 spell damage",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 8 October, 23:13 UTC."
+  },
+  "279841": {
+   "name": "Defender of Dalaran",
+   "quality": "rare",
+   "icon": "inv_hammer_04",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tMace"
+    ],
+    [
+     "l",
+     "82 - 124 Damage\tSpeed 3.30"
+    ],
+    [
+     "l",
+     "(31.2 damage per second)"
+    ],
+    [
+     "l",
+     "+9 Strength"
+    ],
+    [
+     "l",
+     "+13 Stamina"
+    ],
+    [
+     "l",
+     "+9 Intellect"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "brief": "Strength 9, Stamina 13, Intellect 9",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 8 October, 23:13 UTC.",
+   "was": "rare · 82 - 124 damage, speed 3.30 (31.2 dps), Stamina 13, Agility 9, Strength 9",
+   "wasAt": "ForeverChanges, build 70245"
+  },
+  "279835": {
+   "name": "Vine Pruner's Cloak",
+   "quality": "uncommon",
+   "icon": "inv_misc_cape_13",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Back\tCloth"
+    ],
+    [
+     "l",
+     "24 Armor"
+    ],
+    [
+     "l",
+     "+6 Stamina"
+    ],
+    [
+     "g",
+     "Equip: +5 Spell Damage Vs Elementals"
+    ],
+    [
+     "g",
+     "Equip: +5 Spell Power"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "was": "rare · 26 armor, Stamina 8, +6 spell power",
+   "wasAt": "ForeverChanges, build 70245",
+   "oldQuality": "rare",
+   "brief": "Stamina 6, +5 spell power"
+  },
+  "279836": {
+   "name": "Thorn Protecting Girdle",
+   "quality": "uncommon",
+   "icon": "inv_belt_12",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Waist\tMail"
+    ],
+    [
+     "l",
+     "122 Armor"
+    ],
+    [
+     "l",
+     "+8 Stamina"
+    ],
+    [
+     "g",
+     "Equip: +9 Attack Power Vs Elementals"
+    ],
+    [
+     "g",
+     "Equip: +12 Attack Power"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "was": "rare · 134 armor, Stamina 12, +12 Attack Power",
+   "wasAt": "ForeverChanges, build 70245",
+   "oldQuality": "rare",
+   "brief": "Stamina 8, +12 Attack Power"
+  },
+  "251963": {
+   "name": "Gravewalker Boots",
+   "quality": "uncommon",
+   "icon": "inv_boots_08",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Feet\tLeather"
+    ],
+    [
+     "l",
+     "71 Armor"
+    ],
+    [
+     "l",
+     "+5 Agility"
+    ],
+    [
+     "l",
+     "+7 Stamina"
+    ],
+    [
+     "l",
+     "+5 Spirit"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "was": "rare · 78 armor, Stamina 10, Agility 7, Spirit 7",
+   "wasAt": "ForeverChanges, build 70245",
+   "oldQuality": "rare",
+   "brief": "Stamina 7, Agility 5, Spirit 5"
+  },
+  "251965": {
+   "name": "Undead Knight's Bracers",
+   "quality": "uncommon",
+   "icon": "inv_bracer_16",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Wrist\tMail"
+    ],
+    [
+     "l",
+     "95 Armor"
+    ],
+    [
+     "l",
+     "+3 Strength"
+    ],
+    [
+     "l",
+     "+6 Stamina"
+    ],
+    [
+     "l",
+     "+3 Intellect"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "was": "rare · 104 armor, Stamina 8, Strength 4, Agility 4",
+   "wasAt": "ForeverChanges, build 70245",
+   "oldQuality": "rare",
+   "brief": "Stamina 6, Strength 3, Intellect 3"
+  },
+  "279847": {
+   "name": "Unstable Power Core",
+   "quality": "uncommon",
+   "icon": "inv_staff_06",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Ranged\tWand"
+    ],
+    [
+     "l",
+     "35 - 66 Damage\tSpeed 1.70"
+    ],
+    [
+     "l",
+     "(29.7 damage per second)"
+    ],
+    [
+     "l",
+     "+4 Stamina"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "was": "rare · 40 - 76 damage, speed 1.70 (34.1 dps), Stamina 6",
+   "wasAt": "ForeverChanges, build 70245",
+   "oldQuality": "rare",
+   "brief": "Stamina 4"
+  },
+  "279848": {
+   "name": "Construct Cloak",
+   "quality": "uncommon",
+   "icon": "inv_misc_cape_02",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Back\tCloth"
+    ],
+    [
+     "l",
+     "24 Armor"
+    ],
+    [
+     "l",
+     "+5 Strength"
+    ],
+    [
+     "l",
+     "+5 Spirit"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "was": "rare · 26 armor, Strength 7, Spirit 7",
+   "wasAt": "ForeverChanges, build 70245",
+   "oldQuality": "rare",
+   "brief": "Strength 5, Spirit 5"
+  },
+  "279842": {
+   "name": "Battle Spaulders",
+   "quality": "rare",
+   "icon": "inv_shoulder_23",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Shoulder\tMail"
+    ],
+    [
+     "l",
+     "178 Armor"
+    ],
+    [
+     "l",
+     "+4 Strength"
+    ],
+    [
+     "l",
+     "+11 Stamina"
+    ],
+    [
+     "l",
+     "+7 Spirit"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "brief": "Stamina 11, Spirit 7, Strength 4"
+  },
+  "279843": {
+   "name": "Enchanted Sandals",
+   "quality": "rare",
+   "icon": "inv_boots_05",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Feet\tCloth"
+    ],
+    [
+     "l",
+     "36 Armor"
+    ],
+    [
+     "l",
+     "+50 Armor"
+    ],
+    [
+     "l",
+     "+10 Stamina"
+    ],
+    [
+     "g",
+     "Equip: +9 Spell Power"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "was": "rare · 36 armor, Stamina 10, Agility 5, Intellect 8",
+   "wasAt": "ForeverChanges, build 70245",
+   "brief": "Stamina 10, +50 Armor, +9 spell power"
+  },
+  "279844": {
+   "name": "Striking Staff",
+   "quality": "rare",
+   "icon": "inv_staff_28",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tStaff"
+    ],
+    [
+     "l",
+     "77 - 117 Damage\tSpeed 3.10"
+    ],
+    [
+     "l",
+     "(31.3 damage per second)"
+    ],
+    [
+     "l",
+     "+9 Strength"
+    ],
+    [
+     "l",
+     "+6 Stamina"
+    ],
+    [
+     "l",
+     "+14 Intellect"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "was": "rare · 77 - 117 damage, speed 3.10 (31.3 dps), Stamina 6, Strength 14, Spirit 9",
+   "wasAt": "ForeverChanges, build 70245",
+   "brief": "Stamina 6, Strength 9, Intellect 14"
+  },
+  "279837": {
+   "name": "Fallen Guard's Pendant",
+   "quality": "uncommon",
+   "icon": "inv_jewelry_necklace_44",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Neck"
+    ],
+    [
+     "l",
+     "+3 Strength"
+    ],
+    [
+     "l",
+     "+7 Arcane Resistance"
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "brief": "Strength 3, +7 Arcane Resistance",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 8 October, 23:14 UTC.",
+   "was": "rare · Stamina 8, Strength 6",
+   "wasAt": "ForeverChanges, build 70245",
+   "oldQuality": "rare"
+  },
+  "279838": {
+   "name": "Arcane Infused Rod",
+   "quality": "uncommon",
+   "icon": "inv_wand_04",
+   "itemLevel": 36,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Held In Off-hand"
+    ],
+    [
+     "g",
+     "Equip: Increases damage done by Arcane spells and effects by up to 11."
+    ],
+    [
+     "y",
+     "Item Level 36"
+    ]
+   ],
+   "brief": "+11 Arcane spell damage",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 8 October, 23:14 UTC.",
+   "was": "rare · Intellect 8, +9 Arcane Spell Damage",
+   "wasAt": "ForeverChanges, build 70245",
+   "oldQuality": "rare"
+  },
+  "273033": {
+   "name": "Gravespike Repeater",
+   "quality": "rare",
+   "icon": "inv_weapon_crossbow_06",
+   "itemLevel": 31,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Ranged\tCrossbow"
+    ],
+    [
+     "l",
+     "28 - 43 Damage\tSpeed 2.30"
+    ],
+    [
+     "l",
+     "(15.4 damage per second)"
+    ],
+    [
+     "g",
+     "Equip: +8 Attack Power."
+    ],
+    [
+     "g",
+     "Equip: +9 Attack Power against Humanoids."
+    ],
+    [
+     "l",
+     "Requires Level 26"
+    ],
+    [
+     "y",
+     "Item Level 31"
+    ]
+   ],
+   "brief": "+8 Attack Power, +9 Attack Power against Humanoids",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 9 October, 01:22 UTC. Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded."
+  },
+  "273035": {
+   "name": "Mana-Warped Chain Shirt",
+   "quality": "rare",
+   "icon": "inv_chest_chain_04",
+   "itemLevel": 32,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Chest\tMail"
+    ],
+    [
+     "l",
+     "225 Armor"
+    ],
+    [
+     "l",
+     "+12 Strength"
+    ],
+    [
+     "l",
+     "+8 Stamina"
+    ],
+    [
+     "g",
+     "Equip: Restores 3 Mana per 5 sec."
+    ],
+    [
+     "l",
+     "Requires Level 27"
+    ],
+    [
+     "y",
+     "Item Level 32"
+    ]
+   ],
+   "brief": "Strength 12, Stamina 8, +3 mana per 5",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 8 October, 23:36 UTC. Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded."
+  },
+  "273036": {
+   "name": "Graveweave Bindings",
+   "quality": "rare",
+   "icon": "inv_bracer_10",
+   "itemLevel": 31,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Wrist\tCloth"
+    ],
+    [
+     "l",
+     "21 Armor"
+    ],
+    [
+     "l",
+     "+6 Strength"
+    ],
+    [
+     "g",
+     "Equip: Restores 2 Mana per 5 sec."
+    ],
+    [
+     "g",
+     "Equip: Increases damage and healing done by magical spells and effects by up to 5."
+    ],
+    [
+     "l",
+     "Requires Level 26"
+    ],
+    [
+     "y",
+     "Item Level 31"
+    ]
+   ],
+   "brief": "Strength 6, +2 mana per 5, +5 spell power",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 8 October, 23:53 UTC. Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded.",
+   "was": "rare · 21 armor, Strength 6, +5 spell power",
+   "wasAt": "Wowhead's Forever database, by October 3"
+  },
+  "273038": {
+   "name": "Garb of Fallen Felbark",
+   "quality": "rare",
+   "icon": "inv_shirt_09",
+   "itemLevel": 34,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Chest\tLeather"
+    ],
+    [
+     "l",
+     "110 Armor"
+    ],
+    [
+     "l",
+     "+9 Agility"
+    ],
+    [
+     "l",
+     "+7 Stamina"
+    ],
+    [
+     "l",
+     "+13 Intellect"
+    ],
+    [
+     "l",
+     "Requires Level 29"
+    ],
+    [
+     "y",
+     "Item Level 34"
+    ]
+   ],
+   "brief": "Agility 9, Stamina 7, Intellect 13",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 9 October, 01:55 UTC. Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded.",
+   "was": "rare · 110 armor, Agility 13, Stamina 7, Intellect 9",
+   "wasAt": "Wowhead's Forever database, by October 3"
+  },
+  "273041": {
+   "name": "Slitherwrap Girdle",
+   "quality": "rare",
+   "icon": "inv_belt_15",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Waist\tLeather"
+    ],
+    [
+     "l",
+     "61 Armor"
+    ],
+    [
+     "l",
+     "+9 Agility"
+    ],
+    [
+     "l",
+     "+6 Stamina"
+    ],
+    [
+     "g",
+     "Equip: When struck in combat, drain 2 mana from the attacker."
+    ],
+    [
+     "l",
+     "Requires Level 28"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "brief": "Agility 9, Stamina 6, When struck in combat, drain 2 mana from the attacker",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 9 October, 01:51 UTC. Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded."
+  },
+  "273045": {
+   "name": "Drape of Shifting Energy",
+   "quality": "rare",
+   "icon": "inv_misc_cape_18",
+   "itemLevel": 32,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Back"
+    ],
+    [
+     "l",
+     "24 Armor"
+    ],
+    [
+     "l",
+     "+7 Spirit"
+    ],
+    [
+     "g",
+     "Equip: +12 Attack Power."
+    ],
+    [
+     "l",
+     "Requires Level 27"
+    ],
+    [
+     "y",
+     "Item Level 32"
+    ]
+   ],
+   "brief": "Spirit 7, +12 Attack Power",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 9 October, 02:02 UTC. Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded."
+  },
+  "273047": {
+   "name": "Unstable Crystalline Shoulderpads",
+   "quality": "rare",
+   "icon": "inv_shoulder_07",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Shoulder\tLeather"
+    ],
+    [
+     "l",
+     "81 Armor"
+    ],
+    [
+     "l",
+     "+9 Agility"
+    ],
+    [
+     "l",
+     "+6 Stamina"
+    ],
+    [
+     "g",
+     "Equip: Restores 2 Mana per 5 sec."
+    ],
+    [
+     "l",
+     "Requires Level 28"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "brief": "Agility 9, Stamina 6, +2 mana per 5",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 9 October, 02:01 UTC. Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded.",
+   "was": "rare · 81 armor, Agility 9, Stamina 5",
+   "wasAt": "Wowhead's Forever database, by October 3"
+  },
+  "273048": {
+   "name": "Refractory Scaleguards",
+   "quality": "rare",
+   "icon": "inv_pants_mail_12",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Legs\tMail"
+    ],
+    [
+     "l",
+     "199 Armor"
+    ],
+    [
+     "l",
+     "+12 Strength"
+    ],
+    [
+     "l",
+     "+5 Arcane Resistance"
+    ],
+    [
+     "l",
+     "+100 Armor"
+    ],
+    [
+     "l",
+     "Requires Level 28"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "brief": "Strength 12, +5 Arcane Resistance, +100 Armor",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 8 October, 23:36 UTC. Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded."
+  },
+  "273049": {
+   "name": "Archmagister's Faceted Pendant",
+   "quality": "rare",
+   "icon": "inv_misc_necklacea8",
+   "itemLevel": 35,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Neck"
+    ],
+    [
+     "l",
+     "+6 Intellect"
+    ],
+    [
+     "g",
+     "Equip: +12 Attack Power."
+    ],
+    [
+     "g",
+     "Use: Increase experience gained from slaying Undead by 10% for 5 min. (6 Hr Cooldown)"
+    ],
+    [
+     "l",
+     "Requires Level 30"
+    ],
+    [
+     "y",
+     "Item Level 35"
+    ]
+   ],
+   "brief": "Intellect 6, +12 Attack Power",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 9 October, 02:12 UTC. Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded."
+  },
+  "273054": {
+   "name": "Cartilage Shapers",
+   "quality": "rare",
+   "icon": "inv_gauntlets_18",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Hands\tLeather"
+    ],
+    [
+     "l",
+     "68 Armor"
+    ],
+    [
+     "l",
+     "+9 Agility"
+    ],
+    [
+     "l",
+     "+8 Spirit"
+    ],
+    [
+     "g",
+     "Equip: Increased Skinning +4."
+    ],
+    [
+     "l",
+     "Requires Level 28"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "brief": "Agility 9, Spirit 8, Increased Skinning +4",
+   "src": "Read in a player's game: QuestBank uploads, build 70291, 9 October, 01:43 UTC. Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded."
+  },
+  "273046": {
+   "name": "Guardian's Dualblade",
+   "quality": "rare",
+   "icon": "inv_throwingaxe_05",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tAxe"
+    ],
+    [
+     "l",
+     "78 - 117 Damage\tSpeed 3.50"
+    ],
+    [
+     "l",
+     "(27.9 damage per second)"
+    ],
+    [
+     "g",
+     "Equip: When damaged, has a chance to grant you 1080 armor for 12 sec."
+    ],
+    [
+     "l",
+     "Requires Level 28"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). Seen dropping at Blizzard's BlizzCon demo run of the dungeon, per ForeverChanges' notes.",
+   "brief": "When damaged, has a chance to grant you 1080 armor for 12 sec"
+  },
+  "273052": {
+   "name": "Ponderous Orb",
+   "quality": "rare",
+   "icon": "inv_misc_orb_04",
+   "itemLevel": 35,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Held In Off-hand"
+    ],
+    [
+     "l",
+     "+2 Intellect"
+    ],
+    [
+     "l",
+     "+8 Spirit"
+    ],
+    [
+     "g",
+     "Equip: +11 Healing"
+    ],
+    [
+     "g",
+     "Equip: +4 Spell Damage"
+    ],
+    [
+     "l",
+     "Requires Level 30"
+    ],
+    [
+     "y",
+     "Item Level 35"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). Seen dropping at Blizzard's BlizzCon demo run of the dungeon, per ForeverChanges' notes.",
+   "was": "rare · Stamina 5, Intellect 2, Spirit 8",
+   "wasAt": "Wowhead's Forever database, by October 3",
+   "brief": "Spirit 8, Intellect 2, +11 Healing, +4 Spell Damage"
+  },
+  "273039": {
+   "name": "Blightleaf Rope",
+   "quality": "rare",
+   "icon": "inv_belt_10",
+   "itemLevel": 34,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Waist\tCloth"
+    ],
+    [
+     "l",
+     "28 Armor"
+    ],
+    [
+     "l",
+     "+10 Intellect"
+    ],
+    [
+     "g",
+     "Equip: +7 Spell Power"
+    ],
+    [
+     "g",
+     "Equip: +5 Health Regeneration"
+    ],
+    [
+     "l",
+     "Requires Level 29"
+    ],
+    [
+     "y",
+     "Item Level 34"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop.",
+   "was": "rare · 28 armor, Stamina 6, Intellect 10",
+   "wasAt": "Wowhead's Forever database, by October 3",
+   "brief": "Intellect 10, +7 spell power, +5 health per 5"
+  },
+  "273042": {
+   "name": "Manascale Treads",
+   "quality": "rare",
+   "icon": "inv_boots_chain_08",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Feet\tMail"
+    ],
+    [
+     "l",
+     "157 Armor"
+    ],
+    [
+     "l",
+     "+7 Strength"
+    ],
+    [
+     "l",
+     "+7 Intellect"
+    ],
+    [
+     "g",
+     "Equip: +7 Critical Strike Rating"
+    ],
+    [
+     "l",
+     "Requires Level 28"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop.",
+   "was": "rare · 157 armor, Strength 7, Stamina 7, Improves your chance to get a critical strike by 0.5%",
+   "wasAt": "Wowhead's Forever database, by October 3",
+   "brief": "Strength 7, Intellect 7, +7 Crit Rating"
+  },
+  "273044": {
+   "name": "Violet Sorcerer's Robes",
+   "quality": "rare",
+   "icon": "inv_chest_cloth_17",
+   "itemLevel": 32,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Chest\tCloth"
+    ],
+    [
+     "l",
+     "49 Armor"
+    ],
+    [
+     "l",
+     "+15 Intellect"
+    ],
+    [
+     "g",
+     "Equip: +9 Spell Power"
+    ],
+    [
+     "g",
+     "Equip: When damaged, has a chance to reduce threat level on all enemies by a small amount for 10 sec."
+    ],
+    [
+     "l",
+     "Requires Level 27"
+    ],
+    [
+     "y",
+     "Item Level 32"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop.",
+   "was": "rare · 49 armor, Intellect 15, Spirit 8",
+   "wasAt": "Wowhead's Forever database, by October 3",
+   "brief": "Intellect 15, +9 spell power, When damaged, has a chance to reduce threat level on all enemies by a small amount for 10 sec"
+  },
+  "277507": {
+   "name": "Dalaran Sewer Key",
+   "quality": "uncommon",
+   "icon": "inv_misc_key_02",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291 (ItemSparse), in the client since 69876."
+  },
+  "251961": {
+   "name": "Arcane Mote",
+   "quality": "common",
+   "icon": "jewelcrafting_uncut-epic-gem_color1",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291 (ItemSparse), in the client since 69876."
+  },
+  "275997": {
+   "name": "Cracked Sentry Core",
+   "quality": "common",
+   "icon": "inv_misc_gem_sapphire_02",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291 (ItemSparse), in the client since 69876."
+  },
+  "251983": {
+   "name": "Fel Infused Blossom",
+   "quality": "common",
+   "icon": "inv_misc_herb_fellotus",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291 (ItemSparse), in the client since 69876."
+  },
+  "275996": {
+   "name": "The Founding of Dalaran",
+   "quality": "common",
+   "icon": "inv_misc_book_03",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291 (ItemSparse), in the client since 69876."
+  },
+  "275989": {
+   "name": "Tome of Dalaran",
+   "quality": "uncommon",
+   "icon": "inv_misc_book_04",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291 (ItemSparse), in the client since 69876."
+  },
+  "276561": {
+   "name": "Black Tome",
+   "quality": "common",
+   "icon": "inv_misc_book_04",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "g",
+     "Use: Use at the Ambermill Leyline Focus to create the Tome of Dalaran."
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291 (ItemSparse), in the client since 69876."
+  },
+  "285327": {
+   "name": "Kirin Tor Tabard",
+   "quality": "common",
+   "icon": "inv_shirt_guildtabard_01",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Tabard"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291 (ItemSparse), in the client since 69876."
+  },
+  "10327": {
+   "name": "Horn of Echeyakee",
+   "quality": "common",
+   "icon": "inv_misc_horn_01",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "g",
+     "Use: Blow near Echeyakee's Lair. (30 Sec Cooldown)"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291 (ItemSparse)."
+  },
+  "212792": {
+   "name": "Eye of the Tempest",
+   "quality": "common",
+   "icon": "inv_jewelcrafting_gem_05",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291 (ItemSparse)."
+  },
+  "271767": {
+   "name": "Healer's Staff",
+   "quality": "rare",
+   "icon": "inv_staff_10",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tStaff"
+    ],
+    [
+     "l",
+     "43 - 65 Damage\tSpeed 2.60"
+    ],
+    [
+     "l",
+     "(20.8 damage per second)"
+    ],
+    [
+     "l",
+     "+12 Stamina"
+    ],
+    [
+     "g",
+     "Equip: +5 Mana Regeneration"
+    ],
+    [
+     "g",
+     "Equip: +67 Healing"
+    ],
+    [
+     "g",
+     "Equip: +22 Spell Damage"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). The client's row is identical in 70170 and 70291.",
+   "brief": "Stamina 12, +5 mana per 5, +67 Healing, +22 Spell Damage"
+  },
+  "271667": {
+   "name": "Ironwood Destroyer",
+   "quality": "uncommon",
+   "icon": "inv_hammer_16",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tMace"
+    ],
+    [
+     "l",
+     "61 - 91 Damage\tSpeed 3.40"
+    ],
+    [
+     "l",
+     "(22.4 damage per second)"
+    ],
+    [
+     "g",
+     "Equip: +19 Nature Spell Damage"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "was": "rare; Stamina 9, Spirit 7, +24 Attack Power; 76 - 114 damage, speed 3.40 (27.9 dps)",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "271664": {
+   "name": "Hornbeam Heft",
+   "quality": "uncommon",
+   "icon": "inv_axe_01",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "One-Hand\tAxe"
+    ],
+    [
+     "l",
+     "29 - 54 Damage\tSpeed 2.40"
+    ],
+    [
+     "l",
+     "(17.2 damage per second)"
+    ],
+    [
+     "l",
+     "+6 Strength"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "was": "rare; Stamina 6, Strength 3, Spirit 3; 36 - 67 damage, speed 2.40 (21.4 dps)",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "271670": {
+   "name": "Curl of Life",
+   "quality": "uncommon",
+   "icon": "inv_jewelry_ring_12",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "l",
+     "Finger"
+    ],
+    [
+     "l",
+     "+5 Stamina"
+    ],
+    [
+     "g",
+     "Equip: +5 Spell Power"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "was": "rare; Stamina 7, +5 spell power, +5 health per 5",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "271740": {
+   "name": "Knife-Polishing Rag",
+   "quality": "uncommon",
+   "icon": "inv_bracer_10",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Wrist\tCloth"
+    ],
+    [
+     "l",
+     "20 Armor"
+    ],
+    [
+     "l",
+     "+4 Spirit"
+    ],
+    [
+     "g",
+     "Equip: +6 Spell Power"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "was": "rare; Intellect 4, Spirit 7, +5 spell power; 22 armor",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "271732": {
+   "name": "Dirt-Heavy Bracers",
+   "quality": "uncommon",
+   "icon": "inv_bracer_04",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Wrist\tLeather"
+    ],
+    [
+     "l",
+     "43 Armor"
+    ],
+    [
+     "l",
+     "+4 Spirit"
+    ],
+    [
+     "g",
+     "Equip: +10 Attack Power"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "was": "rare; Spirit 7, +8 Attack Power, Stamina 4; 47 armor",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "271769": {
+   "name": "Daewyn's Girdle",
+   "quality": "uncommon",
+   "icon": "inv_belt_16",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Waist\tCloth"
+    ],
+    [
+     "l",
+     "25 Armor"
+    ],
+    [
+     "l",
+     "+6 Spirit"
+    ],
+    [
+     "g",
+     "Equip: +7 Spell Power"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "was": "rare; Spirit 9, +6 spell power, +10 health per 5; 28 armor",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "280766": {
+   "name": "Satchel of Potions",
+   "quality": "uncommon",
+   "icon": "inv_misc_bag_08",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Trinket"
+    ],
+    [
+     "g",
+     "Use: Reach into the bag and hope for the best."
+    ],
+    [
+     "d",
+     "\"Not every potion is meant for consumption.\""
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "was": "rare",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "271716": {
+   "name": "Explorer's League Dustcover",
+   "quality": "rare",
+   "icon": "inv_misc_cape_21",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Back\tCloth"
+    ],
+    [
+     "l",
+     "25 Armor"
+    ],
+    [
+     "l",
+     "+5 Agility"
+    ],
+    [
+     "l",
+     "+5 Intellect"
+    ],
+    [
+     "l",
+     "+5 Spirit"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "was": "Intellect 7, Strength 4, Agility 4",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "271719": {
+   "name": "Furs of the Earthen Ring",
+   "quality": "rare",
+   "icon": "inv_misc_cape_04",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Back\tCloth"
+    ],
+    [
+     "l",
+     "25 Armor"
+    ],
+    [
+     "l",
+     "+5 Strength"
+    ],
+    [
+     "l",
+     "+5 Intellect"
+    ],
+    [
+     "l",
+     "+5 Spirit"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "was": "Intellect 5, Stamina 3, Strength 4, Spirit 4",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "271766": {
+   "name": "Heavehammer",
+   "quality": "rare",
+   "icon": "inv_hammer_09",
+   "itemLevel": 33,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tMace"
+    ],
+    [
+     "l",
+     "74 - 110 Damage\tSpeed 3.30"
+    ],
+    [
+     "l",
+     "(27.9 damage per second)"
+    ],
+    [
+     "l",
+     "+60 Armor"
+    ],
+    [
+     "g",
+     "Equip: +32 Attack Power"
+    ],
+    [
+     "y",
+     "Item Level 33"
+    ]
+   ],
+   "was": "+26 Attack Power, Agility 7, +70 Armor",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274957": {
+   "name": "Lumber Luggers",
+   "quality": "uncommon",
+   "icon": "inv_gauntlets_21",
+   "itemLevel": 38,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Hands\tLeather"
+    ],
+    [
+     "l",
+     "66 Armor"
+    ],
+    [
+     "l",
+     "+11 Strength"
+    ],
+    [
+     "y",
+     "Item Level 38"
+    ]
+   ],
+   "was": "item level 43; Strength 13; 73 armor",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274915": {
+   "name": "Sacristan Band",
+   "quality": "uncommon",
+   "icon": "inv_jewelry_ring_01",
+   "itemLevel": 38,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Finger"
+    ],
+    [
+     "l",
+     "+7 Stamina"
+    ],
+    [
+     "g",
+     "Equip: +6 Healing"
+    ],
+    [
+     "g",
+     "Equip: +2 Spell Damage"
+    ],
+    [
+     "y",
+     "Item Level 38"
+    ]
+   ],
+   "was": "item level 40; Stamina 8, +7 Healing, +3 Spell Damage",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274916": {
+   "name": "Verger Greaves",
+   "quality": "uncommon",
+   "icon": "inv_boots_01",
+   "itemLevel": 38,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Feet\tMail"
+    ],
+    [
+     "l",
+     "153 Armor"
+    ],
+    [
+     "l",
+     "+7 Strength"
+    ],
+    [
+     "g",
+     "Equip: +8 Spell Power"
+    ],
+    [
+     "y",
+     "Item Level 38"
+    ]
+   ],
+   "was": "item level 40; Strength 8, +9 spell power; 159 armor",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274918": {
+   "name": "Warding Candle",
+   "quality": "common",
+   "icon": "inv_misc_candlekobold_color1",
+   "itemLevel": 38,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "g",
+     "Use: Attempts to remove 1 Curse or Bane, and 1 Disease from the igniter. (1 Min Cooldown)"
+    ],
+    [
+     "y",
+     "Item Level 38"
+    ]
+   ],
+   "was": "item level 40",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274922": {
+   "name": "Riverglades Marsh Gas",
+   "quality": "common",
+   "icon": "trade_alchemy_potiona4",
+   "itemLevel": 38,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "g",
+     "Use: Reduces movement speed by 50% and increases Fire damage taken by all targets in a 5 yard radius by 15 for 15 sec. (15 Sec Cooldown)"
+    ],
+    [
+     "y",
+     "Item Level 38"
+    ]
+   ],
+   "was": "item level 40",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274928": {
+   "name": "Curly's Chopper",
+   "quality": "uncommon",
+   "icon": "inv_axe_14",
+   "itemLevel": 39,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "One-Hand\tAxe"
+    ],
+    [
+     "l",
+     "30 - 56 Damage\tSpeed 2.00"
+    ],
+    [
+     "l",
+     "(21.4 damage per second)"
+    ],
+    [
+     "l",
+     "+6 Stamina"
+    ],
+    [
+     "g",
+     "Equip: +2 Defense Rating"
+    ],
+    [
+     "y",
+     "Item Level 39"
+    ]
+   ],
+   "was": "item level 40; 31 - 58 damage, speed 2.00 (22.3 dps)",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274929": {
+   "name": "Hurley's Felling Axe",
+   "quality": "uncommon",
+   "icon": "inv_misc_1h_lumberaxe_a_01",
+   "itemLevel": 39,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tAxe"
+    ],
+    [
+     "l",
+     "74 - 110 Damage\tSpeed 3.30"
+    ],
+    [
+     "l",
+     "(27.9 damage per second)"
+    ],
+    [
+     "l",
+     "+7 Strength"
+    ],
+    [
+     "g",
+     "Equip: +1 Two-Handed Axes Skill"
+    ],
+    [
+     "y",
+     "Item Level 39"
+    ]
+   ],
+   "was": "item level 40; 77 - 115 damage, speed 3.30 (29.0 dps)",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274938": {
+   "name": "Gnollhide Tunic",
+   "quality": "uncommon",
+   "icon": "inv_chest_leather_02",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Chest\tLeather"
+    ],
+    [
+     "l",
+     "110 Armor"
+    ],
+    [
+     "l",
+     "+11 Agility"
+    ],
+    [
+     "l",
+     "+11 Spirit"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "item level 42; 115 armor",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274939": {
+   "name": "Southern Watch Leggings",
+   "quality": "uncommon",
+   "icon": "inv_pants_03",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Legs\tMail"
+    ],
+    [
+     "l",
+     "202 Armor"
+    ],
+    [
+     "l",
+     "+13 Strength"
+    ],
+    [
+     "l",
+     "+8 Stamina"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "item level 42; Strength 14, Stamina 8; 208 armor",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274940": {
+   "name": "Unbalanced Fighting Stick",
+   "quality": "uncommon",
+   "icon": "inv_spear_05",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tPolearm"
+    ],
+    [
+     "l",
+     "70 - 104 Damage\tSpeed 3.00"
+    ],
+    [
+     "l",
+     "(29.0 damage per second)"
+    ],
+    [
+     "l",
+     "+13 Strength"
+    ],
+    [
+     "l",
+     "+8 Stamina"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "item level 42; Stamina 8, Strength 14; 75 - 113 damage, speed 3.00 (31.4 dps)",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274941": {
+   "name": "Bristle Hills Mystic Robe",
+   "quality": "uncommon",
+   "icon": "inv_chest_cloth_24",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Chest\tCloth"
+    ],
+    [
+     "l",
+     "53 Armor"
+    ],
+    [
+     "l",
+     "+11 Intellect"
+    ],
+    [
+     "g",
+     "Equip: +12 Spell Power"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "item level 42; Intellect 11, +13 spell power; 55 armor",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274942": {
+   "name": "Bristlepelt Vest",
+   "quality": "uncommon",
+   "icon": "inv_chest_leather_02",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Chest\tLeather"
+    ],
+    [
+     "l",
+     "110 Armor"
+    ],
+    [
+     "l",
+     "+8 Agility"
+    ],
+    [
+     "l",
+     "+12 Stamina"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "item level 42; Stamina 13, Agility 9; 115 armor",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274943": {
+   "name": "Gnoll Crusher Leggings",
+   "quality": "uncommon",
+   "icon": "inv_pants_03",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Legs\tMail"
+    ],
+    [
+     "l",
+     "202 Armor"
+    ],
+    [
+     "l",
+     "+11 Strength"
+    ],
+    [
+     "l",
+     "+11 Intellect"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "item level 42; 208 armor",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274944": {
+   "name": "Bloodsnout Striker",
+   "quality": "uncommon",
+   "icon": "inv_spear_05",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tPolearm"
+    ],
+    [
+     "l",
+     "74 - 111 Damage\tSpeed 3.20"
+    ],
+    [
+     "l",
+     "(29.0 damage per second)"
+    ],
+    [
+     "l",
+     "+11 Stamina"
+    ],
+    [
+     "g",
+     "Equip: +18 Attack Power"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "item level 42; Stamina 12, +20 Attack Power; 80 - 120 damage, speed 3.20 (31.4 dps)",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274946": {
+   "name": "Gnollblood Robe",
+   "quality": "uncommon",
+   "icon": "inv_chest_cloth_24",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Chest\tCloth"
+    ],
+    [
+     "l",
+     "53 Armor"
+    ],
+    [
+     "l",
+     "+11 Spirit"
+    ],
+    [
+     "g",
+     "Equip: +11 Spell Power"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "item level 42; Spirit 12, +12 spell power; 55 armor",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274955": {
+   "name": "Clobrok's Block Rock",
+   "quality": "uncommon",
+   "icon": "trade_archaeology_soapstonescarabnecklace",
+   "itemLevel": 42,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Neck"
+    ],
+    [
+     "l",
+     "+7 Strength"
+    ],
+    [
+     "g",
+     "Equip: +10 Block Value"
+    ],
+    [
+     "y",
+     "Item Level 42"
+    ]
+   ],
+   "was": "item level 43",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274961": {
+   "name": "Brute Slayer Band",
+   "quality": "uncommon",
+   "icon": "inv_jewelry_ring_05",
+   "itemLevel": 39,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Finger"
+    ],
+    [
+     "l",
+     "+6 Intellect"
+    ],
+    [
+     "g",
+     "Equip: +2 Spell Penetration"
+    ],
+    [
+     "y",
+     "Item Level 39"
+    ]
+   ],
+   "was": "item level 40",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274963": {
+   "name": "Rot-Covered Harpoon",
+   "quality": "rare",
+   "icon": "inv_spear_06",
+   "itemLevel": 42,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tPolearm"
+    ],
+    [
+     "l",
+     "75 - 112 Damage\tSpeed 2.50"
+    ],
+    [
+     "l",
+     "(37.3 damage per second)"
+    ],
+    [
+     "g",
+     "Chance on hit: Diseases target for 24 Nature damage every 1 sec for 7 sec. Deals 2 times as much damage to Aquatic enemies."
+    ],
+    [
+     "y",
+     "Item Level 42"
+    ]
+   ],
+   "was": "item level 44; 78 - 117 damage, speed 2.50 (38.9 dps)",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "6975": {
+   "name": "Whirlwind Axe",
+   "quality": "rare",
+   "icon": "inv_axe_12",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tAxe"
+    ],
+    [
+     "l",
+     "103 - 154 Damage\tSpeed 3.60"
+    ],
+    [
+     "l",
+     "(35.7 damage per second)"
+    ],
+    [
+     "l",
+     "+16 Strength"
+    ],
+    [
+     "l",
+     "+15 Stamina"
+    ],
+    [
+     "l",
+     "Classes: Warrior"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "Strength 15, Stamina 14",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "6976": {
+   "name": "Whirlwind Warhammer",
+   "quality": "rare",
+   "icon": "inv_hammer_08",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tMace"
+    ],
+    [
+     "l",
+     "97 - 146 Damage\tSpeed 3.40"
+    ],
+    [
+     "l",
+     "(35.7 damage per second)"
+    ],
+    [
+     "l",
+     "+16 Strength"
+    ],
+    [
+     "l",
+     "+15 Stamina"
+    ],
+    [
+     "l",
+     "Classes: Warrior"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "Stamina 14, Strength 15",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "6977": {
+   "name": "Whirlwind Sword",
+   "quality": "rare",
+   "icon": "inv_sword_15",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tSword"
+    ],
+    [
+     "l",
+     "83 - 124 Damage\tSpeed 2.90"
+    ],
+    [
+     "l",
+     "(35.7 damage per second)"
+    ],
+    [
+     "l",
+     "+16 Strength"
+    ],
+    [
+     "l",
+     "+15 Stamina"
+    ],
+    [
+     "l",
+     "Classes: Warrior"
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "Stamina 14, Strength 15",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "280604": {
+   "name": "Rage of the Storm",
+   "quality": "rare",
+   "icon": "inv_mace_42",
+   "itemLevel": 40,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tMace"
+    ],
+    [
+     "l",
+     "94 - 141 Damage\tSpeed 3.30"
+    ],
+    [
+     "l",
+     "(35.7 damage per second)"
+    ],
+    [
+     "l",
+     "+15 Stamina"
+    ],
+    [
+     "l",
+     "+12 Intellect"
+    ],
+    [
+     "g",
+     "Equip: Increases the damage dealt by your Stormstrike ability by 10%."
+    ],
+    [
+     "y",
+     "Item Level 40"
+    ]
+   ],
+   "was": "Intellect 16, Stamina 15; 103 - 154 damage, speed 3.60 (35.7 dps)",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "281286": {
+   "name": "High Order Pendant",
+   "quality": "uncommon",
+   "icon": "inv_jewelry_necklace_32",
+   "itemLevel": 57,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Neck"
+    ],
+    [
+     "l",
+     "+11 Intellect"
+    ],
+    [
+     "g",
+     "Equip: +7 Spell Power"
+    ],
+    [
+     "y",
+     "Item Level 57"
+    ]
+   ],
+   "was": "Stamina 6, Intellect 11",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "272184": {
+   "name": "Amulet of Vengeance",
+   "quality": "uncommon",
+   "icon": "inv_jewelry_necklace_05",
+   "itemLevel": 43,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Neck"
+    ],
+    [
+     "l",
+     "+6 Strength"
+    ],
+    [
+     "l",
+     "+7 Stamina"
+    ],
+    [
+     "y",
+     "Item Level 43"
+    ]
+   ],
+   "was": "rare; Stamina 10, Strength 8",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "272185": {
+   "name": "Amulet of Forgiveness",
+   "quality": "uncommon",
+   "icon": "inv_jewelry_necklace_06",
+   "itemLevel": 43,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Neck"
+    ],
+    [
+     "l",
+     "+7 Spirit"
+    ],
+    [
+     "g",
+     "Equip: +13 Healing"
+    ],
+    [
+     "g",
+     "Equip: +4 Spell Damage"
+    ],
+    [
+     "y",
+     "Item Level 43"
+    ]
+   ],
+   "was": "rare; Spirit 10, Intellect 8",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "279450": {
+   "name": "Fractured Insignia",
+   "quality": "uncommon",
+   "icon": "inv_misc_armorkit_04",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Requires Level 40"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "was": "rare",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "221518": {
+   "name": "Whisper",
+   "quality": "rare",
+   "icon": "inv_hammer_05",
+   "itemLevel": 53,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Two-Hand\tMace"
+    ],
+    [
+     "l",
+     "125 - 187 Damage\tSpeed 3.40"
+    ],
+    [
+     "l",
+     "(45.9 damage per second)"
+    ],
+    [
+     "l",
+     "+23 Strength"
+    ],
+    [
+     "g",
+     "Equip: +14 Spell Power"
+    ],
+    [
+     "g",
+     "Equip: +7 Critical Strike Rating"
+    ],
+    [
+     "y",
+     "Item Level 53"
+    ]
+   ],
+   "was": "item level 56; Strength 17, Stamina 17, +17 Crit Rating; 123 - 185 damage, speed 3.20 (48.2 dps)",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables. The site's database flags this as Season of Discovery data."
+  },
+  "273658": {
+   "name": "Bloody Parchment",
+   "quality": "common",
+   "icon": "inv_scroll_02",
+   "itemLevel": 23,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "d",
+     "\"There's a note tucked into the folds of the Broodmother's robes.\""
+    ],
+    [
+     "l",
+     "Requires Level 23"
+    ],
+    [
+     "y",
+     "Item Level 23"
+    ]
+   ],
+   "was": "item level 30; requires level 30",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "277254": {
+   "name": "Truthseeker's Bow",
+   "quality": "rare",
+   "icon": "inv_weapon_bow_01",
+   "itemLevel": 45,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Ranged\tBow"
+    ],
+    [
+     "l",
+     "+7 Agility"
+    ],
+    [
+     "l",
+     "+3 Stamina"
+    ],
+    [
+     "l",
+     "Requires Level 40"
+    ],
+    [
+     "y",
+     "Item Level 45"
+    ]
+   ],
+   "was": "requires level none",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "251485": {
+   "name": "Edward's Knife",
+   "quality": "uncommon",
+   "icon": "inv_weapon_shortblade_14",
+   "itemLevel": 24,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "One-Hand\tDagger"
+    ],
+    [
+     "l",
+     "14 - 26 Damage\tSpeed 1.60"
+    ],
+    [
+     "l",
+     "(12.3 damage per second)"
+    ],
+    [
+     "l",
+     "+2 Agility"
+    ],
+    [
+     "l",
+     "+2 Stamina"
+    ],
+    [
+     "y",
+     "Item Level 24"
+    ]
+   ],
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "251486": {
+   "name": "Tabitha's Cuffs",
+   "quality": "uncommon",
+   "icon": "inv_bracer_10",
+   "itemLevel": 24,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Wrist\tCloth"
+    ],
+    [
+     "l",
+     "17 Armor"
+    ],
+    [
+     "l",
+     "+4 Stamina"
+    ],
+    [
+     "g",
+     "Equip: +3 Spell Power"
+    ],
+    [
+     "y",
+     "Item Level 24"
+    ]
+   ],
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "287958": {
+   "name": "Titan Relic",
+   "quality": "common",
+   "icon": "inv_pet_scorchedstone",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "d",
+     "\"Fragmented remnants of the construct, refracting light like a kaleidoscope.\""
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "287959": {
+   "name": "Titan Relic",
+   "quality": "common",
+   "icon": "inv_pet_scorchedstone",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "d",
+     "\"Fragmented remnants of the construct, refracting light like a kaleidoscope.\""
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "287992": {
+   "name": "Old Key",
+   "quality": "common",
+   "icon": "inv_misc_key_05",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "d",
+     "\"An old key.\""
+    ],
+    [
+     "l",
+     "Requires Level 35"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "287963": {
+   "name": "Roasted Quail",
+   "quality": "common",
+   "icon": "inv_misc_food_15",
+   "itemLevel": 55,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "g",
+     "Use: Restores 358 health over 30 sec. Must remain seated while eating."
+    ],
+    [
+     "y",
+     "Item Level 55"
+    ]
+   ],
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "287964": {
+   "name": "Morning Glory Dew",
+   "quality": "common",
+   "icon": "inv_potion_01",
+   "itemLevel": 55,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "g",
+     "Use: Restores 489 mana over 30 sec. Must remain seated while drinking."
+    ],
+    [
+     "y",
+     "Item Level 55"
+    ]
+   ],
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "287971": {
+   "name": "Woolen Bag",
+   "quality": "common",
+   "icon": "inv_misc_bag_10",
+   "itemLevel": 15,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "y",
+     "Item Level 15"
+    ]
+   ],
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "287966": {
+   "name": "Minor Healing Potion",
+   "quality": "common",
+   "icon": "inv_potion_49",
+   "itemLevel": 5,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "g",
+     "Use: Restores 70 to 90 health. (2 Min Cooldown)"
+    ],
+    [
+     "y",
+     "Item Level 5"
+    ]
+   ],
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "280404": {
+   "name": "Lordaeron Forever Tabard",
+   "quality": "common",
+   "icon": "inv_tabard_lordaeronc60_b_01",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Tabard"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "was": "epic",
+   "oldQuality": "epic",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "280729": {
+   "name": "Shen'dorei Tabard",
+   "quality": "common",
+   "icon": "/plan/img/icons/8101155.png",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Tabard"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "was": "epic",
+   "oldQuality": "epic",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "279182": {
+   "name": "Ensemble: Veteran Adventurer's Outdoor Wear",
+   "quality": "common",
+   "icon": "inv_helm_armor_dwarfc60_d_02",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "g",
+     "Use: Collect the appearances of this armor set."
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "was": "rare",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "280623": {
+   "name": "Veteran Adventurer's Rucksack",
+   "quality": "common",
+   "icon": "inv_cape_special_camping_d_01_green",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Back"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "was": "rare",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "280740": {
+   "name": "Shen'dorei Windwell",
+   "quality": "common",
+   "icon": "ability_skyreach_four_wind",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "g",
+     "Use: Summons your own portable Windwell for 15 min. (15 Min Cooldown)"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "was": "rare",
+   "oldQuality": "rare",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "280614": {
+   "name": "Pachimari",
+   "quality": "rare",
+   "icon": "inv_pachimarapet",
+   "itemLevel": 20,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "g",
+     "Use: Right Click to summon and dismiss your Pachimara."
+    ],
+    [
+     "d",
+     "\"Teaches you how to summon this companion.\""
+    ],
+    [
+     "y",
+     "Item Level 20"
+    ]
+   ],
+   "was": "epic",
+   "oldQuality": "epic",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "221192": {
+   "name": "Dream Journal",
+   "quality": "uncommon",
+   "icon": "inv_misc_book_09",
+   "itemLevel": 1,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "y",
+     "Item Level 1"
+    ]
+   ],
+   "was": "epic",
+   "oldQuality": "epic",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "276538": {
+   "name": "Spiritcaller Kilt",
+   "quality": "epic",
+   "icon": "inv_misc_desecrated_mailpants",
+   "itemLevel": 61,
+   "lines": [
+    [
+     "l",
+     "Binds when equipped"
+    ],
+    [
+     "l",
+     "Unique"
+    ],
+    [
+     "l",
+     "Legs\tMail"
+    ],
+    [
+     "l",
+     "344 Armor"
+    ],
+    [
+     "l",
+     "Classes: Shaman"
+    ],
+    [
+     "l",
+     "Requires Level 60"
+    ],
+    [
+     "y",
+     "Item Level 61"
+    ]
+   ],
+   "was": "classes: any",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "274748": {
+   "name": "Booty Bay Bruiser's Buckshot",
+   "quality": "rare",
+   "icon": "inv_weapon_rifle_02",
+   "itemLevel": 35,
+   "lines": [
+    [
+     "l",
+     "Binds when picked up"
+    ],
+    [
+     "l",
+     "Ranged\tGun"
+    ],
+    [
+     "l",
+     "+3 Stamina"
+    ],
+    [
+     "g",
+     "Equip: +9 Attack Power"
+    ],
+    [
+     "l",
+     "Requires Level 30"
+    ],
+    [
+     "y",
+     "Item Level 35"
+    ]
+   ],
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  },
+  "8345": {
+   "name": "Wolfshead Helm",
+   "quality": "rare",
+   "icon": "inv_helmet_04",
+   "itemLevel": 45,
+   "lines": [
+    [
+     "l",
+     "Binds when equipped"
+    ],
+    [
+     "l",
+     "Head\tLeather"
+    ],
+    [
+     "l",
+     "109 Armor"
+    ],
+    [
+     "l",
+     "+10 Spirit"
+    ],
+    [
+     "g",
+     "Equip: You gain an additional 5 Rage from activating Enrage and an additional 5 Energy from activating Shifting Power."
+    ],
+    [
+     "l",
+     "Classes: Druid"
+    ],
+    [
+     "l",
+     "Requires Level 40"
+    ],
+    [
+     "y",
+     "Item Level 45"
+    ]
+   ],
+   "was": "20 Energy from Shifting Power",
+   "src": "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
+  }
+ },
+ "rebase": [
+  {
+   "key": "wrath",
+   "name": "Wrath",
+   "cls": "Druid",
+   "cc": "#ff7c0a",
+   "icon": "spell_nature_abolishmagic",
+   "ranks": [
+    {
+     "r": 1,
+     "id": 5176,
+     "lv": [
+      1,
+      5
+     ],
+     "base": [
+      15.0,
+      15.0
+     ],
+     "per": [
+      0.4,
+      0.2
+     ],
+     "atmax": [
+      16.6,
+      15.8
+     ]
+    },
+    {
+     "r": 2,
+     "id": 5177,
+     "lv": [
+      6,
+      12
+     ],
+     "base": [
+      23.0,
+      21.0
+     ],
+     "per": [
+      0.6,
+      0.3
+     ],
+     "atmax": [
+      26.6,
+      22.8
+     ]
+    },
+    {
+     "r": 3,
+     "id": 5178,
+     "lv": [
+      14,
+      20
+     ],
+     "base": [
+      30.0,
+      30.0
+     ],
+     "per": [
+      0.7,
+      0.5
+     ],
+     "atmax": [
+      34.2,
+      33.0
+     ]
+    },
+    {
+     "r": 4,
+     "id": 5179,
+     "lv": [
+      22,
+      28
+     ],
+     "base": [
+      38.0,
+      37.0
+     ],
+     "per": [
+      0.9,
+      0.6
+     ],
+     "atmax": [
+      43.4,
+      40.6
+     ]
+    },
+    {
+     "r": 5,
+     "id": 5180,
+     "lv": [
+      30,
+      36
+     ],
+     "base": [
+      45.0,
+      45.0
+     ],
+     "per": [
+      0.9,
+      0.7
+     ],
+     "atmax": [
+      50.4,
+      49.2
+     ]
+    },
+    {
+     "r": 6,
+     "id": 6780,
+     "lv": [
+      38,
+      44
+     ],
+     "base": [
+      54.0,
+      54.0
+     ],
+     "per": [
+      0.9,
+      0.9
+     ],
+     "atmax": [
+      59.4,
+      59.4
+     ],
+     "same": true
+    }
+   ],
+   "cap": "A level-30 character's best rank, rank 5, is unchanged at the cap. Ranks 2 and 4 lose base damage, and ranks 1 to 5 grow slower per level."
+  },
+  {
+   "key": "fireball",
+   "name": "Fireball",
+   "cls": "Mage",
+   "cc": "#3fc7eb",
+   "icon": "spell_fire_flamebolt",
+   "ranks": [
+    {
+     "r": 1,
+     "id": 133,
+     "lv": [
+      1,
+      5
+     ],
+     "base": [
+      18.0,
+      18.0
+     ],
+     "per": [
+      0.6,
+      0.2
+     ],
+     "atmax": [
+      20.4,
+      18.8
+     ]
+    },
+    {
+     "r": 2,
+     "id": 143,
+     "lv": [
+      6,
+      10
+     ],
+     "base": [
+      37.0,
+      32.0
+     ],
+     "per": [
+      0.7,
+      0.3
+     ],
+     "atmax": [
+      39.8,
+      33.2
+     ]
+    },
+    {
+     "r": 3,
+     "id": 145,
+     "lv": [
+      12,
+      16
+     ],
+     "base": [
+      53.0,
+      51.0
+     ],
+     "per": [
+      0.9,
+      0.6
+     ],
+     "atmax": [
+      56.6,
+      53.4
+     ]
+    },
+    {
+     "r": 4,
+     "id": 3140,
+     "lv": [
+      18,
+      22
+     ],
+     "base": [
+      74.0,
+      77.0
+     ],
+     "per": [
+      1.1,
+      0.9
+     ],
+     "atmax": [
+      78.4,
+      80.6
+     ]
+    },
+    {
+     "r": 5,
+     "id": 8400,
+     "lv": [
+      24,
+      28
+     ],
+     "base": [
+      108.0,
+      120.0
+     ],
+     "per": [
+      1.5,
+      1.4
+     ],
+     "atmax": [
+      114.0,
+      125.6
+     ]
+    },
+    {
+     "r": 6,
+     "id": 8401,
+     "lv": [
+      30,
+      34
+     ],
+     "base": [
+      153.0,
+      153.0
+     ],
+     "per": [
+      1.8,
+      1.8
+     ],
+     "atmax": [
+      160.2,
+      160.2
+     ],
+     "same": true
+    }
+   ],
+   "cap": "A level-30 character's best rank, rank 6, is unchanged at the cap. The cut lands on ranks 2 and 3 while leveling; ranks 4 and 5 rise."
+  },
+  {
+   "key": "frostbolt",
+   "name": "Frostbolt",
+   "cls": "Mage",
+   "cc": "#3fc7eb",
+   "icon": "spell_frost_frostbolt02",
+   "ranks": [
+    {
+     "r": 1,
+     "id": 116,
+     "lv": [
+      4,
+      8
+     ],
+     "base": [
+      19.0,
+      19.0
+     ],
+     "per": [
+      0.5,
+      0.2
+     ],
+     "atmax": [
+      21.0,
+      19.8
+     ]
+    },
+    {
+     "r": 2,
+     "id": 205,
+     "lv": [
+      8,
+      12
+     ],
+     "base": [
+      33.0,
+      29.0
+     ],
+     "per": [
+      0.7,
+      0.3
+     ],
+     "atmax": [
+      35.8,
+      30.2
+     ]
+    },
+    {
+     "r": 3,
+     "id": 837,
+     "lv": [
+      14,
+      18
+     ],
+     "base": [
+      46.0,
+      46.0
+     ],
+     "per": [
+      0.9,
+      0.5
+     ],
+     "atmax": [
+      49.6,
+      48.0
+     ]
+    },
+    {
+     "r": 4,
+     "id": 7322,
+     "lv": [
+      20,
+      24
+     ],
+     "base": [
+      60.0,
+      70.0
+     ],
+     "per": [
+      1.1,
+      0.8
+     ],
+     "atmax": [
+      64.4,
+      73.2
+     ]
+    },
+    {
+     "r": 5,
+     "id": 8406,
+     "lv": [
+      26,
+      30
+     ],
+     "base": [
+      95.0,
+      104.0
+     ],
+     "per": [
+      1.5,
+      1.3
+     ],
+     "atmax": [
+      101.0,
+      109.2
+     ]
+    },
+    {
+     "r": 6,
+     "id": 8407,
+     "lv": [
+      32,
+      36
+     ],
+     "base": [
+      134.0,
+      134.0
+     ],
+     "per": [
+      1.7,
+      1.7
+     ],
+     "atmax": [
+      140.8,
+      140.8
+     ],
+     "same": true
+    }
+   ],
+   "cap": "Rises at the cap: rank 5 at level 30, 101 → 109.2 (inferred, Classic's per-level rule). Rank 2 is cut; ranks 4 and 5 rise.",
+   "note": "damage is its second effect",
+   "inf": true
+  },
+  {
+   "key": "arcanemissiles",
+   "name": "Arcane Missiles",
+   "cls": "Mage",
+   "cc": "#3fc7eb",
+   "icon": "spell_nature_starfall",
+   "ranks": [
+    {
+     "r": 1,
+     "id": 5143,
+     "lv": [
+      8,
+      12
+     ],
+     "base": [
+      24.0,
+      24.0
+     ],
+     "per": [
+      0.3,
+      0.2
+     ],
+     "atmax": [
+      25.2,
+      24.8
+     ]
+    },
+    {
+     "r": 2,
+     "id": 5144,
+     "lv": [
+      16,
+      20
+     ],
+     "base": [
+      31.0,
+      34.0
+     ],
+     "per": [
+      0.4,
+      0.3
+     ],
+     "atmax": [
+      32.6,
+      35.2
+     ]
+    },
+    {
+     "r": 3,
+     "id": 5145,
+     "lv": [
+      24,
+      28
+     ],
+     "base": [
+      44.0,
+      47.0
+     ],
+     "per": [
+      0.5,
+      0.4
+     ],
+     "atmax": [
+      46.0,
+      48.6
+     ]
+    },
+    {
+     "r": 4,
+     "id": 8416,
+     "lv": [
+      32,
+      36
+     ],
+     "base": [
+      66.0,
+      66.0
+     ],
+     "per": [
+      0.6,
+      0.6
+     ],
+     "atmax": [
+      68.4,
+      68.4
+     ],
+     "same": true
+    }
+   ],
+   "cap": "Rises at the cap: rank 3 (capped at its level 28), 46 → 48.6 per missile (inferred). Ranks 2 and 3 rise per missile; rank 1 only grows slower.",
+   "note": "per missile (spells 7268 to 7270)",
+   "inf": true
+  },
+  {
+   "key": "smite",
+   "name": "Smite",
+   "cls": "Priest",
+   "cc": "#ffffff",
+   "icon": "spell_holy_holysmite",
+   "ranks": [
+    {
+     "r": 1,
+     "id": 585,
+     "lv": [
+      1,
+      6
+     ],
+     "base": [
+      15.0,
+      15.0
+     ],
+     "per": [
+      0.5,
+      0.1
+     ],
+     "atmax": [
+      17.5,
+      15.5
+     ]
+    },
+    {
+     "r": 2,
+     "id": 591,
+     "lv": [
+      6,
+      11
+     ],
+     "base": [
+      28.0,
+      27.0
+     ],
+     "per": [
+      0.6,
+      0.3
+     ],
+     "atmax": [
+      31.0,
+      28.5
+     ]
+    },
+    {
+     "r": 3,
+     "id": 598,
+     "lv": [
+      14,
+      19
+     ],
+     "base": [
+      46.0,
+      45.0
+     ],
+     "per": [
+      0.8,
+      0.5
+     ],
+     "atmax": [
+      50.0,
+      47.5
+     ]
+    },
+    {
+     "r": 4,
+     "id": 984,
+     "lv": [
+      22,
+      27
+     ],
+     "base": [
+      59.0,
+      60.0
+     ],
+     "per": [
+      1.0,
+      0.7
+     ],
+     "atmax": [
+      64.0,
+      63.5
+     ]
+    },
+    {
+     "r": 5,
+     "id": 1004,
+     "lv": [
+      30,
+      35
+     ],
+     "base": [
+      81.0,
+      81.0
+     ],
+     "per": [
+      1.0,
+      1.0
+     ],
+     "atmax": [
+      86.0,
+      86.0
+     ],
+     "same": true
+    }
+   ],
+   "cap": "A level-30 character's best rank, rank 5, is unchanged at the cap. Ranks 2 and 3 are cut; rank 4 rises."
+  },
+  {
+   "key": "lesserheal",
+   "name": "Lesser Heal",
+   "cls": "Priest",
+   "cc": "#ffffff",
+   "icon": "spell_holy_lesserheal",
+   "ranks": [
+    {
+     "r": 1,
+     "id": 2050,
+     "lv": [
+      1,
+      3
+     ],
+     "base": [
+      51.0,
+      51.0
+     ],
+     "per": [
+      0.9,
+      0.3
+     ],
+     "atmax": [
+      52.8,
+      51.6
+     ]
+    },
+    {
+     "r": 2,
+     "id": 2052,
+     "lv": [
+      4,
+      9
+     ],
+     "base": [
+      78.0,
+      94.0
+     ],
+     "per": [
+      1.1,
+      0.7
+     ],
+     "atmax": [
+      83.5,
+      97.5
+     ]
+    },
+    {
+     "r": 3,
+     "id": 2053,
+     "lv": [
+      10,
+      15
+     ],
+     "base": [
+      141.0,
+      163.0
+     ],
+     "per": [
+      1.6,
+      1.2
+     ],
+     "atmax": [
+      149.0,
+      169.0
+     ]
+    }
+   ],
+   "cap": "Rank 3, the top rank, heals more: 141 → 163, and rank 2 78 → 94. Rank 1 only grows slower per level."
+  },
+  {
+   "key": "heal",
+   "name": "Heal",
+   "cls": "Priest",
+   "cc": "#ffffff",
+   "icon": "spell_holy_heal",
+   "ranks": [
+    {
+     "r": 1,
+     "id": 2054,
+     "lv": [
+      16,
+      21
+     ],
+     "base": [
+      291.0,
+      270.0
+     ],
+     "per": [
+      2.4,
+      2.0
+     ],
+     "atmax": [
+      303.0,
+      280.0
+     ]
+    },
+    {
+     "r": 2,
+     "id": 2055,
+     "lv": [
+      22,
+      27
+     ],
+     "base": [
+      405.0,
+      375.0
+     ],
+     "per": [
+      3.2,
+      2.9
+     ],
+     "atmax": [
+      421.0,
+      389.5
+     ]
+    },
+    {
+     "r": 3,
+     "id": 6063,
+     "lv": [
+      28,
+      33
+     ],
+     "base": [
+      523.0,
+      523.0
+     ],
+     "per": [
+      4.0,
+      4.0
+     ],
+     "atmax": [
+      543.0,
+      543.0
+     ],
+     "same": true
+    }
+   ],
+   "cap": "A level-30 character's best rank, rank 3 (level 28), is unchanged at the cap. Ranks 1 and 2 heal less."
+  },
+  {
+   "key": "lightningbolt",
+   "name": "Lightning Bolt",
+   "cls": "Shaman",
+   "cc": "#2e8fff",
+   "icon": "spell_nature_lightning",
+   "ranks": [
+    {
+     "r": 1,
+     "id": 403,
+     "lv": [
+      1,
+      6
+     ],
+     "base": [
+      14.0,
+      15.0
+     ],
+     "per": [
+      0.4,
+      0.1
+     ],
+     "atmax": [
+      16.0,
+      15.5
+     ]
+    },
+    {
+     "r": 2,
+     "id": 529,
+     "lv": [
+      8,
+      13
+     ],
+     "base": [
+      29.0,
+      27.0
+     ],
+     "per": [
+      0.5,
+      0.1
+     ],
+     "atmax": [
+      31.5,
+      27.5
+     ]
+    },
+    {
+     "r": 3,
+     "id": 548,
+     "lv": [
+      14,
+      19
+     ],
+     "base": [
+      45.0,
+      45.0
+     ],
+     "per": [
+      0.6,
+      0.3
+     ],
+     "atmax": [
+      48.0,
+      46.5
+     ]
+    },
+    {
+     "r": 4,
+     "id": 915,
+     "lv": [
+      20,
+      25
+     ],
+     "base": [
+      56.0,
+      61.0
+     ],
+     "per": [
+      0.6,
+      0.4
+     ],
+     "atmax": [
+      59.0,
+      63.0
+     ]
+    },
+    {
+     "r": 5,
+     "id": 943,
+     "lv": [
+      26,
+      31
+     ],
+     "base": [
+      72.0,
+      82.0
+     ],
+     "per": [
+      0.7,
+      0.5
+     ],
+     "atmax": [
+      75.5,
+      84.5
+     ]
+    },
+    {
+     "r": 6,
+     "id": 6041,
+     "lv": [
+      32,
+      37
+     ],
+     "base": [
+      111.0,
+      111.0
+     ],
+     "per": [
+      0.8,
+      0.8
+     ],
+     "atmax": [
+      115.0,
+      115.0
+     ],
+     "same": true
+    }
+   ],
+   "cap": "Rises at the cap: rank 5 at level 30, 74.8 → 84 (inferred). Rank 1 and ranks 4 and 5 rise; rank 2 is cut.",
+   "inf": true
+  },
+  {
+   "key": "shadowbolt",
+   "name": "Shadow Bolt",
+   "cls": "Warlock",
+   "cc": "#8788ee",
+   "icon": "spell_shadow_shadowbolt",
+   "ranks": [
+    {
+     "r": 1,
+     "id": 686,
+     "lv": [
+      1,
+      5
+     ],
+     "base": [
+      13.0,
+      13.0
+     ],
+     "per": [
+      0.3,
+      0.2
+     ],
+     "atmax": [
+      14.2,
+      13.8
+     ]
+    },
+    {
+     "r": 2,
+     "id": 695,
+     "lv": [
+      6,
+      11
+     ],
+     "base": [
+      25.0,
+      23.0
+     ],
+     "per": [
+      0.6,
+      0.3
+     ],
+     "atmax": [
+      28.0,
+      24.5
+     ]
+    },
+    {
+     "r": 3,
+     "id": 705,
+     "lv": [
+      12,
+      17
+     ],
+     "base": [
+      41.0,
+      40.0
+     ],
+     "per": [
+      0.7,
+      0.6
+     ],
+     "atmax": [
+      44.5,
+      43.0
+     ]
+    },
+    {
+     "r": 4,
+     "id": 1088,
+     "lv": [
+      20,
+      25
+     ],
+     "base": [
+      56.0,
+      58.0
+     ],
+     "per": [
+      0.9,
+      0.8
+     ],
+     "atmax": [
+      60.5,
+      62.0
+     ]
+    },
+    {
+     "r": 5,
+     "id": 1106,
+     "lv": [
+      28,
+      33
+     ],
+     "base": [
+      78.0,
+      78.0
+     ],
+     "per": [
+      1.2,
+      1.2
+     ],
+     "atmax": [
+      84.0,
+      84.0
+     ],
+     "same": true
+    }
+   ],
+   "cap": "A level-30 character's best rank, rank 5 (level 28), is unchanged at the cap. Ranks 2 and 3 are cut; rank 4 rises."
+  }
+ ],
+ "builds": {
+  "before": "1.60.1.70170",
+  "now": "1.60.1.70291",
+  "note": "70205, 70235 and 70245 serve the same tables as 70170."
+ }
+}
