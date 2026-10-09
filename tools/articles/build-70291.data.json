@@ -652,7 +652,7 @@
     ]
    ],
    "brief": "Intellect 9, +6 spell power",
-   "src": "Read in game: QuestBank uploads, build 70291.",
+   "src": "Read in game, build 70291.",
    "was": "rare · 29 armor, Spirit 7, Intellect 12",
    "wasAt": "ForeverChanges, build 70245",
    "oldQuality": "rare"
@@ -693,7 +693,7 @@
     ]
    ],
    "brief": "Stamina 7, Spirit 4, +12 Attack Power",
-   "src": "Read in game: QuestBank uploads, build 70291.",
+   "src": "Read in game, build 70291.",
    "was": "rare · 71 armor, Stamina 10, Spirit 5, +16 Attack Power",
    "wasAt": "ForeverChanges, build 70245",
    "oldQuality": "rare"
@@ -734,7 +734,7 @@
     ]
    ],
    "brief": "Strength 4, Stamina 11, Intellect 7",
-   "src": "Read in game: QuestBank uploads, build 70291.",
+   "src": "Read in game, build 70291.",
    "was": "rare · 178 armor, Stamina 11, Spirit 7, Strength 4",
    "wasAt": "ForeverChanges, build 70245"
   },
@@ -774,7 +774,7 @@
     ]
    ],
    "brief": "Intellect 11, Stamina 5, +11 healing, +4 spell damage",
-   "src": "Read in game: QuestBank uploads, build 70291."
+   "src": "Read in game, build 70291."
   },
   "279841": {
    "name": "Defender of Dalaran",
@@ -816,7 +816,7 @@
     ]
    ],
    "brief": "Strength 9, Stamina 13, Intellect 9",
-   "src": "Read in game: QuestBank uploads, build 70291.",
+   "src": "Read in game, build 70291.",
    "was": "rare · 82 - 124 damage, speed 3.30 (31.2 dps), Stamina 13, Agility 9, Strength 9",
    "wasAt": "ForeverChanges, build 70245"
   },
@@ -855,7 +855,7 @@
      "Item Level 36"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "src": "ForeverChanges' item files, build 1.60.1.70291.",
    "was": "rare · 26 armor, Stamina 8, +6 spell power",
    "wasAt": "ForeverChanges, build 70245",
    "oldQuality": "rare",
@@ -896,7 +896,7 @@
      "Item Level 36"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "src": "ForeverChanges' item files, build 1.60.1.70291.",
    "was": "rare · 134 armor, Stamina 12, +12 Attack Power",
    "wasAt": "ForeverChanges, build 70245",
    "oldQuality": "rare",
@@ -937,7 +937,7 @@
      "Item Level 36"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "src": "ForeverChanges' item files, build 1.60.1.70291.",
    "was": "rare · 78 armor, Stamina 10, Agility 7, Spirit 7",
    "wasAt": "ForeverChanges, build 70245",
    "oldQuality": "rare",
@@ -978,7 +978,7 @@
      "Item Level 36"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "src": "ForeverChanges' item files, build 1.60.1.70291.",
    "was": "rare · 104 armor, Stamina 8, Strength 4, Agility 4",
    "wasAt": "ForeverChanges, build 70245",
    "oldQuality": "rare",
@@ -1015,7 +1015,7 @@
      "Item Level 36"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "src": "ForeverChanges' item files, build 1.60.1.70291.",
    "was": "rare · 40 - 76 damage, speed 1.70 (34.1 dps), Stamina 6",
    "wasAt": "ForeverChanges, build 70245",
    "oldQuality": "rare",
@@ -1052,7 +1052,7 @@
      "Item Level 36"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "src": "ForeverChanges' item files, build 1.60.1.70291.",
    "was": "rare · 26 armor, Strength 7, Spirit 7",
    "wasAt": "ForeverChanges, build 70245",
    "oldQuality": "rare",
@@ -1093,7 +1093,7 @@
      "Item Level 36"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "src": "ForeverChanges' item files, build 1.60.1.70291.",
    "brief": "Stamina 11, Spirit 7, Strength 4"
   },
   "279843": {
@@ -1131,7 +1131,7 @@
      "Item Level 36"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "src": "ForeverChanges' item files, build 1.60.1.70291.",
    "was": "rare · 36 armor, Stamina 10, Agility 5, Intellect 8",
    "wasAt": "ForeverChanges, build 70245",
    "brief": "Stamina 10, +50 Armor, +9 spell power"
@@ -1175,7 +1175,7 @@
      "Item Level 36"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg).",
+   "src": "ForeverChanges' item files, build 1.60.1.70291.",
    "was": "rare · 77 - 117 damage, speed 3.10 (31.3 dps), Stamina 6, Strength 14, Spirit 9",
    "wasAt": "ForeverChanges, build 70245",
    "brief": "Stamina 6, Strength 9, Intellect 14"
@@ -1208,7 +1208,7 @@
     ]
    ],
    "brief": "Strength 3, +7 Arcane Resistance",
-   "src": "Read in game: QuestBank uploads, build 70291.",
+   "src": "Read in game, build 70291.",
    "was": "rare · Stamina 8, Strength 6",
    "wasAt": "ForeverChanges, build 70245",
    "oldQuality": "rare"
@@ -1237,7 +1237,7 @@
     ]
    ],
    "brief": "+11 Arcane spell damage",
-   "src": "Read in game: QuestBank uploads, build 70291.",
+   "src": "Read in game, build 70291.",
    "was": "rare · Intellect 8, +9 Arcane Spell Damage",
    "wasAt": "ForeverChanges, build 70245",
    "oldQuality": "rare"
@@ -1282,7 +1282,7 @@
     ]
    ],
    "brief": "+8 Attack Power, +9 Attack Power against Humanoids",
-   "src": "Read in game: QuestBank uploads, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
+   "src": "Read in game, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
   },
   "273035": {
    "name": "Mana-Warped Chain Shirt",
@@ -1324,7 +1324,7 @@
     ]
    ],
    "brief": "Strength 12, Stamina 8, +3 mana per 5",
-   "src": "Read in game: QuestBank uploads, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
+   "src": "Read in game, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
   },
   "273036": {
    "name": "Graveweave Bindings",
@@ -1366,7 +1366,7 @@
     ]
    ],
    "brief": "Strength 6, +2 mana per 5, +5 spell power",
-   "src": "Read in game: QuestBank uploads, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded.",
+   "src": "Read in game, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded.",
    "was": "rare · 21 armor, Strength 6, +5 spell power",
    "wasAt": "Wowhead's Forever database, by October 3"
   },
@@ -1410,7 +1410,7 @@
     ]
    ],
    "brief": "Agility 9, Stamina 7, Intellect 13",
-   "src": "Read in game: QuestBank uploads, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded.",
+   "src": "Read in game, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded.",
    "was": "rare · 110 armor, Agility 13, Stamina 7, Intellect 9",
    "wasAt": "Wowhead's Forever database, by October 3"
   },
@@ -1454,7 +1454,7 @@
     ]
    ],
    "brief": "Agility 9, Stamina 6, When struck in combat, drain 2 mana from the attacker",
-   "src": "Read in game: QuestBank uploads, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
+   "src": "Read in game, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
   },
   "273045": {
    "name": "Drape of Shifting Energy",
@@ -1492,7 +1492,7 @@
     ]
    ],
    "brief": "Spirit 7, +12 Attack Power",
-   "src": "Read in game: QuestBank uploads, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
+   "src": "Read in game, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
   },
   "273047": {
    "name": "Unstable Crystalline Shoulderpads",
@@ -1534,7 +1534,7 @@
     ]
    ],
    "brief": "Agility 9, Stamina 6, +2 mana per 5",
-   "src": "Read in game: QuestBank uploads, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded.",
+   "src": "Read in game, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded.",
    "was": "rare · 81 armor, Agility 9, Stamina 5",
    "wasAt": "Wowhead's Forever database, by October 3"
   },
@@ -1578,7 +1578,7 @@
     ]
    ],
    "brief": "Strength 12, +5 Arcane Resistance, +100 Armor",
-   "src": "Read in game: QuestBank uploads, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
+   "src": "Read in game, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
   },
   "273049": {
    "name": "Archmagister's Faceted Pendant",
@@ -1616,7 +1616,7 @@
     ]
    ],
    "brief": "Intellect 6, +12 Attack Power",
-   "src": "Read in game: QuestBank uploads, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
+   "src": "Read in game, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
   },
   "273054": {
    "name": "Cartilage Shapers",
@@ -1658,7 +1658,7 @@
     ]
    ],
    "brief": "Agility 9, Spirit 8, Increased Skinning +4",
-   "src": "Read in game: QuestBank uploads, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
+   "src": "Read in game, build 70291. Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
   },
   "273046": {
    "name": "Guardian's Dualblade",
@@ -1695,7 +1695,7 @@
      "Item Level 33"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). Seen dropping at Blizzard's BlizzCon demo run of the dungeon, per ForeverChanges' notes.",
+   "src": "ForeverChanges' item files, build 1.60.1.70291. Seen dropping at Blizzard's BlizzCon demo run of the dungeon, per ForeverChanges' notes.",
    "brief": "When damaged, has a chance to grant you 1080 armor for 12 sec"
   },
   "273052": {
@@ -1737,7 +1737,7 @@
      "Item Level 35"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). Seen dropping at Blizzard's BlizzCon demo run of the dungeon, per ForeverChanges' notes.",
+   "src": "ForeverChanges' item files, build 1.60.1.70291. Seen dropping at Blizzard's BlizzCon demo run of the dungeon, per ForeverChanges' notes.",
    "was": "rare · Stamina 5, Intellect 2, Spirit 8",
    "wasAt": "Wowhead's Forever database, by October 3",
    "brief": "Spirit 8, Intellect 2, +11 Healing, +4 Spell Damage"
@@ -1781,7 +1781,7 @@
      "Item Level 34"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop.",
+   "src": "ForeverChanges' item files, build 1.60.1.70291. Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop.",
    "was": "rare · 28 armor, Stamina 6, Intellect 10",
    "wasAt": "Wowhead's Forever database, by October 3",
    "brief": "Intellect 10, +7 spell power, +5 health per 5"
@@ -1825,7 +1825,7 @@
      "Item Level 33"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop.",
+   "src": "ForeverChanges' item files, build 1.60.1.70291. Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop.",
    "was": "rare · 157 armor, Strength 7, Stamina 7, Improves your chance to get a critical strike by 0.5%",
    "wasAt": "Wowhead's Forever database, by October 3",
    "brief": "Strength 7, Intellect 7, +7 Crit Rating"
@@ -1869,7 +1869,7 @@
      "Item Level 32"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop.",
+   "src": "ForeverChanges' item files, build 1.60.1.70291. Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop.",
    "was": "rare · 49 armor, Intellect 15, Spirit 8",
    "wasAt": "Wowhead's Forever database, by October 3",
    "brief": "Intellect 15, +9 spell power, When damaged, has a chance to reduce threat level on all enemies by a small amount for 10 sec"
@@ -2103,7 +2103,7 @@
      "Item Level 33"
     ]
    ],
-   "src": "ForeverChanges' item files, build 1.60.1.70291 (players' loot records via ForeverChanges and wowtbc.gg). The client's row is identical in 70170 and 70291.",
+   "src": "ForeverChanges' item files, build 1.60.1.70291. The client's row is identical in 70170 and 70291.",
    "brief": "Stamina 12, +5 mana per 5, +67 Healing, +22 Spell Damage"
   },
   "271667": {

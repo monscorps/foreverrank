@@ -254,7 +254,7 @@ RESIST_RE = __import__("re").compile(r"^\+(\d+) (Arcane|Fire|Frost|Nature|Shadow
 BONUS_ARMOR_RE = __import__("re").compile(r"^\+(\d+) Armor$")
 
 SRC_CLIENT = "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
-SRC_QB = "Read in game: QuestBank uploads, build %d."
+SRC_QB = "Read in game, build %d."
 QNAME = {0: "poor", 1: "common", 2: "uncommon", 3: "rare", 4: "epic", 5: "legendary"}
 PRIM_RE = __import__("re").compile(r"^\+(\d+) (Strength|Agility|Stamina|Intellect|Spirit)$")
 SRC_WH = "Wowhead's Forever database (server data, read by the site's item database)."
@@ -268,7 +268,7 @@ def src_of(row, note=""):
     s = row.get("source") or ""
     m = _BUILD_RE.search(s)
     if "foreverchanges" in s.lower() and m:
-        line = "ForeverChanges' item files, build 1.60.1.%s (players' loot records via ForeverChanges and wowtbc.gg)." % m.group(1)
+        line = "ForeverChanges' item files, build 1.60.1.%s." % m.group(1)
     elif "wowhead" in s.lower():
         line = SRC_WH
     else:
