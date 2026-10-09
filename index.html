@@ -38,7 +38,7 @@ a.hn-feature:hover { border-color: var(--gold); transform: translateY(-2px); }
 .hn-art { position: relative; background: var(--img) center/cover no-repeat; min-height: 14rem; }
 .hn-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(11,20,24,0) 55%, #0b1418), linear-gradient(0deg, rgba(11,20,24,.78), rgba(11,20,24,0) 48%); }
 .hn-art .hn-src { position: absolute; left: 1rem; top: 1rem; z-index: 1; }
-.hn-art h3 { position: absolute; left: 1.1rem; right: 1.1rem; bottom: 1rem; z-index: 1; margin: 0; font: 400 clamp(1.4rem, 3vw, 2.1rem)/1.12 var(--display-serif); color: #fff; text-shadow: 0 2px 16px rgba(0,0,0,.8); }
+.hn-art h3 { position: absolute; left: 1.1rem; right: 1.1rem; bottom: 1rem; z-index: 1; margin: 0; font: 400 clamp(1.4rem, 3vw, 2.1rem)/1.12 var(--display-serif); color: #fff; text-shadow: 0 2px 16px rgba(0,0,0,.8); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; } /* a long headline is cut at four lines instead of climbing over the art */
 .hn-side { display: flex; flex-direction: column; gap: .7rem; padding: 1.1rem 1.2rem 1.2rem; }
 .hn-side .hn-date { font: 600 .64rem/1 var(--heading); letter-spacing: .14em; text-transform: uppercase; color: var(--subtle); }
 .hn-hl { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
