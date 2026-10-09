@@ -254,7 +254,7 @@ RESIST_RE = __import__("re").compile(r"^\+(\d+) (Arcane|Fire|Frost|Nature|Shadow
 BONUS_ARMOR_RE = __import__("re").compile(r"^\+(\d+) Armor$")
 
 SRC_CLIENT = "Client build 70291: ItemSparse, decoded from the item budget; armor and damage computed from the client's tables."
-SRC_QB = "Read in a player's game: QuestBank uploads, build %d, %s UTC."
+SRC_QB = "Read in game: QuestBank uploads, build %d."
 QNAME = {0: "poor", 1: "common", 2: "uncommon", 3: "rare", 4: "epic", 5: "legendary"}
 PRIM_RE = __import__("re").compile(r"^\+(\d+) (Strength|Agility|Stamina|Intellect|Spirit)$")
 SRC_WH = "Wowhead's Forever database (server data, read by the site's item database)."
@@ -460,7 +460,7 @@ def db_item(iid, db, tip=None, note="", extra=None):
         if e["quality"] != row["quality"]:
             sys.exit("item %s: the game printed quality %r, the database row says %r" % (iid, e["quality"], row["quality"]))
         when = datetime.datetime.fromtimestamp(tip["at"], datetime.timezone.utc).strftime("%-d %B, %H:%M")
-        e["src"] = (SRC_QB % (tip["b"], when) + " " + note).strip()
+        e["src"] = (SRC_QB % tip["b"] + " " + note).strip()
         w = was_of(row, WAS.get(iid))
         if w:
             e["was"], e["wasAt"] = w
@@ -504,7 +504,7 @@ def db_item(iid, db, tip=None, note="", extra=None):
 DALARAN_REWARDS = ["251962", "279849", "279839", "279840", "279841", "279835", "279836", "251963", "251965",
                    "279847", "279848", "279842", "279843", "279844", "279837", "279838"]
 # the 15 named rows of the boss-loot block 273031 to 273055, each with how it is tied to Dalaran (the tooltip's last words)
-_RUN = "Looted in a City of Dalaran run by a player (QuestBank upload); which boss dropped it was not recorded."
+_RUN = "Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
 _DEMO = "Seen dropping at Blizzard's BlizzCon demo run of the dungeon, per ForeverChanges' notes."
 _PROB = "Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop."
 BOSS_BLOCK = {"273033": _RUN, "273035": _RUN, "273036": _RUN, "273038": _RUN, "273041": _RUN, "273045": _RUN, "273047": _RUN,
@@ -700,7 +700,7 @@ def main():
     path = os.path.join(HERE, "build-70291.data.json")
     json.dump(data, open(path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     was = sorted(k for k, v in data["items"].items() if v.get("was"))
-    game = sorted(k for k, v in data["items"].items() if v.get("src", "").startswith("Read in a player's game"))
+    game = sorted(k for k, v in data["items"].items() if v.get("src", "").startswith("Read in game"))
     print("wrote %s (%d spells, %d items, %d rebase spells; %d tooltips from a player's game, %d with a 'was' line)"
           % (os.path.relpath(path, ROOT), len(data["spells"]), len(data["items"]), len(data["rebase"]), len(game), len(was)))
 
