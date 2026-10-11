@@ -161,3 +161,7 @@ CREATE TABLE IF NOT EXISTS probe_uploads (
 CREATE INDEX IF NOT EXISTS idx_probe_hash ON probe_uploads(hash);
 CREATE INDEX IF NOT EXISTS idx_probe_received ON probe_uploads(received DESC);
 
+-- Page views (worker: /api/hit, sent once per page load by nav.js). Counts only: per day and path, and per day and
+-- referring host. No IP, user agent, cookie or anything per reader. The Worker also creates these on first use.
+CREATE TABLE IF NOT EXISTS page_views (day TEXT NOT NULL, path TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, path));
+CREATE TABLE IF NOT EXISTS page_refs (day TEXT NOT NULL, host TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, host));

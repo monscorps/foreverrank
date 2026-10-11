@@ -369,6 +369,11 @@ Corrections welcome: open an issue.
   the Wire, credited as "Blizzard (X)".
 - Players' QuestBank uploads: the quest XP the game paid after the 1 October
   cut (164 quests agree with the cut), quoted in the level-30 article.
+- 2026-10-11, **page views**: each page sends one beacon when it loads (nav.js) to the
+  site's Worker, which keeps a count per day and page and per day and referring
+  site, nothing else: no cookies, no IP addresses, no browser details, nothing
+  per reader. Browsers that ask not to be tracked are not counted. Read with
+  tools/visits.py (admin key).
 
 ## QuestBank (/questbank/)
 

@@ -864,6 +864,79 @@ async function handleProbeStats(env) {
     200, { 'cache-control': 'public, max-age=120' });
 }
 
+/* ---------- page views ----------
+ * Each page of the site sends one beacon when it loads (nav.js): its path and the address of the page the reader came
+ * from. Kept: a count per day and path, and per day and referring site (host only). Not kept: IP addresses, user agents,
+ * cookies or anything else about a reader, so the numbers are page views, not people. Requests that say they are bots,
+ * or that don't come from the site, are not counted. Read back only with the admin key (tools/visits.py). */
+const HIT_ORIGIN = /^https:\/\/(www\.)?foreverrank\.com$/;
+const HIT_PATH = /^\/[a-z0-9\-\/]{0,90}$/;
+const HIT_BOT = /bot|crawl|spider|slurp|headless|lighthouse|preview|python|curl|wget|httpclient/i;
+const HIT_TABLES = [
+  'CREATE TABLE IF NOT EXISTS page_views (day TEXT NOT NULL, path TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, path))',
+  'CREATE TABLE IF NOT EXISTS page_refs (day TEXT NOT NULL, host TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, host))',
+];
+
+/** A page path as the count keeps it: no query or hash, "/x/index.html" as "/x/", lower case; null when it isn't one. */
+export function hitPath(p) {
+  let path = String(p || '').split(/[?#]/)[0].toLowerCase().replace(/\/index\.html$/, '/');
+  if (path && !path.endsWith('/')) path += '/';
+  return HIT_PATH.test(path) ? path.replace(/\/{2,}/g, '/') : null;
+}
+
+/** The referring site's host, without "www."; null for the site itself, a missing referrer or a malformed one. */
+export function hitRef(r) {
+  try {
+    const host = new URL(String(r || '')).hostname.toLowerCase().replace(/^www\./, '');
+    if (!host || host === 'foreverrank.com' || !/^[a-z0-9.\-]{1,80}$/.test(host)) return null;
+    return host;
+  } catch { return null; }
+}
+
+async function handleHit(req, env) {
+  const origin = req.headers.get('origin') || '';
+  let from = origin;
+  if (!from) { try { from = new URL(req.headers.get('referer') || '').origin; } catch { from = ''; } }
+  const quiet = new Response(null, { status: 204 });
+  if (!HIT_ORIGIN.test(from) || HIT_BOT.test(req.headers.get('user-agent') || '')) return quiet;
+  let body;
+  try { body = JSON.parse((await req.text()).slice(0, 1000)); } catch { return quiet; }
+  const path = hitPath(body && body.p);
+  if (!path) return quiet;
+  const host = hitRef(body && body.r);
+  const day = new Date().toISOString().slice(0, 10);
+  const write = () => env.DB.batch([
+    env.DB.prepare('INSERT INTO page_views (day, path, n) VALUES (?, ?, 1) ON CONFLICT(day, path) DO UPDATE SET n = n + 1').bind(day, path),
+    ...(host ? [env.DB.prepare('INSERT INTO page_refs (day, host, n) VALUES (?, ?, 1) ON CONFLICT(day, host) DO UPDATE SET n = n + 1').bind(day, host)] : []),
+  ]);
+  try {
+    await write();
+  } catch (err) {
+    // the first view after a deploy makes the two tables (they are in schema.sql too)
+    if (!/no such table/i.test(String(err && err.message))) throw err;
+    await env.DB.batch(HIT_TABLES.map((sql) => env.DB.prepare(sql)));
+    await write();
+  }
+  return quiet;
+}
+
+/** Page views for the last N days (1-365): per day, per page and per referring site. Only with the admin key. */
+async function handleHits(req, url, env) {
+  const key = req.headers.get('x-admin-key') || '';
+  if (!env.PROBE_ADMIN_KEY || !key || (await sha256Hex(key)) !== (await sha256Hex(env.PROBE_ADMIN_KEY)))
+    return json({ error: 'unauthorised' }, 401);
+  const days = Math.min(365, Math.max(1, Number(url.searchParams.get('days') || 30)));
+  const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+  const q = async (sql) => {
+    try { return (await env.DB.prepare(sql).bind(since).all()).results || []; }
+    catch (err) { if (/no such table/i.test(String(err && err.message))) return []; throw err; }
+  };
+  const perDay = await q('SELECT day, SUM(n) AS n FROM page_views WHERE day >= ? GROUP BY day ORDER BY day');
+  const perPage = await q('SELECT path, SUM(n) AS n FROM page_views WHERE day >= ? GROUP BY path ORDER BY n DESC LIMIT 60');
+  const perRef = await q('SELECT host, SUM(n) AS n FROM page_refs WHERE day >= ? GROUP BY host ORDER BY n DESC LIMIT 40');
+  return json({ since, days, total: perDay.reduce((a, r) => a + r.n, 0), perDay, perPage, perRef });
+}
+
 /** The merge tool's read: rows after an id, bodies as base64 gzip. Only with the admin key. */
 async function handleProbePull(req, url, env) {
   const key = req.headers.get('x-admin-key') || '';
@@ -919,10 +992,12 @@ export default {
       if (url.pathname === '/api/probe' && req.method === 'POST') return await handleProbeUpload(req, env, ctx);
       if (url.pathname === '/api/probe/stats') return await handleProbeStats(env);
       if (url.pathname === '/api/probe/pull') return await handleProbePull(req, url, env);
+      if (url.pathname === '/api/hit' && req.method === 'POST') return await handleHit(req, env);
+      if (url.pathname === '/api/hits') return await handleHits(req, url, env);
       if (url.pathname === '/' || url.pathname === '/api')
         return json({
           service: 'foreverrank',
-          routes: ['/api/stats', '/api/leaderboard', '/api/baseline', '/api/rares', '/api/enrol', '/api/submit', '/api/hello', '/api/clients', '/api/probe', '/api/probe/stats'],
+          routes: ['/api/stats', '/api/leaderboard', '/api/baseline', '/api/rares', '/api/enrol', '/api/submit', '/api/hello', '/api/clients', '/api/probe', '/api/probe/stats', '/api/hit'],
           board: 'https://foreverrank.com',
         });
       return json({ error: 'not found' }, 404);

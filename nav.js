@@ -76,3 +76,18 @@
   document.addEventListener("click", function (e) { if (!e.target.closest || !e.target.closest(".mdd")) closeAll(); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeAll(); });
 })();
+
+/* One page view for the site's own count (the Worker's /api/hit): this page's path and the site you came from, nothing
+ * about you (no cookie, no id; the Worker keeps daily totals only). Skipped when the browser asks not to be tracked,
+ * and anywhere but the live site. */
+(function () {
+  "use strict";
+  try {
+    if (!/(^|\.)foreverrank\.com$/.test(location.hostname)) return;
+    if (navigator.doNotTrack === "1" || window.doNotTrack === "1" || navigator.globalPrivacyControl === true) return;
+    var url = "https://foreverrank.andustemme.workers.dev/api/hit";
+    var body = JSON.stringify({ p: location.pathname, r: document.referrer || "" });
+    if (navigator.sendBeacon) navigator.sendBeacon(url, new Blob([body], { type: "text/plain" }));
+    else fetch(url, { method: "POST", body: body, keepalive: true, mode: "no-cors" });
+  } catch (e) { /* a count is never worth an error */ }
+})();
