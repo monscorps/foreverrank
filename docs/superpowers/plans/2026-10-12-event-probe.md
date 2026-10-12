@@ -464,11 +464,11 @@ Register: `"MERCHANT_SHOW", "LOOT_OPENED", "ENCOUNTER_START", "ENCOUNTER_END", "
 
 - [ ] **Step 4: Harness passes. Step 5: Commit** `"QuestBank probe: merchants, chests, combat and encounter timing"`.
 
-### Task 5: Off switch, clear on untick, and the hidden /qb probe readout
+### Task 5: Off switch, clear on untick, and the hidden /qb events readout
 
 **Files:**
 - Modify: `tools/questbank/QuestBank/Observe.lua` (`Observe.Clear()`)
-- Modify: `tools/questbank/QuestBank/Core.lua` (where unticking "Note items, spells and loot" calls `QB.Loot.Clear()`: also call `QB.Observe.Clear()`; slash `/qb probe` prints the per-event table to chat, counts only)
+- Modify: `tools/questbank/QuestBank/Core.lua` (where unticking "Note items, spells and loot" calls `QB.Loot.Clear()`: also call `QB.Observe.Clear()`; slash `/qb events` prints the per-event table to chat, counts only)
 - Test: `tools/questbank/harness.lua`
 
 - [ ] **Step 1: Test**
@@ -478,11 +478,11 @@ Register: `"MERCHANT_SHOW", "LOOT_OPENED", "ENCOUNTER_START", "ENCOUNTER_END", "
   assert(DB.diag.ev == nil, "clear drops the probe's counts")
   Ob.Note("X", { a = 1 })
   local chat0 = #c.chat
-  c.env.SlashCmdList.QUESTBANK("probe")
-  assert(#c.chat > chat0 and table.concat(c.chat, "\n", chat0 + 1):find("X", 1, true) and table.concat(c.chat, "\n", chat0 + 1):find("1 ok", 1, true), "/qb probe lists the events with their counts")
+  c.env.SlashCmdList.QUESTBANK("events")
+  assert(#c.chat > chat0 and table.concat(c.chat, "\n", chat0 + 1):find("X", 1, true) and table.concat(c.chat, "\n", chat0 + 1):find("1 ok", 1, true), "/qb events lists the events with their counts")
 ```
 
-(Check the slash handler's name with `grep -n "SlashCmdList" QuestBank/Core.lua`; use that name.)
+(`/qb probe` is taken by the ForeverProbe retirement message, so the readout is `/qb events`.)
 
 - [ ] **Step 2: Fail, Step 3: Implement**
 
@@ -507,9 +507,9 @@ function Observe.Report(say)
 end
 ```
 
-In Core.lua's slash handler add `elseif cmd == "probe" then QB.Observe.Report(QB.Say)` (use whatever chat print function Core already uses for `/qb errors`; grep `"errors"`). Where the settings untick clears Loot, add `if QB.Observe then QB.Observe.Clear() end`.
+In Core.lua's slash handler add `elseif cmd == "events" then QB.Observe.Report(QB.Say)` (use whatever chat print function Core already uses for `/qb errors`; grep `"errors"`). Where the settings untick clears Loot, add `if QB.Observe then QB.Observe.Clear() end`.
 
-- [ ] **Step 4: Harness passes. Step 5: Commit** `"QuestBank probe: /qb probe readout, cleared with the notes box"`.
+- [ ] **Step 4: Harness passes. Step 5: Commit** `"QuestBank probe: /qb events readout, cleared with the notes box"`.
 
 ### Task 6: Release 3.7.0
 
@@ -517,7 +517,7 @@ In Core.lua's slash handler add `elseif cmd == "probe" then QB.Observe.Report(QB
 - Modify: `tools/questbank/QuestBank/Core.lua:5`, `tools/questbank/QuestBank/QuestBank.toc:5`, `questbank/index.html` (version lines, release notes lead + bullets, zip sizes), `SOURCES.md` (one ledger line), `tools/questbank/OBSERVER-EVENTS.md` (create: the table to be filled from the next upload, with the event list and columns works / secret / absent)
 - Rebuild: `questbank/QuestBank.zip`, `questbank/QuestBank-Uploader.zip`
 
-- [ ] **Step 1: Bump the version** in Core.lua and the TOC to `3.7.0`; in questbank/index.html replace every `3.6.2` with `3.7.0`, the date with `12 October 2026`, and add the release note lead "3.7.0 asks the game what it will tell addons" with bullets: "Counts, per event, whether the client hands QuestBank readable values, secret values or nothing: the groundwork for recording what bosses cast and what vendors sell." / "`/qb probe` shows the counts; the notes box clears them." / "Nothing new is uploaded about you: field names and value kinds only."
+- [ ] **Step 1: Bump the version** in Core.lua and the TOC to `3.7.0`; in questbank/index.html replace every `3.6.2` with `3.7.0`, the date with `12 October 2026`, and add the release note lead "3.7.0 asks the game what it will tell addons" with bullets: "Counts, per event, whether the client hands QuestBank readable values, secret values or nothing: the groundwork for recording what bosses cast and what vendors sell." / "`/qb events` shows the counts; the notes box clears them." / "Nothing new is uploaded about you: field names and value kinds only."
 
 - [ ] **Step 2: Rebuild the zips and run the uploader test**
 
