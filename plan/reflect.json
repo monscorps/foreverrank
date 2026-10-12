@@ -1,5 +1,5 @@
 {
- "note": "Damage done back to attackers by class abilities and buffs, from the beta client's spell tables (build 1.60.1.70291, tools/apply_reflect.py) unless a field says otherwise. Retribution Aura ranks are [level learned, base damage per hit taken, spell id]; retCoef is the share of the paladin's Holy spell damage added to it (retCoefSrc says where it comes from). Blessing of Sanctuary is not in the Forever client at all. Improved Retribution Aura (spells 20091/20092) still has spell rows in the client, but no Forever talent teaches it, so nothing raises Retribution Aura's damage.",
+ "note": "Damage done back to attackers by class abilities and buffs, from the beta client's spell tables (build 1.60.1.70338, tools/apply_reflect.py) unless a field says otherwise. Retribution Aura ranks are [level learned, base damage per hit taken, spell id]; retCoef is the share of the paladin's Holy spell damage added to it (retCoefSrc says where it comes from). Blessing of Sanctuary is not in the Forever client at all. Improved Retribution Aura (spells 20091/20092) still has spell rows in the client, but no Forever talent teaches it, so nothing raises Retribution Aura's damage.",
  "classes": {
   "PALADIN": {
    "retAura": [

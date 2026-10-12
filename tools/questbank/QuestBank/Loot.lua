@@ -275,13 +275,36 @@ function Loot.EncounterEnd(encounterID, success, units)
   if not e or won ~= 1 then return end
   local kill = { e = e, t = now() }
   if type(units) == "table" then
-    local list = {}
+    local list, seenKeys = {}, nil
     for _, u in ipairs(units) do
       u = plain(u)
-      local cid = type(u) == "table" and num(u.creatureID) or nil
-      if cid then list[cid] = true end
+      if type(u) == "table" then
+        -- the creature's id, whichever field carries it and whether as a number or a string; a GUID field names it too
+        local cid = num(u.creatureID) or num(u.creatureId) or num(u.npcID) or num(u.npcId) or num(u.id)
+        if not cid then
+          for _, k in ipairs({ "creatureID", "creatureId", "npcID", "npcId", "id" }) do
+            local v = plain(u[k])
+            if type(v) == "string" then cid = tonumber(v); if cid then break end end
+          end
+        end
+        if not cid then
+          local g = plain(u.unitGUID) or plain(u.guid) or plain(u.GUID)
+          local key = type(g) == "string" and QB.Disc and QB.Disc.Key and QB.Disc.Key(g) or nil
+          if type(key) == "string" and key:sub(1, 1) == "c" then cid = tonumber(key:sub(2)) end
+        end
+        if cid then list[cid] = true end
+        if not seenKeys then
+          -- the field names the list carries (never their values): the first uploads say which the client uses
+          seenKeys = {}
+          for k in pairs(u) do if type(k) == "string" then seenKeys[#seenKeys + 1] = k end end
+          table.sort(seenKeys)
+        end
+      end
     end
     if next(list) then kill.c = list end
+    if seenKeys and QuestBankDB and type(QuestBankDB.diag) == "table" and type(QuestBankDB.diag.loot) == "table" then
+      QuestBankDB.diag.loot.uk = table.concat(seenKeys, ","):sub(1, 120)
+    end
   end
   lastKill = kill
 end

@@ -507,9 +507,10 @@ DALARAN_REWARDS = ["251962", "279849", "279839", "279840", "279841", "279835", "
 _RUN = "Looted in a City of Dalaran run (QuestBank upload); which boss dropped it was not recorded."
 _DEMO = "Seen dropping at Blizzard's BlizzCon demo run of the dungeon, per ForeverChanges' notes."
 _PROB = "Dalaran link inferred: the row sits in the client's probable boss-loot block; no one has seen it drop."
-BOSS_BLOCK = {"273033": _RUN, "273035": _RUN, "273036": _RUN, "273038": _RUN, "273041": _RUN, "273045": _RUN, "273047": _RUN,
-              "273048": _RUN, "273049": _RUN, "273054": _RUN, "273046": _DEMO, "273052": _DEMO,
-              "273039": _PROB, "273042": _PROB, "273044": _PROB}
+_REC = "Recorded by QuestBank's loot notes in a City of Dalaran run: the loot window after the boss's kill."
+BOSS_BLOCK = {"273033": _RUN, "273035": _REC, "273036": _RUN, "273038": _RUN, "273041": _RUN, "273045": _REC, "273047": _RUN,
+              "273048": _REC, "273049": _REC, "273054": _REC, "273046": _DEMO, "273052": _DEMO,
+              "273034": _REC, "273037": _REC, "273042": _REC, "273044": _REC, "273053": _REC, "273039": _PROB}
 DALARAN_MISC = ["277507", "251961", "275997", "251983", "275996", "275989", "276561", "285327", "10327", "212792"]
 EXCAVATION = ["271667", "271664", "271670", "271740", "271732", "271769", "280766", "271716", "271719", "271766"]
 # Healer's Staff: its client row is identical in 70170 and 70291, but the client's damage tables give it 27.9 dps where

@@ -49,6 +49,7 @@ WAGO = os.path.join(ROOT, "research", "wago")
 CMANGOS = os.path.join(ROOT, "research", "cmangos", "ClassicDB.sql.gz")
 HAND = os.path.join(ROOT, "tools", "creature_names.json")
 SIGHTINGS = os.path.join(ROOT, "tools", "item_sightings.json")
+ITEMDB = os.path.join(ROOT, "plan", "items-db.json")
 PG = "players' games"
 # item classes kept: 2 weapon, 4 armor, 9 recipe, 12 quest; an id no table knows is kept too
 KEEP_CLASS = {2, 4, 9, 12}
@@ -129,8 +130,18 @@ def load_inputs():
             if str(k).isdigit() and int(k) not in cls and isinstance(v, dict) and isinstance(v.get("c"), int):
                 cls[int(k)] = v["c"]
     creatures, chests = classic_names()
+    # item quality, for the time-link rule: the site's database, else what players' tooltips said (0 poor .. 4 epic)
+    qual = {}
+    if os.path.exists(ITEMDB):
+        qn = {"poor": 0, "common": 1, "uncommon": 2, "rare": 3, "epic": 4, "legendary": 5}
+        for it in json.load(open(ITEMDB)).get("items") or []:
+            if it.get("quality") in qn:
+                qual[int(it["id"])] = qn[it["quality"]]
+    for k, v in ((disc.get("probe") or {}).get("tips") or {}).items():
+        if str(k).isdigit() and isinstance(v, dict) and isinstance(v.get("q"), int):
+            qual.setdefault(int(k), v["q"])
     return {"loot": disc.get("loot") or {}, "uploads": (disc.get("meta") or {}).get("with_loot", 0), "enc": enc, "maps": maps,
-            "cls": cls, "creatures": creatures, "chests": chests, "hand": hand_names(), "build": build}
+            "cls": cls, "qual": qual, "creatures": creatures, "chests": chests, "hand": hand_names(), "build": build}
 
 
 # ----------------------------------------------------------------------------------------------- naming
@@ -141,18 +152,30 @@ def top(votes):
     return int(sorted(votes.items(), key=lambda kv: (-kv[1], int(kv[0])))[0][0])
 
 
-def time_linked(key, s, exact, rep):
+def worthy(s, qual):
+    """A creature whose recorded drops hold something uncommon or better: what a boss corpse looks like. Trash
+    looted right after a kill drops greys and commons, and that is what a time link must not put on a boss."""
+    return any(qual.get(int(i), -1) >= 2 for i in (s.get("i") or {}))
+
+
+def time_linked(key, s, exact, rep, rivals=None, qual=None):
     """The encounter a time link names this creature after, when the link holds; else None, with the reason in the
-    report. It holds when TIME_LINK_VOTES uploads made it and no upload's game-made list named another creature for
-    that fight (then the fight's boss is known and this corpse was something else)."""
+    report. It holds when TIME_LINK_VOTES uploads made it, no upload's game-made list named another creature for
+    that fight (then the fight's boss is known and this corpse was something else), the creature's drops hold
+    something uncommon or better, and no other creature with such drops claims the same fight by time."""
     e = top(s.get("ei"))
     if not e:
         return None
     votes = (s.get("ei") or {}).get(str(e), 0)
+    others = [k for k in (rivals or {}).get(e, []) if k != key]
     if e in exact:
         why = "the game's own list named creature %s for fight %d" % (", ".join(str(c) for c in sorted(exact[e])), e)
     elif votes < TIME_LINK_VOTES:
         why = "fight %d from %d upload%s, %d wanted" % (e, votes, "" if votes == 1 else "s", TIME_LINK_VOTES)
+    elif qual is not None and not worthy(s, qual):
+        why = "fight %d, but its drops are all common or poor: looted trash, not the boss" % e
+    elif others:
+        why = "fight %d is also claimed by time by %s, each with uncommon drops: no way to tell the boss" % (e, ", ".join(others))
     else:
         return e
     if rep is not None:
@@ -173,7 +196,7 @@ def name_source(key, s, im, inp, exact=None, rep=None):
         return None, "object", "unnamed"
     e, how = top(s.get("e")), "encounter"
     if not e:
-        e, how = time_linked(key, s, exact or {}, rep), TIME_HOW
+        e, how = time_linked(key, s, exact or {}, rep, inp.get("rivals"), inp.get("qual")), TIME_HOW
     if e and e in inp["enc"]:
         name, emap = inp["enc"][e]
         if emap == im:
@@ -252,6 +275,14 @@ def merge(doc, inp):
     for k in keys:
         for e in (inp["loot"][k].get("e") or {}) if k[0] == "c" else ():
             exact.setdefault(int(e), set()).add(int(k[1:]))
+    # creatures with uncommon-or-better drops that claim each fight by time: more than one and none is placed
+    rivals = {}
+    for k in keys:
+        s = inp["loot"][k]
+        e = top(s.get("ei"))
+        if k[0] == "c" and e and worthy(s, inp["qual"]):
+            rivals.setdefault(e, []).append(k)
+    inp["rivals"] = rivals
 
     def settled(k):
         s = inp["loot"][k]
@@ -390,12 +421,17 @@ def selftest():
             "c246031": {"u": 2, "n": 1, "b": 70291, "m": {}, "im": {"2959": 2}, "d": {"1": 2}, "e": {}, "ei": {"3303": 2}, "i": {"273046": {"v": 2, "n": 1}}, "last": 2},
             # no place at all: the client hid it, or a battleground
             "c9": {"u": 1, "n": 1, "b": 70291, "m": {}, "im": {}, "d": {}, "e": {}, "ei": {}, "i": {"5447": {"v": 1, "n": 1}}, "last": 1},
+            # a time link from two uploads to Herod's fight, but every drop common: looted trash, not the boss
+            "c4001": {"u": 2, "n": 2, "b": 70291, "m": {}, "im": {"189": 2}, "d": {}, "e": {}, "ei": {"449": 2}, "i": {"7721": {"v": 2, "n": 1}}, "last": 2},
         },
         "uploads": 2,
         "enc": {3303: ("Shade of the Archmage", 2959), 3311: ("Atrexis the Grave Knight", 2959), 2741: ("Rhahk'Zor", 36), 448: ("Herod", 189),
-                3900: ("Lord Mistmantle", 3109)},
+                449: ("Arcanist Doan", 189), 3900: ("Lord Mistmantle", 3109)},
+        # item quality as the site's database has it (2 uncommon and up is what a boss drop looks like)
+        "qual": {273031: 3, 273032: 3, 2589: 1, 5440: 1, 5443: 2, 5444: 2, 7719: 3, 7720: 1, 7721: 1, 280001: 3, 273041: 3, 273042: 3,
+                 273045: 3, 273046: 3, 5447: 1},
         "maps": {2959: "City of Dalaran", 36: "Deadmines", 189: "Scarlet Monastery", 3109: "Manor Mistmantle", 34: "Stormwind Stockade"},
-        "cls": {273031: 4, 273032: 2, 2589: 7, 5440: 12, 5443: 4, 5444: 4, 7719: 4, 7720: 4, 280001: 4, 273041: 4, 273042: 4, 273045: 4,
+        "cls": {273031: 4, 273032: 2, 2589: 7, 5440: 12, 5443: 4, 5444: 4, 7719: 4, 7720: 4, 7721: 4, 280001: 4, 273041: 4, 273042: 4, 273045: 4,
                 273046: 2, 5447: 4},
         "creatures": {644: ("Rhahk'Zor", 1), 3586: ("Miner Johnson", 2), 3975: ("Herod", 1), 4000: ("Scarlet Gallant", 1), 197: ("Marshal McBride", 0)},
         "chests": {2843: "Defias Cannon"},
@@ -437,8 +473,9 @@ def selftest():
     assert trash["items"] == [273040, 273041, 273045, 273046] and trash["gamesOnly"] == [273040, 273041, 273045, 273046], trash
     assert trash["games"] == {"kills": 7, "seen": {"273040": 1, "273041": 1, "273045": 1, "273046": 1}, "build": 70291}, trash["games"]
     assert len(rep["dropped_link"]) == 1 and rep["dropped_link"][0].startswith("c5001: encounter 448 is on map 189"), rep["dropped_link"]
-    assert len(rep["time_link"]) == 2 and rep["time_link"][0] == "c246030: fight 3311 from 1 upload, 2 wanted", rep["time_link"]
-    assert rep["time_link"][1] == "c246031: the game's own list named creature 246020 for fight 3303", rep["time_link"]
+    assert len(rep["time_link"]) == 3 and "c246030: fight 3311 from 1 upload, 2 wanted" in rep["time_link"] \
+        and "c4001: fight 449, but its drops are all common or poor: looted trash, not the boss" in rep["time_link"], rep["time_link"]
+    assert "c246031: the game's own list named creature 246020 for fight 3303" in rep["time_link"], rep["time_link"]
     assert not any(b["name"] == "Atrexis the Grave Knight" for b in dal["bosses"]), "a one-upload time link names no boss"
     wraith = next(b for b in dal["bosses"] if b["name"] == "Mana Wraith")
     assert wraith["kind"] == "trash" and wraith["items"] == [5440] and wraith["games"]["npc"] == 1236
@@ -458,7 +495,7 @@ def selftest():
     # Scarlet Monastery is one map: Herod is placed in the wing that names him, a trash creature is only reported
     arm = doc["dungeons"][3]
     assert arm["bosses"][0]["items"] == [7718, 7719] and PG in arm["src"] and PG not in doc["dungeons"][2]["src"], arm
-    assert len(rep["wing"]) == 1 and rep["wing"][0].startswith("c4000"), rep["wing"]
+    assert len(rep["wing"]) == 2 and rep["wing"][0].startswith("c4000") and rep["wing"][1].startswith("c4001"), rep["wing"]
     # a map no site lists becomes a new dungeon with players as its only source; an unknown map and the outdoors are reported
     manor = doc["dungeons"][-1]
     assert manor["name"] == "Manor Mistmantle" and manor["new"] is True and manor["levels"] is None and manor["src"] == [PG], manor
@@ -466,7 +503,7 @@ def selftest():
     assert rep["new_dungeons"] == ["Manor Mistmantle"] and len(rep["unknown_map"]) == 1 and rep["unknown_map"][0].startswith("c5002")
     assert len(rep["outdoors"]) == 1 and rep["outdoors"][0].startswith("c197") and "1429" in rep["outdoors"][0]
     assert len(rep["no_place"]) == 1 and rep["no_place"][0].startswith("c9:") and "map" not in rep["no_place"][0], rep["no_place"]
-    assert rep["placed"] == 12 and rep["items"] == 10 and rep["sources"] == 16, (rep["placed"], rep["items"], rep["sources"])
+    assert rep["placed"] == 12 and rep["items"] == 10 and rep["sources"] == 17, (rep["placed"], rep["items"], rep["sources"])
     assert rep["how"] == {"encounter": 3, TIME_HOW: 1, "classic": 1, "hand": 1, "unnamed": 5, "chest": 1}, rep["how"]
     assert "link" not in shade["games"] and "link" not in wraith["games"] and "link" not in chest["games"], "only a time link is marked"
     assert CLAUSE in doc["note"] and doc["note"].count("October 2026") == 1 and doc["note"].endswith("Items under absent are in a site's loot table."), doc["note"]

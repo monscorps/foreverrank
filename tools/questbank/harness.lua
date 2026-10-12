@@ -3838,6 +3838,13 @@ do
   c.loot = { { id = 273033, src = src("Creature-0-4455-2959-12-246021-0000A1B2CA") } }
   open()
   assert(loot().c246021 and loot().c246021.e == nil and loot().c246021.im == 2959, "a trash creature after the kill: no fight")
+  -- the list's creature id under another field name, as a string: still the fight's creature; the field names are noted
+  ev("ENCOUNTER_START", 3298, "Arcane Anomaly", 1, 5)
+  ev("ENCOUNTER_END", 3298, "Arcane Anomaly", 1, 5, 1, { { npcID = "245999", remainingHealthPercent = 0 } })
+  c.loot = { { id = 273034, src = src("Creature-0-4455-2959-12-245999-0000A1B2D0") } }
+  open()
+  assert(loot().c245999 and loot().c245999.e == 3298 and loot().c245999.ex == true, "a creature id given as npcID text still links the fight by the game's list")
+  assert(diag().uk == "npcID,remainingHealthPercent", "diag: the list's field names are noted, nothing else: " .. tostring(diag().uk))
   -- a kill that names no creatures: the first corpse looted within two minutes is taken for it, as a guess
   ev("ENCOUNTER_END", 3311, "Atrexis the Grave Knight", 1, 5, 1, nil)
   assert(diag().ee == 1, "diag: a kill without the list")
