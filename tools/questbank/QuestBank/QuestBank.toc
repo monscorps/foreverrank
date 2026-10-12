@@ -12,6 +12,7 @@ Core.lua
 Discover.lua
 Game.lua
 Loot.lua
+Observe.lua
 Model.lua
 
 Pins.lua

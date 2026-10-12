@@ -4288,6 +4288,43 @@ do
 end
 
 ----------------------------------------------------------------------------
+-- 3.7.0: the event probe (Observe.lua). On the Forever client QuestBank counts, per unit event, whether the game
+-- handed it readable values, secret values or nothing, in QuestBankDB.diag.ev, so the observer can be designed on
+-- what this client really gives addons. Kinds only: never a name, never a player
+----------------------------------------------------------------------------
+do
+  local c, Q2 = torvald, torvald.QB
+  local Ob = Q2.Observe
+  local DB = c.env.QuestBankDB
+  assert(Ob and Ob.frame and Ob.On() and Ob.frame.__scripts.OnEvent, "the Forever client with the box ticked: the probe is on")
+  assert(Ob.MAX_KEYS == 60, "the cap")
+  local function ev() return DB.diag and DB.diag.ev or {} end
+  Ob.Note("TEST_EVENT", { a = 1, b = "x" })
+  local r = ev().TEST_EVENT
+  assert(r and r.n == 1 and r.ok == 1 and r.sec == 0 and r.nl == 0 and r.s.a == "number" and r.s.b == "string", "a plain read: counted ok, kinds kept, values not")
+  Ob.Note("TEST_EVENT", { a = SECRET.num(), b = "x" })
+  r = ev().TEST_EVENT
+  assert(r.n == 2 and r.ok == 1 and r.sec == 1 and r.s.a == "number", "a secret read: counted, the first sample stays")
+  Ob.Note("TEST_EVENT2", { a = Ob.NIL, b = SECRET.str() })
+  r = ev().TEST_EVENT2
+  assert(r.n == 1 and r.ok == 0 and r.sec == 1 and r.nl == 1 and r.s.a == "nil" and r.s.b == "secret", "nil and secret both noted in the sample")
+  for i = 1, 70 do Ob.Note("FILL_" .. i, { a = i }) end
+  assert(countOf(ev()) <= 60, "no more than 60 event keys")
+  local dump = {}
+  for k, v in pairs(ev()) do for f, kind in pairs(v.s) do dump[#dump + 1] = k .. f .. kind end end
+  assert(not table.concat(dump):find("Torvald", 1, true), "never a player's name")
+  -- the readout, then the clear that the notes box does
+  local chat0 = #c.chat
+  c.env.SlashCmdList.QUESTBANK("events")
+  local said = table.concat(c.chat, "\n", chat0 + 1)
+  assert(#c.chat > chat0 and said:find("TEST_EVENT: 2 seen, 1 ok, 1 secret, 0 missing (a=number b=string)", 1, true), "/qb events lists the events with their counts: " .. said:sub(1, 200))
+  Ob.Clear()
+  assert(DB.diag.ev == nil, "clear drops the probe's counts")
+  Ob.Note("X", { a = 1 })
+  assert(ev().X.n == 1, "and counting starts again")
+end
+
+----------------------------------------------------------------------------
 -- map icons (QuestMap.lua): a level 3 human priest in Elwynn on the Forever client. The spots are injected here
 -- (gen_data builds the real ones); the givers and hand-ins are the catalog's own
 ----------------------------------------------------------------------------

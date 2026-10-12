@@ -2177,6 +2177,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Discover then QB.Discover:Init() end
     if QB.Game then QB.Game:Init() end
     if QB.Loot then QB.Loot:Init() end
+    if QB.Observe then QB.Observe:Init() end
     if QB.Arrow then QB.Arrow:Init() end
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
@@ -2334,6 +2335,9 @@ slash = function(msg)
     elseif QB.UI then
       QB.UI:ShowErrors()
     end
+  elseif cmd == "events" then
+    -- not listed anywhere: the event probe's counts (Observe.lua), for the owner to read off before an upload
+    QB.Observe.Report(function(m) QB:Print(m) end)
   elseif cmd == "probe" then
     -- not listed anywhere: the old Windows uploader still tells players to type it. ForeverProbe is retired
     QB.NoteAddons()

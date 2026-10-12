@@ -490,6 +490,7 @@ function Game.SetOn(yes)
   elseif QuestBankDB then
     QuestBankDB.game = nil
     if QB.Loot then QB.Loot.Clear() end
+    if QB.Observe then QB.Observe.Clear() end
   end
 end
 
