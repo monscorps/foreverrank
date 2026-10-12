@@ -905,6 +905,7 @@ for _key, _v in LOC.items():
     if _v.get("name") and _v.get("coords"):
         _kind, _i = _key.split("/")
         NAME_INDEX.setdefault(_v["name"].lower(), []).append((_kind, int(_i)))
+QTIPS = load("qtips.json", {}) or {}  # Wowhead's quest tooltips (npcloc.py --quests): names and text, no level or XP
 TEXT_NAMED = []
 
 
@@ -912,7 +913,9 @@ def npc_by_text(qid, zone):
     """Wowhead links no NPC, but the objective names one: "bring them to Captain Stoutfist in Menethil"."""
     import re
     d = DET.get(qid) or {}
-    text = d.get("obj") or ""
+    # the page read's objective text, else Wowhead's tooltip for the quest (npcloc.py --quests), which carries the
+    # same "... for Melisara in Tarren Mill" sentence
+    text = d.get("obj") or (QTIPS.get(str(qid)) or {}).get("text") or ""
     title = LIST[qid]["name"]
     if text.startswith(title):
         text = text[len(title):]
@@ -2041,7 +2044,6 @@ open(OUT, "w").write("\n".join(lines))
 # ---------------------------------------------------------------------------
 # GAPS.md: everything still missing, so nobody has to take the numbers on trust
 # ---------------------------------------------------------------------------
-QTIPS = load("qtips.json", {}) or {}  # Wowhead's quest tooltips (npcloc.py --quests): names and text, no level or XP
 
 
 def quest_name(qid):
