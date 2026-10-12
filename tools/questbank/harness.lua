@@ -4308,11 +4308,94 @@ do
   Ob.Note("TEST_EVENT2", { a = Ob.NIL, b = SECRET.str() })
   r = ev().TEST_EVENT2
   assert(r.n == 1 and r.ok == 0 and r.sec == 1 and r.nl == 1 and r.s.a == "nil" and r.s.b == "secret", "nil and secret both noted in the sample")
-  for i = 1, 70 do Ob.Note("FILL_" .. i, { a = i }) end
-  assert(countOf(ev()) <= 60, "no more than 60 event keys")
-  local dump = {}
-  for k, v in pairs(ev()) do for f, kind in pairs(v.s) do dump[#dump + 1] = k .. f .. kind end end
-  assert(not table.concat(dump):find("Torvald", 1, true), "never a player's name")
+  -- the unit cast events: a target casting with everything readable, then a nameplate whose GUID is hidden
+  local f = Ob.frame
+  local function fire(event, ...) f.__scripts.OnEvent(f, event, ...) end
+  local unitLevel, guidOf = c.env.UnitLevel, c.env.UnitGUID
+  c.env.UnitLevel = function(u) if u == "target" or u:find("^nameplate") then return 31 end return unitLevel(u) end
+  c.env.UnitClassification = function() return "elite" end
+  c.env.UnitHealth = function() return 1200 end
+  c.env.UnitHealthMax = function() return 4000 end
+  c.env.UnitCastingInfo = function() return "Arcane Bolt", "Arcane Bolt", "", 1000, 2500, false, "cast-1", false, 1234 end
+  c.env.UnitChannelInfo = function() return nil end
+  c.env.UnitGUID = function(u) if u == "target" then return "Creature-0-4455-0-12-245999-0000A1B2C3" end if u:find("^nameplate") then return SECRET.str() end return guidOf(u) end
+  fire("UNIT_SPELLCAST_START", "target", "cast-1", 1234)
+  r = ev().UNIT_SPELLCAST_START
+  assert(r and r.n == 1 and r.ok == 1 and r.s.guid == "string" and r.s.cast == "string" and r.s.castSpell == "number" and r.s.castId == "string"
+    and r.s.spellId == "number" and r.s.unit == "string" and r.s.level == "number" and r.s.cls == "string" and r.s.hp == "number" and r.s.chan == "none",
+    "a readable cast on the target: the unit's guid, level, class, health, the cast and the event's ids")
+  assert(r.s.name == "string", "the creature's name is read (its kind kept, never the name)")
+  fire("UNIT_SPELLCAST_START", "nameplate3", "cast-2", 1234)
+  r = ev().UNIT_SPELLCAST_START
+  assert(r.n == 2 and r.sec == 1 and r.nl == 0, "a nameplate with a hidden GUID counts as secret (not casting is not missing)")
+  fire("UNIT_SPELLCAST_START", "player", "cast-3", 1)
+  fire("UNIT_SPELLCAST_START", "party1", "cast-3", 1)
+  fire("UNIT_SPELLCAST_START", SECRET.str(), "cast-3", 1)
+  assert(ev().UNIT_SPELLCAST_START.n == 2, "our own casts, and a hidden unit, are not the probe's business")
+  fire("UNIT_HEALTH", "target")
+  assert(ev().UNIT_HEALTH.n == 1 and ev().UNIT_HEALTH.s.hp == "number", "health on the target")
+  c.env.UnitCastingInfo = function() return nil end
+  fire("UNIT_SPELLCAST_STOP", "target", "cast-1", 1234)
+  r = ev().UNIT_SPELLCAST_STOP
+  assert(r.ok == 1 and r.s.cast == "none" and r.s.castSpell == nil, "a cast that ended: no cast going on, nothing missing")
+  fire("PLAYER_TARGET_CHANGED")
+  assert(ev().PLAYER_TARGET_CHANGED.n == 1 and ev().PLAYER_TARGET_CHANGED.s.guid == "string", "a target change reads the target")
+  -- auras on the player and party: the first harmful one, by C_UnitAuras
+  local auraByIndex = c.env.C_UnitAuras.GetAuraDataByIndex
+  c.env.C_UnitAuras.GetAuraDataByIndex = function(unit, i, filter)
+    if i == 1 and filter == "HARMFUL" then return { name = "Mana Burn", spellId = 1300001, sourceUnit = "target", isHarmful = true, dispelName = "Magic" } end
+  end
+  fire("UNIT_AURA", "player", { isFullUpdate = true })
+  r = ev().UNIT_AURA
+  assert(r and r.n == 1 and r.ok == 1 and r.s.n == "number" and r.s.name == "string" and r.s.spellId == "number" and r.s.source == "string" and r.s.kind == "string", "a harmful aura on the player: its source unit and school")
+  fire("UNIT_AURA", "target")
+  assert(ev().UNIT_AURA.n == 1, "auras on creatures are not read (only what lands on us)")
+  c.env.C_UnitAuras.GetAuraDataByIndex = auraByIndex
+  -- nameplates and rare vignettes
+  fire("NAME_PLATE_UNIT_ADDED", "nameplate1")
+  assert(ev().NAME_PLATE_UNIT_ADDED.n == 1 and ev().NAME_PLATE_UNIT_ADDED.sec == 1 and ev().NAME_PLATE_UNIT_ADDED.s.level == "number", "a nameplate added reads the unit (its GUID hidden here)")
+  c.env.C_VignetteInfo = { GetVignettes = function() return { "v-1" } end,
+    GetVignetteInfo = function(id) return { vignetteGUID = id, objectGUID = "Creature-0-4455-0-12-7777-0000A1B2C3", name = "Grizzled Rare", atlasName = "VignetteKill", onWorldMap = true, onMinimap = true } end }
+  fire("VIGNETTE_MINIMAP_UPDATED", "v-1", true)
+  r = ev().VIGNETTE_MINIMAP_UPDATED
+  assert(r and r.n == 1 and r.ok == 1 and r.s.objectGUID == "string" and r.s.atlas == "string", "a vignette: its object GUID and atlas")
+  c.env.C_VignetteInfo = nil
+  fire("VIGNETTE_MINIMAP_UPDATED", "v-2", true)
+  assert(ev().VIGNETTE_MINIMAP_UPDATED.n == 2 and ev().VIGNETTE_MINIMAP_UPDATED.nl == 1, "a client without C_VignetteInfo: counted as missing")
+  -- a merchant: the npc's GUID, the first item's id, price and link
+  c.npcGUID = "Creature-0-4455-0-12-1234-0000A1B2C3"
+  c.merchant = { 2589, 2592 }
+  c.env.GetMerchantItemInfo = function(i) return "Linen Cloth", "", 13, 1, 0, true, nil end
+  c.env.GetMerchantItemLink = function(i) return "|cffffffff|Hitem:2589::::::::29:::::|h[Linen Cloth]|h|r" end
+  fire("MERCHANT_SHOW")
+  r = ev().MERCHANT_SHOW
+  assert(r and r.n == 1 and r.ok == 1 and r.s.guid == "string" and r.s.items == "number" and r.s.id == "number" and r.s.price == "number" and r.s.link == "string", "a merchant: who, how many, the first item's id, price and link")
+  c.merchant = {}
+  fire("MERCHANT_SHOW")
+  assert(ev().MERCHANT_SHOW.n == 2 and ev().MERCHANT_SHOW.ok == 2, "an empty vendor: who and none, still ok")
+  -- a chest: loot from a game object
+  c.loot = { { id = 2589, src = { { "GameObject-0-4455-0-12-2843-0000A1B2C3", 1 } } } }
+  fire("LOOT_OPENED", false, false)
+  r = ev().LOOT_OPENED
+  assert(r and r.n == 1 and r.ok == 1 and r.s.src == "string" and r.s.slots == "number", "a loot window: the first slot's source GUID")
+  -- combat and encounter timing
+  fire("PLAYER_REGEN_DISABLED"); fire("ENCOUNTER_START", 3303, "Shade of the Archmage", 1, 5); fire("ENCOUNTER_END", 3303, "Shade of the Archmage", 1, 5, 1); fire("PLAYER_REGEN_ENABLED")
+  assert(ev().PLAYER_REGEN_DISABLED.n == 1 and ev().PLAYER_REGEN_ENABLED.n == 1 and ev().PLAYER_REGEN_ENABLED.s.t == "number"
+    and ev().ENCOUNTER_START.s.id == "number" and ev().ENCOUNTER_START.s.t == "number" and ev().ENCOUNTER_START.s.diff == "number" and ev().ENCOUNTER_END.n == 1,
+    "combat edges and the encounter id with a time")
+  -- an event QuestBank registered but has no reader for: its argument count
+  fire("SOMETHING_ELSE", 1, 2)
+  assert(ev().SOMETHING_ELSE.s.nargs == "number", "an unknown event: counted with its argument count")
+  -- with the box unticked nothing is counted
+  DB.settings = DB.settings or {}
+  DB.settings.noteGame = false
+  local n0 = ev().UNIT_HEALTH.n
+  f.__scripts.OnEvent(f, "UNIT_HEALTH", "target")
+  assert(ev().UNIT_HEALTH.n == n0, "the box unticked: the frame's handler counts nothing")
+  DB.settings.noteGame = nil
+  c.env.UnitLevel, c.env.UnitGUID = unitLevel, guidOf
+  c.env.UnitClassification, c.env.UnitHealth, c.env.UnitHealthMax, c.env.UnitCastingInfo, c.env.UnitChannelInfo = nil, nil, nil, nil, nil
+  c.env.GetMerchantItemInfo, c.env.GetMerchantItemLink = nil, nil
   -- the readout, then the clear that the notes box does
   local chat0 = #c.chat
   c.env.SlashCmdList.QUESTBANK("events")
@@ -4322,6 +4405,13 @@ do
   assert(DB.diag.ev == nil, "clear drops the probe's counts")
   Ob.Note("X", { a = 1 })
   assert(ev().X.n == 1, "and counting starts again")
+  -- the cap, and never a name in what is kept
+  for i = 1, 70 do Ob.Note("FILL_" .. i, { a = i }) end
+  assert(countOf(ev()) == 60, "no more than 60 event keys")
+  local dump = {}
+  for k, v in pairs(ev()) do for fld, kind in pairs(v.s) do dump[#dump + 1] = k .. fld .. kind end end
+  assert(not table.concat(dump):find("Torvald", 1, true) and not table.concat(dump):find("Arcane Bolt", 1, true), "never a player's name, never a value")
+  Ob.Clear()
 end
 
 ----------------------------------------------------------------------------
