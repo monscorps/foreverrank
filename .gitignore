@@ -14,3 +14,4 @@ tools/.wh-quest-cache/
 worker/.dev.vars
 worker/.probe-admin-key
 worker/.wrangler/
+.claude/

@@ -1,12 +1,6909 @@
 {
- "note": "Enchants and attachments that damage attackers, numbers from the beta client's spell tables (build 1.60.1.70338, tools/apply_reflect.py). v is the average, lo-hi the range; skill is the profession level needed to make it, not to use it.",
+ "note": "Every permanent enchant a player can put on gear, from the beta client's item and spell tables (build 1.60.1.70338, tools/build_enchants.py): Forever's Enchanting scrolls, armor kits, scopes, spikes and chains, librams and the Zandalar, Argent Dawn and Scourge enchants. stats are what the Forge counts; fx is the item's own Use line; skill is the profession level needed to make it, not to use it; rf (shield spikes, Retricutioner) is the damage to attackers from tools/apply_reflect.py.",
+ "build": "1.60.1.70338",
  "enchants": [
+  {
+   "id": "i273604",
+   "item": 273604,
+   "name": "Enchant Cloak - Agility",
+   "slot": "back",
+   "stats": {
+    "agility": 5
+   },
+   "fx": "Permanently enchant a Cloak to add 5 to agility.",
+   "ench": [
+    7667
+   ],
+   "spell": 1219587,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1219587,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     274399
+    ]
+   }
+  },
+  {
+   "id": "i273499",
+   "item": 273499,
+   "name": "Enchant Cloak - Defense",
+   "slot": "back",
+   "stats": {
+    "bonusArmor": 30
+   },
+   "fx": "Permanently enchant a cloak to give 60 additional armor.",
+   "ench": [
+    848
+   ],
+   "spell": 13635,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    155
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13635,
+    "sk": 155,
+    "c": [
+     175,
+     215
+    ]
+   }
+  },
+  {
+   "id": "i273588",
+   "item": 273588,
+   "name": "Enchant Cloak - Dodge",
+   "slot": "back",
+   "stats": {
+    "dodge": 1
+   },
+   "fx": "Permanently enchant a cloak to give a 1% chance to dodge.",
+   "ench": [
+    2622
+   ],
+   "spell": 25086,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25086,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20736
+    ]
+   }
+  },
+  {
+   "id": "i273508",
+   "item": 273508,
+   "name": "Enchant Cloak - Fire Resistance",
+   "slot": "back",
+   "stats": {
+    "fireResist": 12
+   },
+   "fx": "Permanently enchant a cloak to give 12 Fire Resistance.",
+   "ench": [
+    2463
+   ],
+   "spell": 13657,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    175
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13657,
+    "sk": 175,
+    "c": [
+     195,
+     235
+    ]
+   }
+  },
+  {
+   "id": "i273518",
+   "item": 273518,
+   "name": "Enchant Cloak - Greater Defense",
+   "slot": "back",
+   "stats": {
+    "bonusArmor": 60
+   },
+   "fx": "Permanently enchant a cloak to give 60 additional armor.",
+   "ench": [
+    884
+   ],
+   "spell": 13746,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    205
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13746,
+    "sk": 205,
+    "c": [
+     225,
+     265
+    ]
+   }
+  },
+  {
+   "id": "i273584",
+   "item": 273584,
+   "name": "Enchant Cloak - Greater Fire Resistance",
+   "slot": "back",
+   "stats": {
+    "fireResist": 15
+   },
+   "fx": "Permanently enchant a cloak to give 15 fire resistance.",
+   "ench": [
+    2619
+   ],
+   "spell": 25081,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25081,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20732,
+     229008
+    ]
+   }
+  },
+  {
+   "id": "i273585",
+   "item": 273585,
+   "name": "Enchant Cloak - Greater Nature Resistance",
+   "slot": "back",
+   "stats": {
+    "natureResist": 15
+   },
+   "fx": "Permanently enchant a cloak to give 15 nature resistance.",
+   "ench": [
+    2620
+   ],
+   "spell": 25082,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25082,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20733,
+     229009
+    ]
+   }
+  },
+  {
+   "id": "i273551",
+   "item": 273551,
+   "name": "Enchant Cloak - Greater Resistance",
+   "slot": "back",
+   "stats": {
+    "allResist": 5
+   },
+   "fx": "Permanently enchant a cloak to give 5 to all resistances.",
+   "ench": [
+    1888
+   ],
+   "spell": 20014,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    265
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20014,
+    "sk": 265,
+    "c": [
+     285,
+     325
+    ],
+    "by": [
+     16216
+    ]
+   }
+  },
+  {
+   "id": "i273528",
+   "item": 273528,
+   "name": "Enchant Cloak - Lesser Agility",
+   "slot": "back",
+   "stats": {
+    "agility": 3
+   },
+   "fx": "Permanently enchant a cloak to give 3 Agility.",
+   "ench": [
+    849
+   ],
+   "spell": 13882,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    225
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13882,
+    "sk": 225,
+    "c": [
+     245,
+     285
+    ],
+    "by": [
+     11206
+    ]
+   }
+  },
+  {
+   "id": "i273477",
+   "item": 273477,
+   "name": "Enchant Cloak - Lesser Fire Resistance",
+   "slot": "back",
+   "stats": {
+    "fireResist": 10
+   },
+   "fx": "Permanently enchant a cloak so that it increases resistance to fire by 10.",
+   "ench": [
+    256
+   ],
+   "spell": 7861,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    125
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7861,
+    "sk": 125,
+    "c": [
+     150,
+     190
+    ]
+   }
+  },
+  {
+   "id": "i273483",
+   "item": 273483,
+   "name": "Enchant Cloak - Lesser Protection",
+   "slot": "back",
+   "stats": {
+    "bonusArmor": 20
+   },
+   "fx": "Permanently enchant a cloak to increase armor by 20.",
+   "ench": [
+    744
+   ],
+   "spell": 13421,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    115
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13421,
+    "sk": 115,
+    "c": [
+     140,
+     180
+    ]
+   }
+  },
+  {
+   "id": "i273488",
+   "item": 273488,
+   "name": "Enchant Cloak - Lesser Shadow Resistance",
+   "slot": "back",
+   "stats": {
+    "shadowResist": 10
+   },
+   "fx": "Permanently enchant a cloak so that it increases resistance to shadow by 10.",
+   "ench": [
+    804
+   ],
+   "spell": 13522,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    135
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13522,
+    "sk": 135,
+    "c": [
+     160,
+     200
+    ],
+    "by": [
+     11098
+    ]
+   }
+  },
+  {
+   "id": "i273468",
+   "item": 273468,
+   "name": "Enchant Cloak - Minor Protection",
+   "slot": "back",
+   "stats": {
+    "bonusArmor": 10
+   },
+   "fx": "Permanently enchant a cloak to increase armor by 10.",
+   "ench": [
+    783
+   ],
+   "spell": 7771,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    90
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7771,
+    "sk": 90,
+    "c": [
+     110,
+     150
+    ],
+    "by": [
+     6345
+    ]
+   }
+  },
+  {
+   "id": "i273463",
+   "item": 273463,
+   "name": "Enchant Cloak - Minor Resistance",
+   "slot": "back",
+   "stats": {
+    "allResist": 2
+   },
+   "fx": "Permanently enchant a cloak so that it increases the resistance to all schools of magic by 2.",
+   "ench": [
+    65
+   ],
+   "spell": 7454,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    45
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7454,
+    "sk": 45,
+    "c": [
+     95,
+     135
+    ]
+   }
+  },
+  {
+   "id": "i273519",
+   "item": 273519,
+   "name": "Enchant Cloak - Resistance",
+   "slot": "back",
+   "stats": {
+    "allResist": 3
+   },
+   "fx": "Permanently enchant a cloak to give 3 to all resistances.",
+   "ench": [
+    903
+   ],
+   "spell": 13794,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    205
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13794,
+    "sk": 205,
+    "c": [
+     225,
+     265
+    ]
+   }
+  },
+  {
+   "id": "i273586",
+   "item": 273586,
+   "name": "Enchant Cloak - Stealth",
+   "slot": "back",
+   "stats": {},
+   "fx": "Permanently enchant a cloak to give an increase to your stealth as if you were 1 level higher.",
+   "ench": [
+    910
+   ],
+   "spell": 25083,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "raw": "aura 154 5",
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25083,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20734
+    ]
+   }
+  },
+  {
+   "id": "i273587",
+   "item": 273587,
+   "name": "Enchant Cloak - Subtlety",
+   "slot": "back",
+   "stats": {},
+   "fx": "Permanently enchant a cloak to decrease threat caused by the wearer by 2%.",
+   "ench": [
+    2621
+   ],
+   "spell": 25084,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "raw": "aura 10 (127) -2",
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25084,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20735
+    ]
+   }
+  },
+  {
+   "id": "i273552",
+   "item": 273552,
+   "name": "Enchant Cloak - Superior Defense",
+   "slot": "back",
+   "stats": {
+    "bonusArmor": 70
+   },
+   "fx": "Permanently enchant a cloak to give 70 additional armor.",
+   "ench": [
+    1889
+   ],
+   "spell": 20015,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "back"
+   ],
+   "skill": [
+    "Enchanting",
+    285
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20015,
+    "sk": 285,
+    "c": [
+     305,
+     345
+    ],
+    "by": [
+     16224
+    ]
+   }
+  },
+  {
+   "id": "i273635",
+   "item": 273635,
+   "name": "Enchant Chest - Absorption",
+   "slot": "chest",
+   "stats": {},
+   "fx": "Enchant a piece of chest armor so it has a 25% chance per hit of giving you 50 points of damage absorption. Cannot occur more often than once every 5 sec.",
+   "ench": [
+    8220
+   ],
+   "spell": 1249071,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "raw": "aura 42 0",
+   "skill": [
+    "Enchanting",
+    220
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1249071,
+    "sk": 220,
+    "c": [
+     225,
+     265
+    ],
+    "by": [
+     249510
+    ]
+   }
+  },
+  {
+   "id": "i273511",
+   "item": 273511,
+   "name": "Enchant Chest - Greater Intellect",
+   "slot": "chest",
+   "stats": {
+    "intellect": 6
+   },
+   "fx": "Permanently enchant a piece of chest armor to give +6 Intellect.",
+   "ench": [
+    857
+   ],
+   "spell": 13663,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    185
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13663,
+    "sk": 185,
+    "c": [
+     205,
+     245
+    ]
+   }
+  },
+  {
+   "id": "i273501",
+   "item": 273501,
+   "name": "Enchant Chest - Greater Stamina",
+   "slot": "chest",
+   "stats": {
+    "stamina": 6
+   },
+   "fx": "Permanently enchant a piece of chest armor to give +6 Stamina.",
+   "ench": [
+    850
+   ],
+   "spell": 13640,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    160
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13640,
+    "sk": 160,
+    "c": [
+     180,
+     220
+    ]
+   }
+  },
+  {
+   "id": "i273558",
+   "item": 273558,
+   "name": "Enchant Chest - Greater Stats",
+   "slot": "chest",
+   "stats": {
+    "strength": 4,
+    "agility": 4,
+    "stamina": 4,
+    "intellect": 4,
+    "spirit": 4
+   },
+   "fx": "Permanently enchant a piece of chest armor to grant +4 to all stats.",
+   "ench": [
+    1891
+   ],
+   "spell": 20025,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20025,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     16253
+    ]
+   }
+  },
+  {
+   "id": "i273459",
+   "item": 273459,
+   "name": "Enchant Chest - Inferior Stamina",
+   "slot": "chest",
+   "stats": {
+    "stamina": 2
+   },
+   "fx": "Permanently enchant a piece of chest armor so that it increases the Stamina of the wearer by 2.",
+   "ench": [
+    41
+   ],
+   "spell": 7420,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    15
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7420,
+    "sk": 15,
+    "c": [
+     70,
+     110
+    ]
+   }
+  },
+  {
+   "id": "i273492",
+   "item": 273492,
+   "name": "Enchant Chest - Intellect",
+   "slot": "chest",
+   "stats": {
+    "intellect": 4
+   },
+   "fx": "Permanently enchant a piece of chest armor to increase the Intellect of the wearer by 4.",
+   "ench": [
+    843
+   ],
+   "spell": 13607,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    145
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13607,
+    "sk": 145,
+    "c": [
+     170,
+     210
+    ]
+   }
+  },
+  {
+   "id": "i273491",
+   "item": 273491,
+   "name": "Enchant Chest - Lesser Absorption",
+   "slot": "chest",
+   "stats": {},
+   "fx": "Enchant a piece of chest armor so it has a 5% chance per hit of giving you 25 points of damage absorption. Cannot occur more often than once every 5 sec.",
+   "ench": [
+    63
+   ],
+   "spell": 13538,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "raw": "aura 42 0",
+   "skill": [
+    "Enchanting",
+    140
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13538,
+    "sk": 140,
+    "c": [
+     165,
+     205
+    ]
+   }
+  },
+  {
+   "id": "i273469",
+   "item": 273469,
+   "name": "Enchant Chest - Lesser Intellect",
+   "slot": "chest",
+   "stats": {
+    "intellect": 3
+   },
+   "fx": "Permanently enchant a piece of chest armor so that it increases the Intellect of the wearer by 3.",
+   "ench": [
+    246
+   ],
+   "spell": 7776,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    80
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7776,
+    "sk": 80,
+    "c": [
+     115,
+     155
+    ],
+    "by": [
+     6346
+    ]
+   }
+  },
+  {
+   "id": "i273466",
+   "item": 273466,
+   "name": "Enchant Chest - Lesser Stamina",
+   "slot": "chest",
+   "stats": {
+    "stamina": 3
+   },
+   "fx": "Permanently enchant a piece of chest armor so that it increases the Stamina of the wearer by 3.",
+   "ench": [
+    242
+   ],
+   "spell": 7748,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    60
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7748,
+    "sk": 60,
+    "c": [
+     105,
+     145
+    ]
+   }
+  },
+  {
+   "id": "i273517",
+   "item": 273517,
+   "name": "Enchant Chest - Lesser Stats",
+   "slot": "chest",
+   "stats": {
+    "strength": 2,
+    "agility": 2,
+    "stamina": 2,
+    "intellect": 2,
+    "spirit": 2
+   },
+   "fx": "Permanently enchant a piece of chest armor to grant +2 to all stats.",
+   "ench": [
+    866
+   ],
+   "spell": 13700,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    200
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13700,
+    "sk": 200,
+    "c": [
+     220,
+     260
+    ]
+   }
+  },
+  {
+   "id": "i273593",
+   "item": 273593,
+   "name": "Enchant Chest - Living Stats",
+   "slot": "chest",
+   "stats": {
+    "strength": 4,
+    "agility": 4,
+    "stamina": 4,
+    "intellect": 4,
+    "spirit": 4,
+    "natureResist": 15
+   },
+   "fx": "Permanently enchant a piece of chest armor to increase all stats by 4, and Nature Resistance by 15.",
+   "ench": [
+    7645
+   ],
+   "spell": 1213616,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    320
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1213616,
+    "sk": null,
+    "c": [
+     320,
+     360
+    ]
+   }
+  },
+  {
+   "id": "i273560",
+   "item": 273560,
+   "name": "Enchant Chest - Major Intellect",
+   "slot": "chest",
+   "stats": {
+    "intellect": 10
+   },
+   "fx": "Permanently enchant a piece of chest armor to give +10 Intellect.",
+   "ench": [
+    1893
+   ],
+   "spell": 20028,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    290
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20028,
+    "sk": 290,
+    "c": [
+     310,
+     350
+    ],
+    "by": [
+     16242
+    ]
+   }
+  },
+  {
+   "id": "i273559",
+   "item": 273559,
+   "name": "Enchant Chest - Major Stamina",
+   "slot": "chest",
+   "stats": {
+    "stamina": 10
+   },
+   "fx": "Permanently enchant a piece of chest armor to grant +10 Stamina.",
+   "ench": [
+    1892
+   ],
+   "spell": 20026,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    275
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20026,
+    "sk": 275,
+    "c": [
+     295,
+     335
+    ],
+    "by": [
+     16221
+    ]
+   }
+  },
+  {
+   "id": "i273460",
+   "item": 273460,
+   "name": "Enchant Chest - Minor Absorption",
+   "slot": "chest",
+   "stats": {},
+   "fx": "Enchant a piece of chest armor so it has a 2% chance per hit of giving you 10 points of damage absorption. Cannot occur more often than once every 5 sec.",
+   "ench": [
+    44
+   ],
+   "spell": 7426,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "raw": "aura 42 0",
+   "skill": [
+    "Enchanting",
+    40
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7426,
+    "sk": 40,
+    "c": [
+     90,
+     130
+    ]
+   }
+  },
+  {
+   "id": "i273462",
+   "item": 273462,
+   "name": "Enchant Chest - Minor Intellect",
+   "slot": "chest",
+   "stats": {
+    "intellect": 2
+   },
+   "fx": "Permanently enchant a piece of chest armor so that it increases the Intellect of the wearer by 2.",
+   "ench": [
+    24
+   ],
+   "spell": 7443,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    20
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7443,
+    "sk": 20,
+    "c": [
+     80,
+     120
+    ],
+    "by": [
+     6342
+    ]
+   }
+  },
+  {
+   "id": "i273497",
+   "item": 273497,
+   "name": "Enchant Chest - Minor Stats",
+   "slot": "chest",
+   "stats": {
+    "strength": 2,
+    "agility": 2,
+    "stamina": 2,
+    "intellect": 2,
+    "spirit": 2
+   },
+   "fx": "Permanently enchant a piece of chest armor to grant +2 to all stats.",
+   "ench": [
+    847
+   ],
+   "spell": 13626,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    150
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13626,
+    "sk": 150,
+    "c": [
+     175,
+     215
+    ]
+   }
+  },
+  {
+   "id": "retricutioner",
+   "item": 273591,
+   "name": "Enchant Chest - Retricutioner",
+   "slot": "chest",
+   "stats": {},
+   "fx": "Teaches you how to permanently enchant a piece of chest armor to reflect 9 damage back to the attacker when the bearer is struck in Melee.",
+   "ench": [
+    7223
+   ],
+   "spell": 435903,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "raw": "aura 15 9",
+   "skill": [
+    "Enchanting",
+    225
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 435903,
+    "sk": 225,
+    "c": [
+     200,
+     240
+    ],
+    "by": [
+     215138
+    ]
+   },
+   "rf": {
+    "s": "Physical",
+    "v": 9,
+    "sp": 435901,
+    "k": "hit"
+   },
+   "note": "Enchanting formula 273591 teaches Enchant Chest - Retricutioner (spell 435903); the enchant's damage shield is client spell 435901: 9 Physical damage to each melee attacker. The client gives that aura a 5 s recovery time; whether it limits how often it hits is not shown in the tables, so the Forge counts every hit."
+  },
+  {
+   "id": "i273475",
+   "item": 273475,
+   "name": "Enchant Chest - Stamina",
+   "slot": "chest",
+   "stats": {
+    "stamina": 4
+   },
+   "fx": "Permanently enchant a piece of chest armor to increase the Stamina of the wearer by 4.",
+   "ench": [
+    254
+   ],
+   "spell": 7857,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    120
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7857,
+    "sk": 120,
+    "c": [
+     145,
+     185
+    ]
+   }
+  },
+  {
+   "id": "i273540",
+   "item": 273540,
+   "name": "Enchant Chest - Stats",
+   "slot": "chest",
+   "stats": {
+    "strength": 3,
+    "agility": 3,
+    "stamina": 3,
+    "intellect": 3,
+    "spirit": 3
+   },
+   "fx": "Permanently enchant a piece of chest armor to grant +3 to all stats.",
+   "ench": [
+    928
+   ],
+   "spell": 13941,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    245
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13941,
+    "sk": 245,
+    "c": [
+     265,
+     305
+    ]
+   }
+  },
+  {
+   "id": "i273534",
+   "item": 273534,
+   "name": "Enchant Chest - Superior Intellect",
+   "slot": "chest",
+   "stats": {
+    "intellect": 8
+   },
+   "fx": "Permanently enchant a piece of chest armor to give +8 Intellect.",
+   "ench": [
+    913
+   ],
+   "spell": 13917,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    230
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13917,
+    "sk": 230,
+    "c": [
+     250,
+     290
+    ]
+   }
+  },
+  {
+   "id": "i273526",
+   "item": 273526,
+   "name": "Enchant Chest - Superior Stamina",
+   "slot": "chest",
+   "stats": {
+    "stamina": 8
+   },
+   "fx": "Permanently enchant a piece of chest armor to grant +8 Stamina.",
+   "ench": [
+    908
+   ],
+   "spell": 13858,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "chest"
+   ],
+   "skill": [
+    "Enchanting",
+    220
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13858,
+    "sk": 220,
+    "c": [
+     240,
+     280
+    ]
+   }
+  },
+  {
+   "id": "i2304",
+   "item": 2304,
+   "name": "Light Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 8,
+    "stamina": 1
+   },
+   "fx": "Permanently increase the Stamina value by 1 and the Armor value by 8 of an item worn on the chest, legs, hands or feet.",
+   "ench": [
+    15
+   ],
+   "spell": 2831,
+   "icon": "inv_misc_armorkit_17",
+   "q": "common",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "skill": [
+    "Leatherworking",
+    1
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 2152,
+    "sk": 1,
+    "c": [
+     30,
+     60
+    ]
+   }
+  },
+  {
+   "id": "i2313",
+   "item": 2313,
+   "name": "Medium Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 16,
+    "stamina": 2
+   },
+   "fx": "Permanently increase the Stamina value by 2 and the armor value by 16 of an item worn on the chest, legs, hands or feet.",
+   "ench": [
+    8481
+   ],
+   "spell": 2832,
+   "icon": "inv_misc_armorkit_15",
+   "q": "common",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 5,
+   "skill": [
+    "Leatherworking",
+    100
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 2165,
+    "sk": 100,
+    "c": [
+     90,
+     105
+    ]
+   }
+  },
+  {
+   "id": "i252437",
+   "item": 252437,
+   "name": "Forceful Medium Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 16,
+    "attackPower": 4
+   },
+   "fx": "Permanently increase the Attack Power value by 4 and the armor value by 16 of an item worn on the chest, legs, hands, or feet.",
+   "ench": [
+    8483
+   ],
+   "spell": 1254740,
+   "icon": "inv_misc_armorkit_15",
+   "q": "uncommon",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 15,
+   "skill": [
+    "Leatherworking",
+    80
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 1255123,
+    "sk": 80,
+    "c": [
+     95,
+     110
+    ],
+    "by": [
+     252784
+    ]
+   }
+  },
+  {
+   "id": "i252436",
+   "item": 252436,
+   "name": "Mystic Medium Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 16,
+    "spellPower": 2
+   },
+   "fx": "Permanently increase the Spell Power value by 2 and the armor value by 16 of an item worn on the chest, legs, hands, or feet.",
+   "ench": [
+    8482
+   ],
+   "spell": 1254742,
+   "icon": "inv_misc_armorkit_15",
+   "q": "uncommon",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 15,
+   "skill": [
+    "Leatherworking",
+    80
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 1255124,
+    "sk": 80,
+    "c": [
+     95,
+     110
+    ],
+    "by": [
+     252783
+    ]
+   }
+  },
+  {
+   "id": "i4265",
+   "item": 4265,
+   "name": "Heavy Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 24,
+    "stamina": 3
+   },
+   "fx": "Permanently increase the Stamina value by 3 and armor value by 24 of an item worn on the chest, legs, hands or feet. Only usable on items level 15 and above.",
+   "ench": [
+    8484
+   ],
+   "spell": 2833,
+   "icon": "inv_misc_armorkit_16",
+   "q": "common",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 20,
+   "ilvlMin": 15,
+   "skill": [
+    "Leatherworking",
+    150
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 3780,
+    "sk": 150,
+    "c": [
+     145,
+     165
+    ]
+   }
+  },
+  {
+   "id": "i252453",
+   "item": 252453,
+   "name": "Forceful Heavy Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 24,
+    "attackPower": 6
+   },
+   "fx": "Permanently increase the Attack Power value by 6 and armor value by 24 of an item worn on the chest, legs, hands, or feet. Only usable on items level 15 and above.",
+   "ench": [
+    8486
+   ],
+   "spell": 1254748,
+   "icon": "inv_misc_armorkit_16",
+   "q": "uncommon",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 30,
+   "ilvlMin": 15,
+   "skill": [
+    "Leatherworking",
+    135
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 1255095,
+    "sk": 135,
+    "c": [
+     155,
+     175
+    ],
+    "by": [
+     252812
+    ]
+   }
+  },
+  {
+   "id": "i252452",
+   "item": 252452,
+   "name": "Mystic Heavy Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 24,
+    "spellPower": 4
+   },
+   "fx": "Permanently increase the Spell Power value by 4 and armor value by 24 of an item worn on the chest, legs, hands, or feet. Only usable on items level 15 and above.",
+   "ench": [
+    8485
+   ],
+   "spell": 1254750,
+   "icon": "inv_misc_armorkit_16",
+   "q": "uncommon",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 30,
+   "ilvlMin": 15,
+   "skill": [
+    "Leatherworking",
+    135
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 1255096,
+    "sk": 135,
+    "c": [
+     155,
+     175
+    ],
+    "by": [
+     252811
+    ]
+   }
+  },
+  {
+   "id": "i8173",
+   "item": 8173,
+   "name": "Thick Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 32,
+    "stamina": 4
+   },
+   "fx": "Permanently increase the Stamina value by 4 and armor value by 32 of an item worn on the chest, legs, hands or feet. Only usable on items level 25 and above.",
+   "ench": [
+    8487
+   ],
+   "spell": 10344,
+   "icon": "inv_misc_armorkit_07",
+   "q": "common",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 30,
+   "ilvlMin": 25,
+   "skill": [
+    "Leatherworking",
+    200
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 10487,
+    "sk": 200,
+    "c": [
+     195,
+     215
+    ]
+   }
+  },
+  {
+   "id": "i252463",
+   "item": 252463,
+   "name": "Forceful Thick Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 32,
+    "attackPower": 8
+   },
+   "fx": "Permanently increase the Attack Power value by 8 and armor value by 32 of an item worn on the chest, legs, hands, or feet. Only usable on items level 25 and above.",
+   "ench": [
+    8488
+   ],
+   "spell": 1254768,
+   "icon": "inv_misc_armorkit_07",
+   "q": "uncommon",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 40,
+   "ilvlMin": 25,
+   "skill": [
+    "Leatherworking",
+    185
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 1255073,
+    "sk": 185,
+    "c": [
+     205,
+     225
+    ],
+    "by": [
+     252834
+    ]
+   }
+  },
+  {
+   "id": "i252462",
+   "item": 252462,
+   "name": "Mystic Thick Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 32,
+    "spellPower": 5
+   },
+   "fx": "Permanently increase the Spell Power value by 5 and armor value by 32 of an item worn on the chest, legs, hands, or feet. Only usable on items level 25 and above.",
+   "ench": [
+    8489
+   ],
+   "spell": 1254767,
+   "icon": "inv_misc_armorkit_07",
+   "q": "uncommon",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 40,
+   "ilvlMin": 25,
+   "skill": [
+    "Leatherworking",
+    185
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 1255074,
+    "sk": 185,
+    "c": [
+     205,
+     225
+    ],
+    "by": [
+     252833
+    ]
+   }
+  },
+  {
+   "id": "i15564",
+   "item": 15564,
+   "name": "Rugged Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 40,
+    "stamina": 5
+   },
+   "fx": "Permanently increase the Stamina value by 5 and armor value by 40 of an item worn on the chest, legs, hands or feet. Only usable on items level 35 and above.",
+   "ench": [
+    8490
+   ],
+   "spell": 19057,
+   "icon": "inv_misc_armorkit_09",
+   "q": "common",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 40,
+   "ilvlMin": 35,
+   "skill": [
+    "Leatherworking",
+    250
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 19058,
+    "sk": 250,
+    "c": [
+     225,
+     245
+    ]
+   }
+  },
+  {
+   "id": "i18251",
+   "item": 18251,
+   "name": "Core Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "defense": 3
+   },
+   "fx": "Permanently increase the defense value of an item worn on the chest, legs, hands or feet by 3. Only usable on items level 45 and above.",
+   "ench": [
+    2503
+   ],
+   "spell": 22725,
+   "icon": "inv_misc_armorkit_05",
+   "q": "rare",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 50,
+   "ilvlMin": 45,
+   "skill": [
+    "Leatherworking",
+    300
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 22727,
+    "sk": 300,
+    "c": [
+     320,
+     340
+    ],
+    "by": [
+     18252
+    ]
+   }
+  },
+  {
+   "id": "i252488",
+   "item": 252488,
+   "name": "Forceful Rugged Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 40,
+    "attackPower": 10
+   },
+   "fx": "Permanently increase the Attack Power value by 10 and armor value by 40 of an item worn on the chest, legs, hands, or feet. Only usable on items level 35 and above.",
+   "ench": [
+    8491
+   ],
+   "spell": 1254772,
+   "icon": "inv_misc_armorkit_09",
+   "q": "uncommon",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 50,
+   "ilvlMin": 35,
+   "skill": [
+    "Leatherworking",
+    235
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 1254965,
+    "sk": 235,
+    "c": [
+     235,
+     255
+    ],
+    "by": [
+     252942
+    ]
+   }
+  },
+  {
+   "id": "i252487",
+   "item": 252487,
+   "name": "Mystic Rugged Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "bonusArmor": 40,
+    "spellPower": 6
+   },
+   "fx": "Permanently increase the Spell Power value by 6 and armor value by 40 of an item worn on the chest, legs, hands, or feet. Only usable on items level 35 and above.",
+   "ench": [
+    8492
+   ],
+   "spell": 1254770,
+   "icon": "inv_misc_armorkit_09",
+   "q": "uncommon",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 50,
+   "ilvlMin": 35,
+   "skill": [
+    "Leatherworking",
+    235
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 1254966,
+    "sk": 235,
+    "c": [
+     235,
+     255
+    ],
+    "by": [
+     252941
+    ]
+   }
+  },
+  {
+   "id": "i279258",
+   "item": 279258,
+   "name": "Wild Leather Armor Kit",
+   "slot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "stats": {
+    "defense": 4,
+    "stamina": 10
+   },
+   "fx": "Permanently increase the Defense Skill by 4 and the Stamina value by 10 of an item worn on the chest, legs, hands, or feet. Only usable on items level 45 and above.",
+   "ench": [
+    8719
+   ],
+   "spell": 1306907,
+   "icon": "inv_10_inscription_runedwrithebark_color1",
+   "q": "rare",
+   "itSlot": [
+    "chest",
+    "legs",
+    "feet",
+    "hands"
+   ],
+   "lvl": 60,
+   "ilvlMin": 45,
+   "skill": [
+    "Leatherworking",
+    300
+   ],
+   "made": {
+    "p": "Leatherworking",
+    "s": 1306532,
+    "sk": 300,
+    "c": [
+     310,
+     325
+    ],
+    "by": [
+     279307
+    ]
+   }
+  },
+  {
+   "id": "i273537",
+   "item": 273537,
+   "name": "Enchant Boots - Agility",
+   "slot": "feet",
+   "stats": {
+    "agility": 5
+   },
+   "fx": "Permanently enchant boots to give +5 Agility.",
+   "ench": [
+    904
+   ],
+   "spell": 13935,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "skill": [
+    "Enchanting",
+    235
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13935,
+    "sk": 235,
+    "c": [
+     255,
+     295
+    ]
+   }
+  },
+  {
+   "id": "i273556",
+   "item": 273556,
+   "name": "Enchant Boots - Greater Agility",
+   "slot": "feet",
+   "stats": {
+    "agility": 7
+   },
+   "fx": "Permanently enchant boots to give +7 Agility.",
+   "ench": [
+    1887
+   ],
+   "spell": 20023,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "skill": [
+    "Enchanting",
+    295
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20023,
+    "sk": 295,
+    "c": [
+     315,
+     355
+    ],
+    "by": [
+     16245
+    ]
+   }
+  },
+  {
+   "id": "i273555",
+   "item": 273555,
+   "name": "Enchant Boots - Greater Stamina",
+   "slot": "feet",
+   "stats": {
+    "stamina": 7
+   },
+   "fx": "Permanently enchant boots to give +7 Stamina.",
+   "ench": [
+    929
+   ],
+   "spell": 20020,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "skill": [
+    "Enchanting",
+    260
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20020,
+    "sk": 260,
+    "c": [
+     280,
+     320
+    ],
+    "by": [
+     16215
+    ]
+   }
+  },
+  {
+   "id": "i273500",
+   "item": 273500,
+   "name": "Enchant Boots - Lesser Agility",
+   "slot": "feet",
+   "stats": {
+    "agility": 4
+   },
+   "fx": "Permanently enchant boots to give +4 Agility.",
+   "ench": [
+    8204
+   ],
+   "spell": 13637,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "skill": [
+    "Enchanting",
+    160
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13637,
+    "sk": 160,
+    "c": [
+     180,
+     220
+    ]
+   }
+  },
+  {
+   "id": "i273512",
+   "item": 273512,
+   "name": "Enchant Boots - Lesser Spirit",
+   "slot": "feet",
+   "stats": {
+    "spirit": 4
+   },
+   "fx": "Permanently enchant boots to give +4 Spirit.",
+   "ench": [
+    8203
+   ],
+   "spell": 13687,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "skill": [
+    "Enchanting",
+    190
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13687,
+    "sk": 190,
+    "c": [
+     210,
+     250
+    ],
+    "by": [
+     11167
+    ]
+   }
+  },
+  {
+   "id": "i273503",
+   "item": 273503,
+   "name": "Enchant Boots - Lesser Stamina",
+   "slot": "feet",
+   "stats": {
+    "stamina": 4
+   },
+   "fx": "Permanently enchant boots to give +4 Stamina.",
+   "ench": [
+    254
+   ],
+   "spell": 13644,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "skill": [
+    "Enchanting",
+    170
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13644,
+    "sk": 170,
+    "c": [
+     190,
+     230
+    ]
+   }
+  },
+  {
+   "id": "i273479",
+   "item": 273479,
+   "name": "Enchant Boots - Minor Agility",
+   "slot": "feet",
+   "stats": {
+    "agility": 3
+   },
+   "fx": "Permanently enchant a pair of boots so they increase the wearer's Agility by 3.",
+   "ench": [
+    247
+   ],
+   "spell": 7867,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "skill": [
+    "Enchanting",
+    125
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7867,
+    "sk": 125,
+    "c": [
+     150,
+     190
+    ],
+    "by": [
+     6377
+    ]
+   }
+  },
+  {
+   "id": "i273530",
+   "item": 273530,
+   "name": "Enchant Boots - Minor Speed",
+   "slot": "feet",
+   "stats": {},
+   "fx": "Permanently enchant boots to give a slight movement speed increase.",
+   "ench": [
+    911
+   ],
+   "spell": 13890,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "raw": "aura 31 8",
+   "skill": [
+    "Enchanting",
+    225
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13890,
+    "sk": 225,
+    "c": [
+     245,
+     285
+    ]
+   }
+  },
+  {
+   "id": "i273478",
+   "item": 273478,
+   "name": "Enchant Boots - Minor Stamina",
+   "slot": "feet",
+   "stats": {
+    "stamina": 3
+   },
+   "fx": "Permanently enchant a pair of boots so they increase the wearer's Stamina by 3.",
+   "ench": [
+    66
+   ],
+   "spell": 7863,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "skill": [
+    "Enchanting",
+    125
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7863,
+    "sk": 125,
+    "c": [
+     150,
+     190
+    ],
+    "by": [
+     6376
+    ]
+   }
+  },
+  {
+   "id": "i273557",
+   "item": 273557,
+   "name": "Enchant Boots - Spirit",
+   "slot": "feet",
+   "stats": {
+    "spirit": 5
+   },
+   "fx": "Permanently enchant boots to give +5 Spirit.",
+   "ench": [
+    851
+   ],
+   "spell": 20024,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "skill": [
+    "Enchanting",
+    275
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20024,
+    "sk": 275,
+    "c": [
+     295,
+     335
+    ],
+    "by": [
+     16220
+    ]
+   }
+  },
+  {
+   "id": "i273523",
+   "item": 273523,
+   "name": "Enchant Boots - Stamina",
+   "slot": "feet",
+   "stats": {
+    "stamina": 5
+   },
+   "fx": "Permanently enchant boots to give +5 Stamina.",
+   "ench": [
+    852
+   ],
+   "spell": 13836,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "feet"
+   ],
+   "skill": [
+    "Enchanting",
+    215
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13836,
+    "sk": 215,
+    "c": [
+     235,
+     275
+    ]
+   }
+  },
+  {
+   "id": "i7969",
+   "item": 7969,
+   "name": "Mithril Spurs",
+   "slot": "feet",
+   "stats": {},
+   "fx": "Attaches spurs to your boots that increase your mounted movement speed slightly.",
+   "ench": [
+    464
+   ],
+   "spell": 9783,
+   "icon": "ability_rogue_sprint",
+   "q": "uncommon",
+   "itSlot": [
+    "feet"
+   ],
+   "raw": "aura 130 4",
+   "skill": [
+    "Blacksmithing",
+    210
+   ],
+   "made": {
+    "p": "Blacksmithing",
+    "s": 9964,
+    "sk": 210,
+    "c": [
+     230,
+     250
+    ],
+    "by": [
+     7989
+    ]
+   }
+  },
+  {
+   "id": "i273527",
+   "item": 273527,
+   "name": "Enchant Gloves - Advanced Herbalism",
+   "slot": "hands",
+   "stats": {
+    "herbalism": 5
+   },
+   "fx": "Permanently enchant gloves to grant +5 herbalism skill.",
+   "ench": [
+    909
+   ],
+   "spell": 13868,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    225
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13868,
+    "sk": 225,
+    "c": [
+     245,
+     285
+    ],
+    "by": [
+     11205
+    ]
+   }
+  },
+  {
+   "id": "i273524",
+   "item": 273524,
+   "name": "Enchant Gloves - Advanced Mining",
+   "slot": "hands",
+   "stats": {
+    "mining": 5
+   },
+   "fx": "Permanently enchant gloves to grant +5 mining skill.",
+   "ench": [
+    906
+   ],
+   "spell": 13841,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    215
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13841,
+    "sk": 215,
+    "c": [
+     235,
+     275
+    ],
+    "by": [
+     11203
+    ]
+   }
+  },
+  {
+   "id": "i273619",
+   "item": 273619,
+   "name": "Enchant Gloves - Advanced Skinning",
+   "slot": "hands",
+   "stats": {
+    "skinning": 10
+   },
+   "fx": "Permanently enchant gloves to grant +10 skinning skill.",
+   "ench": [
+    8210
+   ],
+   "spell": 1248528,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    250
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248528,
+    "sk": 250,
+    "c": [
+     270,
+     310
+    ],
+    "by": [
+     249516
+    ]
+   }
+  },
+  {
+   "id": "i273520",
+   "item": 273520,
+   "name": "Enchant Gloves - Agility",
+   "slot": "hands",
+   "stats": {
+    "agility": 7
+   },
+   "fx": "Permanently enchant gloves to grant +7 Agility.",
+   "ench": [
+    1887
+   ],
+   "spell": 13815,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    210
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13815,
+    "sk": 210,
+    "c": [
+     230,
+     270
+    ]
+   }
+  },
+  {
+   "id": "i273595",
+   "item": 273595,
+   "name": "Enchant Gloves - Arcane Power",
+   "slot": "hands",
+   "stats": {
+    "arcaneSpellDamage": 20
+   },
+   "fx": "Permanently enchant gloves to increase arcane damage by up to 20.",
+   "ench": [
+    7647
+   ],
+   "spell": 1213626,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1213626,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     249534
+    ]
+   }
+  },
+  {
+   "id": "i273581",
+   "item": 273581,
+   "name": "Enchant Gloves - Fire Power",
+   "slot": "hands",
+   "stats": {
+    "fireSpellDamage": 20
+   },
+   "fx": "Permanently enchant gloves to increase fire damage by up to 20.",
+   "ench": [
+    2616
+   ],
+   "spell": 25078,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25078,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20729
+    ]
+   }
+  },
+  {
+   "id": "i273495",
+   "item": 273495,
+   "name": "Enchant Gloves - Fishing",
+   "slot": "hands",
+   "stats": {
+    "fishing": 2
+   },
+   "fx": "Permanently enchant gloves to grant +2 fishing skill.",
+   "ench": [
+    846
+   ],
+   "spell": 13620,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    145
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13620,
+    "sk": 145,
+    "c": [
+     170,
+     210
+    ],
+    "by": [
+     11152
+    ]
+   }
+  },
+  {
+   "id": "i273580",
+   "item": 273580,
+   "name": "Enchant Gloves - Frost Power",
+   "slot": "hands",
+   "stats": {
+    "frostSpellDamage": 20
+   },
+   "fx": "Permanently enchant gloves to increase frost damage by up to 20.",
+   "ench": [
+    2615
+   ],
+   "spell": 25074,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25074,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20728
+    ]
+   }
+  },
+  {
+   "id": "i273549",
+   "item": 273549,
+   "name": "Enchant Gloves - Greater Agility",
+   "slot": "hands",
+   "stats": {
+    "agility": 10
+   },
+   "fx": "Permanently enchant gloves to grant +10 Agility.",
+   "ench": [
+    8206
+   ],
+   "spell": 20012,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    270
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20012,
+    "sk": 270,
+    "c": [
+     290,
+     330
+    ],
+    "by": [
+     16219
+    ]
+   }
+  },
+  {
+   "id": "i273550",
+   "item": 273550,
+   "name": "Enchant Gloves - Greater Strength",
+   "slot": "hands",
+   "stats": {
+    "strength": 10
+   },
+   "fx": "Permanently enchant gloves to grant +10 Strength.",
+   "ench": [
+    8207
+   ],
+   "spell": 20013,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    295
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20013,
+    "sk": 295,
+    "c": [
+     315,
+     355
+    ],
+    "by": [
+     16244
+    ]
+   }
+  },
+  {
+   "id": "i273582",
+   "item": 273582,
+   "name": "Enchant Gloves - Healing Power",
+   "slot": "hands",
+   "stats": {
+    "healing": 35,
+    "spellDamage": 12
+   },
+   "fx": "Permanently enchant gloves to increase the caster's healing spells by up to 35 and damage spells by up to 12.",
+   "ench": [
+    2617
+   ],
+   "spell": 25079,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25079,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20730
+    ]
+   }
+  },
+  {
+   "id": "i273494",
+   "item": 273494,
+   "name": "Enchant Gloves - Herbalism",
+   "slot": "hands",
+   "stats": {
+    "herbalism": 2
+   },
+   "fx": "Permanently enchant gloves to grant +2 herbalism skill.",
+   "ench": [
+    845
+   ],
+   "spell": 13617,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    145
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13617,
+    "sk": 145,
+    "c": [
+     170,
+     210
+    ],
+    "by": [
+     11151
+    ]
+   }
+  },
+  {
+   "id": "i273594",
+   "item": 273594,
+   "name": "Enchant Gloves - Holy Power",
+   "slot": "hands",
+   "stats": {
+    "holySpellDamage": 20
+   },
+   "fx": "Permanently enchant gloves to increase holy damage by up to 20.",
+   "ench": [
+    7646
+   ],
+   "spell": 1213622,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1213622,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     249536
+    ]
+   }
+  },
+  {
+   "id": "i274426",
+   "item": 274426,
+   "name": "Enchant Gloves - Lotus Claw",
+   "slot": "hands",
+   "stats": {},
+   "fx": "Permanently enchant a pair of gloves to give a small chance to acquire Death Lotus when gathering any herb in Hyjal.",
+   "ench": [
+    8695
+   ],
+   "spell": 1294054,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "raw": "aura 4 0",
+   "skill": [
+    "Enchanting",
+    295
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1294054,
+    "sk": 295,
+    "c": [
+     295,
+     300
+    ],
+    "by": [
+     274424
+    ]
+   }
+  },
+  {
+   "id": "i273493",
+   "item": 273493,
+   "name": "Enchant Gloves - Mining",
+   "slot": "hands",
+   "stats": {
+    "mining": 2
+   },
+   "fx": "Permanently enchant gloves to grant +2 mining skill.",
+   "ench": [
+    844
+   ],
+   "spell": 13612,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    145
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13612,
+    "sk": 145,
+    "c": [
+     170,
+     210
+    ],
+    "by": [
+     11150
+    ]
+   }
+  },
+  {
+   "id": "i273544",
+   "item": 273544,
+   "name": "Enchant Gloves - Minor Haste",
+   "slot": "hands",
+   "stats": {
+    "haste": 1
+   },
+   "fx": "Permanently enchant gloves to grant a +1% attack and casting speed bonus.",
+   "ench": [
+    931
+   ],
+   "spell": 13948,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    250
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13948,
+    "sk": 250,
+    "c": [
+     270,
+     310
+    ]
+   }
+  },
+  {
+   "id": "i273624",
+   "item": 273624,
+   "name": "Enchant Gloves - Natural Power",
+   "slot": "hands",
+   "stats": {
+    "natureSpellDamage": 20
+   },
+   "fx": "Permanently enchant gloves to increase Nature damage by up to 20.",
+   "ench": [
+    8213
+   ],
+   "spell": 1248645,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248645,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     249535
+    ]
+   }
+  },
+  {
+   "id": "i273543",
+   "item": 273543,
+   "name": "Enchant Gloves - Riding Skill",
+   "slot": "hands",
+   "stats": {},
+   "fx": "Permanently enchant gloves to grant a minor movement bonus while mounted.",
+   "ench": [
+    930
+   ],
+   "spell": 13947,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "raw": "aura 130 2",
+   "skill": [
+    "Enchanting",
+    250
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13947,
+    "sk": 250,
+    "c": [
+     270,
+     310
+    ],
+    "by": [
+     11226
+    ]
+   }
+  },
+  {
+   "id": "i273579",
+   "item": 273579,
+   "name": "Enchant Gloves - Shadow Power",
+   "slot": "hands",
+   "stats": {
+    "shadowSpellDamage": 20
+   },
+   "fx": "Permanently enchant gloves to increase shadow damage by up to 20.",
+   "ench": [
+    2614
+   ],
+   "spell": 25073,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25073,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20727
+    ]
+   }
+  },
+  {
+   "id": "i273516",
+   "item": 273516,
+   "name": "Enchant Gloves - Skinning",
+   "slot": "hands",
+   "stats": {
+    "skinning": 5
+   },
+   "fx": "Permanently enchant gloves to grant +5 skinning skill.",
+   "ench": [
+    865
+   ],
+   "spell": 13698,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    200
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13698,
+    "sk": 200,
+    "c": [
+     220,
+     260
+    ],
+    "by": [
+     11166
+    ]
+   }
+  },
+  {
+   "id": "i273529",
+   "item": 273529,
+   "name": "Enchant Gloves - Strength",
+   "slot": "hands",
+   "stats": {
+    "strength": 7
+   },
+   "fx": "Permanently enchant gloves to grant +7 Strength.",
+   "ench": [
+    927
+   ],
+   "spell": 13887,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    225
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13887,
+    "sk": 225,
+    "c": [
+     245,
+     285
+    ]
+   }
+  },
+  {
+   "id": "i273583",
+   "item": 273583,
+   "name": "Enchant Gloves - Superior Agility",
+   "slot": "hands",
+   "stats": {
+    "agility": 15
+   },
+   "fx": "Permanently enchant gloves to increase agility by 15.",
+   "ench": [
+    2564
+   ],
+   "spell": 25080,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25080,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20731
+    ]
+   }
+  },
+  {
+   "id": "i273623",
+   "item": 273623,
+   "name": "Enchant Gloves - Superior Strength",
+   "slot": "hands",
+   "stats": {
+    "strength": 15
+   },
+   "fx": "Permanently enchant gloves to increase Strength by 15.",
+   "ench": [
+    2563
+   ],
+   "spell": 1248640,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248640,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     274398
+    ]
+   }
+  },
+  {
+   "id": "i273578",
+   "item": 273578,
+   "name": "Enchant Gloves - Threat",
+   "slot": "hands",
+   "stats": {},
+   "fx": "Permanently enchant gloves to increase threat from all attacks and spells by 2%.",
+   "ench": [
+    2613
+   ],
+   "spell": 25072,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "hands"
+   ],
+   "raw": "aura 10 (127) 2",
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 25072,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     20726
+    ]
+   }
+  },
+  {
+   "id": "i18330",
+   "item": 18330,
+   "name": "Arcanum of Focus",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "spellDamage": 8,
+    "healing": 8
+   },
+   "fx": "Permanently adds +8 to your Healing and Damage from spells to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2544
+   ],
+   "spell": 22844,
+   "icon": "inv_misc_gem_02",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i18331",
+   "item": 18331,
+   "name": "Arcanum of Protection",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "dodge": 1
+   },
+   "fx": "Permanently adds 1% dodge to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2545
+   ],
+   "spell": 22846,
+   "icon": "inv_misc_gem_02",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i18329",
+   "item": 18329,
+   "name": "Arcanum of Rapidity",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "haste": 1
+   },
+   "fx": "Permanently adds 1% haste to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2543
+   ],
+   "spell": 22840,
+   "icon": "inv_misc_gem_02",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i11642",
+   "item": 11642,
+   "name": "Lesser Arcanum of Constitution",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {},
+   "fx": "Permanently adds 100 hit points to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    1503
+   ],
+   "spell": 15389,
+   "icon": "inv_misc_gem_03",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "raw": "aura 34 100",
+   "skill": null,
+   "binding": "Quest"
+  },
+  {
+   "id": "i11644",
+   "item": 11644,
+   "name": "Lesser Arcanum of Resilience",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "fireResist": 20
+   },
+   "fx": "Permanently adds 20 fire resistance to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    1505
+   ],
+   "spell": 15394,
+   "icon": "inv_misc_gem_03",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "skill": null,
+   "binding": "Quest"
+  },
+  {
+   "id": "i11622",
+   "item": 11622,
+   "name": "Lesser Arcanum of Rumination",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {},
+   "fx": "Permanently adds 150 mana to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    1483
+   ],
+   "spell": 15340,
+   "icon": "inv_misc_gem_03",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "raw": "aura 35 150",
+   "skill": null,
+   "binding": "Quest"
+  },
+  {
+   "id": "i11643",
+   "item": 11643,
+   "name": "Lesser Arcanum of Tenacity",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "bonusArmor": 125
+   },
+   "fx": "Permanently adds 125 armor to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    1504
+   ],
+   "spell": 15391,
+   "icon": "inv_misc_gem_03",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "skill": null,
+   "binding": "Quest"
+  },
+  {
+   "id": "i11645",
+   "item": 11645,
+   "name": "Lesser Arcanum of Voracity",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "strength": 8
+   },
+   "fx": "Permanently adds 8 strength to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    1506
+   ],
+   "spell": 15397,
+   "icon": "inv_misc_gem_03",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "skill": null,
+   "binding": "Quest"
+  },
+  {
+   "id": "i11646",
+   "item": 11646,
+   "name": "Lesser Arcanum of Voracity",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "stamina": 8
+   },
+   "fx": "Permanently adds 8 stamina to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    1507
+   ],
+   "spell": 15400,
+   "icon": "inv_misc_gem_03",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "skill": null,
+   "binding": "Quest"
+  },
+  {
+   "id": "i11647",
+   "item": 11647,
+   "name": "Lesser Arcanum of Voracity",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "agility": 8
+   },
+   "fx": "Permanently adds 8 agility to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    1508
+   ],
+   "spell": 15402,
+   "icon": "inv_misc_gem_03",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "skill": null,
+   "binding": "Quest"
+  },
+  {
+   "id": "i11648",
+   "item": 11648,
+   "name": "Lesser Arcanum of Voracity",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "intellect": 8
+   },
+   "fx": "Permanently adds 8 intellect to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    1509
+   ],
+   "spell": 15404,
+   "icon": "inv_misc_gem_03",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "skill": null,
+   "binding": "Quest"
+  },
+  {
+   "id": "i11649",
+   "item": 11649,
+   "name": "Lesser Arcanum of Voracity",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "spirit": 8
+   },
+   "fx": "Permanently adds 8 spirit to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    1510
+   ],
+   "spell": 15406,
+   "icon": "inv_misc_gem_03",
+   "q": "uncommon",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "skill": null,
+   "binding": "Quest"
+  },
+  {
+   "id": "i22636",
+   "item": 22636,
+   "name": "Ice Guard",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "frostResist": 10
+   },
+   "fx": "Permanently adds 10 frost resistance to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2682
+   ],
+   "spell": 28163,
+   "icon": "spell_frost_frostshock",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 55,
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i22635",
+   "item": 22635,
+   "name": "Savage Guard",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "natureResist": 10
+   },
+   "fx": "Permanently adds 10 nature resistance to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2681
+   ],
+   "spell": 28161,
+   "icon": "spell_nature_spiritarmor",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 55,
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i22638",
+   "item": 22638,
+   "name": "Shadow Guard",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "shadowResist": 10
+   },
+   "fx": "Permanently adds 10 shadow resistance to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2683
+   ],
+   "spell": 28165,
+   "icon": "spell_shadow_antishadow",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 55,
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i19790",
+   "item": 19790,
+   "name": "Animist's Caress",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "stamina": 10,
+    "intellect": 10,
+    "healing": 24
+   },
+   "fx": "Permanently adds 10 Stamina, 10 Intellect, and increases healing by up to 24 to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2591
+   ],
+   "spell": 24168,
+   "icon": "spell_nature_reincarnation",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "cls": [
+    "Druid"
+   ],
+   "binding": "BoP"
+  },
+  {
+   "id": "i19784",
+   "item": 19784,
+   "name": "Death's Embrace",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "attackPower": 28,
+    "dodge": 1
+   },
+   "fx": "Permanently adds 28 Attack Power and 1% Dodge to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2585
+   ],
+   "spell": 24161,
+   "icon": "spell_shadow_scourgebuild",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "cls": [
+    "Rogue"
+   ],
+   "binding": "BoP"
+  },
+  {
+   "id": "i19785",
+   "item": 19785,
+   "name": "Falcon's Call",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "rangedAttackPower": 24,
+    "hit": 1,
+    "stamina": 10
+   },
+   "fx": "Permanently adds 24 Ranged Attack Power, 10 Stamina, and 1% Chance to Hit to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2586
+   ],
+   "spell": 24162,
+   "icon": "spell_nature_forceofnature",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "cls": [
+    "Hunter"
+   ],
+   "binding": "BoP"
+  },
+  {
+   "id": "i19788",
+   "item": 19788,
+   "name": "Hoodoo Hex",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "spellDamage": 18,
+    "healing": 18,
+    "stamina": 10
+   },
+   "fx": "Permanently adds 10 Stamina and increases spell damage and healing by up to 18 to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2589
+   ],
+   "spell": 24165,
+   "icon": "spell_shadow_impphaseshift",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "cls": [
+    "Warlock"
+   ],
+   "binding": "BoP"
+  },
+  {
+   "id": "i19782",
+   "item": 19782,
+   "name": "Presence of Might",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "stamina": 10,
+    "defense": 7
+   },
+   "fx": "Permanently adds 10 Stamina, 7 Defense, and 15 Shield Block value to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2583
+   ],
+   "spell": 24149,
+   "icon": "spell_holy_sealofwrath",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 60,
+   "raw": "aura 274 15",
+   "skill": null,
+   "cls": [
+    "Warrior"
+   ],
+   "binding": "BoP"
+  },
+  {
+   "id": "i19787",
+   "item": 19787,
+   "name": "Presence of Sight",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "spellDamage": 18,
+    "healing": 18,
+    "spellHit": 1
+   },
+   "fx": "Permanently adds 18 to all healing and damage spells and 1% chance to hit with spells to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2588
+   ],
+   "spell": 24164,
+   "icon": "spell_shadow_detectlesserinvisibility",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "cls": [
+    "Mage"
+   ],
+   "binding": "BoP"
+  },
+  {
+   "id": "i19789",
+   "item": 19789,
+   "name": "Prophetic Aura",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "stamina": 10,
+    "mp5": 4,
+    "healing": 24
+   },
+   "fx": "Permanently adds 10 Stamina, 4 mana per 5 sec., and increases healing by up to 24 to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2590
+   ],
+   "spell": 24167,
+   "icon": "spell_holy_holyprotection",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "cls": [
+    "Priest"
+   ],
+   "binding": "BoP"
+  },
+  {
+   "id": "i19783",
+   "item": 19783,
+   "name": "Syncretist's Sigil",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "stamina": 10,
+    "defense": 7,
+    "healing": 24
+   },
+   "fx": "Permanently adds 10 Stamina, 7 Defense, and increases healing by up to 24 to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2584
+   ],
+   "spell": 24160,
+   "icon": "spell_holy_prayerofhealing",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "cls": [
+    "Paladin"
+   ],
+   "binding": "BoP"
+  },
+  {
+   "id": "i19786",
+   "item": 19786,
+   "name": "Vodouisant's Vigilant Embrace",
+   "slot": [
+    "head",
+    "legs"
+   ],
+   "stats": {
+    "spellDamage": 13,
+    "healing": 13,
+    "intellect": 15
+   },
+   "fx": "Permanently adds 15 Intellect and increases all healing and spell damage by up to 13 to a leg or head slot item. Does not stack with other enchantments for the selected equipment slot.",
+   "ench": [
+    2587
+   ],
+   "spell": 24163,
+   "icon": "spell_nature_purge",
+   "q": "rare",
+   "itSlot": [
+    "head",
+    "legs"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "cls": [
+    "Shaman"
+   ],
+   "binding": "BoP"
+  },
+  {
+   "id": "i273589",
+   "item": 273589,
+   "name": "Enchant 2H Weapon - Agility",
+   "slot": "mainhand",
+   "stats": {
+    "agility": 25
+   },
+   "fx": "Permanently enchant a two-handed melee weapon to grant +25 Agility.",
+   "ench": [
+    2646
+   ],
+   "spell": 27837,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    290
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 27837,
+    "sk": 290,
+    "c": [
+     310,
+     350
+    ],
+    "by": [
+     22392
+    ]
+   }
+  },
+  {
+   "id": "i273608",
+   "item": 273608,
+   "name": "Enchant 2H Weapon - Grand Arcanist",
+   "slot": "mainhand",
+   "stats": {},
+   "fx": "Permanently enchant a two-handed melee weapon so that often when striking with a spell it restores 350 to 450 mana and increases Spell Power by 140 for 20 sec.",
+   "ench": [
+    7941
+   ],
+   "spell": 1231139,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "raw": "aura 42 0",
+   "skill": [
+    "Enchanting",
+    280
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1231139,
+    "sk": 280,
+    "c": [
+     305,
+     310
+    ],
+    "by": [
+     241195
+    ]
+   }
+  },
+  {
+   "id": "i273610",
+   "item": 273610,
+   "name": "Enchant 2H Weapon - Grand Inquisitor",
+   "slot": "mainhand",
+   "stats": {},
+   "fx": "Permanently enchant a two-handed melee weapon so that often when attacking in melee it heals for 350 to 450 and increases Strength by 200 for 20 sec.",
+   "ench": [
+    7943
+   ],
+   "spell": 1232172,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "raw": "proc: Righteous Inquisition; aura 42 0",
+   "skill": [
+    "Enchanting",
+    280
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1232172,
+    "sk": 280,
+    "c": [
+     305,
+     310
+    ],
+    "by": [
+     242361
+    ]
+   }
+  },
+  {
+   "id": "i273538",
+   "item": 273538,
+   "name": "Enchant 2H Weapon - Greater Impact",
+   "slot": "mainhand",
+   "stats": {
+    "weaponDamage": 7
+   },
+   "fx": "Permanently enchant a two-handed melee weapon to do +7 damage.",
+   "ench": [
+    963
+   ],
+   "spell": 13937,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    240
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13937,
+    "sk": 240,
+    "c": [
+     260,
+     300
+    ]
+   }
+  },
+  {
+   "id": "i273515",
+   "item": 273515,
+   "name": "Enchant 2H Weapon - Impact",
+   "slot": "mainhand",
+   "stats": {
+    "weaponDamage": 6
+   },
+   "fx": "Permanently enchant a Two-handed Melee Weapon to do 6 additional points of damage.",
+   "ench": [
+    8205
+   ],
+   "spell": 13695,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    200
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13695,
+    "sk": 200,
+    "c": [
+     220,
+     260
+    ]
+   }
+  },
+  {
+   "id": "i273617",
+   "item": 273617,
+   "name": "Enchant 2H Weapon - Lesser Agility",
+   "slot": "mainhand",
+   "stats": {
+    "agility": 9
+   },
+   "fx": "Permanently enchant a Two-handed Melee Weapon to grant +15 Agility.",
+   "ench": [
+    2618
+   ],
+   "spell": 1248510,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    210
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248510,
+    "sk": 210,
+    "c": [
+     230,
+     270
+    ],
+    "by": [
+     249511
+    ]
+   }
+  },
+  {
+   "id": "i273489",
+   "item": 273489,
+   "name": "Enchant 2H Weapon - Lesser Impact",
+   "slot": "mainhand",
+   "stats": {
+    "weaponDamage": 5
+   },
+   "fx": "Permanently enchant a Two-handed Melee Weapon to do 5 additional points of damage.",
+   "ench": [
+    1897
+   ],
+   "spell": 13529,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    145
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13529,
+    "sk": 145,
+    "c": [
+     170,
+     210
+    ]
+   }
+  },
+  {
+   "id": "i273474",
+   "item": 273474,
+   "name": "Enchant 2H Weapon - Lesser Intellect",
+   "slot": "mainhand",
+   "stats": {
+    "intellect": 5
+   },
+   "fx": "Permanently enchant a Two-Handed Melee Weapon to add 5 to Intellect.",
+   "ench": [
+    723
+   ],
+   "spell": 7793,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    100
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7793,
+    "sk": 100,
+    "c": [
+     130,
+     170
+    ],
+    "by": [
+     6349
+    ]
+   }
+  },
+  {
+   "id": "i273481",
+   "item": 273481,
+   "name": "Enchant 2H Weapon - Lesser Spirit",
+   "slot": "mainhand",
+   "stats": {
+    "spirit": 5
+   },
+   "fx": "Permanently enchant a Two-Handed Melee Weapon to add 5 to Spirit.",
+   "ench": [
+    851
+   ],
+   "spell": 13380,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    110
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13380,
+    "sk": 110,
+    "c": [
+     135,
+     175
+    ],
+    "by": [
+     11038
+    ]
+   }
+  },
+  {
+   "id": "i273618",
+   "item": 273618,
+   "name": "Enchant 2H Weapon - Lesser Strength",
+   "slot": "mainhand",
+   "stats": {
+    "strength": 15
+   },
+   "fx": "Permanently enchant a Two-handed Melee Weapon to grant +15 Strength.",
+   "ench": [
+    2563
+   ],
+   "spell": 1248511,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    220
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248511,
+    "sk": 220,
+    "c": [
+     240,
+     280
+    ],
+    "by": [
+     249513
+    ]
+   }
+  },
+  {
+   "id": "i273568",
+   "item": 273568,
+   "name": "Enchant 2H Weapon - Major Intellect",
+   "slot": "mainhand",
+   "stats": {
+    "intellect": 9
+   },
+   "fx": "Permanently enchant a Two-Handed Melee Weapon to add 9 to intellect.",
+   "ench": [
+    1904
+   ],
+   "spell": 20036,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20036,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     16249
+    ]
+   }
+  },
+  {
+   "id": "i273567",
+   "item": 273567,
+   "name": "Enchant 2H Weapon - Major Spirit",
+   "slot": "mainhand",
+   "stats": {
+    "spirit": 9
+   },
+   "fx": "Permanently enchant a Two-Handed Melee Weapon to add 9 to Spirit.",
+   "ench": [
+    1903
+   ],
+   "spell": 20035,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20035,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     16255
+    ]
+   }
+  },
+  {
+   "id": "i273622",
+   "item": 273622,
+   "name": "Enchant 2H Weapon - Mighty Healing Power",
+   "slot": "mainhand",
+   "stats": {
+    "healing": 100,
+    "spellDamage": 34
+   },
+   "fx": "Permanently enchant a two-handed melee weapon to increase healing by up to 100 and damage by up to 34.",
+   "ench": [
+    8212
+   ],
+   "spell": 1248636,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248636,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     249526
+    ]
+   }
+  },
+  {
+   "id": "i273621",
+   "item": 273621,
+   "name": "Enchant 2H Weapon - Mighty Spell Power",
+   "slot": "mainhand",
+   "stats": {
+    "spellPower": 55
+   },
+   "fx": "Permanently enchant a two-handed melee weapon to increase damage and healing by up to 55.",
+   "ench": [
+    8211
+   ],
+   "spell": 1248607,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248607,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     249525
+    ]
+   }
+  },
+  {
+   "id": "i273465",
+   "item": 273465,
+   "name": "Enchant 2H Weapon - Minor Impact",
+   "slot": "mainhand",
+   "stats": {
+    "weaponDamage": 4
+   },
+   "fx": "Permanently enchant a Two-Handed Melee Weapon to do 4 additional points of damage.",
+   "ench": [
+    805
+   ],
+   "spell": 7745,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    100
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7745,
+    "sk": 100,
+    "c": [
+     130,
+     170
+    ]
+   }
+  },
+  {
+   "id": "i273601",
+   "item": 273601,
+   "name": "Enchant 2H Weapon - Spellblasting",
+   "slot": "mainhand",
+   "stats": {
+    "spellPower": 65
+   },
+   "fx": "Permanently enchant a 2H Weapon to add 65 Spell Power.",
+   "ench": [
+    7662
+   ],
+   "spell": 1219580,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1219580,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     274394
+    ]
+   }
+  },
+  {
+   "id": "i273562",
+   "item": 273562,
+   "name": "Enchant 2H Weapon - Superior Impact",
+   "slot": "mainhand",
+   "stats": {
+    "weaponDamage": 9
+   },
+   "fx": "Permanently enchant a two-handed melee weapon to do +9 damage.",
+   "ench": [
+    1896
+   ],
+   "spell": 20030,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff"
+   ],
+   "skill": [
+    "Enchanting",
+    295
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20030,
+    "sk": 295,
+    "c": [
+     315,
+     355
+    ],
+    "by": [
+     16247
+    ]
+   }
+  },
+  {
+   "id": "i19971",
+   "item": 19971,
+   "name": "High Test Eternium Fishing Line",
+   "slot": "mainhand",
+   "stats": {
+    "fishing": 5
+   },
+   "fx": "Replaces the fishing line on your fishing pole with a high test eternium line.",
+   "ench": [
+    2603
+   ],
+   "spell": 24302,
+   "icon": "inv_fabric_mageweave_02",
+   "q": "uncommon",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Fishing Pole"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i6043",
+   "item": 6043,
+   "name": "Iron Counterweight",
+   "slot": "mainhand",
+   "stats": {
+    "haste": 3
+   },
+   "fx": "Attaches a counterweight to a two-handed sword, mace, axe or polearm making it 3% faster.",
+   "ench": [
+    34
+   ],
+   "spell": 7218,
+   "icon": "inv_misc_orb_01",
+   "q": "common",
+   "itSlot": [
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword"
+   ],
+   "skill": [
+    "Blacksmithing",
+    140
+   ],
+   "made": {
+    "p": "Blacksmithing",
+    "s": 7222,
+    "sk": 140,
+    "c": [
+     165,
+     190
+    ],
+    "by": [
+     6045
+    ]
+   }
+  },
+  {
+   "id": "i273573",
+   "item": 273573,
+   "name": "Enchant Weapon - Agility",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "agility": 15
+   },
+   "fx": "Permanently enchant a melee weapon to grant +15 Agility.",
+   "ench": [
+    2564
+   ],
+   "spell": 23800,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    290
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 23800,
+    "sk": 290,
+    "c": [
+     310,
+     350
+    ],
+    "by": [
+     19445
+    ]
+   }
+  },
+  {
+   "id": "i273566",
+   "item": 273566,
+   "name": "Enchant Weapon - Crusader",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a melee weapon so that often when attacking in melee it heals for 75 to 125 and increases Strength by 100 for 15 sec.",
+   "ench": [
+    1900
+   ],
+   "spell": 20034,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "proc: Holy Strength; aura 42 0",
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20034,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     16252
+    ]
+   }
+  },
+  {
+   "id": "i273533",
+   "item": 273533,
+   "name": "Enchant Weapon - Demonslaying",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a melee weapon to have a chance of stunning and doing heavy damage to demons.",
+   "ench": [
+    912
+   ],
+   "spell": 13915,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "proc: Smite Demon",
+   "skill": [
+    "Enchanting",
+    230
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13915,
+    "sk": 230,
+    "c": [
+     250,
+     290
+    ],
+    "by": [
+     11208
+    ]
+   }
+  },
+  {
+   "id": "i273590",
+   "item": 273590,
+   "name": "Enchant Weapon - Dismantle",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a Weapon to cause all spells and attacks to sometimes deal 60 to 90 additional damage to mechanical creatures.",
+   "ench": [
+    7210
+   ],
+   "spell": 435481,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "aura 42 10; aura 42 10",
+   "skill": [
+    "Enchanting",
+    225
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 435481,
+    "sk": 225,
+    "c": [
+     200,
+     235
+    ],
+    "by": [
+     215129
+    ]
+   }
+  },
+  {
+   "id": "i273531",
+   "item": 273531,
+   "name": "Enchant Weapon - Fiery Weapon",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a melee weapon to often strike for 40 additional fire damage.",
+   "ench": [
+    803
+   ],
+   "spell": 13898,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "proc: Fiery Weapon",
+   "skill": [
+    "Enchanting",
+    265
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13898,
+    "sk": 265,
+    "c": [
+     285,
+     325
+    ],
+    "by": [
+     11207
+    ]
+   }
+  },
+  {
+   "id": "i273607",
+   "item": 273607,
+   "name": "Enchant Weapon - Grand Crusader",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a melee weapon so that often when attacking in melee it heals for 350 to 450 and increases Strength by 120 for 20 sec.",
+   "ench": [
+    7940
+   ],
+   "spell": 1231128,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "proc: Righteous Strength; aura 42 0",
+   "skill": [
+    "Enchanting",
+    280
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1231128,
+    "sk": 280,
+    "c": [
+     305,
+     310
+    ],
+    "by": [
+     241191
+    ]
+   }
+  },
+  {
+   "id": "i273609",
+   "item": 273609,
+   "name": "Enchant Weapon - Grand Sorcerer",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a melee weapon so that often when striking with a spell it restores 350 to 450 mana and increases Spell Power by 70 for 20 sec.",
+   "ench": [
+    7942
+   ],
+   "spell": 1231164,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "aura 42 0",
+   "skill": [
+    "Enchanting",
+    280
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1231164,
+    "sk": 280,
+    "c": [
+     305,
+     310
+    ],
+    "by": [
+     241201
+    ]
+   }
+  },
+  {
+   "id": "i273541",
+   "item": 273541,
+   "name": "Enchant Weapon - Greater Striking",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "weaponDamage": 4
+   },
+   "fx": "Permanently enchant a Melee Weapon to do 4 additional points of damage.",
+   "ench": [
+    805
+   ],
+   "spell": 13943,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    245
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13943,
+    "sk": 245,
+    "c": [
+     265,
+     305
+    ]
+   }
+  },
+  {
+   "id": "i273571",
+   "item": 273571,
+   "name": "Enchant Weapon - Healing Power",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "healing": 55,
+    "spellDamage": 19
+   },
+   "fx": "Permanently enchant a Melee Weapon to add up to 55 points of healing to healing spells and up to 19 points of damage to damage spells.",
+   "ench": [
+    2505
+   ],
+   "spell": 22750,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 22750,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     18260
+    ]
+   }
+  },
+  {
+   "id": "i273561",
+   "item": 273561,
+   "name": "Enchant Weapon - Icy Chill",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a melee weapon to often chill the target reducing their movement and attack speed.",
+   "ench": [
+    1894
+   ],
+   "spell": 20029,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "proc: Chilled",
+   "skill": [
+    "Enchanting",
+    285
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20029,
+    "sk": 285,
+    "c": [
+     305,
+     345
+    ],
+    "by": [
+     16223
+    ]
+   }
+  },
+  {
+   "id": "i273627",
+   "item": 273627,
+   "name": "Enchant Weapon - Insight",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a Melee Weapon to have a chance to grant Insight when you cast a spell, increasing Spirit by 100% for 10 sec.",
+   "ench": [
+    8216
+   ],
+   "spell": 1248757,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "aura 42 100",
+   "skill": [
+    "Enchanting",
+    140
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248757,
+    "sk": 140,
+    "c": [
+     140,
+     180
+    ],
+    "by": [
+     249479
+    ]
+   }
+  },
+  {
+   "id": "i273506",
+   "item": 273506,
+   "name": "Enchant Weapon - Lesser Beastslayer",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a Melee Weapon to do 6 additional points of damage to Beasts.",
+   "ench": [
+    853
+   ],
+   "spell": 13653,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "aura 59 (1) 6",
+   "skill": [
+    "Enchanting",
+    175
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13653,
+    "sk": 175,
+    "c": [
+     195,
+     235
+    ],
+    "by": [
+     11164
+    ]
+   }
+  },
+  {
+   "id": "i273507",
+   "item": 273507,
+   "name": "Enchant Weapon - Lesser Elemental Slayer",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a Melee Weapon to do 6 additional damage against Elementals.",
+   "ench": [
+    854
+   ],
+   "spell": 13655,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "aura 59 (8) 6",
+   "skill": [
+    "Enchanting",
+    175
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13655,
+    "sk": 175,
+    "c": [
+     195,
+     235
+    ],
+    "by": [
+     11165
+    ]
+   }
+  },
+  {
+   "id": "i273487",
+   "item": 273487,
+   "name": "Enchant Weapon - Lesser Striking",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "weaponDamage": 2
+   },
+   "fx": "Permanently enchant a Melee Weapon to do 2 additional points of damage.",
+   "ench": [
+    241
+   ],
+   "spell": 13503,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    140
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13503,
+    "sk": 140,
+    "c": [
+     165,
+     205
+    ]
+   }
+  },
+  {
+   "id": "i273564",
+   "item": 273564,
+   "name": "Enchant Weapon - Lifestealing",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a melee weapon to often steal life from the enemy and give it to the wielder.",
+   "ench": [
+    1898
+   ],
+   "spell": 20032,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "proc: Life Steal",
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20032,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     16254
+    ]
+   }
+  },
+  {
+   "id": "i273577",
+   "item": 273577,
+   "name": "Enchant Weapon - Mighty Intellect",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "intellect": 22
+   },
+   "fx": "Permanently enchant a melee weapon to grant +22 Intellect.",
+   "ench": [
+    2568
+   ],
+   "spell": 23804,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 23804,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     19449
+    ]
+   }
+  },
+  {
+   "id": "i273576",
+   "item": 273576,
+   "name": "Enchant Weapon - Mighty Spirit",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "spirit": 22
+   },
+   "fx": "Permanently enchant a melee weapon to grant +22 Spirit.",
+   "ench": [
+    2567
+   ],
+   "spell": 23803,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 23803,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     19448
+    ]
+   }
+  },
+  {
+   "id": "i273472",
+   "item": 273472,
+   "name": "Enchant Weapon - Minor Beastslayer",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a Melee Weapon to do 2 additional points of damage to Beasts.",
+   "ench": [
+    249
+   ],
+   "spell": 7786,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "aura 59 (1) 2",
+   "skill": [
+    "Enchanting",
+    90
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7786,
+    "sk": 90,
+    "c": [
+     120,
+     160
+    ],
+    "by": [
+     6348
+    ]
+   }
+  },
+  {
+   "id": "i273473",
+   "item": 273473,
+   "name": "Enchant Weapon - Minor Striking",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "weaponDamage": 1
+   },
+   "fx": "Permanently enchant a Melee Weapon to do 1 additional point of damage.",
+   "ench": [
+    250
+   ],
+   "spell": 7788,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    90
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7788,
+    "sk": 90,
+    "c": [
+     120,
+     160
+    ]
+   }
+  },
+  {
+   "id": "i273628",
+   "item": 273628,
+   "name": "Enchant Weapon - Recovery",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a Melee Weapon to trigger Recovery when you are Parried or Dodged, healing you for 5% of your maximum health. Cannot occur more often than once every 10 sec.",
+   "ench": [
+    8721
+   ],
+   "spell": 1248760,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "aura 42 100",
+   "skill": [
+    "Enchanting",
+    140
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248760,
+    "sk": 140,
+    "c": [
+     140,
+     180
+    ],
+    "by": [
+     249480
+    ]
+   }
+  },
+  {
+   "id": "i273629",
+   "item": 273629,
+   "name": "Enchant Weapon - Revelation",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a Melee Weapon to have a chance to trigger Revelation when a non-periodic spell fails to critically strike. Revelation grants 100% increased critical strike chance to the next non-periodic spell cast. Revelation's chance to trigger is diminished as your critical strike chance increases.",
+   "ench": [
+    8217
+   ],
+   "spell": 1248805,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "aura 42 0",
+   "skill": [
+    "Enchanting",
+    140
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248805,
+    "sk": 140,
+    "c": [
+     140,
+     180
+    ],
+    "by": [
+     249481
+    ]
+   }
+  },
+  {
+   "id": "i273570",
+   "item": 273570,
+   "name": "Enchant Weapon - Spell Power",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "spellDamage": 30,
+    "healing": 30
+   },
+   "fx": "Permanently enchant a Melee Weapon to add up to 30 damage to spells.",
+   "ench": [
+    2504
+   ],
+   "spell": 22749,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 22749,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     18259
+    ]
+   }
+  },
+  {
+   "id": "i273572",
+   "item": 273572,
+   "name": "Enchant Weapon - Strength",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "strength": 15
+   },
+   "fx": "Permanently enchant a melee weapon to grant +15 strength.",
+   "ench": [
+    2563
+   ],
+   "spell": 23799,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    290
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 23799,
+    "sk": 290,
+    "c": [
+     310,
+     350
+    ],
+    "by": [
+     19444
+    ]
+   }
+  },
+  {
+   "id": "i273514",
+   "item": 273514,
+   "name": "Enchant Weapon - Striking",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "weaponDamage": 3
+   },
+   "fx": "Permanently enchant a Melee Weapon to do 3 additional points of damage.",
+   "ench": [
+    943
+   ],
+   "spell": 13693,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    195
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13693,
+    "sk": 195,
+    "c": [
+     215,
+     255
+    ]
+   }
+  },
+  {
+   "id": "i273563",
+   "item": 273563,
+   "name": "Enchant Weapon - Superior Striking",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "weaponDamage": 5
+   },
+   "fx": "Permanently enchant a Melee Weapon to do 5 additional points of damage.",
+   "ench": [
+    1897
+   ],
+   "spell": 20031,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20031,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     16250
+    ]
+   }
+  },
+  {
+   "id": "i273565",
+   "item": 273565,
+   "name": "Enchant Weapon - Unholy Weapon",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Permanently enchant a melee weapon to often inflict a curse on the target reducing their melee damage.",
+   "ench": [
+    1899
+   ],
+   "spell": 20033,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "proc: Unholy Curse",
+   "skill": [
+    "Enchanting",
+    295
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20033,
+    "sk": 295,
+    "c": [
+     315,
+     355
+    ],
+    "by": [
+     16248
+    ]
+   }
+  },
+  {
+   "id": "i273569",
+   "item": 273569,
+   "name": "Enchant Weapon - Winter's Might",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {
+    "frostSpellDamage": 15
+   },
+   "fx": "Permanently enchant a weapon to grant up to 15 additional frost damage when casting frost spells.",
+   "ench": [
+    2443
+   ],
+   "spell": 21931,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "skill": [
+    "Enchanting",
+    190
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 21931,
+    "sk": 190,
+    "c": [
+     210,
+     250
+    ],
+    "by": [
+     17725
+    ]
+   }
+  },
+  {
+   "id": "i5421",
+   "item": 5421,
+   "name": "Fiery Blaze Enchantment",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Enchants a weapon to have a 15% chance to inflict 9 to 13 Fire damage to all enemies within 3 yards.",
+   "ench": [
+    36
+   ],
+   "spell": 6296,
+   "icon": "inv_jewelry_talisman_01",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "proc: Fiery Blaze",
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i6041",
+   "item": 6041,
+   "name": "Steel Weapon Chain",
+   "slot": [
+    "mainhand",
+    "offhand"
+   ],
+   "stats": {},
+   "fx": "Attaches a chain to your weapon, making it impossible to disarm.",
+   "ench": [
+    37
+   ],
+   "spell": 7220,
+   "icon": "spell_frost_chainsofice",
+   "q": "common",
+   "itSlot": [
+    "one-hand",
+    "main-hand",
+    "off-hand",
+    "two-hand"
+   ],
+   "itType": [
+    "Axe",
+    "Mace",
+    "Polearm",
+    "Sword",
+    "Staff",
+    "Fist Weapon",
+    "Dagger"
+   ],
+   "raw": "aura 77 (3) 0",
+   "skill": [
+    "Blacksmithing",
+    165
+   ],
+   "made": {
+    "p": "Blacksmithing",
+    "s": 7224,
+    "sk": 165,
+    "c": [
+     190,
+     215
+    ],
+    "by": [
+     6046
+    ]
+   }
+  },
+  {
+   "id": "i273633",
+   "item": 273633,
+   "name": "Enchant Necklace - Agility",
+   "slot": "neck",
+   "stats": {
+    "agility": 5
+   },
+   "fx": "Permanently enchant a necklace to increase Agility by 5.",
+   "ench": [
+    904
+   ],
+   "spell": 1249059,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "neck"
+   ],
+   "skill": [
+    "Enchanting",
+    210
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1249059,
+    "sk": 210,
+    "c": [
+     225,
+     265
+    ],
+    "by": [
+     249504
+    ]
+   }
+  },
+  {
+   "id": "i273634",
+   "item": 273634,
+   "name": "Enchant Necklace - Deflection",
+   "slot": "neck",
+   "stats": {
+    "defense": 2
+   },
+   "fx": "Permanently enchant a necklace to increase defense skill by 5.",
+   "ench": [
+    925
+   ],
+   "spell": 1249060,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "neck"
+   ],
+   "skill": [
+    "Enchanting",
+    210
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1249060,
+    "sk": 210,
+    "c": [
+     225,
+     265
+    ],
+    "by": [
+     249505
+    ]
+   }
+  },
+  {
+   "id": "i273632",
+   "item": 273632,
+   "name": "Enchant Necklace - Healing Power",
+   "slot": "neck",
+   "stats": {
+    "healing": 11,
+    "spellDamage": 4
+   },
+   "fx": "Permanently enchant a necklace to increase healing by up to 11 and spell damage by up to 4.",
+   "ench": [
+    8219
+   ],
+   "spell": 1249058,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "neck"
+   ],
+   "skill": [
+    "Enchanting",
+    210
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1249058,
+    "sk": 210,
+    "c": [
+     225,
+     265
+    ],
+    "by": [
+     249503
+    ]
+   }
+  },
+  {
+   "id": "i273631",
+   "item": 273631,
+   "name": "Enchant Necklace - Spell Power",
+   "slot": "neck",
+   "stats": {
+    "spellPower": 6
+   },
+   "fx": "Permanently enchant a necklace to increase spell damage and healing by up to 6.",
+   "ench": [
+    8218
+   ],
+   "spell": 1249057,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "neck"
+   ],
+   "skill": [
+    "Enchanting",
+    210
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1249057,
+    "sk": 210,
+    "c": [
+     225,
+     265
+    ],
+    "by": [
+     249502
+    ]
+   }
+  },
+  {
+   "id": "i273630",
+   "item": 273630,
+   "name": "Enchant Necklace - Strength",
+   "slot": "neck",
+   "stats": {
+    "strength": 5
+   },
+   "fx": "Permanently enchant a necklace to increase Strength by 5.",
+   "ench": [
+    856
+   ],
+   "spell": 1249019,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "neck"
+   ],
+   "skill": [
+    "Enchanting",
+    210
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1249019,
+    "sk": 210,
+    "c": [
+     225,
+     265
+    ],
+    "by": [
+     249496
+    ]
+   }
+  },
+  {
+   "id": "i273599",
+   "item": 273599,
+   "name": "Enchant Off-Hand - Excellent Spirit",
+   "slot": "offhand",
+   "stats": {
+    "spirit": 12
+   },
+   "fx": "Permanently enchant an Off-Hand to add 12 to spirit.",
+   "ench": [
+    7660
+   ],
+   "spell": 1219578,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "none"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1219578,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     274392
+    ]
+   }
+  },
+  {
+   "id": "i273598",
+   "item": 273598,
+   "name": "Enchant Off-Hand - Superior Intellect",
+   "slot": "offhand",
+   "stats": {
+    "intellect": 9
+   },
+   "fx": "Permanently enchant an Off-Hand to add 9 to intellect.",
+   "ench": [
+    7659
+   ],
+   "spell": 1219577,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "none"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1219577,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     274391
+    ]
+   }
+  },
+  {
+   "id": "i273600",
+   "item": 273600,
+   "name": "Enchant Off-Hand - Wisdom",
+   "slot": "offhand",
+   "stats": {
+    "intellect": 6,
+    "spirit": 5
+   },
+   "fx": "Permanently enchant an Off-Hand to add 6 to intellect and 5 to spirit.",
+   "ench": [
+    7661
+   ],
+   "spell": 1219579,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "none"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1219579,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     274393
+    ]
+   }
+  },
+  {
+   "id": "i273605",
+   "item": 273605,
+   "name": "Enchant Shield - Critical Strike",
+   "slot": "offhand",
+   "stats": {
+    "crit": 1,
+    "spellCrit": 1
+   },
+   "fx": "Permanently enchant a Shield to add 1% critical strike chance.",
+   "ench": [
+    7664
+   ],
+   "spell": 1220623,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1220623,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     274400
+    ]
+   }
+  },
+  {
+   "id": "i273602",
+   "item": 273602,
+   "name": "Enchant Shield - Excellent Stamina",
+   "slot": "offhand",
+   "stats": {
+    "stamina": 12
+   },
+   "fx": "Permanently enchant a Shield to add 12 to stamina.",
+   "ench": [
+    7663
+   ],
+   "spell": 1219581,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1219581,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     274395
+    ]
+   }
+  },
+  {
+   "id": "i273536",
+   "item": 273536,
+   "name": "Enchant Shield - Frost Resistance",
+   "slot": "offhand",
+   "stats": {
+    "frostResist": 8
+   },
+   "fx": "Permanently enchant a shield to give +8 Frost Resistance.",
+   "ench": [
+    926
+   ],
+   "spell": 13933,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    235
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13933,
+    "sk": 235,
+    "c": [
+     255,
+     295
+    ],
+    "by": [
+     11224
+    ]
+   }
+  },
+  {
+   "id": "i273532",
+   "item": 273532,
+   "name": "Enchant Shield - Greater Spirit",
+   "slot": "offhand",
+   "stats": {
+    "spirit": 7
+   },
+   "fx": "Permanently enchant a shield to give +7 Spirit.",
+   "ench": [
+    907
+   ],
+   "spell": 13905,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    230
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13905,
+    "sk": 230,
+    "c": [
+     250,
+     290
+    ]
+   }
+  },
+  {
+   "id": "i273554",
+   "item": 273554,
+   "name": "Enchant Shield - Greater Stamina",
+   "slot": "offhand",
+   "stats": {
+    "stamina": 9
+   },
+   "fx": "Permanently enchant a shield to give +9 Stamina.",
+   "ench": [
+    1886
+   ],
+   "spell": 20017,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    265
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20017,
+    "sk": 265,
+    "c": [
+     285,
+     325
+    ],
+    "by": [
+     16217
+    ]
+   }
+  },
+  {
+   "id": "i273592",
+   "item": 273592,
+   "name": "Enchant Shield - Law of Nature",
+   "slot": "offhand",
+   "stats": {
+    "spellDamage": 30,
+    "healing": 55
+   },
+   "fx": "Permanently enchant a Shield to add up to 30 damage to spells and up to 55 points of healing to healing spells.",
+   "ench": [
+    7603
+   ],
+   "spell": 463871,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 463871,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     228982
+    ]
+   }
+  },
+  {
+   "id": "i273513",
+   "item": 273513,
+   "name": "Enchant Shield - Lesser Block",
+   "slot": "offhand",
+   "stats": {
+    "blockChance": 2
+   },
+   "fx": "Permanently enchant a shield to give +2% chance to block.",
+   "ench": [
+    863
+   ],
+   "spell": 13689,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    195
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13689,
+    "sk": 195,
+    "c": [
+     215,
+     255
+    ],
+    "by": [
+     11168
+    ]
+   }
+  },
+  {
+   "id": "i273484",
+   "item": 273484,
+   "name": "Enchant Shield - Lesser Protection",
+   "slot": "offhand",
+   "stats": {
+    "bonusArmor": 30
+   },
+   "fx": "Permanently enchant a shield to increase its armor by 30.",
+   "ench": [
+    848
+   ],
+   "spell": 13464,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    115
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13464,
+    "sk": 115,
+    "c": [
+     140,
+     180
+    ],
+    "by": [
+     11081
+    ]
+   }
+  },
+  {
+   "id": "i273485",
+   "item": 273485,
+   "name": "Enchant Shield - Lesser Spirit",
+   "slot": "offhand",
+   "stats": {
+    "spirit": 3
+   },
+   "fx": "Permanently enchant a shield to give 3 spirit.",
+   "ench": [
+    255
+   ],
+   "spell": 13485,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    130
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13485,
+    "sk": 130,
+    "c": [
+     155,
+     195
+    ]
+   }
+  },
+  {
+   "id": "i273498",
+   "item": 273498,
+   "name": "Enchant Shield - Lesser Stamina",
+   "slot": "offhand",
+   "stats": {
+    "stamina": 5
+   },
+   "fx": "Permanently enchant a shield to give 5 Stamina.",
+   "ench": [
+    852
+   ],
+   "spell": 13631,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    155
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13631,
+    "sk": 155,
+    "c": [
+     175,
+     215
+    ]
+   }
+  },
+  {
+   "id": "i273480",
+   "item": 273480,
+   "name": "Enchant Shield - Minor Stamina",
+   "slot": "offhand",
+   "stats": {
+    "stamina": 3
+   },
+   "fx": "Permanently enchant a shield so that it increases the Stamina of the bearer by 3.",
+   "ench": [
+    66
+   ],
+   "spell": 13378,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    105
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13378,
+    "sk": 105,
+    "c": [
+     130,
+     170
+    ]
+   }
+  },
+  {
+   "id": "i273509",
+   "item": 273509,
+   "name": "Enchant Shield - Spirit",
+   "slot": "offhand",
+   "stats": {
+    "spirit": 5
+   },
+   "fx": "Permanently enchant a shield to give 5 Spirit.",
+   "ench": [
+    851
+   ],
+   "spell": 13659,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    180
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13659,
+    "sk": 180,
+    "c": [
+     200,
+     240
+    ]
+   }
+  },
+  {
+   "id": "i273521",
+   "item": 273521,
+   "name": "Enchant Shield - Stamina",
+   "slot": "offhand",
+   "stats": {
+    "stamina": 7
+   },
+   "fx": "Permanently enchant a shield to give +7 Stamina.",
+   "ench": [
+    929
+   ],
+   "spell": 13817,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    210
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13817,
+    "sk": 210,
+    "c": [
+     230,
+     270
+    ],
+    "by": [
+     11202
+    ]
+   }
+  },
+  {
+   "id": "i273553",
+   "item": 273553,
+   "name": "Enchant Shield - Superior Spirit",
+   "slot": "offhand",
+   "stats": {
+    "spirit": 9
+   },
+   "fx": "Permanently enchant a shield to give +9 Spirit.",
+   "ench": [
+    1890
+   ],
+   "spell": 20016,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Enchanting",
+    280
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20016,
+    "sk": 280,
+    "c": [
+     300,
+     340
+    ],
+    "by": [
+     16222
+    ]
+   }
+  },
   {
    "id": "iron-spike",
    "item": 6042,
    "name": "Iron Shield Spike",
    "slot": "offhand",
-   "needs": "Shield",
+   "stats": {},
+   "fx": "Attaches an Iron Spike to your shield that deals damage every time you block with it.",
+   "ench": [
+    43
+   ],
+   "spell": 7216,
+   "icon": "inv_misc_armorkit_01",
+   "q": "common",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Blacksmithing",
+    150
+   ],
+   "made": {
+    "p": "Blacksmithing",
+    "s": 7221,
+    "sk": 125,
+    "c": [
+     155,
+     185
+    ],
+    "by": [
+     6044
+    ]
+   },
    "rf": {
     "s": "Physical",
     "v": 10,
@@ -15,11 +6912,6 @@
     "hi": 12,
     "k": "block"
    },
-   "stats": {},
-   "skill": [
-    "Blacksmithing",
-    150
-   ],
    "note": "Blacksmithing attachment; damage on each block, client spell 9784. Anyone can attach it to a shield."
   },
   {
@@ -27,7 +6919,36 @@
    "item": 7967,
    "name": "Mithril Shield Spike",
    "slot": "offhand",
-   "needs": "Shield",
+   "stats": {},
+   "fx": "Attaches a Mithril Spike to your shield that deals damage every time you block with it.",
+   "ench": [
+    463
+   ],
+   "spell": 9781,
+   "icon": "inv_misc_armorkit_02",
+   "q": "uncommon",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Blacksmithing",
+    215
+   ],
+   "made": {
+    "p": "Blacksmithing",
+    "s": 9939,
+    "sk": 190,
+    "c": [
+     210,
+     230
+    ],
+    "by": [
+     7976
+    ]
+   },
    "rf": {
     "s": "Physical",
     "v": 18,
@@ -36,11 +6957,6 @@
     "hi": 20,
     "k": "block"
    },
-   "stats": {},
-   "skill": [
-    "Blacksmithing",
-    215
-   ],
    "note": "Blacksmithing attachment; damage on each block, client spell 9782. Anyone can attach it to a shield."
   },
   {
@@ -48,7 +6964,36 @@
    "item": 12645,
    "name": "Thorium Shield Spike",
    "slot": "offhand",
-   "needs": "Shield",
+   "stats": {},
+   "fx": "Attaches a Thorium Spike to your shield that deals damage every time you block with it.",
+   "ench": [
+    1704
+   ],
+   "spell": 16623,
+   "icon": "inv_misc_armorkit_20",
+   "q": "uncommon",
+   "itSlot": [
+    "off-hand"
+   ],
+   "itType": [
+    "Shield"
+   ],
+   "skill": [
+    "Blacksmithing",
+    250
+   ],
+   "made": {
+    "p": "Blacksmithing",
+    "s": 16651,
+    "sk": 250,
+    "c": [
+     270,
+     290
+    ],
+    "by": [
+     12692
+    ]
+   },
    "rf": {
     "s": "Physical",
     "v": 25,
@@ -57,27 +7002,1836 @@
     "hi": 30,
     "k": "block"
    },
-   "stats": {},
-   "skill": [
-    "Blacksmithing",
-    250
-   ],
    "note": "Blacksmithing attachment; damage on each block, client spell 16624. Anyone can attach it to a shield."
   },
   {
-   "id": "retricutioner",
-   "item": 273591,
-   "name": "Enchant Chest - Retricutioner",
-   "slot": "chest",
-   "rf": {
-    "s": "Physical",
-    "v": 9,
-    "sp": 435901,
-    "k": "hit"
+   "id": "i4405",
+   "item": 4405,
+   "name": "Crude Scope",
+   "slot": "ranged",
+   "stats": {
+    "weaponDamage": 1
    },
-   "stats": {},
+   "fx": "Attaches a permanent scope to a bow or gun that increases its damage by 1.",
+   "ench": [
+    30
+   ],
+   "spell": 3974,
+   "icon": "inv_misc_spyglass_02",
+   "q": "common",
+   "itSlot": [
+    "ranged"
+   ],
+   "itType": [
+    "Bow",
+    "Gun",
+    "Crossbow"
+   ],
+   "lvl": 5,
+   "skill": [
+    "Engineering",
+    60
+   ],
+   "made": {
+    "p": "Engineering",
+    "s": 3977,
+    "sk": 60,
+    "c": [
+     90,
+     120
+    ]
+   }
+  },
+  {
+   "id": "i4406",
+   "item": 4406,
+   "name": "Standard Scope",
+   "slot": "ranged",
+   "stats": {
+    "weaponDamage": 2
+   },
+   "fx": "Attaches a permanent scope to a bow or gun that increases its damage by 2.",
+   "ench": [
+    32
+   ],
+   "spell": 3975,
+   "icon": "inv_misc_spyglass_02",
+   "q": "common",
+   "itSlot": [
+    "ranged"
+   ],
+   "itType": [
+    "Bow",
+    "Gun",
+    "Crossbow"
+   ],
+   "lvl": 10,
+   "skill": [
+    "Engineering",
+    110
+   ],
+   "made": {
+    "p": "Engineering",
+    "s": 3978,
+    "sk": 110,
+    "c": [
+     135,
+     160
+    ]
+   }
+  },
+  {
+   "id": "i4407",
+   "item": 4407,
+   "name": "Accurate Scope",
+   "slot": "ranged",
+   "stats": {
+    "weaponDamage": 3
+   },
+   "fx": "Attaches a permanent scope to a bow or gun that increases its damage by 3.",
+   "ench": [
+    33
+   ],
+   "spell": 3976,
+   "icon": "inv_misc_spyglass_02",
+   "q": "common",
+   "itSlot": [
+    "ranged"
+   ],
+   "itType": [
+    "Bow",
+    "Gun",
+    "Crossbow"
+   ],
+   "lvl": 20,
+   "skill": [
+    "Engineering",
+    180
+   ],
+   "made": {
+    "p": "Engineering",
+    "s": 3979,
+    "sk": 180,
+    "c": [
+     200,
+     220
+    ],
+    "by": [
+     13310
+    ]
+   }
+  },
+  {
+   "id": "i10546",
+   "item": 10546,
+   "name": "Deadly Scope",
+   "slot": "ranged",
+   "stats": {
+    "weaponDamage": 5
+   },
+   "fx": "Attaches a permanent scope to a bow or gun that increases its damage by 5.",
+   "ench": [
+    663
+   ],
+   "spell": 12459,
+   "icon": "inv_misc_spyglass_02",
+   "q": "common",
+   "itSlot": [
+    "ranged"
+   ],
+   "itType": [
+    "Bow",
+    "Gun",
+    "Crossbow"
+   ],
+   "lvl": 30,
+   "skill": [
+    "Engineering",
+    210
+   ],
+   "made": {
+    "p": "Engineering",
+    "s": 12597,
+    "sk": 210,
+    "c": [
+     230,
+     250
+    ],
+    "by": [
+     10602
+    ]
+   }
+  },
+  {
+   "id": "i10548",
+   "item": 10548,
+   "name": "Sniper Scope",
+   "slot": "ranged",
+   "stats": {
+    "weaponDamage": 7
+   },
+   "fx": "Attaches a permanent scope to a bow or gun that increases its damage by 7.",
+   "ench": [
+    664
+   ],
+   "spell": 12460,
+   "icon": "inv_misc_spyglass_02",
+   "q": "common",
+   "itSlot": [
+    "ranged"
+   ],
+   "itType": [
+    "Bow",
+    "Gun",
+    "Crossbow"
+   ],
+   "lvl": 40,
+   "skill": [
+    "Engineering",
+    240
+   ],
+   "made": {
+    "p": "Engineering",
+    "s": 12620,
+    "sk": 240,
+    "c": [
+     260,
+     280
+    ],
+    "by": [
+     10608
+    ]
+   }
+  },
+  {
+   "id": "i18283",
+   "item": 18283,
+   "name": "Biznicks 247x128 Accurascope",
+   "slot": "ranged",
+   "stats": {
+    "hit": 3
+   },
+   "fx": "Attaches a permanent scope to a bow or gun that increases its chance to hit by 3%.",
+   "ench": [
+    2523
+   ],
+   "spell": 22779,
+   "icon": "inv_misc_spyglass_02",
+   "q": "rare",
+   "itSlot": [
+    "ranged"
+   ],
+   "itType": [
+    "Bow",
+    "Gun",
+    "Crossbow"
+   ],
+   "lvl": 50,
+   "skill": [
+    "Engineering",
+    300
+   ],
+   "made": {
+    "p": "Engineering",
+    "s": 22793,
+    "sk": 300,
+    "c": [
+     320,
+     340
+    ],
+    "by": [
+     18290
+    ]
+   }
+  },
+  {
+   "id": "i279272",
+   "item": 279272,
+   "name": "SAF-T Ultra Precision Scope",
+   "slot": "ranged",
+   "stats": {
+    "crit": 2
+   },
+   "fx": "Attaches a permanent scope to a bow, gun, or crossbow that increases its critical strike chance by 2%.",
+   "ench": [
+    8720
+   ],
+   "spell": 1307050,
+   "icon": "inv_engineering_90_scope_blue",
+   "q": "rare",
+   "itSlot": [
+    "ranged"
+   ],
+   "itType": [
+    "Bow",
+    "Gun",
+    "Crossbow"
+   ],
+   "lvl": 60,
+   "skill": [
+    "Engineering",
+    300
+   ],
+   "made": {
+    "p": "Engineering",
+    "s": 1306546,
+    "sk": 300,
+    "c": [
+     310,
+     325
+    ],
+    "by": [
+     279321
+    ]
+   }
+  },
+  {
+   "id": "i18171",
+   "item": 18171,
+   "name": "Arcane Mantle of the Dawn",
+   "slot": "shoulder",
+   "stats": {
+    "arcaneResist": 5
+   },
+   "fx": "Permanently adds 5 arcane resistance to a shoulder slot item.",
+   "ench": [
+    2485
+   ],
+   "spell": 22598,
+   "icon": "spell_holy_wordfortitude",
+   "q": "uncommon",
+   "itSlot": [
+    "shoulder"
+   ],
    "skill": null,
-   "note": "Enchanting formula 273591 teaches Enchant Chest - Retricutioner (spell 435903); the enchant's damage shield is client spell 435901: 9 Physical damage to each melee attacker. The client gives that aura a 5 s recovery time; whether it limits how often it hits is not shown in the tables, so the Forge counts every hit."
+   "binding": "BoP"
+  },
+  {
+   "id": "i18182",
+   "item": 18182,
+   "name": "Chromatic Mantle of the Dawn",
+   "slot": "shoulder",
+   "stats": {
+    "allResist": 5
+   },
+   "fx": "Permanently adds 5 resistance to all magic schools to a shoulder slot item.",
+   "ench": [
+    2488
+   ],
+   "spell": 22599,
+   "icon": "inv_misc_gem_variety_02",
+   "q": "uncommon",
+   "itSlot": [
+    "shoulder"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i18169",
+   "item": 18169,
+   "name": "Flame Mantle of the Dawn",
+   "slot": "shoulder",
+   "stats": {
+    "fireResist": 5
+   },
+   "fx": "Permanently adds 5 fire resistance to a shoulder slot item.",
+   "ench": [
+    2483
+   ],
+   "spell": 22593,
+   "icon": "spell_fire_flameshock",
+   "q": "uncommon",
+   "itSlot": [
+    "shoulder"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i18170",
+   "item": 18170,
+   "name": "Frost Mantle of the Dawn",
+   "slot": "shoulder",
+   "stats": {
+    "frostResist": 5
+   },
+   "fx": "Permanently adds 5 frost resistance to a shoulder slot item.",
+   "ench": [
+    2484
+   ],
+   "spell": 22594,
+   "icon": "spell_frost_frostshock",
+   "q": "uncommon",
+   "itSlot": [
+    "shoulder"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i18172",
+   "item": 18172,
+   "name": "Nature Mantle of the Dawn",
+   "slot": "shoulder",
+   "stats": {
+    "natureResist": 5
+   },
+   "fx": "Permanently adds 5 nature resistance to a shoulder slot item.",
+   "ench": [
+    2486
+   ],
+   "spell": 22597,
+   "icon": "spell_nature_protectionformnature",
+   "q": "uncommon",
+   "itSlot": [
+    "shoulder"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i18173",
+   "item": 18173,
+   "name": "Shadow Mantle of the Dawn",
+   "slot": "shoulder",
+   "stats": {
+    "shadowResist": 5
+   },
+   "fx": "Permanently adds 5 shadow resistance to a shoulder slot item.",
+   "ench": [
+    2487
+   ],
+   "spell": 22596,
+   "icon": "spell_shadow_ragingscream",
+   "q": "uncommon",
+   "itSlot": [
+    "shoulder"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i20077",
+   "item": 20077,
+   "name": "Zandalar Signet of Might",
+   "slot": "shoulder",
+   "stats": {
+    "attackPower": 30,
+    "rangedAttackPower": 30
+   },
+   "fx": "Permanently adds 30 attack power to a shoulder slot item.",
+   "ench": [
+    2606
+   ],
+   "spell": 24422,
+   "icon": "inv_misc_armorkit_08",
+   "q": "rare",
+   "itSlot": [
+    "shoulder"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i20076",
+   "item": 20076,
+   "name": "Zandalar Signet of Mojo",
+   "slot": "shoulder",
+   "stats": {
+    "spellDamage": 18,
+    "healing": 18
+   },
+   "fx": "Permanently adds to a shoulder slot item increased damage and healing done by magical spells and effects up to 18.",
+   "ench": [
+    2605
+   ],
+   "spell": 24421,
+   "icon": "inv_jewelry_ring_46",
+   "q": "rare",
+   "itSlot": [
+    "shoulder"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i20078",
+   "item": 20078,
+   "name": "Zandalar Signet of Serenity",
+   "slot": "shoulder",
+   "stats": {
+    "healing": 33
+   },
+   "fx": "Permanently adds to a shoulder slot item increased healing done by spells and effects up to 33.",
+   "ench": [
+    2604
+   ],
+   "spell": 24420,
+   "icon": "spell_holy_powerwordshield",
+   "q": "rare",
+   "itSlot": [
+    "shoulder"
+   ],
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i23549",
+   "item": 23549,
+   "name": "Fortitude of the Scourge",
+   "slot": "shoulder",
+   "stats": {
+    "stamina": 16,
+    "bonusArmor": 100
+   },
+   "fx": "Permanently adds to a shoulder slot item increased Stamina by 16 and also grants 100 armor.",
+   "ench": [
+    2716
+   ],
+   "spell": 29480,
+   "icon": "spell_shadow_antishadow",
+   "q": "epic",
+   "itSlot": [
+    "shoulder"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i23548",
+   "item": 23548,
+   "name": "Might of the Scourge",
+   "slot": "shoulder",
+   "stats": {
+    "crit": 1,
+    "attackPower": 26,
+    "rangedAttackPower": 26
+   },
+   "fx": "Permanently adds to a shoulder slot item increased Attack Power by 26 and also increases your chance to land a critical strike by 1%.",
+   "ench": [
+    2717
+   ],
+   "spell": 29483,
+   "icon": "spell_shadow_deathpact",
+   "q": "epic",
+   "itSlot": [
+    "shoulder"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i23545",
+   "item": 23545,
+   "name": "Power of the Scourge",
+   "slot": "shoulder",
+   "stats": {
+    "spellDamage": 15,
+    "healing": 15,
+    "spellCrit": 1
+   },
+   "fx": "Permanently adds to a shoulder slot item increased damage and healing done by magical spells and effects up to 15 and also increases your chance to land a critical strike with spells by 1%.",
+   "ench": [
+    2721
+   ],
+   "spell": 29467,
+   "icon": "spell_shadow_darkritual",
+   "q": "epic",
+   "itSlot": [
+    "shoulder"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i23547",
+   "item": 23547,
+   "name": "Resilience of the Scourge",
+   "slot": "shoulder",
+   "stats": {
+    "healing": 31,
+    "mp5": 5
+   },
+   "fx": "Permanently adds to a shoulder slot item increased healing done by magical spells and effects up to 31 and also increases your mana regen by 5 mana per 5 sec.",
+   "ench": [
+    2715
+   ],
+   "spell": 29475,
+   "icon": "spell_shadow_deadofnight",
+   "q": "epic",
+   "itSlot": [
+    "shoulder"
+   ],
+   "lvl": 60,
+   "skill": null,
+   "binding": "BoP"
+  },
+  {
+   "id": "i273597",
+   "item": 273597,
+   "name": "Enchant Bracer - Agility",
+   "slot": "wrist",
+   "stats": {
+    "agility": 9
+   },
+   "fx": "Permanently enchant bracers to increase Agility by 9.",
+   "ench": [
+    7656
+   ],
+   "spell": 1217203,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    190
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248497,
+    "sk": 190,
+    "c": [
+     225,
+     265
+    ],
+    "by": [
+     249488
+    ]
+   }
+  },
+  {
+   "id": "i273614",
+   "item": 273614,
+   "name": "Enchant Bracer - Agility",
+   "slot": "wrist",
+   "stats": {
+    "agility": 5
+   },
+   "fx": "Permanently enchant bracers to give +5 Agility.",
+   "ench": [
+    904
+   ],
+   "spell": 1248497,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    190
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248497,
+    "sk": 190,
+    "c": [
+     225,
+     265
+    ],
+    "by": [
+     249488
+    ]
+   }
+  },
+  {
+   "id": "i273535",
+   "item": 273535,
+   "name": "Enchant Bracer - Deflection",
+   "slot": "wrist",
+   "stats": {
+    "defense": 7
+   },
+   "fx": "Permanently enchant bracers to give +7 Defense.",
+   "ench": [
+    923
+   ],
+   "spell": 13931,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    235
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13931,
+    "sk": 235,
+    "c": [
+     255,
+     295
+    ],
+    "by": [
+     11223
+    ]
+   }
+  },
+  {
+   "id": "i273616",
+   "item": 273616,
+   "name": "Enchant Bracer - Greater Agility",
+   "slot": "wrist",
+   "stats": {
+    "agility": 7
+   },
+   "fx": "Permanently enchant bracers to give +7 Agility.",
+   "ench": [
+    1887
+   ],
+   "spell": 1248500,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    240
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248500,
+    "sk": 240,
+    "c": [
+     260,
+     300
+    ],
+    "by": [
+     249514
+    ]
+   }
+  },
+  {
+   "id": "i273545",
+   "item": 273545,
+   "name": "Enchant Bracer - Greater Intellect",
+   "slot": "wrist",
+   "stats": {
+    "intellect": 7
+   },
+   "fx": "Permanently enchant bracers to give +7 Intellect.",
+   "ench": [
+    1883
+   ],
+   "spell": 20008,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    255
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20008,
+    "sk": 255,
+    "c": [
+     275,
+     315
+    ],
+    "by": [
+     16214
+    ]
+   }
+  },
+  {
+   "id": "i273606",
+   "item": 273606,
+   "name": "Enchant Bracer - Greater Spellpower",
+   "slot": "wrist",
+   "stats": {
+    "spellPower": 16
+   },
+   "fx": "Permanently enchant Bracers to add 16 to spell power.",
+   "ench": [
+    7665
+   ],
+   "spell": 1220624,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1220624,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     274401
+    ]
+   }
+  },
+  {
+   "id": "i273525",
+   "item": 273525,
+   "name": "Enchant Bracer - Greater Spirit",
+   "slot": "wrist",
+   "stats": {
+    "spirit": 7
+   },
+   "fx": "Permanently enchant bracers to give +7 Spirit.",
+   "ench": [
+    907
+   ],
+   "spell": 13846,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    220
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13846,
+    "sk": 220,
+    "c": [
+     240,
+     280
+    ],
+    "by": [
+     11204
+    ]
+   }
+  },
+  {
+   "id": "i273542",
+   "item": 273542,
+   "name": "Enchant Bracer - Greater Stamina",
+   "slot": "wrist",
+   "stats": {
+    "stamina": 7
+   },
+   "fx": "Permanently enchant bracers to give +7 Stamina.",
+   "ench": [
+    929
+   ],
+   "spell": 13945,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    245
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13945,
+    "sk": 245,
+    "c": [
+     265,
+     305
+    ],
+    "by": [
+     11225
+    ]
+   }
+  },
+  {
+   "id": "i273539",
+   "item": 273539,
+   "name": "Enchant Bracer - Greater Strength",
+   "slot": "wrist",
+   "stats": {
+    "strength": 7
+   },
+   "fx": "Permanently enchant bracers to give +7 Strength.",
+   "ench": [
+    927
+   ],
+   "spell": 13939,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    240
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13939,
+    "sk": 240,
+    "c": [
+     260,
+     300
+    ]
+   }
+  },
+  {
+   "id": "i273575",
+   "item": 273575,
+   "name": "Enchant Bracer - Healing Power",
+   "slot": "wrist",
+   "stats": {
+    "healing": 24,
+    "spellDamage": 8
+   },
+   "fx": "Permanently enchant bracers to increase the effects of your healing spells by up to 24 and the effects of your damage spells by up to 8.",
+   "ench": [
+    2566
+   ],
+   "spell": 23802,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 23802,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     19447
+    ]
+   }
+  },
+  {
+   "id": "i273458",
+   "item": 273458,
+   "name": "Enchant Bracer - Inferior Stamina",
+   "slot": "wrist",
+   "stats": {
+    "stamina": 2
+   },
+   "fx": "Permanently enchant bracers to increase the Stamina of the wearer by 2.",
+   "ench": [
+    41
+   ],
+   "spell": 7418,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    1
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7418,
+    "sk": 1,
+    "c": [
+     20,
+     25
+    ]
+   }
+  },
+  {
+   "id": "i273522",
+   "item": 273522,
+   "name": "Enchant Bracer - Intellect",
+   "slot": "wrist",
+   "stats": {
+    "intellect": 5
+   },
+   "fx": "Permanently enchant bracers to give +5 Intellect.",
+   "ench": [
+    905
+   ],
+   "spell": 13822,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    210
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13822,
+    "sk": 210,
+    "c": [
+     230,
+     270
+    ]
+   }
+  },
+  {
+   "id": "i273613",
+   "item": 273613,
+   "name": "Enchant Bracer - Lesser Agility",
+   "slot": "wrist",
+   "stats": {
+    "agility": 4
+   },
+   "fx": "Permanently enchant a bracer so it increases the wearer's Agility by 4.",
+   "ench": [
+    8204
+   ],
+   "spell": 1248460,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    140
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248460,
+    "sk": 140,
+    "c": [
+     165,
+     205
+    ],
+    "by": [
+     249486
+    ]
+   }
+  },
+  {
+   "id": "i273504",
+   "item": 273504,
+   "name": "Enchant Bracer - Lesser Deflection",
+   "slot": "wrist",
+   "stats": {
+    "defense": 2
+   },
+   "fx": "Permanently enchant bracers to give +5 Defense.",
+   "ench": [
+    925
+   ],
+   "spell": 13646,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    170
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13646,
+    "sk": 170,
+    "c": [
+     190,
+     230
+    ],
+    "by": [
+     11163
+    ]
+   }
+  },
+  {
+   "id": "i273615",
+   "item": 273615,
+   "name": "Enchant Bracer - Lesser Healing Power",
+   "slot": "wrist",
+   "stats": {
+    "healing": 16,
+    "spellDamage": 6
+   },
+   "fx": "Permanently enchant bracers to increase healing by up to 16 and damage by up to 6.",
+   "ench": [
+    8209
+   ],
+   "spell": 1248498,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    205
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248498,
+    "sk": 205,
+    "c": [
+     225,
+     265
+    ],
+    "by": [
+     249489
+    ]
+   }
+  },
+  {
+   "id": "i273496",
+   "item": 273496,
+   "name": "Enchant Bracer - Lesser Intellect",
+   "slot": "wrist",
+   "stats": {
+    "intellect": 5
+   },
+   "fx": "Permanently enchant a bracer so it increases the wearer's Intellect by 5.",
+   "ench": [
+    723
+   ],
+   "spell": 13622,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    150
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13622,
+    "sk": 150,
+    "c": [
+     175,
+     215
+    ]
+   }
+  },
+  {
+   "id": "i273476",
+   "item": 273476,
+   "name": "Enchant Bracer - Lesser Spirit",
+   "slot": "wrist",
+   "stats": {
+    "spirit": 4
+   },
+   "fx": "Permanently enchant a bracer so it increases the wearer's Spirit by 4.",
+   "ench": [
+    8203
+   ],
+   "spell": 7859,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    120
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7859,
+    "sk": 120,
+    "c": [
+     145,
+     185
+    ],
+    "by": [
+     6375
+    ]
+   }
+  },
+  {
+   "id": "i273486",
+   "item": 273486,
+   "name": "Enchant Bracer - Lesser Stamina",
+   "slot": "wrist",
+   "stats": {
+    "stamina": 4
+   },
+   "fx": "Permanently enchant a bracer so it increases the wearer's Stamina by 4.",
+   "ench": [
+    254
+   ],
+   "spell": 13501,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    130
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13501,
+    "sk": 130,
+    "c": [
+     155,
+     195
+    ]
+   }
+  },
+  {
+   "id": "i273490",
+   "item": 273490,
+   "name": "Enchant Bracer - Lesser Strength",
+   "slot": "wrist",
+   "stats": {
+    "strength": 4
+   },
+   "fx": "Permanently enchant a bracer so it increases the wearer's Strength by 4.",
+   "ench": [
+    823
+   ],
+   "spell": 13536,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    140
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13536,
+    "sk": 140,
+    "c": [
+     165,
+     205
+    ],
+    "by": [
+     11101
+    ]
+   },
+   "binding": "BoP"
+  },
+  {
+   "id": "i273574",
+   "item": 273574,
+   "name": "Enchant Bracer - Mana Regeneration",
+   "slot": "wrist",
+   "stats": {
+    "mp5": 4
+   },
+   "fx": "Permanently enchant bracers to restore 4 mana every 5 seconds.",
+   "ench": [
+    2565
+   ],
+   "spell": 23801,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    290
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 23801,
+    "sk": 290,
+    "c": [
+     310,
+     350
+    ],
+    "by": [
+     19446
+    ]
+   }
+  },
+  {
+   "id": "i273470",
+   "item": 273470,
+   "name": "Enchant Bracer - Minor Agility",
+   "slot": "wrist",
+   "stats": {
+    "agility": 3
+   },
+   "fx": "Permanently enchant bracers so they increase the wearer's Agility by 3.",
+   "ench": [
+    247
+   ],
+   "spell": 7779,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    80
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7779,
+    "sk": 80,
+    "c": [
+     115,
+     155
+    ]
+   }
+  },
+  {
+   "id": "i273461",
+   "item": 273461,
+   "name": "Enchant Bracer - Minor Deflect",
+   "slot": "wrist",
+   "stats": {
+    "defense": 3
+   },
+   "fx": "Permanently enchant bracers so that the defense skill of the wearer is increased by 3.",
+   "ench": [
+    924
+   ],
+   "spell": 7428,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    20
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7428,
+    "sk": 20,
+    "c": [
+     80,
+     120
+    ]
+   }
+  },
+  {
+   "id": "i273612",
+   "item": 273612,
+   "name": "Enchant Bracer - Minor Healing Power",
+   "slot": "wrist",
+   "stats": {
+    "healing": 8,
+    "spellDamage": 3
+   },
+   "fx": "Permanently enchant bracers so they increase the wearer's healing spells by up to 8 and damage spells by up to 3.",
+   "ench": [
+    8208
+   ],
+   "spell": 1248459,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    90
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248459,
+    "sk": 90,
+    "c": [
+     120,
+     160
+    ],
+    "by": [
+     249475
+    ]
+   }
+  },
+  {
+   "id": "i273611",
+   "item": 273611,
+   "name": "Enchant Bracer - Minor Intellect",
+   "slot": "wrist",
+   "stats": {
+    "intellect": 3
+   },
+   "fx": "Permanently enchant bracers to give +3 Intellect.",
+   "ench": [
+    246
+   ],
+   "spell": 1248458,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    70
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248458,
+    "sk": 70,
+    "c": [
+     110,
+     150
+    ],
+    "by": [
+     249474
+    ]
+   }
+  },
+  {
+   "id": "i273467",
+   "item": 273467,
+   "name": "Enchant Bracer - Minor Spirit",
+   "slot": "wrist",
+   "stats": {
+    "spirit": 3
+   },
+   "fx": "Permanently enchant bracers so they increase the wearer's Spirit by 3.",
+   "ench": [
+    243
+   ],
+   "spell": 7766,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    60
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7766,
+    "sk": 60,
+    "c": [
+     105,
+     145
+    ],
+    "by": [
+     6344
+    ]
+   }
+  },
+  {
+   "id": "i273464",
+   "item": 273464,
+   "name": "Enchant Bracer - Minor Stamina",
+   "slot": "wrist",
+   "stats": {
+    "stamina": 3
+   },
+   "fx": "Permanently enchant bracers so they increase the wearer's Stamina by 3.",
+   "ench": [
+    66
+   ],
+   "spell": 7457,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    50
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7457,
+    "sk": 50,
+    "c": [
+     100,
+     140
+    ]
+   }
+  },
+  {
+   "id": "i273471",
+   "item": 273471,
+   "name": "Enchant Bracer - Minor Strength",
+   "slot": "wrist",
+   "stats": {
+    "strength": 3
+   },
+   "fx": "Permanently enchant bracers so they increase the wearer's Strength by 3.",
+   "ench": [
+    248
+   ],
+   "spell": 7782,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    80
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 7782,
+    "sk": 80,
+    "c": [
+     115,
+     155
+    ],
+    "by": [
+     6347
+    ]
+   }
+  },
+  {
+   "id": "i273596",
+   "item": 273596,
+   "name": "Enchant Bracer - Spell Power",
+   "slot": "wrist",
+   "stats": {
+    "spellPower": 12
+   },
+   "fx": "Permanently enchant bracers to add up to 12 damage to spells.",
+   "ench": [
+    7655
+   ],
+   "spell": 1217189,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    320
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1217189,
+    "sk": null,
+    "c": [
+     320,
+     360
+    ]
+   }
+  },
+  {
+   "id": "i273502",
+   "item": 273502,
+   "name": "Enchant Bracer - Spirit",
+   "slot": "wrist",
+   "stats": {
+    "spirit": 5
+   },
+   "fx": "Permanently enchant bracers to give +5 Spirit.",
+   "ench": [
+    851
+   ],
+   "spell": 13642,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    165
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13642,
+    "sk": 165,
+    "c": [
+     185,
+     225
+    ]
+   }
+  },
+  {
+   "id": "i273505",
+   "item": 273505,
+   "name": "Enchant Bracer - Stamina",
+   "slot": "wrist",
+   "stats": {
+    "stamina": 5
+   },
+   "fx": "Permanently enchant bracers to give +5 Stamina.",
+   "ench": [
+    852
+   ],
+   "spell": 13648,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    170
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13648,
+    "sk": 170,
+    "c": [
+     190,
+     230
+    ]
+   }
+  },
+  {
+   "id": "i273510",
+   "item": 273510,
+   "name": "Enchant Bracer - Strength",
+   "slot": "wrist",
+   "stats": {
+    "strength": 5
+   },
+   "fx": "Permanently enchant bracers to give +5 Strength.",
+   "ench": [
+    856
+   ],
+   "spell": 13661,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    180
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 13661,
+    "sk": 180,
+    "c": [
+     200,
+     240
+    ]
+   }
+  },
+  {
+   "id": "i273620",
+   "item": 273620,
+   "name": "Enchant Bracer - Superior Agility",
+   "slot": "wrist",
+   "stats": {
+    "agility": 9
+   },
+   "fx": "Permanently enchant bracers to give +9 Agility.",
+   "ench": [
+    7656
+   ],
+   "spell": 1248599,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    295
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248599,
+    "sk": 295,
+    "c": [
+     315,
+     355
+    ],
+    "by": [
+     249524
+    ]
+   }
+  },
+  {
+   "id": "i273626",
+   "item": 273626,
+   "name": "Enchant Bracer - Superior Deflection",
+   "slot": "wrist",
+   "stats": {
+    "defense": 9
+   },
+   "fx": "Permanently enchant bracers to give +9 defense skill.",
+   "ench": [
+    8214
+   ],
+   "spell": 1248665,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248665,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     249539
+    ]
+   }
+  },
+  {
+   "id": "i273625",
+   "item": 273625,
+   "name": "Enchant Bracer - Superior Intellect",
+   "slot": "wrist",
+   "stats": {
+    "intellect": 9
+   },
+   "fx": "Permanently enchant bracers to give +9 Intellect.",
+   "ench": [
+    1901
+   ],
+   "spell": 1248661,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 1248661,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     249538
+    ]
+   }
+  },
+  {
+   "id": "i273546",
+   "item": 273546,
+   "name": "Enchant Bracer - Superior Spirit",
+   "slot": "wrist",
+   "stats": {
+    "spirit": 9
+   },
+   "fx": "Permanently enchant bracers to give +9 Spirit.",
+   "ench": [
+    1884
+   ],
+   "spell": 20009,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    270
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20009,
+    "sk": 270,
+    "c": [
+     290,
+     330
+    ],
+    "by": [
+     16218
+    ]
+   }
+  },
+  {
+   "id": "i273548",
+   "item": 273548,
+   "name": "Enchant Bracer - Superior Stamina",
+   "slot": "wrist",
+   "stats": {
+    "stamina": 9
+   },
+   "fx": "Permanently enchant bracers to give +9 Stamina.",
+   "ench": [
+    1886
+   ],
+   "spell": 20011,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    300
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20011,
+    "sk": 300,
+    "c": [
+     320,
+     360
+    ],
+    "by": [
+     16251
+    ]
+   }
+  },
+  {
+   "id": "i273547",
+   "item": 273547,
+   "name": "Enchant Bracer - Superior Strength",
+   "slot": "wrist",
+   "stats": {
+    "strength": 9
+   },
+   "fx": "Permanently enchant bracers to give +9 Strength.",
+   "ench": [
+    1885
+   ],
+   "spell": 20010,
+   "icon": "inv_misc_enchantedscroll",
+   "q": "common",
+   "itSlot": [
+    "wrist"
+   ],
+   "skill": [
+    "Enchanting",
+    295
+   ],
+   "made": {
+    "p": "Enchanting",
+    "s": 20010,
+    "sk": 295,
+    "c": [
+     315,
+     355
+    ],
+    "by": [
+     16246
+    ]
+   }
   }
  ]
 }

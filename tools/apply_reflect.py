@@ -3,7 +3,7 @@
 
 Writes, from the client's spell tables (research/wago/<BUILD>):
   plan/items-db.json   rf on every wearable item that reflects damage
-  plan/enchants.json   shield spikes and the Retricutioner chest enchant
+  plan/enchants.json   shield spikes and the Retricutioner chest enchant, through tools/build_enchants.py (run it after)
   plan/reflect.json    Retribution Aura, Holy Shield, Redoubt, Eye for an Eye, druid Thorns
 
 rf entries: {k, s, v, lo, hi, p, up, aoe, sp, src}
@@ -18,7 +18,7 @@ Item -> ItemXItemEffect -> ItemEffect.SpellID -> SpellEffect, school from SpellM
 SpellAuraOptions.ProcChance, range from SpellEffect.Variance. Where the proc flags cannot tell a block from a hit
 (aura 43), the spell's and the item's text decide.
 
-  python3 tools/apply_reflect.py          # rewrite rf, enchants.json, reflect.json
+  python3 tools/apply_reflect.py          # rewrite rf and reflect.json; then python3 tools/build_enchants.py
   python3 tools/apply_reflect.py --dry    # report only
 Also run at the end of tools/scavenge_items.py.
 """
@@ -419,12 +419,12 @@ def run(db, dry=False, verbose=True):
         for iid, name, a, b in rep["differ"]:
             print("  client and tooltip differ: %s %s client %s/%s, tooltip %s/%s" % (iid, name, a["v"], a.get("p"), b["v"], b.get("p")))
     if not dry:
-        for path, doc in ((ENCHANTS, ench), (REFLECT, refl)):
-            with open(path, "w") as f:
-                json.dump(doc, f, ensure_ascii=False, indent=1)
-                f.write("\n")
+        # plan/enchants.json is tools/build_enchants.py's (every enchant, these four with their rf merged in by item id)
+        with open(REFLECT, "w") as f:
+            json.dump(refl, f, ensure_ascii=False, indent=1)
+            f.write("\n")
         if verbose:
-            print("wrote plan/enchants.json (%d) and plan/reflect.json" % len(ench["enchants"]))
+            print("wrote plan/reflect.json (%d reflect enchants go to plan/enchants.json through build_enchants.py)" % len(ench["enchants"]))
     return rep
 
 

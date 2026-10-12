@@ -764,7 +764,26 @@
       var list = Array.isArray(es) ? es : [es];
       return list.some(function (x) { return x === slotKey || (x && slotKey.indexOf(x) === 0 && /\d$/.test(slotKey)); });
     }
-    function enchantFits(en, it) { return !!it && (!en.needs || it.type === en.needs || it.sub === en.needs); }
+    // An enchant fits an item when the client's equipped-item rule says so: itSlot lists the item slots it takes
+    // (two-hand, off-hand...), itType the weapon or armor kinds ("none" = a held off-hand with no kind); needs is the
+    // older one-kind form the built-in spikes use.
+    function enchantFits(en, it) {
+      if (!it) return false;
+      if (en.needs && it.type !== en.needs && it.sub !== en.needs) return false;
+      if (en.itSlot && en.itSlot.indexOf(it.slot) < 0) return false;
+      if (en.itType && en.itType.indexOf(it.type || "none") < 0) return false;
+      return true;
+    }
+    var ENCH_LABEL = { weaponDamage: "Weapon Damage", skinning: "Skinning", herbalism: "Herbalism", mining: "Mining", fishing: "Fishing", riding: "Riding", defense: "Defense" };
+    function needsText(en, it) {
+      if (en.needs) return "Needs a " + String(en.needs).toLowerCase();
+      if (it && en.itSlot && en.itSlot.indexOf(it.slot) < 0) {
+        var two = en.itSlot.indexOf("two-hand") >= 0, one = en.itSlot.indexOf("one-hand") >= 0;
+        return "Needs a " + (two && !one ? "two-hand weapon" : one && !two ? "one-hand weapon" : en.itSlot.join(" or ") + " item");
+      }
+      var t = (en.itType || []).map(function (x) { return x === "none" ? "held off-hand" : x.toLowerCase(); });
+      return "Needs " + (t.length ? (t.length > 3 ? t.slice(0, 3).join(", ") + " or similar" : t.join(" or ")) : "another kind of item");
+    }
     function enchantsFor(slotKey) { return (EXTRA.enchants || []).filter(function (en) { return slotMatch(en.slot, slotKey); }); }
     function enchantById(id) { return (EXTRA.enchants || []).filter(function (en) { return en.id === id; })[0] || null; }
     function activeEnchant(slotKey) {
@@ -1466,14 +1485,17 @@
     }
     // ---- Enchant picker for one slot ----
     function enchantHTML(slotKey) {
-      var it = byId[eq()[slotKey]], cur = ench()[slotKey], list = enchantsFor(slotKey);
+      var it = byId[eq()[slotKey]], cur = ench()[slotKey], list = enchantsFor(slotKey).slice();
       var def = [].concat(SLOTS.left, SLOTS.right, SLOTS.bottom).filter(function (s) { return s[0] === slotKey; })[0];
+      // the ones this item can take first, then the locked ones, each group in the data file's order
+      list.sort(function (a, b) { return (enchantFits(b, it) ? 1 : 0) - (enchantFits(a, it) ? 1 : 0); });
       function line(en) {
         var bits = [];
         [].concat(en.rf || []).forEach(function (e) {
           bits.push((e.lo != null && e.hi != null ? e.lo + "–" + e.hi : e.v) + " " + (e.s || "Physical") + " damage " + (e.k === "block" ? "each time you block" : "to a melee attacker each hit"));
         });
-        Object.keys(en.stats || {}).forEach(function (k) { bits.push("+" + en.stats[k] + " " + (STATBY[k] ? STATBY[k][1] : k)); });
+        Object.keys(en.stats || {}).forEach(function (k) { bits.push("+" + en.stats[k] + (STATBY[k] && /^(crit|hit|haste|dodge|parry|blockChance|spellCrit|spellHit)$/.test(k) ? "% " : " ") + (STATBY[k] ? STATBY[k][1] : ENCH_LABEL[k] || k)); });
+        if (!bits.length && en.fx) bits.push(en.fx.replace(/^Permanently (enchant|increase|adds?) /i, "").replace(/\s*Does not stack.*$/i, ""));
         return bits.join(", ");
       }
       return '<div class="gpick"><div class="gp-top">' + img("inv_misc_enchantedscroll", "gp-slotic") + "<b>Enchant: " + esc(def ? def[1] : slotKey) + '</b><span class="gp-n">' + (it ? esc(it.name) : "") + "</span>" +
@@ -1484,7 +1506,7 @@
               (src ? ' data-tipcls="itemtip" data-tip="' + attr(itemTip(src)) + '"' : "") + ">" +
             '<span class="gp-ic q-' + esc((src && src.quality) || "common") + '">' + img(enchantIcon(en)) + "</span>" +
             '<span class="gp-t"><b class="q-' + esc((src && src.quality) || "common") + '">' + esc(en.name) + "</b><em>" + esc(line(en)) + "</em></span>" +
-            '<span class="gp-s"><i>' + esc(en.skill && en.skill[0] ? en.skill[0] + (en.skill[1] ? " " + en.skill[1] : "") : "") + "</i>" + (ok ? "" : "<i>Needs a " + esc(String(en.needs).toLowerCase()) + "</i>") + "</span>" +
+            '<span class="gp-s"><i>' + esc(en.skill && en.skill[0] ? en.skill[0] + (en.skill[1] ? " " + en.skill[1] : "") : (en.lvl ? "Level " + en.lvl : "")) + "</i>" + (ok ? "" : "<i>" + esc(needsText(en, it)) + "</i>") + "</span>" +
             '<span class="gp-sc"></span>' + (([].concat(en.rf || [])[0] || {}).src === "text" ? '<span class="gp-src k-est" title="Read from the tooltip text">Text</span>' : '<span class="gp-src k-known" title="Numbers from the client spell tables">Client</span>') + "</button>";
         }).join("") + (list.length ? "" : '<div class="gp-empty"><b>No enchants listed for this slot yet.</b></div>') + "</div>" +
         '<div class="gp-foot"><span class="gp-legend">' + esc(EXTRA.enchantNote || "") + "</span>" + (cur ? '<button type="button" class="nm-btn ghost" data-gench-clear="1">Remove enchant</button>' : "") + "</div></div>";
