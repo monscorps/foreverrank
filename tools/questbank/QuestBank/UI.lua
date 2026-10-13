@@ -1038,7 +1038,7 @@ local SIDEBAR = {
   { tab = 6, name = "Now", icon = "sideNow" },
   { tab = 1, name = "Quest Log", icon = "sideLog", count = function() return QB.state.logCount or 0 end },
   { tab = 2, name = "Available", icon = "sideAvail" },
-  { tab = 3, name = "Hand-in Route", icon = "sideRoute" },
+  { tab = 3, name = "Route", icon = "sideRoute" },
   { group = "Together" },
   { tab = 4, name = "Party", icon = "sideParty", count = function() return QB.Sync and #(QB.Sync:Members() or {}) or 0 end },
   { group = "World" },
@@ -3109,6 +3109,52 @@ local function layLeg(l, width, y, parent)
   return top
 end
 
+-- where to do the quests in your log that are not finished, nearest first from where you stand: each stop is the
+-- nearest place one of them is done, with every other quest done within 150 yards of it; at most five stops.
+-- { { sp, name, yards, mins, quests = { q, ... } }, ... }
+function UI.ObjectiveLegs(maxLegs)
+  local D = QB.Data
+  local QM = QB.QuestMap
+  local here = QB.API.WorldPosition()
+  if not (here and D.SPOT and QM and QM.Spots) then return {} end
+  local pending = {}
+  for _, e in ipairs(QB.state.logOrder or {}) do
+    if not e.complete then
+      local q = Q.Get(e.id)
+      local pts = {}
+      for _, sp in ipairs(QM.Spots(D.SPOT[e.id]) or {}) do
+        local w = QB.Model.World(sp.m, sp.x * 100, sp.y * 100)
+        if w and w.c == here.c then pts[#pts + 1] = { sp = sp, w = w } end
+      end
+      if q and #pts > 0 then pending[#pending + 1] = { q = q, pts = pts } end
+    end
+  end
+  local legs, pos = {}, here
+  local speed = 7 * (QB:Mounted() and 1.6 or 1) -- yards a second
+  local function dist(a, b) return math.sqrt((a.wx - b.wx) ^ 2 + (a.wy - b.wy) ^ 2) end
+  while #pending > 0 and #legs < (maxLegs or 5) do
+    local bestI, bestP, bestD
+    for i, it in ipairs(pending) do
+      for _, p in ipairs(it.pts) do
+        local d = dist(pos, p.w)
+        if not bestD or d < bestD then bestI, bestP, bestD = i, p, d end
+      end
+    end
+    local leg = { sp = bestP.sp, w = bestP.w, yards = bestD, mins = bestD * 1.3 / speed / 60, quests = { pending[bestI].q } }
+    local name = bestP.sp.name and D.SN and D.SN[bestP.sp.name]
+    leg.name = name or pending[bestI].q.name
+    table.remove(pending, bestI)
+    for i = #pending, 1, -1 do
+      for _, p in ipairs(pending[i].pts) do
+        if dist(bestP.w, p.w) <= 150 then table.insert(leg.quests, pending[i].q); table.remove(pending, i); break end
+      end
+    end
+    legs[#legs + 1] = leg
+    pos = bestP.w
+  end
+  return legs
+end
+
 function UI:RefreshRouteView(v)
   local set = QB:Settings()
   local run = QB.Run.Get()
@@ -3197,7 +3243,54 @@ function UI:RefreshRouteView(v)
     end
   end
 
-  if not r.legs or #r.legs == 0 then
+  -- questing: first where to do what your log still asks, then the hand-ins
+  local doLegs = (not banking and not run and mode == "now") and UI.ObjectiveLegs(5) or {}
+  local tDo = 0
+  for i, dl in ipairs(doLegs) do
+    local l = v.legs:Get()
+    l.divider:SetShown(i == 1)
+    l.divider:SetText("Do now")
+    l.divider:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+    layLeg(l, width, y, v.scroll.child)
+    l.node:SetTexture("Interface\\AddOns\\QuestBank\\art\\diamond.tga")
+    l.node:SetVertexColor(0.45, 0.68, 1, 1)
+    tDo = tDo + dl.mins
+    l.clock:SetText(QB.Clock(tDo))
+    l.travelIcon:SetTexture(travelIcon("foot"))
+    l.travel:SetText(string.format("On foot, about %d min, %d yd", math.max(1, math.floor(dl.mins + 0.5)), math.floor(dl.yards / 10 + 0.5) * 10))
+    l.name:SetText(dl.name)
+    l.level:SetText("")
+    l.pin.stop = { m = dl.sp.m, x = dl.sp.x * 100, y = dl.sp.y * 100, name = dl.name }
+    l.pin:Show()
+    l.note:SetText("")
+    local top = l.divider:IsShown() and 22 or 0
+    local ry = 46 + top
+    for k, q in ipairs(dl.quests) do
+      local rr = legRow(l, k)
+      rr:ClearAllPoints()
+      rr:SetPoint("TOPLEFT", 66, -ry)
+      rr:SetWidth(width - 74)
+      rr.q, rr.st, rr.xpv, rr.pct, rr.plvl, rr.doneXP = q, QB:Status(q), nil, nil, nil, nil
+      rr.icon:Show()
+      rr.tick:Hide()
+      setIcon(rr.icon, q.icon)
+      rr.name:SetText(q.name)
+      rr.name:SetTextColor(INK[1], INK[2], INK[3])
+      local objs = QB.API.Objectives(q.id) or {}
+      local left = {}
+      for _, o in ipairs(objs) do if not o.done and #left < 1 then left[#left + 1] = QB.Plain(o.text) or "" end end
+      rr.npc:SetText(left[1] or "")
+      rr.xp:SetText(QB.Comma(QB:Value(q.id) or 0))
+      ry = ry + 20
+    end
+    for k = #dl.quests + 1, #l.rows do l.rows[k]:Hide() end
+    l:SetAlpha(1)
+    l:SetHeight(ry + 10)
+    y = y + ry + 10
+  end
+  v.thenHandIn = #doLegs > 0
+
+  if (not r.legs or #r.legs == 0) and #doLegs == 0 then
     v.empty:SetText(run and "Everything that was ready is handed in. End the run to save it." or
       (mode == "now" and ((QB:Banking() and "Nothing is banked yet." or "Nothing is ready to hand in yet.") .. " Finished quests and quest items in your bags show up here in hand-in order. Full plan shows the route you're building towards.") or
         "Nothing in your log or on your pick-up list yet. The ! on a quest on Available puts it there."))
@@ -3212,8 +3305,11 @@ function UI:RefreshRouteView(v)
     local l = v.legs:Get()
     local s = leg.stop
     local lateStart = leg.late and not (r.legs[i - 1] and r.legs[i - 1].late) and r.goal == "hour" and not run
-    l.divider:SetShown(lateStart)
-    l.divider:SetText("After the first hour")
+    l.divider:SetShown(lateStart or (i == 1 and v.thenHandIn))
+    l.divider:SetText(lateStart and "After the first hour" or "Then hand in")
+    l.divider:SetTextColor(BAD[1], BAD[2], BAD[3])
+    if not lateStart then l.divider:SetTextColor(GOLD[1], GOLD[2], GOLD[3]) end
+    l.node:SetVertexColor(1, 1, 1, 1)
     layLeg(l, width, y, v.scroll.child)
     l.node:SetTexture(i == 1 and T.taxiY or T.taxiGray)
     l.clock:SetText(QB.Clock(leg.t))

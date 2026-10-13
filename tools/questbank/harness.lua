@@ -4468,6 +4468,25 @@ end
 
 
 ----------------------------------------------------------------------------
+-- 5.3: the Route page guides a questing character: where to do the unfinished quests, nearest first, then hand in
+do
+  local N, U = newbie.QB, newbie.QB.UI
+  local D = N.Data
+  local e1 = N.state.logOrder[1]
+  local saveSpot = D.SPOT[e1.id]
+  D.SPOT[e1.id] = "k,1,1429,520,500,10,c"
+  e1.complete = false
+  local legs = U.ObjectiveLegs(5)
+  assert(#legs >= 1 and legs[1].quests[1].id == e1.id and legs[1].mins >= 0 and legs[1].yards >= 0, "the nearest unfinished quest's place comes first")
+  U:ShowTab(3); U:Refresh()
+  local v3n = U.views[3]
+  local first
+  for _, l in ipairs(v3n.legs.items) do if l:IsShown() and not first then first = l end end
+  assert(first and first.divider:IsShown() and first.divider:GetText() == "Do now" and first.name:GetText() == legs[1].name, "the page opens with Do now")
+  assert(first.pin.stop and first.pin.stop.m == 1429, "with a waypoint on the place")
+  D.SPOT[e1.id] = saveSpot
+end
+
 -- 3.6.2: who drops what (Loot.lua): a dwarf hunter looting in Elwynn and in the City of Dalaran on the Forever
 -- client. Each creature or chest looted is noted by id with the item ids in its window, the map or the dungeon with
 -- its difficulty, and the boss fight it ended; never a name, never a player; under the same Settings box as the
