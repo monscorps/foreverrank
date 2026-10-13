@@ -1363,11 +1363,27 @@ do
     cb:SetChecked(false); cb.__scripts.OnClick(cb, "LeftButton")
     assert(QB:Settings()[name] == false, name .. " ticks off")
   end
+  -- 3.8.0: the key button cycles, a context switch cycles inherit, on, off, and the strip box follows the timer
+  assert(v5.autoKey:GetText() == "Shift", "the key starts as Shift")
+  for _, want in ipairs({ "Ctrl", "Alt", "No key", "Shift" }) do
+    v5.autoKey.__scripts.OnClick(v5.autoKey, "LeftButton")
+    assert(v5.autoKey:GetText() == want, "the key cycles to " .. want .. ": " .. tostring(v5.autoKey:GetText()))
+  end
+  assert(QB:Settings().autoKey == "shift", "and back to shift in the setting")
+  local tb = v5.tri["party.autoAccept"]
+  assert(tb and QB:Settings().profiles.party.autoAccept == nil, "a context switch starts as inherit")
+  tb.__scripts.OnClick(tb, "LeftButton"); assert(QB:Settings().profiles.party.autoAccept == true, "one click: on")
+  tb.__scripts.OnClick(tb, "LeftButton"); assert(QB:Settings().profiles.party.autoAccept == false, "two: off")
+  tb.__scripts.OnClick(tb, "LeftButton"); assert(QB:Settings().profiles.party.autoAccept == nil, "three: inherit again")
+  v5.clockShow:SetChecked(true); v5.clockShow.__scripts.OnClick(v5.clockShow, "LeftButton")
+  assert(QB:Settings().clock.show == true and QB.Timer.frame and QB.Timer.frame:IsShown(), "the strip box shows the strip")
+  v5.clockShow:SetChecked(false); v5.clockShow.__scripts.OnClick(v5.clockShow, "LeftButton")
+  assert(QB:Settings().clock.show == false and not QB.Timer.frame:IsShown(), "and hides it")
   local lay = checkLayout(UI.frame, "settings, scrolled")
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 722 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 930 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()

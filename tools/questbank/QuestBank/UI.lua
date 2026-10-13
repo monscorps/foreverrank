@@ -3297,6 +3297,68 @@ function UI:CreateSettingsView(parent)
   v.discText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
   v.discText:SetPoint("TOPLEFT", RIGHT, -636)
   v.discText:SetHeight(72)
+
+  -- the decide-yourself key: held at the NPC, the auto actions above leave the quest to you
+  v.autoKey = button(p, "Shift", 70)
+  v.autoKey:SetPoint("TOPLEFT", LEFT, -650)
+  v.autoKeyLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 290)
+  v.autoKeyLabel:SetPoint("LEFT", v.autoKey, "RIGHT", 8, 0)
+  v.autoKeyLabel:SetText("held at the NPC: decide the quest yourself")
+  local KEYS = { "shift", "ctrl", "alt", "none" }
+  UI.KEY_NAMES = { shift = "Shift", ctrl = "Ctrl", alt = "Alt", none = "No key" }
+  v.autoKey:SetScript("OnClick", QB.Safe(function()
+    local set = QB:Settings()
+    local i = 1
+    for k, name in ipairs(KEYS) do if name == set.autoKey then i = k end end
+    set.autoKey = KEYS[i % #KEYS + 1]
+    UI:Refresh()
+  end, "settings: key"))
+
+  -- timers (Timer.lua)
+  heading(p, LEFT, -690, "Timers", 370)
+  v.clockShow = checkRow(p, LEFT, -714, "Show the timer strip (drag it; right-click hides it)", 340)
+  v.clockShow:SetScript("OnClick", function(self) if QB.Timer then QB.Timer.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
+  v.clockLevelMsg = checkRow(p, LEFT, -742, "Say how long each level took, at level-up", 340)
+  v.clockLevelMsg:SetScript("OnClick", function(self) QB:Settings().clockLevelMsg = self:GetChecked() and true or false end)
+  v.clockHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
+  v.clockHint:SetPoint("TOPLEFT", LEFT, -768)
+  v.clockHint:SetHeight(44)
+  v.clockHint:SetText("The strip shows your time at this level, the oldest quest in your log and the hand-in run. Quest tooltips say how long a quest took.")
+
+  -- where you are decides (QB:Opt): each row is a context, each column a setting; a button cycles inherit, on, off
+  heading(p, RIGHT, -724, "When you are...")
+  local COLS = { { "autoAccept", "Accept" }, { "autoTurnIn", "Hand in" }, { "sayAccept", "Say got" }, { "sayComplete", "Say done" }, { "clockShow", "Strip" } }
+  local ROWS = { { "dungeon", "In a dungeon" }, { "pvp", "In a PvP zone" }, { "party", "In a party" }, { "cap", "At a level cap" } }
+  v.tri = {}
+  for ci, col in ipairs(COLS) do
+    local h = text(p, "GameFontNormalSmall", 10, INK_SOFT, "CENTER", 48)
+    h:SetPoint("TOPLEFT", RIGHT + 120 + (ci - 1) * 44 - 12, -748)
+    h:SetText(col[2])
+  end
+  for ri, row in ipairs(ROWS) do
+    local y = -766 - (ri - 1) * 26
+    local l = text(p, "GameFontNormal", 12, INK, "LEFT", 118)
+    l:SetPoint("TOPLEFT", RIGHT, y - 4)
+    l:SetText(row[2])
+    for ci, col in ipairs(COLS) do
+      local b = button(p, "\226\128\147", 24)
+      b:SetPoint("TOPLEFT", RIGHT + 120 + (ci - 1) * 44, y)
+      b.ctx, b.key = row[1], col[1]
+      b:SetScript("OnClick", QB.Safe(function(self)
+        local prof = QB:Settings().profiles
+        prof[self.ctx] = prof[self.ctx] or {}
+        local cur, nxt = prof[self.ctx][self.key], nil
+        if cur == nil then nxt = true elseif cur == true then nxt = false end -- inherit -> on -> off -> inherit
+        prof[self.ctx][self.key] = nxt
+        if QB.Timer then QB.Timer.Apply() end
+        UI:Refresh()
+      end, "settings: context"))
+      v.tri[row[1] .. "." .. col[1]] = b
+    end
+  end
+  v.ctxText = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
+  v.ctxText:SetPoint("TOPLEFT", RIGHT, -876)
+  v.ctxText:SetHeight(44)
   v.Refresh = function() UI:RefreshSettingsView(v) end
   return v
 end
@@ -3374,6 +3436,25 @@ function UI:RefreshSettingsView(v)
   v.autoTurnIn:SetChecked(set.autoTurnIn == true)
   v.sayAccept:SetChecked(set.sayAccept == true)
   v.sayComplete:SetChecked(set.sayComplete == true)
+  local keyName = UI.KEY_NAMES[set.autoKey] or "Shift"
+  v.autoKey:SetText(keyName)
+  v.acceptHint:SetText(string.format("At an NPC and when a party member shares one; escorts are yours to join in the game's prompt. %s Not trivial or repeatable quests, and not with a full log.",
+    set.autoKey == "none" and "No key skips it." or ("Hold " .. keyName .. " to do it by hand.")))
+  v.clockShow:SetChecked(set.clock and set.clock.show == true)
+  v.clockLevelMsg:SetChecked(set.clockLevelMsg ~= false)
+  local MARK = { [true] = "|cff2e8b2e\226\156\147|r", [false] = "|cffb03030\226\156\151|r" }
+  for key, b in pairs(v.tri) do
+    local ctx, k = key:match("^(%a+)%.(%w+)$")
+    local p = set.profiles and set.profiles[ctx]
+    local val = p and p[k]
+    b:SetText(val == nil and "\226\128\147" or MARK[val])
+  end
+  local active = QB.Contexts()
+  local names = { dungeon = "in a dungeon", pvp = "in a PvP zone", party = "in a party", cap = "at a level cap" }
+  local words = {}
+  for _, c in ipairs(active) do words[#words + 1] = names[c] end
+  v.ctxText:SetText(#words > 0 and ("Right now you are " .. table.concat(words, ", ") .. ": the first row that sets a switch wins, dungeon first.")
+    or "Right now none of these applies: the switches above are what counts. The first row that sets a switch wins, dungeon first.")
   local zones = {}
   for _, c in ipairs(QB.Data.CAT) do if set.skipCat[c.key] then zones[#zones + 1] = c.name end end
   table.sort(zones)
@@ -3383,7 +3464,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(722) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(930) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------
