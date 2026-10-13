@@ -119,6 +119,7 @@ local function listFor(m)
   cache.list = (m == "handin" and handinList()) or (m == "pickup" and pickupList()) or nil
   return cache.list
 end
+A.ListFor = listFor
 
 -- what the arrow points at, judged from where you stand (passed in, so one read serves the whole tick)
 function A.Target(here)

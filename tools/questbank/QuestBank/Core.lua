@@ -1003,7 +1003,9 @@ local DEFAULTS = {
   -- where you are decides: each context may override autoAccept, autoTurnIn, sayAccept, sayComplete and clockShow;
   -- a key left out inherits the setting above (QB:Opt). Checked in this order: dungeon, pvp, party, cap
   profiles = { dungeon = {}, pvp = {}, party = {}, cap = {} },
-  clock = { show = false }, clockLevelMsg = true, -- the timer strip (Clock.lua) and the level-up line
+  clock = { show = false }, clockLevelMsg = true, -- the timer strip (Timer.lua) and the level-up line
+  -- the route on the minimap (Minimap.lua): the stops and their lines, your pick-up list, dungeon entrances
+  minimapPins = true, minimapLines = true, minimapPickups = true, minimapEntrances = true,
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
   noteGame = true, -- note the spells and item tooltips the Forever client shows, for foreverrank.com (Game.lua)
   -- quest icons on each zone's world map (QuestMap.lua, Forever only): all of them, then where quests you can take
@@ -2219,6 +2221,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Observe then QB.Observe:Init() end
     if QB.Timer then QB.Timer:Init() end
     if QB.Link then QB.Link:Init() end
+    if QB.Mini then QB.Mini:Init() end
     if QB.Arrow then QB.Arrow:Init() end
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
@@ -2376,6 +2379,8 @@ slash = function(msg)
     elseif QB.UI then
       QB.UI:ShowErrors()
     end
+  elseif cmd == "bigmap" then
+    if QB.Mini then QB.Mini.Big() end
   elseif cmd == "events" then
     -- not listed anywhere: the event probe's counts (Observe.lua), for the owner to read off before an upload
     QB.Observe.Report(function(m) QB:Print(m) end)

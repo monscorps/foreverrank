@@ -21,7 +21,7 @@ RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThum
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
-SetAtlas SetPassThroughButtons SetScale]])
+SetAtlas SetPassThroughButtons SetScale GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
@@ -64,6 +64,13 @@ local function newObj(kind, template, parent)
         elseif k == "HookScript" then local old = self.__scripts[a[1]]; self.__scripts[a[1]] = function(...) if old then old(...) end a[2](...) end
         elseif k == "CreateTexture" then local x = newObj("Texture", nil, self); x.__layer = a[2] or "ARTWORK"; return x
         elseif k == "CreateFontString" then local x = newObj("FontString", nil, self); x.__layer = a[2] or "OVERLAY"; return x
+        elseif k == "CreateLine" then local x = newObj("Line", nil, self); x.__layer = a[2] or "ARTWORK"; return x
+        elseif k == "SetStartPoint" then self.__start = { a[1], a[2], a[3], a[4] }
+        elseif k == "SetEndPoint" then self.__stop = { a[1], a[2], a[3], a[4] }
+        elseif k == "GetZoom" then return self.__zoom or 0
+        elseif k == "SetZoom" then self.__zoom = a[1]
+        elseif k == "GetZoomLevels" then return 6
+        elseif k == "GetFrameLevel" then return self.__level or 2
         elseif k == "Show" then local was = self.__shown; self.__shown = true; if not was and self.__scripts.OnShow then self.__scripts.OnShow(self) end
         elseif k == "Hide" then local was = self.__shown; self.__shown = false; if was and self.__scripts.OnHide then self.__scripts.OnHide(self) end
         elseif k == "SetShown" then if a[1] then self:Show() else self:Hide() end
@@ -84,6 +91,7 @@ local function newObj(kind, template, parent)
         elseif k == "SetWordWrap" then self.__wrap = a[1] and true or false
         elseif k == "SetTextColor" then self.__color = { a[1], a[2], a[3] }
         elseif k == "SetAlpha" then self.__alpha = a[1]
+        elseif k == "GetAlpha" then return self.__alpha
         elseif k == "SetMinMaxValues" then self.__min, self.__max = a[1], a[2]
         elseif k == "GetMinMaxValues" then return self.__min, self.__max
         elseif k == "SetValue" then self.__value = a[1]; if self.__scripts.OnValueChanged then self.__scripts.OnValueChanged(self, a[1]) end
@@ -225,7 +233,10 @@ local function newClient(o)
   local c = { env = env, o = o, timers = {}, clock = 1000, outbox = {}, pins = {}, chat = {}, frames = {}, QB = {} }
   env.UIParent = newObj("Frame"); env.UIParent:SetSize(1600, 1000); env.UIParent.__points = {}
   env.UIParent.__root = true
-  env.Minimap = newObj("Frame"); env.Minimap:SetSize(140, 140)
+  env.Minimap = newObj("Frame"); env.Minimap:SetSize(140, 140); env.Minimap.__points = {}
+  env.Minimap:SetPoint("TOPRIGHT", env.UIParent, "TOPRIGHT", -20, -20)
+  env.C_Minimap = { GetViewRadius = function() return c.miniRadius or 233.33 end }
+  env.GetCVar = env.GetCVar or function(name) return (c.cvars or {})[name] end
   env.UISpecialFrames = {}
   env.SlashCmdList = {}
   env.DEFAULT_CHAT_FRAME = { AddMessage = function(_, m) c.chat[#c.chat + 1] = m end }
@@ -1160,6 +1171,61 @@ do
   assert(#lines == 0, "linen cloth: no quest gives it")
   L.ItemTip({}, { id = iid }); L.ItemTip(tip, { id = SECRET.num() })
   assert(#lines == 0, "a tooltip without AddLine, a hidden id: nothing, no error")
+end
+-- 3.9.0: the route on the minimap (Minimap.lua): numbered stops, lines, pick-ups, dungeon entrances; the big map
+do
+  local Mini, env, P = QB.Mini, owner.env, QB.Pins
+  assert(Mini and Mini.ready and env.QuestBankMinimap, "the overlay sits on the minimap")
+  -- a flat world for the test: map 1429, 1 percent = 30 yards north-south and 40 east-west, from (0, 0)
+  local saveWorld, savePos = env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition
+  env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = -v.y * 3000, y = -v.x * 4000, GetXY = function(self) return self.x, self.y end } end
+  env.C_Map.GetPlayerMapPosition = function() return { x = 0.50, y = 0.50, GetXY = function(self) return self.x, self.y end } end
+  local saveList = P.list
+  P.list = { { m = 1429, x = 50, y = 48, num = 1, name = "Goldshire", when = "At 0:10", lines = {} },   -- 60 yards north
+             { m = 1429, x = 52, y = 50, num = 2, name = "Crossroads", when = "At 0:20", lines = {} },  -- 80 yards east
+             { m = 1429, x = 90, y = 50, num = 3, name = "Far away", when = "At 1:00", lines = {} } }  -- 1600 yards east
+  c = owner; c.miniRadius = 200
+  Mini.Invalidate()
+  Mini.Place()
+  local f = env.QuestBankMinimap
+  local shown = {}
+  for _, child in ipairs(c.frames) do if child.__parent == f and child.d and child:IsShown() then shown[#shown + 1] = child end end
+  assert(#shown >= 3, "three stops on the minimap: " .. #shown)
+  local byName = {}
+  for _, p in ipairs(shown) do byName[p.d.name] = p end
+  local g = byName.Goldshire
+  local function at(p) return p.__points[1].x, p.__points[1].y end -- (the harness's GetPoint is a stub)
+  local gx, gy = at(g)
+  assert(math.abs(gx) < 0.01 and math.abs(gy - 21) < 0.01 and g:GetAlpha() == 1, string.format("60 yards north at radius 200 on a 140 px map: 21 px up (%s, %s)", gx, gy))
+  local x2, y2 = at(byName.Crossroads)
+  assert(math.abs(x2 - 28) < 0.01 and math.abs(y2) < 0.01, string.format("80 yards east: 28 px right (%s, %s)", x2, y2))
+  local far = byName["Far away"]
+  local x3 = at(far)
+  assert(math.abs(x3 - 63) < 0.01 and far:GetAlpha() < 1, "a stop past the reach sits on the rim, dimmer: " .. tostring(x3))
+  assert(byName.Goldshire.num:GetText() == "1" and byName.Crossroads.num:GetText() == "2", "numbered")
+  assert(Mini.linesShown == 2, "you to stop 1 and stop 1 to stop 2; nothing to the far one: " .. tostring(Mini.linesShown))
+  -- the minimap turning with you: facing west puts north on the right
+  c.cvars = { rotateMinimap = "1" }; c.facing = math.pi / 2
+  Mini.Place()
+  local rx, ry = at(byName.Goldshire)
+  assert(math.abs(rx - 21) < 0.01 and math.abs(ry) < 0.01, string.format("rotated: north is to the right (%s, %s)", rx, ry))
+  c.cvars = nil; c.facing = nil
+  -- the big map, and a fight that puts it back
+  local w0 = env.Minimap:GetWidth()
+  assert(Mini.Big(true) and env.Minimap:GetWidth() > 400 and Mini.IsBig(), "the big map grows the minimap")
+  c.combat = true
+  assert(Mini.Big(false) == false and Mini.IsBig(), "in a fight nothing is touched")
+  c.combat = false
+  Mini.Big(false)
+  assert(env.Minimap:GetWidth() == w0 and not Mini.IsBig(), "back to its size")
+  -- off: nothing shown
+  QB:Settings().minimapPins = false
+  Mini.Place()
+  assert(not byName.Goldshire:IsShown(), "the setting off clears the pins")
+  QB:Settings().minimapPins = true
+  P.list = saveList
+  env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
+  Mini.Invalidate(); Mini.Place()
 end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do

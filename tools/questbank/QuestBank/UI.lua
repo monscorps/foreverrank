@@ -3325,6 +3325,17 @@ function UI:CreateSettingsView(parent)
   v.clockHint:SetHeight(44)
   v.clockHint:SetText("The strip shows your time at this level, the oldest quest in your log and the hand-in run. Quest tooltips say how long a quest took.")
 
+  -- the route on the minimap (Minimap.lua)
+  heading(p, LEFT, -820, "Minimap", 370)
+  v.minimapPins = checkRow(p, LEFT, -844, "Route stops, pick-ups and dungeon entrances on the minimap", 340)
+  v.minimapPins:SetScript("OnClick", function(self) QB:Settings().minimapPins = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
+  v.bigmap = button(p, "Big map", 110)
+  v.bigmap:SetPoint("TOPLEFT", LEFT + 4, -872)
+  v.bigmap:SetScript("OnClick", QB.Safe(function() if QB.Mini then QB.Mini.Big() end end, "settings: big map"))
+  v.bigmapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
+  v.bigmapLabel:SetPoint("LEFT", v.bigmap, "RIGHT", 8, 0)
+  v.bigmapLabel:SetText("the minimap grown and zoomed out; /qb bigmap")
+
   -- where you are decides (QB:Opt): each row is a context, each column a setting; a button cycles inherit, on, off
   heading(p, RIGHT, -724, "When you are...")
   local COLS = { { "autoAccept", "Accept" }, { "autoTurnIn", "Hand in" }, { "sayAccept", "Say got" }, { "sayComplete", "Say done" }, { "clockShow", "Strip" } }
@@ -3441,6 +3452,7 @@ function UI:RefreshSettingsView(v)
   v.acceptHint:SetText(string.format("At an NPC and when a party member shares one; escorts are yours to join in the game's prompt. %s Not trivial or repeatable quests, and not with a full log.",
     set.autoKey == "none" and "No key skips it." or ("Hold " .. keyName .. " to do it by hand.")))
   v.clockShow:SetChecked(set.clock and set.clock.show == true)
+  v.minimapPins:SetChecked(set.minimapPins ~= false)
   v.clockLevelMsg:SetChecked(set.clockLevelMsg ~= false)
   local MARK = { [true] = "|cff2e8b2e\226\156\147|r", [false] = "|cffb03030\226\156\151|r" }
   for key, b in pairs(v.tri) do

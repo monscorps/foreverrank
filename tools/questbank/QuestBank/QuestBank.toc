@@ -15,6 +15,7 @@ Loot.lua
 Observe.lua
 Timer.lua
 Link.lua
+Minimap.lua
 Model.lua
 
 Pins.lua

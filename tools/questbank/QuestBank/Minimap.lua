@@ -1,0 +1,280 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
+-- The route on the minimap: a numbered pin for every stop of the hand-in route, a line from stop to stop and from you
+-- to the next one, your pick-up list, and the entrances of the dungeons around you. A pin outside the minimap's reach
+-- sits on its rim, dimmer, in the direction it lies. Click a pin: a waypoint there, as on the world map. /qb bigmap
+-- (or the Big map setting) grows the minimap to most of the screen, zoomed all the way out, so it reads as a map of
+-- the area; the same command puts it back. Everything here is QuestBank's own frames laid over the Minimap: nothing
+-- of the game's is replaced, and the minimap itself is only resized and zoomed, never in a fight.
+--   where a pin is: the stop's map and position go through QB.Model.World to continent yards, as the arrow's do; the
+--   minimap's radius in yards comes from C_Minimap.GetViewRadius; rotateMinimap turns the pins with your facing.
+local _, QB = ...
+local Mini = {}
+QB.Mini = Mini
+
+local TICK = 0.1           -- seconds between placements (the pins follow you)
+local MAX_PINS = 60        -- route stops, pick-ups and entrances, the nearest first past that
+local EDGE = 7             -- the rim: pins past the minimap's reach sit this far inside its edge
+local LINE_REACH = 1.6     -- a line is drawn when both ends are within this many radii
+Mini.TICK, Mini.MAX_PINS = TICK, MAX_PINS
+
+local plain = QB.Plain
+local sqrt, atan2, sin, cos, pi = math.sqrt, math.atan2, math.sin, math.cos, math.pi
+local pins, lines, worldOf = {}, {}, {}
+
+local function on() return QB:Settings().minimapPins ~= false end
+
+-- the minimap's reach in yards: the client says; else the Classic zoom table
+local ZOOM_YARDS = { 233.33, 200, 166.67, 133.33, 100, 66.67 }
+function Mini.Radius()
+  if C_Minimap and C_Minimap.GetViewRadius then
+    local ok, r = pcall(C_Minimap.GetViewRadius)
+    r = ok and plain(r) or nil
+    if type(r) == "number" and r > 0 then return r end
+  end
+  local z = Minimap and Minimap.GetZoom and plain(Minimap:GetZoom()) or 0
+  return ZOOM_YARDS[(type(z) == "number" and z or 0) + 1] or 233.33
+end
+
+local function rotated()
+  if not GetCVar then return false end
+  local ok, v = pcall(GetCVar, "rotateMinimap")
+  return ok and plain(v) == "1"
+end
+
+-- continent yards of a pin's place, kept once per pin key
+local function worldPos(d)
+  local key = d.m .. ":" .. d.x .. ":" .. d.y
+  local w = worldOf[key]
+  if w == nil then
+    w = QB.Model.World(d.m, d.x, d.y) or false
+    worldOf[key] = w
+  end
+  return w or nil
+end
+
+-- screen offset of a world point from where you stand: north up, west left, turned with you when the minimap turns.
+-- Returns x, y (pixels), the distance in yards, and whether it is past the rim
+function Mini.Project(me, w, radius, R, facing)
+  local dn, dw = w.wx - me.wx, w.wy - me.wy
+  local d = sqrt(dn * dn + dw * dw)
+  local b = atan2(dw, dn) - (facing or 0)
+  local px = d / radius * R
+  local far = px > R - EDGE
+  if far then px = R - EDGE end
+  return -sin(b) * px, cos(b) * px, d, far
+end
+
+-- what goes on the minimap: the route's stops (numbered), the pick-up list, the dungeon entrances of your continent
+function Mini.List()
+  local out = {}
+  local P = QB.Pins
+  if P and P.list then
+    for _, d in ipairs(P.list) do
+      if d.m and d.m > 0 then out[#out + 1] = { m = d.m, x = d.x, y = d.y, name = d.name, num = d.num, kind = "stop", when = d.when, lines = d.lines, late = d.late } end
+    end
+  end
+  if QB:Settings().minimapPickups ~= false and QB.Arrow and QB.Arrow.ListFor then
+    for _, d in ipairs(QB.Arrow.ListFor("pickup") or {}) do
+      if d.m and d.m > 0 then out[#out + 1] = { m = d.m, x = d.x, y = d.y, name = d.name, kind = "pickup" } end
+    end
+  end
+  if QB:Settings().minimapEntrances ~= false then
+    for _, c in ipairs(QB.Data.CAT) do
+      local e = c.entrance
+      if c.dungeon and e and e.m and e.m > 0 then out[#out + 1] = { m = e.m, x = e.x, y = e.y, name = c.name, kind = "dungeon", icon = c.icon } end
+    end
+  end
+  return out
+end
+
+local overlay
+local function overlayFrame()
+  if overlay then return overlay end
+  overlay = CreateFrame("Frame", "QuestBankMinimap", Minimap)
+  overlay:SetAllPoints(Minimap)
+  overlay:SetFrameLevel((Minimap:GetFrameLevel() or 2) + 5)
+  overlay.elapsed = 0
+  overlay:SetScript("OnUpdate", QB.Safe(function(self, dt)
+    self.elapsed = self.elapsed + (dt or 0)
+    if self.elapsed < TICK then return end
+    self.elapsed = 0
+    Mini.Place()
+  end, "minimap pins"))
+  return overlay
+end
+
+local T
+local function pin(i)
+  local p = pins[i]
+  if p then return p end
+  T = T or QB.Data.TEX
+  p = CreateFrame("Button", nil, overlayFrame())
+  p:SetSize(16, 16)
+  p.icon = p:CreateTexture(nil, "ARTWORK")
+  p.icon:SetAllPoints()
+  p.num = p:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+  p.num:SetPoint("CENTER", 0, 0)
+  p:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  p:SetScript("OnClick", QB.Safe(function(self, button)
+    local d = self.d
+    if not d then return end
+    if button == "RightButton" then
+      if d.kind == "stop" and QB.UI and QB.UI.StopMenu then QB.UI.StopMenu(d) end
+      return
+    end
+    QB.API.SetWaypoint(d.m, d.x, d.y, d.name)
+  end, "minimap pin"))
+  p:SetScript("OnEnter", function(self)
+    local d = self.d
+    if not d then return end
+    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+    GameTooltip:SetText(d.name or "", 1, 1, 1)
+    if d.when then GameTooltip:AddLine(d.when, 0.8, 0.8, 0.8) end
+    for _, l in ipairs(d.lines or {}) do GameTooltip:AddDoubleLine(l[1], l[2], 0.9, 0.9, 0.9, 0.6, 0.8, 0.6) end
+    if d.kind == "dungeon" then GameTooltip:AddLine("Dungeon entrance", 0.8, 0.8, 0.8) end
+    if d.kind == "pickup" then GameTooltip:AddLine("On your pick-up list", 0.8, 0.8, 0.8) end
+    GameTooltip:AddLine(string.format("%d yards. Click: waypoint.", self.yards or 0), 0.5, 0.5, 0.5)
+    GameTooltip:Show()
+  end)
+  p:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  pins[i] = p
+  return p
+end
+
+local function line(i)
+  local l = lines[i]
+  if l then return l end
+  local f = overlayFrame()
+  if not f.CreateLine then return nil end
+  l = f:CreateLine(nil, "BACKGROUND")
+  l:SetThickness(2)
+  l:SetColorTexture(1, 0.82, 0.3, 0.6)
+  lines[i] = l
+  return l
+end
+
+local function style(p, d)
+  T = T or QB.Data.TEX
+  if d.kind == "stop" then
+    p.icon:SetTexture(T.mapPin)
+    p.icon:SetTexCoord(0, 1, 0, 1)
+    p.num:SetText(d.num and tostring(d.num) or "")
+    p:SetSize(18, 18)
+  elseif d.kind == "dungeon" then
+    p.icon:SetTexture(d.icon or T.ring)
+    p.num:SetText("")
+    p:SetSize(14, 14)
+  else
+    p.icon:SetTexture(T.questAvail)
+    p.num:SetText("")
+    p:SetSize(14, 14)
+  end
+end
+
+-- place every pin for where you stand now
+function Mini.Place()
+  if not on() then Mini.Clear(); return end
+  local me = QB.API.WorldPosition()
+  local f = overlayFrame()
+  if not me then Mini.Clear(); return end
+  local R = (Minimap:GetWidth() or 140) / 2
+  local radius = Mini.Radius()
+  local facing = rotated() and (GetPlayerFacing and plain(GetPlayerFacing())) or 0
+  if type(facing) ~= "number" then facing = 0 end
+  local list, placed, n = Mini.List(), {}, 0
+  -- nearest first when there are too many
+  local pts = {}
+  for _, d in ipairs(list) do
+    local w = worldPos(d)
+    if w and w.c == me.c then
+      local x, y, yards, far = Mini.Project(me, w, radius, R, facing)
+      pts[#pts + 1] = { d = d, x = x, y = y, yards = yards, far = far }
+    end
+  end
+  table.sort(pts, function(a, b) if a.d.kind ~= b.d.kind then return a.d.kind == "stop" end return a.yards < b.yards end)
+  for i, pt in ipairs(pts) do
+    if i > MAX_PINS then break end
+    local p = pin(i)
+    style(p, pt.d)
+    p.d, p.yards = pt.d, pt.yards
+    p:ClearAllPoints()
+    p:SetPoint("CENTER", f, "CENTER", pt.x, pt.y)
+    p:SetAlpha(pt.far and 0.55 or 1)
+    p:Show()
+    n = n + 1
+    if pt.d.kind == "stop" and pt.d.num then placed[pt.d.num] = pt end
+  end
+  for i = n + 1, #pins do pins[i]:Hide() end
+  -- lines: you to stop 1, then stop to stop, where both ends are near enough
+  local li = 0
+  if QB:Settings().minimapLines ~= false then
+    local prev = { x = 0, y = 0, far = false, yards = 0 }
+    local num = 1
+    while placed[num] do
+      local pt = placed[num]
+      if not prev.far and not pt.far and pt.yards <= radius * LINE_REACH and prev.yards <= radius * LINE_REACH then
+        li = li + 1
+        local l = line(li)
+        if l then
+          l:SetStartPoint("CENTER", f, prev.x, prev.y)
+          l:SetEndPoint("CENTER", f, pt.x, pt.y)
+          l:Show()
+        end
+      end
+      prev, num = pt, num + 1
+    end
+  end
+  for i = li + 1, #lines do lines[i]:Hide() end
+  Mini.shown, Mini.linesShown = n, li
+end
+
+function Mini.Clear()
+  for _, p in ipairs(pins) do p:Hide() end
+  for _, l in ipairs(lines) do l:Hide() end
+  Mini.shown, Mini.linesShown = 0, 0
+end
+
+function Mini.Invalidate() worldOf = {} end
+
+-- the big map: the minimap grown to most of the screen and zoomed out, and back
+local saved
+function Mini.Big(on)
+  if InCombatLockdown and InCombatLockdown() then QB:Print("Not in a fight: the minimap stays as it is until you are out."); return false end
+  if on == nil then on = not saved end
+  if on and not saved then
+    local w, h = Minimap:GetWidth(), Minimap:GetHeight()
+    local pt = { Minimap:GetPoint(1) }
+    saved = { w = w, h = h, pt = pt, zoom = Minimap.GetZoom and Minimap:GetZoom() or 0 }
+    local size = math.floor(math.min((UIParent:GetHeight() or 900) - 140, (UIParent:GetWidth() or 1600) - 200))
+    Minimap:SetSize(size, size)
+    Minimap:ClearAllPoints()
+    Minimap:SetPoint("CENTER", UIParent, "CENTER", 0, 10)
+    if Minimap.SetZoom then Minimap:SetZoom(0) end
+    QB:Print("The big map is up. /qb bigmap puts the minimap back.")
+  elseif not on and saved then
+    Minimap:SetSize(saved.w, saved.h)
+    Minimap:ClearAllPoints()
+    if saved.pt[1] then Minimap:SetPoint(unpack(saved.pt)) end
+    if Minimap.SetZoom then Minimap:SetZoom(saved.zoom) end
+    saved = nil
+  end
+  Mini.Place()
+  return saved ~= nil
+end
+function Mini.IsBig() return saved ~= nil end
+
+function Mini:Init()
+  if self.ready then return end
+  self.ready = true
+  if not (Minimap and QB.Model and QB.Model.World) then return end
+  local f = CreateFrame("Frame")
+  f:SetScript("OnEvent", QB.Safe(function(_, event)
+    if event == "PLAYER_REGEN_DISABLED" and saved then Mini.Big(false) end -- a fight: the minimap goes back
+    Mini.Invalidate()
+    Mini.Place()
+  end, "minimap pins"))
+  for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "MINIMAP_UPDATE_ZOOM", "PLAYER_REGEN_DISABLED" }) do
+    pcall(f.RegisterEvent, f, e)
+  end
+  overlayFrame()
+end
