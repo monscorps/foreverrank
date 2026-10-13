@@ -350,6 +350,11 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
   else
     shift = QB:IsAdded(q.id) and "Shift-click: take it off your pick-up list" or "Shift-click: put it on your pick-up list"
   end
+  -- how long it took, or has taken (Timer.lua)
+  if QB.Timer then
+    local took, done = QB.Timer.QuestTime(q.id)
+    if took and took >= 60 then tip:AddLine(done and ("Took " .. QB.Timer.Span(took)) or ("Accepted " .. QB.Timer.Span(took) .. " ago"), 0.6, 0.6, 0.6) end
+  end
   if chatOpen() then shift = "Shift-click: link it in chat" end
   if rewardRow then shift = "Shift-click: link the reward" end -- Find quests' reward rows link the item, not the quest
   tip:AddLine("Click: waypoint.  " .. shift .. ".  Right-click: more.", 0.5, 0.5, 0.5, true)

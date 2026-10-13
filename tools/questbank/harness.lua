@@ -1074,6 +1074,60 @@ do
   set.autoKey = "shift"
   owner.shift, owner.ctrl = false, false
 end
+-- 3.8.0: timers (Timer.lua): time at each level, time per quest, the strip
+do
+  local T, env = QB.Timer, owner.env
+  assert(T and T.eventFrame and T.QUESTS == 300 and not T.frame, "timers on, the strip not built until asked for")
+  local function ev(e, ...) T.eventFrame.__scripts.OnEvent(T.eventFrame, e, ...) end
+  local lvl0 = QB.state.level
+  ev("PLAYER_ENTERING_WORLD")
+  local L = T.DB().levels[lvl0]
+  assert(L and L.at and L.played == 0 and T.LevelTime() == 0, "entering the world starts this level's clock")
+  tick(owner, 600)
+  assert(T.LevelTime() == 600, "ten minutes in: 600 s at this level")
+  ev("QUEST_ACCEPTED", 1, 7)
+  assert(T.DB().quests[7] and T.DB().quests[7].a and T.QuestTime(7) == 0, "a quest accepted (log index first, the id second)")
+  tick(owner, 480)
+  local took, done = T.QuestTime(7)
+  assert(took == 480 and done == false, "eight minutes in the log")
+  ev("QUEST_ACCEPTED", SECRET.num(), SECRET.num())
+  ev("QUEST_TURNED_IN", SECRET.num(), 100)
+  assert(T.QuestTime(7) == 480, "hidden ids: nothing noted, nothing broken")
+  ev("QUEST_TURNED_IN", 7, 250)
+  tick(owner, 60)
+  took, done = T.QuestTime(7)
+  assert(took == 480 and done == true, "handed in: the time it took stays")
+  assert(T.Span(45) == "45s" and T.Span(480) == "8m" and T.Span(4320) == "1h 12m", "spans")
+  local chat0 = #owner.chat
+  ev("PLAYER_LEVEL_UP", lvl0 + 1)
+  assert(QB.state.level == lvl0 + 1 and T.DB().levels[lvl0 + 1] and T.LevelTime(lvl0) == 1140 and T.LevelTime() == 0, "a level up: the old level's time is kept, the new one starts")
+  assert(#owner.chat == chat0 + 1 and owner.chat[#owner.chat]:find("Level " .. (lvl0 + 1) .. " in 19m of play at level " .. lvl0, 1, true), "the level-up line: " .. tostring(owner.chat[#owner.chat]))
+  for i = 1, 310 do ev("QUEST_ACCEPTED", 1, 10000 + i) end
+  local n = 0; for _ in pairs(T.DB().quests) do n = n + 1 end
+  assert(n == 300 and not T.DB().quests[7], "no more than 300 quests kept; the handed-in one went first")
+  -- the strip: off by default, on by setting, on by context, text
+  assert(not T.frame, "off: no frame")
+  T.Set(true)
+  assert(T.frame and T.frame:IsShown() and T.frame.text:GetText():find("Lvl " .. (lvl0 + 1) .. " ", 1, true), "on: the strip shows the level: " .. tostring(T.frame.text:GetText()))
+  QB.state.log[10001] = QB.state.log[10001] or {}
+  T.Update()
+  assert(T.frame.text:GetText():find("quest ", 1, true), "the oldest quest in the log is timed: " .. T.frame.text:GetText())
+  QB.state.log[10001] = nil
+  tick(owner, 2)
+  T.Set(false)
+  assert(not T.frame:IsShown() and QB:Settings().clock.show == false, "off again")
+  QB:Settings().profiles.party.clockShow = true
+  local inGroup = env.IsInGroup
+  env.IsInGroup = function() return true end
+  ev("GROUP_ROSTER_UPDATE")
+  assert(T.frame:IsShown(), "a context profile switches the strip on when you join a group")
+  env.IsInGroup = inGroup
+  QB:Settings().profiles.party.clockShow = nil
+  ev("GROUP_ROSTER_UPDATE")
+  assert(not T.frame:IsShown(), "and off again when it no longer applies")
+  QB.state.level = lvl0
+  T.DB().levels, T.DB().quests = {}, {}
+end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
   local set = QB:Settings()

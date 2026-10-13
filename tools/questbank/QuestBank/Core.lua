@@ -2217,6 +2217,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Game then QB.Game:Init() end
     if QB.Loot then QB.Loot:Init() end
     if QB.Observe then QB.Observe:Init() end
+    if QB.Timer then QB.Timer:Init() end
     if QB.Arrow then QB.Arrow:Init() end
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
