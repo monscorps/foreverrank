@@ -21,7 +21,7 @@ RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThum
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
-SetAtlas SetPassThroughButtons SetScale GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture]])
+SetAtlas SetPassThroughButtons SetScale GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
@@ -748,6 +748,8 @@ local function deliver()
 end
 
 local function login(c)
+  -- (the older tests read every place's quests on Available: open them all; the 5.3 block tests the folded default)
+  if c.QB.UI then c.QB.UI.allOpen = true end
   c.ev(c.QB.eventFrame, "ADDON_LOADED", "QuestBank")
   c.ev(c.QB.eventFrame, "PLAYER_LOGIN")
   c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE")
@@ -1899,9 +1901,12 @@ do
   end
   -- the richest place first: the header number never grows down the list (banking: no distance discount)
   do
-    local last = math.huge
+    -- (within each section: zones, then dungeons)
+    local last, wasDungeon = math.huge, nil
     for _, c in ipairs(UI.views[2].cards.items) do
       if c:IsShown() and c.skip:IsShown() and c.gain:GetText():sub(1, 1) == "+" then
+        local isDungeon = c.skip.key and c.skip.key:sub(1, 1) == "d"
+        if isDungeon ~= wasDungeon then last, wasDungeon = math.huge, isDungeon end
         local n = tonumber((c.gain:GetText():gsub("[^%d]", "")))
         assert(n and n <= last, "cards sort by the XP still to collect: " .. c.title:GetText() .. " shows +" .. n .. " below +" .. tostring(last))
         last = n
@@ -2945,9 +2950,19 @@ do
   local row
   for _, c in ipairs(v2.cards.items) do for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q and r.st.code == "todo" and r.q.give and not r.q.give.inside then row = row or r end end end
   assert(row, "a fetchable quest row with a giver outside")
+  -- 5.3: a click opens the quest; its Giver button sets the waypoint
+  local rq = row.q
+  UI.detailOpen = {} -- (earlier tests poked rows open)
   row.__scripts.OnClick(row, "LeftButton")
+  assert(UI.detailOpen[rq.id], "a click opens the quest's details")
+  local det
+  for _, c in ipairs(v2.cards.items) do for _, d in ipairs(c.details.items) do if d:IsShown() and d.q == rq then det = d end end end
+  assert(det and det.from:GetText():find(rq.give.n, 1, true), "the details name the giver")
+  det.goGive.__scripts.OnClick(det.goGive)
   t = A.Target()
-  assert(A.Mode() == "pin" and t and t.kind == "pin" and t.name == row.q.give.n, "a click on a quest pins the arrow to its giver: " .. tostring(t and t.name))
+  assert(A.Mode() == "pin" and t and t.kind == "pin" and t.name == rq.give.n, "the Giver button pins the arrow to the giver: " .. tostring(t and t.name))
+  row.__scripts.OnClick(row, "LeftButton")
+  assert(not UI.detailOpen[rq.id], "a second click closes it")
   assert(A.toldPin, "and it said so, once this session (the first pin above did)")
   -- the right-click menu: the four targets and Hide
   F.__scripts.OnClick(F, "RightButton")
@@ -3568,21 +3583,46 @@ do
   U.candMemo = nil
   U:ShowTab(2); QB.Model.Finish(); U:Refresh()
   assert(U.tabs[2].label:GetText() == "Available", "the tab is called Available")
-  -- 5.0: the chips narrow the cards, and a row shows what its quest gives
+  -- 5.3: Available folds: zones and dungeons are sections, a place opens on its banner, a quest on a click; a row
+  -- shows what its quest gives; a report goes into the saved file for the next upload
   do
     local v2 = U.views[2]
-    assert(v2.chips and #v2.chips == 5 and v2.chips[2].label:GetText() == "Dungeons", "five chips")
-    v2.chips[2].__scripts.OnClick(v2.chips[2])
-    local shownC, dng = 0, 0
-    for _, card in ipairs(v2.cards.items) do if card:IsShown() then shownC = shownC + 1; if card.skip.key and card.skip.key:sub(1, 1) == "d" then dng = dng + 1 end end end
-    assert(shownC > 0 and dng == shownC, "Dungeons: every card is a dungeon: " .. dng .. " of " .. shownC)
-    v2.chips[1].__scripts.OnClick(v2.chips[1])
-    assert(U.availFilter == nil, "All again")
+    U.allOpen, U.cardOpen, U.detailOpen, U.secClosed = false, {}, {}, {}
+    U:ShowTab(2); U:Refresh()
+    local secs = {}
+    for _, h in ipairs(v2.sections.items) do if h:IsShown() then secs[#secs + 1] = h end end
+    assert(#secs >= 1 and secs[1].label:GetText():find("Zones", 1, true) and secs[1].sum:GetText():find("places", 1, true), "a Zones section with its sums")
+    local open1 = 0
+    for _, c in ipairs(v2.cards.items) do if c:IsShown() and c.head.key then for _, r in ipairs(c.rows.items) do if r:IsShown() then open1 = open1 + 1 end end end end
+    assert(open1 == 0, "places start folded: no quest rows")
+    local first
+    for _, c in ipairs(v2.cards.items) do if c:IsShown() and c.head.key and not first then first = c end end
+    first.head.__scripts.OnClick(first.head)
+    local rows = {}
+    for _, r in ipairs(first.rows.items) do if r:IsShown() then rows[#rows + 1] = r end end
+    assert(#rows > 0 and first.caret:GetText() == "\226\150\190", "the banner opens its place: " .. #rows .. " rows")
+    secs[1].__scripts.OnClick(secs[1])
+    local shownC = 0
+    for _, c in ipairs(v2.cards.items) do if c:IsShown() and c.head.key and not c.head.key:find("^d") then shownC = shownC + 1 end end
+    assert(shownC == 0 and secs[1].label:GetText():find("\226\150\184", 1, true), "the Zones section folds away")
+    secs[1].__scripts.OnClick(secs[1])
+    -- a quest opens; its report is kept
+    for _, c in ipairs(v2.cards.items) do if c:IsShown() and c.head.key == first.head.key then first = c end end
+    local r1
+    for _, r in ipairs(first.rows.items) do if r:IsShown() and r.q and not r1 then r1 = r end end
+    r1.__scripts.OnClick(r1, "LeftButton")
+    local det
+    for _, d in ipairs(first.details.items) do if d:IsShown() then det = d end end
+    assert(det and det.q == r1.q and det.rwHead:GetText() ~= "", "the quest opens under its row")
+    local env1 = owner.env
+    env1.QuestBankDB.reports = nil
+    U.Report(r1.q, U.REPORTS[1])
+    assert(env1.QuestBankDB.reports and env1.QuestBankDB.reports[1].id == r1.q.id and env1.QuestBankDB.reports[1].r == U.REPORTS[1], "the report is kept for the upload")
     local withIcons = 0
-    for _, card in ipairs(v2.cards.items) do
-      if card:IsShown() then for _, r in ipairs(card.rows.items) do if r:IsShown() and r.rw and r.rw[1]:IsShown() then withIcons = withIcons + 1 end end end
-    end
+    for _, r in ipairs(first.rows.items) do if r:IsShown() and r.rw and r.rw[1]:IsShown() then withIcons = withIcons + 1 end end
     assert(withIcons > 0, "rows with reward icons: " .. withIcons)
+    U.allOpen, U.cardOpen, U.detailOpen = true, {}, {}
+    U:Refresh()
   end
   local v2 = U.views[2]
   assert(v2.intro:GetText():find("^Level %d+ to %d+$"), "the intro names the level window, nothing more: " .. tostring(v2.intro:GetText()))

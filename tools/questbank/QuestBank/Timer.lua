@@ -89,7 +89,33 @@ local function trim(t)
   end
 end
 
+-- the XP gained since login, counted on every XP update (a level-up carries the rest of the old bar)
+local gain, lastXP, lastMax, since = 0, nil, nil, nil
+local function xpNow()
+  local x = UnitXP and plain(UnitXP("player")) or nil
+  local m = UnitXPMax and plain(UnitXPMax("player")) or nil
+  return type(x) == "number" and x or nil, type(m) == "number" and m or nil
+end
+function Timer.NoteXP()
+  local x, m = xpNow()
+  if not x then return end
+  if lastXP then
+    if x >= lastXP then gain = gain + (x - lastXP) else gain = gain + ((lastMax or lastXP) - lastXP) + x end
+  end
+  lastXP, lastMax = x, m
+  since = since or now()
+end
+-- XP an hour this session: nil until ten minutes have passed (a first quest would read as thousands an hour)
+function Timer.XPPerHour()
+  if not since then return nil end
+  local secs = now() - since
+  if secs < 600 then return nil end
+  return gain / (secs / 3600)
+end
+function Timer.SessionXP() return gain end
+
 function Timer.Record(event, a1, a2)
+  if event == "PLAYER_XP_UPDATE" then Timer.NoteXP(); return end
   if event == "PLAYER_LEVEL_UP" then
     local lvl = plain(a1)
     if type(lvl) ~= "number" then return end
@@ -115,6 +141,7 @@ function Timer.Record(event, a1, a2)
     if q and not q.d then q.d = clock() end
   elseif event == "PLAYER_ENTERING_WORLD" then
     sessionLevel, sessionStart = level(), now()
+    if not since then Timer.NoteXP() end
     local t = db()
     if type(t.levels[sessionLevel]) ~= "table" then t.levels[sessionLevel] = { at = clock(), played = 0 } end
   elseif event == "PLAYER_LOGOUT" then
@@ -214,7 +241,7 @@ function Timer:Init()
   local f = CreateFrame("Frame")
   self.eventFrame = f
   f:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2) Timer.Record(event, a1, a2) end, "timers"))
-  for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_LEVEL_UP", "QUEST_ACCEPTED", "QUEST_TURNED_IN", "PLAYER_LOGOUT",
+  for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "PLAYER_LEVEL_UP", "QUEST_ACCEPTED", "QUEST_TURNED_IN", "PLAYER_LOGOUT", "PLAYER_XP_UPDATE",
                        "ZONE_CHANGED_NEW_AREA", "GROUP_ROSTER_UPDATE" }) do
     pcall(f.RegisterEvent, f, e)
   end

@@ -1425,6 +1425,24 @@ _MAP_ART = {int(r["UiMapID"]): r["UiMapArtID"] for r in csv.DictReader(open(os.p
 _TILES = {}
 for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "UiMapArtTile.csv"))):
     if r["LayerIndex"] == "0": _TILES[(r["UiMapArtID"], int(r["RowIndex"]), int(r["ColIndex"]))] = int(r["FileDataID"])
+# a zone's picture: the painted art of the zone-choice board ("answer-warboard-classic-<zone>"), and its
+# achievement icon; cities and small places have the icon only
+_WB = {k[len("interface/questionframe/answer-warboard-classic-"):-4]: int(v) for k, v in MAN.items() if k.startswith("interface/questionframe/answer-warboard-classic-")}
+_ZI = {k[len("interface/icons/achievement_zone_"):-4]: int(v) for k, v in MAN.items() if k.startswith("interface/icons/achievement_zone_")}
+_WB_ALIAS = {"thebarrens": "northernbarrens", "stranglethornvale": "northernstranglethorn", "thehinterlands": "hinterlands"}
+_ZI_ALIAS = {"thebarrens": "barrens", "stranglethornvale": "stranglethorn", "thehinterlands": "hinterlands", "stormwindcity": "stormwind",
+             "ungorocrater": "ungorocrater", "alteracmountains": "alteracmountains"}
+def _norm(n): return re.sub(r"[^a-z]", "", n.lower())
+for c in CATS:
+    if c["key"].startswith("z"):
+        n = _norm(c["name"])
+        wb = _WB.get(_WB_ALIAS.get(n, n))
+        if wb: c["img"] = wb
+        zi = None
+        for cand in (_ZI_ALIAS.get(n, n), n.replace("the", "", 1)):
+            zi = _ZI.get(cand) or _ZI.get(cand + "_01")
+            if zi: break
+        if zi: c["zi"] = zi
 for c in CATS:
     if c["key"].startswith("z"):
         m = _AREA_MAP.get(int(c["key"][1:]))
