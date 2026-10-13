@@ -2090,6 +2090,16 @@ local function fillRow(r, it, width)
   r.status:SetWidth(math.max(100, width - 450 - 76 - (awayText ~= "" and 48 or 0)))
   UI.RewardIcons(r, q)
   local status, color = st.text, STATUS[st.code] or INK
+  local drop = QB.Data.DROP and QB.Data.DROP[q.id]
+  if drop and drop < 30 and not held and st.code ~= "done" then
+    local pct = math.floor(drop + 0.5)
+    if st.code == "item" then
+      status = string.format("Item at %d%%: %s", pct, (st.text or ""):gsub("^Starts from an item: ", ""))
+    else
+      status = string.format("drop %d%%", pct) .. ((st.text and st.text ~= "") and (" \194\183 " .. st.text) or "")
+    end
+    if drop < 15 then color = BAD end
+  end
   if chosen and not st.behind then
     if st.code == "todo" or st.code == "item" then status, color = "To pick up", STATUS.pickup
     else status = "To pick up. " .. st.text end
@@ -2257,6 +2267,8 @@ function UI:RefreshPrepView(v)
     local st = QB:Status(q)
     if st.code == "wrong" then return end
     local value = M.XpAt(q, level)
+    local drop = D.DROP and D.DROP[q.id]
+    local weight = (drop and drop < 25) and (0.5 + drop / 50) or 1 -- a grind at 10% counts 0.7, at 2% 0.54
     local g = group(D.Q[q.id][8])
     local held = s.log[q.id] ~= nil or st.bag or false
     local chosen = (not held) and st.code ~= "done" and QB:IsAdded(q.id) or false
@@ -2281,9 +2293,9 @@ function UI:RefreshPrepView(v)
       g.done = g.done + 1
     else
       if it.grp == 2 then g.open = g.open + 1 elseif it.grp == 4 then g.notyet = g.notyet + 1 else g.behind = g.behind + 1 end
-      g.fetch = g.fetch + value
-      g.avail = g.avail + value * (near or 1)
-      g.score = g.score + value * 0.25 * (near or 1)
+      g.fetch = g.fetch + value * weight
+      g.avail = g.avail + value * weight * (near or 1)
+      g.score = g.score + value * weight * 0.25 * (near or 1)
     end
     if mins and not held and st.code ~= "done" and (not g.nearest or mins < g.nearest) then g.nearest = mins end
     if st.code ~= "done" then g.lvlSum, g.lvlN = g.lvlSum + q.lvl, g.lvlN + 1 end

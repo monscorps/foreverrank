@@ -1577,6 +1577,10 @@ for iid, e in CAMP.items():
     if bn and _camp_by_name.get(bn):
         e["base"] = _camp_by_name[bn]
         if not e.get("g"): e["g"] = CAMP[_camp_by_name[bn]].get("g")
+# the drop chance a quest's items carry (objectives.py -> drops.json): D.DROP[quest id] = percent, the worst item
+_DROPS = load("drops.json", {}) or {}
+DROP = {int(k): v for k, v in _DROPS.items() if int(k) in LIST}
+lines.append("D.DROP = " + keyed(DROP))
 lines.append("D.CAMP = " + keyed(CAMP))
 lines.append("D.FOOD = " + keyed(FOOD))
 lines.append("-- [id] = {quest level, required level, side (1 Alliance, 2 Horde, 0 both), Classic base XP, Forever multiplier,")

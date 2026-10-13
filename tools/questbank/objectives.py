@@ -109,6 +109,21 @@ def main():
             for it, chance, quest in loot_obj[g("data1")]:
                 by_loot_obj.setdefault(it, []).append((g("entry"), chance, quest))
 
+    # drops.json: the drop chance a quest's items carry (the best source of each item, the worst item of the quest),
+    # in percent, for the guide's "skip: low drop" and the Now ranking. Quest drops in the Classic database are the
+    # per-kill chance for a player on the quest
+    drops = {}
+    for qid, n in need.items():
+        worst = None
+        for it in n["items"]:
+            best = 0.0
+            for _, chance, _ in by_loot_npc.get(it, []): best = max(best, chance)
+            for _, chance, _ in by_loot_obj.get(it, []): best = max(best, chance)
+            if best > 0 and (worst is None or best < worst): worst = best
+        if worst is not None and worst < 100: drops[qid] = round(worst, 1)
+    json.dump(drops, open(os.path.join(cmangos.REPO, "research", "questbank", "drops.json"), "w"), separators=(",", ":"))
+    print("drops: %d quests whose items drop at under 100%%, %d under 25%%" % (len(drops), sum(1 for v in drops.values() if v < 25)))
+
     # who gives and takes each quest, for "near the quest" ranking
     ends_of = {}
     for table, kind in (("creature_questrelation", "npc"), ("creature_involvedrelation", "npc"),
