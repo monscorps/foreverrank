@@ -22,7 +22,7 @@ local PER_QUEST = 0.06 -- minutes per extra quest at the same NPC
 local HEARTH = 0.5     -- the cast and the loading screen
 local MOUNT = 0.625    -- a 60% mount
 local CHEAP = 400      -- a stop worth less XP than this goes last
-M.MOUNT = MOUNT
+M.MOUNT, M.RUN, M.DETOUR = MOUNT, RUN, DETOUR
 
 local function round(x) return floor(x + 0.5) end
 -- the game's own rounding of quest XP (the server's RoundXPValue): to 5 up to 100, to 10 up to 500, to 25 up to

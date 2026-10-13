@@ -1407,6 +1407,7 @@ T = {k: tex(v) for k, v in {
     "dotRed": "interface/common/indicator-red",
     "upgrade": "interface/containerframe/bags",  # the bags' green upgrade arrow (atlas bags-greenarrow)
     "questArrow": "interface/minimap/minimap-questarrow",
+    "taxiHi": "interface/taxiframe/ui-taxi-icon-highlight",  # the taxi map's glow on the flight master to pick
 }.items()}
 T.update({"hearth": icon("inv_misc_rune_01"), "mount": icon("ability_mount_ridinghorse"), "foot": icon("ability_rogue_sprint"),
           "sleep": 133662, "hourglass": icon("inv_misc_pocketwatch_01"), "gryphon": icon("ability_mount_gryphon_01"),
@@ -2222,8 +2223,11 @@ lines.append("D.MAPTILES = " + keyed(MAPTILES))
 hubs, dist = {}, {}
 for fac in ("A", "H"):
     order = TR.order[fac]
+    # the route planner reads the first five fields (D.NPC's hub fields index these rows); the arrow the rest
     hubs[fac] = [[TR.hubs[fac][h]["town"], TR.hubs[fac][h]["cont"], round(TR.hubs[fac][h]["x"]), round(TR.hubs[fac][h]["y"]),
-                  1 if TR.hubs[fac][h]["inn"] else 0] for h in order]
+                  1 if TR.hubs[fac][h]["inn"] else 0] + list(extra) for h, extra in zip(order, TR.hub_extra(fac))]
+    for row in hubs[fac]:
+        assert row[9] & 1 or (row[5] > 0 and row[6] > 0), "%s %s: a hub with flights needs its TaxiNodes id and map" % (fac, row[0])
     f, w, k = [], [], []
     for a in order:
         for b in order:
@@ -2235,11 +2239,77 @@ for fac in ("A", "H"):
             else:
                 f.append(enc(p[0])); w.append(enc(p[1])); k.append(KIND.get(p[2], "f"))
     dist[fac] = {"n": len(order), "f": "".join(f), "w": "".join(w), "k": "".join(k)}
-lines.append("-- {town, continent, world x, world y, has an inn}")
+lines.append("-- {town, continent, world x, world y, has an inn, TaxiNodes id (0 none), uiMap, map x, map y, flags (1 no flights, 2 druids only, 4 world-PvP tower)}")
 lines.append("D.HUB = {A=" + lua(hubs["A"]) + ",\nH=" + lua(hubs["H"]) + "}")
 lines.append("-- hub to hub: fixed minutes (flights, boats) and minutes on foot, two characters each (tenths of a minute, base 64), and the main way")
 lines.append("D.DIST = {A=" + lua(dist["A"]) + ",\nH=" + lua(dist["H"]) + "}")
 lines.append('D.ALPHA = "%s"' % ALPHA)
+
+# the step-by-step arrow (Travel.lua): every flight on its own, the rides between docks, the islands you cannot walk to,
+# and where a hearthstone lands
+FLY = {fac: "".join(ALPHA[a - 1] + ALPHA[b - 1] + enc(m) for a, b, m in TR.flights_for(fac)) for fac in ("A", "H")}
+assert len(FLY["A"]) == 588 and len(FLY["H"]) == 612, "flights changed: A %d, H %d" % (len(FLY["A"]) // 4, len(FLY["H"]) // 4)
+lines.append("-- flights, 4 characters each: from and to (the D.HUB index i as D.ALPHA:sub(i, i)), minutes (tenths, base 64, as D.DIST)")
+lines.append("D.FLY = " + lua(FLY))
+LINK = TR.links()
+AREA_NAMES = {r["AreaName_lang"].lower() for r in AREA_ROW.values()}
+# the docks on an island: Rut'theran's pier and the portal's lower end at Teldrassil's foot (4), its upper end on the
+# canopy (2), Feathermoon's pier on Sardor Isle (3)
+DOCK_LAND = {("Rut'theran Village", "b"): 4, ("Rut'theran Village", "p"): 4, ("Darnassus", "p"): 2, ("Auberdine", "b"): 1,
+             ("the Forgotten Coast", "b"): 1, ("Feathermoon", "b"): 3}
+assert len(LINK) == 10, "rides changed: %d" % len(LINK)
+for fac, kind, minutes, a, b, track in LINK:
+    for e in (a, b):
+        assert e[0] in (0, 1) and e[3], "a %s dock of %s off the continents' maps: %s" % (kind, fac, e)
+        assert TR.town_yards(e[6], *e[:3]) is not None or e[6].lower() in AREA_NAMES, "%s is neither a hub nor an area" % e[6]
+        want = DOCK_LAND.get((e[6], kind))
+        assert want is None or TR.land(*e[:3]) == want, "the %s %s dock is on land %d, not %d" % (e[6], kind, TR.land(*e[:3]), want)
+lines.append("-- boats, zeppelins, the tram and the portal: {factions, kind (b boat, z zeppelin, t tram, p portal), minutes of the ride with")
+lines.append("-- the wait, end 1, end 2, track}; an end is {continent, world x, world y, uiMap, x, y, its town}, and from end 1 the step reads")
+lines.append("-- \"<Kind> to <end 2's town>\". The track is the ride's loop, end 1 to end 2 and back, as \"c,wx,wy;...\" (\"\" for the tram and the portal)")
+lines.append("D.LINK = {\n" + ",\n".join(lua([fac, kind, minutes, list(a), list(b), ";".join("%d,%d,%d" % q for q in track)])
+                                         for fac, kind, minutes, a, b, track in LINK) + "\n}")
+LAND = TR.lands()
+for n in NPCS:
+    if n[1] in (1438, 1457):
+        # Rut'theran Village at the tree's foot (land 4, west of x 9,000: the canopy starts past 9,070), the canopy (2)
+        want = 4 if n[5] < 9000 else 2
+        assert TR.land(n[4], n[5], n[6]) == want, "%s on Teldrassil is on land %s, not %d" % (n[0], TR.land(n[4], n[5], n[6]), want)
+print("on Sardor Isle (land 3, Feathermoon), for review: " + ", ".join(
+    "%s (%d %.1f,%.1f)" % tuple(n[:4]) for n in NPCS if n[4] in (0, 1) and TR.land(n[4], n[5], n[6]) == 3))
+lines.append("-- islands you cannot walk to: {continent, min x, min y, max x, max y, land}, the first box holding a point its land (4 Rut'theran")
+lines.append("-- at Teldrassil's foot, 2 the canopy, 3 Sardor Isle); outside every box a point's land is its continent")
+lines.append("D.LAND = " + lua([list(r) for r in LAND]))
+# a hearthstone lands at the inn: each innkeeper is named for the hub town with an inn within 400 yd, or by entry where
+# the town has no flight master; a new character's lands at its race's starting spot
+BIND_BY_ENTRY = {295: "Goldshire", 1247: "Kharanos", 6736: "Dolanaar", 6928: "Razor Hill", 5688: "Brill", 6747: "Bloodhoof Village",
+                 15174: "Cenarion Hold", 16256: "Light's Hope Chapel"}
+START_AREA = {1: "Northshire Abbey", 2: "Valley of Trials", 3: "Coldridge Valley", 4: "Shadowglen", 5: "Deathknell", 6: "Camp Narache",
+              7: "Coldridge Valley", 8: "Valley of Trials"}
+BIND = {}
+assert _cm.get("innkeepers") and _cm.get("starts"), "cmangos.json has no innkeepers or starting spots: run cmangos.py"
+for e, name, c, x, y in _cm["innkeepers"]:
+    town = BIND_BY_ENTRY.get(e)
+    if not town:
+        near = min(((math.hypot(n["x"] - x, n["y"] - y), n["town"]) for n in TR.nodes.values() if n["inn"] and n["cont"] == c), default=None)
+        town = near[1] if near and near[0] < 400 else None
+    if not town:
+        print("innkeeper %d %s (%d, %d, %d) is near no inn town: left out of D.BIND" % (e, name, c, x, y))
+        continue
+    assert town not in BIND, "two inns named %s" % town
+    BIND[town] = [town, c, round(x), round(y)]
+for race, c, x, y in _cm["starts"]:
+    BIND.setdefault(START_AREA[race], [START_AREA[race], c, round(x), round(y)])
+assert all(t.lower() in AREA_NAMES for t in START_AREA.values()), "a starting area's name is not in AreaTable"
+lines.append("-- where a hearthstone lands, by town: {town, continent, world x, world y}")
+lines.append("D.BIND = " + lua([BIND[t] for t in sorted(BIND)]))
+# the names GetBindLocation gives for inns whose area is not named for the town (subzones as AreaTable has them)
+BIND_ALIAS = {"thunderbrew distillery": "Kharanos", "gallows' end tavern": "Brill", "deepwater tavern": "Menethil Harbor",
+              "stoutlager inn": "Thelsamar", "craftsmen's terrace": "Darnassus", "theramore isle": "Theramore",
+              "grom'gol base camp": "Grom'gol", "feathermoon stronghold": "Feathermoon"}
+for k, v in BIND_ALIAS.items():
+    assert k in AREA_NAMES and v in BIND, "D.BIND_ALIAS %s -> %s: no such area or bind" % (k, v)
+lines.append("D.BIND_ALIAS = " + lua(BIND_ALIAS))
 lines.append('D.CUT_NOTES = {[1654]="Hand it to Jordan now and keep the forge step instead",[79192]="Carry on up the chain for the Cozy Sleeping Bag",[97894]="Pays 0 XP: abandon it"}')
 lines.append("D.TRACKED_ITEMS = " + lua([
     {"id": 211527, "name": "Cozy Sleeping Bag", "need": 1, "icon": 133662},

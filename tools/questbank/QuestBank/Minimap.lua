@@ -1,11 +1,12 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The route on the minimap: a numbered pin for every stop of the hand-in route, a line from stop to stop and from you
--- to the next one, your pick-up list, and the entrances of the dungeons around you. A pin outside the minimap's reach
--- sits on its rim, dimmer, in the direction it lies. Click a pin: a waypoint there, as on the world map. Alt-drag
--- moves the minimap, Ctrl-wheel sizes it, the wheel zooms past the game's widest into QuestBank's own map art, and
--- /qb bigmap (a key binding, the sidebar) makes it most of the screen; the same puts it back. Everything here is
--- QuestBank's own frames laid over the Minimap: nothing of the game's is replaced, and the minimap itself is only
--- scaled, moved and zoomed, never in a fight.
+-- to the next one, your pick-up list, and the entrances of the dungeons around you. While the arrow sends you by a
+-- flight master, a pier or the tram first, that is pinned too, and the line and the label go there. A pin outside the
+-- minimap's reach sits on its rim, dimmer, in the direction it lies. Click a pin: a waypoint there, as on the world
+-- map. Alt-drag moves the minimap, Ctrl-wheel sizes it, the wheel zooms past the game's widest into QuestBank's own
+-- map art, and /qb bigmap (a key binding, the sidebar) makes it most of the screen; the same puts it back. Everything
+-- here is QuestBank's own frames laid over the Minimap: nothing of the game's is replaced, and the minimap itself is
+-- only scaled, moved and zoomed, never in a fight.
 --   where a pin is: the stop's map and position go through QB.Model.World to continent yards, as the arrow's do; the
 --   minimap's radius in yards comes from C_Minimap.GetViewRadius; rotateMinimap turns the pins with your facing.
 local _, QB = ...
@@ -19,9 +20,10 @@ local MAX_PINS = 60        -- route stops, pick-ups and entrances, the nearest f
 local EDGE = 7             -- the rim: pins past the minimap's reach sit this far inside its edge
 local LINE_REACH = 1.6     -- a line is drawn when both ends are within this many radii
 Mini.TICK, Mini.MAX_PINS = TICK, MAX_PINS
+local RANK = { step = 0, stop = 1 } -- pins placed first, and kept past MAX_PINS: the arrow's step, the route's stops
 
 local plain = QB.Plain
-local sqrt, atan2, sin, cos, pi = math.sqrt, math.atan2, math.sin, math.cos, math.pi
+local sqrt, atan2, sin, cos, pi, floor = math.sqrt, math.atan2, math.sin, math.cos, math.pi, math.floor
 local pins, lines, worldOf = {}, {}, {}
 
 local function on() return QB:Settings().minimapPins ~= false end
@@ -46,9 +48,16 @@ local function rotated()
   return ok and plain(v) == "1"
 end
 
--- continent yards of a pin's place, kept once per pin key
+-- a pin's key: its map and spot, or its world spot (the arrow's step has no map)
+local function keyOf(d)
+  if d.wx then return d.c .. ":" .. floor(d.wx) .. ":" .. floor(d.wy) end
+  return d.m .. ":" .. d.x .. ":" .. d.y
+end
+
+-- continent yards of a pin's place, kept once per pin key (a pin that has them already is its own)
 local function worldPos(d)
-  local key = d.m .. ":" .. d.x .. ":" .. d.y
+  if d.wx then return d end
+  local key = keyOf(d)
   local w = worldOf[key]
   if w == nil then
     w = QB.Model.World(d.m, d.x, d.y) or false
@@ -69,9 +78,12 @@ function Mini.Project(me, w, radius, R, facing)
   return -sin(b) * px, cos(b) * px, d, far
 end
 
--- what goes on the minimap: the route's stops (numbered), the pick-up list, the dungeon entrances of your continent
+-- what goes on the minimap: the arrow's step on the way (a flight master, a pier), the route's stops (numbered), the
+-- pick-up list, the dungeon entrances of your continent
 function Mini.List()
   local out = {}
+  local step = QB.Arrow and QB.Arrow.MiniStep and QB.Arrow.MiniStep()
+  if step then out[1] = step end
   local P = QB.Pins
   if P and P.list then
     for _, d in ipairs(P.list) do
@@ -147,7 +159,7 @@ local function pin(i)
       if d.kind == "stop" and QB.UI and QB.UI.StopMenu then QB.UI.StopMenu(d) end
       return
     end
-    QB.API.SetWaypoint(d.m, d.x, d.y, d.name)
+    if d.m then QB.API.SetWaypoint(d.m, d.x, d.y, d.name) end -- (the arrow's step: the arrow points there already)
   end, "minimap pin"))
   p:SetScript("OnEnter", function(self)
     local d = self.d
@@ -158,7 +170,7 @@ local function pin(i)
     for _, l in ipairs(d.lines or {}) do GameTooltip:AddDoubleLine(l[1], l[2], 0.9, 0.9, 0.9, 0.6, 0.8, 0.6) end
     if d.kind == "dungeon" then GameTooltip:AddLine("Dungeon entrance", 0.8, 0.8, 0.8) end
     if d.kind == "pickup" then GameTooltip:AddLine("On your pick-up list", 0.8, 0.8, 0.8) end
-    GameTooltip:AddLine(string.format("%d yards. Click: waypoint.", self.yards or 0), 0.5, 0.5, 0.5)
+    GameTooltip:AddLine(string.format(d.m and "%d yards. Click: waypoint." or "%d yards.", self.yards or 0), 0.5, 0.5, 0.5)
     GameTooltip:Show()
   end)
   p:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -198,14 +210,7 @@ end
 
 -- the game's own crisp art where the client has it (the quest-number pin, the dungeon and quest marks), QuestBank's
 -- textures otherwise. A pin is a little bigger on the big map
-local function atlasOr(tex, atlas, file)
-  if tex.SetAtlas and atlas then
-    local ok = pcall(tex.SetAtlas, tex, atlas, false)
-    if ok then tex:SetTexCoord(0, 1, 0, 1); return end
-  end
-  tex:SetTexture(file)
-  tex:SetTexCoord(0, 1, 0, 1)
-end
+local atlasOr = QB.Art
 local function style(p, d, big)
   T = T or QB.Data.TEX
   local k = big and 1.4 or 1
@@ -226,6 +231,12 @@ local function style(p, d, big)
     atlasOr(p.icon, "Dungeon", d.icon or T.ring)
     p.num:SetText("")
     p:SetSize(18 * k, 18 * k)
+  elseif d.kind == "step" then
+    if not atlasOr(p.icon, d.atlas, d.icon) then p.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    p.num:SetText("")
+    p:SetSize(18 * k, 18 * k)
+    p.glow:SetSize(40 * k, 40 * k)
+    p.glow:Show()
   else
     atlasOr(p.icon, "QuestNormal", T.questAvail)
     p.num:SetText("")
@@ -255,12 +266,15 @@ function Mini.Place()
     end
   end
   table.sort(pts, function(a, b)
-    local ka, kb = a.d.kind == "stop" and 0 or 1, b.d.kind == "stop" and 0 or 1
+    local ka, kb = RANK[a.d.kind] or 2, RANK[b.d.kind] or 2
     if ka ~= kb then return ka < kb end
     return a.yards < b.yards
   end)
-  local nearestObj
-  for _, pt in ipairs(pts) do if pt.d.kind == "obj" and (not nearestObj or pt.yards < nearestObj.yards) then nearestObj = pt end end
+  local nearestObj, step
+  for _, pt in ipairs(pts) do
+    if pt.d.kind == "obj" and (not nearestObj or pt.yards < nearestObj.yards) then nearestObj = pt end
+    if pt.d.kind == "step" then step = pt end
+  end
   for i, pt in ipairs(pts) do
     if i > MAX_PINS then break end
     local p = pin(i)
@@ -277,8 +291,10 @@ function Mini.Place()
   -- lines: you to stop 1 (along the golden path when your trails know the way), then stop to stop, where both ends
   -- are near enough
   local li = 0
+  -- where the line and the label go: the arrow's step on the way, else stop 1 or a nearer objective
   local target = placed[1]
   if nearestObj and (not target or nearestObj.yards < target.yards) then target = nearestObj end
+  target = step or target
   Mini.target = target and target.d or nil
   Mini.Label(target, f)
   if QB:Settings().minimapLines ~= false then
@@ -467,7 +483,7 @@ local gold = {}
 function Mini.GoldenPath(me, d)
   local w = worldPos(d)
   if not w or w.c ~= me.c then return nil end
-  local key = d.m .. ":" .. d.x .. ":" .. d.y
+  local key = keyOf(d)
   local t = GetTime and GetTime() or 0
   if gold.key == key and gold.at and t - gold.at < PATH_EVERY and gold.me and math.abs(gold.me.wx - me.wx) + math.abs(gold.me.wy - me.wy) < 30 then
     return gold.path

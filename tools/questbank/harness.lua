@@ -595,8 +595,13 @@ local function newClient(o)
       if not m then return nil end
       return env.UiMapPoint.CreateFromCoordinates(tonumber(m), tonumber(x) / 10000, tonumber(y) / 10000)
     end,
-    GetPlayerMapPosition = function() return { x = 0.66, y = 0.62, GetXY = function(self) return self.x, self.y end } end,
-    GetWorldPosFromMapPos = function() return o.world[1], { x = o.world[2], y = o.world[3], GetXY = function(self) return self.x, self.y end } end,
+    -- c.noPos: the client gives no position (the tram, a loading screen)
+    GetPlayerMapPosition = function() if c.noPos then return nil end return { x = 0.66, y = 0.62, GetXY = function(self) return self.x, self.y end } end,
+    -- c.instWorld[m]: a map inside an instance, on the instance's own continent (not 0 or 1)
+    GetWorldPosFromMapPos = function(m)
+      if (c.instWorld or {})[m] then return 36, { x = 0, y = 0, GetXY = function(self) return self.x, self.y end } end
+      return o.world[1], { x = o.world[2], y = o.world[3], GetXY = function(self) return self.x, self.y end }
+    end,
     GetMapRectOnMap = function() return 0.4, 0.6, 0.4, 0.6 end,
     -- zones and cities 3, continents 2, the world 1 (Enum.UIMapType); c.mapTypes overrides one
     GetMapInfo = function(id)
@@ -606,6 +611,46 @@ local function newClient(o)
   }
   env.C_Texture = { GetAtlasInfo = function(name) if (c.noAtlas or {})[name] then return nil end return { file = 1, width = 32, height = 32 } end }
   env.InCombatLockdown = function() return c.combat or false end
+  -- flight points (Travel.lua). c.taxiKnown = { [TaxiNodes id] = true }: the world map's flight points this character
+  -- has found (nil: the client answers nothing); every flight master of the faction with an id is listed, on its own
+  -- map and its continent's (1415, 1414). c.taxiNoContinent: the continent maps answer nothing. c.taxiSecret: ids and
+  -- flags are secret values. c.taxiOpen = { map, nodes = { { nodeID, name, state (0 here, 1 can fly, 2 can't), slotIndex } } }:
+  -- a flight master's map, open (openTaxi below)
+  env.C_TaxiMap = {
+    GetTaxiNodesForMap = function(m)
+      if c.taxiKnown == nil or (c.taxiNoContinent and (m == 1414 or m == 1415)) then return {} end
+      local out = {}
+      for _, h in ipairs(c.QB.Data.HUB[o.faction == "Horde" and "H" or "A"]) do
+        if h[6] > 0 and (h[7] == m or (m == 1415 and h[2] == 0) or (m == 1414 and h[2] == 1)) then
+          out[#out + 1] = { nodeID = c.taxiSecret and SECRET.num() or h[6], name = h[1], faction = 0,
+            isUndiscovered = c.taxiSecret and SECRET.bool() or not c.taxiKnown[h[6]], position = env.CreateVector2D(h[8] / 100, h[9] / 100) }
+        end
+      end
+      return out
+    end,
+    GetAllTaxiNodes = function() return c.taxiOpen and c.taxiOpen.nodes or {} end,
+  }
+  local function taxiSlot(i) for _, n in ipairs(c.taxiOpen and c.taxiOpen.nodes or {}) do if n.slotIndex == i then return n end end end
+  env.GetTaxiMapID = function() return c.taxiOpen and c.taxiOpen.map end
+  env.NumTaxiNodes = function() return c.taxiOpen and #c.taxiOpen.nodes or 0 end
+  env.TaxiNodeName = function(i) local n = taxiSlot(i); return n and n.name or "INVALID" end
+  env.TaxiNodeGetType = function(i) local n = taxiSlot(i); return n and ({ [0] = "CURRENT", [1] = "REACHABLE", [2] = "UNREACHABLE" })[n.state] or "NONE" end
+  env.TakeTaxiNode = function(slot) c.took = slot end
+  -- a post-hook on a global function (or a table's)
+  env.hooksecurefunc = function(a, b, fn)
+    local t, name = env, a
+    if type(a) == "table" then t, name = a, b else fn = b end
+    local old = t[name]
+    assert(type(old) == "function", "hooksecurefunc needs a function: " .. tostring(name))
+    rawset(t, name, function(...) local r = { old(...) }; fn(...); return unpack(r) end)
+  end
+  env.UnitIsDeadOrGhost = function() return c.ghost or false end
+  env.ERR_NEWTAXIPATH = "New flight path discovered!"
+  -- Astral Recall: c.recallCD = when it was cast (15 min)
+  env.C_Spell = {
+    GetSpellTexture = function(id) return id == 556 and 136010 or 134400 end,
+    GetSpellCooldown = function() return { startTime = c.recallCD or 0, duration = c.recallCD and 900 or 0, isEnabled = true, modRate = 1 } end,
+  }
   -- chat people read: one line of at most 255 bytes, no escape codes, only to a channel you're in
   c.said, c.chatErrors = {}, {}
   env.SendChatMessage = function(msg, chatType)
@@ -737,6 +782,30 @@ local function tick(c, seconds)
       if not u then break end
       u(f, 0.016)
     end
+  end
+end
+
+-- travel guidance: a client's faction hub row for a town (one with flights first) and its index
+local function hubOf(c, town)
+  local best, bi
+  for i, h in ipairs(c.QB.Data.HUB[c.o.faction == "Horde" and "H" or "A"]) do
+    if h[1] == town and (not best or best[10] ~= 0) then best, bi = h, i end
+  end
+  assert(best, "a hub called " .. town)
+  return best, bi
+end
+-- the player stands here (every map position is this spot, as the mock's maps go)
+local function standAt(c, cont, wx, wy) c.o.world = { cont, wx, wy } end
+-- an event to Travel.lua's own frame
+local function fireTV(c, event, ...) local f = c.QB.Travel.frame; f.__scripts.OnEvent(f, event, ...) end
+-- a flight master's map opens: nodes = { { nodeID, name, state, slotIndex } }, a button for each slot
+local function openTaxi(c, nodes, map)
+  local env = c.env
+  c.taxiOpen = { map = map, nodes = nodes }
+  if not env.TaxiFrame then env.CreateFrame("Frame", "TaxiFrame", env.UIParent) end
+  env.TaxiFrame:Show()
+  for _, n in ipairs(nodes) do
+    if not env["TaxiButton" .. n.slotIndex] then env.CreateFrame("Button", "TaxiButton" .. n.slotIndex, env.TaxiFrame) end
   end
 end
 
@@ -973,6 +1042,8 @@ local function dumpLayout(root, label)
               if o.__tex ~= "color" then it.raw = o.__tex end
               if o.__mask then it.mask = true end
               if o.__atlas then it.atlas = o.__atlas end
+              if o.__rot and o.__rot ~= 0 then it.rot = o.__rot end
+              if o.__desat then it.desat = true end
               it.c = o.__color or o.__vertex
               it.tc, it.blend, it.desat = o.__tc, o.__blend, o.__desat or nil
               if not it.tex then it = nil end
@@ -2435,6 +2506,14 @@ UI:Refresh()
 print("run:", v3.setup:GetText())
 local handed = v3.legs.items[1]
 print("  first leg:", handed.travel:GetText(), handed.name:GetText())
+-- the next stop reads the arrow's way there (Travel.lua: the flight paths you know, boats, the hearthstone)
+do
+  local nextLeg
+  for _, l in ipairs(v3.legs.items) do if not nextLeg and l:IsShown() and l ~= handed then nextLeg = l end end
+  assert(nextLeg and nextLeg.name:GetText():find(QB.routeNow.legs[1].stop.name, 1, true) and nextLeg.travel:GetText():find(" · about %d+ min$"),
+    "the next stop: the way the arrow shows it: " .. tostring(nextLeg and nextLeg.travel:GetText()))
+  print("  next leg:", nextLeg.travel:GetText(), nextLeg.name:GetText())
+end
 for _, p in ipairs(checkLayout(UI.frame, "run")) do problems[#problems + 1] = p end
 layouts[#layouts + 1] = dumpLayout(UI.frame, "Hand-in Route, during the run")
 print("chat:", owner.chat[#owner.chat])
@@ -2993,6 +3072,42 @@ layouts[#layouts + 1] = dumpLayout(horde.QB.UI.frame, "Horde: Prep")
 horde.QB.UI:ShowTab(3)
 layouts[#layouts + 1] = dumpLayout(horde.QB.UI.frame, "Horde: Hand-in Route")
 
+-- travel data for the step-by-step arrow (gen_data.py from travel.py): the route planner's hub rows keep their order and
+-- first five fields (D.NPC's hub fields and D.DIST index them), every hub with flights carries its client flight master,
+-- every flight decodes to two hubs, and the ten rides end on the two continents
+do
+  local D = QB.Data
+  local old = {
+    A = { { "Aerie Peak", 0, 284, -2003, 1 }, { "Booty Bay", 0, -14272, 300, 1 }, { "Booty Bay", 0, -14473, 464, 1 },
+          { "Chillwind Camp", 0, 931, -1430, 0 }, { "Crown Guard Tower", 0, 1858, -3658, 0 } },
+    H = { { "Booty Bay", 0, -14444, 510, 1 }, { "Crown Guard Tower", 0, 1858, -3658, 0 }, { "Eastwall Tower", 0, 2499, -4743, 0 },
+          { "Flame Crest", 0, -7504, -2188, 0 }, { "Grom'gol", 0, -12414, 146, 1 } },
+  }
+  local at = {}
+  for i = 1, #D.ALPHA do at[D.ALPHA:sub(i, i)] = i end
+  for fac, rows in pairs(old) do
+    local hubs = D.HUB[fac]
+    for i, r in ipairs(rows) do
+      for k = 1, 5 do assert(hubs[i][k] == r[k], fac .. " hub " .. i .. " field " .. k .. " moved: " .. tostring(hubs[i][k])) end
+    end
+    for i, h in ipairs(hubs) do
+      assert(#h == 10, fac .. " hub " .. i .. " has its ten fields")
+      assert(h[10] ~= 0 or (h[6] > 0 and h[7] > 0), fac .. " " .. h[1] .. ": a hub with flights has its TaxiNodes id and map")
+    end
+    local fly = D.FLY[fac]
+    for e = 1, #fly, 4 do
+      local a, b = at[fly:sub(e, e)], at[fly:sub(e + 1, e + 1)]
+      local min = ((at[fly:sub(e + 2, e + 2)] - 1) * 64 + at[fly:sub(e + 3, e + 3)] - 1) / 10
+      assert(a and b and a ~= b and a <= #hubs and b <= #hubs and min > 0, fac .. " flight " .. (e + 3) / 4 .. " decodes to two hubs")
+    end
+  end
+  assert(#D.FLY.A == 588 and #D.FLY.H == 612, "147 Alliance and 153 Horde flights: " .. #D.FLY.A / 4 .. ", " .. #D.FLY.H / 4)
+  assert(#D.LINK == 10, "ten rides: " .. #D.LINK)
+  for _, l in ipairs(D.LINK) do
+    for e = 4, 5 do assert(l[e][1] == 0 or l[e][1] == 1, l[2] .. " to " .. l[e][7] .. " ends on a continent") end
+  end
+end
+
 -- the direction arrow: off until you turn it on, then it points to the next stop
 do
   local A = owner.QB.Arrow
@@ -3062,6 +3177,23 @@ do
   assert(F.name:GetText() == t.name, "the arrow names that NPC: " .. F.name:GetText())
   lines = {}; F.__scripts.OnEnter(F); assert(lines[1]:find("Hand in at " .. t.name:gsub("%p", "%%%0"), 1), "and the tooltip says so: " .. lines[1])
   print("arrow, hand in:", t.name, t.quests)
+  -- the minimap reads the pick-ups between the arrow's looks: the hand-in list and the arrow's choice on it stay, so the
+  -- way to each hand-in is worked out once a second, not at every look
+  do
+    local TV, opts, vias = QB.Travel, 0, 0
+    local saveOpts, saveVia = TV.Opts, TV.Via
+    TV.Opts = function(...) opts = opts + 1; return saveOpts(...) end
+    TV.Via = function(...) vias = vias + 1; return saveVia(...) end
+    for i = 1, 20 do
+      owner.clock = owner.clock + 0.05
+      F.__scripts.OnUpdate(F, 0.05)
+      if i % 2 == 0 then QB.Mini.List() end
+    end
+    TV.Opts, TV.Via = saveOpts, saveVia
+    local n = #A.ListFor("handin")
+    assert(A.Guided() and n >= 1 and opts >= 1 and opts <= 2 and vias <= 2 * n,
+      string.format("a second of looks beside the minimap: %d plans of the ways, %d ways to %d hand-ins", opts, vias, n))
+  end
   owner.env.SlashCmdList.QUESTBANK("arrow pickup")
   local plan = QB:Plan()
   local keep = plan.add
@@ -3159,7 +3291,7 @@ do
   row.__scripts.OnClick(row, "LeftButton")
   assert(not UI.detailOpen[rq.id], "a second click closes it")
   assert(A.toldPin, "and it said so, once this session (the first pin above did)")
-  -- the right-click menu: the four targets and Hide
+  -- the right-click menu: the four targets, the hearthstone in the steps, and Hide
   F.__scripts.OnClick(F, "RightButton")
   local M = owner.env.QuestBankMenu
   assert(M and M:IsShown(), "right-click opens the menu")
@@ -3172,7 +3304,8 @@ do
     end
   end
   print("arrow menu: " .. table.concat(labels, " | "))
-  assert(#labels == 5 and hide and route and labels[4]:find("%(now%)"), "the menu lists the four targets, the current one marked, and Hide: " .. table.concat(labels, " | "))
+  assert(#labels == 6 and hide and route and labels[4]:find("%(now%)") and labels[5] == "Hearthstone in the steps: on",
+    "the menu lists the four targets, the current one marked, the hearthstone, and Hide: " .. table.concat(labels, " | "))
   for _, pr in ipairs(checkLayout(M, "arrow menu")) do problems[#problems + 1] = pr end
   route.__scripts.OnClick(route)
   assert(not M:IsShown() and A.Mode() == "route", "choosing the route from the menu")
@@ -3180,6 +3313,928 @@ do
   for _, b in ipairs(M.items) do if b:IsShown() and b.label:GetText() == "Hide the arrow" then b.__scripts.OnClick(b) end end
   assert(not F:IsShown() and not QB:Settings().arrow, "Hide in the menu hides it")
   QB:Settings().arrowPin = nil
+end
+
+----------------------------------------------------------------------------
+-- travel guidance (Travel.lua): the router and the live guide, checked on what they hand the arrow (TV.Route's plan,
+-- TV.Guide's g). Two fresh characters: a dwarf warrior for the Alliance and an orc warrior for the Horde
+----------------------------------------------------------------------------
+local function lightClient(o)
+  local c = newClient(o)
+  c.ev(c.QB.eventFrame, "ADDON_LOADED", "QuestBank")
+  c.ev(c.QB.eventFrame, "PLAYER_LOGIN")
+  tick(c, 1)
+  return c
+end
+local brann = lightClient({
+  name = "Brann", level = 30, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Dwarf",
+  log = { { 7, 0 } }, done = { [783] = true }, group = false, guild = false, world = { 0, -8833, 479 }, bind = "Goldshire",
+  riding = false, bagSlots = {}, map = 1453,
+})
+do
+  local c, TV, D = brann, brann.QB.Travel, brann.QB.Data
+  local T = D.TEX
+  local function here() return c.QB.API.WorldPosition() end
+  local function place(h, dx, name) return { name = name or h[1], c = h[2], wx = h[3] + (dx or 0), wy = h[4] } end
+  local function kinds(plan)
+    local out = {}
+    for _, l in ipairs(plan and plan.legs or {}) do out[#out + 1] = l.kind .. (l.town and (" " .. l.town) or "") end
+    return table.concat(out, ", ")
+  end
+  local function has(plan, kind, town)
+    for _, l in ipairs(plan and plan.legs or {}) do if l.kind == kind and (not town or l.town == town) then return l end end
+  end
+  local function learn() fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1) end
+  local sw, lake, gz, th = hubOf(c, "Stormwind"), hubOf(c, "Lakeshire"), hubOf(c, "Gadgetzan"), hubOf(c, "Theramore")
+
+  -- lands and binds: Teldrassil and Sardor Isle are islands; a bind's name finds its inn (an inn's own name too)
+  assert(TV.Land(1, 9885, 2515) == 2 and TV.Land(1, 9802, 983) == 2, "Darnassus and Dolanaar are on Teldrassil's canopy")
+  assert(TV.Land(1, 8644, 841) == 4 and TV.Land(1, 8532, 1024) == 4 and TV.Land(1, 8799, 970) == 4,
+    "Rut'theran's flight master, pier and portal lie at the tree's foot, 1,300 yards below the canopy: a land of their own")
+  assert(TV.Land(1, 6341, 558) == 1 and TV.Land(0, -8833, 479) == 0, "Auberdine and Stormwind are on their continents")
+  local fm = hubOf(c, "Feathermoon")
+  assert(TV.Land(1, fm[3], fm[4]) == 3, "Feathermoon's flight master is on Sardor Isle")
+  assert(TV.Land(1, -4187, 3287) == 3 and TV.Land(1, -4120, 3287) == 3 and TV.Land(1, -4348, 2444) == 1,
+    "Feathermoon's pier and a boat docked at it are on Sardor Isle; the Forgotten Coast's pier is not")
+  -- up from Rut'theran to the canopy and down again: by the portal, never a walk up or down the tree
+  local opts = TV.Opts("pin")
+  local up = TV.Route({ c = 1, wx = 8644, wy = 841 }, { name = "Dolanaar", c = 1, wx = 9802, wy = 983 }, opts)
+  assert(up and up.legs[1].kind == "portal" and up.legs[1].town == "Darnassus" and #up.legs == 2,
+    "Rut'theran's flight master to Dolanaar: the portal up, then the walk: " .. kinds(up))
+  local down = TV.Route({ c = 1, wx = 9802, wy = 983 }, { name = "Vesprystus", c = 1, wx = 8641, wy = 841 }, opts)
+  assert(down and down.legs[1].kind == "portal" and down.legs[1].town == "Rut'theran Village" and #down.legs == 2,
+    "Dolanaar to Rut'theran's flight master: the portal down, then the walk: " .. kinds(down))
+  local off = TV.Route({ c = 1, wx = 9802, wy = 983 }, { name = "Auberdine", c = 1, wx = 6341, wy = 558 }, opts)
+  assert(off and off.legs[1].kind == "portal" and has(off, "fly", "Auberdine"), "Dolanaar to Auberdine: the portal down, then the flight: " .. kinds(off))
+  local home = TV.Route({ c = 1, wx = 6341, wy = 558 }, { name = "Denalan", c = 1, wx = 9510, wy = 719 }, opts)
+  assert(home and has(home, "portal", "Darnassus"), "Auberdine to Denalan by Lake Al'Ameth: the portal up on the way: " .. kinds(home))
+  assert(TV.Graph("A").n == 60 and TV.Graph("H").n == 50 and TV.Graph("A").h == #D.HUB.A, "the graphs: the hubs in D.HUB's order, then two docks a ride")
+  local inn = {}
+  for _, r in ipairs(D.BIND) do inn[r[1]] = r end
+  for _, case in ipairs({ { "Stormwind City", "Stormwind" }, { "Goldshire", "Goldshire" }, { "Northshire Abbey", "Northshire Abbey" },
+                          { "Thunderbrew Distillery", "Kharanos" }, { "The Crossroads", "Crossroads" }, { "The Sepulcher", "The Sepulcher" } }) do
+    c.o.bind = case[1]
+    local b, r = TV.Bind(), inn[case[2]]
+    assert(b and r and b.name == case[1] and b.c == r[2] and b.wx == r[3] and b.wy == r[4], "bound at " .. case[1] .. ": the hearthstone lands at " .. case[2])
+  end
+  c.o.bind = "Nowhere"
+  assert(TV.Bind() == nil, "a bind QuestBank has no inn for: nowhere")
+  c.o.bind = "Goldshire"
+
+  -- the client never says which flight points you know (no C_TaxiMap): every flight master counts, as before
+  local saveTaxi = c.env.C_TaxiMap
+  c.env.C_TaxiMap = nil
+  learn()
+  assert(next(TV.DB().known) == nil and next(TV.DB().readC) == nil, "nothing read: nothing kept")
+  standAt(c, 0, sw[3], sw[4])
+  local toGz = place(gz, 30)
+  local plan = TV.Route(here(), toGz, TV.Opts("pin"))
+  assert(has(plan, "fly"), "never read: the flights all count: " .. kinds(plan))
+  local n, total, read = TV.Known("A", 0)
+  assert(n == total and total == 18 and not read, "and the count says so: " .. n .. " of " .. total)
+  local set = c.QB:Settings()
+  set.arrowMode, set.arrowPin = "pin", { name = "Gadgetzan", c = toGz.c, wx = toGz.wx, wy = toGz.wy }
+  local way = TV.WayLines()
+  assert(way[1]:find("^Way to Gadgetzan, about %d+ min: ") and way[2]:find("known on Eastern Kingdoms (assumed)", 1, true),
+    "/qb way: the steps and where the flight paths come from: " .. table.concat(way, " / "))
+  print("/qb way: " .. table.concat(way, " / "))
+  c.env.C_TaxiMap = saveTaxi
+
+  -- the world map says none are found: tram, walk and boat from Stormwind to Theramore, never a flight
+  c.taxiKnown = {}
+  learn()
+  local db = TV.DB()
+  assert(db.known[2] == false and db.known[5] == false and db.readC[0] and db.readC[1], "the world map read: nothing found on either continent")
+  assert(c.env.QuestBankDB.diag.taxi.cont > 40 and c.env.QuestBankDB.diag.taxi.known == 0, "diag: what the continent maps answered")
+  local g = TV.Guide(here(), place(th), "pin")
+  assert(g.plan and g.leg.kind == "tram" and has(g.plan, "boat", "Theramore") and not has(g.plan, "fly"),
+    "nothing known: the tram first, then the boat, no flight: " .. kinds(g.plan))
+  assert(g.state == "approach" and g.step == "Tram to Ironforge" and g.info:find("yards", 1, true) and g.aim == g.leg.start,
+    "on the way to the tram: " .. tostring(g.state) .. " / " .. tostring(g.step) .. " / " .. tostring(g.info))
+  print("nothing known, Stormwind to Theramore: " .. kinds(g.plan) .. string.format(" (%.1f min)", g.plan.min))
+
+  -- the same continent: a flight you know is a step; one you don't, and the arrow walks you there
+  c.taxiKnown = { [2] = true, [5] = true }
+  fireTV(c, "TAXI_NODE_STATUS_CHANGED"); fireTV(c, "TAXI_NODE_STATUS_CHANGED")
+  tick(c, 1.5)
+  assert(db.known[2] == "m" and db.known[5] == "m" and db.known[6] == false, "the world map's word, a second after the change")
+  local toLake = place(lake, 50)
+  g = TV.Guide(here(), toLake, "pin")
+  assert(g.leg.kind == "fly" and g.state == "at" and g.step == "Fly to Lakeshire" and g.info == "Talk to the flight master"
+    and g.act.atlas == "flightmaster" and g.act.file == T.gryphon, "at Stormwind's flight master: fly to Lakeshire: " .. tostring(g.step) .. " / " .. tostring(g.info))
+  assert(#g.trail == 2 and g.trail[1] == g.leg.icon and g.trail[2].file == T.foot, "the trail: the flight, then the walk")
+  assert(TV.Summary(g.plan):find("^Flight · about %d+ min$"), "summed up: " .. TV.Summary(g.plan))
+  local direct = math.sqrt((toLake.wx - sw[3]) ^ 2 + (toLake.wy - sw[4]) ^ 2) * 1.3 / 7 / 60
+  local R = TV.Reach(here(), TV.Opts("pin"))
+  assert(TV.Via(R, toLake) < 0.6 * direct, "by time, Lakeshire is near: " .. TV.Via(R, toLake))
+  c.taxiKnown[5] = nil
+  fireTV(c, "TAXI_NODE_STATUS_CHANGED"); tick(c, 1.5)
+  g = TV.Guide(here(), toLake, "pin")
+  assert(g.leg.kind == "walk" and g.state == "walk" and g.step == nil and g.info:find("yards", 1, true) and g.aim == toLake,
+    "Lakeshire not known: walk there: " .. tostring(g.info))
+  assert(TV.Via(TV.Reach(here(), TV.Opts("pin")), toLake) >= direct - 0.01, "and by time it is as far as the walk")
+  -- a short way: walking straight beats a flight that saves too little
+  c.taxiKnown[5] = true
+  fireTV(c, "TAXI_NODE_STATUS_CHANGED"); tick(c, 1.5)
+  local near = { name = "Trade District", c = 0, wx = sw[3] + 300, wy = sw[4] }
+  assert(kinds(TV.Route(here(), near, TV.Opts("pin"))) == "walk", "300 yards: a walk")
+
+  -- the flight master's map: the place you fly to glows; the flight; landing
+  g = TV.Guide(here(), toLake, "pin")
+  openTaxi(c, { { nodeID = 2, name = "Stormwind, Elwynn", state = 0, slotIndex = 1 }, { nodeID = 6, name = "Ironforge, Dun Morogh", state = 2, slotIndex = 2 },
+                { nodeID = 5, name = "Lakeshire, Redridge", state = 1, slotIndex = 3 } }, 1463)
+  fireTV(c, "TAXIMAP_OPENED")
+  tick(c, 0)
+  g = TV.Guide(here(), toLake, "pin")
+  local mark = c.env.QuestBankTaxiMark
+  assert(g.info == "Pick Lakeshire" and mark and mark:IsShown() and mark.__points[1].rel == c.env.TaxiButton3 and mark.__parent == c.env.UIParent,
+    "the map open: pick Lakeshire, its button marked: " .. tostring(g.info))
+  assert(db.known[2] == "t" and db.known[5] == "t" and db.known[6] == false, "the map's word: Current and Reachable known, Unreachable as it was")
+  local routes = TV.stats.routes
+  c.env.TakeTaxiNode(3)
+  assert(c.took == 3 and TV.flying and TV.flying.to == select(2, hubOf(c, "Lakeshire")) and TV.flying.min > 0, "the flight picked: to Lakeshire")
+  fireTV(c, "TAXIMAP_CLOSED")
+  assert(not mark:IsShown(), "the mark goes with the map")
+  c.taxiOpen, c.taxi = nil, true
+  standAt(c, 0, sw[3] - 1000, sw[4] - 300)
+  tick(c, 1)
+  g = TV.Guide(here(), toLake, "pin")
+  assert(g.state == "underway" and g.step == "Flying to Lakeshire" and (g.info:find("^Lands in %d+:%d%d$") or g.info == "Landing")
+    and g.icon.file == T.gryphon, "in the air: " .. tostring(g.step) .. " / " .. tostring(g.info))
+  for _ = 1, 20 do c.clock = c.clock + 0.05; TV.Guide(here(), toLake, "pin") end
+  assert(TV.stats.routes == routes, "no planning in the air")
+  c.taxi = false
+  standAt(c, 0, lake[3], lake[4])
+  g = TV.Guide(here(), toLake, "pin")
+  assert(g.state == "walk" and g.step == nil and (db.known[5] == "f" or db.known[5] == "t") and TV.stats.routes == routes + 1,
+    "landed: plan again, the last walk: " .. tostring(g.state))
+
+  -- the other continent: flights you know, the boat, and when a flight master is learned, the plan takes it
+  c.taxiKnown = { [2] = true, [6] = true, [7] = true, [32] = true }
+  db.known = {}
+  learn()
+  standAt(c, 0, sw[3], sw[4])
+  g = TV.Guide(here(), toGz, "pin")
+  local legs = g.plan.legs
+  assert(legs[#legs].kind == "walk" and has(g.plan, "boat", "Theramore") and not has(g.plan, "fly", "Gadgetzan"),
+    "Stormwind to Gadgetzan: the boat to Theramore, then on foot: " .. kinds(g.plan))
+  for _, l in ipairs(legs) do
+    if l.kind == "fly" then assert(TV.Usable("A", l.from) and TV.Usable("A", l.to), "a flight only between flight masters you know: " .. kinds(g.plan)) end
+  end
+  assert(g.step == g.leg.step and (g.state == "at" or g.state == "approach"), "the first step shows")
+  print("Stormwind to Gadgetzan, four known: " .. kinds(g.plan) .. string.format(" (%.1f min)", g.plan.min))
+  local ver = TV.ver
+  c.taxiKnown[39] = true
+  fireTV(c, "TAXI_NODE_STATUS_CHANGED")
+  tick(c, 2)
+  g = TV.Guide(here(), toGz, "pin")
+  assert(TV.ver > ver and has(g.plan, "fly", "Gadgetzan") and has(g.plan, "fly", "Gadgetzan").step == "Fly to Gadgetzan",
+    "Gadgetzan learned: the plan flies there: " .. kinds(g.plan))
+
+  -- a boat: wait on the pier; on board the plan stands; at the far pier the next step
+  c.taxiKnown = {}
+  learn()
+  standAt(c, 0, -3905, -586)
+  local toTh = place(th)
+  g = TV.Guide(here(), toTh, "pin")
+  assert(g.leg.kind == "boat" and g.state == "at" and g.step == "Boat to Theramore" and g.info == "Wait for the boat" and g.act.atlas == "flightmasterferry",
+    "on the pier: " .. tostring(g.step) .. " / " .. tostring(g.info))
+  -- steps back from the pier, toward town, are never boarding: the arrow leads back to it, and there it waits again
+  -- (150 yards back, off the boat's way, you walked off: from then on only the pier again counts)
+  local function lookFor(s, cont, x, y)
+    standAt(c, cont, x, y)
+    for _ = 1, math.floor(s / 0.05) do c.clock = c.clock + 0.05; g = TV.Guide(here(), toTh, "pin") end
+    return g
+  end
+  -- (130 yards out on the boat's way, after that, is not on board either: you never went back to the pier)
+  for _, at in ipairs({ { -3905, -631, "45 yards back" }, { -3905, -656, "70 yards back" }, { -3905, -696, "110 yards back" },
+                        { -3905, -736, "150 yards back" }, { -3830, -480, "130 yards out on the boat's way" }, { -3905, -631, "45 yards back" } }) do
+    lookFor(3, 0, at[1], at[2])
+    assert(g.state == "approach" and g.step == "Boat to Theramore" and g.aim == g.leg.start and g.info:find("yards", 1, true),
+      at[3] .. " from the pier: back to it, not on board: " .. tostring(g.state) .. " / " .. tostring(g.info))
+  end
+  lookFor(1, 0, -3905, -586)
+  assert(g.state == "at" and g.info == "Wait for the boat", "on the pier again: wait for the boat: " .. tostring(g.info))
+  -- on board, then back on the pier (off before it sailed far): waiting again, not on board
+  lookFor(1, 0, -4008, 516)
+  assert(g.state == "underway", "out to sea: on board")
+  lookFor(1, 0, -3905, -586)
+  assert(g.state == "at" and g.info == "Wait for the boat", "back on the pier: wait for the boat: " .. tostring(g.state) .. " / " .. tostring(g.info))
+  routes = TV.stats.routes
+  standAt(c, 0, -4008, 516) -- out to sea
+  for _ = 1, 20 do
+    c.clock = c.clock + 0.05
+    g = TV.Guide(here(), toTh, "pin")
+  end
+  assert(g.state == "underway" and g.info:find("^On board · about %d+ min$") and TV.stats.routes == routes, "on board: " .. tostring(g.info))
+  standAt(c, 1, -4016, -4741)
+  g = TV.Guide(here(), toTh, "pin")
+  assert(g.leg.kind == "walk" and g.state == "walk" and TV.stats.routes == routes + 1, "at Theramore's pier: walk on: " .. tostring(g.state))
+
+  -- the tram: no position under the ground; out at the far end, the next step
+  standAt(c, 0, -8346, 514)
+  local toIf = place(hubOf(c, "Ironforge"))
+  g = TV.Guide(here(), toIf, "pin")
+  assert(g.leg.kind == "tram" and g.state == "at" and g.info == "Take the tram" and g.act.file == T.tram, "at the tram: " .. tostring(g.info))
+  c.instance, c.noPos = { "Deeprun Tram", 0, 369 }, true
+  g = TV.Guide(here(), toIf, "pin")
+  assert(g.state == "underway" and g.step == "On the tram to Ironforge" and g.info == "Ride to the end", "on the tram: " .. tostring(g.step))
+  c.instance, c.noPos = nil, nil
+  standAt(c, 0, -4840, -1330)
+  g = TV.Guide(here(), toIf, "pin")
+  assert(g.leg.kind == "walk" and g.state == "walk", "out in Ironforge: walk on: " .. kinds(g.plan))
+
+  -- the hearthstone: in your bags, nearly ready, and QuestBank knows where it lands
+  c.o.bagSlots = { { 6948, 1 } }
+  c.o.bind = "Goldshire"
+  standAt(c, 1, gz[3], gz[4])
+  local gs = inn.Goldshire
+  local toInn = { name = "Innkeeper Farley", c = 0, wx = gs[3] + 5, wy = gs[4] }
+  local function hearthLeg() return has(TV.Guide(here(), toInn, "pin").plan, "hearth") end
+  g = TV.Guide(here(), toInn, "pin")
+  assert(g.leg.kind == "hearth" and g.state == "at" and g.step == "Hearth to Goldshire" and g.short == "Goldshire" and g.info == "Use your Hearthstone"
+    and g.act.file == T.hearth and g.aim == nil and g.cd == nil, "far from Goldshire, the hearthstone first: " .. kinds(g.plan))
+  assert(math.abs(g.leg.finish.wx - gs[3]) < 1 and math.abs(g.leg.min - 0.5) < 0.01, "it lands at the inn, half a minute")
+  assert(TV.HearthLine() == "Hearthstone: Goldshire, ready", TV.HearthLine())
+  c.hearthCD = c.clock - 3560
+  g = TV.Guide(here(), toInn, "pin")
+  assert(g.leg.kind == "hearth" and g.info == "Ready in 0:40" and g.cd and g.cd.duration == 3600, "nearly ready: " .. tostring(g.info))
+  c.combat = true
+  assert(TV.Guide(here(), toInn, "pin").info == "After the fight", "in a fight")
+  c.combat = false
+  c.hearthCD = c.clock
+  tick(c, 5.1)
+  assert(not hearthLeg(), "an hour to go: no hearth step")
+  assert(TV.HearthLine():find("ready in 60 min", 1, true), TV.HearthLine())
+  c.hearthCD = nil
+  tick(c, 5.1)
+  assert(hearthLeg(), "ready again")
+  local saveCD = c.env.C_Container.GetItemCooldown
+  c.env.C_Container.GetItemCooldown = function() error("no cooldowns here") end
+  tick(c, 5.1)
+  assert(not hearthLeg(), "the cooldown unreadable: no hearth step")
+  c.env.C_Container.GetItemCooldown = saveCD
+  c.o.bind = "Nowhere"
+  tick(c, 5.1)
+  assert(not hearthLeg() and TV.HearthLine():find("learns where it goes", 1, true), "bound somewhere QuestBank has no inn for: no hearth step")
+  local X = { 0, gs[3] + 120, gs[4] - 40 }
+  standAt(c, X[1], X[2], X[3])
+  fireTV(c, "HEARTHSTONE_BOUND")
+  standAt(c, 1, gz[3], gz[4])
+  local hl = hearthLeg()
+  assert(hl and math.abs(hl.finish.wx - X[2]) < 5 and math.abs(hl.finish.wy - X[3]) < 5 and TV.DB().bind.src == "bound",
+    "bound there: the hearthstone lands where you stood")
+  c.o.bind = "Goldshire"
+  -- cast: the plan stands; the loading screen; landed, the spot is the bind's
+  tick(c, 5.1)
+  g = TV.Guide(here(), toInn, "pin")
+  assert(g.leg.kind == "hearth", "the hearth step again")
+  routes = TV.stats.routes
+  fireTV(c, "UNIT_SPELLCAST_START", "player", "Cast-1", 8690)
+  g = TV.Guide(here(), toInn, "pin")
+  assert(g.state == "underway" and g.info == "Hearthing" and g.step == "Hearth to Goldshire", "casting: " .. tostring(g.info))
+  fireTV(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", 8690)
+  c.noPos = true
+  assert(TV.Guide(here(), toInn, "pin").state == "underway" and TV.stats.routes == routes, "the loading screen: as it was")
+  c.noPos = nil
+  standAt(c, 0, gs[3] + 8, gs[4] + 3)
+  tick(c, 1)
+  assert(TV.cast == nil and TV.DB().bind.src == "landed" and TV.DB().bind.name == "Goldshire" and math.abs(TV.DB().bind.wx - gs[3] - 8) < 1,
+    "landed: the hearthstone's own spot, noted")
+  g = TV.Guide(here(), toInn, "pin")
+  assert(g.state == "there" or g.state == "walk", "and from there, the walk: " .. tostring(g.state))
+  standAt(c, 1, gz[3], gz[4])
+  set.arrowHearth = false
+  TV.ver = TV.ver + 1 -- (the arrow's menu does this)
+  assert(not hearthLeg() and not TV.Hearth("pin"), "the hearthstone switched off: no hearth step")
+  set.arrowHearth = true
+  TV.ver = TV.ver + 1
+  local saveRoute = c.QB.routeNow
+  c.QB.routeNow = { legs = { { kind = "flight" } } }
+  assert(not has(TV.Guide(here(), toInn, "route").plan, "hearth"), "on the route, only the route's own hearth")
+  c.QB.routeNow = { legs = { { kind = "hearth" } } }
+  TV.ver = TV.ver + 1 -- (or the next look at the hearthstone, within 5 seconds)
+  hl = has(TV.Guide(here(), toInn, "route").plan, "hearth")
+  assert(hl and TV.Hearth("route").penalty == 0, "the route's hearth: a step, free")
+  c.QB.routeNow = saveRoute
+  c.o.bagSlots = {}
+  tick(c, 5.1)
+  assert(not hearthLeg() and TV.HearthLine() == nil, "no hearthstone: no step, no line")
+
+  -- secret values: nothing learned, nothing broken; a secret answer to "on a flight?" is no
+  local before = {}
+  for k, v in pairs(TV.DB().known) do before[k] = v end
+  ver = TV.ver
+  c.taxiKnown, c.taxiSecret = { [4] = true, [8] = true }, true
+  learn()
+  local same = TV.ver == ver
+  for k, v in pairs(TV.DB().known) do same = same and before[k] == v end
+  assert(same, "secret flight points: nothing changes")
+  c.taxiSecret = nil
+  local saveTaxiOn = c.env.UnitOnTaxi
+  c.env.UnitOnTaxi = function() return SECRET.bool() end
+  standAt(c, 0, sw[3], sw[4])
+  g = TV.Guide(here(), toLake, "pin")
+  assert(g.state ~= "underway", "a secret 'on a flight': not flying: " .. g.state)
+  c.env.UnitOnTaxi = saveTaxiOn
+  c.ghost = true
+  g = TV.Guide(here(), toLake, "pin")
+  assert(g.state == "ghost" and g.info == "Resurrect first" and g.act.atlas == "Navigation-Tombstone-Icon", "dead: resurrect first")
+  c.ghost = nil
+  c.env.IsInInstance = function() return true, "party" end
+  g = TV.Guide(here(), toLake, "pin")
+  assert(g.state == "instance" and g.info == "Leave the dungeon first" and g.act.atlas == "dungeon", "in a dungeon")
+  c.env.IsInInstance = nil
+  -- no way known to an island on the other continent; one on this continent: straight at it, as before
+  g = TV.Guide(here(), { name = "Shandris", c = 1, wx = fm[3], wy = fm[4] + 20 }, "pin")
+  assert(g.plan and has(g.plan, "boat", "Feathermoon") and not has(g.plan, "fly"), "Feathermoon, no flight known: the ferry: " .. kinds(g.plan))
+  print("nothing known, Stormwind to Feathermoon: " .. kinds(g.plan) .. string.format(" (%.1f min)", g.plan.min))
+  -- Feathermoon's pier, on the boat's north side: on Sardor Isle, the way on is a walk, planned once (no plan a look)
+  local shandris = { name = "Shandris", c = 1, wx = fm[3], wy = fm[4] + 20 }
+  standAt(c, 1, -4187, 3287)
+  routes = TV.stats.routes
+  for _ = 1, 20 do c.clock = c.clock + 0.05; g = TV.Guide(here(), shandris, "pin") end
+  assert(g.leg.kind == "walk" and g.state == "walk" and TV.stats.routes == routes + 1,
+    "landed on Feathermoon's pier: walk on, one plan: " .. kinds(g.plan) .. ", " .. TV.stats.routes - routes .. " plans")
+  -- a step's far end counts as reached only on its land: were the pier's spot off the isle's box, the plan (the coast's
+  -- pier, then the boat back here) would end within reach of you at every look, and plan again at every look
+  local isle = D.LAND[#D.LAND]
+  D.LAND[#D.LAND] = { 1, -5131, 2778, -4195, 3963, 3 }
+  standAt(c, 0, sw[3], sw[4]); TV.Guide(here(), shandris, "pin")
+  standAt(c, 1, -4187, 3287)
+  routes = TV.stats.routes
+  for _ = 1, 20 do c.clock = c.clock + 0.05; g = TV.Guide(here(), shandris, "pin") end
+  D.LAND[#D.LAND] = isle
+  assert(TV.stats.routes == routes + 1, "the far end on another land: one plan, not one a look: " .. TV.stats.routes - routes)
+  standAt(c, 0, sw[3], sw[4]); TV.Guide(here(), shandris, "pin")
+  -- the ferry from the Forgotten Coast, standing 4 yards off its line: on board once, then the walk, no flicker
+  local ferry = { { -4348, 2444 }, { -4906, 2778 }, { -5054, 2971 }, { -5121, 3186 }, { -5130, 3471 }, { -5089, 3706 }, { -5010, 3853 },
+                  { -4880, 3940 }, { -4693, 3962 }, { -4417, 3904 }, { -4196, 3783 }, { -4197, 3287 } }
+  standAt(c, 1, -4348, 2444)
+  g = TV.Guide(here(), shandris, "pin")
+  assert(g.leg.kind == "boat" and g.state == "at" and g.step == "Boat to Feathermoon", "on the Forgotten Coast's pier: " .. kinds(g.plan))
+  local boarded, last, after = 0, g.state, {}
+  for i = 1, #ferry - 1 do
+    local a, b = ferry[i], ferry[i + 1]
+    for k = 1, 20 do
+      standAt(c, 1, a[1] + (b[1] - a[1]) * k / 20 + 4, a[2] + (b[2] - a[2]) * k / 20)
+      c.clock = c.clock + 0.5
+      g = TV.Guide(here(), shandris, "pin")
+      if g.state == "underway" and last ~= "underway" then boarded = boarded + 1 end
+      last = g.state
+    end
+  end
+  for _ = 1, 20 do c.clock = c.clock + 0.05; after[#after + 1] = TV.Guide(here(), shandris, "pin").state end
+  assert(boarded == 1 and g.leg.kind == "walk" and table.concat(after, " "):find("^walk[ walk]*$"),
+    "the ferry to Feathermoon: on board once, then the walk: " .. boarded .. " boardings, then " .. table.concat(after, " "))
+  standAt(c, 0, sw[3], sw[4])
+  -- a waypoint inside a dungeon: its entrance; an island with no way in: said so
+  c.instWorld = { [1581] = true, [2521] = true }
+  c.QB.API.SetWaypoint(1581, 50, 50, "Inside")
+  assert(set.arrowPin.name == "The Deadmines entrance" and c.chat[#c.chat]:find("Waypoint: Inside", 1, true),
+    "a click inside the Deadmines: the arrow's pin at its entrance: " .. tostring(set.arrowPin.name))
+  assert(not set.arrow and c.QB.Arrow.temp and c.QB.Arrow.temp.name == "The Deadmines entrance", "the arrow off: shown for that click")
+  c.QB.API.SetWaypoint(2521, 50, 50, "Zephras Isle")
+  assert(set.arrowPin.none and set.arrowPin.name == "Zephras Isle", "no way in known: the pin says so")
+  assert(not c.QB.Arrow.temp and not c.env.QuestBankArrow:IsShown(), "and the arrow shown for the last click goes: never the old place")
+  c.instWorld = nil
+  -- TomTom, the arrow off: QuestBank's arrow shows the way while there is more to it than the last walk; each click
+  -- replaces the last one's, and a click with only a walk to it (or no way there) leaves TomTom's arrow alone
+  c.addons = { TomTom = { loaded = true } }
+  c.env.TomTom = { AddWaypoint = function() return 1 end, IsCrazyArrowEmpty = function() return true end, RemoveWaypoint = function() end }
+  c.QB.API.SetWaypoint(1446, 50, 30, "Gadgetzan", nil, toGz)
+  assert(c.env.QuestBankArrow:IsShown() and c.QB.Arrow.temp and c.QB.Arrow.temp.travel, "with TomTom, another continent: QuestBank's arrow too")
+  c.QB.API.SetWaypoint(1453, 50, 50, "Here", nil, { c = 0, wx = sw[3] + 20, wy = sw[4] })
+  assert(not c.QB.Arrow.temp and not c.env.QuestBankArrow:IsShown(), "with TomTom, a walk after Gadgetzan: TomTom's arrow alone, not the way to Gadgetzan")
+  c.QB.API.SetWaypoint(1446, 50, 30, "Gadgetzan", nil, toGz)
+  assert(c.QB.Arrow.temp and c.QB.Arrow.temp.name == "Gadgetzan", "Gadgetzan again: QuestBank's arrow again")
+  c.instWorld = { [2521] = true }
+  c.QB.API.SetWaypoint(2521, 50, 50, "Zephras Isle")
+  assert(not c.QB.Arrow.temp and not c.env.QuestBankArrow:IsShown(), "with TomTom, no way in known: not the way to Gadgetzan either")
+  c.instWorld = nil
+  c.addons, c.env.TomTom = nil, nil
+  set.arrowPin, set.arrowMode = nil, "route"
+
+  -- the flight master's map has the last word: one the world map called known that the map leaves out is not known,
+  -- and the world map's word goes for this build. A map with no ids: by name. "New flight path discovered!"
+  c.taxiKnown = { [2] = true, [5] = true, [4] = true, [32] = true }
+  db.known, db.readC = {}, {}
+  learn()
+  assert(db.known[4] == "m" and db.known[32] == "m" and db.readC[1], "the world map: Sentinel Hill and Theramore known")
+  standAt(c, 0, sw[3] + 10, sw[4])
+  openTaxi(c, { { nodeID = 5, name = "Lakeshire, Redridge", state = 1, slotIndex = 2 } }, 1463)
+  fireTV(c, "TAXIMAP_OPENED")
+  local tdiag = c.env.QuestBankDB.diag.taxi
+  assert(db.known[2] == "t" and db.known[5] == "t" and db.known[4] == false and db.known[32] == nil and db.readC[0] and not db.readC[1]
+    and tdiag.scanBad == "70170", "the map leaves Sentinel Hill out: not known, and the world map is doubted on this build")
+  fireTV(c, "TAXIMAP_CLOSED")
+  assert(db.known[4] == false and db.known[32] == nil and not db.readC[1] and TV.Usable("A", select(2, hubOf(c, "Theramore"))),
+    "a doubted world map: its 'found' counts for nothing, and Kalimdor, never read but by it, counts every flight master again")
+  local saveAll = c.env.C_TaxiMap.GetAllTaxiNodes
+  c.env.C_TaxiMap.GetAllTaxiNodes = function() return {} end
+  openTaxi(c, { { name = "Stormwind, Elwynn", state = 0, slotIndex = 1 }, { name = "Ironforge, Dun Morogh", state = 1, slotIndex = 2 },
+                { name = "Lakeshire, Redridge", state = 1, slotIndex = 3 } }, 1463)
+  fireTV(c, "TAXIMAP_OPENED")
+  assert(db.known[6] == "t" and db.known[5] == "t" and TV.slots[2] == 6 and TV.cur == select(2, hubOf(c, "Stormwind")),
+    "no ids on the map: the flight masters by name")
+  fireTV(c, "TAXIMAP_CLOSED")
+  c.env.C_TaxiMap.GetAllTaxiNodes, c.taxiOpen = saveAll, nil
+  local thel = hubOf(c, "Thelsamar")
+  standAt(c, 0, thel[3] + 20, thel[4])
+  ver = TV.ver
+  fireTV(c, "UI_INFO_MESSAGE", 0, "Quest accepted")
+  assert(db.known[8] == false and TV.ver == ver, "another message: nothing")
+  fireTV(c, "UI_INFO_MESSAGE", 0, "New flight path discovered!")
+  assert(db.known[8] == "n" and TV.ver > ver, "a new flight path, here: Thelsamar")
+  tdiag.scanBad = nil
+
+  -- many ways, at random (a fixed seed): every plan keeps the rules, and fast
+  local seed = 20261013
+  local function rnd(k) seed = seed * 16807 % 2147483647; return seed % k + 1 end
+  local spots = {}
+  for i = 1, #D.NPC, 7 do local p = D.NPC[i]; if p[5] == 0 or p[5] == 1 then spots[#spots + 1] = { c = p[5], wx = p[6], wy = p[7], name = p[1] } end end
+  local binds = {}
+  for _, r in ipairs(D.BIND) do binds[#binds + 1] = r end
+  local cases, plans, unreachable = 2000, 0, 0
+  routes = TV.stats.routes
+  TV.stats.maxMs = 0
+  for _ = 1, cases do
+    local fac = rnd(2) == 1 and "A" or "H"
+    local G = TV.Graph(fac)
+    local known, readC = {}, {}
+    for i = 1, G.h do
+      local r = rnd(4)
+      if r == 1 then known[G.taxi[i]] = "t" elseif r == 2 then known[G.taxi[i]] = false end
+    end
+    if rnd(2) == 1 then readC[0] = 1 end
+    if rnd(2) == 1 then readC[1] = 1 end
+    db.known, db.readC = known, readC
+    local o = { fac = fac, mf = rnd(2) == 1 and 1 or 0.625, druid = rnd(4) == 1, mode = "pin" }
+    if rnd(3) == 1 then
+      local b = binds[rnd(#binds)]
+      o.hearth = { kind = "hearth", c = b[2], wx = b[3], wy = b[4], name = b[1], min = 0.5 + rnd(90) / 60, penalty = 3, left = 0 }
+    end
+    local from, to = spots[rnd(#spots)], spots[rnd(#spots)]
+    local p = TV.Route(from, to, o)
+    if not p then
+      unreachable = unreachable + 1
+      assert(TV.Land(from.c, from.wx, from.wy) ~= TV.Land(to.c, to.wx, to.wy), "on one land there is always a way: on foot")
+    else
+      plans = plans + 1
+      assert(p.min >= 0 and p.min < 1e6, "a plan's minutes are a number")
+      local at = from
+      for i, l in ipairs(p.legs) do
+        if l.kind == "fly" then
+          assert(TV.Usable(fac, l.from, o.druid) and TV.Usable(fac, l.to, o.druid), "a flight between flight masters you can use")
+        elseif l.kind == "hearth" then
+          assert(i == 1 and o.hearth and l.walk == 0, "the hearth only first, and only when offered")
+        elseif l.kind ~= "walk" then
+          assert(l.link and D.LINK[l.link][1]:find(fac, 1, true), "a ride of the faction's own: " .. l.kind)
+        end
+        local stop = l.start or (l.kind == "walk" and l.finish)
+        if stop then
+          assert(TV.Land(at.c, at.wx, at.wy) == TV.Land(stop.c, stop.wx, stop.wy), "a walk on one land: " .. kinds(p))
+        end
+        at = l.finish
+      end
+      assert(p.legs[#p.legs].kind == "walk" and at.wx == to.wx and at.wy == to.wy, "the last step walks to the target")
+    end
+  end
+  assert(TV.stats.routes == routes + cases and TV.stats.maxMs < 2, string.format("%d routes, the slowest %.2f ms", cases, TV.stats.maxMs))
+  print(string.format("travel: %d random ways, %d planned, %d unreachable (another island), the slowest %.2f ms", cases, plans, unreachable, TV.stats.maxMs))
+  -- standing still plans nothing; walking on re-plans every couple of seconds at most
+  db.known, db.readC = { [2] = "t", [5] = "t" }, { [0] = 1, [1] = 1 }
+  TV.ver = TV.ver + 1
+  standAt(c, 0, sw[3], sw[4])
+  TV.Guide(here(), toLake, "pin")
+  routes = TV.stats.routes
+  for _ = 1, 100 do c.clock = c.clock + 0.05; TV.Guide(here(), toLake, "pin") end
+  assert(TV.stats.routes == routes, "100 idle looks: no planning")
+  standAt(c, 0, sw[3] - 60, sw[4] - 20)
+  for _ = 1, 20 do c.clock = c.clock + 0.05; TV.Guide(here(), toLake, "pin") end
+  assert(TV.stats.routes == routes + 1, "moved: one plan in those two seconds: " .. TV.stats.routes - routes)
+end
+
+-- the Horde: nothing known in Orgrimmar, Undercity is a zeppelin away
+local grosh = lightClient({
+  name = "Grosh", level = 30, cap = 60, faction = "Horde", className = "Warrior", class = "WARRIOR", classID = 1, race = "Orc",
+  log = { { 7, 0 } }, done = {}, group = false, guild = false, world = { 1, 1320, -4649 }, bind = "Orgrimmar",
+  riding = false, bagSlots = {}, map = 1411,
+})
+do
+  local c, TV = grosh, grosh.QB.Travel
+  c.taxiKnown = {}
+  fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+  local uc = hubOf(c, "Undercity")
+  local g = TV.Guide(c.QB.API.WorldPosition(), { name = "Undercity", c = uc[2], wx = uc[3], wy = uc[4] }, "pin")
+  assert(g.leg.kind == "zeppelin" and g.state == "at" and g.step == "Zeppelin to Undercity" and g.info == "Wait for the zeppelin"
+    and g.act.file == c.QB.Data.TEX.zeppelin, "at the tower: the zeppelin to Undercity: " .. tostring(g.step) .. " / " .. tostring(g.info))
+  -- across the tower to the Grom'gol zeppelin's platform, 51 yards on: not on board; the arrow leads back to Undercity's
+  local toUc = { name = "Undercity", c = uc[2], wx = uc[3], wy = uc[4] }
+  standAt(c, 1, 1361, -4631)
+  for _ = 1, 40 do c.clock = c.clock + 0.05; g = TV.Guide(c.QB.API.WorldPosition(), toUc, "pin") end
+  assert(g.state == "approach" and g.step == "Zeppelin to Undercity" and g.aim == g.leg.start,
+    "on the Grom'gol platform: back to Undercity's, not on board: " .. tostring(g.state) .. " / " .. tostring(g.info))
+  standAt(c, 1, 1318, -4658)
+  g = TV.Guide(c.QB.API.WorldPosition(), toUc, "pin")
+  assert(g.state == "at" and g.info == "Wait for the zeppelin", "back on Undercity's platform: wait: " .. tostring(g.info))
+  standAt(c, 1, 1320, -4649)
+  local plan = TV.Route(c.QB.API.WorldPosition(), { name = "Darnassus", c = 1, wx = 9885, wy = 2515 }, TV.Opts("pin"))
+  assert(plan == nil, "Darnassus: no way the Horde takes")
+  -- a shaman: Astral Recall before the hearthstone (a quarter of its cooldown), the stone while Recall waits
+  c.o.class, c.o.riding, c.o.bagSlots = "SHAMAN", true, { { 6948, 1 } }
+  local h = TV.Hearth("pin")
+  assert(h and h.kind == "recall" and h.name == "Orgrimmar" and h.penalty == 3, "Astral Recall ready: it goes first")
+  c.recallCD = c.clock - 100
+  h = TV.Hearth("pin")
+  assert(h and h.kind == "hearth", "Recall cooling down: the hearthstone")
+  c.o.class, c.o.riding, c.o.bagSlots, c.recallCD = "WARRIOR", false, {}, nil
+end
+
+-- an arrow moved by an older QuestBank was kept by the point the game chose for its 170x84 frame (CENTER, BOTTOMLEFT):
+-- kept by its top now, where that top was, so the arrow stays put as the lines under it come and go
+do
+  local c = newClient({
+    name = "Moira", level = 30, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Dwarf",
+    log = { { 7, 0 } }, done = {}, group = false, guild = false, world = { 0, -8833, 479 }, bind = "Goldshire",
+    riding = false, bagSlots = {}, map = 1453,
+  })
+  c.env.QuestBankDB = { settings = { arrow = true, arrowPos = { "CENTER", 30, -40 } } }
+  c.ev(c.QB.eventFrame, "ADDON_LOADED", "QuestBank")
+  c.ev(c.QB.eventFrame, "PLAYER_LOGIN")
+  tick(c, 1)
+  local F, set = c.env.QuestBankArrow, c.QB:Settings()
+  local function at(x, y)
+    local p = F.__points[1]
+    return #F.__points == 1 and p.point == "TOP" and p.relPoint == "TOP" and p.rel == c.env.UIParent and p.x == x and p.y == y
+      and set.arrowPos[1] == "TOP" and set.arrowPos[2] == x and set.arrowPos[3] == y
+  end
+  assert(F and F:IsShown() and at(30, -498), "kept by CENTER 30,-40 (1600x1000 screen): by its top, 42 above that centre")
+  c.QB.Arrow.frame, set.arrowPos = nil, { "BOTTOMLEFT", 100, 200 }
+  F = c.QB.Arrow:Create()
+  assert(at(-615, -716), "kept by BOTTOMLEFT 100,200: by its top's middle, 85 right and 84 up")
+  set.arrowPos = { "TOP", 12, -34 }
+  c.QB.Arrow.frame = nil
+  F = c.QB.Arrow:Create()
+  assert(at(12, -34), "kept by its top already: as it was")
+end
+
+----------------------------------------------------------------------------
+-- the arrow on screen, step by step (Arrow.lua over Travel.lua): what it shows in each state, its art, its turn and
+-- colour, every town's name on its lines, the nearest hand-in by the way there, a pin with no way there, TomTom, and
+-- the minimap's step pin. Each state is a sheet "Arrow: ..." on the layout page
+----------------------------------------------------------------------------
+do
+  local c, TV, A, D = brann, brann.QB.Travel, brann.QB.Arrow, brann.QB.Data
+  local T = D.TEX
+  local set, db = c.QB:Settings(), TV.DB()
+  local function here() return c.QB.API.WorldPosition() end
+  local function learn() fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1) end
+  local function aimAt(name, cont, wx, wy) set.arrowMode, set.arrowPin = "pin", { name = name, c = cont, wx = wx, wy = wy } end
+  local function has(kind) for _, l in ipairs(A.g and A.g.plan and A.g.plan.legs or {}) do if l.kind == kind then return l end end end
+  local sw, lake, gz, th = hubOf(c, "Stormwind"), hubOf(c, "Lakeshire"), hubOf(c, "Gadgetzan"), hubOf(c, "Theramore")
+  local inn = {}
+  for _, r in ipairs(D.BIND) do inn[r[1]] = r end
+  A:Set(true)
+  local F = c.env.QuestBankArrow
+  -- one look: the 20-a-second update and a frame drawn
+  local function look() F.__scripts.OnUpdate(F, 1) end
+  local function step() return F.step:IsShown() and F.step:GetText() or nil end
+  local function says() return tostring(step()) .. " / " .. F.dist:GetText() end
+  local function sheet(label)
+    for _, pr in ipairs(checkLayout(F, label)) do problems[#problems + 1] = pr end
+    layouts[#layouts + 1] = dumpLayout(F, label)
+  end
+  c.facing = 0
+  assert(F.arrow.__atlas == "npe_arrowup" and F.arrow.__desat and F.glow.__atlas == "npe_arrowupglow" and F.glow.__blend == "ADD",
+    "the game's own arrow and its glow")
+
+  -- the same continent: at Stormwind's flight master, Lakeshire known. Its icon takes the arrow's place
+  c.taxiKnown = { [2] = true, [5] = true }
+  db.known, db.readC = {}, {}
+  learn()
+  standAt(c, 0, sw[3], sw[4])
+  aimAt("Lakeshire", 0, lake[3] + 50, lake[4])
+  look()
+  assert(F.name:GetText() == "Lakeshire" and step() == "Fly to Lakeshire" and F.dist:GetText() == "Talk to the flight master"
+    and F.act:IsShown() and F.act.__atlas == "flightmaster" and not F.arrow:IsShown() and F.stepIcon:IsShown() and F.stepIcon.__atlas == "flightmaster",
+    "at the flight master: " .. says())
+  assert(F.trail[1]:IsShown() and F.trail[2]:IsShown() and not F.trail[3]:IsShown() and F.trail[1].__alpha == 1 and F.trail[2].__alpha == 0.5
+    and F.trail[2].__tex == T.foot and F.__h == 130, "the steps left: the flight, then the walk")
+  -- something to do here: a ping every couple of seconds, growing and fading
+  local pinged, grown = 0, false
+  for _ = 1, 130 do
+    F.__scripts.OnUpdate(F, 0.016)
+    if F.ping:IsShown() then pinged, grown = pinged + 1, grown or (F.ping.__w > 40 and F.ping.__w < 96 and F.ping.__alpha < 0.9) end
+  end
+  assert(pinged > 20 and pinged < 60 and grown, "a ping at the flight master: " .. pinged .. " frames")
+  lines = {}; F.__scripts.OnEnter(F)
+  local tip = table.concat(lines, "\n")
+  assert(tip:find("|A:flightmaster:14:14|a Fly to Lakeshire | ", 1, true) and tip:find("Walk to Lakeshire | %d+ min") and tip:find("About %d+ min in all%.")
+    and tip:find("Flight paths: 2 of 18 known here", 1, true) and lines[#lines]:find("^Click: the Hand%-in Route"), "the tooltip lists the steps: " .. tip)
+  sheet("Arrow: at the flight master")
+  -- on the way there, the arrow points at it; the minimap pins it and draws the line to it
+  standAt(c, 0, sw[3] + 150, sw[4])
+  look()
+  assert(F.arrow:IsShown() and not F.act:IsShown() and step() == "Fly to Lakeshire" and F.dist:GetText():find("^150 yards · %d+ min$"),
+    "on the way to the flight master: " .. says())
+  c.QB.Mini.Place()
+  local Mini = c.QB.Mini
+  assert(Mini.target and Mini.target.kind == "step" and Mini.labelText == "Fly to Lakeshire" and Mini.linesShown >= 1,
+    "the minimap: the flight master is the target, named: " .. tostring(Mini.labelText))
+  sheet("Arrow: on the way to a flight master")
+  -- Lakeshire not known: a walk, no step line
+  c.taxiKnown[5] = nil
+  fireTV(c, "TAXI_NODE_STATUS_CHANGED"); tick(c, 1.5)
+  standAt(c, 0, sw[3], sw[4])
+  look()
+  assert(not F.step:IsShown() and not F.stepIcon:IsShown() and F.dist:GetText():find("yards", 1, true) and F.arrow:IsShown() and not F.trail[1]:IsShown()
+    and F.__h == 98, "Lakeshire not known: walk there: " .. says())
+  sheet("Arrow: walk")
+  c.QB.Mini.Place()
+  assert(Mini.target and Mini.target.kind ~= "step", "a walk: no step on the minimap")
+
+  -- its turn and colour: green and glowing ahead, gold to the side, red behind; eased, the short way round
+  local me = here()
+  local b0 = math.atan2(lake[4] - me.wy, lake[3] + 50 - me.wx)
+  c.facing = b0
+  tick(c, 1)
+  assert(math.abs(F.arrow.__rot) < 0.01 and F.arrow.__vertex[2] > F.arrow.__vertex[1] and F.glow.__alpha > 0, "facing it: green, glowing")
+  sheet("Arrow: walk, facing it")
+  c.facing = b0 - 1
+  F.__scripts.OnUpdate(F, 0.016)
+  assert(F.arrow.__rot > 0 and F.arrow.__rot < 1 and F.glow.__rot == F.arrow.__rot, "a turn eases in: " .. F.arrow.__rot)
+  tick(c, 1)
+  assert(math.abs(F.arrow.__rot - 1) < 0.01 and F.glow.__alpha == 0, "and settles: " .. F.arrow.__rot)
+  c.facing = b0 + math.pi
+  tick(c, 1)
+  assert(F.arrow.__vertex[1] > F.arrow.__vertex[2] and F.glow.__alpha == 0, "behind you: red")
+  c.facing = b0 - 3
+  tick(c, 1)
+  c.facing = b0 + 3
+  for _ = 1, 40 do
+    F.__scripts.OnUpdate(F, 0.016)
+    assert(math.abs(F.arrow.__rot) > 2.9, "from 3 to -3 the short way, behind you: " .. F.arrow.__rot)
+  end
+  tick(c, 1)
+  assert(math.abs(F.arrow.__rot + 3) < 0.01, "and settles: " .. F.arrow.__rot)
+  -- which way you face is a secret: the arrow dims, upright
+  c.facing = SECRET.num()
+  look()
+  assert(F.arrow.__alpha == 0.3 and F.arrow.__rot == 0 and F.dist:GetText():find("yards", 1, true), "facing unknown: dimmed")
+  c.facing = b0
+  look()
+  assert(F.arrow.__alpha == 1 and math.abs(F.arrow.__rot) < 0.01, "and back")
+
+  -- the flight master's map: pick Lakeshire, its button marked; in the air; landed
+  c.taxiKnown[5] = true
+  fireTV(c, "TAXI_NODE_STATUS_CHANGED"); tick(c, 1.5)
+  look()
+  openTaxi(c, { { nodeID = 2, name = "Stormwind, Elwynn", state = 0, slotIndex = 1 }, { nodeID = 6, name = "Ironforge, Dun Morogh", state = 2, slotIndex = 2 },
+                { nodeID = 5, name = "Lakeshire, Redridge", state = 1, slotIndex = 3 } }, 1463)
+  fireTV(c, "TAXIMAP_OPENED")
+  tick(c, 0)
+  local mark = c.env.QuestBankTaxiMark
+  assert(step() == "Fly to Lakeshire" and F.dist:GetText() == "Pick Lakeshire" and mark:IsShown() and mark.__points[1].rel == c.env.TaxiButton3,
+    "the map open: " .. says())
+  sheet("Arrow: the flight master's map")
+  local routes = TV.stats.routes
+  c.env.TakeTaxiNode(3)
+  fireTV(c, "TAXIMAP_CLOSED")
+  c.taxiOpen, c.taxi = nil, true
+  standAt(c, 0, sw[3] - 1000, sw[4] - 300)
+  tick(c, 1)
+  assert(step() == "Flying to Lakeshire" and (F.dist:GetText():find("^Lands in %d+:%d%d$") or F.dist:GetText() == "Landing")
+    and F.stepIcon.__tex == T.gryphon and F.arrow:IsShown() and F.arrow.__alpha == 0.85 and TV.stats.routes == routes, "in the air: " .. says())
+  sheet("Arrow: in the air")
+  c.taxi = false
+  standAt(c, 0, lake[3], lake[4])
+  A:Update()
+  F.__scripts.OnUpdate(F, 0.016)
+  assert(not F.step:IsShown() and F.arrow:IsShown() and (db.known[5] == "f" or db.known[5] == "t"), "landed: the walk: " .. says())
+  assert(F.ping:IsShown() and F.arrow.__w > 48 and F.arrow.__w < 60, "a new step: the arrow pops, a ping: " .. F.arrow.__w)
+  tick(c, 1)
+  assert(not F.ping:IsShown() and F.arrow.__w == 48, "and settles")
+
+  -- a boat: wait on the pier, its icon in the arrow's place; on board the plan stands; at the far pier, walk on
+  c.taxiKnown = {}
+  learn()
+  standAt(c, 0, -3905, -586)
+  aimAt("Theramore", 1, th[3], th[4])
+  look()
+  assert(step() == "Boat to Theramore" and F.dist:GetText() == "Wait for the boat" and F.act.__atlas == "flightmasterferry", "on the pier: " .. says())
+  sheet("Arrow: on the pier")
+  local track
+  for _, l in ipairs(D.LINK) do if l[2] == "b" and l[4][7] == "Menethil Harbor" and l[5][7] == "Theramore" then track = l[6] end end
+  local pts = {}
+  for cc, x, y in track:gmatch("(%-?%d+),(%-?[%d.]+),(%-?[%d.]+)") do pts[#pts + 1] = { tonumber(cc), tonumber(x), tonumber(y) } end
+  routes = TV.stats.routes
+  standAt(c, pts[4][1], pts[4][2], pts[4][3])
+  for _ = 1, 20 do c.clock = c.clock + 0.05; look() end
+  assert(step() == "Boat to Theramore" and F.dist:GetText():find("^On board · about %d+ min$") and F.act:IsShown() and TV.stats.routes == routes,
+    "on board: " .. says())
+  sheet("Arrow: on board")
+  standAt(c, 1, -4016, -4741)
+  look()
+  assert(step() ~= "Boat to Theramore" and TV.stats.routes == routes + 1, "at Theramore's pier: the next step: " .. says())
+
+  -- the tram: no position under the ground; out at the far end, walk on
+  local ifh = hubOf(c, "Ironforge")
+  standAt(c, 0, -8346, 514)
+  aimAt("Ironforge", 0, ifh[3], ifh[4])
+  look()
+  assert(step() == "Tram to Ironforge" and F.dist:GetText() == "Take the tram" and F.act.__tex == T.tram, "at the tram: " .. says())
+  sheet("Arrow: at the tram")
+  c.instance, c.noPos = { "Deeprun Tram", 0, 369 }, true
+  look()
+  assert(step() == "On the tram to Ironforge" and F.dist:GetText() == "Ride to the end" and F.act:IsShown(), "on the tram: " .. says())
+  sheet("Arrow: on the tram")
+  c.instance, c.noPos = nil, nil
+  standAt(c, 0, -4840, -1330)
+  look()
+  assert(not F.step:IsShown() and F.arrow:IsShown(), "out in Ironforge: walk on: " .. says())
+  -- a flight master you haven't learned, on the way
+  db.known = {}
+  learn()
+  standAt(c, 0, lake[3], lake[4] + 20)
+  aimAt("Lakeshire Inn", 0, lake[3] + 300, lake[4])
+  look()
+  assert(step() == "Learn this flight path" and F.stepIcon.__atlas == "taxinode_undiscovered" and F.dist:GetText():find("yards", 1, true) and F.arrow:IsShown(),
+    "at Lakeshire's flight master, not learned: " .. says())
+  sheet("Arrow: learn this flight path")
+
+  -- the hearthstone: its icon with the cooldown's swipe, and the menu's switch
+  c.o.bagSlots, c.o.bind = { { 6948, 1 } }, "Goldshire"
+  standAt(c, 1, gz[3], gz[4])
+  local gs = inn.Goldshire
+  aimAt("Innkeeper Farley", 0, gs[3] + 5, gs[4])
+  look()
+  assert(step() == "Hearth to Goldshire" and F.dist:GetText() == "Use your Hearthstone" and F.act.__tex == T.hearth and not F.cd:IsShown(),
+    "far from Goldshire, the hearthstone: " .. says())
+  sheet("Arrow: hearthstone")
+  c.hearthCD = c.clock - 3560
+  look()
+  assert(F.dist:GetText() == "Ready in 0:40" and F.cd:IsShown() and F.cd.__cd[2] == 3600, "nearly ready: the swipe: " .. says())
+  sheet("Arrow: hearthstone, nearly ready")
+  c.hearthCD = nil
+  look()
+  assert(not F.cd:IsShown(), "ready: no swipe")
+  local function menuItem(label)
+    F.__scripts.OnClick(F, "RightButton")
+    for _, b in ipairs(c.env.QuestBankMenu.items) do if b:IsShown() and b.label:GetText() == label then return b end end
+  end
+  local item = menuItem("Hearthstone in the steps: on")
+  for _, pr in ipairs(checkLayout(c.env.QuestBankMenu, "arrow menu, hearthstone")) do problems[#problems + 1] = pr end
+  item.__scripts.OnClick(item)
+  look()
+  assert(set.arrowHearth == false and not has("hearth") and step() ~= "Hearth to Goldshire", "the hearthstone switched off in the menu: " .. says())
+  item = menuItem("Hearthstone in the steps: off")
+  item.__scripts.OnClick(item)
+  look()
+  assert(set.arrowHearth == true and step() == "Hearth to Goldshire", "and on again")
+  c.o.bind = "Nowhere"
+  tick(c, 5.1)
+  lines = {}; F.__scripts.OnEnter(F)
+  assert(not has("hearth") and table.concat(lines, "\n"):find("Hearthstone: QuestBank learns where it goes", 1, true), "bound somewhere QuestBank has no inn for")
+  c.o.bind, c.o.bagSlots = "Goldshire", {}
+  tick(c, 5.1)
+
+  -- the client never says which flight paths you know: they all count, and the tooltip says so
+  local saveTaxi = c.env.C_TaxiMap
+  c.env.C_TaxiMap = nil
+  db.known, db.readC = {}, {}
+  TV.ver = TV.ver + 1
+  standAt(c, 0, sw[3], sw[4])
+  aimAt("Gadgetzan", 1, gz[3] + 30, gz[4])
+  look()
+  lines = {}; F.__scripts.OnEnter(F)
+  assert(has("fly") and table.concat(lines, "\n"):find("Flight paths: not read yet, so all count", 1, true), "assumed: " .. table.concat(lines, " / "))
+  sheet("Arrow: a long way, every flight path counted")
+  c.env.C_TaxiMap = saveTaxi
+
+  -- dead, in a dungeon, no way there
+  c.ghost = true
+  look()
+  assert(F.dist:GetText() == "Resurrect first" and F.act.__atlas == "Navigation-Tombstone-Icon" and F.act.__alpha == 0.5 and not F.trail[1]:IsShown(), "dead")
+  sheet("Arrow: dead")
+  c.ghost = nil
+  c.env.IsInInstance = function() return true, "party" end
+  look()
+  assert(F.dist:GetText() == "Leave the dungeon first" and F.act.__atlas == "dungeon" and F.act.__alpha == 0.5, "in a dungeon")
+  sheet("Arrow: in a dungeon")
+  c.env.IsInInstance = nil
+  c.instWorld = { [2521] = true }
+  c.QB.API.SetWaypoint(2521, 50, 50, "Zephras Isle")
+  look()
+  assert(F.name:GetText() == "Zephras Isle" and F.dist:GetText() == "No known way there" and F.act.__atlas == "Waypoint-MapPin-Untracked"
+    and F.act.__desat and F.act.__alpha == 0.5 and not F.step:IsShown(), "a click on an island QuestBank can't lead to: " .. says())
+  sheet("Arrow: no known way there")
+  c.instWorld = nil
+  -- there
+  aimAt("Here", 0, sw[3] + 5, sw[4])
+  A:Update()
+  F.__scripts.OnUpdate(F, 0.016)
+  assert(F.dist:GetText() == "You're there" and F.act.__atlas == "Waypoint-MapPin-Tracked" and F.act.__alpha == 1 and not F.act.__desat and F.ping:IsShown(),
+    "there: the pin, a ping")
+  sheet("Arrow: there")
+
+  -- every town on the lines: each fits whole, or the step by the town's name alone, never cut; the longest names go
+  -- through the whole layout check
+  local I = TV.Icons("A")
+  local towns, seen = {}, {}
+  for _, fac in ipairs({ "A", "H" }) do for _, h in ipairs(D.HUB[fac]) do if not seen[h[1]] then seen[h[1]], towns[#towns + 1] = true, h[1] end end end
+  for _, b in ipairs(D.BIND) do if not seen[b[1]] then seen[b[1]], towns[#towns + 1] = true, b[1] end end
+  table.sort(towns, function(a, b) if #a ~= #b then return #a > #b end return a < b end)
+  local cases = { { "at", "Fly to %s", "Pick %s", I.fly, I.fly }, { "underway", "Flying to %s", "Lands in 12:34", I.flying },
+                  { "at", "Hearth to %s", "Ready in 59:59", I.hearth, I.hearth } }
+  local fake, shortened = { trail = { I.fly, I.boat, I.foot } }, 0
+  me = here()
+  for i, town in ipairs(towns) do
+    for _, k in ipairs(cases) do
+      fake.state, fake.step, fake.short, fake.icon, fake.info, fake.act = k[1], k[2]:format(town), town, k[4], k[3]:format(town), k[5]
+      fake.aim, fake.plan = not k[5] and me or nil, k
+      A:Draw(town, fake, me)
+      if i <= 4 then for _, pr in ipairs(checkLayout(F, "arrow, " .. fake.step)) do problems[#problems + 1] = pr end end
+      if i == 1 and k == cases[2] then layouts[#layouts + 1] = dumpLayout(F, "Arrow: the longest name, " .. town) end
+      assert(not F.step:GetText():find("...", 1, true) and not F.dist:GetText():find("...", 1, true) and not F.name:GetText():find("...", 1, true),
+        "every town fits: " .. fake.step)
+      if F.step:GetText() == town then shortened = shortened + 1 end
+    end
+  end
+  print(string.format("arrow: %d towns on its lines, %d steps by the town's name alone", #towns, shortened))
+  look()
+
+  -- the nearest hand-in by the way there: by air beats a nearer walk; with the flight unknown, the walk
+  c.taxiKnown = { [2] = true, [5] = true }
+  db.known, db.readC = {}, {}
+  learn()
+  standAt(c, 0, sw[3], sw[4])
+  local byAir = { name = "By air", c = 0, wx = lake[3] + 50, wy = lake[4], idx = 1 }
+  local onFoot = { name = "On foot", c = 0, wx = sw[3] + 1800, wy = sw[4], idx = 2 }
+  local _, airYards = A.Bearing(here(), byAir)
+  local _, footYards = A.Bearing(here(), onFoot)
+  assert(footYards < airYards, "on foot is nearer as the crow flies")
+  assert(A.Nearest({ onFoot, byAir }, here(), "handin") == byAir, "by air is quicker: it is the nearest")
+  c.taxiKnown[5] = nil
+  fireTV(c, "TAXI_NODE_STATUS_CHANGED"); tick(c, 1.5)
+  assert(A.Nearest({ onFoot, byAir }, here(), "handin") == onFoot, "Lakeshire not known: the walk is")
+  set.arrowTravel = false
+  assert(A.Nearest({ byAir, onFoot }, here(), "pickup") == onFoot, "straight: as the crow flies")
+  set.arrowTravel = true
+
+  -- TomTom, the arrow off: QuestBank's arrow shows the way there, and goes once only the last walk is left
+  A:Set(false)
+  c.addons = { TomTom = { loaded = true } }
+  c.env.TomTom = { AddWaypoint = function() return 1 end, IsCrazyArrowEmpty = function() return true end, RemoveWaypoint = function() end }
+  c.QB.API.SetWaypoint(1446, 50, 30, "Gadgetzan", nil, { c = 1, wx = gz[3] + 30, wy = gz[4] })
+  look()
+  assert(F:IsShown() and A.temp and A.temp.travel and step(), "with TomTom, the way to Gadgetzan: " .. says())
+  standAt(c, 1, gz[3] + 200, gz[4])
+  look()
+  assert(not F:IsShown() and not A.temp, "the last walk left: TomTom's arrow alone")
+  c.addons, c.env.TomTom = nil, nil
+  set.arrowPin, set.arrowMode = nil, "route"
+
+  -- straight at it (/qb arrow straight): another continent says so, the arrow dimmed
+  A:Set(true)
+  set.arrowTravel = false
+  standAt(c, 0, sw[3], sw[4])
+  aimAt("Gadgetzan", 1, gz[3] + 30, gz[4])
+  look()
+  assert(F.dist:GetText() == "On the other continent" and not F.step:IsShown() and F.arrow.__alpha == 0.3 and F.arrow.__rot == 0, "straight: " .. says())
+  sheet("Arrow: straight, another continent")
+  set.arrowTravel = true
+  -- Travel.lua breaking: noted once, and the arrow points straight for the rest of the session
+  aimAt("Lakeshire", 0, lake[3] + 50, lake[4])
+  local guide = TV.Guide
+  TV.Guide = function() error("a broken guide") end
+  c.env.QUESTBANK_DEV = false
+  look()
+  c.env.QUESTBANK_DEV = true
+  TV.Guide = guide
+  look()
+  assert(TV.broken and not F.step:IsShown() and F.dist:GetText():find("yards", 1, true) and c.env.QuestBankDB.errors[1].msg:find("a broken guide", 1, true),
+    "the guide broke: straight at it, the error kept: " .. says())
+  TV.broken = nil
+  set.arrowPin, set.arrowMode = nil, "route"
+  A:Set(false)
+
+  -- the Horde, on a client without the tutorial arrow: the old quest arrow, no glow; at the tower, the zeppelin
+  local h = grosh
+  h.noAtlas = { npe_arrowup = true }
+  h.QB.Arrow:Set(true)
+  local HF = h.env.QuestBankArrow
+  assert(HF.arrow.__tex == h.QB.Data.TEX.questArrow and not HF.arrow.__atlas and not HF.glow:IsShown(), "no atlas: the quest arrow")
+  h.facing = 0
+  local uc = hubOf(h, "Undercity")
+  h.QB:Settings().arrowMode, h.QB:Settings().arrowPin = "pin", { name = "Undercity", c = uc[2], wx = uc[3], wy = uc[4] }
+  HF.__scripts.OnUpdate(HF, 1)
+  assert(HF.step:GetText() == "Zeppelin to Undercity" and HF.dist:GetText() == "Wait for the zeppelin" and HF.act.__tex == h.QB.Data.TEX.zeppelin,
+    "at the tower: " .. HF.step:GetText() .. " / " .. HF.dist:GetText())
+  for _, pr in ipairs(checkLayout(HF, "Arrow: the zeppelin (Horde)")) do problems[#problems + 1] = pr end
+  layouts[#layouts + 1] = dumpLayout(HF, "Arrow: the zeppelin (Horde)")
+  h.QB.Arrow:Set(false)
+  h.QB:Settings().arrowPin, h.QB:Settings().arrowMode, h.noAtlas = nil, "route", nil
 end
 
 ----------------------------------------------------------------------------

@@ -390,13 +390,32 @@ function API.BindName()
   return GetBindLocation and GetBindLocation() or ""
 end
 
--- the hearthstone is ready within a minute and a half
-function API.HearthReady()
+-- seconds until the hearthstone is ready (0: it is), with its cooldown's start and duration; nil when the client
+-- won't say (no answer, an error, a secret value)
+function API.HearthLeft()
   local f = (C_Container and C_Container.GetItemCooldown) or GetItemCooldown
-  if not f then return true end
+  if type(f) ~= "function" then return nil end
   local ok, start, duration = pcall(f, 6948)
-  if not ok or not start or start == 0 or not duration then return true end
-  return (start + duration - GetTime()) < 90
+  if not ok then return nil end
+  start, duration = QB.Plain(start), QB.Plain(duration)
+  if type(start) ~= "number" or type(duration) ~= "number" then return nil end
+  if start == 0 then return 0, 0, 0 end
+  return math.max(0, start + duration - GetTime()), start, duration
+end
+
+-- a hearthstone in your bags; false when the client won't say
+function API.HasHearth()
+  local f = (C_Item and C_Item.GetItemCount) or GetItemCount
+  if type(f) ~= "function" then return false end
+  local ok, n = pcall(f, 6948)
+  n = ok and QB.Plain(n) or nil
+  return type(n) == "number" and n > 0
+end
+
+-- the hearthstone is ready within a minute and a half, or its cooldown can't be read (the planner counts on it then)
+function API.HearthReady()
+  local left = API.HearthLeft()
+  return left == nil or left < 90
 end
 
 function API.KnowsRiding()
@@ -500,6 +519,28 @@ function API.WaypointLink(m, x, y)
   return string.format("|cffffff00|Hworldmap:%d:%d:%d|h[Map pin]|h|r", m, at(x), at(y))
 end
 
+-- a spot on a map with no place in the world (an instance's own map): its dungeon's entrance, by the map or the maps
+-- it sits in (two levels up at most), as a place and the pin's name. Nil when QuestBank knows no way in
+local function entranceOf(m)
+  local id = m
+  for level = 0, 2 do
+    if type(id) ~= "number" then return nil end
+    local key = "d" .. id
+    for _, cat in ipairs(D.CAT) do
+      if cat.key == key then
+        local e = cat.entrance
+        local p = e and QB.Model.World(e.m, e.x, e.y)
+        if p then return p, cat.name .. " entrance" end
+        return nil
+      end
+    end
+    if level == 2 or not (C_Map and C_Map.GetMapInfo) then return nil end
+    local ok, info = pcall(C_Map.GetMapInfo, id)
+    info = ok and QB.Plain(info) or nil
+    id = type(info) == "table" and QB.Plain(info.parentMapID) or nil
+  end
+end
+
 -- quiet: the run's own, as the next stop changes (Pins.lua): only TomTom hears of it, QuestBank's arrow follows the
 -- route by itself. place: where the arrow points (worked out from m, x, y when not given); false: the route's own, the
 -- arrow stays on what it points at, if it is up
@@ -507,11 +548,30 @@ function API.SetWaypoint(m, x, y, title, quiet, place)
   local tomtom = API.TomTom()
   local shown = false
   if not quiet and QB.Arrow then
-    local p = place or (QB.Model and QB.Model.World and QB.Model.World(m, x, y))
+    -- the arrow shown for the last click goes: this click shows its own, or none (only a walk left beside TomTom's
+    -- arrow, no way there), never the old place
+    if place ~= false then QB.Arrow:EndTemp() end
+    local p, pin = place or (QB.Model and QB.Model.World and QB.Model.World(m, x, y)), title
+    if not p and place == nil then
+      p, pin = entranceOf(m)
+      if not p then
+        -- nowhere QuestBank can lead (an island, an instance with no known way in): said so, never the old target
+        local set = QB:Settings()
+        set.arrowPin = { name = title, none = true }
+        if set.arrow then set.arrowMode = "pin" end
+        QB.Arrow.Invalidate()
+      end
+    end
     if p then
-      if place ~= false then QB.Arrow:Pin(title, p.c, p.wx, p.wy) end
-      -- the arrow switched off: shown for this waypoint, until you get there (TomTom's own arrow does that job)
-      if not tomtom then shown = QB.Arrow:ShowFor(title, p.c, p.wx, p.wy) end
+      if place ~= false then QB.Arrow:Pin(pin, p.c, p.wx, p.wy) end
+      -- the arrow switched off: shown for this waypoint, until you get there (TomTom's own arrow does that job, but
+      -- only as the crow flies: with TomTom QuestBank's shows the way while there is more to it than the last walk)
+      if not tomtom then
+        shown = QB.Arrow:ShowFor(pin, p.c, p.wx, p.wy)
+      elseif QB.Travel and QB:Settings().arrowTravel ~= false then
+        local plan = QB.Travel.PlanTo(p, "pin")
+        if plan and #plan.legs > 1 and QB.Arrow:ShowFor(pin, p.c, p.wx, p.wy) then QB.Arrow.temp.travel = true end
+      end
     end
   end
   if not (m and x and y) or m == 0 then return false end
@@ -888,6 +948,17 @@ function QB.Plain(v)
   return v
 end
 
+-- the game's own art where the client has the atlas, QuestBank's file otherwise. True when it was the atlas. The
+-- texture's corners are reset first: set after an atlas they could replace the atlas's own part of its file
+function QB.Art(tex, atlas, file)
+  local ok, info = false, nil
+  if atlas and C_Texture and type(C_Texture.GetAtlasInfo) == "function" then ok, info = pcall(C_Texture.GetAtlasInfo, atlas) end
+  local use = ok and info ~= nil and tex.SetAtlas ~= nil
+  tex:SetTexCoord(0, 1, 0, 1)
+  if use then tex:SetAtlas(atlas, false) else tex:SetTexture(file) end
+  return use
+end
+
 -- what the game hands addons for a quest's XP on this client, the last dozen times (window and hand-in): the
 -- uploads show whether the number is there, hidden (a secret value) or missing, which decides how the catalog learns
 function QB.NoteXPSeen(how, id, xp)
@@ -1012,6 +1083,9 @@ local DEFAULTS = {
   -- dungeons when quietInstance. campBar = false hides the bar
   remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true }, campBar = true,
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
+  -- the arrow guides you step by step, by the flight paths you know, boats and the hearthstone (Travel.lua); off, it
+  -- points straight at its target. arrowHearth: the hearthstone may be one of the steps
+  arrowTravel = true, arrowHearth = true,
   noteGame = true, -- note the spells and item tooltips the Forever client shows, for foreverrank.com (Game.lua)
   -- quest icons on each zone's world map (QuestMap.lua, Forever only): all of them, then where quests you can take
   -- start (!), where finished ones are handed in (?), and the objectives and quest-item drops of the quests in your log
@@ -1093,7 +1167,7 @@ function QB:MergeCharKeys()
   if not (db and key and plain) then return end
   local other = (UnitName("player") or "?") .. "-" .. plain
   if other == key then return end
-  for _, name in ipairs({ "plans", "chars", "held", "bank" }) do
+  for _, name in ipairs({ "plans", "chars", "held", "bank", "travel" }) do
     local t = db[name]
     if type(t) == "table" and t[other] ~= nil then
       if t[key] == nil then
@@ -2232,6 +2306,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Glow then QB.Glow:Init() end
     if QB.Walk then QB.Walk:Init() end
     if QB.Camp then QB.Camp:Init() end
+    if QB.Travel then QB.Travel:Init() end
     if QB.Arrow then QB.Arrow:Init() end
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
@@ -2353,10 +2428,17 @@ slash = function(msg)
     elseif want == "on" or want == "off" then
       QB.Arrow:Set(want == "on")
       QB:Print(want == "on" and ("Direction arrow on: it points at " .. QB.Arrow.MODES[QB.Arrow.Mode()] .. ".") or "Direction arrow off.")
+    elseif want == "travel" or want == "straight" then
+      QB:Settings().arrowTravel = want == "travel"
+      QB:Print(want == "travel" and "The arrow shows the way step by step: the flight paths you know, boats, zeppelins, the tram and your hearthstone. /qb way lists the steps."
+        or "The arrow points straight at what it points at. /qb arrow travel shows the way step by step again.")
     else
       QB.Arrow:Set(not QB:Settings().arrow)
       QB:Print(QB:Settings().arrow and ("Direction arrow on: it points at " .. QB.Arrow.MODES[QB.Arrow.Mode()] .. ". Right-click it to choose: the route, the nearest hand-in or pick-up, or where you last clicked; /qb arrow route, handin, pickup or pin does the same. Drag it where you like.") or "Direction arrow off.")
     end
+  elseif cmd == "way" and QB.Travel then
+    -- the steps to what the arrow points at, the flight paths QuestBank counts on, and the hearthstone
+    for _, line in ipairs(QB.Travel.WayLines()) do QB:Print(line) end
   elseif cmd == "discoveries" then
     local nq, nn, nc = QB.Discover.Count()
     local function n(k, one, many) return k == 1 and ("1 " .. one) or (k .. " " .. many) end

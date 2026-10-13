@@ -3470,6 +3470,14 @@ function UI:RefreshRouteView(v)
     else
       label = label .. string.format(", about %d min", math.max(1, math.floor(leg.travel + 0.5)))
       if kind == "hearth" and leg.inn then label = label .. " to " .. QB.Data.HUB[r.fac][leg.inn][1] end
+      -- the next stop from where you stand: the way the arrow shows it, by the flight paths you know (Travel.lua)
+      local plan = i == 1 and mode == "now" and QB.Arrow.Guided() and QB.Travel.PlanTo(s, "route")
+      if plan then
+        label = QB.Travel.Summary(plan)
+        local first
+        for _, tl in ipairs(plan.legs) do if tl.kind ~= "walk" then first = tl break end end
+        l.travelIcon:SetTexture(first and first.icon.file or travelIcon("foot"))
+      end
     end
     l.travel:SetText(label)
     local here = mapID and mapID == s.m and "  |cff6cdc74you are here|r" or ""

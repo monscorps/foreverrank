@@ -1,5 +1,5 @@
-"""Extract quest chains, quest givers, spawn points and item starts from the CMaNGOS Classic
-database (github.com/cmangos/classic-db, GPL-3.0) for QuestBank.
+"""Extract quest chains, quest givers, spawn points, item starts, innkeepers and starting spots from the
+CMaNGOS Classic database (github.com/cmangos/classic-db, GPL-3.0) for QuestBank.
 
 Wowhead Forever lacks many prerequisites (Morganth needs Looking Further, and starts from the Old
 Lion Statue). The Classic server database has them all: PrevQuestId, NextQuestId, ExclusiveGroup,
@@ -22,7 +22,9 @@ WANT = {"quest_template", "creature_questrelation", "creature_involvedrelation",
         # for objectives.py: spawns that stand for one of several entries, spawns and quests that only come with a
         # game event, and the quests' own POI outlines
         "creature_spawn_entry", "gameobject_spawn_entry", "game_event_creature", "game_event_gameobject",
-        "game_event_quest", "quest_poi", "quest_poi_points"}
+        "game_event_quest", "quest_poi", "quest_poi_points",
+        # for gen_data.py's D.BIND: where each race starts, which is where a new character's hearthstone is bound
+        "playercreateinfo"}
 FIELD = re.compile(r"'((?:[^'\\]|\\.)*)'|(NULL)|(-?[\d.eE+-]+)")
 
 
@@ -149,12 +151,25 @@ def main():
             i = r[idx["id"]]
             if i in wanted[kind] and r[idx["map"]] in (0, 1):
                 spawns[kind].setdefault(i, []).append([r[idx["map"]], round(r[idx["position_x"]], 1), round(r[idx["position_y"]], 1)])
+    # where a hearthstone can land: every innkeeper (NpcFlags 128, SubName Innkeeper: eight mount sellers and Bashana
+    # Runetotem carry the flag too, away from the inns of Darnassus and Thunder Bluff) that stands at one place on the
+    # two continents, and each race's starting spot (one row per class, all at the same place)
+    stands = spawn_points(data, "npc")
+    innkeepers = []
+    for idx, r in data["creature_template"]:
+        e = r[idx["entry"]]
+        if (r[idx["npcflags"]] or 0) & 128 and r[idx["subname"]] == "Innkeeper" and len(stands.get(e, ())) == 1:
+            m, x, y = stands[e][0]
+            innkeepers.append([e, r[idx["name"]], m, round(x, 1), round(y, 1)])
+    starts = {}
+    for idx, r in data["playercreateinfo"]:
+        starts.setdefault(r[idx["race"]], [r[idx["race"]], r[idx["map"]], round(r[idx["position_x"]], 1), round(r[idx["position_y"]], 1)])
     out = {"quests": quests, "items": items, "itemnames": itemnames,
            "names": {k: {i: names[k].get(i) for i in wanted[k]} for k in names},
-           "spawns": spawns}
+           "spawns": spawns, "innkeepers": sorted(innkeepers), "starts": [starts[k] for k in sorted(starts)]}
     json.dump(out, open(OUT, "w"), separators=(",", ":"))
-    print("wrote %s: %d quests, %d item starts, %d NPC and %d object spawn sets" % (
-        OUT, len(quests), len(items), len(spawns["npc"]), len(spawns["object"])))
+    print("wrote %s: %d quests, %d item starts, %d NPC and %d object spawn sets, %d innkeepers, %d starting spots" % (
+        OUT, len(quests), len(items), len(spawns["npc"]), len(spawns["object"]), len(innkeepers), len(starts)))
     for qid in (249, 248, 94, 19, 219, 166, 155, 1200):
         q = quests.get(qid)
         print(qid, q and {k: q[k] for k in ("title", "min", "level", "prev", "next", "excl", "chain", "objectives", "starts", "ends")})

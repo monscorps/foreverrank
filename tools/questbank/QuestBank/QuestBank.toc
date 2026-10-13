@@ -21,6 +21,7 @@ Glow.lua
 Walk.lua
 Camp.lua
 Model.lua
+Travel.lua
 
 Pins.lua
 QuestMap.lua

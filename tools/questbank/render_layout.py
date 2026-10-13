@@ -29,6 +29,15 @@ def tex_style(it):
         if it.get("desat"): tint = "filter:grayscale(1);"
         return "background:url(%s) center/cover;%s" % (url, tint), None
     if isinstance(raw, str) and raw.startswith("atlas:"):
+        name = raw[6:].lower()
+        rot = ("transform:rotate(%.3frad);" % -it["rot"]) if it.get("rot") else ""
+        if os.path.exists(os.path.join(LOCAL_TEX, "atlas_%s.png" % name)):
+            c = it.get("c")
+            if it.get("desat") and c:
+                # the game greys the art and multiplies by the tint: a tinted silhouette is close enough to judge
+                col = rgba(c, 1)
+                return ("background:%s;-webkit-mask:url(tex/atlas_%s.png) center/100%% 100%% no-repeat;mask:url(tex/atlas_%s.png) center/100%% 100%% no-repeat;%s" % (col, name, name, rot)), None
+            return "background:url(tex/atlas_%s.png) center/100%% 100%% no-repeat;%s" % (name, rot), None
         return "background:rgba(242,207,107,.85);border-radius:50%;", raw[6:]
     if path and path.endswith(".tga"):
         pass
