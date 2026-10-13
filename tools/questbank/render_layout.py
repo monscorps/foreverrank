@@ -13,8 +13,14 @@ def rgba(c, a=1.0, default="rgba(0,0,0,0)"):
     al = c[3] if len(c) > 3 and c[3] is not None else a
     return "rgba(%d,%d,%d,%.2f)" % (r, g, b, al * (a if len(c) <= 3 or c[3] is None else 1))
 
+LOCAL_TEX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "research", "qbrender", "tex")
+
 def tex_style(it):
     raw = it.get("raw")
+    # client art fetched once as PNG (research/qbrender/tex/<file id>.png): the dungeon floors, covers and portraits
+    if isinstance(raw, (int, float)) and os.path.exists(os.path.join(LOCAL_TEX, "%d.png" % int(raw))):
+        round = "border-radius:50%;" if it.get("mask") else ""
+        return "background:url(tex/%d.png) center/100%% 100%%;%s" % (int(raw), round), None
     path = BY_ID.get(int(raw)) if isinstance(raw, (int, float)) else (raw if isinstance(raw, str) else None)
     if path and path.startswith("interface/icons/"):
         name = path[len("interface/icons/"):-4]
@@ -30,6 +36,8 @@ def tex_style(it):
     label = (path or str(raw or it.get("tex") or "")).split("/")[-1].replace(".blp", "")
     if it.get("tex") == "color" or (path and path.endswith("white8x8.blp")) or (isinstance(raw, str) and "WHITE8x8" in raw):
         return "background:%s;" % rgba(c, 1), None
+    if isinstance(raw, str) and raw.endswith("art\\ring"):
+        return "border:2px solid %s;border-radius:50%%;" % rgba(c or (1, 0.82, 0.3), 1), None
     if isinstance(raw, str) and raw.startswith("Interface\\AddOns\\QuestBank\\art\\"):
         return "background:radial-gradient(%s,transparent 70%%);" % rgba(c or (1, 0.82, 0.3), 0.8), None
     return "background:%s;outline:1px dashed rgba(255,255,255,.12);" % rgba(c or (0.3, 0.3, 0.35), 0.35), label

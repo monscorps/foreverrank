@@ -9,12 +9,15 @@ local DM = {}
 QB.DMap = DM
 
 local TILE, COLS, ROWS = 256, 4, 3
-local SCALE = 0.56               -- the 1002 x 668 floor art at 561 x 374
-local W, H = 980, 640
-local LIST_W = 300
+-- sizes: set when the journal is built into its page of the QuestBank window (build)
+local SCALE = 0.5                -- the 1002 x 668 floor art, scaled to fit the page
+local W, H = 828, 468
+local LIST_W = 220
+local COVER_H, BODY_Y = 70, 78
 local ROW_H = 68
 local MAX_ITEMS = 12
 
+local ART = "Interface\\AddOns\\QuestBank\\art\\"
 local plain = QB.Plain
 local DARK = { 0.07, 0.06, 0.05 }
 local GOLD = { 1, 0.82, 0.3 }
@@ -162,35 +165,22 @@ local function pill(parent, label, w)
   return b
 end
 
-local function build()
-  local f = CreateFrame("Frame", "QuestBankDungeonMap", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-  f:SetSize(W, H)
-  f:SetPoint("CENTER")
-  f:SetFrameStrata("HIGH")
-  f:SetMovable(true)
-  f:EnableMouse(true)
-  f:RegisterForDrag("LeftButton")
-  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-  f:SetClampedToScreen(true)
-  if f.SetBackdrop then
-    f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", tile = false, edgeSize = 24,
-                    insets = { left = 6, right = 6, top = 6, bottom = 6 } })
-    f:SetBackdropColor(0.05, 0.045, 0.04, 0.96)
-  end
-  f.title = fs(f, "GameFontNormalLarge", 16, GOLD, 400, "CENTER")
-  f.title:SetPoint("TOP", 0, -14)
-  f.title:SetText("Dungeon Journal")
+local function build(page, pw, ph)
+  -- the page's size decides the rest: the list on the left, the floor art as large as the detail allows
+  W, H = pw or W, ph or H
+  local detailW = W - LIST_W - 8 - 4
+  local bodyH = H - BODY_Y - 12
+  SCALE = math.min((detailW - 24) / 1002, (bodyH - 46) / 668)
+  local f = CreateFrame("Frame", "QuestBankDungeonMap", page)
+  f:SetAllPoints(page)
   f.sub = fs(f, "GameFontDisableSmall", 10, SOFT, 200, "RIGHT")
-  f.sub:SetPoint("TOPRIGHT", -40, -18)
-  f.sub:SetText("Forever beta data")
-  f.close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  f.close:SetPoint("TOPRIGHT", -4, -4)
+  f.sub:SetPoint("BOTTOMRIGHT", -8, -2)
+  f.sub:SetText("")
 
   -- search
   f.search = CreateFrame("EditBox", nil, f, BackdropTemplateMixin and "BackdropTemplate" or nil)
   f.search:SetSize(LIST_W - 8, 22)
-  f.search:SetPoint("TOPLEFT", 16, -40)
+  f.search:SetPoint("TOPLEFT", 4, -4)
   f.search:SetFontObject(ChatFontNormal)
   f.search:SetAutoFocus(false)
   f.search:SetMaxLetters(40)
@@ -208,8 +198,8 @@ local function build()
 
   -- the list of dungeons
   f.listPanel = panel(f, 0.6)
-  f.listPanel:SetPoint("TOPLEFT", 12, -66)
-  f.listPanel:SetPoint("BOTTOMLEFT", 12, 12)
+  f.listPanel:SetPoint("TOPLEFT", 0, -30)
+  f.listPanel:SetPoint("BOTTOMLEFT", 0, 0)
   f.listPanel:SetWidth(LIST_W)
   f.listScroll = CreateFrame("ScrollFrame", nil, f.listPanel)
   f.listScroll:SetPoint("TOPLEFT", 4, -4)
@@ -227,31 +217,31 @@ local function build()
 
   -- the detail
   f.detail = panel(f, 0.5)
-  f.detail:SetPoint("TOPLEFT", f.listPanel, "TOPRIGHT", 8, 0)
-  f.detail:SetPoint("BOTTOMRIGHT", -12, 12)
+  f.detail:SetPoint("TOPLEFT", f, "TOPLEFT", LIST_W + 8, 0)
+  f.detail:SetPoint("BOTTOMRIGHT", 0, 0)
   f.cover = f.detail:CreateTexture(nil, "BACKGROUND")
   f.cover:SetPoint("TOPLEFT", 3, -3)
   f.cover:SetPoint("TOPRIGHT", -3, -3)
-  f.cover:SetHeight(110)
+  f.cover:SetHeight(COVER_H)
   f.coverShade = f.detail:CreateTexture(nil, "BORDER")
   f.coverShade:SetAllPoints(f.cover)
   f.coverShade:SetColorTexture(0, 0, 0, 0.45)
-  f.name = fs(f.detail, "GameFontNormalHuge", 20, GOLD, 420)
-  f.name:SetPoint("TOPLEFT", 18, -16)
-  f.level = fs(f.detail, "GameFontNormal", 12, INK, 420)
-  f.level:SetPoint("TOPLEFT", 18, -44)
-  f.where = fs(f.detail, "GameFontDisableSmall", 11, SOFT, 420)
-  f.where:SetPoint("TOPLEFT", 18, -62)
+  f.name = fs(f.detail, "GameFontNormalHuge", 20, GOLD, detailW - 300)
+  f.name:SetPoint("TOPLEFT", 14, -12)
+  f.level = fs(f.detail, "GameFontNormal", 12, INK, detailW - 300)
+  f.level:SetPoint("TOPLEFT", 14, -38)
+  f.where = fs(f.detail, "GameFontDisableSmall", 11, SOFT, detailW - 300)
+  f.where:SetPoint("TOPLEFT", 14, -54)
   f.tabs = {}
   for i, name in ipairs({ "Map", "Bosses", "Quests" }) do
-    local b = pill(f.detail, name, 90)
-    b:SetPoint("TOPRIGHT", -14 - (3 - i) * 96, -78)
+    local b = pill(f.detail, name, 84)
+    b:SetPoint("TOPRIGHT", -10 - (3 - i) * 88, -12)
     b.tab = name:lower()
     b:SetScript("OnClick", function(self) DM.ShowTab(self.tab) end)
     f.tabs[i] = b
   end
   f.body = CreateFrame("Frame", nil, f.detail)
-  f.body:SetPoint("TOPLEFT", 8, -120)
+  f.body:SetPoint("TOPLEFT", 8, -BODY_Y)
   f.body:SetPoint("BOTTOMRIGHT", -8, 8)
 
   -- map tab
@@ -268,7 +258,8 @@ local function build()
       f.tiles[#f.tiles + 1] = t
     end
   end
-  f.noArt = fs(f.map, "GameFontNormal", 13, SOFT, 400, "CENTER")
+  f.pins = {}
+  f.noArt = fs(f.map, "GameFontNormal", 13, SOFT, math.min(400, 1002 * SCALE - 20), "CENTER")
   f.noArt:SetPoint("CENTER")
   f.noArt:SetText("The client has no map art for this dungeon.")
   f.floors = {}
@@ -278,14 +269,24 @@ local function build()
     local e = f.cat and f.cat.entrance
     if e then QB.API.SetWaypoint(e.m, e.x, e.y, f.cat.name .. " entrance") end
   end, "dungeon map"))
-  f.mapNote = fs(f.mapTab, "GameFontDisableSmall", 10, SOFT, 380, "RIGHT")
-  f.mapNote:SetPoint("BOTTOMRIGHT", -8, 10)
-  f.mapNote:SetText("Blizzard's floor art. The game hides your position inside.")
+  f.floorLabel = fs(f.mapTab, "GameFontNormalSmall", 11, SOFT, 40, "RIGHT")
+  f.floorLabel:SetPoint("BOTTOMLEFT", 160, 13)
+  f.floorLabel:SetText("Floor")
+  -- the art's own tooltip: what the pins are, and why your own dot isn't there
+  f.map:EnableMouse(true)
+  f.map:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT")
+    GameTooltip:SetText(f.cat and f.cat.name or "Dungeon map", GOLD[1], GOLD[2], GOLD[3])
+    GameTooltip:AddLine("Each portrait is a boss where it stands. Click one for its loot.", 1, 1, 1, true)
+    GameTooltip:AddLine("The game gives no positions inside dungeons, so you and your party aren't on it.", 0.6, 0.6, 0.6, true)
+    GameTooltip:Show()
+  end)
+  f.map:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
   -- bosses tab
   f.bossTab = CreateFrame("Frame", nil, f.body); f.bossTab:SetAllPoints()
   f.bossList = panel(f.bossTab, 0.5)
-  f.bossList:SetPoint("TOPLEFT", 0, 0); f.bossList:SetPoint("BOTTOMLEFT", 0, 0); f.bossList:SetWidth(236)
+  f.bossList:SetPoint("TOPLEFT", 0, 0); f.bossList:SetPoint("BOTTOMLEFT", 0, 0); f.bossList:SetWidth(200)
   f.bossHead = fs(f.bossList, "GameFontNormal", 12, GOLD, 200)
   f.bossHead:SetPoint("TOPLEFT", 10, -8)
   f.bossHead:SetText("Bosses")
@@ -295,11 +296,12 @@ local function build()
   f.lootFace = f.lootPanel:CreateTexture(nil, "ARTWORK")
   f.lootFace:SetSize(64, 64)
   f.lootFace:SetPoint("TOPLEFT", 12, -10)
-  f.lootName = fs(f.lootPanel, "GameFontNormalLarge", 16, GOLD, 300)
+  local lootW = detailW - 16 - 208
+  f.lootName = fs(f.lootPanel, "GameFontNormalLarge", 16, GOLD, lootW - 96)
   f.lootName:SetPoint("TOPLEFT", 86, -16)
-  f.lootSub = fs(f.lootPanel, "GameFontDisableSmall", 11, SOFT, 300)
+  f.lootSub = fs(f.lootPanel, "GameFontDisableSmall", 11, SOFT, lootW - 96)
   f.lootSub:SetPoint("TOPLEFT", 86, -40)
-  f.lootHead = fs(f.lootPanel, "GameFontNormal", 12, INK, 300)
+  f.lootHead = fs(f.lootPanel, "GameFontNormal", 12, INK, lootW - 24)
   f.lootHead:SetPoint("TOPLEFT", 12, -86)
   f.lootRows = {}
 
@@ -311,8 +313,7 @@ local function build()
 
   f:SetScript("OnEvent", QB.Safe(function(_, event) if event == "GET_ITEM_INFO_RECEIVED" and f:IsShown() and f.boss then DM.ShowBoss(f.boss) end end, "dungeon journal"))
   pcall(f.RegisterEvent, f, "GET_ITEM_INFO_RECEIVED")
-  if UISpecialFrames then table.insert(UISpecialFrames, "QuestBankDungeonMap") end
-  f:Hide()
+  f.lootW, f.bodyW = lootW, detailW - 16
   return f
 end
 
@@ -337,12 +338,12 @@ local function listRow(i)
   r.hi = r:CreateTexture(nil, "HIGHLIGHT")
   r.hi:SetAllPoints()
   r.hi:SetColorTexture(1, 0.82, 0.3, 0.08)
-  r.name = fs(r, "GameFontNormalLarge", 15, GOLD, 200)
+  r.name = fs(r, "GameFontNormalLarge", 15, GOLD, LIST_W - 28)
   r.name:SetPoint("TOPLEFT", 10, -8)
-  r.lv = fs(r, "GameFontHighlightSmall", 10, INK, 120)
+  r.lv = fs(r, "GameFontHighlightSmall", 10, INK, 80)
   r.lv:SetPoint("BOTTOMLEFT", 10, 7)
   r.quests = fs(r, "GameFontHighlightSmall", 10, INK, 90, "RIGHT")
-  r.quests:SetPoint("TOPRIGHT", -8, -8)
+  r.quests:SetPoint("BOTTOMRIGHT", -8, 7)
   r:SetScript("OnClick", function(self) DM.Open(self.cat) end)
   f.rows[i] = r
   return r
@@ -393,6 +394,113 @@ function DM.ShowFloor(n)
   end
   f.noArt:SetShown(not floor)
   for i, b in ipairs(f.floors) do b:SetEnabled(i ~= n); b:SetOn(i == n) end
+  DM.DrawPins()
+end
+
+-- a boss's face: the client's own portrait of its model where the boss has one (b.d), else the old Encounter
+-- Journal's art (b.p, a 128 x 64 picture: the middle is the face), else the journal's default face
+local function face(t, b, d, preferArt)
+  if b.d and not (preferArt and b.p) and SetPortraitTextureFromCreatureDisplayID and pcall(SetPortraitTextureFromCreatureDisplayID, t, b.d) then
+    t:SetTexCoord(0, 1, 0, 1)
+    return
+  end
+  t:SetTexture(b.p or (d and d.defaultFace) or nil)
+  t:SetTexCoord(0.2, 0.8, 0.02, 0.98)
+end
+
+-- the bosses on the shown floor, as the old Encounter Journal drew them: a round portrait in a gold ring where the
+-- boss stands (boss_spots.py places them from the Classic database's spawns on the very same art). Click: the loot
+local PIN = 30
+local function pin(i)
+  local f = frame
+  local p = f.pins[i]
+  if p then return p end
+  p = CreateFrame("Button", nil, f.map)
+  p:SetSize(PIN, PIN)
+  p:SetFrameLevel(f.map:GetFrameLevel() + 5)
+  p.shadow = p:CreateTexture(nil, "BACKGROUND")
+  p.shadow:SetTexture(ART .. "glow")
+  p.shadow:SetVertexColor(0, 0, 0, 0.8)
+  p.shadow:SetPoint("CENTER")
+  p.shadow:SetSize(PIN + 16, PIN + 16)
+  p.face = p:CreateTexture(nil, "ARTWORK")
+  p.face:SetPoint("CENTER")
+  p.face:SetSize(PIN - 4, PIN - 4)
+  p.mask = p.CreateMaskTexture and p:CreateMaskTexture() or nil
+  if p.mask then
+    p.mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIONAL", "CLAMPTOBLACKADDITIONAL")
+    p.mask:SetAllPoints(p.face)
+    pcall(p.face.AddMaskTexture, p.face, p.mask)
+  end
+  p.ring = p:CreateTexture(nil, "OVERLAY")
+  p.ring:SetTexture(ART .. "ring")
+  p.ring:SetAllPoints()
+  p.hi = p:CreateTexture(nil, "HIGHLIGHT")
+  p.hi:SetTexture(ART .. "glow")
+  p.hi:SetVertexColor(1, 0.82, 0.3, 0.6)
+  p.hi:SetPoint("CENTER")
+  p.hi:SetSize(PIN + 14, PIN + 14)
+  p:SetScript("OnEnter", function(self)
+    local b = self.boss
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(b.n, GOLD[1], GOLD[2], GOLD[3])
+    local kind = b.k == "boss" and "Boss" or b.k == "rare" and "Rare" or "Trash"
+    GameTooltip:AddLine(kind .. (b.l and (" \194\183 level " .. b.l) or "") .. (b.w and (" \194\183 " .. b.w) or ""), 1, 1, 1)
+    GameTooltip:AddLine(#b.i > 0 and string.format("%d item%s of loot. Click to see them.", #b.i, #b.i == 1 and "" or "s") or "No loot recorded yet.", 0.6, 0.6, 0.6)
+    GameTooltip:Show()
+  end)
+  p:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  p:SetScript("OnClick", function(self) DM.ShowBoss(self.boss); DM.ShowTab("bosses") end)
+  f.pins[i] = p
+  return p
+end
+
+function DM.DrawPins()
+  local f = frame
+  local d, n = f.data, 0
+  local mw, mh = f.map:GetWidth(), f.map:GetHeight()
+  local at = {}
+  for _, b in ipairs(d and d.bosses or {}) do
+    if b.f == f.floor and b.x and b.y and b.k ~= "trash" then
+      n = n + 1
+      local p = pin(n)
+      p.boss = b
+      face(p.face, b, d)
+      local big = b.k == "boss"
+      p.size = big and PIN or PIN - 8
+      p:SetSize(p.size, p.size)
+      p.face:SetSize(p.size - 4, p.size - 4)
+      p.ring:SetVertexColor(big and 1 or 0.75, big and 0.82 or 0.75, big and 0.3 or 0.75, 1)
+      at[n] = { b.x * mw, b.y * mh, p.size }
+      p:Show()
+    end
+  end
+  -- bosses that stand close (Greenskin and Cookie on the ship) are pushed apart until their portraits only touch
+  for _ = 1, 60 do
+    local moved = false
+    for i = 1, n do
+      for j = i + 1, n do
+        local a, c = at[i], at[j]
+        local dx, dy = c[1] - a[1], c[2] - a[2]
+        local dist, need = math.sqrt(dx * dx + dy * dy), (a[3] + c[3]) / 2 + 1
+        if dist < need then
+          if dist < 0.01 then dx, dy, dist = 1, 0, 1 end
+          local push = (need - dist) / 2
+          a[1], a[2] = a[1] - dx / dist * push, a[2] - dy / dist * push
+          c[1], c[2] = c[1] + dx / dist * push, c[2] + dy / dist * push
+          moved = true
+        end
+      end
+    end
+    if not moved then break end
+  end
+  for i = 1, n do
+    local p, a = f.pins[i], at[i]
+    p:ClearAllPoints()
+    p:SetPoint("CENTER", f.map, "TOPLEFT", math.max(a[3] / 2, math.min(mw - a[3] / 2, a[1])), -math.max(a[3] / 2, math.min(mh - a[3] / 2, a[2])))
+  end
+  for i = n + 1, #f.pins do f.pins[i]:Hide() end
+  f.pinCount = n
 end
 
 local function row(list, i, parent, height, w)
@@ -418,8 +526,9 @@ end
 function DM.ShowBoss(b)
   local f = frame
   f.boss = b
+  if b.f and b.f ~= f.floor and f.data and f.data.floors[b.f] then DM.ShowFloor(b.f) end
   for _, r in ipairs(f.bossRows) do if r.hi then r.hi:SetAlpha(r.boss == b and 1 or 0) end end
-  f.lootFace:SetTexture(b.p or (f.data and f.data.defaultFace) or nil)
+  face(f.lootFace, b, f.data, true)
   f.lootName:SetText(b.n)
   f.lootSub:SetText((b.k == "boss" and "Boss" or b.k == "rare" and "Rare" or "Trash") .. (b.l and (" \194\183 level " .. b.l) or "") .. (b.w and (" \194\183 " .. b.w) or ""))
   f.lootHead:SetText(#b.i > 0 and string.format("Loot  |  %d items", #b.i) or "Loot  |  nothing recorded yet")
@@ -427,7 +536,7 @@ function DM.ShowBoss(b)
   for i = 1, math.min(MAX_ITEMS, #b.i) do
     local id = b.i[i]
     local it = DM.Item(id)
-    local r = row(f.lootRows, i, f.lootPanel, 38, 360)
+    local r = row(f.lootRows, i, f.lootPanel, 38, f.lootW - 20)
     r:ClearAllPoints()
     r:SetPoint("TOPLEFT", 10, y)
     r.id = id
@@ -435,7 +544,10 @@ function DM.ShowBoss(b)
     local qc = QUALITY[it.q] or QUALITY[1]
     r.text:SetText(it.name)
     r.text:SetTextColor(qc[1], qc[2], qc[3])
-    r.sub:SetText(table.concat({ it.slot, it.kind }, ", "):gsub("^, ", ""))
+    local parts = {}
+    if it.slot then parts[#parts + 1] = it.slot end
+    if it.kind and it.kind ~= it.slot then parts[#parts + 1] = it.kind end
+    r.sub:SetText(table.concat(parts, ", "))
     r:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
       if GameTooltip.SetItemByID then pcall(GameTooltip.SetItemByID, GameTooltip, self.id) else GameTooltip:SetText(DM.Item(self.id).name) end
@@ -457,8 +569,29 @@ function DM.ShowTab(tab)
   for _, b in ipairs(f.tabs) do b:SetOn(b.tab == tab) end
 end
 
+-- the journal is a page of the QuestBank window (UI.lua, page 7): built the first time the page shows, to its size
+function DM.Attach(page, w, h)
+  frame = frame or build(page, w, h)
+  return frame
+end
+
+-- the page's refresh: a dungeon the first time, else the list's quest counts
+function DM.Refresh()
+  if not frame then return end
+  if frame.cat then DM.FillList() else
+    local list = DM.List()
+    if list[1] then DM.Fill(list[1]) end
+  end
+end
+
+-- open the journal's page on a dungeon (and a tab: "map", "bosses" or "quests")
 function DM.Open(cat, tab)
-  frame = frame or build()
+  if QB.UI and QB.UI.Open then QB.UI:Open(7) end
+  if not frame then return nil end
+  return DM.Fill(cat, tab)
+end
+
+function DM.Fill(cat, tab)
   local f = frame
   local d = DM.Data(cat.key) or { floors = {}, bosses = {} }
   f.cat, f.data = cat, d
@@ -471,24 +604,25 @@ function DM.Open(cat, tab)
   for i = 1, math.max(#d.floors, #f.floors) do
     local b = f.floors[i]
     if not b and i <= #d.floors then
-      b = pill(f.mapTab, "Floor " .. i, 70)
-      b:SetPoint("BOTTOM", f.mapTab, "BOTTOM", -140 + (i - 1) * 74, 8)
+      b = pill(f.mapTab, tostring(i), 34)
+      b:SetPoint("BOTTOMLEFT", f.mapTab, "BOTTOMLEFT", 206 + (i - 1) * 38, 8)
       b.n = i
       b:SetScript("OnClick", function(self) DM.ShowFloor(self.n) end)
       f.floors[i] = b
     end
     if b then b:SetShown(i <= #d.floors and #d.floors > 1) end
   end
+  f.floorLabel:SetShown(#d.floors > 1)
   DM.ShowFloor(1)
   f.entrance:SetShown(cat.entrance ~= nil)
   -- bosses
   local y = -28
   for i, b in ipairs(d.bosses) do
-    local r = row(f.bossRows, i, f.bossList, 40, 216)
+    local r = row(f.bossRows, i, f.bossList, 40, 184)
     r:ClearAllPoints()
     r:SetPoint("TOPLEFT", 10, y)
     r.boss = b
-    r.icon:SetTexture(b.p or d.defaultFace or nil)
+    face(r.icon, b, d)
     r.text:SetText(b.n)
     r.sub:SetText((b.k == "boss" and "" or (b.k == "rare" and "Rare" or "Trash")) .. ((b.w and (b.k == "boss" and b.w or (" \194\183 " .. b.w))) or ""))
     r:SetScript("OnClick", function(self) DM.ShowBoss(self.boss) end)
@@ -506,7 +640,7 @@ function DM.Open(cat, tab)
   f.questHead:SetText(#qs > 0 and string.format("%d quests", #qs) or "No quests in the catalog for this dungeon")
   y = -28
   for i, e in ipairs(qs) do
-    local r = row(f.questRows, i, f.questTab, 34, 600)
+    local r = row(f.questRows, i, f.questTab, 34, f.bodyW - 20)
     r:ClearAllPoints()
     r:SetPoint("TOPLEFT", 10, y)
     r.q = e.q
@@ -527,12 +661,14 @@ function DM.Open(cat, tab)
   for i = #qs + 1, #f.questRows do f.questRows[i]:Hide() end
   DM.ShowTab(tab or f.tab or (#d.bosses > 0 and "bosses" or "map"))
   DM.FillList()
-  f:Show()
   return f
 end
 
+local function onPage() return QB.UI and QB.UI.frame and QB.UI.frame:IsShown() and QB.UI.tab == 7 end
+
+-- the Map button on a dungeon's card: the journal on that dungeon, or back to where you were when it already is
 function DM.Toggle(cat)
-  if frame and frame:IsShown() and frame.cat == cat then frame:Hide() else DM.Open(cat) end
+  if onPage() and frame and frame.cat == cat then QB.UI:ShowTab(QB.UI.lastTab or 4) else DM.Open(cat) end
 end
 
 -- /qb map [name]: the journal, on a dungeon when one is named
@@ -542,7 +678,7 @@ function DM.Command(rest)
     if cat then DM.Open(cat) else QB:Print("No dungeon called '" .. rest .. "'. /qb map opens the journal.") end
     return
   end
+  if onPage() then QB.UI.frame:Hide(); return end
   local list = DM.List()
-  if frame and frame:IsShown() then frame:Hide(); return end
   if list[1] then DM.Open(frame and frame.cat or list[1]) end
 end

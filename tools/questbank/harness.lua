@@ -195,6 +195,8 @@ BASE.time = os.time
 BASE.debugprofilestop = function() return os.clock() * 1000 end
 BASE.GetCursorPosition = function() return 600, 500 end
 BASE.SetPortraitTexture = function() end
+-- the client draws a creature's portrait from its display id into a texture
+BASE.SetPortraitTextureFromCreatureDisplayID = function(t, id) t.__tex = "portrait:" .. tostring(id); t.__portrait = id end
 BASE.geterrorhandler = function() return error end
 BASE.UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { m = m, x = x, y = y } end }
 -- the game's super-tracking: QuestBank never touches it (SUPER_TRACKING_CHANGED and the waypoint's listeners would run
@@ -922,6 +924,7 @@ local function checkLayout(root, label)
       if not nested and overlap(a.r, b.r, 1.5) then
         local name = function(t) return t.button and ("[button " .. plain(t.o.__text or ""):sub(1, 20) .. "]") or plain(t.o.__text):sub(1, 40) end
         problems[#problems + 1] = string.format("%s: '%s' overlaps '%s'", label, name(a), name(b))
+        if os.getenv("QB_DEBUG_OVERLAP") then print("overlap", a.o.boss and a.o.boss.n, b.o.boss and b.o.boss.n, a.r.l, a.r.t, b.r.l, b.r.t) end
       end
     end
   end
@@ -953,6 +956,7 @@ local function dumpLayout(root, label)
               it.layer = o.__layer
               it.tex = o.__tex == "color" and "color" or (texNames[o.__tex] or (o.__tex and "icon") or nil)
               if o.__tex ~= "color" then it.raw = o.__tex end
+              if o.__mask then it.mask = true end
               if o.__atlas then it.atlas = o.__atlas end
               it.c = o.__color or o.__vertex
               it.tc, it.blend, it.desat = o.__tc, o.__blend, o.__desat or nil
@@ -1299,15 +1303,35 @@ do
   assert(#list >= 15, "the dungeons with a map or bosses: " .. #list)
   local dm = DM.Find("deadmines")
   assert(dm and dm.key == "d1581" and DM.Find("Scarlet").key == "d796" and DM.Find("nothing like it") == nil, "finding a dungeon by part of its name")
+  local U = QB.UI
+  U:ShowTab(4)
   local f = DM.Open(dm)
-  assert(f and f:IsShown() and env.QuestBankDungeonMap == f and f.name:GetText():find("The Deadmines", 1, true) and f.level:GetText():find("LV", 1, true), "the journal opens on the dungeon")
+  assert(f and env.QuestBankDungeonMap == f and f.name:GetText():find("The Deadmines", 1, true) and f.level:GetText():find("LV", 1, true), "the journal opens on the dungeon")
+  assert(U.frame:IsShown() and U.tab == 7 and U.views[7]:IsShown() and f:GetParent() == U.views[7], "inside the QuestBank window, on its own page")
+  assert(f.listPanel:GetWidth() + 8 + 1002 * 0.4 <= 812 and f.map:GetWidth() <= 812 - 228 and f.map:GetHeight() <= 452 - 78, "the floor art fits the page")
   assert(#f.tiles == 12 and f.tiles[1].__tex == D.d1581.floors[1][1] and f.tiles[12].__tex == D.d1581.floors[1][12] and not f.noArt:IsShown(), "floor 1's tiles")
   assert(f.floors[1] and f.floors[2] and f.floors[2]:IsShown() and not f.floors[1]:IsEnabled(), "two floor buttons, the shown one greyed")
   DM.ShowFloor(2)
   assert(f.tiles[1].__tex == D.d1581.floors[2][1] and f.floors[1]:IsEnabled() and not f.floors[2]:IsEnabled(), "floor 2")
+  -- the bosses on the floor: a portrait where each stands (VanCleef on his ship, two thirds across, halfway down)
+  local van
+  for i = 1, f.pinCount do if f.pins[i].boss.n == "Edwin VanCleef" then van = f.pins[i] end end
+  assert(van and van:IsShown(), "VanCleef's pin on floor 2")
+  local pt = van.__points[1]
+  assert(pt.relPoint == "TOPLEFT" and pt.rel == f.map and math.abs(pt.x - 0.606 * f.map:GetWidth()) < 16 and math.abs(pt.y + 0.459 * f.map:GetHeight()) < 16, "where he stands (give or take a nudge from a neighbour)")
+  assert(van.face.__portrait == 2029, "his pin is his own portrait, drawn by the client from his model")
+  van.__scripts.OnClick(van)
+  assert(f.boss.n == "Edwin VanCleef" and f.tab == "bosses" and f.lootName:GetText() == "Edwin VanCleef", "a pin opens the boss's loot")
+  DM.ShowFloor(1)
+  for i = 1, f.pinCount do assert(f.pins[i].boss.f == 1, "floor 1 shows floor 1's bosses only") end
+  assert(f.pinCount >= 2, "floor 1 has bosses: " .. f.pinCount)
+  DM.ShowBoss(van.boss)
+  assert(f.floor == 2, "picking a boss turns the map to its floor")
+  DM.ShowTab("map")
   local shownBosses = 0
   for _, r in ipairs(f.bossRows) do if r:IsShown() then shownBosses = shownBosses + 1 end end
   assert(shownBosses == #D.d1581.bosses and f.bossRows[1].text:GetText():find("Rhahk'Zor", 1, true), "a row a boss")
+  DM.ShowBoss(D.d1581.bosses[1])
   assert(f.lootHead:GetText():find("items", 1, true) and f.lootName:GetText():find("Rhahk'Zor", 1, true), "the first boss is shown with its item count")
   assert(f.lootRows[1] and f.lootRows[1]:IsShown() and f.lootRows[1].text:GetText() ~= "", "a loot row with a name")
   assert(f.rows[1] and f.rows[1]:IsShown() and f.rows[1].name:GetText() ~= "", "the dungeon list has rows")
@@ -1322,16 +1346,22 @@ do
   for _, r in ipairs(f.questRows) do if r:IsShown() then shownQ = shownQ + 1 end end
   assert(shownQ == #qs and f.entrance:IsShown(), "a row a quest, and the entrance button")
   DM.Toggle(dm)
-  assert(not f:IsShown(), "toggled away")
+  assert(U.tab == 4 and not U.views[7]:IsShown(), "toggled back to the Party page")
   local rc = DM.Find("Ragefire")
   DM.Open(rc)
-  assert(f:IsShown() and not f.floors[2]:IsShown() and not f.entrance:IsShown(), "Ragefire: one floor (no buttons), no entrance known")
+  assert(U.tab == 7 and not f.floors[2]:IsShown() and not f.entrance:IsShown(), "Ragefire: one floor (no buttons), no entrance known")
+  -- a loot row's second line: slot and kind, never a hole (a table.concat over a nil was a Lua error in 5.2)
+  for _, b in ipairs(QB.Data.DMAP.d2437.bosses) do DM.ShowBoss(b) end
   local chat0 = #owner.chat
   DM.Command("nothing like it")
   assert(#owner.chat == chat0 + 1 and owner.chat[#owner.chat]:find("No dungeon called", 1, true), "an unknown name is said")
   DM.Command("stockade")
   assert(f.cat.key == "d717", "/qb map stockade")
-  f:Hide()
+  DM.Command("")
+  assert(not U.frame:IsShown(), "/qb map on the journal's page closes the window")
+  DM.Command("")
+  assert(U.frame:IsShown() and U.tab == 7 and f.cat.key == "d717", "and opens it again where it was")
+  U:ShowTab(1)
 end
 -- 3.9.0: Target and Focus on the minimap (Minimap.lua): kept per character, set again after each loading screen
 do
@@ -2134,7 +2164,7 @@ local function hoverFirst(list, n)
   end
 end
 local function unhover() for _, o in ipairs(ALL) do o.__hover = nil end end
-for tab = 1, 6 do
+for tab = 1, 7 do
   UI:ShowTab(tab)
   QB.Model.Finish()
   UI:Refresh()
@@ -2155,7 +2185,8 @@ for tab = 1, 6 do
     local l = v3.legs.items[2]
     if l then l.pin.__hover = true; hoverFirst(l.rows) end
   end
-  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Available", "Hand-in Route", "Party", "Settings", "Now" })[tab] .. " (one row hovered)")
+  if tab == 7 then QB.DMap.Open(QB.DMap.Find("deadmines"), "map"); QB.DMap.ShowFloor(2); UI:Refresh() end
+  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Available", "Hand-in Route", "Party", "Settings", "Now", "Dungeon Journal" })[tab] .. " (one row hovered)")
   unhover()
 end
 

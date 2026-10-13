@@ -1028,11 +1028,25 @@ function UI:CreateContent(f)
     self:CreatePartyView(c),
     self:CreateSettingsView(c),
     self:CreatePrepView(c, true), -- Now: the three places worth going to from where you stand
+    self:CreateJournalView(c),    -- the Dungeon Journal (DungeonMap.lua), built the first time it shows
   }
 end
 
--- the sidebar: the pages in groups, each with its icon and a count where one helps; Dungeon Journal and the big
--- map are actions, not pages. UI.tabs[i] is page i's button, as the tab bar had them
+function UI:CreateJournalView(parent)
+  local v = CreateFrame("Frame", nil, parent)
+  v:SetPoint("TOPLEFT", 8, -8)
+  v:SetPoint("BOTTOMRIGHT", -8, 8)
+  v.Refresh = function()
+    if not QB.DMap then return end
+    -- the content frame is the window less the sidebar, the header and the margins
+    QB.DMap.Attach(v, W - SIDE - 8 - 14 - 16, H - 138 - 14 - 16)
+    QB.DMap.Refresh()
+  end
+  return v
+end
+
+-- the sidebar: the pages in groups, each with its icon and a count where one helps; the big map is an action, not a
+-- page. UI.tabs[i] is page i's button, as the tab bar had them
 local SIDEBAR = {
   { group = "Questing" },
   { tab = 6, name = "Now", icon = "sideNow" },
@@ -1042,7 +1056,7 @@ local SIDEBAR = {
   { group = "Together" },
   { tab = 4, name = "Party", icon = "sideParty", count = function() return QB.Sync and #(QB.Sync:Members() or {}) or 0 end },
   { group = "World" },
-  { act = function() if QB.DMap then QB.DMap.Command("") end end, name = "Dungeon Journal", icon = "sideJournal" },
+  { tab = 7, name = "Dungeon Journal", icon = "sideJournal" },
   { act = function() if QB.Mini then QB.Mini.Big() end end, name = "Big map", icon = "sideMap" },
   { group = "QuestBank" },
   { tab = 5, name = "Settings", icon = "sideSettings" },
@@ -1164,6 +1178,7 @@ function UI:ShowErrors()
 end
 
 function UI:ShowTab(i)
+  if self.tab and self.tab ~= i and self.tab ~= 7 then self.lastTab = self.tab end
   QB:Settings().tab = i
   self.tab = i
   for k, v in ipairs(self.views) do v:SetShown(k == i) end

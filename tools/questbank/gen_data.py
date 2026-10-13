@@ -1525,6 +1525,17 @@ for d in _LOOT_EARLY.get("dungeons", []):
         if pt: boss["p"] = pt
         if b.get("level"): boss["l"] = b["level"]
         entry["bosses"].append(boss)
+# where each boss stands on the floor art (boss_spots.py: MoP Classic's map rectangles for the very same art files and
+# the Classic database's spawns): b.f the floor, b.x and b.y 0-1 across the art; summoned and event bosses have none.
+# b.d: the boss's creature display id, for the client's own rendered portrait
+_SPOTS = load("boss_spots.json", {}) or {}
+for key, entry in DMAP.items():
+    for boss in entry["bosses"]:
+        if (_SPOTS.get("models") or {}).get(boss["n"]):
+            boss["d"] = _SPOTS["models"][boss["n"]]
+        sp = ((_SPOTS.get("spots") or {}).get(key) or {}).get(boss["n"])
+        if sp and 0.02 <= sp[1] <= 0.98 and 0.04 <= sp[2] <= 0.98 and sp[0] <= len(entry["floors"]):
+            boss["f"], boss["x"], boss["y"] = sp[0], round(sp[1], 3), round(sp[2], 3)
 for key, entry in DMAP.items():
     cover, kind = ej_cover(EJ_COVER.get(key, ""))
     if cover:
