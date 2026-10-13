@@ -21,8 +21,8 @@
 Files: Core.lua (DEFAULTS: `autoKey = "shift"`, `profiles = { dungeon = {}, pvp = {}, party = {}, cap = {} }`, `clock = { show = false }`, `clockLevelMsg = true`; new `QB.Contexts()` and `QB:Opt(key)`), Auto.lua (`byHand()` reads `QB:Settings().autoKey`; `on(key)` becomes `QB:Opt(key) == true`), harness test block.
 Test: a client in a party with base autoAccept false and `profiles.party.autoAccept = true` -> `QB:Opt("autoAccept") == true`; in a dungeon with `profiles.dungeon.autoAccept = false` -> false even with party true (order); `autoKey = "ctrl"` -> `Auto.ByHand()` follows IsControlKeyDown; `"none"` -> never. Secret IsInInstance -> contexts empty.
 
-### Task 2: Clock.lua
-Files: Clock.lua (new, after Loot.lua in the TOC), Core.lua (Init call; level-up message), harness.
+### Task 2: Timer.lua (the spec said Clock.lua; QB.Clock is already the time formatter, so the module is QB.Timer)
+Files: Timer.lua (new, after Loot.lua in the TOC), Core.lua (Init call; level-up message), harness.
 Functions: `Clock.Record(event, ...)`, `Clock.LevelTime(lvl)`, `Clock.QuestTime(qid)`, `Clock.Text()`, `Clock:Show(on)`, `Clock:Init()`.
 Test: PLAYER_LEVEL_UP 31 writes `levels[31].at`; tick 600 s and `Clock.LevelTime(31) == 600`; QUEST_ACCEPTED 7 then tick 480 then QUEST_TURNED_IN 7 -> `QuestTime(7) == 480`; secret id skipped; cap 300; `Clock.Text()` carries "Lvl 31" and "8m"; strip hidden by default, shown when `settings.clock.show` (or `profiles.*.clockShow`).
 
