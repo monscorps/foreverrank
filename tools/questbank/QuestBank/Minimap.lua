@@ -12,6 +12,9 @@ local Mini = {}
 QB.Mini = Mini
 
 local TICK = 0.1           -- seconds between placements (the pins follow you)
+local ART = "Interface\\AddOns\\QuestBank\\art\\"
+local BIG_MAX = 480        -- the big map's side in pixels, at most (and never more than 60% of the screen's height)
+local PATH_EVERY = 2       -- seconds between golden-path searches
 local MAX_PINS = 60        -- route stops, pick-ups and entrances, the nearest first past that
 local EDGE = 7             -- the rim: pins past the minimap's reach sit this far inside its edge
 local LINE_REACH = 1.6     -- a line is drawn when both ends are within this many radii
@@ -110,6 +113,13 @@ local function pin(i)
   T = T or QB.Data.TEX
   p = CreateFrame("Button", nil, overlayFrame())
   p:SetSize(16, 16)
+  p.glow = p:CreateTexture(nil, "BACKGROUND")
+  p.glow:SetTexture(ART .. "glow.tga")
+  p.glow:SetPoint("CENTER")
+  p.glow:SetSize(44, 44)
+  p.glow:SetVertexColor(1, 0.82, 0.3, 0.55)
+  p.glow:SetBlendMode("ADD")
+  p.glow:Hide()
   p.icon = p:CreateTexture(nil, "ARTWORK")
   p.icon:SetAllPoints()
   p.num = p:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
@@ -147,27 +157,41 @@ local function line(i)
   local f = overlayFrame()
   if not f.CreateLine then return nil end
   l = f:CreateLine(nil, "BACKGROUND")
-  l:SetThickness(2)
-  l:SetColorTexture(1, 0.82, 0.3, 0.6)
+  l:SetTexture(ART .. "line.tga")
+  l:SetThickness(6)
+  l:SetVertexColor(0.62, 0.55, 1, 0.7)
+  l:SetBlendMode("ADD")
   lines[i] = l
   return l
 end
 
-local function style(p, d)
+-- the game's own crisp art where the client has it (the quest-number pin, the dungeon and quest marks), QuestBank's
+-- textures otherwise. A pin is a little bigger on the big map
+local function atlasOr(tex, atlas, file)
+  if tex.SetAtlas and atlas then
+    local ok = pcall(tex.SetAtlas, tex, atlas, false)
+    if ok then tex:SetTexCoord(0, 1, 0, 1); return end
+  end
+  tex:SetTexture(file)
+  tex:SetTexCoord(0, 1, 0, 1)
+end
+local function style(p, d, big)
   T = T or QB.Data.TEX
+  local k = big and 1.5 or 1
+  p.glow:Hide()
   if d.kind == "stop" then
-    p.icon:SetTexture(T.mapPin)
-    p.icon:SetTexCoord(0, 1, 0, 1)
+    atlasOr(p.icon, d.num == 1 and "UI-QuestPoi-QuestNumber-SuperTracked" or "UI-QuestPoi-QuestNumber", T.mapPin)
     p.num:SetText(d.num and tostring(d.num) or "")
-    p:SetSize(18, 18)
+    p:SetSize(22 * k, 22 * k)
+    if d.num == 1 then p.glow:SetSize(50 * k, 50 * k); p.glow:Show() end
   elseif d.kind == "dungeon" then
-    p.icon:SetTexture(d.icon or T.ring)
+    atlasOr(p.icon, "Dungeon", d.icon or T.ring)
     p.num:SetText("")
-    p:SetSize(14, 14)
+    p:SetSize(18 * k, 18 * k)
   else
-    p.icon:SetTexture(T.questAvail)
+    atlasOr(p.icon, "QuestNormal", T.questAvail)
     p.num:SetText("")
-    p:SetSize(14, 14)
+    p:SetSize(16 * k, 16 * k)
   end
 end
 
@@ -195,7 +219,7 @@ function Mini.Place()
   for i, pt in ipairs(pts) do
     if i > MAX_PINS then break end
     local p = pin(i)
-    style(p, pt.d)
+    style(p, pt.d, saved ~= nil)
     p.d, p.yards = pt.d, pt.yards
     p:ClearAllPoints()
     p:SetPoint("CENTER", f, "CENTER", pt.x, pt.y)
@@ -205,17 +229,35 @@ function Mini.Place()
     if pt.d.kind == "stop" and pt.d.num then placed[pt.d.num] = pt end
   end
   for i = n + 1, #pins do pins[i]:Hide() end
-  -- lines: you to stop 1, then stop to stop, where both ends are near enough
+  -- lines: you to stop 1 (along the golden path when your trails know the way), then stop to stop, where both ends
+  -- are near enough
   local li = 0
   if QB:Settings().minimapLines ~= false then
     local prev = { x = 0, y = 0, far = false, yards = 0 }
     local num = 1
+    local first = placed[1]
+    if first and QB.Walk and QB.Walk.Path then
+      local path = Mini.GoldenPath(me, first.d)
+      if path and #path >= 2 then
+        for i = 1, #path - 1 do
+          local x1, y1, _, far1 = Mini.Project(me, { wx = path[i][1], wy = path[i][2] }, radius, R, facing)
+          local x2, y2, _, far2 = Mini.Project(me, { wx = path[i + 1][1], wy = path[i + 1][2] }, radius, R, facing)
+          if not (far1 and far2) then
+            li = li + 1
+            local l = line(li)
+            if l then l:SetVertexColor(1, 0.82, 0.3, 0.85); l:SetStartPoint("CENTER", f, x1, y1); l:SetEndPoint("CENTER", f, x2, y2); l:Show() end
+          end
+        end
+        prev, num = first, 2 -- the straight line to stop 1 is replaced by the path
+      end
+    end
     while placed[num] do
       local pt = placed[num]
       if not prev.far and not pt.far and pt.yards <= radius * LINE_REACH and prev.yards <= radius * LINE_REACH then
         li = li + 1
         local l = line(li)
         if l then
+          l:SetVertexColor(num == 1 and 1 or 0.62, num == 1 and 0.82 or 0.55, num == 1 and 0.3 or 1, num == 1 and 0.85 or 0.6)
           l:SetStartPoint("CENTER", f, prev.x, prev.y)
           l:SetEndPoint("CENTER", f, pt.x, pt.y)
           l:Show()
@@ -242,8 +284,10 @@ function Mini.DrawTrails(me, radius, R, facing, f)
         local l = trailLines[n]
         if not l then
           l = f:CreateLine(nil, "BACKGROUND", nil, -1)
-          l:SetThickness(3)
-          l:SetColorTexture(1, 0.85, 0.4, 0.28)
+          l:SetTexture(ART .. "line.tga")
+          l:SetThickness(5)
+          l:SetVertexColor(1, 0.85, 0.4, 0.22)
+          l:SetBlendMode("ADD")
           trailLines[n] = l
         end
         l:SetStartPoint("CENTER", f, x1, y1)
@@ -254,6 +298,22 @@ function Mini.DrawTrails(me, radius, R, facing, f)
   end
   for i = n + 1, #trailLines do trailLines[i]:Hide() end
   Mini.trailsShown = n
+end
+
+-- the golden path to the next stop: the way your trails know between where you stand and the stop, looked up at
+-- most every PATH_EVERY seconds, kept while you and the stop stay put
+local gold = {}
+function Mini.GoldenPath(me, d)
+  local w = worldPos(d)
+  if not w or w.c ~= me.c then return nil end
+  local key = d.m .. ":" .. d.x .. ":" .. d.y
+  local t = GetTime and GetTime() or 0
+  if gold.key == key and gold.at and t - gold.at < PATH_EVERY and gold.me and math.abs(gold.me.wx - me.wx) + math.abs(gold.me.wy - me.wy) < 30 then
+    return gold.path
+  end
+  gold.key, gold.at, gold.me = key, t, { wx = me.wx, wy = me.wy }
+  gold.path = QB.Walk.Path(me.c, me, w)
+  return gold.path
 end
 
 function Mini.Clear()
@@ -274,7 +334,7 @@ function Mini.Big(on)
     local w, h = Minimap:GetWidth(), Minimap:GetHeight()
     local pt = { Minimap:GetPoint(1) }
     saved = { w = w, h = h, pt = pt, zoom = Minimap.GetZoom and Minimap:GetZoom() or 0 }
-    local size = math.floor(math.min((UIParent:GetHeight() or 900) - 140, (UIParent:GetWidth() or 1600) - 200))
+    local size = math.floor(math.min(BIG_MAX, (UIParent:GetHeight() or 900) * 0.6))
     Minimap:SetSize(size, size)
     Minimap:ClearAllPoints()
     Minimap:SetPoint("CENTER", UIParent, "CENTER", 0, 10)

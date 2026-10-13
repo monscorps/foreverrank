@@ -1451,15 +1451,49 @@ for key, folder in DMAP_ART.items():
         f += 1
     if floors:
         DMAP[key] = {"art": folder, "floors": floors, "bosses": []}
+# the Encounter Journal's own art, which the client still ships: a cover for each dungeon
+# (UI-EJ-DUNGEONBUTTON-<name>, else UI-EJ-LOREBG-<name>, else UI-EJ-BACKGROUND-<name>) and a portrait for each boss
+# the journal once knew (UI-EJ-BOSS-<name>). Forever's new dungeons and bosses have neither: the addon shows the
+# dungeon's LFG background and the journal's default boss face instead
+EJ_COVER = {"d1581": "Deadmines", "d717": "TheStockade", "d718": "WailingCaverns", "d719": "BlackfathomDeeps",
+            "d209": "ShadowFangKeep", "d796": "ScarletMonastery", "d491": "RazorfenKraul", "d1337": "Uldaman",
+            "d721": "Gnomeregan", "d2437": "RagefireChasm", "d722": "RazorfenDowns", "d1417": "SunkenTemple",
+            "d1584": "BlackrockDepths", "d1583": "BlackrockSpire", "d2057": "Scholomance", "d2017": "Stratholme",
+            "d2557": "DireMaul", "d2100": "Maraudon", "d1176": "ZulFarrak"}
+def ej_cover(name):
+    for kind in ("DUNGEONBUTTON", "LOREBG", "BACKGROUND"):
+        k = ("interface/encounterjournal/ui-ej-%s-%s.blp" % (kind, name)).lower()
+        if k in MAN:
+            return int(MAN[k]), kind
+    return None, None
+EJ_BOSS = {}
+for k in MAN:
+    if k.startswith("interface/encounterjournal/ui-ej-boss-"):
+        EJ_BOSS[k[len("interface/encounterjournal/ui-ej-boss-"):-4]] = int(MAN[k])
+EJ_BOSS_DEFAULT = EJ_BOSS.get("default")
 for d in _LOOT_EARLY.get("dungeons", []):
     key = DMAP_LOOT.get(d.get("name"))
     if not key:
         continue
     entry = DMAP.setdefault(key, {"art": None, "floors": [], "bosses": []})
     wing = d["name"].split(": ", 1)[1] if ": " in d["name"] and key in ("d796", "d1583", "d2557") else None
+    lv = d.get("levels")
+    if isinstance(lv, list) and len(lv) == 2 and all(isinstance(x, int) for x in lv):
+        cur = entry.get("lv")
+        entry["lv"] = [min(lv[0], cur[0]), max(lv[1], cur[1])] if cur else lv
     for b in d.get("bosses", []):
         items = [int(i) for i in (b.get("items") or []) if str(i).isdigit()][:12]
-        entry["bosses"].append({"n": b["name"], "k": b.get("kind") or "boss", "w": wing, "i": items})
+        boss = {"n": b["name"], "k": b.get("kind") or "boss", "w": wing, "i": items}
+        pt = EJ_BOSS.get(b["name"].lower())
+        if pt: boss["p"] = pt
+        if b.get("level"): boss["l"] = b["level"]
+        entry["bosses"].append(boss)
+for key, entry in DMAP.items():
+    cover, kind = ej_cover(EJ_COVER.get(key, ""))
+    if cover:
+        entry["cover"] = cover
+        entry["coverKind"] = kind
+    entry["defaultFace"] = EJ_BOSS_DEFAULT
 lines.append("D.DMAP = " + lua(DMAP))
 
 # Herb and ore nodes by name (Glow.lua lights the object your Interact key would use: green for an herb, orange for

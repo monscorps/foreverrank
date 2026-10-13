@@ -59,7 +59,7 @@ function Walk.Note(me)
   if not t or d >= BREAK then t = {}; trails[#trails + 1] = t end
   t[#t + 1], t[#t + 2] = wx, wy
   last = { c = me.c, wx = wx, wy = wy }
-  Walk.dirty = true
+  Walk.dirty, Walk.dirtyNodes = true, true
   while count(trails) > MAX_POINTS and #trails > 1 do table.remove(trails, 1) end
   if count(trails) > MAX_POINTS then -- one trail longer than the cap: its oldest half goes
     local t1 = trails[1]
@@ -106,6 +106,94 @@ function Walk.Near(c, wx, wy, reach)
       end
     end
   end
+  return out
+end
+
+-- the way your trails know from one point to another: a search over the trail points (each joined to its
+-- neighbours on the trail, and to any other trail's point within JOIN yards), from the point nearest you to the
+-- point nearest the goal, each within REACH yards. Nil when the trails do not connect the two. Returns
+-- { {x, y}, ... } from you to the goal, the trail points between
+local JOIN, REACH, MAX_NODES = 25, 80, 6000
+Walk.JOIN, Walk.REACH = JOIN, REACH
+local nodes, nodesC, nodesN = nil, nil, 0
+local function buildNodes(c)
+  local trails = db()[c] or {}
+  local n = count(trails)
+  if nodes and nodesC == c and nodesN == n and not Walk.dirtyNodes then return nodes end
+  nodes, nodesC, nodesN, Walk.dirtyNodes = {}, c, n, false
+  local byCell = {}
+  for ti, t in ipairs(trails) do
+    for i = 1, #t - 1, 2 do
+      local id = #nodes + 1
+      nodes[id] = { x = t[i], y = t[i + 1], adj = {}, t = ti }
+      if i > 1 then local prev = id - 1; nodes[id].adj[#nodes[id].adj + 1] = prev; nodes[prev].adj[#nodes[prev].adj + 1] = id end
+      local k = cell(t[i], t[i + 1])
+      byCell[k] = byCell[k] or {}
+      byCell[k][#byCell[k] + 1] = id
+    end
+  end
+  -- joins across trails
+  for id, nd in ipairs(nodes) do
+    local cx, cy = floor(nd.x / CELL), floor(nd.y / CELL)
+    for bx = cx - 1, cx + 1 do
+      for by = cy - 1, cy + 1 do
+        for _, other in ipairs(byCell[bx .. ":" .. by] or {}) do
+          local o = nodes[other]
+          if other ~= id and o.t ~= nd.t and (o.x - nd.x) ^ 2 + (o.y - nd.y) ^ 2 <= JOIN * JOIN then nd.adj[#nd.adj + 1] = other end
+        end
+      end
+    end
+  end
+  return nodes
+end
+Walk.Nodes = buildNodes
+
+local function nearestNode(N, wx, wy, reach)
+  local best, bd = nil, reach * reach
+  for id, nd in ipairs(N) do
+    local d = (nd.x - wx) ^ 2 + (nd.y - wy) ^ 2
+    if d < bd then best, bd = id, d end
+  end
+  return best
+end
+
+function Walk.Path(c, from, to)
+  local N = buildNodes(c)
+  if #N == 0 then return nil end
+  local a, b = nearestNode(N, from.wx, from.wy, REACH), nearestNode(N, to.wx, to.wy, REACH)
+  if not a or not b then return nil end
+  if a == b then return { { from.wx, from.wy }, { N[a].x, N[a].y }, { to.wx, to.wy } } end
+  local open, g, came, closed = { [a] = true }, { [a] = 0 }, {}, {}
+  local function h(id) return sqrt((N[id].x - N[b].x) ^ 2 + (N[id].y - N[b].y) ^ 2) end
+  local f = { [a] = h(a) }
+  local explored = 0
+  while next(open) do
+    local cur, best
+    for id in pairs(open) do if not best or f[id] < best then cur, best = id, f[id] end end
+    if cur == b then break end
+    open[cur] = nil; closed[cur] = true
+    explored = explored + 1
+    if explored > MAX_NODES then return nil end
+    for _, nb in ipairs(N[cur].adj) do
+      if not closed[nb] then
+        local ng = g[cur] + sqrt((N[nb].x - N[cur].x) ^ 2 + (N[nb].y - N[cur].y) ^ 2)
+        if g[nb] == nil or ng < g[nb] then g[nb], came[nb], f[nb] = ng, cur, ng + h(nb); open[nb] = true end
+      end
+    end
+  end
+  if not came[b] and a ~= b then return nil end
+  local out = { { to.wx, to.wy } }
+  local cur = b
+  while cur do
+    out[#out + 1] = { N[cur].x, N[cur].y }
+    cur = came[cur]
+  end
+  out[#out + 1] = { from.wx, from.wy }
+  -- reverse: from you to the goal; a trail point you stand on, or the goal stands on, is not a leg
+  for i = 1, floor(#out / 2) do out[i], out[#out + 1 - i] = out[#out + 1 - i], out[i] end
+  local function same(p, q) return math.abs(p[1] - q[1]) + math.abs(p[2] - q[2]) < 2 end
+  if #out > 2 and same(out[1], out[2]) then table.remove(out, 2) end
+  if #out > 2 and same(out[#out], out[#out - 1]) then table.remove(out, #out - 1) end
   return out
 end
 

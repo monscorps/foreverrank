@@ -20,7 +20,7 @@ local CHEST = { "chest", "cache", "crate", "barrel", "strongbox", "footlocker", 
 local plain = QB.Plain
 local function settings()
   local s = QB:Settings()
-  if type(s.glow) ~= "table" then s.glow = { on = true, other = false } end
+  if type(s.glow) ~= "table" then s.glow = { on = true, other = true } end
   return s.glow
 end
 
@@ -65,27 +65,38 @@ local function restoreCVars()
   saved = nil
 end
 
+-- the light: a soft glow under a slow-turning sparkle and a breathing ring, QuestBank's own textures (art/)
+local ART = "Interface\\AddOns\\QuestBank\\art\\"
 local light
 local function lightFrame()
   if light then return light end
   light = CreateFrame("Frame", "QuestBankGlow", UIParent)
   light:SetSize(64, 64)
   light:SetFrameStrata("BACKGROUND")
-  light.ring = light:CreateTexture(nil, "ARTWORK")
-  light.ring:SetAllPoints()
-  light.ring:SetTexture("Interface\\Minimap\\UI-Minimap-Ping-Expand")
-  light.ring:SetBlendMode("ADD")
   light.core = light:CreateTexture(nil, "BACKGROUND")
-  light.core:SetSize(28, 28)
+  light.core:SetSize(80, 80)
   light.core:SetPoint("CENTER")
-  light.core:SetTexture("Interface\\Minimap\\UI-Minimap-Ping-Center")
+  light.core:SetTexture(ART .. "glow.tga")
   light.core:SetBlendMode("ADD")
+  light.ring = light:CreateTexture(nil, "ARTWORK")
+  light.ring:SetSize(46, 46)
+  light.ring:SetPoint("CENTER")
+  light.ring:SetTexture(ART .. "ring.tga")
+  light.ring:SetBlendMode("ADD")
+  light.spark = light:CreateTexture(nil, "OVERLAY")
+  light.spark:SetSize(54, 54)
+  light.spark:SetPoint("CENTER")
+  light.spark:SetTexture(ART .. "sparkle.tga")
+  light.spark:SetBlendMode("ADD")
   light.t = 0
   light:SetScript("OnUpdate", function(self, dt)
     self.t = self.t + (dt or 0)
-    local a = 0.55 + 0.45 * math.sin(self.t * 4)
-    self.ring:SetAlpha(a)
-    self.core:SetAlpha(0.5 + 0.3 * math.sin(self.t * 4 + 1))
+    local breath = 0.5 + 0.5 * math.sin(self.t * 3)
+    self.core:SetAlpha(0.28 + 0.18 * breath)
+    self.ring:SetAlpha(0.55 + 0.35 * breath)
+    self.ring:SetSize(42 + 8 * breath, 42 + 8 * breath)
+    self.spark:SetAlpha(0.7 + 0.3 * (1 - breath))
+    if self.spark.SetRotation then self.spark:SetRotation(self.t * 0.6) end
   end)
   light:Hide()
   return light
@@ -97,6 +108,9 @@ function Glow.Update()
   local f = lightFrame()
   if not g.on or (InCombatLockdown and InCombatLockdown() and g.combat ~= true) then f:Hide(); Glow.kind = nil; return end
   if not (UnitExists and plain(UnitExists("softinteract")) == true) then f:Hide(); Glow.kind = nil; return end
+  -- objects only: an NPC you could talk to keeps the game's own cursor icon and nothing more
+  local guid = plain(UnitGUID and UnitGUID("softinteract"))
+  if type(guid) == "string" and not guid:find("^GameObject") then f:Hide(); Glow.kind = nil; return end
   local name = plain(UnitName and UnitName("softinteract"))
   local kind = Glow.Kind(name) or "other"
   if kind == "other" and not g.other then f:Hide(); Glow.kind = nil; return end
@@ -105,6 +119,7 @@ function Glow.Update()
   local c = COLORS[kind]
   f.ring:SetVertexColor(c[1], c[2], c[3])
   f.core:SetVertexColor(c[1], c[2], c[3])
+  f.spark:SetVertexColor(math.min(1, c[1] + 0.3), math.min(1, c[2] + 0.3), math.min(1, c[3] + 0.3))
   f:SetParent(plate)
   f:ClearAllPoints()
   f:SetPoint("CENTER", plate, "CENTER", 0, -10)

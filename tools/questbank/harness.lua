@@ -21,7 +21,7 @@ RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThum
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
-SetAtlas SetPassThroughButtons SetScale GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine]])
+SetAtlas SetPassThroughButtons SetScale GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
@@ -294,7 +294,11 @@ local function newClient(o)
   env.IsPlayerSpell = function() return o.riding or false end
   env.AuraUtil = { FindAuraByName = function(name) if c.rested and name == "Well Rested" then return name end end }
   env.UnitName = function(unit) if unit == "npc" then return c.npcName end if unit == "softinteract" then return c.soft and c.soft.name end return o.name end
-  env.UnitGUID = function(unit) if unit == "npc" then return c.npcGUID end return "Player-1234-" .. string.format("%08X", #o.name * 7919 + (o.level or 1)) end
+  env.UnitGUID = function(unit)
+    if unit == "npc" then return c.npcGUID end
+    if unit == "softinteract" then return c.soft and (c.soft.guid or "GameObject-0-4455-0-12-2843-0000A1B2C3") or nil end
+    return "Player-1234-" .. string.format("%08X", #o.name * 7919 + (o.level or 1))
+  end
   -- Midnight's secret values, as the Forever client hands them out: type() says "string" or "number", any use
   -- errors, and issecretvalue tells. SECRET.str() / SECRET.num() make one.
   env.issecretvalue = function(v) return getmetatable(v) == SECRET_MT end
@@ -1255,7 +1259,7 @@ do
   local dm = DM.Find("deadmines")
   assert(dm and dm.key == "d1581" and DM.Find("Scarlet").key == "d796" and DM.Find("nothing like it") == nil, "finding a dungeon by part of its name")
   local f = DM.Open(dm)
-  assert(f and f:IsShown() and env.QuestBankDungeonMap == f and f.title:GetText():find("The Deadmines", 1, true), "the map opens")
+  assert(f and f:IsShown() and env.QuestBankDungeonMap == f and f.name:GetText():find("The Deadmines", 1, true) and f.level:GetText():find("LV", 1, true), "the journal opens on the dungeon")
   assert(#f.tiles == 12 and f.tiles[1].__tex == D.d1581.floors[1][1] and f.tiles[12].__tex == D.d1581.floors[1][12] and not f.noArt:IsShown(), "floor 1's tiles")
   assert(f.floors[1] and f.floors[2] and f.floors[2]:IsShown() and not f.floors[1]:IsEnabled(), "two floor buttons, the shown one greyed")
   DM.ShowFloor(2)
@@ -1263,7 +1267,13 @@ do
   local shownBosses = 0
   for _, r in ipairs(f.bossRows) do if r:IsShown() then shownBosses = shownBosses + 1 end end
   assert(shownBosses == #D.d1581.bosses and f.bossRows[1].text:GetText():find("Rhahk'Zor", 1, true), "a row a boss")
-  assert(f.bossRows[1].right:GetText():find("items", 1, true), "with its item count")
+  assert(f.lootHead:GetText():find("items", 1, true) and f.lootName:GetText():find("Rhahk'Zor", 1, true), "the first boss is shown with its item count")
+  assert(f.lootRows[1] and f.lootRows[1]:IsShown() and f.lootRows[1].text:GetText() ~= "", "a loot row with a name")
+  assert(f.rows[1] and f.rows[1]:IsShown() and f.rows[1].name:GetText() ~= "", "the dungeon list has rows")
+  f.search:SetText("rhahk"); f.search.__scripts.OnTextChanged(f.search)
+  local shownRows = 0; for _, r in ipairs(f.rows) do if r:IsShown() then shownRows = shownRows + 1 end end
+  assert(shownRows == 1 and f.rows[1].cat.key == "d1581", "searching a boss name narrows the list to its dungeon: " .. shownRows)
+  f.search:SetText(""); f.search.__scripts.OnTextChanged(f.search)
   assert(type(DM.ItemName(872)) == "string" and type(DM.ItemName(999999999)) == "string", "items are named by the client, or by id until it answers")
   local qs = DM.Quests("d1581")
   assert(#qs >= 3, "the Deadmines' quests: " .. #qs)
@@ -1315,7 +1325,7 @@ do
   c = owner
   local f = Glow.frame
   local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
-  assert(f and QB:Settings().glow.on == true and QB:Settings().glow.other == false, "on by default, plain objects off")
+  assert(f and QB:Settings().glow.on == true and QB:Settings().glow.other == true, "on by default, plain objects too")
   c.cvars = { SoftTargetInteract = "0", SoftTargetInteractArc = "0", SoftTargetInteractRange = "10", SoftTargetNameplateInteract = "0", SoftTargetIconInteract = "1" }
   ev("PLAYER_ENTERING_WORLD")
   assert(c.cvars.SoftTargetInteract == "3" and c.cvars.SoftTargetInteractArc == "2" and c.cvars.SoftTargetNameplateInteract == "1", "entering the world sets the soft-interact settings")
@@ -1328,10 +1338,12 @@ do
   c.soft = { name = "Copper Vein", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
   assert(Glow.kind == "ore", "ore: orange")
   c.soft = { name = "Old Jug", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
-  assert(not L:IsShown() and Glow.kind == nil, "a plain object: nothing, unless asked for")
-  QB:Settings().glow.other = true; ev("PLAYER_SOFT_INTERACT_CHANGED")
-  assert(L:IsShown() and Glow.kind == "other", "asked for: white")
-  QB:Settings().glow.other = false
+  assert(L:IsShown() and Glow.kind == "other", "a plain object: white")
+  QB:Settings().glow.other = false; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(not L:IsShown() and Glow.kind == nil, "plain objects switched off: nothing")
+  QB:Settings().glow.other = true
+  c.soft = { name = "Innkeeper Farley", plate = plate, guid = "Creature-0-4455-0-12-295-0000A1B2C3" }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(not L:IsShown(), "an NPC keeps the game's own cursor icon, no light")
   c.soft = { name = "Sunken Chest", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
   assert(Glow.kind == "chest", "a chest: blue")
   -- a quest object: named in an objective of a quest in the log
@@ -1390,6 +1402,27 @@ do
   c.miniRadius = 200
   Mini.Place()
   assert(Mini.trailsShown == 3, "the three segments drawn near you on the minimap: " .. tostring(Mini.trailsShown))
+  -- the golden path: your trails know the way from you (1000, 2000) to a stop at (1045, 2000); none to (9000, 9000)
+  Walk.dirtyNodes = true
+  local path = Walk.Path(0, { wx = 1000, wy = 2000 }, { wx = 1045, wy = 2000 })
+  assert(path and #path == 4 and path[1][1] == 1000 and path[#path][1] == 1045 and path[2][1] == 1015, "the way along the trail, point by point: " .. tostring(path and #path))
+  assert(Walk.Path(0, { wx = 1000, wy = 2000 }, { wx = 9000, wy = 9000 }) == nil, "no trail joins the far point: no path")
+  assert(Walk.Path(0, { wx = 1000, wy = 2000 }, { wx = 1000, wy = 2600 }) == nil, "a goal nowhere near a trail: no path")
+  local P = QB.Pins
+  local saveList2 = P.list
+  P.list = { { m = 1429, x = 50, y = 48.5, num = 1, name = "Along the trail", when = "", lines = {} } } -- (0.485 * 2000 = 970 ... see the flat world below)
+  env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = 1000 + (0.5 - v.y) * 3000, y = 2000 + (0.5 - v.x) * 4000, GetXY = function(self) return self.x, self.y end } end
+  -- the stop at map (51.125, 50) is 45 yards east: (1000, 2000 - 45)... our trail runs north; put the trail east instead
+  W[0] = { { 1000, 2000, 1000, 1985, 1000, 1970, 1000, 1955 } }
+  Walk.dirty, Walk.dirtyNodes = true, true
+  P.list = { { m = 1429, x = 51.125, y = 50, num = 1, name = "Along the trail", when = "", lines = {} } }
+  Mini.Invalidate(); Mini.Place()
+  assert(Mini.linesShown == 3, "the line to stop 1 follows the trail, leg by leg: " .. tostring(Mini.linesShown))
+  P.list = saveList2
+  W[0] = { { 1000, 2000, 1015, 2000, 1030, 2000, 1045, 2000 }, { 9000, 9000, 9015, 9000 } }
+  Walk.dirty, Walk.dirtyNodes = true, true
+  env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = v.y * 2000, y = v.x * 4000, GetXY = function(self) return self.x, self.y end } end
+  Mini.Invalidate(); Mini.Place()
   QB:Settings().walkShow = false
   Mini.Place()
   assert(Mini.trailsShown == 0, "not when switched off")
