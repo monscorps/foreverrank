@@ -1031,6 +1031,49 @@ do
   print("escort prompt:", owner.chat[#owner.chat])
   env.MAX_QUESTS, env.MAX_QUESTLOG_QUESTS = 40, 40
 end
+-- 3.8.0: where you are decides (QB:Opt, settings.profiles) and the decide-yourself key (settings.autoKey)
+do
+  local set, env = QB:Settings(), owner.env
+  assert(set.autoKey == "shift" and type(set.profiles) == "table" and next(set.profiles.party) == nil and set.clock.show == false, "defaults: Shift, no overrides, no strip")
+  -- (this character may be held at a cap: that context is left out of the comparisons below)
+  local function ctx() local t = {} for _, c in ipairs(QB.Contexts()) do if c ~= "cap" then t[#t + 1] = c end end return table.concat(t, ",") end
+  local inGroup, inInst = env.IsInGroup, env.IsInInstance
+  env.IsInGroup = function() return false end
+  assert(ctx() == "" and QB:Opt("autoAccept") == false, "alone outdoors: no context, the plain setting: " .. ctx())
+  env.IsInGroup = function() return true end
+  assert(ctx() == "party", "in a group: the party context")
+  set.profiles.party.autoAccept = true
+  assert(QB:Opt("autoAccept") == true and QB:Opt("autoTurnIn") == false, "the party override, the rest inherited")
+  env.IsInInstance = function() return true, "party" end
+  set.profiles.dungeon.autoAccept = false
+  assert(ctx() == "dungeon,party" and QB:Opt("autoAccept") == false, "a dungeon comes before the party: its override wins")
+  env.IsInInstance = function() return true, "pvp" end
+  assert(ctx() == "pvp,party", "a battleground is the pvp context")
+  env.IsInInstance = function() return SECRET.num(), SECRET.str() end
+  assert(ctx() == "party", "a hidden instance answer: no dungeon, no pvp, no error")
+  env.IsInInstance = function() return false, "none" end
+  env.GetZonePVPInfo = function() return "combat" end
+  assert(ctx() == "pvp,party", "a contested zone at war: pvp")
+  env.GetZonePVPInfo = nil
+  set.profiles.party.clockShow = true
+  assert(QB:Opt("clockShow") == true, "the strip can be switched on by context")
+  set.profiles.party.clockShow = nil
+  assert(QB:Opt("clockShow") == false, "and reads the strip setting otherwise")
+  set.profiles.party.autoAccept, set.profiles.dungeon.autoAccept = nil, nil
+  env.IsInGroup, env.IsInInstance = inGroup, inInst
+  -- the key
+  local Auto = QB.Auto
+  owner.shift, owner.ctrl = true, false
+  assert(Auto.ByHand() == true, "Shift held: by hand")
+  set.autoKey = "ctrl"
+  assert(Auto.ByHand() == false, "the key is Ctrl now: Shift does nothing")
+  owner.ctrl = true
+  assert(Auto.ByHand() == true, "Ctrl held: by hand")
+  set.autoKey = "none"
+  assert(Auto.ByHand() == false, "no key: never by hand")
+  set.autoKey = "shift"
+  owner.shift, owner.ctrl = false, false
+end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
   local set = QB:Settings()

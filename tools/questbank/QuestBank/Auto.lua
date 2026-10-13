@@ -17,7 +17,7 @@ local Auto = {}
 QB.Auto = Auto
 local Q = QB.Quest
 
-local function on(key) return QB:Settings()[key] == true end
+local function on(key) return QB:Opt(key) == true end -- (where you are can override the setting: QB:Opt)
 -- the quest the window shows: 0 when there is none, or when the client hides the id (a secret value)
 local function qid()
   local id = GetQuestID and GetQuestID()
@@ -25,7 +25,14 @@ local function qid()
   return id
 end
 
-local function byHand() return (IsShiftKeyDown and IsShiftKeyDown()) and true or false end
+-- the decide-yourself key (Settings: shift, ctrl, alt, or none): held at the NPC, QuestBank leaves the quest to you
+local KEYS = { shift = "IsShiftKeyDown", ctrl = "IsControlKeyDown", alt = "IsAltKeyDown" }
+local function byHand()
+  local name = KEYS[QB:Settings().autoKey or "shift"]
+  local fn = name and _G[name]
+  return (fn and fn()) and true or false
+end
+Auto.ByHand = byHand
 local function later(where, fn) C_Timer.After(0.05, QB.Safe(fn, "auto: " .. where)) end
 local function banking() return QB:Mode() == "lock" end
 local function level() return QB.state.level or 1 end

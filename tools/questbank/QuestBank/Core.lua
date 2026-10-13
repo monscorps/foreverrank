@@ -999,6 +999,11 @@ local DEFAULTS = {
   -- off until asked for: accept quests for you (at an NPC, and ones a party member shares), hand finished ones in
   -- for you (Auto.lua decides when that is wise), and two party-chat lines
   autoAccept = false, autoTurnIn = false, sayAccept = false, sayComplete = false,
+  autoKey = "shift", -- hold this key at an NPC to decide a quest yourself: shift, ctrl, alt, or none (Auto.lua)
+  -- where you are decides: each context may override autoAccept, autoTurnIn, sayAccept, sayComplete and clockShow;
+  -- a key left out inherits the setting above (QB:Opt). Checked in this order: dungeon, pvp, party, cap
+  profiles = { dungeon = {}, pvp = {}, party = {}, cap = {} },
+  clock = { show = false }, clockLevelMsg = true, -- the timer strip (Clock.lua) and the level-up line
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
   noteGame = true, -- note the spells and item tooltips the Forever client shows, for foreverrank.com (Game.lua)
   -- quest icons on each zone's world map (QuestMap.lua, Forever only): all of them, then where quests you can take
@@ -1030,6 +1035,41 @@ function QB:Settings()
   db.runs = db.runs or {}
   db.plans = db.plans or {}
   return s
+end
+
+-- where you are, for the settings that change with it: the contexts active now, most specific first
+QB.CONTEXTS = { "dungeon", "pvp", "party", "cap" }
+function QB.Contexts()
+  local out = {}
+  local inside, kind
+  if IsInInstance then
+    local ok, a, b = pcall(IsInInstance)
+    if ok then inside, kind = QB.Plain(a), QB.Plain(b) end
+  end
+  if inside == true and (kind == "party" or kind == "raid") then out[#out + 1] = "dungeon" end
+  local pvp = inside == true and (kind == "pvp" or kind == "arena")
+  if not pvp and GetZonePVPInfo then
+    local ok, z = pcall(GetZonePVPInfo)
+    z = ok and QB.Plain(z) or nil
+    pvp = z == "combat" or z == "hostile"
+  end
+  if pvp then out[#out + 1] = "pvp" end
+  if IsInGroup and QB.Plain(IsInGroup()) == true then out[#out + 1] = "party" end
+  if QB.Lock and QB:Lock() then out[#out + 1] = "cap" end
+  return out
+end
+
+-- a setting as it applies right now: the first active context that overrides it, else the plain setting.
+-- clockShow reads settings.clock.show when nothing overrides it
+function QB:Opt(key)
+  local s = self:Settings()
+  local prof = type(s.profiles) == "table" and s.profiles or {}
+  for _, ctx in ipairs(QB.Contexts()) do
+    local p = prof[ctx]
+    if type(p) == "table" and p[key] ~= nil then return p[key] end
+  end
+  if key == "clockShow" then return type(s.clock) == "table" and s.clock.show == true end
+  return s[key]
 end
 
 function QB:CharKey()
@@ -1236,9 +1276,8 @@ function QB:Banking() return self:Mode() ~= "quest" end
 
 -- two plain lines in party chat (raid chat in a raid), only when asked for in Settings and only while grouped
 function QB:Announce(kind, title)
-  local s = self:Settings()
-  if kind == "accept" and not s.sayAccept then return end
-  if kind == "complete" and not s.sayComplete then return end
+  if kind == "accept" and self:Opt("sayAccept") ~= true then return end
+  if kind == "complete" and self:Opt("sayComplete") ~= true then return end
   local channel = (IsInGroup and LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE)) and "INSTANCE_CHAT"
     or ((IsInRaid and IsInRaid()) and "RAID") or ((IsInGroup and IsInGroup()) and "PARTY") or nil
   if not channel or not SendChatMessage then return end
