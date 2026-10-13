@@ -1425,8 +1425,26 @@ function UI:CreateLogView(parent)
     local b = iconButton(v, 36, nil)
     local col, row = (i - 1) % 8, math.floor((i - 1) / 8)
     b:SetPoint("TOPLEFT", LEFT + 4 + col * 46, -48 - row * 46)
+    -- the band behind a run of quests in one place: it runs on under the gap to the next slot of the same place
+    b.band = tex(v, "BACKGROUND", FLAT)
+    b.band:SetPoint("TOPLEFT", b, "TOPLEFT", -3, 3)
+    b.band:SetSize(42, 42)
+    b.band:Hide()
     b.frame = tex(b, "OVERLAY", T.iconFrame)
     b.frame:SetAllPoints()
+    -- done: a green check stamped across the corner
+    b.stamp = b:CreateTexture(nil, "ARTWORK", nil, 7) -- over the icon, under the frame and the XP
+    b.stamp:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+    b.stamp:SetSize(22, 22)
+    b.stamp:SetPoint("CENTER", b, "CENTER", 3, 3)
+    if b.stamp.SetRotation then b.stamp:SetRotation(-0.3) end
+    b.stamp:Hide()
+    -- a follow-up: the chain's link from the quest before it
+    b.link = tex(b, "OVERLAY", T.upgrade, 12, 13)
+    b.link:SetTexCoord(66 / 512, 86 / 512, 93 / 256, 115 / 256)
+    b.link:SetPoint("RIGHT", b, "LEFT", 3, 0)
+    if b.link.SetRotation then b.link:SetRotation(-math.pi / 2) end
+    b.link:Hide()
     b.xp = text(b, "NumberFontNormal", 11, WHITE, "RIGHT", 40)
     b.xp:SetPoint("BOTTOMRIGHT", 0, 2)
     b.mark = tex(b, "OVERLAY", nil, 14, 14)
@@ -1442,6 +1460,7 @@ function UI:CreateLogView(parent)
     tooltip(b, function(tip, self)
       if self.q then
         if self.pick then tip:AddLine("To pick up: not in your log yet. Click for a waypoint to whoever gives it; right-click to take it off the list.", 1, 0.82, 0, true) end
+        if self.follow then tip:AddLine("Follow-up of " .. self.follow.name .. ": " .. (self.q.give and self.q.give.n and ("from " .. self.q.give.n .. ", ") or "") .. "do it while you're here.", 0.5, 1, 0.5, true) end
         UI.QuestTooltip(tip, self.q, self.st, self.value, self.pct, self.plvl)
         if self.advice then tip:AddLine(self.advice, 1, 0.55, 0.45, true) end
       elseif self.entry then
@@ -1709,6 +1728,100 @@ function UI:Candidates(limit, level)
   return kept
 end
 
+-- the bands' colours, one a place, in turn
+UI.BAND = { { 0.36, 0.27, 0.12 }, { 0.14, 0.27, 0.36 }, { 0.17, 0.33, 0.17 }, { 0.36, 0.17, 0.17 }, { 0.27, 0.18, 0.36 }, { 0.32, 0.32, 0.14 } }
+
+-- a quest's next step you could take once it is handed in: open, not in the log, not done
+function UI.FollowUp(q)
+  for _, nid in ipairs(q and q.nextSteps or {}) do
+    local nq = Q.Get(nid)
+    if nq and not QB.state.log[nid] and not QB.API.IsDone(nid) then
+      local st = QB:Status(nq)
+      if st.code ~= "wrong" and st.code ~= "done" then return nq end
+    end
+  end
+  return nil
+end
+
+-- the Quest Log's slots in order: the quests by place, the nearest place first; in each, the ones ready to hand in
+-- first, then the most XP; a quest's follow-up right after it (faded: you take it where you hand the first in, so
+-- both get done on one visit); the quests you chose to pick up in their place too; quests left out of the route last.
+-- { kind = "entry", it } | { kind = "follow", q, value, from } | { kind = "pick", q, value }, each with its group's number
+function UI.LogCells(entries, picks)
+  local s = QB.state
+  local me = QB.API.WorldPosition()
+  local groups, byKey = {}, {}
+  local function group(key, name)
+    local g = byKey[key]
+    if not g then g = { key = key, name = name, items = {}, near = math.huge, value = 0 }; byKey[key] = g; groups[#groups + 1] = g end
+    return g
+  end
+  local function nearTo(g, q)
+    for _, n in ipairs({ q.turn, q.give }) do
+      if me and n and n.m and not n.inside then
+        local w = QB.Model.World(n.m, n.x, n.y)
+        if w and w.c == me.c then
+          local d = math.sqrt((w.wx - me.wx) ^ 2 + (w.wy - me.wy) ^ 2)
+          if d < g.near then g.near = d end
+        end
+      end
+    end
+  end
+  local cut = {}
+  for _, it in ipairs(entries) do
+    if it.cut or not it.q then cut[#cut + 1] = it
+    else
+      local cat = it.q.cat
+      local g = group(cat and cat.key or "?", cat and cat.name or "")
+      g.items[#g.items + 1] = it
+      g.value = g.value + (it.value or 0)
+      nearTo(g, it.q)
+    end
+  end
+  for _, pk in ipairs(picks) do
+    local cat = pk.q.cat
+    local g = group(cat and cat.key or "?", cat and cat.name or "")
+    g.picks = g.picks or {}
+    g.picks[#g.picks + 1] = pk
+    nearTo(g, pk.q)
+  end
+  table.sort(groups, function(a, b)
+    if a.near ~= b.near then return a.near < b.near end
+    return a.value > b.value
+  end)
+  local out, room = {}, QB.LOG_SLOTS
+  -- the log's own quests always get a slot; then the quests you chose to pick up; follow-ups fill what is left
+  local spare = room - #entries
+  local pickRoom = math.min(#picks, math.max(0, spare))
+  local followRoom = math.max(0, spare - pickRoom)
+  local seen = {}
+  for gi, g in ipairs(groups) do
+    table.sort(g.items, function(a, b)
+      if (a.e.complete or false) ~= (b.e.complete or false) then return a.e.complete or false end
+      return (a.value or 0) > (b.value or 0)
+    end)
+    for _, it in ipairs(g.items) do
+      out[#out + 1] = { kind = "entry", it = it, group = gi }
+      local nq = UI.FollowUp(it.q)
+      if nq and followRoom > 0 and not seen[nq.id] and not QB:Plan().add[nq.id] then
+        seen[nq.id] = true
+        followRoom = followRoom - 1
+        out[#out + 1] = { kind = "follow", q = nq, value = QB.Model.XpAt(nq, s.level), from = it.q, group = gi }
+      end
+    end
+    for _, pk in ipairs(g.picks or {}) do
+      if pickRoom > 0 and not seen[pk.q.id] then
+        seen[pk.q.id] = true
+        pickRoom = pickRoom - 1
+        out[#out + 1] = { kind = "pick", q = pk.q, value = pk.value, group = gi }
+      end
+    end
+  end
+  for _, it in ipairs(cut) do out[#out + 1] = { kind = "entry", it = it, group = #groups + 1 } end
+  UI.logGroups = groups
+  return out
+end
+
 function UI:RefreshLogView(v)
   local s = QB.state
   local entries, total = {}, 0
@@ -1760,11 +1873,27 @@ function UI:RefreshLogView(v)
   if dng > 0 then where[#where + 1] = dng .. " dungeon" end
   local xpText = QB:Banking() and string.format("%s XP on the day", QB.Short(total)) or string.format("%s XP", QB.Short(total))
   v.worth:SetText(xpText .. (#where > 0 and ("  \194\183  " .. table.concat(where, "  \194\183  ")) or "") .. (overflow > 0 and string.format("  \194\183  %d more to pick up", overflow) or ""))
+  local cells = UI.LogCells(entries, picks)
   for i, b in ipairs(v.slots) do
-    local it = entries[i]
-    b.q, b.st, b.entry, b.value, b.pct, b.plvl, b.pick, b.advice = nil, nil, nil, nil, nil, nil, nil, nil
+    local cell = cells[i]
+    local it = cell and cell.kind == "entry" and cell.it or nil
+    b.q, b.st, b.entry, b.value, b.pct, b.plvl, b.pick, b.advice, b.follow, b.group = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
     b.icon:SetAlpha(1)
     b.frame:SetAlpha(1)
+    b.stamp:Hide()
+    b.link:Hide()
+    -- the band: this place's colour, joined to the next slot when it is the same place on the same row
+    if cell then
+      local nxt = cells[i + 1]
+      local joined = nxt and nxt.group == cell.group and i % 8 ~= 0
+      local col = UI.BAND[(cell.group - 1) % #UI.BAND + 1]
+      b.band:SetVertexColor(col[1], col[2], col[3], 0.9)
+      b.band:SetWidth(joined and 48 or 42)
+      b.band:Show()
+      b.group = cell.group
+    else
+      b.band:Hide()
+    end
     if it then
       b.entry, b.value = it.e, it.value
       -- what to do about a slot that earns nothing: the advice the old Make room card gave
@@ -1789,35 +1918,39 @@ function UI:RefreshLogView(v)
       else
         b.mark:SetTexture(T.waiting)
       end
-      b.mark:Show()
+      b.mark:SetShown(not it.e.complete or it.cut or not it.q)
+      b.stamp:SetShown(it.e.complete and not it.cut and it.q ~= nil)
       b.up:SetShown(it.q ~= nil and not it.cut and QB:Upgrade(it.q) ~= nil)
+    elseif cell then
+      -- a quest not in the log yet: a follow-up of the one before it, or one you chose to pick up; faded
+      local q, value = cell.q, cell.value
+      b.q, b.st, b.value = q, QB:Status(q), value
+      b.pick = cell.kind == "pick" or nil
+      b.follow = cell.kind == "follow" and cell.from or nil
+      setIcon(b.icon, q.icon)
+      b.icon:SetDesaturated(false)
+      b.icon:SetAlpha(0.55)
+      local c = QUALITY[tier(value)]
+      b.frame:SetVertexColor(c[1], c[2], c[3])
+      b.frame:SetAlpha(0.55)
+      b.frame:Show()
+      b.xp:SetText(QB.Short(value))
+      b.mark:SetTexture(T.questAvail)
+      b.mark:Show()
+      b.up:Hide()
+      b.link:SetShown(cell.kind == "follow" and (i - 1) % 8 ~= 0)
+      local cat = q.cat
+      if cat and (cat.zi or cat.icon) then b.zone:SetTexture(cat.zi or cat.icon); b.zone:Show() else b.zone:Hide() end
     else
-      local pk = picks[i - #entries]
-      if pk then
-        b.q, b.st, b.value, b.pick = pk.q, pk.st, pk.value, true
-        setIcon(b.icon, pk.q.icon)
-        b.icon:SetDesaturated(false)
-        b.icon:SetAlpha(0.55)
-        local c = QUALITY[tier(pk.value)]
-        b.frame:SetVertexColor(c[1], c[2], c[3])
-        b.frame:SetAlpha(0.55)
-        b.frame:Show()
-        b.xp:SetText(QB.Short(pk.value))
-        b.mark:SetTexture(T.questAvail)
-        b.mark:Show()
-        b.up:Hide()
-        local cat = pk.q.cat
-        if cat and (cat.zi or cat.icon) then b.zone:SetTexture(cat.zi or cat.icon); b.zone:Show() else b.zone:Hide() end
-      else
-        b.zone:Hide()
-        b.icon:SetTexture(nil)
-        b.frame:Hide()
-        b.xp:SetText("")
-        b.mark:Hide()
-        b.up:Hide()
-      end
+      b.zone:Hide()
+      b.icon:SetTexture(nil)
+      b.frame:Hide()
+      b.xp:SetText("")
+      b.mark:Hide()
+      b.up:Hide()
     end
   end
+  v.cells = cells
 
   -- bags: the sleeping bag, and quests that wait in your bags
   local bagItems = {}

@@ -36,6 +36,8 @@ def tex_style(it):
     label = (path or str(raw or it.get("tex") or "")).split("/")[-1].replace(".blp", "")
     if it.get("tex") == "color" or (path and path.endswith("white8x8.blp")) or (isinstance(raw, str) and "WHITE8x8" in raw):
         return "background:%s;" % rgba(c, 1), None
+    if isinstance(raw, str) and "ReadyCheck-Ready" in raw:
+        return "background:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAyNCAyNCc+PHBhdGggZD0nTTMgMTNsNiA2TDIxIDUnIGZpbGw9J25vbmUnIHN0cm9rZT0nIzAwMCcgc3Ryb2tlLXdpZHRoPSc2JyBzdHJva2UtbGluZWNhcD0ncm91bmQnLz48cGF0aCBkPSdNMyAxM2w2IDZMMjEgNScgZmlsbD0nbm9uZScgc3Ryb2tlPScjMzNkZDQ0JyBzdHJva2Utd2lkdGg9JzMuNScgc3Ryb2tlLWxpbmVjYXA9J3JvdW5kJy8+PC9zdmc+) center/contain no-repeat;transform:rotate(-17deg);", None
     if isinstance(raw, str) and raw.endswith("art\\ring"):
         return "border:2px solid %s;border-radius:50%%;" % rgba(c or (1, 0.82, 0.3), 1), None
     if isinstance(raw, str) and raw.startswith("Interface\\AddOns\\QuestBank\\art\\"):

@@ -3719,6 +3719,66 @@ do
 end
 
 
+-- 5.3: the Quest Log grid by place: one run a zone, the nearest first; ready ones first in each; a follow-up beside the
+-- quest it follows; a check stamped on what is done
+do
+  local U = QB.UI
+  U:ShowTab(1); U:Refresh()
+  local v1 = U.views[1]
+  local cells = v1.cells
+  assert(cells and #cells > 0 and #U.logGroups >= 2, "the log in groups: " .. #U.logGroups)
+  local ended, last = {}, nil
+  for i, cell in ipairs(cells) do
+    if cell.group ~= last then
+      assert(not ended[cell.group], "a place's quests sit together (group " .. cell.group .. " again at slot " .. i .. ")")
+      if last then ended[last] = true end
+      last = cell.group
+    end
+  end
+  for g = 1, #U.logGroups - 1 do assert(U.logGroups[g].near <= U.logGroups[g + 1].near, "the nearest place first") end
+  local follows, stamped = 0, 0
+  for i, cell in ipairs(cells) do
+    local nxt = cells[i + 1]
+    if cell.kind == "entry" and nxt and nxt.kind == "entry" and nxt.group == cell.group and nxt.it.q and cell.it.q then
+      assert(cell.it.e.complete or not nxt.it.e.complete, "ready to hand in first in a place")
+    end
+    if cell.kind == "follow" then
+      follows = follows + 1
+      local prev = cells[i - 1]
+      assert(prev and prev.kind == "entry" and prev.it.q == cell.from and prev.group == cell.group, "a follow-up right after the quest it follows")
+      assert(v1.slots[i].follow == cell.from and v1.slots[i].icon:GetAlpha() < 1, "faded, and its tooltip names the quest before it")
+    end
+    local b = v1.slots[i]
+    if cell.kind == "entry" and cell.it.e.complete and cell.it.q and not cell.it.cut then
+      assert(b.stamp:IsShown(), "a done quest has the check stamp")
+      stamped = stamped + 1
+    elseif b.stamp then
+      assert(not b.stamp:IsShown(), "only done quests are stamped")
+    end
+    assert(b.band:IsShown(), "each filled slot sits on its place's band")
+  end
+  -- follow-ups take only the slots left over after the log and your pick-ups
+  local inLog, picks, withNext = 0, 0, 0
+  for _, cell in ipairs(cells) do
+    if cell.kind == "entry" then inLog = inLog + 1; if cell.it.q and U.FollowUp(cell.it.q) then withNext = withNext + 1 end end
+    if cell.kind == "pick" then picks = picks + 1 end
+  end
+  local room = QB.LOG_SLOTS - inLog - picks
+  print("quest log groups:", #U.logGroups, "follow-ups shown:", follows, "of", withNext, "room", room, "stamped:", stamped)
+  assert(stamped >= 1 and follows == math.min(room, withNext), "stamps on the owner's log, and as many follow-ups as there is room for")
+  -- with room (twelve quests in the log): the follow-ups show, each right after its quest
+  local few = {}
+  for _, cell in ipairs(cells) do if cell.kind == "entry" and #few < 12 then few[#few + 1] = cell.it end end
+  local fewCells = U.LogCells(few, {})
+  local f2, n2 = 0, 0
+  for i, cell in ipairs(fewCells) do
+    if cell.kind == "entry" and cell.it.q and U.FollowUp(cell.it.q) then n2 = n2 + 1 end
+    if cell.kind == "follow" then f2 = f2 + 1; assert(fewCells[i - 1].it.q == cell.from, "right after its quest") end
+  end
+  print("quest log, twelve quests: follow-ups shown:", f2, "of", n2)
+  assert(f2 == n2 and f2 >= 1, "with free slots every follow-up shows beside its quest")
+  U:Refresh()
+end
 -- quests you chose to pick up show in the Quest Log grid's free slots, faded, with the pick-up mark
 do
   local U = QB.UI
