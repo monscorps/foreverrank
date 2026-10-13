@@ -2926,6 +2926,10 @@ local function makeDungeonCard(parent)
   c.gain:SetPoint("TOPRIGHT", -8, -4)
   c.left = text(c.head, "GameFontHighlightSmall", 10, WHITE, "RIGHT", 90)
   c.left:SetPoint("TOPRIGHT", -8, -20)
+  -- the dungeon's map (DungeonMap.lua): Blizzard's floor art with the bosses, their loot and the quests
+  c.map = button(c, "Map", 44)
+  c.map:SetPoint("TOPRIGHT", c.head, "TOPRIGHT", -84, -8)
+  c.map:SetScript("OnClick", QB.Safe(function() if c.head.cat and QB.DMap then QB.DMap.Toggle(c.head.cat) end end, "dungeon map"))
   c.head:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   c.head:SetScript("OnClick", function(self, which)
     if which == "RightButton" then

@@ -1410,6 +1410,53 @@ T.update({"hearth": icon("inv_misc_rune_01"), "mount": icon("ability_mount_ridin
           "note": icon("inv_misc_note_06"), "start": icon("inv_misc_coin_01")})
 lines.append("D.TEX = " + lua(T))
 lines.append("D.CAT = {\n" + "\n".join("  " + lua(c) + "," for c in CATS) + "\n}")
+
+# The dungeons' maps (DungeonMap.lua): Blizzard's own floor art, which the client ships for every Classic dungeon and
+# the City of Dalaran under Interface/WorldMap/<folder>/<folder><floor>_<tile>.blp, twelve 256-px tiles a floor in
+# four columns of three; and the bosses with the loot the site records for them (codex/loot.json: ForeverChanges,
+# wowtbc.gg and players' games), by item id: the client names the items. D.DMAP[cat key] = { art, floors = { {12
+# file ids}, ... }, bosses = { { n = name, k = boss|rare|trash, w = wing or nil, i = { item ids } }, ... } }
+DMAP_ART = {"d1581": "TheDeadmines", "d717": "TheStockade", "d718": "WailingCaverns", "d719": "BlackFathomDeeps",
+            "d209": "ShadowfangKeep", "d796": "ScarletMonastery", "d491": "RazorfenKraul", "d1337": "Uldaman",
+            "d721": "Gnomeregan", "d2437": "Ragefire", "d722": "RazorfenDowns", "d16611": "RuinsofLordaeronScenario",
+            "d1417": "TheTempleofAtalhakkar", "d1584": "BlackrockDepths", "d1583": "BlackrockSpire", "d2057": "Scholomance",
+            "d2017": "Stratholme", "d2557": "DireMaul", "d2100": "Maraudon", "d16544": "DalaranCity"}
+DMAP_LOOT = {"The Deadmines": "d1581", "The Stockade": "d717", "Wailing Caverns": "d718", "Blackfathom Deeps": "d719",
+             "Shadowfang Keep": "d209", "Scarlet Monastery: Graveyard": "d796", "Scarlet Monastery: Library": "d796",
+             "Scarlet Monastery: Armory": "d796", "Scarlet Monastery: Cathedral": "d796", "Razorfen Kraul": "d491",
+             "Uldaman": "d1337", "Gnomeregan": "d721", "Ragefire Chasm": "d2437", "Razorfen Downs": "d722",
+             "Ruins of Lordaeron": "d16611", "The Temple of Atal'Hakkar": "d1417", "Blackrock Depths": "d1584",
+             "Blackrock Spire: Lower": "d1583", "Blackrock Spire: Upper": "d1583", "Scholomance": "d2057", "Stratholme": "d2017",
+             "Dire Maul: East": "d2557", "Dire Maul: North": "d2557", "Dire Maul: West": "d2557", "Maraudon": "d2100",
+             "City of Dalaran": "d16544", "Excavation Site: Wetlands": "d16732", "Hall of Thanes": "d16919"}
+_LOOT_EARLY = load_json(os.path.join(REPO, "codex", "loot.json")) or {}
+DMAP = {}
+for key, folder in DMAP_ART.items():
+    floors = []
+    f = 1
+    while True:
+        ids = []
+        for t in range(1, 13):
+            k = "interface/worldmap/%s/%s%d_%d.blp" % (folder.lower(), folder.lower(), f, t)
+            if k not in MAN:
+                break
+            ids.append(int(MAN[k]))
+        if len(ids) < 12:
+            break
+        floors.append(ids)
+        f += 1
+    if floors:
+        DMAP[key] = {"art": folder, "floors": floors, "bosses": []}
+for d in _LOOT_EARLY.get("dungeons", []):
+    key = DMAP_LOOT.get(d.get("name"))
+    if not key:
+        continue
+    entry = DMAP.setdefault(key, {"art": None, "floors": [], "bosses": []})
+    wing = d["name"].split(": ", 1)[1] if ": " in d["name"] and key in ("d796", "d1583", "d2557") else None
+    for b in d.get("bosses", []):
+        items = [int(i) for i in (b.get("items") or []) if str(i).isdigit()][:12]
+        entry["bosses"].append({"n": b["name"], "k": b.get("kind") or "boss", "w": wing, "i": items})
+lines.append("D.DMAP = " + lua(DMAP))
 lines.append("-- [id] = {quest level, required level, side (1 Alliance, 2 Horde, 0 both), Classic base XP, Forever multiplier,")
 lines.append("--         turn-in NPC, quest giver, category, class mask, flags (1 dungeon, 2 group, 4 starts from an item, 8 multiplier not read,")
 lines.append("--         16 Classic only: not in Wowhead Forever's data yet, 32 multiplier taken from its dungeon's other quests,")

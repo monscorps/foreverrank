@@ -1227,6 +1227,44 @@ do
   env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
   Mini.Invalidate(); Mini.Place()
 end
+-- 3.9.0: dungeon maps (DungeonMap.lua): the client's floor art, the bosses with their recorded loot, the quests
+do
+  local DM, env = QB.DMap, owner.env
+  local D = QB.Data.DMAP
+  assert(D and D.d1581 and #D.d1581.floors == 2 and #D.d1581.floors[1] == 12 and #D.d1581.bosses >= 5, "the Deadmines: two floors of twelve tiles and its bosses")
+  assert(D.d209 and #D.d209.floors == 7 and D.d16544 and #D.d16544.floors == 2 and D.d796 and D.d796.bosses[1].w, "Shadowfang's seven floors, the City of Dalaran's two, the Monastery's wings")
+  local list = DM.List()
+  assert(#list >= 15, "the dungeons with a map or bosses: " .. #list)
+  local dm = DM.Find("deadmines")
+  assert(dm and dm.key == "d1581" and DM.Find("Scarlet").key == "d796" and DM.Find("nothing like it") == nil, "finding a dungeon by part of its name")
+  local f = DM.Open(dm)
+  assert(f and f:IsShown() and env.QuestBankDungeonMap == f and f.title:GetText():find("The Deadmines", 1, true), "the map opens")
+  assert(#f.tiles == 12 and f.tiles[1].__tex == D.d1581.floors[1][1] and f.tiles[12].__tex == D.d1581.floors[1][12] and not f.noArt:IsShown(), "floor 1's tiles")
+  assert(f.floors[1] and f.floors[2] and f.floors[2]:IsShown() and not f.floors[1]:IsEnabled(), "two floor buttons, the shown one greyed")
+  DM.ShowFloor(2)
+  assert(f.tiles[1].__tex == D.d1581.floors[2][1] and f.floors[1]:IsEnabled() and not f.floors[2]:IsEnabled(), "floor 2")
+  local shownBosses = 0
+  for _, r in ipairs(f.bossRows) do if r:IsShown() then shownBosses = shownBosses + 1 end end
+  assert(shownBosses == #D.d1581.bosses and f.bossRows[1].text:GetText():find("Rhahk'Zor", 1, true), "a row a boss")
+  assert(f.bossRows[1].right:GetText():find("items", 1, true), "with its item count")
+  assert(type(DM.ItemName(872)) == "string" and type(DM.ItemName(999999999)) == "string", "items are named by the client, or by id until it answers")
+  local qs = DM.Quests("d1581")
+  assert(#qs >= 3, "the Deadmines' quests: " .. #qs)
+  local shownQ = 0
+  for _, r in ipairs(f.questRows) do if r:IsShown() then shownQ = shownQ + 1 end end
+  assert(shownQ == #qs and f.entrance:IsShown(), "a row a quest, and the entrance button")
+  DM.Toggle(dm)
+  assert(not f:IsShown(), "toggled away")
+  local rc = DM.Find("Ragefire")
+  DM.Open(rc)
+  assert(f:IsShown() and not f.floors[2]:IsShown() and not f.entrance:IsShown(), "Ragefire: one floor (no buttons), no entrance known")
+  local chat0 = #owner.chat
+  DM.Command("nothing like it")
+  assert(#owner.chat == chat0 + 1 and owner.chat[#owner.chat]:find("No dungeon called", 1, true), "an unknown name is said")
+  DM.Command("stockade")
+  assert(f.cat.key == "d717", "/qb map stockade")
+  f:Hide()
+end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
   local set = QB:Settings()

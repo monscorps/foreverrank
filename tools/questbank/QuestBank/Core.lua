@@ -2379,6 +2379,8 @@ slash = function(msg)
     elseif QB.UI then
       QB.UI:ShowErrors()
     end
+  elseif cmd == "map" or cmd == "maps" then
+    if QB.DMap then QB.DMap.Command(rest) end
   elseif cmd == "bigmap" then
     if QB.Mini then QB.Mini.Big() end
   elseif cmd == "events" then
