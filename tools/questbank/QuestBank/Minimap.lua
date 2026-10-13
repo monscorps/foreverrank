@@ -226,12 +226,41 @@ function Mini.Place()
   end
   for i = li + 1, #lines do lines[i]:Hide() end
   Mini.shown, Mini.linesShown = n, li
+  Mini.DrawTrails(me, radius, R, facing, f)
+end
+
+-- your walked trails (Walk.lua), as thin lines under the pins
+local trailLines = {}
+function Mini.DrawTrails(me, radius, R, facing, f)
+  local n = 0
+  if QB.Walk and QB:Settings().walkShow ~= false and f.CreateLine then
+    for _, seg in ipairs(QB.Walk.Near(me.c, me.wx, me.wy, radius * 1.1)) do
+      local x1, y1, _, far1 = Mini.Project(me, { wx = seg[1], wy = seg[2] }, radius, R, facing)
+      local x2, y2, _, far2 = Mini.Project(me, { wx = seg[3], wy = seg[4] }, radius, R, facing)
+      if not (far1 and far2) then
+        n = n + 1
+        local l = trailLines[n]
+        if not l then
+          l = f:CreateLine(nil, "BACKGROUND", nil, -1)
+          l:SetThickness(3)
+          l:SetColorTexture(1, 0.85, 0.4, 0.28)
+          trailLines[n] = l
+        end
+        l:SetStartPoint("CENTER", f, x1, y1)
+        l:SetEndPoint("CENTER", f, x2, y2)
+        l:Show()
+      end
+    end
+  end
+  for i = n + 1, #trailLines do trailLines[i]:Hide() end
+  Mini.trailsShown = n
 end
 
 function Mini.Clear()
   for _, p in ipairs(pins) do p:Hide() end
   for _, l in ipairs(lines) do l:Hide() end
-  Mini.shown, Mini.linesShown = 0, 0
+  for _, l in ipairs(trailLines) do l:Hide() end
+  Mini.shown, Mini.linesShown, Mini.trailsShown = 0, 0, 0
 end
 
 function Mini.Invalidate() worldOf = {} end

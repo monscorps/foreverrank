@@ -1357,6 +1357,47 @@ do
   c.soft = nil; c.cvars = {}
   QB:Settings().glow.saved = nil
 end
+-- 3.9.0: walked trails (Walk.lua): noted every 15 yards outdoors, a jump starts a new trail, drawn on the minimap
+do
+  local Walk, Mini, env = QB.Walk, QB.Mini, owner.env
+  c = owner
+  assert(Walk and Walk.frame and Walk.STEP == 15 and Walk.BREAK == 150 and Walk.MAX_POINTS == 12000, "trails on, the numbers")
+  local W = Walk.DB()
+  W[0], W[1] = nil, nil
+  local function at(wx, wy) return Walk.Note({ c = 0, wx = wx, wy = wy }) end
+  assert(at(1000, 2000) == true and at(1005, 2000) == false and at(1016, 2000) == true, "the first point, a step too short, a step on")
+  assert(#W[0] == 1 and #W[0][1] == 4 and W[0][1][3] == 1016, "one trail of two points")
+  assert(at(1400, 2000) == true and #W[0] == 2, "a jump of 150 yards or more starts a new trail")
+  local saveInst = env.IsInInstance
+  env.IsInInstance = function() return true, "party" end
+  assert(Walk.Note() == false, "inside an instance nothing is noted")
+  env.IsInInstance = saveInst
+  QB:Settings().walkRecord = false
+  assert(at(1500, 2000) == false, "off: nothing")
+  QB:Settings().walkRecord = true
+  -- the cap: the oldest trail goes
+  for i = 1, 12010 do at(1400 + i * 20, 2000) end
+  local n = 0; for _, t in ipairs(W[0]) do n = n + #t / 2 end
+  assert(n <= 12000 and W[0][1][1] ~= 1000, "no more than 12,000 points a continent; the first trail went")
+  -- near: segments around a point, on the minimap
+  W[0] = { { 1000, 2000, 1015, 2000, 1030, 2000, 1045, 2000 }, { 9000, 9000, 9015, 9000 } }
+  Walk.dirty = true
+  local near = Walk.Near(0, 1020, 2000, 100)
+  assert(#near == 3 and Walk.Near(0, 5000, 5000, 100)[1] == nil, "the three segments of the first trail near its middle; none far away: " .. #near)
+  local saveWorld, savePos = env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition
+  env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = v.y * 2000, y = v.x * 4000, GetXY = function(self) return self.x, self.y end } end
+  env.C_Map.GetPlayerMapPosition = function() return { x = 0.5, y = 0.5, GetXY = function(self) return self.x, self.y end } end -- (1000, 2000)
+  c.miniRadius = 200
+  Mini.Place()
+  assert(Mini.trailsShown == 3, "the three segments drawn near you on the minimap: " .. tostring(Mini.trailsShown))
+  QB:Settings().walkShow = false
+  Mini.Place()
+  assert(Mini.trailsShown == 0, "not when switched off")
+  QB:Settings().walkShow = true
+  env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
+  W[0] = nil
+  Mini.Invalidate(); Mini.Place()
+end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
   local set = QB:Settings()
