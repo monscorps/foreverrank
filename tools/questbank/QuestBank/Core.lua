@@ -1008,9 +1008,9 @@ local DEFAULTS = {
   minimapPins = true, minimapLines = true, minimapPickups = true, minimapEntrances = true,
   glow = { on = true, other = true, combat = false },
   walkRecord = true, walkShow = true, -- walked trails (Walk.lua): noted as you go, drawn on the minimap
-  -- reminders (Camp.lua): camp features you can place, food when Well Fed runs out, the sleeping bag when you stand
-  -- still, a camp buff that ran out; quiet in a fight, and in dungeons when quietInstance
-  remind = { camp = true, food = true, bag = true, buff = false, quietInstance = true }, -- the light on the object your Interact key would use (Glow.lua)
+  -- the camp bar (Camp.lua): Well Fed, the campfire kit, camp features with their cooldown, the sleeping bag; hidden in
+  -- dungeons when quietInstance. campBar = false hides the bar
+  remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true }, campBar = true,
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
   noteGame = true, -- note the spells and item tooltips the Forever client shows, for foreverrank.com (Game.lua)
   -- quest icons on each zone's world map (QuestMap.lua, Forever only): all of them, then where quests you can take

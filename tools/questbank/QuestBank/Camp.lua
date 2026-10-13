@@ -1,30 +1,30 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Reminders, as small toasts at the top of the screen, each with a button that uses the item (a secure button: the
--- click is yours, QuestBank only sets what it uses). Four kinds, each with its own switch in Settings, all quiet in
--- a fight and, if asked, in dungeons:
---   camp   a campfire was lit (yours, or one you walk up to): the camp features your professions can place that you
---          carry, with what each gives, when the shared one-hour camp cooldown is up
---   food   Well Fed ran out and you carry food that gives it
---   bag    you stand still outdoors with the Cozy Sleeping Bag packed and fewer than three Well Rested stacks
---   buff   a camp buff you had ran out and the camp cooldown is up
+-- The camp bar: a row of icons, the way a WeakAura shows a buff, up whenever one of them has something to say. Each
+-- icon is the game's secure button for its item, so a click is yours: QuestBank only sets which item it uses, and
+-- only out of a fight. Each has its own switch in Settings:
+--   food   Well Fed with its minutes; gone: the food you carry that gives it, lit, a click eats it; none: grey
+--   fire   the campfire kit you carry and how many; a click lights it
+--   camp   the best camp feature you can place: the shared one-hour cooldown as a sweep, lit when a campfire is near
+--          and the cooldown is up; a click places it
+--   bag    the Cozy Sleeping Bag with your Well Rested stacks, lit when you stand still under three; a click unfurls it
+-- Alt-drag moves the bar. In a fight it dims and keeps its buttons as they are; in dungeons it hides if asked.
 -- What the game tells: your professions (GetProfessions), your bags (Game.ScanItems), your buffs (C_UnitAuras), the
 -- spell a kit casts (D.CAMP[id].sp, seen on UNIT_SPELLCAST_SUCCEEDED), the campfire under your Interact key.
 local _, QB = ...
 local Camp = {}
 QB.Camp = Camp
 
-local STILL = 20          -- seconds standing still before the sleeping-bag reminder
-local AGAIN = 600         -- seconds before the same reminder is shown again
+local STILL = 20          -- seconds standing still before the sleeping bag lights
 local CAMP_CD = 3600      -- the shared camp cooldown
 local TICK = 2            -- seconds between looks
-local MAX_TOASTS = 3
-Camp.STILL, Camp.AGAIN, Camp.CAMP_CD = STILL, AGAIN, CAMP_CD
+Camp.STILL, Camp.CAMP_CD = STILL, CAMP_CD
 
 local plain = QB.Plain
 local function now() return GetTime and GetTime() or 0 end
 local function settings()
   local s = QB:Settings()
-  if type(s.remind) ~= "table" then s.remind = { camp = true, food = true, bag = true, buff = false, quietInstance = true } end
+  if type(s.remind) ~= "table" then s.remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true } end
+  if s.remind.fire == nil then s.remind.fire = true end
   return s.remind
 end
 
@@ -44,8 +44,9 @@ function Camp.Professions()
   return out
 end
 
--- your helpful auras by name, and the stacks of one
-function Camp.Buffs()
+-- your helpful auras by name: the stacks of one (Camp.Buffs), or what the game says of it (Camp.Auras: stacks, when
+-- it runs out on GetTime's clock, its icon)
+function Camp.Auras()
   local out = {}
   local get = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
   if get then
@@ -53,9 +54,17 @@ function Camp.Buffs()
       local ok, a = pcall(get, "player", i, "HELPFUL")
       if not ok or type(a) ~= "table" then break end
       local n = plain(a.name)
-      if type(n) == "string" then out[n] = plain(a.applications) or 1 end
+      if type(n) == "string" then
+        local exp = plain(a.expirationTime)
+        out[n] = { n = plain(a.applications) or 1, exp = type(exp) == "number" and exp > 0 and exp or nil, icon = plain(a.icon) }
+      end
     end
   end
+  return out
+end
+function Camp.Buffs()
+  local out = {}
+  for n, a in pairs(Camp.Auras()) do out[n] = a.n end
   return out
 end
 
@@ -79,6 +88,15 @@ function Camp.Placeable(bags, profs)
   return best
 end
 
+-- the campfire kits you carry, the best first
+function Camp.Kits(bags)
+  bags = bags or carried()
+  local out = {}
+  for id, e in pairs(QB.Data.CAMP or {}) do if e.t == "kit" and bags[id] then out[#out + 1] = { id = id, e = e } end end
+  table.sort(out, function(a, b) return (a.e.s or 0) > (b.e.s or 0) end)
+  return out
+end
+
 -- the foods you carry that make you Well Fed
 function Camp.Foods(bags)
   bags = bags or carried()
@@ -89,124 +107,217 @@ function Camp.Foods(bags)
 end
 
 ----------------------------------------------------------------------------
--- the toasts
+-- the bar
 ----------------------------------------------------------------------------
 local ART = "Interface\\AddOns\\QuestBank\\art\\"
-local stack, toasts = nil, {}
-local function stackFrame()
-  if stack then return stack end
-  stack = CreateFrame("Frame", "QuestBankToasts", UIParent)
-  stack:SetSize(420, 10)
-  stack:SetPoint("TOP", UIParent, "TOP", 0, -90)
-  stack:SetFrameStrata("HIGH")
-  return stack
-end
-local function toast(i)
-  local t = toasts[i]
-  if t then return t end
-  t = CreateFrame("Frame", nil, stackFrame(), BackdropTemplateMixin and "BackdropTemplate" or nil)
-  t:SetSize(420, 52)
-  if t.SetBackdrop then
-    t:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
-    t:SetBackdropColor(0.06, 0.08, 0.11, 0.94)
-    t:SetBackdropBorderColor(0.55, 0.42, 0.18, 1)
-  end
-  t.icon = t:CreateTexture(nil, "ARTWORK")
-  t.icon:SetSize(36, 36)
-  t.icon:SetPoint("LEFT", 8, 0)
-  t.title = t:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  t.title:SetPoint("TOPLEFT", 52, -8)
-  t.title:SetWidth(270); t.title:SetJustifyH("LEFT")
-  t.text = t:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  t.text:SetPoint("TOPLEFT", 52, -27)
-  t.text:SetWidth(270); t.text:SetJustifyH("LEFT")
-  t.text:SetTextColor(0.75, 0.7, 0.6)
-  -- the Use button: secure, so the click is the player's own; set only out of combat
-  t.use = CreateFrame("Button", nil, t, "SecureActionButtonTemplate")
-  t.use:SetSize(64, 22)
-  t.use:SetPoint("RIGHT", -30, 0)
-  t.use:RegisterForClicks("AnyUp", "AnyDown")
-  t.use.bg = t.use:CreateTexture(nil, "BACKGROUND")
-  t.use.bg:SetAllPoints()
-  t.use.bg:SetColorTexture(0.35, 0.2, 0.08, 0.95)
-  t.use.label = t.use:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  t.use.label:SetPoint("CENTER")
-  t.close = CreateFrame("Button", nil, t)
-  t.close:SetSize(20, 20)
-  t.close:SetPoint("RIGHT", -6, 0)
-  t.close.x = t.close:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  t.close.x:SetPoint("CENTER"); t.close.x:SetText("x")
-  t.close:SetScript("OnClick", function(self) Camp.Dismiss(self:GetParent().key) end)
-  t:Hide()
-  toasts[i] = t
-  return t
-end
-
-local shown = {}   -- key -> { title, text, icon, item, verb, at }
-local lastShown = {} -- key -> time it was last put up (AGAIN)
-local function layout()
-  local y, n = 0, 0
-  local keys = {}
-  for k in pairs(shown) do keys[#keys + 1] = k end
-  table.sort(keys, function(a, b) return shown[a].at < shown[b].at end)
-  for _, k in ipairs(keys) do
-    n = n + 1
-    if n > MAX_TOASTS then break end
-    local d, t = shown[k], toast(n)
-    t.key = k
-    t.icon:SetTexture(d.icon and ("Interface\\Icons\\" .. d.icon) or 134400)
-    t.title:SetText(d.title)
-    t.text:SetText(d.text)
-    if d.item and not (InCombatLockdown and InCombatLockdown()) then
-      t.use:SetAttribute("type", "item")
-      t.use:SetAttribute("item", "item:" .. d.item)
-      t.use.label:SetText(d.verb or "Use")
-      t.use:Show()
-    else
-      t.use:Hide()
-    end
-    t:ClearAllPoints()
-    t:SetPoint("TOP", stackFrame(), "TOP", 0, -y)
-    t:Show()
-    y = y + 58
-  end
-  for i = n + 1, #toasts do toasts[i]:Hide() end
-  Camp.visible = math.min(n, MAX_TOASTS)
-end
-
-function Camp.Show(key, d)
-  local t = now()
-  if shown[key] then return false end
-  if lastShown[key] and t - lastShown[key] < AGAIN then return false end
-  d.at = t
-  shown[key], lastShown[key] = d, t
-  layout()
-  return true
-end
-
-function Camp.Dismiss(key)
-  if not shown[key] then return end
-  shown[key] = nil
-  layout()
-end
-
-function Camp.Clear()
-  shown = {}
-  layout()
-end
-
-----------------------------------------------------------------------------
--- the rules
-----------------------------------------------------------------------------
-local campAt, fireAt, lastMove, lastPos, lastBuffs = nil, nil, nil, nil, {}
+local SIZE, GAP = 40, 6
+local ORDER = { "food", "fire", "camp", "bag" }
+local bar, icons = nil, {}
+local campAt, fireAt, lastMove, lastPos
 
 local function quiet()
-  if InCombatLockdown and InCombatLockdown() then return true end
   if settings().quietInstance ~= false and IsInInstance then
     local ok, inside = pcall(IsInInstance)
     if ok and plain(inside) == true then return true end
   end
   return false
+end
+local function fighting() return InCombatLockdown and InCombatLockdown() or false end
+
+local function barFrame()
+  if bar then return bar end
+  bar = CreateFrame("Frame", "QuestBankCampBar", UIParent)
+  bar:SetSize(SIZE, SIZE)
+  bar:SetFrameStrata("MEDIUM")
+  bar:SetMovable(true)
+  bar:SetClampedToScreen(true)
+  local pos = settings().pos
+  if type(pos) == "table" and pos.x then bar:SetPoint("CENTER", UIParent, "BOTTOMLEFT", pos.x, pos.y) else bar:SetPoint("CENTER", UIParent, "CENTER", 0, -190) end
+  bar.elapsed = 0
+  return bar
+end
+
+local function moveStart(_, button)
+  if button == "LeftButton" and IsAltKeyDown and IsAltKeyDown() and not fighting() then bar:StartMoving(); bar.moving = true end
+end
+local function moveStop()
+  if not bar.moving then return end
+  bar.moving = nil
+  bar:StopMovingOrSizing()
+  local x, y = bar:GetCenter()
+  if x then settings().pos = { x = x, y = y } end
+end
+
+local function icon(key)
+  local b = icons[key]
+  if b then return b end
+  b = CreateFrame("Button", "QuestBankCamp_" .. key, barFrame(), "SecureActionButtonTemplate")
+  b:SetSize(SIZE, SIZE)
+  b:RegisterForClicks("AnyUp", "AnyDown")
+  b:SetAttribute("alt-type1", "noop") -- Alt-click moves the bar, never uses the item
+  b.edge = b:CreateTexture(nil, "BACKGROUND")
+  b.edge:SetPoint("TOPLEFT", -1, 1); b.edge:SetPoint("BOTTOMRIGHT", 1, -1)
+  b.edge:SetColorTexture(0, 0, 0, 1)
+  b.glow = b:CreateTexture(nil, "BACKGROUND", nil, -1)
+  b.glow:SetTexture(ART .. "glow")
+  b.glow:SetBlendMode("ADD")
+  b.glow:SetPoint("CENTER")
+  b.glow:SetSize(SIZE * 1.9, SIZE * 1.9)
+  b.glow:Hide()
+  b.icon = b:CreateTexture(nil, "ARTWORK")
+  b.icon:SetAllPoints()
+  b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  b.cd = CreateFrame("Cooldown", nil, b, "CooldownFrameTemplate")
+  b.cd:SetAllPoints()
+  if b.cd.SetHideCountdownNumbers then b.cd:SetHideCountdownNumbers(true) end
+  b.time = b:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+  b.time:SetPoint("BOTTOM", 0, 2)
+  b.count = b:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+  b.count:SetPoint("TOPRIGHT", -2, -2)
+  b.hi = b:CreateTexture(nil, "HIGHLIGHT")
+  b.hi:SetAllPoints()
+  b.hi:SetColorTexture(1, 1, 1, 0.12)
+  b:HookScript("OnMouseDown", moveStart)
+  b:HookScript("OnMouseUp", moveStop)
+  b:SetScript("OnEnter", function(self)
+    if not self.tip then return end
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText(self.tip[1], 1, 0.82, 0.3)
+    for i = 2, #self.tip do GameTooltip:AddLine(self.tip[i], 1, 1, 1, true) end
+    GameTooltip:AddLine("Alt-drag moves the bar.", 0.5, 0.5, 0.5)
+    GameTooltip:Show()
+  end)
+  b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  b:Hide()
+  icons[key] = b
+  return b
+end
+
+local function mins(sec)
+  if not sec or sec <= 0 then return "" end
+  if sec >= 3600 then return string.format("%dh", math.floor(sec / 3600 + 0.5)) end
+  if sec >= 60 then return string.format("%dm", math.ceil(sec / 60)) end
+  return string.format("%ds", math.ceil(sec))
+end
+
+local function itemCD(id)
+  local get = C_Container and C_Container.GetItemCooldown
+  if not (get and id) then return 0, 0 end
+  local ok, start, dur = pcall(get, id)
+  start, dur = ok and plain(start) or 0, ok and plain(dur) or 0
+  if type(start) ~= "number" or type(dur) ~= "number" or dur <= 1.5 then return 0, 0 end
+  return start, dur
+end
+
+local function count(id)
+  local get = C_Item and C_Item.GetItemCount or GetItemCount
+  local ok, n = pcall(get, id)
+  n = ok and plain(n) or 0
+  return type(n) == "number" and n or 0
+end
+
+-- what each icon shows now: nil to hide it, else { tex, time, count, lit, grey, item, cd = { start, dur }, tip }
+function Camp.State()
+  local s = settings()
+  local out = {}
+  local auras, bags, t = Camp.Auras(), carried(), now()
+  if s.food then
+    local fed = auras["Well Fed"]
+    if fed then
+      out.food = { tex = fed.icon or 136000, time = fed.exp and mins(fed.exp - t) or "", tip = { "Well Fed", fed.exp and ("Runs out in " .. mins(fed.exp - t) .. ".") or "" } }
+    else
+      local foods = Camp.Foods(bags)
+      local f = foods[1]
+      if f then
+        out.food = { tex = "Interface\\Icons\\" .. f.e.i, count = count(f.id), lit = true, item = f.id,
+                     tip = { "Not Well Fed", f.e.n .. ": " .. (f.e.g or "Well Fed") .. ". Click to eat." } }
+      else
+        out.food = { tex = 133945, grey = true, tip = { "Not Well Fed", "No food in your bags that gives Well Fed." } }
+      end
+    end
+  end
+  local cdStart, cdDur = 0, 0
+  if s.camp then
+    local list = Camp.Placeable(bags)
+    local best = list[1]
+    if best then
+      cdStart, cdDur = itemCD(best.id)
+      if cdDur == 0 and campAt and t - campAt < CAMP_CD then cdStart, cdDur = campAt, CAMP_CD end
+      local up = cdDur == 0 or (cdStart + cdDur - t) <= 0
+      local near = fireAt and t - fireAt < 300
+      local names = {}
+      for i = 1, math.min(4, #list) do names[#names + 1] = list[i].e.n .. (list[i].e.g and (": " .. list[i].e.g) or "") end
+      out.camp = { tex = "Interface\\Icons\\" .. best.e.i, lit = up and near, grey = not up, item = best.id, cd = (not up) and { cdStart, cdDur } or nil,
+                   time = (not up) and mins(cdStart + cdDur - t) or "",
+                   tip = { up and (near and "Place a camp feature" or "Camp features ready") or ("Camp cooldown: " .. mins(cdStart + cdDur - t)),
+                           table.concat(names, "\n"), up and (near and "Click to place the first." or "Light a campfire, then click to place the first.") or "All camp features share an hour's cooldown." } }
+    end
+  end
+  if s.fire then
+    local kits = Camp.Kits(bags)
+    local k = kits[1]
+    if k then
+      out.fire = { tex = "Interface\\Icons\\" .. k.e.i, count = count(k.id), item = k.id, lit = out.camp and not out.camp.grey and not (fireAt and t - fireAt < 300),
+                   tip = { k.e.n, string.format("Holds %d camp feature%s. Click to light it.", k.e.cap or 3, (k.e.cap or 3) == 1 and "" or "s") } }
+    end
+  end
+  if s.bag and bags[211527] then
+    local me = QB.API.WorldPosition()
+    if me and lastPos and math.abs(me.wx - lastPos.wx) + math.abs(me.wy - lastPos.wy) > 2 then lastMove = t end
+    if me then lastPos = me end
+    lastMove = lastMove or t
+    local rested = auras["Well Rested"]
+    local stacks = rested and rested.n or 0
+    local still = t - lastMove >= STILL and not (UnitOnTaxi and plain(UnitOnTaxi("player")) == true)
+    out.bag = { tex = "Interface\\Icons\\" .. ((QB.Data.CAMP[211527] or {}).i or "inv_misc_bag_bigbagofenchantments"), count = stacks > 0 and stacks or nil,
+                time = rested and rested.exp and mins(rested.exp - t) or "", lit = stacks < 3 and still, grey = stacks == 0 and not still, item = 211527,
+                tip = { "Well Rested " .. stacks .. "/3", "A minute in the Cozy Sleeping Bag adds a stack of bonus XP. Click to unfurl it." } }
+  end
+  return out
+end
+
+function Camp.Refresh()
+  local f = barFrame()
+  if quiet() then
+    if not fighting() then f:Hide() end
+    Camp.visible = 0
+    return
+  end
+  local fight = fighting()
+  local st = Camp.State()
+  local x, n = 0, 0
+  for _, key in ipairs(ORDER) do
+    local d, b = st[key], icon(key)
+    if d then
+      n = n + 1
+      b.icon:SetTexture(d.tex)
+      b.icon:SetDesaturated(d.grey and true or false)
+      b.icon:SetAlpha(d.grey and 0.55 or 1)
+      b.time:SetText(d.time or "")
+      b.count:SetText(d.count and d.count > 1 and tostring(d.count) or (key == "bag" and d.count and tostring(d.count) or ""))
+      b.glow:SetShown(d.lit and true or false)
+      b.edge:SetColorTexture(d.lit and 1 or 0, d.lit and 0.75 or 0, d.lit and 0.2 or 0, 1)
+      if d.cd then b.cd:SetCooldown(d.cd[1], d.cd[2]) else b.cd:SetCooldown(0, 0) end
+      b.tip = d.tip
+      b.state = d
+      if not fight then
+        b:SetAttribute("type", d.item and "item" or nil)
+        b:SetAttribute("item", d.item and ("item:" .. d.item) or nil)
+        b:ClearAllPoints()
+        b:SetPoint("LEFT", f, "LEFT", x, 0)
+        b:Show()
+      end
+      x = x + SIZE + GAP
+    elseif not fight then
+      b:Hide()
+    end
+  end
+  if not fight then
+    f:SetSize(math.max(SIZE, x - GAP), SIZE)
+    f:SetShown(n > 0 and QB:Settings().campBar ~= false)
+  end
+  f:SetAlpha(fight and 0.45 or 1)
+  Camp.visible = (QB:Settings().campBar ~= false) and n or 0
 end
 
 function Camp.CooldownLeft()
@@ -217,50 +328,7 @@ end
 -- a campfire is here: yours lit, or one under your Interact key
 function Camp.OnFire()
   fireAt = now()
-  if not settings().camp or quiet() then return end
-  if Camp.CooldownLeft() > 0 then return end
-  local list = Camp.Placeable()
-  if #list == 0 then return end
-  local names = {}
-  for i = 1, math.min(3, #list) do names[#names + 1] = list[i].e.n .. (list[i].e.g and (" (" .. list[i].e.g .. ")") or "") end
-  local first = list[1]
-  Camp.Show("camp", { title = string.format("A campfire is lit. You can place %d thing%s.", #list, #list == 1 and "" or "s"),
-                      text = table.concat(names, " \194\183 ") .. (#list > 3 and " ..." or ""), icon = first.e.i, item = first.id, verb = "Place" })
-end
-
-function Camp.Look()
-  if quiet() then Camp.Clear(); return end
-  local s = settings()
-  local buffs = Camp.Buffs()
-  -- food
-  if s.food and not buffs["Well Fed"] then
-    local foods = Camp.Foods()
-    if #foods > 0 then
-      local f = foods[1]
-      Camp.Show("food", { title = "Well Fed is gone.", text = f.e.n .. " in your bags: " .. (f.e.g or "Well Fed") .. ".", icon = f.e.i, item = f.id, verb = "Eat" })
-    end
-  elseif buffs["Well Fed"] then Camp.Dismiss("food") end
-  -- the sleeping bag
-  if s.bag then
-    local me = QB.API.WorldPosition()
-    if me and lastPos and math.abs(me.wx - lastPos.wx) + math.abs(me.wy - lastPos.wy) > 2 then lastMove = now() end
-    if me then lastPos = me end
-    lastMove = lastMove or now()
-    local stacks = buffs["Well Rested"] or 0
-    local bags = carried()
-    if bags[211527] and stacks < 3 and now() - lastMove >= STILL and not (UnitOnTaxi and plain(UnitOnTaxi("player")) == true) then
-      Camp.Show("bag", { title = "Standing still with the sleeping bag packed.", text = "Unfurl it: a minute inside is +XP, stacks to 3" .. (stacks > 0 and (" (you have " .. stacks .. ")") or "") .. ".", icon = "inv_misc_bag_cenarionherbbag", item = 211527, verb = "Unfurl" })
-    elseif stacks >= 3 then Camp.Dismiss("bag") end
-  end
-  -- a camp buff ran out
-  if s.buff then
-    for name in pairs(lastBuffs) do
-      if not buffs[name] and Camp.IsCampBuff(name) and Camp.CooldownLeft() == 0 then
-        Camp.Show("buff", { title = name .. " ran out.", text = "The camp cooldown is up: place it again at a campfire.", icon = "spell_fire_fire" })
-      end
-    end
-  end
-  lastBuffs = buffs
+  Camp.Refresh()
 end
 
 -- the camp buffs carry their feature's name, as far as players' games have shown
@@ -283,17 +351,18 @@ function Camp.OnEvent(event, a1, a2, a3)
     if plain(a1) ~= "player" then return end
     local sp = plain(a3)
     if KIT[sp] then Camp.OnFire() end
-    if FEATURE[sp] then campAt = now(); Camp.Dismiss("camp"); Camp.Dismiss("buff") end
+    if FEATURE[sp] then campAt = now(); Camp.Refresh() end
   elseif event == "PLAYER_SOFT_INTERACT_CHANGED" then
     local name = plain(UnitName and UnitName("softinteract"))
     local guid = plain(UnitGUID and UnitGUID("softinteract"))
     if type(name) == "string" and type(guid) == "string" and guid:find("^GameObject") and name:lower():find("campfire", 1, true) then
       if not fireAt or now() - fireAt > 60 then Camp.OnFire() end
     end
-  elseif event == "PLAYER_REGEN_DISABLED" then
-    Camp.Clear()
+  elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" or event == "BAG_UPDATE_DELAYED" then
+    Camp.Refresh()
   elseif event == "PLAYER_ENTERING_WORLD" then
     lastMove = now()
+    Camp.Refresh()
   end
 end
 
@@ -308,9 +377,10 @@ function Camp:Init()
     self.elapsed = self.elapsed + (dt or 0)
     if self.elapsed < TICK then return end
     self.elapsed = 0
-    Camp.Look()
-  end, "reminders"))
-  for _, e in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "PLAYER_SOFT_INTERACT_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_ENTERING_WORLD" }) do
+    Camp.Refresh()
+  end, "camp bar"))
+  for _, e in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "PLAYER_SOFT_INTERACT_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+                       "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED" }) do
     pcall(f.RegisterEvent, f, e)
   end
 end

@@ -4106,15 +4106,15 @@ function UI:CreateSettingsView(parent)
   v.ctxText:SetPoint("TOPLEFT", RIGHT, -876)
   v.ctxText:SetHeight(44)
 
-  -- reminders (Camp.lua): toasts at the top of the screen, a switch each
-  heading(p, RIGHT, -930, "Reminders")
-  local REMIND = { { "camp", "Camp features I can place, when a campfire is lit" }, { "food", "Food when Well Fed runs out" },
-                   { "bag", "The sleeping bag when I stand still" }, { "buff", "A camp buff that ran out" }, { "quietInstance", "Quiet in dungeons (always in a fight)" } }
+  -- the camp bar (Camp.lua): icons under your character, a switch each
+  heading(p, RIGHT, -930, "Camp bar")
+  local REMIND = { { "food", "Well Fed, and the food that gives it" }, { "fire", "Campfire kit" }, { "camp", "Camp features I can place, with the cooldown" },
+                   { "bag", "Sleeping bag and Well Rested" }, { "quietInstance", "Hidden in dungeons" } }
   v.remind = {}
   for i, r in ipairs(REMIND) do
     local row = checkRow(p, RIGHT, -954 - (i - 1) * 26, r[2], 300)
     row.key = r[1]
-    row:SetScript("OnClick", function(self) QB:Settings().remind[self.key] = self:GetChecked() and true or false end)
+    row:SetScript("OnClick", function(self) QB:Settings().remind[self.key] = self:GetChecked() and true or false; if QB.Camp then QB.Camp.Refresh() end end)
     v.remind[r[1]] = row
   end
   v.Refresh = function() UI:RefreshSettingsView(v) end

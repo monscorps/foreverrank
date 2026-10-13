@@ -21,7 +21,7 @@ RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThum
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
-SetAtlas SetPassThroughButtons SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient]])
+SetAtlas SetPassThroughButtons SetCooldown SetHideCountdownNumbers SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
@@ -132,6 +132,7 @@ local function newObj(kind, template, parent)
         elseif k == "SetAtlas" then self.__tex = "atlas:" .. tostring(a[1]); self.__atlas = a[1]; self.__color = nil
         elseif k == "SetScale" then self.__scale = a[1]
         elseif k == "GetScale" then return self.__scale or 1
+        elseif k == "SetCooldown" then self.__cd = { a[1], a[2] }
         elseif k == "GetLeft" then return self.__left or 0
         elseif k == "GetTop" then return self.__top or 0
         elseif k == "GetNumPoints" then return #self.__points
@@ -1565,7 +1566,7 @@ do
   W[0] = nil
   Mini.Invalidate(); Mini.Place()
 end
--- 4.1.0: reminders (Camp.lua): a campfire lit, Well Fed gone, the sleeping bag packed, a camp buff ran out
+-- 5.3: the camp bar (Camp.lua): Well Fed, the campfire kit, camp features with the shared cooldown, the sleeping bag
 do
   local Camp, env = QB.Camp, owner.env
   c = owner
@@ -1574,56 +1575,77 @@ do
   local D = QB.Data
   assert(f and D.CAMP and D.CAMP[279944] and D.CAMP[279944].sp and D.CAMP[279981].t == "kit" and D.CAMP[279988].base == 279944 and D.FOOD[2888], "the camp and food tables")
   local set = QB:Settings().remind
-  assert(set.camp and set.food and set.bag and not set.buff and set.quietInstance, "defaults")
+  assert(set.camp and set.food and set.bag and set.fire and set.quietInstance, "defaults: every icon on")
   c.profs = { { "Blacksmithing", 150 }, { "Alchemy", 10 }, { "Fishing", 0 }, { "Cooking", 60 }, { "First Aid", 30 } }
   local saveBags = owner.o.bagSlots
-  owner.o.bagSlots = { { 279944, 1 }, { 279988, 1 }, { 279956, 1 }, { 279968, 1 }, { 2888, 5 }, { 211527, 1 } }
+  owner.o.bagSlots = { { 279944, 1 }, { 279988, 1 }, { 279956, 1 }, { 279968, 1 }, { 2888, 5 }, { 211527, 1 }, { 279981, 2 } }
   local pr = Camp.Professions()
   assert(pr.Blacksmithing == 150 and pr["First Aid"] == 30 and pr.Alchemy == 10, "professions read")
   local pl = Camp.Placeable()
-  assert(#pl == 2 and pl[1].e.n == "Anvil" and pl[2].e.n == "First Aid Kit", "placeable: the anvil over the wheel, the kit; no mana well at Alchemy 10: " .. #pl .. " " .. tostring(pl[1] and pl[1].e.n))
+  assert(#pl == 2 and pl[1].e.n == "Anvil" and pl[2].e.n == "First Aid Kit", "placeable: the anvil over the wheel, the kit; no mana well at Alchemy 10")
   c.buffs = {}
-  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
-  local T = env.QuestBankToasts
-  assert(T and Camp.visible == 1 and T.__client, "the campfire lit: one toast")
-  local t1 = nil
-  for _, fr in ipairs(c.frames) do if fr.__parent == T and fr:IsShown() then t1 = fr end end
-  assert(t1 and t1.title:GetText():find("place 2 things", 1, true) and t1.text:GetText():find("Anvil (+34 Strength)", 1, true) and t1.use:GetAttribute("item") == "item:279988", "what it says, and the button places the anvil: " .. tostring(t1 and t1.title:GetText()))
-  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279988].sp)
-  assert(Camp.visible == 0 and Camp.CooldownLeft() > 3500, "the anvil placed: the toast goes, the camp cooldown runs")
-  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
-  assert(Camp.visible == 0, "another fire inside the cooldown: nothing to place")
-  -- food (a loading screen first: the standing-still clock starts now)
   ev("PLAYER_ENTERING_WORLD")
-  Camp.Look()
-  assert(Camp.visible == 1, "Well Fed gone with ribs in the bag: a toast")
-  c.buffs = { "Well Fed" }
-  Camp.Look()
-  assert(Camp.visible == 0, "fed: it goes")
-  c.buffs = {}
-  QB:Settings().remind.food = false
-  Camp.Look()
-  assert(Camp.visible == 0, "the food switch off: nothing")
-  QB:Settings().remind.food = true
-  -- the sleeping bag: standing still 20 s
+  local bar = env.QuestBankCampBar
+  local function ic(k) return env["QuestBankCamp_" .. k] end
+  assert(bar and bar:IsShown() and Camp.visible == 4, "the bar is up with four icons: " .. tostring(Camp.visible))
+  -- food: not fed, ribs in the bag: lit, the click eats them
+  local food = ic("food")
+  assert(food:IsShown() and food.state.lit and food:GetAttribute("type") == "item" and food:GetAttribute("item") == "item:2888" and food.count:GetText() == "5", "not fed: the ribs, lit, five of them, a click eats one")
+  -- fed: the buff's own icon with its minutes
+  local saveAura = env.C_UnitAuras.GetAuraDataByIndex
+  env.C_UnitAuras.GetAuraDataByIndex = function(unit, i, filter)
+    if i == 1 then return { name = "Well Fed", applications = 0, expirationTime = env.GetTime() + 600, icon = 136000 } end
+  end
+  Camp.Refresh()
+  assert(food.time:GetText() == "10m" and not food.state.lit and food:GetAttribute("type") == nil, "fed: ten minutes left, nothing to click")
+  env.C_UnitAuras.GetAuraDataByIndex = saveAura
+  -- the campfire kit, then the anvil: lit only with a fire near and the cooldown up
+  local fire, camp = ic("fire"), ic("camp")
+  Camp.Refresh()
+  assert(fire:IsShown() and fire:GetAttribute("item") == "item:279981" and fire.count:GetText() == "2" and fire.state.lit, "two campfire kits; lit while features wait for a fire")
+  assert(camp:IsShown() and camp:GetAttribute("item") == "item:279988" and not camp.state.lit and not camp.state.grey, "the anvil, ready, waiting for a fire")
+  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
+  assert(camp.state.lit and not fire.state.lit, "the fire lit: the anvil lights up, the kit doesn't")
+  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279988].sp)
+  assert(camp.state.grey and camp.state.cd and camp.time:GetText() == "1h" and Camp.CooldownLeft() > 3500, "placed: the hour's cooldown sweeps, greyed")
+  -- the game's own cooldown wins when it answers
+  local saveCD = env.C_Container.GetItemCooldown
+  env.C_Container.GetItemCooldown = function(id) if id == 279988 then return env.GetTime() - 3000, 3600, 1 end return 0, 0, 1 end
+  Camp.Refresh()
+  assert(camp.time:GetText() == "10m", "the item's own cooldown: ten minutes left")
+  env.C_Container.GetItemCooldown = saveCD
+  -- the sleeping bag: lit after 20 s standing still under three stacks
+  local bag = ic("bag")
+  assert(bag:IsShown() and not bag.state.lit and bag:GetAttribute("item") == "item:211527", "the bag, not lit while you move")
   tick(owner, 25)
-  Camp.Look()
-  local titles = {}
-  for _, fr in ipairs(c.frames) do if fr.__parent == T and fr:IsShown() then titles[#titles + 1] = fr.title:GetText() end end
-  assert(Camp.visible == 1 and table.concat(titles, "|"):find("sleeping bag", 1, true), "still for 20 s with the bag packed: the bag toast; food stays away for its ten minutes: " .. table.concat(titles, "|"))
-  Camp.Dismiss("bag")
-  assert(Camp.visible == 0 and not Camp.Show("bag", { title = "x" }), "dismissed, it waits ten minutes before coming back")
-  -- a fight clears the toasts; a dungeon keeps quiet
-  c.combat = true; ev("PLAYER_REGEN_DISABLED"); Camp.Look()
-  assert(Camp.visible == 0, "in a fight: nothing")
-  c.combat = false
+  Camp.Refresh()
+  assert(bag.state.lit, "still for 20 s: the bag lights up")
+  -- a switch off takes its icon away
+  QB:Settings().remind.food = false
+  Camp.Refresh()
+  assert(not food:IsShown() and Camp.visible == 3, "the food switch off: no food icon")
+  QB:Settings().remind.food = true
+  -- in a fight: dimmed, its buttons left alone (the game's secure buttons)
+  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  owner.o.bagSlots = {}
+  Camp.Refresh()
+  assert(bar:GetAlpha() < 1 and fire:IsShown() and fire:GetAttribute("item") == "item:279981", "in a fight nothing moves or changes its click")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  assert(bar:GetAlpha() == 1 and not fire:IsShown() and food:IsShown() and food.state.grey, "after it: the kit is gone, no food is grey")
+  -- in a dungeon: hidden
   local saveInst = env.IsInInstance
   env.IsInInstance = function() return true, "party" end
-  tick(owner, 700); Camp.Look()
-  assert(Camp.visible == 0, "in a dungeon with quiet on: nothing")
+  Camp.Refresh()
+  assert(not bar:IsShown(), "in a dungeon with quiet on: hidden")
   env.IsInInstance = saveInst
-  Camp.Clear()
+  -- Alt-drag moves it and the place is kept
+  c.alt = true
+  food.__scripts.OnMouseDown(food, "LeftButton"); food.__scripts.OnMouseUp(food, "LeftButton")
+  c.alt = false
+  assert(type(QB:Settings().remind.pos) == "table" and QB:Settings().remind.pos.x == 500, "Alt-drag moves the bar and keeps its place")
+  QB:Settings().remind.pos = nil
   owner.o.bagSlots = saveBags; c.profs = nil; c.buffs = nil
+  Camp.Refresh()
 end
 -- 5.3: the minimap leads to the work: objectives as diamonds, the line to the nearest unfinished one, its name in a
 -- label; the big map draws its own zone or continent art under a round mask and zooms with the wheel
