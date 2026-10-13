@@ -1281,7 +1281,9 @@ end
 -- banking words only where banking happens
 function QB:Banking() return self:Mode() ~= "quest" end
 
--- two plain lines in party chat (raid chat in a raid), only when asked for in Settings and only while grouped
+-- two plain lines in party chat (raid chat in a raid), only when asked for in Settings and only while grouped, signed
+-- the way a player would read it: "QuestBank: Kobold Camp Cleanup - completed"
+QB.SAY = { accept = "QuestBank: %s - accepted", complete = "QuestBank: %s - completed" }
 function QB:Announce(kind, title)
   if kind == "accept" and self:Opt("sayAccept") ~= true then return end
   if kind == "complete" and self:Opt("sayComplete") ~= true then return end
@@ -1289,7 +1291,7 @@ function QB:Announce(kind, title)
     or ((IsInRaid and IsInRaid()) and "RAID") or ((IsInGroup and IsInGroup()) and "PARTY") or nil
   if not channel or not SendChatMessage then return end
   local clean = tostring(title or "a quest"):gsub("|", ""):sub(1, 200)
-  pcall(SendChatMessage, (kind == "accept" and "Quest accepted: " or "Quest complete: ") .. clean, channel)
+  pcall(SendChatMessage, string.format(QB.SAY[kind] or QB.SAY.complete, clean), channel)
 end
 
 ----------------------------------------------------------------------------

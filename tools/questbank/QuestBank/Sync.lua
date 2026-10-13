@@ -656,7 +656,7 @@ function S.NextStepText()
     for i, row in ipairs(leg.rows or {}) do if i <= 3 then names[#names + 1] = row.q.name end end
     local xp = 0
     for _, row in ipairs(leg.rows or {}) do xp = xp + (row.xp or 0) end
-    return string.format("Next: %s%s%s", leg.stop.name, #names > 0 and (": " .. table.concat(names, ", ")) or "",
+    return string.format("QuestBank next stop: %s%s%s", leg.stop.name, #names > 0 and (": " .. table.concat(names, ", ")) or "",
                          xp > 0 and string.format(" (+%s XP)", QB.Comma(xp)) or "")
   end
   return nil

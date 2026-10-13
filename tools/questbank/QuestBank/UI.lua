@@ -4124,6 +4124,13 @@ function UI:CreateSettingsView(parent)
   v.sayAccept:SetScript("OnClick", function(self) QB:Settings().sayAccept = self:GetChecked() and true or false end)
   v.sayComplete = checkRow(p, RIGHT, -510, "Say when a quest is complete", 300)
   v.sayComplete:SetScript("OnClick", function(self) QB:Settings().sayComplete = self:GetChecked() and true or false end)
+  for key, b in pairs({ accept = v.sayAccept, complete = v.sayComplete }) do
+    tooltip(b, function(tip)
+      tip:AddLine(key == "accept" and "When you pick a quest up" or "When a quest's objectives are done", GOLD[1], GOLD[2], GOLD[3])
+      tip:AddLine("One line in party chat (raid chat in a raid), only while grouped:", 1, 1, 1, true)
+      tip:AddLine(string.format(QB.SAY[key], "Kobold Camp Cleanup"), 0.67, 0.67, 1)
+    end)
+  end
   v.sayHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
   v.sayHint:SetPoint("TOPLEFT", RIGHT, -538)
   v.sayHint:SetHeight(30)

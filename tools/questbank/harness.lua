@@ -1946,10 +1946,10 @@ do
   set.sayAccept, set.sayComplete = true, true
   table.insert(owner.log, { 15, 0 })
   owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
-  assert(#owner.said == said + 1 and owner.said[#owner.said][1] == "Quest accepted: Quest 15" and owner.said[#owner.said][2] == "PARTY", "a new quest in the log is said in party chat: " .. tostring(owner.said[#owner.said] and owner.said[#owner.said][1]))
+  assert(#owner.said == said + 1 and owner.said[#owner.said][1] == "QuestBank: Quest 15 - accepted" and owner.said[#owner.said][2] == "PARTY", "a new quest in the log is said in party chat: " .. tostring(owner.said[#owner.said] and owner.said[#owner.said][1]))
   for _, e in ipairs(owner.log) do if e[1] == 15 then e[2] = 1 end end
   owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
-  assert(#owner.said == said + 2 and owner.said[#owner.said][1] == "Quest complete: Quest 15", "and so is a quest turning complete: " .. tostring(owner.said[#owner.said][1]))
+  assert(#owner.said == said + 2 and owner.said[#owner.said][1] == "QuestBank: Quest 15 - completed", "and so is a quest turning complete: " .. tostring(owner.said[#owner.said][1]))
   for _ = 1, 2 do for i, e in ipairs(owner.log) do if e[1] == 7 or e[1] == 15 then table.remove(owner.log, i) break end end end
   -- not grouped: nothing is sent, and nothing is tried against a channel you're not in
   owner.o.group = false
@@ -2853,7 +2853,7 @@ do
   local line = S.NextStepText()
   v4.postBtn.__scripts.OnClick(v4.postBtn)
   if line then
-    assert(P:IsShown() and P.eb:GetText():find("^Next: ") and #P.eb:GetText() <= 255, "the next step is offered for chat: " .. P.eb:GetText())
+    assert(P:IsShown() and P.eb:GetText():find("^QuestBank next stop: ") and #P.eb:GetText() <= 255, "the next step is offered for chat: " .. P.eb:GetText())
     P.cancel.__scripts.OnClick(P.cancel)
   else
     assert(owner.chat[#owner.chat]:find("No next step", 1, true), "no route: said")
