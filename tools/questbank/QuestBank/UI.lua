@@ -4008,7 +4008,7 @@ function UI:CreateSettingsView(parent)
   heading(p, LEFT, -304, "Map icons", 370)
   local MAP_ICONS = {
     { "mapIcons", LEFT, -328, "Quest icons on the world map", 340,
-      "On each zone's map: a ! where quests you can take start, a ? where finished ones are handed in, and where to do the ones in your log. Click one for a waypoint; Shift-click a ! to put its quests on your pick-up list. The numbered route pins have their own switch above." },
+      "On each zone's map: a ! where quests you can take start, a ? where finished ones are handed in, where to do the ones in your log, and each dungeon's entrance with how many of its quests you have done. Click one for a waypoint; Shift-click a ! to put its quests on your pick-up list. The numbered route pins have their own switch above." },
     { "mapGive", LEFT + 24, -356, "Quests you can pick up", 316,
       "A yellow ! on the NPCs with quests for your faction, class and level that you haven't done. Grey (low-level) quests are left off, as the game does, and so are quests that need a profession or an item first. Where a numbered route pin stands on the NPC, that pin's tooltip lists the NPC's quests instead." },
     { "mapTurn", LEFT + 24, -384, "Hand-ins", 316,

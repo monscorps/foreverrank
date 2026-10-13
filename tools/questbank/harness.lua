@@ -1579,6 +1579,31 @@ do
   assert(c.cvars.statusText == "0" and U.StatusText() == "NONE", "Off")
   U:ShowTab(1)
 end
+-- 5.3: dungeon entrances on the zone maps: hovered, how many of their quests you have done, a check on each done one
+do
+  local QM, U = QB.QuestMap, QB.UI
+  c = owner
+  local list = QM:Build(1436)
+  local dm
+  for _, d in ipairs(list) do if d.kind == "dungeon" and d.cat.key == "d1581" then dm = d end end
+  assert(dm and math.abs(dm.x - 0.425) < 0.001 and math.abs(dm.y - 0.717) < 0.001, "the Deadmines' entrance on Westfall's map")
+  local qs = QB.DMap.Quests("d1581")
+  local doneN = 0
+  for _, e in ipairs(qs) do if e.st == "done" then doneN = doneN + 1 end end
+  lines = {}
+  local icon = { data = dm }
+  -- the tooltip as the icon's hover draws it
+  local f = QM.IconMethods and QM.IconMethods.OnMouseEnter
+  assert(f, "the icon's hover")
+  f(icon)
+  local all = table.concat(lines, "\n")
+  print("dungeon tooltip:", (all:gsub("\n", " | ")):sub(1, 220))
+  assert(all:find(string.format("The Deadmines | %d/%d quests done", doneN, #qs), 1, true), "its name and N/M quests done")
+  U:ShowTab(1)
+  QM.ClickForTest(dm, "LeftButton")
+  assert(U.tab == 7 and QB.DMap.Fill and owner.env.QuestBankDungeonMap.cat.key == "d1581" and owner.env.QuestBankDungeonMap.tab == "quests", "a click opens the Journal on its quests")
+  U:ShowTab(1)
+end
 -- 5.3: the camp bar (Camp.lua): Well Fed, the campfire kit, camp features with the shared cooldown, the sleeping bag
 do
   local Camp, env = QB.Camp, owner.env

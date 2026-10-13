@@ -52,6 +52,7 @@ local ART = {
   s = { atlas = "Crosshair_LootAll_32", file = 131023, size = 16 },  -- the item that starts a quest drops here
   bang = { atlas = "SmallQuestBang", file = 132049 },                -- on that mark: it starts a quest
   area = { atlas = "CircleMaskScalable", file = 130924 },            -- an objective's area
+  dungeon = { atlas = "Dungeon", file = 136347, size = 24 },          -- a dungeon's entrance
 }
 QM.ART = ART
 
@@ -479,6 +480,13 @@ function QM:Build(m)
     if #list >= MAX_PINS then break end
     list[#list + 1] = d
   end
+  -- the dungeons whose entrance is on this map; hovered, how many of their quests you have done (as Questie shows it)
+  for _, c in ipairs(D.CAT) do
+    local e = c.entrance
+    if c.dungeon and e and e.m == m and #list < MAX_PINS then
+      list[#list + 1] = { kind = "dungeon", art = { atlas = ART.dungeon.atlas, file = c.icon or ART.dungeon.file, size = ART.dungeon.size }, level = "PIN_FRAME_LEVEL_INVASION", m = m, x = e.x / 100, y = e.y / 100, title = c.name .. " entrance", cat = c }
+    end
+  end
 
   if set.mapObj ~= false then
     -- a list of marks for each objective of the quests in your log that isn't finished, and for each quest you can
@@ -635,6 +643,24 @@ local function people(tip, d)
 end
 
 local TIP = {}
+-- a dungeon's entrance: its quests, a check on each you have done
+local CHECK, WAIT = "|TInterface\\RaidFrame\\ReadyCheck-Ready:14|t ", "|TInterface\\RaidFrame\\ReadyCheck-Waiting:14|t "
+function TIP.dungeon(tip, d)
+  local c = d.cat
+  local qs = QB.DMap and QB.DMap.Quests(c.key) or {}
+  local done = 0
+  for _, e in ipairs(qs) do if e.st == "done" then done = done + 1 end end
+  tip:AddDoubleLine(c.name, #qs > 0 and string.format("%d/%d quests done", done, #qs) or "", 1, 0.82, 0, done == #qs and 0.3 or 1, done == #qs and 0.9 or 1, done == #qs and 0.3 or 1)
+  local lv = QB.DMap and QB.DMap.Levels(c.key)
+  if lv and lv[1] > 0 then tip:AddLine(string.format("Level %d-%d", lv[1], lv[2]), 0.8, 0.8, 0.8) end
+  for i, e in ipairs(qs) do
+    if i > 14 then tip:AddLine(string.format("and %d more", #qs - 14), 0.6, 0.6, 0.6) break end
+    local mark = e.st == "done" and CHECK or (e.st == "ready" and WAIT or "      ")
+    local col = e.st == "done" and { 0.5, 0.5, 0.5 } or (e.st == "log" or e.st == "ready") and { 1, 0.82, 0.3 } or { 1, 1, 1 }
+    tip:AddLine(mark .. e.q.name, col[1], col[2], col[3])
+  end
+  tip:AddLine("Click: the Dungeon Journal.  Shift-click: waypoint on the entrance.", 0.5, 0.5, 0.5)
+end
 function TIP.give(tip, d)
   if d.who and #d.who > 1 then
     people(tip, d)
@@ -733,6 +759,8 @@ end
 local function click(d, button)
   -- a right-click passes through to zoom the map out; one that reaches an icon anyway is left alone
   if not d or button == "RightButton" then return end
+  -- a dungeon: its page in the Dungeon Journal; Shift: a waypoint on the entrance
+  if d.kind == "dungeon" and not (IsShiftKeyDown and IsShiftKeyDown()) and QB.DMap then QB.DMap.Open(d.cat, "quests"); return end
   if IsShiftKeyDown and IsShiftKeyDown() and QM.Track(d) then return end
   QB.API.SetWaypoint(d.m, d.x * 100, d.y * 100, d.title)
 end
@@ -781,6 +809,7 @@ function Area:Fit(canvas)
 end
 
 -- ! , ? and marks: a little bigger as you zoom in; areas under every icon, no mouse (the mark on one has the tooltip)
+QM.IconMethods, QM.ClickForTest = Icon, click -- (the harness hovers and clicks without a map)
 QM.ICON = { template = ICON, level = "PIN_FRAME_LEVEL_INVASION", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Icon }
 QM.AREA = { template = AREA, level = "PIN_FRAME_LEVEL_QUEST_BLOB", mouse = false, methods = Area }
 
