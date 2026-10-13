@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "4.0.0"
+QB.version = "4.1.0"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's escort prompt has said 25: see QB.EscortLimit)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -1007,7 +1007,10 @@ local DEFAULTS = {
   -- the route on the minimap (Minimap.lua): the stops and their lines, your pick-up list, dungeon entrances
   minimapPins = true, minimapLines = true, minimapPickups = true, minimapEntrances = true,
   glow = { on = true, other = true, combat = false },
-  walkRecord = true, walkShow = true, -- walked trails (Walk.lua): noted as you go, drawn on the minimap -- the light on the object your Interact key would use (Glow.lua)
+  walkRecord = true, walkShow = true, -- walked trails (Walk.lua): noted as you go, drawn on the minimap
+  -- reminders (Camp.lua): camp features you can place, food when Well Fed runs out, the sleeping bag when you stand
+  -- still, a camp buff that ran out; quiet in a fight, and in dungeons when quietInstance
+  remind = { camp = true, food = true, bag = true, buff = false, quietInstance = true }, -- the light on the object your Interact key would use (Glow.lua)
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
   noteGame = true, -- note the spells and item tooltips the Forever client shows, for foreverrank.com (Game.lua)
   -- quest icons on each zone's world map (QuestMap.lua, Forever only): all of them, then where quests you can take
@@ -2226,6 +2229,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Mini then QB.Mini:Init() end
     if QB.Glow then QB.Glow:Init() end
     if QB.Walk then QB.Walk:Init() end
+    if QB.Camp then QB.Camp:Init() end
     if QB.Arrow then QB.Arrow:Init() end
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))

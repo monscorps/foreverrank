@@ -21,7 +21,7 @@ RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThum
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
-SetAtlas SetPassThroughButtons SetScale GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets]])
+SetAtlas SetPassThroughButtons SetScale GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
@@ -92,6 +92,8 @@ local function newObj(kind, template, parent)
         elseif k == "SetTextColor" then self.__color = { a[1], a[2], a[3] }
         elseif k == "SetAlpha" then self.__alpha = a[1]
         elseif k == "GetAlpha" then return self.__alpha
+        elseif k == "SetAttribute" then self.__attr = self.__attr or {}; self.__attr[a[1]] = a[2]
+        elseif k == "GetAttribute" then return self.__attr and self.__attr[a[1]]
         elseif k == "SetMinMaxValues" then self.__min, self.__max = a[1], a[2]
         elseif k == "GetMinMaxValues" then return self.__min, self.__max
         elseif k == "SetValue" then self.__value = a[1]; if self.__scripts.OnValueChanged then self.__scripts.OnValueChanged(self, a[1]) end
@@ -239,6 +241,10 @@ local function newClient(o)
   -- the minimap's tracking list: c.tracking = { { name, filterID, active }, ... }; the game's menu, as Menu.ModifyMenu sees it
   c.tracking = { { name = "Battlemaster", filterID = 4, active = false }, { name = "Target", filterID = 16384, active = false },
                  { name = "Focus", filterID = 32768, active = false } }
+  -- professions: c.profs = { { name, skill }, ... } (two crafts, then fishing, cooking, first aid as the game lists them)
+  env.GetProfessions = function() local p = c.profs or {}; return p[1] and 1 or nil, p[2] and 2 or nil, nil, p[3] and 3 or nil, p[4] and 4 or nil, p[5] and 5 or nil end
+  env.GetProfessionInfo = function(i) local p = (c.profs or {})[i]; if not p then return nil end return p[1], 0, p[2], 300, 0, 0, 0, 0 end
+  env.UnitOnTaxi = env.UnitOnTaxi or function() return c.taxi or false end
   env.C_Minimap = { GetViewRadius = function() return c.miniRadius or 233.33 end,
     GetNumTrackingTypes = function() return #c.tracking end,
     GetTrackingFilter = function(i) local t = c.tracking[i]; return t and { filterID = t.filterID } or nil end,
@@ -332,7 +338,10 @@ local function newClient(o)
   }
   -- the player's helpful auras: c.auras = { spellId, ... }
   env.C_UnitAuras = {
-    GetAuraDataByIndex = function(unit, i, filter) local a = (c.auras or {})[i]; return a and { spellId = a } or nil end,
+    GetAuraDataByIndex = function(unit, i, filter)
+      if filter == "HELPFUL" and c.buffs then local n = c.buffs[i]; return n and { name = n, spellId = 0 } or nil end
+      local a = (c.auras or {})[i]; return a and { spellId = a } or nil
+    end,
   }
   env.C_GossipInfo = {
     GetAvailableQuests = function() return c.gossipAvail or {} end,
@@ -1431,6 +1440,66 @@ do
   W[0] = nil
   Mini.Invalidate(); Mini.Place()
 end
+-- 4.1.0: reminders (Camp.lua): a campfire lit, Well Fed gone, the sleeping bag packed, a camp buff ran out
+do
+  local Camp, env = QB.Camp, owner.env
+  c = owner
+  local f = Camp.frame
+  local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
+  local D = QB.Data
+  assert(f and D.CAMP and D.CAMP[279944] and D.CAMP[279944].sp and D.CAMP[279981].t == "kit" and D.CAMP[279988].base == 279944 and D.FOOD[2888], "the camp and food tables")
+  local set = QB:Settings().remind
+  assert(set.camp and set.food and set.bag and not set.buff and set.quietInstance, "defaults")
+  c.profs = { { "Blacksmithing", 150 }, { "Alchemy", 10 }, { "Fishing", 0 }, { "Cooking", 60 }, { "First Aid", 30 } }
+  local saveBags = owner.o.bagSlots
+  owner.o.bagSlots = { { 279944, 1 }, { 279988, 1 }, { 279956, 1 }, { 279968, 1 }, { 2888, 5 }, { 211527, 1 } }
+  local pr = Camp.Professions()
+  assert(pr.Blacksmithing == 150 and pr["First Aid"] == 30 and pr.Alchemy == 10, "professions read")
+  local pl = Camp.Placeable()
+  assert(#pl == 2 and pl[1].e.n == "Anvil" and pl[2].e.n == "First Aid Kit", "placeable: the anvil over the wheel, the kit; no mana well at Alchemy 10: " .. #pl .. " " .. tostring(pl[1] and pl[1].e.n))
+  c.buffs = {}
+  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
+  local T = env.QuestBankToasts
+  assert(T and Camp.visible == 1 and T.__client, "the campfire lit: one toast")
+  local t1 = nil
+  for _, fr in ipairs(c.frames) do if fr.__parent == T and fr:IsShown() then t1 = fr end end
+  assert(t1 and t1.title:GetText():find("place 2 things", 1, true) and t1.text:GetText():find("Anvil (+34 Strength)", 1, true) and t1.use:GetAttribute("item") == "item:279988", "what it says, and the button places the anvil: " .. tostring(t1 and t1.title:GetText()))
+  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279988].sp)
+  assert(Camp.visible == 0 and Camp.CooldownLeft() > 3500, "the anvil placed: the toast goes, the camp cooldown runs")
+  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
+  assert(Camp.visible == 0, "another fire inside the cooldown: nothing to place")
+  -- food (a loading screen first: the standing-still clock starts now)
+  ev("PLAYER_ENTERING_WORLD")
+  Camp.Look()
+  assert(Camp.visible == 1, "Well Fed gone with ribs in the bag: a toast")
+  c.buffs = { "Well Fed" }
+  Camp.Look()
+  assert(Camp.visible == 0, "fed: it goes")
+  c.buffs = {}
+  QB:Settings().remind.food = false
+  Camp.Look()
+  assert(Camp.visible == 0, "the food switch off: nothing")
+  QB:Settings().remind.food = true
+  -- the sleeping bag: standing still 20 s
+  tick(owner, 25)
+  Camp.Look()
+  local titles = {}
+  for _, fr in ipairs(c.frames) do if fr.__parent == T and fr:IsShown() then titles[#titles + 1] = fr.title:GetText() end end
+  assert(Camp.visible == 1 and table.concat(titles, "|"):find("sleeping bag", 1, true), "still for 20 s with the bag packed: the bag toast; food stays away for its ten minutes: " .. table.concat(titles, "|"))
+  Camp.Dismiss("bag")
+  assert(Camp.visible == 0 and not Camp.Show("bag", { title = "x" }), "dismissed, it waits ten minutes before coming back")
+  -- a fight clears the toasts; a dungeon keeps quiet
+  c.combat = true; ev("PLAYER_REGEN_DISABLED"); Camp.Look()
+  assert(Camp.visible == 0, "in a fight: nothing")
+  c.combat = false
+  local saveInst = env.IsInInstance
+  env.IsInInstance = function() return true, "party" end
+  tick(owner, 700); Camp.Look()
+  assert(Camp.visible == 0, "in a dungeon with quiet on: nothing")
+  env.IsInInstance = saveInst
+  Camp.Clear()
+  owner.o.bagSlots = saveBags; c.profs = nil; c.buffs = nil
+end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
   local set = QB:Settings()
@@ -1653,7 +1722,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 1070 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 1100 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()

@@ -149,6 +149,8 @@ local function scanItems()
   return idList(ids)
 end
 
+Game.ScanItems = scanItems -- (Camp.lua reads the bags the same way)
+
 -- one class and race's reading: a higher level wins, then the later reading
 local function better(new, old)
   if type(old) ~= "table" then return true end

@@ -3387,6 +3387,18 @@ function UI:CreateSettingsView(parent)
   v.ctxText = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
   v.ctxText:SetPoint("TOPLEFT", RIGHT, -876)
   v.ctxText:SetHeight(44)
+
+  -- reminders (Camp.lua): toasts at the top of the screen, a switch each
+  heading(p, RIGHT, -930, "Reminders")
+  local REMIND = { { "camp", "Camp features I can place, when a campfire is lit" }, { "food", "Food when Well Fed runs out" },
+                   { "bag", "The sleeping bag when I stand still" }, { "buff", "A camp buff that ran out" }, { "quietInstance", "Quiet in dungeons (always in a fight)" } }
+  v.remind = {}
+  for i, r in ipairs(REMIND) do
+    local row = checkRow(p, RIGHT, -954 - (i - 1) * 26, r[2], 300)
+    row.key = r[1]
+    row:SetScript("OnClick", function(self) QB:Settings().remind[self.key] = self:GetChecked() and true or false end)
+    v.remind[r[1]] = row
+  end
   v.Refresh = function() UI:RefreshSettingsView(v) end
   return v
 end
@@ -3475,6 +3487,8 @@ function UI:RefreshSettingsView(v)
   v.glowOther:SetChecked(gl.other == true)
   v.glowCombat:SetChecked(gl.combat == true)
   v.glowOther:SetEnabled(gl.on == true); v.glowCombat:SetEnabled(gl.on == true)
+  local rm = type(set.remind) == "table" and set.remind or {}
+  for key, row in pairs(v.remind) do row:SetChecked(rm[key] == true) end
   v.clockLevelMsg:SetChecked(set.clockLevelMsg ~= false)
   local MARK = { [true] = "|cff2e8b2e\226\156\147|r", [false] = "|cffb03030\226\156\151|r" }
   for key, b in pairs(v.tri) do
@@ -3498,7 +3512,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(1070) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(1100) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------

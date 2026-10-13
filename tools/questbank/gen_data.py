@@ -1504,6 +1504,63 @@ GATHER = {}
 for n in _GATHER.get("herb", []): GATHER[n.replace("\\'", "'")] = "herb"
 for n in _GATHER.get("ore", []): GATHER[n.replace("\\'", "'")] = "ore"
 lines.append("D.GATHER = " + lua(GATHER))
+
+# Forever's camps (Camp.lua reminders): the campfire kits (Cooking), one feature per profession at skill 20, 140 and
+# 300 (a sit-down buff; the higher tiers carry the lower one's buff), and the Cozy Sleeping Bag; plus the foods that
+# make you Well Fed. From the site's item database (plan/items-db.json: the client's own Use lines) and the client's
+# item-effect tables (which spell a kit casts, so a campfire being lit is seen on UNIT_SPELLCAST_SUCCEEDED).
+#   D.CAMP[item id] = { n = name, p = profession, s = skill, t = "kit"|"feature"|"bag", g = what it gives, i = icon,
+#                       base = the item whose benefit it also gives, sp = the spell the item casts, cap = features a kit allows }
+#   D.FOOD[item id] = { n = name, g = what it gives, i = icon }
+_ITEMS = load_json(os.path.join(REPO, "plan", "items-db.json")) or {"items": []}
+_IE = {r["ID"]: r for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "ItemEffect.csv")))}
+_IXE = {}
+for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "ItemXItemEffect.csv"))):
+    e = _IE.get(r["ItemEffectID"])
+    if e and e["TriggerType"] == "0": _IXE.setdefault(int(r["ItemID"]), int(e["SpellID"]))
+CAMP, FOOD = {}, {}
+def _gives(use):
+    m = re.search(r"(?:gain|nearby) (\d+%?) (?:increased )?(?:melee )?([A-Za-z ]+?)(?:,| for| with| every|\.)", use)
+    if m and m.group(2).strip().lower() not in ("stats",): return "+%s %s" % (m.group(1), m.group(2).strip())
+    if m: return "+%s all stats" % m.group(1)
+    m = re.search(r"regenerate (\d+) Mana every 5 sec", use)
+    if m: return "%s mana per 5 sec" % m.group(1)
+    if "Rested experience" in use: return "rested XP to 5% of a level"
+    if "bonus to experience" in use: return "+XP in the bag, stacks to 3"
+    m = re.search(r"grants the ability to (catch [a-z]+ fish)", use)
+    if m: return m.group(1)
+    for k, v in (("Repair", "repairs and reagents"), ("purchase reagents", "a reagent vendor"), ("grow herbs", "grows herbs"), ("spawns a common mining node", "a mining node"),
+                 ("Track Beasts", "Track Beasts"), ("healing potions", "healing potions"), ("disenchanting", "better disenchanting"), ("traps", "traps")):
+        if k in use: return v
+    return None
+_camp_by_name = {}
+for it in _ITEMS["items"]:
+    use = " ".join(e for e in (it.get("effects") or []) if e.startswith("Use:"))
+    if not use: continue
+    iid = int(it["id"])
+    if re.search(r"Requires a Campfire nearby|Builds a (basic|journeyman|expert) campfire|Unfurl a sleeping bag", use) and not it["name"].startswith("Blueprint"):
+        sk = it.get("reqSkill")
+        prof, lvl = (sk.rsplit(" ", 1) if sk else (None, "0"))
+        kind = "kit" if "campfire that allows" in use else ("bag" if "sleeping bag" in use else "feature")
+        entry = {"n": it["name"], "p": prof, "s": int(lvl) if lvl.isdigit() else 0, "t": kind, "g": _gives(use), "i": it.get("icon")}
+        base = re.search(r"benefits of an? ([A-Z][A-Za-z' ]+?)(?:\.| Requires)", use)
+        if base: entry["baseName"] = base.group(1).strip()
+        cap = re.search(r"up to (\d+) additional camp features", use)
+        if cap: entry["cap"] = int(cap.group(1))
+        if iid in _IXE: entry["sp"] = _IXE[iid]
+        CAMP[iid] = entry
+        _camp_by_name.setdefault(it["name"], iid)
+    elif re.search(r"well fed", use, re.I):
+        m = re.search(r"well fed and gain (\d+%?) ([A-Za-z ]+?)(?: and ([A-Za-z ]+?))? for (\d+) min", use, re.I)
+        g = m and ("+%s %s%s, %s min" % (m.group(1), m.group(2), (" and " + m.group(3)) if m.group(3) else "", m.group(4))) or "Well Fed"
+        FOOD[iid] = {"n": it["name"], "g": g, "i": it.get("icon")}
+for iid, e in CAMP.items():
+    bn = e.pop("baseName", None)
+    if bn and _camp_by_name.get(bn):
+        e["base"] = _camp_by_name[bn]
+        if not e.get("g"): e["g"] = CAMP[_camp_by_name[bn]].get("g")
+lines.append("D.CAMP = " + keyed(CAMP))
+lines.append("D.FOOD = " + keyed(FOOD))
 lines.append("-- [id] = {quest level, required level, side (1 Alliance, 2 Horde, 0 both), Classic base XP, Forever multiplier,")
 lines.append("--         turn-in NPC, quest giver, category, class mask, flags (1 dungeon, 2 group, 4 starts from an item, 8 multiplier not read,")
 lines.append("--         16 Classic only: not in Wowhead Forever's data yet, 32 multiplier taken from its dungeon's other quests,")
