@@ -101,6 +101,7 @@ local function newObj(kind, template, parent)
         elseif k == "GetPoint" then return "CENTER", nil, "CENTER", 0, 0
         elseif k == "GetName" then return self.__name
         elseif k == "GetParent" then return self.__parent
+        elseif k == "SetParent" then self.__parent = a[1]
         elseif k == "SetTexture" then self.__tex = a[1]; self.__color = nil
         elseif k == "SetColorTexture" then self.__tex = "color"; self.__color = { a[1], a[2], a[3], a[4] }
         elseif k == "SetVertexColor" then self.__vertex = { a[1], a[2], a[3] }
@@ -247,7 +248,12 @@ local function newClient(o)
   env.C_CVar = { GetCVarBool = function(name) return (c.cvars or {})[name] == "1" end }
   c.menus = {}
   env.Menu = { ModifyMenu = function(tag, fn) c.menus[tag] = fn end }
+  c.cvars = c.cvars or {}
   env.GetCVar = env.GetCVar or function(name) return (c.cvars or {})[name] end
+  env.SetCVar = function(name, v) c.cvars = c.cvars or {}; c.cvars[name] = tostring(v) end
+  -- soft targeting: c.soft = { name, plate } is the object the Interact key would use
+  env.UnitExists = env.UnitExists or function(unit) if unit == "softinteract" then return c.soft ~= nil end return true end
+  env.C_NamePlate = { GetNamePlateForUnit = function(unit) if unit == "softinteract" and c.soft then return c.soft.plate end return nil end }
   env.UISpecialFrames = {}
   env.SlashCmdList = {}
   env.DEFAULT_CHAT_FRAME = { AddMessage = function(_, m) c.chat[#c.chat + 1] = m end }
@@ -287,7 +293,7 @@ local function newClient(o)
   env.GetBindLocation = function() return o.bind or "Stormwind City" end
   env.IsPlayerSpell = function() return o.riding or false end
   env.AuraUtil = { FindAuraByName = function(name) if c.rested and name == "Well Rested" then return name end end }
-  env.UnitName = function(unit) if unit == "npc" then return c.npcName end return o.name end
+  env.UnitName = function(unit) if unit == "npc" then return c.npcName end if unit == "softinteract" then return c.soft and c.soft.name end return o.name end
   env.UnitGUID = function(unit) if unit == "npc" then return c.npcGUID end return "Player-1234-" .. string.format("%08X", #o.name * 7919 + (o.level or 1)) end
   -- Midnight's secret values, as the Forever client hands them out: type() says "string" or "number", any use
   -- errors, and issecretvalue tells. SECRET.str() / SECRET.num() make one.
@@ -1303,6 +1309,54 @@ do
   c.cvars = nil
   Mini.TrackDB().target, Mini.TrackDB().focus = true, nil
 end
+-- 3.9.0: the light on the object your Interact key would use (Glow.lua)
+do
+  local Glow, env = QB.Glow, owner.env
+  c = owner
+  local f = Glow.frame
+  local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
+  assert(f and QB:Settings().glow.on == true and QB:Settings().glow.other == false, "on by default, plain objects off")
+  c.cvars = { SoftTargetInteract = "0", SoftTargetInteractArc = "0", SoftTargetInteractRange = "10", SoftTargetNameplateInteract = "0", SoftTargetIconInteract = "1" }
+  ev("PLAYER_ENTERING_WORLD")
+  assert(c.cvars.SoftTargetInteract == "3" and c.cvars.SoftTargetInteractArc == "2" and c.cvars.SoftTargetNameplateInteract == "1", "entering the world sets the soft-interact settings")
+  assert(QB:Settings().glow.saved.SoftTargetInteract == "0" and QB:Settings().glow.saved.SoftTargetIconInteract == "1", "and keeps what they were")
+  local plate = env.CreateFrame("Frame")
+  c.soft = { name = "Peacebloom", plate = plate }
+  ev("PLAYER_SOFT_INTERACT_CHANGED")
+  local L = env.QuestBankGlow
+  assert(L and L:IsShown() and Glow.kind == "herb" and L:GetParent() == plate, "an herb: the green light on its nameplate")
+  c.soft = { name = "Copper Vein", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(Glow.kind == "ore", "ore: orange")
+  c.soft = { name = "Old Jug", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(not L:IsShown() and Glow.kind == nil, "a plain object: nothing, unless asked for")
+  QB:Settings().glow.other = true; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(L:IsShown() and Glow.kind == "other", "asked for: white")
+  QB:Settings().glow.other = false
+  c.soft = { name = "Sunken Chest", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(Glow.kind == "chest", "a chest: blue")
+  -- a quest object: named in an objective of a quest in the log
+  local saveObj = env.C_QuestLog.GetQuestObjectives
+  env.C_QuestLog.GetQuestObjectives = function(id) if id == 7 then return { { text = "Kobold Candle: 0/3", finished = false } } end return {} end
+  QB.state.log[7] = QB.state.log[7] or {}
+  c.soft = { name = "Kobold Candle", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(Glow.kind == "quest", "a quest object: gold")
+  env.C_QuestLog.GetQuestObjectives = saveObj
+  c.soft = nil; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(not L:IsShown(), "nothing under the key: no light")
+  c.soft = { name = "Peacebloom", plate = plate }
+  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  assert(not L:IsShown(), "in a fight: off")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  assert(L:IsShown(), "and back after it")
+  Glow.Set(false)
+  assert(not L:IsShown() and c.cvars.SoftTargetInteract == "0" and c.cvars.SoftTargetNameplateInteract == "0" and QB:Settings().glow.saved == nil, "off: the settings go back as they were")
+  Glow.Set(true)
+  assert(c.cvars.SoftTargetInteract == "3", "on again")
+  ev("PLAYER_LOGOUT")
+  assert(c.cvars.SoftTargetInteract == "0", "logging out puts them back too")
+  c.soft = nil; c.cvars = {}
+  QB:Settings().glow.saved = nil
+end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
   local set = QB:Settings()
@@ -1525,7 +1579,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 930 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 1070 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()

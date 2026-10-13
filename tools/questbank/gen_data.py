@@ -1346,7 +1346,11 @@ def lua(v):
         return str(int(v)) if v == int(v) else ("%.4f" % v).rstrip("0").rstrip(".")  # 4 decimals, as nerfed() rounds
     if isinstance(v, str): return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
     if isinstance(v, list): return "{" + ",".join(lua(x) for x in v) + "}"
-    if isinstance(v, dict): return "{" + ",".join("%s=%s" % (k, lua(x)) for k, x in v.items() if x is not None) + "}"
+    if isinstance(v, dict):
+        def key(k):
+            if isinstance(k, int): return "[%d]" % k
+            return k if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", k) else "[" + lua(k) + "]"
+        return "{" + ",".join("%s=%s" % (key(k), lua(x)) for k, x in v.items() if x is not None) + "}"
     raise TypeError(v)
 
 
@@ -1457,6 +1461,15 @@ for d in _LOOT_EARLY.get("dungeons", []):
         items = [int(i) for i in (b.get("items") or []) if str(i).isdigit()][:12]
         entry["bosses"].append({"n": b["name"], "k": b.get("kind") or "boss", "w": wing, "i": items})
 lines.append("D.DMAP = " + lua(DMAP))
+
+# Herb and ore nodes by name (Glow.lua lights the object your Interact key would use: green for an herb, orange for
+# ore). The names come from the Classic database's object templates whose lock asks for Herbalism or Mining
+# (research/questbank/gather.json, built from research/cmangos); Forever keeps Classic's node names.
+_GATHER = load("gather.json", {}) or {}
+GATHER = {}
+for n in _GATHER.get("herb", []): GATHER[n.replace("\\'", "'")] = "herb"
+for n in _GATHER.get("ore", []): GATHER[n.replace("\\'", "'")] = "ore"
+lines.append("D.GATHER = " + lua(GATHER))
 lines.append("-- [id] = {quest level, required level, side (1 Alliance, 2 Horde, 0 both), Classic base XP, Forever multiplier,")
 lines.append("--         turn-in NPC, quest giver, category, class mask, flags (1 dungeon, 2 group, 4 starts from an item, 8 multiplier not read,")
 lines.append("--         16 Classic only: not in Wowhead Forever's data yet, 32 multiplier taken from its dungeon's other quests,")

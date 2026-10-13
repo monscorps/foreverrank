@@ -17,6 +17,7 @@ Timer.lua
 Link.lua
 Minimap.lua
 DungeonMap.lua
+Glow.lua
 Model.lua
 
 Pins.lua

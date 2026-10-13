@@ -3340,6 +3340,19 @@ function UI:CreateSettingsView(parent)
   v.bigmapLabel:SetPoint("LEFT", v.bigmap, "RIGHT", 8, 0)
   v.bigmapLabel:SetText("the minimap grown and zoomed out; /qb bigmap")
 
+  -- the light on the object your Interact key would use (Glow.lua)
+  heading(p, LEFT, -904, "Interact light", 370)
+  v.glowOn = checkRow(p, LEFT, -928, "Light the object my Interact key would use", 340)
+  v.glowOn:SetScript("OnClick", function(self) if QB.Glow then QB.Glow.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
+  v.glowOther = checkRow(p, LEFT + 24, -956, "Plain objects too, in white", 316)
+  v.glowOther:SetScript("OnClick", function(self) QB:Settings().glow.other = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
+  v.glowCombat = checkRow(p, LEFT + 24, -984, "Keep it on in a fight", 316)
+  v.glowCombat:SetScript("OnClick", function(self) QB:Settings().glow.combat = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
+  v.glowHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
+  v.glowHint:SetPoint("TOPLEFT", LEFT, -1010)
+  v.glowHint:SetHeight(44)
+  v.glowHint:SetText("Gold for a quest object, green for an herb, orange for ore, blue for a chest. Switching it on sets the game's soft-interact settings; they go back as they were when it is off.")
+
   -- where you are decides (QB:Opt): each row is a context, each column a setting; a button cycles inherit, on, off
   heading(p, RIGHT, -724, "When you are...")
   local COLS = { { "autoAccept", "Accept" }, { "autoTurnIn", "Hand in" }, { "sayAccept", "Say got" }, { "sayComplete", "Say done" }, { "clockShow", "Strip" } }
@@ -3457,6 +3470,11 @@ function UI:RefreshSettingsView(v)
     set.autoKey == "none" and "No key skips it." or ("Hold " .. keyName .. " to do it by hand.")))
   v.clockShow:SetChecked(set.clock and set.clock.show == true)
   v.minimapPins:SetChecked(set.minimapPins ~= false)
+  local gl = type(set.glow) == "table" and set.glow or {}
+  v.glowOn:SetChecked(gl.on == true)
+  v.glowOther:SetChecked(gl.other == true)
+  v.glowCombat:SetChecked(gl.combat == true)
+  v.glowOther:SetEnabled(gl.on == true); v.glowCombat:SetEnabled(gl.on == true)
   v.clockLevelMsg:SetChecked(set.clockLevelMsg ~= false)
   local MARK = { [true] = "|cff2e8b2e\226\156\147|r", [false] = "|cffb03030\226\156\151|r" }
   for key, b in pairs(v.tri) do
@@ -3480,7 +3498,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(930) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(1070) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------
