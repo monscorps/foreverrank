@@ -749,7 +749,7 @@ end
 
 local function login(c)
   -- (the older tests read every place's quests on Available: open them all; the 5.3 block tests the folded default)
-  if c.QB.UI then c.QB.UI.allOpen = true end
+  if c.QB.UI then c.QB.UI.allOpen = true; c.QB.UI.longTips = true end
   c.ev(c.QB.eventFrame, "ADDON_LOADED", "QuestBank")
   c.ev(c.QB.eventFrame, "PLAYER_LOGIN")
   c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE")
@@ -1577,6 +1577,47 @@ do
   P.list = saveList
   env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
   Mini.Invalidate(); Mini.Place()
+end
+-- 5.3: the short tooltip, abandoning from the menu, Best gear by slot
+do
+  local U, env = QB.UI, owner.env
+  local q = QB.Quest.Get(QB.state.logOrder[1].id)
+  local got = {}
+  local tip = { AddLine = function(_, t) got[#got + 1] = t end, AddDoubleLine = function(_, a, b) got[#got + 1] = a .. " | " .. b end }
+  U.longTips = false
+  U.QuestTooltip(tip, q, QB:Status(q), 1234)
+  assert(got[1] == q.name and got[2]:find("1,234 XP", 1, true) and got[#got] == "Shift: sources, chain and notes" and #got <= 6, "the short tooltip: " .. table.concat(got, " / "))
+  got = {}
+  owner.shift = true
+  U.QuestTooltip(tip, q, QB:Status(q), 1234)
+  owner.shift = false
+  assert(#got > 6, "Shift: the long one")
+  U.longTips = true
+  -- abandon: the game's three calls, from the menu, asked twice
+  local calls = {}
+  env.C_QuestLog.SetSelectedQuest = function(id) calls[#calls + 1] = "select " .. id end
+  env.C_QuestLog.SetAbandonQuest = function() calls[#calls + 1] = "mark" end
+  env.C_QuestLog.AbandonQuest = function() calls[#calls + 1] = "abandon" end
+  U.QuestMenu(q)
+  local menu = env.QuestBankMenu
+  local ab
+  for _, b in ipairs(menu.items) do if b:IsShown() and b.label:GetText():find("Abandon this quest", 1, true) then ab = b end end
+  assert(ab, "the menu offers to abandon a quest in the log")
+  ab.__scripts.OnClick(ab)
+  local yes
+  for _, b in ipairs(menu.items) do if b:IsShown() and b.label:GetText():find("Yes, abandon it", 1, true) then yes = b end end
+  assert(yes and #calls == 0, "it asks first")
+  yes.__scripts.OnClick(yes)
+  assert(table.concat(calls, ",") == "select " .. q.id .. ",mark,abandon", "then the game's own abandon: " .. table.concat(calls, ","))
+  env.C_QuestLog.SetSelectedQuest, env.C_QuestLog.SetAbandonQuest, env.C_QuestLog.AbandonQuest = nil, nil, nil
+  -- Best gear narrowed to a slot: a reward's equip location decides
+  local saveInst = env.C_Item.GetItemInfoInstant
+  env.C_Item.GetItemInfoInstant = function(id) return id, "Armor", "Cloth", id % 2 == 0 and "INVTYPE_HEAD" or "INVTYPE_FEET" end
+  local R = QB.Data.RITEMS
+  local qid, rid
+  for id, r in pairs(R) do if r.c and r.c[1] and r.c[1] % 2 == 0 then qid, rid = id, r.c[1]; break end end
+  assert(qid and U.RewardSlotFits(qid, "Head") and not U.RewardSlotFits(qid, "Ring"), "a head reward fits Head, not Ring")
+  env.C_Item.GetItemInfoInstant = saveInst
 end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do

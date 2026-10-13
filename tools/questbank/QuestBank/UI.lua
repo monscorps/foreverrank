@@ -233,7 +233,34 @@ local function chatOpen()
   return chatFn("InsertLink", "ChatEdit_InsertLink") and true or false
 end
 
+-- the short tooltip: name, level and place, XP, the rewards as icons, what stands out; Shift shows the long one
+function UI.QuestTooltipShort(tip, q, st, xp)
+  tip:AddLine(q.name, GOLD[1], GOLD[2], GOLD[3])
+  local full = Q.Full(q)
+  local xpText = (q.xpUnknown and not q.liveFull) and "XP not known yet" or (QB.Comma(xp or full) .. " XP")
+  tip:AddDoubleLine(string.format("L%d  \194\183  %s", q.lvl or 0, q.cat and q.cat.name or ""), xpText, 0.8, 0.8, 0.8, 1, 0.82, 0)
+  local R = QB.Data.RITEMS and QB.Data.RITEMS[q.id]
+  local icons = {}
+  for _, key in ipairs({ "c", "r", "u" }) do
+    for _, id in ipairs(R and R[key] or {}) do
+      if #icons < 6 then
+        local ic = C_Item and C_Item.GetItemIconByID and select(2, pcall(C_Item.GetItemIconByID, id))
+        icons[#icons + 1] = "|T" .. (type(ic) == "number" and ic or 134400) .. ":20:20:0:0:64:64:5:59:5:59|t"
+      end
+    end
+  end
+  if #icons > 0 then tip:AddLine(((R and R.c and #R.c > 0) and "Choose: " or "") .. table.concat(icons, " "), 1, 1, 1) end
+  if st and st.text and st.text ~= "" and st.code ~= "todo" then
+    local c = STATUS[st.code] or INK
+    tip:AddLine(st.text, c[1], c[2], c[3])
+  end
+  local drop = QB.Data.DROP and QB.Data.DROP[q.id]
+  if drop and drop < 30 then tip:AddLine(string.format("Its items drop %d%% of the time", math.floor(drop + 0.5)), drop < 15 and 0.9 or 0.85, drop < 15 and 0.4 or 0.7, 0.3) end
+  tip:AddLine("Shift: sources, chain and notes", 0.5, 0.5, 0.5)
+end
+
 function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
+  if not (IsShiftKeyDown and IsShiftKeyDown()) and not UI.longTips then return UI.QuestTooltipShort(tip, q, st, xp) end
   tip:AddLine(q.name, GOLD[1], GOLD[2], GOLD[3])
   local cat = q.cat and q.cat.name or ""
   tip:AddDoubleLine(string.format("Level %d, needs %d", q.lvl, q.req or 1), cat, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8)
@@ -716,6 +743,11 @@ function UI.QuestMenu(q, st)
   local held = QB.state.log[q.id] or st.bag
   if held then
     items[#items + 1] = { QB:IsCut(q.id) and "Keep it in the route" or "Leave it out of the route", function() QB:ToggleAdd(q.id); UI:Refresh() end }
+    if QB.state.log[q.id] then
+      items[#items + 1] = { "|cffe05a4aAbandon this quest|r", function()
+        UI:ShowMenu("Abandon " .. q.name .. "?", { { "|cffe05a4aYes, abandon it|r", function() UI.Abandon(q) end }, { "No, keep it", function() end } })
+      end }
+    end
   elseif st.code ~= "done" and st.code ~= "wrong" then
     items[#items + 1] = { QB:IsAdded(q.id) and "Take it off my pick-up list" or "Put it on my pick-up list", function() QB:ToggleAdd(q.id); UI:Refresh() end }
   end
@@ -734,6 +766,19 @@ function UI.QuestMenu(q, st)
   end
   items[#items + 1] = { "Copy the Wowhead link", function() UI:CopyLink(q.name, "https://www.wowhead.com/forever/quest=" .. q.id) end }
   UI:ShowMenu(q.name, items)
+end
+
+-- abandon a quest in your log, the game's own way (select it, mark it, abandon); a click in QuestBank's menu, asked twice
+function UI.Abandon(q)
+  local L = C_QuestLog
+  local ok = false
+  if L and L.SetSelectedQuest and L.SetAbandonQuest and L.AbandonQuest then
+    ok = pcall(L.SetSelectedQuest, q.id) and pcall(L.SetAbandonQuest) and pcall(L.AbandonQuest)
+  elseif SelectQuestLogEntry and SetAbandonQuest and AbandonQuest and GetQuestLogIndexByID then
+    local idx = GetQuestLogIndexByID(q.id)
+    ok = idx and idx > 0 and pcall(SelectQuestLogEntry, idx) and pcall(SetAbandonQuest) and pcall(AbandonQuest) or false
+  end
+  QB:Print(ok and ("Abandoned " .. q.name .. ".") or ("The game would not abandon " .. q.name .. " from here: use its quest log."))
 end
 
 ----------------------------------------------------------------------------
@@ -1302,7 +1347,9 @@ function UI:FindRewards(kind, level)
     if r and not c.behind then
       local kinds = r[2]
       local hit
-      if kind == "gear" then hit = kinds % 2 == 1 and r[1] > 0 and wearable(kinds, level)
+      if kind == "gear" then
+        hit = kinds % 2 == 1 and r[1] > 0 and wearable(kinds, level)
+        if hit and UI.gearSlot then hit = UI.RewardSlotFits(c.id, UI.gearSlot) end
       elseif kind == "trinket" then hit = math.floor(kinds / 2) % 2 == 1 or math.floor(kinds / 4) % 2 == 1
       elseif kind == "recipe" then hit = math.floor(kinds / 8) % 2 == 1 end
       if hit then
@@ -1316,6 +1363,29 @@ function UI:FindRewards(kind, level)
     return a.value > b.value
   end)
   return out
+end
+
+-- the slots the Best gear finder narrows to, by the item's equip location
+UI.GEAR_SLOTS = { { "Head", { INVTYPE_HEAD = 1 } }, { "Neck", { INVTYPE_NECK = 1 } }, { "Shoulder", { INVTYPE_SHOULDER = 1 } },
+  { "Back", { INVTYPE_CLOAK = 1 } }, { "Chest", { INVTYPE_CHEST = 1, INVTYPE_ROBE = 1 } }, { "Wrist", { INVTYPE_WRIST = 1 } },
+  { "Hands", { INVTYPE_HAND = 1 } }, { "Waist", { INVTYPE_WAIST = 1 } }, { "Legs", { INVTYPE_LEGS = 1 } }, { "Feet", { INVTYPE_FEET = 1 } },
+  { "Ring", { INVTYPE_FINGER = 1 } }, { "Trinket", { INVTYPE_TRINKET = 1 } },
+  { "Weapon", { INVTYPE_WEAPON = 1, INVTYPE_2HWEAPON = 1, INVTYPE_WEAPONMAINHAND = 1, INVTYPE_WEAPONOFFHAND = 1 } },
+  { "Off hand", { INVTYPE_SHIELD = 1, INVTYPE_HOLDABLE = 1 } }, { "Ranged", { INVTYPE_RANGED = 1, INVTYPE_RANGEDRIGHT = 1, INVTYPE_THROWN = 1 } } }
+function UI.RewardSlotFits(qid, slot)
+  local want
+  for _, g in ipairs(UI.GEAR_SLOTS) do if g[1] == slot then want = g[2] end end
+  if not want then return true end
+  local R = QB.Data.RITEMS and QB.Data.RITEMS[qid]
+  for _, key in ipairs({ "c", "r", "u" }) do
+    for _, id in ipairs(R and R[key] or {}) do
+      local loc
+      if C_Item and C_Item.GetItemInfoInstant then local ok, _, _, _, l = pcall(C_Item.GetItemInfoInstant, id); if ok then loc = QB.Plain(l) end
+      elseif GetItemInfoInstant then local ok, _, _, _, l = pcall(GetItemInfoInstant, id); if ok then loc = QB.Plain(l) end end
+      if loc and want[loc] then return true end
+    end
+  end
+  return false
 end
 
 local modWatch = CreateFrame("Frame")
@@ -1333,13 +1403,13 @@ function UI:CreateLogView(parent)
   v:SetAllPoints()
   v.title = text(v, "GameFontNormalLarge", 15, INK, "LEFT", 150)
   v.title:SetPoint("TOPLEFT", LEFT, -12)
-  v.worth = text(v, "GameFontNormal", 12, INK_SOFT, "LEFT", 250)
-  v.worth:SetPoint("TOPLEFT", LEFT + 150, -14)
+  v.worth = text(v, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", RIGHT - LEFT - 20)
+  v.worth:SetPoint("TOPLEFT", LEFT, -30)
   v.slots = {}
   for i = 1, QB.LOG_SLOTS do
     local b = iconButton(v, 36, nil)
     local col, row = (i - 1) % 8, math.floor((i - 1) / 8)
-    b:SetPoint("TOPLEFT", LEFT + 4 + col * 46, -42 - row * 46)
+    b:SetPoint("TOPLEFT", LEFT + 4 + col * 46, -48 - row * 46)
     b.frame = tex(b, "OVERLAY", T.iconFrame)
     b.frame:SetAllPoints()
     b.xp = text(b, "NumberFontNormal", 11, WHITE, "RIGHT", 40)
@@ -1348,6 +1418,10 @@ function UI:CreateLogView(parent)
     b.mark:SetPoint("TOPLEFT", 1, -1)
     b.up = upgradeMark(b, 13, 14)
     b.up:SetPoint("TOPRIGHT", -1, -1)
+    -- where it is: the zone's icon in the corner, a dungeon's own
+    b.zone = tex(b, "OVERLAY", nil, 14, 14)
+    b.zone:SetPoint("BOTTOMLEFT", 1, 1)
+    b.zone:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     b:SetScript("OnClick", function(self, which) if self.q then UI.QuestClick(self.q, self.st, which) end end)
     tooltip(b, function(tip, self)
@@ -1430,6 +1504,13 @@ function UI:CreateLogView(parent)
     end)
     v.finds[i] = b
   end
+  v.slotBtn = button(v, "Any slot", 90)
+  v.slotBtn:SetPoint("TOPLEFT", RIGHT + 4 * 84 - 6, -32)
+  v.slotBtn:SetScript("OnClick", QB.Safe(function()
+    local items = { { "Any slot", function() UI.gearSlot = nil; UI:Refresh() end } }
+    for _, g in ipairs(UI.GEAR_SLOTS) do items[#items + 1] = { g[1], function() UI.gearSlot = g[1]; UI:Refresh() end } end
+    UI:ShowMenu("Best gear for", items)
+  end, "gear slot"))
   v.swaps = {}
   for i = 1, 8 do
     local r = CreateFrame("Button", nil, v)
@@ -1651,11 +1732,19 @@ function UI:RefreshLogView(v)
   end
   v.legend:SetText("") -- (the colours speak for themselves)
   local overflow = #picks - (QB.LOG_SLOTS - #entries)
-  if overflow > 0 then
-    v.worth:SetText(string.format("worth about %s XP · %d more to pick up", QB.Comma(total), overflow))
-  else
-    v.worth:SetText(string.format("worth about %s XP %s", QB.Comma(total), QB:OnTheDay()))
+  local ek, kal, dng = 0, 0, 0
+  for _, it in ipairs(entries) do
+    local cat = it.q and it.q.cat
+    if cat then
+      if cat.dungeon then dng = dng + 1 elseif cat.cont == 0 then ek = ek + 1 elseif cat.cont == 1 then kal = kal + 1 end
+    end
   end
+  local where = {}
+  if ek > 0 then where[#where + 1] = "EK " .. ek end
+  if kal > 0 then where[#where + 1] = "Kalimdor " .. kal end
+  if dng > 0 then where[#where + 1] = dng .. " dungeon" end
+  local xpText = QB:Banking() and string.format("%s XP on the day", QB.Short(total)) or string.format("%s XP", QB.Short(total))
+  v.worth:SetText(xpText .. (#where > 0 and ("  \194\183  " .. table.concat(where, "  \194\183  ")) or "") .. (overflow > 0 and string.format("  \194\183  %d more to pick up", overflow) or ""))
   for i, b in ipairs(v.slots) do
     local it = entries[i]
     b.q, b.st, b.entry, b.value, b.pct, b.plvl, b.pick, b.advice = nil, nil, nil, nil, nil, nil, nil, nil
@@ -1670,6 +1759,8 @@ function UI:RefreshLogView(v)
         elseif low then b.advice = QB.Data.CUT_NOTES[it.e.id] or string.format(it.e.complete and "Pays next to nothing at level %d: hand it in now for the rewards." or "Pays next to nothing at level %d: abandon it to free the slot.", s.level) end
       end
       if it.q then b.q, b.st = it.q, it.st end
+      local cat = it.q and it.q.cat
+      if cat and (cat.zi or cat.icon) then b.zone:SetTexture(cat.zi or cat.icon); b.zone:Show() else b.zone:Hide() end
       setIcon(b.icon, it.q and it.q.icon or (it.e.complete and T.questActive or T.questAvail))
       b.icon:SetDesaturated(it.cut or false)
       local c = QUALITY[tier(it.value)]
@@ -1700,7 +1791,10 @@ function UI:RefreshLogView(v)
         b.mark:SetTexture(T.questAvail)
         b.mark:Show()
         b.up:Hide()
+        local cat = pk.q.cat
+        if cat and (cat.zi or cat.icon) then b.zone:SetTexture(cat.zi or cat.icon); b.zone:Show() else b.zone:Hide() end
       else
+        b.zone:Hide()
         b.icon:SetTexture(nil)
         b.frame:Hide()
         b.xp:SetText("")
@@ -1767,6 +1861,8 @@ function UI:RefreshLogView(v)
   end
 
   -- the finder's mode buttons
+  v.slotBtn:SetShown(UI.findMode == "gear")
+  v.slotBtn:SetText(UI.gearSlot or "Any slot")
   for _, b in ipairs(v.finds) do
     local on = b.key == UI.findMode
     local col = on and INK or INK_SOFT
