@@ -1182,7 +1182,8 @@ function UI:RefreshHeader()
     h.legend:SetText(string.format("|cff6f9fffNow %.1f|r    |cffc080c0Banked %.1f|r    |cffd8c8ffLog and pick-ups %.1f|r    |cffaaaaaaAt 60 min %.1f|r",
       cur, nowL, planL, plan60))
   else
-    h.legend:SetText(string.format("|cff6f9fffNow %.1f|r    |cffc080c0Ready %.1f|r    |cffd8c8ffLog and pick-ups %.1f|r", cur, nowL, planL))
+    -- questing: where the log takes you, in one short line; the bar says the rest
+    h.legend:SetText(planL > cur + 0.05 and string.format("|cffd8c8ffYour log is worth level %.1f|r", planL) or "")
   end
   local set = QB:Settings()
   local tg = h.toggles
@@ -1191,6 +1192,8 @@ function UI:RefreshHeader()
   tg.mounted.caption:SetText(mounted and "Mounted" or "On foot")
   -- the third switch: the hour's goal when banking, the lock itself when questing
   local g = tg.goal
+  g:SetShown(banking)
+  if g.caption then g.caption:SetShown(banking) end
   if banking then
     g.key = "goal"
     setIcon(g.icon, T.hourglass)
@@ -1598,8 +1601,7 @@ function UI:RefreshLogView(v)
     if x >= 1000 then return QB.Short(math.floor(x / 100 + 0.5) * 100) end
     return tostring(math.floor(x / 10 + 0.5) * 10)
   end
-  v.legend:SetText(string.format("|cffff8000Orange|r %s+  |cffa335eePurple|r %s+  |cff0070ddBlue|r %s+  |cff1eff00Green|r %s+  White %s+",
-    step(12000), step(9000), step(6000), step(3000), step(1500)))
+  v.legend:SetText("") -- (the colours speak for themselves)
   local overflow = #picks - (QB.LOG_SLOTS - #entries)
   if overflow > 0 then
     v.worth:SetText(string.format("worth about %s XP · %d more to pick up", QB.Comma(total), overflow))
@@ -2096,7 +2098,8 @@ local function fillRow(r, it, width)
     if st.code == "item" then
       status = string.format("Item at %d%%: %s", pct, (st.text or ""):gsub("^Starts from an item: ", ""))
     else
-      status = string.format("drop %d%%", pct) .. ((st.text and st.text ~= "") and (" \194\183 " .. st.text) or "")
+      local rest = (st.text and st.text ~= "" and st.code ~= "todo") and (" \194\183 " .. st.text) or ""
+      status = string.format("drop %d%%", pct) .. rest
     end
     if drop < 15 then color = BAD end
   end
@@ -2116,9 +2119,10 @@ local function fillRow(r, it, width)
       end
     end
   end
+  if st.code == "todo" and status == st.text then status = "" end
   if it.together and #it.together > 0 then
     local room = r.status:GetWidth() - 4
-    local suffix = string.format(" · with %d", #it.together)
+    local suffix = string.format(status ~= "" and " · %d in the same spot" or "%d in the same spot", #it.together)
     r.status:SetText(status .. suffix)
     if r.status:GetStringWidth() <= room then status = status .. suffix end
   end
@@ -2361,8 +2365,7 @@ function UI:RefreshPrepView(v)
     v.intro:SetText(hubName and string.format("Where next, from %s: the three places worth your time.", hubName) or "Where next: the three places worth your time.")
     v.introR:SetText(string.format("%d available", openAll))
   else
-    v.intro:SetText(hubName and string.format("Level %d to %d, %s. Minutes from %s.", level - below, level + above, order_word, hubName)
-      or string.format("Level %d to %d, %s.", level - below, level + above, order_word))
+    v.intro:SetText(string.format("Level %d to %d", math.max(1, level - below), math.min(QB.MAXLEVEL or 60, level + above)))
     v.introR:SetText(string.format("%d available" .. (picksAll > 0 and " · %d to pick up" or ""), openAll, picksAll))
   end
 
@@ -2485,7 +2488,7 @@ function UI:RefreshPrepView(v)
         if it.grp == 6 or not rowPasses(it) then show = false
         elseif it.grp == 1 or it.grp == 3 then show = true
         else
-          show = open or extra < PER_CARD
+          show = open or extra < (v.now and 4 or PER_CARD)
           if show then extra = extra + 1 else hidden = hidden + 1 end
         end
         if show then
@@ -2506,7 +2509,7 @@ function UI:RefreshPrepView(v)
           end
         end
       end
-      if hidden > 0 or open then
+      if (hidden > 0 or open) and not v.now then
         c.more:ClearAllPoints()
         c.more:SetPoint("TOPLEFT", 46, -ry - 2)
         c.more.key = a.key

@@ -104,9 +104,12 @@ local function newObj(kind, template, parent)
         elseif k == "GetName" then return self.__name
         elseif k == "GetParent" then return self.__parent
         elseif k == "SetParent" then self.__parent = a[1]
-        elseif k == "SetTexture" then self.__tex = a[1]; self.__color = nil
+        elseif k == "SetTexture" then self.__tex = a[1]; self.__color = nil; self.__atlas = nil
+        elseif k == "SetAtlas" then self.__atlas = a[1]; self.__tex = "atlas:" .. tostring(a[1])
         elseif k == "SetColorTexture" then self.__tex = "color"; self.__color = { a[1], a[2], a[3], a[4] }
-        elseif k == "SetVertexColor" then self.__vertex = { a[1], a[2], a[3] }
+        elseif k == "SetVertexColor" then self.__vertex = { a[1], a[2], a[3], a[4] }
+        elseif k == "SetBackdropColor" then self.__bdc = { a[1], a[2], a[3], a[4] }
+        elseif k == "SetBackdropBorderColor" then self.__bdb = { a[1], a[2], a[3], a[4] }
         elseif k == "SetTexCoord" then self.__tc = { a[1], a[2], a[3], a[4] }
         elseif k == "SetBlendMode" then self.__blend = a[1]
         elseif k == "SetDesaturated" then self.__desat = a[1] and true or false
@@ -945,12 +948,15 @@ local function dumpLayout(root, label)
             else
               it.layer = o.__layer
               it.tex = o.__tex == "color" and "color" or (texNames[o.__tex] or (o.__tex and "icon") or nil)
+              if o.__tex ~= "color" then it.raw = o.__tex end
+              if o.__atlas then it.atlas = o.__atlas end
               it.c = o.__color or o.__vertex
               it.tc, it.blend, it.desat = o.__tc, o.__blend, o.__desat or nil
               if not it.tex then it = nil end
             end
           else
             it.bd = o.__backdrop or nil
+            it.bdc, it.bdb = o.__bdc, o.__bdb
             it.tpl = o.__template
             it.text = (o.__template or o.__kind == "EditBox") and o.__text ~= "" and o.__text or nil
             it.checked, it.off = o.__checked or nil, o.__disabled or nil
@@ -2034,7 +2040,7 @@ local function hoverFirst(list, n)
   end
 end
 local function unhover() for _, o in ipairs(ALL) do o.__hover = nil end end
-for tab = 1, 5 do
+for tab = 1, 6 do
   UI:ShowTab(tab)
   QB.Model.Finish()
   UI:Refresh()
@@ -2055,7 +2061,7 @@ for tab = 1, 5 do
     local l = v3.legs.items[2]
     if l then l.pin.__hover = true; hoverFirst(l.rows) end
   end
-  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Available", "Hand-in Route", "Party", "Settings" })[tab] .. " (one row hovered)")
+  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Available", "Hand-in Route", "Party", "Settings", "Now" })[tab] .. " (one row hovered)")
   unhover()
 end
 
@@ -3531,7 +3537,7 @@ do
     assert(withIcons > 0, "rows with reward icons: " .. withIcons)
   end
   local v2 = U.views[2]
-  assert(v2.intro:GetText():find("^Level %d+ to %d+, "), "the intro names the level window and the order: " .. tostring(v2.intro:GetText()))
+  assert(v2.intro:GetText():find("^Level %d+ to %d+$"), "the intro names the level window, nothing more: " .. tostring(v2.intro:GetText()))
   local todoRow, heldRow
   for _, c in ipairs(v2.cards.items) do
     if c:IsShown() then
@@ -3604,7 +3610,7 @@ do
     end
   end
   assert(bands >= 2, "several cards to order")
-  assert(NU.views[2].intro:GetText():find("zone by zone from the lowest", 1, true), "the intro says the order")
+  assert(NU.views[2].intro:GetText():find("^Level %d+ to %d+$"), "the intro is the level window: " .. tostring(NU.views[2].intro:GetText()))
   -- a chain opens under its row
   U.candMemo = nil
   U:ShowTab(2); QB.Model.Finish(); U:Refresh()
