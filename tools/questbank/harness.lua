@@ -254,6 +254,10 @@ local function newClient(o)
     return f
   end
   env.C_Timer = { After = function(sec, f) c.timers[#c.timers + 1] = { t = c.clock + sec, f = f } end }
+  -- the client's event registry, as far as chat links use it: a clicked addon link fires "SetItemRef"
+  env.EventRegistry = { cbs = {},
+    RegisterCallback = function(self, event, fn, owner) self.cbs[event] = self.cbs[event] or {}; table.insert(self.cbs[event], { fn, owner }) end,
+    TriggerEvent = function(self, event, ...) for _, cb in ipairs(self.cbs[event] or {}) do cb[1](cb[2], ...) end end }
   env.GetTime = function() return c.clock end
   local t0 = os.time()
   env.time = function() return t0 + math.floor(c.clock - 1000) end
@@ -1127,6 +1131,35 @@ do
   assert(not T.frame:IsShown(), "and off again when it no longer applies")
   QB.state.level = lvl0
   T.DB().levels, T.DB().quests = {}, {}
+end
+-- 3.8.0: chat links (Link.lua): QuestBank's quest links open the quest's menu; an item tooltip names the quests that give it
+do
+  local L, env = QB.Link, owner.env
+  local q = QB.Quest.Get(7)
+  assert(q and L.Format(q) == "|cffc6af8d|Haddon:QuestBank:quest:7|h[" .. q.name .. "]|h|r", "the link: " .. L.Format(q))
+  assert(L.Parse("addon:QuestBank:quest:7") == 7 and L.Parse("addon:Other:quest:7") == nil and L.Parse("item:2589") == nil and L.Parse(SECRET.str()) == nil, "parsing")
+  assert(#env.EventRegistry.cbs.SetItemRef == 1, "one SetItemRef callback on the Forever client")
+  env.EventRegistry:TriggerEvent("SetItemRef", "addon:QuestBank:quest:7", L.Format(q), "LeftButton", nil)
+  local menu = env.QuestBankMenu
+  assert(menu and menu:IsShown() and menu.title:GetText() == q.name, "a click opens the quest's menu")
+  menu:Hide()
+  env.EventRegistry:TriggerEvent("SetItemRef", "addon:QuestBank:quest:999999999", "[x]", "LeftButton", nil)
+  assert(not menu:IsShown() and owner.chat[#owner.chat]:find("doesn't know quest 999999999", 1, true), "an unknown quest: said, no menu")
+  env.EventRegistry:TriggerEvent("SetItemRef", "item:2589", "[Linen Cloth]", "LeftButton", nil)
+  assert(not menu:IsShown(), "other links are not QuestBank's business")
+  -- item tooltips: a reward item names its quests, a plain item nothing
+  local idx = L.RewardIndex()
+  local iid, qids = next(idx)
+  assert(iid and #qids >= 1, "the reward index holds items")
+  local lines = {}
+  local tip = { AddLine = function(_, s) lines[#lines + 1] = s end }
+  L.ItemTip(tip, { id = iid })
+  assert(#lines >= 1 and lines[1]:find("^Reward of: ") and lines[1]:find("%(L%d+"), "a reward item: " .. tostring(lines[1]))
+  lines = {}
+  L.ItemTip(tip, { id = 2589 })
+  assert(#lines == 0, "linen cloth: no quest gives it")
+  L.ItemTip({}, { id = iid }); L.ItemTip(tip, { id = SECRET.num() })
+  assert(#lines == 0, "a tooltip without AddLine, a hidden id: nothing, no error")
 end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do

@@ -2158,7 +2158,7 @@ local function onTurnIn(questID, xpReward)
     -- the game hid the number: nothing to learn about locks, no run to start; a run under way counts the plan's figure
     Run.Record(questID, predicted or 0, q and q.name)
     if q then
-      QB:Print(string.format("%s handed in. The game hides its XP from addons%s.", q.name,
+      QB:Print(string.format("%s handed in. The game hides its XP from addons%s.", QB.Link.Format(q),
         (predicted and predicted > 0) and string.format("; the plan counted %s", QB.Comma(predicted)) or ""))
     end
     return
@@ -2178,7 +2178,7 @@ local function onTurnIn(questID, xpReward)
   Run.Record(questID, xpReward, q and q.name)
   if not q then return end
   if (xpReward or 0) == 0 and predicted and predicted > 0 then
-    QB:Print(string.format("%s paid no XP (the level cap?). The plan counted %s for it.", q.name, QB.Comma(predicted)))
+    QB:Print(string.format("%s paid no XP (the level cap?). The plan counted %s for it.", QB.Link.Format(q), QB.Comma(predicted)))
     return
   end
   local msg = string.format("%s: +%s XP", q.name, QB.Comma(xpReward or 0))
@@ -2218,6 +2218,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Loot then QB.Loot:Init() end
     if QB.Observe then QB.Observe:Init() end
     if QB.Timer then QB.Timer:Init() end
+    if QB.Link then QB.Link:Init() end
     if QB.Arrow then QB.Arrow:Init() end
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))

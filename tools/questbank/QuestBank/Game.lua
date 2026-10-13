@@ -554,8 +554,9 @@ function Game:Init()
   end
   -- every item tooltip the game shows (bags, chat links, anything hovered); quest rewards come through Discover
   if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType and Enum.TooltipDataType.Item then
-    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, QB.Safe(function(_, data)
+    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, QB.Safe(function(tip, data)
       if type(data) == "table" then want(data.id) end
+      if QB.Link then QB.Link.ItemTip(tip, data) end -- the quests that give the item (Link.lua), through this one hook
     end, "item notes"))
   end
   if on() then db() end
