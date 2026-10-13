@@ -1566,6 +1566,19 @@ do
   W[0] = nil
   Mini.Invalidate(); Mini.Place()
 end
+-- 5.3: health and mana numbers on the portraits: the game's own Status Text, from QuestBank's settings
+do
+  local U = QB.UI
+  c = owner
+  U:ShowTab(5)
+  local v = U.views[5]
+  assert(#v.statusBtns == 4 and U.StatusText() == "NONE" and not v.statusBtns[1]:IsEnabled(), "off by default, Off greyed as the one in use")
+  v.statusBtns[4].__scripts.OnClick(v.statusBtns[4])
+  assert(c.cvars.statusText == "1" and c.cvars.statusTextDisplay == "BOTH" and U.StatusText() == "BOTH" and not v.statusBtns[4]:IsEnabled(), "Both: numbers and percent, always shown")
+  v.statusBtns[1].__scripts.OnClick(v.statusBtns[1])
+  assert(c.cvars.statusText == "0" and U.StatusText() == "NONE", "Off")
+  U:ShowTab(1)
+end
 -- 5.3: the camp bar (Camp.lua): Well Fed, the campfire kit, camp features with the shared cooldown, the sleeping bag
 do
   local Camp, env = QB.Camp, owner.env
@@ -1956,7 +1969,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 1100 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 1170 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()

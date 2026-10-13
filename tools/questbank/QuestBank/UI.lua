@@ -4071,6 +4071,22 @@ function UI:CreateSettingsView(parent)
   v.glowHint:SetHeight(44)
   v.glowHint:SetText("Gold for a quest object, green for an herb, orange for ore, blue for a chest. Switching it on sets the game's soft-interact settings; they go back as they were when it is off.")
 
+  -- health and mana on the portraits: the game's own Status Text (Options, Interface), always shown, so it works in
+  -- a fight where an addon may not read an enemy's health
+  heading(p, LEFT, -1070, "Health and mana numbers", 370)
+  v.statusBtns = {}
+  for i, o in ipairs(UI.STATUS_TEXT) do
+    local b = button(p, o[2], 84)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1096)
+    b.value = o[1]
+    b:SetScript("OnClick", QB.Safe(function(self) UI.SetStatusText(self.value); UI:Refresh() end, "settings: status text"))
+    v.statusBtns[i] = b
+  end
+  v.statusHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
+  v.statusHint:SetPoint("TOPLEFT", LEFT, -1126)
+  v.statusHint:SetHeight(30)
+  v.statusHint:SetText("On your portrait, your target's and your focus's, always shown. The game's own Status Text option.")
+
   -- where you are decides (QB:Opt): each row is a context, each column a setting; a button cycles inherit, on, off
   heading(p, RIGHT, -724, "When you are...")
   local COLS = { { "autoAccept", "Accept" }, { "autoTurnIn", "Hand in" }, { "sayAccept", "Say got" }, { "sayComplete", "Say done" }, { "clockShow", "Strip" } }
@@ -4121,8 +4137,30 @@ function UI:CreateSettingsView(parent)
   return v
 end
 
+-- the game's Status Text: off, numbers, percent or both on the unit frames (statusText, statusTextDisplay)
+UI.STATUS_TEXT = { { "NONE", "Off" }, { "NUMERIC", "Numbers" }, { "PERCENT", "Percent" }, { "BOTH", "Both" } }
+function UI.StatusText()
+  local get = C_CVar and C_CVar.GetCVar or GetCVar
+  local okA, on = pcall(get, "statusText")
+  local okB, how = pcall(get, "statusTextDisplay")
+  on, how = okA and QB.Plain(on), okB and QB.Plain(how)
+  if on ~= "1" or how == nil or how == "" then return "NONE" end
+  return how
+end
+function UI.SetStatusText(value)
+  local set = C_CVar and C_CVar.SetCVar or SetCVar
+  pcall(set, "statusTextDisplay", value)
+  pcall(set, "statusText", value == "NONE" and "0" or "1")
+end
+
 function UI:RefreshSettingsView(v)
   local set = QB:Settings()
+  local st = UI.StatusText()
+  for _, b in ipairs(v.statusBtns or {}) do
+    local on = b.value == st
+    b:SetEnabled(not on) -- the one in use is greyed, as the game's own choosers do
+    b.on = on
+  end
   local choice = QB:LockChoice()
   local vals = { auto = 1, off = 2, on = 3 }
   for i, b in ipairs(v.modeBtns) do b:SetEnabled(vals[choice] ~= i) end
@@ -4230,7 +4268,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(1100) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(1170) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------
