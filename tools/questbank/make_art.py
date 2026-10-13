@@ -70,6 +70,18 @@ def border(size=256, inner=0.90, width=0.045):
         return v, v, v, int(255 * a)
     return px
 
+def diamond(size=32):
+    """a diamond with a light rim: an objective's mark"""
+    c = (size - 1) / 2
+    def px(x, y):
+        d = (abs(x - c) + abs(y - c)) / c
+        if d > 1: return 0, 0, 0, 0
+        edge = smooth((1 - d) * 6)
+        rim = 1.0 if d > 0.72 else 0.0
+        v = int(255 * (0.75 + 0.25 * rim))
+        return v, v, v, int(255 * edge)
+    return px
+
 def dot(size=32):
     c = (size - 1) / 2
     def px(x, y):
@@ -86,4 +98,5 @@ if __name__ == "__main__":
     tga(os.path.join(HERE, "line.tga"), 16, 64, line())
     tga(os.path.join(HERE, "dot.tga"), 32, 32, dot())
     tga(os.path.join(HERE, "border.tga"), 256, 256, border())
+    tga(os.path.join(HERE, "diamond.tga"), 32, 32, diamond())
     print("wrote", sorted(os.listdir(HERE)))

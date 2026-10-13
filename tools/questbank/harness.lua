@@ -21,7 +21,7 @@ RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThum
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
-SetAtlas SetPassThroughButtons SetScale GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute]])
+SetAtlas SetPassThroughButtons SetScale GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
@@ -65,6 +65,8 @@ local function newObj(kind, template, parent)
         elseif k == "CreateTexture" then local x = newObj("Texture", nil, self); x.__layer = a[2] or "ARTWORK"; return x
         elseif k == "CreateFontString" then local x = newObj("FontString", nil, self); x.__layer = a[2] or "OVERLAY"; return x
         elseif k == "CreateLine" then local x = newObj("Line", nil, self); x.__layer = a[2] or "ARTWORK"; return x
+        elseif k == "CreateMaskTexture" then local x = newObj("Texture", nil, self); x.__layer = "MASK"; return x
+        elseif k == "AddMaskTexture" then self.__mask = a[1]
         elseif k == "SetStartPoint" then self.__start = { a[1], a[2], a[3], a[4] }
         elseif k == "SetEndPoint" then self.__stop = { a[1], a[2], a[3], a[4] }
         elseif k == "GetZoom" then return self.__zoom or 0
@@ -1527,6 +1529,52 @@ do
   env.IsInInstance = saveInst
   Camp.Clear()
   owner.o.bagSlots = saveBags; c.profs = nil; c.buffs = nil
+end
+-- 5.3: the minimap leads to the work: objectives as diamonds, the line to the nearest unfinished one, its name in a
+-- label; the big map draws its own zone or continent art under a round mask and zooms with the wheel
+do
+  local Mini, env, P, D = QB.Mini, owner.env, QB.Pins, QB.Data
+  c = owner
+  local saveWorld, savePos, saveList = env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition, P.list
+  env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = -v.y * 3000, y = -v.x * 4000, GetXY = function(self) return self.x, self.y end } end
+  env.C_Map.GetPlayerMapPosition = function() return { x = 0.50, y = 0.50, GetXY = function(self) return self.x, self.y end } end
+  D.SPOT[777777] = "k,1,1429,520,500,10,c"                      -- 80 yards east of you
+  QB.Quest.Get(777777) -- (unknown to the catalog: named by id)
+  table.insert(QB.state.logOrder, 1, { id = 777777, complete = false })
+  P.list = { { m = 1429, x = 50, y = 40, num = 1, name = "Goldshire", when = "", lines = {} } } -- 300 yards north
+  c.miniRadius = 200
+  Mini.Invalidate(); Mini.Place()
+  local obj
+  for _, fr in ipairs(c.frames) do if fr.d and fr.d.kind == "obj" and fr.d.id == 777777 and fr:IsShown() then obj = fr end end
+  assert(obj and obj.icon.__tex:find("diamond", 1, true) and math.abs(obj.__points[1].x - 28) < 0.01, "the objective is a diamond, 80 yards east: 28 px")
+  assert(Mini.target and Mini.target.kind == "obj" and Mini.target.id == 777777, "the nearer objective is the target, not stop 1")
+  assert(Mini.linesShown >= 1 and env.QuestBankMinimapLabel:IsShown() and Mini.labelText == "Quest 777777", "a line to it, and its name in the label: " .. tostring(Mini.labelText))
+  QB:Settings().minimapObjectives = false
+  c.miniRadius = 400 -- (Goldshire inside the circle, so its label shows)
+  Mini.Place()
+  assert(Mini.target and Mini.target.kind == "stop" and Mini.labelText == "Goldshire", "objectives off: stop 1 is the target")
+  c.miniRadius = 200
+  QB:Settings().minimapObjectives = nil
+  -- the big map: its own art, centred on you
+  D.MAPTILES[1453] = { c = 4, r = 3, t = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 } }
+  Mini.Big(true)
+  assert(Mini.big and Mini.bigRadius == 1200 and Mini.artMap == 1453 and Mini.artTiles == 12, "the zone's twelve tiles: " .. tostring(Mini.artMap) .. " " .. tostring(Mini.artTiles))
+  local art = env.QuestBankBigMapArt
+  local t1 = art.tiles[1]
+  local R = env.Minimap:GetWidth() / 2
+  assert(t1.__mask and math.abs(t1.__points[1].x - (-2000 * R / 1200)) < 0.01 and math.abs(t1.__points[1].y - (1500 * R / 1200)) < 0.01, "the first tile at the map's corner, masked round")
+  Mini.Zoom(1)
+  assert(math.abs(Mini.bigRadius - 960) < 0.01, "the wheel zooms in a fifth")
+  for _ = 1, 20 do Mini.Zoom(-1) end
+  assert(Mini.bigRadius == 6000 and Mini.artMap == 1415, "zoomed far out: 6,000 yards and the continent's art: " .. tostring(Mini.artMap))
+  Mini.Big(false)
+  assert(not Mini.big and not art:IsShown(), "back: the art goes")
+  D.MAPTILES[1453] = nil
+  D.SPOT[777777] = nil
+  table.remove(QB.state.logOrder, 1)
+  P.list = saveList
+  env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
+  Mini.Invalidate(); Mini.Place()
 end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
