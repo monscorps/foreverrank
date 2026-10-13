@@ -62,6 +62,8 @@ local function paint(t, art)
   t:SetTexture(art.file)
   t:SetTexCoord(0, 1, 0, 1)
 end
+-- an objective's icon by its kind letter, as the game's cursor shows it (the minimap and the Route page use it too)
+function QM.PaintKind(t, kind) paint(t, ART[kind] or ART.u) end
 
 -- where a spot comes from, as every tooltip says
 local CLASSIC = "Classic data (may have moved in Forever)"

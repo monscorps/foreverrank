@@ -91,7 +91,7 @@ function Mini.List()
         for _, sp in ipairs(QB.QuestMap.Spots(QB.Data.SPOT[e.id]) or {}) do
           if n >= 120 then break end
           n = n + 1
-          out[#out + 1] = { m = sp.m, x = sp.x * 100, y = sp.y * 100, name = q and q.name or ("Quest " .. e.id), kind = "obj", id = e.id }
+          out[#out + 1] = { m = sp.m, x = sp.x * 100, y = sp.y * 100, name = q and q.name or ("Quest " .. e.id), kind = "obj", id = e.id, obj = sp.kind }
         end
       end
     end
@@ -217,11 +217,10 @@ local function style(p, d, big)
     p:SetSize(22 * k, 22 * k)
     if d.num == 1 then p.glow:SetSize(50 * k, 50 * k); p.glow:Show() end
   elseif d.kind == "obj" then
-    p.icon:SetTexture(ART .. "diamond.tga")
-    p.icon:SetTexCoord(0, 1, 0, 1)
-    p.icon:SetVertexColor(0.45, 0.68, 1, 1)
+    -- the game's own cursor for the work: a sword to kill, a bag to loot, a cogwheel to use or click, coins to buy
+    if QB.QuestMap and QB.QuestMap.PaintKind then QB.QuestMap.PaintKind(p.icon, d.obj) else p.icon:SetTexture(131021) end
     p.num:SetText("")
-    p:SetSize(13 * k, 13 * k)
+    p:SetSize(16 * k, 16 * k)
     return
   elseif d.kind == "dungeon" then
     atlasOr(p.icon, "Dungeon", d.icon or T.ring)

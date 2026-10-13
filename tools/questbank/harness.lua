@@ -1660,7 +1660,7 @@ do
   owner.o.bagSlots = saveBags; c.profs = nil; c.buffs = nil
   Camp.Refresh()
 end
--- 5.3: the minimap leads to the work: objectives as diamonds, the line to the nearest unfinished one, its name in a
+-- 5.3: the minimap leads to the work: objectives as the game's cursor icons, the line to the nearest unfinished one, its name in a
 -- label; the big map draws its own zone or continent art under a round mask and zooms with the wheel
 do
   local Mini, env, P, D = QB.Mini, owner.env, QB.Pins, QB.Data
@@ -1676,7 +1676,7 @@ do
   Mini.Invalidate(); Mini.Place()
   local obj
   for _, fr in ipairs(c.frames) do if fr.d and fr.d.kind == "obj" and fr.d.id == 777777 and fr:IsShown() then obj = fr end end
-  assert(obj and obj.icon.__tex:find("diamond", 1, true) and math.abs(obj.__points[1].x - 28) < 0.01, "the objective is a diamond, 80 yards east: 28 px")
+  assert(obj and (obj.icon.__tex == "atlas:Crosshair_Attack_32" or obj.icon.__tex == 131013) and math.abs(obj.__points[1].x - 28) < 0.01, "a kill objective is the game's sword cursor, 80 yards east: 28 px: " .. tostring(obj and obj.icon.__tex))
   assert(Mini.target and Mini.target.kind == "obj" and Mini.target.id == 777777, "the nearer objective is the target, not stop 1")
   assert(Mini.linesShown >= 1 and env.QuestBankMinimapLabel:IsShown() and Mini.labelText == "Quest 777777", "a line to it, and its name in the label: " .. tostring(Mini.labelText))
   QB:Settings().minimapObjectives = false
