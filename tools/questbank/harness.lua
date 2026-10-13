@@ -19,7 +19,7 @@ EnableMouseWheel SetMovable SetClampedToScreen RegisterForDrag StartMoving StopM
 SetScrollChild SetVerticalScroll GetVerticalScroll SetText GetText SetNormalTexture SetHighlightTexture SetPushedTexture
 RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThumbTexture SetMinMaxValues GetMinMaxValues
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
-SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
+SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetUnboundedStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
 SetAtlas SetPassThroughButtons SetCooldown SetHideCountdownNumbers SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
@@ -51,7 +51,9 @@ local function newObj(kind, template, parent)
               __max = 0, __points = {}, __parent = parent, __alpha = 1, __size = 12, __wrap = true, __justify = "CENTER" }
   o.__backdrop = template and template:find("BackdropTemplate") and true or false
   o.__template = template
-  if template == "UIPanelCloseButton" then o.__w, o.__h = 32, 32 end
+  -- Forever's red X: 24 px of art edge to edge (Blizzard_SharedXML/Mainline/SharedUIPanelTemplates.xml); the 32 px padded one
+  -- was Classic's
+  if template == "UIPanelCloseButton" then o.__w, o.__h = 24, 24 end
   ALL[#ALL + 1] = o
   local mt = {}
   mt.__index = function(t, k)
@@ -77,14 +79,15 @@ local function newObj(kind, template, parent)
         elseif k == "Hide" then local was = self.__shown; self.__shown = false; if was and self.__scripts.OnHide then self.__scripts.OnHide(self) end
         elseif k == "SetShown" then if a[1] then self:Show() else self:Hide() end
         elseif k == "IsShown" or k == "IsVisible" then return self.__shown
-        elseif k == "SetSize" then self.__w, self.__h = a[1], a[2] or a[1]; self.__wset, self.__hset = true, true
-        elseif k == "SetWidth" then self.__w = a[1]; self.__wset = true
-        elseif k == "SetHeight" then self.__h = a[1]; self.__hset = true
+        -- (a size set now is what the game reports at once; the last layout's is stale)
+        elseif k == "SetSize" then self.__w, self.__h = a[1], a[2] or a[1]; self.__wset, self.__hset = true, true; self.__rw, self.__rh = nil, nil
+        elseif k == "SetWidth" then self.__w = a[1]; self.__wset = true; self.__rw = nil
+        elseif k == "SetHeight" then self.__h = a[1]; self.__hset = true; self.__rh = nil
         elseif k == "GetWidth" then return self.__rw or self.__w
         elseif k == "GetHeight" then return self.__rh or self.__h
         elseif k == "SetText" then self.__text = a[1] == nil and "" or tostring(a[1])
         elseif k == "GetText" then return self.__text
-        elseif k == "GetStringWidth" then return textWidth(self.__text, self.__size)
+        elseif k == "GetStringWidth" or k == "GetUnboundedStringWidth" then return textWidth(self.__text, self.__size)
         elseif k == "GetStringHeight" then return self.__size + 2
         elseif k == "GetFont" then return "Fonts\\FRIZQT__.TTF", self.__size, ""
         elseif k == "SetFont" then self.__size = a[2] or self.__size
@@ -110,6 +113,8 @@ local function newObj(kind, template, parent)
         elseif k == "SetAtlas" then self.__atlas = a[1]; self.__tex = "atlas:" .. tostring(a[1])
         elseif k == "SetColorTexture" then self.__tex = "color"; self.__color = { a[1], a[2], a[3], a[4] }
         elseif k == "SetVertexColor" then self.__vertex = { a[1], a[2], a[3], a[4] }
+        elseif k == "SetBackdrop" then self.__inset = a[1] and a[1].insets and a[1].insets.left or 0
+        elseif k == "SetThumbTexture" then self.__thumb = a[1]
         elseif k == "SetBackdropColor" then self.__bdc = { a[1], a[2], a[3], a[4] }
         elseif k == "SetBackdropBorderColor" then self.__bdb = { a[1], a[2], a[3], a[4] }
         elseif k == "SetTexCoord" then self.__tc = { a[1], a[2], a[3], a[4] }
@@ -277,7 +282,14 @@ local function newClient(o)
   env.Menu = { ModifyMenu = function(tag, fn) c.menus[tag] = fn end }
   c.cvars = c.cvars or {}
   env.GetCVar = env.GetCVar or function(name) return (c.cvars or {})[name] end
-  env.SetCVar = function(name, v) c.cvars = c.cvars or {}; c.cvars[name] = tostring(v) end
+  -- c.cvarChanges: { name, value, statusTextDisplay then } for each real change, the ones the client fires CVAR_UPDATE
+  -- for (setting a CVar to the value it has fires nothing)
+  env.SetCVar = function(name, v)
+    c.cvars = c.cvars or {}
+    v = tostring(v)
+    if c.cvars[name] ~= v then c.cvarChanges = c.cvarChanges or {}; table.insert(c.cvarChanges, { name, v, c.cvars.statusTextDisplay }) end
+    c.cvars[name] = v
+  end
   -- soft targeting: c.soft = { name, plate } is the object the Interact key would use
   env.UnitExists = env.UnitExists or function(unit)
     if unit == "softinteract" then return c.soft ~= nil end
@@ -303,6 +315,13 @@ local function newClient(o)
     local f = newObj(kind, template, parent)
     f.__name = name
     f.__client = c
+    -- where it was made, for the edge check's messages: the line that called CreateFrame and the one above it
+    local where = {}
+    for lvl = 2, 3 do
+      local info = debug.getinfo(lvl, "Sl")
+      if info and info.currentline and info.currentline > 0 then where[#where + 1] = info.short_src:match("[^/]+$") .. ":" .. info.currentline end
+    end
+    f.__where = table.concat(where, " < ")
     if name then env[name] = f end
     local t = template and templates[template]
     if template and template:find("^QuestBank") then
@@ -686,6 +705,7 @@ local function newClient(o)
     IsShown = function() return map.shown end,
     IsVisible = function() return map.shown end,
     GetCanvas = function() return canvas end,
+    GetMapID = function() return map.id end,
     -- QuestBank hooks nothing of the map's: its layers hear of the map shutting as its data providers
     HookScript = function(_, script) error("QuestBank hooked the world map's " .. tostring(script), 2) end,
   }
@@ -713,6 +733,22 @@ local function newClient(o)
   function map:Zoom(scale, zoom)
     self.scale, self.zoom = scale, zoom
     for _, p in ipairs(self.providers) do p:OnCanvasScaleChanged() end
+  end
+  -- the game's panel code (UIParentPanelManager, Blizzard_WorldMap): OpenWorldMap shows the map, which puts itself on
+  -- the player's zone (c.playerMap, its OnShow); HideUIPanel shuts it. Called by an addon in combat both are blocked
+  -- (the red message). c.panelCalls lists the calls
+  c.panelCalls = {}
+  env.MapUtil = { GetDisplayableMapForPlayer = function() return c.playerMap or 1453 end }
+  env.OpenWorldMap = function(mapID)
+    c.panelCalls[#c.panelCalls + 1] = "open"
+    if c.combat then c.panelBlocked = true; return end
+    if not map.shown then map.id = env.MapUtil.GetDisplayableMapForPlayer(); map:Open() end
+    if mapID then map:SetMapID(mapID) end
+  end
+  env.HideUIPanel = function(f)
+    c.panelCalls[#c.panelCalls + 1] = "hide"
+    if c.combat then c.panelBlocked = true; return end
+    if f == env.WorldMapFrame and map.shown then map:Close() end
   end
   for _, name in ipairs({ "AcquirePin", "RemoveAllPinsByTemplate", "RemovePin", "EnumeratePinsByTemplate", "SetPinPosition", "ApplyPinPosition" }) do
     map[name] = function() error("QuestBank called the map canvas's " .. name .. ": that writes QuestBank's taint into the map", 2) end
@@ -936,17 +972,123 @@ local function overlap(a, b, pad)
   return a.l < b.r - pad and b.l < a.r - pad and a.b < b.t - pad and b.b < a.t - pad
 end
 
+-- every button sits well inside QuestBank's window: a page's 6 px or more inside the content panel, the window's own
+-- (the sidebar, the header, the close X) 6 px or more inside the window's border. The edge is where the frame's backdrop
+-- starts (its insets: 3 px for the panel, 7 for the window). In a scroll view only across counts (down, it scrolls), and
+-- nothing reaches past the view's sides. A slider counts its knob where the knob is wider. Every page is checked
+local EDGE_GAP = 6
+local function interactive(o)
+  local k = o.__kind
+  return k == "Button" or k == "CheckButton" or k == "EditBox" or k == "Slider" or (k == "Frame" and o.__mouse == true)
+end
+local function buttonName(o)
+  if o.__text and o.__text ~= "" then return plain(o.__text):sub(1, 24) end
+  for _, x in ipairs(ALL) do
+    if x.__parent == o and x.__kind == "FontString" and x.__text ~= "" then return plain(x.__text):sub(1, 24) end
+  end
+  return o.__where or "?"
+end
+local function checkEdges(root, label)
+  local out = {}
+  local QBx = root.__client and root.__client.QB
+  local UI = QBx and QBx.UI
+  if not (UI and UI.frame == root and UI.content) then return out end
+  local page = {}
+  for i, v in ipairs(UI.views or {}) do page[v] = i end
+  local panel, win = rectOf(UI.content), rectOf(root)
+  for _, o in ipairs(ALL) do
+    if o ~= root and o ~= UI.content and not page[o] and interactive(o) and visible(o) then
+      local anc = ancestors(o)
+      local inRoot, inPanel, clip = false, false, nil
+      for _, a in ipairs(anc) do
+        if a == root then inRoot = true end
+        if a == UI.content then inPanel = true end
+        if a.__child and not clip then clip = rectOf(a) end
+      end
+      local r = inRoot and rectOf(o)
+      if r and r.r - r.l > 0 and r.t - r.b > 0 then
+        local l, rt = r.l, r.r
+        local knob = o.__kind == "Slider" and type(o.__thumb) == "table" and o.__thumb.__w or 0
+        if knob > rt - l then local over = (knob - (rt - l)) / 2; l, rt = l - over, rt + over end
+        local box, inset, what = win, root.__inset or 0, "window"
+        if inPanel then box, inset, what = panel, UI.content.__inset or 0, "page" end
+        local sides = { { "left", l - (box.l + inset) }, { "right", (box.r - inset) - rt } }
+        if not clip then
+          sides[3] = { "top", (box.t - inset) - r.t }
+          sides[4] = { "bottom", r.b - (box.b + inset) }
+        end
+        local msg
+        for _, s in ipairs(sides) do
+          if s[2] < EDGE_GAP and not msg then
+            msg = string.format("[%s '%s'] sits %d px from the %s's %s edge", o.__kind, buttonName(o), math.floor(s[2] + 0.5), what, s[1])
+          end
+        end
+        if not msg and clip and (l < clip.l - 1 or rt > clip.r + 1) then
+          msg = string.format("[%s '%s'] reaches past its scroll view", o.__kind, buttonName(o))
+        end
+        if msg then out[#out + 1] = label .. ": " .. msg end
+      end
+    end
+  end
+  return out
+end
+
+-- the characters the game's font draws: Friz Quadrata has the Western set (Windows-1252) and draws a hollow box for
+-- anything else (a triangle, an arrow, a check). The drawn layout pages can't show this: the browser has the glyph.
+-- Colour codes, |T textures|t, |A atlases|a and a link's |H data|h are not drawn as text and are left out
+local CP1252 = {}
+for _, cp in ipairs({ 0x20AC, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160, 0x2039, 0x0152, 0x017D,
+  0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, 0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x017E, 0x0178 }) do CP1252[cp] = true end
+local function undrawable(str)
+  local s = str:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", ""):gsub("|A.-|a", ""):gsub("|H.-|h", ""):gsub("|h", "")
+  local i, n = 1, #s
+  while i <= n do
+    local c = s:byte(i)
+    local b2, b3, b4 = (s:byte(i + 1) or 0) % 64, (s:byte(i + 2) or 0) % 64, (s:byte(i + 3) or 0) % 64
+    local cp, len
+    if c < 0x80 then cp, len = c, 1
+    elseif c >= 0xF0 then cp, len = (c % 8) * 262144 + b2 * 4096 + b3 * 64 + b4, 4
+    elseif c >= 0xE0 then cp, len = (c % 16) * 4096 + b2 * 64 + b3, 3
+    elseif c >= 0xC0 then cp, len = (c % 32) * 64 + b2, 2
+    else return string.format("a stray byte 0x%02X", c) end
+    if not ((cp >= 0x20 and cp <= 0x7E) or cp == 9 or cp == 10 or (cp >= 0xA0 and cp <= 0xFF) or CP1252[cp]) then
+      return string.format("U+%04X", cp)
+    end
+    i = i + len
+  end
+end
+
+-- a button whose art is cut round: a texture of its own carries a mask
+local function round(o)
+  if o.__round == nil then
+    o.__round = false
+    for _, x in ipairs(ALL) do if x.__parent == o and x.__mask then o.__round = true break end end
+  end
+  return o.__round
+end
+
 -- every problem with the window as it is on screen now
 local function checkLayout(root, label)
   GEN = GEN + 1
   local problems, texts = {}, {}
   local rootRect = rectOf(root)
   for _, o in ipairs(ALL) do
+    -- a button's own label (UIPanelButtonTemplate) is drawn in the same font
+    if o.__kind ~= "FontString" and o.__kind ~= "EditBox" and o.__text ~= "" and visible(o) then
+      local bad = undrawable(o.__text)
+      if bad then
+        local inside = false
+        for _, a in ipairs(ancestors(o)) do if a == root then inside = true end end
+        if inside then problems[#problems + 1] = string.format("%s: [%s '%s'] has %s, which the game's font draws as a box", label, o.__kind, plain(o.__text):sub(1, 40), bad) end
+      end
+    end
     if o.__kind == "FontString" and o.__text ~= "" and visible(o) then
       local anc = ancestors(o)
       local inside = false
       for _, a in ipairs(anc) do if a == root then inside = true end end
       if inside then
+        local bad = undrawable(o.__text)
+        if bad then problems[#problems + 1] = string.format("%s: '%s' has %s, which the game's font draws as a box", label, plain(o.__text):sub(1, 40), bad) end
         local r = rectOf(o)
         if r then
           local tw = textWidth(o.__text, o.__size)
@@ -991,6 +1133,8 @@ local function checkLayout(root, label)
         local clip
         for _, a in ipairs(anc) do if a.__child then clip = rectOf(a); break end end
         if not clip or (r.b < clip.t and r.t > clip.b) then
+          -- a scroll view shows only the part inside it, as it does with text
+          if clip then r = { l = math.max(r.l, clip.l), r = math.min(r.r, clip.r), t = math.min(r.t, clip.t), b = math.max(r.b, clip.b) } end
           texts[#texts + 1] = { o = o, r = r, button = true }
         end
       end
@@ -1005,6 +1149,11 @@ local function checkLayout(root, label)
         for _, x in ipairs(ancestors(other.o)) do if x == btn.o then nested = true end end
         if a.button and b.button then nested = false end
       end
+      -- two round buttons (a portrait in a ring, cut round by a mask: the journal's boss pins) touch as circles do
+      if not nested and overlap(a.r, b.r, 1.5) and a.button and b.button and round(a.o) and round(b.o) then
+        local dx, dy = (a.r.l + a.r.r - b.r.l - b.r.r) / 2, (a.r.t + a.r.b - b.r.t - b.r.b) / 2
+        if math.sqrt(dx * dx + dy * dy) >= (a.r.r - a.r.l + b.r.r - b.r.l) / 2 - 1.5 then nested = true end
+      end
       if not nested and overlap(a.r, b.r, 1.5) then
         local name = function(t) return t.button and ("[button " .. plain(t.o.__text or ""):sub(1, 20) .. "]") or plain(t.o.__text):sub(1, 40) end
         problems[#problems + 1] = string.format("%s: '%s' overlaps '%s'", label, name(a), name(b))
@@ -1012,6 +1161,7 @@ local function checkLayout(root, label)
       end
     end
   end
+  for _, p in ipairs(checkEdges(root, label)) do problems[#problems + 1] = p end
   return problems
 end
 
@@ -1324,7 +1474,8 @@ do
   L.ItemTip({}, { id = iid }); L.ItemTip(tip, { id = SECRET.num() })
   assert(#lines == 0, "a tooltip without AddLine, a hidden id: nothing, no error")
 end
--- 3.9.0: the route on the minimap (Minimap.lua): numbered stops, lines, pick-ups, dungeon entrances; the big map
+-- 3.9.0: the route on the minimap (Minimap.lua): numbered stops, lines, pick-ups, dungeon entrances; its size, place
+-- and zoom
 do
   local Mini, env, P = QB.Mini, owner.env, QB.Pins
   assert(Mini and Mini.ready and env.QuestBankMinimap, "the overlay sits on the minimap")
@@ -1377,19 +1528,18 @@ do
   c.ctrl = false
   local zl = cl.__points[1]
   assert(zl and zl.point == "TOPLEFT" and zl.rel == env.UIParent, "sizing keeps the minimap's centre where it was (the cluster moves)")
-  -- the wheel zooms the game's minimap, and past its widest QuestBank's own art goes on
+  -- the wheel zooms the game's minimap and nothing else: at its widest the wheel out stays there (5.3.1's far zoom
+  -- into QuestBank's own map art and its big map are gone; the Map is the game's world map)
   env.Minimap.__zoom = 1
   Mini.Wheel(-1)
-  assert(env.Minimap.__zoom == 0 and not Mini.big, "the game's zoom first")
-  Mini.Wheel(-1)
-  assert(Mini.big and Mini.bigRadius == 300, "past the widest: QuestBank's art at 300 yards")
-  Mini.Wheel(-1)
-  assert(math.abs(Mini.bigRadius - 375) < 0.01, "and on out")
-  Mini.Wheel(1); Mini.Wheel(1)
-  assert(not Mini.big and env.Minimap.__zoom == 0, "zooming back in hands over to the game's widest zoom")
+  assert(env.Minimap.__zoom == 0, "the wheel out: the game's zoom")
+  Mini.Wheel(-1); Mini.Wheel(-1)
+  assert(env.Minimap.__zoom == 0 and Mini.Radius() == 200, "at the widest it stays the game's widest: " .. tostring(Mini.Radius()))
   Mini.Wheel(1)
-  assert(env.Minimap.__zoom == 1, "then the game's zoom")
+  assert(env.Minimap.__zoom == 1, "the wheel in: the game's zoom")
   env.Minimap.__zoom = 0
+  assert(Mini.Big == nil and Mini.Far == nil and Mini.Zoom == nil and Mini.DrawArt == nil and env.QuestBankBigMapArt == nil and QB.Data.MAPTILES == nil,
+    "no big map, no far zoom, no map art of QuestBank's own")
   -- Alt-drag moves it; where it ends is kept
   c.alt = true
   env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
@@ -1399,14 +1549,15 @@ do
   c.alt = false
   env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
   assert(not Mini.dragging, "a plain click doesn't move it")
-  -- the big map: most of the screen in the middle, far out; its size isn't kept; a fight puts it back
-  assert(Mini.Big(true) and cont:GetScale() > 3 and Mini.IsBig() and Mini.big and Mini.bigRadius == 1200, "the big map: the minimap at most of the screen, zoomed far out")
-  assert(math.abs(free.scale - 1.1) < 0.001, "the big map's size isn't kept as yours")
+  -- the Minimap bigger and smaller keys: 15% a press, kept as your size; in a fight nothing is touched
+  env.QuestBankKeys.Bigger()
+  assert(math.abs(cont:GetScale() - 1.265) < 0.001 and math.abs(free.scale - 1.265) < 0.001, "the bigger key, kept")
+  env.QuestBankKeys.Smaller()
+  assert(math.abs(cont:GetScale() - 1.1) < 0.001 and math.abs(free.scale - 1.1) < 0.001, "the smaller key")
   c.combat = true
-  assert(Mini.Big(false) == false and Mini.IsBig(), "in a fight nothing is touched")
+  env.QuestBankKeys.Bigger()
+  assert(math.abs(cont:GetScale() - 1.1) < 0.001, "in a fight nothing is touched")
   c.combat = false
-  Mini.Big(false)
-  assert(math.abs(cont:GetScale() - 1.1) < 0.001 and not Mini.IsBig() and not Mini.big, "back to its size and zoom")
   -- other addons' buttons: LibDBIcon's refreshed from their own angle, a stray one put back on the rim
   local refreshed = {}
   env.LibStub = function(name) if name == "LibDBIcon-1.0" then return { GetButtonList = function() return { "Foo" } end, Refresh = function(_, n) refreshed[#refreshed + 1] = n end } end end
@@ -1648,7 +1799,119 @@ do
   assert(c.cvars.statusText == "1" and c.cvars.statusTextDisplay == "BOTH" and U.StatusText() == "BOTH" and not v.statusBtns[4]:IsEnabled(), "Both: numbers and percent, always shown")
   v.statusBtns[1].__scripts.OnClick(v.statusBtns[1])
   assert(c.cvars.statusText == "0" and U.StatusText() == "NONE", "Off")
+  -- from one kind shown to another: the bars redraw only when the switch changes (CVAR_UPDATE for statusText), so it
+  -- goes off and on again after the kind is set. 5.3.1 set the kind alone: Numbers then Percent changed nothing
+  local function redrawnAs()
+    local as
+    for _, ch in ipairs(c.cvarChanges or {}) do if ch[1] == "statusText" and ch[2] == "1" then as = ch[3] end end
+    return as
+  end
+  v.statusBtns[2].__scripts.OnClick(v.statusBtns[2])
+  assert(U.StatusText() == "NUMERIC", "Numbers")
+  c.cvarChanges = {}
+  v.statusBtns[3].__scripts.OnClick(v.statusBtns[3])
+  assert(U.StatusText() == "PERCENT" and c.cvars.statusText == "1" and redrawnAs() == "PERCENT", "Numbers then Percent: the bars redraw as Percent: " .. tostring(redrawnAs()))
+  c.cvarChanges = {}
+  v.statusBtns[4].__scripts.OnClick(v.statusBtns[4])
+  assert(U.StatusText() == "BOTH" and redrawnAs() == "BOTH", "Percent then Both: redrawn too")
+  -- not in a fight: nothing changes, a line says when
+  c.combat = true
+  local nChat = #c.chat
+  v.statusBtns[2].__scripts.OnClick(v.statusBtns[2])
+  assert(U.StatusText() == "BOTH" and #c.chat == nChat + 1 and c.chat[#c.chat]:find("fight", 1, true), "in a fight: as it was")
+  c.combat = false
+  v.statusBtns[1].__scripts.OnClick(v.statusBtns[1])
   U:ShowTab(1)
+end
+-- the key bindings: one QuestBank section in the game's Key Bindings, a line for the window, each page, the Map
+-- and the minimap's size; a page's key opens the window on that page and shuts it there. The Map is the game's own
+-- world map on your zone, opened through the game's panel code, with QuestBank's icons on it
+do
+  local U, env = QB.UI, owner.env
+  c = owner
+  local xml = io.open(HERE .. "/QuestBank/Bindings.xml"):read("*a"):gsub("<!%-%-.-%-%->", "")
+  local keys, order = {}, {}
+  for attrs, body in xml:gmatch("<Binding ([^>]*)>(.-)</Binding>") do
+    local name = attrs:match('name="([^"]+)"')
+    assert(name and attrs:match('category="([^"]+)"') == "BINDING_HEADER_QUESTBANK" and not attrs:find("header=", 1, true),
+      "every key in QuestBank's own section, without the blank header row: " .. tostring(name))
+    assert(type(env["BINDING_NAME_" .. name]) == "string" and env["BINDING_NAME_" .. name] ~= "", "each key named in Key Bindings: " .. name)
+    local fn = assert(loadstring(body, name))
+    setfenv(fn, env)
+    keys[name], order[#order + 1] = fn, name
+  end
+  assert(env.BINDING_HEADER_QUESTBANK == "QuestBank" and #order == 11, "the QuestBank section, eleven keys: " .. #order)
+  local pages = 0
+  for _, e in ipairs(U.SIDEBAR) do
+    if e.name and not e.group then
+      assert(e.key and keys["QUESTBANK_" .. e.key] and env["BINDING_NAME_QUESTBANK_" .. e.key] == e.name, "a key for the sidebar's " .. e.name .. ", named as there")
+      if e.tab then pages = pages + 1 end
+    end
+  end
+  assert(pages == 7 and keys.QUESTBANK_WINDOW and keys.QUESTBANK_MAP and keys.QUESTBANK_MINIMAP_BIGGER and keys.QUESTBANK_MINIMAP_SMALLER, "seven pages, the window, the Map, the minimap's size")
+  assert(env.BINDING_NAME_QUESTBANK_MAP == "Map" and keys.QUESTBANK_BIGMAP == nil and env.BINDING_NAME_QUESTBANK_BIGMAP == nil, "Map, not Big map")
+  -- a page's key: the window on that page; again, shut; another page's key while it is open: that page
+  local wasOpen, wasTab = U.frame:IsShown(), U.tab
+  U.frame:Hide()
+  for _, e in ipairs(U.SIDEBAR) do
+    if e.tab then
+      keys["QUESTBANK_" .. e.key]()
+      assert(U.frame:IsShown() and U.tab == e.tab and U.views[e.tab]:IsShown(), "the " .. e.name .. " key opens the window there")
+      keys["QUESTBANK_" .. e.key]()
+      assert(not U.frame:IsShown(), "and again shuts it: " .. e.name)
+    end
+  end
+  keys.QUESTBANK_NOW()
+  keys.QUESTBANK_LOG()
+  assert(U.frame:IsShown() and U.tab == 1, "open on Now, the Quest Log key: the Quest Log")
+  keys.QUESTBANK_WINDOW()
+  assert(not U.frame:IsShown(), "the window key shuts it")
+  keys.QUESTBANK_WINDOW()
+  assert(U.frame:IsShown() and U.tab == 1, "and opens it where it was")
+  -- the Map: the sidebar's entry, the key, the settings button and /qb bigmap open the game's world map on your zone
+  local map = c.map
+  local mapWas, idWas = map.shown, map.id
+  map:Close()
+  c.panelCalls, c.playerMap = {}, 1453
+  local side
+  for _, b in ipairs(U.sideButtons) do if b.entry.name == "Map" then side = b end end
+  assert(side and not side.entry.tab and side.label:GetText() == "Map", "the sidebar's Map, an action, not a page")
+  side.__scripts.OnClick(side)
+  assert(map.shown and map.id == 1453 and c.panelCalls[1] == "open" and U.frame:IsShown() and U.tab == 1, "the sidebar's Map: the game's map, on your zone; the window stays as it was")
+  assert(#ours(c, "QuestBankQuestPinTemplate") > 0, "QuestBank's icons on it")
+  side.__scripts.OnClick(side)
+  assert(map.shown and #c.panelCalls == 1, "open on your zone already: left as it is")
+  map.id = 1429
+  side.__scripts.OnClick(side)
+  assert(map.shown and map.id == 1453 and c.panelCalls[2] == "hide" and c.panelCalls[3] == "open", "open on another zone: shut and opened on yours")
+  keys.QUESTBANK_MAP()
+  assert(not map.shown and c.panelCalls[4] == "hide", "the Map key shuts it")
+  keys.QUESTBANK_MAP()
+  assert(map.shown and c.panelCalls[5] == "open", "and opens it")
+  -- in a fight the game blocks an addon opening a panel: nothing is called, a line says so
+  c.combat = true
+  local nCalls, nChat = #c.panelCalls, #c.chat
+  keys.QUESTBANK_MAP()
+  side.__scripts.OnClick(side)
+  assert(#c.panelCalls == nCalls and not c.panelBlocked and map.shown and #c.chat == nChat + 2 and c.chat[#c.chat]:find("fight", 1, true), "in a fight: nothing tried")
+  c.combat = false
+  for _, cmd in ipairs({ "bigmap", "map-open" }) do
+    map:Close()
+    env.SlashCmdList.QUESTBANK(cmd)
+    assert(map.shown and map.id == 1453, "/qb " .. cmd .. " opens the Map")
+  end
+  map:Close()
+  U:ShowTab(5)
+  local v = U.views[5]
+  assert(v.map and v.map:GetText() == "Map" and v.bigmap == nil, "the settings button is Map")
+  v.map.__scripts.OnClick(v.map)
+  assert(map.shown and map.id == 1453, "and opens the game's map")
+  -- back as it was
+  map.id = idWas
+  if mapWas then map:RefreshAll() else map:Close() end
+  c.playerMap, c.panelCalls = nil, {}
+  U:ShowTab(wasTab or 1)
+  U.frame:SetShown(wasOpen)
 end
 -- 5.3: dungeon entrances on the zone maps: hovered, how many of their quests you have done, a check on each done one
 do
@@ -1757,7 +2020,7 @@ do
   Camp.Refresh()
 end
 -- 5.3: the minimap leads to the work: objectives as the game's cursor icons, the line to the nearest unfinished one, its name in a
--- label; the big map draws its own zone or continent art under a round mask and zooms with the wheel
+-- label
 do
   local Mini, env, P, D = QB.Mini, owner.env, QB.Pins, QB.Data
   c = owner
@@ -1781,21 +2044,6 @@ do
   assert(Mini.target and Mini.target.kind == "stop" and Mini.labelText == "Goldshire", "objectives off: stop 1 is the target")
   c.miniRadius = 200
   QB:Settings().minimapObjectives = nil
-  -- the big map: its own art, centred on you
-  D.MAPTILES[1453] = { c = 4, r = 3, t = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 } }
-  Mini.Big(true)
-  assert(Mini.big and Mini.bigRadius == 1200 and Mini.artMap == 1453 and Mini.artTiles == 12, "the zone's twelve tiles: " .. tostring(Mini.artMap) .. " " .. tostring(Mini.artTiles))
-  local art = env.QuestBankBigMapArt
-  local t1 = art.tiles[1]
-  local R = env.Minimap:GetWidth() / 2
-  assert(t1.__mask and math.abs(t1.__points[1].x - (-2000 * R / 1200)) < 0.01 and math.abs(t1.__points[1].y - (1500 * R / 1200)) < 0.01, "the first tile at the map's corner, masked round")
-  Mini.Zoom(1)
-  assert(math.abs(Mini.bigRadius - 960) < 0.01, "the wheel zooms in a fifth")
-  for _ = 1, 20 do Mini.Zoom(-1) end
-  assert(Mini.bigRadius == 6000 and Mini.artMap == 1415, "zoomed far out: 6,000 yards and the continent's art: " .. tostring(Mini.artMap))
-  Mini.Big(false)
-  assert(not Mini.big and not art:IsShown(), "back: the art goes")
-  D.MAPTILES[1453] = nil
   D.SPOT[777777] = nil
   table.remove(QB.state.logOrder, 1)
   P.list = saveList
@@ -2055,7 +2303,10 @@ do
   local tb = v5.tri["party.autoAccept"]
   assert(tb and QB:Settings().profiles.party.autoAccept == nil, "a context switch starts as inherit")
   tb.__scripts.OnClick(tb, "LeftButton"); assert(QB:Settings().profiles.party.autoAccept == true, "one click: on")
+  -- 5.4: on and off are the ready check's tick and cross (the font drew a box for a text check mark)
+  UI:Refresh(); assert(tb:GetText() == "|T" .. QB.Data.TEX.ready .. ":14|t", "on: the ready check's tick: " .. tb:GetText())
   tb.__scripts.OnClick(tb, "LeftButton"); assert(QB:Settings().profiles.party.autoAccept == false, "two: off")
+  UI:Refresh(); assert(tb:GetText() == "|T" .. QB.Data.TEX.notready .. ":14|t", "off: its cross")
   tb.__scripts.OnClick(tb, "LeftButton"); assert(QB:Settings().profiles.party.autoAccept == nil, "three: inherit again")
   v5.clockShow:SetChecked(true); v5.clockShow.__scripts.OnClick(v5.clockShow, "LeftButton")
   assert(QB:Settings().clock.show == true and QB.Timer.frame and QB.Timer.frame:IsShown(), "the strip box shows the strip")
@@ -2362,6 +2613,8 @@ for tab = 1, 7 do
   UI:ShowTab(tab)
   QB.Model.Finish()
   UI:Refresh()
+  -- (the journal is checked as it is drawn: on the Deadmines' map)
+  if tab == 7 then QB.DMap.Open(QB.DMap.Find("deadmines"), "map"); QB.DMap.ShowFloor(2); UI:Refresh() end
   for _, p in ipairs(checkLayout(UI.frame, "tab " .. tab)) do problems[#problems + 1] = p end
   unhover()
   if tab == 1 then
@@ -2379,9 +2632,103 @@ for tab = 1, 7 do
     local l = v3.legs.items[2]
     if l then l.pin.__hover = true; hoverFirst(l.rows) end
   end
-  if tab == 7 then QB.DMap.Open(QB.DMap.Find("deadmines"), "map"); QB.DMap.ShowFloor(2); UI:Refresh() end
   layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Available", "Hand-in Route", "Party", "Settings", "Now", "Dungeon Journal" })[tab] .. " (one row hovered)")
   unhover()
+end
+
+-- 5.4: the Dungeon Journal, every dungeon on every tab and every boss's loot: nothing errors (a boss's level can be a
+-- range, { 20, 21 }), and the long lists scroll inside the page (Blackrock Depths has 39 bosses and 24 quests, a trash
+-- list 12 items; they ran up to 1285 px off the bottom of the window)
+do
+  local DM = QB.DMap
+  UI:ShowTab(7); UI:Refresh()
+  assert(DM.LevelText({ 20, 21 }) == "20-21" and DM.LevelText(52) == "52", "a boss's level, one or a range")
+  local n, ranged, longest = 0, 0, { boss = 0, quest = 0 }
+  local function check(label) for _, p in ipairs(checkLayout(UI.frame, label)) do problems[#problems + 1] = p end end
+  for _, cat in ipairs(DM.List()) do
+    local ok, f = pcall(DM.Open, cat, "bosses")
+    assert(ok and f, "the journal opens on " .. cat.name .. ": " .. tostring(f))
+    n = n + 1
+    check("Dungeon Journal, " .. cat.name .. ", bosses")
+    local most
+    for _, b in ipairs(f.data.bosses or {}) do
+      local okb, err = pcall(DM.ShowBoss, b)
+      assert(okb, "a boss's loot opens: " .. cat.name .. ", " .. tostring(b.n) .. ": " .. tostring(err))
+      if type(b.l) == "table" then
+        ranged = ranged + 1
+        assert(f.lootSub:GetText():find("level " .. DM.LevelText(b.l), 1, true), "a level range under the boss's name: " .. f.lootSub:GetText())
+      end
+      if not most or #b.i > #most.i then most = b end
+    end
+    if most then DM.ShowBoss(most); check("Dungeon Journal, " .. cat.name .. ", loot of " .. most.n) end
+    DM.ShowTab("quests"); check("Dungeon Journal, " .. cat.name .. ", quests")
+    DM.ShowTab("map"); check("Dungeon Journal, " .. cat.name .. ", map")
+    longest.boss = math.max(longest.boss, #(f.data.bosses or {}))
+    local qn = 0
+    for _, r in ipairs(f.questRows) do if r:IsShown() then qn = qn + 1 end end
+    longest.quest = math.max(longest.quest, qn)
+  end
+  assert(n >= 20 and ranged >= 1, "every dungeon opened (" .. n .. "), bosses with a level range among them (" .. ranged .. ")")
+  -- the longest lists scroll: the knob runs exactly what does not fit, the wheel moves a row, and the last row,
+  -- scrolled to, sits inside the list
+  local f = DM.Open(DM.Find("blackrock depths"), "bosses")
+  local sf = f.bossScroll
+  local lo, hi = sf.bar:GetMinMaxValues()
+  assert(#f.data.bosses >= 30 and sf.bar:IsShown() and hi == #f.data.bosses * 44 - 2 - sf.viewH, "Blackrock Depths' bosses scroll: " .. tostring(hi))
+  sf.__scripts.OnMouseWheel(sf, -1)
+  assert(sf.bar:GetValue() == 44 and sf.__scroll == 44, "a wheel notch scrolls one boss")
+  sf.bar:SetValue(hi)
+  check("Dungeon Journal, Blackrock Depths, bosses scrolled to the end")
+  GEN = GEN + 1
+  local last, view = rectOf(f.bossRows[#f.data.bosses]), rectOf(sf)
+  assert(last.b >= view.b - 0.5 and last.t <= view.t + 0.5, "the last boss, scrolled to, is in view")
+  DM.ShowBoss(f.data.bosses[1])
+  assert(f.bossScroll.bar:GetValue() == hi, "showing a boss's loot keeps the list where it is")
+  local trash
+  for _, b in ipairs(f.data.bosses) do if #b.i >= 12 then trash = trash or b end end
+  if trash then
+    DM.ShowBoss(trash)
+    local _, lh = f.lootScroll.bar:GetMinMaxValues()
+    assert(f.lootScroll.bar:IsShown() and lh == 12 * 40 - 2 - f.lootScroll.viewH, "12 items of loot scroll: " .. lh)
+    f.lootScroll.bar:SetValue(lh)
+    DM.ShowBoss(trash)
+    assert(f.lootScroll.bar:GetValue() == lh, "the same boss drawn again (an item's name came in) keeps its place")
+    DM.ShowBoss(f.data.bosses[1] ~= trash and f.data.bosses[1] or f.data.bosses[2])
+    assert(f.lootScroll.bar:GetValue() == 0, "another boss starts at the top")
+  end
+  DM.ShowTab("quests")
+  local _, qh = f.questScroll.bar:GetMinMaxValues()
+  assert(f.questScroll.bar:IsShown() and qh > 0, "Blackrock Depths' quests scroll")
+  f.questScroll.bar:SetValue(qh)
+  check("Dungeon Journal, Blackrock Depths, quests scrolled to the end")
+  layouts[#layouts + 1] = dumpLayout(UI.frame, "Dungeon Journal, Blackrock Depths, quests scrolled to the end")
+  DM.Open(DM.Find("blackrock depths"), "bosses")
+  layouts[#layouts + 1] = dumpLayout(UI.frame, "Dungeon Journal, Blackrock Depths, bosses")
+  print(string.format("journal: %d dungeons on every tab, %d bosses with a level range; longest lists %d bosses, %d quests", n, ranged, longest.boss, longest.quest))
+  DM.Open(DM.Find("deadmines"), "map"); DM.ShowFloor(2)
+  UI:ShowTab(1); UI:Refresh()
+end
+
+-- 5.4: the close X sits at the end of the title strip, well inside the window's border (it sat 3 px into the border);
+-- Classic Era's padded 32 px X keeps its size, and its art lands in the same place
+do
+  GEN = GEN + 1
+  local close
+  for _, o in ipairs(ALL) do if o.__template == "UIPanelCloseButton" and o.__parent == UI.frame then close = o end end
+  local r, w = rectOf(close), rectOf(UI.frame)
+  assert(r.r - r.l == 20 and r.t - r.b == 20 and w.r - r.r == 14 and w.t - r.t == 13, "the close X: 20 px, 14 px in from the right and 13 from the top")
+  local env = owner.env
+  local real = env.CreateFrame
+  env.CreateFrame = function(kind, name, parent, template)
+    local f = real(kind, name, parent, template)
+    if template == "UIPanelCloseButton" then f.__w, f.__h = 32, 32 end
+    return f
+  end
+  local holder = real("Frame", nil, env.UIParent)
+  local era = UI.CloseButton(holder)
+  env.CreateFrame = real
+  local p = era.__points[1]
+  assert(era.__w == 32 and p.point == "TOPRIGHT" and p.x == -8 and p.y == -7, "Classic Era's X: 32 px with 6 px of air, so its art sits 14 and 13 px in too")
 end
 
 -- right-click: the menu of what you can do with a quest
@@ -2401,6 +2748,10 @@ do
   local lf = owner.env.QuestBankLink
   assert(lf and lf:IsShown() and lf.eb:GetText():find("wowhead.com/forever/quest="), "the link box shows the quest's link")
   print("link box:", lf.eb:GetText())
+  -- its close X sits inside the border, as the window's does (it sat on the border's corner)
+  local x
+  for _, o in ipairs(ALL) do if o.__parent == lf and o.__template == "UIPanelCloseButton" then x = o end end
+  assert(x and x.__w == 20 and x.__points[1].x == -14 and x.__points[1].y == -13, "the link box's close X is inside its border")
   lf:Hide()
   -- cut from the menu, and keep again
   local id = b.q.id
@@ -2624,6 +2975,9 @@ do
   owner.env.SlashCmdList.QUESTBANK("errors")
   assert(owner.env.QuestBankErrors and owner.env.QuestBankErrors:IsShown(), "/qb errors opens its box")
   assert(owner.env.QuestBankErrors.eb:GetText():find("Nothing recorded"), "and says when nothing went wrong")
+  local x
+  for _, o in ipairs(ALL) do if o.__parent == owner.env.QuestBankErrors and o.__template == "UIPanelCloseButton" then x = o end end
+  assert(x and x.__w == 20 and x.__points[1].x == -14 and x.__points[1].y == -13, "the problems box's close X is inside its border")
   owner.env.QuestBankErrors:Hide()
   owner.env.QUESTBANK_DEV = false
   local boom = QB.Safe(function() local t = nil; return t.field end, "test")
@@ -2982,6 +3336,14 @@ do
   assert(v5.verText:GetText():find("Brann Steelhand runs 9.9.9"), "Settings says who runs the newer one")
   for _, pr in ipairs(checkLayout(UI.frame, "settings")) do problems[#problems + 1] = pr end
   layouts[#layouts + 1] = dumpLayout(UI.frame, "Settings")
+  -- drawn for review: the Minimap and Map rows and the health and mana numbers, near the bottom
+  do
+    local sf = v5.scroll
+    local _, hi = sf.bar:GetMinMaxValues()
+    sf.bar:SetValue(math.min(hi, 780)); UI:Refresh()
+    layouts[#layouts + 1] = dumpLayout(UI.frame, "Settings, scrolled to the Map")
+    sf.bar:SetValue(0); UI:Refresh()
+  end
   local before = QB:Mode()
   v5.modeBtns[2].__scripts.OnClick(v5.modeBtns[2])
   QB:Recompute(true); UI:Refresh()
@@ -4800,7 +5162,8 @@ end
 
 
 -- 5.3: the Quest Log grid by place: one run a zone, the nearest first; ready ones first in each; a follow-up beside the
--- quest it follows; a check stamped on what is done
+-- quest it follows. 5.4: each slot shows its place's icon (no zone badge on a quest icon), the item it rewards small in
+-- the corner, a done quest the green glow and check, a quest in progress no mark at all
 do
   local U = QB.UI
   U:ShowTab(1); U:Refresh()
@@ -4816,7 +5179,8 @@ do
     end
   end
   for g = 1, #U.logGroups - 1 do assert(U.logGroups[g].near <= U.logGroups[g + 1].near, "the nearest place first") end
-  local follows, stamped = 0, 0
+  local follows, stamped, rewarded = 0, 0, 0
+  local Dt = QB.Data.TEX
   for i, cell in ipairs(cells) do
     local nxt = cells[i + 1]
     if cell.kind == "entry" and nxt and nxt.kind == "entry" and nxt.group == cell.group and nxt.it.q and cell.it.q then
@@ -4829,14 +5193,36 @@ do
       assert(v1.slots[i].follow == cell.from and v1.slots[i].icon:GetAlpha() < 1, "faded, and its tooltip names the quest before it")
     end
     local b = v1.slots[i]
+    assert(b.zone == nil and b.stamp == nil, "no zone badge and no stamp on a slot any more")
+    local q = cell.kind == "entry" and cell.it.q or cell.q
+    if q then
+      local want = q.cat and (q.cat.zi or q.cat.icon) or q.icon
+      assert(b.icon.__tex == want, "the slot's picture is its place's icon: " .. q.name)
+      local R = QB.Quest.Rewards(q)
+      local first = R and ((R.c or {})[1] or (R.r or {})[1] or (R.u or {})[1])
+      assert(b.rw:IsShown() == (first ~= nil) and b.rwBack:IsShown() == (first ~= nil), "the reward mark shows when it rewards an item: " .. q.name)
+      if first then
+        rewarded = rewarded + 1
+        assert(b.rwId == first and b.rw.__tex == 133328, "the reward mark is that item's own icon: " .. q.name)
+        assert(b.rw.__w <= 16 and b.rw.__points[1].rel == b.rwBack, "small, on its dark square in the corner")
+      end
+    end
     if cell.kind == "entry" and cell.it.e.complete and cell.it.q and not cell.it.cut then
-      assert(b.stamp:IsShown(), "a done quest has the check stamp")
+      assert(b.glow:IsShown() and b.glow.__atlas == "bags-glow-green" and b.glow.__blend == "ADD" and b.mark:IsShown() and b.mark.__tex == Dt.ready,
+        "a done quest glows green (the bags' own glow) with the check in its corner")
       stamped = stamped + 1
-    elseif b.stamp then
-      assert(not b.stamp:IsShown(), "only done quests are stamped")
+    else
+      assert(not b.glow:IsShown(), "only done quests glow")
+    end
+    if cell.kind == "entry" and cell.it.q and not cell.it.cut and not cell.it.e.complete then
+      assert(not b.mark:IsShown(), "a quest in progress has no mark: " .. cell.it.q.name)
+    end
+    if cell.kind == "entry" and (cell.it.cut or not cell.it.q) then
+      assert(b.mark:IsShown() and b.mark.__tex == Dt.notready, "a cut quest keeps its red X")
     end
     assert(b.band:IsShown(), "each filled slot sits on its place's band")
   end
+  assert(rewarded >= 5, "the owner's log has quests that reward items, marked: " .. rewarded)
   -- follow-ups take only the slots left over after the log and your pick-ups
   local inLog, picks, withNext = 0, 0, 0
   for _, cell in ipairs(cells) do
@@ -4844,8 +5230,32 @@ do
     if cell.kind == "pick" then picks = picks + 1 end
   end
   local room = QB.LOG_SLOTS - inLog - picks
-  print("quest log groups:", #U.logGroups, "follow-ups shown:", follows, "of", withNext, "room", room, "stamped:", stamped)
-  assert(stamped >= 1 and follows == math.min(room, withNext), "stamps on the owner's log, and as many follow-ups as there is room for")
+  print("quest log groups:", #U.logGroups, "follow-ups shown:", follows, "of", withNext, "room", room, "done:", stamped, "with a reward:", rewarded)
+  assert(stamped >= 1 and follows == math.min(room, withNext), "done quests in the owner's log, and as many follow-ups as there is room for")
+  -- the slots: 49 px apart, so the 3 px band round each leaves a 7 px gap between places; the band runs on under the gap
+  -- to a slot of the same place
+  GEN = GEN + 1
+  local s1, s2, s9 = rectOf(v1.slots[1]), rectOf(v1.slots[2]), rectOf(v1.slots[9])
+  assert(s2.l - s1.l == 49 and s1.t - s9.t == 49, "the grid steps 49 px each way")
+  local downs = 0
+  for i = 1, #cells - 1 do
+    local b = v1.slots[i]
+    if cells[i + 1].group == cells[i].group and i % 8 ~= 0 then assert(b.band.__w == 50, "the band joins the next slot of its place")
+    else assert(b.band.__w == 42, "the band ends at the place's last slot on the row") end
+    if cells[i + 8] and cells[i + 8].group == cells[i].group then assert(b.band.__h == 50, "and the slot under it, same place"); downs = downs + 1
+    else assert(b.band.__h == 42, "a place's band stops above another place") end
+  end
+  assert(downs >= 1, "the owner's log has a place over two rows")
+  -- a quest with no place shows its own icon; with no reward known, no mark
+  local bare = { id = -1, name = "Bare", icon = 136797 }
+  assert(U.LogPicture(bare) == 136797 and U.LogReward(bare) == nil, "no place: the quest's own icon, and no reward mark")
+  -- the game hasn't sent the reward's icon yet: a bag in the corner
+  local saveIcon = owner.env.C_Item.GetItemIconByID
+  owner.env.C_Item.GetItemIconByID = function() return nil end
+  local withReward
+  for _, cell in ipairs(cells) do local q = cell.kind == "entry" and cell.it.q or cell.q; if q and U.LogReward(q) then withReward = q break end end
+  assert(select(2, U.LogReward(withReward)) == QB.Data.TEX.bag, "a bag until the item's icon comes")
+  owner.env.C_Item.GetItemIconByID = saveIcon
   -- with room (twelve quests in the log): the follow-ups show, each right after its quest
   local few = {}
   for _, cell in ipairs(cells) do if cell.kind == "entry" and #few < 12 then few[#few + 1] = cell.it end end
@@ -4910,11 +5320,12 @@ do
     first.head.__scripts.OnClick(first.head)
     local rows = {}
     for _, r in ipairs(first.rows.items) do if r:IsShown() then rows[#rows + 1] = r end end
-    assert(#rows > 0 and first.caret:GetText() == "\226\150\190", "the banner opens its place: " .. #rows .. " rows")
+    -- 5.4: the open and closed marks are the game's header art: the font draws a box for a text triangle
+    assert(#rows > 0 and first.caret.__atlas == "campaign_headericon_open" and first.caret:IsShown(), "the banner opens its place: " .. #rows .. " rows")
     secs[1].__scripts.OnClick(secs[1])
     local shownC = 0
     for _, c in ipairs(v2.cards.items) do if c:IsShown() and c.head.key and not c.head.key:find("^d") then shownC = shownC + 1 end end
-    assert(shownC == 0 and secs[1].label:GetText():find("\226\150\184", 1, true), "the Zones section folds away")
+    assert(shownC == 0 and secs[1].caret.__atlas == "campaign_headericon_closed" and secs[1].label:GetText() == "Zones", "the Zones section folds away")
     secs[1].__scripts.OnClick(secs[1])
     -- a quest opens; its report is kept
     for _, c in ipairs(v2.cards.items) do if c:IsShown() and c.head.key == first.head.key then first = c end end
@@ -5008,6 +5419,10 @@ do
     end
   end
   assert(bands >= 2, "several cards to order")
+  -- 5.4: a place with no zone of its own (the class quests) has no empty part between two dots
+  for _, c in ipairs(NU.views[2].cards.items) do
+    if c:IsShown() then assert(not c.where:GetText():find("\194\183%s*\194\183"), "no empty part in a card's line: " .. c.where:GetText()) end
+  end
   assert(NU.views[2].intro:GetText():find("^Level %d+ to %d+$"), "the intro is the level window: " .. tostring(NU.views[2].intro:GetText()))
   -- a chain opens under its row
   U.candMemo = nil
@@ -5018,21 +5433,32 @@ do
     if r:IsShown() and r.q and r.chain:IsShown() and not chainRow then chainRow = r end
   end end end
   assert(chainRow, "a chain quest shows the toggle")
-  assert(chainRow.chain.label:GetText() == "\226\150\184", "folded: a right-pointing chevron")
+  assert(chainRow.chain.icon.__atlas == "campaign_headericon_closed", "folded: the game's closed header mark")
+  -- a step under its chain is set 12 px in (no arrow glyph: the game's font has none)
+  local function isStep(r) local p = r.name.__points[1]; return p and p.x == 58 and r.icon.__points[1].x == 34 end
   local id, card = chainRow.q.id, chainRow:GetParent()
   chainRow.chain.__scripts.OnClick(chainRow.chain)
   assert(U.chainOpen and U.chainOpen[id], "the click opens it")
   local subs, headRow = 0, nil
   for _, r in ipairs(card.rows.items) do
     if r:IsShown() and r.q and r.q.id == id then headRow = r end
-    if r:IsShown() and r.name:GetText():find("^\226\134\179 ") then subs = subs + 1; assert(not r.chain:IsShown(), "a step under a chain carries no toggle of its own") end
+    if r:IsShown() and isStep(r) then subs = subs + 1; assert(not r.chain:IsShown(), "a step under a chain carries no toggle of its own") end
   end
-  assert(subs >= 1 and headRow and headRow.chain.label:GetText() == "\226\150\190", "its steps show under the row, the chevron points down (" .. subs .. " steps)")
+  assert(subs >= 1 and headRow and not isStep(headRow) and headRow.chain.icon.__atlas == "campaign_headericon_open", "its steps show under the row, the mark open (" .. subs .. " steps)")
+  -- the chain open, its card scrolled into view: checked, and drawn for review
+  do
+    local p = card.__points and card.__points[1]
+    if p and p.y then v2.scroll.bar:SetValue(-p.y) end
+    for _, pr in ipairs(checkLayout(U.frame, "Available, a chain open")) do problems[#problems + 1] = pr end
+    GEN = GEN + 1
+    layouts[#layouts + 1] = dumpLayout(U.frame, "Available, a chain open")
+    v2.scroll.bar:SetValue(0)
+  end
   lines = {}; headRow.chain.__scripts.OnEnter(headRow.chain)
   assert(lines[1] == "The chain" and lines[2]:find("fold it away", 1, true), "the toggle's tooltip")
   headRow.chain.__scripts.OnClick(headRow.chain)
   subs = 0
-  for _, r in ipairs(card.rows.items) do if r:IsShown() and r.name:GetText():find("^\226\134\179 ") then subs = subs + 1 end end
+  for _, r in ipairs(card.rows.items) do if r:IsShown() and isStep(r) then subs = subs + 1 end end
   assert(subs == 0 and not (U.chainOpen and U.chainOpen[id]), "a second click folds it")
   -- quests done in the same spot: the row tooltip says so
   local items = { { q = QB.Quest.Get(7), st = { code = "todo", text = "" } }, { q = QB.Quest.Get(62), st = { code = "todo", text = "" } } }
@@ -5053,6 +5479,154 @@ do
   assert(#items == before, "Together leaves the list as it was")
 end
 
+-- 5.4: several quests at once, on Available and on Now. Ctrl-click a row, or tick its box (the game's check box, on the
+-- quest's icon while the mouse is on the row), and it is selected; the bar under the page counts the selection and
+-- picks them all up, takes the ones on the list off it, or clears it. Each place's "+ all" puts every quest it shows
+-- that you could pick up on the list
+do
+  local U = QB.UI
+  local function rowsOf(v)
+    local out = {}
+    for _, c in ipairs(v.cards.items) do if c:IsShown() then for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q then out[#out + 1] = r end end end end
+    return out
+  end
+  local function rowOf(v, id) for _, r in ipairs(rowsOf(v)) do if r.q.id == id then return r end end end
+  local function ctrlClick(r) owner.ctrl = true; r.__scripts.OnClick(r, "LeftButton"); owner.ctrl = false end
+  for _, tab in ipairs({ 2, 6 }) do
+    local v, name = U.views[tab], tab == 2 and "Available" or "Now"
+    U.allOpen, U.cardOpen, U.detailOpen, U.chainOpen, U.secClosed = true, {}, {}, {}, {}
+    U:ShowTab(tab); QB.Model.Finish(); U:Refresh()
+    local free, held = {}, nil
+    for _, r in ipairs(rowsOf(v)) do
+      if r.selectable and not QB:IsAdded(r.q.id) then free[#free + 1] = r.q.id end
+      if QB.state.log[r.q.id] then held = held or r end
+    end
+    assert(#free >= 3, name .. ": quests to pick from: " .. #free)
+    local a, b, c = free[1], free[2], free[3]
+    -- a quest in your log is not picked this way (Shift-click cuts it; this is the pick-up list)
+    assert(held and not held.selectable, name .. ": a quest in your log has no box")
+    ctrlClick(held)
+    assert(next(v.sel) == nil and not v.selBar:IsShown(), name .. ": Ctrl-click on it selects nothing")
+    U.detailOpen = {}; U:Refresh()
+    -- the box: on the row's icon while the mouse is on the row, gone when it leaves
+    local ra = rowOf(v, a)
+    assert(not ra.sel:IsShown(), name .. ": no box until the mouse is on the row")
+    ra.__scripts.OnEnter(ra)
+    assert(ra.sel:IsShown() and not ra.sel.check:IsShown() and ra.sel.box.__atlas == "checkbox-minimal" and ra.sel.__points[1].x == ra.icon.__points[1].x,
+      name .. ": the mouse on the row: the game's check box over the quest's icon")
+    if tab == 2 then ra.__hover = true; layouts[#layouts + 1] = dumpLayout(UI.frame, "Available, the mouse on a row: its box"); ra.__hover = nil end
+    lines = {}; ra.__scripts.OnEnter(ra)
+    assert(table.concat(lines, "\n"):find("Ctrl-click: select it", 1, true), name .. ": the row's tooltip says so")
+    ra.__scripts.OnLeave(ra)
+    assert(not ra.sel:IsShown(), name .. ": and gone when it leaves")
+    -- Ctrl-click selects (and doesn't open the quest); the box selects too
+    ctrlClick(ra)
+    assert(v.sel[a] and not U.detailOpen[a], name .. ": Ctrl-click selects the quest and leaves it shut")
+    assert(v.selBar:IsShown() and v.selBar.count:GetText() == "1 selected", name .. ": the bar counts it: " .. v.selBar.count:GetText())
+    ra = rowOf(v, a)
+    assert(ra.sel:IsShown() and ra.sel.check:IsShown() and ra.sel.check.__atlas == "checkmark-minimal" and ra.selBg:IsShown(), name .. ": ticked, the row washed gold")
+    ra.__scripts.OnLeave(ra)
+    assert(ra.sel:IsShown(), name .. ": a ticked box stays when the mouse leaves")
+    local rb = rowOf(v, b)
+    rb.__scripts.OnEnter(rb); rb.sel.__scripts.OnClick(rb.sel)
+    assert(v.sel[b] and v.selBar.count:GetText() == "2 selected", name .. ": the box selects too")
+    lines = {}; rb = rowOf(v, b); rb.sel.__scripts.OnEnter(rb.sel)
+    assert(lines[1] == "Selected" and lines[2]:find("Ctrl-click", 1, true), name .. ": the box's tooltip")
+    -- the page with the bar: the list ends above it, everything inside the page
+    for _, p in ipairs(checkLayout(UI.frame, name .. ", two selected")) do problems[#problems + 1] = p end
+    GEN = GEN + 1
+    local sr, br = rectOf(v.scroll), rectOf(v.selBar)
+    assert(sr.b >= br.t + 3, name .. ": the list ends above the bar")
+    if tab == 2 then layouts[#layouts + 1] = dumpLayout(UI.frame, "Available, two quests selected") end
+    -- Pick up all
+    assert(v.selBar.pick:IsEnabled() and not v.selBar.remove:IsEnabled(), name .. ": neither is on the list: Pick up all, no Remove all")
+    v.selBar.pick.__scripts.OnClick(v.selBar.pick)
+    assert(QB:IsAdded(a) and QB:IsAdded(b) and not QB:IsAdded(c), name .. ": Pick up all puts both on the pick-up list")
+    assert(next(v.sel) == nil and not v.selBar:IsShown(), name .. ": and the selection and its bar are gone")
+    GEN = GEN + 1
+    sr = rectOf(v.scroll)
+    assert(sr.b == rectOf(v).b + 6, name .. ": the list runs to the bottom again")
+    -- Remove all: only the selected ones on the list come off
+    ctrlClick(rowOf(v, a)); ctrlClick(rowOf(v, c))
+    assert(v.selBar.count:GetText() == "2 selected" and v.selBar.pick:IsEnabled() and v.selBar.remove:IsEnabled(), name .. ": one on the list, one not: both buttons")
+    v.selBar.remove.__scripts.OnClick(v.selBar.remove)
+    assert(not QB:IsAdded(a) and QB:IsAdded(b) and not QB:IsAdded(c) and next(v.sel) == nil, name .. ": Remove all takes off the selected one on the list, nothing else")
+    -- Clear: nothing changes on the list
+    ctrlClick(rowOf(v, c)); ctrlClick(rowOf(v, b))
+    v.selBar.clear.__scripts.OnClick(v.selBar.clear)
+    assert(next(v.sel) == nil and not v.selBar:IsShown() and QB:IsAdded(b) and not QB:IsAdded(c), name .. ": Clear unticks them, the list as it was")
+    -- Ctrl-click twice unticks; a quest that can't be picked any more drops out of the selection
+    ctrlClick(rowOf(v, c)); ctrlClick(rowOf(v, c))
+    assert(next(v.sel) == nil, name .. ": a second Ctrl-click unticks it")
+    v.sel[c] = true; v.sel[1999999] = true
+    owner.done[c] = true
+    U:Refresh()
+    owner.done[c] = nil
+    assert(next(v.sel) == nil, name .. ": a quest done since (or unknown) drops out of the selection")
+    QB:SetAdded(b, false)
+    assert(not QB:IsAdded(b) and not QB:SetAdded(b, false), "SetAdded says when nothing changed")
+    -- the other page keeps its own selection
+    U:Refresh()
+    print(string.format("%s: picked %s and %s, removed one, cleared", name, QB.Quest.Get(a).name, QB.Quest.Get(b).name))
+  end
+  -- + all, on a place's banner: every quest it shows that you could pick up, open or folded
+  for _, tab in ipairs({ 2, 6 }) do
+    local v, name = U.views[tab], tab == 2 and "Available" or "Now"
+    U.allOpen, U.cardOpen, U.detailOpen, U.chainOpen, U.expanded = tab == 6, {}, {}, {}, nil
+    U:ShowTab(tab); U:Refresh()
+    local card
+    for _, cd in ipairs(v.cards.items) do if cd:IsShown() and cd.addAll:IsShown() and not card then card = cd end end
+    assert(card, name .. ": a place with quests to pick up shows + all")
+    local key, ids = card.head.key, card.addAll.ids
+    assert(card.addAll.label:GetText() == "+ all" and #ids >= 1, name .. ": + all, for " .. #ids)
+    lines = {}; card.addAll.__scripts.OnEnter(card.addAll)
+    assert(lines[1] == string.format("Pick up all %d here", #ids), name .. ": its tooltip counts them: " .. tostring(lines[1]))
+    -- folded, it takes what opening shows: the same quests the open card lists with a !
+    U.cardOpen[key] = true; U:Refresh()
+    for _, cd in ipairs(v.cards.items) do if cd:IsShown() and cd.head.key == key then card = cd end end
+    local shownBang = {}
+    for _, r in ipairs(card.rows.items) do if r:IsShown() and r.q and r.pick.pickable and not QB:IsAdded(r.q.id) then shownBang[#shownBang + 1] = r.q.id end end
+    assert(#shownBang == #ids, name .. ": + all takes what the open place shows to pick up: " .. #shownBang .. " vs " .. #ids)
+    for i, id in ipairs(ids) do assert(shownBang[i] == id, name .. ": the same quests, in the same order") end
+    card.addAll.__scripts.OnClick(card.addAll)
+    for _, id in ipairs(ids) do assert(QB:IsAdded(id), name .. ": + all put it on the list: " .. id) end
+    for _, cd in ipairs(v.cards.items) do if cd:IsShown() and cd.head.key == key then card = cd end end
+    for _, id in ipairs(card.addAll.ids or {}) do for _, old in ipairs(ids) do assert(id ~= old, name .. ": what is on the list is not offered again") end end
+    for _, p in ipairs(checkLayout(UI.frame, name .. ", after + all")) do problems[#problems + 1] = p end
+    for _, id in ipairs(ids) do QB:SetAdded(id, false) end
+    print(string.format("%s: + all put %d quests of %s on the list", name, #ids, card.title:GetText()))
+  end
+  -- every place open, quests and chains open, scrolled: still all inside the page
+  for _, tab in ipairs({ 2, 6 }) do
+    local v, name = U.views[tab], tab == 2 and "Available" or "Now"
+    U:ShowTab(tab)
+    U.allOpen, U.cardOpen, U.secClosed, U.expanded, U.detailOpen, U.chainOpen = true, {}, {}, {}, {}, {}
+    for _, cat in ipairs(QB.Data.CAT) do U.expanded[cat.key] = true end
+    U:Refresh()
+    local nd, nc = 0, 0
+    for _, cd in ipairs(v.cards.items) do
+      if cd:IsShown() then
+        for _, r in ipairs(cd.rows.items) do if r:IsShown() and r.q and r.detailable and nd < 8 then U.detailOpen[r.q.id] = true; nd = nd + 1; break end end
+        for _, r in ipairs(cd.rows.items) do if r:IsShown() and r.q and r.chain:IsShown() and nc < 4 and not U.detailOpen[r.q.id] then U.chainOpen[r.q.id] = true; nc = nc + 1; break end end
+      end
+    end
+    -- and a selection, so the bar is up
+    for _, r in ipairs(rowsOf(v)) do if r.selectable and next(v.sel) == nil then v.sel[r.q.id] = true end end
+    U:Refresh()
+    assert(nd > 0 and nc > 0 and v.selBar:IsShown(), name .. ": details and chains open, a selection")
+    for _, p in ipairs(checkLayout(UI.frame, name .. ", every place open, " .. nd .. " quests and " .. nc .. " chains open")) do problems[#problems + 1] = p end
+    local lo, hi = v.scroll.bar:GetMinMaxValues()
+    for _, f in ipairs({ 0.33, 0.66, 1 }) do
+      v.scroll.bar:SetValue(math.floor(hi * f))
+      for _, p in ipairs(checkLayout(UI.frame, string.format("%s, every place open, scrolled %d%%", name, f * 100))) do problems[#problems + 1] = p end
+    end
+    v.scroll.bar:SetValue(0)
+    v.sel = {}
+  end
+  U.allOpen, U.cardOpen, U.secClosed, U.expanded, U.detailOpen, U.chainOpen = true, {}, {}, nil, {}, {}
+  U:ShowTab(1); U:Refresh()
+end
+
 -- 3.5.1: the Quest Log's right column is a finder: highest XP (the swaps), the best gear you can wear,
 -- trinkets and jewellery, recipes
 do
@@ -5067,6 +5641,10 @@ do
   -- best gear: pieces you can wear, the highest item level first
   poke(mode("gear"))
   assert(U.findMode == "gear" and mode("gear").label:GetText() == "[Best gear]", "clicking a mode selects it")
+  -- the slot choice shows on the title line, at the rows' right edge: inside the page (5.3 put it past the panel's edge)
+  assert(v1.slotBtn:IsShown(), "Best gear offers the slot choice")
+  for _, p in ipairs(checkLayout(U.frame, "Quest Log, Best gear")) do problems[#problems + 1] = p end
+  layouts[#layouts + 1] = dumpLayout(U.frame, "Quest Log, Best gear")
   local rows = shown()
   assert(#rows > 0, "a level-20 paladin finds gear quests")
   local prev
@@ -5704,7 +6282,13 @@ do
   assert(d and d.iface == 11507 and d.build == "63696", "the quest notes say which client wrote them")
   assert(owner.env.QuestBankDB.disc.iface == 16001, "and on Forever: " .. tostring(owner.env.QuestBankDB.disc.iface))
   assert(c.env.QuestBankDB.diag.addons.iface == 11507 and c.env.QuestBankDB.diag.addons.probe == nil, "the client's stamps, and nothing about ForeverProbe")
+  -- a client without the bags' glow atlas: a done Quest Log slot glows with the action buttons' border, tinted green
+  c.noAtlas = { ["bags-glow-green"] = true }
   Q2.UI:Open(5); Q2.UI:Refresh()
+  c.noAtlas = nil
+  local glow = Q2.UI.views[1].slots[1].glow
+  assert(glow.__tex == "Interface\\Buttons\\UI-ActionButton-Border" and glow.__w > 60 and glow.__vertex and glow.__vertex[2] == 1
+    and glow.__blend == "ADD", "no atlas: the action buttons' border, green, round the slot")
   local v5 = Q2.UI.views[5]
   assert(not v5.noteGame:IsEnabled() and not v5.noteGame:GetChecked() and v5.noteGame.label:GetText():find("Forever client only", 1, true)
     and not v5.discText:GetText():find("items", 1, true) and not v5.discText:GetText():find("drop", 1, true), "the Settings box is greyed out here, and says why")
@@ -7587,8 +8171,10 @@ end
 --   the game's waypoint and tracking (USER_WAYPOINT_UPDATED, SUPER_TRACKING_CHANGED and QUEST_WATCH_LIST_CHANGED run
 --   Blizzard's listeners inside the call), Blizzard's popups (their list of popups on screen), opening the chat box
 --   (the game's chat globals), the escort prompt's Yes with no click behind it and its count of a full log (MAX_QUESTS:
---   read, never written; the prompt reads it as it opens), the map canvas's pin calls, and the loot window's actions
---   (taking a slot, closing it, rolling, the loot method: the drop-source notes only read the window)
+--   read, never written; the prompt reads it as it opens), the map canvas's pin calls, the world map laid out or moved
+--   as QuestBank (ToggleWorldMap sizes it and fills its quest log, SetMapID redraws its pins; the Map opens through
+--   OpenWorldMap, which the game's own panel code shows), and the loot window's actions (taking a slot, closing it,
+--   rolling, the loot method: the drop-source notes only read the window)
 ----------------------------------------------------------------------------
 do
   -- whole names (CanSetUserWaypointOnMap, a question, is fine; so is GetLootSlotInfo next to LootSlot), and the start of
@@ -7597,7 +8183,7 @@ do
     "AddWorldQuestWatch", "AddQuestWatchForQuestID", "StaticPopupDialogs", "OpenChat", "ChatFrame_OpenChat", "ActivateChat",
     "ACTIVE_CHAT_EDIT_BOX", "LAST_ACTIVE_CHAT_EDIT_BOX", "ConfirmAcceptQuest", "AcquirePin", "RemoveAllPinsByTemplate",
     "RemovePin", "SetPinPosition", "MarkCanvasDirty", "UpdateQuestAcceptLogFullDialog", "MAX_QUESTLOG_QUESTS",
-    "LootSlot", "CloseLoot", "ConfirmLootSlot", "ConfirmLootRoll", "RollOnLoot", "SetLootMethod" }
+    "LootSlot", "CloseLoot", "ConfirmLootSlot", "ConfirmLootRoll", "RollOnLoot", "SetLootMethod", "ToggleWorldMap", "SetMapID" }
 
   local FAMILIES = { "StaticPopup_", "SetSuperTracked" }
   local PATTERNS = {}

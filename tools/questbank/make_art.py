@@ -57,19 +57,6 @@ def line(w=16, h=64):
         return 255, 255, 255, int(255 * max(0.0, a))
     return px
 
-def border(size=256, inner=0.90, width=0.045):
-    """a thin ring with a soft dark halo outside: the big map's edge"""
-    c = (size - 1) / 2
-    def px(x, y):
-        d = math.hypot(x - c, y - c) / c
-        ring = max(0.0, 1 - abs(d - (inner + width / 2)) / (width / 2))
-        halo = 0.0
-        if d > inner + width: halo = max(0.0, 1 - (d - inner - width) / (1 - inner - width)) * 0.85
-        a = min(1.0, smooth(ring) + halo)
-        v = 255 if ring > 0.05 else 0
-        return v, v, v, int(255 * a)
-    return px
-
 def diamond(size=32):
     """a diamond with a light rim: an objective's mark"""
     c = (size - 1) / 2
@@ -97,6 +84,5 @@ if __name__ == "__main__":
     tga(os.path.join(HERE, "sparkle.tga"), 128, 128, sparkle())
     tga(os.path.join(HERE, "line.tga"), 16, 64, line())
     tga(os.path.join(HERE, "dot.tga"), 32, 32, dot())
-    tga(os.path.join(HERE, "border.tga"), 256, 256, border())
     tga(os.path.join(HERE, "diamond.tga"), 32, 32, diamond())
     print("wrote", sorted(os.listdir(HERE)))

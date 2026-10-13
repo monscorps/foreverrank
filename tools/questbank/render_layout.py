@@ -13,6 +13,27 @@ def rgba(c, a=1.0, default="rgba(0,0,0,0)"):
     al = c[3] if len(c) > 3 and c[3] is not None else a
     return "rgba(%d,%d,%d,%.2f)" % (r, g, b, al * (a if len(c) <= 3 or c[3] is None else 1))
 
+import base64
+def _svg(body):
+    return base64.b64encode(("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>%s</svg>" % body).encode()).decode()
+MARKS = {
+    "readycheck-ready.blp": _svg("<path d='M3 13l6 6L21 5' fill='none' stroke='#000' stroke-width='6' stroke-linecap='round'/><path d='M3 13l6 6L21 5' fill='none' stroke='#33dd44' stroke-width='3.5' stroke-linecap='round'/>"),
+    "readycheck-notready.blp": _svg("<path d='M5 5l14 14M19 5L5 19' stroke='#000' stroke-width='6' stroke-linecap='round'/><path d='M5 5l14 14M19 5L5 19' stroke='#e03a2a' stroke-width='3.5' stroke-linecap='round'/>"),
+    "readycheck-waiting.blp": _svg("<circle cx='12' cy='12' r='8' fill='#888' stroke='#000' stroke-width='2'/>"),
+    "availablequesticon.blp": _svg("<text x='12' y='21' text-anchor='middle' font-family='Georgia' font-weight='bold' font-size='22' fill='#ffd100' stroke='#000' stroke-width='1.2'>!</text>"),
+    "activequesticon.blp": _svg("<text x='12' y='21' text-anchor='middle' font-family='Georgia' font-weight='bold' font-size='22' fill='#ffd100' stroke='#000' stroke-width='1.2'>?</text>"),
+}
+GLOW = {"green": "30,255,0", "blue": "0,112,221", "purple": "163,53,238", "orange": "255,128,0", "white": "255,255,255"}
+# atlases with no local picture, drawn close enough to judge: the campaign headers' open and closed marks (a gold ring
+# with a minus or a plus) and the modern check box with its check
+_RING = "<circle cx='12' cy='12' r='9' fill='#2a1d0e' stroke='#c9a24a' stroke-width='2.2'/>"
+ATLAS_SVG = {
+    "campaign_headericon_closed": _svg(_RING + "<path d='M7.5 12h9M12 7.5v9' stroke='#f2d27a' stroke-width='2.4' stroke-linecap='round'/>"),
+    "campaign_headericon_open": _svg(_RING + "<path d='M7.5 12h9' stroke='#f2d27a' stroke-width='2.4' stroke-linecap='round'/>"),
+    "checkbox-minimal": _svg("<rect x='2.5' y='2.5' width='19' height='19' rx='3' fill='#0d0f12' stroke='#9a9488' stroke-width='1.6'/>"),
+    "checkmark-minimal": _svg("<path d='M6 12.5l4 4 8-9' fill='none' stroke='#ffd24a' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>"),
+}
+
 LOCAL_TEX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "research", "qbrender", "tex")
 
 def tex_style(it):
@@ -28,6 +49,10 @@ def tex_style(it):
         tint = ""
         if it.get("desat"): tint = "filter:grayscale(1);"
         return "background:url(%s) center/cover;%s" % (url, tint), None
+    # the bags' glow round an item (bags-glow-green and its kin): a soft coloured edge inside the slot
+    if isinstance(raw, str) and raw.lower().startswith("atlas:bags-glow-"):
+        col = GLOW.get(raw[len("atlas:bags-glow-"):].lower(), "255,255,255")
+        return "box-shadow:inset 0 0 4px 2px rgba(%s,.95),0 0 3px 1px rgba(%s,.7);border-radius:3px;" % (col, col), None
     if isinstance(raw, str) and raw.startswith("atlas:"):
         name = raw[6:].lower()
         rot = ("transform:rotate(%.3frad);" % -it["rot"]) if it.get("rot") else ""
@@ -38,9 +63,15 @@ def tex_style(it):
                 col = rgba(c, 1)
                 return ("background:%s;-webkit-mask:url(tex/atlas_%s.png) center/100%% 100%% no-repeat;mask:url(tex/atlas_%s.png) center/100%% 100%% no-repeat;%s" % (col, name, name, rot)), None
             return "background:url(tex/atlas_%s.png) center/100%% 100%% no-repeat;%s" % (name, rot), None
+        if name in ATLAS_SVG:
+            return "background:url(data:image/svg+xml;base64,%s) center/contain no-repeat;" % ATLAS_SVG[name], None
         return "background:rgba(242,207,107,.85);border-radius:50%;", raw[6:]
     if path and path.endswith(".tga"):
         pass
+    # the game's small marks, drawn as close as a picture can: the ready check, the red X, the waiting disc, the gossip !
+    mark = MARKS.get((path or "").split("/")[-1])
+    if mark:
+        return "background:url(data:image/svg+xml;base64,%s) center/contain no-repeat;" % mark, None
     c = it.get("c")
     label = (path or str(raw or it.get("tex") or "")).split("/")[-1].replace(".blp", "")
     if it.get("tex") == "color" or (path and path.endswith("white8x8.blp")) or (isinstance(raw, str) and "WHITE8x8" in raw):
@@ -62,6 +93,11 @@ def render(layout):
         if clip and (y + h < clip["y"] or y > clip["y"] + clip["h"]): continue
         a = it.get("a", 1) or 1
         base = "left:%dpx;top:%dpx;width:%dpx;height:%dpx;opacity:%.2f;" % (x, y, w, h, a)
+        # a scroll view shows only what is inside it, as the game cuts it
+        if clip:
+            ct, cb = max(0, clip["y"] - y), max(0, (y + h) - (clip["y"] + clip["h"]))
+            cl, cr = max(0, clip["x"] - x), max(0, (x + w) - (clip["x"] + clip["w"]))
+            if ct or cb or cl or cr: base += "clip-path:inset(%dpx %dpx %dpx %dpx);" % (ct, cr, cb, cl)
         if it["k"] == "FontString":
             c = rgba(it.get("c") or (0.93, 0.88, 0.78), 1)
             size = it.get("size") or 12

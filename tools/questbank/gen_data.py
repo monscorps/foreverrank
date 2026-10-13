@@ -1415,7 +1415,8 @@ T.update({"hearth": icon("inv_misc_rune_01"), "mount": icon("ability_mount_ridin
           "zeppelin": icon("inv_zeppelinmount"), "portal": icon("spell_arcane_portaldarnassus"),
           "unknown": icon("inv_misc_questionmark"), "questGeneric": icon("inv_misc_note_01"), "map": icon("inv_misc_map_01"),
           "party": icon("inv_misc_groupneedmore"), "rally": icon("ability_warrior_rallyingcry"), "letter": icon("inv_letter_15"),
-          "note": icon("inv_misc_note_06"), "start": icon("inv_misc_coin_01")})
+          "note": icon("inv_misc_note_06"), "start": icon("inv_misc_coin_01"),
+          "bag": icon("inv_misc_bag_08")})  # the Quest Log slot's reward mark until the game sends the item's icon
 lines.append("D.TEX = " + lua(T))
 # a zone card's art: the middle tile of the zone's own map (UiMapAssignment: area -> map; UiMapXMapArt and
 # UiMapArtTile: the map's tiles by row and column), as the dungeon cards carry the LFG background
@@ -2208,18 +2209,6 @@ lines.append("-- where each D.NPC place comes from, one letter per NPC: w Wowhea
 lines.append('D.NSRC = "%s"' % "".join({"wowhead": "w", "cmangos": "c", "game": "g"}.get(SOURCE.get(i), "c") for i in range(1, len(NPCS) + 1)))
 lines.append("D.MAPNAME = " + keyed({m: UIMAP.get(m, "") for m in USED_MAPS}))
 
-# the far-zoom map (Minimap.lua's big map draws its own art under a round mask): the map art of every zone QuestBank
-# uses and of the two continents, as their 256-px tiles row by row (layer 0). D.MAPTILES[uiMap] = { c, r, t }
-MAPTILES = {}
-for m in sorted(set(USED_MAPS) | {1414, 1415}):
-    art = _MAP_ART.get(m)
-    if not art: continue
-    cells = {(row, col): fid for (a, row, col), fid in _TILES.items() if a == art}
-    if not cells: continue
-    rows = max(r for r, _ in cells) + 1
-    cols = max(c for _, c in cells) + 1
-    MAPTILES[m] = {"c": cols, "r": rows, "t": [cells.get((r, c), 0) for r in range(rows) for c in range(cols)]}
-lines.append("D.MAPTILES = " + keyed(MAPTILES))
 hubs, dist = {}, {}
 for fac in ("A", "H"):
     order = TR.order[fac]

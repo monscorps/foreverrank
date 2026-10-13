@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "5.3.1"
+QB.version = "5.3.2"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's escort prompt has said 25: see QB.EscortLimit)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -1817,6 +1817,18 @@ function QB:ToggleAdd(id)
   self:MarkDirty()
 end
 
+-- on the pick-up list or off it, whichever it is now (the window's Pick up all and Remove all). Never a cut: a quest
+-- in your log or your bags is left as it is. True when it changed
+function QB:SetAdded(id, on)
+  local q = Q.Get(id)
+  if self.state.log[id] or (q and self:Status(q).bag) then return false end
+  local p = self:Plan()
+  if (p.add[id] == true) == (on and true or false) then return false end
+  p.add[id] = on and true or nil
+  self:MarkDirty()
+  return true
+end
+
 -- quests kept as items in your bags, for your faction, class and race: worked out once
 local bagQuests
 function QB:BagQuests()
@@ -2477,8 +2489,9 @@ slash = function(msg)
     end
   elseif cmd == "map" or cmd == "maps" then
     if QB.DMap then QB.DMap.Command(rest) end
-  elseif cmd == "bigmap" then
-    if QB.Mini then QB.Mini.Big() end
+  elseif cmd == "bigmap" or cmd == "map-open" then
+    -- the Map: the game's world map on your zone (bigmap: the command of the minimap's old big map)
+    if QB.UI and QB.UI.OpenMap then QB.UI.OpenMap() end
   elseif cmd == "events" then
     -- not listed anywhere: the event probe's counts (Observe.lua), for the owner to read off before an upload
     QB.Observe.Report(function(m) QB:Print(m) end)

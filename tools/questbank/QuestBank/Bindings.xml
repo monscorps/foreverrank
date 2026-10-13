@@ -1,6 +1,14 @@
 <Bindings>
-	<Binding name="QUESTBANK_WINDOW" header="QUESTBANK" category="ADDONS">QuestBankKeys.Window()</Binding>
-	<Binding name="QUESTBANK_BIGMAP" category="ADDONS">QuestBankKeys.BigMap()</Binding>
-	<Binding name="QUESTBANK_MINIMAP_BIGGER" category="ADDONS">QuestBankKeys.Bigger()</Binding>
-	<Binding name="QUESTBANK_MINIMAP_SMALLER" category="ADDONS">QuestBankKeys.Smaller()</Binding>
+	<!-- one QuestBank section in the game's Key Bindings, a line each; the names are UI.lua's BINDING_NAME_ globals -->
+	<Binding name="QUESTBANK_WINDOW" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Window()</Binding>
+	<Binding name="QUESTBANK_NOW" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("NOW")</Binding>
+	<Binding name="QUESTBANK_LOG" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("LOG")</Binding>
+	<Binding name="QUESTBANK_AVAILABLE" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("AVAILABLE")</Binding>
+	<Binding name="QUESTBANK_ROUTE" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("ROUTE")</Binding>
+	<Binding name="QUESTBANK_PARTY" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("PARTY")</Binding>
+	<Binding name="QUESTBANK_JOURNAL" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("JOURNAL")</Binding>
+	<Binding name="QUESTBANK_MAP" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Map()</Binding>
+	<Binding name="QUESTBANK_SETTINGS" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("SETTINGS")</Binding>
+	<Binding name="QUESTBANK_MINIMAP_BIGGER" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Bigger()</Binding>
+	<Binding name="QUESTBANK_MINIMAP_SMALLER" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Smaller()</Binding>
 </Bindings>

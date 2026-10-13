@@ -3,10 +3,9 @@
 -- to the next one, your pick-up list, and the entrances of the dungeons around you. While the arrow sends you by a
 -- flight master, a pier or the tram first, that is pinned too, and the line and the label go there. A pin outside the
 -- minimap's reach sits on its rim, dimmer, in the direction it lies. Click a pin: a waypoint there, as on the world
--- map. Alt-drag moves the minimap, Ctrl-wheel sizes it, the wheel zooms past the game's widest into QuestBank's own
--- map art, and /qb bigmap (a key binding, the sidebar) makes it most of the screen; the same puts it back. Everything
+-- map. Alt-drag moves the minimap, Ctrl-wheel sizes it, the wheel zooms it as the game's own zoom does. Everything
 -- here is QuestBank's own frames laid over the Minimap: nothing of the game's is replaced, and the minimap itself is
--- only scaled, moved and zoomed, never in a fight.
+-- only scaled, moved and zoomed, never in a fight. (QuestBank's Map is the game's world map: UI.OpenMap.)
 --   where a pin is: the stop's map and position go through QB.Model.World to continent yards, as the arrow's do; the
 --   minimap's radius in yards comes from C_Minimap.GetViewRadius; rotateMinimap turns the pins with your facing.
 local _, QB = ...
@@ -30,9 +29,7 @@ local function on() return QB:Settings().minimapPins ~= false end
 
 -- the minimap's reach in yards: the client says; else the Classic zoom table
 local ZOOM_YARDS = { 233.33, 200, 166.67, 133.33, 100, 66.67 }
-local BIG_MIN, BIG_MAX_R = 300, 6000
 function Mini.Radius()
-  if Mini.big then return Mini.bigRadius or 900 end
   if C_Minimap and C_Minimap.GetViewRadius then
     local ok, r = pcall(C_Minimap.GetViewRadius)
     r = ok and plain(r) or nil
@@ -209,38 +206,37 @@ local function line(i)
 end
 
 -- the game's own crisp art where the client has it (the quest-number pin, the dungeon and quest marks), QuestBank's
--- textures otherwise. A pin is a little bigger on the big map
+-- textures otherwise
 local atlasOr = QB.Art
-local function style(p, d, big)
+local function style(p, d)
   T = T or QB.Data.TEX
-  local k = big and 1.4 or 1
   p.glow:Hide()
   p.icon:SetVertexColor(1, 1, 1, 1)
   if d.kind == "stop" then
     atlasOr(p.icon, d.num == 1 and "UI-QuestPoi-QuestNumber-SuperTracked" or "UI-QuestPoi-QuestNumber", T.mapPin)
     p.num:SetText(d.num and tostring(d.num) or "")
-    p:SetSize(22 * k, 22 * k)
-    if d.num == 1 then p.glow:SetSize(50 * k, 50 * k); p.glow:Show() end
+    p:SetSize(22, 22)
+    if d.num == 1 then p.glow:SetSize(50, 50); p.glow:Show() end
   elseif d.kind == "obj" then
     -- the game's own cursor for the work: a sword to kill, a bag to loot, a cogwheel to use or click, coins to buy
     if QB.QuestMap and QB.QuestMap.PaintKind then QB.QuestMap.PaintKind(p.icon, d.obj) else p.icon:SetTexture(131021) end
     p.num:SetText("")
-    p:SetSize(16 * k, 16 * k)
+    p:SetSize(16, 16)
     return
   elseif d.kind == "dungeon" then
     atlasOr(p.icon, "Dungeon", d.icon or T.ring)
     p.num:SetText("")
-    p:SetSize(18 * k, 18 * k)
+    p:SetSize(18, 18)
   elseif d.kind == "step" then
     if not atlasOr(p.icon, d.atlas, d.icon) then p.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
     p.num:SetText("")
-    p:SetSize(18 * k, 18 * k)
-    p.glow:SetSize(40 * k, 40 * k)
+    p:SetSize(18, 18)
+    p.glow:SetSize(40, 40)
     p.glow:Show()
   else
     atlasOr(p.icon, "QuestNormal", T.questAvail)
     p.num:SetText("")
-    p:SetSize(16 * k, 16 * k)
+    p:SetSize(16, 16)
   end
 end
 
@@ -252,9 +248,8 @@ function Mini.Place()
   if not me then Mini.Clear(); return end
   local R = (Minimap:GetWidth() or 140) / 2
   local radius = Mini.Radius()
-  local facing = (not Mini.big and rotated()) and (GetPlayerFacing and plain(GetPlayerFacing())) or 0
+  local facing = rotated() and (GetPlayerFacing and plain(GetPlayerFacing())) or 0
   if type(facing) ~= "number" then facing = 0 end
-  if Mini.big then Mini.DrawArt(me, radius, R) end
   local list, placed, n = Mini.List(), {}, 0
   -- nearest first when there are too many
   local pts = {}
@@ -278,7 +273,7 @@ function Mini.Place()
   for i, pt in ipairs(pts) do
     if i > MAX_PINS then break end
     local p = pin(i)
-    style(p, pt.d, saved ~= nil)
+    style(p, pt.d)
     p.d, p.yards = pt.d, pt.yards
     p:ClearAllPoints()
     p:SetPoint("CENTER", f, "CENTER", pt.x, pt.y)
@@ -348,80 +343,6 @@ function Mini.Place()
   for i = li + 1, #lines do lines[i]:HideAll() end
   Mini.shown, Mini.linesShown = n, li
   Mini.DrawTrails(me, radius, R, facing, f)
-end
-
--- the big map's own art: the zone you are in, or the continent when zoomed far out, as the client's map tiles,
--- placed around you at the big map's scale and cut round by a mask. North is up.
-local MAP_W, MAP_H, TILE = 1002, 668, 256
-local CONTINENT = { [0] = 1415, [1] = 1414 }
-local art
-local function artFrame()
-  if art then return art end
-  art = CreateFrame("Frame", "QuestBankBigMapArt", Minimap)
-  art:SetAllPoints(Minimap)
-  art:SetFrameLevel((Minimap:GetFrameLevel() or 2) + 1)
-  art.mask = art:CreateMaskTexture()
-  art.mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIONAL", "CLAMPTOBLACKADDITIONAL")
-  art.mask:SetAllPoints(art)
-  art.bg = art:CreateTexture(nil, "BACKGROUND", nil, -8)
-  art.bg:SetAllPoints(art)
-  art.bg:SetColorTexture(0.04, 0.035, 0.03, 1)
-  art.bg:AddMaskTexture(art.mask)
-  art.tiles = {}
-  art:Hide()
-  return art
-end
-
-function Mini.ArtMap(me, radius)
-  local T = QB.Data.MAPTILES or {}
-  local zone = QB.API.MapID and QB.Plain(QB.API.MapID())
-  if radius <= 1600 and zone and T[zone] then return zone end
-  local cont = CONTINENT[me.c]
-  return (cont and T[cont]) and cont or nil
-end
-
-function Mini.DrawArt(me, radius, R)
-  local a = artFrame()
-  local m = Mini.ArtMap(me, radius)
-  local tiles = m and QB.Data.MAPTILES[m]
-  local A = m and QB.Model.World(m, 0, 0)
-  local B = m and QB.Model.World(m, 100, 100)
-  if not (tiles and A and B and A.c == me.c) then
-    for _, t in ipairs(a.tiles) do t:Hide() end
-    a:Show(); Mini.artMap = nil
-    return
-  end
-  local k = R / radius -- pixels a yard
-  local function at(u, v) -- a map point, as a pixel offset from you
-    local wx, wy = A.wx + (B.wx - A.wx) * v, A.wy + (B.wy - A.wy) * u
-    return -(wy - me.wy) * k, (wx - me.wx) * k
-  end
-  local tw = TILE / MAP_W * math.abs(B.wy - A.wy) * k
-  local th = TILE / MAP_H * math.abs(B.wx - A.wx) * k
-  local i = 0
-  for row = 0, tiles.r - 1 do
-    for col = 0, tiles.c - 1 do
-      local id = tiles.t[row * tiles.c + col + 1]
-      if id and id > 0 then
-        i = i + 1
-        local t = a.tiles[i]
-        if not t then
-          t = a:CreateTexture(nil, "BACKGROUND", nil, -7)
-          t:AddMaskTexture(a.mask)
-          a.tiles[i] = t
-        end
-        local x, y = at(col * TILE / MAP_W, row * TILE / MAP_H)
-        t:SetTexture(id)
-        t:SetSize(tw, th)
-        t:ClearAllPoints()
-        t:SetPoint("TOPLEFT", a, "CENTER", x, y)
-        t:Show()
-      end
-    end
-  end
-  for j = i + 1, #a.tiles do a.tiles[j]:Hide() end
-  a:Show()
-  Mini.artMap, Mini.artTiles = m, i
 end
 
 -- the target's name in a dark pill above it, the way the game labels a pin
@@ -503,14 +424,11 @@ end
 function Mini.Invalidate() worldOf = {} end
 
 ----------------------------------------------------------------------------
--- The minimap you move and size. Alt-drag moves it (its header comes along), Ctrl and the wheel size it, the wheel
--- zooms, and past the game's widest zoom QuestBank's own map art carries on out to 6,000 yards. The size is the
--- game's own: the minimap's container scale, which Edit Mode's Size slider sets, so the border, the pins and other
--- addons' buttons all grow with it and stay on the rim. The big map (/qb bigmap, the key binding, the sidebar) is
--- the same thing at most of the screen's height in the middle, zoomed far out; it goes back after, and in a fight.
+-- The minimap you move and size. Alt-drag moves it (its header comes along), Ctrl and the wheel size it, the plain
+-- wheel zooms it as the game's own zoom does. The size is the game's own: the minimap's container scale, which Edit
+-- Mode's Size slider sets, so the border, the pins and other addons' buttons all grow with it and stay on the rim.
 ----------------------------------------------------------------------------
 local SCALE_MIN, SCALE_MAX = 0.6, 4
-local saved -- the big map's way back: scale, centre, zoom, far
 
 local function container() return MinimapCluster and MinimapCluster.MinimapContainer or nil end
 local function freeDB()
@@ -551,64 +469,38 @@ function Mini.MaxScale()
   return math.max(SCALE_MIN, math.min(SCALE_MAX, (UIParent:GetHeight() or 1080) * 0.92 / h))
 end
 
--- size the minimap around its centre; kept for next time unless it is the big map's
-function Mini.SetScale(scale, passing)
+-- size the minimap around its centre; kept for next time
+function Mini.SetScale(scale)
   local c = container()
   if not c then return nil end
   if InCombatLockdown and InCombatLockdown() then return nil end
   scale = math.max(SCALE_MIN, math.min(Mini.MaxScale(), scale))
   local db = freeDB()
-  if not passing and not db.orig then db.orig = c:GetScale() or 1 end
+  if not db.orig then db.orig = c:GetScale() or 1 end
   local x, y = centreOf(c)
   c:SetScale(scale)
   if x then Mini.PlaceAt(x, y) end
-  if not passing then db.scale = scale; db.x, db.y = centreOf(c) end
+  db.scale = scale; db.x, db.y = centreOf(c)
   Mini.Place()
   return scale
 end
 
--- the zoom past the game's widest: QuestBank's art from BIG_MIN out to BIG_MAX_R yards
-function Mini.Far(on)
-  if on then
-    Mini.big = true
-    Mini.bigRadius = Mini.bigRadius or BIG_MIN
-  else
-    Mini.big = nil
-    if art then art:Hide() end
-  end
-  Mini.Place()
+-- k times its size now: Ctrl-wheel, and the Minimap bigger and smaller keys
+function Mini.Size(k)
+  local c = container()
+  if c then return Mini.SetScale((c:GetScale() or 1) * k) end
 end
 
--- the wheel over the minimap
+-- the wheel over the minimap: with Ctrl it sizes the minimap, else it zooms it in or out as the game's own zoom does
 function Mini.Wheel(delta)
-  if IsControlKeyDown and IsControlKeyDown() then
-    local c = container()
-    if c then Mini.SetScale((c:GetScale() or 1) * (delta > 0 and 1.1 or 1 / 1.1), saved ~= nil) end
-    return
-  end
-  if Mini.big then Mini.Zoom(delta); return end
+  if IsControlKeyDown and IsControlKeyDown() then Mini.Size(delta > 0 and 1.1 or 1 / 1.1); return end
   local z = Minimap.GetZoom and plain(Minimap:GetZoom()) or 0
   if type(z) ~= "number" then z = 0 end
-  if delta < 0 and z <= 0 and QB:Settings().minimapFar ~= false then
-    Mini.bigRadius = BIG_MIN
-    Mini.Far(true)
-    return
-  end
   if delta > 0 then
     if Minimap_ZoomIn then Minimap_ZoomIn() elseif Minimap.SetZoom then Minimap:SetZoom(math.min((Minimap:GetZoomLevels() or 6) - 1, z + 1)) end
   elseif delta < 0 then
     if Minimap_ZoomOut then Minimap_ZoomOut() elseif Minimap.SetZoom then Minimap:SetZoom(math.max(0, z - 1)) end
   end
-end
-
--- the wheel past the game's zoom: in a fifth, out a quarter; in past BIG_MIN hands back to the game's widest zoom
-function Mini.Zoom(delta)
-  if not Mini.big then return end
-  local r = Mini.bigRadius or 1200
-  r = delta > 0 and r * 0.8 or r * 1.25
-  if r < BIG_MIN - 0.01 and not saved then Mini.Far(false); return end
-  Mini.bigRadius = math.max(BIG_MIN, math.min(BIG_MAX_R, r))
-  Mini.Place()
 end
 
 -- Alt-drag: the whole minimap moves; where it ends up is kept
@@ -628,14 +520,14 @@ function Mini.DragStop()
   local x, y = c and centreOf(c)
   if x then
     Mini.PlaceAt(x, y)
-    if not saved then local db = freeDB(); db.x, db.y = centreOf(c) end
+    local db = freeDB(); db.x, db.y = centreOf(c)
   end
 end
 
 -- the kept size and place, again after a loading screen (Edit Mode puts its own back first)
 function Mini.ApplyFree()
   local c, db = container(), freeDB()
-  if not c or saved or (InCombatLockdown and InCombatLockdown()) then return end
+  if not c or (InCombatLockdown and InCombatLockdown()) then return end
   if db.scale then c:SetScale(math.max(SCALE_MIN, math.min(Mini.MaxScale(), db.scale))) end
   if db.x and db.y then Mini.PlaceAt(db.x, db.y) end
 end
@@ -650,7 +542,7 @@ function Mini.RescueButtons()
   end
   local R = (Minimap:GetWidth() or 140) / 2
   for _, ch in ipairs({ Minimap:GetChildren() }) do
-    if ch ~= overlay and ch ~= art and ch ~= Mini.ring and ch.GetNumPoints and ch:GetNumPoints() == 1 then
+    if ch ~= overlay and ch.GetNumPoints and ch:GetNumPoints() == 1 then
       local p, rel, _, x, y = ch:GetPoint(1)
       if rel == Minimap and p == "CENTER" and type(x) == "number" and type(y) == "number" then
         local d = sqrt(x * x + y * y)
@@ -667,64 +559,13 @@ end
 
 -- /qb minimap reset: the game's size and place again, every button back on the rim
 function Mini.ResetFree()
-  if saved then Mini.Big(false) end
   local c, db = container(), freeDB()
   if c then c:SetScale(db.orig or 1) end
   if MinimapCluster and MinimapCluster.ApplySystemAnchor then pcall(MinimapCluster.ApplySystemAnchor, MinimapCluster) end
   QB:Settings().miniFree = {}
-  Mini.Far(false)
   local a, b = Mini.RescueButtons()
   return a + b
 end
-
--- the big map: most of the screen's height in the middle, zoomed out to 1,200 yards; and back
-function Mini.Big(on)
-  if InCombatLockdown and InCombatLockdown() then QB:Print("Not in a fight: the minimap stays as it is until you are out."); return false end
-  if on == nil then on = not saved end
-  local c = container()
-  if on and not saved then
-    saved = { zoom = Minimap.GetZoom and Minimap:GetZoom() or 0, far = Mini.big, radius = Mini.bigRadius }
-    if c then
-      saved.scale = c:GetScale() or 1
-      saved.x, saved.y = centreOf(c)
-      Mini.SetScale(Mini.MaxScale() * 0.82, true)
-      Mini.PlaceAt((UIParent:GetWidth() or 1920) / 2, (UIParent:GetHeight() or 1080) / 2)
-    end
-    Mini.bigRadius = 1200
-    Mini.Far(true)
-    QB:Print("The big map is up: the wheel zooms, Ctrl-wheel sizes it, Alt-drag moves it. /qb bigmap or your key puts it back.")
-  elseif not on and saved then
-    local s = saved
-    saved = nil
-    if c and s.scale then
-      c:SetScale(s.scale)
-      if s.x then Mini.PlaceAt(s.x, s.y) end
-    end
-    if Minimap.SetZoom and s.zoom then Minimap:SetZoom(s.zoom) end
-    Mini.bigRadius = s.radius
-    Mini.Far(s.far and true or false)
-  end
-  Mini.Place()
-  return saved ~= nil
-end
-function Mini.IsBig() return saved ~= nil end
-
--- the key bindings (Bindings.xml): the game's Key Bindings, under AddOns, QuestBank
-BINDING_HEADER_QUESTBANK = "QuestBank"
-BINDING_NAME_QUESTBANK_WINDOW = "Open or close QuestBank"
-BINDING_NAME_QUESTBANK_BIGMAP = "Big map"
-BINDING_NAME_QUESTBANK_MINIMAP_BIGGER = "Minimap bigger"
-BINDING_NAME_QUESTBANK_MINIMAP_SMALLER = "Minimap smaller"
-local function sized(k)
-  local c = container()
-  if c then Mini.SetScale((c:GetScale() or 1) * k, saved ~= nil) end
-end
-QuestBankKeys = {
-  Window = QB.Safe(function() if QB.UI then QB.UI:Toggle() end end, "key: window"),
-  BigMap = QB.Safe(function() Mini.Big() end, "key: big map"),
-  Bigger = QB.Safe(function() sized(1.15) end, "key: minimap bigger"),
-  Smaller = QB.Safe(function() sized(1 / 1.15) end, "key: minimap smaller"),
-}
 
 function Mini:Init()
   if self.ready then return end
@@ -732,7 +573,6 @@ function Mini:Init()
   if not (Minimap and QB.Model and QB.Model.World) then return end
   local f = CreateFrame("Frame")
   f:SetScript("OnEvent", QB.Safe(function(_, event)
-    if event == "PLAYER_REGEN_DISABLED" and saved then Mini.Big(false) end -- a fight: the minimap goes back
     if event == "PLAYER_ENTERING_WORLD" or event == "EDIT_MODE_LAYOUTS_UPDATED" then
       -- after Edit Mode has put its own size and place back
       local again = function()
@@ -744,11 +584,10 @@ function Mini:Init()
     Mini.Invalidate()
     Mini.Place()
   end, "minimap pins"))
-  for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "MINIMAP_UPDATE_ZOOM", "PLAYER_REGEN_DISABLED",
-                       "EDIT_MODE_LAYOUTS_UPDATED" }) do
+  for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "MINIMAP_UPDATE_ZOOM", "EDIT_MODE_LAYOUTS_UPDATED" }) do
     pcall(f.RegisterEvent, f, e)
   end
-  -- the wheel: Ctrl sizes, past the widest zoom QuestBank's art goes on; Alt-drag moves
+  -- the wheel: Ctrl sizes, else the game's zoom; Alt-drag moves
   Minimap:EnableMouseWheel(true)
   Minimap:SetScript("OnMouseWheel", QB.Safe(function(_, delta) Mini.Wheel(delta) end, "minimap wheel"))
   Minimap:HookScript("OnMouseDown", QB.Safe(function(_, button) Mini.DragStart(button) end, "minimap move"))

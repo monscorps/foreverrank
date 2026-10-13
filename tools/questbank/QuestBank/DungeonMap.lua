@@ -15,6 +15,7 @@ local W, H = 828, 468
 local LIST_W = 220
 local COVER_H, BODY_Y = 70, 78
 local ROW_H = 68
+local BOSS_W, BOSS_H = 216, 42  -- the boss list's width, and a boss's row: its face, its name on one or two lines
 local MAX_ITEMS = 12
 
 local ART = "Interface\\AddOns\\QuestBank\\art\\"
@@ -147,6 +148,56 @@ local function panel(parent, alpha)
   end
   return p
 end
+
+-- a boss's level: one number, or a range ({ 20, 21 }) for a pair that differs
+local function levelText(l)
+  if type(l) == "table" then return (l[1] and l[2] and l[1] ~= l[2]) and (l[1] .. "-" .. l[2]) or tostring(l[1] or "") end
+  return tostring(l)
+end
+DM.LevelText = levelText
+
+-- a list that scrolls: the wheel, and a slim knob beside it while it runs past the bottom. viewH: the height it shows
+-- (known from the page's size, so it holds before the game has laid the frame out)
+local function scroller(parent, step, viewH)
+  local sf = CreateFrame("ScrollFrame", nil, parent)
+  local child = CreateFrame("Frame", nil, sf)
+  child:SetSize(10, 10)
+  sf:SetScrollChild(child)
+  local bar = CreateFrame("Slider", nil, parent)
+  bar:SetOrientation("VERTICAL")
+  bar:SetWidth(10)
+  bar:SetPoint("TOPLEFT", sf, "TOPRIGHT", 2, 0)
+  bar:SetPoint("BOTTOMLEFT", sf, "BOTTOMRIGHT", 2, 0)
+  local track = bar:CreateTexture(nil, "BACKGROUND")
+  track:SetColorTexture(0.25, 0.17, 0.08, 0.25)
+  track:SetPoint("TOPLEFT", 3, 0)
+  track:SetPoint("BOTTOMRIGHT", -3, 0)
+  local knob = bar:CreateTexture(nil, "OVERLAY")
+  knob:SetTexture(QB.Data.TEX.knob)
+  knob:SetSize(14, 20)
+  bar:SetThumbTexture(knob)
+  bar:SetMinMaxValues(0, 0)
+  bar:SetValueStep(1)
+  bar:SetValue(0)
+  bar:Hide()
+  bar:SetScript("OnValueChanged", function(_, v) sf:SetVerticalScroll(v) end)
+  sf:EnableMouseWheel(true)
+  sf:SetScript("OnMouseWheel", function(_, d)
+    local lo, hi = bar:GetMinMaxValues()
+    bar:SetValue(math.max(lo, math.min(hi, bar:GetValue() - d * step)))
+  end)
+  sf.child, sf.bar, sf.viewH = child, bar, viewH
+  -- the list's full height: the knob runs what does not fit; a new list starts at its top, the same one stays put
+  function sf:SetContentHeight(h, keep)
+    child:SetHeight(math.max(h, 1))
+    local max = math.max(0, h - self.viewH)
+    bar:SetMinMaxValues(0, max)
+    bar:SetShown(max > 0)
+    bar:SetValue(keep and math.min(bar:GetValue(), max) or 0)
+  end
+  return sf
+end
+
 local function pill(parent, label, w)
   local b = CreateFrame("Button", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
   b:SetSize(w or 90, 24)
@@ -202,10 +253,10 @@ local function build(page, pw, ph)
   f.listPanel:SetPoint("BOTTOMLEFT", 0, 0)
   f.listPanel:SetWidth(LIST_W)
   f.listScroll = CreateFrame("ScrollFrame", nil, f.listPanel)
-  f.listScroll:SetPoint("TOPLEFT", 4, -4)
-  f.listScroll:SetPoint("BOTTOMRIGHT", -4, 4)
+  f.listScroll:SetPoint("TOPLEFT", 6, -6)
+  f.listScroll:SetPoint("BOTTOMRIGHT", -6, 6)
   f.listChild = CreateFrame("Frame", nil, f.listScroll)
-  f.listChild:SetSize(LIST_W - 8, 10)
+  f.listChild:SetSize(LIST_W - 12, 10)
   f.listScroll:SetScrollChild(f.listChild)
   f.listScroll:EnableMouseWheel(true)
   f.listScroll:SetScript("OnMouseWheel", function(self, d)
@@ -286,34 +337,47 @@ local function build(page, pw, ph)
   -- bosses tab
   f.bossTab = CreateFrame("Frame", nil, f.body); f.bossTab:SetAllPoints()
   f.bossList = panel(f.bossTab, 0.5)
-  f.bossList:SetPoint("TOPLEFT", 0, 0); f.bossList:SetPoint("BOTTOMLEFT", 0, 0); f.bossList:SetWidth(200)
-  f.bossHead = fs(f.bossList, "GameFontNormal", 12, GOLD, 200)
+  f.bossList:SetPoint("TOPLEFT", 0, 0); f.bossList:SetPoint("BOTTOMLEFT", 0, 0); f.bossList:SetWidth(BOSS_W)
+  f.bossHead = fs(f.bossList, "GameFontNormal", 12, GOLD, BOSS_W - 20)
   f.bossHead:SetPoint("TOPLEFT", 10, -8)
   f.bossHead:SetText("Bosses")
+  -- the bosses scroll under the heading (Blackrock Depths has 39), as the loot does under the boss
+  local bodyH = H - BODY_Y - 8
+  f.bossScroll = scroller(f.bossList, BOSS_H + 2, bodyH - 28 - 8)
+  f.bossScroll:SetPoint("TOPLEFT", 8, -28)
+  f.bossScroll:SetPoint("BOTTOMRIGHT", -20, 8)
   f.bossRows = {}
   f.lootPanel = panel(f.bossTab, 0.5)
   f.lootPanel:SetPoint("TOPLEFT", f.bossList, "TOPRIGHT", 8, 0); f.lootPanel:SetPoint("BOTTOMRIGHT", 0, 0)
   f.lootFace = f.lootPanel:CreateTexture(nil, "ARTWORK")
   f.lootFace:SetSize(64, 64)
   f.lootFace:SetPoint("TOPLEFT", 12, -10)
-  local lootW = detailW - 16 - 208
+  local lootW = detailW - 16 - BOSS_W - 8
   f.lootName = fs(f.lootPanel, "GameFontNormalLarge", 16, GOLD, lootW - 96)
   f.lootName:SetPoint("TOPLEFT", 86, -16)
   f.lootSub = fs(f.lootPanel, "GameFontDisableSmall", 11, SOFT, lootW - 96)
   f.lootSub:SetPoint("TOPLEFT", 86, -40)
   f.lootHead = fs(f.lootPanel, "GameFontNormal", 12, INK, lootW - 24)
   f.lootHead:SetPoint("TOPLEFT", 12, -86)
+  f.lootScroll = scroller(f.lootPanel, 40, bodyH - 106 - 8)
+  f.lootScroll:SetPoint("TOPLEFT", 10, -106)
+  f.lootScroll:SetPoint("BOTTOMRIGHT", -22, 8)
   f.lootRows = {}
 
   -- quests tab
   f.questTab = CreateFrame("Frame", nil, f.body); f.questTab:SetAllPoints()
   f.questHead = fs(f.questTab, "GameFontNormal", 12, GOLD, 300)
   f.questHead:SetPoint("TOPLEFT", 10, -6)
+  f.questScroll = scroller(f.questTab, 36, bodyH - 28)
+  f.questScroll:SetPoint("TOPLEFT", 10, -28)
+  f.questScroll:SetPoint("BOTTOMRIGHT", -18, 0)
   f.questRows = {}
 
   f:SetScript("OnEvent", QB.Safe(function(_, event) if event == "GET_ITEM_INFO_RECEIVED" and f:IsShown() and f.boss then DM.ShowBoss(f.boss) end end, "dungeon journal"))
   pcall(f.RegisterEvent, f, "GET_ITEM_INFO_RECEIVED")
+  -- the rows' widths: each list's scroll frame, less the knob beside it
   f.lootW, f.bodyW = lootW, detailW - 16
+  f.bossRowW, f.lootRowW, f.questRowW = BOSS_W - 8 - 20, lootW + 4 - 10 - 22, detailW - 16 + 4 - 10 - 18
   return f
 end
 
@@ -325,7 +389,7 @@ local function listRow(i)
   local r = f.rows[i]
   if r then return r end
   r = CreateFrame("Button", nil, f.listChild, BackdropTemplateMixin and "BackdropTemplate" or nil)
-  r:SetSize(LIST_W - 8, ROW_H - 4)
+  r:SetSize(LIST_W - 12, ROW_H - 4)
   r.art = r:CreateTexture(nil, "BACKGROUND")
   r.art:SetAllPoints()
   r.shade = r:CreateTexture(nil, "BORDER")
@@ -338,7 +402,7 @@ local function listRow(i)
   r.hi = r:CreateTexture(nil, "HIGHLIGHT")
   r.hi:SetAllPoints()
   r.hi:SetColorTexture(1, 0.82, 0.3, 0.08)
-  r.name = fs(r, "GameFontNormalLarge", 15, GOLD, LIST_W - 28)
+  r.name = fs(r, "GameFontNormalLarge", 15, GOLD, LIST_W - 32)
   r.name:SetPoint("TOPLEFT", 10, -8)
   r.lv = fs(r, "GameFontHighlightSmall", 10, INK, 80)
   r.lv:SetPoint("BOTTOMLEFT", 10, 7)
@@ -445,7 +509,7 @@ local function pin(i)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText(b.n, GOLD[1], GOLD[2], GOLD[3])
     local kind = b.k == "boss" and "Boss" or b.k == "rare" and "Rare" or "Trash"
-    GameTooltip:AddLine(kind .. (b.l and (" \194\183 level " .. b.l) or "") .. (b.w and (" \194\183 " .. b.w) or ""), 1, 1, 1)
+    GameTooltip:AddLine(kind .. (b.l and (" \194\183 level " .. levelText(b.l)) or "") .. (b.w and (" \194\183 " .. b.w) or ""), 1, 1, 1)
     GameTooltip:AddLine(#b.i > 0 and string.format("%d item%s of loot. Click to see them.", #b.i, #b.i == 1 and "" or "s") or "No loot recorded yet.", 0.6, 0.6, 0.6)
     GameTooltip:Show()
   end)
@@ -523,22 +587,34 @@ local function row(list, i, parent, height, w)
   return r
 end
 
+-- a boss's row: a long name takes two lines and the wing or kind sits under it, the pair centred on the face (a
+-- second line ran into the wing's name)
+local function fitRow(r, h)
+  local width = r.text.GetUnboundedStringWidth or r.text.GetStringWidth -- (the text's whole width, not its box's)
+  local lines = width(r.text) > r.text:GetWidth() and 2 or 1
+  local sub = (r.sub:GetText() or "") ~= ""
+  local top = math.floor((h - lines * 14 - (sub and 12 or 0)) / 2)
+  r.text:ClearAllPoints(); r.text:SetPoint("TOPLEFT", h + 4, -top)
+  r.sub:ClearAllPoints(); r.sub:SetPoint("TOPLEFT", h + 4, -top - lines * 14)
+end
+
 function DM.ShowBoss(b)
   local f = frame
+  local same = f.boss == b -- (the item names coming in redraw the same boss: its list keeps its place)
   f.boss = b
   if b.f and b.f ~= f.floor and f.data and f.data.floors[b.f] then DM.ShowFloor(b.f) end
   for _, r in ipairs(f.bossRows) do if r.hi then r.hi:SetAlpha(r.boss == b and 1 or 0) end end
   face(f.lootFace, b, f.data, true)
   f.lootName:SetText(b.n)
-  f.lootSub:SetText((b.k == "boss" and "Boss" or b.k == "rare" and "Rare" or "Trash") .. (b.l and (" \194\183 level " .. b.l) or "") .. (b.w and (" \194\183 " .. b.w) or ""))
+  f.lootSub:SetText((b.k == "boss" and "Boss" or b.k == "rare" and "Rare" or "Trash") .. (b.l and (" \194\183 level " .. levelText(b.l)) or "") .. (b.w and (" \194\183 " .. b.w) or ""))
   f.lootHead:SetText(#b.i > 0 and string.format("Loot  |  %d items", #b.i) or "Loot  |  nothing recorded yet")
-  local y = -108
+  local y = 0
   for i = 1, math.min(MAX_ITEMS, #b.i) do
     local id = b.i[i]
     local it = DM.Item(id)
-    local r = row(f.lootRows, i, f.lootPanel, 38, f.lootW - 20)
+    local r = row(f.lootRows, i, f.lootScroll.child, 38, f.lootRowW)
     r:ClearAllPoints()
-    r:SetPoint("TOPLEFT", 10, y)
+    r:SetPoint("TOPLEFT", 0, y)
     r.id = id
     r.icon:SetTexture(it.icon or 134400) -- (the question-mark icon until the client knows)
     local qc = QUALITY[it.q] or QUALITY[1]
@@ -560,6 +636,8 @@ function DM.ShowBoss(b)
     y = y - 40
   end
   for i = math.min(MAX_ITEMS, #b.i) + 1, #f.lootRows do f.lootRows[i]:Hide() end
+  f.lootScroll.child:SetWidth(f.lootRowW)
+  f.lootScroll:SetContentHeight(-y - 2, same)
 end
 
 function DM.ShowTab(tab)
@@ -616,33 +694,37 @@ function DM.Fill(cat, tab)
   DM.ShowFloor(1)
   f.entrance:SetShown(cat.entrance ~= nil)
   -- bosses
-  local y = -28
+  local y = 0
   for i, b in ipairs(d.bosses) do
-    local r = row(f.bossRows, i, f.bossList, 40, 184)
+    local r = row(f.bossRows, i, f.bossScroll.child, BOSS_H, f.bossRowW)
     r:ClearAllPoints()
-    r:SetPoint("TOPLEFT", 10, y)
+    r:SetPoint("TOPLEFT", 0, y)
     r.boss = b
     face(r.icon, b, d)
     r.text:SetText(b.n)
     r.sub:SetText((b.k == "boss" and "" or (b.k == "rare" and "Rare" or "Trash")) .. ((b.w and (b.k == "boss" and b.w or (" \194\183 " .. b.w))) or ""))
+    fitRow(r, BOSS_H)
     r:SetScript("OnClick", function(self) DM.ShowBoss(self.boss) end)
     r:SetScript("OnEnter", nil)
     r:Show()
-    y = y - 42
+    y = y - BOSS_H - 2
   end
   for i = #d.bosses + 1, #f.bossRows do f.bossRows[i]:Hide() end
+  f.bossScroll.child:SetWidth(f.bossRowW)
+  f.bossScroll:SetContentHeight(-y - 2)
   if d.bosses[1] then DM.ShowBoss(d.bosses[1]) else
     f.boss = nil; f.lootFace:SetTexture(nil); f.lootName:SetText("No bosses recorded"); f.lootSub:SetText(""); f.lootHead:SetText("")
+    f.lootScroll:SetContentHeight(0)
     for _, r in ipairs(f.lootRows) do r:Hide() end
   end
   -- quests
   local qs = DM.Quests(cat.key)
   f.questHead:SetText(#qs > 0 and string.format("%d quests", #qs) or "No quests in the catalog for this dungeon")
-  y = -28
+  y = 0
   for i, e in ipairs(qs) do
-    local r = row(f.questRows, i, f.questTab, 34, f.bodyW - 20)
+    local r = row(f.questRows, i, f.questScroll.child, 34, f.questRowW)
     r:ClearAllPoints()
-    r:SetPoint("TOPLEFT", 10, y)
+    r:SetPoint("TOPLEFT", 0, y)
     r.q = e.q
     r.icon:SetTexture(e.q.icon or 136797)
     local st = STATUS[e.st]
@@ -659,6 +741,8 @@ function DM.Fill(cat, tab)
     y = y - 36
   end
   for i = #qs + 1, #f.questRows do f.questRows[i]:Hide() end
+  f.questScroll.child:SetWidth(f.questRowW)
+  f.questScroll:SetContentHeight(-y - 2)
   DM.ShowTab(tab or f.tab or (#d.bosses > 0 and "bosses" or "map"))
   DM.FillList()
   return f

@@ -71,6 +71,25 @@ local function text(parent, obj, size, color, justify, width)
   return fs
 end
 
+-- a label cut after a whole word with "..." when it is wider than its box (the game would cut it mid-letter); the
+-- text as it is when it fits. room: the width it may take, its box's less a little by default. The text's own width
+-- is the unbounded one where the client has it: a label of set width may report no more than its box
+local function fitText(fs, s, room)
+  room = room or (fs:GetWidth() - 4)
+  local width = fs.GetUnboundedStringWidth or fs.GetStringWidth
+  fs:SetText(s)
+  if width(fs) <= room then return s end
+  local cut = s
+  while true do
+    local shorter = cut:match("^(.*%S)%s+%S+$")
+    if not shorter then break end
+    cut = shorter:gsub("%s*\194\183$", ""):gsub("[,:;]$", "")
+    fs:SetText(cut .. "...")
+    if width(fs) <= room then return cut .. "..." end
+  end
+  return s
+end
+
 local function para(parent, obj, size, color, width)
   local fs = text(parent, obj, size, color, "LEFT", width)
   fs:SetWordWrap(true)
@@ -116,6 +135,22 @@ end
 
 local function setIcon(t, icon) t:SetTexture(icon or T.questGeneric) end
 
+-- open or closed, drawn as the game's own campaign and reputation headers draw it; never a text glyph: the game's
+-- font (Friz Quadrata) has no triangles or arrows and draws a hollow box for each
+local function caret(t, open)
+  QB.Art(t, open and "campaign_headericon_open" or "campaign_headericon_closed",
+    open and "Interface\\Buttons\\UI-MinusButton-Up" or "Interface\\Buttons\\UI-PlusButton-Up")
+end
+
+-- an item's icon: the client's when it has one, asked of the server when not (nil until it comes)
+local function itemIcon(id)
+  local CI = C_Item
+  if CI and CI.GetItemIconByID then local ok, i = pcall(CI.GetItemIconByID, id); if ok and i then return i end end
+  if GetItemInfoInstant then local ok, _, _, _, _, i = pcall(GetItemInfoInstant, id); if ok and i then return i end end
+  if CI and CI.RequestLoadItemDataByID then pcall(CI.RequestLoadItemDataByID, id) end
+  return nil
+end
+
 -- the bags' green upgrade arrow (atlas bags-greenarrow in Interface\ContainerFrame\Bags)
 local UPGRADE_TC = { 66 / 512, 86 / 512, 93 / 256, 115 / 256 }
 local function upgradeMark(parent, w, h)
@@ -155,18 +190,20 @@ local function pool(parent, make)
   return p
 end
 
--- ScrollFrame, content child and a knob slider, no templates needed
+-- ScrollFrame, content child and a knob slider, no templates needed. What scrolls sits 7 px inside the panel's
+-- border and the knob as far in on the right (its 18 px art hangs 2 px past the 14 px bar on each side)
+local SCROLL_L, SCROLL_R, BAR_R = 10, 30, 12
 local function scrollArea(parent)
   local sf = CreateFrame("ScrollFrame", nil, parent)
-  sf:SetPoint("TOPLEFT", 6, -6)
-  sf:SetPoint("BOTTOMRIGHT", -24, 6)
+  sf:SetPoint("TOPLEFT", SCROLL_L, -6)
+  sf:SetPoint("BOTTOMRIGHT", -SCROLL_R, 6)
   local child = CreateFrame("Frame", nil, sf)
-  child:SetSize((W - SIDE - 22) - 58, 10)
+  child:SetSize((W - SIDE - 22) - SCROLL_L - SCROLL_R, 10)
   sf:SetScrollChild(child)
   local bar = CreateFrame("Slider", nil, parent)
   bar:SetOrientation("VERTICAL")
-  bar:SetPoint("TOPRIGHT", -8, -10)
-  bar:SetPoint("BOTTOMRIGHT", -8, 10)
+  bar:SetPoint("TOPRIGHT", -BAR_R, -10)
+  bar:SetPoint("BOTTOMRIGHT", -BAR_R, 10)
   bar:SetWidth(14)
   local track = tex(bar, "BACKGROUND")
   track:SetColorTexture(0.25, 0.17, 0.08, 0.25)
@@ -185,10 +222,18 @@ local function scrollArea(parent)
   end)
   sf:SetScript("OnSizeChanged", function(_, w) if w and w > 0 then child:SetWidth(w) end end)
   sf.child, sf.bar = child, bar
+  -- room under the list for a bar of the page's own (the selection's on Now and Available): the list and its knob
+  -- end above it
+  function sf:SetBottom(px)
+    if (self.bottom or 6) == px then return end
+    self.bottom = px
+    self:SetPoint("BOTTOMRIGHT", -SCROLL_R, px)
+    bar:SetPoint("BOTTOMRIGHT", -BAR_R, px + 4)
+  end
   function sf:SetContentHeight(h)
     child:SetHeight(math.max(h, 1))
     local view = self:GetHeight() or 0
-    if view < 100 then view = (H - 138 - 14) - 12 end -- not laid out yet: the content area less the insets
+    if view < 100 then view = (H - 138 - 14) - 6 - (self.bottom or 6) end -- not laid out yet: the content area less the insets
     local max = math.max(0, h - view)
     bar:SetMinMaxValues(0, max)
     bar:SetShown(max > 0)
@@ -196,7 +241,7 @@ local function scrollArea(parent)
   end
   function sf:Width()
     local w = self:GetWidth() or 0
-    if w < 200 then w = (W - SIDE - 22) - 36 end
+    if w < 200 then w = (W - SIDE - 22) - SCROLL_L - SCROLL_R end
     return w
   end
   return sf
@@ -535,7 +580,7 @@ function UI:ShowMenu(title, items)
     local b = m.items[i]
     if not b then
       b = CreateFrame("Button", nil, m)
-      b:SetSize(232, 20)
+      b:SetSize(228, 20) -- (5 px inside the menu's border on each side; it sat 3 px from it)
       b.hi = tex(b, "HIGHLIGHT", T.rowHi)
       b.hi:SetAllPoints()
       b.hi:SetBlendMode("ADD")
@@ -550,7 +595,7 @@ function UI:ShowMenu(title, items)
       m.items[i] = b
     end
     b:ClearAllPoints()
-    b:SetPoint("TOPLEFT", 6, y)
+    b:SetPoint("TOPLEFT", 8, y)
     b.label:SetText(it[1])
     b.func = it[2]
     b:Show()
@@ -564,6 +609,17 @@ function UI:ShowMenu(title, items)
   m:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x / scale + 6, cy / scale - 6)
   m.catcher:Show()
   m:Show()
+end
+
+-- the game's red close X, well inside a dialog border (24 px, 7 px in): 20 px, its edges 14 px from the frame's right and
+-- 13 from its top. Forever's art fills its 24 px box edge to edge; Classic Era's old 32 px art has 6 px of air all round,
+-- so that one keeps its size and its X lands in the same place
+function UI.CloseButton(f)
+  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+  local air = (close:GetWidth() or 24) >= 30 and 6 or 0
+  close:SetSize(20 + 2 * air, 20 + 2 * air)
+  close:SetPoint("TOPRIGHT", -14 + air, -13 + air)
+  return close
 end
 
 -- a box with the link selected, ready for Ctrl+C
@@ -590,8 +646,7 @@ function UI:CopyLink(title, url)
     f.eb:SetAutoFocus(false)
     f.eb:SetScript("OnEscapePressed", function() f:Hide() end)
     f.eb:SetScript("OnEnterPressed", function() f:Hide() end)
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -2, -2)
+    UI.CloseButton(f)
     if UISpecialFrames then table.insert(UISpecialFrames, "QuestBankLink") end
   end
   f.title:SetText(title)
@@ -813,22 +868,21 @@ function UI:Create()
   backdrop(f, FLAT, EDGE, 24, 7)
   if f.SetBackdropColor then f:SetBackdropColor(SLATE[1], SLATE[2], SLATE[3], 0.97) end
   if UISpecialFrames then table.insert(UISpecialFrames, "QuestBankFrame") end
-  -- the top strip: the name in Blizzard's own face, a gold hairline under it
+  -- the top strip: the name in Blizzard's own face, a gold hairline under it, the close X at its end
   local strip = tex(f, "BACKGROUND", FLAT)
   strip:SetPoint("TOPLEFT", 8, -8)
   strip:SetPoint("TOPRIGHT", -8, -8)
-  strip:SetHeight(26)
+  strip:SetHeight(30)
   strip:SetVertexColor(0.12, 0.15, 0.2, 0.9)
   local hair = tex(f, "BACKGROUND", FLAT)
-  hair:SetPoint("TOPLEFT", 8, -34)
-  hair:SetPoint("TOPRIGHT", -8, -34)
+  hair:SetPoint("TOPLEFT", 8, -38)
+  hair:SetPoint("TOPRIGHT", -8, -38)
   hair:SetHeight(1)
   hair:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 0.35)
   local title = text(f, "GameFontNormalLarge", 15, GOLD, "LEFT", 200)
-  title:SetPoint("TOPLEFT", 20, -13)
+  title:SetPoint("TOPLEFT", 20, -15)
   title:SetText("QUESTBANK")
-  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -5, -5)
+  UI.CloseButton(f)
 
   self:CreateHeader(f)
   self:CreateContent(f)
@@ -1045,22 +1099,24 @@ function UI:CreateJournalView(parent)
   return v
 end
 
--- the sidebar: the pages in groups, each with its icon and a count where one helps; the big map is an action, not a
--- page. UI.tabs[i] is page i's button, as the tab bar had them
+-- the sidebar: the pages in groups, each with its icon and a count where one helps; the Map is an action, not a
+-- page: the game's world map (UI.OpenMap). UI.tabs[i] is page i's button, as the tab bar had them. key: its key
+-- binding's name (Bindings.xml, QUESTBANK_<key>), which the Key Bindings list shows with the entry's name
 local SIDEBAR = {
   { group = "Questing" },
-  { tab = 6, name = "Now", icon = "sideNow" },
-  { tab = 1, name = "Quest Log", icon = "sideLog", count = function() return QB.state.logCount or 0 end },
-  { tab = 2, name = "Available", icon = "sideAvail" },
-  { tab = 3, name = "Route", icon = "sideRoute" },
+  { tab = 6, name = "Now", icon = "sideNow", key = "NOW" },
+  { tab = 1, name = "Quest Log", icon = "sideLog", key = "LOG", count = function() return QB.state.logCount or 0 end },
+  { tab = 2, name = "Available", icon = "sideAvail", key = "AVAILABLE" },
+  { tab = 3, name = "Route", icon = "sideRoute", key = "ROUTE" },
   { group = "Together" },
-  { tab = 4, name = "Party", icon = "sideParty", count = function() return QB.Sync and #(QB.Sync:Members() or {}) or 0 end },
+  { tab = 4, name = "Party", icon = "sideParty", key = "PARTY", count = function() return QB.Sync and #(QB.Sync:Members() or {}) or 0 end },
   { group = "World" },
-  { tab = 7, name = "Dungeon Journal", icon = "sideJournal" },
-  { act = function() if QB.Mini then QB.Mini.Big() end end, name = "Big map", icon = "sideMap" },
+  { tab = 7, name = "Dungeon Journal", icon = "sideJournal", key = "JOURNAL" },
+  { act = function() UI.OpenMap() end, name = "Map", icon = "sideMap", key = "MAP" },
   { group = "QuestBank" },
-  { tab = 5, name = "Settings", icon = "sideSettings" },
+  { tab = 5, name = "Settings", icon = "sideSettings", key = "SETTINGS" },
 }
+UI.SIDEBAR = SIDEBAR
 function UI:CreateTabs(f)
   self.tabs = {}
   local side = CreateFrame("Frame", nil, f)
@@ -1157,8 +1213,7 @@ function UI:ShowErrors()
     f.title = text(f, "GameFontNormal", 13, GOLD, "LEFT", 480)
     f.title:SetPoint("TOPLEFT", 18, -16)
     f.title:SetText("QuestBank problems")
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -2, -2)
+    UI.CloseButton(f)
     local sf = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
     sf:SetPoint("TOPLEFT", 18, -40)
     sf:SetPoint("BOTTOMRIGHT", -36, 18)
@@ -1200,6 +1255,60 @@ function UI:Toggle()
   self:Create()
   self.frame:SetShown(not self.frame:IsShown())
 end
+
+-- a page's key: the window open on that page, or shut when it is open on that page already
+function UI:TogglePage(tab)
+  self:Create()
+  if self.frame:IsShown() and self.tab == tab then self.frame:Hide(); return false end
+  self:Open(tab)
+  return true
+end
+
+-- the Map: the game's own world map, on your zone, with QuestBank's map icons and route pins on it as layers of their
+-- own (QuestMap.lua, Pins.lua). OpenWorldMap opens it and HideUIPanel shuts it: both hand the panel to the game's own
+-- secure panel code, so the map lays itself out and draws its pins as the game. Never ToggleWorldMap: that sizes the
+-- map and fills its quest log as QuestBank, and the game later blames QuestBank for what it blocks there. The game
+-- lets an addon open a panel only out of a fight (its own map key works in one). toggle: shut it when it is open
+function UI.OpenMap(toggle)
+  local wm = WorldMapFrame
+  if not (wm and OpenWorldMap and HideUIPanel) then return false end
+  if (QB.Pins and QB.Pins.InCombat and QB.Pins.InCombat()) or (InCombatLockdown and InCombatLockdown()) then
+    QB:Print("In a fight only the game's own map key opens the map.")
+    return false
+  end
+  if wm:IsShown() then
+    if toggle then pcall(HideUIPanel, wm); return false end
+    -- open on another map: shut and opened again, where the game puts it on your zone
+    local ok, here = pcall(function() return MapUtil.GetDisplayableMapForPlayer() end)
+    here = ok and QB.Plain(here) or nil
+    if not here or here == QB.Plain(wm:GetMapID()) then return true end
+    pcall(HideUIPanel, wm)
+  end
+  pcall(OpenWorldMap)
+  return wm:IsShown() and true or false
+end
+
+-- the key bindings (Bindings.xml): the game's Key Bindings, a QuestBank section with a line each, named as the
+-- sidebar names them. A page's key opens the window on that page or shuts it there; the Map key opens the game's map
+-- or shuts it
+BINDING_HEADER_QUESTBANK = "QuestBank"
+BINDING_NAME_QUESTBANK_WINDOW = "Open or close QuestBank"
+BINDING_NAME_QUESTBANK_MINIMAP_BIGGER = "Minimap bigger"
+BINDING_NAME_QUESTBANK_MINIMAP_SMALLER = "Minimap smaller"
+UI.PAGE_KEYS = {}
+for _, e in ipairs(SIDEBAR) do
+  if e.key then
+    _G["BINDING_NAME_QUESTBANK_" .. e.key] = e.name
+    if e.tab then UI.PAGE_KEYS[e.key] = e.tab end
+  end
+end
+QuestBankKeys = {
+  Window = QB.Safe(function() UI:Toggle() end, "key: window"),
+  Page = QB.Safe(function(key) local tab = UI.PAGE_KEYS[key]; if tab then UI:TogglePage(tab) end end, "key: page"),
+  Map = QB.Safe(function() UI.OpenMap(true) end, "key: map"),
+  Bigger = QB.Safe(function() if QB.Mini then QB.Mini.Size(1.15) end end, "key: minimap bigger"),
+  Smaller = QB.Safe(function() if QB.Mini then QB.Mini.Size(1 / 1.15) end end, "key: minimap smaller"),
+}
 
 ----------------------------------------------------------------------------
 -- refresh
@@ -1319,6 +1428,9 @@ end
 -- page 1: the quest log as a bank
 ----------------------------------------------------------------------------
 local LEFT, RIGHT = 16, 420
+-- the Quest Log's grid, 8 across: each slot shows its quest's place, and the gap between slots lets each place's band
+-- read as one group
+local LOG_ICON, LOG_STEP, LOG_TOP = 36, 49, 48
 
 -- what the finder looks for among the quests you could still take
 UI.FINDS = {
@@ -1422,23 +1534,30 @@ function UI:CreateLogView(parent)
   v.worth:SetPoint("TOPLEFT", LEFT, -30)
   v.slots = {}
   for i = 1, QB.LOG_SLOTS do
-    local b = iconButton(v, 36, nil)
+    -- the picture is the quest's place: a zone's own icon, a dungeon's (UI.LogPicture)
+    local b = iconButton(v, LOG_ICON, nil)
     local col, row = (i - 1) % 8, math.floor((i - 1) / 8)
-    b:SetPoint("TOPLEFT", LEFT + 4 + col * 46, -48 - row * 46)
+    b:SetPoint("TOPLEFT", LEFT + 4 + col * LOG_STEP, -LOG_TOP - row * LOG_STEP)
     -- the band behind a run of quests in one place: it runs on under the gap to the next slot of the same place
     b.band = tex(v, "BACKGROUND", FLAT)
     b.band:SetPoint("TOPLEFT", b, "TOPLEFT", -3, 3)
-    b.band:SetSize(42, 42)
+    b.band:SetSize(LOG_ICON + 6, LOG_ICON + 6)
     b.band:Hide()
-    b.frame = tex(b, "OVERLAY", T.iconFrame)
+    b.frame = b:CreateTexture(nil, "OVERLAY", nil, 0)
+    b.frame:SetTexture(T.iconFrame)
     b.frame:SetAllPoints()
-    -- done: a green check stamped across the corner
-    b.stamp = b:CreateTexture(nil, "ARTWORK", nil, 7) -- over the icon, under the frame and the XP
-    b.stamp:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
-    b.stamp:SetSize(22, 22)
-    b.stamp:SetPoint("CENTER", b, "CENTER", 3, 3)
-    if b.stamp.SetRotation then b.stamp:SetRotation(-0.3) end
-    b.stamp:Hide()
+    -- ready to hand in: the bags' green glow round the slot (the action buttons' border, tinted, where the client has
+    -- no such atlas), and the ready check in the corner
+    b.glow = b:CreateTexture(nil, "OVERLAY", nil, 1)
+    if QB.Art(b.glow, "bags-glow-green", "Interface\\Buttons\\UI-ActionButton-Border") then
+      b.glow:SetSize(LOG_ICON + 3, LOG_ICON + 3)
+    else
+      b.glow:SetSize(LOG_ICON * 1.72, LOG_ICON * 1.72)
+      b.glow:SetVertexColor(0.3, 1, 0.3)
+    end
+    b.glow:SetPoint("CENTER")
+    b.glow:SetBlendMode("ADD")
+    b.glow:Hide()
     -- a follow-up: the chain's link from the quest before it
     b.link = tex(b, "OVERLAY", T.upgrade, 12, 13)
     b.link:SetTexCoord(66 / 512, 86 / 512, 93 / 256, 115 / 256)
@@ -1447,14 +1566,22 @@ function UI:CreateLogView(parent)
     b.link:Hide()
     b.xp = text(b, "NumberFontNormal", 11, WHITE, "RIGHT", 40)
     b.xp:SetPoint("BOTTOMRIGHT", 0, 2)
-    b.mark = tex(b, "OVERLAY", nil, 14, 14)
+    -- top left: the ready check, the red X of a quest you cut, the ! of one still to pick up; nothing while you work on it
+    b.mark = b:CreateTexture(nil, "OVERLAY", nil, 2)
+    b.mark:SetSize(15, 15)
     b.mark:SetPoint("TOPLEFT", 1, -1)
+    -- bottom left: the green arrow of a chain worth carrying on; bottom right the XP
     b.up = upgradeMark(b, 13, 14)
-    b.up:SetPoint("TOPRIGHT", -1, -1)
-    -- where it is: the zone's icon in the corner, a dungeon's own
-    b.zone = tex(b, "OVERLAY", nil, 14, 14)
-    b.zone:SetPoint("BOTTOMLEFT", 1, 1)
-    b.zone:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    b.up:SetPoint("BOTTOMLEFT", 1, 2)
+    -- top right: the item it rewards, small on a dark square
+    b.rwBack = b:CreateTexture(nil, "OVERLAY", nil, 1)
+    b.rwBack:SetColorTexture(0, 0, 0, 0.85)
+    b.rwBack:SetSize(16, 16)
+    b.rwBack:SetPoint("TOPRIGHT", -1, -1)
+    b.rw = b:CreateTexture(nil, "OVERLAY", nil, 2)
+    b.rw:SetSize(14, 14)
+    b.rw:SetPoint("CENTER", b.rwBack, "CENTER", 0, 0)
+    b.rw:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     b:SetScript("OnClick", function(self, which) if self.q then UI.QuestClick(self.q, self.st, which) end end)
     tooltip(b, function(tip, self)
@@ -1475,13 +1602,15 @@ function UI:CreateLogView(parent)
     end)
     v.slots[i] = b
   end
+  -- under the grid: your bags, a row of slots in the grid's columns, then what left the log
+  local foot = LOG_TOP + (math.ceil(QB.LOG_SLOTS / 8) - 1) * LOG_STEP + LOG_ICON
   v.bagLabel = text(v, "GameFontNormal", 13, INK, "LEFT", 380)
-  v.bagLabel:SetPoint("TOPLEFT", LEFT, -278)
+  v.bagLabel:SetPoint("TOPLEFT", LEFT, -(foot + 16))
   v.bagLabel:SetText("In your bags, no log slot needed")
   v.bagSlots = {}
   for i = 1, 8 do
     local b = iconButton(v, 32, nil)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 46, -300)
+    b:SetPoint("TOPLEFT", LEFT + 6 + (i - 1) * LOG_STEP, -(foot + 38))
     b.count = text(b, "NumberFontNormal", 11, WHITE, "RIGHT", 40)
     b.count:SetPoint("BOTTOMRIGHT", 0, 2)
     tooltip(b, function(tip, self)
@@ -1502,16 +1631,16 @@ function UI:CreateLogView(parent)
     v.bagSlots[i] = b
   end
   v.dropTitle = text(v, "GameFontNormal", 12, BAD, "LEFT", 300)
-  v.dropTitle:SetPoint("TOPLEFT", LEFT, -346)
+  v.dropTitle:SetPoint("TOPLEFT", LEFT, -(foot + 84))
   v.dropClear = button(v, "Clear", 64)
-  v.dropClear:SetPoint("TOPLEFT", LEFT + 316, -342)
+  v.dropClear:SetPoint("TOPLEFT", LEFT + 316, -(foot + 80))
   v.dropClear:SetScript("OnClick", function()
     local p = QB:Plan()
     for k in pairs(p.removed) do p.removed[k] = nil end
     UI:Refresh()
   end)
   v.drops = para(v, "GameFontNormalSmall", 11, INK_SOFT, 380)
-  v.drops:SetPoint("TOPLEFT", LEFT, -366)
+  v.drops:SetPoint("TOPLEFT", LEFT, -(foot + 104))
   v.drops:SetHeight(50)
 
   -- the finder: what to look for in the quests you could still take
@@ -1539,7 +1668,7 @@ function UI:CreateLogView(parent)
     v.finds[i] = b
   end
   v.slotBtn = button(v, "Any slot", 90)
-  v.slotBtn:SetPoint("TOPLEFT", RIGHT + 4 * 84 - 6, -32)
+  v.slotBtn:SetPoint("TOPLEFT", RIGHT + 334 - 90, -10)
   v.slotBtn:SetScript("OnClick", QB.Safe(function()
     local items = { { "Any slot", function() UI.gearSlot = nil; UI:Refresh() end } }
     for _, g in ipairs(UI.GEAR_SLOTS) do items[#items + 1] = { g[1], function() UI.gearSlot = g[1]; UI:Refresh() end } end
@@ -1822,6 +1951,32 @@ function UI.LogCells(entries, picks)
   return out
 end
 
+-- a Quest Log slot's picture: the quest's place, a zone's own icon or a dungeon's; the quest's icon only when it has no place
+function UI.LogPicture(q)
+  local cat = q and q.cat
+  return cat and (cat.zi or cat.icon) or (q and q.icon)
+end
+
+-- the item a quest rewards, for the slot's corner: the first to choose from, else the first it gives; its icon, or a bag
+-- until the game sends the icon. nil when it rewards no item, or nobody knows yet
+function UI.LogReward(q)
+  local rw = q and Q.Rewards(q)
+  if type(rw) ~= "table" then return nil end
+  for _, key in ipairs({ "c", "r", "u" }) do
+    local id = type(rw[key]) == "table" and rw[key][1]
+    if id then return id, itemIcon(id) or T.bag end
+  end
+  return nil
+end
+
+local function showReward(b, q, alpha, grey)
+  local id, icon = UI.LogReward(q)
+  b.rwId = id
+  if id then b.rw:SetTexture(icon); b.rw:SetDesaturated(grey or false) end
+  b.rw:SetShown(id ~= nil); b.rwBack:SetShown(id ~= nil)
+  b.rw:SetAlpha(alpha); b.rwBack:SetAlpha(alpha)
+end
+
 function UI:RefreshLogView(v)
   local s = QB.state
   local entries, total = {}, 0
@@ -1880,15 +2035,19 @@ function UI:RefreshLogView(v)
     b.q, b.st, b.entry, b.value, b.pct, b.plvl, b.pick, b.advice, b.follow, b.group = nil, nil, nil, nil, nil, nil, nil, nil, nil, nil
     b.icon:SetAlpha(1)
     b.frame:SetAlpha(1)
-    b.stamp:Hide()
+    b.mark:SetAlpha(1)
+    b.glow:Hide()
     b.link:Hide()
-    -- the band: this place's colour, joined to the next slot when it is the same place on the same row
+    -- the band: this place's colour, joined across the gap to the next slot on the row and to the slot under it when
+    -- they are the same place, so a place reads as one block and the gaps part the places
     if cell then
-      local nxt = cells[i + 1]
+      local nxt, under = cells[i + 1], cells[i + 8]
       local joined = nxt and nxt.group == cell.group and i % 8 ~= 0
+      local down = under and under.group == cell.group
       local col = UI.BAND[(cell.group - 1) % #UI.BAND + 1]
       b.band:SetVertexColor(col[1], col[2], col[3], 0.9)
-      b.band:SetWidth(joined and 48 or 42)
+      b.band:SetWidth(joined and LOG_STEP + 1 or LOG_ICON + 6)
+      b.band:SetHeight(down and LOG_STEP + 1 or LOG_ICON + 6)
       b.band:Show()
       b.group = cell.group
     else
@@ -1903,23 +2062,19 @@ function UI:RefreshLogView(v)
         elseif low then b.advice = QB.Data.CUT_NOTES[it.e.id] or string.format(it.e.complete and "Pays next to nothing at level %d: hand it in now for the rewards." or "Pays next to nothing at level %d: abandon it to free the slot.", s.level) end
       end
       if it.q then b.q, b.st = it.q, it.st end
-      local cat = it.q and it.q.cat
-      if cat and (cat.zi or cat.icon) then b.zone:SetTexture(cat.zi or cat.icon); b.zone:Show() else b.zone:Hide() end
-      setIcon(b.icon, it.q and it.q.icon or (it.e.complete and T.questActive or T.questAvail))
+      setIcon(b.icon, it.q and UI.LogPicture(it.q) or (it.e.complete and T.questActive or T.questAvail))
       b.icon:SetDesaturated(it.cut or false)
       local c = QUALITY[tier(it.value)]
       b.frame:SetVertexColor(c[1], c[2], c[3])
       b.frame:SetShown(not it.cut)
       b.xp:SetText((it.value and not (it.q and it.q.xpUnknown and not it.q.liveFull)) and QB.Short(it.value) or "?")
-      if it.cut or not it.q then
-        b.mark:SetTexture(T.notready)
-      elseif it.e.complete then
-        b.mark:SetTexture(T.ready)
-      else
-        b.mark:SetTexture(T.waiting)
-      end
-      b.mark:SetShown(not it.e.complete or it.cut or not it.q)
-      b.stamp:SetShown(it.e.complete and not it.cut and it.q ~= nil)
+      -- cut or unknown: greyed with the red X; ready: the green glow and the check; in progress: no mark
+      local done = it.e.complete and not it.cut and it.q ~= nil
+      if it.cut or not it.q then b.mark:SetTexture(T.notready); b.mark:Show()
+      elseif done then b.mark:SetTexture(T.ready); b.mark:Show()
+      else b.mark:Hide() end
+      b.glow:SetShown(done)
+      showReward(b, it.q, 1, it.cut)
       b.up:SetShown(it.q ~= nil and not it.cut and QB:Upgrade(it.q) ~= nil)
     elseif cell then
       -- a quest not in the log yet: a follow-up of the one before it, or one you chose to pick up; faded
@@ -1927,7 +2082,7 @@ function UI:RefreshLogView(v)
       b.q, b.st, b.value = q, QB:Status(q), value
       b.pick = cell.kind == "pick" or nil
       b.follow = cell.kind == "follow" and cell.from or nil
-      setIcon(b.icon, q.icon)
+      setIcon(b.icon, UI.LogPicture(q))
       b.icon:SetDesaturated(false)
       b.icon:SetAlpha(0.55)
       local c = QUALITY[tier(value)]
@@ -1936,17 +2091,17 @@ function UI:RefreshLogView(v)
       b.frame:Show()
       b.xp:SetText(QB.Short(value))
       b.mark:SetTexture(T.questAvail)
+      b.mark:SetAlpha(0.8)
       b.mark:Show()
+      showReward(b, q, 0.55)
       b.up:Hide()
       b.link:SetShown(cell.kind == "follow" and (i - 1) % 8 ~= 0)
-      local cat = q.cat
-      if cat and (cat.zi or cat.icon) then b.zone:SetTexture(cat.zi or cat.icon); b.zone:Show() else b.zone:Hide() end
     else
-      b.zone:Hide()
       b.icon:SetTexture(nil)
       b.frame:Hide()
       b.xp:SetText("")
       b.mark:Hide()
+      showReward(b, nil, 1)
       b.up:Hide()
     end
   end
@@ -2165,9 +2320,15 @@ end
 ----------------------------------------------------------------------------
 -- page 2: prep
 ----------------------------------------------------------------------------
+local SELBAR_H = 34 -- the selection's bar under Now and Available
 local function makeRow(parent)
   local r = CreateFrame("Button", nil, parent)
   r:SetHeight(22)
+  -- picked out for Pick up all / Remove all: a gold wash under the row
+  r.selBg = tex(r, "BACKGROUND", FLAT)
+  r.selBg:SetAllPoints()
+  r.selBg:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 0.12)
+  r.selBg:Hide()
   r.hi = tex(r, "HIGHLIGHT", T.rowHi)
   r.hi:SetAllPoints()
   r.hi:SetBlendMode("ADD")
@@ -2204,6 +2365,29 @@ local function makeRow(parent)
   r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
   r.name = text(r, "GameFontNormal", 12, INK, "LEFT", 270)
   r.name:SetPoint("LEFT", 46, 0)
+  -- the box that picks several quests at once (Ctrl-click the row does the same): the game's own check box, on the
+  -- quest's icon while the mouse is on the row, and kept there while it is ticked
+  r.sel = CreateFrame("Button", nil, r)
+  r.sel:SetSize(18, 18)
+  r.sel:SetPoint("LEFT", 22, 0)
+  r.sel.box = tex(r.sel, "ARTWORK")
+  r.sel.box:SetAllPoints()
+  QB.Art(r.sel.box, "checkbox-minimal", "Interface\\Buttons\\UI-CheckBox-Up")
+  r.sel.check = tex(r.sel, "OVERLAY")
+  r.sel.check:SetAllPoints()
+  QB.Art(r.sel.check, "checkmark-minimal", "Interface\\Buttons\\UI-CheckBox-Check")
+  r.sel:Hide()
+  r.sel:SetScript("OnClick", QB.Safe(function(self) UI.Select(self:GetParent()) end, "select"))
+  tooltip(r.sel, function(tip, self)
+    local row = self:GetParent()
+    local on = row.view and row.q and row.view.sel[row.q.id]
+    tip:AddLine(on and "Selected" or "Select", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Pick up or remove several quests at once, from the bar below. Ctrl-click a row does the same.", 1, 1, 1, true)
+  end)
+  r.sel:HookScript("OnLeave", function(self)
+    local row = self:GetParent()
+    if not (row.IsMouseOver and row:IsMouseOver()) then UI.ShowSelect(row, false) end
+  end)
   -- what the quest gives, as the journal shows it: up to three item icons (the tooltip names them)
   r.rw = {}
   for i = 1, 3 do
@@ -2227,8 +2411,8 @@ local function makeRow(parent)
   r.chain = CreateFrame("Button", nil, r)
   r.chain:SetSize(16, 16)
   r.chain:SetPoint("LEFT", 430, 0)
-  r.chain.label = text(r.chain, "GameFontNormalSmall", 11, GOLD_SOFT, "CENTER", 16)
-  r.chain.label:SetPoint("CENTER", 0, 0)
+  r.chain.icon = tex(r.chain, "ARTWORK", nil, 14, 14)
+  r.chain.icon:SetPoint("CENTER", 0, 0)
   r.chain:SetScript("OnClick", QB.Safe(function(self)
     local row = self:GetParent()
     if not row.q then return end
@@ -2244,6 +2428,7 @@ local function makeRow(parent)
   r.chain:Hide()
   r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   r:SetScript("OnClick", function(self, which)
+    if self.selectable and which ~= "RightButton" and IsControlKeyDown and IsControlKeyDown() then UI.Select(self) return end
     if self.q and self.detailable and which ~= "RightButton" and not (IsShiftKeyDown and IsShiftKeyDown()) then
       UI.detailOpen = UI.detailOpen or {}
       UI.detailOpen[self.q.id] = not UI.detailOpen[self.q.id] or nil
@@ -2260,6 +2445,7 @@ local function makeRow(parent)
     if self.q then
       UI.QuestTooltip(tip, self.q, self.st, self.value)
       if self.together then tip:AddLine("Done in the same spot as: " .. table.concat(self.together, ", ") .. ". Do them together.", 0.75, 0.75, 1, true) end
+      if self.selectable then tip:AddLine("Ctrl-click: select it, to pick up or remove several at once.", 0.5, 0.5, 0.5, true) end
     elseif self.entry then
       tip:AddLine(self.entry.title, GOLD[1], GOLD[2], GOLD[3])
       tip:AddLine(self.advice or "", 1, 0.55, 0.45, true)
@@ -2268,6 +2454,11 @@ local function makeRow(parent)
       tip:AddLine(self.step.where, 1, 1, 1, true)
       if self.step.m then tip:AddLine("Click: waypoint.", 0.5, 0.5, 0.5) end
     end
+  end)
+  -- the box shows while the mouse is on the row (leaving the row for its own box keeps it)
+  r:HookScript("OnEnter", function(self) UI.ShowSelect(self, true) end)
+  r:HookScript("OnLeave", function(self)
+    if not (self.sel.IsMouseOver and self.sel:IsMouseOver()) then UI.ShowSelect(self, false) end
   end)
   return r
 end
@@ -2293,7 +2484,7 @@ local function makeCard(parent)
   -- the banner opens and closes the place
   c.head = CreateFrame("Button", nil, c)
   c.head:SetPoint("TOPLEFT", 3, -3)
-  c.head:SetPoint("TOPRIGHT", -60, -3)
+  c.head:SetPoint("TOPRIGHT", -92, -3)
   c.head:SetHeight(42)
   c.head:SetScript("OnClick", QB.Safe(function(self)
     local key = self.key
@@ -2302,8 +2493,8 @@ local function makeCard(parent)
     UI.cardOpen[key] = not UI.cardOpen[key] or nil
     UI:Refresh()
   end, "open a place"))
-  c.caret = text(c, "GameFontNormal", 12, GOLD, "CENTER", 20)
-  c.caret:SetPoint("TOPLEFT", 3, -14)
+  c.caret = tex(c, "OVERLAY", nil, 16, 16)
+  c.caret:SetPoint("TOPLEFT", 4, -16)
   c.details = pool(c, function(p) return makeDetail(p) end)
   c.icon = tex(c, "ARTWORK", nil, 32, 32)
   c.icon:SetPoint("TOPLEFT", 22, -8)
@@ -2312,9 +2503,9 @@ local function makeCard(parent)
   c.where = text(c, "GameFontHighlightSmall", 11, WHITE, "LEFT", 420)
   c.where:SetPoint("TOPLEFT", 62, -28)
   c.gain = text(c, "GameFontNormalLarge", 15, GOLD, "RIGHT", 150)
-  c.gain:SetPoint("TOPRIGHT", -50, -9)
+  c.gain:SetPoint("TOPRIGHT", -96, -9)
   c.count = text(c, "GameFontHighlightSmall", 11, WHITE, "RIGHT", 150)
-  c.count:SetPoint("TOPRIGHT", -50, -28)
+  c.count:SetPoint("TOPRIGHT", -96, -28)
   c.pin = pinButton(c, 22)
   c.pin:SetPoint("TOPRIGHT", -12, -7)
   c.pin:SetScript("OnClick", function(self)
@@ -2336,6 +2527,29 @@ local function makeCard(parent)
     tip:AddLine(on and "Skipped: nothing here is suggested." or "Skip this place: QuestBank stops suggesting quests here.", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine(on and "Click to bring it back." or "Click again to bring it back; Settings and /qb skip list them.", 0.8, 0.8, 0.8, true)
   end)
+  -- every quest the place shows that you could pick up, onto your pick-up list in one click
+  c.addAll = CreateFrame("Button", nil, c)
+  c.addAll:SetSize(40, 14)
+  c.addAll:SetPoint("TOPRIGHT", -48, -31)
+  c.addAll.label = text(c.addAll, "GameFontNormalSmall", 11, GOLD, "RIGHT", 40)
+  c.addAll.label:SetPoint("RIGHT", 0, 0)
+  c.addAll.label:SetText("+ all")
+  c.addAll:SetHighlightTexture(T.rowHi, "ADD")
+  c.addAll:SetScript("OnClick", QB.Safe(function(self)
+    for _, id in ipairs(self.ids or {}) do QB:SetAdded(id, true) end
+    UI:Refresh()
+  end, "pick up all here"))
+  tooltip(c.addAll, function(tip, self)
+    local ids = self.ids or {}
+    tip:AddLine(string.format("Pick up all %d here", #ids), GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Puts every quest this place shows that you can pick up on your pick-up list:", 1, 1, 1, true)
+    for i, id in ipairs(ids) do
+      if i > 10 then tip:AddLine(string.format("and %d more", #ids - 10), 0.8, 0.8, 0.8) break end
+      local q = Q.Get(id)
+      if q then tip:AddLine(q.name, 0.8, 0.8, 0.8) end
+    end
+  end)
+  c.addAll:Hide()
   c.rows = pool(c, makeRow)
   c.more = CreateFrame("Button", nil, c)
   c.more:SetSize(400, 18)
@@ -2464,13 +2678,6 @@ STATUS.pickup = { 0.25, 0.25, 0.45 }
 
 -- the quest's reward items as icons (D.RITEMS: choose one of c, always r, u unknown), the client's icon when it has
 -- one, asked of the server when not
-local function itemIcon(id)
-  local CI = C_Item
-  if CI and CI.GetItemIconByID then local ok, i = pcall(CI.GetItemIconByID, id); if ok and i then return i end end
-  if GetItemInfoInstant then local ok, _, _, _, _, i = pcall(GetItemInfoInstant, id); if ok and i then return i end end
-  if CI and CI.RequestLoadItemDataByID then pcall(CI.RequestLoadItemDataByID, id) end
-  return nil
-end
 function UI.RewardIcons(r, q)
   if not r.rw then return end
   local R = QB.Data.RITEMS and QB.Data.RITEMS[q.id]
@@ -2483,13 +2690,43 @@ function UI.RewardIcons(r, q)
   end
 end
 
--- it = { q, st, value, held, chosen, cut, mins, sub (a step shown under its chain), together (names) }
-local function fillRow(r, it, width)
+-- a chain's step sits under its quest's row, its icon and name 12 px further in; rows are pooled, so every fill sets it
+local function indent(r, sub)
+  local dx = sub and 12 or 0
+  r.icon:ClearAllPoints(); r.icon:SetPoint("LEFT", 22 + dx, 0)
+  r.sel:ClearAllPoints(); r.sel:SetPoint("LEFT", 22 + dx, 0)
+  r.name:ClearAllPoints(); r.name:SetPoint("LEFT", 46 + dx, 0)
+  r.name:SetWidth(270 - dx)
+end
+
+-- the box on a row: shown while the mouse is on the row or while it is ticked, on rows that can go on the pick-up
+-- list (not in your log or bags, not done); a ticked row is washed gold
+function UI.ShowSelect(r, hover)
+  local on = (r.selectable and r.view and r.q and r.view.sel[r.q.id]) and true or false
+  r.sel:SetShown((r.selectable and (hover or on)) and true or false)
+  r.sel.check:SetShown(on)
+  r.selBg:SetShown(on)
+end
+
+-- Ctrl-click or the box: the quest into the page's selection, or out of it
+function UI.Select(r)
+  local v, q = r.view, r.q
+  if not (v and v.sel and q and r.selectable) then return end
+  v.sel[q.id] = (not v.sel[q.id]) or nil
+  UI:Refresh()
+end
+
+-- it = { q, st, value, held, chosen, cut, mins, sub (a step shown under its chain), together (names) }; v: the page
+-- whose selection the row joins (Now and Available), nil where rows are not picked
+local function fillRow(r, it, width, v)
   local q, st = it.q, it.st
   r.q, r.st, r.entry, r.step, r.value, r.together = q, st, nil, nil, it.value, it.together
   r.detailable = it.detailable or nil
   r:SetWidth(width)
   local held, chosen = it.held, it.chosen
+  r.view = v
+  r.selectable = (v and v.sel and not held and st.code ~= "done") and true or nil
+  UI.ShowSelect(r, r.IsMouseOver and r:IsMouseOver() or false)
   local pickable = not held and st.code ~= "done" and not st.behind and (st.code == "todo" or st.code == "item")
   local mark
   if it.cut then mark = T.notready
@@ -2500,7 +2737,7 @@ local function fillRow(r, it, width)
   r.pick:EnableMouse(pickable and true or false)
   setIcon(r.icon, q.icon)
   r.icon:SetDesaturated(st.code == "done" or st.code == "locked" or st.behind or false)
-  r.name:SetText((it.sub and "\226\134\179 " or "") .. q.name)
+  indent(r, it.sub)
   local c = (held or chosen) and INK or INK_SOFT
   r.name:SetTextColor(c[1], c[2], c[3])
   r.up:SetShown(held and not it.cut and QB:Upgrade(q) ~= nil)
@@ -2510,7 +2747,7 @@ local function fillRow(r, it, width)
   -- a chain opens under its row; a step shown under one carries no toggle of its own
   local chained = not it.sub and ((q.pre ~= nil) or (q.nextSteps ~= nil and #q.nextSteps > 0))
   if chained then
-    r.chain.label:SetText((UI.chainOpen and UI.chainOpen[q.id]) and "\226\150\190" or "\226\150\184")
+    caret(r.chain.icon, UI.chainOpen and UI.chainOpen[q.id])
     r.chain:Show()
   else
     r.chain:Hide()
@@ -2520,6 +2757,10 @@ local function fillRow(r, it, width)
   -- the minutes column takes room from the status only when it has something to say
   r.status:SetWidth(math.max(100, width - 450 - 76 - (awayText ~= "" and 48 or 0)))
   UI.RewardIcons(r, q)
+  -- the name runs on into the reward icons' room when the quest shows none (and the green arrow's when it has none)
+  local anyRw = r.rw[1]:IsShown() or r.rw[2]:IsShown() or r.rw[3]:IsShown()
+  r.name:SetWidth((anyRw and 314 or (r.up:IsShown() and 372 or 392)) - 46 - (it.sub and 12 or 0))
+  r.name:SetText(fitText(r.name, q.name))
   local status, color = st.text, STATUS[st.code] or INK
   local drop = QB.Data.DROP and QB.Data.DROP[q.id]
   if drop and drop < 30 and not held and st.code ~= "done" then
@@ -2549,13 +2790,21 @@ local function fillRow(r, it, width)
     end
   end
   if st.code == "todo" and status == st.text then status = "" end
+  -- a long item name: the item's own name is what counts, "Item:" says the rest
+  if st.code == "item" then
+    r.status:SetText(status)
+    if r.status:GetStringWidth() > r.status:GetWidth() - 4 then status = status:gsub("^Starts from an item: ", "Item: ") end
+  end
   if it.together and #it.together > 0 then
     local room = r.status:GetWidth() - 4
     local suffix = string.format(status ~= "" and " · %d in the same spot" or "%d in the same spot", #it.together)
     r.status:SetText(status .. suffix)
     if r.status:GetStringWidth() <= room then status = status .. suffix end
   end
+  -- too long for its column: a chain's step count goes first, then the end of the line, cut at a word
   r.status:SetText(status)
+  if r.status:GetStringWidth() > r.status:GetWidth() - 4 then status = status:gsub(" %(%d+ steps%)", "") end
+  r.status:SetText(fitText(r.status, status))
   r.status:SetTextColor(color[1], color[2], color[3])
   r.away:SetText(awayText)
   r.xp:SetText(QB.Comma(it.value or Q.Full(q)))
@@ -2641,8 +2890,10 @@ function UI:CreatePrepView(parent, now)
       local h = CreateFrame("Button", nil, p, BD)
       backdrop(h, FLAT, nil, 0, 0)
       if h.SetBackdropColor then h:SetBackdropColor(0.13, 0.11, 0.08, 0.9) end
+      h.caret = tex(h, "OVERLAY", nil, 16, 16)
+      h.caret:SetPoint("LEFT", 8, 0)
       h.label = text(h, "GameFontNormalLarge", 14, GOLD, "LEFT", 200)
-      h.label:SetPoint("LEFT", 10, 0)
+      h.label:SetPoint("LEFT", 30, 0)
       h.sum = text(h, "GameFontNormalSmall", 11, INK_SOFT, "RIGHT", 360)
       h.sum:SetPoint("RIGHT", -12, 0)
       h:SetScript("OnClick", QB.Safe(function(self)
@@ -2674,6 +2925,38 @@ function UI:CreatePrepView(parent, now)
     end
   end
   v.cards = pool(child, makeCard)
+  -- several quests at once: Ctrl-click rows (or tick their box), then pick them all up or take them all off
+  v.sel = {}
+  local bar = CreateFrame("Frame", nil, v, BD)
+  bar:SetPoint("BOTTOMLEFT", 10, 10)
+  bar:SetPoint("BOTTOMRIGHT", -10, 10)
+  bar:SetHeight(SELBAR_H)
+  bar:EnableMouse(true)
+  backdrop(bar, FLAT, T.tipBorder, 12, 3)
+  if bar.SetBackdropColor then bar:SetBackdropColor(0.12, 0.09, 0.05, 0.97) end
+  if bar.SetBackdropBorderColor then bar:SetBackdropBorderColor(GOLD_SOFT[1], GOLD_SOFT[2], GOLD_SOFT[3], 0.9) end
+  bar.count = text(bar, "GameFontNormal", 13, GOLD, "LEFT", 300)
+  bar.count:SetPoint("LEFT", 14, 0)
+  local function act(label, w, fn, tipTitle, tipText)
+    local b = button(bar, label, w)
+    b:SetScript("OnClick", QB.Safe(function() fn(); UI:Refresh() end, "selection"))
+    tooltip(b, function(tip) tip:AddLine(tipTitle, GOLD[1], GOLD[2], GOLD[3]); tip:AddLine(tipText, 1, 1, 1, true) end)
+    return b
+  end
+  bar.clear = act("Clear", 70, function() v.sel = {} end, "Clear", "Untick them all.")
+  bar.clear:SetPoint("RIGHT", -10, 0)
+  bar.remove = act("Remove all", 100, function()
+    for id in pairs(v.sel) do QB:SetAdded(id, false) end
+    v.sel = {}
+  end, "Remove all", "Takes the selected quests that are on your pick-up list off it.")
+  bar.remove:SetPoint("RIGHT", bar.clear, "LEFT", -6, 0)
+  bar.pick = act("Pick up all", 100, function()
+    for id in pairs(v.sel) do QB:SetAdded(id, true) end
+    v.sel = {}
+  end, "Pick up all", "Puts the selected quests on your pick-up list: they show in your Quest Log as To pick up, with a ! on their givers on the map.")
+  bar.pick:SetPoint("RIGHT", bar.remove, "LEFT", -6, 0)
+  bar:Hide()
+  v.selBar = bar
   v.foot = text(child, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 660)
   v.foot:Hide()
   v.empty = para(child, "GameFontNormal", 13, INK_SOFT, 560)
@@ -2697,6 +2980,22 @@ function UI:RefreshPrepView(v)
   local width = v.scroll:Width() - 6
   v.cards:Reset()
   local here, mf, hubName = UI.Here()
+  -- the selection keeps what can still go on the list: a quest taken or done since drops out of it
+  local selN, selOn = 0, 0
+  for id in pairs(v.sel) do
+    local q = Q.Get(id)
+    local st = q and QB:Status(q)
+    if not q or s.log[id] or st.code == "done" or st.bag then v.sel[id] = nil
+    else
+      selN = selN + 1
+      if QB:IsAdded(id) then selOn = selOn + 1 end
+    end
+  end
+  v.selBar:SetShown(selN > 0)
+  v.scroll:SetBottom(selN > 0 and (10 + SELBAR_H + 4) or 6)
+  v.selBar.count:SetText(string.format("%d selected", selN))
+  v.selBar.pick:SetEnabled(selN > selOn)
+  v.selBar.remove:SetEnabled(selOn > 0)
 
   local groups, order = {}, {}
   local function group(cat)
@@ -2861,6 +3160,8 @@ function UI:RefreshPrepView(v)
     c.more:Hide()
     c.skip:Hide()
     c.skip.key = nil
+    c.addAll:Hide()
+    c.addAll.ids = nil
     c:SetAlpha(1)
   end
   -- the card's count line, as much of it as fits: available, to pick up, in your log (ready), not yet, done
@@ -2899,8 +3200,10 @@ function UI:RefreshPrepView(v)
       minsText = g.nearest < 1 and " \194\183 you're here" or string.format(a.dungeon and " \194\183 %d min to the entrance" or " \194\183 %d min away", math.floor(g.nearest + 0.5))
     end
     local lv = g.lvlN > 0 and string.format("L%d", math.floor(g.lvlSum / g.lvlN + 0.5)) or ""
-    local where = (a.dungeon and (a.where ~= "" and a.where or "Dungeon") or (a.where ~= "" and a.where or "")) .. minsText
-    if lv ~= "" then where = lv .. "  \194\183  " .. where end
+    local zone = a.dungeon and (a.where ~= "" and a.where or "Dungeon") or (a.where or "")
+    -- (a place with no zone of its own, the class quests: no empty part between two dots)
+    local where = zone ~= "" and (zone .. minsText) or minsText:gsub("^ \194\183 ", "")
+    if lv ~= "" then where = lv .. (where ~= "" and ("  \194\183  " .. where) or "") end
     local pic = a.img or a.bg or a.art
     c.art.__tile = (not a.img and not a.bg and a.art) and true or false
     c.art.__img = a.img and true or false
@@ -2924,7 +3227,8 @@ function UI:RefreshPrepView(v)
     if UI.cardOpen[a.key] ~= nil then isOpen = UI.cardOpen[a.key] else isOpen = openByDefault or UI.allOpen or false end
     c.head.key = a.key
     c.head:SetHeight(artH)
-    c.caret:SetText(isOpen and "\226\150\190" or "\226\150\184")
+    caret(c.caret, isOpen)
+    c.caret:Show()
     c.details:Reset()
     table.sort(g.quests, function(x, z)
       if x.grp ~= z.grp then return x.grp < z.grp end
@@ -2936,6 +3240,18 @@ function UI:RefreshPrepView(v)
     local ry = artH + 8
     local extra, hidden = 0, 0
     local open = UI.expanded and UI.expanded[a.key]
+    -- + all: what the place shows (open, or when it opens) that you could pick up now
+    local addable, shownN = {}, 0
+    for _, it in ipairs(g.quests) do
+      if it.grp ~= 6 and it.grp ~= 1 and it.grp ~= 3 and rowPasses(it) and (open or shownN < (v.now and 4 or PER_CARD)) then
+        shownN = shownN + 1
+        if it.grp == 2 then addable[#addable + 1] = it.q.id end
+      end
+    end
+    c.addAll.ids = addable
+    c.addAll:SetShown(#addable > 0)
+    c.addAll:ClearAllPoints()
+    c.addAll:SetPoint("TOPRIGHT", c.skip:IsShown() and -48 or -8, -31) -- (Skip's place where the place has no Skip)
     if isOpen then
       for _, it in ipairs(g.quests) do
         local show = false
@@ -2950,7 +3266,7 @@ function UI:RefreshPrepView(v)
           r:ClearAllPoints()
           r:SetPoint("TOPLEFT", 4, -ry)
           it.detailable = true
-          fillRow(r, it, width - 8)
+          fillRow(r, it, width - 8, v)
           ry = ry + 22
           if UI.detailOpen[it.q.id] then
             local d = c.details:Get()
@@ -2964,7 +3280,7 @@ function UI:RefreshPrepView(v)
               local r2 = c.rows:Get()
               r2:ClearAllPoints()
               r2:SetPoint("TOPLEFT", 4, -ry)
-              fillRow(r2, sit, width - 8)
+              fillRow(r2, sit, width - 8, v)
               ry = ry + 22
             end
           end
@@ -3015,7 +3331,8 @@ function UI:RefreshPrepView(v)
         h:SetSize(width, 26)
         h.key = sec.key
         local closed = UI.secClosed[sec.key]
-        h.label:SetText((closed and "\226\150\184  " or "\226\150\190  ") .. sec.name)
+        caret(h.caret, not closed)
+        h.label:SetText(sec.name)
         h.sum:SetText(string.format("%d places  \194\183  %d quests  \194\183  +%s XP", #list, quests, QB.Short(xp)))
         y = y + 30
         if not closed then for _, g in ipairs(list) do drawGroup(g, false) end end
@@ -3040,7 +3357,7 @@ function UI:RefreshPrepView(v)
     header(c, { 0.10, 0.12, 0.22 }, T.sleep, "Cozy Sleeping Bag", "Finish Stepping Stones: a bag that builds rested XP faster.", "Bag",
       string.format("%d of %d steps done", doneSteps, steps))
     c.head.key = nil
-    c.caret:SetText("")
+    c.caret:Hide()
     c.details:Reset(); c.details:HideRest()
     local hq = heldStep and QB.Quest.Get(nextStep.id)
     if hq and hq.turn and hq.turn.m and hq.turn.m > 0 and not hq.turn.inside then
@@ -3065,6 +3382,10 @@ function UI:RefreshPrepView(v)
       r.pick:EnableMouse(false)
       r.chain:Hide()
       r.together = nil
+      r.view, r.selectable = nil, nil
+      UI.ShowSelect(r, false)
+      indent(r, false)
+      for _, t in ipairs(r.rw) do t:Hide() end -- (a pooled row keeps the last quest's reward icons otherwise)
       setIcon(r.icon, T.map)
       r.icon:SetDesaturated(done)
       r.name:SetText(step.name)
@@ -3848,7 +4169,8 @@ function UI:RefreshPartyView(v)
   end
   v.members:HideRest()
   v.empty:SetShown(#list == 0)
-  v.empty:SetText("Nobody with you yet. Group up and the party shows here, QuestBank or not; guild members who run QuestBank show too.")
+  -- the hint above already says how the party fills: the empty line only says it is empty
+  v.empty:SetText("Nobody with you yet.")
   v.shareBtn.ids = lackAll
   v.shareBtn:SetText(#lackAll > 0 and string.format("Share %d", #lackAll) or "Share")
   v.shareBtn:SetEnabled(#lackAll > 0)
@@ -4192,19 +4514,25 @@ function UI:CreateSettingsView(parent)
   v.clockHint:SetText("The strip shows your time at this level, the oldest quest in your log and the hand-in run. Quest tooltips say how long a quest took.")
 
   -- the route on the minimap (Minimap.lua)
-  heading(p, LEFT, -820, "Minimap", 370)
+  heading(p, LEFT, -820, "Minimap and map", 370)
   v.minimapPins = checkRow(p, LEFT, -844, "Route stops, pick-ups and dungeon entrances on the minimap", 340)
   v.minimapPins:SetScript("OnClick", function(self) QB:Settings().minimapPins = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
-  v.bigmap = button(p, "Big map", 110)
-  v.bigmap:SetPoint("TOPLEFT", LEFT + 4, -872)
-  v.bigmap:SetScript("OnClick", QB.Safe(function() if QB.Mini then QB.Mini.Big() end end, "settings: big map"))
-  v.bigmapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
-  v.bigmapLabel:SetPoint("LEFT", v.bigmap, "RIGHT", 8, 0)
-  v.bigmapLabel:SetText("Alt-drag moves it, Ctrl-wheel sizes it")
-  tooltip(v.bigmap, function(tip)
+  tooltip(v.minimapPins, function(tip)
     tip:AddLine("The minimap", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("Alt-drag moves it. Ctrl and the wheel size it. The wheel zooms, and past the game's widest zoom QuestBank's map goes on out.", 1, 1, 1, true)
-    tip:AddLine("Big map: most of the screen, zoomed far out. Keys for it under Key Bindings, AddOns. /qb minimap reset puts it all back.", 0.6, 0.6, 0.6, true)
+    tip:AddLine("Alt-drag moves it, Ctrl and the wheel size it, the wheel zooms it.", 1, 1, 1, true)
+    tip:AddLine("/qb minimap reset puts it back as the game had it.", 0.6, 0.6, 0.6, true)
+  end)
+  -- the Map: the game's world map (UI.OpenMap)
+  v.map = button(p, "Map", 110)
+  v.map:SetPoint("TOPLEFT", LEFT + 4, -872)
+  v.map:SetScript("OnClick", QB.Safe(function() UI.OpenMap() end, "settings: map"))
+  v.mapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
+  v.mapLabel:SetPoint("LEFT", v.map, "RIGHT", 8, 0)
+  v.mapLabel:SetText("Your zone on the game's world map")
+  tooltip(v.map, function(tip)
+    tip:AddLine("Map", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("The game's world map on your zone, with QuestBank's icons on it.", 1, 1, 1, true)
+    tip:AddLine("Keys for it and for each page: Key Bindings, QuestBank.", 0.6, 0.6, 0.6, true)
   end)
 
   -- the light on the object your Interact key would use (Glow.lua)
@@ -4296,10 +4624,23 @@ function UI.StatusText()
   if on ~= "1" or how == nil or how == "" then return "NONE" end
   return how
 end
+-- set as the game's Options does: the kind first, then the switch. The bars redraw when the switch changes
+-- (CVAR_UPDATE for statusText, TextStatusBar.lua), never for the kind alone, so from one kind shown to another the
+-- switch goes off and on again: the same redraw as from Off. Not in a fight, where the bars would redraw as
+-- QuestBank on health the game keeps secret
 function UI.SetStatusText(value)
+  if (QB.Pins and QB.Pins.InCombat and QB.Pins.InCombat()) or (InCombatLockdown and InCombatLockdown()) then
+    QB:Print("Not in a fight: set the health and mana numbers after it.")
+    return false
+  end
   local set = C_CVar and C_CVar.SetCVar or SetCVar
+  local get = C_CVar and C_CVar.GetCVar or GetCVar
   pcall(set, "statusTextDisplay", value)
-  pcall(set, "statusText", value == "NONE" and "0" or "1")
+  if value == "NONE" then pcall(set, "statusText", "0"); return true end
+  local ok, was = pcall(get, "statusText")
+  if ok and QB.Plain(was) == "1" then pcall(set, "statusText", "0") end
+  pcall(set, "statusText", "1")
+  return true
 end
 
 function UI:RefreshSettingsView(v)
@@ -4395,7 +4736,8 @@ function UI:RefreshSettingsView(v)
   local rm = type(set.remind) == "table" and set.remind or {}
   for key, row in pairs(v.remind) do row:SetChecked(rm[key] == true) end
   v.clockLevelMsg:SetChecked(set.clockLevelMsg ~= false)
-  local MARK = { [true] = "|cff2e8b2e\226\156\147|r", [false] = "|cffb03030\226\156\151|r" }
+  -- the ready-check's tick and cross, drawn inline: the game's font has no check or cross of its own
+  local MARK = { [true] = "|T" .. T.ready .. ":14|t", [false] = "|T" .. T.notready .. ":14|t" }
   for key, b in pairs(v.tri) do
     local ctx, k = key:match("^(%a+)%.(%w+)$")
     local p = set.profiles and set.profiles[ctx]
