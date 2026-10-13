@@ -21,7 +21,7 @@ RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThum
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
-SetAtlas SetPassThroughButtons SetScale GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient]])
+SetAtlas SetPassThroughButtons SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
@@ -131,6 +131,14 @@ local function newObj(kind, template, parent)
         elseif k == "SetRotation" then self.__rot = a[1]
         elseif k == "SetAtlas" then self.__tex = "atlas:" .. tostring(a[1]); self.__atlas = a[1]; self.__color = nil
         elseif k == "SetScale" then self.__scale = a[1]
+        elseif k == "GetScale" then return self.__scale or 1
+        elseif k == "GetLeft" then return self.__left or 0
+        elseif k == "GetTop" then return self.__top or 0
+        elseif k == "GetNumPoints" then return #self.__points
+        elseif k == "GetChildren" then
+          local out = {}
+          for _, x in ipairs(ALL) do if x.__parent == self and x.__kind ~= "Texture" and x.__kind ~= "FontString" and x.__kind ~= "Line" then out[#out + 1] = x end end
+          return unpack(out)
         elseif k == "SetFrameLevel" then self.__frameLevel = a[1]
         elseif k == "EnableMouse" then self.__mouse = a[1] and true or false
         -- protected on Forever, with combat restrictions: an addon calling it in combat is blocked (ADDON_ACTION_BLOCKED)
@@ -243,7 +251,12 @@ local function newClient(o)
   local c = { env = env, o = o, timers = {}, clock = 1000, outbox = {}, pins = {}, chat = {}, frames = {}, QB = {} }
   env.UIParent = newObj("Frame"); env.UIParent:SetSize(1600, 1000); env.UIParent.__points = {}
   env.UIParent.__root = true
-  env.Minimap = newObj("Frame"); env.Minimap:SetSize(140, 140); env.Minimap.__points = {}
+  -- the minimap in its cluster and container, as the client builds it (Blizzard_Minimap/Mainline/Minimap.xml)
+  env.MinimapCluster = newObj("Frame", nil, env.UIParent); env.MinimapCluster:SetSize(256, 256)
+  env.MinimapCluster.__left, env.MinimapCluster.__top = 1344, 1000
+  rawset(env.MinimapCluster, "ApplySystemAnchor", function(self) self.__anchored = true end) -- Edit Mode's own (a mixin method)
+  env.MinimapCluster.MinimapContainer = newObj("Frame", nil, env.MinimapCluster); env.MinimapCluster.MinimapContainer:SetSize(215, 226)
+  env.Minimap = newObj("Frame", nil, env.MinimapCluster.MinimapContainer); env.Minimap:SetSize(140, 140); env.Minimap.__points = {}
   env.Minimap:SetPoint("TOPRIGHT", env.UIParent, "TOPRIGHT", -20, -20)
   -- the minimap's tracking list: c.tracking = { { name, filterID, active }, ... }; the game's menu, as Menu.ModifyMenu sees it
   c.tracking = { { name = "Battlemaster", filterID = 4, active = false }, { name = "Target", filterID = 16384, active = false },
@@ -344,6 +357,7 @@ local function newClient(o)
   env.UpdateQuestAcceptLogFullDialog = function() error("QuestBank called UpdateQuestAcceptLogFullDialog: the escort prompt's Yes would be set as QuestBank", 2) end
   -- Ctrl, for the game's own map pin (Ctrl+click on the map)
   env.IsControlKeyDown = function() return c.ctrl or false end
+  env.IsAltKeyDown = function() return c.alt or false end
   env.WaypointLocationDataProviderMixin = {}
   env.GetTitleText = function() return c.window and c.window.title or "" end
   env.GetSuggestedGroupNum = function() return 0 end
@@ -1276,14 +1290,63 @@ do
   local rx, ry = at(byName.Goldshire)
   assert(math.abs(rx - 21) < 0.01 and math.abs(ry) < 0.01, string.format("rotated: north is to the right (%s, %s)", rx, ry))
   c.cvars = nil; c.facing = nil
-  -- the big map, and a fight that puts it back
-  local w0 = env.Minimap:GetWidth()
-  assert(Mini.Big(true) and env.Minimap:GetWidth() > 400 and Mini.IsBig(), "the big map grows the minimap")
+  -- the minimap sized and moved: the container's scale (as Edit Mode's Size slider sets it), the cluster's place
+  local cont, cl = env.MinimapCluster.MinimapContainer, env.MinimapCluster
+  assert(env.Minimap.__scripts.OnMouseWheel, "the wheel over the minimap is QuestBank's")
+  c.ctrl = true
+  env.Minimap.__scripts.OnMouseWheel(env.Minimap, 1)
+  local free = QB:Settings().miniFree
+  assert(math.abs(cont:GetScale() - 1.1) < 0.001 and math.abs(free.scale - 1.1) < 0.001 and free.orig == 1, "Ctrl-wheel sizes the minimap, and the size is kept")
+  for _ = 1, 30 do Mini.Wheel(1) end
+  assert(math.abs(cont:GetScale() - Mini.MaxScale()) < 0.001 and Mini.MaxScale() <= 4, "never past what fits the screen")
+  for _ = 1, 30 do Mini.Wheel(-1) end
+  assert(math.abs(cont:GetScale() - 0.6) < 0.001, "nor smaller than 60%")
+  Mini.SetScale(1.1)
+  c.ctrl = false
+  local zl = cl.__points[1]
+  assert(zl and zl.point == "TOPLEFT" and zl.rel == env.UIParent, "sizing keeps the minimap's centre where it was (the cluster moves)")
+  -- the wheel zooms the game's minimap, and past its widest QuestBank's own art goes on
+  env.Minimap.__zoom = 1
+  Mini.Wheel(-1)
+  assert(env.Minimap.__zoom == 0 and not Mini.big, "the game's zoom first")
+  Mini.Wheel(-1)
+  assert(Mini.big and Mini.bigRadius == 300, "past the widest: QuestBank's art at 300 yards")
+  Mini.Wheel(-1)
+  assert(math.abs(Mini.bigRadius - 375) < 0.01, "and on out")
+  Mini.Wheel(1); Mini.Wheel(1)
+  assert(not Mini.big and env.Minimap.__zoom == 0, "zooming back in hands over to the game's widest zoom")
+  Mini.Wheel(1)
+  assert(env.Minimap.__zoom == 1, "then the game's zoom")
+  env.Minimap.__zoom = 0
+  -- Alt-drag moves it; where it ends is kept
+  c.alt = true
+  env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
+  assert(Mini.dragging, "Alt and the left button start a move")
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
+  assert(not Mini.dragging and free.x == 500 and free.y == 400, "the move ends and its place is kept")
+  c.alt = false
+  env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
+  assert(not Mini.dragging, "a plain click doesn't move it")
+  -- the big map: most of the screen in the middle, far out; its size isn't kept; a fight puts it back
+  assert(Mini.Big(true) and cont:GetScale() > 3 and Mini.IsBig() and Mini.big and Mini.bigRadius == 1200, "the big map: the minimap at most of the screen, zoomed far out")
+  assert(math.abs(free.scale - 1.1) < 0.001, "the big map's size isn't kept as yours")
   c.combat = true
   assert(Mini.Big(false) == false and Mini.IsBig(), "in a fight nothing is touched")
   c.combat = false
   Mini.Big(false)
-  assert(env.Minimap:GetWidth() == w0 and not Mini.IsBig(), "back to its size")
+  assert(math.abs(cont:GetScale() - 1.1) < 0.001 and not Mini.IsBig() and not Mini.big, "back to its size and zoom")
+  -- other addons' buttons: LibDBIcon's refreshed from their own angle, a stray one put back on the rim
+  local refreshed = {}
+  env.LibStub = function(name) if name == "LibDBIcon-1.0" then return { GetButtonList = function() return { "Foo" } end, Refresh = function(_, n) refreshed[#refreshed + 1] = n end } end end
+  local stray = env.CreateFrame("Button", nil, env.Minimap)
+  stray:SetPoint("CENTER", env.Minimap, "CENTER", 300, 0)
+  rawset(stray, "GetPoint", function() return "CENTER", env.Minimap, "CENTER", 300, 0 end)
+  local nr, nm = Mini.RescueButtons()
+  assert(nr == 1 and refreshed[1] == "Foo" and nm == 1 and math.abs(stray.__points[1].x - 80) < 0.01 and stray.__points[1].y == 0, "a stray button back on the rim, same direction")
+  stray:Hide(); rawset(stray, "GetPoint", nil); stray:ClearAllPoints()
+  env.LibStub = nil
+  Mini.ResetFree()
+  assert(cont:GetScale() == 1 and next(QB:Settings().miniFree) == nil, "/qb minimap reset: the game's size again")
   -- off: nothing shown
   QB:Settings().minimapPins = false
   Mini.Place()

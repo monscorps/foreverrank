@@ -1,0 +1,6 @@
+<Bindings>
+	<Binding name="QUESTBANK_WINDOW" header="QUESTBANK" category="ADDONS">QuestBankKeys.Window()</Binding>
+	<Binding name="QUESTBANK_BIGMAP" category="ADDONS">QuestBankKeys.BigMap()</Binding>
+	<Binding name="QUESTBANK_MINIMAP_BIGGER" category="ADDONS">QuestBankKeys.Bigger()</Binding>
+	<Binding name="QUESTBANK_MINIMAP_SMALLER" category="ADDONS">QuestBankKeys.Smaller()</Binding>
+</Bindings>

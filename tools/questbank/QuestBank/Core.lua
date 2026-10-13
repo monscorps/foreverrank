@@ -2322,6 +2322,10 @@ slash = function(msg)
     QB:Settings().pos, QB:Settings().post.pos = nil, nil
     if QB.UI.frame then QB.UI.frame:ClearAllPoints(); QB.UI.frame:SetPoint("CENTER") end
     if QB.UI.postFrame then QB.UI.postFrame:ClearAllPoints(); QB.UI.postFrame:SetPoint("TOP", 0, -120) end
+  elseif cmd == "minimap" and rest == "reset" then
+    -- the minimap's own size and place again, other addons' buttons back on its rim
+    if QB.Mini then QB.Mini.ResetFree() end
+    QB:Print("The minimap is back to the game's size and place, and its buttons are on the rim.")
   elseif cmd == "minimap" then
     local m = QB:Settings().minimap
     m.hide = not m.hide
