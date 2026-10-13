@@ -277,4 +277,108 @@ function Mini:Init()
     pcall(f.RegisterEvent, f, e)
   end
   overlayFrame()
+  Mini.InitTracking()
+end
+
+----------------------------------------------------------------------------
+-- Target and Focus on the minimap. The client can show your target and your focus as dots on the minimap, but its
+-- tracking menu lists the two only with the console's minimapTrackingShowAll on, and forgets the choice at every
+-- loading screen. QuestBank adds the two to the menu, keeps the choice per character (Target on until you say
+-- otherwise), and sets it again after each loading screen; with show-all on it does nothing, the game lists them.
+----------------------------------------------------------------------------
+local FILTER = { target = 16384, focus = 32768 } -- Enum.MinimapTrackingFilter.Target and .Focus
+local NAMES = { target = "Target", focus = "Focus" }
+
+local function trackDB()
+  QuestBankDB = QuestBankDB or {}
+  QuestBankDB.chars = QuestBankDB.chars or {}
+  local key = QB:CharKey()
+  local c = QuestBankDB.chars[key]
+  if type(c) ~= "table" then c = {}; QuestBankDB.chars[key] = c end
+  if type(c.track) ~= "table" then c.track = { target = true } end
+  return c.track
+end
+Mini.TrackDB = trackDB
+
+local function showAll()
+  if C_CVar and C_CVar.GetCVarBool then
+    local ok, v = pcall(C_CVar.GetCVarBool, "minimapTrackingShowAll")
+    return ok and plain(v) == true
+  end
+  if GetCVar then
+    local ok, v = pcall(GetCVar, "minimapTrackingShowAll")
+    return ok and plain(v) == "1"
+  end
+  return false
+end
+
+-- the tracking index of Target or Focus, by the client's filter id, else by name
+local function trackIndex(which)
+  if not (C_Minimap and C_Minimap.GetNumTrackingTypes and C_Minimap.GetTrackingFilter) then return nil end
+  local ok, n = pcall(C_Minimap.GetNumTrackingTypes)
+  n = ok and plain(n) or 0
+  local want = (Enum and Enum.MinimapTrackingFilter and Enum.MinimapTrackingFilter[NAMES[which]]) or FILTER[which]
+  for i = 1, n do
+    local okF, f = pcall(C_Minimap.GetTrackingFilter, i)
+    if okF and type(f) == "table" and plain(f.filterID) == want then return i end
+  end
+  for i = 1, n do
+    local okI, info = pcall(C_Minimap.GetTrackingInfo, i)
+    if okI and type(info) == "table" and plain(info.name) == NAMES[which] then return i end
+  end
+  return nil
+end
+
+function Mini.TrackOn(which)
+  local i = trackIndex(which)
+  if not i then return nil end
+  local ok, info = pcall(C_Minimap.GetTrackingInfo, i)
+  return ok and type(info) == "table" and plain(info.active) == true
+end
+
+function Mini.SetTrack(which, on)
+  trackDB()[which] = on and true or false
+  local i = trackIndex(which)
+  if i and C_Minimap.SetTracking then pcall(C_Minimap.SetTracking, i, on and true or false) end
+end
+
+-- after a loading screen: the saved choices, when the game's own menu does not carry them
+function Mini.ApplyTracking()
+  if showAll() then return false end
+  local saved = trackDB()
+  local n = 0
+  for which in pairs(NAMES) do
+    if saved[which] ~= nil then
+      local i = trackIndex(which)
+      if i and C_Minimap.SetTracking then pcall(C_Minimap.SetTracking, i, saved[which] == true); n = n + 1 end
+    end
+  end
+  return n
+end
+
+function Mini.TrackingMenu(owner, root)
+  if showAll() or not root then return end
+  if root.CreateDivider then root:CreateDivider() end
+  if root.CreateTitle then root:CreateTitle("QuestBank") end
+  for _, which in ipairs({ "target", "focus" }) do
+    if trackIndex(which) and root.CreateCheckbox then
+      root:CreateCheckbox(NAMES[which] .. " on the minimap",
+        function() return Mini.TrackOn(which) == true end,
+        function() Mini.SetTrack(which, not Mini.TrackOn(which)) end)
+    end
+  end
+end
+
+function Mini.InitTracking()
+  if Mini.trackReady then return end
+  Mini.trackReady = true
+  if Menu and Menu.ModifyMenu then
+    pcall(Menu.ModifyMenu, "MENU_MINIMAP_TRACKING", function(owner, root) QB.Try("minimap tracking menu", Mini.TrackingMenu, owner, root) end)
+  end
+  local f = CreateFrame("Frame")
+  f:SetScript("OnEvent", QB.Safe(function()
+    Mini.ApplyTracking()
+    C_Timer.After(3, QB.Safe(Mini.ApplyTracking, "minimap tracking")) -- the game may reset it a moment after the load
+  end, "minimap tracking"))
+  pcall(f.RegisterEvent, f, "PLAYER_ENTERING_WORLD")
 end

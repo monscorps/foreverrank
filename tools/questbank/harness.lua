@@ -235,7 +235,18 @@ local function newClient(o)
   env.UIParent.__root = true
   env.Minimap = newObj("Frame"); env.Minimap:SetSize(140, 140); env.Minimap.__points = {}
   env.Minimap:SetPoint("TOPRIGHT", env.UIParent, "TOPRIGHT", -20, -20)
-  env.C_Minimap = { GetViewRadius = function() return c.miniRadius or 233.33 end }
+  -- the minimap's tracking list: c.tracking = { { name, filterID, active }, ... }; the game's menu, as Menu.ModifyMenu sees it
+  c.tracking = { { name = "Battlemaster", filterID = 4, active = false }, { name = "Target", filterID = 16384, active = false },
+                 { name = "Focus", filterID = 32768, active = false } }
+  env.C_Minimap = { GetViewRadius = function() return c.miniRadius or 233.33 end,
+    GetNumTrackingTypes = function() return #c.tracking end,
+    GetTrackingFilter = function(i) local t = c.tracking[i]; return t and { filterID = t.filterID } or nil end,
+    GetTrackingInfo = function(i) local t = c.tracking[i]; return t and { name = t.name, active = t.active, texture = 0, type = "other" } or nil end,
+    SetTracking = function(i, on) local t = c.tracking[i]; if t then t.active = on and true or false end end }
+  env.Enum = env.Enum or {}
+  env.C_CVar = { GetCVarBool = function(name) return (c.cvars or {})[name] == "1" end }
+  c.menus = {}
+  env.Menu = { ModifyMenu = function(tag, fn) c.menus[tag] = fn end }
   env.GetCVar = env.GetCVar or function(name) return (c.cvars or {})[name] end
   env.UISpecialFrames = {}
   env.SlashCmdList = {}
@@ -1264,6 +1275,33 @@ do
   DM.Command("stockade")
   assert(f.cat.key == "d717", "/qb map stockade")
   f:Hide()
+end
+-- 3.9.0: Target and Focus on the minimap (Minimap.lua): kept per character, set again after each loading screen
+do
+  local Mini, env = QB.Mini, owner.env
+  c = owner
+  assert(c.menus.MENU_MINIMAP_TRACKING, "QuestBank adds to the game's tracking menu")
+  assert(Mini.TrackDB().target == true and Mini.TrackDB().focus == nil, "Target on by default, Focus as the game has it")
+  c.tracking[2].active, c.tracking[3].active = false, false
+  assert(Mini.ApplyTracking() == 1 and c.tracking[2].active == true and c.tracking[3].active == false, "after a loading screen: Target set, Focus left alone")
+  -- the menu: a divider, a title, two boxes that read and set the tracking
+  local entries = {}
+  local root = { CreateDivider = function() entries[#entries + 1] = "divider" end, CreateTitle = function(_, t) entries[#entries + 1] = "title " .. t end,
+                 CreateCheckbox = function(_, text, isOn, setOn) entries[#entries + 1] = { text = text, isOn = isOn, setOn = setOn } end }
+  c.menus.MENU_MINIMAP_TRACKING(nil, root)
+  assert(#entries == 4 and entries[1] == "divider" and entries[2] == "title QuestBank" and entries[3].text == "Target on the minimap" and entries[4].text == "Focus on the minimap", "the menu's entries")
+  assert(entries[3].isOn() == true and entries[4].isOn() == false, "the boxes read the game's state")
+  entries[4].setOn()
+  assert(c.tracking[3].active == true and Mini.TrackDB().focus == true, "ticking Focus sets it and keeps the choice")
+  entries[3].setOn()
+  assert(c.tracking[2].active == false and Mini.TrackDB().target == false, "unticking Target")
+  -- show-all on: the game lists both itself; QuestBank adds nothing and sets nothing
+  c.cvars = { minimapTrackingShowAll = "1" }
+  entries = {}
+  c.menus.MENU_MINIMAP_TRACKING(nil, root)
+  assert(#entries == 0 and Mini.ApplyTracking() == false, "with show-all on QuestBank stays out of it")
+  c.cvars = nil
+  Mini.TrackDB().target, Mini.TrackDB().focus = true, nil
 end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
