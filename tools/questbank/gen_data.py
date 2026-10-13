@@ -1393,6 +1393,9 @@ T = {k: tex(v) for k, v in {
     "bar": "interface/targetingframe/ui-statusbar", "ready": "interface/raidframe/readycheck-ready",
     "notready": "interface/raidframe/readycheck-notready", "waiting": "interface/raidframe/readycheck-waiting",
     "ring": "interface/minimap/minimap-trackingborder", "questAvail": "interface/gossipframe/availablequesticon",
+    "sideNow": "interface/icons/inv_misc_map_01", "sideLog": "interface/icons/inv_misc_book_09", "sideAvail": "interface/icons/inv_scroll_03",
+    "sideRoute": "interface/icons/inv_misc_map02", "sideParty": "interface/icons/inv_misc_groupneedmore", "sideJournal": "interface/icons/inv_misc_key_11",
+    "sideSettings": "interface/icons/inv_misc_gear_01", "sideMap": "interface/icons/inv_misc_map09", "sideTimers": "interface/icons/inv_misc_pocketwatch_01",
     "questActive": "interface/gossipframe/activequesticon", "taxiY": "interface/taxiframe/ui-taxi-icon-yellow",
     "taxiG": "interface/taxiframe/ui-taxi-icon-green", "taxiGray": "interface/taxiframe/ui-taxi-icon-gray",
     "mapPin": "interface/worldmap/ui-worldmap-questicon", "book": "interface/questframe/ui-questlog-bookicon",
@@ -1413,6 +1416,21 @@ T.update({"hearth": icon("inv_misc_rune_01"), "mount": icon("ability_mount_ridin
           "party": icon("inv_misc_groupneedmore"), "rally": icon("ability_warrior_rallyingcry"), "letter": icon("inv_letter_15"),
           "note": icon("inv_misc_note_06"), "start": icon("inv_misc_coin_01")})
 lines.append("D.TEX = " + lua(T))
+# a zone card's art: the middle tile of the zone's own map (UiMapAssignment: area -> map; UiMapXMapArt and
+# UiMapArtTile: the map's tiles by row and column), as the dungeon cards carry the LFG background
+_AREA_MAP = {}
+for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "UiMapAssignment.csv"))):
+    if r["OrderIndex"] == "0" and r["AreaID"] not in ("0", ""): _AREA_MAP.setdefault(int(r["AreaID"]), int(r["UiMapID"]))
+_MAP_ART = {int(r["UiMapID"]): r["UiMapArtID"] for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "UiMapXMapArt.csv")))}
+_TILES = {}
+for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "UiMapArtTile.csv"))):
+    if r["LayerIndex"] == "0": _TILES[(r["UiMapArtID"], int(r["RowIndex"]), int(r["ColIndex"]))] = int(r["FileDataID"])
+for c in CATS:
+    if c["key"].startswith("z"):
+        m = _AREA_MAP.get(int(c["key"][1:]))
+        art = m and _MAP_ART.get(m)
+        tile = art and (_TILES.get((art, 1, 1)) or _TILES.get((art, 1, 2)) or _TILES.get((art, 0, 1)))
+        if tile: c["art"] = tile
 lines.append("D.CAT = {\n" + "\n".join("  " + lua(c) + "," for c in CATS) + "\n}")
 
 # The dungeons' maps (DungeonMap.lua): Blizzard's own floor art, which the client ships for every Classic dungeon and

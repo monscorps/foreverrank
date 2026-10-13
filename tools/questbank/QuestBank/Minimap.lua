@@ -156,11 +156,29 @@ local function line(i)
   if l then return l end
   local f = overlayFrame()
   if not f.CreateLine then return nil end
-  l = f:CreateLine(nil, "BACKGROUND")
+  l = f:CreateLine(nil, "BACKGROUND", nil, 1)
   l:SetTexture(ART .. "line.tga")
-  l:SetThickness(6)
-  l:SetVertexColor(0.62, 0.55, 1, 0.7)
+  l:SetThickness(9)
+  l:SetVertexColor(0.62, 0.55, 1, 0.9)
   l:SetBlendMode("ADD")
+  -- a wide, soft underlay makes it read as light on the ground, and a dot rounds each joint
+  l.under = f:CreateLine(nil, "BACKGROUND", nil, 0)
+  l.under:SetTexture(ART .. "line.tga")
+  l.under:SetThickness(22)
+  l.under:SetVertexColor(0.62, 0.55, 1, 0.28)
+  l.under:SetBlendMode("ADD")
+  l.dot = f:CreateTexture(nil, "BACKGROUND", nil, 2)
+  l.dot:SetTexture(ART .. "dot.tga")
+  l.dot:SetSize(10, 10)
+  l.dot:SetBlendMode("ADD")
+  l.SetLine = function(self, x1, y1, x2, y2, r, g, b, a)
+    self:SetVertexColor(r, g, b, a); self.under:SetVertexColor(r, g, b, a * 0.3); self.dot:SetVertexColor(r, g, b, a)
+    self:SetStartPoint("CENTER", f, x1, y1); self:SetEndPoint("CENTER", f, x2, y2)
+    self.under:SetStartPoint("CENTER", f, x1, y1); self.under:SetEndPoint("CENTER", f, x2, y2)
+    self.dot:ClearAllPoints(); self.dot:SetPoint("CENTER", f, "CENTER", x2, y2)
+    self:Show(); self.under:Show(); self.dot:Show()
+  end
+  l.HideAll = function(self) self:Hide(); self.under:Hide(); self.dot:Hide() end
   lines[i] = l
   return l
 end
@@ -245,7 +263,7 @@ function Mini.Place()
           if not (far1 and far2) then
             li = li + 1
             local l = line(li)
-            if l then l:SetVertexColor(1, 0.82, 0.3, 0.85); l:SetStartPoint("CENTER", f, x1, y1); l:SetEndPoint("CENTER", f, x2, y2); l:Show() end
+            if l then l:SetLine(x1, y1, x2, y2, 1, 0.82, 0.3, 0.95) end
           end
         end
         prev, num = first, 2 -- the straight line to stop 1 is replaced by the path
@@ -257,16 +275,13 @@ function Mini.Place()
         li = li + 1
         local l = line(li)
         if l then
-          l:SetVertexColor(num == 1 and 1 or 0.62, num == 1 and 0.82 or 0.55, num == 1 and 0.3 or 1, num == 1 and 0.85 or 0.6)
-          l:SetStartPoint("CENTER", f, prev.x, prev.y)
-          l:SetEndPoint("CENTER", f, pt.x, pt.y)
-          l:Show()
+          if num == 1 then l:SetLine(prev.x, prev.y, pt.x, pt.y, 1, 0.82, 0.3, 0.95) else l:SetLine(prev.x, prev.y, pt.x, pt.y, 0.62, 0.55, 1, 0.8) end
         end
       end
       prev, num = pt, num + 1
     end
   end
-  for i = li + 1, #lines do lines[i]:Hide() end
+  for i = li + 1, #lines do lines[i]:HideAll() end
   Mini.shown, Mini.linesShown = n, li
   Mini.DrawTrails(me, radius, R, facing, f)
 end
@@ -318,7 +333,7 @@ end
 
 function Mini.Clear()
   for _, p in ipairs(pins) do p:Hide() end
-  for _, l in ipairs(lines) do l:Hide() end
+  for _, l in ipairs(lines) do l:HideAll() end
   for _, l in ipairs(trailLines) do l:Hide() end
   Mini.shown, Mini.linesShown, Mini.trailsShown = 0, 0, 0
 end
@@ -339,12 +354,44 @@ function Mini.Big(on)
     Minimap:ClearAllPoints()
     Minimap:SetPoint("CENTER", UIParent, "CENTER", 0, 10)
     if Minimap.SetZoom then Minimap:SetZoom(0) end
+    -- the game's border pieces do not grow with the map: away while it is big, back after
+    saved.hidden = {}
+    for _, name in ipairs({ "MinimapBorder", "MinimapBorderTop", "MinimapCompassTexture", "MinimapBackdrop", "MinimapZoneTextButton",
+                            "MinimapToggleButton", "MinimapZoomIn", "MinimapZoomOut", "GameTimeFrame", "MiniMapTracking", "MiniMapMailFrame",
+                            "MiniMapWorldMapButton" }) do
+      local fr = _G[name]
+      if type(fr) == "table" and fr.IsShown and fr:IsShown() and fr.Hide then fr:Hide(); saved.hidden[#saved.hidden + 1] = fr end
+    end
+    for _, key in ipairs({ "BorderTop", "ZoneTextButton", "Tracking", "IndicatorFrame", "InstanceDifficulty", "MailFrame" }) do
+      local fr = MinimapCluster and MinimapCluster[key]
+      if type(fr) == "table" and fr.IsShown and fr:IsShown() and fr.Hide then fr:Hide(); saved.hidden[#saved.hidden + 1] = fr end
+    end
+    local ring = Mini.ring
+    if not ring then
+      ring = CreateFrame("Frame", "QuestBankBigMapRing", Minimap)
+      ring:SetFrameLevel((Minimap:GetFrameLevel() or 2) + 3)
+      ring.tex = ring:CreateTexture(nil, "OVERLAY")
+      ring.tex:SetAllPoints()
+      ring.tex:SetTexture(ART .. "border.tga")
+      ring.tex:SetVertexColor(0.85, 0.68, 0.3, 1)
+      ring.halo = ring:CreateTexture(nil, "BACKGROUND")
+      ring.halo:SetAllPoints()
+      ring.halo:SetTexture(ART .. "border.tga")
+      ring.halo:SetVertexColor(0, 0, 0, 0.9)
+      Mini.ring = ring
+    end
+    ring:ClearAllPoints()
+    ring:SetPoint("CENTER", Minimap, "CENTER")
+    ring:SetSize(size * 1.12, size * 1.12)
+    ring:Show()
     QB:Print("The big map is up. /qb bigmap puts the minimap back.")
   elseif not on and saved then
     Minimap:SetSize(saved.w, saved.h)
     Minimap:ClearAllPoints()
     if saved.pt[1] then Minimap:SetPoint(unpack(saved.pt)) end
     if Minimap.SetZoom then Minimap:SetZoom(saved.zoom) end
+    for _, fr in ipairs(saved.hidden or {}) do fr:Show() end
+    if Mini.ring then Mini.ring:Hide() end
     saved = nil
   end
   Mini.Place()

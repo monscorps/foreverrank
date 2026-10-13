@@ -10,20 +10,26 @@ local _, QB = ...
 local UI = {}
 QB.UI = UI
 
-local W, H = 800, 620
-local INK = { 0.20, 0.12, 0.05 }
-local INK_SOFT = { 0.40, 0.29, 0.16 }
-local GOOD = { 0.05, 0.40, 0.08 }
-local BAD = { 0.55, 0.12, 0.05 }
+local SIDE = 184                 -- the sidebar's width
+local W, H = SIDE + 8 + 828 + 14, 620
+local INK = { 0.93, 0.88, 0.78 }
+local INK_SOFT = { 0.66, 0.60, 0.50 }
+local GOOD = { 0.42, 0.86, 0.45 }
+local BAD = { 0.90, 0.38, 0.32 }
 local GOLD = { 1, 0.82, 0 }
+local GOLD_SOFT = { 0.78, 0.62, 0.3 }
 local WHITE = { 0.95, 0.93, 0.88 }
+local SLATE = { 0.055, 0.07, 0.095 }
+local SLATE2 = { 0.09, 0.11, 0.15 }
+local EDGE = "Interface\\DialogFrame\\UI-DialogBox-Border"
+local FLAT = "Interface\\Buttons\\WHITE8x8"
 local QUALITY = {
   { 0.62, 0.62, 0.62 }, { 1, 1, 1 }, { 0.12, 1, 0 }, { 0, 0.44, 0.87 }, { 0.64, 0.21, 0.93 }, { 1, 0.5, 0 },
 }
 local STATUS = {
-  done = { 0.45, 0.42, 0.38 }, banked = GOOD, active = { 0.60, 0.36, 0.0 }, partial = { 0.60, 0.36, 0.0 },
-  bagstart = { 0.60, 0.36, 0.0 }, item = INK_SOFT, locked = BAD, prereq = BAD, todo = INK_SOFT, follow = { 0.25, 0.25, 0.45 },
-  wrong = { 0.45, 0.42, 0.38 },
+  done = { 0.5, 0.5, 0.5 }, banked = GOOD, active = { 0.95, 0.72, 0.3 }, partial = { 0.95, 0.72, 0.3 },
+  bagstart = { 0.95, 0.72, 0.3 }, item = INK_SOFT, locked = BAD, prereq = BAD, todo = INK_SOFT, follow = { 0.55, 0.65, 0.95 },
+  wrong = { 0.5, 0.5, 0.5 },
 }
 local BD = BackdropTemplateMixin and "BackdropTemplate" or nil
 local T -- QB.Data.TEX
@@ -155,7 +161,7 @@ local function scrollArea(parent)
   sf:SetPoint("TOPLEFT", 6, -6)
   sf:SetPoint("BOTTOMRIGHT", -24, 6)
   local child = CreateFrame("Frame", nil, sf)
-  child:SetSize(W - 90, 10)
+  child:SetSize((W - SIDE - 22) - 58, 10)
   sf:SetScrollChild(child)
   local bar = CreateFrame("Slider", nil, parent)
   bar:SetOrientation("VERTICAL")
@@ -182,7 +188,7 @@ local function scrollArea(parent)
   function sf:SetContentHeight(h)
     child:SetHeight(math.max(h, 1))
     local view = self:GetHeight() or 0
-    if view < 100 then view = (H - 128 - 42) - 12 end -- not laid out yet: the content area less the insets
+    if view < 100 then view = (H - 138 - 14) - 12 end -- not laid out yet: the content area less the insets
     local max = math.max(0, h - view)
     bar:SetMinMaxValues(0, max)
     bar:SetShown(max > 0)
@@ -190,7 +196,7 @@ local function scrollArea(parent)
   end
   function sf:Width()
     local w = self:GetWidth() or 0
-    if w < 200 then w = W - 32 - 36 end
+    if w < 200 then w = (W - SIDE - 22) - 36 end
     return w
   end
   return sf
@@ -759,14 +765,23 @@ function UI:Create()
   end)
   f:SetScript("OnShow", function() UI:Refresh() end)
   f:Hide()
-  backdrop(f, T.bg, T.border, 32, 11, true)
+  backdrop(f, FLAT, EDGE, 24, 7)
+  if f.SetBackdropColor then f:SetBackdropColor(SLATE[1], SLATE[2], SLATE[3], 0.97) end
   if UISpecialFrames then table.insert(UISpecialFrames, "QuestBankFrame") end
-
-  local plate = tex(f, "ARTWORK", T.header, 320, 64)
-  plate:SetPoint("TOP", 0, 12)
-  local title = text(f, "GameFontNormalLarge", 15, GOLD, "CENTER", 200)
-  title:SetPoint("TOP", plate, "TOP", 0, -14)
-  title:SetText("QuestBank")
+  -- the top strip: the name in Blizzard's own face, a gold hairline under it
+  local strip = tex(f, "BACKGROUND", FLAT)
+  strip:SetPoint("TOPLEFT", 8, -8)
+  strip:SetPoint("TOPRIGHT", -8, -8)
+  strip:SetHeight(26)
+  strip:SetVertexColor(0.12, 0.15, 0.2, 0.9)
+  local hair = tex(f, "BACKGROUND", FLAT)
+  hair:SetPoint("TOPLEFT", 8, -34)
+  hair:SetPoint("TOPRIGHT", -8, -34)
+  hair:SetHeight(1)
+  hair:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 0.35)
+  local title = text(f, "GameFontNormalLarge", 15, GOLD, "LEFT", 200)
+  title:SetPoint("TOPLEFT", 20, -13)
+  title:SetText("QUESTBANK")
   local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", -5, -5)
 
@@ -778,21 +793,21 @@ function UI:Create()
 end
 
 -- header: portrait, name, the XP bar from 20 to 30, four switches
-local BAR_X, BAR_W = 92, 400
+local BAR_X, BAR_W = SIDE + 88, 400
 function UI:CreateHeader(f)
   local h = {}
   self.header = h
   h.portrait = tex(f, "ARTWORK", nil, 58, 58)
-  h.portrait:SetPoint("TOPLEFT", 22, -34)
+  h.portrait:SetPoint("TOPLEFT", SIDE + 18, -44)
   h.name = text(f, "GameFontNormalLarge", 16, GOLD, "LEFT", BAR_W)
-  h.name:SetPoint("TOPLEFT", BAR_X, -34)
+  h.name:SetPoint("TOPLEFT", BAR_X, -44)
   h.sub = text(f, "GameFontHighlightSmall", 11, WHITE, "LEFT", BAR_W)
-  h.sub:SetPoint("TOPLEFT", BAR_X, -54)
+  h.sub:SetPoint("TOPLEFT", BAR_X, -64)
   h.legend = text(f, "GameFontHighlightSmall", 11, WHITE, "LEFT", BAR_W)
-  h.legend:SetPoint("TOPLEFT", BAR_X, -70)
+  h.legend:SetPoint("TOPLEFT", BAR_X, -80)
 
   local bar = CreateFrame("Frame", nil, f, BD)
-  bar:SetPoint("TOPLEFT", BAR_X - 4, -86)
+  bar:SetPoint("TOPLEFT", BAR_X - 4, -96)
   bar:SetSize(BAR_W + 8, 22)
   backdrop(bar, T.tipBg, T.tipBorder, 10, 2)
   if bar.SetBackdropColor then bar:SetBackdropColor(0, 0, 0, 0.75) end
@@ -919,12 +934,11 @@ end
 
 function UI:CreateContent(f)
   local c = CreateFrame("Frame", nil, f, BD)
-  c:SetPoint("TOPLEFT", 16, -128)
-  c:SetPoint("BOTTOMRIGHT", -16, 42)
-  backdrop(c, nil, T.tipBorder, 14, 3)
-  local parch = tex(c, "BACKGROUND", T.parchH)
-  parch:SetPoint("TOPLEFT", 4, -4)
-  parch:SetPoint("BOTTOMRIGHT", -4, 4)
+  c:SetPoint("TOPLEFT", SIDE + 8, -138)
+  c:SetPoint("BOTTOMRIGHT", -14, 14)
+  backdrop(c, FLAT, T.tipBorder, 12, 3)
+  if c.SetBackdropColor then c:SetBackdropColor(SLATE2[1], SLATE2[2], SLATE2[3], 0.92) end
+  if c.SetBackdropBorderColor then c:SetBackdropBorderColor(0.45, 0.36, 0.2, 0.9) end
   self.content = c
   self.views = {
     self:CreateLogView(c),
@@ -932,45 +946,81 @@ function UI:CreateContent(f)
     self:CreateRouteView(c),
     self:CreatePartyView(c),
     self:CreateSettingsView(c),
+    self:CreatePrepView(c, true), -- Now: the three places worth going to from where you stand
   }
 end
 
+-- the sidebar: the pages in groups, each with its icon and a count where one helps; Dungeon Journal and the big
+-- map are actions, not pages. UI.tabs[i] is page i's button, as the tab bar had them
+local SIDEBAR = {
+  { group = "Questing" },
+  { tab = 6, name = "Now", icon = "sideNow" },
+  { tab = 1, name = "Quest Log", icon = "sideLog", count = function() return QB.state.logCount or 0 end },
+  { tab = 2, name = "Available", icon = "sideAvail" },
+  { tab = 3, name = "Hand-in Route", icon = "sideRoute" },
+  { group = "Together" },
+  { tab = 4, name = "Party", icon = "sideParty", count = function() return QB.Sync and #(QB.Sync:Members() or {}) or 0 end },
+  { group = "World" },
+  { act = function() if QB.DMap then QB.DMap.Command("") end end, name = "Dungeon Journal", icon = "sideJournal" },
+  { act = function() if QB.Mini then QB.Mini.Big() end end, name = "Big map", icon = "sideMap" },
+  { group = "QuestBank" },
+  { tab = 5, name = "Settings", icon = "sideSettings" },
+}
 function UI:CreateTabs(f)
   self.tabs = {}
-  local names = { "Quest Log", "Available", "Hand-in Route", "Party", "Settings" }
-  local x = 20
-  for i, name in ipairs(names) do
-    local b = CreateFrame("Button", nil, f)
-    local w = 118
-    b:SetSize(w, 32)
-    b:SetPoint("TOPLEFT", self.content, "BOTTOMLEFT", x, 2)
-    x = x + w + 2
-    local function piece(file, w2, l, r, bottom, h2)
-      local t = tex(b, "BACKGROUND", file)
-      t:SetSize(w2, h2)
-      t:SetTexCoord(l, r, 0, bottom)
-      return t
+  local side = CreateFrame("Frame", nil, f)
+  side:SetPoint("TOPLEFT", 10, -40)
+  side:SetPoint("BOTTOMLEFT", 10, 14)
+  side:SetWidth(SIDE - 8)
+  local rule = tex(side, "BACKGROUND", FLAT)
+  rule:SetPoint("TOPRIGHT", 0, 0)
+  rule:SetPoint("BOTTOMRIGHT", 0, 0)
+  rule:SetWidth(1)
+  rule:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 0.25)
+  self.sidebar = side
+  self.sideButtons = {}
+  local y = 4
+  for _, e in ipairs(SIDEBAR) do
+    if e.group then
+      local g = text(side, "GameFontNormalSmall", 10, GOLD_SOFT, "LEFT", SIDE - 30)
+      g:SetPoint("TOPLEFT", 10, -y - 6)
+      g:SetText(string.upper(e.group))
+      y = y + 22
+    else
+      local b = CreateFrame("Button", nil, side)
+      b:SetSize(SIDE - 20, 30)
+      b:SetPoint("TOPLEFT", 4, -y)
+      b.on = tex(b, "BACKGROUND", FLAT)
+      b.on:SetAllPoints()
+      b.on:SetVertexColor(0.25, 0.2, 0.1, 0.9)
+      b.on:Hide()
+      b.bar = tex(b, "ARTWORK", FLAT)
+      b.bar:SetPoint("TOPLEFT", 0, 0)
+      b.bar:SetPoint("BOTTOMLEFT", 0, 0)
+      b.bar:SetWidth(3)
+      b.bar:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 1)
+      b.bar:Hide()
+      local hi = tex(b, "HIGHLIGHT", FLAT)
+      hi:SetAllPoints()
+      hi:SetVertexColor(1, 0.82, 0.3, 0.08)
+      b.icon = tex(b, "ARTWORK", T[e.icon], 20, 20)
+      b.icon:SetPoint("LEFT", 8, 0)
+      b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+      b.label = text(b, "GameFontNormal", 12, INK, "LEFT", SIDE - 76)
+      b.label:SetPoint("LEFT", 36, 0)
+      b.label:SetText(e.name)
+      b.count = text(b, "GameFontNormalSmall", 10, INK_SOFT, "RIGHT", 28)
+      b.count:SetPoint("RIGHT", -8, 0)
+      b.entry = e
+      if e.tab then
+        b:SetScript("OnClick", function() UI:ShowTab(e.tab) end)
+        self.tabs[e.tab] = b
+      else
+        b:SetScript("OnClick", QB.Safe(function() e.act() end, "sidebar"))
+      end
+      self.sideButtons[#self.sideButtons + 1] = b
+      y = y + 32
     end
-    b.onL = piece(T.tabOn, 20, 0, 0.15625, 0.546875, 35)
-    b.onR = piece(T.tabOn, 20, 0.84375, 1, 0.546875, 35)
-    b.onM = piece(T.tabOn, w - 40, 0.15625, 0.84375, 0.546875, 35)
-    b.offL = piece(T.tabOff, 20, 0, 0.15625, 1, 32)
-    b.offR = piece(T.tabOff, 20, 0.84375, 1, 1, 32)
-    b.offM = piece(T.tabOff, w - 40, 0.15625, 0.84375, 1, 32)
-    for _, set in ipairs({ { b.onL, b.onM, b.onR, 3 }, { b.offL, b.offM, b.offR, 0 } }) do
-      set[1]:SetPoint("TOPLEFT", 0, set[4])
-      set[2]:SetPoint("TOPLEFT", set[1], "TOPRIGHT")
-      set[3]:SetPoint("TOPLEFT", set[2], "TOPRIGHT")
-    end
-    local hi = tex(b, "HIGHLIGHT", T.tabHi)
-    hi:SetPoint("TOPLEFT", 6, -2)
-    hi:SetPoint("BOTTOMRIGHT", -6, 6)
-    hi:SetBlendMode("ADD")
-    b.label = text(b, "GameFontNormalSmall", 12, GOLD, "CENTER", w - 16)
-    b.label:SetPoint("CENTER", 0, 2)
-    b.label:SetText(name)
-    b:SetScript("OnClick", function() UI:ShowTab(i) end)
-    self.tabs[i] = b
   end
 end
 
@@ -1036,11 +1086,10 @@ function UI:ShowTab(i)
   QB:Settings().tab = i
   self.tab = i
   for k, v in ipairs(self.views) do v:SetShown(k == i) end
-  for k, b in ipairs(self.tabs) do
+  for k, b in pairs(self.tabs) do
     local on = k == i
-    for _, t in ipairs({ b.onL, b.onM, b.onR }) do t:SetShown(on) end
-    for _, t in ipairs({ b.offL, b.offM, b.offR }) do t:SetShown(not on) end
-    b.label:SetTextColor(on and 1 or GOLD[1], on and 1 or GOLD[2], on and 1 or GOLD[3])
+    b.on:SetShown(on); b.bar:SetShown(on)
+    b.label:SetTextColor(on and GOLD[1] or INK[1], on and GOLD[2] or INK[2], on and GOLD[3] or INK[3])
   end
   if self.frame and self.frame:IsShown() then self:Refresh() end
 end
@@ -1063,6 +1112,10 @@ local refresh
 function UI:Refresh() QB.Try("window", refresh, self) end
 refresh = function(self)
   if not (self.frame and self.frame:IsShown()) then return end
+  for _, b in ipairs(self.sideButtons or {}) do
+    local n = b.entry.count and b.entry.count() or 0
+    b.count:SetText(n > 0 and tostring(n) or "")
+  end
   if not QB.fresh then QB:Recompute() end
   self:RefreshHeader()
   local v = self.views[self.tab or 1]
@@ -1857,12 +1910,21 @@ local function makeRow(parent)
   r.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
   r.name = text(r, "GameFontNormal", 12, INK, "LEFT", 270)
   r.name:SetPoint("LEFT", 46, 0)
+  -- what the quest gives, as the journal shows it: up to three item icons (the tooltip names them)
+  r.rw = {}
+  for i = 1, 3 do
+    local t = tex(r, "ARTWORK", nil, 16, 16)
+    t:SetPoint("LEFT", 318 + (i - 1) * 18, 0)
+    t:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    t:Hide()
+    r.rw[i] = t
+  end
   r.up = upgradeMark(r, 10, 11)
-  r.up:SetPoint("LEFT", 320, 0)
+  r.up:SetPoint("LEFT", 376, 0)
   r.lvl = text(r, "GameFontNormalSmall", 10, INK_SOFT, "LEFT", 30)
-  r.lvl:SetPoint("LEFT", 340, 0)
+  r.lvl:SetPoint("LEFT", 396, 0)
   r.status = text(r, "GameFontNormalSmall", 11, INK, "LEFT", 250)
-  r.status:SetPoint("LEFT", 392, 0)
+  r.status:SetPoint("LEFT", 450, 0)
   r.away = text(r, "GameFontNormalSmall", 11, INK_SOFT, "RIGHT", 40)
   r.away:SetPoint("RIGHT", -72, 0)
   r.xp = text(r, "GameFontNormal", 12, INK, "RIGHT", 60)
@@ -1870,8 +1932,8 @@ local function makeRow(parent)
   -- a chain: open it to see every step, done, held, next and later
   r.chain = CreateFrame("Button", nil, r)
   r.chain:SetSize(16, 16)
-  r.chain:SetPoint("LEFT", 372, 0)
-  r.chain.label = text(r.chain, "GameFontNormalSmall", 11, { 0.45, 0.25, 0.05 }, "CENTER", 16)
+  r.chain:SetPoint("LEFT", 430, 0)
+  r.chain.label = text(r.chain, "GameFontNormalSmall", 11, GOLD_SOFT, "CENTER", 16)
   r.chain.label:SetPoint("CENTER", 0, 0)
   r.chain:SetScript("OnClick", QB.Safe(function(self)
     local row = self:GetParent()
@@ -1955,7 +2017,7 @@ local function makeCard(parent)
   c.rows = pool(c, makeRow)
   c.more = CreateFrame("Button", nil, c)
   c.more:SetSize(400, 18)
-  c.more.label = text(c.more, "GameFontNormalSmall", 11, { 0.45, 0.25, 0.05 }, "LEFT", 400)
+  c.more.label = text(c.more, "GameFontNormalSmall", 11, GOLD_SOFT, "LEFT", 400)
   c.more.label:SetPoint("LEFT", 0, 0)
   c.more:SetScript("OnClick", function(self)
     UI.expanded = UI.expanded or {}
@@ -1969,6 +2031,27 @@ end
 -- one in your log, the yellow ! for one you can pick up (chosen or not), a red X for one you cut
 local MARK = { banked = "ready", active = "waiting", partial = "waiting", bagstart = "waiting" }
 STATUS.pickup = { 0.25, 0.25, 0.45 }
+
+-- the quest's reward items as icons (D.RITEMS: choose one of c, always r, u unknown), the client's icon when it has
+-- one, asked of the server when not
+local function itemIcon(id)
+  local CI = C_Item
+  if CI and CI.GetItemIconByID then local ok, i = pcall(CI.GetItemIconByID, id); if ok and i then return i end end
+  if GetItemInfoInstant then local ok, _, _, _, _, i = pcall(GetItemInfoInstant, id); if ok and i then return i end end
+  if CI and CI.RequestLoadItemDataByID then pcall(CI.RequestLoadItemDataByID, id) end
+  return nil
+end
+function UI.RewardIcons(r, q)
+  if not r.rw then return end
+  local R = QB.Data.RITEMS and QB.Data.RITEMS[q.id]
+  local ids = {}
+  for _, key in ipairs({ "c", "r", "u" }) do for _, id in ipairs(R and R[key] or {}) do ids[#ids + 1] = id end end
+  for i = 1, 3 do
+    local id = ids[i]
+    local icon = id and itemIcon(id)
+    if icon then r.rw[i]:SetTexture(icon); r.rw[i]:Show() else r.rw[i]:Hide() end
+  end
+end
 
 -- it = { q, st, value, held, chosen, cut, mins, sub (a step shown under its chain), together (names) }
 local function fillRow(r, it, width)
@@ -2004,7 +2087,8 @@ local function fillRow(r, it, width)
   -- a chain's row says what its steps cost; the minutes to its giver would only crowd that out
   if st.code == "prereq" then awayText = "" end
   -- the minutes column takes room from the status only when it has something to say
-  r.status:SetWidth(math.max(120, width - 392 - 76 - (awayText ~= "" and 48 or 0)))
+  r.status:SetWidth(math.max(100, width - 450 - 76 - (awayText ~= "" and 48 or 0)))
+  UI.RewardIcons(r, q)
   local status, color = st.text, STATUS[st.code] or INK
   if chosen and not st.behind then
     if st.code == "todo" or st.code == "item" then status, color = "To pick up", STATUS.pickup
@@ -2099,15 +2183,36 @@ function UI.Together(items)
   end
 end
 
-function UI:CreatePrepView(parent)
+function UI:CreatePrepView(parent, now)
   local v = CreateFrame("Frame", nil, parent)
   v:SetAllPoints()
+  v.now = now or false
   v.scroll = scrollArea(v)
   local child = v.scroll.child
   v.intro = text(child, "GameFontNormal", 12, INK_SOFT, "LEFT", 470)
   v.intro:SetPoint("TOPLEFT", 4, -4)
   v.introR = text(child, "GameFontNormal", 12, INK_SOFT, "RIGHT", 200)
   v.introR:SetPoint("TOPLEFT", 486, -4)
+  if not now then
+    -- one-click filters: all, dungeons, chains, gear, near me
+    v.chips = {}
+    local CHIPS = { { nil, "All" }, { "dungeon", "Dungeons" }, { "chain", "Chains" }, { "gear", "Gear" }, { "near", "Near me" } }
+    local x = 4
+    for i, ch in ipairs(CHIPS) do
+      local b = CreateFrame("Button", nil, child, BD)
+      local w = 20 + #ch[2] * 7
+      b:SetSize(w, 20)
+      b:SetPoint("TOPLEFT", x, -24)
+      backdrop(b, FLAT, T.tipBorder, 8, 2)
+      b.label = text(b, "GameFontNormalSmall", 11, INK, "CENTER", w - 8)
+      b.label:SetPoint("CENTER")
+      b.label:SetText(ch[2])
+      b.key = ch[1]
+      b:SetScript("OnClick", function(self) UI.availFilter = self.key; UI:Refresh() end)
+      v.chips[i] = b
+      x = x + w + 6
+    end
+  end
   v.cards = pool(child, makeCard)
   v.foot = text(child, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 660)
   v.foot:Hide()
@@ -2215,6 +2320,17 @@ function UI:RefreshPrepView(v)
   -- what is near); banking: the richest place first, what you hold plus what you could fetch
   for _, g in ipairs(order) do g.band = g.lvlN > 0 and g.lvlSum / g.lvlN or 99 end
   table.sort(order, function(a, b)
+    if v.now then
+      -- where to go now: what you hold and could fetch there, the near places up, skipped ones down
+      local set = QB:Settings()
+      local sa = (set.skipCat[a.cat.key] or (a.cat.cont ~= nil and set.skipCont[a.cat.cont])) and 1 or 0
+      local sb = (set.skipCat[b.cat.key] or (b.cat.cont ~= nil and set.skipCont[b.cat.cont])) and 1 or 0
+      if sa ~= sb then return sa < sb end
+      local na, nb = a.nearest or 60, b.nearest or 60
+      local ka, kb = (a.left + a.avail) / (1 + na / 20), (b.left + b.avail) / (1 + nb / 20)
+      if ka ~= kb then return ka > kb end
+      return a.score > b.score
+    end
     if not banking then
       if math.abs(a.band - b.band) >= 0.5 then return a.band < b.band end
       return (a.cat.name or "") < (b.cat.name or "")
@@ -2229,21 +2345,50 @@ function UI:RefreshPrepView(v)
   local picksAll, openAll = 0, 0
   for _, g in ipairs(order) do picksAll, openAll = picksAll + g.picks, openAll + g.open end
   local order_word = banking and "richest place first" or "zone by zone from the lowest"
-  v.intro:SetText(hubName and string.format("Level %d to %d, %s. Minutes from %s.", level - below, level + above, order_word, hubName)
-    or string.format("Level %d to %d, %s.", level - below, level + above, order_word))
-  v.introR:SetText(string.format("%d available" .. (picksAll > 0 and " · %d to pick up" or ""), openAll, picksAll))
+  if v.now then
+    v.intro:SetText(hubName and string.format("Where next, from %s: the three places worth your time.", hubName) or "Where next: the three places worth your time.")
+    v.introR:SetText(string.format("%d available", openAll))
+  else
+    v.intro:SetText(hubName and string.format("Level %d to %d, %s. Minutes from %s.", level - below, level + above, order_word, hubName)
+      or string.format("Level %d to %d, %s.", level - below, level + above, order_word))
+    v.introR:SetText(string.format("%d available" .. (picksAll > 0 and " · %d to pick up" or ""), openAll, picksAll))
+  end
 
-  local y = 24
+  local y = v.now and 24 or 50
+  local filter = (not v.now) and UI.availFilter or nil
+  for _, b in ipairs(v.chips or {}) do
+    local on = b.key == filter
+    if b.SetBackdropColor then b:SetBackdropColor(on and 0.6 or 0.12, on and 0.45 or 0.14, on and 0.15 or 0.19, 0.95) end
+    b.label:SetTextColor(on and 1 or INK[1], on and 0.95 or INK[2], on and 0.7 or INK[3])
+  end
+  local R = QB.Data.REWARD or {}
+  local function rowPasses(it)
+    if filter == "chain" then return it.q.pre ~= nil or (it.q.nextSteps ~= nil and #it.q.nextSteps > 0) end
+    if filter == "gear" then local r = R[it.q.id]; return r ~= nil and (r[1] or 0) > 0 end
+    return true
+  end
+  local function groupPasses(g)
+    if filter == "dungeon" and not g.cat.dungeon then return false end
+    if filter == "near" and not (g.nearest and g.nearest <= 12) then return false end
+    if filter == "chain" or filter == "gear" then
+      for _, it in ipairs(g.quests) do if it.grp ~= 6 and rowPasses(it) then return true end end
+      return false
+    end
+    return true
+  end
   local function place(card, h)
     card:ClearAllPoints()
     card:SetPoint("TOPLEFT", v.scroll.child, "TOPLEFT", 0, -y)
     card:SetSize(width, h)
     y = y + h + 8
   end
+  local artH = v.now and 78 or 42
   local function header(c, art, icon, title, where, gain, count)
     c.rows:Reset()
+    c.art:SetHeight(artH)
     if type(art) == "table" then c.art:SetColorTexture(art[1], art[2], art[3], 1); c.art:SetTexCoord(0, 1, 0, 1)
-    else c.art:SetTexture(art); c.art:SetTexCoord(0, 1, 0.18, 0.5) end
+    elseif c.art.__tile then c.art:SetTexture(art); c.art:SetTexCoord(0, 1, 0.25, v.now and 0.75 or 0.5)
+    else c.art:SetTexture(art); c.art:SetTexCoord(0, 1, 0.18, v.now and 0.7 or 0.5) end
     c.icon:SetTexture(icon)
     c.title:SetText(title)
     c.where:SetText(where)
@@ -2278,12 +2423,12 @@ function UI:RefreshPrepView(v)
 
   local shownCards = 0
   -- every place you hold or chose quests in gets a card, wherever it sorts; places with nothing of yours stop
-  -- after the 14 richest
+  -- after the 14 richest. Now: the three that sort first, whatever they are
   local fetchOnly = 0
   for _, g in ipairs(order) do
     local mine = g.held + g.picks > 0
     if not mine then fetchOnly = fetchOnly + 1 end
-    if mine or fetchOnly <= 14 then
+    if ((v.now and shownCards < 3) or (not v.now and (mine or fetchOnly <= 14))) and groupPasses(g) then
       local c = v.cards:Get()
       shownCards = shownCards + 1
       local a = g.cat
@@ -2295,7 +2440,8 @@ function UI:RefreshPrepView(v)
       local where
       if a.dungeon then where = (a.where ~= "" and a.where or "Dungeon") .. minsText .. ". Bring a group."
       else where = (a.where ~= "" and a.where or "") .. minsText end
-      header(c, a.bg or { 0.16, 0.12, 0.08 }, a.icon, a.name, where,
+      c.art.__tile = (not a.bg and a.art) and true or false
+      header(c, a.bg or a.art or { 0.16, 0.12, 0.08 }, a.icon, a.name, where,
         worth > 0 and ("+" .. QB.Comma(worth)) or (g.held > 0 and (banking and "All banked" or "All ready") or ""), "")
       c.count:SetText(countLine(c, g))
       if g.held > 0 and g.left == 0 and g.fetch == 0 and g.picks == 0 then c.gain:SetTextColor(0.4, 0.9, 0.4) end
@@ -2319,12 +2465,12 @@ function UI:RefreshPrepView(v)
       end)
       UI.Together(g.quests)
       c.band = g.band
-      local ry = 50
+      local ry = artH + 8
       local extra, hidden = 0, 0
       local open = UI.expanded and UI.expanded[a.key]
       for _, it in ipairs(g.quests) do
         local show = false
-        if it.grp == 6 then show = false
+        if it.grp == 6 or not rowPasses(it) then show = false
         elseif it.grp == 1 or it.grp == 3 then show = true
         else
           show = open or extra < PER_CARD
@@ -2361,8 +2507,8 @@ function UI:RefreshPrepView(v)
     end
   end
 
-  -- the sleeping bag chain, last, while you don't have the bag
-  if QB.API.ItemCount(211527) == 0 then
+  -- the sleeping bag chain, last, while you don't have the bag (not under a filter, not on Now)
+  if QB.API.ItemCount(211527) == 0 and not filter and not v.now then
     local c = v.cards:Get()
     shownCards = shownCards + 1
     local steps, doneSteps = #D.SLEEP_CHAIN, 0
@@ -2553,7 +2699,7 @@ function UI:CreateRouteView(parent)
   end)
   v.summary = text(v, "GameFontNormal", 12, INK, "RIGHT", 336)
   v.summary:SetPoint("TOPRIGHT", -184, -14)
-  v.setup = para(v, "GameFontNormal", 12, INK, W - 64)
+  v.setup = para(v, "GameFontNormal", 12, INK, (W - SIDE - 22) - 48)
   v.setup:SetPoint("TOPLEFT", 16, -40)
   v.setup:SetHeight(30)
   local holder = CreateFrame("Frame", nil, v)
@@ -2603,7 +2749,7 @@ function UI:RefreshRouteView(v)
   v.modeNow:SetText(banking and "Banked now" or "Ready now")
   v.run:SetText(run and "End run" or "Start run")
   local width = v.scroll:Width() - 6
-  local busy = QB.Model.Busy() and "  |cff8a6a3aplanning...|r" or ""
+  local busy = QB.Model.Busy() and "  |cffc9a24aplanning...|r" or ""
   if banking then
     v.summary:SetText(string.format("%s XP  |  level %.2f  |  %d min  |  at 60 min %.2f%s",
       QB.Comma(r.xp or 0), r.level or 0, math.floor((r.t or 0) + 0.5), r.at60 or 0, busy))
@@ -2617,21 +2763,21 @@ function UI:RefreshRouteView(v)
   if run then
     local got, n = QB.Run.Totals()
     local pace = QB.Run.Pace()
-    line = string.format("Run %s.  %d handed in, |cff0a6a0a+%s XP|r.", QB.Clock(QB.Run.Elapsed()), n, QB.Comma(got))
+    line = string.format("Run %s.  %d handed in, |cff6cdc74+%s XP|r.", QB.Clock(QB.Run.Elapsed()), n, QB.Comma(got))
     if pace then
       if math.abs(pace) < 1 then line = line .. "  On pace."
       elseif pace > 0 then line = line .. string.format("  %.0f min ahead of the plan.", pace)
-      else line = line .. string.format("  |cffa0400a%.0f min behind the plan.|r", -pace) end
+      else line = line .. string.format("  |cffe05a4a%.0f min behind the plan.|r", -pace) end
     end
-    if r.legs[1] then line = line .. "  Next: |cff7a2e0a" .. r.legs[1].stop.name .. "|r." end
+    if r.legs[1] then line = line .. "  Next: |cffe8c35a" .. r.legs[1].stop.name .. "|r." end
   elseif not banking then
-    line = r.legs and r.legs[1] and ("From where you stand. First stop: |cff7a2e0a" .. r.legs[1].stop.name .. "|r.")
+    line = r.legs and r.legs[1] and ("From where you stand. First stop: |cffe8c35a" .. r.legs[1].stop.name .. "|r.")
       or (mode == "now" and "Nothing in your log is ready to hand in yet." or "Nothing on your pick-up list yet. The ! on a quest on Available puts it there, and the route takes it in.")
   elseif r.legs and r.legs[1] then
-    line = (QB.mode == "rush" and "Start at |cff7a2e0a" or "Log out at |cff7a2e0a") .. r.legs[1].stop.name .. "|r."
+    line = (QB.mode == "rush" and "Start at |cffe8c35a" or "Log out at |cffe8c35a") .. r.legs[1].stop.name .. "|r."
     if r.bind then
       local bind = QB.API.BindName()
-      line = line .. " Bind your hearthstone in |cff7a2e0a" .. r.bind.town .. "|r"
+      line = line .. " Bind your hearthstone in |cffe8c35a" .. r.bind.town .. "|r"
       if bind ~= "" and not (bind:find(r.bind.town, 1, true) or r.bind.town:find(bind, 1, true)) then line = line .. " (it is set to " .. bind .. ")" end
       line = line .. "."
     end
@@ -2710,7 +2856,7 @@ function UI:RefreshRouteView(v)
       if kind == "hearth" and leg.inn then label = label .. " to " .. QB.Data.HUB[r.fac][leg.inn][1] end
     end
     l.travel:SetText(label)
-    local here = mapID and mapID == s.m and "  |cff0a6a0ayou are here|r" or ""
+    local here = mapID and mapID == s.m and "  |cff6cdc74you are here|r" or ""
     l.name:SetText(s.name .. here)
     l.level:SetText(string.format("level %.1f > %.1f", leg.arrive, leg.leave))
     l.pin.stop = s
@@ -2732,8 +2878,8 @@ function UI:RefreshRouteView(v)
       rr.name:SetTextColor(c[1], c[2], c[3])
       rr.npc:SetText(row.q.turn and row.q.turn.n or "")
       local xpText = QB.Comma(row.xp)
-      if row.blocked then xpText = "|cffa0400aafter its first step|r"
-      elseif row.pct < 100 then xpText = string.format("|cffa0400a%d%%|r  %s", row.pct, xpText) end
+      if row.blocked then xpText = "|cffe05a4aafter its first step|r"
+      elseif row.pct < 100 then xpText = string.format("|cffe05a4a%d%%|r  %s", row.pct, xpText) end
       rr.xp:SetText(xpText)
       ry = ry + 20
     end
@@ -3058,7 +3204,7 @@ function UI:RefreshPartyView(v)
         r.who:SetWidth(width - 36)
         r.q, r.e = e.q, e
         setIcon(r.icon, e.q.icon)
-        r.name:SetText(string.format("%s  |cff6b4d28L%d|r", e.q.name, e.q.lvl))
+        r.name:SetText(string.format("%s  |cff9a8a70L%d|r", e.q.name, e.q.lvl))
         r.who:SetText(whoText(e))
         ry = ry + 32
       end
@@ -3432,7 +3578,7 @@ function UI:RefreshSettingsView(v)
   v.minimap:SetChecked(not (set.minimap and set.minimap.hide))
   v.arrow:SetChecked(set.arrow and true or false)
   local newest = QB.newest
-  v.verText:SetText(newest and string.format("You run QuestBank %s. |cff0a6a0a%s runs %s: time to update.|r", QB.version, newest.who or "Someone", newest.version)
+  v.verText:SetText(newest and string.format("You run QuestBank %s. |cff6cdc74%s runs %s: time to update.|r", QB.version, newest.who or "Someone", newest.version)
     or string.format("You run QuestBank %s, the newest anyone on the realm has shown.", QB.version))
   v.updates:SetChecked(set.updates and true or false)
   local nq, nn, nc = QB.Discover.Count()

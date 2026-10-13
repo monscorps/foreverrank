@@ -3449,6 +3449,22 @@ do
   U.candMemo = nil
   U:ShowTab(2); QB.Model.Finish(); U:Refresh()
   assert(U.tabs[2].label:GetText() == "Available", "the tab is called Available")
+  -- 5.0: the chips narrow the cards, and a row shows what its quest gives
+  do
+    local v2 = U.views[2]
+    assert(v2.chips and #v2.chips == 5 and v2.chips[2].label:GetText() == "Dungeons", "five chips")
+    v2.chips[2].__scripts.OnClick(v2.chips[2])
+    local shownC, dng = 0, 0
+    for _, card in ipairs(v2.cards.items) do if card:IsShown() then shownC = shownC + 1; if card.skip.key and card.skip.key:sub(1, 1) == "d" then dng = dng + 1 end end end
+    assert(shownC > 0 and dng == shownC, "Dungeons: every card is a dungeon: " .. dng .. " of " .. shownC)
+    v2.chips[1].__scripts.OnClick(v2.chips[1])
+    assert(U.availFilter == nil, "All again")
+    local withIcons = 0
+    for _, card in ipairs(v2.cards.items) do
+      if card:IsShown() then for _, r in ipairs(card.rows.items) do if r:IsShown() and r.rw and r.rw[1]:IsShown() then withIcons = withIcons + 1 end end end
+    end
+    assert(withIcons > 0, "rows with reward icons: " .. withIcons)
+  end
   local v2 = U.views[2]
   assert(v2.intro:GetText():find("^Level %d+ to %d+, "), "the intro names the level window and the order: " .. tostring(v2.intro:GetText()))
   local todoRow, heldRow

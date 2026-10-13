@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "4.1.0"
+QB.version = "5.0.0"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's escort prompt has said 25: see QB.EscortLimit)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -989,7 +989,7 @@ QB.WindowXP = windowXP
 -- settings: account-wide switches, and one plan per character
 ----------------------------------------------------------------------------
 local DEFAULTS = {
-  mounted = "auto", goal = "hour", routeMode = "now", tab = 1, pins = true,
+  mounted = "auto", goal = "hour", routeMode = "now", tab = 6, pins = true,
   minimap = { angle = 205, hide = false }, share = { party = true, guild = true },
   post = { party = true, guild = true, auto = true }, updates = true,
   -- how far above and below your level suggestions reach ("auto": 12 above while banking, 4 while
