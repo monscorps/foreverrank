@@ -554,3 +554,111 @@ function S:Init()
   end, "version notice")
   C_Timer.After(600, vbeat)
 end
+
+----------------------------------------------------------------------------
+-- the party as the game sees it, with or without QuestBank on the other side: who is here, how far, what they lack
+-- of your quests, and the share itself (the game's own push, one quest every second and a half so the prompts
+-- do not pile up). A quest is shareable when the client says so (C_QuestLog.IsPushableQuest).
+----------------------------------------------------------------------------
+local SHARE_GAP = 1.5
+
+-- { { unit, name, class (file name), level, me = true for you, pos = { c, wx, wy } or nil }, ... }, you first
+function S.GroupUnits()
+  local out = {}
+  local function add(unit, me)
+    if not (UnitExists and QB.Plain(UnitExists(unit)) == true) then return end
+    local name = QB.Plain(UnitName and UnitName(unit))
+    local _, class = nil, nil
+    if UnitClass then local okC, a, b = pcall(UnitClass, unit); if okC then _, class = QB.Plain(a), QB.Plain(b) end end
+    local level = UnitLevel and QB.Plain(UnitLevel(unit)) or nil
+    local pos
+    if UnitPosition then
+      local ok, y, x, _, inst = pcall(UnitPosition, unit)
+      y, x, inst = QB.Plain(y), QB.Plain(x), QB.Plain(inst)
+      if ok and type(x) == "number" and type(y) == "number" then pos = { inst = inst, wx = x, wy = y } end
+    end
+    out[#out + 1] = { unit = unit, name = type(name) == "string" and name or "?", class = type(class) == "string" and class or nil,
+                      level = type(level) == "number" and level or nil, me = me or nil, pos = pos }
+  end
+  add("player", true)
+  local n = GetNumGroupMembers and QB.Plain(GetNumGroupMembers()) or 0
+  if type(n) == "number" and n > 1 and not (IsInRaid and QB.Plain(IsInRaid()) == true) then
+    for i = 1, 4 do add("party" .. i) end
+  end
+  return out
+end
+
+-- yards between you and a member outdoors, nil when the game hides it
+function S.YardsTo(member)
+  if not (member.pos and not member.me) then return nil end
+  local me = S.GroupUnits()[1]
+  if not (me and me.pos and me.pos.inst == member.pos.inst) then return nil end
+  local dx, dy = member.pos.wx - me.pos.wx, member.pos.wy - me.pos.wy
+  return math.floor(math.sqrt(dx * dx + dy * dy) + 0.5)
+end
+
+-- the quests in your log the game lets you share
+function S.Shareable()
+  local out = {}
+  if not (C_QuestLog and C_QuestLog.IsPushableQuest) then return out end
+  for _, e in ipairs(QB.state.logOrder or {}) do
+    local ok, can = pcall(C_QuestLog.IsPushableQuest, e.id)
+    if ok and QB.Plain(can) == true then out[#out + 1] = e.id end
+  end
+  return out
+end
+
+-- the sync record of a party member by name, when they run QuestBank
+-- (the chat's sender name may carry more than the unit's: the first word decides)
+local function firstWord(n) return type(n) == "string" and n:match("^[^%s%-]+") or n end
+function S:MemberByName(name)
+  local want = firstWord(name)
+  for _, m in pairs(self.members) do if m.name == name or firstWord(m.name) == want then return m end end
+  return nil
+end
+
+-- what a member lacks of your shareable quests: known for a QuestBank user, every shareable one otherwise
+function S:Lacking(member, shareable)
+  shareable = shareable or S.Shareable()
+  local m = self:MemberByName(member.name)
+  if not (m and m.quests) then return shareable, false end
+  local out = {}
+  for _, id in ipairs(shareable) do if not m.quests[id] and not QB.API.IsDone(id) then out[#out + 1] = id end end
+  return out, true
+end
+
+-- the share: the game's push, which goes to the whole party; one quest, then the next after a pause
+local queue, sharing = {}, false
+local function pushOne()
+  local id = table.remove(queue, 1)
+  if not id then sharing = false; return end
+  local okIdx, index = pcall(C_QuestLog.GetLogIndexForQuestID, id)
+  index = okIdx and QB.Plain(index) or nil
+  if index and QuestLogPushQuest then pcall(QuestLogPushQuest, index)
+  elseif QuestUtil and QuestUtil.ShareQuest then pcall(QuestUtil.ShareQuest, id) end
+  S.shared = (S.shared or 0) + 1
+  C_Timer.After(SHARE_GAP, QB.Safe(pushOne, "share quests"))
+end
+function S:Share(ids)
+  if not (C_QuestLog and C_QuestLog.GetLogIndexForQuestID) then return 0 end
+  local n = 0
+  for _, id in ipairs(ids or {}) do queue[#queue + 1] = id; n = n + 1 end
+  if n > 0 and not sharing then sharing = true; pushOne() end
+  return n
+end
+
+-- the next step as a line for party chat: the route's first stop and its quests, else the Now page's first place
+function S.NextStepText()
+  local r = QB.routeNow
+  local leg = r and r.legs and r.legs[1]
+  if leg and leg.stop then
+    local names = {}
+    for i, row in ipairs(leg.rows or {}) do if i <= 3 then names[#names + 1] = row.q.name end end
+    local xp = 0
+    for _, row in ipairs(leg.rows or {}) do xp = xp + (row.xp or 0) end
+    return string.format("Next: %s%s%s", leg.stop.name, #names > 0 and (": " .. table.concat(names, ", ")) or "",
+                         xp > 0 and string.format(" (+%s XP)", QB.Comma(xp)) or "")
+  end
+  return nil
+end
+

@@ -258,7 +258,12 @@ local function newClient(o)
   env.GetCVar = env.GetCVar or function(name) return (c.cvars or {})[name] end
   env.SetCVar = function(name, v) c.cvars = c.cvars or {}; c.cvars[name] = tostring(v) end
   -- soft targeting: c.soft = { name, plate } is the object the Interact key would use
-  env.UnitExists = env.UnitExists or function(unit) if unit == "softinteract" then return c.soft ~= nil end return true end
+  env.UnitExists = env.UnitExists or function(unit)
+    if unit == "softinteract" then return c.soft ~= nil end
+    local i = unit and unit:match("^party(%d)$")
+    if i then return (c.party or {})[tonumber(i)] ~= nil end
+    return true
+  end
   env.C_NamePlate = { GetNamePlateForUnit = function(unit) if unit == "softinteract" and c.soft then return c.soft.plate end return nil end }
   env.UISpecialFrames = {}
   env.SlashCmdList = {}
@@ -299,7 +304,23 @@ local function newClient(o)
   env.GetBindLocation = function() return o.bind or "Stormwind City" end
   env.IsPlayerSpell = function() return o.riding or false end
   env.AuraUtil = { FindAuraByName = function(name) if c.rested and name == "Well Rested" then return name end end }
-  env.UnitName = function(unit) if unit == "npc" then return c.npcName end if unit == "softinteract" then return c.soft and c.soft.name end return o.name end
+  -- the party as the game shows it: c.party = { { name, class file, level, pos = { inst, wx, wy } }, ... } (party1..)
+  local function partyOf(unit) local i = unit and unit:match("^party(%d)$"); return i and (c.party or {})[tonumber(i)] end
+  env.UnitName = function(unit)
+    if unit == "npc" then return c.npcName end
+    if unit == "softinteract" then return c.soft and c.soft.name end
+    local pm = partyOf(unit); if pm then return pm[1] end
+    return o.name
+  end
+  env.GetNumGroupMembers = function() return c.party and (#c.party + 1) or 0 end
+  env.UnitPosition = function(unit)
+    local pm = partyOf(unit)
+    if pm then return pm.pos and pm.pos.wy, pm.pos and pm.pos.wx, 0, pm.pos and pm.pos.inst end
+    if unit == "player" then return (c.pos or {}).wy or 100, (c.pos or {}).wx or 100, 0, (c.pos or {}).inst or 0 end
+    return nil
+  end
+  c.pushed = {}
+  env.QuestLogPushQuest = function(index) c.pushed[#c.pushed + 1] = index end
   env.UnitGUID = function(unit)
     if unit == "npc" then return c.npcGUID end
     if unit == "softinteract" then return c.soft and (c.soft.guid or "GameObject-0-4455-0-12-2843-0000A1B2C3") or nil end
@@ -383,7 +404,7 @@ local function newClient(o)
   env.GetNumAvailableQuests = function() return #(c.greetAvail or {}) end
   env.GetAvailableQuestInfo = function(i) local e = c.greetAvail[i]; return e.isTrivial or false, 0, e.repeatable or false, false, e.questID end
   env.SelectAvailableQuest = function(i) c.auto[#c.auto + 1] = "SelectAvailableQuest #" .. i end
-  env.UnitLevel = function() return c.level or o.level end
+  env.UnitLevel = function(unit) local pm = partyOf(unit); if pm then return pm[3] end return c.level or o.level end
   env.GetMaxPlayerLevel = function() return c.cap or o.cap or 60 end
   env.GetPlayerFacing = function() return c.facing end
   -- the chat box: open or not (c.chatOpen; c.chatFocus = false: open but not typed in, as the IM style leaves it),
@@ -396,7 +417,7 @@ local function newClient(o)
   env.GetItemInfo = function(id) return "Item " .. id, "|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r" end
   env.UnitXP = function() return c.xp or 0 end
   env.UnitXPMax = function() return 23200 end
-  env.UnitClass = function() return o.className, o.class, o.classID end
+  env.UnitClass = function(unit) local pm = partyOf(unit); if pm then return pm[2], pm[2], 0 end return o.className, o.class, o.classID end
   env.UnitRace = function() return o.race, o.race end
   env.UnitFactionGroup = function() return o.faction end
   env.GetNormalizedRealmName = function() return c.realmGone and nil or "ForeverNormal" end
@@ -509,6 +530,7 @@ local function newClient(o)
   env.GetMerchantNumItems = function() return #c.merchant end
   env.GetMerchantItemID = function(i) return c.merchant[i] end
   env.C_QuestLog = {
+    IsPushableQuest = function(id) return (c.pushable or {})[id] == true end,
     IsQuestFlaggedCompleted = function(id) return c.done[id] or false end,
     GetNumQuestLogEntries = function() if c.logReady == false then return 0, 0 end return #c.log + 2, #c.log end,
     GetMaxNumQuestsCanAccept = function() return 25 end, -- stale too, the worst case
@@ -2541,6 +2563,49 @@ do
       P.cancel.__scripts.OnClick(P.cancel)
     end
   end
+end
+-- 5.1: the party as the game shows it, with or without QuestBank: what each lacks, the share, the next step, together
+do
+  local S, env = owner.QB.Sync, owner.env
+  owner.party = { { "Brann", "WARRIOR", 18, pos = { inst = 0, wx = -10500, wy = 1050 } }, { "Nowen", "ROGUE", 19, pos = { inst = 0, wx = -8700, wy = 500 } } }
+  owner.pos = { inst = 0, wx = -8830, wy = 480 }
+  owner.pushable = { [971] = true, [1275] = true, [1199] = true }
+  local units = S.GroupUnits()
+  assert(#units == 3 and units[1].me and units[2].name == "Brann" and units[2].class == "WARRIOR" and units[3].level == 19, "the group as the game lists it")
+  assert(S.YardsTo(units[3]) == 132 and S.YardsTo(units[2]) > 1000, "yards to each member")
+  local sh = S.Shareable()
+  assert(#sh == 3, "three shareable quests in the log")
+  local lackB, knownB = S:Lacking(units[2], sh)
+  local lackN, knownN = S:Lacking(units[3], sh)
+  assert(knownB and #lackB == 2 and not knownN and #lackN == 3, "Brann (QuestBank) lacks two; Nowen (no QuestBank) gets all three")
+  UI:ShowTab(4); UI:Refresh()
+  assert(v4.title:GetText() == "Party of 3", "the title: " .. v4.title:GetText())
+  local rows = {}
+  for _, m in ipairs(v4.members.items) do if m:IsShown() then rows[#rows + 1] = m end end
+  assert(#rows == 2 and rows[1].name:GetText() == "Brann" and rows[1].lack:GetText() == "lacks 2 of yours" and rows[1].bank:GetText():find("QuestBank", 1, true), "Brann's row: " .. tostring(rows[1].lack:GetText()))
+  assert(rows[2].name:GetText() == "Nowen" and rows[2].lack:GetText() == "share 3" and rows[2].bank:GetText() == "No QuestBank" and rows[2].sub:GetText():find("132 yd", 1, true), "Nowen's row: " .. tostring(rows[2].sub:GetText()))
+  assert(v4.shareBtn:GetText() == "Share 3" and v4.shareBtn:IsEnabled() and v4.postBtn:IsEnabled(), "the share button counts what the party lacks")
+  local tog = 0
+  for _, r in ipairs(v4.together.items) do if r:IsShown() then tog = tog + 1 end end
+  assert(tog >= 3 and v4.togetherHead:IsShown() and v4.together.items[1].status:GetText() == "2 of you", "quests you hold together: " .. tog)
+  -- the share: one push now, the rest every second and a half
+  owner.pushed = {}
+  v4.shareBtn.__scripts.OnClick(v4.shareBtn)
+  assert(#owner.pushed == 1, "the first quest is pushed at once")
+  tick(owner, 2); assert(#owner.pushed == 2, "the second after the pause")
+  tick(owner, 2); tick(owner, 2); assert(#owner.pushed == 3, "and the third; then it stops")
+  -- the next step as a line for party chat
+  local P = env.QuestBankPost
+  local line = S.NextStepText()
+  v4.postBtn.__scripts.OnClick(v4.postBtn)
+  if line then
+    assert(P:IsShown() and P.eb:GetText():find("^Next: ") and #P.eb:GetText() <= 255, "the next step is offered for chat: " .. P.eb:GetText())
+    P.cancel.__scripts.OnClick(P.cancel)
+  else
+    assert(owner.chat[#owner.chat]:find("No next step", 1, true), "no route: said")
+  end
+  owner.party, owner.pushable = nil, nil
+  UI:Refresh()
 end
 -- a friend runs a newer QuestBank: one notice, and the link
 do

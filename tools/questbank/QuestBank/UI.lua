@@ -2950,6 +2950,8 @@ local function makeMember(parent)
   m.bank:SetPoint("TOPLEFT", 196, -5)
   m.run = text(m, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 150)
   m.run:SetPoint("TOPLEFT", 196, -22)
+  m.lack = text(m, "GameFontNormalSmall", 11, GOLD_SOFT, "RIGHT", 120)
+  m.lack:SetPoint("RIGHT", -40, 0)
   m.copy = iconButton(m, 24, T.letter)
   m.copy:SetPoint("RIGHT", -10, 0)
   m.copy:SetScript("OnClick", function(self)
@@ -3106,31 +3108,49 @@ function UI:CreatePartyView(parent)
   v.members = pool(v, makeMember)
   v.empty = para(v, "GameFontNormal", 12, INK_SOFT, 380)
   v.empty:SetPoint("TOPLEFT", LEFT, -72)
-  v.sharePartyBtn = button(v, "Party: on", 96)
-  v.sharePartyBtn:SetPoint("BOTTOMLEFT", LEFT, 12)
-  v.sharePartyBtn:SetScript("OnClick", function() local s = QB:Settings().share; s.party = not s.party; UI:Refresh() end)
-  v.shareGuildBtn = button(v, "Guild: on", 96)
-  v.shareGuildBtn:SetPoint("BOTTOMLEFT", LEFT + 102, 12)
-  v.shareGuildBtn:SetScript("OnClick", function() local s = QB:Settings().share; s.guild = not s.guild; UI:Refresh() end)
+  -- the share: the game's own push of what the party lacks, one quest at a time
+  v.shareBtn = button(v, "Share", 120)
+  v.shareBtn:SetPoint("BOTTOMLEFT", LEFT, 12)
+  v.shareBtn:SetScript("OnClick", QB.Safe(function(self)
+    local n = QB.Sync and QB.Sync:Share(self.ids or {}) or 0
+    QB:Print(n > 0 and string.format("Sharing %d quest%s with the party, one every second and a half.", n, n == 1 and "" or "s") or "Nothing to share.")
+  end, "share quests"))
+  tooltip(v.shareBtn, function(tip, self)
+    tip:AddLine("Share with the party", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("The game's own share, for every quest a member lacks (all your shareable ones when a member runs no QuestBank). Each gets the usual prompt.", 1, 1, 1, true)
+    for _, id in ipairs(self.ids or {}) do local q = Q.Get(id); if q then tip:AddLine(q.name, 0.8, 0.8, 0.8) end end
+  end)
+  v.postBtn = button(v, "Post next step", 120)
+  v.postBtn:SetPoint("BOTTOMLEFT", LEFT + 126, 12)
+  v.postBtn:SetScript("OnClick", QB.Safe(function()
+    local line = QB.Sync and QB.Sync.NextStepText()
+    if line then UI:PostDialog(line, "The next step, for party chat.") else QB:Print("No next step yet: plan a route or pick quests first.") end
+  end, "post next step"))
+  tooltip(v.postBtn, function(tip)
+    tip:AddLine("Post the next step", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Your route's first stop and its quests, as one line you check before it goes to party chat.", 1, 1, 1, true)
+  end)
   v.syncBtn = button(v, "Send now", 96)
-  v.syncBtn:SetPoint("BOTTOMLEFT", LEFT + 204, 12)
+  v.syncBtn:SetPoint("BOTTOMLEFT", LEFT + 252, 12)
   v.syncBtn:SetScript("OnClick", QB.Safe(function() if QB.Sync then QB.Sync:Broadcast(true) end end, "send now"))
   tooltip(v.syncBtn, function(tip)
-    tip:AddLine("Share your quests now", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine((QB:Banking() and "Sends your level, banked XP and plan" or "Sends your level, what you have ready and what you plan to fetch") .. " to QuestBank users in your party and guild. /qb sync Name whispers one friend.", 1, 1, 1, true)
+    tip:AddLine("Send your quests to QuestBank users now", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Party and guild sharing is set in Settings. /qb sync Name whispers one friend.", 1, 1, 1, true)
   end)
 
   v.runTitle = text(v, "GameFontNormalLarge", 15, INK, "LEFT", 330)
   v.runTitle:SetPoint("TOPLEFT", RIGHT, -12)
-  v.runTitle:SetText("Dungeons")
+  v.runTitle:SetText("Together next")
   v.runHint = para(v, "GameFontNormalSmall", 11, INK_SOFT, 330)
   v.runHint:SetPoint("TOPLEFT", RIGHT, -32)
   v.runHint:SetHeight(28)
-  v.runHint:SetText("The quests each of you still has to do there, and how far along you are.")
+  v.runHint:SetText("Quests you all hold, then the dungeons with quests left for any of you.")
   local holder = CreateFrame("Frame", nil, v)
   holder:SetPoint("TOPLEFT", RIGHT - 10, -58)
   holder:SetPoint("BOTTOMRIGHT", 0, 0)
   v.dscroll = scrollArea(holder)
+  v.together = pool(v.dscroll.child, makeRow)
+  v.togetherHead = text(v.dscroll.child, "GameFontNormal", 12, GOLD, "LEFT", 300)
   v.dcards = pool(v.dscroll.child, makeDungeonCard)
   v.noRuns = para(v.dscroll.child, "GameFontNormal", 12, INK_SOFT, 300)
   v.noRuns:SetPoint("TOPLEFT", 8, -8)
@@ -3140,47 +3160,112 @@ end
 
 function UI:RefreshPartyView(v)
   local S = QB.Sync
-  local share = QB:Settings().share
-  v.sharePartyBtn:SetText(share.party and "Party: on" or "Party: off")
-  v.shareGuildBtn:SetText(share.guild and "Guild: on" or "Guild: off")
-  local members = S and S:Members() or {}
-  v.title:SetText(#members > 0 and string.format("QuestBank users  %d", #members) or "QuestBank users")
-  v.hint:SetText(QB:Banking() and "Everyone here shares their level, banked XP and plan. Hover a name for their bank."
-    or "Everyone here shares their level, what they have ready to hand in and what they plan to fetch. Hover a name for their quests.")
+  local units = S and S.GroupUnits() or {}
+  local inGroup = #units > 1
+  local synced = S and S:Members() or {}
+  -- the group first, QuestBank or not; QuestBank users outside it (the guild) after
+  local list, seen = {}, {}
+  local mine = S and S:MemberByName(QB.state.name or "")
+  for _, u in ipairs(units) do
+    if not u.me then
+      local m = S and S:MemberByName(u.name)
+      if m then seen[m.key] = true end
+      list[#list + 1] = { unit = u, m = m }
+    end
+  end
+  for _, m in ipairs(synced) do if not seen[m.key] and m ~= mine then list[#list + 1] = { m = m } end end
+  v.title:SetText(inGroup and string.format("Party of %d", #units) or (#synced > 0 and "QuestBank users" or "Party"))
+  v.hint:SetText(inGroup and "Members with QuestBank share their quests; the others get yours through you: share what they lack, post the next step."
+    or "Group up and the party shows here, QuestBank or not. Guild members with QuestBank show below.")
+  local shareable = S and S.Shareable() or {}
+  local lackAll, lackSet = {}, {}
   v.members:Reset()
-  for i, m in ipairs(members) do
+  for i, e in ipairs(list) do
     if i > 8 then break end
     local row = v.members:Get()
     row:ClearAllPoints()
     row:SetPoint("TOPLEFT", LEFT - 4, -66 - (i - 1) * 42)
     row:SetWidth(390)
-    row.who = m.key
-    local coords = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[m.class or ""]
+    local m, u = e.m, e.unit
+    row.who = m and m.key or nil
+    local class = (m and m.class) or (u and u.class) or ""
+    local coords = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class]
     if coords then row.class:SetTexCoord(coords[1], coords[2], coords[3], coords[4]) else row.class:SetTexCoord(0, 0.25, 0, 0.25) end
-    local cc = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS) and (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[m.class or ""]
-    row.name:SetText(m.name or m.key)
-    if cc then row.name:SetTextColor(cc.r * 0.7, cc.g * 0.7, cc.b * 0.7) else row.name:SetTextColor(INK[1], INK[2], INK[3]) end
-    row.sub:SetText(string.format("Level %s %s", m.level or "?", m.fac == "H" and "Horde" or "Alliance"))
-    row.bank:SetText(string.format(QB:Banking() and "Banked %.1f, plan %.1f" or "Ready %.1f, plan %.1f", m.banked or 0, m.plan or 0))
-    if m.runStart then
-      row.run:SetText(string.format("Running %s, %d in, +%s", QB.Clock(m.runMin or 0), m.runN or 0, QB.Short(m.runXP or 0)))
-      row.run:SetTextColor(GOOD[1], GOOD[2], GOOD[3])
+    local cc = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS) and (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[class]
+    row.name:SetText((u and u.name) or (m and m.name) or "?")
+    if cc then row.name:SetTextColor(cc.r, cc.g, cc.b) else row.name:SetTextColor(INK[1], INK[2], INK[3]) end
+    local level = (u and u.level) or (m and m.level)
+    local yards = u and S.YardsTo(u)
+    row.sub:SetText(string.format("Level %s%s", level or "?", yards and (" \194\183 " .. yards .. " yd") or (u and "" or " \194\183 guild")))
+    if m then
+      row.bank:SetText(string.format(QB:Banking() and "QuestBank \194\183 banked %.1f" or "QuestBank \194\183 ready %.1f", m.banked or 0))
+      if m.runStart then
+        row.run:SetText(string.format("Running %s, %d in, +%s", QB.Clock(m.runMin or 0), m.runN or 0, QB.Short(m.runXP or 0)))
+        row.run:SetTextColor(GOOD[1], GOOD[2], GOOD[3])
+      else
+        row.run:SetText(m.age and m.age > 90 and string.format("Seen %d min ago", math.floor(m.age / 60)) or "Online")
+        row.run:SetTextColor(INK_SOFT[1], INK_SOFT[2], INK_SOFT[3])
+      end
+      row.dot:SetTexture(m.age and m.age > 600 and T.dotGray or (m.runStart and T.dotYellow or T.dotGreen))
     else
-      row.run:SetText(m.age and m.age > 90 and string.format("Seen %d min ago", math.floor(m.age / 60)) or "Online")
+      row.bank:SetText("No QuestBank")
+      row.run:SetText("gets your plan through you")
       row.run:SetTextColor(INK_SOFT[1], INK_SOFT[2], INK_SOFT[3])
+      row.dot:SetTexture(T.dotGray)
     end
-    row.dot:SetTexture(m.age and m.age > 600 and T.dotGray or (m.runStart and T.dotYellow or T.dotGreen))
-    row.copy:SetShown(m.fac == QB.faction and m.quests ~= nil)
+    if u then
+      local lack, known = S:Lacking(u, shareable)
+      for _, id in ipairs(lack) do if not lackSet[id] then lackSet[id] = true; lackAll[#lackAll + 1] = id end end
+      row.lack:SetText(#lack > 0 and string.format(known and "lacks %d of yours" or "share %d", #lack) or (known and "has your quests" or ""))
+    else
+      row.lack:SetText("")
+    end
+    row.copy:SetShown(m ~= nil and m.fac == QB.faction and m.quests ~= nil)
   end
   v.members:HideRest()
-  v.empty:SetShown(#members == 0)
-  v.empty:SetText("Nobody with QuestBank in your party or guild yet. When friends install it and group up, their quests show here and you can plan dungeon runs together. To share with one friend outside your group: /qb sync Name")
-
-  local dungeons = S and S:Dungeons() or {}
+  v.empty:SetShown(#list == 0)
+  v.empty:SetText("Nobody with you yet. Group up and the party shows here, QuestBank or not; guild members who run QuestBank show too.")
+  v.shareBtn.ids = lackAll
+  v.shareBtn:SetText(#lackAll > 0 and string.format("Share %d", #lackAll) or "Share")
+  v.shareBtn:SetEnabled(#lackAll > 0)
+  v.postBtn:SetEnabled(inGroup)
+  -- together next: the quests in your log that QuestBank members hold too, the richest first
   local width = v.dscroll:Width() - 4
   if width > 330 then width = 316 end
-  v.dcards:Reset()
+  v.together:Reset()
+  local tog = {}
+  if inGroup then
+    for _, e in ipairs(QB.state.logOrder or {}) do
+      local q = Q.Get(e.id)
+      if q then
+        local holders = 0
+        for _, x in ipairs(list) do if x.unit and x.m and x.m.quests and x.m.quests[e.id] then holders = holders + 1 end end
+        if holders > 0 then tog[#tog + 1] = { q = q, st = QB:Status(q), value = QB:Value(e.id), held = true, holders = holders } end
+      end
+    end
+    table.sort(tog, function(a, b) if a.holders ~= b.holders then return a.holders > b.holders end return (a.value or 0) > (b.value or 0) end)
+  end
   local y = 0
+  if #tog > 0 then
+    v.togetherHead:ClearAllPoints(); v.togetherHead:SetPoint("TOPLEFT", 4, -y)
+    v.togetherHead:SetText(string.format("%d quest%s you hold together", #tog, #tog == 1 and "" or "s"))
+    v.togetherHead:Show()
+    y = y + 20
+    for i, it in ipairs(tog) do
+      if i > 6 then break end
+      local r = v.together:Get()
+      r:ClearAllPoints(); r:SetPoint("TOPLEFT", 0, -y)
+      fillRow(r, it, width)
+      r.status:SetText(string.format("%d of you", it.holders + 1))
+      y = y + 22
+    end
+    y = y + 10
+  else
+    v.togetherHead:Hide()
+  end
+  v.together:HideRest()
+  local dungeons = S and S:Dungeons() or {}
+  v.dcards:Reset()
   for _, d in ipairs(dungeons) do
     local c = v.dcards:Get()
     c.rows:Reset()
