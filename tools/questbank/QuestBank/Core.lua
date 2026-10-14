@@ -1092,6 +1092,8 @@ local DEFAULTS = {
   mapIcons = true, mapGive = true, mapTurn = true, mapObj = true,
   -- the kinds the Dungeon Journal lists and pins (DungeonMap.lua): "other" is chests and events
   djShow = { boss = true, rare = true, trash = false, other = true },
+  -- the Quest Log's reward finders (Best gear, Trinkets, Recipes): also quests you can take within 2 levels, not only now
+  finderAhead = false,
 }
 
 function QB:Settings()

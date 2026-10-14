@@ -2096,13 +2096,20 @@ do
   yes.__scripts.OnClick(yes)
   assert(table.concat(calls, ",") == "select " .. q.id .. ",mark,abandon", "then the game's own abandon: " .. table.concat(calls, ","))
   env.C_QuestLog.SetSelectedQuest, env.C_QuestLog.SetAbandonQuest, env.C_QuestLog.AbandonQuest = nil, nil, nil
-  -- Best gear narrowed to a slot: a reward's equip location decides
+  -- Best gear narrowed to a slot: a reward's equip location decides, as the game's GetItemInfoInstant gives it, and only a
+  -- piece you can use counts (a paladin under 40 wears mail)
   local saveInst = env.C_Item.GetItemInfoInstant
-  env.C_Item.GetItemInfoInstant = function(id) return id, "Armor", "Cloth", id % 2 == 0 and "INVTYPE_HEAD" or "INVTYPE_FEET" end
-  local R = QB.Data.RITEMS
-  local qid, rid
-  for id, r in pairs(R) do if r.c and r.c[1] and r.c[1] % 2 == 0 then qid, rid = id, r.c[1]; break end end
-  assert(qid and U.RewardSlotFits(qid, "Head") and not U.RewardSlotFits(qid, "Ring"), "a head reward fits Head, not Ring")
+  env.C_Item.GetItemInfoInstant = function(id)
+    if id % 2 == 0 then return id, "Armor", "Mail", "INVTYPE_HEAD", 133328, 4, 3 end
+    return id, "Armor", "Cloth", "INVTYPE_FEET", 133328, 4, 1
+  end
+  local R, RIT = QB.Data.RITEMS, QB.Data.RIT
+  local qid
+  for id, r in pairs(R) do
+    local first = r.c and r.c[1]
+    if first and first % 2 == 0 and RIT[first] and RIT[first][1] > 0 and not RIT[first][5] then qid = id; break end
+  end
+  assert(qid and U.RewardSlotFits(qid, "Head") and not U.RewardSlotFits(qid, "Ring"), "a mail head reward fits a paladin's Head, not Ring")
   env.C_Item.GetItemInfoInstant = saveInst
 end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
@@ -5847,49 +5854,212 @@ do
   for _, p in ipairs(checkLayout(U.frame, "Quest Log, Best gear")) do problems[#problems + 1] = p end
   layouts[#layouts + 1] = dumpLayout(U.frame, "Quest Log, Best gear")
   local rows = shown()
-  assert(#rows > 0, "a level-20 paladin finds gear quests")
+  assert(#rows > 0, "the paladin finds gear quests")
+  local lv = QB.state.level
+  -- each row shows the best piece of its quest the paladin can use, judged item by item (D.RIT, as the client's
+  -- GetItemInfoInstant would tell)
+  local RIT, RI = QB.Data.RIT, QB.Data.RITEMS
+  local function rewardsOf(qid)
+    local out = {}
+    for _, k in ipairs({ "c", "r", "u" }) do for _, id in ipairs((RI[qid] or {})[k] or {}) do out[#out + 1] = id end end
+    return out
+  end
   local prev
   for _, r in ipairs(rows) do
-    local rw = R[r.add.id]
-    assert(rw and rw[2] % 2 == 1 and rw[1] > 0, "a gear row rewards a piece: " .. r.add.name)
-    assert(math.floor(rw[2] / 512) % 2 == 0, "no plate before 40: " .. r.add.name)
-    assert(prev == nil or rw[1] <= prev, "the highest item level first: " .. r.add.name)
-    prev = rw[1]
-    assert(r.gain:GetText() == "iL " .. rw[1], "the right column shows the item level: " .. r.gain:GetText())
-    assert(r.cutName:GetText():find("Item " .. rw[3], 1, true), "the second line names the item: " .. r.cutName:GetText())
+    local it = r.rewardId and RIT[r.rewardId]
+    assert(it and it[1] > 0, "a gear row shows a piece with its item level: " .. r.add.name)
+    assert(U.ItemUse(r.rewardId, lv) ~= nil, "a piece the paladin can use: " .. r.add.name)
+    assert(not (it[3] == 4 and it[4] == 4), "no plate before 40: " .. r.add.name)
+    local best = 0
+    for _, id in ipairs(rewardsOf(r.add.id)) do
+      local use, l = U.ItemUse(id, lv)
+      if (use == "gear" or use == "trinket") and l > best then best = l end
+    end
+    assert(it[1] == best, "the quest's best piece you can use: " .. r.add.name)
+    assert(prev == nil or it[1] <= prev, "the highest item level first: " .. r.add.name)
+    prev = it[1]
+    assert(r.gain:GetText() == "iL " .. it[1], "the right column shows the item level: " .. r.gain:GetText())
+    assert(r.cutName:GetText():find("Item " .. r.rewardId, 1, true), "the second line names the item: " .. r.cutName:GetText())
+    assert(not r.cutName:GetText():find(" at %d"), "a quest you can take now says no level: " .. r.cutName:GetText())
+    assert((r.add.req or 1) <= lv, "the finder lists quests you can take now: " .. r.add.name)
     assert(not QB.Quest.Behind(r.add.id), "a quest you are probably past is not offered")
     assert(not QB.state.log[r.add.id], "nor one already in your log")
   end
   lines = {}; rows[1].__scripts.OnEnter(rows[1])
-  assert(table.concat(lines, "\n"):find("Rewards Item " .. R[rows[1].add.id][3] .. " (item level", 1, true), "the tooltip names the reward")
-  print(string.format("finder gear: %d rows, best %s (iL %d)", #rows, rows[1].add.name, R[rows[1].add.id][1]))
+  assert(table.concat(lines, "\n"):find("Rewards Item " .. rows[1].rewardId .. " (item level", 1, true), "the tooltip names the reward")
+  print(string.format("finder gear: %d rows, best %s (iL %d)", #rows, rows[1].add.name, RIT[rows[1].rewardId][1]))
+  -- the 2 levels ahead box shows with the reward finders, unticked
+  assert(v1.ahead:IsShown() and not v1.ahead:GetChecked() and not QB:Settings().finderAhead, "the 2 levels ahead box, off by default")
   -- trinkets, rings and necklaces
   poke(mode("trinket"))
   rows = shown()
   for _, r in ipairs(rows) do
-    local k = R[r.add.id][2]
-    assert(math.floor(k / 2) % 2 == 1 or math.floor(k / 4) % 2 == 1, "a trinket row rewards a trinket, ring or necklace: " .. r.add.name)
+    local it = RIT[r.rewardId]
+    assert(it and (it[2] == 2 or it[2] == 11 or it[2] == 12), "a trinket row shows a trinket, ring or necklace: " .. r.add.name)
   end
   print(string.format("finder trinkets: %d rows%s", #rows, rows[1] and (", first " .. rows[1].add.name) or ""))
   if #rows == 0 then assert(v1.noSwaps:IsShown() and v1.noSwaps:GetText():find("trinket", 1, true), "an empty mode says so") end
-  -- recipes
+  -- recipes: the recipe itself, the most XP first
   poke(mode("recipe"))
   rows = shown()
-  for _, r in ipairs(rows) do assert(math.floor(R[r.add.id][2] / 8) % 2 == 1, "a recipe row rewards a recipe: " .. r.add.name) end
+  for _, r in ipairs(rows) do assert(RIT[r.rewardId] and RIT[r.rewardId][3] == 9, "a recipe row shows a recipe: " .. r.add.name) end
   print(string.format("finder recipes: %d rows%s", #rows, rows[1] and (", first " .. rows[1].add.name) or ""))
-  -- a cloth wearer never sees mail
+  -- a cloth wearer never sees a piece of mail, leather or plate
   local T2, TU = newbie.QB, newbie.QB.UI
   TU:ShowTab(1); TU.findMode = "gear"; TU:Refresh()
   for _, r in ipairs(TU.views[1].swaps) do
     if r:IsShown() then
-      local k = T2.Data.REWARD[r.add.id][2]
-      assert(math.floor(k / 256) % 2 == 0 and math.floor(k / 512) % 2 == 0 or math.floor(k / 64) % 2 == 1, "a priest is offered nothing in mail or plate alone: " .. r.add.name)
+      local it = T2.Data.RIT[r.rewardId]
+      assert(it and not (it[3] == 4 and it[4] >= 2 and it[4] <= 4 and it[2] ~= 16), "a priest is offered no mail, leather or plate: " .. r.add.name)
     end
   end
   TU.findMode = "xp"
   -- back to the swaps
   poke(mode("xp"))
   for _, r in ipairs(shown()) do assert(r.gain:GetText():sub(1, 1) == "+", "the XP mode is back") end
+end
+
+-- 5.3.3: the reward finders judge each reward item for you, and reach two levels ahead when asked. The owner's report:
+-- head pieces of another armour class under Head, and no Stranglethorn wand (Venture Company Mining, needs 30)
+do
+  local U, D = QB.UI, QB.Data
+  local function rewardsOf(qid)
+    local out = {}
+    for _, k in ipairs({ "c", "r", "u" }) do for _, id in ipairs((D.RITEMS[qid] or {})[k] or {}) do out[#out + 1] = id end end
+    return out
+  end
+  -- (a) quests no Forever source has rewards for take the Classic database's: quest 600 offers the Goblin Igniter
+  local igniter
+  for _, id in ipairs(rewardsOf(600)) do if id == 5253 then igniter = true end end
+  assert(igniter and D.RCLASSIC[600], "quest 600 rewards the Goblin Igniter, from the Classic database")
+  assert(D.RIT[5253] and D.RIT[5253][1] == 40 and D.RIT[5253][2] == 26 and D.RIT[5253][3] == 2 and D.RIT[5253][4] == 19,
+    "the Goblin Igniter: a wand, item level 40")
+  lines = {}; owner.env.GameTooltip:ClearLines(); U.RewardLines(owner.env.GameTooltip, QB.Quest.Get(600))
+  assert(table.concat(lines, "\n"):find("Rewards from Classic data", 1, true), "its tooltip says the rewards are Classic data")
+  local some
+  for id in pairs(D.RITEMS) do if not D.RCLASSIC[id] and QB.Quest.Get(id) then some = id; break end end
+  lines = {}; owner.env.GameTooltip:ClearLines(); U.RewardLines(owner.env.GameTooltip, QB.Quest.Get(some))
+  assert(not table.concat(lines, "\n"):find("Classic data", 1, true), "a quest with Forever's own list says nothing of Classic")
+  local nClassic = 0
+  for _ in pairs(D.RCLASSIC) do nClassic = nClassic + 1 end
+  -- weapons and armour by class, from the client's skill tables
+  assert(D.WEAPONS.PALADIN and math.floor(D.WEAPONS.PALADIN / 2 ^ 15) % 2 == 0 and math.floor(D.WEAPONS.PALADIN / 2 ^ 19) % 2 == 0
+    and math.floor(D.WEAPONS.PALADIN / 2 ^ 5) % 2 == 1, "paladins: two-handed maces, no daggers, no wands")
+  assert(math.floor(D.WEAPONS.PRIEST / 2 ^ 19) % 2 == 1 and math.floor(D.WEAPONS.PRIEST / 2 ^ 7) % 2 == 0, "priests: wands, no swords")
+  assert(D.ARMOR.PALADIN[3] == 0 and D.ARMOR.PALADIN[4] == 40 and D.ARMOR.HUNTER[3] == 40 and not D.ARMOR.ROGUE[3]
+    and D.ARMOR.PRIEST[1] == 0 and not D.ARMOR.PRIEST[2] and D.ARMOR.SHAMAN[6] == 0 and not D.ARMOR.HUNTER[6],
+    "armour: paladins mail then plate at 40, hunters mail at 40, rogues leather, priests cloth; shamans carry shields, hunters don't")
+  assert(U.MyArmor(39) == 3 and U.MyArmor(40) == 4, "a paladin wears mail at 39, plate at 40")
+
+  -- (b) a paladin below 40 sees mail head pieces, never cloth or leather ones, and no daggers or wands
+  local mailHeads, lightHeads, dw = 0, 0, 0
+  for qid in pairs(D.RITEMS) do
+    for _, id in ipairs(rewardsOf(qid)) do
+      local it = D.RIT[id]
+      if it and it[2] == 1 and it[3] == 4 then
+        local use = U.ItemUse(id, 35)
+        if it[4] == 3 and not it[5] then assert(use == "gear", "a paladin at 35 wears a mail helm: " .. id); mailHeads = mailHeads + 1 end
+        if it[4] == 1 or it[4] == 2 then assert(use == nil, "not a cloth or leather one: " .. id); lightHeads = lightHeads + 1 end
+      end
+      if it and it[3] == 2 and (it[4] == 15 or it[4] == 19) then assert(U.ItemUse(id, 35) == nil, "no dagger or wand for a paladin: " .. id); dw = dw + 1 end
+    end
+  end
+  assert(mailHeads > 0 and lightHeads > 0 and dw > 0, "the catalog has mail, cloth and leather helms, daggers and wands to judge")
+  U.gearSlot = "Head"
+  local heads = U:FindRewards("gear", 35)
+  assert(#heads > 0, "a paladin at 35 finds mail head pieces")
+  for _, d in ipairs(heads) do
+    local it = D.RIT[d.item]
+    assert(it[2] == 1 and it[3] == 4 and it[4] == 3, "Head, for a paladin at 35: mail only: " .. d.q.name .. " " .. d.item)
+  end
+  U.gearSlot = nil
+  local all = U:FindRewards("gear", 35)
+  for _, d in ipairs(all) do
+    local it = D.RIT[d.item]
+    assert(not (it[3] == 2 and (it[4] == 15 or it[4] == 19)), "no dagger or wand in a paladin's list: " .. d.q.name)
+    assert(not (it[3] == 4 and it[4] >= 1 and it[4] <= 4 and it[2] ~= 16 and it[4] ~= 3), "armour pieces in mail only: " .. d.q.name)
+  end
+  -- the rows on the page too: Head shows mail
+  U:ShowTab(1); U.findMode = "gear"; U.gearSlot = "Head"; U:Refresh()
+  for _, r in ipairs(v1.swaps) do
+    if r:IsShown() then local it = D.RIT[r.rewardId]; assert(it[2] == 1 and it[4] == 3, "a Head row shows mail: " .. r.add.name) end
+  end
+  U.gearSlot = nil; U.findMode = "xp"; U:Refresh()
+  -- a priest sees wands
+  local NU = newbie.QB.UI
+  local wands = 0
+  for _, d in ipairs(NU:FindRewards("gear", 35)) do
+    local it = newbie.QB.Data.RIT[d.item]
+    if it[3] == 2 and it[4] == 19 then wands = wands + 1 end
+    assert(not (it[3] == 4 and it[4] >= 2 and it[4] <= 4 and it[2] ~= 16), "a priest's list has cloth only: " .. d.q.name)
+  end
+  assert(wands > 0, "a priest at 35 is offered wands")
+
+  -- (c) a quest whose head reward is cloth and whose chest reward is mail is no Head piece for a paladin
+  local qc
+  for qid in pairs(D.RITEMS) do
+    local ids = rewardsOf(qid)
+    local a, b = D.RIT[ids[1] or 0], D.RIT[ids[2] or 0]
+    if a and b and a[1] > 0 and b[1] > 0 and not a[5] and not b[5] then qc = qid; break end
+  end
+  local h, ch = rewardsOf(qc)[1], rewardsOf(qc)[2]
+  local saveInst = owner.env.C_Item.GetItemInfoInstant
+  owner.env.C_Item.GetItemInfoInstant = function(id)
+    if id == h then return id, "Armor", "Cloth", "INVTYPE_HEAD", 133328, 4, 1 end
+    if id == ch then return id, "Armor", "Mail", "INVTYPE_CHEST", 133328, 4, 3 end
+    return id, "Miscellaneous", "Junk", "", 133328, 15, 0
+  end
+  assert(not U.RewardSlotFits(qc, "Head", 25) and U.RewardSlotFits(qc, "Chest", 25),
+    "cloth head and mail chest: not a Head piece for a paladin, a Chest one")
+  local best = U.BestReward(qc, "gear", 25)
+  assert(best == ch, "the row shows the piece you can wear, not the quest's first reward")
+  owner.env.C_Item.GetItemInfoInstant = saveInst
+  print(string.format("finder judged item by item: %d quests' rewards from Classic data, %d mail helms, %d cloth and leather ones and %d daggers and wands kept from a paladin",
+    nClassic, mailHeads, lightHeads, dw))
+end
+
+-- (d) 2 levels ahead: at 28 a priest sees Venture Company Mining (needs 30) only with the box ticked, its row saying
+-- "at 30"; (e) the page stays clean with it
+local wren = newClient({
+  name = "Wren", level = 28, cap = 60, faction = "Alliance", className = "Priest", class = "PRIEST", classID = 5, race = "Human",
+  log = {}, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Goldshire", riding = false, bagSlots = {}, xp = 900,
+})
+login(wren)
+do
+  local W, U = wren.QB, wren.QB.UI
+  wren.env.SlashCmdList.QUESTBANK("")
+  W.Model.Finish()
+  U:ShowTab(1); U:Refresh()
+  local v = U.views[1]
+  local function has600(list) for _, d in ipairs(list) do if d.q.id == 600 then return d end end end
+  assert(not W:Settings().finderAhead and not has600(U:FindRewards("gear", 28)), "off: a quest that needs 30 is not offered at 28")
+  U.findMode = "gear"; U.gearSlot = "Ranged"; U:Refresh()
+  assert(v.ahead:IsShown() and not v.ahead:GetChecked(), "the box shows with Best gear, unticked")
+  local function row600() for _, r in ipairs(v.swaps) do if r:IsShown() and r.add and r.add.id == 600 then return r end end end
+  assert(not row600(), "no row for it")
+  lines = {}; v.ahead.__scripts.OnEnter(v.ahead)
+  assert(lines[1] == "Show quests I can take within 2 levels", "the box's tooltip names the setting: " .. tostring(lines[1]))
+  v.ahead:SetChecked(true); v.ahead.__scripts.OnClick(v.ahead, "LeftButton")
+  assert(W:Settings().finderAhead == true, "ticking it turns the setting on")
+  local d = has600(U:FindRewards("gear", 28))
+  assert(d and d.item == 5253 and d.req == 30, "on: quest 600 with the Goblin Igniter")
+  local r = row600()
+  assert(r and r.rewardId == 5253 and r.cutName:GetText():find("at 30", 1, true) and r.gain:GetText() == "iL 40",
+    "its row: the wand, at 30, item level 40: " .. tostring(r and r.cutName:GetText()))
+  lines = {}; r.__scripts.OnEnter(r)
+  assert(table.concat(lines, "\n"):find("You can take it at level 30.", 1, true), "the tooltip says when you can take it")
+  print("2 levels ahead:", r.addName:GetText(), "|", r.cutName:GetText(), "|", r.gain:GetText())
+  for _, p in ipairs(checkLayout(U.frame, "Quest Log, Best gear 2 levels ahead")) do problems[#problems + 1] = p end
+  layouts[#layouts + 1] = dumpLayout(U.frame, "Quest Log, Best gear 2 levels ahead")
+  -- Trinkets and Recipes keep the box; the swaps don't show it
+  U.findMode = "recipe"; U:Refresh()
+  assert(v.ahead:IsShown(), "Recipes keep the box")
+  for _, p in ipairs(checkLayout(U.frame, "Quest Log, Recipes 2 levels ahead")) do problems[#problems + 1] = p end
+  U.findMode = "xp"; U:Refresh()
+  assert(not v.ahead:IsShown() and not v.ahead.label:IsShown(), "Highest XP hides the box")
+  v.ahead:SetChecked(false); U.findMode = "gear"; U:Refresh(); v.ahead:SetChecked(false); v.ahead.__scripts.OnClick(v.ahead, "LeftButton")
+  assert(W:Settings().finderAhead == false and not row600(), "unticked: gone again")
+  U.gearSlot = nil; U.findMode = "xp"; U:Refresh()
 end
 
 -- 3.6.0 (was 3.5.2's ForeverProbe check): QuestBank notes the client's build and interface without asking, and

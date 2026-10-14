@@ -516,6 +516,9 @@ function UI.RewardLines(tip, q)
     tip:AddLine("Rewards include:", 1, 0.82, 0) -- a loot page lists them without saying which are a choice
     for i = 1, math.min(#u, 6) do line(u[i]) end
   end
+  -- no Forever source lists them yet: the Classic database's, said as the map icons say it
+  local classic = how == "catalog" and QB.Data.RCLASSIC and QB.Data.RCLASSIC[q.id]
+  if classic then tip:AddLine("Rewards from Classic data (may differ in Forever).", 1, 0.6, 0.3, true) end
   tip:AddLine((how == "game" and "As your quest window showed them. " or "") .. "Right-click the quest to link one in chat.", 0.6, 0.6, 0.6, true)
 end
 
@@ -1441,19 +1444,93 @@ UI.FINDS = {
 }
 UI.findMode = "xp"
 
--- the heaviest armour you can wear, by class: everything lighter fits too. Warriors and paladins wear mail
--- until plate at 40; hunters and shamans leather until mail at 40
-local ARMOR = { WARRIOR = 512, PALADIN = 512, HUNTER = 256, SHAMAN = 256, ROGUE = 128, DRUID = 128, MAGE = 64, PRIEST = 64, WARLOCK = 64 }
-local function wearable(kinds, level)
-  local offered = 0
-  for _, bit in ipairs({ 512, 256, 128, 64 }) do if math.floor(kinds / bit) % 2 == 1 then offered = offered + bit end end
-  if offered == 0 then return true end -- weapons, rings, trinkets, cloaks: no armour class
-  local mine = ARMOR[QB.state.class or ""] or 512
-  if (level or 60) < 40 and mine >= 256 then mine = mine / 2 end
-  for _, bit in ipairs({ 64, 128, 256, 512 }) do
-    if math.floor(offered / bit) % 2 == 1 and bit <= mine then return true end
+-- each reward item judged on its own: what it is (C_Item.GetItemInfoInstant, the client's item table; D.RIT, read from
+-- the same table, where the client answers nothing) and whether you can use it
+local INVTYPE = { "INVTYPE_HEAD", "INVTYPE_NECK", "INVTYPE_SHOULDER", "INVTYPE_BODY", "INVTYPE_CHEST", "INVTYPE_WAIST", "INVTYPE_LEGS",
+  "INVTYPE_FEET", "INVTYPE_WRIST", "INVTYPE_HAND", "INVTYPE_FINGER", "INVTYPE_TRINKET", "INVTYPE_WEAPON", "INVTYPE_SHIELD",
+  "INVTYPE_RANGED", "INVTYPE_CLOAK", "INVTYPE_2HWEAPON", "INVTYPE_BAG", "INVTYPE_TABARD", "INVTYPE_ROBE", "INVTYPE_WEAPONMAINHAND",
+  "INVTYPE_WEAPONOFFHAND", "INVTYPE_HOLDABLE", "INVTYPE_AMMO", "INVTYPE_THROWN", "INVTYPE_RANGEDRIGHT", "INVTYPE_QUIVER", "INVTYPE_RELIC" }
+-- armour pieces count only in your own armour class; cloaks, jewellery, trinkets and held-in-off-hand items fit everyone
+local ARMOR_SLOT = { INVTYPE_HEAD = 1, INVTYPE_SHOULDER = 1, INVTYPE_CHEST = 1, INVTYPE_ROBE = 1, INVTYPE_WRIST = 1, INVTYPE_HAND = 1,
+  INVTYPE_WAIST = 1, INVTYPE_LEGS = 1, INVTYPE_FEET = 1 }
+local ANYONE = { INVTYPE_CLOAK = 1, INVTYPE_FINGER = 1, INVTYPE_NECK = 1, INVTYPE_TRINKET = 1, INVTYPE_HOLDABLE = 1 }
+local JEWEL = { INVTYPE_FINGER = 1, INVTYPE_NECK = 1, INVTYPE_TRINKET = 1 }
+local WEAPON_SLOT = { INVTYPE_WEAPON = 1, INVTYPE_2HWEAPON = 1, INVTYPE_WEAPONMAINHAND = 1, INVTYPE_WEAPONOFFHAND = 1,
+  INVTYPE_RANGED = 1, INVTYPE_RANGEDRIGHT = 1, INVTYPE_THROWN = 1 }
+
+-- an item's equip slot, class, subclass, item level (0: Forever's numbers not shown yet) and the classes it is limited
+-- to (a class bitmask, nil for anyone)
+function UI.ItemFacts(id)
+  local loc, cls, sub
+  local get = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+  if get then
+    local ok, _, _, _, l, _, c, sc = pcall(get, id)
+    if ok then loc, cls, sub = QB.Plain(l), QB.Plain(c), QB.Plain(sc) end
   end
-  return false
+  local d = QB.Data.RIT and QB.Data.RIT[id]
+  if type(loc) ~= "string" then loc = d and INVTYPE[d[2]] or "" end
+  if type(cls) ~= "number" then cls = d and d[3] end
+  if type(sub) ~= "number" then sub = d and d[4] end
+  return loc, cls, sub, d and d[1] or 0, d and d[5]
+end
+
+-- the heaviest armour you wear at your level, from the client's skill tables (D.ARMOR): warriors and paladins mail until
+-- plate at 40, hunters and shamans leather until mail at 40, rogues and druids leather, the others cloth. 1 cloth,
+-- 2 leather, 3 mail, 4 plate; nil when the class is not known
+function UI.MyArmor(level)
+  local a = QB.Data.ARMOR and QB.Data.ARMOR[QB.state.class or ""]
+  if not a then return nil end
+  local best = 1
+  for sub = 1, 4 do if a[sub] and a[sub] <= (level or QB.state.level or 60) then best = sub end end
+  return best
+end
+
+-- what an item is to you: "gear" (a piece you can wear or wield), "trinket" (a trinket, ring or necklace, which is gear
+-- too), "recipe", or nil (not for you, or not equipment); then its item level and equip slot
+function UI.ItemUse(id, level)
+  local loc, cls, sub, ilvl, mask = UI.ItemFacts(id)
+  local bit = QB.API.ClassBit()
+  if mask and bit > 0 and math.floor(mask / bit) % 2 == 0 then return nil, ilvl, loc end -- for other classes
+  if cls == 9 then return "recipe", ilvl, loc end
+  local class = QB.state.class or ""
+  local use
+  if ANYONE[loc] then
+    use = JEWEL[loc] and "trinket" or "gear"
+  elseif ARMOR_SLOT[loc] then
+    local mine = UI.MyArmor(level)
+    -- 0: a piece of no armour class (goggles and the like) fits anyone
+    if cls == 4 and (sub == 0 or not mine or sub == mine) then use = "gear" end
+  elseif loc == "INVTYPE_SHIELD" then
+    local a = QB.Data.ARMOR and QB.Data.ARMOR[class]
+    if not a or (a[6] and a[6] <= (level or 60)) then use = "gear" end
+  elseif WEAPON_SLOT[loc] then
+    local w = QB.Data.WEAPONS and QB.Data.WEAPONS[class]
+    if cls == 2 and type(sub) == "number" and (not w or math.floor(w / 2 ^ sub) % 2 == 1) then use = "gear" end
+  elseif loc == "INVTYPE_RELIC" then
+    if mask then use = "gear" end -- a libram, idol or totem: its own class only
+  end
+  -- shirts, tabards, bags and ammunition are not gear
+  return use, ilvl, loc
+end
+
+-- a quest's reward the finder shows for a kind ("gear", "trinket", "recipe") and, for gear, a slot: the best of its items
+-- you can use, the highest item level first. Gear and trinkets need a known item level. Returns the item and its level
+function UI.BestReward(qid, kind, level, slot)
+  local want
+  if slot then for _, g in ipairs(UI.GEAR_SLOTS) do if g[1] == slot then want = g[2] end end end
+  local R = QB.Data.RITEMS and QB.Data.RITEMS[qid]
+  local bestId, bestL
+  for _, key in ipairs({ "c", "r", "u" }) do
+    for _, id in ipairs(R and R[key] or {}) do
+      local use, ilvl, loc = UI.ItemUse(id, level)
+      local hit
+      if kind == "gear" then hit = (use == "gear" or use == "trinket") and ilvl > 0 and (not want or want[loc] ~= nil)
+      elseif kind == "trinket" then hit = use == "trinket" and ilvl > 0
+      elseif kind == "recipe" then hit = use == "recipe" end
+      if hit and (not bestL or ilvl > bestL) then bestId, bestL = id, ilvl end
+    end
+  end
+  return bestId, bestL
 end
 
 local function itemName(id)
@@ -1463,31 +1540,28 @@ local function itemName(id)
   return name
 end
 
--- the finder's rows for a reward kind: quests you could take (any status but done, wrong or held) whose rewards
--- fit the kind, the best item level first; { q, value, st, reward = { ilvl, kinds, id } }
+-- the finder's rows for a reward kind: quests you can take now (any status but done, wrong or held), whatever their
+-- quest level, with "2 levels ahead" ticked also those you can take within two levels; each with the best of its
+-- rewards you can use, the highest item level first (recipes: the most XP first).
+-- { q, value, st, item, ilvl, req, mins }
 function UI:FindRewards(kind, level)
-  local R = QB.Data.REWARD
-  if not R then return {} end
+  if not QB.Data.RITEMS then return {} end
+  local reqMax = level + (QB:Settings().finderAhead and 2 or 0)
+  local slot = kind == "gear" and UI.gearSlot or nil
   local out = {}
-  for _, c in ipairs(self:Candidates(nil, level)) do
-    local r = R[c.id]
-    if r and not c.behind then
-      local kinds = r[2]
-      local hit
-      if kind == "gear" then
-        hit = kinds % 2 == 1 and r[1] > 0 and wearable(kinds, level)
-        if hit and UI.gearSlot then hit = UI.RewardSlotFits(c.id, UI.gearSlot) end
-      elseif kind == "trinket" then hit = math.floor(kinds / 2) % 2 == 1 or math.floor(kinds / 4) % 2 == 1
-      elseif kind == "recipe" then hit = math.floor(kinds / 8) % 2 == 1 end
-      if hit then
-        local q = Q.Get(c.id)
-        if q then out[#out + 1] = { q = q, value = QB.Model.XpAt(q, level), st = QB:Status(q), reward = r, mins = c.mins } end
+  for _, c in ipairs(self:Candidates(nil, level, reqMax)) do
+    if not c.behind then
+      local id, ilvl = UI.BestReward(c.id, kind, level, slot)
+      local q = id and Q.Get(c.id)
+      if q then
+        out[#out + 1] = { q = q, value = QB.Model.XpAt(q, level), st = QB:Status(q), item = id, ilvl = ilvl, req = c.req, mins = c.mins }
       end
     end
   end
   table.sort(out, function(a, b)
-    if a.reward[1] ~= b.reward[1] then return a.reward[1] > b.reward[1] end
-    return a.value > b.value
+    if kind ~= "recipe" and a.ilvl ~= b.ilvl then return a.ilvl > b.ilvl end
+    if a.value ~= b.value then return a.value > b.value end
+    return a.q.id < b.q.id
   end)
   return out
 end
@@ -1499,20 +1573,9 @@ UI.GEAR_SLOTS = { { "Head", { INVTYPE_HEAD = 1 } }, { "Neck", { INVTYPE_NECK = 1
   { "Ring", { INVTYPE_FINGER = 1 } }, { "Trinket", { INVTYPE_TRINKET = 1 } },
   { "Weapon", { INVTYPE_WEAPON = 1, INVTYPE_2HWEAPON = 1, INVTYPE_WEAPONMAINHAND = 1, INVTYPE_WEAPONOFFHAND = 1 } },
   { "Off hand", { INVTYPE_SHIELD = 1, INVTYPE_HOLDABLE = 1 } }, { "Ranged", { INVTYPE_RANGED = 1, INVTYPE_RANGEDRIGHT = 1, INVTYPE_THROWN = 1 } } }
-function UI.RewardSlotFits(qid, slot)
-  local want
-  for _, g in ipairs(UI.GEAR_SLOTS) do if g[1] == slot then want = g[2] end end
-  if not want then return true end
-  local R = QB.Data.RITEMS and QB.Data.RITEMS[qid]
-  for _, key in ipairs({ "c", "r", "u" }) do
-    for _, id in ipairs(R and R[key] or {}) do
-      local loc
-      if C_Item and C_Item.GetItemInfoInstant then local ok, _, _, _, l = pcall(C_Item.GetItemInfoInstant, id); if ok then loc = QB.Plain(l) end
-      elseif GetItemInfoInstant then local ok, _, _, _, l = pcall(GetItemInfoInstant, id); if ok then loc = QB.Plain(l) end end
-      if loc and want[loc] then return true end
-    end
-  end
-  return false
+-- does the quest reward a piece for this slot that you can use (judged item by item, as the finder does)?
+function UI.RewardSlotFits(qid, slot, level)
+  return UI.BestReward(qid, "gear", level or QB.state.level, slot) ~= nil
 end
 
 local modWatch = CreateFrame("Frame")
@@ -1667,6 +1730,21 @@ function UI:CreateLogView(parent)
     end)
     v.finds[i] = b
   end
+  -- the reward finders reach two levels further when asked (off until ticked): quests you can take within 2 levels
+  v.ahead = CreateFrame("CheckButton", nil, v, "UICheckButtonTemplate")
+  v.ahead:SetSize(20, 20)
+  v.ahead:SetPoint("TOPLEFT", RIGHT + 112, -10)
+  v.ahead.label = text(v, "GameFontNormalSmall", 10, INK_SOFT, "LEFT", 100)
+  v.ahead.label:SetPoint("LEFT", v.ahead, "RIGHT", 1, 0)
+  v.ahead.label:SetText("2 levels ahead")
+  v.ahead:SetScript("OnClick", QB.Safe(function(self)
+    QB:Settings().finderAhead = self:GetChecked() and true or false
+    UI:Refresh()
+  end, "finder: 2 levels ahead"))
+  tooltip(v.ahead, function(tip)
+    tip:AddLine("Show quests I can take within 2 levels", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Best gear, Trinkets and Recipes list the quests you can take now. Ticked, they also list those you can take within 2 levels; their row says the level each needs.", 1, 1, 1, true)
+  end)
   v.slotBtn = button(v, "Any slot", 90)
   v.slotBtn:SetPoint("TOPLEFT", RIGHT + 334 - 90, -10)
   v.slotBtn:SetScript("OnClick", QB.Safe(function()
@@ -1766,7 +1844,9 @@ function UI.MinutesTo(q, here, mf)
   return M.Between(here, to, fac, mf)
 end
 
-function UI:Candidates(limit, level)
+-- reqMax (the reward finders): quests you can take at that level, whatever their quest level; else those needing at most
+-- two levels more than yours, within the level window (QB:Range)
+function UI:Candidates(limit, level, reqMax)
   local D = QB.Data
   local s = QB.state
   level = level or s.level
@@ -1774,7 +1854,7 @@ function UI:Candidates(limit, level)
   local banking = QB:Banking()
   local above, below = QB:Range()
   -- the same question asked several times a refresh: answer it once a second
-  local key = table.concat({ limit or 0, level, s.level, s.logCount or 0, tostring(banking), fac or "", s.mapID or 0, above, below, QB:SkipSignature(), QB.doneVer or 0 }, ":")
+  local key = table.concat({ limit or 0, level, s.level, s.logCount or 0, tostring(banking), fac or "", s.mapID or 0, above, below, QB:SkipSignature(), QB.doneVer or 0, reqMax or "-" }, ":")
   local now = GetTime and GetTime() or 0
   UI.candMemo = UI.candMemo or {}
   local memo = UI.candMemo[key]
@@ -1793,13 +1873,13 @@ function UI:Candidates(limit, level)
     if (side == 0 or (side == 1 and fac == "A") or (side == 2 and fac == "H"))
       and (cls == 0 or bit == 0 or math.floor(cls / bit) % 2 == 1)
       and (not race or rbit == 0 or rbit > 128 or math.floor(race / rbit) % 2 == 1)
-      and r[2] <= s.level + 2 and r[1] >= level - below and r[1] <= ceiling and not s.log[id] and not D.FOLLOW[id]
+      and r[2] <= (reqMax or s.level + 2) and r[1] >= level - below and (reqMax ~= nil or r[1] <= ceiling) and not s.log[id] and not D.FOLLOW[id]
       and math.floor(r[10] / 128) % 2 == 0 -- never suggest Season of Discovery leftovers
       and math.floor(r[10] / 4096) % 2 == 0 -- nor repeatables
       and not (turn and turn[5] < 0)
       and not QB:Skipped(r[8], turn and turn[5]) then -- nor anything where you said to skip
       local live = QuestBankDB.live and QuestBankDB.live[id]
-      out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], cat = r[8], give = r[7],
+      out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], req = r[2], cat = r[8], give = r[7],
                         turn = (fac == "H" and D.TURNH and D.TURNH[id]) or r[6] }
     end
   end
@@ -2166,6 +2246,10 @@ function UI:RefreshLogView(v)
   -- the finder's mode buttons
   v.slotBtn:SetShown(UI.findMode == "gear")
   v.slotBtn:SetText(UI.gearSlot or "Any slot")
+  local ahead = QB:Settings().finderAhead and true or false
+  v.ahead:SetShown(UI.findMode ~= "xp")
+  v.ahead.label:SetShown(UI.findMode ~= "xp")
+  v.ahead:SetChecked(ahead)
   for _, b in ipairs(v.finds) do
     local on = b.key == UI.findMode
     local col = on and INK or INK_SOFT
@@ -2173,34 +2257,42 @@ function UI:RefreshLogView(v)
     b.label:SetText(on and ("[" .. b.label.base .. "]") or b.label.base)
   end
   if UI.findMode ~= "xp" then
+    local recipe = UI.findMode == "recipe"
     local found = self:FindRewards(UI.findMode, s.level)
     for i, r in ipairs(v.swaps) do
       local d = found[i]
       if d then
         r:Show()
         r.add, r.addValue, r.via, r.cutTitle, r.cutValue = d.q, d.value, nil, nil, nil
-        local id = d.reward[3]
-        local name = itemName(id) or (id and id > 0 and ("item " .. id)) or (UI.findMode == "recipe" and "a recipe" or "a reward")
-        setIcon(r.addIcon, (id and id > 0 and QB.API.ItemIcon(id, d.q.icon)) or d.q.icon)
+        local id = d.item
+        local name = itemName(id) or ("item " .. id)
+        setIcon(r.addIcon, QB.API.ItemIcon(id, d.q.icon) or d.q.icon)
         r.addName:SetText(d.q.name)
         local place = d.q.cat and d.q.cat.name or ""
         local mins = d.mins and string.format(", %d min", math.floor(d.mins + 0.5)) or ""
+        -- a quest you can't take yet (2 levels ahead): the level it needs, kept as long as the line has room
+        local at = (d.req or 0) > s.level and string.format("at %d", d.req) or nil
         local room = r.cutName:GetWidth() - 2
-        for _, line in ipairs({ name .. " · " .. place .. mins, name .. " · " .. place, name }) do
+        local fits = at and { name .. " · " .. at .. " · " .. place .. mins, name .. " · " .. at .. " · " .. place, name .. " · " .. at, name }
+          or { name .. " · " .. place .. mins, name .. " · " .. place, name }
+        for _, line in ipairs(fits) do
           r.cutName:SetText(line)
           if r.cutName:GetStringWidth() <= room then break end
         end
-        r.gain:SetText(d.reward[1] > 0 and ("iL " .. d.reward[1]) or QB.Short(d.value))
-        r.reward = string.format("Rewards %s%s. %s XP %s.", name, d.reward[1] > 0 and string.format(" (item level %d)", d.reward[1]) or "", QB.Comma(d.value), QB:OnTheDay())
-        r.rewardId = (id and id > 0) and id or nil
+        local showL = not recipe and d.ilvl > 0
+        r.gain:SetText(showL and ("iL " .. d.ilvl) or QB.Short(d.value))
+        r.reward = string.format("Rewards %s%s. %s XP %s.", name, showL and string.format(" (item level %d)", d.ilvl) or "", QB.Comma(d.value), QB:OnTheDay())
+          .. (at and string.format(" You can take it at level %d.", d.req) or "")
+        r.rewardId = id
       else
         r:Hide()
       end
     end
     v.noSwaps:SetShown(#found == 0)
-    v.noSwaps:SetText(UI.findMode == "gear" and "No quest within your level range rewards a piece you can wear. Settings widens the range."
-      or UI.findMode == "trinket" and "No quest within your level range rewards a trinket, ring or necklace."
-      or "No quest within your level range rewards a recipe.")
+    local reach = ahead and "No quest you can take within 2 levels" or "No quest you can take now"
+    v.noSwaps:SetText(UI.findMode == "gear" and (reach .. " rewards a piece you can wear" .. (UI.gearSlot and (" (" .. UI.gearSlot .. ")") or "") .. ".")
+      or UI.findMode == "trinket" and (reach .. " rewards a trinket, ring or necklace.")
+      or (reach .. " rewards a recipe."))
     return
   end
   for _, r in ipairs(v.swaps) do r.reward, r.rewardId = nil, nil end
