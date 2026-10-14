@@ -303,7 +303,7 @@ end
 function UI.QuestTooltipShort(tip, q, st, xp)
   tip:AddLine(q.name, GOLD[1], GOLD[2], GOLD[3])
   local full = Q.Full(q)
-  local xpText = (q.xpUnknown and not q.liveFull) and "XP not known yet" or (QB.Comma(xp or full) .. " XP")
+  local xpText = q.turnIn and "No XP" or (q.xpUnknown and not q.liveFull) and "XP not known yet" or (QB.Comma(xp or full) .. " XP")
   tip:AddDoubleLine(string.format("L%d  \194\183  %s", q.lvl or 0, q.cat and q.cat.name or ""), xpText, 0.8, 0.8, 0.8, 1, 0.82, 0)
   local R = QB.Data.RITEMS and QB.Data.RITEMS[q.id]
   local icons = {}
@@ -333,7 +333,9 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
   tip:AddDoubleLine(q.surveyOnly and string.format("Level %d", q.lvl) or string.format("Level %d, needs %d", q.lvl, q.req or 1), cat, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8)
   local full = Q.Full(q)
   local src
-  if q.liveFull then
+  if q.turnIn then
+    src = "none: a writ's turn-in"
+  elseif q.liveFull then
     src = QB.Live.Source(q) or "the game's own number"
   elseif q.xpUnknown then
     src = "not known yet"
@@ -353,7 +355,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
   else
     src = QB.Comma(q.base) .. " x 1"
   end
-  tip:AddDoubleLine("Forever XP " .. ((q.xpUnknown and not q.liveFull) and "?" or QB.Comma(full)), src, 1, 1, 1, 0.55, 0.75, 1)
+  tip:AddDoubleLine("Forever XP " .. ((q.xpUnknown and not q.liveFull and not q.turnIn) and "?" or QB.Comma(full)), src, 1, 1, 1, 0.55, 0.75, 1)
   UI.RewardLines(tip, q)
   if st and st.behind and st.later then
     tip:AddLine(string.format("Probably behind you: %s, a later step of this chain, is %s, and the game only offers a step once the ones before it are handed in.", QB.Quest.Label(st.later), st.how == "held" and "in your log" or "done"), 1, 0.6, 0.3, true)
@@ -381,7 +383,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
     tip:AddLine(string.format(q.nerfed and "The catalog lists %s. QuestBank uses the game's number." or "Wowhead lists %s. QuestBank uses the game's number.", QB.Comma(QB.Model.Listed(q))), 1, 0.6, 0.3, true)
   end
   if xp then
-    local line = QB.Comma(xp) .. " XP " .. QB:OnTheDay()
+    local line = (q.turnIn and "No XP " or (QB.Comma(xp) .. " XP ")) .. QB:OnTheDay()
     if pct and pct < 100 then line = line .. string.format(" (%d%% at level %d)", pct, plvl) end
     tip:AddLine(line, pct and pct < 100 and 1 or 0.6, pct and pct < 100 and 0.6 or 1, pct and pct < 100 and 0.3 or 0.6)
   end
@@ -2325,18 +2327,21 @@ function UI:RefreshLogView(v)
         r.addName:SetText(d.q.name)
         local place = d.q.cat and d.q.cat.name or ""
         local mins = d.mins and string.format(", %d min", math.floor(d.mins + 0.5)) or ""
-        -- a quest you can't take yet (2 levels ahead): the level it needs, kept as long as the line has room
+        -- a quest you can't take yet (2 levels ahead): the level it needs, kept as long as the line has room; a writ's
+        -- turn-in (it pays no XP) or a repeatable says so before its place
         local at = (d.req or 0) > s.level and string.format("at %d", d.req) or nil
+        local kind = d.q.turnIn and "Turn-in" or d.q.repeatable and "Repeatable" or nil
+        local head = name .. (at and (" · " .. at) or "") .. (kind and (" · " .. kind) or "")
         local room = r.cutName:GetWidth() - 2
-        local fits = at and { name .. " · " .. at .. " · " .. place .. mins, name .. " · " .. at .. " · " .. place, name .. " · " .. at, name }
-          or { name .. " · " .. place .. mins, name .. " · " .. place, name }
+        local fits = { head .. " · " .. place .. mins, head .. " · " .. place, head, name .. (kind and (" · " .. kind) or ""), name }
         for _, line in ipairs(fits) do
           r.cutName:SetText(line)
           if r.cutName:GetStringWidth() <= room then break end
         end
         local showL = not recipe and d.ilvl > 0
         r.gain:SetText(showL and ("iL " .. d.ilvl) or QB.Short(d.value))
-        r.reward = string.format("Rewards %s%s. %s XP %s.", name, showL and string.format(" (item level %d)", d.ilvl) or "", QB.Comma(d.value), QB:OnTheDay())
+        local pay = d.q.turnIn and "No XP: a turn-in." or (QB.Comma(d.value) .. " XP " .. QB:OnTheDay() .. "." .. (d.q.repeatable and " Repeatable." or ""))
+        r.reward = string.format("Rewards %s%s. %s", name, showL and string.format(" (item level %d)", d.ilvl) or "", pay)
           .. (at and string.format(" You can take it at level %d.", d.req) or "")
         r.rewardId = id
       else

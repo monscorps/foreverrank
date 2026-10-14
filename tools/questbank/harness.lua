@@ -3394,6 +3394,84 @@ local layouts, problems = {}, {}
 
 
 -- [stage: checklist] that stage's tests go right below this line
+-- checklist 1: the writs' turn-ins (flag 131072) and the repeatables (4096) are the reward finders' alone, never Available
+-- or Now, and their finder rows say Turn-in (no XP) or Repeatable
+do
+  local D = QB.Data
+  local level = QB.state.level
+  local _, below = QB:Range()
+  local writ, rep
+  for id, r in pairs(D.Q) do
+    local fl = r[10]
+    -- (the finders' window: takeable at your level, not grey below it)
+    local mine = (r[3] == 0 or r[3] == 1) and r[9] == 0 and not D.RACE[id] and r[2] <= level and r[1] >= level - below and not QB.state.log[id] and not QB.API.IsDone(id)
+      and not D.FOLLOW[id] and math.floor(fl / 128) % 2 == 0 and math.floor(fl / 65536) % 2 == 0
+    if mine and math.floor(fl / 131072) % 2 == 1 and not D.RITEMS[id] and (not writ or id < writ) then writ = id end
+    if mine and math.floor(fl / 4096) % 2 == 1 and math.floor(fl / 131072) % 2 == 0 and (not rep or id < rep) then rep = id end
+  end
+  assert(writ and rep, "a writ and a repeatable an Alliance paladin at 20 could take: " .. tostring(writ) .. " " .. tostring(rep))
+  local wq, rq = QB.Quest.Get(writ), QB.Quest.Get(rep)
+  assert(wq.turnIn and not rq.turnIn and rq.repeatable, "the flags read: " .. wq.name .. " is a turn-in, " .. rq.name .. " repeatable")
+  print(string.format("checklist: writ %d %s (%s), repeatable %d %s (%s)", writ, wq.name, wq.cat and wq.cat.name or "?", rep, rq.name, rq.cat and rq.cat.name or "?"))
+  -- their rewards, as the quest survey learns them in game: a shield for the writ, a trinket for the repeatable
+  local saveW, saveR = D.RITEMS[writ], D.RITEMS[rep]
+  D.RITEMS[writ] = { c = { 999901 } }; D.RIT[999901] = { 35, 14, 4, 6 }  -- INVTYPE_SHIELD, armour, shield
+  D.RITEMS[rep] = { r = { 999902 } }; D.RIT[999902] = { 34, 12, 4, 0 }   -- INVTYPE_TRINKET
+  UI.candMemo = nil
+  local function byQ(list) local t = {} for _, d in ipairs(list) do t[d.q.id] = d end return t end
+  local gear, trinket = byQ(UI:FindRewards("gear", level)), byQ(UI:FindRewards("trinket", level))
+  assert(gear[writ] and gear[writ].item == 999901 and gear[writ].ilvl == 35 and gear[writ].value == 0, "the writ is in Best gear with its shield and no XP")
+  assert(trinket[rep] and trinket[rep].item == 999902 and trinket[rep].ilvl == 34, "the repeatable is in Trinkets with its trinket")
+  assert(not trinket[writ], "the shield is no trinket")
+  -- never Available or Now: not a candidate outside the finders, with either level window, and on no card of either page
+  for _, c in ipairs(UI:Candidates(nil, level)) do assert(c.id ~= writ and c.id ~= rep, "outside the finders: " .. D.QN[c.id]) end
+  for _, c in ipairs(UI:Candidates(nil, level, level)) do assert(c.id ~= writ and c.id ~= rep, "nor with the finders' level window alone: " .. D.QN[c.id]) end
+  for _, tab in ipairs({ 2, 6 }) do
+    UI:ShowTab(tab); UI:Refresh()
+    for _, card in ipairs(UI.views[tab].cards.items) do
+      for _, row in ipairs(card.rows.items) do
+        assert(not (row:IsShown() and row.q and (row.q.id == writ or row.q.id == rep)), (tab == 2 and "Available" or "Now") .. " lists " .. tostring(row.q and row.q.name))
+      end
+    end
+  end
+  -- the rows: Best gear says Turn-in and the tooltip says no XP; Trinkets says Repeatable
+  UI:ShowTab(1); UI.findMode, UI.gearSlot = "gear", nil; UI:Refresh()
+  local function rowOf(id) for _, r in ipairs(v1.swaps) do if r:IsShown() and r.add and r.add.id == id then return r end end end
+  local wr = rowOf(writ)
+  assert(wr, "the writ has a Best gear row")
+  assert(wr.cutName:GetText():find("Item 999901 · Turn-in · " .. (wq.cat and wq.cat.name or ""), 1, true) and wr.gain:GetText() == "iL 35",
+    "its line says Turn-in before its place: " .. wr.cutName:GetText() .. " / " .. wr.gain:GetText())
+  lines = {}; wr.__scripts.OnEnter(wr)
+  local t = table.concat(lines, "\n")
+  assert(t:find("Rewards Item 999901 (item level 35). No XP: a turn-in.", 1, true) and not t:find("0 XP", 1, true), "its tooltip: no XP, not 0 XP: " .. t)
+  UI.findMode = "trinket"; UI:Refresh()
+  local rr = rowOf(rep)
+  assert(rr and rr.cutName:GetText():find("Item 999902 · Repeatable · ", 1, true) and rr.gain:GetText() == "iL 34",
+    "the repeatable's Trinkets row says so: " .. tostring(rr and rr.cutName:GetText()))
+  lines = {}; rr.__scripts.OnEnter(rr); t = table.concat(lines, "\n")
+  assert(t:find(" XP " .. QB:OnTheDay() .. ". Repeatable.", 1, true), "and its tooltip: " .. t)
+  -- the sheet: Best gear narrowed to the off hand, with the writ's shield and Blackfathom Villainy's (its trip across the
+  -- sea, checklist 3); no row anywhere says "0 min" for a place on the other continent
+  UI.findMode, UI.gearSlot = "gear", "Off hand"; UI:Refresh()
+  assert(rowOf(writ), "the writ's shield is in the off-hand rows")
+  local villainy = rowOf(1200)
+  assert(villainy and villainy.cutName:GetText():find("Blackfathom Deeps, %d+ min$") and not villainy.cutName:GetText():find(", 0 min", 1, true),
+    "Blackfathom Villainy's row: its minutes to the Deeps: " .. tostring(villainy and villainy.cutName:GetText()))
+  for _, slot in ipairs({ "Off hand", false }) do
+    UI.gearSlot = slot or nil; UI:Refresh()
+    for _, r in ipairs(v1.swaps) do
+      if r:IsShown() and r.add and r.add.cat and r.add.cat.cont and r.add.cat.cont ~= 0 then
+        assert(not r.cutName:GetText():find(", 0 min", 1, true), "a quest across the sea is never 0 min away: " .. r.cutName:GetText())
+      end
+    end
+  end
+  UI.gearSlot = "Off hand"; UI:Refresh()
+  for _, p in ipairs(checkLayout(UI.frame, "Quest Log, Best gear, a writ's turn-in")) do problems[#problems + 1] = p end
+  layouts[#layouts + 1] = dumpLayout(UI.frame, "Quest Log, Best gear (off hand): a writ's turn-in, a trip across the sea")
+  UI.findMode, UI.gearSlot = "xp", nil
+  D.RITEMS[writ], D.RITEMS[rep], D.RIT[999901], D.RIT[999902] = saveW, saveR, nil, nil
+  UI.candMemo = nil; UI:Refresh()
+end
 -- checklist 3: a quest given inside a dungeon across the sea is measured to the entrance: Blackfathom Villainy from Goldshire
 -- is a boat and a flight away, never "0 min"; a place no way is known to shows no minutes, not a huge number
 do
