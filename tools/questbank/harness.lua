@@ -3356,6 +3356,30 @@ do
   assert(qid and U.RewardSlotFits(qid, "Head") and not U.RewardSlotFits(qid, "Ring"), "a mail head reward fits a paladin's Head, not Ring")
   env.C_Item.GetItemInfoInstant = saveInst
 end
+-- [stage: boss-spots] that stage's tests go right below this line
+
+
+
+-- [stage: glow] that stage's tests go right below this line
+
+
+
+-- [stage: dressup] that stage's tests go right below this line
+
+
+
+-- [stage: gear] that stage's tests go right below this line
+
+
+
+-- [stage: legacy] that stage's tests go right below this line
+
+
+
+-- [stage: checklist] that stage's tests go right below this line
+
+
+
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
   local set = QB:Settings()
