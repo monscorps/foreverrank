@@ -3422,6 +3422,62 @@ end
 -- (STAGE_LAYOUTS and STAGE_PROBLEMS are the same tables, for the stage blocks that name them that way)
 local layouts, problems = {}, {}
 STAGE_LAYOUTS, STAGE_PROBLEMS = layouts, problems
+-- 5.5: the minimap as drawn, two sheets on the layout page (render_layout.py draws QuestBank's art from its files): at
+-- the game's zoom, three route stops, a hand-in on the rim, the objectives of two quests of the log, a dungeon's
+-- entrance and the strokes; and the far zoom over the game's tiles with your arrow and your party on them
+do
+  local Mini, MV, env, P, D = QB.Mini, QB.MiniView, owner.env, QB.Pins, QB.Data
+  c = owner
+  local saveWorld, savePos, saveParty, saveList = env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition, c.party, P.list
+  env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = -v.y * 3000, y = -v.x * 4000, GetXY = function(self) return self.x, self.y end } end
+  local at = { player = { 0.5, 0.5 }, party1 = { 0.5, 0.48 }, party2 = { 0.52, 0.5 } }
+  env.C_Map.GetPlayerMapPosition = function(m, unit)
+    local s = at[unit or "player"]
+    return s and { x = s[1], y = s[2], GetXY = function(self) return self.x, self.y end } or nil
+  end
+  local realTiles, testTiles = QB.MinimapTiles, {}
+  for col = 20, 50 do for row = 20, 50 do testTiles[col * 100 + row] = 900000 + col * 100 + row end end
+  QB.MinimapTiles = { azeroth = testTiles }
+  c.party = { { "Brann", "WARRIOR", 20 }, { "Aela", "SHAMAN", 21 } }
+  c.miniRadius, c.facing, env.Minimap.__zoom = 200, 0, 0
+  local q1, q2 = QB.state.logOrder[1].id, QB.state.logOrder[2].id
+  P.list = { { m = 1429, x = 50, y = 47.5, num = 1, name = "Goldshire", when = "At 0:10, level 20.0 to 20.2", lines = {}, ids = { [q1] = true } },
+             { m = 1429, x = 52.5, y = 51, num = 2, name = "Crossroads", when = "At 0:20", lines = {}, ids = { [q2] = true } },
+             { m = 1429, x = 90, y = 50, num = 3, name = "Far away", when = "At 1:00", lines = {} } }
+  local saveSpot1, saveSpot2 = D.SPOT[q1], D.SPOT[q2]
+  D.SPOT[q1] = "k,1,1429,515,485,10,c;k,1,1429,520,490,10,c;c,2,1429,478,520,10,c"
+  D.SPOT[q2] = "u,1,1429,487,470,10,o;e,2,1429,530,530,10,p"
+  local saveComplete = { QB.state.logOrder[1].complete, QB.state.logOrder[2].complete }
+  QB.state.logOrder[1].complete, QB.state.logOrder[2].complete = false, false
+  local tid
+  for id in pairs(D.Q) do
+    local q = QB.Quest.Get(id)
+    if q and q.turn and not QB.state.log[id] then tid = id; break end
+  end
+  local tq = QB.Quest.Get(tid)
+  local saveTurn = tq.turn
+  tq.turn = { n = "Marshal Dughan", m = 1429, x = 50, y = 10 }
+  table.insert(QB.state.logOrder, 1, { id = tid, complete = true })
+  local dcat
+  for _, cat in ipairs(D.CAT) do if cat.dungeon and cat.entrance then dcat = cat; break end end
+  local saveEntrance = dcat.entrance
+  dcat.entrance = { m = 1429, x = 50.5, y = 54 }
+  Mini.Invalidate(); Mini.Update(0)
+  assert(Mini.shown >= 6 and Mini.linesShown >= 2, "the sheet holds the stops, the objectives, the hand-in and the entrance: " .. tostring(Mini.shown))
+  layouts[#layouts + 1] = dumpLayout(env.Minimap, "Minimap, native")
+  Mini.Wheel(-1); Mini.Update(0)
+  for _ = 1, 3 do c.clock = c.clock + 0.2; Mini.Update(0) end
+  assert(MV.Extended() and MV.partyShown == 2, "the far zoom: the ground, your party")
+  layouts[#layouts + 1] = dumpLayout(env.Minimap, "Minimap, far zoom")
+  Mini.Wheel(1); Mini.Update(0)
+  table.remove(QB.state.logOrder, 1)
+  tq.turn, dcat.entrance = saveTurn, saveEntrance
+  QB.state.logOrder[1].complete, QB.state.logOrder[2].complete = saveComplete[1], saveComplete[2]
+  D.SPOT[q1], D.SPOT[q2] = saveSpot1, saveSpot2
+  c.party, P.list, QB.MinimapTiles = saveParty, saveList, realTiles
+  env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
+  Mini.Invalidate(); Mini.Update(0)
+end
 -- [stage: boss-spots] that stage's tests go right below this line
 -- 5.4.2: where the bosses stand on the floor art (boss_spots.py: the room each stands in, by MoP Classic's building
 -- groups, decides the floor; the rectangle the spot; DungeonMap.lua draws them). The dungeons' known truths pin the

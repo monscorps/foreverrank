@@ -3,9 +3,49 @@
 frames as boxes, text at its size and colour, the game's icons from the icon CDN by name, other art as tinted
 placeholders labelled with what they are. A look at what QuestBank really draws, without the game.
   python3 render_layout.py layout.json out.html"""
-import html, json, math, os, sys
+import html, io, json, math, os, site, sys
 MAN = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "research", "questbank", "manifest.json")))
 BY_ID = {int(v): k for k, v in MAN.items()}
+# QuestBank's own art (QuestBank/art/*.png and *.tga: QuestTrail's marker discs, glyphs, step circles and compass dial,
+# QuestBank's glow and lines) is drawn from the files, tinted as the game tints it (the vertex colour multiplies the
+# image), through Pillow where it is installed (the user's site-packages too, under python3 -I); without it, tinted
+# placeholders as before
+try:
+    from PIL import Image
+except ImportError:
+    try:
+        sys.path.append(site.getusersitepackages())
+        from PIL import Image
+    except Exception:
+        Image = None
+ART_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "QuestBank", "art")
+ART_PREFIX = "Interface\\AddOns\\QuestBank\\art\\"
+_art_cache = {}
+
+def art_uri(name, col=None, desat=False):
+    """a data URI of the art file, multiplied by the colour (and greyed first when desaturated); None when unknown"""
+    key = (name, col, desat)
+    if key in _art_cache: return _art_cache[key]
+    uri = None
+    if Image is not None:
+        base = os.path.join(ART_DIR, name)
+        paths = [base] if os.path.splitext(name)[1] else [base + ".png", base + ".tga"]
+        for path in paths:
+            if os.path.exists(path):
+                im = Image.open(path).convert("RGBA")
+                if desat:
+                    g = im.convert("L")
+                    im = Image.merge("RGBA", (g, g, g, im.split()[3]))
+                if col:
+                    r, g, b, a = im.split()
+                    k = [max(0.0, min(1.0, x or 0)) for x in col[:3]]
+                    im = Image.merge("RGBA", (r.point(lambda v, k=k[0]: int(v * k)), g.point(lambda v, k=k[1]: int(v * k)), b.point(lambda v, k=k[2]: int(v * k)), a))
+                buf = io.BytesIO()
+                im.save(buf, "PNG")
+                uri = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+                break
+    _art_cache[key] = uri
+    return uri
 
 def rgba(c, a=1.0, default="rgba(0,0,0,0)"):
     if not c: return default
@@ -72,6 +112,28 @@ def tex_style(it):
         if name in ATLAS_SVG:
             return "background:url(data:image/svg+xml;base64,%s) center/contain no-repeat;" % ATLAS_SVG[name], None
         return "background:rgba(242,207,107,.85);border-radius:50%;", raw[6:]
+    # QuestBank's own art, from the file, tinted and turned as the game draws it
+    if isinstance(raw, str) and raw.startswith(ART_PREFIX):
+        c = it.get("c")
+        uri = art_uri(raw[len(ART_PREFIX):], tuple(c[:3]) if c else None, bool(it.get("desat")))
+        if uri:
+            rot = ("transform:rotate(%.3frad);" % -it["rot"]) if it.get("rot") else ""
+            return "background:url(%s) center/100%% 100%% no-repeat;%s" % (uri, rot), None
+    # the game's minimap art: your arrow, a party member's blip (the white one of the sheet, tinted), a dungeon's portal
+    if isinstance(raw, str) and raw == "Interface\\Minimap\\MinimapArrow":
+        rot = ("transform:rotate(%.3frad);" % -it["rot"]) if it.get("rot") else ""
+        arrow = _svg("<path d='M12 2L19 20L12 16L5 20Z' fill='#f4f4f4' stroke='#1a1a1a' stroke-width='1.4' stroke-linejoin='round'/>")
+        return "background:url(data:image/svg+xml;base64,%s) center/100%% 100%% no-repeat;%s" % (arrow, rot), None
+    if isinstance(raw, str) and raw == "Interface\\Minimap\\PartyRaidBlips":
+        return "background:%s;border-radius:50%%;box-shadow:0 0 0 1px #000;" % rgba(it.get("c") or (1, 1, 1), 1), None
+    if isinstance(raw, str) and raw == "Interface\\Minimap\\Dungeon_Icon":
+        if os.path.exists(os.path.join(LOCAL_TEX, "atlas_dungeon.png")):
+            return "background:url(tex/atlas_dungeon.png) center/100%% 100%% no-repeat;", None
+        return "background:radial-gradient(circle,#7fd0ff 0%%,#2a5a9a 55%%,transparent 70%%);", None
+    # the harness's stand-in minimap tiles (900000 and up): plain ground
+    if isinstance(raw, (int, float)) and 900000 <= int(raw) < 910000:
+        rot = ("transform:rotate(%.3frad);" % -it["rot"]) if it.get("rot") else ""
+        return "background:#3f4a2e;outline:1px solid rgba(0,0,0,.25);%s" % rot, None
     if path and path.endswith(".tga"):
         pass
     # the game's small marks, drawn as close as a picture can: the ready check, the red X, the waiting disc, the gossip !
@@ -100,7 +162,10 @@ def tex_style(it):
     return "background:%s;outline:1px dashed rgba(255,255,255,.12);" % rgba(c or (0.3, 0.3, 0.35), 0.35), label
 
 def render(layout):
-    out = ['<div class="shot"><h2>%s</h2><div class="win" style="width:%dpx;height:%dpx">' % (html.escape(layout["label"]), layout["w"], layout["h"])]
+    # the minimap's sheets: round, over ground, drawn at twice the size so the markers can be judged
+    mini = layout["label"].startswith("Minimap")
+    extra = ("border-radius:50%%;background:#2f3a24;transform:scale(2);transform-origin:0 0;margin-bottom:%dpx;" % layout["h"]) if mini else ""
+    out = ['<div class="shot"><h2>%s</h2><div class="win" style="width:%dpx;height:%dpx;%s">' % (html.escape(layout["label"]), layout["w"], layout["h"], extra)]
     items = sorted(layout["items"], key=lambda it: (it.get("depth", 0), {"BACKGROUND": 0, "BORDER": 1, "ARTWORK": 2, "OVERLAY": 3, "HIGHLIGHT": 4}.get(it.get("layer"), 2), it["i"]))
     for it in items:
         x, y, w, h = it["x"], it["y"], it["w"], it["h"]
