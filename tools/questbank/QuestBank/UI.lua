@@ -4710,32 +4710,50 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("Keys for it and for each page: Key Bindings, QuestBank.", 0.6, 0.6, 0.6, true)
   end)
 
-  -- the light on the object your Interact key would use (Glow.lua)
+  -- the light on what your Interact key would use (Glow.lua): its style, and what it lights
   heading(p, LEFT, -1006, "Interact light", 370)
-  v.glowOn = checkRow(p, LEFT, -1030, "Light the object my Interact key would use", 340)
+  v.glowOn = checkRow(p, LEFT, -1030, "Light what my Interact key would use", 340)
   v.glowOn:SetScript("OnClick", function(self) if QB.Glow then QB.Glow.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
-  v.glowOther = checkRow(p, LEFT + 24, -1058, "Plain objects too, in white", 316)
+  -- the style: QuestBank's sparkles, its soft light, or the game's own highlight alone; the one in use is greyed
+  v.glowStyle = {}
+  for i, o in ipairs(UI.GLOW_STYLES) do
+    local b = button(p, o[2], 84)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1058)
+    b.value = o[1]
+    b:SetScript("OnClick", QB.Safe(function(self)
+      if QB.Glow then QB.Glow.SetStyle(self.value) else QB:Settings().glow.style = self.value end
+      UI:Refresh()
+    end, "settings: light style"))
+    tooltip(b, function(tip)
+      tip:AddLine(o[2], GOLD[1], GOLD[2], GOLD[3])
+      tip:AddLine(o[3], 1, 1, 1, true)
+    end)
+    v.glowStyle[i] = b
+  end
+  v.glowNpcs = checkRow(p, LEFT + 24, -1086, "NPCs too: gold with a quest for you", 316)
+  v.glowNpcs:SetScript("OnClick", function(self) QB:Settings().glow.npcs = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
+  v.glowOther = checkRow(p, LEFT + 24, -1114, "Plain objects too, in white", 316)
   v.glowOther:SetScript("OnClick", function(self) QB:Settings().glow.other = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
-  v.glowCombat = checkRow(p, LEFT + 24, -1086, "Keep it on in a fight", 316)
+  v.glowCombat = checkRow(p, LEFT + 24, -1142, "Keep it on in a fight", 316)
   v.glowCombat:SetScript("OnClick", function(self) QB:Settings().glow.combat = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
   v.glowHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.glowHint:SetPoint("TOPLEFT", LEFT, -1112)
-  v.glowHint:SetHeight(44)
-  v.glowHint:SetText("Gold for a quest object, green for an herb, orange for ore, blue for a chest. Switching it on sets the game's soft-interact settings; they go back as they were when it is off.")
+  v.glowHint:SetPoint("TOPLEFT", LEFT, -1168)
+  v.glowHint:SetHeight(52)
+  v.glowHint:SetText("Gold for a quest object or NPC, green for an herb, orange for ore, blue for a chest. Switching it on sets the game's soft-interact settings; they go back as they were when it is off. Game's own draws nothing of QuestBank's.")
 
   -- health and mana on the portraits: the game's own Status Text (Options, Interface), always shown, so it works in
   -- a fight where an addon may not read an enemy's health
-  heading(p, LEFT, -1172, "Health and mana numbers", 370)
+  heading(p, LEFT, -1228, "Health and mana numbers", 370)
   v.statusBtns = {}
   for i, o in ipairs(UI.STATUS_TEXT) do
     local b = button(p, o[2], 84)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1198)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1254)
     b.value = o[1]
     b:SetScript("OnClick", QB.Safe(function(self) UI.SetStatusText(self.value); UI:Refresh() end, "settings: status text"))
     v.statusBtns[i] = b
   end
   v.statusHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.statusHint:SetPoint("TOPLEFT", LEFT, -1228)
+  v.statusHint:SetPoint("TOPLEFT", LEFT, -1284)
   v.statusHint:SetHeight(30)
   v.statusHint:SetText("On your portrait, your target's and your focus's, always shown. The game's own Status Text option.")
 
@@ -4800,6 +4818,12 @@ end
 
 -- the game's Status Text: off, numbers, percent or both on the unit frames (statusText, statusTextDisplay)
 UI.STATUS_TEXT = { { "NONE", "Off" }, { "NUMERIC", "Numbers" }, { "PERCENT", "Percent" }, { "BOTH", "Both" } }
+-- the interact light's styles (Glow.lua): the setting, the button, what the tooltip says
+UI.GLOW_STYLES = {
+  { "sparkle", "Sparkles", "QuestBank's sparkles: a soft glow with small sparkles twinkling and circling round it, in the kind's colour." },
+  { "light", "Light", "QuestBank's soft light: a glow under a breathing ring and a slow-turning sparkle." },
+  { "game", "Game's own", "Nothing drawn by QuestBank: the game's own highlight on the nameplate, with its health bar and interact icon." },
+}
 function UI.StatusText()
   local get = C_CVar and C_CVar.GetCVar or GetCVar
   local okA, on = pcall(get, "statusText")
@@ -4929,11 +4953,17 @@ function UI:RefreshSettingsView(v)
   v.mapPage.label:SetText(page and "Map key opens QuestBank's map" or "Map key opens QuestBank's map (Forever client only)")
   local pageInk = page and INK or INK_SOFT
   v.mapPage.label:SetTextColor(pageInk[1], pageInk[2], pageInk[3])
-  local gl = type(set.glow) == "table" and set.glow or {}
+  local gl = QB.Glow and QB.Glow.Settings() or (type(set.glow) == "table" and set.glow or {})
+  local style = gl.style or "sparkle"
   v.glowOn:SetChecked(gl.on == true)
+  -- the style buttons: the one in use greyed, as the game's own choosers do; all of them while the light is off
+  for _, b in ipairs(v.glowStyle) do b:SetEnabled(gl.on == true and b.value ~= style) end
+  -- what it lights and when: nothing to choose while the game's own highlight is in use
+  local draws = gl.on == true and style ~= "game"
+  v.glowNpcs:SetChecked(gl.npcs ~= false)
   v.glowOther:SetChecked(gl.other == true)
   v.glowCombat:SetChecked(gl.combat == true)
-  v.glowOther:SetEnabled(gl.on == true); v.glowCombat:SetEnabled(gl.on == true)
+  v.glowNpcs:SetEnabled(draws); v.glowOther:SetEnabled(draws); v.glowCombat:SetEnabled(draws)
   local rm = QB.Camp and QB.Camp.Settings and QB.Camp.Settings() or (type(set.remind) == "table" and set.remind or {})
   for key, row in pairs(v.remind) do row:SetChecked(rm[key] == true) end
   v.clockLevelMsg:SetChecked(set.clockLevelMsg ~= false)
@@ -4960,7 +4990,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(1272) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(1328) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------

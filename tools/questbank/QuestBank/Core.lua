@@ -1090,7 +1090,9 @@ local DEFAULTS = {
   -- the minimap's far zoom over the game's tiles and its drag (MinimapView.lua); back to you after a drag; your party
   -- and the quest's areas on the far ground; the stops the strokes join (MinimapRoute.lua)
   mmExtended = true, mmCenter = true, mmParty = true, mmAreas = true, minimapSteps = 5,
-  glow = { on = true, other = true, combat = false },
+  -- the interact light (Glow.lua): its style (sparkle, light, or the game's own highlight), NPCs lit too, plain
+  -- objects too, kept on in a fight
+  glow = { on = true, style = "sparkle", npcs = true, other = true, combat = false },
   walkRecord = true, walkShow = true, -- walked trails (Walk.lua): noted as you go, drawn on the minimap
   -- the camp bar (Camp.lua): Well Fed, the campfire (Basic Campfire or a kit), camp features with their cooldown, the
   -- sleeping bag; hidden in dungeons when quietInstance. campBar = false hides the bar. buffs: the missing-buffs banner
