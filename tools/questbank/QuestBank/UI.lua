@@ -1880,9 +1880,10 @@ function UI.MinutesTo(q, here, mf)
 end
 
 -- reqMax (the reward finders): quests you can take at that level, whatever their quest level; else those needing at most
--- two levels more than yours, within the level window (QB:Range). seen: the quests the quest survey alone knows
--- (Survey.lua) too, for the reward finders: they have no giver or place, so nothing else suggests them
-function UI:Candidates(limit, level, reqMax, seen)
+-- two levels more than yours, within the level window (QB:Range). finder: the reward finders' own quests too: the ones
+-- the quest survey alone knows (Survey.lua: no giver or place), repeatables and the writs' turn-ins (no XP), which
+-- nothing else suggests
+function UI:Candidates(limit, level, reqMax, finder)
   local D = QB.Data
   local s = QB.state
   level = level or s.level
@@ -1891,7 +1892,7 @@ function UI:Candidates(limit, level, reqMax, seen)
   local above, below = QB:Range()
   -- the same question asked several times a refresh: answer it once a second
   local key = table.concat({ limit or 0, level, s.level, s.logCount or 0, tostring(banking), fac or "", s.mapID or 0, above, below, QB:SkipSignature(), QB.doneVer or 0,
-                             reqMax or "-", seen and 1 or 0, QB.surveyVer or 0 }, ":")
+                             reqMax or "-", finder and 1 or 0, QB.surveyVer or 0 }, ":")
   local now = GetTime and GetTime() or 0
   UI.candMemo = UI.candMemo or {}
   local memo = UI.candMemo[key]
@@ -1912,8 +1913,8 @@ function UI:Candidates(limit, level, reqMax, seen)
       and (not race or rbit == 0 or rbit > 128 or math.floor(race / rbit) % 2 == 1)
       and r[2] <= (reqMax or s.level + 2) and r[1] >= level - below and (reqMax ~= nil or r[1] <= ceiling) and not s.log[id] and not D.FOLLOW[id]
       and math.floor(r[10] / 128) % 2 == 0 -- never suggest Season of Discovery leftovers
-      and math.floor(r[10] / 4096) % 2 == 0 -- nor repeatables
-      and (seen or math.floor(r[10] / 65536) % 2 == 0) -- nor, but in the finders, a quest the survey alone knows
+      -- nor, but in the reward finders, repeatables, a quest the survey alone knows or a writ's turn-in
+      and (finder or (math.floor(r[10] / 4096) % 2 == 0 and math.floor(r[10] / 65536) % 2 == 0 and math.floor(r[10] / 131072) % 2 == 0))
       and not (turn and turn[5] < 0)
       and not QB:Skipped(r[8], turn and turn[5]) then -- nor anything where you said to skip
       local live = QuestBankDB.live and QuestBankDB.live[id]

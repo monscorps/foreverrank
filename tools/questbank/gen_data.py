@@ -300,6 +300,17 @@ def classic_base(c):
 
 
 CLASSIC = set()
+# The crafting writs: an item named "Craftsman's Writ" starts a quest that asks you to deliver what it names (the client's
+# ItemSparse StartQuestID). The Argent Dawn's (22600-22626, quests 9178-9206, from Naxxramas' trash) and Forever's own
+# (264011 and on, quests 94004 and 94212-94360, from the Sealed Apprentice's, Journeyman's, Expert's, Artisan's and
+# Craftsman's Writs: "a pending crafting order intercepted in transit"). No XP and no giver, so nothing plans them; the
+# catalog keeps them (flag 131072, a turn-in) for the reward finders alone. WRIT[quest id] = (writ item, its name)
+ITEMS_BUILD = "1.60.1.70338"
+WRIT = {}
+for _r in csv.DictReader(open(os.path.join(REPO, "research", "wago", ITEMS_BUILD, "ItemSparse.csv"), encoding="utf-8")):
+    if (_r.get("Display_lang") or "").startswith("Craftsman's Writ") and int(_r.get("StartQuestID") or 0) > 0:
+        WRIT[int(_r["StartQuestID"])] = (int(_r["ID"]), _r["Display_lang"])
+CRAFTING_AREA = 16941  # Wowhead's area of Forever's writ quests (the client's AreaTable: "Crafting")
 # Forever's client descends from Season of Discovery and carries its leftovers: Wowhead lists quests
 # whose NPCs were never put into Forever. Players' reports settle it quest by quest:
 NOT_IN_FOREVER = {78132, 78133, 78134}  # Alonso's Dragonslayer quests: no Alonso in Ashenvale (owner, 2026-09-30)
@@ -355,12 +366,13 @@ for _k, _c in ((load("cmangos.json", {}) or {}).get("quests") or {}).items():
         continue
     _lvl = _c["level"] if _c["level"] and _c["level"] > 0 else _c["min"]
     _sort = _c.get("sort") if _c.get("sort") is not None else _c.get("zone")
-    if not (1 <= (_lvl or 0) <= MAXLVL) or (_c["min"] or 0) > MAXLVL or _sort in EVENTS or (_c.get("special") or 0) & 1:
+    _writ = _qid in WRIT  # a writ's turn-in: repeatable and no XP, kept for the reward finders
+    if not (1 <= (_lvl or 0) <= MAXLVL) or (_c["min"] or 0) > MAXLVL or _sort in EVENTS or ((_c.get("special") or 0) & 1 and not _writ):
         continue
     if _c.get("type") in (41, 62, 88, 89) or not _c.get("starts") or not _c.get("ends"):
         continue
     _rec = classic_record(_qid, _c)
-    if _rec["category2"] in (3, 6) or _rec["xp"] <= 0 or not (_c["level"] and _c["level"] > 0):
+    if _rec["category2"] in (3, 6) or (_rec["xp"] <= 0 and not _writ) or not (_c["level"] and _c["level"] > 0):
         continue  # raids, battlegrounds, and quests with no level or no XP to plan
     LIST[_qid] = _rec
     CLASSIC.add(_qid)
@@ -704,8 +716,8 @@ for qid, q in LIST.items():
         # Shard is 6981, not 3366) or a Forever one Wowhead lists bare (999, 1005, 1500: no giver, ender or XP)
     if not (1 <= qlevel(qid) <= MAXLVL) or (q.get("reqlevel") or 0) > MAXLVL:
         continue
-    if qlevel(qid) >= MAXLVL and not base_xp(qid):
-        continue  # client leftovers Wowhead lists at level 60 with no XP (Craftsman's Writs and the like)
+    if qlevel(qid) >= MAXLVL and not base_xp(qid) and qid not in WRIT:
+        continue  # client leftovers Wowhead lists at level 60 with no XP (the writs' turn-ins stay: WRIT)
     IDS.append(qid)
 IDS.sort()
 
@@ -1147,6 +1159,12 @@ def continent_of(where):
 def cat_for(qid):
     q = LIST[qid]
     c2, area = q.get("category2"), q.get("category")
+    if area == CRAFTING_AREA:
+        # Forever's writ quests: handed in to whoever placed the order, nowhere on a map yet
+        if "crafting" not in CAT_AT:
+            CATS.append({"key": "crafting", "name": "Crafting orders", "where": "", "icon": icon("inv_misc_note_02")})
+            CAT_AT["crafting"] = len(CATS)
+        return CAT_AT["crafting"]
     if c2 == 2 or (q.get("type") == 81 and area in DUNGEON):
         key = "d%d" % area
         if key not in CAT_AT:
@@ -1243,6 +1261,8 @@ for qid in IDS:
         flags |= 2
     if d.get("startType") == "item" or any(k == "item" for k, _ in cmq.get("starts", [])) or (extra.get("bag") and len(extra["bag"]) == 2):
         flags |= 4
+    if qid in WRIT:
+        flags |= 4 | 131072  # a writ's turn-in: starts from the writ, for the reward finders alone
     mult = d.get("mult")
     base = base_xp(qid)
     if (not d or mult is None) and FC.get(qid) and base:
@@ -1253,7 +1273,9 @@ for qid in IDS:
         if abs(f - FC[qid]) > max(60, FC[qid] * 0.02):
             DISAGREE.append((qid, f, FC[qid]))
     postcut = (d.get("read") or "") >= NERF_DATE  # a page read after the cut already shows the new multiplier
-    if not d and mult is None or mult is None:
+    if (not d and mult is None or mult is None) and qid in WRIT:
+        mult = 1  # (no XP to multiply)
+    elif not d and mult is None or mult is None:
         flags |= 8
         mult = 1
         unconfirmed += 1
@@ -1329,6 +1351,8 @@ for qid in IDS:
         BAGQ[qid] = [b[0], b[1], 2 if len(b) > 2 else 1]
     elif d.get("startType") == "item" and d.get("startId"):
         BAGQ[qid] = [d["startId"], 1, 0, d.get("start") or (CM_ITEMS.get(d["startId"]) or {}).get("name")]
+    elif qid in WRIT:
+        BAGQ[qid] = [WRIT[qid][0], 1, 0, WRIT[qid][1]]
     else:
         for kind, i in cmq.get("starts", []):
             if kind == "item":
@@ -1831,10 +1855,11 @@ lines.append("--         16 Classic only: not in Wowhead Forever's data yet, 32 
 lines.append("--         64 XP not known yet, 128 a Season of Discovery leftover: its NPC hasn't been met in Forever,")
 lines.append("--         256 multiplier computed from the pre-2026-10-01 read: the extra above x1 halved, not yet re-read,")
 lines.append("--         512 XP as the game paid it after the cut: a hand-in or quest window on build 70170 or later,")
-lines.append("--         1024 a wanted poster, 2048 an escort, 4096 repeatable (never suggested), 8192 kept as read: the game paid within a few percent of it after the cut,")
+lines.append("--         1024 a wanted poster, 2048 an escort, 4096 repeatable (in the reward finders alone), 8192 kept as read: the game paid within a few percent of it after the cut,")
 lines.append("--         16384 known only from players' notes: level, NPCs and XP as their games showed them; needs = the lowest level anyone took it at,")
 lines.append("--         32768 the required level as Blizzard's notes give it;")
-lines.append("--         65536 never here: QuestBank gives it to the quests of D.SURVEYED, which it shows in its finders alone)}")
+lines.append("--         65536 never here: QuestBank gives it to the quests of D.SURVEYED, which it shows in its finders alone,")
+lines.append("--         131072 a turn-in: a Craftsman's Writ's delivery, no XP, in the reward finders alone)}")
 lines.append("D.Q = {\n" + ",\n".join("[%d]=%s" % (k, lua(v)) for k, v in sorted(Q.items())) + "\n}")
 lines.append("D.QN = " + keyed(QN))
 lines.append("D.STEPNAME = " + keyed(STEPNAME))
@@ -2326,7 +2351,6 @@ lines.append("D.SREQ = " + keyed(SREQ))
 # the finder, the best item level among them and what kinds they are (D.REWARD).
 # The client's own item table, the datamine plan/items-db.json is built from: each item's class, subclass and equip
 # slot (what C_Item.GetItemInfoInstant answers in game), and the classes ItemSparse lets use it
-ITEMS_BUILD = "1.60.1.70338"
 _WI = os.path.join(REPO, "research", "wago", ITEMS_BUILD)
 CLIENT_ITEM = {int(r["ID"]): (int(r["ClassID"]), int(r["SubclassID"]), int(r["InventoryType"]))
                for r in csv.DictReader(open(os.path.join(_WI, "Item.csv")))}
@@ -2375,7 +2399,9 @@ for qid in IDS:
         c = [int(x) for x in rw.get("c") or [] if str(x).isdigit()]
         r = [int(x) for x in rw.get("r") or [] if str(x).isdigit()]
         RSRC["game"] += 1
-    elif qid not in DISC_ONLY and ("itemrewards" in q or "itemchoices" in q):
+    elif qid not in DISC_ONLY and ("itemrewards" in q or "itemchoices" in q) and not (
+            qid in WRIT and not DET.get(qid) and not (q.get("itemrewards") or q.get("itemchoices"))):
+        # (a writ's quest Wowhead lists bare, no page read: its empty lists say nothing, so the survey asks the game)
         c = [x[0] for x in q.get("itemchoices") or [] if isinstance(x, list) and x]
         r = [x[0] for x in q.get("itemrewards") or [] if isinstance(x, list) and x and x[0] not in c]  # Wowhead repeats some
         RSRC["wowhead"] += 1
@@ -2939,7 +2965,10 @@ def gap_report():
            "", "Dungeon quests nobody has read take their dungeon's multiplier when the read ones agree (as read; before the cut unless marked): %s." % (
                ", ".join("%s x%s%s" % (CATS[c - 1]["name"], m, " (read after the cut)" if DMULT_POST.get(c) else "") for c, m in sorted(DMULT.items(), key=lambda kv: CATS[kv[0] - 1]["name"])) or "none"),
            "", "Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>, test quests), war efforts, invasions,",
-           "holidays, repeatable turn-ins, raids and battlegrounds are left out.",
+           "holidays, repeatable turn-ins, raids and battlegrounds are left out. The crafting writs' deliveries stay for the reward finders",
+           "alone (%d quests: %d of Forever's crafting orders, %d of the Argent Dawn's; no XP, never suggested)." % (
+               len([q for q in Q if Q[q][9] & 131072]), len([q for q in Q if Q[q][9] & 131072 and q >= 90000]),
+               len([q for q in Q if Q[q][9] & 131072 and q < 90000])),
            "", "NPC positions: %d from Wowhead Forever, %d from the CMaNGOS spawn table where Wowhead has none." % (
                sum(1 for v in SOURCE.values() if v == "wowhead"), len(from_cm)),
            "Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: %d Wowhead coordinates there were in the old" % FRAME.fixed,

@@ -750,11 +750,12 @@ function Q.Get(id)
   c.confirmed = math.floor(c.flags / 512) % 2 == 1   -- XP as the game paid it after the cut (a hand-in or quest window, build 70170+)
   c.wanted = math.floor(c.flags / 1024) % 2 == 1     -- a wanted poster
   c.escort = math.floor(c.flags / 2048) % 2 == 1     -- an escort
-  c.repeatable = math.floor(c.flags / 4096) % 2 == 1 -- repeatable: never suggested
+  c.repeatable = math.floor(c.flags / 4096) % 2 == 1 -- repeatable: in the reward finders alone
   c.near = math.floor(c.flags / 8192) % 2 == 1       -- kept as read: the game paid within a few percent of this number
   c.seenOnly = math.floor(c.flags / 16384) % 2 == 1  -- known only from players' notes (not on Wowhead or in the Classic database)
   c.reqStated = math.floor(c.flags / 32768) % 2 == 1 -- the required level as Blizzard's notes give it
   c.surveyOnly = math.floor(c.flags / 65536) % 2 == 1 -- known from the quest survey alone (Survey.lua): no giver, place or side
+  c.turnIn = math.floor(c.flags / 131072) % 2 == 1   -- a Craftsman's Writ's delivery: no XP, in the reward finders alone
   c.note = D.NOTE and D.NOTE[id]                      -- where a number comes from, or what Blizzard changed since
   c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and API.ItemIcon(c.bag[1])) or API.ItemIcon(D.QITEM[id])
     or (c.cat and c.cat.icon) or D.TEX.questGeneric
