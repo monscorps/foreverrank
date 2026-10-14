@@ -1,4 +1,4 @@
-MinimapTiles.lua, MinimapView.lua, MinimapRoute.lua, parts of Minimap.lua and art/line_arrow.png come from QuestTrail 3.0.6 by Krom under this licence:
+MinimapTiles.lua, MinimapView.lua, MinimapRoute.lua, parts of Minimap.lua and Arrow.lua, and Krom's art in art/ (line_arrow.png, ring_bg.png, ring_frame.png, ring_elite.png, glyph_kill.png, glyph_use.png, glyph_usedrop.png, glyph_area.png, glyph_escort.png, step_bg.png, step_tint.png, arrow_bg.png, arrow_needle.png, arrow_tint.png) come from QuestTrail 3.0.6 by Krom under this licence:
 MIT License
 
 Copyright (c) 2026 Krom

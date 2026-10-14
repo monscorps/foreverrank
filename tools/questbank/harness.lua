@@ -2235,25 +2235,32 @@ do
   c.party, P.list, QB.MinimapTiles = saveParty, saveList, realTiles
   env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
   Mini.Invalidate(); Mini.Update(0)
-  -- QuestTrail's MIT licence goes with its code: the notice, the two lines atop each file with its code, its line
-  -- texture; none of its own art
+  -- QuestTrail's MIT licence goes with its code and its art: the notice names every file of Krom's, the two lines atop
+  -- each file with his code; his 14 PNGs are in art/ as he drew them (5.5: the markers, circles and dial too), and
+  -- nothing of QuestTrail's that QuestBank has no use for (its logo, its unused circle_dot)
   local lic = io.open(HERE .. "/QuestBank/LICENSE-QuestTrail.txt"):read("*a")
-  assert(lic:find("Copyright (c) 2026 Krom", 1, true) and lic:find("^MinimapTiles.lua, MinimapView.lua, MinimapRoute.lua, parts of Minimap.lua and art/line_arrow.png"),
+  local KROM_ART = { "line_arrow", "ring_bg", "ring_frame", "ring_elite", "glyph_kill", "glyph_use", "glyph_usedrop", "glyph_area", "glyph_escort",
+                     "step_bg", "step_tint", "arrow_bg", "arrow_needle", "arrow_tint" }
+  assert(lic:find("Copyright (c) 2026 Krom", 1, true) and lic:find("^MinimapTiles.lua, MinimapView.lua, MinimapRoute.lua, parts of Minimap.lua and Arrow.lua"),
     "LICENSE-QuestTrail.txt: QuestTrail's notice")
-  for _, fn in ipairs({ "MinimapTiles.lua", "MinimapView.lua", "MinimapRoute.lua", "Minimap.lua" }) do
+  for _, art in ipairs(KROM_ART) do
+    assert(lic:sub(1, (lic:find("\n", 1, true) or #lic)):find(art .. ".png", 1, true), "LICENSE-QuestTrail.txt names art/" .. art .. ".png on its first line")
+    local png = io.open(HERE .. "/QuestBank/art/" .. art .. ".png", "rb")
+    assert(png and png:read(4) == "\137PNG", "art/" .. art .. ".png is there, a PNG")
+    png:close()
+  end
+  for _, fn in ipairs({ "MinimapTiles.lua", "MinimapView.lua", "MinimapRoute.lua", "Minimap.lua", "Arrow.lua" }) do
     local head, k = {}, 0
     for line in io.lines(HERE .. "/QuestBank/" .. fn) do k = k + 1; head[k] = line; if k == 3 then break end end
     head = table.concat(head, "\n")
     assert(head:find("LICENSE-QuestTrail.txt", 1, true) and head:find("SPDX-License-Identifier: GPL-3.0-or-later AND MIT", 1, true), fn .. " names QuestTrail's licence")
   end
-  local png = io.open(HERE .. "/QuestBank/art/line_arrow.png", "rb")
-  assert(png and png:read(4) == "\137PNG", "art/line_arrow.png is there")
-  png:close()
+  assert(not io.open(HERE .. "/QuestBank/art/logo.png") and not io.open(HERE .. "/QuestBank/art/circle_dot.png"), "QuestTrail's logo and its unused dot stay out")
   for line in io.lines(HERE .. "/QuestBank/QuestBank.toc") do
     local fn = line:match("^%s*([%w_]+%.lua)%s*$")
     if fn then
       local src = io.open(HERE .. "/QuestBank/" .. fn):read("*a")
-      for _, art in ipairs({ "ring_bg", "glyph_", "step_bg", "arrow_bg", "logo.png" }) do assert(not src:find(art, 1, true), fn .. " uses QuestTrail's own art: " .. art) end
+      for _, art in ipairs({ "logo.png", "circle_dot" }) do assert(not src:find(art, 1, true), fn .. " uses art QuestBank has not got: " .. art) end
     end
   end
 end

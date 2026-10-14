@@ -1,4 +1,5 @@
--- SPDX-License-Identifier: GPL-3.0-or-later
+-- SPDX-License-Identifier: GPL-3.0-or-later AND MIT
+-- Contains code from QuestTrail 3.0.6, Copyright (c) 2026 Krom, MIT licence (LICENSE-QuestTrail.txt): QuestTrail_Compass.lua: the dial's layers (A.Create), SizeArrow, ApplyLook, FitBg, Tint, the needle's easing
 -- The direction arrow (opt-in, Settings or /qb arrow): points from where you stand and the way you
 -- face to a target, with its name and how far it is. What it points at is yours to choose: right-click
 -- it, or /qb arrow route|handin|pickup|pin.

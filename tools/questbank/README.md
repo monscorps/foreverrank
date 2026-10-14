@@ -6,8 +6,9 @@ pins, party sync, and banking with a hand-in run when the game holds your level 
 "quest"). Wowhead Forever's quests seed the catalog up to the beta's cap; above it the CMaNGOS Classic database does,
 flagged "Classic only" until players see the quests in Forever.
 Free software under the GPL-3.0 (`QuestBank/LICENSE.txt`): its quest chains and spawn points come from the
-CMaNGOS Classic database, which is GPL-3.0. The minimap's far zoom, its tile table and line texture come from
-QuestTrail 3.0.6 by Krom under the MIT licence (`QuestBank/LICENSE-QuestTrail.txt`; each such file says so at its top).
+CMaNGOS Classic database, which is GPL-3.0. The minimap's far zoom, its tile table, the look of its markers, strokes and
+step circles, the compass dial of the arrow and all of that art (`QuestBank/art/*.png`, drawn by Krom) come from QuestTrail
+3.0.6 by Krom under the MIT licence (`QuestBank/LICENSE-QuestTrail.txt`; each such file says so at its top).
 
 The addon, `QuestBank/`:
 
