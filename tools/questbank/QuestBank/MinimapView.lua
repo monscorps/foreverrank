@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later AND MIT
--- Contains code from QuestTrail 3.0.6, Copyright (c) 2026 Krom, MIT licence (LICENSE-QuestTrail.txt): QuestTrail_Minimap.lua: MV, Tiles, Extended, Square, Reach, View, Frame, SetShape, Tile, DrawGround, DrawPlayer, NativePlayer, PartyDot, NewPart, Layout, HideBlob, DrawBlob, Debug, DrawParty, Cursor, ScreenToMap, Wheel, Menu, Recentre, OnMouseDown, OnMouseUp, OnUpdateDrag, ZoomButtons, Hook, Moving, Tick
+-- Contains code from QuestTrail 3.0.6, Copyright (c) 2026 Krom, MIT licence (LICENSE-QuestTrail.txt): QuestTrail_Minimap.lua: MV, Tiles, Extended, Square, Reach, View, Frame, SetShape, Tile, DrawGround, DrawPlayer, NativePlayer, PartyDot, NewPart, Layout, HideBlob, DrawBlob, Debug, DrawParty, Cursor, ScreenToMap, Wheel, Menu, Recentre, OnMouseDown, OnMouseUp, OnUpdateDrag, ZoomButtons, Hook (its re-wrap), Moving, Tick
 -- The minimap's view, after QuestTrail's extended minimap. Centred on you at the game's own zoom levels it is the
 -- game's minimap as it is. Wheeled out past the game's widest (1.5 times a step, up to 12,000 yards across) or dragged
 -- away from you, the ground is drawn from the game's own minimap tiles (MinimapTiles.lua) over the minimap, cut by the
@@ -243,19 +243,23 @@ local function drawGround(v)
 end
 
 -------------------------------------------------------------------------
--- Your arrow over the ground (the game's own is under it there): the game's MinimapArrow, above QuestBank's pins.
--- The game's arrow is left alone (QuestTrail sized it away, a call Forever's minimap does not have)
+-- Your arrow, the game's MinimapArrow, on a frame of its own above everything QuestBank draws on the minimap (the
+-- strokes, the circles, the markers), at the game's zoom and over the far ground alike, as QuestTrail draws it:
+-- the route sits under you. Its size the mmArrowSize setting, in pixels (12 to 64; the party dots follow it). The
+-- game's own arrow is left alone, under ours (QuestTrail sized it away, a call Forever's minimap does not have)
 -------------------------------------------------------------------------
 local arrowFrame, arrow
+function MV.ArrowSize() return max(12, min(64, tonumber(QB:Settings().mmArrowSize) or MV.ARROW)) end
 local function drawPlayer(v, me)
   if not arrowFrame then
     arrowFrame = CreateFrame("Frame", nil, Minimap)
     arrowFrame:SetAllPoints(Minimap)
     arrow = arrowFrame:CreateTexture(nil, "OVERLAY", nil, 7)
     arrow:SetTexture("Interface\\Minimap\\MinimapArrow")
-    arrow:SetSize(MV.ARROW, MV.ARROW)
     MV.arrow = arrow
   end
+  local sz = MV.ArrowSize()
+  if arrow.sz ~= sz then arrow:SetSize(sz, sz); arrow.sz = sz end
   local lvl = (Minimap:GetFrameLevel() or 1) + 9
   if arrowFrame:GetFrameLevel() ~= lvl then arrowFrame:SetFrameLevel(lvl) end
   local sx, sy = MV.Point(v, me.wx, me.wy)
@@ -295,7 +299,7 @@ local function partyDot(k)
   local d = party[k]
   if d then return d end
   d = CreateFrame("Frame", nil, frame)
-  d:SetSize(MV.ARROW * MV.PARTY_SIZE, MV.ARROW * MV.PARTY_SIZE)
+  d:SetSize(MV.ArrowSize() * MV.PARTY_SIZE, MV.ArrowSize() * MV.PARTY_SIZE)
   d.tex = d:CreateTexture(nil, "OVERLAY")
   d.tex:SetAllPoints()
   d.tex:SetTexture("Interface\\Minimap\\PartyRaidBlips")
@@ -326,6 +330,8 @@ local function drawParty(v)
           used = used + 1
           local d = partyDot(used)
           if d.lvl ~= lvl then d:SetFrameLevel(lvl); d.lvl = lvl end
+          local ds = MV.ArrowSize() * MV.PARTY_SIZE
+          if d.sz ~= ds then d:SetSize(ds, ds); d.sz = ds end
           local okC, _, file = pcall(UnitClass, unit)
           local class = okC and plain(file) or nil
           if d.class ~= class then
@@ -579,7 +585,7 @@ end
 -- the minimap's menu (a right-click on it, or on a pin: "Waypoint here" first), its switches named as on the
 -- Settings page. Built a frame later and owned by UIParent: QuestTrail found a menu owned by a map could crash the client
 local SWITCHES = {
-  { "Far zoom", "mmExtended" }, { "Route", "minimapPins" }, { "Lines", "minimapLines" }, { "Pick-ups", "minimapPickups" },
+  { "Far zoom", "mmExtended" }, { "Route", "minimapPins" }, { "Lines", "minimapLines" }, { "Golden path", "goldenPath" }, { "Pick-ups", "minimapPickups" },
   { "Objectives", "minimapObjectives" }, { "Dungeons", "minimapEntrances" }, { "Trails", "walkShow" }, { "Party", "mmParty" },
   { "Quest areas", "mmAreas" }, { "Label", "minimapLabel" },
 }
@@ -678,22 +684,34 @@ local function zoomButtons(show)
   end
 end
 
--- The minimap's release, set once round the game's own handler (QuestTrail set it again whenever another addon replaced
--- it, so its chain could grow): before (Mini.DragStop) first, then the view's, then the game's (the ping). With
--- QuestTrail loaded it is only hooked: QuestTrail sets it. And the game's tooltips over its blips (under the far
--- ground, where nothing shows them) are hidden while the ground is drawn
+-- The minimap's release, set round the game's own handler: before (Mini.DragStop) first, then the view's, then the
+-- game's (the ping). Set again when another addon replaces it later (QuestTrail's re-wrap, each update: MV.Rehook),
+-- else a drag's end, the ping on the far view and the menu would be lost; a release that comes round twice in one
+-- frame (the other addon wrapped ours) runs ours once. With QuestTrail loaded it is only hooked: QuestTrail sets it.
+-- And the game's tooltips over its blips (under the far ground, where nothing shows them) are hidden while the ground
+-- is drawn
 function MV.Hook(before)
   if MV.hooked or not Minimap then return end
-  MV.hooked = true
+  MV.hooked, MV.before = true, before
   if MV.blocked then Minimap:HookScript("OnMouseUp", QB.Safe(before, "minimap move")); return end
   local orig = Minimap:GetScript("OnMouseUp")
-  Minimap:SetScript("OnMouseUp", function(self, button, ...)
+  MV.ourUp = function(self, button, ...)
+    local now = GetTime()
+    if MV.upAt == now and MV.upButton == button then
+      if orig then return orig(self, button, ...) end
+      return
+    end
+    MV.upAt, MV.upButton = now, button
     QB.Try("minimap move", before)
     local mine
     QB.Try("minimap click", function() mine = MV.MouseUp(button) end)
     if mine then return end
     if orig then return orig(self, button, ...) end
-  end)
+  end
+  Minimap:SetScript("OnMouseUp", MV.ourUp)
+  MV.rehooks = MV.rehooks or 0
+  if MV.tipHooked then return end
+  MV.tipHooked = true
   if GameTooltip and GameTooltip.HookScript then
     GameTooltip:HookScript("OnShow", QB.Safe(function(tt)
       if not MV.extendedNow then return end
@@ -702,6 +720,16 @@ function MV.Hook(before)
       if owner == Minimap or owner == MinimapCluster or (owner == UIParent and Minimap:IsMouseOver()) then tt:Hide() end
     end, "minimap tooltip"))
   end
+end
+
+-- another addon set the minimap's release since: ours round it again
+function MV.Rehook()
+  if not (MV.hooked and MV.ourUp and not MV.blocked and Minimap) then return false end
+  if Minimap:GetScript("OnMouseUp") == MV.ourUp then return false end
+  MV.hooked = nil
+  MV.rehooks = (MV.rehooks or 0) + 1
+  MV.Hook(MV.before)
+  return true
 end
 
 -- whether the view is moving (dragged, or easing): then it is drawn every frame, so the ground and the pins go smoothly
@@ -716,6 +744,7 @@ end
 -- each update (Minimap.lua's overlay): the drag, the ease, then the ground and your arrow. Returns the view
 function MV.Tick(dt, me)
   if MV.blocked or not Minimap then return nil end
+  MV.Rehook()
   local on = MV.On()
   if MV.zoomButtons ~= on then MV.zoomButtons = on; zoomButtons(not on) end
   local want, cur = MV.want, MV.cur
@@ -750,7 +779,8 @@ function MV.Tick(dt, me)
   if not me then MV.extendedNow, MV.blobBusy = nil, nil; f:Hide(); hidePlayer(); return nil end
   local v = MV.View(me)
   MV.extendedNow = v.ext or nil
-  if not v.ext then MV.blobBusy = nil; f:Hide(); hidePlayer(); return v end
+  -- (at the game's zoom: its own minimap, with your arrow over QuestBank's pins)
+  if not v.ext then MV.blobBusy = nil; f:Hide(); drawPlayer(v, me); return v end
   setShape(v.square)
   -- (just over the minimap: its level can change after the ground was made, the game's or another addon's doing)
   local lvl = (Minimap:GetFrameLevel() or 1) + 1

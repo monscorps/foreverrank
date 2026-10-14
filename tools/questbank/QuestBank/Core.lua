@@ -1165,13 +1165,24 @@ local DEFAULTS = {
   -- objectives of the quests in your log, the target's name
   minimapPins = true, minimapLines = true, minimapPickups = true, minimapEntrances = true,
   minimapObjectives = true, minimapLabel = true,
+  -- how the minimap's markers are drawn: QuestTrail's look (Krom's coloured diamonds, glyphs, step circles and the
+  -- compass dial; the default) or the game's own icons and numbered pins. QuestTrail's settings: the marker size in
+  -- pixels (mmRing, 8 to 40), the ! and ? as a share of it (mmGlyphPct), each quest's own colour or one colour for
+  -- all (mmColor "quest" or "single", oneColor), the strokes' width and opacity (zmWidth 2 to 24, zmAlpha 0.2 to 1),
+  -- your arrow's size on the minimap (mmArrowSize, the party dots follow it), the golden path (goldenPath; its pieces
+  -- in metres, its width, its opacity and its colour), the compass dial's size in screen pixels (compassSize 24 to
+  -- 128) and a dark backdrop behind it (compassBg)
+  markerStyle = "questtrail", mmRing = 18, mmGlyphPct = 100, mmColor = "quest", oneColor = { 1, 0.82, 0 },
+  zmWidth = 8, zmAlpha = 1, mmArrowSize = 32,
+  goldenPath = true, gpSpacing = 15, gpWidth = 8, gpAlpha = 0.9, gpColor = { 1, 0.82, 0 },
+  compassSize = 48, compassBg = false,
   -- the minimap's far zoom over the game's tiles and its drag (MinimapView.lua); back to you after a drag; your party
-  -- and the quest's areas on the far ground; the stops the strokes join (MinimapRoute.lua)
-  mmExtended = true, mmCenter = true, mmParty = true, mmAreas = true, minimapSteps = 5,
+  -- and the quest's areas on the far ground; the stops the strokes join (MinimapRoute.lua; QuestTrail's 16)
+  mmExtended = true, mmCenter = true, mmParty = true, mmAreas = true, minimapSteps = 16,
   -- the interact light (Glow.lua): its style (sparkle, light, or the game's own highlight), NPCs lit too, plain
   -- objects too, kept on in a fight
   glow = { on = true, style = "sparkle", npcs = true, other = true, combat = false },
-  walkRecord = true, walkShow = true, -- walked trails (Walk.lua): noted as you go, drawn on the minimap
+  walkRecord = true, walkShow = false, -- walked trails (Walk.lua): noted as you go; drawn on the minimap when asked
   -- the camp bar (Camp.lua): Well Fed, the campfire (Basic Campfire or a kit), camp features with their cooldown, the
   -- sleeping bag; hidden in dungeons when quietInstance. campBar = false hides the bar. buffs: the missing-buffs banner
   -- when you leave a town

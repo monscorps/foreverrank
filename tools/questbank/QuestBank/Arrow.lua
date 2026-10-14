@@ -119,6 +119,7 @@ local function handinList()
         local t = byNpc[q.turnIdx]
         if not t then
           t = npcTarget(q.turnIdx, p, q.turn.n, "to hand in there", "handin")
+          t.qid = q.id -- (its first quest: the colour of the arrow's dial and the minimap's stroke)
           byNpc[q.turnIdx] = t
           list[#list + 1] = t
         end
@@ -156,9 +157,11 @@ local function pickupList()
           local t = byNpc[g.giveIdx]
           if not t then
             t = npcTarget(g.giveIdx, p, g.give.n, "to pick up there", "pickup")
+            t.qid = g.id -- (its first quest: the colour of the arrow's dial and the minimap's stroke)
             byNpc[g.giveIdx] = t
             list[#list + 1] = t
           end
+          if g.escort then t.escort = true end -- (the escort glyph on its ! on the minimap)
           t.quests = t.quests + 1
         end
       end

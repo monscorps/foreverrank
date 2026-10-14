@@ -127,9 +127,9 @@ def tex_style(it):
     if isinstance(raw, str) and raw == "Interface\\Minimap\\PartyRaidBlips":
         return "background:%s;border-radius:50%%;box-shadow:0 0 0 1px #000;" % rgba(it.get("c") or (1, 1, 1), 1), None
     if isinstance(raw, str) and raw == "Interface\\Minimap\\Dungeon_Icon":
-        if os.path.exists(os.path.join(LOCAL_TEX, "atlas_dungeon.png")):
-            return "background:url(tex/atlas_dungeon.png) center/100%% 100%% no-repeat;", None
-        return "background:radial-gradient(circle,#7fd0ff 0%%,#2a5a9a 55%%,transparent 70%%);", None
+        # the Classic minimap's swirling portal, drawn close enough to judge
+        portal = _svg("<circle cx='12' cy='12' r='10' fill='#1a3b6e' stroke='#0a1a33' stroke-width='1.5'/><path d='M12 4a8 8 0 0 1 8 8 5 5 0 0 1-5 5 3 3 0 0 1-3-3 2 2 0 0 1 2-2' fill='none' stroke='#8fd6ff' stroke-width='2.2' stroke-linecap='round'/><path d='M12 20a8 8 0 0 1-8-8 5 5 0 0 1 5-5 3 3 0 0 1 3 3' fill='none' stroke='#5aa6e8' stroke-width='2' stroke-linecap='round'/>")
+        return "background:url(data:image/svg+xml;base64,%s) center/100%% 100%% no-repeat;" % portal, None
     # the harness's stand-in minimap tiles (900000 and up): plain ground
     if isinstance(raw, (int, float)) and 900000 <= int(raw) < 910000:
         rot = ("transform:rotate(%.3frad);" % -it["rot"]) if it.get("rot") else ""
@@ -162,11 +162,15 @@ def tex_style(it):
     return "background:%s;outline:1px dashed rgba(255,255,255,.12);" % rgba(c or (0.3, 0.3, 0.35), 0.35), label
 
 def render(layout):
-    # the minimap's sheets: round, over ground, drawn at twice the size so the markers can be judged
+    # the minimap's sheets: round, over ground, drawn at four times the size so the markers can be judged, side by side
     mini = layout["label"].startswith("Minimap")
-    extra = ("border-radius:50%%;background:#2f3a24;transform:scale(2);transform-origin:0 0;margin-bottom:%dpx;" % layout["h"]) if mini else ""
-    out = ['<div class="shot"><h2>%s</h2><div class="win" style="width:%dpx;height:%dpx;%s">' % (html.escape(layout["label"]), layout["w"], layout["h"], extra)]
-    items = sorted(layout["items"], key=lambda it: (it.get("depth", 0), {"BACKGROUND": 0, "BORDER": 1, "ARTWORK": 2, "OVERLAY": 3, "HIGHLIGHT": 4}.get(it.get("layer"), 2), it["i"]))
+    K = 4
+    extra = ("border-radius:50%%;background:#2f3a24;transform:scale(%d);transform-origin:0 0;margin:0 %dpx %dpx 0;" % (K, layout["w"] * (K - 1), layout["h"] * (K - 1))) if mini else ""
+    shot = ' style="display:inline-block;vertical-align:top;margin-right:16px"' if mini else ""
+    out = ['<div class="shot"%s><h2>%s</h2><div class="win" style="width:%dpx;height:%dpx;%s">' % (shot, html.escape(layout["label"]), layout["w"], layout["h"], extra)]
+    # drawn as the game stacks them: by frame level first (the minimap's ground, strokes, pins and arrow are frames at set
+    # levels over one another), then by depth, layer and order of making
+    items = sorted(layout["items"], key=lambda it: (it.get("lvl", 0), it.get("depth", 0), {"BACKGROUND": 0, "BORDER": 1, "ARTWORK": 2, "OVERLAY": 3, "HIGHLIGHT": 4}.get(it.get("layer"), 2), it["i"]))
     for it in items:
         x, y, w, h = it["x"], it["y"], it["w"], it["h"]
         clip = it.get("clip")
@@ -193,6 +197,7 @@ def render(layout):
             ws = "normal" if it.get("wrap") else "nowrap"
             out.append('<div class="t" style="%scolor:%s;font-size:%dpx;text-align:%s;white-space:%s">%s</div>' % (base, c, size, j, ws, html.escape(it.get("text") or "").replace("\n", "<br>")))
         elif it["k"] == "Texture":
+            if it.get("layer") == "MASK": continue  # (a mask shapes other textures; it draws nothing itself)
             st, label = tex_style(it)
             if it.get("blend") == "ADD": st += "mix-blend-mode:screen;"
             out.append('<div class="x" style="%s%s"%s></div>' % (base, st, (' title="%s"' % html.escape(label)) if label else ""))

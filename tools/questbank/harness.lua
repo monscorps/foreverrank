@@ -774,6 +774,8 @@ local function newClient(o)
     RemoveQuestWatch = function() error("QuestBank called C_QuestLog.RemoveQuestWatch: the tracker would redraw as QuestBank", 2) end,
     GetAllCompletedQuestIDs = function() local t = {} for k, v in pairs(c.done) do if v then t[#t + 1] = k end end return t end,
     GetLogIndexForQuestID = function(id) for i, e in ipairs(c.log) do if e[1] == id then return i + 2 end end end,
+    -- the quest's tag: elite (c.elite[id]) as the Forever client says it, tag 1
+    GetQuestTagInfo = function(id) if (c.elite or {})[id] then return { tagID = 1, isElite = true, tagName = "Elite" } end return nil end,
   }
   local KALIMDOR = { [1411] = true, [1412] = true, [1413] = true, [1438] = true, [1439] = true, [1440] = true, [1441] = true, [1442] = true,
     [1443] = true, [1444] = true, [1445] = true, [1446] = true, [1447] = true, [1448] = true, [1449] = true, [1450] = true, [1451] = true,
@@ -1421,6 +1423,15 @@ local function checkLayout(root, label)
 end
 
 -- a drawing of the window for the layout page
+-- an object's frame level: the nearest frame up from it given one (SetFrameLevel), as the game stacks frames; 0 when none
+local function levelOf(o)
+  local p = o
+  while p do
+    if p.__frameLevel then return p.__frameLevel end
+    p = p.__parent or p.__scrollParent
+  end
+  return 0
+end
 local function dumpLayout(root, label)
   GEN = GEN + 1
   local rr = rectOf(root)
@@ -1437,7 +1448,7 @@ local function dumpLayout(root, label)
       if ra and rb then
         local x1, y1 = anchorXY(ra, o.__start[1])
         local x2, y2 = anchorXY(rb, o.__stop[1])
-        items[#items + 1] = { k = "Line", x = 0, y = 0, w = 0, h = 0, i = idx, a = o.__alpha, depth = #anc, layer = "BACKGROUND",
+        items[#items + 1] = { k = "Line", x = 0, y = 0, w = 0, h = 0, i = idx, a = o.__alpha, depth = #anc, layer = "BACKGROUND", lvl = levelOf(o),
           x1 = x1 + (o.__start[3] or 0) - rr.l, y1 = rr.t - (y1 + (o.__start[4] or 0)), x2 = x2 + (o.__stop[3] or 0) - rr.l,
           y2 = rr.t - (y2 + (o.__stop[4] or 0)), thick = o.__thick or 2, c = o.__vertex }
       end
@@ -1448,7 +1459,7 @@ local function dumpLayout(root, label)
       if inside then
         local r = rectOf(o)
         if r and (r.r - r.l) > 0 and (r.t - r.b) > 0 then
-          local it = { k = o.__kind, x = r.l - rr.l, y = rr.t - r.t, w = r.r - r.l, h = r.t - r.b, i = idx, a = o.__alpha, depth = #anc }
+          local it = { k = o.__kind, x = r.l - rr.l, y = rr.t - r.t, w = r.r - r.l, h = r.t - r.b, i = idx, a = o.__alpha, depth = #anc, lvl = levelOf(o) }
           if o.__kind == "FontString" then
             it.text, it.size, it.j, it.wrap = plain(o.__text), o.__size, o.__justify, o.__wrap
             it.c = o.__color
@@ -1773,17 +1784,33 @@ do
   local far = byName["Far away"]
   local x3 = at(far)
   assert(math.abs(x3 - 63) < 0.01 and far:GetAlpha() == 0.6, "a stop past the reach sits on the rim at 0.6: " .. tostring(x3) .. ", " .. far:GetAlpha())
-  assert(byName.Goldshire.num:GetText() == "1" and byName.Crossroads.num:GetText() == "2", "numbered")
+  -- 5.5: QuestTrail's look (the default): a stop is a step circle, its disc (step_bg, 32/26.5 of the marker's 18 px,
+  -- tinted the stop's colour: the first of the palette, these stops name no quest) under the game's ? and the gold ring
+  -- (step_tint) over it; no number. The game-icon style numbers the game's own pins
+  local ART = "Interface\\AddOns\\QuestBank\\art\\"
+  local pal = Mini.PALETTE
+  assert(Mini.QT() and g.num:GetText() == "" and g.disc.__shown and g.ring.__shown and g.disc.__tex == ART .. "step_bg.png" and g.ring.__tex == ART .. "step_tint.png"
+    and math.abs(g.disc.__w - 18 * 32 / 26.5) < 0.01 and g.disc.__vertex[1] == pal[1][1] and g.disc.__vertex[2] == pal[1][2] and g.disc.__vertex[4] == 1
+    and g.icon.__tex == "atlas:QuestTurnin" and g.icon.__w == 18 and g.__w == 18 and not g.glow.__shown, "QuestTrail's step circle for stop 1")
+  QB:Settings().markerStyle = "game"
+  Mini.Place()
+  assert(byName.Goldshire.num:GetText() == "1" and byName.Crossroads.num:GetText() == "2" and g.icon.__tex == "atlas:UI-QuestPoi-QuestNumber-SuperTracked"
+    and not g.disc.__shown and not g.ring.__shown and g.glow.__shown and g.__w == 22, "the game-icon style: numbered, the game's pins, stop 1 glowing")
+  QB:Settings().markerStyle = nil
+  Mini.Place()
+  assert(g.num:GetText() == "" and g.disc.__shown and g.__w == 18, "and back to QuestTrail's")
   -- 5.4: the strokes (MinimapRoute.lua): QuestTrail's line_arrow.png, you to stop 1 (stopping at the pin's edge, 0.45 of
-  -- its 22 px short), 1 to 2, and 2 to the far stop cut at the minimap's edge, pointing the way
+  -- its 18 px short), 1 to 2, and 2 to the far stop cut at the minimap's edge, pointing the way; 5.5: each in its stop's
+  -- colour, the stroke width setting's 8 px
   local MR = QB.MiniRoute
   local stroke = MR.route.lines
-  assert(Mini.linesShown == 3 and stroke[1].__tex == "Interface\\AddOns\\QuestBank\\art\\line_arrow.png" and math.abs(stroke[1].__stop[4] - 11.1) < 0.01,
+  assert(Mini.linesShown == 3 and stroke[1].__tex == ART .. "line_arrow.png" and math.abs(stroke[1].__stop[4] - 12.9) < 0.01
+    and stroke[1].__vertex[1] == pal[1][1] and stroke[1].__vertex[2] == pal[1][2] and stroke[1].__vertex[4] == 1 and stroke[1].__thick == 8,
     "you to stop 1, 1 to 2, 2 to 3: " .. tostring(Mini.linesShown))
   local ex, ey = stroke[3].__stop[3], stroke[3].__stop[4]
   assert(stroke[3].__shown and math.sqrt(ex * ex + ey * ey) < 70 and ex > 60 and math.abs(ey) < 0.01, string.format("the stroke to the far stop ends at the edge (%s, %s)", ex, ey))
   -- QuestTrail's rim: an objective out of reach is gone (400 yards west at 200), one inside fades over its last width
-  -- (195 yards east: 68 px of 70, a 16 px pin)
+  -- (195 yards east: 68 px of 70, an 18 px pin)
   local D = QB.Data
   D.SPOT[777001], D.SPOT[777002] = "k,1,1429,548.75,500,10,c", "k,1,1429,400,500,10,c"
   table.insert(QB.state.logOrder, 1, { id = 777001, complete = false })
@@ -1814,22 +1841,36 @@ do
   for _ = 1, 20 do Mini.Place() end
   Mini.List = realList
   assert(built == 1, "twenty placings made the list " .. built .. " times")
-  -- the quest picked on QuestBank's Map: its pins glow blue, pulsing once a second
+  -- 5.5: an objective's marker, QuestTrail's: the disc (ring_bg) in its quest's colour under the gold frame (ring_frame)
+  -- and the glyph of the work (a kill: the skull), 18 px; an elite quest's under the elite ring, 1.5 times as wide
+  local qc = Mini.ColorFor(777001, "progress")
+  assert(near.icon.__tex == ART .. "ring_bg.png" and near.icon.__vertex[1] == qc[1] and near.icon.__vertex[3] == qc[3] and near.frame.__shown
+    and near.frame.__tex == ART .. "ring_frame.png" and near.glyph.__shown and near.glyph.__tex == ART .. "glyph_kill.png" and near.glyph.__w == 18
+    and not near.elite.__shown and near.__w == 18 and not near.glow.__shown, "a kill's marker: the coloured diamond, the frame, the skull")
+  c.elite = { [777001] = true }
+  c.clock = c.clock + 10 -- (the game said no a moment ago: asked again 10 seconds on)
+  QB.changed = QB.changed + 1
+  Mini.Place()
+  assert(near.elite.__shown and near.elite.__tex == ART .. "ring_elite.png" and near.elite.__w == 28, "an elite quest: the elite ring, 1.5 times as wide (28 px of 18)")
+  c.elite = nil
+  -- the quest picked on QuestBank's Map: its markers blue, pulsing once a second a third of the way to white and back
   QB.MapPage.focus = 777001
   Mini.Place()
   near = pinOf(function(d) return d.id == 777001 end)
   local k = (1 - math.cos(c.clock * 2 * math.pi)) / 2 -- (where in the second the clock is: half a second on, the other end)
   f.__scripts.OnUpdate(f, 0.001)
-  local a0 = near.glow.__alpha
+  local a0 = near.icon.__vertex[1]
   c.clock = c.clock + 0.5
   f.__scripts.OnUpdate(f, 0.001)
-  local a1 = near.glow.__alpha
+  local a1 = near.icon.__vertex[1]
   c.clock = c.clock + 0.5
-  assert(Mini.pulsing and near.glow.__shown and near.glow.__vertex[3] == 1 and math.abs(a0 - (0.25 + 0.75 * k)) < 0.01 and math.abs(a1 - (1 - 0.75 * k)) < 0.01,
-    string.format("the picked quest pulses: %s then %s", tostring(a0), tostring(a1)))
+  local sel = Mini.SELECTED
+  assert(Mini.pulsing and near.icon.__tex == ART .. "ring_bg.png" and math.abs(a0 - (sel[1] + (1 - sel[1]) * 0.33 * k)) < 0.01
+    and math.abs(a1 - (sel[1] + (1 - sel[1]) * 0.33 * (1 - k))) < 0.01 and not near.glow.__shown,
+    string.format("the picked quest pulses blue: %s then %s", tostring(a0), tostring(a1)))
   QB.MapPage.focus = nil
   Mini.Place()
-  assert(not Mini.pulsing and not near.glow.__shown, "nothing picked: no pulse")
+  assert(not Mini.pulsing and near.icon.__vertex[1] == qc[1], "nothing picked: no pulse, its own colour")
   table.remove(QB.state.logOrder, 1); table.remove(QB.state.logOrder, 1)
   D.SPOT[777001], D.SPOT[777002] = nil, nil
   -- two stops at one place are one pin, a little bigger, "2,3"; the strokes join the first minimapSteps stops
@@ -1837,7 +1878,8 @@ do
   P.list = { route[1], route[2], { m = 1429, x = 52, y = 50, num = 3, name = "Crossroads again", when = "", lines = {} } }
   Mini.Invalidate(); Mini.Place()
   local both = pinOf(function(d) return d.num == 2 end)
-  assert(both and both.num:GetText() == "2,3" and both.__w == 28 and not pinOf(function(d) return d.num == 3 end), "stops 2 and 3 at one place: one pin, 2,3")
+  assert(both and both.label == "2,3" and both.num:GetText() == "" and both.__w == 24 and math.abs(both.disc.__w - 24 * 32 / 26.5) < 0.01
+    and not pinOf(function(d) return d.num == 3 end), "stops 2 and 3 at one place: one circle, a third bigger")
   P.list = route
   QB:Settings().minimapSteps = 2
   Mini.Invalidate(); Mini.Place()
@@ -1869,13 +1911,16 @@ do
   dcat.entrance = { m = 1429, x = 50, y = 54 } -- 120 yards south
   Mini.Invalidate(); Mini.Place()
   local dpin = pinOf(function(d) return d.kind == "dungeon" and d.name == dcat.name end)
-  assert(dpin and dpin.icon.__tex == "atlas:Dungeon" and not dpin.badge.__shown, "a dungeon with quests to do: no tick")
+  assert(dpin and dpin.icon.__tex == "Interface\\Minimap\\Dungeon_Icon" and math.abs(dpin.__w - 23.4) < 0.01 and not dpin.badge.__shown,
+    "a dungeon with quests to do: QuestTrail's portal, 1.3 times the marker size, no tick")
   local wasDone = {}
   for _, e in ipairs(DM.Quests(dcat.key)) do wasDone[e.q.id] = c.done[e.q.id] or false; c.done[e.q.id] = true end
   -- (QuestBank's data changed: QB:Changed counts it; not run here, it would drop the done quests from the owner's plan)
   QB.API.RefreshDone(); QB.changed = QB.changed + 1
   Mini.Place()
-  assert(dpin.d.done and dpin.badge.__shown and dpin.badge.__tex == QB.Data.TEX.ready, "all its quests done: the tick")
+  assert(dpin.d.done and dpin.badge.__shown and dpin.badge.__tex == QB.Data.TEX.ready and math.abs(dpin.badge.__w - 23.4 * 0.51) < 0.01
+    and dpin.badge.__points[1].point == "CENTER" and dpin.badge.__points[1].relPoint == "BOTTOMLEFT" and math.abs(dpin.badge.__points[1].x - 23.4 * 0.305) < 0.01,
+    "all its quests done: the tick on its bottom-left corner, QuestTrail's size")
   for id, was in pairs(wasDone) do c.done[id] = was or nil end
   QB.API.RefreshDone(); QB.changed = QB.changed + 1
   dcat.entrance = saveEntrance
@@ -1960,7 +2005,13 @@ do
   assert(tt:IsShown(), "a tooltip elsewhere stays")
   tt:Hide()
   Mini.Wheel(1)
-  assert(not MV.Extended() and not MV.frame:IsShown() and not arrowFrame:IsShown() and env.Minimap.__zoom == 0, "the wheel in: the game's minimap, no ground, no arrow of ours")
+  assert(not MV.Extended() and not MV.frame:IsShown() and arrowFrame:IsShown() and MV.arrow.__w == 32 and env.Minimap.__zoom == 0,
+    "the wheel in: the game's minimap, no ground; our arrow stays over the pins (5.5: QuestTrail's), 32 px")
+  QB:Settings().mmArrowSize = 48
+  Mini.Update(0)
+  assert(MV.arrow.__w == 48, "the arrow size setting")
+  QB:Settings().mmArrowSize = nil
+  Mini.Update(0)
   tt:SetOwner(env.Minimap, "ANCHOR_CURSOR"); tt:Show()
   assert(tt:IsShown(), "at the game's zoom its tooltips are its own")
   tt:Hide()
@@ -2023,6 +2074,20 @@ do
   env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
   env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
   assert(c.gameClicks == clicks + 1 and #env.Minimap.__pings == pings + 1, "a click on the game's minimap: the game's own")
+  -- 5.5: another addon sets the minimap's release later: ours round it again at the next update (QuestTrail's re-wrap);
+  -- a click runs ours, then theirs (the game's is behind theirs now); the game's own put back, ours round it again
+  local theirs, gameUp = 0, env.Minimap:GetScript("OnMouseUp")
+  env.Minimap:SetScript("OnMouseUp", function() theirs = theirs + 1 end)
+  Mini.Update(0)
+  assert(MV.rehooks == 1 and env.Minimap:GetScript("OnMouseUp") == MV.ourUp, "the release wrapped again: " .. tostring(MV.rehooks))
+  env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
+  assert(theirs == 1 and c.gameClicks == clicks + 1, "a click: ours, then theirs")
+  env.Minimap:SetScript("OnMouseUp", function() c.gameClicks = (c.gameClicks or 0) + 1 end)
+  Mini.Update(0)
+  env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
+  assert(MV.rehooks == 2 and theirs == 1 and c.gameClicks == clicks + 2, "the game's own back: ours round it")
   -- a right-click: the minimap's menu, a frame later and owned by UIParent, with every switch; Far zoom is the setting.
   -- On a pin, "Waypoint here" first
   local menus = #c.contextMenus
@@ -2030,7 +2095,7 @@ do
   local function nextFrame(n0) for i = #c.timers, n0 + 1, -1 do table.remove(c.timers, i).f() end end
   local n0 = #c.timers
   env.Minimap.__scripts.OnMouseUp(env.Minimap, "RightButton")
-  assert(#c.contextMenus == menus and c.gameClicks == clicks + 1, "not at once, and no ping")
+  assert(#c.contextMenus == menus and c.gameClicks == clicks + 2, "not at once, and no ping")
   nextFrame(n0)
   local m = c.contextMenus[#c.contextMenus]
   local function entry(list, text) for _, e in ipairs(list) do if e.text == text then return e end end end
@@ -2205,7 +2270,7 @@ do
   env.Minimap.__scripts.OnMouseUp(env.Minimap, "RightButton")
   for i = #c.timers, n0 + 1, -1 do table.remove(c.timers, i).f() end
   local menu = c.contextMenus[#c.contextMenus]
-  local want, got = { "Back to me after a drag", "Back to me", "Far zoom", "Route", "Lines", "Pick-ups", "Objectives", "Dungeons", "Trails", "Party", "Quest areas", "Label", "QuestBank settings" }, {}
+  local want, got = { "Back to me after a drag", "Back to me", "Far zoom", "Route", "Lines", "Golden path", "Pick-ups", "Objectives", "Dungeons", "Trails", "Party", "Quest areas", "Label", "QuestBank settings" }, {}
   for _, e in ipairs(menu) do if e.text then got[#got + 1] = e.text end end
   assert(table.concat(got, ",") == table.concat(want, ","), "the minimap's menu: " .. table.concat(got, ","))
   for _, e in ipairs(menu) do if e.text == "Quest areas" then e.set() end end
@@ -2215,7 +2280,12 @@ do
   local U = QB.UI
   U:ShowTab(5)
   local v5 = U.views[5]
-  assert(v5.mmExtended:GetChecked() and v5.walkShow:GetChecked() and v5.minimapHint:GetText() == "Right-click the minimap for the rest.", "the minimap's rows in Settings")
+  assert(v5.mmExtended:GetChecked() and not v5.walkShow:GetChecked() and v5.minimapHint:GetText() == "Marker style. Right-click the minimap for the rest."
+    and v5.markerStyle:GetText() == "QuestTrail", "the minimap's rows in Settings: the trails off by default, the marker style QuestTrail's")
+  v5.markerStyle.__scripts.OnClick(v5.markerStyle)
+  assert(QB:Settings().markerStyle == "game" and v5.markerStyle:GetText() == "Game icons" and not Mini.QT(), "the button: the game's icons")
+  v5.markerStyle.__scripts.OnClick(v5.markerStyle)
+  assert(QB:Settings().markerStyle == "questtrail" and v5.markerStyle:GetText() == "QuestTrail" and Mini.QT(), "and QuestTrail's again")
   v5.mmExtended:SetChecked(false); v5.mmExtended.__scripts.OnClick(v5.mmExtended)
   assert(QB:Settings().mmExtended == false and not MV.Extended(), "Far zoom off in Settings: the game's minimap")
   v5.mmExtended:SetChecked(true); v5.mmExtended.__scripts.OnClick(v5.mmExtended)
@@ -2504,6 +2574,19 @@ do
   assert(searches == 0 and GP.n == 3 and GP.x[1] == 1000 and math.abs(GP.y[1] - 1980) < 0.01 and kinds() == "own,line",
     "walked on: the way trimmed behind you: " .. kinds() .. ", " .. GP.n .. " points")
   Walk.Path = realPath
+  -- 5.5: the Golden path switch (the minimap's menu): off, the plain stroke
+  QB:Settings().goldenPath = false
+  Mini.Place()
+  assert(MR.goldShown == 0 and Mini.linesShown == 1, "the golden path off: the stroke")
+  QB:Settings().goldenPath = nil
+  Mini.Place()
+  assert(MR.goldShown >= 1 and Mini.linesShown == 0, "and on again")
+  -- its width and opacity settings (QuestTrail's gpWidth, gpAlpha): the pieces take them at once
+  QB:Settings().gpWidth, QB:Settings().gpAlpha = 12, 0.5
+  Mini.Place()
+  assert(MR.gold.lines[1].th == 12 and MR.gold.lines[1].__vertex[4] == 0.5, "the golden path's width and opacity settings: " .. tostring(MR.gold.lines[1].th))
+  QB:Settings().gpWidth, QB:Settings().gpAlpha = nil, nil
+  Mini.Place()
   -- not in the air, nor within 20 metres of the place: then the plain stroke to it
   c.flying = true
   Mini.Place()
@@ -3354,9 +3437,17 @@ do
   Mini.Invalidate(); Mini.Place()
   local obj
   for _, fr in ipairs(c.frames) do if fr.d and fr.d.kind == "obj" and fr.d.id == 777777 and fr:IsShown() then obj = fr end end
-  assert(obj and (obj.icon.__tex == "atlas:Crosshair_Attack_32" or obj.icon.__tex == 131013) and math.abs(obj.__points[1].x - 28) < 0.01, "a kill objective is the game's sword cursor, 80 yards east: 28 px: " .. tostring(obj and obj.icon.__tex))
+  -- (5.5: QuestTrail's skull glyph on its coloured diamond; the game-icon style, the game's sword cursor)
+  local ART = "Interface\\AddOns\\QuestBank\\art\\"
+  assert(obj and obj.icon.__tex == ART .. "ring_bg.png" and obj.glyph.__tex == ART .. "glyph_kill.png" and math.abs(obj.__points[1].x - 28) < 0.01, "a kill objective is QuestTrail's skull, 80 yards east: 28 px: " .. tostring(obj and obj.icon.__tex))
+  QB:Settings().markerStyle = "game"
+  Mini.Place()
+  assert((obj.icon.__tex == "atlas:Crosshair_Attack_32" or obj.icon.__tex == 131013) and not obj.glyph.__shown, "the game-icon style: the game's sword cursor: " .. tostring(obj.icon.__tex))
   assert(Mini.target and Mini.target.kind == "obj" and Mini.target.id == 777777, "the nearer objective is the target, not stop 1")
   assert(Mini.linesShown >= 1 and env.QuestBankMinimapLabel:IsShown() and Mini.labelText == "Quest 777777", "a line to it, and its name in the label: " .. tostring(Mini.labelText))
+  QB:Settings().markerStyle = nil
+  Mini.Place()
+  assert(not env.QuestBankMinimapLabel:IsShown() and Mini.labelText == "Quest 777777", "QuestTrail's look: no label pill (the target's name is kept)")
   QB:Settings().minimapObjectives = false
   c.miniRadius = 400 -- (Goldshire inside the circle, so its label shows)
   Mini.Place()
@@ -3779,8 +3870,8 @@ do
   v5.glowStyle[1].__scripts.OnClick(v5.glowStyle[1])
   assert(Glow.Style() == "sparkle" and L:IsShown() and sparksShown() == 7, "Sparkles again")
   -- the rows below moved down with the two new ones, and the page grew to hold them
-  assert(v5.statusHint.__points[1].y == -1284 and v5.statusBtns[1].__points[1].y == -1254 and v5.scroll.child:GetHeight() == 1328,
-    "the health and mana rows sit under the light's rows, the page holds them")
+  assert(v5.statusHint.__points[1].y == -1296 and v5.statusBtns[1].__points[1].y == -1266 and v5.scroll.child:GetHeight() == 1340,
+    "the health and mana rows sit under the light's rows (and 5.5's marker style row), the page holds them")
   local sf = v5.scroll
   local _, hi = sf.bar:GetMinMaxValues()
   sf.bar:SetValue(math.min(hi, 990)); UI:Refresh()
@@ -5070,7 +5161,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 1328 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 1340 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()
