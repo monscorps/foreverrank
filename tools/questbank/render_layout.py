@@ -116,6 +116,9 @@ def render(layout):
                 st = "background:linear-gradient(#5a1a10,#3a0f08);border:1px solid #8a6a2f;border-radius:3px;"
             if it.get("tpl") == "UICheckButtonTemplate":
                 st = "background:#0b1119;border:1px solid #6a5a3a;border-radius:2px;"
+                # ticked: the game's gold check, drawn close enough to judge
+                if it.get("checked"):
+                    st += "background:#0b1119 url(data:image/svg+xml;base64,%s) center/90%% no-repeat;" % _svg("<path d='M4 13l5 5L20 6' fill='none' stroke='#ffd100' stroke-width='3.5' stroke-linecap='round'/>")
             if it.get("tpl") == "UIPanelCloseButton":
                 st = "background:#5a1a10;border-radius:3px;"
             # a live 3D model (the journal's loot face): a shaded bust where the creature would stand

@@ -1565,7 +1565,8 @@ lines.append("D.GATHER = " + lua(GATHER))
 # make you Well Fed. From the site's item database (plan/items-db.json: the client's own Use lines) and the client's
 # item-effect tables (which spell a kit casts, so a campfire being lit is seen on UNIT_SPELLCAST_SUCCEEDED).
 #   D.CAMP[item id] = { n = name, p = profession, s = skill, t = "kit"|"feature"|"bag", g = what it gives, i = icon,
-#                       base = the item whose benefit it also gives, sp = the spell the item casts, cap = features a kit allows }
+#                       base = the item whose benefit it also gives, sp = the spell the item casts, cap = features a kit allows,
+#                       b, bn = the buff a feature gives as an aura, its spell and its name }
 #   D.FOOD[item id] = { n = name, g = what it gives, i = icon }
 _ITEMS = load_json(os.path.join(REPO, "plan", "items-db.json")) or {"items": []}
 _IE = {r["ID"]: r for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "ItemEffect.csv")))}
@@ -1593,7 +1594,7 @@ for it in _ITEMS["items"]:
     use = " ".join(e for e in (it.get("effects") or []) if e.startswith("Use:"))
     if not use: continue
     iid = int(it["id"])
-    if re.search(r"Requires a Campfire nearby|Builds a (basic|journeyman|expert) campfire|Unfurl a sleeping bag", use) and not it["name"].startswith("Blueprint"):
+    if re.search(r"Requires a Campfire nearby|Builds an? (basic|journeyman|expert) campfire|Unfurl a sleeping bag", use) and not it["name"].startswith("Blueprint"):
         sk = it.get("reqSkill")
         prof, lvl = (sk.rsplit(" ", 1) if sk else (None, "0"))
         kind = "kit" if "campfire that allows" in use else ("bag" if "sleeping bag" in use else "feature")
@@ -1609,11 +1610,24 @@ for it in _ITEMS["items"]:
         m = re.search(r"well fed and gain (\d+%?) ([A-Za-z ]+?)(?: and ([A-Za-z ]+?))? for (\d+) min", use, re.I)
         g = m and ("+%s %s%s, %s min" % (m.group(1), m.group(2), (" and " + m.group(3)) if m.group(3) else "", m.group(4))) or "Well Fed"
         FOOD[iid] = {"n": it["name"], "g": g, "i": it.get("icon")}
+# the buff a feature gives while you sit by it, as the aura's own spell (the missing-buffs banner looks for it on you):
+# the first spell the cast's tooltip names for its number ($1230172s1: Extra Strength), never the shared cooldown
+# (Camping, 1308027). The aura's name is not the feature's (the Sharpening Wheel's is Extra Strength); a feature that
+# carries a lower tier's benefits has its buff. Tents, bots and workbenches give no aura: no b
+_SPELL_DESC = {r["ID"]: r["Description_lang"] or "" for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "Spell.csv")))}
+_SPELL_NAME = {r["ID"]: r["Name_lang"] for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "SpellName.csv")))}
+for iid, e in CAMP.items():
+    if e["t"] != "feature" or not e.get("sp"): continue
+    for ref in re.findall(r"\$(\d{5,})s1", _SPELL_DESC.get(str(e["sp"]), "")):
+        if ref != "1308027" and _SPELL_NAME.get(ref):
+            e["b"], e["bn"] = int(ref), _SPELL_NAME[ref]
+            break
 for iid, e in CAMP.items():
     bn = e.pop("baseName", None)
     if bn and _camp_by_name.get(bn):
         e["base"] = _camp_by_name[bn]
         if not e.get("g"): e["g"] = CAMP[_camp_by_name[bn]].get("g")
+        if not e.get("b") and CAMP[_camp_by_name[bn]].get("b"): e["b"], e["bn"] = CAMP[_camp_by_name[bn]]["b"], CAMP[_camp_by_name[bn]]["bn"]
 # the drop chance a quest's items carry (objectives.py -> drops.json): D.DROP[quest id] = percent, the worst item
 _DROPS = load("drops.json", {}) or {}
 DROP = {int(k): v for k, v in _DROPS.items() if int(k) in LIST}

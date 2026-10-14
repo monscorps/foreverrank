@@ -496,10 +496,12 @@ function Camp.Missing()
   for i, sp in ipairs(Camp.SelfMissing(names, ids)) do
     out[#out + 1] = { key = "self" .. i, tex = spellIcon(sp.id, sp.icon), spell = sp.id, self = true, tip = { sp.name, "Click to cast it on yourself." } }
   end
-  local best = s.camp and Camp.Placeable(bags)[1]
+  -- the best feature you can place that gives a buff (D.CAMP's b: a tent, a bot or a workbench gives none), unless its
+  -- buff is on you. The aura is the buff's own spell, not the feature's name (the Sharpening Wheel's is Extra Strength)
+  local best
+  if s.camp then for _, x in ipairs(Camp.Placeable(bags)) do if x.e.b then best = x; break end end end
   if best and select(2, campCD(best, t)) == 0 then
-    local on = false
-    for _, e in pairs(QB.Data.CAMP or {}) do if e.t == "feature" and e.p == best.e.p and names[e.n] then on = true end end
+    local on = ids[best.e.b] or names[best.e.bn or ""] or names[spellName(best.e.b, best.e.bn or "")]
     if not on then
       local feat = { key = "camp", tex = "Interface\\Icons\\" .. best.e.i, item = best.id,
                      tip = { best.e.n, (best.e.g or "Its buff") .. " while you sit by it.", "Click to place it." } }

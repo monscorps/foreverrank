@@ -6068,6 +6068,20 @@ do
   lines = {}; r.__scripts.OnEnter(r)
   assert(table.concat(lines, "\n"):find("You can take it at level 30.", 1, true), "the tooltip says when you can take it")
   print("2 levels ahead:", r.addName:GetText(), "|", r.cutName:GetText(), "|", r.gain:GetText())
+  -- at 29 too, still "at 30"; at 27 it is three levels off; at 30 it is offered without the box and says no level
+  local function at(lvl) wren.level = lvl; W.state.level = lvl; U.candMemo = nil; U:Refresh() end
+  at(29)
+  r = row600()
+  assert(has600(U:FindRewards("gear", 29)) and r and r.cutName:GetText():find("at 30", 1, true), "at 29, ticked: the wand, at 30")
+  at(27)
+  assert(not has600(U:FindRewards("gear", 27)) and not row600(), "at 27, ticked: three levels off, not offered")
+  at(30)
+  v.ahead:SetChecked(false); v.ahead.__scripts.OnClick(v.ahead, "LeftButton")
+  r = row600()
+  assert(r and not r.cutName:GetText():find("at 30", 1, true) and r.rewardId == 5253, "at 30, unticked: the wand, no level said: " .. tostring(r and r.cutName:GetText()))
+  v.ahead:SetChecked(true); v.ahead.__scripts.OnClick(v.ahead, "LeftButton")
+  at(28)
+  r = row600()
   for _, p in ipairs(checkLayout(U.frame, "Quest Log, Best gear 2 levels ahead")) do problems[#problems + 1] = p end
   layouts[#layouts + 1] = dumpLayout(U.frame, "Quest Log, Best gear 2 levels ahead")
   -- Trinkets and Recipes keep the box; the swaps don't show it
@@ -8734,9 +8748,25 @@ do
   ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
   assert(B:IsShown() and btn(1):GetAttribute("item") == "item:279944" and btn(1).state.tip[3] == "Click to place it.", "the fire lit: the wheel")
   for _, pr in ipairs(checkLayout(B, "Missing buffs banner, one icon")) do problems[#problems + 1] = pr end
+  -- the wheel's aura is its buff's own spell, Extra Strength: the feature's name on you is no buff
+  assert(D.CAMP[279944].b == 1230172 and D.CAMP[279944].bn == "Extra Strength" and D.CAMP[279955].b == 1230172, "the wheel's buff, and the Master Forge's (its base)")
   c.buffs = { "Well Fed", "Sharpening Wheel" }
   ev("UNIT_AURA", "player")
+  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:279944", "an aura named after the wheel is not its buff")
+  c.buffs = { "Well Fed", "Extra Strength" }
+  ev("UNIT_AURA", "player")
   assert(not B:IsShown(), "the wheel's buff on: gone")
+  -- a feature that gives no buff (the Repair Bot: repairs and reagents) is no missing buff
+  assert(D.CAMP[279949] and not D.CAMP[279949].b, "the Repair Bot gives no aura")
+  owner.o.bagSlots, c.profs, c.buffs = { { 279949, 1 }, { 279981, 1 } }, { { "Engineering", 150 } }, { "Well Fed" }
+  tick(owner, Camp.QUIET + 3601)
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(not B:IsShown() and said():find("No buffs missing.", 1, true), "an engineer's Repair Bot: nothing missing")
+  -- the Expert Campfire Kit ("Builds an expert campfire") is a kit too: the fire icon uses it
+  assert(D.CAMP[279974] and D.CAMP[279974].t == "kit" and D.CAMP[279974].cap == 10 and D.CAMP[279974].sp == 1307237, "the Expert Campfire Kit")
+  owner.o.bagSlots, c.profs = { { 279974, 2 } }, { { "Cooking", 225 } }
+  Camp.Refresh()
+  assert(ic("fire"):IsShown() and ic("fire"):GetAttribute("item") == "item:279974" and ic("fire").count:GetText() == "2", "an Expert Campfire Kit on the fire icon")
   owner.o.bagSlots, owner.o.class, c.profs, c.known, c.buffs, c.resting = saveBags, saveClass, nil, nil, nil, nil
   env.C_Spell.GetSpellTexture, env.C_Spell.GetSpellCooldown = saveTex, saveCD
   Camp.Refresh()
