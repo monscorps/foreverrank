@@ -295,6 +295,7 @@ function UI.QuestTooltipShort(tip, q, st, xp)
     end
   end
   if #icons > 0 then tip:AddLine(((R and R.c and #R.c > 0) and "Choose: " or "") .. table.concat(icons, " "), 1, 1, 1) end
+  if q.surveyOnly then tip:AddLine("Seen in game. Who gives it isn't known yet.", 0.75, 0.75, 1, true) end
   if st and st.text and st.text ~= "" and st.code ~= "todo" then
     local c = STATUS[st.code] or INK
     tip:AddLine(st.text, c[1], c[2], c[3])
@@ -308,13 +309,15 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
   if not (IsShiftKeyDown and IsShiftKeyDown()) and not UI.longTips then return UI.QuestTooltipShort(tip, q, st, xp) end
   tip:AddLine(q.name, GOLD[1], GOLD[2], GOLD[3])
   local cat = q.cat and q.cat.name or ""
-  tip:AddDoubleLine(string.format("Level %d, needs %d", q.lvl, q.req or 1), cat, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8)
+  tip:AddDoubleLine(q.surveyOnly and string.format("Level %d", q.lvl) or string.format("Level %d, needs %d", q.lvl, q.req or 1), cat, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8)
   local full = Q.Full(q)
   local src
   if q.liveFull then
     src = QB.Live.Source(q) or "the game's own number"
   elseif q.xpUnknown then
     src = "not known yet"
+  elseif q.surveyOnly then
+    src = "as the game told QuestBank"
   elseif q.confirmed and q.seenOnly then
     src = QB.Comma(q.base) .. ", as players' games showed it"
   elseif q.confirmed then
@@ -345,6 +348,9 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
     tip:AddLine(string.format("New in Forever and known only from players' notes: Wowhead doesn't list it yet. Level %d as the game showed it%s.%s",
       q.lvl, q.reqStated and "" or string.format("; it may unlock before level %d", q.req or q.lvl),
       q.turn and "" or " Where it's handed in isn't known yet."), 0.75, 0.75, 1, true)
+  end
+  if q.surveyOnly then
+    tip:AddLine("Seen in game: QuestBank asked the game about it. Who gives it, where, and for which side isn't known yet.", 0.75, 0.75, 1, true)
   end
   if q.note then tip:AddLine(q.note, 1, 0.6, 0.3, true) end
   if q.nerfed and not q.confirmed and not q.liveFull and not q.xpUnknown then
@@ -489,7 +495,8 @@ function UI.RewardLines(tip, q)
   end
   local c, r, u = rw and rw.c or {}, rw and rw.r or {}, rw and rw.u or {}
   if #c + #r + #u == 0 then
-    tip:AddLine(how == "game" and "No item rewards (as your quest window showed)." or "No item rewards.", 0.6, 0.6, 0.6)
+    tip:AddLine(how == "game" and "No item rewards (as your quest window showed)." or how == "survey" and "No item rewards (as the game told QuestBank)."
+      or "No item rewards.", 0.6, 0.6, 0.6)
     return
   end
   local function line(id)
@@ -516,7 +523,8 @@ function UI.RewardLines(tip, q)
     tip:AddLine("Rewards include:", 1, 0.82, 0) -- a loot page lists them without saying which are a choice
     for i = 1, math.min(#u, 6) do line(u[i]) end
   end
-  tip:AddLine((how == "game" and "As your quest window showed them. " or "") .. "Right-click the quest to link one in chat.", 0.6, 0.6, 0.6, true)
+  tip:AddLine((how == "game" and "As your quest window showed them. " or how == "survey" and "As the game told QuestBank. " or "")
+    .. "Right-click the quest to link one in chat.", 0.6, 0.6, 0.6, true)
 end
 
 local questClick
@@ -538,6 +546,9 @@ questClick = function(q, st, which)
   end
   if target and not target.inside then
     QB.API.SetWaypoint(target.m, target.x, target.y, target.n, nil, QB.Model.NpcPlace(target.idx, QB.faction))
+  elseif not target and q.surveyOnly then
+    -- a quest the survey alone knows: no NPC to point at, and it says so
+    QB:Print(string.format("Who gives %s isn't known yet. The game told QuestBank its rewards, not where it starts.", q.name))
   end
 end
 
@@ -1469,7 +1480,7 @@ function UI:FindRewards(kind, level)
   local R = QB.Data.REWARD
   if not R then return {} end
   local out = {}
-  for _, c in ipairs(self:Candidates(nil, level)) do
+  for _, c in ipairs(self:Candidates(nil, level, true)) do
     local r = R[c.id]
     if r and not c.behind then
       local kinds = r[2]
@@ -1766,7 +1777,9 @@ function UI.MinutesTo(q, here, mf)
   return M.Between(here, to, fac, mf)
 end
 
-function UI:Candidates(limit, level)
+-- seen: the quests the quest survey alone knows (Survey.lua) too, for the reward finders: they have no giver or place,
+-- so nothing else suggests them
+function UI:Candidates(limit, level, seen)
   local D = QB.Data
   local s = QB.state
   level = level or s.level
@@ -1774,7 +1787,8 @@ function UI:Candidates(limit, level)
   local banking = QB:Banking()
   local above, below = QB:Range()
   -- the same question asked several times a refresh: answer it once a second
-  local key = table.concat({ limit or 0, level, s.level, s.logCount or 0, tostring(banking), fac or "", s.mapID or 0, above, below, QB:SkipSignature(), QB.doneVer or 0 }, ":")
+  local key = table.concat({ limit or 0, level, s.level, s.logCount or 0, tostring(banking), fac or "", s.mapID or 0, above, below, QB:SkipSignature(), QB.doneVer or 0,
+                             seen and 1 or 0, QB.surveyVer or 0 }, ":")
   local now = GetTime and GetTime() or 0
   UI.candMemo = UI.candMemo or {}
   local memo = UI.candMemo[key]
@@ -1796,6 +1810,7 @@ function UI:Candidates(limit, level)
       and r[2] <= s.level + 2 and r[1] >= level - below and r[1] <= ceiling and not s.log[id] and not D.FOLLOW[id]
       and math.floor(r[10] / 128) % 2 == 0 -- never suggest Season of Discovery leftovers
       and math.floor(r[10] / 4096) % 2 == 0 -- nor repeatables
+      and (seen or math.floor(r[10] / 65536) % 2 == 0) -- nor, but in the finders, a quest the survey alone knows
       and not (turn and turn[5] < 0)
       and not QB:Skipped(r[8], turn and turn[5]) then -- nor anything where you said to skip
       local live = QuestBankDB.live and QuestBankDB.live[id]
@@ -4482,8 +4497,25 @@ function UI:CreateSettingsView(parent)
     GameTooltip:Show()
   end)
   v.noteGame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  -- the quest survey (Survey.lua): QuestBank asks the game about the quests it has no rewards for
+  v.survey = checkRow(p, RIGHT, -634, "Learn quests from the game", 300)
+  v.survey:SetScript("OnClick", function(self)
+    if QB.Survey then QB.Survey.SetOn(self:GetChecked() and true or false) else QB:Settings().survey = self:GetChecked() and true or false end
+    UI:Refresh()
+  end)
+  v.survey:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Learn quests from the game", 1, 1, 1)
+    GameTooltip:AddLine("Out of combat and outside dungeons, QuestBank asks the game about the quests it has no rewards for, two a second, and shows their rewards in the finders and tooltips at once. Once per game build for the account.", nil, nil, nil, true)
+    if QB.Survey and QB.Survey.Able() then
+      local pr = QB.Survey.Progress()
+      GameTooltip:AddLine(string.format("%s of %s quests done on this build, %s with item rewards. /qb survey says more.", QB.Comma(pr.done), QB.Comma(pr.total), QB.Comma(pr.rewards)), 0.6, 0.8, 1, true)
+    end
+    GameTooltip:Show()
+  end)
+  v.survey:SetScript("OnLeave", function() GameTooltip:Hide() end)
   v.discText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
-  v.discText:SetPoint("TOPLEFT", RIGHT, -636)
+  v.discText:SetPoint("TOPLEFT", RIGHT, -662)
   v.discText:SetHeight(72)
 
   -- the decide-yourself key: held at the NPC, the auto actions above leave the quest to you
@@ -4565,17 +4597,17 @@ function UI:CreateSettingsView(parent)
   v.statusHint:SetText("On your portrait, your target's and your focus's, always shown. The game's own Status Text option.")
 
   -- where you are decides (QB:Opt): each row is a context, each column a setting; a button cycles inherit, on, off
-  heading(p, RIGHT, -724, "When you are...")
+  heading(p, RIGHT, -750, "When you are...")
   local COLS = { { "autoAccept", "Accept" }, { "autoTurnIn", "Hand in" }, { "sayAccept", "Say got" }, { "sayComplete", "Say done" }, { "clockShow", "Strip" } }
   local ROWS = { { "dungeon", "In a dungeon" }, { "pvp", "In a PvP zone" }, { "party", "In a party" }, { "cap", "At a level cap" } }
   v.tri = {}
   for ci, col in ipairs(COLS) do
     local h = text(p, "GameFontNormalSmall", 10, INK_SOFT, "CENTER", 48)
-    h:SetPoint("TOPLEFT", RIGHT + 120 + (ci - 1) * 44 - 12, -748)
+    h:SetPoint("TOPLEFT", RIGHT + 120 + (ci - 1) * 44 - 12, -774)
     h:SetText(col[2])
   end
   for ri, row in ipairs(ROWS) do
-    local y = -766 - (ri - 1) * 26
+    local y = -792 - (ri - 1) * 26
     local l = text(p, "GameFontNormal", 12, INK, "LEFT", 118)
     l:SetPoint("TOPLEFT", RIGHT, y - 4)
     l:SetText(row[2])
@@ -4596,16 +4628,16 @@ function UI:CreateSettingsView(parent)
     end
   end
   v.ctxText = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
-  v.ctxText:SetPoint("TOPLEFT", RIGHT, -876)
+  v.ctxText:SetPoint("TOPLEFT", RIGHT, -902)
   v.ctxText:SetHeight(44)
 
   -- the camp bar (Camp.lua): icons under your character, a switch each
-  heading(p, RIGHT, -930, "Camp bar")
+  heading(p, RIGHT, -956, "Camp bar")
   local REMIND = { { "food", "Well Fed, and the food that gives it" }, { "fire", "Campfire kit" }, { "camp", "Camp features I can place, with the cooldown" },
                    { "bag", "Sleeping bag and Well Rested" }, { "quietInstance", "Hidden in dungeons" } }
   v.remind = {}
   for i, r in ipairs(REMIND) do
-    local row = checkRow(p, RIGHT, -954 - (i - 1) * 26, r[2], 300)
+    local row = checkRow(p, RIGHT, -980 - (i - 1) * 26, r[2], 300)
     row.key = r[1]
     row:SetScript("OnClick", function(self) QB:Settings().remind[self.key] = self:GetChecked() and true or false; if QB.Camp then QB.Camp.Refresh() end end)
     v.remind[r[1]] = row
@@ -4690,6 +4722,14 @@ function UI:RefreshSettingsView(v)
   v.noteGame.label:SetText(forever and "Note items, spells and loot, for foreverrank.com" or "Note items, spells and loot (Forever client only)")
   local ink = forever and INK or INK_SOFT
   v.noteGame.label:SetTextColor(ink[1], ink[2], ink[3])
+  -- the quest survey: the same client only
+  local S = QB.Survey
+  local asks = S ~= nil and S.Able()
+  v.survey:SetEnabled(asks)
+  v.survey:SetChecked(asks and set.survey ~= false)
+  v.survey.label:SetText(asks and "Learn quests from the game" or "Learn quests from the game (Forever client only)")
+  local sink = asks and INK or INK_SOFT
+  v.survey.label:SetTextColor(sink[1], sink[2], sink[3])
   -- the map icons: greyed out off Forever, the three kinds greyed out while the icons are off
   local icons = forever and QB.QuestMap ~= nil
   v.mapIcons:SetEnabled(icons)

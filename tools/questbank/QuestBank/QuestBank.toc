@@ -10,6 +10,7 @@
 Data.lua
 Core.lua
 Discover.lua
+Survey.lua
 Game.lua
 Loot.lua
 Observe.lua

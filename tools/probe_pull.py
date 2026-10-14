@@ -392,7 +392,19 @@ SPOT_TYPES = {"monster", "item", "object", "event", "areatrigger", "log", "reput
 # {v uploads, n most windows in one upload}, last the upload with loot that last had it (meta.with_loot then).
 LOOT_KEYS = ("loot", "lootAt", "lootN")  # what QuestBankDB.disc keeps for the loot sources
 LOOT_UPLOAD = (400, 40)                  # sources, and items per source, the addon keeps: a file over that is read up to it
-EXTRA_KEYS = SPOT_KEYS + LOOT_KEYS       # what the notes' digest leaves out
+# QuestBank's quest survey (Survey.lua), on the Forever client: what the game answered when QuestBank asked about a
+# quest by id, once per account and client build. QuestBankDB.disc.survey = { [questId] = { t = the quest's title,
+# c = { item ids to choose from }, r = { item ids always given } (both missing when the game didn't send the rewards
+# whole, both empty when the quest gives no items), xp = the XP at the player's level then, pl = that level, money =
+# copper when it pays any, lvl = the quest's level, at = when, b = the client build } }, and next to it surveyNo =
+# { [questId] = tries that failed on this build }, surveyB, that build, and surveyCheck, whether the game showed the
+# items of the quests it checks against. Kept in disc.json under "sv": per quest u uploads that had
+# it, b the newest build, and votes per upload for each title (t), level (lv), XP reading ("xp@level"), money (m) and
+# reward set (rw: "c1,c2|r1" -> [uploads, newest build]); "sv_no" counts the uploads whose game never answered (three
+# tries). Quest titles and numbers only: a player's name is nowhere in it, and nothing else of the record is read.
+SURVEY_KEYS = ("survey", "surveyNo", "surveyB", "surveyCheck")
+SURVEY_UPLOAD = 8000                     # quests read from one upload at most (the client knows about 6,600)
+EXTRA_KEYS = SPOT_KEYS + LOOT_KEYS + SURVEY_KEYS  # what the notes' digest leaves out
 
 
 def _pairs(v):
@@ -550,6 +562,70 @@ def merge_loot(acc, loot):
         voted += 1
     if voted:
         meta["with_loot"] = stamp
+    return voted
+
+
+def _ids(v):
+    """A list of item ids from a saved file (a Lua array reads back as a list, an empty table as {}), or None."""
+    if isinstance(v, dict) and not v:
+        return []
+    if isinstance(v, dict):
+        v = [x for _, x in sorted(((int(k), x) for k, x in v.items() if str(k).isdigit()))]
+    if not isinstance(v, list):
+        return None
+    out = []
+    for x in v:
+        x = _whole(x, 1, 9999999)
+        if x is None:
+            return None  # a hidden or odd slot: the list isn't whole
+        if x not in out:
+            out.append(x)
+    return out
+
+
+def merge_survey(acc, survey, no=None):
+    """One upload's QuestBankDB.disc.survey (and surveyNo) into disc.json's "sv" (and "sv_no"). One vote per upload per
+    fact; a reward set also keeps the newest build that read it, since Blizzard changes rewards between builds. A title
+    is kept only as the quest's own (a short string with no escape codes). Returns the number of quests voted for."""
+    out = acc.setdefault("sv", {})
+    quests = {}
+    for k, rec in _pairs(survey):
+        q = _key(k, 999999)
+        if q and q not in quests and isinstance(rec, dict):
+            quests[q] = rec
+    voted = 0
+    for qid in sorted(quests)[:SURVEY_UPLOAD]:
+        rec = quests[qid]
+        a = out.setdefault(str(qid), {"u": 0, "b": 0, "t": {}, "lv": {}, "xp": {}, "m": {}, "rw": {}})
+        a["u"] += 1
+        b = _whole(rec.get("b"), 1, 99999999) or 0
+        a["b"] = max(a["b"], b)
+        t = rec.get("t")
+        if isinstance(t, str) and 0 < len(t.strip()) <= 120 and "|" not in t and not any(ord(ch) < 32 for ch in t):
+            t = " ".join(t.split())
+            a["t"][t] = a["t"].get(t, 0) + 1
+        lv = _whole(rec.get("lvl"), 1, 200)
+        if lv:
+            a["lv"][str(lv)] = a["lv"].get(str(lv), 0) + 1
+        xp, pl = _whole(rec.get("xp"), 1, 10 ** 7), _whole(rec.get("pl"), 1, 200)
+        if xp and pl:
+            k = "%d@%d" % (xp, pl)
+            a["xp"][k] = a["xp"].get(k, 0) + 1
+        m = _whole(rec.get("money"), 0, 10 ** 9)
+        if m is not None:
+            a["m"][str(m)] = a["m"].get(str(m), 0) + 1
+        c, r = _ids(rec.get("c")), _ids(rec.get("r"))
+        if c is not None and r is not None:
+            k = ",".join(str(x) for x in c) + "|" + ",".join(str(x) for x in r if x not in c)
+            v = a["rw"].setdefault(k, [0, 0])
+            v[0], v[1] = v[0] + 1, max(v[1], b)
+        voted += 1
+    if no is not None:
+        out_no = acc.setdefault("sv_no", {})
+        for k, n in _pairs(no):
+            q, n = _key(k, 999999), _whole(n, 0, 99)
+            if q and n is not None and n >= 3:
+                out_no[str(q)] = out_no.get(str(q), 0) + 1
     return voted
 
 
@@ -753,6 +829,14 @@ def merge_upload(acc, text, source="local"):
                 seen_hashes.append(h)
                 spotted = merge_loot(acc, loot) > 0 or spotted
                 fresh = True
+        # what the game told the quest survey (Survey.lua), a part of its own the same way
+        disc = disc_of(kind, data) or {}
+        if disc.get("survey") or disc.get("surveyNo"):
+            h = _digest({"survey": disc.get("survey"), "surveyNo": disc.get("surveyNo")})
+            if h not in seen_hashes:
+                seen_hashes.append(h)
+                spotted = merge_survey(acc, disc.get("survey"), disc.get("surveyNo")) > 0 or spotted
+                fresh = True
         # the notes' digest is the one earlier pulls stored, so a rebuild isn't needed for old uploads to stay merged once
         h = _digest({k: _sans_spots(data.get(k)) if k == "disc" else data.get(k) for k in ("disc", "turnins", "live", "liveEra")})
         if h in seen_hashes:
@@ -800,6 +884,10 @@ def summary(acc):
     loot = acc.get("loot") or {}
     out += "; loot: %d sources, %d items, from %d upload(s)" % (
         len(loot), sum(len(s.get("i") or {}) for s in loot.values()), acc["meta"].get("with_loot", 0))
+    sv = acc.get("sv") or {}
+    if sv or acc.get("sv_no"):
+        out += "; quest survey: %d quests, %d with a whole reward list, %d the game never answered" % (
+            len(sv), sum(1 for a in sv.values() if a.get("rw")), len(acc.get("sv_no") or {}))
     if acc["meta"].get("other_client"):
         out += "; %d upload(s) from another client left out" % acc["meta"]["other_client"]
     return out
@@ -1095,6 +1183,24 @@ def selftest():
     assert from_forever({"disc": {"build": "70205"}, "diag": {"addons": {"iface": 11507}}}) is False, "the stamp decides over the build"
     assert from_forever({"disc": {"build": "61582", "iface": 16001}}) is True
     json.dumps(acc), json.dumps(acc3), json.dumps(acc4), json.dumps(acc5)  # everything JSON-clean
+    # the quest survey (Survey.lua): a part of its own with its own digest, so new answers don't count the notes again
+    # and new notes don't vote for the answers again; titles and numbers only, never a name or an escape code
+    sv_text = open(os.path.join(fx, "QuestBank-survey.lua")).read()
+    assert _sans_spots({"v": 1, "q": {}, "survey": {}, "surveyNo": {}, "surveyB": 1, "surveyCheck": {}}) == {"v": 1, "q": {}}, "the survey stays out of the notes' digest"
+    acc6 = empty()
+    assert merge_upload(acc6, sv_text, "fixture") == ("questbank-savedvars", True)
+    sv = acc6["sv"]
+    assert sv["99999"] == {"u": 1, "b": 70338, "t": {"Shimmerwine Shakedown": 1}, "lv": {"51": 1}, "xp": {"6150@50": 1}, "m": {"4500": 1},
+                           "rw": {"276903|": [1, 70338]}}, sv["99999"]
+    assert sv["10"]["rw"] == {"2470,2435|2471": [1, 70338]} and sv["99997"]["rw"] == {"|": [1, 70338]}, "an empty pair: no item rewards"
+    assert sv["99996"]["rw"] == {} and sv["99995"]["rw"] == {} and sv["99995"]["t"] == {}, "no lists, a name in a slot, an escape code: left out"
+    assert acc6["sv_no"] == {"99001": 1} and "Brann" not in json.dumps(acc6), "three unanswered tries count; no name gets in"
+    assert merge_upload(acc6, sv_text, "fixture") == ("questbank-savedvars", False) and sv["99999"]["u"] == 1, "the same file again is a repeat"
+    grown = sv_text.replace('["money"] = 4500,', '["money"] = 4500,\n\t\t\t\t["g"] = 0,').replace(
+        '[99997] = {', '[99994] = {\n\t\t\t\t["t"] = "Later Read",\n\t\t\t\t["lvl"] = 12,\n\t\t\t\t["b"] = 70400,\n\t\t\t},\n\t\t\t[99997] = {')
+    assert merge_upload(acc6, grown, "fixture") == ("questbank-savedvars", True)
+    assert sv["99999"]["u"] == 2 and sv["99999"]["rw"]["276903|"] == [2, 70338] and sv["99994"]["b"] == 70400
+    assert acc6["meta"]["with_notes"] == 1, "a new survey answer merges the survey alone, not the notes again"
     print("selftest OK:", summary(acc))
     print("selftest OK:", summary(acc3))
 

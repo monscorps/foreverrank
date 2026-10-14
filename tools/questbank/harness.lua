@@ -511,15 +511,15 @@ local function newClient(o)
     end,
     GetItemIconByID = function(id) return id and 133328 or nil end,
     -- the whole answer, for the item notes (Game.lua): c.itemClass[id] (4, armor, by default), c.itemQuality[id],
-    -- c.itemName[id] (a secret one, say), c.unloaded[id] = not in the client's cache yet
+    -- c.itemName[id] (a secret one, say), c.unloaded[id] = not in the client's cache yet, c.itemLevel[id] (27 by default)
     GetItemInfo = function(id)
       if c.unloaded[id] then return nil end
       return c.itemName[id] or ("Item " .. id), "|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r", c.itemQuality[id],
-        27, 22, "Armor", "Cloth", 1, "INVTYPE_CHEST", 133328, 815, c.itemClass[id] or 4, 1, 1, 0, nil
+        c.itemLevel[id] or 27, 22, "Armor", "Cloth", 1, "INVTYPE_CHEST", 133328, 815, c.itemClass[id] or 4, 1, 1, 0, nil
     end,
     RequestLoadItemDataByID = function(id) c.loadRequests[#c.loadRequests + 1] = id end,
   }
-  c.itemClass, c.itemQuality, c.itemName, c.unloaded, c.loadRequests = {}, {}, {}, {}, {}
+  c.itemClass, c.itemQuality, c.itemName, c.unloaded, c.loadRequests, c.itemLevel = {}, {}, {}, {}, {}, {}
   -- the modern spellbook (ported from tools/foreverprobe/harness.lua): a General line and a class line;
   -- o.book = { { spellID, itemType (1 learned, 2 not yet), isOffSpec }, ... }, the first two in General
   env.Enum = {
@@ -8363,6 +8363,330 @@ do
     local drawn = 0
     for m in pairs(maps) do drawn = drawn + #O.QuestMap:Build(m) end
     print(string.format("map icons, real data: %d spots on %d maps; %d icons for the owner", spots, (function() local k = 0 for _ in pairs(maps) do k = k + 1 end return k end)(), drawn))
+  end
+end
+
+----------------------------------------------------------------------------
+-- the quest survey (Survey.lua): out of combat and outside instances QuestBank asks the game about the quests of
+-- D.SURVEY by id, two a second, and uses what it tells at once. A level-50 rogue on the Forever client; the server
+-- below knows a Forever quest no list has (99999, the Shimmerwine Shanker, item 276903, level 52), a catalog quest
+-- nobody knew the rewards of (10), a quest whose rewards come late, one with none; it says no to 99001 and never
+-- answers 99004, and knows nothing of 80001
+----------------------------------------------------------------------------
+local function d0(c) return c.env.QuestBankDB.disc end
+local function deepCopy(t)
+  if type(t) ~= "table" then return t end
+  local o = {}
+  for k, v in pairs(t) do o[k] = deepCopy(v) end
+  return o
+end
+-- the server's quests on a client, and the client's calls about them by id. c.server[id] = { t, lvl, xp, money, c, r,
+-- late = reads before the rewards are all there, fail = the server says no, silent = it never answers, sync = the
+-- answer comes inside the call, cached = the client has the quest already, noIds = its reward slots never give an id }
+local function surveyClient(c, server)
+  local env = c.env
+  c.server, c.loadedQ, c.qAsked = server, {}, {}
+  for id, s in pairs(server) do if s.cached then c.loadedQ[id] = true end end
+  local function known(id) return c.loadedQ[id] and c.server[id] or nil end
+  env.HaveQuestData = function(id) return c.loadedQ[id] and true or false end
+  env.C_QuestLog.RequestLoadQuestByID = function(id)
+    assert(not c.combat, "the survey asks nothing in a fight")
+    local ask = { id = id, t = c.clock }
+    c.qAsked[#c.qAsked + 1] = ask
+    local s = c.server[id]
+    if s and s.silent then return end
+    local ok = s ~= nil and not s.fail
+    if ok then c.loadedQ[id] = true end
+    local function reply()
+      ask.back = c.clock
+      local f = c.QB.Survey.frame
+      f.__scripts.OnEvent(f, "QUEST_DATA_LOAD_RESULT", id, ok)
+    end
+    -- data the client has answers inside the call (the event is synchronous); the rest a moment later
+    if s and s.sync then reply() else env.C_Timer.After(0.2, reply) end
+  end
+  env.C_QuestLog.GetTitleForQuestID = function(id) local s = known(id); return s and s.t end
+  env.C_QuestLog.GetQuestDifficultyLevel = function(id) local s = known(id); return s and s.lvl or 0 end
+  env.HaveQuestRewardData = function(id)
+    local s = known(id)
+    if not s then return false end
+    if (s.late or 0) > 0 then s.late = s.late - 1; return false end
+    return true
+  end
+  env.GetNumQuestLogChoices = function(id) local s = known(id); return s and #(s.c or {}) or 0 end
+  env.GetNumQuestLogRewards = function(id) local s = known(id); return s and #(s.r or {}) or 0 end
+  env.GetQuestLogChoiceInfo = function(i, id)
+    local s = known(id); local item = s and s.c[i]
+    if item then return "Item " .. item, 133328, 1, 2, true, (not s.noIds) and item or nil end
+  end
+  env.GetQuestLogRewardInfo = function(i, id)
+    local s = known(id); local item = s and s.r[i]
+    if item then return "Item " .. item, 133328, 1, 2, true, item end
+  end
+  local logXP = env.GetQuestLogRewardXP
+  env.GetQuestLogRewardXP = function(id) local s = known(id); if s then return s.xp or 0 end return logXP(id) end
+  env.GetQuestLogRewardMoney = function(id) local s = known(id); return s and s.money or 0 end
+  -- what the finder needs of an item without its cache: a dagger, leather and cloth chests, a leather belt; armor otherwise
+  local INSTANT = { [276903] = { "INVTYPE_WEAPONMAINHAND", 2, 15 }, [2470] = { "INVTYPE_CHEST", 4, 2 }, [2435] = { "INVTYPE_CHEST", 4, 1 },
+                    [2471] = { "INVTYPE_WAIST", 4, 2 } }
+  env.C_Item.GetItemInfoInstant = function(id)
+    local i = INSTANT[id] or { "INVTYPE_CHEST", 4, 1 }
+    return id, "Armor", "Cloth", i[1], 133328, i[2], i[3]
+  end
+  local itemInfo = env.GetItemInfo
+  env.GetItemInfo = function(id) local name, link = itemInfo(id); return c.itemName[id] or name, link end
+  c.itemName[276903], c.itemLevel[276903] = "Shimmerwine Shanker", 52
+  c.itemLevel[2470], c.itemLevel[2435], c.itemLevel[2471] = 50, 50, 50
+end
+local SERVER = {
+  [99999] = { t = "Shimmerwine Shakedown", lvl = 51, xp = 6150, money = 4500, c = { 276903 }, r = {} },
+  [99002] = { t = "Late Rewards", lvl = 30, c = { 2470 }, r = {}, late = 2 },
+  [99003] = { t = "Empty Hands", lvl = 30, c = {}, r = {}, sync = true },
+  [10] = { t = "The Scrimshank Redemption", lvl = 48, xp = 4400, c = { 2470, 2435 }, r = { 2471 } },
+  [99001] = { fail = true },
+  [99004] = { silent = true },
+  [99006] = { t = "Already Here", lvl = 40, c = { 2435 }, r = {}, cached = true },
+  [99007] = { t = "Never Whole", lvl = 40, c = { 2435 }, r = {}, noIds = true },
+}
+local RUNA = { name = "Runa", level = 50, cap = 60, faction = "Alliance", className = "Rogue", class = "ROGUE", classID = 4, race = "Human",
+               log = {}, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Stormwind City", riding = true,
+               bagSlots = {}, xp = 100, map = 1453 }
+local runa = newClient(deepCopy(RUNA))
+do
+  local c, Q2 = runa, runa.QB
+  local S, D2 = Q2.Survey, Q2.Data
+  -- the real list: three ascending runs, the catalog's run exactly its quests with no rewards known
+  local real = {}
+  for run, s in ipairs(D2.SURVEY) do
+    local ids = S.Decode(s)
+    assert(#ids > 0, "run " .. run .. " has ids")
+    for k, id in ipairs(ids) do
+      assert(k == 1 or id > ids[k - 1], "each run ascends")
+      assert(not real[id], "an id once")
+      real[id] = run
+      if run == 2 then assert(D2.Q[id] and D2.RUNK[id], "the catalog's run: a catalog quest with no rewards known: " .. id)
+      elseif run == 4 then assert(D2.Q[id] and D2.RITEMS[id], "the check: catalog quests whose items Wowhead lists: " .. id)
+      else assert(not D2.Q[id] and (run == 1) == (id >= 90000), "the other runs: ids the catalog lacks, the new range first: " .. id) end
+    end
+  end
+  for id in pairs(D2.RUNK) do if D2.Q[id] then assert(real[id] == 2, "every catalog quest with no rewards known is asked about: " .. id) end end
+  assert(S.Decode(S.Encode({ 1, 2, 33, 1057, 99999 }))[5] == 99999 and #S.Encode({ 99999 }) == 4, "the encoding reads back")
+  assert(D2.RUNK[10] and not D2.RITEMS[10], "quest 10's rewards are not known before the survey")
+  -- the check: three Forever quests whose items Wowhead lists, asked first
+  local CHECK = S.Decode(D2.SURVEY[4])
+  assert(#CHECK == 3, "three quests to check")
+  for _, id in ipairs(CHECK) do
+    local R = D2.RITEMS[id]
+    assert(D2.Q[id] and R and ((R.c and #R.c > 0) or (R.r and #R.r > 0)), "a check quest has items on Wowhead's list: " .. id)
+  end
+  -- this test's list: the server's quests, and 80001, which it knows nothing of
+  D2.SURVEY = { S.Encode({ 99001, 99002, 99003, 99004, 99006, 99007, 99999 }), S.Encode({ 10 }), S.Encode({ 80001 }), D2.SURVEY[4] }
+  local WANT = { [99001] = true, [99002] = true, [99003] = true, [99004] = true, [99006] = true, [99007] = true, [99999] = true, [10] = true, [80001] = true }
+  local server = deepCopy(SERVER)
+  for _, id in ipairs(CHECK) do
+    WANT[id] = true
+    server[id] = { t = Q2.Data.QN[id], lvl = D2.Q[id][1], c = deepCopy(D2.RITEMS[id].c or {}), r = deepCopy(D2.RITEMS[id].r or {}) }
+  end
+  surveyClient(c, server)
+  c.unloaded[2470] = true -- not in the item cache yet: its level comes once the server sends the item
+  login(c)
+  assert(S.frame and S.On() and #c.qAsked == 0, "nothing is asked in the first seconds after login")
+  tick(c, 16)
+  local first = #c.qAsked
+  assert(first >= 2 and first <= 3 and c.qAsked[1].t >= 1000 + S.START, "it starts half a minute after login: " .. first)
+  -- a fight: nothing is asked until it ends
+  c.combat = true
+  tick(c, 30)
+  assert(#c.qAsked == first and S.state == "fight", "nothing in a fight")
+  c.combat = false
+  S.frame.__scripts.OnEvent(S.frame, "PLAYER_REGEN_ENABLED")
+  tick(c, 1)
+  assert(#c.qAsked > first, "it goes on when the fight ends")
+  -- an instance: it stops, and the loading screen on the way out starts it again after a few seconds
+  local inside = true
+  c.env.IsInInstance = function() return inside, inside and "party" or "none" end
+  tick(c, 1)
+  local n = #c.qAsked
+  tick(c, 40)
+  assert(#c.qAsked == n and S.state == "instance", "nothing inside an instance")
+  inside = false
+  S.frame.__scripts.OnEvent(S.frame, "PLAYER_ENTERING_WORLD", false, false)
+  tick(c, S.SETTLE - 1)
+  assert(#c.qAsked == n, "not in the seconds after the loading screen")
+  tick(c, 2)
+  assert(#c.qAsked > n, "and on after them")
+  -- a secret id, or an answer to a quest it never asked about (Blizzard's own requests fire the event too): nothing
+  S.frame.__scripts.OnEvent(S.frame, "QUEST_DATA_LOAD_RESULT", SECRET.num(), true)
+  S.frame.__scripts.OnEvent(S.frame, "QUEST_DATA_LOAD_RESULT", 4242, true)
+  tick(c, 300)
+  assert(S.state == "done", "done: " .. tostring(S.state))
+  -- only the list's ids, PACE apart at the least, never more than FLIGHT waiting for an answer
+  local count = {}
+  for k = 1, 3 do assert(c.qAsked[k].id == CHECK[k], "the check is asked first") end
+  assert(Q2.Survey.Checked() == "trusted", "the game showed the check quests' items")
+  for k, a in ipairs(c.qAsked) do
+    assert(WANT[a.id], "asked only about the list's quests: " .. a.id)
+    count[a.id] = (count[a.id] or 0) + 1
+    assert(k == 1 or a.t - c.qAsked[k - 1].t >= S.PACE - 1e-9, "paced: " .. (a.t - (c.qAsked[k - 1] or a).t))
+    local waiting = 0
+    for j = 1, k - 1 do
+      local b = c.qAsked[j]
+      if (not b.back or b.back > a.t) and a.t - b.t < S.TIMEOUT then waiting = waiting + 1 end
+    end
+    assert(waiting < S.FLIGHT, "at most " .. S.FLIGHT .. " waiting for an answer")
+  end
+  -- a quest the server says no to, one it never answers and one it doesn't know: three tries each, no more
+  assert(count[99001] == S.TRIES and count[99004] == S.TRIES and count[80001] == S.TRIES, "three tries for a failure")
+  for id, s in pairs(SERVER) do if not s.fail and not s.silent and not s.cached then assert(count[id] == 1, "asked once: " .. id) end end
+  -- a quest the client has already is read without a question (its answer would come inside QuestBank's call)
+  assert(not count[99006] and d0(c).survey[99006].c[1] == 2435, "read as the client has it")
+  -- rewards that never come whole: the try fails, the title stays, three reads in all and the quest rests
+  assert(d0(c).surveyNo[99007] == 3 and d0(c).survey[99007].t == "Never Whole" and d0(c).survey[99007].c == nil, "never whole: three tries")
+  local d = c.env.QuestBankDB.disc
+  assert(d.surveyB == 70170 and d.surveyNo[99001] == 3 and d.surveyNo[99004] == 3 and d.surveyNo[80001] == 3, "the tries are kept for this build")
+  -- what the game told, kept per account
+  local rec = d.survey[99999]
+  assert(rec.t == "Shimmerwine Shakedown" and rec.lvl == 51 and rec.xp == 6150 and rec.pl == 50 and rec.money == 4500 and rec.b == 70170
+    and #rec.c == 1 and rec.c[1] == 276903 and #rec.r == 0 and rec.at, "the title, rewards, XP, money and level are kept")
+  assert(d.survey[99002].c[1] == 2470, "rewards that come late are read again until they are all there")
+  assert(#d.survey[99003].c == 0 and #d.survey[99003].r == 0, "no item rewards: two empty lists (answered inside the call)")
+  assert(d.survey[10].c[2] == 2435 and d.survey[10].r[1] == 2471, "a catalog quest's lists")
+  assert(not d.q[99999] and not d.q[10], "the survey is no sighting: the quest notes stay as they were")
+  local dg = c.env.QuestBankDB.diag.survey
+  assert(dg.asked == #c.qAsked and dg.loaded == 11 and dg.rewards == 7 and dg.failed == 12, "the counts: " .. dg.asked .. " " .. dg.loaded .. " " .. dg.rewards .. " " .. dg.failed)
+  for _, id in ipairs(CHECK) do assert(not D2.RSURV[id], "a check quest's lists stay Wowhead's: " .. id) end
+  -- an item the client didn't have: asked of the server in turn (never in one go), and the quests waiting on its level
+  -- are rated again when it comes
+  local reqs = 0
+  for _, i in ipairs(c.loadRequests) do if i == 2470 then reqs = reqs + 1 end end
+  assert(reqs == 1 and D2.REWARD[99002] and D2.REWARD[99002][1] == 0, "the leather chest's level is asked for once")
+  c.unloaded[2470] = nil
+  S.frame.__scripts.OnEvent(S.frame, "ITEM_DATA_LOAD_RESULT", 2470, true)
+  assert(D2.REWARD[99002][1] == 50 and D2.REWARD[99002][3] == 2470, "and it comes")
+  -- used at once: the catalog quest's rewards in its tooltip and in the finders' facts (Available's gear chip reads them)
+  assert(D2.RITEMS[10] and not D2.RUNK[10] and D2.REWARD[10][1] == 50 and D2.REWARD[10][2] % 2 == 1, "quest 10's rewards are in the catalog's tables")
+  local q10 = Q2.Quest.Get(10)
+  local _, how = Q2.Quest.Rewards(q10)
+  assert(how == "survey", "and they say where they come from")
+  lines = {}; Q2.UI.QuestTooltip(c.env.GameTooltip, q10, Q2:Status(q10), 1000)
+  local t = table.concat(lines, "\n")
+  assert(t:find("Choose one:", 1, true) and t:find("You get:", 1, true) and t:find("As the game told QuestBank.", 1, true), t)
+  local function found(level)
+    for _, row in ipairs(Q2.UI:FindRewards("gear", level)) do if row.q.id == 99999 then return row end end
+  end
+  -- the Forever quest no list has: Best gear finds it for the rogue at 51 (and at 50: the range reaches four levels up)
+  local hit = found(51)
+  assert(hit and hit.reward[1] == 52 and hit.reward[3] == 276903 and hit.q.name == "Shimmerwine Shakedown" and hit.q.surveyOnly, "Best gear at 51")
+  assert(found(50), "and at 50")
+  assert(hit.q.cat and hit.q.cat.name == "Seen in game" and not hit.q.give and not hit.q.turn, "seen in game, no giver")
+  for _, cand in ipairs(Q2.UI:Candidates(nil, 51)) do assert(cand.id ~= 99999, "nothing but the finders suggests it") end
+  -- on the page: the weapons, the dagger first
+  local U = Q2.UI
+  U.findMode, U.gearSlot = "gear", "Weapon"
+  U:Open(1); U:Refresh()
+  local row
+  for _, r in ipairs(U.views[1].swaps) do if r:IsShown() and r.add and r.add.id == 99999 then row = r end end
+  assert(row and row.gain:GetText() == "iL 52" and row.cutName:GetText():find("Shimmerwine Shanker", 1, true)
+    and row.cutName:GetText():find("Seen in game", 1, true), "the row: " .. tostring(row and row.cutName:GetText()))
+  for _, p in ipairs(checkLayout(U.frame, "Quest Log, Best gear, seen in game")) do problems[#problems + 1] = p end
+  lines = {}; row.__scripts.OnEnter(row)
+  t = table.concat(lines, "\n")
+  assert(t:find("Seen in game: QuestBank asked the game about it", 1, true) and t:find("Level 51", 1, true) and not t:find("needs", 1, true)
+    and t:find("As the game told QuestBank.", 1, true), t)
+  local said = #c.chat
+  row.__scripts.OnClick(row, "LeftButton")
+  assert(#c.chat == said + 1 and c.chat[#c.chat]:find("Who gives Shimmerwine Shakedown isn't known yet", 1, true), "no waypoint: it says so")
+  U.findMode, U.gearSlot = "xp", nil
+  -- the item's own tooltip names the quest
+  lines = {}; Q2.Link.ItemTip(c.env.GameTooltip, { id = 276903 })
+  assert(table.concat(lines, "\n"):find("Reward of: Shimmerwine Shakedown (L51, Seen in game)", 1, true), table.concat(lines, "\n"))
+  -- /qb survey
+  said = #c.chat
+  c.env.SlashCmdList.QUESTBANK("survey")
+  assert(c.chat[said + 1]:find("12 of 12 quests done on this build", 1, true) and c.chat[said + 1]:find("Done for this game build.", 1, true), c.chat[said + 1])
+  -- the Settings box: ticked by default here; unticked, nothing more is asked
+  U:Open(5); U:Refresh()
+  local v5 = U.views[5]
+  assert(v5.survey:IsEnabled() and v5.survey:GetChecked() and v5.survey.label:GetText() == "Learn quests from the game", "the box")
+  lines = {}; v5.survey.__scripts.OnEnter(v5.survey)
+  assert(table.concat(lines, "\n"):find("12 of 12 quests done on this build, 7 with item rewards.", 1, true), table.concat(lines, "\n"))
+  v5.survey:SetChecked(false); v5.survey.__scripts.OnClick(v5.survey, "LeftButton")
+  assert(Q2:Settings().survey == false and S.state == "off" and not S.On(), "unticked: off")
+  v5.survey:SetChecked(true); v5.survey.__scripts.OnClick(v5.survey, "LeftButton")
+  assert(Q2:Settings().survey == true and S.On(), "ticked again")
+  for _, p in ipairs(checkLayout(U.frame, "Settings, with the survey")) do problems[#problems + 1] = p end
+  print(string.format("quest survey: %d questions, %d quests answered, the Shimmerwine Shanker in Best gear at iL %d", #c.qAsked, dg.loaded, hit.reward[1]))
+end
+
+-- after a reload the account's survey stands: what it learned is in the finders before any question, and only what is
+-- new on the list is asked. A new build asks everything again. A client that answers every id with one quest's XP
+-- (four quests of different levels paying the same) or one quest's rewards (six in a row) gives itself away
+do
+  local saved = deepCopy(runa.env.QuestBankDB)
+  local again = newClient(deepCopy(RUNA))
+  again.env.QuestBankDB = saved
+  local Q2, S = again.QB, again.QB.Survey
+  local server = deepCopy(SERVER)
+  local CHECK = S.Decode(Q2.Data.SURVEY[4])
+  for _, id in ipairs(CHECK) do
+    server[id] = { t = Q2.Data.QN[id], lvl = Q2.Data.Q[id][1], c = deepCopy(Q2.Data.RITEMS[id].c or {}), r = deepCopy(Q2.Data.RITEMS[id].r or {}) }
+  end
+  for k = 0, 3 do server[99010 + k] = { t = "Same Pay " .. k, lvl = 20 + 10 * k, xp = 5000, c = {}, r = {} } end
+  for k = 0, 5 do server[99020 + k] = { t = "Same Items " .. k, lvl = 40, c = { 2435 }, r = {} } end
+  server[99005] = { t = "New On The List", lvl = 45, c = { 2471 }, r = {} }
+  surveyClient(again, server)
+  local list = { 99001, 99002, 99003, 99004, 99005, 99999 }
+  for k = 0, 3 do list[#list + 1] = 99010 + k end
+  for k = 0, 5 do list[#list + 1] = 99020 + k end
+  table.sort(list)
+  Q2.Data.SURVEY = { S.Encode(list), S.Encode({ 10 }), S.Encode({ 80001 }), Q2.Data.SURVEY[4] }
+  login(again)
+  local row
+  for _, r in ipairs(Q2.UI:FindRewards("gear", 51)) do if r.q.id == 99999 then row = r end end
+  assert(row and row.reward[1] == 52 and #again.qAsked == 0, "after a reload: in Best gear at once, before any question")
+  assert(Q2.Data.RITEMS[10] and not Q2.Data.RUNK[10], "and the catalog quest's rewards too")
+  tick(again, 400)
+  local asked = {}
+  for _, a in ipairs(again.qAsked) do asked[a.id] = (asked[a.id] or 0) + 1 end
+  assert(not asked[99999] and not asked[10] and not asked[99001] and not asked[99004] and not asked[80001] and asked[99005] == 1,
+    "only what is new on the list is asked on the same build")
+  local d = again.env.QuestBankDB.disc
+  assert(d.survey[99005].c[1] == 2471 and Q2.Data.REWARD[99005], "the new one is kept, and in the finders")
+  for k = 0, 3 do assert(d.survey[99010 + k].xp == nil and d.survey[99010 + k].t == "Same Pay " .. k, "one XP for every level: not kept") end
+  for k = 0, 5 do assert(d.survey[99020 + k].c == nil and not Q2.Data.RITEMS[99020 + k], "one reward list for six quests in a row: not kept") end
+  assert(d.survey[99999].xp == 6150, "the readings before stay")
+  -- a new build: every quest is asked again. This one shows no items for the check's quests: then no answer that a
+  -- quest gives no items is kept (the earlier build's stands), and /qb survey says why
+  again.env.GetBuildInfo = function() return "1.60.1", "70400", "Oct 14 2026", 16001 end
+  for _, id in ipairs(CHECK) do server[id].c, server[id].r = {}, {}; again.loadedQ[id] = nil end
+  again.loadedQ[99003] = nil
+  S.Start(0)
+  tick(again, 400)
+  local fresh = 0
+  for _, a in ipairs(again.qAsked) do if a.id == 99999 then fresh = fresh + 1 end end
+  assert(fresh == 1 and d.surveyB == 70400 and d.survey[99999].b == 70400, "a new build asks again")
+  assert(S.Checked() == "failed" and d.surveyNo[99003] == 3 and d.survey[99003].b == 70170, "no-item answers aren't kept when the check failed")
+  local said = #again.chat
+  again.env.SlashCmdList.QUESTBANK("survey")
+  assert(again.chat[said + 1]:find("no-reward answers aren't kept", 1, true), again.chat[said + 1])
+  print(string.format("quest survey after a reload: %d questions in all, the new build's with them", #again.qAsked))
+end
+
+-- the other end: players' uploads with survey answers (tools/fixtures/probe/QuestBank-survey.lua and a later build's,
+-- merged by probe_pull.py) as gen_data.py builds them into Data.lua: a catalog quest with no rewards known takes the
+-- game's lists, Wowhead's lists stand, the newest build's list wins, and a quest no list has goes to D.SURVEYED (in
+-- the finders) with the Shimmerwine Shanker's facts. Where the generator's inputs are (research/), with python3
+do
+  local inputs = io.open(HERE .. "/../../research/questbank/manifest.json")
+  if inputs then
+    inputs:close()
+    local p = io.popen("cd '" .. HERE .. "' && python3 gen_data.py --selftest-survey 2>&1")
+    local out = p and p:read("*a") or ""
+    if p then p:close() end
+    assert(out:find("selftest-survey: OK", 1, true), "gen_data.py --selftest-survey:\n" .. out)
+    print((out:match("(selftest%-survey: OK[^\n]*)")))
+  else
+    print("gen_data.py --selftest-survey: skipped (no research/ here)")
   end
 end
 

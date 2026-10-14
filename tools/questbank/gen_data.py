@@ -24,6 +24,8 @@ Icons and textures: file IDs from the Forever client's interface manifest; a mis
   python3 tools/questbank/gen_data.py --fetch    # first fetch the NPC tooltips we lack (nether.wowhead.com)
   python3 tools/questbank/gen_data.py --selftest-os  # check players' objective spots, probe_pull.py's merge to D.SPOT
                                                      # (its own fixture and made-up uploads; writes nothing)
+  python3 tools/questbank/gen_data.py --selftest-survey  # check the quest survey's answers (probe_pull.py's merge of its
+                                                         # fixture) as the build reads them; writes nothing
 """
 import collections, csv, json, math, os, re, sys
 from travel import Travel, DETOUR, RUN
@@ -34,6 +36,20 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 RAW = os.path.join(REPO, "research", "questbank")
 BUILD = "1.60.1.70291"
 READ = "2026-09-29"
+
+
+def newest_forever_build():
+    """The newest Forever client build datamined with its quest table (research/wago/1.60.x.<build>/QuestV2.csv): the
+    survey asks the game about that client's quests."""
+    found = []
+    for d in os.listdir(os.path.join(REPO, "research", "wago")):
+        m = re.match(r"^1\.60\.\d+\.(\d+)$", d)
+        if m and os.path.exists(os.path.join(REPO, "research", "wago", d, "QuestV2.csv")):
+            found.append((int(m.group(1)), d))
+    return max(found)[1] if found else BUILD
+
+
+SURVEY_BUILD = newest_forever_build()
 # Blizzard, 2026-10-01 (the level-30 build): "Dungeon quests now reward 50% less extra experience beyond normal
 # quest values." Wowhead Forever's pages still show the old multipliers, so every multiplier above 1 read before
 # that date is cut here: 1 + (mult - 1) * NERF. Set NERF to 1 (and READ to the new date) once the pages are re-read.
@@ -395,6 +411,69 @@ def unbuff(xp):
         if cand > 0 and abs(cand * BUFF - xp) <= 1:  # the game floors or rounds the boosted value: 1,250 shows 1,288
             return cand
     return xp
+
+
+# The quest survey (Survey.lua): players' QuestBank asks the game, by id and a couple a second, about the quests no
+# list has read (QuestBankDB.disc.survey: the title, the reward items, the XP at the player's level then, the money, the
+# quest's level and the client build), and probe_pull.py keeps every upload's reading as votes in disc.json's "sv".
+# One reading per quest is taken: the newest build's reward list, then the one most uploads had. The survey never
+# touches DISC["q"]: the server answering about a quest is no sighting in the world, so it clears no "Classic only" flag
+# and places no quest. gen_data.py --selftest-survey reads made-up uploads instead of disc.json's (see the end).
+SELFTEST_SURVEY = "--selftest-survey" in sys.argv
+
+
+def survey_pick(a):
+    """One quest's survey votes -> {"t": title, "lv": quest level, "c": choose one, "r": always given, "xp": XP at full
+    value (0 not known), "m": copper, "b": newest build, "u": uploads}. c and r are None when no reading had the rewards
+    whole; empty lists mean the game said the quest gives no items."""
+    def top(votes):
+        votes = {k: v for k, v in (votes or {}).items() if isinstance(v, int) and v > 0}
+        return max(votes.items(), key=lambda kv: (kv[1], kv[0]))[0] if votes else None
+    out = {"t": None, "lv": 0, "c": None, "r": None, "xp": 0, "m": None, "b": int(a.get("b") or 0), "u": int(a.get("u") or 0)}
+    t = top(a.get("t"))
+    if isinstance(t, str) and t.strip():
+        out["t"] = " ".join(t.split())
+    lv = top(a.get("lv"))
+    out["lv"] = int(lv) if lv and str(lv).isdigit() else 0
+    rw = {k: v for k, v in (a.get("rw") or {}).items() if isinstance(v, list) and len(v) == 2}
+    if rw:
+        key = max(rw.items(), key=lambda kv: (kv[1][1], kv[1][0], kv[0]))[0]  # newest build, then most uploads
+        c, _, r = key.partition("|")
+        out["c"] = [int(x) for x in c.split(",") if x.isdigit()]
+        out["r"] = [int(x) for x in r.split(",") if x.isdigit() and int(x) not in out["c"]]
+    # XP read at a level where the quest pays in full (not grey: at most five levels above it), the buff undone
+    xps = {}
+    for k, n in (a.get("xp") or {}).items():
+        xp, _, pl = str(k).partition("@")
+        if xp.isdigit() and pl.isdigit() and out["lv"] and int(pl) <= out["lv"] + 5:
+            g = unbuff(int(xp))
+            xps[g] = xps.get(g, 0) + n
+    if xps:
+        out["xp"] = max(xps.items(), key=lambda kv: (kv[1], kv[0]))[0]
+    m = top(a.get("m"))
+    out["m"] = int(m) if m is not None and str(m).isdigit() else None
+    return out
+
+
+def survey_selftest_input():
+    """--selftest-survey: disc.json's "sv" and "sv_no" as probe_pull.py's own merge makes them from its survey fixture
+    and a made-up later upload, instead of the real ones."""
+    sys.path.insert(0, os.path.dirname(HERE))
+    import probe_pull
+    acc = probe_pull.empty()
+    fixture = os.path.join(os.path.dirname(HERE), "fixtures", "probe", "QuestBank-survey.lua")
+    kind, _ = probe_pull.merge_upload(acc, open(fixture, encoding="utf-8").read(), "fixture")
+    assert kind == "questbank-savedvars" and acc.get("sv"), "the fixture's survey reaches disc.json"
+    # a later build: the reward list of 704 changed; it wins although the old one has more uploads
+    probe_pull.merge_survey(acc, {704: {"t": "Agmond's Fate", "lvl": 38, "c": [9535, 9536], "r": [], "b": 70400}})
+    return json.loads(json.dumps(acc["sv"])), json.loads(json.dumps(acc.get("sv_no") or {}))
+
+
+if SELFTEST_SURVEY:
+    DISC = dict(DISC)
+    DISC["sv"], DISC["sv_no"] = survey_selftest_input()
+SURVEY_PICK = {int(k): survey_pick(a) for k, a in (DISC.get("sv") or {}).items() if str(k).isdigit() and isinstance(a, dict)}
+SURVEY_NO = {int(k) for k in (DISC.get("sv_no") or {}) if str(k).isdigit()}  # the game said nothing about these, three times
 
 
 def seen_full(qid, ql):
@@ -1623,7 +1702,8 @@ lines.append("--         256 multiplier computed from the pre-2026-10-01 read: t
 lines.append("--         512 XP as the game paid it after the cut: a hand-in or quest window on build 70170 or later,")
 lines.append("--         1024 a wanted poster, 2048 an escort, 4096 repeatable (never suggested), 8192 kept as read: the game paid within a few percent of it after the cut,")
 lines.append("--         16384 known only from players' notes: level, NPCs and XP as their games showed them; needs = the lowest level anyone took it at,")
-lines.append("--         32768 the required level as Blizzard's notes give it)}")
+lines.append("--         32768 the required level as Blizzard's notes give it;")
+lines.append("--         65536 never here: QuestBank gives it to the quests of D.SURVEYED, which it shows in its finders alone)}")
 lines.append("D.Q = {\n" + ",\n".join("[%d]=%s" % (k, lua(v)) for k, v in sorted(Q.items())) + "\n}")
 lines.append("D.QN = " + keyed(QN))
 lines.append("D.STEPNAME = " + keyed(STEPNAME))
@@ -2108,14 +2188,14 @@ lines.append("D.START = " + keyed(START))
 lines.append("D.SN = " + lua(SN))
 lines.append("D.SREQ = " + keyed(SREQ))
 
-# what a quest rewards, for the finder: the best item level among its reward items, what kinds they are
-# (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable, 64 cloth, 128 leather, 256 mail, 512 plate offered), and the id of the best piece
+# What a quest rewards: every reward item (D.RITEMS, for the tooltips and chat links) and, for the finder, the best item
+# level among them and what kinds they are (D.REWARD). Where Wowhead lists no rewards (new Forever quests), the dungeon
+# loot pages do, by quest name (codex/loot.json, from foreverchanges.pro and wowtbc.gg): taken when the name belongs to
+# one catalog quest only
 _ITEMS = (load_json(os.path.join(REPO, "plan", "items-db.json")) or {})
 _ITEMS = _ITEMS.get("items") or _ITEMS
 if isinstance(_ITEMS, list):
     _ITEMS = {str(i.get("id")): i for i in _ITEMS}
-# Where Wowhead lists no rewards (new Forever quests), the dungeon loot pages do, by quest name (codex/loot.json, from
-# foreverchanges.pro and wowtbc.gg): taken when the name belongs to one catalog quest only
 _LOOT = load_json(os.path.join(REPO, "codex", "loot.json")) or {}
 _LOOT_Q = {}
 for _dg in (_LOOT.get("dungeons") or {}).values() if isinstance(_LOOT.get("dungeons"), dict) else (_LOOT.get("dungeons") or []):
@@ -2125,49 +2205,16 @@ for _dg in (_LOOT.get("dungeons") or {}).values() if isinstance(_LOOT.get("dunge
 _NAME_COUNT = {}
 for _qid in IDS:
     _NAME_COUNT[str(LIST[_qid].get("name") or "").strip().lower()] = _NAME_COUNT.get(str(LIST[_qid].get("name") or "").strip().lower(), 0) + 1
-REWARD_FROM_LOOT = []
-REWARD = {}
-for qid in IDS:
-    q = LIST[qid]
-    ids = [x[0] for x in (q.get("itemrewards") or []) + (q.get("itemchoices") or []) if isinstance(x, list) and x]
-    _nm = str(q.get("name") or "").strip().lower()
-    if not ids and _nm in _LOOT_Q and _NAME_COUNT.get(_nm) == 1:
-        ids = sorted(_LOOT_Q[_nm])
-        REWARD_FROM_LOOT.append(qid)
-    best, kinds, bestId = 0, 0, 0
-    for iid in ids:
-        it = _ITEMS.get(str(iid))
-        if not it or it.get("est"):
-            continue  # unknown, or a Classic estimate nobody has seen in Forever: no item level to promise
-        cat, slot = str(it.get("cat") or ""), str(it.get("slot") or "")
-        ilvl = int(it.get("itemLevel") or 0)
-        if cat in ("armor", "weapon", "accessory", "offhand"):
-            kinds |= 1
-            if ilvl > best:
-                best, bestId = ilvl, int(iid)
-        # the armour class of the pieces offered, so the finder can leave out what you can't wear
-        kinds |= {"Cloth": 64, "Leather": 128, "Mail": 256, "Plate": 512}.get(str(it.get("type") or ""), 0)
-        if slot == "trinket":
-            kinds |= 2
-        if slot in ("finger", "neck"):
-            kinds |= 4
-        if cat == "recipe":
-            kinds |= 8
-        if slot == "bag":
-            kinds |= 16
-        if cat == "consumable":
-            kinds |= 32
-    if kinds:
-        REWARD[qid] = [best, kinds, bestId]
-lines.append("-- [id] = { best item level among the rewards, kinds (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable, 64 cloth, 128 leather, 256 mail, 512 plate), best item }")
-lines.append("D.REWARD = " + keyed(REWARD))
 # Every reward item a quest gives, for the tooltip and for linking in chat: what players' quest windows showed
 # (QuestBank 3.5.7+, newest upload), else Wowhead's quest list (it always carries both lists, so an empty pair means
-# no items), else the dungeon loot pages by quest name. c = choose one, r = always given. D.RUNK: nobody knows yet.
+# no items), else what the game told players' QuestBank when it asked by id (the survey, newest build), else the
+# dungeon loot pages by quest name. c = choose one, r = always given. D.RUNK: nobody knows yet.
 RITEMS, RUNK, RSRC = {}, {}, collections.Counter()
+REWARD_FROM_LOOT, REWARD_FROM_SURVEY, REWARD_FROM_WOWHEAD = [], [], []
 for qid in IDS:
     q = LIST[qid]
     rw = ((DISC.get("q") or {}).get(str(qid)) or {}).get("rw")
+    sv = SURVEY_PICK.get(qid)
     c = r = None
     u = []
     if isinstance(rw, dict) and (isinstance(rw.get("c"), list) or isinstance(rw.get("r"), list)):
@@ -2178,20 +2225,211 @@ for qid in IDS:
         c = [x[0] for x in q.get("itemchoices") or [] if isinstance(x, list) and x]
         r = [x[0] for x in q.get("itemrewards") or [] if isinstance(x, list) and x and x[0] not in c]  # Wowhead repeats some
         RSRC["wowhead"] += 1
+        REWARD_FROM_WOWHEAD.append(qid)
+    elif sv and sv["c"] is not None:
+        c, r = list(sv["c"]), list(sv["r"])
+        RSRC["game survey"] += 1
+        REWARD_FROM_SURVEY.append(qid)
     else:
         _nm = str(q.get("name") or "").strip().lower()
         if _nm in _LOOT_Q and _NAME_COUNT.get(_nm) == 1:
             u = sorted(_LOOT_Q[_nm])  # the page lists them without saying which are a choice
             c, r = [], []
             RSRC["loot pages"] += 1
+            REWARD_FROM_LOOT.append(qid)
     if c is None:
         RUNK[qid] = True
         RSRC["unknown"] += 1
     elif c or r or u:
         RITEMS[qid] = {"c": c or None, "r": r or None, "u": u or None}
+# Quests the survey read that the catalog doesn't have and no list knows (a quest a list knows and the catalog leaves out
+# was left out on purpose: a battleground's, a holiday's, a placeholder): with reward items, a level and a real title they
+# go to the finders as "Seen in game", with no giver, place or side (D.SURVEYED); every one is listed in GAPS.md
+SURVEYED, SURVEY_OUT = {}, {}  # qid -> [level, XP at full value (0 not known), title]; qid -> why it isn't in the finders
+for qid, sv in sorted(SURVEY_PICK.items()):
+    if qid in Q or qid in LIST:
+        continue
+    why = None
+    if not sv["t"]:
+        why = "no title"
+    elif any(t in sv["t"] for t in JUNK):
+        why = "a placeholder"
+    elif not (1 <= sv["lv"] <= MAXLVL):
+        why = "level %d" % sv["lv"] if sv["lv"] else "no level"
+    elif sv["c"] is None:
+        why = "rewards not read whole"
+    elif not (sv["c"] or sv["r"]):
+        why = "no item rewards"
+    SURVEY_OUT[qid] = why
+    if why:
+        continue
+    RITEMS[qid] = {"c": sv["c"] or None, "r": sv["r"] or None, "u": None}
+    SURVEYED[qid] = [sv["lv"], sv["xp"] or 0, sv["t"]]
+
+# the item facts the finder needs: the item database's (plan/items-db.json), else the client's own tables for an item
+# it lacks (Item and ItemSparse of the survey's build: class, subclass, slot, item level), as the same cat/slot/type words
+_CLIENT_ITEMS = None
+INV_SLOT = {2: "neck", 4: "shirt", 11: "finger", 12: "trinket", 16: "back", 18: "bag", 19: "tabard"}
+
+
+def item_facts(iid):
+    """(cat, slot, type, item level) of a reward item, or None when nothing reliable is known (a Classic estimate)."""
+    global _CLIENT_ITEMS
+    it = _ITEMS.get(str(iid))
+    if it:
+        if it.get("est"):
+            return None  # a Classic estimate nobody has seen in Forever: no item level to promise
+        return str(it.get("cat") or ""), str(it.get("slot") or ""), str(it.get("type") or ""), int(it.get("itemLevel") or 0)
+    if _CLIENT_ITEMS is None:
+        _CLIENT_ITEMS = {}
+        _dir = os.path.join(REPO, "research", "wago", SURVEY_BUILD)
+        _lvl = {}
+        if os.path.exists(os.path.join(_dir, "ItemSparse.csv")):
+            for _r in csv.DictReader(open(os.path.join(_dir, "ItemSparse.csv"), encoding="utf-8")):
+                _lvl[int(_r["ID"])] = int(_r["ItemLevel"] or 0)
+        if os.path.exists(os.path.join(_dir, "Item.csv")):
+            for _r in csv.DictReader(open(os.path.join(_dir, "Item.csv"), encoding="utf-8")):
+                _i = int(_r["ID"])
+                if _i in _lvl:
+                    _CLIENT_ITEMS[_i] = (int(_r["ClassID"]), int(_r["SubclassID"]), int(_r["InventoryType"]), _lvl[_i])
+    row = _CLIENT_ITEMS.get(int(iid))
+    if not row:
+        return None
+    cls, sub, inv, ilvl = row
+    cat = {2: "weapon", 9: "recipe", 0: "consumable"}.get(cls) or ("armor" if cls == 4 and inv not in (0, 4, 19) else "misc")
+    return cat, INV_SLOT.get(inv, ""), {1: "Cloth", 2: "Leather", 3: "Mail", 4: "Plate"}.get(sub, "") if cls == 4 else "", ilvl
+
+
+def reward_of(ids):
+    """[best item level among the gear, kinds, the best piece] of a quest's reward items, or None when no kind is known."""
+    best, kinds, bestId = 0, 0, 0
+    for iid in ids:
+        f = item_facts(iid)
+        if not f:
+            continue
+        cat, slot, typ, ilvl = f
+        if cat in ("armor", "weapon", "accessory", "offhand"):
+            kinds |= 1
+            if ilvl > best:
+                best, bestId = ilvl, int(iid)
+        # the armour class of the pieces offered, so the finder can leave out what you can't wear
+        kinds |= {"Cloth": 64, "Leather": 128, "Mail": 256, "Plate": 512}.get(typ, 0)
+        if slot == "trinket":
+            kinds |= 2
+        if slot in ("finger", "neck"):
+            kinds |= 4
+        if cat == "recipe":
+            kinds |= 8
+        if slot == "bag":
+            kinds |= 16
+        if cat == "consumable":
+            kinds |= 32
+    return [best, kinds, bestId] if kinds else None
+
+
+# what a quest rewards, for the finder: the best item level among its reward items, what kinds they are
+# (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable, 64 cloth, 128 leather, 256 mail, 512 plate offered), and the id of the best piece
+REWARD = {}
+for qid, lists in RITEMS.items():
+    rr = reward_of((lists.get("r") or []) + (lists.get("c") or []) + (lists.get("u") or []))  # (the given first: a tie names it)
+    if rr:
+        REWARD[qid] = rr
+lines.append("-- [id] = { best item level among the rewards, kinds (1 gear, 2 trinket, 4 ring or neck, 8 recipe, 16 bag, 32 consumable, 64 cloth, 128 leather, 256 mail, 512 plate), best item }")
+lines.append("D.REWARD = " + keyed(REWARD))
 lines.append("-- [id] = { c = { choose one of these }, r = { always given }, u = { given, split unknown } }; quests in D.RUNK: rewards not known yet")
 lines.append("D.RITEMS = " + keyed(RITEMS))
 lines.append("D.RUNK = " + keyed(RUNK))
+lines.append("-- [id] = { quest level, XP at full value (0 not known), title }: quests not in the catalog that players' QuestBank asked")
+lines.append("-- the game about (the survey) and that reward items (D.RITEMS); QuestBank shows them in its finders as \"Seen in game\"")
+lines.append("D.SURVEYED = " + keyed(SURVEYED))
+# The quests QuestBank asks the game about (Survey.lua): every id in the client's quest table (QuestV2 of the newest
+# datamined build) that neither the catalog nor any list has, and the catalog's quests whose rewards nobody knows yet.
+# Three runs of ids, asked in this order: the new Forever range (90000 and above), the catalog's, the rest; and a fourth,
+# asked before them, the check: three Forever quests whose items Wowhead lists, so that the addon takes the game's word
+# that a quest gives no items only once the game has shown it the items of quests that do. Each run is ascending and
+# written as the steps between ids, base 32, a digit from D.ALPHA's second half when more digits follow.
+_QV2 = sorted(int(r["ID"]) for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", SURVEY_BUILD, "QuestV2.csv"))))
+_NEW = [q for q in _QV2 if q not in Q and q not in LIST]
+_QV2_SET = set(_QV2)
+SURVEY_CHECK = sorted(q for q in REWARD_FROM_WOWHEAD if q in Q and q in RITEMS and q not in CLASSIC and q in _QV2_SET
+                      and (RITEMS[q]["c"] or RITEMS[q]["r"]))[:3]
+SURVEY_RUNS = [[q for q in _NEW if q >= 90000], sorted(q for q in Q if q in RUNK), [q for q in _NEW if q < 90000], SURVEY_CHECK]
+
+
+def survey_enc(ids):
+    out, prev = [], 0
+    for q in ids:
+        step, digits = q - prev, []
+        assert step > 0, "ascending ids"
+        while True:
+            digits.append(step % 32)
+            step //= 32
+            if not step:
+                break
+        digits.reverse()
+        out.append("".join(ALPHA[d + 32] for d in digits[:-1]) + ALPHA[digits[-1]])
+        prev = q
+    return "".join(out)
+
+
+def survey_dec(s):
+    out, prev, acc = [], 0, 0
+    for ch in s:
+        d = ALPHA.index(ch)
+        if d >= 32:
+            acc = acc * 32 + d - 32
+        else:
+            prev += acc * 32 + d
+            out.append(prev)
+            acc = 0
+    return out
+
+
+SURVEY_STR = [survey_enc(run) for run in SURVEY_RUNS]
+assert [survey_dec(s) for s in SURVEY_STR] == SURVEY_RUNS, "the survey's ids read back"
+lines.append("-- the quests QuestBank asks the game about, in three runs (the new Forever range, the catalog's quests with no rewards")
+lines.append("-- known, the client's other ids) and the check asked first (three quests whose items Wowhead lists): each ascending,")
+lines.append("-- written as the steps between ids in base 32 over D.ALPHA, a digit from its second half when more digits of the same")
+lines.append("-- step follow (Survey.lua reads it)")
+lines.append("D.SURVEY = " + lua(SURVEY_STR))
+print("survey: %d quest ids to ask the game (%d new Forever ids, %d catalog quests with no rewards known, %d other client ids, %d to check), "
+      "%d characters; %d quests read by players (%d catalog quests' rewards from it, %d not in the catalog in the finders)" % (
+          sum(len(r) for r in SURVEY_RUNS), len(SURVEY_RUNS[0]), len(SURVEY_RUNS[1]), len(SURVEY_RUNS[2]), len(SURVEY_RUNS[3]),
+          sum(len(s) for s in SURVEY_STR), len(SURVEY_PICK), len(REWARD_FROM_SURVEY), len(SURVEYED)))
+
+
+def survey_selftest():
+    """--selftest-survey: the made-up uploads' survey (survey_selftest_input) as the build reads it."""
+    assert "Brann" not in json.dumps(DISC["sv"]) and "Hidden" not in json.dumps(DISC["sv"]), "no name, no escape code reaches disc.json"
+    assert SURVEY_NO == {99001}, "three unanswered tries count; one doesn't: %s" % SURVEY_NO
+    # a catalog quest nobody knew the rewards of takes the survey's lists, split as the game said
+    assert 10 in Q and 10 not in RUNK and RITEMS[10] == {"c": [2470, 2435], "r": [2471], "u": None}, RITEMS.get(10)
+    assert REWARD[10][1] & 1 and REWARD[10][1] & 64 and REWARD[10][1] & 128 and REWARD[10][0] == 50, REWARD.get(10)
+    assert SURVEY_PICK[10]["xp"] == 0, "a reading ten levels above the quest is grey: no XP to take from it"
+    # Wowhead Forever's list stands over the survey's
+    assert RITEMS[6] == {"c": [6076, 60, 3070], "r": None, "u": None}, RITEMS.get(6)
+    # the survey's split beats a loot page's list, and the newest build's list beats an older one with as many votes
+    assert RITEMS[704] == {"c": [9535, 9536], "r": None, "u": None} and 704 in REWARD_FROM_SURVEY and 704 not in REWARD_FROM_LOOT, RITEMS.get(704)
+    # a quest no list has: in the finders as seen in game, its reward's facts from the item database
+    assert 99999 not in Q and SURVEYED[99999] == [51, 6150, "Shimmerwine Shakedown"], SURVEYED.get(99999)
+    assert RITEMS[99999] == {"c": [276903], "r": None, "u": None} and REWARD[99999] == [52, 1, 276903], (RITEMS.get(99999), REWARD.get(99999))
+    assert SURVEY_OUT == {99995: "no title", 99996: "rewards not read whole", 99997: "no item rewards", 99998: "a placeholder", 99999: None}, SURVEY_OUT
+    # an item the item database lacks takes the client's own tables
+    _ITEMS.pop("276903", None)
+    assert reward_of([276903]) == [52, 1, 276903], reward_of([276903])
+    # the ids to ask: three ascending runs, none twice, the catalog's run exactly the quests with no rewards known
+    allq = [q for run in SURVEY_RUNS for q in run]
+    assert len(allq) == len(set(allq)) and all(run == sorted(run) for run in SURVEY_RUNS)
+    assert len(SURVEY_RUNS[3]) == 3 and all(q in REWARD_FROM_WOWHEAD and (RITEMS[q]["c"] or RITEMS[q]["r"]) for q in SURVEY_RUNS[3]), SURVEY_RUNS[3]
+    assert set(SURVEY_RUNS[1]) == {q for q in Q if q in RUNK} and not (set(SURVEY_RUNS[0]) | set(SURVEY_RUNS[2])) & (set(Q) | set(LIST))
+    assert all(q >= 90000 for q in SURVEY_RUNS[0]) and all(q < 90000 for q in SURVEY_RUNS[2])
+    assert survey_dec(survey_enc([1, 2, 33, 1057, 99999])) == [1, 2, 33, 1057, 99999]
+    print("selftest-survey: OK (%d quests read, %d ids to ask in %d characters)" % (len(SURVEY_PICK), len(allq), sum(len(s) for s in SURVEY_STR)))
+
+
+if SELFTEST_SURVEY:
+    survey_selftest()
+    raise SystemExit(0)
 lines.append("-- [id] = {{item, how many, name}, ...}: what the quest asks you to bring")
 lines.append("D.REQ = " + keyed(REQ))
 lines.append("D.RACE = " + keyed(RACE))
@@ -2479,6 +2717,14 @@ def gap_report():
                        (": " + ", ".join("%s %d by %d yd" % (k, i, d) for k, i, d in sorted(set(GAME_MOVED)))) if GAME_MOVED else "",
                        len(set(GAME_FILLED)), (": " + ", ".join("%s %d" % (k, i) for k, i in sorted(set(GAME_FILLED)))) if GAME_FILLED else ""))
         out.append("Quest reward items: %s." % ", ".join("%s %d" % (k, v) for k, v in RSRC.most_common()))
+        out.append(("Quest survey (QuestBank asks the game by quest id, out of combat, a couple a second): %d ids on the list "
+                    "(%d new Forever ids, %d catalog quests with no rewards known, %d other ids in the client's quest table, and %s to "
+                    "check the game's answers against Wowhead's lists); "
+                    "%d quests read by players, %d of the catalog's took their rewards from it, %d not in the catalog are in the "
+                    "finders as \"Seen in game\" (listed at the end); the game never answered about %d ids.") % (
+                       sum(len(r) for r in SURVEY_RUNS), len(SURVEY_RUNS[0]), len(SURVEY_RUNS[1]), len(SURVEY_RUNS[2]),
+                       ", ".join("%d %s" % (q, QN.get(q, "?")) for q in SURVEY_RUNS[3]),
+                       len(SURVEY_PICK), len(REWARD_FROM_SURVEY), len(SURVEYED), len(SURVEY_NO)))
         if REWARD_FROM_LOOT:
             out.append("Rewards taken from the dungeon loot pages where Wowhead lists none (%d): %s." % (
                 len(REWARD_FROM_LOOT), ", ".join("%d %s" % (q, QN.get(q, "?")) for q in REWARD_FROM_LOOT)))
@@ -2520,6 +2766,16 @@ def gap_report():
         if len(lst) > 400:
             out.append("- and %d more" % (len(lst) - 400))
         out.append("")
+    # what the survey read about quests the catalog doesn't have, each with why it is or isn't in the finders
+    out.append("## Surveyed in game, not in the catalog (%d)" % len(SURVEY_OUT))
+    out.append("")
+    for q, why in sorted(SURVEY_OUT.items()):
+        sv = SURVEY_PICK[q]
+        items = [i for i in (sv["c"] or []) + (sv["r"] or [])]
+        what = ", ".join("%s %d" % ((_ITEMS.get(str(i)) or {}).get("name") or "item", i) for i in items[:6])
+        out.append("- %d %s (%s%s): %s" % (q, sv["t"] or "?", "level %d" % sv["lv"] if sv["lv"] else "no level",
+                                           "; " + what if what else "", why or "in the finders as seen in game"))
+    out.append("")
     open(os.path.join(HERE, "GAPS.md"), "w").write("\n".join(out))
     return len(forever), len(F["no_page"]), len(F["no_turn"]), len(F["inside"]), len(F["no_give"]), len(F["no_chain"]), len(classic)
 
