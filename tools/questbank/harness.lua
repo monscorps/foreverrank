@@ -3365,6 +3365,143 @@ end
 
 
 -- [stage: dressup] that stage's tests go right below this line
+-- 5.3.3: Ctrl-click an item QuestBank shows and the game's dressing room puts it on you, as Ctrl-clicking an item link
+-- does in the game: the finder's reward rows, the reward icons on quest rows and under an open quest, a log slot's
+-- corner reward, the bag slots, the Dungeon Journal's loot rows. Their tooltips say so where the room can wear the item
+do
+  local env, U = owner.env, QB.UI
+  local dressed = {}
+  -- the game's try-on click is its DRESSUP modified click (Ctrl by default); the dressing room takes an item's link;
+  -- the client says what it can wear (owner.undressable[id] = true for what it can't)
+  env.IsModifiedClick = function(action) if action == "DRESSUP" then return owner.ctrl or false end return false end
+  env.DressUpItemLink = function(link) dressed[#dressed + 1] = link; return true end
+  env.C_Item.IsDressableItemByID = function(id) return not (owner.undressable or {})[id] end
+  local function last() return dressed[#dressed] or "" end
+  local function tipOf(f) lines = {}; f.__scripts.OnEnter(f); return table.concat(lines, "\n") end
+  local function ctrlClick(f) owner.ctrl = true; f.__scripts.OnClick(f, "LeftButton"); owner.ctrl = false end
+  -- the helper: the item's link into the dressing room; nothing for no item, a hidden id, or a client without the room
+  assert(QB.API.DressUp(2470) == true and #dressed == 1 and last():find("|Hitem:2470:", 1, true), "DressUp takes the item's link to the dressing room: " .. last())
+  assert(not QB.API.DressUp(nil) and not QB.API.DressUp(SECRET.num()) and not QB.API.DressUp(0) and #dressed == 1, "no item, a hidden id: nothing")
+  env.DressUpItemLink = nil
+  assert(not QB.API.DressUp(2470) and #dressed == 1, "a client without the dressing room: nothing, and no error")
+  env.DressUpItemLink = function(link) dressed[#dressed + 1] = link; return true end
+  assert(QB.API.Dressable(2470) and not QB.API.Dressable(nil) and not QB.API.Dressable(SECRET.num()), "what the room can wear is the client's answer")
+  owner.undressable = { [2473] = true }
+  assert(not QB.API.Dressable(2473), "a potion: no")
+  -- an item the client hasn't got yet: asked for, and put on when the client's answer comes (not before; not on a
+  -- stranger's answer; not when the load failed; and a late answer, after 5 s, no more)
+  owner.unloaded[2471] = true
+  local asked = #owner.loadRequests
+  assert(QB.API.DressUp(2471) == true and #dressed == 1 and owner.loadRequests[#owner.loadRequests] == 2471, "an item not loaded yet is asked for, nothing put on yet")
+  local df = QB.dressFrame
+  assert(df and df.__scripts.OnEvent, "and the answer is listened for")
+  df.__scripts.OnEvent(df, "ITEM_DATA_LOAD_RESULT", 2472, true)
+  df.__scripts.OnEvent(df, "ITEM_DATA_LOAD_RESULT", SECRET.num(), true)
+  assert(#dressed == 1, "another item's answer, a hidden one: nothing")
+  owner.unloaded[2471] = nil
+  df.__scripts.OnEvent(df, "ITEM_DATA_LOAD_RESULT", 2471, true)
+  assert(#dressed == 2 and last():find("|Hitem:2471:", 1, true), "loaded: put on")
+  df.__scripts.OnEvent(df, "ITEM_DATA_LOAD_RESULT", 2471, true)
+  assert(#dressed == 2, "once")
+  owner.unloaded[2474] = true
+  assert(QB.API.DressUp(2474) == true, "asked for")
+  df.__scripts.OnEvent(df, "ITEM_DATA_LOAD_RESULT", 2474, false)
+  owner.unloaded[2474] = nil
+  df.__scripts.OnEvent(df, "ITEM_DATA_LOAD_RESULT", 2474, true)
+  assert(#dressed == 2, "a failed load puts nothing on, and the wait is over")
+  owner.unloaded[2475] = true
+  assert(QB.API.DressUp(2475) == true, "asked for")
+  tick(owner, 6)
+  owner.unloaded[2475] = nil
+  df.__scripts.OnEvent(df, "ITEM_DATA_LOAD_RESULT", 2475, true)
+  assert(#dressed == 2, "an answer 6 s on is too late: the room doesn't open out of the blue")
+  -- the finder's reward rows: Ctrl-click tries the reward on; Shift-click still links it; the tooltip says both
+  U:ShowTab(1); U.findMode = "gear"; U:Refresh()
+  local row
+  for _, r in ipairs(U.views[1].swaps) do if r:IsShown() and r.rewardId then row = r; break end end
+  assert(row, "a gear row has a reward item")
+  ctrlClick(row)
+  assert(#dressed == 3 and last():find("|Hitem:" .. row.rewardId .. ":", 1, true), "Ctrl-click a finder row: its reward goes to the dressing room")
+  assert(tipOf(row):find("Ctrl-click: try it on.", 1, true) and tipOf(row):find("Hold Shift to see the item", 1, true), "its tooltip says so, and keeps the Shift line")
+  owner.shift = true
+  assert(lines and tipOf(row):find("^ITEM:" .. row.rewardId) and table.concat(lines, "\n"):find("Ctrl-click: try it on.", 1, true), "under Shift, the item's own tooltip, with the line")
+  owner.shift = false
+  owner.undressable[row.rewardId] = true
+  assert(not tipOf(row):find("Ctrl-click", 1, true), "no line for an item the room can't wear")
+  owner.undressable[row.rewardId] = nil
+  local said = #owner.chat
+  owner.shift = true
+  row.__scripts.OnClick(row, "LeftButton")
+  owner.shift = false
+  assert(#dressed == 3 and #owner.chat == said + 1, "Shift-click still links it, and dresses nothing")
+  U.findMode = "xp"; U:Refresh()
+  -- the reward icons on a quest row (Available): each is the item's own tooltip with the line; Ctrl-click one puts it on;
+  -- a plain click is the row's (it opens the quest); the icon holds the item it shows
+  local saveCard, saveDet, saveAll = U.cardOpen, U.detailOpen, U.allOpen
+  U.allOpen, U.cardOpen, U.detailOpen = true, {}, {}
+  U:ShowTab(2); U:Refresh()
+  local v2 = U.views[2]
+  local qrow, icon
+  for _, c in ipairs(v2.cards.items) do
+    if c:IsShown() then for _, r in ipairs(c.rows.items) do if r:IsShown() and r.q and r.detailable and r.rw[1]:IsShown() and not qrow then qrow = r end end end
+  end
+  assert(qrow, "a quest row with a reward icon")
+  icon = qrow.rw[1]
+  assert(icon.__kind == "Button" and icon.id and icon.icon.__tex == 133328 and icon.__w == 16 and icon.__parent == qrow, "the icon is a 16 px button on the row, holding its item: " .. tostring(icon.id))
+  assert(tipOf(icon):find("^ITEM:" .. icon.id) and tipOf(icon):find("Ctrl-click: try it on.", 1, true), "the icon's tooltip is the item's, with the line")
+  ctrlClick(icon)
+  assert(#dressed == 4 and last():find("|Hitem:" .. icon.id .. ":", 1, true), "Ctrl-click a reward icon: that item in the dressing room")
+  local qid = qrow.q.id
+  icon.__scripts.OnClick(icon, "LeftButton")
+  assert(U.detailOpen[qid] and #dressed == 4, "a plain click on the icon is the row's click: the quest opens under it")
+  -- the open quest's reward buttons: the same, bigger
+  local det
+  for _, c in ipairs(v2.cards.items) do if c:IsShown() then for _, d in ipairs(c.details.items) do if d:IsShown() and d.q and d.q.id == qid then det = d end end end end
+  assert(det and det.rw[1]:IsShown() and det.rw[1].id, "the quest's detail shows its rewards")
+  assert(tipOf(det.rw[1]):find("Ctrl-click: try it on.", 1, true), "with the line")
+  ctrlClick(det.rw[1])
+  assert(#dressed == 5 and last():find("|Hitem:" .. det.rw[1].id .. ":", 1, true), "Ctrl-click one: on you")
+  U.allOpen, U.cardOpen, U.detailOpen = saveAll, saveCard, saveDet
+  U:ShowTab(1); U:Refresh()
+  -- a log slot with a reward in its corner: Ctrl-click the slot tries that reward on; its tooltip names it
+  local slot
+  for _, b in ipairs(U.views[1].slots) do if b:IsShown() and b.q and b.rwId and not slot then slot = b end end
+  assert(slot, "a log slot with a reward mark")
+  ctrlClick(slot)
+  assert(#dressed == 6 and last():find("|Hitem:" .. slot.rwId .. ":", 1, true), "Ctrl-click the slot: its corner reward in the dressing room")
+  assert(tipOf(slot):find("Ctrl-click: try on Item " .. slot.rwId .. ".", 1, true), "the slot's tooltip names it: " .. tipOf(slot):match("Ctrl[^\n]*") or "")
+  -- a bag slot: the item in it
+  local bag
+  for _, b in ipairs(U.views[1].bagSlots) do if b:IsShown() and b.item and b.item.id and not bag then bag = b end end
+  assert(bag, "a bag slot with an item")
+  ctrlClick(bag)
+  assert(#dressed == 7 and last():find("|Hitem:" .. bag.item.id .. ":", 1, true), "Ctrl-click a bag slot: its item in the dressing room")
+  assert(tipOf(bag):find("Ctrl-click: try it on.", 1, true), "and its tooltip says so")
+  -- the Dungeon Journal's loot rows: Ctrl-click tries the drop on, Shift-click still links it
+  local DM = QB.DMap
+  U:ShowTab(4)
+  local f = DM.Open(DM.Find("deadmines"))
+  DM.ShowBoss(QB.Data.DMAP.d1581.bosses[1])
+  local loot = f.lootRows[1]
+  assert(loot and loot:IsShown() and loot.id, "a loot row")
+  ctrlClick(loot)
+  assert(#dressed == 8 and last():find("|Hitem:" .. loot.id .. ":", 1, true), "Ctrl-click a loot row: the drop in the dressing room")
+  assert(tipOf(loot):find("^ITEM:" .. loot.id) and tipOf(loot):find("Ctrl-click: try it on.", 1, true), "its tooltip says so")
+  owner.chatOpen = true
+  local nl = #owner.chatLinks
+  owner.shift = true
+  loot.__scripts.OnClick(loot, "LeftButton")
+  owner.shift = false
+  owner.chatOpen = false
+  assert(#owner.chatLinks == nl + 1 and #dressed == 8, "Shift-click still links it")
+  -- without the game's modified-click check, plain Ctrl is the click
+  env.IsModifiedClick = nil
+  ctrlClick(loot)
+  assert(#dressed == 9, "a client without IsModifiedClick: Ctrl itself")
+  env.IsModifiedClick = function(action) if action == "DRESSUP" then return owner.ctrl or false end return false end
+  owner.undressable = nil
+  U:ShowTab(1); U:Refresh()
+end
 
 
 
