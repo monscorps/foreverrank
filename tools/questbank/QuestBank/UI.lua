@@ -4691,17 +4691,26 @@ function UI:CreateSettingsView(parent)
   v.ctxText:SetPoint("TOPLEFT", RIGHT, -876)
   v.ctxText:SetHeight(44)
 
-  -- the camp bar (Camp.lua): icons under your character, a switch each
+  -- the camp bar (Camp.lua): icons under your character, a switch each; and the banner when you leave a town
   heading(p, RIGHT, -930, "Camp bar")
-  local REMIND = { { "food", "Well Fed, and the food that gives it" }, { "fire", "Campfire kit" }, { "camp", "Camp features I can place, with the cooldown" },
-                   { "bag", "Sleeping bag and Well Rested" }, { "quietInstance", "Hidden in dungeons" } }
+  local REMIND = { { "food", "Well Fed, and the food that gives it" }, { "fire", "Campfire: Basic Campfire or a kit" }, { "camp", "Camp features I can place, with the cooldown" },
+                   { "bag", "Sleeping bag and Well Rested" }, { "quietInstance", "Hidden in dungeons" }, { "buffs", "Tell me when I leave town without my buffs" } }
   v.remind = {}
   for i, r in ipairs(REMIND) do
     local row = checkRow(p, RIGHT, -954 - (i - 1) * 26, r[2], 300)
     row.key = r[1]
-    row:SetScript("OnClick", function(self) QB:Settings().remind[self.key] = self:GetChecked() and true or false; if QB.Camp then QB.Camp.Refresh() end end)
+    row:SetScript("OnClick", function(self)
+      local rm = QB.Camp and QB.Camp.Settings and QB.Camp.Settings() or QB:Settings().remind
+      rm[self.key] = self:GetChecked() and true or false
+      if QB.Camp then QB.Camp.Refresh() end
+    end)
     v.remind[r[1]] = row
   end
+  tooltip(v.remind.buffs, function(tip)
+    tip:AddLine("Missing buffs", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("When you leave an inn or a city, a banner above the camp bar shows the buffs you are missing: your class's own, Well Fed, a camp feature's. A click casts one or eats the food. Never in a fight or a dungeon.", 1, 1, 1, true)
+    tip:AddLine("/qb buffs shows it any time.", 0.6, 0.6, 0.6, true)
+  end)
   v.Refresh = function() UI:RefreshSettingsView(v) end
   return v
 end
@@ -4825,7 +4834,7 @@ function UI:RefreshSettingsView(v)
   v.glowOther:SetChecked(gl.other == true)
   v.glowCombat:SetChecked(gl.combat == true)
   v.glowOther:SetEnabled(gl.on == true); v.glowCombat:SetEnabled(gl.on == true)
-  local rm = type(set.remind) == "table" and set.remind or {}
+  local rm = QB.Camp and QB.Camp.Settings and QB.Camp.Settings() or (type(set.remind) == "table" and set.remind or {})
   for key, row in pairs(v.remind) do row:SetChecked(rm[key] == true) end
   v.clockLevelMsg:SetChecked(set.clockLevelMsg ~= false)
   -- the ready-check's tick and cross, drawn inline: the game's font has no check or cross of its own

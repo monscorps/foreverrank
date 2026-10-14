@@ -26,6 +26,10 @@ local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorde
 -- a PlayerModel's own: the creature it shows, by display id or by NPC id, its camera, and whether it keeps the model
 -- while hidden
 local MODEL = { SetDisplayInfo = true, SetCreature = true, SetPortraitZoom = true, ClearModel = true, SetKeepModelOnHide = true }
+-- a protected frame (the game's secure buttons and the frames holding them) can't be shown, hidden, moved, sized or have
+-- its attributes set by an addon in a fight: the game blocks the call (ADDON_ACTION_BLOCKED)
+local PROTECTED_CALL = { Show = true, Hide = true, SetShown = true, SetPoint = true, ClearAllPoints = true, SetAllPoints = true,
+  SetSize = true, SetWidth = true, SetHeight = true, SetAttribute = true, SetParent = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
 ----------------------------------------------------------------------------
@@ -64,6 +68,9 @@ local function newObj(kind, template, parent)
       return function(self, ...)
         local a = { ... }
         local n = select("#", ...)
+        if PROTECTED_CALL[k] and (rawget(self, "__secure") or rawget(self, "__protected")) and rawget(self, "__client") and self.__client.combat then
+          error("ADDON_ACTION_BLOCKED: " .. k .. " on a protected frame in a fight", 2)
+        end
         if k == "SetScript" then self.__scripts[a[1]] = a[2]
         elseif k == "GetScript" then return self.__scripts[a[1]]
         elseif k == "HookScript" then local old = self.__scripts[a[1]]; self.__scripts[a[1]] = function(...) if old then old(...) end a[2](...) end
@@ -326,9 +333,17 @@ local function newClient(o)
   end
   c.templates = templates
   env.CreateFrame = function(kind, name, parent, template)
+    -- a secure button: protected, and so is every frame holding it; none is made in a fight
+    local secure = template and template:find("Secure") and true or false
+    if secure and c.combat then error("ADDON_ACTION_BLOCKED: a secure frame made in a fight", 2) end
     local f = newObj(kind, template, parent)
     f.__name = name
     f.__client = c
+    if secure then
+      f.__secure = true
+      local p = parent
+      while p and not p.__root do p.__protected = true; p = p.__parent end
+    end
     -- where it was made, for the edge check's messages: the line that called CreateFrame and the one above it
     local where = {}
     for lvl = 2, 3 do
@@ -357,6 +372,8 @@ local function newClient(o)
   env.IsShiftKeyDown = function() return c.shift end
   env.GetBindLocation = function() return o.bind or "Stormwind City" end
   env.IsPlayerSpell = function() return o.riding or false end
+  -- the inn's or the city's rest: c.resting (PLAYER_UPDATE_RESTING when it changes)
+  env.IsResting = function() return c.resting or false end
   env.AuraUtil = { FindAuraByName = function(name) if c.rested and name == "Well Rested" then return name end end }
   -- the party as the game shows it: c.party = { { name, class file, level, pos = { inst, wx, wy } }, ... } (party1..)
   local function partyOf(unit) local i = unit and unit:match("^party(%d)$"); return i and (c.party or {})[tonumber(i)] end
@@ -539,6 +556,8 @@ local function newClient(o)
       if bank ~= 0 and bank ~= 1 then error("bad argument #2 to 'GetSpellBookItemInfo' (Enum.SpellBookSpellBank expected)", 2) end
       return c.book[slot]
     end,
+    -- c.known = { [spell id] = true }: the spells this character knows, each rank its own id
+    IsSpellKnown = function(id, bank) return (c.known or {})[id] == true end,
   }
   -- what the character wears: o.gear[slot] = item id
   env.GetInventoryItemID = function(unit, slot) return unit == "player" and (o.gear or {})[slot] or nil end
@@ -8534,6 +8553,194 @@ do
     for m in pairs(maps) do drawn = drawn + #O.QuestMap:Build(m) end
     print(string.format("map icons, real data: %d spots on %d maps; %d icons for the owner", spots, (function() local k = 0 for _ in pairs(maps) do k = k + 1 end return k end)(), drawn))
   end
+end
+
+-- 5.4: the camp bar's campfire (Cooking's Basic Campfire, or a kit) and the missing-buffs banner when you leave a town
+do
+  local Camp, env, D = owner.QB.Camp, owner.env, owner.QB.Data
+  c = owner
+  c.combat = false
+  local f = Camp.frame
+  local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
+  local function ic(k) return env["QuestBankCamp_" .. k] end
+  local function btn(i) return env["QuestBankBuff_" .. i] end
+  local function said() return owner.chat[#owner.chat] or "" end
+  local saveBags, saveClass = owner.o.bagSlots, owner.o.class
+  local saveTex, saveCD, saveInst = env.C_Spell.GetSpellTexture, env.C_Spell.GetSpellCooldown, env.IsInInstance
+  env.C_Spell.GetSpellTexture = function(id) return ({ [818] = 135805, [1460] = 135932 })[id] or 134400 end
+  local spellCD = {}
+  env.C_Spell.GetSpellCooldown = function(id) local s = spellCD[id]; return { startTime = s or 0, duration = s and 300 or 0, isEnabled = true, modRate = 1 } end
+  -- the camp features' shared hour from the camp bar's own test runs out first
+  tick(owner, Camp.QUIET + 3600)
+  local SMITH = { { "Blacksmithing", 150 }, { "Alchemy", 10 }, { "Fishing", 0 }, { "Cooking", 60 }, { "First Aid", 30 } }
+  assert(Camp.FIRE_SPELL == 818 and Camp.WOOD == 4470 and D.CAMP[Camp.BASIC_KIT] and D.CAMP[Camp.BASIC_KIT].t == "kit", "Basic Campfire, Simple Wood, the Basic Campfire Kit")
+  -- every class's buffs: names, an icon, ranks lowest first, each id once
+  local ids = {}
+  for class, list in pairs(Camp.SELF) do
+    for _, entry in ipairs(list) do
+      for _, sp in ipairs(entry) do
+        assert(type(sp[1]) == "string" and type(sp[2]) == "number" and #sp[3] > 0, "a buff: " .. class)
+        for _, id in ipairs(sp[3]) do assert(not ids[id], "each rank once: " .. id); ids[id] = true end
+      end
+    end
+  end
+  assert(not Camp.SELF.WARRIOR and not Camp.SELF.ROGUE, "Battle Shout is short: nothing for a warrior or a rogue")
+
+  -- (a) the fire: a cook who knows Basic Campfire, with Simple Wood and the sharpening wheel to place, no kit
+  c.profs, c.known, c.buffs = SMITH, { [818] = true }, {}
+  owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 } }
+  ev("PLAYER_ENTERING_WORLD")
+  local fire, camp = ic("fire"), ic("camp")
+  assert(fire:IsShown() and fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil,
+    "Basic Campfire known: a click casts the spell")
+  assert(fire.icon.__tex == 135805 and fire.count:GetText() == "3" and fire.state.lit and fire.state.tip[2] == "Click to light a campfire.",
+    "the spell's own icon, the Simple Wood, lit while the wheel waits for a fire")
+  assert(camp:IsShown() and camp:GetAttribute("item") == "item:279944" and not camp.state.lit, "the wheel, waiting")
+  spellCD[818] = env.GetTime() - 60
+  Camp.Refresh()
+  assert(fire.state.cd and fire.cd.__cd[2] == 300 and fire.time:GetText() == "4m" and not fire.state.lit, "the spell's own cooldown: four minutes left, not lit")
+  spellCD[818] = nil
+  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 818)
+  assert(camp.state.lit and not fire.state.lit, "the fire cast: the wheel lights up, the fire doesn't")
+  owner.o.bagSlots = { { 279944, 1 } }
+  Camp.Refresh()
+  assert(fire.state.grey and fire.state.tip[2] == "Needs Simple Wood.", "no Simple Wood: grey")
+  -- a kit too: the kit while a feature waits (a kit's fire holds camp features), the spell without one
+  owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 }, { 279981, 2 } }
+  Camp.Refresh()
+  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "a feature to place: the kit")
+  owner.o.bagSlots = { { 4470, 3 }, { 279981, 2 } }
+  Camp.Refresh()
+  assert(fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil, "nothing to place: the spell")
+  c.known = {}
+  Camp.Refresh()
+  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire.count:GetText() == "2", "the spell unknown: the kit, as before")
+  -- a feature to place and no way to light a fire: grey, with where a kit comes from, no click
+  owner.o.bagSlots = { { 279944, 1 } }
+  Camp.Refresh()
+  assert(fire:IsShown() and fire.state.grey and fire:GetAttribute("type") == nil and fire.state.tip[1] == "No campfire kit"
+    and fire.state.tip[2]:find("Simple Wood", 1, true), "no kit, no spell: grey, saying how to get one")
+  owner.o.bagSlots = {}
+  Camp.Refresh()
+  assert(not fire:IsShown(), "nothing to place, nothing to light: no fire icon")
+  -- in a fight the click stays as it was; after it, the new one
+  c.known, owner.o.bagSlots = { [818] = true }, { { 4470, 3 } }
+  Camp.Refresh()
+  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  owner.o.bagSlots = { { 279981, 1 } }; c.known = {}
+  Camp.Refresh()
+  assert(fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818, "in a fight the fire's click stays")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "after the fight: the kit")
+
+  -- (b) the banner: a mage who knows two ranks of Arcane Intellect, ribs in the bag, nothing on, in town
+  owner.o.class, c.profs, c.buffs = "MAGE", nil, {}
+  c.known = { [1459] = true, [1460] = true }
+  owner.o.bagSlots = { { 2888, 5 } }
+  c.resting = true
+  ev("PLAYER_ENTERING_WORLD")
+  local shows = Camp.shows
+  c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  local B = env.QuestBankBuffBanner
+  assert(B and B:IsShown() and Camp.shows == shows + 1 and B.title:GetText() == "Missing buffs", "left town without buffs: the banner")
+  assert(btn(1):IsShown() and btn(1):GetAttribute("type") == "item" and btn(1):GetAttribute("item") == "item:2888" and btn(1).count:GetText() == "5",
+    "Well Fed missing: the ribs, a click eats one")
+  assert(btn(2):IsShown() and btn(2):GetAttribute("type") == "spell" and btn(2):GetAttribute("spell") == 1460 and btn(2):GetAttribute("unit") == "player"
+    and btn(2):GetAttribute("item") == nil and btn(2).icon.__tex == 135932, "Arcane Intellect missing: the highest rank known, cast on yourself, its own icon")
+  assert(not (btn(3) and btn(3):IsShown()), "two icons")
+  for _, pr in ipairs(checkLayout(B, "Missing buffs banner")) do problems[#problems + 1] = pr end
+  layouts[#layouts + 1] = dumpLayout(B, "Missing buffs banner")
+  ev("PLAYER_UPDATE_RESTING")
+  assert(Camp.shows == shows + 1, "the same departure: once")
+  -- a buff cast takes its icon away; all on, the banner goes
+  c.buffs = { "Arcane Intellect" }
+  ev("UNIT_AURA", "player")
+  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:2888" and not btn(2):IsShown(), "Arcane Intellect on: only the food is left")
+  c.buffs = { "Well Fed", "Arcane Intellect" }
+  ev("UNIT_AURA", "player")
+  assert(not B:IsShown(), "everything on: the banner goes")
+  -- the next departure, after the quiet minute: up, and gone after 12 seconds
+  c.buffs = {}
+  tick(owner, Camp.QUIET + 1)
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(B:IsShown() and Camp.shows == shows + 2, "the next departure: the banner again")
+  tick(owner, Camp.BANNER_SECS - 1)
+  assert(B:IsShown() and B.left:GetWidth() < B:GetWidth() / 4, "after 11 s: still up, its time line nearly run out")
+  tick(owner, 1.5)
+  assert(not B:IsShown(), "after 12 s: gone")
+  -- a town's edge crossed back and forth: not again within the minute
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(not B:IsShown() and Camp.shows == shows + 2, "within the minute: not again")
+  -- /qb buffs: any time; its X closes it
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(B:IsShown() and Camp.shows == shows + 3 and btn(2):GetAttribute("spell") == 1460, "/qb buffs shows it")
+  B.close.__scripts.OnClick(B.close, "LeftButton")
+  assert(not B:IsShown(), "the X closes it")
+  -- not in a fight: after it, within the minute
+  tick(owner, Camp.QUIET + 1)
+  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(not B:IsShown() and Camp.shows == shows + 3, "left town in a fight: no banner")
+  local n = #owner.chat
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(not B:IsShown() and #owner.chat == n + 1 and said():find("Not in a fight", 1, true), "/qb buffs in a fight: says so")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  assert(B:IsShown() and Camp.shows == shows + 4, "the fight over: the banner, once")
+  -- a fight while it is up: dimmed, its buttons left alone, gone when the fight is over
+  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  tick(owner, Camp.BANNER_SECS + 1)
+  assert(B:IsShown() and B:GetAlpha() < 1 and btn(2):GetAttribute("spell") == 1460, "in a fight: dimmed, kept")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  assert(not B:IsShown(), "the fight over: gone")
+  -- not in a dungeon
+  tick(owner, Camp.QUIET + 1)
+  env.IsInInstance = function() return true, "party" end
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(not B:IsShown() and Camp.shows == shows + 4, "in a dungeon: no banner")
+  env.IsInInstance = saveInst
+  -- everything on: nothing to say
+  c.buffs = { "Well Fed", "Arcane Brilliance" }
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(not B:IsShown() and Camp.shows == shows + 4, "all on (Arcane Brilliance counts): no banner")
+  n = #owner.chat
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(not B:IsShown() and said():find("No buffs missing.", 1, true), "/qb buffs with all on: says so")
+  -- the switch in Settings
+  c.buffs = {}
+  local v5 = owner.QB.UI.views[5]
+  owner.QB.UI:Open(5)
+  assert(v5.remind.buffs and v5.remind.buffs:GetChecked() and v5.remind.buffs.label:GetText() == "Tell me when I leave town without my buffs", "the switch, on")
+  v5.remind.buffs:SetChecked(false); v5.remind.buffs.__scripts.OnClick(v5.remind.buffs, "LeftButton")
+  assert(owner.QB:Settings().remind.buffs == false, "switched off")
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(not B:IsShown() and Camp.shows == shows + 4, "switched off: no banner")
+  v5.remind.buffs:SetChecked(true); v5.remind.buffs.__scripts.OnClick(v5.remind.buffs, "LeftButton")
+  -- the armor: Ice Armor before Frost Armor; the one last seen on you first; any rank, by name or id
+  c.known = { [1459] = true, [168] = true, [7300] = true, [7302] = true, [6117] = true }
+  local m = Camp.SelfMissing({}, {})
+  assert(#m == 2 and m[1].id == 1459 and m[2].id == 7302 and m[2].name == "Ice Armor", "the armor: Ice Armor first")
+  c.buffs = { "Mage Armor" }; Camp.Refresh(); c.buffs = {}
+  m = Camp.SelfMissing({}, {})
+  assert(m[2].id == 6117 and m[2].name == "Mage Armor", "the armor last seen on you: Mage Armor")
+  assert(#Camp.SelfMissing({}, { [10157] = true }) == 1 and #Camp.SelfMissing({ ["Frost Armor"] = true }, {}) == 1, "any rank counts, by name or by spell id")
+  owner.o.class, c.known = "WARRIOR", {}
+  assert(#Camp.SelfMissing({}, {}) == 0, "a warrior: no class buffs")
+  -- a camp feature ready and no fire near: the click lights the kit, then places the feature
+  owner.o.bagSlots, c.profs, c.buffs = { { 279944, 1 }, { 279981, 1 } }, SMITH, { "Well Fed" }
+  tick(owner, 301)
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:279981" and btn(1).state.tip[1] == "Sharpening Wheel" and btn(1).state.tip[2] == "Needs a campfire first."
+    and not btn(2):IsShown(), "the wheel ready, no fire: the kit first")
+  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
+  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:279944" and btn(1).state.tip[3] == "Click to place it.", "the fire lit: the wheel")
+  for _, pr in ipairs(checkLayout(B, "Missing buffs banner, one icon")) do problems[#problems + 1] = pr end
+  c.buffs = { "Well Fed", "Sharpening Wheel" }
+  ev("UNIT_AURA", "player")
+  assert(not B:IsShown(), "the wheel's buff on: gone")
+  owner.o.bagSlots, owner.o.class, c.profs, c.known, c.buffs, c.resting = saveBags, saveClass, nil, nil, nil, nil
+  env.C_Spell.GetSpellTexture, env.C_Spell.GetSpellCooldown = saveTex, saveCD
+  Camp.Refresh()
+  print(string.format("camp bar and banner: Basic Campfire and kits on the fire icon; the banner %d times, %d classes with buffs", Camp.shows, (function() local k = 0 for _ in pairs(Camp.SELF) do k = k + 1 end return k end)()))
 end
 
 ----------------------------------------------------------------------------

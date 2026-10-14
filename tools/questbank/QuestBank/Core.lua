@@ -1079,9 +1079,10 @@ local DEFAULTS = {
   minimapPins = true, minimapLines = true, minimapPickups = true, minimapEntrances = true,
   glow = { on = true, other = true, combat = false },
   walkRecord = true, walkShow = true, -- walked trails (Walk.lua): noted as you go, drawn on the minimap
-  -- the camp bar (Camp.lua): Well Fed, the campfire kit, camp features with their cooldown, the sleeping bag; hidden in
-  -- dungeons when quietInstance. campBar = false hides the bar
-  remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true }, campBar = true,
+  -- the camp bar (Camp.lua): Well Fed, the campfire (Basic Campfire or a kit), camp features with their cooldown, the
+  -- sleeping bag; hidden in dungeons when quietInstance. campBar = false hides the bar. buffs: the missing-buffs banner
+  -- when you leave a town
+  remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true, buffs = true }, campBar = true,
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
   -- the arrow guides you step by step, by the flight paths you know, boats and the hearthstone (Travel.lua); off, it
   -- points straight at its target. arrowHearth: the hearthstone may be one of the steps
@@ -2452,6 +2453,9 @@ slash = function(msg)
       QB.Arrow:Set(not QB:Settings().arrow)
       QB:Print(QB:Settings().arrow and ("Direction arrow on: it points at " .. QB.Arrow.MODES[QB.Arrow.Mode()] .. ". Right-click it to choose: the route, the nearest hand-in or pick-up, or where you last clicked; /qb arrow route, handin, pickup or pin does the same. Drag it where you like.") or "Direction arrow off.")
     end
+  elseif cmd == "buffs" and QB.Camp then
+    -- the missing-buffs banner, now (Camp.lua)
+    QB.Camp.Command()
   elseif cmd == "way" and QB.Travel then
     -- the steps to what the arrow points at, the flight paths QuestBank counts on, and the hearthstone
     for _, line in ipairs(QB.Travel.WayLines()) do QB:Print(line) end
