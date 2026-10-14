@@ -242,6 +242,8 @@ function Glow.Update()
   if kind == "other" and not g.other then return off(nil) end
   local plate = C_NamePlate and C_NamePlate.GetNamePlateForUnit and select(2, pcall(C_NamePlate.GetNamePlateForUnit, "softinteract"))
   if type(plate) ~= "table" then return off(kind) end
+  -- a plate the game keeps from addons (a friendly plate in an instance says it is forbidden): no place for the light
+  if plate.IsForbidden and select(2, pcall(plate.IsForbidden, plate)) then return off(kind) end
   dress(f, g.style, kind)
   f:SetParent(plate)
   f:ClearAllPoints()

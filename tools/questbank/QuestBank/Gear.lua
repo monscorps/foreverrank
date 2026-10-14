@@ -3,7 +3,8 @@
 -- each (its icon on the slot's own art, its name in its quality colour, its item level) and beside it the best
 -- upgrade you can get for that slot: a quest reward within reach (the finders' judgement, item by item: your armour
 -- class, your weapon skills, your class, "2 levels ahead" as set) or a dungeon drop at your level (the journal's
--- bosses' recorded loot, judged the same way), whichever has the highest item level above what you wear. A click puts
+-- bosses' recorded loot, judged the same way), whichever has the highest item level above what you wear. A quest's
+-- choice (one reward of several) is offered for one slot only: the slot with the most to lose without it. A click puts
 -- the quest on your pick-up list or opens the journal on the boss; Shift links the item in chat, Ctrl tries it on.
 local _, QB = ...
 local G = {}
@@ -111,14 +112,22 @@ local function worn(slotId)
   return w
 end
 
+-- is the item one of the quest's reward choices (one pick among several), rather than one given along with the rest?
+local function isChoice(qid, id)
+  local R = QB.Data.RITEMS and QB.Data.RITEMS[qid]
+  for _, c in ipairs(R and R.c or {}) do if c == id then return true end end
+  return false
+end
+
 -- the quest rewards you could go and get for a slot: the finder's rows ("Best gear", narrowed to the slot's equip
--- locations: each quest's best piece for you, the highest item level first, "2 levels ahead" as the finder has it)
+-- locations: each quest's best piece for you, the highest item level first, "2 levels ahead" as the finder has it);
+-- choice: the item is one of the quest's choices; rank: the finder's order (the most XP first at one item level)
 local function questFinds(slot, level)
   local UI = QB.UI
   if not (UI and UI.FindRewards) then return {} end
   local out = {}
-  for _, r in ipairs(UI:FindRewards("gear", level, slot.loc)) do
-    out[#out + 1] = { id = r.item, ilvl = r.ilvl, q = r.q, st = r.st, mins = r.mins, req = r.req, kind = "quest" }
+  for i, r in ipairs(UI:FindRewards("gear", level, slot.loc)) do
+    out[i] = { id = r.item, ilvl = r.ilvl, q = r.q, st = r.st, mins = r.mins, req = r.req, kind = "quest", choice = isChoice(r.q.id, r.item), rank = i }
   end
   return out
 end
@@ -166,24 +175,89 @@ local function dungeonFinds(level, ahead)
   return byLoc, loading
 end
 
--- the best piece for a slot among its quest finds and drops: the highest item level above what you wear (anything
--- for an empty slot), a quest reward before a drop at the same level; never one already suggested for the pair's
--- other slot. taken: the items and quests suggested so far
-local function bestFor(slot, finds, drops, beat, taken)
-  local best
-  local function try(c)
-    if c.ilvl <= beat or taken.item[c.id] then return end
-    if slot.pair and c.q and taken.quest[slot.pair .. c.q.id] then return end
-    if not best or c.ilvl > best.ilvl or (c.ilvl == best.ilvl and c.q and not best.q) then best = c end
+-- a slot's candidates, the best first: its quest finds and the drops for its equip locations above what you wear
+-- (anything for an empty slot), the highest item level first, a quest reward before a drop at the same level, the
+-- quests in the finder's order (the most XP first) and the drops by item
+local function candidates(slot, finds, drops, beat)
+  local out = {}
+  for _, c in ipairs(finds) do if c.ilvl > beat then out[#out + 1] = c end end
+  for loc in pairs(slot.loc) do
+    for _, c in ipairs(drops[loc] or {}) do if c.ilvl > beat then out[#out + 1] = c end end
   end
-  for _, c in ipairs(finds) do try(c) end
-  for loc in pairs(slot.loc) do for _, c in ipairs(drops[loc] or {}) do try(c) end end
-  if best then
-    taken.item[best.id] = true
-    if slot.pair and best.q then taken.quest[slot.pair .. best.q.id] = true end
-  end
-  return best
+  table.sort(out, function(a, b)
+    if a.ilvl ~= b.ilvl then return a.ilvl > b.ilvl end
+    if (a.q ~= nil) ~= (b.q ~= nil) then return a.q ~= nil end
+    if a.q and b.q then return a.rank < b.rank end
+    return a.id < b.id
+  end)
+  return out
 end
+
+-- may this candidate go to the slot? Not an item suggested already; not a quest's choice (one reward of several)
+-- spent on another slot; not the pair's other slot's quest
+local function allowed(c, slot, taken)
+  if taken.item[c.id] then return false end
+  if c.q then
+    if c.choice and taken.choice[c.q.id] then return false end
+    if slot.pair and taken.quest[slot.pair .. c.q.id] then return false end
+  end
+  return true
+end
+
+-- every slot's pick from its candidates. A quest's choice is one reward of several, so it counts for one slot: when
+-- two slots want it, the one with the most to lose without it (its best against its next) gets it and the other
+-- takes its next; a drop or a quest's fixed reward is one item, had once. Rounds until every slot is settled.
+-- rows[i] = { slot, beat, cands }; returns pick[i], the slot's candidate or nil
+local function assign(rows)
+  local taken = { item = {}, quest = {}, choice = {} }
+  local done, pick = {}, {}
+  for _ = 1, #rows + 1 do
+    local claims, open = {}, false
+    for i, r in ipairs(rows) do
+      if not done[i] then
+        open = true
+        local best, after
+        for _, c in ipairs(r.cands) do
+          if allowed(c, r.slot, taken) then
+            if not best then best = c
+            elseif not (c.q and best.q and c.q.id == best.q.id) then after = c; break end
+          end
+        end
+        pick[i] = best
+        r.regret = best and (best.ilvl - (after and after.ilvl or r.beat)) or 0
+        if best and best.q and best.choice then
+          local l = claims[best.q.id]
+          if not l then l = {}; claims[best.q.id] = l end
+          l[#l + 1] = i
+        end
+      end
+    end
+    if not open then break end
+    -- a choice two slots claim goes to the one with the most to lose; the others wait for the next round
+    local wait = {}
+    for _, list in pairs(claims) do
+      if #list > 1 then
+        local win = list[1]
+        for _, i in ipairs(list) do if rows[i].regret > rows[win].regret then win = i end end
+        for _, i in ipairs(list) do if i ~= win then wait[i] = true end end
+      end
+    end
+    for i, r in ipairs(rows) do
+      if not done[i] and not wait[i] then
+        local b = pick[i]
+        if not b then done[i] = true
+        elseif allowed(b, r.slot, taken) then -- (an earlier slot this round may have taken the very item: a ring)
+          done[i] = true
+          taken.item[b.id] = true
+          if b.q and b.choice then taken.choice[b.q.id] = true end
+          if r.slot.pair and b.q then taken.quest[r.slot.pair .. b.q.id] = true end
+        end
+      end
+    end
+  end
+  return pick
+end
+G.Assign = assign
 
 -- the page's answer, slot by slot: { slot, worn, best }, with the count, the item levels gained and how many items
 -- are still loading. Read by the tests as well as the page
@@ -191,15 +265,19 @@ function G.Upgrades()
   local level = QB.state.level or 1
   local ahead = QB:Settings().finderAhead and 2 or 0
   local drops, loading = dungeonFinds(level, ahead)
-  local taken = { item = {}, quest = {} }
-  local out = { n = 0, gain = 0, loading = loading }
+  local rows = {}
   for i, slot in ipairs(G.SLOTS) do
     local w = worn(slot.id)
     local beat = w and (w.ilvl or 0) or 0
-    local best = bestFor(slot, questFinds(slot, level), drops, beat, taken)
-    out[i] = { slot = slot, worn = w, best = best }
-    if w and not w.name then out.loading = out.loading + 1 end
-    if best then out.n = out.n + 1; out.gain = out.gain + best.ilvl - beat end
+    rows[i] = { slot = slot, worn = w, beat = beat, cands = candidates(slot, questFinds(slot, level), drops, beat) }
+  end
+  local pick = assign(rows)
+  local out = { n = 0, gain = 0, loading = loading }
+  for i, r in ipairs(rows) do
+    local best = pick[i]
+    out[i] = { slot = r.slot, worn = r.worn, best = best }
+    if r.worn and not r.worn.name then out.loading = out.loading + 1 end
+    if best then out.n = out.n + 1; out.gain = out.gain + best.ilvl - r.beat end
   end
   return out
 end

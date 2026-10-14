@@ -13,7 +13,7 @@ for i = 1, #arg do if arg[i] == "--layout" then LAYOUT_OUT = arg[i + 1] end end
 local METHODS = {}
 local function allow(list) for m in list:gmatch("%S+") do METHODS[m] = true end end
 allow([[SetPoint ClearAllPoints SetAllPoints SetSize SetWidth SetHeight GetWidth GetHeight Show Hide SetShown IsShown
-IsVisible SetAlpha GetAlpha GetParent GetPoint GetCenter GetEffectiveScale SetParent CreateTexture CreateFontString
+IsVisible IsForbidden SetAlpha GetAlpha GetParent GetPoint GetCenter GetEffectiveScale SetParent CreateTexture CreateFontString
 SetScript GetScript HookScript RegisterEvent UnregisterEvent SetFrameStrata SetFrameLevel SetToplevel EnableMouse
 EnableMouseWheel SetMovable SetClampedToScreen RegisterForDrag StartMoving StopMovingOrSizing GetName IsMouseOver
 SetScrollChild SetVerticalScroll GetVerticalScroll SetText GetText SetNormalTexture SetHighlightTexture SetPushedTexture
@@ -95,6 +95,7 @@ local function newObj(kind, template, parent)
         elseif k == "Hide" then local was = self.__shown; self.__shown = false; if was and self.__scripts.OnHide then self.__scripts.OnHide(self) end
         elseif k == "SetShown" then if a[1] then self:Show() else self:Hide() end
         elseif k == "IsShown" then return self.__shown
+        elseif k == "IsForbidden" then return false -- (a test sets a plate's own IsForbidden to say otherwise)
         -- shown, and every frame it sits in too (a page of a shut window is not visible)
         elseif k == "IsVisible" then
           local o = self
@@ -2382,6 +2383,14 @@ do
   assert(not L:IsShown(), "a player keeps the game's own cursor icon, no light")
   c.soft = { name = "Sunken Chest", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
   assert(Glow.kind == "chest", "a chest: blue")
+  -- a plate the game keeps from addons (a friendly plate in an instance answers IsForbidden): nothing drawn, no error;
+  -- an ordinary plate lights again
+  plate.IsForbidden = function() return true end
+  ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(not L:IsShown() and Glow.kind == "chest", "a forbidden nameplate: no light on it, the kind still known")
+  plate.IsForbidden = nil
+  ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(L:IsShown() and L:GetParent() == plate, "an ordinary plate lights again")
   -- a quest object: named in an objective of a quest in the log
   local saveObj = env.C_QuestLog.GetQuestObjectives
   env.C_QuestLog.GetQuestObjectives = function(id) if id == 7 then return { { text = "Kobold Candle: 0/3", finished = false } } end return {} end
@@ -3979,6 +3988,47 @@ do
     "the row says the boss, the dungeon and its levels: " .. hand.up.src:GetText() .. " / " .. hand.up.place:GetText())
   assert(hand.up.face.__tex == 5875511, "with the boss's face (the journal's art)")
   for _, e in ipairs(G.last) do assert(not (e.best and (e.best.id == 5443 or e.best.id == 5194)), "never the dagger or the cloth chest: " .. e.slot.name) end
+  -- a quest's choice is one reward of several: Morbent Fel (55) offers a mail head (1282) and a cloak (2953), both level
+  -- 33, the best for the empty head and back; the page offers the quest for one of them only, the other takes its next
+  do
+    local back, seen, fromMF = rowOf("Back"), {}, 0
+    for _, e in ipairs(G.last) do
+      local b = e.best
+      if b and b.q and b.choice then assert(not seen[b.q.id], "a quest's choice is offered for one slot only: " .. b.q.name); seen[b.q.id] = true end
+      if b and b.q and b.q.id == 55 and b.choice then fromMF = fromMF + 1 end
+    end
+    local hq, bq = head.best and head.best.q and head.best.q.id, back.best and back.best.q and back.best.q.id
+    assert(hq == 55 or bq == 55, "Morbent Fel's choice goes to the head or the back")
+    assert(fromMF == 1 and hq ~= bq, "and to one of them only: " .. fromMF)
+    assert(D.RIT[1282][1] == 33 and D.RIT[2953][1] == 33, "(the fixture: both pieces at level 33)")
+  end
+  -- the choice goes to the slot with the most to lose: the head's next is 30, the back's next is 20, so the back gets it
+  do
+    local q1 = { id = 999001, name = "A choice" }
+    local rows = {
+      { slot = G.SLOTS[1], beat = 0, cands = { { id = 1, ilvl = 33, q = q1, choice = true }, { id = 2, ilvl = 30, q = { id = 999002 } } } },
+      { slot = G.SLOTS[4], beat = 0, cands = { { id = 3, ilvl = 33, q = q1, choice = true }, { id = 4, ilvl = 20, q = { id = 999003 } } } },
+    }
+    local pick = G.Assign(rows)
+    assert(pick[1].id == 2 and pick[2].id == 3, "the back, with the most to lose, gets the choice; the head takes its next: " .. pick[1].id .. "/" .. pick[2].id)
+    -- a quest's fixed rewards are each had: two slots from one quest's r list is fine
+    rows = {
+      { slot = G.SLOTS[1], beat = 0, cands = { { id = 1, ilvl = 33, q = q1 } } },
+      { slot = G.SLOTS[4], beat = 0, cands = { { id = 3, ilvl = 33, q = q1 } } },
+    }
+    pick = G.Assign(rows)
+    assert(pick[1].id == 1 and pick[2].id == 3, "a quest's fixed rewards go to both slots")
+    -- one drop ring for both ring slots: the first has it, the second takes the next
+    rows = {
+      { slot = G.SLOTS[14], beat = 0, cands = { { id = 5, ilvl = 40 }, { id = 6, ilvl = 35 } } },
+      { slot = G.SLOTS[15], beat = 0, cands = { { id = 5, ilvl = 40 }, { id = 6, ilvl = 35 } } },
+    }
+    pick = G.Assign(rows)
+    assert(pick[1].id == 5 and pick[2].id == 6, "one ring, had once; the second slot takes the next")
+    -- nothing above what is worn: no pick, no error
+    pick = G.Assign({ { slot = G.SLOTS[1], beat = 50, cands = {} } })
+    assert(pick[1] == nil, "an empty list picks nothing")
+  end
   -- an empty ring slot: any ring; the second ring slot gets another
   assert(ring1.best and ring1.best.ilvl > 0 and ring1.up:IsShown(), "an empty ring slot offers a ring")
   local r1 = D.RIT[ring1.best.id]
