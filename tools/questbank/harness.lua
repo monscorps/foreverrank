@@ -2550,6 +2550,7 @@ do
   Walk.dirty, Walk.dirtyNodes = true, true
   P.list = { { m = 1429, x = 51.125, y = 50, num = 1, name = "Along the trail", when = "", lines = {} } }
   QB:Settings().minimapObjectives = false -- (the stop is the target here, not one of your log's objectives)
+  QB.Arrow:EndTemp() -- (nor the arrow's step for a waypoint clicked long ago, planned anew in this flat world)
   Mini.Invalidate(); Mini.Place()
   -- 5.4: the golden path, QuestTrail's (MinimapRoute.lua): gold along your trail, in pieces of 15 metres; the straight
   -- stroke to stop 1 left to it
@@ -7391,8 +7392,14 @@ do
     layouts[#layouts + 1] = dumpLayout(F, label)
   end
   c.facing = 0
+  -- 5.5: QuestTrail's compass by default: the dial's three layers (Krom's art), 48 screen pixels; the game's own arrow
+  -- and its glow kept for the game-icon style
+  local ART = "Interface\\AddOns\\QuestBank\\art\\"
+  assert(A.QT() and F.dialBg.__tex == ART .. "arrow_bg.png" and F.tint.__tex == ART .. "arrow_tint.png" and F.needle.__tex == ART .. "arrow_needle.png"
+    and F.dial.__w == 48 and F.dialBg.__layer == "BACKGROUND" and F.needle.__layer == "OVERLAY" and not F.arrow:IsShown() and not F.glow:IsShown(),
+    "QuestTrail's dial: its three layers, 48 px")
   assert(F.arrow.__atlas == "npe_arrowup" and F.arrow.__desat and F.glow.__atlas == "npe_arrowupglow" and F.glow.__blend == "ADD",
-    "the game's own arrow and its glow")
+    "the game's own arrow and its glow, kept for the game-icon style")
 
   -- the same continent: at Stormwind's flight master, Lakeshire known. Its icon takes the arrow's place
   c.taxiKnown = { [2] = true, [5] = true }
@@ -7402,17 +7409,21 @@ do
   aimAt("Lakeshire", 0, lake[3] + 50, lake[4])
   look()
   assert(F.name:GetText() == "Lakeshire" and step() == "Fly to Lakeshire" and F.dist:GetText() == "Talk to the flight master"
-    and F.act:IsShown() and F.act.__atlas == "flightmaster" and not F.arrow:IsShown() and F.stepIcon:IsShown() and F.stepIcon.__atlas == "flightmaster",
+    and F.act:IsShown() and F.act.__atlas == "flightmaster" and not F.dial:IsShown() and F.stepIcon:IsShown() and F.stepIcon.__atlas == "flightmaster",
     "at the flight master: " .. says())
+  -- QuestTrail's lines under the dial: the step (blue) and what to do at the target on one line, the name in white
+  assert(F.act.__w == 48 and F.kind:IsShown() and F.kind:GetText() == ", then Go to" and F.step.__color[3] == 1 and F.name.__color[1] == 1 and F.name.__color[3] == 1
+    and F.name.__size == 10 and F.kind.__points[1].y == F.step.__points[1].y and F.kind.__points[1].x > F.step.__points[1].x,
+    "the first line: the step, then what to do; the name white under it")
   assert(F.trail[1]:IsShown() and F.trail[2]:IsShown() and not F.trail[3]:IsShown() and F.trail[1].__alpha == 1 and F.trail[2].__alpha == 0.5
-    and F.trail[2].__tex == T.foot and F.__h == 130, "the steps left: the flight, then the walk")
-  -- something to do here: a ping every couple of seconds, growing and fading
-  local pinged, grown = 0, false
+    and F.trail[2].__tex == T.foot and F.__h == 117, "the steps left: the flight, then the walk: " .. tostring(F.__h))
+  -- something to do here: QuestTrail's compass pings nothing (the game style's ping is tested below)
+  local pinged = 0
   for _ = 1, 130 do
     F.__scripts.OnUpdate(F, 0.016)
-    if F.ping:IsShown() then pinged, grown = pinged + 1, grown or (F.ping.__w > 40 and F.ping.__w < 96 and F.ping.__alpha < 0.9) end
+    if F.ping:IsShown() then pinged = pinged + 1 end
   end
-  assert(pinged > 20 and pinged < 60 and grown, "a ping at the flight master: " .. pinged .. " frames")
+  assert(pinged == 0, "no ping at the flight master in QuestTrail's look: " .. pinged .. " frames")
   lines = {}; F.__scripts.OnEnter(F)
   local tip = table.concat(lines, "\n")
   assert(tip:find("|A:flightmaster:14:14|a Fly to Lakeshire | ", 1, true) and tip:find("Walk to Lakeshire | %d+ min") and tip:find("About %d+ min in all%.")
@@ -7421,8 +7432,9 @@ do
   -- on the way there, the arrow points at it; the minimap pins it and draws the line to it
   standAt(c, 0, sw[3] + 150, sw[4])
   look()
-  assert(F.arrow:IsShown() and not F.act:IsShown() and step() == "Fly to Lakeshire" and F.dist:GetText():find("^150 yards · %d+ min$"),
+  assert(F.dial:IsShown() and not F.act:IsShown() and step() == "Fly to Lakeshire" and F.dist:GetText():find("^150 yards · %d+ min$"),
     "on the way to the flight master: " .. says())
+  assert(math.abs(F.tint.__vertex[1] - 0.7) < 0.01 and math.abs(F.tint.__vertex[2] - 0.9) < 0.01 and F.tint.__vertex[3] == 1, "the glass blue on the way to a flight master")
   c.QB.Mini.Place()
   local Mini = c.QB.Mini
   assert(Mini.target and Mini.target.kind == "step" and Mini.labelText == "Fly to Lakeshire" and Mini.linesShown >= 1,
@@ -7433,8 +7445,8 @@ do
   fireTV(c, "TAXI_NODE_STATUS_CHANGED"); tick(c, 1.5)
   standAt(c, 0, sw[3], sw[4])
   look()
-  assert(not F.step:IsShown() and not F.stepIcon:IsShown() and F.dist:GetText():find("yards", 1, true) and F.arrow:IsShown() and not F.trail[1]:IsShown()
-    and F.__h == 98, "Lakeshire not known: walk there: " .. says())
+  assert(not F.step:IsShown() and not F.stepIcon:IsShown() and F.dist:GetText():find("yards", 1, true) and F.dial:IsShown() and not F.trail[1]:IsShown()
+    and F.__h == 99 and F.kind:GetText() == "Go to", "Lakeshire not known: walk there: " .. says())
   sheet("Arrow: walk")
   c.QB.Mini.Place()
   assert(Mini.target and Mini.target.kind ~= "step", "a walk: no step on the minimap")
@@ -7444,32 +7456,33 @@ do
   local b0 = math.atan2(lake[4] - me.wy, lake[3] + 50 - me.wx)
   c.facing = b0
   tick(c, 1)
-  assert(math.abs(F.arrow.__rot) < 0.01 and F.arrow.__vertex[2] > F.arrow.__vertex[1] and F.glow.__alpha > 0, "facing it: green, glowing")
+  assert(math.abs(F.needle.__rot) < 0.01 and not F.glow:IsShown() and math.abs(F.tint.__vertex[2] - 0.91) < 0.01 and F.tint.__vertex[1] == 1,
+    "facing it: the needle up, the glass gold for a waypoint, no glow")
   sheet("Arrow: walk, facing it")
   c.facing = b0 - 1
   F.__scripts.OnUpdate(F, 0.016)
-  assert(F.arrow.__rot > 0 and F.arrow.__rot < 1 and F.glow.__rot == F.arrow.__rot, "a turn eases in: " .. F.arrow.__rot)
+  assert(F.needle.__rot > 0 and F.needle.__rot < 1, "a turn eases in: " .. F.needle.__rot)
   tick(c, 1)
-  assert(math.abs(F.arrow.__rot - 1) < 0.01 and F.glow.__alpha == 0, "and settles: " .. F.arrow.__rot)
+  assert(math.abs(F.needle.__rot - 1) < 0.01, "and settles: " .. F.needle.__rot)
   c.facing = b0 + math.pi
   tick(c, 1)
-  assert(F.arrow.__vertex[1] > F.arrow.__vertex[2] and F.glow.__alpha == 0, "behind you: red")
+  assert(math.abs(F.tint.__vertex[2] - 0.91) < 0.01, "behind you: the glass keeps its colour (no heading colour in QuestTrail's look)")
   c.facing = b0 - 3
   tick(c, 1)
   c.facing = b0 + 3
   for _ = 1, 40 do
     F.__scripts.OnUpdate(F, 0.016)
-    assert(math.abs(F.arrow.__rot) > 2.9, "from 3 to -3 the short way, behind you: " .. F.arrow.__rot)
+    assert(math.abs(F.needle.__rot) > 2.9, "from 3 to -3 the short way, behind you: " .. F.needle.__rot)
   end
   tick(c, 1)
-  assert(math.abs(F.arrow.__rot + 3) < 0.01, "and settles: " .. F.arrow.__rot)
+  assert(math.abs(F.needle.__rot + 3) < 0.01, "and settles: " .. F.needle.__rot)
   -- which way you face is a secret: the arrow dims, upright
   c.facing = SECRET.num()
   look()
-  assert(F.arrow.__alpha == 0.3 and F.arrow.__rot == 0 and F.dist:GetText():find("yards", 1, true), "facing unknown: dimmed")
+  assert(F.dial.__alpha == 0.3 and F.needle.__rot == 0 and F.dist:GetText():find("yards", 1, true), "facing unknown: dimmed")
   c.facing = b0
   look()
-  assert(F.arrow.__alpha == 1 and math.abs(F.arrow.__rot) < 0.01, "and back")
+  assert(F.dial.__alpha == 1 and math.abs(F.needle.__rot) < 0.01, "and back")
 
   -- the flight master's map: pick Lakeshire, its button marked; in the air; landed
   c.taxiKnown[5] = true
@@ -7490,16 +7503,16 @@ do
   standAt(c, 0, sw[3] - 1000, sw[4] - 300)
   tick(c, 1)
   assert(step() == "Flying to Lakeshire" and (F.dist:GetText():find("^Lands in %d+:%d%d$") or F.dist:GetText() == "Landing")
-    and F.stepIcon.__tex == T.gryphon and F.arrow:IsShown() and F.arrow.__alpha == 0.85 and TV.stats.routes == routes, "in the air: " .. says())
+    and F.stepIcon.__tex == T.gryphon and F.dial:IsShown() and F.dial.__alpha == 0.85 and not F.kind:IsShown() and TV.stats.routes == routes, "in the air: " .. says())
   sheet("Arrow: in the air")
   c.taxi = false
   standAt(c, 0, lake[3], lake[4])
   A:Update()
   F.__scripts.OnUpdate(F, 0.016)
-  assert(not F.step:IsShown() and F.arrow:IsShown() and (db.known[5] == "f" or db.known[5] == "t"), "landed: the walk: " .. says())
-  assert(F.ping:IsShown() and F.arrow.__w > 48 and F.arrow.__w < 60, "a new step: the arrow pops, a ping: " .. F.arrow.__w)
+  assert(not F.step:IsShown() and F.dial:IsShown() and (db.known[5] == "f" or db.known[5] == "t"), "landed: the walk: " .. says())
+  assert(not F.ping:IsShown() and F.dial.__w == 48, "a new step: no pop nor ping in QuestTrail's look")
   tick(c, 1)
-  assert(not F.ping:IsShown() and F.arrow.__w == 48, "and settles")
+  assert(F.dial.__w == 48, "and stays")
 
   -- a boat: wait on the pier, its icon in the arrow's place; on board the plan stands; at the far pier, walk on
   c.taxiKnown = {}
@@ -7537,14 +7550,14 @@ do
   c.instance, c.noPos = nil, nil
   standAt(c, 0, -4840, -1330)
   look()
-  assert(not F.step:IsShown() and F.arrow:IsShown(), "out in Ironforge: walk on: " .. says())
+  assert(not F.step:IsShown() and F.dial:IsShown(), "out in Ironforge: walk on: " .. says())
   -- a flight master you haven't learned, on the way
   db.known = {}
   learn()
   standAt(c, 0, lake[3], lake[4] + 20)
   aimAt("Lakeshire Inn", 0, lake[3] + 300, lake[4])
   look()
-  assert(step() == "Learn this flight path" and F.stepIcon.__atlas == "taxinode_undiscovered" and F.dist:GetText():find("yards", 1, true) and F.arrow:IsShown(),
+  assert(step() == "Learn this flight path" and F.stepIcon.__atlas == "taxinode_undiscovered" and F.dist:GetText():find("yards", 1, true) and F.dial:IsShown(),
     "at Lakeshire's flight master, not learned: " .. says())
   sheet("Arrow: learn this flight path")
 
@@ -7619,8 +7632,8 @@ do
   aimAt("Here", 0, sw[3] + 5, sw[4])
   A:Update()
   F.__scripts.OnUpdate(F, 0.016)
-  assert(F.dist:GetText() == "You're there" and F.act.__atlas == "Waypoint-MapPin-Tracked" and F.act.__alpha == 1 and not F.act.__desat and F.ping:IsShown(),
-    "there: the pin, a ping")
+  assert(F.dist:GetText() == "You're there" and F.act.__atlas == "Waypoint-MapPin-Tracked" and F.act.__alpha == 1 and not F.act.__desat and not F.ping:IsShown(),
+    "there: the pin, no ping in QuestTrail's look")
   sheet("Arrow: there")
 
   -- every town on the lines: each fits whole, or the step by the town's name alone, never cut; the longest names go
@@ -7686,7 +7699,7 @@ do
   standAt(c, 0, sw[3], sw[4])
   aimAt("Gadgetzan", 1, gz[3] + 30, gz[4])
   look()
-  assert(F.dist:GetText() == "On the other continent" and not F.step:IsShown() and F.arrow.__alpha == 0.3 and F.arrow.__rot == 0, "straight: " .. says())
+  assert(F.dist:GetText() == "On the other continent" and not F.step:IsShown() and F.dial.__alpha == 0.3 and F.needle.__rot == 0, "straight: " .. says())
   sheet("Arrow: straight, another continent")
   set.arrowTravel = true
   -- Travel.lua breaking: noted once, and the arrow points straight for the rest of the session
@@ -7704,9 +7717,38 @@ do
   set.arrowPin, set.arrowMode = nil, "route"
   A:Set(false)
 
-  -- the Horde, on a client without the tutorial arrow: the old quest arrow, no glow; at the tower, the zeppelin
+  -- 5.5: the dial's size setting, its backdrop; the game-icon style: the game's arrow, coloured by your heading,
+  -- glowing when it points ahead, popping and pinging at a new step, the name in gold above the step line
+  A:Set(true)
+  standAt(c, 0, sw[3], sw[4])
+  aimAt("Lakeshire", 0, lake[3] + 50, lake[4])
+  set.compassSize, set.compassBg = 64, true
+  look()
+  assert(F.dial.__w == 64 and F.bg and F.bg:IsShown() and F.name.__points[1].y == -79 and F.bg.__w > 64, "a 64 px dial, the backdrop behind it")
+  set.compassSize, set.compassBg = nil, nil
+  look()
+  assert(F.dial.__w == 48 and not F.bg:IsShown(), "and the default again")
+  set.markerStyle = "game"
+  c.facing = b0
+  look()
+  tick(c, 1)
+  assert(not A.QT() and F.arrow:IsShown() and not F.dial:IsShown() and F.name.__size == 12 and F.name.__points[1].y == -56 and not F.kind:IsShown()
+    and F.arrow.__vertex[2] > F.arrow.__vertex[1] and F.glow.__alpha > 0 and F.__h == 98, "the game-icon style: the game's arrow, green ahead, glowing")
+  c.facing = b0 + math.pi
+  tick(c, 1)
+  assert(F.arrow.__vertex[1] > F.arrow.__vertex[2] and F.glow.__alpha == 0, "behind you: red")
+  c.facing = b0
+  set.markerStyle = nil
+  look()
+  assert(A.QT() and F.dial:IsShown() and not F.arrow:IsShown(), "and QuestTrail's dial again")
+  set.arrowPin, set.arrowMode = nil, "route"
+  A:Set(false)
+
+  -- the Horde, on a client without the tutorial arrow, in the game-icon style: the old quest arrow, no glow; at the
+  -- tower, the zeppelin
   local h = grosh
   h.noAtlas = { npe_arrowup = true }
+  h.QB:Settings().markerStyle = "game"
   h.QB.Arrow:Set(true)
   local HF = h.env.QuestBankArrow
   assert(HF.arrow.__tex == h.QB.Data.TEX.questArrow and not HF.arrow.__atlas and not HF.glow:IsShown(), "no atlas: the quest arrow")
@@ -7719,7 +7761,7 @@ do
   for _, pr in ipairs(checkLayout(HF, "Arrow: the zeppelin (Horde)")) do problems[#problems + 1] = pr end
   layouts[#layouts + 1] = dumpLayout(HF, "Arrow: the zeppelin (Horde)")
   h.QB.Arrow:Set(false)
-  h.QB:Settings().arrowPin, h.QB:Settings().arrowMode, h.noAtlas = nil, "route", nil
+  h.QB:Settings().arrowPin, h.QB:Settings().arrowMode, h.noAtlas, h.QB:Settings().markerStyle = nil, "route", nil, nil
 end
 
 ----------------------------------------------------------------------------
