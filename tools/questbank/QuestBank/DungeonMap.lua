@@ -273,8 +273,8 @@ local function pill(parent, label, w)
   return b
 end
 
--- the journal's text, panel and pill, for the Map page's (MapPage.lua)
-DM.Text, DM.Panel, DM.Pill = fs, panel, pill
+-- the journal's text, panel, pill and scrolling list, for the Map page's (MapPage.lua)
+DM.Text, DM.Panel, DM.Pill, DM.Scroller = fs, panel, pill, scroller
 
 ----------------------------------------------------------------------------
 -- faces

@@ -298,6 +298,7 @@ function Layer:Add(kind, data, x, y, levelType)
   if level then f:SetFrameLevel(level) end
   local setup = method(f, "Setup")
   if setup then setup(f, data) end
+  P.Glow(f, self.lit and self.lit(data))
   self:Place(f, self.scales)
   f:Show()
   self.active[#self.active + 1] = f
@@ -356,6 +357,26 @@ end
 function Layer:OnCanvasScaleChanged()
   local scales = {}
   for _, f in ipairs(self.active) do self:Place(f, scales) end
+end
+
+-- a light under a frame (art/glow.tga, as the minimap's pins have): col = { r, g, b, a }, or nil for none. A layer
+-- with a lit(data) function lights its frames as they are drawn (QuestBank's map page: the quest hovered or picked in
+-- its list, the arrow's step)
+local GLOW = "Interface\\AddOns\\QuestBank\\art\\glow.tga"
+function P.Glow(f, col)
+  if not (col or f.glow) then return end
+  if not f.glow then
+    f.glow = f:CreateTexture(nil, "BACKGROUND")
+    f.glow:SetTexture(GLOW)
+    f.glow:SetBlendMode("ADD")
+    f.glow:SetPoint("CENTER")
+  end
+  if col then
+    local size = (f:GetWidth() or 20) * 2.2
+    f.glow:SetSize(size, size)
+    f.glow:SetVertexColor(col[1], col[2], col[3], col[4] or 1)
+  end
+  f.glow:SetShown(col and true or false)
 end
 
 -- a layer on a map: the world map, or another canvas built from the game's map templates (map; QuestBank's map page).
@@ -437,9 +458,17 @@ local function project(d, mapID)
 end
 P.Project = project
 
+-- is the route drawn: on the world map by its own switch (pins, "Numbered route pins on the world map"), on
+-- QuestBank's map page by the page's (mapRoute, its strip's Route)
+function P.RouteOn(world)
+  local set = QB:Settings()
+  if world then return set.pins and true or false end
+  return set.mapRoute ~= false
+end
+
 -- every pin of the route that falls on the map shown
 local function drawRoute(layer, m)
-  if not QB:Settings().pins then return end
+  if not P.RouteOn(layer.world) then return end
   for _, d in ipairs(P.list) do
     local x, y = project(d, m)
     if x then layer:Add(ROUTE, d, x, y) end
@@ -454,9 +483,14 @@ function P:Init()
   end, "map pins: waiting for the map")
 end
 
--- the same pins on QuestBank's own map page (MapPage.lua), once
+-- the same pins on QuestBank's own map page (MapPage.lua), once. pageLayers: the page's layers drawn from the route
+-- (these pins, and MapPage.lua's strokes and arrow step), drawn again with it while the page shows
+P.pageLayers = {}
 function P.AddTo(map)
-  P.pageProvider = P.pageProvider or P.NewLayer(drawRoute, "map page pins", map)
+  if not P.pageProvider then
+    P.pageProvider = P.NewLayer(drawRoute, "map page pins", map)
+    P.pageLayers[#P.pageLayers + 1] = P.pageProvider
+  end
   return P.pageProvider
 end
 
@@ -527,7 +561,9 @@ function P:Update()
   self:Build()
   QB.API.TomTomLater() -- a waypoint TomTom was kept from while the map was open, if the map is shut (else it waits)
   if self.provider and mapOpen() then self.provider:RefreshAllData() end
-  if self.pageProvider and shown(self.pageProvider) then self.pageProvider:RefreshAllData() end
+  for _, layer in ipairs(self.pageLayers) do
+    if shown(layer) then layer:RefreshAllData() end
+  end
   -- then the quest icons, whenever these pins change (a new plan, /qb pins, Settings): they leave the NPCs these
   -- pins stand on to them
   if QB.QuestMap then QB.Try("map icons", QB.QuestMap.Update, QB.QuestMap) end

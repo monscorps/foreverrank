@@ -89,6 +89,7 @@ local function fitText(fs, s, room)
   end
   return s
 end
+UI.FitText = fitText -- (the Map page's quest rows, MapPage.lua)
 
 local function para(parent, obj, size, color, width)
   local fs = text(parent, obj, size, color, "LEFT", width)

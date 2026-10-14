@@ -113,6 +113,7 @@ function MR.Line(ctx, x1, y1, x2, y2, col, thick, alpha)
   return true
 end
 local function hideFrom(ctx, k) for i = k, #ctx.lines do MR.Show(ctx.lines[i], false) end end
+MR.HideFrom = hideFrom -- (the Map page's strokes, MapPage.lua)
 
 -- a stroke that stops 0.45 of the pin's size short of its end (at the pin's edge); none under 6 pixels
 function MR.Stroke(ctx, x1, y1, x2, y2, col, thick, alpha, size)

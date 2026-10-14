@@ -77,6 +77,7 @@ local function newObj(kind, template, parent)
         elseif k == "CreateLine" then local x = newObj("Line", nil, self); x.__layer = a[2] or "ARTWORK"; return x
         elseif k == "CreateMaskTexture" then local x = newObj("Texture", nil, self); x.__layer = "MASK"; return x
         elseif k == "AddMaskTexture" then self.__mask = a[1]
+        elseif k == "SetThickness" then self.__thick = a[1]
         elseif k == "SetStartPoint" then self.__start = { a[1], a[2], a[3], a[4] }
         elseif k == "SetEndPoint" then self.__stop = { a[1], a[2], a[3], a[4] }
         elseif k == "GetZoom" then return self.__zoom or 0
@@ -436,6 +437,9 @@ local function newClient(o)
   local templates = {}
   for attrs, body in xml:gmatch("<Frame (name=\"[^\"]+\"[^>]*)>(.-)</Frame>") do
     local t = { name = attrs:match('name="([^"]+)"'), mixin = attrs:match('mixin="([^"]+)"'), scripts = {}, regions = {}, fill = {} }
+    -- the frame's own size: its first <Size> (a region's comes after)
+    local w, h = body:match('^%s*<Size x="(%d+)" y="(%d+)"/>')
+    t.size = w and { tonumber(w), tonumber(h) } or nil
     for tag in body:gmatch("<(On%a+)") do t.scripts[tag] = true end
     -- each region, and the ones that cover the whole frame (setAllPoints)
     for kind, key, more in body:gmatch("<(%a+) parentKey=\"(%a+)\"([^>]*)>") do
@@ -461,6 +465,7 @@ local function newClient(o)
     if template and template:find("^QuestBank") then
       assert(t, "a template Pins.xml defines: " .. template)
       assert(not t.mixin and not next(t.scripts), "QuestBank's map templates carry no mixin or scripts (never the canvas's pins): " .. template)
+      if t.size then f:SetSize(t.size[1], t.size[2]) end
       for key, rk in pairs(t.regions) do
         f[key] = newObj(rk, nil, f)
         if t.fill[key] then f[key]:SetAllPoints(f) end
@@ -1360,7 +1365,20 @@ local function dumpLayout(root, label)
   local texNames = {}
   for k, v in pairs(clients[1].QB.Data.TEX) do texNames[v] = k end
   for idx, o in ipairs(ALL) do
-    if visible(o) and o ~= root then
+    if o.__kind == "Line" and visible(o) and o.__start and o.__stop then
+      -- a stroke (the Map page's route): its two ends, under the pins as their frame levels put it in the game
+      local anc = ancestors(o)
+      local inside = false
+      for _, a in ipairs(anc) do if a == root then inside = true end end
+      local ra, rb = inside and rectOf(o.__start[2]), inside and rectOf(o.__stop[2])
+      if ra and rb then
+        local x1, y1 = anchorXY(ra, o.__start[1])
+        local x2, y2 = anchorXY(rb, o.__stop[1])
+        items[#items + 1] = { k = "Line", x = 0, y = 0, w = 0, h = 0, i = idx, a = o.__alpha, depth = #anc, layer = "BACKGROUND",
+          x1 = x1 + (o.__start[3] or 0) - rr.l, y1 = rr.t - (y1 + (o.__start[4] or 0)), x2 = x2 + (o.__stop[3] or 0) - rr.l,
+          y2 = rr.t - (y2 + (o.__stop[4] or 0)), thick = o.__thick or 2, c = o.__vertex }
+      end
+    elseif visible(o) and o ~= root then
       local anc = ancestors(o)
       local inside = false
       for _, a in ipairs(anc) do if a == root then inside = true end end
@@ -2667,9 +2685,10 @@ do
   table.sort(blizz)
   assert(table.concat(blizz, " ") == "AreaLabelDataProviderMixin GroupMembersDataProviderMixin MapExplorationDataProviderMixin MapHighlightDataProviderMixin QuestBlobDataProviderMixin",
     "Blizzard's five safe providers: " .. table.concat(blizz, " "))
-  assert(own == 2 and canvas.dataProviders[QM.pageProvider] and canvas.dataProviders[P.pageProvider] and QM.pageProvider ~= QM.provider and P.pageProvider ~= P.provider,
-    "and QuestBank's two layers, of its own")
-  assert(not QM.pageProvider.world and not P.pageProvider.world and #P.layers == 2, "off the world map's Ctrl watch and TomTom hold")
+  assert(own == 5 and canvas.dataProviders[QM.pageProvider] and canvas.dataProviders[P.pageProvider] and QM.pageProvider ~= QM.provider and P.pageProvider ~= P.provider
+    and canvas.dataProviders[MP.lines] and canvas.dataProviders[MP.step] and canvas.dataProviders[MP.flight],
+    "and QuestBank's five layers, of its own: the icons, the route's pins, its strokes, the arrow's step, the flight paths")
+  assert(not QM.pageProvider.world and not P.pageProvider.world and not MP.lines.world and #P.layers == 2, "off the world map's Ctrl watch and TomTom hold")
   -- the three overrides: Blizzard's own would empty the game's shared caches (the mock's error)
   for _, k in ipairs({ "OnUpdate", "OnShow", "OnMapChanged" }) do
     assert(canvas[k] ~= env.MapCanvasMixin[k], "overridden: " .. k)
@@ -2818,6 +2837,272 @@ do
   MP.Here()
   U:ShowTab(1)
   c.playerMap, c.mapLevels = nil, nil
+end
+
+-- 5.5: the Map page's own layers and their switches under the map: the quest icons and route pins on the page, the
+-- route's strokes (you to stop 1 gold, stop to stop blue, 5 pixels on screen at any zoom), the arrow's step, the
+-- flight paths (the game's own list, else QuestBank's flight masters); a switch for each layer, with its count
+do
+  local MP, QM, P, U, env = QB.MapPage, QB.QuestMap, QB.Pins, QB.UI, owner.env
+  c = owner
+  local set, canvas = QB:Settings(), MP.canvas
+  U:Open(8)
+  local f = MP.frame
+  local function count(layer, kind)
+    local n = 0
+    for _, fr in ipairs(layer.active) do if fr:IsShown() and (not kind or (fr.data and fr.data.kind == kind)) then n = n + 1 end end
+    return n
+  end
+  local function onMap(m)
+    local n = 0
+    for _, d in ipairs(P.list) do if P.Project(d, m) then n = n + 1 end end
+    return n
+  end
+  -- the quest icons on the page are the ones QuestMap.lua builds for it; the route's pins those of the route on the map
+  for _, m in ipairs({ 1429, 1453 }) do
+    MP.Go(m, "user")
+    local want = {}
+    for _, d in ipairs(QM:Build(m, true)) do want[d.kind] = (want[d.kind] or 0) + 1 end
+    for _, k in ipairs({ "give", "turn", "obj" }) do
+      assert(count(QM.pageProvider, k) == (want[k] or 0), string.format("map %d: the page's %s icons: %d of %d", m, k, count(QM.pageProvider, k), want[k] or 0))
+    end
+    assert(count(P.pageProvider) == onMap(m) and onMap(m) > 0, "map " .. m .. ": the route's pins on it: " .. count(P.pageProvider))
+  end
+  -- the strokes, on a route of our own: stops 1, 2, 3 and 5 on Elwynn, 4 on Westfall (off this map), and a pick-up
+  local route, rectOnMap = P.list, env.C_Map.GetMapRectOnMap
+  env.C_Map.GetMapRectOnMap = function(a, b) if a == 1436 then return nil end return rectOnMap(a, b) end
+  local function stop(m, x, y, num, name) return { m = m, x = x, y = y, num = num, name = name, ids = {}, lines = {} } end
+  P.list = { stop(1429, 20, 20, 1, "One"), stop(1429, 60, 30, 2, "Two"), stop(1429, 40, 70, 3, "Three"), stop(1436, 50, 50, 4, "Four"),
+             stop(1429, 80, 80, 5, "Five"), stop(1429, 10, 90, nil, "A giver") }
+  -- you stand at 0.5, 0.3 of Elwynn (the client's world yards for it)
+  c.mapRects = { [1429] = { c = 0, x = -8530, y = 980, size = 1000 } }
+  MP.Go(1429, "user")
+  local strokes = MP.lines.active[1]
+  local function shown()
+    local out = {}
+    for _, l in ipairs(strokes and strokes.ctx.lines or {}) do if l.__shown then out[#out + 1] = l end end
+    return out
+  end
+  local drawn = shown()
+  local w, h = strokes:GetWidth(), strokes:GetHeight()
+  assert(count(P.pageProvider) == 5 and #MP.lines.active == 1 and #drawn == 3, "you to 1, 1 to 2, 2 to 3; 3 and 5 lie beside a stop off the map: " .. #drawn)
+  assert(w == canvas:GetCanvas():GetWidth() and h == canvas:GetCanvas():GetHeight(), "the strokes' frame covers the map")
+  local first = drawn[1]
+  local gold, blue = QB.Mini.GOLD, QB.Mini.BLUE
+  assert(first.__start[2] == strokes and first.__start[3] == 0 and math.abs(first.__start[4] - 0.2 * h) < 1e-6 and first.__vertex[1] == gold[1]
+    and drawn[2].__vertex[1] == blue[1] and drawn[3].__vertex[3] == blue[3], "from you (gold), then stop to stop (blue)")
+  assert(first.__thick == 5 and first.__layer == "OVERLAY" and first.__tex == "Interface\\AddOns\\QuestBank\\art\\line_arrow.png", "5 pixels of line_arrow.png")
+  -- zoomed in to twice the size: still 5 pixels on screen
+  local scaleOf = canvas.GetCanvasScale
+  canvas.GetCanvasScale = function() return 2 end
+  MP.lines:OnCanvasScaleChanged()
+  assert(first.__thick == 2.5, "zoomed in: thinner on the canvas, the same on screen: " .. tostring(first.__thick))
+  canvas.GetCanvasScale = scaleOf
+  MP.lines:OnCanvasScaleChanged()
+  -- you walk on: the stroke from you follows at the next look; off the map, it goes
+  local world = owner.o.world
+  owner.o.world = { 0, -8830, 580 }
+  MP.Tick(1)
+  assert(math.abs(first.__start[3] - (-0.1 * w)) < 1e-6 and #shown() == 3, "the stroke from you moved with you")
+  c.noPos = true
+  MP.Tick(1)
+  assert(#shown() == 2 and not first.__shown or shown()[1] ~= first or #shown() == 2, "nowhere on the map: no stroke from you")
+  assert(#shown() == 2, "nowhere on the map: no stroke from you: " .. #shown())
+  c.noPos, owner.o.world = nil, world
+  MP.Tick(1)
+  assert(#shown() == 3, "back")
+  -- the route's switch: its pins, strokes and step go, and the switch greys
+  local function toggle(key) for _, b in ipairs(f.toggles) do if b.t.key == key then return b end end end
+  local rt = toggle("mapRoute")
+  assert(rt.count:GetText() == "5" and rt.num:GetText() == "1" and rt.icon.__atlas == "UI-QuestPoi-QuestNumber" and not rt.icon.__desat, "the route's switch: 5 pins here")
+  lines = {}
+  rt.__scripts.OnEnter(rt)
+  assert(lines[1] == "Route" and lines[2]:find("Click: hide them", 1, true), "its tooltip: " .. table.concat(lines, " / "))
+  rt.__scripts.OnClick(rt)
+  assert(set.mapRoute == false and count(P.pageProvider) == 0 and #MP.lines.active == 0 and rt.icon.__desat and rt.__alpha == 0.4, "Route off")
+  assert(QM:Build(1429, true) and P.RouteOn(true) == (set.pins and true or false), "the world map's pins keep their own switch")
+  rt.__scripts.OnClick(rt)
+  assert(set.mapRoute == true and count(P.pageProvider) == 5 and #shown() == 3 and rt.__alpha == 1, "Route on")
+  -- the arrow's step, lit, where the arrow sends you first
+  local MiniStep = QB.Arrow.MiniStep
+  QB.Arrow.MiniStep = function() return { c = 0, wx = -8830, wy = 480, name = "Fly to Lakeshire", atlas = "flightmaster", icon = 1 } end
+  MP.Tick(1)
+  local st = MP.step.active[1]
+  assert(#MP.step.active == 1 and st.Icon.__atlas == "flightmaster" and math.abs(st.mapX - 0.5) < 1e-6 and math.abs(st.mapY - 0.3) < 1e-6
+    and st.glow and st.glow.__shown, "the arrow's step on the map, lit")
+  lines = {}
+  st.__scripts.OnEnter(st)
+  assert(lines[1] == "Fly to Lakeshire", "its tooltip")
+  QB.Arrow.MiniStep = MiniStep
+  MP.Tick(1)
+  assert(#MP.step.active == 0, "no step: none")
+  P.list, env.C_Map.GetMapRectOnMap, c.mapRects = route, rectOnMap, nil
+  P:Update()
+  -- the flight paths: QuestBank's flight masters while the client lists none (Stormwind's on Stormwind City), else the
+  -- game's own, with their art, and the other faction's left out
+  MP.Go(1453, "user")
+  assert(#MP.flight.active == 1 and MP.flight.active[1].data.name == "Stormwind" and toggle("mapFlights").count:GetText() == "1", "Stormwind's flight master")
+  local nodesFor = env.C_TaxiMap.GetTaxiNodesForMap
+  env.C_TaxiMap.GetTaxiNodesForMap = function()
+    return { { name = "Ours", faction = 0, isUndiscovered = false, atlasName = "TaxiNode_Neutral", position = env.CreateVector2D(0.3, 0.3) },
+             { name = "Theirs", faction = 1, isUndiscovered = false, atlasName = "TaxiNode_Horde", position = env.CreateVector2D(0.4, 0.3) },
+             { name = "Not found", faction = 2, isUndiscovered = true, position = env.CreateVector2D(0.5, 0.3) } }
+  end
+  MP.RefreshLayers()
+  local fl = MP.flight.active
+  assert(#fl == 2 and fl[1].Icon.__atlas == "TaxiNode_Neutral" and fl[2].Icon.__atlas == "taxinode_undiscovered" and not fl[2].data.known, "the game's flight points, ours")
+  lines = {}
+  fl[2].__scripts.OnEnter(fl[2])
+  assert(lines[1] == "Not found" and lines[2] == "Flight path, not found yet", "a flight point's tooltip")
+  local SetWaypoint, way = QB.API.SetWaypoint, nil
+  QB.API.SetWaypoint = function(...) way = { ... } end
+  fl[1]:OnMouseClickAction("LeftButton")
+  assert(way and way[1] == 1453 and math.abs(way[2] - 30) < 1e-6 and way[4] == "Ours", "a click: a waypoint there")
+  QB.API.SetWaypoint = SetWaypoint
+  toggle("mapFlights").__scripts.OnClick(toggle("mapFlights"))
+  assert(set.mapFlights == false and #MP.flight.active == 0, "Flight paths off")
+  toggle("mapFlights").__scripts.OnClick(toggle("mapFlights"))
+  env.C_TaxiMap.GetTaxiNodesForMap = nodesFor
+  -- the dungeons: Westfall's entrance with its count on the page too, and their switch (the world map's as well)
+  MP.Go(1436, "user")
+  local function deadmines()
+    for _, fr in ipairs(QM.pageProvider.active) do if fr.data.kind == "dungeon" and fr.data.cat.key == "d1581" then return fr end end
+  end
+  local p = QB.DMap.Progress().d1581
+  assert(deadmines() and deadmines().Count:GetText() == p.done .. "/" .. p.total and toggle("mapDungeons").count:GetText() == tostring(#QM.Entrances(1436)), "the Deadmines' entrance on the page")
+  toggle("mapDungeons").__scripts.OnClick(toggle("mapDungeons"))
+  local dungeonsWorld = 0
+  for _, d in ipairs(QM:Build(1436)) do if d.kind == "dungeon" then dungeonsWorld = dungeonsWorld + 1 end end
+  assert(set.mapDungeons == false and not deadmines() and dungeonsWorld == 0, "Dungeons off, here and on the world map")
+  toggle("mapDungeons").__scripts.OnClick(toggle("mapDungeons"))
+  assert(deadmines(), "and on")
+  -- the icons' switches are QuestMap.lua's: with all its icons off, one switched on comes on alone
+  set.mapIcons = false
+  MP.Update()
+  assert(toggle("mapGive").__alpha == 0.4 and toggle("mapTurn").__alpha == 0.4 and toggle("mapRoute").__alpha == 1, "the icons off: their switches grey")
+  toggle("mapGive").__scripts.OnClick(toggle("mapGive"))
+  assert(set.mapIcons and set.mapGive and not set.mapTurn and not set.mapObj and not set.mapDungeons and count(QM.pageProvider, "give") > 0
+    and count(QM.pageProvider, "turn") == 0, "To pick up on: the !s alone")
+  set.mapTurn, set.mapObj, set.mapDungeons = true, true, true
+  MP.RefreshLayers()
+  MP.Go(1429, "user")
+end
+
+-- 5.5: the Map page's quest panel: the zone's quests ready to hand in, in your log and to pick up, a row each with its
+-- XP; hovered, its pins light and the game's quest blob shows its areas; clicked, the map goes to it; Ctrl-click or
+-- the box picks several to pick up at once; an icon clicked on the map shows its row
+do
+  local MP, QM, P, U, env = QB.MapPage, QB.QuestMap, QB.Pins, QB.UI, owner.env
+  c = owner
+  local canvas = MP.canvas
+  U:Open(8)
+  MP.Go(1429, "user")
+  local f = MP.frame
+  local ready, log, pickup = QM.ZoneQuests(1429)
+  assert(f.heads.ready.count:GetText() == tostring(#ready) and f.heads.log.count:GetText() == tostring(#log) and f.heads.pickup.count:GetText() == tostring(#pickup),
+    "the sections' counts are the zone's quests")
+  local rows = {}
+  for _, r in ipairs(f.rows) do if r:IsShown() then rows[#rows + 1] = r end end
+  assert(#rows == #ready + #log + #pickup, "a row each")
+  for _, r in ipairs(rows) do
+    assert(r.xp:GetText() == QB.Short(QB:Value(r.it.q.id)) and r.name:GetText():sub(1, 3) == r.it.q.name:sub(1, 3), "a row's XP: " .. r.xp:GetText())
+  end
+  -- hovered: the game's blob shows the quest's areas, its pins light; left: both go
+  local r = rows[1]
+  local id = r.it.q.id
+  local function lastCall(name)
+    for i = #canvas.__calls, 1, -1 do local k = canvas.__calls[i]; if k[1] == name or k[2] == name then return k end end
+  end
+  local function lit()
+    local n = 0
+    for _, layer in ipairs({ QM.pageProvider, P.pageProvider }) do
+      for _, fr in ipairs(layer.active) do if fr.glow and fr.glow.__shown then n = n + 1 end end
+    end
+    return n
+  end
+  lines = {}
+  r.__scripts.OnEnter(r)
+  local ev = canvas.__calls[#canvas.__calls]
+  assert(ev[1] == "TriggerEvent" and ev[2] == "SetHighlightedQuestID" and ev[3] == id and MP.hover == id and lit() > 0, "hovered: its areas and its pins, lit")
+  assert(lines[1] == r.it.q.name and table.concat(lines, "\n"):find("Click: show it on the map", 1, true), "its tooltip")
+  r.__scripts.OnLeave(r)
+  assert(canvas.__calls[#canvas.__calls][2] == "ClearHighlightedQuestID" and not MP.hover and lit() == 0, "left: no light")
+  -- clicked: the map goes to the quest, the game's blob holds it, its row is washed blue; again: let go
+  r.__scripts.OnClick(r, "LeftButton")
+  local pan = canvas.__calls[#canvas.__calls - 1]
+  assert((pan[1] == "PanTo" or pan[1] == "PanAndZoomTo") and pan[2] >= 0 and pan[2] <= 1 and canvas.__calls[#canvas.__calls][2] == "SetFocusedQuestID"
+    and canvas.__calls[#canvas.__calls][3] == id and MP.focus == id and r.wash:IsShown() and lit() > 0, "clicked: the map goes to it: " .. pan[1])
+  local pts = MP.Points(id, 1429)
+  assert(#pts > 0 and pan[2] == pts[1][1] and pan[3] == pts[1][2] and (#pts > 1 or pan[1] == "PanAndZoomTo"), "to its place, zoomed in on one place")
+  r.__scripts.OnClick(r, "LeftButton")
+  assert(canvas.__calls[#canvas.__calls][2] == "ClearFocusedQuestID" and not MP.focus and not r.wash:IsShown() and lit() == 0, "clicked again: let go")
+  -- right-click: QuestBank's menu for it
+  local QuestMenu, menu = U.QuestMenu, nil
+  U.QuestMenu = function(q) menu = q end
+  r.__scripts.OnClick(r, "RightButton")
+  U.QuestMenu = QuestMenu
+  assert(menu == r.it.q and not MP.focus, "right-click: its menu")
+  -- Westfall's quests to pick up: two ticked (the box, a Ctrl-click), then picked up at once from the bar
+  MP.Go(1436, "user")
+  local picks = {}
+  for _, row in ipairs(f.rows) do
+    if row:IsShown() and row.pick and not QB:IsAdded(row.it.q.id) and #picks < 2 then picks[#picks + 1] = row end
+  end
+  assert(#picks == 2 and not f.bar:IsShown(), "two quests to pick up in Westfall")
+  picks[1].__scripts.OnEnter(picks[1])
+  assert(picks[1].sel:IsShown() and not picks[1].sel.check:IsShown(), "hovered: its box")
+  picks[1].sel.__scripts.OnClick(picks[1].sel)
+  picks[1].__scripts.OnLeave(picks[1])
+  c.ctrl = true
+  picks[2].__scripts.OnClick(picks[2], "LeftButton")
+  c.ctrl = false
+  local a, b = picks[1].it.q.id, picks[2].it.q.id
+  assert(MP.sel[a] and MP.sel[b] and f.bar:IsShown() and f.bar.pick:GetText() == "Pick up all 2" and picks[1].sel:IsShown() and picks[1].sel.check:IsShown()
+    and picks[1].wash:IsShown() and not MP.focus, "two ticked: the bar")
+  local problems = checkLayout(U.frame, "Map, two quests ticked")
+  assert(#problems == 0, table.concat(problems, "\n"))
+  f.bar.pick.__scripts.OnClick(f.bar.pick)
+  assert(QB:IsAdded(a) and QB:IsAdded(b) and not next(MP.sel) and not f.bar:IsShown(), "Pick up all: both on your pick-up list")
+  QB:SetAdded(a, false); QB:SetAdded(b, false)
+  -- "+ all": every quest to pick up here
+  local all = f.heads.pickup.all
+  assert(all:IsShown() and #all.ids == #select(3, QM.ZoneQuests(1436)), "+ all: all of them")
+  all.__scripts.OnClick(all)
+  for _, qid in ipairs(all.ids) do assert(QB:IsAdded(qid), "+ all: on the list") end
+  for _, qid in ipairs(all.ids) do QB:SetAdded(qid, false) end
+  -- a section folds, and opens again
+  local head = f.heads.pickup
+  head.__scripts.OnClick(head)
+  local n = 0
+  for _, row in ipairs(f.rows) do if row:IsShown() and row.pick then n = n + 1 end end
+  assert(n == 0 and head.count:GetText() == tostring(#all.ids) and head.caret.__atlas == "campaign_headericon_closed", "folded")
+  -- a ! clicked on the map: its row, its section opened again, scrolled into view and lit for a moment
+  local give
+  for _, fr in ipairs(QM.pageProvider.active) do if fr.data.kind == "give" then give = fr end end
+  local SetWaypoint = QB.API.SetWaypoint
+  QB.API.SetWaypoint = function() end
+  give:OnMouseClickAction("LeftButton")
+  QB.API.SetWaypoint = SetWaypoint
+  local shown = MP.flashing
+  local inQuests = false
+  for _, q in ipairs(give.data.quests) do if shown and shown.it.q.id == q.id then inQuests = true end end
+  assert(shown and inQuests and shown.flash:IsShown() and not MP.fold.pickup and head.caret.__atlas == "campaign_headericon_open", "a ! clicked: its row lit")
+  local top = shown.top - (f.list.bar:GetValue() or 0)
+  assert(top >= 0 and top + 28 <= f.list.viewH, "and in view")
+  MP.Tick(2)
+  assert(not shown.flash:IsShown() and not MP.flashing, "the light fades")
+  -- a zone with none of your quests, and a continent
+  local empty
+  for m in pairs(QB.Data.MAPNAME) do
+    local r1, l1, p1 = QM.ZoneQuests(m)
+    if not empty and #r1 + #l1 + #p1 == 0 and QM.Draws(m) then empty = m end
+  end
+  MP.Go(empty, "user")
+  assert(f.empty:IsShown() and f.empty:GetText() == "No quests here" and not f.heads.ready:IsShown(), "no quests here")
+  MP.Go(1415, "user")
+  assert(f.empty:GetText() == "Pick a zone", "a continent")
+  MP.Here()
+  U:ShowTab(1)
 end
 
 -- 5.5: a login in a fight: no canvas until it ends (Blizzard's providers would make their pins in combat). The page
@@ -3586,7 +3871,12 @@ for tab = 1, 8 do
     local l = v3.legs.items[2]
     if l then l.pin.__hover = true; hoverFirst(l.rows) end
   end
-  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Available", "Hand-in Route", "Party", "Settings", "Now", "Dungeon Journal", "Map" })[tab] .. " (one row hovered)")
+  -- the Map: its first quest row hovered, the way the mouse does it (its pins lit, the game's blob asked)
+  local mapRow = tab == 8 and QB.MapPage.frame.rows[1]
+  if mapRow then mapRow.__hover = true; mapRow.__scripts.OnEnter(mapRow) end
+  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log (one row hovered)", "Available (one row hovered)", "Hand-in Route (one row hovered)",
+    "Party (one row hovered)", "Settings (one row hovered)", "Now (one row hovered)", "Dungeon Journal (one row hovered)", "Map (one quest row hovered)" })[tab])
+  if mapRow then mapRow.__scripts.OnLeave(mapRow) end
   unhover()
 end
 

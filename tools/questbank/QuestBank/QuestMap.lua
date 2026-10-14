@@ -394,7 +394,17 @@ local also = setmetatable({}, { __mode = "k" })
 -- map percent: another NPC this close to a route pin, or to an NPC with an icon, would have its icon right under it
 local UNDER = 0.2
 
-function QM:Build(m)
+-- the dungeons whose entrance is on map m (the Map page's strip counts them too)
+function QM.Entrances(m)
+  local out = {}
+  for _, c in ipairs(D.CAT) do
+    if c.dungeon and c.entrance and c.entrance.m == m then out[#out + 1] = c end
+  end
+  return out
+end
+
+-- page: for QuestBank's map page, where the route shows by the page's own switch (Pins.lua, P.RouteOn)
+function QM:Build(m, page)
   local list = {}
   for r in pairs(also) do if r.m == m then also[r] = nil end end
   if not (on() and QM.Draws(m)) then return list end
@@ -406,7 +416,7 @@ function QM:Build(m)
   -- most) gets no icon of its own: what the pin doesn't list already goes on its tooltip. So does a quest of another
   -- NPC at the very same spot, whose icon would lie under the pin; an NPC a little way off keeps its own icon.
   local route = {}
-  if set.pins and QB.Pins then
+  if QB.Pins and QB.Pins.RouteOn(not page) then
     for _, r in ipairs(QB.Pins.list or {}) do if r.m == m then route[#route + 1] = r end end
   end
   local function routeOn(n)
@@ -497,9 +507,9 @@ function QM:Build(m)
     list[#list + 1] = d
   end
   -- the dungeons whose entrance is on this map; hovered, how many of their quests you have done (as Questie shows it)
-  for _, c in ipairs(D.CAT) do
+  for _, c in ipairs(set.mapDungeons ~= false and QM.Entrances(m) or {}) do
     local e = c.entrance
-    if c.dungeon and e and e.m == m and #list < MAX_PINS then
+    if #list < MAX_PINS then
       list[#list + 1] = { kind = "dungeon", art = { atlas = ART.dungeon.atlas, file = c.icon or ART.dungeon.file, size = ART.dungeon.size }, level = "PIN_FRAME_LEVEL_INVASION", m = m, x = e.x / 100, y = e.y / 100, title = c.name .. " entrance", cat = c }
     end
   end
@@ -599,7 +609,7 @@ function QM.ZoneQuests(m)
 end
 
 function QM:Draw(layer, m)
-  for _, d in ipairs(self:Build(m)) do
+  for _, d in ipairs(self:Build(m, not layer.world)) do
     if d.kind == "area" then layer:Add(QM.AREA, d, d.x, d.y) else layer:Add(QM.ICON, d, d.x, d.y, d.level) end
   end
 end
@@ -826,7 +836,11 @@ end, "map icon tooltip")
 
 function Icon:OnMouseLeave() GameTooltip:Hide() end
 
-function Icon:OnMouseClickAction(button) QB.Try("map icon click", click, self.data, button) end
+function Icon:OnMouseClickAction(button)
+  QB.Try("map icon click", click, self.data, button)
+  -- on QuestBank's map page, the list beside the map shows the quests' rows too
+  if button ~= "RightButton" and self.data and not self.layer.world and QB.MapPage then QB.MapPage.Reveal(idsOf(self.data)) end
+end
 
 local Area = {}
 

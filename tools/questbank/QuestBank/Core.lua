@@ -1097,6 +1097,9 @@ local DEFAULTS = {
   -- start (!), where finished ones are handed in (?), and the objectives and quest-item drops of the quests in your log
   mapIcons = true, mapGive = true, mapTurn = true, mapObj = true,
   mapPage = true, -- the Map key and the sidebar open QuestBank's own map page (MapPage.lua), not the game's map
+  -- the Map page's switches beyond those: the dungeons' entrances (on the world map too), and on the page the route (its
+  -- pins, strokes and the arrow's step) and the flight paths
+  mapDungeons = true, mapRoute = true, mapFlights = true,
   -- the kinds the Dungeon Journal lists and pins (DungeonMap.lua): "other" is chests and events
   djShow = { boss = true, rare = true, trash = false, other = true },
 }

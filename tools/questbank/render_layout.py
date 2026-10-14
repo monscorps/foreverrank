@@ -3,7 +3,7 @@
 frames as boxes, text at its size and colour, the game's icons from the icon CDN by name, other art as tinted
 placeholders labelled with what they are. A look at what QuestBank really draws, without the game.
   python3 render_layout.py layout.json out.html"""
-import html, json, os, sys
+import html, json, math, os, sys
 MAN = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "research", "questbank", "manifest.json")))
 BY_ID = {int(v): k for k, v in MAN.items()}
 
@@ -32,6 +32,12 @@ ATLAS_SVG = {
     "campaign_headericon_open": _svg(_RING + "<path d='M7.5 12h9' stroke='#f2d27a' stroke-width='2.4' stroke-linecap='round'/>"),
     "checkbox-minimal": _svg("<rect x='2.5' y='2.5' width='19' height='19' rx='3' fill='#0d0f12' stroke='#9a9488' stroke-width='1.6'/>"),
     "checkmark-minimal": _svg("<path d='M6 12.5l4 4 8-9' fill='none' stroke='#ffd24a' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/>"),
+    # the numbered quest marker (its number is a font string over it; gold for the next one), the flight path's green
+    # ring, the grey-gold ? of a quest in your log
+    "ui-questpoi-questnumber": _svg("<circle cx='12' cy='12' r='9.5' fill='#20160a' stroke='#d9b04a' stroke-width='2.2'/>"),
+    "ui-questpoi-questnumber-supertracked": _svg("<circle cx='12' cy='12' r='9.5' fill='#c99a2e' stroke='#3a2608' stroke-width='2.2'/>"),
+    "flightpath": _svg("<circle cx='12' cy='12' r='8.5' fill='#1d5a1d' stroke='#7fe07f' stroke-width='2.2'/><path d='M6 13l6-5 6 5' fill='none' stroke='#e8ffe8' stroke-width='2' stroke-linecap='round'/>"),
+    "quest-in-progress-icon-yellow": _svg("<text x='12' y='20' text-anchor='middle' font-family='Georgia' font-weight='bold' font-size='20' fill='#b8a35a' stroke='#000' stroke-width='1'>?</text>"),
 }
 
 LOCAL_TEX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "research", "qbrender", "tex")
@@ -98,6 +104,14 @@ def render(layout):
             ct, cb = max(0, clip["y"] - y), max(0, (y + h) - (clip["y"] + clip["h"]))
             cl, cr = max(0, clip["x"] - x), max(0, (x + w) - (clip["x"] + clip["w"]))
             if ct or cb or cl or cr: base += "clip-path:inset(%dpx %dpx %dpx %dpx);" % (ct, cr, cb, cl)
+        if it["k"] == "Line":
+            # a stroke of line_arrow.png: a light core in its colour between dark edges, turned from its start
+            dx, dy = it["x2"] - it["x1"], it["y2"] - it["y1"]
+            th, col = it.get("thick") or 2, rgba(it.get("c") or (1, 0.84, 0.18), 1)
+            out.append('<div style="left:%.1fpx;top:%.1fpx;width:%.1fpx;height:%.1fpx;opacity:%.2f;transform-origin:0 50%%;transform:rotate(%.4frad);'
+                       'background:linear-gradient(rgba(0,0,0,.75),%s 30%%,%s 70%%,rgba(0,0,0,.75));border-radius:%.1fpx"></div>'
+                       % (it["x1"], it["y1"] - th / 2, math.hypot(dx, dy), th, a, math.atan2(dy, dx), col, col, th / 2))
+            continue
         if it["k"] == "FontString":
             c = rgba(it.get("c") or (0.93, 0.88, 0.78), 1)
             size = it.get("size") or 12
