@@ -1090,6 +1090,8 @@ local DEFAULTS = {
   -- quest icons on each zone's world map (QuestMap.lua, Forever only): all of them, then where quests you can take
   -- start (!), where finished ones are handed in (?), and the objectives and quest-item drops of the quests in your log
   mapIcons = true, mapGive = true, mapTurn = true, mapObj = true,
+  -- the kinds the Dungeon Journal lists and pins (DungeonMap.lua): "other" is chests and events
+  djShow = { boss = true, rare = true, trash = false, other = true },
 }
 
 function QB:Settings()

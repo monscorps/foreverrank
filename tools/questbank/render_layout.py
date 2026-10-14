@@ -118,6 +118,9 @@ def render(layout):
                 st = "background:#0b1119;border:1px solid #6a5a3a;border-radius:2px;"
             if it.get("tpl") == "UIPanelCloseButton":
                 st = "background:#5a1a10;border-radius:3px;"
+            # a live 3D model (the journal's loot face): a shaded bust where the creature would stand
+            if it["k"] == "PlayerModel":
+                st = "background:radial-gradient(circle at 50% 38%,#8a7660 0,#4a3a2a 45%,transparent 70%);"
             if st:
                 txt = html.escape(it.get("text") or "")
                 out.append('<div class="f" style="%s%s">%s</div>' % (base, st, ('<span>%s</span>' % txt) if txt else ""))

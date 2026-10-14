@@ -1,9 +1,10 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The Dungeon Journal: every dungeon with the Encounter Journal's own cover art, which the client still ships; its
--- bosses with the journal's portraits where it had them and the loot players and the site have recorded, by item id
--- (the client names, colours and slots the items); the floor art of the dungeon; its quests and where you stand with
--- each; a waypoint on the entrance. /qb map opens it, /qb map <name> on a dungeon, and the Map button on a dungeon's
--- card on the Party page. Inside an instance the game hides where you are, so the map is a map, not a tracker.
+-- bosses, rares, trash and chests (chips show or hide each kind), each with a face, and the loot players and the site
+-- have recorded, by item id (the client names, colours and slots the items); the floor art of the dungeon; its quests
+-- and where you stand with each; a waypoint on the entrance. /qb map opens it, /qb map <name> on a dungeon, and the
+-- Map button on a dungeon's card on the Party page. Inside an instance the game hides where you are, so the map is a
+-- map, not a tracker.
 local _, QB = ...
 local DM = {}
 QB.DMap = DM
@@ -126,6 +127,38 @@ function DM.Matches(cat, text)
   return false
 end
 
+-- what an entry is: its chip ("boss", "rare", "trash", or "other" for chests and events) and its word
+function DM.Kind(b)
+  return (b.k == "boss" or b.k == "rare" or b.k == "trash") and b.k or "other"
+end
+local WORD = { boss = "Boss", rare = "Rare", trash = "Trash", quest = "Event" }
+function DM.KindLabel(b) return WORD[b.k] or "Chest" end
+
+-- the entries the chips let through (djShow), in the list's order: each wing together, the wings as the loot file has
+-- them; in a wing the bosses in the game's encounter order (b.o; one the client does not know keeps its place after
+-- the entry before it in the loot file), then rares, trash and the rest, each in the loot file's order
+local RANK = { boss = 1, rare = 2, trash = 3, other = 4 }
+function DM.Visible(d)
+  local show = QB:Settings().djShow
+  local keys, wing, o = {}, {}, -1
+  for i, b in ipairs(d and d.bosses or {}) do
+    o = b.o or o
+    local w = b.w or ""
+    wing[w] = wing[w] or i
+    local kind = DM.Kind(b)
+    if show[kind] ~= false then keys[#keys + 1] = { b = b, w = wing[w], k = RANK[kind], o = kind == "boss" and o or 0, i = i } end
+  end
+  table.sort(keys, function(x, y)
+    if x.w ~= y.w then return x.w < y.w end
+    if x.k ~= y.k then return x.k < y.k end
+    if x.o ~= y.o then return x.o < y.o end
+    return x.i < y.i
+  end)
+  local out = {}
+  for n, e in ipairs(keys) do out[n] = e.b end
+  return out
+end
+
 ----------------------------------------------------------------------------
 -- the frame
 ----------------------------------------------------------------------------
@@ -155,6 +188,11 @@ local function levelText(l)
   return tostring(l)
 end
 DM.LevelText = levelText
+
+-- an entry's line under its name: its kind, level and wing
+local function about(b)
+  return DM.KindLabel(b) .. (b.l and (", level " .. levelText(b.l)) or "") .. (b.w and (", " .. b.w) or "")
+end
 
 -- a list that scrolls: the wheel, and a slim knob beside it while it runs past the bottom. viewH: the height it shows
 -- (known from the page's size, so it holds before the game has laid the frame out)
@@ -214,6 +252,69 @@ local function pill(parent, label, w)
     self.text:SetTextColor(on and 1 or INK[1], on and 0.9 or INK[2], on and 0.6 or INK[3])
   end
   return b
+end
+
+----------------------------------------------------------------------------
+-- faces
+----------------------------------------------------------------------------
+-- each kind's icon, the game's own: the boss skull (grey for trash), the nameplates' elite dragon, a chest, the
+-- quest-giver's "!" for an event. A file icon loses its rim; an atlas keeps its own part of its file
+local ICON = {
+  boss = { file = 137025 }, trash = { file = 137025, grey = true }, chest = { file = 132594 },
+  rare = { atlas = "nameplates-icon-elite-silver", file = 237678 }, event = { atlas = "QuestNormal", file = QB.Data.TEX.questAvail },
+}
+local function kindIcon(t, key)
+  local i = ICON[key]
+  if not QB.Art(t, i.atlas, i.file) then t:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+  t:SetDesaturated(i.grey or false)
+  local v = i.grey and 0.8 or 1
+  t:SetVertexColor(v, v, v)
+end
+
+-- the textures showing a portrait drawn from a display id, and whose: the client fills such a portrait in once the
+-- model has loaded, often after the call, and says so with PORTRAITS_UPDATED (DM.RedrawFaces)
+local faced = {}
+
+-- an entry's face, the first of these the client can draw: the old Encounter Journal's art (b.p, a 128 x 64 picture
+-- whose middle is the face; a file, never blank), the portrait of its model (b.d), an achievement's boss icon (b.a),
+-- its kind's icon, and for a boss the journal's default face. Says which: "p", "d", "a", "kind" or "default"
+function DM.Face(t, b, d)
+  t:SetDesaturated(false)
+  t:SetVertexColor(1, 1, 1)
+  local drew
+  if b.p then
+    t:SetTexture(b.p); t:SetTexCoord(0.2, 0.8, 0.02, 0.98); drew = "p"
+  elseif b.d and SetPortraitTextureFromCreatureDisplayID and pcall(SetPortraitTextureFromCreatureDisplayID, t, b.d) then
+    t:SetTexCoord(0, 1, 0, 1); drew = "d"
+  elseif b.a then
+    t:SetTexture(b.a); t:SetTexCoord(0.08, 0.92, 0.08, 0.92); drew = "a"
+  elseif DM.Kind(b) == "boss" then
+    t:SetTexture(d and d.defaultFace or nil); t:SetTexCoord(0.2, 0.8, 0.02, 0.98); drew = "default"
+  else
+    kindIcon(t, DM.KindLabel(b):lower()); drew = "kind"
+  end
+  faced[t] = drew == "d" and b or nil
+  return drew
+end
+
+-- the portraits drawn again (rows, pins and the loot face), while the page shows. How many
+function DM.RedrawFaces()
+  if not (frame and frame:IsVisible()) then return 0 end
+  local n = 0
+  for t, b in pairs(faced) do DM.Face(t, b, frame.data); n = n + 1 end
+  return n
+end
+-- PORTRAITS_UPDATED comes in bursts: one redraw 0.2 s after the first
+local redrawing = false
+local function redrawSoon()
+  if redrawing then return end
+  redrawing = true
+  C_Timer.After(0.2, QB.Safe(function() redrawing = false; DM.RedrawFaces() end, "dungeon journal"))
+end
+-- and in case it never comes: a second and three seconds after the page shows or a dungeon opens
+local function redrawLater()
+  C_Timer.After(1, QB.Safe(DM.RedrawFaces, "dungeon journal"))
+  C_Timer.After(3, QB.Safe(DM.RedrawFaces, "dungeon journal"))
 end
 
 local function build(page, pw, ph)
@@ -310,9 +411,6 @@ local function build(page, pw, ph)
     end
   end
   f.pins = {}
-  f.noArt = fs(f.map, "GameFontNormal", 13, SOFT, math.min(400, 1002 * SCALE - 20), "CENTER")
-  f.noArt:SetPoint("CENTER")
-  f.noArt:SetText("The client has no map art for this dungeon.")
   f.floors = {}
   f.entrance = pill(f.mapTab, "Waypoint: entrance", 150)
   f.entrance:SetPoint("BOTTOMLEFT", 8, 8)
@@ -338,13 +436,40 @@ local function build(page, pw, ph)
   f.bossTab = CreateFrame("Frame", nil, f.body); f.bossTab:SetAllPoints()
   f.bossList = panel(f.bossTab, 0.5)
   f.bossList:SetPoint("TOPLEFT", 0, 0); f.bossList:SetPoint("BOTTOMLEFT", 0, 0); f.bossList:SetWidth(BOSS_W)
-  f.bossHead = fs(f.bossList, "GameFontNormal", 12, GOLD, BOSS_W - 20)
-  f.bossHead:SetPoint("TOPLEFT", 10, -8)
-  f.bossHead:SetText("Bosses")
-  -- the bosses scroll under the heading (Blackrock Depths has 39), as the loot does under the boss
+  -- the chips over the list, each a kind's icon and its count (the word in the tooltip): a click shows or hides that
+  -- kind here and on the map, kept in djShow. Chests and events only where the dungeon has some (DM.FillBosses)
+  f.chips = {}
+  for i, c in ipairs({ { "boss", "Bosses", "boss" }, { "rare", "Rares", "rare" }, { "trash", "Trash", "trash" }, { "other", "Chests and events", "chest" } }) do
+    local b = pill(f.bossList, "", 48)
+    b:SetHeight(22)
+    b:SetPoint("TOPLEFT", 8 + (i - 1) * 50, -6)
+    b.kind, b.word = c[1], c[2]
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetSize(16, 16)
+    b.icon:SetPoint("LEFT", 6, 0)
+    kindIcon(b.icon, c[3])
+    b.text:ClearAllPoints(); b.text:SetPoint("LEFT", 25, 0); b.text:SetWidth(18); b.text:SetJustifyH("LEFT")
+    b:SetScript("OnClick", function(self)
+      local show = QB:Settings().djShow
+      show[self.kind] = show[self.kind] == false
+      DM.FillBosses(true); DM.DrawPins()
+    end)
+    b:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_TOP")
+      GameTooltip:SetText(self.word, GOLD[1], GOLD[2], GOLD[3])
+      GameTooltip:AddLine(QB:Settings().djShow[self.kind] == false and "Hidden. Click to show." or "Shown. Click to hide.", 1, 1, 1)
+      GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    f.chips[i] = b
+  end
+  f.bossEmpty = fs(f.bossList, "GameFontDisableSmall", 11, SOFT, BOSS_W - 24)
+  f.bossEmpty:SetPoint("TOPLEFT", 12, -38)
+  f.bossEmpty:SetText("All hidden by the filter")
+  -- the bosses scroll under the chips (Blackrock Depths has 39), as the loot does under the boss
   local bodyH = H - BODY_Y - 8
-  f.bossScroll = scroller(f.bossList, BOSS_H + 2, bodyH - 28 - 8)
-  f.bossScroll:SetPoint("TOPLEFT", 8, -28)
+  f.bossScroll = scroller(f.bossList, BOSS_H + 2, bodyH - 32 - 8)
+  f.bossScroll:SetPoint("TOPLEFT", 8, -32)
   f.bossScroll:SetPoint("BOTTOMRIGHT", -20, 8)
   f.bossRows = {}
   f.lootPanel = panel(f.bossTab, 0.5)
@@ -352,6 +477,18 @@ local function build(page, pw, ph)
   f.lootFace = f.lootPanel:CreateTexture(nil, "ARTWORK")
   f.lootFace:SetSize(64, 64)
   f.lootFace:SetPoint("TOPLEFT", 12, -10)
+  -- the face as a live model over the picture (ShowBoss), in the pins' gold ring, which sits on a frame of its own
+  -- above the model. The model is kept while the page is away: it is set once a boss
+  f.lootModel = CreateFrame("PlayerModel", nil, f.lootPanel)
+  f.lootModel:SetAllPoints(f.lootFace)
+  pcall(f.lootModel.SetKeepModelOnHide, f.lootModel, true)
+  f.lootRing = CreateFrame("Frame", nil, f.lootModel)
+  f.lootRing:SetSize(74, 74)
+  f.lootRing:SetPoint("CENTER")
+  local ring = f.lootRing:CreateTexture(nil, "OVERLAY")
+  ring:SetTexture(ART .. "ring")
+  ring:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 1)
+  ring:SetAllPoints()
   local lootW = detailW - 16 - BOSS_W - 8
   f.lootName = fs(f.lootPanel, "GameFontNormalLarge", 16, GOLD, lootW - 96)
   f.lootName:SetPoint("TOPLEFT", 86, -16)
@@ -373,8 +510,14 @@ local function build(page, pw, ph)
   f.questScroll:SetPoint("BOTTOMRIGHT", -18, 0)
   f.questRows = {}
 
-  f:SetScript("OnEvent", QB.Safe(function(_, event) if event == "GET_ITEM_INFO_RECEIVED" and f:IsShown() and f.boss then DM.ShowBoss(f.boss) end end, "dungeon journal"))
+  -- an item's name came in: the boss's loot again; a portrait was drawn: the faces again
+  f:SetScript("OnEvent", QB.Safe(function(_, event)
+    if event == "PORTRAITS_UPDATED" then redrawSoon()
+    elseif f:IsShown() and f.boss then DM.ShowBoss(f.boss) end
+  end, "dungeon journal"))
   pcall(f.RegisterEvent, f, "GET_ITEM_INFO_RECEIVED")
+  pcall(f.RegisterEvent, f, "PORTRAITS_UPDATED")
+  f:SetScript("OnShow", redrawLater)
   -- the rows' widths: each list's scroll frame, less the knob beside it
   f.lootW, f.bodyW = lootW, detailW - 16
   f.bossRowW, f.lootRowW, f.questRowW = BOSS_W - 8 - 20, lootW + 4 - 10 - 22, detailW - 16 + 4 - 10 - 18
@@ -456,24 +599,12 @@ function DM.ShowFloor(n)
   for i, t in ipairs(f.tiles) do
     if floor and floor[i] then t:SetTexture(floor[i]); t:Show() else t:Hide() end
   end
-  f.noArt:SetShown(not floor)
   for i, b in ipairs(f.floors) do b:SetEnabled(i ~= n); b:SetOn(i == n) end
   DM.DrawPins()
 end
 
--- a boss's face: the client's own portrait of its model where the boss has one (b.d), else the old Encounter
--- Journal's art (b.p, a 128 x 64 picture: the middle is the face), else the journal's default face
-local function face(t, b, d, preferArt)
-  if b.d and not (preferArt and b.p) and SetPortraitTextureFromCreatureDisplayID and pcall(SetPortraitTextureFromCreatureDisplayID, t, b.d) then
-    t:SetTexCoord(0, 1, 0, 1)
-    return
-  end
-  t:SetTexture(b.p or (d and d.defaultFace) or nil)
-  t:SetTexCoord(0.2, 0.8, 0.02, 0.98)
-end
-
--- the bosses on the shown floor, as the old Encounter Journal drew them: a round portrait in a gold ring where the
--- boss stands (boss_spots.py places them from the Classic database's spawns on the very same art). Click: the loot
+-- the entries on the shown floor, as the old Encounter Journal drew them: a round face in a ring where each stands
+-- (boss_spots.py places them from the Classic database's spawns on the very same art). Click: the loot
 local PIN = 30
 local function pin(i)
   local f = frame
@@ -492,7 +623,7 @@ local function pin(i)
   p.face:SetSize(PIN - 4, PIN - 4)
   p.mask = p.CreateMaskTexture and p:CreateMaskTexture() or nil
   if p.mask then
-    p.mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIONAL", "CLAMPTOBLACKADDITIONAL")
+    p.mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
     p.mask:SetAllPoints(p.face)
     pcall(p.face.AddMaskTexture, p.face, p.mask)
   end
@@ -508,8 +639,7 @@ local function pin(i)
     local b = self.boss
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText(b.n, GOLD[1], GOLD[2], GOLD[3])
-    local kind = b.k == "boss" and "Boss" or b.k == "rare" and "Rare" or "Trash"
-    GameTooltip:AddLine(kind .. (b.l and (" \194\183 level " .. levelText(b.l)) or "") .. (b.w and (" \194\183 " .. b.w) or ""), 1, 1, 1)
+    GameTooltip:AddLine(about(b), 1, 1, 1)
     GameTooltip:AddLine(#b.i > 0 and string.format("%d item%s of loot. Click to see them.", #b.i, #b.i == 1 and "" or "s") or "No loot recorded yet.", 0.6, 0.6, 0.6)
     GameTooltip:Show()
   end)
@@ -524,17 +654,19 @@ function DM.DrawPins()
   local d, n = f.data, 0
   local mw, mh = f.map:GetWidth(), f.map:GetHeight()
   local at = {}
-  for _, b in ipairs(d and d.bosses or {}) do
-    if b.f == f.floor and b.x and b.y and b.k ~= "trash" then
+  for _, b in ipairs(DM.Visible(d)) do
+    if b.f == f.floor and b.x and b.y then
       n = n + 1
       local p = pin(n)
       p.boss = b
-      face(p.face, b, d)
-      local big = b.k == "boss"
-      p.size = big and PIN or PIN - 8
+      DM.Face(p.face, b, d)
+      -- a boss in a big gold ring, trash in a small grey one, the rest silver between
+      local kind = DM.Kind(b)
+      p.size = kind == "boss" and PIN or kind == "trash" and PIN - 12 or PIN - 8
       p:SetSize(p.size, p.size)
       p.face:SetSize(p.size - 4, p.size - 4)
-      p.ring:SetVertexColor(big and 1 or 0.75, big and 0.82 or 0.75, big and 0.3 or 0.75, 1)
+      local v = kind == "trash" and 0.55 or 0.75
+      if kind == "boss" then p.ring:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 1) else p.ring:SetVertexColor(v, v, v, 1) end
       at[n] = { b.x * mw, b.y * mh, p.size }
       p:Show()
     end
@@ -563,7 +695,7 @@ function DM.DrawPins()
     p:ClearAllPoints()
     p:SetPoint("CENTER", f.map, "TOPLEFT", math.max(a[3] / 2, math.min(mw - a[3] / 2, a[1])), -math.max(a[3] / 2, math.min(mh - a[3] / 2, a[2])))
   end
-  for i = n + 1, #f.pins do f.pins[i]:Hide() end
+  for i = n + 1, #f.pins do f.pins[i]:Hide(); faced[f.pins[i].face] = nil end
   f.pinCount = n
 end
 
@@ -604,9 +736,18 @@ function DM.ShowBoss(b)
   f.boss = b
   if b.f and b.f ~= f.floor and f.data and f.data.floors[b.f] then DM.ShowFloor(b.f) end
   for _, r in ipairs(f.bossRows) do if r.hi then r.hi:SetAlpha(r.boss == b and 1 or 0) end end
-  face(f.lootFace, b, f.data, true)
+  DM.Face(f.lootFace, b, f.data)
+  -- the face as a live model where there is one (b.d, else the creature b.c, which the server may not have sent: the
+  -- picture stays under it); it draws itself once loaded. Set once a boss, not again as item names come in
+  if not same then
+    local m, live = f.lootModel, b.d or b.c
+    m:SetShown(live ~= nil)
+    if b.d then pcall(m.SetDisplayInfo, m, b.d) elseif b.c then pcall(m.SetCreature, m, b.c) else pcall(m.ClearModel, m) end
+    if live then pcall(m.SetPortraitZoom, m, 0.6) end
+  end
+  f.lootFace:SetShown(not b.d)
   f.lootName:SetText(b.n)
-  f.lootSub:SetText((b.k == "boss" and "Boss" or b.k == "rare" and "Rare" or "Trash") .. (b.l and (" \194\183 level " .. levelText(b.l)) or "") .. (b.w and (" \194\183 " .. b.w) or ""))
+  f.lootSub:SetText(about(b))
   f.lootHead:SetText(#b.i > 0 and string.format("Loot  |  %d items", #b.i) or "Loot  |  nothing recorded yet")
   local y = 0
   for i = 1, math.min(MAX_ITEMS, #b.i) do
@@ -640,8 +781,77 @@ function DM.ShowBoss(b)
   f.lootScroll:SetContentHeight(-y - 2, same)
 end
 
+-- the loot panel with no entry to show, and why
+local function noBoss(why)
+  local f = frame
+  f.boss = nil
+  f.lootModel:Hide()
+  f.lootFace:SetTexture(nil); f.lootFace:Show(); faced[f.lootFace] = nil
+  f.lootName:SetText(why); f.lootSub:SetText(""); f.lootHead:SetText("")
+  f.lootScroll:SetContentHeight(0)
+  for _, r in ipairs(f.lootRows) do r:Hide() end
+end
+
+-- a row of the boss list: a row with a badge on the face's corner
+local function bossRow(i)
+  local f = frame
+  local r = row(f.bossRows, i, f.bossScroll.child, BOSS_H, f.bossRowW)
+  if not r.badge then
+    r.badge = r:CreateTexture(nil, "OVERLAY")
+    r.badge:SetSize(16, 16)
+    r.badge:SetPoint("BOTTOMRIGHT", r.icon, "BOTTOMRIGHT", 3, -1)
+  end
+  return r
+end
+
+-- the boss list: the entries the chips let through, a line when they hide them all, the chips' counts; then the loot
+-- of the entry shown before while it is still listed (keep: a chip's click), else of the first
+function DM.FillBosses(keep)
+  local f = frame
+  local d = f.data
+  local list, y, still = DM.Visible(d), 0, false
+  for i, b in ipairs(list) do
+    local r = bossRow(i)
+    r:ClearAllPoints()
+    r:SetPoint("TOPLEFT", 0, y)
+    r.boss = b
+    -- a rare or an event wears its kind on the face's corner, unless the face is that icon already
+    local drew, key = DM.Face(r.icon, b, d), DM.KindLabel(b):lower()
+    local badge = (key == "rare" or key == "event") and drew ~= "kind"
+    if badge then kindIcon(r.badge, key) end
+    r.badge:SetShown(badge)
+    r.text:SetText(b.n)
+    r.sub:SetText(b.w or (b.l and ("Level " .. levelText(b.l))) or "")
+    fitRow(r, BOSS_H)
+    r:SetScript("OnClick", function(self) DM.ShowBoss(self.boss) end)
+    r:SetScript("OnEnter", nil)
+    r:Show()
+    y = y - BOSS_H - 2
+    still = still or b == f.boss
+  end
+  for i = #list + 1, #f.bossRows do f.bossRows[i]:Hide(); faced[f.bossRows[i].icon] = nil end
+  f.bossScroll.child:SetWidth(f.bossRowW)
+  f.bossScroll:SetContentHeight(-y - 2)
+  f.bossEmpty:SetShown(#list == 0 and #d.bosses > 0)
+  local count, show = {}, QB:Settings().djShow
+  for _, b in ipairs(d.bosses) do local k = DM.Kind(b); count[k] = (count[k] or 0) + 1 end
+  for _, c in ipairs(f.chips) do
+    local on = show[c.kind] ~= false
+    c.text:SetText(tostring(count[c.kind] or 0))
+    c:SetShown(c.kind ~= "other" or (count.other or 0) > 0)
+    c:SetOn(on)
+    c:SetAlpha(on and 1 or 0.45)
+    c.icon:SetDesaturated(not on or c.kind == "trash")
+  end
+  if keep and still then DM.ShowBoss(f.boss)
+  elseif list[1] then DM.ShowBoss(list[1])
+  else noBoss(#d.bosses > 0 and "" or "No bosses recorded") end
+end
+
 function DM.ShowTab(tab)
   local f = frame
+  -- a dungeon the client has no floor art for has no Map tab: its bosses instead
+  if tab == "map" and #f.data.floors == 0 then tab = "bosses" end
   f.tab = tab
   f.mapTab:SetShown(tab == "map"); f.bossTab:SetShown(tab == "bosses"); f.questTab:SetShown(tab == "quests")
   for _, b in ipairs(f.tabs) do b:SetOn(b.tab == tab) end
@@ -678,6 +888,7 @@ function DM.Fill(cat, tab)
   f.level:SetText(lv[1] > 0 and string.format("LV %d-%d", lv[1], lv[2]) or "")
   f.where:SetText(cat.where and cat.where ~= "" and cat.where or "")
   if d.cover then f.cover:SetTexture(d.cover) elseif cat.bg then f.cover:SetTexture(cat.bg) else f.cover:SetTexture(nil) end
+  f.tabs[1]:SetShown(#d.floors > 0)
   -- floors
   for i = 1, math.max(#d.floors, #f.floors) do
     local b = f.floors[i]
@@ -693,34 +904,11 @@ function DM.Fill(cat, tab)
   f.floorLabel:SetShown(#d.floors > 1)
   DM.ShowFloor(1)
   f.entrance:SetShown(cat.entrance ~= nil)
-  -- bosses
-  local y = 0
-  for i, b in ipairs(d.bosses) do
-    local r = row(f.bossRows, i, f.bossScroll.child, BOSS_H, f.bossRowW)
-    r:ClearAllPoints()
-    r:SetPoint("TOPLEFT", 0, y)
-    r.boss = b
-    face(r.icon, b, d)
-    r.text:SetText(b.n)
-    r.sub:SetText((b.k == "boss" and "" or (b.k == "rare" and "Rare" or "Trash")) .. ((b.w and (b.k == "boss" and b.w or (" \194\183 " .. b.w))) or ""))
-    fitRow(r, BOSS_H)
-    r:SetScript("OnClick", function(self) DM.ShowBoss(self.boss) end)
-    r:SetScript("OnEnter", nil)
-    r:Show()
-    y = y - BOSS_H - 2
-  end
-  for i = #d.bosses + 1, #f.bossRows do f.bossRows[i]:Hide() end
-  f.bossScroll.child:SetWidth(f.bossRowW)
-  f.bossScroll:SetContentHeight(-y - 2)
-  if d.bosses[1] then DM.ShowBoss(d.bosses[1]) else
-    f.boss = nil; f.lootFace:SetTexture(nil); f.lootName:SetText("No bosses recorded"); f.lootSub:SetText(""); f.lootHead:SetText("")
-    f.lootScroll:SetContentHeight(0)
-    for _, r in ipairs(f.lootRows) do r:Hide() end
-  end
+  DM.FillBosses()
   -- quests
   local qs = DM.Quests(cat.key)
   f.questHead:SetText(#qs > 0 and string.format("%d quests", #qs) or "No quests in the catalog for this dungeon")
-  y = 0
+  local y = 0
   for i, e in ipairs(qs) do
     local r = row(f.questRows, i, f.questScroll.child, 34, f.questRowW)
     r:ClearAllPoints()
@@ -745,6 +933,7 @@ function DM.Fill(cat, tab)
   f.questScroll:SetContentHeight(-y - 2)
   DM.ShowTab(tab or f.tab or (#d.bosses > 0 and "bosses" or "map"))
   DM.FillList()
+  redrawLater()
   return f
 end
 

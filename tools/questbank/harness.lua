@@ -23,6 +23,9 @@ SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap G
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
 SetAtlas SetPassThroughButtons SetCooldown SetHideCountdownNumbers SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
+-- a PlayerModel's own: the creature it shows, by display id or by NPC id, its camera, and whether it keeps the model
+-- while hidden
+local MODEL = { SetDisplayInfo = true, SetCreature = true, SetPortraitZoom = true, ClearModel = true, SetKeepModelOnHide = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
 ----------------------------------------------------------------------------
@@ -57,7 +60,7 @@ local function newObj(kind, template, parent)
   ALL[#ALL + 1] = o
   local mt = {}
   mt.__index = function(t, k)
-    if METHODS[k] or (BACKDROP[k] and t.__backdrop) then
+    if METHODS[k] or (BACKDROP[k] and t.__backdrop) or (MODEL[k] and kind == "PlayerModel") then
       return function(self, ...)
         local a = { ... }
         local n = select("#", ...)
@@ -138,6 +141,11 @@ local function newObj(kind, template, parent)
         elseif k == "SetScale" then self.__scale = a[1]
         elseif k == "GetScale" then return self.__scale or 1
         elseif k == "SetCooldown" then self.__cd = { a[1], a[2] }
+        elseif k == "SetDisplayInfo" then self.__display, self.__creature = a[1], nil
+        elseif k == "SetCreature" then self.__creature, self.__display = a[1], nil
+        elseif k == "SetPortraitZoom" then self.__portraitZoom = a[1]
+        elseif k == "ClearModel" then self.__display, self.__creature = nil, nil
+        elseif k == "SetKeepModelOnHide" then self.__keepModel = a[1]
         elseif k == "GetLeft" then return self.__left or 0
         elseif k == "GetTop" then return self.__top or 0
         elseif k == "GetNumPoints" then return #self.__points
@@ -209,8 +217,14 @@ BASE.time = os.time
 BASE.debugprofilestop = function() return os.clock() * 1000 end
 BASE.GetCursorPosition = function() return 600, 500 end
 BASE.SetPortraitTexture = function() end
--- the client draws a creature's portrait from its display id into a texture
-BASE.SetPortraitTextureFromCreatureDisplayID = function(t, id) t.__tex = "portrait:" .. tostring(id); t.__portrait = id end
+-- the client draws a creature's portrait from its display id into a texture. PORTRAIT.defer: as in the game, the
+-- picture comes later: the texture stays empty until the portraits are ready (a test then fires PORTRAITS_UPDATED)
+local PORTRAIT = { defer = false, ready = false, calls = 0 }
+BASE.SetPortraitTextureFromCreatureDisplayID = function(t, id)
+  PORTRAIT.calls = PORTRAIT.calls + 1
+  if PORTRAIT.defer and not PORTRAIT.ready then t.__tex, t.__portrait = nil, nil; return end
+  t.__tex = "portrait:" .. tostring(id); t.__portrait = id
+end
 BASE.geterrorhandler = function() return error end
 BASE.UiMapPoint = { CreateFromCoordinates = function(m, x, y) return { m = m, x = x, y = y } end }
 -- the game's super-tracking: QuestBank never touches it (SUPER_TRACKING_CHANGED and the waypoint's listeners would run
@@ -1595,7 +1609,7 @@ do
   assert(f and env.QuestBankDungeonMap == f and f.name:GetText():find("The Deadmines", 1, true) and f.level:GetText():find("LV", 1, true), "the journal opens on the dungeon")
   assert(U.frame:IsShown() and U.tab == 7 and U.views[7]:IsShown() and f:GetParent() == U.views[7], "inside the QuestBank window, on its own page")
   assert(f.listPanel:GetWidth() + 8 + 1002 * 0.4 <= 812 and f.map:GetWidth() <= 812 - 228 and f.map:GetHeight() <= 452 - 78, "the floor art fits the page")
-  assert(#f.tiles == 12 and f.tiles[1].__tex == D.d1581.floors[1][1] and f.tiles[12].__tex == D.d1581.floors[1][12] and not f.noArt:IsShown(), "floor 1's tiles")
+  assert(#f.tiles == 12 and f.tiles[1].__tex == D.d1581.floors[1][1] and f.tiles[12].__tex == D.d1581.floors[1][12] and f.tabs[1]:IsShown(), "floor 1's tiles, and the Map tab")
   assert(f.floors[1] and f.floors[2] and f.floors[2]:IsShown() and not f.floors[1]:IsEnabled(), "two floor buttons, the shown one greyed")
   DM.ShowFloor(2)
   assert(f.tiles[1].__tex == D.d1581.floors[2][1] and f.floors[1]:IsEnabled() and not f.floors[2]:IsEnabled(), "floor 2")
@@ -1616,7 +1630,7 @@ do
   DM.ShowTab("map")
   local shownBosses = 0
   for _, r in ipairs(f.bossRows) do if r:IsShown() then shownBosses = shownBosses + 1 end end
-  assert(shownBosses == #D.d1581.bosses and f.bossRows[1].text:GetText():find("Rhahk'Zor", 1, true), "a row a boss")
+  assert(shownBosses == #D.d1581.bosses - 1 and shownBosses == #DM.Visible(D.d1581) and f.bossRows[1].text:GetText():find("Rhahk'Zor", 1, true), "a row a boss, the trash hidden at first")
   DM.ShowBoss(D.d1581.bosses[1])
   assert(f.lootHead:GetText():find("items", 1, true) and f.lootName:GetText():find("Rhahk'Zor", 1, true), "the first boss is shown with its item count")
   assert(f.lootRows[1] and f.lootRows[1]:IsShown() and f.lootRows[1].text:GetText() ~= "", "a loot row with a name")
@@ -2674,13 +2688,14 @@ do
   local f = DM.Open(DM.Find("blackrock depths"), "bosses")
   local sf = f.bossScroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(#f.data.bosses >= 30 and sf.bar:IsShown() and hi == #f.data.bosses * 44 - 2 - sf.viewH, "Blackrock Depths' bosses scroll: " .. tostring(hi))
+  local rows = #DM.Visible(f.data)
+  assert(rows >= 30 and sf.bar:IsShown() and hi == rows * 44 - 2 - sf.viewH, "Blackrock Depths' bosses scroll: " .. tostring(hi))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44 and sf.__scroll == 44, "a wheel notch scrolls one boss")
   sf.bar:SetValue(hi)
   check("Dungeon Journal, Blackrock Depths, bosses scrolled to the end")
   GEN = GEN + 1
-  local last, view = rectOf(f.bossRows[#f.data.bosses]), rectOf(sf)
+  local last, view = rectOf(f.bossRows[rows]), rectOf(sf)
   assert(last.b >= view.b - 0.5 and last.t <= view.t + 0.5, "the last boss, scrolled to, is in view")
   DM.ShowBoss(f.data.bosses[1])
   assert(f.bossScroll.bar:GetValue() == hi, "showing a boss's loot keeps the list where it is")
@@ -2703,8 +2718,194 @@ do
   check("Dungeon Journal, Blackrock Depths, quests scrolled to the end")
   layouts[#layouts + 1] = dumpLayout(UI.frame, "Dungeon Journal, Blackrock Depths, quests scrolled to the end")
   DM.Open(DM.Find("blackrock depths"), "bosses")
-  layouts[#layouts + 1] = dumpLayout(UI.frame, "Dungeon Journal, Blackrock Depths, bosses")
+  layouts[#layouts + 1] = dumpLayout(UI.frame, "Dungeon Journal, Blackrock Depths, Bosses+Rares")
   print(string.format("journal: %d dungeons on every tab, %d bosses with a level range; longest lists %d bosses, %d quests", n, ranged, longest.boss, longest.quest))
+  DM.Open(DM.Find("deadmines"), "map"); DM.ShowFloor(2)
+  UI:ShowTab(1); UI:Refresh()
+end
+
+-- 5.3.3: the Dungeon Journal's faces, chips and model (DungeonMap.lua). An entry's face is the first the client can
+-- draw: the old journal's art, the portrait of its model (the client fills that in after the call, so it is drawn
+-- again when the client says portraits changed; drawn only once, it stayed a blank ring), an achievement icon, its
+-- kind's icon, and the default face for a boss only. Chips over the list show or hide bosses, rares, trash and
+-- chests, here and on the map; the loot panel's face is one live model
+do
+  local DM, env = QB.DMap, owner.env
+  local D = QB.Data.DMAP
+  local function check(label) for _, p in ipairs(checkLayout(UI.frame, label)) do problems[#problems + 1] = p end end
+  UI:ShowTab(7); UI:Refresh()
+  local f = env.QuestBankDungeonMap
+  local show = QB:Settings().djShow
+  assert(show.boss and show.rare and show.trash == false and show.other, "at first bosses, rares, chests and events show, trash does not")
+  local src = io.open(HERE .. "/QuestBank/DungeonMap.lua"):read("*a")
+  assert(not src:find("\\194\\183", 1, true) and not src:find("\194\183", 1, true), "no middle dot in the journal's text: a comma")
+
+  -- the face chain, an entry a branch, on one texture (each face undoes the last: the grey of trash, an atlas)
+  local fix = { defaultFace = 521744, floors = {}, bosses = {
+    { n = "Old Art", k = "boss", p = 5875512, d = 7125, o = 2, i = {} },
+    { n = "Model Only", k = "boss", d = 2029, o = 0, i = {} },
+    { n = "Achiever", k = "boss", a = 236693, i = {} },
+    { n = "Faceless", k = "boss", o = 1, i = {} },
+    { n = "Plain Rare", k = "rare", i = {} },
+    { n = "Rare Model", k = "rare", d = 556, i = {} },
+    { n = "Trash mobs", k = "trash", i = {} },
+    { n = "Strongbox", k = "object", i = {} },
+    { n = "Summoned", k = "quest", i = {} },
+    { n = "Creature", k = "boss", c = 245999, a = 236694, i = {} },
+  } }
+  local B = {}
+  for _, b in ipairs(fix.bosses) do B[b.n] = b end
+  local t = f:CreateTexture()
+  local calls = PORTRAIT.calls
+  assert(DM.Face(t, B["Old Art"], fix) == "p" and t.__tex == 5875512 and PORTRAIT.calls == calls, "the journal's art first, never a blank portrait")
+  assert(DM.Face(t, B["Trash mobs"], fix) == "kind" and t.__tex == 137025 and t.__desat, "trash with nothing: the grey skull")
+  assert(DM.Face(t, B["Model Only"], fix) == "d" and t.__portrait == 2029 and PORTRAIT.calls == calls + 1 and not t.__desat, "a display id only: the client's portrait of the model")
+  assert(DM.Face(t, B["Achiever"], fix) == "a" and t.__tex == 236693, "an achievement's boss icon next")
+  assert(DM.Face(t, B["Strongbox"], fix) == "kind" and t.__tex == 132594, "an object: the chest")
+  assert(DM.Face(t, B["Summoned"], fix) == "kind" and t.__atlas == "QuestNormal", "an event: the quest-giver's !")
+  assert(DM.Face(t, B["Faceless"], fix) == "default" and t.__tex == 521744, "a boss with nothing: the journal's default face")
+  assert(DM.Face(t, B["Plain Rare"], fix) == "kind" and t.__atlas == "nameplates-icon-elite-silver" and t.__tex ~= 521744, "a rare with nothing: the elite dragon, never the default face")
+  assert(DM.Kind(B["Strongbox"]) == "other" and DM.KindLabel(B["Strongbox"]) == "Chest" and DM.KindLabel(B["Summoned"]) == "Event" and DM.KindLabel(B["Trash mobs"]) == "Trash", "kinds and their words")
+
+  -- the list: bosses in encounter order (one the client does not know right after the one before it), rares, the rest
+  D.dfix = fix
+  DM.Fill({ key = "dfix", name = "Fixture Halls" }, "bosses")
+  local names, badges = {}, {}
+  for _, r in ipairs(f.bossRows) do if r:IsShown() then names[#names + 1] = r.boss.n; badges[r.boss.n] = r.badge:IsShown() and r.badge.__atlas end end
+  assert(table.concat(names, ",") == "Model Only,Achiever,Faceless,Creature,Old Art,Plain Rare,Rare Model,Strongbox,Summoned", "the list's order: " .. table.concat(names, ","))
+  assert(badges["Rare Model"] == "nameplates-icon-elite-silver" and not badges["Plain Rare"] and not badges["Summoned"] and not badges["Old Art"], "a rare with a face wears the elite badge; a face that is the kind's icon needs none")
+  assert(f.bossRows[1].sub:GetText() == "" and not f.tabs[1]:IsShown() and f.tab == "bosses", "no wing or level, no floor art: no Map tab")
+  DM.ShowTab("map")
+  assert(f.tab == "bosses" and f.bossTab:IsShown(), "no Map tab to show")
+  -- the loot panel's face: one live model where there is a display id, the creature where there is only its NPC id
+  -- (the picture stays under it), else the picture alone; set once a boss
+  local m = f.lootModel
+  DM.ShowBoss(B["Old Art"])
+  assert(m:IsShown() and m.__display == 7125 and m.__portraitZoom == 0.6 and not f.lootFace:IsShown() and f.lootRing:IsShown(), "a display id: the live model in its ring")
+  m.__display = nil
+  DM.ShowBoss(B["Old Art"])
+  assert(m.__display == nil, "the same boss again (an item's name came in): the model is left as it is")
+  DM.ShowBoss(B["Creature"])
+  assert(m:IsShown() and m.__creature == 245999 and f.lootFace:IsShown() and f.lootFace.__tex == 236694, "an NPC id only: the creature, the picture under it")
+  DM.ShowBoss(B["Faceless"])
+  assert(not m:IsShown() and m.__display == nil and m.__creature == nil and f.lootFace:IsShown() and f.lootFace.__tex == 521744, "nothing live: the picture")
+  local models = 0
+  for _, o in ipairs(ALL) do if o.__kind == "PlayerModel" and o.__client == owner then models = models + 1 end end
+  assert(models == 1 and m.__keepModel == true, "one model, whatever is shown, kept while the page is away: " .. models)
+  assert(f.lootSub:GetText() == "Boss", "the loot panel's line: the kind's word")
+  DM.ShowBoss(B["Strongbox"])
+  assert(f.lootSub:GetText() == "Chest", "an object's word: Chest")
+
+  -- portraits the client draws late: blank at first, all drawn again on PORTRAITS_UPDATED (a burst, one redraw 0.2 s
+  -- later), else a second after the page shows; never while it is hidden
+  PORTRAIT.defer, PORTRAIT.ready = true, false
+  local deep = { floors = { { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 } }, bosses = {} }
+  for i = 1, 5 do deep.bosses[i] = { n = "Deep Boss " .. i, k = "boss", d = 1000 + i, i = {}, f = 1, x = i / 6, y = 0.5 } end
+  D.dfix2 = deep
+  DM.Fill({ key = "dfix2", name = "Fixture Deep" }, "bosses")
+  local function faces()
+    local list, blank = {}, 0
+    for _, r in ipairs(f.bossRows) do if r:IsShown() then list[#list + 1] = r.icon end end
+    for i = 1, f.pinCount do list[#list + 1] = f.pins[i].face end
+    list[#list + 1] = f.lootFace
+    for _, x in ipairs(list) do if not x.__portrait then blank = blank + 1 end end
+    return #list, blank
+  end
+  local n, blank = faces()
+  assert(n == 11 and blank == 11 and f.pinCount == 5, "five rows, five pins and the loot face, all blank so far: " .. n .. ", " .. blank)
+  PORTRAIT.ready = true
+  calls = PORTRAIT.calls
+  f.__scripts.OnEvent(f, "PORTRAITS_UPDATED"); f.__scripts.OnEvent(f, "PORTRAITS_UPDATED")
+  assert(PORTRAIT.calls == calls, "not at once: the event comes in bursts")
+  tick(owner, 0.3)
+  n, blank = faces()
+  assert(PORTRAIT.calls - calls == 11 and blank == 0, "PORTRAITS_UPDATED: every face drawn from a model drawn again, once: " .. (PORTRAIT.calls - calls))
+  PORTRAIT.ready = false
+  DM.Fill({ key = "dfix2", name = "Fixture Deep" }, "bosses")
+  PORTRAIT.ready = true
+  tick(owner, 1.1)
+  n, blank = faces()
+  assert(blank == 0, "no event: drawn again a second after the dungeon opened")
+  tick(owner, 3)
+  PORTRAIT.ready = false
+  DM.Fill({ key = "dfix2", name = "Fixture Deep" }, "bosses")
+  tick(owner, 3.5)
+  PORTRAIT.ready = true
+  f:Hide()
+  calls = PORTRAIT.calls
+  f.__scripts.OnEvent(f, "PORTRAITS_UPDATED"); tick(owner, 0.3)
+  assert(PORTRAIT.calls == calls and DM.RedrawFaces() == 0, "a hidden page draws nothing")
+  f:Show()
+  tick(owner, 1.1)
+  n, blank = faces()
+  assert(blank == 0, "the page shown again: drawn a second later")
+  PORTRAIT.defer, PORTRAIT.ready = false, false
+  D.dfix, D.dfix2 = nil, nil
+
+  -- the chips: Blackrock Depths lists its bosses, rares and the rest at first, each chip counting its kind
+  DM.Open(DM.Find("blackrock depths"), "bosses")
+  local d = f.data
+  local per = {}
+  for _, b in ipairs(d.bosses) do local k = DM.Kind(b); per[k] = (per[k] or 0) + 1 end
+  local function rows()
+    local all, trash = 0, 0
+    for _, r in ipairs(f.bossRows) do if r:IsShown() then all = all + 1; if DM.Kind(r.boss) == "trash" then trash = trash + 1 end end end
+    return all, trash
+  end
+  local chip = {}
+  for _, c in ipairs(f.chips) do chip[c.kind] = c end
+  local all, trash = rows()
+  assert(per.trash and per.trash > 0 and all == per.boss + per.rare + (per.other or 0) and trash == 0, "Blackrock Depths at first: no trash rows")
+  for k, c in pairs(chip) do assert(c.text:GetText() == tostring(per[k] or 0), "the " .. k .. " chip counts its kind") end
+  assert(chip.other:IsShown() == ((per.other or 0) > 0) and chip.boss:GetAlpha() == 1 and chip.trash:GetAlpha() == 0.45 and chip.trash.icon.__desat, "a chip that is off is faded")
+  lines = {}; chip.trash.__scripts.OnEnter(chip.trash)
+  assert(#lines == 1 and lines[1]:find("Click to show", 1, true), "a chip's tooltip")
+  chip.trash.__scripts.OnClick(chip.trash)
+  all, trash = rows()
+  assert(all == #d.bosses and trash == per.trash and env.QuestBankDB.settings.djShow.trash == true and chip.trash:GetAlpha() == 1, "the Trash chip adds the trash, and is kept")
+  check("Dungeon Journal, Blackrock Depths, with Trash")
+  -- (drawn scrolled to the end, where the trash is listed)
+  local _, hi = f.bossScroll.bar:GetMinMaxValues()
+  f.bossScroll.bar:SetValue(hi)
+  check("Dungeon Journal, Blackrock Depths, with Trash, scrolled to the end")
+  layouts[#layouts + 1] = dumpLayout(UI.frame, "Dungeon Journal, Blackrock Depths, with Trash")
+  -- trash on the map: small grey pins (the Stockade's trash stands where it was seen)
+  DM.Open(DM.Find("stockade"), "map")
+  local grey = 0
+  for i = 1, f.pinCount do
+    local p = f.pins[i]
+    if DM.Kind(p.boss) == "trash" then grey = grey + 1; assert(p.size == 18 and p.ring.__vertex[1] == 0.55, "a trash pin: small and grey") end
+  end
+  assert(grey >= 1, "the Stockade's trash on its map: " .. grey)
+  check("Dungeon Journal, The Stockade, map with trash")
+  chip.trash.__scripts.OnClick(chip.trash)
+  for i = 1, f.pinCount do assert(DM.Kind(f.pins[i].boss) ~= "trash", "trash off: off the map too") end
+  -- every chip off: one line says why, no rows, no pins
+  DM.Open(DM.Find("blackrock depths"), "bosses")
+  for _, k in ipairs({ "boss", "rare", "other" }) do chip[k].__scripts.OnClick(chip[k]) end
+  all = rows()
+  assert(all == 0 and f.bossEmpty:IsShown() and f.bossEmpty:GetText() == "All hidden by the filter" and f.boss == nil and not f.lootModel:IsShown(), "all hidden: the line, no rows, no loot")
+  DM.ShowTab("map")
+  assert(f.pinCount == 0, "all hidden: no pins")
+  check("Dungeon Journal, Blackrock Depths, all hidden")
+  for _, k in ipairs({ "boss", "rare", "other" }) do chip[k].__scripts.OnClick(chip[k]) end
+  assert(show.boss and show.rare and show.other and not show.trash and not f.bossEmpty:IsShown(), "back as it was")
+  -- each wing together: the Monastery's wings in one block each, the bosses first in each
+  DM.Open(DM.Find("scarlet monastery"), "bosses")
+  local seen, last, order = {}, nil, {}
+  for _, r in ipairs(f.bossRows) do
+    if r:IsShown() then
+      local w = r.boss.w
+      assert(w == last or not seen[w], "the wing " .. tostring(w) .. " in one block")
+      seen[w], last = true, w
+      order[#order + 1] = DM.Kind(r.boss)
+      assert(r.sub:GetText() == w, "a row's line: its wing")
+    end
+  end
+  assert(order[1] == "boss" and DM.Kind(f.bossRows[1].boss) == "boss", "a wing starts with its bosses")
+  DM.Open(DM.Find("City of Dalaran"), "bosses")
+  check("Dungeon Journal, City of Dalaran")
+  layouts[#layouts + 1] = dumpLayout(UI.frame, "Dungeon Journal, City of Dalaran")
   DM.Open(DM.Find("deadmines"), "map"); DM.ShowFloor(2)
   UI:ShowTab(1); UI:Refresh()
 end
