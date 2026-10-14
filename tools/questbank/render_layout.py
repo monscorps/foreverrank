@@ -38,6 +38,27 @@ ATLAS_SVG = {
     "ui-questpoi-questnumber-supertracked": _svg("<circle cx='12' cy='12' r='9.5' fill='#c99a2e' stroke='#3a2608' stroke-width='2.2'/>"),
     "flightpath": _svg("<circle cx='12' cy='12' r='8.5' fill='#1d5a1d' stroke='#7fe07f' stroke-width='2.2'/><path d='M6 13l6-5 6 5' fill='none' stroke='#e8ffe8' stroke-width='2' stroke-linecap='round'/>"),
     "quest-in-progress-icon-yellow": _svg("<text x='12' y='20' text-anchor='middle' font-family='Georgia' font-weight='bold' font-size='20' fill='#b8a35a' stroke='#000' stroke-width='1'>?</text>"),
+    # the game's pins QuestBank draws again (Pins.lua): the brown in-progress glyph on the super-tracked disc, the
+    # turn-in glyph (a gold ? with a check), the offers' ! (and the Recurring family's blue ! and ?), the inner glow,
+    # the dungeon entrance's grey portal, the flight points' green ring, the pressed discs
+    "quest-in-progress-icon-brown": _svg("<text x='12' y='20' text-anchor='middle' font-family='Georgia' font-weight='bold' font-size='20' fill='#5a3a12' stroke='#000' stroke-width='.8'>?</text>"),
+    "ui-questicon-turnin-normal": _svg("<text x='11' y='20' text-anchor='middle' font-family='Georgia' font-weight='bold' font-size='20' fill='#ffd100' stroke='#000' stroke-width='1'>?</text><path d='M14 18l3 3 5-6' fill='none' stroke='#000' stroke-width='3.2' stroke-linecap='round'/><path d='M14 18l3 3 5-6' fill='none' stroke='#5ce05c' stroke-width='1.8' stroke-linecap='round'/>"),
+    "questnormal": _svg("<text x='12' y='21' text-anchor='middle' font-family='Georgia' font-weight='bold' font-size='24' fill='#ffd100' stroke='#000' stroke-width='1.2'>!</text>"),
+    "questturnin": _svg("<text x='12' y='21' text-anchor='middle' font-family='Georgia' font-weight='bold' font-size='22' fill='#ffd100' stroke='#000' stroke-width='1.2'>?</text>"),
+    "ui-questpoirecurring-questbang": _svg("<text x='12' y='21' text-anchor='middle' font-family='Georgia' font-weight='bold' font-size='24' fill='#4aa8ff' stroke='#000' stroke-width='1.2'>!</text>"),
+    "ui-questpoirecurring-questbangturnin": _svg("<text x='12' y='21' text-anchor='middle' font-family='Georgia' font-weight='bold' font-size='22' fill='#4aa8ff' stroke='#000' stroke-width='1.2'>?</text>"),
+    "ui-questpoirecurring-questnumber": _svg("<circle cx='12' cy='12' r='9.5' fill='#0e1a2a' stroke='#4aa8ff' stroke-width='2.2'/>"),
+    "ui-questpoirecurring-questnumber-supertracked": _svg("<circle cx='12' cy='12' r='9.5' fill='#2a6fb0' stroke='#0a1a30' stroke-width='2.2'/>"),
+    "ui-questpoi-questnumber-pressed": _svg("<circle cx='12' cy='12' r='9.5' fill='#120c04' stroke='#9a7a2a' stroke-width='2.2'/>"),
+    "ui-questpoi-questnumber-pressed-supertracked": _svg("<circle cx='12' cy='12' r='9.5' fill='#8a6a1e' stroke='#2a1a06' stroke-width='2.2'/>"),
+    "ui-questpoi-innerglow": _svg("<circle cx='12' cy='12' r='9' fill='none' stroke='#fff2b0' stroke-width='3' opacity='.8'/>"),
+    "ui-questpoi-outerglow": _svg("<circle cx='12' cy='12' r='9' fill='url(#g)'/><defs><radialGradient id='g'><stop offset='30%' stop-color='#ffe9a0' stop-opacity='.9'/><stop offset='100%' stop-color='#ffe9a0' stop-opacity='0'/></radialGradient></defs>"),
+    "dungeon": _svg("<path d='M4 22V11a8 8 0 0 1 16 0v11z' fill='#2a2a30' stroke='#9a9aa8' stroke-width='1.6'/><path d='M8 22V12a4 4 0 0 1 8 0v10z' fill='#0a0a10'/>"),
+    "raid": _svg("<path d='M4 22V11a8 8 0 0 1 16 0v11z' fill='#3a1a1a' stroke='#c08080' stroke-width='1.6'/><path d='M8 22V12a4 4 0 0 1 8 0v10z' fill='#100404'/>"),
+    "taxinode_neutral": _svg("<circle cx='12' cy='12' r='8.5' fill='#1d5a1d' stroke='#7fe07f' stroke-width='2.2'/><path d='M6 13l6-5 6 5' fill='none' stroke='#e8ffe8' stroke-width='2' stroke-linecap='round'/>"),
+    "taxinode_alliance": _svg("<circle cx='12' cy='12' r='8.5' fill='#1d5a1d' stroke='#7fe07f' stroke-width='2.2'/><path d='M6 13l6-5 6 5' fill='none' stroke='#e8ffe8' stroke-width='2' stroke-linecap='round'/>"),
+    "taxinode_horde": _svg("<circle cx='12' cy='12' r='8.5' fill='#1d5a1d' stroke='#7fe07f' stroke-width='2.2'/><path d='M6 13l6-5 6 5' fill='none' stroke='#e8ffe8' stroke-width='2' stroke-linecap='round'/>"),
+    "taxinode_undiscovered": _svg("<circle cx='12' cy='12' r='8.5' fill='#3a3a3a' stroke='#9a9a9a' stroke-width='2.2'/><path d='M6 13l6-5 6 5' fill='none' stroke='#ddd' stroke-width='2' stroke-linecap='round'/>"),
 }
 
 LOCAL_TEX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "research", "qbrender", "tex")
@@ -101,7 +122,8 @@ def tex_style(it):
 
 def render(layout):
     out = ['<div class="shot"><h2>%s</h2><div class="win" style="width:%dpx;height:%dpx">' % (html.escape(layout["label"]), layout["w"], layout["h"])]
-    items = sorted(layout["items"], key=lambda it: (it.get("depth", 0), {"BACKGROUND": 0, "BORDER": 1, "ARTWORK": 2, "OVERLAY": 3, "HIGHLIGHT": 4}.get(it.get("layer"), 2), it["i"]))
+    # as the game stacks regions: by frame depth, then draw layer, then the layer's sublevel, then creation order
+    items = sorted(layout["items"], key=lambda it: (it.get("depth", 0), {"BACKGROUND": 0, "BORDER": 1, "ARTWORK": 2, "OVERLAY": 3, "HIGHLIGHT": 4}.get(it.get("layer"), 2), it.get("sub") or 0, it["i"]))
     for it in items:
         x, y, w, h = it["x"], it["y"], it["w"], it["h"]
         clip = it.get("clip")
