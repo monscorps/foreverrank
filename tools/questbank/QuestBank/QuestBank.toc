@@ -33,4 +33,5 @@ Pins.xml
 Arrow.lua
 Sync.lua
 Auto.lua
+MapPage.lua
 UI.lua

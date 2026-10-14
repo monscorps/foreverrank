@@ -2,7 +2,7 @@
   <!-- QuestBank's own frames on the world map's canvas: Pins.lua makes them out of combat, places and scales them, and
        sets their mouse scripts. They are never the map canvas's pins (no mixin or scripts here, nothing the canvas
        hands out): Pins.lua says why. -->
-  <!-- a numbered route pin, or a ! where a quest you plan to fetch starts -->
+  <!-- a numbered route pin (the game's quest POI with its number on it), or a ! where a quest you plan to fetch starts -->
   <Frame name="QuestBankPinTemplate" virtual="true" enableMouse="true">
     <Size x="22" y="22"/>
     <Layers>
@@ -12,14 +12,15 @@
       <Layer level="OVERLAY">
         <FontString parentKey="Num" inherits="NumberFontNormal" justifyH="CENTER">
           <Anchors>
-            <Anchor point="BOTTOM" relativePoint="TOP" x="0" y="-4"/>
+            <Anchor point="CENTER" x="0" y="0"/>
           </Anchors>
         </FontString>
       </Layer>
     </Layers>
   </Frame>
   <!-- the quest icons (QuestMap.lua): ! where a quest starts, ? where one is handed in, a mark on an objective or
-       where a quest item drops; sized and given their art when drawn -->
+       where a quest item drops, a dungeon's entrance with how many of its quests are done; sized and given their art
+       when drawn -->
   <Frame name="QuestBankQuestPinTemplate" virtual="true" enableMouse="true">
     <Size x="20" y="20"/>
     <Layers>
@@ -33,6 +34,11 @@
             <Anchor point="TOPRIGHT" x="3" y="3"/>
           </Anchors>
         </Texture>
+        <FontString parentKey="Count" inherits="NumberFontNormalSmall" justifyH="CENTER" hidden="true">
+          <Anchors>
+            <Anchor point="TOP" relativeKey="$parent.Icon" relativePoint="BOTTOM" x="0" y="1"/>
+          </Anchors>
+        </FontString>
       </Layer>
     </Layers>
   </Frame>

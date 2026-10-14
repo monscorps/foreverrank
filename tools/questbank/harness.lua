@@ -84,6 +84,7 @@ local function newObj(kind, template, parent)
         elseif k == "CreateLine" then local x = newObj("Line", nil, self); x.__layer = a[2] or "ARTWORK"; return x
         elseif k == "CreateMaskTexture" then local x = newObj("Texture", nil, self); x.__layer = "MASK"; return x
         elseif k == "AddMaskTexture" then self.__mask = a[1]
+        elseif k == "SetThickness" then self.__thick = a[1]
         elseif k == "SetStartPoint" then self.__start = { a[1], a[2], a[3], a[4] }
         elseif k == "SetEndPoint" then self.__stop = { a[1], a[2], a[3], a[4] }
         elseif k == "GetZoom" then return self.__zoom or 0
@@ -93,7 +94,12 @@ local function newObj(kind, template, parent)
         elseif k == "Show" then local was = self.__shown; self.__shown = true; if not was and self.__scripts.OnShow then self.__scripts.OnShow(self) end
         elseif k == "Hide" then local was = self.__shown; self.__shown = false; if was and self.__scripts.OnHide then self.__scripts.OnHide(self) end
         elseif k == "SetShown" then if a[1] then self:Show() else self:Hide() end
-        elseif k == "IsShown" or k == "IsVisible" then return self.__shown
+        elseif k == "IsShown" then return self.__shown
+        -- shown, and every frame it sits in too (a page of a shut window is not visible)
+        elseif k == "IsVisible" then
+          local o = self
+          while o do if not o.__shown then return false end; o = o.__parent or o.__scrollParent end
+          return true
         -- (a size set now is what the game reports at once; the last layout's is stale)
         elseif k == "SetSize" then self.__w, self.__h = a[1], a[2] or a[1]; self.__wset, self.__hset = true, true; self.__rw, self.__rh = nil, nil
         elseif k == "SetWidth" then self.__w = a[1]; self.__wset = true; self.__rw = nil
@@ -268,8 +274,78 @@ BASE.CreateFromMixins = function(...)
   for i = 1, select("#", ...) do for k, v in pairs(select(i, ...)) do t[k] = v end end
   return t
 end
--- (QuestBank no longer uses the map canvas's pins, so no MapCanvasPinMixin here: a use of it fails)
-BASE.MapCanvasDataProviderMixin = { GetMap = function(self) return self.owningMap end }
+-- (QuestBank no longer uses the map canvas's pins, so no MapCanvasPinMixin here: a use of it fails). A data provider
+-- as Blizzard's base has it (MapCanvas_DataProviderBase.lua): told it is added, shown, hidden, on a new map
+local function nothing() end
+BASE.MapCanvasDataProviderMixin = {
+  GetMap = function(self) return self.owningMap end,
+  OnAdded = function(self, map) self.owningMap = map end,
+  OnRemoved = function(self) self.owningMap = nil end,
+  OnMapChanged = function(self) self:RefreshAllData() end,
+  RefreshAllData = nothing, RemoveAllData = nothing, OnShow = nothing, OnHide = nothing,
+  OnCanvasScaleChanged = nothing, OnCanvasSizeChanged = nothing,
+}
+-- the five of Blizzard's providers QuestBank's map page may add (MapPage.lua), tagged with their names: each makes its
+-- one pin as it is added, and AcquirePin calls SetPassThroughButtons, blocked in combat
+for _, name in ipairs({ "MapExplorationDataProviderMixin", "MapHighlightDataProviderMixin", "AreaLabelDataProviderMixin",
+                        "GroupMembersDataProviderMixin", "QuestBlobDataProviderMixin" }) do
+  BASE[name] = BASE.CreateFromMixins(BASE.MapCanvasDataProviderMixin, { __blizzard = name, OnAdded = function(self, map)
+    if map.__client and map.__client.combat then error("ADDON_ACTION_BLOCKED: " .. name .. " acquired its pin in combat", 2) end
+    self.owningMap = map
+  end })
+end
+BASE.Mixin = function(obj, ...)
+  for i = 1, select("#", ...) do for k, v in pairs((select(i, ...))) do obj[k] = v end end
+  return obj
+end
+BASE.secureexecuterange = function(t, fn, ...) for k, v in pairs(t) do fn(k, v, ...) end end
+BASE.GetQuestDifficultyColor = function() return { r = 1, g = 0.82, b = 0 } end
+-- Blizzard_MapCanvas's canvas, as far as the map page builds and drives one. Its own OnShow, OnUpdate and
+-- OnMapChanged empty the game's shared quest and POI caches (ClearCachedActivitiesForPlayer): from QuestBank's frame
+-- that errors here, so the page overrides all three. canvas.__calls records what QuestBank asked: { method, args... }
+BASE.ClearCachedActivitiesForPlayer = function() error("QuestBank cleared the map caches", 2) end
+local function cleared() BASE.ClearCachedActivitiesForPlayer() end
+local function asked(name) return function(self, ...) table.insert(self.__calls, { name, ... }) end end
+local CANVAS_LEVELS = { PIN_FRAME_LEVEL_AREA_POI = 2300, PIN_FRAME_LEVEL_INVASION = 2250, PIN_FRAME_LEVEL_DIG_SITE = 2200, PIN_FRAME_LEVEL_QUEST_BLOB = 2100 }
+BASE.MapCanvasMixin = {
+  OnLoad = function(self)
+    self.dataProviders, self.__calls, self.__clickHandlers = {}, {}, {}
+    self:EvaluateLockReasons()
+  end,
+  OnShow = cleared, OnUpdate = cleared, OnMapChanged = cleared,
+  OnHide = function(self) for dp in pairs(self.dataProviders) do dp:OnHide() end end,
+  OnEvent = nothing,
+  EvaluateLockReasons = function(self) self.BorderFrame:EnableMouse(false) end,
+  -- a new map (every call recorded): zoomed out, the map fills the canvas
+  SetMapID = function(self, id)
+    table.insert(self.__calls, { "SetMapID", id })
+    if id == self.mapID then return end
+    self.mapID = id
+    self.ScrollContainer.Child:SetSize(self:GetWidth(), self:GetHeight())
+    self:OnMapChanged()
+  end,
+  GetMapID = function(self) return self.mapID end,
+  GetCanvas = function(self) return self.ScrollContainer.Child end,
+  OnFrameSizeChanged = function(self)
+    self.ScrollContainer.Child:SetSize(self:GetWidth(), self:GetHeight())
+    for dp in pairs(self.dataProviders) do dp:OnCanvasSizeChanged() end
+  end,
+  AddDataProvider = function(self, dp) self.dataProviders[dp] = true; dp:OnAdded(self) end,
+  RemoveDataProvider = function(self, dp) dp:RemoveAllData(); self.dataProviders[dp] = nil; dp:OnRemoved(self) end,
+  RefreshAll = function(self) for dp in pairs(self.dataProviders) do dp:RefreshAllData(true) end end,
+  GetCanvasScale = function() return 1 end,
+  GetCanvasZoomPercent = function() return 0 end,
+  GetGlobalPinScale = function() return 1 end,
+  GetPinFrameLevelsManager = function() return { GetValidFrameLevel = function(_, t) return CANVAS_LEVELS[t] or 2000 end } end,
+  AddCanvasClickHandler = function(self, fn) table.insert(self.__clickHandlers, fn) end,
+  TriggerEvent = asked("TriggerEvent"), RegisterCallback = asked("RegisterCallback"), PanTo = asked("PanTo"),
+  PanAndZoomTo = asked("PanAndZoomTo"), ResetZoom = asked("ResetZoom"), NavigateToParentMap = asked("NavigateToParentMap"),
+  SetShouldNavigateOnClick = asked("SetShouldNavigateOnClick"), SetShouldZoomInOnClick = asked("SetShouldZoomInOnClick"),
+  SetShouldPanOnClick = asked("SetShouldPanOnClick"),
+  UpdatePinSuppression = nothing, UpdatePinNudging = nothing, ProcessCursorHandlers = nothing, RunDataProviderOnUpdate = nothing,
+}
+-- its scroll frame (MapCanvasFrameScrollContainerTemplate, made in env.CreateFrame): the map on its child
+BASE.MapCanvasScrollControllerMixin = { OnLoad = nothing }
 
 SECRET_MT = {
   __index = function(t, k) error(string.format("attempt to index a secret %s value", rawget(t, "__kind")), 2) end,
@@ -367,9 +443,16 @@ local function newClient(o)
   local xml = io.open(HERE .. "/QuestBank/Pins.xml"):read("*a"):gsub("<!%-%-.-%-%->", "")
   local templates = {}
   for attrs, body in xml:gmatch("<Frame (name=\"[^\"]+\"[^>]*)>(.-)</Frame>") do
-    local t = { name = attrs:match('name="([^"]+)"'), mixin = attrs:match('mixin="([^"]+)"'), scripts = {}, regions = {} }
+    local t = { name = attrs:match('name="([^"]+)"'), mixin = attrs:match('mixin="([^"]+)"'), scripts = {}, regions = {}, fill = {} }
+    -- the frame's own size: its first <Size> (a region's comes after)
+    local w, h = body:match('^%s*<Size x="(%d+)" y="(%d+)"/>')
+    t.size = w and { tonumber(w), tonumber(h) } or nil
     for tag in body:gmatch("<(On%a+)") do t.scripts[tag] = true end
-    for kind, key in body:gmatch("<(%a+) parentKey=\"(%a+)\"") do t.regions[key] = kind end
+    -- each region, and the ones that cover the whole frame (setAllPoints)
+    for kind, key, more in body:gmatch("<(%a+) parentKey=\"(%a+)\"([^>]*)>") do
+      t.regions[key] = kind
+      if more:find('setAllPoints="true"', 1, true) then t.fill[key] = true end
+    end
     templates[t.name] = t
   end
   c.templates = templates
@@ -397,7 +480,22 @@ local function newClient(o)
     if template and template:find("^QuestBank") then
       assert(t, "a template Pins.xml defines: " .. template)
       assert(not t.mixin and not next(t.scripts), "QuestBank's map templates carry no mixin or scripts (never the canvas's pins): " .. template)
-      for key, rk in pairs(t.regions) do f[key] = newObj(rk, nil, f) end
+      if t.size then f:SetSize(t.size[1], t.size[2]) end
+      for key, rk in pairs(t.regions) do
+        f[key] = newObj(rk, nil, f)
+        if t.fill[key] then f[key]:SetAllPoints(f) end
+      end
+    end
+    -- Blizzard_MapCanvas.xml's scroll frame: the parent's ScrollContainer, the map on its child over a tiled background
+    if template == "MapCanvasFrameScrollContainerTemplate" then
+      env.Mixin(f, env.MapCanvasScrollControllerMixin)
+      f.Child = newObj("Frame", nil, f)
+      f.Child.TiledBackground = f.Child:CreateTexture(nil, "BACKGROUND")
+      f.Child.TiledBackground:SetAtlas("AdventureMap_TileBg")
+      f:SetScrollChild(f.Child)
+      f.Child:SetPoint("TOPLEFT")
+      parent.ScrollContainer = f
+      f:OnLoad()
     end
     c.frames[#c.frames + 1] = f
     return f
@@ -671,6 +769,13 @@ local function newClient(o)
     GetAllCompletedQuestIDs = function() local t = {} for k, v in pairs(c.done) do if v then t[#t + 1] = k end end return t end,
     GetLogIndexForQuestID = function(id) for i, e in ipairs(c.log) do if e[1] == id then return i + 2 end end end,
   }
+  local KALIMDOR = { [1411] = true, [1412] = true, [1413] = true, [1438] = true, [1439] = true, [1440] = true, [1441] = true, [1442] = true,
+    [1443] = true, [1444] = true, [1445] = true, [1446] = true, [1447] = true, [1448] = true, [1449] = true, [1450] = true, [1451] = true,
+    [1452] = true, [1454] = true, [1456] = true, [1457] = true, [2521] = true, [2524] = true }
+  local function continentOf(id) return KALIMDOR[id] and 1414 or 1415 end
+  local function mapName(id)
+    return ({ [947] = "Azeroth", [1414] = "Kalimdor", [1415] = "Eastern Kingdoms" })[id] or c.QB.Data.MAPNAME[id] or ("Map " .. id)
+  end
   env.C_Map = {
     GetBestMapForUnit = function() return o.map or 1453 end,
     -- c.noPins[m]: a map the game has no pins for (an instance's)
@@ -700,10 +805,38 @@ local function newClient(o)
       return o.world[1], { x = o.world[2], y = o.world[3], GetXY = function(self) return self.x, self.y end }
     end,
     GetMapRectOnMap = function() return 0.4, 0.6, 0.4, 0.6 end,
-    -- zones and cities 3, continents 2, the world 1 (Enum.UIMapType); c.mapTypes overrides one
+    -- zones and cities 3, continents 2, the world 1 (Enum.UIMapType); c.mapTypes overrides one. Azeroth holds the two
+    -- continents, a zone lies in its own (Kalimdor's by D.MAPNAME's ids, else the Eastern Kingdoms); names as
+    -- D.MAPNAME has them
     GetMapInfo = function(id)
       local kind = (c.mapTypes or {})[id] or ({ [947] = 1, [1414] = 2, [1415] = 2 })[id] or 3
-      return { mapID = id, mapType = kind, parentMapID = kind == 3 and 1415 or 947, name = "Map " .. id }
+      return { mapID = id, mapType = kind, parentMapID = kind == 1 and 0 or kind == 3 and continentOf(id) or 947, name = mapName(id) }
+    end,
+    -- c.noArt[id]: a map without art of its own
+    MapHasArt = function(id) return not (c.noArt or {})[id] end,
+    GetMapChildrenInfo = function(id)
+      local out = {}
+      if id == 947 then
+        out = { { mapID = 1414, name = "Kalimdor", mapType = 2, parentMapID = 947 }, { mapID = 1415, name = "Eastern Kingdoms", mapType = 2, parentMapID = 947 } }
+      elseif id == 1414 or id == 1415 then
+        for m, name in pairs(c.QB.Data.MAPNAME) do
+          if continentOf(m) == id then out[#out + 1] = { mapID = m, name = name, mapType = 3, parentMapID = id } end
+        end
+      end
+      return out
+    end,
+    -- the levels a zone is for: c.mapLevels[id], else 10-20 for a zone and none above
+    GetMapLevels = function(id)
+      local l = (c.mapLevels or {})[id]
+      if l then return l[1], l[2], 0, 0 end
+      if env.C_Map.GetMapInfo(id).mapType == 3 then return 10, 20, 0, 0 end
+      return 0, 0, 0, 0
+    end,
+    -- world yards to a map: c.mapRects[id] = { c = continent, x = north edge, y = west edge, size = yards across }
+    GetMapPosFromWorldPos = function(cont, pos, id)
+      local r = (c.mapRects or {})[id]
+      if not r or r.c ~= cont then return nil end
+      return id, env.CreateVector2D((r.y - pos.y) / r.size, (r.x - pos.x) / r.size)
     end,
   }
   env.C_Texture = { GetAtlasInfo = function(name) if (c.noAtlas or {})[name] then return nil end return { file = 1, width = 32, height = 32 } end }
@@ -1251,7 +1384,20 @@ local function dumpLayout(root, label)
   local texNames = {}
   for k, v in pairs(clients[1].QB.Data.TEX) do texNames[v] = k end
   for idx, o in ipairs(ALL) do
-    if visible(o) and o ~= root then
+    if o.__kind == "Line" and visible(o) and o.__start and o.__stop then
+      -- a stroke (the Map page's route): its two ends, under the pins as their frame levels put it in the game
+      local anc = ancestors(o)
+      local inside = false
+      for _, a in ipairs(anc) do if a == root then inside = true end end
+      local ra, rb = inside and rectOf(o.__start[2]), inside and rectOf(o.__stop[2])
+      if ra and rb then
+        local x1, y1 = anchorXY(ra, o.__start[1])
+        local x2, y2 = anchorXY(rb, o.__stop[1])
+        items[#items + 1] = { k = "Line", x = 0, y = 0, w = 0, h = 0, i = idx, a = o.__alpha, depth = #anc, layer = "BACKGROUND",
+          x1 = x1 + (o.__start[3] or 0) - rr.l, y1 = rr.t - (y1 + (o.__start[4] or 0)), x2 = x2 + (o.__stop[3] or 0) - rr.l,
+          y2 = rr.t - (y2 + (o.__stop[4] or 0)), thick = o.__thick or 2, c = o.__vertex }
+      end
+    elseif visible(o) and o ~= root then
       local anc = ancestors(o)
       local inside = false
       for _, a in ipairs(anc) do if a == root then inside = true end end
@@ -1625,7 +1771,7 @@ do
   Mini.List = realList
   assert(built == 1, "twenty placings made the list " .. built .. " times")
   -- the quest picked on QuestBank's Map: its pins glow blue, pulsing once a second
-  QB.MapPage = { focus = 777001 }
+  QB.MapPage.focus = 777001
   Mini.Place()
   near = pinOf(function(d) return d.id == 777001 end)
   local k = (1 - math.cos(c.clock * 2 * math.pi)) / 2 -- (where in the second the clock is: half a second on, the other end)
@@ -1637,7 +1783,7 @@ do
   c.clock = c.clock + 0.5
   assert(Mini.pulsing and near.glow.__shown and near.glow.__vertex[3] == 1 and math.abs(a0 - (0.25 + 0.75 * k)) < 0.01 and math.abs(a1 - (1 - 0.75 * k)) < 0.01,
     string.format("the picked quest pulses: %s then %s", tostring(a0), tostring(a1)))
-  QB.MapPage = nil
+  QB.MapPage.focus = nil
   Mini.Place()
   assert(not Mini.pulsing and not near.glow.__shown, "nothing picked: no pulse")
   table.remove(QB.state.logOrder, 1); table.remove(QB.state.logOrder, 1)
@@ -1973,7 +2119,7 @@ do
   QB:Settings().mmParty = nil
   -- the quest's blue areas: the game's own QuestPOIFrame over your zone's map, cut in 16 bands on a round minimap,
   -- drawn unseen first and shown once the layout settled; the quest picked on QuestBank's Map
-  QB.MapPage = { focus = 777100 }
+  QB.MapPage.focus = 777100
   local m = QB.API.MapID()
   for _ = 1, 3 do c.clock = c.clock + 0.2; Mini.Update(0) end
   local parts, drawn = {}, 0
@@ -2006,7 +2152,7 @@ do
   Mini.Update(0)
   assert(not parts[1].__shown, "Quest areas off: none")
   QB:Settings().mmAreas = nil
-  QB.MapPage = nil
+  QB.MapPage.focus = nil
   local first = QB.state.logOrder[1].id
   P.list = { { m = 1429, x = 50, y = 48, num = 1, name = "Goldshire", when = "", lines = {}, ids = { [first] = true } } }
   assert(MV.AreaQuest() == first, "nothing picked: the first quest of your log at stop 1")
@@ -2356,8 +2502,9 @@ do
   U:ShowTab(1)
 end
 -- the key bindings: one QuestBank section in the game's Key Bindings, a line for the window, each page, the Map
--- and the minimap's size; a page's key opens the window on that page and shuts it there. The Map is the game's own
--- world map on your zone, opened through the game's panel code, with QuestBank's icons on it
+-- and the minimap's size; a page's key opens the window on that page and shuts it there. The Map is QuestBank's map
+-- page (page 8); switched off in Settings, the game's own world map on your zone, opened through the game's panel
+-- code, with QuestBank's icons on it
 do
   local U, env = QB.UI, owner.env
   c = owner
@@ -2380,7 +2527,7 @@ do
       if e.tab then pages = pages + 1 end
     end
   end
-  assert(pages == 7 and keys.QUESTBANK_WINDOW and keys.QUESTBANK_MAP and keys.QUESTBANK_MINIMAP_BIGGER and keys.QUESTBANK_MINIMAP_SMALLER, "seven pages, the window, the Map, the minimap's size")
+  assert(pages == 8 and keys.QUESTBANK_WINDOW and keys.QUESTBANK_MAP and keys.QUESTBANK_MINIMAP_BIGGER and keys.QUESTBANK_MINIMAP_SMALLER, "eight pages (the Map one), the window, the minimap's size")
   assert(env.BINDING_NAME_QUESTBANK_MAP == "Map" and keys.QUESTBANK_BIGMAP == nil and env.BINDING_NAME_QUESTBANK_BIGMAP == nil, "Map, not Big map")
   -- a page's key: the window on that page; again, shut; another page's key while it is open: that page
   local wasOpen, wasTab = U.frame:IsShown(), U.tab
@@ -2400,16 +2547,33 @@ do
   assert(not U.frame:IsShown(), "the window key shuts it")
   keys.QUESTBANK_WINDOW()
   assert(U.frame:IsShown() and U.tab == 1, "and opens it where it was")
-  -- the Map: the sidebar's entry, the key, the settings button and /qb bigmap open the game's world map on your zone
+  -- the Map: the sidebar's entry and the key open the Map page (in a fight too: no panel of the game's is shown)
   local map = c.map
   local mapWas, idWas = map.shown, map.id
   map:Close()
   c.panelCalls, c.playerMap = {}, 1453
   local side
   for _, b in ipairs(U.sideButtons) do if b.entry.name == "Map" then side = b end end
-  assert(side and not side.entry.tab and side.label:GetText() == "Map", "the sidebar's Map, an action, not a page")
+  assert(side and side.entry.tab == 8 and side.entry.act and side.label:GetText() == "Map" and U.tabs[8] == side, "the sidebar's Map: page 8, with the game's map for when it is off")
+  U:ShowTab(1)
   side.__scripts.OnClick(side)
-  assert(map.shown and map.id == 1453 and c.panelCalls[1] == "open" and U.frame:IsShown() and U.tab == 1, "the sidebar's Map: the game's map, on your zone; the window stays as it was")
+  assert(U.frame:IsShown() and U.tab == 8 and U.views[8]:IsShown() and QB.MapPage.frame and #c.panelCalls == 0 and not map.shown, "the sidebar's Map: the Map page; the game's map left shut")
+  U.frame:Hide()
+  keys.QUESTBANK_MAP()
+  assert(U.frame:IsShown() and U.tab == 8, "the Map key: the window on the Map page")
+  keys.QUESTBANK_MAP()
+  assert(not U.frame:IsShown(), "again: shut")
+  c.combat = true
+  keys.QUESTBANK_MAP()
+  assert(U.frame:IsShown() and U.tab == 8 and #c.panelCalls == 0 and not c.panelBlocked, "in a fight the Map page opens")
+  keys.QUESTBANK_MAP()
+  c.combat = false
+  -- switched off in Settings (or /qb map game): the game's world map on your zone, as before
+  QB:Settings().mapPage = false
+  U.frame:Show()
+  U:ShowTab(1)
+  side.__scripts.OnClick(side)
+  assert(map.shown and map.id == 1453 and c.panelCalls[1] == "open" and U.frame:IsShown() and U.tab == 1, "switched off, the sidebar's Map: the game's map, on your zone; the window stays as it was")
   assert(#ours(c, "QuestBankQuestPinTemplate") > 0, "QuestBank's icons on it")
   side.__scripts.OnClick(side)
   assert(map.shown and #c.panelCalls == 1, "open on your zone already: left as it is")
@@ -2420,6 +2584,8 @@ do
   assert(not map.shown and c.panelCalls[4] == "hide", "the Map key shuts it")
   keys.QUESTBANK_MAP()
   assert(map.shown and c.panelCalls[5] == "open", "and opens it")
+  env.QuestBankKeys.Page("MAP")
+  assert(U.tab == 1 and #c.panelCalls == 5, "the Map is no plain page: its key is the Map key's")
   -- in a fight the game blocks an addon opening a panel: nothing is called, a line says so
   c.combat = true
   local nCalls, nChat = #c.panelCalls, #c.chat
@@ -2427,17 +2593,24 @@ do
   side.__scripts.OnClick(side)
   assert(#c.panelCalls == nCalls and not c.panelBlocked and map.shown and #c.chat == nChat + 2 and c.chat[#c.chat]:find("fight", 1, true), "in a fight: nothing tried")
   c.combat = false
+  QB:Settings().mapPage = true
   for _, cmd in ipairs({ "bigmap", "map-open" }) do
     map:Close()
     env.SlashCmdList.QUESTBANK(cmd)
-    assert(map.shown and map.id == 1453, "/qb " .. cmd .. " opens the Map")
+    assert(map.shown and map.id == 1453, "/qb " .. cmd .. " opens the game's map")
   end
   map:Close()
   U:ShowTab(5)
   local v = U.views[5]
-  assert(v.map and v.map:GetText() == "Map" and v.bigmap == nil, "the settings button is Map")
+  assert(v.map and v.map:GetText() == "Game's map" and v.bigmap == nil and v.mapPage:GetChecked(), "the settings button is the game's map, beside the page's switch")
   v.map.__scripts.OnClick(v.map)
   assert(map.shown and map.id == 1453, "and opens the game's map")
+  v.mapPage:SetChecked(false)
+  v.mapPage.__scripts.OnClick(v.mapPage)
+  assert(QB:Settings().mapPage == false and not QB.MapPage.On(), "the switch off: the game's map on the key")
+  v.mapPage:SetChecked(true)
+  v.mapPage.__scripts.OnClick(v.mapPage)
+  assert(QB.MapPage.On(), "and on again")
   -- back as it was
   map.id = idWas
   if mapWas then map:RefreshAll() else map:Close() end
@@ -2445,6 +2618,559 @@ do
   U:ShowTab(wasTab or 1)
   U.frame:SetShown(wasOpen)
 end
+local deadminesPin -- the Deadmines' entrance on the world map of client c, drawn now
+-- 5.5: the plumbing under the Map page. A zone's quests as its icons show them (QM.ZoneQuests): what is ready to hand
+-- in there, what of your log is there, and what you can pick up there
+do
+  local QM, set = QB.QuestMap, QB:Settings()
+  c = owner
+  local pins = set.pins
+  set.pins = false -- (else the NPCs under a route pin fold into its tooltip, not an icon of their own)
+  for _, m in ipairs({ 1429, 1453, 1436 }) do
+    local ready, log, pickup = QM.ZoneQuests(m)
+    local turnIcons, giveIcons = {}, {}
+    for _, d in ipairs(QM:Build(m)) do
+      if d.kind == "turn" then
+        for _, q in ipairs(d.quests) do turnIcons[q.id] = true end
+        for _, q in ipairs(d.offers or {}) do giveIcons[q.id] = true end
+      elseif d.kind == "give" then
+        for _, q in ipairs(d.quests) do giveIcons[q.id] = true end
+      end
+    end
+    local function same(list, icons)
+      local n = 0
+      for _ in pairs(icons) do n = n + 1 end
+      for _, q in ipairs(list) do if not icons[q.id] then return false end end
+      return n == #list
+    end
+    assert(same(ready, turnIcons) and same(pickup, giveIcons), "map " .. m .. ": the ready and pick-up lists are the ? and ! icons' quests")
+    for _, q in ipairs(log) do
+      local e = QB.state.log[q.id]
+      assert(e and not e.complete, "map " .. m .. ": an unfinished quest of your log: " .. q.name)
+    end
+    print(string.format("zone quests on %d: %d ready, %d in the log, %d to pick up", m, #ready, #log, #pickup))
+  end
+  local ready, log = QM.ZoneQuests(1429)
+  assert(#ready + #log > 0, "the owner has quests in Elwynn")
+  set.pins = pins
+  -- world yards back to a map's fractions (Model.MapPos): on it, off it, and nothing without the client's answer
+  local M, env = QB.Model, owner.env
+  c.mapRects = { [1429] = { c = 0, x = 0, y = 100, size = 1000 } }
+  local x, y = M.MapPos(0, -300, -150, 1429)
+  assert(math.abs(x - 0.25) < 1e-9 and math.abs(y - 0.3) < 1e-9, "a point on Elwynn: " .. tostring(x) .. ", " .. tostring(y))
+  assert(M.MapPos(0, 300, -150, 1429) == nil and M.MapPos(1, -300, -150, 1429) == nil and M.MapPos(0, -300, -150, 1436) == nil, "off the map, another continent, a map with no answer: nil")
+  local save = env.C_Map.GetMapPosFromWorldPos
+  env.C_Map.GetMapPosFromWorldPos = function() return 1429, { x = SECRET.num(), y = 0.5 } end
+  assert(M.MapPos(0, -300, -150, 1429) == nil, "a hidden answer: nil")
+  env.C_Map.GetMapPosFromWorldPos = save
+  c.mapRects = nil
+  -- a dungeon's entrance on a zone map says how many of its quests you have done, and has the ready tick once that is
+  -- all of them (DungeonMap.lua's count, kept until QuestBank's data changes)
+  local map = c.map
+  local wasShown, wasId = map.shown, map.id
+  map.shown = true
+  map:SetMapID(1436)
+  local function deadmines()
+    for _, f in ipairs(ours(c, "QuestBankQuestPinTemplate")) do
+      if f.data.kind == "dungeon" and f.data.cat.key == "d1581" then return f end
+    end
+  end
+  deadminesPin = deadmines
+  local qs = QB.DMap.Quests("d1581")
+  local done = 0
+  for _, e in ipairs(qs) do if e.st == "done" then done = done + 1 end end
+  local f = deadmines()
+  assert(f and f.Count:IsShown() and f.Count:GetText() == done .. "/" .. #qs and (done < #qs) ~= f.Badge:IsShown(), "the Deadmines' entrance: " .. tostring(f and f.Count:GetText()))
+  for _, d in ipairs(ours(c, "QuestBankQuestPinTemplate")) do
+    if d.data.kind ~= "dungeon" then assert(not d.Count:IsShown(), "only an entrance has a count") end
+  end
+  map.id = wasId
+  map.shown = wasShown
+  map:RefreshAll()
+end
+
+-- 5.5: the Map page (MapPage.lua): the game's map canvas in the window, built in Lua at login out of combat from
+-- Blizzard_MapCanvas, with three of its methods overridden, five of Blizzard's providers and QuestBank's layers
+do
+  local MP, QM, P, U, env = QB.MapPage, QB.QuestMap, QB.Pins, QB.UI, owner.env
+  c = owner
+  local canvas = MP.canvas
+  assert(MP.Available() and MP.On() and canvas and env.QuestBankMapCanvas == canvas, "the canvas is built at login")
+  -- Blizzard's five safe providers and QuestBank's own layers, nothing else
+  local blizz, own = {}, 0
+  for dp in pairs(canvas.dataProviders) do
+    if dp.__blizzard then blizz[#blizz + 1] = dp.__blizzard else own = own + 1 end
+  end
+  table.sort(blizz)
+  assert(table.concat(blizz, " ") == "AreaLabelDataProviderMixin GroupMembersDataProviderMixin MapExplorationDataProviderMixin MapHighlightDataProviderMixin QuestBlobDataProviderMixin",
+    "Blizzard's five safe providers: " .. table.concat(blizz, " "))
+  assert(own == 5 and canvas.dataProviders[QM.pageProvider] and canvas.dataProviders[P.pageProvider] and QM.pageProvider ~= QM.provider and P.pageProvider ~= P.provider
+    and canvas.dataProviders[MP.lines] and canvas.dataProviders[MP.step] and canvas.dataProviders[MP.flight],
+    "and QuestBank's five layers, of its own: the icons, the route's pins, its strokes, the arrow's step, the flight paths")
+  assert(not QM.pageProvider.world and not P.pageProvider.world and not MP.lines.world and #P.layers == 2, "off the world map's Ctrl watch and TomTom hold")
+  -- the three overrides: Blizzard's own would empty the game's shared caches (the mock's error)
+  for _, k in ipairs({ "OnUpdate", "OnShow", "OnMapChanged" }) do
+    assert(canvas[k] ~= env.MapCanvasMixin[k], "overridden: " .. k)
+    assert(not pcall(env.MapCanvasMixin[k], canvas), "Blizzard's " .. k .. " would clear the caches")
+  end
+  assert(canvas.__scripts.OnUpdate == canvas.OnUpdate and canvas.__scripts.OnShow == canvas.OnShow and canvas.__scripts.OnHide == env.MapCanvasMixin.OnHide,
+    "its scripts: the overrides, and Blizzard's OnHide")
+  assert(canvas:GetCanvas() == canvas.ScrollContainer.Child and canvas.ScrollContainer:GetParent() == canvas and canvas.BorderFrame.__mouse == false,
+    "its scroll frame and border frame, as the template has them")
+  assert(#canvas.__clickHandlers == 1, "a click handler of its own")
+  -- the names the page must never use, read from the file
+  local banned = { "QuestDataProviderMixin", "AreaPOIDataProviderMixin", "QuestOfferDataProviderMixin", "WorldQuestDataProviderMixin",
+    "BonusObjectiveDataProviderMixin", "VignetteDataProviderMixin", "WaypointLocationDataProviderMixin", "FlightPointDataProviderMixin",
+    "DungeonEntranceDataProviderMixin", "ClearCachedActivitiesForPlayer" }
+  local n, hits = 0, {}
+  for line in io.lines(HERE .. "/QuestBank/MapPage.lua") do
+    n = n + 1
+    for _, name in ipairs(banned) do if line:find("%f[%w_]" .. name .. "%f[^%w_]") then hits[#hits + 1] = n .. " " .. name end end
+  end
+  assert(#hits == 0, "MapPage.lua names a provider or call it must not: " .. table.concat(hits, ", "))
+  -- shown, a new map and the canvas's frames: no error (Blizzard's own methods would have raised one)
+  c.playerMap = 1429
+  c.mapLevels = { [1429] = { 1, 10 } }
+  U:Open(8)
+  local f = MP.frame
+  assert(U.tab == 8 and canvas:GetParent() == f.map and canvas:IsVisible() and not f.later:IsShown(), "the page shows the canvas in its map frame")
+  canvas.__scripts.OnShow(canvas)
+  MP.Go(1415, "user")
+  MP.Go(1429, "user")
+  for _ = 1, 10 do canvas.__scripts.OnUpdate(canvas, 0.016) end
+  canvas.__scripts.OnHide(canvas)
+  canvas.__scripts.OnShow(canvas)
+  -- on your zone, with the maps it lies in as crumbs
+  MP.Here()
+  local function crumbs()
+    local out = {}
+    for _, b in ipairs(f.crumbs) do if b:IsShown() then out[#out + 1] = b.text:GetText() end end
+    return table.concat(out, " > ")
+  end
+  assert(canvas.mapID == 1429 and MP.follow and crumbs() == "Azeroth > Eastern Kingdoms > Elwynn Forest", "on your zone: " .. crumbs())
+  assert(f.zone:GetText() == "Elwynn Forest" and f.levels:GetText() == "LV 1-10", "under the map, the zone and its levels: " .. f.levels:GetText())
+  local ready, log, pickup = QM.ZoneQuests(1429)
+  assert(f.heads.ready:IsShown() and f.heads.ready.count:GetText() == tostring(#ready) and f.heads.log.count:GetText() == tostring(#log)
+    and f.heads.pickup.count:GetText() == tostring(#pickup) and not f.empty:IsShown(), "beside it, the zone's quests by kind")
+  -- the continent's crumb: the continent, and the map stays there
+  local cont = f.crumbs[2]
+  cont.__scripts.OnClick(cont, "LeftButton")
+  local last = canvas.__calls[#canvas.__calls]
+  assert(last[1] == "SetMapID" and last[2] == 1415 and canvas.mapID == 1415 and not MP.follow and crumbs() == "Azeroth > Eastern Kingdoms",
+    "the continent's crumb opens it, and the map stops following you")
+  assert(f.empty:IsShown() and f.empty:GetText() == "Pick a zone" and not f.heads.ready:IsShown() and f.levels:GetText() == "", "a continent: pick a zone")
+  local ev = MP.events
+  c.playerMap = 1436
+  ev.__scripts.OnEvent(ev, "ZONE_CHANGED_NEW_AREA")
+  U:Refresh()
+  assert(canvas.mapID == 1415, "you move on: the map stays where you took it")
+  f.here.__scripts.OnClick(f.here)
+  assert(canvas.mapID == 1436 and MP.follow and crumbs() == "Azeroth > Eastern Kingdoms > Westfall", "Here: your zone, following you again")
+  c.playerMap = 1429
+  ev.__scripts.OnEvent(ev, "ZONE_CHANGED_NEW_AREA")
+  assert(canvas.mapID == 1429, "following: the map goes with you")
+  -- the map itself moved (a click into a zone, a right-click out): the map stays there
+  canvas:SetMapID(1415)
+  assert(not MP.follow and crumbs() == "Azeroth > Eastern Kingdoms", "a click on the map stops following too")
+  MP.Here()
+  -- a map without art is never shown
+  c.noArt = { [2665] = true, [1436] = true }
+  local before = #canvas.__calls
+  assert(MP.Go(2665, "user") == false and #canvas.__calls == before and MP.follow, "no art: not shown, and still following")
+  c.playerMap = 2665
+  ev.__scripts.OnEvent(ev, "ZONE_CHANGED_NEW_AREA")
+  U:Refresh()
+  assert(#canvas.__calls == before and canvas.mapID == 1429, "your zone without art: the map stays")
+  c.playerMap = 1429
+  -- a crumb's menu (the right button, or a click on the map shown): the zones in it with art of their own, by name
+  c.contextMenus = {}
+  cont.__scripts.OnClick(cont, "RightButton")
+  local menu = c.contextMenus[1]
+  local names = {}
+  for _, e in ipairs(menu or {}) do names[#names + 1] = e.text end
+  assert(menu and #names > 10 and names[1] == "Alterac Mountains" and table.concat(names, ","):find("Elwynn Forest", 1, true)
+    and not table.concat(names, ","):find("Westfall", 1, true) and not table.concat(names, ","):find("Durotar", 1, true), "the Eastern Kingdoms' zones with art: " .. table.concat(names, ", "))
+  for _, e in ipairs(menu) do if e.text == "Redridge Mountains" then e.set() end end
+  assert(canvas.mapID == 1433 and not MP.follow, "a zone picked from it")
+  MP.Go(1415, "user")
+  cont.__scripts.OnClick(cont, "LeftButton")
+  assert(#c.contextMenus == 2 and canvas.mapID == 1415, "the crumb of the map shown: its menu")
+  f.crumbs[1].__scripts.OnClick(f.crumbs[1], "RightButton")
+  local world = {}
+  for _, e in ipairs(c.contextMenus[3]) do world[#world + 1] = e.text end
+  assert(table.concat(world, ",") == "Eastern Kingdoms,Kalimdor", "Azeroth's: its continents")
+  c.noArt = nil
+  -- the Dungeons button: the journal's dungeons with an entrance here, on a continent in its zones
+  MP.Go(1436, "user")
+  c.contextMenus = {}
+  f.dungeons.__scripts.OnClick(f.dungeons)
+  local dm = c.contextMenus[1]
+  assert(dm and dm[1].text:find("^The Deadmines") and not f.dungeons.icon.__desat, "Westfall's dungeons: " .. tostring(dm and dm[1] and dm[1].text))
+  dm[1].set()
+  assert(U.tab == 7 and env.QuestBankDungeonMap.cat.key == "d1581", "one picked opens in the Dungeon Journal")
+  U:Open(8)
+  MP.Go(1415, "user")
+  assert(#MP.Dungeons(1415) > #MP.Dungeons(1436) and #MP.Dungeons(947) == 0, "the continent: its zones' dungeons")
+  MP.Go(1429, "user")
+  local none = #MP.Dungeons(1429) == 0
+  assert(f.dungeons.icon.__desat == none, "no dungeon here: the button greyed")
+  -- Ctrl and a click on the map: QuestBank's waypoint there; a plain click goes to the map
+  local SetWaypoint, got = QB.API.SetWaypoint, nil
+  QB.API.SetWaypoint = function(...) got = { ... } end
+  local handler = canvas.__clickHandlers[1]
+  assert(handler(canvas, "LeftButton", 0.5, 0.25) == false and not got, "a plain click: the map's")
+  c.ctrl = true
+  assert(handler(canvas, "LeftButton", 0.5, 0.25) == true and got[1] == 1429 and got[2] == 50 and got[3] == 25, "Ctrl and a click: a waypoint")
+  c.ctrl = false
+  QB.API.SetWaypoint = SetWaypoint
+  -- the page's layers redraw when QuestBank's data changes while the page shows, not while it is shut; the world map's
+  -- Ctrl pass-through leaves their mouse alone
+  local qd, pd = QM.pageProvider.draws, P.pageProvider.draws
+  P:Update()
+  assert(QM.pageProvider.draws == qd + 1 and P.pageProvider.draws == pd + 1, "shown: redrawn on a change")
+  U.frame:Hide()
+  P:Update()
+  assert(QM.pageProvider.draws == qd + 1 and P.pageProvider.draws == pd + 1, "shut: left until it shows")
+  U:Open(8)
+  P.SetThrough(true)
+  QM.pageProvider:RefreshAllData()
+  for _, fr in ipairs(QM.pageProvider.active) do assert(fr.__mouse ~= false, "the page's icons keep the mouse") end
+  P.SetThrough(false)
+  U:ShowTab(4); U:ShowTab(8); U:ShowTab(7)
+  assert(U.lastTab == 4, "the Map and the journal are never the page to go back to")
+  U:ShowTab(8)
+  -- /qb map: the page; on a zone by name; any other name the journal's dungeon; /qb journal the journal
+  U.frame:Hide()
+  env.SlashCmdList.QUESTBANK("map")
+  assert(U.frame:IsShown() and U.tab == 8, "/qb map: the Map page")
+  env.SlashCmdList.QUESTBANK("map westfall")
+  assert(U.tab == 8 and canvas.mapID == 1436 and not MP.follow, "/qb map westfall: Westfall")
+  env.SlashCmdList.QUESTBANK("map deadmines")
+  assert(U.tab == 7 and env.QuestBankDungeonMap.cat.key == "d1581", "/qb map deadmines: the journal")
+  env.SlashCmdList.QUESTBANK("journal stockade")
+  assert(U.tab == 7 and env.QuestBankDungeonMap.cat.name == "The Stockade", "/qb journal stockade")
+  U:ShowTab(8)
+  env.SlashCmdList.QUESTBANK("map game")
+  assert(QB:Settings().mapPage == false and U.tab ~= 8 and not MP.On(), "/qb map game: the game's map on the key, and off the page")
+  QB:Settings().mapPage = true
+  MP.Here()
+  U:ShowTab(1)
+  c.playerMap, c.mapLevels = nil, nil
+end
+
+-- 5.5: the Map page's own layers and their switches under the map: the quest icons and route pins on the page, the
+-- route's strokes (you to stop 1 gold, stop to stop blue, 5 pixels on screen at any zoom), the arrow's step, the
+-- flight paths (the game's own list, else QuestBank's flight masters); a switch for each layer, with its count
+do
+  local MP, QM, P, U, env = QB.MapPage, QB.QuestMap, QB.Pins, QB.UI, owner.env
+  c = owner
+  local set, canvas = QB:Settings(), MP.canvas
+  U:Open(8)
+  local f = MP.frame
+  local function count(layer, kind)
+    local n = 0
+    for _, fr in ipairs(layer.active) do if fr:IsShown() and (not kind or (fr.data and fr.data.kind == kind)) then n = n + 1 end end
+    return n
+  end
+  local function onMap(m)
+    local n = 0
+    for _, d in ipairs(P.list) do if P.Project(d, m) then n = n + 1 end end
+    return n
+  end
+  -- the quest icons on the page are the ones QuestMap.lua builds for it; the route's pins those of the route on the map
+  for _, m in ipairs({ 1429, 1453 }) do
+    MP.Go(m, "user")
+    local want = {}
+    for _, d in ipairs(QM:Build(m, true)) do want[d.kind] = (want[d.kind] or 0) + 1 end
+    for _, k in ipairs({ "give", "turn", "obj" }) do
+      assert(count(QM.pageProvider, k) == (want[k] or 0), string.format("map %d: the page's %s icons: %d of %d", m, k, count(QM.pageProvider, k), want[k] or 0))
+    end
+    assert(count(P.pageProvider) == onMap(m) and onMap(m) > 0, "map " .. m .. ": the route's pins on it: " .. count(P.pageProvider))
+  end
+  -- the strokes, on a route of our own: stops 1, 2, 3 and 5 on Elwynn, 4 on Westfall (off this map), and a pick-up
+  local route, rectOnMap = P.list, env.C_Map.GetMapRectOnMap
+  env.C_Map.GetMapRectOnMap = function(a, b) if a == 1436 then return nil end return rectOnMap(a, b) end
+  local function stop(m, x, y, num, name) return { m = m, x = x, y = y, num = num, name = name, ids = {}, lines = {} } end
+  P.list = { stop(1429, 20, 20, 1, "One"), stop(1429, 60, 30, 2, "Two"), stop(1429, 40, 70, 3, "Three"), stop(1436, 50, 50, 4, "Four"),
+             stop(1429, 80, 80, 5, "Five"), stop(1429, 10, 90, nil, "A giver") }
+  -- you stand at 0.5, 0.3 of Elwynn (the client's world yards for it)
+  c.mapRects = { [1429] = { c = 0, x = -8530, y = 980, size = 1000 } }
+  MP.Go(1429, "user")
+  local strokes = MP.lines.active[1]
+  local function shown()
+    local out = {}
+    for _, l in ipairs(strokes and strokes.ctx.lines or {}) do if l.__shown then out[#out + 1] = l end end
+    return out
+  end
+  local drawn = shown()
+  local w, h = strokes:GetWidth(), strokes:GetHeight()
+  assert(count(P.pageProvider) == 5 and #MP.lines.active == 1 and #drawn == 3, "you to 1, 1 to 2, 2 to 3; 3 and 5 lie beside a stop off the map: " .. #drawn)
+  assert(w == canvas:GetCanvas():GetWidth() and h == canvas:GetCanvas():GetHeight(), "the strokes' frame covers the map")
+  local first = drawn[1]
+  local gold, blue = QB.Mini.GOLD, QB.Mini.BLUE
+  assert(first.__start[2] == strokes and first.__start[3] == 0 and math.abs(first.__start[4] - 0.2 * h) < 1e-6 and first.__vertex[1] == gold[1]
+    and drawn[2].__vertex[1] == blue[1] and drawn[3].__vertex[3] == blue[3], "from you (gold), then stop to stop (blue)")
+  assert(first.__thick == 5 and first.__layer == "OVERLAY" and first.__tex == "Interface\\AddOns\\QuestBank\\art\\line_arrow.png", "5 pixels of line_arrow.png")
+  -- zoomed in to twice the size: still 5 pixels on screen
+  local scaleOf = canvas.GetCanvasScale
+  canvas.GetCanvasScale = function() return 2 end
+  MP.lines:OnCanvasScaleChanged()
+  assert(first.__thick == 2.5, "zoomed in: thinner on the canvas, the same on screen: " .. tostring(first.__thick))
+  canvas.GetCanvasScale = scaleOf
+  MP.lines:OnCanvasScaleChanged()
+  -- you walk on: the stroke from you follows at the next look; off the map, it goes
+  local world = owner.o.world
+  owner.o.world = { 0, -8830, 580 }
+  MP.Tick(1)
+  assert(math.abs(first.__start[3] - (-0.1 * w)) < 1e-6 and #shown() == 3, "the stroke from you moved with you")
+  c.noPos = true
+  MP.Tick(1)
+  assert(#shown() == 2 and not first.__shown or shown()[1] ~= first or #shown() == 2, "nowhere on the map: no stroke from you")
+  assert(#shown() == 2, "nowhere on the map: no stroke from you: " .. #shown())
+  c.noPos, owner.o.world = nil, world
+  MP.Tick(1)
+  assert(#shown() == 3, "back")
+  -- the route's switch: its pins, strokes and step go, and the switch greys
+  local function toggle(key) for _, b in ipairs(f.toggles) do if b.t.key == key then return b end end end
+  local rt = toggle("mapRoute")
+  assert(rt.count:GetText() == "5" and rt.num:GetText() == "1" and rt.icon.__atlas == "UI-QuestPoi-QuestNumber" and not rt.icon.__desat, "the route's switch: 5 pins here")
+  lines = {}
+  rt.__scripts.OnEnter(rt)
+  assert(lines[1] == "Route" and lines[2]:find("Click: hide them", 1, true), "its tooltip: " .. table.concat(lines, " / "))
+  rt.__scripts.OnClick(rt)
+  assert(set.mapRoute == false and count(P.pageProvider) == 0 and #MP.lines.active == 0 and rt.icon.__desat and rt.__alpha == 0.4, "Route off")
+  assert(QM:Build(1429, true) and P.RouteOn(true) == (set.pins and true or false), "the world map's pins keep their own switch")
+  rt.__scripts.OnClick(rt)
+  assert(set.mapRoute == true and count(P.pageProvider) == 5 and #shown() == 3 and rt.__alpha == 1, "Route on")
+  -- the arrow's step, lit, where the arrow sends you first
+  local MiniStep = QB.Arrow.MiniStep
+  QB.Arrow.MiniStep = function() return { c = 0, wx = -8830, wy = 480, name = "Fly to Lakeshire", atlas = "flightmaster", icon = 1 } end
+  MP.Tick(1)
+  local st = MP.step.active[1]
+  assert(#MP.step.active == 1 and st.Icon.__atlas == "flightmaster" and math.abs(st.mapX - 0.5) < 1e-6 and math.abs(st.mapY - 0.3) < 1e-6
+    and st.glow and st.glow.__shown, "the arrow's step on the map, lit")
+  lines = {}
+  st.__scripts.OnEnter(st)
+  assert(lines[1] == "Fly to Lakeshire", "its tooltip")
+  QB.Arrow.MiniStep = MiniStep
+  MP.Tick(1)
+  assert(#MP.step.active == 0, "no step: none")
+  P.list, env.C_Map.GetMapRectOnMap, c.mapRects = route, rectOnMap, nil
+  P:Update()
+  -- the flight paths: QuestBank's flight masters while the client lists none (Stormwind's on Stormwind City), else the
+  -- game's own, with their art, and the other faction's left out
+  MP.Go(1453, "user")
+  assert(#MP.flight.active == 1 and MP.flight.active[1].data.name == "Stormwind" and toggle("mapFlights").count:GetText() == "1", "Stormwind's flight master")
+  local nodesFor = env.C_TaxiMap.GetTaxiNodesForMap
+  env.C_TaxiMap.GetTaxiNodesForMap = function()
+    return { { name = "Ours", faction = 0, isUndiscovered = false, atlasName = "TaxiNode_Neutral", position = env.CreateVector2D(0.3, 0.3) },
+             { name = "Theirs", faction = 1, isUndiscovered = false, atlasName = "TaxiNode_Horde", position = env.CreateVector2D(0.4, 0.3) },
+             { name = "Not found", faction = 2, isUndiscovered = true, position = env.CreateVector2D(0.5, 0.3) } }
+  end
+  MP.RefreshLayers()
+  local fl = MP.flight.active
+  assert(#fl == 2 and fl[1].Icon.__atlas == "TaxiNode_Neutral" and fl[2].Icon.__atlas == "taxinode_undiscovered" and not fl[2].data.known, "the game's flight points, ours")
+  lines = {}
+  fl[2].__scripts.OnEnter(fl[2])
+  assert(lines[1] == "Not found" and lines[2] == "Flight path, not found yet", "a flight point's tooltip")
+  local SetWaypoint, way = QB.API.SetWaypoint, nil
+  QB.API.SetWaypoint = function(...) way = { ... } end
+  fl[1]:OnMouseClickAction("LeftButton")
+  assert(way and way[1] == 1453 and math.abs(way[2] - 30) < 1e-6 and way[4] == "Ours", "a click: a waypoint there")
+  QB.API.SetWaypoint = SetWaypoint
+  toggle("mapFlights").__scripts.OnClick(toggle("mapFlights"))
+  assert(set.mapFlights == false and #MP.flight.active == 0, "Flight paths off")
+  toggle("mapFlights").__scripts.OnClick(toggle("mapFlights"))
+  env.C_TaxiMap.GetTaxiNodesForMap = nodesFor
+  -- the dungeons: Westfall's entrance with its count on the page too, and their switch (the world map's as well)
+  MP.Go(1436, "user")
+  local function deadmines()
+    for _, fr in ipairs(QM.pageProvider.active) do if fr.data.kind == "dungeon" and fr.data.cat.key == "d1581" then return fr end end
+  end
+  local p = QB.DMap.Progress().d1581
+  assert(deadmines() and deadmines().Count:GetText() == p.done .. "/" .. p.total and toggle("mapDungeons").count:GetText() == tostring(#QM.Entrances(1436)), "the Deadmines' entrance on the page")
+  toggle("mapDungeons").__scripts.OnClick(toggle("mapDungeons"))
+  local dungeonsWorld = 0
+  for _, d in ipairs(QM:Build(1436)) do if d.kind == "dungeon" then dungeonsWorld = dungeonsWorld + 1 end end
+  assert(set.mapDungeons == false and not deadmines() and dungeonsWorld == 0, "Dungeons off, here and on the world map")
+  toggle("mapDungeons").__scripts.OnClick(toggle("mapDungeons"))
+  assert(deadmines(), "and on")
+  -- the icons' switches are QuestMap.lua's: with all its icons off, one switched on comes on alone
+  set.mapIcons = false
+  MP.Update()
+  assert(toggle("mapGive").__alpha == 0.4 and toggle("mapTurn").__alpha == 0.4 and toggle("mapRoute").__alpha == 1, "the icons off: their switches grey")
+  toggle("mapGive").__scripts.OnClick(toggle("mapGive"))
+  assert(set.mapIcons and set.mapGive and not set.mapTurn and not set.mapObj and not set.mapDungeons and count(QM.pageProvider, "give") > 0
+    and count(QM.pageProvider, "turn") == 0, "To pick up on: the !s alone")
+  set.mapTurn, set.mapObj, set.mapDungeons = true, true, true
+  MP.RefreshLayers()
+  MP.Go(1429, "user")
+end
+
+-- 5.5: the Map page's quest panel: the zone's quests ready to hand in, in your log and to pick up, a row each with its
+-- XP; hovered, its pins light and the game's quest blob shows its areas; clicked, the map goes to it; Ctrl-click or
+-- the box picks several to pick up at once; an icon clicked on the map shows its row
+do
+  local MP, QM, P, U, env = QB.MapPage, QB.QuestMap, QB.Pins, QB.UI, owner.env
+  c = owner
+  local canvas = MP.canvas
+  U:Open(8)
+  MP.Go(1429, "user")
+  local f = MP.frame
+  local ready, log, pickup = QM.ZoneQuests(1429)
+  assert(f.heads.ready.count:GetText() == tostring(#ready) and f.heads.log.count:GetText() == tostring(#log) and f.heads.pickup.count:GetText() == tostring(#pickup),
+    "the sections' counts are the zone's quests")
+  local rows = {}
+  for _, r in ipairs(f.rows) do if r:IsShown() then rows[#rows + 1] = r end end
+  assert(#rows == #ready + #log + #pickup, "a row each")
+  for _, r in ipairs(rows) do
+    assert(r.xp:GetText() == QB.Short(QB:Value(r.it.q.id)) and r.name:GetText():sub(1, 3) == r.it.q.name:sub(1, 3), "a row's XP: " .. r.xp:GetText())
+  end
+  -- hovered: the game's blob shows the quest's areas, its pins light; left: both go
+  local r = rows[1]
+  local id = r.it.q.id
+  local function lastCall(name)
+    for i = #canvas.__calls, 1, -1 do local k = canvas.__calls[i]; if k[1] == name or k[2] == name then return k end end
+  end
+  local function lit()
+    local n = 0
+    for _, layer in ipairs({ QM.pageProvider, P.pageProvider }) do
+      for _, fr in ipairs(layer.active) do if fr.glow and fr.glow.__shown then n = n + 1 end end
+    end
+    return n
+  end
+  lines = {}
+  r.__scripts.OnEnter(r)
+  local ev = canvas.__calls[#canvas.__calls]
+  assert(ev[1] == "TriggerEvent" and ev[2] == "SetHighlightedQuestID" and ev[3] == id and MP.hover == id and lit() > 0, "hovered: its areas and its pins, lit")
+  assert(lines[1] == r.it.q.name and table.concat(lines, "\n"):find("Click: show it on the map", 1, true), "its tooltip")
+  r.__scripts.OnLeave(r)
+  assert(canvas.__calls[#canvas.__calls][2] == "ClearHighlightedQuestID" and not MP.hover and lit() == 0, "left: no light")
+  -- clicked: the map goes to the quest, the game's blob holds it, its row is washed blue; again: let go
+  r.__scripts.OnClick(r, "LeftButton")
+  local pan = canvas.__calls[#canvas.__calls - 1]
+  assert((pan[1] == "PanTo" or pan[1] == "PanAndZoomTo") and pan[2] >= 0 and pan[2] <= 1 and canvas.__calls[#canvas.__calls][2] == "SetFocusedQuestID"
+    and canvas.__calls[#canvas.__calls][3] == id and MP.focus == id and r.wash:IsShown() and lit() > 0, "clicked: the map goes to it: " .. pan[1])
+  local pts = MP.Points(id, 1429)
+  assert(#pts > 0 and pan[2] == pts[1][1] and pan[3] == pts[1][2] and (#pts > 1 or pan[1] == "PanAndZoomTo"), "to its place, zoomed in on one place")
+  r.__scripts.OnClick(r, "LeftButton")
+  assert(canvas.__calls[#canvas.__calls][2] == "ClearFocusedQuestID" and not MP.focus and not r.wash:IsShown() and lit() == 0, "clicked again: let go")
+  -- right-click: QuestBank's menu for it
+  local QuestMenu, menu = U.QuestMenu, nil
+  U.QuestMenu = function(q) menu = q end
+  r.__scripts.OnClick(r, "RightButton")
+  U.QuestMenu = QuestMenu
+  assert(menu == r.it.q and not MP.focus, "right-click: its menu")
+  -- Westfall's quests to pick up: two ticked (the box, a Ctrl-click), then picked up at once from the bar
+  MP.Go(1436, "user")
+  local picks = {}
+  for _, row in ipairs(f.rows) do
+    if row:IsShown() and row.pick and not QB:IsAdded(row.it.q.id) and #picks < 2 then picks[#picks + 1] = row end
+  end
+  assert(#picks == 2 and not f.bar:IsShown(), "two quests to pick up in Westfall")
+  picks[1].__scripts.OnEnter(picks[1])
+  assert(picks[1].sel:IsShown() and not picks[1].sel.check:IsShown(), "hovered: its box")
+  picks[1].sel.__scripts.OnClick(picks[1].sel)
+  picks[1].__scripts.OnLeave(picks[1])
+  c.ctrl = true
+  picks[2].__scripts.OnClick(picks[2], "LeftButton")
+  c.ctrl = false
+  local a, b = picks[1].it.q.id, picks[2].it.q.id
+  assert(MP.sel[a] and MP.sel[b] and f.bar:IsShown() and f.bar.pick:GetText() == "Pick up all 2" and picks[1].sel:IsShown() and picks[1].sel.check:IsShown()
+    and picks[1].wash:IsShown() and not MP.focus, "two ticked: the bar")
+  local problems = checkLayout(U.frame, "Map, two quests ticked")
+  assert(#problems == 0, table.concat(problems, "\n"))
+  f.bar.pick.__scripts.OnClick(f.bar.pick)
+  assert(QB:IsAdded(a) and QB:IsAdded(b) and not next(MP.sel) and not f.bar:IsShown(), "Pick up all: both on your pick-up list")
+  QB:SetAdded(a, false); QB:SetAdded(b, false)
+  -- "+ all": every quest to pick up here
+  local all = f.heads.pickup.all
+  assert(all:IsShown() and #all.ids == #select(3, QM.ZoneQuests(1436)), "+ all: all of them")
+  all.__scripts.OnClick(all)
+  for _, qid in ipairs(all.ids) do assert(QB:IsAdded(qid), "+ all: on the list") end
+  for _, qid in ipairs(all.ids) do QB:SetAdded(qid, false) end
+  -- a section folds, and opens again
+  local head = f.heads.pickup
+  head.__scripts.OnClick(head)
+  local n = 0
+  for _, row in ipairs(f.rows) do if row:IsShown() and row.pick then n = n + 1 end end
+  assert(n == 0 and head.count:GetText() == tostring(#all.ids) and head.caret.__atlas == "campaign_headericon_closed", "folded")
+  -- a ! clicked on the map: its row, its section opened again, scrolled into view and lit for a moment
+  local give
+  for _, fr in ipairs(QM.pageProvider.active) do if fr.data.kind == "give" then give = fr end end
+  local SetWaypoint = QB.API.SetWaypoint
+  QB.API.SetWaypoint = function() end
+  give:OnMouseClickAction("LeftButton")
+  QB.API.SetWaypoint = SetWaypoint
+  local shown = MP.flashing
+  local inQuests = false
+  for _, q in ipairs(give.data.quests) do if shown and shown.it.q.id == q.id then inQuests = true end end
+  assert(shown and inQuests and shown.flash:IsShown() and not MP.fold.pickup and head.caret.__atlas == "campaign_headericon_open", "a ! clicked: its row lit")
+  local top = shown.top - (f.list.bar:GetValue() or 0)
+  assert(top >= 0 and top + 28 <= f.list.viewH, "and in view")
+  MP.Tick(2)
+  assert(not shown.flash:IsShown() and not MP.flashing, "the light fades")
+  -- a zone with none of your quests, and a continent
+  local empty
+  for m in pairs(QB.Data.MAPNAME) do
+    local r1, l1, p1 = QM.ZoneQuests(m)
+    if not empty and #r1 + #l1 + #p1 == 0 and QM.Draws(m) then empty = m end
+  end
+  MP.Go(empty, "user")
+  assert(f.empty:IsShown() and f.empty:GetText() == "No quests here" and not f.heads.ready:IsShown(), "no quests here")
+  MP.Go(1415, "user")
+  assert(f.empty:GetText() == "Pick a zone", "a continent")
+  MP.Here()
+  U:ShowTab(1)
+end
+
+-- 5.5: a login in a fight: no canvas until it ends (Blizzard's providers would make their pins in combat). The page
+-- opens anyway, with its panel and a word on the map; when the fight ends the canvas is built hidden, its layers drawn,
+-- so a first open in the next fight still shows QuestBank's icons
+do
+  local b = newClient({
+    name = "Brynja", level = 5, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8, race = "Human",
+    log = {}, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, riding = false, bagSlots = {}, map = 1429,
+  })
+  b.combat, b.playerMap = true, 1429
+  login(b)
+  local MPb, UIb = b.QB.MapPage, b.QB.UI
+  assert(MPb.Available() and MPb.canvas == nil, "logged in during a fight: no canvas yet")
+  UIb:Open(8)
+  local f = MPb.frame
+  assert(f and f.later:IsShown() and f.later:GetText() == "Map after the fight" and f.zone:GetText() == "Elwynn Forest"
+    and (f.heads.pickup:IsShown() or f.empty:IsShown()), "the page in the fight: the panel, and the map after the fight")
+  UIb.frame:Hide()
+  b.combat = false
+  local ev = MPb.events
+  ev.__scripts.OnEvent(ev, "PLAYER_REGEN_ENABLED")
+  local canvas = MPb.canvas
+  local layer = b.QB.QuestMap.pageProvider
+  assert(canvas and canvas:GetParent() == f.map and not canvas:IsVisible() and canvas.mapID == 1429 and layer.drawnFor == 1429 and (layer.made or 0) > 0,
+    "after the fight: built and drawn while hidden")
+  b.combat = true
+  UIb:Open(8)
+  canvas.__scripts.OnShow(canvas)
+  local shown = 0
+  for _, fr in ipairs(layer.active) do if fr:IsShown() then shown = shown + 1 end end
+  assert(not f.later:IsShown() and shown > 0 and shown == #layer.active, "the next fight: the map and its icons at once")
+  b.combat = false
+  -- every quest of the Deadmines done: its entrance has the ready tick (on the world map, as on the page), drawn by the
+  -- change itself (the count is kept per change, and the change counts before anything is drawn)
+  c = b
+  b.map.shown = true
+  b.map:SetMapID(1436)
+  local qs = b.QB.DMap.Quests("d1581")
+  assert(#qs > 0 and deadminesPin().Count:GetText() == "0/" .. #qs, "none done yet")
+  for _, e in ipairs(qs) do b.done[e.q.id] = true end
+  b.QB.API.RefreshDone()
+  b.QB:Changed()
+  local pin = deadminesPin()
+  assert(#qs > 0 and pin and pin.Count:GetText() == #qs .. "/" .. #qs and pin.Badge:IsShown() and pin.Badge.__tex == "Interface\\RaidFrame\\ReadyCheck-Ready",
+    "all done: the ready tick, " .. tostring(pin and pin.Count:GetText()))
+  c = owner
+end
+
 -- 5.3: dungeon entrances on the zone maps: hovered, how many of their quests you have done, a check on each done one
 do
   local QM, U = QB.QuestMap, QB.UI
@@ -2855,7 +3581,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 1242 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 1272 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()
@@ -3175,7 +3901,7 @@ local function hoverFirst(list, n)
   end
 end
 local function unhover() for _, o in ipairs(ALL) do o.__hover = nil end end
-for tab = 1, 7 do
+for tab = 1, 8 do
   UI:ShowTab(tab)
   QB.Model.Finish()
   UI:Refresh()
@@ -3198,7 +3924,12 @@ for tab = 1, 7 do
     local l = v3.legs.items[2]
     if l then l.pin.__hover = true; hoverFirst(l.rows) end
   end
-  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log", "Available", "Hand-in Route", "Party", "Settings", "Now", "Dungeon Journal" })[tab] .. " (one row hovered)")
+  -- the Map: its first quest row hovered, the way the mouse does it (its pins lit, the game's blob asked)
+  local mapRow = tab == 8 and QB.MapPage.frame.rows[1]
+  if mapRow then mapRow.__hover = true; mapRow.__scripts.OnEnter(mapRow) end
+  layouts[#layouts + 1] = dumpLayout(UI.frame, ({ "Quest Log (one row hovered)", "Available (one row hovered)", "Hand-in Route (one row hovered)",
+    "Party (one row hovered)", "Settings (one row hovered)", "Now (one row hovered)", "Dungeon Journal (one row hovered)", "Map (one quest row hovered)" })[tab])
+  if mapRow then mapRow.__scripts.OnLeave(mapRow) end
   unhover()
 end
 
@@ -7282,9 +8013,16 @@ do
     and not v5.discText:GetText():find("items", 1, true) and not v5.discText:GetText():find("drop", 1, true), "the Settings box is greyed out here, and says why")
   assert(not v5.mapIcons:IsEnabled() and not v5.mapIcons:GetChecked() and v5.mapIcons.label:GetText():find("Forever client only", 1, true)
     and not v5.mapGive:IsEnabled() and not v5.mapTurn:IsEnabled() and not v5.mapObj:IsEnabled(), "the map icon rows are greyed out here, and say why")
+  assert(not v5.mapPage:IsEnabled() and not v5.mapPage:GetChecked() and v5.mapPage.label:GetText():find("Forever client only", 1, true), "so is the Map page's switch")
   for _, pr in ipairs(checkLayout(Q2.UI.frame, "settings on Classic Era")) do problems[#problems + 1] = pr end
   layouts[#layouts + 1] = dumpLayout(Q2.UI.frame, "Settings on Classic Era")
   Q2.UI.frame:Hide()
+  -- no Map page on this client: no canvas, and the Map key opens the game's world map as before
+  c.map:Close()
+  c.panelCalls = {}
+  c.env.QuestBankKeys.Map()
+  assert(not Q2.MapPage.Available() and Q2.MapPage.canvas == nil and c.panelCalls[1] == "open" and c.map.shown and not Q2.UI.frame:IsShown(),
+    "Classic Era: the Map key opens the game's map")
   -- the map icons: not on this client. No provider, nothing drawn, and the client's missing map calls don't matter
   local QMe = Q2.QuestMap
   c.env.C_Map.GetMapInfo = nil

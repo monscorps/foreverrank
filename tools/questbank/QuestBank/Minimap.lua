@@ -28,7 +28,8 @@ Mini.TICK, Mini.MAX_PINS = TICK, MAX_PINS
 local RANK = { step = 0, stop = 1, turn = 1 }
 local PINNED = { step = true, stop = true, turn = true } -- out of reach: on the rim, the way to go
 local SIZE = { stop = 22, step = 18, dungeon = 18, obj = 16, pickup = 16, turn = 16 }
-local GOLD, BLUE = { 1, 0.84, 0.18 }, { 0.4, 0.55, 1 }
+local GOLD, BLUE = { 1, 0.84, 0.18 }, { 0.4, 0.55, 1 } -- the strokes: you to the target, stop to stop
+Mini.GOLD, Mini.BLUE = GOLD, BLUE -- (the Map page's strokes, MapPage.lua)
 
 local plain = QB.Plain
 local sqrt, floor, cos, pi, max = math.sqrt, math.floor, math.cos, math.pi, math.max

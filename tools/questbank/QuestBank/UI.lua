@@ -89,6 +89,7 @@ local function fitText(fs, s, room)
   end
   return s
 end
+UI.FitText = fitText -- (the Map page's quest rows, MapPage.lua)
 
 local function para(parent, obj, size, color, width)
   local fs = text(parent, obj, size, color, "LEFT", width)
@@ -141,6 +142,7 @@ local function caret(t, open)
   QB.Art(t, open and "campaign_headericon_open" or "campaign_headericon_closed",
     open and "Interface\\Buttons\\UI-MinusButton-Up" or "Interface\\Buttons\\UI-PlusButton-Up")
 end
+UI.Caret = caret -- (the Map page's sections, MapPage.lua)
 
 -- an item's icon: the client's when it has one, asked of the server when not (nil until it comes)
 local function itemIcon(id)
@@ -921,7 +923,7 @@ function UI:Create()
   self:CreateHeader(f)
   self:CreateContent(f)
   self:CreateTabs(f)
-  self:ShowTab(set.tab or 1)
+  self:ShowTab((set.tab == 8 and not UI.MapPageOn()) and 1 or set.tab or 1)
   return f
 end
 
@@ -1117,25 +1119,31 @@ function UI:CreateContent(f)
     self:CreateSettingsView(c),
     self:CreatePrepView(c, true), -- Now: the three places worth going to from where you stand
     self:CreateJournalView(c),    -- the Dungeon Journal (DungeonMap.lua), built the first time it shows
+    self:CreateMapView(c),        -- the Map (MapPage.lua), the same way
   }
 end
 
-function UI:CreateJournalView(parent)
+-- a page another file builds the first time it shows, to the page's size: mod.Attach(page, w, h), then mod.Refresh()
+local function attachedView(parent, key)
   local v = CreateFrame("Frame", nil, parent)
   v:SetPoint("TOPLEFT", 8, -8)
   v:SetPoint("BOTTOMRIGHT", -8, 8)
   v.Refresh = function()
-    if not QB.DMap then return end
+    local mod = QB[key]
+    if not mod then return end
     -- the content frame is the window less the sidebar, the header and the margins
-    QB.DMap.Attach(v, W - SIDE - 8 - 14 - 16, H - 138 - 14 - 16)
-    QB.DMap.Refresh()
+    mod.Attach(v, W - SIDE - 8 - 14 - 16, H - 138 - 14 - 16)
+    mod.Refresh()
   end
   return v
 end
+function UI:CreateJournalView(parent) return attachedView(parent, "DMap") end
+function UI:CreateMapView(parent) return attachedView(parent, "MapPage") end
 
--- the sidebar: the pages in groups, each with its icon and a count where one helps; the Map is an action, not a
--- page: the game's world map (UI.OpenMap). UI.tabs[i] is page i's button, as the tab bar had them. key: its key
--- binding's name (Bindings.xml, QUESTBANK_<key>), which the Key Bindings list shows with the entry's name
+-- the sidebar: the pages in groups, each with its icon and a count where one helps. The Map is QuestBank's map page,
+-- or its action where that is off or missing (act: the game's world map, UI.OpenMap). UI.tabs[i] is page i's button,
+-- as the tab bar had them. key: its key binding's name (Bindings.xml, QUESTBANK_<key>), which the Key Bindings list
+-- shows with the entry's name
 local SIDEBAR = {
   { group = "Questing" },
   { tab = 6, name = "Now", icon = "sideNow", key = "NOW" },
@@ -1146,7 +1154,7 @@ local SIDEBAR = {
   { tab = 4, name = "Party", icon = "sideParty", key = "PARTY", count = function() return QB.Sync and #(QB.Sync:Members() or {}) or 0 end },
   { group = "World" },
   { tab = 7, name = "Dungeon Journal", icon = "sideJournal", key = "JOURNAL" },
-  { act = function() UI.OpenMap() end, name = "Map", icon = "sideMap", key = "MAP" },
+  { tab = 8, act = function() UI.OpenMap() end, name = "Map", icon = "sideMap", key = "MAP" },
   { group = "QuestBank" },
   { tab = 5, name = "Settings", icon = "sideSettings", key = "SETTINGS" },
 }
@@ -1198,7 +1206,7 @@ function UI:CreateTabs(f)
       b.count:SetPoint("RIGHT", -8, 0)
       b.entry = e
       if e.tab then
-        b:SetScript("OnClick", function() UI:ShowTab(e.tab) end)
+        b:SetScript("OnClick", QB.Safe(function() if e.act and not UI.MapPageOn() then e.act() else UI:ShowTab(e.tab) end end, "sidebar"))
         self.tabs[e.tab] = b
       else
         b:SetScript("OnClick", QB.Safe(function() e.act() end, "sidebar"))
@@ -1267,7 +1275,7 @@ function UI:ShowErrors()
 end
 
 function UI:ShowTab(i)
-  if self.tab and self.tab ~= i and self.tab ~= 7 then self.lastTab = self.tab end
+  if self.tab and self.tab ~= i and self.tab ~= 7 and self.tab ~= 8 then self.lastTab = self.tab end
   QB:Settings().tab = i
   self.tab = i
   for k, v in ipairs(self.views) do v:SetShown(k == i) end
@@ -1289,6 +1297,9 @@ function UI:Toggle()
   self:Create()
   self.frame:SetShown(not self.frame:IsShown())
 end
+
+-- QuestBank's own map (MapPage.lua): on Forever with the game's map canvas, unless Settings gave the Map key back
+function UI.MapPageOn() return QB.MapPage ~= nil and QB.MapPage.On() end
 
 -- a page's key: the window open on that page, or shut when it is open on that page already
 function UI:TogglePage(tab)
@@ -1323,8 +1334,8 @@ function UI.OpenMap(toggle)
 end
 
 -- the key bindings (Bindings.xml): the game's Key Bindings, a QuestBank section with a line each, named as the
--- sidebar names them. A page's key opens the window on that page or shuts it there; the Map key opens the game's map
--- or shuts it
+-- sidebar names them. A page's key opens the window on that page or shuts it there; so does the Map key, on the Map
+-- page, or with that off the game's world map
 BINDING_HEADER_QUESTBANK = "QuestBank"
 BINDING_NAME_QUESTBANK_WINDOW = "Open or close QuestBank"
 BINDING_NAME_QUESTBANK_MINIMAP_BIGGER = "Minimap bigger"
@@ -1333,13 +1344,13 @@ UI.PAGE_KEYS = {}
 for _, e in ipairs(SIDEBAR) do
   if e.key then
     _G["BINDING_NAME_QUESTBANK_" .. e.key] = e.name
-    if e.tab then UI.PAGE_KEYS[e.key] = e.tab end
+    if e.tab and not e.act then UI.PAGE_KEYS[e.key] = e.tab end
   end
 end
 QuestBankKeys = {
   Window = QB.Safe(function() UI:Toggle() end, "key: window"),
   Page = QB.Safe(function(key) local tab = UI.PAGE_KEYS[key]; if tab then UI:TogglePage(tab) end end, "key: page"),
-  Map = QB.Safe(function() UI.OpenMap(true) end, "key: map"),
+  Map = QB.Safe(function() if UI.MapPageOn() then UI:TogglePage(8) else UI.OpenMap(true) end end, "key: map"),
   Bigger = QB.Safe(function() if QB.Mini then QB.Mini.Size(1.15) end end, "key: minimap bigger"),
   Smaller = QB.Safe(function() if QB.Mini then QB.Mini.Size(1 / 1.15) end end, "key: minimap smaller"),
 }
@@ -4679,45 +4690,52 @@ function UI:CreateSettingsView(parent)
   v.minimapHint:SetPoint("TOPLEFT", LEFT, -928)
   v.minimapHint:SetHeight(14)
   v.minimapHint:SetText("Right-click the minimap for the rest.")
-  -- the Map: the game's world map (UI.OpenMap)
-  v.map = button(p, "Map", 110)
-  v.map:SetPoint("TOPLEFT", LEFT + 4, -944)
+  -- the Map: QuestBank's map page on the Map key and the sidebar (MapPage.lua), or the game's world map (UI.OpenMap)
+  v.mapPage = checkRow(p, LEFT, -946, "Map key opens QuestBank's map", 340)
+  v.mapPage:SetScript("OnClick", function(self) QB:Settings().mapPage = self:GetChecked() and true or false; UI:Refresh() end)
+  tooltip(v.mapPage, function(tip)
+    tip:AddLine("QuestBank's map", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("The Map key and the sidebar's Map open QuestBank's own map page: the game's map with QuestBank's icons and route on it, and the zone's quests beside it. Off, they open the game's world map.", 1, 1, 1, true)
+    if not (QB.MapPage and QB.MapPage.Available()) then tip:AddLine("Only on the Forever client.", 1, 0.5, 0.3, true) end
+  end)
+  v.map = button(p, "Game's map", 110)
+  v.map:SetPoint("TOPLEFT", LEFT + 4, -974)
   v.map:SetScript("OnClick", QB.Safe(function() UI.OpenMap() end, "settings: map"))
   v.mapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
   v.mapLabel:SetPoint("LEFT", v.map, "RIGHT", 8, 0)
   v.mapLabel:SetText("Your zone on the game's world map")
   tooltip(v.map, function(tip)
-    tip:AddLine("Map", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Game's map", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("The game's world map on your zone, with QuestBank's icons on it.", 1, 1, 1, true)
     tip:AddLine("Keys for it and for each page: Key Bindings, QuestBank.", 0.6, 0.6, 0.6, true)
   end)
 
   -- the light on the object your Interact key would use (Glow.lua)
-  heading(p, LEFT, -976, "Interact light", 370)
-  v.glowOn = checkRow(p, LEFT, -1000, "Light the object my Interact key would use", 340)
+  heading(p, LEFT, -1006, "Interact light", 370)
+  v.glowOn = checkRow(p, LEFT, -1030, "Light the object my Interact key would use", 340)
   v.glowOn:SetScript("OnClick", function(self) if QB.Glow then QB.Glow.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
-  v.glowOther = checkRow(p, LEFT + 24, -1028, "Plain objects too, in white", 316)
+  v.glowOther = checkRow(p, LEFT + 24, -1058, "Plain objects too, in white", 316)
   v.glowOther:SetScript("OnClick", function(self) QB:Settings().glow.other = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
-  v.glowCombat = checkRow(p, LEFT + 24, -1056, "Keep it on in a fight", 316)
+  v.glowCombat = checkRow(p, LEFT + 24, -1086, "Keep it on in a fight", 316)
   v.glowCombat:SetScript("OnClick", function(self) QB:Settings().glow.combat = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
   v.glowHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.glowHint:SetPoint("TOPLEFT", LEFT, -1082)
+  v.glowHint:SetPoint("TOPLEFT", LEFT, -1112)
   v.glowHint:SetHeight(44)
   v.glowHint:SetText("Gold for a quest object, green for an herb, orange for ore, blue for a chest. Switching it on sets the game's soft-interact settings; they go back as they were when it is off.")
 
   -- health and mana on the portraits: the game's own Status Text (Options, Interface), always shown, so it works in
   -- a fight where an addon may not read an enemy's health
-  heading(p, LEFT, -1142, "Health and mana numbers", 370)
+  heading(p, LEFT, -1172, "Health and mana numbers", 370)
   v.statusBtns = {}
   for i, o in ipairs(UI.STATUS_TEXT) do
     local b = button(p, o[2], 84)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1168)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1198)
     b.value = o[1]
     b:SetScript("OnClick", QB.Safe(function(self) UI.SetStatusText(self.value); UI:Refresh() end, "settings: status text"))
     v.statusBtns[i] = b
   end
   v.statusHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.statusHint:SetPoint("TOPLEFT", LEFT, -1198)
+  v.statusHint:SetPoint("TOPLEFT", LEFT, -1228)
   v.statusHint:SetHeight(30)
   v.statusHint:SetText("On your portrait, your target's and your focus's, always shown. The game's own Status Text option.")
 
@@ -4904,6 +4922,13 @@ function UI:RefreshSettingsView(v)
   v.minimapPins:SetChecked(set.minimapPins ~= false)
   v.mmExtended:SetChecked(set.mmExtended ~= false)
   v.walkShow:SetChecked(set.walkShow ~= false)
+  -- QuestBank's map page: greyed out where the client has none (Classic Era)
+  local page = QB.MapPage and QB.MapPage.Available()
+  v.mapPage:SetEnabled(page)
+  v.mapPage:SetChecked(page and set.mapPage ~= false)
+  v.mapPage.label:SetText(page and "Map key opens QuestBank's map" or "Map key opens QuestBank's map (Forever client only)")
+  local pageInk = page and INK or INK_SOFT
+  v.mapPage.label:SetTextColor(pageInk[1], pageInk[2], pageInk[3])
   local gl = type(set.glow) == "table" and set.glow or {}
   v.glowOn:SetChecked(gl.on == true)
   v.glowOther:SetChecked(gl.other == true)
@@ -4935,7 +4960,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(1242) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(1272) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------

@@ -100,10 +100,11 @@ local function mayMouse(f)
   return not (ok and QB.Plain(prot))
 end
 
--- a frame that takes the mouse: taking it, or letting it through to the map while P.through
+-- a frame that takes the mouse: taking it, or letting it through to the world map while P.through (QuestBank's own
+-- map page has no game pin to let it through to)
 local function mouseFor(f)
   if not f.kind.mouse then return end
-  local want = not P.through
+  local want = not (P.through and f.layer.world)
   if f.mouseOn == want or not mayMouse(f) then return end
   f.mouseOn = want
   f:EnableMouse(want)
@@ -138,16 +139,24 @@ local function watchKeys()
   end
 end
 
+-- a layer's map on screen: the world map as mapOpen says, QuestBank's own map page (MapPage.lua) by its canvas
+local function shown(layer)
+  if layer.world then return mapOpen() end
+  local map = layer:GetMap()
+  return map and map:IsVisible() and true or false
+end
+P.Shown = shown
+
 -- layers that were told to redraw in combat: they draw when combat ends (or the game stops holding addons back), if
--- the map is still open; opening it later draws anyway
+-- their map is still open; opening it later draws anyway
 local afterCombat = {}
 local function redrawLater()
   if inCombat() then return end
   local list = {}
   for layer in pairs(afterCombat) do list[#list + 1] = layer end
   afterCombat = {}
-  if mapOpen() then
-    for _, layer in ipairs(list) do layer:RefreshAllData() end
+  for _, layer in ipairs(list) do
+    if shown(layer) then layer:RefreshAllData() end
   end
 end
 P.combatFrame = CreateFrame and CreateFrame("Frame")
@@ -289,6 +298,7 @@ function Layer:Add(kind, data, x, y, levelType)
   if level then f:SetFrameLevel(level) end
   local setup = method(f, "Setup")
   if setup then setup(f, data) end
+  P.Glow(f, self.lit and self.lit(data))
   self:Place(f, self.scales)
   f:Show()
   self.active[#self.active + 1] = f
@@ -342,7 +352,6 @@ function P.AfterClose()
     QB.API.TomTomLater()
   end, "map closed"))
 end
-function Layer:OnHide() P.AfterClose() end
 
 -- zoomed, or the map made bigger or smaller: every frame placed and sized again (allowed in combat: QuestBank's own)
 function Layer:OnCanvasScaleChanged()
@@ -350,22 +359,48 @@ function Layer:OnCanvasScaleChanged()
   for _, f in ipairs(self.active) do self:Place(f, scales) end
 end
 
--- a layer on the world map: draw(layer, mapID) adds its frames (layer:Add), after the last draw's are put away.
--- Whatever goes wrong in it stays in it: the map runs every provider in one loop
-function P.NewLayer(draw, where)
+-- a light under a frame (art/glow.tga, as the minimap's pins have): col = { r, g, b, a }, or nil for none. A layer
+-- with a lit(data) function lights its frames as they are drawn (QuestBank's map page: the quest hovered or picked in
+-- its list, the arrow's step)
+local GLOW = "Interface\\AddOns\\QuestBank\\art\\glow.tga"
+function P.Glow(f, col)
+  if not (col or f.glow) then return end
+  if not f.glow then
+    f.glow = f:CreateTexture(nil, "BACKGROUND")
+    f.glow:SetTexture(GLOW)
+    f.glow:SetBlendMode("ADD")
+    f.glow:SetPoint("CENTER")
+  end
+  if col then
+    local size = (f:GetWidth() or 20) * 2.2
+    f.glow:SetSize(size, size)
+    f.glow:SetVertexColor(col[1], col[2], col[3], col[4] or 1)
+  end
+  f.glow:SetShown(col and true or false)
+end
+
+-- a layer on a map: the world map, or another canvas built from the game's map templates (map; QuestBank's map page).
+-- draw(layer, mapID) adds its frames (layer:Add), after the last draw's are put away. Whatever goes wrong in it stays
+-- in it: the map runs every provider in one loop
+function P.NewLayer(draw, where, map)
+  map = map or WorldMapFrame
   local layer = CreateFromMixins(MapCanvasDataProviderMixin, Layer)
-  layer.draw, layer.active, layer.free, layer.canvas = draw, {}, {}, WorldMapFrame:GetCanvas()
+  layer.draw, layer.active, layer.free, layer.canvas = draw, {}, {}, map:GetCanvas()
+  layer.world = map == WorldMapFrame
   layer.RefreshAllData = QB.Safe(Layer.RefreshAllData, where)
   layer.OnCanvasScaleChanged = QB.Safe(Layer.OnCanvasScaleChanged, where)
   layer.OnCanvasSizeChanged = layer.OnCanvasScaleChanged
-  layer.OnHide = QB.Safe(Layer.OnHide, where)
-  P.layers[#P.layers + 1] = layer
-  if not P.watcher then
-    -- on the canvas, so it runs only while the map is open; no mouse, nothing drawn
-    P.watcher = CreateFrame("Frame", nil, layer.canvas)
-    P.watcher:SetScript("OnUpdate", watchKeys)
+  if layer.world then
+    -- only the world map has the game's own pin to let Ctrl+clicks through to, and TomTom to hold back while open
+    layer.OnHide = QB.Safe(P.AfterClose, where)
+    P.layers[#P.layers + 1] = layer
+    if not P.watcher then
+      -- on the canvas, so it runs only while the map is open; no mouse, nothing drawn
+      P.watcher = CreateFrame("Frame", nil, layer.canvas)
+      P.watcher:SetScript("OnUpdate", watchKeys)
+    end
   end
-  WorldMapFrame:AddDataProvider(layer)
+  map:AddDataProvider(layer)
   return layer
 end
 
@@ -376,8 +411,10 @@ end
 local Pin = {}
 P.Pin = Pin
 
+-- a stop: the game's numbered quest POI (gold for the next one), as on the minimap; a planned pick-up: the game's !
 function Pin:Setup(data)
-  self.Icon:SetTexture(data.icon)
+  local atlas = not data.num and "QuestNormal" or (data.num == 1 and "UI-QuestPoi-QuestNumber-SuperTracked" or "UI-QuestPoi-QuestNumber")
+  QB.Art(self.Icon, atlas, data.icon)
   self.Icon:SetDesaturated(data.late or false)
   self.Num:SetText(data.num and tostring(data.num) or "")
 end
@@ -419,19 +456,42 @@ local function project(d, mapID)
   if x < 0 or x > 1 or y < 0 or y > 1 then return nil end
   return x, y
 end
+P.Project = project
+
+-- is the route drawn: on the world map by its own switch (pins, "Numbered route pins on the world map"), on
+-- QuestBank's map page by the page's (mapRoute, its strip's Route)
+function P.RouteOn(world)
+  local set = QB:Settings()
+  if world then return set.pins and true or false end
+  return set.mapRoute ~= false
+end
+
+-- every pin of the route that falls on the map shown
+local function drawRoute(layer, m)
+  if not P.RouteOn(layer.world) then return end
+  for _, d in ipairs(P.list) do
+    local x, y = project(d, m)
+    if x then layer:Add(ROUTE, d, x, y) end
+  end
+end
 
 function P:Init()
   if self.provider or self.waiting then return end
   self.waiting = P.WhenMap(function()
     if P.provider then return end
-    P.provider = P.NewLayer(function(layer, shown)
-      if not QB:Settings().pins then return end
-      for _, d in ipairs(P.list) do
-        local x, y = project(d, shown)
-        if x then layer:Add(ROUTE, d, x, y) end
-      end
-    end, "map pins")
+    P.provider = P.NewLayer(drawRoute, "map pins")
   end, "map pins: waiting for the map")
+end
+
+-- the same pins on QuestBank's own map page (MapPage.lua), once. pageLayers: the page's layers drawn from the route
+-- (these pins, and MapPage.lua's strokes and arrow step), drawn again with it while the page shows
+P.pageLayers = {}
+function P.AddTo(map)
+  if not P.pageProvider then
+    P.pageProvider = P.NewLayer(drawRoute, "map page pins", map)
+    P.pageLayers[#P.pageLayers + 1] = P.pageProvider
+  end
+  return P.pageProvider
 end
 
 -- the route on screen: the run's rest, or what is banked now, else the full plan
@@ -501,6 +561,9 @@ function P:Update()
   self:Build()
   QB.API.TomTomLater() -- a waypoint TomTom was kept from while the map was open, if the map is shut (else it waits)
   if self.provider and mapOpen() then self.provider:RefreshAllData() end
+  for _, layer in ipairs(self.pageLayers) do
+    if shown(layer) then layer:RefreshAllData() end
+  end
   -- then the quest icons, whenever these pins change (a new plan, /qb pins, Settings): they leave the NPCs these
   -- pins stand on to them
   if QB.QuestMap then QB.Try("map icons", QB.QuestMap.Update, QB.QuestMap) end
