@@ -396,7 +396,7 @@ LOOT_UPLOAD = (400, 40)                  # sources, and items per source, the ad
 # quest by id, once per account and client build. QuestBankDB.disc.survey = { [questId] = { t = the quest's title,
 # c = { item ids to choose from }, r = { item ids always given } (both missing when the game didn't send the rewards
 # whole, both empty when the quest gives no items), xp = the XP at the player's level then, pl = that level, money =
-# copper when it pays any, lvl = the quest's level, at = when, b = the client build } }, and next to it surveyNo =
+# copper when it pays any, lvl = the quest's level, b = the client build } }, and next to it surveyNo =
 # { [questId] = tries that failed on this build }, surveyB, that build, and surveyCheck, whether the game showed the
 # items of the quests it checks against. Kept in disc.json under "sv": per quest u uploads that had
 # it, b the newest build, and votes per upload for each title (t), level (lv), XP reading ("xp@level"), money (m) and

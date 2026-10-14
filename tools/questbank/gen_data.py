@@ -473,7 +473,8 @@ if SELFTEST_SURVEY:
     DISC = dict(DISC)
     DISC["sv"], DISC["sv_no"] = survey_selftest_input()
 SURVEY_PICK = {int(k): survey_pick(a) for k, a in (DISC.get("sv") or {}).items() if str(k).isdigit() and isinstance(a, dict)}
-SURVEY_NO = {int(k) for k in (DISC.get("sv_no") or {}) if str(k).isdigit()}  # the game said nothing about these, three times
+# the game said nothing about these, three times, to anyone (a quest another upload read, its title at least, was answered)
+SURVEY_NO = {int(k) for k in (DISC.get("sv_no") or {}) if str(k).isdigit()} - {q for q, p in SURVEY_PICK.items() if p["t"] or p["c"] is not None}
 
 
 def seen_full(qid, ql):

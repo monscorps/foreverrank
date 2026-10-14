@@ -8385,12 +8385,14 @@ end
 -- answer comes inside the call, cached = the client has the quest already, noIds = its reward slots never give an id }
 local function surveyClient(c, server)
   local env = c.env
-  c.server, c.loadedQ, c.qAsked = server, {}, {}
+  c.server, c.loadedQ, c.qAsked, c.wrongTime = server, {}, {}, {}
   for id, s in pairs(server) do if s.cached then c.loadedQ[id] = true end end
   local function known(id) return c.loadedQ[id] and c.server[id] or nil end
   env.HaveQuestData = function(id) return c.loadedQ[id] and true or false end
   env.C_QuestLog.RequestLoadQuestByID = function(id)
-    assert(not c.combat, "the survey asks nothing in a fight")
+    -- (counted, not asserted: the survey's pcall would swallow an error here)
+    local inside = env.IsInInstance and env.IsInInstance()
+    if c.combat or inside then c.wrongTime[#c.wrongTime + 1] = "asked " .. id end
     local ask = { id = id, t = c.clock }
     c.qAsked[#c.qAsked + 1] = ask
     local s = c.server[id]
@@ -8408,6 +8410,8 @@ local function surveyClient(c, server)
   env.C_QuestLog.GetTitleForQuestID = function(id) local s = known(id); return s and s.t end
   env.C_QuestLog.GetQuestDifficultyLevel = function(id) local s = known(id); return s and s.lvl or 0 end
   env.HaveQuestRewardData = function(id)
+    -- (it can ask the server for the rewards: never in a fight or an instance)
+    if c.combat or (env.IsInInstance and env.IsInInstance()) then c.wrongTime[#c.wrongTime + 1] = "read " .. id end
     local s = known(id)
     if not s then return false end
     if (s.late or 0) > 0 then s.late = s.late - 1; return false end
@@ -8547,7 +8551,7 @@ do
   -- what the game told, kept per account
   local rec = d.survey[99999]
   assert(rec.t == "Shimmerwine Shakedown" and rec.lvl == 51 and rec.xp == 6150 and rec.pl == 50 and rec.money == 4500 and rec.b == 70170
-    and #rec.c == 1 and rec.c[1] == 276903 and #rec.r == 0 and rec.at, "the title, rewards, XP, money and level are kept")
+    and #rec.c == 1 and rec.c[1] == 276903 and #rec.r == 0 and rec.at == nil, "the title, rewards, XP, money and level are kept")
   assert(d.survey[99002].c[1] == 2470, "rewards that come late are read again until they are all there")
   assert(#d.survey[99003].c == 0 and #d.survey[99003].r == 0, "no item rewards: two empty lists (answered inside the call)")
   assert(d.survey[10].c[2] == 2435 and d.survey[10].r[1] == 2471, "a catalog quest's lists")
@@ -8615,12 +8619,14 @@ do
   v5.survey:SetChecked(true); v5.survey.__scripts.OnClick(v5.survey, "LeftButton")
   assert(Q2:Settings().survey == true and S.On(), "ticked again")
   for _, p in ipairs(checkLayout(U.frame, "Settings, with the survey")) do problems[#problems + 1] = p end
+  assert(#c.wrongTime == 0, "nothing asked or read in a fight or an instance: " .. table.concat(c.wrongTime, ", "))
   print(string.format("quest survey: %d questions, %d quests answered, the Shimmerwine Shanker in Best gear at iL %d", #c.qAsked, dg.loaded, hit.reward[1]))
 end
 
 -- after a reload the account's survey stands: what it learned is in the finders before any question, and only what is
--- new on the list is asked. A new build asks everything again. A client that answers every id with one quest's XP
--- (four quests of different levels paying the same) or one quest's rewards (six in a row) gives itself away
+-- new on the list is asked. A new build asks everything again. Quests in a row that really pay alike (four of different
+-- levels the same XP, six the same items) are kept while the check's quests tell their own apart; a client that answers
+-- every id with one quest's XP and rewards (the check's quests too) gives itself away, and the earlier readings stand
 do
   local saved = deepCopy(runa.env.QuestBankDB)
   local again = newClient(deepCopy(RUNA))
@@ -8629,11 +8635,13 @@ do
   local server = deepCopy(SERVER)
   local CHECK = S.Decode(Q2.Data.SURVEY[4])
   for _, id in ipairs(CHECK) do
-    server[id] = { t = Q2.Data.QN[id], lvl = Q2.Data.Q[id][1], c = deepCopy(Q2.Data.RITEMS[id].c or {}), r = deepCopy(Q2.Data.RITEMS[id].r or {}) }
+    -- (the client has them from the first session: they can be read again without a question)
+    server[id] = { t = Q2.Data.QN[id], lvl = Q2.Data.Q[id][1], xp = 30 + id, c = deepCopy(Q2.Data.RITEMS[id].c or {}), r = deepCopy(Q2.Data.RITEMS[id].r or {}),
+                   cached = true }
   end
-  for k = 0, 3 do server[99010 + k] = { t = "Same Pay " .. k, lvl = 20 + 10 * k, xp = 5000, c = {}, r = {} } end
+  for k = 0, 3 do server[99010 + k] = { t = "Same Pay " .. k, lvl = 46 + k, xp = 5000, c = {}, r = {} } end
   for k = 0, 5 do server[99020 + k] = { t = "Same Items " .. k, lvl = 40, c = { 2435 }, r = {} } end
-  server[99005] = { t = "New On The List", lvl = 45, c = { 2471 }, r = {} }
+  server[99005] = { t = "New On The List", lvl = 45, c = { 2471 }, r = {}, late = 3 }
   surveyClient(again, server)
   local list = { 99001, 99002, 99003, 99004, 99005, 99999 }
   for k = 0, 3 do list[#list + 1] = 99010 + k end
@@ -8645,6 +8653,16 @@ do
   for _, r in ipairs(Q2.UI:FindRewards("gear", 51)) do if r.q.id == 99999 then row = r end end
   assert(row and row.reward[1] == 52 and #again.qAsked == 0, "after a reload: in Best gear at once, before any question")
   assert(Q2.Data.RITEMS[10] and not Q2.Data.RUNK[10], "and the catalog quest's rewards too")
+  -- a fight while a quest's rewards are still on their way: the reads wait for its end
+  for _ = 1, 1000 do if #again.qAsked > 0 then break end tick(again, 0.05) end
+  assert(again.qAsked[1].id == 99005, "the first new quest on the list")
+  tick(again, 0.3) -- answered and read once (its rewards not all there yet), the next question not yet asked
+  assert(#again.qAsked == 1, "one question so far")
+  again.combat = true
+  tick(again, 12)
+  assert(not again.env.QuestBankDB.disc.survey[99005] and #again.wrongTime == 0, "nothing read in a fight")
+  again.combat = false
+  S.frame.__scripts.OnEvent(S.frame, "PLAYER_REGEN_ENABLED")
   tick(again, 400)
   local asked = {}
   for _, a in ipairs(again.qAsked) do asked[a.id] = (asked[a.id] or 0) + 1 end
@@ -8652,23 +8670,48 @@ do
     "only what is new on the list is asked on the same build")
   local d = again.env.QuestBankDB.disc
   assert(d.survey[99005].c[1] == 2471 and Q2.Data.REWARD[99005], "the new one is kept, and in the finders")
-  for k = 0, 3 do assert(d.survey[99010 + k].xp == nil and d.survey[99010 + k].t == "Same Pay " .. k, "one XP for every level: not kept") end
-  for k = 0, 5 do assert(d.survey[99020 + k].c == nil and not Q2.Data.RITEMS[99020 + k], "one reward list for six quests in a row: not kept") end
+  for k = 0, 3 do assert(d.survey[99010 + k].xp == 5000 and d.survey[99010 + k].t == "Same Pay " .. k, "four quests that really pay alike: kept") end
+  for k = 0, 5 do
+    assert(d.survey[99020 + k].c[1] == 2435 and Q2.Data.RITEMS[99020 + k] and Q2.Data.RITEMS[99020 + k].c[1] == 2435, "six in a row with one list, really: kept")
+  end
   assert(d.survey[99999].xp == 6150, "the readings before stay")
   -- a new build: every quest is asked again. This one shows no items for the check's quests: then no answer that a
   -- quest gives no items is kept (the earlier build's stands), and /qb survey says why
   again.env.GetBuildInfo = function() return "1.60.1", "70400", "Oct 14 2026", 16001 end
   for _, id in ipairs(CHECK) do server[id].c, server[id].r = {}, {}; again.loadedQ[id] = nil end
   again.loadedQ[99003] = nil
+  server[99002].late = 0 -- (all there at once this time: the reads come in the order asked, the run of one list unbroken)
   S.Start(0)
   tick(again, 400)
   local fresh = 0
   for _, a in ipairs(again.qAsked) do if a.id == 99999 then fresh = fresh + 1 end end
   assert(fresh == 1 and d.surveyB == 70400 and d.survey[99999].b == 70400, "a new build asks again")
   assert(S.Checked() == "failed" and d.surveyNo[99003] == 3 and d.survey[99003].b == 70170, "no-item answers aren't kept when the check failed")
+  for k = 0, 5 do assert(d.survey[99020 + k].b == 70400 and d.survey[99020 + k].c[1] == 2435, "a run of one list, nothing wrong seen: kept") end
   local said = #again.chat
   again.env.SlashCmdList.QUESTBANK("survey")
   assert(again.chat[said + 1]:find("no-reward answers aren't kept", 1, true), again.chat[said + 1])
+  -- another build, on a client that answers every quest with one quest's rewards and XP (the Shimmerwine Shakedown's),
+  -- the check's quests too: they come back wrong, the run of one list and the run of one XP are dropped, and what this
+  -- account read on the build before stands, in the saved file and in the finders
+  local env = again.env
+  env.GetBuildInfo = function() return "1.60.1", "70500", "Oct 15 2026", 16001 end
+  env.GetNumQuestLogChoices = function() return 1 end
+  env.GetNumQuestLogRewards = function() return 0 end
+  env.GetQuestLogChoiceInfo = function(i) if i == 1 then return "Item 276903", 133328, 1, 2, true, 276903 end end
+  env.GetQuestLogRewardXP = function() return 6150 end
+  S.Start(0)
+  tick(again, 400)
+  local k5 = d.surveyCheck
+  assert(d.surveyB == 70500 and S.Checked() == "failed" and k5.b == 70500, "the check's quests came back wrong")
+  for _, id in ipairs(CHECK) do assert(k5.ids[id] == "wrong", "wrong: " .. id .. " " .. tostring(k5.ids[id])) end
+  for k = 0, 5 do
+    assert(d.survey[99020 + k].c[1] == 2435 and d.survey[99020 + k].b == 70400 and Q2.Data.RITEMS[99020 + k].c[1] == 2435, "the earlier lists stand: " .. (99020 + k))
+  end
+  assert(d.survey[99005].c[1] == 2471 and Q2.Data.RITEMS[99005].c[1] == 2471 and Q2.Data.RITEMS[99002].c[1] == 2470, "and those the run took back")
+  assert(Q2.Data.RITEMS[10] and Q2.Data.RITEMS[10].c[1] == 2470 and d.survey[10].b == 70400, "the catalog quest keeps its lists")
+  for k = 0, 3 do assert(d.survey[99010 + k].xp == 5000, "the earlier XP stands: " .. (99010 + k) .. " " .. tostring(d.survey[99010 + k].xp)) end
+  assert(#again.wrongTime == 0, "nothing asked or read in a fight or an instance: " .. table.concat(again.wrongTime, ", "))
   print(string.format("quest survey after a reload: %d questions in all, the new build's with them", #again.qAsked))
 end
 

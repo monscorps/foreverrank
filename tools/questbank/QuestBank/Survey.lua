@@ -9,9 +9,9 @@
 -- Available. A quest no list has shows in the finders as "Seen in game", with no giver, place or side.
 -- Kept once per account in QuestBankDB.disc, so an upload carries it into the next release for everyone:
 --   survey[questID] = { t = title, c = { items to choose from }, r = { items always given }, xp = XP at your level
---     then, pl = that level, money = copper (when it pays any), lvl = the quest's level, at = when (time()), b = the
---     client build }. c and r are missing when the game didn't send the rewards whole, empty when the quest gives no
---     items. A quest the client has already is read as it is, without a question
+--     then, pl = that level, money = copper (when it pays any), lvl = the quest's level, b = the client build }: eight
+--     fields at most, so 6,000 of them stay small. c and r are missing when the game didn't send the rewards whole,
+--     empty when the quest gives no items. A quest the client has already is read as it is, without a question
 --   surveyNo[questID] = tries that failed on this build (the game said no, never answered, or never sent the rewards
 --     whole); after three the quest rests until the next build
 --   surveyB = that build: a new build asks every quest again
@@ -327,6 +327,7 @@ function Survey.Load()
     if not D.Q[id] and type(s) == "table" then
       place(id, s[1], s[2], s[3])
       if D.RITEMS[id] and not D.REWARD[id] then rate(id) end
+      before[id] = nil -- the release's row is what a reading dropped later goes back to
     end
   end
   for id, rec in pairs(db().survey) do use(id, rec) end
@@ -385,58 +386,12 @@ local function rewards(id)
   return c, r, have
 end
 
--- a client answering one quest's numbers for every id (some answer with the selected quest's) gives itself away: four
--- quests of different levels paying the same XP in a row, or six in a row with the same reward items. Then those
--- readings lose it, and so does the rest of the session
-local recent = {}
-local xpBad, rwBad = false, false
-
-local function guard(id, rec)
-  local key = rec.c and (table.concat(rec.c, ",") .. "|" .. table.concat(rec.r, ",")) or nil
-  recent[#recent + 1] = { id = id, xp = rec.xp, lvl = rec.lvl, rw = (key ~= "|") and key or nil }
-  if #recent > 6 then table.remove(recent, 1) end
-  local d = db()
-  if not xpBad and #recent >= 4 and rec.xp then
-    local same, levels, nl = 0, {}, 0
-    for k = #recent - 3, #recent do
-      local e = recent[k]
-      if e.xp == rec.xp then
-        same = same + 1
-        if e.lvl and not levels[e.lvl] then levels[e.lvl] = true; nl = nl + 1 end
-      end
-    end
-    if same == 4 and nl >= 2 then
-      xpBad = true
-      for k = #recent - 3, #recent do
-        local s = d.survey[recent[k].id]
-        if type(s) == "table" then s.xp, s.pl = nil, nil end
-      end
-    end
-  end
-  if not rwBad and #recent >= 6 and recent[#recent].rw then
-    local same = 0
-    for k = #recent - 5, #recent do if recent[k].rw == recent[#recent].rw then same = same + 1 end end
-    if same == 6 then
-      rwBad = true
-      for k = #recent - 5, #recent do
-        local e = recent[k]
-        local s = d.survey[e.id]
-        if type(s) == "table" then s.c, s.r = nil, nil end
-        restore(e.id)
-        use(e.id, s)
-      end
-      changed()
-    end
-  end
-  if xpBad then rec.xp, rec.pl = nil, nil end
-  if rwBad then rec.c, rec.r = nil, nil end
-end
-
 ----------------------------------------------------------------------------
--- the check: the game's word that a quest gives no items is taken only once it has shown the items of quests that do.
--- D.SURVEY's fourth run is three Forever quests whose items Wowhead lists, asked first on each build: an empty answer
--- counts once more of them came back with their items than without (and one did). Until then an empty answer is a failed
--- try, asked again later; once the check has failed, it is no answer (the quest rests until the next build)
+-- the check: D.SURVEY's fourth run is three Forever quests whose items Wowhead lists, asked first on each build. Each
+-- answer is "ok" (items, one of them on the quest's list), "none" (no items) or "wrong" (items, none of them on its
+-- list: the game told another quest's). The game's word that a quest gives no items is taken only once more of them
+-- came back ok than not (and one did). Until then an empty answer is a failed try, asked again later; once the check
+-- has failed, it is no answer (the quest rests until the next build)
 ----------------------------------------------------------------------------
 local CHECK_RUN = 4
 local checking = {} -- [id] = true: a quest of the check
@@ -448,7 +403,7 @@ local function checkOf(d)
     d.surveyCheck = k
   end
   local ok, bad = 0, 0
-  for _, v in pairs(k.ids) do if v == "ok" then ok = ok + 1 elseif v == "bad" then bad = bad + 1 end end
+  for _, v in pairs(k.ids) do if v == "ok" then ok = ok + 1 else bad = bad + 1 end end
   return k, ok, bad
 end
 
@@ -461,10 +416,110 @@ local function checked(d)
 end
 Survey.Checked = function() return checked(db()) end
 
+local function listKey(c, r) return table.concat(c, ",") .. "|" .. table.concat(r, ",") end
+
+-- one of these items is on the quest's list in the catalog (a check quest's: Wowhead's)
+local function own(id, c, r)
+  local R, mine = D.RITEMS[id], {}
+  for _, key in ipairs({ "c", "r", "u" }) do for _, item in ipairs(R and R[key] or {}) do mine[item] = true end end
+  for _, list in ipairs({ c, r }) do for _, item in ipairs(list) do if mine[item] then return true end end end
+  return false
+end
+
+-- a check quest read again now, as the guards below compare it: its reward list (and whether that is its own), its XP
+local function checkList(id)
+  local c, r = rewards(id)
+  if c and #c + #r > 0 then return listKey(c, r), own(id, c, r) end
+end
+local function checkXP(id)
+  local x = num(GetQuestLogRewardXP, id)
+  if x and x > 0 then return x, false end
+end
+
+-- a client answering one quest's numbers for every id (some answer with the selected quest's) would show it as a run:
+-- four quests of different levels paying the same XP in a row (at levels where they pay in full), or six in a row with
+-- the same reward items. Quests in a row can pay alike too (a series of turn-ins, a shelf of library books), so the
+-- check's quests decide: read again now, one that tells its own apart from the run's means the game answers by id and
+-- the readings stand; one that gives the run's (its own being something else) means it doesn't. When none can be read
+-- now, the check's answers on this build decide: a wrong one, and the run is dropped. A dropped reading gives back what
+-- this account read before (an earlier build's), and the rest of the session leaves that number (XP or items) out
+local recent = {}
+local xpBad, rwBad = false, false
+
+local function wrongRun(value, readOf)
+  for id in pairs(checking) do
+    local v, mine = readOf(id)
+    if v ~= nil then
+      if v ~= value then return false end
+      if not mine then return true end
+    end
+  end
+  local k = checkOf(db())
+  for _, v in pairs(k.ids) do if v == "wrong" then return true end end
+  return false
+end
+
+-- before a reading is kept (old: the account's reading of the quest until now)
+local function guard(id, rec, old)
+  local key = rec.c and listKey(rec.c, rec.r) or nil
+  local full = rec.xp and rec.pl and rec.lvl and rec.pl <= rec.lvl + 5
+  recent[#recent + 1] = { id = id, xp = full and rec.xp or nil, lvl = rec.lvl, rw = (key ~= "|") and key or nil, old = old }
+  if #recent > 6 then table.remove(recent, 1) end
+  local d = db()
+  local x = recent[#recent].xp
+  if not xpBad and #recent >= 4 and x then
+    local same, levels, nl = 0, {}, 0
+    for k = #recent - 3, #recent do
+      local e = recent[k]
+      if e.xp == x then
+        same = same + 1
+        if e.lvl and not levels[e.lvl] then levels[e.lvl] = true; nl = nl + 1 end
+      end
+    end
+    if same == 4 and nl >= 2 and wrongRun(x, checkXP) then
+      xpBad = true
+      for k = #recent - 3, #recent - 1 do
+        local e = recent[k]
+        local s, o = d.survey[e.id], type(e.old) == "table" and e.old or {}
+        if type(s) == "table" then s.xp, s.pl = o.xp, o.pl end
+      end
+    end
+  end
+  local w = recent[#recent].rw
+  if not rwBad and #recent >= 6 and w then
+    local same = 0
+    for k = #recent - 5, #recent do if recent[k].rw == w then same = same + 1 end end
+    if same == 6 and wrongRun(w, checkList) then
+      rwBad = true
+      for k = #recent - 5, #recent - 1 do
+        local e = recent[k]
+        if type(e.old) == "table" and type(e.old.c) == "table" then
+          d.survey[e.id] = e.old -- the earlier reading stands
+        elseif type(d.survey[e.id]) == "table" then
+          d.survey[e.id].c, d.survey[e.id].r = nil, nil
+        end
+        restore(e.id)
+        use(e.id, d.survey[e.id])
+      end
+      restore(id)
+      if type(old) == "table" then use(id, old) end
+      changed()
+    end
+  end
+  local o = type(old) == "table" and old or {}
+  if xpBad then rec.xp, rec.pl = o.xp, o.pl end
+  if rwBad then rec.c, rec.r = nil, nil end
+end
+
 local reads = {} -- [id] = reads of a loaded quest so far
 local read, fail -- (fail: below, with the asking)
 
 function read(id)
+  -- in a fight or an instance it waits: a read can ask the server for the reward data
+  if inCombat() or inInstance() then
+    C_Timer.After(COMBAT_WAIT, QB.Safe(function() read(id) end, "quest survey"))
+    return
+  end
   local n = (reads[id] or 0) + 1
   reads[id] = n
   local L = C_QuestLog
@@ -486,22 +541,22 @@ function read(id)
   local money = num(GetQuestLogRewardMoney, id)
   local pl = UnitLevel and num(UnitLevel, "player") or nil
   local rec = { t = title, lvl = (lvl and lvl > 0) and lvl or nil, xp = (xp and xp > 0) and xp or nil, money = (money and money > 0) and money or nil,
-                at = time and time() or nil, b = build() }
+                b = build() }
   if rec.xp then rec.pl = pl end
   local d = db()
   local rest = false
   if whole and checking[id] then
     local k = checkOf(d)
-    if k.ids[id] == nil then k.ids[id] = (#c + #r > 0) and "ok" or "bad" end
+    if k.ids[id] == nil then k.ids[id] = (#c + #r == 0) and "none" or (own(id, c, r) and "ok" or "wrong") end
   elseif whole and #c + #r == 0 and checked(d) ~= "trusted" then
     -- no items, the game says; not taken before the check (and never when it failed)
     whole, rest = false, checked(d) == "failed"
   end
   if whole then rec.c, rec.r = c, r end
-  -- a reading without the rewards never replaces one with them (an earlier build's)
   local old = d.survey[id]
-  if whole or not (type(old) == "table" and type(old.c) == "table") then d.survey[id] = rec end
-  guard(id, rec)
+  guard(id, rec, old)
+  -- a reading without the rewards never replaces one with them (an earlier build's)
+  if rec.c or not (type(old) == "table" and type(old.c) == "table") then d.survey[id] = rec end
   if rest then
     d.surveyNo[id] = TRIES
     local s = diag()
