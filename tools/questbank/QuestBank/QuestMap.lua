@@ -1,13 +1,16 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- QuestBank map icons: on each zone's world map, a ! where a quest you can take now starts, a ? where a finished
--- quest in your log is handed in, and for the quests in your log a mark (with its area) on every objective not
--- finished yet, plus where the item that starts a quest drops. The Forever client only. Settings' "Map icons" and
--- /qb icons switch them; the numbered route pins (Pins.lua) are a layer of their own with their own switch.
+-- QuestBank map icons: on each zone's world map (and on QuestBank's Map page), the game's own pins drawn again
+-- (Pins.lua, Pins.xml): the game's ! where a quest you can take now starts (red where the item that starts one
+-- drops), its quest POI with the turn-in glyph where a finished quest in your log is handed in, the same POI in
+-- progress on every objective of the quests in your log not finished yet, and its Dungeon pin on each dungeon's
+-- entrance. The objectives' areas are the game's blue blob (QuestBlobDataProvider: the world map draws its own, the
+-- Map page's shows under the mouse). The Forever client only. Settings' "Map icons" and /qb icons switch them; the
+-- route's pins (Pins.lua) are a layer of their own with their own switch.
 -- Every spot is stored in the frame of the map it is drawn on (Data.lua: D.SPOT, D.START, D.SN and D.SREQ; givers
 -- and hand-ins from D.Q and D.NPC, with D.NSRC saying where each NPC's place comes from, and D.QLOCK the quests that
 -- need a profession or a reputation), so nothing is projected from world yards here, and every tooltip says where
 -- its spot comes from. With an older Data.lua (no D.SPOT) the ! and ? still show. NPCs standing at the same spot
--- share one icon that lists each of them; where a numbered route pin stands on an NPC, that pin's tooltip lists what
+-- share one icon that lists each of them; where a route pin stands on an NPC, that pin's tooltip lists what
 -- the NPC has besides.
 local _, QB = ...
 local QM = {}
@@ -17,10 +20,8 @@ local D = QB.Data
 local Q = QB.Quest
 local floor = math.floor
 
-local ICON, AREA = "QuestBankQuestPinTemplate", "QuestBankAreaPinTemplate"
-local MAX_PINS = 200 -- at most this many pins on one map: every ! and ? first, then the marks in turns, then areas
+local MAX_PINS = 200 -- at most this many pins on one map: every ! and ? first, then the marks in turns
 local NEAR = 0.6     -- map percent: a route pin this close, or a second record of the NPC, is the same NPC
-local MIN_AREA = 0.005 -- an area narrower than 1% of the map is drawn as its mark alone
 
 -- the maps that get icons: zones and cities, and Zephras Isle; never a continent, the world or a dungeon
 local ALSO = { [2521] = true, [2524] = true }
@@ -38,11 +39,10 @@ function QM.Available() return QB.Game and QB.Game.Forever() or false end
 local function on() return QM.Available() and QB:Settings().mapIcons ~= false end
 
 ----------------------------------------------------------------------------
--- art: the client's own atlases, file ids where one is missing
+-- art: the client's own cursor atlases for each kind of objective, as the minimap and the Route page draw them (file
+-- ids where one is missing); the map itself draws the game's pins (Pins.lua)
 ----------------------------------------------------------------------------
 local ART = {
-  give = { atlas = "QuestNormal", file = 132049, size = 20 },        -- the yellow !
-  turn = { atlas = "QuestTurnin", file = 132048, size = 20 },        -- the yellow ?
   k = { atlas = "Crosshair_Attack_32", file = 131013, size = 16 },   -- kill: the attack cursor
   c = { atlas = "Crosshair_LootAll_32", file = 131023, size = 16 },  -- collect: the loot cursor
   u = { atlas = "Crosshair_Interact_32", file = 131021, size = 16 }, -- use or click an object
@@ -50,9 +50,7 @@ local ART = {
   e = { atlas = "QuestObjective", file = 131017, size = 16 },        -- explore, an event
   f = { atlas = "Crosshair_Fishing_32", file = 303902, size = 16 },  -- fish, pick pockets or skin
   s = { atlas = "Crosshair_LootAll_32", file = 131023, size = 16 },  -- the item that starts a quest drops here
-  bang = { atlas = "SmallQuestBang", file = 132049 },                -- on that mark: it starts a quest
-  area = { atlas = "CircleMaskScalable", file = 130924 },            -- an objective's area
-  dungeon = { atlas = "Dungeon", file = 136347, size = 24 },          -- a dungeon's entrance
+  dungeon = { atlas = "Dungeon", file = 136347, size = 24 },          -- a dungeon's entrance (the minimap; the file for the map's pin)
 }
 QM.ART = ART
 
@@ -387,7 +385,7 @@ local function spotOn(all, m)
   return false
 end
 
--- what this layer would show at an NPC a numbered route pin stands on, for that pin's tooltip:
+-- what this layer would show at an NPC a route pin stands on, for that pin's tooltip:
 -- [route pin's data] = { { name = NPC, own = the pin stands on this NPC, turn = quests, give = quests }, ... }
 -- (weak: the route's pins are made again with every plan)
 local also = setmetatable({}, { __mode = "k" })
@@ -412,7 +410,7 @@ function QM:Build(m, page)
   local level = s.level or 1
   local range = greyRange(level)
 
-  -- the numbered route pins on this map (when they are on). The NPC a pin stands on (its own name, a step away at
+  -- the route's pins on this map (when they are on). The NPC a pin stands on (its own name, a step away at
   -- most) gets no icon of its own: what the pin doesn't list already goes on its tooltip. So does a quest of another
   -- NPC at the very same spot, whose icon would lie under the pin; an NPC a little way off keeps its own icon.
   local route = {}
@@ -467,7 +465,7 @@ function QM:Build(m, page)
       end
     end
     if not d then
-      d = { kind = kind, level = "PIN_FRAME_LEVEL_INVASION", m = m, x = n.x / 100, y = n.y / 100, title = n.n, npc = n.idx, who = {} }
+      d = { kind = kind, m = m, x = n.x / 100, y = n.y / 100, title = n.n, npc = n.idx, who = {} }
       npcs[#npcs + 1] = d
     end
     if not w then
@@ -489,17 +487,26 @@ function QM:Build(m, page)
   if set.mapGive ~= false then
     for _, q in ipairs(givers(m)) do atNpc("give", q.give, q) end
   end
-  -- what each icon shows: its hand-ins (quests), and the quests to pick up there (on a ?, offers)
+  -- what each icon shows: its hand-ins (quests), and the quests to pick up there (on a ?, offers); the family of
+  -- the game's pin (Recurring for repeatables) and the level the game gives it (a ? among the quest pins, in the
+  -- log's order; a ! among the offers)
+  local logIndex = {}
+  for i, e in ipairs(s.logOrder or {}) do logIndex[e.id] = i end
   for _, d in ipairs(npcs) do
     d.kind = "give"
     for _, w in ipairs(d.who) do if #w.turn > 0 then d.kind = "turn" end end
-    d.art, d.quests = ART[d.kind], {}
+    d.quests, d.family = {}, "basic"
     if d.kind == "turn" then d.offers = {} end
     for _, w in ipairs(d.who) do
-      for _, q in ipairs(w[d.kind]) do d.quests[#d.quests + 1] = q end
+      for _, q in ipairs(w[d.kind]) do
+        d.quests[#d.quests + 1] = q
+        if QB.Pins.Family(q) == "recurring" then d.family = "recurring" end
+        if d.kind == "turn" then d.index = math.min(d.index or 999, logIndex[q.id] or 999) end
+      end
       if d.offers then for _, q in ipairs(w.give) do d.offers[#d.offers + 1] = q end end
     end
     if d.offers and #d.offers == 0 then d.offers = nil end
+    if d.index == 999 then d.index = nil end
   end
   -- the ! and ? first: the cap below only ever trims marks and areas
   for _, d in ipairs(npcs) do
@@ -510,7 +517,7 @@ function QM:Build(m, page)
   for _, c in ipairs(set.mapDungeons ~= false and QM.Entrances(m) or {}) do
     local e = c.entrance
     if #list < MAX_PINS then
-      list[#list + 1] = { kind = "dungeon", art = { atlas = ART.dungeon.atlas, file = c.icon or ART.dungeon.file, size = ART.dungeon.size }, level = "PIN_FRAME_LEVEL_INVASION", m = m, x = e.x / 100, y = e.y / 100, title = c.name .. " entrance", cat = c }
+      list[#list + 1] = { kind = "dungeon", m = m, x = e.x / 100, y = e.y / 100, title = c.name, cat = c }
     end
   end
 
@@ -519,13 +526,14 @@ function QM:Build(m, page)
     -- take that starts from an item, in the catalog's order (nearest the giver or hand-in first)
     local groups = {}
     if D.SPOT then
-      for _, e in ipairs(s.logOrder or {}) do
+      for li, e in ipairs(s.logOrder or {}) do
         local all = not e.complete and spots(D.SPOT[e.id])
         if spotOn(all, m) then
           local need, objs = needOf(e.id), objectivesOf(e)
           local lines, loose = QM.Match(objs, all, need.count, namesOf(need)), QM.Loose(objs, all)
           local q = Q.Get(e.id)
           local qname = q and q.name or QB.Plain(e.title) or ("Quest " .. e.id)
+          local family = q and QB.Pins.Family(q) or "basic"
           -- one list of marks for each slot, and for slot 0 one for each kind (a quest the catalog doesn't know has
           -- all its spots there, and each of its objectives should get its nearest mark first too)
           local bySlot = {}
@@ -540,7 +548,7 @@ function QM:Build(m, page)
                 groups[#groups + 1] = g
               end
               local name = spotName(sp)
-              g[#g + 1] = { kind = "obj", art = ART[sp.kind] or ART.c, level = "PIN_FRAME_LEVEL_DIG_SITE", m = m, x = sp.x, y = sp.y,
+              g[#g + 1] = { kind = "obj", m = m, x = sp.x, y = sp.y, index = li, family = family,
                             spot = sp, id = e.id, qname = qname, line = line, title = name and (qname .. ": " .. name) or qname }
             end
           end
@@ -561,13 +569,13 @@ function QM:Build(m, page)
         if g then
           local sp = it.spot
           local name = spotName(sp) or (q.bag and q.bag[4])
-          g[#g + 1] = { kind = "start", art = ART.s, badge = ART.bang, level = "PIN_FRAME_LEVEL_DIG_SITE", m = m, x = sp.x, y = sp.y,
+          g[#g + 1] = { kind = "start", m = m, x = sp.x, y = sp.y, family = QB.Pins.Family(q),
                         spot = sp, id = it.id, q = q, item = name, title = name or q.name }
         end
       end
     end
-    -- in turns, so every objective has its nearest mark before any has a second; then the areas under them while
-    -- there is room. A zone with a full log can hold more than the cap (Stranglethorn: some 280 with the areas)
+    -- in turns, so every objective has its nearest mark before any has a second. A zone with a full log can hold
+    -- more than the cap (Stranglethorn: some 280 spots)
     local marks, total, rank = {}, 0, 1
     for _, g in ipairs(groups) do total = total + #g end
     while #marks < total and #list + #marks < MAX_PINS do
@@ -577,18 +585,7 @@ function QM:Build(m, page)
       rank = rank + 1
     end
     for _, mark in ipairs(marks) do list[#list + 1] = mark end
-    local cut = total - #marks
-    for _, mark in ipairs(marks) do
-      local sp = mark.spot
-      if sp.r >= MIN_AREA then
-        if #list < MAX_PINS then
-          list[#list + 1] = { kind = "area", m = m, x = sp.x, y = sp.y, r = sp.r, start = mark.kind == "start" or nil }
-        else
-          cut = cut + 1
-        end
-      end
-    end
-    list.cut = cut -- what the cap left out (the harness reads it)
+    list.cut = total - #marks -- what the cap left out (the harness reads it)
   end
   return list
 end
@@ -608,15 +605,12 @@ function QM.ZoneQuests(m)
   return ready, log, givers(m)
 end
 
-function QM:Draw(layer, m)
-  for _, d in ipairs(self:Build(m, not layer.world)) do
-    if d.kind == "area" then layer:Add(QM.AREA, d, d.x, d.y) else layer:Add(QM.ICON, d, d.x, d.y, d.level) end
-  end
-end
+----------------------------------------------------------------------------
+-- tooltips and clicks: the game's own words first (QuestDataProvider's and QuestOfferDataProvider's tooltips, the
+-- Camelot client's "[level] name"), QuestBank's lines after
+----------------------------------------------------------------------------
+local P = QB.Pins
 
-----------------------------------------------------------------------------
--- tooltips and clicks
-----------------------------------------------------------------------------
 -- a quest's level in the game's colours: red, orange, yellow, green, grey
 local function levelColor(qlvl, level, range)
   local d = (qlvl or level) - level
@@ -630,25 +624,61 @@ local function xpText(q, level)
   return QB.Comma(QB.Model.XpAt(q, level)) .. " XP"
 end
 
-local function questLines(tip, quests)
+-- the game's tag after a quest's name on this client (Camelot's GetQuestTagText): "(Dungeon)", "(Elite)"; and
+-- QuestBank's "(Classic only)"
+local function tagOf(q)
+  local tags = {}
+  if q.dungeon then tags[#tags + 1] = P.Word("CALENDAR_TYPE_DUNGEON", "Dungeon") end
+  if q.group then tags[#tags + 1] = P.Word("ELITE", "Elite") end
+  if q.classic then tags[#tags + 1] = "Classic only" end
+  return #tags > 0 and (" (" .. table.concat(tags, ", ") .. ")") or ""
+end
+
+-- a quest's title as the game's quest pins give it (SetQuestTitleLevelAndDifficultyColor, Camelot's prefix): "[level]
+-- name", a + after the level for an elite quest, in the colour of its level against yours unless the client's
+-- showQuestDifficultyColor is off; then the tag
+local function titleOf(q, level, range)
+  local elite = q.group and "+" or ""
+  if QB.state.log[q.id] and C_QuestLog and C_QuestLog.IsEliteQuest then
+    local ok, e = pcall(C_QuestLog.IsEliteQuest, q.id)
+    e = ok and QB.Plain(e)
+    if e ~= nil then elite = e and "+" or "" end
+  end
+  local r, g, b = levelColor(q.lvl, level, range)
+  if GetCVar then
+    local ok, v = pcall(GetCVar, "showQuestDifficultyColor")
+    if ok and QB.Plain(v) == "0" then r, g, b = 1, 1, 1 end
+  end
+  return string.format("[%d%s] %s%s", q.lvl or 0, elite, q.name, tagOf(q)), r, g, b
+end
+function QM.Title(q)
+  local level = QB.state.level or 1
+  return titleOf(q, level, greyRange(level))
+end
+
+-- each quest on its own line as the game titles it, its XP (or labels[id], a word of QuestBank's) on the right
+local function questLines(tip, quests, labels)
   local level = QB.state.level or 1
   local range = greyRange(level)
   for _, q in ipairs(quests) do
-    local tags = {}
-    if q.dungeon then tags[#tags + 1] = "dungeon" end
-    if q.group then tags[#tags + 1] = "group" end
-    if q.escort then tags[#tags + 1] = "escort" end
-    if q.classic then tags[#tags + 1] = "Classic only" end
-    local r, g, b = levelColor(q.lvl, level, range)
-    tip:AddDoubleLine(string.format("[%d] %s%s", q.lvl or 0, q.name, #tags > 0 and (" (" .. table.concat(tags, ", ") .. ")") or ""),
-      xpText(q, level), r, g, b, 0.6, 1, 0.6)
+    local text, r, g, b = titleOf(q, level, range)
+    tip:AddDoubleLine(text, labels and labels[q.id] or xpText(q, level), r, g, b, 0.6, 1, 0.6)
+  end
+end
+QM.QuestLines = questLines
+
+-- the quest's objectives not finished yet, as the game's quest pin lists them: "- " and the game's line, white
+local function objectiveLines(tip, e)
+  for _, o in ipairs(objectivesOf(e)) do
+    if o.text and not o.done then tip:AddLine(P.Word("QUEST_DASH", "- ") .. o.text, 1, 1, 1, true) end
   end
 end
 
+local READY_WORD = function() return P.Word("QUEST_WATCH_QUEST_READY", "Ready for turn-in") end
+local function offersWord(n) return n > 1 and P.Word("QUEST_HUB_TOOLTIP_AVAILABLE_QUESTS_HEADER", "Available Quests") or P.Word("AVAILABLE_QUEST", "Available quest") end
+
 local function source(tip, src) tip:AddLine("Position: " .. (SOURCE[src] or CLASSIC), 0.6, 0.6, 0.6, true) end
-local function hint(tip, shift)
-  tip:AddLine(shift and ("Click: waypoint.  Shift-click: " .. shift .. ".") or "Click: waypoint.", 0.5, 0.5, 0.5, true)
-end
+local function waypointLine(tip) P.Instruct(tip, "Click to set a waypoint") end
 
 local function allAdded(quests)
   for _, q in ipairs(quests) do if not QB:IsAdded(q.id) then return false end end
@@ -669,11 +699,11 @@ local function people(tip, d)
   for i, w in ipairs(d.who) do
     tip:AddLine(w.title, 1, 0.82, 0)
     if #w.turn > 0 then
-      tip:AddLine("Hand in:", 0.8, 0.8, 0.8)
+      tip:AddLine(READY_WORD(), 1, 1, 1)
       questLines(tip, w.turn)
     end
     if #w.give > 0 then
-      tip:AddLine(#w.turn > 0 and "Also to pick up:" or "To pick up:", 0.8, 0.8, 0.8)
+      tip:AddLine(offersWord(#w.give), 1, 1, 1)
       questLines(tip, w.give)
     end
     if not same then source(tip, src[i]) end
@@ -682,7 +712,8 @@ local function people(tip, d)
 end
 
 local TIP = {}
--- a dungeon's entrance: its quests, a check on each you have done
+-- a dungeon's entrance, as the game's own pin: its name, its levels (the game's description line), then QuestBank's
+-- quests with a check on each you have done, and the game's instruction for the right button
 local CHECK, WAIT = "|TInterface\\RaidFrame\\ReadyCheck-Ready:14|t ", "|TInterface\\RaidFrame\\ReadyCheck-Waiting:14|t "
 function TIP.dungeon(tip, d)
   local c = d.cat
@@ -691,66 +722,81 @@ function TIP.dungeon(tip, d)
   for _, e in ipairs(qs) do if e.st == "done" then done = done + 1 end end
   tip:AddDoubleLine(c.name, #qs > 0 and string.format("%d/%d quests done", done, #qs) or "", 1, 0.82, 0, done == #qs and 0.3 or 1, done == #qs and 0.9 or 1, done == #qs and 0.3 or 1)
   local lv = QB.DMap and QB.DMap.Levels(c.key)
-  if lv and lv[1] > 0 then tip:AddLine(string.format("Level %d-%d", lv[1], lv[2]), 0.8, 0.8, 0.8) end
+  local word = c.raid and P.Word("RAID", "Raid") or P.Word("CALENDAR_TYPE_DUNGEON", "Dungeon")
+  tip:AddLine(lv and lv[1] > 0 and string.format("%s, level %d-%d", word, lv[1], lv[2]) or word, 1, 0.82, 0)
   for i, e in ipairs(qs) do
     if i > 14 then tip:AddLine(string.format("and %d more", #qs - 14), 0.6, 0.6, 0.6) break end
     local mark = e.st == "done" and CHECK or (e.st == "ready" and WAIT or "      ")
     local col = e.st == "done" and { 0.5, 0.5, 0.5 } or (e.st == "log" or e.st == "ready") and { 1, 0.82, 0.3 } or { 1, 1, 1 }
     tip:AddLine(mark .. e.q.name, col[1], col[2], col[3])
   end
-  tip:AddLine("Click: the Dungeon Journal.  Shift-click: waypoint on the entrance.", 0.5, 0.5, 0.5)
+  waypointLine(tip)
+  P.Instruct(tip, "Right Click to open the Dungeon Journal")
 end
+-- a ! as the game's offer pin: the name, "Available quest", the quests; Shift-click for the pick-up list
 function TIP.give(tip, d)
   if d.who and #d.who > 1 then
     people(tip, d)
   else
     tip:AddLine(d.title, 1, 0.82, 0)
+    tip:AddLine(offersWord(#d.quests), 1, 1, 1, true)
     questLines(tip, d.quests)
     source(tip, npcSource(d))
   end
+  waypointLine(tip)
   local many = #d.quests > 1
-  hint(tip, allAdded(d.quests) and (many and "take them off your pick-up list" or "take it off your pick-up list")
-    or (many and "put them on your pick-up list" or "put it on your pick-up list"))
+  P.Instruct(tip, allAdded(d.quests) and (many and "Shift-click to take them off your pick-up list" or "Shift-click to take it off your pick-up list")
+    or (many and "Shift-click to put them on your pick-up list" or "Shift-click to put it on your pick-up list"))
 end
+-- a ? as the game's quest pin for a quest that is complete: the quests ready for turn-in here, and what else the NPC
+-- offers
 function TIP.turn(tip, d)
   if d.who and #d.who > 1 then
     people(tip, d)
   else
     tip:AddLine(d.title, 1, 0.82, 0)
-    tip:AddLine("Hand in:", 0.8, 0.8, 0.8)
+    tip:AddLine(READY_WORD(), 1, 1, 1)
     questLines(tip, d.quests)
     if d.offers and #d.offers > 0 then
-      tip:AddLine("Also to pick up:", 0.8, 0.8, 0.8)
+      tip:AddLine(offersWord(#d.offers), 1, 1, 1)
       questLines(tip, d.offers)
     end
     source(tip, npcSource(d))
   end
-  hint(tip)
+  waypointLine(tip)
 end
+-- an objective's mark as the game's quest pin for a quest in progress: "[level] name", every objective not finished
+-- yet as "- the game's line"; then QuestBank's: what this spot is for, and where it comes from
 function TIP.obj(tip, d)
   local sp = d.spot
   local name = spotName(sp)
-  tip:AddLine(d.qname, 1, 0.82, 0)
-  tip:AddLine(name and string.format(LABEL[sp.kind] or "%s", name) or (BARE[sp.kind] or "Here"), 1, 1, 1, true)
-  local line = d.line
-  if line and line.text then
-    if line.done then tip:AddLine(line.text, 0.4, 0.9, 0.4, true) else tip:AddLine(line.text, 0.9, 0.9, 0.9, true) end
+  local q = Q.Get(d.id)
+  if q then
+    local text, r, g, b = QM.Title(q)
+    tip:AddLine(text, r, g, b)
+  else
+    tip:AddLine(d.qname, 1, 0.82, 0)
   end
+  local e = QB.state.log[d.id]
+  if e then objectiveLines(tip, e) elseif d.line and d.line.text then tip:AddLine(P.Word("QUEST_DASH", "- ") .. d.line.text, 1, 1, 1, true) end
+  tip:AddLine(name and string.format(LABEL[sp.kind] or "%s", name) or (BARE[sp.kind] or "Here"), 0.8, 0.8, 0.8, true)
   source(tip, sp.src)
-  hint(tip)
+  waypointLine(tip)
 end
+-- where the item that starts a quest drops: the ! in red
 function TIP.start(tip, d)
   local q = d.q
   tip:AddLine(d.item or "A quest item", 1, 0.82, 0)
   tip:AddLine("Drops here, and starts:", 1, 1, 1, true)
   questLines(tip, { q })
   source(tip, d.spot.src)
-  hint(tip, QB:IsAdded(q.id) and "take it off your pick-up list" or "put it on your pick-up list")
+  waypointLine(tip)
+  P.Instruct(tip, QB:IsAdded(q.id) and "Shift-click to take it off your pick-up list" or "Shift-click to put it on your pick-up list")
 end
 QM.TIP = TIP
 
--- on a numbered route pin's tooltip (Pins.lua): what this layer would show at the NPCs under that pin, on the pin's
--- own map (on a continent, where this layer draws nothing, the pin hides nothing)
+-- on a route pin's tooltip (Pins.lua): what this layer would show at the NPCs under that pin, on the pin's own map
+-- (on a continent, where this layer draws nothing, the pin hides nothing)
 function QM.AlsoHere(tip, r, shown)
   if shown and shown ~= r.m then return end
   for _, g in ipairs(also[r] or {}) do
@@ -795,74 +841,88 @@ function QM.Track(d)
   return true
 end
 
+-- a click: a waypoint, as the game's left click super-tracks the pin; a dungeon's entrance takes the right button
+-- too, for the Dungeon Journal, as the game's opens the Adventure Guide (every other pin lets it through to zoom the
+-- map out; one that reaches an icon anyway is left alone)
 local function click(d, button)
-  -- a right-click passes through to zoom the map out; one that reaches an icon anyway is left alone
-  if not d or button == "RightButton" then return end
-  -- a dungeon: its page in the Dungeon Journal; Shift: a waypoint on the entrance
-  if d.kind == "dungeon" and not (IsShiftKeyDown and IsShiftKeyDown()) and QB.DMap then QB.DMap.Open(d.cat, "quests"); return end
+  if not d then return end
+  if button == "RightButton" then
+    if d.kind == "dungeon" and QB.DMap then QB.DMap.Open(d.cat, "quests") end
+    return
+  end
   if IsShiftKeyDown and IsShiftKeyDown() and QM.Track(d) then return end
   QB.API.SetWaypoint(d.m, d.x * 100, d.y * 100, d.title)
 end
 
 ----------------------------------------------------------------------------
--- the frames: QuestBank's own (Pins.lua's layer), from the templates in Pins.xml with these on top
+-- the frames: QuestBank's own (Pins.lua's layer), the game's pins drawn again from the templates in Pins.xml with
+-- these on top. A ! is the game's quest offer (QuestBankOfferTemplate), a ? and an objective's mark its quest POI
+-- (QuestBankPoiTemplate: the disc with the turn-in glyph, or the in-progress one), a dungeon's entrance its POI pin
+-- (QuestBankMarkTemplate: the Dungeon atlas at its 32 px); each on the level the game gives that pin, scaled as it is
 ----------------------------------------------------------------------------
 local Icon = {}
 local READY = "Interface\\RaidFrame\\ReadyCheck-Ready"
 
--- size and art for what it marks; the layer places it and gives it its frame level (d.level: ! and ? on INVASION,
--- objectives below them on DIG_SITE, all under the numbered route pins on AREA_POI). A dungeon's entrance says how
--- many of its quests you have done ("2/5" under it, DungeonMap.lua's count, kept until QuestBank's data changes), and
--- has the ready-check's tick when that is all of them
+-- a ! (the quests you can take there, or where the item that starts one drops: red) or a ? (complete) or a mark (in
+-- progress): the look for what the pin is, in the family of its quests
 function Icon:Setup(d)
-  local size = d.art.size or 16
-  self:SetSize(size, size)
-  paint(self.Icon, d.art)
-  local p = d.kind == "dungeon" and QB.DMap and QB.DMap.Progress()[d.cat.key]
-  if d.badge then paint(self.Badge, d.badge); self.Badge:Show()
-  elseif p and p.done == p.total then QB.Art(self.Badge, nil, READY); self.Badge:Show()
-  else self.Badge:Hide() end
+  if d.kind == "give" then P.StyleOffer(self, { family = d.family })
+  elseif d.kind == "start" then P.StyleOffer(self, { family = d.family, drop = true })
+  else P.StylePoi(self, { complete = d.kind == "turn", family = d.family }) end
+end
+
+-- a dungeon's entrance: the game's Dungeon (or Raid) pin, and under it how many of its quests you have done ("2/5",
+-- DungeonMap.lua's count, kept until QuestBank's data changes), with the ready check's tick when that is all of them
+local Entrance = {}
+function Entrance:Setup(d)
+  P.StyleMark(self, d.cat.raid and "Raid" or "Dungeon", d.cat.icon or ART.dungeon.file)
+  local p = QB.DMap and QB.DMap.Progress()[d.cat.key]
+  if p and p.done == p.total then QB.Art(self.Badge, nil, READY); self.Badge:Show() else self.Badge:Hide() end
   self.Count:SetText(p and (p.done .. "/" .. p.total) or "")
   self.Count:SetShown(p and true or false)
 end
 
+-- hovered: the tooltip; on QuestBank's map page the game's blob shows the quest's areas too, as it does under the
+-- game's own pins (the page's list row lights, and the pins of that quest glow)
+local function hoverQuest(self, id)
+  if self.layer.world or not (QB.MapPage and QB.MapPage.Hover) then return end
+  QB.MapPage.Hover(id)
+end
 Icon.OnMouseEnter = QB.Safe(function(self)
   local d = self.data
   if not (d and TIP[d.kind]) then return end
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
   TIP[d.kind](GameTooltip, d)
   GameTooltip:Show()
+  if d.kind ~= "dungeon" then hoverQuest(self, idsOf(d)[1]) end
 end, "map icon tooltip")
 
-function Icon:OnMouseLeave() GameTooltip:Hide() end
+function Icon:OnMouseLeave()
+  GameTooltip:Hide()
+  if self.data and self.data.kind ~= "dungeon" then hoverQuest(self, nil) end
+end
 
 function Icon:OnMouseClickAction(button)
   QB.Try("map icon click", click, self.data, button)
   -- on QuestBank's map page, the list beside the map shows the quests' rows too
   if button ~= "RightButton" and self.data and not self.layer.world and QB.MapPage then QB.MapPage.Reveal(idsOf(self.data)) end
 end
+Entrance.OnMouseEnter, Entrance.OnMouseLeave, Entrance.OnMouseClickAction = Icon.OnMouseEnter, Icon.OnMouseLeave, Icon.OnMouseClickAction
 
-local Area = {}
-
-function Area:Setup(d)
-  paint(self.Circle, ART.area)
-  if d.start then self.Circle:SetVertexColor(0.7, 0.85, 1) else self.Circle:SetVertexColor(1, 0.82, 0) end
-  self.Circle:SetAlpha(0.22)
-end
-
--- the size of the ground it covers, whatever the zoom: r is a fraction of the map's width, as the canvas is, and
--- the frame keeps the canvas's own scale (no limits: it grows and shrinks with the terrain)
-function Area:Fit(canvas)
-  local d = self.data
-  if not (d and canvas) then return end
-  local size = math.max(4, 2 * d.r * (canvas:GetWidth() or 0))
-  self:SetSize(size, size)
-end
-
--- ! , ? and marks: a little bigger as you zoom in; areas under every icon, no mouse (the mark on one has the tooltip)
+-- the kinds: the game's offer (a little bigger as you zoom in, the offers' level), its quest POI (the same size at
+-- every zoom, the quest pins' levels in the log's order, snapped apart by the game's quantizer, Pins.lua) and its POI
+-- pin (the dungeon entrances' level, the right button its own)
 QM.IconMethods, QM.ClickForTest = Icon, click -- (the harness hovers and clicks without a map)
-QM.ICON = { template = ICON, level = "PIN_FRAME_LEVEL_INVASION", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Icon }
-QM.AREA = { template = AREA, level = "PIN_FRAME_LEVEL_QUEST_BLOB", mouse = false, methods = Area }
+QM.OFFER = { template = "QuestBankOfferTemplate", level = "PIN_FRAME_LEVEL_QUEST_OFFER", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Icon, glow = 68, size = 32 }
+QM.POI = { template = "QuestBankPoiTemplate", level = "PIN_FRAME_LEVEL_ACTIVE_QUEST", scale = { 1, 1, 1 }, mouse = true, methods = Icon, glow = 75, size = 32, quantize = true }
+QM.MARK = { template = "QuestBankMarkTemplate", level = "PIN_FRAME_LEVEL_DUNGEON_ENTRANCE", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Entrance, rightClick = true, size = 32 }
+local KIND = { give = QM.OFFER, start = QM.OFFER, turn = QM.POI, obj = QM.POI, dungeon = QM.MARK }
+
+function QM:Draw(layer, m)
+  for _, d in ipairs(self:Build(m, not layer.world)) do
+    layer:Add(KIND[d.kind] or QM.POI, d, d.x, d.y, nil, d.index)
+  end
+end
 
 ----------------------------------------------------------------------------
 -- switching
