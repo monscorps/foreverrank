@@ -362,6 +362,31 @@ local function unchecked(q)
 end
 QM.Unchecked = unchecked
 
+-- the quests you can take now from the NPCs of map m: what the game would show a ! for (QM:Build, QM.ZoneQuests)
+local function givers(m)
+  local s = QB.state
+  local level = s.level or 1
+  local range = greyRange(level)
+  local out = {}
+  for _, g in ipairs(giversOn(m) or {}) do
+    for _, id in ipairs(g.ids) do
+      local q = Q.Get(id)
+      local n = q and q.give
+      if n and n.m == m and not q.repeatable and not q.sodLeftover and not unchecked(q) and not s.log[id] then
+        local st = QB:Status(q)
+        if st.code == "todo" and not st.behind and not grey(q, level, range) then out[#out + 1] = q end
+      end
+    end
+  end
+  return out
+end
+
+-- does a quest have a spot (D.SPOT, parsed) on map m
+local function spotOn(all, m)
+  for _, sp in ipairs(all or {}) do if sp.m == m then return true end end
+  return false
+end
+
 -- what this layer would show at an NPC a numbered route pin stands on, for that pin's tooltip:
 -- [route pin's data] = { { name = NPC, own = the pin stands on this NPC, turn = quests, give = quests }, ... }
 -- (weak: the route's pins are made again with every plan)
@@ -452,16 +477,7 @@ function QM:Build(m)
   end
   -- ! where the quests you can take now start
   if set.mapGive ~= false then
-    for _, g in ipairs(giversOn(m) or {}) do
-      for _, id in ipairs(g.ids) do
-        local q = Q.Get(id)
-        local n = q and q.give
-        if n and n.m == m and not q.repeatable and not q.sodLeftover and not unchecked(q) and not s.log[id] then
-          local st = QB:Status(q)
-          if st.code == "todo" and not st.behind and not grey(q, level, range) then atNpc("give", n, q) end
-        end
-      end
-    end
+    for _, q in ipairs(givers(m)) do atNpc("give", q.give, q) end
   end
   -- what each icon shows: its hand-ins (quests), and the quests to pick up there (on a ?, offers)
   for _, d in ipairs(npcs) do
@@ -495,9 +511,7 @@ function QM:Build(m)
     if D.SPOT then
       for _, e in ipairs(s.logOrder or {}) do
         local all = not e.complete and spots(D.SPOT[e.id])
-        local here = false
-        for _, sp in ipairs(all or {}) do if sp.m == m then here = true break end end
-        if here then
+        if spotOn(all, m) then
           local need, objs = needOf(e.id), objectivesOf(e)
           local lines, loose = QM.Match(objs, all, need.count, namesOf(need)), QM.Loose(objs, all)
           local q = Q.Get(e.id)
@@ -567,6 +581,21 @@ function QM:Build(m)
     list.cut = cut -- what the cap left out (the harness reads it)
   end
   return list
+end
+
+-- the quests of map m as its icons show them, whatever their switches: ready (finished, handed in here), log (in
+-- your log with a mark, the giver or the hand-in here) and pickup (a ! here). The Map page lists them (MapPage.lua)
+function QM.ZoneQuests(m)
+  local ready, log = {}, {}
+  for _, e in ipairs(QB.state.logOrder or {}) do
+    local q = Q.Get(e.id)
+    if q and e.complete then
+      if q.turn and q.turn.m == m then ready[#ready + 1] = q end
+    elseif q and ((q.give and q.give.m == m) or (q.turn and q.turn.m == m) or spotOn(D.SPOT and spots(D.SPOT[e.id]), m)) then
+      log[#log + 1] = q
+    end
+  end
+  return ready, log, givers(m)
 end
 
 function QM:Draw(layer, m)
@@ -769,14 +798,22 @@ end
 -- the frames: QuestBank's own (Pins.lua's layer), from the templates in Pins.xml with these on top
 ----------------------------------------------------------------------------
 local Icon = {}
+local READY = "Interface\\RaidFrame\\ReadyCheck-Ready"
 
 -- size and art for what it marks; the layer places it and gives it its frame level (d.level: ! and ? on INVASION,
--- objectives below them on DIG_SITE, all under the numbered route pins on AREA_POI)
+-- objectives below them on DIG_SITE, all under the numbered route pins on AREA_POI). A dungeon's entrance says how
+-- many of its quests you have done ("2/5" under it, DungeonMap.lua's count, kept until QuestBank's data changes), and
+-- has the ready-check's tick when that is all of them
 function Icon:Setup(d)
   local size = d.art.size or 16
   self:SetSize(size, size)
   paint(self.Icon, d.art)
-  if d.badge then paint(self.Badge, d.badge); self.Badge:Show() else self.Badge:Hide() end
+  local p = d.kind == "dungeon" and QB.DMap and QB.DMap.Progress()[d.cat.key]
+  if d.badge then paint(self.Badge, d.badge); self.Badge:Show()
+  elseif p and p.done == p.total then QB.Art(self.Badge, nil, READY); self.Badge:Show()
+  else self.Badge:Hide() end
+  self.Count:SetText(p and (p.done .. "/" .. p.total) or "")
+  self.Count:SetShown(p and true or false)
 end
 
 Icon.OnMouseEnter = QB.Safe(function(self)
@@ -824,9 +861,16 @@ function QM:Init()
   end, "map icons: waiting for the map")
 end
 
--- after QB:Changed: the open map shows the plan and the log as they are now
+-- the same icons on QuestBank's own map page (MapPage.lua), once
+function QM:AddTo(map)
+  self.pageProvider = self.pageProvider or QB.Pins.NewLayer(function(layer, m) QM:Draw(layer, m) end, "map page icons", map)
+  return self.pageProvider
+end
+
+-- after QB:Changed: each map on screen shows the plan and the log as they are now
 function QM:Update()
   if self.provider and QB.Pins.MapOpen() then self.provider:RefreshAllData() end
+  if self.pageProvider and QB.Pins.Shown(self.pageProvider) then self.pageProvider:RefreshAllData() end
 end
 
 -- Settings' rows: mapIcons (all of them), mapGive, mapTurn, mapObj

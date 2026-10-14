@@ -127,6 +127,19 @@ function M.World(mapID, x, y)
   return { c = cont, wx = wx, wy = wy }
 end
 
+-- the other way: a world position (yards on continent c) as x and y fractions of a map, or nil off it (the Map page
+-- draws the arrow's step with it)
+function M.MapPos(c, wx, wy, mapID)
+  if not (C_Map and C_Map.GetMapPosFromWorldPos and CreateVector2D) then return nil end
+  local ok, _, pos = pcall(C_Map.GetMapPosFromWorldPos, c, CreateVector2D(wx, wy), mapID)
+  if not ok or type(pos) ~= "table" then return nil end
+  local x, y = pos.x, pos.y
+  if pos.GetXY then x, y = pos:GetXY() end
+  x, y = QB.Plain(x), QB.Plain(y)
+  if type(x) ~= "number" or type(y) ~= "number" or x < 0 or x > 1 or y < 0 or y > 1 then return nil end
+  return x, y
+end
+
 -- a place tied to the nearest flight master of the faction
 function M.Place(fac, c, wx, wy)
   local best, bi = huge, 0

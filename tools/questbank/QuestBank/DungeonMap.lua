@@ -2,9 +2,9 @@
 -- The Dungeon Journal: every dungeon with the Encounter Journal's own cover art, which the client still ships; its
 -- bosses, rares, trash and chests (chips show or hide each kind), each with a face, and the loot players and the site
 -- have recorded, by item id (the client names, colours and slots the items); the floor art of the dungeon; its quests
--- and where you stand with each; a waypoint on the entrance. /qb map opens it, /qb map <name> on a dungeon, and the
--- Map button on a dungeon's card on the Party page. Inside an instance the game hides where you are, so the map is a
--- map, not a tracker.
+-- and where you stand with each; a waypoint on the entrance. /qb journal opens it, /qb journal <name> on a dungeon,
+-- and the Map button on a dungeon's card on the Party page. Inside an instance the game hides where you are, so the
+-- map is a map, not a tracker.
 local _, QB = ...
 local DM = {}
 QB.DMap = DM
@@ -272,6 +272,9 @@ local function pill(parent, label, w)
   end
   return b
 end
+
+-- the journal's text, panel and pill, for the Map page's (MapPage.lua)
+DM.Text, DM.Panel, DM.Pill = fs, panel, pill
 
 ----------------------------------------------------------------------------
 -- faces
@@ -972,11 +975,11 @@ function DM.Toggle(cat)
   if onPage() and frame and frame.cat == cat then QB.UI:ShowTab(QB.UI.lastTab or 4) else DM.Open(cat) end
 end
 
--- /qb map [name]: the journal, on a dungeon when one is named
+-- /qb journal [name] (and /qb map with a name that is no zone): the journal, on a dungeon when one is named
 function DM.Command(rest)
   if rest and rest ~= "" then
     local cat = DM.Find(rest)
-    if cat then DM.Open(cat) else QB:Print("No dungeon called '" .. rest .. "'. /qb map opens the journal.") end
+    if cat then DM.Open(cat) else QB:Print("No dungeon called '" .. rest .. "'. /qb journal opens the journal.") end
     return
   end
   if onPage() then QB.UI.frame:Hide(); return end

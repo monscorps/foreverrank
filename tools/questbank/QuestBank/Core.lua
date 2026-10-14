@@ -1096,6 +1096,7 @@ local DEFAULTS = {
   -- quest icons on each zone's world map (QuestMap.lua, Forever only): all of them, then where quests you can take
   -- start (!), where finished ones are handed in (?), and the objectives and quest-item drops of the quests in your log
   mapIcons = true, mapGive = true, mapTurn = true, mapObj = true,
+  mapPage = true, -- the Map key and the sidebar open QuestBank's own map page (MapPage.lua), not the game's map
   -- the kinds the Dungeon Journal lists and pins (DungeonMap.lua): "other" is chests and events
   djShow = { boss = true, rare = true, trash = false, other = true },
 }
@@ -2230,6 +2231,9 @@ function QB:MarkDirty()
 end
 
 function QB:Changed()
+  -- a count, for what is kept until the data changes (the minimap's list, the dungeons' done counts): first, so what
+  -- is drawn below already counts as new
+  QB.changed = (QB.changed or 0) + 1
   QB.Try("plan", QB.Recompute, QB)
   -- the window shows what was just worked out, without working it out again
   QB.fresh = true
@@ -2237,7 +2241,6 @@ function QB:Changed()
   QB.fresh = false
   if QB.Pins then QB.Try("map pins", QB.Pins.Update, QB.Pins) end -- and the quest icons after them (Pins.lua)
   if QB.Sync then QB.Try("party sync", QB.Sync.Changed, QB.Sync) end
-  QB.changed = (QB.changed or 0) + 1 -- a count, for what is kept until the data changes (the minimap's list)
 end
 
 local function onTurnIn(questID, xpReward)
@@ -2324,6 +2327,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Timer then QB.Timer:Init() end
     if QB.Link then QB.Link:Init() end
     if QB.Mini then QB.Mini:Init() end
+    if QB.MapPage then QB.MapPage:Init() end
     if QB.Glow then QB.Glow:Init() end
     if QB.Walk then QB.Walk:Init() end
     if QB.Camp then QB.Camp:Init() end
@@ -2500,7 +2504,24 @@ slash = function(msg)
       QB.UI:ShowErrors()
     end
   elseif cmd == "map" or cmd == "maps" then
-    if QB.DMap then QB.DMap.Command(rest) end
+    -- the Map page (MapPage.lua), on a zone when one is named; another name, that dungeon in the journal. /qb map game
+    -- gives the Map key and the sidebar back to the game's map (Settings brings QuestBank's back)
+    local MP = QB.MapPage
+    local zone = rest ~= "" and MP.Find(rest)
+    if rest:lower() == "game" then
+      QB:Settings().mapPage = false
+      if QB.UI.frame and QB.UI.tab == 8 then QB.UI:ShowTab(QB.UI.lastTab or 1) end
+      QB:Print("The Map key and the sidebar's Map open the game's world map now. Settings turns QuestBank's map back on.")
+    elseif rest ~= "" and not (zone and MP.On()) then
+      QB.DMap.Command(rest)
+    elseif MP.On() then
+      QB.UI:Open(8)
+      if zone then MP.Go(zone, "user") end
+    else
+      QB.UI.OpenMap()
+    end
+  elseif cmd == "journal" then
+    QB.DMap.Command(rest)
   elseif cmd == "bigmap" or cmd == "map-open" then
     -- the Map: the game's world map on your zone (bigmap: the command of the minimap's old big map)
     if QB.UI and QB.UI.OpenMap then QB.UI.OpenMap() end
