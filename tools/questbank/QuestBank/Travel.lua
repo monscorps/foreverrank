@@ -9,7 +9,11 @@
 -- shows, tick by tick.
 --   QuestBankDB.travel[character] = { known = { [TaxiNodes id] = "m" the world map | "t" the flight master's map |
 --     "n" "New flight path discovered!" | "f" flown | false not known }, readC = { [continent] = time() read },
---     bind = { name, c, wx, wy, src = "bound" | "landed", at } }
+--     bind = { name, c, wx, wy, src = "bound" | "landed", at },
+--     flown = { ["from>to" (TaxiNodes ids)] = { n = flights, secs = seconds in the air, the mean of the last few } }:
+--     how long each flight you took really lasted, from the pick (TakeTaxiNode) to landing (UnitOnTaxi off, or
+--     PLAYER_CONTROL_GAINED); a flight you flew counts its own seconds, the rest the tables' minutes with Frequent
+--     Flier (QB.Legacy) }
 --   QuestBankDB.diag.taxi = { cont, zone, open, known, scanBad, bind, at }: how many flight points each read of the
 --     client gave, so the uploads show what this client answers
 -- Only reads: QuestBank never takes a flight or uses the hearthstone for you.
@@ -66,6 +70,12 @@ end
 local function ydTo(me, p) return yd(me.c, me.wx, me.wy, p.c, p.wx, p.wy) end
 local WALK -- minutes on foot a yard, at a run
 local function walkMin() WALK = WALK or M.DETOUR / M.RUN / 60; return WALK end
+-- on a flight now (false when the client won't say)
+local function taxiNow()
+  if type(UnitOnTaxi) ~= "function" then return false end
+  local ok, v = pcall(UnitOnTaxi, "player")
+  return ok and plain(v) == true
+end
 
 ----------------------------------------------------------------------------
 -- what QuestBank keeps per character, and what the client said
@@ -79,6 +89,7 @@ function TV.DB()
   all[key] = t
   if type(t.known) ~= "table" then t.known = {} end
   if type(t.readC) ~= "table" then t.readC = {} end
+  if type(t.flown) ~= "table" then t.flown = {} end
   return t
 end
 
@@ -144,11 +155,14 @@ function TV.Graph(fac)
     end
   end
   G.n = n
+  G.flyModel = {}
+  for u = 1, G.h do G.flyModel[u] = {} end
   local s = D.FLY[fac]
   for e = 1, #s, 4 do
     local b1, b2, b3, b4 = s:byte(e, e + 3)
-    push(G.fly[AT[b1] + 1], AT[b2] + 1, (AT[b3] * 64 + AT[b4]) / 10)
+    push(G.flyModel[AT[b1] + 1], AT[b2] + 1, (AT[b3] * 64 + AT[b4]) / 10)
   end
+  TV.ApplyFlights(G)
   local k = walkMin()
   for u = 1, n do
     for v = 1, n do
@@ -157,6 +171,52 @@ function TV.Graph(fac)
   end
   graphs[fac] = G
   return G
+end
+
+-- the seconds a flight from one flight master to another took you (TV.DB().flown), or nil
+local function flownKey(G, a, b)
+  local ta, tb = G.taxi[a], G.taxi[b]
+  if not (ta and tb and ta > 0 and tb > 0) then return nil end
+  return ta .. ">" .. tb
+end
+function TV.Learned(G, a, b)
+  local key = flownKey(G, a, b)
+  local e = key and TV.DB().flown[key]
+  return type(e) == "table" and type(e.secs) == "number" and e.secs > 0 and e.secs or nil, key
+end
+
+-- the graph's flight minutes from the tables' (G.flyModel): a flight you flew counts its own seconds; the rest the
+-- tables' minutes with Frequent Flier's faster mount (QB.Legacy.FlightMinutes). A flight you flew in one go that the
+-- tables have no edge for (through flight masters you know) becomes an edge of its own
+function TV.ApplyFlights(G)
+  local flown = TV.DB().flown
+  local L = QB.Legacy
+  for u = 1, G.h do
+    local f, m, has = {}, G.flyModel[u], {}
+    for k = 1, #m, 2 do
+      local v, model = m[k], m[k + 1]
+      local secs = TV.Learned(G, u, v)
+      f[k], f[k + 1] = v, secs and secs / 60 or (L and L.FlightMinutes(model) or model)
+      has[v] = true
+    end
+    if G.taxi[u] > 0 then
+      for key, e in pairs(flown) do
+        local ta, tb = key:match("^(%d+)>(%d+)$")
+        if ta and tonumber(ta) == G.taxi[u] and type(e) == "table" and type(e.secs) == "number" and e.secs > 0 then
+          local v = G.byTaxi[tonumber(tb)]
+          if v and not has[v] then push(f, v, e.secs / 60) end
+        end
+      end
+    end
+    G.fly[u] = f
+  end
+end
+
+-- the flights changed (a flight learned, a Legacy perk read): every graph's again, and the plans with them
+function TV.Refly()
+  local any = false
+  for _, G in pairs(graphs) do TV.ApplyFlights(G); any = true end
+  if any then TV.ver = TV.ver + 1 end
 end
 
 -- the hub of a town on a continent (a flight master's first, where a town has two rows)
@@ -431,7 +491,73 @@ function TV.OnTakeTaxi(slot)
   local news = mark(G, to, "f")
   news = mark(G, from, "f") or news
   if news then TV.ver = TV.ver + 1 end
-  TV.flying = { to = to, from = from, at = now(), min = from and to and flightMin(G, from, to) or nil }
+  local min, key
+  if from and to then
+    local secs
+    secs, key = TV.Learned(G, from, to)
+    min = secs and secs / 60 or flightMin(G, from, to)
+  end
+  TV.flying = { to = to, from = from, at = now(), min = min }
+  TV.WatchFlight(from, to, key, min)
+end
+
+----------------------------------------------------------------------------
+-- the flight timer: how long the flight you picked really takes, from takeoff to landing, whatever the arrow does.
+-- Takeoff: UnitOnTaxi on, or PLAYER_CONTROL_LOST; landing: UnitOnTaxi off, or PLAYER_CONTROL_GAINED. A look a second
+-- in between. Learned into TV.DB().flown (the mean of the last few), and every graph's minutes follow
+----------------------------------------------------------------------------
+local watch -- { from, to, key, model (minutes), at (picked), up (took off) }
+local MEAN_OF = 5        -- flights a learned edge averages over
+local MIN_FLIGHT = 10    -- seconds: shorter was no flight
+TV.MEAN_OF = MEAN_OF
+
+local function landed(w, secs)
+  watch = nil
+  if not w.key or secs < MIN_FLIGHT then return end
+  if w.model and secs > max(600, 3 * w.model * 60) then return end -- (a disconnect, a loading screen: not a flight)
+  local flown = TV.DB().flown
+  local e = flown[w.key]
+  if type(e) == "table" and type(e.n) == "number" and type(e.secs) == "number" and e.n > 0 then
+    local n = math.min(e.n, MEAN_OF - 1)
+    e.secs, e.n = floor((e.secs * n + secs) / (n + 1) + 0.5), n + 1
+  else
+    flown[w.key] = { n = 1, secs = floor(secs + 0.5) }
+  end
+  TV.flownLast = { key = w.key, secs = secs, model = w.model }
+  TV.Refly()
+end
+
+local function flightTick(w)
+  if watch ~= w then return end
+  local tnow = now()
+  local on = taxiNow()
+  if not w.up then
+    if on then w.up = tnow
+    elseif tnow - w.at > 60 then watch = nil; return end -- (never took off: refused, or the map shut)
+  elseif not on then
+    landed(w, tnow - w.up)
+    return
+  end
+  C_Timer.After(1, QB.Safe(function() flightTick(w) end, "flight timer"))
+end
+
+function TV.WatchFlight(from, to, key, model)
+  local w = { from = from, to = to, key = key, model = model, at = now() }
+  watch = w
+  C_Timer.After(1, QB.Safe(function() flightTick(w) end, "flight timer")) -- (a pick after it: this one's ticks stop)
+end
+-- the flight timer's state, for the tests: nil, "picked" or "up"
+function TV.Watching() return watch and (watch.up and "up" or "picked") or nil end
+
+function TV.OnControl(lost)
+  local w = watch
+  if not w then return end
+  local tnow = now()
+  if lost then
+    if not w.up and (taxiNow() or tnow - w.at <= 10) then w.up = tnow end
+  elseif w.up then
+    landed(w, tnow - w.up)
+  end
 end
 
 -- "New flight path discovered!": the flight master you stand at
@@ -591,7 +717,8 @@ TV.Icons = icons
 
 -- what the router may use: the faction, the walking pace (mounted or not), druid flights, the hearthstone
 function TV.Opts(mode)
-  return { fac = faction(), mf = QB:Mounted() and M.MOUNT or 1, druid = class() == "DRUID", hearth = TV.Hearth(mode), mode = mode }
+  local mounted = QB:Mounted() and true or false
+  return { fac = faction(), mounted = mounted, mf = M.Factor(mounted), druid = class() == "DRUID", hearth = TV.Hearth(mode), mode = mode }
 end
 
 -- Dijkstra (no heap: a few dozen nodes) from `from` to `to`, or to everywhere when `to` is nil. Nodes 1..n are the
@@ -930,7 +1057,7 @@ local function replan(me, t, mode, forced)
   for i = #tr, 1, -1 do tr[i] = nil end
   if plan and #plan.legs > 1 then
     local I = icons(o.fac)
-    for i, l in ipairs(plan.legs) do tr[i] = l.icon or (o.mf < 1 and I.mount or I.foot) end
+    for i, l in ipairs(plan.legs) do tr[i] = l.icon or ((o.mounted or (o.mounted == nil and o.mf < 1)) and I.mount or I.foot) end
   end
 end
 
@@ -1181,6 +1308,8 @@ function TV.OnEvent(event, a1, a2, a3)
     C_Timer.After(1, QB.Safe(function() TV.learnSoon = false; TV.Learn() end, "flight paths"))
   elseif event == "UI_INFO_MESSAGE" then
     if type(ERR_NEWTAXIPATH) == "string" and plain(a2) == ERR_NEWTAXIPATH then newPath(); TV.Learn() end
+  elseif event == "PLAYER_CONTROL_LOST" or event == "PLAYER_CONTROL_GAINED" then
+    TV.OnControl(event == "PLAYER_CONTROL_LOST")
   elseif event == "HEARTHSTONE_BOUND" then
     -- you stand at the innkeeper: where the hearthstone lands from now on
     local name, me = bindName(), QB.API.WorldPosition()
@@ -1213,7 +1342,7 @@ function TV:Init()
   self.frame = f
   f:SetScript("OnEvent", QB.Safe(function(_, event, ...) TV.OnEvent(event, ...) end, "travel"))
   for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "TAXIMAP_OPENED", "TAXIMAP_CLOSED",
-                       "TAXI_NODE_STATUS_CHANGED", "UI_INFO_MESSAGE", "HEARTHSTONE_BOUND" }) do
+                       "TAXI_NODE_STATUS_CHANGED", "UI_INFO_MESSAGE", "HEARTHSTONE_BOUND", "PLAYER_CONTROL_LOST", "PLAYER_CONTROL_GAINED" }) do
     pcall(f.RegisterEvent, f, e)
   end
   for _, e in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_INTERRUPTED", "UNIT_SPELLCAST_FAILED" }) do

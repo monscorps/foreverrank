@@ -429,10 +429,28 @@ function API.KnowsRiding()
   return false
 end
 
+-- the Cozy Sleeping Bag's buff on you: 429959 "Well-Rested" (1.60.1.70338, a hyphen) by its id first; by either name
+-- when the id isn't the Legacy perk's 1225478 "Well Rested" (a hidden passive, never the bag's)
+local PERK_RESTED, BAG_RESTED = 1225478, 429959
 function API.HasWellRested()
+  local get = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
+  if get then
+    local seen = false
+    for i = 1, 60 do
+      local ok, a = pcall(get, "player", i, "HELPFUL")
+      if not ok or type(a) ~= "table" then break end
+      seen = true
+      local id, n = QB.Plain(a.spellId), QB.Plain(a.name)
+      if id == BAG_RESTED then return true end
+      if (n == "Well-Rested" or n == "Well Rested") and id ~= PERK_RESTED then return true end
+    end
+    if seen then return false end
+  end
   if AuraUtil and AuraUtil.FindAuraByName then
-    local ok, name = pcall(AuraUtil.FindAuraByName, "Well Rested", "player", "HELPFUL")
-    if ok and name then return true end
+    for _, name in ipairs({ "Well-Rested", "Well Rested" }) do
+      local ok, found, _, _, _, _, _, _, _, _, id = pcall(AuraUtil.FindAuraByName, name, "player", "HELPFUL")
+      if ok and found and QB.Plain(id) ~= PERK_RESTED then return true end
+    end
   end
   return false
 end
@@ -1796,7 +1814,7 @@ function QB:ChainCost(q)
   if not steps then return nil end
   local s = self.state
   local M, fac = QB.Model, self.faction or API.Faction()
-  local mf = self:Mounted() and 0.625 or 1
+  local mf = M.Factor(self:Mounted())
   local wp = API.WorldPosition()
   local prev = wp and M.Place(fac, wp.c, wp.wx, wp.wy) or nil
   local minutes, known, xp = 0, true, 0
@@ -2346,6 +2364,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.MapPage then QB.MapPage:Init() end
     if QB.Glow then QB.Glow:Init() end
     if QB.Walk then QB.Walk:Init() end
+    if QB.Legacy then QB.Legacy:Init() end
     if QB.Camp then QB.Camp:Init() end
     if QB.Travel then QB.Travel:Init() end
     if QB.Arrow then QB.Arrow:Init() end
@@ -2486,6 +2505,10 @@ slash = function(msg)
   elseif cmd == "way" and QB.Travel then
     -- the steps to what the arrow points at, the flight paths QuestBank counts on, and the hearthstone
     for _, line in ipairs(QB.Travel.WayLines()) do QB:Print(line) end
+  elseif cmd == "legacy" and QB.Legacy then
+    -- every Legacy perk's rank, and what QuestBank counts with (Legacy.lua)
+    if rest == "read" then QB.Legacy.Read() end
+    for _, line in ipairs(QB.Legacy.Report()) do QB:Print(line) end
   elseif cmd == "discoveries" then
     local nq, nn, nc = QB.Discover.Count()
     local function n(k, one, many) return k == 1 and ("1 " .. one) or (k .. " " .. many) end
