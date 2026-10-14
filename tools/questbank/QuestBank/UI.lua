@@ -1887,7 +1887,9 @@ function UI.MinutesTo(q, here, mf)
     to = (w and M.Place(fac, w.c, w.wx, w.wy)) or (q.turnIdx and q.turnIdx > 0 and M.NpcPlace(q.turnIdx, fac)) or nil
   end
   if not to then return nil end
-  return M.Between(here, to, fac, mf)
+  local mins = M.Between(here, to, fac, mf)
+  if mins == math.huge then return nil end -- no way there is known (a place off every flight path, across the sea)
+  return mins
 end
 
 -- reqMax (the reward finders): quests you can take at that level, whatever their quest level; else those needing at most
@@ -1952,13 +1954,16 @@ function UI:Candidates(limit, level, reqMax, finder)
       local w = ent and M.World and M.World(ent.m, ent.x, ent.y)
       to = (w and M.Place(fac, w.c, w.wx, w.wy)) or turnP
     end
-    c.mins = (here and to) and M.Between(here, to, fac, mf) or nil
+    -- (a place no way is known to, off every flight path across the sea: the model says never; the row shows no
+    -- minutes rather than a huge number, and questing it is a waste all the same)
+    local trip = (here and to) and M.Between(here, to, fac, mf) or nil
+    c.mins = (trip and trip < math.huge) and trip or nil
     if not banking then
       -- questing: XP for the time. The trip to the giver, the quest's own loop from giver to turn-in,
       -- and half of what its chain leads on to.
       -- a giver the catalog can't place (an item drop, a Forever quest nobody has met): no trip is known,
       -- so a modest ten minutes stands in, and it is never dropped on ignorance
-      c.away = c.mins or ((here and not to) and 10 or 0)
+      c.away = trip or ((here and not to) and 10 or 0)
       c.back = (give and turnP) and M.Between(give, turnP, fac, mf) or 0
       c.lead = QB:ChainLead(c.id)
       local minutes = c.away + c.back + 3 -- three for the quest itself, so one at your feet isn't infinite

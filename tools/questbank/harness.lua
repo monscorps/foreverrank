@@ -799,9 +799,24 @@ local function newClient(o)
     end,
     -- c.noPos: the client gives no position (the tram, a loading screen)
     GetPlayerMapPosition = function() if c.noPos then return nil end return { x = 0.66, y = 0.62, GetXY = function(self) return self.x, self.y end } end,
-    -- c.instWorld[m]: a map inside an instance, on the instance's own continent (not 0 or 1)
-    GetWorldPosFromMapPos = function(m)
+    -- c.instWorld[m]: a map inside an instance, on the instance's own continent (not 0 or 1). A map on the other
+    -- continent than the player's: a spot there, placed from one of its flight masters' map and world positions
+    -- (D.HUB, 40 yards a percent), so a trip across the sea is one. Every map on his own continent is where he
+    -- stands, as the mock's maps go
+    GetWorldPosFromMapPos = function(m, v)
       if (c.instWorld or {})[m] then return 36, { x = 0, y = 0, GetXY = function(self) return self.x, self.y end } end
+      local cont = continentOf(m) == 1414 and 1 or 0
+      local okM, mine = pcall(env.C_Map.GetBestMapForUnit, "player") -- (his own map is where he stands, whatever continent a test put him on)
+      if m ~= (okM and mine or nil) and (o.world[1] == 0 or o.world[1] == 1) and cont ~= o.world[1] and type(v) == "table" and c.QB.Data.HUB then
+        local wx, wy, found = 0, 0, false
+        for _, fac in ipairs({ "A", "H" }) do
+          for _, h in ipairs(c.QB.Data.HUB[fac]) do
+            if h[7] == m then wx, wy, found = h[3] - ((v.y or 0) * 100 - h[9]) * 40, h[4] - ((v.x or 0) * 100 - h[8]) * 40, true; break end
+          end
+          if found then break end
+        end
+        return cont, { x = wx, y = wy, GetXY = function(self) return self.x, self.y end }
+      end
       return o.world[1], { x = o.world[2], y = o.world[3], GetXY = function(self) return self.x, self.y end }
     end,
     GetMapRectOnMap = function() return 0.4, 0.6, 0.4, 0.6 end,
@@ -3356,6 +3371,8 @@ do
   assert(qid and U.RewardSlotFits(qid, "Head") and not U.RewardSlotFits(qid, "Ring"), "a mail head reward fits a paladin's Head, not Ring")
   env.C_Item.GetItemInfoInstant = saveInst
 end
+-- the layout sheets (dumpLayout) and the layout problems every stage's tests add to, written out at the end
+local layouts, problems = {}, {}
 -- [stage: boss-spots] that stage's tests go right below this line
 
 
@@ -3377,6 +3394,55 @@ end
 
 
 -- [stage: checklist] that stage's tests go right below this line
+-- checklist 3: a quest given inside a dungeon across the sea is measured to the entrance: Blackfathom Villainy from Goldshire
+-- is a boat and a flight away, never "0 min"; a place no way is known to shows no minutes, not a huge number
+do
+  local M, D = QB.Model, QB.Data
+  local lock0 = QB:LockChoice()
+  QB:SetLock("off"); QB:Recompute(true)
+  assert(QB:Mode() == "quest", "questing by hand")
+  local wp = QB.API.WorldPosition()
+  assert(wp and wp.c == 0, "the owner stands in Elwynn")
+  local q = QB.Quest.Get(1200)
+  assert(q and q.give and q.give.inside and q.cat.entrance and q.cat.cont == 1, "Blackfathom Villainy: given inside the Deeps, off Ashenvale")
+  local w = M.World(q.cat.entrance.m, q.cat.entrance.x, q.cat.entrance.y)
+  assert(w and w.c == 1, "the entrance lies on Kalimdor in the mock too: " .. tostring(w and w.c))
+  local here, mf = UI.Here()
+  local mins = UI.MinutesTo(q, here, mf)
+  assert(mins and mins > 20 and mins < 120, "Blackfathom Villainy from Goldshire: a boat and a flight, " .. tostring(mins))
+  print(string.format("Blackfathom Villainy from Goldshire: %.1f min to the Deeps' entrance", mins))
+  UI.candMemo = nil
+  local villainy, placed
+  -- (the finders' own view: quests you can take at your level, whatever their quest level)
+  for _, c in ipairs(UI:Candidates(nil, nil, QB.state.level, true)) do
+    if c.id == 1200 then villainy = c end
+    if not placed and c.give > 0 and M.NpcPlace(c.give, QB.faction) and c.mins and c.mins > 0 then placed = c end
+    local cat = D.CAT[c.cat]
+    if c.give > 0 and D.NPC[c.give][5] < 0 and cat.cont and cat.cont ~= here.c then
+      assert(c.mins == nil or c.mins > 10, "a dungeon giver across the sea: real minutes or none: " .. D.QN[c.id] .. " " .. tostring(c.mins))
+    end
+  end
+  assert(villainy and villainy.mins and math.abs(villainy.mins - mins) < 0.01 and villainy.mins > 20, "the finder's row: the entrance's trip, never 0: " .. tostring(villainy and villainy.mins))
+  assert(placed, "a finder candidate with a placed giver and a trip")
+  -- no way known between two places (off every flight path, across the sea): the model says never
+  local far = { c = 1, wx = 0, wy = 0, hub = 0, walk = 0 }
+  assert(M.Between(here, far, "A", 1) == math.huge, "the model's never")
+  local pq = QB.Quest.Get(placed.id)
+  local saveNpc = M.NpcPlace
+  M.NpcPlace = function(i, fac) if i == pq.giveIdx then return far end return saveNpc(i, fac) end
+  assert(UI.MinutesTo(pq, here, mf) == nil, "no way there: no minutes")
+  UI.candMemo = nil
+  local seen
+  for _, c in ipairs(UI:Candidates(nil, nil, QB.state.level, true)) do
+    if c.id == placed.id then seen = true; assert(c.mins == nil and c.away == math.huge and c.waste, "no way there: no minutes on the row, and questing no suggestion") end
+  end
+  assert(seen, "the quest is still a finder candidate")
+  local cc = QB:ChainCost(pq)
+  assert(not cc or cc.minutes == nil, "a chain through a place no way is known to: no minutes, not a huge number")
+  M.NpcPlace = saveNpc
+  UI.candMemo = nil
+  QB:SetLock(lock0); QB:Recompute(true)
+end
 
 
 
@@ -3917,7 +3983,7 @@ v3.modeNow.__scripts.OnClick(v3.modeNow)
 QB.Model.Finish()
 
 -- the layout of every page, checked and drawn
-local layouts, problems = {}, {}
+-- (layouts and problems are declared above the stage anchors)
 local function hoverFirst(list, n)
   local k = 0
   for _, f in ipairs(list) do

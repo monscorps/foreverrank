@@ -1802,7 +1802,10 @@ function QB:ChainCost(q)
   local minutes, known, xp = 0, true, 0
   local function hop(to)
     if not to then known = false return end
-    if prev then minutes = minutes + M.Between(prev, to, fac, mf) end
+    if prev then
+      local leg = M.Between(prev, to, fac, mf)
+      if leg == math.huge then known = false else minutes = minutes + leg end -- no way known: the minutes aren't
+    end
     prev = to
   end
   for _, st in ipairs(steps) do
