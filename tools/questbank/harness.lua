@@ -1619,7 +1619,7 @@ do
   assert(van and van:IsShown(), "VanCleef's pin on floor 2")
   local pt = van.__points[1]
   assert(pt.relPoint == "TOPLEFT" and pt.rel == f.map and math.abs(pt.x - 0.606 * f.map:GetWidth()) < 16 and math.abs(pt.y + 0.459 * f.map:GetHeight()) < 16, "where he stands (give or take a nudge from a neighbour)")
-  assert(van.face.__portrait == 2029, "his pin is his own portrait, drawn by the client from his model")
+  assert(van.boss.p and van.face.__tex == van.boss.p and not van.face.__portrait, "his pin is the old journal's art of him (EdwinVanCleef, matched without the space), never a portrait the client fills in late")
   van.__scripts.OnClick(van)
   assert(f.boss.n == "Edwin VanCleef" and f.tab == "bosses" and f.lootName:GetText() == "Edwin VanCleef", "a pin opens the boss's loot")
   DM.ShowFloor(1)
@@ -2906,6 +2906,64 @@ do
   DM.Open(DM.Find("City of Dalaran"), "bosses")
   check("Dungeon Journal, City of Dalaran")
   layouts[#layouts + 1] = dumpLayout(UI.frame, "Dungeon Journal, City of Dalaran")
+  DM.Open(DM.Find("deadmines"), "map"); DM.ShowFloor(2)
+  UI:ShowTab(1); UI:Refresh()
+end
+
+-- 5.3.3: the journal's data (gen_data.py, boss_spots.py, forever_npcs.py): the game's encounter order, the names the
+-- Classic database and the old journal's art spell another way, chests and events by their kind, each dungeon's map
+-- and cover (Forever's own dungeons: their loading screen, cut to a band), and a face for every boss
+do
+  local DM, env = QB.DMap, owner.env
+  local D = QB.Data.DMAP
+  UI:ShowTab(7); UI:Refresh()
+  local f = env.QuestBankDungeonMap
+  local function rows()
+    local out = {}
+    for _, r in ipairs(f.bossRows) do if r:IsShown() then out[#out + 1] = r.boss.n end end
+    return out
+  end
+  -- the order: the Deadmines as the game runs them (Miner Johnson is an encounter, so a boss now, no longer a rare);
+  -- a boss the client doesn't know comes right after the entry before it in the loot file (Sneed's Shredder after
+  -- Sneed, the City of Dalaran's Arcanic Enigma after the Arcane Anomaly)
+  DM.Open(DM.Find("deadmines"), "bosses")
+  local names = rows()
+  assert(table.concat(names, ",", 1, 4) == "Rhahk'Zor,Sneed,Sneed's Shredder,Miner Johnson", "the Deadmines in the game's order: " .. table.concat(names, ","))
+  DM.Open(DM.Find("City of Dalaran"), "bosses")
+  local enigma, before
+  for i, b in ipairs(D.d16544.bosses) do if b.n == "Arcanic Enigma" then enigma, before = b, D.d16544.bosses[i - 1].n end end
+  names = rows()
+  local at = {}
+  for i, n in ipairs(names) do at[n] = i end
+  assert(enigma.o == nil and at["Arcanic Enigma"] == at[before] + 1, "the Arcanic Enigma right after " .. before .. ": " .. table.concat(names, ","))
+  -- names: the Ring of Law's six fighters, the client's "Geilhast" (Gelihast) and Shadowfang's pair have models
+  local by = {}
+  for _, d in pairs(D) do for _, b in ipairs(d.bosses) do by[b.n] = b end end
+  local ring = 0
+  for _, b in ipairs(D.d1584.bosses) do if b.n:find("Ring of Law: ", 1, true) == 1 then ring = ring + 1; assert(b.d and b.p, "a Ring of Law fighter's model and art: " .. b.n) end end
+  assert(ring == 6 and by["Geilhast"].d == 1773 and by["Fel Steed / Shadow Charger"].d == 1951, "the names the Classic database spells another way")
+  assert(by["Dark Coffer"].k == "object" and by["Chest of The Seven"].k == "object" and DM.KindLabel(by["Guzzler"]) == "Event", "two chests and an event that the loot file filed as bosses")
+  -- every dungeon knows its map; Forever's four have their loading screen as the cover, cut to fit without squeezing
+  for key, d in pairs(D) do assert(type(d.mid) == "number" and d.mid > 0, "the dungeon's map: " .. key) end
+  for _, key in ipairs({ "d16544", "d16732", "d16611", "d16919" }) do
+    assert(D[key].cover and D[key].coverKind == "LOADING", "a cover for Forever's own dungeon " .. key)
+  end
+  -- (a band fits when its height, at the art's 2992 x 1684, is the texture's height at the texture's width)
+  GEN = GEN + 1
+  local function fits(t)
+    local r, tc = rectOf(t), t.__tc
+    return tc[1] == 0 and tc[2] == 1 and math.abs(tc[3] + tc[4] - 1) < 1e-6 and math.abs((tc[4] - tc[3]) * 1684 / 2992 * (r.r - r.l) - (r.t - r.b)) < 0.5
+  end
+  assert(f.cover.__tex == D.d16544.cover and fits(f.cover), "the header's cover: the band across the loading screen's middle that fills it")
+  local row = {}
+  for _, r in ipairs(f.rows) do if r:IsShown() then row[r.cat.key] = r end end
+  assert(row.d16544.art.__tex == D.d16544.cover and fits(row.d16544.art), "the list row's cover: its own band")
+  assert(row.d1581.art.__tex == D.d1581.cover and row.d1581.art.__tc[3] == 0 and row.d1581.art.__tc[4] == 1, "the journal's own art whole")
+  -- a face for every boss (the old journal's art, a model or an achievement's icon), never more without one than
+  -- gen_data.py's ratchet allows
+  local faceless, cap = 0, tonumber(io.open(HERE .. "/gen_data.py"):read("*a"):match("\nFACELESS_BOSS_MAX = (%d+)"))
+  for _, d in pairs(D) do for _, b in ipairs(d.bosses) do if DM.Kind(b) == "boss" and not (b.p or b.d or b.a) then faceless = faceless + 1 end end end
+  assert(cap and faceless <= cap, "bosses with no face: " .. faceless .. ", at most " .. tostring(cap))
   DM.Open(DM.Find("deadmines"), "map"); DM.ShowFloor(2)
   UI:ShowTab(1); UI:Refresh()
 end

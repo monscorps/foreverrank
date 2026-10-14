@@ -25,7 +25,7 @@ Icons and textures: file IDs from the Forever client's interface manifest; a mis
   python3 tools/questbank/gen_data.py --selftest-os  # check players' objective spots, probe_pull.py's merge to D.SPOT
                                                      # (its own fixture and made-up uploads; writes nothing)
 """
-import collections, csv, json, math, os, re, sys
+import collections, csv, html, json, math, os, re, sys
 from travel import Travel, DETOUR, RUN
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -1458,7 +1458,9 @@ lines.append("D.CAT = {\n" + "\n".join("  " + lua(c) + "," for c in CATS) + "\n}
 # the City of Dalaran under Interface/WorldMap/<folder>/<folder><floor>_<tile>.blp, twelve 256-px tiles a floor in
 # four columns of three; and the bosses with the loot the site records for them (codex/loot.json: ForeverChanges,
 # wowtbc.gg and players' games), by item id: the client names the items. D.DMAP[cat key] = { art, floors = { {12
-# file ids}, ... }, bosses = { { n = name, k = boss|rare|trash, w = wing or nil, i = { item ids } }, ... } }
+# file ids}, ... }, mid = map id, cover, coverKind, defaultFace, bosses = { { n = name, k = boss|rare|trash|object|quest,
+# w = wing or nil, i = { item ids }, o = encounter order, p = journal art, d = display id, a = achievement icon,
+# c = NPC id, l = level, f, x, y = where it stands }, ... } }
 DMAP_ART = {"d1581": "TheDeadmines", "d717": "TheStockade", "d718": "WailingCaverns", "d719": "BlackFathomDeeps",
             "d209": "ShadowfangKeep", "d796": "ScarletMonastery", "d491": "RazorfenKraul", "d1337": "Uldaman",
             "d721": "Gnomeregan", "d2437": "Ragefire", "d722": "RazorfenDowns", "d16611": "RuinsofLordaeronScenario",
@@ -1505,11 +1507,33 @@ def ej_cover(name):
         if k in MAN:
             return int(MAN[k]), kind
     return None, None
+# a boss's name as the journal's art and the client's encounters spell it: letters and digits alone ("Rhahk'Zor" is
+# RhahkZor), the Ring of Law's prefix off (its six fighters are listed as "Ring of Law: <name>")
+RING = "Ring of Law: "
+def _unring(n): return n[len(RING):] if n.startswith(RING) else n
+def _bn(n): return re.sub(r"[^a-z0-9]", "", _unring(n).lower())
 EJ_BOSS = {}
 for k in MAN:
     if k.startswith("interface/encounterjournal/ui-ej-boss-"):
         EJ_BOSS[k[len("interface/encounterjournal/ui-ej-boss-"):-4]] = int(MAN[k])
 EJ_BOSS_DEFAULT = EJ_BOSS.get("default")
+EJ_NORM = {}
+for k, v in EJ_BOSS.items():
+    EJ_NORM.setdefault(_bn(k), v)
+# bosses the journal's art knows by a later name
+EJ_ALIAS = {"Emperor Dagran Thaurissan": "emperorthaurissan", "Baron Rivendare": "lordauriusrivendare",
+            "Archivist Galford": "instructorgalford", "Cannon Master Willey": "willeyhopebreaker", "Malor the Zealous": "commandermalor"}
+def ej_portrait(name):
+    """The journal's art for a boss: by its exact name, else by letters and digits alone (or its later name)."""
+    return EJ_BOSS.get(name.lower()) or EJ_NORM.get(EJ_ALIAS.get(name) or _bn(name))
+# an achievement's boss icon (Achievement_Boss_<name>), for an entry with neither the journal's art nor a model
+ACH_BOSS = {}
+for k in MAN:
+    if k.startswith("interface/icons/achievement_boss_"):
+        ACH_BOSS.setdefault(_bn(k[len("interface/icons/achievement_boss_"):-4]), int(MAN[k]))
+# kinds the loot file has wrong: two chests filed as bosses, and the Guzzler (the Grim Guzzler's event; no creature
+# has the name), which the journal calls an event as it does the bosses a quest summons
+KIND_FIX = {"Dark Coffer": "object", "Chest of The Seven": "object", "Guzzler": "quest"}
 for d in _LOOT_EARLY.get("dungeons", []):
     key = DMAP_LOOT.get(d.get("name"))
     if not key:
@@ -1522,8 +1546,8 @@ for d in _LOOT_EARLY.get("dungeons", []):
         entry["lv"] = [min(lv[0], cur[0]), max(lv[1], cur[1])] if cur else lv
     for b in d.get("bosses", []):
         items = [int(i) for i in (b.get("items") or []) if str(i).isdigit()][:12]
-        boss = {"n": b["name"], "k": b.get("kind") or "boss", "w": wing, "i": items}
-        pt = EJ_BOSS.get(b["name"].lower())
+        boss = {"n": b["name"], "k": KIND_FIX.get(b["name"]) or b.get("kind") or "boss", "w": wing, "i": items}
+        pt = ej_portrait(b["name"])
         if pt: boss["p"] = pt
         if b.get("level"): boss["l"] = b["level"]
         entry["bosses"].append(boss)
@@ -1538,12 +1562,98 @@ for key, entry in DMAP.items():
         sp = ((_SPOTS.get("spots") or {}).get(key) or {}).get(boss["n"])
         if sp and 0.02 <= sp[1] <= 0.98 and 0.04 <= sp[2] <= 0.98 and sp[0] <= len(entry["floors"]):
             boss["f"], boss["x"], boss["y"] = sp[0], round(sp[1], 3), round(sp[2], 3)
+# Forever's own dungeons, which the Classic database has never heard of: each boss's NPC id (b.c, for the loot panel's
+# model) and display id (b.d, in place of a Classic model of the same name) from Wowhead Forever (forever_npcs.py).
+# A display id the client's CreatureDisplayInfo lacks can't be drawn and is left out. ForeverChanges' boss pictures,
+# named by display id, are a cross-check only: printed where they differ, never copied (the 2026-10-08 terms decision)
+FOREVER_DMAP = {"d16544": "city-of-dalaran", "d16732": "excavation-site", "d16611": "ruins-of-lordaeron", "d16919": "hall-of-thanes"}
+_FNPC = load("forever_npcs.json", {}) or {}
+_CDI = {int(r["ID"]) for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "CreatureDisplayInfo.csv")))}
+_FC_FACE, _fnpc_off, _fc_differs, _fc_agrees = {}, [], [], 0
+for key, slug in FOREVER_DMAP.items():
+    p = os.path.join(RAW, "fc", slug + ".html")
+    for did, name in re.findall(r'/wow-ui/bosses/(\d+)\.webp\)" aria-hidden="true"></span><span>([^<]+)</span>', open(p).read() if os.path.exists(p) else ""):
+        _FC_FACE[(key, html.unescape(name))] = int(did)
+for key in FOREVER_DMAP:
+    for boss in DMAP.get(key, {}).get("bosses", []):
+        wh = _FNPC.get(boss["n"])
+        if not wh:
+            continue
+        boss["c"] = wh["npc"]
+        if wh["display"] not in _CDI:
+            _fnpc_off.append("%s %d" % (boss["n"], wh["display"]))
+            continue
+        boss["d"] = wh["display"]
+        fc = _FC_FACE.get((key, boss["n"]))
+        if fc == boss["d"]:
+            _fc_agrees += 1
+        elif fc:
+            _fc_differs.append("%s: Wowhead %d, ForeverChanges %d" % (boss["n"], boss["d"], fc))
+print("Forever's own bosses: %d with Wowhead Forever's NPC and display ids; ForeverChanges' pictures agree on %d, differ on %d%s"
+      % (sum(1 for k in FOREVER_DMAP for b in DMAP.get(k, {}).get("bosses", []) if b.get("c")), _fc_agrees, len(_fc_differs),
+         "".join("\n  " + s for s in _fc_differs)))
+if _fnpc_off:
+    print("  display ids not in the client's CreatureDisplayInfo, left out: " + ", ".join(_fnpc_off))
+# the client's encounters by the dungeon's map (DungeonEncounter; difficulties 0 and 1, the rest are Season of
+# Discovery's raids): b.o, a boss's place in the game's order (the journal lists a boss the client doesn't know right
+# after the entry before it), and a rare the game counts as an encounter is a boss. D.DMAP[key].mid is the map
+DMAP_MID = {"d1581": 36, "d717": 34, "d718": 43, "d719": 48, "d209": 33, "d796": 189, "d491": 47, "d1337": 70, "d721": 90,
+            "d2437": 389, "d722": 129, "d1417": 109, "d1584": 230, "d1583": 229, "d2057": 289, "d2017": 329, "d2557": 429,
+            "d2100": 349, "d16544": 2959, "d16732": 2998, "d16611": 2999, "d16919": 3065}
+# loot names of a boss whose encounter the client names otherwise: its spelling, or the group it fights in
+DE_ALIAS = {"Kirtonos the Herald": "Kirtonos", "Ras Frostwhisper": "Ras Frostwhisperer", "Gelihast": "Geilhast",
+            "Doom'rel": "The Seven", "Anger'rel": "The Seven",
+            **dict.fromkeys(('Eric "The Swift"', "Baelog", "Olaf"), "The Lost Dwarves"),
+            **dict.fromkeys(("Anub'shiah", "Eviscerator", "Gorosh the Dervish", "Grizzle", "Hedrum the Creeper", "Ok'thor the Breaker"), "Ring of Law")}
+_DE = {}
+for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "DungeonEncounter.csv"))):
+    if r["DifficultyID"] in ("0", "1"):
+        k = (int(r["MapID"]), _bn(r["Name_lang"]))
+        _DE[k] = min(int(r["OrderIndex"]), _DE.get(k, int(r["OrderIndex"])))
+# Forever's own dungeons have no journal art: their loading screen (Map -> LoadingScreens' main image, 16:9), which
+# the journal crops to a band (coverKind LOADING)
+_MAP_LOAD = {int(r["ID"]): r["LoadingScreenID"] for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "Map.csv")))}
+_LOAD_IMG = {r["ID"]: int(r["MainImageFileDataID"]) for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "LoadingScreens.csv")))}
+_FILES = {int(v) for v in MAN.values()}
+_promoted = []
 for key, entry in DMAP.items():
+    entry["mid"] = DMAP_MID[key]
+    for boss in entry["bosses"]:
+        n = _unring(boss["n"])
+        o = _DE.get((entry["mid"], _bn(DE_ALIAS.get(n, n))))
+        if o is not None:
+            boss["o"] = o
+            if boss["k"] == "rare":
+                boss["k"] = "boss"
+                _promoted.append(boss["n"])
+        if not (boss.get("p") or boss.get("d")):
+            a = ACH_BOSS.get(_bn(boss["n"])) or ACH_BOSS.get(EJ_ALIAS.get(boss["n"], ""))
+            if a: boss["a"] = a
     cover, kind = ej_cover(EJ_COVER.get(key, ""))
+    if not cover and _LOAD_IMG.get(_MAP_LOAD.get(entry["mid"])) in _FILES:
+        cover, kind = _LOAD_IMG[_MAP_LOAD[entry["mid"]]], "LOADING"
     if cover:
         entry["cover"] = cover
         entry["coverKind"] = kind
     entry["defaultFace"] = EJ_BOSS_DEFAULT
+print("journal order: %d entries placed in the game's encounter order; rares the game counts as encounters, now bosses: %s"
+      % (sum(1 for e in DMAP.values() for b in e["bosses"] if "o" in b), ", ".join(_promoted)))
+# the census: how each entry's face is drawn (DungeonMap.lua's DM.Face: the journal's art, the model's portrait, an
+# achievement's icon, the kind's icon, and the default face for a boss with none). FACELESS_BOSS_MAX may only go down
+FACELESS_BOSS_MAX = 0
+_faces = collections.Counter()
+_faceless = []
+for key, entry in DMAP.items():
+    for boss in entry["bosses"]:
+        face = next((f for f in ("p", "d", "a") if boss.get(f)), "default" if boss["k"] == "boss" else "kind icon")
+        _faces[face] += 1
+        if face == "default":
+            _faceless.append(boss["n"])
+print("journal faces: %d art, %d model, %d achievement icon, %d kind icon, %d bosses with no face (at most %d)%s" % (
+    _faces["p"], _faces["d"], _faces["a"], _faces["kind icon"], len(_faceless), FACELESS_BOSS_MAX,
+    (": " + ", ".join(_faceless)) if _faceless else ""))
+if len(_faceless) > FACELESS_BOSS_MAX:
+    sys.exit("more bosses with no face than FACELESS_BOSS_MAX: find each one an image, don't raise the number")
 lines.append("D.DMAP = " + lua(DMAP))
 
 # Herb and ore nodes by name (Glow.lua lights the object your Interact key would use: green for an herb, orange for

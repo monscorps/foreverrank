@@ -524,6 +524,16 @@ local function build(page, pw, ph)
   return f
 end
 
+-- a dungeon's cover on a texture w x h: the journal's art whole; a loading screen (Forever's own dungeons: 2992 x 1684,
+-- the picture the middle 68% of its height, transparent above and below) cut to the band across its middle that fills
+-- the texture without squeezing it
+local LOADING_ASPECT, LOADING_ART = 2992 / 1684, 0.68
+local function setCover(t, d, cat, w, h)
+  t:SetTexture(d.cover or cat.bg)
+  local band = d.coverKind == "LOADING" and math.min(LOADING_ART, LOADING_ASPECT * h / w) or 1
+  t:SetTexCoord(0, 1, 0.5 - band / 2, 0.5 + band / 2)
+end
+
 ----------------------------------------------------------------------------
 -- the list
 ----------------------------------------------------------------------------
@@ -569,8 +579,7 @@ function DM.FillList()
       r.cat = cat
       r:ClearAllPoints()
       r:SetPoint("TOPLEFT", 0, -y)
-      if d.cover then r.art:SetTexture(d.cover) elseif cat.bg then r.art:SetTexture(cat.bg) else r.art:SetTexture(nil) end
-      r.art:SetTexCoord(0, 1, 0, 1)
+      setCover(r.art, d, cat, LIST_W - 12, ROW_H - 4)
       r.name:SetText(cat.name)
       local lv = DM.Levels(cat.key)
       r.lv:SetText(lv[1] > 0 and string.format("LV %d-%d", lv[1], lv[2]) or "")
@@ -887,7 +896,7 @@ function DM.Fill(cat, tab)
   local lv = DM.Levels(cat.key)
   f.level:SetText(lv[1] > 0 and string.format("LV %d-%d", lv[1], lv[2]) or "")
   f.where:SetText(cat.where and cat.where ~= "" and cat.where or "")
-  if d.cover then f.cover:SetTexture(d.cover) elseif cat.bg then f.cover:SetTexture(cat.bg) else f.cover:SetTexture(nil) end
+  setCover(f.cover, d, cat, W - LIST_W - 8 - 6, COVER_H)
   f.tabs[1]:SetShown(#d.floors > 0)
   -- floors
   for i = 1, math.max(#d.floors, #f.floors) do

@@ -36,6 +36,17 @@ LOOT_KEYS = {"The Deadmines": "d1581", "The Stockade": "d717", "Wailing Caverns"
              "The Temple of Atal'Hakkar": "d1417", "Blackrock Depths": "d1584", "Blackrock Spire: Lower": "d1583",
              "Blackrock Spire: Upper": "d1583", "Scholomance": "d2057", "Stratholme": "d2017", "Dire Maul: East": "d2557",
              "Dire Maul: North": "d2557", "Dire Maul: West": "d2557", "Maraudon": "d2100"}
+# loot names the Classic database spells another way: the Ring of Law's fighters go by their own names, the client
+# spells Gelihast "Geilhast", a pair is named by its first, and the Sunken Temple's balcony minibosses are six trolls
+# (Gasher the first). For the model only: a spawn of the stand-in would put a second pin on the one it stands for
+RING = "Ring of Law: "
+ALIAS = {"Geilhast": "Gelihast", "Fel Steed / Shadow Charger": "Fel Steed", "Balcony Minibosses": "Gasher"}
+
+
+def db_name(name, alias=False):
+    """The Classic database's name (lower case) for a loot entry's name."""
+    name = name[len(RING):] if name.startswith(RING) else name
+    return (ALIAS.get(name, name) if alias else name).lower()
 
 
 def rd(t):
@@ -122,10 +133,10 @@ def main():
             continue
         maps = {r["map"] for _, rects in floors[key] for r in rects}
         for b in d.get("bosses", []):
-            if model.get(b["name"].lower()):
-                models[b["name"]] = model[b["name"].lower()]
+            if model.get(db_name(b["name"], True)):
+                models[b["name"]] = model[db_name(b["name"], True)]
             spot = None
-            for entry in names.get(b["name"].lower(), []):
+            for entry in names.get(db_name(b["name"]), []):
                 for m, x, y, z in spawns.get(entry, []):
                     if m in maps:
                         spot = place(floors[key], m, x, y, z)
