@@ -3554,6 +3554,60 @@ do
   UI.candMemo = nil
   QB:SetLock(lock0); QB:Recompute(true)
 end
+-- checklist 4: the camp bar's fire icon: a carried kit first, the Basic Campfire spell only with no kit, one fire icon
+do
+  local Camp, env = QB.Camp, owner.env
+  local c = owner
+  local f = Camp.frame
+  local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
+  local function ic(k) return env["QuestBankCamp_" .. k] end
+  local saveBags, saveKnown, saveProfs, saveBuffs = owner.o.bagSlots, c.known, c.profs, c.buffs
+  local saveTex = env.C_Spell.GetSpellTexture
+  env.C_Spell.GetSpellTexture = function(id) return id == 818 and 135805 or 134400 end
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  -- the fire icons on the bar: the ones whose click lights a fire (the kit, or the spell)
+  local function fires()
+    local n, which = 0, {}
+    for _, k in ipairs({ "food", "fire", "camp", "bag" }) do
+      local b = ic(k)
+      if b and b:IsShown() and (b:GetAttribute("item") == "item:279981" or b:GetAttribute("spell") == 818) then n = n + 1; which[#which + 1] = k end
+    end
+    return n, table.concat(which, ",")
+  end
+  -- a smith and cook who knows Basic Campfire, with Simple Wood and two kits, nothing to place: the kit, once
+  c.profs, c.known, c.buffs = { { "Blacksmithing", 150 }, { "Cooking", 60 } }, { [818] = true }, {}
+  owner.o.bagSlots = { { 4470, 3 }, { 279981, 2 } }
+  Camp.Refresh()
+  local fire = ic("fire")
+  assert(fire:IsShown() and fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil
+    and fire.count:GetText() == "2", "kit and spell both at hand: the kit shows, with its count")
+  assert(fire.state.tip[1] == "Basic Campfire Kit" or fire.state.tip[1]:find("Kit", 1, true), "its tooltip is the kit's: " .. tostring(fire.state.tip[1]))
+  assert(fires() == 1, "one fire icon: " .. select(2, fires()))
+  -- a feature to place too: the kit still, and the camp slot's click is the feature, not a second fire
+  owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 }, { 279981, 2 } }
+  Camp.Refresh()
+  assert(fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil and fire.state.item == 279981, "a feature waiting: the kit")
+  assert(ic("camp"):IsShown() and ic("camp"):GetAttribute("item") == "item:279944" and fires() == 1, "the camp slot is the feature; still one fire icon: " .. select(2, fires()))
+  -- (the sheet alone: the bar is a strip of icons whose count and time sit inside them, as the game's own buttons draw
+  -- theirs, so the pages' window-edge rule is not for it)
+  layouts[#layouts + 1] = dumpLayout(env.QuestBankCampBar, "Camp bar: a kit and Basic Campfire both at hand, the kit shows, the wheel waits")
+  -- no kit: the spell, once
+  owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 } }
+  Camp.Refresh()
+  assert(fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil and fire.count:GetText() == "3",
+    "no kit: Basic Campfire, with the Simple Wood")
+  assert(fires() == 1, "one fire icon: " .. select(2, fires()))
+  -- the spell unknown and no kit, a feature waiting: grey, no click; nothing waiting: no fire icon
+  c.known = {}
+  Camp.Refresh()
+  assert(fire:IsShown() and fire.state.grey and fire:GetAttribute("type") == nil and fire.state.tip[1] == "No campfire kit", "no way to light one: grey")
+  owner.o.bagSlots = {}
+  Camp.Refresh()
+  assert(not fire:IsShown() and fires() == 0, "nothing to light, nothing to place: no fire icon")
+  owner.o.bagSlots, c.known, c.profs, c.buffs = saveBags, saveKnown, saveProfs, saveBuffs
+  env.C_Spell.GetSpellTexture = saveTex
+  Camp.Refresh()
+end
 
 
 
@@ -10142,13 +10196,13 @@ do
   owner.o.bagSlots = { { 279944, 1 } }
   Camp.Refresh()
   assert(fire.state.grey and fire.state.tip[2] == "Needs Simple Wood.", "no Simple Wood: grey")
-  -- a kit too: the kit while a feature waits (a kit's fire holds camp features), the spell without one
+  -- a kit too: the kit, a feature waiting or not (a kit's fire holds camp features; on Forever the kit is the fire)
   owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 }, { 279981, 2 } }
   Camp.Refresh()
   assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "a feature to place: the kit")
   owner.o.bagSlots = { { 4470, 3 }, { 279981, 2 } }
   Camp.Refresh()
-  assert(fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil, "nothing to place: the spell")
+  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "nothing to place: the kit still")
   c.known = {}
   Camp.Refresh()
   assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire.count:GetText() == "2", "the spell unknown: the kit, as before")
