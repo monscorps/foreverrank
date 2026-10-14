@@ -4519,7 +4519,7 @@ function UI:CreateSettingsView(parent)
   v.capUp:SetScript("OnClick", function() moveCap(1) end)
 
   heading(p, LEFT, -188, "Map", 370)
-  v.pins = checkRow(p, LEFT, -212, "Numbered route pins on the world map")
+  v.pins = checkRow(p, LEFT, -212, "The route's pins on the world map")
   v.pins:SetScript("OnClick", function(self)
     if QB.Pins then
       if (self:GetChecked() and true or false) ~= (QB:Settings().pins and true or false) then QB.Pins:Toggle() end
@@ -4540,13 +4540,13 @@ function UI:CreateSettingsView(parent)
   heading(p, LEFT, -304, "Map icons", 370)
   local MAP_ICONS = {
     { "mapIcons", LEFT, -328, "Quest icons on the world map", 340,
-      "On each zone's map: a ! where quests you can take start, a ? where finished ones are handed in, where to do the ones in your log, and each dungeon's entrance with how many of its quests you have done. Click one for a waypoint; Shift-click a ! to put its quests on your pick-up list. The numbered route pins have their own switch above." },
+      "On each zone's map, drawn as the game draws its own pins: a ! where quests you can take start, the game's quest pin with its turn-in mark where finished ones are handed in and in progress where to do the ones in your log, and each dungeon's entrance with how many of its quests you have done. Click one for a waypoint; Shift-click a ! to put its quests on your pick-up list. The route's pins have their own switch above." },
     { "mapGive", LEFT + 24, -356, "Quests you can pick up", 316,
-      "A yellow ! on the NPCs with quests for your faction, class and level that you haven't done. Grey (low-level) quests are left off, as the game does, and so are quests that need a profession or an item first. Where a numbered route pin stands on the NPC, that pin's tooltip lists the NPC's quests instead." },
+      "A yellow ! on the NPCs with quests for your faction, class and level that you haven't done. Grey (low-level) quests are left off, as the game does, and so are quests that need a profession or an item first. Where a route pin stands on the NPC, that pin's tooltip lists the NPC's quests instead." },
     { "mapTurn", LEFT + 24, -384, "Hand-ins", 316,
-      "A yellow ? on the NPC each finished quest in your log goes to." },
+      "The game's quest pin, with its turn-in mark, on the NPC each finished quest in your log goes to." },
     { "mapObj", LEFT + 24, -412, "Objectives and quest items", 316,
-      "For the quests in your log, where to do each objective you haven't finished; for quests that start from an item, where it drops. Each tooltip says where the spot comes from: Wowhead Forever, Classic data or players' games." },
+      "For the quests in your log, the game's in-progress pin where to do each objective you haven't finished; for quests that start from an item, a red ! where it drops. Each tooltip says where the spot comes from: Wowhead Forever, Classic data or players' games." },
   }
   for _, r in ipairs(MAP_ICONS) do
     local key, title, about = r[1], r[4], r[6]
@@ -4759,7 +4759,8 @@ function UI:CreateSettingsView(parent)
   v.mapPage:SetScript("OnClick", function(self) QB:Settings().mapPage = self:GetChecked() and true or false; UI:Refresh() end)
   tooltip(v.mapPage, function(tip)
     tip:AddLine("QuestBank's map", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("The Map key and the sidebar's Map open QuestBank's own map page: the game's map with QuestBank's icons and route on it, and the zone's quests beside it. Off, they open the game's world map.", 1, 1, 1, true)
+    tip:AddLine("QuestBank's Map key and the sidebar's Map open QuestBank's own map page: the game's map with the game's own pins and QuestBank's route on it, and the zone's quests beside it. Off, they open the game's world map.", 1, 1, 1, true)
+    tip:AddLine("QuestBank's Map key is its own binding (Key Bindings, QuestBank). The game's own map key (M, unless you changed it) always opens the game's map, whatever this says.", 0.6, 0.6, 0.6, true)
     if not (QB.MapPage and QB.MapPage.Available()) then tip:AddLine("Only on the Forever client.", 1, 0.5, 0.3, true) end
   end)
   v.map = button(p, "Game's map", 110)
@@ -4770,8 +4771,8 @@ function UI:CreateSettingsView(parent)
   v.mapLabel:SetText("Your zone on the game's world map")
   tooltip(v.map, function(tip)
     tip:AddLine("Game's map", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("The game's world map on your zone, with QuestBank's icons on it.", 1, 1, 1, true)
-    tip:AddLine("Keys for it and for each page: Key Bindings, QuestBank.", 0.6, 0.6, 0.6, true)
+    tip:AddLine("The game's own world map on your zone, with QuestBank's route and icons on it.", 1, 1, 1, true)
+    tip:AddLine(QB.MapPage and QB.MapPage.KEYS or "Keys for it and for each page: Key Bindings, QuestBank.", 0.6, 0.6, 0.6, true)
   end)
 
   -- the light on what your Interact key would use (Glow.lua): its style, and what it lights

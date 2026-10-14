@@ -79,7 +79,7 @@ local function newObj(kind, template, parent)
         if k == "SetScript" then self.__scripts[a[1]] = a[2]
         elseif k == "GetScript" then return self.__scripts[a[1]]
         elseif k == "HookScript" then local old = self.__scripts[a[1]]; self.__scripts[a[1]] = function(...) if old then old(...) end a[2](...) end
-        elseif k == "CreateTexture" then local x = newObj("Texture", nil, self); x.__layer = a[2] or "ARTWORK"; return x
+        elseif k == "CreateTexture" then local x = newObj("Texture", nil, self); x.__layer = a[2] or "ARTWORK"; x.__sub = a[4] or 0; return x
         elseif k == "CreateFontString" then local x = newObj("FontString", nil, self); x.__layer = a[2] or "OVERLAY"; return x
         elseif k == "CreateLine" then local x = newObj("Line", nil, self); x.__layer = a[2] or "ARTWORK"; return x
         elseif k == "CreateMaskTexture" then local x = newObj("Texture", nil, self); x.__layer = "MASK"; return x
@@ -307,7 +307,21 @@ BASE.GetQuestDifficultyColor = function() return { r = 1, g = 0.82, b = 0 } end
 BASE.ClearCachedActivitiesForPlayer = function() error("QuestBank cleared the map caches", 2) end
 local function cleared() BASE.ClearCachedActivitiesForPlayer() end
 local function asked(name) return function(self, ...) table.insert(self.__calls, { name, ... }) end end
-local CANVAS_LEVELS = { PIN_FRAME_LEVEL_AREA_POI = 2300, PIN_FRAME_LEVEL_INVASION = 2250, PIN_FRAME_LEVEL_DIG_SITE = 2200, PIN_FRAME_LEVEL_QUEST_BLOB = 2100 }
+-- the frame levels the game's world map gives its pins (Blizzard_WorldMap.lua adds the types in this order, from 2000;
+-- MapCanvas_PinFrameLevelsManager: each type's start level, and the range of the ones that stack, the offers 7 and the
+-- quests one a quest, GetMaxNumQuests). QuestBank's pins must land on the level of the game pin each is drawn as
+local GAME_LEVELS = { PIN_FRAME_LEVEL_QUEST_BLOB = 2007, PIN_FRAME_LEVEL_DIG_SITE = 2014, PIN_FRAME_LEVEL_DUNGEON_ENTRANCE = 2015,
+  PIN_FRAME_LEVEL_FLIGHT_POINT = 2017, PIN_FRAME_LEVEL_INVASION = 2019, PIN_FRAME_LEVEL_AREA_POI = 2023, PIN_FRAME_LEVEL_QUEST_OFFER = 2228,
+  PIN_FRAME_LEVEL_ACTIVE_QUEST = 2740, PIN_FRAME_LEVEL_SUPER_TRACKED_CONTENT = 2765, PIN_FRAME_LEVEL_SUPER_TRACKED_QUEST = 2766,
+  PIN_FRAME_LEVEL_WAYPOINT_LOCATION = 2769, PIN_FRAME_LEVEL_GROUP_MEMBER = 2770,
+  RANGE = { PIN_FRAME_LEVEL_QUEST_OFFER = 7, PIN_FRAME_LEVEL_ACTIVE_QUEST = 25 } }
+-- GetValidFrameLevel(type, index): the start level plus the index within the range, as the game's manager works it out
+function GAME_LEVELS.Valid(t, i)
+  local start = GAME_LEVELS[t]
+  if type(start) ~= "number" then return nil end
+  return start + math.min(math.max(i or 1, 1), GAME_LEVELS.RANGE[t] or 1) - 1
+end
+BASE.GAME_LEVELS = GAME_LEVELS
 BASE.MapCanvasMixin = {
   OnLoad = function(self)
     self.dataProviders, self.__calls, self.__clickHandlers = {}, {}, {}
@@ -337,7 +351,7 @@ BASE.MapCanvasMixin = {
   GetCanvasScale = function() return 1 end,
   GetCanvasZoomPercent = function() return 0 end,
   GetGlobalPinScale = function() return 1 end,
-  GetPinFrameLevelsManager = function() return { GetValidFrameLevel = function(_, t) return CANVAS_LEVELS[t] or 2000 end } end,
+  GetPinFrameLevelsManager = function() return { GetValidFrameLevel = function(_, t, i) return GAME_LEVELS.Valid(t, i) or 2000 end } end,
   AddCanvasClickHandler = function(self, fn) table.insert(self.__clickHandlers, fn) end,
   TriggerEvent = asked("TriggerEvent"), RegisterCallback = asked("RegisterCallback"), PanTo = asked("PanTo"),
   PanAndZoomTo = asked("PanAndZoomTo"), ResetZoom = asked("ResetZoom"), NavigateToParentMap = asked("NavigateToParentMap"),
@@ -454,6 +468,13 @@ local function newClient(o)
       t.regions[key] = kind
       if more:find('setAllPoints="true"', 1, true) then t.fill[key] = true end
     end
+    -- each region's draw layer and sublevel, from the <Layer> it sits in (the game draws a layer's higher sublevel
+    -- over its lower: a quest POI's glyph over its disc)
+    t.layerOf = {}
+    for lattrs, lbody in body:gmatch("<Layer ([^>]*)>(.-)</Layer>") do
+      local level, sub = lattrs:match('level="(%u+)"'), tonumber(lattrs:match('textureSubLevel="(%-?%d+)"')) or 0
+      for key in lbody:gmatch("parentKey=\"(%a+)\"") do t.layerOf[key] = { level, sub } end
+    end
     templates[t.name] = t
   end
   c.templates = templates
@@ -485,6 +506,8 @@ local function newClient(o)
       for key, rk in pairs(t.regions) do
         f[key] = newObj(rk, nil, f)
         if t.fill[key] then f[key]:SetAllPoints(f) end
+        local lay = t.layerOf[key]
+        if lay then f[key].__layer, f[key].__sub = lay[1], lay[2] end
       end
     end
     -- Blizzard_MapCanvas.xml's scroll frame: the parent's ScrollContainer, the map on its child over a tiled background
@@ -860,7 +883,12 @@ local function newClient(o)
       return id, env.CreateVector2D((r.y - pos.y) / r.size, (r.x - pos.x) / r.size)
     end,
   }
-  env.C_Texture = { GetAtlasInfo = function(name) if (c.noAtlas or {})[name] then return nil end return { file = 1, width = 32, height = 32 } end }
+  -- an atlas at the size the game draws it (UiTextureAtlasMember's override sizes): the taxi nodes 21 px, the rest 32
+  env.C_Texture = { GetAtlasInfo = function(name)
+    if (c.noAtlas or {})[name] then return nil end
+    local px = type(name) == "string" and name:lower():find("^taxinode") and 21 or 32
+    return { file = 1, width = px, height = px }
+  end }
   env.InCombatLockdown = function() return c.combat or false end
   -- flight points (Travel.lua). c.taxiKnown = { [TaxiNodes id] = true }: the world map's flight points this character
   -- has found (nil: the client answers nothing); every flight master of the faction with an id is listed, on its own
@@ -969,8 +997,8 @@ local function newClient(o)
   function map:GetCanvasScale() return self.scale end
   function map:GetCanvasZoomPercent() return self.zoom end
   function map:GetGlobalPinScale() return 1 end
-  map.levels = { PIN_FRAME_LEVEL_AREA_POI = 300, PIN_FRAME_LEVEL_INVASION = 250, PIN_FRAME_LEVEL_DIG_SITE = 200, PIN_FRAME_LEVEL_QUEST_BLOB = 100 }
-  local levels = { GetValidFrameLevel = function(_, t) return map.levels[t] or 1 end }
+  map.levels = GAME_LEVELS
+  local levels = { GetValidFrameLevel = function(_, t, i) return GAME_LEVELS.Valid(t, i) or 1 end }
   function map:GetPinFrameLevelsManager() return levels end
   -- what Blizzard_MapCanvas does on the client's own UI calls: opening refreshes every provider, a new map tells each,
   -- zooming tells each, closing tells each (MapCanvasMixin:OnHide, secureexecuterange over the providers' OnHide)
@@ -1029,12 +1057,18 @@ local function newClient(o)
 end
 
 -- QuestBank's own frames on a client's world map, drawn now: every layer's, or one template's
+-- QuestBank's frames on the world map: by the name of their layer's old template (QuestBankPinTemplate: the route's
+-- layer, Pins.lua; QuestBankQuestPinTemplate: the quest icons', QuestMap.lua; QuestBankAreaPinTemplate: the areas, none
+-- since 5.5, the game's blob is the area), else by the template each frame is made from, else all
+local LAYER_OF = { QuestBankPinTemplate = 1, QuestBankQuestPinTemplate = 2 }
 local function ours(c, template)
   local out = {}
-  for _, layer in ipairs({ c.QB.Pins and c.QB.Pins.provider or false, c.QB.QuestMap and c.QB.QuestMap.provider or false }) do
-    if layer then
+  if template == "QuestBankAreaPinTemplate" then return out end
+  local which = LAYER_OF[template]
+  for i, layer in ipairs({ c.QB.Pins and c.QB.Pins.provider or false, c.QB.QuestMap and c.QB.QuestMap.provider or false }) do
+    if layer and (not which or which == i) then
       for _, f in ipairs(layer.active) do
-        if not template or f.kind.template == template then out[#out + 1] = f end
+        if which or not template or f.kind.template == template then out[#out + 1] = f end
       end
     end
   end
@@ -1455,7 +1489,7 @@ local function dumpLayout(root, label)
           elseif o.__kind == "Texture" then
             if o.__layer == "HIGHLIGHT" and not (o.__parent and o.__parent.__hover) then it = nil
             else
-              it.layer = o.__layer
+              it.layer, it.sub = o.__layer, o.__sub
               it.tex = o.__tex == "color" and "color" or (texNames[o.__tex] or (o.__tex and "icon") or nil)
               if o.__tex ~= "color" then it.raw = o.__tex end
               if o.__mask then it.mask = true end
@@ -2736,7 +2770,7 @@ do
   local f = deadmines()
   assert(f and f.Count:IsShown() and f.Count:GetText() == done .. "/" .. #qs and (done < #qs) ~= f.Badge:IsShown(), "the Deadmines' entrance: " .. tostring(f and f.Count:GetText()))
   for _, d in ipairs(ours(c, "QuestBankQuestPinTemplate")) do
-    if d.data.kind ~= "dungeon" then assert(not d.Count:IsShown(), "only an entrance has a count") end
+    if d.data.kind ~= "dungeon" then assert(not rawget(d, "Count") or not d.Count:IsShown(), "only an entrance has a count") end
   end
   map.id = wasId
   map.shown = wasShown
@@ -2987,7 +3021,7 @@ do
   -- the route's switch: its pins, strokes and step go, and the switch greys
   local function toggle(key) for _, b in ipairs(f.toggles) do if b.t.key == key then return b end end end
   local rt = toggle("mapRoute")
-  assert(rt.count:GetText() == "5" and rt.num:GetText() == "1" and rt.icon.__atlas == "UI-QuestPoi-QuestNumber" and not rt.icon.__desat, "the route's switch: 5 pins here")
+  assert(rt.count:GetText() == "5" and rt.num == nil and rt.icon.__atlas == "UI-QuestPoi-QuestNumber-SuperTracked" and not rt.icon.__desat, "the route's switch: 5 pins here, the game's super-tracked disc")
   lines = {}
   rt.__scripts.OnEnter(rt)
   assert(lines[1] == "Route" and lines[2]:find("Click: hide them", 1, true), "its tooltip: " .. table.concat(lines, " / "))
@@ -3001,8 +3035,8 @@ do
   QB.Arrow.MiniStep = function() return { c = 0, wx = -8830, wy = 480, name = "Fly to Lakeshire", atlas = "flightmaster", icon = 1 } end
   MP.Tick(1)
   local st = MP.step.active[1]
-  assert(#MP.step.active == 1 and st.Icon.__atlas == "flightmaster" and math.abs(st.mapX - 0.5) < 1e-6 and math.abs(st.mapY - 0.3) < 1e-6
-    and st.glow and st.glow.__shown, "the arrow's step on the map, lit")
+  assert(#MP.step.active == 1 and st.Texture.__atlas == "flightmaster" and st.__w == 24 and st.Texture.__w == 24 and math.abs(st.mapX - 0.5) < 1e-6 and math.abs(st.mapY - 0.3) < 1e-6
+    and st.glow and st.glow.__shown and st.glow.__atlas == "UI-QuestPoi-OuterGlow" and st.glow.__blend == "ADD", "the arrow's step on the map at 24 px, lit with the game's outer glow")
   lines = {}
   st.__scripts.OnEnter(st)
   assert(lines[1] == "Fly to Lakeshire", "its tooltip")
@@ -3023,10 +3057,24 @@ do
   end
   MP.RefreshLayers()
   local fl = MP.flight.active
-  assert(#fl == 2 and fl[1].Icon.__atlas == "TaxiNode_Neutral" and fl[2].Icon.__atlas == "taxinode_undiscovered" and not fl[2].data.known, "the game's flight points, ours")
+  assert(#fl == 2 and fl[1].Texture.__atlas == "TaxiNode_Neutral" and fl[2].Texture.__atlas == "taxinode_undiscovered" and not fl[2].data.known, "the game's flight points, ours")
+  -- as the game's flight point pins: the atlas at its 21 px, the frame sized to it, on the flight points' level, no
+  -- tooltip: hovered, the name (and the game's "Undiscovered ... Flightpoint") goes to the map's own area label
+  for _, fp in ipairs(fl) do
+    assert(fp.__w == 21 and fp.Texture.__w == 21 and fp.hi and fp.hi.__atlas == fp.Texture.__atlas and fp.hi.__alpha == 0.4
+      and fp.levelType == "PIN_FRAME_LEVEL_FLIGHT_POINT" and fp.__frameLevel == env.GAME_LEVELS.PIN_FRAME_LEVEL_FLIGHT_POINT and fp.kind.scale[3] == 1.2,
+      "a flight point as the game's: 21 px, lit under the mouse, on its level")
+  end
   lines = {}
   fl[2].__scripts.OnEnter(fl[2])
-  assert(lines[1] == "Not found" and lines[2] == "Flight path, not found yet", "a flight point's tooltip")
+  local al = canvas.__calls[#canvas.__calls]
+  assert(#lines == 0 and al[1] == "TriggerEvent" and al[2] == "SetAreaLabel" and al[3] == 4 and al[4] == "Not found" and al[5] == "Undiscovered Alliance Flightpoint",
+    "a flight point: no tooltip, the area label as the game's: " .. tostring(al[4]) .. " / " .. tostring(al[5]))
+  fl[2].__scripts.OnLeave(fl[2])
+  assert(canvas.__calls[#canvas.__calls][2] == "ClearAreaLabel", "left: the label cleared")
+  fl[1].__scripts.OnEnter(fl[1])
+  assert(canvas.__calls[#canvas.__calls][5] == nil, "a known one: its name alone")
+  fl[1].__scripts.OnLeave(fl[1])
   local SetWaypoint, way = QB.API.SetWaypoint, nil
   QB.API.SetWaypoint = function(...) way = { ... } end
   fl[1]:OnMouseClickAction("LeftButton")
@@ -3059,6 +3107,111 @@ do
   set.mapTurn, set.mapObj, set.mapDungeons = true, true, true
   MP.RefreshLayers()
   MP.Go(1429, "user")
+end
+
+-- 5.5: the Map page's nav bar and its map's own menu: the game's map by name, with the two map keys' story; a
+-- right-click on the map (zoom out, the game's map, your zone, a waypoint); a crumb for a map without art greyed and
+-- said so, and /qb map there told; the layers' switches with the game's own icons
+do
+  local MP, QM, P, U, env = QB.MapPage, QB.QuestMap, QB.Pins, QB.UI, owner.env
+  c = owner
+  local canvas, map = MP.canvas, c.map
+  U:Open(8)
+  local f = MP.frame
+  MP.Go(1429, "user")
+  -- the Game's map button: a labelled button, not a bare icon; its tooltip says which key opens which map
+  assert(f.game and f.game.text and f.game.text:GetText() == "Game's map" and f.game:IsShown(), "the nav bar's Game's map, by name")
+  lines = {}
+  f.game.__scripts.OnEnter(f.game)
+  local tt = table.concat(lines, "\n")
+  assert(lines[1] == "Game's map" and tt:find("QuestBank's Map key", 1, true) and tt:find("The game's own map key (M, unless you changed it) always opens the game's map", 1, true),
+    "its tooltip tells the keys apart: " .. tt)
+  f.game.__scripts.OnLeave(f.game)
+  local mapWas, idWas = map.shown, map.id
+  map:Close()
+  c.panelCalls, c.playerMap = {}, 1429
+  f.game.__scripts.OnClick(f.game)
+  assert(c.panelCalls[1] == "open" and map.shown and map.id == 1429, "clicked: the game's world map on your zone")
+  map:Close()
+  -- the Settings page tells the same story
+  U:ShowTab(5)
+  local v = U.views[5]
+  lines = {}
+  v.mapPage.__scripts.OnEnter(v.mapPage)
+  assert(table.concat(lines, "\n"):find("The game's own map key (M, unless you changed it) always opens the game's map", 1, true), "Settings' switch says so too")
+  v.mapPage.__scripts.OnLeave(v.mapPage)
+  lines = {}
+  v.map.__scripts.OnEnter(v.map)
+  assert(table.concat(lines, "\n"):find("QuestBank's Map key", 1, true), "and its Game's map button")
+  v.map.__scripts.OnLeave(v.map)
+  U:ShowTab(8)
+  -- a right-click on the map: its menu, the zoom out the game's right-click does first on it, then the game's map,
+  -- your zone, a waypoint where you clicked
+  local handler = canvas.__clickHandlers[1]
+  local menus = #c.contextMenus
+  assert(handler(canvas, "RightButton", 0.3, 0.6) == true and #c.contextMenus == menus + 1, "a right-click: the map's menu, the click taken")
+  local menu = c.contextMenus[#c.contextMenus]
+  local names = {}
+  for _, e in ipairs(menu) do names[#names + 1] = e.text end
+  assert(table.concat(names, " | ") == "Zoom out to Eastern Kingdoms | Game's map | Your zone | Waypoint here", "its entries: " .. table.concat(names, " | "))
+  menu[1].set()
+  assert(canvas.mapID == 1415 and not MP.follow, "Zoom out: the continent")
+  c.panelCalls = {}
+  menu[2].set()
+  assert(c.panelCalls[1] == "open" and map.shown, "Game's map: the game's")
+  map:Close()
+  menu[3].set()
+  assert(canvas.mapID == 1429 and MP.follow, "Your zone: back, following you")
+  local SetWaypoint, got = QB.API.SetWaypoint, nil
+  QB.API.SetWaypoint = function(...) got = { ... } end
+  menu[4].set()
+  QB.API.SetWaypoint = SetWaypoint
+  assert(got and got[1] == 1429 and math.abs(got[2] - 30) < 1e-9 and math.abs(got[3] - 60) < 1e-9, "Waypoint here: where you clicked")
+  -- at the top of the chain, with the world map lacking art (as it can): no zoom out past it, and the crumb for it
+  -- greyed, its tooltip saying so, a click giving its zones
+  c.noArt = { [947] = true }
+  MP.Go(1415, "user")
+  local azeroth = f.crumbs[1]
+  assert(azeroth and azeroth.text:GetText() == "Azeroth" and azeroth.noArt and azeroth.__alpha == 0.5 and f.crumbs[2].__alpha == 1, "Azeroth's crumb greyed: no art")
+  lines = {}
+  azeroth.__scripts.OnEnter(azeroth)
+  assert(table.concat(lines, "\n"):find("No map art for it on this client", 1, true), "and its tooltip says so")
+  azeroth.__scripts.OnLeave(azeroth)
+  menus = #c.contextMenus
+  azeroth.__scripts.OnClick(azeroth, "LeftButton")
+  assert(canvas.mapID == 1415 and #c.contextMenus == menus + 1 and c.contextMenus[#c.contextMenus][1].text == "Eastern Kingdoms", "a click: its zones, the map left where it was")
+  handler(canvas, "RightButton", 0.5, 0.5)
+  assert(c.contextMenus[#c.contextMenus][1].text == "Azeroth: no map art", "the menu says the map above has no art")
+  local said = #c.chat
+  assert(MP.Go(947, "user") == false and c.chat[#c.chat]:find("Azeroth has no map art on this client", 1, true), "/qb map azeroth: told why not")
+  assert(MP.Go(947, "follow") == false and #c.chat == said + 1, "following you there: quietly not")
+  c.noArt = nil
+  MP.Go(1429, "user")
+  MP.Crumbs()
+  assert(f.crumbs[1].__alpha == 1 and not f.crumbs[1].noArt, "with art: the crumb as before")
+  -- the strip's switches carry the game's own icons for each kind
+  local icons = {}
+  for _, b in ipairs(f.toggles) do icons[b.t.key] = b.icon.__atlas end
+  assert(icons.mapTurn == "UI-QuestIcon-TurnIn-Normal" and icons.mapObj == "Quest-In-Progress-Icon-yellow" and icons.mapGive == "QuestNormal"
+    and icons.mapRoute == "UI-QuestPoi-QuestNumber-SuperTracked" and icons.mapDungeons == "Dungeon" and icons.mapFlights == "FlightPath", "the switches' icons are the game's")
+  -- the page's pins are the game's pins too: a ? on the page hovered lights the game's blob for its quest (as the
+  -- game's own pin does through its highlight manager) and the pins of that quest glow; left, both go
+  local turn
+  for _, fr in ipairs(QM.pageProvider.active) do if fr.data.kind == "turn" then turn = fr end end
+  if turn then
+    lines = {}
+    turn.__scripts.OnEnter(turn)
+    local ev = canvas.__calls[#canvas.__calls]
+    assert(ev[2] == "SetHighlightedQuestID" and ev[3] == turn.data.quests[1].id and MP.hover == ev[3] and turn.glow and turn.glow.__shown and turn.Hi:IsShown(),
+      "a ? hovered on the page: the game's blob and glow for its quest")
+    turn.__scripts.OnLeave(turn)
+    assert(canvas.__calls[#canvas.__calls][2] == "ClearHighlightedQuestID" and not MP.hover and not turn.glow.__shown, "left: cleared")
+  end
+  map.id = idWas
+  if mapWas then map:Open() else map:Close() end
+  c.playerMap, c.panelCalls = nil, {}
+  MP.Here()
+  U:ShowTab(1)
 end
 
 -- 5.5: the Map page's quest panel: the zone's quests ready to hand in, in your log and to pick up, a row each with its
@@ -3246,8 +3399,15 @@ do
   print("dungeon tooltip:", (all:gsub("\n", " | ")):sub(1, 220))
   assert(all:find(string.format("The Deadmines | %d/%d quests done", doneN, #qs), 1, true), "its name and N/M quests done")
   U:ShowTab(1)
+  -- as the game's dungeon pin: a left click super-tracks (QuestBank's waypoint on the entrance), the right opens the
+  -- journal (the game's Adventure Guide; QuestBank's Dungeon Journal, on its quests)
+  local SetWaypoint, got = QB.API.SetWaypoint, nil
+  QB.API.SetWaypoint = function(...) got = { ... } end
   QM.ClickForTest(dm, "LeftButton")
-  assert(U.tab == 7 and QB.DMap.Fill and owner.env.QuestBankDungeonMap.cat.key == "d1581" and owner.env.QuestBankDungeonMap.tab == "quests", "a click opens the Journal on its quests")
+  QB.API.SetWaypoint = SetWaypoint
+  assert(got and got[4] == dm.title and U.tab == 1, "a left click: a waypoint on the entrance")
+  QM.ClickForTest(dm, "RightButton")
+  assert(U.tab == 7 and QB.DMap.Fill and owner.env.QuestBankDungeonMap.cat.key == "d1581" and owner.env.QuestBankDungeonMap.tab == "quests", "a right click opens the Journal on its quests")
   U:ShowTab(1)
 end
 -- 5.3: the camp bar (Camp.lua): Well Fed, the campfire kit, camp features with the shared cooldown, the sleeping bag
@@ -10197,11 +10357,14 @@ do
   redraw()
   local give, turn, obj, start = icons("give"), icons("turn"), icons("obj"), icons("start")
   print(string.format("map icons, Elwynn at level 3: %d !, %d ?, %d objective marks, %d item drops, %d areas", #give, #turn, #obj, #start, #areas()))
-  assert(#give > 0 and #turn == 1 and #obj == 4 and #start == 1 and #areas() == 4, "the ! , ? , objectives and the item drop are all there")
-  -- ! only for quests you can take now: todo, not in the log, not done, for your side; under the route pins
+  assert(#give > 0 and #turn == 1 and #obj == 4 and #start == 1 and #areas() == 0, "the ! , ? , objectives and the item drop are all there; no areas of QuestBank's own (the game's blob is the area)")
+  -- ! only for quests you can take now: todo, not in the log, not done, for your side; the game's own offer pin:
+  -- QuestNormal at its 32 px on a 22 px frame, on the offers' level, 1.0 to 1.2 as you zoom in
   for _, pin in ipairs(give) do
-    assert(pin.levelType == "PIN_FRAME_LEVEL_INVASION" and pin.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_INVASION and pin.Icon.__atlas == "QuestNormal",
-      "a ! is the game's own, below the route pins")
+    assert(pin.levelType == "PIN_FRAME_LEVEL_QUEST_OFFER" and pin.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_QUEST_OFFER and pin.Texture.__atlas == "QuestNormal"
+      and pin.Texture.__w == 32 and pin.__w == 22 and pin.kind.template == "QuestBankOfferTemplate" and pin.kind.scale[2] == 1.0 and pin.kind.scale[3] == 1.2
+      and pin.Texture.__vertex[1] == 1 and pin.Texture.__vertex[2] == 1 and not pin.Texture.__desat,
+      "a ! is the game's offer pin, on the offers' level")
     for _, q in ipairs(pin.data.quests) do
       local st = MQ:Status(q)
       assert(st.code == "todo" and not st.behind, "a ! only for a quest you can take now: " .. q.name .. " (" .. st.code .. ")")
@@ -10210,36 +10373,57 @@ do
   end
   -- ? where Wolves Across the Border goes, at Eagan Peltskinner's own spot
   local eagan = turn[1]
-  assert(eagan.data.title == "Eagan Peltskinner" and eagan.data.quests[1].id == 33 and near(eagan, 0.489, 0.402) and eagan.Icon.__atlas == "QuestTurnin",
-    "a ? where the finished quest is handed in: " .. tostring(eagan.data.title))
+  -- the ? is the game's quest POI for a complete quest: the disc with the turn-in glyph, 32 px on a 20 px button, the
+  -- same size at every zoom, on the quest pins' level in the log's order
+  local eaganIndex
+  for i, e in ipairs(MQ.state.logOrder) do if e.id == 33 then eaganIndex = i end end
+  assert(eagan.data.title == "Eagan Peltskinner" and eagan.data.quests[1].id == 33 and near(eagan, 0.489, 0.402)
+    and eagan.kind.template == "QuestBankPoiTemplate" and eagan.Disc.__atlas == "UI-QuestPoi-QuestNumber" and eagan.Glyph.__atlas == "UI-QuestIcon-TurnIn-Normal"
+    and eagan.Disc.__w == 32 and eagan.Glyph.__w == 32 and eagan.__w == 20 and eagan.Hi.__atlas == "UI-QuestPoi-InnerGlow" and not eagan.Hi:IsShown()
+    and eagan.kind.scale[1] == 1 and eagan.kind.scale[2] == 1 and eagan.kind.scale[3] == 1 and eagan.levelType == "PIN_FRAME_LEVEL_ACTIVE_QUEST"
+    and eagan.levelIndex == eaganIndex and eagan.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_ACTIVE_QUEST + eaganIndex - 1,
+    "a ? where the finished quest is handed in, as the game's complete quest pin: " .. tostring(eagan.data.title) .. " on level " .. tostring(eagan.levelIndex))
   -- objectives: Kobold Vermin's two areas and the crate no line of the game's fits; the bandanas, not the finished masks
   assert(marksFor(7) == 3 and marksFor(18) == 1 and marksFor(33) == 0, "the marks: 3 for Kobold Camp Cleanup, 1 for the bandanas, none for a complete quest")
+  -- each is the game's quest POI in progress: the disc with the yellow in-progress glyph, on the quest pins' level
+  -- in the log's order (Kobold Camp Cleanup is the log's second, the bandanas' quest its third)
   for _, pin in ipairs(obj) do
-    assert(pin.levelType == "PIN_FRAME_LEVEL_DIG_SITE" and pin.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_DIG_SITE, "objective marks sit under the ! and ?")
+    local li
+    for i, e in ipairs(MQ.state.logOrder) do if e.id == pin.data.id then li = i end end
+    assert(pin.levelType == "PIN_FRAME_LEVEL_ACTIVE_QUEST" and pin.levelIndex == li and pin.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_ACTIVE_QUEST + li - 1
+      and pin.kind.template == "QuestBankPoiTemplate" and pin.Disc.__atlas == "UI-QuestPoi-QuestNumber" and pin.Glyph.__atlas == "Quest-In-Progress-Icon-yellow"
+      and pin.Disc.__w == 32 and pin.__w == 20 and pin.kind.scale[3] == 1, "an objective's mark is the game's in-progress quest pin, on its quest's level: " .. tostring(pin.levelIndex))
     if pin.data.id == 18 then assert(pin.data.spot.name == 2 and near(pin, 0.54, 0.30), "the bandanas' spot, not the finished masks'") end
   end
-  for _, a in ipairs(areas()) do
-    assert(a.levelType == "PIN_FRAME_LEVEL_QUEST_BLOB" and a.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_QUEST_BLOB and a.__scale == nil and a.__mouse == false,
-      "an area grows with the map, under every icon, no mouse")
-    assert(math.abs(a.__w - 2 * a.data.r * 1002) < 1e-6, "an area is as wide as the ground it covers: " .. a.__w)
-  end
-  -- the item that starts Welcome! (from a Northshire Gift Voucher): where it drops, with the game's ! on the mark
+  -- the item that starts Welcome! (from a Northshire Gift Voucher): where it drops, the game's ! in red (QuestTrail's
+  -- mark for a quest a drop starts), on the offers' level
   assert(MQ:Status(MQ.Quest.Get(5805)).code == "item", "Welcome! starts from an item for Maren")
-  assert(start[1].data.id == 5805 and near(start[1], 0.42, 0.64) and start[1].Badge:IsShown(), "where the item that starts a quest drops")
+  assert(start[1].data.id == 5805 and near(start[1], 0.42, 0.64) and start[1].kind.template == "QuestBankOfferTemplate" and start[1].Texture.__atlas == "QuestNormal"
+    and start[1].Texture.__desat and start[1].Texture.__vertex[1] == 1 and start[1].Texture.__vertex[2] == 0.22 and start[1].levelType == "PIN_FRAME_LEVEL_QUEST_OFFER",
+    "where the item that starts a quest drops: the ! in red")
   -- tooltips say what and where from
   local t7 = tipOf(icons("obj")[1])
-  assert(t7:find("Kobold Camp Cleanup", 1, true) and t7:find("Kill Kobold Vermin", 1, true) and t7:find("Kobold Vermin slain: 3/10", 1, true)
-    and t7:find("Position: Classic data (may have moved in Forever)", 1, true) and t7:find("Click: waypoint.", 1, true) and not t7:find("Shift-click", 1, true),
-    "the kill mark's tooltip: " .. t7)
+  -- the game's own words first (QuestDataProvider's tooltip: "[level] name" in its colour, "- " and each unfinished
+  -- objective), then QuestBank's (what this spot is for, where it comes from) and the game's green instruction line
+  assert(t7:find("%[%d+%] Kobold Camp Cleanup") and t7:find("- Kobold Vermin slain: 3/10", 1, true) and t7:find("Kill Kobold Vermin", 1, true)
+    and t7:find("Position: Classic data (may have moved in Forever)", 1, true) and t7:find("<Click to set a waypoint>", 1, true) and not t7:find("Shift-click", 1, true)
+    and t7:find("^%[%d+%] Kobold Camp Cleanup\n%- Kobold Vermin slain: 3/10\nKill Kobold Vermin\nPosition"), "the kill mark's tooltip: " .. t7)
   local sources = {}
   for _, pin in ipairs(icons()) do
     local t = tipOf(pin)
-    assert(#t > 0 and t:find("Click: waypoint", 1, true), "every icon has a tooltip")
+    assert(#t > 0 and t:find("<Click to set a waypoint>", 1, true) and not t:find("Click: ", 1, true), "every icon has a tooltip, its click the game's way: " .. t)
     for _, src in pairs(QMm.SOURCE) do if t:find("Position: " .. src, 1, true) then sources[src] = true end end
   end
   assert(sources["Wowhead Forever"] and sources["seen in players' games"] and sources["Classic data (may have moved in Forever)"], "tooltips name all three sources")
   local tStart = tipOf(start[1])
-  assert(tStart:find("Northshire Gift Voucher", 1, true) and tStart:find("Drops here, and starts:\n[1] Welcome!", 1, true), "the drop's tooltip names the item and the quest: " .. tStart)
+  assert(tStart:find("Northshire Gift Voucher", 1, true) and tStart:find("Drops here, and starts:\n[1] Welcome!", 1, true) and tStart:find("<Shift%-click to put it on your pick%-up list>"),
+    "the drop's tooltip names the item and the quest: " .. tStart)
+  local tGive = tipOf(give[1])
+  assert(tGive:find("^" .. give[1].data.title:gsub("%p", "%%%0") .. "\nAvailable [Qq]uests?\n%[%d+%] ") and tGive:find("<Click to set a waypoint>", 1, true)
+    and tGive:find("<Shift%-click to put [ti][th]e?m? on your pick%-up list>"), "a !'s tooltip: the NPC, the game's Available quest, each quest as the game titles it: " .. tGive)
+  local tTurn = tipOf(eagan)
+  assert(tTurn:find("^Eagan Peltskinner\nReady for turn%-in\n%[%d+%] Wolves Across the Border") and tTurn:find("<Click to set a waypoint>", 1, true) and not tTurn:find("Shift", 1, true),
+    "a ?'s tooltip: the NPC, the game's Ready for turn-in, the quest: " .. tTurn)
   print("map icon tooltip:", (t7:gsub("\n", " | ")))
   print("map icon tooltip, !:", (tipOf(give[1]):gsub("\n", " | ")))
   print("map icon tooltip, ?:", (tipOf(eagan):gsub("\n", " | ")))
@@ -10324,7 +10508,7 @@ do
   MQ:Settings().pins = true
   redraw()
   local nRoute = #routePins()
-  local function counts() return #icons("give"), #icons("turn"), #icons("obj") + #icons("start"), #areas() end
+  local function counts() return #icons("give"), #icons("turn"), #icons("obj") + #icons("start"), 0 end
   local g0, t0, o0, a0 = counts()
   QMm.Set("mapGive", false)
   local g1, t1, o1, a1 = counts()
@@ -10334,7 +10518,7 @@ do
   assert(g1 == g0 and o1 == 0 and a1 == 0 and #routePins() == nRoute, "no objectives, drops or areas with Objectives and quest items off")
   QMm.Set("mapObj", true)
   M.env.SlashCmdList.QUESTBANK("icons")
-  assert(MQ:Settings().mapIcons == false and #icons() == 0 and #areas() == 0 and #routePins() == nRoute and M.chat[#M.chat]:find("off", 1, true), "/qb icons: all off, the route's pins stay")
+  assert(MQ:Settings().mapIcons == false and #icons() == 0 and #routePins() == nRoute and M.chat[#M.chat]:find("off", 1, true), "/qb icons: all off, the route's pins stay")
   M.env.SlashCmdList.QUESTBANK("icons")
   g1, t1, o1, a1 = counts()
   assert(MQ:Settings().mapIcons and g1 == g0 and o1 == o0 and a1 == a0, "/qb icons: back on")
@@ -10365,7 +10549,7 @@ do
   for _, pin in ipairs(icons("turn")) do if pin.data.title == "Marshal McBride" then mcbride = pin end end
   assert(marksFor(7) == 0 and mcbride, "complete: its marks go, and a ? stands at Marshal McBride")
   for _, pin in ipairs(icons("give")) do assert(pin.data.title ~= "Marshal McBride", "one icon per NPC: his ! goes on the ?") end
-  if mcbride.data.offers then assert(tipOf(mcbride):find("Also to pick up:", 1, true), "and its tooltip lists them") end
+  if mcbride.data.offers then assert(tipOf(mcbride):find("\nAvailable [Qq]uests?\n"), "and its tooltip lists them under the game's word: " .. tipOf(mcbride)) end
   M.log[1] = { 7, 0 }
   M.objectives[7][1] = { text = "Kobold Vermin slain: 3/10", type = "monster", finished = false, numFulfilled = 3, numRequired = 10 }
   redraw()
@@ -10397,7 +10581,7 @@ do
 
   -- only zone maps (and Zephras Isle): not a continent; a spot is drawn on its own map only
   M.map:SetMapID(1415)
-  assert(#icons() == 0 and #areas() == 0, "no icons on a continent")
+  assert(#icons() == 0, "no icons on a continent")
   M.mapTypes = { [2521] = 6 }
   MD.SPOT[18] = SPOT[18] .. ";c,5,2521,300,300,10,w,2"
   M.map:SetMapID(2521)
@@ -10428,29 +10612,134 @@ do
   MQ:Settings().pins = true
   redraw()
   local canvas = M.map:GetCanvas()
-  assert(#routePins() > 0 and #icons() > 0 and #areas() > 0, "all three kinds drawn")
+  assert(#routePins() > 0 and #icons() > 0 and #areas() == 0, "both layers drawn, no areas of QuestBank's own")
+  local dungeons = 0
   for _, f in ipairs(ours(M)) do
-    assert(f.__parent == canvas and f.__frameLevel == M.map.levels[f.levelType], "on the canvas at its level: " .. tostring(f.levelType))
-    if f.kind.mouse then
-      assert(f.__mouse and f.__passThrough and f.__passThrough[1] == "RightButton", "a right-click passes through to zoom the map out")
+    assert(f.__parent == canvas and f.__frameLevel == M.map.levels.Valid(f.levelType, f.levelIndex), "on the canvas at its level: " .. tostring(f.levelType))
+    assert(f.kind.mouse and f.__mouse, "every pin takes the mouse")
+    if f.kind.rightClick then
+      -- a dungeon's entrance keeps the right button, as the game's does (the Adventure Guide; here the Dungeon Journal)
+      dungeons = dungeons + 1
+      assert(f.data.kind == "dungeon" and not f.__passThrough, "a dungeon's entrance takes the right button")
     else
-      assert(f.__mouse == false and not f.__passThrough, "an area takes no mouse")
+      assert(f.__passThrough and f.__passThrough[1] == "RightButton", "a right-click passes through to zoom the map out")
     end
   end
+  assert(dungeons == 0 or dungeons == #icons("dungeon"), "the entrances alone keep the right button")
   -- zoomed halfway in on a canvas at twice its scale: as MapCanvasPinMixin:ApplyCurrentScale and ApplyPinPosition would
   M.map:Zoom(2, 0.5)
   local function placed(f, scale)
     local pt = f.__points[1]
     return #f.__points == 1 and pt.point == "CENTER" and pt.rel == canvas and pt.relPoint == "TOPLEFT"
-      and math.abs(pt.x - 1002 * f.mapX / scale) < 1e-6 and math.abs(pt.y + 668 * f.mapY / scale) < 1e-6
+      and math.abs(pt.x - 1002 * (f.qX or f.mapX) / scale) < 1e-6 and math.abs(pt.y + 668 * (f.qY or f.mapY) / scale) < 1e-6
   end
-  local ic, rp, ar = icons("give")[1], routePins()[1], areas()[1]
-  local s1, s2 = (1 + 0.2 * 0.5) / 2, (1 + 0.25 * 0.5) / 2
-  assert(math.abs(ic.__scale - s1) < 1e-9 and placed(ic, s1), "an icon: smaller against the canvas zoom, a little bigger zoomed in")
-  assert(math.abs(rp.__scale - s2) < 1e-9 and placed(rp, s2), "a route pin: the same, a little bigger again")
-  assert(ar.__scale == nil and placed(ar, 1) and math.abs(ar.__w - 2 * ar.data.r * 1002) < 1e-6, "an area keeps the terrain's scale")
+  local ic, rp, ob = icons("give")[1], routePins()[1], icons("obj")[1]
+  local s1, s2 = (1 + 0.2 * 0.5) / 2, 1 / 2
+  assert(math.abs(ic.__scale - s1) < 1e-9 and placed(ic, s1), "a !: smaller against the canvas zoom, a little bigger zoomed in, as the game's offers (1.0 to 1.2)")
+  assert(math.abs(rp.__scale - s2) < 1e-9 and placed(rp, s2) and math.abs(ob.__scale - s2) < 1e-9, "a route pin and an objective's mark: the same size on screen at every zoom, as the game's quest pins")
   M.map:Zoom(1, 0)
-  assert(math.abs(ic.__scale - 1) < 1e-9 and placed(ic, 1), "zoomed out again")
+  assert(math.abs(ic.__scale - 1) < 1e-9 and placed(ic, 1) and math.abs(rp.__scale - 1) < 1e-9, "zoomed out again")
+  -- the game's quantizer (WorldMapPOIQuantizer, 75 cells high): two quest pins on one spot snap to neighbouring cells'
+  -- centres, so neither lies on the other; a pin with nothing near it stays where it stands; the ! are left alone, as
+  -- the game leaves its offers; a ? of the other layer on a stop's spot is kept off it too
+  do
+    local keep = MQ.Pins.list
+    MQ.Pins.list = { { m = 1429, x = 50, y = 50, num = 1, name = "One", ids = {}, lines = {}, quests = {} }, { m = 1429, x = 50.2, y = 50.1, num = 2, name = "Two", ids = {}, lines = {}, quests = {} },
+                     { m = 1429, x = 20, y = 20, num = 3, name = "Lone", ids = {}, lines = {}, quests = {} }, { m = 1429, x = 20.1, y = 20.1, name = "A giver", ids = {}, lines = {}, quests = {} } }
+    MQ.Pins.provider:RefreshAllData()
+    local byName = {}
+    for _, f in ipairs(routePins()) do byName[f.data.name] = f end
+    local one, two, lone, giver = byName.One, byName.Two, byName.Lone, byName["A giver"]
+    local wide = math.ceil(75 * 1002 / 668)
+    assert(one.qX and two.qX and one.qX ~= two.qX or one.qY ~= two.qY, "two stops on one spot: snapped to cells of their own")
+    for _, f in ipairs({ one, two }) do
+      assert(math.abs(f.qX - f.mapX) <= 1 / wide + 1e-9 and math.abs(f.qY - f.mapY) <= 1 / 75 + 1e-9 and placed(f, 1), "within a cell of its spot: " .. f.data.name)
+    end
+    assert(lone.qX == nil and lone.cell and placed(lone, 1), "nothing near: left where it stands")
+    assert(giver.qX == nil and giver.cell == nil and not giver.kind.quantize, "a ! is never snapped")
+    -- the icons' layer: a ? that would share a stop's cell goes beside it
+    local q = MQ.Quest.Get(33)
+    local tx, ty = q.turn.x, q.turn.y
+    q.turn.x, q.turn.y = 50, 50
+    MQ:Settings().pins = true
+    QMm.provider:RefreshAllData()
+    local e2 = icons("turn")[1]
+    if e2 then
+      assert(e2.qX and (e2.qX ~= one.qX or e2.qY ~= one.qY) and (e2.qX ~= two.qX or e2.qY ~= two.qY), "a ? on the stops' spot: a cell of its own")
+    end
+    q.turn.x, q.turn.y = tx, ty
+    MQ.Pins.list = keep
+    redraw()
+  end
+  -- the route's stops as the game's quest pins: stop 1 as the quest the game super-tracks (its gold disc, the brown
+  -- glyph while in progress, on the super-tracked quest's level above every other pin), the rest on the quest pins'
+  -- levels in their order; a stop whose quests are all done shows the turn-in glyph
+  do
+    local stops = {}
+    for _, f in ipairs(routePins()) do if f.data.num then stops[f.data.num] = f end end
+    local one = stops[1]
+    assert(one and one.kind.template == "QuestBankPoiTemplate" and one.Disc.__atlas == "UI-QuestPoi-QuestNumber-SuperTracked" and one.Disc.__w == 32
+      and one.levelType == "PIN_FRAME_LEVEL_SUPER_TRACKED_QUEST" and one.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_SUPER_TRACKED_QUEST
+      and (one.Glyph.__atlas == (one.data.ready and "UI-QuestIcon-TurnIn-Normal" or "Quest-In-Progress-Icon-Brown")),
+      "stop 1: the game's super-tracked quest pin: " .. tostring(one and one.Glyph.__atlas))
+    local n = 0
+    for num, f in pairs(stops) do
+      if num > 1 then
+        n = n + 1
+        assert(f.Disc.__atlas == "UI-QuestPoi-QuestNumber" and f.levelType == "PIN_FRAME_LEVEL_ACTIVE_QUEST" and f.levelIndex == num
+          and f.__frameLevel == M.map.levels.Valid("PIN_FRAME_LEVEL_ACTIVE_QUEST", num)
+          and f.Glyph.__atlas == (f.data.ready and "UI-QuestIcon-TurnIn-Normal" or "Quest-In-Progress-Icon-yellow"), "stop " .. num .. ": the game's quest pin on its level")
+        assert(rawget(f, "Num") == nil, "no number on the disc: the game draws none")
+      end
+    end
+    -- the tooltip: the place, each quest as the game titles it with its XP, which stop it is, the click
+    local t = tipOf(one)
+    assert(t:find("^" .. one.data.name:gsub("%p", "%%%0") .. "\n%[%d+%] ") and t:find("Stop 1 of %d+, at ") and t:find("<Click to set a waypoint>", 1, true) and not t:find("Click: ", 1, true),
+      "a stop's tooltip: " .. t)
+    -- the mouse on a quest pin: the inner glow, as the game's HighlightTexture; the button held: the pressed disc and
+    -- the glyph a pixel right and down; let go: as it was
+    one.__scripts.OnEnter(one)
+    assert(one.Hi:IsShown() and one.Hi.__atlas == "UI-QuestPoi-InnerGlow" and one.Hi.__blend == "ADD", "hovered: the inner glow")
+    one.__scripts.OnMouseDown(one, "LeftButton")
+    assert(one.Disc.__atlas == "UI-QuestPoi-QuestNumber-Pressed-SuperTracked" and one.Glyph.__points[1].x == 1 and one.Glyph.__points[1].y == -1, "held: the pressed disc")
+    one.__scripts.OnMouseUp(one, "LeftButton", false)
+    assert(one.Disc.__atlas == "UI-QuestPoi-QuestNumber-SuperTracked" and one.Glyph.__points[1].x == 0, "let go: the disc back")
+    one.__scripts.OnLeave(one)
+    assert(not one.Hi:IsShown(), "left: no glow")
+    -- a planned pick-up: the game's offer pin, its tooltip the game's Available quest
+    local pick
+    for _, f in ipairs(routePins()) do if not f.data.num then pick = f end end
+    if pick then
+      assert(pick.kind.template == "QuestBankOfferTemplate" and pick.Texture.__atlas == "QuestNormal" and pick.levelType == "PIN_FRAME_LEVEL_QUEST_OFFER", "a planned pick-up: the game's !")
+      local tp = tipOf(pick)
+      assert(tp:find("\nAvailable [Qq]uests?\n%[%d+%] ") and tp:find("<Click to set a waypoint>", 1, true), "its tooltip: " .. tp)
+    end
+  end
+  -- a dungeon's entrance as the game's own pin: the Dungeon atlas at its 32 px, the frame sized to it, on the
+  -- entrances' level, 1.0 to 1.2 as you zoom in; its tooltip the game's (name, kind and levels, the green instruction
+  -- for the right button), QuestBank's quest list between; a left click a waypoint, the right the Dungeon Journal
+  do
+    local wasId = M.map.id
+    M.map:SetMapID(1436)
+    local dm
+    for _, f in ipairs(icons("dungeon")) do if f.data.cat.key == "d1581" then dm = f end end
+    assert(dm and dm.kind.template == "QuestBankMarkTemplate" and dm.Texture.__atlas == "Dungeon" and dm.Texture.__w == 32 and dm.__w == 32
+      and dm.hi and dm.hi.__atlas == "Dungeon" and dm.levelType == "PIN_FRAME_LEVEL_DUNGEON_ENTRANCE"
+      and dm.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_DUNGEON_ENTRANCE and dm.kind.scale[3] == 1.2 and dm.kind.rightClick,
+      "the Deadmines' entrance as the game's dungeon pin")
+    local td = tipOf(dm)
+    assert(td:find("^" .. dm.data.cat.name:gsub("%p", "%%%0") .. " | %d+/%d+ quests done\nDungeon, level %d+%-%d+\n") and td:find("<Click to set a waypoint>", 1, true)
+      and td:find("<Right Click to open the Dungeon Journal>", 1, true), "its tooltip: " .. td)
+    local SetWaypoint, got = MQ.API.SetWaypoint, nil
+    MQ.API.SetWaypoint = function(...) got = { ... } end
+    dm:OnMouseClickAction("LeftButton")
+    assert(got and got[1] == 1436 and got[4] == dm.data.cat.name, "left: a waypoint on the entrance")
+    MQ.API.SetWaypoint = SetWaypoint
+    dm:OnMouseClickAction("RightButton")
+    assert(MQ.UI.tab == 7 and M.env.QuestBankDungeonMap.cat.key == "d1581", "right: the Dungeon Journal on it")
+    MQ.UI.frame:Hide()
+    M.map:SetMapID(wasId)
+  end
 
   -- combat: nothing made or drawn (SetPassThroughButtons errors in combat here, as the game's restricted call is
   -- blocked); a redraw waits for the end of combat; zooming still moves what is there
@@ -10478,7 +10767,7 @@ do
   f.__scripts.OnEvent(f, "PLAYER_REGEN_ENABLED")
   assert(MQ.Pins.provider.draws > d1 and QMm.provider.draws > d2 and MQ.Pins.provider.drawnFor == 1453 and QMm.provider.drawnFor == 1453,
     "after combat both layers draw the map on show")
-  for _, fr in ipairs(ours(M)) do assert(fr:IsShown() and (not fr.kind.mouse or fr.__passThrough[1] == "RightButton"), "every frame shown, right-click passing through") end
+  for _, fr in ipairs(ours(M)) do assert(fr:IsShown() and (fr.kind.rightClick or fr.__passThrough[1] == "RightButton"), "every frame shown, right-click passing through") end
   M.map:SetMapID(1429)
   assert(marksFor(7) == 1, "and the kills done in combat are off the map now")
   M.objectives[7][1].finished = false
@@ -10681,14 +10970,19 @@ do
   MQ:Settings().pins = false
   MD.SPOT, MD.START, MD.SN, MD.SREQ = nil, nil, nil, nil
   redraw()
-  assert(#icons("give") == #give and #icons("turn") == 1 and #icons("obj") == 0 and #icons("start") == 0 and #areas() == 0, "no D.SPOT: the ! and ? still show")
+  assert(#icons("give") == #give and #icons("turn") == 1 and #icons("obj") == 0 and #icons("start") == 0, "no D.SPOT: the ! and ? still show")
   inject()
   redraw()
   assert(#icons("obj") == 4 and #icons("start") == 1, "and the spots are back")
   -- the atlas missing: the file id
   M.noAtlas = { QuestNormal = true }
   redraw()
-  assert(icons("give")[1].Icon.__tex == MD.TEX.questAvail, "no atlas: the gossip ! file")
+  assert(icons("give")[1].Texture.__tex == MD.TEX.questAvail and icons("give")[1].Texture.__w == 32, "no atlas: the gossip ! file, at the atlas's size")
+  M.noAtlas = { ["UI-QuestPoi-QuestNumber"] = true, ["UI-QuestIcon-TurnIn-Normal"] = true }
+  redraw()
+  local tp0 = icons("turn")[1]
+  assert(tp0.Disc.__tex == 334391 and tp0.Disc.__tc[1] == 0.875 and tp0.Disc.__tc[3] == 0.875 and tp0.Glyph.__tex == MD.TEX.questActive,
+    "no atlas: the disc from UI-QuestPoi-NumberIcons as POIButton.xml cuts it, the gossip ?")
   M.noAtlas = nil
 
   -- a tie nothing settles is never guessed by order: on a German client the names don't help, so neither slot is
@@ -10757,8 +11051,8 @@ do
     for _, d in ipairs(QMm:Build(1429)) do if d.kind == "obj" and d.id == 7 then order[#order + 1] = d.spot.kind end end
     for _, pin in ipairs(icons("obj")) do if pin.data.id == 7 and pin.data.spot.kind == "k" then kill = pin end end
     assert(table.concat(order) == "keke", "each kind its nearest mark first: " .. table.concat(order))
-    assert(kill and tipOf(kill):find("Kill here\nKobold Vermin slain: 3/10\nPosition: seen in players' games", 1, true),
-      "the kills' spot says how far along they are")
+    assert(kill and tipOf(kill):find("%- Kobold Vermin slain: 3/10\n%- Camp scouted: 0/1\nKill here\nPosition: seen in players' games"),
+      "the kills' spot says how far along they are, the game's lines first: " .. tipOf(kill))
     M.objectives[7][1] = { text = "Kobold Vermin slain: 10/10", type = "monster", finished = true, numFulfilled = 10, numRequired = 10 }
     redraw()
     local left = {}
@@ -10784,7 +11078,7 @@ do
     for _, pin in ipairs(icons("obj")) do if pin.data.id == 18 then left = pin end end
     assert(marksFor(18) == 1 and left.data.spot.slot == 5 and near(left, 0.54, 0.30) and left.data.line.text == "Red Burlap Bandana: 2/12",
       "the masks are done, told by their item's name: only the bandanas' spot")
-    assert(tipOf(left):find("Loot Defias Thug\nRed Burlap Bandana: 2/12", 1, true), "its tooltip: who drops it, and the game's line")
+    assert(tipOf(left):find("%- Red Burlap Bandana: 2/12\nLoot Defias Thug\n"), "its tooltip: the game's line, then who drops it: " .. tipOf(left))
     local list = QMm.Spots("c,5,1429,1,1,0,c,11;c,6,1429,1,1,0,c,12")
     local objs = { { text = "Defias Mask: 12/12", type = "item", need = 12, done = true }, { text = "Red Burlap Bandana: 2/12", type = "item", need = 12 } }
     local m = QMm.Match(objs, list, { [5] = 12, [6] = 12 }, { [5] = "Red Burlap Bandana", [6] = "Defias Mask" })
@@ -10793,12 +11087,12 @@ do
     redraw()
   end
 
-  -- a log too big for the cap: every ! and ? stays, each objective has its nearest mark first, the areas go first
+  -- a log too big for the cap: every ! and ? stays, each objective has its nearest mark first, the farthest marks go
   do
     local keep = MD.SPOT[7]
     local parts = {}
-    for i = 1, 105 do parts[#parts + 1] = string.format("k,1,1429,%d,%d,20,c,1", 100 + (i % 10) * 70, 100 + math.floor(i / 10) * 70) end
-    parts[#parts + 1] = "u,2,1429,450,380,0,g,4" -- the crate, last of 106
+    for i = 1, 250 do parts[#parts + 1] = string.format("k,1,1429,%d,%d,20,c,1", 100 + (i % 10) * 70, 100 + math.floor(i / 10) * 30) end
+    parts[#parts + 1] = "u,2,1429,450,380,0,g,4" -- the crate, last of 251
     MD.SPOT[7] = table.concat(parts, ";")
     MQ:Settings().pins = false
     local full = QMm:Build(1429)
@@ -10807,9 +11101,10 @@ do
       n[d.kind] = (n[d.kind] or 0) + 1
       if d.kind == "obj" and d.spot.slot == 2 then crate = true end
     end
-    assert(#full == 200 and full.cut > 0 and n.give == #give and n.turn == 1 and n.start == 1 and n.obj == 107,
-      "at the cap: every !, ? and mark still there, areas left out: " .. #full .. ", " .. tostring(full.cut))
-    assert(crate, "the crate's mark comes in its turn, not after 105 kills")
+    local others = (n.give or 0) + (n.turn or 0) + (n.start or 0) + (n.dungeon or 0)
+    assert(#full == 200 and n.give == #give and n.turn == 1 and n.start == 1 and n.obj == 200 - others and full.cut == 251 + 1 - n.obj,
+      "at the cap: every !, ? and drop still there, the marks cut to what is left: " .. #full .. ", " .. tostring(full.cut))
+    assert(crate, "the crate's mark comes in its turn, not after 250 kills")
     MD.SPOT[7] = keep
   end
 
@@ -10910,15 +11205,15 @@ do
       assert(jp == pestle and #pestle.data.who == 2 and #pw.give > 0 and #jw.give > 0 and #pestle.data.quests == #pw.give + #jw.give
         and pestle.data.kind == "give", "Pestle and Josetta: one ! for both")
       local t = tipOf(pestle)
-      assert(t:find("William Pestle\nTo pick up:\n", 1, true) and t:find("Priestess Josetta\nTo pick up:\n", 1, true) and t:find(jw.give[1].name, 1, true)
+      assert(t:find("William Pestle\nAvailable [Qq]uests?\n") and t:find("Priestess Josetta\nAvailable [Qq]uests?\n") and t:find(jw.give[1].name, 1, true)
         and t:find(pw.give[1].name, 1, true), "its tooltip names each NPC with its quests: " .. t)
       local _, nPos = t:gsub("Position: ", "")
-      assert(nPos == 1 and t:find("Shift-click: put them on your pick-up list", 1, true), "one Position line when both places come from the same data")
+      assert(nPos == 1 and t:find("<Shift-click to put them on your pick-up list>", 1, true), "one Position line when both places come from the same data")
       -- their places from different data: a line under each
       MD.NSRC = { [pw.npc] = "w", [jw.npc] = "c" } -- (none before this: one line above)
       t = tipOf(pestle)
       _, nPos = t:gsub("Position: ", "")
-      assert(nPos == 2 and t:find("To pick up:\n.-Position: Wowhead Forever\nPriestess Josetta", 1) and t:find("Position: Classic data", 1, true), "a Position line under each: " .. t)
+      assert(nPos == 2 and t:find("Available [Qq]uests?\n.-Position: Wowhead Forever\nPriestess Josetta", 1) and t:find("Position: Classic data", 1, true), "a Position line under each: " .. t)
       MD.NSRC = nil
       print("map icons, two NPCs at one spot:", (tipOf(pestle):gsub("\n", " | ")))
       -- Kobold Candles done and in the log: Pestle takes it, so their icon is a ?, Josetta's quests on it to pick up
@@ -10926,9 +11221,9 @@ do
       redraw()
       local tp = iconOf("Priestess Josetta")
       t = tipOf(tp)
-      assert(tp.data.kind == "turn" and tp.Icon.__atlas == "QuestTurnin" and #tp.data.quests == 1 and tp.data.quests[1].id == 60 and #tp.data.offers >= #jw.give
-        and t:find("William Pestle\nHand in:\n[7] Kobold Candles", 1, true) and t:find("Priestess Josetta\nTo pick up:\n", 1, true)
-        and t:find("Click: waypoint.", 1, true) and not t:find("Shift-click", 1, true), "a ? at the spot, each NPC's part on it: " .. t)
+      assert(tp.data.kind == "turn" and tp.Glyph.__atlas == "UI-QuestIcon-TurnIn-Normal" and #tp.data.quests == 1 and tp.data.quests[1].id == 60 and #tp.data.offers >= #jw.give
+        and t:find("William Pestle\nReady for turn%-in\n%[7%] Kobold Candles") and t:find("Priestess Josetta\nAvailable [Qq]uests?\n")
+        and t:find("<Click to set a waypoint>", 1, true) and not t:find("Shift%-click"), "a ? at the spot, each NPC's part on it: " .. t)
       print("map icons, a ? and a ! at one spot:", (t:gsub("\n", " | ")))
       table.remove(M.log)
       redraw()
