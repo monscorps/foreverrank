@@ -6,7 +6,8 @@ pins, party sync, and banking with a hand-in run when the game holds your level 
 "quest"). Wowhead Forever's quests seed the catalog up to the beta's cap; above it the CMaNGOS Classic database does,
 flagged "Classic only" until players see the quests in Forever.
 Free software under the GPL-3.0 (`QuestBank/LICENSE.txt`): its quest chains and spawn points come from the
-CMaNGOS Classic database, which is GPL-3.0.
+CMaNGOS Classic database, which is GPL-3.0. The minimap's far zoom, its tile table and line texture come from
+QuestTrail 3.0.6 by Krom under the MIT licence (`QuestBank/LICENSE-QuestTrail.txt`; each such file says so at its top).
 
 The addon, `QuestBank/`:
 
@@ -18,6 +19,7 @@ The addon, `QuestBank/`:
 - `Model.lua`: Forever quest XP, travel over the flight network, and the route planner (planned a few milliseconds a frame).
 - `Pins.lua`, `Pins.xml`: numbered pins on the world map, drawn as QuestBank's own frames on the map canvas (not the canvas's pins, whose AcquirePin runs a call the game blocks in combat), and the switch that lets Ctrl+clicks through to the game's own map pin.
 - `QuestMap.lua`: the quest icons on each zone's map (where quests start and end, objective areas, quest items), on the same layer.
+- `Minimap.lua`, `MinimapView.lua`, `MinimapTiles.lua`: the route, pick-ups, objectives and entrances on the minimap; its size and place; the wheel past the game's widest zoom over the game's own minimap tiles, a drag that pans and eases back, and the minimap's right-click menu (after QuestTrail's).
 - `Arrow.lua`: the direction arrow. Waypoints are QuestBank's arrow, or the real TomTom's; QuestBank never sets the game's own waypoint, it prints a link that does when the player clicks it (`Core.lua`, `API.SetWaypoint`).
 - `Auto.lua`: accepting and handing in quests at NPCs when Settings say so. The game's escort prompt is left to the player.
 - `Sync.lua`: sharing banks, plans, runs and reported XP with QuestBank users in the party and guild.

@@ -21,7 +21,8 @@ RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThum
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetUnboundedStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
-SetAtlas SetPassThroughButtons SetCooldown SetHideCountdownNumbers SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient]])
+SetAtlas SetPassThroughButtons SetCooldown SetHideCountdownNumbers SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient
+SetClipsChildren PingLocation]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 -- a PlayerModel's own: the creature it shows, by display id or by NPC id, its camera, and whether it keeps the model
 -- while hidden
@@ -137,6 +138,10 @@ local function newObj(kind, template, parent)
         elseif k == "HasFocus" then return self.__focus or false
         elseif k == "SetMaxLetters" then self.__maxLetters = a[1]
         elseif k == "SetRotation" then self.__rot = a[1]
+        -- the cursor over it: a test sets __mouseOver
+        elseif k == "IsMouseOver" then return self.__mouseOver or false
+        -- the minimap's ping, where it was asked for (pixels from its centre)
+        elseif k == "PingLocation" then self.__pings = self.__pings or {}; table.insert(self.__pings, { a[1], a[2] })
         elseif k == "SetAtlas" then self.__tex = "atlas:" .. tostring(a[1]); self.__atlas = a[1]; self.__color = nil
         elseif k == "SetScale" then self.__scale = a[1]
         elseif k == "GetScale" then return self.__scale or 1
@@ -202,13 +207,21 @@ local BASE = setmetatable({}, { __index = _G })
 BASE.BackdropTemplateMixin = {}
 BASE.QUESTBANK_DEV = true -- errors stay fatal here; one test below turns it off to check the safety net
 for name in pairs(FONT_SIZE) do BASE[name] = fontObj(name) end
-BASE.GameTooltip = setmetatable({}, { __index = function(_, k)
-  return function(_, ...)
+-- the game's tooltip, one for every client: its lines go to `lines`; its owner, whether it shows, and the OnShow hooks
+-- (each client's minimap view hides the game's own over the far ground)
+BASE.GameTooltip = setmetatable({ __hooks = {} }, { __index = function(_, k)
+  return function(tt, ...)
     if k == "SetItemByID" then lines[#lines + 1] = "ITEM:" .. tostring((...)) return end
     if k == "AddLine" or k == "AddDoubleLine" then
       local parts = {}
       for i = 1, select("#", ...) do local v = select(i, ...); if type(v) == "string" then parts[#parts + 1] = v end end
       lines[#lines + 1] = table.concat(parts, " | ")
+    elseif k == "SetOwner" then rawset(tt, "__owner", (...)); rawset(tt, "__shown", false)
+    elseif k == "GetOwner" then return rawget(tt, "__owner")
+    elseif k == "HookScript" and (...) == "OnShow" then table.insert(tt.__hooks, (select(2, ...)))
+    elseif k == "Show" then rawset(tt, "__shown", true); for _, h in ipairs(tt.__hooks) do h(tt) end
+    elseif k == "Hide" then rawset(tt, "__shown", false)
+    elseif k == "IsShown" then return rawget(tt, "__shown") or false
     end
   end
 end })
@@ -278,6 +291,27 @@ local function newClient(o)
   env.MinimapCluster.MinimapContainer = newObj("Frame", nil, env.MinimapCluster); env.MinimapCluster.MinimapContainer:SetSize(215, 226)
   env.Minimap = newObj("Frame", nil, env.MinimapCluster.MinimapContainer); env.Minimap:SetSize(140, 140); env.Minimap.__points = {}
   env.Minimap:SetPoint("TOPRIGHT", env.UIParent, "TOPRIGHT", -20, -20)
+  -- its own scripts (Minimap.xml: OnMouseUp pings, the wheel zooms; c.gameClicks counts the game's clicks) and its + and
+  -- -, hidden until the mouse is over it
+  env.Minimap:SetScript("OnMouseUp", function() c.gameClicks = (c.gameClicks or 0) + 1 end)
+  env.Minimap:SetScript("OnMouseWheel", function() c.gameWheel = (c.gameWheel or 0) + 1 end)
+  for _, key in ipairs({ "ZoomIn", "ZoomOut" }) do env.Minimap[key] = newObj("Button", nil, env.Minimap); env.Minimap[key]:Hide() end
+  -- indoors (c.indoors), the left button held (c.leftDown), and the context menus shown: c.contextMenus = { entries,
+  -- ... }, each entry { kind, text, get, set } as MenuUtil's root gets them
+  env.IsIndoors = function() return c.indoors or false end
+  env.IsMouseButtonDown = function(b) return b == "LeftButton" and c.leftDown or false end
+  c.contextMenus = {}
+  env.MenuUtil = { CreateContextMenu = function(owner, gen)
+    local entries = {}
+    local root = {}
+    function root:CreateCheckbox(text, get, set) entries[#entries + 1] = { kind = "check", text = text, get = get, set = set } end
+    function root:CreateButton(text, fn) entries[#entries + 1] = { kind = "button", text = text, set = fn } end
+    function root:CreateDivider() entries[#entries + 1] = { kind = "divider" } end
+    function root:CreateTitle(text) entries[#entries + 1] = { kind = "title", text = text } end
+    gen(owner, root)
+    entries.owner = owner
+    c.contextMenus[#c.contextMenus + 1] = entries
+  end }
   -- the minimap's tracking list: c.tracking = { { name, filterID, active }, ... }; the game's menu, as Menu.ModifyMenu sees it
   c.tracking = { { name = "Battlemaster", filterID = 4, active = false }, { name = "Target", filterID = 16384, active = false },
                  { name = "Focus", filterID = 32768, active = false } }
@@ -1533,7 +1567,8 @@ do
   c.ctrl = true
   env.Minimap.__scripts.OnMouseWheel(env.Minimap, 1)
   local free = QB:Settings().miniFree
-  assert(math.abs(cont:GetScale() - 1.1) < 0.001 and math.abs(free.scale - 1.1) < 0.001 and free.orig == 1, "Ctrl-wheel sizes the minimap, and the size is kept")
+  assert(math.abs(cont:GetScale() - 1.1) < 0.001 and math.abs(free.scale - 1.1) < 0.001 and free.orig == 1 and c.gameWheel == nil,
+    "Ctrl-wheel sizes the minimap (not the game's wheel), and the size is kept")
   for _ = 1, 30 do Mini.Wheel(1) end
   assert(math.abs(cont:GetScale() - Mini.MaxScale()) < 0.001 and Mini.MaxScale() <= 4, "never past what fits the screen")
   for _ = 1, 30 do Mini.Wheel(-1) end
@@ -1542,18 +1577,163 @@ do
   c.ctrl = false
   local zl = cl.__points[1]
   assert(zl and zl.point == "TOPLEFT" and zl.rel == env.UIParent, "sizing keeps the minimap's centre where it was (the cluster moves)")
-  -- the wheel zooms the game's minimap and nothing else: at its widest the wheel out stays there (5.3.1's far zoom
-  -- into QuestBank's own map art and its big map are gone; the Map is the game's world map)
+  -- the wheel: the game's levels first, then past its widest: QuestTrail's far zoom (MinimapView.lua) over the game's
+  -- own minimap tiles, 1.5 times a step, up to 12,000 yards across. No zone art of QuestBank's own (5.3.1's is gone):
+  -- QuestTrail's table of the game's tiles; here a test table round the flat world
+  local MV = QB.MiniView
+  local function count(t) local k = 0; for _ in pairs(t) do k = k + 1 end; return k end
+  assert(QB.Data.MAPTILES == nil and env.QuestBankBigMapArt == nil and QB.MinimapTiles ~= nil and count(QB.MinimapTiles.azeroth) == 1224
+    and count(QB.MinimapTiles.kalimdor) == 1105, "no zone art of QuestBank's own: the game's minimap tiles")
+  local realTiles, testTiles = QB.MinimapTiles, {}
+  for col = 20, 50 do for row = 20, 50 do testTiles[col * 100 + row] = 900000 + col * 100 + row end end
+  QB.MinimapTiles = { azeroth = testTiles }
+  c.facing = 0
   env.Minimap.__zoom = 1
   Mini.Wheel(-1)
-  assert(env.Minimap.__zoom == 0, "the wheel out: the game's zoom")
-  Mini.Wheel(-1); Mini.Wheel(-1)
-  assert(env.Minimap.__zoom == 0 and Mini.Radius() == 200, "at the widest it stays the game's widest: " .. tostring(Mini.Radius()))
+  assert(env.Minimap.__zoom == 0 and not MV.Extended() and not MV.frame:IsShown(), "the wheel out: the game's zoom first")
+  Mini.Wheel(-1)
+  assert(env.Minimap.__zoom == 0 and MV.Extended() and MV.cur.r == 300, "past the game's widest: its 200 yards times 1.5: " .. tostring(MV.cur.r))
+  assert(MV.frame:IsShown() and MV.tilesShown >= 1 and MV.maskKind == "atlas", "the ground: the game's tiles, cut by the game's minimap mask")
+  -- your tile (col 35, row 34) centred 133 yards west and 167 north of you, 0.233 px a yard; Goldshire 60 yards north
+  local mine
+  for _, o in ipairs(ALL) do if o.__tex == 903534 and o.__shown then mine = o end end
+  assert(mine and math.abs(mine.__points[1].x + 31.11) < 0.01 and math.abs(mine.__points[1].y - 38.89) < 0.01 and math.abs(mine.__w - 125.44) < 0.01,
+    "your tile where the game draws it: " .. tostring(mine and mine.__points[1].x) .. ", " .. tostring(mine and mine.__points[1].y))
+  assert(math.abs(select(2, at(g)) - 14) < 0.01, "the pins on the far view: 60 yards north at 300 is 14 px up")
+  -- your arrow over the far ground (the game's own is under it), above the pins; none while your facing is secret
+  local arrowFrame = MV.arrow:GetParent()
+  assert(MV.arrow:IsShown() and arrowFrame:IsShown() and arrowFrame.__frameLevel == 11 and MV.arrow.__points[1].x == 0 and MV.arrow.__rot == 0,
+    "your arrow on the far ground, at its centre")
+  c.facing = SECRET.num()
+  Mini.Update(0)
+  assert(not MV.arrow:IsShown(), "no arrow while your facing is secret")
+  -- a minimap that turns with you: facing west, north is to the right, each tile turned and laid out again; the
+  -- arrow points up. A square minimap (GetMinimapShape, as addons set it): the square mask
+  c.cvars = { rotateMinimap = "1" }; c.facing = math.pi / 2
+  local layouts = MV.layouts
+  Mini.Update(0)
+  local rx, ry = at(g)
+  assert(math.abs(rx - 14) < 0.01 and math.abs(ry) < 0.01 and mine.__rot == -math.pi / 2 and MV.layouts == layouts + 1 and MV.arrow.__rot == 0
+    and MV.arrow:IsShown(), string.format("turned: north on the right (%s, %s), the tiles turned, the arrow up", rx, ry))
+  c.cvars = nil; c.facing = 0
+  env.GetMinimapShape = function() return "SQUARE" end
+  c.clock = c.clock + 0.01 -- (the shape is read once a frame)
+  Mini.Update(0)
+  assert(MV.maskKind == "square", "a square minimap: the ground square too")
+  env.GetMinimapShape = nil
+  c.clock = c.clock + 0.01
+  Mini.Update(0)
+  assert(MV.maskKind == "atlas", "round again: the game's mask")
+  -- the game's tooltips over its blips (under the ground now): hidden while the ground is drawn; owned by the minimap,
+  -- or by UIParent at the cursor over it as the game's own Minimap_OnUpdate does. Anyone else's stay
+  local tt = env.GameTooltip
+  tt:SetOwner(env.Minimap, "ANCHOR_CURSOR"); tt:Show()
+  assert(not tt:IsShown(), "a tooltip of the minimap's under the far ground: hidden")
+  tt:SetOwner(env.UIParent, "ANCHOR_CURSOR"); env.Minimap.__mouseOver = true; tt:Show()
+  assert(not tt:IsShown(), "the game's blip tooltip at the cursor over the minimap: hidden")
+  env.Minimap.__mouseOver = false; tt:Show()
+  assert(tt:IsShown(), "a tooltip elsewhere stays")
+  tt:Hide()
+  Mini.Wheel(1)
+  assert(not MV.Extended() and not MV.frame:IsShown() and not arrowFrame:IsShown() and env.Minimap.__zoom == 0, "the wheel in: the game's minimap, no ground, no arrow of ours")
+  tt:SetOwner(env.Minimap, "ANCHOR_CURSOR"); tt:Show()
+  assert(tt:IsShown(), "at the game's zoom its tooltips are its own")
+  tt:Hide()
+  for _ = 1, 20 do Mini.Wheel(-1) end
+  assert(MV.cur.r == 6000 and MV.tilesShown > 100, "no further out than 12,000 yards across: " .. tostring(MV.cur.r))
+  for _ = 1, 9 do Mini.Wheel(1) end
+  assert(MV.cur.r == nil and env.Minimap.__zoom == 0, "in again, step by step, to the game's widest")
   Mini.Wheel(1)
   assert(env.Minimap.__zoom == 1, "the wheel in: the game's zoom")
-  env.Minimap.__zoom = 0
-  assert(Mini.Big == nil and Mini.Far == nil and Mini.Zoom == nil and Mini.DrawArt == nil and env.QuestBankBigMapArt == nil and QB.Data.MAPTILES == nil,
-    "no big map, no far zoom, no map art of QuestBank's own")
+  Mini.Wheel(-1)
+  -- the game's + and -: hidden and not clickable while the far zoom is on (the game shows them on mouseover: hidden
+  -- again), as they were when it is off; off, the wheel stops at the game's widest
+  local zin = env.Minimap.ZoomIn
+  assert(zin:GetAlpha() == 0 and zin.__mouse == false and not zin:IsShown(), "the game's + and - hidden: the wheel zooms past them")
+  zin:Show()
+  assert(not zin:IsShown(), "shown on mouseover: hidden again")
+  QB:Settings().mmExtended = false
+  Mini.Update(0)
+  assert(zin:GetAlpha() == 1 and zin.__mouse == true and not MV.On(), "far zoom off: the game's + and - back")
+  Mini.Wheel(-1)
+  assert(env.Minimap.__zoom == 0 and MV.cur.r == nil and not MV.Extended(), "off, the wheel stops at the game's widest")
+  QB:Settings().mmExtended = true
+  Mini.Update(0)
+  assert(zin:GetAlpha() == 0, "on again: hidden")
+  -- a drag pans the view (the point grabbed stays under the cursor); let go, no ping, and 3 seconds later it eases
+  -- back to you. The cursor goes round the mock minimap's centre (500, 400)
+  local saveCursor = env.GetCursorPosition
+  local cx, cy = 0, 0
+  env.GetCursorPosition = function() return 500 + cx, 400 + cy end
+  local gx0, gy0 = at(g)
+  c.leftDown = true
+  env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
+  cx = 20
+  f.__scripts.OnUpdate(f, 0.05)
+  local gx1, gy1 = at(g)
+  assert(MV.want.wx and MV.Extended() and math.abs(gx1 - gx0 - 20) < 0.01 and math.abs(gy1 - gy0) < 0.01,
+    string.format("dragged 20 px right: stop 1 with it (%s, %s)", gx1, gy1))
+  c.leftDown = false
+  local clicks, pings = c.gameClicks or 0, #(env.Minimap.__pings or {})
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
+  assert((c.gameClicks or 0) == clicks and #(env.Minimap.__pings or {}) == pings, "the end of a drag: no ping, not the game's click")
+  c.clock = c.clock + 2
+  f.__scripts.OnUpdate(f, 0.05)
+  assert(MV.want.wx and MV.cur.wx, "two seconds after: still where it was left")
+  c.clock = c.clock + 1.1
+  for _ = 1, 60 do f.__scripts.OnUpdate(f, 0.05) end
+  assert(MV.want.wx == nil and MV.cur.wx == nil and not MV.Extended() and math.abs(at(g) - gx0) < 0.01, "3 seconds after: back to you")
+  -- a click without a drag: on the far view a ping there, in the game's own scale round you; on the game's minimap the
+  -- game's own click
+  Mini.Wheel(-1)
+  cx, cy = 10, 0
+  c.leftDown = true
+  env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
+  c.leftDown = false
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
+  local ping = env.Minimap.__pings and env.Minimap.__pings[#env.Minimap.__pings]
+  assert(ping and #env.Minimap.__pings == pings + 1 and math.abs(ping[1] - 15) < 0.01 and math.abs(ping[2]) < 0.01 and (c.gameClicks or 0) == clicks,
+    "a click on the far view: a ping 15 px east on the game's minimap (10 px out at 300 yards)")
+  Mini.Wheel(1)
+  env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
+  assert(c.gameClicks == clicks + 1 and #env.Minimap.__pings == pings + 1, "a click on the game's minimap: the game's own")
+  -- a right-click: the minimap's menu, a frame later and owned by UIParent, with every switch; Far zoom is the setting.
+  -- On a pin, "Waypoint here" first
+  local menus = #c.contextMenus
+  -- (the next frame: the timers asked for since, run; a whole tick would move the arrow on in this flat world)
+  local function nextFrame(n0) for i = #c.timers, n0 + 1, -1 do table.remove(c.timers, i).f() end end
+  local n0 = #c.timers
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "RightButton")
+  assert(#c.contextMenus == menus and c.gameClicks == clicks + 1, "not at once, and no ping")
+  nextFrame(n0)
+  local m = c.contextMenus[#c.contextMenus]
+  local function entry(list, text) for _, e in ipairs(list) do if e.text == text then return e end end end
+  local farSwitch = m and entry(m, "Far zoom")
+  assert(#c.contextMenus == menus + 1 and m.owner == env.UIParent and farSwitch and farSwitch.kind == "check" and farSwitch.get() == true
+    and entry(m, "Back to me") and entry(m, "Trails") and entry(m, "QuestBank settings"), "the minimap's menu, Far zoom on")
+  farSwitch.set()
+  assert(QB:Settings().mmExtended == false and not farSwitch.get(), "Far zoom off from the menu")
+  farSwitch.set()
+  assert(QB:Settings().mmExtended == true, "and on again")
+  local gp
+  for _, o in ipairs(c.frames) do if o.__parent == f and o.d and o.d.name == "Goldshire" and o:IsShown() then gp = o end end
+  n0 = #c.timers
+  gp.__scripts.OnClick(gp, "RightButton")
+  nextFrame(n0)
+  m = c.contextMenus[#c.contextMenus]
+  assert(#c.contextMenus == menus + 2 and m[1].text == "Waypoint here" and m[1].kind == "button" and entry(m, "Far zoom"), "a pin's right-click: Waypoint here, then the switches")
+  env.GetCursorPosition = saveCursor
+  QB.MinimapTiles = realTiles
+  -- no menu that doesn't exist (5.3's StopMenu), and the game's arrow left alone (QuestTrail sized it with calls
+  -- Forever's minimap lacks)
+  for line in io.lines(HERE .. "/QuestBank/QuestBank.toc") do
+    local fn = line:match("^%s*([%w_]+%.lua)%s*$")
+    if fn then
+      local src = io.open(HERE .. "/QuestBank/" .. fn):read("*a")
+      assert(not src:find("StopMenu", 1, true) and not src:find("SetPlayerTexture", 1, true), "no StopMenu, no SetPlayerTexture* in " .. fn)
+    end
+  end
   -- Alt-drag moves it; where it ends is kept
   c.alt = true
   env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
@@ -1592,6 +1772,33 @@ do
   P.list = saveList
   env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
   Mini.Invalidate(); Mini.Place()
+end
+-- 5.4: with QuestTrail loaded too, its minimap is in charge: QuestBank's far zoom stays off for the session (said once)
+-- and the minimap's release is left to the game and QuestTrail (only hooked, for the Alt-drag's end)
+do
+  local ylva = newClient({
+    name = "Ylva", level = 12, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8, race = "Human",
+    log = {}, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, riding = false, bagSlots = {}, map = 1429,
+  })
+  ylva.addons = { QuestTrail = { version = "3.0.6", loaded = true } }
+  login(ylva)
+  local MVy, env = ylva.QB.MiniView, ylva.env
+  local said = 0
+  for _, line in ipairs(ylva.chat) do if line:find("QuestTrail is loaded", 1, true) then said = said + 1 end end
+  assert(MVy.blocked and not MVy.On() and ylva.QB:Settings().mmExtended ~= false and said == 1, "QuestTrail loaded: QuestBank's far zoom off this session, said once")
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "RightButton")
+  tick(ylva, 0)
+  assert(ylva.gameClicks == 1 and #ylva.contextMenus == 0, "the release is the game's (and QuestTrail's): no menu of QuestBank's")
+  assert(env.Minimap.ZoomIn:GetAlpha() == 1 and env.Minimap.ZoomIn.__mouse == nil, "the game's + and - left to QuestTrail")
+  env.Minimap.__zoom = 0
+  ylva.QB.Mini.Wheel(-1)
+  assert(MVy.cur.r == nil and env.Minimap.__zoom == 0, "the wheel: the game's zoom only")
+  ylva.alt = true
+  env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
+  assert(ylva.QB.Mini.dragging, "Alt-drag still moves it")
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
+  assert(ylva.QB.Mini.dragging == nil and ylva.gameClicks == 2, "and ends on the release, the game's click after")
+  ylva.alt = false
 end
 -- 3.9.0: dungeon maps (DungeonMap.lua): the client's floor art, the bosses with their recorded loot, the quests
 do

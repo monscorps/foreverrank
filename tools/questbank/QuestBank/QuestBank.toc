@@ -15,6 +15,8 @@ Loot.lua
 Observe.lua
 Timer.lua
 Link.lua
+MinimapTiles.lua
+MinimapView.lua
 Minimap.lua
 DungeonMap.lua
 Glow.lua

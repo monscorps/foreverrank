@@ -1075,8 +1075,12 @@ local DEFAULTS = {
   -- a key left out inherits the setting above (QB:Opt). Checked in this order: dungeon, pvp, party, cap
   profiles = { dungeon = {}, pvp = {}, party = {}, cap = {} },
   clock = { show = false }, clockLevelMsg = true, -- the timer strip (Timer.lua) and the level-up line
-  -- the route on the minimap (Minimap.lua): the stops and their lines, your pick-up list, dungeon entrances
+  -- the route on the minimap (Minimap.lua): the stops and their lines, your pick-up list, dungeon entrances, the
+  -- objectives of the quests in your log, the target's name
   minimapPins = true, minimapLines = true, minimapPickups = true, minimapEntrances = true,
+  minimapObjectives = true, minimapLabel = true,
+  -- the minimap's far zoom over the game's tiles and its drag (MinimapView.lua); back to you after a drag
+  mmExtended = true, mmCenter = true,
   glow = { on = true, other = true, combat = false },
   walkRecord = true, walkShow = true, -- walked trails (Walk.lua): noted as you go, drawn on the minimap
   -- the camp bar (Camp.lua): Well Fed, the campfire kit, camp features with their cooldown, the sleeping bag; hidden in

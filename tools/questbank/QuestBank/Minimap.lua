@@ -3,16 +3,19 @@
 -- to the next one, your pick-up list, and the entrances of the dungeons around you. While the arrow sends you by a
 -- flight master, a pier or the tram first, that is pinned too, and the line and the label go there. A pin outside the
 -- minimap's reach sits on its rim, dimmer, in the direction it lies. Click a pin: a waypoint there, as on the world
--- map. Alt-drag moves the minimap, Ctrl-wheel sizes it, the wheel zooms it as the game's own zoom does. Everything
--- here is QuestBank's own frames laid over the Minimap: nothing of the game's is replaced, and the minimap itself is
--- only scaled, moved and zoomed, never in a fight. (QuestBank's Map is the game's world map: UI.OpenMap.)
---   where a pin is: the stop's map and position go through QB.Model.World to continent yards, as the arrow's do; the
---   minimap's radius in yards comes from C_Minimap.GetViewRadius; rotateMinimap turns the pins with your facing.
+-- map; right-click it: the minimap's menu. Alt-drag moves the minimap, Ctrl-wheel sizes it, the wheel zooms it: the
+-- game's own levels, then further out over the game's minimap tiles, and a drag pans that far view
+-- (MinimapView.lua). Everything here is QuestBank's own frames laid over the Minimap; of the game's only its release
+-- script is wrapped (MinimapView.lua), and the minimap itself is only scaled, moved and zoomed, never in a fight.
+-- (QuestBank's Map is the game's world map: UI.OpenMap.)
+--   where a pin is: the stop's map and position go through QB.Model.World to continent yards, as the arrow's do, and
+--   then through the minimap's view (MV.View: its centre, its radius in yards from C_Minimap.GetViewRadius or the far
+--   zoom, its turn with your facing under rotateMinimap).
 local _, QB = ...
 local Mini = {}
 QB.Mini = Mini
 
-local TICK = 0.1           -- seconds between placements (the pins follow you)
+local TICK = 0.05          -- seconds between placements (the pins follow you); every frame while the view moves
 local ART = "Interface\\AddOns\\QuestBank\\art\\"
 local PATH_EVERY = 2       -- seconds between golden-path searches
 local MAX_PINS = 60        -- route stops, pick-ups and entrances, the nearest first past that
@@ -37,12 +40,6 @@ function Mini.Radius()
   end
   local z = Minimap and Minimap.GetZoom and plain(Minimap:GetZoom()) or 0
   return ZOOM_YARDS[(type(z) == "number" and z or 0) + 1] or 233.33
-end
-
-local function rotated()
-  if not GetCVar then return false end
-  local ok, v = pcall(GetCVar, "rotateMinimap")
-  return ok and plain(v) == "1"
 end
 
 -- a pin's key: its map and spot, or its world spot (the arrow's step has no map)
@@ -123,9 +120,10 @@ local function overlayFrame()
   overlay.elapsed = 0
   overlay:SetScript("OnUpdate", QB.Safe(function(self, dt)
     self.elapsed = self.elapsed + (dt or 0)
-    if self.elapsed < TICK then return end
+    if self.elapsed < TICK and not QB.MiniView.Moving() then return end
+    local step = self.elapsed
     self.elapsed = 0
-    Mini.Place()
+    Mini.Update(step)
   end, "minimap pins"))
   return overlay
 end
@@ -152,10 +150,7 @@ local function pin(i)
   p:SetScript("OnClick", QB.Safe(function(self, button)
     local d = self.d
     if not d then return end
-    if button == "RightButton" then
-      if d.kind == "stop" and QB.UI and QB.UI.StopMenu then QB.UI.StopMenu(d) end
-      return
-    end
+    if button == "RightButton" then QB.MiniView.OpenMenu(d); return end
     if d.m then QB.API.SetWaypoint(d.m, d.x, d.y, d.name) end -- (the arrow's step: the arrow points there already)
   end, "minimap pin"))
   p:SetScript("OnEnter", function(self)
@@ -240,24 +235,29 @@ local function style(p, d)
   end
 end
 
--- place every pin for where you stand now
-function Mini.Place()
-  if not on() then Mini.Clear(); return end
+-- one update: the view (MinimapView.lua: a drag, the ease back, the far ground and your arrow), then the pins on it
+function Mini.Update(dt)
   local me = QB.API.WorldPosition()
+  Mini.Place(me, QB.MiniView.Tick(dt, me))
+end
+
+-- place every pin for where you stand now (me), on the view v (MV.View's for me when not given)
+function Mini.Place(me, v)
+  if not on() then Mini.Clear(); return end
+  me = me or QB.API.WorldPosition()
   local f = overlayFrame()
   if not me then Mini.Clear(); return end
-  local R = (Minimap:GetWidth() or 140) / 2
-  local radius = Mini.Radius()
-  local facing = rotated() and (GetPlayerFacing and plain(GetPlayerFacing())) or 0
-  if type(facing) ~= "number" then facing = 0 end
+  v = v or QB.MiniView.View(me)
+  local R, radius, facing = v.R, v.radius, v.facing
   local list, placed, n = Mini.List(), {}, 0
-  -- nearest first when there are too many
+  -- nearest to you first when there are too many; placed round the view's centre (you, unless it was dragged)
   local pts = {}
   for _, d in ipairs(list) do
     local w = worldPos(d)
     if w and w.c == me.c then
-      local x, y, yards, far = Mini.Project(me, w, radius, R, facing)
-      pts[#pts + 1] = { d = d, x = x, y = y, yards = yards, far = far }
+      local x, y, _, far = Mini.Project(v, w, radius, R, facing)
+      local dn, dw = w.wx - me.wx, w.wy - me.wy
+      pts[#pts + 1] = { d = d, x = x, y = y, yards = sqrt(dn * dn + dw * dw), far = far }
     end
   end
   table.sort(pts, function(a, b)
@@ -293,7 +293,8 @@ function Mini.Place()
   Mini.target = target and target.d or nil
   Mini.Label(target, f)
   if QB:Settings().minimapLines ~= false then
-    local prev = { x = 0, y = 0, far = false, yards = 0 }
+    local yx, yy, _, yfar = Mini.Project(v, me, radius, R, facing)
+    local prev = { x = yx, y = yy, far = yfar, yards = 0 }
     local num = 1
     local first = placed[1]
     if target and target ~= first then
@@ -303,11 +304,11 @@ function Mini.Place()
       if not (path and #path >= 2) then
         li = li + 1
         local l = line(li)
-        if l then l:SetLine(0, 0, target.x, target.y, 1, 0.84, 0.18, 1) end
+        if l then l:SetLine(yx, yy, target.x, target.y, 1, 0.84, 0.18, 1) end
       else
         for i = 1, #pts2 - 1 do
-          local x1, y1, _, far1 = Mini.Project(me, { wx = pts2[i][1], wy = pts2[i][2] }, radius, R, facing)
-          local x2, y2, _, far2 = Mini.Project(me, { wx = pts2[i + 1][1], wy = pts2[i + 1][2] }, radius, R, facing)
+          local x1, y1, _, far1 = Mini.Project(v, { wx = pts2[i][1], wy = pts2[i][2] }, radius, R, facing)
+          local x2, y2, _, far2 = Mini.Project(v, { wx = pts2[i + 1][1], wy = pts2[i + 1][2] }, radius, R, facing)
           if not (far1 and far2) then li = li + 1; local l = line(li); if l then l:SetLine(x1, y1, x2, y2, 1, 0.84, 0.18, 1) end end
         end
       end
@@ -317,8 +318,8 @@ function Mini.Place()
       local path = Mini.GoldenPath(me, first.d)
       if path and #path >= 2 then
         for i = 1, #path - 1 do
-          local x1, y1, _, far1 = Mini.Project(me, { wx = path[i][1], wy = path[i][2] }, radius, R, facing)
-          local x2, y2, _, far2 = Mini.Project(me, { wx = path[i + 1][1], wy = path[i + 1][2] }, radius, R, facing)
+          local x1, y1, _, far1 = Mini.Project(v, { wx = path[i][1], wy = path[i][2] }, radius, R, facing)
+          local x2, y2, _, far2 = Mini.Project(v, { wx = path[i + 1][1], wy = path[i + 1][2] }, radius, R, facing)
           if not (far1 and far2) then
             li = li + 1
             local l = line(li)
@@ -342,7 +343,7 @@ function Mini.Place()
   end
   for i = li + 1, #lines do lines[i]:HideAll() end
   Mini.shown, Mini.linesShown = n, li
-  Mini.DrawTrails(me, radius, R, facing, f)
+  Mini.DrawTrails(v, radius, R, facing, f)
 end
 
 -- the target's name in a dark pill above it, the way the game labels a pin
@@ -369,7 +370,7 @@ function Mini.Label(target, f)
   Mini.labelText = target.d.name
 end
 
--- your walked trails (Walk.lua), as thin lines under the pins
+-- your walked trails (Walk.lua) round the view's centre (me: {c, wx, wy}), as thin lines under the pins
 local trailLines = {}
 function Mini.DrawTrails(me, radius, R, facing, f)
   local n = 0
@@ -425,8 +426,8 @@ function Mini.Invalidate() worldOf = {} end
 
 ----------------------------------------------------------------------------
 -- The minimap you move and size. Alt-drag moves it (its header comes along), Ctrl and the wheel size it, the plain
--- wheel zooms it as the game's own zoom does. The size is the game's own: the minimap's container scale, which Edit
--- Mode's Size slider sets, so the border, the pins and other addons' buttons all grow with it and stay on the rim.
+-- wheel zooms it (MinimapView.lua). The size is the game's own: the minimap's container scale, which Edit Mode's Size
+-- slider sets, so the border, the pins and other addons' buttons all grow with it and stay on the rim.
 ----------------------------------------------------------------------------
 local SCALE_MIN, SCALE_MAX = 0.6, 4
 
@@ -491,9 +492,11 @@ function Mini.Size(k)
   if c then return Mini.SetScale((c:GetScale() or 1) * k) end
 end
 
--- the wheel over the minimap: with Ctrl it sizes the minimap, else it zooms it in or out as the game's own zoom does
+-- the wheel over the minimap: with Ctrl it sizes the minimap; else it zooms it, past the game's widest too while the
+-- far zoom is on (MinimapView.lua), or as the game's own zoom does
 function Mini.Wheel(delta)
   if IsControlKeyDown and IsControlKeyDown() then Mini.Size(delta > 0 and 1.1 or 1 / 1.1); return end
+  if QB.MiniView.On() then QB.MiniView.Wheel(delta); Mini.Update(0); return end
   local z = Minimap.GetZoom and plain(Minimap:GetZoom()) or 0
   if type(z) ~= "number" then z = 0 end
   if delta > 0 then
@@ -580,6 +583,7 @@ function Mini:Init()
         if not Mini.rescued then Mini.rescued = true; Mini.RescueButtons() end
       end
       if C_Timer and C_Timer.After then C_Timer.After(0.5, QB.Safe(again, "minimap size")) else again() end
+      QB.MiniView.Recentre(true)
     end
     Mini.Invalidate()
     Mini.Place()
@@ -587,11 +591,16 @@ function Mini:Init()
   for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "MINIMAP_UPDATE_ZOOM", "EDIT_MODE_LAYOUTS_UPDATED" }) do
     pcall(f.RegisterEvent, f, e)
   end
-  -- the wheel: Ctrl sizes, else the game's zoom; Alt-drag moves
+  -- the mouse: Ctrl-wheel sizes, the wheel zooms; Alt-drag moves the minimap, a plain drag pans its view, a click
+  -- pings and a right-click opens its menu (MinimapView.lua; with QuestTrail loaded, its own)
+  local MV = QB.MiniView
+  MV.Guard()
   Minimap:EnableMouseWheel(true)
   Minimap:SetScript("OnMouseWheel", QB.Safe(function(_, delta) Mini.Wheel(delta) end, "minimap wheel"))
-  Minimap:HookScript("OnMouseDown", QB.Safe(function(_, button) Mini.DragStart(button) end, "minimap move"))
-  Minimap:HookScript("OnMouseUp", QB.Safe(function() Mini.DragStop() end, "minimap move"))
+  Minimap:HookScript("OnMouseDown", QB.Safe(function(_, button)
+    if IsAltKeyDown and IsAltKeyDown() then Mini.DragStart(button) else MV.MouseDown(button) end
+  end, "minimap mouse"))
+  MV.Hook(Mini.DragStop)
   overlayFrame()
   Mini.InitTracking()
 end
