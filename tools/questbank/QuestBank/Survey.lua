@@ -800,6 +800,42 @@ function Survey.Report(print)
     p.check == "failed" and " This client didn't show known rewards, so its no-reward answers aren't kept." or ""))
 end
 
+-- /qb survey find <text>: the surveyed quests whose title has the text, any case, ten lines at most:
+-- "id  title  (level N)  rewards: name, name" (an item by its name when the client has it, else its id); none found:
+-- how many quests have been asked so far. Returns the number found
+function Survey.Find(text, print)
+  local want = plain(text)
+  want = type(want) == "string" and want:lower():gsub("^%s+", ""):gsub("%s+$", "") or ""
+  local d, hits = db(), {}
+  if want ~= "" then
+    for id, rec in pairs(d.survey) do
+      if type(id) == "number" and type(rec) == "table" and type(rec.t) == "string" and rec.t:lower():find(want, 1, true) then hits[#hits + 1] = id end
+    end
+  end
+  table.sort(hits)
+  if #hits == 0 then
+    print(string.format("Nothing yet: %s quests asked so far.", QB.Comma(diag().asked)))
+    return 0
+  end
+  local function itemName(item)
+    local name
+    if C_Item and C_Item.GetItemNameByID then
+      local ok, n = pcall(C_Item.GetItemNameByID, item)
+      if ok then name = plain(n) end
+    end
+    return (type(name) == "string" and name ~= "") and name or tostring(item)
+  end
+  for i = 1, math.min(10, #hits) do
+    local id, rec = hits[i], d.survey[hits[i]]
+    local names = {}
+    for _, list in ipairs({ rec.c, rec.r }) do
+      for _, item in ipairs(type(list) == "table" and list or {}) do names[#names + 1] = itemName(item) end
+    end
+    print(string.format("%d  %s  (level %s)  rewards: %s", id, rec.t, rec.lvl and tostring(rec.lvl) or "?", #names > 0 and table.concat(names, ", ") or "none"))
+  end
+  return #hits
+end
+
 function Survey:Init()
   if self.frame or not able() then return end
   local f = CreateFrame("Frame")

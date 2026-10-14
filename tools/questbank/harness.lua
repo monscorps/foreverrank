@@ -3472,6 +3472,39 @@ do
   D.RITEMS[writ], D.RITEMS[rep], D.RIT[999901], D.RIT[999902] = saveW, saveR, nil, nil
   UI.candMemo = nil; UI:Refresh()
 end
+-- checklist 2: /qb survey find <text> lists the surveyed quests whose title has the text, any case, with their rewards by name
+do
+  local S = QB.Survey
+  local d = S.DB()
+  local save = { d.survey[999801], d.survey[999802], d.survey[999803] }
+  d.survey[999801] = { t = "Checklist Fixture One", lvl = 12, c = { 2435 }, r = { 2470 }, b = 70170 }
+  d.survey[999802] = { t = "Another checklist FIXTURE", lvl = 15, c = {}, r = {}, b = 70170 }
+  d.survey[999803] = { t = "Unrelated Errand", lvl = 9, c = { 2435 }, r = {}, b = 70170 }
+  local saveName = owner.env.C_Item.GetItemNameByID
+  owner.env.C_Item.GetItemNameByID = function(id) if id == 2435 then return "Tooth of Checklist" end return nil end
+  local n = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("survey find fixture")
+  assert(#owner.chat == n + 2, "two quests, a line each: " .. (#owner.chat - n))
+  local a, b = owner.chat[n + 1], owner.chat[n + 2]
+  assert(a:find("999801  Checklist Fixture One  (level 12)  rewards: Tooth of Checklist, 2470", 1, true), "an item by name where the client has it, else by id: " .. a)
+  assert(b:find("999802  Another checklist FIXTURE  (level 15)  rewards: none", 1, true), "any case, in id order, no rewards: " .. b)
+  n = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("survey find nothing-like-this")
+  assert(#owner.chat == n + 1 and owner.chat[n + 1]:find("Nothing yet: %d+ quests asked so far%.$"), "no hit: " .. owner.chat[n + 1])
+  n = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("survey find")
+  assert(#owner.chat == n + 1 and owner.chat[n + 1]:find("Nothing yet: ", 1, true), "no text: the same")
+  for k = 1, 12 do d.survey[999810 + k] = { t = "Many Fixture " .. k, lvl = 1, c = {}, r = {}, b = 70170 } end
+  n = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("survey find fixture")
+  assert(#owner.chat == n + 10, "ten lines at most: " .. (#owner.chat - n))
+  n = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("survey")
+  assert(#owner.chat == n + 1 and owner.chat[n + 1]:find("Quest survey:", 1, true), "/qb survey alone: the report")
+  for k = 1, 12 do d.survey[999810 + k] = nil end
+  d.survey[999801], d.survey[999802], d.survey[999803] = save[1], save[2], save[3]
+  owner.env.C_Item.GetItemNameByID = saveName
+end
 -- checklist 3: a quest given inside a dungeon across the sea is measured to the entrance: Blackfathom Villainy from Goldshire
 -- is a boat and a flight away, never "0 min"; a place no way is known to shows no minutes, not a huge number
 do

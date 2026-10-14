@@ -2505,8 +2505,14 @@ slash = function(msg)
     QB:Print(string.format("Noted in game so far: %s, %s, %s%s. They stay in your saved file, QuestBank.lua. Upload it at foreverrank.com/questbank/, or let QuestBank Uploader send it on Windows, and it goes into the next release for everyone.",
       n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps"), game))
   elseif cmd == "survey" and QB.Survey then
-    -- what the quest survey has asked the game on this build (Survey.lua)
-    QB.Survey.Report(function(m) QB:Print(m) end)
+    -- what the quest survey has asked the game on this build (Survey.lua); find <text>: the surveyed quests whose title
+    -- has the text, with their rewards
+    local sub, text = rest:match("^(%S*)%s*(.-)$")
+    if (sub or ""):lower() == "find" then
+      QB.Survey.Find(text, function(m) QB:Print(m) end)
+    else
+      QB.Survey.Report(function(m) QB:Print(m) end)
+    end
   elseif cmd == "update" or cmd == "version" then
     QB:Print("You run QuestBank " .. QB.version .. (QB.newest and (". Newest seen: " .. QB.newest.version .. " (" .. (QB.newest.who or "?") .. ").") or "."))
     QB.UI:CopyLink("QuestBank download page", QB.DOWNLOAD)
