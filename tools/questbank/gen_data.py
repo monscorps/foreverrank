@@ -1527,6 +1527,16 @@ T.update({"hearth": icon("inv_misc_rune_01"), "mount": icon("ability_mount_ridin
           "party": icon("inv_misc_groupneedmore"), "rally": icon("ability_warrior_rallyingcry"), "letter": icon("inv_letter_15"),
           "note": icon("inv_misc_note_06"), "start": icon("inv_misc_coin_01"),
           "bag": icon("inv_misc_bag_08")})  # the Quest Log slot's reward mark until the game sends the item's icon
+# the Gear page: its sidebar icon, and the character pane's own slot backgrounds (the paper doll's art; the back
+# slot shares the chest's, as the game's paper doll has it)
+T.update({"sideGear": icon("inv_chest_plate04"), "slotHead": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Head"),
+          "slotNeck": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Neck"), "slotShoulder": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Shoulder"),
+          "slotChest": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Chest"), "slotWaist": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Waist"),
+          "slotLegs": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Legs"), "slotFeet": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Feet"),
+          "slotWrist": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Wrists"), "slotHands": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Hands"),
+          "slotFinger": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Finger"), "slotTrinket": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Trinket"),
+          "slotMainHand": tex("Interface/PaperDoll/UI-PaperDoll-Slot-MainHand"), "slotOffHand": tex("Interface/PaperDoll/UI-PaperDoll-Slot-SecondaryHand"),
+          "slotRanged": tex("Interface/PaperDoll/UI-PaperDoll-Slot-Ranged")})
 lines.append("D.TEX = " + lua(T))
 # a zone card's art: the middle tile of the zone's own map (UiMapAssignment: area -> map; UiMapXMapArt and
 # UiMapArtTile: the map's tiles by row and column), as the dungeon cards carry the LFG background

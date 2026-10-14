@@ -1120,6 +1120,7 @@ function UI:CreateContent(f)
     self:CreatePrepView(c, true), -- Now: the three places worth going to from where you stand
     self:CreateJournalView(c),    -- the Dungeon Journal (DungeonMap.lua), built the first time it shows
     self:CreateMapView(c),        -- the Map (MapPage.lua), the same way
+    self:CreateGearView(c),       -- Gear (Gear.lua): what you wear, and the best upgrade to get for every slot
   }
 end
 
@@ -1139,6 +1140,7 @@ local function attachedView(parent, key)
 end
 function UI:CreateJournalView(parent) return attachedView(parent, "DMap") end
 function UI:CreateMapView(parent) return attachedView(parent, "MapPage") end
+function UI:CreateGearView(parent) return attachedView(parent, "Gear") end
 
 -- the sidebar: the pages in groups, each with its icon and a count where one helps. The Map is QuestBank's map page,
 -- or its action where that is off or missing (act: the game's world map, UI.OpenMap). UI.tabs[i] is page i's button,
@@ -1150,6 +1152,7 @@ local SIDEBAR = {
   { tab = 1, name = "Quest Log", icon = "sideLog", key = "LOG", count = function() return QB.state.logCount or 0 end },
   { tab = 2, name = "Available", icon = "sideAvail", key = "AVAILABLE" },
   { tab = 3, name = "Route", icon = "sideRoute", key = "ROUTE" },
+  { tab = 9, name = "Gear", icon = "sideGear", key = "GEAR" },
   { group = "Together" },
   { tab = 4, name = "Party", icon = "sideParty", key = "PARTY", count = function() return QB.Sync and #(QB.Sync:Members() or {}) or 0 end },
   { group = "World" },
@@ -1560,10 +1563,12 @@ function UI.ItemUse(id, level)
 end
 
 -- a quest's reward the finder shows for a kind ("gear", "trinket", "recipe") and, for gear, a slot: the best of its items
--- you can use, the highest item level first. Gear and trinkets need a known item level. Returns the item and its level
+-- you can use, the highest item level first. Gear and trinkets need a known item level. Returns the item and its level.
+-- slot: a slot's name (UI.GEAR_SLOTS), or the set of equip locations itself
 function UI.BestReward(qid, kind, level, slot)
   local want
-  if slot then for _, g in ipairs(UI.GEAR_SLOTS) do if g[1] == slot then want = g[2] end end end
+  if type(slot) == "table" then want = slot
+  elseif slot then for _, g in ipairs(UI.GEAR_SLOTS) do if g[1] == slot then want = g[2] end end end
   local R = QB.Data.RITEMS and QB.Data.RITEMS[qid]
   local bestId, bestL
   for _, key in ipairs({ "c", "r", "u" }) do
@@ -1589,11 +1594,12 @@ end
 -- the finder's rows for a reward kind: quests you can take now (any status but done, wrong or held), whatever their
 -- quest level, with "2 levels ahead" ticked also those you can take within two levels; each with the best of its
 -- rewards you can use, the highest item level first (recipes: the most XP first).
--- { q, value, st, item, ilvl, req, mins }
-function UI:FindRewards(kind, level)
+-- { q, value, st, item, ilvl, req, mins }. slot: for gear, a slot's name (UI.GEAR_SLOTS) or a set of equip locations,
+-- the finder's own choice (UI.gearSlot) when none is given
+function UI:FindRewards(kind, level, slot)
   if not QB.Data.RITEMS then return {} end
   local reqMax = level + (QB:Settings().finderAhead and 2 or 0)
-  local slot = kind == "gear" and UI.gearSlot or nil
+  slot = kind == "gear" and (slot or UI.gearSlot) or nil
   local out = {}
   for _, c in ipairs(self:Candidates(nil, level, reqMax, true)) do
     if not c.behind then

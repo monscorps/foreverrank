@@ -2519,7 +2519,7 @@ do
     setfenv(fn, env)
     keys[name], order[#order + 1] = fn, name
   end
-  assert(env.BINDING_HEADER_QUESTBANK == "QuestBank" and #order == 11, "the QuestBank section, eleven keys: " .. #order)
+  assert(env.BINDING_HEADER_QUESTBANK == "QuestBank" and #order == 12, "the QuestBank section, twelve keys (the Gear page's among them): " .. #order)
   local pages = 0
   for _, e in ipairs(U.SIDEBAR) do
     if e.name and not e.group then
@@ -2527,7 +2527,7 @@ do
       if e.tab then pages = pages + 1 end
     end
   end
-  assert(pages == 8 and keys.QUESTBANK_WINDOW and keys.QUESTBANK_MAP and keys.QUESTBANK_MINIMAP_BIGGER and keys.QUESTBANK_MINIMAP_SMALLER, "eight pages (the Map one), the window, the minimap's size")
+  assert(pages == 9 and keys.QUESTBANK_WINDOW and keys.QUESTBANK_MAP and keys.QUESTBANK_GEAR and keys.QUESTBANK_MINIMAP_BIGGER and keys.QUESTBANK_MINIMAP_SMALLER, "nine pages (the Map and Gear ones), the window, the minimap's size")
   assert(env.BINDING_NAME_QUESTBANK_MAP == "Map" and keys.QUESTBANK_BIGMAP == nil and env.BINDING_NAME_QUESTBANK_BIGMAP == nil, "Map, not Big map")
   -- a page's key: the window on that page; again, shut; another page's key while it is open: that page
   local wasOpen, wasTab = U.frame:IsShown(), U.tab
@@ -3356,6 +3356,8 @@ do
   assert(qid and U.RewardSlotFits(qid, "Head") and not U.RewardSlotFits(qid, "Ring"), "a mail head reward fits a paladin's Head, not Ring")
   env.C_Item.GetItemInfoInstant = saveInst
 end
+-- the layout sheets (luajit harness.lua --layout out.json) and every layout problem found, from here on
+local layouts, problems = {}, {}
 -- [stage: boss-spots] that stage's tests go right below this line
 
 
@@ -3369,6 +3371,174 @@ end
 
 
 -- [stage: gear] that stage's tests go right below this line
+-- Gear (page 9): the character sheet's slots, what you wear in each and the best upgrade you can get for it, from
+-- quest rewards (the finder's judgement) and dungeon drops (the journal's loot, judged the same way)
+do
+  local U, env, c, D, G = QB.UI, owner.env, owner, QB.Data, QB.Gear
+  assert(G and U.views[9] and U.tabs[9] and U.tabs[9].label:GetText() == "Gear" and U.PAGE_KEYS.GEAR == 9, "page 9 is Gear, in the sidebar, with a key")
+  local names = {}
+  for i, s in ipairs(G.SLOTS) do names[#names + 1] = s.name end
+  assert(table.concat(names, ",") == "Head,Neck,Shoulder,Back,Chest,Wrist,Main hand,Off hand,Ranged,Hands,Waist,Legs,Feet,Ring 1,Ring 2,Trinket 1,Trinket 2",
+    "the sheet's 17 slots in the pane's order, the weapons under the left column, no shirt or tabard: " .. table.concat(names, ","))
+  for _, s in ipairs(G.SLOTS) do assert(D.TEX[s.art], "each slot's paper-doll art is a client file: " .. s.art) end
+  -- what the paladin wears: c.equipped[slot] = item id, as GetInventoryItemID and GetInventoryItemLink answer; the
+  -- client's word on each mocked item (GetItemInfoInstant: class, subclass, equip location) and its level (c.itemLevel)
+  local saveID, saveLink, saveInst = env.GetInventoryItemID, env.GetInventoryItemLink, env.C_Item.GetItemInfoInstant
+  c.equipped = {}
+  env.GetInventoryItemID = function(unit, slot) return unit == "player" and c.equipped[slot] or nil end
+  env.GetInventoryItemLink = function(unit, slot)
+    local id = unit == "player" and c.equipped[slot]
+    return id and ("|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r") or nil
+  end
+  local facts = {}
+  env.C_Item.GetItemInfoInstant = function(id)
+    local f = facts[id]
+    if not f then return nil end
+    return id, f[1] == 4 and "Armor" or "Weapon", "", f[3], 133328, f[1], f[2]
+  end
+  facts[900001] = { 4, 3, "INVTYPE_CHEST" }; c.itemLevel[900001] = 10; c.itemQuality[900001] = 2   -- a mail chest, level 10
+  facts[900002] = { 2, 4, "INVTYPE_WEAPON" }; c.itemLevel[900002] = 12                                -- a one-hand mace, level 12
+  facts[5187] = { 2, 5, "INVTYPE_2HWEAPON" }; c.itemLevel[5187] = 44; c.itemQuality[5187] = 2        -- Rhahk'Zor's hammer (Deadmines)
+  facts[5443] = { 2, 15, "INVTYPE_WEAPON" }; c.itemLevel[5443] = 60                                   -- Miner Johnson's dagger: not for a paladin
+  facts[5194] = { 4, 1, "INVTYPE_CHEST" }; c.itemLevel[5194] = 60                                     -- Sneed's cloth chest: not for a paladin
+  c.equipped[5], c.equipped[16] = 900001, 900002
+  U:ShowTab(9); U:Refresh()
+  local f = G.Frame()
+  assert(f and f:IsShown() and QB.state.level == 20 and QB.state.class == "PALADIN", "the Gear page shows, for the paladin at 20")
+  local function rowOf(name) for _, r in ipairs(f.rows) do if r.slot.name == name then return r end end end
+  local chest, hand, ring1, ring2, head = rowOf("Chest"), rowOf("Main hand"), rowOf("Ring 1"), rowOf("Ring 2"), rowOf("Head")
+  assert(chest.worn and chest.worn.id == 900001 and chest.worn.ilvl == 10 and chest.sub:GetText() == "Chest, iL 10" and chest.name:GetText() == "Item 900001",
+    "the worn mail chest, its level: " .. tostring(chest.sub:GetText()))
+  assert(chest.button.icon:IsShown() and chest.button.rim:IsShown() and not chest.button.back:IsShown(), "a worn piece: its icon in the quality frame, not the slot's art")
+  assert(not head.worn and head.button.back:IsShown() and head.button.back.__tex == D.TEX.slotHead and not head.button.icon:IsShown()
+    and head.name:GetText() == "Head" and head.sub:GetText() == "nothing worn", "an empty slot shows its paper-doll art and its name")
+  -- the chest: a mail chest from a quest beats the level-10 one; never cloth (Sneed's, level 60, is not for a paladin)
+  local b = chest.best
+  assert(b and b.kind == "quest" and b.ilvl > 10 and chest.up:IsShown() and chest.arrow:IsShown(), "a quest's chest upgrade for the paladin")
+  local it = D.RIT[b.id]
+  assert(it and it[3] == 4 and (it[4] == 3 or it[4] == 0) and (it[2] == 5 or it[2] == 20), "the chest upgrade is mail (or of no armour class), for the chest: " .. table.concat(it or {}, ","))
+  assert(b.id ~= 5194, "never the cloth chest")
+  for _, r in ipairs(U:FindRewards("gear", 20, chest.slot.loc)) do
+    local x = D.RIT[r.item]
+    assert(x and x[3] == 4 and (x[4] == 3 or x[4] == 0), "only mail chests among the quest finds: " .. r.item)
+    assert(r.ilvl <= b.ilvl, "the best by item level")
+  end
+  assert(chest.up.src:GetText():find("^Quest: ") and chest.up.ilvl:GetText() == "iL " .. b.ilvl and chest.up.place:GetText() ~= "",
+    "the row says the quest, the place and the level: " .. chest.up.src:GetText() .. " / " .. chest.up.place:GetText() .. " / " .. chest.up.ilvl:GetText())
+  assert(chest.up.face.__tex == b.q.icon and not chest.up.mark:IsShown(), "with the quest's icon, no check yet")
+  -- the main hand: Rhahk'Zor's hammer (a two-hander, level 44) from the Deadmines, never Miner Johnson's dagger (level 60)
+  local h = hand.best
+  assert(h and h.kind == "drop" and h.id == 5187 and h.boss.n == "Rhahk'Zor" and h.cat.name == "The Deadmines", "the weapon upgrade is the Deadmines hammer: " .. tostring(h and h.id))
+  assert(hand.up.src:GetText() == "Rhahk'Zor" and hand.up.place:GetText() == "The Deadmines, LV 18-23" and hand.up.ilvl:GetText() == "iL 44",
+    "the row says the boss, the dungeon and its levels: " .. hand.up.src:GetText() .. " / " .. hand.up.place:GetText())
+  assert(hand.up.face.__tex == 5875511, "with the boss's face (the journal's art)")
+  for _, e in ipairs(G.last) do assert(not (e.best and (e.best.id == 5443 or e.best.id == 5194)), "never the dagger or the cloth chest: " .. e.slot.name) end
+  -- an empty ring slot: any ring; the second ring slot gets another
+  assert(ring1.best and ring1.best.ilvl > 0 and ring1.up:IsShown(), "an empty ring slot offers a ring")
+  local r1 = D.RIT[ring1.best.id]
+  assert(r1 and r1[2] == 11, "a ring (INVTYPE_FINGER): " .. table.concat(r1 or {}, ","))
+  assert(not ring2.best or ring2.best.id ~= ring1.best.id, "the second ring slot: another ring")
+  -- the header: the count and the item levels won; nothing loading
+  local up = G.last
+  local n, gain = f.head:GetText():match("^(%d+) upgrades? to get, %+(%d+) item level")
+  assert(tonumber(n) == up.n and tonumber(gain) == up.gain and up.n >= 3, "the header counts the upgrades: " .. f.head:GetText())
+  local sum = 0
+  for _, e in ipairs(up) do if e.best then sum = sum + e.best.ilvl - (e.worn and (e.worn.ilvl or 0) or 0) end end
+  assert(sum == up.gain and f.note:GetText() == "", "the gain is the item levels won; nothing loading")
+  print("gear:", f.head:GetText(), "| chest:", chest.up.src:GetText(), "/", chest.up.place:GetText(), "| hand:", hand.up.src:GetText(), "/", hand.up.place:GetText())
+  -- tooltips: the item itself (the game's), where from, the gain, what a click does
+  lines = {}; hand.up.__scripts.OnEnter(hand.up)
+  local tip = table.concat(lines, "\n")
+  assert(lines[1] == "ITEM:5187" and tip:find("Rhahk'Zor", 1, true) and tip:find("Item level 44, over the 12 you wear.", 1, true) and tip:find("Dungeon Journal", 1, true),
+    "the upgrade's tooltip: the item, where from, the gain, the click: " .. tip)
+  hand.up.__scripts.OnLeave(hand.up)
+  lines = {}; chest.button.__scripts.OnEnter(chest.button)
+  assert(table.concat(lines, "\n"):find("An upgrade beside it", 1, true), "the worn piece's tooltip points at the upgrade")
+  chest.button.__scripts.OnLeave(chest.button)
+  lines = {}; head.button.__scripts.OnEnter(head.button)
+  assert(lines[1] == "Head" and lines[2] == "Nothing worn here.", "an empty slot's tooltip")
+  head.button.__scripts.OnLeave(head.button)
+  -- the layout sheet, the chest's upgrade under the mouse
+  chest.up.__hover = true
+  for _, p in ipairs(checkLayout(U.frame, "Gear")) do problems[#problems + 1] = p end
+  layouts[#layouts + 1] = dumpLayout(U.frame, "Gear")
+  chest.up.__hover = nil
+  -- clicks: the quest on the pick-up list, and off again; the right button: the quest's menu
+  local qid = b.q.id
+  assert(not QB:IsAdded(qid), "not on the list yet")
+  chest.up.__scripts.OnClick(chest.up, "LeftButton")
+  assert(QB:IsAdded(qid) and chest.up.mark:IsShown() and chest.best and chest.best.q.id == qid, "a click puts the quest on the pick-up list, and the row shows the check")
+  chest.up.__scripts.OnClick(chest.up, "LeftButton")
+  assert(not QB:IsAdded(qid) and not chest.up.mark:IsShown(), "again: off it")
+  chest.up.__scripts.OnClick(chest.up, "RightButton")
+  local menu = env.QuestBankMenu
+  assert(menu and menu:IsShown() and menu.title:GetText() == b.q.name, "the right button: the quest's menu")
+  menu:Hide()
+  -- a dungeon upgrade: the journal on that boss
+  hand.up.__scripts.OnClick(hand.up, "LeftButton")
+  local jf = QB.DMap.Attach(U.views[7])
+  assert(U.tab == 7 and jf.boss == h.boss and jf.cat == h.cat and jf.tab == "bosses", "a click on a drop opens the journal on the boss")
+  U:ShowTab(9)
+  -- Shift: the item's link into the chat box; Ctrl: the dressing room (the game's DressUpItemLink, or QB.API.DressUp where set up)
+  c.chatOpen = true; c.shift = true
+  hand.up.__scripts.OnClick(hand.up, "LeftButton")
+  assert(c.chatLinks[#c.chatLinks]:find("item:5187", 1, true) and U.tab == 9, "Shift-click links the item")
+  c.shift = false; c.chatOpen = false
+  local dressed
+  env.DressUpItemLink = function(link) dressed = link end
+  c.ctrl = true
+  hand.up.__scripts.OnClick(hand.up, "LeftButton")
+  assert(dressed and dressed:find("item:5187", 1, true) and U.tab == 9, "Ctrl-click tries it on: " .. tostring(dressed))
+  local viaApi
+  QB.API.DressUp = function(link) viaApi = link; return true end
+  dressed = nil
+  hand.up.__scripts.OnClick(hand.up, "LeftButton")
+  assert(viaApi and viaApi:find("item:5187", 1, true) and not dressed, "QB.API.DressUp first, where another part of QuestBank set it up")
+  chest.button.__scripts.OnClick(chest.button, "LeftButton")
+  assert(viaApi:find("item:900001", 1, true), "Ctrl-click on a worn piece tries it on too")
+  QB.API.DressUp = nil; env.DressUpItemLink = nil; c.ctrl = false
+  -- what you wear changed: the page follows a moment later, one refresh for a burst; hidden, it waits for its next show
+  facts[900003] = { 4, 3, "INVTYPE_CHEST" }; c.itemLevel[900003] = 60
+  c.equipped[5] = 900003
+  local before = G.last
+  f.__scripts.OnEvent(f, "PLAYER_EQUIPMENT_CHANGED", 5, false)
+  f.__scripts.OnEvent(f, "PLAYER_EQUIPMENT_CHANGED", 5, false)
+  assert(G.last == before and chest.worn.id == 900001, "not yet: a moment later")
+  tick(owner, 1)
+  assert(G.last ~= before and chest.worn.id == 900003 and chest.sub:GetText() == "Chest, iL 60" and not chest.best and not chest.up:IsShown() and not chest.arrow:IsShown(),
+    "the new chest, level 60: nothing beats it")
+  assert(tonumber(f.head:GetText():match("^(%d+)")) == up.n - 1, "one upgrade fewer: " .. f.head:GetText())
+  U:ShowTab(1)
+  c.equipped[5] = 900001
+  f.__scripts.OnEvent(f, "PLAYER_EQUIPMENT_CHANGED", 5, false)
+  tick(owner, 1)
+  assert(chest.worn.id == 900003, "hidden, the page waits")
+  U:ShowTab(9)
+  assert(chest.worn.id == 900001 and chest.best and chest.best.id == b.id, "shown again: the old chest, its upgrade back")
+  -- an item whose level the client has not sent yet: asked of the server, said as loading; when it comes, the page shows it
+  facts[5195] = { 4, 3, "INVTYPE_CHEST" }; c.itemLevel[5195] = 0
+  U:Refresh()
+  assert(f.note:GetText() == "loading items..." and c.loadRequests[#c.loadRequests] == 5195, "an unknown level: asked for, said as loading")
+  local asks = #c.loadRequests
+  U:Refresh()
+  assert(#c.loadRequests == asks, "asked once")
+  c.itemLevel[5195] = 50
+  f.__scripts.OnEvent(f, "GET_ITEM_INFO_RECEIVED", 5195, true)
+  tick(owner, 1)
+  assert(f.note:GetText() == "" and chest.best and chest.best.id == 5195 and chest.best.kind == "drop" and chest.up.src:GetText() == "Sneed",
+    "the mail chest from Sneed, level 50, once the client has it: " .. tostring(chest.best and chest.best.id))
+  facts[5444] = { 4, 3, "INVTYPE_HEAD" }; c.itemLevel[5444] = 0
+  U:Refresh()
+  assert(f.note:GetText() == "loading items...", "another unknown level")
+  f.__scripts.OnEvent(f, "ITEM_DATA_LOAD_RESULT", 5444, false)
+  tick(owner, 1)
+  assert(f.note:GetText() == "" and not (head.best and head.best.id == 5444), "an item the server has no data for is dropped, not loading for ever")
+  -- back as it was
+  env.GetInventoryItemID, env.GetInventoryItemLink, env.C_Item.GetItemInfoInstant = saveID, saveLink, saveInst
+  c.equipped = nil
+  for id in pairs(facts) do c.itemLevel[id] = nil; c.itemQuality[id] = nil end
+  U:ShowTab(1); U:Refresh()
+end
 
 
 
@@ -3917,7 +4087,7 @@ v3.modeNow.__scripts.OnClick(v3.modeNow)
 QB.Model.Finish()
 
 -- the layout of every page, checked and drawn
-local layouts, problems = {}, {}
+-- (layouts and problems: declared above the stages' anchors, so their sheets and checks count too)
 local function hoverFirst(list, n)
   local k = 0
   for _, f in ipairs(list) do

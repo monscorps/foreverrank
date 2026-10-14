@@ -5,6 +5,7 @@
 	<Binding name="QUESTBANK_LOG" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("LOG")</Binding>
 	<Binding name="QUESTBANK_AVAILABLE" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("AVAILABLE")</Binding>
 	<Binding name="QUESTBANK_ROUTE" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("ROUTE")</Binding>
+	<Binding name="QUESTBANK_GEAR" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("GEAR")</Binding>
 	<Binding name="QUESTBANK_PARTY" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("PARTY")</Binding>
 	<Binding name="QUESTBANK_JOURNAL" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Page("JOURNAL")</Binding>
 	<Binding name="QUESTBANK_MAP" category="BINDING_HEADER_QUESTBANK">QuestBankKeys.Map()</Binding>
