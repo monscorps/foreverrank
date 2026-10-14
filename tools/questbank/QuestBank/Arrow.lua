@@ -609,6 +609,8 @@ function A:ApplyLook()
     f.step:SetTextColor(1, 1, 1)
     f.step:SetJustifyH("CENTER")
     f.step:SetWidth(STEP_W)
+    f.step:ClearAllPoints()
+    f.step:SetPoint("TOP", 8, -73) -- (where A:Create put it; the dial's line moved it)
     f.kind:Hide()
     if f.bg then f.bg:Hide() end
   end
@@ -761,8 +763,8 @@ function A:Update()
 end
 
 -- QuestTrail's first line, laid out as one centred line: the step's icon, the step (blue) and what to do at the
--- target (gold: ", then Turn in"; "Turn in" alone with no step; nothing while carried, or with no target). Returns
--- the line's width
+-- target (gold: ", then Turn in", the comma straight after the step's name as QuestTrail writes it; "Turn in" alone
+-- with no step; nothing while carried, or with no target). Returns the line's width
 local function line1(f, step, g, S)
   local t = A.t
   local verb = t and (VERB[t.kind] or "Go to") or ""
@@ -770,9 +772,9 @@ local function line1(f, step, g, S)
   local iw = (step and g.icon) and 17 or 0
   if f.kind.qbText ~= kindText then f.kind.qbText = kindText; f.kind:SetText(kindText) end
   local kw = kindText ~= "" and (f.kind:GetStringWidth() or 0) or 0
-  if step then A.Fit(f.step, step, g.short, LABEL_W - iw - kw - (kw > 0 and GAP or 0)) end
+  if step then A.Fit(f.step, step, g.short, LABEL_W - iw - kw) end
   local sw = step and (f.step:GetStringWidth() or 0) or 0
-  local total = iw + sw + (kw > 0 and ((sw > 0 and GAP or 0) + kw) or 0)
+  local total = iw + sw + kw
   local x0, y = -total / 2, -(S + GAP)
   if step then
     f.step:SetWidth(sw + 2)
@@ -792,7 +794,7 @@ local function line1(f, step, g, S)
   if kw > 0 then
     f.kind:SetWidth(kw + 2)
     f.kind:ClearAllPoints()
-    f.kind:SetPoint("TOPLEFT", f, "TOP", x0 + iw + sw + (sw > 0 and GAP or 0), y)
+    f.kind:SetPoint("TOPLEFT", f, "TOP", x0 + iw + sw, y)
     f.kind:Show()
   else
     f.kind:Hide()
