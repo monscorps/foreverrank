@@ -256,13 +256,13 @@ local function sourceText(c)
   return c.boss.n, c.cat.name .. (lv[1] > 0 and string.format(", LV %d-%d", lv[1], lv[2]) or "")
 end
 
--- the dressing room: the client's own, with the item's link (QB.API.DressUp where another part of QuestBank set it up,
--- else the game's DressUpItemLink where this client has it)
+-- the dressing room: Core.lua's QB.API.DressUp by the item's id (it finds the link, and asks the client for an item it
+-- hasn't got yet); without it, the game's DressUpItemLink with the item's link where this client has it
 function G.DressUp(c)
+  if QB.API.DressUp then return QB.API.DressUp(c.id) end
   local link = c.link
   if not link then local _, l = QB.API.ItemInfo(c.id); link = l end
   link = link or ("item:" .. c.id)
-  if QB.API.DressUp then return QB.API.DressUp(link) end
   if type(DressUpItemLink) == "function" then
     if InCombatLockdown and InCombatLockdown() then QB:Print("The dressing room waits for the fight to end."); return false end
     local ok = pcall(DressUpItemLink, link)
@@ -272,13 +272,25 @@ function G.DressUp(c)
   return false
 end
 
+-- the try-on click: the Key Bindings' Dressing Room modifier (Core.lua's QB.DressClick, Ctrl unless rebound), plain
+-- Ctrl without it
+local function dressClick()
+  if QB.DressClick then return QB.DressClick() end
+  return (IsControlKeyDown and IsControlKeyDown()) and true or false
+end
+-- the hint goes on an item the dressing room can put on you (Core.lua's QB.API.Dressable; every item without it)
+local function dressHint(id)
+  if QB.API.Dressable and not QB.API.Dressable(id) then return "Shift-click: link it in chat." end
+  return "Shift-click: link it in chat. Ctrl-click: try it on."
+end
+
 -- a click on an upgrade: Shift links the item, Ctrl tries it on, the right button opens the quest's menu, a plain
 -- click puts the quest on your pick-up list (again: takes it off) or opens the journal on the boss
 local function upgradeClick(r, which)
   local c = r.best
   if not c then return end
   if IsShiftKeyDown and IsShiftKeyDown() then QB.UI.LinkItemAlways(c.id); return end
-  if IsControlKeyDown and IsControlKeyDown() then G.DressUp(c); return end
+  if dressClick() then G.DressUp(c); return end
   if c.q then
     if which == "RightButton" then QB.UI.QuestMenu(c.q, c.st); return end
     QB:SetAdded(c.q.id, not QB:IsAdded(c.q.id))
@@ -312,7 +324,7 @@ local function upgradeTip(tip, r)
   else
     tip:AddLine("Click: the Dungeon Journal on " .. c.boss.n .. ".", 0.6, 0.6, 0.6)
   end
-  tip:AddLine("Shift-click: link it in chat. Ctrl-click: try it on.", 0.6, 0.6, 0.6)
+  tip:AddLine(dressHint(c.id), 0.6, 0.6, 0.6)
 end
 
 local function slotTip(tip, r)
@@ -328,14 +340,14 @@ local function slotTip(tip, r)
     tip:AddLine(r.slot.name, GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Nothing worn here.", SOFT[1], SOFT[2], SOFT[3])
   end
-  if w then tip:AddLine("Shift-click: link it in chat. Ctrl-click: try it on.", 0.6, 0.6, 0.6) end
+  if w then tip:AddLine(dressHint(w.id), 0.6, 0.6, 0.6) end
 end
 
 local function slotClick(r)
   local w = r.worn
   if not w then return end
   if IsShiftKeyDown and IsShiftKeyDown() then QB.UI.LinkItemAlways(w.id)
-  elseif IsControlKeyDown and IsControlKeyDown() then G.DressUp(w) end
+  elseif dressClick() then G.DressUp(w) end
 end
 
 local function tooltip(b, fill)

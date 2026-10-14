@@ -4025,24 +4025,37 @@ do
   local jf = QB.DMap.Attach(U.views[7])
   assert(U.tab == 7 and jf.boss == h.boss and jf.cat == h.cat and jf.tab == "bosses", "a click on a drop opens the journal on the boss")
   U:ShowTab(9)
-  -- Shift: the item's link into the chat box; Ctrl: the dressing room (the game's DressUpItemLink, or QB.API.DressUp where set up)
+  -- Shift: the item's link into the chat box; Ctrl: the dressing room (Core.lua's QB.API.DressUp by the item's id, which
+  -- reaches the game's DressUpItemLink with its link; a stand-in API gets the id; the game's own alone without the API)
   c.chatOpen = true; c.shift = true
   hand.up.__scripts.OnClick(hand.up, "LeftButton")
   assert(c.chatLinks[#c.chatLinks]:find("item:5187", 1, true) and U.tab == 9, "Shift-click links the item")
   c.shift = false; c.chatOpen = false
+  local saveDressUp, saveDressLink = QB.API.DressUp, env.DressUpItemLink
   local dressed
-  env.DressUpItemLink = function(link) dressed = link end
+  env.DressUpItemLink = function(link) dressed = link; return true end
   c.ctrl = true
   hand.up.__scripts.OnClick(hand.up, "LeftButton")
   assert(dressed and dressed:find("item:5187", 1, true) and U.tab == 9, "Ctrl-click tries it on: " .. tostring(dressed))
   local viaApi
-  QB.API.DressUp = function(link) viaApi = link; return true end
+  QB.API.DressUp = function(id) viaApi = id; return true end
   dressed = nil
   hand.up.__scripts.OnClick(hand.up, "LeftButton")
-  assert(viaApi and viaApi:find("item:5187", 1, true) and not dressed, "QB.API.DressUp first, where another part of QuestBank set it up")
+  assert(viaApi == 5187 and not dressed, "QB.API.DressUp first, by the item's id: " .. tostring(viaApi))
   chest.button.__scripts.OnClick(chest.button, "LeftButton")
-  assert(viaApi:find("item:900001", 1, true), "Ctrl-click on a worn piece tries it on too")
-  QB.API.DressUp = nil; env.DressUpItemLink = nil; c.ctrl = false
+  assert(viaApi == 900001, "Ctrl-click on a worn piece tries it on too: " .. tostring(viaApi))
+  QB.API.DressUp = nil
+  dressed = nil
+  hand.up.__scripts.OnClick(hand.up, "LeftButton")
+  assert(dressed and dressed:find("item:5187", 1, true), "a QuestBank without the API: the game's DressUpItemLink with the link")
+  -- the game's Dressing Room modifier (IsModifiedClick "DRESSUP") is the click, as on every other item QuestBank shows
+  local saveMod = env.IsModifiedClick
+  env.IsModifiedClick = function(action) return action == "DRESSUP" and c.alt or false end
+  dressed = nil; c.ctrl = false; c.alt = true
+  hand.up.__scripts.OnClick(hand.up, "LeftButton")
+  assert(dressed and dressed:find("item:5187", 1, true), "the Dressing Room modifier, whatever it is bound to, tries it on")
+  c.alt = nil; env.IsModifiedClick = saveMod
+  QB.API.DressUp, env.DressUpItemLink = saveDressUp, saveDressLink
   -- what you wear changed: the page follows a moment later, one refresh for a burst; hidden, it waits for its next show
   facts[900003] = { 4, 3, "INVTYPE_CHEST" }; c.itemLevel[900003] = 60
   c.equipped[5] = 900003
