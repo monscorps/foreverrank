@@ -635,8 +635,11 @@ function DM.ShowFloor(n)
 end
 
 -- the entries on the shown floor, as the old Encounter Journal drew them: a round face in a ring where each stands
--- (boss_spots.py places them from the Classic database's spawns on the very same art). Click: the loot
+-- (boss_spots.py places them from the Classic database's spawns on the very same art). Entries that stand together
+-- (the Ring of Law's fighters, a stack of trash at one spawn) share a pin: the best one's face, their count in a
+-- badge, every name in the tooltip. Click: the loot
 local PIN = 30
+local CLUSTER = 16 -- (px: entries closer than this share a pin)
 local function pin(i)
   local f = frame
   local p = f.pins[i]
@@ -666,11 +669,24 @@ local function pin(i)
   p.hi:SetVertexColor(1, 0.82, 0.3, 0.6)
   p.hi:SetPoint("CENTER")
   p.hi:SetSize(PIN + 14, PIN + 14)
+  p.badge = p:CreateTexture(nil, "OVERLAY", nil, 1)
+  p.badge:SetTexture(ART .. "glow")
+  p.badge:SetVertexColor(0, 0, 0, 0.9)
+  p.badge:SetSize(16, 16)
+  p.badge:SetPoint("BOTTOMRIGHT", 0, 0) -- (inside the pin: a neighbour may touch it)
+  p.count = fs(p, "GameFontNormalSmall", 10, GOLD, 16, "CENTER")
+  p.count:SetPoint("CENTER", p.badge, "CENTER", 0, 0)
   p:SetScript("OnEnter", function(self)
     local b = self.boss
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:SetText(b.n, GOLD[1], GOLD[2], GOLD[3])
     GameTooltip:AddLine(about(b), 1, 1, 1)
+    if self.list and #self.list > 1 then
+      GameTooltip:AddLine(string.format("%d stand here:", #self.list), 0.6, 0.6, 0.6)
+      for _, e in ipairs(self.list) do
+        if e ~= b then GameTooltip:AddLine(string.format("%s  |cff9a8a70%s|r", e.n, DM.KindLabel(e)), 1, 1, 1) end
+      end
+    end
     GameTooltip:AddLine(#b.i > 0 and string.format("%d item%s of loot. Click to see them.", #b.i, #b.i == 1 and "" or "s") or "No loot recorded yet.", 0.6, 0.6, 0.6)
     GameTooltip:Show()
   end)
@@ -684,45 +700,88 @@ function DM.DrawPins()
   local f = frame
   local d, n = f.data, 0
   local mw, mh = f.map:GetWidth(), f.map:GetHeight()
-  local at = {}
+  -- who stands with whom: DM.Visible lists bosses first, so a group's first entry is its best
+  local groups = {}
   for _, b in ipairs(DM.Visible(d)) do
     if b.f == f.floor and b.x and b.y then
-      n = n + 1
-      local p = pin(n)
-      p.boss = b
-      DM.Face(p.face, b, d)
-      -- a boss in a big gold ring, trash in a small grey one, the rest silver between
-      local kind = DM.Kind(b)
-      p.size = kind == "boss" and PIN or kind == "trash" and PIN - 12 or PIN - 8
-      p:SetSize(p.size, p.size)
-      p.face:SetSize(p.size - 4, p.size - 4)
-      local v = kind == "trash" and 0.55 or 0.75
-      if kind == "boss" then p.ring:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 1) else p.ring:SetVertexColor(v, v, v, 1) end
-      at[n] = { b.x * mw, b.y * mh, p.size }
-      p:Show()
+      local x, y, g = b.x * mw, b.y * mh, nil
+      for _, c in ipairs(groups) do
+        local dx, dy = c.x - x, c.y - y
+        if dx * dx + dy * dy < CLUSTER * CLUSTER then g = c; break end
+      end
+      if g then g.list[#g.list + 1] = b else groups[#groups + 1] = { x = x, y = y, list = { b } } end
     end
   end
-  -- bosses that stand close (Greenskin and Cookie on the ship) are pushed apart until their portraits only touch
-  for _ = 1, 60 do
-    local moved = false
-    for i = 1, n do
-      for j = i + 1, n do
+  -- pins that stand close (Greenskin and Cookie on the ship) are pushed apart, each along the way it least has to
+  -- go, until their boxes only touch, but never further than a portrait's width from where they stand: the room
+  -- is the point. Two that would still overlap (a crowd in one hall) share a pin instead
+  local function sizeOf(c)
+    local kind = DM.Kind(c.list[1])
+    return kind == "boss" and PIN or kind == "trash" and PIN - 12 or PIN - 8
+  end
+  local at
+  repeat
+    at = {}
+    for i, c in ipairs(groups) do at[i] = { c.x, c.y, sizeOf(c) } end
+    for _ = 1, 60 do
+      local moved = false
+      for i = 1, #at do
+        for j = i + 1, #at do
+          local a, c = at[i], at[j]
+          local dx, dy = c[1] - a[1], c[2] - a[2]
+          local need = (a[3] + c[3]) / 2 + 1
+          local ox, oy = need - math.abs(dx), need - math.abs(dy)
+          if ox > 0 and oy > 0 then
+            if ox < oy then
+              local s = dx < 0 and -1 or 1
+              a[1], c[1] = a[1] - s * ox / 2, c[1] + s * ox / 2
+            else
+              local s = dy < 0 and -1 or 1
+              a[2], c[2] = a[2] - s * oy / 2, c[2] + s * oy / 2
+            end
+            moved = true
+          end
+        end
+      end
+      if not moved then break end
+    end
+    local merged = false
+    for i, a in ipairs(at) do
+      local h = groups[i]
+      local dx, dy = a[1] - h.x, a[2] - h.y
+      local far = math.sqrt(dx * dx + dy * dy)
+      if far > a[3] then a[1], a[2] = h.x + dx / far * a[3], h.y + dy / far * a[3] end
+    end
+    for i = 1, #at do
+      for j = i + 1, #at do
         local a, c = at[i], at[j]
-        local dx, dy = c[1] - a[1], c[2] - a[2]
-        local dist, need = math.sqrt(dx * dx + dy * dy), (a[3] + c[3]) / 2 + 1
-        if dist < need then
-          if dist < 0.01 then dx, dy, dist = 1, 0, 1 end
-          local push = (need - dist) / 2
-          a[1], a[2] = a[1] - dx / dist * push, a[2] - dy / dist * push
-          c[1], c[2] = c[1] + dx / dist * push, c[2] + dy / dist * push
-          moved = true
+        local dx, dy = math.abs(c[1] - a[1]), math.abs(c[2] - a[2])
+        if not merged and dx < (a[3] + c[3]) / 2 and dy < (a[3] + c[3]) / 2 then
+          for _, e in ipairs(groups[j].list) do groups[i].list[#groups[i].list + 1] = e end
+          table.remove(groups, j)
+          merged = true
         end
       end
     end
-    if not moved then break end
-  end
-  for i = 1, n do
-    local p, a = f.pins[i], at[i]
+  until not merged
+  for i, c in ipairs(groups) do
+    n = n + 1
+    local p, b = pin(n), c.list[1]
+    -- the pin is the group's encounter (b.o) when it has one: Arugal, not the voidwalker he summons
+    for _, e in ipairs(c.list) do if e.o then b = e; break end end
+    p.boss, p.list = b, c.list
+    DM.Face(p.face, b, d)
+    -- a boss in a big gold ring, trash in a small grey one, the rest silver between
+    local kind = DM.Kind(b)
+    p.size = at[i][3]
+    p:SetSize(p.size, p.size)
+    p.face:SetSize(p.size - 4, p.size - 4)
+    local v = kind == "trash" and 0.55 or 0.75
+    if kind == "boss" then p.ring:SetVertexColor(GOLD[1], GOLD[2], GOLD[3], 1) else p.ring:SetVertexColor(v, v, v, 1) end
+    p.badge:SetShown(#c.list > 1)
+    p.count:SetText(#c.list > 1 and tostring(#c.list) or "")
+    p:Show()
+    local a = at[i]
     p:ClearAllPoints()
     p:SetPoint("CENTER", f.map, "TOPLEFT", math.max(a[3] / 2, math.min(mw - a[3] / 2, a[1])), -math.max(a[3] / 2, math.min(mh - a[3] / 2, a[2])))
   end

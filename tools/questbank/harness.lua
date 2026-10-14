@@ -3357,6 +3357,151 @@ do
   env.C_Item.GetItemInfoInstant = saveInst
 end
 -- [stage: boss-spots] that stage's tests go right below this line
+-- 5.4.2: where the bosses stand on the floor art (boss_spots.py: the room each stands in, by MoP Classic's building
+-- groups, decides the floor; the rectangle the spot; DungeonMap.lua draws them). The dungeons' known truths pin the
+-- data; the map keeps a crowd in its room, shows one floor's bosses at a time and forgets the last dungeon's
+do
+  local DM, env, D, U = QB.DMap, owner.env, QB.Data.DMAP, QB.UI
+  -- every position lies on its floor's art, and a boss without one has no position at all
+  local placed, perDungeon = 0, {}
+  for key, d in pairs(D) do
+    for _, b in ipairs(d.bosses) do
+      if b.f then
+        placed = placed + 1
+        perDungeon[key] = (perDungeon[key] or 0) + 1
+        assert(b.x and b.y and b.x > 0.02 and b.x < 0.98 and b.y > 0.04 and b.y < 0.98, key .. ": " .. b.n .. " is off the art")
+        assert(d.floors[b.f], key .. ": " .. b.n .. " stands on floor " .. b.f .. ", which has no art")
+      else
+        assert(not b.x and not b.y, key .. ": " .. b.n .. " has a spot but no floor")
+      end
+    end
+  end
+  assert(placed >= 260, "bosses placed on the art: " .. placed)
+  for _, key in ipairs({ "d1581", "d717", "d718", "d719", "d209", "d796", "d491", "d1337", "d721", "d2437", "d722", "d1417", "d1584", "d1583", "d2057", "d2017", "d2557", "d2100" }) do
+    assert((perDungeon[key] or 0) >= 4, key .. " has at least four entries on its map: " .. tostring(perDungeon[key]))
+  end
+  -- a dozen known truths: the floor, and the quarter of the art (x and y 0-1 from the top left)
+  local function spot(key, name)
+    for _, b in ipairs(D[key].bosses) do if b.n == name then return b end end
+  end
+  local function at(key, name, f, x0, x1, y0, y1)
+    local b = spot(key, name)
+    assert(b and b.f, key .. " places " .. name)
+    assert(b.f == f, string.format("%s stands on floor %d, not %d", name, b.f, f))
+    assert(b.x >= x0 and b.x <= x1 and b.y >= y0 and b.y <= y1,
+      string.format("%s stands at %.2f, %.2f on floor %d, not within %.2f-%.2f, %.2f-%.2f", name, b.x, b.y, b.f, x0, x1, y0, y1))
+  end
+  at("d1581", "Edwin VanCleef", 2, 0.5, 0.75, 0.35, 0.6)              -- on his ship, right of the middle of Ironclad Cove
+  at("d1581", "Rhahk'Zor", 1, 0.3, 0.5, 0.5, 0.7)                     -- the mines, floor 1
+  at("d209", "Rethilgore", 1, 0.55, 0.8, 0.6, 0.85)                   -- the prison by the entrance
+  at("d209", "Baron Silverlaine", 2, 0.15, 0.45, 0.65, 0.95)          -- the dining hall
+  at("d209", "Fenrus the Devourer", 4, 0.4, 0.75, 0.3, 0.6)           -- the round room
+  at("d209", "Archmage Arugal", 6, 0.5, 0.8, 0.1, 0.35)               -- his chamber: the game's floor 6 (floor 7 is the ramparts, Odo's)
+  at("d209", "Odo the Blindwatcher", 7, 0.4, 0.7, 0.65, 0.9)
+  at("d721", "Mekgineer Thermaplugg", 4, 0.2, 0.45, 0.15, 0.45)      -- Tinkers' Court, the last floor
+  at("d721", "Electrocutioner 6000", 2, 0.15, 0.4, 0.55, 0.8)        -- the Launch Bay
+  at("d1584", "Emperor Dagran Thaurissan", 2, 0.8, 0.98, 0.02, 0.3)  -- the Imperial Seat, top right of Shadowforge City
+  at("d1584", "High Interrogator Gerstahn", 1, 0.35, 0.6, 0.8, 0.98) -- the Detention Block
+  at("d1337", "Archaedas", 2, 0.4, 0.7, 0.35, 0.65)                   -- Khaz'goroth's Seat, the vault
+  at("d1337", "Grimlok", 1, 0.1, 0.35, 0.1, 0.4)                      -- the Stone Vault
+  at("d2057", "Darkmaster Gandling", 4, 0.5, 0.85, 0.15, 0.45)       -- the Headmaster's Study
+  at("d2017", "Baron Rivendare", 2, 0.2, 0.5, 0.05, 0.35)             -- the Slaughterhouse
+  at("d2017", "Grand Crusader Dathrohan", 1, 0.05, 0.35, 0.7, 0.95)  -- the Crimson Throne
+  at("d2100", "Princess Theradras", 2, 0.1, 0.4, 0.65, 0.9)           -- Zaetar's Grave, the end
+  at("d718", "Mutanus the Devourer", 1, 0.2, 0.5, 0.05, 0.3)          -- by Naralex, the end
+  at("d796", "Herod", 3, 0.6, 0.95, 0.02, 0.3)                        -- the Armory's Hall of Champions
+  at("d796", "High Inquisitor Whitemane", 4, 0.35, 0.65, 0.05, 0.35)  -- the Cathedral's chapel
+  at("d796", "Arcanist Doan", 2, 0.7, 0.95, 0.6, 0.9)                 -- the Library's Athenaeum
+  at("d2557", "Immol'thar", 4, 0.2, 0.5, 0.4, 0.75)                   -- his prison
+  at("d2557", "King Gordok", 1, 0.2, 0.45, 0.15, 0.4)                 -- Gordok's Seat
+  at("d2557", "Alzzin the Wildshaper", 6, 0.4, 0.7, 0.15, 0.4)        -- the Shrine of Eldretharr
+  at("d1583", "Highlord Omokk", 3, 0.25, 0.5, 0.4, 0.7)               -- Mok'Doom
+  at("d1583", "Overlord Wyrmthalak", 6, 0.45, 0.7, 0.4, 0.7)          -- the Chamber of Battle
+  at("d1583", "Warchief Rend Blackhand", 7, 0.35, 0.65, 0.1, 0.4)     -- the Stadium, on the upper spire's own map
+  at("d1583", "General Drakkisath", 7, 0.2, 0.45, 0.35, 0.6)          -- the Spire Throne
+  at("d1417", "Shade of Eranikus", 1, 0.55, 0.85, 0.75, 0.98)         -- the Chamber of the Dreamer
+  at("d719", "Aku'mai", 2, 0.7, 0.98, 0.7, 0.98)                      -- his lair
+  at("d719", "Twilight Lord Kelris", 2, 0.35, 0.65, 0.65, 0.95)       -- the Moonshrine Sanctum, not the pool under it
+  at("d719", "Old Serra'kis", 3, 0.45, 0.75, 0.15, 0.45)              -- the Forgotten Pool
+  at("d722", "Amnennar the Coldbringer", 1, 0.3, 0.6, 0.45, 0.75)     -- the Spiral of Thorns
+  assert(not spot("d718", "Lord Pythas").f and not spot("d721", "Techbot").f, "a boss off the drawn art or outside the instance gets no pin")
+  -- Arugal's floor shows its bosses, and nobody else's
+  local f = DM.Open(DM.Find("shadowfang"), "map")
+  DM.ShowFloor(6)
+  local aru
+  for i = 1, f.pinCount do
+    assert(f.pins[i].boss.f == 6, "floor 6 shows floor 6's bosses only")
+    if f.pins[i].boss.n == "Archmage Arugal" then aru = f.pins[i] end
+  end
+  assert(aru and aru:IsShown() and f.tiles[1].__tex == D.d209.floors[6][1], "Arugal's pin on his floor, over that floor's art")
+  assert(aru.list and #aru.list == 2 and aru.list[1].n == "Arugal's Voidwalker" and aru.badge:IsShown() and aru.count:GetText() == "2", "Arugal and the voidwalker he summons share a pin: his face, a 2 in the badge")
+  aru.__scripts.OnEnter(aru)
+  assert(table.concat(lines, "\n"):find("2 stand here:", 1, true) and table.concat(lines, "\n"):find("Arugal's Voidwalker", 1, true), "the pin's tooltip names them both")
+  aru.__scripts.OnLeave(aru)
+  assert(f.floors[7]:IsShown() and not f.floors[6]:IsEnabled() and f.floors[7]:IsEnabled() and f.floors[1].__points[1].x + f.floors[1]:GetWidth() <= f.floors[7].__points[1].x, "seven floor buttons in a row, the sixth pressed")
+  DM.ShowFloor(7)
+  assert(f.pinCount >= 1 and f.pins[1].boss.f == 7, "the ramparts, floor 7, have their own bosses: " .. f.pinCount)
+  -- a crowd stays in its room: the Ring of Law's fighters share one pin with their count, the rest are pushed
+  -- apart, but never further than a portrait's width from where they stand
+  f = DM.Open(DM.Find("blackrock depths"), "map")
+  QB:Settings().djShow.trash = true
+  DM.FillBosses(true); DM.ShowFloor(1)
+  assert(f.pinCount >= 5 and f.pinCount <= 10, "Blackrock Depths' first floor: its eighteen entries on a handful of pins: " .. f.pinCount)
+  local ring
+  for i = 1, f.pinCount do
+    for _, e in ipairs(f.pins[i].list) do if e.n == "Ring of Law: Anub'shiah" then ring = f.pins[i] end end
+  end
+  assert(ring and #ring.list >= 12 and ring.count:GetText() == tostring(#ring.list) and ring.badge:IsShown() and ring.boss.o, "the Ring of Law's fighters, listed twice, share one pin with their count: " .. tostring(ring and #ring.list))
+  local lone
+  for i = 1, f.pinCount do if f.pins[i].boss.n == "Bael'Gar" then lone = f.pins[i] end end
+  assert(lone and #lone.list == 1 and not lone.badge:IsShown() and lone.count:GetText() == "", "Bael'Gar stands alone: no badge")
+  local mw, mh = f.map:GetWidth(), f.map:GetHeight()
+  local nudged = 0
+  for i = 1, f.pinCount do
+    local p, b = f.pins[i], f.pins[i].boss
+    local pt = p.__points[1]
+    local dx, dy = pt.x - b.x * mw, -pt.y - b.y * mh
+    local far = math.sqrt(dx * dx + dy * dy)
+    assert(far <= p.size + 0.01, string.format("%s is %.0f px from where it stands (at most %d)", b.n, far, p.size))
+    if far > 0.5 then nudged = nudged + 1 end
+    assert(pt.x >= p.size / 2 and pt.x <= mw - p.size / 2 and -pt.y >= p.size / 2 and -pt.y <= mh - p.size / 2, b.n .. " is whole on the art")
+  end
+  assert(nudged >= 1, "neighbours were nudged apart: " .. nudged)
+  QB:Settings().djShow.trash = false
+  DM.FillBosses(true); DM.ShowFloor(2)
+  -- another dungeon: its first floor and its own bosses, never the last dungeon's second floor
+  DM.Open(DM.Find("ragefire"), "map")
+  assert(f.floor == 1 and f.pinCount == 4 and f.tiles[1].__tex == D.d2437.floors[1][1], "Ragefire opens on its one floor with its four bosses: " .. f.pinCount)
+  for i = 1, f.pinCount do
+    local mine = false
+    for _, b in ipairs(D.d2437.bosses) do if b == f.pins[i].boss then mine = true end end
+    assert(mine and f.pins[i].boss.f == 1, "a pin is Ragefire's own")
+  end
+  for i = f.pinCount + 1, #f.pins do assert(not f.pins[i]:IsShown(), "the last dungeon's spare pins are hidden") end
+  -- a boss whose floor has no art never reaches the map, and picking it leaves the floor alone
+  local fake = { n = "Nowhere Man", k = "boss", f = 9, x = 0.5, y = 0.5, i = {} }
+  table.insert(D.d2437.bosses, fake)
+  DM.Fill(DM.Find("ragefire"), "map")
+  assert(f.pinCount == 4, "no pin for a boss on a floor the art lacks")
+  DM.ShowBoss(fake)
+  assert(f.floor == 1 and f.lootName:GetText() == "Nowhere Man", "picking it shows its loot on the floor you were on")
+  table.remove(D.d2437.bosses)
+  DM.Fill(DM.Find("ragefire"), "map")
+  -- the sheets: the journal on the keep's top floor and on Blackrock Depths' crowded first floor
+  local sheets = {}
+  for _, s in ipairs({ { "shadowfang", 6, "Dungeon Journal, Shadowfang Keep, floor 6" }, { "blackrock spire", 7, "Dungeon Journal, Blackrock Spire, floor 7" },
+                       { "blackrock depths", 1, "Dungeon Journal, Blackrock Depths, floor 1" }, { "gnomeregan", 4, "Dungeon Journal, Gnomeregan, floor 4" } }) do
+    DM.Open(DM.Find(s[1]), "map"); DM.ShowFloor(s[2]); U:Refresh()
+    local bad = checkLayout(U.frame, s[3])
+    assert(#bad == 0, s[3] .. ": " .. table.concat(bad, "; "))
+    sheets[#sheets + 1] = dumpLayout(U.frame, s[3])
+  end
+  if LAYOUT_OUT then
+    local fh = assert(io.open((LAYOUT_OUT:gsub("%.json$", "")) .. ".boss-spots.json", "w"))
+    fh:write(json(sheets)); fh:close()
+  end
+  U:ShowTab(1)
+end
 
 
 
