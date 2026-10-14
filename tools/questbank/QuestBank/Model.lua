@@ -14,15 +14,34 @@ QB.Model = M
 local floor, sqrt, huge = math.floor, math.sqrt, math.huge
 local D
 
-local RUN = 7          -- yards a second on foot
+local RUN = 7          -- yards a second on foot: the pace the tables' walking minutes were built at (travel.py)
 local DETOUR = 1.3     -- roads against a straight line
 local CLUSTER = 90     -- NPCs closer than this share a stop
 local TALK = 0.25      -- minutes per NPC: talk and pick rewards
 local PER_QUEST = 0.06 -- minutes per extra quest at the same NPC
 local HEARTH = 0.5     -- the cast and the loading screen
-local MOUNT = 0.625    -- a 60% mount
+local MOUNT = 0.625    -- a 60% mount, until this character's own is measured
+local TAKEOFF = 0.25   -- minutes a flight's takeoff takes before the air (travel.py's TAKEOFF)
 local CHEAP = 400      -- a stop worth less XP than this goes last
-M.MOUNT, M.RUN, M.DETOUR = MOUNT, RUN, DETOUR
+M.MOUNT, M.RUN, M.DETOUR, M.TAKEOFF = MOUNT, RUN, DETOUR, TAKEOFF
+
+-- this character's pace: yards a second on foot and the mounted factor (minutes mounted against on foot), measured
+-- by QB.Measure when it has enough samples, the tables' guesses (7 and a 60% mount) until then. The third return says
+-- what was measured, for /qb legacy
+function M.Speed()
+  local foot, ride = nil, nil
+  if QB.Measure and QB.Measure.Speeds then foot, ride = QB.Measure.Speeds() end
+  local run = foot or RUN
+  local mount = ride and (run / ride) or MOUNT
+  local what = foot and ride and "measured on foot and mounted" or foot and "measured on foot" or ride and "measured mounted" or nil
+  return run, mount, what
+end
+
+-- the factor on the tables' walking minutes (built at RUN on foot): mounted or not, at this character's own pace
+function M.Factor(mounted)
+  local run, mount = M.Speed()
+  return (mounted and mount or 1) * RUN / run
+end
 
 local function round(x) return floor(x + 0.5) end
 -- the game's own rounding of quest XP (the server's RoundXPValue): to 5 up to 100, to 10 up to 500, to 25 up to
@@ -89,7 +108,10 @@ function M.HubTravel(fac, a, b)
   local i = (a - 1) * d.n + b
   local f1, f2 = d.f:byte(2 * i - 1, 2 * i)
   local w1, w2 = d.w:byte(2 * i - 1, 2 * i)
-  return (B64[f1] * 64 + B64[f2]) / 10, (B64[w1] * 64 + B64[w2]) / 10, KIND[d.k:sub(i, i)] or "flight"
+  local fixed, kind = (B64[f1] * 64 + B64[f2]) / 10, KIND[d.k:sub(i, i)] or "flight"
+  -- a flight's minutes with Frequent Flier (a boat's, the tram's and a portal's are the game's own)
+  if kind == "flight" and QB.Legacy then fixed = QB.Legacy.FlightMinutes(fixed) end
+  return fixed, (B64[w1] * 64 + B64[w2]) / 10, kind
 end
 
 local function yards(a, b)
@@ -247,7 +269,7 @@ end
 local function problem(entries, opts)
   D = QB.Data
   local fac = opts.fac or "A"
-  local mf = opts.mounted and MOUNT or 1
+  local mf = M.Factor(opts.mounted)
   local stops, unplaced = buildStops(entries, fac)
   local n = #stops
   local P = { stops = stops, unplaced = unplaced, n = n, fac = fac, mf = mf, level = opts.level, xp = opts.xp,

@@ -207,6 +207,7 @@ function Walk:Init()
     if self.elapsed < TICK then return end
     self.elapsed = 0
     if on() then Walk.Note() end
+    if QB.Measure then QB.Measure.Sample() end -- your pace, on foot and mounted (Legacy.lua)
   end, "walked trails"))
   f:SetScript("OnEvent", function() last = nil end) -- a loading screen: the next point starts a new trail
   pcall(f.RegisterEvent, f, "PLAYER_ENTERING_WORLD")

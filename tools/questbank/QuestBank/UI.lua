@@ -1919,7 +1919,7 @@ function UI.Here()
     here = QB.Model.Place(fac, wp.c, wp.wx, wp.wy)
     if here.hub == 0 then here = nil end
   end
-  local mf = QB:Mounted() and 0.625 or 1
+  local mf = QB.Model.Factor(QB:Mounted())
   local hub = here and QB.Data.HUB[fac] and QB.Data.HUB[fac][here.hub]
   return here, mf, hub and hub[1] or nil
 end
@@ -3798,7 +3798,8 @@ function UI.ObjectiveLegs(maxLegs)
     end
   end
   local legs, pos = {}, here
-  local speed = 7 * (QB:Mounted() and 1.6 or 1) -- yards a second
+  local M = QB.Model
+  local perYard = M.DETOUR / M.RUN / 60 * M.Factor(QB:Mounted()) -- minutes a yard, at your pace
   local function dist(a, b) return math.sqrt((a.wx - b.wx) ^ 2 + (a.wy - b.wy) ^ 2) end
   while #pending > 0 and #legs < (maxLegs or 5) do
     local bestI, bestP, bestD
@@ -3808,7 +3809,7 @@ function UI.ObjectiveLegs(maxLegs)
         if not bestD or d < bestD then bestI, bestP, bestD = i, p, d end
       end
     end
-    local leg = { sp = bestP.sp, w = bestP.w, yards = bestD, mins = bestD * 1.3 / speed / 60, quests = { pending[bestI].q } }
+    local leg = { sp = bestP.sp, w = bestP.w, yards = bestD, mins = bestD * perYard, quests = { pending[bestI].q } }
     local name = bestP.sp.name and D.SN and D.SN[bestP.sp.name]
     leg.name = name or pending[bestI].q.name
     table.remove(pending, bestI)

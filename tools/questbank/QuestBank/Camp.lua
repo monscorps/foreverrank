@@ -22,9 +22,14 @@ local Camp = {}
 QB.Camp = Camp
 
 local STILL = 20          -- seconds standing still before the sleeping bag lights
-local CAMP_CD = 3600      -- the shared camp cooldown
+local CAMP_CD = 3600      -- the shared camp cooldown, without Field Guide
 local TICK = 2            -- seconds between looks
 Camp.STILL, Camp.CAMP_CD = STILL, CAMP_CD
+-- the shared camp cooldown in seconds: the hour, less Field Guide's 288 / 612 / 900 (QB.Legacy)
+function Camp.CampCD() return QB.Legacy and QB.Legacy.CampCooldown() or CAMP_CD end
+-- a food's text with Gourmand's longer Well Fed ("15 min" reads 20 / 25 / 30)
+local function foodText(s) return QB.Legacy and QB.Legacy.FoodText(s) or s end
+Camp.FoodText = foodText
 
 local plain = QB.Plain
 local function now() return GetTime and GetTime() or 0 end
@@ -157,7 +162,15 @@ function Camp.Auras()
       if type(id) == "number" and id > 0 then ids[id] = true end
       if type(n) == "string" then
         local exp = plain(a.expirationTime)
-        out[n] = { n = plain(a.applications) or 1, exp = type(exp) == "number" and exp > 0 and exp or nil, icon = plain(a.icon) }
+        local e = { n = plain(a.applications) or 1, exp = type(exp) == "number" and exp > 0 and exp or nil, icon = plain(a.icon) }
+        -- the Cozy Sleeping Bag's buff is 429959 "Well-Rested" (1.60.1.70338), with a hyphen; the Legacy perk's hidden
+        -- passive 1225478 is "Well Rested" and is never the bag's. Either name counts when the id isn't the perk's
+        local L = QB.Legacy
+        local perk, bag = L and L.PERK_WELL_RESTED or 1225478, L and L.BAG_WELL_RESTED or 429959
+        if id ~= perk then
+          out[n] = e
+          if id == bag or n == "Well-Rested" then out["Well Rested"] = e end
+        end
       end
     end
   end
@@ -379,11 +392,18 @@ end
 -- placed one
 local function campCD(best, t)
   local start, dur = itemCD(best.id)
-  if dur == 0 and campAt and t - campAt < CAMP_CD then start, dur = campAt, CAMP_CD end
+  local cd = Camp.CampCD()
+  if dur == 0 and campAt and t - campAt < cd then start, dur = campAt, cd end
   if dur > 0 and start + dur - t <= 0 then return 0, 0 end
   return start, dur
 end
 local function fireNear(t) return fireAt ~= nil and t - fireAt < 300 end
+-- "All camp features share an hour's cooldown.", shorter with Field Guide
+function Camp.CooldownText()
+  local cd = Camp.CampCD()
+  if cd >= CAMP_CD then return "All camp features share an hour's cooldown." end
+  return string.format("All camp features share a %d-minute cooldown (Field Guide).", math.floor(cd / 60 + 0.5))
+end
 
 -- what each icon shows now: nil to hide it, else { tex, time, count, lit, grey, item or spell, cd = { start, dur }, tip }
 function Camp.State()
@@ -401,7 +421,7 @@ function Camp.State()
       local f = foods[1]
       if f then
         out.food = { tex = "Interface\\Icons\\" .. f.e.i, count = count(f.id), lit = true, item = f.id,
-                     tip = { "Not Well Fed", f.e.n .. ": " .. (f.e.g or "Well Fed") .. ". Click to eat." } }
+                     tip = { "Not Well Fed", f.e.n .. ": " .. foodText(f.e.g or "Well Fed") .. ". Click to eat." } }
       else
         out.food = { tex = 133945, grey = true, tip = { "Not Well Fed", "No food in your bags that gives Well Fed." } }
       end
@@ -419,7 +439,7 @@ function Camp.State()
       out.camp = { tex = "Interface\\Icons\\" .. best.e.i, lit = up and near, grey = not up, item = best.id, cd = (not up) and { cdStart, cdDur } or nil,
                    time = (not up) and mins(cdStart + cdDur - t) or "",
                    tip = { up and (near and "Place a camp feature" or "Camp features ready") or ("Camp cooldown: " .. mins(cdStart + cdDur - t)),
-                           table.concat(names, "\n"), up and (near and "Click to place the first." or "Light a campfire, then click to place the first.") or "All camp features share an hour's cooldown." } }
+                           table.concat(names, "\n"), up and (near and "Click to place the first." or "Light a campfire, then click to place the first.") or Camp.CooldownText() } }
     end
   end
   if s.fire then
@@ -490,7 +510,7 @@ function Camp.Missing()
     local f = Camp.Foods(bags)[1]
     if f then
       out[#out + 1] = { key = "food", tex = "Interface\\Icons\\" .. f.e.i, item = f.id, count = count(f.id),
-                        tip = { "Well Fed", f.e.n .. ": " .. (f.e.g or "Well Fed") .. ".", "Click to eat it." } }
+                        tip = { "Well Fed", f.e.n .. ": " .. foodText(f.e.g or "Well Fed") .. ".", "Click to eat it." } }
     end
   end
   for i, sp in ipairs(Camp.SelfMissing(names, ids)) do
@@ -690,7 +710,7 @@ end
 
 function Camp.CooldownLeft()
   if not campAt then return 0 end
-  return math.max(0, CAMP_CD - (now() - campAt))
+  return math.max(0, Camp.CampCD() - (now() - campAt))
 end
 
 -- a campfire is here: yours lit, or one under your Interact key

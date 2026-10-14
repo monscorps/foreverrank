@@ -568,10 +568,15 @@ local function newClient(o)
     DoesAddOnHaveLoadError = function(n) local a = (c.addons or {})[n]; return a and a.loadError or false end,
     IsAddonVersionCheckEnabled = function() return true end,
   }
-  -- the player's helpful auras: c.auras = { spellId, ... }
+  -- the player's helpful auras: c.auras = { spellId, ... }; c.buffs = { name or { name = , spellId = , applications = ,
+  -- expirationTime = }, ... } as HELPFUL
   env.C_UnitAuras = {
     GetAuraDataByIndex = function(unit, i, filter)
-      if filter == "HELPFUL" and c.buffs then local n = c.buffs[i]; return n and { name = n, spellId = 0 } or nil end
+      if filter == "HELPFUL" and c.buffs then
+        local n = c.buffs[i]
+        if type(n) == "table" then return { name = n.name, spellId = n.spellId or 0, applications = n.applications, expirationTime = n.expirationTime, icon = n.icon } end
+        return n and { name = n, spellId = 0 } or nil
+      end
       local a = (c.auras or {})[i]; return a and { spellId = a } or nil
     end,
   }
@@ -891,6 +896,29 @@ local function newClient(o)
   end
   env.UnitIsDeadOrGhost = function() return c.ghost or false end
   env.ERR_NEWTAXIPATH = "New flight path discovered!"
+  -- Legacy (Blizzard_LegacySystem's trait trees): c.legacy = { [node] = rank } gives every tree a config and each
+  -- node its committed rank; nil is a client with no Legacy loaded (no config). c.traitCalls counts the reads
+  c.traitCalls = 0
+  env.C_Traits = {
+    GetConfigIDByTreeID = function(tree)
+      c.traitCalls = c.traitCalls + 1
+      if not c.legacy then return nil end
+      return 1000 + tree
+    end,
+    GetNodeInfo = function(cfg, node)
+      c.traitCalls = c.traitCalls + 1
+      assert(type(cfg) == "number" and cfg > 1000, "GetNodeInfo needs the config the tree gave")
+      local r = c.legacy and c.legacy[node] or 0
+      return { ID = node, activeRank = r, currentRank = r, ranksPurchased = r, maxRanks = 5, type = 0, entryIDs = {} }
+    end,
+  }
+  -- your speed as the game reports it: c.speed = { current, run } (yards a second; 0, 7 standing on foot), and whether
+  -- you sit on a mount (c.mounted)
+  env.GetUnitSpeed = function(unit)
+    local sp = c.speed or { 0, 7 }
+    return sp[1], sp[2], 7, 4.72
+  end
+  env.IsMounted = function() return c.mounted or false end
   -- Astral Recall: c.recallCD = when it was cast (15 min)
   env.C_Spell = {
     GetSpellTexture = function(id) return id == 556 and 136010 or 134400 end,
@@ -3372,7 +3400,9 @@ do
   env.C_Item.GetItemInfoInstant = saveInst
 end
 -- the layout sheets (dumpLayout) and the layout problems every stage's tests add to, written out at the end
+-- (STAGE_LAYOUTS and STAGE_PROBLEMS are the same tables, for the stage blocks that name them that way)
 local layouts, problems = {}, {}
+STAGE_LAYOUTS, STAGE_PROBLEMS = layouts, problems
 -- [stage: boss-spots] that stage's tests go right below this line
 
 
@@ -3527,6 +3557,358 @@ end
 
 
 -- [stage: legacy] that stage's tests go right below this line
+STAGE_LAYOUTS, STAGE_PROBLEMS = STAGE_LAYOUTS or {}, STAGE_PROBLEMS or {}
+-- Legacy perks and live measurement (Legacy.lua): the perks' ranks from C_Traits, read again on the trait events;
+-- what they change (flights, the camp cooldown, Well Fed, buffs, rested XP, talents); the measured pace; flights
+-- timed; the sleeping bag's Well Rested by its spell id; /qb legacy
+do
+  local c = newClient({
+    name = "Legacy", level = 30, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Dwarf",
+    log = { { 7, 0 } }, done = {}, group = false, guild = false, world = { 0, -8833, 479 }, bind = "Goldshire",
+    riding = false, bagSlots = {}, map = 1453,
+  })
+  c.ev(c.QB.eventFrame, "ADDON_LOADED", "QuestBank")
+  c.ev(c.QB.eventFrame, "PLAYER_LOGIN")
+  tick(c, 1)
+  local QB, env = c.QB, c.env
+  local L, Ms, TV, M, Camp, D, API = QB.Legacy, QB.Measure, QB.Travel, QB.Model, QB.Camp, QB.Data, QB.API
+  local function ascii(s) return not s:find("[\128-\255]") end
+  local function near(a, b, eps) return math.abs(a - b) <= (eps or 1e-6) end
+  local function traitEvent(e, ...) L.frame.__scripts.OnEvent(L.frame, e, ...) end
+
+  -- (a) the perks' table: 21 live perks, each node once, three trees; nothing read yet counts as rank 0
+  local nodes, trees = {}, {}
+  for _, p in ipairs(L.PERKS) do
+    assert(not nodes[p.node] and p.ranks >= 1 and L.TREE_NAME[p.tree] and type(p.name) == "string", "a perk: " .. tostring(p.name))
+    nodes[p.node], trees[p.tree] = true, true
+  end
+  assert(#L.PERKS == 21 and trees[1187] and trees[1188] and trees[1189], "21 perks over the three trees")
+  assert(L.frame and L.Rank(110300) == 0 and L.FlightFactor() == 1 and L.CampCooldown() == 3600 and L.FoodFactor() == 1
+    and L.BuffFactor() == 1 and L.Rested() == 0 and L.Talented() == 10, "no Legacy on this character: every perk rank 0, the tables' numbers")
+  assert(env.QuestBankDB.diag.legacy and env.QuestBankDB.diag.legacy.reads >= 1 and env.QuestBankDB.diag.legacy.trees[1188] == false,
+    "diag: the read, no config for the Adventure tree")
+
+  -- (b) ranks read on the events, from the tree's config; cached between them
+  c.legacy = { [110300] = 1, [110304] = 2, [110313] = 3, [110316] = 1, [110301] = 2, [110298] = 3 }
+  assert(L.Rank(110300) == 0, "kept until an event or a read")
+  local calls, ver = c.traitCalls, TV.ver
+  traitEvent("TRAIT_NODE_CHANGED", 110300)
+  assert(c.traitCalls > calls and L.Rank(110300) == 1 and L.Rank(110304) == 2 and L.Rank(110313) == 3 and L.Rank(110316) == 1
+    and L.Rank(110301) == 2 and L.Rank(110298) == 3 and L.Rank(110289) == 0, "TRAIT_NODE_CHANGED: the ranks read again")
+  assert(near(L.FlightFactor(), 1 / 1.2) and L.CampCooldown() == 2988 and near(L.FoodFactor(), 2.0) and near(L.BuffFactor(), 1.5)
+    and near(L.Rested(), 0.08) and L.Talented() == 7 and select(2, L.Talented()) == 3, "what the ranks mean: flights / 1.2, camp 2988 s, food x2, buffs x1.5, rested +8%, talents at 7")
+  c.legacy[110313] = 2; L.Read()
+  assert(near(L.FoodFactor(), 1.67), "Gourmand 2: x1.67")
+  c.legacy[110313] = 3; L.Read()
+  c.legacy[110304] = 3
+  traitEvent("TRAIT_CONFIG_UPDATED", 2188)
+  assert(L.CampCooldown() == 2700, "TRAIT_CONFIG_UPDATED: Field Guide 3: 2700 s")
+  c.legacy[110304] = 1
+  traitEvent("TRAIT_CONFIG_LIST_UPDATED")
+  assert(L.CampCooldown() == 3312, "TRAIT_CONFIG_LIST_UPDATED: Field Guide 1: 3312 s")
+  c.legacy[110313] = 1
+  traitEvent("PLAYER_ENTERING_WORLD")
+  assert(near(L.FoodFactor(), 1.33), "PLAYER_ENTERING_WORLD: Gourmand 1: x1.33")
+  local dg = env.QuestBankDB.diag.legacy
+  assert(dg.reads >= 5 and dg.events == 3 and dg.ranks[110300] == 1 and dg.trees[1188] == 2188 and dg.trees[1187] == 2187 and dg.at,
+    "diag: reads, three trait events, the ranks and the configs: " .. tostring(dg.reads) .. "/" .. tostring(dg.events))
+  assert(L.FoodText("+1 Strength, 15 min") == "+1 Strength, 20 min" and L.FoodText("Well Fed") == "Well Fed" and L.FoodText(nil) == nil, "a food's 15 min reads 20 with Gourmand 1")
+  c.legacy[110313] = 2; L.Read()
+  assert(L.FoodText("+1 Strength, 15 min") == "+1 Strength, 25 min", "Gourmand 2: 25 min")
+  c.legacy[110313] = 3; L.Read()
+  assert(L.FoodText("+1 Strength, 15 min") == "+1 Strength, 30 min", "Gourmand 3: 30 min")
+  -- Frequent Flier: a flight of 0.25 takeoff and 6.0 in the air plans as 0.25 + 5.0
+  assert(near(L.FlightMinutes(6.25), 5.25) and near(L.FlightMinutes(0.2), 0.2) and near(M.TAKEOFF, 0.25), "6.0 minutes in the air become 5.0, the takeoff stays")
+  assert(TV.ver > ver, "the flights changed: the plans know")
+  -- the client won't say, or errors: rank 0, no error
+  local saveNode = env.C_Traits.GetNodeInfo
+  env.C_Traits.GetNodeInfo = function() return { activeRank = SECRET.num() } end
+  L.Read()
+  assert(L.Rank(110300) == 0 and L.FlightFactor() == 1, "a secret rank: 0")
+  env.C_Traits.GetNodeInfo = function() error("no traits here") end
+  L.Read()
+  assert(L.Rank(110300) == 0, "an error from the client: 0")
+  env.C_Traits.GetNodeInfo = saveNode
+  L.Read()
+  assert(L.Rank(110300) == 1 and near(L.FlightFactor(), 1 / 1.2), "and read again")
+
+  -- (c) /qb legacy: every perk's rank by tree, what QuestBank counts with, in plain ASCII
+  c.chat = {}
+  env.SlashCmdList.QUESTBANK("legacy")
+  local said = table.concat(c.chat, "\n")
+  for _, want in ipairs({ "Frequent Flier 1/1", "Field Guide 1/3", "Gourmand 3/3", "Permanence 1/2", "Well Rested 2/5", "Talented 3/5", "Master Chef 0/5",
+                          "Diplomat 0/5", "Legacy, Professions:", "Legacy, Adventure:", "Legacy, Progression:", "camp cooldown 55 min", "Well Fed 30 min",
+                          "class buffs x1.5", "rested XP +8%", "talents at level 7", "the tables' guess", "trait events" }) do
+    assert(said:find(want, 1, true), "/qb legacy says " .. want .. ":\n" .. said)
+  end
+  assert(#c.chat == 6 and ascii(said), "six lines, ASCII only")
+  for _, line in ipairs(c.chat) do assert(#line < 400, "a chat line that fits: " .. #line) end
+  print("/qb legacy: " .. c.chat[2]:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+  print("/qb legacy: " .. c.chat[4]:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""))
+  local saveTraits = env.C_Traits
+  env.C_Traits = nil
+  L.Read()
+  c.chat = {}
+  env.SlashCmdList.QUESTBANK("legacy")
+  assert(L.Rank(110300) == 0 and table.concat(c.chat, "\n"):find("No Legacy on this client", 1, true), "a client without C_Traits (Classic Era): rank 0, said so")
+  env.C_Traits = saveTraits
+  L.Read()
+
+  -- (d) the camp bar: Field Guide's cooldown and text, Gourmand's minutes on the food
+  c.legacy[110304], c.legacy[110313] = 1, 1
+  L.Read()
+  local cf = Camp.frame
+  local function cev(e, ...) cf.__scripts.OnEvent(cf, e, ...) end
+  local function ic(k) return env["QuestBankCamp_" .. k] end
+  c.profs = { { "Blacksmithing", 150 }, { "Alchemy", 10 }, { "Fishing", 0 }, { "Cooking", 60 }, { "First Aid", 30 } }
+  c.o.bagSlots = { { 279988, 1 }, { 279981, 2 }, { 2888, 5 }, { 211527, 1 } }
+  c.buffs = {}
+  assert(D.FOOD[2888].g:find("15 min", 1, true), "the ribs' own text says 15 min")
+  cev("PLAYER_ENTERING_WORLD")
+  local bar, food, camp, bag = env.QuestBankCampBar, ic("food"), ic("camp"), ic("bag")
+  assert(bar and bar:IsShown() and food and camp and bag, "the bar with the food, the anvil and the bag")
+  assert(Camp.CampCD() == 3312 and Camp.CooldownText() == "All camp features share a 55-minute cooldown (Field Guide).", "Field Guide 1: 55 minutes, said so")
+  assert(food.state.tip[2]:find("20 min", 1, true) and not food.state.tip[2]:find("15 min", 1, true), "Gourmand 1: the ribs say 20 min: " .. food.state.tip[2])
+  cev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
+  cev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279988].sp)
+  assert(camp.state.grey and camp.state.cd and camp.state.cd[2] == 3312 and camp.time:GetText() == "56m" and camp.state.tip[3] == Camp.CooldownText()
+    and Camp.CooldownLeft() > 3300 and Camp.CooldownLeft() <= 3312, "placed: the 55-minute cooldown sweeps, 56m on the icon: " .. tostring(camp.time:GetText()))
+  -- (the bar is an icon strip with its minutes on the icons' bottom edge, as a WeakAura's: a sheet, not the window check)
+  assert(camp.time:GetStringWidth() < camp:GetWidth() - 4 and camp.time.__points[1].point == "BOTTOM", "56m fits its icon")
+  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(bar, "Camp bar, Field Guide 1: the anvil's 55-minute cooldown")
+  c.legacy[110304] = 2; L.Read(); Camp.Refresh()
+  assert(camp.state.cd[2] == 2988 and camp.time:GetText() == "50m" and camp.state.tip[3]:find("50-minute", 1, true), "Field Guide 2: 2988 s")
+  c.legacy[110304] = 3; L.Read(); Camp.Refresh()
+  assert(camp.state.cd[2] == 2700 and camp.time:GetText() == "45m" and camp.state.tip[3]:find("45-minute", 1, true), "Field Guide 3: 2700 s")
+  c.legacy[110304] = 0; L.Read(); Camp.Refresh()
+  assert(camp.state.cd[2] == 3600 and camp.time:GetText() == "1h" and camp.state.tip[3] == "All camp features share an hour's cooldown.", "no Field Guide: the hour")
+  -- the game's own cooldown still wins when it answers
+  local saveCD = env.C_Container.GetItemCooldown
+  env.C_Container.GetItemCooldown = function(id) if id == 279988 then return env.GetTime() - 3000, 3312, 1 end return 0, 0, 1 end
+  Camp.Refresh()
+  assert(camp.state.cd[2] == 3312 and camp.time:GetText() == "6m", "the item's own cooldown: six minutes left")
+  env.C_Container.GetItemCooldown = saveCD
+  c.legacy[110313] = 3; L.Read(); Camp.Refresh()
+  assert(food.state.tip[2]:find("30 min", 1, true), "Gourmand 3: the ribs say 30 min")
+  -- the missing-buffs banner says the same of the food
+  c.resting = true; cev("PLAYER_UPDATE_RESTING")
+  c.resting = false; cev("PLAYER_UPDATE_RESTING")
+  local B = env.QuestBankBuffBanner
+  assert(B and B:IsShown() and env.QuestBankBuff_1 and env.QuestBankBuff_1.state.tip[2]:find("30 min", 1, true), "the banner: the ribs, 30 min")
+  for _, pr in ipairs(checkLayout(B, "Missing buffs banner, Gourmand")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(B, "Missing buffs banner, Gourmand 3: the ribs' 30 min")
+  Camp.HideBanner()
+  c.legacy[110313] = 0; L.Read(); Camp.Refresh()
+  assert(food.state.tip[2]:find("15 min", 1, true), "no Gourmand: 15 min")
+
+  -- (e) the sleeping bag's Well Rested by its spell id: 429959 "Well-Rested"; the perk's 1225478 "Well Rested" never
+  tick(c, 25); Camp.Refresh()
+  c.buffs = { { name = "Well Rested", spellId = 1225478, applications = 3 } }
+  Camp.Refresh()
+  assert(Camp.Auras()["Well Rested"] == nil and not API.HasWellRested() and bag.state.count == nil and bag.state.tip[1] == "Well Rested 0/3",
+    "the Legacy perk's passive is not the bag's buff")
+  c.buffs = { { name = "Well-Rested", spellId = 429959, applications = 2, expirationTime = c.clock + 100 } }
+  Camp.Refresh()
+  local a = Camp.Auras()["Well Rested"]
+  assert(a and a.n == 2 and API.HasWellRested() and bag.state.count == 2 and bag.state.tip[1] == "Well Rested 2/3", "the bag's buff by its id: two stacks")
+  c.buffs = { "Well Rested" }
+  assert(Camp.Auras()["Well Rested"] and API.HasWellRested(), "an older client's name without an id counts")
+  c.buffs = { "Well-Rested" }
+  assert(Camp.Auras()["Well Rested"] and API.HasWellRested(), "the hyphen counts too")
+  c.buffs = { { name = "Well Fed", spellId = 19705 } }
+  assert(not API.HasWellRested(), "fed is not rested")
+  c.buffs = nil
+  c.rested = true
+  assert(API.HasWellRested(), "the old way (AuraUtil) still answers when the aura list is empty")
+  c.rested = false
+  assert(not API.HasWellRested(), "and says no")
+  c.buffs = {}
+
+  -- (f) the measured pace: GetUnitSpeed on Walk's tick, on foot and mounted, the median; the model follows
+  local run0, mf0, what0 = M.Speed()
+  assert(run0 == 7 and near(mf0, 0.625) and what0 == nil and near(M.Factor(true), 0.625) and M.Factor(false) == 1, "nothing measured: the tables' 7 yd/s and the 60% mount")
+  c.speed, c.mounted = { 0, 7.56 }, false
+  tick(c, 1)
+  assert(Ms.Speeds() == nil and #Ms.DB().foot == 0, "standing still: no sample")
+  c.speed = { 7.56, 7.56 }
+  c.taxi = true; tick(c, 1); c.taxi = false
+  assert(#Ms.DB().foot == 0, "on a taxi: none")
+  c.ghost = true; tick(c, 1); c.ghost = false
+  assert(#Ms.DB().foot == 0, "dead: none")
+  local saveInst = env.IsInInstance
+  env.IsInInstance = function() return true, "party" end
+  tick(c, 1)
+  env.IsInInstance = saveInst
+  assert(#Ms.DB().foot == 0, "in a dungeon: none")
+  c.buffs = { { name = "Aspect of the Cheetah", spellId = 5118 } }; tick(c, 1)
+  c.buffs = { "Westfall Stew" }; tick(c, 1)
+  c.buffs = { { name = "Travel Form", spellId = 783 } }; tick(c, 1)
+  c.buffs = { { name = "Ghost Wolf", spellId = 2645 } }; tick(c, 1)
+  assert(#Ms.DB().foot == 0, "with a speed buff on: none")
+  c.buffs = {}
+  c.speed = { 30, 30 }; tick(c, 1)
+  c.speed = { SECRET.num(), SECRET.num() }; tick(c, 1)
+  assert(#Ms.DB().foot == 0, "an impossible speed, a secret one: none")
+  c.speed = { 7.56, 7.56 }
+  tick(c, 1)
+  local foot = Ms.DB().foot
+  assert(#foot >= Ms.ENOUGH and foot[1] == 7.56 and Ms.Speeds() == 7.56, "a second of running with a minor speed enchant: samples, the median 7.56")
+  local run1, mf1, what1 = M.Speed()
+  assert(run1 == 7.56 and near(mf1, 0.625) and what1 == "measured on foot" and near(M.Factor(false), 7 / 7.56) and near(M.Factor(true), 0.625 * 7 / 7.56),
+    "the model runs at the measured pace; the mount is still the tables' until measured")
+  -- the walk minutes follow: the model's, the router's, the quest list's and the chain's factor
+  local a1, b1 = M.Place("A", 0, -8833, 479), M.Place("A", 0, -8833 + 2100, 479)
+  local base = 2100 * M.DETOUR / M.RUN / 60
+  assert(near(M.Between(a1, b1, "A", M.Factor(false)), base * 7 / 7.56, 1e-4), "2,100 yards on foot: the tables' minutes x 7 / 7.56")
+  assert(near(TV.Opts("pin").mf, 7 / 7.56) and TV.Opts("pin").mounted == false, "the router's factor is the model's")
+  local plan = TV.Route({ c = 0, wx = -8833, wy = 479 }, { name = "Near", c = 0, wx = -8833 + 2100, wy = 479 }, TV.Opts("pin"))
+  assert(plan and #plan.legs == 1 and near(plan.min, base * 7 / 7.56, 1e-4), "a walk's plan: the measured pace")
+  assert(near(select(2, QB.UI.Here()), M.Factor(QB:Mounted())), "the quest list's factor is the model's")
+  -- a spike inside the range doesn't move the median; mounted samples make the mount factor yours
+  c.speed = { 9, 9 }
+  assert(Ms.Sample() and Ms.Speeds() == 7.56, "one odd sample: the median stands")
+  c.mounted, c.speed = true, { 14, 14 }
+  tick(c, 1)
+  local run2, mf2, what2 = M.Speed()
+  assert(select(2, Ms.Speeds()) == 14 and run2 == 7.56 and near(mf2, 7.56 / 14) and what2 == "measured on foot and mounted" and near(M.Factor(true), 0.5),
+    "a 100% mount measured: 14 yd/s, the mount factor 0.54, on the tables' minutes 0.5")
+  assert(#Ms.DB().mount <= Ms.KEEP and #Ms.DB().foot <= Ms.KEEP and env.QuestBankDB.chars[QB:CharKey()].measure.run == 7.56, "kept per character, the last samples only")
+  c.mounted, c.speed = false, { 0, 7 }
+  c.chat = {}
+  env.SlashCmdList.QUESTBANK("legacy")
+  assert(table.concat(c.chat, "\n"):find("7.6 yards a second on foot, mounted x1.85 (measured on foot and mounted)", 1, true), "/qb legacy says the measured pace:\n" .. table.concat(c.chat, "\n"))
+  Ms.Reset()
+  assert(M.Speed() == 7 and M.Factor(true) == 0.625, "reset: the tables again")
+
+  -- (g) no copy of the tables' pace outside the model: Core, UI, Travel and Arrow ask the model
+  for _, f in ipairs({ "Core.lua", "UI.lua", "Travel.lua", "Arrow.lua", "Camp.lua" }) do
+    local src = io.open(HERE .. "/QuestBank/" .. f):read("*a")
+    assert(not src:find("0.625", 1, true) and not src:find("7 * (", 1, true) and not src:find("* 1.3 /", 1, true), f .. " carries no copy of the model's pace")
+  end
+end
+
+-- Frequent Flier and timed flights (Travel.lua): the flights' minutes with the perk, a flight's own seconds learned
+-- from takeoff to landing and used over the tables', the arrow's "Lands in" with them
+do
+  local c = newClient({
+    name = "Flier", level = 30, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Dwarf",
+    log = { { 7, 0 } }, done = {}, group = false, guild = false, world = { 0, -8833, 479 }, bind = "Goldshire",
+    riding = false, bagSlots = {}, map = 1453,
+  })
+  c.ev(c.QB.eventFrame, "ADDON_LOADED", "QuestBank")
+  c.ev(c.QB.eventFrame, "PLAYER_LOGIN")
+  tick(c, 1)
+  local QB, env = c.QB, c.env
+  local L, TV, M, D, A = QB.Legacy, QB.Travel, QB.Model, QB.Data, QB.Arrow
+  local function near(a, b, eps) return math.abs(a - b) <= (eps or 1e-6) end
+  local function here() return QB.API.WorldPosition() end
+  local sw, swI = hubOf(c, "Stormwind")
+  local lake, lakeI = hubOf(c, "Lakeshire")
+  local toLake = { name = "Lakeshire", c = lake[2], wx = lake[3], wy = lake[4] }
+  c.taxiKnown = { [2] = true, [5] = true }
+  standAt(c, 0, sw[3], sw[4])
+  fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+  local G = TV.Graph("A")
+  local function edge(u, v, list)
+    local f = list or G.fly[u]
+    for k = 1, #f, 2 do if f[k] == v then return f[k + 1] end end
+  end
+  local model = edge(swI, lakeI, G.flyModel[swI])
+  assert(model and model > 1 and near(edge(swI, lakeI), model) and G.taxi[swI] == 2 and G.taxi[lakeI] == 5, "the tables' Stormwind to Lakeshire flight: " .. tostring(model))
+  local hub0 = M.HubTravel("A", swI, lakeI)
+  local plan = TV.Route(here(), toLake, TV.Opts("pin"))
+  local function flyLeg(p) for _, l in ipairs(p and p.legs or {}) do if l.kind == "fly" then return l end end end
+  assert(flyLeg(plan) and near(flyLeg(plan).min, model), "the plan flies the tables' minutes")
+
+  -- Frequent Flier: the air part / 1.2 in the graph, the plan, the model's hub travel, and the flight picked
+  c.legacy = { [110300] = 1 }
+  local ver = TV.ver
+  L.frame.__scripts.OnEvent(L.frame, "TRAIT_NODE_CHANGED", 110300)
+  local want = 0.25 + (model - 0.25) / 1.2
+  assert(TV.ver > ver and near(edge(swI, lakeI), want) and near(edge(swI, lakeI, G.flyModel[swI]), model), "the perk read: the flight's air part / 1.2, the tables kept")
+  plan = TV.Route(here(), toLake, TV.Opts("pin"))
+  assert(near(flyLeg(plan).min, want), "the plan flies the faster minutes: " .. tostring(flyLeg(plan).min))
+  local hub1, _, kind1 = M.HubTravel("A", swI, lakeI)
+  assert(kind1 == "flight" and near(hub1, 0.25 + (hub0 - 0.25) / 1.2) and hub1 < hub0, "the hand-in route's flight minutes scale too")
+  openTaxi(c, { { nodeID = 2, name = "Stormwind, Elwynn", state = 0, slotIndex = 1 }, { nodeID = 5, name = "Lakeshire, Redridge", state = 1, slotIndex = 3 } }, 1463)
+  fireTV(c, "TAXIMAP_OPENED"); tick(c, 0)
+  env.TakeTaxiNode(3)
+  assert(TV.flying and TV.flying.from == swI and TV.flying.to == lakeI and near(TV.flying.min, want) and TV.Watching() == "picked", "the flight picked counts the perk's minutes, the timer waits")
+  fireTV(c, "TAXIMAP_CLOSED")
+  c.taxiOpen, c.taxi = nil, true
+  local g = TV.Guide(here(), toLake, "pin")
+  local secs = math.ceil(want * 60)
+  assert(g.state == "underway" and g.info == string.format("Lands in %d:%02d", math.floor(secs / 60), secs % 60), "Lands in: the perk's minutes: " .. tostring(g.info))
+  -- takeoff: PLAYER_CONTROL_LOST; 200 seconds later, landing: PLAYER_CONTROL_GAINED. The flight's own seconds are learned
+  fireTV(c, "PLAYER_CONTROL_LOST")
+  assert(TV.Watching() == "up", "control lost on the taxi: up")
+  tick(c, 200)
+  c.taxi = false
+  fireTV(c, "PLAYER_CONTROL_GAINED")
+  local flown = TV.DB().flown
+  assert(TV.Watching() == nil and flown["2>5"] and flown["2>5"].n == 1 and flown["2>5"].secs == 200 and TV.flownLast.key == "2>5", "landed after 200 s: the flight learned")
+  assert(near(edge(swI, lakeI), 200 / 60), "the graph flies the learned seconds")
+  standAt(c, 0, lake[3], lake[4])
+  TV.Guide(here(), toLake, "pin")
+  standAt(c, 0, sw[3], sw[4])
+  plan = TV.Route(here(), toLake, TV.Opts("pin"))
+  assert(near(flyLeg(plan).min, 200 / 60), "the plan flies the learned seconds over the tables'")
+  -- a second flight of 220 s: the mean, 210; the arrow's countdown from it
+  openTaxi(c, { { nodeID = 2, name = "Stormwind, Elwynn", state = 0, slotIndex = 1 }, { nodeID = 5, name = "Lakeshire, Redridge", state = 1, slotIndex = 3 } }, 1463)
+  fireTV(c, "TAXIMAP_OPENED"); tick(c, 0)
+  env.TakeTaxiNode(3)
+  assert(near(TV.flying.min, 200 / 60), "the flight picked counts the learned seconds")
+  fireTV(c, "TAXIMAP_CLOSED")
+  c.taxiOpen, c.taxi = nil, true
+  g = TV.Guide(here(), toLake, "pin")
+  assert(g.info == "Lands in 3:20", "Lands in 3:20, the learned 200 s: " .. tostring(g.info))
+  tick(c, 2)
+  assert(TV.Watching() == "up", "the timer's own look saw the taxi: up")
+  tick(c, 218)
+  c.taxi = false
+  tick(c, 1.5)
+  assert(TV.Watching() == nil and flown["2>5"].n == 2 and flown["2>5"].secs == 210, "landed by the timer's look after 220 s: the mean 210: " .. tostring(flown["2>5"].secs))
+  standAt(c, 0, lake[3], lake[4]); TV.Guide(here(), toLake, "pin"); standAt(c, 0, sw[3], sw[4])
+  -- a flight picked but never taken (refused): nothing learned, the timer gives up after a minute
+  openTaxi(c, { { nodeID = 2, name = "Stormwind, Elwynn", state = 0, slotIndex = 1 }, { nodeID = 5, name = "Lakeshire, Redridge", state = 1, slotIndex = 3 } }, 1463)
+  fireTV(c, "TAXIMAP_OPENED"); tick(c, 0)
+  env.TakeTaxiNode(3)
+  fireTV(c, "TAXIMAP_CLOSED"); c.taxiOpen = nil
+  tick(c, 62)
+  assert(TV.Watching() == nil and flown["2>5"].n == 2, "never took off: nothing learned, the timer gone")
+  -- control lost and back within seconds (a fear at the flight master): no flight
+  openTaxi(c, { { nodeID = 2, name = "Stormwind, Elwynn", state = 0, slotIndex = 1 }, { nodeID = 5, name = "Lakeshire, Redridge", state = 1, slotIndex = 3 } }, 1463)
+  fireTV(c, "TAXIMAP_OPENED"); tick(c, 0)
+  env.TakeTaxiNode(3)
+  fireTV(c, "TAXIMAP_CLOSED"); c.taxiOpen = nil
+  fireTV(c, "PLAYER_CONTROL_LOST"); tick(c, 3); fireTV(c, "PLAYER_CONTROL_GAINED")
+  assert(TV.Watching() == nil and flown["2>5"].n == 2, "three seconds is no flight")
+  -- the learned flights survive the perk being read again, and a reload (the graph built anew from the saved table)
+  L.Read()
+  assert(near(edge(swI, lakeI), 210 / 60), "read again: the learned seconds stay")
+  -- the arrow in the air with a learned flight: its sheet
+  local set = QB:Settings()
+  set.arrowMode, set.arrowPin = "pin", { name = "Lakeshire", c = lake[2], wx = lake[3], wy = lake[4] }
+  A:Set(true)
+  local F = env.QuestBankArrow
+  openTaxi(c, { { nodeID = 2, name = "Stormwind, Elwynn", state = 0, slotIndex = 1 }, { nodeID = 5, name = "Lakeshire, Redridge", state = 1, slotIndex = 3 } }, 1463)
+  fireTV(c, "TAXIMAP_OPENED"); tick(c, 0)
+  env.TakeTaxiNode(3)
+  fireTV(c, "TAXIMAP_CLOSED")
+  c.taxiOpen, c.taxi = nil, true
+  standAt(c, 0, sw[3] - 1000, sw[4] - 300)
+  A:Update()
+  F.__scripts.OnUpdate(F, 1)
+  assert(F.step:GetText() == "Flying to Lakeshire" and F.dist:GetText() == "Lands in 3:30", "the arrow: Lands in 3:30 from the learned 210 s: " .. tostring(F.dist:GetText()))
+  for _, pr in ipairs(checkLayout(F, "Arrow: in the air, a learned flight")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(F, "Arrow: in the air, the flight's own 210 s learned")
+  c.taxi = false
+  tick(c, 2)
+  standAt(c, 0, lake[3], lake[4])
+  A:Update(); F.__scripts.OnUpdate(F, 1)
+  A:Set(false)
+  print(string.format("legacy: flights %.2f min in the tables, %.2f with Frequent Flier, %d s flown and learned", model, want, flown["2>5"].secs))
+end
 
 
 
@@ -4342,7 +4724,8 @@ v3.modeNow.__scripts.OnClick(v3.modeNow)
 QB.Model.Finish()
 
 -- the layout of every page, checked and drawn
--- (layouts and problems are declared above the stage anchors)
+-- (layouts and problems are declared above the stage anchors; the stages' tests also reach them as
+-- STAGE_LAYOUTS and STAGE_PROBLEMS, the same tables)
 local function hoverFirst(list, n)
   local k = 0
   for _, f in ipairs(list) do
