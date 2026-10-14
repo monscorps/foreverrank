@@ -342,6 +342,66 @@ function API.ItemIcon(itemID, fallback)
   return fallback
 end
 
+-- the game's try-on click: Ctrl-click, or whatever the Key Bindings' Dressing Room modifier is (IsModifiedClick
+-- "DRESSUP", as the game's own item buttons ask); plain Ctrl on a client without the check
+function QB.DressClick()
+  if IsModifiedClick then
+    local ok, v = pcall(IsModifiedClick, "DRESSUP")
+    if ok then return v and true or false end
+  end
+  return (IsControlKeyDown and IsControlKeyDown()) and true or false
+end
+
+-- can the dressing room put it on you? The client's own answer (C_Item.IsDressableItemByID); yes where it has none
+function API.Dressable(id)
+  id = QB.Plain(id)
+  if type(id) ~= "number" or id <= 0 then return false end
+  local f = C_Item and C_Item.IsDressableItemByID
+  if not f then return true end
+  local ok, v = pcall(f, id)
+  if not ok then return true end
+  return QB.Plain(v) ~= false
+end
+
+-- the dressing room with an item on you, as Ctrl-clicking its link does in the game: DressUpItemLink takes the link
+-- (Blizzard_UIPanels_Game/Mainline/DressUpFrames.lua; the game's item buttons go through DressUpLink to the same place;
+-- neither is protected). An item the client hasn't got yet is asked for, and put on when ITEM_DATA_LOAD_RESULT brings it,
+-- for a few seconds: a late answer must not open the room out of the blue. True when it was put on, or will be
+local dressing = {} -- [item id] = waiting for the client's answer
+local dressFrame = CreateFrame("Frame")
+QB.dressFrame = dressFrame
+local function dressLink(link)
+  local f = DressUpItemLink or DressUpLink
+  if not (f and type(link) == "string") then return false end
+  local ok, took = pcall(f, link)
+  return (ok and took) and true or false
+end
+local function dressDone(id)
+  dressing[id] = nil
+  if next(dressing) == nil then pcall(dressFrame.UnregisterEvent, dressFrame, "ITEM_DATA_LOAD_RESULT") end
+end
+dressFrame:SetScript("OnEvent", QB.Safe(function(_, event, itemID, success)
+  itemID = QB.Plain(itemID)
+  if not (itemID and dressing[itemID]) then return end
+  dressDone(itemID)
+  if QB.Plain(success) == false then return end
+  local _, link = API.ItemInfo(itemID)
+  if link then dressLink(link) end
+end, "dressing room"))
+function API.DressUp(id)
+  id = QB.Plain(id)
+  if type(id) ~= "number" or id <= 0 then return false end
+  if not (DressUpItemLink or DressUpLink) then return false end
+  local _, link = API.ItemInfo(id)
+  if link then return dressLink(link) end
+  if not (C_Item and C_Item.RequestLoadItemDataByID) then return false end
+  if next(dressing) == nil then pcall(dressFrame.RegisterEvent, dressFrame, "ITEM_DATA_LOAD_RESULT") end
+  dressing[id] = true
+  pcall(C_Item.RequestLoadItemDataByID, id)
+  C_Timer.After(5, function() if dressing[id] then dressDone(id) end end)
+  return true
+end
+
 -- Quests an item in your bags would start: the item waits in your bags, no log slot used.
 function API.BagQuestStarts()
   local out = {}

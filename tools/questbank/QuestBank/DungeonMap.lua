@@ -796,12 +796,15 @@ function DM.ShowBoss(b)
     if it.slot then parts[#parts + 1] = it.slot end
     if it.kind and it.kind ~= it.slot then parts[#parts + 1] = it.kind end
     r.sub:SetText(table.concat(parts, ", "))
+    -- the item's tooltip; Ctrl-click puts it on you in the dressing room, Shift-click links it in chat
     r:SetScript("OnEnter", function(self)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
       if GameTooltip.SetItemByID then pcall(GameTooltip.SetItemByID, GameTooltip, self.id) else GameTooltip:SetText(DM.Item(self.id).name) end
+      if QB.API.Dressable(self.id) then GameTooltip:AddLine("Ctrl-click: try it on.", 0.5, 0.5, 0.5) end
       GameTooltip:Show()
     end)
     r:SetScript("OnClick", function(self)
+      if QB.DressClick() then QB.API.DressUp(self.id) return end
       if IsShiftKeyDown and IsShiftKeyDown() and QB.UI and QB.UI.LinkItem then QB.UI.LinkItem(self.id) end
     end)
     r:Show()

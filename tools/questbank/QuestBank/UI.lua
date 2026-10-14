@@ -127,6 +127,40 @@ local function iconButton(parent, size, icon)
   return b
 end
 
+-- the dressing room's line under an item's tooltip, where the room can put the item on you
+local function dressHint(tip, id)
+  if id and QB.API.Dressable(id) then tip:AddLine("Ctrl-click: try it on.", 0.5, 0.5, 0.5) end
+end
+
+-- a reward item's icon as a button: the item's own tooltip, Ctrl-click tries it on in the dressing room, any other
+-- click is the row's (the icon sits on the row and must not swallow its click)
+local function rewardButton(parent, size, row)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(size, size)
+  b.icon = tex(b, "ARTWORK", nil, size, size)
+  b.icon:SetAllPoints()
+  b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+  b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  b:SetScript("OnClick", QB.Safe(function(self, which)
+    if self.id and which ~= "RightButton" and QB.DressClick() then QB.API.DressUp(self.id) return end
+    local f = row and row:GetScript("OnClick")
+    if f then f(row, which) end
+  end, "reward icon"))
+  b:SetScript("OnEnter", function(self)
+    if not self.id then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    if GameTooltip.SetItemByID then pcall(GameTooltip.SetItemByID, GameTooltip, self.id) end
+    dressHint(GameTooltip, self.id)
+    GameTooltip:Show()
+  end)
+  b:SetScript("OnLeave", function(self)
+    GameTooltip:Hide()
+    -- (a row's selection box shows while the mouse is on the row: off its icon and off the row, it goes)
+    if row and row.sel and UI.ShowSelect and not (row.IsMouseOver and row:IsMouseOver()) then UI.ShowSelect(row, false) end
+  end)
+  return b
+end
+
 local function button(parent, label, w)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
   b:SetSize(w or 110, 22)
@@ -1694,13 +1728,22 @@ function UI:CreateLogView(parent)
     b.rw:SetPoint("CENTER", b.rwBack, "CENTER", 0, 0)
     b.rw:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    b:SetScript("OnClick", function(self, which) if self.q then UI.QuestClick(self.q, self.st, which) end end)
+    b:SetScript("OnClick", function(self, which)
+      if not self.q then return end
+      -- Ctrl-click: the reward in its corner, on you in the dressing room
+      if self.rwId and which ~= "RightButton" and QB.DressClick() then QB.API.DressUp(self.rwId) return end
+      UI.QuestClick(self.q, self.st, which)
+    end)
     tooltip(b, function(tip, self)
       if self.q then
         if self.pick then tip:AddLine("To pick up: not in your log yet. Click for a waypoint to whoever gives it; right-click to take it off the list.", 1, 0.82, 0, true) end
         if self.follow then tip:AddLine("Follow-up of " .. self.follow.name .. ": " .. (self.q.give and self.q.give.n and ("from " .. self.q.give.n .. ", ") or "") .. "do it while you're here.", 0.5, 1, 0.5, true) end
         UI.QuestTooltip(tip, self.q, self.st, self.value, self.pct, self.plvl)
         if self.advice then tip:AddLine(self.advice, 1, 0.55, 0.45, true) end
+        if self.rwId and QB.API.Dressable(self.rwId) then
+          local name = QB.API.ItemInfo(self.rwId)
+          tip:AddLine("Ctrl-click: try on " .. (name or "the reward") .. ".", 0.5, 0.5, 0.5, true)
+        end
       elseif self.entry then
         tip:AddLine(self.entry.title, GOLD[1], GOLD[2], GOLD[3])
         tip:AddLine("Not in QuestBank's catalog, so the route can't place it.", 1, 1, 1, true)
@@ -1731,11 +1774,13 @@ function UI:CreateLogView(parent)
       if it.need then tip:AddLine(string.format("%d of %d in your bags", QB.API.ItemCount(it.id), it.need), 1, 1, 1) end
       if it.q then UI.QuestTooltip(tip, it.q, QB:Status(it.q), (QB:Value(it.q.id))) end
       if it.id == 211527 then tip:AddLine("Camp in it: your rested XP builds faster.", 0.8, 0.8, 0.8, true) end
+      dressHint(tip, it.id)
     end)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     b:SetScript("OnClick", QB.Safe(function(self, which)
       local it = self.item
       if not it then return end
+      if it.id and which ~= "RightButton" and QB.DressClick() then QB.API.DressUp(it.id) return end
       if IsShiftKeyDown and IsShiftKeyDown() and UI.LinkItem(it.id, it.name) then return end
       if it.q then UI.QuestClick(it.q, QB:Status(it.q), which) end
     end, "bag slot"))
@@ -1823,7 +1868,8 @@ function UI:CreateLogView(parent)
     r:SetScript("OnClick", function(self, which)
       local q = self.add
       if not q then return end
-      -- on a reward row (Best gear, Trinkets, Recipes), Shift-click links the reward item instead of the quest
+      -- on a reward row (Best gear, Trinkets, Recipes), Ctrl-click tries the reward on and Shift-click links it, not the quest
+      if self.rewardId and which ~= "RightButton" and QB.DressClick() then QB.API.DressUp(self.rewardId) return end
       if self.rewardId and which ~= "RightButton" and IsShiftKeyDown and IsShiftKeyDown() then UI.LinkItemAlways(self.rewardId) return end
       -- one path decides where a click sends you: the giver, a chain's first step, a held step's turn-in
       UI.QuestClick(q, QB:Status(q), which)
@@ -1832,6 +1878,7 @@ function UI:CreateLogView(parent)
       UI.hoverRow = self
       if self.rewardId and IsShiftKeyDown and IsShiftKeyDown() and tip.SetItemByID then
         tip:SetItemByID(self.rewardId) -- the item itself, as the game shows it
+        dressHint(tip, self.rewardId)
         return
       end
       if self.cutTitle then
@@ -1846,6 +1893,7 @@ function UI:CreateLogView(parent)
       end
       if self.add then UI.QuestTooltip(tip, self.add, QB:Status(self.add), self.addValue, nil, nil, self.rewardId) end
       if self.reward then tip:AddLine(self.reward, 0.75, 0.75, 1, true) end
+      dressHint(tip, self.rewardId)
       if self.rewardId then tip:AddLine("Hold Shift to see the item. To put the quest on your pick-up list, right-click it.", 0.6, 0.6, 0.6, true) end
     end)
     v.swaps[i] = r
@@ -2546,14 +2594,14 @@ local function makeRow(parent)
     local row = self:GetParent()
     if not (row.IsMouseOver and row:IsMouseOver()) then UI.ShowSelect(row, false) end
   end)
-  -- what the quest gives, as the journal shows it: up to three item icons (the tooltip names them)
+  -- what the quest gives, as the journal shows it: up to three item icons, each with the item's tooltip; Ctrl-click one
+  -- and the dressing room puts it on you (any other click is the row's)
   r.rw = {}
   for i = 1, 3 do
-    local t = tex(r, "ARTWORK", nil, 16, 16)
-    t:SetPoint("LEFT", 318 + (i - 1) * 18, 0)
-    t:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    t:Hide()
-    r.rw[i] = t
+    local b = rewardButton(r, 16, r)
+    b:SetPoint("LEFT", 318 + (i - 1) * 18, 0)
+    b:Hide()
+    r.rw[i] = b
   end
   r.up = upgradeMark(r, 10, 11)
   r.up:SetPoint("LEFT", 376, 0)
@@ -2613,10 +2661,11 @@ local function makeRow(parent)
       if self.step.m then tip:AddLine("Click: waypoint.", 0.5, 0.5, 0.5) end
     end
   end)
-  -- the box shows while the mouse is on the row (leaving the row for its own box keeps it)
+  -- the box shows while the mouse is on the row (leaving the row for its own box or a reward icon keeps it: both sit
+  -- on the row, and the icon's own leave takes the box off)
   r:HookScript("OnEnter", function(self) UI.ShowSelect(self, true) end)
   r:HookScript("OnLeave", function(self)
-    if not (self.sel.IsMouseOver and self.sel:IsMouseOver()) then UI.ShowSelect(self, false) end
+    if not ((self.sel.IsMouseOver and self.sel:IsMouseOver()) or (self.IsMouseOver and self:IsMouseOver())) then UI.ShowSelect(self, false) end
   end)
   return r
 end
@@ -2731,21 +2780,11 @@ makeDetail = function(parent)
   if d.SetBackdropBorderColor then d:SetBackdropBorderColor(0.35, 0.28, 0.16, 0.9) end
   d.rwHead = text(d, "GameFontNormalSmall", 10, GOLD_SOFT, "LEFT", 120)
   d.rwHead:SetPoint("TOPLEFT", 10, -8)
+  -- its rewards, each with the item's tooltip; Ctrl-click one and the dressing room puts it on you
   d.rw = {}
   for i = 1, 6 do
-    local b = CreateFrame("Button", nil, d)
-    b:SetSize(26, 26)
+    local b = rewardButton(d, 26)
     b:SetPoint("TOPLEFT", 10 + (i - 1) * 30, -22)
-    b.icon = tex(b, "ARTWORK", nil, 26, 26)
-    b.icon:SetAllPoints()
-    b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    b:SetScript("OnEnter", function(self)
-      if not self.id then return end
-      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-      if GameTooltip.SetItemByID then pcall(GameTooltip.SetItemByID, GameTooltip, self.id) end
-      GameTooltip:Show()
-    end)
-    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
     d.rw[i] = b
   end
   d.from = text(d, "GameFontHighlightSmall", 11, INK, "LEFT", 300)
@@ -2844,7 +2883,9 @@ function UI.RewardIcons(r, q)
   for i = 1, 3 do
     local id = ids[i]
     local icon = id and itemIcon(id)
-    if icon then r.rw[i]:SetTexture(icon); r.rw[i]:Show() else r.rw[i]:Hide() end
+    local b = r.rw[i]
+    b.id = icon and id or nil
+    if icon then b.icon:SetTexture(icon); b:Show() else b:Hide() end
   end
 end
 
