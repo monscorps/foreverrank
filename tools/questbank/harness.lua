@@ -2376,8 +2376,10 @@ do
   QB:Settings().glow.other = false; ev("PLAYER_SOFT_INTERACT_CHANGED")
   assert(not L:IsShown() and Glow.kind == nil, "plain objects switched off: nothing")
   QB:Settings().glow.other = true
-  c.soft = { name = "Innkeeper Farley", plate = plate, guid = "Creature-0-4455-0-12-295-0000A1B2C3" }; ev("PLAYER_SOFT_INTERACT_CHANGED")
-  assert(not L:IsShown(), "an NPC keeps the game's own cursor icon, no light")
+  c.soft = { name = "Corina Steele", plate = plate, guid = "Creature-0-4455-0-12-295-0000A1B2C3" }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(L:IsShown() and Glow.kind == "npc", "an NPC lights too, white without a quest for you (5.4, below)")
+  c.soft = { name = "Brann Steelhand", plate = plate, guid = "Player-1234-0000ABCD" }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(not L:IsShown(), "a player keeps the game's own cursor icon, no light")
   c.soft = { name = "Sunken Chest", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
   assert(Glow.kind == "chest", "a chest: blue")
   -- a quest object: named in an objective of a quest in the log
@@ -3408,6 +3410,222 @@ STAGE_LAYOUTS, STAGE_PROBLEMS = layouts, problems
 
 
 -- [stage: glow] that stage's tests go right below this line
+-- 5.4: the interact light's styles (sparkles, light, the game's own), NPCs lit too, and the Settings rows (Glow.lua)
+do
+  local Glow, env = QB.Glow, owner.env
+  c = owner
+  local f = Glow.frame
+  local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
+  STAGE_LAYOUTS, STAGE_PROBLEMS = STAGE_LAYOUTS or {}, STAGE_PROBLEMS or {}
+  local function sheetOf(root, label)
+    for _, pr in ipairs(checkLayout(root, label:lower())) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+    STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(root, label)
+  end
+  local g = Glow.Settings()
+  assert(g.style == "sparkle" and g.npcs == true and g.on == true and g.other == true, "sparkles and NPCs by default")
+  assert(#Glow.STYLES == 3 and Glow.STYLES[1] == "sparkle" and Glow.STYLES[2] == "light" and Glow.STYLES[3] == "game", "the three styles")
+  -- an older save without the new keys gets them
+  g.style, g.npcs = nil, nil
+  assert(Glow.Settings().style == "sparkle" and Glow.Settings().npcs == true, "an older save: sparkles, NPCs too")
+  local plate = env.CreateFrame("Frame")
+  local L = env.QuestBankGlow
+  local function sparksShown() local n = 0; for _, t in ipairs(L.sparks) do if t:IsShown() then n = n + 1 end end; return n end
+  -- sparkles: the glow and seven small sparkles, no ring and no big sparkle
+  c.soft = { name = "Peacebloom", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(L:IsShown() and Glow.kind == "herb" and L.style == "sparkle" and #L.sparks == 7 and #Glow.SPARKS == 7 and sparksShown() == 7
+    and L.core:IsShown() and not L.ring:IsShown() and not L.spark:IsShown(), "sparkles: the glow and seven sparkles, no ring")
+  assert(L.core.__vertex[2] == 0.9 and L.core.__vertex[1] == 0.35 and L.sparks[1].__vertex[2] == 1 and math.abs(L.sparks[1].__vertex[1] - 0.65) < 0.001,
+    "green for an herb, the sparkles a shade brighter")
+  for _, t in ipairs(L.sparks) do assert(t.__blend == "ADD" and t.__tex:find("sparkle%.tga$"), "each sparkle is art/sparkle.tga, added") end
+  assert(L.core.__tex:find("glow%.tga$") and L.core.__blend == "ADD", "the glow is art/glow.tga")
+  -- they move: each on its own orbit, twinkling and swelling at its own pace, turning as it goes
+  L.t = 0
+  L.__scripts.OnUpdate(L, 0.2)
+  local function state(i) local p = L.sparks[i].__points[1]; return { p.x, p.y, L.sparks[i].__alpha, L.sparks[i].__w, L.sparks[i].__rot } end
+  local s1 = state(1)
+  for _ = 1, 10 do L.__scripts.OnUpdate(L, 0.05) end
+  local s2 = state(1)
+  assert(s1[1] ~= s2[1] and s1[2] ~= s2[2] and s1[3] ~= s2[3] and s1[4] ~= s2[4] and s1[5] ~= s2[5], "a sparkle moves, twinkles, swells and turns")
+  local seenR = {}
+  for i, sp in ipairs(Glow.SPARKS) do
+    local t = L.sparks[i]
+    assert(t.__alpha >= 0.12 and t.__alpha <= 1 and t.__w >= sp.s * 0.6 and t.__w <= sp.s * 1.3 and t.__w == t.__h, "sparkle " .. i .. " within its bounds")
+    local p = t.__points[1]
+    assert(math.abs(p.x) <= sp.r + 0.01 and math.abs(p.y) <= sp.r * 0.55 + 0.01, "sparkle " .. i .. " on its flattened orbit")
+    assert(not seenR[sp.r], "each sparkle on its own orbit"); seenR[sp.r] = true
+  end
+  assert(L.core.__alpha > 0.2 and L.core.__alpha < 0.45, "the glow breathes softly under them")
+  -- light: the glow, the ring and the big sparkle, no small sparkles
+  assert(Glow.SetStyle("light") and L.style == "light" and L:IsShown() and L.ring:IsShown() and L.spark:IsShown() and sparksShown() == 0,
+    "light: the ring and the sparkle, no small sparkles")
+  L.__scripts.OnUpdate(L, 0.3)
+  assert(L.ring.__w >= 42 and L.ring.__w <= 50 and L.spark.__rot and L.spark.__rot > 0, "the ring breathes and the sparkle turns")
+  assert(not Glow.SetStyle("neon") and Glow.Style() == "light", "an unknown style is refused")
+  -- game's own: nothing drawn; the soft-interact settings still set, so the game's highlight shows
+  assert(Glow.SetStyle("game") and not L:IsShown() and Glow.kind == nil, "game's own: nothing of QuestBank's")
+  c.cvars = { SoftTargetInteract = "0", SoftTargetNameplateInteract = "0", SoftTargetIconInteract = "0" }
+  ev("PLAYER_ENTERING_WORLD")
+  assert(not L:IsShown() and c.cvars.SoftTargetNameplateInteract == "1" and c.cvars.SoftTargetInteract == "3" and c.cvars.SoftTargetIconInteract == "1",
+    "the game's own highlight stays on: its nameplate and icon settings are set")
+  assert(Glow.SetStyle("sparkle") and L:IsShown() and sparksShown() == 7, "back to sparkles")
+  -- NPCs: one with nothing for you white, a quest NPC gold; off with glow.npcs while objects still light
+  local CREATURE = "Creature-0-4455-0-12-295-0000A1B2C3"
+  c.soft = { name = "Corina Steele", plate = plate, guid = CREATURE }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(L:IsShown() and Glow.kind == "npc" and L.core.__vertex[1] == 0.9 and L.core.__vertex[3] == 0.9, "a vendor: white")
+  local D = QB.Data
+  local turnName, givers = nil, {}
+  for id, e in pairs(QB.state.log) do
+    local q = QB.Quest.Get(id)
+    local n = q and q.turnIdx and q.turnIdx > 0 and D.NPC[q.turnIdx]
+    if n and e.complete and not turnName then turnName = n[1] end
+  end
+  assert(turnName, "the owner holds a finished quest with a hand-in NPC")
+  c.soft = { name = turnName, plate = plate, guid = CREATURE }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(Glow.kind == "quest" and L.core.__vertex[1] == 1 and L.core.__vertex[3] == 0.2, "the hand-in of a finished quest: gold (" .. turnName .. ")")
+  -- who gives what, worked out here on the raw table, apart from Glow's own index
+  local todoBy, ids = {}, {}
+  for id in pairs(D.Q) do ids[#ids + 1] = id end
+  table.sort(ids)
+  local giveName
+  for _, id in ipairs(ids) do
+    local q = QB.Quest.Get(id)
+    if q and q.giveIdx and q.giveIdx > 0 and not QB.state.log[id] then
+      local st = QB:Status(q)
+      if st.code == "todo" and not st.behind then
+        todoBy[D.NPC[q.giveIdx][1]] = true
+        giveName = giveName or D.NPC[q.giveIdx][1]
+      end
+    end
+  end
+  assert(giveName, "a quest the owner can take, with a giver")
+  c.soft = { name = giveName, plate = plate, guid = CREATURE }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(Glow.kind == "quest", "a giver with a quest for you: gold (" .. giveName .. ")")
+  -- the hand-in of a quest still in progress, who has nothing else for you: white
+  local idle
+  for id, e in pairs(QB.state.log) do
+    local q = QB.Quest.Get(id)
+    local n = q and q.turnIdx and q.turnIdx > 0 and D.NPC[q.turnIdx]
+    if n and not e.complete and not todoBy[n[1]] then
+      local endsDone = false
+      for id2, e2 in pairs(QB.state.log) do
+        local q2 = QB.Quest.Get(id2)
+        if e2.complete and q2 and q2.turnIdx and D.NPC[q2.turnIdx] and D.NPC[q2.turnIdx][1] == n[1] then endsDone = true end
+      end
+      if not endsDone then idle = n[1]; break end
+    end
+  end
+  assert(idle, "a hand-in NPC of a quest in progress with nothing else for the owner")
+  c.soft = { name = idle, plate = plate, guid = CREATURE }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(Glow.kind == "npc" and L.core.__vertex[1] == 0.9, "a hand-in you are not ready for: white (" .. idle .. ")")
+  QB:Settings().glow.npcs = false
+  c.soft = { name = giveName, plate = plate, guid = CREATURE }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(not L:IsShown() and Glow.kind == nil, "NPCs switched off: nothing on a quest giver")
+  c.soft = { name = "Copper Vein", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(L:IsShown() and Glow.kind == "ore" and L.core.__vertex[1] == 1 and L.core.__vertex[2] == 0.55, "while ore still lights, orange")
+  QB:Settings().glow.other = false
+  c.soft = { name = "Old Jug", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(not L:IsShown(), "plain objects off: nothing")
+  QB:Settings().glow.other, QB:Settings().glow.npcs = true, true
+  c.soft = { name = "Brann Steelhand", plate = plate, guid = "Player-1234-0000ABCD" }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(not L:IsShown(), "a player: nothing")
+  c.soft = { name = "Sunken Chest", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(Glow.kind == "chest" and L.core.__vertex[3] == 1 and sparksShown() == 7, "a chest: blue sparkles")
+  -- in a fight the sparkles go out too, unless asked to stay
+  c.soft = { name = "Peacebloom", plate = plate }
+  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  assert(not L:IsShown(), "a fight: out")
+  QB:Settings().glow.combat = true; ev("PLAYER_REGEN_DISABLED")
+  assert(L:IsShown() and sparksShown() == 7, "kept on in a fight when asked")
+  QB:Settings().glow.combat = false; ev("PLAYER_REGEN_DISABLED")
+  assert(not L:IsShown(), "and out again")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  assert(L:IsShown(), "back after the fight")
+  -- Settings: the three-way chooser and the NPCs row
+  local wasTab, wasLast, wasShown = UI.tab, UI.lastTab, UI.frame:IsShown()
+  UI.frame:Show(); UI:ShowTab(5); UI:Refresh()
+  local v5 = UI.views[5]
+  assert(#v5.glowStyle == 3 and v5.glowStyle[1]:GetText() == "Sparkles" and v5.glowStyle[2]:GetText() == "Light" and v5.glowStyle[3]:GetText() == "Game's own", "three buttons")
+  assert(not v5.glowStyle[1]:IsEnabled() and v5.glowStyle[2]:IsEnabled() and v5.glowStyle[3]:IsEnabled(), "the one in use greyed")
+  assert(v5.glowNpcs:GetChecked() == true and v5.glowNpcs:IsEnabled() and v5.glowOther:IsEnabled() and v5.glowCombat:IsEnabled(), "NPCs too, ticked and live")
+  v5.glowStyle[3].__scripts.OnClick(v5.glowStyle[3])
+  assert(Glow.Style() == "game" and not v5.glowStyle[3]:IsEnabled() and v5.glowStyle[1]:IsEnabled() and not L:IsShown(), "Game's own chosen")
+  assert(not v5.glowNpcs:IsEnabled() and not v5.glowOther:IsEnabled() and not v5.glowCombat:IsEnabled(), "nothing to choose for the game's own")
+  v5.glowStyle[2].__scripts.OnClick(v5.glowStyle[2])
+  assert(Glow.Style() == "light" and v5.glowNpcs:IsEnabled() and L:IsShown() and L.ring:IsShown(), "Light chosen, the light at once")
+  v5.glowNpcs:SetChecked(false); v5.glowNpcs.__scripts.OnClick(v5.glowNpcs)
+  assert(QB:Settings().glow.npcs == false, "the NPCs row sets it")
+  v5.glowNpcs:SetChecked(true); v5.glowNpcs.__scripts.OnClick(v5.glowNpcs)
+  v5.glowOn:SetChecked(false); v5.glowOn.__scripts.OnClick(v5.glowOn)
+  assert(not v5.glowStyle[1]:IsEnabled() and not v5.glowStyle[3]:IsEnabled() and not v5.glowNpcs:IsEnabled() and not L:IsShown(), "off: the chooser and rows greyed")
+  v5.glowOn:SetChecked(true); v5.glowOn.__scripts.OnClick(v5.glowOn)
+  v5.glowStyle[1].__scripts.OnClick(v5.glowStyle[1])
+  assert(Glow.Style() == "sparkle" and L:IsShown() and sparksShown() == 7, "Sparkles again")
+  -- the rows below moved down with the two new ones, and the page grew to hold them
+  assert(v5.statusHint.__points[1].y == -1284 and v5.statusBtns[1].__points[1].y == -1254 and v5.scroll.child:GetHeight() == 1328,
+    "the health and mana rows sit under the light's rows, the page holds them")
+  local sf = v5.scroll
+  local _, hi = sf.bar:GetMinMaxValues()
+  sf.bar:SetValue(math.min(hi, 990)); UI:Refresh()
+  sheetOf(UI.frame, "Settings, interact light")
+  sf.bar:SetValue(0); UI:Refresh()
+  if wasTab then UI:ShowTab(wasTab) end
+  UI.lastTab = wasLast
+  UI.frame:SetShown(wasShown)
+  -- drawn: the light itself in each style, on a nameplate as the game shows one for a soft-interact target (the
+  -- name; a creature's health bar under it)
+  local saveObj = env.C_QuestLog.GetQuestObjectives
+  env.C_QuestLog.GetQuestObjectives = function(id) if id == 7 then return { { text = "Kobold Candle: 0/3", finished = false } } end return saveObj(id) end
+  local hadLog7 = QB.state.log[7]
+  QB.state.log[7] = QB.state.log[7] or {}
+  local function sheet(label, name, guid, health, style, t)
+    local root = env.CreateFrame("Frame", nil, env.UIParent)
+    root:SetSize(260, 150)
+    root:SetPoint("CENTER", env.UIParent, "CENTER", 0, 0)
+    local ground = root:CreateTexture(nil, "BACKGROUND")
+    ground:SetAllPoints()
+    ground:SetColorTexture(0.07, 0.09, 0.06, 1)
+    local pl = env.CreateFrame("Frame", nil, root)
+    pl:SetSize(130, 40)
+    pl:SetPoint("CENTER", root, "CENTER", 0, 14)
+    local nm = pl:CreateFontString(nil, "OVERLAY")
+    nm:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    nm:SetJustifyH("CENTER")
+    nm:SetWordWrap(false)
+    nm:SetPoint("TOP", pl, "TOP", 0, -2)
+    nm:SetText(name)
+    if health then
+      nm:SetTextColor(0.4, 1, 0.4)
+      local bg = pl:CreateTexture(nil, "BORDER"); bg:SetSize(112, 12); bg:SetPoint("TOP", nm, "BOTTOM", 0, -2); bg:SetColorTexture(0, 0, 0, 0.8)
+      local bar = pl:CreateTexture(nil, "ARTWORK"); bar:SetSize(108, 8); bar:SetPoint("CENTER", bg, "CENTER", 0, 0); bar:SetColorTexture(0.1, 0.85, 0.1, 1)
+    else
+      nm:SetTextColor(1, 1, 1)
+    end
+    Glow.SetStyle(style)
+    c.soft = { name = name, plate = pl, guid = guid }; ev("PLAYER_SOFT_INTERACT_CHANGED")
+    if L:IsShown() then L.t = 0; L.__scripts.OnUpdate(L, t) end
+    sheetOf(root, label)
+    c.soft = nil; ev("PLAYER_SOFT_INTERACT_CHANGED")
+    root:Hide()
+  end
+  sheet("Interact light: sparkles", "Kobold Candle", nil, false, "sparkle", 2.3)
+  assert(STAGE_LAYOUTS[#STAGE_LAYOUTS].label == "Interact light: sparkles", "the sheet is drawn")
+  sheet("Interact light: sparkles on an herb", "Peacebloom", nil, false, "sparkle", 2.0)
+  sheet("Interact light: sparkles on a quest NPC", giveName, CREATURE, true, "sparkle", 2.45)
+  sheet("Interact light: light", "Copper Vein", nil, false, "light", 0.4)
+  sheet("Interact light: game's own", "Corina Steele", CREATURE, true, "game", 0)
+  local n = 0
+  for _, it in ipairs(STAGE_LAYOUTS[#STAGE_LAYOUTS].items) do if it.raw and tostring(it.raw):find("QuestBank") then n = n + 1 end end
+  assert(n == 0, "game's own: nothing of QuestBank's art on the sheet")
+  n = 0
+  for _, it in ipairs(STAGE_LAYOUTS[#STAGE_LAYOUTS - 4].items) do if it.raw and tostring(it.raw):find("sparkle%.tga") then n = n + 1 end end
+  assert(n == 7, "sparkles: the seven sparkles on the sheet, " .. n)
+  env.C_QuestLog.GetQuestObjectives = saveObj
+  if not hadLog7 then QB.state.log[7] = nil end
+  Glow.SetStyle("sparkle")
+  c.soft = nil; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  c.cvars = {}
+  QB:Settings().glow.saved = nil
+end
 
 
 
@@ -4412,7 +4630,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 1272 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 1328 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()
@@ -4723,7 +4941,7 @@ print("after switches:", v3.summary:GetText())
 v3.modeNow.__scripts.OnClick(v3.modeNow)
 QB.Model.Finish()
 
--- the layout of every page, checked and drawn
+-- the layout of every page, checked and drawn (with what the stage blocks above collected)
 -- (layouts and problems are declared above the stage anchors; the stages' tests also reach them as
 -- STAGE_LAYOUTS and STAGE_PROBLEMS, the same tables)
 local function hoverFirst(list, n)

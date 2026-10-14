@@ -84,10 +84,19 @@ def tex_style(it):
         return "background:%s;" % rgba(c, 1), None
     if isinstance(raw, str) and "ReadyCheck-Ready" in raw:
         return "background:url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAyNCAyNCc+PHBhdGggZD0nTTMgMTNsNiA2TDIxIDUnIGZpbGw9J25vbmUnIHN0cm9rZT0nIzAwMCcgc3Ryb2tlLXdpZHRoPSc2JyBzdHJva2UtbGluZWNhcD0ncm91bmQnLz48cGF0aCBkPSdNMyAxM2w2IDZMMjEgNScgZmlsbD0nbm9uZScgc3Ryb2tlPScjMzNkZDQ0JyBzdHJva2Utd2lkdGg9JzMuNScgc3Ryb2tlLWxpbmVjYXA9J3JvdW5kJy8+PC9zdmc+) center/contain no-repeat;transform:rotate(-17deg);", None
-    if isinstance(raw, str) and raw.endswith("art\\ring"):
-        return "border:2px solid %s;border-radius:50%%;" % rgba(c or (1, 0.82, 0.3), 1), None
+    if isinstance(raw, str) and (raw.endswith("art\\ring") or raw.endswith("art\\ring.tga")):
+        col = rgba(c or (1, 0.82, 0.3), 1)
+        return "border:3px solid %s;border-radius:50%%;box-shadow:0 0 6px %s,inset 0 0 6px %s;" % (col, col, col), None
+    if isinstance(raw, str) and raw.endswith("art\\sparkle.tga"):
+        # the four-point sparkle: thin rays from a bright core, turned as the game turns it
+        col = rgba(c or (1, 0.9, 0.6), 1)
+        rot = ("transform:rotate(%.3frad);" % -it["rot"]) if it.get("rot") else ""
+        star = _svg("<path d='M12 0L13.1 10.9L24 12L13.1 13.1L12 24L10.9 13.1L0 12L10.9 10.9Z' fill='%s'/>"
+                    "<path d='M4.5 4.5L12 10.6L19.5 4.5L13.4 12L19.5 19.5L12 13.4L4.5 19.5L10.6 12Z' fill='%s' opacity='.35'/>"
+                    "<circle cx='12' cy='12' r='2.4' fill='#fff'/>" % (col, col))
+        return "background:url(data:image/svg+xml;base64,%s) center/100%% 100%% no-repeat;%s" % (star, rot), None
     if isinstance(raw, str) and raw.startswith("Interface\\AddOns\\QuestBank\\art\\"):
-        return "background:radial-gradient(%s,transparent 70%%);" % rgba(c or (1, 0.82, 0.3), 0.8), None
+        return "background:radial-gradient(circle,%s 0%%,%s 30%%,transparent 68%%);" % (rgba(c or (1, 0.82, 0.3), 0.9), rgba(c or (1, 0.82, 0.3), 0.45)), None
     return "background:%s;outline:1px dashed rgba(255,255,255,.12);" % rgba(c or (0.3, 0.3, 0.35), 0.35), label
 
 def render(layout):
