@@ -38,7 +38,7 @@ function Link.Click(link, text, button)
   return true
 end
 
--- item id -> the quests that give it, built once from the catalog's reward lists
+-- item id -> the quests that give it, built once from the catalog's reward lists (and again after Link.Reset)
 local byItem
 local function rewardIndex()
   if byItem then return byItem end
@@ -57,6 +57,8 @@ local function rewardIndex()
   return byItem
 end
 Link.RewardIndex = rewardIndex
+-- the reward lists changed (the quest survey filled some in): the index is built again when next needed
+function Link.Reset() byItem = nil end
 
 -- the quests that give this item, as the catalog knows them (for you first), at most MAX_QUESTS_ON_TIP
 function Link.QuestsFor(itemId)

@@ -754,12 +754,16 @@ function Q.Get(id)
   c.near = math.floor(c.flags / 8192) % 2 == 1       -- kept as read: the game paid within a few percent of this number
   c.seenOnly = math.floor(c.flags / 16384) % 2 == 1  -- known only from players' notes (not on Wowhead or in the Classic database)
   c.reqStated = math.floor(c.flags / 32768) % 2 == 1 -- the required level as Blizzard's notes give it
+  c.surveyOnly = math.floor(c.flags / 65536) % 2 == 1 -- known from the quest survey alone (Survey.lua): no giver, place or side
   c.note = D.NOTE and D.NOTE[id]                      -- where a number comes from, or what Blizzard changed since
   c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and API.ItemIcon(c.bag[1])) or API.ItemIcon(D.QITEM[id])
     or (c.cat and c.cat.icon) or D.TEX.questGeneric
   cache[id] = c
   return c
 end
+
+-- a quest's row changed under the cache (the quest survey adds and fills in rows): read it afresh next time
+function Q.Forget(id) cache[id] = nil end
 
 function Q.Full(q)
   return q.liveFull or QB.Model.Full(q)
@@ -859,15 +863,17 @@ end
 local Live = {}
 QB.Live = Live
 
--- A quest's reward items: what your own quest window showed ("game"), else the catalog's list ("catalog"), else
--- "unknown" (no source lists them yet) or "none" (the quest gives no items). Returns { c = choose one, r = always }, how
+-- A quest's reward items: what your own quest window showed ("game"), else what the game told the quest survey
+-- (Survey.lua: "survey"), else the catalog's list ("catalog"), else "unknown" (no source lists them yet) or "none" (the
+-- quest gives no items; "survey" when the game said so). Returns { c = choose one, r = always }, how
 function Q.Rewards(q)
   local own = QuestBankDB and QuestBankDB.disc and QuestBankDB.disc.q and QuestBankDB.disc.q[q.id]
   if own and type(own.rw) == "table" then return own.rw, "game" end
   local D = QB.Data
-  if D.RITEMS and D.RITEMS[q.id] then return D.RITEMS[q.id], "catalog" end
+  local how = D.RSURV and D.RSURV[q.id] and "survey" or "catalog"
+  if D.RITEMS and D.RITEMS[q.id] then return D.RITEMS[q.id], how end
   if D.RUNK and D.RUNK[q.id] then return nil, "unknown" end
-  return nil, "none"
+  return nil, how == "survey" and "survey" or "none"
 end
 
 -- the game's number behind a reading taken under the +3% buff: the game rounds quest XP to its grid (5 up to 100,
@@ -1094,6 +1100,7 @@ local DEFAULTS = {
   -- points straight at its target. arrowHearth: the hearthstone may be one of the steps
   arrowTravel = true, arrowHearth = true,
   noteGame = true, -- note the spells and item tooltips the Forever client shows, for foreverrank.com (Game.lua)
+  survey = true, -- ask the game about quests by id, out of combat, and use their rewards at once (Survey.lua)
   -- quest icons on each zone's world map (QuestMap.lua, Forever only): all of them, then where quests you can take
   -- start (!), where finished ones are handed in (?), and the objectives and quest-item drops of the quests in your log
   mapIcons = true, mapGive = true, mapTurn = true, mapObj = true,
@@ -2297,7 +2304,8 @@ end
 
 frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
   if event == "ADDON_LOADED" then
-    if a1 == ADDON then QB:Settings(); Live.Apply() end
+    -- (the quest survey's rows first: the game's XP for one of them applies like any other's)
+    if a1 == ADDON then QB:Settings(); if QB.Survey then QB.Try("quest survey", QB.Survey.Load) end; Live.Apply() end
     return
   elseif event == "QUEST_ACCEPT_CONFIRM" then
     -- the game's own prompt answers it: you say yes there (Auto.lua says why QuestBank no longer does)
@@ -2321,6 +2329,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.QuestMap then QB.QuestMap:Init() end
     if QB.Sync then QB.Sync:Init() end
     if QB.Discover then QB.Discover:Init() end
+    if QB.Survey then QB.Survey:Init() end
     if QB.Game then QB.Game:Init() end
     if QB.Loot then QB.Loot:Init() end
     if QB.Observe then QB.Observe:Init() end
@@ -2484,6 +2493,9 @@ slash = function(msg)
 
     QB:Print(string.format("Noted in game so far: %s, %s, %s%s. They stay in your saved file, QuestBank.lua. Upload it at foreverrank.com/questbank/, or let QuestBank Uploader send it on Windows, and it goes into the next release for everyone.",
       n(nq, "quest", "quests"), n(nn, "quest NPC", "quest NPCs"), n(nc, "chain step", "chain steps"), game))
+  elseif cmd == "survey" and QB.Survey then
+    -- what the quest survey has asked the game on this build (Survey.lua)
+    QB.Survey.Report(function(m) QB:Print(m) end)
   elseif cmd == "update" or cmd == "version" then
     QB:Print("You run QuestBank " .. QB.version .. (QB.newest and (". Newest seen: " .. QB.newest.version .. " (" .. (QB.newest.who or "?") .. ").") or "."))
     QB.UI:CopyLink("QuestBank download page", QB.DOWNLOAD)
