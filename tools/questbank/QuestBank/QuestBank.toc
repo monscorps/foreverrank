@@ -35,4 +35,5 @@ Arrow.lua
 Sync.lua
 Auto.lua
 MapPage.lua
+Gear.lua
 UI.lua
