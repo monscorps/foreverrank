@@ -369,12 +369,13 @@ function API.MapID()
   end
 end
 
--- where you stand, as a place on the continent: {c, wx, wy}. Nil where the client hides it (a secret map id, position
--- or coordinate: the arrow reads this every tick, so nothing here may touch one)
-function API.WorldPosition()
+-- where you stand (or a member of your party, unit, read on your map), as a place on the continent: {c, wx, wy}. Nil
+-- where the client hides it (a secret map id, position or coordinate: the arrow reads this every tick, so nothing
+-- here may touch one)
+function API.WorldPosition(unit)
   local m = QB.Plain(API.MapID())
   if not (m and C_Map and C_Map.GetPlayerMapPosition) then return nil end
-  local ok, pos = pcall(C_Map.GetPlayerMapPosition, m, "player")
+  local ok, pos = pcall(C_Map.GetPlayerMapPosition, m, unit or "player")
   pos = ok and QB.Plain(pos) or nil
   if type(pos) ~= "table" then return nil end
   local x, y = QB.Plain(pos.x), QB.Plain(pos.y)
@@ -1079,8 +1080,9 @@ local DEFAULTS = {
   -- objectives of the quests in your log, the target's name
   minimapPins = true, minimapLines = true, minimapPickups = true, minimapEntrances = true,
   minimapObjectives = true, minimapLabel = true,
-  -- the minimap's far zoom over the game's tiles and its drag (MinimapView.lua); back to you after a drag
-  mmExtended = true, mmCenter = true,
+  -- the minimap's far zoom over the game's tiles and its drag (MinimapView.lua); back to you after a drag; your party
+  -- and the quest's areas on the far ground; the stops the strokes join (MinimapRoute.lua)
+  mmExtended = true, mmCenter = true, mmParty = true, mmAreas = true, minimapSteps = 5,
   glow = { on = true, other = true, combat = false },
   walkRecord = true, walkShow = true, -- walked trails (Walk.lua): noted as you go, drawn on the minimap
   -- the camp bar (Camp.lua): Well Fed, the campfire kit, camp features with their cooldown, the sleeping bag; hidden in
@@ -2235,6 +2237,7 @@ function QB:Changed()
   QB.fresh = false
   if QB.Pins then QB.Try("map pins", QB.Pins.Update, QB.Pins) end -- and the quest icons after them (Pins.lua)
   if QB.Sync then QB.Try("party sync", QB.Sync.Changed, QB.Sync) end
+  QB.changed = (QB.changed or 0) + 1 -- a count, for what is kept until the data changes (the minimap's list)
 end
 
 local function onTurnIn(questID, xpReward)
@@ -2417,6 +2420,9 @@ slash = function(msg)
     QB:Settings().pos, QB:Settings().post.pos = nil, nil
     if QB.UI.frame then QB.UI.frame:ClearAllPoints(); QB.UI.frame:SetPoint("CENTER") end
     if QB.UI.postFrame then QB.UI.postFrame:ClearAllPoints(); QB.UI.postFrame:SetPoint("TOP", 0, -120) end
+  elseif cmd == "minimap" and rest == "debug" then
+    -- the minimap's far view, its ground and the quest's areas, for a report
+    if QB.MiniView then QB.MiniView.Debug() end
   elseif cmd == "minimap" and rest == "reset" then
     -- the minimap's own size and place again, other addons' buttons back on its rim
     if QB.Mini then QB.Mini.ResetFree() end

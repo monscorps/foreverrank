@@ -1,13 +1,17 @@
--- SPDX-License-Identifier: GPL-3.0-or-later
--- The route on the minimap: a numbered pin for every stop of the hand-in route, a line from stop to stop and from you
--- to the next one, your pick-up list, and the entrances of the dungeons around you. While the arrow sends you by a
--- flight master, a pier or the tram first, that is pinned too, and the line and the label go there. A pin outside the
--- minimap's reach sits on its rim, dimmer, in the direction it lies. Click a pin: a waypoint there, as on the world
--- map; right-click it: the minimap's menu. Alt-drag moves the minimap, Ctrl-wheel sizes it, the wheel zooms it: the
--- game's own levels, then further out over the game's minimap tiles, and a drag pans that far view
--- (MinimapView.lua). Everything here is QuestBank's own frames laid over the Minimap; of the game's only its release
--- script is wrapped (MinimapView.lua), and the minimap itself is only scaled, moved and zoomed, never in a fight.
--- (QuestBank's Map is the game's world map: UI.OpenMap.)
+-- SPDX-License-Identifier: GPL-3.0-or-later AND MIT
+-- Contains code from QuestTrail 3.0.6, Copyright (c) 2026 Krom, MIT licence (LICENSE-QuestTrail.txt): QuestTrail_Pins.lua: WeightScale, ByWeight, MergeOverlaps, Item, SizePin, RebuildMinimapCache, GroupMinimap, UpdateMinimap, the selected quest's pulse
+-- The route on the minimap: a numbered pin for every stop of the hand-in route, a stroke from you to the next place
+-- and from stop to stop (MinimapRoute.lua), the NPCs who take your finished quests, your pick-up list, the objectives
+-- of the quests in your log, and the entrances of the dungeons around you, ticked once their quests are all done.
+-- While the arrow sends you by a flight master, a pier or the tram first, that is pinned too, and the stroke and the
+-- label go there. Placed QuestTrail's way: out of reach, the stops, the step and the hand-ins sit on the rim, dimmer,
+-- in the direction they lie, and the rest fade out over their last width before it; one quest's objectives close
+-- together on the ground are one pin, a little bigger; each place keeps its pin while the view moves. Click a pin: a
+-- waypoint there, as on the world map; right-click it: the minimap's menu. Alt-drag moves the minimap, Ctrl-wheel
+-- sizes it, the wheel zooms it: the game's own levels, then further out over the game's minimap tiles, and a drag pans
+-- that far view (MinimapView.lua). Everything here is QuestBank's own frames laid over the Minimap; of the game's only
+-- its release script is wrapped (MinimapView.lua), and the minimap itself is only scaled, moved and zoomed, never in
+-- a fight. (QuestBank's Map is the game's world map: UI.OpenMap.)
 --   where a pin is: the stop's map and position go through QB.Model.World to continent yards, as the arrow's do, and
 --   then through the minimap's view (MV.View: its centre, its radius in yards from C_Minimap.GetViewRadius or the far
 --   zoom, its turn with your facing under rotateMinimap).
@@ -17,16 +21,18 @@ QB.Mini = Mini
 
 local TICK = 0.05          -- seconds between placements (the pins follow you); every frame while the view moves
 local ART = "Interface\\AddOns\\QuestBank\\art\\"
-local PATH_EVERY = 2       -- seconds between golden-path searches
-local MAX_PINS = 60        -- route stops, pick-ups and entrances, the nearest first past that
-local EDGE = 7             -- the rim: pins past the minimap's reach sit this far inside its edge
-local LINE_REACH = 1.6     -- a line is drawn when both ends are within this many radii
+local MAX_PINS = 60        -- pins at once: the step and the stops first, then the nearest
+local EDGE = 7             -- the rim: pins kept on it sit this far inside the minimap's edge
+local LIST_EVERY = 0.5     -- seconds the list is kept (and until QuestBank's data or a switch changes)
 Mini.TICK, Mini.MAX_PINS = TICK, MAX_PINS
-local RANK = { step = 0, stop = 1 } -- pins placed first, and kept past MAX_PINS: the arrow's step, the route's stops
+local RANK = { step = 0, stop = 1, turn = 1 }
+local PINNED = { step = true, stop = true, turn = true } -- out of reach: on the rim, the way to go
+local SIZE = { stop = 22, step = 18, dungeon = 18, obj = 16, pickup = 16, turn = 16 }
+local GOLD, BLUE = { 1, 0.84, 0.18 }, { 0.4, 0.55, 1 }
 
 local plain = QB.Plain
-local sqrt, atan2, sin, cos, pi, floor = math.sqrt, math.atan2, math.sin, math.cos, math.pi, math.floor
-local pins, lines, worldOf = {}, {}, {}
+local sqrt, floor, cos, pi, max = math.sqrt, math.floor, math.cos, math.pi, math.max
+local pins, worldOf, pinOf = {}, {}, {}
 
 local function on() return QB:Settings().minimapPins ~= false end
 
@@ -60,33 +66,42 @@ local function worldPos(d)
   return w or nil
 end
 
--- screen offset of a world point from where you stand: north up, west left, turned with you when the minimap turns.
--- Returns x, y (pixels), the distance in yards, and whether it is past the rim
-function Mini.Project(me, w, radius, R, facing)
-  local dn, dw = w.wx - me.wx, w.wy - me.wy
-  local d = sqrt(dn * dn + dw * dw)
-  local b = atan2(dw, dn) - (facing or 0)
-  local px = d / radius * R
-  local far = px > R - EDGE
-  if far then px = R - EDGE end
-  return -sin(b) * px, cos(b) * px, d, far
-end
-
--- what goes on the minimap: the arrow's step on the way (a flight master, a pier), the route's stops (numbered), the
--- pick-up list, the dungeon entrances of your continent
-function Mini.List()
+-- what goes on the minimap: the arrow's step on the way (a flight master, a pier; left out with noStep), the route's
+-- stops (numbered), the pick-up list, the hand-ins of your finished quests, the objectives of the others, the dungeon
+-- entrances of your continent
+function Mini.List(noStep)
   local out = {}
-  local step = QB.Arrow and QB.Arrow.MiniStep and QB.Arrow.MiniStep()
+  local step = not noStep and QB.Arrow and QB.Arrow.MiniStep and QB.Arrow.MiniStep()
   if step then out[1] = step end
   local P = QB.Pins
+  local stopAt = {}
   if P and P.list then
     for _, d in ipairs(P.list) do
-      if d.m and d.m > 0 then out[#out + 1] = { m = d.m, x = d.x, y = d.y, name = d.name, num = d.num, kind = "stop", when = d.when, lines = d.lines, late = d.late } end
+      if d.m and d.m > 0 then
+        out[#out + 1] = { m = d.m, x = d.x, y = d.y, name = d.name, num = d.num, kind = "stop", when = d.when, lines = d.lines, late = d.late }
+        stopAt[keyOf(d)] = true
+      end
     end
   end
   if QB:Settings().minimapPickups ~= false and QB.Arrow and QB.Arrow.ListFor then
     for _, d in ipairs(QB.Arrow.ListFor("pickup") or {}) do
       if d.m and d.m > 0 then out[#out + 1] = { m = d.m, x = d.x, y = d.y, name = d.name, kind = "pickup" } end
+    end
+  end
+  -- the NPCs who take your finished quests, a pin each with the quests it takes (none where a stop's pin stands)
+  local turnAt = {}
+  for _, e in ipairs(QB.state.logOrder or {}) do
+    local q = e.complete and QB.Quest.Get(e.id)
+    local t = q and q.turn
+    if t and t.m and t.m > 0 and not t.inside then
+      local key = keyOf(t)
+      local g = turnAt[key]
+      if not g and not stopAt[key] then
+        g = { m = t.m, x = t.x, y = t.y, name = t.n, kind = "turn", id = e.id, lines = {} }
+        turnAt[key] = g
+        out[#out + 1] = g
+      end
+      if g then g.lines[#g.lines + 1] = { q.name, QB.Comma(QB.Model.XpAt(q, QB.state.level)) } end
     end
   end
   if QB:Settings().minimapObjectives ~= false and QB.Data.SPOT and QB.QuestMap and QB.QuestMap.Spots then
@@ -103,12 +118,91 @@ function Mini.List()
     end
   end
   if QB:Settings().minimapEntrances ~= false then
+    local done = QB.DMap and QB.DMap.Progress and QB.DMap.Progress() or {}
     for _, c in ipairs(QB.Data.CAT) do
       local e = c.entrance
-      if c.dungeon and e and e.m and e.m > 0 then out[#out + 1] = { m = e.m, x = e.x, y = e.y, name = c.name, kind = "dungeon", icon = c.icon } end
+      if c.dungeon and e and e.m and e.m > 0 then
+        local p = done[c.key]
+        out[#out + 1] = { m = e.m, x = e.x, y = e.y, name = c.name, kind = "dungeon", icon = c.icon, done = p and p.total > 0 and p.done == p.total or nil }
+      end
     end
   end
   return out
+end
+
+-- the list as last made: made again after LIST_EVERY seconds, or when QuestBank's data (QB:Changed) or a switch of
+-- what it holds changed. Each entry gets its key, so its pin stays its own while the view moves
+local cache = {}
+function Mini.ListCached()
+  local s, now, c = QB:Settings(), GetTime(), cache
+  if c.list and now >= c.at and now - c.at < LIST_EVERY and c.v == QB.changed and c.pk == s.minimapPickups
+    and c.ob == s.minimapObjectives and c.en == s.minimapEntrances then return c.list end
+  local list = Mini.List(true)
+  for _, d in ipairs(list) do d.key = d.kind .. ":" .. keyOf(d) .. ":" .. (d.id or d.num or "") end
+  c.list, c.at, c.v, c.pk, c.ob, c.en = list, now, QB.changed, s.minimapPickups, s.minimapObjectives, s.minimapEntrances
+  return list
+end
+
+-- a pin a little bigger where more spots are one (x1 for one, up to x1.4)
+local function weightScale(w)
+  if not w or w <= 1 then return 1 end
+  return 1 + math.min(0.4, 0.15 * math.log(w) / math.log(2))
+end
+-- the heaviest first; equals always in the same order (the sort is not stable, and the pins kept would change)
+local function byWeight(a, b)
+  if a.w ~= b.w then return a.w > b.w end
+  local qa, qb = a.d.id or 0, b.d.id or 0
+  if qa ~= qb then return qa < qb end
+  if a.wx ~= b.wx then return a.wx < b.wx end
+  return a.wy < b.wy
+end
+
+-- The list's places on the view's continent, grouped where they overlap: one quest's objectives closer than 0.8 of a
+-- pin's width make one pin, the heaviest's, carrying the others' weight. Grouped on the ground (yards), not on the
+-- screen, so a pin coming in at the edge never changes the groups inside; made again only when the list or the zoom
+-- changes, its tables kept. Each group { d, w (weight), wx, wy }
+local grp = { groups = {}, pool = {}, byQuest = {}, gen = 0 }
+function Mini.Group(list, v)
+  local zk = floor(math.log(max(v.scale, 1e-6)) * 50)
+  if grp.list == list and grp.c == v.c and grp.z == zk then return grp.groups end
+  if grp.list ~= list or grp.c ~= v.c then
+    local ents = {}
+    for _, d in ipairs(list) do
+      local w = worldPos(d)
+      if w and w.c == v.c then ents[#ents + 1] = { d = d, w = d.w or 1, wx = w.wx, wy = w.wy } end
+    end
+    table.sort(ents, byWeight)
+    grp.ents = ents
+  end
+  grp.list, grp.c, grp.z, grp.gen = list, v.c, zk, grp.gen + 1
+  local groups, reach, ng = grp.groups, SIZE.obj * 0.8 / max(v.scale, 1e-6), 0
+  for k = #groups, 1, -1 do groups[k] = nil end
+  for _, e in ipairs(grp.ents) do
+    local q = e.d.kind == "obj" and e.d.id
+    local mine = q and grp.byQuest[q]
+    if mine and mine.gen ~= grp.gen then mine.gen, mine.n = grp.gen, 0 end
+    local into
+    for i = 1, mine and mine.n or 0 do
+      local g = mine[i]
+      local dx, dy = g.wx - e.wx, g.wy - e.wy
+      if dx * dx + dy * dy < reach * reach then into = g; break end
+    end
+    if into then
+      into.w = into.w + e.w
+    else
+      ng = ng + 1
+      local g = grp.pool[ng] or {}
+      grp.pool[ng] = g
+      g.d, g.w, g.wx, g.wy = e.d, e.w, e.wx, e.wy
+      groups[ng] = g
+      if q then
+        if not mine then mine = { gen = grp.gen, n = 0 }; grp.byQuest[q] = mine end
+        mine.n = mine.n + 1
+        mine[mine.n] = g
+      end
+    end
+  end
+  return groups
 end
 
 local overlay
@@ -119,6 +213,7 @@ local function overlayFrame()
   overlay:SetFrameLevel((Minimap:GetFrameLevel() or 2) + 5)
   overlay.elapsed = 0
   overlay:SetScript("OnUpdate", QB.Safe(function(self, dt)
+    if Mini.pulsing then Mini.Pulse() end
     self.elapsed = self.elapsed + (dt or 0)
     if self.elapsed < TICK and not QB.MiniView.Moving() then return end
     local step = self.elapsed
@@ -129,23 +224,25 @@ local function overlayFrame()
 end
 
 local T
-local function pin(i)
-  local p = pins[i]
-  if p then return p end
+local function newPin()
   T = T or QB.Data.TEX
-  p = CreateFrame("Button", nil, overlayFrame())
+  local p = CreateFrame("Button", nil, overlayFrame())
   p:SetSize(16, 16)
   p.glow = p:CreateTexture(nil, "BACKGROUND")
   p.glow:SetTexture(ART .. "glow.tga")
   p.glow:SetPoint("CENTER")
-  p.glow:SetSize(44, 44)
-  p.glow:SetVertexColor(1, 0.82, 0.3, 0.55)
   p.glow:SetBlendMode("ADD")
   p.glow:Hide()
   p.icon = p:CreateTexture(nil, "ARTWORK")
   p.icon:SetAllPoints()
   p.num = p:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
   p.num:SetPoint("CENTER", 0, 0)
+  -- a dungeon whose quests are all done: the ready check's tick on its corner
+  p.badge = p:CreateTexture(nil, "OVERLAY")
+  p.badge:SetTexture(T.ready)
+  p.badge:SetSize(10, 10)
+  p.badge:SetPoint("BOTTOMRIGHT", 3, -3)
+  p.badge:Hide()
   p:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   p:SetScript("OnClick", QB.Safe(function(self, button)
     local d = self.d
@@ -159,80 +256,57 @@ local function pin(i)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:SetText(d.name or "", 1, 1, 1)
     if d.when then GameTooltip:AddLine(d.when, 0.8, 0.8, 0.8) end
+    if d.kind == "turn" then GameTooltip:AddLine("Hand in here", 0.3, 0.9, 0.3) end
     for _, l in ipairs(d.lines or {}) do GameTooltip:AddDoubleLine(l[1], l[2], 0.9, 0.9, 0.9, 0.6, 0.8, 0.6) end
-    if d.kind == "dungeon" then GameTooltip:AddLine("Dungeon entrance", 0.8, 0.8, 0.8) end
+    if d.kind == "dungeon" then GameTooltip:AddLine(d.done and "Dungeon entrance. Its quests are all done." or "Dungeon entrance", 0.8, 0.8, 0.8) end
     if d.kind == "pickup" then GameTooltip:AddLine("On your pick-up list", 0.8, 0.8, 0.8) end
     GameTooltip:AddLine(string.format(d.m and "%d yards. Click: waypoint." or "%d yards.", self.yards or 0), 0.5, 0.5, 0.5)
     GameTooltip:Show()
   end)
   p:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  pins[i] = p
+  pins[#pins + 1] = p
   return p
 end
 
-local function line(i)
-  local l = lines[i]
-  if l then return l end
-  local f = overlayFrame()
-  if not f.CreateLine then return nil end
-  local FLAT = "Interface\\Buttons\\WHITE8x8"
-  l = f:CreateLine(nil, "ARTWORK", nil, 1)
-  l:SetTexture(FLAT)
-  l:SetThickness(4)
-  l:SetVertexColor(1, 0.84, 0.18, 1)
-  -- the dark edge under it, and a round joint so the turns read as one line
-  l.under = f:CreateLine(nil, "ARTWORK", nil, 0)
-  l.under:SetTexture(FLAT)
-  l.under:SetThickness(8)
-  l.under:SetVertexColor(0.05, 0.04, 0.02, 0.9)
-  l.dot = f:CreateTexture(nil, "ARTWORK", nil, 2)
-  l.dot:SetTexture(ART .. "dot.tga")
-  l.dot:SetSize(7, 7)
-  l.SetLine = function(self, x1, y1, x2, y2, r, g, b, a)
-    self:SetVertexColor(r, g, b, a); self.under:SetVertexColor(0.05, 0.04, 0.02, 0.9 * a); self.dot:SetVertexColor(r, g, b, a)
-    self:SetStartPoint("CENTER", f, x1, y1); self:SetEndPoint("CENTER", f, x2, y2)
-    self.under:SetStartPoint("CENTER", f, x1, y1); self.under:SetEndPoint("CENTER", f, x2, y2)
-    self.dot:ClearAllPoints(); self.dot:SetPoint("CENTER", f, "CENTER", x2, y2)
-    self:Show(); self.under:Show(); self.dot:Show()
-  end
-  l.HideAll = function(self) self:Hide(); self.under:Hide(); self.dot:Hide() end
-  lines[i] = l
-  return l
-end
-
 -- the game's own crisp art where the client has it (the quest-number pin, the dungeon and quest marks), QuestBank's
--- textures otherwise
+-- textures otherwise. The quest picked on QuestBank's Map glows blue, pulsing (Mini.Pulse)
 local atlasOr = QB.Art
-local function style(p, d)
+local function style(p, it)
+  local d = it.d
   T = T or QB.Data.TEX
-  p.glow:Hide()
   p.icon:SetVertexColor(1, 1, 1, 1)
+  p.num:SetText(it.label or "")
+  p.badge:SetShown(d.done == true)
+  local glow
   if d.kind == "stop" then
     atlasOr(p.icon, d.num == 1 and "UI-QuestPoi-QuestNumber-SuperTracked" or "UI-QuestPoi-QuestNumber", T.mapPin)
-    p.num:SetText(d.num and tostring(d.num) or "")
-    p:SetSize(22, 22)
-    if d.num == 1 then p.glow:SetSize(50, 50); p.glow:Show() end
+    if d.num == 1 then glow = 2.3 end
   elseif d.kind == "obj" then
     -- the game's own cursor for the work: a sword to kill, a bag to loot, a cogwheel to use or click, coins to buy
     if QB.QuestMap and QB.QuestMap.PaintKind then QB.QuestMap.PaintKind(p.icon, d.obj) else p.icon:SetTexture(131021) end
-    p.num:SetText("")
-    p:SetSize(16, 16)
-    return
   elseif d.kind == "dungeon" then
     atlasOr(p.icon, "Dungeon", d.icon or T.ring)
-    p.num:SetText("")
-    p:SetSize(18, 18)
   elseif d.kind == "step" then
     if not atlasOr(p.icon, d.atlas, d.icon) then p.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
-    p.num:SetText("")
-    p:SetSize(18, 18)
-    p.glow:SetSize(40, 40)
-    p.glow:Show()
+    glow = 2.2
+  elseif d.kind == "turn" then
+    atlasOr(p.icon, "QuestTurnin", T.questActive)
   else
     atlasOr(p.icon, "QuestNormal", T.questAvail)
-    p.num:SetText("")
-    p:SetSize(16, 16)
   end
+  if it.focus then glow = 2.4 end
+  p.glow:SetAlpha(1)
+  if it.focus then p.glow:SetVertexColor(0.3, 0.55, 1, 0.9) else p.glow:SetVertexColor(1, 0.82, 0.3, 0.55) end
+  if glow then p.glow:SetSize(it.size * glow, it.size * glow); p.glow:Show() else p.glow:Hide() end
+end
+
+-- the picked quest's pins: their glow from faint to bright and back, once a second (every frame while there are any)
+function Mini.Pulse()
+  local k, any = (1 - cos(GetTime() * 2 * pi)) / 2, false
+  for _, p in ipairs(pins) do
+    if p.focus and p:IsShown() then p.glow:SetAlpha(0.25 + 0.75 * k); any = true end
+  end
+  Mini.pulsing = any
 end
 
 -- one update: the view (MinimapView.lua: a drag, the ease back, the far ground and your arrow), then the pins on it
@@ -241,109 +315,191 @@ function Mini.Update(dt)
   Mini.Place(me, QB.MiniView.Tick(dt, me))
 end
 
--- place every pin for where you stand now (me), on the view v (MV.View's for me when not given)
+-- Where a place's pin goes on the view: whole pixels from the minimap's centre, and how clear; nil when it is gone.
+-- Out of reach a stop, the step and a hand-in sit on the rim at 0.6 (the way to go), fading to that over their last
+-- width before it; anything else fades out over that width and is gone past the minimap's edge
+local function place(v, kind, wx, wy, size)
+  local MV = QB.MiniView
+  local x, y = MV.Point(v, wx, wy)
+  local reach, alpha = MV.Reach(x, y), 1
+  if PINNED[kind] then
+    local rim = v.R - EDGE
+    if reach > rim then x, y, alpha = x * rim / reach, y * rim / reach, 0.6
+    elseif reach > rim - size then alpha = 0.6 + 0.4 * (rim - reach) / size end
+  elseif reach > v.R then
+    return nil
+  elseif reach > v.R - size then
+    alpha = (v.R - reach) / size
+    if alpha < 0.05 then return nil end
+  end
+  return floor(x + 0.5), floor(y + 0.5), alpha
+end
+
+-- the pins of a placing, their tables kept from one to the next (20 a second): { d, key, x, y, alpha, size, label,
+-- yards (from you), focus, pin }; the stops' true places, and by number; the strokes; the label's place
+local items, itemPool, stops, byNum, segs, free, tinfo, gen = {}, {}, {}, {}, {}, {}, {}, 0
+local function addItem(v, me, d, w, wx, wy, focus)
+  local size = SIZE[d.kind] or 16
+  if d.kind == "obj" then size = max(floor(size * weightScale(w) / 2 + 0.5) * 2, 8) end
+  local x, y, alpha = place(v, d.kind, wx, wy, size)
+  if not x then return nil end
+  local n = #items + 1
+  local it = itemPool[n] or {}
+  itemPool[n], items[n] = it, it
+  local dn, dw = wx - me.wx, wy - me.wy
+  it.d, it.key, it.x, it.y, it.alpha, it.size, it.yards = d, d.key or d.kind, x, y, alpha, size, sqrt(dn * dn + dw * dw)
+  it.label, it.focus, it.pin = d.num and tostring(d.num) or nil, (focus ~= nil and d.id == focus) or nil, nil
+  return it
+end
+local function byRank(a, b)
+  local ka, kb = RANK[a.d.kind] or 2, RANK[b.d.kind] or 2
+  if ka ~= kb then return ka < kb end
+  return a.yards < b.yards
+end
+local function seg(n, x1, y1, x2, y2, col, alpha, size, gold)
+  local s = segs[n] or {}
+  segs[n] = s
+  s.x1, s.y1, s.x2, s.y2, s.col, s.alpha, s.size, s.gold = x1, y1, x2, y2, col, alpha, size, gold
+  return n
+end
+
+-- place every pin for where you stand now (me), on the view v (MV.View's for me when not given): QuestTrail's
+-- UpdateMinimap, with QuestBank's places and the game's art
 function Mini.Place(me, v)
   if not on() then Mini.Clear(); return end
   me = me or QB.API.WorldPosition()
   local f = overlayFrame()
   if not me then Mini.Clear(); return end
-  v = v or QB.MiniView.View(me)
-  local R, radius, facing = v.R, v.radius, v.facing
-  local list, placed, n = Mini.List(), {}, 0
-  -- nearest to you first when there are too many; placed round the view's centre (you, unless it was dragged)
-  local pts = {}
+  local MV = QB.MiniView
+  v = v or MV.View(me)
+  local set = QB:Settings()
+  local list = Mini.ListCached()
+  local groups = Mini.Group(list, v)
+  local focus = QB.MapPage and QB.MapPage.focus
+  for k = #items, 1, -1 do items[k] = nil end
+  for k = #byNum, 1, -1 do byNum[k] = nil end
+  -- the arrow's step first, read now: it moves with the arrow's guide
+  local step = QB.Arrow and QB.Arrow.MiniStep and QB.Arrow.MiniStep()
+  if step and step.c ~= me.c then step = nil end
+  if step then step.key = "step"; addItem(v, me, step, 1, step.wx, step.wy, focus) end
+  -- the route's stops in order, at their true places for the strokes; two at one place are one pin, "2,3"
+  local ns = 0
   for _, d in ipairs(list) do
-    local w = worldPos(d)
+    local w = d.kind == "stop" and worldPos(d)
     if w and w.c == me.c then
-      local x, y, _, far = Mini.Project(v, w, radius, R, facing)
-      local dn, dw = w.wx - me.wx, w.wy - me.wy
-      pts[#pts + 1] = { d = d, x = x, y = y, yards = sqrt(dn * dn + dw * dw), far = far }
-    end
-  end
-  table.sort(pts, function(a, b)
-    local ka, kb = RANK[a.d.kind] or 2, RANK[b.d.kind] or 2
-    if ka ~= kb then return ka < kb end
-    return a.yards < b.yards
-  end)
-  local nearestObj, step
-  for _, pt in ipairs(pts) do
-    if pt.d.kind == "obj" and (not nearestObj or pt.yards < nearestObj.yards) then nearestObj = pt end
-    if pt.d.kind == "step" then step = pt end
-  end
-  for i, pt in ipairs(pts) do
-    if i > MAX_PINS then break end
-    local p = pin(i)
-    style(p, pt.d)
-    p.d, p.yards = pt.d, pt.yards
-    p:ClearAllPoints()
-    p:SetPoint("CENTER", f, "CENTER", pt.x, pt.y)
-    p:SetAlpha(pt.far and 0.55 or 1)
-    p:Show()
-    n = n + 1
-    if pt.d.kind == "stop" and pt.d.num then placed[pt.d.num] = pt end
-  end
-  for i = n + 1, #pins do pins[i]:Hide() end
-  -- lines: you to stop 1 (along the golden path when your trails know the way), then stop to stop, where both ends
-  -- are near enough
-  local li = 0
-  -- where the line and the label go: the arrow's step on the way, else stop 1 or a nearer objective
-  local target = placed[1]
-  if nearestObj and (not target or nearestObj.yards < target.yards) then target = nearestObj end
-  target = step or target
-  Mini.target = target and target.d or nil
-  Mini.Label(target, f)
-  if QB:Settings().minimapLines ~= false then
-    local yx, yy, _, yfar = Mini.Project(v, me, radius, R, facing)
-    local prev = { x = yx, y = yy, far = yfar, yards = 0 }
-    local num = 1
-    local first = placed[1]
-    if target and target ~= first then
-      -- to the objective first: the golden path when your trails know it, else straight; the route's stops after
-      local path = QB.Walk and QB.Walk.Path and Mini.GoldenPath(me, target.d)
-      local pts2 = (path and #path >= 2) and path or { { me.wx, me.wy }, nil }
-      if not (path and #path >= 2) then
-        li = li + 1
-        local l = line(li)
-        if l then l:SetLine(yx, yy, target.x, target.y, 1, 0.84, 0.18, 1) end
+      local x, y = MV.Point(v, w.wx, w.wy)
+      local same
+      for i = 1, d.num and ns or 0 do
+        local s = stops[i]
+        if s.d.num and (s.x - x) ^ 2 + (s.y - y) ^ 2 < SIZE.stop * SIZE.stop * 0.8 then same = s; break end
+      end
+      ns = ns + 1
+      local s = stops[ns] or {}
+      stops[ns] = s
+      s.d, s.x, s.y = d, x, y
+      if same and same.it then
+        local it = same.it
+        it.label = it.label .. "," .. d.num
+        it.size = floor((SIZE.stop + (#it.label - 2) * SIZE.stop * 0.3) / 2 + 0.5) * 2
+        s.it = it
       else
-        for i = 1, #pts2 - 1 do
-          local x1, y1, _, far1 = Mini.Project(v, { wx = pts2[i][1], wy = pts2[i][2] }, radius, R, facing)
-          local x2, y2, _, far2 = Mini.Project(v, { wx = pts2[i + 1][1], wy = pts2[i + 1][2] }, radius, R, facing)
-          if not (far1 and far2) then li = li + 1; local l = line(li); if l then l:SetLine(x1, y1, x2, y2, 1, 0.84, 0.18, 1) end end
-        end
+        s.it = addItem(v, me, d, 1, w.wx, w.wy, focus)
       end
-      prev = target
-    end
-    if target == first and first and QB.Walk and QB.Walk.Path then
-      local path = Mini.GoldenPath(me, first.d)
-      if path and #path >= 2 then
-        for i = 1, #path - 1 do
-          local x1, y1, _, far1 = Mini.Project(v, { wx = path[i][1], wy = path[i][2] }, radius, R, facing)
-          local x2, y2, _, far2 = Mini.Project(v, { wx = path[i + 1][1], wy = path[i + 1][2] }, radius, R, facing)
-          if not (far1 and far2) then
-            li = li + 1
-            local l = line(li)
-            if l then l:SetLine(x1, y1, x2, y2, 1, 0.84, 0.18, 1) end
-          end
-        end
-        prev, num = first, 2 -- the straight line to stop 1 is replaced by the path
-      end
-    end
-    while placed[num] do
-      local pt = placed[num]
-      if not prev.far and not pt.far and pt.yards <= radius * LINE_REACH and prev.yards <= radius * LINE_REACH then
-        li = li + 1
-        local l = line(li)
-        if l then
-          if num == 1 and target == first then l:SetLine(prev.x, prev.y, pt.x, pt.y, 1, 0.84, 0.18, 1) else l:SetLine(prev.x, prev.y, pt.x, pt.y, 0.4, 0.55, 1, 0.85) end
-        end
-      end
-      prev, num = pt, num + 1
+      if d.num and not byNum[d.num] then byNum[d.num] = s end
     end
   end
-  for i = li + 1, #lines do lines[i]:HideAll() end
-  Mini.shown, Mini.linesShown = n, li
-  Mini.DrawTrails(v, radius, R, facing, f)
+  for _, g in ipairs(groups) do
+    if g.d.kind ~= "stop" then addItem(v, me, g.d, g.w, g.wx, g.wy, focus) end
+  end
+  -- too many: the step and the stops first, then the nearest
+  if #items > MAX_PINS then
+    table.sort(items, byRank)
+    for k = #items, MAX_PINS + 1, -1 do items[k] = nil end
+  end
+  -- each place on the pin it had (QuestTrail's: a place coming in or leaving at the edge moved every pin after it to
+  -- another place, each restyled), the free pins to the new places
+  gen = gen + 1
+  for _, it in ipairs(items) do
+    local p = pinOf[it.key]
+    if p and p.gen ~= gen and p.key == it.key then p.gen = gen; it.pin = p end
+  end
+  local nf = 0
+  for _, p in ipairs(pins) do
+    if p.gen ~= gen then nf = nf + 1; free[nf] = p end
+  end
+  local fi = 0
+  for _, it in ipairs(items) do
+    if not it.pin then
+      fi = fi + 1
+      local p = free[fi] or newPin()
+      if p.key and pinOf[p.key] == p then pinOf[p.key] = nil end
+      p.gen, p.key, it.pin = gen, it.key, p
+      pinOf[it.key] = p
+    end
+  end
+  for i = fi + 1, nf do
+    local p = free[i]
+    if p:IsShown() then p:Hide() end
+    if p.key and pinOf[p.key] == p then pinOf[p.key] = nil end
+    p.key = nil
+  end
+  for i = nf, 1, -1 do free[i] = nil end
+  -- (the game called only for what changed: most pins stay as they were while you walk)
+  local pulsing = false
+  for _, it in ipairs(items) do
+    local p, d = it.pin, it.d
+    if p.d ~= d or p.label ~= it.label or p.focus ~= it.focus or p.sz ~= it.size or p.sa ~= d.atlas or p.si ~= d.icon then
+      if p.sz ~= it.size then p:SetSize(it.size, it.size); p.sz = it.size end
+      style(p, it)
+      p.label, p.focus, p.sa, p.si = it.label, it.focus, d.atlas, d.icon
+    end
+    p.d, p.yards = d, it.yards
+    if p.a ~= it.alpha then p:SetAlpha(it.alpha); p.a = it.alpha end
+    if p.x ~= it.x or p.y ~= it.y then
+      p:ClearAllPoints()
+      p:SetPoint("CENTER", f, "CENTER", it.x, it.y)
+      p.x, p.y = it.x, it.y
+    end
+    if not p:IsShown() then p:Show() end
+    pulsing = pulsing or it.focus or false
+  end
+  Mini.pulsing = pulsing
+  -- where the stroke and the label go: the arrow's step on the way, else stop 1 or a nearer objective of your log
+  local target, tw = step, step
+  if not target then
+    local s1 = byNum[1]
+    tw = s1 and worldPos(s1.d)
+    target = s1 and s1.d
+    local best = tw and (tw.wx - me.wx) ^ 2 + (tw.wy - me.wy) ^ 2
+    for _, e in ipairs(grp.ents) do
+      local dd = e.d.kind == "obj" and (e.wx - me.wx) ^ 2 + (e.wy - me.wy) ^ 2
+      if dd and (not best or dd < best) then target, tw, best = e.d, e, dd end
+    end
+  end
+  Mini.target = target
+  local tx, ty = 0, 0
+  if target then
+    tx, ty = MV.Point(v, tw.wx, tw.wy)
+    tinfo.d, tinfo.x, tinfo.y, tinfo.far = target, tx, ty, MV.Reach(tx, ty) > v.R - EDGE
+  end
+  Mini.Label(target and tinfo, f)
+  -- the strokes: you to the target (along the golden path when your trails know the way), on to stop 1 if that is
+  -- not it, then stop to stop, up to minimapSteps stops
+  local n, gold = 0, false
+  if set.minimapLines ~= false and target then
+    local mx, my = MV.Point(v, me.wx, me.wy)
+    n = seg(1, mx, my, tx, ty, GOLD, 1, SIZE[target.kind] or 16, true)
+    local prev, px, py = target, tx, ty
+    for num = 1, set.minimapSteps or 5 do
+      local s = byNum[num]
+      if not s then break end
+      if s.d ~= prev then n = seg(n + 1, px, py, s.x, s.y, BLUE, 0.85, s.it and s.it.size or SIZE.stop) end
+      prev, px, py = s.d, s.x, s.y
+    end
+    gold = Mini.GoldenPath(me, target)
+  end
+  Mini.shown, Mini.linesShown = #items, QB.MiniRoute.Draw(v, segs, n, gold)
+  Mini.DrawTrails(v)
 end
 
 -- the target's name in a dark pill above it, the way the game labels a pin
@@ -370,15 +526,19 @@ function Mini.Label(target, f)
   Mini.labelText = target.d.name
 end
 
--- your walked trails (Walk.lua) round the view's centre (me: {c, wx, wy}), as thin lines under the pins
+-- your walked trails (Walk.lua) round the view's centre, faint lines under the route's (MinimapRoute.lua's frame),
+-- cut at the minimap's edge
 local trailLines = {}
-function Mini.DrawTrails(me, radius, R, facing, f)
+function Mini.DrawTrails(v)
   local n = 0
+  local f = QB.MiniRoute.Frames()
   if QB.Walk and QB:Settings().walkShow ~= false and f.CreateLine then
-    for _, seg in ipairs(QB.Walk.Near(me.c, me.wx, me.wy, radius * 1.1)) do
-      local x1, y1, _, far1 = Mini.Project(me, { wx = seg[1], wy = seg[2] }, radius, R, facing)
-      local x2, y2, _, far2 = Mini.Project(me, { wx = seg[3], wy = seg[4] }, radius, R, facing)
-      if not (far1 and far2) then
+    local Clip, Point, r = QB.MiniRoute.Clip, QB.MiniView.Point, v.R - 3
+    for _, seg in ipairs(QB.Walk.Near(v.c, v.wx, v.wy, v.radius * (v.square and 1.42 or 1.1))) do
+      local x1, y1 = Point(v, seg[1], seg[2])
+      local x2, y2 = Point(v, seg[3], seg[4])
+      local a1, b1, a2, b2 = Clip(x1, y1, x2, y2, r, v.square)
+      if a1 then
         n = n + 1
         local l = trailLines[n]
         if not l then
@@ -389,8 +549,8 @@ function Mini.DrawTrails(me, radius, R, facing, f)
           l:SetBlendMode("ADD")
           trailLines[n] = l
         end
-        l:SetStartPoint("CENTER", f, x1, y1)
-        l:SetEndPoint("CENTER", f, x2, y2)
+        l:SetStartPoint("CENTER", f, a1, b1)
+        l:SetEndPoint("CENTER", f, a2, b2)
         l:Show()
       end
     end
@@ -399,30 +559,24 @@ function Mini.DrawTrails(me, radius, R, facing, f)
   Mini.trailsShown = n
 end
 
--- the golden path to the next stop: the way your trails know between where you stand and the stop, looked up at
--- most every PATH_EVERY seconds, kept while you and the stop stay put
-local gold = {}
+-- the golden path to a pin's place (MinimapRoute.lua): true when your trails know the way and it is drawn
 function Mini.GoldenPath(me, d)
   local w = worldPos(d)
-  if not w or w.c ~= me.c then return nil end
-  local key = keyOf(d)
-  local t = GetTime and GetTime() or 0
-  if gold.key == key and gold.at and t - gold.at < PATH_EVERY and gold.me and math.abs(gold.me.wx - me.wx) + math.abs(gold.me.wy - me.wy) < 30 then
-    return gold.path
-  end
-  gold.key, gold.at, gold.me = key, t, { wx = me.wx, wy = me.wy }
-  gold.path = QB.Walk.Path(me.c, me, w)
-  return gold.path
+  if not w or w.c ~= me.c then return false end
+  return QB.MiniRoute.Gold(me, w)
 end
 
 function Mini.Clear()
   for _, p in ipairs(pins) do p:Hide() end
-  for _, l in ipairs(lines) do l:HideAll() end
   for _, l in ipairs(trailLines) do l:Hide() end
-  Mini.shown, Mini.linesShown, Mini.trailsShown = 0, 0, 0
+  if label then label:Hide() end
+  QB.MiniRoute.Clear()
+  Mini.shown, Mini.linesShown, Mini.trailsShown, Mini.pulsing = 0, 0, 0, false
 end
 
-function Mini.Invalidate() worldOf = {} end
+-- QuestBank's data, read again: the places' yards, the list and its groups
+function Mini.Invalidate() worldOf, cache.list, grp.list = {}, nil, nil end
+
 
 ----------------------------------------------------------------------------
 -- The minimap you move and size. Alt-drag moves it (its header comes along), Ctrl and the wheel size it, the plain

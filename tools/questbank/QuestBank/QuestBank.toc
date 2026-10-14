@@ -17,6 +17,7 @@ Timer.lua
 Link.lua
 MinimapTiles.lua
 MinimapView.lua
+MinimapRoute.lua
 Minimap.lua
 DungeonMap.lua
 Glow.lua

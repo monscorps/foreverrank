@@ -22,11 +22,15 @@ SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexC
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetUnboundedStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
 SetAtlas SetPassThroughButtons SetCooldown SetHideCountdownNumbers SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient
-SetClipsChildren PingLocation]])
+SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 -- a PlayerModel's own: the creature it shows, by display id or by NPC id, its camera, and whether it keeps the model
 -- while hidden
 local MODEL = { SetDisplayInfo = true, SetCreature = true, SetPortraitZoom = true, ClearModel = true, SetKeepModelOnHide = true }
+-- a QuestPOIFrame's own (the game's quest areas, Blizzard_SharedMapDataProviders/QuestBlobDataProvider.xml): the map it
+-- draws for and the quest it drew (__blobs counts the drawings)
+local POI = { DrawBlob = true, DrawNone = true, SetMapID = true, SetFillTexture = true, SetBorderTexture = true, SetFillAlpha = true,
+  SetBorderAlpha = true, SetBorderScalar = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
 ----------------------------------------------------------------------------
@@ -61,7 +65,7 @@ local function newObj(kind, template, parent)
   ALL[#ALL + 1] = o
   local mt = {}
   mt.__index = function(t, k)
-    if METHODS[k] or (BACKDROP[k] and t.__backdrop) or (MODEL[k] and kind == "PlayerModel") then
+    if METHODS[k] or (BACKDROP[k] and t.__backdrop) or (MODEL[k] and kind == "PlayerModel") or (POI[k] and kind == "QuestPOIFrame") then
       return function(self, ...)
         local a = { ... }
         local n = select("#", ...)
@@ -151,6 +155,9 @@ local function newObj(kind, template, parent)
         elseif k == "SetPortraitZoom" then self.__portraitZoom = a[1]
         elseif k == "ClearModel" then self.__display, self.__creature = nil, nil
         elseif k == "SetKeepModelOnHide" then self.__keepModel = a[1]
+        elseif k == "SetMapID" then self.__poiMap = a[1]
+        elseif k == "DrawBlob" then self.__blobQuest, self.__blobs = a[1], (self.__blobs or 0) + 1
+        elseif k == "DrawNone" then self.__blobQuest = nil
         elseif k == "GetLeft" then return self.__left or 0
         elseif k == "GetTop" then return self.__top or 0
         elseif k == "GetNumPoints" then return #self.__points
@@ -513,6 +520,10 @@ local function newClient(o)
   env.GetRealmName = function() return "Forever Normal" end
   env.IsInGroup = function() return o.group or false end
   env.IsInRaid = function() return false end
+  -- the party without you (c.party), whether a unit is you, and whether you fly (c.flying)
+  env.GetNumSubgroupMembers = function() return c.party and #c.party or 0 end
+  env.UnitIsUnit = function(a, b) return a == b end
+  env.IsFlying = function() return c.flying or false end
   env.IsInGuild = function() return o.guild or false end
   -- chat channels: the version notice joins one quiet channel; GetChannelName answers 0 until joined
   c.channels = {}
@@ -1552,9 +1563,114 @@ do
   assert(math.abs(x2 - 28) < 0.01 and math.abs(y2) < 0.01, string.format("80 yards east: 28 px right (%s, %s)", x2, y2))
   local far = byName["Far away"]
   local x3 = at(far)
-  assert(math.abs(x3 - 63) < 0.01 and far:GetAlpha() < 1, "a stop past the reach sits on the rim, dimmer: " .. tostring(x3))
+  assert(math.abs(x3 - 63) < 0.01 and far:GetAlpha() == 0.6, "a stop past the reach sits on the rim at 0.6: " .. tostring(x3) .. ", " .. far:GetAlpha())
   assert(byName.Goldshire.num:GetText() == "1" and byName.Crossroads.num:GetText() == "2", "numbered")
-  assert(Mini.linesShown == 2, "you to stop 1 and stop 1 to stop 2; nothing to the far one: " .. tostring(Mini.linesShown))
+  -- 5.4: the strokes (MinimapRoute.lua): QuestTrail's line_arrow.png, you to stop 1 (stopping at the pin's edge, 0.45 of
+  -- its 22 px short), 1 to 2, and 2 to the far stop cut at the minimap's edge, pointing the way
+  local MR = QB.MiniRoute
+  local stroke = MR.route.lines
+  assert(Mini.linesShown == 3 and stroke[1].__tex == "Interface\\AddOns\\QuestBank\\art\\line_arrow.png" and math.abs(stroke[1].__stop[4] - 11.1) < 0.01,
+    "you to stop 1, 1 to 2, 2 to 3: " .. tostring(Mini.linesShown))
+  local ex, ey = stroke[3].__stop[3], stroke[3].__stop[4]
+  assert(stroke[3].__shown and math.sqrt(ex * ex + ey * ey) < 70 and ex > 60 and math.abs(ey) < 0.01, string.format("the stroke to the far stop ends at the edge (%s, %s)", ex, ey))
+  -- QuestTrail's rim: an objective out of reach is gone (400 yards west at 200), one inside fades over its last width
+  -- (195 yards east: 68 px of 70, a 16 px pin)
+  local D = QB.Data
+  D.SPOT[777001], D.SPOT[777002] = "k,1,1429,548.75,500,10,c", "k,1,1429,400,500,10,c"
+  table.insert(QB.state.logOrder, 1, { id = 777001, complete = false })
+  table.insert(QB.state.logOrder, 2, { id = 777002, complete = false })
+  Mini.Invalidate(); Mini.Place()
+  local function pinOf(test) for _, p in ipairs(c.frames) do if p.__parent == f and p.d and p:IsShown() and test(p.d) then return p end end end
+  local near, gone = pinOf(function(d) return d.id == 777001 end), pinOf(function(d) return d.id == 777002 end)
+  assert(near and near:GetAlpha() > 0.05 and near:GetAlpha() < 1 and not gone, "an objective past the rim is gone, one at its edge faded: " .. tostring(near and near:GetAlpha()))
+  -- each place keeps its pin: placed again, a second later with the list made again, and with a new place coming in
+  -- ahead of the others (quest 5's objective, 90 yards south), nothing moves to another pin
+  local onPin, kept = {}, 0
+  for _, p in ipairs(c.frames) do if p.__parent == f and p.d and p:IsShown() then onPin[p.d.key or p.d.kind] = p; kept = kept + 1 end end
+  Mini.Place()
+  c.clock = c.clock + 1
+  Mini.Place()
+  D.SPOT[5] = "k,1,1429,500,530,10,c"
+  table.insert(QB.state.logOrder, 1, { id = 5, complete = false })
+  Mini.Invalidate(); Mini.Place()
+  local same = 0
+  for _, p in ipairs(c.frames) do if p.__parent == f and p.d and p:IsShown() and onPin[p.d.key or p.d.kind] == p then same = same + 1 end end
+  assert(kept >= 5 and same == kept and pinOf(function(d) return d.id == 5 end), string.format("every place on the pin it had: %d of %d", same, kept))
+  table.remove(QB.state.logOrder, 1)
+  D.SPOT[5] = nil
+  -- the list is made at most every half second (and when QuestBank's data changes): twenty placings, one list
+  local realList, built = Mini.List, 0
+  Mini.List = function(...) built = built + 1; return realList(...) end
+  c.clock = c.clock + 1
+  for _ = 1, 20 do Mini.Place() end
+  Mini.List = realList
+  assert(built == 1, "twenty placings made the list " .. built .. " times")
+  -- the quest picked on QuestBank's Map: its pins glow blue, pulsing once a second
+  QB.MapPage = { focus = 777001 }
+  Mini.Place()
+  near = pinOf(function(d) return d.id == 777001 end)
+  local k = (1 - math.cos(c.clock * 2 * math.pi)) / 2 -- (where in the second the clock is: half a second on, the other end)
+  f.__scripts.OnUpdate(f, 0.001)
+  local a0 = near.glow.__alpha
+  c.clock = c.clock + 0.5
+  f.__scripts.OnUpdate(f, 0.001)
+  local a1 = near.glow.__alpha
+  c.clock = c.clock + 0.5
+  assert(Mini.pulsing and near.glow.__shown and near.glow.__vertex[3] == 1 and math.abs(a0 - (0.25 + 0.75 * k)) < 0.01 and math.abs(a1 - (1 - 0.75 * k)) < 0.01,
+    string.format("the picked quest pulses: %s then %s", tostring(a0), tostring(a1)))
+  QB.MapPage = nil
+  Mini.Place()
+  assert(not Mini.pulsing and not near.glow.__shown, "nothing picked: no pulse")
+  table.remove(QB.state.logOrder, 1); table.remove(QB.state.logOrder, 1)
+  D.SPOT[777001], D.SPOT[777002] = nil, nil
+  -- two stops at one place are one pin, a little bigger, "2,3"; the strokes join the first minimapSteps stops
+  local route = P.list
+  P.list = { route[1], route[2], { m = 1429, x = 52, y = 50, num = 3, name = "Crossroads again", when = "", lines = {} } }
+  Mini.Invalidate(); Mini.Place()
+  local both = pinOf(function(d) return d.num == 2 end)
+  assert(both and both.num:GetText() == "2,3" and both.__w == 28 and not pinOf(function(d) return d.num == 3 end), "stops 2 and 3 at one place: one pin, 2,3")
+  P.list = route
+  QB:Settings().minimapSteps = 2
+  Mini.Invalidate(); Mini.Place()
+  assert(Mini.linesShown == 2, "two stops' strokes: you to 1, 1 to 2: " .. Mini.linesShown)
+  QB:Settings().minimapSteps = nil
+  -- a hand-in: the game's ? for a finished quest of your log, kept on the rim at 0.6 out of reach (1200 yards north)
+  local tid
+  for id in pairs(D.Q) do
+    local q = QB.Quest.Get(id)
+    if q and q.turn and not QB.state.log[id] then tid = id; break end
+  end
+  local tq = QB.Quest.Get(tid)
+  local saveTurn = tq.turn
+  tq.turn = { n = "Marshal Dughan", m = 1429, x = 50, y = 10 }
+  table.insert(QB.state.logOrder, 1, { id = tid, complete = true })
+  Mini.Invalidate(); Mini.Place()
+  local turn = pinOf(function(d) return d.kind == "turn" and d.id == tid end)
+  assert(turn and turn.icon.__tex == "atlas:QuestTurnin" and turn:GetAlpha() == 0.6 and math.abs(turn.__points[1].y - 63) < 0.01 and turn.d.name == "Marshal Dughan",
+    "a hand-in out of reach: the game's ? on the rim, at 0.6")
+  table.remove(QB.state.logOrder, 1)
+  tq.turn = saveTurn
+  -- a dungeon whose quests are all done: the ready check's tick on its entrance (made again when QuestBank's data changes)
+  local DM, dcat = QB.DMap, nil
+  for _, cat in ipairs(D.CAT) do
+    local pr = DM.Progress()[cat.key]
+    if cat.dungeon and cat.entrance and pr and pr.done < pr.total then dcat = cat; break end
+  end
+  local saveEntrance = dcat.entrance
+  dcat.entrance = { m = 1429, x = 50, y = 54 } -- 120 yards south
+  Mini.Invalidate(); Mini.Place()
+  local dpin = pinOf(function(d) return d.kind == "dungeon" and d.name == dcat.name end)
+  assert(dpin and dpin.icon.__tex == "atlas:Dungeon" and not dpin.badge.__shown, "a dungeon with quests to do: no tick")
+  local wasDone = {}
+  for _, e in ipairs(DM.Quests(dcat.key)) do wasDone[e.q.id] = c.done[e.q.id] or false; c.done[e.q.id] = true end
+  -- (QuestBank's data changed: QB:Changed counts it; not run here, it would drop the done quests from the owner's plan)
+  QB.API.RefreshDone(); QB.changed = QB.changed + 1
+  Mini.Place()
+  assert(dpin.d.done and dpin.badge.__shown and dpin.badge.__tex == QB.Data.TEX.ready, "all its quests done: the tick")
+  for id, was in pairs(wasDone) do c.done[id] = was or nil end
+  QB.API.RefreshDone(); QB.changed = QB.changed + 1
+  dcat.entrance = saveEntrance
+  Mini.Invalidate(); Mini.Place()
   -- the minimap turning with you: facing west puts north on the right
   c.cvars = { rotateMinimap = "1" }; c.facing = math.pi / 2
   Mini.Place()
@@ -1768,6 +1884,10 @@ do
   QB:Settings().minimapPins = false
   Mini.Place()
   assert(not byName.Goldshire:IsShown(), "the setting off clears the pins")
+  -- QuestBank's data changed: counted, so the minimap's list and the dungeons' ticks are made again
+  local changed = QB.changed
+  QB:Changed()
+  assert(QB.changed == changed + 1, "QB:Changed counts each change")
   QB:Settings().minimapPins = true
   P.list = saveList
   env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
@@ -1799,6 +1919,134 @@ do
   env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
   assert(ylva.QB.Mini.dragging == nil and ylva.gameClicks == 2, "and ends on the release, the game's click after")
   ylva.alt = false
+end
+-- 5.4: on the far ground your party and the quest's blue areas (MinimapView.lua), every switch on the minimap's menu or
+-- in Settings, /qb minimap debug, and QuestTrail's licence kept with its code
+do
+  local Mini, MV, env, P = QB.Mini, QB.MiniView, owner.env, QB.Pins
+  c = owner
+  -- the flat world (1 percent: 30 yards north-south, 40 east-west); you in the middle, party1 60 yards north, party2
+  -- 80 yards east, each read on your map as the game does
+  local saveWorld, savePos, saveParty, saveList = env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition, c.party, P.list
+  env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = -v.y * 3000, y = -v.x * 4000, GetXY = function(self) return self.x, self.y end } end
+  local at = { player = { 0.5, 0.5 }, party1 = { 0.5, 0.48 }, party2 = { 0.52, 0.5 } }
+  env.C_Map.GetPlayerMapPosition = function(m, unit)
+    local s = at[unit or "player"]
+    return s and { x = s[1], y = s[2], GetXY = function(self) return self.x, self.y end } or nil
+  end
+  local realTiles, testTiles = QB.MinimapTiles, {}
+  for col = 20, 50 do for row = 20, 50 do testTiles[col * 100 + row] = 900000 + col * 100 + row end end
+  QB.MinimapTiles = { azeroth = testTiles }
+  c.party = { { "Brann", "WARRIOR", 20 }, { "Aela", "SHAMAN", 21 } }
+  c.miniRadius, c.facing, env.Minimap.__zoom = 200, 0, 0
+  Mini.Invalidate(); Mini.Update(0)
+  assert(not MV.Extended() and (MV.partyShown or 0) == 0, "at the game's zoom the party dots are the game's own")
+  Mini.Wheel(-1)
+  local function dot(unit) for _, fr in ipairs(c.frames) do if fr.__parent == MV.frame and fr.unit == unit and fr:IsShown() then return fr end end end
+  local d1, d2 = dot("party1"), dot("party2")
+  assert(MV.Extended() and MV.partyShown == 2 and d1 and d2, "far out: two dots for the party")
+  assert(d1.tex.__tex == "Interface\\Minimap\\PartyRaidBlips" and d1.tex.__vertex[1] == 0.78 and math.abs(d1.__points[1].y - 14) < 0.01
+    and math.abs(d2.__points[1].x - 18.67) < 0.01 and d2.tex.__vertex[3] == 0.87 and d1.__w == 14,
+    "each in its class colour where it stands: 60 yards north at 300 is 14 px up")
+  QB:Settings().mmParty = false
+  Mini.Update(0)
+  assert(MV.partyShown == 0 and not d1:IsShown(), "Party off: no dots")
+  QB:Settings().mmParty = nil
+  -- the quest's blue areas: the game's own QuestPOIFrame over your zone's map, cut in 16 bands on a round minimap,
+  -- drawn unseen first and shown once the layout settled; the quest picked on QuestBank's Map
+  QB.MapPage = { focus = 777100 }
+  local m = QB.API.MapID()
+  for _ = 1, 3 do c.clock = c.clock + 0.2; Mini.Update(0) end
+  local parts, drawn = {}, 0
+  for _, o in ipairs(ALL) do if o.__kind == "QuestPOIFrame" and o.__client ~= nil and o.__client == c and o.__shown and o.__poiMap then parts[#parts + 1] = o end end
+  for _, o in ipairs(parts) do if o.__blobQuest == 777100 and o.__alpha == 1 then drawn = drawn + 1 end end
+  local scale = 4000 * (70 / 300) / 512
+  assert(MV.AreaQuest() == 777100 and MV.blobFrames == 16 and drawn == 16 and parts[1].__poiMap == m and math.abs(parts[1].__scale - scale) < 0.001
+    and parts[1].__w == 512 and math.abs(parts[1].__h - 384) < 0.01,
+    string.format("the quest's areas in 16 bands, the zone 4000 yards at 0.23 px a yard: %d drawn, scale %s", drawn, tostring(parts[1] and parts[1].__scale)))
+  -- (each band as wide as the circle, 2 px under the rim, at its outer edge: 34 px at the top and bottom)
+  local widths = {}
+  for _, o in ipairs(parts) do widths[#widths + 1] = o.__parent.__w end
+  table.sort(widths)
+  assert(math.abs(widths[1] - 33.71) < 0.01 and widths[#widths] < 144, "the bands follow the circle: " .. widths[1] .. " to " .. widths[#widths])
+  -- a zoom step (the wheel places at once): drawn unseen, shown the frame after (the minimap updated every frame
+  -- meanwhile)
+  local blobs = parts[1].__blobs
+  Mini.Wheel(-1)
+  assert(MV.Moving() and parts[1].__alpha == 0 and parts[1].__blobs == blobs + 1, "a zoom step: the areas drawn again, unseen")
+  Mini.Update(0)
+  assert(not MV.Moving() and parts[1].__alpha == 1 and parts[1].__blobs == blobs + 2 and math.abs(parts[1].__scale - scale / 1.5) < 0.001, "and shown the next frame")
+  Mini.Wheel(1); Mini.Update(0); Mini.Update(0)
+  c.clock = c.clock + 0.4 -- (whole seconds again, as the later tests count them)
+  -- none on a minimap that turns, nor with Quest areas off; with nothing picked, the first quest of your log at stop 1
+  c.cvars = { rotateMinimap = "1" }; c.facing = 1
+  Mini.Update(0)
+  assert(not parts[1].__shown, "a minimap that turns: no areas")
+  c.cvars = nil; c.facing = 0
+  QB:Settings().mmAreas = false
+  Mini.Update(0)
+  assert(not parts[1].__shown, "Quest areas off: none")
+  QB:Settings().mmAreas = nil
+  QB.MapPage = nil
+  local first = QB.state.logOrder[1].id
+  P.list = { { m = 1429, x = 50, y = 48, num = 1, name = "Goldshire", when = "", lines = {}, ids = { [first] = true } } }
+  assert(MV.AreaQuest() == first, "nothing picked: the first quest of your log at stop 1")
+  -- the minimap's menu holds every switch: Party and Quest areas among them
+  local n0 = #c.timers
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "RightButton")
+  for i = #c.timers, n0 + 1, -1 do table.remove(c.timers, i).f() end
+  local menu = c.contextMenus[#c.contextMenus]
+  local want, got = { "Back to me after a drag", "Back to me", "Far zoom", "Route", "Lines", "Pick-ups", "Objectives", "Dungeons", "Trails", "Party", "Quest areas", "Label", "QuestBank settings" }, {}
+  for _, e in ipairs(menu) do if e.text then got[#got + 1] = e.text end end
+  assert(table.concat(got, ",") == table.concat(want, ","), "the minimap's menu: " .. table.concat(got, ","))
+  for _, e in ipairs(menu) do if e.text == "Quest areas" then e.set() end end
+  assert(QB:Settings().mmAreas == false, "Quest areas off from the menu")
+  QB:Settings().mmAreas = nil
+  -- Settings: Far zoom and drag, your walked trails; the rest is on the minimap's menu
+  local U = QB.UI
+  U:ShowTab(5)
+  local v5 = U.views[5]
+  assert(v5.mmExtended:GetChecked() and v5.walkShow:GetChecked() and v5.minimapHint:GetText() == "Right-click the minimap for the rest.", "the minimap's rows in Settings")
+  v5.mmExtended:SetChecked(false); v5.mmExtended.__scripts.OnClick(v5.mmExtended)
+  assert(QB:Settings().mmExtended == false and not MV.Extended(), "Far zoom off in Settings: the game's minimap")
+  v5.mmExtended:SetChecked(true); v5.mmExtended.__scripts.OnClick(v5.mmExtended)
+  v5.walkShow:SetChecked(false); v5.walkShow.__scripts.OnClick(v5.walkShow)
+  assert(QB:Settings().walkShow == false, "trails off in Settings")
+  v5.walkShow:SetChecked(true); v5.walkShow.__scripts.OnClick(v5.walkShow)
+  U:ShowTab(1)
+  -- /qb minimap debug: three plain lines to paste back
+  Mini.Wheel(-1); Mini.Update(0)
+  local said = #c.chat
+  env.SlashCmdList.QUESTBANK("minimap debug")
+  local report = table.concat({ unpack(c.chat, said + 1) }, "\n")
+  assert(#c.chat == said + 3 and report:find("far view on (drawn)", 1, true) and report:find("mask atlas", 1, true) and report:find("party dots 2", 1, true)
+    and report:find("Quest areas: made", 1, true) and not report:find("[\128-\255]"), "/qb minimap debug: " .. report)
+  print(report)
+  Mini.Wheel(1)
+  c.party, P.list, QB.MinimapTiles = saveParty, saveList, realTiles
+  env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
+  Mini.Invalidate(); Mini.Update(0)
+  -- QuestTrail's MIT licence goes with its code: the notice, the two lines atop each file with its code, its line
+  -- texture; none of its own art
+  local lic = io.open(HERE .. "/QuestBank/LICENSE-QuestTrail.txt"):read("*a")
+  assert(lic:find("Copyright (c) 2026 Krom", 1, true) and lic:find("^MinimapTiles.lua, MinimapView.lua, MinimapRoute.lua, parts of Minimap.lua and art/line_arrow.png"),
+    "LICENSE-QuestTrail.txt: QuestTrail's notice")
+  for _, fn in ipairs({ "MinimapTiles.lua", "MinimapView.lua", "MinimapRoute.lua", "Minimap.lua" }) do
+    local head, k = {}, 0
+    for line in io.lines(HERE .. "/QuestBank/" .. fn) do k = k + 1; head[k] = line; if k == 3 then break end end
+    head = table.concat(head, "\n")
+    assert(head:find("LICENSE-QuestTrail.txt", 1, true) and head:find("SPDX-License-Identifier: GPL-3.0-or-later AND MIT", 1, true), fn .. " names QuestTrail's licence")
+  end
+  local png = io.open(HERE .. "/QuestBank/art/line_arrow.png", "rb")
+  assert(png and png:read(4) == "\137PNG", "art/line_arrow.png is there")
+  png:close()
+  for line in io.lines(HERE .. "/QuestBank/QuestBank.toc") do
+    local fn = line:match("^%s*([%w_]+%.lua)%s*$")
+    if fn then
+      local src = io.open(HERE .. "/QuestBank/" .. fn):read("*a")
+      for _, art in ipairs({ "ring_bg", "glyph_", "step_bg", "arrow_bg", "logo.png" }) do assert(not src:find(art, 1, true), fn .. " uses QuestTrail's own art: " .. art) end
+    end
+  end
 end
 -- 3.9.0: dungeon maps (DungeonMap.lua): the client's floor art, the bosses with their recorded loot, the quests
 do
@@ -1980,6 +2228,17 @@ do
   c.miniRadius = 200
   Mini.Place()
   assert(Mini.trailsShown == 3, "the three segments drawn near you on the minimap: " .. tostring(Mini.trailsShown))
+  -- 5.4: a trail running out of the minimap is cut at its edge (190 to 205 yards east: 66.5 to 71.8 px, cut at 67)
+  W[0][3] = { 1000, 1810, 1000, 1795 }
+  Walk.dirty = true
+  Mini.Place()
+  local cut
+  for _, o in ipairs(ALL) do
+    if o.__kind == "Line" and o.__parent == QB.MiniRoute.route.frame and o.__layer == "BACKGROUND" and o.__shown and o.__stop[3] > 60 then cut = o end
+  end
+  assert(Mini.trailsShown == 4 and cut and math.abs(cut.__start[3] - 66.5) < 0.01 and math.abs(cut.__stop[3] - 67) < 0.01, "a trail cut at the minimap's edge")
+  W[0][3] = nil
+  Walk.dirty = true
   -- the golden path: your trails know the way from you (1000, 2000) to a stop at (1045, 2000); none to (9000, 9000)
   Walk.dirtyNodes = true
   local path = Walk.Path(0, { wx = 1000, wy = 2000 }, { wx = 1045, wy = 2000 })
@@ -1994,8 +2253,41 @@ do
   W[0] = { { 1000, 2000, 1000, 1985, 1000, 1970, 1000, 1955 } }
   Walk.dirty, Walk.dirtyNodes = true, true
   P.list = { { m = 1429, x = 51.125, y = 50, num = 1, name = "Along the trail", when = "", lines = {} } }
+  QB:Settings().minimapObjectives = false -- (the stop is the target here, not one of your log's objectives)
   Mini.Invalidate(); Mini.Place()
-  assert(Mini.linesShown == 3, "the line to stop 1 follows the trail, leg by leg: " .. tostring(Mini.linesShown))
+  -- 5.4: the golden path, QuestTrail's (MinimapRoute.lua): gold along your trail, in pieces of 15 metres; the straight
+  -- stroke to stop 1 left to it
+  local MR, GP = QB.MiniRoute, QB.MiniRoute.GP
+  local function kinds() local t = {}; for i = 1, GP.n - 1 do t[i] = GP.seg[i] end; return table.concat(t, ",") end
+  assert(GP.n == 4 and kinds() == "own,own,own" and MR.goldShown >= 3 and Mini.linesShown == 0 and MR.gold.lines[1].__vertex[3] == 0,
+    "the way to stop 1 along the trail, gold: " .. kinds() .. ", " .. tostring(MR.goldShown) .. " pieces, " .. tostring(Mini.linesShown) .. " strokes")
+  -- from 30 yards west of the trail to a stop 40 yards past its end: straight, paler and thinner on those two bits
+  local px, py = 0.5, 0.5
+  env.C_Map.GetPlayerMapPosition = function() return { x = px, y = py, GetXY = function(self) return self.x, self.y end } end
+  px = 0.4925 -- (1000, 2030)
+  P.list[1].x = 52.125 -- (1000, 1915)
+  Mini.Invalidate(); Mini.Place()
+  local last = MR.gold.lines[MR.goldShown]
+  assert(kinds() == "line,own,line" and GP.n == 4 and math.abs(MR.gold.lines[1].th - 4.8) < 0.01 and last.__vertex[3] == 0.7 and last.th == 4.8,
+    "the bits off the trail, straight: " .. kinds())
+  -- walking along it, the points behind you are dropped and the way starts where you stand (no new search)
+  local searches, realPath = 0, Walk.Path
+  Walk.Path = function(...) searches = searches + 1; return realPath(...) end
+  px = 0.505 -- (1000, 1980): on the trail, past its start
+  Mini.Place()
+  assert(searches == 0 and GP.n == 3 and GP.x[1] == 1000 and math.abs(GP.y[1] - 1980) < 0.01 and kinds() == "own,line",
+    "walked on: the way trimmed behind you: " .. kinds() .. ", " .. GP.n .. " points")
+  Walk.Path = realPath
+  -- not in the air, nor within 20 metres of the place: then the plain stroke to it
+  c.flying = true
+  Mini.Place()
+  assert(MR.goldShown == 0 and not MR.gold.lines[1].__shown and Mini.linesShown == 1, "flying: no golden path, the stroke")
+  c.flying = false
+  P.list[1].x = 50.875 -- (1000, 1965): 15 yards on
+  Mini.Invalidate(); Mini.Place()
+  assert(MR.goldShown == 0 and not MR.gold.lines[1].__shown, "within 20 metres: no golden path")
+  QB:Settings().minimapObjectives = nil
+  env.C_Map.GetPlayerMapPosition = function() return { x = 0.5, y = 0.5, GetXY = function(self) return self.x, self.y end } end
   P.list = saveList2
   W[0] = { { 1000, 2000, 1015, 2000, 1030, 2000, 1045, 2000 }, { 9000, 9000, 9015, 9000 } }
   Walk.dirty, Walk.dirtyNodes = true, true
@@ -2537,7 +2829,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 1170 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 1242 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()
@@ -8649,7 +8941,10 @@ do
     "AddWorldQuestWatch", "AddQuestWatchForQuestID", "StaticPopupDialogs", "OpenChat", "ChatFrame_OpenChat", "ActivateChat",
     "ACTIVE_CHAT_EDIT_BOX", "LAST_ACTIVE_CHAT_EDIT_BOX", "ConfirmAcceptQuest", "AcquirePin", "RemoveAllPinsByTemplate",
     "RemovePin", "SetPinPosition", "MarkCanvasDirty", "UpdateQuestAcceptLogFullDialog", "MAX_QUESTLOG_QUESTS",
-    "LootSlot", "CloseLoot", "ConfirmLootSlot", "ConfirmLootRoll", "RollOnLoot", "SetLootMethod", "ToggleWorldMap", "SetMapID" }
+    "LootSlot", "CloseLoot", "ConfirmLootSlot", "ConfirmLootRoll", "RollOnLoot", "SetLootMethod", "ToggleWorldMap" }
+  -- SetMapID only on QuestBank's own frames: the Map page's canvas (MapPage.lua) and the minimap's quest areas
+  -- (MinimapView.lua: a QuestPOIFrame of its own). The world map's, never
+  local OWN_MAPID = { ["MapPage.lua"] = { "Canvas:SetMapID", "canvas:SetMapID" }, ["MinimapView.lua"] = { "part[:.]SetMapID" } }
 
   local FAMILIES = { "StaticPopup_", "SetSuperTracked" }
   local PATTERNS = {}
@@ -8683,6 +8978,11 @@ do
         local c = code(src)
         for _, pat in ipairs(PATTERNS) do
           if c:find(pat[1]) then found[#found + 1] = string.format("%s:%d %s", f, n, pat[2]) end
+        end
+        if c:find("%f[%w_]SetMapID%f[^%w_]") then
+          local mine = false
+          for _, ok in ipairs(OWN_MAPID[f] or {}) do if c:find("%f[%w_]" .. ok .. "%f[^%w_]") then mine = true end end
+          if not mine or c:find("WorldMapFrame[:.]SetMapID") then found[#found + 1] = string.format("%s:%d SetMapID", f, n) end
         end
       end
     end

@@ -4522,9 +4522,22 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("Alt-drag moves it, Ctrl and the wheel size it, the wheel zooms it.", 1, 1, 1, true)
     tip:AddLine("/qb minimap reset puts it back as the game had it.", 0.6, 0.6, 0.6, true)
   end)
+  -- its far zoom and drag (MinimapView.lua), your trails on it (Walk.lua); the other switches are on its own menu
+  v.mmExtended = checkRow(p, LEFT, -872, "Far zoom and drag", 340)
+  v.mmExtended:SetScript("OnClick", function(self) QB:Settings().mmExtended = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Update(0) end end)
+  tooltip(v.mmExtended, function(tip)
+    tip:AddLine("Far zoom and drag", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Wheel out past the game's widest, over the game's own minimap tiles. Drag to look around; it comes back to you.", 1, 1, 1, true)
+  end)
+  v.walkShow = checkRow(p, LEFT, -900, "Your walked trails", 340)
+  v.walkShow:SetScript("OnClick", function(self) QB:Settings().walkShow = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
+  v.minimapHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
+  v.minimapHint:SetPoint("TOPLEFT", LEFT, -928)
+  v.minimapHint:SetHeight(14)
+  v.minimapHint:SetText("Right-click the minimap for the rest.")
   -- the Map: the game's world map (UI.OpenMap)
   v.map = button(p, "Map", 110)
-  v.map:SetPoint("TOPLEFT", LEFT + 4, -872)
+  v.map:SetPoint("TOPLEFT", LEFT + 4, -944)
   v.map:SetScript("OnClick", QB.Safe(function() UI.OpenMap() end, "settings: map"))
   v.mapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
   v.mapLabel:SetPoint("LEFT", v.map, "RIGHT", 8, 0)
@@ -4536,31 +4549,31 @@ function UI:CreateSettingsView(parent)
   end)
 
   -- the light on the object your Interact key would use (Glow.lua)
-  heading(p, LEFT, -904, "Interact light", 370)
-  v.glowOn = checkRow(p, LEFT, -928, "Light the object my Interact key would use", 340)
+  heading(p, LEFT, -976, "Interact light", 370)
+  v.glowOn = checkRow(p, LEFT, -1000, "Light the object my Interact key would use", 340)
   v.glowOn:SetScript("OnClick", function(self) if QB.Glow then QB.Glow.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
-  v.glowOther = checkRow(p, LEFT + 24, -956, "Plain objects too, in white", 316)
+  v.glowOther = checkRow(p, LEFT + 24, -1028, "Plain objects too, in white", 316)
   v.glowOther:SetScript("OnClick", function(self) QB:Settings().glow.other = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
-  v.glowCombat = checkRow(p, LEFT + 24, -984, "Keep it on in a fight", 316)
+  v.glowCombat = checkRow(p, LEFT + 24, -1056, "Keep it on in a fight", 316)
   v.glowCombat:SetScript("OnClick", function(self) QB:Settings().glow.combat = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
   v.glowHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.glowHint:SetPoint("TOPLEFT", LEFT, -1010)
+  v.glowHint:SetPoint("TOPLEFT", LEFT, -1082)
   v.glowHint:SetHeight(44)
   v.glowHint:SetText("Gold for a quest object, green for an herb, orange for ore, blue for a chest. Switching it on sets the game's soft-interact settings; they go back as they were when it is off.")
 
   -- health and mana on the portraits: the game's own Status Text (Options, Interface), always shown, so it works in
   -- a fight where an addon may not read an enemy's health
-  heading(p, LEFT, -1070, "Health and mana numbers", 370)
+  heading(p, LEFT, -1142, "Health and mana numbers", 370)
   v.statusBtns = {}
   for i, o in ipairs(UI.STATUS_TEXT) do
     local b = button(p, o[2], 84)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1096)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1168)
     b.value = o[1]
     b:SetScript("OnClick", QB.Safe(function(self) UI.SetStatusText(self.value); UI:Refresh() end, "settings: status text"))
     v.statusBtns[i] = b
   end
   v.statusHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.statusHint:SetPoint("TOPLEFT", LEFT, -1126)
+  v.statusHint:SetPoint("TOPLEFT", LEFT, -1198)
   v.statusHint:SetHeight(30)
   v.statusHint:SetText("On your portrait, your target's and your focus's, always shown. The game's own Status Text option.")
 
@@ -4728,6 +4741,8 @@ function UI:RefreshSettingsView(v)
     set.autoKey == "none" and "No key skips it." or ("Hold " .. keyName .. " to do it by hand.")))
   v.clockShow:SetChecked(set.clock and set.clock.show == true)
   v.minimapPins:SetChecked(set.minimapPins ~= false)
+  v.mmExtended:SetChecked(set.mmExtended ~= false)
+  v.walkShow:SetChecked(set.walkShow ~= false)
   local gl = type(set.glow) == "table" and set.glow or {}
   v.glowOn:SetChecked(gl.on == true)
   v.glowOther:SetChecked(gl.other == true)
@@ -4759,7 +4774,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(1170) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(1242) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------

@@ -109,6 +109,25 @@ function DM.Quests(key)
   table.sort(out, function(a, b) if a.q.lvl ~= b.q.lvl then return (a.q.lvl or 0) < (b.q.lvl or 0) end return a.q.name < b.q.name end)
   return out
 end
+
+-- each dungeon's quests for you, done and in all ({ [key] = { done, total } }): one pass over the quests, as
+-- DM.Quests counts them, kept until QuestBank's data changes (QB:Changed). The minimap ticks a dungeon done
+local progress, progressAt
+function DM.Progress()
+  if progress and progressAt == QB.changed then return progress end
+  progress, progressAt = {}, QB.changed
+  local Q, API = QB.Quest, QB.API
+  for id in pairs(QB.Data.Q) do
+    local q = Q.Get(id)
+    if q and q.cat and q.cat.dungeon and Q.ForMe(q) then
+      local p = progress[q.cat.key]
+      if not p then p = { done = 0, total = 0 }; progress[q.cat.key] = p end
+      p.total = p.total + 1
+      if API.IsDone(id) then p.done = p.done + 1 end
+    end
+  end
+  return progress
+end
 local STATUS = { done = { "Done", 0.5, 0.5, 0.5 }, ready = { "Ready to hand in", 0.3, 0.9, 0.3 }, log = { "In your log", 1, 0.82, 0.3 }, open = { "To take", 0.9, 0.9, 0.9 } }
 
 -- what the search box matches: the dungeon's name, a boss, an item the client already names

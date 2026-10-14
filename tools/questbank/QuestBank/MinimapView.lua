@@ -1,12 +1,13 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later AND MIT
--- Contains code from QuestTrail 3.0.6, Copyright (c) 2026 Krom, MIT licence (LICENSE-QuestTrail.txt): QuestTrail_Minimap.lua: MV, Tiles, Extended, Square, Reach, View, Frame, SetShape, Tile, DrawGround, DrawPlayer, NativePlayer, Cursor, ScreenToMap, Wheel, Menu, Recentre, OnMouseDown, OnMouseUp, OnUpdateDrag, ZoomButtons, Hook, Moving, Tick
+-- Contains code from QuestTrail 3.0.6, Copyright (c) 2026 Krom, MIT licence (LICENSE-QuestTrail.txt): QuestTrail_Minimap.lua: MV, Tiles, Extended, Square, Reach, View, Frame, SetShape, Tile, DrawGround, DrawPlayer, NativePlayer, PartyDot, NewPart, Layout, HideBlob, DrawBlob, Debug, DrawParty, Cursor, ScreenToMap, Wheel, Menu, Recentre, OnMouseDown, OnMouseUp, OnUpdateDrag, ZoomButtons, Hook, Moving, Tick
 -- The minimap's view, after QuestTrail's extended minimap. Centred on you at the game's own zoom levels it is the
 -- game's minimap as it is. Wheeled out past the game's widest (1.5 times a step, up to 12,000 yards across) or dragged
 -- away from you, the ground is drawn from the game's own minimap tiles (MinimapTiles.lua) over the minimap, cut by the
--- minimap's own mask, with your arrow on it; 3 seconds after a drag it eases back to you. A click that does not drag
--- pings, as the game's does; a right-click opens the minimap's menu. Indoors, or where no tile is known, the game's
--- minimap shows. Everything QuestBank draws on the minimap goes through one view (MV.View): its centre and radius in
--- continent yards (QB.Model.World's), its scale in pixels a yard and its turn.
+-- minimap's own mask, with your arrow, your party and the quest's blue areas on it; 3 seconds after a drag it eases
+-- back to you. A click that does not drag pings, as the game's does; a right-click opens the minimap's menu. Indoors,
+-- or where no tile is known, the game's minimap shows (/qb minimap debug says why). Everything QuestBank draws on the
+-- minimap goes through one view (MV.View): its centre and radius in continent yards (QB.Model.World's), its scale in
+-- pixels a yard and its turn.
 local _, QB = ...
 local MV = { MAX_YARDS = 12000, STEP = 1.5, SMOOTH = 0.12, DRAG = 4, RETURN = 3, TILE = 1600 / 3, ARROW = 32 }
 QB.MiniView = MV
@@ -114,7 +115,7 @@ function MV.View(me)
            cs = cos(facing), sn = sin(facing), facing = facing, ext = ext, square = MV.Square() }
 end
 
--- a world spot on the minimap: pixels from its centre, x right and y up (Mini.Project's, without the rim)
+-- a world spot on the minimap: pixels from its centre, x right and y up
 function MV.Point(v, wx, wy)
   local e, n = v.wy - wy, wx - v.wx
   return (e * v.cs + n * v.sn) * v.scale, (-e * v.sn + n * v.cs) * v.scale
@@ -273,6 +274,268 @@ local function drawPlayer(v, me)
 end
 local function hidePlayer() if arrowFrame then arrowFrame:Hide() end end
 
+-- a value from the client: nil when the call fails or the value is secret
+local function ask(fn, ...)
+  if not fn then return nil end
+  local ok, v = pcall(fn, ...)
+  return ok and plain(v) or nil
+end
+
+-------------------------------------------------------------------------
+-- Your party (or raid) on the far ground, where the game's own dots are under it: a dot in each member's class
+-- colour (the game's blip, Interface\Minimap\PartyRaidBlips: its white one, tinted), the name on mouseover, placed
+-- as yours is (QB.API.WorldPosition). The mmParty switch
+-------------------------------------------------------------------------
+local party = {}
+MV.PARTY_SIZE = 14 / 32 -- of your arrow: the arrow's image has room round it, the dot's none
+local PARTY_UNITS, RAID_UNITS = {}, {}
+for i = 1, 4 do PARTY_UNITS[i] = "party" .. i end
+for i = 1, 40 do RAID_UNITS[i] = "raid" .. i end
+local function partyDot(k)
+  local d = party[k]
+  if d then return d end
+  d = CreateFrame("Frame", nil, frame)
+  d:SetSize(MV.ARROW * MV.PARTY_SIZE, MV.ARROW * MV.PARTY_SIZE)
+  d.tex = d:CreateTexture(nil, "OVERLAY")
+  d.tex:SetAllPoints()
+  d.tex:SetTexture("Interface\\Minimap\\PartyRaidBlips")
+  d.tex:SetTexCoord(0.5, 0.625, 0, 0.25)
+  d:EnableMouse(true)
+  d:SetScript("OnEnter", function(self)
+    if not self.unit then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetUnit(self.unit)
+    GameTooltip:Show()
+  end)
+  d:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  party[k] = d
+  return d
+end
+local function drawParty(v)
+  local used = 0
+  if QB:Settings().mmParty ~= false then
+    local raid = ask(IsInRaid) == true
+    local count = ask(raid and GetNumGroupMembers or GetNumSubgroupMembers)
+    local lvl = (Minimap:GetFrameLevel() or 1) + 4
+    for i = 1, type(count) == "number" and count or 0 do
+      local unit = (raid and RAID_UNITS or PARTY_UNITS)[i]
+      local w = unit and ask(UnitExists, unit) and not ask(UnitIsUnit, unit, "player") and QB.API.WorldPosition(unit)
+      if w and w.c == v.c then
+        local sx, sy = MV.Point(v, w.wx, w.wy)
+        if MV.Reach(sx, sy) <= v.R then
+          used = used + 1
+          local d = partyDot(used)
+          if d.lvl ~= lvl then d:SetFrameLevel(lvl); d.lvl = lvl end
+          local okC, _, file = pcall(UnitClass, unit)
+          local class = okC and plain(file) or nil
+          if d.class ~= class then
+            local col = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+            d.tex:SetVertexColor(col and col.r or 1, col and col.g or 1, col and col.b or 1)
+            d.class = class
+          end
+          d.unit = unit
+          if d.sx ~= sx or d.sy ~= sy then
+            d:ClearAllPoints()
+            d:SetPoint("CENTER", frame, "CENTER", sx, sy)
+            d.sx, d.sy = sx, sy
+          end
+          if not d:IsShown() then d:Show() end
+        end
+      end
+    end
+  end
+  for k = used + 1, #party do if party[k]:IsShown() then party[k]:Hide() end end
+  MV.partyShown = used
+end
+
+-------------------------------------------------------------------------
+-- The quest's blue areas on the far ground (the game draws them on its own minimap, under the tiles): frames of the
+-- game's own kind for them (QuestPOIFrame, as its world map's), laid over your zone's map where the view puts it,
+-- drawn by the game. The quest picked on QuestBank's Map (QB.MapPage.focus), else the first quest of your log at
+-- route stop 1; the mmAreas switch. Not on a minimap that turns (a frame cannot turn), nor where the client has no
+-- such frame. They cannot be masked: on a round minimap the circle is cut in BLOB_BANDS bands, each clipped as wide
+-- as the circle at its outer edge and the areas drawn again in each (a staircase under the rim). The timing is
+-- QuestTrail's, found in game: the game draws the areas at the frame's layout of a frame before
+-------------------------------------------------------------------------
+local blob -- nil: not made yet; false: no such frame on this client; else its state and frames
+local BLOB_W, BLOB_SETTLE, BLOB_SHOW, BLOB_BANDS, BLOB_EARLY = 512, 0.15, 0.1, 16, 5
+local function newPart(parent)
+  local ok, b = pcall(CreateFrame, "QuestPOIFrame", nil, parent)
+  if not (ok and b and b.DrawBlob) then return nil end
+  pcall(b.SetFillTexture, b, "Interface\\WorldMap\\UI-QuestBlob-Inside")
+  pcall(b.SetBorderTexture, b, "Interface\\WorldMap\\UI-QuestBlob-Outside")
+  pcall(b.SetFillAlpha, b, 128)
+  pcall(b.SetBorderAlpha, b, 192)
+  pcall(b.SetBorderScalar, b, 1.0)
+  b:SetFrameLevel((Minimap:GetFrameLevel() or 1) + 3)
+  -- (the wheel and the clicks go through it, to the minimap under it)
+  pcall(b.EnableMouse, b, false)
+  pcall(b.EnableMouseWheel, b, false)
+  b:Hide()
+  return b
+end
+-- The frames the areas are drawn in, for the minimap's shape and size: square, one, clipped by the ground's frame;
+-- round, a band each, 2 pixels wider than the circle (under the rim)
+local function layout()
+  local fw, fh = Minimap:GetWidth() or 140, Minimap:GetHeight() or 140 -- (the ground's frame is the minimap's size)
+  if blob.kSquare == MV.square and blob.kW == fw and blob.kH == fh then return end
+  blob.kSquare, blob.kW, blob.kH = MV.square, fw, fh
+  blob.key, blob.drawn = (blob.key or 0) + 1, nil
+  if blob.use then for _, p in ipairs(blob.use) do p:Hide() end end
+  for _, band in ipairs(blob.bands) do band.clip:Hide() end
+  if MV.square then
+    blob.use = { blob.single }
+    return
+  end
+  blob.use = {}
+  local r, bandH = fw / 2 + 2, fh / BLOB_BANDS
+  for i = 1, BLOB_BANDS do
+    local band = blob.bands[i]
+    if not band then
+      local clip = CreateFrame("Frame", nil, frame)
+      clip:SetClipsChildren(true)
+      clip:SetFrameLevel((Minimap:GetFrameLevel() or 1) + 3)
+      band = { clip = clip, part = newPart(clip) }
+      blob.bands[i] = band
+    end
+    local y0, y1 = -fh / 2 + (i - 1) * bandH, -fh / 2 + i * bandH
+    local far = max(abs(y0), abs(y1))
+    local half = sqrt(max(r * r - far * far, 0))
+    if half > 0 and band.part then
+      band.clip:ClearAllPoints()
+      band.clip:SetPoint("CENTER", frame, "CENTER", 0, (y0 + y1) / 2)
+      band.clip:SetSize(half * 2, bandH)
+      band.clip:Show()
+      blob.use[#blob.use + 1] = band.part
+    end
+  end
+end
+local function hideBlob()
+  if blob and blob.use then for _, p in ipairs(blob.use) do if p:IsShown() then p:Hide() end end end
+end
+
+-- the quest whose areas show: the one picked on QuestBank's Map, else the first quest of your log at route stop 1
+function MV.AreaQuest()
+  local picked = QB.MapPage and QB.MapPage.focus
+  if picked then return picked end
+  for _, d in ipairs(QB.Pins and QB.Pins.list or {}) do
+    if d.num == 1 then
+      for _, e in ipairs(QB.state.logOrder or {}) do if d.ids and d.ids[e.id] then return e.id end end
+      return nil
+    end
+  end
+end
+
+-- your zone's map in continent yards: its centre and its width west to east, height north to south
+local function zoneOf(m)
+  local a, b = QB.Model.World(m, 0, 0), QB.Model.World(m, 100, 100)
+  if not (a and b and a.c == b.c and a.wx ~= b.wx and a.wy ~= b.wy) then return nil end
+  return { c = a.c, wx = (a.wx + b.wx) / 2, wy = (a.wy + b.wy) / 2, W = abs(a.wy - b.wy), H = abs(a.wx - b.wx) }
+end
+
+-- each frame where the view puts the zone (ox, oy: its centre in the frames' own scale), drawn if asked, seen or not
+-- (a hidden frame is not drawn: one drawn unseen is shown, transparent)
+local function placeParts(parts, ox, oy, q, draw, showing)
+  for _, p in ipairs(parts) do
+    if draw then
+      pcall(p.DrawNone, p)
+      pcall(p.DrawBlob, p, q, true)
+    end
+    p:ClearAllPoints()
+    p:SetPoint("CENTER", frame, "CENTER", ox, oy)
+    p:SetAlpha(showing and 1 or 0)
+    p:Show()
+  end
+end
+
+local function drawBlob(v)
+  local q = QB:Settings().mmAreas ~= false and v.facing == 0 and MV.AreaQuest() or nil
+  if not q then
+    hideBlob()
+    -- (picked again later: its first seconds again, the game giving the areas a moment after)
+    if blob then blob.selected, blob.drawn, blob.zoom = nil, nil, nil end
+    MV.blobBusy = nil
+    return
+  end
+  if blob == nil then
+    -- (one made first: where the client has no such frame, none)
+    local test = newPart(frame)
+    blob = test and { single = test, bands = {} } or false
+    MV.blobSupported = blob and true or false
+    if blob then
+      -- (the quests' areas changed: drawn again)
+      local ev = CreateFrame("Frame")
+      pcall(ev.RegisterEvent, ev, "QUEST_POI_UPDATE")
+      pcall(ev.RegisterEvent, ev, "QUEST_LOG_UPDATE")
+      ev:SetScript("OnEvent", function() blob.dirty = true end)
+    end
+  end
+  if not blob then return end
+  local m = plain(QB.API.MapID())
+  local z = m and zoneOf(m)
+  if not (z and z.c == v.c) then hideBlob(); return end
+  layout()
+  local parts = blob.use
+  MV.blobFrames = #parts
+  -- The frames keep one modest size per zone (BLOB_W wide), laid out a frame before they are drawn; the zoom is their
+  -- scale. (The game draws the areas at the frame's size of its last layout: drawn at a size just set, or at the
+  -- zone's whole size on the ground, thousands of pixels, they came out shifted)
+  local bh = BLOB_W * z.H / z.W
+  if blob.map ~= m or blob.bh ~= bh or blob.sized ~= blob.key then
+    blob.s = 1
+    for _, part in ipairs(parts) do
+      part:SetScale(1)
+      part:SetSize(BLOB_W, bh)
+      pcall(part.SetMapID, part, m)
+    end
+    blob.map, blob.bh, blob.sized, blob.drawn, blob.moved, blob.scaled = m, bh, blob.key, nil, GetTime(), true
+  end
+  local now, s = GetTime(), z.W * v.scale / BLOB_W
+  -- a zoom step: the frames scaled at once, the areas drawn unseen in that frame, drawn again and shown the next
+  -- (drawn right after a scale they came out shifted, and so did a drawing kept and scaled); the minimap updated
+  -- every frame meanwhile (MV.Moving)
+  if abs(s / blob.s - 1) > 0.0005 or not blob.scaled then
+    blob.s, blob.moved, blob.scaled = s, now, true
+    for _, p in ipairs(parts) do p:SetScale(s) end
+    if blob.drawn == q then blob.zoom, MV.blobBusy = 1, true end
+  end
+  local cx, cy = MV.Point(v, z.wx, z.wy)
+  local ox, oy = cx / blob.s, cy / blob.s
+  if blob.zoom and blob.drawn ~= q then blob.zoom, MV.blobBusy = nil, nil end
+  if blob.zoom == 1 then blob.zoom = 2; placeParts(parts, ox, oy, q, true, false); return end
+  if blob.zoom == 2 then blob.zoom, MV.blobBusy, blob.at = nil, nil, now; placeParts(parts, ox, oy, q, true, true); return end
+  local settling = now - (blob.moved or 0) < BLOB_SETTLE
+  -- (a quest's areas not drawn yet, or another map's: they wait for the layout, unseen)
+  if settling and not blob.drawn then hideBlob(); return end
+  if blob.selected ~= q then blob.selected, blob.selAt = q, now end
+  if blob.drawn ~= q then blob.drawn, blob.from, blob.at, blob.final = q, now, 0, nil end
+  local showing = now - blob.from > BLOB_SHOW
+  -- drawn twice once still (at once, and as it is shown, the layout settled); then each second for BLOB_EARLY seconds
+  -- after the quest is picked; after that only when the game says the quests' areas changed
+  local draw = not settling and (blob.at == 0 or (showing and not blob.final)
+    or (now - blob.at > 1 and (now - blob.selAt < BLOB_EARLY or blob.dirty)))
+  if showing then blob.final = true end
+  if draw then blob.at, blob.dirty = now, nil end
+  placeParts(parts, ox, oy, q, draw, showing)
+end
+
+-- /qb minimap debug: the far view's state, for a report
+function MV.Debug()
+  local me = QB.API.WorldPosition()
+  local ext, why = MV.Extended(me)
+  local shown = 0
+  for _, t in ipairs(tiles) do if t:IsShown() then shown = shown + 1 end end
+  QB:Print(string.format("Minimap: far view %s (%s), continent %s, radius %s yards (the game's %s, its widest %s), tiles %d shown of %d, %d layouts.",
+    ext and "on" or "off", why or "drawn", tostring(me and me.c), tostring(MV.cur.r), tostring(QB.Mini.Radius()), tostring(MV.nativeMax),
+    shown, #tiles, MV.layouts or 0))
+  QB:Print(string.format("Ground: shown %s, level %s (minimap %s), mask %s, %s; your arrow %s; party dots %d.",
+    tostring(frame and frame:IsShown()), tostring(frame and frame:GetFrameLevel()), tostring(Minimap:GetFrameLevel()),
+    tostring(MV.maskKind), MV.square and "square" or "round", tostring(arrow and arrow:IsShown()), MV.partyShown or 0))
+  QB:Print(string.format("Quest areas: %s, quest %s, %s frames, drawn for %s.",
+    blob == false and "not on this client" or (blob and "made" or "not made yet"), tostring(MV.AreaQuest()), tostring(MV.blobFrames),
+    tostring(blob and blob.drawn)))
+end
+
 -------------------------------------------------------------------------
 -- The mouse: the wheel zooms (the game's levels first, then further out), a drag pans, a click that does not drag
 -- pings (where it was clicked, for the game's minimap), a right-click opens the menu
@@ -317,7 +580,8 @@ end
 -- Settings page. Built a frame later and owned by UIParent: QuestTrail found a menu owned by a map could crash the client
 local SWITCHES = {
   { "Far zoom", "mmExtended" }, { "Route", "minimapPins" }, { "Lines", "minimapLines" }, { "Pick-ups", "minimapPickups" },
-  { "Objectives", "minimapObjectives" }, { "Dungeons", "minimapEntrances" }, { "Trails", "walkShow" }, { "Label", "minimapLabel" },
+  { "Objectives", "minimapObjectives" }, { "Dungeons", "minimapEntrances" }, { "Trails", "walkShow" }, { "Party", "mmParty" },
+  { "Quest areas", "mmAreas" }, { "Label", "minimapLabel" },
 }
 function MV.Menu(d)
   if not (MenuUtil and MenuUtil.CreateContextMenu) then return end
@@ -443,6 +707,7 @@ end
 -- whether the view is moving (dragged, or easing): then it is drawn every frame, so the ground and the pins go smoothly
 function MV.Moving()
   if mouse and mouse.moved then return true end
+  if MV.blobBusy then return true end -- (the quest's areas, the frame after a zoom step)
   local want, cur = MV.want, MV.cur
   if cur.wx and not want.wx then return true end
   return (want.wx and cur.wx and (want.wx - cur.wx) ^ 2 + (want.wy - cur.wy) ^ 2 > 0.25) and true or false
@@ -455,7 +720,7 @@ function MV.Tick(dt, me)
   if MV.zoomButtons ~= on then MV.zoomButtons = on; zoomButtons(not on) end
   local want, cur = MV.want, MV.cur
   if not on then
-    MV.extendedNow, mouse = nil, nil
+    MV.extendedNow, mouse, MV.blobBusy = nil, nil, nil
     want.r, want.wx, want.wy, cur.r, cur.wx, cur.wy = nil, nil, nil, nil, nil, nil
     if frame then frame:Hide() end
     hidePlayer()
@@ -482,14 +747,23 @@ function MV.Tick(dt, me)
     if (cur.wx - me.wx) ^ 2 + (cur.wy - me.wy) ^ 2 < 1 then cur.wx, cur.wy = nil, nil end
   end
   local f = groundFrame()
-  if not me then MV.extendedNow = nil; f:Hide(); hidePlayer(); return nil end
+  if not me then MV.extendedNow, MV.blobBusy = nil, nil; f:Hide(); hidePlayer(); return nil end
   local v = MV.View(me)
   MV.extendedNow = v.ext or nil
-  if not v.ext then f:Hide(); hidePlayer(); return v end
+  if not v.ext then MV.blobBusy = nil; f:Hide(); hidePlayer(); return v end
   setShape(v.square)
   -- (just over the minimap: its level can change after the ground was made, the game's or another addon's doing)
   local lvl = (Minimap:GetFrameLevel() or 1) + 1
   if f:GetFrameLevel() ~= lvl then f:SetFrameLevel(lvl) end
-  if drawGround(v) then f:Show(); drawPlayer(v, me) else f:Hide(); hidePlayer() end
+  if drawGround(v) then
+    f:Show()
+    drawPlayer(v, me)
+    QB.Try("minimap quest areas", drawBlob, v)
+    drawParty(v)
+  else
+    MV.blobBusy = nil
+    f:Hide()
+    hidePlayer()
+  end
   return v
 end
