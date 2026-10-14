@@ -799,9 +799,24 @@ local function newClient(o)
     end,
     -- c.noPos: the client gives no position (the tram, a loading screen)
     GetPlayerMapPosition = function() if c.noPos then return nil end return { x = 0.66, y = 0.62, GetXY = function(self) return self.x, self.y end } end,
-    -- c.instWorld[m]: a map inside an instance, on the instance's own continent (not 0 or 1)
-    GetWorldPosFromMapPos = function(m)
+    -- c.instWorld[m]: a map inside an instance, on the instance's own continent (not 0 or 1). A map on the other
+    -- continent than the player's: a spot there, placed from one of its flight masters' map and world positions
+    -- (D.HUB, 40 yards a percent), so a trip across the sea is one. Every map on his own continent is where he
+    -- stands, as the mock's maps go
+    GetWorldPosFromMapPos = function(m, v)
       if (c.instWorld or {})[m] then return 36, { x = 0, y = 0, GetXY = function(self) return self.x, self.y end } end
+      local cont = continentOf(m) == 1414 and 1 or 0
+      local okM, mine = pcall(env.C_Map.GetBestMapForUnit, "player") -- (his own map is where he stands, whatever continent a test put him on)
+      if m ~= (okM and mine or nil) and (o.world[1] == 0 or o.world[1] == 1) and cont ~= o.world[1] and type(v) == "table" and c.QB.Data.HUB then
+        local wx, wy, found = 0, 0, false
+        for _, fac in ipairs({ "A", "H" }) do
+          for _, h in ipairs(c.QB.Data.HUB[fac]) do
+            if h[7] == m then wx, wy, found = h[3] - ((v.y or 0) * 100 - h[9]) * 40, h[4] - ((v.x or 0) * 100 - h[8]) * 40, true; break end
+          end
+          if found then break end
+        end
+        return cont, { x = wx, y = wy, GetXY = function(self) return self.x, self.y end }
+      end
       return o.world[1], { x = o.world[2], y = o.world[3], GetXY = function(self) return self.x, self.y end }
     end,
     GetMapRectOnMap = function() return 0.4, 0.6, 0.4, 0.6 end,
@@ -3356,6 +3371,8 @@ do
   assert(qid and U.RewardSlotFits(qid, "Head") and not U.RewardSlotFits(qid, "Ring"), "a mail head reward fits a paladin's Head, not Ring")
   env.C_Item.GetItemInfoInstant = saveInst
 end
+-- the layout sheets (dumpLayout) and the layout problems every stage's tests add to, written out at the end
+local layouts, problems = {}, {}
 -- [stage: boss-spots] that stage's tests go right below this line
 
 
@@ -3377,6 +3394,277 @@ end
 
 
 -- [stage: checklist] that stage's tests go right below this line
+-- checklist 1: the writs' turn-ins (flag 131072) and the repeatables (4096) are the reward finders' alone, never Available
+-- or Now, and their finder rows say Turn-in (no XP) or Repeatable
+do
+  local D = QB.Data
+  local level = QB.state.level
+  local _, below = QB:Range()
+  local writ, rep
+  for id, r in pairs(D.Q) do
+    local fl = r[10]
+    -- (the finders' window: takeable at your level, not grey below it)
+    local mine = (r[3] == 0 or r[3] == 1) and r[9] == 0 and not D.RACE[id] and r[2] <= level and r[1] >= level - below and not QB.state.log[id] and not QB.API.IsDone(id)
+      and not D.FOLLOW[id] and math.floor(fl / 128) % 2 == 0 and math.floor(fl / 65536) % 2 == 0
+    if mine and math.floor(fl / 131072) % 2 == 1 and not D.RITEMS[id] and (not writ or id < writ) then writ = id end
+    if mine and math.floor(fl / 4096) % 2 == 1 and math.floor(fl / 131072) % 2 == 0 and (not rep or id < rep) then rep = id end
+  end
+  assert(writ and rep, "a writ and a repeatable an Alliance paladin at 20 could take: " .. tostring(writ) .. " " .. tostring(rep))
+  local wq, rq = QB.Quest.Get(writ), QB.Quest.Get(rep)
+  assert(wq.turnIn and not rq.turnIn and rq.repeatable, "the flags read: " .. wq.name .. " is a turn-in, " .. rq.name .. " repeatable")
+  print(string.format("checklist: writ %d %s (%s), repeatable %d %s (%s)", writ, wq.name, wq.cat and wq.cat.name or "?", rep, rq.name, rq.cat and rq.cat.name or "?"))
+  -- their rewards, as the quest survey learns them in game: a shield for the writ, a trinket for the repeatable
+  local saveW, saveR = D.RITEMS[writ], D.RITEMS[rep]
+  D.RITEMS[writ] = { c = { 999901 } }; D.RIT[999901] = { 35, 14, 4, 6 }  -- INVTYPE_SHIELD, armour, shield
+  D.RITEMS[rep] = { r = { 999902 } }; D.RIT[999902] = { 34, 12, 4, 0 }   -- INVTYPE_TRINKET
+  UI.candMemo = nil
+  local function byQ(list) local t = {} for _, d in ipairs(list) do t[d.q.id] = d end return t end
+  local gear, trinket = byQ(UI:FindRewards("gear", level)), byQ(UI:FindRewards("trinket", level))
+  assert(gear[writ] and gear[writ].item == 999901 and gear[writ].ilvl == 35 and gear[writ].value == 0, "the writ is in Best gear with its shield and no XP")
+  assert(trinket[rep] and trinket[rep].item == 999902 and trinket[rep].ilvl == 34, "the repeatable is in Trinkets with its trinket")
+  assert(not trinket[writ], "the shield is no trinket")
+  -- never Available or Now: not a candidate outside the finders, with either level window, and on no card of either page
+  for _, c in ipairs(UI:Candidates(nil, level)) do assert(c.id ~= writ and c.id ~= rep, "outside the finders: " .. D.QN[c.id]) end
+  for _, c in ipairs(UI:Candidates(nil, level, level)) do assert(c.id ~= writ and c.id ~= rep, "nor with the finders' level window alone: " .. D.QN[c.id]) end
+  for _, tab in ipairs({ 2, 6 }) do
+    UI:ShowTab(tab); UI:Refresh()
+    for _, card in ipairs(UI.views[tab].cards.items) do
+      for _, row in ipairs(card.rows.items) do
+        assert(not (row:IsShown() and row.q and (row.q.id == writ or row.q.id == rep)), (tab == 2 and "Available" or "Now") .. " lists " .. tostring(row.q and row.q.name))
+      end
+    end
+  end
+  -- the rows: Best gear says Turn-in and the tooltip says no XP; Trinkets says Repeatable
+  UI:ShowTab(1); UI.findMode, UI.gearSlot = "gear", nil; UI:Refresh()
+  local function rowOf(id) for _, r in ipairs(v1.swaps) do if r:IsShown() and r.add and r.add.id == id then return r end end end
+  local wr = rowOf(writ)
+  assert(wr, "the writ has a Best gear row")
+  assert(wr.cutName:GetText():find("Item 999901 · Turn-in · " .. (wq.cat and wq.cat.name or ""), 1, true) and wr.gain:GetText() == "iL 35",
+    "its line says Turn-in before its place: " .. wr.cutName:GetText() .. " / " .. wr.gain:GetText())
+  lines = {}; wr.__scripts.OnEnter(wr)
+  local t = table.concat(lines, "\n")
+  assert(t:find("Rewards Item 999901 (item level 35). No XP: a turn-in.", 1, true) and not t:find("0 XP", 1, true), "its tooltip: no XP, not 0 XP: " .. t)
+  UI.findMode = "trinket"; UI:Refresh()
+  local rr = rowOf(rep)
+  assert(rr and rr.cutName:GetText():find("Item 999902 · Repeatable · ", 1, true) and rr.gain:GetText() == "iL 34",
+    "the repeatable's Trinkets row says so: " .. tostring(rr and rr.cutName:GetText()))
+  lines = {}; rr.__scripts.OnEnter(rr); t = table.concat(lines, "\n")
+  assert(t:find(" XP " .. QB:OnTheDay() .. ". Repeatable.", 1, true), "and its tooltip: " .. t)
+  -- the sheet: Best gear narrowed to the off hand, with the writ's shield and Blackfathom Villainy's (its trip across the
+  -- sea, checklist 3); no row anywhere says "0 min" for a place on the other continent
+  UI.findMode, UI.gearSlot = "gear", "Off hand"; UI:Refresh()
+  assert(rowOf(writ), "the writ's shield is in the off-hand rows")
+  local villainy = rowOf(1200)
+  assert(villainy and villainy.cutName:GetText():find("Blackfathom Deeps, %d+ min$") and not villainy.cutName:GetText():find(", 0 min", 1, true),
+    "Blackfathom Villainy's row: its minutes to the Deeps: " .. tostring(villainy and villainy.cutName:GetText()))
+  for _, slot in ipairs({ "Off hand", false }) do
+    UI.gearSlot = slot or nil; UI:Refresh()
+    for _, r in ipairs(v1.swaps) do
+      if r:IsShown() and r.add and r.add.cat and r.add.cat.cont and r.add.cat.cont ~= 0 then
+        assert(not r.cutName:GetText():find(", 0 min", 1, true), "a quest across the sea is never 0 min away: " .. r.cutName:GetText())
+      end
+    end
+  end
+  UI.gearSlot = "Off hand"; UI:Refresh()
+  for _, p in ipairs(checkLayout(UI.frame, "Quest Log, Best gear, a writ's turn-in")) do problems[#problems + 1] = p end
+  layouts[#layouts + 1] = dumpLayout(UI.frame, "Quest Log, Best gear (off hand): a writ's turn-in, a trip across the sea")
+  UI.findMode, UI.gearSlot = "xp", nil
+  D.RITEMS[writ], D.RITEMS[rep], D.RIT[999901], D.RIT[999902] = saveW, saveR, nil, nil
+  UI.candMemo = nil; UI:Refresh()
+end
+-- checklist 2: /qb survey find <text> lists the surveyed quests whose title has the text, any case, with their rewards by name
+do
+  local S = QB.Survey
+  local d = S.DB()
+  local save = { d.survey[999801], d.survey[999802], d.survey[999803] }
+  d.survey[999801] = { t = "Checklist Fixture One", lvl = 12, c = { 2435 }, r = { 2470 }, b = 70170 }
+  d.survey[999802] = { t = "Another checklist FIXTURE", lvl = 15, c = {}, r = {}, b = 70170 }
+  d.survey[999803] = { t = "Unrelated Errand", lvl = 9, c = { 2435 }, r = {}, b = 70170 }
+  local saveName = owner.env.C_Item.GetItemNameByID
+  owner.env.C_Item.GetItemNameByID = function(id) if id == 2435 then return "Tooth of Checklist" end return nil end
+  local n = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("survey find fixture")
+  assert(#owner.chat == n + 2, "two quests, a line each: " .. (#owner.chat - n))
+  local a, b = owner.chat[n + 1], owner.chat[n + 2]
+  assert(a:find("999801  Checklist Fixture One  (level 12)  rewards: Tooth of Checklist, 2470", 1, true), "an item by name where the client has it, else by id: " .. a)
+  assert(b:find("999802  Another checklist FIXTURE  (level 15)  rewards: none", 1, true), "any case, in id order, no rewards: " .. b)
+  n = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("survey find nothing-like-this")
+  assert(#owner.chat == n + 1 and owner.chat[n + 1]:find("Nothing yet: %d+ quests asked so far%.$"), "no hit: " .. owner.chat[n + 1])
+  n = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("survey find")
+  assert(#owner.chat == n + 1 and owner.chat[n + 1]:find("Nothing yet: ", 1, true), "no text: the same")
+  for k = 1, 12 do d.survey[999810 + k] = { t = "Many Fixture " .. k, lvl = 1, c = {}, r = {}, b = 70170 } end
+  n = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("survey find fixture")
+  assert(#owner.chat == n + 10, "ten lines at most: " .. (#owner.chat - n))
+  n = #owner.chat
+  owner.env.SlashCmdList.QUESTBANK("survey")
+  assert(#owner.chat == n + 1 and owner.chat[n + 1]:find("Quest survey:", 1, true), "/qb survey alone: the report")
+  for k = 1, 12 do d.survey[999810 + k] = nil end
+  d.survey[999801], d.survey[999802], d.survey[999803] = save[1], save[2], save[3]
+  owner.env.C_Item.GetItemNameByID = saveName
+end
+-- checklist 3: a quest given inside a dungeon across the sea is measured to the entrance: Blackfathom Villainy from Goldshire
+-- is a boat and a flight away, never "0 min"; a place no way is known to shows no minutes, not a huge number
+do
+  local M, D = QB.Model, QB.Data
+  local lock0 = QB:LockChoice()
+  QB:SetLock("off"); QB:Recompute(true)
+  assert(QB:Mode() == "quest", "questing by hand")
+  local wp = QB.API.WorldPosition()
+  assert(wp and wp.c == 0, "the owner stands in Elwynn")
+  local q = QB.Quest.Get(1200)
+  assert(q and q.give and q.give.inside and q.cat.entrance and q.cat.cont == 1, "Blackfathom Villainy: given inside the Deeps, off Ashenvale")
+  local w = M.World(q.cat.entrance.m, q.cat.entrance.x, q.cat.entrance.y)
+  assert(w and w.c == 1, "the entrance lies on Kalimdor in the mock too: " .. tostring(w and w.c))
+  local here, mf = UI.Here()
+  local mins = UI.MinutesTo(q, here, mf)
+  assert(mins and mins > 20 and mins < 120, "Blackfathom Villainy from Goldshire: a boat and a flight, " .. tostring(mins))
+  print(string.format("Blackfathom Villainy from Goldshire: %.1f min to the Deeps' entrance", mins))
+  UI.candMemo = nil
+  local villainy, placed
+  -- (the finders' own view: quests you can take at your level, whatever their quest level)
+  for _, c in ipairs(UI:Candidates(nil, nil, QB.state.level, true)) do
+    if c.id == 1200 then villainy = c end
+    if not placed and c.give > 0 and M.NpcPlace(c.give, QB.faction) and c.mins and c.mins > 0 then placed = c end
+    local cat = D.CAT[c.cat]
+    if c.give > 0 and D.NPC[c.give][5] < 0 and cat.cont and cat.cont ~= here.c then
+      assert(c.mins == nil or c.mins > 10, "a dungeon giver across the sea: real minutes or none: " .. D.QN[c.id] .. " " .. tostring(c.mins))
+    end
+  end
+  assert(villainy and villainy.mins and math.abs(villainy.mins - mins) < 0.01 and villainy.mins > 20, "the finder's row: the entrance's trip, never 0: " .. tostring(villainy and villainy.mins))
+  assert(placed, "a finder candidate with a placed giver and a trip")
+  -- no way known between two places (off every flight path, across the sea): the model says never
+  local far = { c = 1, wx = 0, wy = 0, hub = 0, walk = 0 }
+  assert(M.Between(here, far, "A", 1) == math.huge, "the model's never")
+  local pq = QB.Quest.Get(placed.id)
+  local saveNpc = M.NpcPlace
+  M.NpcPlace = function(i, fac) if i == pq.giveIdx then return far end return saveNpc(i, fac) end
+  assert(UI.MinutesTo(pq, here, mf) == nil, "no way there: no minutes")
+  UI.candMemo = nil
+  local seen
+  for _, c in ipairs(UI:Candidates(nil, nil, QB.state.level, true)) do
+    if c.id == placed.id then seen = true; assert(c.mins == nil and c.away == math.huge and c.waste, "no way there: no minutes on the row, and questing no suggestion") end
+  end
+  assert(seen, "the quest is still a finder candidate")
+  local cc = QB:ChainCost(pq)
+  assert(not cc or cc.minutes == nil, "a chain through a place no way is known to: no minutes, not a huge number")
+  M.NpcPlace = saveNpc
+  UI.candMemo = nil
+  QB:SetLock(lock0); QB:Recompute(true)
+end
+-- checklist 4: the camp bar's fire icon: a carried kit first, the Basic Campfire spell only with no kit, one fire icon
+do
+  local Camp, env = QB.Camp, owner.env
+  local c = owner
+  local f = Camp.frame
+  local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
+  local function ic(k) return env["QuestBankCamp_" .. k] end
+  local saveBags, saveKnown, saveProfs, saveBuffs = owner.o.bagSlots, c.known, c.profs, c.buffs
+  local saveTex = env.C_Spell.GetSpellTexture
+  env.C_Spell.GetSpellTexture = function(id) return id == 818 and 135805 or 134400 end
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  -- the fire icons on the bar: the ones whose click lights a fire (the kit, or the spell)
+  local function fires()
+    local n, which = 0, {}
+    for _, k in ipairs({ "food", "fire", "camp", "bag" }) do
+      local b = ic(k)
+      if b and b:IsShown() and (b:GetAttribute("item") == "item:279981" or b:GetAttribute("spell") == 818) then n = n + 1; which[#which + 1] = k end
+    end
+    return n, table.concat(which, ",")
+  end
+  -- a smith and cook who knows Basic Campfire, with Simple Wood and two kits, nothing to place: the kit, once
+  c.profs, c.known, c.buffs = { { "Blacksmithing", 150 }, { "Cooking", 60 } }, { [818] = true }, {}
+  owner.o.bagSlots = { { 4470, 3 }, { 279981, 2 } }
+  Camp.Refresh()
+  local fire = ic("fire")
+  assert(fire:IsShown() and fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil
+    and fire.count:GetText() == "2", "kit and spell both at hand: the kit shows, with its count")
+  assert(fire.state.tip[1] == "Basic Campfire Kit" or fire.state.tip[1]:find("Kit", 1, true), "its tooltip is the kit's: " .. tostring(fire.state.tip[1]))
+  assert(fires() == 1, "one fire icon: " .. select(2, fires()))
+  -- a feature to place too: the kit still, and the camp slot's click is the feature, not a second fire
+  owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 }, { 279981, 2 } }
+  Camp.Refresh()
+  assert(fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil and fire.state.item == 279981, "a feature waiting: the kit")
+  assert(ic("camp"):IsShown() and ic("camp"):GetAttribute("item") == "item:279944" and fires() == 1, "the camp slot is the feature; still one fire icon: " .. select(2, fires()))
+  -- (the sheet alone: the bar is a strip of icons whose count and time sit inside them, as the game's own buttons draw
+  -- theirs, so the pages' window-edge rule is not for it)
+  layouts[#layouts + 1] = dumpLayout(env.QuestBankCampBar, "Camp bar: a kit and Basic Campfire both at hand, the kit shows, the wheel waits")
+  -- no kit: the spell, once
+  owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 } }
+  Camp.Refresh()
+  assert(fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil and fire.count:GetText() == "3",
+    "no kit: Basic Campfire, with the Simple Wood")
+  assert(fires() == 1, "one fire icon: " .. select(2, fires()))
+  -- the spell unknown and no kit, a feature waiting: grey, no click; nothing waiting: no fire icon
+  c.known = {}
+  Camp.Refresh()
+  assert(fire:IsShown() and fire.state.grey and fire:GetAttribute("type") == nil and fire.state.tip[1] == "No campfire kit", "no way to light one: grey")
+  owner.o.bagSlots = {}
+  Camp.Refresh()
+  assert(not fire:IsShown() and fires() == 0, "nothing to light, nothing to place: no fire icon")
+  owner.o.bagSlots, c.known, c.profs, c.buffs = saveBags, saveKnown, saveProfs, saveBuffs
+  env.C_Spell.GetSpellTexture = saveTex
+  Camp.Refresh()
+end
+-- checklist 5: Highest XP is sorted by XP alone: the richest candidate that fits is row 1, the gains never rise down the
+-- list, the trip's minutes on the line; the reward finders keep their own order
+do
+  local lock0 = QB:LockChoice()
+  QB:SetLock("off"); QB:Recompute(true)
+  assert(QB:Mode() == "quest", "questing, where the trip used to weigh the rows")
+  assert(QB.LOG_SLOTS > #QB.state.logOrder, "a free slot, so the richest fills it")
+  UI.candMemo = nil
+  UI.findMode = "xp"; UI:ShowTab(1); UI:Refresh()
+  local shown = {}
+  for _, r in ipairs(v1.swaps) do if r:IsShown() then shown[#shown + 1] = r end end
+  assert(#shown >= 3, "swap rows: " .. #shown)
+  for i = 2, #shown do
+    local a, b = shown[i - 1].addValue - (shown[i - 1].cutValue or 0), shown[i].addValue - (shown[i].cutValue or 0)
+    assert(a >= b, string.format("row %d gains %d, row %d %d: the gains never rise", i - 1, a, i, b))
+  end
+  -- the richest candidate that fits: not a waste or behind, takeable (or a step away inside a dungeon, or behind a
+  -- chain), not on the pick-up list, not a bag start
+  local lvl = QB.state.level
+  local best, bestName, bestMins = 0, nil, nil
+  for _, c in ipairs(UI:Candidates(nil)) do
+    if not c.waste and not c.behind then
+      local q = QB.Quest.Get(c.id)
+      local st = q and QB:Status(q)
+      local via = false
+      if q and st.code == "prereq" and type(st.pre) == "number" then
+        local p = QB.Quest.Get(st.pre)
+        via = (p and p.turn and p.turn.inside and QB:Status(p).code == "todo") and true or false
+      end
+      local chain = q and st.code == "prereq" and not via and QB:ChainCost(q)
+      if q and not QB:IsAdded(q.id) and (st.code == "todo" or via or chain) and not (q.bag and q.bag[3] == 1) then
+        local v = QB.Model.XpAt(q, lvl)
+        if v > best then best, bestName, bestMins = v, q.name, c.mins end
+      end
+    end
+  end
+  assert(best > 0 and shown[1].addValue == best and shown[1].add.name == bestName,
+    string.format("row 1 is the richest that fits: %s %d; row 1 %s %d", tostring(bestName), best, shown[1].add.name, shown[1].addValue))
+  -- the minutes stay on the line: a row's trip, or its chain's
+  local withTrip = 0
+  for _, r in ipairs(shown) do
+    local t = r.cutName:GetText()
+    if t:find(" min", 1, true) or t:find(" · here", 1, true) then withTrip = withTrip + 1 end
+  end
+  assert(withTrip >= math.floor(#shown / 2), "the minutes stay on the lines: " .. withTrip .. " of " .. #shown)
+  if bestMins and bestMins >= 1 and not shown[1].cutName:GetText():find("step", 1, true) then
+    assert(shown[1].cutName:GetText():find(string.format("%d min", math.floor(bestMins + 0.5)), 1, true), "row 1's own trip: " .. shown[1].cutName:GetText())
+  end
+  print("highest XP rows (questing):")
+  for _, r in ipairs(shown) do print(string.format("  %-30s %-50s %s", r.add.name, r.cutName:GetText(), r.gain:GetText())) end
+  for _, p in ipairs(checkLayout(UI.frame, "Quest Log, Highest XP")) do problems[#problems + 1] = p end
+  layouts[#layouts + 1] = dumpLayout(UI.frame, "Quest Log, Highest XP: by XP alone, the trip on the line")
+  -- the reward finders keep their own order: item level first
+  local last
+  for _, d in ipairs(UI:FindRewards("gear", lvl)) do assert(not last or d.ilvl <= last, "Best gear: item level first"); last = d.ilvl end
+  QB:SetLock(lock0); QB:Recompute(true); UI.candMemo = nil; UI:Refresh()
+end
 
 
 
@@ -3917,7 +4205,7 @@ v3.modeNow.__scripts.OnClick(v3.modeNow)
 QB.Model.Finish()
 
 -- the layout of every page, checked and drawn
-local layouts, problems = {}, {}
+-- (layouts and problems are declared above the stage anchors)
 local function hoverFirst(list, n)
   local k = 0
   for _, f in ipairs(list) do
@@ -9965,13 +10253,13 @@ do
   owner.o.bagSlots = { { 279944, 1 } }
   Camp.Refresh()
   assert(fire.state.grey and fire.state.tip[2] == "Needs Simple Wood.", "no Simple Wood: grey")
-  -- a kit too: the kit while a feature waits (a kit's fire holds camp features), the spell without one
+  -- a kit too: the kit, a feature waiting or not (a kit's fire holds camp features; on Forever the kit is the fire)
   owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 }, { 279981, 2 } }
   Camp.Refresh()
   assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "a feature to place: the kit")
   owner.o.bagSlots = { { 4470, 3 }, { 279981, 2 } }
   Camp.Refresh()
-  assert(fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil, "nothing to place: the spell")
+  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "nothing to place: the kit still")
   c.known = {}
   Camp.Refresh()
   assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire.count:GetText() == "2", "the spell unknown: the kit, as before")

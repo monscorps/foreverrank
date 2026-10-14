@@ -3,10 +3,10 @@
 -- icon is the game's secure button for its item or spell, so a click is yours: QuestBank only sets what it uses, and
 -- only out of a fight. Each has its own switch in Settings:
 --   food   Well Fed with its minutes; gone: the food you carry that gives it, lit, a click eats it; none: grey
---   fire   a campfire: Cooking's Basic Campfire when you know the spell (the Simple Wood you carry, its cooldown), else
---          the campfire kit you carry and how many; a kit first while a camp feature waits, since a kit's fire is the
---          one that holds camp features. Lit while a feature waits and no fire is near; a click lights it. A feature
---          to place and no way to light a fire: grey, saying where a kit comes from
+--   fire   a campfire: the campfire kit you carry and how many (a kit's fire is the one that holds camp features, and
+--          on Forever the kit is the fire), else Cooking's Basic Campfire when you know the spell (the Simple Wood you
+--          carry, its cooldown); one icon, never both. Lit while a feature waits and no fire is near; a click lights
+--          it. A feature to place and no way to light a fire: grey, saying where a kit comes from
 --   camp   the best camp feature you can place: the shared one-hour cooldown as a sweep, lit when a campfire is near
 --          and the cooldown is up; a click places it
 --   bag    the Cozy Sleeping Bag with your Well Rested stacks, lit when you stand still under three; a click unfurls it
@@ -207,13 +207,13 @@ function Camp.Foods(bags)
   return out
 end
 
--- how you can light a campfire now: { kit = Camp.Kits' first } or { spell = Basic Campfire }, or nil. forFeature: a
--- camp feature waits, so a kit you carry comes first (its fire is the one that holds camp features)
-function Camp.Fire(bags, forFeature)
+-- how you can light a campfire now: { kit = Camp.Kits' first } or { spell = Basic Campfire }, or nil. A kit you carry
+-- comes first, feature waiting or not: its fire is the one that holds camp features, and on Forever the kit is the
+-- fire (Basic Campfire there is the recipe that makes it). The spell only when you carry no kit
+function Camp.Fire(bags)
   local kit = Camp.Kits(bags)[1]
-  local spell = knows(Camp.FIRE_SPELL)
-  if kit and (forFeature or not spell) then return { kit = kit } end
-  if spell then return { spell = Camp.FIRE_SPELL } end
+  if kit then return { kit = kit } end
+  if knows(Camp.FIRE_SPELL) then return { spell = Camp.FIRE_SPELL } end
   return nil
 end
 
@@ -424,7 +424,7 @@ function Camp.State()
   end
   if s.fire then
     local waits = out.camp and not out.camp.grey and not fireNear(t)
-    local fire = Camp.Fire(bags, list[1] ~= nil)
+    local fire = Camp.Fire(bags)
     if fire and fire.spell then
       local st, du = spellCD(fire.spell)
       local up = du == 0 or st + du - t <= 0
@@ -507,7 +507,7 @@ function Camp.Missing()
                      tip = { best.e.n, (best.e.g or "Its buff") .. " while you sit by it.", "Click to place it." } }
       if not fireNear(t) then
         -- the feature needs a campfire first: the click lights one
-        local fire = Camp.Fire(bags, true)
+        local fire = Camp.Fire(bags)
         feat.item, feat.tip[2], feat.tip[3] = nil, "Needs a campfire first.", "Click to light one."
         if fire and fire.kit then
           feat.tex, feat.item, feat.count = "Interface\\Icons\\" .. fire.kit.e.i, fire.kit.id, count(fire.kit.id)

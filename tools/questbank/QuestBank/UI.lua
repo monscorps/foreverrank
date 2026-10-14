@@ -303,7 +303,7 @@ end
 function UI.QuestTooltipShort(tip, q, st, xp)
   tip:AddLine(q.name, GOLD[1], GOLD[2], GOLD[3])
   local full = Q.Full(q)
-  local xpText = (q.xpUnknown and not q.liveFull) and "XP not known yet" or (QB.Comma(xp or full) .. " XP")
+  local xpText = q.turnIn and "No XP" or (q.xpUnknown and not q.liveFull) and "XP not known yet" or (QB.Comma(xp or full) .. " XP")
   tip:AddDoubleLine(string.format("L%d  \194\183  %s", q.lvl or 0, q.cat and q.cat.name or ""), xpText, 0.8, 0.8, 0.8, 1, 0.82, 0)
   local R = QB.Data.RITEMS and QB.Data.RITEMS[q.id]
   local icons = {}
@@ -333,7 +333,9 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
   tip:AddDoubleLine(q.surveyOnly and string.format("Level %d", q.lvl) or string.format("Level %d, needs %d", q.lvl, q.req or 1), cat, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8)
   local full = Q.Full(q)
   local src
-  if q.liveFull then
+  if q.turnIn then
+    src = "none: a writ's turn-in"
+  elseif q.liveFull then
     src = QB.Live.Source(q) or "the game's own number"
   elseif q.xpUnknown then
     src = "not known yet"
@@ -353,7 +355,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
   else
     src = QB.Comma(q.base) .. " x 1"
   end
-  tip:AddDoubleLine("Forever XP " .. ((q.xpUnknown and not q.liveFull) and "?" or QB.Comma(full)), src, 1, 1, 1, 0.55, 0.75, 1)
+  tip:AddDoubleLine("Forever XP " .. ((q.xpUnknown and not q.liveFull and not q.turnIn) and "?" or QB.Comma(full)), src, 1, 1, 1, 0.55, 0.75, 1)
   UI.RewardLines(tip, q)
   if st and st.behind and st.later then
     tip:AddLine(string.format("Probably behind you: %s, a later step of this chain, is %s, and the game only offers a step once the ones before it are handed in.", QB.Quest.Label(st.later), st.how == "held" and "in your log" or "done"), 1, 0.6, 0.3, true)
@@ -381,7 +383,7 @@ function UI.QuestTooltip(tip, q, st, xp, pct, plvl, rewardRow)
     tip:AddLine(string.format(q.nerfed and "The catalog lists %s. QuestBank uses the game's number." or "Wowhead lists %s. QuestBank uses the game's number.", QB.Comma(QB.Model.Listed(q))), 1, 0.6, 0.3, true)
   end
   if xp then
-    local line = QB.Comma(xp) .. " XP " .. QB:OnTheDay()
+    local line = (q.turnIn and "No XP " or (QB.Comma(xp) .. " XP ")) .. QB:OnTheDay()
     if pct and pct < 100 then line = line .. string.format(" (%d%% at level %d)", pct, plvl) end
     tip:AddLine(line, pct and pct < 100 and 1 or 0.6, pct and pct < 100 and 0.6 or 1, pct and pct < 100 and 0.3 or 0.6)
   end
@@ -1887,7 +1889,9 @@ function UI.MinutesTo(q, here, mf)
     to = (w and M.Place(fac, w.c, w.wx, w.wy)) or (q.turnIdx and q.turnIdx > 0 and M.NpcPlace(q.turnIdx, fac)) or nil
   end
   if not to then return nil end
-  return M.Between(here, to, fac, mf)
+  local mins = M.Between(here, to, fac, mf)
+  if mins == math.huge then return nil end -- no way there is known (a place off every flight path, across the sea)
+  return mins
 end
 
 -- reqMax (the reward finders): quests you can take at that level, whatever their quest level; else those needing at most
@@ -1952,13 +1956,16 @@ function UI:Candidates(limit, level, reqMax, finder)
       local w = ent and M.World and M.World(ent.m, ent.x, ent.y)
       to = (w and M.Place(fac, w.c, w.wx, w.wy)) or turnP
     end
-    c.mins = (here and to) and M.Between(here, to, fac, mf) or nil
+    -- (a place no way is known to, off every flight path across the sea: the model says never; the row shows no
+    -- minutes rather than a huge number, and questing it is a waste all the same)
+    local trip = (here and to) and M.Between(here, to, fac, mf) or nil
+    c.mins = (trip and trip < math.huge) and trip or nil
     if not banking then
       -- questing: XP for the time. The trip to the giver, the quest's own loop from giver to turn-in,
       -- and half of what its chain leads on to.
       -- a giver the catalog can't place (an item drop, a Forever quest nobody has met): no trip is known,
       -- so a modest ten minutes stands in, and it is never dropped on ignorance
-      c.away = c.mins or ((here and not to) and 10 or 0)
+      c.away = trip or ((here and not to) and 10 or 0)
       c.back = (give and turnP) and M.Between(give, turnP, fac, mf) or 0
       c.lead = QB:ChainLead(c.id)
       local minutes = c.away + c.back + 3 -- three for the quest itself, so one at your feet isn't infinite
@@ -2320,18 +2327,21 @@ function UI:RefreshLogView(v)
         r.addName:SetText(d.q.name)
         local place = d.q.cat and d.q.cat.name or ""
         local mins = d.mins and string.format(", %d min", math.floor(d.mins + 0.5)) or ""
-        -- a quest you can't take yet (2 levels ahead): the level it needs, kept as long as the line has room
+        -- a quest you can't take yet (2 levels ahead): the level it needs, kept as long as the line has room; a writ's
+        -- turn-in (it pays no XP) or a repeatable says so before its place
         local at = (d.req or 0) > s.level and string.format("at %d", d.req) or nil
+        local kind = d.q.turnIn and "Turn-in" or d.q.repeatable and "Repeatable" or nil
+        local head = name .. (at and (" · " .. at) or "") .. (kind and (" · " .. kind) or "")
         local room = r.cutName:GetWidth() - 2
-        local fits = at and { name .. " · " .. at .. " · " .. place .. mins, name .. " · " .. at .. " · " .. place, name .. " · " .. at, name }
-          or { name .. " · " .. place .. mins, name .. " · " .. place, name }
+        local fits = { head .. " · " .. place .. mins, head .. " · " .. place, head, name .. (kind and (" · " .. kind) or ""), name }
         for _, line in ipairs(fits) do
           r.cutName:SetText(line)
           if r.cutName:GetStringWidth() <= room then break end
         end
         local showL = not recipe and d.ilvl > 0
         r.gain:SetText(showL and ("iL " .. d.ilvl) or QB.Short(d.value))
-        r.reward = string.format("Rewards %s%s. %s XP %s.", name, showL and string.format(" (item level %d)", d.ilvl) or "", QB.Comma(d.value), QB:OnTheDay())
+        local pay = d.q.turnIn and "No XP: a turn-in." or (QB.Comma(d.value) .. " XP " .. QB:OnTheDay() .. "." .. (d.q.repeatable and " Repeatable." or ""))
+        r.reward = string.format("Rewards %s%s. %s", name, showL and string.format(" (item level %d)", d.ilvl) or "", pay)
           .. (at and string.format(" You can take it at level %d.", d.req) or "")
         r.rewardId = id
       else
@@ -2383,8 +2393,14 @@ function UI:RefreshLogView(v)
     if (a.cut or false) ~= (b.cut or false) then return a.cut end
     return (a.value or 0) < (b.value or 0)
   end)
+  -- the Highest XP finder is sorted by XP alone. The candidates come ranked for the time (questing, nearby first), so
+  -- the richest are taken from the whole list, sixty at most; the trip shows on each line instead
   local adds = {}
-  for _, c in ipairs(self:Candidates(60)) do
+  local cands = {}
+  for i, c in ipairs(self:Candidates(nil)) do cands[i] = c end
+  table.sort(cands, function(a, b) if a.value ~= b.value then return a.value > b.value end return a.id < b.id end)
+  for _, c in ipairs(cands) do
+    if #adds >= 60 then break end
     if c.waste or c.behind then c = nil end -- questing: a long run for little is no suggestion
     if c then
     local q = Q.Get(c.id)
@@ -2400,10 +2416,11 @@ function UI:RefreshLogView(v)
     local chain
     if q and st.code == "prereq" and not via then chain = QB:ChainCost(q) end
     if q and not used[q.id] and not QB:IsAdded(q.id) and (st.code == "todo" or via or chain) and not (q.bag and q.bag[3] == 1) then
-      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via, chain = chain, rank = c.rank, lead = c.lead }
+      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via, chain = chain, lead = c.lead, mins = c.mins }
     end
     end
   end
+  table.sort(adds, function(a, b) if a.value ~= b.value then return a.value > b.value end return a.q.id < b.q.id end)
   local ai = 1
   for _ = 1, QB.LOG_SLOTS - #entries do
     if adds[ai] then rows[#rows + 1] = { add = adds[ai], cutValue = 0, gain = adds[ai].value }; ai = ai + 1 end
@@ -2417,12 +2434,8 @@ function UI:RefreshLogView(v)
       ai = ai + 1
     end
   end
-  -- banking: the biggest gain first; questing: the gain for the trip (nearby first)
-  for _, r in ipairs(rows) do
-    local near = (not QB:Banking() and r.add.rank and r.add.value and r.add.value > 0) and r.add.rank / r.add.value or 1
-    r.key = r.gain * near
-  end
-  table.sort(rows, function(a, b) return a.key > b.key end)
+  -- the biggest gain first, banking or questing: Highest XP is sorted by XP, and the trip on the line says how far
+  table.sort(rows, function(a, b) if a.gain ~= b.gain then return a.gain > b.gain end return a.add.q.id < b.add.q.id end)
   for i, r in ipairs(v.swaps) do
     local d = rows[i]
     if d then
@@ -2442,8 +2455,11 @@ function UI:RefreshLogView(v)
         -- questing: what the quest leads on to is part of why it's here
         local lead = (not QB:Banking() and d.add.lead and d.add.lead > 0 and not ch) and (" · leads to +" .. QB.Short(d.add.lead)) or ""
         local classic = (d.add.q.classic and not d.add.q.liveFull) and " · Classic only" or ""
+        -- the trip to its giver (a chain's own minutes cover it)
+        local trip = (not ch and d.add.mins) and (" · " .. (d.add.mins < 1 and "here" or string.format("%d min", math.floor(d.add.mins + 0.5)))) or ""
         local room = r.cutName:GetWidth() - 2
-        for _, line in ipairs({ base .. long .. lead .. classic, base .. short .. classic, base .. short .. lead, base .. short, base .. lead, base }) do
+        for _, line in ipairs({ base .. trip .. long .. lead .. classic, base .. trip .. short .. classic, base .. trip .. short .. lead, base .. trip .. short,
+                                base .. trip .. lead, base .. trip, base }) do
           r.cutName:SetText(line)
           if r.cutName:GetStringWidth() <= room then break end
         end
