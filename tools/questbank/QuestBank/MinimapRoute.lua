@@ -152,11 +152,30 @@ local GP = { MOVE = 8, EVERY = 2, REFRESH = 15, SIMPLIFY = 1, JOIN_LINE = 20, ON
   NEAR = 20 / 0.9144, THICK = 8, ALPHA = 0.9, LINE_PALE = 0.7, LINE_THIN = 0.6, n = 0, np = 0,
   x = {}, y = {}, seg = {}, ax = {}, ay = {}, bx = {}, by = {}, pk = {}, wx = {}, wy = {}, wk = {}, stack = {} }
 MR.GP = GP
+GP.DEFAULTS = { gpSpacing = 15, gpWidth = 8, gpAlpha = 0.9, gpColor = { 1, 0.82, 0 } }
 
--- gold where you walked; paler (LINE_PALE of the way to white) and thinner (LINE_THIN) across ground you never did
-local TINT = { own = { 1, 0.82, 0 } }
+-- QuestTrail's settings: shown (goldenPath), its pieces in metres (gpSpacing 5 to 50), its width in pixels (gpWidth 2
+-- to 32), its opacity (gpAlpha 0.2 to 1) and its colour (gpColor)
+function GP.On() return QB:Settings().goldenPath ~= false end
+function GP.Thickness() return max(2, min(32, tonumber(QB:Settings().gpWidth) or GP.THICK)) end
+function GP.Alpha() return max(0.2, min(1, tonumber(QB:Settings().gpAlpha) or GP.ALPHA)) end
+function GP.Spacing() return max(5, min(50, tonumber(QB:Settings().gpSpacing) or 15)) / 0.9144 end
+-- gold where you walked (line_arrow.png multiplied by the colour: its dark edges stay dark); paler (LINE_PALE of the
+-- way to white) and thinner (LINE_THIN) across ground you never did. The same tables while the colour is unchanged
+local TINT = { r = 1, g = 0.82, b = 0, own = { 1, 0.82, 0 } }
 TINT.line = { 1, 0.82 + 0.18 * GP.LINE_PALE, GP.LINE_PALE }
-function GP.ColorOf(kind) return TINT[kind] or TINT.line end
+function GP.ColorOf(kind)
+  local c = QB:Settings().gpColor
+  if type(c) ~= "table" then c = GP.DEFAULTS.gpColor end
+  local r, g, b = tonumber(c[1]) or 1, tonumber(c[2]) or 0.82, tonumber(c[3]) or 0
+  if TINT.r ~= r or TINT.g ~= g or TINT.b ~= b then
+    local k = GP.LINE_PALE
+    TINT.r, TINT.g, TINT.b = r, g, b
+    TINT.own = { r, g, b }
+    TINT.line = { r + (1 - r) * k, g + (1 - g) * k, b + (1 - b) * k }
+  end
+  return kind == "own" and TINT.own or TINT.line
+end
 function GP.WidthOf(kind) return kind == "own" and 1 or GP.LINE_THIN end
 
 -- Douglas-Peucker on points i..j: keep[k] = true for the points kept
@@ -188,7 +207,7 @@ end
 -- the way cut in pieces: SPACING yards each (at most MAX_SUB of them), the way's own corners kept; each piece keeps
 -- its stretch's kind
 function GP.Cut()
-  local spacing = GP.SPACING
+  local spacing = GP.Spacing()
   if GP.len and GP.len / spacing > GP.MAX_SUB then spacing = GP.len / GP.MAX_SUB end
   local np, nextCut, walked = 0, spacing, 0
   for i = 1, GP.n - 1 do
@@ -317,8 +336,9 @@ function GP.Hidden(px, py, tx, ty)
   return false
 end
 
--- the golden path from you (me) to w: worked out, and true when it is drawn
+-- the golden path from you (me) to w: worked out, and true when it is drawn (not with the switch off)
 function MR.Gold(me, w)
+  if not GP.On() then return false end
   return GP.Update(me.c, me.wx, me.wy, w.wx, w.wy) and not GP.Hidden(me.wx, me.wy, w.wx, w.wy)
 end
 
@@ -326,27 +346,30 @@ end
 -- zoomed far out, where a piece is under 4 pixels, the way's own stretches instead, a line each
 function MR.DrawGold(v)
   local ctx = MR.gold
-  ctx.used, ctx.r, ctx.square = 0, v.R - GP.THICK / 2 - 1, v.square
+  local thick, alpha = GP.Thickness(), GP.Alpha()
+  ctx.used, ctx.r, ctx.square = 0, v.R - thick / 2 - 1, v.square
   local ax, ay, bx, by, pk, count = GP.ax, GP.ay, GP.bx, GP.by, GP.pk, GP.np
-  local whole = GP.SPACING * v.scale < 4
+  local whole = GP.Spacing() * v.scale < 4
   if whole then ax, ay, bx, by, pk, count = GP.x, GP.y, nil, nil, GP.seg, GP.n - 1 end
   local Point = QB.MiniView.Point
   for k = 1, count do
     local x1, y1 = Point(v, ax[k], ay[k])
     local x2, y2 = Point(v, whole and GP.x[k + 1] or bx[k], whole and GP.y[k + 1] or by[k])
-    MR.Line(ctx, x1, y1, x2, y2, GP.ColorOf(pk[k]), GP.THICK * GP.WidthOf(pk[k]), GP.ALPHA)
+    MR.Line(ctx, x1, y1, x2, y2, GP.ColorOf(pk[k]), thick * GP.WidthOf(pk[k]), alpha)
   end
   hideFrom(ctx, ctx.used + 1)
   return ctx.used
 end
 
--- each placing (Mini.Place): the route's strokes and, when gold, the golden path in place of the first one. Returns
--- the strokes and the golden path's pieces drawn
-function MR.Draw(v, segs, n, gold)
+-- each placing (Mini.Place): the route's strokes (thick pixels wide: QuestTrail's stroke width setting, MR.THICK when
+-- not given) and, when gold, the golden path in place of the first one. Returns the strokes and the golden path's
+-- pieces drawn
+function MR.Draw(v, segs, n, gold, thick)
   MR.Frames()
+  thick = thick or MR.THICK
   local ctx = MR.route
-  ctx.r, ctx.square = v.R - MR.THICK * 0.55, v.square
-  local lines = MR.DrawRoute(ctx, segs, n, MR.THICK, gold)
+  ctx.r, ctx.square = v.R - thick * 0.55, v.square
+  local lines = MR.DrawRoute(ctx, segs, n, thick, gold)
   local pieces = 0
   if gold then pieces = MR.DrawGold(v) else hideFrom(MR.gold, 1) end
   MR.goldShown = pieces

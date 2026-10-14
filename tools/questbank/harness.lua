@@ -797,6 +797,8 @@ local function newClient(o)
     RemoveQuestWatch = function() error("QuestBank called C_QuestLog.RemoveQuestWatch: the tracker would redraw as QuestBank", 2) end,
     GetAllCompletedQuestIDs = function() local t = {} for k, v in pairs(c.done) do if v then t[#t + 1] = k end end return t end,
     GetLogIndexForQuestID = function(id) for i, e in ipairs(c.log) do if e[1] == id then return i + 2 end end end,
+    -- the quest's tag: elite (c.elite[id]) as the Forever client says it, tag 1
+    GetQuestTagInfo = function(id) if (c.elite or {})[id] then return { tagID = 1, isElite = true, tagName = "Elite" } end return nil end,
   }
   local KALIMDOR = { [1411] = true, [1412] = true, [1413] = true, [1438] = true, [1439] = true, [1440] = true, [1441] = true, [1442] = true,
     [1443] = true, [1444] = true, [1445] = true, [1446] = true, [1447] = true, [1448] = true, [1449] = true, [1450] = true, [1451] = true,
@@ -1455,6 +1457,15 @@ local function checkLayout(root, label)
 end
 
 -- a drawing of the window for the layout page
+-- an object's frame level: the nearest frame up from it given one (SetFrameLevel), as the game stacks frames; 0 when none
+local function levelOf(o)
+  local p = o
+  while p do
+    if p.__frameLevel then return p.__frameLevel end
+    p = p.__parent or p.__scrollParent
+  end
+  return 0
+end
 local function dumpLayout(root, label)
   GEN = GEN + 1
   local rr = rectOf(root)
@@ -1471,7 +1482,7 @@ local function dumpLayout(root, label)
       if ra and rb then
         local x1, y1 = anchorXY(ra, o.__start[1])
         local x2, y2 = anchorXY(rb, o.__stop[1])
-        items[#items + 1] = { k = "Line", x = 0, y = 0, w = 0, h = 0, i = idx, a = o.__alpha, depth = #anc, layer = "BACKGROUND",
+        items[#items + 1] = { k = "Line", x = 0, y = 0, w = 0, h = 0, i = idx, a = o.__alpha, depth = #anc, layer = "BACKGROUND", lvl = levelOf(o),
           x1 = x1 + (o.__start[3] or 0) - rr.l, y1 = rr.t - (y1 + (o.__start[4] or 0)), x2 = x2 + (o.__stop[3] or 0) - rr.l,
           y2 = rr.t - (y2 + (o.__stop[4] or 0)), thick = o.__thick or 2, c = o.__vertex }
       end
@@ -1482,7 +1493,7 @@ local function dumpLayout(root, label)
       if inside then
         local r = rectOf(o)
         if r and (r.r - r.l) > 0 and (r.t - r.b) > 0 then
-          local it = { k = o.__kind, x = r.l - rr.l, y = rr.t - r.t, w = r.r - r.l, h = r.t - r.b, i = idx, a = o.__alpha, depth = #anc }
+          local it = { k = o.__kind, x = r.l - rr.l, y = rr.t - r.t, w = r.r - r.l, h = r.t - r.b, i = idx, a = o.__alpha, depth = #anc, lvl = levelOf(o) }
           if o.__kind == "FontString" then
             it.text, it.size, it.j, it.wrap = plain(o.__text), o.__size, o.__justify, o.__wrap
             it.c = o.__color
@@ -1807,17 +1818,33 @@ do
   local far = byName["Far away"]
   local x3 = at(far)
   assert(math.abs(x3 - 63) < 0.01 and far:GetAlpha() == 0.6, "a stop past the reach sits on the rim at 0.6: " .. tostring(x3) .. ", " .. far:GetAlpha())
-  assert(byName.Goldshire.num:GetText() == "1" and byName.Crossroads.num:GetText() == "2", "numbered")
+  -- 5.5: QuestTrail's look (the default): a stop is a step circle, its disc (step_bg, 32/26.5 of the marker's 18 px,
+  -- tinted the stop's colour: the first of the palette, these stops name no quest) under the game's ? and the gold ring
+  -- (step_tint) over it; no number. The game-icon style numbers the game's own pins
+  local ART = "Interface\\AddOns\\QuestBank\\art\\"
+  local pal = Mini.PALETTE
+  assert(Mini.QT() and g.num:GetText() == "" and g.disc.__shown and g.ring.__shown and g.disc.__tex == ART .. "step_bg.png" and g.ring.__tex == ART .. "step_tint.png"
+    and math.abs(g.disc.__w - 18 * 32 / 26.5) < 0.01 and g.disc.__vertex[1] == pal[1][1] and g.disc.__vertex[2] == pal[1][2] and g.disc.__vertex[4] == 1
+    and g.icon.__tex == "atlas:QuestTurnin" and g.icon.__w == 18 and g.__w == 18 and not g.glow.__shown, "QuestTrail's step circle for stop 1")
+  QB:Settings().markerStyle = "game"
+  Mini.Place()
+  assert(byName.Goldshire.num:GetText() == "1" and byName.Crossroads.num:GetText() == "2" and g.icon.__tex == "atlas:UI-QuestPoi-QuestNumber-SuperTracked"
+    and not g.disc.__shown and not g.ring.__shown and g.glow.__shown and g.__w == 22, "the game-icon style: numbered, the game's pins, stop 1 glowing")
+  QB:Settings().markerStyle = nil
+  Mini.Place()
+  assert(g.num:GetText() == "" and g.disc.__shown and g.__w == 18, "and back to QuestTrail's")
   -- 5.4: the strokes (MinimapRoute.lua): QuestTrail's line_arrow.png, you to stop 1 (stopping at the pin's edge, 0.45 of
-  -- its 22 px short), 1 to 2, and 2 to the far stop cut at the minimap's edge, pointing the way
+  -- its 18 px short), 1 to 2, and 2 to the far stop cut at the minimap's edge, pointing the way; 5.5: each in its stop's
+  -- colour, the stroke width setting's 8 px
   local MR = QB.MiniRoute
   local stroke = MR.route.lines
-  assert(Mini.linesShown == 3 and stroke[1].__tex == "Interface\\AddOns\\QuestBank\\art\\line_arrow.png" and math.abs(stroke[1].__stop[4] - 11.1) < 0.01,
+  assert(Mini.linesShown == 3 and stroke[1].__tex == ART .. "line_arrow.png" and math.abs(stroke[1].__stop[4] - 12.9) < 0.01
+    and stroke[1].__vertex[1] == pal[1][1] and stroke[1].__vertex[2] == pal[1][2] and stroke[1].__vertex[4] == 1 and stroke[1].__thick == 8,
     "you to stop 1, 1 to 2, 2 to 3: " .. tostring(Mini.linesShown))
   local ex, ey = stroke[3].__stop[3], stroke[3].__stop[4]
   assert(stroke[3].__shown and math.sqrt(ex * ex + ey * ey) < 70 and ex > 60 and math.abs(ey) < 0.01, string.format("the stroke to the far stop ends at the edge (%s, %s)", ex, ey))
   -- QuestTrail's rim: an objective out of reach is gone (400 yards west at 200), one inside fades over its last width
-  -- (195 yards east: 68 px of 70, a 16 px pin)
+  -- (195 yards east: 68 px of 70, an 18 px pin)
   local D = QB.Data
   D.SPOT[777001], D.SPOT[777002] = "k,1,1429,548.75,500,10,c", "k,1,1429,400,500,10,c"
   table.insert(QB.state.logOrder, 1, { id = 777001, complete = false })
@@ -1848,22 +1875,36 @@ do
   for _ = 1, 20 do Mini.Place() end
   Mini.List = realList
   assert(built == 1, "twenty placings made the list " .. built .. " times")
-  -- the quest picked on QuestBank's Map: its pins glow blue, pulsing once a second
+  -- 5.5: an objective's marker, QuestTrail's: the disc (ring_bg) in its quest's colour under the gold frame (ring_frame)
+  -- and the glyph of the work (a kill: the skull), 18 px; an elite quest's under the elite ring, 1.5 times as wide
+  local qc = Mini.ColorFor(777001, "progress")
+  assert(near.icon.__tex == ART .. "ring_bg.png" and near.icon.__vertex[1] == qc[1] and near.icon.__vertex[3] == qc[3] and near.frame.__shown
+    and near.frame.__tex == ART .. "ring_frame.png" and near.glyph.__shown and near.glyph.__tex == ART .. "glyph_kill.png" and near.glyph.__w == 18
+    and not near.elite.__shown and near.__w == 18 and not near.glow.__shown, "a kill's marker: the coloured diamond, the frame, the skull")
+  c.elite = { [777001] = true }
+  c.clock = c.clock + 10 -- (the game said no a moment ago: asked again 10 seconds on)
+  QB.changed = QB.changed + 1
+  Mini.Place()
+  assert(near.elite.__shown and near.elite.__tex == ART .. "ring_elite.png" and near.elite.__w == 28, "an elite quest: the elite ring, 1.5 times as wide (28 px of 18)")
+  c.elite = nil
+  -- the quest picked on QuestBank's Map: its markers blue, pulsing once a second a third of the way to white and back
   QB.MapPage.focus = 777001
   Mini.Place()
   near = pinOf(function(d) return d.id == 777001 end)
   local k = (1 - math.cos(c.clock * 2 * math.pi)) / 2 -- (where in the second the clock is: half a second on, the other end)
   f.__scripts.OnUpdate(f, 0.001)
-  local a0 = near.glow.__alpha
+  local a0 = near.icon.__vertex[1]
   c.clock = c.clock + 0.5
   f.__scripts.OnUpdate(f, 0.001)
-  local a1 = near.glow.__alpha
+  local a1 = near.icon.__vertex[1]
   c.clock = c.clock + 0.5
-  assert(Mini.pulsing and near.glow.__shown and near.glow.__vertex[3] == 1 and math.abs(a0 - (0.25 + 0.75 * k)) < 0.01 and math.abs(a1 - (1 - 0.75 * k)) < 0.01,
-    string.format("the picked quest pulses: %s then %s", tostring(a0), tostring(a1)))
+  local sel = Mini.SELECTED
+  assert(Mini.pulsing and near.icon.__tex == ART .. "ring_bg.png" and math.abs(a0 - (sel[1] + (1 - sel[1]) * 0.33 * k)) < 0.01
+    and math.abs(a1 - (sel[1] + (1 - sel[1]) * 0.33 * (1 - k))) < 0.01 and not near.glow.__shown,
+    string.format("the picked quest pulses blue: %s then %s", tostring(a0), tostring(a1)))
   QB.MapPage.focus = nil
   Mini.Place()
-  assert(not Mini.pulsing and not near.glow.__shown, "nothing picked: no pulse")
+  assert(not Mini.pulsing and near.icon.__vertex[1] == qc[1], "nothing picked: no pulse, its own colour")
   table.remove(QB.state.logOrder, 1); table.remove(QB.state.logOrder, 1)
   D.SPOT[777001], D.SPOT[777002] = nil, nil
   -- two stops at one place are one pin, a little bigger, "2,3"; the strokes join the first minimapSteps stops
@@ -1871,7 +1912,8 @@ do
   P.list = { route[1], route[2], { m = 1429, x = 52, y = 50, num = 3, name = "Crossroads again", when = "", lines = {} } }
   Mini.Invalidate(); Mini.Place()
   local both = pinOf(function(d) return d.num == 2 end)
-  assert(both and both.num:GetText() == "2,3" and both.__w == 28 and not pinOf(function(d) return d.num == 3 end), "stops 2 and 3 at one place: one pin, 2,3")
+  assert(both and both.label == "2,3" and both.num:GetText() == "" and both.__w == 24 and math.abs(both.disc.__w - 24 * 32 / 26.5) < 0.01
+    and not pinOf(function(d) return d.num == 3 end), "stops 2 and 3 at one place: one circle, a third bigger")
   P.list = route
   QB:Settings().minimapSteps = 2
   Mini.Invalidate(); Mini.Place()
@@ -1903,13 +1945,16 @@ do
   dcat.entrance = { m = 1429, x = 50, y = 54 } -- 120 yards south
   Mini.Invalidate(); Mini.Place()
   local dpin = pinOf(function(d) return d.kind == "dungeon" and d.name == dcat.name end)
-  assert(dpin and dpin.icon.__tex == "atlas:Dungeon" and not dpin.badge.__shown, "a dungeon with quests to do: no tick")
+  assert(dpin and dpin.icon.__tex == "Interface\\Minimap\\Dungeon_Icon" and math.abs(dpin.__w - 23.4) < 0.01 and not dpin.badge.__shown,
+    "a dungeon with quests to do: QuestTrail's portal, 1.3 times the marker size, no tick")
   local wasDone = {}
   for _, e in ipairs(DM.Quests(dcat.key)) do wasDone[e.q.id] = c.done[e.q.id] or false; c.done[e.q.id] = true end
   -- (QuestBank's data changed: QB:Changed counts it; not run here, it would drop the done quests from the owner's plan)
   QB.API.RefreshDone(); QB.changed = QB.changed + 1
   Mini.Place()
-  assert(dpin.d.done and dpin.badge.__shown and dpin.badge.__tex == QB.Data.TEX.ready, "all its quests done: the tick")
+  assert(dpin.d.done and dpin.badge.__shown and dpin.badge.__tex == QB.Data.TEX.ready and math.abs(dpin.badge.__w - 23.4 * 0.51) < 0.01
+    and dpin.badge.__points[1].point == "CENTER" and dpin.badge.__points[1].relPoint == "BOTTOMLEFT" and math.abs(dpin.badge.__points[1].x - 23.4 * 0.305) < 0.01,
+    "all its quests done: the tick on its bottom-left corner, QuestTrail's size")
   for id, was in pairs(wasDone) do c.done[id] = was or nil end
   QB.API.RefreshDone(); QB.changed = QB.changed + 1
   dcat.entrance = saveEntrance
@@ -1994,7 +2039,13 @@ do
   assert(tt:IsShown(), "a tooltip elsewhere stays")
   tt:Hide()
   Mini.Wheel(1)
-  assert(not MV.Extended() and not MV.frame:IsShown() and not arrowFrame:IsShown() and env.Minimap.__zoom == 0, "the wheel in: the game's minimap, no ground, no arrow of ours")
+  assert(not MV.Extended() and not MV.frame:IsShown() and arrowFrame:IsShown() and MV.arrow.__w == 32 and env.Minimap.__zoom == 0,
+    "the wheel in: the game's minimap, no ground; our arrow stays over the pins (5.5: QuestTrail's), 32 px")
+  QB:Settings().mmArrowSize = 48
+  Mini.Update(0)
+  assert(MV.arrow.__w == 48, "the arrow size setting")
+  QB:Settings().mmArrowSize = nil
+  Mini.Update(0)
   tt:SetOwner(env.Minimap, "ANCHOR_CURSOR"); tt:Show()
   assert(tt:IsShown(), "at the game's zoom its tooltips are its own")
   tt:Hide()
@@ -2057,6 +2108,20 @@ do
   env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
   env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
   assert(c.gameClicks == clicks + 1 and #env.Minimap.__pings == pings + 1, "a click on the game's minimap: the game's own")
+  -- 5.5: another addon sets the minimap's release later: ours round it again at the next update (QuestTrail's re-wrap);
+  -- a click runs ours, then theirs (the game's is behind theirs now); the game's own put back, ours round it again
+  local theirs, gameUp = 0, env.Minimap:GetScript("OnMouseUp")
+  env.Minimap:SetScript("OnMouseUp", function() theirs = theirs + 1 end)
+  Mini.Update(0)
+  assert(MV.rehooks == 1 and env.Minimap:GetScript("OnMouseUp") == MV.ourUp, "the release wrapped again: " .. tostring(MV.rehooks))
+  env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
+  assert(theirs == 1 and c.gameClicks == clicks + 1, "a click: ours, then theirs")
+  env.Minimap:SetScript("OnMouseUp", function() c.gameClicks = (c.gameClicks or 0) + 1 end)
+  Mini.Update(0)
+  env.Minimap.__scripts.OnMouseDown(env.Minimap, "LeftButton")
+  env.Minimap.__scripts.OnMouseUp(env.Minimap, "LeftButton")
+  assert(MV.rehooks == 2 and theirs == 1 and c.gameClicks == clicks + 2, "the game's own back: ours round it")
   -- a right-click: the minimap's menu, a frame later and owned by UIParent, with every switch; Far zoom is the setting.
   -- On a pin, "Waypoint here" first
   local menus = #c.contextMenus
@@ -2064,7 +2129,7 @@ do
   local function nextFrame(n0) for i = #c.timers, n0 + 1, -1 do table.remove(c.timers, i).f() end end
   local n0 = #c.timers
   env.Minimap.__scripts.OnMouseUp(env.Minimap, "RightButton")
-  assert(#c.contextMenus == menus and c.gameClicks == clicks + 1, "not at once, and no ping")
+  assert(#c.contextMenus == menus and c.gameClicks == clicks + 2, "not at once, and no ping")
   nextFrame(n0)
   local m = c.contextMenus[#c.contextMenus]
   local function entry(list, text) for _, e in ipairs(list) do if e.text == text then return e end end end
@@ -2239,7 +2304,7 @@ do
   env.Minimap.__scripts.OnMouseUp(env.Minimap, "RightButton")
   for i = #c.timers, n0 + 1, -1 do table.remove(c.timers, i).f() end
   local menu = c.contextMenus[#c.contextMenus]
-  local want, got = { "Back to me after a drag", "Back to me", "Far zoom", "Route", "Lines", "Pick-ups", "Objectives", "Dungeons", "Trails", "Party", "Quest areas", "Label", "QuestBank settings" }, {}
+  local want, got = { "Back to me after a drag", "Back to me", "Far zoom", "Route", "Lines", "Golden path", "Pick-ups", "Objectives", "Dungeons", "Trails", "Party", "Quest areas", "Label", "QuestBank settings" }, {}
   for _, e in ipairs(menu) do if e.text then got[#got + 1] = e.text end end
   assert(table.concat(got, ",") == table.concat(want, ","), "the minimap's menu: " .. table.concat(got, ","))
   for _, e in ipairs(menu) do if e.text == "Quest areas" then e.set() end end
@@ -2249,7 +2314,12 @@ do
   local U = QB.UI
   U:ShowTab(5)
   local v5 = U.views[5]
-  assert(v5.mmExtended:GetChecked() and v5.walkShow:GetChecked() and v5.minimapHint:GetText() == "Right-click the minimap for the rest.", "the minimap's rows in Settings")
+  assert(v5.mmExtended:GetChecked() and not v5.walkShow:GetChecked() and v5.minimapHint:GetText() == "Marker style. Right-click the minimap for the rest."
+    and v5.markerStyle:GetText() == "QuestTrail", "the minimap's rows in Settings: the trails off by default, the marker style QuestTrail's")
+  v5.markerStyle.__scripts.OnClick(v5.markerStyle)
+  assert(QB:Settings().markerStyle == "game" and v5.markerStyle:GetText() == "Game icons" and not Mini.QT(), "the button: the game's icons")
+  v5.markerStyle.__scripts.OnClick(v5.markerStyle)
+  assert(QB:Settings().markerStyle == "questtrail" and v5.markerStyle:GetText() == "QuestTrail" and Mini.QT(), "and QuestTrail's again")
   v5.mmExtended:SetChecked(false); v5.mmExtended.__scripts.OnClick(v5.mmExtended)
   assert(QB:Settings().mmExtended == false and not MV.Extended(), "Far zoom off in Settings: the game's minimap")
   v5.mmExtended:SetChecked(true); v5.mmExtended.__scripts.OnClick(v5.mmExtended)
@@ -2269,25 +2339,32 @@ do
   c.party, P.list, QB.MinimapTiles = saveParty, saveList, realTiles
   env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
   Mini.Invalidate(); Mini.Update(0)
-  -- QuestTrail's MIT licence goes with its code: the notice, the two lines atop each file with its code, its line
-  -- texture; none of its own art
+  -- QuestTrail's MIT licence goes with its code and its art: the notice names every file of Krom's, the two lines atop
+  -- each file with his code; his 14 PNGs are in art/ as he drew them (5.5: the markers, circles and dial too), and
+  -- nothing of QuestTrail's that QuestBank has no use for (its logo, its unused circle_dot)
   local lic = io.open(HERE .. "/QuestBank/LICENSE-QuestTrail.txt"):read("*a")
-  assert(lic:find("Copyright (c) 2026 Krom", 1, true) and lic:find("^MinimapTiles.lua, MinimapView.lua, MinimapRoute.lua, parts of Minimap.lua and art/line_arrow.png"),
+  local KROM_ART = { "line_arrow", "ring_bg", "ring_frame", "ring_elite", "glyph_kill", "glyph_use", "glyph_usedrop", "glyph_area", "glyph_escort",
+                     "step_bg", "step_tint", "arrow_bg", "arrow_needle", "arrow_tint" }
+  assert(lic:find("Copyright (c) 2026 Krom", 1, true) and lic:find("^MinimapTiles.lua, MinimapView.lua, MinimapRoute.lua, parts of Minimap.lua and Arrow.lua"),
     "LICENSE-QuestTrail.txt: QuestTrail's notice")
-  for _, fn in ipairs({ "MinimapTiles.lua", "MinimapView.lua", "MinimapRoute.lua", "Minimap.lua" }) do
+  for _, art in ipairs(KROM_ART) do
+    assert(lic:sub(1, (lic:find("\n", 1, true) or #lic)):find(art .. ".png", 1, true), "LICENSE-QuestTrail.txt names art/" .. art .. ".png on its first line")
+    local png = io.open(HERE .. "/QuestBank/art/" .. art .. ".png", "rb")
+    assert(png and png:read(4) == "\137PNG", "art/" .. art .. ".png is there, a PNG")
+    png:close()
+  end
+  for _, fn in ipairs({ "MinimapTiles.lua", "MinimapView.lua", "MinimapRoute.lua", "Minimap.lua", "Arrow.lua" }) do
     local head, k = {}, 0
     for line in io.lines(HERE .. "/QuestBank/" .. fn) do k = k + 1; head[k] = line; if k == 3 then break end end
     head = table.concat(head, "\n")
     assert(head:find("LICENSE-QuestTrail.txt", 1, true) and head:find("SPDX-License-Identifier: GPL-3.0-or-later AND MIT", 1, true), fn .. " names QuestTrail's licence")
   end
-  local png = io.open(HERE .. "/QuestBank/art/line_arrow.png", "rb")
-  assert(png and png:read(4) == "\137PNG", "art/line_arrow.png is there")
-  png:close()
+  assert(not io.open(HERE .. "/QuestBank/art/logo.png") and not io.open(HERE .. "/QuestBank/art/circle_dot.png"), "QuestTrail's logo and its unused dot stay out")
   for line in io.lines(HERE .. "/QuestBank/QuestBank.toc") do
     local fn = line:match("^%s*([%w_]+%.lua)%s*$")
     if fn then
       local src = io.open(HERE .. "/QuestBank/" .. fn):read("*a")
-      for _, art in ipairs({ "ring_bg", "glyph_", "step_bg", "arrow_bg", "logo.png" }) do assert(not src:find(art, 1, true), fn .. " uses QuestTrail's own art: " .. art) end
+      for _, art in ipairs({ "logo.png", "circle_dot" }) do assert(not src:find(art, 1, true), fn .. " uses art QuestBank has not got: " .. art) end
     end
   end
 end
@@ -2507,6 +2584,7 @@ do
   Walk.dirty, Walk.dirtyNodes = true, true
   P.list = { { m = 1429, x = 51.125, y = 50, num = 1, name = "Along the trail", when = "", lines = {} } }
   QB:Settings().minimapObjectives = false -- (the stop is the target here, not one of your log's objectives)
+  QB.Arrow:EndTemp() -- (nor the arrow's step for a waypoint clicked long ago, planned anew in this flat world)
   Mini.Invalidate(); Mini.Place()
   -- 5.4: the golden path, QuestTrail's (MinimapRoute.lua): gold along your trail, in pieces of 15 metres; the straight
   -- stroke to stop 1 left to it
@@ -2531,6 +2609,19 @@ do
   assert(searches == 0 and GP.n == 3 and GP.x[1] == 1000 and math.abs(GP.y[1] - 1980) < 0.01 and kinds() == "own,line",
     "walked on: the way trimmed behind you: " .. kinds() .. ", " .. GP.n .. " points")
   Walk.Path = realPath
+  -- 5.5: the Golden path switch (the minimap's menu): off, the plain stroke
+  QB:Settings().goldenPath = false
+  Mini.Place()
+  assert(MR.goldShown == 0 and Mini.linesShown == 1, "the golden path off: the stroke")
+  QB:Settings().goldenPath = nil
+  Mini.Place()
+  assert(MR.goldShown >= 1 and Mini.linesShown == 0, "and on again")
+  -- its width and opacity settings (QuestTrail's gpWidth, gpAlpha): the pieces take them at once
+  QB:Settings().gpWidth, QB:Settings().gpAlpha = 12, 0.5
+  Mini.Place()
+  assert(MR.gold.lines[1].th == 12 and MR.gold.lines[1].__vertex[4] == 0.5, "the golden path's width and opacity settings: " .. tostring(MR.gold.lines[1].th))
+  QB:Settings().gpWidth, QB:Settings().gpAlpha = nil, nil
+  Mini.Place()
   -- not in the air, nor within 20 metres of the place: then the plain stroke to it
   c.flying = true
   Mini.Place()
@@ -3507,9 +3598,17 @@ do
   Mini.Invalidate(); Mini.Place()
   local obj
   for _, fr in ipairs(c.frames) do if fr.d and fr.d.kind == "obj" and fr.d.id == 777777 and fr:IsShown() then obj = fr end end
-  assert(obj and (obj.icon.__tex == "atlas:Crosshair_Attack_32" or obj.icon.__tex == 131013) and math.abs(obj.__points[1].x - 28) < 0.01, "a kill objective is the game's sword cursor, 80 yards east: 28 px: " .. tostring(obj and obj.icon.__tex))
+  -- (5.5: QuestTrail's skull glyph on its coloured diamond; the game-icon style, the game's sword cursor)
+  local ART = "Interface\\AddOns\\QuestBank\\art\\"
+  assert(obj and obj.icon.__tex == ART .. "ring_bg.png" and obj.glyph.__tex == ART .. "glyph_kill.png" and math.abs(obj.__points[1].x - 28) < 0.01, "a kill objective is QuestTrail's skull, 80 yards east: 28 px: " .. tostring(obj and obj.icon.__tex))
+  QB:Settings().markerStyle = "game"
+  Mini.Place()
+  assert((obj.icon.__tex == "atlas:Crosshair_Attack_32" or obj.icon.__tex == 131013) and not obj.glyph.__shown, "the game-icon style: the game's sword cursor: " .. tostring(obj.icon.__tex))
   assert(Mini.target and Mini.target.kind == "obj" and Mini.target.id == 777777, "the nearer objective is the target, not stop 1")
   assert(Mini.linesShown >= 1 and env.QuestBankMinimapLabel:IsShown() and Mini.labelText == "Quest 777777", "a line to it, and its name in the label: " .. tostring(Mini.labelText))
+  QB:Settings().markerStyle = nil
+  Mini.Place()
+  assert(not env.QuestBankMinimapLabel:IsShown() and Mini.labelText == "Quest 777777", "QuestTrail's look: no label pill (the target's name is kept)")
   QB:Settings().minimapObjectives = false
   c.miniRadius = 400 -- (Goldshire inside the circle, so its label shows)
   Mini.Place()
@@ -3575,6 +3674,62 @@ end
 -- (STAGE_LAYOUTS and STAGE_PROBLEMS are the same tables, for the stage blocks that name them that way)
 local layouts, problems = {}, {}
 STAGE_LAYOUTS, STAGE_PROBLEMS = layouts, problems
+-- 5.5: the minimap as drawn, two sheets on the layout page (render_layout.py draws QuestBank's art from its files): at
+-- the game's zoom, three route stops, a hand-in on the rim, the objectives of two quests of the log, a dungeon's
+-- entrance and the strokes; and the far zoom over the game's tiles with your arrow and your party on them
+do
+  local Mini, MV, env, P, D = QB.Mini, QB.MiniView, owner.env, QB.Pins, QB.Data
+  c = owner
+  local saveWorld, savePos, saveParty, saveList = env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition, c.party, P.list
+  env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = -v.y * 3000, y = -v.x * 4000, GetXY = function(self) return self.x, self.y end } end
+  local at = { player = { 0.5, 0.5 }, party1 = { 0.5, 0.48 }, party2 = { 0.52, 0.5 } }
+  env.C_Map.GetPlayerMapPosition = function(m, unit)
+    local s = at[unit or "player"]
+    return s and { x = s[1], y = s[2], GetXY = function(self) return self.x, self.y end } or nil
+  end
+  local realTiles, testTiles = QB.MinimapTiles, {}
+  for col = 20, 50 do for row = 20, 50 do testTiles[col * 100 + row] = 900000 + col * 100 + row end end
+  QB.MinimapTiles = { azeroth = testTiles }
+  c.party = { { "Brann", "WARRIOR", 20 }, { "Aela", "SHAMAN", 21 } }
+  c.miniRadius, c.facing, env.Minimap.__zoom = 200, 0, 0
+  local q1, q2 = QB.state.logOrder[1].id, QB.state.logOrder[2].id
+  P.list = { { m = 1429, x = 50, y = 47.5, num = 1, name = "Goldshire", when = "At 0:10, level 20.0 to 20.2", lines = {}, ids = { [q1] = true } },
+             { m = 1429, x = 52.5, y = 51, num = 2, name = "Crossroads", when = "At 0:20", lines = {}, ids = { [q2] = true } },
+             { m = 1429, x = 90, y = 50, num = 3, name = "Far away", when = "At 1:00", lines = {} } }
+  local saveSpot1, saveSpot2 = D.SPOT[q1], D.SPOT[q2]
+  D.SPOT[q1] = "k,1,1429,515,485,10,c;k,1,1429,520,490,10,c;c,2,1429,478,520,10,c"
+  D.SPOT[q2] = "u,1,1429,487,470,10,o;e,2,1429,530,530,10,p"
+  local saveComplete = { QB.state.logOrder[1].complete, QB.state.logOrder[2].complete }
+  QB.state.logOrder[1].complete, QB.state.logOrder[2].complete = false, false
+  local tid
+  for id in pairs(D.Q) do
+    local q = QB.Quest.Get(id)
+    if q and q.turn and not QB.state.log[id] then tid = id; break end
+  end
+  local tq = QB.Quest.Get(tid)
+  local saveTurn = tq.turn
+  tq.turn = { n = "Marshal Dughan", m = 1429, x = 50, y = 10 }
+  table.insert(QB.state.logOrder, 1, { id = tid, complete = true })
+  local dcat
+  for _, cat in ipairs(D.CAT) do if cat.dungeon and cat.entrance then dcat = cat; break end end
+  local saveEntrance = dcat.entrance
+  dcat.entrance = { m = 1429, x = 50.5, y = 54 }
+  Mini.Invalidate(); Mini.Update(0)
+  assert(Mini.shown >= 6 and Mini.linesShown >= 2, "the sheet holds the stops, the objectives, the hand-in and the entrance: " .. tostring(Mini.shown))
+  layouts[#layouts + 1] = dumpLayout(env.Minimap, "Minimap, native")
+  Mini.Wheel(-1); Mini.Update(0)
+  for _ = 1, 3 do c.clock = c.clock + 0.2; Mini.Update(0) end
+  assert(MV.Extended() and MV.partyShown == 2, "the far zoom: the ground, your party")
+  layouts[#layouts + 1] = dumpLayout(env.Minimap, "Minimap, far zoom")
+  Mini.Wheel(1); Mini.Update(0)
+  table.remove(QB.state.logOrder, 1)
+  tq.turn, dcat.entrance = saveTurn, saveEntrance
+  QB.state.logOrder[1].complete, QB.state.logOrder[2].complete = saveComplete[1], saveComplete[2]
+  D.SPOT[q1], D.SPOT[q2] = saveSpot1, saveSpot2
+  c.party, P.list, QB.MinimapTiles = saveParty, saveList, realTiles
+  env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
+  Mini.Invalidate(); Mini.Update(0)
+end
 -- [stage: boss-spots] that stage's tests go right below this line
 -- 5.4.2: where the bosses stand on the floor art (boss_spots.py: the room each stands in, by MoP Classic's building
 -- groups, decides the floor; the rectangle the spot; DungeonMap.lua draws them). The dungeons' known truths pin the
@@ -3876,8 +4031,8 @@ do
   v5.glowStyle[1].__scripts.OnClick(v5.glowStyle[1])
   assert(Glow.Style() == "sparkle" and L:IsShown() and sparksShown() == 7, "Sparkles again")
   -- the rows below moved down with the two new ones, and the page grew to hold them
-  assert(v5.statusHint.__points[1].y == -1284 and v5.statusBtns[1].__points[1].y == -1254 and v5.scroll.child:GetHeight() == 1328,
-    "the health and mana rows sit under the light's rows, the page holds them")
+  assert(v5.statusHint.__points[1].y == -1296 and v5.statusBtns[1].__points[1].y == -1266 and v5.scroll.child:GetHeight() == 1340,
+    "the health and mana rows sit under the light's rows (and 5.5's marker style row), the page holds them")
   local sf = v5.scroll
   local _, hi = sf.bar:GetMinMaxValues()
   sf.bar:SetValue(math.min(hi, 990)); UI:Refresh()
@@ -5167,7 +5322,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 1328 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 1340 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()
@@ -7397,8 +7552,14 @@ do
     layouts[#layouts + 1] = dumpLayout(F, label)
   end
   c.facing = 0
+  -- 5.5: QuestTrail's compass by default: the dial's three layers (Krom's art), 48 screen pixels; the game's own arrow
+  -- and its glow kept for the game-icon style
+  local ART = "Interface\\AddOns\\QuestBank\\art\\"
+  assert(A.QT() and F.dialBg.__tex == ART .. "arrow_bg.png" and F.tint.__tex == ART .. "arrow_tint.png" and F.needle.__tex == ART .. "arrow_needle.png"
+    and F.dial.__w == 48 and F.dialBg.__layer == "BACKGROUND" and F.needle.__layer == "OVERLAY" and not F.arrow:IsShown() and not F.glow:IsShown(),
+    "QuestTrail's dial: its three layers, 48 px")
   assert(F.arrow.__atlas == "npe_arrowup" and F.arrow.__desat and F.glow.__atlas == "npe_arrowupglow" and F.glow.__blend == "ADD",
-    "the game's own arrow and its glow")
+    "the game's own arrow and its glow, kept for the game-icon style")
 
   -- the same continent: at Stormwind's flight master, Lakeshire known. Its icon takes the arrow's place
   c.taxiKnown = { [2] = true, [5] = true }
@@ -7408,17 +7569,21 @@ do
   aimAt("Lakeshire", 0, lake[3] + 50, lake[4])
   look()
   assert(F.name:GetText() == "Lakeshire" and step() == "Fly to Lakeshire" and F.dist:GetText() == "Talk to the flight master"
-    and F.act:IsShown() and F.act.__atlas == "flightmaster" and not F.arrow:IsShown() and F.stepIcon:IsShown() and F.stepIcon.__atlas == "flightmaster",
+    and F.act:IsShown() and F.act.__atlas == "flightmaster" and not F.dial:IsShown() and F.stepIcon:IsShown() and F.stepIcon.__atlas == "flightmaster",
     "at the flight master: " .. says())
+  -- QuestTrail's lines under the dial: the step (blue) and what to do at the target on one line, the name in white
+  assert(F.act.__w == 48 and F.kind:IsShown() and F.kind:GetText() == ", then Go to" and F.step.__color[3] == 1 and F.name.__color[1] == 1 and F.name.__color[3] == 1
+    and F.name.__size == 10 and F.kind.__points[1].y == F.step.__points[1].y and F.kind.__points[1].x > F.step.__points[1].x,
+    "the first line: the step, then what to do; the name white under it")
   assert(F.trail[1]:IsShown() and F.trail[2]:IsShown() and not F.trail[3]:IsShown() and F.trail[1].__alpha == 1 and F.trail[2].__alpha == 0.5
-    and F.trail[2].__tex == T.foot and F.__h == 130, "the steps left: the flight, then the walk")
-  -- something to do here: a ping every couple of seconds, growing and fading
-  local pinged, grown = 0, false
+    and F.trail[2].__tex == T.foot and F.__h == 117, "the steps left: the flight, then the walk: " .. tostring(F.__h))
+  -- something to do here: QuestTrail's compass pings nothing (the game style's ping is tested below)
+  local pinged = 0
   for _ = 1, 130 do
     F.__scripts.OnUpdate(F, 0.016)
-    if F.ping:IsShown() then pinged, grown = pinged + 1, grown or (F.ping.__w > 40 and F.ping.__w < 96 and F.ping.__alpha < 0.9) end
+    if F.ping:IsShown() then pinged = pinged + 1 end
   end
-  assert(pinged > 20 and pinged < 60 and grown, "a ping at the flight master: " .. pinged .. " frames")
+  assert(pinged == 0, "no ping at the flight master in QuestTrail's look: " .. pinged .. " frames")
   lines = {}; F.__scripts.OnEnter(F)
   local tip = table.concat(lines, "\n")
   assert(tip:find("|A:flightmaster:14:14|a Fly to Lakeshire | ", 1, true) and tip:find("Walk to Lakeshire | %d+ min") and tip:find("About %d+ min in all%.")
@@ -7427,8 +7592,9 @@ do
   -- on the way there, the arrow points at it; the minimap pins it and draws the line to it
   standAt(c, 0, sw[3] + 150, sw[4])
   look()
-  assert(F.arrow:IsShown() and not F.act:IsShown() and step() == "Fly to Lakeshire" and F.dist:GetText():find("^150 yards · %d+ min$"),
+  assert(F.dial:IsShown() and not F.act:IsShown() and step() == "Fly to Lakeshire" and F.dist:GetText():find("^150 yards · %d+ min$"),
     "on the way to the flight master: " .. says())
+  assert(math.abs(F.tint.__vertex[1] - 0.7) < 0.01 and math.abs(F.tint.__vertex[2] - 0.9) < 0.01 and F.tint.__vertex[3] == 1, "the glass blue on the way to a flight master")
   c.QB.Mini.Place()
   local Mini = c.QB.Mini
   assert(Mini.target and Mini.target.kind == "step" and Mini.labelText == "Fly to Lakeshire" and Mini.linesShown >= 1,
@@ -7439,8 +7605,8 @@ do
   fireTV(c, "TAXI_NODE_STATUS_CHANGED"); tick(c, 1.5)
   standAt(c, 0, sw[3], sw[4])
   look()
-  assert(not F.step:IsShown() and not F.stepIcon:IsShown() and F.dist:GetText():find("yards", 1, true) and F.arrow:IsShown() and not F.trail[1]:IsShown()
-    and F.__h == 98, "Lakeshire not known: walk there: " .. says())
+  assert(not F.step:IsShown() and not F.stepIcon:IsShown() and F.dist:GetText():find("yards", 1, true) and F.dial:IsShown() and not F.trail[1]:IsShown()
+    and F.__h == 99 and F.kind:GetText() == "Go to", "Lakeshire not known: walk there: " .. says())
   sheet("Arrow: walk")
   c.QB.Mini.Place()
   assert(Mini.target and Mini.target.kind ~= "step", "a walk: no step on the minimap")
@@ -7450,32 +7616,33 @@ do
   local b0 = math.atan2(lake[4] - me.wy, lake[3] + 50 - me.wx)
   c.facing = b0
   tick(c, 1)
-  assert(math.abs(F.arrow.__rot) < 0.01 and F.arrow.__vertex[2] > F.arrow.__vertex[1] and F.glow.__alpha > 0, "facing it: green, glowing")
+  assert(math.abs(F.needle.__rot) < 0.01 and not F.glow:IsShown() and math.abs(F.tint.__vertex[2] - 0.91) < 0.01 and F.tint.__vertex[1] == 1,
+    "facing it: the needle up, the glass gold for a waypoint, no glow")
   sheet("Arrow: walk, facing it")
   c.facing = b0 - 1
   F.__scripts.OnUpdate(F, 0.016)
-  assert(F.arrow.__rot > 0 and F.arrow.__rot < 1 and F.glow.__rot == F.arrow.__rot, "a turn eases in: " .. F.arrow.__rot)
+  assert(F.needle.__rot > 0 and F.needle.__rot < 1, "a turn eases in: " .. F.needle.__rot)
   tick(c, 1)
-  assert(math.abs(F.arrow.__rot - 1) < 0.01 and F.glow.__alpha == 0, "and settles: " .. F.arrow.__rot)
+  assert(math.abs(F.needle.__rot - 1) < 0.01, "and settles: " .. F.needle.__rot)
   c.facing = b0 + math.pi
   tick(c, 1)
-  assert(F.arrow.__vertex[1] > F.arrow.__vertex[2] and F.glow.__alpha == 0, "behind you: red")
+  assert(math.abs(F.tint.__vertex[2] - 0.91) < 0.01, "behind you: the glass keeps its colour (no heading colour in QuestTrail's look)")
   c.facing = b0 - 3
   tick(c, 1)
   c.facing = b0 + 3
   for _ = 1, 40 do
     F.__scripts.OnUpdate(F, 0.016)
-    assert(math.abs(F.arrow.__rot) > 2.9, "from 3 to -3 the short way, behind you: " .. F.arrow.__rot)
+    assert(math.abs(F.needle.__rot) > 2.9, "from 3 to -3 the short way, behind you: " .. F.needle.__rot)
   end
   tick(c, 1)
-  assert(math.abs(F.arrow.__rot + 3) < 0.01, "and settles: " .. F.arrow.__rot)
+  assert(math.abs(F.needle.__rot + 3) < 0.01, "and settles: " .. F.needle.__rot)
   -- which way you face is a secret: the arrow dims, upright
   c.facing = SECRET.num()
   look()
-  assert(F.arrow.__alpha == 0.3 and F.arrow.__rot == 0 and F.dist:GetText():find("yards", 1, true), "facing unknown: dimmed")
+  assert(F.dial.__alpha == 0.3 and F.needle.__rot == 0 and F.dist:GetText():find("yards", 1, true), "facing unknown: dimmed")
   c.facing = b0
   look()
-  assert(F.arrow.__alpha == 1 and math.abs(F.arrow.__rot) < 0.01, "and back")
+  assert(F.dial.__alpha == 1 and math.abs(F.needle.__rot) < 0.01, "and back")
 
   -- the flight master's map: pick Lakeshire, its button marked; in the air; landed
   c.taxiKnown[5] = true
@@ -7496,16 +7663,16 @@ do
   standAt(c, 0, sw[3] - 1000, sw[4] - 300)
   tick(c, 1)
   assert(step() == "Flying to Lakeshire" and (F.dist:GetText():find("^Lands in %d+:%d%d$") or F.dist:GetText() == "Landing")
-    and F.stepIcon.__tex == T.gryphon and F.arrow:IsShown() and F.arrow.__alpha == 0.85 and TV.stats.routes == routes, "in the air: " .. says())
+    and F.stepIcon.__tex == T.gryphon and F.dial:IsShown() and F.dial.__alpha == 0.85 and not F.kind:IsShown() and TV.stats.routes == routes, "in the air: " .. says())
   sheet("Arrow: in the air")
   c.taxi = false
   standAt(c, 0, lake[3], lake[4])
   A:Update()
   F.__scripts.OnUpdate(F, 0.016)
-  assert(not F.step:IsShown() and F.arrow:IsShown() and (db.known[5] == "f" or db.known[5] == "t"), "landed: the walk: " .. says())
-  assert(F.ping:IsShown() and F.arrow.__w > 48 and F.arrow.__w < 60, "a new step: the arrow pops, a ping: " .. F.arrow.__w)
+  assert(not F.step:IsShown() and F.dial:IsShown() and (db.known[5] == "f" or db.known[5] == "t"), "landed: the walk: " .. says())
+  assert(not F.ping:IsShown() and F.dial.__w == 48, "a new step: no pop nor ping in QuestTrail's look")
   tick(c, 1)
-  assert(not F.ping:IsShown() and F.arrow.__w == 48, "and settles")
+  assert(F.dial.__w == 48, "and stays")
 
   -- a boat: wait on the pier, its icon in the arrow's place; on board the plan stands; at the far pier, walk on
   c.taxiKnown = {}
@@ -7543,14 +7710,14 @@ do
   c.instance, c.noPos = nil, nil
   standAt(c, 0, -4840, -1330)
   look()
-  assert(not F.step:IsShown() and F.arrow:IsShown(), "out in Ironforge: walk on: " .. says())
+  assert(not F.step:IsShown() and F.dial:IsShown(), "out in Ironforge: walk on: " .. says())
   -- a flight master you haven't learned, on the way
   db.known = {}
   learn()
   standAt(c, 0, lake[3], lake[4] + 20)
   aimAt("Lakeshire Inn", 0, lake[3] + 300, lake[4])
   look()
-  assert(step() == "Learn this flight path" and F.stepIcon.__atlas == "taxinode_undiscovered" and F.dist:GetText():find("yards", 1, true) and F.arrow:IsShown(),
+  assert(step() == "Learn this flight path" and F.stepIcon.__atlas == "taxinode_undiscovered" and F.dist:GetText():find("yards", 1, true) and F.dial:IsShown(),
     "at Lakeshire's flight master, not learned: " .. says())
   sheet("Arrow: learn this flight path")
 
@@ -7625,8 +7792,8 @@ do
   aimAt("Here", 0, sw[3] + 5, sw[4])
   A:Update()
   F.__scripts.OnUpdate(F, 0.016)
-  assert(F.dist:GetText() == "You're there" and F.act.__atlas == "Waypoint-MapPin-Tracked" and F.act.__alpha == 1 and not F.act.__desat and F.ping:IsShown(),
-    "there: the pin, a ping")
+  assert(F.dist:GetText() == "You're there" and F.act.__atlas == "Waypoint-MapPin-Tracked" and F.act.__alpha == 1 and not F.act.__desat and not F.ping:IsShown(),
+    "there: the pin, no ping in QuestTrail's look")
   sheet("Arrow: there")
 
   -- every town on the lines: each fits whole, or the step by the town's name alone, never cut; the longest names go
@@ -7692,7 +7859,7 @@ do
   standAt(c, 0, sw[3], sw[4])
   aimAt("Gadgetzan", 1, gz[3] + 30, gz[4])
   look()
-  assert(F.dist:GetText() == "On the other continent" and not F.step:IsShown() and F.arrow.__alpha == 0.3 and F.arrow.__rot == 0, "straight: " .. says())
+  assert(F.dist:GetText() == "On the other continent" and not F.step:IsShown() and F.dial.__alpha == 0.3 and F.needle.__rot == 0, "straight: " .. says())
   sheet("Arrow: straight, another continent")
   set.arrowTravel = true
   -- Travel.lua breaking: noted once, and the arrow points straight for the rest of the session
@@ -7710,9 +7877,38 @@ do
   set.arrowPin, set.arrowMode = nil, "route"
   A:Set(false)
 
-  -- the Horde, on a client without the tutorial arrow: the old quest arrow, no glow; at the tower, the zeppelin
+  -- 5.5: the dial's size setting, its backdrop; the game-icon style: the game's arrow, coloured by your heading,
+  -- glowing when it points ahead, popping and pinging at a new step, the name in gold above the step line
+  A:Set(true)
+  standAt(c, 0, sw[3], sw[4])
+  aimAt("Lakeshire", 0, lake[3] + 50, lake[4])
+  set.compassSize, set.compassBg = 64, true
+  look()
+  assert(F.dial.__w == 64 and F.bg and F.bg:IsShown() and F.name.__points[1].y == -79 and F.bg.__w > 64, "a 64 px dial, the backdrop behind it")
+  set.compassSize, set.compassBg = nil, nil
+  look()
+  assert(F.dial.__w == 48 and not F.bg:IsShown(), "and the default again")
+  set.markerStyle = "game"
+  c.facing = b0
+  look()
+  tick(c, 1)
+  assert(not A.QT() and F.arrow:IsShown() and not F.dial:IsShown() and F.name.__size == 12 and F.name.__points[1].y == -56 and not F.kind:IsShown()
+    and F.arrow.__vertex[2] > F.arrow.__vertex[1] and F.glow.__alpha > 0 and F.__h == 98, "the game-icon style: the game's arrow, green ahead, glowing")
+  c.facing = b0 + math.pi
+  tick(c, 1)
+  assert(F.arrow.__vertex[1] > F.arrow.__vertex[2] and F.glow.__alpha == 0, "behind you: red")
+  c.facing = b0
+  set.markerStyle = nil
+  look()
+  assert(A.QT() and F.dial:IsShown() and not F.arrow:IsShown(), "and QuestTrail's dial again")
+  set.arrowPin, set.arrowMode = nil, "route"
+  A:Set(false)
+
+  -- the Horde, on a client without the tutorial arrow, in the game-icon style: the old quest arrow, no glow; at the
+  -- tower, the zeppelin
   local h = grosh
   h.noAtlas = { npe_arrowup = true }
+  h.QB:Settings().markerStyle = "game"
   h.QB.Arrow:Set(true)
   local HF = h.env.QuestBankArrow
   assert(HF.arrow.__tex == h.QB.Data.TEX.questArrow and not HF.arrow.__atlas and not HF.glow:IsShown(), "no atlas: the quest arrow")
@@ -7725,7 +7921,7 @@ do
   for _, pr in ipairs(checkLayout(HF, "Arrow: the zeppelin (Horde)")) do problems[#problems + 1] = pr end
   layouts[#layouts + 1] = dumpLayout(HF, "Arrow: the zeppelin (Horde)")
   h.QB.Arrow:Set(false)
-  h.QB:Settings().arrowPin, h.QB:Settings().arrowMode, h.noAtlas = nil, "route", nil
+  h.QB:Settings().arrowPin, h.QB:Settings().arrowMode, h.noAtlas, h.QB:Settings().markerStyle = nil, "route", nil, nil
 end
 
 ----------------------------------------------------------------------------

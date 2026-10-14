@@ -1,4 +1,5 @@
--- SPDX-License-Identifier: GPL-3.0-or-later
+-- SPDX-License-Identifier: GPL-3.0-or-later AND MIT
+-- Contains code from QuestTrail 3.0.6, Copyright (c) 2026 Krom, MIT licence (LICENSE-QuestTrail.txt): QuestTrail_Compass.lua: the dial's layers (A.Create), SizeArrow, ApplyLook, FitBg, Tint, the needle's easing
 -- The direction arrow (opt-in, Settings or /qb arrow): points from where you stand and the way you
 -- face to a target, with its name and how far it is. What it points at is yours to choose: right-click
 -- it, or /qb arrow route|handin|pickup|pin.
@@ -16,7 +17,7 @@
 -- at the step's start (a flight master, a pier, the tram), the step's icon takes its place where there is something
 -- to do (talk, wait, use the hearthstone), a line names the step, the next says how far or what to do, and a row of
 -- icons shows the steps left. The turn, the colour for your heading and the pulses are drawn every frame; the rest
--- 20 times a second.
+-- 20 times a second. Drawn as QuestTrail's compass by default (the dial, A.QT), or as the game's own arrow.
 local _, QB = ...
 local A = {}
 QB.Arrow = A
@@ -96,7 +97,9 @@ local function routeTarget()
   local leg = r and r.legs and r.legs[1]
   if not leg or not leg.stop then return nil end
   local st = leg.stop
-  return { name = st.name, c = st.c, wx = st.wx, wy = st.wy, quests = #(leg.rows or {}), what = "to hand in there", kind = "route" }
+  local first = leg.rows and leg.rows[1] and leg.rows[1].q
+  return { name = st.name, c = st.c, wx = st.wx, wy = st.wy, quests = #(leg.rows or {}), what = "to hand in there", kind = "route",
+           qid = first and first.id } -- (its first quest: the colour of the dial and the minimap's stroke)
 end
 
 -- an NPC as a target: where it stands in the world, and on its map (for the minimap's pins)
@@ -118,6 +121,7 @@ local function handinList()
         local t = byNpc[q.turnIdx]
         if not t then
           t = npcTarget(q.turnIdx, p, q.turn.n, "to hand in there", "handin")
+          t.qid = q.id -- (its first quest: the colour of the arrow's dial and the minimap's stroke)
           byNpc[q.turnIdx] = t
           list[#list + 1] = t
         end
@@ -155,9 +159,11 @@ local function pickupList()
           local t = byNpc[g.giveIdx]
           if not t then
             t = npcTarget(g.giveIdx, p, g.give.n, "to pick up there", "pickup")
+            t.qid = g.id -- (its first quest: the colour of the arrow's dial and the minimap's stroke)
             byNpc[g.giveIdx] = t
             list[#list + 1] = t
           end
+          if g.escort then t.escort = true end -- (the escort glyph on its ! on the minimap)
           t.quests = t.quests + 1
         end
       end
@@ -355,6 +361,61 @@ local function tipSteps(t, g)
   if hearth then GameTooltip:AddLine(hearth, 0.8, 0.8, 0.8, true) end
 end
 
+----------------------------------------------------------------------------
+-- The look: QuestTrail's compass (the default, the Marker style setting), after QuestTrail_Compass.lua: a dial of
+-- three layers of Krom's art, bottom to top the bevelled dial (arrow_bg), the glass, the one layer coloured, half
+-- white and half the target's quest's colour (arrow_tint; blue on the way to a flight master, a pier or the tram) and
+-- the red needle on top (arrow_needle), the only layer that turns, eased toward the target every frame; sized in
+-- screen pixels whatever the UI scale (compassSize). Under it two small lines, what to do ("Fly to Lakeshire, then
+-- Turn in"; the travel step blue, QuestBank's own words) and the target's name in white, then how far, then
+-- QuestBank's row of the steps left; a dark backdrop behind them when asked (compassBg). No heading colour, glow,
+-- ping or pop in this look. The game style keeps the game's own tutorial arrow, greyed and coloured by your heading,
+-- with its glow and pulses, the name in gold above the step line.
+----------------------------------------------------------------------------
+local ART = "Interface\\AddOns\\QuestBank\\art\\"
+local TRAVEL_KIND = { fly = true, boat = true, zeppelin = true, tram = true, portal = true }
+local VERB = { route = "Turn in", handin = "Turn in", pickup = "Take", pin = "Go to" } -- what to do at the target
+local EASE = 12                   -- how fast the needle catches up (QuestTrail's: most of the way in about 0.2 s)
+local LABEL_W, LINE_H, GAP = 200, 13, 2
+A.EASE, A.VERB = EASE, VERB
+
+function A.QT() return QB:Settings().markerStyle ~= "game" end
+
+-- the dial's size (compassSize, 24 to 128 screen pixels) in the frame's own units, whatever the UI scale
+function A.DialSize()
+  local px = max(24, min(128, tonumber(QB:Settings().compassSize) or ARROW))
+  local h
+  if type(GetPhysicalScreenSize) == "function" then
+    local ok, _, ph = pcall(GetPhysicalScreenSize)
+    ph = ok and plain(ph) or nil
+    if type(ph) == "number" then h = ph end
+  end
+  local f = A.frame
+  local scale = f and f:GetEffectiveScale() or 1
+  if type(h) == "number" and h > 0 and type(scale) == "number" and scale > 0 then return px * 768 / h / scale end
+  return px
+end
+
+-- the dial's colour for the target: its quest's (a stop's or a hand-in's own, a pick-up's, as the minimap's markers and
+-- strokes), blue on the way to a flight master, a pier, the tram or a portal and while carried; gold for a waypoint
+function A.TintFor(t, g)
+  local Mini = QB.Mini
+  local leg = g and g.leg
+  if leg and TRAVEL_KIND[leg.kind] and (g.state == "approach" or g.state == "at" or g.state == "underway") then return Mini.TRAVEL end
+  if t and (t.kind == "route" or t.kind == "handin") and t.qid then return Mini.ColorFor(t.qid, "finish") end
+  if t and t.kind == "pickup" and t.qid then return Mini.ColorFor(t.qid, "start") end
+  return Mini.SINGLE
+end
+-- the glass half white, half the colour (QuestTrail's TINT_MIX): set again only when it changes
+A.TINT_MIX = 0.5
+function A.Tint(f, c)
+  local w = A.TINT_MIX
+  local r, g, b = w + c[1] * (1 - w), w + c[2] * (1 - w), w + c[3] * (1 - w)
+  if f.tr == r and f.tg == g and f.tb == b then return end
+  f.tr, f.tg, f.tb = r, g, b
+  f.tint:SetVertexColor(r, g, b)
+end
+
 function A:Create()
   if self.frame then return self.frame end
   local T = QB.Data.TEX
@@ -394,8 +455,8 @@ function A:Create()
     end
     QB:Settings().arrowPos = { p, x, y }
   end)
-  -- the puck: the game's tutorial arrow, greyed so your heading colours it, with its glow (the old quest arrow where
-  -- the client lacks it); the step's icon in its place, with a cooldown swipe; a ping behind them
+  -- the game style's puck: the game's tutorial arrow, greyed so your heading colours it, with its glow (the old quest
+  -- arrow where the client lacks it); a ping behind it
   f.ping = f:CreateTexture(nil, "BACKGROUND")
   f.ping:SetPoint("CENTER", f, "TOP", 0, PUCK_Y)
   f.ping:SetTexture(T.ping)
@@ -410,15 +471,28 @@ function A:Create()
   A.size = atlas and ARROW or 40
   f.arrow:SetSize(A.size, A.size)
   f.arrow:SetDesaturated(true)
+  f.arrow:Hide()
   A.glows = atlas and QB.Art(f.glow, "npe_arrowupglow", T.questArrow)
   if A.glows then
     f.glow:SetDesaturated(true)
     f.glow:SetVertexColor(0.35, 1, 0.35)
     f.glow:SetBlendMode("ADD")
     f.glow:SetAlpha(0)
-  else
-    f.glow:Hide()
   end
+  f.glow:Hide()
+  -- QuestTrail's dial: its three layers on one frame, shown and hidden together; the needle alone turns
+  f.dial = CreateFrame("Frame", nil, f)
+  f.dial:SetPoint("TOP", f, "TOP", 0, 0)
+  f.dial:SetSize(ARROW, ARROW)
+  local function layer(file, l)
+    local t = f.dial:CreateTexture(nil, l)
+    t:SetTexture(ART .. file, nil, nil, "TRILINEAR")
+    t:SetAllPoints(f.dial)
+    return t
+  end
+  f.dialBg, f.tint, f.needle = layer("arrow_bg.png", "BACKGROUND"), layer("arrow_tint.png", "ARTWORK"), layer("arrow_needle.png", "OVERLAY")
+  f.dial:Hide()
+  -- the step's icon in the puck's place, with a cooldown swipe
   f.act = f:CreateTexture(nil, "ARTWORK")
   f.act:SetPoint("CENTER", f, "TOP", 0, PUCK_Y)
   f.act:SetSize(ACT, ACT)
@@ -441,6 +515,12 @@ function A:Create()
   f.step:SetWidth(STEP_W)
   f.step:SetWordWrap(false)
   f.step:Hide()
+  -- QuestTrail's first line: what to do at the target ("Turn in"), after the travel step when there is one
+  f.kind = f:CreateFontString(nil, "OVERLAY")
+  f.kind:SetFontObject(GameFontNormalSmall)
+  f.kind:SetTextColor(1, 0.82, 0)
+  f.kind:SetWordWrap(false)
+  f.kind:Hide()
   f.dist = f:CreateFontString(nil, "OVERLAY")
   f.dist:SetFontObject(GameFontHighlightSmall)
   f.dist:SetTextColor(0.85, 0.85, 0.85)
@@ -488,15 +568,67 @@ function A:Create()
     A:Render(elapsed)
   end, "arrow"))
   f:Hide()
+  self:ApplyLook()
   return f
 end
 
--- every frame: the arrow turns toward its aim as you turn (eased, so it glides), takes the colour of your heading and
--- glows while it points ahead; the ping and the pop play out. Nothing is set that didn't change
+-- the frame laid out for the look (QuestTrail's dial, or the game's puck) and the dial's size: at its making, and
+-- again when the Marker style or the dial's size setting changes (A:Update watches them; the Settings page calls
+-- A:Restyle)
+function A:ApplyLook()
+  local f = self.frame
+  if not f then return end
+  local set = QB:Settings()
+  local qt = A.QT()
+  local S = qt and A.DialSize() or 0
+  A.lookKey = (qt and "qt" or "game") .. ":" .. tostring(set.compassSize) .. ":" .. tostring(set.compassBg)
+  A.qt, A.dialPx = qt, S
+  f.act:ClearAllPoints()
+  f.name:ClearAllPoints()
+  if qt then
+    f.dial:SetSize(S, S)
+    f.dial:ClearAllPoints()
+    f.dial:SetPoint("TOP", f, "TOP", 0, 0)
+    f.act:SetPoint("CENTER", f.dial, "CENTER", 0, 0)
+    A.actSize = S
+    f.name:SetFontObject(GameFontNormalSmall)
+    f.name:SetTextColor(1, 1, 1)
+    f.name:SetPoint("TOP", f, "TOP", 0, -(S + GAP + LINE_H))
+    f.step:SetFontObject(GameFontNormalSmall)
+    f.step:SetTextColor(0.4, 0.8, 1)
+    f.step:SetJustifyH("LEFT")
+    f.arrow:Hide(); f.glow:Hide(); f.ping:Hide()
+  else
+    f.dial:Hide()
+    f.act:SetPoint("CENTER", f, "TOP", 0, PUCK_Y)
+    A.actSize = ACT
+    f.name:SetFontObject(GameFontNormal)
+    f.name:SetTextColor(1, 0.82, 0)
+    f.name:SetPoint("TOP", f, "TOP", 0, -56)
+    f.step:SetFontObject(GameFontHighlightSmall)
+    f.step:SetTextColor(1, 1, 1)
+    f.step:SetJustifyH("CENTER")
+    f.step:SetWidth(STEP_W)
+    f.kind:Hide()
+    if f.bg then f.bg:Hide() end
+  end
+  f.act:SetSize(A.actSize, A.actSize)
+  -- (laid out afresh: the puck, the lines' places, the steps row)
+  A.pointing, A.distY, A.h, A.trailY, A.trailPlan, A.line1 = nil, nil, nil, nil, nil, nil
+  f.step.qbText, f.name.qbText, f.dist.qbText = nil, nil, nil
+  A.shownRot, A.shownAlpha, A.cr = huge, -1, -1
+  self:Update()
+end
+function A:Restyle() self:ApplyLook() end
+
+-- every frame: the arrow turns toward its aim as you turn (eased, so it glides: QuestTrail's needle, most of the way
+-- in a fifth of a second), the game style's takes the colour of your heading and glows while it points ahead, and
+-- its ping and pop play out. Nothing is set that didn't change
 function A:Render(elapsed)
   local f = self.frame
   local now = A.clock + elapsed
   A.clock = now
+  local qt = A.qt
   if A.pingAt then
     local k = (now - A.pingAt) / PING_S
     if k >= 1 then
@@ -513,7 +645,7 @@ function A:Render(elapsed)
     local s = 1.25 - 0.25 * min(1, k)
     if k >= 1 then A.popAt = nil end
     f.arrow:SetSize(A.size * s, A.size * s)
-    f.act:SetSize(ACT * s, ACT * s)
+    f.act:SetSize(A.actSize * s, A.actSize * s)
   end
   if not A.pointing then return end
   local facing
@@ -526,21 +658,21 @@ function A:Render(elapsed)
   if known then
     local target = wrap(A.bear - facing)
     local cur = A.rot
-    if A.snap or not cur or elapsed >= SNAP_S then cur = target else cur = wrap(cur + wrap(target - cur) * min(1, elapsed * TURN)) end
+    if A.snap or not cur or elapsed >= SNAP_S then cur = target else cur = wrap(cur + wrap(target - cur) * (1 - math.exp(-elapsed * EASE))) end
     A.rot, rot, alpha = cur, cur, A.alpha
   else
     A.rot = nil
   end
   A.snap = not known
   if abs(rot - A.shownRot) > 0.002 then
-    f.arrow:SetRotation(rot)
-    f.glow:SetRotation(rot)
+    if qt then f.needle:SetRotation(rot) else f.arrow:SetRotation(rot); f.glow:SetRotation(rot) end
     A.shownRot = rot
   end
   if alpha ~= A.shownAlpha then
-    f.arrow:SetAlpha(alpha)
+    if qt then f.dial:SetAlpha(alpha) else f.arrow:SetAlpha(alpha) end
     A.shownAlpha = alpha
   end
+  if qt then return end
   local r, g, b = A.Heading(known and rot or 1.2)
   if abs(r - A.cr) > 0.02 or abs(g - A.cg) > 0.02 or abs(b - A.cb) > 0.02 then
     f.arrow:SetVertexColor(r, g, b)
@@ -555,8 +687,9 @@ function A:Render(elapsed)
   end
 end
 
--- a ring that grows and fades behind the puck
+-- a ring that grows and fades behind the puck (the game style's; QuestTrail's compass has none)
 function A.Ping()
+  if A.qt then return end
   local f = A.frame
   A.pingAt, A.pinged = A.clock, A.clock
   f.ping:SetSize(40, 40)
@@ -589,6 +722,8 @@ local nothing = { trail = {}, state = "nothing" }
 function A:Update()
   local f = self.frame
   if not f then return end
+  local set = QB:Settings()
+  if A.lookKey ~= (A.QT() and "qt" or "game") .. ":" .. tostring(set.compassSize) .. ":" .. tostring(set.compassBg) then self:ApplyLook(); return end
   local me = QB.API.WorldPosition()
   local t = A.Target(me)
   A.t, A.me, A.guided = t, me, false
@@ -625,28 +760,107 @@ function A:Update()
   self:Draw(t.name, g, me)
 end
 
--- the frame for what the guide says (TV.Guide's g, or the same fields when straight): the name, the step and info
--- lines, the puck (the arrow toward g.aim, or g.act in its place), the row of steps left, the pulses
-function A:Draw(name, g, me)
-  local f = self.frame
-  A.Fit(f.name, name, nil, TEXT_W)
-  local step = g.step
+-- QuestTrail's first line, laid out as one centred line: the step's icon, the step (blue) and what to do at the
+-- target (gold: ", then Turn in"; "Turn in" alone with no step; nothing while carried, or with no target). Returns
+-- the line's width
+local function line1(f, step, g, S)
+  local t = A.t
+  local verb = t and (VERB[t.kind] or "Go to") or ""
+  local kindText = step and (g.state == "underway" and "" or (verb ~= "" and (", then " .. verb) or "")) or verb
+  local iw = (step and g.icon) and 17 or 0
+  if f.kind.qbText ~= kindText then f.kind.qbText = kindText; f.kind:SetText(kindText) end
+  local kw = kindText ~= "" and (f.kind:GetStringWidth() or 0) or 0
+  if step then A.Fit(f.step, step, g.short, LABEL_W - iw - kw - (kw > 0 and GAP or 0)) end
+  local sw = step and (f.step:GetStringWidth() or 0) or 0
+  local total = iw + sw + (kw > 0 and ((sw > 0 and GAP or 0) + kw) or 0)
+  local x0, y = -total / 2, -(S + GAP)
   if step then
-    if A.Fit(f.step, step, g.short, STEP_W) then
-      -- the icon just left of the text, which is centred
-      local w = min(f.step:GetStringWidth() or 0, STEP_W)
-      f.stepIcon:ClearAllPoints()
-      f.stepIcon:SetPoint("RIGHT", f, "TOP", 8 - w / 2 - 3, -79)
-    end
-    if g.icon then paint(f.stepIcon, g.icon) end
+    f.step:SetWidth(sw + 2)
+    f.step:ClearAllPoints()
+    f.step:SetPoint("TOPLEFT", f, "TOP", x0 + iw, y)
     f.step:Show()
+    if g.icon then
+      paint(f.stepIcon, g.icon)
+      f.stepIcon:ClearAllPoints()
+      f.stepIcon:SetPoint("TOPLEFT", f, "TOP", x0, y + 1)
+    end
     f.stepIcon:SetShown(g.icon ~= nil)
   else
     f.step:Hide()
     f.stepIcon:Hide()
   end
+  if kw > 0 then
+    f.kind:SetWidth(kw + 2)
+    f.kind:ClearAllPoints()
+    f.kind:SetPoint("TOPLEFT", f, "TOP", x0 + iw + sw + (sw > 0 and GAP or 0), y)
+    f.kind:Show()
+  else
+    f.kind:Hide()
+  end
+  return total
+end
+
+-- the backdrop behind the dial and its lines (compassBg): QuestTrail's, fitted to what shows
+local function fitBg(f, S, lineW, trailY)
+  local set = QB:Settings()
+  if not (A.qt and set.compassBg) then
+    if f.bg then f.bg:Hide() end
+    return
+  end
+  if not f.bg then
+    f.bg = CreateFrame("Frame", nil, f, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    f.bg:SetFrameLevel(max(0, (f:GetFrameLevel() or 1) - 1))
+    if f.bg.SetBackdrop then
+      f.bg:SetBackdrop({ bgFile = "Interface\\Tooltips\\UI-Tooltip-Background", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+                         tile = true, tileSize = 16, edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+      f.bg:SetBackdropColor(0, 0, 0, 0.6)
+      f.bg:SetBackdropBorderColor(0.5, 0.5, 0.5, 0.8)
+    else
+      local t = f.bg:CreateTexture(nil, "BACKGROUND")
+      t:SetAllPoints()
+      t:SetColorTexture(0, 0, 0, 0.6)
+    end
+  end
+  local w = max(S, lineW, f.name:GetStringWidth() or 0, f.dist:GetStringWidth() or 0)
+  local bottom = trailY and (trailY - TRAIL) or (-(S + GAP + 2 * LINE_H) - LINE_H)
+  if f.bg.w ~= w or f.bg.bottom ~= bottom then
+    f.bg.w, f.bg.bottom = w, bottom
+    f.bg:ClearAllPoints()
+    f.bg:SetPoint("TOP", f, "TOP", 0, 8)
+    f.bg:SetSize(w + 20, 8 - bottom + 8)
+  end
+  f.bg:Show()
+end
+
+-- the frame for what the guide says (TV.Guide's g, or the same fields when straight): the name, the step and info
+-- lines, the puck (the arrow toward g.aim, or g.act in its place), the row of steps left, the pulses
+function A:Draw(name, g, me)
+  local f = self.frame
+  local qt, S = A.qt, A.dialPx
+  local step = g.step
+  local lineW = 0
+  if qt then
+    A.Fit(f.name, name, nil, LABEL_W)
+    lineW = line1(f, step, g, S)
+  else
+    A.Fit(f.name, name, nil, TEXT_W)
+    if step then
+      if A.Fit(f.step, step, g.short, STEP_W) then
+        -- the icon just left of the text, which is centred
+        local w = min(f.step:GetStringWidth() or 0, STEP_W)
+        f.stepIcon:ClearAllPoints()
+        f.stepIcon:SetPoint("RIGHT", f, "TOP", 8 - w / 2 - 3, -79)
+      end
+      if g.icon then paint(f.stepIcon, g.icon) end
+      f.step:Show()
+      f.stepIcon:SetShown(g.icon ~= nil)
+    else
+      f.step:Hide()
+      f.stepIcon:Hide()
+    end
+  end
   A.Fit(f.dist, g.info or "", nil, TEXT_W)
-  local y = step and -89 or -73
+  local y = qt and -(S + GAP + 2 * LINE_H) or (step and -89 or -73)
   if y ~= A.distY then
     A.distY = y
     f.dist:ClearAllPoints()
@@ -657,7 +871,7 @@ function A:Draw(name, g, me)
   if aim and not act and not (me and me.c == aim.c) then act, aim = g.icon, nil end
   if act then
     if A.pointing ~= false then
-      f.arrow:Hide(); f.glow:Hide(); f.act:Show()
+      f.arrow:Hide(); f.glow:Hide(); f.dial:Hide(); f.act:Show()
       A.pointing = false
     end
     paint(f.act, act)
@@ -678,21 +892,25 @@ function A:Draw(name, g, me)
     end
   else
     if A.pointing ~= true then
-      f.act:Hide(); f.cd:Hide(); f.arrow:Show()
-      if A.glows then f.glow:Show() end
+      f.act:Hide(); f.cd:Hide()
+      if qt then f.dial:Show() else f.arrow:Show(); if A.glows then f.glow:Show() end end
       A.pointing, A.snap, A.cdStart = true, true, nil
     end
     A.bear = aim and me and atan2(aim.wy - me.wy, aim.wx - me.wx) or nil
     A.alpha = g.state == "underway" and 0.85 or 1
+    if qt then A.Tint(f, A.TintFor(A.t, g)) end
   end
-  -- a new step (planned, or the last one done): the arrow snaps to it, the puck pops and pings. Arriving pings, and so
-  -- does every couple of seconds where there is something to do
+  -- a new step (planned, or the last one done): the arrow snaps to it, the puck pops and pings (the game style's;
+  -- QuestTrail's compass has neither). Arriving pings, and so does every couple of seconds where there is something to do
   local leg = g.leg
   local kind, to, town = leg and leg.kind, leg and leg.to, leg and leg.town
   if kind ~= A.stepKind or to ~= A.stepTo or town ~= A.stepTown then
     A.stepKind, A.stepTo, A.stepTown = kind, to, town
-    A.snap, A.popAt = true, A.clock
-    if leg then A.Ping() end
+    A.snap = true
+    if not qt then
+      A.popAt = A.clock
+      if leg then A.Ping() end
+    end
   end
   if g.state ~= A.state then
     A.state = g.state
@@ -703,7 +921,7 @@ function A:Draw(name, g, me)
   local tr = g.trail
   local n = (tr and not NO_TRAIL[g.state]) and min(#tr, #f.trail) or 0
   if n < 2 then n = 0 end
-  local ty = step and -106 or -90
+  local ty = qt and -(S + GAP + 3 * LINE_H + 2) or (step and -106 or -90)
   if g.plan ~= A.trailPlan or n ~= A.trailN or ty ~= A.trailY then
     A.trailPlan, A.trailN, A.trailY = g.plan, n, ty
     local x0 = -(n * TRAIL + (n - 1) * 4) / 2
@@ -719,11 +937,14 @@ function A:Draw(name, g, me)
       end
     end
   end
-  local h = (step and 114 or 98) + (n > 0 and 16 or 0)
+  local h
+  if qt then h = S + GAP + 3 * LINE_H + 10 + (n > 0 and (TRAIL + 4) or 0)
+  else h = (step and 114 or 98) + (n > 0 and 16 or 0) end
   if h ~= A.h then
     A.h = h
     f:SetHeight(h)
   end
+  fitBg(f, S, lineW, n > 0 and ty or nil)
 end
 
 -- the arrow's step for the minimap: where it sends you first (a flight master, a pier, the tram), while the arrow

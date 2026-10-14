@@ -4750,12 +4750,26 @@ function UI:CreateSettingsView(parent)
   end)
   v.walkShow = checkRow(p, LEFT, -900, "Your walked trails", 340)
   v.walkShow:SetScript("OnClick", function(self) QB:Settings().walkShow = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
-  v.minimapHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.minimapHint:SetPoint("TOPLEFT", LEFT, -928)
-  v.minimapHint:SetHeight(14)
-  v.minimapHint:SetText("Right-click the minimap for the rest.")
+  -- how the markers are drawn (Minimap.lua, Arrow.lua): QuestTrail's look, or the game's own icons; the button cycles
+  v.markerStyle = button(p, "QuestTrail", 90)
+  v.markerStyle:SetPoint("TOPLEFT", LEFT + 4, -928)
+  UI.MARKER_STYLES = { questtrail = "QuestTrail", game = "Game icons" }
+  v.markerStyle:SetScript("OnClick", QB.Safe(function()
+    local set = QB:Settings()
+    set.markerStyle = set.markerStyle == "game" and "questtrail" or "game"
+    if QB.Mini then QB.Mini.Invalidate(); QB.Mini.Place() end
+    if QB.Arrow and QB.Arrow.Restyle then QB.Arrow:Restyle() end
+    UI:Refresh()
+  end, "settings: marker style"))
+  tooltip(v.markerStyle, function(tip)
+    tip:AddLine("Marker style", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("QuestTrail: its coloured diamonds with a glyph for the work, step circles, coloured strokes and compass dial, by Krom. Game icons: the game's own numbered pins and cursor icons.", 1, 1, 1, true)
+  end)
+  v.minimapHint = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 270)
+  v.minimapHint:SetPoint("LEFT", v.markerStyle, "RIGHT", 8, 0)
+  v.minimapHint:SetText("Marker style. Right-click the minimap for the rest.")
   -- the Map: QuestBank's map page on the Map key and the sidebar (MapPage.lua), or the game's world map (UI.OpenMap)
-  v.mapPage = checkRow(p, LEFT, -946, "Map key opens QuestBank's map", 340)
+  v.mapPage = checkRow(p, LEFT, -958, "Map key opens QuestBank's map", 340)
   v.mapPage:SetScript("OnClick", function(self) QB:Settings().mapPage = self:GetChecked() and true or false; UI:Refresh() end)
   tooltip(v.mapPage, function(tip)
     tip:AddLine("QuestBank's map", GOLD[1], GOLD[2], GOLD[3])
@@ -4764,7 +4778,7 @@ function UI:CreateSettingsView(parent)
     if not (QB.MapPage and QB.MapPage.Available()) then tip:AddLine("Only on the Forever client.", 1, 0.5, 0.3, true) end
   end)
   v.map = button(p, "Game's map", 110)
-  v.map:SetPoint("TOPLEFT", LEFT + 4, -974)
+  v.map:SetPoint("TOPLEFT", LEFT + 4, -986)
   v.map:SetScript("OnClick", QB.Safe(function() UI.OpenMap() end, "settings: map"))
   v.mapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
   v.mapLabel:SetPoint("LEFT", v.map, "RIGHT", 8, 0)
@@ -4776,14 +4790,14 @@ function UI:CreateSettingsView(parent)
   end)
 
   -- the light on what your Interact key would use (Glow.lua): its style, and what it lights
-  heading(p, LEFT, -1006, "Interact light", 370)
-  v.glowOn = checkRow(p, LEFT, -1030, "Light what my Interact key would use", 340)
+  heading(p, LEFT, -1018, "Interact light", 370)
+  v.glowOn = checkRow(p, LEFT, -1042, "Light what my Interact key would use", 340)
   v.glowOn:SetScript("OnClick", function(self) if QB.Glow then QB.Glow.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
   -- the style: QuestBank's sparkles, its soft light, or the game's own highlight alone; the one in use is greyed
   v.glowStyle = {}
   for i, o in ipairs(UI.GLOW_STYLES) do
     local b = button(p, o[2], 84)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1058)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1070)
     b.value = o[1]
     b:SetScript("OnClick", QB.Safe(function(self)
       if QB.Glow then QB.Glow.SetStyle(self.value) else QB:Settings().glow.style = self.value end
@@ -4795,30 +4809,30 @@ function UI:CreateSettingsView(parent)
     end)
     v.glowStyle[i] = b
   end
-  v.glowNpcs = checkRow(p, LEFT + 24, -1086, "NPCs too: gold with a quest for you", 316)
+  v.glowNpcs = checkRow(p, LEFT + 24, -1098, "NPCs too: gold with a quest for you", 316)
   v.glowNpcs:SetScript("OnClick", function(self) QB:Settings().glow.npcs = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
-  v.glowOther = checkRow(p, LEFT + 24, -1114, "Plain objects too, in white", 316)
+  v.glowOther = checkRow(p, LEFT + 24, -1126, "Plain objects too, in white", 316)
   v.glowOther:SetScript("OnClick", function(self) QB:Settings().glow.other = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
-  v.glowCombat = checkRow(p, LEFT + 24, -1142, "Keep it on in a fight", 316)
+  v.glowCombat = checkRow(p, LEFT + 24, -1154, "Keep it on in a fight", 316)
   v.glowCombat:SetScript("OnClick", function(self) QB:Settings().glow.combat = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
   v.glowHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.glowHint:SetPoint("TOPLEFT", LEFT, -1168)
+  v.glowHint:SetPoint("TOPLEFT", LEFT, -1180)
   v.glowHint:SetHeight(52)
   v.glowHint:SetText("Gold for a quest object or NPC, green for an herb, orange for ore, blue for a chest. Switching it on sets the game's soft-interact settings; they go back as they were when it is off. Game's own draws nothing of QuestBank's.")
 
   -- health and mana on the portraits: the game's own Status Text (Options, Interface), always shown, so it works in
   -- a fight where an addon may not read an enemy's health
-  heading(p, LEFT, -1228, "Health and mana numbers", 370)
+  heading(p, LEFT, -1240, "Health and mana numbers", 370)
   v.statusBtns = {}
   for i, o in ipairs(UI.STATUS_TEXT) do
     local b = button(p, o[2], 84)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1254)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1266)
     b.value = o[1]
     b:SetScript("OnClick", QB.Safe(function(self) UI.SetStatusText(self.value); UI:Refresh() end, "settings: status text"))
     v.statusBtns[i] = b
   end
   v.statusHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.statusHint:SetPoint("TOPLEFT", LEFT, -1284)
+  v.statusHint:SetPoint("TOPLEFT", LEFT, -1296)
   v.statusHint:SetHeight(30)
   v.statusHint:SetText("On your portrait, your target's and your focus's, always shown. The game's own Status Text option.")
 
@@ -5011,6 +5025,7 @@ function UI:RefreshSettingsView(v)
   v.minimapPins:SetChecked(set.minimapPins ~= false)
   v.mmExtended:SetChecked(set.mmExtended ~= false)
   v.walkShow:SetChecked(set.walkShow ~= false)
+  v.markerStyle:SetText(UI.MARKER_STYLES[set.markerStyle] or UI.MARKER_STYLES.questtrail)
   -- QuestBank's map page: greyed out where the client has none (Classic Era)
   local page = QB.MapPage and QB.MapPage.Available()
   v.mapPage:SetEnabled(page)
@@ -5055,7 +5070,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(1328) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(1340) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------
