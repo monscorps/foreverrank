@@ -2393,8 +2393,14 @@ function UI:RefreshLogView(v)
     if (a.cut or false) ~= (b.cut or false) then return a.cut end
     return (a.value or 0) < (b.value or 0)
   end)
+  -- the Highest XP finder is sorted by XP alone. The candidates come ranked for the time (questing, nearby first), so
+  -- the richest are taken from the whole list, sixty at most; the trip shows on each line instead
   local adds = {}
-  for _, c in ipairs(self:Candidates(60)) do
+  local cands = {}
+  for i, c in ipairs(self:Candidates(nil)) do cands[i] = c end
+  table.sort(cands, function(a, b) if a.value ~= b.value then return a.value > b.value end return a.id < b.id end)
+  for _, c in ipairs(cands) do
+    if #adds >= 60 then break end
     if c.waste or c.behind then c = nil end -- questing: a long run for little is no suggestion
     if c then
     local q = Q.Get(c.id)
@@ -2410,10 +2416,11 @@ function UI:RefreshLogView(v)
     local chain
     if q and st.code == "prereq" and not via then chain = QB:ChainCost(q) end
     if q and not used[q.id] and not QB:IsAdded(q.id) and (st.code == "todo" or via or chain) and not (q.bag and q.bag[3] == 1) then
-      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via, chain = chain, rank = c.rank, lead = c.lead }
+      adds[#adds + 1] = { q = q, value = QB.Model.XpAt(q, lvl), st = st, via = via, chain = chain, lead = c.lead, mins = c.mins }
     end
     end
   end
+  table.sort(adds, function(a, b) if a.value ~= b.value then return a.value > b.value end return a.q.id < b.q.id end)
   local ai = 1
   for _ = 1, QB.LOG_SLOTS - #entries do
     if adds[ai] then rows[#rows + 1] = { add = adds[ai], cutValue = 0, gain = adds[ai].value }; ai = ai + 1 end
@@ -2427,12 +2434,8 @@ function UI:RefreshLogView(v)
       ai = ai + 1
     end
   end
-  -- banking: the biggest gain first; questing: the gain for the trip (nearby first)
-  for _, r in ipairs(rows) do
-    local near = (not QB:Banking() and r.add.rank and r.add.value and r.add.value > 0) and r.add.rank / r.add.value or 1
-    r.key = r.gain * near
-  end
-  table.sort(rows, function(a, b) return a.key > b.key end)
+  -- the biggest gain first, banking or questing: Highest XP is sorted by XP, and the trip on the line says how far
+  table.sort(rows, function(a, b) if a.gain ~= b.gain then return a.gain > b.gain end return a.add.q.id < b.add.q.id end)
   for i, r in ipairs(v.swaps) do
     local d = rows[i]
     if d then
@@ -2452,8 +2455,11 @@ function UI:RefreshLogView(v)
         -- questing: what the quest leads on to is part of why it's here
         local lead = (not QB:Banking() and d.add.lead and d.add.lead > 0 and not ch) and (" · leads to +" .. QB.Short(d.add.lead)) or ""
         local classic = (d.add.q.classic and not d.add.q.liveFull) and " · Classic only" or ""
+        -- the trip to its giver (a chain's own minutes cover it)
+        local trip = (not ch and d.add.mins) and (" · " .. (d.add.mins < 1 and "here" or string.format("%d min", math.floor(d.add.mins + 0.5)))) or ""
         local room = r.cutName:GetWidth() - 2
-        for _, line in ipairs({ base .. long .. lead .. classic, base .. short .. classic, base .. short .. lead, base .. short, base .. lead, base }) do
+        for _, line in ipairs({ base .. trip .. long .. lead .. classic, base .. trip .. short .. classic, base .. trip .. short .. lead, base .. trip .. short,
+                                base .. trip .. lead, base .. trip, base }) do
           r.cutName:SetText(line)
           if r.cutName:GetStringWidth() <= room then break end
         end

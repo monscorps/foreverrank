@@ -3608,6 +3608,63 @@ do
   env.C_Spell.GetSpellTexture = saveTex
   Camp.Refresh()
 end
+-- checklist 5: Highest XP is sorted by XP alone: the richest candidate that fits is row 1, the gains never rise down the
+-- list, the trip's minutes on the line; the reward finders keep their own order
+do
+  local lock0 = QB:LockChoice()
+  QB:SetLock("off"); QB:Recompute(true)
+  assert(QB:Mode() == "quest", "questing, where the trip used to weigh the rows")
+  assert(QB.LOG_SLOTS > #QB.state.logOrder, "a free slot, so the richest fills it")
+  UI.candMemo = nil
+  UI.findMode = "xp"; UI:ShowTab(1); UI:Refresh()
+  local shown = {}
+  for _, r in ipairs(v1.swaps) do if r:IsShown() then shown[#shown + 1] = r end end
+  assert(#shown >= 3, "swap rows: " .. #shown)
+  for i = 2, #shown do
+    local a, b = shown[i - 1].addValue - (shown[i - 1].cutValue or 0), shown[i].addValue - (shown[i].cutValue or 0)
+    assert(a >= b, string.format("row %d gains %d, row %d %d: the gains never rise", i - 1, a, i, b))
+  end
+  -- the richest candidate that fits: not a waste or behind, takeable (or a step away inside a dungeon, or behind a
+  -- chain), not on the pick-up list, not a bag start
+  local lvl = QB.state.level
+  local best, bestName, bestMins = 0, nil, nil
+  for _, c in ipairs(UI:Candidates(nil)) do
+    if not c.waste and not c.behind then
+      local q = QB.Quest.Get(c.id)
+      local st = q and QB:Status(q)
+      local via = false
+      if q and st.code == "prereq" and type(st.pre) == "number" then
+        local p = QB.Quest.Get(st.pre)
+        via = (p and p.turn and p.turn.inside and QB:Status(p).code == "todo") and true or false
+      end
+      local chain = q and st.code == "prereq" and not via and QB:ChainCost(q)
+      if q and not QB:IsAdded(q.id) and (st.code == "todo" or via or chain) and not (q.bag and q.bag[3] == 1) then
+        local v = QB.Model.XpAt(q, lvl)
+        if v > best then best, bestName, bestMins = v, q.name, c.mins end
+      end
+    end
+  end
+  assert(best > 0 and shown[1].addValue == best and shown[1].add.name == bestName,
+    string.format("row 1 is the richest that fits: %s %d; row 1 %s %d", tostring(bestName), best, shown[1].add.name, shown[1].addValue))
+  -- the minutes stay on the line: a row's trip, or its chain's
+  local withTrip = 0
+  for _, r in ipairs(shown) do
+    local t = r.cutName:GetText()
+    if t:find(" min", 1, true) or t:find(" · here", 1, true) then withTrip = withTrip + 1 end
+  end
+  assert(withTrip >= math.floor(#shown / 2), "the minutes stay on the lines: " .. withTrip .. " of " .. #shown)
+  if bestMins and bestMins >= 1 and not shown[1].cutName:GetText():find("step", 1, true) then
+    assert(shown[1].cutName:GetText():find(string.format("%d min", math.floor(bestMins + 0.5)), 1, true), "row 1's own trip: " .. shown[1].cutName:GetText())
+  end
+  print("highest XP rows (questing):")
+  for _, r in ipairs(shown) do print(string.format("  %-30s %-50s %s", r.add.name, r.cutName:GetText(), r.gain:GetText())) end
+  for _, p in ipairs(checkLayout(UI.frame, "Quest Log, Highest XP")) do problems[#problems + 1] = p end
+  layouts[#layouts + 1] = dumpLayout(UI.frame, "Quest Log, Highest XP: by XP alone, the trip on the line")
+  -- the reward finders keep their own order: item level first
+  local last
+  for _, d in ipairs(UI:FindRewards("gear", lvl)) do assert(not last or d.ilvl <= last, "Best gear: item level first"); last = d.ilvl end
+  QB:SetLock(lock0); QB:Recompute(true); UI.candMemo = nil; UI:Refresh()
+end
 
 
 
