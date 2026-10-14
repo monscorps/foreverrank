@@ -31,6 +31,10 @@ local MODEL = { SetDisplayInfo = true, SetCreature = true, SetPortraitZoom = tru
 -- draws for and the quest it drew (__blobs counts the drawings)
 local POI = { DrawBlob = true, DrawNone = true, SetMapID = true, SetFillTexture = true, SetBorderTexture = true, SetFillAlpha = true,
   SetBorderAlpha = true, SetBorderScalar = true }
+-- a protected frame (the game's secure buttons and the frames holding them) can't be shown, hidden, moved, sized or have
+-- its attributes set by an addon in a fight: the game blocks the call (ADDON_ACTION_BLOCKED)
+local PROTECTED_CALL = { Show = true, Hide = true, SetShown = true, SetPoint = true, ClearAllPoints = true, SetAllPoints = true,
+  SetSize = true, SetWidth = true, SetHeight = true, SetAttribute = true, SetParent = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
 ----------------------------------------------------------------------------
@@ -69,6 +73,9 @@ local function newObj(kind, template, parent)
       return function(self, ...)
         local a = { ... }
         local n = select("#", ...)
+        if PROTECTED_CALL[k] and (rawget(self, "__secure") or rawget(self, "__protected")) and rawget(self, "__client") and self.__client.combat then
+          error("ADDON_ACTION_BLOCKED: " .. k .. " on a protected frame in a fight", 2)
+        end
         if k == "SetScript" then self.__scripts[a[1]] = a[2]
         elseif k == "GetScript" then return self.__scripts[a[1]]
         elseif k == "HookScript" then local old = self.__scripts[a[1]]; self.__scripts[a[1]] = function(...) if old then old(...) end a[2](...) end
@@ -367,9 +374,17 @@ local function newClient(o)
   end
   c.templates = templates
   env.CreateFrame = function(kind, name, parent, template)
+    -- a secure button: protected, and so is every frame holding it; none is made in a fight
+    local secure = template and template:find("Secure") and true or false
+    if secure and c.combat then error("ADDON_ACTION_BLOCKED: a secure frame made in a fight", 2) end
     local f = newObj(kind, template, parent)
     f.__name = name
     f.__client = c
+    if secure then
+      f.__secure = true
+      local p = parent
+      while p and not p.__root do p.__protected = true; p = p.__parent end
+    end
     -- where it was made, for the edge check's messages: the line that called CreateFrame and the one above it
     local where = {}
     for lvl = 2, 3 do
@@ -398,6 +413,8 @@ local function newClient(o)
   env.IsShiftKeyDown = function() return c.shift end
   env.GetBindLocation = function() return o.bind or "Stormwind City" end
   env.IsPlayerSpell = function() return o.riding or false end
+  -- the inn's or the city's rest: c.resting (PLAYER_UPDATE_RESTING when it changes)
+  env.IsResting = function() return c.resting or false end
   env.AuraUtil = { FindAuraByName = function(name) if c.rested and name == "Well Rested" then return name end end }
   -- the party as the game shows it: c.party = { { name, class file, level, pos = { inst, wx, wy } }, ... } (party1..)
   local function partyOf(unit) local i = unit and unit:match("^party(%d)$"); return i and (c.party or {})[tonumber(i)] end
@@ -584,6 +601,8 @@ local function newClient(o)
       if bank ~= 0 and bank ~= 1 then error("bad argument #2 to 'GetSpellBookItemInfo' (Enum.SpellBookSpellBank expected)", 2) end
       return c.book[slot]
     end,
+    -- c.known = { [spell id] = true }: the spells this character knows, each rank its own id
+    IsSpellKnown = function(id, bank) return (c.known or {})[id] == true end,
   }
   -- what the character wears: o.gear[slot] = item id
   env.GetInventoryItemID = function(unit, slot) return unit == "player" and (o.gear or {})[slot] or nil end
@@ -2595,13 +2614,20 @@ do
   yes.__scripts.OnClick(yes)
   assert(table.concat(calls, ",") == "select " .. q.id .. ",mark,abandon", "then the game's own abandon: " .. table.concat(calls, ","))
   env.C_QuestLog.SetSelectedQuest, env.C_QuestLog.SetAbandonQuest, env.C_QuestLog.AbandonQuest = nil, nil, nil
-  -- Best gear narrowed to a slot: a reward's equip location decides
+  -- Best gear narrowed to a slot: a reward's equip location decides, as the game's GetItemInfoInstant gives it, and only a
+  -- piece you can use counts (a paladin under 40 wears mail)
   local saveInst = env.C_Item.GetItemInfoInstant
-  env.C_Item.GetItemInfoInstant = function(id) return id, "Armor", "Cloth", id % 2 == 0 and "INVTYPE_HEAD" or "INVTYPE_FEET" end
-  local R = QB.Data.RITEMS
-  local qid, rid
-  for id, r in pairs(R) do if r.c and r.c[1] and r.c[1] % 2 == 0 then qid, rid = id, r.c[1]; break end end
-  assert(qid and U.RewardSlotFits(qid, "Head") and not U.RewardSlotFits(qid, "Ring"), "a head reward fits Head, not Ring")
+  env.C_Item.GetItemInfoInstant = function(id)
+    if id % 2 == 0 then return id, "Armor", "Mail", "INVTYPE_HEAD", 133328, 4, 3 end
+    return id, "Armor", "Cloth", "INVTYPE_FEET", 133328, 4, 1
+  end
+  local R, RIT = QB.Data.RITEMS, QB.Data.RIT
+  local qid
+  for id, r in pairs(R) do
+    local first = r.c and r.c[1]
+    if first and first % 2 == 0 and RIT[first] and RIT[first][1] > 0 and not RIT[first][5] then qid = id; break end
+  end
+  assert(qid and U.RewardSlotFits(qid, "Head") and not U.RewardSlotFits(qid, "Ring"), "a mail head reward fits a paladin's Head, not Ring")
   env.C_Item.GetItemInfoInstant = saveInst
 end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
@@ -6404,49 +6430,226 @@ do
   for _, p in ipairs(checkLayout(U.frame, "Quest Log, Best gear")) do problems[#problems + 1] = p end
   layouts[#layouts + 1] = dumpLayout(U.frame, "Quest Log, Best gear")
   local rows = shown()
-  assert(#rows > 0, "a level-20 paladin finds gear quests")
+  assert(#rows > 0, "the paladin finds gear quests")
+  local lv = QB.state.level
+  -- each row shows the best piece of its quest the paladin can use, judged item by item (D.RIT, as the client's
+  -- GetItemInfoInstant would tell)
+  local RIT, RI = QB.Data.RIT, QB.Data.RITEMS
+  local function rewardsOf(qid)
+    local out = {}
+    for _, k in ipairs({ "c", "r", "u" }) do for _, id in ipairs((RI[qid] or {})[k] or {}) do out[#out + 1] = id end end
+    return out
+  end
   local prev
   for _, r in ipairs(rows) do
-    local rw = R[r.add.id]
-    assert(rw and rw[2] % 2 == 1 and rw[1] > 0, "a gear row rewards a piece: " .. r.add.name)
-    assert(math.floor(rw[2] / 512) % 2 == 0, "no plate before 40: " .. r.add.name)
-    assert(prev == nil or rw[1] <= prev, "the highest item level first: " .. r.add.name)
-    prev = rw[1]
-    assert(r.gain:GetText() == "iL " .. rw[1], "the right column shows the item level: " .. r.gain:GetText())
-    assert(r.cutName:GetText():find("Item " .. rw[3], 1, true), "the second line names the item: " .. r.cutName:GetText())
+    local it = r.rewardId and RIT[r.rewardId]
+    assert(it and it[1] > 0, "a gear row shows a piece with its item level: " .. r.add.name)
+    assert(U.ItemUse(r.rewardId, lv) ~= nil, "a piece the paladin can use: " .. r.add.name)
+    assert(not (it[3] == 4 and it[4] == 4), "no plate before 40: " .. r.add.name)
+    local best = 0
+    for _, id in ipairs(rewardsOf(r.add.id)) do
+      local use, l = U.ItemUse(id, lv)
+      if (use == "gear" or use == "trinket") and l > best then best = l end
+    end
+    assert(it[1] == best, "the quest's best piece you can use: " .. r.add.name)
+    assert(prev == nil or it[1] <= prev, "the highest item level first: " .. r.add.name)
+    prev = it[1]
+    assert(r.gain:GetText() == "iL " .. it[1], "the right column shows the item level: " .. r.gain:GetText())
+    assert(r.cutName:GetText():find("Item " .. r.rewardId, 1, true), "the second line names the item: " .. r.cutName:GetText())
+    assert(not r.cutName:GetText():find(" at %d"), "a quest you can take now says no level: " .. r.cutName:GetText())
+    assert((r.add.req or 1) <= lv, "the finder lists quests you can take now: " .. r.add.name)
     assert(not QB.Quest.Behind(r.add.id), "a quest you are probably past is not offered")
     assert(not QB.state.log[r.add.id], "nor one already in your log")
   end
   lines = {}; rows[1].__scripts.OnEnter(rows[1])
-  assert(table.concat(lines, "\n"):find("Rewards Item " .. R[rows[1].add.id][3] .. " (item level", 1, true), "the tooltip names the reward")
-  print(string.format("finder gear: %d rows, best %s (iL %d)", #rows, rows[1].add.name, R[rows[1].add.id][1]))
+  assert(table.concat(lines, "\n"):find("Rewards Item " .. rows[1].rewardId .. " (item level", 1, true), "the tooltip names the reward")
+  print(string.format("finder gear: %d rows, best %s (iL %d)", #rows, rows[1].add.name, RIT[rows[1].rewardId][1]))
+  -- the 2 levels ahead box shows with the reward finders, unticked
+  assert(v1.ahead:IsShown() and not v1.ahead:GetChecked() and not QB:Settings().finderAhead, "the 2 levels ahead box, off by default")
   -- trinkets, rings and necklaces
   poke(mode("trinket"))
   rows = shown()
   for _, r in ipairs(rows) do
-    local k = R[r.add.id][2]
-    assert(math.floor(k / 2) % 2 == 1 or math.floor(k / 4) % 2 == 1, "a trinket row rewards a trinket, ring or necklace: " .. r.add.name)
+    local it = RIT[r.rewardId]
+    assert(it and (it[2] == 2 or it[2] == 11 or it[2] == 12), "a trinket row shows a trinket, ring or necklace: " .. r.add.name)
   end
   print(string.format("finder trinkets: %d rows%s", #rows, rows[1] and (", first " .. rows[1].add.name) or ""))
   if #rows == 0 then assert(v1.noSwaps:IsShown() and v1.noSwaps:GetText():find("trinket", 1, true), "an empty mode says so") end
-  -- recipes
+  -- recipes: the recipe itself, the most XP first
   poke(mode("recipe"))
   rows = shown()
-  for _, r in ipairs(rows) do assert(math.floor(R[r.add.id][2] / 8) % 2 == 1, "a recipe row rewards a recipe: " .. r.add.name) end
+  for _, r in ipairs(rows) do assert(RIT[r.rewardId] and RIT[r.rewardId][3] == 9, "a recipe row shows a recipe: " .. r.add.name) end
   print(string.format("finder recipes: %d rows%s", #rows, rows[1] and (", first " .. rows[1].add.name) or ""))
-  -- a cloth wearer never sees mail
+  -- a cloth wearer never sees a piece of mail, leather or plate
   local T2, TU = newbie.QB, newbie.QB.UI
   TU:ShowTab(1); TU.findMode = "gear"; TU:Refresh()
   for _, r in ipairs(TU.views[1].swaps) do
     if r:IsShown() then
-      local k = T2.Data.REWARD[r.add.id][2]
-      assert(math.floor(k / 256) % 2 == 0 and math.floor(k / 512) % 2 == 0 or math.floor(k / 64) % 2 == 1, "a priest is offered nothing in mail or plate alone: " .. r.add.name)
+      local it = T2.Data.RIT[r.rewardId]
+      assert(it and not (it[3] == 4 and it[4] >= 2 and it[4] <= 4 and it[2] ~= 16), "a priest is offered no mail, leather or plate: " .. r.add.name)
     end
   end
   TU.findMode = "xp"
   -- back to the swaps
   poke(mode("xp"))
   for _, r in ipairs(shown()) do assert(r.gain:GetText():sub(1, 1) == "+", "the XP mode is back") end
+end
+
+-- 5.3.3: the reward finders judge each reward item for you, and reach two levels ahead when asked. The owner's report:
+-- head pieces of another armour class under Head, and no Stranglethorn wand (Venture Company Mining, needs 30)
+do
+  local U, D = QB.UI, QB.Data
+  local function rewardsOf(qid)
+    local out = {}
+    for _, k in ipairs({ "c", "r", "u" }) do for _, id in ipairs((D.RITEMS[qid] or {})[k] or {}) do out[#out + 1] = id end end
+    return out
+  end
+  -- (a) quests no Forever source has rewards for take the Classic database's: quest 600 offers the Goblin Igniter
+  local igniter
+  for _, id in ipairs(rewardsOf(600)) do if id == 5253 then igniter = true end end
+  assert(igniter and D.RCLASSIC[600], "quest 600 rewards the Goblin Igniter, from the Classic database")
+  assert(D.RIT[5253] and D.RIT[5253][1] == 40 and D.RIT[5253][2] == 26 and D.RIT[5253][3] == 2 and D.RIT[5253][4] == 19,
+    "the Goblin Igniter: a wand, item level 40")
+  lines = {}; owner.env.GameTooltip:ClearLines(); U.RewardLines(owner.env.GameTooltip, QB.Quest.Get(600))
+  assert(table.concat(lines, "\n"):find("Rewards from Classic data", 1, true), "its tooltip says the rewards are Classic data")
+  local some
+  for id in pairs(D.RITEMS) do if not D.RCLASSIC[id] and QB.Quest.Get(id) then some = id; break end end
+  lines = {}; owner.env.GameTooltip:ClearLines(); U.RewardLines(owner.env.GameTooltip, QB.Quest.Get(some))
+  assert(not table.concat(lines, "\n"):find("Classic data", 1, true), "a quest with Forever's own list says nothing of Classic")
+  local nClassic = 0
+  for _ in pairs(D.RCLASSIC) do nClassic = nClassic + 1 end
+  -- weapons and armour by class, from the client's skill tables
+  assert(D.WEAPONS.PALADIN and math.floor(D.WEAPONS.PALADIN / 2 ^ 15) % 2 == 0 and math.floor(D.WEAPONS.PALADIN / 2 ^ 19) % 2 == 0
+    and math.floor(D.WEAPONS.PALADIN / 2 ^ 5) % 2 == 1, "paladins: two-handed maces, no daggers, no wands")
+  assert(math.floor(D.WEAPONS.PRIEST / 2 ^ 19) % 2 == 1 and math.floor(D.WEAPONS.PRIEST / 2 ^ 7) % 2 == 0, "priests: wands, no swords")
+  assert(D.ARMOR.PALADIN[3] == 0 and D.ARMOR.PALADIN[4] == 40 and D.ARMOR.HUNTER[3] == 40 and not D.ARMOR.ROGUE[3]
+    and D.ARMOR.PRIEST[1] == 0 and not D.ARMOR.PRIEST[2] and D.ARMOR.SHAMAN[6] == 0 and not D.ARMOR.HUNTER[6],
+    "armour: paladins mail then plate at 40, hunters mail at 40, rogues leather, priests cloth; shamans carry shields, hunters don't")
+  assert(U.MyArmor(39) == 3 and U.MyArmor(40) == 4, "a paladin wears mail at 39, plate at 40")
+
+  -- (b) a paladin below 40 sees mail head pieces, never cloth or leather ones, and no daggers or wands
+  local mailHeads, lightHeads, dw = 0, 0, 0
+  for qid in pairs(D.RITEMS) do
+    for _, id in ipairs(rewardsOf(qid)) do
+      local it = D.RIT[id]
+      if it and it[2] == 1 and it[3] == 4 then
+        local use = U.ItemUse(id, 35)
+        if it[4] == 3 and not it[5] then assert(use == "gear", "a paladin at 35 wears a mail helm: " .. id); mailHeads = mailHeads + 1 end
+        if it[4] == 1 or it[4] == 2 then assert(use == nil, "not a cloth or leather one: " .. id); lightHeads = lightHeads + 1 end
+      end
+      if it and it[3] == 2 and (it[4] == 15 or it[4] == 19) then assert(U.ItemUse(id, 35) == nil, "no dagger or wand for a paladin: " .. id); dw = dw + 1 end
+    end
+  end
+  assert(mailHeads > 0 and lightHeads > 0 and dw > 0, "the catalog has mail, cloth and leather helms, daggers and wands to judge")
+  U.gearSlot = "Head"
+  local heads = U:FindRewards("gear", 35)
+  assert(#heads > 0, "a paladin at 35 finds mail head pieces")
+  for _, d in ipairs(heads) do
+    local it = D.RIT[d.item]
+    assert(it[2] == 1 and it[3] == 4 and it[4] == 3, "Head, for a paladin at 35: mail only: " .. d.q.name .. " " .. d.item)
+  end
+  U.gearSlot = nil
+  local all = U:FindRewards("gear", 35)
+  for _, d in ipairs(all) do
+    local it = D.RIT[d.item]
+    assert(not (it[3] == 2 and (it[4] == 15 or it[4] == 19)), "no dagger or wand in a paladin's list: " .. d.q.name)
+    assert(not (it[3] == 4 and it[4] >= 1 and it[4] <= 4 and it[2] ~= 16 and it[4] ~= 3), "armour pieces in mail only: " .. d.q.name)
+  end
+  -- the rows on the page too: Head shows mail
+  U:ShowTab(1); U.findMode = "gear"; U.gearSlot = "Head"; U:Refresh()
+  for _, r in ipairs(v1.swaps) do
+    if r:IsShown() then local it = D.RIT[r.rewardId]; assert(it[2] == 1 and it[4] == 3, "a Head row shows mail: " .. r.add.name) end
+  end
+  U.gearSlot = nil; U.findMode = "xp"; U:Refresh()
+  -- a priest sees wands
+  local NU = newbie.QB.UI
+  local wands = 0
+  for _, d in ipairs(NU:FindRewards("gear", 35)) do
+    local it = newbie.QB.Data.RIT[d.item]
+    if it[3] == 2 and it[4] == 19 then wands = wands + 1 end
+    assert(not (it[3] == 4 and it[4] >= 2 and it[4] <= 4 and it[2] ~= 16), "a priest's list has cloth only: " .. d.q.name)
+  end
+  assert(wands > 0, "a priest at 35 is offered wands")
+
+  -- (c) a quest whose head reward is cloth and whose chest reward is mail is no Head piece for a paladin
+  local qc
+  for qid in pairs(D.RITEMS) do
+    local ids = rewardsOf(qid)
+    local a, b = D.RIT[ids[1] or 0], D.RIT[ids[2] or 0]
+    if a and b and a[1] > 0 and b[1] > 0 and not a[5] and not b[5] then qc = qid; break end
+  end
+  local h, ch = rewardsOf(qc)[1], rewardsOf(qc)[2]
+  local saveInst = owner.env.C_Item.GetItemInfoInstant
+  owner.env.C_Item.GetItemInfoInstant = function(id)
+    if id == h then return id, "Armor", "Cloth", "INVTYPE_HEAD", 133328, 4, 1 end
+    if id == ch then return id, "Armor", "Mail", "INVTYPE_CHEST", 133328, 4, 3 end
+    return id, "Miscellaneous", "Junk", "", 133328, 15, 0
+  end
+  assert(not U.RewardSlotFits(qc, "Head", 25) and U.RewardSlotFits(qc, "Chest", 25),
+    "cloth head and mail chest: not a Head piece for a paladin, a Chest one")
+  local best = U.BestReward(qc, "gear", 25)
+  assert(best == ch, "the row shows the piece you can wear, not the quest's first reward")
+  owner.env.C_Item.GetItemInfoInstant = saveInst
+  print(string.format("finder judged item by item: %d quests' rewards from Classic data, %d mail helms, %d cloth and leather ones and %d daggers and wands kept from a paladin",
+    nClassic, mailHeads, lightHeads, dw))
+end
+
+-- (d) 2 levels ahead: at 28 a priest sees Venture Company Mining (needs 30) only with the box ticked, its row saying
+-- "at 30"; (e) the page stays clean with it
+local wren = newClient({
+  name = "Wren", level = 28, cap = 60, faction = "Alliance", className = "Priest", class = "PRIEST", classID = 5, race = "Human",
+  log = {}, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Goldshire", riding = false, bagSlots = {}, xp = 900,
+})
+login(wren)
+do
+  local W, U = wren.QB, wren.QB.UI
+  wren.env.SlashCmdList.QUESTBANK("")
+  W.Model.Finish()
+  U:ShowTab(1); U:Refresh()
+  local v = U.views[1]
+  local function has600(list) for _, d in ipairs(list) do if d.q.id == 600 then return d end end end
+  assert(not W:Settings().finderAhead and not has600(U:FindRewards("gear", 28)), "off: a quest that needs 30 is not offered at 28")
+  U.findMode = "gear"; U.gearSlot = "Ranged"; U:Refresh()
+  assert(v.ahead:IsShown() and not v.ahead:GetChecked(), "the box shows with Best gear, unticked")
+  local function row600() for _, r in ipairs(v.swaps) do if r:IsShown() and r.add and r.add.id == 600 then return r end end end
+  assert(not row600(), "no row for it")
+  lines = {}; v.ahead.__scripts.OnEnter(v.ahead)
+  assert(lines[1] == "Show quests I can take within 2 levels", "the box's tooltip names the setting: " .. tostring(lines[1]))
+  v.ahead:SetChecked(true); v.ahead.__scripts.OnClick(v.ahead, "LeftButton")
+  assert(W:Settings().finderAhead == true, "ticking it turns the setting on")
+  local d = has600(U:FindRewards("gear", 28))
+  assert(d and d.item == 5253 and d.req == 30, "on: quest 600 with the Goblin Igniter")
+  local r = row600()
+  assert(r and r.rewardId == 5253 and r.cutName:GetText():find("at 30", 1, true) and r.gain:GetText() == "iL 40",
+    "its row: the wand, at 30, item level 40: " .. tostring(r and r.cutName:GetText()))
+  lines = {}; r.__scripts.OnEnter(r)
+  assert(table.concat(lines, "\n"):find("You can take it at level 30.", 1, true), "the tooltip says when you can take it")
+  print("2 levels ahead:", r.addName:GetText(), "|", r.cutName:GetText(), "|", r.gain:GetText())
+  -- at 29 too, still "at 30"; at 27 it is three levels off; at 30 it is offered without the box and says no level
+  local function at(lvl) wren.level = lvl; W.state.level = lvl; U.candMemo = nil; U:Refresh() end
+  at(29)
+  r = row600()
+  assert(has600(U:FindRewards("gear", 29)) and r and r.cutName:GetText():find("at 30", 1, true), "at 29, ticked: the wand, at 30")
+  at(27)
+  assert(not has600(U:FindRewards("gear", 27)) and not row600(), "at 27, ticked: three levels off, not offered")
+  at(30)
+  v.ahead:SetChecked(false); v.ahead.__scripts.OnClick(v.ahead, "LeftButton")
+  r = row600()
+  assert(r and not r.cutName:GetText():find("at 30", 1, true) and r.rewardId == 5253, "at 30, unticked: the wand, no level said: " .. tostring(r and r.cutName:GetText()))
+  v.ahead:SetChecked(true); v.ahead.__scripts.OnClick(v.ahead, "LeftButton")
+  at(28)
+  r = row600()
+  for _, p in ipairs(checkLayout(U.frame, "Quest Log, Best gear 2 levels ahead")) do problems[#problems + 1] = p end
+  layouts[#layouts + 1] = dumpLayout(U.frame, "Quest Log, Best gear 2 levels ahead")
+  -- Trinkets and Recipes keep the box; the swaps don't show it
+  U.findMode = "recipe"; U:Refresh()
+  assert(v.ahead:IsShown(), "Recipes keep the box")
+  for _, p in ipairs(checkLayout(U.frame, "Quest Log, Recipes 2 levels ahead")) do problems[#problems + 1] = p end
+  U.findMode = "xp"; U:Refresh()
+  assert(not v.ahead:IsShown() and not v.ahead.label:IsShown(), "Highest XP hides the box")
+  v.ahead:SetChecked(false); U.findMode = "gear"; U:Refresh(); v.ahead:SetChecked(false); v.ahead.__scripts.OnClick(v.ahead, "LeftButton")
+  assert(W:Settings().finderAhead == false and not row600(), "unticked: gone again")
+  U.gearSlot = nil; U.findMode = "xp"; U:Refresh()
 end
 
 -- 3.6.0 (was 3.5.2's ForeverProbe check): QuestBank notes the client's build and interface without asking, and
@@ -8921,6 +9124,210 @@ do
     for m in pairs(maps) do drawn = drawn + #O.QuestMap:Build(m) end
     print(string.format("map icons, real data: %d spots on %d maps; %d icons for the owner", spots, (function() local k = 0 for _ in pairs(maps) do k = k + 1 end return k end)(), drawn))
   end
+end
+
+-- 5.4: the camp bar's campfire (Cooking's Basic Campfire, or a kit) and the missing-buffs banner when you leave a town
+do
+  local Camp, env, D = owner.QB.Camp, owner.env, owner.QB.Data
+  c = owner
+  c.combat = false
+  local f = Camp.frame
+  local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
+  local function ic(k) return env["QuestBankCamp_" .. k] end
+  local function btn(i) return env["QuestBankBuff_" .. i] end
+  local function said() return owner.chat[#owner.chat] or "" end
+  local saveBags, saveClass = owner.o.bagSlots, owner.o.class
+  local saveTex, saveCD, saveInst = env.C_Spell.GetSpellTexture, env.C_Spell.GetSpellCooldown, env.IsInInstance
+  env.C_Spell.GetSpellTexture = function(id) return ({ [818] = 135805, [1460] = 135932 })[id] or 134400 end
+  local spellCD = {}
+  env.C_Spell.GetSpellCooldown = function(id) local s = spellCD[id]; return { startTime = s or 0, duration = s and 300 or 0, isEnabled = true, modRate = 1 } end
+  -- the camp features' shared hour from the camp bar's own test runs out first
+  tick(owner, Camp.QUIET + 3600)
+  local SMITH = { { "Blacksmithing", 150 }, { "Alchemy", 10 }, { "Fishing", 0 }, { "Cooking", 60 }, { "First Aid", 30 } }
+  assert(Camp.FIRE_SPELL == 818 and Camp.WOOD == 4470 and D.CAMP[Camp.BASIC_KIT] and D.CAMP[Camp.BASIC_KIT].t == "kit", "Basic Campfire, Simple Wood, the Basic Campfire Kit")
+  -- every class's buffs: names, an icon, ranks lowest first, each id once
+  local ids = {}
+  for class, list in pairs(Camp.SELF) do
+    for _, entry in ipairs(list) do
+      for _, sp in ipairs(entry) do
+        assert(type(sp[1]) == "string" and type(sp[2]) == "number" and #sp[3] > 0, "a buff: " .. class)
+        for _, id in ipairs(sp[3]) do assert(not ids[id], "each rank once: " .. id); ids[id] = true end
+      end
+    end
+  end
+  assert(not Camp.SELF.WARRIOR and not Camp.SELF.ROGUE, "Battle Shout is short: nothing for a warrior or a rogue")
+
+  -- (a) the fire: a cook who knows Basic Campfire, with Simple Wood and the sharpening wheel to place, no kit
+  c.profs, c.known, c.buffs = SMITH, { [818] = true }, {}
+  owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 } }
+  ev("PLAYER_ENTERING_WORLD")
+  local fire, camp = ic("fire"), ic("camp")
+  assert(fire:IsShown() and fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil,
+    "Basic Campfire known: a click casts the spell")
+  assert(fire.icon.__tex == 135805 and fire.count:GetText() == "3" and fire.state.lit and fire.state.tip[2] == "Click to light a campfire.",
+    "the spell's own icon, the Simple Wood, lit while the wheel waits for a fire")
+  assert(camp:IsShown() and camp:GetAttribute("item") == "item:279944" and not camp.state.lit, "the wheel, waiting")
+  spellCD[818] = env.GetTime() - 60
+  Camp.Refresh()
+  assert(fire.state.cd and fire.cd.__cd[2] == 300 and fire.time:GetText() == "4m" and not fire.state.lit, "the spell's own cooldown: four minutes left, not lit")
+  spellCD[818] = nil
+  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, 818)
+  assert(camp.state.lit and not fire.state.lit, "the fire cast: the wheel lights up, the fire doesn't")
+  owner.o.bagSlots = { { 279944, 1 } }
+  Camp.Refresh()
+  assert(fire.state.grey and fire.state.tip[2] == "Needs Simple Wood.", "no Simple Wood: grey")
+  -- a kit too: the kit while a feature waits (a kit's fire holds camp features), the spell without one
+  owner.o.bagSlots = { { 279944, 1 }, { 4470, 3 }, { 279981, 2 } }
+  Camp.Refresh()
+  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "a feature to place: the kit")
+  owner.o.bagSlots = { { 4470, 3 }, { 279981, 2 } }
+  Camp.Refresh()
+  assert(fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818 and fire:GetAttribute("item") == nil, "nothing to place: the spell")
+  c.known = {}
+  Camp.Refresh()
+  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire.count:GetText() == "2", "the spell unknown: the kit, as before")
+  -- a feature to place and no way to light a fire: grey, with where a kit comes from, no click
+  owner.o.bagSlots = { { 279944, 1 } }
+  Camp.Refresh()
+  assert(fire:IsShown() and fire.state.grey and fire:GetAttribute("type") == nil and fire.state.tip[1] == "No campfire kit"
+    and fire.state.tip[2]:find("Simple Wood", 1, true), "no kit, no spell: grey, saying how to get one")
+  owner.o.bagSlots = {}
+  Camp.Refresh()
+  assert(not fire:IsShown(), "nothing to place, nothing to light: no fire icon")
+  -- in a fight the click stays as it was; after it, the new one
+  c.known, owner.o.bagSlots = { [818] = true }, { { 4470, 3 } }
+  Camp.Refresh()
+  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  owner.o.bagSlots = { { 279981, 1 } }; c.known = {}
+  Camp.Refresh()
+  assert(fire:GetAttribute("type") == "spell" and fire:GetAttribute("spell") == 818, "in a fight the fire's click stays")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "after the fight: the kit")
+
+  -- (b) the banner: a mage who knows two ranks of Arcane Intellect, ribs in the bag, nothing on, in town
+  owner.o.class, c.profs, c.buffs = "MAGE", nil, {}
+  c.known = { [1459] = true, [1460] = true }
+  owner.o.bagSlots = { { 2888, 5 } }
+  c.resting = true
+  ev("PLAYER_ENTERING_WORLD")
+  local shows = Camp.shows
+  c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  local B = env.QuestBankBuffBanner
+  assert(B and B:IsShown() and Camp.shows == shows + 1 and B.title:GetText() == "Missing buffs", "left town without buffs: the banner")
+  assert(btn(1):IsShown() and btn(1):GetAttribute("type") == "item" and btn(1):GetAttribute("item") == "item:2888" and btn(1).count:GetText() == "5",
+    "Well Fed missing: the ribs, a click eats one")
+  assert(btn(2):IsShown() and btn(2):GetAttribute("type") == "spell" and btn(2):GetAttribute("spell") == 1460 and btn(2):GetAttribute("unit") == "player"
+    and btn(2):GetAttribute("item") == nil and btn(2).icon.__tex == 135932, "Arcane Intellect missing: the highest rank known, cast on yourself, its own icon")
+  assert(not (btn(3) and btn(3):IsShown()), "two icons")
+  for _, pr in ipairs(checkLayout(B, "Missing buffs banner")) do problems[#problems + 1] = pr end
+  layouts[#layouts + 1] = dumpLayout(B, "Missing buffs banner")
+  ev("PLAYER_UPDATE_RESTING")
+  assert(Camp.shows == shows + 1, "the same departure: once")
+  -- a buff cast takes its icon away; all on, the banner goes
+  c.buffs = { "Arcane Intellect" }
+  ev("UNIT_AURA", "player")
+  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:2888" and not btn(2):IsShown(), "Arcane Intellect on: only the food is left")
+  c.buffs = { "Well Fed", "Arcane Intellect" }
+  ev("UNIT_AURA", "player")
+  assert(not B:IsShown(), "everything on: the banner goes")
+  -- the next departure, after the quiet minute: up, and gone after 12 seconds
+  c.buffs = {}
+  tick(owner, Camp.QUIET + 1)
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(B:IsShown() and Camp.shows == shows + 2, "the next departure: the banner again")
+  tick(owner, Camp.BANNER_SECS - 1)
+  assert(B:IsShown() and B.left:GetWidth() < B:GetWidth() / 4, "after 11 s: still up, its time line nearly run out")
+  tick(owner, 1.5)
+  assert(not B:IsShown(), "after 12 s: gone")
+  -- a town's edge crossed back and forth: not again within the minute
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(not B:IsShown() and Camp.shows == shows + 2, "within the minute: not again")
+  -- /qb buffs: any time; its X closes it
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(B:IsShown() and Camp.shows == shows + 3 and btn(2):GetAttribute("spell") == 1460, "/qb buffs shows it")
+  B.close.__scripts.OnClick(B.close, "LeftButton")
+  assert(not B:IsShown(), "the X closes it")
+  -- not in a fight: after it, within the minute
+  tick(owner, Camp.QUIET + 1)
+  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(not B:IsShown() and Camp.shows == shows + 3, "left town in a fight: no banner")
+  local n = #owner.chat
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(not B:IsShown() and #owner.chat == n + 1 and said():find("Not in a fight", 1, true), "/qb buffs in a fight: says so")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  assert(B:IsShown() and Camp.shows == shows + 4, "the fight over: the banner, once")
+  -- a fight while it is up: dimmed, its buttons left alone, gone when the fight is over
+  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  tick(owner, Camp.BANNER_SECS + 1)
+  assert(B:IsShown() and B:GetAlpha() < 1 and btn(2):GetAttribute("spell") == 1460, "in a fight: dimmed, kept")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  assert(not B:IsShown(), "the fight over: gone")
+  -- not in a dungeon
+  tick(owner, Camp.QUIET + 1)
+  env.IsInInstance = function() return true, "party" end
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(not B:IsShown() and Camp.shows == shows + 4, "in a dungeon: no banner")
+  env.IsInInstance = saveInst
+  -- everything on: nothing to say
+  c.buffs = { "Well Fed", "Arcane Brilliance" }
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(not B:IsShown() and Camp.shows == shows + 4, "all on (Arcane Brilliance counts): no banner")
+  n = #owner.chat
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(not B:IsShown() and said():find("No buffs missing.", 1, true), "/qb buffs with all on: says so")
+  -- the switch in Settings
+  c.buffs = {}
+  local v5 = owner.QB.UI.views[5]
+  owner.QB.UI:Open(5)
+  assert(v5.remind.buffs and v5.remind.buffs:GetChecked() and v5.remind.buffs.label:GetText() == "Tell me when I leave town without my buffs", "the switch, on")
+  v5.remind.buffs:SetChecked(false); v5.remind.buffs.__scripts.OnClick(v5.remind.buffs, "LeftButton")
+  assert(owner.QB:Settings().remind.buffs == false, "switched off")
+  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(not B:IsShown() and Camp.shows == shows + 4, "switched off: no banner")
+  v5.remind.buffs:SetChecked(true); v5.remind.buffs.__scripts.OnClick(v5.remind.buffs, "LeftButton")
+  -- the armor: Ice Armor before Frost Armor; the one last seen on you first; any rank, by name or id
+  c.known = { [1459] = true, [168] = true, [7300] = true, [7302] = true, [6117] = true }
+  local m = Camp.SelfMissing({}, {})
+  assert(#m == 2 and m[1].id == 1459 and m[2].id == 7302 and m[2].name == "Ice Armor", "the armor: Ice Armor first")
+  c.buffs = { "Mage Armor" }; Camp.Refresh(); c.buffs = {}
+  m = Camp.SelfMissing({}, {})
+  assert(m[2].id == 6117 and m[2].name == "Mage Armor", "the armor last seen on you: Mage Armor")
+  assert(#Camp.SelfMissing({}, { [10157] = true }) == 1 and #Camp.SelfMissing({ ["Frost Armor"] = true }, {}) == 1, "any rank counts, by name or by spell id")
+  owner.o.class, c.known = "WARRIOR", {}
+  assert(#Camp.SelfMissing({}, {}) == 0, "a warrior: no class buffs")
+  -- a camp feature ready and no fire near: the click lights the kit, then places the feature
+  owner.o.bagSlots, c.profs, c.buffs = { { 279944, 1 }, { 279981, 1 } }, SMITH, { "Well Fed" }
+  tick(owner, 301)
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:279981" and btn(1).state.tip[1] == "Sharpening Wheel" and btn(1).state.tip[2] == "Needs a campfire first."
+    and not btn(2):IsShown(), "the wheel ready, no fire: the kit first")
+  ev("UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
+  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:279944" and btn(1).state.tip[3] == "Click to place it.", "the fire lit: the wheel")
+  for _, pr in ipairs(checkLayout(B, "Missing buffs banner, one icon")) do problems[#problems + 1] = pr end
+  -- the wheel's aura is its buff's own spell, Extra Strength: the feature's name on you is no buff
+  assert(D.CAMP[279944].b == 1230172 and D.CAMP[279944].bn == "Extra Strength" and D.CAMP[279955].b == 1230172, "the wheel's buff, and the Master Forge's (its base)")
+  c.buffs = { "Well Fed", "Sharpening Wheel" }
+  ev("UNIT_AURA", "player")
+  assert(B:IsShown() and btn(1):GetAttribute("item") == "item:279944", "an aura named after the wheel is not its buff")
+  c.buffs = { "Well Fed", "Extra Strength" }
+  ev("UNIT_AURA", "player")
+  assert(not B:IsShown(), "the wheel's buff on: gone")
+  -- a feature that gives no buff (the Repair Bot: repairs and reagents) is no missing buff
+  assert(D.CAMP[279949] and not D.CAMP[279949].b, "the Repair Bot gives no aura")
+  owner.o.bagSlots, c.profs, c.buffs = { { 279949, 1 }, { 279981, 1 } }, { { "Engineering", 150 } }, { "Well Fed" }
+  tick(owner, Camp.QUIET + 3601)
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(not B:IsShown() and said():find("No buffs missing.", 1, true), "an engineer's Repair Bot: nothing missing")
+  -- the Expert Campfire Kit ("Builds an expert campfire") is a kit too: the fire icon uses it
+  assert(D.CAMP[279974] and D.CAMP[279974].t == "kit" and D.CAMP[279974].cap == 10 and D.CAMP[279974].sp == 1307237, "the Expert Campfire Kit")
+  owner.o.bagSlots, c.profs = { { 279974, 2 } }, { { "Cooking", 225 } }
+  Camp.Refresh()
+  assert(ic("fire"):IsShown() and ic("fire"):GetAttribute("item") == "item:279974" and ic("fire").count:GetText() == "2", "an Expert Campfire Kit on the fire icon")
+  owner.o.bagSlots, owner.o.class, c.profs, c.known, c.buffs, c.resting = saveBags, saveClass, nil, nil, nil, nil
+  env.C_Spell.GetSpellTexture, env.C_Spell.GetSpellCooldown = saveTex, saveCD
+  Camp.Refresh()
+  print(string.format("camp bar and banner: Basic Campfire and kits on the fire icon; the banner %d times, %d classes with buffs", Camp.shows, (function() local k = 0 for _ in pairs(Camp.SELF) do k = k + 1 end return k end)()))
 end
 
 ----------------------------------------------------------------------------
