@@ -163,17 +163,36 @@ end
 -- UI-WorldMap-QuestIcon holds three question marks; the yellow one sits in the top-left quarter
 -- (its pixels: 11 to 23 across, 7 to 24 down, of 64), cropped square around it
 local PIN_TC = { 0.1172, 0.4141, 0.0938, 0.3906 }
+-- a waypoint button: the game's own waypoint pin (a quest's ? would read as a hand-in); the old map icon where the
+-- client has no such atlas
 local function pinButton(parent, size)
   local b = CreateFrame("Button", nil, parent)
   b:SetSize(size, size)
-  b.t = tex(b, "ARTWORK", T.mapPin)
+  b.t = tex(b, "ARTWORK")
   b.t:SetAllPoints()
-  b.t:SetTexCoord(PIN_TC[1], PIN_TC[2], PIN_TC[3], PIN_TC[4])
-  b.hi = tex(b, "HIGHLIGHT", T.mapPin)
+  if not QB.Art(b.t, "Waypoint-MapPin-Untracked", T.mapPin) then b.t:SetTexCoord(PIN_TC[1], PIN_TC[2], PIN_TC[3], PIN_TC[4]) end
+  b.hi = tex(b, "HIGHLIGHT")
   b.hi:SetAllPoints()
-  b.hi:SetTexCoord(PIN_TC[1], PIN_TC[2], PIN_TC[3], PIN_TC[4])
+  if not QB.Art(b.hi, "Waypoint-MapPin-Highlight", T.mapPin) then b.hi:SetTexCoord(PIN_TC[1], PIN_TC[2], PIN_TC[3], PIN_TC[4]) end
   b.hi:SetBlendMode("ADD")
   return b
+end
+
+-- what a route row is about, at a glance: a green check for a quest to hand in, the game's yellow ! for one to pick
+-- up first, the quest's own icon while it is still being done
+local function routeMark(rr, q, st)
+  rr.icon:Show()
+  rr.tick:Hide()
+  rr.icon:SetDesaturated(false)
+  if st and st.code == "banked" then
+    rr.icon:Hide()
+    rr.tick:Show()
+  elseif not QB.state.log[q.id] and not (st and st.bag) then
+    QB.Art(rr.icon, "QuestNormal", T.questAvail)
+  else
+    setIcon(rr.icon, q.icon)
+    rr.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+  end
 end
 
 local function pool(parent, make)
@@ -3907,9 +3926,7 @@ function UI:RefreshRouteView(v)
       rr:SetPoint("TOPLEFT", 66, -ry)
       rr:SetWidth(width - 74)
       rr.q, rr.st, rr.xpv, rr.pct, rr.plvl, rr.doneXP = row.q, row.e.st, row.xp, row.pct, row.plvl, nil
-      rr.icon:Show()
-      rr.tick:Hide()
-      setIcon(rr.icon, row.q.icon)
+      routeMark(rr, row.q, row.e.st)
       rr.name:SetText(row.q.name)
       local c = row.blocked and INK_SOFT or INK
       rr.name:SetTextColor(c[1], c[2], c[3])
@@ -3946,9 +3963,7 @@ function UI:RefreshRouteView(v)
       rr:SetPoint("TOPLEFT", 66, -ry)
       rr:SetWidth(width - 74)
       rr.q, rr.st, rr.xpv, rr.pct, rr.plvl, rr.doneXP = e.q, e.st, QB:Value(e.q.id), nil, nil, nil
-      rr.icon:Show()
-      rr.tick:Hide()
-      setIcon(rr.icon, e.q.icon)
+      routeMark(rr, e.q, e.st)
       rr.name:SetText(e.q.name)
       rr.name:SetTextColor(INK[1], INK[2], INK[3])
       rr.npc:SetText(e.q.turn and (e.q.turn.inside and (e.q.turn.n .. ", inside") or e.q.turn.n) or "NPC unknown")
