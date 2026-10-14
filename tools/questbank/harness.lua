@@ -2583,6 +2583,33 @@ QB.Model.Finish()
 UI:Refresh()
 print("route plan:", v3.summary:GetText())
 assert(v3.summary:GetText() == "93,610 XP  |  level 23.61  |  121 min  |  at 60 min 23.42", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
+-- each row says what it is at a glance: a check to hand in, the game's ! to pick up first, the quest's icon while it is
+-- still being done; the waypoint button is the game's own pin, not a quest's ?
+do
+  local seen = { check = 0, pick = 0, doing = 0 }
+  for _, l in ipairs(v3.legs.items) do
+    if l:IsShown() then
+      if l.pin:IsShown() then assert(l.pin.t.__tex == "atlas:Waypoint-MapPin-Untracked", "the waypoint is the game's pin: " .. tostring(l.pin.t.__tex)) end
+      for _, r in ipairs(l.rows) do
+        if r:IsShown() and r.q then
+          local inLog = QB.state.log[r.q.id] ~= nil
+          if r.st and r.st.code == "banked" then
+            assert(r.tick:IsShown() and not r.icon:IsShown(), "a hand-in row shows the check: " .. r.q.name)
+            seen.check = seen.check + 1
+          elseif not inLog and not (r.st and r.st.bag) then
+            assert(r.icon:IsShown() and r.icon.__tex == "atlas:QuestNormal" and not r.tick:IsShown(), "a pick-up row shows the game's !: " .. r.q.name)
+            seen.pick = seen.pick + 1
+          else
+            assert(r.icon:IsShown() and not r.tick:IsShown() and r.icon.__tex ~= "atlas:QuestNormal", "a quest still being done keeps its own icon: " .. r.q.name)
+            seen.doing = seen.doing + 1
+          end
+        end
+      end
+    end
+  end
+  print("route rows: checks", seen.check, "pick-ups", seen.pick, "in progress", seen.doing)
+  assert(seen.check > 0 and seen.pick + seen.doing > 0, "the plan has hand-ins and quests still to pick up or finish")
+end
 print("setup:", v3.setup:GetText())
 for _, key in ipairs({ "mounted", "pins" }) do
   local b = UI.header.toggles[key]
