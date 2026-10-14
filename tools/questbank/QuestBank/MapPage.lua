@@ -2,12 +2,14 @@
 -- The Map page (page 8 of the QuestBank window, the Forever client only): the game's own map canvas inside the window,
 -- built in Lua from Blizzard_MapCanvas's mixins. Five of Blizzard's data providers give it the game's art and explored
 -- areas, the zones lit and named under the mouse, your arrow and your party, and the quests' blue areas; QuestBank's
--- layers go on top (QuestMap.lua's icons, Pins.lua's route pins, and here the route's strokes, the arrow's step and the
--- flight paths), its own frames with the game's atlases. Above the map a bar of crumbs (Azeroth > Eastern Kingdoms >
--- Elwynn Forest), Here, the dungeons on the map and the game's own map; under it the zone's name and levels and a
--- switch for each layer; beside it the zone's quests: ready to hand in, in your log and to pick up, a row each, lit on
--- the map while hovered and shown there when clicked. It opens on your zone and follows you until you go elsewhere.
--- The game's world map is left as it was, QuestBank's layers on it as before.
+-- layers go on top, each the game's own pin drawn again on QuestBank's frames (Pins.lua, Pins.xml): QuestMap.lua's
+-- quest pins, offers and dungeon entrances, Pins.lua's route pins, and here the flight points, the route's strokes and
+-- the arrow's step. Above the map a bar of crumbs (Azeroth > Eastern Kingdoms > Elwynn Forest), Here, the dungeons on
+-- the map and a "Game's map" button for the game's own world map; under it the zone's name and levels and a switch
+-- for each layer; beside it the zone's quests: ready to hand in, in your log and to pick up, a row each, lit on the
+-- map while hovered and shown there when clicked. A right-click on the map is its menu (zoom out, the game's map,
+-- your zone, a waypoint). It opens on your zone and follows you until you go elsewhere. The game's world map is left
+-- as it was, QuestBank's layers on it as before; the game's own map key always opens it, QuestBank's Map key this page.
 local _, QB = ...
 local MP = { follow = true }
 QB.MapPage = MP
@@ -47,15 +49,19 @@ local BLIZZARD = { "MapExplorationDataProviderMixin", "MapHighlightDataProviderM
 -- three and the dungeons are QuestMap.lua's own switches (Settings has them under "Quest icons on the world map": icons),
 -- the route and the flight paths the page's. count: what the number counts (list: the panel's section of that kind)
 local TOGGLES = {
-  { key = "mapTurn", name = "Ready to hand in", atlas = "QuestTurnin", file = T.questActive, icons = true, count = "ready", list = "ready" },
+  { key = "mapTurn", name = "Ready to hand in", atlas = "UI-QuestIcon-TurnIn-Normal", file = T.questActive, icons = true, count = "ready", list = "ready" },
   { key = "mapObj", name = "In your log", atlas = "Quest-In-Progress-Icon-yellow", file = T.questActive, icons = true, count = "log", list = "log" },
   { key = "mapGive", name = "To pick up", atlas = "QuestNormal", file = T.questAvail, icons = true, count = "pickup", list = "pickup" },
-  { key = "mapRoute", name = "Route", atlas = "UI-QuestPoi-QuestNumber", file = T.questActive, num = "1", count = "route" },
+  { key = "mapRoute", name = "Route", atlas = "UI-QuestPoi-QuestNumber-SuperTracked", file = T.mapPin, count = "route" },
   { key = "mapDungeons", name = "Dungeons", atlas = "Dungeon", file = QB.QuestMap.ART.dungeon.file, icons = true, count = "dungeons" },
   { key = "mapFlights", name = "Flight paths", atlas = "FlightPath", file = T.taxiY, count = "flights" },
 }
 -- the panel's sections: the zone's quests of the first three kinds, as QuestMap.lua finds them (QM.ZoneQuests)
 local SECTIONS = { TOGGLES[1], TOGGLES[2], TOGGLES[3] }
+
+-- how the keys fall, said wherever the two maps meet (the Game's map button, Settings): QuestBank's Map key is its
+-- own binding, the game's map key is the game's
+MP.KEYS = "QuestBank's Map key (Key Bindings, QuestBank) opens this page. The game's own map key (M, unless you changed it) always opens the game's map."
 
 -- Forever's client with the game's map canvas and the five providers (not Classic Era)
 function MP.Available()
@@ -123,12 +129,18 @@ local function shownMap()
   return playerMap()
 end
 
--- Ctrl and a left click: QuestBank's waypoint there (the canvas asks this before it opens a zone)
-local function ctrlClick(canvas, button, x, y)
-  if button ~= "LeftButton" or not (IsControlKeyDown and IsControlKeyDown()) then return false end
+-- a click on the map itself (the canvas asks this before it opens a zone or goes up to its parent): Ctrl and a left
+-- click is QuestBank's waypoint there; a right-click is the map's menu (MP.MapMenu), with the zoom out the game's
+-- right-click does first on it
+local function canvasClick(canvas, button, x, y)
   local m = QB.Plain(canvas:GetMapID())
   x, y = QB.Plain(x), QB.Plain(y)
   if not (m and type(x) == "number" and type(y) == "number") then return false end
+  if button == "RightButton" then
+    MP.MapMenu(canvas, m, x, y)
+    return true
+  end
+  if button ~= "LeftButton" or not (IsControlKeyDown and IsControlKeyDown()) then return false end
   QB.Try("map page click", QB.API.SetWaypoint, m, x * 100, y * 100, "Map")
   return true
 end
@@ -171,7 +183,7 @@ function Lines:Fit(canvas)
   if not (d and map) then return end
   local w, h = canvas:GetWidth() or 0, canvas:GetHeight() or 0
   self:SetSize(w, h)
-  local thick, size = LINE_W / canvasScale(map), 22 * P.PinScale(map, P.ROUTE.scale) -- (a stroke ends at its pin's edge)
+  local thick, size = LINE_W / canvasScale(map), P.ROUTE.size * P.PinScale(map, P.ROUTE.scale) -- (a stroke ends at its pin's disc)
   local ctx = self.ctx or { frame = self, lines = {}, square = true }
   self.ctx = ctx
   ctx.used, ctx.r = 0, max(w, h)
@@ -200,17 +212,17 @@ local function drawLines(layer, m)
   if #stops > 0 then layer:Add(LINES, { stops = stops, you = youOn(m) }, 0.5, 0.5) end
 end
 
--- the arrow's step (a flight master, a pier, the tram) where it sends you first: its own icon, lit
+-- the arrow's step (a flight master, a pier, the tram) where it sends you first: its own icon on the game's POI pin,
+-- lit with the game's glow
 local Step = {}
 function Step:Setup(d)
-  self:SetSize(24, 24)
-  QB.Art(self.Icon, d.atlas, d.icon)
+  P.StyleMark(self, d.atlas, d.icon, 24)
   self.Badge:Hide()
   self.Count:Hide()
 end
 Step.OnMouseEnter = QB.Safe(function(self) tip(self, self.data.name, "Where the arrow sends you first.", "ANCHOR_RIGHT") end, "map page step")
 Step.OnMouseLeave = untip
-local STEP = { template = "QuestBankQuestPinTemplate", level = "PIN_FRAME_LEVEL_AREA_POI", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Step }
+local STEP = { template = "QuestBankMarkTemplate", level = "PIN_FRAME_LEVEL_AREA_POI", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Step, size = 24 }
 
 -- the step now, and a key that changes when it does
 local function stepNow()
@@ -226,32 +238,41 @@ local function drawStep(layer, m)
   if x then layer:Add(STEP, { name = s.name or "Next step", atlas = s.atlas, icon = s.icon }, x, y) end
 end
 
--- the flight paths, with their own art: a click is a waypoint
+-- the flight points as the game's own pins (FlightPointDataProvider): the taxi node atlas at its 21 px, no tooltip:
+-- hovered, the pin's name (and "Undiscovered ... Flightpoint") goes into the map's own area label, as the game's does
+-- (SetAreaLabel, which the page's AreaLabelDataProvider shows); a click is a waypoint, as the game's super-tracks
 local Flight = {}
+local LABEL_POI = function() return MAP_AREA_LABEL_TYPE and MAP_AREA_LABEL_TYPE.POI or 4 end
 function Flight:Setup(d)
-  self:SetSize(18, 18)
-  QB.Art(self.Icon, d.atlas, d.file)
+  P.StyleMark(self, d.atlas, d.file)
   self.Badge:Hide()
   self.Count:Hide()
 end
 Flight.OnMouseEnter = QB.Safe(function(self)
-  local d = self.data
-  GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-  GameTooltip:AddLine(d.name, GOLD[1], GOLD[2], GOLD[3])
-  GameTooltip:AddLine(d.known and "Flight path" or "Flight path, not found yet", 1, 1, 1)
-  GameTooltip:AddLine("Click: waypoint.", 0.5, 0.5, 0.5)
-  GameTooltip:Show()
+  local d, map = self.data, self.layer:GetMap()
+  if d and map and map.TriggerEvent then QB.Try("map page flight", map.TriggerEvent, map, "SetAreaLabel", LABEL_POI(), d.name, d.desc) end
 end, "map page flight")
-Flight.OnMouseLeave = untip
+Flight.OnMouseLeave = QB.Safe(function(self)
+  local map = self.layer:GetMap()
+  if map and map.TriggerEvent then QB.Try("map page flight", map.TriggerEvent, map, "ClearAreaLabel", LABEL_POI()) end
+end, "map page flight")
 function Flight:OnMouseClickAction(button)
   local d = self.data
   if d and button ~= "RightButton" then QB.API.SetWaypoint(d.m, d.x * 100, d.y * 100, d.name) end
 end
-local FLIGHT = { template = "QuestBankQuestPinTemplate", level = "PIN_FRAME_LEVEL_FLIGHT_POINT", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Flight }
+local FLIGHT = { template = "QuestBankMarkTemplate", level = "PIN_FRAME_LEVEL_FLIGHT_POINT", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Flight, size = 21 }
+
+-- the game's words for a flight point not found yet: "Undiscovered Alliance Flightpoint", or the neutral one
+local function undiscovered(faction)
+  local E = Enum and Enum.FlightPathFaction
+  local side = faction == (E and E.Alliance or 2) and P.Word("FACTION_ALLIANCE", "Alliance") or faction == (E and E.Horde or 1) and P.Word("FACTION_HORDE", "Horde") or nil
+  if side then return string.format(P.Word("UNDISCOVERED_FACTION_FLIGHTPOINT", "Undiscovered %s Flightpoint"), side) end
+  return P.Word("UNDISCOVERED_NEUTRAL_FLIGHTPOINT", "Undiscovered Flightpoint")
+end
 
 -- the flight paths on map m (a zone, a city or a continent): the world map's own (C_TaxiMap, with their art, the other
 -- faction's left out), else QuestBank's flight masters of your faction (Data.lua's D.HUB) on this map or a zone of it,
--- found or not as the arrow knows (Travel.lua). Each { m, x, y, name, known, atlas, file }
+-- found or not as the arrow knows (Travel.lua). Each { m, x, y, name, known, atlas, file, desc }
 function MP.Flights(m)
   local out = {}
   local i = info(m)
@@ -267,8 +288,9 @@ function MP.Flights(m)
       local known = QB.Plain(n.isUndiscovered) ~= true
       local atlas, kit = QB.Plain(n.atlasName), QB.Plain(n.textureKit)
       if type(atlas) == "string" and type(kit) == "string" then atlas = kit .. "-" .. atlas end
-      out[#out + 1] = { m = m, x = x, y = y, name = QB.Plain(n.name) or "Flight path", known = known,
-                        atlas = type(atlas) == "string" and atlas or (known and "FlightPath" or "taxinode_undiscovered"), file = known and T.taxiY or T.taxiGray }
+      local side = QB.Plain(n.faction)
+      out[#out + 1] = { m = m, x = x, y = y, name = QB.Plain(n.name) or "Flight path", known = known, desc = not known and undiscovered(side) or nil,
+                        atlas = type(atlas) == "string" and atlas or (known and (QB.faction == "H" and "taxinode_horde" or "taxinode_alliance") or "taxinode_undiscovered"), file = known and T.taxiY or T.taxiGray }
     end
   end
   if #out > 0 then return out end
@@ -282,7 +304,8 @@ function MP.Flights(m)
     end
     if x then
       local known = TV.Usable(fac, k)
-      out[#out + 1] = { m = m, x = x, y = y, name = h[1], known = known, atlas = known and "FlightPath" or "taxinode_undiscovered", file = known and T.taxiY or T.taxiGray }
+      out[#out + 1] = { m = m, x = x, y = y, name = h[1], known = known, desc = not known and undiscovered(fac == "H" and 1 or 2) or nil,
+                        atlas = known and (fac == "H" and "taxinode_horde" or "taxinode_alliance") or "taxinode_undiscovered", file = known and T.taxiY or T.taxiGray }
     end
   end
   return out
@@ -356,7 +379,7 @@ local function build()
   P.pageLayers[#P.pageLayers + 1] = MP.step
   QM.pageProvider.lit, P.pageProvider.lit, MP.step.lit = MP.Lit, MP.Lit, function() return STEP_LIT end
   MP.layers = { QM.pageProvider, P.pageProvider, MP.lines, MP.step, MP.flight }
-  canvas:AddCanvasClickHandler(ctrlClick)
+  canvas:AddCanvasClickHandler(canvasClick)
   MP.canvas = canvas
   -- your zone now, hidden: its art loads and QuestBank's layers make their frames (they make none in a fight), so a
   -- first open in one shows them
@@ -381,16 +404,26 @@ end
 ----------------------------------------------------------------------------
 -- going places
 ----------------------------------------------------------------------------
--- show a map, one with art. why: "user" (a crumb, a menu, /qb map) stops following you; "here" and "follow" follow
+-- show a map, one with art (the scroll container reads a map's art unchecked; a map without any, as the world map
+-- can be, is never shown: a player asking for one is told). why: "user" (a crumb, a menu, /qb map) stops following
+-- you; "here" and "follow" follow
 function MP.Go(mapID, why)
   local canvas = MP.canvas
-  if not (canvas and hasArt(mapID)) then return false end
+  if not canvas then return false end
+  if not hasArt(mapID) then
+    if why == "user" then
+      local i = info(mapID)
+      QB:Print(string.format("%s has no map art on this client.", i and QB.Plain(i.name) or "That map"))
+    end
+    return false
+  end
   MP.follow = why ~= "user"
   MP.going = true
   QB.Try("map page", setMap, canvas, mapID)
   MP.going = false
   return true
 end
+MP.HasArt = hasArt
 
 -- your zone, and the map follows you again
 function MP.Here()
@@ -453,6 +486,26 @@ function MP.Dungeons(mapID)
   return out
 end
 
+-- a right-click on the map: zoom out to the map it lies in (what the game's right-click does), the game's own world
+-- map, your zone, a waypoint where you clicked. m, x, y: the map and the fraction of it under the mouse
+function MP.MapMenu(owner, m, x, y)
+  if not menuOK() then return end
+  local i = info(m)
+  local parent = i and QB.Plain(i.parentMapID)
+  local up = type(parent) == "number" and parent > 0 and info(parent) or nil
+  MenuUtil.CreateContextMenu(owner, function(_, root)
+    if up then
+      if hasArt(parent) then root:CreateButton("Zoom out to " .. (QB.Plain(up.name) or "the map above"), function() MP.Go(parent, "user") end)
+      else root:CreateButton((QB.Plain(up.name) or "The map above") .. ": no map art", function() end) end
+    end
+    root:CreateButton("Game's map", function() QB.UI.OpenMap() end)
+    root:CreateButton("Your zone", function() MP.Here() end)
+    if type(x) == "number" and type(y) == "number" then
+      root:CreateButton("Waypoint here", function() QB.Try("map page menu", QB.API.SetWaypoint, m, x * 100, y * 100, "Map") end)
+    end
+  end)
+end
+
 -- the Dungeons button: one picked opens in the Dungeon Journal
 function MP.DungeonMenu(owner)
   local list = MP.Dungeons(shownMap())
@@ -483,15 +536,17 @@ end
 
 local function textWidth(t) return (t.GetUnboundedStringWidth or t.GetStringWidth)(t) or 0 end
 
--- a crumb: a click opens its map; on the map shown already, or with the right button, its zones
+-- a crumb: a click opens its map; on the map shown already, or with the right button, its zones. A map without art
+-- on this client (the world map can be one) can't be shown: its crumb is greyed and says so, and still gives its zones
 local function crumb(f, i)
   local b = QB.DMap.Pill(f.nav, "", 80)
   b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   b:SetScript("OnClick", function(self, button)
-    if button == "RightButton" or self.last then MP.ChildMenu(self, self.mapID) else MP.Go(self.mapID, "user") end
+    if button == "RightButton" or self.last or self.noArt then MP.ChildMenu(self, self.mapID) else MP.Go(self.mapID, "user") end
   end)
   b:SetScript("OnEnter", function(self)
-    tip(self, self.text:GetText(), self.last and "Click: the zones in it." or "Click: open it. Right-click: the zones in it.")
+    tip(self, self.text:GetText(), self.noArt and "No map art for it on this client. Click: the zones in it."
+      or (self.last and "Click: the zones in it." or "Click: open it. Right-click: the zones in it."))
   end)
   b:SetScript("OnLeave", untip)
   f.crumbs[i] = b
@@ -505,7 +560,7 @@ local function separator(f, i)
   return s
 end
 
--- a layer's switch under the map: the game's icon (the route's numbered marker carries a 1) and how many there are
+-- a layer's switch under the map: the game's icon (the route's the super-tracked disc) and how many there are
 -- on this map; off, greyed. Its tooltip gives the word
 local function layerOn(t)
   local set = QB:Settings()
@@ -695,9 +750,18 @@ local function buildPage(page)
   f.nav:SetPoint("TOPLEFT", 0, 0)
   f.nav:SetSize(MAP_W, NAV_H)
   f.crumbs, f.seps = {}, {}
-  f.game = iconButton(f.nav, nil, T.sideMap, "Game's map", "The game's world map on your zone.")
+  -- the game's own world map, by name: the map key story is in its tooltip (MP.KEYS)
+  f.game = DM.Pill(f.nav, "Game's map", 88)
   f.game:SetPoint("RIGHT", -4, 0)
   f.game:SetScript("OnClick", function() QB.UI.OpenMap() end)
+  f.game:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:AddLine("Game's map", GOLD[1], GOLD[2], GOLD[3])
+    GameTooltip:AddLine("The game's own world map on your zone, with QuestBank's route and icons on it.", 1, 1, 1, true)
+    GameTooltip:AddLine(MP.KEYS, 0.6, 0.6, 0.6, true)
+    GameTooltip:Show()
+  end)
+  f.game:SetScript("OnLeave", untip)
   f.dungeons = iconButton(f.nav, "Dungeon", QB.QuestMap.ART.dungeon.file, "Dungeons", "The dungeons whose entrance is on this map.")
   f.dungeons:SetPoint("RIGHT", f.game, "LEFT", -4, 0)
   f.dungeons:SetScript("OnClick", function(self) MP.DungeonMenu(self) end)
@@ -787,8 +851,9 @@ function MP.Crumbs()
   local x = 4
   for i, c in ipairs(chain) do
     local b = f.crumbs[i] or crumb(f, i)
-    b.mapID, b.last = c.id, i == #chain
+    b.mapID, b.last, b.noArt = c.id, i == #chain, not hasArt(c.id)
     b.text:SetText(c.name)
+    b:SetAlpha(b.noArt and 0.5 or 1)
     local w = math.min(CRUMB_MAX, math.floor(textWidth(b.text) + 20))
     b:SetWidth(w)
     b.text:SetWidth(w - 8)
