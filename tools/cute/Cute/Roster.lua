@@ -162,10 +162,19 @@ function R:Entry(name, create)
 end
 
 -- values that arrived from a member's addon
+local MAX_GAME = 1000 -- statistics kept per member from the wire (the probe caps its own at the same)
 function R:Apply(name, kv)
   local e = self:Entry(name, true)
   local t = now()
-  for id, v in pairs(kv) do e.stats[id] = v; e.at[id] = t end
+  local games
+  for id, v in pairs(kv) do
+    local keep = true
+    if e.stats[id] == nil and id:match("^g%d+$") then
+      if not games then games = 0; for k in pairs(e.stats) do if k:match("^g%d+$") then games = games + 1 end end end
+      if games >= MAX_GAME then keep = false else games = games + 1 end
+    end
+    if keep then e.stats[id] = v; e.at[id] = t end
+  end
   e.seen, e.online = t, true
   self.updatedAt = t
   if C.UI and C.UI.Refresh then C.UI:Refresh() end

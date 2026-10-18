@@ -1,11 +1,12 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Cute: the guild dashboard of <Cute>. Every member's client reads about a hundred and ten facts about its own
--- character (Stats.lua), shares them with the guild on the game's addon channel (Comm.lua), keeps everyone's last
--- known values (Roster.lua) and shows the whole guild in one window (UI.lua). Officers decide, stat by stat, whether
--- members see each other's (Policy.lua). Nothing leaves the guild channel; there is no server.
+-- Cute: the guild dashboard of <Cute>. Every member's client reads about a hundred and twenty facts about its own
+-- character (Stats.lua), plus the game's own statistics where the client reports them, shares them with the guild
+-- on the game's addon channel (Comm.lua), keeps everyone's last known values (Roster.lua) and shows the whole guild
+-- in one window (UI.lua). Officers decide, stat by stat, whether members see each other's (Policy.lua). Nothing
+-- leaves the guild channel; there is no server.
 local ADDON, C = ...
-C.version = "0.2.0"
-C.REGVER = 2 -- the stat registry's wire version (informational: a client ignores ids it does not know)
+C.version = "0.3.0"
+C.REGVER = 3 -- the stat registry's wire version (informational: a client ignores ids it does not know)
 C.COLOR = "|cffe8b24a"
 
 ----------------------------------------------------------------------------
@@ -105,9 +106,14 @@ function C.Api(ns, name)
   return fn
 end
 
--- the client functions no generated API doc lists, which Cute reads all the same (Stats.lua says on what evidence).
--- /cute api prints which of them this client has, a line to paste, so a stat leaning on a missing one can be dropped.
-C.UNDOCUMENTED = { "GetInventoryItemDurability", "GetInventoryItemCount", "GetNumUnspentTalents", "DoEmote", "GetAverageItemLevel" }
+-- the client functions no generated API doc lists, which Cute reads all the same (Stats.lua says on what evidence),
+-- and the ones it probes for (the statistics API, the latest achievements). /cute api prints which of them this
+-- client has, a line to paste, so a stat leaning on a missing one can be dropped.
+C.UNDOCUMENTED = { "GetInventoryItemDurability", "GetInventoryItemCount", "GetNumUnspentTalents", "DoEmote", "GetAverageItemLevel",
+  "GetCategoryList", "GetCategoryInfo", "GetCategoryNumAchievements", "GetAchievementInfo", "GetTotalAchievementPoints",
+  "GetLatestCompletedAchievements", "GetStatisticsCategoryList", "GetStatistic" }
+-- a global this client has, asked without the note a Get by name leaves when it has not
+function C.Callable(name) return type(_G[name]) == "function" end
 function C.ApiReport()
   local have, miss = {}, {}
   for _, name in ipairs(C.UNDOCUMENTED) do
@@ -216,7 +222,7 @@ SlashCmdList.CUTE = C.Safe(function(msg)
   elseif msg == "errors" then errorsList()
   elseif msg == "resend" then C.Comm:Ask(); C.Print("asked the guild to send their records again.")
   elseif msg == "me" then C.UI:Open("me")
-  elseif msg == "api" then C.Print(C.ApiReport())
+  elseif msg == "api" then C.Print(C.Stats.GameReport()); C.Print(C.ApiReport())
   elseif msg == "help" then
     C.Print("/cute opens the dashboard. /cute settings, /cute me, /cute resend, /cute errors, /cute api (which client functions exist here).")
   else C.UI:Toggle() end

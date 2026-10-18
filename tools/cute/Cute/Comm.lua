@@ -1,12 +1,16 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The guild channel. Small addon messages, one a second at most, GUILD only:
 --   1D|regver|k=v;k=v;...          what changed since the last send
---   1F|part|parts|regver|k=v;...   the full record, in chunks (at login, and when asked)
---   1R                             please send your full record (answered after a random 1 to 20 s)
---   1P|at|threshold|id=a;id=s;...  the officers' visibility policy
+--   1F|part|parts|regver|k=v;...   the full record, in chunks (at login, and when asked); the game's statistics, where
+--                                  the client reports them, follow in a pass of their own a minute and a half later
+--   1R                             please send your full record (answered after a random 1 to 20 s, the statistics
+--                                  60 to 90 s on; one answer however many ask while it waits)
+--   1P|at|threshold|id=a;id=s;...  the officers' visibility policy (a statistics category is gc<id>)
 -- Values: ints in base 36, flags 1/0, text as ASCII without | ; =, lists as base-36 bitmaps over the stat's list,
--- pips as digits. A client ignores ids it does not know. Stats marked slow in the registry (time played, XP into
--- the level) go out on a two-minute flush rather than as they tick.
+-- pips as digits. A client ignores ids it does not know, except a statistic's ("g" and the game's id), whose value
+-- it keeps as an int: the labels are the client's own, so a client that learns its statistics later shows them at
+-- once. Stats marked slow in the registry (time played, XP into the level, every statistic) go out on a two-minute
+-- flush rather than as they tick.
 local _, C = ...
 local M = { out = {}, lastSent = {}, queued = {}, started = false, hello = false }
 C.Comm = M
@@ -14,6 +18,7 @@ local PREFIX = "Cute"
 local LIMIT = 255       -- the client's cap on one addon message, header included
 local SLOW_FLUSH = 120  -- seconds between sends of the slow stats
 local RETRIES = 5       -- "try later" answers before a message is given up
+local GAME_AFTER = 90   -- seconds after the hello before the statistics pass: a login's first minute stays small
 
 local DIG = "0123456789abcdefghijklmnopqrstuvwxyz"
 local function b36(n)
@@ -156,32 +161,58 @@ function M:Changed(all)
   for _, e in ipairs(pack("1D|" .. C.REGVER .. "|", partsFor(ids))) do queue(e) end
 end
 
--- the whole record, in chunks whose header is counted against the limit
-function M:Full()
-  if not C.Roster:InGuild() then return end
-  local ids = {}
-  for _, def in ipairs(C.Stats.list) do ids[#ids + 1] = def.id; C.Sample.dirty[def.id] = nil end
+-- "k=v" parts as 1F chunks whose header is counted against the limit
+local function chunks(parts)
   local head = string.format("1F|%d|%d|%d|", 99, 99, C.REGVER) -- the longest header a chunk can get
-  local chunks = pack("", partsFor(ids, true), LIMIT - #head)
-  for i, e in ipairs(chunks) do
-    e.msg = string.format("1F|%d|%d|%d|%s", i, #chunks, C.REGVER, e.msg)
+  local list = pack("", parts, LIMIT - #head)
+  for i, e in ipairs(list) do
+    e.msg = string.format("1F|%d|%d|%d|%s", i, #list, C.REGVER, e.msg)
     queue(e)
   end
 end
 
+-- the whole record but the statistics, which have their own pass
+function M:Full()
+  if not C.Roster:InGuild() then return end
+  local ids = {}
+  for _, def in ipairs(C.Stats.list) do
+    if def.cat ~= "game" then ids[#ids + 1] = def.id; C.Sample.dirty[def.id] = nil end
+  end
+  chunks(partsFor(ids, true))
+end
+
+-- the statistics: at login a minute and a half after the hello, and when asked. force sends values already sent (an
+-- asker has not seen them); without it only what has not gone out yet goes
+function M:FullGame(force)
+  if not C.Roster:InGuild() then return end
+  local ids = {}
+  for _, def in ipairs(C.Stats.byCat.game) do ids[#ids + 1] = def.id; C.Sample.dirty[def.id] = nil end
+  if #ids == 0 then return end
+  chunks(partsFor(ids, force))
+end
+
 function M:Ask() if C.Roster:InGuild() then queue({ msg = "1R" }) end end
 function M:SendPolicy()
-  local body = C.Policy:Encode()
-  if body and C.Roster:InGuild() then queue({ msg = "1P|" .. body }) end
+  local at, threshold, parts = C.Policy:Parts()
+  if not at or not C.Roster:InGuild() then return end
+  -- one message per chunk that fits, all under the same "at": the first replaces the receiver's policy, the rest add
+  local head = string.format("1P|%d|%d|", at, threshold)
+  local list = {}
+  for _, kv in ipairs(parts) do list[#list + 1] = { kv = kv, id = kv:match("^[^=]+"), s = kv:match("=(.*)$") } end
+  local msgs = pack(head, list)
+  if #msgs == 0 then msgs = { { msg = head } } end
+  for _, m in ipairs(msgs) do queue({ msg = m.msg }) end
 end
 
 ----------------------------------------------------------------------------
 -- receiving
 ----------------------------------------------------------------------------
+-- a statistic this client has not defined (its own probe found none, or not yet) still decodes as the int it is
+local INT = { kind = "int" }
 local function decodeBody(body)
   local kv = {}
   for id, s in (body or ""):gmatch("([%l%d_]+)=([^;]*)") do
-    local def = C.Stats.byId[id]
+    local def = C.Stats.byId[id] or (id:match("^g%d+$") and INT) or nil
     if def then
       local v = M.Decode(def, s)
       if v ~= nil then kv[id] = v end
@@ -204,11 +235,20 @@ function M:Receive(text, channel, sender)
     local body = text:match("^1F|%d+|%d+|[^|]*|(.*)$")
     C.Roster:Apply(sender, decodeBody(body))
   elseif kind == "1R" then
-    -- everyone answers, spread over twenty seconds so a login does not fire twenty clients at once; an officer
-    -- adds the policy, so a fresh install gets it without waiting for the next officer login
-    local wait = 1 + (math.random and math.random(0, 19) or 5)
-    C_Timer.After(wait, C.Safe(function() M:Full() end, "comm: answer"))
-    if C.Roster:MeOfficer() then C_Timer.After(wait + 1, C.Safe(function() M:SendPolicy() end, "comm: answer policy")) end
+    -- everyone answers, spread over twenty seconds so a login does not fire twenty clients at once, and once for all
+    -- who ask while the answer waits (an asker is online by the time it goes); an officer adds the policy, so a fresh
+    -- install gets it without waiting for the next officer login. The statistics follow a minute later, in their own pass
+    if not M.answering then
+      M.answering = true
+      local wait = 1 + (math.random and math.random(0, 19) or 5)
+      C_Timer.After(wait, C.Safe(function() M.answering = false; M:Full() end, "comm: answer"))
+      if C.Roster:MeOfficer() then C_Timer.After(wait + 1, C.Safe(function() M:SendPolicy() end, "comm: answer policy")) end
+    end
+    if not M.answeringGame and #C.Stats.byCat.game > 0 then
+      M.answeringGame = true
+      local wait = GAME_AFTER - 30 + (math.random and math.random(0, 29) or 5)
+      C_Timer.After(wait, C.Safe(function() M.answeringGame = false; M:FullGame(true) end, "comm: answer statistics"))
+    end
   elseif kind == "1P" then
     local at, thr, body = text:match("^1P|(%d+)|(%d+)|(.*)$")
     C.Policy:Receive(sender, at, thr, body)
@@ -233,6 +273,8 @@ function M:Start()
     M:Full()
     if C.Roster:MeOfficer() then M:SendPolicy() end
   end, "comm: hello"))
+  -- the statistics, a minute and a half after the hello
+  C_Timer.After(8 + GAME_AFTER, C.Safe(function() M:FullGame(false) end, "comm: statistics"))
   -- the slow stats, every two minutes
   local function flush()
     C_Timer.After(SLOW_FLUSH, C.Safe(flush, "comm: flush"))

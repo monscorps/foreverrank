@@ -2,7 +2,8 @@
 -- Settings, drawn inside the window's scroll area, flat like the rest.
 --   Everyone:  which columns each page shows, density, offline members, the minimap button, your main, role and
 --              raid spec (role and raid spec per character, the main account-wide)
---   Officers:  per stat, Everyone or Only you; the officer rank threshold; Broadcast now (greyed for members)
+--   Officers:  per stat, Everyone or Only you (per category for the game's statistics); the officer rank threshold;
+--              Broadcast now (greyed for members)
 local _, C = ...
 local ST = {}
 C.SettingsPage = ST
@@ -183,6 +184,38 @@ local function drawOfficers(x, w)
   color(h2, DIM)
   h2:SetText("Only you")
   y = y + 18
+  -- one Everyone / Only-you pair; id is a stat's, or a statistics category's ("gc" .. its id)
+  local function pair(id, label, indent)
+    local lab = widgets.labels:Get()
+    lab:SetPoint("TOPLEFT", x + (indent or 0), -y - 3)
+    lab:SetWidth(w - 140 - (indent or 0))
+    color(lab, INK)
+    C.UI.FitText(lab, label, w - 144 - (indent or 0))
+    local vis = C.Policy:Vis(id)
+    local a = widgets.checks:Get()
+    a:SetPoint("TOPLEFT", x + w - 118, -y - 3)
+    a.label:SetText("")
+    a.statId, a.vis = id, "all"
+    a:Set(vis == "all")
+    a:SetOn(officer)
+    a.fn = function(self) if officer then C.Policy:Set(id, "all"); C.UI:Draw() else self:Set(vis == "all") end end
+    local s = widgets.checks:Get()
+    s:SetPoint("TOPLEFT", x + w - 52, -y - 3)
+    s.label:SetText("")
+    s.statId, s.vis = id, "self"
+    s:Set(vis == "self")
+    s:SetOn(officer)
+    s.fn = function(self) if officer then C.Policy:Set(id, "self"); C.UI:Draw() else self:Set(vis == "self") end end
+    y = y + ROWH
+  end
+  local function note(s)
+    local n = widgets.labels:Get()
+    n:SetPoint("TOPLEFT", x, -y - 3)
+    n:SetWidth(w - 4)
+    color(n, DIM)
+    C.UI.FitText(n, s, w - 8)
+    y = y + ROWH
+  end
   for _, cat in ipairs(C.Stats.CATS) do
     local cl = widgets.labels:Get()
     cl:SetPoint("TOPLEFT", x, -y)
@@ -190,28 +223,19 @@ local function drawOfficers(x, w)
     color(cl, WHITE)
     cl:SetText(C.Stats.CAT_LABEL[cat])
     y = y + 18
-    for _, def in ipairs(C.Stats.byCat[cat]) do
-      local lab = widgets.labels:Get()
-      lab:SetPoint("TOPLEFT", x, -y - 3)
-      lab:SetWidth(w - 140)
-      color(lab, INK)
-      C.UI.FitText(lab, def.label, w - 144)
-      local vis = C.Policy:Vis(def.id)
-      local a = widgets.checks:Get()
-      a:SetPoint("TOPLEFT", x + w - 118, -y - 3)
-      a.label:SetText("")
-      a.statId, a.vis = def.id, "all"
-      a:Set(vis == "all")
-      a:SetOn(officer)
-      a.fn = function(self) if officer then C.Policy:Set(def.id, "all"); C.UI:Draw() else self:Set(vis == "all") end end
-      local s = widgets.checks:Get()
-      s:SetPoint("TOPLEFT", x + w - 52, -y - 3)
-      s.label:SetText("")
-      s.statId, s.vis = def.id, "self"
-      s:Set(vis == "self")
-      s:SetOn(officer)
-      s.fn = function(self) if officer then C.Policy:Set(def.id, "self"); C.UI:Draw() else self:Set(vis == "self") end end
-      y = y + ROWH
+    if cat == "game" then
+      -- the game's statistics are set per category: a category's choice covers every statistic in it, a child's
+      -- its parent's unless set
+      local game = C.Stats.game
+      if #C.Stats.byCat.game == 0 then note(C.Stats.gameNote or "No statistics on this client.")
+      else
+        note("Per category; a category's choice covers its statistics.")
+        for _, g in ipairs(game.cats) do
+          if #g.stats > 0 then pair("gc" .. g.id, g.name, g.parent ~= -1 and 14 or 0) end
+        end
+      end
+    else
+      for _, def in ipairs(C.Stats.byCat[cat]) do pair(def.id, def.label) end
     end
     y = y + 6
   end

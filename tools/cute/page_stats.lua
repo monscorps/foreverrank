@@ -1,7 +1,9 @@
 -- Writes addons/cute/stats.js from the addon's own code, so the page's stat explorer and the mock window are the
 -- registry and the window's defaults, not a copy of them: every stat's id, label, short column label, category, kind,
 -- default visibility, hint, list size or pip count, formatter and column width (Stats.lua, UI.lua), the default
--- columns per page (UI.DEFAULT_COLS) and the categories in order.
+-- columns per page (UI.DEFAULT_COLS) and the categories in order. The fifth category, game (Statistics), is in the
+-- list with its label but holds no stat here: its stats are defined at login from what the client reports
+-- (Stats.lua ProbeGame), so a page mock that shows the Statistics tab brings its own categories and numbers.
 --   luajit tools/cute/page_stats.lua
 -- build.py runs it; the mock reads window.CUTE_STATS, window.CUTE_COLS and window.CUTE_CATS.
 local HERE = (arg and arg[0] and arg[0]:match("^(.*)/") or ".")

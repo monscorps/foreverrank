@@ -76,6 +76,16 @@ window.CUTE_STATS = [
   { id: "pvp_rank", label: "PvP rank", short: "PvP", cat: "prog", kind: "int", vis: "all", hint: "0 is unranked, as the PvP tab shows", n: null, fmt: null, w: 56 },
   { id: "pvp_pts", label: "Rank points", short: "Rank pts", cat: "prog", kind: "int", vis: "all", hint: "toward the next PvP rank, as the PvP tab shows", n: null, fmt: null, w: 68 },
   { id: "raids", label: "Raids attended", short: "Raids", cat: "prog", kind: "int", vis: "all", hint: "raid instances entered, counted", n: null, fmt: null, w: 56 },
+  { id: "lc_done", label: "Challenges done", short: "Challenges", cat: "prog", kind: "int", vis: "all", hint: "Legacy Challenges this character has earned", n: null, fmt: null, w: 82 },
+  { id: "lc_total", label: "Challenges listed", short: "Listed", cat: "prog", kind: "int", vis: "all", hint: "Legacy Challenges the client lists, done or not", n: null, fmt: null, w: 56 },
+  { id: "lc_pts", label: "Legacy points", short: "Legacy pts", cat: "prog", kind: "int", vis: "all", hint: "the Legacy points the challenges you have done gave, counted the same way on every client", n: null, fmt: null, w: 82 },
+  { id: "lc_free", label: "Legacy unspent", short: "Unspent", cat: "prog", kind: "int", vis: "all", hint: "Legacy points not yet spent in a tree", n: null, fmt: null, w: 61 },
+  { id: "lc_renown", label: "Legacy renown", short: "Renown", cat: "prog", kind: "int", vis: "all", hint: "the Legacy reward track's level", n: null, fmt: null, w: 56 },
+  { id: "lc_prof", label: "Professions tree", short: "Prof. tree", cat: "prog", kind: "int", vis: "all", hint: "Legacy points spent in it", n: null, fmt: null, w: 82 },
+  { id: "lc_adv", label: "Adventure tree", short: "Adv. tree", cat: "prog", kind: "int", vis: "all", hint: "Legacy points spent in it", n: null, fmt: null, w: 75 },
+  { id: "lc_prog", label: "Progression tree", short: "Prog. tree", cat: "prog", kind: "int", vis: "all", hint: "Legacy points spent in it", n: null, fmt: null, w: 82 },
+  { id: "lc_last", label: "Latest challenge", short: "Latest", cat: "prog", kind: "text", vis: "all", hint: "the last Legacy Challenge earned while the addon ran, or the client's latest at login", n: null, fmt: null, w: 110 },
+  { id: "lc_cats", label: "Challenge categories", short: "Categories", cat: "prog", kind: "pips", vis: "all", hint: "a pip per Legacy category, your class's last: dark none, brighter by quarters, white all", n: 13, fmt: null, w: 99 },
   { id: "stones", label: "Healthstones", short: "Stones", cat: "prog", kind: "int", vis: "all", hint: null, n: null, fmt: null, w: 56 },
   { id: "shards", label: "Soul shards", short: "Soul shards", cat: "prog", kind: "int", vis: "all", hint: null, n: null, fmt: null, w: 89 },
   { id: "totems", label: "Totems", short: "Totems", cat: "prog", kind: "int", vis: "all", hint: "of the four", n: null, fmt: null, w: 56 },
@@ -115,4 +125,4 @@ window.CUTE_COLS = {
   prog: ["ready", "ilvl", "attune_mc", "attune_ony_a", "attune_ony_h", "keys", "flasks", "pot_health", "world_buffs", "durability", "rep", "unenchanted", "empty_slots"],
   officers: ["gold", "bank_in", "bank_out", "raids", "weekly_raids", "consumed", "main", "role", "last_login", "addon_ver"],
 };
-window.CUTE_CATS = [["leveling", "Race"], ["prog", "Prog"], ["funny", "Hall of Shame"], ["officer", "Officers"]];
+window.CUTE_CATS = [["leveling", "Race"], ["prog", "Prog"], ["funny", "Hall of Shame"], ["officer", "Officers"], ["game", "Statistics"]];

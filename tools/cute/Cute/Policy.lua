@@ -12,12 +12,23 @@ function P:Threshold()
   return (p and type(p.threshold) == "number") and p.threshold or DEFAULT_THRESHOLD
 end
 
--- what the officers set for a stat, or the registry's default
-function P:Vis(id)
+-- what the officers set for a stat, or the registry's default. A statistic (a "g" stat with a game category) takes
+-- its category's setting ("gc" .. the category id), a child category its parent's, and "all" where nothing is set:
+-- the officers choose per statistics category, not per statistic
+function P:Vis(id, depth)
   local p = CuteDB and CuteDB.policy
   local v = p and p.vis and p.vis[id]
   if v == "all" or v == "self" then return v end
+  depth = (depth or 0) + 1
+  if depth > 4 then return "all" end
   local def = C.Stats.byId[id]
+  if def and def.game then return self:Vis("gc" .. def.game, depth) end
+  local cat = tonumber(id:match("^gc(%d+)$"))
+  if cat then
+    local e = C.Stats.game and C.Stats.game.byId[cat]
+    if e and type(e.parent) == "number" and e.parent ~= -1 and e.parent ~= cat then return self:Vis("gc" .. e.parent, depth) end
+    return "all"
+  end
   return def and def.default or "all"
 end
 
@@ -54,21 +65,39 @@ function P:Encode()
   return string.format("%d|%d|%s", p.at or 0, p.threshold or DEFAULT_THRESHOLD, table.concat(parts, ";"))
 end
 
--- a policy from the channel: applied when the sender is an officer by our roster and it is newer than ours. Before
--- the roster is known the newest one waits (P.pending) and Replay judges it once the ranks arrive.
+-- the policy as pieces for the wire: when it was set, the threshold, and "id=a" / "id=s" parts (sorted, so the
+-- chunks are the same every time)
+function P:Parts()
+  local p = CuteDB.policy
+  if not p then return nil end
+  local parts = {}
+  for id, v in pairs(p.vis or {}) do parts[#parts + 1] = id .. "=" .. (v == "self" and "s" or "a") end
+  table.sort(parts)
+  return p.at or 0, p.threshold or DEFAULT_THRESHOLD, parts
+end
+
+-- a policy from the channel: applied when the sender is an officer by our roster and it is newer than ours. A long
+-- policy comes in several messages sharing one "at": the first replaces ours, the rest add to it. Before the roster
+-- is known the pieces of the newest one wait (P.pending) and Replay judges them once the ranks arrive.
 function P:Receive(sender, at, threshold, body)
   at, threshold = tonumber(at), tonumber(threshold)
   if not (at and threshold) or threshold < 0 or threshold > 9 then return false, "malformed" end
   if not C.Roster.trusted then
-    if not self.pending or self.pending.at < at then self.pending = { sender = sender, at = at, threshold = threshold, body = body } end
+    if not self.pending or self.pending.at < at then self.pending = { at = at, list = {} } end
+    if self.pending.at == at then table.insert(self.pending.list, { sender = sender, at = at, threshold = threshold, body = body }) end
     return false, "roster not known yet"
   end
   if not C.Roster:IsOfficer(sender) then return false, "not an officer" end
   local p = CuteDB.policy
-  if p and (p.at or 0) >= at then return false, "older" end
+  if p and (p.at or 0) > at then return false, "older" end
   local vis = {}
   for id, v in (body or ""):gmatch("([%l%d_]+)=([as])") do vis[id] = v == "s" and "self" or "all" end
-  CuteDB.policy = { vis = vis, by = sender, rank = C.Roster:Rank(sender), at = at, threshold = threshold }
+  if p and p.at == at and p.by == sender then
+    for id, v in pairs(vis) do p.vis[id] = v end
+    p.threshold = threshold
+  else
+    CuteDB.policy = { vis = vis, by = sender, rank = C.Roster:Rank(sender), at = at, threshold = threshold }
+  end
   if C.UI and C.UI.Refresh then C.UI:Refresh() end
   return true
 end
@@ -76,7 +105,9 @@ function P:Replay()
   local w = self.pending
   if not w or not C.Roster.trusted then return end
   self.pending = nil
-  return self:Receive(w.sender, w.at, w.threshold, w.body)
+  local ok
+  for _, m in ipairs(w.list) do ok = self:Receive(m.sender, m.at, m.threshold, m.body) or ok end
+  return ok
 end
 
 -- who set it, for Settings

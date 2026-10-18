@@ -3,7 +3,8 @@
 -- Settings checklists) is generated from this table, so a new stat is one line here.
 --   id        short ASCII, stable for life; the wire key
 --   label     the column header or card title
---   cat       leveling | prog | funny | officer: the default tab and the default visibility
+--   cat       leveling | prog | funny | officer | game: the default tab and the default visibility (game is filled at
+--             login from the client's own statistics; see the end of the file)
 --   read      a function returning the value (under pcall; a secret value reads as nil)
 --   count     an event the addon counts for this stat (kept per character in CuteDB)
 --   track     true: a value Sample.lua's ticker or hooks set (kept per character too)
@@ -15,20 +16,27 @@
 --             not as they happen, so twenty clients do not fill the guild channel with ticks
 --   default   "all" or "self"; the category's default applies otherwise
 --   hint      a line for the tooltip saying how it is measured
+--   game      for a statistics stat: the game's category id, which the visibility policy is set by ("gc" .. id)
 -- Every client API here is in Forever's generated API docs, is read by QuestBank on this client (GetInventoryItemLink),
 -- or is called by Blizzard's own Camelot UI code: GetInventoryItemDurability and GetInventoryItemCount by the Camelot
 -- equipment flyout through EquipmentManager_GetItemInfoByLocation (Blizzard_FrameXML/Camelot/EquipmentFlyout.lua:544),
--- GetNumUnspentTalents by the mainline TalentFrameBase.lua the camelot game type loads. Those three are the ones no
--- doc lists: /cute api prints which exist on the live client, and a read of a missing one says so in its tooltip. The
--- globals the older clients had (GetItemInfo, UnitAura, GetAverageItemLevel...) are not here, so nothing falls back to
--- them. A global is passed to Get and Num by name ("UnitLevel"), so a missing one reads as a reason, not as nothing.
+-- GetNumUnspentTalents by the mainline TalentFrameBase.lua the camelot game type loads, GetCategoryList, GetCategoryInfo,
+-- GetCategoryNumAchievements and GetAchievementInfo by Blizzard_LegacySystem (Forever's achievement UI, which loads on
+-- camelot: Blizzard_LegacyChallenges.lua:128-168), GetTotalAchievementPoints by Blizzard_Communities/GuildRewards.lua:256.
+-- The statistics API (GetStatisticsCategoryList, GetStatistic) and GetLatestCompletedAchievements are in the same binary
+-- but only the mainline achievement panel calls them, which camelot never loads: they are probed at login (ProbeGame,
+-- below) and read only where they exist. /cute api prints which of the undocumented functions the live client has,
+-- and a read of a missing one says so in its tooltip. The globals the older clients had (GetItemInfo, UnitAura,
+-- GetAverageItemLevel...) are not here, so nothing falls back to them. A global is passed to Get and Num by name
+-- ("UnitLevel"), so a missing one reads as a reason, not as nothing.
 local _, C = ...
-local S = { list = {}, byId = {}, byCat = { leveling = {}, prog = {}, funny = {}, officer = {} } }
+local S = { list = {}, byId = {}, byCat = { leveling = {}, prog = {}, funny = {}, officer = {}, game = {} } }
 C.Stats = S
 
-S.CATS = { "leveling", "prog", "funny", "officer" }
-S.CAT_LABEL = { leveling = "Race", prog = "Prog", funny = "Hall of Shame", officer = "Officers" }
-S.CAT_DEFAULT = { leveling = "all", prog = "all", funny = "all", officer = "self" }
+-- game is the dynamic fifth category: the game's own statistics, defined at login from what the client reports
+S.CATS = { "leveling", "prog", "funny", "officer", "game" }
+S.CAT_LABEL = { leveling = "Race", prog = "Prog", funny = "Hall of Shame", officer = "Officers", game = "Statistics" }
+S.CAT_DEFAULT = { leveling = "all", prog = "all", funny = "all", officer = "self", game = "all" }
 local KINDS = { int = true, flag = true, text = true, list = true, pips = true }
 
 function S.def(id, label, cat, o)
@@ -149,11 +157,26 @@ end
 local function primary(i) local sk = skills(); if not sk then return nil end local p = sk.primary[i]; return p and (p.name .. " " .. p.rank) or "" end
 local function skillRank(id) local sk = skills(); if not sk then return nil end local l = sk[id]; return l and l.rank or 0 end
 
+-- Forever's Legacy ids as Constants.LegacyConsts names them (Blizzard_APIDocumentationGenerated/LegacyConstantsDocumentation.lua);
+-- the documented values stand in where the table is missing. The class categories are the ones LegacyChallengeDefaultCategories
+-- opens the Legacy window to (Blizzard_LegacySystemConstants.lua)
+local LC_DOC = { LEGACY_REWARD_TRACK_FACTION_ID = 2802, LEGACY_POINTS_TRAIT_CURRENCY_ID = 4225, LEGACY_TREE_PROFESSIONS_ID = 1187,
+  LEGACY_TREE_ADVENTURE_ID = 1188, LEGACY_TREE_PROGRESSION_ID = 1189, LEGACY_DEFAULT_CATEGORY_WARRIOR = 15585, LEGACY_DEFAULT_CATEGORY_PALADIN = 15580,
+  LEGACY_DEFAULT_CATEGORY_HUNTER = 15578, LEGACY_DEFAULT_CATEGORY_ROGUE = 15582, LEGACY_DEFAULT_CATEGORY_PRIEST = 15581, LEGACY_DEFAULT_CATEGORY_SHAMAN = 15583,
+  LEGACY_DEFAULT_CATEGORY_MAGE = 15579, LEGACY_DEFAULT_CATEGORY_WARLOCK = 15584, LEGACY_DEFAULT_CATEGORY_DRUID = 15577 }
+local CLASSES = { "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }
+local function lc(name)
+  local t = type(Constants) == "table" and Constants.LegacyConsts
+  local v = type(t) == "table" and C.Plain(t[name]) or nil
+  return type(v) == "number" and v or LC_DOC[name]
+end
+local LEGACY_TREES = { "LEGACY_TREE_PROFESSIONS_ID", "LEGACY_TREE_ADVENTURE_ID", "LEGACY_TREE_PROGRESSION_ID" }
+
 local function legacyRank(node)
   local cfgOf, info = api("C_Traits", "GetConfigIDByTreeID"), api("C_Traits", "GetNodeInfo")
   if not (cfgOf and info) then return nil end
-  for _, tree in ipairs({ 1187, 1188, 1189 }) do
-    local cfg = Num(cfgOf, tree)
+  for _, treeName in ipairs(LEGACY_TREES) do
+    local cfg = Num(cfgOf, lc(treeName))
     if cfg then
       local n = Get(info, cfg, node)
       if type(n) == "table" and type(C.Plain(n.activeRank)) == "number" and n.activeRank > 0 then return n.activeRank end
@@ -161,6 +184,115 @@ local function legacyRank(node)
   end
   return 0
 end
+
+-- a Legacy tree's currency, as the Legacy UI reads it (Blizzard_LegacySystemUtil.lua RefreshCachedCurrencyInfo: the
+-- first TreeCurrencyInfo of the tree): points spent in this tree, spent in all, unspent, the seasonal cap
+local function treeCurrency(treeName)
+  local cfgOf, info = api("C_Traits", "GetConfigIDByTreeID"), api("C_Traits", "GetTreeCurrencyInfo")
+  if not (cfgOf and info) then return nil end
+  local tree = lc(treeName)
+  local cfg = Num(cfgOf, tree)
+  if not cfg then return nil end
+  local list = Get(info, cfg, tree, false)
+  local ci = type(list) == "table" and list[1] or nil
+  if type(ci) ~= "table" then return nil end
+  return C.Plain(ci.spentInTree), C.Plain(ci.spent), C.Plain(ci.quantity), C.Plain(ci.maxQuantity)
+end
+local function spentIn(treeName)
+  return function()
+    local inTree, spent = treeCurrency(treeName)
+    if type(inTree) == "number" then return inTree end
+    return type(spent) == "number" and spent or nil
+  end
+end
+local TREE_ON = { "TRAIT_CONFIG_UPDATED", "TRAIT_TREE_CURRENCY_INFO_UPDATED" }
+
+-- the game rule that hides the Legacy window (Blizzard_AchievementUI/Camelot/Blizzard_AchievementUI.lua reads it by
+-- this name; no doc gives its value, so it is looked up, and a client without the enum has no such rule)
+local function legacyDisabled()
+  local rule = type(Enum) == "table" and type(Enum.GameRule) == "table" and C.Plain(Enum.GameRule.AchievementsPanelDisabled) or nil
+  if rule == nil then return false end
+  local ns = C_GameRules
+  local fn = type(ns) == "table" and ns.IsGameRuleActive or nil
+  if type(fn) ~= "function" then return false end
+  return Get(fn, rule) == true
+end
+
+-- the Legacy Challenges, walked the way the Legacy window lists them (Blizzard_LegacyChallenges.lua GenerateDataProvider:
+-- GetCategoryList, GetCategoryInfo for the name and parent, GetCategoryNumAchievements and GetAchievementInfo by index)
+-- and cached five seconds: six stats read it, and ACHIEVEMENT_EARNED clears it. A challenge counts as done when it is
+-- completed by this character (the 13th return, wasEarnedByMe: the Legacy UI shows other characters' as incomplete);
+-- its points are the Legacy points the UI shows for it (C_Traits.GetTraitCurrencyForAchievement, the override in
+-- Blizzard_LegacyAchievementOverrides.lua), the achievement's own points where that reads nothing. Statistics
+-- (the 15th return) are not challenges.
+local legacyCache, legacyAt = nil, -1
+local function legacy()
+  local now = (GetTime and GetTime()) or 0
+  if legacyCache and now - legacyAt < 5 then return legacyCache end
+  if legacyDisabled() then C.lastErr = "Legacy Challenges are disabled on this realm"; return nil end
+  local cats = Get("GetCategoryList")
+  if type(cats) ~= "table" then return nil end
+  local pointsOf, currency = api("C_Traits", "GetTraitCurrencyForAchievement"), lc("LEGACY_POINTS_TRAIT_CURRENCY_ID")
+  local classOf = {}
+  for _, class in ipairs(CLASSES) do classOf[lc("LEGACY_DEFAULT_CATEGORY_" .. class)] = class end
+  local out = { done = 0, total = 0, pts = 0, cats = {}, byId = {} }
+  for _, cat in ipairs(cats) do
+    cat = C.Plain(cat)
+    if type(cat) == "number" then
+      local name, parent = Get("GetCategoryInfo", cat)
+      local n = Num("GetCategoryNumAchievements", cat) or 0
+      local e = { id = cat, name = type(name) == "string" and name or ("Category " .. cat), parent = type(parent) == "number" and parent or -1, done = 0, total = 0, class = classOf[cat] }
+      for i = 1, n do
+        local r = { Get("GetAchievementInfo", cat, i) }
+        local id, points, completed, mine, isStat = r[1], r[3], r[4], r[13], r[15]
+        if type(id) == "number" and isStat ~= true then
+          e.total = e.total + 1
+          if completed == true and mine ~= false then
+            e.done = e.done + 1
+            local p = pointsOf and Num(pointsOf, currency, id) or nil
+            out.pts = out.pts + (p or (type(points) == "number" and points or 0))
+          end
+        end
+      end
+      out.total, out.done = out.total + e.total, out.done + e.done
+      out.cats[#out.cats + 1] = e
+      out.byId[cat] = e
+    end
+  end
+  legacyCache, legacyAt = out, now
+  return out
+end
+function S.LegacyClear() legacyCache = nil end
+S.Legacy = legacy
+
+-- the categories the pips stand for, in order: every top-level category that is not a class's, its children folded
+-- in, then the one class category of the class given (yours when you read, the row's when you look); thirteen at most
+function S.LegacyCategories(l, class)
+  local out = {}
+  if type(l) ~= "table" then return out end
+  for _, e in ipairs(l.cats) do
+    if e.parent == -1 and not e.class then
+      local done, total = e.done, e.total
+      for _, child in ipairs(l.cats) do if child.parent == e.id and not child.class then done, total = done + child.done, total + child.total end end
+      if total > 0 then out[#out + 1] = { id = e.id, name = e.name, done = done, total = total } end
+    end
+  end
+  local mine = class and l.byId[lc("LEGACY_DEFAULT_CATEGORY_" .. class)]
+  -- thirteen pips fit a cell: the class category always has the last one
+  while #out > (mine and mine.total > 0 and 12 or 13) do table.remove(out) end
+  if mine and mine.total > 0 then out[#out + 1] = { id = mine.id, name = mine.name, done = mine.done, total = mine.total, class = class } end
+  return out
+end
+-- a category's completion as one pip digit: 0 none, 3 to 6 climbing by quarters, 8 all (the pip colours climb from 3 to 8)
+local function pipOf(done, total)
+  if total <= 0 or done <= 0 then return 0 end
+  if done >= total then return 8 end
+  return 3 + math.floor(done * 4 / total)
+end
+S.PIP_WORDS = { [0] = "none", [3] = "under a quarter", [4] = "a quarter or more", [5] = "half or more", [6] = "three quarters or more", [8] = "all" }
+local function myClass() local _, file = Get("UnitClass", "player"); return type(file) == "string" and file or nil end
+-- a global that exists on this client, without the note a Get by name leaves when it does not
+local function callable(name) return type(_G[name]) == "function" end
 
 -- Forever's PvP rank is a Major Faction renown track (faction 2800), as its own PvP tab reads it
 local PVP_RANK_FACTION = 2800
@@ -402,6 +534,31 @@ S.FACTIONS = FACTIONS
 D("pvp_rank", "PvP rank", "prog", { read = function() local rank = pvp(); return type(rank) == "number" and rank or nil end, on = PVP_ON, hint = "0 is unranked, as the PvP tab shows" })
 D("pvp_pts", "Rank points", "prog", { read = function() local _, pts = pvp(); return type(pts) == "number" and pts or nil end, on = PVP_ON, hint = "toward the next PvP rank, as the PvP tab shows" })
 D("raids", "Raids attended", "prog", { count = "RAID_ENTERED", hint = "raid instances entered, counted" })
+-- Legacy Challenges: Forever's achievements. The counts, the points and the categories share one walk (legacy, above),
+-- cleared and re-read on ACHIEVEMENT_EARNED and on the heartbeat; CRITERIA_UPDATE changes no count, so it does not
+-- re-read them (it drives the statistics pass in Sample.lua instead)
+D("lc_done", "Challenges done", "prog", { on = "ACHIEVEMENT_EARNED", hint = "Legacy Challenges this character has earned",
+  read = function() local l = legacy(); return l and l.done or nil end })
+D("lc_total", "Challenges listed", "prog", { on = "ACHIEVEMENT_EARNED", hint = "Legacy Challenges the client lists, done or not",
+  read = function() local l = legacy(); return l and l.total or nil end })
+D("lc_pts", "Legacy points", "prog", { on = "ACHIEVEMENT_EARNED", hint = "the Legacy points the challenges you have done gave, counted the same way on every client",
+  read = function() local l = legacy(); return l and l.pts or nil end })
+D("lc_free", "Legacy unspent", "prog", { on = TREE_ON, hint = "Legacy points not yet spent in a tree",
+  read = function() local _, _, free = treeCurrency("LEGACY_TREE_PROFESSIONS_ID"); return type(free) == "number" and free or nil end })
+D("lc_renown", "Legacy renown", "prog", { on = "MAJOR_FACTION_RENOWN_LEVEL_CHANGED", hint = "the Legacy reward track's level",
+  read = function() return Num(api("C_MajorFactions", "GetCurrentRenownLevel"), lc("LEGACY_REWARD_TRACK_FACTION_ID")) end })
+D("lc_prof", "Professions tree", "prog", { on = TREE_ON, read = spentIn("LEGACY_TREE_PROFESSIONS_ID"), hint = "Legacy points spent in it" })
+D("lc_adv", "Adventure tree", "prog", { on = TREE_ON, read = spentIn("LEGACY_TREE_ADVENTURE_ID"), hint = "Legacy points spent in it" })
+D("lc_prog", "Progression tree", "prog", { on = TREE_ON, read = spentIn("LEGACY_TREE_PROGRESSION_ID"), hint = "Legacy points spent in it" })
+D("lc_last", "Latest challenge", "prog", { kind = "text", track = true, hint = "the last Legacy Challenge earned while the addon ran, or the client's latest at login" })
+D("lc_cats", "Challenge categories", "prog", { kind = "pips", pips = 13, on = "ACHIEVEMENT_EARNED", hint = "a pip per Legacy category, your class's last: dark none, brighter by quarters, white all",
+  read = function()
+    local l = legacy()
+    if not l then return nil end
+    local s = {}
+    for i, e in ipairs(S.LegacyCategories(l, myClass())) do s[i] = pipOf(e.done, e.total) end
+    return table.concat(s)
+  end })
 D("stones", "Healthstones", "prog", { read = counts({ 9421, 5510, 5509, 5511, 5512, 19013, 19012, 19011 }), on = "BAG_UPDATE_DELAYED" })
 D("shards", "Soul shards", "prog", { read = counts({ 6265 }), on = "BAG_UPDATE_DELAYED" })
 D("totems", "Totems", "prog", { read = function() local n = 0; for _, id in ipairs({ 5175, 5176, 5177, 5178 }) do if itemCount(id) > 0 then n = n + 1 end end; return n end, on = "BAG_UPDATE_DELAYED", hint = "of the four" })
@@ -443,6 +600,102 @@ D("role", "Role", "officer", { kind = "text", read = function() return C.Char().
 D("last_login", "Last login", "officer", { track = true, hint = "epoch seconds", default = "all" })
 D("raid_spec", "Raid spec set", "officer", { kind = "flag", read = function() return C.Char().raidspec == true end, hint = "ticked by you in Settings, per character" })
 D("weekly_raids", "Raids this week", "officer", { track = true, hint = "raid instances entered since Monday" })
+
+----------------------------------------------------------------------------
+-- the game's statistics: a dynamic category, defined at login from what the client reports
+----------------------------------------------------------------------------
+-- The Statistics panel never loads on camelot, but the C functions behind it are in the binary (the mainline panel
+-- reads GetStatisticsCategoryList, GetCategoryInfo for the name and parent, GetCategoryNumAchievements, and
+-- GetStatistic(category, index) -> quantity, skip, achievementID; GetStatistic(achievementID) -> the quantity as a
+-- string, Blizzard_AchievementUI/Mainline/Blizzard_AchievementUI.lua:2385-2456). Whether camelot exposes them and the
+-- server fills them is unknown, so ProbeGame asks at login and defines one int stat per statistic only where the list
+-- is there and not empty. S.game keeps the categories as the game groups them (parents, then their children) for the
+-- Statistics page and the policy; S.gameNote says why nothing was defined. Stats are "g" .. achievementID, labelled by
+-- GetAchievementInfo, hinted with the category path, slow (they travel on the two-minute flush and their own
+-- full-record pass, never as they tick), read on the heartbeat and by Sample's coalesced pass.
+S.game = { cats = {}, byCat = {}, byId = {}, defined = false }
+S.gameNote = nil
+S.GAME_CAP = 1000 -- statistics defined at most, so a client cannot fill the registry or the channel past reason
+
+-- the quantity string as a number: separators of any locale dropped ("1,234", "1 234", "1.234"); "--" is the game's
+-- "never recorded", which reads as 0 here (a count that never happened is nought, and a nil would send nothing, so
+-- the guild would see "?" where the game shows a dash)
+function S.Quantity(s)
+  if type(s) == "number" then return math.floor(s) end
+  if type(s) ~= "string" then return nil end
+  if s:match("^%s*%-+%s*$") then return 0 end
+  local digits = s:gsub("[^%d]", "")
+  if digits == "" then return nil end
+  return tonumber(digits)
+end
+
+-- the probe: true and the count when statistics were defined; false, the reason and whether asking again could help
+-- otherwise (an empty list may still be loading at login; a missing function will not appear). Defines once.
+function S.ProbeGame()
+  if S.game.defined then return true, #S.byCat.game end
+  if not callable("GetStatisticsCategoryList") then
+    S.gameNote = "GetStatisticsCategoryList is missing on this client"
+    return false, S.gameNote, false
+  end
+  local list = Get("GetStatisticsCategoryList")
+  if type(list) ~= "table" or #list == 0 then
+    S.gameNote = "This client reports no statistics"
+    return false, S.gameNote, true
+  end
+  -- the categories: name and parent for each, then parents in the game's order with their children after them
+  local cats, byId = {}, {}
+  for _, id in ipairs(list) do
+    id = C.Plain(id)
+    if type(id) == "number" and not byId[id] then
+      local name, parent = Get("GetCategoryInfo", id)
+      local e = { id = id, name = type(name) == "string" and name or ("Category " .. id), parent = type(parent) == "number" and parent or -1, stats = {} }
+      cats[#cats + 1] = e
+      byId[id] = e
+    end
+  end
+  local ordered = {}
+  for _, e in ipairs(cats) do
+    if e.parent == -1 or not byId[e.parent] then
+      e.parent = -1
+      e.path = e.name
+      ordered[#ordered + 1] = e
+      for _, child in ipairs(cats) do
+        if child.parent == e.id then child.path = e.name .. " > " .. child.name; ordered[#ordered + 1] = child end
+      end
+    end
+  end
+  for _, e in ipairs(cats) do if not e.path then e.path = e.name; e.parent = -1; ordered[#ordered + 1] = e end end
+  -- the statistics: one int stat each, the ones the game marks skip left out
+  local n = 0
+  for _, e in ipairs(ordered) do
+    local count = Num("GetCategoryNumAchievements", e.id) or 0
+    for i = 1, count do
+      local _, skip, id = Get("GetStatistic", e.id, i)
+      if type(id) == "number" and skip ~= true and n < S.GAME_CAP then
+        local sid = "g" .. math.floor(id)
+        if not S.byId[sid] then
+          local _, label = Get("GetAchievementInfo", id)
+          local statId = id
+          local def = S.def(sid, type(label) == "string" and label or ("Statistic " .. sid:sub(2)), "game",
+            { read = function() return S.Quantity(Get("GetStatistic", statId)) end, slow = true, hint = e.path, game = e.id, default = "all" })
+          e.stats[#e.stats + 1] = def
+          n = n + 1
+        end
+      end
+    end
+  end
+  S.game = { cats = ordered, byCat = {}, byId = byId, defined = true }
+  for _, e in ipairs(ordered) do S.game.byCat[e.id] = e.stats end
+  if n > 0 then S.gameNote = nil; return true, n end
+  S.gameNote = "This client lists statistics categories but no statistic in them"
+  return false, S.gameNote, false
+end
+
+-- one line for /cute api
+function S.GameReport()
+  if #S.byCat.game > 0 then return string.format("statistics: %d defined in %d categories", #S.byCat.game, #S.game.cats) end
+  return "statistics: none (" .. (S.gameNote or "not probed yet") .. ")"
+end
 
 -- what a category contains, in order
 function S.Cat(cat) return S.byCat[cat] end

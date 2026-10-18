@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cute, the guild dashboard addon · ForeverRank</title>
-<meta name="description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame and the officers' view, shared over the guild channel. No server, no accounts.">
+<meta name="description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame, the game's statistics ranked and the officers' view, shared over the guild channel. No server, no accounts.">
 <link rel="canonical" href="https://foreverrank.com/addons/cute/">
 <!-- seo:begin -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ForeverRank">
 <meta property="og:url" content="https://foreverrank.com/addons/cute/">
 <meta property="og:title" content="Cute, the guild dashboard addon · ForeverRank">
-<meta property="og:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame and the officers' view, shared over the guild channel. No server, no accounts.">
+<meta property="og:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame, the game's statistics ranked and the officers' view, shared over the guild channel. No server, no accounts.">
 <meta property="og:image" content="https://foreverrank.com/addons/cute/img/banner.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Cute, the guild dashboard addon · ForeverRank">
-<meta name="twitter:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame and the officers' view, shared over the guild channel. No server, no accounts.">
+<meta name="twitter:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame, the game's statistics ranked and the officers' view, shared over the guild channel. No server, no accounts.">
 <meta name="twitter:image" content="https://foreverrank.com/addons/cute/img/banner.jpg">
 <!-- seo:end -->
 <meta name="theme-color" content="#000000">
@@ -120,6 +120,34 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-card .cu-cm { position: absolute; left: 8px; bottom: 7px; color: var(--cu-mute); font-size: 11px; }
 .cu-olines div { height: 18px; padding-left: 6px; color: var(--cu-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cu-olines div.cu-dimline { color: var(--cu-dim); }
+/* the Statistics page: the game's own statistics as a leaderboard, the categories down the left, the open one on the right;
+   a statistic opens to the whole guild ranked on it. The table is the member table's, striped by a class because the
+   opened row would shift the stripes. */
+.cu-lb { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 0 8px; align-items: start; }
+.cu-lbcats { display: grid; gap: 2px; padding-top: 2px; }
+.cu-lbcats button { appearance: none; display: flex; justify-content: space-between; align-items: center; gap: 6px; height: 22px; padding: 0 6px; border: 1px solid #000; background: var(--cu-panel2); color: var(--cu-dim); font: 12px var(--cu-narrow); text-align: left; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.cu-lbcats button:hover { background: #232323; color: var(--cu-white); }
+.cu-lbcats button[aria-selected="true"], .cu-lbcats button[aria-selected="true"]:hover { background: var(--cu-white); border-color: var(--cu-white); color: #000; }
+.cu-lbcats button span { color: var(--cu-mute); }
+.cu-lbcats button[aria-selected="true"] span { color: #555; }
+.cu-lbh { height: 20px; padding-left: 6px; color: var(--cu-dim); font-size: 11px; line-height: 20px; border-bottom: 1px solid #000; }
+.cu-lbcats button.cu-sub { padding-left: 20px; }
+.cu-lbrows { width: 100%; }
+.cu-lbrows td.cu-st { padding: 0; }
+.cu-lbrows td.cu-st button { appearance: none; display: block; width: 100%; height: 20px; padding: 0 2px 0 6px; border: 0; background: none; color: var(--cu-ink); font: 12px var(--cu-narrow); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.cu-lbrows.cu-compact td.cu-st button { height: 17px; }
+.cu-lbrows td.cu-st button::before { content: "+"; display: inline-block; width: 10px; color: var(--cu-mute); }
+.cu-lbrows td.cu-st button[aria-expanded="true"] { color: var(--cu-white); }
+.cu-lbrows td.cu-st button[aria-expanded="true"]::before { content: "-"; }
+.cu-lbrows tbody tr:nth-child(even) td { background: none; }
+.cu-lbrows tbody tr.cu-even td { background: rgba(255,255,255,.03); }
+.cu-lbrows tbody tr:hover td { background: rgba(255,255,255,.06); }
+.cu-lbrows tbody tr.cu-ranked td, .cu-lbrows tbody tr.cu-ranked:hover td { height: auto; padding: 5px 8px 7px 16px; white-space: normal; background: var(--cu-panel2); }
+.cu-rank { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 1fr); gap: 2px 14px; } /* reads down, three columns; the rows are set inline from the count */
+.cu-rank div { display: flex; align-items: baseline; gap: 6px; height: 18px; white-space: nowrap; overflow: hidden; }
+.cu-rank .cu-rk { flex: none; width: 16px; color: var(--cu-mute); text-align: right; }
+.cu-rank .cu-rn { overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+.cu-rank .cu-rv { margin-left: auto; flex: none; }
 .cu-btns { display: flex; gap: 6px; padding: 2px 0 8px 6px; }
 .cu-btn { appearance: none; height: 22px; width: 160px; border: 1px solid #000; background: var(--cu-panel2); color: var(--cu-ink); font: 12px var(--cu-narrow); cursor: pointer; }
 .cu-btn:hover:not(:disabled) { background: #242424; }
@@ -200,9 +228,13 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-log { list-style: none; margin: 0; padding: 0; color: var(--cu-dim); line-height: 1.6; max-width: 72ch; }
 .cu-log li + li { margin-top: .5rem; }
 .cu-log b { color: var(--cu-white); font: 600 1rem Fredoka, sans-serif; margin-right: .6rem; }
-.cu-log-sub { margin: .35rem 0 0 1.1rem; padding: 0; list-style: disc; }
-.cu-log-sub li { margin: .15rem 0; }
-.cu-log .cu-log-sub li + li { margin-top: .15rem; }
+.cu-fold { margin: 0; }
+.cu-fold > summary { cursor: pointer; color: var(--cu-dim); font-weight: 600; padding: .5rem 0; list-style: none; }
+.cu-fold > summary::-webkit-details-marker { display: none; }
+.cu-fold > summary::before { content: "+  "; color: var(--cu-white); }
+.cu-fold[open] > summary::before { content: "-  "; }
+.cu-fold > summary:hover { color: var(--cu-white); }
+.cu-fold > summary + * { margin-top: .6rem; }
 footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0 0 3rem; border-top: 1px solid var(--cu-rule); color: var(--cu-dim); font-size: .9rem; line-height: 1.6; }
 .cu-foot p { margin: 1.6rem 0 0; max-width: 72ch; }
 .cu-foot a { margin-left: 0; color: var(--cu-white); text-underline-offset: 2px; }
@@ -217,6 +249,8 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
 @media (pointer: coarse) {
   .cu-tabs button { height: 40px; }
   .cu-rows th, .cu-rows th button { height: 32px; }
+  .cu-lbcats button, .cu-lbrows td.cu-st button { height: 32px; }
+  .cu-lbh { height: 32px; line-height: 32px; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -244,9 +278,9 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-art"><img src="img/banner.jpg" alt="The Cute emblem, a red-haired elf in a gold ring, over a bright valley with floating castles"></div>
   <div class="cu-hero-text">
     <h1>The whole guild in one window.</h1>
-    <p>Cute is the guild's own addon for Forever's November release. Every member's client shares <!--@n-->109<!--/@n--> facts about its character over the guild channel, and the window shows the race to 60, raid readiness, the hall of shame and the officers' view. Officers decide who sees what.</p>
+    <p>The guild's own addon for Forever's November release. Every member's client shares its character over the guild channel, and one window shows the whole guild: the race to 60, readiness, the hall of shame, the statistics, the officers' view. Officers decide who sees what.</p>
     <div class="cu-cta">
-      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.2.0<!--/@v--></span>, <!--@kb-->263<!--/@kb--> KB</small></a>
+      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.3.0<!--/@v--></span>, <!--@kb-->273<!--/@kb--> KB</small></a>
       <span class="cu-note">Free, GPL. No server, no accounts, nothing leaves the guild channel. Unzip into <code>Interface\AddOns</code> and type <code>/cute</code>.</span>
     </div>
   </div>
@@ -276,6 +310,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
           <button type="button" role="tab" id="cu-tab-race" aria-controls="cu-panel" aria-selected="true" tabindex="0" data-tab="race">Race</button>
           <button type="button" role="tab" id="cu-tab-prog" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="prog">Prog</button>
           <button type="button" role="tab" id="cu-tab-shame" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="shame">Hall of Shame</button>
+          <button type="button" role="tab" id="cu-tab-statistics" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="statistics">Statistics</button>
           <button type="button" role="tab" id="cu-tab-officers" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="officers" hidden>Officers</button>
           <button type="button" role="tab" id="cu-tab-me" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="me">Me</button>
           <button type="button" role="tab" id="cu-tab-settings" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="settings">Settings</button>
@@ -295,20 +330,15 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     <h2>Who sees what</h2>
     <div class="cu-rules">
       <div>
-        <p>Every stat has one of two settings, and officers pick it on the window's Settings page. A change is broadcast on the guild channel; members' addons apply it when it comes from an officer rank. Your own row is always complete.</p>
+        <p>Every stat has one of two settings, and officers pick it on the window's Settings page. A change is broadcast on the guild channel; members' addons apply it when it comes from an officer rank. Your own row is always complete. The game's own statistics are set per category rather than one by one, since the server decides which there are.</p>
         <dl class="cu-lev">
           <dt>Everyone</dt><dd>Every member sees every member's value: the race, who is doing well, the funny stats the officers want on the wall.</dd>
-          <dt class="cu-only">Only you</dt><dd>You see your own; officers and the guild master see everyone's. By default: empty and unenchanted slots, gear ten levels old, greens worn, the raid buffs you lack, gold, guild bank deposits and withdrawals, consumables used in raids, whispers an hour, raid spec set, raids this week.</dd>
+          <dt class="cu-only">Only you</dt><dd>You see your own; officers and the guild master see everyone's. By default: your gear gaps, gold and the guild bank, whispers, raid attendance.</dd>
         </dl>
       </div>
       <div>
-        <h3>What never happens</h3>
-        <ul>
-          <li>Nothing leaves the guild's addon channel. There is no server behind this addon and no upload.</li>
-          <li>No combat log, which Forever's client restricts anyway. Whispers and guild lines are counted, never read. The only text that is read is your own: party and raid lines, for the words "where are you", and your emote lines on a client without the emote hook. Only the counts are kept.</li>
-          <li>Nothing accepts, abandons or hands in a quest; nothing touches the game's secure frames.</li>
-          <li>An Only-you stat is hidden in members' windows, not encrypted. It still travels on the guild channel, so a member reading the saved file could see it. Fine for a guild, said plainly.</li>
-        </ul>
+        <h3>Privacy</h3>
+        <p>Nothing leaves the guild's addon channel and there is no server behind it. Chat is counted, never read. An Only-you stat is hidden in members' windows, not encrypted: a member reading the saved file could see it, which is fine for a guild and said plainly.</p>
       </div>
     </div>
   </div>
@@ -317,14 +347,17 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
 <section class="cu-sec" id="stats">
   <div class="cu-wrap">
     <h2>What it tracks</h2>
-    <p class="cu-lede">The addon's own list, <!--@n-->109<!--/@n--> stats in <!--@v-->0.2.0<!--/@v-->: <!--@n:leveling-->42<!--/@n:leveling--> for the race, <!--@n:prog-->39<!--/@n:prog--> for prog, <!--@n:funny-->18<!--/@n:funny--> for the hall of shame, <!--@n:officer-->10<!--/@n:officer--> for the officers. Open a stat for how it is measured and who sees it by default.</p>
-    <div class="cu-bar">
-      <div class="cu-cats" role="radiogroup" aria-label="Category" id="cu-cats"></div>
-      <input type="search" class="cu-q" id="cu-q" placeholder="Search stats" aria-label="Search stats">
-    </div>
-    <div class="cu-groups" id="cu-groups"></div>
-    <p class="cu-none" id="cu-none" hidden>Nothing matches. Try another word.</p>
-    <p class="cu-small">Counted stats start at zero the day you install the addon. A stat marked "only you" is hidden from members by default; the officers can open it, or close any other.</p>
+    <p class="cu-lede"><!--@n-->119<!--/@n--> stats in <!--@v-->0.3.0<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It is a work in progress and the list changes weekly; this is today's.</p>
+    <details class="cu-fold">
+      <summary>Show the list: <!--@n:leveling-->42<!--/@n:leveling--> for the race, <!--@n:prog-->49<!--/@n:prog--> for prog, <!--@n:funny-->18<!--/@n:funny--> for the hall of shame, <!--@n:officer-->10<!--/@n:officer--> for the officers</summary>
+      <div class="cu-bar">
+        <div class="cu-cats" role="radiogroup" aria-label="Category" id="cu-cats"></div>
+        <input type="search" class="cu-q" id="cu-q" placeholder="Search stats" aria-label="Search stats">
+      </div>
+      <div class="cu-groups" id="cu-groups"></div>
+      <p class="cu-none" id="cu-none" hidden>Nothing matches. Try another word.</p>
+      <p class="cu-small">Counted stats start at zero the day you install the addon. Open a stat for how it is measured and who sees it by default.</p>
+    </details>
   </div>
 </section>
 
@@ -343,18 +376,10 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-wrap">
     <h2>Changelog</h2>
     <ul class="cu-log">
-      <li><b>0.2.0</b>The audit round: what the client cannot read is gone, what it can is read the right way, and the window got its last details.
-        <ul class="cu-log-sub">
-          <li>Readiness is one stat: ready, gaps or no. PvP rank shown as Forever's renown points.</li>
-          <li>Recipes known, raid lockouts, honor this week and on time for raid removed: this client has no way to read them.</li>
-          <li>Gold kept to the copper and shown as 212g or 40s; hours to 60 counted over the XP each level ahead takes, a dash until there is a pace.</li>
-          <li>Role is per character; a /reload is not a login; fall, drowning and fatigue deaths caught by a one-second poll; the key binding header fixed.</li>
-          <li>Window: a class-coloured bar on every row, numbers right-aligned, an Updated line in the footer, header sort remembered.</li>
-          <li>Page rebuilt in black and white, the window mocked from the registry itself, every number stamped by the build.</li>
-        </ul>
-      </li>
-      <li><b>0.1.1</b>Textures load (the client wants .png paths), so the icon and the minimap button draw; start-up steps isolated so one failure cannot hide the button; the window and the page drawn flat and dark.</li>
-      <li><b>0.1.0</b>The proof of concept: 111 stats, the guild channel sync, the five pages, Settings with the officers' visibility list, the minimap button and key bindings.</li>
+      <li><b>0.3.0</b>The Statistics page: the server's own statistics, the guild ranked on any of them. Legacy Challenges as stats. Visibility per statistics category.</li>
+      <li><b>0.2.0</b>Every client call checked against Forever's own UI code and four unreadable stats removed; comm and roster fixes; the window's final look; the page rebuilt in black and white with a build that checks itself.</li>
+      <li><b>0.1.1</b>Textures load (the client wants .png paths); start-up steps isolated; the window drawn flat and dark.</li>
+      <li><b>0.1.0</b>The proof of concept: the registry, the guild channel sync, the five pages, the officers' visibility list, the minimap button and key bindings.</li>
     </ul>
   </div>
 </section>
@@ -385,9 +410,14 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   var POLICY = { by: "Yezin", at: "2026-10-18 20:40", threshold: 1 };
   var FUNNY = ["deaths", "deaths_today", "falls", "drownings", "fatigue", "hearth_waste", "afk", "dance", "sit", "emotes", "whispers", "gchat", "inspected", "fish", "jumps", "ghost_yards", "where", "grey_gold"];
   var ONY_H = "00000000000";
-  function member(n, c, rank, on, s, funny) {
+  var LC_LISTED = 486; // the Legacy Challenges every client lists, done or not: the same walk on every client
+  function member(n, c, rank, on, s, funny, lc) {
     FUNNY.forEach(function (id, i) { s[id] = funny[i]; });
     s.deaths_lvl = s.deaths;
+    // the Legacy Challenges: the points spent per tree and the unspent add up to the points; a white pip is a category
+    // done, so a member with few challenges has none; a member with no perks has spent nothing in the trees
+    s.lc_done = lc.done; s.lc_total = LC_LISTED; s.lc_free = lc.free; s.lc_renown = lc.renown; s.lc_prof = lc.prof; s.lc_adv = lc.adv; s.lc_prog = lc.prog; s.lc_last = lc.last; s.lc_cats = lc.cats;
+    s.lc_pts = lc.prof + lc.adv + lc.prog + lc.free;
     // readiness as Stats.lua derives it from the same inputs: no gap is ready (2), one or two is gaps (1), more is no (0)
     var gaps = (s.empty_slots > 0 ? 1 : 0) + (s.unenchanted >= 4 ? 1 : 0) + (s.durability < 50 ? 1 : 0) + (s.flasks === 0 && !s.flask_on ? 1 : 0) + (s.pot_health < 5 ? 1 : 0);
     s.ready = gaps === 0 ? 2 : gaps <= 2 ? 1 : 0;
@@ -402,51 +432,51 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     member("Cutecutecute", "PRIEST", "Guild Master", true, { level: 44, xp: 61, xp_hour: 18400, to60: 31, zone: "Feralas", played: hm(52, 4), quests_done: 418, group: "Yezin, Upn", rested: 4200, legacy: 3,
       ilvl: 41, attune_mc: "2", attune_ony_a: "2222222100000", keys: 3, resist_fire: 15, flasks: 1, pot_health: 8, pot_mana: 12, world_buffs: 2, durability: 88, rep: "2211100", unenchanted: 2, empty_slots: 0,
       gold: 212, bank_in: 150, bank_out: 40, raids: 0, weekly_raids: 0, consumed: 0, role: "Heal", last_login: "2026-10-18" },
-      [7, 1, 1, 0, 0, 0, 3, 6, 2, 95, 14, 230, 12, 0, 4120, 1800, 1, 31]),
+      [7, 1, 1, 0, 0, 0, 3, 6, 2, 95, 14, 230, 12, 0, 4120, 1800, 1, 31], { done: 61, free: 8, renown: 7, prof: 38, adv: 52, prog: 30, last: "Explore Feralas", cats: "564335408304" }),
     member("Yezin", "WARRIOR", "Officer", true, { level: 42, xp: 35, xp_hour: 16900, to60: 36, zone: "Duskwood", played: hm(45, 12), quests_done: 388, group: "Cutecutecute, Upn", rested: 0, legacy: 3,
       ilvl: 39, attune_mc: "2", attune_ony_a: "2222221000000", keys: 2, resist_fire: 8, flasks: 2, pot_health: 12, pot_mana: 0, world_buffs: 2, durability: 71, rep: "2111000", unenchanted: 1, empty_slots: 0,
       gold: 148, bank_in: 300, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Tank", last_login: "2026-10-18" },
-      [5, 0, 0, 1, 0, 1, 1, 1, 0, 9, 6, 180, 30, 12, 2210, 900, 0, 44]),
+      [5, 0, 0, 1, 0, 1, 1, 1, 0, 9, 6, 180, 30, 12, 2210, 900, 0, 44], { done: 54, free: 6, renown: 6, prof: 30, adv: 46, prog: 28, last: "Scarlet Monastery", cats: "553334408303" }),
     member("Upn", "MAGE", "Officer", true, { level: 41, xp: 78, xp_hour: 17200, to60: 37, zone: "Duskwood", played: hm(43, 5), quests_done: 371, group: "Cutecutecute, Yezin", rested: 1100, legacy: 2,
       ilvl: 37, attune_mc: "2", attune_ony_a: "2221000000000", keys: 1, resist_fire: 0, flasks: 0, pot_health: 3, pot_mana: 15, world_buffs: 1, durability: 94, rep: "2110000", unenchanted: 4, empty_slots: 1,
       gold: 96, bank_in: 0, bank_out: 20, raids: 0, weekly_raids: 0, consumed: 0, role: "Ranged", last_login: "2026-10-18" },
-      [9, 2, 3, 0, 2, 2, 0, 0, 4, 15, 9, 410, 4, 0, 5980, 2600, 0, 27]),
+      [9, 2, 3, 0, 2, 2, 0, 0, 4, 15, 9, 410, 4, 0, 5980, 2600, 0, 27], { done: 49, free: 10, renown: 6, prof: 26, adv: 34, prog: 30, last: "Level 40", cats: "553343400304" }),
     member("Ferrow", "HUNTER", "Raider", true, { level: 40, xp: 12, xp_hour: 15100, to60: 42, zone: "Stranglethorn Vale", played: hm(40, 30), quests_done: 352, group: "Quillan", rested: 300, legacy: 2,
       ilvl: 36, attune_mc: "1", attune_ony_a: "2210000000000", keys: 1, resist_fire: 0, flasks: 0, pot_health: 5, pot_mana: 4, world_buffs: 0, durability: 63, rep: "1100000", unenchanted: 5, empty_slots: 0,
       gold: 61, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Ranged", last_login: "2026-10-18" },
-      [6, 0, 2, 0, 0, 0, 2, 2, 1, 22, 3, 95, 8, 31, 3310, 1400, 2, 18]),
+      [6, 0, 2, 0, 0, 0, 2, 2, 1, 22, 3, 95, 8, 31, 3310, 1400, 2, 18], { done: 44, free: 14, renown: 5, prof: 20, adv: 32, prog: 26, last: "Explore Stranglethorn Vale", cats: "543334300303" }),
     member("Ondra", "MAGE", "Raider", false, { level: 40, xp: 4, xp_hour: 14800, to60: 43, zone: "Stranglethorn Vale", played: hm(38, 20), quests_done: 340, group: "", rested: 6800, legacy: 2,
       ilvl: 35, attune_mc: "0", attune_ony_a: "2200000000000", keys: 0, resist_fire: 0, flasks: 1, pot_health: 6, pot_mana: 9, world_buffs: 1, durability: 79, rep: "1100000", unenchanted: 3, empty_slots: 0,
       gold: 72, bank_in: 50, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Ranged", last_login: "2026-10-16" },
-      [6, 0, 1, 0, 0, 0, 9, 3, 0, 12, 2, 60, 1, 0, 2780, 1100, 0, 12]),
+      [6, 0, 1, 0, 0, 0, 9, 3, 0, 12, 2, 60, 1, 0, 2780, 1100, 0, 12], { done: 40, free: 10, renown: 5, prof: 22, adv: 30, prog: 22, last: "250 Quests Completed", cats: "443333300303" }),
     member("Mutu", "WARRIOR", "Raider", true, { level: 39, xp: 51, xp_hour: 13900, to60: 48, zone: "Arathi Highlands", played: hm(36, 40), quests_done: 322, group: "Bari", rested: 0, legacy: 1,
       ilvl: 38, attune_mc: "0", attune_ony_a: "2100000000000", keys: 1, resist_fire: 0, flasks: 0, pot_health: 4, pot_mana: 0, world_buffs: 0, durability: 55, rep: "1000000", unenchanted: 2, empty_slots: 0,
       gold: 55, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Tank", last_login: "2026-10-18" },
-      [3, 0, 0, 0, 0, 0, 1, 0, 0, 6, 1, 70, 19, 0, 1920, 500, 0, 22]),
+      [3, 0, 0, 0, 0, 0, 1, 0, 0, 6, 1, 70, 19, 0, 1920, 500, 0, 22], { done: 36, free: 16, renown: 4, prof: 12, adv: 20, prog: 28, last: "Gnomeregan", cats: "443330300303" }),
     member("Bari", "PALADIN", "Raider", true, { level: 38, xp: 88, xp_hour: 13400, to60: 51, zone: "Arathi Highlands", played: hm(35, 15), quests_done: 310, group: "Mutu", rested: 2300, legacy: 1,
       ilvl: 37, attune_mc: "0", attune_ony_a: "2100000000000", keys: 1, resist_fire: 0, flasks: 0, pot_health: 9, pot_mana: 11, world_buffs: 0, durability: 82, rep: "1000000", unenchanted: 1, empty_slots: 0,
       gold: 80, bank_in: 100, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Tank", last_login: "2026-10-18" },
-      [2, 0, 0, 0, 0, 1, 0, 0, 0, 8, 4, 120, 6, 5, 1540, 300, 0, 15]),
+      [2, 0, 0, 0, 0, 1, 0, 0, 0, 8, 4, 120, 6, 5, 1540, 300, 0, 15], { done: 35, free: 12, renown: 4, prof: 24, adv: 18, prog: 20, last: "Journeyman Cook", cats: "433334300303" }),
     member("Quillan", "ROGUE", "Raider", true, { level: 38, xp: 20, xp_hour: 15600, to60: 49, zone: "Stranglethorn Vale", played: hm(33, 50), quests_done: 298, group: "Ferrow", rested: 0, legacy: 1,
       ilvl: 34, attune_mc: "0", attune_ony_a: "2000000000000", keys: 0, resist_fire: 0, flasks: 0, pot_health: 2, pot_mana: 0, world_buffs: 0, durability: 47, rep: "0000000", unenchanted: 6, empty_slots: 1,
       gold: 33, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Melee", last_login: "2026-10-18" },
-      [10, 1, 4, 1, 0, 0, 0, 1, 0, 30, 7, 210, 2, 0, 7410, 3200, 3, 9]),
+      [10, 1, 4, 1, 0, 0, 0, 1, 0, 30, 7, 210, 2, 0, 7410, 3200, 3, 9], { done: 31, free: 10, renown: 4, prof: 6, adv: 22, prog: 26, last: "The Stockade", cats: "433333000303" }),
     member("Kaka", "PRIEST", "Raider", true, { level: 37, xp: 12, xp_hour: 11200, to60: 68, zone: "Desolace", played: hm(39, 10), quests_done: 276, group: "", rested: 900, legacy: 1,
       ilvl: 33, attune_mc: "0", attune_ony_a: "1000000000000", keys: 0, resist_fire: 0, flasks: 0, pot_health: 1, pot_mana: 2, world_buffs: 0, durability: 38, rep: "0000000", unenchanted: 7, empty_slots: 2,
       gold: 12, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Heal", last_login: "2026-10-18" },
-      [23, 3, 6, 2, 1, 4, 8, 14, 5, 88, 21, 640, 1, 3, 6980, 11200, 9, 6]),
+      [23, 3, 6, 2, 1, 4, 8, 14, 5, 88, 21, 640, 1, 3, 6980, 11200, 9, 6], { done: 29, free: 14, renown: 3, prof: 20, adv: 14, prog: 12, last: "Explore Desolace", cats: "433330300303" }),
     member("Boopsy", "WARLOCK", "Raider", true, { level: 36, xp: 66, xp_hour: 12600, to60: 59, zone: "Thousand Needles", played: hm(30, 40), quests_done: 262, group: "", rested: 1500, legacy: 1,
       ilvl: 33, attune_mc: "0", attune_ony_a: "1000000000000", keys: 0, resist_fire: 0, flasks: 0, pot_health: 7, pot_mana: 6, world_buffs: 0, durability: 90, rep: "0000000", unenchanted: 3, empty_slots: 0,
       gold: 44, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Ranged", last_login: "2026-10-18" },
-      [8, 1, 2, 0, 0, 1, 2, 4, 6, 19, 5, 150, 3, 0, 3050, 1900, 1, 20]),
+      [8, 1, 2, 0, 0, 1, 2, 4, 6, 19, 5, 150, 3, 0, 3050, 1900, 1, 20], { done: 27, free: 8, renown: 3, prof: 10, adv: 18, prog: 20, last: "Razorfen Kraul", cats: "433330000303" }),
     member("Lindel", "DRUID", "Raider", false, { level: 35, xp: 30, xp_hour: 12100, to60: 64, zone: "Thousand Needles", played: hm(28, 5), quests_done: 251, group: "", rested: 5400, legacy: 0,
       ilvl: 31, attune_mc: "0", attune_ony_a: "0000000000000", keys: 0, resist_fire: 0, flasks: 0, pot_health: 6, pot_mana: 8, world_buffs: 0, durability: 76, rep: "0000000", unenchanted: 5, empty_slots: 1,
       gold: 38, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Heal", last_login: "2026-10-18" },
-      [5, 0, 1, 0, 0, 0, 3, 2, 2, 14, 2, 40, 0, 8, 2600, 700, 0, 11]),
+      [5, 0, 1, 0, 0, 0, 3, 2, 2, 14, 2, 40, 0, 8, 2600, 700, 0, 11], { done: 22, free: 46, renown: 3, prof: 0, adv: 0, prog: 0, last: "Explore Thousand Needles", cats: "333330000303" }),
     member("Garristan", "WARRIOR", "Member", true, { level: 1, xp: 0, xp_hour: 0, to60: 0, zone: "Northshire Valley", played: hm(0, 3), quests_done: 0, group: "", rested: 0, legacy: 0,
       ilvl: 1, attune_mc: "0", attune_ony_a: "0000000000000", keys: 0, resist_fire: 0, flasks: 0, pot_health: 0, pot_mana: 0, world_buffs: 0, durability: 100, rep: "0000000", unenchanted: 0, empty_slots: 13,
       gold: 0, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, main: "", role: "", last_login: "2026-10-18" },
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { done: 0, free: 0, renown: 0, prof: 0, adv: 0, prog: 0, last: "", cats: "000000000000" }),
     // in the guild, online, without the addon: the roster knows the level and the zone, nothing else
     { n: "Tovi", c: "DRUID", rank: "Raider", on: true, addon: false, s: { level: 33, zone: "Thousand Needles" } }
   ];
@@ -464,22 +494,85 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       flask_on: false, buffs_missing: 4, pvp_rank: 0, pvp_pts: 0, stones: 1, shards: 0, totems: 0, ammo: 0, poisons: 0, raid_spec: false }
   };
   G.forEach(function (r) { if (FULL[r.n]) Object.keys(FULL[r.n]).forEach(function (k) { r.s[k] = FULL[r.n][k]; }); });
+  // the game's own statistics, as the server reports them at login: invented like the rest, one value per member with
+  // the addon in G's order, and never lower than the addon's own counter for the same thing (the addon counts since it
+  // was installed, the server since the character was made): quests completed is quests done, deaths covers deaths,
+  // creatures killed is total kills less honorable kills, the three gold sources sum to the gold acquired.
+  var ADDON = G.filter(function (r) { return r.addon; });
+  var STATCATS = [
+    { id: "kills", label: "Kills", stats: [
+      ["Total kills", [6420, 5980, 5610, 5230, 4870, 4410, 4120, 4560, 3980, 3640, 3210, 4]],
+      ["Total kills that grant experience", [5830, 5410, 5070, 4690, 4420, 3990, 3720, 4080, 3560, 3290, 2900, 4]] ] },
+    { id: "creatures", label: "Creatures", sub: true, stats: [
+      ["Creatures killed", [6406, 5942, 5588, 5179, 4861, 4393, 4114, 4516, 3977, 3628, 3210, 4]],
+      ["Critters killed", [140, 95, 310, 220, 60, 40, 55, 180, 410, 90, 70, 0]],
+      ["Beasts killed", [2140, 1880, 1760, 2210, 1540, 1390, 1300, 1620, 1250, 1150, 1090, 1]],
+      ["Humanoids killed", [2310, 2290, 2080, 1700, 1820, 1700, 1610, 1740, 1480, 1390, 1200, 3]],
+      ["Undead killed", [980, 870, 810, 640, 720, 580, 560, 540, 610, 470, 390, 0]] ] },
+    { id: "deaths", label: "Deaths", stats: [
+      ["Total deaths", [31, 19, 27, 22, 24, 12, 9, 38, 61, 26, 18, 0]],
+      ["Deaths from falling", [4, 2, 7, 5, 3, 1, 1, 9, 14, 6, 3, 0]],
+      ["Deaths from drowning", [1, 2, 0, 1, 0, 0, 0, 2, 5, 1, 0, 0]],
+      ["Deaths from fatigue", [0, 0, 2, 0, 0, 0, 0, 1, 3, 0, 0, 0]],
+      ["Deaths in dungeons", [9, 6, 8, 5, 7, 4, 3, 11, 17, 7, 6, 0]],
+      ["Deaths from Hogger", [1, 0, 2, 1, 0, 0, 0, 1, 3, 0, 0, 0]] ] },
+    { id: "quests", label: "Quests", stats: [
+      ["Quests completed", [418, 388, 371, 352, 340, 322, 310, 298, 276, 262, 251, 0]],
+      ["Quests abandoned", [12, 6, 9, 15, 4, 7, 3, 11, 27, 8, 5, 0]],
+      ["Quests completed in Eastern Kingdoms", [231, 240, 210, 190, 175, 170, 168, 150, 120, 110, 95, 0]],
+      ["Quests completed in Kalimdor", [187, 148, 161, 162, 165, 152, 142, 148, 156, 152, 156, 0]] ] },
+    { id: "dungeons", label: "Dungeons & Raids", stats: [
+      ["Deadmines", [3, 4, 2, 3, 2, 2, 3, 1, 2, 2, 1, 0]],
+      ["Wailing Caverns", [1, 2, 1, 2, 2, 1, 1, 1, 0, 2, 1, 0]],
+      ["Shadowfang Keep", [2, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 0]],
+      ["The Stockade", [2, 3, 1, 0, 1, 2, 1, 1, 0, 1, 0, 0]],
+      ["Gnomeregan", [1, 1, 2, 1, 0, 1, 1, 0, 1, 1, 1, 0]],
+      ["Razorfen Kraul", [1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0]],
+      ["Scarlet Monastery", [6, 8, 5, 4, 3, 4, 3, 5, 2, 3, 2, 0]],
+      ["Uldaman", [2, 3, 2, 1, 1, 1, 0, 1, 0, 0, 0, 0]],
+      ["Zul'Farrak", [1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]] ] },
+    { id: "honor", label: "Honor", stats: [
+      ["Total honorable kills", [14, 38, 22, 51, 9, 17, 6, 44, 3, 12, 0, 0]],
+      ["Killing blows", [5, 19, 11, 27, 2, 8, 1, 23, 0, 4, 0, 0]],
+      ["Highest honorable kills in a day", [6, 15, 9, 20, 4, 8, 3, 18, 2, 5, 0, 0]],
+      ["Battlegrounds played", [1, 4, 2, 6, 0, 1, 0, 5, 0, 1, 0, 0]],
+      ["Battlegrounds won", [1, 2, 1, 3, 0, 0, 0, 2, 0, 0, 0, 0]] ] },
+    { id: "gold", label: "Gold", gold: true, stats: [
+      ["Total gold acquired", [1240, 1085, 912, 780, 735, 640, 690, 560, 505, 470, 420, 0]],
+      ["Gold looted", [410, 365, 300, 290, 260, 225, 240, 210, 170, 160, 150, 0]],
+      ["Gold from quest rewards", [520, 455, 380, 330, 310, 270, 290, 230, 215, 200, 180, 0]],
+      ["Gold from vendors", [310, 265, 232, 160, 165, 145, 160, 120, 120, 110, 90, 0]],
+      ["Most gold ever owned", [260, 190, 140, 95, 110, 88, 120, 70, 61, 75, 64, 0]],
+      ["Gold spent on travel", [38, 44, 29, 31, 22, 18, 20, 27, 35, 19, 15, 0]] ] }
+  ];
+  STATCATS.forEach(function (c) { if (c.gold) c.stats.forEach(function (s) { s[1] = s[1].map(g); }); });
+  // a child category sits under the parent before it; the path names both, as the window's tooltip does
+  var parentCat = null;
+  STATCATS.forEach(function (c) { if (!c.sub) parentCat = c; c.path = c.sub ? parentCat.label + " > " + c.label : c.label; });
+  var N_GAME = STATCATS.reduce(function (n, c) { return n + c.stats.length; }, 0);
   var CLASS = { WARRIOR: "#c79c6e", PRIEST: "#ffffff", MAGE: "#69ccf0", HUNTER: "#abd473", ROGUE: "#fff569", PALADIN: "#f58cba", WARLOCK: "#9482c9", DRUID: "#ff7d0a", SHAMAN: "#0070de" };
   var ME = { member: "Kaka", officer: "Yezin" };
   var MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   // ---- the viewer's settings, as the addon keeps them in CuteDB; the officers' policy on top of the defaults
-  var st = { viewer: "member", tab: "race", sort: {}, offline: true, minimap: true, compact: false, role: { Kaka: "Heal", Yezin: "Tank" }, raidspec: { Kaka: false, Yezin: false }, meView: false, cols: {}, policy: {}, threshold: POLICY.threshold };
+  var st = { viewer: "member", tab: "race", sort: {}, statCat: "kills", statOpen: null, offline: true, minimap: true, compact: false, role: { Kaka: "Heal", Yezin: "Tank" }, raidspec: { Kaka: false, Yezin: false }, meView: false, cols: {}, policy: {}, threshold: POLICY.threshold };
   ["race", "prog", "officers"].forEach(function (p) { st.cols[p] = {}; (COLS[p] || []).forEach(function (id) { st.cols[p][id] = true; }); });
   st.cols.shame = {};
   (byCat.funny || []).forEach(function (d) { st.cols.shame[d.id] = true; });
   function vis(id) { return st.policy[id] || (byId[id] && byId[id].vis) || "all"; }
+  // a statistics category is one policy entry for all its statistics; the key cannot collide with a registry id
+  function statKey(c) { return "stats:" + c.id; }
+  // the categories that have registry stats: a category the registry names but fills from the server has no list to show
+  var CATS_WITH = CATS.filter(function (c) { return (byCat[c[0]] || []).length > 0; });
   function officer() { return st.viewer === "officer"; }
   function me() { return ME[st.viewer]; }
   function canSee(rowIsMe, id) { return officer() || rowIsMe || vis(id) === "all"; }
 
   // ---- values, as UI.Format shows them
   function hours(sec) { var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h > 0 ? h + "h " + (m < 10 ? "0" : "") + m + "m" : m + "m"; }
+  // pips filled by quarters: lc_cats writes a pip as 0, 3 to 6 or 8 (Stats.lua's pipOf), the chains and the reputations as 0, 1 or 2
+  var QUARTERS = { lc_cats: true };
+  function pipsDone(d, v) { return (String(v).match(QUARTERS[d.id] ? /8/g : /2/g) || []).length; }
   function fmt(d, v) {
     if (v == null) return "?";
     if (d.kind === "int") {
@@ -494,14 +587,14 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     }
     if (d.kind === "flag") return v ? "yes" : "-";
     if (d.kind === "text") return v !== "" ? v : "-";
-    if (d.kind === "pips") return (String(v).match(/2/g) || []).length + "/" + d.n + (d.n === 1 ? " step" : " steps");
+    if (d.kind === "pips") return pipsDone(d, v) + "/" + d.n + (QUARTERS[d.id] ? " all" : d.n === 1 ? " step" : " steps");
     if (d.kind === "list") return v + "/" + d.n;
     return String(v);
   }
   function pips(s) { var h = "<span class=\"cu-pips\">"; for (var i = 0; i < s.length; i++) h += "<i class=\"cu-p" + s[i] + "\"></i>"; return h + "</span>"; }
   function sortVal(d, v) {
     if (v == null) return null;
-    if (d.kind === "pips") return (String(v).match(/2/g) || []).length;
+    if (d.kind === "pips") return pipsDone(d, v);
     if (typeof v === "boolean") return v ? 1 : 0;
     return v;
   }
@@ -616,6 +709,55 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     if (n === 0) h += "<p class=\"cu-line\">No funny stats ticked. Settings has the list.</p>";
     return h;
   }
+  // the statistics as the client formats them, "6,420"; gold the addon's way
+  function num(v) { return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+  function statFmt(c, v) {
+    if (v == null) return "?";
+    if (v === 0) return "-";
+    if (c.gold) return v >= 10000 ? num(Math.floor(v / 10000)) + "g" : v >= 100 ? Math.floor(v / 100) + "s" : v + "c";
+    return num(v);
+  }
+  function statistics() {
+    var m = me(), off = officer();
+    var cat = STATCATS.filter(function (c) { return c.id === st.statCat; })[0] || STATCATS[0];
+    var hidden = !off && vis(statKey(cat)) === "self";
+    var h = "<div class=\"cu-lb\"><div><div class=\"cu-lbh\" id=\"cu-lbcat-h\">Category</div><div class=\"cu-lbcats\" role=\"tablist\" aria-orientation=\"vertical\" aria-labelledby=\"cu-lbcat-h\">";
+    STATCATS.forEach(function (c) {
+      var on = c.id === cat.id;
+      h += "<button type=\"button\" role=\"tab\" id=\"cu-stcat-" + c.id + "\"" + (c.sub ? " class=\"cu-sub\"" : "") + " aria-selected=\"" + (on ? "true" : "false") + "\" aria-controls=\"cu-lbt\" tabindex=\"" + (on ? "0" : "-1") + "\" data-stcat=\"" + c.id + "\" title=\"" + esc(c.path + ": " + c.stats.length + " statistics. " + (vis(statKey(c)) === "all" ? "Everyone sees this category." : "Only you and the officers see this category.")) + "\">" + esc(c.label) + "<span>" + c.stats.length + "</span></button>";
+    });
+    h += "</div></div><div id=\"cu-lbt\" role=\"tabpanel\" aria-labelledby=\"cu-stcat-" + cat.id + "\"><table class=\"cu-rows cu-lbrows" + (st.compact ? " cu-compact" : "") + "\"><colgroup><col><col style=\"width:70px\"><col style=\"width:190px\"></colgroup><thead><tr>";
+    h += "<th scope=\"col\"><button type=\"button\" tabindex=\"-1\" aria-disabled=\"true\">Statistic</button></th><th scope=\"col\" class=\"cu-r\"><button type=\"button\" tabindex=\"-1\" aria-disabled=\"true\">You</button></th><th scope=\"col\"><button type=\"button\" tabindex=\"-1\" aria-disabled=\"true\">Leader</button></th></tr></thead><tbody>";
+    var noAddon = G.filter(function (r) { return !r.addon; });
+    cat.stats.forEach(function (s, i) {
+      var id = cat.id + ":" + i, open = st.statOpen === id, rankId = "cu-rank-" + cat.id + "-" + i;
+      var ranked = ADDON.map(function (r, k) { return { r: r, v: s[1][k] }; }).filter(function (x) { return x.v != null; });
+      ranked.sort(function (a, b) { return a.v === b.v ? (a.r.n < b.r.n ? -1 : 1) : b.v - a.v; });
+      var mine = ADDON.map(function (r, k) { return r.n === m ? s[1][k] : null; }).filter(function (v) { return v != null; })[0];
+      var lead = ranked.length && ranked[0].v > 0 ? ranked[0] : null;
+      var tip = s[0] + ". " + (hidden ? "Set to Only you: you see your own value, the officers see everyone's." : "Click to rank the guild on it.");
+      h += "<tr" + (i % 2 ? " class=\"cu-even\"" : "") + "><td class=\"cu-st\"><button type=\"button\" aria-expanded=\"" + (open ? "true" : "false") + "\"" + (open ? " aria-controls=\"" + rankId + "\"" : "") + " data-stat=\"" + id + "\" title=\"" + esc(tip) + "\">" + esc(s[0]) + "</button></td>";
+      h += "<td class=\"cu-r" + (mine ? "" : " cu-mute") + "\">" + esc(statFmt(cat, mine)) + "</td>";
+      if (hidden) h += "<td class=\"cu-hid\" title=\"Only the officers see who leads: this category is set to Only you\">-</td>";
+      else if (!lead) h += "<td class=\"cu-mute\">nobody yet</td>";
+      else h += "<td><span style=\"color:" + (lead.r.on ? CLASS[lead.r.c] : shade(CLASS[lead.r.c])) + "\">" + esc(lead.r.n) + "</span>" + (lead.r.n === m ? " <span class=\"cu-tag\">(you)</span>" : "") + " <span class=\"cu-tag\">" + esc(statFmt(cat, lead.v)) + "</span></td>";
+      h += "</tr>";
+      if (!open) return;
+      h += "<tr class=\"cu-ranked\" id=\"" + rankId + "\"><td colspan=\"3\">";
+      if (hidden) h += "<span class=\"cu-mute\">Set to Only you: you see your own value, the officers see everyone's.</span>";
+      else {
+        h += "<div class=\"cu-rank\" style=\"grid-template-rows:repeat(" + Math.ceil((ranked.length + noAddon.length) / 3) + ",18px)\">";
+        ranked.forEach(function (x, k) {
+          var cc = x.r.on ? CLASS[x.r.c] : shade(CLASS[x.r.c]);
+          h += "<div><span class=\"cu-rk\">" + (k + 1) + "</span><span class=\"cu-rn\" style=\"color:" + cc + "\">" + esc(x.r.n) + (x.r.n === m ? " <span class=\"cu-tag\">(you)</span>" : "") + "</span><span class=\"cu-rv" + (x.v > 0 ? "" : " cu-mute") + "\">" + esc(statFmt(cat, x.v)) + "</span></div>";
+        });
+        noAddon.forEach(function (r) { h += "<div><span class=\"cu-rk\"></span><span class=\"cu-rn cu-mute\">" + esc(r.n) + " <span class=\"cu-tag\">(no addon)</span></span></div>"; });
+        h += "</div>";
+      }
+      h += "</td></tr>";
+    });
+    return h + "</tbody></table></div></div>";
+  }
   function officers() {
     var total = G.length, withAddon = 0, online = 0, levels = [], noAddon = [];
     G.forEach(function (r) { if (r.addon) withAddon++; else noAddon.push(r.n); if (r.on) online++; if (typeof r.s.level === "number") levels.push(r.s.level); });
@@ -631,7 +773,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   function mePage() {
     var r = G.filter(function (x) { return x.n === me(); })[0];
     var h = "<label class=\"cu-ckl\" style=\"margin-top:-2px\"><input type=\"checkbox\" class=\"cu-ck\" data-set=\"meView\"" + (st.meView ? " checked" : "") + "> Show what members see of me</label>";
-    CATS.forEach(function (c) {
+    CATS_WITH.forEach(function (c) {
       h += "<div class=\"cu-h\" style=\"margin-top:8px\">" + esc(c[1]) + "</div><div class=\"cu-me\">";
       (byCat[c[0]] || []).forEach(function (d) {
         var hidden = st.meView && vis(d.id) === "self";
@@ -640,6 +782,8 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       });
       h += "</div>";
     });
+    // the game's statistics have a page of their own; the Me page says how many, as the window does
+    h += "<div class=\"cu-line\" style=\"padding-top:12px\">Statistics: " + N_GAME + ", on the Statistics page.</div>";
     return h;
   }
   function check(label, on, enabled, data) {
@@ -661,14 +805,19 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     right += "<div class=\"cu-field\" style=\"justify-content:space-between;padding-right:0\"><span style=\"width:auto;color:var(--cu-ink)\">Officer ranks: 0 to " + st.threshold + "</span><span style=\"width:auto;display:flex;gap:4px\"><button type=\"button\" class=\"cu-btn cu-sm\" data-act=\"thr-\" aria-label=\"Lower the officer rank threshold\"" + (off ? "" : " disabled") + ">-</button><button type=\"button\" class=\"cu-btn cu-sm\" data-act=\"thr+\" aria-label=\"Raise the officer rank threshold\"" + (off ? "" : " disabled") + ">+</button></span></div>";
     right += "<div class=\"cu-btns\" style=\"padding-top:4px\"><button type=\"button\" class=\"cu-btn\" data-act=\"policy\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Broadcast now</button><button type=\"button\" class=\"cu-btn\" data-act=\"reset\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Reset to defaults</button></div>";
     right += "<div class=\"cu-vishead\"><span></span><span>Everyone</span><span>Only you</span></div>";
-    CATS.forEach(function (c) {
+    function visRow(label, key) {
+      var v = vis(key);
+      return "<div class=\"cu-visrow\"><span>" + esc(label) + "</span><label aria-label=\"" + esc(label + ": everyone") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + key + "\" data-vis=\"" + key + ":all\"" + (v === "all" ? " checked" : "") + (off ? "" : " disabled") + "></label><label aria-label=\"" + esc(label + ": only you") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + key + "\" data-vis=\"" + key + ":self\"" + (v === "self" ? " checked" : "") + (off ? "" : " disabled") + "></label></div>";
+    }
+    CATS_WITH.forEach(function (c) {
       right += "<div class=\"cu-h\" style=\"height:18px\">" + esc(c[1]) + "</div>";
-      (byCat[c[0]] || []).forEach(function (d) {
-        var v = vis(d.id);
-        right += "<div class=\"cu-visrow\"><span>" + esc(d.label) + "</span><label aria-label=\"" + esc(d.label + ": everyone") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + d.id + "\" data-vis=\"" + d.id + ":all\"" + (v === "all" ? " checked" : "") + (off ? "" : " disabled") + "></label><label aria-label=\"" + esc(d.label + ": only you") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + d.id + "\" data-vis=\"" + d.id + ":self\"" + (v === "self" ? " checked" : "") + (off ? "" : " disabled") + "></label></div>";
-      });
+      (byCat[c[0]] || []).forEach(function (d) { right += visRow(d.label, d.id); });
       right += "<div class=\"cu-gap\"></div>";
     });
+    // the game's statistics: one setting per category, the server decides which statistics are in it
+    right += "<div class=\"cu-h\" style=\"height:18px\">Statistics, per category</div>";
+    STATCATS.forEach(function (c) { right += visRow(c.label, statKey(c)); });
+    right += "<div class=\"cu-gap\"></div>";
     return "<div class=\"cu-set\"><div>" + left + "</div><div>" + right + "</div></div>";
   }
 
@@ -685,13 +834,14 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       return self.join(" and ") + (self.length === 1 ? " is" : " are") + " set to Only you: " + m + " sees their own, the rest show a dash. Switch to Yezin to see them all.";
     }
     if (st.tab === "shame") return "One card per funny stat, the leader on each. Untick cards on the Settings page.";
+    if (st.tab === "statistics") return "The game's own statistics, every one this client reports at login, by category. Click a statistic to rank the guild on it. Officers set visibility per category on the Settings page.";
     if (st.tab === "officers") return "Officer ranks only. The three buttons open the visibility list, ask every addon to resend its record, and push the policy out.";
     if (st.tab === "me") return "Your whole record, every stat in the registry. Tick the box to see what members see of you.";
     return off ? "Everyone picks their own columns and cards. The visibility list on the right is the officers' to change, and you are one." : "Everyone picks their own columns and cards. The visibility list on the right is the officers' to change; a member sees it greyed.";
   }
   function draw() {
     var off = officer();
-    var keep = document.activeElement && panel.contains(document.activeElement) ? (document.activeElement.dataset.k || document.activeElement.dataset.set || document.activeElement.dataset.col || document.activeElement.dataset.vis || document.activeElement.dataset.act || document.activeElement.dataset.role || (document.activeElement.dataset.raidspec && "raidspec")) : null;
+    var keep = document.activeElement && panel.contains(document.activeElement) ? keepOf(document.activeElement) : null;
     var keepScroll = scroll.scrollTop;
     var officersTab = document.getElementById("cu-tab-officers");
     officersTab.hidden = !off;
@@ -702,7 +852,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       b.tabIndex = on ? 0 : -1;
     });
     panel.setAttribute("aria-labelledby", "cu-tab-" + st.tab);
-    var body = st.tab === "race" || st.tab === "prog" ? table(st.tab) : st.tab === "shame" ? shame() : st.tab === "officers" ? officers() : st.tab === "me" ? mePage() : settings();
+    var body = st.tab === "race" || st.tab === "prog" ? table(st.tab) : st.tab === "shame" ? shame() : st.tab === "statistics" ? statistics() : st.tab === "officers" ? officers() : st.tab === "me" ? mePage() : settings();
     scroll.innerHTML = body + "<div class=\"cu-updated\">Updated just now</div>";
     scroll.scrollTop = keepScroll;
     var online = G.filter(function (r) { return r.on && r.addon; }).length;
@@ -710,9 +860,15 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     hintEl.textContent = off ? "An officer sees everything, and the Officers page appears." : "A member sees everyone's shared stats and all of their own.";
     footEl.textContent = footText();
     if (keep) {
-      var again = scroll.querySelector("[data-k=\"" + keep + "\"],[data-set=\"" + keep + "\"],[data-col=\"" + keep + "\"],[data-vis=\"" + keep + "\"],[data-act=\"" + keep + "\"],[data-role=\"" + keep + "\"]" + (keep === "raidspec" ? ",[data-raidspec]" : ""));
+      var again = scroll.querySelector("[data-" + keep[0] + "=\"" + keep[1] + "\"]");
       if (again) again.focus();
     }
+  }
+  // the data attribute that names a control in the panel, so a redraw can hand the focus back to it
+  var KEEP = ["k", "set", "col", "vis", "act", "role", "raidspec", "stcat", "stat"];
+  function keepOf(el) {
+    for (var i = 0; i < KEEP.length; i++) if (el.dataset[KEEP[i]] !== undefined) return [KEEP[i], el.dataset[KEEP[i]]];
+    return null;
   }
   function print(s) {
     printEl.textContent = "Cute: " + s;
@@ -727,10 +883,14 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       draw();
       return;
     }
+    var c = e.target.closest("button[data-stcat]");
+    if (c) { st.statCat = c.dataset.stcat; draw(); return; }
+    var x = e.target.closest("button[data-stat]");
+    if (x) { st.statOpen = st.statOpen === x.dataset.stat ? null : x.dataset.stat; draw(); return; }
     var a = e.target.closest("button[data-act]");
     if (!a || a.disabled) return;
     var act = a.dataset.act;
-    if (act === "settings") { st.tab = "settings"; draw(); tabs[5].focus(); }
+    if (act === "settings") { st.tab = "settings"; draw(); document.getElementById("cu-tab-settings").focus(); }
     else if (act === "ask") print("asked the guild to send their records again.");
     else if (act === "policy") print("sent the visibility policy to the guild.");
     else if (act === "reset") { st.policy = {}; draw(); print("visibility reset to the defaults."); }
@@ -741,11 +901,27 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     var t = e.target;
     if (t.dataset.set) { st[t.dataset.set] = t.checked; draw(); }
     else if (t.dataset.col) { var p = t.dataset.col.split(":"); st.cols[p[0]][p[1]] = t.checked; }
-    else if (t.dataset.vis) { var q = t.dataset.vis.split(":"); st.policy[q[0]] = q[1]; }
+    else if (t.dataset.vis) { var q = t.dataset.vis.lastIndexOf(":"); st.policy[t.dataset.vis.slice(0, q)] = t.dataset.vis.slice(q + 1); }
     else if (t.dataset.raidspec) { st.raidspec[me()] = t.checked; G.filter(function (r) { return r.n === me(); })[0].s.raid_spec = t.checked; }
     else if (t.dataset.role) { st.role[me()] = t.checked ? t.dataset.role : ""; G.filter(function (r) { return r.n === me(); })[0].s.role = st.role[me()]; draw(); }
   });
 
+  // the category list on the Statistics page is redrawn with the page, so its arrow keys are handled here, not by roving()
+  scroll.addEventListener("keydown", function (e) {
+    var b = e.target.closest("button[data-stcat]");
+    if (!b) return;
+    var ids = STATCATS.map(function (c) { return c.id; }), at = ids.indexOf(b.dataset.stcat), to = -1;
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") to = (at + 1) % ids.length;
+    else if (e.key === "ArrowUp" || e.key === "ArrowLeft") to = (at - 1 + ids.length) % ids.length;
+    else if (e.key === "Home") to = 0;
+    else if (e.key === "End") to = ids.length - 1;
+    if (to < 0) return;
+    e.preventDefault();
+    st.statCat = ids[to];
+    draw();
+    var next = scroll.querySelector("[data-stcat=\"" + ids[to] + "\"]");
+    if (next) next.focus();
+  });
   // roving tabindex: one tab stop per group, arrows move and choose, Home and End jump
   function roving(items, choose) {
     items.forEach(function (b, i) {
@@ -783,7 +959,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   }
   draw();
   // a link straight to a page of the window: #prog, #officers, #settings-officer ...
-  var deep = /^#(race|prog|shame|officers|me|settings)(?:-(member|officer))?$/.exec(location.hash);
+  var deep = /^#(race|prog|shame|statistics|officers|me|settings)(?:-(member|officer))?$/.exec(location.hash);
   if (deep) {
     st.tab = deep[1];
     setViewer(deep[2] === "officer" || deep[1] === "officers" ? "officer" : "member");
@@ -794,7 +970,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   var KIND = { int: "a number", flag: "yes or no", text: "text", list: "a checklist", pips: "steps" };
   function kindOf(d) {
     if (d.kind === "list") return "a checklist of " + d.n;
-    if (d.kind === "pips") return d.n + (d.n === 1 ? " step" : " steps");
+    if (d.kind === "pips") return QUARTERS[d.id] ? d.n + " categories" : d.n + (d.n === 1 ? " step" : " steps");
     if (d.fmt === "hours") return "hours and minutes";
     if (d.fmt === "pct") return "a percentage";
     if (d.fmt === "gold") return "gold, to the copper";
@@ -806,14 +982,14 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     return kindOf(d).charAt(0).toUpperCase() + kindOf(d).slice(1) + ", on the " + CATNAME[d.cat] + " page. " + hint + (d.vis === "self" ? "Only you and the officers see it" : "Everyone sees it") + " by default; the officers can change that.";
   }
   var catsEl = document.getElementById("cu-cats"), groupsEl = document.getElementById("cu-groups"), noneEl = document.getElementById("cu-none"), qEl = document.getElementById("cu-q");
-  var catBtns = [["all", "All", S.length]].concat(CATS.map(function (c) { return [c[0], c[1], (byCat[c[0]] || []).length]; })).map(function (c, i) {
+  var catBtns = [["all", "All", S.length]].concat(CATS_WITH.map(function (c) { return [c[0], c[1], (byCat[c[0]] || []).length]; })).map(function (c, i) {
     var b = document.createElement("button");
     b.type = "button"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", i === 0 ? "true" : "false"); b.tabIndex = i === 0 ? 0 : -1; b.dataset.cat = c[0];
     b.innerHTML = esc(c[1]) + "<span>" + c[2] + "</span>";
     catsEl.appendChild(b);
     return b;
   });
-  groupsEl.innerHTML = CATS.map(function (c) {
+  groupsEl.innerHTML = CATS_WITH.map(function (c) {
     return "<section class=\"cu-group\" data-cat=\"" + c[0] + "\"><h3 id=\"cu-g-" + c[0] + "\">" + esc(c[1]) + "<span>" + (byCat[c[0]] || []).length + " stats</span></h3><ul class=\"cu-list\" aria-labelledby=\"cu-g-" + c[0] + "\">" +
       (byCat[c[0]] || []).map(function (d) {
         return "<li data-id=\"" + d.id + "\" data-q=\"" + esc((d.label + " " + (d.hint || "")).toLowerCase()) + "\"><button type=\"button\" class=\"cu-stat\" aria-expanded=\"false\" aria-controls=\"cu-d-" + d.id + "\">" + esc(d.label) + (d.vis === "self" ? "<span class=\"cu-vis\">only you</span>" : "") + "</button><p class=\"cu-desc\" id=\"cu-d-" + d.id + "\" hidden>" + esc(desc(d)) + "</p></li>";

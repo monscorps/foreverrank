@@ -3,9 +3,11 @@
 -- widget method outside a whitelist of real API methods. It lays the window out like the game does and reports
 -- clipped text, overlapping text, text the game's font cannot draw, and buttons too near an edge.
 -- The mock defines what Forever's generated API docs list (C_Club for the guild, C_SpecializationInfo, C_MajorFactions,
--- C_SkillInfo, GetMirrorTimerProgress...), what QuestBank reads on this client (GetInventoryItemLink, the taxi nodes)
--- and, named one by one in UNDOCUMENTED below with the evidence for each, the globals no doc lists that Cute reads all
--- the same. A stat reading anything else reads nil here too, and the registry scenario fails on it.
+-- C_Traits, C_SkillInfo, GetMirrorTimerProgress...), what QuestBank reads on this client (GetInventoryItemLink, the taxi
+-- nodes) and, named one by one in UNDOCUMENTED below with the evidence for each, the globals no doc lists that Cute
+-- reads all the same: the Legacy window's achievement calls on every client, the statistics API (which only the
+-- mainline panel calls, never loaded on camelot) on o.withStats clients alone, so the gate runs Cute with it and
+-- without it. A stat reading anything else reads nil here too, and the registry scenario fails on it.
 --   luajit tools/cute/harness.lua                   run every scenario
 --   luajit tools/cute/harness.lua --layout out.json  also write the window, page by page, for tools/questbank/render_layout.py
 math.randomseed = nil -- the client has none
@@ -273,7 +275,15 @@ BASE.issecretvalue = function(v) return type(v) == "table" and getmetatable(v) =
 BASE.Enum = {
   ClubMemberPresence = { Unknown = 0, Online = 1, OnlineMobile = 2, Offline = 3, Away = 4, Busy = 5 },
   SendAddonMessageResult = { Success = 0, InvalidMessage = 2, AddonMessageThrottle = 3, ChannelThrottle = 8, GeneralError = 9, AddOnMessageLockdown = 11 },
+  -- the Camelot achievement stub reads this rule by name; no doc gives its value, so the mock's is made up and Cute looks it up
+  GameRule = { AchievementsPanelDisabled = 77 },
 }
+-- Blizzard_APIDocumentationGenerated/LegacyConstantsDocumentation.lua, as the client exposes it
+BASE.Constants = { LegacyConsts = { LEGACY_REWARD_TRACK_FACTION_ID = 2802, LEGACY_POINTS_TRAIT_CURRENCY_ID = 4225, LEGACY_TREE_PROFESSIONS_ID = 1187,
+  LEGACY_TREE_ADVENTURE_ID = 1188, LEGACY_TREE_PROGRESSION_ID = 1189, LEGACY_TREE_ADVENTURE_TALENTED_NODE_ID = 110298,
+  LEGACY_DEFAULT_CATEGORY_WARRIOR = 15585, LEGACY_DEFAULT_CATEGORY_PALADIN = 15580, LEGACY_DEFAULT_CATEGORY_HUNTER = 15578,
+  LEGACY_DEFAULT_CATEGORY_ROGUE = 15582, LEGACY_DEFAULT_CATEGORY_PRIEST = 15581, LEGACY_DEFAULT_CATEGORY_SHAMAN = 15583,
+  LEGACY_DEFAULT_CATEGORY_MAGE = 15579, LEGACY_DEFAULT_CATEGORY_WARLOCK = 15584, LEGACY_DEFAULT_CATEGORY_DRUID = 15577 } }
 
 local EPOCH = 1792300000
 
@@ -285,7 +295,32 @@ local UNDOCUMENTED = {
   GetInventoryItemDurability = "Camelot's EquipmentFlyout.lua:544 reaches it through EquipmentManager_GetItemInfoByLocation",
   GetInventoryItemCount = "the same flyout, the line above it",
   GetNumUnspentTalents = "Mainline/TalentFrameBase.lua:140, a file the camelot game type loads",
+  GetCategoryList = "Blizzard_LegacySystem/Blizzard_LegacyChallenges.lua:139 (the Legacy Challenges window, AllowLoadGameType camelot)",
+  GetCategoryInfo = "Blizzard_LegacyChallenges.lua:149 and 168: name, parent",
+  GetCategoryNumAchievements = "Blizzard_LegacySystemUtil.lua:20: total, completed, incomplete",
+  GetAchievementInfo = "Blizzard_LegacyChallenges.lua:128 by category and index (wasEarnedByMe the 13th return), Blizzard_LegacyAchievementOverrides.lua:44 by id",
+  GetTotalAchievementPoints = "Blizzard_Communities/GuildRewards.lua:256, an addon whose toc limits no game type",
+  -- the same binary's achievement API that no camelot-loaded file calls: mocked for o.withStats clients only
+  GetLatestCompletedAchievements = { "Blizzard_AchievementUI/Mainline/Blizzard_AchievementUI.lua:2487, a file camelot does not load", optional = true },
+  GetStatisticsCategoryList = { "Mainline/Blizzard_AchievementUI.lua:156, the same", optional = true },
+  GetStatistic = { "Mainline/Blizzard_AchievementUI.lua:2440 (category, index -> quantity, skip, id) and 2385 (id -> quantity), the same", optional = true },
 }
+
+-- Legacy Challenges as the Legacy window lists them: categories by id (name, parent, how many), achievements by
+-- (category, index) with ids like Forever's. Quests has a third challenge completed by another character (completed,
+-- not wasEarnedByMe), which the Legacy UI shows as incomplete; the player's own class category has o.classDone done
+local LEGACY_CATS = { { 15001, "Quests", -1, 6 }, { 15002, "Exploration", -1, 4 }, { 15003, "Dungeons", -1, 3 }, { 15004, "Classic Dungeons", 15003, 2 },
+  { 15570, "Classes", -1, 0 }, { 15577, "Druid", 15570, 3 }, { 15578, "Hunter", 15570, 3 }, { 15579, "Mage", 15570, 3 }, { 15580, "Paladin", 15570, 3 },
+  { 15581, "Priest", 15570, 3 }, { 15582, "Rogue", 15570, 3 }, { 15583, "Shaman", 15570, 3 }, { 15584, "Warlock", 15570, 3 }, { 15585, "Warrior", 15570, 3 } }
+local LEGACY_DONE = { [15001] = 2, [15002] = 0, [15003] = 1, [15004] = 2 }
+local CLASS_CAT = { WARRIOR = 15585, PALADIN = 15580, HUNTER = 15578, ROGUE = 15582, PRIEST = 15581, SHAMAN = 15583, MAGE = 15579, WARLOCK = 15584, DRUID = 15577 }
+-- the statistics panel's data: three categories, one with a child; twelve statistics, one the game marks skip, one
+-- never recorded ("--"); o.manyStats adds that many more across the categories
+local STAT_CATS = { { 130, "Kills", -1 }, { 131, "Creatures", 130 }, { 132, "Deaths", -1 }, { 133, "Quests", -1 } }
+local STATS = { { 130, 2001, "Total kills", 1234 }, { 130, 2002, "Total kills that grant experience", 987 }, { 130, 2003, "Hidden", 0, true },
+  { 131, 2004, "Creatures killed", 1100 }, { 131, 2005, "Beasts killed", 300 }, { 131, 2006, "Humanoids killed", 420 },
+  { 132, 2007, "Total deaths", 17 }, { 132, 2008, "Deaths from drowning", "--" }, { 132, 2009, "Deaths from falling", 3 },
+  { 133, 2010, "Quests completed", 240 }, { 133, 2011, "Daily quests completed", 0 }, { 133, 2012, "Quests abandoned", 12 } }
 
 local function newClient(o)
   local env = setmetatable({}, { __index = BASE })
@@ -347,14 +382,84 @@ local function newClient(o)
   env.GetInventoryItemLink = api(function(_, slot) return (o.items or {})[slot] end)
   -- baseResistance, realResistance, effectiveResistance: the sheet shows the third
   env.UnitResistance = api(function(_, i) return 0, 0, (o.resist or {})[i] or 0 end)
-  -- the undocumented globals, each with its evidence in UNDOCUMENTED or the mock is refused
+  -- the Legacy Challenges: id, name, points, completed, month, day, year, description, flags, icon, rewardText, isGuild,
+  -- wasEarnedByMe, earnedBy, isStatistic
+  local function legacyCat(id) for _, cat in ipairs(LEGACY_CATS) do if cat[1] == id then return cat end end end
+  local function statCat(id) for _, cat in ipairs(STAT_CATS) do if cat[1] == id then return cat end end end
+  local function doneIn(cat)
+    if CLASS_CAT[o.class] == cat[1] then return o.classDone or 1 end
+    return (o.lcDone or {})[cat[1]] or LEGACY_DONE[cat[1]] or 0
+  end
+  local function achievement(cat, i)
+    local id = cat[1] * 10 + i
+    local other = cat[1] == 15001 and i == 3
+    local completed = i <= doneIn(cat) or other
+    return id, cat[2] .. " " .. i, 10, completed, 1, 1, 2026, "Do the thing", 0, 0, "", false, completed and not other, other and "Alt-Forever" or "", false
+  end
+  -- the statistics panel's data, this client's own copy
+  c.stats = {}
+  for i, s in ipairs(STATS) do c.stats[i] = s end
+  for i = 1, o.manyStats or 0 do c.stats[#c.stats + 1] = { STAT_CATS[(i % 4) + 1][1], 3000 + i, "Statistic " .. i, i * 7 } end
+  local function statistic(id)
+    for _, s in ipairs(c.stats) do if s[2] == id then return id, s[3], 0, false, 0, 0, 0, "", 0, 0, "", false, false, "", true end end
+  end
+  -- the quantity as the panel shows it: thousands separated, "--" never recorded
+  local function quantityText(v)
+    if v == "--" then return "--" end
+    local s, k = tostring(v)
+    repeat s, k = s:gsub("^(%d+)(%d%d%d)", "%1,%2") until k == 0
+    return s
+  end
+  local function statValue(s) local v = (o.stat or {})[s[2]]; if v == nil then v = s[4] end return v end
+  -- the undocumented globals, each with its evidence in UNDOCUMENTED or the mock is refused; the optional ones
+  -- (the statistics API, the latest achievements) only on a client made withStats
   local undocumented = {
     GetInventoryItemDurability = api(function(slot) if (o.items or {})[slot] then return o.dur or 80, 100 end end),
     GetInventoryItemCount = api(function() return o.ammo or 0 end),
     GetNumUnspentTalents = api(function() return o.talents or 0 end),
+    GetCategoryList = api(function() local out = {}; for i, cat in ipairs(LEGACY_CATS) do out[i] = cat[1] end return out end),
+    GetCategoryInfo = api(function(id) local cat = legacyCat(id) or statCat(id); if cat then return cat[2], cat[3], 0 end end),
+    GetCategoryNumAchievements = api(function(id)
+      local cat = legacyCat(id)
+      if cat then
+        local n, done = cat[4], 0
+        for i = 1, n do local _, _, _, completed = achievement(cat, i); if completed then done = done + 1 end end
+        return n, done, n - done
+      end
+      if statCat(id) then local n = 0; for _, s in ipairs(c.stats) do if s[1] == id then n = n + 1 end end return n, 0, n end
+      return 0, 0, 0
+    end),
+    GetAchievementInfo = api(function(a, b)
+      if b then local cat = legacyCat(a); if cat and b <= cat[4] then return achievement(cat, b) end return nil end
+      for _, cat in ipairs(LEGACY_CATS) do local i = a - cat[1] * 10; if i >= 1 and i <= cat[4] then return achievement(cat, i) end end
+      return statistic(a)
+    end),
+    GetTotalAchievementPoints = api(function() return o.achPoints or 120 end),
   }
+  if o.withStats then
+    -- c.statsEmpty: the list is still empty, as it may be while the data loads at login
+    undocumented.GetStatisticsCategoryList = api(function() if c.statsEmpty then return {} end local out = {}; for i, cat in ipairs(STAT_CATS) do out[i] = cat[1] end return out end)
+    undocumented.GetStatistic = api(function(a, b)
+      c.statReads = (c.statReads or 0) + 1
+      if b then
+        local n = 0
+        for _, s in ipairs(c.stats) do if s[1] == a then n = n + 1; if n == b then return quantityText(statValue(s)), s[5] or false, s[2] end end end
+        return nil
+      end
+      for _, s in ipairs(c.stats) do if s[2] == a then return quantityText(statValue(s)) end end
+      return nil
+    end)
+    undocumented.GetLatestCompletedAchievements = api(function()
+      local out = {}
+      for _, cat in ipairs(LEGACY_CATS) do
+        for i = 1, cat[4] do local id, _, _, completed, _, _, _, _, _, _, _, _, mine = achievement(cat, i); if completed and mine then table.insert(out, 1, id) end end
+      end
+      return unpack(out, 1, math.min(#out, 5))
+    end)
+  end
   for name, fn in pairs(undocumented) do assert(UNDOCUMENTED[name], name .. " is mocked without its evidence in UNDOCUMENTED"); env[name] = fn end
-  for name in pairs(UNDOCUMENTED) do assert(undocumented[name], name .. " is listed in UNDOCUMENTED but not mocked") end
+  for name, ev in pairs(UNDOCUMENTED) do assert(undocumented[name] or (type(ev) == "table" and ev.optional), name .. " is listed in UNDOCUMENTED but not mocked") end
+  env.C_GameRules = { IsGameRuleActive = api(function(rule) return rule == 77 and o.achDisabled == true end) }
   env.UnitPosition = api(function() local p = o.pos or { 100, 100 }; return p[2], p[1], 0, 0 end)
   env.UnitIsGhost = api(function() return o.ghost or false end)
   env.UnitOnTaxi = api(function() return o.taxi or false end)
@@ -409,14 +514,23 @@ local function newClient(o)
   env.C_UnitAuras = { GetAuraDataByIndex = api(function(_, i) local a = (o.auras or {})[i]; if a then return { name = a[1], spellId = a[2] } end end) }
   env.C_Reputation = { GetFactionDataByID = api(function(id) return { reaction = (o.rep or {})[id] or 4 } end) }
   env.C_MountJournal = { GetMountIDs = api(function() return { 1 } end), GetMountInfoByID = api(function() return "Horse", 1, 1, true, true, 1, false, false, false, false, o.mount or false end) }
-  env.C_Traits = { GetConfigIDByTreeID = api(function(tree) return tree == 1187 and 7 or nil end),
-    GetNodeInfo = api(function(_, node) return { activeRank = (o.legacy or {})[node] or 0 } end) }
+  -- the three Legacy trees, a config each; their currency is the Legacy points (traitCurrencyID, quantity unspent,
+  -- maxQuantity, spent, spentInTree), five of them per challenge done
+  local TREE_CFG = { [1187] = 7, [1188] = 8, [1189] = 9 }
+  local TREE_SPENT = { [1187] = 3, [1188] = 2, [1189] = 1 }
+  env.C_Traits = { GetConfigIDByTreeID = api(function(tree) return TREE_CFG[tree] end),
+    GetNodeInfo = api(function(_, node) return { activeRank = (o.legacy or {})[node] or 0 } end),
+    GetTreeCurrencyInfo = api(function(cfg, tree)
+      if TREE_CFG[tree] ~= cfg then return {} end
+      return { { traitCurrencyID = 4225, quantity = o.lcFree or 2, maxQuantity = 40, spent = 6, spentInTree = (o.lcSpent or TREE_SPENT)[tree] or 0 } }
+    end),
+    GetTraitCurrencyForAchievement = api(function(currency) return currency == 4225 and 5 or 0 end) }
   env.C_SpecializationInfo = { GetSpecialization = api(function() return 1 end), GetSpecializationInfo = api(function() return 1, o.spec or "Arms" end) }
-  -- Forever's PvP rank: the renown track of Major Faction 2800
+  -- Forever's PvP rank: the renown track of Major Faction 2800; the Legacy reward track is Major Faction 2802
   env.C_MajorFactions = { GetMajorFactionProgressionInfo = api(function(id)
     if id ~= 2800 then return nil end
     return { renownLevel = o.pvp or 0, renownReputationEarned = o.pvpPts or 0, renownLevelThreshold = 1000, currentWeekProgressiveMaxLevel = 14, maxLevel = 14, weekNumber = 1 }
-  end) }
+  end), GetCurrentRenownLevel = api(function(id) return id == 2802 and (o.renown or 4) or 0 end) }
   -- the skills window's lines: { skillID, name, rank, maxRank }, headers between
   o.skills = o.skills or { { 186, "Mining", 150, 225 }, { 202, "Engineering", 140, 225 }, { 356, "Fishing", 40, 75 }, { 185, "Cooking", 60, 150 }, { 129, "First Aid", 1, 75 } }
   env.C_SkillInfo = {
@@ -736,8 +850,9 @@ local function check(root, label)
 end
 
 makeGuild()
-local yezin = newClient(charOf(NAMES[2]))
-local kaka = newClient(charOf(NAMES[4], { level = 37, xp = 120, money = 54321, zone = "Desolace" }))
+-- the two clients most scenarios share have the statistics API; scenario 17 makes clients without it
+local yezin = newClient(charOf(NAMES[2], { withStats = true }))
+local kaka = newClient(charOf(NAMES[4], { level = 37, xp = 120, money = 54321, zone = "Desolace", withStats = true }))
 login(yezin)
 login(kaka)
 
@@ -775,8 +890,9 @@ do
     undoc[#undoc + 1] = name
   end
   table.sort(undoc)
-  print(string.format("registry: %d stats (leveling %d, prog %d, funny %d, officer %d), every read stat has a value on the documented client; undocumented globals mocked on evidence: %s",
-    #S.list, counts.leveling, counts.prog, counts.funny, counts.officer, table.concat(undoc, ", ")))
+  assert(counts.game == 11 and #S.game.cats == 4, "the statistics category filled from the client's list: " .. counts.game)
+  print(string.format("registry: %d stats (leveling %d, prog %d, funny %d, officer %d, statistics %d from the client), every read stat has a value on the documented client; undocumented globals mocked on evidence: %s",
+    #S.list, counts.leveling, counts.prog, counts.funny, counts.officer, counts.game, table.concat(undoc, ", ")))
 end
 
 -- 2: every read survives a client whose values are all secret, and one whose calls all throw (and the tooltip learns why)
@@ -905,14 +1021,23 @@ do
   assert(d:sub(1, 2) == "1D" and d:find("level=12", 1, true), "the delta carries the new level in base 36: " .. d)
   assert(not d:find("played=", 1, true), "the ticking stats are not in it: " .. d)
   assert(yezin.env.CuteDB.roster["Kaka-Forever"].stats.level == 38, "Yezin saw the level")
-  -- five quiet minutes: the flush alone, with the ticking stats
+  -- five quiet minutes: the flushes with the ticking stats, and the statistics pass a minute and a half after the
+  -- hello (its own, and the one answering Yezin's hello)
   before = #kaka.sent
   tickAll(300)
-  local flushed = #kaka.sent - before
+  local flushed, statPasses = 0, 0
+  for i = before + 1, #kaka.sent do
+    if kaka.sent[i].msg:find("g2001=", 1, true) then statPasses = statPasses + 1 else flushed = flushed + 1 end
+  end
   assert(flushed >= 1 and flushed <= 3, "a quiet client sends only its flushes in five minutes: " .. flushed)
-  assert(kaka.sent[#kaka.sent].msg:find("played=", 1, true) or kaka.sent[#kaka.sent - 1].msg:find("played=", 1, true), "the flush carries time played")
+  -- (the answer to Yezin's hello goes first; the own pass then finds nothing left unsent)
+  assert(statPasses >= 1 and statPasses <= 2, "the statistics went in answer to the hello, and of their own accord only what was left: " .. statPasses)
+  local played = false
+  for i = math.max(1, #kaka.sent - 3), #kaka.sent do if kaka.sent[i].msg:find("played=", 1, true) then played = true end end
+  assert(played, "the flush carries time played")
   assert(yezin.env.CuteDB.roster["Kaka-Forever"].stats.played and yezin.env.CuteDB.roster["Kaka-Forever"].stats.played > 0, "Yezin has Kaka's time played")
-  print(string.format("deltas: a level-up reaches the guild as one small message; %d messages in five quiet minutes", flushed))
+  assert(yezin.env.CuteDB.roster["Kaka-Forever"].stats.g2001 == 1234, "and Kaka's kills, from the statistics pass")
+  print(string.format("deltas: a level-up reaches the guild as one small message; %d flushes and %d statistics passes in five quiet minutes", flushed, statPasses))
 end
 
 -- 6: the policy: a member's is ignored, an officer's applies, cells follow it; a policy before the roster waits
@@ -1061,9 +1186,9 @@ do
     end
     return f
   end
-  local f = pages(yezin, "officer", { "race", "prog", "shame", "officers", "me", "settings" })
+  local f = pages(yezin, "officer", { "race", "prog", "shame", "game", "officers", "me", "settings" })
   assert(yezin.C.UI.tabs.officers:IsShown(), "the officer sees the Officers tab")
-  pages(kaka, "member", { "race", "prog", "shame", "me", "settings" })
+  pages(kaka, "member", { "race", "prog", "shame", "game", "me", "settings" })
   assert(not kaka.C.UI.tabs.officers:IsShown(), "the member has no Officers tab")
   kaka.C.UI:Open("officers")
   assert(kaka.C.UI.page == "race", "a member asking for the officers' page lands on Race")
@@ -1131,7 +1256,7 @@ do
   assert(yezin.C.UI.scroll.bar:GetValue() == 0, "a page change starts at the top")
   -- resized small: still no problems, on every page
   yezin.C.UI.frame:SetSize(760, 420)
-  for _, page in ipairs({ "race", "prog", "shame", "officers", "me", "settings" }) do
+  for _, page in ipairs({ "race", "prog", "shame", "game", "officers", "me", "settings" }) do
     yezin.C.UI:Open(page)
     check(yezin.C.UI.frame, "officer " .. page .. ", small window")
   end
@@ -1227,7 +1352,7 @@ do
   assert(n >= 15, "Yezin's roster filled from the storm: " .. n)
   for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
     yezin.C.UI.frame:SetSize(size[1], size[2])
-    for _, page in ipairs({ "race", "prog", "shame", "officers" }) do
+    for _, page in ipairs({ "race", "prog", "shame", "game", "officers" }) do
       yezin.C.UI:Open(page)
       check(yezin.C.UI.frame, string.format("officer %s, twenty members, %dx%d", page, size[1], size[2]))
     end
@@ -1275,6 +1400,8 @@ do
   assert(lone.C.UI.footer:GetText() == "Not in a guild", "the footer says so")
   lone.C.UI:Open("me")
   check(lone.C.UI.frame, "guildless me")
+  lone.C.UI:Open("game")
+  check(lone.C.UI.frame, "guildless statistics (none on this client)")
   leave(lone)
   print("guildless: nothing sent, the window shows your own record")
 end
@@ -1395,6 +1522,228 @@ do
   local f = kaka.C.Sample.frame
   assert(f.__units and f.__units.UNIT_AURA == "player" and f.__units.UNIT_SPELLCAST_SUCCEEDED == "player", "UNIT_AURA and UNIT_SPELLCAST_SUCCEEDED are registered for the player")
   print("never: the combat log, the game's tracking, popups and chat boxes stay untouched; unit events are yours only")
+end
+
+-- 16: Legacy Challenges: the counts, points, trees, renown and categories from the Legacy window's own calls; the
+-- latest challenge from the client at login and from ACHIEVEMENT_EARNED; the game rule; a client without the calls
+do
+  local S = yezin.C.Stats
+  local function V(id) return yezin.C.Sample:Value(id) end
+  -- Yezin, a warrior: Quests 2 of 6 (the third, completed by another character, does not count), Dungeons 1 of 3,
+  -- Classic Dungeons 2 of 2, Warrior 1 of 3; 42 listed
+  assert(V("lc_done") == 6 and V("lc_total") == 42, "challenges done and listed: " .. tostring(V("lc_done")) .. " of " .. tostring(V("lc_total")))
+  assert(V("lc_pts") == 5 * V("lc_done"), "Legacy points are the trait currency of the challenges done, on every client: " .. tostring(V("lc_pts")))
+  assert(V("lc_renown") == 4 and V("lc_free") == 2 and V("lc_prof") == 3 and V("lc_adv") == 2 and V("lc_prog") == 1, "renown, unspent and the three trees")
+  -- the categories as pips: Quests 2/6 under half (4), Exploration none (0), Dungeons with its child 3/5 (5), Warrior 1/3 (4); Classes, empty, left out
+  assert(V("lc_cats") == "4054", "a pip per category, the class's last: " .. tostring(V("lc_cats")))
+  local cats = S.LegacyCategories(S.Legacy(), "WARRIOR")
+  assert(#cats == 4 and cats[1].name == "Quests" and cats[3].name == "Dungeons" and cats[3].total == 5 and cats[4].name == "Warrior", "the categories, children folded in")
+  assert(V("lc_last") == "Warrior 1", "the latest at login, from GetLatestCompletedAchievements: " .. tostring(V("lc_last")))
+  -- a challenge earned: named at once, the walk cleared and read again a second later
+  yezin.o.lcDone = { [15002] = 1 }
+  fire(yezin, "ACHIEVEMENT_EARNED", 150021, false)
+  assert(V("lc_last") == "Exploration 1", "ACHIEVEMENT_EARNED names the latest: " .. tostring(V("lc_last")))
+  tick(yezin, 2)
+  assert(V("lc_done") == 7 and V("lc_cats") == "4454", "the walk is cleared and re-read: " .. tostring(V("lc_done")) .. " " .. tostring(V("lc_cats")))
+  -- the pips' tooltip names the categories: your own say the counts, a member's the quarter, with the row's class category
+  yezin.env.CuteDB.settings.columns.prog = { lc_cats = true, lc_done = true, lc_last = true }
+  yezin.C.UI:Open("prog")
+  local n0 = #lines
+  hover(cellOf(rowOf(yezin, "Yezin"), "lc_cats"))
+  local tip = table.concat(lines, "\n", n0 + 1)
+  assert(tip:find("Quests | 2 of 6", 1, true) and tip:find("Warrior | 1 of 3", 1, true), "your own pips say the counts: " .. tip)
+  n0 = #lines
+  hover(cellOf(rowOf(yezin, "Kaka"), "lc_cats"))
+  tip = table.concat(lines, "\n", n0 + 1)
+  assert(tip:find("Priest | a quarter or more", 1, true) and tip:find("Exploration | none", 1, true), "a member's pips read by quarters, the row's class category last: " .. tip)
+  assert(cellOf(rowOf(yezin, "Kaka"), "lc_last").label:GetText() == "Priest 1", "the member's latest challenge came over the wire as text")
+  check(yezin.C.UI.frame, "officer prog, legacy columns")
+  yezin.env.CuteDB.settings.columns.prog = nil
+  -- the same on a client without GetTotalAchievementPoints (the addon never reads it: one way to count on every client)
+  local sum = newClient(charOf(NAMES[17], { without = { GetTotalAchievementPoints = true } }))
+  login(sum)
+  assert(sum.C.Sample:Value("lc_pts") == 5 * sum.C.Sample:Value("lc_done") and sum.C.Sample:Value("lc_done") == 6, "the fallback sums the trait currency per challenge done: " .. tostring(sum.C.Sample:Value("lc_pts")))
+  assert(sum.C.Sample:Value("lc_last") == "", "no latest without the client's list, until one is earned")
+  leave(sum)
+  -- the game rule that hides the Legacy window: the challenge stats read as its reason, the trees and renown still read
+  local off = newClient(charOf(NAMES[18], { achDisabled = true }))
+  login(off)
+  assert(off.C.Sample:Value("lc_done") == nil and off.C.Sample:Error("lc_done") == "Legacy Challenges are disabled on this realm", "disabled: " .. tostring(off.C.Sample:Error("lc_done")))
+  assert(off.C.Sample:Value("lc_renown") == 4 and off.C.Sample:Value("lc_prof") == 3, "renown and the trees still read")
+  leave(off)
+  -- a client without the Legacy window's globals: the reason in the tooltip, nothing thrown
+  local none = newClient(charOf(NAMES[19], { without = { GetCategoryList = true } }))
+  login(none)
+  assert(none.C.Sample:Value("lc_done") == nil and none.C.Sample:Error("lc_done") == "GetCategoryList is missing on this client", "missing: " .. tostring(none.C.Sample:Error("lc_done")))
+  leave(none)
+  print("legacy: challenges done and listed, points both ways, renown, unspent and the three trees, a pip per category with names in the tooltip, the latest at login and on ACHIEVEMENT_EARNED, the game rule and a missing function read as their reason")
+end
+
+-- 17: the game's statistics: a dynamic category where the client reports them, none where it does not; their own
+-- full-record pass; a receiver without the API keeps them; the policy per category; the page for both views and
+-- the empty state; a storm of CRITERIA_UPDATE re-reads once in thirty seconds; a login with 300 statistics stays
+-- under twenty messages in its first minute; an empty list at login is asked again
+do
+  local S = yezin.C.Stats
+  assert(#S.byCat.game == 11 and S.byId.g2001 and not S.byId.g2003, "eleven statistics defined, the one marked skip left out: " .. #S.byCat.game)
+  assert(S.byId.g2001.label == "Total kills" and S.byId.g2004.hint == "Kills > Creatures" and S.byId.g2004.game == 131 and S.byId.g2001.slow == true and S.byId.g2001.kind == "int",
+    "the label from GetAchievementInfo, the category path as the hint, the category id, slow ints")
+  assert(yezin.C.Sample:Value("g2001") == 1234 and yezin.C.Sample:Value("g2008") == 0, "the quantity string parsed, -- read as 0")
+  assert(S.Quantity("1 234") == 1234 and S.Quantity("1.234.567") == 1234567 and S.Quantity("--") == 0 and S.Quantity("") == nil and S.Quantity(nil) == nil, "the parser")
+  assert(#S.game.cats == 4 and S.game.cats[1].name == "Kills" and S.game.cats[2].name == "Creatures" and S.game.cats[2].parent == 130 and S.game.cats[2].path == "Kills > Creatures"
+    and S.game.cats[3].name == "Deaths", "the categories as the game groups them, a child after its parent")
+  assert(yezin.C.Policy:Vis("g2001") == "all", "statistics default to everyone")
+  yezin.env.SlashCmdList.CUTE("api")
+  assert(yezin.chat[#yezin.chat - 1]:find("statistics: 11 defined in 4 categories", 1, true), "/cute api says how many: " .. yezin.chat[#yezin.chat - 1])
+  -- a client without the API: nothing defined, the reason kept and noted; others' statistics still stored as ints
+  local plain = newClient(charOf(NAMES[20]))
+  login(plain)
+  assert(#plain.C.Stats.byCat.game == 0 and plain.C.Stats.gameNote == "GetStatisticsCategoryList is missing on this client", "nothing defined without the function: " .. tostring(plain.C.Stats.gameNote))
+  local noted = false
+  for _, e in ipairs(plain.env.CuteDB.errors) do if e.msg == "GetStatisticsCategoryList is missing on this client" then noted = true end end
+  assert(noted and #plain.chat == 0, "noted for /cute errors, no chat line")
+  tickAll(45)
+  local e = plain.env.CuteDB.roster["Yezin-Forever"]
+  assert(e and e.stats.level and e.stats.g2001 == nil, "the first full record has no statistics")
+  tickAll(60)
+  assert(e.stats.g2001 == 1234 and e.stats.g2008 == 0, "the statistics pass answered the hello; a receiver without the API keeps them as ints: " .. tostring(e.stats.g2001))
+  assert(kaka.env.CuteDB.roster["Yezin-Forever"].stats.g2001 == 1234, "Kaka has Yezin's kills too")
+  -- a changed statistic: the pass re-reads it; it travels on the flush, not as it ticks
+  yezin.o.stat = { [2001] = 1300 }
+  fire(yezin, "CRITERIA_UPDATE")
+  assert(yezin.C.Sample:Value("g2001") == 1300, "the pass re-read it")
+  tickAll(5)
+  assert(kaka.env.CuteDB.roster["Yezin-Forever"].stats.g2001 == 1234, "not sent as it ticks")
+  tickAll(125)
+  assert(kaka.env.CuteDB.roster["Yezin-Forever"].stats.g2001 == 1300, "the flush carried it")
+  -- a storm of criteria: one pass, the next thirty seconds on
+  local passes = yezin.C.Sample.gamePasses
+  local reads = yezin.statReads or 0
+  for _ = 1, 50 do fire(yezin, "CRITERIA_UPDATE"); tick(yezin, 0.2) end
+  assert(yezin.C.Sample.gamePasses == passes + 1, "fifty criteria updates in ten seconds: one pass: " .. (yezin.C.Sample.gamePasses - passes))
+  assert((yezin.statReads or 0) - reads <= 11, "and no more GetStatistic calls than the statistics: " .. ((yezin.statReads or 0) - reads))
+  tick(yezin, 31)
+  assert(yezin.C.Sample.gamePasses == passes + 2, "the pass they asked for came thirty seconds on: " .. (yezin.C.Sample.gamePasses - passes))
+  -- the policy, per category: Kills only-you covers its statistics and its child's; a child set on its own
+  yezin.C.Policy:Set("gc130", "self")
+  yezin.C.Comm:SendPolicy()
+  tickAll(3)
+  assert(kaka.C.Policy:Vis("g2001") == "self" and kaka.C.Policy:Vis("g2004") == "self" and kaka.C.Policy:Vis("g2007") == "all", "a category's choice covers its statistics and its child's")
+  yezin.C.Policy:Set("gc131", "all")
+  yezin.C.Comm:SendPolicy()
+  tickAll(3)
+  assert(kaka.C.Policy:Vis("g2004") == "all" and kaka.C.Policy:Vis("g2001") == "self", "a child set on its own")
+  assert(plain.C.Policy:Vis("gc130") == "self", "the receiver without the API keeps the category's setting")
+  -- Settings shows one pair per category, none per statistic
+  yezin.C.UI:Open("settings")
+  local perCat, perStat = 0, 0
+  for _, fr in ipairs(yezin.frames) do
+    if fr.__kind == "CheckButton" and fr:IsVisible() and fr.vis == "self" and type(fr.statId) == "string" then
+      if fr.statId:match("^gc%d+$") then perCat = perCat + 1 elseif fr.statId:match("^g%d+$") then perStat = perStat + 1 end
+    end
+  end
+  assert(perCat == 4 and perStat == 0, "four category pairs, no per-statistic pair: " .. perCat .. " " .. perStat)
+  local onlyKills = checkBox(yezin, function(cb) return cb.statId == "gc130" and cb.vis == "self" end)
+  assert(onlyKills and onlyKills:GetChecked(), "the Kills pair shows only-you")
+  check(yezin.C.UI.frame, "officer settings, statistics categories")
+  kaka.C.UI:Open("settings")
+  check(kaka.C.UI.frame, "member settings, statistics categories")
+  -- the page: categories left, the open one's statistics right with your value and the leader; a click ranks everyone
+  local function lineOf(c, test) for _, l in ipairs(c.C.UI.lines.items) do if l:IsShown() and test(l) then return l end end end
+  yezin.C.UI:Open("game")
+  assert(yezin.C.UI.page == "game" and yezin.C.UI.gameCat == 130, "opens on the first category with statistics")
+  local kills = lineOf(yezin, function(l) return l.def and l.def.id == "g2001" and not l.member end)
+  assert(kills and kills.val:GetText() == "1300" and kills.val.__justify == "RIGHT", "your value, right-aligned: " .. tostring(kills and kills.val:GetText()))
+  assert(kills.who:GetText():find("Yezin", 1, true) and kills.who:GetText():find("1300", 1, true), "the leader, named and valued: " .. kills.who:GetText())
+  local catLines = 0
+  for _, l in ipairs(yezin.C.UI.lines.items) do if l:IsShown() and l.cat then catLines = catLines + 1 end end
+  assert(catLines == 4, "the four categories on the left: " .. catLines)
+  check(yezin.C.UI.frame, "officer statistics")
+  press(kills)
+  local ranked = {}
+  for _, l in ipairs(yezin.C.UI.lines.items) do if l:IsShown() and l.member and l.def.id == "g2001" then ranked[#ranked + 1] = l end end
+  assert(#ranked >= 2 and ranked[1].member.row.short == "Yezin" and ranked[1].name:GetText():find("^1%.") and ranked[2].name:GetText():find("^2%."), "a click ranks every member, the leader first: " .. #ranked)
+  check(yezin.C.UI.frame, "officer statistics, a statistic opened")
+  for _, l in ipairs(yezin.C.UI.lines.items) do if l:IsShown() then hover(l) end end
+  -- the member: Kills is only-you, so the leader is Kaka's own value and Yezin's is a dash in the ranking
+  kaka.C.UI:Open("game")
+  local kkills = lineOf(kaka, function(l) return l.def and l.def.id == "g2001" and not l.member end)
+  assert(kkills and kkills.who:GetText():find("Kaka", 1, true), "the member's leader is the one value it may see: " .. kkills.who:GetText())
+  press(kkills)
+  local dash = lineOf(kaka, function(l) return l.member and l.member.row.short == "Yezin" and l.def.id == "g2001" end)
+  assert(dash and dash.who:GetText() == "-" and dash.member.hidden, "Yezin's kills are a dash for the member")
+  check(kaka.C.UI.frame, "member statistics, a statistic opened")
+  local creatures = lineOf(kaka, function(l) return l.cat and l.cat.id == 131 end)
+  press(creatures)
+  assert(kaka.C.UI.gameCat == 131, "the child category opened")
+  local cre = lineOf(kaka, function(l) return l.def and l.def.id == "g2004" and not l.member end)
+  assert(cre and cre.who:GetText():find("1100", 1, true), "Creatures is everyone's again: " .. cre.who:GetText())
+  check(kaka.C.UI.frame, "member statistics, a child category")
+  for _, c in ipairs({ yezin, kaka }) do
+    c.C.UI.frame:SetSize(760, 420)
+    c.C.UI:Open("game")
+    check(c.C.UI.frame, (c == yezin and "officer" or "member") .. " statistics, small window")
+    c.C.UI.frame:SetSize(1040, 640)
+  end
+  -- the empty state, where the client has no statistics API
+  plain.C.UI:Open("game")
+  local said, counters = false, false
+  for _, l in ipairs(plain.C.UI.labels.items) do
+    if l:IsShown() and l:GetText():find("GetStatisticsCategoryList is missing", 1, true) then said = true end
+    if l:IsShown() and l:GetText():find("counters stay on the other pages", 1, true) then counters = true end
+  end
+  assert(said and counters, "the empty state names the reason and says where the addon's own counters are")
+  check(plain.C.UI.frame, "member statistics, empty state")
+  plain.C.UI:Open("me")
+  check(plain.C.UI.frame, "member me, no statistics")
+  leave(plain)
+  -- a login with 300 statistics: under twenty messages per client in its first minute, every statistic across by
+  -- the second, the whole login under forty-five
+  local big1 = newClient(charOf(NAMES[12], { withStats = true, manyStats = 300 }))
+  local big2 = newClient(charOf(NAMES[16], { withStats = true, manyStats = 300 }))
+  login(big1); login(big2)
+  tickAll(60)
+  assert(#big1.sent < 20 and #big2.sent < 20, "under twenty messages in the first minute with 311 statistics: " .. #big1.sent .. ", " .. #big2.sent)
+  assert(big2.env.CuteDB.roster[big1.name] and big2.env.CuteDB.roster[big1.name].stats.g3001 == nil, "none of them in that minute")
+  tickAll(70)
+  local n = 0
+  for id in pairs(big2.env.CuteDB.roster[big1.name].stats) do if id:match("^g%d+$") then n = n + 1 end end
+  assert(n == 311, "all 311 statistics across within two minutes: " .. n)
+  assert(#big1.sent < 45 and #big1.oversize == 0, "the whole login under forty-five messages: " .. #big1.sent)
+  leave(big1); leave(big2)
+  -- an empty list at login (the data still loading): nothing defined, asked again at thirty seconds
+  local late = newClient(charOf(NAMES[13], { withStats = true }))
+  late.statsEmpty = true
+  login(late)
+  assert(#late.C.Stats.byCat.game == 0 and late.C.Stats.gameNote == "This client reports no statistics", "an empty list at login: nothing defined, the note says so")
+  late.statsEmpty = false
+  tick(late, 31)
+  assert(#late.C.Stats.byCat.game == 11 and late.C.Sample:Value("g2001") == 1234 and late.C.Stats.gameNote == nil, "the retry at thirty seconds defined and read them")
+  leave(late)
+  print("statistics: eleven defined where the client reports them, none where it does not; their own pass after the hello, kept by a receiver without the API; the policy per category; the page both ways, the empty state; one pass per thirty seconds in a storm; 311 statistics under twenty messages in the first minute")
+end
+
+-- 18: a long policy goes out in chunks under one "at" and arrives whole; a reset (empty) replaces it
+do
+  local P = yezin.C.Policy
+  local ids = {}
+  for _, def in ipairs(yezin.C.Stats.list) do if def.cat == "leveling" or def.cat == "prog" then ids[#ids + 1] = def.id end end
+  assert(#ids >= 40, "enough stats for a policy wider than one message")
+  for _, id in ipairs(ids) do P:Set(id, "self") end
+  local before = #yezin.sent
+  yezin.C.Comm:SendPolicy()
+  tickAll(#ids)
+  local chunks = 0
+  for i = before + 1, #yezin.sent do if yezin.sent[i].msg:sub(1, 2) == "1P" then chunks = chunks + 1; assert(#yezin.sent[i].msg <= 255) end end
+  assert(chunks >= 2, "the policy needed more than one message: " .. chunks)
+  for _, id in ipairs(ids) do assert(kaka.C.Policy:Vis(id) == "self", "the member applied every chunk: " .. id) end
+  assert(kaka.env.CuteDB.policy.at == yezin.env.CuteDB.policy.at, "one policy, one at")
+  -- a reset: an empty policy with a newer at replaces the lot
+  yezin.env.CuteDB.policy = { vis = {}, by = yezin.name, rank = 1, at = yezin.env.CuteDB.policy.at + 5, threshold = 1 }
+  yezin.C.Comm:SendPolicy()
+  tickAll(3)
+  assert(kaka.C.Policy:Vis(ids[1]) == yezin.C.Stats.byId[ids[1]].default, "the reset reached the member")
+  print(string.format("policy chunks: %d messages for %d entries, applied whole; a reset replaces them", chunks, #ids))
 end
 
 local seen, unique = {}, {}

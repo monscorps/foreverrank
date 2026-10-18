@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Sampling: reads every stat on its events and on a five-minute heartbeat, keeps the counters and the tracked
--- values this character accumulates (deaths, dances, time stood still), and tells Comm when something changed.
+-- values this character accumulates (deaths, dances, time stood still), probes the game's statistics at login and
+-- re-reads them in one coalesced pass, and tells Comm when something changed.
 -- Every read runs under pcall; a read that errors stores nil and shows "?" with the error in the tooltip.
 local _, C = ...
 local S = { values = {}, at = {}, err = {}, dirty = {}, scheduled = {}, started = false }
@@ -280,6 +281,56 @@ on("PLAYER_DEAD", function()
   if lvl and lvl < 60 then S:Bump("deaths_lvl") end
 end)
 on("PLAYER_LEVEL_UP", function() S:Set("played_lvl", 0) end)
+-- Legacy Challenges and the game's statistics. ACHIEVEMENT_EARNED (achievementID) names the latest challenge and
+-- clears the Legacy walk (the lc_ stats re-read through their own events); it and CRITERIA_UPDATE, which fires on
+-- every kill and loot, start the statistics pass, which runs at most once in thirty seconds however many come, so a
+-- storm of criteria never re-reads hundreds of statistics per event
+local GAME_PASS = 30
+function S:GamePass()
+  if #C.Stats.byCat.game == 0 then return end
+  local t = gtime()
+  if self.gamePassAt and t - self.gamePassAt < GAME_PASS then
+    if not self.gamePassDue then
+      self.gamePassDue = true
+      C_Timer.After(GAME_PASS - (t - self.gamePassAt), C.Safe(function() S.gamePassDue = false; S:GamePass() end, "sample: statistics"))
+    end
+    return
+  end
+  self.gamePassAt = t
+  self.gamePasses = (self.gamePasses or 0) + 1
+  for _, def in ipairs(C.Stats.byCat.game) do self:Read(def.id) end
+end
+on("ACHIEVEMENT_EARNED", function(id)
+  C.Stats.LegacyClear()
+  id = C.Plain(id)
+  if type(id) == "number" then
+    local _, name = C.Get("GetAchievementInfo", id)
+    if type(name) == "string" and name ~= "" then S:Set("lc_last", name) end
+  end
+  S:GamePass()
+end)
+on("CRITERIA_UPDATE", function() S:GamePass() end)
+
+-- the statistics probe (Stats.lua ProbeGame): at login, and again at 30 s and at two minutes when the client has the
+-- function but listed nothing yet (achievement data can still be on its way at PLAYER_ENTERING_WORLD). Statistics
+-- defined late are read at once; their first values go out with the next flush, and an asker gets them in full
+local RETRY = { 30, 120 }
+function S:ProbeGame(attempt)
+  attempt = attempt or 1
+  local ok, what, again = C.Stats.ProbeGame()
+  if ok then
+    if attempt > 1 then
+      for _, def in ipairs(C.Stats.byCat.game) do self:Read(def.id) end
+      if C.UI and C.UI.Refresh then C.UI:Refresh() end
+    end
+    return
+  end
+  if again and RETRY[attempt] then
+    C_Timer.After(RETRY[attempt], C.Safe(function() S:ProbeGame(attempt + 1) end, "sample: statistics probe"))
+  else
+    C.Err.Note(tostring(what), "statistics")
+  end
+end
 -- money moves in copper; the gold stats keep copper and show gold
 on("PLAYER_MONEY", function()
   local m = C.Num("GetMoney")
@@ -469,6 +520,16 @@ function S:Start(initial, reloading)
   S:Set("last_login", now())
   -- the game says how long you have played; its chat line is the price
   if RequestTimePlayed then pcall(RequestTimePlayed) end
+  -- the game's statistics, where this client reports them
+  self:ProbeGame()
+  -- the latest challenge at login, where the client can say (a tracked value, set on ACHIEVEMENT_EARNED from then on)
+  if (counters().lc_last or "") == "" and C.Callable("GetLatestCompletedAchievements") then
+    local latest = C.Get("GetLatestCompletedAchievements")
+    if type(latest) == "number" then
+      local _, name = C.Get("GetAchievementInfo", latest)
+      if type(name) == "string" and name ~= "" then counters().lc_last = name end
+    end
+  end
   -- load every counter and tracked value into the live table
   for _, def in ipairs(C.Stats.list) do if def.count or def.track then self.values[def.id] = readOne(def); self.at[def.id] = now() end end
   self:ReadAll()

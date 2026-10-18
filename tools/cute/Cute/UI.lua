@@ -6,12 +6,14 @@
 --   Race           every member as a row: level, XP, zone, pace, the leveling stats
 --   Prog           readiness, attunements, item level, consumables, buffs, the gaps only you see
 --   Hall of Shame  a card per funny stat with its leader
+--   Statistics     the game's own statistics as a leaderboard: categories left, you and the leader right, a click
+--                  ranks every member (an empty state where the client reports none)
 --   Officers       summaries, the officers' stats, the controls (officer ranks only)
 --   Me             your whole record, with what members see
 -- Columns and cards come from the registry (Stats.lua); the policy (Policy.lua) decides which cells a member sees.
 -- Built on first open, rows are pooled, nothing updates while it is hidden.
 local _, C = ...
-local UI = { page = "race", sort = {} }
+local UI = { page = "race", sort = {}, gameOpen = {} }
 C.UI = UI
 
 local W, H = 1040, 640
@@ -280,7 +282,8 @@ local SHORT = { xp = "XP %", xp_hour = "XP/h", xp_session = "XP/h today", to60 =
   buffs_missing = "Missing", durability = "Dura", rep = "Rep", pvp_rank = "PvP", pvp_pts = "Rank pts", raids = "Raids", stones = "Stones",
   bank_in = "Bank in", bank_out = "Bank out", consumed = "Consumed", addon_ver = "Version", main = "Main", last_login = "Last login", raid_spec = "Raid spec",
   weekly_raids = "Raids/wk", deaths_today = "Today", hearth_waste = "Wasted HS", whispers = "Whispers/h", gchat = "Guild lines", inspected = "Inspected",
-  ghost_yards = "Ghost yds", where = "Where r u", grey_gold = "Grey gold" }
+  ghost_yards = "Ghost yds", where = "Where r u", grey_gold = "Grey gold", lc_done = "Challenges", lc_total = "Listed", lc_pts = "Legacy pts",
+  lc_free = "Unspent", lc_renown = "Renown", lc_prof = "Prof. tree", lc_adv = "Adv. tree", lc_prog = "Prog. tree", lc_last = "Latest", lc_cats = "Categories" }
 UI.SHORT = SHORT
 local function shortLabel(def) return SHORT[def.id] or def.label end
 
@@ -343,7 +346,7 @@ end
 ----------------------------------------------------------------------------
 -- the window
 ----------------------------------------------------------------------------
-local TAB_DEFS = { { "race", "Race", 64 }, { "prog", "Prog", 64 }, { "shame", "Hall of Shame", 110 }, { "officers", "Officers", 80 }, { "me", "Me", 48 }, { "settings", "Settings", 80 } }
+local TAB_DEFS = { { "race", "Race", 64 }, { "prog", "Prog", 64 }, { "shame", "Hall of Shame", 110 }, { "game", "Statistics", 80 }, { "officers", "Officers", 80 }, { "me", "Me", 48 }, { "settings", "Settings", 80 } }
 
 function UI:Build()
   if self.frame then return end
@@ -436,6 +439,7 @@ function UI:Build()
   self.labels = pool(self.scroll.child, function(parent) return text(parent, 12, INK) end)
   self.buttons = pool(self.scroll.child, function(parent) return button(parent, "", 160) end)
   self.checks = pool(self.scroll.child, function(parent) return check(parent) end)
+  self.lines = pool(self.scroll.child, function(parent) return UI:MakeLine(parent) end)
   self.header = CreateFrame("Frame", nil, self.scroll.child)
   self.header:SetPoint("TOPLEFT")
   self.header:SetHeight(ROW)
@@ -585,6 +589,16 @@ function UI:Cell(r, i)
         tip:AddLine(#names > 0 and table.concat(names, ", ") or "none", 0.9, 0.9, 0.9, true)
       elseif def.kind == "pips" and def.id == "rep" and type(v) == "string" then
         for k, f in ipairs(C.Stats.FACTIONS) do tip:AddDoubleLine(f[2], tostring(v:sub(k, k)), 0.8, 0.8, 0.8, 1, 1, 1) end
+      elseif def.kind == "pips" and def.id == "lc_cats" and type(v) == "string" then
+        -- the Legacy categories by name from this client's own walk, the row's class category last; your own
+        -- pips say the exact count, a member's the quarter the pip stands for
+        local cats = C.Stats.LegacyCategories(C.Stats.Legacy(), row.class)
+        for k = 1, #v do
+          local e = cats[k]
+          local d = tonumber(v:sub(k, k)) or 0
+          local what = (row.me and e) and (e.done .. " of " .. e.total) or (C.Stats.PIP_WORDS[d] or "?")
+          tip:AddDoubleLine(e and e.name or ("Category " .. k), what, 0.8, 0.8, 0.8, 1, 1, 1)
+        end
       elseif def.kind == "pips" and type(v) == "string" then
         local done, started = select(2, v:gsub("2", "")), select(2, v:gsub("1", ""))
         tip:AddLine(string.format("%d of %d steps done, %d in the log", done, #v, started), 0.9, 0.9, 0.9)
@@ -627,7 +641,7 @@ local function fillCell(c, def, row, hidden, w)
   color(c.label, INK)
   if def.kind == "pips" and type(v) == "string" and v ~= "" then
     c.label:SetText("")
-    for k = 1, math.min(#v, 13) do
+    for k = 1, math.min(#v, def.pips or 13) do
       local p = c.pips[k]
       if not p then p = flat(c, "ARTWORK", WHITE, 1); p:SetSize(5, 10); c.pips[k] = p end
       local d = tonumber(v:sub(k, k)) or 0
@@ -684,6 +698,15 @@ local function sortRows(rows, page)
   end)
 end
 
+-- the members a page lists: everyone, or the online ones and you when offline members are hidden
+local function rowsShown()
+  local rows = C.Roster:Rows()
+  if C.Settings().offline then return rows end
+  local kept = {}
+  for _, r in ipairs(rows) do if r.online or r.me then kept[#kept + 1] = r end end
+  return kept
+end
+
 -- a table page: the header row and one row per member. y0: room above it the page used already (the officers' lines)
 function UI:DrawTable(page, y0)
   y0 = y0 or 0
@@ -691,12 +714,7 @@ function UI:DrawTable(page, y0)
   local room = sf:Width() - NAME_W - 8
   local cols, hidden = columnsFor(page, room)
   local officer = C.Roster:MeOfficer()
-  local rows = C.Roster:Rows()
-  if not C.Settings().offline then
-    local kept = {}
-    for _, r in ipairs(rows) do if r.online or r.me then kept[#kept + 1] = r end end
-    rows = kept
-  end
+  local rows = rowsShown()
   sortRows(rows, page)
   -- header: grey labels, the sorted one white, a hairline under the row
   self.header:Show()
@@ -920,36 +938,49 @@ function UI:DrawMe()
   self.checks:HideRest()
   local y = 30
   for _, cat in ipairs(C.Stats.CATS) do
-    local l = self.labels:Get()
-    l:SetPoint("TOPLEFT", 6, -y)
-    l:SetWidth(w - 12)
-    color(l, WHITE)
-    l:SetText(C.Stats.CAT_LABEL[cat])
-    y = y + 20
-    local n = 0
-    for _, def in ipairs(C.Stats.byCat[cat]) do
-      local col = n % 2
-      local ly = y + math.floor(n / 2) * 18
-      local a = self.labels:Get()
-      a:SetPoint("TOPLEFT", 6 + col * colW, -ly)
-      a:SetWidth(colW - 130)
-      local hidden = self.meView and C.Policy:Vis(def.id) == "self"
-      color(a, hidden and MUTE or DIM)
-      fitText(a, def.label, colW - 136)
-      local b = self.labels:Get()
-      b:SetPoint("TOPLEFT", 6 + col * colW + (colW - 130), -ly)
-      b:SetWidth(124)
-      b:SetJustifyH("RIGHT")
-      local v = me and me.stats[def.id]
-      if hidden then color(b, MUTE); b:SetText("(only you)")
-      else
-        color(b, v == nil and MUTE or INK)
-        fitText(b, C.Sample:Error(def.id) and "?" or UI.Format(def, v), 120)
+    -- (the game's statistics have a page of their own; one line below says how many)
+    if cat ~= "game" then
+      local l = self.labels:Get()
+      l:SetPoint("TOPLEFT", 6, -y)
+      l:SetWidth(w - 12)
+      l:SetJustifyH("LEFT")
+      color(l, WHITE)
+      l:SetText(C.Stats.CAT_LABEL[cat])
+      y = y + 20
+      local n = 0
+      for _, def in ipairs(C.Stats.byCat[cat]) do
+        local col = n % 2
+        local ly = y + math.floor(n / 2) * 18
+        local a = self.labels:Get()
+        a:SetPoint("TOPLEFT", 6 + col * colW, -ly)
+        a:SetWidth(colW - 130)
+        a:SetJustifyH("LEFT")
+        local hidden = self.meView and C.Policy:Vis(def.id) == "self"
+        color(a, hidden and MUTE or DIM)
+        fitText(a, def.label, colW - 136)
+        local b = self.labels:Get()
+        b:SetPoint("TOPLEFT", 6 + col * colW + (colW - 130), -ly)
+        b:SetWidth(124)
+        b:SetJustifyH("RIGHT")
+        local v = me and me.stats[def.id]
+        if hidden then color(b, MUTE); b:SetText("(only you)")
+        else
+          color(b, v == nil and MUTE or INK)
+          fitText(b, C.Sample:Error(def.id) and "?" or UI.Format(def, v), 120)
+        end
+        n = n + 1
       end
-      n = n + 1
+      y = y + math.ceil(n / 2) * 18 + 8
     end
-    y = y + math.ceil(n / 2) * 18 + 8
   end
+  local g = self.labels:Get()
+  g:SetPoint("TOPLEFT", 6, -y)
+  g:SetWidth(w - 12)
+  g:SetJustifyH("LEFT")
+  color(g, DIM)
+  local nGame = #C.Stats.byCat.game
+  fitText(g, nGame > 0 and string.format("Statistics: %d, on the Statistics page.", nGame) or ("Statistics: none. " .. (C.Stats.gameNote or "")), w - 16)
+  y = y + 26
   -- what could not be read, and why (a client function missing, a call that threw), one line each, so no "?" above
   -- stands without its reason
   local errs = {}
@@ -978,6 +1009,211 @@ function UI:DrawMe()
   end
   self.labels:HideRest()
   sf:SetContentHeight(y + 8)
+end
+
+-- a line of the Statistics page: a name on the left, a value and a "who" on the right, a class bar for a member;
+-- callers set fn (the click) and tip (the tooltip) rather than the scripts
+function UI:MakeLine(parent)
+  local r = CreateFrame("Button", nil, parent)
+  r:SetHeight(ROW)
+  r.bg = flat(r, "BACKGROUND", WHITE, 0.03)
+  r.bg:SetAllPoints()
+  r.bar = flat(r, "ARTWORK", WHITE, 1)
+  r.bar:SetPoint("TOPLEFT", 0, 0)
+  r.bar:SetPoint("BOTTOMLEFT", 0, 0)
+  r.bar:SetWidth(2)
+  r:SetHighlightTexture(FLAT, "ADD")
+  r:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
+  r.name = text(r, 12, INK, "LEFT")
+  r.name:SetPoint("LEFT", 8, 0)
+  r.val = text(r, 12, INK, "RIGHT")
+  r.val:SetPoint("RIGHT", -4, 0)
+  r.who = text(r, 12, INK, "RIGHT")
+  r.who:SetPoint("RIGHT", -4, 0)
+  r:SetScript("OnClick", function(self) if self.fn then self.fn(self) end end)
+  tooltip(r, function(tip, self) if self.tip then self.tip(tip, self) end end)
+  return r
+end
+
+-- the Statistics page: the game's own statistics as a leaderboard, not a wide table. Left, the categories as the
+-- game groups them (a child under its parent; a click opens one); right, the open category's statistics as rows of
+-- name, your value and the guild's leader; a click on a row ranks every member under it, a dash where the policy
+-- keeps a member's value from you. The empty state says why the client reported none.
+function UI:DrawGame()
+  local sf = self.scroll
+  local S = C.Stats
+  self.header:Hide()
+  self.rows:Reset(); self.rows:HideRest()
+  self.labels:Reset()
+  self.lines:Reset()
+  local w = sf:Width()
+  local function say(x, y, width, s, c, justify)
+    local l = self.labels:Get()
+    l:SetPoint("TOPLEFT", x, -y)
+    l:SetWidth(width)
+    l:SetJustifyH(justify or "LEFT")
+    color(l, c or INK)
+    fitText(l, s, width - 4)
+    return l
+  end
+  if #S.byCat.game == 0 then
+    say(6, 6, w - 12, S.gameNote or "No statistics yet.", INK)
+    say(6, 26, w - 12, "The addon's own counters stay on the other pages: deaths, dungeons, quests, flights and the rest.", MUTE)
+    self.labels:HideRest(); self.lines:HideRest()
+    sf:SetContentHeight(50)
+    return
+  end
+  local game = S.game
+  local officer = C.Roster:MeOfficer()
+  local rows = rowsShown()
+  local leftW = math.max(160, math.floor(w * 0.25))
+  local rightX = leftW + 12
+  local rightW = w - rightX
+  -- the open category: the one clicked, else the first with statistics in it
+  local sel = self.gameCat
+  if not (sel and game.byCat[sel] and #game.byCat[sel] > 0) then
+    sel = nil
+    for _, cat in ipairs(game.cats) do if #cat.stats > 0 then sel = cat.id; break end end
+    self.gameCat = sel
+  end
+  -- left: the categories
+  say(4, 4, leftW - 8, "Category", DIM)
+  local y = ROW + 2
+  for i, cat in ipairs(game.cats) do
+    local n = #cat.stats
+    local open = cat.id == sel
+    local r = self.lines:Get()
+    r.cat, r.def, r.member = cat, nil, nil
+    r:SetPoint("TOPLEFT", 0, -y)
+    r:SetWidth(leftW)
+    r:SetHeight(ROW)
+    r.bg:SetColorTexture(1, 1, 1, open and 0.06 or (i % 2 == 0 and 0.03 or 0))
+    r.bar:SetShown(open)
+    r.bar:SetColorTexture(WHITE[1], WHITE[2], WHITE[3], 1)
+    local indent = cat.parent ~= -1 and 14 or 0
+    r.name:SetPoint("LEFT", 8 + indent, 0)
+    r.name:SetWidth(leftW - 8 - indent - 40)
+    color(r.name, open and WHITE or (n > 0 and INK or MUTE))
+    fitText(r.name, cat.name, leftW - 12 - indent - 40)
+    r.val:Show()
+    r.val:SetPoint("RIGHT", -4, 0)
+    r.val:SetWidth(34)
+    color(r.val, MUTE)
+    r.val:SetText(tostring(n))
+    r.who:Hide()
+    r.fn = function() if n > 0 then UI.gameCat = cat.id; UI:Draw() end end
+    r.tip = function(tip)
+      tip:AddLine(cat.path, 1, 1, 1)
+      tip:AddLine(n == 1 and "1 statistic" or (n .. " statistics"), 0.7, 0.7, 0.7)
+      if n > 0 then tip:AddLine("Click to open.", 0.45, 0.45, 0.45) end
+    end
+    y = y + ROW
+  end
+  local leftY = y
+  -- right: the open category's statistics
+  local vw, ww = 90, math.min(190, math.floor(rightW * 0.36))
+  local nw = rightW - vw - ww - 8
+  say(rightX + 8, 4, nw - 8, "Statistic", DIM)
+  say(rightX + rightW - ww - vw - 4, 4, vw, "You", DIM, "RIGHT")
+  say(rightX + rightW - ww - 4, 4, ww, "Leader", DIM, "RIGHT")
+  y = ROW + 2
+  local defs = sel and game.byCat[sel] or {}
+  for i, def in ipairs(defs) do
+    local mine = C.Sample:Value(def.id)
+    -- every member's value as this viewer may see it; the leader among those
+    local ranked, best = {}, nil
+    for _, row in ipairs(rows) do
+      if row.addon then
+        local hidden = not C.Policy:CanSee(officer, row.me, def.id)
+        local v = row.stats[def.id]
+        local e = { row = row, v = (not hidden and type(v) == "number") and v or nil, hidden = hidden, at = row.at and row.at[def.id] }
+        ranked[#ranked + 1] = e
+        if e.v and (not best or e.v > best.v or (e.v == best.v and row.short < best.row.short)) then best = e end
+      end
+    end
+    local open = self.gameOpen[def.id] == true
+    local r = self.lines:Get()
+    r.cat, r.def, r.member = nil, def, nil
+    r:SetPoint("TOPLEFT", rightX, -y)
+    r:SetWidth(rightW)
+    r:SetHeight(ROW)
+    r.bg:SetColorTexture(1, 1, 1, open and 0.06 or (i % 2 == 0 and 0.03 or 0))
+    r.bar:Hide()
+    r.name:SetPoint("LEFT", 8, 0)
+    r.name:SetWidth(nw - 8)
+    color(r.name, open and WHITE or INK)
+    fitText(r.name, def.label, nw - 12)
+    r.val:Show()
+    r.val:SetPoint("RIGHT", -(ww + 4), 0)
+    r.val:SetWidth(vw)
+    color(r.val, mine == nil and MUTE or INK)
+    r.val:SetText(UI.Format(def, mine))
+    r.who:Show()
+    r.who:SetPoint("RIGHT", -4, 0)
+    r.who:SetWidth(ww)
+    if best then
+      color(r.who, INK)
+      r.who:SetText(hex(best.row.class and classColor(best.row.class) or INK) .. best.row.short .. "|r  " .. UI.Format(def, best.v))
+    else
+      color(r.who, MUTE)
+      r.who:SetText("-")
+    end
+    r.fn = function() UI.gameOpen[def.id] = not UI.gameOpen[def.id]; UI:Draw() end
+    r.tip = function(tip)
+      tip:AddLine(def.label, 1, 1, 1)
+      if def.hint then tip:AddLine(def.hint, 0.7, 0.7, 0.7, true) end
+      tip:AddLine(C.Policy:Vis(def.id) == "all" and "Everyone sees this." or "Only you and the officers see this.", 0.6, 0.6, 0.6)
+      if C.Sample:Error(def.id) then tip:AddLine("Could not read: " .. C.Sample:Error(def.id), 0.9, 0.4, 0.4, true) end
+      tip:AddLine(open and "Click to fold." or "Click to rank every member.", 0.45, 0.45, 0.45)
+    end
+    y = y + ROW
+    if open then
+      -- values first, highest on top; then the members whose value is kept from you; then the unreported
+      table.sort(ranked, function(a, b)
+        if (a.v ~= nil) ~= (b.v ~= nil) then return a.v ~= nil end
+        if a.v ~= nil and a.v ~= b.v then return a.v > b.v end
+        if a.hidden ~= b.hidden then return a.hidden end
+        return a.row.short < b.row.short
+      end)
+      for k, e in ipairs(ranked) do
+        local m = self.lines:Get()
+        m.cat, m.def, m.member = nil, def, e
+        m:SetPoint("TOPLEFT", rightX + 16, -y)
+        m:SetWidth(rightW - 16)
+        m:SetHeight(ROW)
+        m.bg:SetColorTexture(1, 1, 1, 0.015)
+        local cc = e.row.class and classColor(e.row.class) or MUTE
+        if not e.row.online then cc = dimmed(cc) end
+        local bc = e.row.me and WHITE or cc
+        m.bar:Show()
+        m.bar:SetColorTexture(bc[1], bc[2], bc[3], 1)
+        m.name:SetPoint("LEFT", 8, 0)
+        m.name:SetWidth(nw - 24)
+        color(m.name, cc)
+        fitText(m.name, (e.v and (k .. ".  ") or "") .. e.row.short .. (e.row.me and "  (you)" or ""), nw - 28)
+        m.val:Hide()
+        m.who:Show()
+        m.who:SetPoint("RIGHT", -4, 0)
+        m.who:SetWidth(ww + vw)
+        if e.hidden then color(m.who, MUTE); m.who:SetText("-")
+        elseif e.v == nil then color(m.who, MUTE); m.who:SetText("?")
+        else color(m.who, INK); m.who:SetText(UI.Format(def, e.v)) end
+        m.fn = nil
+        m.tip = function(tip)
+          tip:AddLine(e.row.short, 1, 1, 1)
+          if e.hidden then tip:AddLine("Only " .. e.row.short .. " and the officers see this.", 0.6, 0.6, 0.6, true)
+          elseif e.v == nil then tip:AddLine("Not reported yet.", 0.6, 0.6, 0.6)
+          else tip:AddLine(UI.Format(def, e.v), 0.9, 0.9, 0.9) end
+          if e.at then tip:AddLine("Reported " .. (ago(e.at) or ""), 0.45, 0.45, 0.45) end
+        end
+        y = y + ROW
+      end
+    end
+  end
+  if #defs == 0 then say(rightX + 8, y, rightW - 16, "Nothing in this category.", MUTE); y = y + 20 end
+  self.labels:HideRest()
+  self.lines:HideRest()
+  sf:SetContentHeight(math.max(leftY, y) + 8)
 end
 
 -- the footer: when the roster last changed
@@ -1014,9 +1250,11 @@ function UI:Draw()
   self.cards:Reset(); self.cards:HideRest()
   self.buttons:Reset(); self.buttons:HideRest()
   self.checks:Reset(); self.checks:HideRest()
+  self.lines:Reset(); self.lines:HideRest()
   if C.Settings_Draw and page ~= "settings" then C.Settings_Hide() end
   if page == "race" or page == "prog" then self:DrawTable(page)
   elseif page == "shame" then self:DrawShame()
+  elseif page == "game" then self:DrawGame()
   elseif page == "officers" then self:DrawOfficers()
   elseif page == "me" then self:DrawMe()
   elseif page == "settings" then
