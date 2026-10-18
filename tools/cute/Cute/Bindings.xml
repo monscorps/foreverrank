@@ -1,0 +1,4 @@
+<Bindings>
+  <Binding name="CUTE_TOGGLE" header="CUTE" category="ADDONS">Cute_Toggle()</Binding>
+  <Binding name="CUTE_SETTINGS" category="ADDONS">Cute_Settings()</Binding>
+</Bindings>

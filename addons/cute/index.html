@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cute · the guild dashboard addon · ForeverRank</title>
+<meta name="description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame and the officers' view, shared over the guild channel. No server, no accounts.">
+<link rel="canonical" href="https://foreverrank.com/addons/cute/">
+<!-- seo:begin -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ForeverRank">
+<meta property="og:url" content="https://foreverrank.com/addons/cute/">
+<meta property="og:title" content="Cute · the guild dashboard addon · ForeverRank">
+<meta property="og:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame and the officers' view, shared over the guild channel. No server, no accounts.">
+<meta property="og:image" content="https://foreverrank.com/addons/cute/img/banner.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Cute · the guild dashboard addon · ForeverRank">
+<meta name="twitter:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame and the officers' view, shared over the guild channel. No server, no accounts.">
+<meta name="twitter:image" content="https://foreverrank.com/addons/cute/img/banner.jpg">
+<!-- seo:end -->
+<link rel="icon" href="/mark.svg">
+<link rel="stylesheet" href="/forever.css?v=23">
+<style>
+.cu { --gold: #e8b24a; --teal: #2f8a8a; --ink: #fbf6ea; --dim: #9aa3b2; --card: #243042; --line: rgba(232,178,74,.28); }
+.cu-wrap { max-width: 980px; margin: 0 auto; padding: 0 1rem 4rem; }
+.cu-hero { position: relative; margin: 1.2rem 0 0; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: #1b2330; }
+.cu-hero img.banner { display: block; width: 100%; height: auto; aspect-ratio: 1983 / 793; object-fit: cover; }
+.cu-hero .plate { position: absolute; left: 0; right: 0; bottom: 0; padding: 1.2rem 1.4rem; background: linear-gradient(180deg, rgba(27,35,48,0) 0%, rgba(27,35,48,.92) 55%); }
+.cu-hero h1 { margin: 0; font-size: 2.2rem; color: var(--ink); text-shadow: 0 2px 12px rgba(0,0,0,.6); }
+.cu-hero h1 span { color: var(--gold); }
+.cu-hero p { margin: .3rem 0 0; color: #d9dde6; max-width: 44rem; text-shadow: 0 1px 8px rgba(0,0,0,.6); }
+.cu-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 1.2rem 0 .2rem; }
+.cu-dl { display: inline-block; font: 700 .85rem/1 var(--heading, inherit); letter-spacing: .08em; text-transform: uppercase; color: #1b2330; background: var(--gold); border-radius: 2px; padding: .85rem 1.3rem; text-decoration: none; }
+.cu-dl:hover { filter: brightness(1.08); }
+.cu-ver { color: var(--dim); font-size: .8rem; }
+.cu-ver code { color: #e8e2d0; }
+.cu-h2 { font-family: var(--display-serif, inherit); color: var(--gold); font-size: 1.45rem; margin: 2.2rem 0 .4rem; }
+.cu-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; }
+.cu-step { background: var(--card); border: 1px solid var(--line); border-radius: 3px; padding: .9rem 1rem; }
+.cu-step b { display: block; color: var(--gold); font: 700 1.2rem/1 var(--heading, inherit); margin-bottom: .4rem; }
+.cu-step p { margin: 0; font-size: .85rem; line-height: 1.5; color: #d9dde6; }
+.cu-step code { color: #fbf6ea; background: rgba(0,0,0,.3); padding: 0 .3em; border-radius: 2px; }
+.cu-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: .7rem; }
+.cu-tab { background: var(--card); border: 1px solid var(--line); border-radius: 3px; padding: .9rem 1rem; }
+.cu-tab h3 { margin: 0 0 .35rem; font-size: 1rem; color: var(--ink); }
+.cu-tab p { margin: 0; font-size: .82rem; line-height: 1.5; color: #c8cede; }
+.cu-two { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
+.cu-card { background: rgba(0,0,0,.28); border: 1px solid var(--line); border-radius: 3px; padding: 1rem 1.1rem; }
+.cu-card h3 { margin: 0 0 .5rem; font-size: 1rem; color: var(--ink); }
+.cu-card p, .cu-card li { font-size: .85rem; line-height: 1.55; color: #c8cede; }
+.cu-card ul { margin: 0; padding-left: 1.1rem; }
+.cu-card a, .cu-step a { color: var(--gold); }
+.cu-cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .7rem; }
+.cu-cat { background: var(--card); border: 1px solid var(--line); border-radius: 3px; padding: .8rem .9rem; }
+.cu-cat h4 { margin: 0 0 .3rem; color: var(--gold); font-size: .95rem; }
+.cu-cat p { margin: 0; font-size: .8rem; line-height: 1.5; color: #c8cede; }
+.cu-cat small { display: block; margin-top: .4rem; color: var(--dim); font-size: .72rem; }
+.cu-log { list-style: none; padding: 0; margin: 0; }
+.cu-log li { padding: .5rem 0; border-top: 1px solid rgba(255,255,255,.08); font-size: .85rem; color: #c8cede; }
+.cu-log li b { color: var(--gold); margin-right: .5rem; }
+.cu-foot { margin-top: 2rem; color: var(--dim); font-size: .78rem; }
+.cu-foot a { color: var(--gold); }
+@media (max-width: 820px) { .cu-steps, .cu-tabs, .cu-cats { grid-template-columns: 1fr 1fr; } .cu-two { grid-template-columns: 1fr; } .cu-hero h1 { font-size: 1.6rem; } }
+@media (max-width: 520px) { .cu-steps, .cu-tabs, .cu-cats { grid-template-columns: 1fr; } .cu-hero .plate { position: static; background: #1b2330; } }
+</style>
+</head>
+<body class="board cu">
+  <nav class="top">
+    <a class="brand" href="/">
+      <img src="/mark.svg" alt="" width="42" height="42">
+      <span class="brand-word">FOREVER<b>RANK</b></span>
+    </a>
+    <div class="top-nav">
+      <a class="pill" href="/">Home</a>
+      <a class="pill" href="/plan/">The Forge</a>
+      <a class="pill" href="/codex/">Database</a>
+      <a class="pill" href="/news/">News</a>
+      <a class="pill" href="/questbank/">QuestBank</a>
+      <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
+    </div>
+  </nav>
+<main class="cu-wrap">
+  <section class="cu-hero">
+    <img class="banner" src="img/banner.jpg" alt="The Cute banner: a red-haired elf over a bright valley">
+    <div class="plate">
+      <h1><span>Cute</span>, the guild dashboard</h1>
+      <p>Every member's addon shares about a hundred facts about their character over the guild channel. One window shows the whole guild: the race to 60, raid readiness, the hall of shame, and the officers' view. Officers decide who sees what.</p>
+    </div>
+  </section>
+
+  <div class="cu-row">
+    <a class="cu-dl" href="Cute.zip">Download Cute 0.1.0</a>
+    <span class="cu-ver">Free. For WoW Forever. Unzip into <code>Interface\AddOns</code>. Proof of concept for Cute's November prog; no server, no accounts, nothing leaves the guild channel.</span>
+  </div>
+
+  <h2 class="cu-h2">Install</h2>
+  <div class="cu-steps">
+    <div class="cu-step"><b>1</b><p>Download <a href="Cute.zip">Cute.zip</a> and unzip it. You get one folder, <code>Cute</code>.</p></div>
+    <div class="cu-step"><b>2</b><p>Put the folder in <code>World of Warcraft\_forever_\Interface\AddOns\</code>, next to your other addons.</p></div>
+    <div class="cu-step"><b>3</b><p>Log in. <code>/cute</code> opens the dashboard, the minimap button too. Your record reaches the guild within a few seconds of logging in.</p></div>
+  </div>
+
+  <h2 class="cu-h2">The window</h2>
+  <div class="cu-tabs">
+    <div class="cu-tab"><h3>Race</h3><p>Every member as a row: level and XP, zone, XP an hour, hours to 60 at your pace, time played, quests done, deaths while leveling, who you are grouped with. Sort by any column.</p></div>
+    <div class="cu-tab"><h3>Prog</h3><p>Attunements as pips, item level, keys, resistances, potions and flasks on hand, world buffs, durability, reputations, and the gear gaps you alone see.</p></div>
+    <div class="cu-tab"><h3>Hall of Shame</h3><p>A card per funny stat with its leader: deaths, fall deaths, drownings, wasted hearthstones, time stood still, /dance, jumps, "where are you" typed.</p></div>
+    <div class="cu-tab"><h3>Officers</h3><p>Officer ranks only: who has the addon, who is online, the median level and who is under it, gold, bank activity, raids attended, declared mains and roles. The controls live here.</p></div>
+    <div class="cu-tab"><h3>Me</h3><p>Your whole record, every stat, and a toggle that shows what members see of you.</p></div>
+  </div>
+
+  <h2 class="cu-h2">Who sees what</h2>
+  <div class="cu-two">
+    <div class="cu-card">
+      <h3>Two levels, set by the officers</h3>
+      <ul>
+        <li><b>Everyone</b>: every member sees every member's value. The race, who is doing well, the funny stats the officers want on the wall.</li>
+        <li><b>Only you</b>: you see your own; officers and the guild master see everyone's. Missing enchants, empty slots, gold, raid buffs you lack.</li>
+      </ul>
+      <p>Officers flip each stat in Settings and press Broadcast; every member's addon applies it when it comes from an officer rank. Your own row is always complete.</p>
+    </div>
+    <div class="cu-card">
+      <h3>What never happens</h3>
+      <ul>
+        <li>Nothing leaves the guild's addon channel. There is no server behind this addon and no upload.</li>
+        <li>No combat log (the Forever client restricts it), no chat text read: whispers and guild lines are counted, never stored.</li>
+        <li>Nothing accepts, abandons or hands in a quest, and nothing touches the game's secure frames.</li>
+        <li>An Only-you stat is hidden in members' windows, not encrypted: it still travels on the guild channel, so a member reading the saved file could see it. Fine for a guild; said plainly.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 class="cu-h2">What it tracks today</h2>
+  <div class="cu-cats">
+    <div class="cu-cat"><h4>Leveling, 42</h4><p>Level, XP, XP an hour, hours to 60, rested XP, zone, group, time played, sessions, quests done and in log, dungeons run, flights, hearths, deaths while leveling, gold earned, professions, Legacy perks.</p><small>Default: everyone</small></div>
+    <div class="cu-cat"><h4>Progression, 40</h4><p>Item level and per slot, empty and unenchanted slots, old gear, attunements, keys, five resistances, recipes, bags, potions, flasks, elixirs, food, bandages, world buffs, durability, reputations, lockouts, class resources.</p><small>Default: everyone, the gaps only you</small></div>
+    <div class="cu-cat"><h4>Hall of Shame, 18</h4><p>Deaths, fall deaths, drownings, fatigue, wasted hearthstones, AFK flags, /dance and /sit, emotes, whispers an hour, guild lines, inspections, fish, jumps, ghost yards, "where are you".</p><small>Default: everyone, whispers only you</small></div>
+    <div class="cu-cat"><h4>Officers, 11</h4><p>Gold, guild bank deposits and withdrawals, consumables used in raids, addon version, declared main, role, last login, raids this week, on time for raid.</p><small>Default: only you</small></div>
+  </div>
+  <p class="cu-ver" style="margin-top:.8rem">A stat is one line in the addon's registry, so the list follows what the officers ask for. Counted stats start at zero the day you install it.</p>
+
+  <h2 class="cu-h2">Changelog</h2>
+  <ul class="cu-log">
+    <li><b>0.1.0</b>The proof of concept: the registry of 111 stats, the guild channel sync, the five pages, Settings with the officers' visibility list, the minimap button and key bindings.</li>
+  </ul>
+
+  <p class="cu-foot">Part of <a href="/">ForeverRank</a>, by a member of Cute. GPL-3.0-or-later. QuestBank, the public questing addon, is <a href="/questbank/">here</a>; the two run side by side. Bugs: the Discord.</p>
+</main>
+</body>
+</html>
