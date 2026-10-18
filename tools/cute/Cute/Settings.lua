@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Settings, drawn inside the window's scroll area, flat like the rest.
---   Everyone:  which columns each page shows, density, offline members, the minimap button, your main and role
+--   Everyone:  which columns each page shows, density, offline members, the minimap button, your main, role and
+--              raid spec (role and raid spec per character, the main account-wide)
 --   Officers:  per stat, Everyone or Only you; the officer rank threshold; Broadcast now (greyed for members)
 local _, C = ...
 local ST = {}
@@ -38,7 +39,7 @@ local function ensure(parent)
     e:SetSize(140, 20)
     e:SetAutoFocus(false)
     e:SetMaxLetters(24)
-    e:SetFont("Fonts\\ARIALN.TTF", 12, "")
+    e:SetFont(C.UI.FONT, 12, "")
     return e
   end)
 end
@@ -48,7 +49,7 @@ local PAGES = { { "race", "Race columns" }, { "prog", "Prog columns" }, { "shame
 
 -- the left half: everyone's choices
 local function drawEveryone(x, w)
-  local s = C.Settings()
+  local s, ch = C.Settings(), C.Char()
   local y = 4
   local function head(label)
     local l = widgets.labels:Get()
@@ -65,7 +66,7 @@ local function drawEveryone(x, w)
     C.UI.FitText(cb.label, label, w - 30)
     cb:Set(on and true or false)
     cb:SetOn(enabled ~= false)
-    cb:SetScript("OnClick", function(self) fn(self:GetChecked()) end)
+    cb.fn = function(self) fn(self:GetChecked()) end
     y = y + ROWH
   end
   head("Display")
@@ -82,7 +83,8 @@ local function drawEveryone(x, w)
   local e = widgets.edits:Get()
   e:SetPoint("TOPLEFT", x + 100, -y)
   e:SetWidth(math.min(160, w - 104))
-  e:SetText(s.main or "")
+  -- a redraw while you type leaves your typing alone
+  if not e:HasFocus() then e:SetText(s.main or "") end
   e:SetScript("OnEnterPressed", function(self) s.main = (self:GetText() or ""):gsub("[^%w%-]", ""):sub(1, 24); self:ClearFocus(); C.Sample:Read("main") end)
   e:SetScript("OnEscapePressed", function(self) self:SetText(s.main or ""); self:ClearFocus() end)
   e:SetScript("OnEditFocusLost", function(self) s.main = (self:GetText() or ""):gsub("[^%w%-]", ""):sub(1, 24); C.Sample:Read("main") end)
@@ -96,14 +98,16 @@ local function drawEveryone(x, w)
   for _, role in ipairs({ "Tank", "Heal", "Melee", "Ranged" }) do
     local cb = widgets.checks:Get()
     cb:SetPoint("TOPLEFT", rx, -y - 3)
-    cb.label:SetWidth(40)
-    C.UI.FitText(cb.label, role, 38)
-    cb:Set(s.role == role)
+    cb.label:SetWidth(44)
+    C.UI.FitText(cb.label, role, 42)
+    cb:Set(ch.role == role)
     cb:SetOn(true)
-    cb:SetScript("OnClick", function(self) s.role = self:GetChecked() and role or ""; C.Sample:Read("role"); C.UI:Draw() end)
-    rx = rx + 62
+    cb.fn = function(self) ch.role = self:GetChecked() and role or ""; C.Sample:Read("role"); C.UI:Draw() end
+    rx = rx + 66
   end
   y = y + 28
+  check("Raid spec set (this character)", ch.raidspec == true, true, function(on) ch.raidspec = on and true or nil; C.Sample:Read("raid_spec") end)
+  y = y + 6
   for _, p in ipairs(PAGES) do
     if p[1] ~= "officers" or C.Roster:MeOfficer() then
       head(p[2])
@@ -196,15 +200,17 @@ local function drawOfficers(x, w)
       local a = widgets.checks:Get()
       a:SetPoint("TOPLEFT", x + w - 118, -y - 3)
       a.label:SetText("")
+      a.statId, a.vis = def.id, "all"
       a:Set(vis == "all")
       a:SetOn(officer)
-      a:SetScript("OnClick", function(self) if officer then C.Policy:Set(def.id, "all"); C.UI:Draw() else self:Set(vis == "all") end end)
+      a.fn = function(self) if officer then C.Policy:Set(def.id, "all"); C.UI:Draw() else self:Set(vis == "all") end end
       local s = widgets.checks:Get()
       s:SetPoint("TOPLEFT", x + w - 52, -y - 3)
       s.label:SetText("")
+      s.statId, s.vis = def.id, "self"
       s:Set(vis == "self")
       s:SetOn(officer)
-      s:SetScript("OnClick", function(self) if officer then C.Policy:Set(def.id, "self"); C.UI:Draw() else self:Set(vis == "self") end end)
+      s.fn = function(self) if officer then C.Policy:Set(def.id, "self"); C.UI:Draw() else self:Set(vis == "self") end end
       y = y + ROWH
     end
     y = y + 6

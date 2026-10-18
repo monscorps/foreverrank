@@ -54,10 +54,15 @@ function P:Encode()
   return string.format("%d|%d|%s", p.at or 0, p.threshold or DEFAULT_THRESHOLD, table.concat(parts, ";"))
 end
 
--- a policy from the channel: applied when the sender is an officer by our roster and it is newer than ours
+-- a policy from the channel: applied when the sender is an officer by our roster and it is newer than ours. Before
+-- the roster is known the newest one waits (P.pending) and Replay judges it once the ranks arrive.
 function P:Receive(sender, at, threshold, body)
   at, threshold = tonumber(at), tonumber(threshold)
-  if not (at and threshold) then return false, "malformed" end
+  if not (at and threshold) or threshold < 0 or threshold > 9 then return false, "malformed" end
+  if not C.Roster.trusted then
+    if not self.pending or self.pending.at < at then self.pending = { sender = sender, at = at, threshold = threshold, body = body } end
+    return false, "roster not known yet"
+  end
   if not C.Roster:IsOfficer(sender) then return false, "not an officer" end
   local p = CuteDB.policy
   if p and (p.at or 0) >= at then return false, "older" end
@@ -66,6 +71,12 @@ function P:Receive(sender, at, threshold, body)
   CuteDB.policy = { vis = vis, by = sender, rank = C.Roster:Rank(sender), at = at, threshold = threshold }
   if C.UI and C.UI.Refresh then C.UI:Refresh() end
   return true
+end
+function P:Replay()
+  local w = self.pending
+  if not w or not C.Roster.trusted then return end
+  self.pending = nil
+  return self:Receive(w.sender, w.at, w.threshold, w.body)
 end
 
 -- who set it, for Settings

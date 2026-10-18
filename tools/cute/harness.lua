@@ -2,8 +2,12 @@
 -- their addon messages, drives events and timers, opens every page for an officer and a member, and fails on any
 -- widget method outside a whitelist of real API methods. It lays the window out like the game does and reports
 -- clipped text, overlapping text, text the game's font cannot draw, and buttons too near an edge.
+-- The mock defines what Forever's generated API docs list (C_Club for the guild, C_SpecializationInfo, C_MajorFactions,
+-- C_SkillInfo, GetMirrorTimerProgress...), what QuestBank reads on this client (GetInventoryItemLink, the taxi nodes)
+-- and, named one by one in UNDOCUMENTED below with the evidence for each, the globals no doc lists that Cute reads all
+-- the same. A stat reading anything else reads nil here too, and the registry scenario fails on it.
 --   luajit tools/cute/harness.lua                   run every scenario
---   luajit tools/cute/harness.lua --layout out.json  also write the window, page by page, for render_layout.py
+--   luajit tools/cute/harness.lua --layout out.json  also write the window, page by page, for tools/questbank/render_layout.py
 math.randomseed = nil -- the client has none
 local HERE = (arg and arg[0] and arg[0]:match("^(.*)/") or ".")
 local LAYOUT_OUT
@@ -22,7 +26,8 @@ SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap G
 SetAutoFocus SetFocus ClearFocus SetMaxLetters HasFocus SetChecked GetChecked GetLeft GetTop GetChildren GetNumPoints
 SetResizable SetResizeBounds StartSizing CreateMaskTexture AddMaskTexture SetScale GetScale]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
-local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10 }
+local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 14, ChatFontNormal = 14 }
+local FONT_FILE = { NumberFontNormal = "Fonts\\ARIALN.TTF", ChatFontNormal = "Fonts\\ARIALN.TTF" }
 
 ----------------------------------------------------------------------------
 -- text width in Friz Quadrata, close enough to see what doesn't fit
@@ -60,7 +65,8 @@ local function newObj(kind, template, parent)
         if k == "SetScript" then self.__scripts[a[1]] = a[2]
         elseif k == "GetScript" then return self.__scripts[a[1]]
         elseif k == "HookScript" then local old = self.__scripts[a[1]]; self.__scripts[a[1]] = function(...) if old then old(...) end a[2](...) end
-        elseif k == "RegisterEvent" or k == "RegisterUnitEvent" then self.__events[a[1]] = true
+        elseif k == "RegisterEvent" then self.__events[a[1]] = true
+        elseif k == "RegisterUnitEvent" then self.__events[a[1]] = true; self.__units = self.__units or {}; self.__units[a[1]] = a[2]
         elseif k == "UnregisterEvent" then self.__events[a[1]] = nil
         elseif k == "CreateTexture" then local x = newObj("Texture", nil, self); x.__layer = a[2] or "ARTWORK"; return x
         elseif k == "CreateFontString" then local x = newObj("FontString", nil, self); x.__layer = a[2] or "OVERLAY"; return x
@@ -90,8 +96,8 @@ local function newObj(kind, template, parent)
         elseif k == "GetHighlightTexture" then if not self.__hi then self.__hi = newObj("Texture", nil, self); self.__hi.__layer = "HIGHLIGHT" end return self.__hi
         elseif k == "GetStringWidth" or k == "GetUnboundedStringWidth" then return textWidth(self.__text, self.__size)
         elseif k == "GetStringHeight" then return self.__size + 2
-        elseif k == "GetFont" then return "Fonts\\FRIZQT__.TTF", self.__size, ""
-        elseif k == "SetFont" then self.__size = a[2] or self.__size
+        elseif k == "GetFont" then return self.__fontFile or "Fonts\\FRIZQT__.TTF", self.__size, ""
+        elseif k == "SetFont" then self.__fontFile = a[1]; self.__size = a[2] or self.__size; return true
         elseif k == "SetFontObject" then self.__size = a[1] and a[1].__fontSize or 12
         elseif k == "SetJustifyH" then self.__justify = a[1]
         elseif k == "SetWordWrap" then self.__wrap = a[1] and true or false
@@ -172,7 +178,7 @@ local function newObj(kind, template, parent)
   end
   return setmetatable(o, mt)
 end
-local function fontObj(name) local f = newObj("Font"); f.__fontSize = FONT_SIZE[name] or 12; return f end
+local function fontObj(name) local f = newObj("Font"); f.__fontSize = FONT_SIZE[name] or 12; f.__fontFile = FONT_FILE[name]; return f end
 
 ----------------------------------------------------------------------------
 -- secret values, as the client makes them
@@ -254,22 +260,39 @@ BASE.GameTooltip = setmetatable({ __hooks = {} }, { __index = function(_, k)
     end
   end
 end })
-BASE.date = os.date
 BASE.RAID_CLASS_COLORS = { WARRIOR = { r = 0.78, g = 0.61, b = 0.43 }, PRIEST = { r = 1, g = 1, b = 1 }, HUNTER = { r = 0.67, g = 0.83, b = 0.45 },
   MAGE = { r = 0.41, g = 0.8, b = 0.94 }, ROGUE = { r = 1, g = 0.96, b = 0.41 }, DRUID = { r = 1, g = 0.49, b = 0.04 },
   PALADIN = { r = 0.96, g = 0.55, b = 0.73 }, WARLOCK = { r = 0.53, g = 0.53, b = 0.93 }, SHAMAN = { r = 0, g = 0.44, b = 0.87 } }
+local CLASS_ID = { WARRIOR = 1, PALADIN = 2, HUNTER = 3, ROGUE = 4, PRIEST = 5, SHAMAN = 7, MAGE = 8, WARLOCK = 9, DRUID = 11 }
+local CLASS_FILE = {}
+for file, id in pairs(CLASS_ID) do CLASS_FILE[id] = file end
 BASE.tinsert = table.insert
 BASE.UISpecialFrames = nil -- per client
 BASE.GetCursorPosition = function() return 600, 500 end
 BASE.issecretvalue = function(v) return type(v) == "table" and getmetatable(v) == SECRET_MT end
+BASE.Enum = {
+  ClubMemberPresence = { Unknown = 0, Online = 1, OnlineMobile = 2, Offline = 3, Away = 4, Busy = 5 },
+  SendAddonMessageResult = { Success = 0, InvalidMessage = 2, AddonMessageThrottle = 3, ChannelThrottle = 8, GeneralError = 9, AddOnMessageLockdown = 11 },
+}
 
 local EPOCH = 1792300000
+
+-- globals no generated API doc lists, mocked on the evidence named here and on nothing else, so the mock claims
+-- nothing quietly: scenario 1 prints them, Cute's /cute api names them on the live client, and a client made with
+-- o.without = { GetInventoryItemDurability = true } lacks one. DoEmote is defined only for o.withEmote clients: the
+-- Forever tree is silent on it, so the chat fallback is the path the gate exercises by default.
+local UNDOCUMENTED = {
+  GetInventoryItemDurability = "Camelot's EquipmentFlyout.lua:544 reaches it through EquipmentManager_GetItemInfoByLocation",
+  GetInventoryItemCount = "the same flyout, the line above it",
+  GetNumUnspentTalents = "Mainline/TalentFrameBase.lua:140, a file the camelot game type loads",
+}
 
 local function newClient(o)
   local env = setmetatable({}, { __index = BASE })
   env._G = env
   local c = { env = env, o = o, name = o.name .. "-" .. (o.realm or "Forever"), timers = {}, clock = 1000, frames = {}, sent = {}, chat = {},
-              hooks = {}, C = {}, inGuild = o.inGuild ~= false, secret = false, throw = false }
+              hooks = {}, C = {}, inGuild = o.inGuild ~= false, secret = false, throw = false, oversize = {}, dayShift = 0,
+              showOffline = o.showOffline ~= false }
   env.UIParent = newObj("Frame"); env.UIParent:SetSize(1600, 1000); env.UIParent.__points = {}; env.UIParent.__root = true
   env.Minimap = newObj("Frame", nil, env.UIParent); env.Minimap:SetSize(140, 140); env.Minimap:SetPoint("TOPRIGHT", env.UIParent, "TOPRIGHT", -20, -20)
   env.UISpecialFrames = {}
@@ -293,10 +316,12 @@ local function newClient(o)
   env.C_Timer = { After = function(sec, f) c.timers[#c.timers + 1] = { t = c.clock + sec, f = f } end }
   env.GetTime = function() return c.clock end
   env.time = function() return EPOCH + c.clock end
+  -- the date follows the client's clock, so a scenario can move it past midnight
+  env.date = function(fmt, t) return os.date(fmt, t or (EPOCH + c.clock + c.dayShift)) end
   env.hooksecurefunc = function(a, b, fn)
     if type(a) == "table" then c.hooks[b] = fn else c.hooks[a] = b end
   end
-  env.DoEmote = function(token) if c.hooks.DoEmote then c.hooks.DoEmote(token) end end
+  if o.withEmote then env.DoEmote = function(token) if c.hooks.DoEmote then c.hooks.DoEmote(token) end end end
   env.JumpOrAscendStart = function() if c.hooks.JumpOrAscendStart then c.hooks.JumpOrAscendStart() end end
 
   -- the character, read through wrappers that can go secret or throw
@@ -315,44 +340,45 @@ local function newClient(o)
   env.GetSubZoneText = api(function() return o.subzone or "" end)
   env.UnitName = api(function(unit) if unit == "player" then return o.name end local i = unit:match("^party(%d)$"); return i and (o.party or {})[tonumber(i)] or nil end)
   env.UnitFullName = api(function() return o.name, o.realm or "Forever" end)
+  env.UnitClass = api(function() return o.class, o.class, CLASS_ID[o.class] end)
   env.GetNormalizedRealmName = api(function() return o.realm or "Forever" end)
   env.GetMoney = api(function() return o.money or 0 end)
   env.GetBindLocation = api(function() return o.hearth or "Goldshire" end)
-  env.GetNumUnspentTalents = api(function() return o.talents or 0 end)
-  env.GetSpecialization = api(function() return 1 end)
-  env.GetSpecializationInfo = api(function() return 1, o.spec or "Arms" end)
-  env.GetProfessions = api(function() return 1, 2, nil, 4, 5 end)
-  env.GetProfessionInfo = api(function(i) local p = ({ { "Mining", 150, 225 }, { "Engineering", 140, 225 }, nil, { "Fishing", 40, 75 }, { "Cooking", 60, 150 } })[i]; if p then return p[1], 0, p[2], p[3] end end)
-  env.GetAverageItemLevel = api(function() return o.ilvl or 30, o.ilvl or 30 end)
   env.GetInventoryItemLink = api(function(_, slot) return (o.items or {})[slot] end)
-  env.GetItemInfo = api(function(link) local id = tonumber(tostring(link):match("item:(%d+)")) or 0; return "Item " .. id, link, (id % 3) + 1, 20 + (id % 40) end)
-  env.UnitResistance = api(function(_, i) return 0, (o.resist or {})[i] or 0 end)
-  env.GetItemCount = api(function(id) return (o.counts or {})[id] or 0 end)
-  env.UnitAura = api(function(_, i) local a = (o.auras or {})[i]; if a then return a[1], nil, nil, nil, nil, nil, nil, nil, nil, a[2] end end)
-  env.GetInventoryItemDurability = api(function(_, slot) if (o.items or {})[slot] then return o.dur or 80, 100 end end)
-  env.GetFactionInfoByID = api(function(id) return "Faction", nil, (o.rep or {})[id] or 4 end)
-  env.UnitPVPRank = api(function() return o.pvp or 0 end)
-  env.GetPVPThisWeekStats = api(function() return 0, o.honor or 0 end)
-  env.GetNumSavedInstances = api(function() return #(o.saved or {}) end)
-  env.GetSavedInstanceInfo = api(function(i) local s = o.saved[i]; return s.name, 1, 0, 0, true, false, 0, s.raid end)
-  env.GetInventoryItemCount = api(function() return o.ammo or 0 end)
+  -- baseResistance, realResistance, effectiveResistance: the sheet shows the third
+  env.UnitResistance = api(function(_, i) return 0, 0, (o.resist or {})[i] or 0 end)
+  -- the undocumented globals, each with its evidence in UNDOCUMENTED or the mock is refused
+  local undocumented = {
+    GetInventoryItemDurability = api(function(slot) if (o.items or {})[slot] then return o.dur or 80, 100 end end),
+    GetInventoryItemCount = api(function() return o.ammo or 0 end),
+    GetNumUnspentTalents = api(function() return o.talents or 0 end),
+  }
+  for name, fn in pairs(undocumented) do assert(UNDOCUMENTED[name], name .. " is mocked without its evidence in UNDOCUMENTED"); env[name] = fn end
+  for name in pairs(UNDOCUMENTED) do assert(undocumented[name], name .. " is listed in UNDOCUMENTED but not mocked") end
   env.UnitPosition = api(function() local p = o.pos or { 100, 100 }; return p[2], p[1], 0, 0 end)
   env.UnitIsGhost = api(function() return o.ghost or false end)
   env.UnitOnTaxi = api(function() return o.taxi or false end)
   env.UnitIsAFK = api(function() return o.afk or false end)
   env.IsFalling = api(function() return o.falling or false end)
-  env.GetMirrorTimerInfo = api(function(i) if i == 1 and o.breath then return "BREATH", o.breath end return "UNKNOWN", 0 end)
+  -- name, startValue (the value the bar began at, not the live one), maxValue, scale, paused, label, spellID
+  env.GetMirrorTimerInfo = api(function(i) if i == 1 and o.breath ~= nil then return "BREATH", 60000, 60000, -1, 0, "Breath", 0 end return "UNKNOWN", 0, 0, 0, 0, "", 0 end)
+  env.GetMirrorTimerProgress = api(function(name) if name == "BREATH" then return o.breath end return nil end)
   env.GetInstanceInfo = api(function() return "Zone", o.instance or "none" end)
   env.NumTaxiNodes = api(function() return 5 end)
   env.TaxiNodeGetType = api(function(i) return i <= 3 and "REACHABLE" or "DISTANT" end)
   env.RequestTimePlayed = function() c.timers[#c.timers + 1] = { t = c.clock + 1, f = function() fire(c, "TIME_PLAYED_MSG", o.played or 36000, o.playedLevel or 3600) end } end
   env.IsInGuild = api(function() return c.inGuild end)
-  env.GetNumGuildMembers = api(function() return c.inGuild and #GUILD or 0 end)
-  env.GetGuildRosterInfo = api(function(i)
-    local m = GUILD[i]
-    if not m then return nil end
-    return m.name, m.rankName or ("Rank " .. m.rank), m.rank, m.level, m.class, m.zone or "Elwynn Forest", "", "", m.online ~= false, 0, m.class
-  end)
+  env.C_Club = {
+    GetGuildClubId = api(function() return c.inGuild and 7 or nil end),
+    GetClubMembers = api(function(id) local out = {}; if id == 7 then for i = 1, #GUILD do out[i] = i end end return out end),
+    GetMemberInfo = api(function(id, i)
+      local m = id == 7 and GUILD[i]
+      if not m then return nil end
+      return { name = m.name, presence = m.online ~= false and 1 or 3, guildRank = m.rankName or ("Rank " .. m.rank), guildRankOrder = m.rank + 1,
+        level = m.level, classID = CLASS_ID[m.class], zone = m.zone or "Elwynn Forest", isSelf = m.name == c.name }
+    end),
+  }
+  env.C_CreatureInfo = { GetClassInfo = api(function(id) local file = CLASS_FILE[id]; if file then return { className = file, classFile = file, classID = id } end end) }
   env.C_GuildInfo = { GuildRoster = function() c.rosterAsked = (c.rosterAsked or 0) + 1; c.timers[#c.timers + 1] = { t = c.clock + 0.5, f = function() fire(c, "GUILD_ROSTER_UPDATE") end } end }
   env.C_QuestLog = {
     IsQuestFlaggedCompleted = api(function(id) return (o.done or {})[id] or false end),
@@ -362,29 +388,65 @@ local function newClient(o)
     GetInfo = api(function(i) return { questID = 100 + i, isHeader = false } end),
     IsComplete = api(function(id) return id == 101 end),
   }
-  env.C_Item = { GetItemCount = env.GetItemCount, GetDetailedItemLevelInfo = api(function(link) local id = tonumber(tostring(link):match("item:(%d+)")) or 0; return 20 + (id % 40) end),
-    GetItemQualityByID = api(function(link) local id = tonumber(tostring(link):match("item:(%d+)")) or 0; return (id % 3) + 1 end) }
-  env.C_Container = { GetContainerNumFreeSlots = api(function(b) return b == 0 and 4 or 2 end), GetContainerNumSlots = api(function(b) return b == 0 and 16 or 10 end) }
+  local function itemId(link) return tonumber(tostring(link):match("item:(%d+)")) or 0 end
+  env.C_Item = {
+    GetItemCount = api(function(id) return (o.counts or {})[id] or 0 end),
+    GetDetailedItemLevelInfo = api(function(link) return 20 + (itemId(link) % 40) end),
+    GetItemQualityByID = api(function(link) return (itemId(link) % 3) + 1 end),
+    -- name, link, quality, level, minLevel, type, subType, stackCount, equipLoc, texture, sellPrice
+    GetItemInfo = api(function(link) local id = itemId(link); return "Item " .. id, link, (id % 3) + 1, 20 + (id % 40), 1, "Misc", "Junk", 20, "", 0, (o.prices or {})[id] or 0 end),
+  }
+  env.C_Container = {
+    GetContainerNumFreeSlots = api(function(b) return b == 0 and 4 or 2 end),
+    GetContainerNumSlots = api(function(b) return b == 0 and 16 or 10 end),
+    GetContainerItemInfo = api(function(bag, slot)
+      local it = ((o.bags or {})[bag] or {})[slot]
+      if not it then return nil end
+      return { quality = it.quality, hyperlink = it.link, stackCount = it.count or 1, hasNoValue = it.noValue or false, itemID = itemId(it.link) }
+    end),
+    UseContainerItem = function(bag, slot) if c.hooks.UseContainerItem then c.hooks.UseContainerItem(bag, slot) end end,
+  }
   env.C_UnitAuras = { GetAuraDataByIndex = api(function(_, i) local a = (o.auras or {})[i]; if a then return { name = a[1], spellId = a[2] } end end) }
   env.C_Reputation = { GetFactionDataByID = api(function(id) return { reaction = (o.rep or {})[id] or 4 } end) }
   env.C_MountJournal = { GetMountIDs = api(function() return { 1 } end), GetMountInfoByID = api(function() return "Horse", 1, 1, true, true, 1, false, false, false, false, o.mount or false end) }
   env.C_Traits = { GetConfigIDByTreeID = api(function(tree) return tree == 1187 and 7 or nil end),
     GetNodeInfo = api(function(_, node) return { activeRank = (o.legacy or {})[node] or 0 } end) }
-  env.C_TradeSkillUI = { GetAllRecipeIDs = api(function() return o.recipes or {} end), GetRecipeInfo = api(function(id) return { learned = true } end), GetTradeSkillLine = api(function() return "Alchemy" end) }
+  env.C_SpecializationInfo = { GetSpecialization = api(function() return 1 end), GetSpecializationInfo = api(function() return 1, o.spec or "Arms" end) }
+  -- Forever's PvP rank: the renown track of Major Faction 2800
+  env.C_MajorFactions = { GetMajorFactionProgressionInfo = api(function(id)
+    if id ~= 2800 then return nil end
+    return { renownLevel = o.pvp or 0, renownReputationEarned = o.pvpPts or 0, renownLevelThreshold = 1000, currentWeekProgressiveMaxLevel = 14, maxLevel = 14, weekNumber = 1 }
+  end) }
+  -- the skills window's lines: { skillID, name, rank, maxRank }, headers between
+  o.skills = o.skills or { { 186, "Mining", 150, 225 }, { 202, "Engineering", 140, 225 }, { 356, "Fishing", 40, 75 }, { 185, "Cooking", 60, 150 }, { 129, "First Aid", 1, 75 } }
+  env.C_SkillInfo = {
+    GetNumSkillLines = api(function() return #o.skills + 1 end),
+    GetSkillLineInfo = api(function(i)
+      if i == 1 then return { skillID = 0, name = "Professions", isHeader = true, rank = 0, maxRank = 0 } end
+      local s = o.skills[i - 1]
+      if s then return { skillID = s[1], name = s[2], isHeader = false, rank = s[3], maxRank = s[4] } end
+    end),
+  }
+  env.C_TradeSkillUI = {
+    GetRecipeInfo = api(function(id) return { recipeID = id, learned = (o.learned or {})[id] == true } end),
+    GetBaseProfessionInfo = api(function() return { professionID = 171, professionName = "Alchemy", skillLevel = 300, maxSkillLevel = 300 } end),
+  }
   env.C_ChatInfo = {
     RegisterAddonMessagePrefix = function(p) c.prefix = p; return true end,
     SendAddonMessage = function(prefix, msg, channel)
-      assert(#msg <= 255, "an addon message of " .. #msg .. " bytes")
       assert(prefix == "Cute" and channel == "GUILD", "the Cute prefix on GUILD only: " .. tostring(prefix) .. " " .. tostring(channel))
+      if #msg > 255 then c.oversize[#c.oversize + 1] = msg; return 2 end
       if c.throttle and c.throttle > 0 then c.throttle = c.throttle - 1; return 3 end
+      if c.fail and c.fail > 0 then c.fail = c.fail - 1; return 9 end
       c.sent[#c.sent + 1] = { msg = msg, at = c.clock }
       BUS[#BUS + 1] = { from = c, prefix = prefix, msg = msg, channel = channel }
       return 0
     end,
     SendChatMessage = function(text, kind) if c.hooks.SendChatMessage then c.hooks.SendChatMessage(text, kind) end end,
   }
-  env.Enum = {}
   env.math = setmetatable({ random = function(a, b) if a and b then return a + (c.clock % (b - a + 1)) end return 0.5 end }, { __index = math })
+  -- a client that lacks a function (o.without = { Name = true }): the global is gone, as on a client without it
+  for name in pairs(o.without or {}) do env[name] = nil end
 
   -- load the addon, file by file, as the TOC lists them
   local toc = io.open(HERE .. "/Cute/Cute.toc"):read("*a")
@@ -400,15 +462,24 @@ local function newClient(o)
   return c
 end
 
-local function login(c, db)
+local function login(c, db, reloading)
   c.env.CuteDB = db or {}
   fire(c, "ADDON_LOADED", "Cute")
-  fire(c, "PLAYER_ENTERING_WORLD", true, false)
+  fire(c, "PLAYER_ENTERING_WORLD", not reloading, reloading or false)
   tick(c, 1) -- the roster arrives
 end
+local function leave(c) for i = #clients, 1, -1 do if clients[i] == c then table.remove(clients, i) end end end
 
-local function click(b) assert(b and b.__scripts.OnClick, "a button with OnClick"); b.__scripts.OnClick(b, "LeftButton") end
+local function click(b) assert(b and b.__scripts.OnClick, "a button with OnClick"); b.__checked = not b.__checked; b.__scripts.OnClick(b, "LeftButton") end
+local function press(b) assert(b and b.__scripts.OnClick, "a button with OnClick"); b.__scripts.OnClick(b, "LeftButton") end
 local function hover(o) if o.__scripts.OnEnter then o.__scripts.OnEnter(o) end end
+local function msgs(c, kind) local n = 0; for _, m in ipairs(c.sent) do if m.msg:sub(1, 2) == kind then n = n + 1 end end return n end
+local function sameColor(a, b) return a and b and math.abs(a[1] - b[1]) < 0.01 and math.abs(a[2] - b[2]) < 0.01 and math.abs(a[3] - b[3]) < 0.01 end
+-- a shown row of the table, and a shown cell of a row, by the stat id
+local function rowOf(c, short) for _, r in ipairs(c.C.UI.rows.items) do if r:IsShown() and r.row and r.row.short == short then return r end end end
+local function cellOf(r, id) for _, cell in ipairs(r.cells) do if cell:IsShown() and cell.def and cell.def.id == id then return cell end end end
+local function shownHeaders(c) local n = 0; for _, h in ipairs(c.C.UI.headerCells.items) do if h:IsShown() then n = n + 1 end end return n end
+local function checkBox(c, test) for _, fr in ipairs(c.frames) do if fr.__kind == "CheckButton" and fr:IsVisible() and test(fr) then return fr end end end
 
 ----------------------------------------------------------------------------
 -- layout: resolve anchors to boxes like the game does
@@ -648,7 +719,7 @@ end
 local function charOf(n, extra)
   local o = { name = n[1], realm = "Forever", level = n[5], xp = 350, xpmax = 1000, class = n[4], money = 123456, zone = "Duskwood", rested = 500,
     items = { [1] = "item:1234:0", [5] = "item:1235:2", [7] = "item:1236:0", [16] = "item:1240:0" }, auras = { { "Power Word: Fortitude", 1243 }, { "Rallying Cry", 22888 } },
-    counts = { [13446] = 5, [13510] = 1, [18249] = 1 }, done = { [7848] = true, [4182] = true }, log = { [4183] = 3 }, saved = {} }
+    counts = { [13446] = 5, [13510] = 1, [18249] = 1 }, done = { [7848] = true, [4182] = true }, log = { [4183] = 3 } }
   for k, v in pairs(extra or {}) do o[k] = v end
   return o
 end
@@ -670,19 +741,45 @@ local kaka = newClient(charOf(NAMES[4], { level = 37, xp = 120, money = 54321, z
 login(yezin)
 login(kaka)
 
--- 1: the registry
+-- 1: the registry, and every read stat has a value on a client that mirrors Forever's documented API
 do
   local S = yezin.C.Stats
   local counts = {}
   for _, cat in ipairs(S.CATS) do counts[cat] = #S.byCat[cat] end
-  assert(#S.list >= 110, "a starter list of over a hundred stats: " .. #S.list)
+  assert(#S.list >= 100, "a starter list of over a hundred stats: " .. #S.list)
   for _, def in ipairs(S.list) do assert(def.id and def.label and def.cat and def.kind, "a whole definition: " .. tostring(def.id)) end
-  assert(S.byId.level and S.byId.deaths and S.byId.gold and S.byId.unenchanted, "the stats the pages lean on")
+  assert(S.byId.level and S.byId.deaths and S.byId.gold and S.byId.unenchanted and S.byId.ready, "the stats the pages lean on")
   assert(yezin.C.Policy:Vis("unenchanted") == "self" and yezin.C.Policy:Vis("level") == "all" and yezin.C.Policy:Vis("gold") == "self", "the defaults")
-  print(string.format("registry: %d stats (leveling %d, prog %d, funny %d, officer %d)", #S.list, counts.leveling, counts.prog, counts.funny, counts.officer))
+  local nils = {}
+  for _, def in ipairs(S.list) do
+    if def.read and yezin.C.Sample:Value(def.id) == nil then nils[#nils + 1] = def.id .. (yezin.C.Sample:Error(def.id) and (" (" .. yezin.C.Sample:Error(def.id) .. ")") or "") end
+  end
+  assert(#nils == 0, "stats that read nil on the documented client: " .. table.concat(nils, ", "))
+  assert(yezin.C.Sample:Value("spec") == "Arms" and yezin.C.Sample:Value("pvp_rank") == 0 and yezin.C.Sample:Value("cooking") == 60 and yezin.C.Sample:Value("first_aid") == 1
+    and yezin.C.Sample:Value("prof1") == "Mining 150" and yezin.C.Sample:Value("mount") == false, "spec, PvP, skills and the mount read through the documented namespaces")
+  assert(yezin.C.Sample:Value("ready") == 1 and yezin.C.UI.Format(S.byId.ready, 1) == "gaps", "readiness: one gap (empty slots) reads as gaps: " .. tostring(yezin.C.Sample:Value("ready")))
+  assert(yezin.C.Sample:Value("gold") == 123456 and yezin.C.UI.Format(S.byId.gold, 123456) == "12g" and S.FmtGold(9500) == "95s" and S.FmtGold(7) == "7c", "gold keeps copper and shows gold")
+  assert(yezin.C.Sample:Value("resist_fire") == 0, "resists read")
+  local XPLeft = yezin.C.Sample.XPLeft
+  assert(XPLeft(59, 0, 171800) == 171800 and XPLeft(58, 165700, 165800) == 100 + 171800 and XPLeft(1, 0, 800) == 2 * 3379200, "the XP left to 60 follows the per-level table, scaled to this client's max")
+  -- the item level is the average over the items worn (there is no GetAverageItemLevel): 54, 55, 56 and 20 make 46
+  assert(yezin.C.Sample:Value("ilvl") == 46, "item level averaged over the four items worn: " .. tostring(yezin.C.Sample:Value("ilvl")))
+  local slots = yezin.C.Sample:Value("ilvl_slots")
+  assert(slots[1] and slots[5] and slots[7] and not slots[16], "the slots at or above that average")
+  -- every undocumented global the mock defines is one /cute api reports on the live client
+  local undoc = {}
+  for name in pairs(UNDOCUMENTED) do
+    local listed = false
+    for _, n in ipairs(yezin.C.UNDOCUMENTED) do if n == name then listed = true end end
+    assert(listed, name .. " is mocked here but /cute api does not report it")
+    undoc[#undoc + 1] = name
+  end
+  table.sort(undoc)
+  print(string.format("registry: %d stats (leveling %d, prog %d, funny %d, officer %d), every read stat has a value on the documented client; undocumented globals mocked on evidence: %s",
+    #S.list, counts.leveling, counts.prog, counts.funny, counts.officer, table.concat(undoc, ", ")))
 end
 
--- 2: every read survives a client whose values are all secret, and one whose calls all throw
+-- 2: every read survives a client whose values are all secret, and one whose calls all throw (and the tooltip learns why)
 do
   local c = newClient(charOf(NAMES[9]))
   login(c)
@@ -695,13 +792,47 @@ do
   c.C.Sample:ReadAll()
   local errs = 0
   for _, def in ipairs(c.C.Stats.list) do if c.C.Sample:Error(def.id) then errs = errs + 1 end end
+  assert(errs >= 20, "the client's throws are recorded against the stats for the tooltip: " .. errs)
+  assert(c.C.Sample:Value("level") == nil and tostring(c.C.Sample:Error("level")):find("the client threw", 1, true), "the level's error text is the client's")
   c.throw = false
   c.C.Sample:ReadAll()
-  assert(c.C.Sample:Value("level") == NAMES[9][5], "the level reads again after the client recovers")
-  print(string.format("reads: every stat survives secret values and thrown errors (%d read errors recorded while throwing)", errs))
+  assert(c.C.Sample:Value("level") == NAMES[9][5] and c.C.Sample:Error("level") == nil, "the level reads again after the client recovers")
+  -- a client without one of the undocumented globals: the stat reads nil with the reason, which the cell's tooltip,
+  -- the Me page and /cute errors carry; /cute api names what is missing and what is there
+  local bare = newClient(charOf(NAMES[15], { without = { GetInventoryItemDurability = true } }))
+  login(bare)
+  assert(bare.C.Sample:Value("durability") == nil and bare.C.Sample:Error("durability") == "GetInventoryItemDurability is missing on this client",
+    "a missing function reads as its reason: " .. tostring(bare.C.Sample:Error("durability")))
+  assert(bare.C.Sample:Value("ready") == 1, "readiness still reads without the durability input")
+  local noted = 0
+  for _, e in ipairs(bare.env.CuteDB.errors) do if e.msg == "GetInventoryItemDurability is missing on this client" then noted = noted + e.count end end
+  assert(noted == 1 and #bare.chat == 0, "noted once for /cute errors, no chat line: " .. noted)
+  bare.C.UI:Open("prog")
+  local cell = cellOf(rowOf(bare, "Ondra"), "durability")
+  assert(cell and cell.label:GetText() == "?", "the cell shows ?")
+  local n0 = #lines
+  hover(cell)
+  assert(table.concat(lines, "\n", n0 + 1):find("Could not read: GetInventoryItemDurability is missing on this client", 1, true), "the cell's tooltip says why")
+  bare.C.UI:Open("me")
+  local said = false
+  for _, l in ipairs(bare.C.UI.labels.items) do if l:IsShown() and l:GetText():find("Durability: GetInventoryItemDurability is missing", 1, true) then said = true end end
+  assert(said, "the Me page lists what could not be read, with the reason")
+  check(bare.C.UI.frame, "member me, a function missing")
+  bare.C.UI.frame:SetSize(760, 420)
+  bare.C.UI:Open("me")
+  check(bare.C.UI.frame, "member me, a function missing, small window")
+  bare.C.UI.frame:SetSize(1040, 640)
+  bare.env.SlashCmdList.CUTE("api")
+  local line = bare.chat[#bare.chat]
+  local present, missing = line:match("present ([^|]*)|"), line:match("missing (.*)$")
+  assert(present and missing, "/cute api prints present and missing: " .. tostring(line))
+  assert(missing:find("GetInventoryItemDurability", 1, true) and missing:find("DoEmote", 1, true) and missing:find("GetAverageItemLevel", 1, true), "the missing ones: " .. missing)
+  assert(present:find("GetInventoryItemCount", 1, true) and present:find("GetNumUnspentTalents", 1, true) and not present:find("Durability", 1, true), "the present ones: " .. present)
+  leave(bare)
+  print(string.format("reads: every stat survives secret values and thrown errors (%d read errors recorded while throwing); a missing function reads as its reason, listed by /cute api", errs))
 end
 
--- 3: the encoder round-trips every kind
+-- 3: the encoder round-trips every kind; what comes in is cleaned
 do
   local M, S = yezin.C.Comm, yezin.C.Stats
   local samples = { int = { 0, 1, 35, 36, 1295, 123456789, -7 }, flag = { true, false }, text = { "Duskwood", "The Barrens", "a|b;c=d", "Kaka, Mutu" }, pips = { "2210", "0", "22222222222" } }
@@ -726,29 +857,44 @@ do
     end
   end
   assert(M.b36(35) == "z" and M.b36(36) == "10" and M.unb36("-1z") == -71, "base 36")
-  print("encoder: " .. n .. " values round-trip")
+  -- a modified client's message: colour codes, separators, a byte the font cannot draw, letters where digits go
+  assert(M.Decode(S.byId.zone, "Dusk|cff00ff00wood;x") == "Duskcff00ff00woodx", "text in is cleaned of | and ;")
+  assert(M.Decode(S.byId.zone, "A\195\169B\1C") == "ABC", "text in loses bytes the font draws as boxes and control characters")
+  assert(M.Decode(S.byId.attune_mc, "12a") == nil and M.Decode(S.byId.attune_mc, "2") == "2", "pips in are digits only")
+  assert(M.Decode(S.byId.keys, "-5") == nil and M.Decode(S.byId.level, "zzzzzzzzzzzz") == nil, "lists and ints in are bounded")
+  print("encoder: " .. n .. " values round-trip; what comes in is cleaned")
 end
 
--- 4: hello: the two clients exchange records; the full record fits in a few chunks
+-- 4: hello: the two clients exchange records; the full record fits in a few chunks; nothing goes out before the hello
 do
   tickAll(45)
-  local function msgs(c, kind) local n = 0; for _, m in ipairs(c.sent) do if m.msg:sub(1, 2) == kind then n = n + 1 end end return n end
   assert(msgs(yezin, "1R") == 1 and msgs(kaka, "1R") == 1, "each said hello")
-  local fulls = msgs(yezin, "1F")
-  assert(fulls >= 1 and fulls <= 16, "the full record in a handful of chunks per send: " .. fulls)
-  for _, m in ipairs(yezin.sent) do assert(#m.msg <= 255) end
+  local fulls = msgs(yezin, "1F") / 2 -- once at the hello, once in answer to Kaka's
+  assert(fulls >= 1 and fulls <= 8, "the full record in a handful of chunks per send: " .. fulls)
+  local longest, firstD, firstF = 0, nil, nil
+  for i, m in ipairs(yezin.sent) do
+    assert(#m.msg <= 255)
+    longest = math.max(longest, #m.msg)
+    if m.msg:sub(1, 2) == "1D" and not firstD then firstD = i end
+    if m.msg:sub(1, 2) == "1F" and not firstF then firstF = i end
+  end
+  assert(#yezin.oversize == 0 and #kaka.oversize == 0, "no message over the limit was tried")
+  assert(longest >= 236, "the chunks are packed close to the limit, header included: " .. longest)
+  assert(not firstD or firstD > firstF, "no delta leaves before the full record")
+  -- the hello, the full record, and the full record again in answer to Kaka's hello: no deltas
+  assert(msgs(yezin, "1D") == 0 and #yezin.sent <= 1 + 2 * fulls, "a quiet client sends nothing beyond the hello and its answers: " .. #yezin.sent .. " messages in 45 s")
   local e = kaka.env.CuteDB.roster["Yezin-Forever"]
   assert(e and e.stats.level == 42 and e.stats.zone == "Duskwood", "Kaka's roster holds Yezin's level and zone")
   local e2 = yezin.env.CuteDB.roster["Kaka-Forever"]
-  assert(e2 and e2.stats.level == 37 and e2.stats.gold == 5, "Yezin's roster holds Kaka's level and gold")
+  assert(e2 and e2.stats.level == 37 and e2.stats.gold == 54321, "Yezin's roster holds Kaka's level and gold (in copper)")
   assert(e2.stats.unenchanted and e2.stats.unenchanted[1] == true and e2.stats.unenchanted[5] == nil, "lists arrive as sets")
   -- one message a second from each
   local last
   for _, m in ipairs(yezin.sent) do if last then assert(m.at - last >= 1 - 1e-9, "one message a second: " .. (m.at - last)) end last = m.at end
-  print(string.format("hello: records exchanged, %d messages from Yezin (%d chunks of the full record), none closer than a second", #yezin.sent, fulls / 2))
+  print(string.format("hello: records exchanged, %d messages from Yezin (%d chunks of the full record, longest %d bytes), none closer than a second", #yezin.sent, fulls, longest))
 end
 
--- 5: a change goes out as a delta
+-- 5: a change goes out as a delta; the slow stats wait for the two-minute flush
 do
   local before = #kaka.sent
   kaka.o.level = 38
@@ -757,11 +903,19 @@ do
   assert(#kaka.sent > before, "a delta went out")
   local d = kaka.sent[#kaka.sent].msg
   assert(d:sub(1, 2) == "1D" and d:find("level=12", 1, true), "the delta carries the new level in base 36: " .. d)
+  assert(not d:find("played=", 1, true), "the ticking stats are not in it: " .. d)
   assert(yezin.env.CuteDB.roster["Kaka-Forever"].stats.level == 38, "Yezin saw the level")
-  print("deltas: a level-up reaches the guild as one small message")
+  -- five quiet minutes: the flush alone, with the ticking stats
+  before = #kaka.sent
+  tickAll(300)
+  local flushed = #kaka.sent - before
+  assert(flushed >= 1 and flushed <= 3, "a quiet client sends only its flushes in five minutes: " .. flushed)
+  assert(kaka.sent[#kaka.sent].msg:find("played=", 1, true) or kaka.sent[#kaka.sent - 1].msg:find("played=", 1, true), "the flush carries time played")
+  assert(yezin.env.CuteDB.roster["Kaka-Forever"].stats.played and yezin.env.CuteDB.roster["Kaka-Forever"].stats.played > 0, "Yezin has Kaka's time played")
+  print(string.format("deltas: a level-up reaches the guild as one small message; %d messages in five quiet minutes", flushed))
 end
 
--- 6: the policy: a member's is ignored, an officer's applies, cells follow it
+-- 6: the policy: a member's is ignored, an officer's applies, cells follow it; a policy before the roster waits
 do
   local P = kaka.C.Policy
   assert(P:Vis("gold") == "self")
@@ -782,38 +936,100 @@ do
   local at = kaka.env.CuteDB.policy.at
   local ok = kaka.C.Policy:Receive("Yezin-Forever", at - 10, 1, "gold=s")
   assert(ok == false and kaka.C.Policy:Vis("gold") == "all", "older policies are ignored")
-  print("policy: member's ignored, officer's applied, older ignored, cells follow the rule")
+  -- a policy that lands before the roster is known waits for the ranks, then applies
+  local early = newClient(charOf(NAMES[13]))
+  early.env.CuteDB = {}
+  fire(early, "ADDON_LOADED", "Cute")
+  assert(not early.C.Roster.trusted, "no roster yet")
+  local okEarly, why = early.C.Policy:Receive("Yezin-Forever", at + 5, 1, "gold=a;deaths=s")
+  assert(okEarly == false and why == "roster not known yet" and early.C.Policy:Vis("deaths") == "all", "held, not applied")
+  fire(early, "PLAYER_ENTERING_WORLD", true, false)
+  tick(early, 1)
+  assert(early.C.Roster.trusted and early.C.Policy:Vis("deaths") == "self" and early.C.Policy:Vis("gold") == "all", "applied once the ranks arrived")
+  -- a fresh install asks (1R) and the officer's answer carries the policy
+  local fresh = newClient(charOf(NAMES[14]))
+  login(fresh)
+  assert(fresh.C.Policy:Vis("deaths") == "all", "a fresh install starts from the defaults")
+  tickAll(45)
+  assert(fresh.C.Policy:Vis("deaths") == "self" and fresh.C.Policy:Vis("gold") == "all", "the officer's answer to the hello carried the policy")
+  leave(early); leave(fresh)
+  print("policy: member's ignored, officer's applied, older ignored, an early one waits for the roster, a fresh install gets it on hello")
 end
 
--- 7: counters persist across a reload
+-- 7: counters persist across a reload; a reload is not a login; deaths know their cause
 do
   fire(kaka, "PLAYER_DEAD")
   fire(kaka, "PLAYER_DEAD")
-  kaka.env.DoEmote("DANCE")
-  kaka.env.DoEmote("WAVE")
+  -- no DoEmote on this client: your own lines in the emote chat count (the hook, where the function exists, is scenario 14's)
+  fire(kaka, "CHAT_MSG_TEXT_EMOTE", "You dance.", "Kaka-Forever")
+  fire(kaka, "CHAT_MSG_TEXT_EMOTE", "You wave.", "Kaka")
   assert(kaka.C.Sample:Value("deaths") == 2 and kaka.C.Sample:Value("dance") == 1 and kaka.C.Sample:Value("emotes") == 2, "counted")
+  assert(kaka.C.Sample:Value("drownings") == 0 and kaka.C.Sample:Value("falls") == 0, "ordinary deaths are neither falls nor drownings")
+  -- a short fall: the one-second poll sees it
   kaka.o.falling = true
+  tick(kaka, 2)
+  kaka.o.falling = false
+  fire(kaka, "PLAYER_DEAD")
+  assert(kaka.C.Sample:Value("falls") == 1 and kaka.C.Sample:Value("deaths") == 3, "a fall death, from a two-second fall")
+  -- drowning: the breath bar is listed and its live value is zero (the start value the info call returns is full)
+  tick(kaka, 5)
+  kaka.o.breath = 0
+  tick(kaka, 2)
+  fire(kaka, "PLAYER_DEAD")
+  assert(kaka.C.Sample:Value("drownings") == 1, "a death with the breath bar empty is a drowning")
+  kaka.o.breath = nil
   tick(kaka, 5)
   fire(kaka, "PLAYER_DEAD")
-  assert(kaka.C.Sample:Value("falls") == 1 and kaka.C.Sample:Value("deaths") == 3, "a fall death")
-  kaka.o.falling = false
+  assert(kaka.C.Sample:Value("drownings") == 1 and kaka.C.Sample:Value("deaths") == 5, "a later death is not")
+  -- whispers an hour, from the count and the session
+  for _ = 1, 5 do fire(kaka, "CHAT_MSG_WHISPER", "hi", "Someone-Forever") end
+  tick(kaka, 5)
+  local hours = math.max(0.25, (kaka.C.Sample:Value("session") or 0) / 3600)
+  assert(kaka.C.Sample:Value("whispers") == math.floor(5 / hours), "whispers an hour: " .. tostring(kaka.C.Sample:Value("whispers")))
+  -- standing still is noticed
+  assert(kaka.C.Sample:Value("still") >= 25, "stood still for the ticks so far: " .. tostring(kaka.C.Sample:Value("still")))
+  assert(kaka.C.Sample:Value("logins") == 1, "one login so far")
   local db = kaka.env.CuteDB
+  local reloaded = newClient(charOf(NAMES[4]))
+  login(reloaded, db, true)
+  assert(reloaded.C.Sample:Value("deaths") == 5 and reloaded.C.Sample:Value("dance") == 1, "counters survive a reload")
+  assert(reloaded.C.Sample:Value("logins") == 1, "a /reload is not a login")
+  leave(reloaded)
   local again = newClient(charOf(NAMES[4]))
   login(again, db)
-  assert(again.C.Sample:Value("deaths") == 3 and again.C.Sample:Value("dance") == 1, "counters survive a reload")
   assert(again.C.Sample:Value("logins") == 2, "logins counted across sessions")
-  table.remove(clients) -- the reloaded Kaka leaves the bus
-  print("counters: deaths, dances and falls persist across a reload")
+  leave(again)
+  -- the week turns between two sessions: the first login of the new week is one, the next is two (0.2.0's first cut
+  -- counted the first as two: the reset set one and the login added one)
+  local rec = db.chars["Kaka-Forever"]
+  local keepDay, keepWeek, keepLogins = rec.day, rec.week, rec.counters.logins
+  local late = newClient(charOf(NAMES[4]))
+  late.dayShift = 9 * 86400
+  login(late, db)
+  assert(late.C.Sample:Value("logins") == 1 and rec.counters.logins == 1, "the first login of a new week is one: " .. tostring(late.C.Sample:Value("logins")))
+  assert(rec.week == os.date("%Y-%W", EPOCH + late.clock + late.dayShift), "the record moved to the new week")
+  leave(late)
+  local late2 = newClient(charOf(NAMES[4]))
+  late2.dayShift = 9 * 86400
+  login(late2, db)
+  assert(late2.C.Sample:Value("logins") == 2, "the next login that week is two: " .. tostring(late2.C.Sample:Value("logins")))
+  leave(late2)
+  -- Kaka's own client still runs on the old week: put its record back so its ten-minute check sees no turn
+  rec.day, rec.week, rec.counters.logins = keepDay, keepWeek, keepLogins
+  print("counters: deaths, dances, falls and drownings persist across a reload, which is not a login; a new week starts its logins at one")
 end
 
--- 8: the roster: prune needs two misses; members without the addon show greyed
+-- 8: the roster: online and class from the guild; prune needs two misses, and only against a complete list
 do
   local rows = yezin.C.Roster:Rows()
   assert(rows[1].me and rows[1].short == "Yezin", "you first")
   local byName = {}
   for _, r in ipairs(rows) do byName[r.short] = r end
-  assert(byName.Kaka and byName.Kaka.addon, "Kaka has the addon")
-  assert(byName.Garristan and not byName.Garristan.addon and byName.Garristan.level == 1, "Garristan is listed from the guild roster without the addon")
+  assert(byName.Kaka and byName.Kaka.addon and byName.Kaka.online == true and byName.Kaka.class == "PRIEST", "Kaka has the addon, is online and a priest")
+  assert(byName.Bari and byName.Bari.online == false and byName.Bari.class == "PALADIN", "Bari is offline, from the guild")
+  assert(byName.Garristan and not byName.Garristan.addon and byName.Garristan.level == 1 and byName.Garristan.zone == "Elwynn Forest", "Garristan is listed from the guild roster without the addon")
+  assert(rows[1].class == "WARRIOR", "your own class is known")
+  assert(yezin.C.Roster.updatedAt, "the roster knows when it last changed")
   -- Kaka leaves the guild: gone after two roster reads
   local saved = GUILD[4]
   table.remove(GUILD, 4)
@@ -826,10 +1042,11 @@ do
   kaka.C.Comm:Full()
   tickAll(12)
   assert(yezin.env.CuteDB.roster["Kaka-Forever"], "back after Kaka sends again")
-  print("roster: you first, no-addon members listed, prune after two misses")
+  -- a client with the older roster API, its guild window hiding offline members: a partial list prunes nobody
+  print("roster: you first, online and class from the guild through C_Club, no-addon members listed, prune after two misses")
 end
 
--- 9: the window, every page, for the officer and the member
+-- 9: the window, every page, for the officer and the member; the look
 do
   local function pages(c, who, list)
     c.C.UI:Open("race")
@@ -838,7 +1055,7 @@ do
     for _, page in ipairs(list) do
       c.C.UI:Open(page)
       assert(c.C.UI.page == page, who .. " could open " .. page)
-      local n = check(f, who .. " " .. page)
+      check(f, who .. " " .. page)
       -- tooltips on a few cells
       for _, r in ipairs(c.C.UI.rows.items) do if r:IsShown() then hover(r); for _, cell in ipairs(r.cells) do if cell:IsShown() then hover(cell) end end end end
     end
@@ -850,92 +1067,146 @@ do
   assert(not kaka.C.UI.tabs.officers:IsShown(), "the member has no Officers tab")
   kaka.C.UI:Open("officers")
   assert(kaka.C.UI.page == "race", "a member asking for the officers' page lands on Race")
+  -- the look: status and footer, aligned numbers, grey headers with the sorted one white, class bars, row heights
+  yezin.C.UI:Open("race")
+  assert(yezin.C.UI.status:GetText():match("^%d+ online with the addon  |  officer view$"), "the status line: " .. yezin.C.UI.status:GetText())
+  assert(kaka.C.UI.status:GetText():match("member view$"), "the member's status line")
+  assert(yezin.C.UI.footer:GetText():match("^Updated "), "the footer says when the roster last changed: " .. yezin.C.UI.footer:GetText())
+  local me, kakaRow, garristan, mutu = rowOf(yezin, "Yezin"), rowOf(yezin, "Kaka"), rowOf(yezin, "Garristan"), rowOf(yezin, "Mutu")
+  assert(me and kakaRow and garristan and mutu, "the rows")
+  assert(cellOf(me, "level").label.__justify == "RIGHT" and cellOf(me, "zone").label.__justify == "LEFT", "numbers right, text left")
+  assert(sameColor(me.bar.__color, { 0.96, 0.96, 0.96 }), "your bar is white")
+  assert(sameColor(mutu.bar.__color, { 0.78, 0.61, 0.43 }), "a warrior's bar is the warrior colour")
+  assert(cellOf(garristan, "level").label:GetText() == "1" and cellOf(garristan, "zone").label:GetText() == "Elwynn Forest", "a member without the addon shows the guild's level and zone")
+  assert(cellOf(garristan, "xp").label:GetText() == "", "and nothing else")
+  assert(me:GetHeight() == 20, "rows are 20 px")
+  local whiteHeaders, greyHeaders = 0, 0
+  for _, h in ipairs(yezin.C.UI.headerCells.items) do
+    if h:IsShown() and h.def then
+      if sameColor(h.label.__color, { 0.96, 0.96, 0.96 }) then whiteHeaders = whiteHeaders + 1; assert(h.id == "level", "the sorted column is the white one") else greyHeaders = greyHeaders + 1 end
+      assert(h.label.__justify == ((h.def.kind == "text" or h.def.kind == "pips") and "LEFT" or "RIGHT"), "headers align like their column")
+    end
+  end
+  assert(whiteHeaders == 1 and greyHeaders >= 5, "one white header, the rest grey")
+  yezin.env.CuteDB.settings.density = "compact"
+  yezin.C.UI:Open("race")
+  assert(rowOf(yezin, "Yezin"):GetHeight() == 17, "compact rows are 17 px")
+  check(yezin.C.UI.frame, "officer race, compact")
+  yezin.env.CuteDB.settings.density = "normal"
+  -- readiness on the prog page: a verdict in colour, the gaps in the tooltip
+  yezin.C.UI:Open("prog")
+  local readyCell = cellOf(rowOf(yezin, "Yezin"), "ready")
+  assert(readyCell and readyCell.label:GetText() == "gaps" and sameColor(readyCell.label.__color, { 0.93, 0.74, 0.35 }), "readiness shows gaps in amber")
+  local n0 = #lines
+  hover(readyCell)
+  local tip = table.concat(lines, "\n", n0 + 1)
+  assert(tip:find("an empty slot", 1, true), "the tooltip names the gap: " .. tip)
   -- the self-only column: a dash on others' rows, the value on your own
   kaka.env.CuteDB.settings.columns.prog = { ilvl = true, unenchanted = true, deaths = true }
   kaka.C.UI:Open("prog")
-  local own, other
-  for _, r in ipairs(kaka.C.UI.rows.items) do
-    if r:IsShown() and r.row then
-      for _, cell in ipairs(r.cells) do
-        if cell:IsShown() and cell.def and cell.def.id == "unenchanted" then
-          if r.row.me then own = cell.label:GetText() elseif r.row.short == "Yezin" then other = cell.label:GetText() end
-        end
-      end
-    end
-  end
+  local own, other = cellOf(rowOf(kaka, "Kaka"), "unenchanted").label:GetText(), cellOf(rowOf(kaka, "Yezin"), "unenchanted").label:GetText()
   assert(own and own ~= "-" and own ~= "" and other == "-", "unenchanted: own value shows (" .. tostring(own) .. "), Yezin's is a dash (" .. tostring(other) .. ")")
   check(kaka.C.UI.frame, "member prog, two columns")
   -- the officer sees the member's
   yezin.env.CuteDB.settings.columns.prog = { ilvl = true, unenchanted = true }
   yezin.C.UI:Open("prog")
-  local seen
-  for _, r in ipairs(yezin.C.UI.rows.items) do
-    if r:IsShown() and r.row and r.row.short == "Kaka" then for _, cell in ipairs(r.cells) do if cell:IsShown() and cell.def and cell.def.id == "unenchanted" then seen = cell.label:GetText() end end end
-  end
+  local seen = cellOf(rowOf(yezin, "Kaka"), "unenchanted").label:GetText()
   assert(seen and seen ~= "-", "the officer sees Kaka's unenchanted slots: " .. tostring(seen))
-  -- sorting by a column
+  -- sorting by a column, remembered in the saved settings
   yezin.env.CuteDB.settings.columns.prog = nil
   yezin.C.UI:Open("race")
   local header
   for _, h in ipairs(yezin.C.UI.headerCells.items) do if h:IsShown() and h.id == "level" then header = h end end
   assert(header, "a Level header")
-  click(header)
+  press(header)
   assert(yezin.C.UI.sort.race and yezin.C.UI.sort.race.id == "level" and yezin.C.UI.sort.race.desc == false, "clicking the sorted column flips it")
+  assert(yezin.env.CuteDB.settings.sort.race and yezin.env.CuteDB.settings.sort.race.desc == false, "the sort is saved")
   check(yezin.C.UI.frame, "officer race, sorted up")
-  -- resized small: still no problems
-  yezin.C.UI.frame:SetSize(760, 420)
-  yezin.C.UI:Open("race")
-  check(yezin.C.UI.frame, "officer race, small window")
+  -- the scroll place survives a redraw and resets on a page change
+  yezin.C.UI.scroll.bar:SetMinMaxValues(0, 100)
+  yezin.C.UI.scroll.bar:SetValue(40)
+  yezin.C.UI:Draw()
+  assert(yezin.C.UI.scroll.bar:GetValue() == math.min(40, select(2, yezin.C.UI.scroll.bar:GetMinMaxValues())), "a redraw keeps the scroll place")
   yezin.C.UI:Open("prog")
-  check(yezin.C.UI.frame, "officer prog, small window")
-  yezin.C.UI:Open("settings")
-  check(yezin.C.UI.frame, "officer settings, small window")
+  assert(yezin.C.UI.scroll.bar:GetValue() == 0, "a page change starts at the top")
+  -- resized small: still no problems, on every page
+  yezin.C.UI.frame:SetSize(760, 420)
+  for _, page in ipairs({ "race", "prog", "shame", "officers", "me", "settings" }) do
+    yezin.C.UI:Open(page)
+    check(yezin.C.UI.frame, "officer " .. page .. ", small window")
+  end
   yezin.C.UI.frame:SetSize(1040, 640)
+  -- a saved position off this screen comes back on it
+  yezin.env.CuteDB.pos = { w = 1040, h = 640, left = 5000, top = -300 }
+  yezin.C.UI:RestorePos()
+  local p = yezin.C.UI.frame.__points[1]
+  assert(p.x == 1600 - 1040 and p.y == 640, "the window is clamped to the screen: " .. p.x .. "," .. p.y)
+  yezin.env.CuteDB.pos = nil
+  yezin.C.UI.frame:ClearAllPoints(); yezin.C.UI.frame:SetPoint("CENTER")
   -- the minimap button and the hall's tooltips
   assert(yezin.C.UI.mini and yezin.C.UI.mini:IsShown(), "the minimap button")
   hover(yezin.C.UI.mini)
   yezin.C.UI:Open("shame")
   for _, card in ipairs(yezin.C.UI.cards.items) do if card:IsShown() then hover(card) end end
-  print("window: every page opens for both views, self-only cells hidden from the member, sorting and resizing hold")
+  print("window: every page opens for both views at both sizes, the look holds, self-only cells hidden from the member, sorting, scrolling and resizing hold")
 end
 
--- 10: settings: a member cannot flip visibility; an officer's flip plus Broadcast reaches the member
+-- 10: settings: a member cannot flip visibility; an officer's click plus Broadcast reaches the member; boxes follow clicks
 do
   kaka.C.UI:Open("settings")
-  local flipped
-  for _, cb in ipairs(kaka.C.UI.scroll.child.__client.frames) do
-    if cb.__kind == "CheckButton" and cb:IsShown() and cb.__disabled and cb.__scripts.OnClick then flipped = cb; break end
-  end
+  local flipped = checkBox(kaka, function(cb) return cb.__disabled and cb.statId ~= nil end)
   assert(flipped, "the member's visibility boxes are disabled")
   local before = kaka.C.Policy:Vis("level")
   -- even a click on a disabled box (a macro could) changes nothing
-  flipped.__checked = not flipped.__checked
-  flipped.__scripts.OnClick(flipped)
+  click(flipped)
   assert(kaka.C.Policy:Vis("level") == before, "a member's click changes no policy")
-  -- the officer flips 'level' to only-you and broadcasts
+  -- the officer clicks Level to only-you in Settings and broadcasts
   yezin.C.UI:Open("settings")
-  local target
-  for _, fr in ipairs(yezin.frames) do
-    if fr.__kind == "CheckButton" and fr:IsShown() and not fr.__disabled and fr.label and fr.label.__text == "" then
-      -- the pairs sit after the stat's label: find the pair for "Level" by position
-      local lab
-      for _, l in ipairs(yezin.frames) do end
-    end
-  end
-  yezin.C.Policy:Set("level", "self")
+  local onlyYou = checkBox(yezin, function(cb) return cb.statId == "level" and cb.vis == "self" end)
+  assert(onlyYou and not onlyYou.__disabled, "the officer's Only-you box for Level")
+  click(onlyYou)
+  assert(yezin.C.Policy:Vis("level") == "self", "the click set the policy")
   yezin.C.Comm:SendPolicy()
   tickAll(3)
   assert(kaka.C.Policy:Vis("level") == "self", "the member applied the officer's policy")
-  yezin.C.Policy:Set("level", "all")
+  local everyone = checkBox(yezin, function(cb) return cb.statId == "level" and cb.vis == "all" end)
+  click(everyone)
   yezin.C.Comm:SendPolicy()
   tickAll(3)
-  -- the column checklist hides a column
+  assert(kaka.C.Policy:Vis("level") == "all", "and back")
+  -- the Minimap button box: its fill follows the click and the button goes with it
+  local mini = checkBox(yezin, function(cb) return cb.label and cb.label:GetText() == "Minimap button" end)
+  assert(mini and mini:GetChecked() and mini.fill:IsShown(), "the minimap box starts ticked")
+  click(mini)
+  assert(not mini:GetChecked() and not mini.fill:IsShown() and not yezin.C.UI.mini:IsShown(), "unticked: the fill goes and so does the button")
+  click(mini)
+  assert(mini:GetChecked() and mini.fill:IsShown() and yezin.C.UI.mini:IsShown(), "ticked again")
+  -- the Main character box is left alone while you type
+  local edit
+  for _, fr in ipairs(yezin.frames) do if fr.__kind == "EditBox" and fr:IsVisible() then edit = fr end end
+  assert(edit, "the Main character box")
+  edit:SetFocus(); edit:SetText("Yez")
+  yezin.C.UI:Draw()
+  assert(edit:GetText() == "Yez", "a redraw while typing keeps the text")
+  edit.__scripts.OnEnterPressed(edit)
+  assert(yezin.env.CuteDB.settings.main == "Yez" and yezin.C.Sample:Value("main") == "Yez", "Enter saves the main")
+  -- the column checklist hides one column, not all of them
+  yezin.C.UI:Open("race")
+  local n = shownHeaders(yezin)
   yezin.C.UI.SetTicked("race", "zone", false)
   yezin.C.UI:Open("race")
   for _, h in ipairs(yezin.C.UI.headerCells.items) do if h:IsShown() then assert(h.id ~= "zone", "zone unticked, no zone column") end end
+  assert(shownHeaders(yezin) == n - 1, "one column fewer: " .. shownHeaders(yezin) .. " of " .. n)
   yezin.C.UI.SetTicked("race", "zone", true)
+  yezin.C.UI:Open("race")
+  assert(shownHeaders(yezin) == n, "and back")
   check(yezin.C.UI.frame, "officer race after settings")
-  print("settings: members cannot flip visibility, the officer's broadcast lands, column checklists hide columns")
+  -- role and raid spec are this character's
+  yezin.C.UI:Open("settings")
+  local tank = checkBox(yezin, function(cb) return cb.label and cb.label:GetText() == "Tank" end)
+  click(tank)
+  assert(yezin.C.Char().role == "Tank" and yezin.env.CuteDB.settings.role == nil, "the role is kept per character")
+  print("settings: members cannot flip visibility, the officer's click and broadcast land, boxes follow clicks, typing survives redraws, one column unticks")
 end
 
 -- 11: a login storm: twenty clients say hello; each sends at most one message a second
@@ -949,22 +1220,23 @@ do
       if last then assert(m.at - last >= 1 - 1e-9, c.name .. " sent two messages within a second") end
       last = m.at
     end
+    assert(#c.oversize == 0, c.name .. " tried a message over the limit")
   end
   local n = 0
   for _ in pairs(yezin.env.CuteDB.roster) do n = n + 1 end
   assert(n >= 15, "Yezin's roster filled from the storm: " .. n)
-  yezin.C.UI:Open("race")
-  check(yezin.C.UI.frame, "officer race, twenty members")
-  yezin.C.UI:Open("prog")
-  check(yezin.C.UI.frame, "officer prog, twenty members")
-  yezin.C.UI:Open("shame")
-  check(yezin.C.UI.frame, "officer shame, twenty members")
-  yezin.C.UI:Open("officers")
-  check(yezin.C.UI.frame, "officer officers, twenty members")
+  for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+    yezin.C.UI.frame:SetSize(size[1], size[2])
+    for _, page in ipairs({ "race", "prog", "shame", "officers" }) do
+      yezin.C.UI:Open(page)
+      check(yezin.C.UI.frame, string.format("officer %s, twenty members, %dx%d", page, size[1], size[2]))
+    end
+  end
+  yezin.C.UI.frame:SetSize(1040, 640)
   print(string.format("storm: %d clients, one message a second each, %d records on Yezin's roster", #clients, n))
 end
 
--- 12: the throttle: the game's "too fast" waits and retries, nothing is lost
+-- 12: the throttle: the game's "too fast" waits and retries, nothing is lost; a message given up is sent with the next change
 do
   kaka.throttle = 2
   kaka.o.zone = "Stranglethorn Vale"
@@ -973,7 +1245,22 @@ do
   tickAll(12)
   assert(#kaka.sent > before and kaka.throttle == 0, "retried past the throttle")
   assert(yezin.env.CuteDB.roster["Kaka-Forever"].stats.zone == "Stranglethorn Vale", "the zone arrived")
-  print("throttle: the queue waits and retries")
+  -- a general error, over and over: the message is given up, its stats marked to go again, and they do
+  kaka.fail = 99
+  kaka.o.zone = "Tanaris"
+  fire(kaka, "ZONE_CHANGED_NEW_AREA")
+  tickAll(70)
+  assert(yezin.env.CuteDB.roster["Kaka-Forever"].stats.zone == "Stranglethorn Vale", "Tanaris never left")
+  assert(kaka.C.Sample.dirty.zone == true or kaka.C.Comm.queued.zone ~= nil, "the zone is marked to go again, or already queued again")
+  local noted = false
+  for _, e in ipairs(kaka.env.CuteDB.errors) do if e.msg:find("addon message not sent", 1, true) then noted = true end end
+  assert(noted, "/cute errors says a message was given up")
+  kaka.fail = 0
+  kaka.o.level = 39
+  fire(kaka, "PLAYER_LEVEL_UP", 39)
+  tickAll(15)
+  assert(yezin.env.CuteDB.roster["Kaka-Forever"].stats.zone == "Tanaris" and yezin.env.CuteDB.roster["Kaka-Forever"].stats.level == 39, "the zone went with the next change")
+  print("throttle: the queue waits and retries; a message given up goes with the next change")
 end
 
 -- 13: not in a guild: nothing is sent, the window still opens on your own record
@@ -985,13 +1272,111 @@ do
   assert(#lone.sent == 0, "nothing leaves a guildless client")
   lone.C.UI:Open("race")
   check(lone.C.UI.frame, "guildless race")
+  assert(lone.C.UI.footer:GetText() == "Not in a guild", "the footer says so")
   lone.C.UI:Open("me")
   check(lone.C.UI.frame, "guildless me")
-  table.remove(clients)
+  leave(lone)
   print("guildless: nothing sent, the window shows your own record")
 end
 
--- 14: calls Cute never makes
+-- 14: the trackers: XP pace across a ding, gold in copper, grey sales, recipes, resists, the day and the week
+do
+  -- level 38 at 66100 of 66200 XP; 50 more, then the ding to 39 (70200 a level) with 25 into it: 125 XP over ten seconds
+  local c = newClient(charOf(NAMES[11], { level = 38, xp = 66100, xpmax = 66200, money = 10000 }))
+  login(c)
+  tick(c, 5) -- the first XP sample
+  c.o.xp = 66150
+  fire(c, "PLAYER_XP_UPDATE", "player")
+  tick(c, 5)
+  c.o.level, c.o.xp, c.o.xpmax = 39, 25, 70200
+  fire(c, "PLAYER_XP_UPDATE", "player")
+  fire(c, "PLAYER_LEVEL_UP", 39)
+  tick(c, 185) -- the pace needs three minutes of samples before it shows
+  local S = c.C.Sample
+  local ring = S.track.xp
+  local rate = math.floor(125 / ((ring[#ring][1] - ring[1][1]) / 3600))
+  assert(rate > 0 and S:Value("xp_hour") == rate, "XP an hour counts the rest of the old level across the ding: " .. tostring(S:Value("xp_hour")) .. " vs " .. rate)
+  local left = S.XPLeft(39, 25, 70200)
+  assert(S:Value("to60") == math.floor(left / rate + 0.5) and S:Value("to60") > 0, "hours to 60 from the levels ahead: " .. tostring(S:Value("to60")))
+  assert(S.track.sessionXP == 125, "the session's XP keeps the old level's rest: " .. tostring(S.track.sessionXP))
+  -- gold moves in copper
+  c.o.money = 19500
+  fire(c, "PLAYER_MONEY")
+  assert(S:Value("gold_earned") == 9500 and c.C.UI.Format(c.C.Stats.byId.gold_earned, 9500) == "95s", "a 95 silver gain counts")
+  fire(c, "QUEST_TURNED_IN", 1, 100, 4500)
+  assert(S:Value("gold_quests") == 4500, "quest money in copper")
+  -- a grey sold at a merchant
+  c.o.bags = { [0] = { [1] = { quality = 0, link = "item:5000", count = 3 }, [2] = { quality = 2, link = "item:5001", count = 1 } } }
+  c.o.prices = { [5000] = 15, [5001] = 900 }
+  fire(c, "MERCHANT_SHOW")
+  c.env.C_Container.UseContainerItem(0, 1)
+  c.env.C_Container.UseContainerItem(0, 2)
+  fire(c, "MERCHANT_CLOSED")
+  c.env.C_Container.UseContainerItem(0, 1)
+  assert(S:Value("grey_gold") == 45, "three greys at 15 copper, the green and the use outside the merchant not counted: " .. tostring(S:Value("grey_gold")))
+  -- raid recipes, asked of the trade skill window by id
+  c.o.learned = { [17635] = true }
+  fire(c, "TRADE_SKILL_SHOW")
+  assert(S:Value("raid_recipes")[17635] == true and S:Value("raid_recipes")[17636] == nil, "the Titans flask is known, the others not")
+  -- the effective resistance
+  c.o.resist = { [2] = 45 }
+  fire(c, "PLAYER_EQUIPMENT_CHANGED")
+  tick(c, 2)
+  assert(S:Value("resist_fire") == 45, "fire resist is the sheet's effective value")
+  -- the mount and the skills
+  c.o.mount = true
+  S:Read("mount")
+  assert(S:Value("mount") == true, "the mount flag is the eleventh return")
+  -- the day turns: today's counters reset; the week turns: logins become this session's one
+  fire(c, "QUEST_TURNED_IN", 2, 100, 0)
+  assert(S:Value("quests_today") == 2, "two hand-ins today so far: " .. tostring(S:Value("quests_today")))
+  c.dayShift = 86400
+  tick(c, 660)
+  assert(S:Value("quests_today") == 0, "a new day resets today's counters")
+  fire(c, "QUEST_TURNED_IN", 3, 100, 0)
+  tick(c, 660)
+  assert(S:Value("quests_today") == 1, "the check keeps running and does not reset the same day twice")
+  c.dayShift = 9 * 86400
+  tick(c, 660)
+  local rec = c.env.CuteDB.chars[c.name]
+  assert(S:Value("logins") == 1 and rec.counters.logins == 1 and rec.week == os.date("%Y-%W", EPOCH + c.clock + c.dayShift), "a new week turning mid-session starts logins at this one: " .. tostring(S:Value("logins")))
+  -- heartbeat-only stats are read every pass
+  local reads = 0
+  local real = c.env.C_SpecializationInfo.GetSpecialization
+  c.env.C_SpecializationInfo.GetSpecialization = function(...) reads = reads + 1; return real(...) end
+  tick(c, 601)
+  assert(reads >= 2, "the heartbeat reads the registry every five minutes: " .. reads)
+  -- emotes without DoEmote (this client): your own lines in the emote chat count, others' do not, and a line made
+  -- secret by a dungeon or raid cannot; the hint says so and /cute errors has the note
+  fire(c, "CHAT_MSG_TEXT_EMOTE", "You dance.", c.name)
+  fire(c, "CHAT_MSG_TEXT_EMOTE", "You sit down.", c.o.name)
+  fire(c, "CHAT_MSG_TEXT_EMOTE", "Kaka waves.", "Kaka-Forever")
+  fire(c, "CHAT_MSG_TEXT_EMOTE", secret("string"), secret("string"))
+  assert(S:Value("emotes") == 2 and S:Value("dance") == 1 and S:Value("sit") == 1, "your own emote lines count, others' and secret ones do not")
+  assert(c.C.Stats.byId.dance.hint:find("secret in dungeons and raids", 1, true) and c.C.Stats.byId.emotes.hint == c.C.Stats.byId.sit.hint, "the hints say where emotes go uncounted: " .. tostring(c.C.Stats.byId.dance.hint))
+  local noted = false
+  for _, x in ipairs(c.env.CuteDB.errors) do if x.msg:find("DoEmote is missing", 1, true) then noted = true end end
+  assert(noted and #c.chat == 0, "the missing function is noted for /cute errors without a chat line")
+  -- with DoEmote (a client made withEmote): the hook counts, the hints stay the registry's
+  local e = newClient(charOf(NAMES[12], { withEmote = true }))
+  login(e)
+  e.env.DoEmote("DANCE")
+  e.env.DoEmote("wave")
+  assert(e.C.Sample:Value("emotes") == 2 and e.C.Sample:Value("dance") == 1 and e.C.Sample:Value("sit") == 0, "DoEmote's hook counts")
+  assert(e.C.Stats.byId.dance.hint == nil, "no caveat where the function exists")
+  -- guild lines count as you send them; CHAT_MSG_GUILD, whose sender is secret in dungeons and raids, is not even registered
+  e.env.C_ChatInfo.SendChatMessage("hello guild", "GUILD")
+  e.env.C_ChatInfo.SendChatMessage("where are you", "PARTY")
+  e.env.C_ChatInfo.SendChatMessage("where are you", "GUILD")
+  fire(e, "CHAT_MSG_GUILD", secret("string"), secret("string"))
+  fire(e, "CHAT_MSG_GUILD", "a line", "Quillan-Forever")
+  assert(e.C.Sample:Value("gchat") == 2 and e.C.Sample:Value("where") == 1, "two guild lines sent, one where-are-you in party; the guild events count nothing: " .. tostring(e.C.Sample:Value("gchat")))
+  assert(not e.C.Sample.frame.__events.CHAT_MSG_GUILD, "CHAT_MSG_GUILD is not registered")
+  leave(e); leave(c)
+  print("trackers: XP pace across a ding, copper gold, grey sales, recipes, resists, the mount, the day and the week, emotes both ways, guild lines as sent")
+end
+
+-- 15: calls Cute never makes
 do
   local NEVER = { "COMBAT_LOG_EVENT_UNFILTERED", "C_SuperTrack", "SetUserWaypoint", "StaticPopup", "OpenChat", "ChatFrame_OpenChat", "AcceptQuest", "LootSlot", "ToggleWorldMap" }
   local found = {}
@@ -1001,12 +1386,15 @@ do
       n = n + 1
       local code = src:gsub("%-%-.*$", "")
       for _, name in ipairs(NEVER) do
-        if code:find(name, 1, true) and not (name == "COMBAT_LOG_EVENT_UNFILTERED" and code:find("~=", 1, true)) then found[#found + 1] = file .. ":" .. n .. " " .. name end
+        if code:find(name, 1, true) and not (name == "COMBAT_LOG_EVENT_UNFILTERED" and code:find("==", 1, true)) then found[#found + 1] = file .. ":" .. n .. " " .. name end
       end
     end
   end
   assert(#found == 0, "a call Cute never makes:\n  " .. table.concat(found, "\n  "))
-  print("never: the combat log, the game's tracking, popups and chat boxes stay untouched")
+  -- the unit events are yours only
+  local f = kaka.C.Sample.frame
+  assert(f.__units and f.__units.UNIT_AURA == "player" and f.__units.UNIT_SPELLCAST_SUCCEEDED == "player", "UNIT_AURA and UNIT_SPELLCAST_SUCCEEDED are registered for the player")
+  print("never: the combat log, the game's tracking, popups and chat boxes stay untouched; unit events are yours only")
 end
 
 local seen, unique = {}, {}

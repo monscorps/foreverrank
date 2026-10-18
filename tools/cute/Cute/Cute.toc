@@ -1,8 +1,8 @@
-## Interface: 16001, 11507
+## Interface: 16001
 ## Title: |cffe8b24aCute|r
 ## Notes: Cute's guild dashboard: the race to 60, raid readiness, the hall of shame and the officers' view, shared over the guild channel. /cute
 ## Author: Mikal
-## Version: 0.1.0
+## Version: 0.2.0
 ## X-License: GPL-3.0-or-later
 ## IconTexture: Interface\AddOns\Cute\art\logo.png
 ## SavedVariables: CuteDB

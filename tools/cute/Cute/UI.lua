@@ -1,9 +1,10 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The window: one frame with five pages and Settings, drawn flat and dark the way ElvUI and Shadowed Unit Frames
 -- draw theirs: one-pixel black borders, near-black panels, white and grey text in the client's narrow font, class
--- colours on names and nothing else coloured unless it means something (green ready, red low).
+-- colours on names and nothing else coloured unless it means something (green ready, red low). Numbers sit on the
+-- right of their columns, text on the left; a two-pixel class-coloured bar marks every member's row, white for you.
 --   Race           every member as a row: level, XP, zone, pace, the leveling stats
---   Prog           attunements, item level, consumables, buffs, the gaps only you see
+--   Prog           readiness, attunements, item level, consumables, buffs, the gaps only you see
 --   Hall of Shame  a card per funny stat with its leader
 --   Officers       summaries, the officers' stats, the controls (officer ranks only)
 --   Me             your whole record, with what members see
@@ -17,9 +18,10 @@ local W, H = 1040, 640
 local MIN_W, MIN_H = 760, 420
 local HEAD = 56          -- the header strip
 local TABS = 26          -- the tab row
-local ROW = 22
+local ROW = 20           -- a member row (compact: 17)
+local ROW_COMPACT = 17
+local FOOT = 18          -- the footer line inside the content panel
 local NAME_W = 150
-local FONT = "Fonts\\ARIALN.TTF" -- the client's narrow sans, the one the clean UIs use
 local WHITE = { 0.96, 0.96, 0.96 }
 local INK = { 0.86, 0.86, 0.86 }
 local DIM = { 0.58, 0.58, 0.58 }
@@ -30,11 +32,26 @@ local BAD = { 0.88, 0.36, 0.33 }
 local BG = { 0.035, 0.035, 0.035 }
 local PANEL = { 0.07, 0.07, 0.07 }
 local PANEL2 = { 0.11, 0.11, 0.11 }
+local LINE = { 0.2, 0.2, 0.2 }
 local BLACK = { 0, 0, 0 }
 local FLAT = "Interface\\Buttons\\WHITE8x8"
 local LOGO = "Interface\\AddOns\\Cute\\art\\logo.png"
 local LOGO_WIDE = "Interface\\AddOns\\Cute\\art\\logo_wide.png"
 local BD = BackdropTemplateMixin and "BackdropTemplate" or nil
+
+-- the client's narrow sans, taken from a font object that uses it (NumberFontNormal is ARIALN on Blizzard's clients),
+-- so a client without the file named here still draws every label
+local function narrowFont()
+  for _, fo in ipairs({ NumberFontNormal, ChatFontNormal, GameFontNormal }) do
+    if type(fo) == "table" and fo.GetFont then
+      local ok, path = pcall(fo.GetFont, fo)
+      if ok and type(path) == "string" and path ~= "" then return path end
+    end
+  end
+  return "Fonts\\ARIALN.TTF"
+end
+local FONT = narrowFont()
+UI.FONT = FONT
 
 local function hex(c) return string.format("|cff%02x%02x%02x", c[1] * 255, c[2] * 255, c[3] * 255) end
 local function classColor(class)
@@ -43,6 +60,7 @@ local function classColor(class)
   return INK
 end
 local function color(fs, c) fs:SetTextColor(c[1], c[2], c[3]) end
+local function dimmed(c) return { c[1] * 0.55, c[2] * 0.55, c[3] * 0.55 } end
 
 ----------------------------------------------------------------------------
 -- small builders, flat
@@ -65,10 +83,17 @@ local function skin(frame, fill, a)
   frame:SetBackdropColor(fill[1], fill[2], fill[3], a or 1)
   frame:SetBackdropBorderColor(0, 0, 0, 1)
 end
+-- a one-pixel line
+local function line(parent, c)
+  local t = flat(parent, "ARTWORK", c or LINE, 1)
+  t:SetHeight(1)
+  return t
+end
 local function text(parent, size, c, justify, width)
   local fs = parent:CreateFontString(nil, "OVERLAY")
   fs:SetFontObject(GameFontNormal)
-  fs:SetFont(FONT, size or 12, "")
+  -- SetFont says whether the file was found; the font object's own face stays otherwise
+  if fs:SetFont(FONT, size or 12, "") == false then fs:SetFontObject(GameFontNormal) end
   color(fs, c or INK)
   fs:SetJustifyH(justify or "LEFT")
   fs:SetWordWrap(false)
@@ -90,7 +115,8 @@ local function button(parent, label, w, h)
   function b:SetOn(on) self.__off = not on; color(self.label, on and INK or MUTE); self:SetEnabled(on) end
   return b
 end
--- a flat check box: a small square, filled white when checked
+-- a flat check box: a small square, filled white when checked. Callers set cb.fn rather than the OnClick script,
+-- so the fill always follows the click
 local function check(parent)
   local cb = CreateFrame("CheckButton", nil, parent, BD)
   cb:SetSize(14, 14)
@@ -103,7 +129,10 @@ local function check(parent)
   cb.label:SetPoint("LEFT", cb, "RIGHT", 6, 0)
   cb:SetHighlightTexture(FLAT, "ADD")
   cb:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.08)
-  cb:HookScript("OnClick", function(self) self.fill:SetShown(self:GetChecked()) end)
+  cb:SetScript("OnClick", function(self, ...)
+    self.fill:SetShown(self:GetChecked())
+    if self.fn then self.fn(self, ...) end
+  end)
   function cb:Set(on) self:SetChecked(on); self.fill:SetShown(on and true or false) end
   function cb:SetOn(on) self:SetEnabled(on); color(self.label, on and INK or MUTE); self.fill:SetVertexColor(1, 1, 1, on and 1 or 0.4) end
   return cb
@@ -153,18 +182,18 @@ local function pool(parent, make)
   return p
 end
 
--- ScrollFrame with a child and a thin flat bar
+-- ScrollFrame with a child and a thin flat bar, above the footer line
 local function scrollArea(parent)
   local sf = CreateFrame("ScrollFrame", nil, parent)
   sf:SetPoint("TOPLEFT", 8, -8)
-  sf:SetPoint("BOTTOMRIGHT", -18, 8)
+  sf:SetPoint("BOTTOMRIGHT", -18, FOOT + 6)
   local child = CreateFrame("Frame", nil, sf)
   child:SetSize(100, 10)
   sf:SetScrollChild(child)
   local bar = CreateFrame("Slider", nil, parent)
   bar:SetOrientation("VERTICAL")
   bar:SetPoint("TOPRIGHT", -7, -8)
-  bar:SetPoint("BOTTOMRIGHT", -7, 8)
+  bar:SetPoint("BOTTOMRIGHT", -7, FOOT + 6)
   bar:SetWidth(6)
   local track = flat(bar, "BACKGROUND", PANEL2, 1)
   track:SetAllPoints()
@@ -185,7 +214,7 @@ local function scrollArea(parent)
   function sf:SetContentHeight(h)
     child:SetHeight(math.max(h, 1))
     local view = self:GetHeight() or 0
-    if view < 50 then view = (UI.frame:GetHeight() or H) - HEAD - TABS - 40 end
+    if view < 50 then view = (UI.frame:GetHeight() or H) - HEAD - TABS - FOOT - 32 end
     local max = math.max(0, h - view)
     bar:SetMinMaxValues(0, max)
     bar:SetShown(max > 0)
@@ -248,9 +277,9 @@ local SHORT = { xp = "XP %", xp_hour = "XP/h", xp_session = "XP/h today", to60 =
   ilvl = "iLvl", ilvl_slots = "Slots", empty_slots = "Empty", unenchanted = "No ench", old_gear = "Old gear", greens = "Greens", attune_mc = "MC", attune_ony_a = "Ony (A)",
   attune_ony_h = "Ony (H)", resist_fire = "FR", resist_nature = "NR", resist_frost = "FrR", resist_shadow = "SR", resist_arcane = "AR", raid_recipes = "Raid rec.",
   bags_free = "Bags free", bags_size = "Bags", pot_health = "HP pots", pot_mana = "MP pots", protpots = "Prot pots", world_buffs = "World", flask_on = "Flask",
-  buffs_missing = "Missing", durability = "Dura", rep = "Rep", pvp_rank = "PvP", honor_week = "Honor", lockouts = "Locks", raids = "Raids", stones = "Stones",
+  buffs_missing = "Missing", durability = "Dura", rep = "Rep", pvp_rank = "PvP", pvp_pts = "Rank pts", raids = "Raids", stones = "Stones",
   bank_in = "Bank in", bank_out = "Bank out", consumed = "Consumed", addon_ver = "Version", main = "Main", last_login = "Last login", raid_spec = "Raid spec",
-  weekly_raids = "Raids/wk", ontime = "On time", deaths_today = "Today", hearth_waste = "Wasted HS", whispers = "Whispers/h", gchat = "Guild lines", inspected = "Inspected",
+  weekly_raids = "Raids/wk", deaths_today = "Today", hearth_waste = "Wasted HS", whispers = "Whispers/h", gchat = "Guild lines", inspected = "Inspected",
   ghost_yards = "Ghost yds", where = "Where r u", grey_gold = "Grey gold" }
 UI.SHORT = SHORT
 local function shortLabel(def) return SHORT[def.id] or def.label end
@@ -260,17 +289,19 @@ local function colWidth(def)
   if def.kind == "flag" then return 44 end
   if def.kind == "text" then return 110 end
   if def.kind == "list" then return 62 end
-  if def.kind == "pips" then return 8 + 7 * (def.pips or 8) end
+  if def.kind == "pips" then return math.max(36, 8 + 7 * (def.pips or 8)) end
   if def.fmt == C.Stats.FmtHours then return 70 end
   return math.max(56, 12 + #shortLabel(def) * 7)
 end
+-- numbers on the right of their column, text (and pips, drawn from the left) on the left
+local function alignOf(def) return (def.kind == "text" or def.kind == "pips") and "LEFT" or "RIGHT" end
 
 ----------------------------------------------------------------------------
 -- which columns a page shows
 ----------------------------------------------------------------------------
 local DEFAULT_COLS = {
   race = { "level", "xp", "xp_hour", "to60", "zone", "played", "quests_done", "deaths_lvl", "group", "rested", "legacy" },
-  prog = { "ilvl", "attune_mc", "attune_ony_a", "attune_ony_h", "keys", "resist_fire", "flasks", "pot_health", "pot_mana", "world_buffs", "durability", "rep", "unenchanted", "empty_slots" },
+  prog = { "ready", "ilvl", "attune_mc", "attune_ony_a", "attune_ony_h", "keys", "flasks", "pot_health", "world_buffs", "durability", "rep", "unenchanted", "empty_slots" },
   officers = { "gold", "bank_in", "bank_out", "raids", "weekly_raids", "consumed", "main", "role", "last_login", "addon_ver" },
 }
 UI.DEFAULT_COLS = DEFAULT_COLS
@@ -288,8 +319,10 @@ end
 function UI.SetTicked(page, id, on)
   local s = C.Settings()
   if not s.columns[page] then
-    s.columns[page] = {}
-    for k, v in pairs(UI.Ticked(page)) do s.columns[page][k] = v end
+    -- the first change copies the defaults, then edits the copy
+    local copy = {}
+    for k, v in pairs(UI.Ticked(page)) do copy[k] = v end
+    s.columns[page] = copy
   end
   s.columns[page][id] = on or nil
   UI:Refresh()
@@ -308,28 +341,13 @@ local function columnsFor(page, room)
 end
 
 ----------------------------------------------------------------------------
--- readiness: red, amber, green from the gaps the prog page knows about
-----------------------------------------------------------------------------
-function UI.Readiness(stats)
-  local gaps = 0
-  local S = C.Stats.byId
-  if type(stats.empty_slots) == "table" and (listCount(S.empty_slots, stats.empty_slots) or 0) > 0 then gaps = gaps + 1 end
-  if type(stats.unenchanted) == "table" and (listCount(S.unenchanted, stats.unenchanted) or 0) > 3 then gaps = gaps + 1 end
-  if type(stats.durability) == "number" and stats.durability < 50 then gaps = gaps + 1 end
-  if stats.flasks == 0 and stats.flask_on == false then gaps = gaps + 1 end
-  if type(stats.pot_health) == "number" and stats.pot_health < 5 then gaps = gaps + 1 end
-  if stats.ilvl == nil and stats.level == nil then return nil end
-  if gaps == 0 then return "green", GOOD elseif gaps <= 2 then return "amber", WARN end
-  return "red", BAD
-end
-
-----------------------------------------------------------------------------
 -- the window
 ----------------------------------------------------------------------------
 local TAB_DEFS = { { "race", "Race", 64 }, { "prog", "Prog", 64 }, { "shame", "Hall of Shame", 110 }, { "officers", "Officers", 80 }, { "me", "Me", 48 }, { "settings", "Settings", 80 } }
 
 function UI:Build()
   if self.frame then return end
+  self.sort = C.Settings().sort -- header clicks are remembered across sessions
   local f = CreateFrame("Frame", "CuteFrame", UIParent, BD)
   self.frame = f
   f:SetSize(W, H)
@@ -357,7 +375,12 @@ function UI:Build()
   f:Hide()
   tinsert(UISpecialFrames, "CuteFrame")
   f:SetScript("OnShow", function() UI:Draw() end)
-  f:SetScript("OnSizeChanged", function() if UI.frame:IsShown() then UI:Draw() end end)
+  -- a resize redraws once the grip has rested for a tenth of a second, not on every pixel
+  f:SetScript("OnSizeChanged", function()
+    if UI.resizing then return end
+    UI.resizing = true
+    C_Timer.After(0.1, C.Safe(function() UI.resizing = false; if UI.frame:IsShown() then UI:Draw() end end, "resize"))
+  end)
 
   -- header: the logo, the status line, the close X
   local head = CreateFrame("Frame", nil, f)
@@ -367,17 +390,16 @@ function UI:Build()
   self.head = head
   local logo = tex(head, "ARTWORK", LOGO_WIDE, 104, 52)
   logo:SetPoint("LEFT", 8, 0)
-  local line = flat(head, "BACKGROUND", BLACK, 1)
-  line:SetPoint("BOTTOMLEFT")
-  line:SetPoint("BOTTOMRIGHT")
-  line:SetHeight(1)
+  local headLine = line(head)
+  headLine:SetPoint("BOTTOMLEFT")
+  headLine:SetPoint("BOTTOMRIGHT")
   self.status = text(head, 11, DIM, "RIGHT", 420)
   self.status:SetPoint("RIGHT", -40, 0)
   local close = button(f, "x", 22, 22)
   close:SetPoint("TOPRIGHT", -9, -9)
   close:SetScript("OnClick", function() f:Hide() end)
 
-  -- tabs: flat, the open one white with a line under it
+  -- tabs: flat, the open one white with a line under it; a hairline under the row
   local tabs = CreateFrame("Frame", nil, f)
   tabs:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 8, -4)
   tabs:SetPoint("TOPRIGHT", head, "BOTTOMRIGHT", -8, -4)
@@ -394,14 +416,21 @@ function UI:Build()
     b:SetScript("OnClick", function() UI:Open(d[1]) end)
     self.tabs[d[1]] = b
   end
+  local tabLine = line(f)
+  tabLine:SetPoint("TOPLEFT", tabs, "BOTTOMLEFT", 0, -1)
+  tabLine:SetPoint("TOPRIGHT", tabs, "BOTTOMRIGHT", 0, -1)
 
-  -- the content panel
+  -- the content panel, with the footer along its bottom edge
   local content = CreateFrame("Frame", nil, f, BD)
   content:SetPoint("TOPLEFT", tabs, "BOTTOMLEFT", 0, -4)
   content:SetPoint("BOTTOMRIGHT", -9, 9)
   skin(content, PANEL, 1)
   self.content = content
   self.scroll = scrollArea(content)
+  self.footer = text(content, 11, MUTE, "LEFT")
+  self.footer:SetPoint("BOTTOMLEFT", 10, 6)
+  self.footer:SetPoint("BOTTOMRIGHT", -40, 6)
+  self.footer:SetHeight(12)
   self.rows = pool(self.scroll.child, function(parent) return UI:MakeRow(parent) end)
   self.cards = pool(self.scroll.child, function(parent) return UI:MakeCard(parent) end)
   self.labels = pool(self.scroll.child, function(parent) return text(parent, 12, INK) end)
@@ -410,6 +439,9 @@ function UI:Build()
   self.header = CreateFrame("Frame", nil, self.scroll.child)
   self.header:SetPoint("TOPLEFT")
   self.header:SetHeight(ROW)
+  self.headerLine = line(self.header)
+  self.headerLine:SetPoint("BOTTOMLEFT")
+  self.headerLine:SetPoint("BOTTOMRIGHT")
   self.headerCells = pool(self.header, function(parent) return UI:MakeHeaderCell(parent) end)
   local grip = CreateFrame("Button", nil, f)
   grip:SetSize(12, 12)
@@ -421,18 +453,34 @@ function UI:Build()
   grip:SetScript("OnMouseUp", function() f:StopMovingOrSizing(); UI:SavePos() end)
   tooltip(grip, function(tip) tip:AddLine("Drag to resize", 1, 1, 1) end)
   self:RestorePos()
+  -- the footer's "2 min ago" keeps up while the window is open
+  local function footTick()
+    C_Timer.After(30, C.Safe(footTick, "footer"))
+    if f:IsShown() then UI:DrawFooter() end
+  end
+  C_Timer.After(30, C.Safe(footTick, "footer"))
 end
 
 function UI:SavePos()
   local f = self.frame
   CuteDB.pos = { w = f:GetWidth(), h = f:GetHeight(), left = f:GetLeft(), top = f:GetTop() }
 end
+-- the saved place, kept on screen: another resolution or UI scale may have saved it beyond this screen's edge
 function UI:RestorePos()
   local p = CuteDB.pos
   if not p then return end
   local f = self.frame
-  if p.w and p.h then f:SetSize(math.max(MIN_W, p.w), math.max(MIN_H, p.h)) end
-  if p.left and p.top then f:ClearAllPoints(); f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", p.left, p.top) end
+  if type(p.w) == "number" and type(p.h) == "number" then f:SetSize(math.max(MIN_W, p.w), math.max(MIN_H, p.h)) end
+  if type(p.left) ~= "number" or type(p.top) ~= "number" then return end
+  local uw, uh = UIParent:GetWidth() or 0, UIParent:GetHeight() or 0
+  local w, h = f:GetWidth() or W, f:GetHeight() or H
+  local left, top = p.left, p.top
+  if uw > w and uh > h then
+    left = math.max(0, math.min(left, uw - w))
+    top = math.max(h, math.min(top, uh))
+  end
+  f:ClearAllPoints()
+  f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
 end
 
 function UI:Toggle()
@@ -442,11 +490,17 @@ end
 function UI:Open(page)
   self:Build()
   if page == "officers" and not C.Roster:MeOfficer() then page = "race" end
-  self.page = page or self.page
+  page = page or self.page
+  if page ~= self.page then self.scrollTo = 0 end -- a new page starts at the top; a redraw keeps the place
+  self.page = page
   if not self.frame:IsShown() then self.frame:Show() else self:Draw() end
 end
+-- a redraw, once a second at most, so a burst of guild messages does not draw twenty times
 function UI:Refresh()
-  if self.frame and self.frame:IsShown() and not self.drawing then self:Draw() end
+  if not (self.frame and self.frame:IsShown()) or self.drawing then return end
+  if self.refreshing then return end
+  self.refreshing = true
+  C_Timer.After(1, C.Safe(function() UI.refreshing = false; if UI.frame:IsShown() then UI:Draw() end end, "refresh"))
 end
 
 ----------------------------------------------------------------------------
@@ -457,11 +511,7 @@ function UI:MakeHeaderCell(parent)
   b:SetHeight(ROW)
   b.label = text(b, 11, DIM, "LEFT")
   b.label:SetPoint("LEFT", 4, 0)
-  b.label:SetPoint("RIGHT", -2, 0)
-  b.under = flat(b, "BACKGROUND", BLACK, 1)
-  b.under:SetPoint("BOTTOMLEFT", 0, 0)
-  b.under:SetPoint("BOTTOMRIGHT", 0, 0)
-  b.under:SetHeight(1)
+  b.label:SetPoint("RIGHT", -4, 0)
   b:SetHighlightTexture(FLAT, "ADD")
   b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
   b:SetScript("OnClick", function(self)
@@ -487,15 +537,15 @@ function UI:MakeRow(parent)
   r:SetHeight(ROW)
   r.bg = flat(r, "BACKGROUND", WHITE, 0.03)
   r.bg:SetAllPoints()
-  r.mark = flat(r, "ARTWORK", WHITE, 1)
-  r.mark:SetPoint("TOPLEFT", 0, 0)
-  r.mark:SetPoint("BOTTOMLEFT", 0, 0)
-  r.mark:SetWidth(2)
-  r.mark:Hide()
+  -- the class bar: two pixels at the left edge, white for you
+  r.bar = flat(r, "ARTWORK", WHITE, 1)
+  r.bar:SetPoint("TOPLEFT", 0, 0)
+  r.bar:SetPoint("BOTTOMLEFT", 0, 0)
+  r.bar:SetWidth(2)
   r:SetHighlightTexture(FLAT, "ADD")
   r:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
-  r.name = text(r, 12, INK, "LEFT", NAME_W - 10)
-  r.name:SetPoint("LEFT", 6, 0)
+  r.name = text(r, 12, INK, "LEFT", NAME_W - 12)
+  r.name:SetPoint("LEFT", 8, 0)
   r.cells = {}
   tooltip(r, function(tip, self)
     local row = self.row
@@ -517,7 +567,7 @@ function UI:Cell(r, i)
     c:SetHeight(ROW)
     c.label = text(c, 12, INK, "LEFT")
     c.label:SetPoint("LEFT", 4, 0)
-    c.label:SetPoint("RIGHT", -2, 0)
+    c.label:SetPoint("RIGHT", -4, 0)
     c.bar = flat(c, "ARTWORK", WHITE, 0.7)
     c.bar:SetHeight(1)
     c.bar:SetPoint("BOTTOMLEFT", 4, 3)
@@ -538,6 +588,10 @@ function UI:Cell(r, i)
       elseif def.kind == "pips" and type(v) == "string" then
         local done, started = select(2, v:gsub("2", "")), select(2, v:gsub("1", ""))
         tip:AddLine(string.format("%d of %d steps done, %d in the log", done, #v, started), 0.9, 0.9, 0.9)
+      elseif def.id == "ready" and type(v) == "number" and (row.me or C.Roster:MeOfficer()) then
+        -- the gaps behind the verdict, for those who may see the inputs
+        local gaps = C.Stats.ReadyGaps(row.stats) or {}
+        tip:AddLine(#gaps == 0 and "No gaps." or table.concat(gaps, ", "), 0.9, 0.9, 0.9, true)
       else
         tip:AddLine(UI.Format(def, v), 0.9, 0.9, 0.9)
       end
@@ -550,13 +604,23 @@ function UI:Cell(r, i)
   return c
 end
 
-local function fillCell(c, def, row, hidden)
+local INVERSE = { empty_slots = true, unenchanted = true, old_gear = true, buffs_missing = true }
+local function fillCell(c, def, row, hidden, w)
   c.def, c.row, c.hidden = def, row, hidden
+  c.label:SetJustifyH(alignOf(def))
   for _, p in ipairs(c.pips) do p:Hide() end
   c.bar:Hide()
   if hidden then
     c.label:SetText("-")
     color(c.label, MUTE)
+    return
+  end
+  if not row.addon then
+    -- the guild roster still knows a member's level and zone
+    color(c.label, MUTE)
+    if def.id == "level" and type(row.level) == "number" then c.label:SetText(tostring(row.level))
+    elseif def.id == "zone" and type(row.zone) == "string" then fitText(c.label, row.zone, w - 8)
+    else c.label:SetText("") end
     return
   end
   local v = row.stats[def.id]
@@ -577,17 +641,17 @@ local function fillCell(c, def, row, hidden)
   local s = UI.Format(def, v)
   if def.kind == "list" and type(v) == "table" then
     local n = listCount(def, v)
-    local inverse = def.id == "empty_slots" or def.id == "unenchanted" or def.id == "old_gear" or def.id == "buffs_missing"
-    if n == 0 then color(c.label, inverse and GOOD or MUTE) elseif inverse then color(c.label, WARN) end
+    if n == 0 then color(c.label, INVERSE[def.id] and GOOD or MUTE) elseif INVERSE[def.id] then color(c.label, WARN) end
   end
   if def.id == "xp" and type(v) == "number" then
-    c.bar:SetWidth(math.max(1, (c:GetWidth() - 8) * v / 100))
+    c.bar:SetWidth(math.max(1, (w - 8) * v / 100))
     c.bar:Show()
   end
   if def.id == "durability" and type(v) == "number" and v < 50 then color(c.label, BAD) end
+  if def.id == "ready" and type(v) == "number" then color(c.label, v == 2 and GOOD or (v == 1 and WARN or BAD)) end
   if def.kind == "flag" then color(c.label, v and INK or MUTE) end
   if v == nil then color(c.label, MUTE) end
-  c.label:SetText(s)
+  if def.kind == "text" then fitText(c.label, s, w - 8) else c.label:SetText(s) end
 end
 
 ----------------------------------------------------------------------------
@@ -595,7 +659,7 @@ end
 ----------------------------------------------------------------------------
 local function sortRows(rows, page)
   local s = UI.sort[page]
-  if not s then
+  if not s or not s.id then
     if page == "race" then s = { id = "level", desc = true } else return end
   end
   local def = C.Stats.byId[s.id]
@@ -634,7 +698,7 @@ function UI:DrawTable(page, y0)
     rows = kept
   end
   sortRows(rows, page)
-  -- header
+  -- header: grey labels, the sorted one white, a hairline under the row
   self.header:Show()
   self.header:ClearAllPoints()
   self.header:SetPoint("TOPLEFT", 0, -y0)
@@ -644,25 +708,26 @@ function UI:DrawTable(page, y0)
   hc:SetPoint("LEFT", 0, 0)
   hc:SetWidth(NAME_W)
   hc.id, hc.def = nil, nil
+  hc.label:SetJustifyH("LEFT")
   hc.label:SetText("Member")
   color(hc.label, DIM)
+  local sorted = self.sort[page] or (page == "race" and { id = "level" }) or {}
   local x = NAME_W
   for _, col in ipairs(cols) do
     local h = self.headerCells:Get()
     h:SetPoint("LEFT", x, 0)
     h:SetWidth(col.w)
     h.id, h.def = col.def.id, col.def
+    h.label:SetJustifyH(alignOf(col.def))
     fitText(h.label, shortLabel(col.def), col.w - 8)
-    local s = self.sort[page] or (page == "race" and { id = "level" }) or {}
-    color(h.label, s.id == col.def.id and WHITE or DIM)
+    color(h.label, sorted.id == col.def.id and WHITE or DIM)
     x = x + col.w
   end
   self.headerCells:HideRest()
   -- rows
   self.rows:Reset()
   local y = y0 + ROW + 2
-  local compact = C.Settings().density == "compact"
-  local rowH = compact and 18 or ROW
+  local rowH = C.Settings().density == "compact" and ROW_COMPACT or ROW
   for i, row in ipairs(rows) do
     local r = self.rows:Get()
     r.row = row
@@ -670,14 +735,15 @@ function UI:DrawTable(page, y0)
     r:SetWidth(sf:Width())
     r:SetHeight(rowH)
     r.bg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.03 or 0)
-    r.mark:SetShown(row.me)
-    local cc = row.addon and classColor(row.class) or MUTE
-    if row.addon and not row.online then cc = { cc[1] * 0.55, cc[2] * 0.55, cc[3] * 0.55 } end
-    color(r.name, cc)
+    local cc = row.class and classColor(row.class) or MUTE
+    if not row.online then cc = dimmed(cc) end
+    local bc = row.me and WHITE or cc
+    r.bar:SetColorTexture(bc[1], bc[2], bc[3], 1)
+    color(r.name, row.addon and cc or MUTE)
     local nameText = row.short
     if row.me then nameText = row.short .. "  (you)" end
     if not row.addon then nameText = row.short .. "  (no addon)" end
-    fitText(r.name, nameText, NAME_W - 14)
+    fitText(r.name, nameText, NAME_W - 16)
     local cx = NAME_W
     for k, col in ipairs(cols) do
       local c = self:Cell(r, k)
@@ -685,9 +751,7 @@ function UI:DrawTable(page, y0)
       c:SetWidth(col.w)
       c:SetHeight(rowH)
       c:Show()
-      local canSee = C.Policy:CanSee(officer, row.me, col.def.id)
-      fillCell(c, col.def, row, not canSee)
-      if not row.addon then c.label:SetText(""); for _, p in ipairs(c.pips) do p:Hide() end; c.bar:Hide() end
+      fillCell(c, col.def, row, not C.Policy:CanSee(officer, row.me, col.def.id), col.w)
       cx = cx + col.w
     end
     for k = #cols + 1, #r.cells do r.cells[k]:Hide() end
@@ -703,7 +767,9 @@ function UI:DrawTable(page, y0)
     l:SetText(string.format("%d more column%s do not fit: widen the window or untick some in Settings.", hidden, hidden == 1 and "" or "s"))
     y = y + 24
   end
-  if #rows <= 1 then
+  local reported = 0
+  for _, r in ipairs(rows) do if r.addon then reported = reported + 1 end end
+  if reported <= 1 then
     local l = self.labels:Get()
     l:SetPoint("TOPLEFT", 6, -y - 6)
     l:SetWidth(sf:Width() - 12)
@@ -800,7 +866,7 @@ function UI:DrawOfficers()
   for _, l in ipairs(levels) do if median and l < median then below = below + 1 end end
   self.labels:Reset()
   local y = 4
-  local function line(s, c)
+  local function say(s, c)
     local l = self.labels:Get()
     l:SetPoint("TOPLEFT", 6, -y)
     l:SetWidth(sf:Width() - 12)
@@ -808,13 +874,13 @@ function UI:DrawOfficers()
     fitText(l, s, sf:Width() - 16)
     y = y + 18
   end
-  line(string.format("%d members, %d with the addon, %d online. Median level %s, %d below it, %d not seen for a week.",
+  say(string.format("%d members, %d with the addon, %d online. Median level %s, %d below it, %d not seen for a week.",
     total, withAddon, online, median and tostring(median) or "?", below, unseen))
   if #noAddon > 0 then
     table.sort(noAddon)
-    line("Without the addon: " .. table.concat(noAddon, ", "), DIM)
+    say("Without the addon: " .. table.concat(noAddon, ", "), DIM)
   end
-  line(C.Policy:Describe(), DIM)
+  say(C.Policy:Describe(), DIM)
   self.buttons:Reset()
   local labels = { { "Visibility settings", function() UI:Open("settings") end },
     { "Ask everyone to resend", function() C.Comm:Ask(); C.Print("asked the guild to send their records again.") end },
@@ -850,7 +916,7 @@ function UI:DrawMe()
   cb.label:SetText("Show what members see of me")
   cb:Set(self.meView and true or false)
   cb:SetOn(true)
-  cb:SetScript("OnClick", function(self) UI.meView = self:GetChecked(); UI:Draw() end)
+  cb.fn = function(self) UI.meView = self:GetChecked(); UI:Draw() end
   self.checks:HideRest()
   local y = 30
   for _, cat in ipairs(C.Stats.CATS) do
@@ -884,8 +950,43 @@ function UI:DrawMe()
     end
     y = y + math.ceil(n / 2) * 18 + 8
   end
+  -- what could not be read, and why (a client function missing, a call that threw), one line each, so no "?" above
+  -- stands without its reason
+  local errs = {}
+  for _, def in ipairs(C.Stats.list) do
+    local e = C.Sample:Error(def.id)
+    if e then errs[#errs + 1] = def.label .. ": " .. tostring(e) end
+  end
+  if #errs > 0 then
+    local l = self.labels:Get()
+    l:SetPoint("TOPLEFT", 6, -y)
+    l:SetWidth(w - 12)
+    l:SetJustifyH("LEFT")
+    color(l, WHITE)
+    l:SetText("Could not read")
+    y = y + 20
+    for _, s in ipairs(errs) do
+      local a = self.labels:Get()
+      a:SetPoint("TOPLEFT", 6, -y)
+      a:SetWidth(w - 12)
+      a:SetJustifyH("LEFT")
+      color(a, BAD)
+      fitText(a, s, w - 16)
+      y = y + 18
+    end
+    y = y + 8
+  end
   self.labels:HideRest()
   sf:SetContentHeight(y + 8)
+end
+
+-- the footer: when the roster last changed
+function UI:DrawFooter()
+  local s
+  if not C.Roster:InGuild() then s = "Not in a guild"
+  elseif not C.Roster.updatedAt then s = "No reports yet"
+  else s = "Updated " .. (ago(C.Roster.updatedAt) or "") end
+  self.footer:SetText(s)
 end
 
 function UI:Draw()
@@ -904,7 +1005,10 @@ function UI:Draw()
       b.under:SetShown(d[1] == page)
     end
   end
-  self.scroll.bar:SetValue(0)
+  -- the scroll place survives a redraw; a page change starts at the top
+  local bar = self.scroll.bar
+  local keep = self.scrollTo or bar:GetValue() or 0
+  self.scrollTo = nil
   self.header:ClearAllPoints()
   self.header:SetPoint("TOPLEFT")
   self.cards:Reset(); self.cards:HideRest()
@@ -919,10 +1023,13 @@ function UI:Draw()
     self.header:Hide(); self.rows:Reset(); self.rows:HideRest(); self.labels:Reset(); self.labels:HideRest()
     C.Settings_Draw(self.scroll)
   end
+  local _, maxv = bar:GetMinMaxValues()
+  bar:SetValue(math.max(0, math.min(keep, maxv or 0)))
   local rows = C.Roster:Rows()
   local online = 0
   for _, r in ipairs(rows) do if r.online and r.addon then online = online + 1 end end
-  self.status:SetText(string.format("%d with the addon online    %s", online, officer and "officer view" or "member view"))
+  self.status:SetText(string.format("%d online with the addon  |  %s view", online, officer and "officer" or "member"))
+  self:DrawFooter()
   self.drawing = false
 end
 
