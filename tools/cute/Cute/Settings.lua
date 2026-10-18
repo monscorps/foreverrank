@@ -1,29 +1,18 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Settings, drawn inside the window's scroll area.
+-- Settings, drawn inside the window's scroll area, flat like the rest.
 --   Everyone:  which columns each page shows, density, offline members, the minimap button, your main and role
 --   Officers:  per stat, Everyone or Only you; the officer rank threshold; Broadcast now (greyed for members)
 local _, C = ...
 local ST = {}
 C.SettingsPage = ST
 
-local INK = { 0.93, 0.88, 0.78 }
-local INK_SOFT = { 0.62, 0.58, 0.50 }
-local GOLD = { 0.91, 0.70, 0.29 }
+local WHITE = { 0.96, 0.96, 0.96 }
+local INK = { 0.86, 0.86, 0.86 }
+local DIM = { 0.58, 0.58, 0.58 }
+local MUTE = { 0.38, 0.38, 0.38 }
 local ROWH = 20
 
-local widgets = { checks = nil, labels = nil, buttons = nil, edits = nil }
-
-local function text(parent, size, color, width)
-  local fs = parent:CreateFontString(nil, "OVERLAY")
-  fs:SetFontObject(GameFontNormalSmall)
-  local path, _, flags = GameFontNormalSmall:GetFont()
-  if path then fs:SetFont(path, size or 11, flags) end
-  fs:SetTextColor(color[1], color[2], color[3])
-  fs:SetJustifyH("LEFT")
-  fs:SetWordWrap(false)
-  if width then fs:SetWidth(width) end
-  return fs
-end
+local widgets = {}
 
 local function pool(parent, make)
   local p = { items = {}, used = 0 }
@@ -41,27 +30,19 @@ end
 
 local function ensure(parent)
   if widgets.checks then return end
-  widgets.checks = pool(parent, function(p)
-    local cb = CreateFrame("CheckButton", nil, p, "UICheckButtonTemplate")
-    cb:SetSize(20, 20)
-    cb.label = text(cb, 11, INK, 200)
-    cb.label:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-    return cb
-  end)
-  widgets.labels = pool(parent, function(p) return text(p, 11, INK, 300) end)
-  widgets.buttons = pool(parent, function(p)
-    local b = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-    b:SetSize(140, 22)
-    return b
-  end)
+  widgets.checks = pool(parent, function(p) return C.UI.Check(p) end)
+  widgets.labels = pool(parent, function(p) return C.UI.Text(p, 12, INK, "LEFT", 300) end)
+  widgets.buttons = pool(parent, function(p) return C.UI.Button(p, "", 140) end)
   widgets.edits = pool(parent, function(p)
     local e = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
     e:SetSize(140, 20)
     e:SetAutoFocus(false)
     e:SetMaxLetters(24)
+    e:SetFont("Fonts\\ARIALN.TTF", 12, "")
     return e
   end)
 end
+local function color(fs, c) fs:SetTextColor(c[1], c[2], c[3]) end
 
 local PAGES = { { "race", "Race columns" }, { "prog", "Prog columns" }, { "shame", "Hall of Shame cards" }, { "officers", "Officers columns" } }
 
@@ -73,18 +54,17 @@ local function drawEveryone(x, w)
     local l = widgets.labels:Get()
     l:SetPoint("TOPLEFT", x, -y)
     l:SetWidth(w)
-    l:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+    color(l, WHITE)
     l:SetText(label)
     y = y + 20
   end
   local function check(label, on, enabled, fn)
     local cb = widgets.checks:Get()
-    cb:SetPoint("TOPLEFT", x, -y)
+    cb:SetPoint("TOPLEFT", x, -y - 3)
     cb.label:SetWidth(w - 26)
     C.UI.FitText(cb.label, label, w - 30)
-    cb:SetChecked(on and true or false)
-    cb:SetEnabled(enabled ~= false)
-    cb.label:SetTextColor(enabled == false and INK_SOFT[1] or INK[1], enabled == false and INK_SOFT[2] or INK[2], enabled == false and INK_SOFT[3] or INK[3])
+    cb:Set(on and true or false)
+    cb:SetOn(enabled ~= false)
     cb:SetScript("OnClick", function(self) fn(self:GetChecked()) end)
     y = y + ROWH
   end
@@ -97,7 +77,7 @@ local function drawEveryone(x, w)
   local l = widgets.labels:Get()
   l:SetPoint("TOPLEFT", x, -y - 3)
   l:SetWidth(90)
-  l:SetTextColor(INK[1], INK[2], INK[3])
+  color(l, DIM)
   l:SetText("Main character")
   local e = widgets.edits:Get()
   e:SetPoint("TOPLEFT", x + 100, -y)
@@ -110,17 +90,16 @@ local function drawEveryone(x, w)
   local l2 = widgets.labels:Get()
   l2:SetPoint("TOPLEFT", x, -y - 2)
   l2:SetWidth(90)
-  l2:SetTextColor(INK[1], INK[2], INK[3])
+  color(l2, DIM)
   l2:SetText("Role")
   local rx = x + 92
   for _, role in ipairs({ "Tank", "Heal", "Melee", "Ranged" }) do
     local cb = widgets.checks:Get()
-    cb:SetPoint("TOPLEFT", rx, -y)
+    cb:SetPoint("TOPLEFT", rx, -y - 3)
     cb.label:SetWidth(40)
     C.UI.FitText(cb.label, role, 38)
-    cb.label:SetTextColor(INK[1], INK[2], INK[3])
-    cb:SetChecked(s.role == role)
-    cb:SetEnabled(true)
+    cb:Set(s.role == role)
+    cb:SetOn(true)
     cb:SetScript("OnClick", function(self) s.role = self:GetChecked() and role or ""; C.Sample:Read("role"); C.UI:Draw() end)
     rx = rx + 62
   end
@@ -145,88 +124,87 @@ local function drawOfficers(x, w)
   local l = widgets.labels:Get()
   l:SetPoint("TOPLEFT", x, -y)
   l:SetWidth(w)
-  l:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
-  l:SetText("Who sees what (officers set this)")
+  color(l, WHITE)
+  l:SetText("Who sees what")
   y = y + 20
   local d = widgets.labels:Get()
   d:SetPoint("TOPLEFT", x, -y)
   d:SetWidth(w)
-  d:SetTextColor(INK_SOFT[1], INK_SOFT[2], INK_SOFT[3])
+  color(d, DIM)
   C.UI.FitText(d, C.Policy:Describe() .. (officer and "" or " Only officers can change it."), w - 4)
   y = y + 18
-  -- the threshold
   local t = widgets.labels:Get()
   t:SetPoint("TOPLEFT", x, -y - 3)
   t:SetWidth(w - 150)
-  t:SetTextColor(INK[1], INK[2], INK[3])
+  color(t, INK)
   C.UI.FitText(t, string.format("Officer ranks: 0 to %d", C.Policy:Threshold()), w - 154)
   local minus = widgets.buttons:Get()
   minus:SetPoint("TOPLEFT", x + w - 140, -y)
   minus:SetWidth(40)
-  minus:SetText("-")
-  minus:SetEnabled(officer)
-  minus:SetScript("OnClick", function() C.Policy:SetThreshold(math.max(0, C.Policy:Threshold() - 1)); C.UI:Draw() end)
+  minus:SetLabel("-")
+  minus:SetOn(officer)
+  minus:SetScript("OnClick", function() if officer then C.Policy:SetThreshold(math.max(0, C.Policy:Threshold() - 1)); C.UI:Draw() end end)
   local plus = widgets.buttons:Get()
   plus:SetPoint("TOPLEFT", x + w - 96, -y)
   plus:SetWidth(40)
-  plus:SetText("+")
-  plus:SetEnabled(officer)
-  plus:SetScript("OnClick", function() C.Policy:SetThreshold(math.min(9, C.Policy:Threshold() + 1)); C.UI:Draw() end)
+  plus:SetLabel("+")
+  plus:SetOn(officer)
+  plus:SetScript("OnClick", function() if officer then C.Policy:SetThreshold(math.min(9, C.Policy:Threshold() + 1)); C.UI:Draw() end end)
   y = y + 26
   local bc = widgets.buttons:Get()
   bc:SetPoint("TOPLEFT", x, -y)
   bc:SetWidth(150)
-  bc:SetText("Broadcast now")
-  bc:SetEnabled(officer)
-  bc:SetScript("OnClick", function() C.Comm:SendPolicy(); C.Print("sent the visibility policy to the guild.") end)
+  bc:SetLabel("Broadcast now")
+  bc:SetOn(officer)
+  bc:SetScript("OnClick", function() if officer then C.Comm:SendPolicy(); C.Print("sent the visibility policy to the guild.") end end)
   local ra = widgets.buttons:Get()
   ra:SetPoint("TOPLEFT", x + 156, -y)
   ra:SetWidth(150)
-  ra:SetText("Reset to defaults")
-  ra:SetEnabled(officer)
+  ra:SetLabel("Reset to defaults")
+  ra:SetOn(officer)
   ra:SetScript("OnClick", function()
+    if not officer then return end
     CuteDB.policy = { vis = {}, by = C.Me(), rank = C.Roster:Rank((C.Me())), at = C.Now(), threshold = C.Policy:Threshold() }
     C.UI:Draw()
   end)
   y = y + 30
-  -- headings for the two columns of check buttons
   local h1 = widgets.labels:Get()
   h1:SetPoint("TOPLEFT", x + w - 130, -y)
   h1:SetWidth(60)
-  h1:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+  color(h1, DIM)
   h1:SetText("Everyone")
   local h2 = widgets.labels:Get()
   h2:SetPoint("TOPLEFT", x + w - 64, -y)
   h2:SetWidth(60)
-  h2:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+  color(h2, DIM)
   h2:SetText("Only you")
   y = y + 18
   for _, cat in ipairs(C.Stats.CATS) do
     local cl = widgets.labels:Get()
     cl:SetPoint("TOPLEFT", x, -y)
     cl:SetWidth(w)
-    cl:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+    color(cl, WHITE)
     cl:SetText(C.Stats.CAT_LABEL[cat])
     y = y + 18
     for _, def in ipairs(C.Stats.byCat[cat]) do
       local lab = widgets.labels:Get()
       lab:SetPoint("TOPLEFT", x, -y - 3)
       lab:SetWidth(w - 140)
-      lab:SetTextColor(INK[1], INK[2], INK[3])
+      color(lab, INK)
       C.UI.FitText(lab, def.label, w - 144)
       local vis = C.Policy:Vis(def.id)
       local a = widgets.checks:Get()
-      a:SetPoint("TOPLEFT", x + w - 122, -y)
+      a:SetPoint("TOPLEFT", x + w - 118, -y - 3)
       a.label:SetText("")
-      a:SetChecked(vis == "all")
-      a:SetEnabled(officer)
-      a:SetScript("OnClick", function(self) if officer then C.Policy:Set(def.id, "all"); C.UI:Draw() else self:SetChecked(vis == "all") end end)
+      a:Set(vis == "all")
+      a:SetOn(officer)
+      a:SetScript("OnClick", function(self) if officer then C.Policy:Set(def.id, "all"); C.UI:Draw() else self:Set(vis == "all") end end)
       local s = widgets.checks:Get()
-      s:SetPoint("TOPLEFT", x + w - 56, -y)
+      s:SetPoint("TOPLEFT", x + w - 52, -y - 3)
       s.label:SetText("")
-      s:SetChecked(vis == "self")
-      s:SetEnabled(officer)
-      s:SetScript("OnClick", function(self) if officer then C.Policy:Set(def.id, "self"); C.UI:Draw() else self:SetChecked(vis == "self") end end)
+      s:Set(vis == "self")
+      s:SetOn(officer)
+      s:SetScript("OnClick", function(self) if officer then C.Policy:Set(def.id, "self"); C.UI:Draw() else self:Set(vis == "self") end end)
       y = y + ROWH
     end
     y = y + 6

@@ -18,53 +18,140 @@
 <meta name="twitter:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame and the officers' view, shared over the guild channel. No server, no accounts.">
 <meta name="twitter:image" content="https://foreverrank.com/addons/cute/img/banner.jpg">
 <!-- seo:end -->
+<meta name="theme-color" content="#000000">
 <link rel="icon" href="/mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/forever.css?v=23">
 <style>
-.cu { --gold: #e8b24a; --teal: #2f8a8a; --ink: #fbf6ea; --dim: #9aa3b2; --card: #243042; --line: rgba(232,178,74,.28); }
-.cu-wrap { max-width: 980px; margin: 0 auto; padding: 0 1rem 4rem; }
-.cu-hero { position: relative; margin: 1.2rem 0 0; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: #1b2330; }
-.cu-hero img.banner { display: block; width: 100%; height: auto; aspect-ratio: 1983 / 793; object-fit: cover; }
-.cu-hero .plate { position: absolute; left: 0; right: 0; bottom: 0; padding: 1.2rem 1.4rem; background: linear-gradient(180deg, rgba(27,35,48,0) 0%, rgba(27,35,48,.92) 55%); }
-.cu-hero h1 { margin: 0; font-size: 2.2rem; color: var(--ink); text-shadow: 0 2px 12px rgba(0,0,0,.6); }
-.cu-hero h1 span { color: var(--gold); }
-.cu-hero p { margin: .3rem 0 0; color: #d9dde6; max-width: 44rem; text-shadow: 0 1px 8px rgba(0,0,0,.6); }
-.cu-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 1.2rem 0 .2rem; }
-.cu-dl { display: inline-block; font: 700 .85rem/1 var(--heading, inherit); letter-spacing: .08em; text-transform: uppercase; color: #1b2330; background: var(--gold); border-radius: 2px; padding: .85rem 1.3rem; text-decoration: none; }
-.cu-dl:hover { filter: brightness(1.08); }
-.cu-ver { color: var(--dim); font-size: .8rem; }
-.cu-ver code { color: #e8e2d0; }
-.cu-h2 { font-family: var(--display-serif, inherit); color: var(--gold); font-size: 1.45rem; margin: 2.2rem 0 .4rem; }
-.cu-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: .7rem; }
-.cu-step { background: var(--card); border: 1px solid var(--line); border-radius: 3px; padding: .9rem 1rem; }
-.cu-step b { display: block; color: var(--gold); font: 700 1.2rem/1 var(--heading, inherit); margin-bottom: .4rem; }
-.cu-step p { margin: 0; font-size: .85rem; line-height: 1.5; color: #d9dde6; }
-.cu-step code { color: #fbf6ea; background: rgba(0,0,0,.3); padding: 0 .3em; border-radius: 2px; }
-.cu-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: .7rem; }
-.cu-tab { background: var(--card); border: 1px solid var(--line); border-radius: 3px; padding: .9rem 1rem; }
-.cu-tab h3 { margin: 0 0 .35rem; font-size: 1rem; color: var(--ink); }
-.cu-tab p { margin: 0; font-size: .82rem; line-height: 1.5; color: #c8cede; }
-.cu-two { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
-.cu-card { background: rgba(0,0,0,.28); border: 1px solid var(--line); border-radius: 3px; padding: 1rem 1.1rem; }
-.cu-card h3 { margin: 0 0 .5rem; font-size: 1rem; color: var(--ink); }
-.cu-card p, .cu-card li { font-size: .85rem; line-height: 1.55; color: #c8cede; }
-.cu-card ul { margin: 0; padding-left: 1.1rem; }
-.cu-card a, .cu-step a { color: var(--gold); }
-.cu-cats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .7rem; }
-.cu-cat { background: var(--card); border: 1px solid var(--line); border-radius: 3px; padding: .8rem .9rem; }
-.cu-cat h4 { margin: 0 0 .3rem; color: var(--gold); font-size: .95rem; }
-.cu-cat p { margin: 0; font-size: .8rem; line-height: 1.5; color: #c8cede; }
-.cu-cat small { display: block; margin-top: .4rem; color: var(--dim); font-size: .72rem; }
-.cu-log { list-style: none; padding: 0; margin: 0; }
-.cu-log li { padding: .5rem 0; border-top: 1px solid rgba(255,255,255,.08); font-size: .85rem; color: #c8cede; }
-.cu-log li b { color: var(--gold); margin-right: .5rem; }
-.cu-foot { margin-top: 2rem; color: var(--dim); font-size: .78rem; }
-.cu-foot a { color: var(--gold); }
-@media (max-width: 820px) { .cu-steps, .cu-tabs, .cu-cats { grid-template-columns: 1fr 1fr; } .cu-two { grid-template-columns: 1fr; } .cu-hero h1 { font-size: 1.6rem; } }
-@media (max-width: 520px) { .cu-steps, .cu-tabs, .cu-cats { grid-template-columns: 1fr; } .cu-hero .plate { position: static; background: #1b2330; } }
+:root { --black: #000; --bg: #0a0a0a; --panel: #111; --panel2: #171717; --line: #000; --hair: rgba(255,255,255,.08);
+  --white: #f4f4f4; --ink: #d6d6d6; --dim: #8e8e8e; --mute: #5a5a5a; --good: #74d077; --warn: #efbd58; --bad: #e46055; }
+body.cute { background: var(--black); color: var(--ink); font-family: 'Nunito Sans', 'Segoe UI', sans-serif; }
+.cute h1, .cute h2, .cute h3 { font-family: Fredoka, 'Trebuchet MS', sans-serif; font-weight: 600; letter-spacing: -0.01em; color: var(--white); }
+.cute a { color: var(--white); }
+.cute :focus-visible { outline: 2px solid var(--white); outline-offset: 2px; }
+
+/* hero: the artwork is the only colour on the page */
+.hero { position: relative; min-height: 64vh; display: grid; align-items: end; overflow: hidden; background: var(--black); }
+.hero img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+.hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.2) 45%, rgba(0,0,0,.97) 100%); }
+.hero-text { position: relative; z-index: 1; max-width: 1180px; width: 100%; margin: 0 auto; padding: 0 1.25rem 2.6rem; }
+.hero h1 { margin: 0; font-size: clamp(2.6rem, 6vw, 4.6rem); line-height: 1; text-shadow: 0 4px 24px rgba(0,0,0,.7); max-width: 14ch; }
+.hero p { margin: 1rem 0 0; font-size: clamp(1.05rem, 1.6vw, 1.2rem); line-height: 1.5; color: var(--ink); max-width: 60ch; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+.hero-cta { display: flex; align-items: center; gap: 1rem 1.4rem; flex-wrap: wrap; margin-top: 1.5rem; }
+.dl { display: inline-flex; align-items: center; gap: .6rem; font: 700 1.05rem/1 Fredoka, sans-serif; color: var(--black); background: var(--white); border-radius: 4px; padding: .95rem 1.4rem; text-decoration: none; }
+.dl:hover { background: #fff; }
+.dl small { font: 600 .8rem/1 'Nunito Sans', sans-serif; opacity: .6; }
+.hero-note { color: var(--ink); font-size: .92rem; max-width: 40ch; line-height: 1.45; text-shadow: 0 2px 10px rgba(0,0,0,.8); }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 1.25rem; }
+section.block { padding: 3.6rem 0 0; }
+section.block > .wrap > h2 { margin: 0 0 .4rem; font-size: clamp(1.7rem, 3vw, 2.2rem); }
+section.block > .wrap > .lede { margin: 0 0 1.4rem; color: var(--dim); max-width: 64ch; line-height: 1.55; }
+
+/* the window, as in game: one-pixel borders, near-black, white and grey */
+.view { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin: 0 0 .9rem; color: var(--dim); font-size: .95rem; }
+.view .seg { display: inline-flex; border: 1px solid #2a2a2a; border-radius: 4px; overflow: hidden; background: var(--panel); }
+.view .seg button { appearance: none; border: 0; background: transparent; color: var(--dim); font: 600 .9rem 'Nunito Sans', sans-serif; padding: .5rem .95rem; cursor: pointer; }
+.view .seg button[aria-pressed="true"] { background: var(--white); color: var(--black); }
+.win { background: var(--bg); border: 1px solid var(--line); box-shadow: 0 0 0 1px #1c1c1c, 0 30px 80px rgba(0,0,0,.8); }
+.win-head { display: flex; align-items: center; gap: .9rem; padding: .35rem .6rem; border-bottom: 1px solid var(--line); }
+.win-head img { height: 48px; width: auto; display: block; }
+.win-head .t, .win-head .s { display: none; }
+.win-head .status { margin-left: auto; color: var(--dim); font-size: .78rem; text-align: right; }
+.tabs { display: flex; gap: 2px; padding: .4rem .5rem 0; flex-wrap: wrap; }
+.tabs button { appearance: none; border: 1px solid var(--line); background: var(--panel2); color: var(--dim); font: 600 .86rem 'Nunito Sans', sans-serif; padding: .36rem .9rem; cursor: pointer; position: relative; }
+.tabs button[aria-selected="true"] { color: var(--white); }
+.tabs button[aria-selected="true"]::after { content: ""; position: absolute; left: 1px; right: 1px; bottom: 1px; height: 2px; background: var(--white); }
+.tabs button[hidden] { display: none; }
+.panel { margin: .3rem .5rem .5rem; padding: .5rem; background: var(--panel); border: 1px solid var(--line); min-height: 240px; }
+.grid-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.board { width: 100%; min-width: 760px; border-collapse: collapse; font-size: .88rem; }
+.board th { text-align: left; font-weight: 600; color: var(--dim); font-size: .78rem; padding: .4rem .55rem; border-bottom: 1px solid var(--line); white-space: nowrap; cursor: pointer; user-select: none; }
+.board th.sorted { color: var(--white); }
+.board td { padding: .34rem .55rem; white-space: nowrap; color: var(--ink); }
+.board tr:nth-child(even) td { background: rgba(255,255,255,.03); }
+.board tr.you td { background: rgba(255,255,255,.07); }
+.board tr.you td.name { box-shadow: inset 2px 0 0 var(--white); }
+.board tr.off td { color: var(--mute); }
+.board td.name { font-weight: 700; }
+.board tr.off td.name { opacity: .55; }
+.board .dash { color: var(--mute); }
+.board .hid { color: var(--mute); cursor: help; }
+.xp { display: block; height: 1px; width: 56px; background: rgba(255,255,255,.1); margin-top: 3px; overflow: hidden; }
+.xp i { display: block; height: 100%; background: var(--white); }
+.pips { display: inline-flex; gap: 2px; vertical-align: middle; }
+.pips i { display: inline-block; width: 5px; height: 10px; background: #2a2a2a; }
+.pips i.s1 { background: #7a7a7a; } .pips i.s2 { background: var(--white); }
+.warnc { color: var(--warn); } .badc { color: var(--bad); } .goodc { color: var(--good); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: .4rem; }
+.card { background: var(--panel2); border: 1px solid var(--line); padding: .6rem .7rem .5rem; min-height: 84px; }
+.card .l { color: var(--dim); font-size: .76rem; font-weight: 600; }
+.card .lead { font: 600 1.05rem/1.2 'Nunito Sans', sans-serif; margin: .3rem 0 .15rem; color: var(--white); }
+.card .lead b { color: var(--white); font-weight: 700; }
+.card .lead b + span, .card .lead { color: var(--ink); }
+.card .mine { color: var(--mute); font-size: .76rem; }
+.officers-lines { color: var(--dim); font-size: .9rem; line-height: 1.55; margin: 0 0 .7rem; }
+.officers-lines b { color: var(--white); font-weight: 600; }
+.ctrls { display: flex; gap: 2px; flex-wrap: wrap; margin: 0 0 .8rem; }
+.ctrls span { border: 1px solid var(--line); background: var(--panel2); color: var(--ink); font-size: .82rem; font-weight: 600; padding: .35rem .8rem; }
+.me-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .1rem 1.6rem; font-size: .88rem; }
+.me-grid div { display: flex; justify-content: space-between; padding: .25rem 0; border-bottom: 1px solid var(--hair); }
+.me-grid div span:first-child { color: var(--dim); }
+.me-grid div.h { border: 0; color: var(--white); font-weight: 700; margin-top: .5rem; grid-column: 1 / -1; display: block; }
+.win-foot { padding: .5rem .9rem .6rem; color: var(--dim); font-size: .8rem; }
+.win-foot b { color: var(--white); font-weight: 600; }
+
+/* who sees what */
+.rules { display: grid; grid-template-columns: 1.2fr 1fr; gap: 2rem 3rem; align-items: start; }
+.rules h3 { margin: 0 0 .5rem; font-size: 1.25rem; }
+.rules p, .rules li { color: var(--dim); line-height: 1.6; }
+.rules ul { margin: 0; padding-left: 1.1rem; }
+.lev { display: grid; grid-template-columns: auto 1fr; gap: .6rem 1rem; align-items: baseline; margin: .9rem 0 0; }
+.lev dt { font: 600 1rem Fredoka, sans-serif; white-space: nowrap; color: var(--white); }
+.lev dt.o { color: var(--ink); }
+.lev dt.o::before, .lev dt.e::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: .5rem; vertical-align: middle; background: var(--white); }
+.lev dt.o::before { background: transparent; box-shadow: inset 0 0 0 1px var(--white); }
+.lev dd { margin: 0; color: var(--dim); line-height: 1.55; }
+
+/* the stat explorer */
+.ex-bar { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; margin: 0 0 1rem; }
+.chip { appearance: none; border: 1px solid #2a2a2a; background: var(--panel); color: var(--dim); font: 600 .88rem 'Nunito Sans', sans-serif; padding: .45rem .9rem; border-radius: 4px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--white); border-color: var(--white); color: var(--black); }
+.ex-bar input { margin-left: auto; flex: 1 1 200px; max-width: 320px; background: var(--panel); border: 1px solid #2a2a2a; color: var(--white); border-radius: 4px; padding: .5rem .95rem; font: 600 .9rem 'Nunito Sans', sans-serif; }
+.ex-bar input::placeholder { color: var(--mute); }
+.pills { display: flex; flex-wrap: wrap; gap: .3rem; }
+.pill { appearance: none; border: 1px solid #222; background: var(--panel); color: var(--ink); font: 600 .86rem 'Nunito Sans', sans-serif; padding: .4rem .75rem .4rem .6rem; border-radius: 4px; cursor: pointer; display: inline-flex; align-items: center; gap: .45rem; }
+.pill::before { content: ""; width: 8px; height: 8px; background: var(--white); flex: none; }
+.pill.o::before { background: transparent; box-shadow: inset 0 0 0 1px var(--white); }
+.pill[aria-expanded="true"] { background: var(--panel2); border-color: var(--white); }
+.detail { margin: .9rem 0 0; padding: .9rem 1rem; background: var(--panel); border: 1px solid #222; border-left: 2px solid var(--white); color: var(--dim); line-height: 1.55; min-height: 3.2rem; }
+.detail b { color: var(--white); }
+.detail .meta { color: var(--mute); font-size: .85rem; }
+.legend { color: var(--mute); font-size: .85rem; margin: .7rem 0 0; }
+.legend i { display: inline-block; width: 8px; height: 8px; vertical-align: middle; margin: 0 .3rem 0 .6rem; }
+.legend i.e { background: var(--white); } .legend i.o { box-shadow: inset 0 0 0 1px var(--white); }
+
+/* install */
+.steps { counter-reset: s; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.4rem; }
+.step { position: relative; padding-left: 3.2rem; color: var(--dim); line-height: 1.55; }
+.step::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: -.35rem; font: 700 2.4rem/1 Fredoka, sans-serif; color: var(--white); }
+.step code { color: var(--white); background: var(--panel2); padding: .05em .4em; border-radius: 3px; font-size: .9em; }
+
+.log { list-style: none; margin: 0; padding: 0; color: var(--dim); line-height: 1.6; }
+.log b { color: var(--white); margin-right: .6rem; font-family: Fredoka, sans-serif; }
+footer.cute-foot { margin: 3.5rem 0 0; padding: 1.6rem 0 3rem; border-top: 1px solid #1c1c1c; color: var(--mute); font-size: .85rem; line-height: 1.6; }
+
+@media (max-width: 860px) {
+  .rules { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: 1fr; gap: 1rem; }
+  .hero { min-height: 56vh; }
+  .win-head .status { display: none; }
+}
 </style>
 </head>
-<body class="board cu">
+<body class="board cute">
   <nav class="top">
     <a class="brand" href="/">
       <img src="/mark.svg" alt="" width="42" height="42">
@@ -79,72 +166,281 @@
       <a class="pill discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
     </div>
   </nav>
-<main class="cu-wrap">
-  <section class="cu-hero">
-    <img class="banner" src="img/banner.jpg" alt="The Cute banner: a red-haired elf over a bright valley">
-    <div class="plate">
-      <h1><span>Cute</span>, the guild dashboard</h1>
-      <p>Every member's addon shares about a hundred facts about their character over the guild channel. One window shows the whole guild: the race to 60, raid readiness, the hall of shame, and the officers' view. Officers decide who sees what.</p>
-    </div>
-  </section>
 
-  <div class="cu-row">
-    <a class="cu-dl" href="Cute.zip">Download Cute 0.1.0</a>
-    <span class="cu-ver">Free. For WoW Forever. Unzip into <code>Interface\AddOns</code>. Proof of concept for Cute's November prog; no server, no accounts, nothing leaves the guild channel.</span>
-  </div>
-
-  <h2 class="cu-h2">Install</h2>
-  <div class="cu-steps">
-    <div class="cu-step"><b>1</b><p>Download <a href="Cute.zip">Cute.zip</a> and unzip it. You get one folder, <code>Cute</code>.</p></div>
-    <div class="cu-step"><b>2</b><p>Put the folder in <code>World of Warcraft\_forever_\Interface\AddOns\</code>, next to your other addons.</p></div>
-    <div class="cu-step"><b>3</b><p>Log in. <code>/cute</code> opens the dashboard, the minimap button too. Your record reaches the guild within a few seconds of logging in.</p></div>
-  </div>
-
-  <h2 class="cu-h2">The window</h2>
-  <div class="cu-tabs">
-    <div class="cu-tab"><h3>Race</h3><p>Every member as a row: level and XP, zone, XP an hour, hours to 60 at your pace, time played, quests done, deaths while leveling, who you are grouped with. Sort by any column.</p></div>
-    <div class="cu-tab"><h3>Prog</h3><p>Attunements as pips, item level, keys, resistances, potions and flasks on hand, world buffs, durability, reputations, and the gear gaps you alone see.</p></div>
-    <div class="cu-tab"><h3>Hall of Shame</h3><p>A card per funny stat with its leader: deaths, fall deaths, drownings, wasted hearthstones, time stood still, /dance, jumps, "where are you" typed.</p></div>
-    <div class="cu-tab"><h3>Officers</h3><p>Officer ranks only: who has the addon, who is online, the median level and who is under it, gold, bank activity, raids attended, declared mains and roles. The controls live here.</p></div>
-    <div class="cu-tab"><h3>Me</h3><p>Your whole record, every stat, and a toggle that shows what members see of you.</p></div>
-  </div>
-
-  <h2 class="cu-h2">Who sees what</h2>
-  <div class="cu-two">
-    <div class="cu-card">
-      <h3>Two levels, set by the officers</h3>
-      <ul>
-        <li><b>Everyone</b>: every member sees every member's value. The race, who is doing well, the funny stats the officers want on the wall.</li>
-        <li><b>Only you</b>: you see your own; officers and the guild master see everyone's. Missing enchants, empty slots, gold, raid buffs you lack.</li>
-      </ul>
-      <p>Officers flip each stat in Settings and press Broadcast; every member's addon applies it when it comes from an officer rank. Your own row is always complete.</p>
-    </div>
-    <div class="cu-card">
-      <h3>What never happens</h3>
-      <ul>
-        <li>Nothing leaves the guild's addon channel. There is no server behind this addon and no upload.</li>
-        <li>No combat log (the Forever client restricts it), no chat text read: whispers and guild lines are counted, never stored.</li>
-        <li>Nothing accepts, abandons or hands in a quest, and nothing touches the game's secure frames.</li>
-        <li>An Only-you stat is hidden in members' windows, not encrypted: it still travels on the guild channel, so a member reading the saved file could see it. Fine for a guild; said plainly.</li>
-      </ul>
+<header class="hero">
+  <img src="img/banner.jpg" alt="The Cute banner: a red-haired elf over a bright valley with floating castles">
+  <div class="hero-text">
+    <h1>Twenty raiders, one window.</h1>
+    <p>Cute is the guild's own addon for Forever's November release. Every member's client shares about a hundred facts about their character over the guild channel, and the dashboard shows the race to 60, raid readiness, the hall of shame and the officers' view. Officers decide who sees what.</p>
+    <div class="hero-cta">
+      <a class="dl" href="Cute.zip">Download Cute <small>0.1.0, 254 KB</small></a>
+      <span class="hero-note">Free. No server, no accounts, nothing leaves the guild channel. Unzip into Interface\AddOns and type /cute.</span>
     </div>
   </div>
+</header>
 
-  <h2 class="cu-h2">What it tracks today</h2>
-  <div class="cu-cats">
-    <div class="cu-cat"><h4>Leveling, 42</h4><p>Level, XP, XP an hour, hours to 60, rested XP, zone, group, time played, sessions, quests done and in log, dungeons run, flights, hearths, deaths while leveling, gold earned, professions, Legacy perks.</p><small>Default: everyone</small></div>
-    <div class="cu-cat"><h4>Progression, 40</h4><p>Item level and per slot, empty and unenchanted slots, old gear, attunements, keys, five resistances, recipes, bags, potions, flasks, elixirs, food, bandages, world buffs, durability, reputations, lockouts, class resources.</p><small>Default: everyone, the gaps only you</small></div>
-    <div class="cu-cat"><h4>Hall of Shame, 18</h4><p>Deaths, fall deaths, drownings, fatigue, wasted hearthstones, AFK flags, /dance and /sit, emotes, whispers an hour, guild lines, inspections, fish, jumps, ghost yards, "where are you".</p><small>Default: everyone, whispers only you</small></div>
-    <div class="cu-cat"><h4>Officers, 11</h4><p>Gold, guild bank deposits and withdrawals, consumables used in raids, addon version, declared main, role, last login, raids this week, on time for raid.</p><small>Default: only you</small></div>
+<section class="block" id="window">
+  <div class="wrap">
+    <h2>This is the window</h2>
+    <p class="lede">The real thing runs in game. This one runs here, with the guild's data made up, so you can click through it. Switch who is looking and watch what changes.</p>
+    <div class="view">
+      <span>Looking as</span>
+      <div class="seg" role="group" aria-label="Viewer">
+        <button type="button" data-viewer="member" aria-pressed="true">Kaka, raider</button>
+        <button type="button" data-viewer="officer" aria-pressed="false">Yezin, officer</button>
+      </div>
+      <span id="view-hint">A member sees everyone's shared stats and all of their own.</span>
+    </div>
+    <div class="win" id="win">
+      <div class="win-head">
+        <img src="img/logo.jpg" alt="">
+        <div><div class="t">Cute</div><div class="s">the guild dashboard</div></div>
+        <div class="status" id="status">11 with the addon online<br>member view</div>
+      </div>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-tab="race" aria-selected="true">Race</button>
+        <button type="button" role="tab" data-tab="prog" aria-selected="false">Prog</button>
+        <button type="button" role="tab" data-tab="shame" aria-selected="false">Hall of Shame</button>
+        <button type="button" role="tab" data-tab="officers" aria-selected="false" hidden>Officers</button>
+        <button type="button" role="tab" data-tab="me" aria-selected="false">Me</button>
+      </div>
+      <div class="panel" id="panel"></div>
+      <div class="win-foot" id="foot">Click a column to sort. A <b>dash</b> is a stat the officers set to Only you: its owner and the officers see it, nobody else.</div>
+    </div>
   </div>
-  <p class="cu-ver" style="margin-top:.8rem">A stat is one line in the addon's registry, so the list follows what the officers ask for. Counted stats start at zero the day you install it.</p>
+</section>
 
-  <h2 class="cu-h2">Changelog</h2>
-  <ul class="cu-log">
-    <li><b>0.1.0</b>The proof of concept: the registry of 111 stats, the guild channel sync, the five pages, Settings with the officers' visibility list, the minimap button and key bindings.</li>
-  </ul>
+<section class="block" id="rules">
+  <div class="wrap">
+    <h2>Who sees what</h2>
+    <div class="rules">
+      <div>
+        <p>Every stat has one of two settings, and the officers pick it in the addon's Settings. A change is broadcast on the guild channel; members' addons apply it when it comes from an officer rank. Your own row is always complete.</p>
+        <dl class="lev">
+          <dt class="e">Everyone</dt><dd>Every member sees every member's value: the race, who is doing well, the funny stats the officers want on the wall.</dd>
+          <dt class="o">Only you</dt><dd>You see your own; officers and the guild master see everyone's. Missing enchants, empty slots, gold, the raid buffs you lack.</dd>
+        </dl>
+      </div>
+      <div>
+        <h3>What never happens</h3>
+        <ul>
+          <li>Nothing leaves the guild's addon channel. There is no server behind this addon and no upload.</li>
+          <li>No combat log, which Forever's client restricts anyway. Whispers and guild lines are counted, never read or stored.</li>
+          <li>Nothing accepts, abandons or hands in a quest; nothing touches the game's secure frames.</li>
+          <li>An Only-you stat is hidden in members' windows, not encrypted. It still travels on the guild channel, so a member reading the saved file could see it. Fine for a guild, said plainly.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
 
-  <p class="cu-foot">Part of <a href="/">ForeverRank</a>, by a member of Cute. GPL-3.0-or-later. QuestBank, the public questing addon, is <a href="/questbank/">here</a>; the two run side by side. Bugs: the Discord.</p>
-</main>
+<section class="block" id="stats">
+  <div class="wrap">
+    <h2>What it tracks</h2>
+    <p class="lede">The addon's own list, 111 stats in version 0.1.0. Pick a category or search; click a stat for how it is measured. The officers' list replaces this one, a line at a time.</p>
+    <div class="ex-bar" id="ex-bar">
+      <button type="button" class="chip" data-cat="all" aria-pressed="true">All</button>
+      <button type="button" class="chip" data-cat="leveling" aria-pressed="false">Race</button>
+      <button type="button" class="chip" data-cat="prog" aria-pressed="false">Prog</button>
+      <button type="button" class="chip" data-cat="funny" aria-pressed="false">Hall of Shame</button>
+      <button type="button" class="chip" data-cat="officer" aria-pressed="false">Officers</button>
+      <input type="search" id="ex-q" placeholder="Search stats" aria-label="Search stats">
+    </div>
+    <div class="pills" id="pills"></div>
+    <div class="detail" id="detail">Pick a stat to see how it is measured and who sees it by default.</div>
+    <p class="legend">Default visibility:<i class="e"></i>everyone<i class="o"></i>only you. Counted stats start at zero the day you install the addon.</p>
+  </div>
+</section>
+
+<section class="block" id="install">
+  <div class="wrap">
+    <h2>Install</h2>
+    <div class="steps">
+      <div class="step">Download <a href="Cute.zip">Cute.zip</a> and unzip it. You get one folder, <code>Cute</code>.</div>
+      <div class="step">Put the folder in <code>World of Warcraft\_forever_\Interface\AddOns\</code>, next to your other addons.</div>
+      <div class="step">Log in and type <code>/cute</code>, or click the elf on the minimap. Your record reaches the guild within a few seconds. Officer ranks get the Officers tab and the visibility list in Settings.</div>
+    </div>
+  </div>
+</section>
+
+<section class="block" id="changelog">
+  <div class="wrap">
+    <h2>Changelog</h2>
+    <ul class="log">
+      <li><b>0.1.0</b>The proof of concept: 111 stats, the guild channel sync, the five pages, Settings with the officers' visibility list, the minimap button and key bindings.</li>
+    </ul>
+    <footer class="cute-foot">Part of <a href="/">ForeverRank</a>, made by a member of Cute. GPL-3.0-or-later. QuestBank, the public questing addon, is <a href="/questbank/">here</a>; the two run side by side. Bugs go to the Discord.</footer>
+  </div>
+</section>
+
+<script src="stats.js"></script>
+<script>
+(function () {
+  // the fake guild. Names are the ones in the memes; numbers are invented
+  var G = [
+    { n: "Cutecutecute", c: "PRIEST", lvl: 44, xp: 61, xph: 18400, to60: 31, zone: "Feralas", played: "2d 04h", quests: 418, dl: 7, grp: "Yezin, Upn", ilvl: 41, mc: "2", ony: "2222222100000", keys: 3, fr: 15, flasks: 1, hp: 8, world: 2, dura: 88, noench: 2, empty: 0, deaths: 7, falls: 1, hs: 0, still: "1h 12m", dance: 6, jumps: 4120, where: 1, gold: 212, bankin: 150, raids: 0, main: "Cutecutecute", role: "Heal", on: true, officer: true, rank: "Guild Master" },
+    { n: "Yezin", c: "WARRIOR", lvl: 42, xp: 35, xph: 16900, to60: 36, zone: "Duskwood", played: "1d 21h", quests: 388, dl: 4, grp: "Cutecutecute, Upn", ilvl: 39, mc: "2", ony: "2222221000000", keys: 2, fr: 8, flasks: 2, hp: 12, world: 2, dura: 71, noench: 1, empty: 0, deaths: 5, falls: 0, hs: 1, still: "0h 40m", dance: 1, jumps: 2210, where: 0, gold: 148, bankin: 300, raids: 0, main: "Yezin", role: "Tank", on: true, officer: true, rank: "Officer" },
+    { n: "Upn", c: "MAGE", lvl: 41, xp: 78, xph: 17200, to60: 37, zone: "Duskwood", played: "1d 19h", quests: 371, dl: 9, grp: "Cutecutecute, Yezin", ilvl: 37, mc: "2", ony: "2221000000000", keys: 1, fr: 0, flasks: 0, hp: 3, world: 1, dura: 94, noench: 4, empty: 1, deaths: 11, falls: 3, hs: 2, still: "0h 12m", dance: 0, jumps: 5980, where: 0, gold: 96, bankin: 0, raids: 0, main: "Upn", role: "Ranged", on: true, officer: true, rank: "Officer" },
+    { n: "Ferrow", c: "HUNTER", lvl: 40, xp: 12, xph: 15100, to60: 42, zone: "Stranglethorn Vale", played: "1d 16h", quests: 352, dl: 6, grp: "Quillan", ilvl: 36, mc: "1", ony: "2210000000000", keys: 1, fr: 0, flasks: 0, hp: 5, world: 0, dura: 63, noench: 5, empty: 0, deaths: 9, falls: 2, hs: 0, still: "0h 25m", dance: 2, jumps: 3310, where: 2, gold: 61, bankin: 0, raids: 0, main: "Ferrow", role: "Ranged", on: true, officer: false, rank: "Raider" },
+    { n: "Ondra", c: "MAGE", lvl: 40, xp: 4, xph: 14800, to60: 43, zone: "Stranglethorn Vale", played: "1d 14h", quests: 340, dl: 5, grp: "", ilvl: 35, mc: "0", ony: "2200000000000", keys: 0, fr: 0, flasks: 1, hp: 6, world: 1, dura: 79, noench: 3, empty: 0, deaths: 6, falls: 1, hs: 0, still: "0h 18m", dance: 3, jumps: 2780, where: 0, gold: 72, bankin: 50, raids: 0, main: "Ondra", role: "Ranged", on: false, officer: false, rank: "Raider" },
+    { n: "Mutu", c: "WARRIOR", lvl: 39, xp: 51, xph: 13900, to60: 48, zone: "Arathi Highlands", played: "1d 12h", quests: 322, dl: 3, grp: "Bari", ilvl: 38, mc: "0", ony: "2100000000000", keys: 1, fr: 0, flasks: 0, hp: 4, world: 0, dura: 55, noench: 2, empty: 0, deaths: 4, falls: 0, hs: 0, still: "0h 31m", dance: 0, jumps: 1920, where: 0, gold: 55, bankin: 0, raids: 0, main: "Mutu", role: "Tank", on: true, officer: false, rank: "Raider" },
+    { n: "Bari", c: "PALADIN", lvl: 38, xp: 88, xph: 13400, to60: 51, zone: "Arathi Highlands", played: "1d 11h", quests: 310, dl: 2, grp: "Mutu", ilvl: 37, mc: "0", ony: "2100000000000", keys: 1, fr: 0, flasks: 0, hp: 9, world: 0, dura: 82, noench: 1, empty: 0, deaths: 3, falls: 0, hs: 1, still: "0h 50m", dance: 0, jumps: 1540, where: 0, gold: 80, bankin: 100, raids: 0, main: "Bari", role: "Tank", on: true, officer: false, rank: "Raider" },
+    { n: "Quillan", c: "ROGUE", lvl: 38, xp: 20, xph: 15600, to60: 49, zone: "Stranglethorn Vale", played: "1d 09h", quests: 298, dl: 8, grp: "Ferrow", ilvl: 34, mc: "0", ony: "2000000000000", keys: 0, fr: 0, flasks: 0, hp: 2, world: 0, dura: 47, noench: 6, empty: 1, deaths: 10, falls: 4, hs: 0, still: "0h 09m", dance: 1, jumps: 7410, where: 3, gold: 33, bankin: 0, raids: 0, main: "Quillan", role: "Melee", on: true, officer: false, rank: "Raider" },
+    { n: "Kaka", c: "PRIEST", lvl: 37, xp: 12, xph: 11200, to60: 68, zone: "Desolace", played: "1d 15h", quests: 276, dl: 14, grp: "", ilvl: 33, mc: "0", ony: "1000000000000", keys: 0, fr: 0, flasks: 0, hp: 1, world: 0, dura: 38, noench: 7, empty: 2, deaths: 23, falls: 6, hs: 4, still: "2h 48m", dance: 14, jumps: 9980, where: 9, gold: 12, bankin: 0, raids: 0, main: "Kaka", role: "Heal", on: true, officer: false, rank: "Raider" },
+    { n: "Boopsy", c: "WARLOCK", lvl: 36, xp: 66, xph: 12600, to60: 59, zone: "Thousand Needles", played: "1d 06h", quests: 262, dl: 5, grp: "Lindel", ilvl: 33, mc: "0", ony: "1000000000000", keys: 0, fr: 0, flasks: 0, hp: 7, world: 0, dura: 90, noench: 3, empty: 0, deaths: 8, falls: 2, hs: 1, still: "0h 36m", dance: 4, jumps: 3050, where: 1, gold: 44, bankin: 0, raids: 0, main: "Boopsy", role: "Ranged", on: true, officer: false, rank: "Raider" },
+    { n: "Lindel", c: "DRUID", lvl: 35, xp: 30, xph: 12100, to60: 64, zone: "Thousand Needles", played: "1d 04h", quests: 251, dl: 4, grp: "Boopsy", ilvl: 31, mc: "0", ony: "0000000000000", keys: 0, fr: 0, flasks: 0, hp: 6, world: 0, dura: 76, noench: 5, empty: 1, deaths: 5, falls: 1, hs: 0, still: "0h 22m", dance: 2, jumps: 2600, where: 0, gold: 38, bankin: 0, raids: 0, main: "Lindel", role: "Heal", on: false, officer: false, rank: "Raider" },
+    { n: "Garristan", c: "WARRIOR", lvl: 1, xp: 0, xph: 0, to60: null, zone: "Character select", played: "0h 03m", quests: 0, dl: 0, grp: "", ilvl: 1, mc: "0", ony: "0000000000000", keys: 0, fr: 0, flasks: 0, hp: 0, world: 0, dura: 100, noench: 0, empty: 14, deaths: 0, falls: 0, hs: 0, still: "0h 03m", dance: 0, jumps: 0, where: 0, gold: 0, bankin: 0, raids: 0, main: "Garristan", role: "", on: true, officer: false, rank: "Member" }
+  ];
+  var CLASS = { WARRIOR: "#c79c6e", PRIEST: "#ffffff", MAGE: "#69ccf0", HUNTER: "#abd473", ROGUE: "#fff569", PALADIN: "#f58cba", WARLOCK: "#9482c9", DRUID: "#ff7d0a", SHAMAN: "#0070de" };
+  var SELF = { noench: 1, empty: 1, gold: 1, bankin: 1 }; // the officers' Only-you stats in this demo
+  var viewer = "member", tab = "race", sort = { race: { k: "lvl", d: true }, prog: { k: "ilvl", d: true }, officers: { k: "gold", d: true } };
+  var ME = { member: "Kaka", officer: "Yezin" };
+
+  var COLS = {
+    race: [["lvl", "Level"], ["xph", "XP/h"], ["to60", "To 60"], ["zone", "Zone"], ["played", "Played"], ["quests", "Quests"], ["dl", "Deaths"], ["grp", "Group"]],
+    prog: [["ilvl", "iLvl"], ["mc", "MC"], ["ony", "Onyxia"], ["keys", "Keys"], ["fr", "FR"], ["flasks", "Flasks"], ["hp", "HP pots"], ["world", "World"], ["dura", "Dura"], ["noench", "No ench"], ["empty", "Empty"]],
+    officers: [["gold", "Gold"], ["bankin", "Bank in"], ["raids", "Raids"], ["main", "Main"], ["role", "Role"]]
+  };
+  var SHAME = [["deaths", "Deaths"], ["falls", "Fall deaths"], ["hs", "Hearthstones wasted"], ["still", "Longest stood still"], ["dance", "/dance"], ["jumps", "Jumps"], ["where", "\"where are you\" typed"], ["dl", "Deaths while leveling"]];
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]; }); }
+  function pips(s) { var out = "<span class=\"pips\">"; for (var i = 0; i < s.length; i++) out += "<i class=\"s" + s[i] + "\"></i>"; return out + "</span>"; }
+  function cell(row, k, me, officer) {
+    var v = row[k];
+    if (SELF[k] && !officer && row.n !== me) return "<span class=\"hid\" title=\"Only " + esc(row.n) + " and the officers see this\">&ndash;</span>";
+    if (k === "lvl") return esc(v) + "<span class=\"xp\"><i style=\"width:" + row.xp + "%\"></i></span>";
+    if (k === "mc" || k === "ony") return pips(v);
+    if (k === "to60") return v == null ? "<span class=\"dash\">&ndash;</span>" : esc(v) + " h";
+    if (k === "xph") return v ? esc(v.toLocaleString("en")) : "0";
+    if (k === "dura") return "<span class=\"" + (v < 50 ? "badc" : "") + "\">" + v + "%</span>";
+    if (k === "noench" || k === "empty") return "<span class=\"" + (v === 0 ? "goodc" : "warnc") + "\">" + v + "</span>";
+    if (k === "keys") return v + "/7";
+    if (k === "world") return v + "/9";
+    if (v === "" || v == null) return "<span class=\"dash\">&ndash;</span>";
+    return esc(v);
+  }
+  function sorted(k, d) {
+    var rows = G.slice();
+    var me = ME[viewer];
+    rows.sort(function (a, b) {
+      if ((a.n === me) !== (b.n === me)) return a.n === me ? -1 : 1;
+      var x = a[k], y = b[k];
+      if (typeof x === "string" && /^\d/.test(x) && k !== "zone") { x = parseFloat(x.replace(/[^\d.]/g, "")); y = parseFloat(String(y).replace(/[^\d.]/g, "")); }
+      if (x == null) return 1; if (y == null) return -1;
+      if (x === y) return a.n < b.n ? -1 : 1;
+      return (x > y ? 1 : -1) * (d ? -1 : 1);
+    });
+    return rows;
+  }
+  function table(page) {
+    var officer = viewer === "officer", me = ME[viewer], s = sort[page];
+    var h = "<div class=\"grid-wrap\"><table class=\"board\"><thead><tr><th>Member</th>";
+    COLS[page].forEach(function (c) { h += "<th data-k=\"" + c[0] + "\" class=\"" + (s.k === c[0] ? "sorted" : "") + "\">" + esc(c[1]) + "</th>"; });
+    h += "</tr></thead><tbody>";
+    sorted(s.k, s.d).forEach(function (r) {
+      var cls = (r.n === me ? "you " : "") + (r.on ? "" : "off");
+      h += "<tr class=\"" + cls + "\"><td class=\"name\" style=\"color:" + CLASS[r.c] + "\">" + esc(r.n) + (r.n === me ? " (you)" : "") + (r.on ? "" : " <span class=\"dash\">offline</span>") + "</td>";
+      COLS[page].forEach(function (c) { h += "<td>" + cell(r, c[0], me, officer) + "</td>"; });
+      h += "</tr>";
+    });
+    return h + "</tbody></table></div>";
+  }
+  function shame() {
+    var officer = viewer === "officer", me = ME[viewer];
+    var h = "<div class=\"cards\">";
+    SHAME.forEach(function (c) {
+      var k = c[0];
+      var rows = G.slice().sort(function (a, b) { var x = parseFloat(String(a[k]).replace(/[^\d.]/g, "")) || 0, y = parseFloat(String(b[k]).replace(/[^\d.]/g, "")) || 0; return y - x; });
+      var mine = G.filter(function (r) { return r.n === me; })[0];
+      var top = rows[0];
+      h += "<div class=\"card\"><div class=\"l\">" + esc(c[1]) + "</div><div class=\"lead\">" + (top && String(top[k]) !== "0" ? "<b>" + esc(top.n) + "</b> " + esc(top[k]) : "<span class=\"dash\">nobody yet</span>") + "</div><div class=\"mine\">You: " + esc(mine[k]) + "</div></div>";
+    });
+    return h + "</div>";
+  }
+  function officers() {
+    var on = G.filter(function (r) { return r.on; }).length;
+    var lvls = G.map(function (r) { return r.lvl; }).sort(function (a, b) { return a - b; });
+    var median = lvls[Math.ceil(lvls.length / 2) - 1];
+    var below = lvls.filter(function (l) { return l < median; }).length;
+    var h = "<p class=\"officers-lines\"><b>" + G.length + " members</b>, 12 with the addon, " + on + " online. Median level <b>" + median + "</b>, " + below + " below it, 0 not seen for a week. Without the addon: nobody. Policy set by Yezin, 18 Oct 20:40.</p>";
+    h += "<div class=\"ctrls\"><span>Visibility settings</span><span>Ask everyone to resend</span><span>Broadcast policy now</span></div>";
+    return h + table("officers");
+  }
+  function me() {
+    var r = G.filter(function (x) { return x.n === ME[viewer]; })[0];
+    var rows = [["h", "Race"], ["Level", r.lvl + " (" + r.xp + "%)"], ["XP an hour", r.xph.toLocaleString("en")], ["Hours to 60", r.to60 == null ? "-" : r.to60], ["Zone", r.zone], ["Time played", r.played], ["Quests done", r.quests],
+      ["h", "Prog"], ["Item level", r.ilvl], ["Keys", r.keys + "/7"], ["Flasks", r.flasks], ["Health potions", r.hp], ["Durability", r.dura + "%"], ["Unenchanted slots", r.noench + " (only you)"], ["Empty slots", r.empty + " (only you)"],
+      ["h", "Hall of Shame"], ["Deaths", r.deaths], ["Fall deaths", r.falls], ["Hearthstones wasted", r.hs], ["Longest stood still", r.still], ["/dance", r.dance], ["Jumps", r.jumps.toLocaleString("en")],
+      ["h", "Officers"], ["Gold", r.gold + " (only you)"], ["Declared main", r.main], ["Role", r.role || "-"]];
+    var h = "<div class=\"me-grid\">";
+    rows.forEach(function (x) { h += x[0] === "h" ? "<div class=\"h\">" + x[1] + "</div>" : "<div><span>" + esc(x[0]) + "</span><span>" + esc(x[1]) + "</span></div>"; });
+    return h + "</div>";
+  }
+  var panel = document.getElementById("panel");
+  function draw() {
+    var officer = viewer === "officer";
+    document.querySelector("[data-tab=officers]").hidden = !officer;
+    if (tab === "officers" && !officer) tab = "race";
+    document.querySelectorAll("[role=tab]").forEach(function (b) { b.setAttribute("aria-selected", b.dataset.tab === tab ? "true" : "false"); });
+    panel.innerHTML = tab === "race" || tab === "prog" ? table(tab) : tab === "shame" ? shame() : tab === "officers" ? officers() : me();
+    document.getElementById("status").innerHTML = "11 with the addon online<br>" + (officer ? "officer view" : "member view");
+    document.getElementById("view-hint").textContent = officer ? "An officer sees everything, and the Officers tab appears." : "A member sees everyone's shared stats and all of their own.";
+    document.getElementById("foot").innerHTML = tab === "prog" && !officer ? "No ench and Empty are set to Only you: Kaka sees their own, the rest show a <b>dash</b>. Switch to Yezin to see them all."
+      : tab === "shame" ? "One card per funny stat, the leader on each. Officers choose which of these go on the wall."
+      : tab === "officers" ? "Officer ranks only. The three controls open the visibility list, ask every addon to resend its record, and push the policy out."
+      : tab === "me" ? "Your whole record, including the stats only you see."
+      : "Click a column to sort. A <b>dash</b> is a stat the officers set to Only you: its owner and the officers see it, nobody else.";
+    panel.querySelectorAll("th[data-k]").forEach(function (th) {
+      th.addEventListener("click", function () {
+        var s = sort[tab];
+        if (s.k === th.dataset.k) s.d = !s.d; else sort[tab] = { k: th.dataset.k, d: true };
+        draw();
+      });
+    });
+  }
+  document.querySelectorAll("[role=tab]").forEach(function (b) { b.addEventListener("click", function () { tab = b.dataset.tab; draw(); }); });
+  document.querySelectorAll("[data-viewer]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      viewer = b.dataset.viewer;
+      document.querySelectorAll("[data-viewer]").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+      draw();
+    });
+  });
+  draw();
+
+  // the stat explorer, from the addon's registry (stats.js)
+  var S = window.CUTE_STATS || [];
+  var CATNAME = { leveling: "Race", prog: "Prog", funny: "Hall of Shame", officer: "Officers" };
+  var KIND = { int: "a number", flag: "yes or no", text: "text", list: "a checklist", pips: "steps" };
+  var cat = "all", q = "", open = null;
+  var pillsEl = document.getElementById("pills"), detail = document.getElementById("detail");
+  function pillsDraw() {
+    var ql = q.trim().toLowerCase();
+    var list = S.filter(function (s) { return (cat === "all" || s.cat === cat) && (!ql || s.label.toLowerCase().indexOf(ql) >= 0 || (s.hint || "").toLowerCase().indexOf(ql) >= 0); });
+    pillsEl.innerHTML = list.map(function (s) {
+      return "<button type=\"button\" class=\"pill " + (s.vis === "self" ? "o" : "") + "\" data-id=\"" + s.id + "\" aria-expanded=\"" + (open === s.id) + "\">" + esc(s.label) + "</button>";
+    }).join("") || "<span class=\"legend\">Nothing matches. Try another word.</span>";
+    pillsEl.querySelectorAll(".pill").forEach(function (p) {
+      p.addEventListener("click", function () { open = open === p.dataset.id ? null : p.dataset.id; pillsDraw(); detailDraw(); });
+    });
+  }
+  function detailDraw() {
+    var s = S.filter(function (x) { return x.id === open; })[0];
+    if (!s) { detail.className = "detail"; detail.innerHTML = "Pick a stat to see how it is measured and who sees it by default."; return; }
+    detail.className = "detail " + (s.vis === "self" ? "o" : "");
+    detail.innerHTML = "<b>" + esc(s.label) + "</b> is on the " + CATNAME[s.cat] + " page, as " + KIND[s.kind] + ". " + (s.hint ? esc(s.hint.charAt(0).toUpperCase() + s.hint.slice(1)) + ". " : "") +
+      "<span class=\"meta\">By default " + (s.vis === "self" ? "only you and the officers see it" : "everyone sees it") + "; officers can change that.</span>";
+  }
+  document.querySelectorAll(".chip").forEach(function (c) {
+    c.addEventListener("click", function () {
+      cat = c.dataset.cat;
+      document.querySelectorAll(".chip").forEach(function (x) { x.setAttribute("aria-pressed", x === c ? "true" : "false"); });
+      pillsDraw();
+    });
+  });
+  document.getElementById("ex-q").addEventListener("input", function (e) { q = e.target.value; pillsDraw(); });
+  pillsDraw();
+})();
+</script>
 </body>
 </html>

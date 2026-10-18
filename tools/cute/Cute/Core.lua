@@ -133,10 +133,11 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1)
     C.loaded = true
   elseif event == "PLAYER_ENTERING_WORLD" then
     if not C.loaded then C.InitDB(); C.loaded = true end
-    C.Roster:Start()
-    C.Sample:Start()
-    C.Comm:Start()
-    if C.UI and C.UI.OnWorld then C.UI:OnWorld() end
+    -- each on its own, so one part failing never hides the others (the minimap button in particular)
+    C.Safe(function() C.Roster:Start() end, "roster: start")()
+    C.Safe(function() C.Sample:Start() end, "sample: start")()
+    C.Safe(function() C.Comm:Start() end, "comm: start")()
+    C.Safe(function() if C.UI and C.UI.OnWorld then C.UI:OnWorld() end end, "minimap button")()
   elseif event == "PLAYER_LOGOUT" then
     if C.Sample.ReadAll then C.Sample:ReadAll() end
   end

@@ -576,7 +576,7 @@ local function checkLayout(root, label)
   return problems
 end
 
-local TEXNAME = { ["Interface\\AddOns\\Cute\\art\\logo"] = "logo", ["Interface\\AddOns\\Cute\\art\\logo_wide"] = "logo_wide" }
+local TEXNAME = { ["Interface\\AddOns\\Cute\\art\\logo.png"] = "logo", ["Interface\\AddOns\\Cute\\art\\logo_wide.png"] = "logo_wide" }
 local function dumpLayout(root, label)
   GEN = GEN + 1
   local rr = rectOf(root)

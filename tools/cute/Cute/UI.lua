@@ -1,7 +1,9 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- The window: one frame with five pages and Settings.
+-- The window: one frame with five pages and Settings, drawn flat and dark the way ElvUI and Shadowed Unit Frames
+-- draw theirs: one-pixel black borders, near-black panels, white and grey text in the client's narrow font, class
+-- colours on names and nothing else coloured unless it means something (green ready, red low).
 --   Race           every member as a row: level, XP, zone, pace, the leveling stats
---   Prog           attunements, item level, consumables, buffs, readiness
+--   Prog           attunements, item level, consumables, buffs, the gaps only you see
 --   Hall of Shame  a card per funny stat with its leader
 --   Officers       summaries, the officers' stats, the controls (officer ranks only)
 --   Me             your whole record, with what members see
@@ -13,23 +15,25 @@ C.UI = UI
 
 local W, H = 1040, 640
 local MIN_W, MIN_H = 760, 420
-local HEAD = 64          -- the header strip
-local TABS = 28          -- the tab row
+local HEAD = 56          -- the header strip
+local TABS = 26          -- the tab row
 local ROW = 22
 local NAME_W = 150
-local INK = { 0.93, 0.88, 0.78 }
-local INK_SOFT = { 0.62, 0.58, 0.50 }
-local GOLD = { 0.91, 0.70, 0.29 }     -- #e8b24a
-local TEAL = { 0.18, 0.54, 0.54 }     -- #2f8a8a
-local GOOD = { 0.42, 0.86, 0.45 }
-local WARN = { 0.95, 0.72, 0.30 }
-local BAD = { 0.90, 0.38, 0.32 }
-local SLATE = { 0.105, 0.137, 0.188 } -- #1b2330
-local SLATE2 = { 0.14, 0.19, 0.26 }   -- #243042
-local EDGE = "Interface\\DialogFrame\\UI-DialogBox-Border"
+local FONT = "Fonts\\ARIALN.TTF" -- the client's narrow sans, the one the clean UIs use
+local WHITE = { 0.96, 0.96, 0.96 }
+local INK = { 0.86, 0.86, 0.86 }
+local DIM = { 0.58, 0.58, 0.58 }
+local MUTE = { 0.38, 0.38, 0.38 }
+local GOOD = { 0.45, 0.83, 0.47 }
+local WARN = { 0.93, 0.74, 0.35 }
+local BAD = { 0.88, 0.36, 0.33 }
+local BG = { 0.035, 0.035, 0.035 }
+local PANEL = { 0.07, 0.07, 0.07 }
+local PANEL2 = { 0.11, 0.11, 0.11 }
+local BLACK = { 0, 0, 0 }
 local FLAT = "Interface\\Buttons\\WHITE8x8"
-local LOGO = "Interface\\AddOns\\Cute\\art\\logo"
-local LOGO_WIDE = "Interface\\AddOns\\Cute\\art\\logo_wide"
+local LOGO = "Interface\\AddOns\\Cute\\art\\logo.png"
+local LOGO_WIDE = "Interface\\AddOns\\Cute\\art\\logo_wide.png"
 local BD = BackdropTemplateMixin and "BackdropTemplate" or nil
 
 local function hex(c) return string.format("|cff%02x%02x%02x", c[1] * 255, c[2] * 255, c[3] * 255) end
@@ -38,9 +42,10 @@ local function classColor(class)
   if c then return { c.r, c.g, c.b } end
   return INK
 end
+local function color(fs, c) fs:SetTextColor(c[1], c[2], c[3]) end
 
 ----------------------------------------------------------------------------
--- small builders
+-- small builders, flat
 ----------------------------------------------------------------------------
 local function tex(parent, layer, file, w, h)
   local t = parent:CreateTexture(nil, layer or "ARTWORK")
@@ -48,36 +53,62 @@ local function tex(parent, layer, file, w, h)
   if w then t:SetSize(w, h or w) end
   return t
 end
-local function flat(parent, layer, color, a)
+local function flat(parent, layer, c, a)
   local t = parent:CreateTexture(nil, layer or "BACKGROUND")
-  t:SetColorTexture(color[1], color[2], color[3], a or 1)
+  t:SetColorTexture(c[1], c[2], c[3], a or 1)
   return t
 end
-local function text(parent, obj, size, color, justify, width)
+-- a frame with a near-black fill and a one-pixel black border
+local function skin(frame, fill, a)
+  if not frame.SetBackdrop then return end
+  frame:SetBackdrop({ bgFile = FLAT, edgeFile = FLAT, tile = false, edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+  frame:SetBackdropColor(fill[1], fill[2], fill[3], a or 1)
+  frame:SetBackdropBorderColor(0, 0, 0, 1)
+end
+local function text(parent, size, c, justify, width)
   local fs = parent:CreateFontString(nil, "OVERLAY")
-  local fo = _G[obj] or GameFontNormal
-  fs:SetFontObject(fo)
-  if size then
-    local path, _, flags = fo:GetFont()
-    if path then fs:SetFont(path, size, flags) end
-  end
-  if color then fs:SetTextColor(color[1], color[2], color[3]) end
+  fs:SetFontObject(GameFontNormal)
+  fs:SetFont(FONT, size or 12, "")
+  color(fs, c or INK)
   fs:SetJustifyH(justify or "LEFT")
   fs:SetWordWrap(false)
   if width then fs:SetWidth(width) end
   return fs
 end
-local function backdrop(frame, bg, edge, edgeSize, inset)
-  if not frame.SetBackdrop then return end
-  frame:SetBackdrop({ bgFile = bg, edgeFile = edge, tile = false, tileSize = 32, edgeSize = edgeSize,
-    insets = { left = inset, right = inset, top = inset, bottom = inset } })
-end
-local function button(parent, label, w)
-  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  b:SetSize(w or 110, 22)
-  b:SetText(label)
+-- a flat button with a label: dark fill, black edge, a touch lighter when the mouse is on it
+local function button(parent, label, w, h)
+  local b = CreateFrame("Button", nil, parent, BD)
+  b:SetSize(w or 110, h or 22)
+  skin(b, PANEL2)
+  b.label = text(b, 12, INK, "CENTER")
+  b.label:SetPoint("TOPLEFT", 4, 0)
+  b.label:SetPoint("BOTTOMRIGHT", -4, 0)
+  b.label:SetText(label or "")
+  b:SetHighlightTexture(FLAT, "ADD")
+  b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.06)
+  function b:SetLabel(s) UI.FitText(self.label, s, (self:GetWidth() or w or 110) - 10) end
+  function b:SetOn(on) self.__off = not on; color(self.label, on and INK or MUTE); self:SetEnabled(on) end
   return b
 end
+-- a flat check box: a small square, filled white when checked
+local function check(parent)
+  local cb = CreateFrame("CheckButton", nil, parent, BD)
+  cb:SetSize(14, 14)
+  skin(cb, PANEL2)
+  cb.fill = flat(cb, "ARTWORK", WHITE, 1)
+  cb.fill:SetPoint("TOPLEFT", 3, -3)
+  cb.fill:SetPoint("BOTTOMRIGHT", -3, 3)
+  cb.fill:Hide()
+  cb.label = text(cb, 12, INK, "LEFT", 220)
+  cb.label:SetPoint("LEFT", cb, "RIGHT", 6, 0)
+  cb:SetHighlightTexture(FLAT, "ADD")
+  cb:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.08)
+  cb:HookScript("OnClick", function(self) self.fill:SetShown(self:GetChecked()) end)
+  function cb:Set(on) self:SetChecked(on); self.fill:SetShown(on and true or false) end
+  function cb:SetOn(on) self:SetEnabled(on); color(self.label, on and INK or MUTE); self.fill:SetVertexColor(1, 1, 1, on and 1 or 0.4) end
+  return cb
+end
+UI.Check, UI.Button, UI.Text, UI.Skin = check, button, text, skin
 local function tooltip(owner, fill)
   owner:SetScript("OnEnter", C.Safe(function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -100,7 +131,6 @@ local function fitText(fs, s, room)
     fs:SetText(cut .. "...")
     if width(fs) <= room then return end
   end
-  -- one word too wide: letters go
   while #cut > 1 do
     cut = cut:sub(1, -2)
     fs:SetText(cut .. "...")
@@ -123,23 +153,23 @@ local function pool(parent, make)
   return p
 end
 
--- ScrollFrame with a child and a knob
+-- ScrollFrame with a child and a thin flat bar
 local function scrollArea(parent)
   local sf = CreateFrame("ScrollFrame", nil, parent)
-  sf:SetPoint("TOPLEFT", 8, -6)
-  sf:SetPoint("BOTTOMRIGHT", -26, 6)
+  sf:SetPoint("TOPLEFT", 8, -8)
+  sf:SetPoint("BOTTOMRIGHT", -18, 8)
   local child = CreateFrame("Frame", nil, sf)
   child:SetSize(100, 10)
   sf:SetScrollChild(child)
   local bar = CreateFrame("Slider", nil, parent)
   bar:SetOrientation("VERTICAL")
-  bar:SetPoint("TOPRIGHT", -10, -10)
-  bar:SetPoint("BOTTOMRIGHT", -10, 10)
-  bar:SetWidth(14)
-  local track = flat(bar, "BACKGROUND", GOLD, 0.15)
-  track:SetPoint("TOPLEFT", 4, 0)
-  track:SetPoint("BOTTOMRIGHT", -4, 0)
-  local knob = tex(bar, "OVERLAY", "Interface\\Buttons\\UI-ScrollBar-Knob", 18, 24)
+  bar:SetPoint("TOPRIGHT", -7, -8)
+  bar:SetPoint("BOTTOMRIGHT", -7, 8)
+  bar:SetWidth(6)
+  local track = flat(bar, "BACKGROUND", PANEL2, 1)
+  track:SetAllPoints()
+  local knob = flat(bar, "OVERLAY", DIM, 1)
+  knob:SetSize(6, 40)
   bar:SetThumbTexture(knob)
   bar:SetMinMaxValues(0, 0)
   bar:SetValueStep(1)
@@ -163,7 +193,7 @@ local function scrollArea(parent)
   end
   function sf:Width()
     local w = self:GetWidth() or 0
-    if w < 100 then w = (UI.frame:GetWidth() or W) - 16 - 26 - 8 end
+    if w < 100 then w = (UI.frame:GetWidth() or W) - 2 - 8 - 18 end
     return w
   end
   return sf
@@ -207,7 +237,8 @@ local function ago(t)
   return string.format("%d days ago", math.floor(d / 86400))
 end
 UI.Ago = ago
-local PIP_COLOR = { [0] = { 0.35, 0.35, 0.38 }, [1] = WARN, [2] = GOOD, [3] = GOOD, [4] = GOOD, [5] = TEAL, [6] = TEAL, [7] = GOLD, [8] = GOLD }
+-- pips: not started dark, in the log grey, done white; reputations climb from grey to white
+local PIP = { [0] = { 0.16, 0.16, 0.16 }, [1] = { 0.5, 0.5, 0.5 }, [2] = WHITE, [3] = { 0.3, 0.3, 0.3 }, [4] = { 0.45, 0.45, 0.45 }, [5] = { 0.6, 0.6, 0.6 }, [6] = { 0.75, 0.75, 0.75 }, [7] = { 0.9, 0.9, 0.9 }, [8] = WHITE }
 
 -- a column header's short form, where the label would not fit a column
 local SHORT = { xp = "XP %", xp_hour = "XP/h", xp_session = "XP/h today", to60 = "To 60", played = "Played", played_lvl = "This lvl", rested = "Rested",
@@ -235,8 +266,7 @@ local function colWidth(def)
 end
 
 ----------------------------------------------------------------------------
--- which columns a page shows: the registry's category, filtered by the viewer's checklist (Settings), cut to what
--- fits the window
+-- which columns a page shows
 ----------------------------------------------------------------------------
 local DEFAULT_COLS = {
   race = { "level", "xp", "xp_hour", "to60", "zone", "played", "quests_done", "deaths_lvl", "group", "rested", "legacy" },
@@ -247,7 +277,6 @@ UI.DEFAULT_COLS = DEFAULT_COLS
 local CAT_OF_PAGE = { race = "leveling", prog = "prog", officers = "officer", shame = "funny" }
 UI.CAT_OF_PAGE = CAT_OF_PAGE
 
--- the ids ticked for a page (the default when the player never touched the checklist)
 function UI.Ticked(page)
   local cols = C.Settings().columns[page]
   if cols then return cols end
@@ -297,6 +326,8 @@ end
 ----------------------------------------------------------------------------
 -- the window
 ----------------------------------------------------------------------------
+local TAB_DEFS = { { "race", "Race", 64 }, { "prog", "Prog", 64 }, { "shame", "Hall of Shame", 110 }, { "officers", "Officers", 80 }, { "me", "Me", 48 }, { "settings", "Settings", 80 } }
+
 function UI:Build()
   if self.frame then return end
   local f = CreateFrame("Frame", "CuteFrame", UIParent, BD)
@@ -313,77 +344,82 @@ function UI:Build()
   f:SetScript("OnDragStop", function(s) s:StopMovingOrSizing(); UI:SavePos() end)
   if f.SetResizable then f:SetResizable(true) end
   if f.SetResizeBounds then f:SetResizeBounds(MIN_W, MIN_H) end
-  backdrop(f, FLAT, EDGE, 24, 7)
-  f:SetBackdropColor(SLATE[1], SLATE[2], SLATE[3], 0.97)
-  f:SetBackdropBorderColor(GOLD[1], GOLD[2], GOLD[3], 1)
+  skin(f, BG, 0.94)
+  -- the shadow the clean UIs draw: a soft dark edge just outside the border
+  local shadow = CreateFrame("Frame", nil, f, BD)
+  shadow:SetPoint("TOPLEFT", -4, 4)
+  shadow:SetPoint("BOTTOMRIGHT", 4, -4)
+  shadow:SetFrameLevel(math.max(0, (f:GetFrameLevel() or 2) - 1))
+  if shadow.SetBackdrop then
+    shadow:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 8, insets = { left = 0, right = 0, top = 0, bottom = 0 } })
+    shadow:SetBackdropBorderColor(0, 0, 0, 0.7)
+  end
   f:Hide()
   tinsert(UISpecialFrames, "CuteFrame")
   f:SetScript("OnShow", function() UI:Draw() end)
   f:SetScript("OnSizeChanged", function() if UI.frame:IsShown() then UI:Draw() end end)
 
-  -- header: the logo strip, the title, the close X
+  -- header: the logo, the status line, the close X
   local head = CreateFrame("Frame", nil, f)
-  head:SetPoint("TOPLEFT", 14, -14)
-  head:SetPoint("TOPRIGHT", -14, -14)
+  head:SetPoint("TOPLEFT", 1, -1)
+  head:SetPoint("TOPRIGHT", -1, -1)
   head:SetHeight(HEAD)
   self.head = head
-  local strip = flat(head, "BACKGROUND", SLATE2, 1)
-  strip:SetAllPoints()
-  local logo = tex(head, "ARTWORK", LOGO_WIDE, 112, 56)
-  logo:SetPoint("LEFT", 6, 0)
-  local title = text(head, "GameFontNormalLarge", 18, GOLD)
-  title:SetPoint("LEFT", logo, "RIGHT", 10, 10)
-  title:SetText("Cute")
-  local sub = text(head, "GameFontNormalSmall", 11, INK_SOFT)
-  sub:SetPoint("LEFT", logo, "RIGHT", 10, -10)
-  sub:SetText("the guild dashboard")
-  self.status = text(head, "GameFontNormalSmall", 11, INK_SOFT, "RIGHT", 420)
-  self.status:SetPoint("RIGHT", -34, -10)
-  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -12, -12)
+  local logo = tex(head, "ARTWORK", LOGO_WIDE, 104, 52)
+  logo:SetPoint("LEFT", 8, 0)
+  local line = flat(head, "BACKGROUND", BLACK, 1)
+  line:SetPoint("BOTTOMLEFT")
+  line:SetPoint("BOTTOMRIGHT")
+  line:SetHeight(1)
+  self.status = text(head, 11, DIM, "RIGHT", 420)
+  self.status:SetPoint("RIGHT", -40, 0)
+  local close = button(f, "x", 22, 22)
+  close:SetPoint("TOPRIGHT", -9, -9)
   close:SetScript("OnClick", function() f:Hide() end)
 
-  -- tabs
+  -- tabs: flat, the open one white with a line under it
   local tabs = CreateFrame("Frame", nil, f)
-  tabs:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -4)
-  tabs:SetPoint("TOPRIGHT", head, "BOTTOMRIGHT", 0, -4)
+  tabs:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 8, -4)
+  tabs:SetPoint("TOPRIGHT", head, "BOTTOMRIGHT", -8, -4)
   tabs:SetHeight(TABS)
   self.tabs = {}
-  local defs = { { "race", "Race" }, { "prog", "Prog" }, { "shame", "Hall of Shame" }, { "officers", "Officers" }, { "me", "Me" }, { "settings", "Settings" } }
-  local x = 0
-  for _, d in ipairs(defs) do
-    local b = button(tabs, d[2], d[1] == "shame" and 110 or (d[1] == "settings" and 90 or 80))
-    b:SetPoint("LEFT", x, 0)
+  for _, d in ipairs(TAB_DEFS) do
+    local b = button(tabs, d[2], d[3], TABS)
     b.page = d[1]
+    b.under = flat(b, "OVERLAY", WHITE, 1)
+    b.under:SetPoint("BOTTOMLEFT", 1, 1)
+    b.under:SetPoint("BOTTOMRIGHT", -1, 1)
+    b.under:SetHeight(2)
+    b.under:Hide()
     b:SetScript("OnClick", function() UI:Open(d[1]) end)
     self.tabs[d[1]] = b
-    x = x + (d[1] == "shame" and 110 or (d[1] == "settings" and 90 or 80)) + 4
   end
 
   -- the content panel
   local content = CreateFrame("Frame", nil, f, BD)
   content:SetPoint("TOPLEFT", tabs, "BOTTOMLEFT", 0, -4)
-  content:SetPoint("BOTTOMRIGHT", -14, 14)
-  backdrop(content, FLAT, nil, 0, 0)
-  content:SetBackdropColor(0, 0, 0, 0.25)
+  content:SetPoint("BOTTOMRIGHT", -9, 9)
+  skin(content, PANEL, 1)
   self.content = content
   self.scroll = scrollArea(content)
   self.rows = pool(self.scroll.child, function(parent) return UI:MakeRow(parent) end)
   self.cards = pool(self.scroll.child, function(parent) return UI:MakeCard(parent) end)
-  self.labels = pool(self.scroll.child, function(parent) return text(parent, "GameFontNormal", 12, INK) end)
+  self.labels = pool(self.scroll.child, function(parent) return text(parent, 12, INK) end)
   self.buttons = pool(self.scroll.child, function(parent) return button(parent, "", 160) end)
-  self.checks = pool(self.scroll.child, function(parent) return UI:MakeCheck(parent) end)
+  self.checks = pool(self.scroll.child, function(parent) return check(parent) end)
   self.header = CreateFrame("Frame", nil, self.scroll.child)
   self.header:SetPoint("TOPLEFT")
   self.header:SetHeight(ROW)
   self.headerCells = pool(self.header, function(parent) return UI:MakeHeaderCell(parent) end)
   local grip = CreateFrame("Button", nil, f)
-  grip:SetSize(16, 16)
-  grip:SetPoint("BOTTOMRIGHT", -13, 13)
-  grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-  grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+  grip:SetSize(12, 12)
+  grip:SetPoint("BOTTOMRIGHT", -10, 10)
+  grip.t = flat(grip, "ARTWORK", MUTE, 1)
+  grip.t:SetAllPoints()
+  grip:SetHighlightTexture(FLAT, "ADD")
   grip:SetScript("OnMouseDown", function() if f.StartSizing then f:StartSizing("BOTTOMRIGHT") end end)
   grip:SetScript("OnMouseUp", function() f:StopMovingOrSizing(); UI:SavePos() end)
+  tooltip(grip, function(tip) tip:AddLine("Drag to resize", 1, 1, 1) end)
   self:RestorePos()
 end
 
@@ -419,13 +455,15 @@ end
 function UI:MakeHeaderCell(parent)
   local b = CreateFrame("Button", nil, parent)
   b:SetHeight(ROW)
-  b.label = text(b, "GameFontNormalSmall", 11, GOLD, "LEFT")
+  b.label = text(b, 11, DIM, "LEFT")
   b.label:SetPoint("LEFT", 4, 0)
   b.label:SetPoint("RIGHT", -2, 0)
-  b.under = flat(b, "BACKGROUND", GOLD, 0.35)
-  b.under:SetPoint("BOTTOMLEFT", 2, 0)
-  b.under:SetPoint("BOTTOMRIGHT", -2, 0)
+  b.under = flat(b, "BACKGROUND", BLACK, 1)
+  b.under:SetPoint("BOTTOMLEFT", 0, 0)
+  b.under:SetPoint("BOTTOMRIGHT", 0, 0)
   b.under:SetHeight(1)
+  b:SetHighlightTexture(FLAT, "ADD")
+  b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
   b:SetScript("OnClick", function(self)
     if not self.id then return end
     -- (the race sorts by level, highest first, until a header is clicked)
@@ -438,8 +476,8 @@ function UI:MakeHeaderCell(parent)
     if not self.def then tip:AddLine(self.label:GetText() or "", 1, 1, 1) return end
     tip:AddLine(self.def.label, 1, 1, 1)
     if self.def.hint then tip:AddLine(self.def.hint, 0.7, 0.7, 0.7, true) end
-    tip:AddLine(C.Policy:Vis(self.def.id) == "all" and "Everyone sees this." or "Only you and the officers see this.", 0.55, 0.75, 0.75)
-    tip:AddLine("Click to sort.", 0.5, 0.5, 0.5)
+    tip:AddLine(C.Policy:Vis(self.def.id) == "all" and "Everyone sees this." or "Only you and the officers see this.", 0.6, 0.6, 0.6)
+    tip:AddLine("Click to sort.", 0.45, 0.45, 0.45)
   end)
   return b
 end
@@ -447,17 +485,18 @@ end
 function UI:MakeRow(parent)
   local r = CreateFrame("Button", nil, parent)
   r:SetHeight(ROW)
-  r.bg = flat(r, "BACKGROUND", INK, 0.04)
+  r.bg = flat(r, "BACKGROUND", WHITE, 0.03)
   r.bg:SetAllPoints()
+  r.mark = flat(r, "ARTWORK", WHITE, 1)
+  r.mark:SetPoint("TOPLEFT", 0, 0)
+  r.mark:SetPoint("BOTTOMLEFT", 0, 0)
+  r.mark:SetWidth(2)
+  r.mark:Hide()
   r:SetHighlightTexture(FLAT, "ADD")
-  r:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.06)
-  r.name = text(r, "GameFontNormal", 12, INK, "LEFT", NAME_W - 10)
+  r:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
+  r.name = text(r, 12, INK, "LEFT", NAME_W - 10)
   r.name:SetPoint("LEFT", 6, 0)
-  r.dot = flat(r, "ARTWORK", GOOD, 1)
-  r.dot:SetSize(6, 6)
-  r.dot:SetPoint("LEFT", 0, 0)
   r.cells = {}
-  r.pips = {}
   tooltip(r, function(tip, self)
     local row = self.row
     if not row then return end
@@ -470,18 +509,18 @@ function UI:MakeRow(parent)
   return r
 end
 
--- a cell for a column: a label, and pips for pip and list stats
+-- a cell for a column: a label, pips for pip stats, a thin bar under the XP cell
 function UI:Cell(r, i)
   local c = r.cells[i]
   if not c then
     c = CreateFrame("Button", nil, r)
     c:SetHeight(ROW)
-    c.label = text(c, "GameFontNormalSmall", 11, INK, "LEFT")
+    c.label = text(c, 12, INK, "LEFT")
     c.label:SetPoint("LEFT", 4, 0)
     c.label:SetPoint("RIGHT", -2, 0)
-    c.bar = flat(c, "ARTWORK", TEAL, 0.9)
-    c.bar:SetHeight(2)
-    c.bar:SetPoint("BOTTOMLEFT", 4, 2)
+    c.bar = flat(c, "ARTWORK", WHITE, 0.7)
+    c.bar:SetHeight(1)
+    c.bar:SetPoint("BOTTOMLEFT", 4, 3)
     c.bar:Hide()
     c.pips = {}
     r.cells[i] = c
@@ -489,7 +528,7 @@ function UI:Cell(r, i)
       local def, row = self.def, self.row
       if not (def and row) then return end
       tip:AddLine(def.label, 1, 1, 1)
-      if self.hidden then tip:AddLine("Only " .. row.short .. " and the officers see this.", 0.55, 0.75, 0.75, true) return end
+      if self.hidden then tip:AddLine("Only " .. row.short .. " and the officers see this.", 0.6, 0.6, 0.6, true) return end
       local v = row.stats[def.id]
       if def.kind == "list" then
         local names = listNames(def, v)
@@ -505,30 +544,30 @@ function UI:Cell(r, i)
       if def.hint then tip:AddLine(def.hint, 0.6, 0.6, 0.6, true) end
       local at = row.at and row.at[def.id]
       if row.me and C.Sample:Error(def.id) then tip:AddLine("Could not read: " .. C.Sample:Error(def.id), 0.9, 0.4, 0.4, true) end
-      if at then tip:AddLine("Reported " .. (ago(at) or ""), 0.5, 0.5, 0.5) end
+      if at then tip:AddLine("Reported " .. (ago(at) or ""), 0.45, 0.45, 0.45) end
     end)
   end
   return c
 end
 
-local function fillCell(c, def, row, hidden, me)
+local function fillCell(c, def, row, hidden)
   c.def, c.row, c.hidden = def, row, hidden
   for _, p in ipairs(c.pips) do p:Hide() end
   c.bar:Hide()
   if hidden then
     c.label:SetText("-")
-    c.label:SetTextColor(INK_SOFT[1], INK_SOFT[2], INK_SOFT[3])
+    color(c.label, MUTE)
     return
   end
   local v = row.stats[def.id]
-  c.label:SetTextColor(INK[1], INK[2], INK[3])
+  color(c.label, INK)
   if def.kind == "pips" and type(v) == "string" and v ~= "" then
     c.label:SetText("")
     for k = 1, math.min(#v, 13) do
       local p = c.pips[k]
-      if not p then p = flat(c, "ARTWORK", INK, 1); p:SetSize(6, 10); c.pips[k] = p end
+      if not p then p = flat(c, "ARTWORK", WHITE, 1); p:SetSize(5, 10); c.pips[k] = p end
       local d = tonumber(v:sub(k, k)) or 0
-      local col = PIP_COLOR[d] or PIP_COLOR[0]
+      local col = PIP[d] or PIP[0]
       p:SetColorTexture(col[1], col[2], col[3], 1)
       p:SetPoint("LEFT", 4 + (k - 1) * 7, 0)
       p:Show()
@@ -539,22 +578,22 @@ local function fillCell(c, def, row, hidden, me)
   if def.kind == "list" and type(v) == "table" then
     local n = listCount(def, v)
     local inverse = def.id == "empty_slots" or def.id == "unenchanted" or def.id == "old_gear" or def.id == "buffs_missing"
-    if n == 0 then c.label:SetTextColor(inverse and GOOD[1] or INK_SOFT[1], inverse and GOOD[2] or INK_SOFT[2], inverse and GOOD[3] or INK_SOFT[3])
-    elseif inverse then c.label:SetTextColor(WARN[1], WARN[2], WARN[3]) end
+    if n == 0 then color(c.label, inverse and GOOD or MUTE) elseif inverse then color(c.label, WARN) end
   end
   if def.id == "xp" and type(v) == "number" then
     c.bar:SetWidth(math.max(1, (c:GetWidth() - 8) * v / 100))
     c.bar:Show()
   end
-  if def.id == "durability" and type(v) == "number" and v < 50 then c.label:SetTextColor(BAD[1], BAD[2], BAD[3]) end
-  if v == nil then c.label:SetTextColor(INK_SOFT[1], INK_SOFT[2], INK_SOFT[3]) end
+  if def.id == "durability" and type(v) == "number" and v < 50 then color(c.label, BAD) end
+  if def.kind == "flag" then color(c.label, v and INK or MUTE) end
+  if v == nil then color(c.label, MUTE) end
   c.label:SetText(s)
 end
 
 ----------------------------------------------------------------------------
 -- pages
 ----------------------------------------------------------------------------
-local function sortRows(rows, page, cols)
+local function sortRows(rows, page)
   local s = UI.sort[page]
   if not s then
     if page == "race" then s = { id = "level", desc = true } else return end
@@ -594,7 +633,7 @@ function UI:DrawTable(page, y0)
     for _, r in ipairs(rows) do if r.online or r.me then kept[#kept + 1] = r end end
     rows = kept
   end
-  sortRows(rows, page, cols)
+  sortRows(rows, page)
   -- header
   self.header:Show()
   self.header:ClearAllPoints()
@@ -606,6 +645,7 @@ function UI:DrawTable(page, y0)
   hc:SetWidth(NAME_W)
   hc.id, hc.def = nil, nil
   hc.label:SetText("Member")
+  color(hc.label, DIM)
   local x = NAME_W
   for _, col in ipairs(cols) do
     local h = self.headerCells:Get()
@@ -613,44 +653,45 @@ function UI:DrawTable(page, y0)
     h:SetWidth(col.w)
     h.id, h.def = col.def.id, col.def
     fitText(h.label, shortLabel(col.def), col.w - 8)
-    local s = self.sort[page]
-    if s and s.id == col.def.id then h.label:SetTextColor(1, 1, 1) else h.label:SetTextColor(GOLD[1], GOLD[2], GOLD[3]) end
+    local s = self.sort[page] or (page == "race" and { id = "level" }) or {}
+    color(h.label, s.id == col.def.id and WHITE or DIM)
     x = x + col.w
   end
   self.headerCells:HideRest()
   -- rows
   self.rows:Reset()
   local y = y0 + ROW + 2
+  local compact = C.Settings().density == "compact"
+  local rowH = compact and 18 or ROW
   for i, row in ipairs(rows) do
     local r = self.rows:Get()
     r.row = row
     r:SetPoint("TOPLEFT", 0, -y)
     r:SetWidth(sf:Width())
-    r.bg:SetColorTexture(INK[1], INK[2], INK[3], i % 2 == 0 and 0.05 or 0.02)
-    if row.me then r.bg:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 0.10) end
-    local cc = row.addon and classColor(row.class) or INK_SOFT
-    if row.addon and not row.online then cc = { cc[1] * 0.6, cc[2] * 0.6, cc[3] * 0.6 } end
-    r.name:SetTextColor(cc[1], cc[2], cc[3])
+    r:SetHeight(rowH)
+    r.bg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.03 or 0)
+    r.mark:SetShown(row.me)
+    local cc = row.addon and classColor(row.class) or MUTE
+    if row.addon and not row.online then cc = { cc[1] * 0.55, cc[2] * 0.55, cc[3] * 0.55 } end
+    color(r.name, cc)
     local nameText = row.short
-    if row.me then nameText = row.short .. " (you)" end
+    if row.me then nameText = row.short .. "  (you)" end
     if not row.addon then nameText = row.short .. "  (no addon)" end
     fitText(r.name, nameText, NAME_W - 14)
-    r.dot:SetColorTexture(row.online and GOOD[1] or 0.4, row.online and GOOD[2] or 0.4, row.online and GOOD[3] or 0.4, 1)
-    r.dot:SetPoint("LEFT", -4, 0)
-    r.dot:Hide()
     local cx = NAME_W
     for k, col in ipairs(cols) do
       local c = self:Cell(r, k)
       c:SetPoint("LEFT", cx, 0)
       c:SetWidth(col.w)
+      c:SetHeight(rowH)
       c:Show()
       local canSee = C.Policy:CanSee(officer, row.me, col.def.id)
-      fillCell(c, col.def, row, not canSee, row.me)
+      fillCell(c, col.def, row, not canSee)
       if not row.addon then c.label:SetText(""); for _, p in ipairs(c.pips) do p:Hide() end; c.bar:Hide() end
       cx = cx + col.w
     end
     for k = #cols + 1, #r.cells do r.cells[k]:Hide() end
-    y = y + ROW
+    y = y + rowH
   end
   self.rows:HideRest()
   if y0 == 0 then self.labels:Reset() end
@@ -658,7 +699,7 @@ function UI:DrawTable(page, y0)
     local l = self.labels:Get()
     l:SetPoint("TOPLEFT", 6, -y - 6)
     l:SetWidth(sf:Width() - 12)
-    l:SetTextColor(INK_SOFT[1], INK_SOFT[2], INK_SOFT[3])
+    color(l, MUTE)
     l:SetText(string.format("%d more column%s do not fit: widen the window or untick some in Settings.", hidden, hidden == 1 and "" or "s"))
     y = y + 24
   end
@@ -666,7 +707,7 @@ function UI:DrawTable(page, y0)
     local l = self.labels:Get()
     l:SetPoint("TOPLEFT", 6, -y - 6)
     l:SetWidth(sf:Width() - 12)
-    l:SetTextColor(INK_SOFT[1], INK_SOFT[2], INK_SOFT[3])
+    color(l, MUTE)
     l:SetText(C.Roster:InGuild() and "Nobody else has reported yet. Members appear as their Cute addon says hello." or "You are not in a guild: only your own record shows.")
     y = y + 24
   end
@@ -678,13 +719,14 @@ end
 function UI:MakeCard(parent)
   local c = CreateFrame("Button", nil, parent, BD)
   c:SetSize(236, 64)
-  backdrop(c, FLAT, nil, 0, 0)
-  c:SetBackdropColor(SLATE2[1], SLATE2[2], SLATE2[3], 1)
-  c.title = text(c, "GameFontNormalSmall", 11, GOLD, "LEFT", 220)
+  skin(c, PANEL2, 1)
+  c:SetHighlightTexture(FLAT, "ADD")
+  c:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.04)
+  c.title = text(c, 11, DIM, "LEFT", 220)
   c.title:SetPoint("TOPLEFT", 8, -7)
-  c.leader = text(c, "GameFontNormal", 13, INK, "LEFT", 220)
-  c.leader:SetPoint("TOPLEFT", 8, -25)
-  c.mine = text(c, "GameFontNormalSmall", 10, INK_SOFT, "LEFT", 220)
+  c.leader = text(c, 14, WHITE, "LEFT", 220)
+  c.leader:SetPoint("TOPLEFT", 8, -24)
+  c.mine = text(c, 11, MUTE, "LEFT", 220)
   c.mine:SetPoint("BOTTOMLEFT", 8, 7)
   tooltip(c, function(tip, self)
     if not self.def then return end
@@ -719,8 +761,8 @@ function UI:DrawShame()
       card:SetPoint("TOPLEFT", (i % perRow) * 244, -math.floor(i / perRow) * 72)
       card.title:SetText(def.label)
       if top[1] and top[1].v > 0 then
-        card.leader:SetText(string.format("%s%s|r  %s", hex(top[1].me and GOLD or INK), top[1].short, UI.Format(def, top[1].v)))
-      else card.leader:SetText(hex(INK_SOFT) .. "nobody yet|r") end
+        card.leader:SetText(string.format("%s  %s%s|r", top[1].short, hex(DIM), UI.Format(def, top[1].v)))
+      else card.leader:SetText(hex(MUTE) .. "nobody yet|r") end
       local mine = C.Sample:Value(def.id)
       card.mine:SetText("You: " .. UI.Format(def, mine))
       i = i + 1
@@ -732,6 +774,7 @@ function UI:DrawShame()
     local l = self.labels:Get()
     l:SetPoint("TOPLEFT", 6, -6)
     l:SetWidth(sf:Width() - 12)
+    color(l, MUTE)
     l:SetText("No funny stats ticked. Settings has the list.")
     y = 30
   end
@@ -739,7 +782,7 @@ function UI:DrawShame()
   sf:SetContentHeight(y + 8)
 end
 
--- the officers' page: summaries, then the officer stats as a table, then the controls
+-- the officers' page: summaries, then the controls, then the officer stats as a table
 function UI:DrawOfficers()
   local sf = self.scroll
   local rows = C.Roster:Rows()
@@ -757,11 +800,11 @@ function UI:DrawOfficers()
   for _, l in ipairs(levels) do if median and l < median then below = below + 1 end end
   self.labels:Reset()
   local y = 4
-  local function line(s, color)
+  local function line(s, c)
     local l = self.labels:Get()
     l:SetPoint("TOPLEFT", 6, -y)
     l:SetWidth(sf:Width() - 12)
-    l:SetTextColor((color or INK)[1], (color or INK)[2], (color or INK)[3])
+    color(l, c or INK)
     fitText(l, s, sf:Width() - 16)
     y = y + 18
   end
@@ -769,29 +812,25 @@ function UI:DrawOfficers()
     total, withAddon, online, median and tostring(median) or "?", below, unseen))
   if #noAddon > 0 then
     table.sort(noAddon)
-    line("Without the addon: " .. table.concat(noAddon, ", "), INK_SOFT)
+    line("Without the addon: " .. table.concat(noAddon, ", "), DIM)
   end
-  line(C.Policy:Describe(), INK_SOFT)
-  -- the controls
+  line(C.Policy:Describe(), DIM)
   self.buttons:Reset()
-  local b1 = self.buttons:Get()
-  b1:SetPoint("TOPLEFT", 6, -y - 2)
-  b1:SetWidth(160)
-  b1:SetText("Visibility settings")
-  b1:SetScript("OnClick", function() UI:Open("settings") end)
-  local b2 = self.buttons:Get()
-  b2:SetPoint("TOPLEFT", 172, -y - 2)
-  b2:SetWidth(160)
-  b2:SetText("Ask everyone to resend")
-  b2:SetScript("OnClick", function() C.Comm:Ask(); C.Print("asked the guild to send their records again.") end)
-  local b3 = self.buttons:Get()
-  b3:SetPoint("TOPLEFT", 338, -y - 2)
-  b3:SetWidth(160)
-  b3:SetText("Broadcast policy now")
-  b3:SetScript("OnClick", function() C.Comm:SendPolicy(); C.Print("sent the visibility policy to the guild.") end)
+  local labels = { { "Visibility settings", function() UI:Open("settings") end },
+    { "Ask everyone to resend", function() C.Comm:Ask(); C.Print("asked the guild to send their records again.") end },
+    { "Broadcast policy now", function() C.Comm:SendPolicy(); C.Print("sent the visibility policy to the guild.") end } }
+  local bx = 6
+  for _, d in ipairs(labels) do
+    local b = self.buttons:Get()
+    b:SetPoint("TOPLEFT", bx, -y - 2)
+    b:SetWidth(160)
+    b:SetLabel(d[1])
+    b:SetOn(true)
+    b:SetScript("OnClick", d[2])
+    bx = bx + 166
+  end
   self.buttons:HideRest()
   y = y + 30
-  -- the table below the lines
   self:DrawTable("officers", y)
 end
 
@@ -807,19 +846,18 @@ function UI:DrawMe()
   local w = sf:Width()
   local colW = math.floor((w - 12) / 2)
   local cb = self.checks:Get()
-  cb:SetPoint("TOPLEFT", 6, -4)
+  cb:SetPoint("TOPLEFT", 6, -6)
   cb.label:SetText("Show what members see of me")
-  cb:SetChecked(self.meView and true or false)
-  cb:SetEnabled(true)
+  cb:Set(self.meView and true or false)
+  cb:SetOn(true)
   cb:SetScript("OnClick", function(self) UI.meView = self:GetChecked(); UI:Draw() end)
   self.checks:HideRest()
   local y = 30
-  local i = 0
   for _, cat in ipairs(C.Stats.CATS) do
     local l = self.labels:Get()
     l:SetPoint("TOPLEFT", 6, -y)
     l:SetWidth(w - 12)
-    l:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+    color(l, WHITE)
     l:SetText(C.Stats.CAT_LABEL[cat])
     y = y + 20
     local n = 0
@@ -830,17 +868,16 @@ function UI:DrawMe()
       a:SetPoint("TOPLEFT", 6 + col * colW, -ly)
       a:SetWidth(colW - 130)
       local hidden = self.meView and C.Policy:Vis(def.id) == "self"
-      local dim = hidden and INK_SOFT or INK
-      a:SetTextColor(dim[1] * 0.9, dim[2] * 0.9, dim[3] * 0.9)
+      color(a, hidden and MUTE or DIM)
       fitText(a, def.label, colW - 136)
       local b = self.labels:Get()
       b:SetPoint("TOPLEFT", 6 + col * colW + (colW - 130), -ly)
       b:SetWidth(124)
       b:SetJustifyH("RIGHT")
       local v = me and me.stats[def.id]
-      if hidden then b:SetTextColor(INK_SOFT[1], INK_SOFT[2], INK_SOFT[3]); b:SetText("(only you)")
+      if hidden then color(b, MUTE); b:SetText("(only you)")
       else
-        b:SetTextColor(v == nil and INK_SOFT[1] or INK[1], v == nil and INK_SOFT[2] or INK[2], v == nil and INK_SOFT[3] or INK[3])
+        color(b, v == nil and MUTE or INK)
         fitText(b, C.Sample:Error(def.id) and "?" or UI.Format(def, v), 120)
       end
       n = n + 1
@@ -851,29 +888,21 @@ function UI:DrawMe()
   sf:SetContentHeight(y + 8)
 end
 
-function UI:MakeCheck(parent)
-  local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-  cb:SetSize(22, 22)
-  cb.label = text(cb, "GameFontNormalSmall", 11, INK, "LEFT", 240)
-  cb.label:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-  return cb
-end
-
 function UI:Draw()
   self.drawing = true
   local page = self.page
-  if page == "officers" and not C.Roster:MeOfficer() then page = "race"; self.page = page end
-  for id, b in pairs(self.tabs) do
-    b:SetShown(id ~= "officers" or C.Roster:MeOfficer())
-    if b.GetFontString and b:GetFontString() then
-      if id == page then b:GetFontString():SetTextColor(1, 1, 1) else b:GetFontString():SetTextColor(GOLD[1], GOLD[2], GOLD[3]) end
-    end
-  end
-  -- the Officers tab leaves a gap when hidden: lay the tabs out again
+  local officer = C.Roster:MeOfficer()
+  if page == "officers" and not officer then page = "race"; self.page = page end
   local x = 0
-  for _, id in ipairs({ "race", "prog", "shame", "officers", "me", "settings" }) do
-    local b = self.tabs[id]
-    if b:IsShown() then b:SetPoint("LEFT", x, 0); x = x + (b:GetWidth() or 80) + 4 end
+  for _, d in ipairs(TAB_DEFS) do
+    local b = self.tabs[d[1]]
+    b:SetShown(d[1] ~= "officers" or officer)
+    if b:IsShown() then
+      b:SetPoint("LEFT", x, 0)
+      x = x + d[3] + 2
+      color(b.label, d[1] == page and WHITE or DIM)
+      b.under:SetShown(d[1] == page)
+    end
   end
   self.scroll.bar:SetValue(0)
   self.header:ClearAllPoints()
@@ -893,39 +922,35 @@ function UI:Draw()
   local rows = C.Roster:Rows()
   local online = 0
   for _, r in ipairs(rows) do if r.online and r.addon then online = online + 1 end end
-  self.status:SetText(string.format("%d with the addon online  |  %s", online, C.Roster:MeOfficer() and "officer view" or "member view"))
+  self.status:SetText(string.format("%d with the addon online    %s", online, officer and "officer view" or "member view"))
   self.drawing = false
 end
 
 ----------------------------------------------------------------------------
--- the minimap button: the emblem in a ring, dragged around the minimap's edge
+-- the minimap button: the emblem in a one-pixel frame, dragged around the minimap's edge
 ----------------------------------------------------------------------------
 function UI:OnWorld()
   if not C.Settings().minimap then if self.mini then self.mini:Hide() end return end
   if self.mini then self.mini:Show(); return end
   if not Minimap then return end
-  local b = CreateFrame("Button", "CuteMinimapButton", Minimap)
+  local b = CreateFrame("Button", "CuteMinimapButton", Minimap, BD)
   self.mini = b
-  b:SetSize(32, 32)
+  b:SetSize(24, 24)
   b:SetFrameStrata("MEDIUM")
   b:SetFrameLevel(8)
   b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   b:RegisterForDrag("LeftButton")
   b:SetMovable(true)
-  local icon = tex(b, "ARTWORK", LOGO, 20, 20)
-  icon:SetPoint("CENTER", -1, 1)
-  if b.CreateMaskTexture then
-    local mask = b:CreateMaskTexture()
-    mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask")
-    mask:SetAllPoints(icon)
-    icon:AddMaskTexture(mask)
-  end
-  local ring = tex(b, "OVERLAY", "Interface\\Minimap\\MiniMap-TrackingBorder", 54, 54)
-  ring:SetPoint("TOPLEFT")
-  b:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight", "ADD")
+  skin(b, BLACK, 1)
+  local icon = tex(b, "ARTWORK", LOGO)
+  icon:SetPoint("TOPLEFT", 1, -1)
+  icon:SetPoint("BOTTOMRIGHT", -1, 1)
+  icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  b:SetHighlightTexture(FLAT, "ADD")
+  b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.1)
   local function place()
     local angle = math.rad(C.Settings().minimapPos or 220)
-    local r = (Minimap:GetWidth() or 140) / 2 + 5
+    local r = (Minimap:GetWidth() or 140) / 2 + 6
     b:ClearAllPoints()
     b:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * r, math.sin(angle) * r)
   end
