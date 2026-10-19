@@ -100,3 +100,20 @@ its licence (GPL-3.0-or-later; QuestTrail's parts MIT).
 Before modules land, a polish round: the logo on a transparent background (done: the grey box is keyed out), every
 page checked at both sizes for spacing, alignment and empty states, `/cute` commands consistent, the version notice
 and "what's new" in game, and a clean first run (no stale records, a welcome line naming `/cute`).
+
+## 5. The Guide, made a guide (0.6.0)
+
+0.5.0's Guide is a plain list of text lines: correct, but it does not guide. The owner called it lacklustre. 0.6.0
+redraws it around one question, "what should I do next, and with whom":
+
+- **The next best thing**, one line at the top, the rules' pick for you: "Run The Deadmines: 3 guild mates online in
+  range, 7 bosses you have not killed, 5 quests", with the reason in its tooltip. Officers get the guild's version:
+  "most members are 28-33: Scarlet Monastery".
+- **Dungeon cards** instead of lines: the name, a level bar with the range drawn against your level (green in range,
+  grey above, dim below), the bosses as pips (killed, not killed, doubted), the quests for it from what we know, how
+  sure we are in one word, and the guild mates online in range as class-coloured names with an Invite button each
+  (`C_PartyInfo.InviteUnit`, out of combat; never opening the chat box).
+- **Next up** as a short timeline of the dungeons opening in the next levels.
+- **Gear and pace** as compact strips under the cards, not paragraphs.
+- When QuestBank's leveling module is on, its best places for your level join the same next-best pick.
+- The same flat look, the band for headings, virtual where long, layout-checked at both sizes.
