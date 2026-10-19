@@ -1,18 +1,22 @@
 ## Interface: 16001
 ## Title: |cffe8b24aCute|r
-## Notes: Cute's guild dashboard: the race to 60, readiness, the hall of shame, what the guild discovers in play and the officers' view, shared over the guild channel. /cute
+## Notes: Cute's guild dashboard: the race to 60, a guide to your next dungeons, readiness, the hall of shame, what the guild discovers in play and the officers' view, shared over the guild channel. /cute
 ## Author: Mikal
-## Version: 0.4.0
+## Version: 0.5.0
 ## X-License: GPL-3.0-or-later
 ## IconTexture: Interface\AddOns\Cute\art\logo.png
 ## SavedVariables: CuteDB
 
 Core.lua
+Known.lua
+Changes.lua
 Stats.lua
+Rules.lua
 Sample.lua
 Roster.lua
 Policy.lua
 Comm.lua
 UI.lua
+Guide.lua
 Settings.lua
 Bindings.xml

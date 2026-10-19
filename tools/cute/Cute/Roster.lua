@@ -279,7 +279,8 @@ end
 -- carrying another's GUID is theirs whatever the sender string. The kinds of a member's enchanted items (the hidden
 -- ench_kinds) teach the guild's knowledge (Stats.lua LearnEnchants), counted once per member by the GUID the record
 -- carries: a delta that comes before any full record has brought the GUID teaches nothing yet (counted under the
--- sender string, the member would count twice once the GUID came); the full record, which carries both, does
+-- sender string, the member would count twice once the GUID came); the full record, which carries both, does. The
+-- rules weigh the rest the same way, by GUID (Rules.lua R:Observe)
 local MAX_GAME = 1000 -- dynamic values kept per member from the wire, statistics and discoveries together (g, e, i, f)
 function R:Apply(name, kv)
   local me, how = self:FromMe(name, kv.guid)
@@ -312,8 +313,13 @@ function R:Apply(name, kv)
   end
   local g = e.stats.guid
   if kv.ench_kinds ~= nil and type(e.stats.ench_kinds) == "string" and type(g) == "string" and g ~= "" then
-    C.Stats.LearnEnchants(C.Stats.EnchantKinds(e.stats.ench_kinds), g)
+    local kinds, enchs = C.Stats.EnchantKinds(e.stats.ench_kinds)
+    C.Stats.LearnEnchants(kinds, g, enchs)
   end
+  -- what the rules weigh (Rules.lua): the XP a level takes, kills and their levels, levels and worn slots
+  if C.Rules then C.Rules:Observe(e.stats, kv) end
+  -- a member's Cute newer than yours (Core.lua)
+  if kv.addon_ver ~= nil then C.SawVersion(kv.addon_ver) end
   e.seen, e.online = t, true
   self.updatedAt = t
   self:Changed()

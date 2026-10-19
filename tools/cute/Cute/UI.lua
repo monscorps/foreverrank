@@ -1,10 +1,13 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- The window: one frame with five pages and Settings, drawn flat and dark the way ElvUI and Shadowed Unit Frames
+-- The window: one frame with its pages and Settings, drawn flat and dark the way ElvUI and Shadowed Unit Frames
 -- draw theirs: one-pixel black borders, near-black panels, white and grey text in the client's narrow font, class
 -- colours on names and nothing else coloured unless it means something (green ready, red low). Numbers sit on the
 -- right of their columns, text on the left; a two-pixel class-coloured bar marks every member's row, white for you.
 --   Race           every member as a row: level, XP, zone, pace, the leveling stats
---   Prog           readiness, item level, empty slots, the enchants the guild has that you lack, consumables, what
+--   Guide          what the rules make of the seed and the guild's play (Guide.lua): the dungeons for your level and
+--                  the next ones, the enchants you lack, your pace; for officers the guild per dungeon and what the
+--                  guild's play changed from the research
+--   Prog           readiness, item level, empty slots, the enchants you lack, consumables, what
 --                  you have met in play, the gaps only you see
 --   Hall of Shame  a card per funny stat with its leader
 --   Statistics     what the guild discovered in play (bosses by instance, dungeons, raids, reputations) and the
@@ -145,6 +148,10 @@ local function check(parent)
   return cb
 end
 UI.Check, UI.Button, UI.Text, UI.Skin = check, button, text, skin
+-- (for Guide.lua, which draws its page with the window's own pieces)
+UI.COLORS = { WHITE = WHITE, INK = INK, DIM = DIM, MUTE = MUTE, GOOD = GOOD, WARN = WARN, BAD = BAD }
+UI.Color, UI.Hex, UI.Dimmed, UI.ROW = color, hex, dimmed, ROW
+UI.ClassColor = function(class) return classColor(class) end
 local function tooltip(owner, fill)
   owner:SetScript("OnEnter", C.Safe(function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -404,7 +411,7 @@ local function alignOf(def) return (def.kind == "text" or def.kind == "pips") an
 local DEFAULT_COLS = {
   race = { "level", "xp", "xp_hour", "to60", "zone", "played", "quests_done", "deaths_lvl", "group", "rested", "legacy" },
   prog = { "ready", "ilvl", "empty_slots", "unenchanted", "durability", "potions", "flasks", "food", "bosses", "dungeons_seen", "lc_done" },
-  -- (838 px of columns at 1040 wide, measured by the harness: Prog's eleven take 671, these ten 789. Raids and Raids
+  -- (838 px of columns at 1040 wide, measured by the harness: Prog's eleven take 671, these ten 782. Raids and Raids
   -- this week stay in the checklist; Forever has shown no raid yet)
   officers = { "gold", "bank_in", "bank_out", "bosses", "dungeons_seen", "potions", "main", "role", "last_login", "addon_ver" },
 }
@@ -457,7 +464,7 @@ end
 ----------------------------------------------------------------------------
 -- the window
 ----------------------------------------------------------------------------
-local TAB_DEFS = { { "race", "Race", 64 }, { "prog", "Prog", 64 }, { "shame", "Hall of Shame", 110 }, { "game", "Statistics", 80 }, { "officers", "Officers", 80 }, { "me", "Me", 48 }, { "settings", "Settings", 80 } }
+local TAB_DEFS = { { "race", "Race", 64 }, { "guide", "Guide", 64 }, { "prog", "Prog", 64 }, { "shame", "Hall of Shame", 110 }, { "game", "Statistics", 80 }, { "officers", "Officers", 80 }, { "me", "Me", 48 }, { "settings", "Settings", 80 } }
 
 function UI:Build()
   if self.frame then return end
@@ -761,8 +768,8 @@ function UI:Cell(r, i)
             any = true
             local worn = g and g.slot[e[1]]
             local kind = worn and worn.kind and C.Stats.EnchantKnown(e[1], worn.kind) and worn.kind or nil
-            local n = C.Stats.EnchantSeen(e[1], kind)
-            tip:AddDoubleLine(kind and (e[2] .. " (" .. C.Stats.KindName(kind) .. ")") or e[2], n == 1 and "seen on 1 member" or ("seen on " .. n .. " members"), 0.8, 0.8, 0.8, 1, 1, 1)
+            -- (seen on how many, or the seed's word where the guild has seen none yet)
+            tip:AddDoubleLine(kind and (e[2] .. " (" .. C.Stats.KindName(kind) .. ")") or e[2], C.Stats.EnchantSource(e[1], kind), 0.8, 0.8, 0.8, 1, 1, 1)
           end
         end
         if not any then tip:AddLine("none", 0.9, 0.9, 0.9) end
@@ -1578,9 +1585,12 @@ function UI:Draw()
   self.cards:Reset(); self.cards:HideRest()
   self.buttons:Reset(); self.buttons:HideRest()
   self.checks:Reset(); self.checks:HideRest()
-  if page ~= "game" then self.lines:Clear(); self.catLines:Clear(); if self.gameNoteLabel then self.gameNoteLabel:Hide() end end
+  -- (the Statistics page and the Guide draw their lines with the same virtual list)
+  if page ~= "game" and page ~= "guide" then self.lines:Clear() end
+  if page ~= "game" then self.catLines:Clear(); if self.gameNoteLabel then self.gameNoteLabel:Hide() end end
   if C.Settings_Draw and page ~= "settings" then C.Settings_Hide() end
   if page == "race" or page == "prog" then self:DrawTable(page)
+  elseif page == "guide" then C.Guide_Draw(self)
   elseif page == "shame" then self:DrawShame()
   elseif page == "game" then self:DrawGame()
   elseif page == "officers" then self:DrawOfficers()
@@ -1594,12 +1604,20 @@ function UI:Draw()
   bar:SetValue(math.max(0, math.min(keep, maxv or 0)))
   -- the rows in view, at the place kept (the scroll's own redraw waits while drawing)
   if self.virtual then self.virtual() end
-  local rows = C.Roster:Rows()
-  local online = 0
-  for _, r in ipairs(rows) do if r.online and r.addon then online = online + 1 end end
-  self.status:SetText(string.format("%d online with the addon  |  %s view", online, officer and "officer" or "member"))
+  self:DrawStatus(officer)
   self:DrawFooter()
   self.drawing = false
+end
+-- the status line: who is online with the addon, your view, and "update available" while a guild mate runs a newer
+-- Cute than yours (Core.lua C.SawVersion, which draws it again when one arrives)
+function UI:DrawStatus(officer)
+  if not self.status then return end
+  if officer == nil then officer = C.Roster:MeOfficer() end
+  local online = 0
+  for _, r in ipairs(C.Roster:Rows()) do if r.online and r.addon then online = online + 1 end end
+  local s = string.format("%d online with the addon  |  %s view", online, officer and "officer" or "member")
+  if C.newer then s = s .. "  |  " .. C.COLOR .. "update available|r" end
+  self.status:SetText(s)
 end
 
 ----------------------------------------------------------------------------

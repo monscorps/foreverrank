@@ -28,7 +28,9 @@
 -- factions its characters know, the raid buffs guild mates cast) is data, found by each client, shared on the guild
 -- channel and kept in CuteDB.known, so the dashboard grows without a new version. (0.3.x listed Classic's: Molten
 -- Core and Onyxia attunements, Classic keys, world buffs, raid factions and potions by item id. Forever has no Classic
--- raid, has neck enchants Classic never had, and no head or shoulder enchant yet; those lists are gone.)
+-- raid, has neck enchants Classic never had, and no head or shoulder enchant yet; those lists are gone.) What research
+-- and the beta showed ships beside it as a seed (Known.lua), which Rules.lua weighs against the guild's play: an
+-- enchant slot the seed names counts here once Rule 0 has found the seed fresh (EnchantKnown, below).
 -- Every client API here is in Forever's generated API docs, is read by QuestBank on this client (GetInventoryItemLink),
 -- or is called by Blizzard's own Camelot UI code: GetInventoryItemID and GetInventoryItemQuality by Forever's own
 -- character sheet (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.lua:2219-2221, PaperDollItemSlotButton_Update),
@@ -100,7 +102,7 @@ local SLOT = { [1] = "Head", [2] = "Neck", [3] = "Shoulder", [5] = "Chest", [6] 
   [17] = "Off hand", [18] = "Ranged" }
 local SLOT_OF = {}
 for _, s in ipairs(GEAR) do SLOT_OF[#SLOT_OF + 1] = { s, SLOT[s] } end
-S.SLOT = SLOT
+S.SLOT, S.GEAR = SLOT, GEAR
 
 -- the gear you wear, slot by slot, read the way Forever's own character sheet reads it (Camelot/PaperDollFrame.lua,
 -- PaperDollItemSlotButton_Update): GetInventoryItemID says what is in a slot, GetInventoryItemQuality its quality.
@@ -200,20 +202,24 @@ end
 -- what the guild enchants, learned per slot and kind of item: CuteDB.known.enchant[slot] = { n = members seen with an
 -- enchant there, at = when first, who = their GUIDs, kinds = { ["2.2"] = { n, at, who }, ... } } (kind: itemKind's
 -- "class.subclass"). A slot alone says too little: a scope on one hunter's bow would ask every wand for one, a shield
--- enchant every caster's off-hand book, and nothing can enchant those. So an item is asked for an enchant only where
--- the guild has seen the same kind of item enchanted in the same slot. Built from your own read, from every member
--- record that arrives with its GUID (Roster:Apply) and from the records saved (LoadKnown), counting a member once by
--- GUID; kept apart from the records, so it outlives a member leaving and the roster's pruning. A slot or kind nobody
--- has enchanted is never asked for: neck shows once anyone wears a neck enchant, head and shoulder only once someone
--- has one. (0.4.0's first build learned slots alone; such a record, with no kinds, asks for nothing.) n only grows: it
--- says how many members the guild has seen with one, not how many have one now. kinds: { [slot] = kind }. True when a
--- slot or kind is new to the guild's knowledge
+-- enchant every caster's off-hand book, and nothing can enchant those. So an item is asked for an enchant where the
+-- guild has seen the same kind of item enchanted in the same slot, or, for a character at the rules' enchant level
+-- (Rules.lua rule 5), where the seed has an enchant for that slot and kind and the rules let it count. Built from your
+-- own read, from every member record that arrives with its GUID (Roster:Apply) and from the records saved
+-- (LoadKnown), counting a member once by GUID; kept apart from the records (the seed is a prior beside it, never
+-- copied in), so it outlives a member leaving and the roster's pruning. A slot or kind neither the guild nor the seed
+-- has an enchant for is never asked for: a head or shoulder enchant, which Forever has none of yet, only once someone
+-- wears one. (0.4.0's first build learned slots alone; such a record, with no kinds, teaches nothing.) n only grows:
+-- it says how many members the guild has seen with one, not how many have one now. kinds: { [slot] = kind }. True when
+-- a slot or kind is new to the guild's knowledge
 local WHO_CAP = 1000
 local function seenOn(rec, who)
   if type(rec.who) ~= "table" then rec.who = {} end
   if type(who) == "string" and who ~= "" and not rec.who[who] and (rec.n or 0) < WHO_CAP then rec.who[who] = true; rec.n = (rec.n or 0) + 1 end
 end
-function S.LearnEnchants(kinds, who)
+-- enchs: { [slot] = the enchant's id as the link carries it }, where the record says (0.5.0 sends it; the Guide marks
+-- the seed's enchants the guild has on an item as seen). rec.ench = { [id] = { n, at, who } }
+function S.LearnEnchants(kinds, who, enchs)
   local k = S.Known()
   if not k or type(kinds) ~= "table" then return false end
   k.enchant = type(k.enchant) == "table" and k.enchant or {}
@@ -228,8 +234,16 @@ function S.LearnEnchants(kinds, who)
       if type(kr) ~= "table" then kr = { n = 0, at = C.Now(), who = {} }; rec.kinds[kind] = kr; new = true end
       seenOn(rec, who)
       seenOn(kr, who)
+      local id = type(enchs) == "table" and tonumber(enchs[slot]) or nil
+      if id and id > 0 then
+        rec.ench = type(rec.ench) == "table" and rec.ench or {}
+        local er = rec.ench[id]
+        if type(er) ~= "table" then er = { n = 0, at = C.Now(), who = {} }; rec.ench[id] = er end
+        seenOn(er, who)
+      end
     end
   end
+  if new and C.Rules then C.Rules:Dirty() end
   if new then
     -- your own Missing enchants (and the verdict) are asked again, and the window learns of it
     if C.Sample and C.Sample.started then C.Sample:Schedule("unenchanted"); C.Sample:Schedule("ready") end
@@ -238,7 +252,7 @@ function S.LearnEnchants(kinds, who)
   return new
 end
 -- has the guild seen an enchant in this slot: on this kind of item, or (kind nil) on any
-function S.EnchantKnown(slot, kind)
+function S.EnchantLearned(slot, kind)
   local k = S.Known()
   local rec = k and type(k.enchant) == "table" and k.enchant[slot]
   local kinds = type(rec) == "table" and rec.kinds
@@ -246,9 +260,32 @@ function S.EnchantKnown(slot, kind)
   if kind ~= nil then return type(kinds[kind]) == "table" end
   return next(kinds) ~= nil
 end
+-- does the slot take an enchant, on this kind of item or (kind nil) on any: the guild has seen one there, or the seed
+-- says so and the rules let it count (Rules.lua rule 5: a fresh seed, the slot neither doubted nor absent, and, where
+-- a level is given, a character at the rules' enchant level)
+function S.EnchantKnown(slot, kind, level)
+  if S.EnchantLearned(slot, kind) then return true end
+  return C.Rules ~= nil and C.Rules.SeedEnchantable(slot, kind, level)
+end
+-- how many members the guild has seen with this enchant (by the id the link carries) in this slot
+function S.EnchantIdSeen(slot, id)
+  local k = S.Known()
+  local rec = k and type(k.enchant) == "table" and k.enchant[slot]
+  local er = type(rec) == "table" and type(rec.ench) == "table" and rec.ench[id]
+  return type(er) == "table" and type(er.n) == "number" and er.n or 0
+end
+-- where the word that a slot takes an enchant comes from, for a tooltip: "seen on 3 members", else the seed's own
+-- word on the slot, however many members the guild has seen with one on other kinds of item there
+function S.EnchantSource(slot, kind)
+  local n = S.EnchantSeen(slot, kind)
+  if n > 0 then return n == 1 and "seen on 1 member" or ("seen on " .. n .. " members") end
+  local st = C.Rules and C.Rules.SeedSlotState(slot)
+  if st == "beta" then return "seen in the beta" end
+  return "from research"
+end
 -- how many members the guild has seen with an enchant in this slot (on this kind of item, where kind is given)
 function S.EnchantSeen(slot, kind)
-  if not S.EnchantKnown(slot, kind) then return 0 end
+  if not S.EnchantLearned(slot, kind) then return 0 end
   local rec = S.Known().enchant[slot]
   local r = kind ~= nil and rec.kinds[kind] or rec
   return type(r.n) == "number" and r.n or 0
@@ -265,7 +302,7 @@ end
 function S.EnchantSlots()
   local out = {}
   for _, e in ipairs(SLOT_OF) do
-    if S.EnchantKnown(e[1]) then
+    if S.EnchantLearned(e[1]) then
       local kinds = {}
       for kind, r in pairs(S.Known().enchant[e[1]].kinds) do if type(r) == "table" then kinds[#kinds + 1] = { kind, type(r.n) == "number" and r.n or 0 } end end
       table.sort(kinds, function(a, b) return a[1] < b[1] end)
@@ -274,30 +311,43 @@ function S.EnchantSlots()
   end
   return out
 end
--- the kinds of the enchanted items a record lists, as the wire carries them: "slot:class.subclass" for each worn item
--- whose readable link carries an enchant and whose kind reads, space-separated in the slots' order ("2:4.0 18:2.2")
+-- the kinds of the enchanted items a record lists, as the wire carries them: "slot:class.subclass:enchant" for each
+-- worn item whose readable link carries an enchant and whose kind reads, space-separated in the slots' order
+-- ("2:4.0:2564 18:2.2:30"); whole entries up to the stat's 200 bytes. (0.4.0 sent "slot:class.subclass" and reads
+-- these the same: its pattern stops at the second colon)
+local KINDS_MAX = 200
 function S.EnchantKindsText(g)
-  local parts = {}
+  local parts, len = {}, 0
   for _, s in ipairs(GEAR) do
     local e = g.slot[s]
-    if e and e.link and (e.enchant or 0) > 0 and e.kind then parts[#parts + 1] = s .. ":" .. e.kind end
+    if e and e.link and (e.enchant or 0) > 0 and e.kind then
+      local part = s .. ":" .. e.kind .. ":" .. math.floor(e.enchant)
+      if len + #part + (#parts > 0 and 1 or 0) > KINDS_MAX then break end
+      parts[#parts + 1] = part
+      len = len + #part + (#parts > 1 and 1 or 0)
+    end
   end
   return table.concat(parts, " ")
 end
--- and back: { [slot] = kind } for the gear slots, anything else dropped
+-- and back: { [slot] = kind } for the gear slots, anything else dropped, and { [slot] = enchant id } where it came
 function S.EnchantKinds(text)
-  local out = {}
-  if type(text) ~= "string" then return out end
-  for slot, kind in text:gmatch("(%d+):(%d+%.%d+)") do
+  local out, enchs = {}, {}
+  if type(text) ~= "string" then return out, enchs end
+  for slot, kind, rest in text:gmatch("(%d+):(%d+%.%d+)(:?%d*)") do
     slot = tonumber(slot)
-    if SLOT[slot] and #kind <= 9 then out[slot] = kind end
+    if SLOT[slot] and #kind <= 9 then
+      out[slot] = kind
+      local id = tonumber(rest:sub(2))
+      if id and id > 0 and id < 2 ^ 31 then enchs[slot] = id end
+    end
   end
-  return out
+  return out, enchs
 end
 -- your own read teaches the guild's knowledge too, and goes to the guild as the hidden ench_kinds (end of the file)
 local function learnOwn(g)
   local text = S.EnchantKindsText(g)
-  S.LearnEnchants(S.EnchantKinds(text), C.MyGUID() or "me")
+  local kinds, enchs = S.EnchantKinds(text)
+  S.LearnEnchants(kinds, C.MyGUID() or "me", enchs)
   if C.Sample and C.Sample.Set then C.Sample:Set("ench_kinds", text) end
 end
 
@@ -640,7 +690,7 @@ D("xp_hour", "XP/hour", "leveling", { track = true, slow = true, hint = "XP gain
 D("xp_session", "XP/hour today", "leveling", { track = true, slow = true, hint = "XP an hour since you logged in" })
 D("played", "Time played", "leveling", { track = true, slow = true, fmt = hours })
 D("played_lvl", "Played this level", "leveling", { track = true, slow = true, fmt = hours })
-D("to60", "Hours to 60", "leveling", { track = true, slow = true, fmt = orDash, hint = "at the last hour's pace, over the XP each level ahead takes" })
+D("to60", "Hours to 60", "leveling", { track = true, slow = true, fmt = orDash, hint = "at the last hour's pace, over the XP each level ahead takes as the guild has learned it" })
 D("rested", "Rested XP", "leveling", { read = function() local r = Num("GetXPExhaustion"); return r or 0 end, on = "UPDATE_EXHAUSTION" })
 D("zone", "Zone", "leveling", { read = function() local z = Get("GetZoneText"); return type(z) == "string" and z or nil end, kind = "text",
   on = { "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "PLAYER_ENTERING_WORLD" } })
@@ -718,9 +768,8 @@ D("still", "Longest stood still", "leveling", { track = true, slow = true, fmt =
 ----------------------------------------------------------------------------
 -- progression
 ----------------------------------------------------------------------------
--- readiness: the gaps a record shows, by name; nil until the gear and bags have been read. An empty slot, an item
--- without an enchant where the guild has enchanted the same kind of item in that slot (learned, above), durability
--- under half, no potion in the bags
+-- readiness: the gaps a record shows, by name; nil until the gear and bags have been read. An empty slot, a missing
+-- enchant (Missing enchants, below), durability under half, no potion in the bags
 local READY_INPUTS = { "empty_slots", "unenchanted", "durability", "potions" }
 local function listCount(v) local k = 0; if type(v) == "table" then for _, e in ipairs(SLOT_OF) do if v[e[1]] then k = k + 1 end end end return k end
 function S.ReadyGaps(v)
@@ -728,7 +777,7 @@ function S.ReadyGaps(v)
   local gaps = {}
   local empty, missing = listCount(v.empty_slots), listCount(v.unenchanted)
   if empty > 0 then gaps[#gaps + 1] = empty == 1 and "an empty slot" or (empty .. " empty slots") end
-  if missing > 0 then gaps[#gaps + 1] = missing == 1 and "an item without the enchant the guild has on its kind" or (missing .. " items without the enchants the guild has on their kind") end
+  if missing > 0 then gaps[#gaps + 1] = missing == 1 and "a missing enchant" or (missing .. " missing enchants") end
   if type(v.durability) == "number" and v.durability < 50 then gaps[#gaps + 1] = "durability under 50%" end
   if v.potions == 0 then gaps[#gaps + 1] = "no potions" end
   return gaps
@@ -736,7 +785,7 @@ end
 local GEAR_ON = { "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED" }
 local BAG_ON = { "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED" }
 D("ready", "Ready", "prog", { fmt = readyOf, gear = true, bag = true, on = { "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED", "UPDATE_INVENTORY_DURABILITY", "BAG_UPDATE_DELAYED" },
-  hint = "ready with no gap, gaps with one or two, no with more: an empty slot, an item without the enchant the guild has on its kind, durability under 50%, no potions",
+  hint = "ready with no gap, gaps with one or two, no with more: an empty slot, a missing enchant (as Missing enchants counts them), durability under 50%, no potions",
   read = function()
     -- from the inputs' live reads, so it never depends on which stat happened to be read first
     local v = {}
@@ -757,7 +806,8 @@ D("empty_slots", "Empty slots", "prog", { kind = "list", of = SLOT_OF, default =
 -- the enchants, from the links alone: where a worn slot gives no readable link the stat reads nil and its tooltip says
 -- why, rather than a count that would be wrong. Enchanted is the slots (everyone sees it; no column); the guild learns
 -- from it with the kind of each enchanted item, which travels beside it as the hidden ench_kinds (end of the file).
--- Missing enchants is the worn items without one where the guild has enchanted the same kind of item in that slot
+-- Missing enchants is the worn items without one where the guild has enchanted the same kind of item in that slot,
+-- or, from the rules' enchant level, where the seed has an enchant for that slot and kind (Rules.lua rule 5)
 D("enchanted", "Enchanted slots", "prog", { kind = "list", of = SLOT_OF, default = "all", on = GEAR_ON, gear = true,
   hint = "worn slots whose item carries an enchant; the guild learns from these, with the kind of item, what takes one", read = function()
   local g = gear()
@@ -774,27 +824,30 @@ D("enchanted", "Enchanted slots", "prog", { kind = "list", of = SLOT_OF, default
   return out
 end })
 D("unenchanted", "Missing enchants", "prog", { kind = "list", of = SLOT_OF, default = "self", on = GEAR_ON, gear = true, countOnly = true,
-  hint = "worn items without an enchant where the guild has seen the same kind of item enchanted in that slot (a bow, a shield, a neck); a kind nobody has enchanted is never asked for",
-  -- (a member's list as this client knows the guild: a slot it has not seen enchanted is left out, so an older
-  -- client's head and shoulder never show)
+  hint = "worn items without an enchant where the guild has seen the same kind of item enchanted in that slot, or, from the rules' enchant level (30 unless the officers set another), where Forever has one for that slot and kind by the research, unless the guild doubts it",
+  -- (a member's list as this client knows the guild and the seed: a slot neither has an enchant for is left out, so
+  -- an older client's head and shoulder never show. Their own client cut it by their level)
   filter = function(v) local out = {}; for slot in pairs(v) do if S.EnchantKnown(slot) then out[slot] = true end end return out end,
   read = function()
     local g = gear()
     if not g then return nil end
     learnOwn(g)
+    -- (a level that does not read counts as under the enchant level: only what the guild has enchanted is asked for)
+    local lvl = Num("UnitLevel", "player") or 0
     local out, blind, kindless = {}, 0, 0
     for s, e in pairs(g.slot) do
-      if S.EnchantKnown(s) then
+      -- (an item whose kind reads and takes no enchant here is never asked for, link or none)
+      if S.EnchantKnown(s, nil, lvl) and not (e.kind and not S.EnchantKnown(s, e.kind, lvl)) then
         if not e.link then blind = blind + 1
         elseif (e.enchant or 0) == 0 then
           -- (a wand where the guild has scoped bows, a book held in the off hand where it has enchanted shields: not
           -- asked for. An item whose kind does not read yet cannot be told apart, so the count waits for it)
-          if not e.kind then kindless = kindless + 1 elseif S.EnchantKnown(s, e.kind) then out[s] = true end
+          if not e.kind then kindless = kindless + 1 elseif S.EnchantKnown(s, e.kind, lvl) then out[s] = true end
         end
       end
     end
     if blind > 0 then
-      C.lastErr = string.format("the client gives no readable item link for %d worn slot%s the guild enchants, so enchants cannot be read", blind, blind == 1 and "" or "s")
+      C.lastErr = string.format("the client gives no readable item link for %d worn slot%s that take%s an enchant, so enchants cannot be read", blind, blind == 1 and "" or "s", blind == 1 and "s" or "")
       return nil
     end
     if kindless > 0 then
@@ -911,7 +964,7 @@ D("inspected", "Inspected others", "funny", { count = "INSPECT_READY" })
 D("fish", "Fish caught", "funny", { track = true, slow = true, hint = "loot windows after a Fishing cast" })
 D("jumps", "Jumps", "funny", { track = true, slow = true })
 D("ghost_yards", "Ghost run yards", "funny", { track = true, slow = true })
-D("where", "\"where are you\" typed", "funny", { track = true, hint = "in party or raid chat; wya counts" })
+D("where", "\"where are you\" typed", "funny", { track = true, hint = "in any chat you type in; wya, where r u and the guild's languages count" })
 D("grey_gold", "Gold from greys", "funny", { track = true, fmt = goldOf, hint = "grey items sold to vendors, at their vendor price" })
 
 ----------------------------------------------------------------------------
@@ -931,15 +984,20 @@ D("weekly_raids", "Raids this week", "officer", { track = true, hint = "raid ins
 --               guild roster's member with the same GUID (names are no key on Forever: two words, a Kstring at times;
 --               Core.lua) and drop a record whose GUID is its own (the game hands a guild addon message back to its
 --               sender too). Sample sets it at login; up to 40 characters
---   ench_kinds  the kind of each enchanted item you wear, "slot:class.subclass" (EnchantKindsText, above), which the
---               guild learns its enchants from; set by your own gear reads, sent as a delta when it changes too.
---               Seventeen slots at nine bytes is 153: 160 at most
+--   ench_kinds  the kind of each enchanted item you wear and the enchant on it, "slot:class.subclass:enchant"
+--               (EnchantKindsText, above), which the guild learns its enchants from; set by your own gear reads, sent
+--               as a delta when it changes too. 200 bytes at most, whole entries
+--   xpmax       the XP your level takes, "level:max" (UnitXPMax at the level you are), which the guild learns its XP
+--               curve from (Rules.lua rule 6). The level travels in it, so a receiver never pairs a new level with
+--               the last one's XP. Slow: it changes once a level
 ----------------------------------------------------------------------------
 S.HIDDEN = { guid = { id = "guid", label = "Character GUID", cat = "hidden", kind = "text", max = 40, default = "all", hidden = true },
-  ench_kinds = { id = "ench_kinds", label = "Enchanted item kinds", cat = "hidden", kind = "text", max = 160, default = "all", hidden = true } }
-S.HIDDEN_ORDER = { "guid", "ench_kinds" }
+  ench_kinds = { id = "ench_kinds", label = "Enchanted item kinds", cat = "hidden", kind = "text", max = KINDS_MAX, default = "all", hidden = true },
+  xpmax = { id = "xpmax", label = "XP this level takes", cat = "hidden", kind = "text", max = 16, default = "all", hidden = true, slow = true } }
+S.HIDDEN_ORDER = { "guid", "ench_kinds", "xpmax" }
 S.byId.guid = S.HIDDEN.guid
 S.byId.ench_kinds = S.HIDDEN.ench_kinds
+S.byId.xpmax = S.HIDDEN.xpmax
 
 ----------------------------------------------------------------------------
 -- the game's statistics: a dynamic category, defined at login from what the client reports
@@ -1086,8 +1144,10 @@ function S.CleanText(s, max)
   return s
 end
 function S.CleanLabel(s) return (S.CleanText(s, S.LABEL_MAX):gsub("^%s+", ""):gsub("%s+$", "")) end
--- an id the wire carries as a bare int whether or not this client defined it: a statistic, a boss, an instance, a faction
-function S.IsDynamic(id) return type(id) == "string" and id:match("^[gefi]%d+$") ~= nil and #id <= 12 end
+-- an id the wire carries as a bare int whether or not this client defined it: a statistic, a boss, an instance, a
+-- faction, and the level a member had at a boss's first kill (k<encounterID>: no stat, Rules.lua's evidence; a 0.4.0
+-- client drops it)
+function S.IsDynamic(id) return type(id) == "string" and id:match("^[gefik]%d+$") ~= nil and #id <= 12 end
 
 -- the reaction a standing falls in, from the ranges your own factions showed (nil where none covers it), and its name
 -- (the game's FACTION_STANDING_LABEL1..8, the number where the client has none)
@@ -1230,7 +1290,8 @@ function S.LoadKnown()
   for _, e in pairs(CuteDB.roster or {}) do
     local st = type(e) == "table" and e.stats
     if type(st) == "table" and type(st.ench_kinds) == "string" and type(st.guid) == "string" and st.guid ~= "" then
-      S.LearnEnchants(S.EnchantKinds(st.ench_kinds), st.guid)
+      local kinds, enchs = S.EnchantKinds(st.ench_kinds)
+      S.LearnEnchants(kinds, st.guid, enchs)
     end
   end
 end

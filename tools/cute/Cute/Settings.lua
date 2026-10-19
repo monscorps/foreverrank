@@ -3,8 +3,8 @@
 --   Everyone:  which columns each page shows, density, offline members, the minimap button, your main, role and
 --              raid spec (role and raid spec per character, the main account-wide)
 --   Officers:  per stat, Everyone or Only you (per category for the game's statistics and for what the guild
---              discovers: bosses, dungeons, raids, reputation); the officer rank threshold; Broadcast now (greyed for
---              members)
+--              discovers: bosses, dungeons, raids, reputation); the officer rank threshold; the thresholds of the
+--              rules the Guide learns by (Rules.lua), each a step down or up; Broadcast now (greyed for members)
 local _, C = ...
 local ST = {}
 C.SettingsPage = ST
@@ -35,6 +35,9 @@ local function ensure(parent)
   if widgets.checks then return end
   widgets.checks = pool(parent, function(p) return C.UI.Check(p) end)
   widgets.labels = pool(parent, function(p) return C.UI.Text(p, 12, INK, "LEFT", 300) end)
+  -- (a rule's value, right-aligned against its step buttons, apart from its label so a narrow window cuts the label
+  -- and never the number)
+  widgets.values = pool(parent, function(p) return C.UI.Text(p, 12, INK, "RIGHT", 44) end)
   widgets.buttons = pool(parent, function(p) return C.UI.Button(p, "", 140) end)
   widgets.edits = pool(parent, function(p)
     local e = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
@@ -123,6 +126,85 @@ local function drawEveryone(x, w)
   return y
 end
 
+-- the rules the Guide learns by (Rules.lua): every threshold with its value and a step down and up, the officers' to
+-- set (greyed for members), sent with Broadcast now and applied by the guild like the visibility. White where an
+-- officer set it; the buttons' tooltip says what it does, who set it, and the default
+local function round(v, step) return math.floor(v / step + 0.5) * step end
+local function drawRules(x, w, y, officer)
+  local R = C.Rules
+  local head = widgets.labels:Get()
+  head:SetPoint("TOPLEFT", x, -y)
+  head:SetWidth(w)
+  color(head, WHITE)
+  head:SetText("Rules the Guide learns by")
+  y = y + 20
+  local note = widgets.labels:Get()
+  note:SetPoint("TOPLEFT", x, -y)
+  note:SetWidth(w)
+  color(note, DIM)
+  C.UI.FitText(note, officer and "White: set by an officer. Broadcast now sends them." or "White: set by an officer. Only officers can change them.", w - 4)
+  y = y + 18
+  for _, t in ipairs(R.TUNE) do
+    local name, lo, hi, step = t[1], t[3], t[4], t[5]
+    local l = widgets.labels:Get()
+    l:SetPoint("TOPLEFT", x, -y - 3)
+    l:SetWidth(w - 196)
+    color(l, R.SetBy(name) and WHITE or INK)
+    C.UI.FitText(l, t[2], w - 200)
+    local val = widgets.values:Get()
+    val:SetPoint("TOPLEFT", x + w - 190, -y - 3)
+    val:SetWidth(44)
+    color(val, R.SetBy(name) and WHITE or INK)
+    C.UI.FitText(val, R.Show(name), 42)
+    local function set(v)
+      if not officer then return end
+      v = round(v, step)
+      if v < lo - 1e-9 or v > hi + 1e-9 then return end
+      -- back at the default clears the officers' setting (an "x and nil or v" would always give v)
+      if math.abs(v - R.RULES[name]) < 1e-9 then C.Policy:SetRule(name, nil) else C.Policy:SetRule(name, v) end
+      C.UI:Draw()
+    end
+    local function tip(b)
+      b:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(t[2], 1, 1, 1)
+        GameTooltip:AddLine(t[7], 0.85, 0.85, 0.85, true)
+        local by = R.SetBy(name)
+        GameTooltip:AddLine("Default " .. R.Show(name, R.RULES[name]) .. (by and (". Set to " .. R.Show(name) .. " by " .. R.WhoName(by) .. ".") or "."), 0.7, 0.7, 0.7, true)
+        GameTooltip:Show()
+      end)
+      b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    local minus = widgets.buttons:Get()
+    minus:SetPoint("TOPLEFT", x + w - 140, -y)
+    minus:SetWidth(40)
+    minus:SetLabel("-")
+    minus:SetOn(officer and R.Get(name) > lo + 1e-9)
+    minus:SetScript("OnClick", function() set(R.Get(name) - step) end)
+    tip(minus)
+    local plus = widgets.buttons:Get()
+    plus:SetPoint("TOPLEFT", x + w - 96, -y)
+    plus:SetWidth(40)
+    plus:SetLabel("+")
+    plus:SetOn(officer and R.Get(name) < hi - 1e-9)
+    plus:SetScript("OnClick", function() set(R.Get(name) + step) end)
+    tip(plus)
+    y = y + 24
+  end
+  local reset = widgets.buttons:Get()
+  reset:SetPoint("TOPLEFT", x, -y)
+  reset:SetWidth(150)
+  reset:SetLabel("Rules to defaults")
+  reset:SetOn(officer)
+  reset:SetScript("OnClick", function()
+    if not officer then return end
+    for _, t in ipairs(R.TUNE) do if R.SetBy(t[1]) then C.Policy:SetRule(t[1], nil) end end
+    C.UI:Draw()
+  end)
+  reset:SetScript("OnEnter", nil)
+  return y + 32
+end
+
 -- the right half: the officers' visibility list
 local function drawOfficers(x, w)
   local officer = C.Roster:MeOfficer()
@@ -170,10 +252,13 @@ local function drawOfficers(x, w)
   ra:SetOn(officer)
   ra:SetScript("OnClick", function()
     if not officer then return end
-    CuteDB.policy = { vis = {}, by = C.Me(), mine = true, rank = C.Roster:MyRank(), at = C.Now(), threshold = C.Policy:Threshold() }
+    -- (the visibility only: the rules' thresholds below are reset on their own)
+    local old = CuteDB.policy or {}
+    CuteDB.policy = { vis = {}, rules = old.rules, ruleBy = old.ruleBy, by = C.Me(), mine = true, rank = C.Roster:MyRank(), at = C.Now(), threshold = C.Policy:Threshold() }
     C.UI:Draw()
   end)
   y = y + 30
+  y = drawRules(x, w, y, officer)
   local h1 = widgets.labels:Get()
   h1:SetPoint("TOPLEFT", x + w - 130, -y)
   h1:SetWidth(60)
@@ -248,17 +333,17 @@ end
 
 function C.Settings_Draw(sf)
   ensure(sf.child)
-  widgets.checks:Reset(); widgets.labels:Reset(); widgets.buttons:Reset(); widgets.edits:Reset()
+  widgets.checks:Reset(); widgets.labels:Reset(); widgets.buttons:Reset(); widgets.edits:Reset(); widgets.values:Reset()
   local w = sf:Width()
   local half = math.floor((w - 24) / 2)
   local y1 = drawEveryone(6, half)
   local y2 = drawOfficers(6 + half + 12, half)
-  widgets.checks:HideRest(); widgets.labels:HideRest(); widgets.buttons:HideRest(); widgets.edits:HideRest()
+  widgets.checks:HideRest(); widgets.labels:HideRest(); widgets.buttons:HideRest(); widgets.edits:HideRest(); widgets.values:HideRest()
   sf:SetContentHeight(math.max(y1, y2) + 8)
 end
 
 function C.Settings_Hide()
   if not widgets.checks then return end
-  widgets.checks:Reset(); widgets.labels:Reset(); widgets.buttons:Reset(); widgets.edits:Reset()
-  widgets.checks:HideRest(); widgets.labels:HideRest(); widgets.buttons:HideRest(); widgets.edits:HideRest()
+  widgets.checks:Reset(); widgets.labels:Reset(); widgets.buttons:Reset(); widgets.edits:Reset(); widgets.values:Reset()
+  widgets.checks:HideRest(); widgets.labels:HideRest(); widgets.buttons:HideRest(); widgets.edits:HideRest(); widgets.values:HideRest()
 end

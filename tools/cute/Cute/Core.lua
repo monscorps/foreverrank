@@ -4,9 +4,11 @@
 -- enchants) and the game's own statistics where the client reports them, shares them with the guild on the game's
 -- addon channel (Comm.lua), keeps everyone's last known values and what the guild has learned (Roster.lua, CuteDB.known)
 -- and shows the whole guild in one window (UI.lua). Officers decide, stat by stat, whether members see each other's
--- (Policy.lua). Nothing leaves the guild channel; there is no server.
+-- (Policy.lua). What research and the beta showed of Forever ships as a seed (Known.lua), checked against the live
+-- client at login and outgrown by the rules that learn from the guild's play (Rules.lua), which the Guide page shows
+-- (Guide.lua). Nothing leaves the guild channel; there is no server.
 local ADDON, C = ...
-C.version = "0.4.0"
+C.version = "0.5.0"
 C.REGVER = 4 -- the stat registry's wire version (informational: a client ignores ids it does not know)
 C.COLOR = "|cffe8b24a"
 
@@ -93,6 +95,22 @@ function C.Get(fn, ...)
   if type(fn) ~= "function" then return nil end
   return plainAll(pcall(fn, ...))
 end
+-- C.Get for a question with three answers (does the client have this id?): the first result made plain and true, or
+-- nil and false where the call is missing, threw (C.lastErr keeps why) or gave a secret: an answer that says nothing
+-- either way, which C.Get alone would read as a plain nil
+function C.Ask(fn, ...)
+  if type(fn) == "string" then
+    local name = fn
+    fn = _G[name]
+    if type(fn) ~= "function" then C.Missing(name); return nil, false end
+  end
+  if type(fn) ~= "function" then return nil, false end
+  local ok, v = pcall(fn, ...)
+  if not ok then C.lastErr = tostring(v); return nil, false end
+  local p = C.Plain(v)
+  if p == nil and issecretvalue and issecretvalue(v) then return nil, false end
+  return p, true
+end
 
 -- a number from the client, or nil
 function C.Num(fn, ...)
@@ -114,7 +132,7 @@ end
 -- client has, a line to paste, so a stat leaning on a missing one can be dropped.
 C.UNDOCUMENTED = { "GetInventoryItemID", "GetInventoryItemQuality", "GetInventoryItemDurability", "GetInventoryItemCount", "GetNumUnspentTalents", "DoEmote", "GetAverageItemLevel",
   "GetCategoryList", "GetCategoryInfo", "GetCategoryNumAchievements", "GetAchievementInfo", "GetTotalAchievementPoints",
-  "GetLatestCompletedAchievements", "GetStatisticsCategoryList", "GetStatistic" }
+  "GetLatestCompletedAchievements", "GetStatisticsCategoryList", "GetStatistic", "GetNumLootItems", "GetLootSlotLink", "GetLootSlotInfo" }
 -- a global this client has, asked without the note a Get by name leaves when it has not
 function C.Callable(name) return type(_G[name]) == "function" end
 function C.ApiReport()
@@ -132,8 +150,67 @@ end
 
 function C.Now() return (time and time()) or os.time() end
 
-function C.Print(msg)
-  if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage(C.COLOR .. "Cute|r: " .. tostring(msg)) end
+-- a chat line, "Cute: " first; bare: the line as given (it names Cute its own way)
+function C.Print(msg, bare)
+  if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage(bare and tostring(msg) or (C.COLOR .. "Cute|r: " .. tostring(msg))) end
+end
+
+----------------------------------------------------------------------------
+-- versions: a newer Cute in the guild, and what is new in this one. Every Cute sends its version (addon_ver, in the
+-- full record); one newer than yours says so once a session in chat, and in the window's status line until you
+-- update. A /reload is the same session (the saved variables remember the chat line until the next login). The first
+-- login on a version prints its changelog line once: Changes.lua, which build.py writes from the page's changelog, so
+-- the game and the page say the same
+----------------------------------------------------------------------------
+C.UPDATE_AT = "foreverrank.com/addons/cute"
+-- a version as its numbers, "0.5.10" as { 0, 5, 10 }; nil for anything but two to four dotted numbers (what comes from
+-- the channel is anyone's text: "0.5.0-beta", "0..5", "banana" and a bare "5" are no version)
+function C.ParseVersion(v)
+  if type(v) ~= "string" or #v > 24 or not v:match("^%d[%d%.]*$") then return nil end
+  local out = {}
+  for part in (v .. "."):gmatch("([^%.]*)%.") do
+    if part == "" or #part > 6 then return nil end
+    out[#out + 1] = tonumber(part)
+  end
+  if #out < 2 or #out > 4 then return nil end
+  return out
+end
+-- is version a newer than b, number by number (0.5.10 is newer than 0.5.9; 0.6 is 0.6.0); false where either is no version
+function C.VersionNewer(a, b)
+  local x, y = C.ParseVersion(a), C.ParseVersion(b)
+  if not (x and y) then return false end
+  for i = 1, math.max(#x, #y) do
+    local p, q = x[i] or 0, y[i] or 0
+    if p ~= q then return p > q end
+  end
+  return false
+end
+-- a guild member's version, as it arrives (Roster.lua) or as a saved record keeps it (at login). C.newer is the newest
+-- seen this session that is newer than yours: the status line shows it (UI.lua)
+function C.SawVersion(v)
+  v = C.Plain(v)
+  if not C.VersionNewer(v, C.version) then return end
+  if C.newer and not C.VersionNewer(v, C.newer) then return end
+  C.newer = v
+  if CuteDB and not CuteDB.toldNewer then
+    CuteDB.toldNewer = true
+    C.Print(C.COLOR .. "Cute " .. v .. "|r is out (you have " .. C.version .. "): " .. C.UPDATE_AT, true)
+  end
+  if C.UI and C.UI.DrawStatus then C.UI:DrawStatus() end
+end
+-- at login (and after a /reload): the versions the saved records keep, yours left out
+local function savedVersions()
+  for key, e in pairs(CuteDB.roster or {}) do
+    local st = type(e) == "table" and type(e.stats) == "table" and e.stats or nil
+    if st and type(st.addon_ver) == "string" and not C.Roster:IsSelfRecord(key, e) then C.SawVersion(st.addon_ver) end
+  end
+end
+-- the first login on this version: its changelog line, once, ten seconds on, after the login's own lines
+function C.WhatsNew()
+  local line = type(C.CHANGES) == "table" and C.CHANGES[C.version] or nil
+  if type(line) ~= "string" or line == "" or CuteDB.toldChanges == C.version then return end
+  CuteDB.toldChanges = C.version
+  C.Print(C.COLOR .. "Cute " .. C.version .. "|r: " .. line, true)
 end
 
 ----------------------------------------------------------------------------
@@ -212,12 +289,14 @@ end
 ----------------------------------------------------------------------------
 -- known: what the guild has learned in play (Stats.lua): what it enchants, by slot and kind of item, the labels of
 -- the bosses, instances and factions it found (and which instance a boss is in, which kind an instance is), the raid
--- buffs guild mates cast, the standing ranges of the reactions. Kept apart from the roster, so pruning a record loses
+-- buffs guild mates cast, the standing ranges of the reactions; and what the rules weigh (Rules.lua): the XP each
+-- level takes as members reported it, the loot seen per boss, when members were first seen wearing items in a slot,
+-- Rule 0's verdict on the seed and the model built from it all. Kept apart from the roster, so pruning a record loses
 -- none of it
 local DEFAULTS = {
   settings = { columns = {}, density = "normal", offline = true, minimap = true, main = "", sort = {} },
   roster = {}, chars = {}, errors = {},
-  known = { enchant = {}, labels = {}, mine = {}, inst = {}, kind = {}, buffs = {}, reactions = {} },
+  known = { enchant = {}, labels = {}, mine = {}, inst = {}, kind = {}, buffs = {}, reactions = {}, xp = {}, loot = {}, watch = {} },
 }
 local function fill(t, d)
   for k, v in pairs(d) do
@@ -267,7 +346,19 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
     C.Safe(function() C.Roster:Start() end, "roster: start")()
     C.Safe(function() C.Sample:Start(initial, reloading) end, "sample: start")()
     C.Safe(function() C.Comm:Start() end, "comm: start")()
+    -- the seed checked against this client (Rule 0, spread over frames), after the roster, before the Guide draws
+    C.Safe(function() C.Rules:Start() end, "rules: start")()
     C.Safe(function() if C.UI and C.UI.OnWorld then C.UI:OnWorld() end end, "minimap button")()
+    -- versions: a login (not a /reload, nor a loading screen) may say a newer Cute again; the saved records' versions
+    -- once a session; what is new in this one ten seconds on
+    C.Safe(function()
+      if initial then CuteDB.toldNewer = nil end
+      if not C.versionsStarted then
+        C.versionsStarted = true
+        savedVersions()
+        C_Timer.After(10, C.Safe(C.WhatsNew, "what is new"))
+      end
+    end, "versions")()
   elseif event == "PLAYER_LOGOUT" then
     if C.Sample.ReadAll then C.Sample:ReadAll() end
   end
@@ -342,6 +433,8 @@ function C.Diag()
   end
   -- what the guild has learned: the enchant slots (how many members were seen with one, the kinds of item), the labels known
   add("diag " .. C.Stats.KnownReport())
+  -- the seed: fresh or stale and why, what Rule 0 found absent, how many facts are in each state
+  add("diag " .. C.Rules.Report())
   return lines
 end
 
@@ -354,8 +447,10 @@ SlashCmdList.CUTE = C.Safe(function(msg)
   elseif msg == "me" then C.UI:Open("me")
   elseif msg == "api" then C.Print(C.Stats.GameReport()); C.Print(C.ApiReport())
   elseif msg == "diag" then for _, l in ipairs(C.Diag()) do C.Print(l) end
+  elseif msg == "rules" then for _, l in ipairs(C.Rules.RulesReport()) do C.Print(l) end
+  elseif msg == "guide" then C.UI:Open("guide")
   elseif msg == "help" then
-    C.Print("/cute opens the dashboard. /cute settings, /cute me, /cute resend, /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them, and what the guild has learned).")
+    C.Print("/cute opens the dashboard. /cute guide, /cute settings, /cute me, /cute resend, /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them, what the guild has learned, the seed's state), /cute rules (each rule's threshold and who set it).")
   else C.UI:Toggle() end
 end, "slash")
 

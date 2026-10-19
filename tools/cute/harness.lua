@@ -11,12 +11,29 @@
 -- reads all the same: the Legacy window's achievement calls on every client, the statistics API (which only the
 -- mainline panel calls, never loaded on camelot) on o.withStats clients alone, so the gate runs Cute with it and
 -- without it. A stat reading anything else reads nil here too, and the registry scenario fails on it.
---   luajit tools/cute/harness.lua                   run every scenario
+-- Every scenario runs twice, in a loop: once with a seed (a small fixture, below, standing in for Known.lua, so the
+-- scenarios do not move with what gen_known.py writes) and once with none, as a copy without Known.lua runs. The real
+-- Known.lua, where gen_known.py has written it, is loaded by the two scenarios that weigh it (the seed, and rule 4 in
+-- Blackrock Depths).
+--   luajit tools/cute/harness.lua                   run every scenario, both passes
 --   luajit tools/cute/harness.lua --layout out.json  also write the window, page by page, for tools/questbank/render_layout.py
 math.randomseed = nil -- the client has none
 local HERE = (arg and arg[0] and arg[0]:match("^(.*)/") or ".")
 local LAYOUT_OUT
 for i = 1, #arg do if arg[i] == "--layout" then LAYOUT_OUT = arg[i + 1] end end
+-- the loop: this file loads itself once per pass; each pass adds its layout problems and layouts to CUTE_RESULTS, and
+-- the last prints them all
+if not CUTE_PASS then
+  CUTE_RESULTS = { problems = {}, layouts = {} }
+  local passes = { "seed", "none" }
+  for i, pass in ipairs(passes) do
+    CUTE_PASS, CUTE_LAST = pass, i == #passes
+    print(pass == "seed" and "== with the seed (the fixture standing in for Known.lua)" or "== with no seed")
+    assert(loadfile(arg[0]))(...)
+  end
+  return
+end
+local SEEDED = CUTE_PASS == "seed"
 
 local METHODS = {}
 local function allow(list) for m in list:gmatch("%S+") do METHODS[m] = true end end
@@ -315,9 +332,11 @@ local ITEM_CLASS = { [118] = { 0, 1 }, [858] = { 0, 1 }, [2455] = { 0, 1 }, [245
   [1251] = { 0, 7 }, [5512] = { 0, 0 }, [2589] = { 7, 5 }, [5000] = { 15, 0 }, [5001] = { 4, 1 },
   -- worn items of the kinds the enchants are learned by: a bow, a gun, a wand, a dagger, a shield, a book held in the
   -- off hand (4.0, Miscellaneous armour, as the game classes one)
-  [5018] = { 2, 2 }, [5019] = { 2, 3 }, [6018] = { 2, 19 }, [6022] = { 2, 15 }, [6020] = { 4, 6 }, [6021] = { 4, 0 } }
+  [5018] = { 2, 2 }, [5019] = { 2, 3 }, [6018] = { 2, 19 }, [6022] = { 2, 15 }, [6020] = { 4, 6 }, [6021] = { 4, 0 },
+  -- a cloth bracer and a leather one, as the seed's wrist enchants take (4.1, 4.2)
+  [6030] = { 4, 1 }, [6031] = { 4, 2 } }
 -- the names C_Item.GetItemSubClassInfo gives those kinds (the default worn item is 15.0, Miscellaneous Junk)
-local SUBCLASS_NAME = { ["2.2"] = "Bows", ["2.3"] = "Guns", ["2.19"] = "Wands", ["2.15"] = "Daggers", ["4.6"] = "Shields", ["4.0"] = "Miscellaneous", ["15.0"] = "Junk" }
+local SUBCLASS_NAME = { ["2.2"] = "Bows", ["2.3"] = "Guns", ["2.19"] = "Wands", ["2.15"] = "Daggers", ["4.6"] = "Shields", ["4.0"] = "Miscellaneous", ["4.1"] = "Cloth", ["4.2"] = "Leather", ["15.0"] = "Junk" }
 -- the spells C_Spell.GetSpellName names: Fishing under two ids (Classic's first rank and another), the Hearthstone
 local SPELL_NAME = { [7620] = "Fishing", [131474] = "Fishing", [8690] = "Hearthstone", [133] = "Fireball" }
 -- the reputation list a character shows: { factionID, name, reaction, currentStanding, threshold, nextThreshold, isHeader,
@@ -326,6 +345,75 @@ local FACTIONS = { { 469, "Alliance", 0, 0, 0, 0, true }, { 72, "Stormwind", 5, 
   { 1168, "Guild", 4, 0, 0, 3000, true, true }, { 930, "Exodar", 6, 9500, 9000, 21000 }, { 1100, "Other", 0, 0, 0, 0, true }, { 589, "Wintersaber Trainers", 2, -4000, -6000, -3000 } }
 
 local EPOCH = 1792300000
+
+----------------------------------------------------------------------------
+-- the seed fixture: Known.lua's fixed format, small. Four dungeons (two the beta saw, one past the beta's cap with no
+-- boss known, one from research whose wings share its instance), eleven bosses (one optional) with thirty-nine items
+-- of loot, four enchant slots (neck for any Miscellaneous armour, wrist for cloth to plate, main hand for two-handed
+-- axes and one-handed swords, each enchant naming its kinds, off hand for shields: none of them the kinds the shared
+-- scenarios wear, so those keep their meaning), a smooth XP curve and five factions. Fifty facts for Rule 0 to ask:
+-- 39 items, 6 enchant recipes, 5 factions, so a share of absent ones is a whole count at the thresholds
+----------------------------------------------------------------------------
+local FIX = { build = "1.60.1.70338", xp = {} }
+for l = 1, 59 do FIX.xp[l] = math.floor((300 + 450 * l + 40 * l * l) / 100 + 0.5) * 100 end
+-- { instance, name, min, max, conf, { { boss, encounter, items of loot, optional }, ... }, wings }
+FIX.dungeons = {
+  { 36, "The Deadmines", 18, 23, "beta", { { "Rhahk'Zor", 1230, 4 }, { "Glubtok", 1236, 4 }, { "Mr. Smite", 1238, 3 }, { "Edwin VanCleef", 1234, 4 } } },
+  { 48, "Blackfathom Deeps", 24, 32, "beta", { { "Ghamoo-ra", 1240, 4 }, { "Lady Sarevess", 1241, 3, true }, { "Twilight Lord Kelris", 1242, 4 }, { "Aku'mai", 1243, 4 } } },
+  { 9001, "Krol'dok Stronghold", 32, 38, "data", {} },
+  { 129, "Razorfen Downs", 37, 46, "data", { { "Tuten'kash", 1250, 3 }, { "Mordresh Fire Eye", 1251, 3 }, { "Amnennar the Coldbringer", 1252, 3 } }, { "Halls", "Crypt" } },
+}
+FIX.items, FIX.loot = {}, {}
+do
+  local nextItem = 30001
+  for _, d in ipairs(FIX.dungeons) do
+    for _, b in ipairs(d[6]) do
+      FIX.loot[b[2]] = {}
+      for _ = 1, b[3] do FIX.items[#FIX.items + 1] = nextItem; table.insert(FIX.loot[b[2]], nextItem); nextItem = nextItem + 1 end
+    end
+  end
+end
+FIX.spells = { 27001, 7418, 7428, 13529, 7788, 13378 }
+FIX.factions = { [72] = "Stormwind", [47] = "Ironforge", [930] = "Exodar", [589] = "Wintersaber Trainers", [69] = "Darnassus" }
+local function fixtureSource(f)
+  f = f or FIX
+  local out = { "local _, C = ...", "C.Known = {", string.format("  v = 1, build = %q, generated = \"2026-10-19\", betaCap = 30, cap = 60,", f.build),
+    "  sources = { \"codex/loot.json\", \"research/wago/1.60.1.70338/DungeonEncounter.csv\" },", "  dungeons = {" }
+  for _, d in ipairs(f.dungeons) do
+    local bosses = {}
+    for _, b in ipairs(d[6]) do
+      local loot = {}
+      for _, id in ipairs(FIX.loot[b[2]] or {}) do loot[#loot + 1] = tostring(id) end
+      bosses[#bosses + 1] = string.format("{ name = %q, enc = %d, conf = %q, loot = { %s }%s }", b[1], b[2], d[5], table.concat(loot, ", "), b[4] and ", optional = true" or "")
+    end
+    local wings = {}
+    for _, wname in ipairs(d[7] or {}) do wings[#wings + 1] = string.format("%q", wname) end
+    out[#out + 1] = string.format("    [%d] = { name = %q, min = %d, max = %d, new = %s, conf = %q, kind = \"party\",%s bosses = { %s } },",
+      d[1], d[2], d[3], d[4], tostring(d[1] == 9001), d[5], d[7] and (" wings = { " .. table.concat(wings, ", ") .. " },") or "", table.concat(bosses, ", "))
+  end
+  out[#out + 1] = "  },"
+  out[#out + 1] = "  enchants = {"
+  out[#out + 1] = "    [2] = { conf = \"data\", kinds = { \"4.0\" }, list = { { spell = 27001, name = \"Enchant Necklace - Agility\", ench = 2564 } } },"
+  out[#out + 1] = "    [9] = { conf = \"beta\", kinds = { \"4.1\", \"4.2\", \"4.3\", \"4.4\" }, list = { { spell = 7418, name = \"Enchant Bracer - Minor Health\", ench = 41 }, { spell = 7428, name = \"Enchant Bracer - Minor Deflection\", ench = 924 } } },"
+  out[#out + 1] = "    [16] = { conf = \"data\", kinds = { \"2.1\", \"2.7\" }, list = { { spell = 13529, name = \"Enchant 2H Weapon - Lesser Impact\", ench = 1897, kinds = { \"2.1\" } }, { spell = 7788, name = \"Enchant Weapon - Minor Striking\", ench = 250, kinds = { \"2.1\", \"2.7\" } } } },"
+  out[#out + 1] = "    [17] = { conf = \"data\", kinds = { \"4.6\" }, list = { { spell = 13378, name = \"Enchant Shield - Minor Stamina\", ench = 848 } } },"
+  out[#out + 1] = "  },"
+  local xp, xc = {}, {}
+  for l = 1, 59 do xp[l] = string.format("[%d] = %d", l, f.xp[l]); xc[l] = string.format("[%d] = %q", l, l <= 30 and "beta" or "data") end
+  out[#out + 1] = "  xp = { " .. table.concat(xp, ", ") .. " },"
+  out[#out + 1] = "  xpConf = { " .. table.concat(xc, ", ") .. " },"
+  local fac = {}
+  for id, name in pairs(FIX.factions) do fac[#fac + 1] = string.format("[%d] = { name = %q, conf = \"data\" }", id, name) end
+  table.sort(fac)
+  out[#out + 1] = "  factions = { " .. table.concat(fac, ", ") .. " },"
+  out[#out + 1] = "}"
+  return table.concat(out, "\n")
+end
+local FIXTURE = fixtureSource()
+local REAL_KNOWN = HERE .. "/Cute/Known.lua"
+-- every faction this client's data has, by id (GetFactionDataByID answers for these whether or not the character
+-- has met them)
+local FACTION_DB = { [69] = "Darnassus" }
 
 -- globals no generated API doc lists, mocked on the evidence named here and on nothing else, so the mock claims
 -- nothing quietly: scenario 1 prints them, Cute's /cute api names them on the live client, and a client made with
@@ -346,6 +434,12 @@ local UNDOCUMENTED = {
   GetLatestCompletedAchievements = { "Blizzard_AchievementUI/Mainline/Blizzard_AchievementUI.lua:2487, a file camelot does not load", optional = true },
   GetStatisticsCategoryList = { "Mainline/Blizzard_AchievementUI.lua:156, the same", optional = true },
   GetStatistic = { "Mainline/Blizzard_AchievementUI.lua:2440 (category, index -> quantity, skip, id) and 2385 (id -> quantity), the same", optional = true },
+  -- the loot window's slots, read for a boss's loot (Rules.lua rule 8): Forever's loot frame reads them, the toc loading
+  -- it for every game type (Blizzard_UIPanels_Game.toc:127, [Family]\LootFrame.lua with no AllowLoadGameType; the
+  -- camelot family is mainline, which the same toc's [ExcludeLoadGameType camelot] on mainline files shows, line 44)
+  GetNumLootItems = "Blizzard_UIPanels_Game/Mainline/LootFrame.lua:227 (LootFrameMixin:Open)",
+  GetLootSlotInfo = "Mainline/LootFrame.lua:228: texture, item, quantity, currencyID, itemQuality, ...",
+  GetLootSlotLink = "Mainline/LootFrame.lua:69 and 515",
 }
 
 -- Legacy Challenges as the Legacy window lists them: categories by id (name, parent, how many), achievements by
@@ -440,7 +534,13 @@ local function newClient(o)
   end)
   env.UnitInRaid = api(function(unit) if unit == "player" and o.raidGroup then return 1 end return nil end)
   env.IsInInstance = api(function() local kind = o.instance or "none"; return kind ~= "none", kind end)
-  env.C_Spell = { GetSpellName = api(function(id) return SPELL_NAME[id] end) }
+  -- o.lackSpells: recipes this client does not have (Rule 0 asks DoesSpellExist)
+  env.C_Spell = { GetSpellName = api(function(id) return SPELL_NAME[id] end), DoesSpellExist = api(function(id) return not (o.lackSpells or {})[id] end) }
+  -- the build (o.build, the fixture's by default) and the level cap (o.maxLevel, 60 by default; o.noCap: neither
+  -- function reads)
+  env.GetBuildInfo = api(function() local v, b = (o.build or FIX.build):match("^(.*)%.(%d+)$"); return v, b, "Oct 1 2026", 16001, v, "" end)
+  env.GetMaxPlayerLevel = api(function() if o.noCap then return nil end return o.maxLevel or 60 end)
+  env.GetMaxLevelForPlayerExpansion = api(function() if o.noCap then return nil end return o.maxLevel or 60 end)
   env.GetRealmName = api(function() return o.realm or "Forever" end)
   env.UnitClass = api(function() return o.class, o.class, CLASS_ID[o.class] end)
   env.GetNormalizedRealmName = api(function() return o.realm or "Forever" end)
@@ -511,6 +611,10 @@ local function newClient(o)
       return statistic(a)
     end),
     GetTotalAchievementPoints = api(function() return o.achPoints or 120 end),
+    -- c.lootWindow: the loot window open now, { { itemID, quality }, ... }
+    GetNumLootItems = api(function() return #(c.lootWindow or {}) end),
+    GetLootSlotLink = api(function(i) local it = (c.lootWindow or {})[i]; return it and ("|cff1eff00|Hitem:" .. it[1] .. ":0|h[Item]|h|r") or nil end),
+    GetLootSlotInfo = api(function(i) local it = (c.lootWindow or {})[i]; if it then return 132, "Item " .. it[1], 1, it[3], it[2] or 3, false, false, nil, false, false end end),
   }
   if o.withStats then
     -- c.statsEmpty: the list is still empty, as it may be while the data loads at login
@@ -594,7 +698,8 @@ local function newClient(o)
     -- itemID, itemType, itemSubType, itemEquipLoc, icon, classID, subClassID; nothing for an item the client's data lacks
     GetItemInfoInstant = api(function(x)
       local id = itemId(x)
-      if (o.serverItems or {})[id] then return nil end
+      -- (o.lackItems: items this client's data lacks altogether, as Rule 0 meets on a client other than the seed's)
+      if (o.serverItems or {})[id] or (o.lackItems or {})[id] then return nil end
       local cls = ITEM_CLASS[id] or { 15, 0 }
       return id, "Type", "Subtype", "", 0, cls[1], cls[2]
     end),
@@ -629,7 +734,13 @@ local function newClient(o)
   env.C_Reputation = {
     GetNumFactions = api(function() return #factionRows() end),
     GetFactionDataByIndex = api(function(i) local f = factionRows()[i]; return f and factionData(f) or nil end),
-    GetFactionDataByID = api(function(id) for _, f in ipairs(o.factions or FACTIONS) do if f[1] == id then return factionData(f) end end end),
+    -- (by id: the character's list, else any faction the client's data has, unless o.lackFactions says it lacks it)
+    GetFactionDataByID = api(function(id)
+      if (o.lackFactions or {})[id] then return nil end
+      for _, f in ipairs(o.factions or FACTIONS) do if f[1] == id then return factionData(f) end end
+      for _, f in ipairs(FACTIONS) do if f[1] == id then return factionData(f) end end
+      if FACTION_DB[id] or o.allFactions then return factionData({ id, FACTION_DB[id] or ("Faction " .. id), 4, 0, 0, 3000 }) end
+    end),
   }
   env.C_MountJournal = { GetMountIDs = api(function() return { 1 } end), GetMountInfoByID = api(function() return "Horse", 1, 1, true, true, 1, false, false, false, false, o.mount or false end) }
   -- the three Legacy trees, a config each; their currency is the Legacy points (traitCurrencyID, quantity unspent,
@@ -680,15 +791,27 @@ local function newClient(o)
   -- a client that lacks a function (o.without = { Name = true }): the global is gone, as on a client without it
   for name in pairs(o.without or {}) do env[name] = nil end
 
-  -- load the addon, file by file, as the TOC lists them
+  -- load the addon, file by file, as the TOC lists them. Known.lua is the seed of the pass (the fixture, or none), or
+  -- the one a client asks for: o.seed = "real" (the generated file), "fixture", false (none) or a source of its own
   local toc = io.open(HERE .. "/Cute/Cute.toc"):read("*a")
   for file in toc:gmatch("\n([%w_]+%.lua)") do
-    local src = assert(io.open(HERE .. "/Cute/" .. file)):read("*a")
-    assert(not src:find("[\128-\255]"), file .. " has a byte the game's font would draw as a box")
-    local fn, err = loadstring(src, "@Cute/" .. file)
-    assert(fn, err)
-    setfenv(fn, env)
-    fn("Cute", c.C)
+    local src
+    if file == "Known.lua" then
+      local seed = o.seed
+      if seed == nil then seed = SEEDED and "fixture" or false end
+      if seed == "fixture" then src = FIXTURE
+      elseif seed == "real" then local f = io.open(REAL_KNOWN); src = f and f:read("*a"); if f then f:close() end
+      elseif type(seed) == "string" then src = seed end
+    else
+      src = assert(io.open(HERE .. "/Cute/" .. file)):read("*a")
+    end
+    if src then
+      assert(not src:find("[\128-\255]"), file .. " has a byte the game's font would draw as a box")
+      local fn, err = loadstring(src, "@Cute/" .. file)
+      assert(fn, err)
+      setfenv(fn, env)
+      fn("Cute", c.C)
+    end
   end
   clients[#clients + 1] = c
   return c
@@ -706,6 +829,13 @@ local function click(b) assert(b and b.__scripts.OnClick, "a button with OnClick
 local function press(b) assert(b and b.__scripts.OnClick, "a button with OnClick"); b.__scripts.OnClick(b, "LeftButton") end
 local function hover(o) if o.__scripts.OnEnter then o.__scripts.OnEnter(o) end end
 local function msgs(c, kind) local n = 0; for _, m in ipairs(c.sent) do if m.msg:sub(1, 2) == kind then n = n + 1 end end return n end
+-- the chat lines a client printed, the line of what is new in this version left out (Core.lua prints it ten seconds
+-- after the first login on a version)
+local function chatLines(c)
+  local out, news = {}, c.C.COLOR .. "Cute " .. c.C.version .. "|r: "
+  for _, m in ipairs(c.chat) do if m:sub(1, #news) ~= news then out[#out + 1] = m end end
+  return out
+end
 local function sameColor(a, b) return a and b and math.abs(a[1] - b[1]) < 0.01 and math.abs(a[2] - b[2]) < 0.01 and math.abs(a[3] - b[3]) < 0.01 end
 -- a shown row of the table, and a shown cell of a row, by the stat id
 local function rowOf(c, short) for _, r in ipairs(c.C.UI.rows.items) do if r:IsShown() and r.row and r.row.short == short then return r end end end
@@ -998,8 +1128,18 @@ do
   assert(yezin.C.Sample:Value("ready") == 1 and yezin.C.UI.Format(S.byId.ready, 1) == "gaps", "readiness: one gap (empty slots) reads as gaps: " .. tostring(yezin.C.Sample:Value("ready")))
   assert(yezin.C.Sample:Value("gold") == 123456 and yezin.C.UI.Format(S.byId.gold, 123456) == "12g" and S.FmtGold(9500) == "95s" and S.FmtGold(7) == "7c", "gold keeps copper and shows gold")
   assert(yezin.C.Sample:Value("resist_fire") == 0, "resists read")
-  local XPLeft = yezin.C.Sample.XPLeft
-  assert(XPLeft(59, 0, 171800) == 171800 and XPLeft(58, 165700, 165800) == 100 + 171800 and XPLeft(1, 0, 800) == 2 * 3379200, "the XP left to 60 follows the per-level table, scaled to this client's max")
+  -- the XP left to 60 runs over the curve the guild learns (Rules.lua rule 6): the seed's where members have not agreed
+  -- on a level, else the members' own UnitXPMax (here everyone's 1000), the levels nobody reported estimated
+  local XPLeft, curve = yezin.C.Sample.XPLeft, yezin.C.Rules.XPCurve()
+  assert(XPLeft(59, 0, 171800) == 171800 and XPLeft(60, 0, 1) == 0, "the last level's rest, and nothing past 60")
+  if SEEDED then
+    assert(XPLeft(58, 165700, 165800) == 100 + FIX.xp[59] and curve[59].state == "data" and curve[20].state == "beta" and curve[42].v == FIX.xp[42],
+      "the seed's curve where the members have not agreed: " .. tostring(curve[59].v) .. " " .. tostring(curve[59].state))
+  else
+    -- (no seed, and only your own level known so far: the levels ahead wait for the guild's, and so does hours to 60)
+    assert(curve[42] and curve[42].v == 1000 and curve[42].state == "seen" and curve[59] == nil and XPLeft(58, 165700, 165800) == nil,
+      "no seed: your own level known, nothing ahead yet: " .. tostring(curve[59] and curve[59].state))
+  end
   -- the item level is the average over the items worn (there is no GetAverageItemLevel): 54, 55, 56 and 20 make 46
   assert(yezin.C.Sample:Value("ilvl") == 46, "item level averaged over the four items worn: " .. tostring(yezin.C.Sample:Value("ilvl")))
   local slots = yezin.C.Sample:Value("ilvl_slots")
@@ -1045,7 +1185,7 @@ do
   assert(bare.C.Sample:Value("ready") == 1, "readiness still reads without the durability input")
   local noted = 0
   for _, e in ipairs(bare.env.CuteDB.errors) do if e.msg == "GetInventoryItemDurability is missing on this client" then noted = noted + e.count end end
-  assert(noted == 1 and #bare.chat == 0, "noted once for /cute errors, no chat line: " .. noted)
+  assert(noted == 1 and #chatLines(bare) == 0, "noted once for /cute errors, no chat line: " .. noted)
   bare.C.UI:Open("prog")
   local cell = cellOf(rowOf(bare, "Ondra"), "durability")
   assert(cell and cell.label:GetText() == "?", "the cell shows ?")
@@ -1319,9 +1459,9 @@ do
     end
     return f
   end
-  local f = pages(yezin, "officer", { "race", "prog", "shame", "game", "officers", "me", "settings" })
+  local f = pages(yezin, "officer", { "race", "guide", "prog", "shame", "game", "officers", "me", "settings" })
   assert(yezin.C.UI.tabs.officers:IsShown(), "the officer sees the Officers tab")
-  pages(kaka, "member", { "race", "prog", "shame", "game", "me", "settings" })
+  pages(kaka, "member", { "race", "guide", "prog", "shame", "game", "me", "settings" })
   assert(not kaka.C.UI.tabs.officers:IsShown(), "the member has no Officers tab")
   kaka.C.UI:Open("officers")
   assert(kaka.C.UI.page == "race", "a member asking for the officers' page lands on Race")
@@ -1400,7 +1540,7 @@ do
   assert(yezin.C.UI.scroll.bar:GetValue() == 0, "a page change starts at the top")
   -- resized small: still no problems, on every page
   yezin.C.UI.frame:SetSize(760, 420)
-  for _, page in ipairs({ "race", "prog", "shame", "game", "officers", "me", "settings" }) do
+  for _, page in ipairs({ "race", "guide", "prog", "shame", "game", "officers", "me", "settings" }) do
     yezin.C.UI:Open(page)
     check(yezin.C.UI.frame, "officer " .. page .. ", small window")
   end
@@ -1501,7 +1641,7 @@ do
   assert(n >= 15, "Yezin's roster filled from the storm: " .. n)
   for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
     yezin.C.UI.frame:SetSize(size[1], size[2])
-    for _, page in ipairs({ "race", "prog", "shame", "game", "officers" }) do
+    for _, page in ipairs({ "race", "guide", "prog", "shame", "game", "officers" }) do
       yezin.C.UI:Open(page)
       check(yezin.C.UI.frame, string.format("officer %s, twenty members, %dx%d", page, size[1], size[2]))
     end
@@ -1678,7 +1818,7 @@ do
   assert(c.C.Stats.byId.dance.hint:find("secret in dungeons and raids", 1, true) and c.C.Stats.byId.emotes.hint == c.C.Stats.byId.sit.hint, "the hints say where emotes go uncounted: " .. tostring(c.C.Stats.byId.dance.hint))
   local noted = false
   for _, x in ipairs(c.env.CuteDB.errors) do if x.msg:find("DoEmote is missing", 1, true) then noted = true end end
-  assert(noted and #c.chat == 0, "the missing function is noted for /cute errors without a chat line")
+  assert(noted and #chatLines(c) == 0, "the missing function is noted for /cute errors without a chat line")
   -- with DoEmote (a client made withEmote): the hook counts, the hints stay the registry's
   local e = newClient(charOf(NAMES[12], { withEmote = true }))
   login(e)
@@ -1692,7 +1832,14 @@ do
   e.env.C_ChatInfo.SendChatMessage("where are you", "GUILD")
   fire(e, "CHAT_MSG_GUILD", secret("string"), secret("string"))
   fire(e, "CHAT_MSG_GUILD", "a line", "Quillan-Forever")
-  assert(e.C.Sample:Value("gchat") == 2 and e.C.Sample:Value("where") == 1, "two guild lines sent, one where-are-you in party; the guild events count nothing: " .. tostring(e.C.Sample:Value("gchat")))
+  assert(e.C.Sample:Value("gchat") == 2 and e.C.Sample:Value("where") == 2, "two guild lines sent, where-are-you in party and in guild; the guild events count nothing: " .. tostring(e.C.Sample:Value("gchat")))
+  -- "where are you" counts in any chat (the owner's "where are you?" in /say did not in 0.2.0), whole words only
+  for _, line in ipairs({ { "where are you?", "SAY" }, { "Where R U", "WHISPER" }, { "wya", "PARTY" }, { "hvor er du??", "SAY" }, { "ok, where you at", "RAID" } }) do
+    e.env.C_ChatInfo.SendChatMessage(line[1], line[2])
+  end
+  e.env.C_ChatInfo.SendChatMessage("where are your boots", "SAY")
+  e.env.C_ChatInfo.SendChatMessage("nowhere", "SAY")
+  assert(e.C.Sample:Value("where") == 7, "five more asks count, 'where are your boots' and 'nowhere' do not: " .. tostring(e.C.Sample:Value("where")))
   assert(not e.C.Sample.frame.__events.CHAT_MSG_GUILD, "CHAT_MSG_GUILD is not registered")
   leave(e); leave(c)
   print("trackers: XP pace across a ding, copper gold, grey sales, recipes, resists, the mount, the day and the week, emotes both ways, guild lines as sent")
@@ -1708,7 +1855,8 @@ do
       n = n + 1
       local code = src:gsub("%-%-.*$", "")
       for _, name in ipairs(NEVER) do
-        if code:find(name, 1, true) and not (name == "COMBAT_LOG_EVENT_UNFILTERED" and code:find("==", 1, true)) then found[#found + 1] = file .. ":" .. n .. " " .. name end
+        -- (a whole identifier: LootSlot loots, GetLootSlotLink only reads)
+        if code:find("%f[%w_]" .. (name:gsub("%p", "%%%0")) .. "%f[^%w_]") and not (name == "COMBAT_LOG_EVENT_UNFILTERED" and code:find("==", 1, true)) then found[#found + 1] = file .. ":" .. n .. " " .. name end
       end
     end
   end
@@ -1796,7 +1944,7 @@ do
   assert(#plain.C.Stats.byCat.game == 0 and plain.C.Stats.gameNote == "GetStatisticsCategoryList is missing on this client", "nothing defined without the function: " .. tostring(plain.C.Stats.gameNote))
   local noted = false
   for _, e in ipairs(plain.env.CuteDB.errors) do if e.msg == "GetStatisticsCategoryList is missing on this client" then noted = true end end
-  assert(noted and #plain.chat == 0, "noted for /cute errors, no chat line")
+  assert(noted and #chatLines(plain) == 0, "noted for /cute errors, no chat line")
   tickAll(45)
   local e = plain.env.CuteDB.roster["Yezin-Forever"]
   assert(e and e.stats.level and e.stats.g2001 == nil, "the first full record has no statistics")
@@ -2110,7 +2258,7 @@ do
   -- chest worn here is the same kind): now the chest's link is needed, and there is none to read
   c.C.Roster:Apply("Someone-Forever", { guid = "Player-4242-0BADBEEF", enchanted = { [5] = true }, ench_kinds = "5:15.0" })
   tick(c, 2)
-  assert(S:Value("unenchanted") == nil and tostring(S:Error("unenchanted")):find("no readable item link for 1 worn slot the guild enchants", 1, true), "no enchant count without links: " .. tostring(S:Error("unenchanted")))
+  assert(S:Value("unenchanted") == nil and tostring(S:Error("unenchanted")):find("no readable item link for 1 worn slot that takes an enchant", 1, true), "no enchant count without links: " .. tostring(S:Error("unenchanted")))
   assert(S:Value("ready") == 1, "readiness still reads (an empty slot is its one gap)")
   c.C.UI:Open("prog")
   local me = rowOf(c, "Lindel")
@@ -2405,7 +2553,7 @@ do
     l0 = #lines
     hover(cellOf(rowOf(odda, "Bjorn"), "ready"))
     tip = table.concat(lines, "\n", l0 + 1)
-    assert(tip:find("an item without the enchant the guild has on its kind", 1, true), "the verdict's gaps name it: " .. tip)
+    assert(tip:find("a missing enchant", 1, true), "the verdict's gaps name it: " .. tip)
     check(odda.C.UI.frame, "officer prog, a learned enchant slot")
     -- an older client's list (0.3.x named head and shoulder): this client shows only the slots it knows the guild enchants
     odda.C.Roster:Apply("Cecil-Forever", { unenchanted = { [1] = true, [2] = true, [3] = true } })
@@ -2688,8 +2836,14 @@ do
     for i = 1, 60 do factions[i] = { 2100 + i, "Faction of the " .. i .. "th Shore", 4, 100 * i, 0, 3000 } end
     local labels, mine, inst, kind, counters = {}, {}, {}, {}, {}
     for i = 1, 18 do labels["i" .. (300 + i)] = "Instance " .. i .. " of the Deep"; mine["i" .. (300 + i)] = true; kind[300 + i] = "party"; counters["i" .. (300 + i)] = i end
-    for i = 1, 40 do local id = "e" .. (7000 + i); labels[id] = "Boss " .. i .. " the Unbowed"; mine[id] = true; inst[7000 + i] = 301 + (i % 18); counters[id] = 1 + i % 3 end
-    local db = { chars = { ["Petra-Forever"] = { counters = counters } }, known = { labels = labels, mine = mine, inst = inst, kind = kind } }
+    -- (each boss with the level of its first kill, and a dozen with the loot Petra saw drop: Rules.lua's evidence)
+    local loot = {}
+    for i = 1, 40 do
+      local id = "e" .. (7000 + i); labels[id] = "Boss " .. i .. " the Unbowed"; mine[id] = true; inst[7000 + i] = 301 + (i % 18); counters[id] = 1 + i % 3
+      counters["k" .. (7000 + i)] = 20 + i % 25
+      if i <= 12 then loot[7000 + i] = { items = { [60000 + i] = EPOCH, [61000 + i] = EPOCH }, mine = { [60000 + i] = true, [61000 + i] = true } } end
+    end
+    local db = { chars = { ["Petra-Forever"] = { counters = counters } }, known = { labels = labels, mine = mine, inst = inst, kind = kind, loot = loot } }
     local petra = newClient(charOf({ "Petra", 3, "Raider", "MAGE", 50 }, { withStats = true, manyStats = 300, factions = factions }))
     local quinn = newClient(charOf({ "Quinn", 3, "Raider", "PRIEST", 50 }, { withStats = true, manyStats = 300, factions = {} }))
     login(petra, db); login(quinn)
@@ -2699,9 +2853,12 @@ do
     assert(first < 20 and #quinn.sent < 20, "under twenty messages in the first minute: " .. first .. ", " .. #quinn.sent)
     tickAll(180)
     local rec = quinn.env.CuteDB.roster["Petra-Forever"]
-    local n = { g = 0, e = 0, i = 0, f = 0 }
-    for id in pairs(rec.stats) do local p = id:match("^([gefi])%d+$"); if p then n[p] = n[p] + 1 end end
-    assert(n.g == 311 and n.e == 40 and n.i == 18 and n.f == 60, string.format("every value across: %d statistics, %d bosses, %d instances, %d factions", n.g, n.e, n.i, n.f))
+    local n = { g = 0, e = 0, i = 0, f = 0, k = 0 }
+    for id in pairs(rec.stats) do local p = id:match("^([gefik])%d+$"); if p then n[p] = n[p] + 1 end end
+    assert(n.g == 311 and n.e == 40 and n.i == 18 and n.f == 60 and n.k == 40, string.format("every value across: %d statistics, %d bosses, %d instances, %d factions, %d kill levels", n.g, n.e, n.i, n.f, n.k))
+    local lootN = 0
+    for enc in pairs(quinn.env.CuteDB.known.loot) do if enc > 7000 and enc <= 7012 then lootN = lootN + 1 end end
+    assert(lootN == 12 and quinn.env.CuteDB.known.loot[7001].items[60001], "and the loot of the twelve bosses: " .. lootN)
     assert(#quinn.C.Stats.byCat.found == 40 + 18 + 60, "and every label: Quinn defined them all: " .. #quinn.C.Stats.byCat.found)
     local labelMsgs = msgs(petra, "1L")
     assert(#petra.oversize == 0 and labelMsgs >= 1 and #petra.sent < 80, "the whole login: " .. #petra.sent .. " messages, " .. labelMsgs .. " of labels")
@@ -2750,7 +2907,8 @@ do
     assert(missing(who.bowen) == "18" and who.bowen.C.Sample:Value("ready") == 1, "Bowen's bow has no scope: " .. missing(who.bowen))
     assert(missing(who.shieldo) == "17" and who.shieldo.C.Sample:Value("ready") == 1, "Shieldo's shield has no enchant: " .. missing(who.shieldo))
     -- the hidden kinds travel and are kept, and show nowhere
-    assert(who.magey.env.CuteDB.roster["Hela-Forever"].stats.ench_kinds == "18:2.2", "Hela's kinds on Magey's roster: " .. tostring(who.magey.env.CuteDB.roster["Hela-Forever"].stats.ench_kinds))
+    -- (0.5.0: with the enchant's id, which marks the seed's enchants the guild has as seen)
+    assert(who.magey.env.CuteDB.roster["Hela-Forever"].stats.ench_kinds == "18:2.2:30", "Hela's kinds on Magey's roster: " .. tostring(who.magey.env.CuteDB.roster["Hela-Forever"].stats.ench_kinds))
     for _, def in ipairs(who.hela.C.Stats.list) do assert(def.id ~= "ench_kinds", "ench_kinds is in no list") end
     -- the officer sees Bowen's and Shieldo's on receipt, the tooltip by slot; Bowen's own names the kind he wears
     local hela = who.hela
@@ -2840,14 +2998,859 @@ do
   print("smaller rules: item info re-reads only for your own items; RegisterUnitEvent failing falls back to every unit's with the unit check; Fishing by name; the improved healthstones")
 end
 
-local seen, unique = {}, {}
-for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
-print("layout problems:", #unique)
-for i = 1, math.min(80, #unique) do print("  " .. unique[i]) end
-if LAYOUT_OUT then
-  local f = assert(io.open(LAYOUT_OUT, "w"))
-  f:write(json(layouts))
-  f:close()
-  print("layout written to " .. LAYOUT_OUT)
+-- 28: the seed. With the fixture: read whole (its wings, optional boss and each main-hand enchant's kinds too), Rule 0
+-- asks its fifty facts at login a frame's worth at a time (the Guide says it is checking until then) and finds none
+-- absent, the states and their words are the seed's (beta, data), a one-handed sword is offered the weapon enchant and
+-- never the two-hander's, /cute diag prints them. A partial seed is read for what it has, its boss without an
+-- encounter id joining as the seed's when one of that name is killed there; one that names nothing is none. With no
+-- seed: none, and /cute diag says so. The real Known.lua, where gen_known.py has written it: read whole, fresh against
+-- a client that has what it names, no head or shoulder enchant and no Classic raid in it, neck enchants there, a dagger
+-- never offered a two-hander's enchant nor a shield an off-hand's, a cloth bracer advice at 20 and missing at 30, the
+-- Guide drawn with it for a member and an officer at both sizes
+do
+  local R = yezin.C.Rules
+  if SEEDED then
+    local s = R.Seed()
+    assert(s and s.dungeons[36] and #s.dungeons[36].bosses == 4 and s.bosses[1234].inst == 36 and s.bosses[1234].loot[1] == FIX.loot[1234][1]
+      and s.enchants[2].kinds["4.0"] and #s.enchants[9].list == 2 and s.xp[59] == FIX.xp[59] and s.factions[72].name == "Stormwind"
+      and s.dungeons[129].wings and not s.dungeons[36].wings and s.bosses[1241].optional and not s.bosses[1240].optional
+      and s.enchants[16].list[1].kinds["2.1"] and not s.enchants[16].list[1].kinds["2.7"] and s.enchants[9].list[1].kinds == nil, "the fixture read whole")
+    assert(R.SeedState() == "fresh" and R.check.total == 50 and R.check.absent == 0, "Rule 0: fifty facts asked, none absent: " .. tostring(R.check.total))
+    local m = R.Model()
+    assert(m.dungeons[36].state == "beta" and m.dungeons[129].state == "data" and m.bosses[1250].state == "data" and m.xp[20].state == "beta"
+      and m.xp[40].state == "data" and m.factions[69].state == "data" and m.dungeons[9001].new, "the seed's states: the beta's and research's")
+    assert(R.Words(m.dungeons[129]) == "from research" and R.Words(m.dungeons[48]) == "seen in the beta", "in words")
+    -- each enchant names the kinds it takes: a one-handed sword is offered the weapon enchant, never the two-hander's
+    local function named(list) local out = {}; for _, x in ipairs(list) do out[#out + 1] = x.name end return table.concat(out, ", ") end
+    assert(named((R.SlotEnchants(16, "2.7"))) == "Enchant Weapon - Minor Striking" and named((R.SlotEnchants(16, "2.1"))) == "Enchant 2H Weapon - Lesser Impact, Enchant Weapon - Minor Striking"
+      and named((R.SlotEnchants(16))) == named((R.SlotEnchants(16, "2.1"))) and select(2, R.SlotEnchants(16, "2.15")) == 0, "the main hand's enchants by kind")
+    -- Rule 0 a frame's worth at a time: at the loading screen it is still checking (and the seed counts for nothing),
+    -- done a frame on
+    local slow = newClient(charOf(NAMES[13], { items = { [1] = "item:1234:0", [9] = "item:6030:0" } }))
+    slow.env.CuteDB = {}
+    fire(slow, "ADDON_LOADED", "Cute")
+    fire(slow, "PLAYER_ENTERING_WORLD", true, false)
+    assert(slow.C.Rules.SeedState() == "checking" and slow.C.Rules.check.i == 50 and not slow.C.Stats.EnchantKnown(9), "fifty asked in the first frame, still checking: " .. slow.C.Rules.check.i)
+    slow.C.UI:Open("guide")
+    assert(texts(slow):find("Checking what we knew against this client.", 1, true), "the Guide says it is checking")
+    check(slow.C.UI.frame, "member guide, checking")
+    tick(slow, 1)
+    assert(slow.C.Rules.SeedState() == "fresh" and slow.C.Stats.EnchantKnown(9, "4.1") and slow.C.Sample:Value("unenchanted")[9], "done a frame on: the seed's wrist now asks for an enchant")
+    slow.C.UI:Draw()
+    assert(texts(slow):find("From research and the beta, checked against this client", 1, true), "and the Guide says where its knowledge comes from")
+    leave(slow)
+    -- a partial seed: a dungeon without a range, one without a name, one whose range is upside down, a boss without an id,
+    -- loot that is no id, an enchant slot past the gear, a recipe without a name, an XP value below zero
+    local partial = newClient(charOf(NAMES[13], { seed = [[
+local _, C = ...
+C.Known = { build = "1.60.1.70338", dungeons = { [36] = { name = "The Deadmines", min = 18 }, [37] = { min = 20, max = 25 },
+  [38] = { name = "Odd Hold", min = 30, max = 25, conf = "beta", bosses = { { name = "Nameless" }, { name = "Yorg", enc = 77, loot = { "a", 5 } } } } },
+  enchants = { [40] = { list = {} }, [9] = { list = { { spell = "x" }, { spell = 7418, name = "Enchant Bracer - Minor Health" } } } }, xp = { [1] = 100, [2] = -5 } }
+]] }))
+    login(partial)
+    local ps = partial.C.Rules.Seed()
+    assert(ps.dungeons[36] and ps.dungeons[36].min == nil and not ps.dungeons[37] and ps.dungeons[38].min == 25 and ps.dungeons[38].max == 30
+      and #ps.dungeons[38].bosses == 1 and #ps.bosses[77].loot == 1 and ps.bosses[77].loot[1] == 5 and ps.bosses[77].conf == "beta" and not ps.enchants[40]
+      and #ps.enchants[9].list == 1 and ps.enchants[9].kinds == nil and ps.xp[1] == 100 and ps.xp[2] == nil, "a partial seed read for what it has")
+    assert(partial.C.Rules.SeedState() == "fresh" and partial.C.Rules.check.total == 2, "Rule 0 asks what it names: " .. partial.C.Rules.check.total)
+    -- the boss it names without an encounter id joins as the seed's when one of that name is killed there, not as new;
+    -- once met, the dungeon is shown by the name this game gives it, the seed's kept for its tooltip
+    partial.C.Stats.Label("i38", "The Odd Hold", true, nil, "party")
+    partial.C.Stats.Label("e900", "Nameless", true, 38)
+    local pm = partial.C.Rules:Rebuild()
+    assert(pm.bosses[900] and pm.bosses[900].seeded and pm.bosses[900].state == "beta" and pm.dungeons[38].name == "The Odd Hold" and pm.dungeons[38].seedName == "Odd Hold",
+      "a seeded boss without an id met by name, the dungeon named as the game names it")
+    for _, ch in ipairs(partial.C.Rules.Changes()) do assert(not ch.what:find("Nameless", 1, true) and not ch.what:find("Odd Hold", 1, true), "nothing new: " .. ch.what) end
+    partial.C.UI:Open("guide")
+    check(partial.C.UI.frame, "member guide, a partial seed")
+    leave(partial)
+    local blank = newClient(charOf(NAMES[13], { seed = "local _, C = ...\nC.Known = { v = 1, dungeons = {} }" }))
+    login(blank)
+    assert(blank.C.Rules.Seed() == nil and blank.C.Rules.SeedState() == "none", "a seed that names nothing is none")
+    leave(blank)
+  else
+    assert(R.Seed() == nil and R.SeedState() == "none" and R.check.state == "done", "no seed: none")
+  end
+  local n0 = #yezin.chat
+  yezin.env.SlashCmdList.CUTE("diag")
+  local out = table.concat(yezin.chat, "\n", n0 + 1)
+  assert(out:find(SEEDED and "diag seed: fresh | build 1.60.1.70338 (this client too) | absent: items 0 of 39, enchants 0 of 6, factions 0 of 5 | data " or "diag seed: none shipped", 1, true), "/cute diag:\n" .. out)
+  -- the real Known.lua
+  local realNote = "not there yet (gen_known.py writes it); the fixture stands in"
+  local f = SEEDED and io.open(REAL_KNOWN) or nil
+  if f then
+    local src = f:read("*a")
+    f:close()
+    local build = src:match('build%s*=%s*"([^"]+)"')
+    -- (both in a cloth bracer; the officer at 30 with a dagger in the main hand and a shield in the off hand)
+    local real = newClient(charOf(NAMES[13], { seed = "real", build = build, allFactions = true, level = 20,
+      items = { [1] = "item:1234:0", [5] = "item:1235:2", [9] = "item:6030:0" } }))
+    local boss = newClient(charOf(NAMES[3], { seed = "real", build = build, allFactions = true, level = 30,
+      items = { [1] = "item:1234:0", [5] = "item:1235:2", [9] = "item:6030:0", [16] = "item:6022:0", [17] = "item:6020:0" } }))
+    login(real); login(boss)
+    local RR = real.C.Rules
+    local rs = RR.Seed()
+    assert(rs and type(real.C.Known) == "table", "the real Known.lua loads")
+    local nd, nb, ni = 0, 0, 0
+    for _, d in pairs(rs.dungeons) do
+      nd = nd + 1
+      assert(not d.name:find("Molten Core", 1, true) and not d.name:find("Onyxia", 1, true), "no Classic raid in the seed: " .. d.name)
+    end
+    for _ in pairs(rs.bosses) do nb = nb + 1 end
+    for _ in pairs(rs.items) do ni = ni + 1 end
+    assert(nd > 0, "the real seed names dungeons")
+    assert(not rs.enchants[1] and not rs.enchants[3] and rs.enchants[2], "neck enchants, and no head or shoulder enchant")
+    assert(RR.SeedState() == "fresh", "fresh against a client that has what it names: " .. tostring((select(2, RR.SeedState()))))
+    -- the enchants a worn item is offered take its kind: a dagger never a two-hander's, a shield never an off-hand's
+    -- (where the seed names no kinds per enchant, a hand slot's are counted and not named)
+    for _, x in ipairs((RR.SlotEnchants(16, "2.15"))) do assert(not x.name:find("2H", 1, true), "a dagger offered " .. x.name) end
+    for _, x in ipairs((RR.SlotEnchants(17, "4.6"))) do assert(not x.name:find("Off-Hand", 1, true), "a shield offered " .. x.name) end
+    local _, unplaced = RR.SlotEnchants(16, "2.15")
+    assert(#(RR.SlotEnchants(16, "2.15")) + unplaced > 0, "the main hand's enchants named or counted for a dagger")
+    -- the research's slots count from the enchant level: the bracer at 20 is advice, at 30 it is missing
+    assert(not real.C.Sample:Value("unenchanted")[9] and boss.C.Sample:Value("unenchanted")[9] and boss.C.Sample:Value("unenchanted")[16]
+      and boss.C.Sample:Value("unenchanted")[17], "under 30 the research's wrist is not missing; at 30 the wrist, the dagger and the shield are")
+    local advice
+    for _, it in ipairs(real.C.Guide.Items(false)) do if it.name and it.name:find("^Could take one: ") then advice = it end end
+    assert(advice and advice.name:find("Wrist", 1, true) and advice.val == "level 30+", "under 30 the Guide gives the research's slots as advice")
+    for _, it in ipairs(boss.C.Guide.Items(true)) do
+      assert(not (it.name or ""):find("2H Weapon", 1, true) and not (it.name or ""):find("Off-Hand", 1, true), "the officer's Gear offers the dagger and the shield only what takes them: " .. tostring(it.name))
+    end
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      for _, c in ipairs({ real, boss }) do
+        c.C.UI:Build()
+        c.C.UI.frame:SetSize(size[1], size[2])
+        c.C.UI:Open("guide")
+        check(c.C.UI.frame, string.format("%s guide, the real seed, %dx%d", c == boss and "officer" or "member", size[1], size[2]))
+        for _, l in ipairs(c.C.UI.lines.items) do if l:IsShown() then hover(l) end end
+        c.C.UI.frame:SetSize(1040, 640)
+      end
+    end
+    realNote = string.format("%d dungeons, %d bosses, %d items, fresh; a dagger and a shield offered only what takes them; its wrist advice at 20, missing at 30; the Guide drawn with it at both sizes", nd, nb, ni)
+    leave(real); leave(boss)
+  end
+  print(SEEDED and ("seed: the fixture read whole, its wings, optional boss and enchant kinds too, and checked a frame's worth at a time (the Guide checking until then), a partial seed read for what it has, its boss without an id met by name, an empty one none; the real Known.lua: " .. realNote)
+    or "seed: none, and every rule runs on the guild's play")
 end
-print(#unique == 0 and "OK" or "OK, with layout problems above")
+
+-- 29: Rule 0 at its edges (with the seed). Fifteen of the fifty facts absent is 30 %, not over the share: fresh, with
+-- the absent loot, recipes and factions marked so (a slot whose recipes are all absent asks for nothing); sixteen is
+-- over: stale. A client lacking over 40 % of the seed's items (17 of 39): stale, and nothing from the seed counts as missing (a cloth
+-- bracer the fresh seed asks an enchant for is not asked for), the Guide says the game differs and runs on the guild's
+-- play: the Deadmines met through one kill, For you names that boss alone as left and the officers' line counts one of
+-- one; an officer's staleShare of 45 % makes it fresh again. Another build of the same major version, a minor one
+-- (1.60.1 to 1.60.2) or a new minor version (1.61): fresh while what it names is there, the beta's facts read as
+-- research. Another major version: stale, whatever is there
+if SEEDED then isolated({ { name = "Rulo-Forever", guid = guidOf("Rulo"), rank = 1, rankName = "Officer", class = "MAGE", level = 40, online = true },
+  { name = "Sablewing-Forever", guid = guidOf("Sablewing"), rank = 3, rankName = "Raider", class = "HUNTER", level = 35, online = true } }, function()
+  local function lacking(n) local t = {}; for i = 1, n do t[FIX.items[i]] = true end return t end
+  local bracer = { [1] = "item:1234:0", [5] = "item:1235:2", [9] = "item:6030:0" }
+  local function client(o) o.items = o.items or bracer; o.level = o.level or 35; local c = newClient(charOf(NAMES[13], o)); login(c); return c end
+  local fresh = client({ lackItems = lacking(10), lackFactions = { [69] = true, [589] = true }, lackSpells = { [7428] = true, [13378] = true, [27001] = true } })
+  local R = fresh.C.Rules
+  assert(R.check.absent == 15 and R.check.total == 50 and R.SeedState() == "fresh", "15 of 50 absent is 30 %: fresh: " .. R.check.absent)
+  local m = R.Model()
+  assert(m.bosses[1230].loot[FIX.loot[1230][1]] == "absent" and m.bosses[1238].loot[FIX.loot[1238][3]] == "beta" and m.factions[69].state == "absent" and m.factions[72].state == "seen",
+    "the absent loot and factions marked, the rest the seed's (Stormwind seen: it is on this character's list)")
+  assert(R.SlotState(2) == "absent" and R.SlotState(17) == "absent" and R.SlotState(9) == "beta", "a slot whose recipes are all absent is absent; the wrist keeps one")
+  local list = R.SlotEnchants(9)
+  assert(#list == 2 and list[1].name == "Enchant Bracer - Minor Deflection" and list[1].state == "absent" and list[2].state == "beta", "the wrist's recipes, the absent one marked")
+  assert(fresh.C.Sample:Value("unenchanted")[9], "the fresh seed asks the cloth bracer for an enchant")
+  local over = client({ lackItems = lacking(16) })
+  local st, why = over.C.Rules.SeedState()
+  assert(st == "stale" and why == "32% of what it names is not in this client (items 16 of 39, enchants 0 of 6, factions 0 of 5)", "16 of 50: stale: " .. tostring(why))
+  -- over 40 % of the seed's items (17 of 39): stale, and the seed counts as nothing
+  local forty = client({ lackItems = lacking(17) })
+  local F = forty.C.Rules
+  assert(F.SeedState() == "stale" and not forty.C.Sample:Value("unenchanted")[9] and not forty.C.Stats.EnchantKnown(9, "4.1"), "a stale seed asks for no enchant")
+  assert(F.Model().dungeons[36].state == "stale" and F.Words(F.Model().bosses[1230]) == "from research this game no longer matches", "every seeded fact stale")
+  local now, soon = F.DungeonsFor(20)
+  assert(#now == 0 and #soon == 0, "and recommends nothing")
+  forty.C.UI:Open("guide")
+  local t = texts(forty)
+  assert(t:find("The game differs from what we knew; learning from the guild.", 1, true) and t:find("from the guild's play alone", 1, true), "the Guide says so:\n" .. t)
+  for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+    forty.C.UI.frame:SetSize(size[1], size[2])
+    forty.C.UI:Open("guide")
+    check(forty.C.UI.frame, string.format("member guide, a stale seed, %dx%d", size[1], size[2]))
+  end
+  forty.C.UI.frame:SetSize(1040, 640)
+  -- a stale seed's bosses are neither left nor counted: the Deadmines met through one kill (Rhahk'Zor, by a member at
+  -- 35), For you names that boss alone, the officers' line counts one of one and its tooltip names no other (the first
+  -- 0.5.0 build listed the seed's other three as left and counted "1 of 4")
+  forty.env.CuteDB.roster["Run1-Forever"] = { stats = { guid = "Player-9-0000RUN1", level = 35, e1230 = 1, k1230 = 35 }, at = {}, seen = forty.C.Now() }
+  F:Rebuild()
+  assert(F.Model().dungeons[36].state == "seen" and F.Model().dungeons[36].min == 35 and F.Model().bosses[1236].state == "stale", "the Deadmines met, its other bosses still stale")
+  local gi = forty.C.Guide.Items(true)
+  local left, perDungeon
+  for i, it in ipairs(gi) do
+    if it.name == "The Deadmines" then if left then perDungeon = it else left = gi[i + 1] end end
+  end
+  assert(left and left.name == "Bosses left: Rhahk'Zor", "For you names the met boss alone: " .. tostring(left and left.name))
+  assert(perDungeon and perDungeon.who:find("1 of 1 boss killed$"), "the officers' line counts one of one: " .. tostring(perDungeon and perDungeon.who))
+  local said = {}
+  perDungeon.tip({ AddLine = function(_, t) said[#said + 1] = t end, AddDoubleLine = function(_, l, r) said[#said + 1] = l .. " | " .. r end })
+  said = table.concat(said, "\n")
+  assert(said:find("Rhahk'Zor", 1, true) and not said:find("Glubtok", 1, true) and not said:find("Edwin VanCleef", 1, true), "its tooltip names the met boss alone:\n" .. said)
+  forty.C.UI.frame:SetSize(760, 420)
+  forty.C.UI:Open("guide")
+  check(forty.C.UI.frame, "member guide, a stale seed, the Deadmines met, 760x420")
+  forty.C.UI.frame:SetSize(1040, 640)
+  -- an officer's staleShare of 45 %: fresh again, and the bracer is asked for once more
+  local at = EPOCH + forty.clock + 10 ^ 6
+  assert(forty.C.Policy:Receive("Rulo-Forever", at, 1, "r_staleshare=0.45:" .. guidOf("Rulo")), "the officer's rule applied")
+  tick(forty, 2)
+  assert(F.Get("staleShare") == 0.45 and F.SeedState() == "fresh" and forty.C.Sample:Value("unenchanted")[9], "fresh again under the officer's share")
+  -- another build of the same major version: fresh, the beta's facts as research; another major version: stale
+  local later = client({ build = "1.60.1.70450" })
+  local L = later.C.Rules
+  assert(L.SeedState() == "fresh" and L.BetaAsData() and L.Model().dungeons[36].state == "data" and L.Model().xp[20].state == "data" and L.SlotState(9) == "data",
+    "another build: the beta's facts read as research")
+  later.C.UI:Open("guide")
+  assert(texts(later):find("This client is 1.60.1.70450: what the beta showed counts as research until the guild sees it.", 1, true), "the band says so")
+  check(later.C.UI.frame, "member guide, another build")
+  local minor = client({ build = "1.61.0.71000" })
+  assert(minor.C.Rules.SeedState() == "fresh" and minor.C.Rules.BetaAsData() and minor.C.Rules.Model().dungeons[36].state == "data",
+    "a new minor version with nothing absent: fresh, the beta's facts as research")
+  local newer = client({ build = "2.0.0.80000" })
+  st, why = newer.C.Rules.SeedState()
+  assert(st == "stale" and why == "this client is build 2.0.0.80000, the research 1.60.1.70338, another major version", "another major version: stale: " .. tostring(why))
+  for _, c in ipairs({ fresh, over, forty, later, minor, newer }) do leave(c) end
+  print("rule 0: 30 % absent fresh, the absent facts marked; over it stale; over 40 % of the items stale with nothing from the seed counted and the Guide saying so (the Deadmines met through one kill: that boss alone left, one of one counted), fresh again under an officer's 45 %; another build or minor version reads the beta as research; another major version stale")
+end) end
+
+-- 30: the rules learn from the guild's play, at their edges, and the Guide shows it. A guild of an officer (Ruler, 26)
+-- and six: four kill Rhahk'Zor in the Deadmines at 18, 19, 20 and 22 (the seed's 18-23 stands; with no seed the
+-- levels seen do, and say so), the fifth at 30 makes five: the 10th to 90th percentile sets one aside at either end,
+-- 19-22, and the kill at 30 stretches nothing. Ada opens a bag's container and loots a trash corpse of greys within the
+-- minute, neither the boss's; then his: the seed's item and a new one are seen, a grey is no loot; four kills leave the
+-- unseen loot plain, five note it. Two full runs that miss Mr. Smite leave him; the third doubts him. Fen kills two
+-- bosses in Krol'dok Stronghold, past the beta's cap with none seeded: they join under it, a world boss joins nothing.
+-- Two members agree on level 31's XP: the seed's stands; the third replaces it. A cloth bracer is asked for an enchant
+-- at 30 (the seed's wrist), not at 19; thirteen days of a member at 30 wearing one leaves it, fourteen doubt the slot
+-- and it is asked for no more; a member at 29 starts no clock. The Guide's ranges and Next up at their edges. Ruler
+-- retunes rangeMembers to 4 in Settings (the values whole at 760 wide) and broadcasts: the members apply it,
+-- Blackfathom's four kills learn its range, /cute rules says who; a member's own rules, and an officer's out of bounds,
+-- change nothing. The Guide for a member and the officer, at both sizes
+do
+  local function member(name, rank, class, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank == 1 and "Officer" or "Raider", class = class, level = level, online = true } end
+  local guild = { member("Ruler", 1, "PALADIN", 26), member("Ada", 3, "WARRIOR", 18), member("Bo", 3, "MAGE", 19), member("Cy", 3, "PRIEST", 20), member("Di", 3, "ROGUE", 22),
+    member("Ed", 3, "HUNTER", 30), member("Fen", 3, "DRUID", 34) }
+  isolated(guild, function()
+    local wrist = { [1] = "item:1234:0", [5] = "item:1235:2", [7] = "item:1236:0", [16] = "item:1240:0", [9] = "item:6030:0" }
+    local function make(name, rank, class, level, extra)
+      local o = { items = wrist }
+      for k, v in pairs(extra or {}) do o[k] = v end
+      return newClient(charOf({ name, rank, rank == 1 and "Officer" or "Raider", class, level }, o))
+    end
+    local ruler, ada, bo, cy, di, ed, fen = make("Ruler", 1, "PALADIN", 26), make("Ada", 3, "WARRIOR", 18, { items = { [1] = "item:1234:0" } }), make("Bo", 3, "MAGE", 19),
+      make("Cy", 3, "PRIEST", 20), make("Di", 3, "ROGUE", 22, { items = { [1] = "item:1234:0" } }), make("Ed", 3, "HUNTER", 30), make("Fen", 3, "DRUID", 34, { items = { [1] = "item:1234:0" } })
+    local all = { ruler, ada, bo, cy, di, ed, fen }
+    for _, c in ipairs(all) do login(c) end
+    tickAll(45)
+    local R = ruler.C.Rules
+    local function settle() tickAll(8) end
+    local function enter(c, kind, id, name) c.o.instance, c.o.instanceID, c.o.instName = kind, id, name; fire(c, "PLAYER_ENTERING_WORLD", false, false) end
+    local function kill(c, enc, name) fire(c, "ENCOUNTER_END", enc, name, 1, 5, 1, {}) end
+    local function dm() return R.Model().dungeons[36] end
+    -- rule 3: four members kill Rhahk'Zor; Ada loots him (rule 8)
+    for _, c in ipairs({ ada, bo, cy, di }) do enter(c, "party", 36, "The Deadmines"); kill(c, 1230, "Rhahk'Zor") end
+    tick(ada, 20)
+    -- a container opened from the bags (isFromItem), and a trash corpse of greys: neither is the boss's, nor takes its place
+    ada.lootWindow = { { 50020, 3 } }
+    fire(ada, "LOOT_OPENED", false, true)
+    ada.lootWindow = { { 50021, 0 } }
+    fire(ada, "LOOT_OPENED", false, false)
+    ada.lootWindow = { { FIX.loot[1230][1], 3 }, { 50001, 2 }, { 50002, 0 }, { 50003, 4, 1 } } -- the seed's, a new one, a grey, a currency
+    fire(ada, "LOOT_OPENED", false, false)
+    ada.lootWindow = nil
+    settle()
+    local d = dm()
+    if SEEDED then assert(d.range == "seed" and d.min == 18 and d.max == 23 and d.levels == 4, "four members: the seed's range stands: " .. tostring(d.range))
+    else assert(d.range == "seen" and d.min == 18 and d.max == 22 and R.RangeWords(d) == "18-22" and select(2, R.RangeWords(d)) == "killed at these levels by 4 members", "four members, no seed: the levels seen") end
+    local rz = R.Model().bosses[1230]
+    assert(rz.state == "seen" and rz.n == 4 and R.Words(rz) == "seen by 4 members" and rz.kills == 4, "rule 1: seen by four, four kills")
+    assert(rz.loot[50001] == "seen" and rz.loot[50002] == nil and rz.loot[50003] == nil and ruler.env.CuteDB.known.loot[1230].items[50001], "rule 8: the loot window's items reached the officer, the grey and the currency left out")
+    assert(not rz.loot[50020] and not rz.loot[50021], "a container from the bags and a corpse of greys are no boss's loot, and leave its window to come")
+    if SEEDED then assert(rz.loot[FIX.loot[1230][1]] == "seen" and rz.loot[FIX.loot[1230][2]] == "beta" and not rz.lootQuiet, "the seed's item seen, the rest the beta's; four kills note nothing") end
+    -- a loot window later than the minute, or a second one, is no boss's
+    tick(bo, 61)
+    bo.lootWindow = { { 50009, 3 } }
+    fire(bo, "LOOT_OPENED", false, false)
+    tick(ada, 1)
+    ada.lootWindow = { { 50010, 3 } }
+    fire(ada, "LOOT_OPENED", false, false)
+    ada.lootWindow = nil
+    -- the fifth
+    enter(ed, "party", 36, "The Deadmines"); kill(ed, 1230, "Rhahk'Zor")
+    settle()
+    d = dm()
+    assert(d.range == "learned" and d.min == 19 and d.max == 22 and d.levels == 5 and select(2, R.RangeWords(d)) == "learned from 5 members",
+      "five members: the 10th to 90th percentile, one level set aside at either end, so the kill at 30 stretches nothing: " .. tostring(d.min) .. "-" .. tostring(d.max))
+    rz = R.Model().bosses[1230]
+    assert(not rz.loot[50009] and not rz.loot[50010], "a window after the minute, or a second one, is no boss's")
+    if SEEDED then assert(rz.lootQuiet and rz.kills == 5, "five kills: the unseen loot noted") end
+    -- rule 4: full runs (every boss the guild met there: Rhahk'Zor, Glubtok, Edwin) that never met Mr. Smite
+    for _, c in ipairs({ ada, bo }) do kill(c, 1236, "Glubtok"); kill(c, 1234, "Edwin VanCleef") end
+    settle()
+    local smite = R.Model().bosses[1238]
+    if SEEDED then assert(smite.state == "beta" and smite.runs == 2, "two full runs: Mr. Smite stands: " .. tostring(smite.state)) else assert(smite == nil, "no seed: Mr. Smite is not known") end
+    kill(cy, 1236, "Glubtok"); kill(cy, 1234, "Edwin VanCleef")
+    settle()
+    smite = R.Model().bosses[1238]
+    if SEEDED then assert(smite.state == "doubted" and smite.runs == 3 and R.Words(smite) == "doubted: not seen in 3 runs", "three: doubted: " .. tostring(smite.state)) end
+    -- rule 2: Krol'dok Stronghold, past the beta's cap, no bosses seeded: Fen's kills join under it; a world boss nowhere
+    enter(fen, "party", 9001, "Krol'dok Stronghold")
+    kill(fen, 9101, "Krol'dok the Brute"); kill(fen, 9102, "Shaman Vrakk")
+    enter(fen, "none", 0, nil)
+    kill(fen, 9200, "Azuregos")
+    settle()
+    local kd = R.Model().dungeons[9001]
+    assert(kd and kd.name == "Krol'dok Stronghold" and #kd.bosses == 2 and R.Model().bosses[9101].inst == 9001 and R.Model().bosses[9102].state == "seen"
+      and not R.Model().bosses[9101].seeded and not R.Model().dungeons[0] and not R.Model().bosses[9200], "the bosses joined under the right instance, the world boss under none")
+    assert(kd.seeded == SEEDED and (SEEDED and kd.range == "seed" and kd.min == 32 or kd.range == "seen" and kd.min == 34), "its range: the seed's, or the level seen")
+    -- the Guide's lists at their edges (by the ranges learned: the Deadmines 19-22, the seed's Blackfathom 24-32 and
+    -- Krol'dok 32-38): For you holds the dungeons whose range holds your level, Next up the ones opening within five
+    local function names(list) local out = {}; for _, x in ipairs(list) do out[#out + 1] = x.name end return table.concat(out, ",") end
+    local now, soon = R.DungeonsFor(22)
+    assert(names(now):find("The Deadmines", 1, true), "22 is the Deadmines' top: in: " .. names(now))
+    now = R.DungeonsFor(23)
+    assert(not names(now):find("The Deadmines", 1, true), "23 is past it: " .. names(now))
+    now, soon = R.DungeonsFor(18)
+    assert(not names(now):find("The Deadmines", 1, true) and names(soon):find("The Deadmines", 1, true), "18 is under it: next up: " .. names(now) .. " / " .. names(soon))
+    if SEEDED then
+      -- (Krol'dok opens at 32: five levels on from 27, six from 26)
+      now, soon = R.DungeonsFor(26)
+      assert(not names(soon):find("Krol", 1, true) and not names(now):find("Krol", 1, true), "26: Krol'dok six levels on: not yet: " .. names(soon))
+      now, soon = R.DungeonsFor(27)
+      assert(names(soon) == "Krol'dok Stronghold", "27: Krol'dok opens within five levels: " .. names(soon))
+    end
+    -- rule 5 and 4: the cloth bracer is asked for an enchant where the seed has the wrist, from the enchant level (Ed at
+    -- 30, not Bo at 19); the clock starts with a member at 30 wearing one (Ed), never with one at 29
+    local K = ed.env.CuteDB.known
+    if SEEDED then
+      assert(ed.C.Sample:Value("unenchanted")[9] and R.SlotState(9) == "beta", "the seed's wrist: the bracer asked for an enchant at 30")
+      assert(not bo.C.Sample:Value("unenchanted")[9] and next(bo.C.Sample:Value("unenchanted")) == nil, "at 19 only what the guild has enchanted is: nothing")
+      assert(K.watch[9], "the clock started: Ed, at 30, wears one")
+      local saved = ruler.env.CuteDB.roster["Ed-Forever"].stats.level
+      ruler.env.CuteDB.known.watch[9] = nil
+      ruler.env.CuteDB.roster["Ed-Forever"].stats.level = 29
+      R:Rebuild()
+      assert(ruler.env.CuteDB.known.watch[9] == nil, "a member at 29 starts no clock")
+      ruler.env.CuteDB.roster["Ed-Forever"].stats.level = saved
+      R:Rebuild()
+      assert(ruler.env.CuteDB.known.watch[9], "at 30 it does")
+      local t0 = ed.C.Now()
+      K.watch[9] = t0 - 13 * 86400
+      ed.C.Sample:Read("unenchanted")
+      assert(ed.C.Sample:Value("unenchanted")[9] and ed.C.Rules.SlotState(9) == "beta", "thirteen days: still asked for")
+      K.watch[9] = t0 - 14 * 86400
+      ed.C.Sample:Read("unenchanted")
+      assert(not ed.C.Sample:Value("unenchanted")[9] and ed.C.Rules.SlotState(9) == "doubted", "fourteen: the wrist doubted, asked for no more")
+      K.watch[9] = t0
+      ed.C.Sample:Read("unenchanted")
+    else
+      assert(not ed.C.Sample:Value("unenchanted")[9], "no seed: nobody has a wrist enchant, so none is asked for")
+    end
+    -- rule 6: Di, Ed and Fen reach 31, where the XP to 32 is 43000 (the seed says otherwise); two agree, then three
+    local function ding(c) c.o.level, c.o.xp, c.o.xpmax = 31, 0, 43000; fire(c, "PLAYER_LEVEL_UP", 31); tickAll(130) end
+    ding(di); ding(ed)
+    R:Rebuild()
+    local x = R.Model().xp[31]
+    if SEEDED then assert(x.v == FIX.xp[31] and x.state == "data", "two agree: the seed's stands: " .. tostring(x.v))
+    else assert(x.v == 43000 and x.state == "seen" and x.n == 2, "no seed: what the members reported") end
+    ding(fen)
+    R:Rebuild()
+    x = R.Model().xp[31]
+    assert(x.v == 43000 and x.state == "seen" and x.n == 3, "three agree: their value: " .. tostring(x.v))
+    assert(R.XPCurve()[31].v == 43000, "and the curve runs on it")
+    -- XP: members gain some, for the pace
+    for i, c in ipairs({ ada, bo, cy }) do c.o.xp = 350 + 50 * i end
+    tickAll(130)
+    for i, c in ipairs({ ada, bo, cy }) do c.o.xp = 350 + 100 * i end
+    tickAll(130)
+    -- Blackfathom: four kill Ghamoo-ra; with rangeMembers 5 its range is not learned
+    for _, c in ipairs({ ada, bo, cy, ed }) do enter(c, "party", 48, "Blackfathom Deeps"); kill(c, 1240, "Ghamoo-ra") end
+    settle()
+    assert(R.Model().dungeons[48].range ~= "learned", "four kills: not learned at five")
+    -- the officer retunes rangeMembers to 4 in Settings, and broadcasts
+    ruler.C.UI:Open("settings")
+    local minus
+    for _, b in ipairs(ruler.frames) do
+      if b.__kind == "Button" and b:IsVisible() and b.label and b.label:GetText() == "-" and b.__scripts.OnEnter then
+        local n0 = #lines
+        hover(b)
+        if table.concat(lines, "\n", n0 + 1):find("Members to learn a range", 1, true) then minus = b end
+      end
+    end
+    assert(minus and not minus.__disabled, "the officer's step down for rangeMembers")
+    press(minus)
+    assert(R.Get("rangeMembers") == 4 and R.SetBy("rangeMembers") == ruler.o.guid, "set here, by the officer")
+    -- a step back up to the default clears the officers' setting (0.5.0's first cut kept it set to the default's value)
+    local plus
+    for _, b in ipairs(ruler.frames) do
+      if b.__kind == "Button" and b:IsVisible() and b.label and b.label:GetText() == "+" and b.__scripts.OnEnter then
+        local n0 = #lines
+        hover(b)
+        if table.concat(lines, "\n", n0 + 1):find("Members to learn a range", 1, true) then plus = b end
+      end
+    end
+    assert(plus, "the officer's step up for rangeMembers")
+    press(plus)
+    assert(R.Get("rangeMembers") == R.RULES.rangeMembers and R.SetBy("rangeMembers") == nil, "back at the default, the setting is cleared")
+    press(minus)
+    assert(R.Get("rangeMembers") == 4 and R.SetBy("rangeMembers") == ruler.o.guid, "set again")
+    check(ruler.C.UI.frame, "officer settings, a rule retuned")
+    -- at the narrowest window every rule's value shows whole beside its buttons (a label may be cut, never the number)
+    local function ruleValues()
+      GEN = GEN + 1
+      local out = {}
+      for _, o in ipairs(ALL) do
+        if o.__kind == "FontString" and o.__shown and visible(o) and o.__parent and o.__parent.__client == ruler and o.__justify == "RIGHT" and o.__w == 44 then out[#out + 1] = o end
+      end
+      table.sort(out, function(a, b) return rectOf(a).t > rectOf(b).t end)
+      local texts = {}
+      for _, o in ipairs(out) do texts[#texts + 1] = o.__text end
+      return table.concat(texts, ",")
+    end
+    local want = {}
+    for _, t in ipairs(R.TUNE) do want[#want + 1] = R.Show(t[1]) end
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      ruler.C.UI.frame:SetSize(size[1], size[2])
+      ruler.C.UI:Open("settings")
+      assert(ruleValues() == table.concat(want, ","), string.format("every rule's value whole at %dx%d: %s", size[1], size[2], ruleValues()))
+      check(ruler.C.UI.frame, string.format("officer settings, the rules, %dx%d", size[1], size[2]))
+    end
+    ruler.C.UI.frame:SetSize(1040, 640)
+    ruler.C.Comm:SendPolicy()
+    settle()
+    for _, c in ipairs({ ada, bo, cy }) do assert(c.C.Rules.Get("rangeMembers") == 4, c.o.name .. " applied the officer's rule") end
+    assert(R.Model().dungeons[48].range == "learned" and cy.C.Rules.Model().dungeons[48].range == "learned", "Blackfathom's four kills learn its range now")
+    local c0 = #cy.chat
+    cy.env.SlashCmdList.CUTE("rules")
+    local said = table.concat(cy.chat, "\n", c0 + 1)
+    assert(said:find("Members to learn a range (rangeMembers): 4, set by Ruler", 1, true) and said:find("(doubtRuns): 3, the default", 1, true), "/cute rules:\n" .. said)
+    -- a member's own rules are no one's; an officer's out of bounds is dropped
+    ada.C.Policy:SetRule("doubtRuns", 9)
+    ada.C.Comm:SendPolicy()
+    settle()
+    assert(bo.C.Rules.Get("doubtRuns") == 3 and R.Get("doubtRuns") == 3, "a member's rule changes nothing")
+    assert(ada.C.Policy:Receive("Ruler-Forever", ada.env.CuteDB.policy.at + 5, 1, "r_rangemembers=99:" .. ruler.o.guid .. ";r_doubtruns=2:" .. ruler.o.guid) and ada.C.Rules.Get("rangeMembers") == 5
+      and ada.C.Rules.Get("doubtRuns") == 2, "out of bounds dropped (the default back), in bounds kept")
+    -- the Guide: Cy (a member, 20) and Ruler (the officer), at both sizes
+    local items = cy.C.Guide.Items(false)
+    local byName = {}
+    for _, it in ipairs(items) do if it.name then byName[it.name] = it end end
+    assert(byName["For you, level 20"] and byName["The Deadmines"] and byName["The Deadmines"].val == "19-22", "Cy's dungeons: the Deadmines, learned 19-22")
+    assert(byName["Online near your level: Bo 19, Ada 18"], "the members online within three levels of Cy's, nearest first")
+    if SEEDED then
+      assert(byName["Every boss here killed but the doubted: Mr. Smite"], "Cy's bosses: every one killed but the doubted")
+      local advice = byName["Could take one: Wrist"]
+      assert(byName["Blackfathom Deeps"] and not byName["Wrist (Cloth)"] and advice and advice.val == "level 30+" and advice.who == "seen in the beta",
+        "Blackfathom next up for Cy; at 20 the research's wrist is advice, not missing")
+      local said = {}
+      advice.tip({ AddLine = function(_, t) said[#said + 1] = t end, AddDoubleLine = function(_, l, r) said[#said + 1] = l .. " | " .. r end })
+      assert(table.concat(said, "\n"):find("Wrist (Cloth) | Enchant Bracer - Minor Deflection, Enchant Bracer - Minor Health", 1, true), "its tooltip names what Forever has:\n" .. table.concat(said, "\n"))
+    else
+      assert(byName["Every boss here killed."] and not byName["Wrist (Cloth)"], "no seed: the bosses the guild met, all killed; no enchant asked for")
+    end
+    -- Ed, at 31: the wrist missing, with what Forever has for a cloth bracer
+    if SEEDED then
+      local edItems = {}
+      for _, it in ipairs(ed.C.Guide.Items(false)) do if it.name then edItems[it.name] = it end end
+      assert(edItems["Wrist (Cloth)"] and edItems["Wrist (Cloth)"].val == "missing" and edItems["Wrist (Cloth)"].who == "seen in the beta"
+        and edItems["Forever has: Enchant Bracer - Minor Deflection, Enchant Bracer - Minor Health"], "at 31 the wrist is missing, with what Forever has for it")
+    end
+    assert(byName["Level 21"] and byName["Level 21"].val ~= "no pace yet" and byName["The cap, level 60"], "the pace: " .. tostring(byName["Level 21"] and byName["Level 21"].val))
+    local officer = {}
+    for _, it in ipairs(ruler.C.Guide.Items(true)) do if it.name then officer[it.name] = it end end
+    -- one line per dungeon the guild is in range of or has met, its bosses folded into a count, each in the tooltip
+    local dmLine = officer["The Deadmines"]
+    assert(officer["The guild, per dungeon"] and officer["Learned in play"] and dmLine and dmLine.val == "19-22"
+      and dmLine.who == "2 in range, 3 of " .. (SEEDED and "4 bosses" or "3 bosses") .. " killed" and not officer["Rhahk'Zor"], "the officer's view per dungeon: " .. tostring(dmLine and dmLine.who))
+    local said = {}
+    dmLine.tip({ AddLine = function(_, t) said[#said + 1] = t end, AddDoubleLine = function(_, l, r) said[#said + 1] = l .. " | " .. r end })
+    said = table.concat(said, "\n")
+    assert(said:find("Rhahk'Zor | seen by 5 members", 1, true) and (not SEEDED or said:find("Mr. Smite | doubted: not seen in 3 runs; not by you", 1, true)), "every boss in its tooltip, one count each:\n" .. said)
+    if SEEDED then
+      assert(officer["New boss: Krol'dok the Brute"] and officer["Learned in play"].who:find(" from the research", 1, true), "what the guild's play changed")
+      assert(officer["Doubted: Mr. Smite"] and officer["XP to reach 32: 43000"] and officer["Range learned: The Deadmines"].who == "19-22 (research 18-23), from 5 members"
+        and officer["1 more dungeon from the research nobody is in range of or has met yet."], "doubted, the XP corrected, the range learned against the research's, the rest counted")
+    else
+      -- with no research nothing is a change from it: Learned in play is what the guild learned, each dungeon once with
+      -- its bosses counted on its line and named in its tooltip, no line a boss (the first 0.5.0 build said "13 changes
+      -- from the research" here, a line for every dungeon and boss)
+      local changes = ruler.C.Rules.Changes()
+      local whats = {}
+      for _, ch in ipairs(changes) do
+        whats[#whats + 1] = ch.what
+        assert(not ch.what:find("^New ") and not ch.detail:find("research", 1, true), "no seed: nothing called a change from research: " .. ch.what .. " | " .. ch.detail)
+      end
+      assert(#changes == 7 and officer["Learned in play"].who == "from the guild's play alone" and officer["No research shipped with this copy"], "no seed: what the guild learned:\n" .. table.concat(whats, "\n"))
+      local dl = officer["Dungeon: The Deadmines"]
+      assert(dl and dl.who == "3 bosses, seen by 5 members" and officer["Dungeon: Krol'dok Stronghold"].who == "2 bosses, seen by 1 member"
+        and officer["Dungeon: Blackfathom Deeps"].who == "1 boss, seen by 4 members" and officer["Range learned: The Deadmines"].who == "19-22, from 5 members"
+        and officer["Enchant slot: Chest"] and not officer["Krol'dok the Brute"], "no seed: each dungeon once, its bosses counted: " .. tostring(dl and dl.who))
+      said = {}
+      dl.tip({ AddLine = function(_, t) said[#said + 1] = t end, AddDoubleLine = function(_, l, r) said[#said + 1] = l .. " | " .. r end })
+      said = table.concat(said, "\n")
+      assert(said:find("Rhahk'Zor", 1, true) and said:find("Glubtok", 1, true) and said:find("Edwin VanCleef", 1, true), "its bosses in its tooltip:\n" .. said)
+    end
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      for _, c in ipairs({ cy, ruler }) do
+        c.C.UI:Build()
+        c.C.UI.frame:SetSize(size[1], size[2])
+        c.C.UI:Open("guide")
+        check(c.C.UI.frame, string.format("%s guide, %dx%d", c == ruler and "officer" or "member", size[1], size[2]))
+        for _, l in ipairs(c.C.UI.lines.items) do if l:IsShown() then hover(l) end end
+        -- the end of the list, scrolled
+        local bar = c.C.UI.scroll.bar
+        local _, max = bar:GetMinMaxValues()
+        bar:SetValue(max)
+        check(c.C.UI.frame, string.format("%s guide, %dx%d, the end", c == ruler and "officer" or "member", size[1], size[2]))
+        c.C.UI.frame:SetSize(1040, 640)
+      end
+    end
+    cy.C.UI:Open("guide")
+    local first = texts(cy)
+    assert(first:find(SEEDED and "From research and the beta, checked against this client" or "Nothing shipped with this copy", 1, true) and first:find("For you, level 20", 1, true), "the page opens on where it comes from and you")
+    -- /cute diag on the officer: the seed's state, with what was learned
+    local d0 = #ruler.chat
+    ruler.env.SlashCmdList.CUTE("diag")
+    local diag = table.concat(ruler.chat, "\n", d0 + 1)
+    assert(diag:find(SEEDED and "diag seed: fresh" or "diag seed: none shipped", 1, true) and (not SEEDED or diag:find("doubted 1", 1, true)), "/cute diag:\n" .. diag)
+    for _, c in ipairs(all) do leave(c) end
+  end)
+  print("rules: a range learned from five members, one at either end set aside (four: the seed's, or the levels seen), loot from a boss's window within the minute and not from a bag's container or a corpse of greys, a boss doubted after three full runs (two: not), Krol'dok's bosses joining under it, level 31's XP replaced when three agree (two: not), the research's wrist missing at 30 and advice at 19, doubted after fourteen days (thirteen: not; a member at 29 starts no clock), For you and Next up at their edges, an officer's rule retuned in Settings (every value whole at 760 wide) and applied by the members, the Guide for a member and an officer at both sizes, the officer's dungeons one line each")
+end
+
+-- 31: the level cap (rule 7): the game's, the lower of the two calls that reads; the seed's 60 where neither does; a
+-- member past it raises it; deaths count while leveling below it
+do
+  local function member(name, level) return { name = name .. "-Forever", guid = guidOf(name), rank = 3, rankName = "Raider", class = "MAGE", level = level, online = true } end
+  isolated({ member("Capa", 25), member("Capb", 25) }, function()
+    local a = newClient(charOf({ "Capa", 3, "Raider", "MAGE", 25 }, { maxLevel = 30 }))
+    local b = newClient(charOf({ "Capb", 3, "Raider", "MAGE", 25 }, { noCap = true }))
+    login(a); login(b)
+    tickAll(45)
+    assert(a.C.Rules.Cap() == 30 and b.C.Rules.Cap() == 60, "the game's 30; the seed's (or the fallback's) 60: " .. a.C.Rules.Cap() .. " " .. b.C.Rules.Cap())
+    a.o.level = 30
+    fire(a, "PLAYER_DEAD")
+    assert(a.C.Sample:Value("deaths_lvl") == 0, "a death at the cap is no leveling death")
+    b.o.level = 32
+    fire(b, "PLAYER_LEVEL_UP", 32)
+    tickAll(5)
+    assert(a.C.Rules.Cap() == 32, "a member past the game's cap raises it: " .. a.C.Rules.Cap())
+    leave(a); leave(b)
+  end)
+  print("cap: the game's, else the seed's 60; a member past it raises it; deaths at the cap are not leveling deaths")
+end
+
+-- 32: rule 4 where a dungeon is no corridor (with the seed). A full run is a member who killed every boss there the
+-- guild has met. One seeded boss missing from three such runs is doubted (the Deadmines' Mr. Smite, scenario 30); two
+-- missing take six: three runs that miss Glubtok and Mr. Smite doubt neither, six doubt both. A run that missed a boss
+-- the guild met is no full run. Never a boss the seed marks optional (Blackfathom's Lady Sarevess), while Kelris,
+-- missing alone there, is doubted; never in a dungeon whose wings share one instance (Razorfen Downs, marked so). With
+-- the real Known.lua: three runs of Blackrock Depths to the Emperor that spare Moira and skip the Grim Guzzler doubt
+-- none of its bosses (a rule that read the seed's order as the path doubted nine), and nine through Scarlet
+-- Monastery's Graveyard and Library none of the Armory's or the Cathedral's (its wings marked). A run is full only
+-- once the guild has seen two bosses there: nine members who killed only the Deadmines' first doubt none of the other
+-- three (the first 0.5.0 build took them for nine full runs and doubted all three); with two seen, the other two take
+-- six full runs, five doubting neither
+if SEEDED then isolated({ { name = "Runa-Forever", guid = guidOf("Runa"), rank = 3, rankName = "Raider", class = "MAGE", level = 40, online = true } }, function()
+  -- members' saved records, each the encounters one member killed; the model built from them alone (who met what
+  -- carries over from one build of it to the next, so each case starts from none)
+  local function runs(c, list)
+    local roster = c.env.CuteDB.roster
+    for key in pairs(roster) do if key:match("^Run%d") then roster[key] = nil end end
+    for i, encs in ipairs(list) do
+      local st = { guid = "Player-9-0000RUN" .. i, level = 40 }
+      for _, e in ipairs(encs) do st["e" .. e] = 1 end
+      roster["Run" .. i .. "-Forever"] = { stats = st, at = {}, seen = c.C.Now() }
+    end
+    c.env.CuteDB.known.model = nil
+    c.C.Rules.model = nil
+    return c.C.Rules:Rebuild()
+  end
+  local function times(n, encs) local out = {}; for i = 1, n do out[i] = encs end return out end
+  local c = newClient(charOf({ "Runa", 3, "Raider", "MAGE", 40 }, {}))
+  login(c)
+  local R = c.C.Rules
+  local m = runs(c, times(3, { 1230, 1234 }))
+  assert(m.bosses[1236].state == "beta" and m.bosses[1238].state == "beta" and m.bosses[1236].runs == 3, "two bosses missing from three full runs: neither doubted")
+  m = runs(c, times(6, { 1230, 1234 }))
+  assert(m.bosses[1236].state == "doubted" and m.bosses[1238].state == "doubted" and R.Words(m.bosses[1236]) == "doubted: not seen in 6 runs", "six: both")
+  m = runs(c, { { 1230, 1236, 1234 }, { 1230, 1236, 1234 }, { 1230, 1234 } })
+  assert(m.bosses[1238].state == "beta" and m.bosses[1238].runs == 2, "a run that missed Glubtok, whom the guild met, is no full run")
+  m = runs(c, times(3, { 1240, 1243 }))
+  assert(m.bosses[1241].state == "beta" and m.bosses[1242].state == "doubted", "Blackfathom: the optional Lady Sarevess never doubted; Kelris, missing alone, is")
+  m = runs(c, times(9, { 1250, 1252 }))
+  assert(m.bosses[1251].state == "data", "Razorfen Downs, wings sharing one instance: never doubted")
+  -- one boss seen: no run is full, whatever the count
+  m = runs(c, times(9, { 1230 }))
+  assert(m.bosses[1236].state == "beta" and m.bosses[1238].state == "beta" and m.bosses[1234].state == "beta" and m.bosses[1236].runs == nil,
+    "the guild has seen only the first boss: nine members who killed it are no full runs, nothing doubted: " .. tostring(m.bosses[1236].state))
+  -- two seen, two missing: doubtRuns full runs each, six; five doubt neither
+  m = runs(c, times(5, { 1230, 1236 }))
+  assert(m.bosses[1238].state == "beta" and m.bosses[1234].state == "beta" and m.bosses[1238].runs == 5, "two bosses seen, five full runs: neither of the other two doubted")
+  m = runs(c, times(6, { 1230, 1236 }))
+  assert(m.bosses[1238].state == "doubted" and m.bosses[1234].state == "doubted" and R.Words(m.bosses[1234]) == "doubted: not seen in 6 runs", "six: both")
+  leave(c)
+  local note = "the real Known.lua not there yet"
+  local f = io.open(REAL_KNOWN)
+  if f then
+    local src = f:read("*a")
+    f:close()
+    local real = newClient(charOf({ "Runa", 3, "Raider", "MAGE", 40 }, { seed = "real", build = src:match('build%s*=%s*"([^"]+)"'), allFactions = true }))
+    login(real)
+    local brd = real.C.Rules.Seed() and real.C.Rules.Seed().dungeons[230]
+    if brd then
+      m = runs(real, times(3, { 227, 230, 231, 232, 233, 234, 235, 236, 237, 242, 244, 2790 }))
+      local doubted = {}
+      for _, enc in ipairs(m.dungeons[230].bosses) do if m.bosses[enc].state == "doubted" then doubted[#doubted + 1] = m.bosses[enc].name end end
+      assert(#doubted == 0, "three runs of Blackrock Depths to the Emperor doubt none of its bosses: " .. table.concat(doubted, ", "))
+      note = string.format("three runs of Blackrock Depths to the Emperor doubt none of its %d bosses", #m.dungeons[230].bosses)
+    else
+      note = "the real Known.lua has no Blackrock Depths"
+    end
+    -- Scarlet Monastery's wings share one instance and a run is one wing: nine members through the Graveyard and the
+    -- Library meet four of its seven bosses and doubt none of the Armory's or the Cathedral's (the first 0.5.0 seed
+    -- named the wings in a comment only, so Rule 4 doubted Herod, Fairbanks and Whitemane)
+    local sm = real.C.Rules.Seed() and real.C.Rules.Seed().dungeons[189]
+    if sm then
+      m = runs(real, times(9, { 444, 2779, 446, 447 }))
+      local doubted = {}
+      for _, enc in ipairs(m.dungeons[189].bosses) do if m.bosses[enc].state == "doubted" then doubted[#doubted + 1] = m.bosses[enc].name end end
+      assert(sm.wings and #doubted == 0, "nine runs of Scarlet Monastery's Graveyard and Library doubt none of the Armory's or the Cathedral's bosses: "
+        .. (sm.wings and "" or "its wings unmarked; ") .. table.concat(doubted, ", "))
+      note = note .. "; nine of Scarlet Monastery's Graveyard and Library, its wings marked, doubt none of the Armory's or the Cathedral's"
+    else
+      note = note .. "; the real Known.lua has no Scarlet Monastery"
+    end
+    leave(real)
+  end
+  print("rule 4: two bosses missing take six full runs (three: neither), a run short of what the guild met is none, an optional boss and a dungeon of wings never doubted, no run full while the guild has seen one boss there (nine: nothing doubted), two seen: six full runs doubt the other two, five not; " .. note)
+end) end
+
+-- 33: rule 5 widens the seed, never narrows it. The seed's wrist takes cloth to plate. Lea, at 30, wears a leather
+-- bracer enchanted with Minor Health; Clo, at 30, a bare cloth one, Lia, at 30, a bare leather one, Kit, at 20, a bare
+-- cloth one. The guild has seen the wrist enchanted on leather alone: Lia's bracer is missing by the guild's word
+-- ("seen on 1 member"), Clo's still by the seed's ("seen in the beta"), in Missing enchants and in the Guide, where
+-- Minor Health is seen on one member and Minor Deflection is the beta's; Kit's is advice, the beta's. (The first 0.5.0
+-- build made the whole wrist "seen" at Lea's enchant: Clo's bracer stopped counting, Kit's advice went, and every
+-- wrist enchant read "seen on 0 members".) With no seed only the leather bracer is asked for
+do
+  local function member(name, level) return { name = name .. "-Forever", guid = guidOf(name), rank = 3, rankName = "Raider", class = "PRIEST", level = level, online = true } end
+  isolated({ member("Lea", 30), member("Clo", 30), member("Lia", 30), member("Kit", 20) }, function()
+    local function make(name, level, bracer) return newClient(charOf({ name, 3, "Raider", "PRIEST", level }, { items = { [1] = "item:1234:0", [9] = bracer } })) end
+    local lea, clo, lia, kit = make("Lea", 30, "item:6031:41"), make("Clo", 30, "item:6030:0"), make("Lia", 30, "item:6031:0"), make("Kit", 20, "item:6030:0")
+    for _, c in ipairs({ lea, clo, lia, kit }) do login(c) end
+    tickAll(45)
+    local function missing(c) return (c.C.Sample:Value("unenchanted") or {})[9] == true end
+    local function guide(c) local out = {}; for _, it in ipairs(c.C.Guide.Items(false)) do if it.name then out[it.name] = it end end return out end
+    local function tipOf(it)
+      local said = {}
+      it.tip({ AddLine = function(_, t) said[#said + 1] = t end, AddDoubleLine = function(_, l, r) said[#said + 1] = l .. " | " .. r end })
+      return table.concat(said, "\n")
+    end
+    for _, c in ipairs({ clo, lia, kit }) do
+      assert(c.C.Stats.EnchantLearned(9, "4.2") and not c.C.Stats.EnchantLearned(9, "4.1"), c.o.name .. ": the guild has seen the wrist enchanted on leather alone")
+    end
+    assert(missing(lia) and not missing(lea) and lia.C.Stats.EnchantSource(9, "4.2") == "seen on 1 member", "Lia's bare leather bracer missing by the guild's word, Lea's enchanted")
+    local gl = guide(lia)["Wrist (Leather)"]
+    assert(gl and gl.val == "missing" and gl.who == "seen on 1 member", "Lia's Guide: the leather bracer missing, seen on one member")
+    if SEEDED then
+      local R = clo.C.Rules
+      assert(R.SlotState(9) == "seen" and R.SeedSlotState(9) == "beta", "the wrist seen by the guild, the seed's own word on it kept: " .. tostring(R.SeedSlotState(9)))
+      assert(missing(clo) and clo.C.Stats.EnchantSource(9, "4.1") == "seen in the beta",
+        "Clo's cloth bracer still missing at 30, by the seed's word: " .. tostring(clo.C.Stats.EnchantSource(9, "4.1")))
+      local list = R.SlotEnchants(9, "4.1")
+      assert(#list == 2 and list[1].name == "Enchant Bracer - Minor Health" and list[1].state == "seen" and list[1].n == 1 and list[2].state == "beta",
+        "each enchant seen only once that enchant was: " .. tostring(list[2] and list[2].state))
+      local g = guide(clo)
+      local line = g["Wrist (Cloth)"]
+      assert(line and line.val == "missing" and line.who == "seen in the beta" and g["Forever has: Enchant Bracer - Minor Health, Enchant Bracer - Minor Deflection"],
+        "Clo's Guide: the cloth bracer missing by the seed's word, with what Forever has")
+      local said = tipOf(line)
+      assert(said:find("Enchant Bracer - Minor Health | seen on 1 member", 1, true) and said:find("Enchant Bracer - Minor Deflection | seen in the beta", 1, true)
+        and not said:find("seen on 0", 1, true), "its tooltip: the enchant Lea wears seen, the other the beta's:\n" .. said)
+      local advice = guide(kit)["Could take one: Wrist"]
+      assert(not missing(kit) and advice and advice.who == "seen in the beta", "Kit at 20: the cloth bracer is advice, the beta's")
+    else
+      assert(not missing(clo) and not guide(clo)["Wrist (Cloth)"], "no seed: a cloth bracer nobody enchanted is not asked for")
+    end
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      for _, c in ipairs({ clo, kit }) do
+        c.C.UI:Open("guide")
+        c.C.UI.frame:SetSize(size[1], size[2])
+        c.C.UI:Open("guide")
+        check(c.C.UI.frame, string.format("member guide, %s, two kinds in the wrist, %dx%d", c.o.name, size[1], size[2]))
+        for _, l in ipairs(c.C.UI.lines.items) do if l:IsShown() then hover(l) end end
+        c.C.UI.frame:SetSize(1040, 640)
+      end
+    end
+    for _, c in ipairs({ lea, clo, lia, kit }) do leave(c) end
+  end)
+  print(SEEDED and "rule 5: one member's leather bracer enchant leaves the seed counting a cloth one at 30 (Missing enchants and the Guide, the seed's word), the leather one missing by the guild's, each enchant seen only once it was, the cloth one advice at 20"
+    or "rule 5, no seed: only the kind the guild enchanted is asked for")
+end
+
+-- 34: the Guide where nothing is known to take an enchant, and its notes. Nolo, an officer alone, wears nothing
+-- enchanted; with no seed, or a stale one (17 of the fixture's 39 items lacking), the Gear line says no enchant slot is
+-- known yet rather than that every worn item has one. A note takes the row's whole width (at 760 the name's column cut
+-- it, the rest of the row empty) and its tooltip holds the whole text. Once Nolo enchants his chest the guild knows a
+-- slot and the line says every worn item that takes one has one; Learned in play names the slot as learned, not as
+-- new to research it has none of
+do
+  isolated({ { name = "Nolo-Forever", guid = guidOf("Nolo"), rank = 1, rankName = "Officer", class = "MAGE", level = 35, online = true } }, function()
+    local lacking = {}
+    for i = 1, 17 do lacking[FIX.items[i]] = true end
+    local c = newClient(charOf({ "Nolo", 1, "Officer", "MAGE", 35 }, { lackItems = lacking, items = { [1] = "item:1234:0", [5] = "item:1235:0", [16] = "item:1240:0" } }))
+    login(c)
+    tickAll(10)
+    assert(c.C.Rules.SeedState() == (SEEDED and "stale" or "none"), "the seed: " .. c.C.Rules.SeedState())
+    local function items() local out = {}; for _, it in ipairs(c.C.Guide.Items(true)) do if it.name then out[it.name] = it end end return out end
+    local note = "No enchant slots known yet: they are learned as the guild enchants."
+    assert(items()[note] and not items()["Every worn item that takes an enchant has one."], "the Gear line says nothing is known yet")
+    -- at 760 wide the note is whole, and its tooltip holds it
+    c.C.UI:Open("guide")
+    c.C.UI.frame:SetSize(760, 420)
+    c.C.UI:Open("guide")
+    local row
+    for _, l in ipairs(c.C.UI.lines.items) do if l:IsShown() and l.name:GetText():find("^No enchant slots") then row = l end end
+    assert(row and row.name:GetText() == note, "the note whole at 760 wide: " .. tostring(row and row.name:GetText()))
+    local l0 = #lines
+    hover(row)
+    assert(table.concat(lines, "\n", l0 + 1):find(note, 1, true), "its tooltip holds the whole text")
+    check(c.C.UI.frame, "officer guide, nothing known to take an enchant, 760x420")
+    c.C.UI.frame:SetSize(1040, 640)
+    -- the chest enchanted: a slot known, nothing missing
+    c.o.items[5] = "item:1235:2"
+    fire(c, "UNIT_INVENTORY_CHANGED", "player")
+    tick(c, 5)
+    local it = items()
+    assert(it["Every worn item that takes an enchant has one."] and not it[note], "a slot known: every worn item that takes one has one")
+    assert(it["Enchant slot: Chest"] and it["Enchant slot: Chest"].who == "seen on 1 member" and not it["New enchant slot: Chest"]
+      and it["Learned in play"].who == "from the guild's play alone", "Learned in play: the slot learned, not new to research: " .. tostring(it["Learned in play"].who))
+    c.C.UI:Open("guide")
+    check(c.C.UI.frame, "officer guide, a slot learned with no research to weigh it, 1040x640")
+    leave(c)
+  end)
+  print("guide: nothing known to take an enchant said so (no seed or a stale one), a note whole at 760 wide with its text in the tooltip; a slot learned with no research named as learned")
+end
+
+-- 35: versions. Every Cute sends its version (addon_ver); one newer than yours, number by number (0.5.10 is newer than
+-- 0.5.9), says so once a session in chat and in the window's status line until you update; an older, an equal or a
+-- malformed one says nothing. A /reload is the same session; the next login says it again; once updated, nothing. The
+-- first login on a version prints its changelog line once, ten seconds on: the page's line for it (Changes.lua, which
+-- build.py writes from the page's changelog before zipping)
+do
+  local function member(name) return { name = name .. "-Forever", guid = guidOf(name), rank = 3, rankName = "Raider", class = "MAGE", level = 30, online = true } end
+  isolated({ member("Vera"), member("Neo") }, function()
+    local function char(name) return charOf({ name, 3, "Raider", "MAGE", 30 }) end
+    local function told(c, s) local n = 0; for _, m in ipairs(c.chat) do if m:find(s, 1, true) then n = n + 1 end end return n end
+    local vera, neo = newClient(char("Vera")), newClient(char("Neo"))
+    local V = vera.C
+    local mine = V.version
+    -- numbers, not text; anything but dotted numbers is no version
+    assert(V.VersionNewer("0.5.10", "0.5.9") and not V.VersionNewer("0.5.9", "0.5.10") and V.VersionNewer("0.6", "0.5.9") and not V.VersionNewer("0.5.0", "0.5")
+      and V.VersionNewer("1.0.0", "0.99.99") and not V.VersionNewer(mine, mine), "versions compared number by number")
+    for _, bad in ipairs({ "", "5", "0.5.x", "0..5", ".5.1", "0.5.1.", "0.5.0-beta", "banana", "1.2.3.4.5", "1234567.0.0", " 0.6.0", "-1.0.0" }) do
+      assert(V.ParseVersion(bad) == nil and not V.VersionNewer(bad, "0.0.1"), "no version: '" .. bad .. "'")
+    end
+    -- older, equal and malformed versions arriving: nothing said, nothing shown (Wim, alone, before any hello)
+    local wim = newClient(char("Wim"))
+    login(wim)
+    for _, v in ipairs({ "0.4.0", "0.4.99", mine, mine .. ".0", "0.5.x", "9.9.9 ", "", "banana" }) do wim.C.Roster:Apply("Jumble-Forever", { guid = guidOf("Jumble"), addon_ver = v }) end
+    wim.C.UI:Open("race")
+    assert(told(wim, "is out") == 0 and wim.C.newer == nil and not wim.C.UI.status:GetText():find("update", 1, true), "older, equal and malformed: nothing")
+    leave(wim)
+    -- Neo runs a newer Cute: his full record at the hello tells Vera, once; Neo hears an older one and says nothing
+    neo.C.version = "0.5.1"
+    login(vera); login(neo)
+    tickAll(45)
+    assert(told(vera, "Cute 0.5.1|r is out (you have " .. mine .. "): foreverrank.com/addons/cute") == 1 and V.newer == "0.5.1", "Vera told once:\n" .. table.concat(vera.chat, "\n"))
+    assert(told(neo, "is out") == 0 and neo.C.newer == nil, "Neo, newer than Vera, is told nothing")
+    -- a newer one again, and junk: no second line; the status line keeps the newest
+    for _, v in ipairs({ "0.4.9", mine, "0.7.0-beta", "banana" }) do vera.C.Roster:Apply("Jumble-Forever", { guid = guidOf("Jumble"), addon_ver = v }) end
+    vera.C.Roster:Apply("Neo-Forever", { addon_ver = "0.6.0" })
+    assert(told(vera, "is out") == 1 and V.newer == "0.6.0", "one line a session, the newest kept: " .. tostring(V.newer))
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      vera.C.UI:Open("race")
+      vera.C.UI.frame:SetSize(size[1], size[2])
+      vera.C.UI:Open("race")
+      assert(vera.C.UI.status:GetText():find("update available", 1, true), "the status line says an update is available: " .. vera.C.UI.status:GetText())
+      check(vera.C.UI.frame, string.format("member race, an update available, %dx%d", size[1], size[2]))
+      vera.C.UI.frame:SetSize(1040, 640)
+    end
+    neo.C.UI:Open("race")
+    assert(not neo.C.UI.status:GetText():find("update", 1, true), "Neo's status line says none")
+    -- what is new: Vera's first login on this version printed its line once, the page's line for it
+    local news = V.COLOR .. "Cute " .. mine .. "|r: "
+    assert(told(vera, news) == 1 and vera.env.CuteDB.toldChanges == mine, "the line of what is new, once:\n" .. table.concat(vera.chat, "\n"))
+    local said
+    for _, m in ipairs(vera.chat) do if m:sub(1, #news) == news then said = m:sub(#news + 1) end end
+    assert(said == V.CHANGES[mine] and not said:find("\n", 1, true), "one line, Changes.lua's")
+    -- a /reload is the same session: the update still shown, neither line said again
+    local db = vera.env.CuteDB
+    leave(vera)
+    local again = newClient(char("Vera"))
+    login(again, db, true)
+    tick(again, 20)
+    assert(again.C.newer == "0.6.0" and told(again, "is out") == 0 and told(again, news) == 0, "after a /reload: the update shown, nothing said")
+    leave(again)
+    -- the next login says the update again, not what is new
+    local nextDay = newClient(char("Vera"))
+    login(nextDay, db)
+    tick(nextDay, 20)
+    assert(told(nextDay, "Cute 0.6.0|r is out (you have " .. mine .. ")") == 1 and told(nextDay, news) == 0, "the next login: the update said again, what is new not:\n" .. table.concat(nextDay.chat, "\n"))
+    leave(nextDay)
+    -- updated to 0.6.0 with the same saved records: nothing; and a first login on a version whose line Changes.lua
+    -- lacks says nothing of it
+    local updated = newClient(char("Vera"))
+    updated.C.version = "0.6.0"
+    login(updated, db)
+    tick(updated, 20)
+    assert(updated.C.newer == nil and told(updated, "is out") == 0 and told(updated, "Cute 0.6.0|r: ") == 0, "updated: nothing")
+    leave(updated)
+    -- saved variables of 0.4.0: the line once
+    local old = newClient(char("Vera"))
+    login(old, { toldChanges = "0.4.0" })
+    tick(old, 20)
+    assert(told(old, news) == 1 and old.env.CuteDB.toldChanges == mine, "from 0.4.0: what is new, once")
+    leave(old)
+    -- Changes.lua, generated by build.py from the page: every changelog line the page has, the toc's version among them
+    local page = assert(io.open(HERE .. "/../../addons/cute/index.html")):read("*a")
+    local n = 0
+    for v, body in page:gmatch("<li><b>(%d+%.%d+%.%d+)</b>(.-)</li>") do
+      local text = body:gsub("<[^>]+>", ""):gsub("&#39;", "'"):gsub("&quot;", '"'):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&amp;", "&"):gsub("%s+", " ")
+      text = text:gsub("^ ", ""):gsub(" $", "")
+      assert(V.CHANGES[v] == text, "Changes.lua says what the page says for " .. v .. ":\n" .. tostring(V.CHANGES[v]) .. "\n" .. text)
+      n = n + 1
+    end
+    local listed = 0
+    for _ in pairs(V.CHANGES) do listed = listed + 1 end
+    local toc = assert(io.open(HERE .. "/Cute/Cute.toc")):read("*a")
+    assert(n > 0 and listed == n and V.CHANGES[mine] and toc:match("## Version:%s*(%S+)") == mine and toc:find("\nChanges.lua\n", 1, true),
+      "Changes.lua holds the page's " .. n .. " lines, the toc's version among them, and the toc loads it")
+    leave(neo)
+  end)
+  print("versions: a newer one said once a session (0.5.10 after 0.5.9) and shown in the status line until updated, older, equal and malformed ones nothing, a /reload the same session, the next login again; what is new printed once a version, the page's line from Changes.lua")
+end
+
+-- this pass's problems and layouts join the run's; the last pass prints them all
+for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
+for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
+if CUTE_LAST then
+  local seen, unique = {}, {}
+  for _, p in ipairs(CUTE_RESULTS.problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end
+  print("layout problems:", #unique)
+  for i = 1, math.min(80, #unique) do print("  " .. unique[i]) end
+  if LAYOUT_OUT then
+    local f = assert(io.open(LAYOUT_OUT, "w"))
+    f:write(json(CUTE_RESULTS.layouts))
+    f:close()
+    print("layout written to " .. LAYOUT_OUT)
+  end
+  print(#unique == 0 and "OK" or "OK, with layout problems above")
+end

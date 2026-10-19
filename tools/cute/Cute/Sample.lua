@@ -3,6 +3,7 @@
 -- values this character accumulates (deaths, dances, time stood still, the bosses it kills and the instances it
 -- enters), reads the gear and the bags again after every loading screen, discovers the bosses, instances and factions
 -- it meets (Stats.lua's found category), probes the game's statistics at login and re-reads them in one coalesced pass,
+-- gathers what the rules learn from (Rules.lua: the level at a boss's first kill, a boss's loot, the XP a level takes)
 -- and tells Comm when something changed. (Comm sends only what changed, so the heartbeat's reads cost the channel
 -- nothing while nothing moves.)
 -- Every read runs under pcall; a read that errors stores nil and shows "?" with the error in the tooltip.
@@ -169,22 +170,22 @@ local T = { lastPos = nil, stillSince = nil, ghostSince = nil, lastGhostPos = ni
   xp = {}, sessionStart = nil, sessionXP = 0, falling = -100, mirrorEmpty = {}, whispers = 0 }
 S.track = T
 
--- the XP each level takes in Classic, 1 to 59; Forever's own curve is read off UnitXPMax and scales these
-local XP_TO_LEVEL = { 400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600, 8700, 9800, 11000, 12300, 13600, 15000, 16400, 17800, 19300, 20800,
-  22400, 24000, 25500, 27200, 28900, 30500, 32200, 33900, 36300, 38800, 41600, 44600, 48000, 51400, 55000, 58700, 62400, 66200, 70200, 74300,
-  78500, 82800, 87100, 91600, 96300, 101000, 105800, 110700, 115700, 120900, 126100, 131500, 137000, 142500, 148200, 154000, 159900, 165800, 171800 }
-S.XP_TO_LEVEL = XP_TO_LEVEL
--- the XP left to 60 from (lvl, xp, max): this level's rest plus every level ahead, at the ratio of this client's
--- max to Classic's for the current level
-local function xpLeft(lvl, xp, max)
-  local base = XP_TO_LEVEL[lvl]
-  if not base or base <= 0 then return nil end
-  local scale = max / base
-  local left = max - xp
-  for l = lvl + 1, 59 do left = left + XP_TO_LEVEL[l] * scale end
-  return left
-end
+-- the XP left to 60 from (lvl, xp, max): this level's rest plus every level ahead, over the curve the guild has learned
+-- (Rules.lua rule 6: the members' UnitXPMax at each level, the seed's where they have not agreed yet). 0.4.0 scaled
+-- Classic's table by your own max, which is gone
+local function xpLeft(lvl, xp, max) return C.Rules.XPLeft(lvl, xp, max, 60) end
 S.XPLeft = xpLeft
+-- the XP your level takes, as the guild learns its curve from it: the hidden xpmax ("level:max") and your own sample.
+-- Taken only when two reads five seconds apart agree, so a ding read halfway (the new level with the old max) is never
+-- kept
+local function xpSample(lvl, max, sure)
+  if not (lvl and max and max > 0) then return end
+  local text = math.floor(lvl) .. ":" .. math.floor(max)
+  if not sure and T.xpPair ~= text then T.xpPair = text; return end
+  T.xpPair = text
+  if S.values.xpmax ~= text then S:Set("xpmax", text) end
+  C.Rules.LearnXP(lvl, C.MyGUID() or "me", max)
+end
 
 local function pos()
   local y, x, _, inst = C.Get("UnitPosition", "player")
@@ -259,6 +260,7 @@ local function tick()
       S:Set("to60", left and math.floor(left / rate + 0.5) or 0)
     end
     T.lastMax = max
+    xpSample(lvl, max)
   end
 end
 
@@ -285,6 +287,7 @@ end
 ----------------------------------------------------------------------------
 -- events
 ----------------------------------------------------------------------------
+local WHERE -- the "where are you" phrases (the chat hook below fills it)
 local EVENTS = {}
 local function on(event, fn) EVENTS[event] = EVENTS[event] or {}; table.insert(EVENTS[event], fn) end
 
@@ -303,9 +306,11 @@ on("PLAYER_DEAD", function()
   if mirrorEmpty("BREATH") or (T.mirrorEmpty.BREATH and t - T.mirrorEmpty.BREATH < 3) then S:Bump("drownings") end
   if mirrorEmpty("EXHAUSTION") or (T.mirrorEmpty.EXHAUSTION and t - T.mirrorEmpty.EXHAUSTION < 3) then S:Bump("fatigue") end
   local lvl = C.Num("UnitLevel", "player")
-  if lvl and lvl < 60 then S:Bump("deaths_lvl") end
+  if lvl and lvl < C.Rules.Cap() then S:Bump("deaths_lvl") end
 end)
-on("PLAYER_LEVEL_UP", function() S:Set("played_lvl", 0) end)
+-- (a level up asks Missing enchants and the verdict again a second on, when UnitLevel has the new level: from the
+-- rules' enchant level the research's slots count, Rules.lua rule 5)
+on("PLAYER_LEVEL_UP", function() S:Set("played_lvl", 0); S:Schedule("unenchanted"); S:Schedule("ready") end)
 -- Legacy Challenges and the game's statistics. ACHIEVEMENT_EARNED (achievementID) names the latest challenge and
 -- clears the Legacy walk (the lc_ stats re-read through their own events); it and CRITERIA_UPDATE, which fires on
 -- every kill and loot, start the statistics pass, which runs at most once in thirty seconds however many come, so a
@@ -494,7 +499,10 @@ function S:InstanceCheck(initial, reloading)
   if T.inDungeon then self:Bump("dungeons") else self:Bump("raids"); self:Bump("weekly_raids") end
   self:Summaries()
 end
--- a boss killed: its count, the first kill's time (kept here, not sent), its label and its instance's
+-- a boss killed: its count, the first kill's time (kept here, not sent), its label and its instance's, and the level
+-- you were at the first kill (k<encounterID>: no stat of its own, it goes with the discoveries and Rules.lua learns the
+-- dungeon's level range from it). The kill opens a minute for its loot window (LOOT_OPENED, below)
+local LOOT_WINDOW = 60
 local function killed(encounter, name, here)
   local id = "e" .. encounter
   if not (type(name) == "string" and name ~= "") then name = "Boss " .. encounter end
@@ -507,8 +515,14 @@ local function killed(encounter, name, here)
   S:Bump(id)
   local ch = C.Char()
   ch.firstKill = type(ch.firstKill) == "table" and ch.firstKill or {}
-  if not ch.firstKill[encounter] then ch.firstKill[encounter] = now() end
+  if not ch.firstKill[encounter] then
+    ch.firstKill[encounter] = now()
+    local lvl = C.Num("UnitLevel", "player")
+    if lvl then counters()["k" .. encounter] = lvl; S.values["k" .. encounter] = lvl; S.dirty["k" .. encounter] = true end
+  end
+  T.lastKill = { enc = encounter, inst = here.id, at = gtime() }
   S:Summaries()
+  C.Rules:Dirty()
 end
 -- ENCOUNTER_END (encounterID, encounterName, difficultyID, groupSize, success): a kill when success is 1. BOSS_KILL
 -- (encounterID, encounterName) counts only where no ENCOUNTER_END for the same encounter came within five seconds
@@ -529,6 +543,31 @@ on("BOSS_KILL", function(encounter, name)
   if ended() or (T.bossKill[encounter] and at - T.bossKill[encounter] <= BOSS_WINDOW) then return end
   T.bossKill[encounter] = at
   C_Timer.After(BOSS_WINDOW, C.Safe(function() if not ended() then killed(encounter, name, here) end end, "sample: boss kill"))
+end)
+-- a boss's loot: the first corpse's loot window opened within a minute of a kill, in the same instance, that holds an
+-- item green or better, is that boss's. Its items are read (GetNumLootItems, GetLootSlotLink and GetLootSlotInfo, as
+-- Forever's own loot frame reads them, Mainline/LootFrame.lua:227-228 and 515), never looted: coin, currency and grey
+-- or white items are left out (a quest item or a trade good is no boss's loot table). LOOT_OPENED (autoLoot,
+-- isFromItem; LootDocumentation.lua) says when the window is a container opened from the bags, which is no corpse; a
+-- trash corpse of greys looted first leaves the boss's window to come. No documented call names the corpse a window
+-- belongs to, so an add's or a trash mob's corpse with a green on it, looted before the boss's, still passes for the
+-- boss's. Rules.lua keeps them as the boss's loot, seen, and the guild hears it in the labels message
+on("LOOT_OPENED", function(_, isFromItem)
+  if C.Plain(isFromItem) == true then return end
+  local kill = T.lastKill
+  if not kill or kill.looted or gtime() - kill.at > LOOT_WINDOW or instanceNow().id ~= kill.inst then return end
+  local n = C.Callable("GetNumLootItems") and C.Num("GetNumLootItems") or nil
+  if not n then return end
+  local ids = {}
+  for slot = 1, math.min(n, 16) do
+    local link = C.Get("GetLootSlotLink", slot)
+    local _, _, _, currency, quality = C.Get("GetLootSlotInfo", slot)
+    local item = type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil
+    if item and currency == nil and type(quality) == "number" and quality >= 2 then ids[#ids + 1] = item end
+  end
+  if #ids == 0 then return end
+  kill.looted = true
+  if C.Rules.LearnLoot(kill.enc, ids, true) then tell("l" .. kill.enc) end
 end)
 -- your factions: the reputation list read once a second at most however many UPDATE_FACTION come; a faction met for
 -- the first time is labelled and told, and every faction's standing is read again
@@ -582,16 +621,23 @@ local function hooks()
     end)
   end
   if JumpOrAscendStart then hooksecurefunc("JumpOrAscendStart", C.Safe(function() S:Bump("jumps") end, "jump hook")) end
+  -- the ways to ask, each padded with spaces so only whole words match
+  WHERE = { " where are you ", " where r u ", " where are u ", " where r you ", " wya ", " where you at ", " where u at ",
+    " hvor er du ", " hvor er dere ", " wo bist du ", " wo seid ihr " }
   -- your own lines, seen as you send them: the hook gets the caller's plain arguments where the chat events' text and
   -- sender are secret in dungeons and raids
   if C_ChatInfo and C_ChatInfo.SendChatMessage then
     hooksecurefunc(C_ChatInfo, "SendChatMessage", C.Safe(function(text, kind)
       text, kind = C.Plain(text), C.Plain(kind)
       if type(text) ~= "string" then return end
-      if kind == "GUILD" then S:Bump("gchat"); return end
-      if kind ~= "PARTY" and kind ~= "RAID" and kind ~= "INSTANCE_CHAT" then return end
-      local t = text:lower()
-      if t:find("where are you", 1, true) or t:find("where r u", 1, true) or t:match("%f[%w]wya%f[%W]") or t:find("where are u", 1, true) then S:Bump("where") end
+      if kind == "GUILD" then S:Bump("gchat") end
+      -- "where are you" counts wherever you type it (say, party, raid, guild, a whisper, a channel: 0.2.0 counted
+      -- party and raid only, so the owner's "where are you?" in /say never counted). Whole words only, so "where are
+      -- your boots" does not; the guild's languages too
+      local t = " " .. text:lower():gsub("[%p%c]", " "):gsub("%s+", " ") .. " "
+      for _, phrase in ipairs(WHERE) do
+        if t:find(phrase, 1, true) then S:Bump("where"); break end
+      end
     end, "chat hook"))
   else
     C.Err.Note("C_ChatInfo.SendChatMessage is missing on this client; guild lines and \"where are you\" go uncounted", "chat hook")
@@ -664,8 +710,11 @@ function S:Start(initial, reloading)
   end
   -- what the guild learned before: every saved label defines its stat again, the saved records teach the enchants
   C.Stats.LoadKnown()
-  -- load every counter and tracked value into the live table
+  -- load every counter and tracked value into the live table, and the levels of your first kills (Rules.lua's evidence)
   for _, def in ipairs(C.Stats.list) do if def.count or def.track then self.values[def.id] = readOne(def); self.at[def.id] = now() end end
+  for id, v in pairs(counters()) do if type(id) == "string" and id:match("^k%d+$") and type(v) == "number" then self.values[id] = v end end
+  -- the XP your level takes, sure at login (no ding is halfway through a loading screen)
+  xpSample(C.Num("UnitLevel", "player"), C.Num("UnitXPMax", "player"), true)
   -- the instance you logged in to, your factions, then every stat
   self:InstanceCheck(initial, reloading)
   self:FactionPass()

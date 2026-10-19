@@ -14,7 +14,9 @@
 --                                  instance it was killed in, i<instanceID>:<p|r|w> for an instance and its kind (party,
 --                                  raid, or the continent an open-world boss stood on: outside an instance
 --                                  GetInstanceInfo names the continent, "Eastern Kingdoms" or "Kalimdor"),
---                                  f<factionID> for a faction. Sent for a
+--                                  f<factionID> for a faction, and l<encounterID>=<item>.<item>... for the items
+--                                  this character saw in a boss's loot window (base 36; Rules.lua rule 8; a 0.4.0
+--                                  client skips the key). Sent for a
 --                                  new discovery a second after it, and in a labels pass after the statistics pass (at
 --                                  the hello and in answer to an ask), for the ids in this character's own record
 -- The full record starts with the sender's GUID (guid=, Stats.lua's hidden stat), so a receiver joins it to the roster's
@@ -23,8 +25,11 @@
 -- changes).
 -- Values: ints in base 36, flags 1/0, text as UTF-8 without | ; = (a client's own names, accents included), lists as
 -- base-36 bitmaps over the stat's list, pips as digits. A client ignores ids it does not know, except the dynamic ones
--- (a statistic's g<id>, a discovered e<id>, i<id>, f<id>), whose values it keeps as ints whether or not it has defined
--- them: a client that learns a statistic, or a label, later shows the others' at once. Stats marked slow in the
+-- (a statistic's g<id>, a discovered e<id>, i<id>, f<id>, and k<encounterID>, the level this character had at that
+-- boss's first kill), whose values it keeps as ints whether or not it has defined them: a client that learns a
+-- statistic, or a label, later shows the others' at once. (The kill level is a value of the member's record, not a
+-- label: it is per member, and a record is joined by GUID, kept and pruned with its member, where a label is kept once
+-- per id. Rules.lua learns a dungeon's level range from them.) Stats marked slow in the
 -- registry (time played, XP into the level, every statistic, the standings) go out on a two-minute flush rather than as
 -- they tick.
 local _, C = ...
@@ -48,6 +53,10 @@ local function b36(n)
 end
 local function unb36(s) return tonumber(s, 36) end
 M.b36, M.unb36 = b36, unb36
+-- a dynamic id this client has no definition for (a statistic its own probe found none of, a boss whose label has not
+-- come yet, a kill level) still encodes and decodes as the int it is
+local INT = { kind = "int" }
+local function defOf(id) return C.Stats.byId[id] or (C.Stats.IsDynamic(id) and INT) or nil end
 
 -- text as it may travel and be shown: no separators, no control characters, UTF-8 kept whole (0.3.x dropped every byte
 -- over 127, so a zone with an accent lost a letter); 24 bytes, or the stat's own max (the GUID's 40), never cutting a
@@ -154,7 +163,7 @@ M.Queue = queue
 local function partsFor(ids, force)
   local list = {}
   for _, id in ipairs(ids) do
-    local def = C.Stats.byId[id]
+    local def = defOf(id)
     local s = def and M.Encode(def, C.Sample:Value(id))
     if s ~= nil and (force or (M.lastSent[id] ~= s and M.queued[id] ~= s)) then list[#list + 1] = { id = id, kv = id .. "=" .. s, s = s } end
   end
@@ -168,7 +177,7 @@ function M:Changed(all)
   if not self.hello then return end
   local ids = {}
   for id in pairs(C.Sample.dirty) do
-    local def = C.Stats.byId[id]
+    local def = defOf(id)
     if def and (all or not def.slow) then ids[#ids + 1] = id; C.Sample.dirty[id] = nil end
   end
   table.sort(ids)
@@ -207,6 +216,11 @@ local function passIds()
   for _, cat in ipairs({ "game", "found" }) do
     for _, def in ipairs(C.Stats.byCat[cat]) do ids[#ids + 1] = def.id; C.Sample.dirty[def.id] = nil end
   end
+  -- the levels of this character's first kills, beside the kills
+  local levels = {}
+  for id in pairs(C.Sample.values) do if type(id) == "string" and id:match("^k%d+$") then levels[#levels + 1] = id; C.Sample.dirty[id] = nil end end
+  table.sort(levels)
+  for _, id in ipairs(levels) do ids[#ids + 1] = id end
   return ids
 end
 function M:FullGame(force)
@@ -222,6 +236,12 @@ end
 local labelSent = {}
 local function labelPart(id)
   local k = C.Stats.Known()
+  -- a boss's loot: the items this character saw drop from it
+  local enc = id:match("^l(%d+)$")
+  if enc then
+    local text = C.Rules.LootText(tonumber(enc))
+    return text and { id = id, kv = id .. "=" .. text } or nil
+  end
   local label = k and k.labels and k.labels[id]
   if type(label) ~= "string" or label == "" then return nil end
   local p, num = id:sub(1, 1), tonumber(id:sub(2))
@@ -240,10 +260,11 @@ function M:Labels(only, force)
     seen[id] = true
     local part = labelPart(id)
     if part and (force or only or not labelSent[part.kv]) then parts[#parts + 1] = part; labelSent[part.kv] = true end
-    -- a boss's instance goes with it, named
+    -- a boss's instance goes with it, named, and the loot this character saw it drop
     local num = id:match("^e(%d+)$")
     local inst = num and k.inst and k.inst[tonumber(num)]
     if type(inst) == "number" then add("i" .. inst) end
+    if num then add("l" .. num) end
   end
   if only then
     for _, id in ipairs(only) do add(id) end
@@ -291,13 +312,10 @@ end
 ----------------------------------------------------------------------------
 -- receiving
 ----------------------------------------------------------------------------
--- a dynamic id this client has not defined (a statistic its own probe found none of, a boss whose label has not come
--- yet) still decodes as the int it is
-local INT = { kind = "int" }
 local function decodeBody(body)
   local kv = {}
   for id, s in (body or ""):gmatch("([%l%d_]+)=([^;]*)") do
-    local def = C.Stats.byId[id] or (C.Stats.IsDynamic(id) and INT) or nil
+    local def = defOf(id)
     if def then
       local v = M.Decode(def, s)
       if v ~= nil then kv[id] = v end
@@ -373,7 +391,14 @@ function M:ReceiveLabels(body)
   for key, label in body:gmatch("([^=;]+)=([^;]*)") do
     local p, num, extra = key:match("^([efi])(%d+):?([%w]*)$")
     num = tonumber(num)
-    if p and num and num < MAX_ID and #key <= 24 then
+    local loot = tonumber(key:match("^l(%d+)$"))
+    if loot and loot < MAX_ID then
+      -- a boss's loot as a member saw it: item ids in base 36, dots between
+      local ids = {}
+      for x in label:gmatch("[%w]+") do local id = unb36(x); if id and id > 0 and id < MAX_ID and #ids < 24 then ids[#ids + 1] = id end end
+      C.Rules.LearnLoot(loot, ids, false)
+      n = n + 1
+    elseif p and num and num < MAX_ID and #key <= 24 then
       if p == "e" then
         local inst = tonumber(extra)
         S.Label("e" .. num, label, false, (inst and inst < MAX_ID) and inst or nil)

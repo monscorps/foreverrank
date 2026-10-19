@@ -1,6 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The officers' visibility policy: per stat, "all" (everyone sees everyone's) or "self" (you see your own; officers
 -- see all). Kept in CuteDB.policy; sent on the guild channel; applied only when it comes from an officer and is newer.
+-- The rules' thresholds travel in it too (Rules.lua): an officer retunes one in Settings, and the guild applies it the
+-- same way, with who set each (by GUID), so the rules adapt on launch day without an addon update.
 local _, C = ...
 local P = {}
 C.Policy = P
@@ -58,23 +60,42 @@ function P:SetThreshold(n)
   p.threshold, p.by, p.mine, p.rank, p.at = n, C.Me(), true, C.Roster:MyRank(), C.Now()
 end
 
--- "at|threshold|id=v;id=v" for the wire
-function P:Encode()
+-- a threshold an officer set here: the policy is yours from then on, as with a visibility change; nil puts the
+-- default back. Who set each is kept by GUID, and travels with it
+function P:SetRule(name, value)
+  CuteDB.policy = CuteDB.policy or { vis = {} }
   local p = CuteDB.policy
-  if not p then return nil end
-  local parts = {}
-  for id, v in pairs(p.vis or {}) do parts[#parts + 1] = id .. "=" .. (v == "self" and "s" or "a") end
-  table.sort(parts)
-  return string.format("%d|%d|%s", p.at or 0, p.threshold or DEFAULT_THRESHOLD, table.concat(parts, ";"))
+  p.vis = p.vis or {}
+  p.rules = type(p.rules) == "table" and p.rules or {}
+  p.ruleBy = type(p.ruleBy) == "table" and p.ruleBy or {}
+  p.rules[name] = value
+  p.ruleBy[name] = value ~= nil and (C.MyGUID() or "me") or nil
+  p.by, p.mine, p.rank, p.at = C.Me(), true, C.Roster:MyRank(), C.Now()
+  p.threshold = p.threshold or DEFAULT_THRESHOLD
+  if C.Rules then C.Rules:Retuned() end
 end
 
--- the policy as pieces for the wire: when it was set, the threshold, and "id=a" / "id=s" parts (sorted, so the
--- chunks are the same every time)
+-- a threshold's value on the wire: whole numbers bare, shares to two places ("0.35")
+local function ruleText(v)
+  if v == math.floor(v) then return string.format("%d", v) end
+  return (string.format("%.2f", v):gsub("0+$", ""))
+end
+-- the policy as pieces for the wire: when it was set, the threshold, "id=a" / "id=s" parts and the rules'
+-- "r_<name>=<value>:<who>" (the name lower case, who a GUID), sorted so the chunks are the same every time. A 0.4.0
+-- client reads the visibility parts and passes the rules by
 function P:Parts()
   local p = CuteDB.policy
   if not p then return nil end
   local parts = {}
   for id, v in pairs(p.vis or {}) do parts[#parts + 1] = id .. "=" .. (v == "self" and "s" or "a") end
+  for name, v in pairs(type(p.rules) == "table" and p.rules or {}) do
+    v = tonumber(v)
+    if v and C.Rules and C.Rules.Valid(name, v) then
+      local by = type(p.ruleBy) == "table" and p.ruleBy[name] or nil
+      by = (by == "me" and C.MyGUID()) or by
+      parts[#parts + 1] = "r_" .. name:lower() .. "=" .. ruleText(v) .. ((type(by) == "string" and by ~= "") and (":" .. by:gsub("[^%w%-]", "")) or "")
+    end
+  end
   table.sort(parts)
   return p.at or 0, p.threshold or DEFAULT_THRESHOLD, parts
 end
@@ -95,14 +116,23 @@ function P:Receive(sender, at, threshold, body)
   if p and (p.at or 0) > at then return false, "older" end
   local vis = {}
   for id, v in (body or ""):gmatch("([%l%d_]+)=([as])") do vis[id] = v == "s" and "self" or "all" end
+  -- the rules' thresholds: a name this client knows, a value inside its bounds, else passed by
+  local rules, ruleBy = {}, {}
+  for lname, v, who in (";" .. (body or "")):gmatch(";r_(%l+)=([%d%.]+):?([%w%-]*)") do
+    local name, value = C.Rules and C.Rules.LOWER[lname], tonumber(v)
+    if name and value and C.Rules.Valid(name, value) then rules[name] = value; ruleBy[name] = who ~= "" and who:sub(1, 40) or nil end
+  end
   -- (p.by of a policy from the channel is the sender string it came under, compared with this one's as the table keys of
   -- CuteDB.roster are; your own policy is marked mine, its p.by your saved-data key, and is never compared with a sender)
   if p and not p.mine and p.at == at and p.by == sender then
     for id, v in pairs(vis) do p.vis[id] = v end
+    p.rules, p.ruleBy = type(p.rules) == "table" and p.rules or {}, type(p.ruleBy) == "table" and p.ruleBy or {}
+    for name, v in pairs(rules) do p.rules[name] = v; p.ruleBy[name] = ruleBy[name] end
     p.threshold = threshold
   else
-    CuteDB.policy = { vis = vis, by = sender, rank = C.Roster:Rank(sender), at = at, threshold = threshold }
+    CuteDB.policy = { vis = vis, rules = rules, ruleBy = ruleBy, by = sender, rank = C.Roster:Rank(sender), at = at, threshold = threshold }
   end
+  if C.Rules then C.Rules:Retuned() end
   if C.UI and C.UI.Refresh then C.UI:Refresh() end
   return true
 end

@@ -148,6 +148,32 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-rank .cu-rk { flex: none; width: 16px; color: var(--cu-mute); text-align: right; }
 .cu-rank .cu-rn { overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
 .cu-rank .cu-rv { margin-left: auto; flex: none; }
+/* the Guide: a band saying where its knowledge comes from, held above the list as the window holds it, then one list
+   of 20 px lines (the window's UI.lines rows): a name, a value and a word on the right, both right-aligned */
+.cu-gband { position: sticky; top: -8px; z-index: 1; margin: -8px -8px 4px; padding: 5px 14px 5px; background: var(--cu-panel); border-bottom: 1px solid #000; }
+.cu-gband div { height: 18px; line-height: 18px; color: var(--cu-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cu-gband div:first-child { color: var(--cu-white); }
+.cu-gl { display: grid; grid-template-columns: minmax(0, 1fr) 90px min(260px, 34%); gap: 0 4px; align-items: center; height: 20px; padding: 0 4px 0 8px; }
+.cu-gl > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* a line with nothing to its right, a note or a sub-line, takes the row's whole width, as the window's do (Guide.lua);
+   the indent stays the span's own padding */
+.cu-gl > span:only-child { grid-column: 1 / -1; }
+.cu-gl:hover { background: rgba(255,255,255,.05); }
+.cu-gl.cu-gh { background: rgba(255,255,255,.06); }
+.cu-gl.cu-gi { background: rgba(255,255,255,.025); }
+.cu-gl.cu-gh:hover { background: rgba(255,255,255,.08); }
+.cu-gl.cu-gi:hover { background: rgba(255,255,255,.06); } /* the mute grey of a doubted entry keeps 4.5:1 on it */
+.cu-gl .cu-gv, .cu-gl .cu-gw { text-align: right; }
+.cu-gl .cu-gw2 { grid-column: 2 / 4; }
+.cu-gl .cu-gwhite { color: var(--cu-white); } .cu-gl .cu-gink { color: var(--cu-ink); } .cu-gl .cu-gdim { color: var(--cu-dim); }
+.cu-gl .cu-gmute { color: var(--cu-mute); } .cu-gl .cu-gwarn { color: var(--cu-warn); }
+/* Settings: the rules' thresholds, the label, its value right-aligned and a step down and up each; white where an
+   officer set one */
+.cu-tune { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 24px; padding-left: 6px; }
+.cu-tune > span:first-child { flex: 1 1 auto; min-width: 0; color: var(--cu-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cu-tune > .cu-tv { flex: none; width: 44px; text-align: right; color: var(--cu-ink); }
+.cu-tune > span.cu-set-by { color: var(--cu-white); }
+.cu-tune > span:last-child { display: flex; gap: 4px; flex: none; }
 .cu-btns { display: flex; gap: 6px; padding: 2px 0 8px 6px; }
 .cu-btn { appearance: none; height: 22px; width: 160px; border: 1px solid #000; background: var(--cu-panel2); color: var(--cu-ink); font: 12px var(--cu-narrow); cursor: pointer; }
 .cu-btn:hover:not(:disabled) { background: #242424; }
@@ -280,7 +306,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     <h1>The whole guild in one window.</h1>
     <p>The guild's own addon for Forever's November release. Every member's client shares its character over the guild channel, and one window shows the whole guild: the race to 60, readiness, the hall of shame, the statistics, the officers' view. Officers decide who sees what.</p>
     <div class="cu-cta">
-      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.4.0<!--/@v--></span>, <!--@kb-->300<!--/@kb--> KB</small></a>
+      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.5.0<!--/@v--></span>, <!--@kb-->393<!--/@kb--> KB</small></a>
       <span class="cu-note">Free, GPL. No server, no accounts, nothing leaves the guild channel. Unzip into <code>Interface\AddOns</code> and type <code>/cute</code>.</span>
     </div>
   </div>
@@ -308,6 +334,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
         </div>
         <div class="cu-tabs" role="tablist" aria-label="Pages of the window">
           <button type="button" role="tab" id="cu-tab-race" aria-controls="cu-panel" aria-selected="true" tabindex="0" data-tab="race">Race</button>
+          <button type="button" role="tab" id="cu-tab-guide" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="guide">Guide</button>
           <button type="button" role="tab" id="cu-tab-prog" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="prog">Prog</button>
           <button type="button" role="tab" id="cu-tab-shame" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="shame">Hall of Shame</button>
           <button type="button" role="tab" id="cu-tab-statistics" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="statistics">Statistics</button>
@@ -347,7 +374,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
 <section class="cu-sec" id="stats">
   <div class="cu-wrap">
     <h2>What it tracks</h2>
-    <p class="cu-lede"><!--@n-->109<!--/@n--> stats in <!--@v-->0.4.0<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It learns what Forever has as the guild finds it (bosses, dungeons, reputations, which slots take an enchant) without a new version. It is a work in progress and the list changes weekly; this is today's.</p>
+    <p class="cu-lede"><!--@n-->109<!--/@n--> stats in <!--@v-->0.5.0<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It starts with what research and the beta showed about Forever and learns the rest as the guild plays, setting the research aside where the game turns out different. It is a work in progress and the list changes weekly; this is today's.</p>
     <details class="cu-fold">
       <summary>Show the list: <!--@n:leveling-->42<!--/@n:leveling--> for the race, <!--@n:prog-->39<!--/@n:prog--> for prog, <!--@n:funny-->18<!--/@n:funny--> for the hall of shame, <!--@n:officer-->10<!--/@n:officer--> for the officers</summary>
       <div class="cu-bar">
@@ -376,6 +403,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-wrap">
     <h2>Changelog</h2>
     <ul class="cu-log">
+      <li><b>0.5.0</b>Ships what research and the beta showed about Forever, checks it against the game at login and learns the rest by rules the officers can retune; the Guide page: dungeons for your level, the bosses you still need, the enchants you lack, your pace; says when a guild mate runs a newer Cute.</li>
       <li><b>0.4.0</b>Learns what Forever has as the guild finds it: enchantable slots, bosses, dungeons, reputations; Classic attunements gone, consumables counted by type; gear updates without a reload.</li>
       <li><b>0.3.1</b>One row for you, under your two-word name; item level and empty slots read by item id; a round minimap button; fast with hundreds of members, the column headings staying in view; /cute diag.</li>
       <li><b>0.3.0</b>The Statistics page: the server's own statistics, the guild ranked on any of them. Legacy Challenges as stats. Visibility per statistics category.</li>
@@ -407,9 +435,175 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   function hm(h, m) { return h * 3600 + m * 60; }
   function g(gold) { return gold * 10000; } // the addon keeps gold in copper
 
+  // ---- what the addon ships: the seed, Cute/Known.lua, which gen_known.py writes from the research and the beta's
+  // client, copied here in the shape the mock reads; build.py does not stamp it, so it is copied again when the seed
+  // changes. The client's build as its four numbers. Dungeons in the order of their lowest level, each [name, lowest,
+  // highest, new in Forever, how sure, bosses in the seed's order, "raid" for a raid]; a boss is [name, how many items
+  // the research lists for its loot], with how sure after them where that is not its dungeon's. Only the bosses with an
+  // encounter id: nothing in play could match the rest, so the addon leaves them out. The enchants per slot
+  // ("class.subclass" of the items that take one, null for any; an enchant that names its own kinds is [name, kinds]),
+  // and the XP each level takes to the next
+  var SEED = { build: [1, 60, 1, 70338], generated: "2026-10-19", cap: 60,
+    dungeons: [
+      ["Hall of Thanes", 13, 18, true, "beta", [["Faldrim Anvilmar", 3], ["Infurnus", 3], ["Plunder", 3],
+        ["Durgen Dirgehammer", 4]]],
+      ["Ragefire Chasm", 13, 18, false, "beta", [["Oggleflint", 3], ["Taragaman the Hungerer", 3],
+        ["Jergosh the Invoker", 3], ["Bazzalan", 3]]],
+      ["Ruins of Lordaeron", 15, 20, true, "beta", [["Witherfang", 3], ["The Abandoned", 3],
+        ["The Butcher", 0, "data"], ["Rath'mael", 5], ["Lordaeron Captain", 2], ["Viktor the Vile", 3], ["Bjork", 3]]],
+      ["Wailing Caverns", 15, 25, false, "beta", [["Lady Anacondra", 5], ["Lord Cobrahn", 5], ["Kresh", 4],
+        ["Lord Pythas", 4], ["Skum", 4], ["Lord Serpentis", 5], ["Verdan the Everliving", 5],
+        ["Mutanus the Devourer", 4]]],
+      ["The Deadmines", 18, 23, false, "beta", [["Rhahk'Zor", 4], ["Sneed", 7], ["Miner Johnson", 2], ["Gilnid", 4],
+        ["Captain Greenskin", 3], ["Mr. Smite", 4], ["Cookie", 5], ["Edwin VanCleef", 6]]],
+      ["Shadowfang Keep", 22, 30, false, "beta", [["Rethilgore", 3], ["Razorclaw the Butcher", 4],
+        ["Baron Silverlaine", 3], ["Commander Springvale", 4], ["Odo the Blindwatcher", 3],
+        ["Fenrus the Devourer", 3], ["Wolf Master Nandos", 3], ["Archmage Arugal", 3]]],
+      ["The Stockade", 22, 30, false, "beta", [["Targorr the Dread", 4], ["Kam Deepfury", 7], ["Hamhock", 5],
+        ["Dextren Ward", 9], ["Bazil Thredd", 9]]],
+      ["Blackfathom Deeps", 24, 32, false, "beta", [["Ghamoo-ra", 3], ["Lady Sarevess", 6], ["Geilhast", 11],
+        ["Lorgus Jett", 7], ["Old Serra'kis", 6], ["Twilight Lord Kelris", 10], ["Aku'mai", 9]]],
+      ["Excavation Site: Wetlands", 26, 31, true, "beta", [["Saltspine", 3], ["Shadetooth", 4],
+        ["Highland Horror", 1], ["Relic Guardian", 5]]],
+      ["City of Dalaran", 28, 33, true, "beta", [["Arcane Anomaly", 2], ["Fel Ancient", 1], ["Mana Devourer", 0],
+        ["Mana Elemental", 1], ["Unstable Sentinel", 1], ["Shade of the Archmage", 1], ["Lyn the Ignored", 2],
+        ["Atrexis the Grave Knight", 0], ["Mana Wraith", 0, "data"]]],
+      ["Scarlet Monastery", 28, 45, false, "beta", [["Interrogator Vishas", 6], ["Bloodmage Thalnos", 6],
+        ["Houndmaster Loksey", 4], ["Arcanist Doan", 6], ["Herod", 4, "data"],
+        ["High Inquisitor Fairbanks", 3, "data"], ["High Inquisitor Whitemane", 3, "data"]]],
+      ["Gnomeregan", 29, 38, false, "beta", [["Grubbis", 3], ["Viscous Fallout", 5], ["Electrocutioner 6000", 5],
+        ["Crowd Pummeler 9-60", 4], ["Mekgineer Thermaplugg", 10]]],
+      ["Razorfen Kraul", 30, 40, false, "beta", [["Roogug", 4], ["Aggem Thorncurse", 7], ["Death Speaker Jargba", 6],
+        ["Overlord Ramtusk", 7], ["Agathelos the Raging", 7], ["Charlga Razorflank", 9]]],
+      ["Razorfen Downs", 40, 50, false, "data", [["Tuten'kash", 3], ["Plaguemaw the Rotting", 2],
+        ["Mordresh Fire Eye", 3], ["Ragglesnout", 3], ["Glutton", 2], ["Amnennar the Coldbringer", 5]]],
+      ["Uldaman", 42, 52, false, "data", [["Revelosh", 5], ["The Lost Dwarves", 9], ["Ironaya", 3],
+        ["Obsidian Sentinel", 1], ["Ancient Stone Keeper", 2], ["Galgann Firehammer", 4], ["Grimlok", 4],
+        ["Archaedas", 3]]],
+      ["Zul'Farrak", 44, 54, false, "data", [["Hydromancer Velratha", 2], ["Gahz'rilla", 2], ["Antu'sul", 4],
+        ["Theka the Martyr", 1], ["Witch Doctor Zum'rah", 2], ["Nekrum Gutchewer", 1], ["Shadowpriest Sezz'ziz", 4],
+        ["Chief Ukorz Sandscalp", 5]]],
+      ["Maraudon", 46, 55, false, "data", [["Noxxion", 3], ["Razorlash", 4], ["Tinkerer Gizlock", 3],
+        ["Lord Vyletongue", 3], ["Celebras the Cursed", 3], ["Landslide", 4], ["Rotgrip", 3],
+        ["Princess Theradras", 8]]],
+      ["The Temple of Atal'Hakkar", 50, 60, false, "data", [["Atal'alarion", 3], ["Avatar of Hakkar", 7],
+        ["Shade of Eranikus", 8], ["Hazzas", 8], ["Morphaz", 8], ["Weaver", 8], ["Dreamscythe", 8],
+        ["Jammal'an the Prophet", 3]]],
+      ["Blackrock Depths", 52, 60, false, "data", [["High Interrogator Gerstahn", 5], ["Lord Roccor", 6],
+        ["Houndmaster Grebmar", 4], ["Ring of Law", 25], ["Pyromancer Loregrain", 5], ["Lord Incendius", 6],
+        ["Warder Stilgiss", 4], ["Fineous Darkvire", 5], ["Bael'Gar", 4], ["General Angerforge", 6],
+        ["Golem Lord Argelmach", 4], ["Hurley Blackbreath", 4], ["Phalanx", 4], ["Ribbly Screwspigot", 4],
+        ["Plugger Spazzring", 3], ["The Vault", 11], ["Ambassador Flamelash", 6], ["The Seven", 8], ["Magmus", 5],
+        ["Princess Moira Bronzebeard", 4], ["Emperor Dagran Thaurissan", 12]]],
+      ["Blackrock Spire", 55, 60, false, "data", [["Highlord Omokk", 8], ["Shadow Hunter Vosh'gajin", 7],
+        ["War Master Voone", 8], ["Mother Smolderweb", 4], ["Urok Doomhowl", 5], ["Quartermaster Zigris", 4],
+        ["Halycon", 4], ["Gizrul the Slavener", 4], ["Overlord Wyrmthalak", 10], ["Pyroguard Emberseer", 6],
+        ["Warchief Rend Blackhand", 20], ["The Beast", 13], ["General Drakkisath", 20], ["Lord Valthalak", 8]]],
+      ["Dire Maul", 58, 60, false, "data", [["Zevrim Thornhoof", 5], ["Hydrospawn", 6], ["Lethtendris", 4],
+        ["Pusillin", 2], ["Alzzin the Wildshaper", 10], ["Tendris Warpwood", 4], ["Illyanna Ravenoak", 4],
+        ["Magister Kalendris", 6], ["Immol'thar", 10], ["Prince Tortheldrin", 10], ["Guard Mol'dar", 15],
+        ["Stomper Kreeg", 6], ["Guard Fengus", 10], ["Guard Slip'kik", 14], ["Captain Kromcrush", 4],
+        ["Cho'Rush the Observer", 4], ["King Gordok", 10], ["Lord Hel'nurath", 4], ["Tsu'zee", 3]]],
+      ["Scholomance", 58, 60, false, "data", [["Kirtonos", 9], ["Jandice Barov", 9], ["Rattlegore", 9],
+        ["Marduk Blackpool", 2], ["Vectus", 2], ["Kormok", 5], ["Ras Frostwhisperer", 14],
+        ["Instructor Malicia", 28], ["Doctor Theolen Krastinov", 29], ["Lorekeeper Polkelt", 28],
+        ["The Ravenian", 28], ["Lord Alexei Barov", 28], ["Lady Illucia Barov", 27], ["Darkmaster Gandling", 21]]],
+      ["Stratholme", 58, 60, false, "data", [["Hearthsinger Forresten", 5], ["Timmy the Cruel", 5],
+        ["Malor the Zealous", 1], ["Cannon Master Willey", 12], ["Archivist Galford", 7], ["Balnazzar", 15],
+        ["The Unforgiven", 5], ["Baroness Anastari", 10], ["Nerub'enkan", 10], ["Maleki the Pallid", 11],
+        ["Magistrate Barthilas", 7], ["Ramstein the Gorger", 7], ["Baron Rivendare", 23],
+        ["Black Guard Swordsmith", 1], ["Crimson Hammersmith", 1], ["Ezra Grimm", 0], ["Postmaster Malown", 6],
+        ["Skul", 3], ["Stonespine", 3]]]
+    ],
+    enchants: {
+      "Neck": { conf: "data", kinds: ["4.0"],
+        list: ["Enchant Necklace - Agility", "Enchant Necklace - Deflection", "Enchant Necklace - Healing Power",
+          "Enchant Necklace - Spell Power", "Enchant Necklace - Strength"] },
+      "Chest": { conf: "data", kinds: ["4.0", "4.1", "4.2", "4.3", "4.4"],
+        list: ["Enchant Chest - Absorption", "Enchant Chest - Greater Intellect", "Enchant Chest - Greater Stamina",
+          "Enchant Chest - Greater Stats", "Enchant Chest - Inferior Stamina", "Enchant Chest - Intellect",
+          "Enchant Chest - Lesser Absorption", "Enchant Chest - Lesser Intellect", "Enchant Chest - Lesser Stamina",
+          "Enchant Chest - Lesser Stats", "Enchant Chest - Major Intellect", "Enchant Chest - Major Stamina",
+          "Enchant Chest - Minor Absorption", "Enchant Chest - Minor Intellect", "Enchant Chest - Minor Stats",
+          "Enchant Chest - Stamina", "Enchant Chest - Stats", "Enchant Chest - Superior Intellect",
+          "Enchant Chest - Superior Stamina", "Mystic Heavy Armor Kit"] },
+      "Feet": { conf: "data", kinds: ["4.0", "4.1", "4.2", "4.3", "4.4"],
+        list: ["Enchant Boots - Agility", "Enchant Boots - Greater Agility", "Enchant Boots - Greater Stamina",
+          "Enchant Boots - Lesser Agility", "Enchant Boots - Lesser Spirit", "Enchant Boots - Lesser Stamina",
+          "Enchant Boots - Minor Agility", "Enchant Boots - Minor Speed", "Enchant Boots - Minor Stamina",
+          "Enchant Boots - Spirit", "Enchant Boots - Stamina", "Mystic Heavy Armor Kit"] },
+      "Wrist": { conf: "data", kinds: null,
+        list: ["Enchant Bracer - Agility", "Enchant Bracer - Deflection", "Enchant Bracer - Greater Agility",
+          "Enchant Bracer - Greater Intellect", "Enchant Bracer - Greater Spellpower",
+          "Enchant Bracer - Greater Spirit", "Enchant Bracer - Greater Stamina", "Enchant Bracer - Greater Strength",
+          "Enchant Bracer - Healing Power", "Enchant Bracer - Inferior Stamina", "Enchant Bracer - Intellect",
+          "Enchant Bracer - Lesser Agility", "Enchant Bracer - Lesser Deflection",
+          "Enchant Bracer - Lesser Healing Power", "Enchant Bracer - Lesser Intellect",
+          "Enchant Bracer - Lesser Spirit", "Enchant Bracer - Lesser Stamina", "Enchant Bracer - Lesser Strength",
+          "Enchant Bracer - Mana Regeneration", "Enchant Bracer - Minor Agility", "Enchant Bracer - Minor Deflect",
+          "Enchant Bracer - Minor Healing Power", "Enchant Bracer - Minor Intellect",
+          "Enchant Bracer - Minor Spirit", "Enchant Bracer - Minor Stamina", "Enchant Bracer - Minor Strength",
+          "Enchant Bracer - Spirit", "Enchant Bracer - Stamina", "Enchant Bracer - Strength",
+          "Enchant Bracer - Superior Agility", "Enchant Bracer - Superior Deflection",
+          "Enchant Bracer - Superior Intellect", "Enchant Bracer - Superior Spirit",
+          "Enchant Bracer - Superior Stamina", "Enchant Bracer - Superior Strength"] },
+      "Hands": { conf: "data", kinds: null,
+        list: ["Enchant Gloves - Advanced Herbalism", "Enchant Gloves - Advanced Mining",
+          "Enchant Gloves - Advanced Skinning", "Enchant Gloves - Agility", "Enchant Gloves - Arcane Power",
+          "Enchant Gloves - Fishing", "Enchant Gloves - Greater Agility", "Enchant Gloves - Greater Strength",
+          "Enchant Gloves - Herbalism", "Enchant Gloves - Holy Power", "Enchant Gloves - Lotus Claw",
+          "Enchant Gloves - Mining", "Enchant Gloves - Minor Haste", "Enchant Gloves - Natural Power",
+          "Enchant Gloves - Riding Skill", "Enchant Gloves - Skinning", "Enchant Gloves - Strength",
+          "Enchant Gloves - Superior Strength", "Mystic Heavy Armor Kit"] },
+      "Back": { conf: "data", kinds: null,
+        list: ["Enchant Cloak - Agility", "Enchant Cloak - Defense", "Enchant Cloak - Fire Resistance",
+          "Enchant Cloak - Greater Defense", "Enchant Cloak - Greater Resistance", "Enchant Cloak - Lesser Agility",
+          "Enchant Cloak - Lesser Fire Resistance", "Enchant Cloak - Lesser Protection",
+          "Enchant Cloak - Lesser Shadow Resistance", "Enchant Cloak - Minor Protection",
+          "Enchant Cloak - Minor Resistance", "Enchant Cloak - Resistance", "Enchant Cloak - Superior Defense"] },
+      "Main hand": { conf: "data", kinds: ["2.0", "2.1", "2.4", "2.5", "2.6", "2.7", "2.8", "2.10", "2.13", "2.14", "2.15", "2.17"],
+        list: ["Enchant 2H Weapon - Agility", "Enchant 2H Weapon - Greater Impact", "Enchant 2H Weapon - Impact",
+          "Enchant 2H Weapon - Lesser Agility", "Enchant 2H Weapon - Lesser Impact",
+          "Enchant 2H Weapon - Lesser Intellect", "Enchant 2H Weapon - Lesser Spirit",
+          "Enchant 2H Weapon - Lesser Strength", "Enchant 2H Weapon - Major Intellect",
+          "Enchant 2H Weapon - Major Spirit", "Enchant 2H Weapon - Mighty Healing Power",
+          "Enchant 2H Weapon - Mighty Spell Power", "Enchant 2H Weapon - Minor Impact",
+          "Enchant 2H Weapon - Spellblasting", "Enchant 2H Weapon - Strength", "Enchant 2H Weapon - Superior Impact",
+          "Enchant Weapon - Agility", "Enchant Weapon - Crusader", "Enchant Weapon - Demonslaying",
+          "Enchant Weapon - Fiery Weapon", "Enchant Weapon - Greater Striking", "Enchant Weapon - Icy Chill",
+          "Enchant Weapon - Insight", "Enchant Weapon - Lesser Beastslayer",
+          "Enchant Weapon - Lesser Elemental Slayer", "Enchant Weapon - Lesser Striking",
+          "Enchant Weapon - Lifestealing", "Enchant Weapon - Mighty Intellect", "Enchant Weapon - Mighty Spirit",
+          "Enchant Weapon - Minor Beastslayer", "Enchant Weapon - Minor Striking", "Enchant Weapon - Recovery",
+          "Enchant Weapon - Revelation", "Enchant Weapon - Strength", "Enchant Weapon - Striking",
+          "Enchant Weapon - Superior Striking", "Enchant Weapon - Unholy Weapon", "Enchant Weapon - Winter's Might"] },
+      "Off hand": { conf: "data", kinds: null,
+        list: ["Enchant Off-Hand - Excellent Spirit", "Enchant Off-Hand - Superior Intellect",
+          "Enchant Off-Hand - Wisdom", "Enchant Shield - Critical Strike", "Enchant Shield - Excellent Stamina",
+          "Enchant Shield - Frost Resistance", "Enchant Shield - Greater Spirit", "Enchant Shield - Greater Stamina",
+          "Enchant Shield - Lesser Block", "Enchant Shield - Lesser Protection", "Enchant Shield - Lesser Spirit",
+          "Enchant Shield - Lesser Stamina", "Enchant Shield - Minor Stamina", "Enchant Shield - Spirit",
+          "Enchant Shield - Stamina", "Enchant Shield - Superior Spirit", "Enchant Weapon - Agility",
+          "Enchant Weapon - Crusader", "Enchant Weapon - Demonslaying", "Enchant Weapon - Fiery Weapon",
+          "Enchant Weapon - Greater Striking", "Enchant Weapon - Icy Chill", "Enchant Weapon - Insight",
+          "Enchant Weapon - Lesser Beastslayer", "Enchant Weapon - Lesser Elemental Slayer",
+          "Enchant Weapon - Lesser Striking", "Enchant Weapon - Lifestealing", "Enchant Weapon - Mighty Intellect",
+          "Enchant Weapon - Mighty Spirit", "Enchant Weapon - Minor Beastslayer", "Enchant Weapon - Minor Striking",
+          "Enchant Weapon - Recovery", "Enchant Weapon - Revelation", "Enchant Weapon - Strength",
+          "Enchant Weapon - Striking", "Enchant Weapon - Superior Striking", "Enchant Weapon - Unholy Weapon",
+          "Enchant Weapon - Winter's Might", "Mithril Shield Spike"] }
+    },
+    xp: [400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600, 8800, 10100, 11400, 12900, 14400, 16000, 17700,
+      19400, 21300, 23200, 25200, 27300, 29400, 31700, 34000, 36400, 38900, 41400, 44300, 47400, 50800, 54500, 58600,
+      62800, 67100, 71600, 76100, 80800, 85700, 90700, 95800, 101000, 106300, 111800, 117500, 123200, 129100, 135100,
+      141200, 147500, 153900, 160400, 167100, 173900, 180800, 187900, 195000, 202300, 209800]
+  };
+
   // ---- the made-up guild. Names are invented; every number below is invented too, and reconciles with the others
-  // (deaths while leveling equals deaths, deaths today is a part of it; bosses, dungeons, missing enchants and readiness
-  // are worked out from what the guild found, further down, as the addon does). Time values are seconds and gold is copper, like the addon's.
+  // (deaths while leveling equals deaths, deaths today is a part of it; hours to 60 is worked out from the pace over the
+  // seed's curve, level-ups today and played this level from the session's XP over it, and bosses, dungeons, missing
+  // enchants and readiness from what the guild found and wears, further down, as the addon does). Time values are
+  // seconds and gold is copper, like the addon's.
   var POLICY = { by: "Yezin", at: "2026-10-18 20:40", threshold: 1 };
   var FUNNY = ["deaths", "deaths_today", "falls", "drownings", "fatigue", "hearth_waste", "afk", "dance", "sit", "emotes", "whispers", "gchat", "inspected", "fish", "jumps", "ghost_yards", "where", "grey_gold"];
   // the prog counts, in this order in each member's last array: the consumables by the game's item classes, the bags,
@@ -431,55 +625,65 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     s.raids = 0; s.weekly_raids = 0; s.consumed = 0; s.raid_spec = false;
     s.addon_ver = VERSION;
     s.main = s.main === undefined ? n : s.main;
+    // hours to 60 as Sample.lua tracks it: the XP left over the curve at the last hour's pace, 0 (a dash) with no pace
+    s.to60 = s.xp_hour > 0 && s.level < SEED.cap ? Math.floor(xpLeft(s.level, s.xp, SEED.cap) / s.xp_hour + 0.5) : 0;
     return { n: n, c: c, rank: rank, on: on, addon: true, s: s };
+  }
+  // the XP from a level, so far into it (a percent), to a level ahead, over the XP each level takes (the guild's curve,
+  // which here agrees with the seed's)
+  function xpLeft(level, pct, target) {
+    if (level >= target) return 0;
+    var max = SEED.xp[level - 1], left = max - Math.floor(max * pct / 100);
+    for (var l = level + 1; l < target; l++) left += SEED.xp[l - 1];
+    return left;
   }
   // empty slots and enchanted slots by the game's slot names, so missing enchants can be worked out below; the other gear lists are counts here
   var G = [
-    member("Cutecutecute", "PRIEST", "Guild Master", true, { level: 44, xp: 61, xp_hour: 18400, to60: 31, zone: "Feralas", played: hm(52, 4), quests_done: 418, group: "Yezin, Upn", rested: 4200, legacy: 3,
+    member("Cutecutecute", "PRIEST", "Guild Master", true, { level: 44, xp: 61, xp_hour: 79600, zone: "Feralas", played: hm(52, 4), quests_done: 418, group: "Yezin, Upn", rested: 4200, legacy: 3,
       ilvl: 41, durability: 88, empty_slots: [], enchanted: ["Neck", "Chest", "Feet", "Wrist", "Back", "Main hand"], gold: 212, bank_in: 150, bank_out: 40, role: "Heal", last_login: "2026-10-18" },
       [7, 1, 1, 0, 0, 0, 3, 6, 2, 95, 14, 230, 12, 0, 4120, 1800, 1, 31], { done: 61, free: 8, renown: 7, prof: 38, adv: 52, prog: 30, last: "Explore Feralas", cats: "564335408304" },
       [20, 2, 1, 40, 10, 0, 0, 12, 56, 1, 9, 2, 6, 15, 0, 0, 10, 0, 0, 40]),
-    member("Yezin", "WARRIOR", "Officer", true, { level: 42, xp: 35, xp_hour: 16900, to60: 36, zone: "Duskwood", played: hm(45, 12), quests_done: 388, group: "Cutecutecute, Upn", rested: 0, legacy: 3,
-      ilvl: 39, durability: 71, empty_slots: [], enchanted: ["Neck", "Chest", "Feet", "Wrist", "Hands", "Back", "Main hand"], gold: 148, bank_in: 300, bank_out: 0, role: "Tank", last_login: "2026-10-18" },
+    member("Yezin", "WARRIOR", "Officer", true, { level: 42, xp: 35, xp_hour: 75200, zone: "Duskwood", played: hm(45, 12), quests_done: 388, group: "Cutecutecute, Upn", rested: 0, legacy: 3,
+      ilvl: 39, durability: 71, empty_slots: [], enchanted: ["Neck", "Chest", "Feet", "Wrist", "Hands", "Back", "Main hand", "Off hand"], gold: 148, bank_in: 300, bank_out: 0, role: "Tank", last_login: "2026-10-18" },
       [5, 0, 0, 1, 0, 1, 1, 1, 0, 9, 6, 180, 30, 12, 2210, 900, 0, 44], { done: 54, free: 6, renown: 6, prof: 30, adv: 46, prog: 28, last: "Scarlet Monastery", cats: "553334408303" },
       [12, 3, 2, 25, 20, 1, 200, 18, 56, 4, 9, 3, 7, 8, 0, 0, 0, 0, 1, 120]),
-    member("Upn", "MAGE", "Officer", true, { level: 41, xp: 78, xp_hour: 17200, to60: 37, zone: "Duskwood", played: hm(43, 5), quests_done: 371, group: "Cutecutecute, Yezin", rested: 1100, legacy: 2,
+    member("Upn", "MAGE", "Officer", true, { level: 41, xp: 78, xp_hour: 74700, zone: "Duskwood", played: hm(43, 5), quests_done: 371, group: "Cutecutecute, Yezin", rested: 1100, legacy: 2,
       ilvl: 37, durability: 94, empty_slots: ["Ranged"], enchanted: ["Chest", "Wrist", "Back"], gold: 96, bank_in: 0, bank_out: 20, role: "Ranged", last_login: "2026-10-18" },
       [9, 2, 3, 0, 2, 2, 0, 0, 4, 15, 9, 410, 4, 0, 5980, 2600, 0, 27], { done: 49, free: 10, renown: 6, prof: 26, adv: 34, prog: 30, last: "Level 40", cats: "553343400304" },
       [18, 1, 0, 80, 5, 0, 0, 9, 52, 2, 8, 4, 9, 0, 0, 0, 0, 0, 0, 0]),
-    member("Ferrow", "HUNTER", "Raider", true, { level: 40, xp: 12, xp_hour: 15100, to60: 42, zone: "Stranglethorn Vale", played: hm(40, 30), quests_done: 352, group: "Quillan", rested: 300, legacy: 2,
+    member("Ferrow", "HUNTER", "Raider", true, { level: 40, xp: 12, xp_hour: 69500, zone: "Stranglethorn Vale", played: hm(40, 30), quests_done: 352, group: "Quillan", rested: 300, legacy: 2,
       ilvl: 36, durability: 63, empty_slots: [], enchanted: ["Neck", "Chest", "Wrist", "Back", "Main hand"], gold: 61, bank_in: 0, bank_out: 0, role: "Ranged", last_login: "2026-10-18" },
       [6, 0, 2, 0, 0, 0, 2, 2, 1, 22, 3, 95, 8, 31, 3310, 1400, 2, 18], { done: 44, free: 14, renown: 5, prof: 20, adv: 32, prog: 26, last: "Explore Stranglethorn Vale", cats: "543334300303" },
       [9, 0, 0, 35, 15, 0, 1600, 6, 48, 3, 8, 3, 10, 0, 5, 0, 0, 0, 2, 340]),
-    member("Ondra", "MAGE", "Raider", false, { level: 40, xp: 4, xp_hour: 14800, to60: 43, zone: "Stranglethorn Vale", played: hm(38, 20), quests_done: 340, group: "", rested: 6800, legacy: 2,
+    member("Ondra", "MAGE", "Raider", false, { level: 40, xp: 4, xp_hour: 68100, zone: "Stranglethorn Vale", played: hm(38, 20), quests_done: 340, group: "", rested: 6800, legacy: 2,
       ilvl: 35, durability: 79, empty_slots: [], enchanted: ["Chest", "Wrist", "Back", "Main hand"], gold: 72, bank_in: 50, bank_out: 0, role: "Ranged", last_login: "2026-10-16" },
       [6, 0, 1, 0, 0, 0, 9, 3, 0, 12, 2, 60, 1, 0, 2780, 1100, 0, 12], { done: 40, free: 10, renown: 5, prof: 22, adv: 30, prog: 22, last: "250 Quests Completed", cats: "443333300303" },
       [15, 2, 1, 60, 0, 0, 0, 14, 52, 2, 7, 2, 8, 0, 0, 0, 0, 0, 0, 0]),
-    member("Mutu", "WARRIOR", "Raider", true, { level: 39, xp: 51, xp_hour: 13900, to60: 48, zone: "Arathi Highlands", played: hm(36, 40), quests_done: 322, group: "Bari", rested: 0, legacy: 1,
+    member("Mutu", "WARRIOR", "Raider", true, { level: 39, xp: 51, xp_hour: 61900, zone: "Arathi Highlands", played: hm(36, 40), quests_done: 322, group: "Bari", rested: 0, legacy: 1,
       ilvl: 38, durability: 55, empty_slots: [], enchanted: ["Neck", "Chest", "Feet", "Wrist", "Main hand"], gold: 55, bank_in: 0, bank_out: 0, role: "Tank", last_login: "2026-10-18" },
       [3, 0, 0, 0, 0, 0, 1, 0, 0, 6, 1, 70, 19, 0, 1920, 500, 0, 22], { done: 36, free: 16, renown: 4, prof: 12, adv: 20, prog: 28, last: "Gnomeregan", cats: "443330300303" },
       [4, 1, 0, 20, 18, 1, 0, 5, 48, 3, 9, 4, 9, 0, 0, 0, 0, 0, 0, 0]),
-    member("Bari", "PALADIN", "Raider", true, { level: 38, xp: 88, xp_hour: 13400, to60: 51, zone: "Arathi Highlands", played: hm(35, 15), quests_done: 310, group: "Mutu", rested: 2300, legacy: 1,
-      ilvl: 37, durability: 82, empty_slots: [], enchanted: ["Neck", "Chest", "Feet", "Wrist", "Hands", "Back", "Main hand"], gold: 80, bank_in: 100, bank_out: 0, role: "Tank", last_login: "2026-10-18" },
+    member("Bari", "PALADIN", "Raider", true, { level: 38, xp: 88, xp_hour: 59300, zone: "Arathi Highlands", played: hm(35, 15), quests_done: 310, group: "Mutu", rested: 2300, legacy: 1,
+      ilvl: 37, durability: 82, empty_slots: [], enchanted: ["Neck", "Chest", "Feet", "Wrist", "Hands", "Back", "Main hand", "Off hand"], gold: 80, bank_in: 100, bank_out: 0, role: "Tank", last_login: "2026-10-18" },
       [2, 0, 0, 0, 0, 1, 0, 0, 0, 8, 4, 120, 6, 5, 1540, 300, 0, 15], { done: 35, free: 12, renown: 4, prof: 24, adv: 18, prog: 20, last: "Journeyman Cook", cats: "433334300303" },
       [20, 0, 0, 30, 12, 0, 0, 11, 52, 1, 10, 3, 8, 0, 0, 0, 0, 0, 0, 0]),
-    member("Quillan", "ROGUE", "Raider", true, { level: 38, xp: 20, xp_hour: 15600, to60: 49, zone: "Stranglethorn Vale", played: hm(33, 50), quests_done: 298, group: "Ferrow", rested: 0, legacy: 1,
+    member("Quillan", "ROGUE", "Raider", true, { level: 38, xp: 20, xp_hour: 62900, zone: "Stranglethorn Vale", played: hm(33, 50), quests_done: 298, group: "Ferrow", rested: 0, legacy: 1,
       ilvl: 34, durability: 47, empty_slots: ["Trinket 2"], enchanted: ["Chest", "Main hand"], gold: 33, bank_in: 0, bank_out: 0, role: "Melee", last_login: "2026-10-18" },
       [10, 1, 4, 1, 0, 0, 0, 1, 0, 30, 7, 210, 2, 0, 7410, 3200, 3, 9], { done: 31, free: 10, renown: 4, prof: 6, adv: 22, prog: 26, last: "The Stockade", cats: "433333000303" },
       [2, 0, 0, 15, 20, 0, 0, 2, 44, 4, 6, 6, 12, 0, 0, 0, 0, 0, 1, 210]),
-    member("Kaka", "PRIEST", "Raider", true, { level: 37, xp: 12, xp_hour: 11200, to60: 68, zone: "Desolace", played: hm(39, 10), quests_done: 276, group: "", rested: 900, legacy: 1,
+    member("Kaka", "PRIEST", "Raider", true, { level: 37, xp: 12, xp_hour: 46500, zone: "Desolace", played: hm(39, 10), quests_done: 276, group: "", rested: 900, legacy: 1,
       ilvl: 33, durability: 38, empty_slots: ["Trinket 1", "Trinket 2"], enchanted: ["Chest"], gold: 12, bank_in: 0, bank_out: 0, role: "Heal", last_login: "2026-10-18" },
       [23, 3, 6, 2, 1, 4, 8, 14, 5, 88, 21, 640, 1, 3, 6980, 11200, 9, 6], { done: 29, free: 14, renown: 3, prof: 20, adv: 14, prog: 12, last: "Explore Desolace", cats: "433330300303" },
       [3, 0, 0, 6, 6, 0, 0, 3, 48, 5, 6, 5, 11, 0, 0, 0, 10, 0, 0, 0]),
-    member("Boopsy", "WARLOCK", "Raider", true, { level: 36, xp: 66, xp_hour: 12600, to60: 59, zone: "Thousand Needles", played: hm(30, 40), quests_done: 262, group: "", rested: 1500, legacy: 1,
+    member("Boopsy", "WARLOCK", "Raider", true, { level: 36, xp: 66, xp_hour: 54200, zone: "Thousand Needles", played: hm(30, 40), quests_done: 262, group: "", rested: 1500, legacy: 1,
       ilvl: 33, durability: 90, empty_slots: [], enchanted: ["Neck", "Chest", "Wrist", "Back"], gold: 44, bank_in: 0, bank_out: 0, role: "Ranged", last_login: "2026-10-18" },
       [8, 1, 2, 0, 0, 1, 2, 4, 6, 19, 5, 150, 3, 0, 3050, 1900, 1, 20], { done: 27, free: 8, renown: 3, prof: 10, adv: 18, prog: 20, last: "Razorfen Kraul", cats: "433330000303" },
       [13, 1, 0, 25, 4, 1, 0, 7, 48, 2, 8, 3, 10, 0, 0, 0, 0, 0, 0, 0]),
-    member("Lindel", "DRUID", "Raider", false, { level: 35, xp: 30, xp_hour: 12100, to60: 64, zone: "Thousand Needles", played: hm(28, 5), quests_done: 251, group: "", rested: 5400, legacy: 0,
+    member("Lindel", "DRUID", "Raider", false, { level: 35, xp: 30, xp_hour: 51400, zone: "Thousand Needles", played: hm(28, 5), quests_done: 251, group: "", rested: 5400, legacy: 0,
       ilvl: 31, durability: 76, empty_slots: ["Trinket 2"], enchanted: ["Chest", "Wrist", "Back"], gold: 38, bank_in: 0, bank_out: 0, role: "Heal", last_login: "2026-10-18" },
       [5, 0, 1, 0, 0, 0, 3, 2, 2, 14, 2, 40, 0, 8, 2600, 700, 0, 11], { done: 22, free: 46, renown: 3, prof: 0, adv: 0, prog: 0, last: "Explore Thousand Needles", cats: "333330000303" },
       [14, 0, 0, 30, 8, 0, 0, 16, 48, 3, 7, 4, 11, 0, 0, 0, 0, 0, 0, 0]),
-    member("Garristan", "WARRIOR", "Member", true, { level: 1, xp: 0, xp_hour: 0, to60: 0, zone: "Northshire Valley", played: hm(0, 3), quests_done: 0, group: "", rested: 0, legacy: 0,
+    member("Garristan", "WARRIOR", "Member", true, { level: 1, xp: 0, xp_hour: 0, zone: "Northshire Valley", played: hm(0, 3), quests_done: 0, group: "", rested: 0, legacy: 0,
       ilvl: 1, durability: 100, empty_slots: ["Head", "Neck", "Shoulder", "Waist", "Wrist", "Hands", "Ring 1", "Ring 2", "Trinket 1", "Trinket 2", "Back", "Off hand", "Ranged"], enchanted: [],
       gold: 0, bank_in: 0, bank_out: 0, main: "", role: "", last_login: "2026-10-18" },
       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { done: 0, free: 0, renown: 0, prof: 0, adv: 0, prog: 0, last: "", cats: "000000000000" },
@@ -490,66 +694,92 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   // the rest of every record: every stat is sent, so the Me page lists the whole registry and any column ticked in
   // Settings has a value for every member with the addon. Offline members show what they last sent
   var FULL = {
-    Cutecutecute: { xp_session: 17600, played_lvl: hm(3, 40), subzone: "Feathermoon Stronghold", logins: 9, session: hm(3, 10), longest: hm(8, 20), quests_today: 6, quests_log: 17, quests_ready: 3, kills: 3100, zones_seen: 18,
+    Cutecutecute: { xp_session: 76100, subzone: "Feathermoon Stronghold", logins: 9, session: hm(3, 10), longest: hm(8, 20), quests_today: 6, quests_log: 17, quests_ready: 3, kills: 3100, zones_seen: 18,
       flights_known: 14, flights: 45, longest_flight: hm(0, 7), hearth: "Feathermoon Stronghold", hearths: 36, ghost_time: hm(0, 48), gold_earned: g(450), gold_quests: g(205), vendor_sales: g(110), mount: true, talents_free: 0, spec: "Discipline",
-      prof1: "Herbalism 240", prof2: "Alchemy 225", fishing: 60, cooking: 150, first_aid: 225, levelups: 1, still: hm(1, 30) },
-    Yezin: { xp_session: 15200, played_lvl: hm(2, 40), subzone: "Darkshire", logins: 5, session: hm(1, 50), longest: hm(6, 10), quests_today: 7, quests_log: 14, quests_ready: 2, kills: 2850, zones_seen: 14,
+      prof1: "Herbalism 240", prof2: "Alchemy 225", fishing: 60, cooking: 150, first_aid: 225, still: hm(1, 30) },
+    Yezin: { xp_session: 67600, subzone: "Darkshire", logins: 5, session: hm(1, 50), longest: hm(6, 10), quests_today: 7, quests_log: 14, quests_ready: 2, kills: 2850, zones_seen: 14,
       flights_known: 11, flights: 38, longest_flight: hm(0, 5), hearth: "Darkshire", hearths: 23, ghost_time: hm(0, 12), gold_earned: g(410), gold_quests: g(190), vendor_sales: g(96), mount: true, talents_free: 0, spec: "Arms",
-      prof1: "Mining 215", prof2: "Blacksmithing 198", fishing: 42, cooking: 75, first_aid: 150, levelups: 1, still: hm(0, 40) },
-    Upn: { xp_session: 14100, played_lvl: hm(2, 55), subzone: "Darkshire", logins: 6, session: hm(1, 50), longest: hm(6, 40), quests_today: 7, quests_log: 15, quests_ready: 2, kills: 2400, zones_seen: 15,
+      prof1: "Mining 215", prof2: "Blacksmithing 198", fishing: 42, cooking: 75, first_aid: 150, still: hm(0, 40) },
+    Upn: { xp_session: 61200, subzone: "Darkshire", logins: 6, session: hm(1, 50), longest: hm(6, 40), quests_today: 7, quests_log: 15, quests_ready: 2, kills: 2400, zones_seen: 15,
       flights_known: 12, flights: 35, longest_flight: hm(0, 6), hearth: "Ironforge", hearths: 28, ghost_time: hm(0, 35), gold_earned: g(280), gold_quests: g(130), vendor_sales: g(60), mount: true, talents_free: 1, spec: "Frost",
-      prof1: "Tailoring 210", prof2: "Enchanting 195", fishing: 0, cooking: 40, first_aid: 150, levelups: 1, still: hm(0, 55) },
-    Ferrow: { xp_session: 13800, played_lvl: hm(4, 10), subzone: "Booty Bay", logins: 8, session: hm(2, 30), longest: hm(9, 5), quests_today: 5, quests_log: 20, quests_ready: 2, kills: 2650, zones_seen: 16,
+      prof1: "Tailoring 210", prof2: "Enchanting 195", fishing: 0, cooking: 40, first_aid: 150, still: hm(0, 55) },
+    Ferrow: { xp_session: 63500, subzone: "Booty Bay", logins: 8, session: hm(2, 30), longest: hm(9, 5), quests_today: 5, quests_log: 20, quests_ready: 2, kills: 2650, zones_seen: 16,
       flights_known: 13, flights: 40, longest_flight: hm(0, 7), hearth: "Booty Bay", hearths: 33, ghost_time: hm(0, 58), gold_earned: g(250), gold_quests: g(110), vendor_sales: g(70), mount: true, talents_free: 0, spec: "Beast Mastery",
-      prof1: "Skinning 225", prof2: "Leatherworking 210", fishing: 120, cooking: 110, first_aid: 160, levelups: 0, still: hm(1, 15) },
-    Ondra: { xp_session: 12900, played_lvl: hm(4, 30), subzone: "Nesingwary's Expedition", logins: 4, session: hm(1, 20), longest: hm(5, 50), quests_today: 0, quests_log: 18, quests_ready: 1, kills: 2280, zones_seen: 14,
+      prof1: "Skinning 225", prof2: "Leatherworking 210", fishing: 120, cooking: 110, first_aid: 160, still: hm(1, 15) },
+    Ondra: { xp_session: 59400, subzone: "Nesingwary's Expedition", logins: 4, session: hm(1, 20), longest: hm(5, 50), quests_today: 0, quests_log: 18, quests_ready: 1, kills: 2280, zones_seen: 14,
       flights_known: 10, flights: 30, longest_flight: hm(0, 6), hearth: "Booty Bay", hearths: 25, ghost_time: hm(0, 40), gold_earned: g(240), gold_quests: g(120), vendor_sales: g(55), mount: true, talents_free: 0, spec: "Fire",
-      prof1: "Tailoring 205", prof2: "Enchanting 180", fishing: 30, cooking: 60, first_aid: 125, levelups: 0, still: hm(0, 45) },
-    Mutu: { xp_session: 12500, played_lvl: hm(3, 5), subzone: "Refuge Pointe", logins: 6, session: hm(2, 15), longest: hm(7, 10), quests_today: 5, quests_log: 16, quests_ready: 1, kills: 2350, zones_seen: 13,
+      prof1: "Tailoring 205", prof2: "Enchanting 180", fishing: 30, cooking: 60, first_aid: 125, still: hm(0, 45) },
+    Mutu: { xp_session: 55700, subzone: "Refuge Pointe", logins: 6, session: hm(2, 15), longest: hm(7, 10), quests_today: 5, quests_log: 16, quests_ready: 1, kills: 2350, zones_seen: 13,
       flights_known: 10, flights: 29, longest_flight: hm(0, 5), hearth: "Refuge Pointe", hearths: 22, ghost_time: hm(0, 20), gold_earned: g(200), gold_quests: g(100), vendor_sales: g(45), mount: false, talents_free: 0, spec: "Protection",
-      prof1: "Mining 190", prof2: "Engineering 185", fishing: 0, cooking: 75, first_aid: 140, levelups: 1, still: hm(0, 30) },
-    Bari: { xp_session: 13100, played_lvl: hm(3, 30), subzone: "Refuge Pointe", logins: 5, session: hm(2, 15), longest: hm(6, 30), quests_today: 6, quests_log: 14, quests_ready: 2, kills: 2200, zones_seen: 13,
+      prof1: "Mining 190", prof2: "Engineering 185", fishing: 0, cooking: 75, first_aid: 140, still: hm(0, 30) },
+    Bari: { xp_session: 58000, subzone: "Refuge Pointe", logins: 5, session: hm(2, 15), longest: hm(6, 30), quests_today: 6, quests_log: 14, quests_ready: 2, kills: 2200, zones_seen: 13,
       flights_known: 11, flights: 31, longest_flight: hm(0, 5), hearth: "Refuge Pointe", hearths: 20, ghost_time: hm(0, 15), gold_earned: g(230), gold_quests: g(115), vendor_sales: g(50), mount: false, talents_free: 0, spec: "Protection",
-      prof1: "Mining 175", prof2: "Blacksmithing 170", fishing: 25, cooking: 150, first_aid: 125, levelups: 0, still: hm(0, 25) },
-    Quillan: { xp_session: 14900, played_lvl: hm(2, 45), subzone: "Nesingwary's Expedition", logins: 7, session: hm(2, 30), longest: hm(8, 0), quests_today: 8, quests_log: 20, quests_ready: 3, kills: 2150, zones_seen: 14,
+      prof1: "Mining 175", prof2: "Blacksmithing 170", fishing: 25, cooking: 150, first_aid: 125, still: hm(0, 25) },
+    Quillan: { xp_session: 60100, subzone: "Nesingwary's Expedition", logins: 7, session: hm(2, 30), longest: hm(8, 0), quests_today: 8, quests_log: 20, quests_ready: 3, kills: 2150, zones_seen: 14,
       flights_known: 10, flights: 27, longest_flight: hm(0, 7), hearth: "Booty Bay", hearths: 26, ghost_time: hm(1, 5), gold_earned: g(180), gold_quests: g(90), vendor_sales: g(40), mount: false, talents_free: 1, spec: "Combat",
-      prof1: "Skinning 190", prof2: "Leatherworking 175", fishing: 0, cooking: 15, first_aid: 110, levelups: 0, still: hm(0, 20) },
-    Kaka: { xp_session: 9800, played_lvl: hm(3, 20), subzone: "Nijel's Point", logins: 7, session: hm(2, 5), longest: hm(7, 30), quests_today: 4, quests_log: 19, quests_ready: 1, kills: 1900, zones_seen: 12,
+      prof1: "Skinning 190", prof2: "Leatherworking 175", fishing: 0, cooking: 15, first_aid: 110, still: hm(0, 20) },
+    Kaka: { xp_session: 40700, subzone: "Nijel's Point", logins: 7, session: hm(2, 5), longest: hm(7, 30), quests_today: 4, quests_log: 19, quests_ready: 1, kills: 1900, zones_seen: 12,
       flights_known: 9, flights: 26, longest_flight: hm(0, 6), hearth: "Nijel's Point", hearths: 31, ghost_time: hm(1, 12), gold_earned: g(230), gold_quests: g(95), vendor_sales: g(48), mount: false, talents_free: 2, spec: "Holy",
-      prof1: "Tailoring 160", prof2: "Enchanting 90", fishing: 15, cooking: 20, first_aid: 95, levelups: 0, still: hm(2, 48) },
-    Boopsy: { xp_session: 11800, played_lvl: hm(3, 15), subzone: "Mirage Raceway", logins: 6, session: hm(1, 40), longest: hm(5, 20), quests_today: 5, quests_log: 18, quests_ready: 2, kills: 1950, zones_seen: 12,
+      prof1: "Tailoring 160", prof2: "Enchanting 90", fishing: 15, cooking: 20, first_aid: 95, still: hm(2, 48) },
+    Boopsy: { xp_session: 50800, subzone: "Mirage Raceway", logins: 6, session: hm(1, 40), longest: hm(5, 20), quests_today: 5, quests_log: 18, quests_ready: 2, kills: 1950, zones_seen: 12,
       flights_known: 9, flights: 24, longest_flight: hm(0, 6), hearth: "Theramore Isle", hearths: 21, ghost_time: hm(0, 50), gold_earned: g(170), gold_quests: g(85), vendor_sales: g(35), mount: false, talents_free: 0, spec: "Affliction",
-      prof1: "Tailoring 175", prof2: "Enchanting 160", fishing: 10, cooking: 30, first_aid: 100, levelups: 0, still: hm(0, 35) },
-    Lindel: { xp_session: 11000, played_lvl: hm(3, 50), subzone: "Mirage Raceway", logins: 3, session: hm(1, 10), longest: hm(4, 40), quests_today: 0, quests_log: 21, quests_ready: 1, kills: 1700, zones_seen: 11,
+      prof1: "Tailoring 175", prof2: "Enchanting 160", fishing: 10, cooking: 30, first_aid: 100, still: hm(0, 35) },
+    Lindel: { xp_session: 46700, subzone: "Mirage Raceway", logins: 3, session: hm(1, 10), longest: hm(4, 40), quests_today: 0, quests_log: 21, quests_ready: 1, kills: 1700, zones_seen: 11,
       flights_known: 9, flights: 20, longest_flight: hm(0, 6), hearth: "Theramore Isle", hearths: 18, ghost_time: hm(0, 30), gold_earned: g(150), gold_quests: g(80), vendor_sales: g(30), mount: false, talents_free: 1, spec: "Restoration",
-      prof1: "Herbalism 180", prof2: "Alchemy 165", fishing: 50, cooking: 45, first_aid: 90, levelups: 0, still: hm(1, 5) },
-    Garristan: { xp_session: 0, played_lvl: hm(0, 3), subzone: "Northshire Abbey", logins: 1, session: hm(0, 3), longest: hm(0, 3), quests_today: 0, quests_log: 1, quests_ready: 0, kills: 0, zones_seen: 1,
+      prof1: "Herbalism 180", prof2: "Alchemy 165", fishing: 50, cooking: 45, first_aid: 90, still: hm(1, 5) },
+    Garristan: { xp_session: 0, subzone: "Northshire Abbey", logins: 1, session: hm(0, 3), longest: hm(0, 3), quests_today: 0, quests_log: 1, quests_ready: 0, kills: 0, zones_seen: 1,
       flights_known: 0, flights: 0, longest_flight: 0, hearth: "Northshire Abbey", hearths: 0, ghost_time: 0, gold_earned: 0, gold_quests: 0, vendor_sales: 0, mount: false, talents_free: 0, spec: "",
-      prof1: "", prof2: "", fishing: 0, cooking: 0, first_aid: 0, levelups: 0, still: hm(0, 2) }
+      prof1: "", prof2: "", fishing: 0, cooking: 0, first_aid: 0, still: hm(0, 2) }
   };
   G.forEach(function (r) { if (FULL[r.n]) Object.keys(FULL[r.n]).forEach(function (k) { r.s[k] = FULL[r.n][k]; }); });
   var ADDON = G.filter(function (r) { return r.addon; });
+  // the session's XP (the XP an hour since login, over the session) runs back from where the bar stands through the
+  // levels before it: each level it reaches past is a level-up today, and the XP into this level at that pace is the
+  // time played at it (a level reached before this login, played at the same pace before it)
+  ADDON.forEach(function (r) {
+    var s = r.s, l = s.level, into = Math.floor(SEED.xp[l - 1] * s.xp / 100), back = s.xp_session * s.session / 3600 - into;
+    s.levelups = 0;
+    while (back > 0 && l > 1) { l--; back -= SEED.xp[l - 1]; s.levelups++; }
+    s.played_lvl = s.xp_session > 0 ? Math.round(into / s.xp_session * 3600) : s.session;
+  });
 
   // ---- what the guild found in play. The addon names a boss, a dungeon or a faction the first time a member meets it
-  // and tells the guild, so these are discoveries, not a list it ships with. One character per member with the addon,
+  // and tells the guild; the names are the client's, which the seed's match. One character per member with the addon,
   // in G's order: a digit is the count, a dash never met. A boss's kills never pass the runs of its dungeon (Scarlet
   // Monastery's wings are runs of their own); a member's bosses, dungeons seen and dungeons run are counted from these.
+  // Bosses in the seed's order. Two finds the seed did not have: Krol'dok Stronghold, which Forever's sources name but
+  // the beta's client did not, entered by three members who have met no boss in it yet; and Scarlet Commander
+  // Mograine, whom loot.json names but the beta's client had no fight for, killed on both Cathedral runs. High
+  // Inquisitor Fairbanks, whom those two runs went past, is not met
   var FOUND = [
-    ["The Deadmines", "33222221221-", [["Rhahk'Zor", "33222221221-"], ["Sneed", "33222221221-"], ["Gilnid", "32222221221-"], ["Mr. Smite", "33222221221-"],
-      ["Captain Greenskin", "33222121211-"], ["Edwin VanCleef", "33221221121-"]]],
-    ["Wailing Caverns", "111211-1-12-", [["Lady Anacondra", "111211-1-12-"], ["Lord Cobrahn", "111211-1-12-"], ["Kresh", "1-111--1--1-"], ["Lord Serpentis", "111211-1-12-"],
-      ["Mutanus the Devourer", "11-111---11-"]]],
-    ["Shadowfang Keep", "22111111111-", [["Rethilgore", "22111111111-"], ["Baron Silverlaine", "22111111111-"], ["Commander Springvale", "22111111111-"],
-      ["Fenrus the Devourer", "22111111111-"], ["Archmage Arugal", "2211111--1--"]]],
-    ["Blackfathom Deeps", "1111-11-11--", [["Ghamoo-ra", "1111-11-11--"], ["Lady Sarevess", "1111-11-11--"], ["Gelihast", "1111-11-11--"], ["Twilight Lord Kelris", "1111-11--1--"],
-      ["Aku'mai", "111--11--1--"]]],
-    ["The Stockade", "221-1111-1--", [["Targorr the Dread", "221-1111-1--"], ["Kam Deepfury", "221-1111-1--"], ["Hamhock", "221-1111-1--"], ["Bazil Thredd", "221-1111----"]]],
+    ["The Deadmines", "33222221221-", [["Rhahk'Zor", "33222221221-"], ["Sneed", "33222221221-"], ["Miner Johnson", "23222121221-"], ["Gilnid", "32222221221-"],
+      ["Captain Greenskin", "33222121211-"], ["Mr. Smite", "33222221221-"], ["Cookie", "33222121221-"], ["Edwin VanCleef", "33221221121-"]]],
+    ["Wailing Caverns", "111211-1-12-", [["Lady Anacondra", "111211-1-12-"], ["Lord Cobrahn", "111211-1-12-"], ["Kresh", "1-111--1--1-"], ["Lord Pythas", "111211-1-12-"],
+      ["Skum", "11-211-1-11-"], ["Lord Serpentis", "111211-1-12-"], ["Verdan the Everliving", "111111-1-11-"], ["Mutanus the Devourer", "11-111---11-"]]],
+    ["Shadowfang Keep", "22111111111-", [["Rethilgore", "22111111111-"], ["Razorclaw the Butcher", "22111111111-"], ["Baron Silverlaine", "22111111111-"],
+      ["Commander Springvale", "22111111111-"], ["Odo the Blindwatcher", "21111111111-"], ["Fenrus the Devourer", "22111111111-"], ["Wolf Master Nandos", "2211111-111-"],
+      ["Archmage Arugal", "2211111--1--"]]],
+    ["The Stockade", "221-1111-1--", [["Targorr the Dread", "221-1111-1--"], ["Kam Deepfury", "221-1111-1--"], ["Hamhock", "221-1111-1--"], ["Dextren Ward", "221-1111-1--"],
+      ["Bazil Thredd", "221-1111----"]]],
+    ["Blackfathom Deeps", "1111-11-11--", [["Ghamoo-ra", "1111-11-11--"], ["Lady Sarevess", "1111-11-11--"], ["Geilhast", "1111-11-11--"], ["Lorgus Jett", "1111-11-11--"],
+      ["Old Serra'kis", "1-11-11-11--"], ["Twilight Lord Kelris", "1111-11--1--"], ["Aku'mai", "111--11--1--"]]],
+    ["Excavation Site: Wetlands", "1-11111111--", [["Saltspine", "1-11111111--"], ["Shadetooth", "1-11111111--"], ["Highland Horror", "1-11111111--"],
+      ["Relic Guardian", "1-11111111--"]]],
+    ["Scarlet Monastery", "44332322111-", [["Interrogator Vishas", "11111111111-"], ["Bloodmage Thalnos", "11111111111-"], ["Houndmaster Loksey", "11111111----"],
+      ["Arcanist Doan", "11111111----"], ["Herod", "1111-1------"], ["High Inquisitor Whitemane", "11----------"],
+      ["Scarlet Commander Mograine", "11----------"]]],
     ["Gnomeregan", "1111-11-1-1-", [["Grubbis", "1111-11-1-1-"], ["Viscous Fallout", "1111-11-1-1-"], ["Electrocutioner 6000", "1111-11-1-1-"], ["Crowd Pummeler 9-60", "1111-11-1-1-"],
       ["Mekgineer Thermaplugg", "111--11-----"]]],
-    ["Razorfen Kraul", "11111-11-1--", [["Aggem Thorncurse", "11111-11-1--"], ["Death Speaker Jargba", "11111-11-1--"], ["Overlord Ramtusk", "11111-11-1--"], ["Charlga Razorflank", "11111-11-1--"]]],
-    ["Scarlet Monastery", "44332322111-", [["Interrogator Vishas", "11111111111-"], ["Bloodmage Thalnos", "11111111111-"], ["Houndmaster Loksey", "11111111----"],
-      ["Arcanist Doan", "11111111----"], ["Herod", "1111-1------"], ["High Inquisitor Whitemane", "11----------"]]]
+    ["Razorfen Kraul", "11111-11-1--", [["Roogug", "11111-11-1--"], ["Aggem Thorncurse", "11111-11-1--"], ["Death Speaker Jargba", "11111-11-1--"], ["Overlord Ramtusk", "11111-11-1--"],
+      ["Agathelos the Raging", "11111-11-1--"], ["Charlga Razorflank", "11111-11-1--"]]],
+    ["Krol'dok Stronghold", "111---------", []]
   ];
+  // the level each member had at a first kill there, as their records carry it (k<encounter id>; a kill from before the
+  // addon sent it carries none), in G's order: what rule 3 learns a level range from. Where fewer members than the rule
+  // asks have one, the seed's range stands
+  var KILL_LEVELS = {
+    "Razorfen Kraul": [32, 32, 33, 33, 34, null, 34, 35, null, 36, null, null]
+  };
   // standings as the reputation list reports them (Friendly from 3,000, Honored from 9,000); a level 1 has met only the home cities
   var FACTIONS = [
     ["Stormwind", [12400, 9800, 7600, 6100, 5200, 9100, 10200, 6800, 4300, 5900, 3600, 3100]],
@@ -563,34 +793,146 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   function counts(s) { return s.split("").map(function (ch) { return ch === "-" ? null : parseInt(ch, 10); }); }
   function byName(a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }
   // the Statistics page's discovered categories, as the window builds them: Bosses with a child per dungeon, Dungeons,
-  // Reputation, each sorted by name (Raids would sit between, but nobody has found one, so it is left out)
-  var BOSS_KIDS = FOUND.slice().sort(byName).map(function (d, i) {
+  // Reputation, each sorted by name (Raids would sit between, but nobody has found one, so it is left out); a dungeon
+  // whose bosses nobody has met has no child yet
+  var BOSS_KIDS = FOUND.filter(function (d) { return d[2].length > 0; }).sort(byName).map(function (d, i) {
     return { id: "b" + i, label: d[0], sub: true, learned: "bosses", stats: d[2].map(function (b) { return [b[0], counts(b[1])]; }).sort(byName) };
   });
   var DUNGEON_STATS = FOUND.map(function (d) { return [d[0], counts(d[1])]; }).sort(byName);
   var REP_STATS = FACTIONS.slice().sort(byName);
   var LEARNED = [{ id: "bosses", label: "Bosses", learned: "bosses", stats: [], first: BOSS_KIDS[0].id, count: BOSS_KIDS.reduce(function (n, c) { return n + c.stats.length; }, 0) }]
     .concat(BOSS_KIDS, [{ id: "dungeons", label: "Dungeons", learned: "dungeons", stats: DUNGEON_STATS }, { id: "rep", label: "Reputation", learned: "rep", stats: REP_STATS }]);
-  // the slots the guild has seen an enchant in, and on how many members: learned from the records, so head and
-  // shoulder, which nobody can enchant yet, are never asked for, and neck is, because Forever has neck enchants
+  // the slots the guild has seen an enchant in, and on how many members (the Officers page's line)
   var SLOTS = ["Head", "Neck", "Shoulder", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Ring 1", "Ring 2", "Trinket 1", "Trinket 2", "Back", "Main hand", "Off hand", "Ranged"];
   var ENCH = {};
   ADDON.forEach(function (r) { r.s.enchanted.forEach(function (slot) { ENCH[slot] = (ENCH[slot] || 0) + 1; }); });
-  // readiness as Stats.lua derives it: an empty slot, a slot missing the enchant the guild has there, durability under
-  // half, no potions; no gap is ready (2), one or two is gaps (1), more is no (0)
+  // what each member wears where an enchant asks the kind of item, as "class.subclass" (Stats.lua's itemKind): the
+  // armour by class, mail and plate from 40; a cloak is cloth, a neck miscellaneous; then the main hand, the off hand
+  // and the ranged slot. Nothing for an empty slot
+  var WIELD = { Cutecutecute: ["2.4", "4.0", "2.19"], Yezin: ["2.7", "4.6", "2.3"], Upn: ["2.15", "4.0", null], Ferrow: ["2.7", "2.7", "2.2"],
+    Ondra: ["2.15", "4.0", "2.19"], Mutu: ["2.0", "4.6", "2.18"], Bari: ["2.4", "4.6", "4.7"], Quillan: ["2.15", "2.15", "2.16"], Kaka: ["2.4", "4.0", "2.19"],
+    Boopsy: ["2.15", "4.0", "2.19"], Lindel: ["2.4", "4.0", "4.8"], Garristan: ["2.7", null, null] };
+  function armourOf(r) {
+    var c = r.c, l = r.s.level;
+    if (c === "PRIEST" || c === "MAGE" || c === "WARLOCK") return "4.1";
+    if (c === "ROGUE" || c === "DRUID") return "4.2";
+    if (c === "HUNTER" || c === "SHAMAN") return l >= 40 ? "4.3" : "4.2";
+    return l >= 40 ? "4.4" : "4.3";
+  }
+  function kindAt(r, slot) {
+    if (r.s.empty_slots.indexOf(slot) >= 0) return null;
+    var w = WIELD[r.n] || [];
+    if (slot === "Main hand") return w[0] || null;
+    if (slot === "Off hand") return w[1] || null;
+    if (slot === "Ranged") return w[2] || null;
+    if (slot === "Back") return "4.1";
+    if (slot === "Neck" || /^(Ring|Trinket)/.test(slot)) return "4.0";
+    return armourOf(r);
+  }
+  // a kind as the client names it (C_Item.GetItemSubClassInfo)
+  var KIND_NAME = { "2.0": "One-Handed Axes", "2.2": "Bows", "2.3": "Guns", "2.4": "One-Handed Maces", "2.7": "One-Handed Swords", "2.15": "Daggers", "2.16": "Thrown",
+    "2.18": "Crossbows", "2.19": "Wands", "4.0": "Miscellaneous", "4.1": "Cloth", "4.2": "Leather", "4.3": "Mail", "4.4": "Plate", "4.6": "Shields", "4.7": "Librams", "4.8": "Idols" };
+  // which of the seed's enchants each member has, by what they do: the id their record sends with the kind, so the Guide
+  // marks those as seen
+  var PICK = {
+    heal: { Neck: "Enchant Necklace - Healing Power", Chest: "Enchant Chest - Lesser Stats", Feet: "Enchant Boots - Lesser Spirit", Wrist: "Enchant Bracer - Lesser Healing Power",
+      Hands: "Enchant Gloves - Holy Power", Back: "Enchant Cloak - Lesser Protection", "Main hand": "Enchant Weapon - Recovery" },
+    tank: { Neck: "Enchant Necklace - Deflection", Chest: "Enchant Chest - Stamina", Feet: "Enchant Boots - Stamina", Wrist: "Enchant Bracer - Lesser Deflection",
+      Hands: "Enchant Gloves - Greater Strength", Back: "Enchant Cloak - Defense", "Main hand": "Enchant Weapon - Striking", "Off hand": "Enchant Shield - Stamina" },
+    phys: { Neck: "Enchant Necklace - Agility", Chest: "Enchant Chest - Lesser Stats", Feet: "Enchant Boots - Lesser Agility", Wrist: "Enchant Bracer - Lesser Agility",
+      Hands: "Enchant Gloves - Agility", Back: "Enchant Cloak - Lesser Agility", "Main hand": "Enchant Weapon - Lesser Striking" },
+    caster: { Neck: "Enchant Necklace - Spell Power", Chest: "Enchant Chest - Intellect", Feet: "Enchant Boots - Lesser Stamina", Wrist: "Enchant Bracer - Intellect",
+      Hands: "Enchant Gloves - Arcane Power", Back: "Enchant Cloak - Lesser Protection", "Main hand": "Enchant Weapon - Insight" }
+  };
+  function pickOf(r, slot) {
+    var style = r.s.role === "Tank" ? "tank" : r.s.role === "Heal" ? "heal" : (r.c === "HUNTER" || r.c === "ROGUE" || r.c === "WARRIOR") ? "phys" : "caster";
+    return PICK[style][slot];
+  }
+
+  // ---- the rules (Rules.lua): their thresholds, the officers' to retune in Settings, and what they make of the seed and
+  // the guild's finds, built again at every draw as the addon builds its model a few seconds after anything changes.
+  // Each threshold as Settings shows it: [name, label, lowest, highest, step, how it reads, what it does]
+  var RULES = { rangeMembers: 5, rangeLow: 0.10, rangeHigh: 0.90, doubtRuns: 3, enchantDoubtDays: 14, enchantDoubtLevel: 30, xpAgree: 3, lootDoubtKills: 5,
+    staleShare: 0.30, guideWindow: 3, guideAhead: 5 };
+  var TUNE = [
+    ["rangeMembers", "Members to learn a range", 1, 40, 1, null, "Members whose kill levels it takes to learn a dungeon's level range."],
+    ["rangeLow", "Range, lower percentile", 0, 0.5, 0.05, "pctile", "A learned range starts at this percentile of the members' kill levels."],
+    ["rangeHigh", "Range, upper percentile", 0.5, 1, 0.05, "pctile", "A learned range ends at this percentile of the members' kill levels."],
+    ["doubtRuns", "Full runs to doubt a boss", 1, 20, 1, null, "Full runs of a dungeon that never meet one of the research's bosses before it is doubted; each more boss missing takes as many runs again."],
+    ["enchantDoubtDays", "Days to doubt a slot", 1, 90, 1, null, "Days of members at the enchant level wearing items in a slot, with no enchant seen there, before the research's slot is doubted."],
+    ["enchantDoubtLevel", "Enchant level", 1, 60, 1, null, "From this level the research's enchant slots count as missing, and members this level or more start the doubt clock."],
+    ["xpAgree", "Members to agree on XP", 1, 20, 1, null, "Members who report the same XP for a level before it replaces the research's."],
+    ["lootDoubtKills", "Kills to note unseen loot", 1, 50, 1, null, "Kills of a boss before the research's loot nobody has seen drop is noted."],
+    ["staleShare", "Stale when absent over", 0.05, 0.95, 0.05, "pct", "The research is stale when this client lacks more than this share of what it names."],
+    ["guideWindow", "Guide: levels near you", 0, 10, 1, null, "The Guide names the members online within this many levels of yours."],
+    ["guideAhead", "Guide: levels ahead", 1, 20, 1, null, "The Guide lists the dungeons opening within this many levels under Next up."]
+  ];
+  var TUNE_BY = {};
+  TUNE.forEach(function (t) { TUNE_BY[t[0]] = t; });
+  // the enchant slots' clock (rule 4) started five days ago, when the first member at the enchant level was seen wearing an item there
+  var WATCH_DAYS = 5;
+  function rule(name) { return st.rules[name] ? st.rules[name].v : RULES[name]; }
+  function showRule(name, v) {
+    if (v == null) v = rule(name);
+    var t = TUNE_BY[name];
+    if (t[5] === "pct") return Math.round(v * 100) + "%";
+    if (t[5] === "pctile") { var n = Math.round(v * 100), tail = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" })[n % 10] || "th"; return n + tail; }
+    return String(Math.round(v));
+  }
+  function members(n) { return plural(n, "member", "members"); }
+
+  // rule 5, enchant slots: a slot counts when a member has an enchant there on that kind of item, or, for a character at
+  // the rules' enchant level, when the seed has one for it (on that kind, where it names kinds) and the guild has not
+  // doubted it (rule 4: nobody has one there enchantDoubtDays after the clock started)
+  function enchLearned(slot, kind) { return enchSeen(slot, kind) > 0; }
+  function enchSeen(slot, kind) { return ADDON.filter(function (r) { return r.s.enchanted.indexOf(slot) >= 0 && (kind == null || kindAt(r, slot) === kind); }).length; }
+  function enchIdSeen(slot, name) { return ADDON.filter(function (r) { return r.s.enchanted.indexOf(slot) >= 0 && pickOf(r, slot) === name; }).length; }
+  function slotDoubted(slot) {
+    var lvl = rule("enchantDoubtLevel");
+    return WATCH_DAYS >= rule("enchantDoubtDays") && ADDON.some(function (r) { return r.s.level >= lvl && kindAt(r, slot) != null; });
+  }
+  // the seed's word on a slot: its own (data or beta), doubted, or none; and the slot's as the Guide says it, seen once a
+  // member has one there on any kind of item. What one kind has taught leaves the seed standing for the others
+  function seedState(slot) {
+    var e = SEED.enchants[slot];
+    if (!e) return null;
+    return !enchLearned(slot) && slotDoubted(slot) ? "doubted" : e.conf;
+  }
+  function slotState(slot) { return SEED.enchants[slot] && enchLearned(slot) ? "seen" : seedState(slot); }
+  // level null asks for the slot whatever the level: the Guide's advice under the enchant level
+  function seedEnchantable(slot, kind, level) {
+    if (level != null && level < rule("enchantDoubtLevel")) return false;
+    var st2 = seedState(slot), kinds = SEED.enchants[slot] && SEED.enchants[slot].kinds;
+    return (st2 === "data" || st2 === "beta") && (kinds == null || kinds.indexOf(kind) >= 0);
+  }
+  function enchKnown(slot, kind, level) { return enchLearned(slot, kind) || seedEnchantable(slot, kind, level); }
+  // where the word that a slot takes an enchant comes from: "seen on 3 members", else the seed's
+  function enchSource(slot, kind) {
+    var n = enchSeen(slot, kind);
+    return n > 0 ? "seen on " + members(n) : seedState(slot) === "beta" ? "seen in the beta" : "from research";
+  }
+  // readiness as Stats.lua derives it: an empty slot, a missing enchant (as Missing enchants counts them), durability
+  // under half, no potions; no gap is ready (2), one or two is gaps (1), more is no (0)
   function readyGaps(s) {
     var gaps = [], empty = s.empty_slots.length, missing = s.unenchanted.length;
     if (empty > 0) gaps.push(empty === 1 ? "an empty slot" : empty + " empty slots");
-    if (missing > 0) gaps.push(missing === 1 ? "a slot missing the enchant the guild has there" : missing + " slots missing the enchants the guild has there");
+    if (missing > 0) gaps.push(missing === 1 ? "a missing enchant" : missing + " missing enchants");
     if (s.durability < 50) gaps.push("durability under 50%");
     if (s.potions === 0) gaps.push("no potions");
     return gaps;
   }
+  // Missing enchants and readiness, worked out again when the rules are retuned: each member's own client asks by their
+  // level
+  function derive() {
+    ADDON.forEach(function (r) {
+      var s = r.s;
+      s.unenchanted = SLOTS.filter(function (slot) { var kind = kindAt(r, slot); return kind != null && s.enchanted.indexOf(slot) < 0 && enchKnown(slot, kind, s.level); });
+      var gaps = readyGaps(s).length;
+      s.ready = gaps === 0 ? 2 : gaps <= 2 ? 1 : 0;
+    });
+  }
   ADDON.forEach(function (r, k) {
     var s = r.s;
-    s.unenchanted = SLOTS.filter(function (slot) { return ENCH[slot] && s.empty_slots.indexOf(slot) < 0 && s.enchanted.indexOf(slot) < 0; });
-    var gaps = readyGaps(s).length;
-    s.ready = gaps === 0 ? 2 : gaps <= 2 ? 1 : 0;
     s.bosses = 0;
     BOSS_KIDS.forEach(function (c) { c.stats.forEach(function (b) { if (b[1][k] > 0) s.bosses++; }); });
     s.dungeons_seen = DUNGEON_STATS.filter(function (d) { return d[1][k] != null; }).length;
@@ -661,10 +1003,11 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   var MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   // ---- the viewer's settings, as the addon keeps them in CuteDB; the officers' policy on top of the defaults
-  var st = { viewer: "member", tab: "race", sort: {}, statCat: null, statOpen: null, offline: true, minimap: true, compact: false, role: { Kaka: "Heal", Yezin: "Tank" }, raidspec: { Kaka: false, Yezin: false }, meView: false, cols: {}, policy: {}, threshold: POLICY.threshold };
+  var st = { viewer: "member", tab: "race", sort: {}, statCat: null, statOpen: null, offline: true, minimap: true, compact: false, role: { Kaka: "Heal", Yezin: "Tank" }, raidspec: { Kaka: false, Yezin: false }, meView: false, cols: {}, policy: {}, threshold: POLICY.threshold, rules: {} };
   ["race", "prog", "officers"].forEach(function (p) { st.cols[p] = {}; (COLS[p] || []).forEach(function (id) { st.cols[p][id] = true; }); });
   st.cols.shame = {};
   (byCat.funny || []).forEach(function (d) { st.cols.shame[d.id] = true; });
+  derive();
   function vis(id) { return st.policy[id] || (byId[id] && byId[id].vis) || "all"; }
   // a statistics category is one policy entry for all its statistics; the key cannot collide with a registry id
   function statKey(c) { return "stats:" + c.id; }
@@ -757,10 +1100,10 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     if (!canSee(x.me, d.id)) return "<td class=\"" + (isRight(d) ? "cu-r " : "") + "cu-hid\" title=\"Only " + esc(r.n) + " and the officers see this\">-</td>";
     var v = r.s[d.id], cls = isRight(d) ? "cu-r" : "", inner, title = "";
     // the tooltips that say more than the cell: the gaps behind the verdict (for those who may see the inputs), the
-    // slots a list names, each missing enchant with how many members the guild has seen with one there
+    // slots a list names, each missing enchant with how many members the guild has seen with one there, or the seed's word
     var tip = null;
     if (d.id === "ready" && (x.me || officer())) { var gaps = readyGaps(r.s); tip = gaps.length ? gaps.join(", ") : "No gaps."; }
-    else if (d.id === "unenchanted" && Array.isArray(v)) tip = v.length ? v.map(function (slot) { return slot + ": " + (ENCH[slot] === 1 ? "1 member has one" : ENCH[slot] + " members have one"); }).join("\n") : "none";
+    else if (d.id === "unenchanted" && Array.isArray(v)) tip = v.length ? v.map(function (slot) { var kind = x.me ? kindAt(r, slot) : null; return slot + (kind ? " (" + (KIND_NAME[kind] || kind) + ")" : "") + ": " + enchSource(slot, kind); }).join("\n") : "none";
     else if (d.kind === "list" && Array.isArray(v)) tip = v.length ? v.join(", ") : "none";
     if (tip) title = " title=\"" + esc(tip) + "\"";
     if (d.kind === "pips") inner = pips(v || "");
@@ -878,6 +1221,243 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     });
     return h + "</tbody></table></div></div>";
   }
+  // ---- the knowledge model, as Rules.lua builds it: every dungeon and boss of the seed, with the guild's finds joined by
+  // name (rule 2 adds what the seed lacks), each with its state: data (from research), beta (seen in the beta), seen (by
+  // the guild) or doubted (rule 4); a dungeon's range learned from the kill levels (rule 3) or the seed's; a boss's loot,
+  // what the research lists and what the guild has seen drop (rule 8)
+  function words(f) {
+    if (f.state === "seen") return f.n > 0 ? "seen by " + members(f.n) : "seen in play";
+    if (f.state === "beta") return "seen in the beta";
+    if (f.state === "data") return "from research";
+    if (f.state === "doubted") return f.runs ? "doubted: not seen in " + plural(f.runs, "run", "runs") : "doubted";
+    return "";
+  }
+  // a dungeon's range in words, and where it comes from: the members' kill levels, else the seed's, as sure as the seed is
+  function rangeWords(d) {
+    if (d.min == null) return ["?", "not known yet: the guild's kills will tell"];
+    var r = d.min === d.max ? String(d.min) : d.min + "-" + d.max;
+    if (d.range === "learned") return [r, "learned from " + members(d.levels)];
+    if (d.range === "seen") return [r, "killed at these levels by " + members(d.levels)];
+    return [r, d.conf === "beta" ? "the beta's range" : "the research's range"];
+  }
+  // rule 3's ends: the lowest rangeLow and the highest 1 - rangeHigh of the levels set aside, each rounded half up; where
+  // nothing would be left, the middle one
+  function percentiles(sorted, lo, hi) {
+    var n = sorted.length, i = 1 + Math.floor(lo * n + 0.5 + 1e-9), j = n - Math.floor((1 - hi) * n + 0.5 + 1e-9);
+    if (i > j) { i = Math.floor((n + 1) / 2); j = i; }
+    return [sorted[Math.max(1, Math.min(n, i)) - 1], sorted[Math.max(1, Math.min(n, j)) - 1]];
+  }
+  function model() {
+    var found = {}, list = [];
+    FOUND.forEach(function (f) { found[f[0]] = f; });
+    // a boss: the members' kills in G's order, how many members killed it, its kills all told, and of the loot the
+    // research lists the share the guild saw drop (one item for every three kills, never more than listed)
+    function boss(name, conf, seeded, order, loot, f) {
+      var hit = f && f[2].filter(function (b) { return b[0] === name; })[0];
+      var c = hit ? counts(hit[1]) : ADDON.map(function () { return null; });
+      var killers = c.filter(function (v) { return v > 0; }).length, kills = c.reduce(function (n, v) { return n + (v || 0); }, 0);
+      return { name: name, conf: conf, seeded: seeded, order: order, counts: c, n: killers, kills: kills, loot: loot, lootSeen: Math.min(loot, Math.floor(kills / 3)),
+        state: killers > 0 || !seeded ? "seen" : conf };
+    }
+    function dungeon(name, conf, seeded, f, bosses) {
+      var runs = f ? counts(f[1]) : [];
+      var n = ADDON.filter(function (r, k) { return runs[k] != null || bosses.some(function (b) { return b.counts[k] > 0; }); }).length;
+      return { name: name, conf: conf, seeded: seeded, n: n, state: n > 0 || !seeded ? "seen" : conf, bosses: bosses };
+    }
+    SEED.dungeons.forEach(function (sd) {
+      var f = found[sd[0]];
+      var bosses = sd[5].map(function (b, i) { return boss(b[0], b[2] || sd[4], true, i + 1, b[1], f); });
+      // rule 2: a boss killed there that the seed lacks joins after the seed's
+      if (f) f[2].forEach(function (b) { if (!bosses.some(function (x) { return x.name === b[0]; })) bosses.push(boss(b[0], null, false, 1000 + bosses.length, 0, f)); });
+      var d = dungeon(sd[0], sd[4], true, f, bosses);
+      d.seedMin = sd[1]; d.seedMax = sd[2]; d.isNew = sd[3]; d.raid = sd[6] === "raid";
+      list.push(d);
+    });
+    FOUND.forEach(function (f) {
+      if (SEED.dungeons.some(function (sd) { return sd[0] === f[0]; })) return;
+      list.push(dungeon(f[0], null, false, f, f[2].map(function (b, i) { return boss(b[0], null, false, 1000 + i, 0, f); })));
+    });
+    list.forEach(function (d) {
+      // rule 3: the members' levels at a first kill there, once rangeMembers have one; else the seed's range; else the
+      // levels seen so far
+      var lv = (KILL_LEVELS[d.name] || []).filter(function (v) { return v != null; }).sort(function (a, b) { return a - b; });
+      var lo = Math.min(rule("rangeLow"), rule("rangeHigh")), hi = Math.max(rule("rangeLow"), rule("rangeHigh"));
+      d.levels = lv.length;
+      if (lv.length >= rule("rangeMembers")) { var ends = percentiles(lv, lo, hi); d.min = ends[0]; d.max = ends[1]; d.range = "learned"; }
+      else if (d.seeded) { d.min = d.seedMin; d.max = d.seedMax; d.range = "seed"; }
+      else if (lv.length) { d.min = lv[0]; d.max = lv[lv.length - 1]; d.range = "seen"; }
+      // rule 4: a seeded boss that doubtRuns full runs never met is doubted, each more boss missing taking as many runs
+      // again; a full run is a member who has killed every boss there the guild has met
+      if (!d.seeded) return;
+      var met = d.bosses.filter(function (b) { return b.state === "seen"; }), open = d.bosses.filter(function (b) { return b.seeded && b.state !== "seen"; });
+      if (!met.length || !open.length) return;
+      var runs = ADDON.filter(function (r, k) { return met.every(function (b) { return b.counts[k] > 0; }); }).length;
+      open.forEach(function (b) { b.runs = runs; if (runs >= rule("doubtRuns") * open.length) b.state = "doubted"; });
+    });
+    return list;
+  }
+  // what the guild's play changed from the research, in the window's order: new dungeons, new bosses, ranges learned,
+  // doubted bosses, then the enchant slots doubted or new
+  function changes(list) {
+    var out = [];
+    function byN(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; }
+    list.filter(function (d) { return !d.seeded; }).sort(byN).forEach(function (d) { out.push({ what: "New dungeon: " + d.name, detail: words(d) }); });
+    var bosses = [];
+    list.forEach(function (d) { d.bosses.forEach(function (b) { b.dungeon = d.name; bosses.push(b); }); });
+    bosses.filter(function (b) { return !b.seeded; }).sort(byN).forEach(function (b) { out.push({ what: "New boss: " + b.name, detail: "in " + b.dungeon + ", " + words(b) }); });
+    list.filter(function (d) { return d.range === "learned" && (d.seedMin !== d.min || d.seedMax !== d.max); }).sort(byN).forEach(function (d) {
+      out.push({ what: "Range learned: " + d.name, detail: d.min + "-" + d.max + (d.seeded ? " (research " + d.seedMin + "-" + d.seedMax + ")" : "") + ", from " + members(d.levels) });
+    });
+    bosses.filter(function (b) { return b.state === "doubted"; }).sort(byN).forEach(function (b) {
+      out.push({ what: "Doubted: " + b.name, detail: "in " + b.dungeon + ", not seen in " + plural(b.runs, "run", "runs"), dim: true });
+    });
+    SLOTS.forEach(function (slot) {
+      if (slotState(slot) === "doubted") out.push({ what: "Doubted: " + slot + " enchants", detail: "none seen in " + plural(rule("enchantDoubtDays"), "day", "days") + " of members at " + rule("enchantDoubtLevel") + " or more", dim: true });
+      else if (!SEED.enchants[slot] && ENCH[slot]) out.push({ what: "New enchant slot: " + slot, detail: "seen on " + members(ENCH[slot]) });
+    });
+    return out;
+  }
+
+  // ---- the Guide page, as Guide.lua draws it: the band, then one list of lines. For you and the officers' view are the
+  // viewer's own: Kaka's at 37, Yezin's at 42 with the guild under it
+  function some(names, max) { return names.length <= max ? names.join(", ") : names.slice(0, max).join(", ") + " and " + (names.length - max) + " more"; }
+  function kindName(kind) { return KIND_NAME[kind] || kind; }
+  // a dungeon's tooltip: its range and where it comes from, how sure, every boss with how sure and your kills, the loot
+  function dungeonTip(d, k) {
+    var rw = rangeWords(d), t = [d.name, "Levels " + rw[0] + ": " + rw[1], (d.raid ? "A raid" : "A dungeon") + (d.isNew ? " new in Forever, " : ", ") + words(d) + "."];
+    d.bosses.forEach(function (b) {
+      t.push(b.name + ": " + words(b) + "; " + (b.counts[k] > 0 ? "you killed it" : "not by you"));
+      var unseen = b.loot - b.lootSeen;
+      if (b.loot > 0) t.push("   Loot: " + plural(b.lootSeen, "item", "items") + " seen in play" + (unseen > 0 ? ", " + unseen + " from research"
+        + (b.seeded && b.kills >= rule("lootDoubtKills") ? " not seen in " + plural(b.kills, "kill", "kills") : "") : ""));
+    });
+    if (!d.bosses.length) t.push("No bosses known here yet: the guild's kills name them.");
+    return t.join("\n");
+  }
+  // what Forever has for a worn item (Rules.lua SlotEnchants): the seed's enchants for the slot that take its kind, the
+  // ones the guild has on an item first; in the hands' slots, where a two-hander, a one-hander, a shield and a book take
+  // different ones, an enchant that names no kinds of its own is counted, not offered
+  var HANDS = { "Main hand": true, "Off hand": true, "Ranged": true };
+  function forever(slot, kind) {
+    var e = SEED.enchants[slot], list = [], unplaced = 0;
+    (e ? e.list : []).forEach(function (x) {
+      var name = typeof x === "string" ? x : x[0], own = typeof x === "string" ? null : x[1], n = enchIdSeen(slot, name);
+      var takes = kind == null ? true : own ? own.indexOf(kind) >= 0 : HANDS[slot] ? false : e.kinds == null || e.kinds.indexOf(kind) >= 0;
+      if (kind != null && !own && HANDS[slot]) unplaced++;
+      if (takes) list.push({ name: name, n: n, state: n > 0 ? "seen" : seedState(slot) });
+    });
+    list.sort(function (a, b) { return (a.state === "seen") !== (b.state === "seen") ? (a.state === "seen" ? -1 : 1) : a.name < b.name ? -1 : 1; });
+    var line = list.length ? "Forever has: " + some(list.map(function (x) { return x.name; }), 3)
+      : unplaced ? "Forever has " + plural(unplaced, "enchant", "enchants") + " for this slot; which take " + kindName(kind) + " is not in the research" : null;
+    return { line: line, list: list, unplaced: unplaced };
+  }
+  function slotTip(label, head, f) {
+    return [label, head].concat(f.list.map(function (x) { return x.name + ": " + (x.state === "seen" ? "seen on " + members(x.n) : words(x)); }),
+      f.unplaced ? [plural(f.unplaced, "more enchant", "more enchants") + " for this slot, for kinds of item the research does not name."] : []).join("\n");
+  }
+  function guide() {
+    var off = officer(), m = me(), r = G.filter(function (x) { return x.n === m; })[0], k = ADDON.indexOf(r), s = r.s, level = s.level;
+    var list = model(), w = rule("guideWindow"), ahead = rule("guideAhead"), items = [];
+    function add(it) { items.push(it); }
+    function byMin(a, b) { return a.min !== b.min ? a.min - b.min : a.name < b.name ? -1 : 1; }
+    function tag(d) { return d.name + (d.raid ? " (raid)" : ""); }
+    var now = list.filter(function (d) { return d.min != null && d.min <= level && level <= d.max; }).sort(byMin);
+    var soon = list.filter(function (d) { return d.min != null && d.min > level && d.min <= level + ahead; }).sort(byMin);
+    // for you: the members online near your level who run the addon (a group to ask), then each dungeon your level is in
+    // range of, with the bosses you have not killed
+    add({ kind: "head", name: "For you, level " + level, who: "the dungeons in range at your level" });
+    var near = !canSee(false, "level") ? [] : G.filter(function (x) { return x.addon && x.on && x.n !== m && Math.abs(x.s.level - level) <= w; })
+      .sort(function (a, b) { var da = Math.abs(a.s.level - level), db = Math.abs(b.s.level - level); return da !== db ? da - db : a.n < b.n ? -1 : 1; })
+      .map(function (x) { return x.n + " " + x.s.level; });
+    if (near.length) add({ kind: "sub", name: "Online near your level: " + some(near, 4), c: "dim", tip: ["Online within " + plural(w, "level", "levels") + " of yours, with the addon"].concat(near).join("\n") });
+    now.forEach(function (d) {
+      var tip = dungeonTip(d, k);
+      add({ kind: "item", name: tag(d), val: rangeWords(d)[0], who: words(d), tip: tip });
+      var left = [], doubted = [];
+      d.bosses.forEach(function (b) { if (!(b.counts[k] > 0)) (b.state === "doubted" ? doubted : left).push(b.name); });
+      var text = !d.bosses.length ? "No bosses known here yet: the guild's kills name them."
+        : !left.length && !doubted.length ? "Every boss here killed."
+        : !left.length ? "Every boss here killed but the doubted: " + doubted.join(", ")
+        : "Bosses left: " + left.join(", ") + (doubted.length ? "; doubted: " + doubted.join(", ") : "");
+      add({ kind: "sub", indent: true, name: text, c: "dim", tip: tip });
+    });
+    if (!now.length) add({ kind: "note", name: "No dungeon known for level " + level + " yet. The guild's kills fill this in." });
+    add({ kind: "gap" });
+    add({ kind: "head", name: "Next up", who: "opening within " + plural(ahead, "level", "levels") });
+    soon.forEach(function (d) { add({ kind: "item", name: tag(d), val: rangeWords(d)[0], who: words(d), tip: dungeonTip(d, k) }); });
+    if (!soon.length) add({ kind: "note", name: "Nothing known to open in the next " + plural(ahead, "level", "levels") + "." });
+    // gear: your Missing enchants, each with what Forever has for the slot and the kind of item worn there; under the
+    // enchant level, the slots the research has enchants for, as advice (they count as missing from that level, rule 5)
+    add({ kind: "gap" });
+    add({ kind: "head", name: "Gear", who: "the enchants you lack" });
+    var from = rule("enchantDoubtLevel"), advice = [];
+    SLOTS.forEach(function (slot) {
+      var kind = kindAt(r, slot), label = slot + (kind ? " (" + kindName(kind) + ")" : "");
+      if (s.unenchanted.indexOf(slot) >= 0) {
+        var f = forever(slot, kind), tip = slotTip(label, "Not enchanted. The guild's word: " + enchSource(slot, kind) + ".", f);
+        add({ kind: "item", name: label, val: "missing", who: enchSource(slot, kind), c: "warn", tip: tip });
+        if (f.line) add({ kind: "sub", indent: true, name: f.line, c: "dim", tip: tip });
+      } else if (level < from && kind && s.enchanted.indexOf(slot) < 0 && seedEnchantable(slot, kind, null)) advice.push({ slot: slot, label: label, kind: kind });
+    });
+    if (!s.unenchanted.length) add({ kind: "note", name: advice.length ? "Nothing missing: under level " + from + " only what the guild has enchanted counts." : "Every worn item that takes an enchant has one." });
+    if (advice.length) {
+      var beta = advice.some(function (a) { return slotState(a.slot) === "beta"; }), data = advice.some(function (a) { return slotState(a.slot) !== "beta"; });
+      add({ kind: "item", name: "Could take one: " + some(advice.map(function (a) { return a.slot; }), 3), val: "level " + from + "+",
+        who: beta && data ? "from research and the beta" : beta ? "seen in the beta" : "from research", c: "dim",
+        tip: ["Forever has enchants for these", "They count as missing from level " + from + ", the rules' enchant level; until then only what the guild has enchanted does."]
+          .concat(advice.map(function (a) { var line = forever(a.slot, a.kind).line; return a.label + ": " + (line ? line.replace(/^Forever has:? /, "") : ""); })).join("\n") });
+    }
+    // pace: to the next level and to the cap, at your pace and at the median of the paces you may see
+    add({ kind: "gap" });
+    add({ kind: "head", name: "Pace", who: "at your pace and the guild's median" });
+    var paces = ADDON.filter(function (x) { return x.s.xp_hour > 0 && canSee(x.n === m, "xp_hour"); }).map(function (x) { return x.s.xp_hour; }).sort(function (a, b) { return a - b; });
+    var med = paces.length ? (paces.length % 2 ? paces[(paces.length - 1) / 2] : (paces[paces.length / 2 - 1] + paces[paces.length / 2]) / 2) : null;
+    if (level >= SEED.cap) add({ kind: "note", name: "At the cap, level " + SEED.cap + "." });
+    else {
+      [["Level " + (level + 1), xpLeft(level, s.xp, level + 1)], ["The cap, level " + SEED.cap, xpLeft(level, s.xp, SEED.cap)]].forEach(function (p) {
+        var mine = s.xp_hour > 0 ? hours(p[1] / s.xp_hour * 3600) : "no pace yet";
+        add({ kind: "item", name: p[0], val: mine, who: med ? hours(p[1] / med * 3600) + " at the median of " + members(paces.length) : "no median yet", c: "ink",
+          tip: p[0] + "\n" + Math.floor(p[1]) + " XP to go.\n" + (s.xp_hour > 0 ? "Your pace: " + s.xp_hour + " XP an hour, over the last hour of play." : "Your pace shows after a few minutes of play.")
+            + (med ? "\nThe guild's median: " + Math.floor(med) + " XP an hour, over " + members(paces.length) + "." : "") });
+      });
+    }
+    // the officers' view: the dungeons the guild is in range of or has met, one line each (every boss in its tooltip), the
+    // rest counted; and what the guild's play changed from the research
+    if (off) {
+      add({ kind: "gap" });
+      add({ kind: "head", name: "The guild, per dungeon", who: "members in range, bosses the guild has killed" });
+      var rest = 0;
+      list.map(function (d) {
+        var inRange = d.min == null ? 0 : ADDON.filter(function (x) { return x.s.level >= d.min && x.s.level <= d.max; }).length;
+        return { d: d, inRange: inRange, killed: d.bosses.filter(function (b) { return b.n > 0; }).length };
+      }).filter(function (e) { if (e.inRange > 0 || e.killed > 0 || e.d.n > 0) return true; rest++; return false; })
+        .sort(function (a, b) { return (a.d.min == null) !== (b.d.min == null) ? (a.d.min == null ? 1 : -1) : a.d.min != null && a.d.min !== b.d.min ? a.d.min - b.d.min : a.d.name < b.d.name ? -1 : 1; })
+        .forEach(function (e) {
+          var d = e.d, bosses = d.bosses.length ? e.killed + " of " + plural(d.bosses.length, "boss", "bosses") + " killed" : "no bosses known yet";
+          add({ kind: "item", name: tag(d), val: rangeWords(d)[0], who: (d.min != null ? e.inRange + " in range, " : "") + bosses, tip: dungeonTip(d, k) });
+        });
+      if (rest > 0) add({ kind: "note", name: plural(rest, "more dungeon", "more dungeons") + " from the research nobody is in range of or has met yet." });
+      add({ kind: "gap" });
+      var ch = changes(list);
+      add({ kind: "head", name: "Learned in play", who: ch.length ? plural(ch.length, "change", "changes") + " from the research" : "" });
+      ch.forEach(function (c) { add({ kind: "item", name: c.what, who: c.detail, c: c.dim ? "mute" : "ink", tip: c.what + "\n" + c.detail }); });
+      if (!ch.length) add({ kind: "note", name: "Nothing yet: the guild's play has matched the research." });
+    }
+    // the band: where the knowledge comes from (the client is the seed's build, and nothing the seed names is missing from it)
+    var h = "<div class=\"cu-gband\"><div>From research and the beta, checked against this client, and what the guild has met since.</div><div>Research build " + esc(SEED.build.join(".")) + ", " + esc(SEED.generated) + ".</div></div>";
+    var COLOR = { white: "cu-gwhite", ink: "cu-gink", dim: "cu-gdim", mute: "cu-gmute", warn: "cu-gwarn" };
+    items.forEach(function (it) {
+      if (it.kind === "gap") { h += "<div class=\"cu-gl\" aria-hidden=\"true\"></div>"; return; }
+      var row = "cu-gl" + (it.kind === "head" ? " cu-gh" : it.kind === "item" ? " cu-gi" : "");
+      var c = COLOR[it.c || (it.kind === "head" ? "white" : it.kind === "note" ? "mute" : "ink")];
+      h += "<div class=\"" + row + "\"" + (it.kind === "head" ? " role=\"heading\" aria-level=\"3\"" : "") + (it.tip ? " title=\"" + esc(it.tip) + "\"" : "") + ">";
+      h += "<span class=\"" + c + "\"" + (it.indent ? " style=\"padding-left:16px\"" : "") + ">" + esc(it.name) + "</span>";
+      if (it.val != null) h += "<span class=\"cu-gv cu-gink\">" + esc(it.val) + "</span>";
+      if (it.who) h += "<span class=\"cu-gw " + COLOR[it.wc || "dim"] + (it.val == null ? " cu-gw2" : "") + "\">" + esc(it.who) + "</span>";
+      h += "</div>";
+    });
+    return h;
+  }
   function officers() {
     var total = G.length, withAddon = 0, online = 0, levels = [], noAddon = [];
     G.forEach(function (r) { if (r.addon) withAddon++; else noAddon.push(r.n); if (r.on) online++; if (typeof r.s.level === "number") levels.push(r.s.level); });
@@ -927,6 +1507,17 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     var right = "<div class=\"cu-h\">Who sees what</div><div class=\"cu-olines\"><div class=\"cu-dimline\">" + esc(describe()) + (off ? "" : " Only officers can change it.") + "</div></div>";
     right += "<div class=\"cu-field\" style=\"justify-content:space-between;padding-right:0\"><span style=\"width:auto;color:var(--cu-ink)\">Officer ranks: 0 to " + st.threshold + "</span><span style=\"width:auto;display:flex;gap:4px\"><button type=\"button\" class=\"cu-btn cu-sm\" data-act=\"thr-\" aria-label=\"Lower the officer rank threshold\"" + (off ? "" : " disabled") + ">-</button><button type=\"button\" class=\"cu-btn cu-sm\" data-act=\"thr+\" aria-label=\"Raise the officer rank threshold\"" + (off ? "" : " disabled") + ">+</button></span></div>";
     right += "<div class=\"cu-btns\" style=\"padding-top:4px\"><button type=\"button\" class=\"cu-btn\" data-act=\"policy\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Broadcast now</button><button type=\"button\" class=\"cu-btn\" data-act=\"reset\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Reset to defaults</button></div>";
+    right += "<div class=\"cu-h\">Rules the Guide learns by</div><div class=\"cu-olines\"><div class=\"cu-dimline\">White: set by an officer. " + (off ? "Broadcast now sends them." : "Only officers can change them.") + "</div></div>";
+    TUNE.forEach(function (t) {
+      // the label, its value apart from it against the steps (a narrow window cuts the label, never the number); the
+      // steps' tooltip says what it does, its default and who set it
+      var name = t[0], v = rule(name), set = st.rules[name];
+      var tip = t[1] + "\n" + t[6] + "\nDefault " + showRule(name, RULES[name]) + (set ? ". Set to " + showRule(name) + " by " + set.by + "." : ".");
+      right += "<div class=\"cu-tune\"><span" + (set ? " class=\"cu-set-by\"" : "") + ">" + esc(t[1]) + "</span><span class=\"cu-tv" + (set ? " cu-set-by" : "") + "\">" + esc(showRule(name)) + "</span><span>";
+      right += "<button type=\"button\" class=\"cu-btn cu-sm\" data-rule=\"" + name + ":-1\" title=\"" + esc(tip) + "\" aria-label=\"" + esc("Lower: " + t[1] + ", " + showRule(name)) + "\"" + (off && v > t[2] + 1e-9 ? "" : " disabled") + ">-</button>";
+      right += "<button type=\"button\" class=\"cu-btn cu-sm\" data-rule=\"" + name + ":1\" title=\"" + esc(tip) + "\" aria-label=\"" + esc("Raise: " + t[1] + ", " + showRule(name)) + "\"" + (off && v < t[3] - 1e-9 ? "" : " disabled") + ">+</button></span></div>";
+    });
+    right += "<div class=\"cu-btns\" style=\"padding-top:4px\"><button type=\"button\" class=\"cu-btn\" data-act=\"rules\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Rules to defaults</button></div><div class=\"cu-gap\"></div>";
     right += "<div class=\"cu-vishead\"><span></span><span>Everyone</span><span>Only you</span></div>";
     function visRow(label, key, indent) {
       var v = vis(key);
@@ -953,6 +1544,8 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   function footText() {
     var off = officer(), m = me();
     if (st.tab === "race") return "Click a column header to sort. Your own row stays on top. Hover a row or a cell for its tooltip.";
+    if (st.tab === "guide") return off ? "Your own guide, then the guild per dungeon and what its play changed from the research. The thresholds the rules use are on the Settings page."
+      : "Hover a dungeon for its bosses and where its range comes from, a slot for the enchants Forever has. Switch to Yezin for the guild per dungeon and what play changed.";
     if (st.tab === "prog") {
       var self = columnsFor("prog", room()).cols.filter(function (d) { return vis(d.id) === "self"; }).map(function (d) { return d.short; });
       if (off) return "An officer sees every cell, including the stats set to Only you.";
@@ -963,7 +1556,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     if (st.tab === "statistics") return "What the guild has found in play, then the game's own statistics, by category. Click one to rank the guild on it. Officers set visibility per category on the Settings page.";
     if (st.tab === "officers") return "Officer ranks only. The three buttons open the visibility list, ask every addon to resend its record, and push the policy out.";
     if (st.tab === "me") return "Your whole record, every stat in the registry. Tick the box to see what members see of you.";
-    return off ? "Everyone picks their own columns and cards. The visibility list on the right is the officers' to change, and you are one." : "Everyone picks their own columns and cards. The visibility list on the right is the officers' to change; a member sees it greyed.";
+    return off ? "Everyone picks their own columns and cards. The rules and the visibility list on the right are the officers' to change, and you are one." : "Everyone picks their own columns and cards. The rules and the visibility list on the right are the officers' to change; a member sees them greyed.";
   }
   function draw() {
     var off = officer();
@@ -978,7 +1571,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       b.tabIndex = on ? 0 : -1;
     });
     panel.setAttribute("aria-labelledby", "cu-tab-" + st.tab);
-    var body = st.tab === "race" || st.tab === "prog" ? table(st.tab) : st.tab === "shame" ? shame() : st.tab === "statistics" ? statistics() : st.tab === "officers" ? officers() : st.tab === "me" ? mePage() : settings();
+    var body = st.tab === "race" || st.tab === "prog" ? table(st.tab) : st.tab === "guide" ? guide() : st.tab === "shame" ? shame() : st.tab === "statistics" ? statistics() : st.tab === "officers" ? officers() : st.tab === "me" ? mePage() : settings();
     scroll.innerHTML = body + "<div class=\"cu-updated\">Updated just now</div>";
     scroll.scrollTop = keepScroll;
     var online = G.filter(function (r) { return r.on && r.addon; }).length;
@@ -987,11 +1580,13 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     footEl.textContent = footText();
     if (keep) {
       var again = scroll.querySelector("[data-" + keep[0] + "=\"" + keep[1] + "\"]");
+      // (a step that reached its limit is disabled and takes no focus: the other step of the pair has it)
+      if (again && again.disabled) again = again.parentNode.querySelector("button:not([disabled])") || panel;
       if (again) again.focus();
     }
   }
   // the data attribute that names a control in the panel, so a redraw can hand the focus back to it
-  var KEEP = ["k", "set", "col", "vis", "act", "role", "raidspec", "stcat", "stat"];
+  var KEEP = ["k", "set", "col", "vis", "act", "role", "raidspec", "stcat", "stat", "rule"];
   function keepOf(el) {
     for (var i = 0; i < KEEP.length; i++) if (el.dataset[KEEP[i]] !== undefined) return [KEEP[i], el.dataset[KEEP[i]]];
     return null;
@@ -1020,13 +1615,26 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     }
     var x = e.target.closest("button[data-stat]");
     if (x) { st.statOpen = st.statOpen === x.dataset.stat ? null : x.dataset.stat; draw(); return; }
+    // a rule's step down or up: the officers' value, dropped where it comes back to the default
+    var t = e.target.closest("button[data-rule]");
+    if (t) {
+      if (t.disabled) return;
+      var q = t.dataset.rule.split(":"), tu = TUNE_BY[q[0]], nv = Math.round((rule(q[0]) + Number(q[1]) * tu[4]) / tu[4]) * tu[4];
+      nv = Math.round(nv * 100) / 100;
+      if (nv < tu[2] - 1e-9 || nv > tu[3] + 1e-9) return;
+      if (Math.abs(nv - RULES[q[0]]) < 1e-9) delete st.rules[q[0]]; else st.rules[q[0]] = { v: nv, by: me() };
+      derive();
+      draw();
+      return;
+    }
     var a = e.target.closest("button[data-act]");
     if (!a || a.disabled) return;
     var act = a.dataset.act;
     if (act === "settings") { st.tab = "settings"; draw(); document.getElementById("cu-tab-settings").focus(); }
     else if (act === "ask") print("asked the guild to send their records again.");
     else if (act === "policy") print("sent the visibility policy to the guild.");
-    else if (act === "reset") { st.policy = {}; draw(); print("visibility reset to the defaults."); }
+    else if (act === "rules") { st.rules = {}; derive(); draw(); }
+    else if (act === "reset") { st.policy = {}; draw(); }
     else if (act === "thr-") { st.threshold = Math.max(0, st.threshold - 1); draw(); }
     else if (act === "thr+") { st.threshold = Math.min(9, st.threshold + 1); draw(); }
   });
@@ -1095,7 +1703,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   }
   draw();
   // a link straight to a page of the window: #prog, #officers, #settings-officer ...
-  var deep = /^#(race|prog|shame|statistics|officers|me|settings)(?:-(member|officer))?$/.exec(location.hash);
+  var deep = /^#(race|guide|prog|shame|statistics|officers|me|settings)(?:-(member|officer))?$/.exec(location.hash);
   if (deep) {
     st.tab = deep[1];
     setViewer(deep[2] === "officer" || deep[1] === "officers" ? "officer" : "member");
