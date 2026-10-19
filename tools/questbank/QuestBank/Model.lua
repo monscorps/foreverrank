@@ -138,14 +138,15 @@ function M.Between(a, b, fac, mf)
   return best, kind
 end
 
--- world position of a map point: {c, wx, wy}
-function M.World(mapID, x, y)
+-- world position of a map point: {c, wx, wy} (into the table into when given)
+function M.World(mapID, x, y, into)
   if not (C_Map and C_Map.GetWorldPosFromMapPos and CreateVector2D) then return nil end
   local ok, cont, pos = pcall(C_Map.GetWorldPosFromMapPos, mapID, CreateVector2D(x / 100, y / 100))
   if not ok or not cont or not pos then return nil end
   local wx, wy = pos.x, pos.y
   if pos.GetXY then wx, wy = pos:GetXY() end
   if cont ~= 0 and cont ~= 1 then return nil end
+  if into then into.c, into.wx, into.wy = cont, wx, wy; return into end
   return { c = cont, wx = wx, wy = wy }
 end
 
@@ -328,10 +329,14 @@ local function problem(entries, opts)
     P.hearth[i], P.inn[i] = HEARTH + best, inn
   end
   P.canHearth = not opts.noHearth and n > 1
+  if P.hasAfter then P.handed, P.gen = {}, 0 end
   return P
 end
 
 -- order: stop indices, 0 for the hearthstone. Returns level at 60 min, level at the end, minutes.
+-- The quests handed in so far (for a follow-up handed you by another hand-in) are marked in one table per plan with
+-- the evaluation's number, not in a new table each time: a plan evaluates thousands of orders (5.4.2: that table made
+-- about 11 MB of garbage a re-plan)
 local function evaluate(P, order, keep)
   local T, CAP = D.TO_NEXT, QB.CAP
   local level, xp = P.level, P.xp
@@ -339,7 +344,8 @@ local function evaluate(P, order, keep)
   local at60 = level >= CAP and CAP or level + xp / T[level]
   local prev, hearthNext = nil, false
   local cheapSeen, outOfOrder = false, false
-  local handed = P.hasAfter and {} or nil
+  local handed, gen = P.handed, nil
+  if handed then gen = P.gen + 1; P.gen = gen end
   local legs = keep and {} or nil
   for k = 1, #order do
     local s = order[k]
@@ -362,7 +368,7 @@ local function evaluate(P, order, keep)
       local full, lvl, after = P.rowFull[s], P.rowLvl[s], P.rowAfter[s]
       for r = 1, #full do
         local a = after[r]
-        if not a or (handed and handed[a]) then
+        if not a or (handed and handed[a] == gen) then
           local m = level - lvl[r]
           local f = full[r]
           if m >= 10 then f = f * 0.1 elseif m >= 6 then f = f * (1 - (m - 5) * 0.2) end
@@ -373,7 +379,7 @@ local function evaluate(P, order, keep)
             xp = xp + x
             while level < CAP and xp >= T[level] do xp = xp - T[level]; level = level + 1 end
           end
-          if handed then handed[P.rowId[s][r]] = true end
+          if handed then handed[P.rowId[s][r]] = gen end
         elseif rows then
           rows[#rows + 1] = { e = P.stops[s].rows[r], q = P.stops[s].rows[r].q, xp = 0, pct = 0, plvl = level, blocked = true }
         end
@@ -416,6 +422,13 @@ end
 local function copy(t)
   local c = {}
   for i = 1, #t do c[i] = t[i] end
+  return c
+end
+-- t's elements into c (a scratch array), c cut to t's length
+local function copyInto(c, t)
+  local n = #t
+  for i = 1, n do c[i] = t[i] end
+  for i = #c, n + 1, -1 do c[i] = nil end
   return c
 end
 
@@ -498,17 +511,20 @@ local function seeds(P)
   return out
 end
 
--- first-improvement local search: move one element, reverse a run, add or drop the hearthstone
+-- first-improvement local search: move one element, reverse a run, add or drop the hearthstone. Each candidate is
+-- written into one spare array, which becomes the order when it wins (the order before it the spare): two arrays a
+-- search, not one for every candidate
 local function improve(P, order, score, budget)
   local b60, bf, bt = score[1], score[2], score[3]
   local evals = 0
   local improved = true
+  local spare = {}
   local function try(cand)
     local a60, af, at = evaluate(P, cand)
     evals = evals + 1
     step()
     if better(P, a60, af, at, b60, bf, bt) then
-      order, b60, bf, bt = cand, a60, af, at
+      order, spare, b60, bf, bt = cand, order, a60, af, at
       return true
     end
   end
@@ -518,7 +534,7 @@ local function improve(P, order, score, budget)
     for i = 1, len do
       for j = 1, len do
         if i ~= j then
-          local cand = copy(order)
+          local cand = copyInto(spare, order)
           table.insert(cand, j, table.remove(cand, i))
           if try(cand) then improved = true break end
         end
@@ -528,7 +544,7 @@ local function improve(P, order, score, budget)
     if not improved and evals < budget then
       for i = 1, len - 1 do
         for j = i + 1, len do
-          local cand = copy(order)
+          local cand = copyInto(spare, order)
           local lo, hi = i, j
           while lo < hi do cand[lo], cand[hi] = cand[hi], cand[lo]; lo, hi = lo + 1, hi - 1 end
           if try(cand) then improved = true break end
@@ -540,12 +556,12 @@ local function improve(P, order, score, budget)
       local has
       for k = 1, #order do if order[k] == 0 then has = k end end
       if has then
-        local cand = copy(order)
+        local cand = copyInto(spare, order)
         table.remove(cand, has)
         improved = try(cand) or false
       else
         for k = 1, #order do
-          local cand = copy(order)
+          local cand = copyInto(spare, order)
           table.insert(cand, k, 0)
           if try(cand) then improved = true break end
         end

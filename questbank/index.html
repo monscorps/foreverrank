@@ -349,9 +349,11 @@
       <p class="lede">Forever pays well for quests: dungeon quests pay up to 2.675 times their Classic XP (4.35 until Blizzard halved the extra on 1 October 2026). QuestBank shows what every quest in your log is worth at your level, which chains to carry on, the best quests near you, and the quickest way to hand them in, with map pins. When the game holds your level at a cap, it banks your log and plans the hour after the cap goes up. Alliance and Horde, and it plans dungeon runs with your party.</p>
       <div class="dl">
         <a class="dl-btn" href="QuestBank.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_misc_book_09.jpg" alt="">Download QuestBank</a>
-        <span class="dl-meta">Version 5.4.1 · 14 October 2026 · 756 KB</span>
+        <span class="dl-meta">Version 5.4.2 · 19 October 2026 · 762 KB</span>
         <span class="dl-meta">Open it in game with <code>/qb</code>. On Windows, <a href="#share">QuestBank Uploader</a> installs it for you.</span>
-        <span class="dl-meta"><b>New in 5.4.1:</b> the map's pins are the game's own, and the minimap and the arrow wear QuestTrail's look.</span>
+        <span class="dl-meta"><b>New in 5.4.2:</b> no more lag late in a session, and less memory: your walked trails grow point by point instead of being rebuilt every few seconds (half a second at 12,000 points, now about a millisecond), and QuestBank keeps 40% less memory and makes a tenth of the garbage (5 MB a minute where it made 40 to 60).</span>
+
+        <span class="dl-meta"><b>5.4.1</b>, in this download too: the map's pins are the game's own, and the minimap and the arrow wear QuestTrail's look.</span>
         <ul class="dl-meta dl-list">
           <li><b>The map's pins are the game's:</b> on the game's world map and on QuestBank's Map page, every pin is the game's own, drawn again region for region from its templates: a stop on the route is the game's quest pin (the disc with the in-progress mark, the turn-in mark once its quests are done, the next stop as the quest the game super-tracks), a quest to pick up its yellow !, a hand-in its quest pin, an objective its in-progress pin, a dungeon entrance its Dungeon pin, a flight point its taxi node with the game's own area label. Tooltips in the game's words first: [level] name in the colour of the level, the objectives as - lines, Available quest, Ready for turn-in, the green click lines. Pins snap apart as the game's do.</li>
           <li><b>Swapping to the game's map:</b> the Map page's "Game's map" button is named, a right-click on the map offers it (with zoom out, your zone and a waypoint), and the tooltip tells the two keys apart: QuestBank's Map key is its own binding; the game's M always opens the game's map.</li>
@@ -548,7 +550,7 @@
       <p>On Windows, <b>QuestBank Uploader</b> sends your <code>QuestBank.lua</code> here on its own: every 30 minutes, when the game has written it since. Its <code>Install.bat</code> also installs QuestBank, or updates it, in each game folder it finds (where QuestBank isn't there yet, it asks first), so it is the one download you need. Nothing to type, no key, no account; one readable script.</p>
       <div class="dl">
         <a class="dl-btn alt" href="QuestBank-Uploader.zip" download><img src="https://wow.zamimg.com/images/wow/icons/large/inv_letter_15.jpg" alt="">Download QuestBank Uploader</a>
-        <span class="dl-meta">For Windows · includes QuestBank · 792 KB · optional</span>
+        <span class="dl-meta">For Windows · includes QuestBank · 797 KB · optional</span>
 
         <span class="dl-meta">Unzip it anywhere and double-click <code>Install.bat</code>. If you ran the older uploader, this one takes its place and keeps what it already sent.</span>
       </div>
@@ -909,7 +911,7 @@
                 </div>
                 <div>
                   <div class="pt">Updates</div>
-                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 5.4.0. <span style="color:#0a6a0a">Brann runs 5.4.1: time to update.</span></div>
+                  <div style="font-size:12px;color:#6b4d28;line-height:1.35">You run QuestBank 5.4.1. <span style="color:#0a6a0a">Brann runs 5.4.2: time to update.</span></div>
                   <div class="cbl"><span class="cb on"></span>Tell me when anyone on the realm runs a newer one</div>
                   <div class="modes" style="margin:6px 0 0"><span>Copy the download link</span></div>
                   <div class="pt" style="margin-top:14px">Sharing and chat</div>
@@ -1118,7 +1120,7 @@
 
 <footer>
   <img src="../mark.svg" alt="" width="22" height="22">
-  <span>QuestBank 5.4.1. Datamined honestly; labeled or it does not ship.</span>
+  <span>QuestBank 5.4.2. Datamined honestly; labeled or it does not ship.</span>
   <a class="ft-discord" href="https://discord.gg/DZUZj66zh" rel="noopener">Discord</a>
   <a href="https://foreverrank.com/">foreverrank.com</a>
 </footer>

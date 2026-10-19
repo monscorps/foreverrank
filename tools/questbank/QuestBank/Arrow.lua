@@ -90,16 +90,22 @@ function A.Nearest(list, here, mode)
   return best
 end
 
+-- (the target is kept while the route's first leg is the same one: a route's legs never change once planned, and the
+-- arrow asks 20 times a second)
+local routeLeg, routeT
 local function routeTarget()
   local set = QB:Settings()
   local r = QB.routeNow
   if QB:Banking() and not (QB.Run and QB.Run.Get()) and set.routeMode == "plan" then r = QB.routePlan end
   local leg = r and r.legs and r.legs[1]
   if not leg or not leg.stop then return nil end
+  if leg == routeLeg then return routeT end
   local st = leg.stop
   local first = leg.rows and leg.rows[1] and leg.rows[1].q
-  return { name = st.name, c = st.c, wx = st.wx, wy = st.wy, quests = #(leg.rows or {}), what = "to hand in there", kind = "route",
-           qid = first and first.id } -- (its first quest: the colour of the dial and the minimap's stroke)
+  routeLeg = leg
+  routeT = { name = st.name, c = st.c, wx = st.wx, wy = st.wy, quests = #(leg.rows or {}), what = "to hand in there", kind = "route",
+             qid = first and first.id } -- (its first quest: the colour of the dial and the minimap's stroke)
+  return routeT
 end
 
 -- an NPC as a target: where it stands in the world, and on its map (for the minimap's pins)
@@ -721,12 +727,14 @@ end
 local none = { trail = {}, state = "unreachable", info = "No known way there" } -- a pin QuestBank can't lead to
 local nothing = { trail = {}, state = "nothing" }
 
+-- where you stand, read into one table each update (A.me: only ever the latest)
+local here = {}
 function A:Update()
   local f = self.frame
   if not f then return end
   local set = QB:Settings()
   if A.lookKey ~= (A.QT() and "qt" or "game") .. ":" .. tostring(set.compassSize) .. ":" .. tostring(set.compassBg) then self:ApplyLook(); return end
-  local me = QB.API.WorldPosition()
+  local me = QB.API.WorldPosition(nil, here)
   local t = A.Target(me)
   A.t, A.me, A.guided = t, me, false
   if not t then

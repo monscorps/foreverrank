@@ -104,15 +104,18 @@ function MV.Facing()
 end
 
 -- The view for you at me ({c, wx, wy}): its centre (you, or where it was dragged), its radius in yards, the minimap's
--- half width R in pixels and the scale between them, its turn (cos, sin) and whether the ground is drawn
-function MV.View(me)
+-- half width R in pixels and the scale between them, its turn (cos, sin) and whether the ground is drawn. Into the
+-- table v when given (the update's own, 20 times a second), else a new one
+function MV.View(me, v)
   local facing = MV.Rotated() and MV.Facing() or 0
   local ext = MV.Extended(me)
   local cur = MV.cur
   local R = (Minimap:GetWidth() or 140) / 2
   local radius = ext and cur.r or QB.Mini.Radius()
-  return { c = me.c, wx = ext and cur.wx or me.wx, wy = ext and cur.wy or me.wy, radius = radius, R = R, scale = R / radius,
-           cs = cos(facing), sn = sin(facing), facing = facing, ext = ext, square = MV.Square() }
+  v = v or {}
+  v.c, v.wx, v.wy, v.radius, v.R, v.scale = me.c, ext and cur.wx or me.wx, ext and cur.wy or me.wy, radius, R, R / radius
+  v.cs, v.sn, v.facing, v.ext, v.square = cos(facing), sin(facing), facing, ext, MV.Square()
+  return v
 end
 
 -- a world spot on the minimap: pixels from its centre, x right and y up
@@ -741,6 +744,10 @@ function MV.Moving()
   return (want.wx and cur.wx and (want.wx - cur.wx) ^ 2 + (want.wy - cur.wy) ^ 2 > 0.25) and true or false
 end
 
+-- the view of each update, one table kept for it (nothing holds a view past its update; a drag keeps its own), and
+-- the quest areas drawn through one wrapper made once
+local tickView = {}
+local safeBlob = QB.Safe(drawBlob, "minimap quest areas")
 -- each update (Minimap.lua's overlay): the drag, the ease, then the ground and your arrow. Returns the view
 function MV.Tick(dt, me)
   if MV.blocked or not Minimap then return nil end
@@ -777,7 +784,7 @@ function MV.Tick(dt, me)
   end
   local f = groundFrame()
   if not me then MV.extendedNow, MV.blobBusy = nil, nil; f:Hide(); hidePlayer(); return nil end
-  local v = MV.View(me)
+  local v = MV.View(me, tickView)
   MV.extendedNow = v.ext or nil
   -- (at the game's zoom: its own minimap, with your arrow over QuestBank's pins)
   if not v.ext then MV.blobBusy = nil; f:Hide(); drawPlayer(v, me); return v end
@@ -788,7 +795,7 @@ function MV.Tick(dt, me)
   if drawGround(v) then
     f:Show()
     drawPlayer(v, me)
-    QB.Try("minimap quest areas", drawBlob, v)
+    safeBlob(v)
     drawParty(v)
   else
     MV.blobBusy = nil

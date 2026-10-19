@@ -78,9 +78,10 @@ end
 -- The strokes' frames over the minimap: the route's (and the trails', Minimap.lua) at +2, the golden path's at +3,
 -- over the far ground (+1) and under QuestBank's pins (+5). Each a pool of lines; r and square: where they are cut
 MR.route, MR.gold = { lines = {}, used = 0 }, { lines = {}, used = 0 }
+local CONTEXTS = { MR.route, MR.gold }
 function MR.Frames()
   local base = Minimap:GetFrameLevel() or 1
-  for i, ctx in ipairs({ MR.route, MR.gold }) do
+  for i, ctx in ipairs(CONTEXTS) do
     if not ctx.frame then
       ctx.frame = CreateFrame("Frame", nil, Minimap)
       ctx.frame:SetAllPoints(Minimap)
@@ -352,10 +353,25 @@ function MR.DrawGold(v)
   local whole = GP.Spacing() * v.scale < 4
   if whole then ax, ay, bx, by, pk, count = GP.x, GP.y, nil, nil, GP.seg, GP.n - 1 end
   local Point = QB.MiniView.Point
+  -- a piece wholly further from the view's centre than the minimap reaches (its corner, when square) is not drawn
+  -- (MR.Line would cut all of it away): skipped in yards, before it is turned and scaled. A long way has hundreds of
+  -- pieces and only those round you are on the minimap (5.4.2; every one was worked out 20 times a second)
+  local cx, cy = v.wx, v.wy
+  local lim = (ctx.r * (v.square and 1.4143 or 1) + 2) / v.scale
+  local lim2 = lim * lim
   for k = 1, count do
-    local x1, y1 = Point(v, ax[k], ay[k])
-    local x2, y2 = Point(v, whole and GP.x[k + 1] or bx[k], whole and GP.y[k + 1] or by[k])
-    MR.Line(ctx, x1, y1, x2, y2, GP.ColorOf(pk[k]), thick * GP.WidthOf(pk[k]), alpha)
+    local ux, uy = ax[k], ay[k]
+    local wx, wy = whole and GP.x[k + 1] or bx[k], whole and GP.y[k + 1] or by[k]
+    local dx, dy = wx - ux, wy - uy
+    local l2 = dx * dx + dy * dy
+    local t = l2 > 0 and ((cx - ux) * dx + (cy - uy) * dy) / l2 or 0
+    if t < 0 then t = 0 elseif t > 1 then t = 1 end
+    local ex, ey = ux + dx * t - cx, uy + dy * t - cy
+    if ex * ex + ey * ey <= lim2 then
+      local x1, y1 = Point(v, ux, uy)
+      local x2, y2 = Point(v, wx, wy)
+      MR.Line(ctx, x1, y1, x2, y2, GP.ColorOf(pk[k]), thick * GP.WidthOf(pk[k]), alpha)
+    end
   end
   hideFrom(ctx, ctx.used + 1)
   return ctx.used

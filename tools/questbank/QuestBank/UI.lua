@@ -1601,14 +1601,17 @@ end
 -- a quest's reward the finder shows for a kind ("gear", "trinket", "recipe") and, for gear, a slot: the best of its items
 -- you can use, the highest item level first. Gear and trinkets need a known item level. Returns the item and its level.
 -- slot: a slot's name (UI.GEAR_SLOTS), or the set of equip locations itself
+-- (the Gear page asks this for every quest within reach and every slot: tens of thousands of calls a refresh, so the
+-- lists it walks are made once)
+local REWARD_KEYS, NO_ITEMS = { "c", "r", "u" }, {}
 function UI.BestReward(qid, kind, level, slot)
   local want
   if type(slot) == "table" then want = slot
   elseif slot then for _, g in ipairs(UI.GEAR_SLOTS) do if g[1] == slot then want = g[2] end end end
   local R = QB.Data.RITEMS and QB.Data.RITEMS[qid]
   local bestId, bestL
-  for _, key in ipairs({ "c", "r", "u" }) do
-    for _, id in ipairs(R and R[key] or {}) do
+  for _, key in ipairs(REWARD_KEYS) do
+    for _, id in ipairs(R and R[key] or NO_ITEMS) do
       local use, ilvl, loc = UI.ItemUse(id, level)
       local hit
       if kind == "gear" then hit = (use == "gear" or use == "trinket") and ilvl > 0 and (not want or want[loc] ~= nil)

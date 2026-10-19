@@ -44,6 +44,93 @@ local function count(trails)
   return n
 end
 
+-- The trails as a graph, kept for one continent at a time and grown point by point as you walk (5.4.2: it was built
+-- afresh, a table for every point and every link, each time a point was noted; at thousands of points that froze the
+-- game for a tenth of a second and more every few seconds and left megabytes of garbage each time). Flat arrays by
+-- node id, no table per point:
+--   x[id], y[id]: the point; tr[id]: its trail's serial (a trail keeps its serial while older ones go)
+--   on its trail, the points before and after: id - 1 and id + 1 when they have the same serial
+--   links to other trails' points within JOIN yards: lhead[id], then lto[e] and lnext[e] (0 ends a list)
+--   join cells, JCELL yards (a point's joins all lie in the 3x3 cells round it): jhead[key], then jnext[id]
+--   draw cells, CELL yards (Walk.Near): the segments starting in each, in the order noted: dhead[key] .. dtail[key],
+--     dnext[id]
+-- Points the cap drops keep their ids (ids below first are skipped) until they are half as many as the points kept;
+-- then the graph is built again with fresh ids: once in thousands of points.
+local JOIN, REACH, MAX_NODES = 25, 80, 6000
+local JCELL = 50 -- yards: no smaller than JOIN
+local CELL = 250 -- yards: the draw cells, as the minimap looks round you
+Walk.JOIN, Walk.REACH = JOIN, REACH
+local G = { ver = 0, stale = true, n = 0 }
+Walk.G = G
+Walk.builds = 0 -- (graphs built whole: once at the first look, then only when the trails change under it or once in
+                -- thousands of points; the harness counts them)
+local function key(cx, cy) return (cx + 32768) * 65536 + (cy + 32768) end
+
+local function reset(c, trails)
+  Walk.builds = Walk.builds + 1
+  G.c, G.trails, G.stale = c, trails, false
+  G.n, G.first, G.last, G.tbase, G.nl = 0, 1, 0, 0, 0
+  G.x, G.y, G.tr, G.lhead, G.jnext, G.dnext, G.lto, G.lnext = {}, {}, {}, {}, {}, {}, {}, {}
+  G.jhead, G.dhead, G.dtail = {}, {}, {}
+  G.g, G.came, G.mark, G.gen = {}, {}, {}, 0 -- the search's (Walk.Path), by node id
+  G.ver = G.ver + 1
+end
+
+local function link(a, b)
+  local e = G.nl + 1
+  G.nl = e
+  G.lto[e], G.lnext[e], G.lhead[a] = b, G.lhead[a], e
+end
+
+-- a point at the end of trail serial s: joined to the point before it on the trail, to every other trail's point within
+-- JOIN yards (both ways), and its segment from the point before put in that point's draw cell
+local function add(x, y, s)
+  local id = G.last + 1
+  G.last, G.n = id, G.n + 1
+  local X, Y, T, first = G.x, G.y, G.tr, G.first
+  X[id], Y[id], T[id], G.lhead[id], G.dnext[id] = x, y, s, 0, 0
+  local p = id - 1
+  if p >= first and T[p] == s then
+    local k = key(floor(X[p] / CELL), floor(Y[p] / CELL))
+    local tail = G.dtail[k]
+    if tail then G.dnext[tail] = p else G.dhead[k] = p end
+    G.dtail[k] = p
+  end
+  local jh, jn = G.jhead, G.jnext
+  local cx, cy = floor(x / JCELL), floor(y / JCELL)
+  for bx = cx - 1, cx + 1 do
+    for by = cy - 1, cy + 1 do
+      local o = jh[key(bx, by)] or 0
+      while o > 0 do
+        if o >= first and T[o] ~= s then
+          local dx, dy = X[o] - x, Y[o] - y
+          if dx * dx + dy * dy <= JOIN * JOIN then link(id, o); link(o, id) end
+        end
+        o = jn[o]
+      end
+    end
+  end
+  local k = key(cx, cy)
+  jn[id] = jh[k] or 0
+  jh[k] = id
+end
+
+-- the graph of continent c, built again only when it is not the one kept (another continent, the trails changed under
+-- it, or Walk.dirty / Walk.dirtyNodes set by whoever changed them)
+local NONE = {}
+local function graph(c)
+  local trails = db()[c]
+  if G.c == c and G.trails == trails and not G.stale and not Walk.dirty and not Walk.dirtyNodes
+    and G.n == count(trails or NONE) then return G end
+  Walk.dirty, Walk.dirtyNodes = false, false
+  reset(c, trails)
+  for ti, t in ipairs(trails or NONE) do
+    for i = 1, #t - 1, 2 do add(t[i], t[i + 1], ti) end
+  end
+  return G
+end
+Walk.Graph = graph
+
 -- note where you stand now, when it is a step on from the last point
 function Walk.Note(me)
   if not on() then return false end
@@ -55,54 +142,65 @@ function Walk.Note(me)
   if type(trails) ~= "table" then trails = {}; W[me.c] = trails end
   local d = last and last.c == me.c and sqrt((wx - last.wx) ^ 2 + (wy - last.wy) ^ 2) or math.huge
   if d < STEP then return false end
+  local n = count(trails)
+  -- the graph grows by this point when it is the one kept and up to date
+  local synced = G.c == me.c and G.trails == trails and not G.stale and not Walk.dirty and not Walk.dirtyNodes and G.n == n
   local t = trails[#trails]
   if not t or d >= BREAK then t = {}; trails[#trails + 1] = t end
   t[#t + 1], t[#t + 2] = wx, wy
+  n = n + 1
   last = { c = me.c, wx = wx, wy = wy }
-  Walk.dirty, Walk.dirtyNodes = true, true
-  while count(trails) > MAX_POINTS and #trails > 1 do table.remove(trails, 1) end
-  if count(trails) > MAX_POINTS then -- one trail longer than the cap: its oldest half goes
-    local t1 = trails[1]
-    for _ = 1, floor(#t1 / 4) * 2 do table.remove(t1, 1) end
+  if synced then add(wx, wy, G.tbase + #trails) elseif G.c == me.c then G.stale = true end
+  -- the cap: the oldest trail goes; one trail longer than the cap loses its oldest half, moved down in one pass
+  while n > MAX_POINTS and #trails > 1 do
+    local k = #trails[1] / 2
+    table.remove(trails, 1)
+    n = n - k
+    if synced then G.first, G.n, G.tbase = G.first + k, G.n - k, G.tbase + 1 end
   end
+  if n > MAX_POINTS then
+    local t1 = trails[1]
+    local len = #t1
+    local drop = floor(len / 4) * 2
+    for j = 1, len - drop do t1[j] = t1[j + drop] end
+    for j = len, len - drop + 1, -1 do t1[j] = nil end
+    n = n - drop / 2
+    if synced then G.first, G.n = G.first + drop / 2, G.n - drop / 2 end
+  end
+  if synced and (G.first - 1) * 2 >= G.n and G.first > 1 then G.stale = true end
+  G.ver = G.ver + 1
   return true
 end
 
--- a grid over each continent's points, so the minimap looks only around you
-local grid, gridC, gridN = nil, nil, 0
-local CELL = 250
-local function cell(x, y) return floor(x / CELL) .. ":" .. floor(y / CELL) end
-local function index(c)
-  local trails = db()[c] or {}
-  local n = count(trails)
-  if grid and gridC == c and gridN == n and not Walk.dirty then return grid end
-  grid, gridC, gridN, Walk.dirty = {}, c, n, false
-  for ti, t in ipairs(trails) do
-    for i = 1, #t - 3, 2 do
-      local k = cell(t[i], t[i + 1])
-      local g = grid[k]
-      if not g then g = {}; grid[k] = g end
-      g[#g + 1] = { t, i }
-    end
-  end
-  return grid
-end
-
--- the trail segments within reach of a point: { {x1, y1, x2, y2}, ... }
+-- the trail segments within reach of a point: { {x1, y1, x2, y2}, ... }, at most DRAW_MAX (cell by cell, each cell's in
+-- the order noted, as 5.4.1 listed them). The list and its entries are reused by the next call (the minimap draws them
+-- at once, 20 times a second)
+local nearOut, nearPool = {}, {}
 function Walk.Near(c, wx, wy, reach)
-  local g = index(c)
-  local out = {}
+  local g = graph(c)
+  local out = nearOut
+  for k = #out, 1, -1 do out[k] = nil end
+  local X, Y, dnext, dhead, first = g.x, g.y, g.dnext, g.dhead, g.first
+  if not X then return out end
   local cx, cy = floor(wx / CELL), floor(wy / CELL)
   local span = math.ceil(reach / CELL)
+  local r2, n = reach * reach, 0
   for bx = cx - span, cx + span do
     for by = cy - span, cy + span do
-      for _, e in ipairs(g[bx .. ":" .. by] or {}) do
-        local t, i = e[1], e[2]
-        local x1, y1, x2, y2 = t[i], t[i + 1], t[i + 2], t[i + 3]
-        if (x1 - wx) ^ 2 + (y1 - wy) ^ 2 <= reach * reach or (x2 - wx) ^ 2 + (y2 - wy) ^ 2 <= reach * reach then
-          out[#out + 1] = { x1, y1, x2, y2 }
-          if #out >= DRAW_MAX then return out end
+      local i = dhead[key(bx, by)] or 0
+      while i > 0 do
+        if i >= first then
+          local x1, y1, x2, y2 = X[i], Y[i], X[i + 1], Y[i + 1]
+          if (x1 - wx) ^ 2 + (y1 - wy) ^ 2 <= r2 or (x2 - wx) ^ 2 + (y2 - wy) ^ 2 <= r2 then
+            n = n + 1
+            local s = nearPool[n]
+            if not s then s = {}; nearPool[n] = s end
+            s[1], s[2], s[3], s[4] = x1, y1, x2, y2
+            out[n] = s
+            if n >= DRAW_MAX then return out end
+          end
         end
+        i = dnext[i]
       end
     end
   end
@@ -113,85 +211,122 @@ end
 -- neighbours on the trail, and to any other trail's point within JOIN yards), from the point nearest you to the
 -- point nearest the goal, each within REACH yards. Nil when the trails do not connect the two. Returns
 -- { {x, y}, ... } from you to the goal, the trail points between
-local JOIN, REACH, MAX_NODES = 25, 80, 6000
-Walk.JOIN, Walk.REACH = JOIN, REACH
-local nodes, nodesC, nodesN = nil, nil, 0
-local function buildNodes(c)
-  local trails = db()[c] or {}
-  local n = count(trails)
-  if nodes and nodesC == c and nodesN == n and not Walk.dirtyNodes then return nodes end
-  nodes, nodesC, nodesN, Walk.dirtyNodes = {}, c, n, false
-  local byCell = {}
-  for ti, t in ipairs(trails) do
-    for i = 1, #t - 1, 2 do
-      local id = #nodes + 1
-      nodes[id] = { x = t[i], y = t[i + 1], adj = {}, t = ti }
-      if i > 1 then local prev = id - 1; nodes[id].adj[#nodes[id].adj + 1] = prev; nodes[prev].adj[#nodes[prev].adj + 1] = id end
-      local k = cell(t[i], t[i + 1])
-      byCell[k] = byCell[k] or {}
-      byCell[k][#byCell[k] + 1] = id
-    end
-  end
-  -- joins across trails
-  for id, nd in ipairs(nodes) do
-    local cx, cy = floor(nd.x / CELL), floor(nd.y / CELL)
-    for bx = cx - 1, cx + 1 do
-      for by = cy - 1, cy + 1 do
-        for _, other in ipairs(byCell[bx .. ":" .. by] or {}) do
-          local o = nodes[other]
-          if other ~= id and o.t ~= nd.t and (o.x - nd.x) ^ 2 + (o.y - nd.y) ^ 2 <= JOIN * JOIN then nd.adj[#nd.adj + 1] = other end
+
+-- the point nearest (wx, wy) within reach (the lowest id of equals), through the join cells
+local function nearestNode(g, wx, wy, reach)
+  local best, bd = nil, reach * reach
+  local X, Y, jh, jn, first = g.x, g.y, g.jhead, g.jnext, g.first
+  local cx, cy, span = floor(wx / JCELL), floor(wy / JCELL), math.ceil(reach / JCELL)
+  for bx = cx - span, cx + span do
+    for by = cy - span, cy + span do
+      local o = jh[key(bx, by)] or 0
+      while o > 0 do
+        if o >= first then
+          local dx, dy = X[o] - wx, Y[o] - wy
+          local d = dx * dx + dy * dy
+          if d < bd or (d == bd and best and o < best) then best, bd = o, d end
         end
+        o = jn[o]
       end
     end
-  end
-  return nodes
-end
-Walk.Nodes = buildNodes
-
-local function nearestNode(N, wx, wy, reach)
-  local best, bd = nil, reach * reach
-  for id, nd in ipairs(N) do
-    local d = (nd.x - wx) ^ 2 + (nd.y - wy) ^ 2
-    if d < bd then best, bd = id, d end
   end
   return best
 end
 
+-- the search's open set: a binary heap of (f, node), kept between searches
+local hf, hid, hn = {}, {}, 0
+local function push(f, id)
+  hn = hn + 1
+  local i = hn
+  while i > 1 do
+    local p = floor(i / 2)
+    if hf[p] <= f then break end
+    hf[i], hid[i] = hf[p], hid[p]
+    i = p
+  end
+  hf[i], hid[i] = f, id
+end
+local function pop()
+  local id = hid[1]
+  local f, last = hf[hn], hid[hn]
+  hn = hn - 1
+  local i, n = 1, hn
+  while true do
+    local c = i * 2
+    if c > n then break end
+    if c < n and hf[c + 1] < hf[c] then c = c + 1 end
+    if hf[c] >= f then break end
+    hf[i], hid[i] = hf[c], hid[c]
+    i = c
+  end
+  if n > 0 then hf[i], hid[i] = f, last end
+  return id
+end
+
+local function same(p, q) return math.abs(p[1] - q[1]) + math.abs(p[2] - q[2]) < 2 end
+
+-- one search's state (module locals, so a search makes no closure): a neighbour nb of cur reached at cost cg
+local sX, sY, sMark, sG, sCame, sGen, sTx, sTy
+local function relax(nb, cur, cx, cy, cg)
+  local m = sMark[nb]
+  if m == -sGen then return end
+  local ng = cg + sqrt((sX[nb] - cx) ^ 2 + (sY[nb] - cy) ^ 2)
+  if m ~= sGen or ng < sG[nb] then
+    sMark[nb], sG[nb], sCame[nb] = sGen, ng, cur
+    push(ng + sqrt((sX[nb] - sTx) ^ 2 + (sY[nb] - sTy) ^ 2), nb)
+  end
+end
+
 function Walk.Path(c, from, to)
-  local N = buildNodes(c)
-  if #N == 0 then return nil end
-  local a, b = nearestNode(N, from.wx, from.wy, REACH), nearestNode(N, to.wx, to.wy, REACH)
+  local g = graph(c)
+  if g.n == 0 then return nil end
+  local a, b = nearestNode(g, from.wx, from.wy, REACH), nearestNode(g, to.wx, to.wy, REACH)
   if not a or not b then return nil end
-  if a == b then return { { from.wx, from.wy }, { N[a].x, N[a].y }, { to.wx, to.wy } } end
-  local open, g, came, closed = { [a] = true }, { [a] = 0 }, {}, {}
-  local function h(id) return sqrt((N[id].x - N[b].x) ^ 2 + (N[id].y - N[b].y) ^ 2) end
-  local f = { [a] = h(a) }
-  local explored = 0
-  while next(open) do
-    local cur, best
-    for id in pairs(open) do if not best or f[id] < best then cur, best = id, f[id] end end
-    if cur == b then break end
-    open[cur] = nil; closed[cur] = true
-    explored = explored + 1
-    if explored > MAX_NODES then return nil end
-    for _, nb in ipairs(N[cur].adj) do
-      if not closed[nb] then
-        local ng = g[cur] + sqrt((N[nb].x - N[cur].x) ^ 2 + (N[nb].y - N[cur].y) ^ 2)
-        if g[nb] == nil or ng < g[nb] then g[nb], came[nb], f[nb] = ng, cur, ng + h(nb); open[nb] = true end
+  local X, Y = g.x, g.y
+  if a == b then return { { from.wx, from.wy }, { X[a], Y[a] }, { to.wx, to.wy } } end
+  -- the same two points on the same graph found no way last time: none now either (the minimap asks again every few
+  -- seconds while you stand off your trails)
+  if g.noVer == g.ver and g.noA == a and g.noB == b then return nil end
+  g.gen = g.gen + 1
+  sX, sY, sMark, sG, sCame, sGen, sTx, sTy = X, Y, g.mark, g.g, g.came, g.gen, X[b], Y[b]
+  local T, lhead, lto, lnext, first, lastId = g.tr, g.lhead, g.lto, g.lnext, g.first, g.last
+  -- sMark[id]: the search's number while open, minus it once closed
+  sMark[a], sG[a], sCame[a] = sGen, 0, 0
+  hn = 0
+  push(sqrt((X[a] - sTx) ^ 2 + (Y[a] - sTy) ^ 2), a)
+  local explored, found = 0, false
+  while hn > 0 do
+    local cur = pop()
+    if sMark[cur] == sGen then
+      if cur == b then found = true; break end
+      sMark[cur] = -sGen
+      explored = explored + 1
+      if explored > MAX_NODES then break end
+      local cx, cy, cg, s = X[cur], Y[cur], sG[cur], T[cur]
+      -- the points before and after it on its trail, then the other trails' points it is joined to
+      if cur - 1 >= first and T[cur - 1] == s then relax(cur - 1, cur, cx, cy, cg) end
+      if cur + 1 <= lastId and T[cur + 1] == s then relax(cur + 1, cur, cx, cy, cg) end
+      local e = lhead[cur]
+      while e > 0 do
+        local nb = lto[e]
+        if nb >= first then relax(nb, cur, cx, cy, cg) end
+        e = lnext[e]
       end
     end
   end
-  if not came[b] and a ~= b then return nil end
+  hn = 0
+  local came = sCame
+  sX, sY, sMark, sG, sCame = nil, nil, nil, nil, nil -- (nothing kept of this graph past the search)
+  if not found then g.noVer, g.noA, g.noB = g.ver, a, b; return nil end
   local out = { { to.wx, to.wy } }
   local cur = b
-  while cur do
-    out[#out + 1] = { N[cur].x, N[cur].y }
+  while cur > 0 do
+    out[#out + 1] = { X[cur], Y[cur] }
     cur = came[cur]
   end
   out[#out + 1] = { from.wx, from.wy }
   -- reverse: from you to the goal; a trail point you stand on, or the goal stands on, is not a leg
   for i = 1, floor(#out / 2) do out[i], out[#out + 1 - i] = out[#out + 1 - i], out[i] end
-  local function same(p, q) return math.abs(p[1] - q[1]) + math.abs(p[2] - q[2]) < 2 end
   if #out > 2 and same(out[1], out[2]) then table.remove(out, 2) end
   if #out > 2 and same(out[#out], out[#out - 1]) then table.remove(out, #out - 1) end
   return out

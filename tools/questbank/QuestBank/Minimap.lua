@@ -29,7 +29,9 @@ local TICK = 0.05          -- seconds between placements (the pins follow you); 
 local ART = "Interface\\AddOns\\QuestBank\\art\\"
 local MAX_PINS = 60        -- pins at once: the step and the stops first, then the nearest
 local EDGE = 7             -- the rim: pins kept on it sit this far inside the minimap's edge
-local LIST_EVERY = 0.5     -- seconds the list is kept (and until QuestBank's data or a switch changes)
+local LIST_EVERY = 30      -- seconds the list is kept at most, a safety net: it is made again at once when
+                           -- QuestBank's data (QB:Changed), the route's pins, your quest log or a switch changes.
+                           -- (Every 0.5 s before 5.4.2, the same list again nearly every time: 30 KB of garbage each)
 Mini.TICK, Mini.MAX_PINS = TICK, MAX_PINS
 local RANK = { step = 0, stop = 1, turn = 1 }
 local PINNED = { step = true, stop = true, turn = true } -- out of reach: on the rim, the way to go
@@ -249,16 +251,18 @@ function Mini.List(noStep)
   return out
 end
 
--- the list as last made: made again after LIST_EVERY seconds, or when QuestBank's data (QB:Changed) or a switch of
--- what it holds changed. Each entry gets its key, so its pin stays its own while the view moves
+-- the list as last made: made again after LIST_EVERY seconds, or when QuestBank's data (QB:Changed), the route's pins
+-- (Pins.lua's list), your quest log (QB.state's) or a switch of what it holds changed. Each entry gets its key, so its
+-- pin stays its own while the view moves
 local cache = {}
 function Mini.ListCached()
   local s, now, c = QB:Settings(), GetTime(), cache
+  local pl, lo = QB.Pins and QB.Pins.list, QB.state and QB.state.logOrder
   if c.list and now >= c.at and now - c.at < LIST_EVERY and c.v == QB.changed and c.pk == s.minimapPickups
-    and c.ob == s.minimapObjectives and c.en == s.minimapEntrances then return c.list end
+    and c.ob == s.minimapObjectives and c.en == s.minimapEntrances and c.pl == pl and c.lo == lo then return c.list end
   local list = Mini.List(true)
   for _, d in ipairs(list) do d.key = d.kind .. ":" .. keyOf(d) .. ":" .. (d.id or d.num or "") end
-  c.list, c.at, c.v, c.pk, c.ob, c.en = list, now, QB.changed, s.minimapPickups, s.minimapObjectives, s.minimapEntrances
+  c.list, c.at, c.v, c.pk, c.ob, c.en, c.pl, c.lo = list, now, QB.changed, s.minimapPickups, s.minimapObjectives, s.minimapEntrances, pl, lo
   return list
 end
 
@@ -603,9 +607,11 @@ function Mini.Pulse()
   Mini.pulsing = any
 end
 
--- one update: the view (MinimapView.lua: a drag, the ease back, the far ground and your arrow), then the pins on it
+-- one update: the view (MinimapView.lua: a drag, the ease back, the far ground and your arrow), then the pins on it.
+-- Where you stand is read into one table kept for it (20 times a second; nothing keeps it past the update)
+local here = {}
 function Mini.Update(dt)
-  local me = QB.API.WorldPosition()
+  local me = QB.API.WorldPosition(nil, here)
   Mini.Place(me, QB.MiniView.Tick(dt, me))
 end
 
@@ -632,6 +638,7 @@ end
 -- the pins of a placing, their tables kept from one to the next (20 a second): { d, key, x, y, alpha, size, label,
 -- yards (from you), focus, pin }; the stops' true places, and by number; the strokes; the label's place
 local items, itemPool, stops, byNum, segs, free, tinfo, gen = {}, {}, {}, {}, {}, {}, {}, 0
+local placeView = {} -- (the view of a placing called without one)
 local function addItem(v, me, d, w, wx, wy, focus)
   local size = SIZE[d.kind] or 16
   if d.kind == "obj" then size = even(size * weightScale(w)) end
@@ -671,7 +678,7 @@ function Mini.Place(me, v)
   local f = overlayFrame()
   if not me then Mini.Clear(); return end
   local MV = QB.MiniView
-  v = v or MV.View(me)
+  v = v or MV.View(me, placeView)
   local set = QB:Settings()
   local qt = Mini.QT()
   Mini.Sizes()

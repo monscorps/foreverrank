@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "5.4.1"
+QB.version = "5.4.2"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's escort prompt has said 25: see QB.EscortLimit)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -40,21 +40,52 @@ function Err.Record(msg, stack, where)
   end
 end
 
--- a function that records its errors instead of raising them
+local function failed(err, where)
+  if QUESTBANK_DEV then error(err.msg .. "\n" .. err.stack, 0) end
+  Err.Record(err.msg, err.stack, where)
+end
+
+-- a function that records its errors instead of raising them. The minimap's, the arrow's and the trails' OnUpdate
+-- run through one of these every frame, so a call makes no garbage: its arguments wait in upvalues for the one body
+-- made here (Lua 5.1's xpcall passes none), and only an error allocates. A call made while the same one is under way
+-- (the code calling itself), or with more than SAFE_ARGS arguments, takes the old way: a table and a closure.
+-- (Before 5.4.2 every call took that way: about 250 bytes a frame for each OnUpdate.)
+local SAFE_ARGS = 6
 function QB.Safe(fn, where)
+  local busy, n, a1, a2, a3, a4, a5, a6 = false, 0, nil, nil, nil, nil, nil, nil
+  -- (exactly as many arguments as were given: a handler may count them, select("#", ...))
+  local function body()
+    if n == 0 then return fn() elseif n == 1 then return fn(a1) elseif n == 2 then return fn(a1, a2)
+    elseif n == 3 then return fn(a1, a2, a3) elseif n == 4 then return fn(a1, a2, a3, a4)
+    elseif n == 5 then return fn(a1, a2, a3, a4, a5) end
+    return fn(a1, a2, a3, a4, a5, a6)
+  end
   return function(...)
-    local n, args = select("#", ...), { ... }
-    local ok, err = xpcall(function() return fn(unpack(args, 1, n)) end, catch)
-    if not ok then
-      if QUESTBANK_DEV then error(err.msg .. "\n" .. err.stack, 0) end
-      Err.Record(err.msg, err.stack, where)
+    local cnt = select("#", ...)
+    local ok, err
+    if busy or cnt > SAFE_ARGS then
+      local args = { ... }
+      ok, err = xpcall(function() return fn(unpack(args, 1, cnt)) end, catch)
+    else
+      busy, n, a1, a2, a3, a4, a5, a6 = true, cnt, ...
+      ok, err = xpcall(body, catch)
+      busy, a1, a2, a3, a4, a5, a6 = false, nil, nil, nil, nil, nil, nil
     end
+    if not ok then failed(err, where) end
   end
 end
 
--- call now, the same way
+-- call now, the same way (no wrapper made: a table and a closure for the arguments only when there are any)
 function QB.Try(where, fn, ...)
-  return QB.Safe(fn, where)(...)
+  local cnt = select("#", ...)
+  local ok, err
+  if cnt == 0 then
+    ok, err = xpcall(fn, catch)
+  else
+    local args = { ... }
+    ok, err = xpcall(function() return fn(unpack(args, 1, cnt)) end, catch)
+  end
+  if not ok then failed(err, where) end
 end
 
 ----------------------------------------------------------------------------
@@ -431,8 +462,9 @@ end
 
 -- where you stand (or a member of your party, unit, read on your map), as a place on the continent: {c, wx, wy}. Nil
 -- where the client hides it (a secret map id, position or coordinate: the arrow reads this every tick, so nothing
--- here may touch one)
-function API.WorldPosition(unit)
+-- here may touch one). Into the table into when given (the minimap's and the arrow's update, 20 times a second, each
+-- with a table of its own), else a new one
+function API.WorldPosition(unit, into)
   local m = QB.Plain(API.MapID())
   if not (m and C_Map and C_Map.GetPlayerMapPosition) then return nil end
   local ok, pos = pcall(C_Map.GetPlayerMapPosition, m, unit or "player")
@@ -444,7 +476,7 @@ function API.WorldPosition(unit)
     if ok2 then x, y = QB.Plain(gx), QB.Plain(gy) end
   end
   if type(x) ~= "number" or type(y) ~= "number" then return nil end
-  return QB.Model.World(m, x * 100, y * 100)
+  return QB.Model.World(m, x * 100, y * 100, into)
 end
 
 function API.BindName()
@@ -806,37 +838,82 @@ local function npcView(i)
   return { n = n[1], m = n[2], x = n[3], y = n[4], inside = n[5] < 0, place = n[12], idx = i }
 end
 
+-- A quest's view: { id } until a field is read, each field worked out from the catalog's row the first time it is
+-- read and kept in the view (a field with no value is looked up again). Before 5.4.2 every view was built whole, 34
+-- fields, and the minimap's dungeon count makes one for every quest of the catalog at login: about 7 MB kept (LuaJIT's
+-- measure; more in the game's Lua) for quests nobody looks at. What other code writes on a view (liveFull, logXp)
+-- stays as before.
+--   VIEW[field] = function(id, row, view) -> the value
+local floor = math.floor
+local VIEW = {
+  name = function(id) return D.QN[id] or ("Quest " .. id) end,
+  lvl = function(_, r) return r[1] end,
+  req = function(_, r) return r[2] end,
+  side = function(_, r) return r[3] end,
+  base = function(_, r) return r[4] end,
+  mult = function(_, r) return r[5] end,
+  turnIdx = function(id, r)
+    if D.TURNH and D.TURNH[id] and (QB.faction or API.Faction()) == "H" then return D.TURNH[id] end
+    return r[6]
+  end,
+  giveIdx = function(_, r) return r[7] end,
+  turn = function(_, _, v) return npcView(v.turnIdx) end,
+  give = function(_, r) return npcView(r[7]) end,
+  cat = function(_, r) return D.CAT[r[8]] end,
+  cls = function(_, r) return r[9] end,
+  flags = function(_, r) return r[10] end,
+  pre = function(id) return D.PRE[id] end,
+  tip = function(id) return D.TIPS[id] end,
+  bag = function(id) return D.BAGQ[id] end,
+  follow = function(id) return D.FOLLOW[id] end,
+  race = function(id) return D.RACE[id] end,
+  excl = function(id) return D.EXCL[id] end,
+  nextSteps = function(id) return D.NEXT[id] end,
+  note = function(id) return D.NOTE and D.NOTE[id] end, -- where a number comes from, or what Blizzard changed since
+  icon = function(id, _, v)
+    local bag, cat = v.bag, v.cat
+    return D.QICON[id] or (bag and bag[3] ~= 2 and API.ItemIcon(bag[1])) or API.ItemIcon(D.QITEM[id])
+      or (cat and cat.icon) or D.TEX.questGeneric
+  end,
+}
+-- the flag bits, true or false
+local FLAG = {
+  dungeon = 1, group = 2,
+  unconfirmed = 8,
+  classic = 16,        -- from the Classic database, not seen in Forever yet
+  dungeonMult = 32,    -- multiplier taken from its dungeon's other quests
+  xpUnknown = 64,
+  sodLeftover = 128,   -- Season of Discovery data whose NPC isn't known in Forever
+  nerfed = 256,        -- multiplier computed from the pre-cut read (D.NERF): the extra above x1 halved
+  confirmed = 512,     -- XP as the game paid it after the cut (a hand-in or quest window, build 70170+)
+  wanted = 1024,       -- a wanted poster
+  escort = 2048,       -- an escort
+  repeatable = 4096,   -- repeatable: in the reward finders alone
+  near = 8192,         -- kept as read: the game paid within a few percent of this number
+  seenOnly = 16384,    -- known only from players' notes (not on Wowhead or in the Classic database)
+  reqStated = 32768,   -- the required level as Blizzard's notes give it
+  surveyOnly = 65536,  -- known from the quest survey alone (Survey.lua): no giver, place or side
+  turnIn = 131072,     -- a Craftsman's Writ's delivery: no XP, in the reward finders alone
+}
+for k, b in pairs(FLAG) do VIEW[k] = function(_, r) return floor(r[10] / b) % 2 == 1 end end
+Q.FIELDS = VIEW -- (the harness compares every field with the views as 5.4.1 built them)
+
+local viewMT = { __index = function(v, k)
+  local f = VIEW[k]
+  if not f then return nil end
+  local id = rawget(v, "id")
+  local r = D.Q[id]
+  if not r then return nil end
+  local x = f(id, r, v)
+  if x ~= nil then rawset(v, k, x) end
+  return x
+end }
+
 function Q.Get(id)
   local c = cache[id]
   if c ~= nil then return c or nil end
-  local r = D.Q[id]
-  if not r then cache[id] = false; return nil end
-  local turnIdx = r[6]
-  if D.TURNH and D.TURNH[id] and (QB.faction or API.Faction()) == "H" then turnIdx = D.TURNH[id] end
-  c = { id = id, name = D.QN[id] or ("Quest " .. id), lvl = r[1], req = r[2], side = r[3], base = r[4], mult = r[5],
-        turnIdx = turnIdx, giveIdx = r[7], turn = npcView(turnIdx), give = npcView(r[7]), cat = D.CAT[r[8]], cls = r[9],
-        flags = r[10], pre = D.PRE[id], tip = D.TIPS[id], bag = D.BAGQ[id], follow = D.FOLLOW[id],
-        race = D.RACE[id], excl = D.EXCL[id], nextSteps = D.NEXT[id] }
-  c.dungeon = c.flags % 2 == 1
-  c.group = math.floor(c.flags / 2) % 2 == 1
-  c.unconfirmed = math.floor(c.flags / 8) % 2 == 1
-  c.classic = math.floor(c.flags / 16) % 2 == 1      -- from the Classic database, not seen in Forever yet
-  c.dungeonMult = math.floor(c.flags / 32) % 2 == 1  -- multiplier taken from its dungeon's other quests
-  c.xpUnknown = math.floor(c.flags / 64) % 2 == 1
-  c.sodLeftover = math.floor(c.flags / 128) % 2 == 1 -- Season of Discovery data whose NPC isn't known in Forever
-  c.nerfed = math.floor(c.flags / 256) % 2 == 1      -- multiplier computed from the pre-cut read (D.NERF): the extra above x1 halved
-  c.confirmed = math.floor(c.flags / 512) % 2 == 1   -- XP as the game paid it after the cut (a hand-in or quest window, build 70170+)
-  c.wanted = math.floor(c.flags / 1024) % 2 == 1     -- a wanted poster
-  c.escort = math.floor(c.flags / 2048) % 2 == 1     -- an escort
-  c.repeatable = math.floor(c.flags / 4096) % 2 == 1 -- repeatable: in the reward finders alone
-  c.near = math.floor(c.flags / 8192) % 2 == 1       -- kept as read: the game paid within a few percent of this number
-  c.seenOnly = math.floor(c.flags / 16384) % 2 == 1  -- known only from players' notes (not on Wowhead or in the Classic database)
-  c.reqStated = math.floor(c.flags / 32768) % 2 == 1 -- the required level as Blizzard's notes give it
-  c.surveyOnly = math.floor(c.flags / 65536) % 2 == 1 -- known from the quest survey alone (Survey.lua): no giver, place or side
-  c.turnIn = math.floor(c.flags / 131072) % 2 == 1   -- a Craftsman's Writ's delivery: no XP, in the reward finders alone
-  c.note = D.NOTE and D.NOTE[id]                      -- where a number comes from, or what Blizzard changed since
-  c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and API.ItemIcon(c.bag[1])) or API.ItemIcon(D.QITEM[id])
-    or (c.cat and c.cat.icon) or D.TEX.questGeneric
+  if not D.Q[id] then cache[id] = false; return nil end
+  c = setmetatable({ id = id }, viewMT)
   cache[id] = c
   return c
 end
@@ -881,11 +958,12 @@ local function laterSteps(id)
   return laterOf[id]
 end
 
+local NO_STEPS = {}
 -- a later step of this quest's chain is in your log or done: the game offers a step only once the ones before it
 -- are handed in, so this one is behind you. Returns that later step and "held" or "done".
 function Q.Behind(id)
   local s = QB.state
-  for _, x in ipairs(laterSteps(id) or {}) do
+  for _, x in ipairs(laterSteps(id) or NO_STEPS) do
     if s and s.log and s.log[x] then return x, "held" end
     if API.IsDone(x) then return x, "done" end
   end
@@ -1229,7 +1307,24 @@ function QB:Settings()
   db.turnins = db.turnins or {}
   db.runs = db.runs or {}
   db.plans = db.plans or {}
+  if not QB.pruned then QB.pruned = true; QB.PruneLogs(db) end
   return s
+end
+
+-- The saved hand-in runs, kept to their newest (5.4.2: they grew for as long as the account played, 3 to 6 KB each,
+-- and nothing reads the old ones). The hand-ins themselves are not cut: about 145 bytes each and a few hundred a
+-- character, nowhere near the memory the lag came from, and the site's upload merge (tools/probe_pull.py merge_seen)
+-- counts a hand-in's own XP reading once only while that hand-in is still in the list
+QB.MAX_RUNS = 20     -- hand-in runs: 3 to 6 KB each (every quest planned and paid); the newest are what is looked at
+local function keepNewest(list, max)
+  local n = type(list) == "table" and #list or 0
+  if n <= max then return end
+  local drop = n - max
+  for i = 1, max do list[i] = list[i + drop] end
+  for i = n, max + 1, -1 do list[i] = nil end
+end
+function QB.PruneLogs(db)
+  keepNewest(db.runs, QB.MAX_RUNS)
 end
 
 -- where you are, for the settings that change with it: the contexts active now, most specific first
@@ -1346,9 +1441,10 @@ end
 --   quest  levelling as usual
 ----------------------------------------------------------------------------
 -- the highest level the game lets you reach for now
+local CAP_FNS = { "GetMaxPlayerLevel", "GetMaxLevelForPlayerExpansion" } -- (asked many times a second: one list)
 function API.GameCap()
   local cap = QB.MAXLEVEL
-  for _, name in ipairs({ "GetMaxPlayerLevel", "GetMaxLevelForPlayerExpansion" }) do
+  for _, name in ipairs(CAP_FNS) do
     local fn = _G[name]
     if fn then
       local ok, v = pcall(fn)
@@ -1653,7 +1749,7 @@ function QB.ReadLogXp(s)
       Live.Record(e.id, xp, s.level, "log")
     end
   end
-  for id, q in pairs(cache) do if q and q.logXp and not s.log[id] then q.logXp = nil end end
+  for id, q in pairs(cache) do if q and rawget(q, "logXp") and not s.log[id] then q.logXp = nil end end
 end
 
 function QB:ReadState()
@@ -1718,7 +1814,12 @@ function QB:ReadState()
   return s
 end
 
+-- a log entry's progress line, kept with the entry (ReadState makes new entries when the log changes; an entry no
+-- longer read goes with it)
+local progressOf = setmetatable({}, { __mode = "k" })
 local function progressText(entry)
+  local done = progressOf[entry]
+  if done then return done end
   local parts = {}
   for _, o in ipairs(entry.objectives or {}) do
     if not o.done then
@@ -1729,24 +1830,51 @@ local function progressText(entry)
       end
     end
   end
-  if #parts == 0 then return "In your log" end
-  return "In your log: " .. table.concat(parts, ", ")
+  done = #parts == 0 and "In your log" or ("In your log: " .. table.concat(parts, ", "))
+  progressOf[entry] = done
+  return done
+end
+
+-- The statuses whose words never change are one table each, shared (5.4.2: QB:Status runs for every quest the routes
+-- consider, twice a refresh, and made a table, a string and Bank.Items' list each time: about 400 KB a refresh with
+-- the window shut). Nothing changes a status once made; one that names a quest, a count or an item is made each time,
+-- except an item that starts a quest and a level, kept by quest and by level
+local ST = {
+  done = { code = "done", text = "Handed in already" },
+  banked = { code = "banked", text = "Banked, ready to hand in" },
+  ready = { code = "banked", text = "Ready to hand in" },
+  bagBanked = { code = "banked", text = "Banked in your bags", bag = true },
+  bagReady = { code = "banked", text = "In your bags, ready", bag = true },
+  bagstart = { code = "bagstart", text = "Starts from an item in your bags" },
+  wrong = { code = "wrong", text = "Not for your faction, race or class" },
+  todo = { code = "todo", text = "Not started" },
+}
+local lockedAt, itemStart = {}, setmetatable({}, { __mode = "k" }) -- (by level; by the quest's D.BAGQ entry)
+
+-- what a quest asks you to bring, counted without making Bank.Items' list: the items still to take out of the bank,
+-- whether bags and bank hold all of it, and how many of those are in the bank
+local function itemsHeld(list)
+  local fromBank, all, inBank = 0, true, 0
+  for _, it in ipairs(list) do
+    local need, bags, bank = it[2], API.ItemCount(it[1]), Bank.Count(it[1])
+    if bags < need and bags + bank >= need then fromBank = fromBank + (need - bags) end
+    if bags + bank < need then all = false end
+    inBank = inBank + math.max(0, math.min(bank, need - bags))
+  end
+  return fromBank, all, inBank
 end
 
 -- code: done | banked | active | partial | bagstart | item | locked | prereq | todo | wrong
 function QB:Status(q)
   local s = self.state
-  if API.IsDone(q.id) then return { code = "done", text = "Handed in already" } end
+  if API.IsDone(q.id) then return ST.done end
   local e = s.log[q.id]
-  local items = Bank.Items(q)
+  local items = D.REQ[q.id]
   if e then
-    if e.complete then return { code = "banked", text = QB:Banking() and "Banked, ready to hand in" or "Ready to hand in" } end
+    if e.complete then return QB:Banking() and ST.banked or ST.ready end
     local text = progressText(e)
     if items then
-      local fromBank = 0
-      for _, it in ipairs(items) do
-        if it.bags < it.need and it.bags + it.bank >= it.need then fromBank = fromBank + (it.need - it.bags) end
-      end
+      local fromBank = itemsHeld(items)
       if fromBank > 0 then text = text .. string.format(". Take %d out of your bank", fromBank) end
     end
     return { code = "active", text = text }
@@ -1760,13 +1888,13 @@ function QB:Status(q)
   local bag = q.bag
   if bag and bag[3] == 1 then
     local n = API.ItemCount(bag[1])
-    if n >= bag[2] then return { code = "banked", text = QB:Banking() and "Banked in your bags" or "In your bags, ready", bag = true } end
+    if n >= bag[2] then return QB:Banking() and ST.bagBanked or ST.bagReady end
     if n > 0 then return { code = "partial", text = n .. "/" .. bag[2] .. " in your bags" } end
   elseif s.bagStarts[q.id] or (bag and bag[3] == 0 and API.ItemCount(bag[1]) > 0) then
-    return { code = "bagstart", text = "Starts from an item in your bags" }
+    return ST.bagstart
   end
   local fromItem = bag and bag[3] == 0
-  if not Q.ForMe(q) then return { code = "wrong", text = "Not for your faction, race or class" } end
+  if not Q.ForMe(q) then return ST.wrong end
   if q.excl then
     for _, other in ipairs(q.excl) do
       if API.IsDone(other) or s.log[other] then
@@ -1774,7 +1902,11 @@ function QB:Status(q)
       end
     end
   end
-  if s.level < (q.req or 1) then return { code = "locked", text = "Needs level " .. q.req } end
+  if s.level < (q.req or 1) then
+    local st = lockedAt[q.req]
+    if not st then st = { code = "locked", text = "Needs level " .. q.req }; lockedAt[q.req] = st end
+    return st
+  end
   if q.pre then
     -- a step you hold or finished means every step before it is behind you
     local from = 1
@@ -1794,18 +1926,18 @@ function QB:Status(q)
       end
     end
   end
-  if fromItem then return { code = "item", text = "Starts from an item: " .. (bag[4] or "a drop") } end
+  if fromItem then
+    local st = itemStart[bag]
+    if not st then st = { code = "item", text = "Starts from an item: " .. (bag[4] or "a drop") }; itemStart[bag] = st end
+    return st
+  end
   if items then
-    local all, bank = true, 0
-    for _, it in ipairs(items) do
-      if it.bags + it.bank < it.need then all = false end
-      bank = bank + math.max(0, math.min(it.bank, it.need - it.bags))
-    end
+    local _, all, bank = itemsHeld(items)
     if all then
       return { code = "todo", text = "Not started, and you already have what it asks for" .. (bank > 0 and string.format(" (%d in your bank)", bank) or "") }
     end
   end
-  return { code = "todo", text = "Not started" }
+  return ST.todo
 end
 
 ----------------------------------------------------------------------------
@@ -1960,13 +2092,17 @@ function QB:BagQuests()
   return out
 end
 
--- entries for the planner: { q, st, after }
+-- entries for the planner: { q, st, after }. What it has looked at is marked in two tables kept between calls with
+-- the call's number (it runs twice a refresh, for a few hundred quests)
+local seenAt, inListAt, entriesGen = {}, {}, 0
 function QB:RouteEntries(mode)
-  local list, seen = {}, {}
+  entriesGen = entriesGen + 1
+  local gen = entriesGen
+  local list = {}
   local s = self.state
   local function consider(id)
-    if seen[id] then return end
-    seen[id] = true
+    if seenAt[id] == gen then return end
+    seenAt[id] = gen
     local q = Q.Get(id)
     if not q then return end
     local st = self:Status(q)
@@ -1985,11 +2121,10 @@ function QB:RouteEntries(mode)
   for _, id in ipairs(QB:BagQuests()) do consider(id) end
   if mode == "plan" then for id in pairs(self:Plan().add) do consider(id) end end
   -- quests handed to you on the day by another hand-in, delivered at once
-  local inList = {}
-  for _, e in ipairs(list) do inList[e.q.id] = true end
+  for _, e in ipairs(list) do inListAt[e.q.id] = gen end
   for id, parent in pairs(D.FOLLOW) do
-    local q = Q.Get(id)
-    if q and inList[parent] and not inList[id] and not API.IsDone(id) and Q.ForMe(q) then
+    local q = inListAt[parent] == gen and inListAt[id] ~= gen and Q.Get(id)
+    if q and not API.IsDone(id) and Q.ForMe(q) then
       list[#list + 1] = { q = q, st = { code = "follow", text = "Given when you hand in " .. Q.Label(parent) }, after = parent }
     end
   end
@@ -2057,6 +2192,7 @@ function Run.Stop()
   for _, d in pairs(run.done) do got, n = got + (d.xp or 0), n + 1 end
   run.got, run.count = got, n
   table.insert(QuestBankDB.runs, run)
+  keepNewest(QuestBankDB.runs, QB.MAX_RUNS)
   QuestBankDB.run = nil
   -- the bank is cashed in: questing from here, until the next lock
   if QuestBankDB.held and not QB:Lock() then QuestBankDB.held[QB:CharKey()] = nil end

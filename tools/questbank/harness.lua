@@ -1868,13 +1868,30 @@ do
   assert(kept >= 5 and same == kept and pinOf(function(d) return d.id == 5 end), string.format("every place on the pin it had: %d of %d", same, kept))
   table.remove(QB.state.logOrder, 1)
   D.SPOT[5] = nil
-  -- the list is made at most every half second (and when QuestBank's data changes): twenty placings, one list
+  -- 5.4.2: the list is made again when QuestBank's data, the route's pins or your quest log change, else at most every
+  -- 30 seconds (it was every half second, the same list nearly every time): twenty placings a second apart from the last
+  -- list, none made; past 30 seconds, one; a change of the data, one more
   local realList, built = Mini.List, 0
   Mini.List = function(...) built = built + 1; return realList(...) end
   c.clock = c.clock + 1
   for _ = 1, 20 do Mini.Place() end
+  assert(built == 0, "nothing changed, a second on: the list kept, made " .. built .. " times")
+  c.clock = c.clock + 25
+  for _ = 1, 20 do Mini.Place() end
+  assert(built == 0, "nothing changed, 26 seconds on: the list kept, made " .. built .. " times")
+  c.clock = c.clock + 5
+  for _ = 1, 20 do Mini.Place() end
+  assert(built == 1, "past 30 seconds: twenty placings made the list " .. built .. " times")
+  QB.changed = QB.changed + 1
+  for _ = 1, 20 do Mini.Place() end
+  assert(built == 2, "QuestBank's data changed: made again at once, once: " .. built)
+  local savePins = QB.Pins.list
+  QB.Pins.list = { unpack(savePins or {}) }
+  Mini.Place()
+  QB.Pins.list = savePins
+  Mini.Place()
+  assert(built == 4, "the route's pins changed (and back): made again each time: " .. built)
   Mini.List = realList
-  assert(built == 1, "twenty placings made the list " .. built .. " times")
   -- 5.5: an objective's marker, QuestTrail's: the disc (ring_bg) in its quest's colour under the gold frame (ring_frame)
   -- and the glyph of the work (a kill: the skull), 18 px; an elite quest's under the elite ring, 1.5 times as wide
   local qc = Mini.ColorFor(777001, "progress")
@@ -12482,6 +12499,603 @@ do
   assert(#found == 0, "QuestBank's code makes a call that runs the game's code as QuestBank:\n  " .. table.concat(found, "\n  "))
   print("calls QuestBank never makes:", #PATTERNS, "names, none in", files, "files")
 end
+
+----------------------------------------------------------------------------
+-- 5.4.2: memory, and the lag that grew through a session ("QuestBank made me lag towards the end, using 80 MB").
+-- The trails' graph was built again from scratch at each point noted, inside the minimap's update (half a second at
+-- 12,000 points, and megabytes of garbage each time); a re-plan made 15 MB of garbage; every frame's error wrapper,
+-- the minimap's list and view, and each refresh's statuses made more; and the minimap's dungeon count turned every quest
+-- of the catalog into a 34-field view at login. Measured here on a client of its own (the owner's twin), late in a
+-- long session. Bytes are those QuestBank's own code allocates (ownBytes: a call and return hook charges each
+-- allocation to the file of the function that made it, so the harness's mock client is left out), with the JIT off,
+-- as the game runs Lua 5.1.
+-- Memory kept is estimated from what is reachable from QB and QuestBankDB, in LuaJIT's layout (kept()).
+----------------------------------------------------------------------------
+;(function()
+  local floor, sqrt = math.floor, math.sqrt
+  local function ownBytes(fn)
+    local getinfo, count = debug.getinfo, collectgarbage
+    local acc, mine, last, mark = 0, false, 0, 0
+    -- at a call, the function called runs now; at a return, its caller (a C function, string.format and the like,
+    -- allocates for whoever called it)
+    local function hook(ev)
+      local now = count("count")
+      if mine then acc = acc + (now - last) end
+      local info = getinfo(ev == "call" and 2 or 3, "S")
+      if info and info.what ~= "C" then mine = info.source:find("/QuestBank/", 1, true) ~= nil end
+      -- (the hook's own tables pile up with the collector stopped: emptied now and then, between two counts)
+      if count("count") - mark > 65536 then collectgarbage("collect"); collectgarbage("stop"); mark = count("count") end
+      last = count("count")
+    end
+    if jit then jit.off(); jit.flush() end
+    collectgarbage("collect"); collectgarbage("stop")
+    last = count("count")
+    mark = last
+    debug.sethook(hook, "cr")
+    fn()
+    debug.sethook()
+    collectgarbage("restart")
+    if jit then jit.on() end
+    return acc * 1024
+  end
+  local function full() collectgarbage("collect"); collectgarbage("collect"); return collectgarbage("count") end
+  -- what a client's QuestBank keeps: everything reachable from QB and QuestBankDB (a widget counted as a small table,
+  -- QuestBank's own fields on it followed; the upvalues of QuestBank's own functions followed, where its caches live)
+  local function pow2(n) local p = 1; while p < n do p = p * 2 end; return p end
+  local function kept(c, skip)
+    collectgarbage("collect"); collectgarbage("collect") -- (a weak table's dead entries go first)
+    local seen = { [c] = true, [c.env] = true, [BASE] = true, [_G] = true, [ALL] = true, [clients] = true, [c.frames] = true, [c.timers] = true }
+    for _, x in ipairs(skip or {}) do seen[x] = true end
+    local total, queue, qi = 0, { c.QB, c.env.QuestBankDB }, 1
+    local function push(v)
+      local tv = type(v)
+      if tv == "string" then
+        if not seen[v] then seen[v] = true; total = total + 17 + #v end
+      elseif (tv == "table" or tv == "function") and not seen[v] then
+        queue[#queue + 1] = v
+      end
+    end
+    while qi <= #queue do
+      local v = queue[qi]
+      queue[qi], qi = false, qi + 1
+      if v and not seen[v] then
+        seen[v] = true
+        if type(v) == "table" then
+          if rawget(v, "__kind") and rawget(v, "__scripts") then
+            total = total + 150
+            for k, x in pairs(v) do if type(k) ~= "string" or not k:find("^__") then push(k); push(x) end end
+            for _, s in pairs(rawget(v, "__scripts")) do push(s) end
+          else
+            local n, h = #v, 0
+            for k in pairs(v) do if not (type(k) == "number" and k >= 1 and k <= n and k % 1 == 0) then h = h + 1 end end
+            total = total + 64 + (n > 0 and pow2(n) * 8 or 0) + (h > 0 and pow2(h) * 24 or 0)
+            local mt = debug.getmetatable(v)
+            if type(mt) == "table" then push(mt) end
+            for k, x in pairs(v) do push(k); push(x) end
+          end
+        else
+          local info = debug.getinfo(v, "Su")
+          total = total + 40 + 8 * (info.nups or 0)
+          if info.source:find("/QuestBank/", 1, true) then
+            for i = 1, info.nups or 0 do local _, x = debug.getupvalue(v, i); push(x) end
+          end
+        end
+      end
+    end
+    return total / 1024
+  end
+  -- a deterministic walk (the client has no randomseed)
+  local seed = 4242
+  local function rand() seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648 end
+
+  local mc = newClient({
+    name = "Memo", level = 20, cap = 20, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2, race = "Human",
+    log = OWNER_LOG, world = { 0, -9460, 60 },
+    done = { [96393] = true, [96394] = true, [96395] = true, [96403] = true, [98423] = true, [96391] = true, [6981] = true,
+             [155] = true, [142] = true, [141] = true, [135] = true, [132] = true, [65] = true, [389] = true, [373] = true },
+    bagSlots = { { 268540, 4 }, { 251522, 1 } },
+  })
+  local QB, env = mc.QB, mc.env
+  c = mc
+  mc.o.map = 1429
+  env.IsInInstance = function() return false, "none" end
+  local m0 = full()
+  login(mc)
+  env.SlashCmdList.QUESTBANK("")
+  QB.Model.Finish()
+  for t = 1, 9 do QB.UI:ShowTab(t) end
+  QB.UI.frame:Hide()
+  QB.Arrow:Set(true)
+  mc.map:Close() -- (the game's world map shut, as it is while you play)
+
+  -- 1. what is kept after login with every page opened. 5.4.1 kept 15.1 MB (LuaJIT; about 22 MB in the client's Lua
+  -- 5.1): the quest views 7.2 MB of it, the catalog (Data.lua) 4.2 MB, the window 1.1 MB. 5.4.2 keeps about 9.3 MB:
+  -- the catalog, the window and its widgets 2.6 MB, the quest views 0.85 MB, the maps' and flights' tables about 1 MB.
+  -- The budget, 11 MB, leaves room to grow and fails if the views (6 MB more) come back whole
+  local KEEP_BUDGET = 11 * 1024
+  local afterLoad = kept(mc)
+  print(string.format("memory: kept after login and every page %.0f KB (budget %d KB); the heap grew %.0f KB with the harness's widgets",
+    afterLoad, KEEP_BUDGET, full() - m0))
+  assert(afterLoad < KEEP_BUDGET, string.format("QuestBank keeps %.0f KB after login, over its budget of %d KB", afterLoad, KEEP_BUDGET))
+
+  -- a late session's trails: 8,000 points (about seven hours on foot) round where you stand, noted before this session
+  local Walk = QB.Walk
+  local home = { mc.o.world[2], mc.o.world[3] }
+  local function fill(n, box, keepOn)
+    local x, y, h, cnt = home[1], home[2], 0, 0
+    local W = Walk.DB()
+    if not keepOn then W[0] = nil end
+    while cnt < n do
+      h = h + (rand() - 0.5) * 1.2
+      local nx, ny = x + math.cos(h) * 16, y + math.sin(h) * 16
+      if math.abs(nx - home[1]) > box or math.abs(ny - home[2]) > box then h = math.atan2(home[2] - y, home[1] - x) else x, y = nx, ny end
+      if rand() < 0.003 then Walk.Note({ c = 0, wx = x + 4000, wy = y + 4000 }) end -- (a hearth now and then: a new trail)
+      if Walk.Note({ c = 0, wx = x, wy = y }) then cnt = cnt + 1 end
+    end
+    return x, y
+  end
+  local function points() local n = 0; for _, t in ipairs(Walk.DB()[0] or {}) do n = n + #t / 2 end; return n end
+
+  -- one frame of play: the clock, walking (a heading that wanders, kept within 1,500 yards of home), the timers due,
+  -- every visible frame's OnUpdate
+  local heading, turnAt, speed = 0, 0, 7
+  local function frame(dt)
+    mc.clock = mc.clock + dt
+    if speed > 0 then
+      if mc.clock >= turnAt then heading, turnAt = heading + (rand() - 0.5) * 2, mc.clock + 2 + rand() * 8 end
+      local w = mc.o.world
+      local nx, ny = w[2] + math.cos(heading) * speed * dt, w[3] + math.sin(heading) * speed * dt
+      if math.abs(nx - home[1]) > 1500 or math.abs(ny - home[2]) > 1500 then heading = math.atan2(home[2] - w[3], home[1] - w[2])
+      else w[2], w[3] = nx, ny end
+    end
+    table.sort(mc.timers, function(a, b) return a.t < b.t end)
+    while mc.timers[1] and mc.timers[1].t <= mc.clock do table.remove(mc.timers, 1).f() end
+    for _, f in ipairs(mc.frames) do
+      local u = f.__scripts.OnUpdate
+      if u and f:IsVisible() then u(f, dt) end
+    end
+  end
+
+  fill(8000, 1500)
+  for _ = 1, 200 do frame(0.05) end
+  -- (the trails, their graph and the quest survey grow with play by design, bounded by their caps: weighed apart)
+  local function sansTrails() return kept(mc, { Walk.G, Walk.DB() }) end
+  local before, beforeAll, builds0 = sansTrails(), kept(mc), Walk.builds
+  -- 2. a long session on those trails: twenty minutes walking, the quest log changing every
+  -- 5 seconds, XP and the bags every 30, a hand-in every 7 minutes, the window opened on each page every 2 minutes
+  local cycle = function()
+    QB.UI:Open(1)
+    for t = 2, 9 do QB.UI:ShowTab(t) end
+    QB.UI.frame:Hide()
+  end
+  local sched = {
+    { 5, function() mc.ev(QB.eventFrame, "QUEST_LOG_UPDATE") end },
+    { 30, function() mc.xp = (mc.xp or 0) + 250; mc.ev(QB.eventFrame, "PLAYER_XP_UPDATE", "player") end },
+    { 30, function() mc.ev(QB.eventFrame, "BAG_UPDATE_DELAYED") end },
+    { 420, function()
+        for i, e in ipairs(mc.log) do
+          if e[2] == 1 then
+            table.remove(mc.log, i); mc.done[e[1]] = true
+            mc.ev(QB.eventFrame, "QUEST_TURNED_IN", e[1], 1150, 0); mc.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+            break
+          end
+        end
+      end },
+    { 120, function() if cycle then cycle() end end },
+    { 60, function() mc.outbox, mc.chat, mc.said = {}, {}, {} end },
+  }
+  for _, s in ipairs(sched) do s.next = mc.clock + s[1] end
+  local function play(seconds, fps)
+    fps = fps or 20
+    for _ = 1, seconds * fps do
+      frame(1 / fps)
+      for _, s in ipairs(sched) do if mc.clock >= s.next then s.next = s.next + s[1]; s[2]() end end
+    end
+  end
+  local p0 = points()
+  play(20 * 60, 10) -- (at 10 frames a second: the minimap places its pins at most 20 times a second anyway)
+  local after, afterAll = sansTrails(), kept(mc)
+  -- QuestBank's own garbage late in the session: ten seconds of play (the window shut) and one look through the
+  -- window's pages, a minute of play counting the pages' share of their 2 minutes
+  local pages = cycle
+  cycle = nil
+  local walk = ownBytes(function() play(10) end) * 6
+  local look = ownBytes(pages)
+  local perMinute = walk + look / 2
+  print(string.format("a long session: %d trail points (+%d); kept %.0f KB before and %.0f KB after (%+.1f%%), %.0f and %.0f KB with the trails; garbage late in it %.0f KB a minute (%.0f playing, %.0f a look through the pages); graphs built whole %d",
+    points(), points() - p0, before, after, (after - before) / before * 100, beforeAll, afterAll, perMinute / 1024, walk / 1024, look / 1024, Walk.builds - builds0))
+  -- 5.4.1 made 27 to 44 MB of garbage a minute walking (mock left out), 60 MB a minute at 8,000 points
+  assert(perMinute < 3 * 1024 * 1024, string.format("late in a session QuestBank makes %.0f KB of garbage a minute (at most 3 MB)", perMinute / 1024))
+  assert(after < before * 1.05, string.format("a long session grows what is kept by %.1f%% (at most 5%%, the trails aside)", (after - before) / before * 100))
+  assert(afterAll - after < 2048 and afterAll < beforeAll * 1.15, string.format("the trails' graph at %d points: %.0f KB (at most 2 MB)", points(), afterAll - after))
+  assert(Walk.builds == builds0 and points() > p0 + 300, "the trails' graph grew point by point: never built whole while walking")
+
+  -- 3. every frame, standing still with nothing changing: each OnUpdate that always runs (the minimap's, the arrow's,
+  -- the trails', the camp bar's) allocates next to nothing. 5.4.1: 2.3 KB a frame on the minimap's, 565 B on the
+  -- arrow's, about 260 B on the others (the error wrapper alone)
+  speed = 0
+  for _ = 1, 40 do frame(0.05) end
+  QB.Mini.Invalidate(); QB.Mini.Place() -- (the list made now: its 30-second safety net does not fall in the count)
+  local IDLE_MAX = 64 -- bytes a call
+  local measured = {}
+  local runners = {}
+  for _, f in ipairs(mc.frames) do
+    local u = f.__scripts.OnUpdate
+    if u and f:IsVisible() then runners[#runners + 1] = f end
+  end
+  for _, f in ipairs(runners) do
+    local u = f.__scripts.OnUpdate
+    local per = ownBytes(function()
+      for _ = 1, 120 do mc.clock = mc.clock + 1 / 60; u(f, 1 / 60) end
+    end) / 120
+    measured[#measured + 1] = string.format("%s %.0f", f.__name == "QuestBankMinimap" and "minimap" or f == QB.Arrow.frame and "arrow"
+      or f == QB.Walk.frame and "trails" or f == QB.Camp.frame and "camp" or tostring(f.__where), per)
+  end
+  for i, f in ipairs(runners) do
+    local per = tonumber(measured[i]:match("(%S+)$"))
+    assert(per < IDLE_MAX, string.format("an OnUpdate allocates %.0f bytes a frame standing still (at most %d): %s", per, IDLE_MAX, table.concat(measured, ", ")))
+  end
+  assert(#runners >= 4, "the minimap's, the arrow's, the trails' and the camp bar's OnUpdate run: " .. #runners)
+  -- the wrapper that keeps errors out of the game's way (QB.Safe): no table or closure a call any more, the arguments
+  -- in upvalues, exactly as many as given (an event handler counts them), and a call within a call its own
+  for n = 0, 8 do
+    local got, args = nil, {}
+    local f = QB.Safe(function(...) got = select("#", ...) end, "harness")
+    for i = 1, n do args[i] = (i % 3 ~= 0) and i or nil end
+    f(unpack(args, 1, n))
+    assert(got == n, "QB.Safe passes " .. n .. " arguments as " .. tostring(got))
+  end
+  local depth, inner = 0, nil
+  inner = QB.Safe(function(k, word)
+    depth = depth + 1
+    if k < 3 then inner(k + 1, "w" .. (k + 1)) end
+    assert(word == "w" .. k, "a call's arguments stay its own after a call within it")
+  end, "harness")
+  inner(1, "w1")
+  local quiet = QB.Safe(function(self, dt) return self, dt end, "harness")
+  local safeBytes = ownBytes(function() for _ = 1, 100 do quiet(mc, 0.016) end end) / 100
+  assert(depth == 3 and safeBytes < 8, string.format("QB.Safe: a call within a call, and %.0f bytes a call", safeBytes))
+  -- and walking: the minimap follows you, the golden path is trimmed behind you and searched again now and then
+  speed = 7
+  local walking = ownBytes(function() for _ = 1, 240 do frame(1 / 60) end end) / 240
+  print(string.format("every frame: standing still, bytes a call: %s; walking, all of them %.0f bytes a frame", table.concat(measured, ", "), walking))
+  assert(walking < 512, string.format("walking, QuestBank allocates %.0f bytes a frame (at most 512)", walking))
+
+  -- 4. the trails' graph against 5.4.1's search, kept here as it was: the same ways on a fixed set of trips, a point
+  -- noted and a search at 12,000 points cheap, and the cap cutting one long trail in one pass
+  local function refGraph(trails)
+    local CELL, JOIN = 250, 25
+    local function cell(x, y) return floor(x / CELL) .. ":" .. floor(y / CELL) end
+    local nodes, byCell = {}, {}
+    for ti, t in ipairs(trails) do
+      for i = 1, #t - 1, 2 do
+        local id = #nodes + 1
+        nodes[id] = { x = t[i], y = t[i + 1], adj = {}, t = ti }
+        if i > 1 then local prev = id - 1; nodes[id].adj[#nodes[id].adj + 1] = prev; nodes[prev].adj[#nodes[prev].adj + 1] = id end
+        local k = cell(t[i], t[i + 1])
+        byCell[k] = byCell[k] or {}
+        byCell[k][#byCell[k] + 1] = id
+      end
+    end
+    for id, nd in ipairs(nodes) do
+      local cx, cy = floor(nd.x / CELL), floor(nd.y / CELL)
+      for bx = cx - 1, cx + 1 do
+        for by = cy - 1, cy + 1 do
+          for _, other in ipairs(byCell[bx .. ":" .. by] or {}) do
+            local o = nodes[other]
+            if other ~= id and o.t ~= nd.t and (o.x - nd.x) ^ 2 + (o.y - nd.y) ^ 2 <= JOIN * JOIN then nd.adj[#nd.adj + 1] = other end
+          end
+        end
+      end
+    end
+    return nodes
+  end
+  local function refPath(N, from, to)
+    local REACH, MAX_NODES = 80, 6000
+    local function nearest(wx, wy)
+      local best, bd = nil, REACH * REACH
+      for id, nd in ipairs(N) do
+        local d = (nd.x - wx) ^ 2 + (nd.y - wy) ^ 2
+        if d < bd then best, bd = id, d end
+      end
+      return best
+    end
+    local a, b = nearest(from.wx, from.wy), nearest(to.wx, to.wy)
+    if not a or not b then return nil end
+    if a == b then return { { from.wx, from.wy }, { N[a].x, N[a].y }, { to.wx, to.wy } } end
+    local open, g, came, closed = { [a] = true }, { [a] = 0 }, {}, {}
+    local function h(id) return sqrt((N[id].x - N[b].x) ^ 2 + (N[id].y - N[b].y) ^ 2) end
+    local f = { [a] = h(a) }
+    local explored = 0
+    while next(open) do
+      local cur, best
+      for id in pairs(open) do if not best or f[id] < best then cur, best = id, f[id] end end
+      if cur == b then break end
+      open[cur] = nil; closed[cur] = true
+      explored = explored + 1
+      if explored > MAX_NODES then return nil end
+      for _, nb in ipairs(N[cur].adj) do
+        if not closed[nb] then
+          local ng = g[cur] + sqrt((N[nb].x - N[cur].x) ^ 2 + (N[nb].y - N[cur].y) ^ 2)
+          if g[nb] == nil or ng < g[nb] then g[nb], came[nb], f[nb] = ng, cur, ng + h(nb); open[nb] = true end
+        end
+      end
+    end
+    if not came[b] then return nil end
+    local out = { { to.wx, to.wy } }
+    local cur = b
+    while cur do out[#out + 1] = { N[cur].x, N[cur].y }; cur = came[cur] end
+    out[#out + 1] = { from.wx, from.wy }
+    for i = 1, floor(#out / 2) do out[i], out[#out + 1 - i] = out[#out + 1 - i], out[i] end
+    local function same(p, q) return math.abs(p[1] - q[1]) + math.abs(p[2] - q[2]) < 2 end
+    if #out > 2 and same(out[1], out[2]) then table.remove(out, 2) end
+    if #out > 2 and same(out[#out], out[#out - 1]) then table.remove(out, #out - 1) end
+    return out
+  end
+  local function length(p) local s = 0; for i = 2, #p do s = s + sqrt((p[i][1] - p[i - 1][1]) ^ 2 + (p[i][2] - p[i - 1][2]) ^ 2) end; return s end
+  local function compare(trips)
+    local N = refGraph(Walk.DB()[0])
+    local tr = Walk.DB()[0]
+    local samePts, sameLen, none = 0, 0, 0
+    for _ = 1, trips do
+      local function spot()
+        if rand() < 0.15 then return { wx = home[1] + (rand() - 0.5) * 3400, wy = home[2] + (rand() - 0.5) * 3400 } end
+        local t = tr[1 + floor(rand() * #tr)]
+        local i = 1 + 2 * floor(rand() * (#t / 2))
+        return { wx = t[i] + (rand() - 0.5) * 60, wy = t[i + 1] + (rand() - 0.5) * 60 }
+      end
+      local from, to = spot(), spot()
+      local want, got = refPath(N, from, to), Walk.Path(0, from, to)
+      assert((want == nil) == (got == nil), "a way found by one search and not by the other")
+      if not want then
+        none = none + 1
+      else
+        local same = #want == #got
+        for i = 1, same and #want or 0 do if want[i][1] ~= got[i][1] or want[i][2] ~= got[i][2] then same = false end end
+        if same then samePts = samePts + 1 else
+          assert(math.abs(length(want) - length(got)) < 1e-6, "a way as long as 5.4.1's (an equal one where two tie)")
+          sameLen = sameLen + 1
+        end
+      end
+    end
+    return samePts, sameLen, none
+  end
+  speed = 0
+  fill(3000, 1200)
+  local a1, b1, n1 = compare(150)
+  fill(12000, 1500)
+  -- the cap: past 12,000 points the oldest trails go
+  local p1 = points()
+  for _ = 1, 400 do
+    local x, y = home[1] + (rand() - 0.5) * 2000, home[2] + (rand() - 0.5) * 2000
+    Walk.Note({ c = 0, wx = x, wy = y }); Walk.Note({ c = 0, wx = x + 16, wy = y })
+  end
+  assert(points() <= Walk.MAX_POINTS and points() > Walk.MAX_POINTS - 1000, "the cap holds: " .. points() .. " points, from " .. p1)
+  local a2, b2, n2 = compare(40)
+  print(string.format("trails: the ways of 5.4.1's search: %d trips the same point for point, %d as long (a tie), %d with no way; at 12,000 points %d, %d, %d",
+    a1, b1, n1, a2, b2, n2))
+  assert(a1 + b1 >= 30 and a2 + b2 >= 10, "trips enough with a way to compare")
+  -- a point noted and a search, at 12,000 points: no graph built again, a few kilobytes (the way found) and a fraction
+  -- of 5.4.1's build alone (its search built the whole graph again after every point: 0.5 s at 12,000 under Lua 5.4)
+  local W = Walk.DB()
+  -- on the end of the longest trail, going on along it; the goal 100 points back on it
+  local tr = W[0][1]
+  for _, t in ipairs(W[0]) do if #t > #tr then tr = t end end
+  assert(#tr >= 240, "a trail of 120 points at least: " .. #tr / 2)
+  local goal = { tr[#tr - 201], tr[#tr - 200] }
+  local gx, gy = tr[#tr - 1], tr[#tr]
+  Walk.Note({ c = 0, wx = home[1] + 9000, wy = home[2] + 9000 }); Walk.Note({ c = 0, wx = gx, wy = gy }) -- (back on it)
+  Walk.Path(0, { wx = gx, wy = gy }, { wx = goal[1], wy = goal[2] })
+  local builds1 = Walk.builds
+  local reps, found = 10, 0
+  local bytes = ownBytes(function()
+    for i = 1, reps do
+      Walk.Note({ c = 0, wx = gx + 16 * i, wy = gy })
+      if Walk.Path(0, { wx = gx + 16 * i, wy = gy }, { wx = goal[1], wy = goal[2] }) then found = found + 1 end
+    end
+  end) / reps
+  assert(found == reps, "the way back along the trail found each time: " .. found)
+  local t1 = os.clock()
+  for i = reps + 1, reps * 2 do
+    Walk.Note({ c = 0, wx = gx + 16 * i, wy = gy })
+    Walk.Path(0, { wx = gx + 16 * i, wy = gy }, { wx = goal[1], wy = goal[2] })
+  end
+  local per = (os.clock() - t1) / reps
+  local r0 = os.clock()
+  refGraph(W[0])
+  local refBuild = os.clock() - r0
+  print(string.format("trails at %d points: a point and a search %.2f ms, %.1f KB; 5.4.1 built its graph in %.0f ms",
+    points(), per * 1000, bytes / 1024, refBuild * 1000))
+  assert(Walk.builds == builds1, "a point noted grows the graph; nothing is built again")
+  assert(bytes < 20 * 1024, string.format("a point and a search allocate %.1f KB (at most 20)", bytes / 1024))
+  assert(per < refBuild / 20, "a point and a search cost a small part of what building the graph cost")
+  -- the trails drawn round you: a few hundred bytes at 12,000 points (5.4.1: 5 to 18 KB a call, 20 a second)
+  Walk.Near(0, home[1], home[2], 400)
+  local near = ownBytes(function() for _ = 1, 20 do Walk.Near(0, home[1], home[2], 400) end end) / 20
+  assert(near < 1024 and #Walk.Near(0, home[1], home[2], 400) > 20, string.format("the trails near you: %.0f bytes a call (at most 1 KB)", near))
+  -- one trail longer than the cap loses its oldest half in one pass (5.4.1 moved the array once for every number:
+  -- seconds)
+  W[0] = nil
+  Walk.Note({ c = 0, wx = home[1] + 9000, wy = home[2] + 9000 }) -- (a jump: what follows is a trail of its own)
+  W[0] = nil
+  for i = 1, 12000 do Walk.Note({ c = 0, wx = home[1] + i * 15, wy = home[2] }) end
+  assert(#W[0] == 1 and #W[0][1] == 24000, "one trail of 12,000 points")
+  local cut0 = os.clock()
+  Walk.Note({ c = 0, wx = home[1] + 12001 * 15, wy = home[2] })
+  local cutMs = (os.clock() - cut0) * 1000
+  local t = W[0][#W[0]]
+  assert(#W[0] == 1 and #t / 2 == 6001 and t[#t - 1] == home[1] + 12001 * 15 and t[1] == home[1] + 6001 * 15 and cutMs < 50,
+    string.format("one trail past the cap keeps its newest half, cut in %.1f ms: %d points from x %s", cutMs, #t / 2, tostring(t[1])))
+  W[0] = nil
+
+  -- 5. the golden path drawn: only the pieces round you are cut to the minimap (the rest cannot show), the same pieces
+  -- drawn as cutting all of them
+  fill(8000, 1500)
+  local MR, GP, MV = QB.MiniRoute, QB.MiniRoute.GP, QB.MiniView
+  MR.Frames()
+  local trs = Walk.DB()[0]
+  local tA = trs[#trs]
+  local px, py = tA[#tA - 1], tA[#tA]
+  local ptx, pty = tA[math.max(1, #tA - 801)], tA[math.max(2, #tA - 800)]
+  GP.c = nil
+  assert(GP.Update(0, px, py, ptx, pty) and GP.np > 100, "a long way along the trails: " .. tostring(GP.np) .. " pieces")
+  for _, view in ipairs({ { radius = 200, facing = 0, square = false }, { radius = 260, facing = 1.1, square = true }, { radius = 120, facing = -2, square = false },
+                          { radius = 900, facing = 0.4, square = false } }) do
+    local v = { c = 0, wx = px, wy = py, radius = view.radius, R = 70, scale = 70 / view.radius, cs = math.cos(view.facing), sn = math.sin(view.facing),
+                facing = view.facing, square = view.square }
+    local calls, realLine = 0, MR.Line
+    MR.Line = function(...) calls = calls + 1; return realLine(...) end
+    local shown = MR.DrawGold(v)
+    MR.Line = realLine
+    local r, want = v.R - GP.Thickness() / 2 - 1, 0
+    -- (zoomed far out, a piece under 4 pixels, the way's own stretches are drawn instead)
+    local whole = GP.Spacing() * v.scale < 4
+    for k = 1, whole and GP.n - 1 or GP.np do
+      local x1, y1 = MV.Point(v, whole and GP.x[k] or GP.ax[k], whole and GP.y[k] or GP.ay[k])
+      local x2, y2 = MV.Point(v, whole and GP.x[k + 1] or GP.bx[k], whole and GP.y[k + 1] or GP.by[k])
+      local u1, w1, u2, w2 = MR.Clip(x1, y1, x2, y2, r, v.square)
+      if u1 and (u2 - u1) ^ 2 + (w2 - w1) ^ 2 > 0.25 then want = want + 1 end
+    end
+    assert(shown == want and shown > 0 and calls < 100, string.format("the golden path: %d pieces drawn of %d (as cutting all: %d), %d cut", shown, GP.np, want, calls))
+  end
+
+  -- 6. a re-plan: under 1 MB of garbage (5.4.1: 14.9 MB, a new table for every order tried), and a plan made twice
+  -- from the same quests the same (the search's arrays are reused from one order to the next)
+  local function routeKey(r)
+    local t = {}
+    for _, l in ipairs(r.legs) do
+      t[#t + 1] = l.stop.name
+      for _, row in ipairs(l.rows) do t[#t + 1] = row.q.id .. "=" .. row.xp end
+    end
+    return table.concat(t, ",") .. string.format(" %.6f %.4f", r.level, r.t)
+  end
+  QB.Model.Finish()
+  local plan = ownBytes(function() QB.liveVer = (QB.liveVer or 0) + 1; QB:Recompute(true) end)
+  local entries = QB:RouteEntries("plan")
+  local opts = { level = QB.state.level, xp = QB.state.xp, goal = "hour", fac = QB.faction }
+  local first, again = QB.Model.Plan(entries, opts), QB.Model.Plan(entries, opts)
+  assert(#first.legs > 3 and routeKey(first) == routeKey(again), "the same quests planned twice: the same route")
+  print(string.format("a re-plan of both routes: %.0f KB of garbage", plan / 1024))
+  assert(plan < 1024 * 1024, string.format("a re-plan made %.0f KB of garbage (at most 1 MB)", plan / 1024))
+
+  -- 7. a refresh with the window shut and nothing changed (QUEST_LOG_UPDATE fires all the time while questing): the
+  -- same window afterwards, and a few tens of kilobytes (5.4.1: about 400 KB, statuses, item lists and strings anew)
+  QB:Changed()
+  local function texts()
+    local out = {}
+    for _, o in ipairs(ALL) do
+      if o.__kind == "FontString" and o.__text ~= "" then
+        local p, vis, mine = o, true, false
+        while p do
+          if not p.__shown then vis = false break end
+          if p == QB.UI.frame then mine = true end
+          p = p.__parent
+        end
+        if vis and mine then out[#out + 1] = o.__text end
+      end
+    end
+    return table.concat(out, "\n")
+  end
+  QB.UI:Open(3)
+  local page = texts()
+  QB.UI.frame:Hide()
+  local refresh = ownBytes(function() QB:Changed(); QB:Changed() end) / 2
+  QB.UI:Open(3)
+  assert(texts() == page, "the Hand-in Route reads the same after two refreshes")
+  QB.UI.frame:Hide()
+  print(string.format("a refresh, the window shut: %.0f KB of garbage", refresh / 1024))
+  assert(refresh < 100 * 1024, string.format("a refresh with nothing changed made %.0f KB of garbage (at most 100)", refresh / 1024))
+
+  -- 8. the saved runs that grew without end: the newest 20, at login and as each run stops; the hand-ins are kept
+  -- whole (the site's upload merge counts a hand-in's own reading once only while the hand-in is in the list)
+  local db = env.QuestBankDB
+  local list = {}
+  for i = 1, 600 do list[i] = { id = 100000 + i, xp = 10, at = tostring(i) } end
+  db.turnins = list
+  db.runs = {}
+  for i = 1, 25 do db.runs[i] = { started = i } end
+  QB.PruneLogs(db)
+  assert(#db.turnins == 600 and #db.runs == QB.MAX_RUNS and db.runs[1].started == 6 and db.runs[20].started == 25,
+    "every hand-in kept, the newest 20 runs")
+  mc.ev(QB.eventFrame, "QUEST_TURNED_IN", 7, 0, 0)
+  assert(#db.turnins == 601 and db.turnins[601].id == 7, "a hand-in in: nothing out")
+  -- a run stopped with 20 saved: still 20, the newest last
+  QB.Run.Start()
+  QB.Run.Stop()
+  assert(#db.runs == QB.MAX_RUNS and db.runs[1].started == 7 and db.runs[QB.MAX_RUNS].ended ~= nil, "a run stopped: the oldest out, the newest last")
+
+  -- 9. the quest views: each field as 5.4.1 made it, worked out when read; the whole catalog's views in a fraction
+  -- of the memory (5.4.1 built all 3,934 at login: about 7 MB)
+  local D, Q = QB.Data, QB.Quest
+  local function npcView(i)
+    local n = i and i > 0 and D.NPC[i]
+    if not n then return nil end
+    return { n = n[1], m = n[2], x = n[3], y = n[4], inside = n[5] < 0, place = n[12], idx = i }
+  end
+  local function eager(id) -- 5.4.1's Q.Get, as it was
+    local r = D.Q[id]
+    local turnIdx = r[6]
+    if D.TURNH and D.TURNH[id] and (QB.faction or QB.API.Faction()) == "H" then turnIdx = D.TURNH[id] end
+    local c = { id = id, name = D.QN[id] or ("Quest " .. id), lvl = r[1], req = r[2], side = r[3], base = r[4], mult = r[5],
+          turnIdx = turnIdx, giveIdx = r[7], turn = npcView(turnIdx), give = npcView(r[7]), cat = D.CAT[r[8]], cls = r[9],
+          flags = r[10], pre = D.PRE[id], tip = D.TIPS[id], bag = D.BAGQ[id], follow = D.FOLLOW[id],
+          race = D.RACE[id], excl = D.EXCL[id], nextSteps = D.NEXT[id] }
+    c.dungeon = c.flags % 2 == 1
+    c.group = floor(c.flags / 2) % 2 == 1
+    c.unconfirmed = floor(c.flags / 8) % 2 == 1
+    c.classic = floor(c.flags / 16) % 2 == 1
+    c.dungeonMult = floor(c.flags / 32) % 2 == 1
+    c.xpUnknown = floor(c.flags / 64) % 2 == 1
+    c.sodLeftover = floor(c.flags / 128) % 2 == 1
+    c.nerfed = floor(c.flags / 256) % 2 == 1
+    c.confirmed = floor(c.flags / 512) % 2 == 1
+    c.wanted = floor(c.flags / 1024) % 2 == 1
+    c.escort = floor(c.flags / 2048) % 2 == 1
+    c.repeatable = floor(c.flags / 4096) % 2 == 1
+    c.near = floor(c.flags / 8192) % 2 == 1
+    c.seenOnly = floor(c.flags / 16384) % 2 == 1
+    c.reqStated = floor(c.flags / 32768) % 2 == 1
+    c.surveyOnly = floor(c.flags / 65536) % 2 == 1
+    c.turnIn = floor(c.flags / 131072) % 2 == 1
+    c.note = D.NOTE and D.NOTE[id]
+    c.icon = D.QICON[id] or (c.bag and c.bag[3] ~= 2 and QB.API.ItemIcon(c.bag[1])) or QB.API.ItemIcon(D.QITEM[id])
+      or (c.cat and c.cat.icon) or D.TEX.questGeneric
+    return c
+  end
+  local fields = {}
+  for k in pairs(Q.FIELDS) do fields[#fields + 1] = k end
+  local ids = {}
+  for id in pairs(D.Q) do ids[#ids + 1] = id end
+  table.sort(ids)
+  local compared = 0
+  for _, id in ipairs(ids) do
+    local want, got = eager(id), Q.Get(id)
+    for k in pairs(want) do assert(Q.FIELDS[k] or k == "id", "a field 5.4.1 had and 5.4.2 does not work out: " .. k) end
+    for _, k in ipairs(fields) do
+      local a, b = want[k], got[k]
+      if type(a) == "table" and a.idx then
+        assert(type(b) == "table", "quest " .. id .. "." .. k)
+        for kk, vv in pairs(a) do assert(b[kk] == vv, "quest " .. id .. "." .. k .. "." .. kk) end
+      else
+        assert(a == b, string.format("quest %d.%s: %s, as read through the view %s", id, k, tostring(a), tostring(b)))
+      end
+      compared = compared + 1
+    end
+  end
+  -- the memory: the catalog's views as the minimap's dungeon count makes them at login, against 5.4.1's whole ones
+  for _, id in ipairs(ids) do Q.Forget(id) end
+  local v0 = full()
+  QB.changed = QB.changed + 1
+  QB.DMap.Progress()
+  local v1 = full()
+  local whole = {}
+  for _, id in ipairs(ids) do whole[id] = eager(id) end
+  local v2 = full()
+  whole = nil
+  print(string.format("quest views: %d fields of %d quests as 5.4.1's; the catalog's views at login %.0f KB, 5.4.1's %.0f KB", compared, #ids, v1 - v0, v2 - v1))
+  assert(v1 - v0 < (v2 - v1) - 4096, "the views at login take at least 4 MB less than 5.4.1's")
+  c = owner
+end)()
 
 local seen = {}
 local unique = {}
