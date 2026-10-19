@@ -2,8 +2,9 @@
 -- Settings, drawn inside the window's scroll area, flat like the rest.
 --   Everyone:  which columns each page shows, density, offline members, the minimap button, your main, role and
 --              raid spec (role and raid spec per character, the main account-wide)
---   Officers:  per stat, Everyone or Only you (per category for the game's statistics); the officer rank threshold;
---              Broadcast now (greyed for members)
+--   Officers:  per stat, Everyone or Only you (per category for the game's statistics and for what the guild
+--              discovers: bosses, dungeons, raids, reputation); the officer rank threshold; Broadcast now (greyed for
+--              members)
 local _, C = ...
 local ST = {}
 C.SettingsPage = ST
@@ -113,7 +114,7 @@ local function drawEveryone(x, w)
     if p[1] ~= "officers" or C.Roster:MeOfficer() then
       head(p[2])
       local ticked = C.UI.Ticked(p[1])
-      for _, def in ipairs(C.Stats.byCat[C.UI.CAT_OF_PAGE[p[1]]]) do
+      for _, def in ipairs(C.UI.Candidates(p[1])) do
         check(def.label, ticked[def.id], true, function(on) C.UI.SetTicked(p[1], def.id, on) end)
       end
       y = y + 6
@@ -224,6 +225,9 @@ local function drawOfficers(x, w)
     cl:SetText(C.Stats.CAT_LABEL[cat])
     y = y + 18
     if cat == "game" then
+      -- what the guild discovers, per category, set before anything is found in it as well as after
+      note("Discovered in play; a category's choice covers what is found in it.")
+      for _, f in ipairs(C.Stats.FOUND) do pair("gc_" .. f[1], f[2]) end
       -- the game's statistics are set per category: a category's choice covers every statistic in it, a child's
       -- its parent's unless set
       local game = C.Stats.game

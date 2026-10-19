@@ -1,9 +1,11 @@
 -- Writes addons/cute/stats.js from the addon's own code, so the page's stat explorer and the mock window are the
 -- registry and the window's defaults, not a copy of them: every stat's id, label, short column label, category, kind,
 -- default visibility, hint, list size or pip count, formatter and column width (Stats.lua, UI.lua), the default
--- columns per page (UI.DEFAULT_COLS) and the categories in order. The fifth category, game (Statistics), is in the
--- list with its label but holds no stat here: its stats are defined at login from what the client reports
--- (Stats.lua ProbeGame), so a page mock that shows the Statistics tab brings its own categories and numbers.
+-- columns per page (UI.DEFAULT_COLS), the other categories' stats a page offers beside its own (UI.PAGE_EXTRA: the
+-- Officers page's raids, bosses, dungeons seen and consumables) and the categories in order. The fifth category, game
+-- (Statistics), is in the list with its label but holds no stat here: its stats are defined at login from what the
+-- client reports (Stats.lua ProbeGame), and the discovered ones (bosses, instances, factions: Stats.lua's found) from
+-- what the guild meets in play, so a page mock that shows the Statistics tab brings its own categories and numbers.
 --   luajit tools/cute/page_stats.lua
 -- build.py runs it; the mock reads window.CUTE_STATS, window.CUTE_COLS and window.CUTE_CATS.
 local HERE = (arg and arg[0] and arg[0]:match("^(.*)/") or ".")
@@ -24,7 +26,7 @@ stats("Cute", C)
 local ui = assert(loadstring(io.open(HERE .. "/Cute/UI.lua"):read("*a"), "@UI.lua"))
 setfenv(ui, env)
 ui("Cute", C)
-assert(C.UI and C.UI.DEFAULT_COLS and C.UI.SHORT, "UI.lua no longer exports DEFAULT_COLS and SHORT")
+assert(C.UI and C.UI.DEFAULT_COLS and C.UI.SHORT and C.UI.PAGE_EXTRA, "UI.lua no longer exports DEFAULT_COLS, SHORT and PAGE_EXTRA")
 
 local function q(s) return '"' .. tostring(s):gsub("\\", "\\\\"):gsub('"', '\\"') .. '"' end
 local function short(d) return C.UI.SHORT[d.id] or d.label end
@@ -58,6 +60,16 @@ for _, page in ipairs({ "race", "prog", "officers" }) do
   local ids = {}
   for _, id in ipairs(C.UI.DEFAULT_COLS[page]) do
     assert(C.Stats.byId[id], "UI.DEFAULT_COLS names an unknown stat: " .. id)
+    ids[#ids + 1] = q(id)
+  end
+  out[#out + 1] = string.format("  %s: [%s],", page, table.concat(ids, ", "))
+end
+out[#out + 1] = "};"
+out[#out + 1] = "window.CUTE_EXTRA = {"
+for _, page in ipairs({ "officers" }) do
+  local ids = {}
+  for _, id in ipairs(C.UI.PAGE_EXTRA[page] or {}) do
+    assert(C.Stats.byId[id], "UI.PAGE_EXTRA names an unknown stat: " .. id)
     ids[#ids + 1] = q(id)
   end
   out[#out + 1] = string.format("  %s: [%s],", page, table.concat(ids, ", "))

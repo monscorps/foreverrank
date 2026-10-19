@@ -14,7 +14,9 @@ end
 
 -- what the officers set for a stat, or the registry's default. A statistic (a "g" stat with a game category) takes
 -- its category's setting ("gc" .. the category id), a child category its parent's, and "all" where nothing is set:
--- the officers choose per statistics category, not per statistic
+-- the officers choose per statistics category, not per statistic. A discovered stat takes its category's,
+-- "gc_bosses", "gc_dungeons", "gc_raids" or "gc_rep" (a letter after "gc_", so no game category id is the same; every
+-- instance's bosses share Bosses')
 function P:Vis(id, depth)
   local p = CuteDB and CuteDB.policy
   local v = p and p.vis and p.vis[id]
@@ -23,6 +25,7 @@ function P:Vis(id, depth)
   if depth > 4 then return "all" end
   local def = C.Stats.byId[id]
   if def and def.game then return self:Vis("gc" .. def.game, depth) end
+  if def and def.learned then return self:Vis("gc_" .. def.learned, depth) end
   local cat = tonumber(id:match("^gc(%d+)$"))
   if cat then
     local e = C.Stats.game and C.Stats.game.byId[cat]

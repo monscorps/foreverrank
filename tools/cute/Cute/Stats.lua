@@ -3,8 +3,9 @@
 -- Settings checklists) is generated from this table, so a new stat is one line here.
 --   id        short ASCII, stable for life; the wire key
 --   label     the column header or card title
---   cat       leveling | prog | funny | officer | game: the default tab and the default visibility (game is filled at
---             login from the client's own statistics; see the end of the file)
+--   cat       leveling | prog | funny | officer | game | found: the default tab and the default visibility (game is
+--             filled at login from the client's own statistics, found by what the guild discovers in play; see the
+--             end of the file)
 --   read      a function returning the value (under pcall; a secret value reads as nil)
 --   count     an event the addon counts for this stat (kept per character in CuteDB)
 --   track     true: a value Sample.lua's ticker or hooks set (kept per character too)
@@ -16,7 +17,18 @@
 --             not as they happen, so twenty clients do not fill the guild channel with ticks
 --   default   "all" or "self"; the category's default applies otherwise
 --   hint      a line for the tooltip saying how it is measured
+--   gear, bag true: re-read with the gear (or the bags) 2 s and 10 s after every loading screen (Sample.lua)
 --   game      for a statistics stat: the game's category id, which the visibility policy is set by ("gc" .. id)
+--   learned   for a discovered stat: bosses | dungeons | raids | rep, its category on the Statistics page and in the
+--             policy ("gc_" .. learned)
+-- Learned, not listed: Forever is an exploring game whose content is revealed over time, so no content is fixed here.
+-- Only the game's structure is (the equipment slots, the classes, the damage schools, the item class enums), and the
+-- few ids no documented call can tell apart, each named where it is used (README, "Adding a stat"). What the guild
+-- meets in play (what it enchants, by slot and kind of item, the bosses it kills, the instances it enters, the
+-- factions its characters know, the raid buffs guild mates cast) is data, found by each client, shared on the guild
+-- channel and kept in CuteDB.known, so the dashboard grows without a new version. (0.3.x listed Classic's: Molten
+-- Core and Onyxia attunements, Classic keys, world buffs, raid factions and potions by item id. Forever has no Classic
+-- raid, has neck enchants Classic never had, and no head or shoulder enchant yet; those lists are gone.)
 -- Every client API here is in Forever's generated API docs, is read by QuestBank on this client (GetInventoryItemLink),
 -- or is called by Blizzard's own Camelot UI code: GetInventoryItemID and GetInventoryItemQuality by Forever's own
 -- character sheet (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.lua:2219-2221, PaperDollItemSlotButton_Update),
@@ -32,13 +44,14 @@
 -- GetAverageItemLevel...) are not here, so nothing falls back to them. A global is passed to Get and Num by name
 -- ("UnitLevel"), so a missing one reads as a reason, not as nothing.
 local _, C = ...
-local S = { list = {}, byId = {}, byCat = { leveling = {}, prog = {}, funny = {}, officer = {}, game = {} } }
+local S = { list = {}, byId = {}, byCat = { leveling = {}, prog = {}, funny = {}, officer = {}, game = {}, found = {} } }
 C.Stats = S
 
--- game is the dynamic fifth category: the game's own statistics, defined at login from what the client reports
+-- game is the dynamic fifth category: the game's own statistics, defined at login from what the client reports. found
+-- is the sixth, kept out of S.CATS (no column, checklist or the web page lists it): what the guild discovers in play
 S.CATS = { "leveling", "prog", "funny", "officer", "game" }
-S.CAT_LABEL = { leveling = "Race", prog = "Prog", funny = "Hall of Shame", officer = "Officers", game = "Statistics" }
-S.CAT_DEFAULT = { leveling = "all", prog = "all", funny = "all", officer = "self", game = "all" }
+S.CAT_LABEL = { leveling = "Race", prog = "Prog", funny = "Hall of Shame", officer = "Officers", game = "Statistics", found = "Discovered" }
+S.CAT_DEFAULT = { leveling = "all", prog = "all", funny = "all", officer = "self", game = "all", found = "all" }
 local KINDS = { int = true, flag = true, text = true, list = true, pips = true }
 
 function S.def(id, label, cat, o)
@@ -59,31 +72,46 @@ function S.def(id, label, cat, o)
   return o
 end
 
+-- what the guild has found out in play (CuteDB.known; Core.lua's defaults make the tables). Nil before the saved
+-- variables load
+function S.Known()
+  local k = CuteDB and CuteDB.known
+  return type(k) == "table" and k or nil
+end
+
 ----------------------------------------------------------------------------
 -- readers. Each returns a plain value or nil. The client's namespaced APIs are looked up at call time.
 ----------------------------------------------------------------------------
 local Get, Num, api = C.Get, C.Num, C.Api
 local function money() return Num("GetMoney") end
+local function gtime() return (GetTime and GetTime()) or 0 end
+-- an enum value by name, as the client has it; the documented value where the table is missing
+local function enum(name, field, documented)
+  local e = type(Enum) == "table" and Enum[name] or nil
+  local v = type(e) == "table" and C.Plain(e[field]) or nil
+  return type(v) == "number" and v or documented
+end
 
 local function itemCount(id) return Num(api("C_Item", "GetItemCount"), id) or 0 end
--- the seventeen gear slots the game shows (no shirt, tabard, ammo)
+-- the seventeen gear slots the game shows (no shirt, tabard, ammo): the game's structure, fixed
 local GEAR = { 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 }
 local SLOT = { [1] = "Head", [2] = "Neck", [3] = "Shoulder", [5] = "Chest", [6] = "Waist", [7] = "Legs", [8] = "Feet", [9] = "Wrist",
   [10] = "Hands", [11] = "Ring 1", [12] = "Ring 2", [13] = "Trinket 1", [14] = "Trinket 2", [15] = "Back", [16] = "Main hand",
   [17] = "Off hand", [18] = "Ranged" }
 local SLOT_OF = {}
 for _, s in ipairs(GEAR) do SLOT_OF[#SLOT_OF + 1] = { s, SLOT[s] } end
--- the slots an enchant goes on at 60
-local ENCHANTABLE = { [1] = true, [3] = true, [5] = true, [7] = true, [8] = true, [9] = true, [10] = true, [15] = true, [16] = true, [17] = true }
+S.SLOT = SLOT
 
 -- the gear you wear, slot by slot, read the way Forever's own character sheet reads it (Camelot/PaperDollFrame.lua,
 -- PaperDollItemSlotButton_Update): GetInventoryItemID says what is in a slot, GetInventoryItemQuality its quality.
 -- The item level comes from the id, C_Item.GetDetailedItemLevelInfo (documented; its ItemInfo argument takes an id, a
 -- name or a link), else C_Item.GetItemInfo's fourth return (an item the client has not cached yet reads nothing from
--- the first). The link is read for the enchant alone, and only when it is a plain string: on this client
--- GetInventoryItemLink gives nothing readable for most slots (0.3.0 showed 15 of 17 slots empty and no item level on
--- a character in full gear), so a stat that needs it says so instead of counting wrong. One scan serves every gear
--- stat read in the same frame; ReadAll starts a fresh one.
+-- the first). The link is read for the enchant alone, and only when it is a plain string; a stat that needs it says
+-- so where the client gives none instead of counting wrong. One scan serves every gear stat read in the same frame;
+-- GearClear starts a fresh one. (The sheet refreshes a slot on UNIT_INVENTORY_CHANGED as well as
+-- PLAYER_EQUIPMENT_CHANGED, Camelot/PaperDollFrame.lua:2055-2063, and so do these stats: the inventory can arrive after
+-- the loading screen, and an enchant changes the link with no equipment change at all. 0.3.x listened to the second
+-- alone, so a login's empty slots and an enchant stood until the five-minute heartbeat or a /reload.)
 local gearCache, gearAt
 function S.GearClear() gearCache = nil end
 -- a call about a slot of yours: its value made plain, whether the client gave anything (a secret counts), the error.
@@ -96,11 +124,30 @@ local function slotCall(name, slot)
   if issecretvalue and issecretvalue(v) then return nil, true end
   return v, v ~= nil
 end
+-- the permanent enchant a link carries: its second field (item:id:enchant:...), 0 for none
+local function linkEnchant(link) return tonumber(link:match("item:%d+:(%d*)")) or 0 end
+-- an item's kind as the game classes it, "class.subclass" by the game's own item class enums: C_Item.GetItemInfoInstant's
+-- sixth and seventh returns (a bow is 2.2, a gun 2.3, a wand 2.19, a dagger 2.15, a shield 4.6, an off-hand item held
+-- in the hand 4.0), else C_Item.GetItemInfo's twelfth and thirteenth once the item is cached (an item the server sends
+-- that the client's own data lacks); nil while neither reads. The enchants are learned per slot and kind (below)
+local function itemKind(id, instant, info)
+  local class, sub
+  if instant then local _, _, _, _, _, c, s = Get(instant, id); class, sub = c, s end
+  if type(class) ~= "number" and info then local r = { Get(info, id) }; class, sub = r[12], r[13] end
+  if type(class) == "number" and type(sub) == "number" then return math.floor(class) .. "." .. math.floor(sub) end
+end
+S.ItemKind = itemKind
+-- the item ids the last gear and bag scans met: GET_ITEM_INFO_RECEIVED re-reads the gear and bag stats only for one of
+-- them (Sample.lua), not for every item a chat link, another addon or the Legacy window asks the client about
+local gearIds, bagIds = {}, {}
+function S.ItemWanted(id) return type(id) == "number" and (gearIds[id] == true or bagIds[id] == true) end
 local function gear()
-  local now = (GetTime and GetTime()) or 0
+  local now = gtime()
   if gearCache and gearAt == now then return gearCache end
   local out = { slot = {}, worn = 0, unreadable = 0, noLevel = 0, noQuality = 0 }
   local detailed, info, qualityById = api("C_Item", "GetDetailedItemLevelInfo"), api("C_Item", "GetItemInfo"), api("C_Item", "GetItemQualityByID")
+  local instant = api("C_Item", "GetItemInfoInstant")
+  local ids = {}
   for _, s in ipairs(GEAR) do
     local id, there, err = slotCall("GetInventoryItemID", s)
     if err then C.lastErr = err; return nil end
@@ -108,8 +155,10 @@ local function gear()
       local e = { id = type(id) == "number" and id or nil }
       out.worn = out.worn + 1
       if e.id then
+        ids[e.id] = true
         e.level = detailed and Num(detailed, e.id) or nil
         if not e.level and info then local r = { Get(info, e.id) }; e.level = type(r[4]) == "number" and r[4] or nil end
+        e.kind = itemKind(e.id, instant, info)
       end
       if not e.level then out.noLevel = out.noLevel + 1 end
       local q = slotCall("GetInventoryItemQuality", s)
@@ -118,14 +167,14 @@ local function gear()
       if not e.quality then out.noQuality = out.noQuality + 1 end
       local link = slotCall("GetInventoryItemLink", s)
       e.link = (type(link) == "string" and link ~= "" and not C.IsKstring(link)) and link or nil
-      if not e.link then out.unreadable = out.unreadable + 1 end
+      if e.link then e.enchant = linkEnchant(e.link) else out.unreadable = out.unreadable + 1 end
       out.slot[s] = e
     end
   end
-  gearCache, gearAt = out, now
+  gearCache, gearAt, gearIds = out, now, ids
   return out
 end
-local function linkEnchant(link) return tonumber(link:match("item:%d+:(%d*)")) or 0 end
+S.Gear = gear
 -- the slots for which test(slot, item) holds (item nil for an empty slot); nil, with the reason, when the scan failed
 local function slotSet(test)
   local g = gear()
@@ -148,32 +197,228 @@ local function avgItemLevel()
   return sum / n
 end
 
--- buffs on you, by spell id and name, read once a second at most
+-- what the guild enchants, learned per slot and kind of item: CuteDB.known.enchant[slot] = { n = members seen with an
+-- enchant there, at = when first, who = their GUIDs, kinds = { ["2.2"] = { n, at, who }, ... } } (kind: itemKind's
+-- "class.subclass"). A slot alone says too little: a scope on one hunter's bow would ask every wand for one, a shield
+-- enchant every caster's off-hand book, and nothing can enchant those. So an item is asked for an enchant only where
+-- the guild has seen the same kind of item enchanted in the same slot. Built from your own read, from every member
+-- record that arrives with its GUID (Roster:Apply) and from the records saved (LoadKnown), counting a member once by
+-- GUID; kept apart from the records, so it outlives a member leaving and the roster's pruning. A slot or kind nobody
+-- has enchanted is never asked for: neck shows once anyone wears a neck enchant, head and shoulder only once someone
+-- has one. (0.4.0's first build learned slots alone; such a record, with no kinds, asks for nothing.) n only grows: it
+-- says how many members the guild has seen with one, not how many have one now. kinds: { [slot] = kind }. True when a
+-- slot or kind is new to the guild's knowledge
+local WHO_CAP = 1000
+local function seenOn(rec, who)
+  if type(rec.who) ~= "table" then rec.who = {} end
+  if type(who) == "string" and who ~= "" and not rec.who[who] and (rec.n or 0) < WHO_CAP then rec.who[who] = true; rec.n = (rec.n or 0) + 1 end
+end
+function S.LearnEnchants(kinds, who)
+  local k = S.Known()
+  if not k or type(kinds) ~= "table" then return false end
+  k.enchant = type(k.enchant) == "table" and k.enchant or {}
+  local new = false
+  for _, e in ipairs(SLOT_OF) do
+    local slot, kind = e[1], kinds[e[1]]
+    if type(kind) == "string" and kind:match("^%d+%.%d+$") then
+      local rec = k.enchant[slot]
+      if type(rec) ~= "table" then rec = { n = 0, at = C.Now(), who = {} }; k.enchant[slot] = rec end
+      rec.kinds = type(rec.kinds) == "table" and rec.kinds or {}
+      local kr = rec.kinds[kind]
+      if type(kr) ~= "table" then kr = { n = 0, at = C.Now(), who = {} }; rec.kinds[kind] = kr; new = true end
+      seenOn(rec, who)
+      seenOn(kr, who)
+    end
+  end
+  if new then
+    -- your own Missing enchants (and the verdict) are asked again, and the window learns of it
+    if C.Sample and C.Sample.started then C.Sample:Schedule("unenchanted"); C.Sample:Schedule("ready") end
+    if C.UI and C.UI.Refresh then C.UI:Refresh() end
+  end
+  return new
+end
+-- has the guild seen an enchant in this slot: on this kind of item, or (kind nil) on any
+function S.EnchantKnown(slot, kind)
+  local k = S.Known()
+  local rec = k and type(k.enchant) == "table" and k.enchant[slot]
+  local kinds = type(rec) == "table" and rec.kinds
+  if type(kinds) ~= "table" then return false end
+  if kind ~= nil then return type(kinds[kind]) == "table" end
+  return next(kinds) ~= nil
+end
+-- how many members the guild has seen with an enchant in this slot (on this kind of item, where kind is given)
+function S.EnchantSeen(slot, kind)
+  if not S.EnchantKnown(slot, kind) then return 0 end
+  local rec = S.Known().enchant[slot]
+  local r = kind ~= nil and rec.kinds[kind] or rec
+  return type(r.n) == "number" and r.n or 0
+end
+-- a kind's name as the client gives it (C_Item.GetItemSubClassInfo: "Bows", "Shields"), the class.subclass where none
+function S.KindName(kind)
+  local class, sub = tostring(kind or ""):match("^(%d+)%.(%d+)$")
+  if not class then return "?" end
+  local name = Get(api("C_Item", "GetItemSubClassInfo"), tonumber(class), tonumber(sub))
+  return (type(name) == "string" and name ~= "") and name or kind
+end
+-- the slots learned, in the slots' order, with how many members were seen with one and the kinds of item:
+-- { { slot, label, n, { { kind, n }, ... } }, ... }
+function S.EnchantSlots()
+  local out = {}
+  for _, e in ipairs(SLOT_OF) do
+    if S.EnchantKnown(e[1]) then
+      local kinds = {}
+      for kind, r in pairs(S.Known().enchant[e[1]].kinds) do if type(r) == "table" then kinds[#kinds + 1] = { kind, type(r.n) == "number" and r.n or 0 } end end
+      table.sort(kinds, function(a, b) return a[1] < b[1] end)
+      out[#out + 1] = { e[1], e[2], S.EnchantSeen(e[1]), kinds }
+    end
+  end
+  return out
+end
+-- the kinds of the enchanted items a record lists, as the wire carries them: "slot:class.subclass" for each worn item
+-- whose readable link carries an enchant and whose kind reads, space-separated in the slots' order ("2:4.0 18:2.2")
+function S.EnchantKindsText(g)
+  local parts = {}
+  for _, s in ipairs(GEAR) do
+    local e = g.slot[s]
+    if e and e.link and (e.enchant or 0) > 0 and e.kind then parts[#parts + 1] = s .. ":" .. e.kind end
+  end
+  return table.concat(parts, " ")
+end
+-- and back: { [slot] = kind } for the gear slots, anything else dropped
+function S.EnchantKinds(text)
+  local out = {}
+  if type(text) ~= "string" then return out end
+  for slot, kind in text:gmatch("(%d+):(%d+%.%d+)") do
+    slot = tonumber(slot)
+    if SLOT[slot] and #kind <= 9 then out[slot] = kind end
+  end
+  return out
+end
+-- your own read teaches the guild's knowledge too, and goes to the guild as the hidden ench_kinds (end of the file)
+local function learnOwn(g)
+  local text = S.EnchantKindsText(g)
+  S.LearnEnchants(S.EnchantKinds(text), C.MyGUID() or "me")
+  if C.Sample and C.Sample.Set then C.Sample:Set("ench_kinds", text) end
+end
+
+-- consumables in your bags, by the game's own item classes (Enum.ItemClass.Consumable and its subclasses,
+-- ItemConstantsDocumentation.lua), not by item ids: whatever potion or flask Forever adds counts the day it drops.
+-- One scan of the backpack and the four bags (C_Container) serves every bag stat read in the same frame; BagClear
+-- starts a fresh one. An item C_Item.GetItemInfoInstant cannot place (one the server sends that the client's own data
+-- lacks) is asked of C_Item.GetItemInfo, whose twelfth and thirteenth returns are the class and subclass once cached
+local CONSUMABLE = { potions = { "Potion", 1 }, elixirs = { "Elixir", 2 }, flasks = { "Flasksphials", 3 }, food = { "Fooddrink", 5 }, bandages = { "Bandage", 7 } }
+local bagCache, bagAt
+function S.BagClear() bagCache = nil end
+local function bags()
+  local now = gtime()
+  if bagCache and bagAt == now then return bagCache end
+  local numSlots, info, instant = api("C_Container", "GetContainerNumSlots"), api("C_Container", "GetContainerItemInfo"), api("C_Item", "GetItemInfoInstant")
+  if not (numSlots and info and instant) then return nil end
+  local itemInfo = api("C_Item", "GetItemInfo")
+  local consumable = enum("ItemClass", "Consumable", 0)
+  local sub, out, ids = {}, { items = 0 }, {}
+  for key, e in pairs(CONSUMABLE) do sub[enum("ItemConsumableSubclass", e[1], e[2])] = key; out[key] = 0 end
+  for b = enum("BagIndex", "Backpack", 0), enum("BagIndex", "Bag_4", 4) do
+    local n = Num(numSlots, b)
+    -- (a bag the client cannot count is a read that failed, with its reason; not a bag of nothing)
+    if n == nil then return nil end
+    for slot = 1, n do
+      local it = Get(info, b, slot)
+      if type(it) == "table" then
+        local id, count = C.Plain(it.itemID), C.Plain(it.stackCount)
+        if type(id) == "number" then
+          out.items = out.items + 1
+          ids[id] = true
+          local _, _, _, _, _, class, subclass = Get(instant, id)
+          if class == nil and itemInfo then local r = { Get(itemInfo, id) }; class, subclass = r[12], r[13] end
+          local key = class == consumable and sub[subclass] or nil
+          if key then out[key] = out[key] + (type(count) == "number" and count or 1) end
+        end
+      end
+    end
+  end
+  bagCache, bagAt, bagIds = out, now, ids
+  return out
+end
+local function consumables(key) return function() local b = bags(); return b and b[key] or nil end end
+
+-- buffs on you, by spell id and name, read once a second at most. A long buff (five minutes or more) that a guild mate
+-- cast on you is remembered by name (CuteDB.known.buffs[name] = { id, at, last, times, from = { [GUID] = true }, nfrom,
+-- on }): the raid buffs are learned from who buffs you in play, not listed. Remembered is not yet a raid buff: one
+-- counts once two different guild mates have cast it on you, or one has on three separate occasions (an occasion is
+-- the buff coming on you while it was not; on is kept in the saved variables, so a /reload is none); one not cast on
+-- you by a guild mate for two weeks is forgotten. And a missing one is counted only in a group or an instance. So a
+-- Soulstone or a Thorns while leveling is no raid buff, and nothing is missing while you quest alone. (0.3.x listed
+-- Classic's six; QuestBank's uploads show four of them on Forever characters, Fortitude, Mark of the Wild, Arcane
+-- Intellect and Kings, and none of the other two, so a list would be wrong either way)
+local BUFF_MIN, BUFF_FROM, BUFF_TIMES, BUFF_FORGET = 300, 2, 3, 14 * 86400
+S.BUFF_FROM, S.BUFF_TIMES, S.BUFF_FORGET = BUFF_FROM, BUFF_TIMES, BUFF_FORGET
 local auraCache, auraAt = nil, -1
+local function learnBuff(name, sid, src)
+  local k = S.Known()
+  if not k then return end
+  k.buffs = type(k.buffs) == "table" and k.buffs or {}
+  local b, t = k.buffs[name], C.Now()
+  if type(b) ~= "table" then b = { id = sid, at = t }; k.buffs[name] = b end
+  b.last = t
+  if not b.on then b.on = true; b.times = (tonumber(b.times) or 0) + 1 end
+  b.from = type(b.from) == "table" and b.from or {}
+  local g = Get("UnitGUID", src)
+  if type(g) == "string" and g ~= "" and not b.from[g] and (tonumber(b.nfrom) or 0) < 40 then b.from[g] = true; b.nfrom = (tonumber(b.nfrom) or 0) + 1 end
+end
+-- a remembered buff the guild gives: from two guild mates, or three times from one
+local function raidBuff(b) return type(b) == "table" and ((tonumber(b.nfrom) or 0) >= BUFF_FROM or (tonumber(b.times) or 0) >= BUFF_TIMES) end
+S.RaidBuff = raidBuff
 local function auras()
-  local now = (GetTime and GetTime()) or 0
+  local now = gtime()
   if auraCache and now - auraAt < 1 then return auraCache end
   local ids, names = {}, {}
   local byIndex = api("C_UnitAuras", "GetAuraDataByIndex")
   for i = 1, 60 do
     local a = Get(byIndex, "player", i, "HELPFUL")
     if type(a) ~= "table" then break end
-    local sid, nm = C.Plain(a.spellId), C.Plain(a.name)
+    local sid, nm, src, dur = C.Plain(a.spellId), C.Plain(a.name), C.Plain(a.sourceUnit), C.Plain(a.duration)
     if type(sid) == "number" then ids[sid] = true end
-    if type(nm) == "string" then names[nm] = true end
+    if type(nm) == "string" and nm ~= "" then
+      names[nm] = true
+      -- cast by a guild mate, not by you, and long: remembered
+      if type(src) == "string" and src ~= "player" and type(dur) == "number" and dur >= BUFF_MIN
+        and Get("UnitIsUnit", "player", src) ~= true and Get("UnitIsInMyGuild", src) == true then learnBuff(nm, sid, src) end
+    end
+  end
+  -- what fell off is off (the next time it comes is another occasion); what no guild mate cast for two weeks goes
+  local k = S.Known()
+  if k and type(k.buffs) == "table" then
+    local t = C.Now()
+    for name, b in pairs(k.buffs) do
+      if type(b) ~= "table" then k.buffs[name] = nil
+      elseif not names[name] then
+        b.on = nil
+        if type(b.last) ~= "number" or t - b.last > BUFF_FORGET then k.buffs[name] = nil end
+      end
+    end
   end
   auraCache, auraAt = { ids = ids, names = names }, now
   return auraCache
 end
-
--- a quest's state as a pip: 2 done, 1 in the log, 0 not started
-local function questPip(id)
-  if Get(api("C_QuestLog", "IsQuestFlaggedCompleted"), id) == true then return 2 end
-  local idx = Num(api("C_QuestLog", "GetLogIndexForQuestID"), id)
-  if idx and idx > 0 then return 1 end
-  return 0
+-- in a group or an instance, by the documented calls: a party member (UnitExists), a raid index for you (UnitInRaid)
+-- or IsInInstance
+function S.Grouped()
+  return Get("UnitExists", "party1") == true or type(Get("UnitInRaid", "player")) == "number" or Get("IsInInstance") == true
 end
-local function steps(ids) return function() local s = {}; for i, q in ipairs(ids) do s[i] = questPip(q) end; return table.concat(s) end end
+-- the raid buffs the guild gives that are not on you now, by name, sorted; none outside a group or an instance
+function S.MissingBuffs()
+  local k = S.Known()
+  if not k or type(k.buffs) ~= "table" then return {} end
+  local a = auras()
+  if not S.Grouped() then return {} end
+  local out = {}
+  for name, b in pairs(k.buffs) do if raidBuff(b) and not a.names[name] then out[#out + 1] = name end end
+  table.sort(out)
+  return out
+end
+-- a remembered buff, for the tooltip: how many guild mates cast it on you and how many times
+function S.Buff(name) local k = S.Known(); return k and type(k.buffs) == "table" and type(k.buffs[name]) == "table" and k.buffs[name] or nil end
 
 local function bagTotal(name)
   local fn = api("C_Container", name)
@@ -189,7 +434,7 @@ local PRIMARY = { [171] = true, [164] = true, [333] = true, [202] = true, [182] 
 local FISHING, COOKING, FIRST_AID = 356, 185, 129
 local skillCache, skillAt = nil, -1
 local function skills()
-  local now = (GetTime and GetTime()) or 0
+  local now = gtime()
   if skillCache and now - skillAt < 1 then return skillCache end
   local n, info = Num(api("C_SkillInfo", "GetNumSkillLines")), api("C_SkillInfo", "GetSkillLineInfo")
   if not (n and info) then return nil end
@@ -210,6 +455,9 @@ local function skills()
 end
 local function primary(i) local sk = skills(); if not sk then return nil end local p = sk.primary[i]; return p and (p.name .. " " .. p.rank) or "" end
 local function skillRank(id) local sk = skills(); if not sk then return nil end local l = sk[id]; return l and l.rank or 0 end
+-- a skill line's name as the skills window gives it (Sample.lua knows a Fishing cast by it), nil where you have none
+function S.SkillName(id) local sk = skills(); local l = sk and sk[id]; return (l and l.name ~= "") and l.name or nil end
+S.FISHING = FISHING
 
 -- Forever's Legacy ids as Constants.LegacyConsts names them (Blizzard_APIDocumentationGenerated/LegacyConstantsDocumentation.lua);
 -- the documented values stand in where the table is missing. The class categories are the ones LegacyChallengeDefaultCategories
@@ -281,7 +529,7 @@ end
 -- (the 15th return) are not challenges.
 local legacyCache, legacyAt = nil, -1
 local function legacy()
-  local now = (GetTime and GetTime()) or 0
+  local now = gtime()
   if legacyCache and now - legacyAt < 5 then return legacyCache end
   if legacyDisabled() then C.lastErr = "Legacy Challenges are disabled on this realm"; return nil end
   local cats = Get("GetCategoryList")
@@ -424,7 +672,7 @@ D("quests_ready", "Ready to hand in", "leveling", { on = "QUEST_LOG_UPDATE", rea
   end
   return ready
 end })
-D("dungeons", "Dungeons run", "leveling", { count = "DUNGEON_ENTERED", hint = "dungeon instances entered" })
+D("dungeons", "Dungeons run", "leveling", { track = true, hint = "dungeon instances entered, not counting reloads; the same dungeon again only after another or a new session" })
 D("kills", "XP gains", "leveling", { count = "CHAT_MSG_COMBAT_XP_GAIN", slow = true, hint = "XP messages, counted: kills, quests and discoveries alike (the text is secret on this client)" })
 D("zones_seen", "Zones visited", "leveling", { track = true })
 D("flights_known", "Flight paths", "leveling", { track = true, hint = "known, as the taxi map last showed" })
@@ -470,27 +718,25 @@ D("still", "Longest stood still", "leveling", { track = true, slow = true, fmt =
 ----------------------------------------------------------------------------
 -- progression
 ----------------------------------------------------------------------------
--- readiness: the gaps a record shows, by name; nil until the gear and bags have been read
-local READY_INPUTS = { "empty_slots", "unenchanted", "durability", "flasks", "flask_on", "pot_health" }
+-- readiness: the gaps a record shows, by name; nil until the gear and bags have been read. An empty slot, an item
+-- without an enchant where the guild has enchanted the same kind of item in that slot (learned, above), durability
+-- under half, no potion in the bags
+local READY_INPUTS = { "empty_slots", "unenchanted", "durability", "potions" }
+local function listCount(v) local k = 0; if type(v) == "table" then for _, e in ipairs(SLOT_OF) do if v[e[1]] then k = k + 1 end end end return k end
 function S.ReadyGaps(v)
-  if type(v) ~= "table" or (v.durability == nil and v.pot_health == nil and type(v.empty_slots) ~= "table") then return nil end
-  local function count(id)
-    local t = v[id]
-    if type(t) ~= "table" then return 0 end
-    local k = 0
-    for _, e in ipairs(S.byId[id].of) do if t[e[1]] then k = k + 1 end end
-    return k
-  end
+  if type(v) ~= "table" or (v.durability == nil and v.potions == nil and type(v.empty_slots) ~= "table") then return nil end
   local gaps = {}
-  if count("empty_slots") > 0 then gaps[#gaps + 1] = "an empty slot" end
-  if count("unenchanted") > 3 then gaps[#gaps + 1] = "4 or more slots unenchanted" end
+  local empty, missing = listCount(v.empty_slots), listCount(v.unenchanted)
+  if empty > 0 then gaps[#gaps + 1] = empty == 1 and "an empty slot" or (empty .. " empty slots") end
+  if missing > 0 then gaps[#gaps + 1] = missing == 1 and "an item without the enchant the guild has on its kind" or (missing .. " items without the enchants the guild has on their kind") end
   if type(v.durability) == "number" and v.durability < 50 then gaps[#gaps + 1] = "durability under 50%" end
-  if v.flasks == 0 and v.flask_on == false then gaps[#gaps + 1] = "no flask on or in the bags" end
-  if type(v.pot_health) == "number" and v.pot_health < 5 then gaps[#gaps + 1] = "under 5 health potions" end
+  if v.potions == 0 then gaps[#gaps + 1] = "no potions" end
   return gaps
 end
-D("ready", "Ready", "prog", { fmt = readyOf, on = { "PLAYER_EQUIPMENT_CHANGED", "UPDATE_INVENTORY_DURABILITY", "BAG_UPDATE_DELAYED", "UNIT_AURA" },
-  hint = "ready with no gap, gaps with one or two, no with more: an empty slot, 4+ unenchanted, durability under 50%, no flask, under 5 health potions",
+local GEAR_ON = { "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED" }
+local BAG_ON = { "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED" }
+D("ready", "Ready", "prog", { fmt = readyOf, gear = true, bag = true, on = { "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED", "UPDATE_INVENTORY_DURABILITY", "BAG_UPDATE_DELAYED" },
+  hint = "ready with no gap, gaps with one or two, no with more: an empty slot, an item without the enchant the guild has on its kind, durability under 50%, no potions",
   read = function()
     -- from the inputs' live reads, so it never depends on which stat happened to be read first
     local v = {}
@@ -499,34 +745,70 @@ D("ready", "Ready", "prog", { fmt = readyOf, on = { "PLAYER_EQUIPMENT_CHANGED", 
     if not gaps then return nil end
     return #gaps == 0 and 2 or (#gaps <= 2 and 1 or 0)
   end })
-local GEAR_ON = { "PLAYER_EQUIPMENT_CHANGED", "GET_ITEM_INFO_RECEIVED" }
-D("ilvl", "Item level", "prog", { read = function() local avg = avgItemLevel(); return avg and math.floor(avg) or nil end, on = GEAR_ON,
+D("ilvl", "Item level", "prog", { read = function() local avg = avgItemLevel(); return avg and math.floor(avg) or nil end, on = GEAR_ON, gear = true,
   hint = "the average over the items you wear" })
-D("ilvl_slots", "Item level per slot", "prog", { kind = "list", of = SLOT_OF, on = GEAR_ON, hint = "slots at or above your average", read = function()
+D("ilvl_slots", "Item level per slot", "prog", { kind = "list", of = SLOT_OF, on = GEAR_ON, gear = true, hint = "slots at or above your average", read = function()
   local avg = avgItemLevel()
   if not avg then return nil end
   return slotSet(function(_, e) return e ~= nil and e.level ~= nil and e.level >= avg end)
 end })
-D("empty_slots", "Empty slots", "prog", { kind = "list", of = SLOT_OF, default = "self", on = "PLAYER_EQUIPMENT_CHANGED",
+D("empty_slots", "Empty slots", "prog", { kind = "list", of = SLOT_OF, default = "self", on = GEAR_ON, gear = true,
   read = function() return slotSet(function(s, e) return e == nil and s ~= 17 and s ~= 18 end) end })
--- the enchant is in the link alone: where a worn slot that takes one gives no readable link, the count would be wrong,
--- so the stat reads nil and its tooltip says why
-D("unenchanted", "Unenchanted", "prog", { kind = "list", of = SLOT_OF, default = "self", on = GEAR_ON, read = function()
+-- the enchants, from the links alone: where a worn slot gives no readable link the stat reads nil and its tooltip says
+-- why, rather than a count that would be wrong. Enchanted is the slots (everyone sees it; no column); the guild learns
+-- from it with the kind of each enchanted item, which travels beside it as the hidden ench_kinds (end of the file).
+-- Missing enchants is the worn items without one where the guild has enchanted the same kind of item in that slot
+D("enchanted", "Enchanted slots", "prog", { kind = "list", of = SLOT_OF, default = "all", on = GEAR_ON, gear = true,
+  hint = "worn slots whose item carries an enchant; the guild learns from these, with the kind of item, what takes one", read = function()
   local g = gear()
   if not g then return nil end
-  local blind = 0
-  for s in pairs(ENCHANTABLE) do local e = g.slot[s]; if e and not e.link then blind = blind + 1 end end
+  learnOwn(g)
+  local out, blind = {}, 0
+  for s, e in pairs(g.slot) do
+    if not e.link then blind = blind + 1 elseif (e.enchant or 0) > 0 then out[s] = true end
+  end
   if blind > 0 then
-    C.lastErr = string.format("the client gives no readable item link for %d worn slot%s that take%s an enchant, so enchants cannot be read", blind, blind == 1 and "" or "s", blind == 1 and "s" or "")
+    C.lastErr = string.format("the client gives no readable item link for %d worn slot%s, so enchants cannot be read", blind, blind == 1 and "" or "s")
     return nil
   end
-  return slotSet(function(s, e) return ENCHANTABLE[s] and e ~= nil and linkEnchant(e.link) == 0 end)
+  return out
 end })
-D("old_gear", "Gear 10+ levels old", "prog", { kind = "list", of = SLOT_OF, default = "self", on = { "PLAYER_EQUIPMENT_CHANGED", "PLAYER_LEVEL_UP", "GET_ITEM_INFO_RECEIVED" }, read = function()
+D("unenchanted", "Missing enchants", "prog", { kind = "list", of = SLOT_OF, default = "self", on = GEAR_ON, gear = true, countOnly = true,
+  hint = "worn items without an enchant where the guild has seen the same kind of item enchanted in that slot (a bow, a shield, a neck); a kind nobody has enchanted is never asked for",
+  -- (a member's list as this client knows the guild: a slot it has not seen enchanted is left out, so an older
+  -- client's head and shoulder never show)
+  filter = function(v) local out = {}; for slot in pairs(v) do if S.EnchantKnown(slot) then out[slot] = true end end return out end,
+  read = function()
+    local g = gear()
+    if not g then return nil end
+    learnOwn(g)
+    local out, blind, kindless = {}, 0, 0
+    for s, e in pairs(g.slot) do
+      if S.EnchantKnown(s) then
+        if not e.link then blind = blind + 1
+        elseif (e.enchant or 0) == 0 then
+          -- (a wand where the guild has scoped bows, a book held in the off hand where it has enchanted shields: not
+          -- asked for. An item whose kind does not read yet cannot be told apart, so the count waits for it)
+          if not e.kind then kindless = kindless + 1 elseif S.EnchantKnown(s, e.kind) then out[s] = true end
+        end
+      end
+    end
+    if blind > 0 then
+      C.lastErr = string.format("the client gives no readable item link for %d worn slot%s the guild enchants, so enchants cannot be read", blind, blind == 1 and "" or "s")
+      return nil
+    end
+    if kindless > 0 then
+      C.lastErr = string.format("the kind of %d worn item%s does not read yet (the client has not cached %s)", kindless, kindless == 1 and "" or "s", kindless == 1 and "it" or "them")
+      return nil
+    end
+    return out
+  end })
+D("old_gear", "Gear 10+ levels old", "prog", { kind = "list", of = SLOT_OF, default = "self", gear = true,
+  on = { "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "PLAYER_LEVEL_UP", "GET_ITEM_INFO_RECEIVED" }, read = function()
   local lvl = Num("UnitLevel", "player") or 1
   return slotSet(function(_, e) return e ~= nil and e.level ~= nil and e.level < lvl - 10 end)
 end })
-D("greens", "Green items worn", "prog", { default = "self", on = GEAR_ON, read = function()
+D("greens", "Green items worn", "prog", { default = "self", on = GEAR_ON, gear = true, read = function()
   local g = gear()
   if not g then return nil end
   if g.worn > 0 and g.noQuality == g.worn then C.lastErr = "no item quality reads for the items worn"; return nil end
@@ -534,49 +816,7 @@ D("greens", "Green items worn", "prog", { default = "self", on = GEAR_ON, read =
   for _, e in pairs(g.slot) do if e.quality ~= nil and e.quality <= 2 then n = n + 1 end end
   return n
 end })
--- attunements and keys. Quest ids are Classic's; Forever's uploads will correct them
-D("attune_mc", "Molten Core", "prog", { kind = "pips", pips = 1, read = steps({ 7848 }), on = "QUEST_LOG_UPDATE", hint = "Attunement to the Core" })
-D("attune_ony_a", "Onyxia (Alliance)", "prog", { kind = "pips", pips = 13, on = "QUEST_LOG_UPDATE",
-  read = steps({ 4182, 4183, 4184, 4185, 4186, 4224, 4264, 4282, 4322, 4321, 4341, 4342, 6502 }), hint = "Dragonkin Menace to Drakefire Amulet" })
-D("attune_ony_h", "Onyxia (Horde)", "prog", { kind = "pips", pips = 11, on = "QUEST_LOG_UPDATE",
-  read = steps({ 4903, 4941, 4974, 6566, 6567, 6568, 6569, 6570, 6601, 6602, 6702 }), hint = "Warlord's Command to Drakefire Amulet" })
-local KEYS = { { 12344, "Seal of Ascension" }, { 13704, "Skeleton Key" }, { 18249, "Crescent Key" }, { 11000, "Shadowforge Key" },
-  { 12382, "Key to the City" }, { 9240, "Mallet of Zul'Farrak" }, { 17191, "Scepter of Celebras" } }
-D("keys", "Keys", "prog", { kind = "list", of = KEYS, on = "BAG_UPDATE_DELAYED", read = function() return listOf(KEYS, function(id) return itemCount(id) > 0 end) end })
--- the effective resistance (third return), the one the character sheet shows
-local function resist(n) return function() local _, _, v = Get("UnitResistance", "player", n); return type(v) == "number" and v or nil end end
-D("resist_fire", "Fire resist", "prog", { read = resist(2), on = "PLAYER_EQUIPMENT_CHANGED" })
-D("resist_nature", "Nature resist", "prog", { read = resist(3), on = "PLAYER_EQUIPMENT_CHANGED" })
-D("resist_frost", "Frost resist", "prog", { read = resist(4), on = "PLAYER_EQUIPMENT_CHANGED" })
-D("resist_shadow", "Shadow resist", "prog", { read = resist(5), on = "PLAYER_EQUIPMENT_CHANGED" })
-D("resist_arcane", "Arcane resist", "prog", { read = resist(6), on = "PLAYER_EQUIPMENT_CHANGED" })
-local RAID_RECIPES = { { 17635, "Flask of the Titans" }, { 17636, "Flask of Distilled Wisdom" }, { 17637, "Flask of Supreme Power" },
-  { 17638, "Flask of Chromatic Resistance" }, { 17556, "Major Healing Potion" }, { 17580, "Major Mana Potion" },
-  { 17574, "Greater Fire Protection" }, { 17576, "Greater Nature Protection" }, { 17578, "Greater Shadow Protection" },
-  { 17575, "Greater Frost Protection" }, { 18560, "Mooncloth" }, { 16729, "Lionheart Helm" }, { 16994, "Arcanite Reaper" } }
-D("raid_recipes", "Raid recipes", "prog", { kind = "list", of = RAID_RECIPES, track = true, hint = "learned, as your trade skill windows showed them" })
-D("bags_free", "Free bag slots", "prog", { read = function() return bagTotal("GetContainerNumFreeSlots") end, on = "BAG_UPDATE_DELAYED" })
-D("bags_size", "Bag slots", "prog", { read = function() return bagTotal("GetContainerNumSlots") end, on = "BAG_UPDATE_DELAYED" })
-local function counts(ids) return function() local n = 0; for _, id in ipairs(ids) do n = n + itemCount(id) end; return n end end
-D("pot_health", "Health potions", "prog", { read = counts({ 13446, 3928, 1710 }), on = "BAG_UPDATE_DELAYED", hint = "Major, Superior, Greater" })
-D("pot_mana", "Mana potions", "prog", { read = counts({ 13444, 6149, 3827 }), on = "BAG_UPDATE_DELAYED", hint = "Major, Superior, Greater" })
-D("flasks", "Flasks", "prog", { read = counts({ 13510, 13511, 13512, 13513 }), on = "BAG_UPDATE_DELAYED" })
-D("elixirs", "Elixirs", "prog", { read = counts({ 13452, 13454, 3825, 9187, 13453, 9206 }), on = "BAG_UPDATE_DELAYED" })
-D("food", "Buff food", "prog", { read = counts({ 13931, 13928, 20452, 21023, 18045, 13813 }), on = "BAG_UPDATE_DELAYED" })
-D("bandages", "Bandages", "prog", { read = counts({ 14530, 14529, 8545, 8544 }), on = "BAG_UPDATE_DELAYED" })
-D("protpots", "Protection potions", "prog", { read = counts({ 13457, 13458, 13459, 13456, 13461 }), on = "BAG_UPDATE_DELAYED" })
-local WORLD = { { 22888, "Rallying Cry" }, { 16609, "Warchief's Blessing" }, { 24425, "Spirit of Zandalar" }, { 15366, "Songflower" },
-  { 22817, "Fengus' Ferocity" }, { 22818, "Mol'dar's Moxie" }, { 22820, "Slip'kik's Savvy" }, { 23768, "Sayge's Damage" }, { 23769, "Sayge's Resistance" } }
-D("world_buffs", "World buffs", "prog", { kind = "list", of = WORLD, on = "UNIT_AURA", read = function() local a = auras(); return listOf(WORLD, function(id) return a.ids[id] end) end })
-D("flask_on", "Flask active", "prog", { kind = "flag", on = "UNIT_AURA", read = function()
-  local a = auras()
-  return (a.ids[17626] or a.ids[17627] or a.ids[17628] or a.ids[17629]) and true or false
-end })
-local RAIDBUFFS = { { "Power Word: Fortitude", "Fortitude" }, { "Mark of the Wild", "Mark of the Wild" }, { "Arcane Intellect", "Arcane Intellect" },
-  { "Blessing of Kings", "Kings" }, { "Divine Spirit", "Divine Spirit" }, { "Shadow Protection", "Shadow Protection" } }
-D("buffs_missing", "Raid buffs missing", "prog", { kind = "list", of = RAIDBUFFS, default = "self", on = "UNIT_AURA",
-  read = function() local a = auras(); return listOf(RAIDBUFFS, function(name) return not a.names[name] end) end })
-D("durability", "Durability", "prog", { fmt = pct, on = { "UPDATE_INVENTORY_DURABILITY", "PLAYER_EQUIPMENT_CHANGED" }, read = function()
+D("durability", "Durability", "prog", { fmt = pct, gear = true, on = { "UPDATE_INVENTORY_DURABILITY", "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED" }, read = function()
   local worst
   for _, s in ipairs(GEAR) do
     local cur, max = Get("GetInventoryItemDurability", s)
@@ -587,23 +827,40 @@ D("durability", "Durability", "prog", { fmt = pct, on = { "UPDATE_INVENTORY_DURA
   end
   return worst
 end })
-local FACTIONS = { { 529, "Argent Dawn" }, { 59, "Thorium Brotherhood" }, { 749, "Hydraxian Waterlords" }, { 910, "Brood of Nozdormu" },
-  { 609, "Cenarion Circle" }, { 270, "Zandalar Tribe" }, { 576, "Timbermaw Hold" } }
-D("rep", "Reputation", "prog", { kind = "pips", pips = 7, on = "UPDATE_FACTION", hint = "standing 1 to 8 with the raid factions, in order", read = function()
-  local byId = api("C_Reputation", "GetFactionDataByID")
-  if not byId then return nil end
-  local s = {}
-  for i, f in ipairs(FACTIONS) do
-    local d = Get(byId, f[1])
-    local standing = type(d) == "table" and C.Plain(d.reaction) or nil
-    s[i] = type(standing) == "number" and math.min(8, math.max(0, standing)) or 0
-  end
-  return table.concat(s)
-end })
-S.FACTIONS = FACTIONS
+-- consumables by the game's item classes (bags, above)
+D("potions", "Potions", "prog", { read = consumables("potions"), on = BAG_ON, bag = true, hint = "in your bags, every potion the game calls one" })
+D("elixirs", "Elixirs", "prog", { read = consumables("elixirs"), on = BAG_ON, bag = true, hint = "in your bags" })
+D("flasks", "Flasks", "prog", { read = consumables("flasks"), on = BAG_ON, bag = true, hint = "in your bags, flasks and phials" })
+D("food", "Food and drink", "prog", { read = consumables("food"), on = BAG_ON, bag = true, hint = "in your bags" })
+D("bandages", "Bandages", "prog", { read = consumables("bandages"), on = BAG_ON, bag = true, hint = "in your bags" })
+-- healthstones by item id: the one class reagent with evidence on Forever (QuestBank's uploads find Minor and Lesser
+-- Healthstones, 5512 and 5511, in Forever characters' bags); soul shards, shaman totems and rogue poisons had none. The
+-- ids are Forever's own item list (plan/items-db.json, the beta build 1.60.1.70291): Minor to Major, 5512, 5511, 5509,
+-- 5510 and 9421, and the improved ranks a talented warlock conjures, 19004 to 19013. Nothing in the documented API
+-- tells a healthstone from another conjured item (a mana gem is the same class and subclass), so these stay listed
+local HEALTHSTONES = { 5512, 5511, 5509, 5510, 9421, 19004, 19005, 19006, 19007, 19008, 19009, 19010, 19011, 19012, 19013 }
+D("stones", "Healthstones", "prog", { read = function() local n = 0; for _, id in ipairs(HEALTHSTONES) do n = n + itemCount(id) end; return n end,
+  on = BAG_ON, bag = true })
+D("ammo", "Ammo", "prog", { read = function() return Num("GetInventoryItemCount", "player", 0) end, on = BAG_ON, bag = true, hint = "in the ammo slot" })
+D("bags_free", "Free bag slots", "prog", { read = function() return bagTotal("GetContainerNumFreeSlots") end, on = BAG_ON, bag = true })
+D("bags_size", "Bag slots", "prog", { read = function() return bagTotal("GetContainerNumSlots") end, on = BAG_ON, bag = true })
+-- the raid buffs guild mates give you (learned, above) that are not on you now, in a group or an instance
+D("buffs_missing", "Raid buffs missing", "prog", { default = "self", on = { "UNIT_AURA", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD" },
+  hint = "long buffs two guild mates (or one, three times) have cast on you in the last two weeks that you have not got now; counted in a group or an instance",
+  read = function() local k = S.Known(); if not k then return nil end return #S.MissingBuffs() end })
+-- what this character has met in play, counted from the discovered stats (Sample.lua keeps them)
+D("bosses", "Bosses killed", "prog", { track = true, hint = "different bosses this character has killed, as the game reports encounters" })
+D("dungeons_seen", "Dungeons seen", "prog", { track = true, hint = "different dungeons this character has entered" })
+D("raids", "Raids attended", "prog", { track = true, hint = "raid instances entered, counted" })
+-- the effective resistance (third return), the one the character sheet shows; the damage schools are the game's structure
+local function resist(n) return function() local _, _, v = Get("UnitResistance", "player", n); return type(v) == "number" and v or nil end end
+D("resist_fire", "Fire resist", "prog", { read = resist(2), on = GEAR_ON, gear = true })
+D("resist_nature", "Nature resist", "prog", { read = resist(3), on = GEAR_ON, gear = true })
+D("resist_frost", "Frost resist", "prog", { read = resist(4), on = GEAR_ON, gear = true })
+D("resist_shadow", "Shadow resist", "prog", { read = resist(5), on = GEAR_ON, gear = true })
+D("resist_arcane", "Arcane resist", "prog", { read = resist(6), on = GEAR_ON, gear = true })
 D("pvp_rank", "PvP rank", "prog", { read = function() local rank = pvp(); return type(rank) == "number" and rank or nil end, on = PVP_ON, hint = "0 is unranked, as the PvP tab shows" })
 D("pvp_pts", "Rank points", "prog", { read = function() local _, pts = pvp(); return type(pts) == "number" and pts or nil end, on = PVP_ON, hint = "toward the next PvP rank, as the PvP tab shows" })
-D("raids", "Raids attended", "prog", { count = "RAID_ENTERED", hint = "raid instances entered, counted" })
 -- Legacy Challenges: Forever's achievements. The counts, the points and the categories share one walk (legacy, above),
 -- cleared and re-read on ACHIEVEMENT_EARNED and on the heartbeat; CRITERIA_UPDATE changes no count, so it does not
 -- re-read them (it drives the statistics pass in Sample.lua instead)
@@ -629,15 +886,10 @@ D("lc_cats", "Challenge categories", "prog", { kind = "pips", pips = 13, on = "A
     for i, e in ipairs(S.LegacyCategories(l, myClass())) do s[i] = pipOf(e.done, e.total) end
     return table.concat(s)
   end })
-D("stones", "Healthstones", "prog", { read = counts({ 9421, 5510, 5509, 5511, 5512, 19013, 19012, 19011 }), on = "BAG_UPDATE_DELAYED" })
-D("shards", "Soul shards", "prog", { read = counts({ 6265 }), on = "BAG_UPDATE_DELAYED" })
-D("totems", "Totems", "prog", { read = function() local n = 0; for _, id in ipairs({ 5175, 5176, 5177, 5178 }) do if itemCount(id) > 0 then n = n + 1 end end; return n end, on = "BAG_UPDATE_DELAYED", hint = "of the four" })
-D("ammo", "Ammo", "prog", { read = function() return Num("GetInventoryItemCount", "player", 0) end, on = "BAG_UPDATE_DELAYED", hint = "in the ammo slot" })
-D("poisons", "Poisons", "prog", { read = counts({ 8985, 20844, 3776, 10922, 8928 }), on = "BAG_UPDATE_DELAYED" })
 D("gold", "Gold", "officer", { read = money, fmt = goldOf, on = "PLAYER_MONEY" })
 D("bank_in", "Guild bank deposits", "officer", { track = true, fmt = goldOf, hint = "while the guild bank was open" })
 D("bank_out", "Guild bank withdrawals", "officer", { track = true, fmt = goldOf, hint = "while the guild bank was open" })
-D("consumed", "Consumables used in raids", "officer", { track = true, hint = "potions, flasks and food that left your bags in a raid" })
+D("consumed", "Consumables used in raids", "officer", { track = true, hint = "potions, elixirs, flasks and food that left your bags in a raid" })
 D("addon_ver", "Addon version", "officer", { kind = "text", read = function() return C.version end, default = "all" })
 
 ----------------------------------------------------------------------------
@@ -672,14 +924,22 @@ D("raid_spec", "Raid spec set", "officer", { kind = "flag", read = function() re
 D("weekly_raids", "Raids this week", "officer", { track = true, hint = "raid instances entered since Monday" })
 
 ----------------------------------------------------------------------------
--- hidden: your character's GUID, never shown. It goes first in every full record so a receiver can join the record to
--- the guild roster's member with the same GUID (names are no key on Forever: two words, a Kstring at times; Core.lua)
--- and drop a record whose GUID is its own (the game hands a guild addon message back to its sender too). Kept out of
--- S.list and the categories, so no page, column, checklist, policy pair or the web page lists it; Sample sets it at
--- login, Comm sends it with the full record, a receiver decodes it like any text stat (up to 40 characters)
+-- hidden: what a record carries for the addon, never shown. Kept out of S.list and the categories, so no page, column,
+-- checklist, policy pair or the web page lists them; Comm sends them with the full record (in this order), a receiver
+-- decodes them like any text stat.
+--   guid        your character's GUID. It goes first in every full record so a receiver can join the record to the
+--               guild roster's member with the same GUID (names are no key on Forever: two words, a Kstring at times;
+--               Core.lua) and drop a record whose GUID is its own (the game hands a guild addon message back to its
+--               sender too). Sample sets it at login; up to 40 characters
+--   ench_kinds  the kind of each enchanted item you wear, "slot:class.subclass" (EnchantKindsText, above), which the
+--               guild learns its enchants from; set by your own gear reads, sent as a delta when it changes too.
+--               Seventeen slots at nine bytes is 153: 160 at most
 ----------------------------------------------------------------------------
-S.HIDDEN = { guid = { id = "guid", label = "Character GUID", cat = "hidden", kind = "text", max = 40, default = "all", hidden = true } }
+S.HIDDEN = { guid = { id = "guid", label = "Character GUID", cat = "hidden", kind = "text", max = 40, default = "all", hidden = true },
+  ench_kinds = { id = "ench_kinds", label = "Enchanted item kinds", cat = "hidden", kind = "text", max = 160, default = "all", hidden = true } }
+S.HIDDEN_ORDER = { "guid", "ench_kinds" }
 S.byId.guid = S.HIDDEN.guid
+S.byId.ench_kinds = S.HIDDEN.ench_kinds
 
 ----------------------------------------------------------------------------
 -- the game's statistics: a dynamic category, defined at login from what the client reports
@@ -775,6 +1035,269 @@ end
 function S.GameReport()
   if #S.byCat.game > 0 then return string.format("statistics: %d defined in %d categories", #S.byCat.game, #S.game.cats) end
   return "statistics: none (" .. (S.gameNote or "not probed yet") .. ")"
+end
+
+----------------------------------------------------------------------------
+-- discovered: what the guild meets in play, defined at run time (the sixth category, found)
+----------------------------------------------------------------------------
+-- Three kinds of stat, each defined the first time a label for it is known, from your own play or from the guild
+-- channel, and kept by receivers like the game's statistics (any client keeps the values of an id it has not defined):
+--   e<encounterID>  kills of a boss by this character (ENCOUNTER_END with success, BOSS_KILL where none came; Sample.lua),
+--                   labelled with the encounter's name, grouped by the instance it was killed in
+--   i<instanceID>   times this character entered an instance, labelled with its name, a dungeon or a raid as the
+--                   game's instanceType says
+--   f<factionID>    this character's standing with a faction its reputation list holds, labelled with its name
+-- CuteDB.known keeps what was learned: labels[id] (60 bytes at most, UTF-8 kept), mine[id] (this client found it, so
+-- its label wins over another locale's), inst[encounterID] (the instance a boss was killed in), kind[instanceID]
+-- ("party", "raid", or "world" for the continent an open-world boss stood on, which is what GetInstanceInfo names
+-- outside an instance) and reactions[r] (the standing range of a reaction,
+-- learned from your own factions, so a member's standing can be named). A label from the channel fills a gap and never
+-- replaces one this client found. Comm.lua carries them in "1L" messages.
+S.FOUND_CAP = 1000 -- discovered stats defined at most
+S.LABEL_CAP = 4000 -- labels kept at most from the channel (a client's own always are), so no sender can fill the saved variables
+S.FOUND = { { "bosses", "Bosses" }, { "dungeons", "Dungeons" }, { "raids", "Raids" }, { "rep", "Reputation" } }
+S.foundVersion = 0
+S.LABEL_MAX = 60
+local KIND_OF = { party = "party", raid = "raid", p = "party", r = "raid", w = "world" }
+
+-- client text as it may travel and be shown: the separators | ; = and control characters gone, valid UTF-8 kept (a
+-- Norwegian or German client's names, an accent in a name), a broken sequence dropped, cut to max bytes without
+-- splitting a character. Comm.lua cleans its text stats the same way
+local function utf8Clean(s)
+  local out, i, n = {}, 1, #s
+  while i <= n do
+    local c = s:byte(i)
+    local len = c < 0x80 and 1 or (c >= 0xC2 and c <= 0xDF and 2) or (c >= 0xE0 and c <= 0xEF and 3) or (c >= 0xF0 and c <= 0xF4 and 4) or 0
+    local ok = len > 0 and i + len - 1 <= n
+    for j = i + 1, i + len - 1 do if ok then local b = s:byte(j); ok = b >= 0x80 and b <= 0xBF end end
+    if ok then out[#out + 1] = s:sub(i, i + len - 1); i = i + len else i = i + 1 end
+  end
+  return table.concat(out)
+end
+function S.CleanText(s, max)
+  if s == nil then return "" end
+  s = utf8Clean((tostring(s):gsub("[|;=]", ""):gsub("%c", "")))
+  max = max or S.LABEL_MAX
+  if #s > max then
+    local cut = max
+    while cut > 0 do local b = s:byte(cut + 1); if not b or b < 0x80 or b > 0xBF then break end cut = cut - 1 end
+    s = s:sub(1, cut)
+  end
+  return s
+end
+function S.CleanLabel(s) return (S.CleanText(s, S.LABEL_MAX):gsub("^%s+", ""):gsub("%s+$", "")) end
+-- an id the wire carries as a bare int whether or not this client defined it: a statistic, a boss, an instance, a faction
+function S.IsDynamic(id) return type(id) == "string" and id:match("^[gefi]%d+$") ~= nil and #id <= 12 end
+
+-- the reaction a standing falls in, from the ranges your own factions showed (nil where none covers it), and its name
+-- (the game's FACTION_STANDING_LABEL1..8, the number where the client has none)
+function S.Reaction(v)
+  local k = S.Known()
+  if not k or type(v) ~= "number" or type(k.reactions) ~= "table" then return nil end
+  for r, t in pairs(k.reactions) do
+    if type(r) == "number" and type(t) == "table" and type(t.lo) == "number" and type(t.hi) == "number" and v >= t.lo and (v < t.hi or t.hi <= t.lo) then return r end
+  end
+end
+function S.ReactionName(r)
+  if type(r) ~= "number" then return nil end
+  local s = C.Plain(_G["FACTION_STANDING_LABEL" .. r])
+  return (type(s) == "string" and s ~= "") and s or tostring(r)
+end
+local function learnReaction(r, lo, hi)
+  local k = S.Known()
+  if not k or type(r) ~= "number" or type(lo) ~= "number" or type(hi) ~= "number" then return end
+  k.reactions = type(k.reactions) == "table" and k.reactions or {}
+  -- the first range seen stays (a faction with its own scale never moves the common one)
+  if k.reactions[r] == nil then k.reactions[r] = { lo = lo, hi = hi } end
+end
+
+-- your reputation list as Forever's reputation window reads it (C_Reputation.GetNumFactions and GetFactionDataByIndex,
+-- ReputationInfoDocumentation.lua): every row with a standing (not a plain header; a header with rep counts), once a
+-- second at most. A section folded in the window lists no rows; the factions this character listed before are asked by
+-- id instead (GetFactionDataByID), so folding a header loses none. { [factionID] = { standing, reaction, name } }
+local facCache, facAt = nil, -1
+function S.FactionsClear() facCache = nil end
+function S.Factions()
+  local now = gtime()
+  if facCache and now - facAt < 1 then return facCache end
+  local n = Num(api("C_Reputation", "GetNumFactions"))
+  local byIndex, byId = api("C_Reputation", "GetFactionDataByIndex"), api("C_Reputation", "GetFactionDataByID")
+  if not (n and byIndex) then return nil end
+  local out = {}
+  local function take(d)
+    if type(d) ~= "table" then return end
+    local id, name, standing, reaction = C.Plain(d.factionID), C.Plain(d.name), C.Plain(d.currentStanding), C.Plain(d.reaction)
+    local header, withRep = C.Plain(d.isHeader), C.Plain(d.isHeaderWithRep)
+    if type(id) ~= "number" or id <= 0 or type(standing) ~= "number" then return end
+    if header == true and withRep ~= true then return end
+    out[id] = { standing = standing, reaction = type(reaction) == "number" and reaction or nil, name = type(name) == "string" and name or nil }
+    learnReaction(reaction, C.Plain(d.currentReactionThreshold), C.Plain(d.nextReactionThreshold))
+  end
+  for i = 1, math.min(n, 400) do take(Get(byIndex, i)) end
+  local ch = C.Char()
+  ch.factions = type(ch.factions) == "table" and ch.factions or {}
+  if byId then for id in pairs(ch.factions) do if not out[id] then take(Get(byId, id)) end end end
+  for id in pairs(out) do ch.factions[id] = true end
+  facCache, facAt = out, now
+  return out
+end
+
+-- the group a discovered id belongs in, and its number; nil for an instance whose kind is not known yet
+local function groupOf(id)
+  local prefix, num = id:match("^([efi])(%d+)$")
+  num = tonumber(num)
+  if not (prefix and num) then return nil end
+  local k = S.Known()
+  if prefix == "e" then return "bosses", num end
+  if prefix == "f" then return "rep", num end
+  local kind = k and k.kind and k.kind[num]
+  if kind == "party" then return "dungeons", num elseif kind == "raid" then return "raids", num end
+  return nil, num
+end
+
+-- define (or relabel) a discovered stat from what is known of it; the def, or nil when it cannot be shown yet
+function S.Found(id)
+  local k = S.Known()
+  local label = k and k.labels and k.labels[id]
+  if type(label) ~= "string" or label == "" then return nil end
+  local group, num = groupOf(id)
+  if not group then return nil end
+  local def = S.byId[id]
+  if def then
+    if def.cat ~= "found" then return nil end
+    if def.label ~= label or def.learned ~= group then def.label, def.learned = label, group; S.foundVersion = S.foundVersion + 1 end
+    return def
+  end
+  if #S.byCat.found >= S.FOUND_CAP then return nil end
+  local o = { learned = group, default = "all", num = num }
+  if group == "rep" then
+    -- the standing is read from the list; it moves with every kill of the faction's foes, so it travels on the flush
+    o.read = function() local f = S.Factions(); local e = f and f[num]; return e and e.standing or nil end
+    o.slow = true
+    o.fmt = function(v) return S.ReactionName(S.Reaction(v)) or (type(v) == "number" and tostring(v) or "?") end
+    o.hint = "standing with this faction, as your reputation list shows it"
+  else
+    -- a count Sample.lua keeps per character; a character that never met it has no value (not a 0 on the wire)
+    o.track = true
+    o.hint = group == "bosses" and "kills by this character" or "entries by this character, not counting reloads"
+  end
+  def = S.def(id, label, "found", o)
+  S.foundVersion = S.foundVersion + 1
+  -- (a page that lists the discoveries draws again; a hidden window draws nothing)
+  if C.UI and C.UI.Refresh then C.UI:Refresh() end
+  return def
+end
+
+-- a label learned: own (this client met it) or from the guild channel. For a boss the instance it was killed in, for an
+-- instance its kind. Returns true when this client found something new to tell the guild (an own discovery, or an own
+-- label that differs from the one it had)
+function S.Label(id, label, own, inst, kind)
+  local k = S.Known()
+  if not k or type(id) ~= "string" or not id:match("^[efi]%d+$") then return false end
+  label = S.CleanLabel(label)
+  if label == "" then return false end
+  k.labels, k.mine, k.inst, k.kind = k.labels or {}, k.mine or {}, k.inst or {}, k.kind or {}
+  if not S.labelCount then S.labelCount = 0; for _ in pairs(k.labels) do S.labelCount = S.labelCount + 1 end end
+  local tell = false
+  if own then
+    tell = not k.mine[id] or k.labels[id] ~= label
+    if k.labels[id] == nil then S.labelCount = S.labelCount + 1 end
+    k.labels[id], k.mine[id] = label, true
+  elseif k.labels[id] == nil then
+    if S.labelCount >= S.LABEL_CAP then return false end
+    k.labels[id] = label
+    S.labelCount = S.labelCount + 1
+  end
+  local num = tonumber(id:sub(2))
+  if id:sub(1, 1) == "e" and type(inst) == "number" and inst >= 0 and (own or k.inst[num] == nil) then
+    if k.inst[num] ~= inst then k.inst[num] = inst; S.foundVersion = S.foundVersion + 1 end
+  end
+  kind = KIND_OF[kind or ""]
+  if id:sub(1, 1) == "i" and kind and (own or k.kind[num] == nil) then
+    if k.kind[num] ~= kind then k.kind[num] = kind; S.foundVersion = S.foundVersion + 1 end
+  end
+  S.Found(id)
+  return tell
+end
+
+-- at login: every label saved defines its stat again, and the records saved teach the enchants (a member who has left
+-- since still taught them), each by the GUID it carries; a record without one teaches nothing (it would count a member
+-- a second time once the GUID comes)
+function S.LoadKnown()
+  local k = S.Known()
+  if not k then return end
+  for id in pairs(k.labels or {}) do if type(id) == "string" then S.Found(id) end end
+  for _, e in pairs(CuteDB.roster or {}) do
+    local st = type(e) == "table" and e.stats
+    if type(st) == "table" and type(st.ench_kinds) == "string" and type(st.guid) == "string" and st.guid ~= "" then
+      S.LearnEnchants(S.EnchantKinds(st.ench_kinds), st.guid)
+    end
+  end
+end
+
+-- the Statistics page's categories: the discovered first (Bosses with a child per instance, Dungeons, Raids,
+-- Reputation; an empty one left out), then the game's own as ProbeGame grouped them. { cats, byCat }: a category is
+-- { id, name, parent (-1 or the parent's id), path, stats, count (a parent's: its children's), learned }. Built again
+-- only when a discovered stat or the game's list changed
+local boardCache, boardKey
+local function byLabel(a, b) if a.label == b.label then return a.id < b.id end return a.label < b.label end
+function S.Board()
+  local key = S.foundVersion .. ":" .. tostring(S.game)
+  if boardCache and boardKey == key then return boardCache end
+  local k = S.Known() or {}
+  local cats, byCat = {}, {}
+  local groups, inst = { dungeons = {}, raids = {}, rep = {} }, {}
+  for _, def in ipairs(S.byCat.found) do
+    if def.learned == "bosses" then
+      local i = (k.inst and k.inst[def.num]) or -1
+      inst[i] = inst[i] or {}
+      table.insert(inst[i], def)
+    elseif groups[def.learned] then
+      table.insert(groups[def.learned], def)
+    end
+  end
+  local function add(c) cats[#cats + 1] = c; byCat[c.id] = c.stats end
+  if next(inst) then
+    local parent = { id = "bosses", name = "Bosses", parent = -1, path = "Bosses", stats = {}, count = 0, learned = "bosses" }
+    local children = {}
+    for i, list in pairs(inst) do
+      table.sort(list, byLabel)
+      local name = (i >= 0 and k.labels and k.labels["i" .. i]) or "Instance not named yet"
+      local child = { id = "b" .. i, name = name, parent = "bosses", path = "Bosses > " .. name, stats = list, learned = "bosses" }
+      for _, def in ipairs(list) do def.hint = "kills by this character, in " .. name end
+      children[#children + 1] = child
+      parent.count = parent.count + #list
+    end
+    table.sort(children, function(a, b) if a.name == b.name then return a.id < b.id end return a.name < b.name end)
+    parent.first = children[1].id
+    add(parent)
+    for _, c in ipairs(children) do add(c) end
+  end
+  for _, g in ipairs(S.FOUND) do
+    local list = groups[g[1]]
+    if list and #list > 0 then table.sort(list, byLabel); add({ id = g[1], name = g[2], parent = -1, path = g[2], stats = list, learned = g[1] }) end
+  end
+  for _, c in ipairs(S.game.cats or {}) do add(c) end
+  boardCache, boardKey = { cats = cats, byCat = byCat }, key
+  return boardCache
+end
+
+-- one line for /cute diag: the enchants learned (slot, members seen with one, the kinds of item), the labels, the buffs
+function S.KnownReport()
+  local k = S.Known()
+  if not k then return "known: nothing yet (no saved variables)" end
+  local slots = {}
+  for _, e in ipairs(S.EnchantSlots()) do
+    local kinds = {}
+    for _, kd in ipairs(e[4]) do kinds[#kinds + 1] = S.KindName(kd[1]) .. " " .. kd[2] end
+    slots[#slots + 1] = e[2] .. " (" .. e[3] .. ": " .. table.concat(kinds, ", ") .. ")"
+  end
+  local n = { e = 0, i = 0, f = 0 }
+  for id in pairs(k.labels or {}) do local p = type(id) == "string" and id:sub(1, 1); if n[p] then n[p] = n[p] + 1 end end
+  local buffs, raid = 0, 0
+  for _, b in pairs(k.buffs or {}) do buffs = buffs + 1; if raidBuff(b) then raid = raid + 1 end end
+  return string.format("known: enchant slots %s | labels %d (bosses %d, instances %d, factions %d) | raid buffs %d of %d remembered",
+    #slots > 0 and table.concat(slots, ", ") or "none", n.e + n.i + n.f, n.e, n.i, n.f, raid, buffs)
 end
 
 -- what a category contains, in order

@@ -4,11 +4,13 @@
 -- colours on names and nothing else coloured unless it means something (green ready, red low). Numbers sit on the
 -- right of their columns, text on the left; a two-pixel class-coloured bar marks every member's row, white for you.
 --   Race           every member as a row: level, XP, zone, pace, the leveling stats
---   Prog           readiness, attunements, item level, consumables, buffs, the gaps only you see
+--   Prog           readiness, item level, empty slots, the enchants the guild has that you lack, consumables, what
+--                  you have met in play, the gaps only you see
 --   Hall of Shame  a card per funny stat with its leader
---   Statistics     the game's own statistics as a leaderboard: categories left, you and the leader right, a click
---                  ranks every member (an empty state where the client reports none)
---   Officers       summaries, the officers' stats, the controls (officer ranks only)
+--   Statistics     what the guild discovered in play (bosses by instance, dungeons, raids, reputations) and the
+--                  game's own statistics as a leaderboard: categories left, you and the leader right, a click ranks
+--                  every member (an empty state where there is neither)
+--   Officers       summaries, what the guild has learned, the officers' stats, the controls (officer ranks only)
 --   Me             your whole record, with what members see
 -- Columns and cards come from the registry (Stats.lua); the policy (Policy.lua) decides which cells a member sees.
 -- Built on first open; nothing updates while it is hidden. A guild of a few hundred stays light: the tables and the
@@ -325,6 +327,14 @@ local function listCount(def, v)
   for _, e in ipairs(def.of) do if v[e[1]] then n = n + 1 end end
   return n
 end
+-- a row's value of a stat as this client shows it: a member's Missing enchants keeps only the slots this client knows
+-- the guild enchants (Stats.lua's filter), so an older client's list never names a slot nobody can enchant
+local function valueOf(def, row)
+  local v = row.stats[def.id]
+  if def.filter and type(v) == "table" and not row.me then return def.filter(v) end
+  return v
+end
+UI.ValueOf = valueOf
 local function listNames(def, v)
   local names = {}
   if type(v) ~= "table" then return names end
@@ -341,7 +351,11 @@ function UI.Format(def, v)
     return tostring(v)
   elseif def.kind == "flag" then return v and "yes" or "-"
   elseif def.kind == "text" then return (type(v) == "string" and v ~= "") and v or "-"
-  elseif def.kind == "list" then local n = listCount(def, v); return n and string.format("%d/%d", n, #def.of) or "?"
+  elseif def.kind == "list" then
+    local n = listCount(def, v)
+    if not n then return "?" end
+    -- (a count of what is missing has no "out of": the slots it is out of are learned)
+    return def.countOnly and tostring(n) or string.format("%d/%d", n, #def.of)
   elseif def.kind == "pips" then return type(v) == "string" and v or "?" end
   return tostring(v)
 end
@@ -354,7 +368,7 @@ local function ago(t)
   return string.format("%d days ago", math.floor(d / 86400))
 end
 UI.Ago = ago
--- pips: not started dark, in the log grey, done white; reputations climb from grey to white
+-- pips: none dark, then brighter by quarters to white (the Legacy categories); 1 and 2 are a step started and done
 local PIP = { [0] = { 0.16, 0.16, 0.16 }, [1] = { 0.5, 0.5, 0.5 }, [2] = WHITE, [3] = { 0.3, 0.3, 0.3 }, [4] = { 0.45, 0.45, 0.45 }, [5] = { 0.6, 0.6, 0.6 }, [6] = { 0.75, 0.75, 0.75 }, [7] = { 0.9, 0.9, 0.9 }, [8] = WHITE }
 
 -- a column header's short form, where the label would not fit a column
@@ -362,10 +376,9 @@ local SHORT = { xp = "XP %", xp_hour = "XP/h", xp_session = "XP/h today", to60 =
   group = "Group", quests_done = "Quests", quests_today = "Today", quests_log = "In log", quests_ready = "Ready", deaths_lvl = "Deaths", legacy = "Legacy",
   flights_known = "Flights", longest_flight = "Flight", hearth = "Hearth", hearths = "Hearths", ghost_time = "Ghost", gold_earned = "Earned", gold_quests = "Quest gold",
   vendor_sales = "Sold", talents_free = "Talents", zones_seen = "Zones", logins = "Logins", longest = "Longest", levelups = "Lvl-ups", still = "Stood still",
-  ilvl = "iLvl", ilvl_slots = "Slots", empty_slots = "Empty", unenchanted = "No ench", old_gear = "Old gear", greens = "Greens", attune_mc = "MC", attune_ony_a = "Ony (A)",
-  attune_ony_h = "Ony (H)", resist_fire = "FR", resist_nature = "NR", resist_frost = "FrR", resist_shadow = "SR", resist_arcane = "AR", raid_recipes = "Raid rec.",
-  bags_free = "Bags free", bags_size = "Bags", pot_health = "HP pots", pot_mana = "MP pots", protpots = "Prot pots", world_buffs = "World", flask_on = "Flask",
-  buffs_missing = "Missing", durability = "Dura", rep = "Rep", pvp_rank = "PvP", pvp_pts = "Rank pts", raids = "Raids", stones = "Stones",
+  ilvl = "iLvl", ilvl_slots = "Slots", empty_slots = "Empty", enchanted = "Enchanted", unenchanted = "No ench", old_gear = "Old gear", greens = "Greens",
+  resist_fire = "FR", resist_nature = "NR", resist_frost = "FrR", resist_shadow = "SR", resist_arcane = "AR", food = "Food", bosses = "Bosses", dungeons_seen = "Dungeons",
+  bags_free = "Bags free", bags_size = "Bags", buffs_missing = "Buffs", durability = "Dura", pvp_pts = "Rank pts", pvp_rank = "PvP", raids = "Raids", stones = "Stones",
   bank_in = "Bank in", bank_out = "Bank out", consumed = "Consumed", addon_ver = "Version", main = "Main", last_login = "Last login", raid_spec = "Raid spec",
   weekly_raids = "Raids/wk", deaths_today = "Today", hearth_waste = "Wasted HS", whispers = "Whispers/h", gchat = "Guild lines", inspected = "Inspected",
   ghost_yards = "Ghost yds", where = "Where r u", grey_gold = "Grey gold", lc_done = "Challenges", lc_total = "Listed", lc_pts = "Legacy pts",
@@ -390,12 +403,24 @@ local function alignOf(def) return (def.kind == "text" or def.kind == "pips") an
 ----------------------------------------------------------------------------
 local DEFAULT_COLS = {
   race = { "level", "xp", "xp_hour", "to60", "zone", "played", "quests_done", "deaths_lvl", "group", "rested", "legacy" },
-  prog = { "ready", "ilvl", "attune_mc", "attune_ony_a", "attune_ony_h", "keys", "flasks", "pot_health", "world_buffs", "durability", "rep", "unenchanted", "empty_slots" },
-  officers = { "gold", "bank_in", "bank_out", "raids", "weekly_raids", "consumed", "main", "role", "last_login", "addon_ver" },
+  prog = { "ready", "ilvl", "empty_slots", "unenchanted", "durability", "potions", "flasks", "food", "bosses", "dungeons_seen", "lc_done" },
+  -- (838 px of columns at 1040 wide, measured by the harness: Prog's eleven take 671, these ten 789. Raids and Raids
+  -- this week stay in the checklist; Forever has shown no raid yet)
+  officers = { "gold", "bank_in", "bank_out", "bosses", "dungeons_seen", "potions", "main", "role", "last_login", "addon_ver" },
 }
 UI.DEFAULT_COLS = DEFAULT_COLS
 local CAT_OF_PAGE = { race = "leveling", prog = "prog", officers = "officer", shame = "funny" }
 UI.CAT_OF_PAGE = CAT_OF_PAGE
+-- the stats of other categories an officer may want beside the officers' own: what members met in play and carry
+local PAGE_EXTRA = { officers = { "raids", "bosses", "dungeons_seen", "potions", "flasks", "food" } } -- (consumed is the officer category's own: it reads 0 until Forever has raids, so it is not a default)
+UI.PAGE_EXTRA = PAGE_EXTRA
+-- every stat a page can show as a column, in order: its category's, then its extras
+function UI.Candidates(page)
+  local out = {}
+  for _, def in ipairs(C.Stats.byCat[CAT_OF_PAGE[page]] or {}) do out[#out + 1] = def end
+  for _, id in ipairs(PAGE_EXTRA[page] or {}) do local def = C.Stats.byId[id]; if def then out[#out + 1] = def end end
+  return out
+end
 
 function UI.Ticked(page)
   local cols = C.Settings().columns[page]
@@ -420,7 +445,7 @@ end
 local function columnsFor(page, room)
   local ticked = UI.Ticked(page)
   local cols, used, hidden = {}, 0, 0
-  for _, def in ipairs(C.Stats.byCat[CAT_OF_PAGE[page]]) do
+  for _, def in ipairs(UI.Candidates(page)) do
     if ticked[def.id] then
       local w = colWidth(def)
       if used + w <= room then cols[#cols + 1] = { def = def, w = w }; used = used + w else hidden = hidden + 1 end
@@ -724,12 +749,35 @@ function UI:Cell(r, i)
       if not (def and row) then return end
       tip:AddLine(def.label, 1, 1, 1)
       if self.hidden then tip:AddLine("Only " .. row.short .. " and the officers see this.", 0.6, 0.6, 0.6, true) return end
-      local v = row.stats[def.id]
-      if def.kind == "list" then
+      local v = valueOf(def, row)
+      if def.id == "unenchanted" and type(v) == "table" then
+        -- each slot missing, with how many members the guild has seen with an enchant there: on your own row the kind
+        -- of item you wear there ("Ranged (Bows)"), whose count it is; on a member's the slot's (their kinds are theirs).
+        -- Seen, not have: the count never falls, as members leave or change their gear
+        local any = false
+        local g = row.me and C.Stats.Gear and C.Stats.Gear() or nil
+        for _, e in ipairs(def.of) do
+          if v[e[1]] then
+            any = true
+            local worn = g and g.slot[e[1]]
+            local kind = worn and worn.kind and C.Stats.EnchantKnown(e[1], worn.kind) and worn.kind or nil
+            local n = C.Stats.EnchantSeen(e[1], kind)
+            tip:AddDoubleLine(kind and (e[2] .. " (" .. C.Stats.KindName(kind) .. ")") or e[2], n == 1 and "seen on 1 member" or ("seen on " .. n .. " members"), 0.8, 0.8, 0.8, 1, 1, 1)
+          end
+        end
+        if not any then tip:AddLine("none", 0.9, 0.9, 0.9) end
+      elseif def.kind == "list" then
         local names = listNames(def, v)
         tip:AddLine(#names > 0 and table.concat(names, ", ") or "none", 0.9, 0.9, 0.9, true)
-      elseif def.kind == "pips" and def.id == "rep" and type(v) == "string" then
-        for k, f in ipairs(C.Stats.FACTIONS) do tip:AddDoubleLine(f[2], tostring(v:sub(k, k)), 0.8, 0.8, 0.8, 1, 1, 1) end
+      elseif def.id == "buffs_missing" and row.me and type(v) == "number" then
+        -- each one missing, with why it counts as one the guild gives (two guild mates, or one three times)
+        local names = C.Stats.MissingBuffs()
+        for _, name in ipairs(names) do
+          local b = C.Stats.Buff(name) or {}
+          local from, times = tonumber(b.nfrom) or 0, tonumber(b.times) or 0
+          tip:AddDoubleLine(name, string.format("from %d guild mate%s, %d time%s", from, from == 1 and "" or "s", times, times == 1 and "" or "s"), 0.8, 0.8, 0.8, 1, 1, 1)
+        end
+        if #names == 0 then tip:AddLine(C.Stats.Grouped() and "none missing" or "Counted in a group or an instance; you are in neither.", 0.9, 0.9, 0.9, true) end
       elseif def.kind == "pips" and def.id == "lc_cats" and type(v) == "string" then
         -- the Legacy categories by name from this client's own walk, the row's class category last; your own
         -- pips say the exact count, a member's the quarter the pip stands for
@@ -759,7 +807,7 @@ function UI:Cell(r, i)
   return c
 end
 
-local INVERSE = { empty_slots = true, unenchanted = true, old_gear = true, buffs_missing = true }
+local INVERSE = { empty_slots = true, unenchanted = true, old_gear = true }
 local function fillCell(c, def, row, hidden, w)
   c.def, c.row, c.hidden = def, row, hidden
   c.label:SetJustifyH(alignOf(def))
@@ -778,7 +826,7 @@ local function fillCell(c, def, row, hidden, w)
     else c.label:SetText("") end
     return
   end
-  local v = row.stats[def.id]
+  local v = valueOf(def, row)
   color(c.label, INK)
   if def.kind == "pips" and type(v) == "string" and v ~= "" then
     c.label:SetText("")
@@ -816,14 +864,15 @@ end
 -- Each row's sort value is worked out once, not in every comparison
 local function sortRows(rows, page)
   local s = UI.sort[page]
-  if not s or not s.id then s = page == "race" and { id = "level", desc = true } or nil end
+  -- (a sort saved on a stat the registry no longer has, 0.3.x's attunements say, sorts by nothing)
+  if not s or not s.id or not C.Stats.byId[s.id] then s = page == "race" and { id = "level", desc = true } or nil end
   local def = s and C.Stats.byId[s.id]
   for _, r in ipairs(rows) do
     r.tier = r.me and 0 or (r.addon and 1 or (r.online and 2 or 3))
     local v
     if s then
       -- (the guild roster still knows the level and zone of a member without the addon)
-      if r.addon then v = r.stats[s.id] else v = (s.id == "level" and r.level) or (s.id == "zone" and r.zone) or nil end
+      if r.addon then v = def and valueOf(def, r) or r.stats[s.id] else v = (s.id == "level" and r.level) or (s.id == "zone" and r.zone) or nil end
       if def and def.kind == "list" then v = listCount(def, v)
       elseif def and def.kind == "pips" then v = type(v) == "string" and select(2, v:gsub("2", "")) or nil end
       if type(v) == "boolean" then v = v and 1 or 0 end
@@ -1042,6 +1091,28 @@ function UI:DrawShame()
   sf:SetContentHeight(y + 8)
 end
 
+-- what is discovered, counted: the bosses (and the instances they are in), dungeons, raids and factions; the guild's
+-- (every one defined here) or, with mine, the ones your own record has a value for
+local function foundCounts(mine)
+  local n, insts = { bosses = 0, dungeons = 0, raids = 0, rep = 0, instances = 0 }, {}
+  local k = C.Stats.Known() or {}
+  for _, def in ipairs(C.Stats.byCat.found) do
+    local v = C.Sample:Value(def.id)
+    if n[def.learned] and (not mine or (type(v) == "number" and (v > 0 or def.learned == "rep"))) then
+      n[def.learned] = n[def.learned] + 1
+      local inst = def.learned == "bosses" and k.inst and k.inst[def.num]
+      if inst and not insts[inst] then insts[inst] = true; n.instances = n.instances + 1 end
+    end
+  end
+  return n
+end
+local function plural(n, one, many) return n .. " " .. (n == 1 and one or many) end
+local function foundLine(n)
+  return string.format("%s in %s, %s, %s, %s", plural(n.bosses, "boss", "bosses"), plural(n.instances, "instance", "instances"),
+    plural(n.dungeons, "dungeon", "dungeons"), plural(n.raids, "raid", "raids"), plural(n.rep, "faction", "factions"))
+end
+UI.FoundCounts = foundCounts
+
 -- the officers' page: summaries, then the controls, then the officer stats as a table
 function UI:DrawOfficers()
   local sf = self.scroll
@@ -1078,6 +1149,10 @@ function UI:DrawOfficers()
     for i = 1, math.min(12, #noAddon) do first[i] = noAddon[i] end
     say(string.format("Without the addon (%d): %s%s", #noAddon, table.concat(first, ", "), #noAddon > 12 and string.format(" and %d more", #noAddon - 12) or ""), DIM)
   end
+  -- what the guild has learned in play: the slots it enchants (on how many members, any kind), what it has discovered
+  local slots = {}
+  for _, e in ipairs(C.Stats.EnchantSlots()) do slots[#slots + 1] = e[2] .. " " .. e[3] end
+  say("Learned in play: " .. foundLine(foundCounts(false)) .. ". Enchants seen on " .. (#slots > 0 and table.concat(slots, ", ") or "no slot yet") .. ".", DIM)
   say(C.Policy:Describe(), DIM)
   local labels = { { "Visibility settings", function() UI:Open("settings") end },
     { "Ask everyone to resend", function() C.Comm:Ask(); C.Print("asked the guild to send their records again.") end },
@@ -1152,6 +1227,14 @@ function UI:DrawMe()
       y = y + math.ceil(n / 2) * 18 + 8
     end
   end
+  -- what you discovered and the game's statistics: counts, not every id (the Statistics page lists them)
+  local f = self.labels:Get()
+  f:SetPoint("TOPLEFT", 6, -y)
+  f:SetWidth(w - 12)
+  f:SetJustifyH("LEFT")
+  color(f, DIM)
+  fitText(f, "Discovered: " .. foundLine(foundCounts(true)) .. ", on the Statistics page.", w - 16)
+  y = y + 18
   local g = self.labels:Get()
   g:SetPoint("TOPLEFT", 6, -y)
   g:SetWidth(w - 12)
@@ -1214,11 +1297,13 @@ function UI:MakeLine(parent)
   return r
 end
 
--- the Statistics page: the game's own statistics as a leaderboard, not a wide table. Left, the categories as the
--- game groups them (a child under its parent; a click opens one); right, the open category's statistics as rows of
--- name, your value and the guild's leader; a click on a row ranks every member under it, a dash where the policy
--- keeps a member's value from you. The empty state says why the client reported none. Both columns are virtual
--- lists: a ranking of a few hundred members draws the rows in view, and a scroll draws the ones coming into view
+-- the Statistics page: what the guild discovered and the game's own statistics as a leaderboard, not a wide table. Left,
+-- the categories (Bosses with a child per instance, Dungeons, Raids, Reputation, then the game's as it groups them; a
+-- click opens one); right, the open category's stats as rows of name, your value and the guild's leader; a click on a
+-- row ranks every member under it, a dash where the policy keeps a member's value from you. Where the client reports
+-- no statistics a note under the categories says why; the empty state, where there is nothing at all, says so too.
+-- Both columns are virtual lists: a ranking of a few hundred members draws the rows in view, and a scroll draws the
+-- ones coming into view
 function UI:DrawGame()
   local sf = self.scroll
   local S = C.Stats
@@ -1235,25 +1320,26 @@ function UI:DrawGame()
     fitText(l, s, width - 4)
     return l
   end
-  if #S.byCat.game == 0 then
+  local board = S.Board()
+  if #board.cats == 0 then
     self.catLines:Clear(); self.lines:Clear()
-    say(6, 6, w - 12, S.gameNote or "No statistics yet.", INK)
-    say(6, 26, w - 12, "The addon's own counters stay on the other pages: deaths, dungeons, quests, flights and the rest.", MUTE)
+    if self.gameNoteLabel then self.gameNoteLabel:Hide() end
+    say(6, 6, w - 12, "Nothing discovered yet. " .. (S.gameNote or "No statistics yet."), INK)
+    say(6, 26, w - 12, "Bosses, dungeons, raids and reputations show here as the guild meets them; the counters stay on the other pages.", MUTE)
     self.labels:HideRest()
     sf:SetContentHeight(50)
     return
   end
-  local game = S.game
   local officer = C.Roster:MeOfficer()
   local rows = rowsShown()
   local leftW = math.max(160, math.floor(w * 0.25))
   local rightX = leftW + 12
   local rightW = w - rightX
-  -- the open category: the one clicked, else the first with statistics in it
+  -- the open category: the one clicked, else the first with stats in it
   local sel = self.gameCat
-  if not (sel and game.byCat[sel] and #game.byCat[sel] > 0) then
+  if not (sel ~= nil and board.byCat[sel] and #board.byCat[sel] > 0) then
     sel = nil
-    for _, cat in ipairs(game.cats) do if #cat.stats > 0 then sel = cat.id; break end end
+    for _, cat in ipairs(board.cats) do if #cat.stats > 0 then sel = cat.id; break end end
     self.gameCat = sel
   end
   -- the headings stay in the band; the two lists scroll under them
@@ -1269,9 +1355,11 @@ function UI:DrawGame()
   -- left: the categories
   head(4, leftW - 8, "Category")
   local top = 0
-  self.catLines:Set(#game.cats, top, ROW, function(r, i, y)
-    local cat = game.cats[i]
-    local n = #cat.stats
+  self.catLines:Set(#board.cats, top, ROW, function(r, i, y)
+    local cat = board.cats[i]
+    -- (a parent with children counts theirs and opens the first)
+    local n = cat.count or #cat.stats
+    local opens = #cat.stats > 0 and cat.id or cat.first
     local open = cat.id == sel
     r.cat, r.def, r.member = cat, nil, nil
     r:SetPoint("TOPLEFT", 0, -y)
@@ -1291,22 +1379,39 @@ function UI:DrawGame()
     color(r.val, MUTE)
     r.val:SetText(tostring(n))
     r.who:Hide()
-    r.fn = function() if n > 0 then UI.gameCat = cat.id; UI:Draw() end end
+    r.fn = function() if n > 0 and opens then UI.gameCat = opens; UI:Draw() end end
     r.tip = function(tip)
       tip:AddLine(cat.path, 1, 1, 1)
-      tip:AddLine(n == 1 and "1 statistic" or (n .. " statistics"), 0.7, 0.7, 0.7)
+      if cat.learned then tip:AddLine("Discovered in play by the guild.", 0.7, 0.7, 0.7) end
+      tip:AddLine(n == 1 and "1 entry" or (n .. " entries"), 0.7, 0.7, 0.7)
       if n > 0 then tip:AddLine("Click to open.", 0.45, 0.45, 0.45) end
     end
   end)
-  local leftY = top + #game.cats * ROW
-  -- right: the open category's statistics, each followed by its ranking where it is open. The list is worked out
-  -- here, once a draw; the scroll only places it
+  local leftY = top + #board.cats * ROW
+  -- a client without the game's statistics says so under the categories, wrapped to the column
+  if S.gameNote and #S.byCat.game == 0 then
+    if not self.gameNoteLabel then self.gameNoteLabel = text(sf.child, 11, MUTE, "LEFT") end
+    local note = self.gameNoteLabel
+    note:ClearAllPoints()
+    note:SetPoint("TOPLEFT", 6, -(leftY + 8))
+    note:SetWidth(leftW - 12)
+    note:SetWordWrap(true)
+    note:SetJustifyV("TOP")
+    note:SetText("No game statistics here: " .. S.gameNote .. ".")
+    note:Show()
+    -- (as many lines as the text is wide, and one more for where the words break)
+    local h = (math.ceil(((note.GetUnboundedStringWidth or note.GetStringWidth)(note) or 0) / math.max(1, leftW - 12)) + 1) * 13
+    note:SetHeight(h)
+    leftY = leftY + 8 + h
+  elseif self.gameNoteLabel then self.gameNoteLabel:Hide() end
+  -- right: the open category's stats, each followed by its ranking where it is open. The list is worked out here,
+  -- once a draw; the scroll only places it
   local vw, ww = 90, math.min(190, math.floor(rightW * 0.36))
   local nw = rightW - vw - ww - 8
-  head(rightX + 8, nw - 8, "Statistic")
+  head(rightX + 8, nw - 8, "Name")
   head(rightX + rightW - ww - vw - 4, vw, "You", "RIGHT")
   head(rightX + rightW - ww - 4, ww, "Leader", "RIGHT")
-  local defs = sel and game.byCat[sel] or {}
+  local defs = (sel ~= nil and board.byCat[sel]) or {}
   local items = {}
   for i, def in ipairs(defs) do
     self.shownIds[def.id] = true
@@ -1334,13 +1439,25 @@ function UI:DrawGame()
       for k, e in ipairs(ranked) do items[#items + 1] = { def = def, member = e, k = k } end
     end
   end
+  -- a discovered value's tooltip: a boss's first kill (yours, kept here), a standing's reaction and number
+  local function extra(tip, def, v, me)
+    if def.learned == "bosses" and me then
+      local first = (C.Char().firstKill or {})[def.num]
+      if first and date then tip:AddLine("First kill " .. date("%Y-%m-%d", first), 0.7, 0.7, 0.7) end
+    elseif def.learned == "rep" and type(v) == "number" then
+      -- your own reaction as your list gives it; a member's from the standing ranges your list showed
+      local mineNow = me and C.Stats.Factions()
+      local r = (mineNow and mineNow[def.num] and mineNow[def.num].reaction) or C.Stats.Reaction(v)
+      tip:AddLine((r and (C.Stats.ReactionName(r) .. ", ") or "") .. "standing " .. v, 0.7, 0.7, 0.7)
+    end
+  end
   self.lines:Set(#items, top, ROW, function(r, i, y)
     local it = items[i]
     local def = it.def
     r.cat, r.def = nil, def
     r:SetHeight(ROW)
     if not it.member then
-      -- a statistic: its name, your value, the leader
+      -- a stat: its name, your value, the leader
       local mine, best, open = C.Sample:Value(def.id), it.best, it.open
       r.member = nil
       r:SetPoint("TOPLEFT", rightX, -y)
@@ -1355,7 +1472,8 @@ function UI:DrawGame()
       r.val:SetPoint("RIGHT", -(ww + 4), 0)
       r.val:SetWidth(vw)
       color(r.val, mine == nil and MUTE or INK)
-      r.val:SetText(UI.Format(def, mine))
+      -- (a discovery you have not met is a dash, not a question)
+      r.val:SetText((mine == nil and def.learned) and "-" or UI.Format(def, mine))
       r.who:Show()
       r.who:SetPoint("RIGHT", -4, 0)
       r.who:SetWidth(ww)
@@ -1370,12 +1488,13 @@ function UI:DrawGame()
       r.tip = function(tip)
         tip:AddLine(def.label, 1, 1, 1)
         if def.hint then tip:AddLine(def.hint, 0.7, 0.7, 0.7, true) end
+        extra(tip, def, mine, true)
         tip:AddLine(C.Policy:Vis(def.id) == "all" and "Everyone sees this." or "Only you and the officers see this.", 0.6, 0.6, 0.6)
         if C.Sample:Error(def.id) then tip:AddLine("Could not read: " .. C.Sample:Error(def.id), 0.9, 0.4, 0.4, true) end
         tip:AddLine(open and "Click to fold." or "Click to rank every member.", 0.45, 0.45, 0.45)
       end
     else
-      -- a member under an open statistic: the place, the name, the value or a dash
+      -- a member under an open stat: the place, the name, the value or a dash
       local e, k = it.member, it.k
       r.member = e
       r:SetPoint("TOPLEFT", rightX + 16, -y)
@@ -1395,14 +1514,14 @@ function UI:DrawGame()
       r.who:SetPoint("RIGHT", -4, 0)
       r.who:SetWidth(ww + vw)
       if e.hidden then color(r.who, MUTE); r.who:SetText("-")
-      elseif e.v == nil then color(r.who, MUTE); r.who:SetText("?")
+      elseif e.v == nil then color(r.who, MUTE); r.who:SetText(def.learned and "-" or "?")
       else color(r.who, INK); r.who:SetText(UI.Format(def, e.v)) end
       r.fn = nil
       r.tip = function(tip)
         tip:AddLine(e.row.short, 1, 1, 1)
         if e.hidden then tip:AddLine("Only " .. e.row.short .. " and the officers see this.", 0.6, 0.6, 0.6, true)
-        elseif e.v == nil then tip:AddLine("Not reported yet.", 0.6, 0.6, 0.6)
-        else tip:AddLine(UI.Format(def, e.v), 0.9, 0.9, 0.9) end
+        elseif e.v == nil then tip:AddLine(def.learned and "Not met yet." or "Not reported yet.", 0.6, 0.6, 0.6)
+        else tip:AddLine(UI.Format(def, e.v), 0.9, 0.9, 0.9); extra(tip, def, e.v, e.row.me) end
         if e.at then tip:AddLine("Reported " .. (ago(e.at) or ""), 0.45, 0.45, 0.45) end
       end
     end
@@ -1459,7 +1578,7 @@ function UI:Draw()
   self.cards:Reset(); self.cards:HideRest()
   self.buttons:Reset(); self.buttons:HideRest()
   self.checks:Reset(); self.checks:HideRest()
-  if page ~= "game" then self.lines:Clear(); self.catLines:Clear() end
+  if page ~= "game" then self.lines:Clear(); self.catLines:Clear(); if self.gameNoteLabel then self.gameNoteLabel:Hide() end end
   if C.Settings_Draw and page ~= "settings" then C.Settings_Hide() end
   if page == "race" or page == "prog" then self:DrawTable(page)
   elseif page == "shame" then self:DrawShame()

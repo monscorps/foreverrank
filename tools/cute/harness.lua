@@ -288,6 +288,10 @@ BASE.GetCursorPosition = function() return 600, 500 end
 BASE.issecretvalue = function(v) return type(v) == "table" and getmetatable(v) == SECRET_MT end
 BASE.Enum = {
   ClubMemberPresence = { Unknown = 0, Online = 1, OnlineMobile = 2, Offline = 3, Away = 4, Busy = 5 },
+  -- ItemConstantsDocumentation.lua and BagIndexConstantsDocumentation.lua, the part Cute reads
+  ItemClass = { Consumable = 0, Container = 1, Weapon = 2, Gem = 3, Armor = 4, Reagent = 5, Projectile = 6, Tradegoods = 7, Miscellaneous = 15 },
+  ItemConsumableSubclass = { Generic = 0, Potion = 1, Elixir = 2, Flasksphials = 3, Scroll = 4, Fooddrink = 5, Itemenhancement = 6, Bandage = 7, Other = 8 },
+  BagIndex = { Keyring = -1, Backpack = 0, Bag_1 = 1, Bag_2 = 2, Bag_3 = 3, Bag_4 = 4, ReagentBag = 5 },
   SendAddonMessageResult = { Success = 0, InvalidMessage = 2, AddonMessageThrottle = 3, ChannelThrottle = 8, GeneralError = 9, AddOnMessageLockdown = 11 },
   -- the Camelot achievement stub reads this rule by name; no doc gives its value, so the mock's is made up and Cute looks it up
   GameRule = { AchievementsPanelDisabled = 77 },
@@ -300,6 +304,26 @@ BASE.Constants = { CharacterNameSeparatorConsts = { CHARACTERNAME_SURNAME_SEPARA
   LEGACY_DEFAULT_CATEGORY_WARRIOR = 15585, LEGACY_DEFAULT_CATEGORY_PALADIN = 15580, LEGACY_DEFAULT_CATEGORY_HUNTER = 15578,
   LEGACY_DEFAULT_CATEGORY_ROGUE = 15582, LEGACY_DEFAULT_CATEGORY_PRIEST = 15581, LEGACY_DEFAULT_CATEGORY_SHAMAN = 15583,
   LEGACY_DEFAULT_CATEGORY_MAGE = 15579, LEGACY_DEFAULT_CATEGORY_WARLOCK = 15584, LEGACY_DEFAULT_CATEGORY_DRUID = 15577 } }
+
+-- the standing names the client's GlobalStrings give (Blizzard_FrameXMLUtil/Mainline/ReputationUtil.lua reads them by number)
+for i, name in ipairs({ "Hated", "Hostile", "Unfriendly", "Neutral", "Friendly", "Honored", "Revered", "Exalted" }) do BASE["FACTION_STANDING_LABEL" .. i] = name end
+
+-- items by class and subclass, as C_Item.GetItemInfoInstant gives them: { classID, subClassID }. An id the table lacks
+-- is Miscellaneous; an id in a client's o.serverItems is one the client's own data lacks (GetItemInfoInstant returns
+-- nothing, C_Item.GetItemInfo knows it once cached), as a server-sent Forever item may be
+local ITEM_CLASS = { [118] = { 0, 1 }, [858] = { 0, 1 }, [2455] = { 0, 1 }, [2454] = { 0, 2 }, [3390] = { 0, 2 }, [13510] = { 0, 3 }, [4540] = { 0, 5 }, [159] = { 0, 5 },
+  [1251] = { 0, 7 }, [5512] = { 0, 0 }, [2589] = { 7, 5 }, [5000] = { 15, 0 }, [5001] = { 4, 1 },
+  -- worn items of the kinds the enchants are learned by: a bow, a gun, a wand, a dagger, a shield, a book held in the
+  -- off hand (4.0, Miscellaneous armour, as the game classes one)
+  [5018] = { 2, 2 }, [5019] = { 2, 3 }, [6018] = { 2, 19 }, [6022] = { 2, 15 }, [6020] = { 4, 6 }, [6021] = { 4, 0 } }
+-- the names C_Item.GetItemSubClassInfo gives those kinds (the default worn item is 15.0, Miscellaneous Junk)
+local SUBCLASS_NAME = { ["2.2"] = "Bows", ["2.3"] = "Guns", ["2.19"] = "Wands", ["2.15"] = "Daggers", ["4.6"] = "Shields", ["4.0"] = "Miscellaneous", ["15.0"] = "Junk" }
+-- the spells C_Spell.GetSpellName names: Fishing under two ids (Classic's first rank and another), the Hearthstone
+local SPELL_NAME = { [7620] = "Fishing", [131474] = "Fishing", [8690] = "Hearthstone", [133] = "Fireball" }
+-- the reputation list a character shows: { factionID, name, reaction, currentStanding, threshold, nextThreshold, isHeader,
+-- isHeaderWithRep }. A plain header has no standing of its own; Guild is a header with rep
+local FACTIONS = { { 469, "Alliance", 0, 0, 0, 0, true }, { 72, "Stormwind", 5, 3500, 3000, 9000 }, { 47, "Ironforge", 4, 1200, 0, 3000 },
+  { 1168, "Guild", 4, 0, 0, 3000, true, true }, { 930, "Exodar", 6, 9500, 9000, 21000 }, { 1100, "Other", 0, 0, 0, 0, true }, { 589, "Wintersaber Trainers", 2, -4000, -6000, -3000 } }
 
 local EPOCH = 1792300000
 
@@ -366,6 +390,8 @@ local function newClient(o)
     f.__where = table.concat(where, " < ")
     if name then env[name] = f end
     if template == "UICheckButtonTemplate" then f.__w, f.__h = 26, 26 end
+    -- o.unitEventThrows: a client whose RegisterUnitEvent throws (Cute falls back to RegisterEvent and its unit check)
+    if o.unitEventThrows then f.RegisterUnitEvent = function() error("RegisterUnitEvent is not available") end end
     c.frames[#c.frames + 1] = f
     return f
   end
@@ -399,15 +425,34 @@ local function newClient(o)
   -- diag will say: Cute must not care)
   env.UnitName = api(function(unit) if unit == "player" then return o.name, o.surname end local i = unit:match("^party(%d)$"); return i and (o.party or {})[tonumber(i)] or nil end)
   env.UnitFullName = api(function() return o.name, (o.surname and o.fullNameSurname) and o.surname or (o.realm or "Forever") end)
-  env.UnitGUID = api(function(unit) if unit == "player" then return o.guid end end)
+  env.UnitGUID = api(function(unit)
+    if unit == "player" then return o.guid end
+    local i = type(unit) == "string" and unit:match("^party(%d)$")
+    local name = i and (o.party or {})[tonumber(i)]
+    return name and guidOf(name) or nil
+  end)
+  -- the group: o.party names the party members, o.raidGroup puts you in a raid (UnitInRaid gives your raid index);
+  -- IsInInstance follows the instance GetInstanceInfo says you are in
+  env.UnitExists = api(function(unit)
+    if unit == "player" then return true end
+    local i = type(unit) == "string" and unit:match("^party(%d)$")
+    return i ~= nil and (o.party or {})[tonumber(i)] ~= nil
+  end)
+  env.UnitInRaid = api(function(unit) if unit == "player" and o.raidGroup then return 1 end return nil end)
+  env.IsInInstance = api(function() local kind = o.instance or "none"; return kind ~= "none", kind end)
+  env.C_Spell = { GetSpellName = api(function(id) return SPELL_NAME[id] end) }
   env.GetRealmName = api(function() return o.realm or "Forever" end)
   env.UnitClass = api(function() return o.class, o.class, CLASS_ID[o.class] end)
   env.GetNormalizedRealmName = api(function() return o.realm or "Forever" end)
   env.GetMoney = api(function() return o.money or 0 end)
   env.GetBindLocation = api(function() return o.hearth or "Goldshire" end)
+  -- the worn items; o.invLate: the inventory has not arrived yet (nothing in any slot) until c.invReady, as it can come
+  -- after the loading screen with UNIT_INVENTORY_CHANGED
+  local function worn(slot) if o.invLate and not c.invReady then return nil end return (o.items or {})[slot] end
+  c.worn = worn
   -- o.secretLinks: the link is a secret for every slot (the owner's client gave nothing readable for most); the item id
   -- and quality still read, as Forever's character sheet reads them
-  env.GetInventoryItemLink = api(function(_, slot) if o.secretLinks then return secret("string") end return (o.items or {})[slot] end)
+  env.GetInventoryItemLink = api(function(_, slot) if o.secretLinks and worn(slot) then return secret("string") end return worn(slot) end)
   -- baseResistance, realResistance, effectiveResistance: the sheet shows the third
   env.UnitResistance = api(function(_, i) return 0, 0, (o.resist or {})[i] or 0 end)
   -- the Legacy Challenges: id, name, points, completed, month, day, year, description, flags, icon, rewardText, isGuild,
@@ -443,9 +488,9 @@ local function newClient(o)
   -- (the statistics API, the latest achievements) only on a client made withStats
   local function linkId(link) return link and tonumber(tostring(link):match("item:(%d+)")) or nil end
   local undocumented = {
-    GetInventoryItemID = api(function(_, slot) return linkId((o.items or {})[slot]) end),
-    GetInventoryItemQuality = api(function(_, slot) local id = linkId((o.items or {})[slot]); return id and (id % 3) + 1 or nil end),
-    GetInventoryItemDurability = api(function(slot) if (o.items or {})[slot] then return o.dur or 80, 100 end end),
+    GetInventoryItemID = api(function(_, slot) return linkId(worn(slot)) end),
+    GetInventoryItemQuality = api(function(_, slot) local id = linkId(worn(slot)); return id and (id % 3) + 1 or nil end),
+    GetInventoryItemDurability = api(function(slot) if worn(slot) then return o.dur or 80, 100 end end),
     GetInventoryItemCount = api(function() return o.ammo or 0 end),
     GetNumUnspentTalents = api(function() return o.talents or 0 end),
     GetCategoryList = api(function() local out = {}; for i, cat in ipairs(LEGACY_CATS) do out[i] = cat[1] end return out end),
@@ -499,7 +544,12 @@ local function newClient(o)
   -- name, startValue (the value the bar began at, not the live one), maxValue, scale, paused, label, spellID
   env.GetMirrorTimerInfo = api(function(i) if i == 1 and o.breath ~= nil then return "BREATH", 60000, 60000, -1, 0, "Breath", 0 end return "UNKNOWN", 0, 0, 0, 0, "", 0 end)
   env.GetMirrorTimerProgress = api(function(name) if name == "BREATH" then return o.breath end return nil end)
-  env.GetInstanceInfo = api(function() return "Zone", o.instance or "none" end)
+  -- name, instanceType, difficultyID, difficultyName, maxPlayers, dynamicDifficulty, isDynamic, instanceID, ...
+  env.GetInstanceInfo = api(function()
+    local kind = o.instance or "none"
+    return o.instName or (kind == "none" and "Eastern Kingdoms" or "Instance"), kind, 1, "Normal", 5, 0, false, o.instanceID or 0, 5, nil, false
+  end)
+  env.GetRealZoneText = api(function() return o.zone or "Elwynn Forest" end)
   env.NumTaxiNodes = api(function() return 5 end)
   env.TaxiNodeGetType = api(function(i) return i <= 3 and "REACHABLE" or "DISTANT" end)
   env.RequestTimePlayed = function() c.timers[#c.timers + 1] = { t = c.clock + 1, f = function() fire(c, "TIME_PLAYED_MSG", o.played or 36000, o.playedLevel or 3600) end } end
@@ -531,11 +581,23 @@ local function newClient(o)
   -- C_Item takes an ItemInfo: an id, a name or a link. o.uncached: GetDetailedItemLevelInfo reads nothing yet
   local function itemId(x) if type(x) == "number" then return x end return tonumber(tostring(x):match("item:(%d+)")) or 0 end
   env.C_Item = {
+    GetItemSubClassInfo = api(function(class, sub) return SUBCLASS_NAME[class .. "." .. sub] or ("Subclass " .. sub), false end),
     GetItemCount = api(function(id) return (o.counts or {})[id] or 0 end),
     GetDetailedItemLevelInfo = api(function(link) if o.uncached then return nil end return 20 + (itemId(link) % 40) end),
     GetItemQualityByID = api(function(link) return (itemId(link) % 3) + 1 end),
-    -- name, link, quality, level, minLevel, type, subType, stackCount, equipLoc, texture, sellPrice
-    GetItemInfo = api(function(link) local id = itemId(link); return "Item " .. id, type(link) == "string" and link or ("item:" .. id), (id % 3) + 1, 20 + (id % 40), 1, "Misc", "Junk", 20, "", 0, (o.prices or {})[id] or 0 end),
+    -- name, link, quality, level, minLevel, type, subType, stackCount, equipLoc, texture, sellPrice, classID, subclassID
+    GetItemInfo = api(function(link)
+      local id = itemId(link)
+      local cls = ITEM_CLASS[id] or (o.serverItems or {})[id] or { 15, 0 }
+      return "Item " .. id, type(link) == "string" and link or ("item:" .. id), (id % 3) + 1, 20 + (id % 40), 1, "Misc", "Junk", 20, "", 0, (o.prices or {})[id] or 0, cls[1], cls[2]
+    end),
+    -- itemID, itemType, itemSubType, itemEquipLoc, icon, classID, subClassID; nothing for an item the client's data lacks
+    GetItemInfoInstant = api(function(x)
+      local id = itemId(x)
+      if (o.serverItems or {})[id] then return nil end
+      local cls = ITEM_CLASS[id] or { 15, 0 }
+      return id, "Type", "Subtype", "", 0, cls[1], cls[2]
+    end),
   }
   env.C_Container = {
     GetContainerNumFreeSlots = api(function(b) return b == 0 and 4 or 2 end),
@@ -547,8 +609,28 @@ local function newClient(o)
     end),
     UseContainerItem = function(bag, slot) if c.hooks.UseContainerItem then c.hooks.UseContainerItem(bag, slot) end end,
   }
-  env.C_UnitAuras = { GetAuraDataByIndex = api(function(_, i) local a = (o.auras or {})[i]; if a then return { name = a[1], spellId = a[2] } end end) }
-  env.C_Reputation = { GetFactionDataByID = api(function(id) return { reaction = (o.rep or {})[id] or 4 } end) }
+  -- an aura: { name, spellId, sourceUnit, duration }
+  env.C_UnitAuras = { GetAuraDataByIndex = api(function(_, i) local a = (o.auras or {})[i]; if a then return { name = a[1], spellId = a[2], sourceUnit = a[3], duration = a[4] or 0 } end end) }
+  env.UnitIsUnit = api(function(a, b) return a == b end)
+  -- the party is the guild unless o.strangers
+  env.UnitIsInMyGuild = api(function(unit) return unit ~= "player" and type(unit) == "string" and unit:match("^party%d$") ~= nil and not o.strangers end)
+  -- the reputation list (FACTIONS, or o.factions); o.folded: the headers are folded, so the list shows them alone
+  local function factionRows()
+    local out = {}
+    for _, f in ipairs(o.factions or FACTIONS) do if not o.folded or f[7] then out[#out + 1] = f end end
+    return out
+  end
+  local function factionData(f)
+    local standing = ((o.standing or {})[f[1]]) or f[4]
+    return { factionID = f[1], name = f[2], description = "", reaction = f[3], currentReactionThreshold = f[5], nextReactionThreshold = f[6], currentStanding = standing,
+      atWarWith = false, canToggleAtWar = false, isChild = false, isHeader = f[7] or false, isHeaderWithRep = f[8] or false, isCollapsed = false, isWatched = false,
+      hasBonusRepGain = false, canSetInactive = false, isAccountWide = false }
+  end
+  env.C_Reputation = {
+    GetNumFactions = api(function() return #factionRows() end),
+    GetFactionDataByIndex = api(function(i) local f = factionRows()[i]; return f and factionData(f) or nil end),
+    GetFactionDataByID = api(function(id) for _, f in ipairs(o.factions or FACTIONS) do if f[1] == id then return factionData(f) end end end),
+  }
   env.C_MountJournal = { GetMountIDs = api(function() return { 1 } end), GetMountInfoByID = api(function() return "Horse", 1, 1, true, true, 1, false, false, false, false, o.mount or false end) }
   -- the three Legacy trees, a config each; their currency is the Legacy points (traitCurrencyID, quantity unspent,
   -- maxQuantity, spent, spentInTree), five of them per challenge done
@@ -630,6 +712,8 @@ local function rowOf(c, short) for _, r in ipairs(c.C.UI.rows.items) do if r:IsS
 local function cellOf(r, id) for _, cell in ipairs(r.cells) do if cell:IsShown() and cell.def and cell.def.id == id then return cell end end end
 local function shownHeaders(c) local n = 0; for _, h in ipairs(c.C.UI.headerCells.items) do if h:IsShown() then n = n + 1 end end return n end
 local function checkBox(c, test) for _, fr in ipairs(c.frames) do if fr.__kind == "CheckButton" and fr:IsVisible() and test(fr) then return fr end end end
+-- every text shown in a client's window, for a scenario that asks what is there (or never is)
+local texts
 
 ----------------------------------------------------------------------------
 -- layout: resolve anchors to boxes like the game does
@@ -868,8 +952,9 @@ local function makeGuild()
 end
 local function charOf(n, extra)
   local o = { name = n[1], realm = "Forever", level = n[5], xp = 350, xpmax = 1000, class = n[4], money = 123456, zone = "Duskwood", rested = 500,
-    items = { [1] = "item:1234:0", [5] = "item:1235:2", [7] = "item:1236:0", [16] = "item:1240:0" }, auras = { { "Power Word: Fortitude", 1243 }, { "Rallying Cry", 22888 } },
-    counts = { [13446] = 5, [13510] = 1, [18249] = 1 }, done = { [7848] = true, [4182] = true }, log = { [4183] = 3 } }
+    items = { [1] = "item:1234:0", [5] = "item:1235:2", [7] = "item:1236:0", [16] = "item:1240:0" }, auras = { { "Power Word: Fortitude", 1243 }, { "Inner Fire", 588, "player", 600 } },
+    bags = { [0] = { [1] = { link = "item:118", count = 5 }, [2] = { link = "item:4540", count = 10 }, [3] = { link = "item:13510", count = 1 }, [4] = { link = "item:2589", count = 20 } } },
+    counts = { [5512] = 1 }, done = {}, log = { [4183] = 3 } }
   for k, v in pairs(extra or {}) do o[k] = v end
   return o
 end
@@ -884,6 +969,8 @@ local function check(root, label)
   if LAYOUT_OUT then layouts[#layouts + 1] = dumpLayout(root, label) end
   return #p
 end
+
+function texts(c) local out = {}; for _, o in ipairs(ALL) do if o.__kind == "FontString" and o.__shown and o.__text ~= "" and visible(o) and o.__parent and o.__parent.__client == c then out[#out + 1] = o.__text end end return table.concat(out, "\n") end
 
 makeGuild()
 -- the two clients most scenarios share have the statistics API; scenario 17 makes clients without it
@@ -927,8 +1014,8 @@ do
   end
   table.sort(undoc)
   assert(counts.game == 11 and #S.game.cats == 4, "the statistics category filled from the client's list: " .. counts.game)
-  print(string.format("registry: %d stats (leveling %d, prog %d, funny %d, officer %d, statistics %d from the client), every read stat has a value on the documented client; undocumented globals mocked on evidence: %s",
-    #S.list, counts.leveling, counts.prog, counts.funny, counts.officer, counts.game, table.concat(undoc, ", ")))
+  print(string.format("registry: %d stats (leveling %d, prog %d, funny %d, officer %d, statistics %d from the client, %d discovered at login), every read stat has a value on the documented client; undocumented globals mocked on evidence: %s",
+    #S.list, counts.leveling, counts.prog, counts.funny, counts.officer, counts.game, #S.byCat.found, table.concat(undoc, ", ")))
 end
 
 -- 2: every read survives a client whose values are all secret, and one whose calls all throw (and the tooltip learns why)
@@ -1011,9 +1098,13 @@ do
   assert(M.b36(35) == "z" and M.b36(36) == "10" and M.unb36("-1z") == -71, "base 36")
   -- a modified client's message: colour codes, separators, a byte the font cannot draw, letters where digits go
   assert(M.Decode(S.byId.zone, "Dusk|cff00ff00wood;x") == "Duskcff00ff00woodx", "text in is cleaned of | and ;")
-  assert(M.Decode(S.byId.zone, "A\195\169B\1C") == "ABC", "text in loses bytes the font draws as boxes and control characters")
-  assert(M.Decode(S.byId.attune_mc, "12a") == nil and M.Decode(S.byId.attune_mc, "2") == "2", "pips in are digits only")
-  assert(M.Decode(S.byId.keys, "-5") == nil and M.Decode(S.byId.level, "zzzzzzzzzzzz") == nil, "lists and ints in are bounded")
+  -- (0.4.0: a client's own text survives the wire whole, accents included, where 0.3.x dropped every byte over 127;
+  -- a byte that is no UTF-8, a control character and a sequence cut short still go)
+  assert(M.Decode(S.byId.zone, "A\195\169B\1C") == "A\195\169BC", "text in keeps UTF-8 and loses control characters")
+  assert(M.Decode(S.byId.zone, "A\233B\195") == "AB" and M.Encode(S.byId.zone, "For\195\170t d'Elwynn") == "For\195\170t d'Elwynn", "a stray byte goes; an accent travels")
+  assert(M.Encode(S.byId.zone, string.rep("\195\169", 20)) == string.rep("\195\169", 12), "cut at 24 bytes without splitting a character")
+  assert(M.Decode(S.byId.lc_cats, "12a") == nil and M.Decode(S.byId.lc_cats, "2") == "2", "pips in are digits only")
+  assert(M.Decode(S.byId.empty_slots, "-5") == nil and M.Decode(S.byId.level, "zzzzzzzzzzzz") == nil, "lists and ints in are bounded")
   print("encoder: " .. n .. " values round-trip; what comes in is cleaned")
 end
 
@@ -1039,7 +1130,7 @@ do
   assert(e and e.stats.level == 42 and e.stats.zone == "Duskwood", "Kaka's roster holds Yezin's level and zone")
   local e2 = yezin.env.CuteDB.roster["Kaka-Forever"]
   assert(e2 and e2.stats.level == 37 and e2.stats.gold == 54321, "Yezin's roster holds Kaka's level and gold (in copper)")
-  assert(e2.stats.unenchanted and e2.stats.unenchanted[1] == true and e2.stats.unenchanted[5] == nil, "lists arrive as sets")
+  assert(e2.stats.enchanted and e2.stats.enchanted[5] == true and e2.stats.enchanted[1] == nil and e2.stats.empty_slots[2] == true, "lists arrive as sets")
   -- one message a second from each
   local last
   for _, m in ipairs(yezin.sent) do if last then assert(m.at - last >= 1 - 1e-9, "one message a second: " .. (m.at - last)) end last = m.at end
@@ -1064,13 +1155,16 @@ do
   -- hello (its own, and the one answering Yezin's hello)
   before = #kaka.sent
   tickAll(300)
-  local flushed, statPasses = 0, 0
+  local flushed, statPasses, labels = 0, 0, 0
   for i = before + 1, #kaka.sent do
-    if kaka.sent[i].msg:find("g2001=", 1, true) then statPasses = statPasses + 1 else flushed = flushed + 1 end
+    if kaka.sent[i].msg:find("g2001=", 1, true) then statPasses = statPasses + 1
+    elseif kaka.sent[i].msg:sub(1, 2) == "1L" then labels = labels + 1
+    else flushed = flushed + 1 end
   end
   assert(flushed >= 1 and flushed <= 3, "a quiet client sends only its flushes in five minutes: " .. flushed)
-  -- (the answer to Yezin's hello goes first; the own pass then finds nothing left unsent)
+  -- (the answer to Yezin's hello goes first; the own pass then finds nothing left unsent, values or labels)
   assert(statPasses >= 1 and statPasses <= 2, "the statistics went in answer to the hello, and of their own accord only what was left: " .. statPasses)
+  assert(labels == 1, "the labels of Kaka's factions went once, after the statistics: " .. labels)
   local played = false
   for i = math.max(1, #kaka.sent - 3), #kaka.sent do if kaka.sent[i].msg:find("played=", 1, true) then played = true end end
   assert(played, "the flush carries time played")
@@ -1257,6 +1351,17 @@ do
   assert(rowOf(yezin, "Yezin"):GetHeight() == 17, "compact rows are 17 px")
   check(yezin.C.UI.frame, "officer race, compact")
   yezin.env.CuteDB.settings.density = "normal"
+  -- the default columns fit the window at 1040 wide: every one shown, no "do not fit" line (Prog's eleven, the
+  -- Officers' with what members met in play beside the officers' own)
+  local fit = {}
+  for _, page in ipairs({ "prog", "officers" }) do
+    yezin.C.UI:Open(page)
+    local used, room = 0, yezin.C.UI.scroll:Width() - 150 - 8
+    for _, h in ipairs(yezin.C.UI.headerCells.items) do if h:IsShown() and h.def then used = used + h:GetWidth() end end
+    assert(shownHeaders(yezin) - 1 == #yezin.C.UI.DEFAULT_COLS[page] and not texts(yezin):find("do not fit", 1, true),
+      page .. ": every default column shown at 1040 wide: " .. (shownHeaders(yezin) - 1) .. " of " .. #yezin.C.UI.DEFAULT_COLS[page])
+    fit[#fit + 1] = string.format("%s %d columns in %d of %d px", page, shownHeaders(yezin) - 1, used, room)
+  end
   -- readiness on the prog page: a verdict in colour, the gaps in the tooltip
   yezin.C.UI:Open("prog")
   local readyCell = cellOf(rowOf(yezin, "Yezin"), "ready")
@@ -1317,7 +1422,7 @@ do
   hover(yezin.C.UI.mini)
   yezin.C.UI:Open("shame")
   for _, card in ipairs(yezin.C.UI.cards.items) do if card:IsShown() then hover(card) end end
-  print("window: every page opens for both views at both sizes, the look holds, self-only cells hidden from the member, sorting, scrolling and resizing hold")
+  print("window: every page opens for both views at both sizes, the look holds, self-only cells hidden from the member, sorting, scrolling and resizing hold; at 1040 wide " .. table.concat(fit, ", "))
 end
 
 -- 10: settings: a member cannot flip visibility; an officer's click plus Broadcast reaches the member; boxes follow clicks
@@ -1518,10 +1623,23 @@ do
   fire(c, "MERCHANT_CLOSED")
   c.env.C_Container.UseContainerItem(0, 1)
   assert(S:Value("grey_gold") == 45, "three greys at 15 copper, the green and the use outside the merchant not counted: " .. tostring(S:Value("grey_gold")))
-  -- raid recipes, asked of the trade skill window by id
-  c.o.learned = { [17635] = true }
-  fire(c, "TRADE_SKILL_SHOW")
-  assert(S:Value("raid_recipes")[17635] == true and S:Value("raid_recipes")[17636] == nil, "the Titans flask is known, the others not")
+  -- the consumables by the game's item classes, one scan of the bags for them all: two stacks of potions, an elixir, a
+  -- flask, food and drink, bandages; a healthstone (Generic), cloth and a grey count as none of them; an item the
+  -- client's own data lacks (a server-sent one) is placed by C_Item.GetItemInfo's class and subclass. (0.4.0: these
+  -- replace 0.3.x's Classic item ids, Major Healing Potion and the like, which Forever may never drop)
+  c.o.serverItems = { [990001] = { 0, 1 } }
+  c.o.bags = { [0] = { [1] = { link = "item:118", count = 5 }, [2] = { link = "item:858", count = 3 }, [3] = { link = "item:2454", count = 2 }, [4] = { link = "item:13510", count = 1 },
+    [5] = { link = "item:4540", count = 10 }, [6] = { link = "item:159", count = 4 } },
+    [1] = { [1] = { link = "item:1251", count = 8 }, [2] = { link = "item:5512", count = 1 }, [3] = { link = "item:2589", count = 20 }, [4] = { link = "item:5000", count = 3, quality = 0 },
+    [5] = { link = "item:990001", count = 2 } } }
+  local slotReads, realInfo = 0, c.env.C_Container.GetContainerItemInfo
+  c.env.C_Container.GetContainerItemInfo = function(...) slotReads = slotReads + 1; return realInfo(...) end
+  fire(c, "BAG_UPDATE_DELAYED")
+  tick(c, 2)
+  c.env.C_Container.GetContainerItemInfo = realInfo
+  assert(S:Value("potions") == 10 and S:Value("elixirs") == 2 and S:Value("flasks") == 1 and S:Value("food") == 14 and S:Value("bandages") == 8,
+    "potions, elixirs, flasks, food and bandages by class: " .. table.concat({ tostring(S:Value("potions")), tostring(S:Value("elixirs")), tostring(S:Value("flasks")), tostring(S:Value("food")), tostring(S:Value("bandages")) }, " "))
+  assert(S:Value("stones") == 1 and slotReads == 16 + 4 * 10, "one scan of the five bags served every count: " .. slotReads .. " slot reads")
   -- the effective resistance
   c.o.resist = { [2] = 45 }
   fire(c, "PLAYER_EQUIPMENT_CHANGED")
@@ -1549,7 +1667,7 @@ do
   local real = c.env.C_SpecializationInfo.GetSpecialization
   c.env.C_SpecializationInfo.GetSpecialization = function(...) reads = reads + 1; return real(...) end
   tick(c, 601)
-  assert(reads >= 2, "the heartbeat reads the registry every five minutes: " .. reads)
+  assert(reads >= 10, "the heartbeat reads the registry every minute: " .. reads)
   -- emotes without DoEmote (this client): your own lines in the emote chat count, others' do not, and a line made
   -- secret by a dungeon or raid cannot; the hint says so and /cute errors has the note
   fire(c, "CHAT_MSG_TEXT_EMOTE", "You dance.", c.name)
@@ -1730,14 +1848,17 @@ do
   local function lineOf(c, test)
     for _, list in ipairs({ c.C.UI.catLines, c.C.UI.lines }) do for _, l in ipairs(list.items) do if l:IsShown() and test(l) then return l end end end
   end
+  -- (0.4.0: the discovered categories come first, Reputation here from the mock's factions; the page opens on it)
   yezin.C.UI:Open("game")
-  assert(yezin.C.UI.page == "game" and yezin.C.UI.gameCat == 130, "opens on the first category with statistics")
+  assert(yezin.C.UI.page == "game" and yezin.C.UI.gameCat == "rep", "opens on the first category with entries, the discovered above the game's: " .. tostring(yezin.C.UI.gameCat))
+  press(lineOf(yezin, function(l) return l.cat and l.cat.id == 130 end))
+  assert(yezin.C.UI.gameCat == 130, "Kills opened")
   local kills = lineOf(yezin, function(l) return l.def and l.def.id == "g2001" and not l.member end)
   assert(kills and kills.val:GetText() == "1300" and kills.val.__justify == "RIGHT", "your value, right-aligned: " .. tostring(kills and kills.val:GetText()))
   assert(kills.who:GetText():find("Yezin", 1, true) and kills.who:GetText():find("1300", 1, true), "the leader, named and valued: " .. kills.who:GetText())
   local catLines = 0
   for _, l in ipairs(yezin.C.UI.catLines.items) do if l:IsShown() and l.cat then catLines = catLines + 1 end end
-  assert(catLines == 4, "the four categories on the left: " .. catLines)
+  assert(catLines == 5, "Reputation and the game's four categories on the left: " .. catLines)
   check(yezin.C.UI.frame, "officer statistics")
   press(kills)
   local ranked = {}
@@ -1747,6 +1868,7 @@ do
   for _, l in ipairs(yezin.C.UI.lines.items) do if l:IsShown() then hover(l) end end
   -- the member: Kills is only-you, so the leader is Kaka's own value and Yezin's is a dash in the ranking
   kaka.C.UI:Open("game")
+  press(lineOf(kaka, function(l) return l.cat and l.cat.id == 130 end))
   local kkills = lineOf(kaka, function(l) return l.def and l.def.id == "g2001" and not l.member end)
   assert(kkills and kkills.who:GetText():find("Kaka", 1, true), "the member's leader is the one value it may see: " .. kkills.who:GetText())
   press(kkills)
@@ -1765,18 +1887,32 @@ do
     check(c.C.UI.frame, (c == yezin and "officer" or "member") .. " statistics, small window")
     c.C.UI.frame:SetSize(1040, 640)
   end
-  -- the empty state, where the client has no statistics API
+  -- a client without the statistics API still shows what it discovered (its factions), the reason for the rest in a
+  -- note under the categories
   plain.C.UI:Open("game")
+  local note = plain.C.UI.gameNoteLabel
+  assert(plain.C.UI.gameCat == "rep" and note and note:IsShown() and note:GetText():find("GetStatisticsCategoryList is missing", 1, true), "the discovered shown, the note says why the game's are not")
+  check(plain.C.UI.frame, "member statistics, discovered only")
+  plain.C.UI.frame:SetSize(760, 420)
+  plain.C.UI:Open("game")
+  check(plain.C.UI.frame, "member statistics, discovered only, small window")
+  plain.C.UI.frame:SetSize(1040, 640)
+  plain.C.UI:Open("me")
+  check(plain.C.UI.frame, "member me, no statistics")
+  assert(not note:IsShown(), "the note goes with the page")
+  leave(plain)
+  -- the empty state: no statistics API and nothing discovered (a character with no reputation list yet)
+  local empty = newClient(charOf(NAMES[19], { factions = {} }))
+  login(empty)
+  empty.C.UI:Open("game")
   local said, counters = false, false
-  for _, l in ipairs(plain.C.UI.labels.items) do
+  for _, l in ipairs(empty.C.UI.labels.items) do
     if l:IsShown() and l:GetText():find("GetStatisticsCategoryList is missing", 1, true) then said = true end
     if l:IsShown() and l:GetText():find("counters stay on the other pages", 1, true) then counters = true end
   end
   assert(said and counters, "the empty state names the reason and says where the addon's own counters are")
-  check(plain.C.UI.frame, "member statistics, empty state")
-  plain.C.UI:Open("me")
-  check(plain.C.UI.frame, "member me, no statistics")
-  leave(plain)
+  check(empty.C.UI.frame, "member statistics, empty state")
+  leave(empty)
   -- a login with 300 statistics: under twenty messages per client in its first minute, every statistic across by
   -- the second, the whole login under forty-five
   local big1 = newClient(charOf(NAMES[12], { withStats = true, manyStats = 300 }))
@@ -1956,7 +2092,8 @@ end
 
 -- 20: gear on a client whose GetInventoryItemLink gives a secret for every slot (0.3.0 showed 15 of 17 slots empty,
 -- 0 of 17 unenchanted and item level "?" for a character in full gear): the item ids and qualities read as Forever's
--- character sheet reads them, the levels from the ids, and the enchants read nil with the reason
+-- character sheet reads them, the levels from the ids, and the enchants read nil with the reason (Missing enchants
+-- only once the guild has learned a slot this client cannot read: a slot nobody enchants asks for no link)
 do
   local c = newClient(charOf(NAMES[10], { secretLinks = true }))
   login(c)
@@ -1967,7 +2104,13 @@ do
   assert(hi and hi[1] and hi[5] and hi[7] and not hi[16], "the slots at or above it")
   assert(n("empty_slots") == 11 and not S:Value("empty_slots")[1] and S:Value("empty_slots")[2], "eleven slots empty, the four worn not: " .. tostring(n("empty_slots")))
   assert(S:Value("greens") == 3 and n("old_gear") == 1 and S:Value("old_gear")[16], "greens from the slot qualities, old gear from the levels")
-  assert(S:Value("unenchanted") == nil and tostring(S:Error("unenchanted")):find("no readable item link for 4 worn slots that take an enchant", 1, true), "no enchant count without links: " .. tostring(S:Error("unenchanted")))
+  assert(S:Value("enchanted") == nil and tostring(S:Error("enchanted")):find("no readable item link for 4 worn slots", 1, true), "no enchants read without links: " .. tostring(S:Error("enchanted")))
+  assert(type(S:Value("unenchanted")) == "table" and next(S:Value("unenchanted")) == nil, "nothing missing while the guild has learned no slot")
+  -- a member's record teaches chest (the kind of their enchanted chest, the hidden ench_kinds, is what teaches; the
+  -- chest worn here is the same kind): now the chest's link is needed, and there is none to read
+  c.C.Roster:Apply("Someone-Forever", { guid = "Player-4242-0BADBEEF", enchanted = { [5] = true }, ench_kinds = "5:15.0" })
+  tick(c, 2)
+  assert(S:Value("unenchanted") == nil and tostring(S:Error("unenchanted")):find("no readable item link for 1 worn slot the guild enchants", 1, true), "no enchant count without links: " .. tostring(S:Error("unenchanted")))
   assert(S:Value("ready") == 1, "readiness still reads (an empty slot is its one gap)")
   c.C.UI:Open("prog")
   local me = rowOf(c, "Lindel")
@@ -2093,8 +2236,9 @@ do
     report[#report + 1] = string.format("%s %d ops first (%d and %d with 100 and 400 members, 40 reporting), %d redraw, %d mid, %d step, %d end (%d of 400 rows have widgets)",
       page, first, firstOf[100][page], firstOf[400][page], again, mid, step, endOps, rows)
   end
-  -- the Statistics ranking: Total kills opened ranks 151
+  -- the Statistics ranking: Total kills opened ranks 151 (Kills opened first: the page opens on the discovered Reputation)
   UI:Open("game")
+  for _, l in ipairs(UI.catLines.items) do if l:IsShown() and l.cat and l.cat.id == 130 then press(l); break end end
   local stat
   for _, l in ipairs(UI.lines.items) do if l:IsShown() and l.def and l.def.id == "g2001" and not l.member then stat = l end end
   local opened = opsOf(function() press(stat) end)
@@ -2147,6 +2291,553 @@ do
   leave(big)
   makeGuild()
   print("400 members: " .. table.concat(report, "; ") .. "; ten sampler ticks draw nothing; thirty records draw once, hidden none")
+end
+
+-- run fn with a guild and clients of its own: the scenario's messages reach none of the others, and the others' none of
+-- its; the shared guild and clients come back afterwards
+local function isolated(guild, fn)
+  local keepClients, keepGuild = {}, GUILD
+  for i, c in ipairs(clients) do keepClients[i] = c end
+  for i = #clients, 1, -1 do clients[i] = nil end
+  GUILD = guild
+  fn()
+  for i = #clients, 1, -1 do clients[i] = nil end
+  for i, c in ipairs(keepClients) do clients[i] = c end
+  GUILD = keepGuild
+end
+
+-- 22: gear without a reload. 0.3.1's gear stats listened to PLAYER_EQUIPMENT_CHANGED alone; on a login whose inventory
+-- arrives after the loading screen (UNIT_INVENTORY_CHANGED, which Forever's own character sheet refreshes on) and on an
+-- enchant (the link changes, no equipment changes) nothing read them again until the five-minute heartbeat or a
+-- /reload. Here the client's slots read nothing until UNIT_INVENTORY_CHANGED fires three seconds after login: with
+-- the Prog page open, the empty-slot and item-level cells fill in on their own, without a draw; another unit's
+-- inventory reads nothing; then an enchant applied (only UNIT_INVENTORY_CHANGED fires) clears Missing enchants
+do
+  local c = newClient(charOf(NAMES[10], { invLate = true }))
+  login(c)
+  local S = c.C.Sample
+  c.env.CuteDB.settings.columns.prog = { ilvl = true, empty_slots = true, unenchanted = true, ready = true }
+  c.C.UI:Open("prog")
+  local me = rowOf(c, "Lindel")
+  assert(cellOf(me, "empty_slots").label:GetText() == "15/17" and cellOf(me, "ilvl").label:GetText() == "?", "before the inventory: every slot empty, no item level: " .. cellOf(me, "empty_slots").label:GetText())
+  tick(c, 2) -- the gear pass two seconds after the loading screen: the inventory is still not there
+  c.invReady = true
+  fire(c, "UNIT_INVENTORY_CHANGED", "party1")
+  tick(c, 2)
+  assert(cellOf(me, "empty_slots").label:GetText() == "15/17", "another unit's inventory reads nothing")
+  local draws = c.C.UI.draws
+  fire(c, "UNIT_INVENTORY_CHANGED", "player")
+  tick(c, 2.5)
+  assert(c.clock < 1010, "before the ten-second pass: " .. c.clock)
+  assert(cellOf(me, "empty_slots").label:GetText() == "11/17" and cellOf(me, "ilvl").label:GetText() == "46", "the cells filled on their own: " .. cellOf(me, "empty_slots").label:GetText() .. ", " .. cellOf(me, "ilvl").label:GetText())
+  -- (one draw at most: the read taught this client a slot the guild enchants, the chest, which may change members' cells)
+  assert(c.C.UI.draws <= draws + 1 and c.env.CuteDB.known.enchant[5], "your row refilled; one draw for the slot learned: " .. (c.C.UI.draws - draws))
+  -- the guild has legs of this kind enchanted (a member's record says so): Missing enchants names them, on the open page
+  c.C.Roster:Apply("Someone-Forever", { guid = "Player-4242-0BADF00D", enchanted = { [7] = true }, ench_kinds = "7:15.0" })
+  tick(c, 3)
+  assert(cellOf(me, "unenchanted").label:GetText() == "1" and S:Value("unenchanted")[7], "legs missing their enchant: " .. cellOf(me, "unenchanted").label:GetText())
+  -- an enchant applied: the link changes, the item does not; only UNIT_INVENTORY_CHANGED fires
+  local pec = 0
+  for _, f in ipairs(c.frames) do if f.__events.PLAYER_EQUIPMENT_CHANGED then pec = pec + 1 end end
+  c.o.items[7] = "item:1236:1900"
+  fire(c, "UNIT_INVENTORY_CHANGED", "player")
+  tick(c, 2.5)
+  assert(cellOf(me, "unenchanted").label:GetText() == "0" and S:Value("enchanted")[7], "Missing enchants cleared on the open page: " .. cellOf(me, "unenchanted").label:GetText())
+  assert(S:Value("ready") == 1, "the verdict follows (the empty slots remain)")
+  check(c.C.UI.frame, "member prog, the inventory arrived late")
+  c.env.CuteDB.settings.columns.prog = nil
+  -- the heartbeat is a minute now; a quiet minute reads every stat and sends nothing new (scenario 5 holds the five
+  -- quiet minutes to their flushes)
+  local reads = 0
+  local real = c.env.C_SpecializationInfo.GetSpecialization
+  c.env.C_SpecializationInfo.GetSpecialization = function(...) reads = reads + 1; return real(...) end
+  tick(c, 125)
+  c.env.C_SpecializationInfo.GetSpecialization = real
+  assert(reads >= 2, "the heartbeat reads the registry every minute: " .. reads)
+  leave(c)
+  print("gear without a reload: a late inventory fills empty slots and item level on the open page by UNIT_INVENTORY_CHANGED (another unit's ignored), an enchant clears Missing enchants without PLAYER_EQUIPMENT_CHANGED, the heartbeat every minute")
+end
+
+-- 23: the enchantable slots are learned, not listed. An officer and three members, nobody with a head or shoulder
+-- enchant (Forever has none yet) and nobody with a neck enchant until Astrid gets one: then Bjorn's and Cecil's
+-- Missing enchants name the neck on their next read, the officer sees it on receipt, and head and shoulder are never
+-- named. The knowledge counts members once by GUID (a delta that comes before the GUID teaches nothing), survives a
+-- /reload and Astrid leaving the guild, and is taught by records saved before that carry a GUID. (Everyone's neck is
+-- the same kind of item here, 15.0; scenario 26 holds the kinds apart)
+do
+  local function member(name, rank, rankName, class) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rankName, class = class, level = 30, online = true } end
+  local guild = { member("Odda", 1, "Officer", "PRIEST"), member("Astrid", 3, "Raider", "WARRIOR"), member("Bjorn", 3, "Raider", "MAGE"), member("Cecil", 3, "Raider", "ROGUE") }
+  isolated(guild, function()
+    local gear = function() return { [1] = "item:3001:0", [2] = "item:3002:0", [3] = "item:3003:0", [5] = "item:3005:0", [16] = "item:3016:0" } end
+    local odda = newClient(charOf({ "Odda", 1, "Officer", "PRIEST", 30 }, { items = { [1] = "item:3101:0", [5] = "item:3105:0" } }))
+    local astrid = newClient(charOf({ "Astrid", 3, "Raider", "WARRIOR", 30 }, { items = gear() }))
+    local bjorn = newClient(charOf({ "Bjorn", 3, "Raider", "MAGE", 30 }, { items = gear() }))
+    local cecil = newClient(charOf({ "Cecil", 3, "Raider", "ROGUE", 30 }, { items = gear() }))
+    for _, c in ipairs({ odda, astrid, bjorn, cecil }) do login(c) end
+    tickAll(45)
+    local function missing(c) local v = c.C.Sample:Value("unenchanted"); local out = {}; for slot in pairs(v or {}) do out[#out + 1] = slot end table.sort(out); return table.concat(out, ",") end
+    for _, c in ipairs({ astrid, bjorn, cecil }) do
+      assert(missing(c) == "" and next(c.env.CuteDB.known.enchant) == nil, c.o.name .. ": nothing learned, nothing missing: " .. missing(c))
+    end
+    -- Astrid's neck enchanted: her own read learns it and her delta carries it
+    astrid.o.items[2] = "item:3002:2564"
+    fire(astrid, "UNIT_INVENTORY_CHANGED", "player")
+    tickAll(6)
+    for _, c in ipairs({ bjorn, cecil }) do
+      assert(missing(c) == "2", c.o.name .. " shows the neck missing: " .. missing(c))
+      local k = c.env.CuteDB.known.enchant[2]
+      assert(k and k.n == 1 and k.who[astrid.o.guid], "the guild's knowledge: one member seen with one")
+    end
+    assert(missing(astrid) == "" and astrid.env.CuteDB.known.enchant[2].n == 1, "Astrid has hers; she counts once")
+    for _, c in ipairs({ odda, astrid, bjorn, cecil }) do
+      assert(not c.env.CuteDB.known.enchant[1] and not c.env.CuteDB.known.enchant[3], c.o.name .. ": head and shoulder never learned")
+    end
+    -- the officer: Bjorn's and Cecil's Missing enchants arrived; the tooltip names the slot and how many have one
+    assert(odda.env.CuteDB.roster["Bjorn-Forever"].stats.unenchanted[2] and odda.env.CuteDB.roster["Cecil-Forever"].stats.unenchanted[2], "the officer has their missing necks")
+    odda.env.CuteDB.settings.columns.prog = { ready = true, unenchanted = true, enchanted = true }
+    odda.C.UI:Open("prog")
+    local cell = cellOf(rowOf(odda, "Bjorn"), "unenchanted")
+    assert(cell and cell.label:GetText() == "1", "the officer's view: 1 missing for Bjorn: " .. tostring(cell and cell.label:GetText()))
+    local l0 = #lines
+    hover(cell)
+    local tip = table.concat(lines, "\n", l0 + 1)
+    assert(tip:find("Neck | seen on 1 member", 1, true) and not tip:find("Head", 1, true), "the tooltip: " .. tip)
+    l0 = #lines
+    hover(cellOf(rowOf(odda, "Bjorn"), "ready"))
+    tip = table.concat(lines, "\n", l0 + 1)
+    assert(tip:find("an item without the enchant the guild has on its kind", 1, true), "the verdict's gaps name it: " .. tip)
+    check(odda.C.UI.frame, "officer prog, a learned enchant slot")
+    -- an older client's list (0.3.x named head and shoulder): this client shows only the slots it knows the guild enchants
+    odda.C.Roster:Apply("Cecil-Forever", { unenchanted = { [1] = true, [2] = true, [3] = true } })
+    odda.C.UI:Draw()
+    assert(cellOf(rowOf(odda, "Cecil"), "unenchanted").label:GetText() == "1", "head and shoulder from an older client left out")
+    -- a second member with one: counted once each, by GUID, however many messages carry it
+    bjorn.o.items[2] = "item:3002:2564"
+    fire(bjorn, "UNIT_INVENTORY_CHANGED", "player")
+    tickAll(6)
+    bjorn.C.Comm:Full()
+    tickAll(12)
+    assert(cecil.env.CuteDB.known.enchant[2].n == 2 and missing(bjorn) == "", "two members seen, each once: " .. cecil.env.CuteDB.known.enchant[2].n)
+    -- /diag names the slot
+    local n0 = #cecil.chat
+    cecil.env.SlashCmdList.CUTE("diag")
+    assert(table.concat(cecil.chat, "\n", n0 + 1):find("known: enchant slots Neck (2: Junk 2)", 1, true), "/cute diag names the learned slots and kinds")
+    -- a /reload keeps the knowledge
+    local db = cecil.env.CuteDB
+    leave(cecil)
+    local again = newClient(charOf({ "Cecil", 3, "Raider", "ROGUE", 30 }, { items = gear() }))
+    login(again, db, true)
+    assert(missing(again) == "2" and again.env.CuteDB.known.enchant[2].n == 2, "after a /reload: still known, still missing")
+    -- Astrid and Bjorn leave the guild: their records are pruned, the knowledge stays
+    table.remove(GUILD, 3); table.remove(GUILD, 2)
+    fire(again, "GUILD_ROSTER_UPDATE"); fire(again, "GUILD_ROSTER_UPDATE")
+    assert(not again.env.CuteDB.roster["Astrid-Forever"] and not again.env.CuteDB.roster["Bjorn-Forever"], "their records pruned")
+    again.C.Sample:ReadAll()
+    assert(missing(again) == "2" and again.env.CuteDB.known.enchant[2], "the neck stays learned after they left")
+    -- records saved before teach a fresh knowledge (a member's back enchant in a record, the knowledge lost)
+    db.known = nil
+    -- (and one without a GUID teaches nothing: counted under its sender string, that member would count twice once the
+    -- GUID came)
+    db.roster["Someone-Forever"] = { seen = EPOCH + again.clock, online = true, at = {}, stats = { guid = "Player-4242-0FACADE0", enchanted = { [15] = true }, ench_kinds = "15:15.0" } }
+    db.roster["Nameless-Forever"] = { seen = EPOCH + again.clock, online = true, at = {}, stats = { enchanted = { [8] = true }, ench_kinds = "8:15.0" } }
+    leave(again)
+    local fresh = newClient(charOf({ "Cecil", 3, "Raider", "ROGUE", 30 }, { items = gear() }))
+    login(fresh, db, true)
+    assert(fresh.env.CuteDB.known.enchant[15] and fresh.env.CuteDB.known.enchant[15].n == 1, "the saved record taught the back slot")
+    assert(not fresh.env.CuteDB.known.enchant[8], "a saved record without a GUID taught nothing")
+    -- a delta that comes before any full record (no GUID yet) teaches nothing; the full record after it counts the
+    -- member once (0.4.0's first build counted the delta under the sender string and the record again under the GUID)
+    fresh.C.Roster:Apply("Dagny-Forever", { enchanted = { [9] = true }, ench_kinds = "9:15.0" })
+    assert(not fresh.env.CuteDB.known.enchant[9], "a delta without a GUID teaches nothing yet")
+    fresh.C.Roster:Apply("Dagny-Forever", { guid = guidOf("Dagny"), enchanted = { [9] = true }, ench_kinds = "9:15.0" })
+    fresh.C.Roster:Apply("Dagny-Forever", { ench_kinds = "9:15.0" })
+    assert(fresh.env.CuteDB.known.enchant[9].n == 1 and fresh.env.CuteDB.known.enchant[9].kinds["15.0"].n == 1, "the full record counts Dagny once: " .. fresh.env.CuteDB.known.enchant[9].n)
+    for _, c in ipairs({ odda, astrid, bjorn, fresh }) do leave(c) end
+  end)
+  print("learned enchants: a neck enchant on one member makes the neck missing for the others on their next read and for the officer on receipt; head and shoulder never; counted once per member by GUID (a delta before the GUID teaches nothing); kept across a /reload, the members leaving, and taught by saved records with a GUID")
+end
+
+-- 24: what the guild meets in play is discovered and shared. Xavi enters a dungeon and kills its bosses (ENCOUNTER_END,
+-- BOSS_KILL where none came, never twice), a /reload and a run back are no new entry, another dungeon and a raid are;
+-- the reputation list (headers left out, one with rep kept) is read once a second however many UPDATE_FACTION come,
+-- and by id once the headers are folded. Rona never met any of it: the labels message gives her the bosses under
+-- their instance, a UTF-8 name whole, a name with ; and | cleaned. The policy per discovered category, the raid buffs
+-- learned from guild mates, a saved record full of 0.3.x's removed ids, and the Statistics page's new categories at
+-- both sizes for both views
+do
+  local function member(name, rank, rankName, class) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rankName, class = class, level = 30, online = true } end
+  local guild = { member("Wynn", 1, "Officer", "PALADIN"), member("Xavi", 3, "Raider", "HUNTER"), member("Rona", 3, "Raider", "DRUID") }
+  isolated(guild, function()
+    local wynn = newClient(charOf({ "Wynn", 1, "Officer", "PALADIN", 30 }, { factions = {} }))
+    local xavi = newClient(charOf({ "Xavi", 3, "Raider", "HUNTER", 30 }))
+    -- (Rona has a reputation list of her own: the standing ranges she learns from it name Xavi's standings)
+    local rona = newClient(charOf({ "Rona", 3, "Raider", "DRUID", 30 }))
+    for _, c in ipairs({ wynn, xavi, rona }) do login(c) end
+    tickAll(45)
+    local X = xavi.C.Sample
+    local function V(id) return X:Value(id) end
+    local function enter(kind, id, name) xavi.o.instance, xavi.o.instanceID, xavi.o.instName = kind, id, name; fire(xavi, "PLAYER_ENTERING_WORLD", false, false) end
+    -- a dungeon entered
+    local dungeons = V("dungeons")
+    enter("party", 36, "The Deadmines")
+    assert(V("i36") == 1 and V("dungeons") == dungeons + 1 and V("dungeons_seen") == 1, "an entry: " .. tostring(V("i36")))
+    assert(xavi.env.CuteDB.known.labels.i36 == "The Deadmines" and xavi.env.CuteDB.known.kind[36] == "party", "the instance labelled, a dungeon")
+    -- a boss by ENCOUNTER_END, then its BOSS_KILL: once
+    fire(xavi, "ENCOUNTER_END", 1234, "Edwin VanCleef", 1, 5, 1, {})
+    fire(xavi, "BOSS_KILL", 1234, "Edwin VanCleef")
+    tick(xavi, 6)
+    assert(V("e1234") == 1 and V("bosses") == 1, "a kill counted once: " .. tostring(V("e1234")))
+    -- BOSS_KILL alone (a UTF-8 name): counted five seconds on; a wipe (success 0) is no kill
+    fire(xavi, "BOSS_KILL", 1235, "Thorvald Bj\195\182rnsson")
+    fire(xavi, "ENCOUNTER_END", 1236, "Glubtok", 1, 5, 0, {})
+    assert(V("e1235") == nil, "not yet: BOSS_KILL waits for an ENCOUNTER_END")
+    tick(xavi, 6)
+    assert(V("e1235") == 1 and V("e1236") == nil, "BOSS_KILL alone counts; a wipe does not")
+    -- BOSS_KILL first, ENCOUNTER_END within five seconds: once; the name carries ; and |, which never travel
+    fire(xavi, "BOSS_KILL", 1237, "Mor;ladim|x")
+    tick(xavi, 2)
+    fire(xavi, "ENCOUNTER_END", 1237, "Mor;ladim|x", 1, 5, 1, {})
+    tick(xavi, 6)
+    assert(V("e1237") == 1 and V("bosses") == 3 and xavi.env.CuteDB.known.labels.e1237 == "Morladimx", "once, the label cleaned: " .. tostring(xavi.env.CuteDB.known.labels.e1237))
+    assert(xavi.env.CuteDB.chars[xavi.name].firstKill[1234], "the first kill's time kept")
+    -- a /reload inside: no entry
+    local db = xavi.env.CuteDB
+    leave(xavi)
+    local xo = xavi.o
+    xavi = newClient(xo)
+    login(xavi, db, true)
+    X = xavi.C.Sample
+    assert(V("i36") == 1, "a /reload is no entry: " .. tostring(V("i36")))
+    -- out to the world and back to the same dungeon (a wipe's run back): no entry; another dungeon, then back: entries
+    enter("none", 0, "Westfall")
+    enter("party", 36, "The Deadmines")
+    assert(V("i36") == 1, "the same dungeon again after the world: no entry")
+    enter("party", 48, "Blackfathom Deeps")
+    enter("party", 36, "The Deadmines")
+    assert(V("i48") == 1 and V("i36") == 2 and V("dungeons_seen") == 2, "another dungeon, then back: two entries")
+    -- a raid: Raids, the weekly count
+    local weekly = V("weekly_raids")
+    enter("raid", 2000, "Ashen Sanctum")
+    assert(V("i2000") == 1 and V("raids") >= 1 and V("weekly_raids") == weekly + 1 and xavi.env.CuteDB.known.kind[2000] == "raid", "a raid entered")
+    -- the reputation list: headers without rep left out, a header with rep kept; a storm of UPDATE_FACTION reads it once
+    local S = xavi.C.Stats
+    assert(S.byId.f72 and S.byId.f1168 and S.byId.f589 and not S.byId.f469 and not S.byId.f1100, "the factions, the plain headers left out")
+    assert(V("f72") == 3500 and V("f589") == -4000 and S.byId.f72.fmt(3500) == "Friendly" and S.byId.f589.fmt(-4000) == "Hostile", "standings, named by the reaction ranges learned")
+    local listReads, realNum = 0, xavi.env.C_Reputation.GetNumFactions
+    xavi.env.C_Reputation.GetNumFactions = function(...) listReads = listReads + 1; return realNum(...) end
+    xavi.o.standing = { [72] = 9500 }
+    for _ = 1, 20 do fire(xavi, "UPDATE_FACTION"); tick(xavi, 0.04) end
+    tick(xavi, 2)
+    assert(listReads == 1 and V("f72") == 9500 and S.byId.f72.fmt(9500) == "Honored", "twenty UPDATE_FACTION, one read: " .. listReads)
+    xavi.env.C_Reputation.GetNumFactions = realNum
+    -- the headers folded: the list shows them alone; the factions are asked by id
+    xavi.o.folded, xavi.o.standing = true, { [72] = 9600, [930] = 12000 }
+    fire(xavi, "UPDATE_FACTION")
+    tick(xavi, 2)
+    assert(V("f72") == 9600 and V("f930") == 12000, "read by id while folded: " .. tostring(V("f72")))
+    xavi.o.folded = nil
+    -- Rona never met any of it: the values and the labels arrive, the bosses under their instance
+    tickAll(130)
+    local K = rona.env.CuteDB.known
+    assert(K.labels.e1234 == "Edwin VanCleef" and K.inst[1234] == 36 and K.labels.i36 == "The Deadmines" and K.kind[36] == "party", "the labels reached Rona")
+    assert(K.labels.e1235 == "Thorvald Bj\195\182rnsson" and K.labels.e1237 == "Morladimx" and K.kind[2000] == "raid", "a UTF-8 label whole, the cleaned one as sent")
+    assert(not K.mine.e1234 and rona.C.Stats.byId.e1234 and rona.C.Stats.byId.e1234.label == "Edwin VanCleef", "defined on Rona as another's")
+    local xr = rona.env.CuteDB.roster["Xavi-Forever"]
+    assert(xr.stats.e1234 == 1 and xr.stats.i36 == 2 and xr.stats.f72 == 9600 and xr.stats.bosses == 3, "Xavi's values on Rona's roster")
+    local board = rona.C.Stats.Board()
+    local names = {}
+    for _, cat in ipairs(board.cats) do names[#names + 1] = tostring(cat.id) .. "=" .. cat.name end
+    local list = table.concat(names, " ")
+    assert(list:find("bosses=Bosses b36=The Deadmines dungeons=Dungeons raids=Raids rep=Reputation", 1, true), "the categories: " .. list)
+    local inDeadmines = {}
+    for _, def in ipairs(board.byCat.b36) do inDeadmines[#inDeadmines + 1] = def.label end
+    assert(table.concat(inDeadmines, ", ") == "Edwin VanCleef, Morladimx, Thorvald Bj\195\182rnsson", "the bosses under their instance: " .. table.concat(inDeadmines, ", "))
+    -- the page: Rona opens on Bosses' first instance; Xavi leads, Rona's own value a dash
+    local function lineOf(c, test) for _, lst in ipairs({ c.C.UI.catLines, c.C.UI.lines }) do for _, l in ipairs(lst.items) do if l:IsShown() and test(l) then return l end end end end
+    rona.C.UI:Open("game")
+    assert(rona.C.UI.gameCat == "b36", "the page opens on the first instance's bosses: " .. tostring(rona.C.UI.gameCat))
+    local edwin = lineOf(rona, function(l) return l.def and l.def.id == "e1234" and not l.member end)
+    assert(edwin and edwin.who:GetText():find("Xavi", 1, true) and edwin.val:GetText() == "-", "Xavi leads, Rona has not met it: " .. tostring(edwin and edwin.who:GetText()))
+    check(rona.C.UI.frame, "member statistics, discovered bosses")
+    press(edwin)
+    check(rona.C.UI.frame, "member statistics, a boss ranked")
+    for _, l in ipairs(rona.C.UI.lines.items) do if l:IsShown() then hover(l) end end
+    press(lineOf(rona, function(l) return l.cat and l.cat.id == "rep" end))
+    local exodar = lineOf(rona, function(l) return l.def and l.def.id == "f930" and not l.member end)
+    assert(exodar and exodar.who:GetText():find("Xavi", 1, true) and exodar.who:GetText():find("Honored", 1, true), "a member's standing named: " .. tostring(exodar and exodar.who:GetText()))
+    check(rona.C.UI.frame, "member statistics, reputation")
+    press(lineOf(rona, function(l) return l.cat and l.cat.id == "raids" end))
+    check(rona.C.UI.frame, "member statistics, raids")
+    -- the officer: the same at both sizes; the parent row opens its first child
+    wynn.C.UI:Build()
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      wynn.C.UI.frame:SetSize(size[1], size[2])
+      wynn.C.UI:Open("game")
+      press(lineOf(wynn, function(l) return l.cat and l.cat.id == "bosses" end))
+      assert(wynn.C.UI.gameCat == "b36", "Bosses opens its first instance")
+      check(wynn.C.UI.frame, string.format("officer statistics, discovered, %dx%d", size[1], size[2]))
+      rona.C.UI.frame:SetSize(size[1], size[2])
+      rona.C.UI:Open("game")
+      check(rona.C.UI.frame, string.format("member statistics, discovered, %dx%d", size[1], size[2]))
+    end
+    wynn.C.UI.frame:SetSize(1040, 640); rona.C.UI.frame:SetSize(1040, 640)
+    -- the policy per discovered category: Bosses only-you; Settings has the four pairs
+    wynn.C.Policy:Set("gc_bosses", "self")
+    wynn.C.Comm:SendPolicy()
+    tickAll(3)
+    assert(rona.C.Policy:Vis("e1234") == "self" and rona.C.Policy:Vis("i36") == "all" and rona.C.Policy:Vis("f72") == "all", "Bosses only-you covers every instance's bosses")
+    rona.C.UI:Open("game")
+    press(lineOf(rona, function(l) return l.cat and l.cat.id == "b36" end))
+    edwin = lineOf(rona, function(l) return l.def and l.def.id == "e1234" and not l.member end)
+    assert(edwin.who:GetText() == "-", "the member sees no leader under only-you")
+    wynn.C.UI:Open("settings")
+    local pairs4 = 0
+    for _, fr in ipairs(wynn.frames) do if fr.__kind == "CheckButton" and fr:IsVisible() and fr.vis == "self" and type(fr.statId) == "string" and fr.statId:match("^gc_%l+$") then pairs4 = pairs4 + 1 end end
+    assert(pairs4 == 4, "four discovered pairs in Settings: " .. pairs4)
+    check(wynn.C.UI.frame, "officer settings, discovered categories")
+    -- the Me page counts what you discovered; the Officers page what the guild learned
+    xavi.C.UI:Open("me")
+    assert(texts(xavi):find("Discovered: 3 bosses in 1 instance, 2 dungeons, 1 raid, 5 factions, on the Statistics page.", 1, true), "the Me page counts:\n" .. texts(xavi))
+    check(xavi.C.UI.frame, "member me, discovered counts")
+    wynn.C.UI:Open("officers")
+    assert(texts(wynn):find("Learned in play: 3 bosses in 1 instance, 2 dungeons, 1 raid, 5 factions.", 1, true), "the Officers page line:\n" .. texts(wynn))
+    check(wynn.C.UI.frame, "officer officers, learned in play")
+    -- labels that do not parse are skipped; a long one is cut on a character
+    local n = rona.C.Comm:ReceiveLabels("e77:36=Slab;x9=nope;i5:z=bad kind;f12=Darnassus;f13=" .. string.rep("\195\182", 40) .. ";e88=" .. string.rep("A", 80))
+    assert(n == 4 and K.labels.f12 == "Darnassus" and K.labels.f13 == string.rep("\195\182", 30) and #K.labels.e88 == 60 and K.inst[77] == 36 and not K.labels.x9 and not K.kind[5], "parsed and cleaned: " .. n)
+    -- the raid buffs: a guild mate's long buff on Xavi is remembered; a short one, a stranger's and his own are not.
+    -- Remembered is not yet a raid buff (0.4.0's first build counted any long buff a guild mate ever cast, for ever, so
+    -- one Soulstone while leveling stood as missing for good): one counts once two guild mates have cast it, or one has
+    -- three times; a missing one counts only in a group or an instance; one no guild mate cast for two weeks goes
+    xavi.o.instance, xavi.o.instanceID, xavi.o.instName = "none", 0, nil
+    xavi.o.party = { "Wynn" }
+    local INNER = { "Inner Fire", 588, "player", 600 }
+    local function aura(list) xavi.o.auras = list; fire(xavi, "UNIT_AURA", "player"); tick(xavi, 2) end
+    aura({ { "Arcane Intellect", 1459, "party1", 1800 }, { "Renew", 139, "party1", 15 }, INNER, { "Soulstone Resurrection", 20707, "party1", 1800 } })
+    aura({ { "Arcane Intellect", 1459, "party1", 1800 }, INNER, { "Soulstone Resurrection", 20707, "party1", 1800 } })
+    local B = xavi.env.CuteDB.known.buffs
+    assert(B["Arcane Intellect"] and B["Soulstone Resurrection"] and not B.Renew and not B["Inner Fire"] and V("buffs_missing") == 0, "Arcane Intellect and the Soulstone remembered, nothing missing")
+    assert(B["Arcane Intellect"].times == 1, "a buff still on at the next look is no new time: " .. tostring(B["Arcane Intellect"].times))
+    aura({ INNER })
+    assert(V("buffs_missing") == 0, "one guild mate, once: remembered, not a raid buff yet")
+    -- a second guild mate's Arcane Intellect makes it one; the Soulstone, cast once, never is
+    xavi.o.party = { "Wynn", "Rona" }
+    aura({ { "Arcane Intellect", 1459, "party2", 1800 }, INNER })
+    aura({ INNER })
+    assert(B["Arcane Intellect"].nfrom == 2 and V("buffs_missing") == 1, "two guild mates: the missing Arcane Intellect counts")
+    -- three times from one guild mate makes one too
+    for _ = 1, 3 do aura({ { "Mark of the Wild", 1126, "party1", 1800 }, INNER }); aura({ INNER }) end
+    assert(B["Mark of the Wild"].times == 3 and B["Mark of the Wild"].nfrom == 1 and V("buffs_missing") == 2, "three times from Wynn: Mark of the Wild counts")
+    xavi.env.CuteDB.settings.columns.prog = { buffs_missing = true }
+    xavi.C.UI:Open("prog")
+    local l0 = #lines
+    hover(cellOf(rowOf(xavi, "Xavi"), "buffs_missing"))
+    local tip = table.concat(lines, "\n", l0 + 1)
+    assert(tip:find("Arcane Intellect | from 2 guild mates, 2 times", 1, true) and tip:find("Mark of the Wild | from 1 guild mate, 3 times", 1, true) and not tip:find("Soulstone", 1, true), "your own tooltip names them and why:\n" .. tip)
+    -- alone outside an instance nothing is missing, and the tooltip says why
+    xavi.o.party = nil
+    fire(xavi, "GROUP_ROSTER_UPDATE")
+    tick(xavi, 2)
+    assert(V("buffs_missing") == 0, "solo: nothing missing")
+    l0 = #lines
+    hover(cellOf(rowOf(xavi, "Xavi"), "buffs_missing"))
+    assert(table.concat(lines, "\n", l0 + 1):find("Counted in a group or an instance; you are in neither.", 1, true), "the solo tooltip")
+    -- in an instance alone: counted again
+    xavi.o.instance = "party"
+    fire(xavi, "UNIT_AURA", "player")
+    tick(xavi, 2)
+    assert(V("buffs_missing") == 2, "in an instance: counted")
+    -- two weeks with no guild mate's Mark of the Wild: forgotten
+    B["Mark of the Wild"].last = B["Mark of the Wild"].last - 15 * 86400
+    fire(xavi, "UNIT_AURA", "player")
+    tick(xavi, 2)
+    assert(V("buffs_missing") == 1 and not B["Mark of the Wild"] and B["Arcane Intellect"], "forgotten after two weeks unseen")
+    xavi.o.instance = "none"
+    xavi.env.CuteDB.settings.columns.prog = nil
+    -- a saved record with 0.3.x's removed ids, and a policy naming them: kept, ignored, never shown
+    wynn.env.CuteDB.roster["Oldtimer-Forever"] = { seen = EPOCH + wynn.clock, online = true, at = {}, stats = { level = 40, attune_mc = "2", attune_ony_a = "2210", rep = "4444444",
+      keys = { [12344] = true }, world_buffs = { [22888] = true }, flask_on = true, pot_health = 5, pot_mana = 3, protpots = 2, raid_recipes = { [17635] = true }, shards = 9, totems = 4, poisons = 20 } }
+    wynn.env.CuteDB.policy.vis.attune_mc = "self"
+    wynn.env.CuteDB.settings.sort.prog = { id = "attune_mc", desc = true }
+    wynn.env.CuteDB.settings.columns.prog = { attune_mc = true, keys = true, ready = true, ilvl = true }
+    wynn.C.Roster:Changed()
+    for _, page in ipairs({ "race", "prog", "shame", "game", "officers", "me", "settings" }) do
+      wynn.C.UI:Open(page)
+      local t = texts(wynn)
+      for _, gone in ipairs({ "Molten", "Onyxia", "Attune", "World buffs", "Flask active", "Health potions", "Soul shards", "Raid recipes" }) do
+        assert(not t:find(gone, 1, true), page .. " shows a removed stat: " .. gone)
+      end
+      check(wynn.C.UI.frame, "officer " .. page .. ", a record with removed ids")
+    end
+    wynn.C.UI:Open("prog")
+    assert(shownHeaders(wynn) == 3, "a saved column of a removed stat is no column: " .. shownHeaders(wynn))
+    wynn.env.CuteDB.settings.columns.prog = nil
+    wynn.C.Comm:Full()
+    tickAll(10)
+    for _, c in ipairs({ wynn, xavi, rona }) do leave(c) end
+  end)
+  print("discovered: dungeon entries (a /reload and a run back none), bosses by ENCOUNTER_END and BOSS_KILL counted once, a raid, factions read once a second and by id when folded; the labels reach a member who never met them, UTF-8 whole, ; and | cleaned; the policy per category; raid buffs from two guild mates or three times from one, in a group or an instance, forgotten after two weeks; removed ids ignored; the new categories at both sizes")
+end
+
+-- 25: the budget at login with everything at once: 300 statistics, 40 bosses in 18 instances, 60 factions. The first
+-- minute stays under twenty messages; the statistics, the discoveries and their labels follow, all of them across
+do
+  local function member(name, rank, class) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = "Raider", class = class, level = 50, online = true } end
+  isolated({ member("Petra", 3, "MAGE"), member("Quinn", 3, "PRIEST") }, function()
+    local factions = {}
+    for i = 1, 60 do factions[i] = { 2100 + i, "Faction of the " .. i .. "th Shore", 4, 100 * i, 0, 3000 } end
+    local labels, mine, inst, kind, counters = {}, {}, {}, {}, {}
+    for i = 1, 18 do labels["i" .. (300 + i)] = "Instance " .. i .. " of the Deep"; mine["i" .. (300 + i)] = true; kind[300 + i] = "party"; counters["i" .. (300 + i)] = i end
+    for i = 1, 40 do local id = "e" .. (7000 + i); labels[id] = "Boss " .. i .. " the Unbowed"; mine[id] = true; inst[7000 + i] = 301 + (i % 18); counters[id] = 1 + i % 3 end
+    local db = { chars = { ["Petra-Forever"] = { counters = counters } }, known = { labels = labels, mine = mine, inst = inst, kind = kind } }
+    local petra = newClient(charOf({ "Petra", 3, "Raider", "MAGE", 50 }, { withStats = true, manyStats = 300, factions = factions }))
+    local quinn = newClient(charOf({ "Quinn", 3, "Raider", "PRIEST", 50 }, { withStats = true, manyStats = 300, factions = {} }))
+    login(petra, db); login(quinn)
+    assert(#petra.C.Stats.byCat.found == 40 + 18 + 60, "Petra's discoveries defined at login: " .. #petra.C.Stats.byCat.found)
+    tickAll(60)
+    local first = #petra.sent
+    assert(first < 20 and #quinn.sent < 20, "under twenty messages in the first minute: " .. first .. ", " .. #quinn.sent)
+    tickAll(180)
+    local rec = quinn.env.CuteDB.roster["Petra-Forever"]
+    local n = { g = 0, e = 0, i = 0, f = 0 }
+    for id in pairs(rec.stats) do local p = id:match("^([gefi])%d+$"); if p then n[p] = n[p] + 1 end end
+    assert(n.g == 311 and n.e == 40 and n.i == 18 and n.f == 60, string.format("every value across: %d statistics, %d bosses, %d instances, %d factions", n.g, n.e, n.i, n.f))
+    assert(#quinn.C.Stats.byCat.found == 40 + 18 + 60, "and every label: Quinn defined them all: " .. #quinn.C.Stats.byCat.found)
+    local labelMsgs = msgs(petra, "1L")
+    assert(#petra.oversize == 0 and labelMsgs >= 1 and #petra.sent < 80, "the whole login: " .. #petra.sent .. " messages, " .. labelMsgs .. " of labels")
+    print(string.format("budget: 300 statistics, 40 bosses in 18 instances and 60 factions: %d messages in the first minute, %d in all (%d of labels), everything across", first, #petra.sent, labelMsgs))
+    leave(petra); leave(quinn)
+  end)
+end
+
+-- 26: the enchants are learned per slot and kind of item. Hela's scoped bow teaches Ranged for bows, never for a wand or
+-- a gun; Tanka's enchanted shield teaches Off hand for shields, never for a book held in the off hand. (0.4.0's first
+-- build learned the slot alone: one scoped hunter made every wand user show Ranged missing and drop to "gaps", the
+-- owner's head-and-shoulder complaint over again.) Everyone wears full gear, so an enchant is the only gap there is
+do
+  local function member(name, rank, rankName, class) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rankName, class = class, level = 40, online = true } end
+  local guild = { member("Hela", 1, "Officer", "HUNTER"), member("Magey", 3, "Raider", "MAGE"), member("Bowen", 3, "Raider", "HUNTER"), member("Tanka", 3, "Raider", "WARRIOR"),
+    member("Prisca", 3, "Raider", "PRIEST"), member("Shieldo", 3, "Raider", "PALADIN"), member("Gunnar", 3, "Raider", "HUNTER") }
+  isolated(guild, function()
+    -- every slot worn (15.0, the default kind), plus what the scenario puts in the off hand and the ranged slot
+    local function full(extra)
+      local t = {}
+      for _, s in ipairs({ 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }) do t[s] = "item:" .. (4000 + s) .. ":0" end
+      for s, link in pairs(extra) do t[s] = link end
+      return t
+    end
+    local who = {
+      hela = newClient(charOf({ "Hela", 1, "Officer", "HUNTER", 40 }, { items = full({ [18] = "item:5018:30" }) })),          -- a scoped bow
+      magey = newClient(charOf({ "Magey", 3, "Raider", "MAGE", 40 }, { items = full({ [17] = "item:6021:0", [18] = "item:6018:0" }) })), -- a book, a wand
+      bowen = newClient(charOf({ "Bowen", 3, "Raider", "HUNTER", 40 }, { items = full({ [18] = "item:5018:0" }) })),        -- a bow, no scope
+      tanka = newClient(charOf({ "Tanka", 3, "Raider", "WARRIOR", 40 }, { items = full({ [17] = "item:6020:20" }) })),      -- an enchanted shield
+      prisca = newClient(charOf({ "Prisca", 3, "Raider", "PRIEST", 40 }, { items = full({ [17] = "item:6021:0", [18] = "item:6018:0" }) })),
+      shieldo = newClient(charOf({ "Shieldo", 3, "Raider", "PALADIN", 40 }, { items = full({ [17] = "item:6020:0" }) })),   -- a shield, no enchant
+      gunnar = newClient(charOf({ "Gunnar", 3, "Raider", "HUNTER", 40 }, { items = full({ [18] = "item:5019:0" }) })),      -- a gun: nobody has scoped one
+    }
+    for _, c in pairs(who) do login(c) end
+    tickAll(45)
+    local function missing(c) local v = c.C.Sample:Value("unenchanted"); local out = {}; for slot in pairs(v or {}) do out[#out + 1] = slot end table.sort(out); return table.concat(out, ",") end
+    for name, c in pairs(who) do
+      local k = c.env.CuteDB.known.enchant
+      assert(k[18] and k[18].kinds["2.2"] and not k[18].kinds["2.19"] and not k[18].kinds["2.3"] and k[17] and k[17].kinds["4.6"] and not k[17].kinds["4.0"],
+        name .. ": Ranged learned for bows only, Off hand for shields only")
+    end
+    for _, name in ipairs({ "magey", "prisca", "gunnar", "hela", "tanka" }) do
+      local c = who[name]
+      assert(missing(c) == "" and c.C.Sample:Value("ready") == 2, name .. ": nothing to enchant that can be, ready: " .. missing(c) .. ", " .. tostring(c.C.Sample:Value("ready")))
+    end
+    assert(missing(who.bowen) == "18" and who.bowen.C.Sample:Value("ready") == 1, "Bowen's bow has no scope: " .. missing(who.bowen))
+    assert(missing(who.shieldo) == "17" and who.shieldo.C.Sample:Value("ready") == 1, "Shieldo's shield has no enchant: " .. missing(who.shieldo))
+    -- the hidden kinds travel and are kept, and show nowhere
+    assert(who.magey.env.CuteDB.roster["Hela-Forever"].stats.ench_kinds == "18:2.2", "Hela's kinds on Magey's roster: " .. tostring(who.magey.env.CuteDB.roster["Hela-Forever"].stats.ench_kinds))
+    for _, def in ipairs(who.hela.C.Stats.list) do assert(def.id ~= "ench_kinds", "ench_kinds is in no list") end
+    -- the officer sees Bowen's and Shieldo's on receipt, the tooltip by slot; Bowen's own names the kind he wears
+    local hela = who.hela
+    hela.env.CuteDB.settings.columns.prog = { ready = true, unenchanted = true }
+    hela.C.UI:Open("prog")
+    assert(cellOf(rowOf(hela, "Bowen"), "unenchanted").label:GetText() == "1" and cellOf(rowOf(hela, "Magey"), "unenchanted").label:GetText() == "0", "the officer's view: Bowen 1, Magey 0")
+    local l0 = #lines
+    hover(cellOf(rowOf(hela, "Bowen"), "unenchanted"))
+    assert(table.concat(lines, "\n", l0 + 1):find("Ranged | seen on 1 member", 1, true), "the officer's tooltip:\n" .. table.concat(lines, "\n", l0 + 1))
+    check(hela.C.UI.frame, "officer prog, enchants by kind")
+    local bowen = who.bowen
+    bowen.env.CuteDB.settings.columns.prog = { unenchanted = true }
+    bowen.C.UI:Open("prog")
+    l0 = #lines
+    hover(cellOf(rowOf(bowen, "Bowen"), "unenchanted"))
+    assert(table.concat(lines, "\n", l0 + 1):find("Ranged (Bows) | seen on 1 member", 1, true), "Bowen's own tooltip names the kind:\n" .. table.concat(lines, "\n", l0 + 1))
+    -- two minutes on, the wand is still never asked for
+    tickAll(120)
+    assert(missing(who.magey) == "" and missing(who.prisca) == "", "a wand and a book never asked for")
+    -- Bowen scopes his bow: nothing missing, and the guild has seen two scoped bows
+    bowen.o.items[18] = "item:5018:30"
+    fire(bowen, "UNIT_INVENTORY_CHANGED", "player")
+    tickAll(6)
+    assert(missing(bowen) == "" and hela.env.CuteDB.known.enchant[18].kinds["2.2"].n == 2, "Bowen scoped: two seen")
+    for _, c in pairs(who) do leave(c) end
+  end)
+  print("enchants by kind: a scoped bow teaches Ranged for bows and a shield enchant Off hand for shields; a wand, a gun and a book held in the off hand are never asked for, their wearers ready; an unscoped bow and a bare shield are, the officer sees them on receipt; the kinds travel hidden")
+end
+
+-- 27: the smaller rules. GET_ITEM_INFO_RECEIVED re-reads the gear and bag stats only for an item you wear or carry; a
+-- client whose RegisterUnitEvent throws still hears UNIT_INVENTORY_CHANGED (every unit's, the unit check keeping
+-- yours); a Fishing cast is known by its name, whatever its spell id; the improved healthstones count
+do
+  local c = newClient(charOf(NAMES[11], { counts = { [19005] = 1, [5512] = 1, [19013] = 2 } }))
+  login(c)
+  tick(c, 15)
+  local S = c.C.Sample
+  -- the item info filter
+  local scheduled, real = {}, S.Schedule
+  S.Schedule = function(self, id) scheduled[id] = (scheduled[id] or 0) + 1; return real(self, id) end
+  fire(c, "GET_ITEM_INFO_RECEIVED", 99999, true)
+  assert(not scheduled.ilvl and not scheduled.potions, "an item you neither wear nor carry re-reads nothing")
+  fire(c, "GET_ITEM_INFO_RECEIVED", 1234, true)
+  assert(scheduled.ilvl and scheduled.unenchanted, "a worn item's info re-reads the gear stats")
+  fire(c, "GET_ITEM_INFO_RECEIVED", 118, true)
+  assert(scheduled.potions, "a carried item's info re-reads the bag stats")
+  S.Schedule = real
+  -- fishing by name: Classic's rank id and another id both named Fishing count; a Fireball does not; nor does anything
+  -- for a character without the skill
+  local fish = S:Value("fish") or 0
+  for _, id in ipairs({ 7620, 131474, 133 }) do
+    fire(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-1", id)
+    fire(c, "LOOT_OPENED")
+  end
+  assert(S:Value("fish") == fish + 2, "two Fishing casts by name, not the Fireball: " .. tostring(S:Value("fish")))
+  -- healthstones: the improved ranks a talented warlock conjures (Forever's own item list) count with the plain ones
+  S:Read("stones")
+  assert(S:Value("stones") == 4, "Minor, improved Minor and two improved Major: " .. tostring(S:Value("stones")))
+  leave(c)
+  local plain = newClient(charOf(NAMES[12], { skills = { { 186, "Mining", 150, 225 } } }))
+  login(plain)
+  tick(plain, 15)
+  local before = plain.C.Sample:Value("fish") or 0
+  fire(plain, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-2", 7620)
+  fire(plain, "LOOT_OPENED")
+  assert((plain.C.Sample:Value("fish") or 0) == before, "no Fishing skill, no fish")
+  leave(plain)
+  -- RegisterUnitEvent throwing: the events are registered all the same, and another unit's still reads nothing
+  local t = newClient(charOf(NAMES[13], { invLate = true, unitEventThrows = true }))
+  login(t)
+  local f = t.C.Sample.frame
+  assert(f.__events.UNIT_INVENTORY_CHANGED and f.__events.UNIT_AURA and not (f.__units and f.__units.UNIT_INVENTORY_CHANGED), "registered for every unit")
+  tick(t, 2) -- (the gear pass two seconds after the loading screen, before the inventory comes)
+  t.invReady = true
+  fire(t, "UNIT_INVENTORY_CHANGED", "party1")
+  tick(t, 2)
+  local empty = 0
+  for _ in pairs(t.C.Sample:Value("empty_slots") or {}) do empty = empty + 1 end
+  assert(empty == 15, "another unit's event reads nothing: " .. empty)
+  fire(t, "UNIT_INVENTORY_CHANGED", "player")
+  tick(t, 2)
+  assert(t.clock < 1010, "before the ten-second pass: " .. t.clock)
+  empty = 0
+  for _ in pairs(t.C.Sample:Value("empty_slots") or {}) do empty = empty + 1 end
+  assert(empty == 11, "yours reads the slots: " .. empty)
+  leave(t)
+  print("smaller rules: item info re-reads only for your own items; RegisterUnitEvent failing falls back to every unit's with the unit check; Fishing by name; the improved healthstones")
 end
 
 local seen, unique = {}, {}

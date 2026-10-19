@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cute, the guild dashboard addon · ForeverRank</title>
-<meta name="description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame, the game's statistics ranked and the officers' view, shared over the guild channel. No server, no accounts.">
+<meta name="description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, readiness, the hall of shame, the game's statistics ranked and the officers' view, shared over the guild channel. No server, no accounts.">
 <link rel="canonical" href="https://foreverrank.com/addons/cute/">
 <!-- seo:begin -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ForeverRank">
 <meta property="og:url" content="https://foreverrank.com/addons/cute/">
 <meta property="og:title" content="Cute, the guild dashboard addon · ForeverRank">
-<meta property="og:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame, the game's statistics ranked and the officers' view, shared over the guild channel. No server, no accounts.">
+<meta property="og:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, readiness, the hall of shame, the game's statistics ranked and the officers' view, shared over the guild channel. No server, no accounts.">
 <meta property="og:image" content="https://foreverrank.com/addons/cute/img/banner.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Cute, the guild dashboard addon · ForeverRank">
-<meta name="twitter:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, raid readiness, the hall of shame, the game's statistics ranked and the officers' view, shared over the guild channel. No server, no accounts.">
+<meta name="twitter:description" content="Cute is the in-game dashboard of the guild Cute on WoW Forever: the race to 60, readiness, the hall of shame, the game's statistics ranked and the officers' view, shared over the guild channel. No server, no accounts.">
 <meta name="twitter:image" content="https://foreverrank.com/addons/cute/img/banner.jpg">
 <!-- seo:end -->
 <meta name="theme-color" content="#000000">
@@ -280,7 +280,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     <h1>The whole guild in one window.</h1>
     <p>The guild's own addon for Forever's November release. Every member's client shares its character over the guild channel, and one window shows the whole guild: the race to 60, readiness, the hall of shame, the statistics, the officers' view. Officers decide who sees what.</p>
     <div class="cu-cta">
-      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.3.1<!--/@v--></span>, <!--@kb-->284<!--/@kb--> KB</small></a>
+      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.4.0<!--/@v--></span>, <!--@kb-->300<!--/@kb--> KB</small></a>
       <span class="cu-note">Free, GPL. No server, no accounts, nothing leaves the guild channel. Unzip into <code>Interface\AddOns</code> and type <code>/cute</code>.</span>
     </div>
   </div>
@@ -333,7 +333,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
         <p>Every stat has one of two settings, and officers pick it on the window's Settings page. A change is broadcast on the guild channel; members' addons apply it when it comes from an officer rank. Your own row is always complete. The game's own statistics are set per category rather than one by one, since the server decides which there are.</p>
         <dl class="cu-lev">
           <dt>Everyone</dt><dd>Every member sees every member's value: the race, who is doing well, the funny stats the officers want on the wall.</dd>
-          <dt class="cu-only">Only you</dt><dd>You see your own; officers and the guild master see everyone's. By default: your gear gaps, gold and the guild bank, whispers, raid attendance.</dd>
+          <dt class="cu-only">Only you</dt><dd>You see your own; officers and the guild master see everyone's. By default: your gear gaps, gold and the guild bank, whispers.</dd>
         </dl>
       </div>
       <div>
@@ -347,9 +347,9 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
 <section class="cu-sec" id="stats">
   <div class="cu-wrap">
     <h2>What it tracks</h2>
-    <p class="cu-lede"><!--@n-->119<!--/@n--> stats in <!--@v-->0.3.1<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It is a work in progress and the list changes weekly; this is today's.</p>
+    <p class="cu-lede"><!--@n-->109<!--/@n--> stats in <!--@v-->0.4.0<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It learns what Forever has as the guild finds it (bosses, dungeons, reputations, which slots take an enchant) without a new version. It is a work in progress and the list changes weekly; this is today's.</p>
     <details class="cu-fold">
-      <summary>Show the list: <!--@n:leveling-->42<!--/@n:leveling--> for the race, <!--@n:prog-->49<!--/@n:prog--> for prog, <!--@n:funny-->18<!--/@n:funny--> for the hall of shame, <!--@n:officer-->10<!--/@n:officer--> for the officers</summary>
+      <summary>Show the list: <!--@n:leveling-->42<!--/@n:leveling--> for the race, <!--@n:prog-->39<!--/@n:prog--> for prog, <!--@n:funny-->18<!--/@n:funny--> for the hall of shame, <!--@n:officer-->10<!--/@n:officer--> for the officers</summary>
       <div class="cu-bar">
         <div class="cu-cats" role="radiogroup" aria-label="Category" id="cu-cats"></div>
         <input type="search" class="cu-q" id="cu-q" placeholder="Search stats" aria-label="Search stats">
@@ -376,6 +376,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-wrap">
     <h2>Changelog</h2>
     <ul class="cu-log">
+      <li><b>0.4.0</b>Learns what Forever has as the guild finds it: enchantable slots, bosses, dungeons, reputations; Classic attunements gone, consumables counted by type; gear updates without a reload.</li>
       <li><b>0.3.1</b>One row for you, under your two-word name; item level and empty slots read by item id; a round minimap button; fast with hundreds of members, the column headings staying in view; /cute diag.</li>
       <li><b>0.3.0</b>The Statistics page: the server's own statistics, the guild ranked on any of them. Legacy Challenges as stats. Visibility per statistics category.</li>
       <li><b>0.2.0</b>Every client call checked against Forever's own UI code and four unreadable stats removed; comm and roster fixes; the window's final look; the page rebuilt in black and white with a build that checks itself.</li>
@@ -396,7 +397,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
 <script>
 (function () {
   "use strict";
-  var S = window.CUTE_STATS || [], COLS = window.CUTE_COLS || {}, CATS = window.CUTE_CATS || [];
+  var S = window.CUTE_STATS || [], COLS = window.CUTE_COLS || {}, CATS = window.CUTE_CATS || [], EXTRA = window.CUTE_EXTRA || {};
   var byId = {}, byCat = {};
   S.forEach(function (d) { byId[d.id] = d; (byCat[d.cat] = byCat[d.cat] || []).push(d); });
   var CATNAME = {};
@@ -407,100 +408,212 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   function g(gold) { return gold * 10000; } // the addon keeps gold in copper
 
   // ---- the made-up guild. Names are invented; every number below is invented too, and reconciles with the others
-  // (deaths while leveling equals deaths, deaths today is a part of it). Time values are seconds and gold is copper, like the addon's.
+  // (deaths while leveling equals deaths, deaths today is a part of it; bosses, dungeons, missing enchants and readiness
+  // are worked out from what the guild found, further down, as the addon does). Time values are seconds and gold is copper, like the addon's.
   var POLICY = { by: "Yezin", at: "2026-10-18 20:40", threshold: 1 };
   var FUNNY = ["deaths", "deaths_today", "falls", "drownings", "fatigue", "hearth_waste", "afk", "dance", "sit", "emotes", "whispers", "gchat", "inspected", "fish", "jumps", "ghost_yards", "where", "grey_gold"];
-  var ONY_H = "00000000000";
+  // the prog counts, in this order in each member's last array: the consumables by the game's item classes, the bags,
+  // the gear lists that are counts here, the five schools' resistances, the PvP rank
+  var PROG = ["potions", "elixirs", "flasks", "food", "bandages", "stones", "ammo", "bags_free", "bags_size", "buffs_missing", "ilvl_slots", "old_gear", "greens",
+    "resist_fire", "resist_nature", "resist_frost", "resist_shadow", "resist_arcane", "pvp_rank", "pvp_pts"];
   var LC_LISTED = 486; // the Legacy Challenges every client lists, done or not: the same walk on every client
-  function member(n, c, rank, on, s, funny, lc) {
+  function member(n, c, rank, on, s, funny, lc, prog) {
     FUNNY.forEach(function (id, i) { s[id] = funny[i]; });
+    PROG.forEach(function (id, i) { s[id] = prog[i]; });
     s.deaths_lvl = s.deaths;
     // the Legacy Challenges: the points spent per tree and the unspent add up to the points; a white pip is a category
     // done, so a member with few challenges has none; a member with no perks has spent nothing in the trees
     s.lc_done = lc.done; s.lc_total = LC_LISTED; s.lc_free = lc.free; s.lc_renown = lc.renown; s.lc_prof = lc.prof; s.lc_adv = lc.adv; s.lc_prog = lc.prog; s.lc_last = lc.last; s.lc_cats = lc.cats;
     s.lc_pts = lc.prof + lc.adv + lc.prog + lc.free;
-    // readiness as Stats.lua derives it from the same inputs: no gap is ready (2), one or two is gaps (1), more is no (0)
-    var gaps = (s.empty_slots > 0 ? 1 : 0) + (s.unenchanted >= 4 ? 1 : 0) + (s.durability < 50 ? 1 : 0) + (s.flasks === 0 && !s.flask_on ? 1 : 0) + (s.pot_health < 5 ? 1 : 0);
-    s.ready = gaps === 0 ? 2 : gaps <= 2 ? 1 : 0;
     s.grey_gold = g(s.grey_gold);
     ["gold", "bank_in", "bank_out"].forEach(function (k) { s[k] = g(s[k]); });
-    s.attune_ony_h = ONY_H;
+    // no raid in Forever yet: nothing attended, nothing drunk in one
+    s.raids = 0; s.weekly_raids = 0; s.consumed = 0; s.raid_spec = false;
     s.addon_ver = VERSION;
     s.main = s.main === undefined ? n : s.main;
     return { n: n, c: c, rank: rank, on: on, addon: true, s: s };
   }
+  // empty slots and enchanted slots by the game's slot names, so missing enchants can be worked out below; the other gear lists are counts here
   var G = [
     member("Cutecutecute", "PRIEST", "Guild Master", true, { level: 44, xp: 61, xp_hour: 18400, to60: 31, zone: "Feralas", played: hm(52, 4), quests_done: 418, group: "Yezin, Upn", rested: 4200, legacy: 3,
-      ilvl: 41, attune_mc: "2", attune_ony_a: "2222222100000", keys: 3, resist_fire: 15, flasks: 1, pot_health: 8, pot_mana: 12, world_buffs: 2, durability: 88, rep: "2211100", unenchanted: 2, empty_slots: 0,
-      gold: 212, bank_in: 150, bank_out: 40, raids: 0, weekly_raids: 0, consumed: 0, role: "Heal", last_login: "2026-10-18" },
-      [7, 1, 1, 0, 0, 0, 3, 6, 2, 95, 14, 230, 12, 0, 4120, 1800, 1, 31], { done: 61, free: 8, renown: 7, prof: 38, adv: 52, prog: 30, last: "Explore Feralas", cats: "564335408304" }),
+      ilvl: 41, durability: 88, empty_slots: [], enchanted: ["Neck", "Chest", "Feet", "Wrist", "Back", "Main hand"], gold: 212, bank_in: 150, bank_out: 40, role: "Heal", last_login: "2026-10-18" },
+      [7, 1, 1, 0, 0, 0, 3, 6, 2, 95, 14, 230, 12, 0, 4120, 1800, 1, 31], { done: 61, free: 8, renown: 7, prof: 38, adv: 52, prog: 30, last: "Explore Feralas", cats: "564335408304" },
+      [20, 2, 1, 40, 10, 0, 0, 12, 56, 1, 9, 2, 6, 15, 0, 0, 10, 0, 0, 40]),
     member("Yezin", "WARRIOR", "Officer", true, { level: 42, xp: 35, xp_hour: 16900, to60: 36, zone: "Duskwood", played: hm(45, 12), quests_done: 388, group: "Cutecutecute, Upn", rested: 0, legacy: 3,
-      ilvl: 39, attune_mc: "2", attune_ony_a: "2222221000000", keys: 2, resist_fire: 8, flasks: 2, pot_health: 12, pot_mana: 0, world_buffs: 2, durability: 71, rep: "2111000", unenchanted: 1, empty_slots: 0,
-      gold: 148, bank_in: 300, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Tank", last_login: "2026-10-18" },
-      [5, 0, 0, 1, 0, 1, 1, 1, 0, 9, 6, 180, 30, 12, 2210, 900, 0, 44], { done: 54, free: 6, renown: 6, prof: 30, adv: 46, prog: 28, last: "Scarlet Monastery", cats: "553334408303" }),
+      ilvl: 39, durability: 71, empty_slots: [], enchanted: ["Neck", "Chest", "Feet", "Wrist", "Hands", "Back", "Main hand"], gold: 148, bank_in: 300, bank_out: 0, role: "Tank", last_login: "2026-10-18" },
+      [5, 0, 0, 1, 0, 1, 1, 1, 0, 9, 6, 180, 30, 12, 2210, 900, 0, 44], { done: 54, free: 6, renown: 6, prof: 30, adv: 46, prog: 28, last: "Scarlet Monastery", cats: "553334408303" },
+      [12, 3, 2, 25, 20, 1, 200, 18, 56, 4, 9, 3, 7, 8, 0, 0, 0, 0, 1, 120]),
     member("Upn", "MAGE", "Officer", true, { level: 41, xp: 78, xp_hour: 17200, to60: 37, zone: "Duskwood", played: hm(43, 5), quests_done: 371, group: "Cutecutecute, Yezin", rested: 1100, legacy: 2,
-      ilvl: 37, attune_mc: "2", attune_ony_a: "2221000000000", keys: 1, resist_fire: 0, flasks: 0, pot_health: 3, pot_mana: 15, world_buffs: 1, durability: 94, rep: "2110000", unenchanted: 4, empty_slots: 1,
-      gold: 96, bank_in: 0, bank_out: 20, raids: 0, weekly_raids: 0, consumed: 0, role: "Ranged", last_login: "2026-10-18" },
-      [9, 2, 3, 0, 2, 2, 0, 0, 4, 15, 9, 410, 4, 0, 5980, 2600, 0, 27], { done: 49, free: 10, renown: 6, prof: 26, adv: 34, prog: 30, last: "Level 40", cats: "553343400304" }),
+      ilvl: 37, durability: 94, empty_slots: ["Ranged"], enchanted: ["Chest", "Wrist", "Back"], gold: 96, bank_in: 0, bank_out: 20, role: "Ranged", last_login: "2026-10-18" },
+      [9, 2, 3, 0, 2, 2, 0, 0, 4, 15, 9, 410, 4, 0, 5980, 2600, 0, 27], { done: 49, free: 10, renown: 6, prof: 26, adv: 34, prog: 30, last: "Level 40", cats: "553343400304" },
+      [18, 1, 0, 80, 5, 0, 0, 9, 52, 2, 8, 4, 9, 0, 0, 0, 0, 0, 0, 0]),
     member("Ferrow", "HUNTER", "Raider", true, { level: 40, xp: 12, xp_hour: 15100, to60: 42, zone: "Stranglethorn Vale", played: hm(40, 30), quests_done: 352, group: "Quillan", rested: 300, legacy: 2,
-      ilvl: 36, attune_mc: "1", attune_ony_a: "2210000000000", keys: 1, resist_fire: 0, flasks: 0, pot_health: 5, pot_mana: 4, world_buffs: 0, durability: 63, rep: "1100000", unenchanted: 5, empty_slots: 0,
-      gold: 61, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Ranged", last_login: "2026-10-18" },
-      [6, 0, 2, 0, 0, 0, 2, 2, 1, 22, 3, 95, 8, 31, 3310, 1400, 2, 18], { done: 44, free: 14, renown: 5, prof: 20, adv: 32, prog: 26, last: "Explore Stranglethorn Vale", cats: "543334300303" }),
+      ilvl: 36, durability: 63, empty_slots: [], enchanted: ["Neck", "Chest", "Wrist", "Back", "Main hand"], gold: 61, bank_in: 0, bank_out: 0, role: "Ranged", last_login: "2026-10-18" },
+      [6, 0, 2, 0, 0, 0, 2, 2, 1, 22, 3, 95, 8, 31, 3310, 1400, 2, 18], { done: 44, free: 14, renown: 5, prof: 20, adv: 32, prog: 26, last: "Explore Stranglethorn Vale", cats: "543334300303" },
+      [9, 0, 0, 35, 15, 0, 1600, 6, 48, 3, 8, 3, 10, 0, 5, 0, 0, 0, 2, 340]),
     member("Ondra", "MAGE", "Raider", false, { level: 40, xp: 4, xp_hour: 14800, to60: 43, zone: "Stranglethorn Vale", played: hm(38, 20), quests_done: 340, group: "", rested: 6800, legacy: 2,
-      ilvl: 35, attune_mc: "0", attune_ony_a: "2200000000000", keys: 0, resist_fire: 0, flasks: 1, pot_health: 6, pot_mana: 9, world_buffs: 1, durability: 79, rep: "1100000", unenchanted: 3, empty_slots: 0,
-      gold: 72, bank_in: 50, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Ranged", last_login: "2026-10-16" },
-      [6, 0, 1, 0, 0, 0, 9, 3, 0, 12, 2, 60, 1, 0, 2780, 1100, 0, 12], { done: 40, free: 10, renown: 5, prof: 22, adv: 30, prog: 22, last: "250 Quests Completed", cats: "443333300303" }),
+      ilvl: 35, durability: 79, empty_slots: [], enchanted: ["Chest", "Wrist", "Back", "Main hand"], gold: 72, bank_in: 50, bank_out: 0, role: "Ranged", last_login: "2026-10-16" },
+      [6, 0, 1, 0, 0, 0, 9, 3, 0, 12, 2, 60, 1, 0, 2780, 1100, 0, 12], { done: 40, free: 10, renown: 5, prof: 22, adv: 30, prog: 22, last: "250 Quests Completed", cats: "443333300303" },
+      [15, 2, 1, 60, 0, 0, 0, 14, 52, 2, 7, 2, 8, 0, 0, 0, 0, 0, 0, 0]),
     member("Mutu", "WARRIOR", "Raider", true, { level: 39, xp: 51, xp_hour: 13900, to60: 48, zone: "Arathi Highlands", played: hm(36, 40), quests_done: 322, group: "Bari", rested: 0, legacy: 1,
-      ilvl: 38, attune_mc: "0", attune_ony_a: "2100000000000", keys: 1, resist_fire: 0, flasks: 0, pot_health: 4, pot_mana: 0, world_buffs: 0, durability: 55, rep: "1000000", unenchanted: 2, empty_slots: 0,
-      gold: 55, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Tank", last_login: "2026-10-18" },
-      [3, 0, 0, 0, 0, 0, 1, 0, 0, 6, 1, 70, 19, 0, 1920, 500, 0, 22], { done: 36, free: 16, renown: 4, prof: 12, adv: 20, prog: 28, last: "Gnomeregan", cats: "443330300303" }),
+      ilvl: 38, durability: 55, empty_slots: [], enchanted: ["Neck", "Chest", "Feet", "Wrist", "Main hand"], gold: 55, bank_in: 0, bank_out: 0, role: "Tank", last_login: "2026-10-18" },
+      [3, 0, 0, 0, 0, 0, 1, 0, 0, 6, 1, 70, 19, 0, 1920, 500, 0, 22], { done: 36, free: 16, renown: 4, prof: 12, adv: 20, prog: 28, last: "Gnomeregan", cats: "443330300303" },
+      [4, 1, 0, 20, 18, 1, 0, 5, 48, 3, 9, 4, 9, 0, 0, 0, 0, 0, 0, 0]),
     member("Bari", "PALADIN", "Raider", true, { level: 38, xp: 88, xp_hour: 13400, to60: 51, zone: "Arathi Highlands", played: hm(35, 15), quests_done: 310, group: "Mutu", rested: 2300, legacy: 1,
-      ilvl: 37, attune_mc: "0", attune_ony_a: "2100000000000", keys: 1, resist_fire: 0, flasks: 0, pot_health: 9, pot_mana: 11, world_buffs: 0, durability: 82, rep: "1000000", unenchanted: 1, empty_slots: 0,
-      gold: 80, bank_in: 100, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Tank", last_login: "2026-10-18" },
-      [2, 0, 0, 0, 0, 1, 0, 0, 0, 8, 4, 120, 6, 5, 1540, 300, 0, 15], { done: 35, free: 12, renown: 4, prof: 24, adv: 18, prog: 20, last: "Journeyman Cook", cats: "433334300303" }),
+      ilvl: 37, durability: 82, empty_slots: [], enchanted: ["Neck", "Chest", "Feet", "Wrist", "Hands", "Back", "Main hand"], gold: 80, bank_in: 100, bank_out: 0, role: "Tank", last_login: "2026-10-18" },
+      [2, 0, 0, 0, 0, 1, 0, 0, 0, 8, 4, 120, 6, 5, 1540, 300, 0, 15], { done: 35, free: 12, renown: 4, prof: 24, adv: 18, prog: 20, last: "Journeyman Cook", cats: "433334300303" },
+      [20, 0, 0, 30, 12, 0, 0, 11, 52, 1, 10, 3, 8, 0, 0, 0, 0, 0, 0, 0]),
     member("Quillan", "ROGUE", "Raider", true, { level: 38, xp: 20, xp_hour: 15600, to60: 49, zone: "Stranglethorn Vale", played: hm(33, 50), quests_done: 298, group: "Ferrow", rested: 0, legacy: 1,
-      ilvl: 34, attune_mc: "0", attune_ony_a: "2000000000000", keys: 0, resist_fire: 0, flasks: 0, pot_health: 2, pot_mana: 0, world_buffs: 0, durability: 47, rep: "0000000", unenchanted: 6, empty_slots: 1,
-      gold: 33, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Melee", last_login: "2026-10-18" },
-      [10, 1, 4, 1, 0, 0, 0, 1, 0, 30, 7, 210, 2, 0, 7410, 3200, 3, 9], { done: 31, free: 10, renown: 4, prof: 6, adv: 22, prog: 26, last: "The Stockade", cats: "433333000303" }),
+      ilvl: 34, durability: 47, empty_slots: ["Trinket 2"], enchanted: ["Chest", "Main hand"], gold: 33, bank_in: 0, bank_out: 0, role: "Melee", last_login: "2026-10-18" },
+      [10, 1, 4, 1, 0, 0, 0, 1, 0, 30, 7, 210, 2, 0, 7410, 3200, 3, 9], { done: 31, free: 10, renown: 4, prof: 6, adv: 22, prog: 26, last: "The Stockade", cats: "433333000303" },
+      [2, 0, 0, 15, 20, 0, 0, 2, 44, 4, 6, 6, 12, 0, 0, 0, 0, 0, 1, 210]),
     member("Kaka", "PRIEST", "Raider", true, { level: 37, xp: 12, xp_hour: 11200, to60: 68, zone: "Desolace", played: hm(39, 10), quests_done: 276, group: "", rested: 900, legacy: 1,
-      ilvl: 33, attune_mc: "0", attune_ony_a: "1000000000000", keys: 0, resist_fire: 0, flasks: 0, pot_health: 1, pot_mana: 2, world_buffs: 0, durability: 38, rep: "0000000", unenchanted: 7, empty_slots: 2,
-      gold: 12, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Heal", last_login: "2026-10-18" },
-      [23, 3, 6, 2, 1, 4, 8, 14, 5, 88, 21, 640, 1, 3, 6980, 11200, 9, 6], { done: 29, free: 14, renown: 3, prof: 20, adv: 14, prog: 12, last: "Explore Desolace", cats: "433330300303" }),
+      ilvl: 33, durability: 38, empty_slots: ["Trinket 1", "Trinket 2"], enchanted: ["Chest"], gold: 12, bank_in: 0, bank_out: 0, role: "Heal", last_login: "2026-10-18" },
+      [23, 3, 6, 2, 1, 4, 8, 14, 5, 88, 21, 640, 1, 3, 6980, 11200, 9, 6], { done: 29, free: 14, renown: 3, prof: 20, adv: 14, prog: 12, last: "Explore Desolace", cats: "433330300303" },
+      [3, 0, 0, 6, 6, 0, 0, 3, 48, 5, 6, 5, 11, 0, 0, 0, 10, 0, 0, 0]),
     member("Boopsy", "WARLOCK", "Raider", true, { level: 36, xp: 66, xp_hour: 12600, to60: 59, zone: "Thousand Needles", played: hm(30, 40), quests_done: 262, group: "", rested: 1500, legacy: 1,
-      ilvl: 33, attune_mc: "0", attune_ony_a: "1000000000000", keys: 0, resist_fire: 0, flasks: 0, pot_health: 7, pot_mana: 6, world_buffs: 0, durability: 90, rep: "0000000", unenchanted: 3, empty_slots: 0,
-      gold: 44, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Ranged", last_login: "2026-10-18" },
-      [8, 1, 2, 0, 0, 1, 2, 4, 6, 19, 5, 150, 3, 0, 3050, 1900, 1, 20], { done: 27, free: 8, renown: 3, prof: 10, adv: 18, prog: 20, last: "Razorfen Kraul", cats: "433330000303" }),
+      ilvl: 33, durability: 90, empty_slots: [], enchanted: ["Neck", "Chest", "Wrist", "Back"], gold: 44, bank_in: 0, bank_out: 0, role: "Ranged", last_login: "2026-10-18" },
+      [8, 1, 2, 0, 0, 1, 2, 4, 6, 19, 5, 150, 3, 0, 3050, 1900, 1, 20], { done: 27, free: 8, renown: 3, prof: 10, adv: 18, prog: 20, last: "Razorfen Kraul", cats: "433330000303" },
+      [13, 1, 0, 25, 4, 1, 0, 7, 48, 2, 8, 3, 10, 0, 0, 0, 0, 0, 0, 0]),
     member("Lindel", "DRUID", "Raider", false, { level: 35, xp: 30, xp_hour: 12100, to60: 64, zone: "Thousand Needles", played: hm(28, 5), quests_done: 251, group: "", rested: 5400, legacy: 0,
-      ilvl: 31, attune_mc: "0", attune_ony_a: "0000000000000", keys: 0, resist_fire: 0, flasks: 0, pot_health: 6, pot_mana: 8, world_buffs: 0, durability: 76, rep: "0000000", unenchanted: 5, empty_slots: 1,
-      gold: 38, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, role: "Heal", last_login: "2026-10-18" },
-      [5, 0, 1, 0, 0, 0, 3, 2, 2, 14, 2, 40, 0, 8, 2600, 700, 0, 11], { done: 22, free: 46, renown: 3, prof: 0, adv: 0, prog: 0, last: "Explore Thousand Needles", cats: "333330000303" }),
+      ilvl: 31, durability: 76, empty_slots: ["Trinket 2"], enchanted: ["Chest", "Wrist", "Back"], gold: 38, bank_in: 0, bank_out: 0, role: "Heal", last_login: "2026-10-18" },
+      [5, 0, 1, 0, 0, 0, 3, 2, 2, 14, 2, 40, 0, 8, 2600, 700, 0, 11], { done: 22, free: 46, renown: 3, prof: 0, adv: 0, prog: 0, last: "Explore Thousand Needles", cats: "333330000303" },
+      [14, 0, 0, 30, 8, 0, 0, 16, 48, 3, 7, 4, 11, 0, 0, 0, 0, 0, 0, 0]),
     member("Garristan", "WARRIOR", "Member", true, { level: 1, xp: 0, xp_hour: 0, to60: 0, zone: "Northshire Valley", played: hm(0, 3), quests_done: 0, group: "", rested: 0, legacy: 0,
-      ilvl: 1, attune_mc: "0", attune_ony_a: "0000000000000", keys: 0, resist_fire: 0, flasks: 0, pot_health: 0, pot_mana: 0, world_buffs: 0, durability: 100, rep: "0000000", unenchanted: 0, empty_slots: 13,
-      gold: 0, bank_in: 0, bank_out: 0, raids: 0, weekly_raids: 0, consumed: 0, main: "", role: "", last_login: "2026-10-18" },
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { done: 0, free: 0, renown: 0, prof: 0, adv: 0, prog: 0, last: "", cats: "000000000000" }),
+      ilvl: 1, durability: 100, empty_slots: ["Head", "Neck", "Shoulder", "Waist", "Wrist", "Hands", "Ring 1", "Ring 2", "Trinket 1", "Trinket 2", "Back", "Off hand", "Ranged"], enchanted: [],
+      gold: 0, bank_in: 0, bank_out: 0, main: "", role: "", last_login: "2026-10-18" },
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { done: 0, free: 0, renown: 0, prof: 0, adv: 0, prog: 0, last: "", cats: "000000000000" },
+      [0, 0, 0, 4, 0, 0, 0, 12, 16, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     // in the guild, online, without the addon: the roster knows the level and the zone, nothing else
     { n: "Tovi", c: "DRUID", rank: "Raider", on: true, addon: false, s: { level: 33, zone: "Thousand Needles" } }
   ];
-  // the two viewers' whole records: the Me page lists every stat in the registry
+  // the rest of every record: every stat is sent, so the Me page lists the whole registry and any column ticked in
+  // Settings has a value for every member with the addon. Offline members show what they last sent
   var FULL = {
-    Kaka: { xp_session: 9800, played_lvl: hm(3, 20), subzone: "Nijel's Point", logins: 7, session: hm(2, 5), longest: hm(7, 30), quests_today: 4, quests_log: 19, quests_ready: 1, dungeons: 6, kills: 1900, zones_seen: 12,
-      flights_known: 9, flights: 26, longest_flight: hm(0, 6), hearth: "Nijel's Point", hearths: 31, ghost_time: hm(1, 12), gold_earned: g(230), gold_quests: g(95), vendor_sales: g(48), mount: false, talents_free: 2, spec: "Holy",
-      prof1: "Tailoring 160", prof2: "Enchanting 90", fishing: 15, cooking: 20, first_aid: 95, levelups: 0, still: hm(2, 48),
-      ilvl_slots: 6, old_gear: 5, greens: 11, resist_nature: 0, resist_frost: 0, resist_shadow: 10, resist_arcane: 0, raid_recipes: 0, bags_free: 3, bags_size: 48, elixirs: 0, food: 2, bandages: 6, protpots: 0,
-      flask_on: false, buffs_missing: 5, pvp_rank: 0, pvp_pts: 0, stones: 0, shards: 0, totems: 0, ammo: 0, poisons: 0, raid_spec: false },
-    Yezin: { xp_session: 15200, played_lvl: hm(2, 40), subzone: "Darkshire", logins: 5, session: hm(1, 50), longest: hm(6, 10), quests_today: 7, quests_log: 14, quests_ready: 2, dungeons: 9, kills: 2850, zones_seen: 14,
+    Cutecutecute: { xp_session: 17600, played_lvl: hm(3, 40), subzone: "Feathermoon Stronghold", logins: 9, session: hm(3, 10), longest: hm(8, 20), quests_today: 6, quests_log: 17, quests_ready: 3, kills: 3100, zones_seen: 18,
+      flights_known: 14, flights: 45, longest_flight: hm(0, 7), hearth: "Feathermoon Stronghold", hearths: 36, ghost_time: hm(0, 48), gold_earned: g(450), gold_quests: g(205), vendor_sales: g(110), mount: true, talents_free: 0, spec: "Discipline",
+      prof1: "Herbalism 240", prof2: "Alchemy 225", fishing: 60, cooking: 150, first_aid: 225, levelups: 1, still: hm(1, 30) },
+    Yezin: { xp_session: 15200, played_lvl: hm(2, 40), subzone: "Darkshire", logins: 5, session: hm(1, 50), longest: hm(6, 10), quests_today: 7, quests_log: 14, quests_ready: 2, kills: 2850, zones_seen: 14,
       flights_known: 11, flights: 38, longest_flight: hm(0, 5), hearth: "Darkshire", hearths: 23, ghost_time: hm(0, 12), gold_earned: g(410), gold_quests: g(190), vendor_sales: g(96), mount: true, talents_free: 0, spec: "Arms",
-      prof1: "Mining 215", prof2: "Blacksmithing 198", fishing: 42, cooking: 75, first_aid: 150, levelups: 1, still: hm(0, 40),
-      ilvl_slots: 9, old_gear: 3, greens: 7, resist_nature: 0, resist_frost: 0, resist_shadow: 0, resist_arcane: 0, raid_recipes: 0, bags_free: 18, bags_size: 56, elixirs: 3, food: 10, bandages: 20, protpots: 0,
-      flask_on: false, buffs_missing: 4, pvp_rank: 0, pvp_pts: 0, stones: 1, shards: 0, totems: 0, ammo: 0, poisons: 0, raid_spec: false }
+      prof1: "Mining 215", prof2: "Blacksmithing 198", fishing: 42, cooking: 75, first_aid: 150, levelups: 1, still: hm(0, 40) },
+    Upn: { xp_session: 14100, played_lvl: hm(2, 55), subzone: "Darkshire", logins: 6, session: hm(1, 50), longest: hm(6, 40), quests_today: 7, quests_log: 15, quests_ready: 2, kills: 2400, zones_seen: 15,
+      flights_known: 12, flights: 35, longest_flight: hm(0, 6), hearth: "Ironforge", hearths: 28, ghost_time: hm(0, 35), gold_earned: g(280), gold_quests: g(130), vendor_sales: g(60), mount: true, talents_free: 1, spec: "Frost",
+      prof1: "Tailoring 210", prof2: "Enchanting 195", fishing: 0, cooking: 40, first_aid: 150, levelups: 1, still: hm(0, 55) },
+    Ferrow: { xp_session: 13800, played_lvl: hm(4, 10), subzone: "Booty Bay", logins: 8, session: hm(2, 30), longest: hm(9, 5), quests_today: 5, quests_log: 20, quests_ready: 2, kills: 2650, zones_seen: 16,
+      flights_known: 13, flights: 40, longest_flight: hm(0, 7), hearth: "Booty Bay", hearths: 33, ghost_time: hm(0, 58), gold_earned: g(250), gold_quests: g(110), vendor_sales: g(70), mount: true, talents_free: 0, spec: "Beast Mastery",
+      prof1: "Skinning 225", prof2: "Leatherworking 210", fishing: 120, cooking: 110, first_aid: 160, levelups: 0, still: hm(1, 15) },
+    Ondra: { xp_session: 12900, played_lvl: hm(4, 30), subzone: "Nesingwary's Expedition", logins: 4, session: hm(1, 20), longest: hm(5, 50), quests_today: 0, quests_log: 18, quests_ready: 1, kills: 2280, zones_seen: 14,
+      flights_known: 10, flights: 30, longest_flight: hm(0, 6), hearth: "Booty Bay", hearths: 25, ghost_time: hm(0, 40), gold_earned: g(240), gold_quests: g(120), vendor_sales: g(55), mount: true, talents_free: 0, spec: "Fire",
+      prof1: "Tailoring 205", prof2: "Enchanting 180", fishing: 30, cooking: 60, first_aid: 125, levelups: 0, still: hm(0, 45) },
+    Mutu: { xp_session: 12500, played_lvl: hm(3, 5), subzone: "Refuge Pointe", logins: 6, session: hm(2, 15), longest: hm(7, 10), quests_today: 5, quests_log: 16, quests_ready: 1, kills: 2350, zones_seen: 13,
+      flights_known: 10, flights: 29, longest_flight: hm(0, 5), hearth: "Refuge Pointe", hearths: 22, ghost_time: hm(0, 20), gold_earned: g(200), gold_quests: g(100), vendor_sales: g(45), mount: false, talents_free: 0, spec: "Protection",
+      prof1: "Mining 190", prof2: "Engineering 185", fishing: 0, cooking: 75, first_aid: 140, levelups: 1, still: hm(0, 30) },
+    Bari: { xp_session: 13100, played_lvl: hm(3, 30), subzone: "Refuge Pointe", logins: 5, session: hm(2, 15), longest: hm(6, 30), quests_today: 6, quests_log: 14, quests_ready: 2, kills: 2200, zones_seen: 13,
+      flights_known: 11, flights: 31, longest_flight: hm(0, 5), hearth: "Refuge Pointe", hearths: 20, ghost_time: hm(0, 15), gold_earned: g(230), gold_quests: g(115), vendor_sales: g(50), mount: false, talents_free: 0, spec: "Protection",
+      prof1: "Mining 175", prof2: "Blacksmithing 170", fishing: 25, cooking: 150, first_aid: 125, levelups: 0, still: hm(0, 25) },
+    Quillan: { xp_session: 14900, played_lvl: hm(2, 45), subzone: "Nesingwary's Expedition", logins: 7, session: hm(2, 30), longest: hm(8, 0), quests_today: 8, quests_log: 20, quests_ready: 3, kills: 2150, zones_seen: 14,
+      flights_known: 10, flights: 27, longest_flight: hm(0, 7), hearth: "Booty Bay", hearths: 26, ghost_time: hm(1, 5), gold_earned: g(180), gold_quests: g(90), vendor_sales: g(40), mount: false, talents_free: 1, spec: "Combat",
+      prof1: "Skinning 190", prof2: "Leatherworking 175", fishing: 0, cooking: 15, first_aid: 110, levelups: 0, still: hm(0, 20) },
+    Kaka: { xp_session: 9800, played_lvl: hm(3, 20), subzone: "Nijel's Point", logins: 7, session: hm(2, 5), longest: hm(7, 30), quests_today: 4, quests_log: 19, quests_ready: 1, kills: 1900, zones_seen: 12,
+      flights_known: 9, flights: 26, longest_flight: hm(0, 6), hearth: "Nijel's Point", hearths: 31, ghost_time: hm(1, 12), gold_earned: g(230), gold_quests: g(95), vendor_sales: g(48), mount: false, talents_free: 2, spec: "Holy",
+      prof1: "Tailoring 160", prof2: "Enchanting 90", fishing: 15, cooking: 20, first_aid: 95, levelups: 0, still: hm(2, 48) },
+    Boopsy: { xp_session: 11800, played_lvl: hm(3, 15), subzone: "Mirage Raceway", logins: 6, session: hm(1, 40), longest: hm(5, 20), quests_today: 5, quests_log: 18, quests_ready: 2, kills: 1950, zones_seen: 12,
+      flights_known: 9, flights: 24, longest_flight: hm(0, 6), hearth: "Theramore Isle", hearths: 21, ghost_time: hm(0, 50), gold_earned: g(170), gold_quests: g(85), vendor_sales: g(35), mount: false, talents_free: 0, spec: "Affliction",
+      prof1: "Tailoring 175", prof2: "Enchanting 160", fishing: 10, cooking: 30, first_aid: 100, levelups: 0, still: hm(0, 35) },
+    Lindel: { xp_session: 11000, played_lvl: hm(3, 50), subzone: "Mirage Raceway", logins: 3, session: hm(1, 10), longest: hm(4, 40), quests_today: 0, quests_log: 21, quests_ready: 1, kills: 1700, zones_seen: 11,
+      flights_known: 9, flights: 20, longest_flight: hm(0, 6), hearth: "Theramore Isle", hearths: 18, ghost_time: hm(0, 30), gold_earned: g(150), gold_quests: g(80), vendor_sales: g(30), mount: false, talents_free: 1, spec: "Restoration",
+      prof1: "Herbalism 180", prof2: "Alchemy 165", fishing: 50, cooking: 45, first_aid: 90, levelups: 0, still: hm(1, 5) },
+    Garristan: { xp_session: 0, played_lvl: hm(0, 3), subzone: "Northshire Abbey", logins: 1, session: hm(0, 3), longest: hm(0, 3), quests_today: 0, quests_log: 1, quests_ready: 0, kills: 0, zones_seen: 1,
+      flights_known: 0, flights: 0, longest_flight: 0, hearth: "Northshire Abbey", hearths: 0, ghost_time: 0, gold_earned: 0, gold_quests: 0, vendor_sales: 0, mount: false, talents_free: 0, spec: "",
+      prof1: "", prof2: "", fishing: 0, cooking: 0, first_aid: 0, levelups: 0, still: hm(0, 2) }
   };
   G.forEach(function (r) { if (FULL[r.n]) Object.keys(FULL[r.n]).forEach(function (k) { r.s[k] = FULL[r.n][k]; }); });
+  var ADDON = G.filter(function (r) { return r.addon; });
+
+  // ---- what the guild found in play. The addon names a boss, a dungeon or a faction the first time a member meets it
+  // and tells the guild, so these are discoveries, not a list it ships with. One character per member with the addon,
+  // in G's order: a digit is the count, a dash never met. A boss's kills never pass the runs of its dungeon (Scarlet
+  // Monastery's wings are runs of their own); a member's bosses, dungeons seen and dungeons run are counted from these.
+  var FOUND = [
+    ["The Deadmines", "33222221221-", [["Rhahk'Zor", "33222221221-"], ["Sneed", "33222221221-"], ["Gilnid", "32222221221-"], ["Mr. Smite", "33222221221-"],
+      ["Captain Greenskin", "33222121211-"], ["Edwin VanCleef", "33221221121-"]]],
+    ["Wailing Caverns", "111211-1-12-", [["Lady Anacondra", "111211-1-12-"], ["Lord Cobrahn", "111211-1-12-"], ["Kresh", "1-111--1--1-"], ["Lord Serpentis", "111211-1-12-"],
+      ["Mutanus the Devourer", "11-111---11-"]]],
+    ["Shadowfang Keep", "22111111111-", [["Rethilgore", "22111111111-"], ["Baron Silverlaine", "22111111111-"], ["Commander Springvale", "22111111111-"],
+      ["Fenrus the Devourer", "22111111111-"], ["Archmage Arugal", "2211111--1--"]]],
+    ["Blackfathom Deeps", "1111-11-11--", [["Ghamoo-ra", "1111-11-11--"], ["Lady Sarevess", "1111-11-11--"], ["Gelihast", "1111-11-11--"], ["Twilight Lord Kelris", "1111-11--1--"],
+      ["Aku'mai", "111--11--1--"]]],
+    ["The Stockade", "221-1111-1--", [["Targorr the Dread", "221-1111-1--"], ["Kam Deepfury", "221-1111-1--"], ["Hamhock", "221-1111-1--"], ["Bazil Thredd", "221-1111----"]]],
+    ["Gnomeregan", "1111-11-1-1-", [["Grubbis", "1111-11-1-1-"], ["Viscous Fallout", "1111-11-1-1-"], ["Electrocutioner 6000", "1111-11-1-1-"], ["Crowd Pummeler 9-60", "1111-11-1-1-"],
+      ["Mekgineer Thermaplugg", "111--11-----"]]],
+    ["Razorfen Kraul", "11111-11-1--", [["Aggem Thorncurse", "11111-11-1--"], ["Death Speaker Jargba", "11111-11-1--"], ["Overlord Ramtusk", "11111-11-1--"], ["Charlga Razorflank", "11111-11-1--"]]],
+    ["Scarlet Monastery", "44332322111-", [["Interrogator Vishas", "11111111111-"], ["Bloodmage Thalnos", "11111111111-"], ["Houndmaster Loksey", "11111111----"],
+      ["Arcanist Doan", "11111111----"], ["Herod", "1111-1------"], ["High Inquisitor Whitemane", "11----------"]]]
+  ];
+  // standings as the reputation list reports them (Friendly from 3,000, Honored from 9,000); a level 1 has met only the home cities
+  var FACTIONS = [
+    ["Stormwind", [12400, 9800, 7600, 6100, 5200, 9100, 10200, 6800, 4300, 5900, 3600, 3100]],
+    ["Ironforge", [9600, 11800, 6900, 7200, 4800, 8800, 9400, 5100, 3900, 4600, 3200, 3100]],
+    ["Darnassus", [6200, 4100, 5300, 7900, 6100, 3400, 3600, 4200, 8200, 4400, 9300, 3100]],
+    ["Gnomeregan Exiles", [5100, 4500, 8300, 3900, 6600, 3700, 3300, 4100, 3200, 7400, 3100, 3100]],
+    ["Booty Bay", [4800, 3900, 3500, 5600, 4200, 2900, 2400, 5200, 1800, 2600, 1500, null]],
+    ["Ratchet", [3900, 3200, 2800, 3600, 2900, 2200, 2500, 2100, 3100, 3300, 2700, null]],
+    ["Gadgetzan", [2600, 1900, 1400, 1100, 900, 700, 500, 1200, 300, 2200, 1700, null]]
+  ];
+  function counts(s) { return s.split("").map(function (ch) { return ch === "-" ? null : parseInt(ch, 10); }); }
+  function byName(a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }
+  // the Statistics page's discovered categories, as the window builds them: Bosses with a child per dungeon, Dungeons,
+  // Reputation, each sorted by name (Raids would sit between, but nobody has found one, so it is left out)
+  var BOSS_KIDS = FOUND.slice().sort(byName).map(function (d, i) {
+    return { id: "b" + i, label: d[0], sub: true, learned: "bosses", stats: d[2].map(function (b) { return [b[0], counts(b[1])]; }).sort(byName) };
+  });
+  var DUNGEON_STATS = FOUND.map(function (d) { return [d[0], counts(d[1])]; }).sort(byName);
+  var REP_STATS = FACTIONS.slice().sort(byName);
+  var LEARNED = [{ id: "bosses", label: "Bosses", learned: "bosses", stats: [], first: BOSS_KIDS[0].id, count: BOSS_KIDS.reduce(function (n, c) { return n + c.stats.length; }, 0) }]
+    .concat(BOSS_KIDS, [{ id: "dungeons", label: "Dungeons", learned: "dungeons", stats: DUNGEON_STATS }, { id: "rep", label: "Reputation", learned: "rep", stats: REP_STATS }]);
+  // the slots the guild has seen an enchant in, and on how many members: learned from the records, so head and
+  // shoulder, which nobody can enchant yet, are never asked for, and neck is, because Forever has neck enchants
+  var SLOTS = ["Head", "Neck", "Shoulder", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Ring 1", "Ring 2", "Trinket 1", "Trinket 2", "Back", "Main hand", "Off hand", "Ranged"];
+  var ENCH = {};
+  ADDON.forEach(function (r) { r.s.enchanted.forEach(function (slot) { ENCH[slot] = (ENCH[slot] || 0) + 1; }); });
+  // readiness as Stats.lua derives it: an empty slot, a slot missing the enchant the guild has there, durability under
+  // half, no potions; no gap is ready (2), one or two is gaps (1), more is no (0)
+  function readyGaps(s) {
+    var gaps = [], empty = s.empty_slots.length, missing = s.unenchanted.length;
+    if (empty > 0) gaps.push(empty === 1 ? "an empty slot" : empty + " empty slots");
+    if (missing > 0) gaps.push(missing === 1 ? "a slot missing the enchant the guild has there" : missing + " slots missing the enchants the guild has there");
+    if (s.durability < 50) gaps.push("durability under 50%");
+    if (s.potions === 0) gaps.push("no potions");
+    return gaps;
+  }
+  ADDON.forEach(function (r, k) {
+    var s = r.s;
+    s.unenchanted = SLOTS.filter(function (slot) { return ENCH[slot] && s.empty_slots.indexOf(slot) < 0 && s.enchanted.indexOf(slot) < 0; });
+    var gaps = readyGaps(s).length;
+    s.ready = gaps === 0 ? 2 : gaps <= 2 ? 1 : 0;
+    s.bosses = 0;
+    BOSS_KIDS.forEach(function (c) { c.stats.forEach(function (b) { if (b[1][k] > 0) s.bosses++; }); });
+    s.dungeons_seen = DUNGEON_STATS.filter(function (d) { return d[1][k] != null; }).length;
+    s.dungeons = DUNGEON_STATS.reduce(function (n, d) { return n + (d[1][k] || 0); }, 0);
+  });
+  // the found, counted, as the Officers and Me pages say it: the guild's (k null) or one member's
+  function plural(n, one, many) { return n + " " + (n === 1 ? one : many); }
+  function foundLine(k) {
+    var bosses = 0, inst = 0;
+    BOSS_KIDS.forEach(function (c) { var any = false; c.stats.forEach(function (b) { if (k == null || b[1][k] > 0) { bosses++; any = true; } }); if (any) inst++; });
+    var dungeons = DUNGEON_STATS.filter(function (d) { return k == null || d[1][k] != null; }).length;
+    var factions = REP_STATS.filter(function (f) { return k == null || f[1][k] != null; }).length;
+    return plural(bosses, "boss", "bosses") + " in " + plural(inst, "instance", "instances") + ", " + plural(dungeons, "dungeon", "dungeons") + ", " + plural(0, "raid", "raids") + ", " + plural(factions, "faction", "factions");
+  }
+  // a standing named by its reaction, as the window names it from the ranges your own reputation list showed
+  var REACTION = [[42000, "Exalted"], [21000, "Revered"], [9000, "Honored"], [3000, "Friendly"], [0, "Neutral"], [-3000, "Unfriendly"], [-6000, "Hostile"]];
+  function reaction(v) { for (var i = 0; i < REACTION.length; i++) if (v >= REACTION[i][0]) return REACTION[i][1]; return "Hated"; }
+
   // the game's own statistics, as the server reports them at login: invented like the rest, one value per member with
   // the addon in G's order, and never lower than the addon's own counter for the same thing (the addon counts since it
   // was installed, the server since the character was made): quests completed is quests done, deaths covers deaths,
   // creatures killed is total kills less honorable kills, the three gold sources sum to the gold acquired.
-  var ADDON = G.filter(function (r) { return r.addon; });
-  var STATCATS = [
+  var GAME = [
     { id: "kills", label: "Kills", stats: [
       ["Total kills", [6420, 5980, 5610, 5230, 4870, 4410, 4120, 4560, 3980, 3640, 3210, 4]],
       ["Total kills that grant experience", [5830, 5410, 5070, 4690, 4420, 3990, 3720, 4080, 3560, 3290, 2900, 4]] ] },
@@ -522,16 +635,6 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       ["Quests abandoned", [12, 6, 9, 15, 4, 7, 3, 11, 27, 8, 5, 0]],
       ["Quests completed in Eastern Kingdoms", [231, 240, 210, 190, 175, 170, 168, 150, 120, 110, 95, 0]],
       ["Quests completed in Kalimdor", [187, 148, 161, 162, 165, 152, 142, 148, 156, 152, 156, 0]] ] },
-    { id: "dungeons", label: "Dungeons & Raids", stats: [
-      ["Deadmines", [3, 4, 2, 3, 2, 2, 3, 1, 2, 2, 1, 0]],
-      ["Wailing Caverns", [1, 2, 1, 2, 2, 1, 1, 1, 0, 2, 1, 0]],
-      ["Shadowfang Keep", [2, 2, 1, 1, 1, 1, 2, 1, 1, 1, 1, 0]],
-      ["The Stockade", [2, 3, 1, 0, 1, 2, 1, 1, 0, 1, 0, 0]],
-      ["Gnomeregan", [1, 1, 2, 1, 0, 1, 1, 0, 1, 1, 1, 0]],
-      ["Razorfen Kraul", [1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0]],
-      ["Scarlet Monastery", [6, 8, 5, 4, 3, 4, 3, 5, 2, 3, 2, 0]],
-      ["Uldaman", [2, 3, 2, 1, 1, 1, 0, 1, 0, 0, 0, 0]],
-      ["Zul'Farrak", [1, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]] ] },
     { id: "honor", label: "Honor", stats: [
       ["Total honorable kills", [14, 38, 22, 51, 9, 17, 6, 44, 3, 12, 0, 0]],
       ["Killing blows", [5, 19, 11, 27, 2, 8, 1, 23, 0, 4, 0, 0]],
@@ -546,33 +649,43 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       ["Most gold ever owned", [260, 190, 140, 95, 110, 88, 120, 70, 61, 75, 64, 0]],
       ["Gold spent on travel", [38, 44, 29, 31, 22, 18, 20, 27, 35, 19, 15, 0]] ] }
   ];
-  STATCATS.forEach(function (c) { if (c.gold) c.stats.forEach(function (s) { s[1] = s[1].map(g); }); });
-  // a child category sits under the parent before it; the path names both, as the window's tooltip does
+  GAME.forEach(function (c) { if (c.gold) c.stats.forEach(function (s) { s[1] = s[1].map(g); }); });
+  // the page's categories: the discovered first, then the game's. A child category sits under the parent before it; the
+  // path names both, as the window's tooltip does, and the child takes the parent's visibility unless set
+  var STATCATS = LEARNED.concat(GAME), CATBY = {};
   var parentCat = null;
-  STATCATS.forEach(function (c) { if (!c.sub) parentCat = c; c.path = c.sub ? parentCat.label + " > " + c.label : c.label; });
-  var N_GAME = STATCATS.reduce(function (n, c) { return n + c.stats.length; }, 0);
+  STATCATS.forEach(function (c) { CATBY[c.id] = c; if (!c.sub) parentCat = c; else c.parent = parentCat; c.path = c.sub ? parentCat.label + " > " + c.label : c.label; });
+  var N_GAME = GAME.reduce(function (n, c) { return n + c.stats.length; }, 0);
   var CLASS = { WARRIOR: "#c79c6e", PRIEST: "#ffffff", MAGE: "#69ccf0", HUNTER: "#abd473", ROGUE: "#fff569", PALADIN: "#f58cba", WARLOCK: "#9482c9", DRUID: "#ff7d0a", SHAMAN: "#0070de" };
   var ME = { member: "Kaka", officer: "Yezin" };
   var MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   // ---- the viewer's settings, as the addon keeps them in CuteDB; the officers' policy on top of the defaults
-  var st = { viewer: "member", tab: "race", sort: {}, statCat: "kills", statOpen: null, offline: true, minimap: true, compact: false, role: { Kaka: "Heal", Yezin: "Tank" }, raidspec: { Kaka: false, Yezin: false }, meView: false, cols: {}, policy: {}, threshold: POLICY.threshold };
+  var st = { viewer: "member", tab: "race", sort: {}, statCat: null, statOpen: null, offline: true, minimap: true, compact: false, role: { Kaka: "Heal", Yezin: "Tank" }, raidspec: { Kaka: false, Yezin: false }, meView: false, cols: {}, policy: {}, threshold: POLICY.threshold };
   ["race", "prog", "officers"].forEach(function (p) { st.cols[p] = {}; (COLS[p] || []).forEach(function (id) { st.cols[p][id] = true; }); });
   st.cols.shame = {};
   (byCat.funny || []).forEach(function (d) { st.cols.shame[d.id] = true; });
   function vis(id) { return st.policy[id] || (byId[id] && byId[id].vis) || "all"; }
   // a statistics category is one policy entry for all its statistics; the key cannot collide with a registry id
   function statKey(c) { return "stats:" + c.id; }
+  // a category's setting: its own, else its parent's (a dungeon's bosses always take Bosses'), else Everyone
+  function catVis(c) { return st.policy[statKey(c)] || (c.parent ? catVis(c.parent) : "all"); }
   // the categories that have registry stats: a category the registry names but fills from the server has no list to show
   var CATS_WITH = CATS.filter(function (c) { return (byCat[c[0]] || []).length > 0; });
   function officer() { return st.viewer === "officer"; }
   function me() { return ME[st.viewer]; }
   function canSee(rowIsMe, id) { return officer() || rowIsMe || vis(id) === "all"; }
+  // every stat a page can show as a column, in order: its category's, then the others it offers (UI.Candidates)
+  var PAGE_CAT = { race: "leveling", prog: "prog", officers: "officer", shame: "funny" };
+  function candidates(page) { return (byCat[PAGE_CAT[page]] || []).concat((EXTRA[page] || []).map(function (id) { return byId[id]; }).filter(Boolean)); }
 
   // ---- values, as UI.Format shows them
   function hours(sec) { var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h > 0 ? h + "h " + (m < 10 ? "0" : "") + m + "m" : m + "m"; }
-  // pips filled by quarters: lc_cats writes a pip as 0, 3 to 6 or 8 (Stats.lua's pipOf), the chains and the reputations as 0, 1 or 2
+  // pips filled by quarters: lc_cats writes a pip as 0, 3 to 6 or 8 (Stats.lua's pipOf); a stat of steps would write 0, 1 or 2
   var QUARTERS = { lc_cats: true };
+  // a count of what is missing has no "out of": the slots it is out of are learned (UI.Format's countOnly)
+  var COUNT_ONLY = { unenchanted: true };
+  var INVERSE = { empty_slots: true, unenchanted: true, old_gear: true };
   function pipsDone(d, v) { return (String(v).match(QUARTERS[d.id] ? /8/g : /2/g) || []).length; }
   function fmt(d, v) {
     if (v == null) return "?";
@@ -589,13 +702,14 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     if (d.kind === "flag") return v ? "yes" : "-";
     if (d.kind === "text") return v !== "" ? v : "-";
     if (d.kind === "pips") return pipsDone(d, v) + "/" + d.n + (QUARTERS[d.id] ? " all" : d.n === 1 ? " step" : " steps");
-    if (d.kind === "list") return v + "/" + d.n;
+    if (d.kind === "list") { var n = Array.isArray(v) ? v.length : v; return COUNT_ONLY[d.id] ? String(n) : n + "/" + d.n; }
     return String(v);
   }
   function pips(s) { var h = "<span class=\"cu-pips\">"; for (var i = 0; i < s.length; i++) h += "<i class=\"cu-p" + s[i] + "\"></i>"; return h + "</span>"; }
   function sortVal(d, v) {
     if (v == null) return null;
     if (d.kind === "pips") return pipsDone(d, v);
+    if (Array.isArray(v)) return v.length;
     if (typeof v === "boolean") return v ? 1 : 0;
     return v;
   }
@@ -627,8 +741,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   var NAME_W = 150;
   function columnsFor(page, room) {
     var cols = [], used = 0, hidden = 0;
-    var cat = { race: "leveling", prog: "prog", officers: "officer" }[page];
-    (byCat[cat] || []).forEach(function (d) {
+    candidates(page).forEach(function (d) {
       if (!st.cols[page][d.id]) return;
       if (used + d.w <= room) { cols.push(d); used += d.w; } else hidden++;
     });
@@ -643,22 +756,20 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     if (!r.addon) return "<td class=\"" + (isRight(d) ? "cu-r " : "") + "cu-mute\">" + (d.id === "level" || d.id === "zone" ? esc(fmt(d, r.s[d.id])) : "") + "</td>";
     if (!canSee(x.me, d.id)) return "<td class=\"" + (isRight(d) ? "cu-r " : "") + "cu-hid\" title=\"Only " + esc(r.n) + " and the officers see this\">-</td>";
     var v = r.s[d.id], cls = isRight(d) ? "cu-r" : "", inner, title = "";
-    if (d.id === "ready" && (x.me || officer())) {
-      var gaps = [];
-      if (r.s.empty_slots > 0) gaps.push("an empty slot");
-      if (r.s.unenchanted >= 4) gaps.push("4+ unenchanted");
-      if (r.s.durability < 50) gaps.push("durability under 50%");
-      if (r.s.flasks === 0 && !r.s.flask_on) gaps.push("no flask");
-      if (r.s.pot_health < 5) gaps.push("under 5 health potions");
-      title = " title=\"" + esc(gaps.length ? "Gaps: " + gaps.join(", ") : "No gaps") + "\"";
-    }
+    // the tooltips that say more than the cell: the gaps behind the verdict (for those who may see the inputs), the
+    // slots a list names, each missing enchant with how many members the guild has seen with one there
+    var tip = null;
+    if (d.id === "ready" && (x.me || officer())) { var gaps = readyGaps(r.s); tip = gaps.length ? gaps.join(", ") : "No gaps."; }
+    else if (d.id === "unenchanted" && Array.isArray(v)) tip = v.length ? v.map(function (slot) { return slot + ": " + (ENCH[slot] === 1 ? "1 member has one" : ENCH[slot] + " members have one"); }).join("\n") : "none";
+    else if (d.kind === "list" && Array.isArray(v)) tip = v.length ? v.join(", ") : "none";
+    if (tip) title = " title=\"" + esc(tip) + "\"";
     if (d.kind === "pips") inner = pips(v || "");
     else {
       inner = esc(fmt(d, v));
       if (v == null) cls += " cu-mute";
-      if (d.kind === "list") {
-        var inverse = d.id === "empty_slots" || d.id === "unenchanted" || d.id === "old_gear" || d.id === "buffs_missing";
-        if (v === 0) cls += inverse ? " cu-good" : " cu-mute"; else if (inverse) cls += " cu-warn";
+      if (d.kind === "list" && v != null) {
+        var n = Array.isArray(v) ? v.length : v;
+        if (n === 0) cls += INVERSE[d.id] ? " cu-good" : " cu-mute"; else if (INVERSE[d.id]) cls += " cu-warn";
       }
       if (d.kind === "flag") { if (!v) cls += " cu-mute"; }
       if (d.kind === "text" && v === "") cls += " cu-mute";
@@ -710,47 +821,55 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     if (n === 0) h += "<p class=\"cu-line\">No funny stats ticked. Settings has the list.</p>";
     return h;
   }
-  // the statistics as the client formats them, "6,420"; gold the addon's way
+  // the statistics as the client formats them, "6,420"; gold the addon's way; a standing by its reaction, its number in
+  // the tooltip. A discovery a member has not met is a dash, a statistic the client did not report a question mark
   function num(v) { return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+  function statTip(c, v) { return c.learned === "rep" && v != null ? " title=\"" + esc(reaction(v) + ", standing " + num(v)) + "\"" : ""; }
   function statFmt(c, v) {
-    if (v == null) return "?";
+    if (v == null) return c.learned ? "-" : "?";
+    if (c.learned === "rep") return reaction(v);
     if (v === 0) return "-";
     if (c.gold) return v >= 10000 ? num(Math.floor(v / 10000)) + "g" : v >= 100 ? Math.floor(v / 100) + "s" : v + "c";
     return num(v);
   }
   function statistics() {
     var m = me(), off = officer();
-    var cat = STATCATS.filter(function (c) { return c.id === st.statCat; })[0] || STATCATS[0];
-    var hidden = !off && vis(statKey(cat)) === "self";
+    // the open category: the one clicked, else the first with statistics in it (Bosses opens its first dungeon)
+    var cat = CATBY[st.statCat];
+    if (!cat || !cat.stats.length) cat = STATCATS.filter(function (c) { return c.stats.length > 0; })[0];
+    var hidden = !off && catVis(cat) === "self";
     var h = "<div class=\"cu-lb\"><div><div class=\"cu-lbh\" id=\"cu-lbcat-h\">Category</div><div class=\"cu-lbcats\" role=\"tablist\" aria-orientation=\"vertical\" aria-labelledby=\"cu-lbcat-h\">";
     STATCATS.forEach(function (c) {
-      var on = c.id === cat.id;
-      h += "<button type=\"button\" role=\"tab\" id=\"cu-stcat-" + c.id + "\"" + (c.sub ? " class=\"cu-sub\"" : "") + " aria-selected=\"" + (on ? "true" : "false") + "\" aria-controls=\"cu-lbt\" tabindex=\"" + (on ? "0" : "-1") + "\" data-stcat=\"" + c.id + "\" title=\"" + esc(c.path + ": " + c.stats.length + " statistics. " + (vis(statKey(c)) === "all" ? "Everyone sees this category." : "Only you and the officers see this category.")) + "\">" + esc(c.label) + "<span>" + c.stats.length + "</span></button>";
+      var on = c.id === cat.id, n = c.count != null ? c.count : c.stats.length;
+      var tip = c.path + ": " + (c.learned ? plural(n, "entry", "entries") + ", discovered in play by the guild. " : plural(n, "statistic", "statistics") + ". ") + (catVis(c) === "all" ? "Everyone sees this category." : "Only you and the officers see this category.");
+      h += "<button type=\"button\" role=\"tab\" id=\"cu-stcat-" + c.id + "\"" + (c.sub ? " class=\"cu-sub\"" : "") + " aria-selected=\"" + (on ? "true" : "false") + "\" aria-controls=\"cu-lbt\" tabindex=\"" + (on ? "0" : "-1") + "\" data-stcat=\"" + c.id + "\" title=\"" + esc(tip) + "\">" + esc(c.label) + "<span>" + n + "</span></button>";
     });
     h += "</div></div><div id=\"cu-lbt\" role=\"tabpanel\" aria-labelledby=\"cu-stcat-" + cat.id + "\"><table class=\"cu-rows cu-lbrows" + (st.compact ? " cu-compact" : "") + "\"><colgroup><col><col style=\"width:70px\"><col style=\"width:190px\"></colgroup><thead><tr>";
     h += "<th scope=\"col\"><button type=\"button\" tabindex=\"-1\" aria-disabled=\"true\">Statistic</button></th><th scope=\"col\" class=\"cu-r\"><button type=\"button\" tabindex=\"-1\" aria-disabled=\"true\">You</button></th><th scope=\"col\"><button type=\"button\" tabindex=\"-1\" aria-disabled=\"true\">Leader</button></th></tr></thead><tbody>";
-    var noAddon = G.filter(function (r) { return !r.addon; });
+    var noAddon = G.filter(function (r) { return !r.addon; }), myK = ADDON.map(function (r) { return r.n; }).indexOf(m), isRep = cat.learned === "rep";
     cat.stats.forEach(function (s, i) {
       var id = cat.id + ":" + i, open = st.statOpen === id, rankId = "cu-rank-" + cat.id + "-" + i;
-      var ranked = ADDON.map(function (r, k) { return { r: r, v: s[1][k] }; }).filter(function (x) { return x.v != null; });
+      // values first, highest on top; then the members who have not met it
+      var all = ADDON.map(function (r, k) { return { r: r, v: s[1][k] }; });
+      var ranked = all.filter(function (x) { return x.v != null; }), unmet = all.filter(function (x) { return x.v == null; });
       ranked.sort(function (a, b) { return a.v === b.v ? (a.r.n < b.r.n ? -1 : 1) : b.v - a.v; });
-      var mine = ADDON.map(function (r, k) { return r.n === m ? s[1][k] : null; }).filter(function (v) { return v != null; })[0];
-      var lead = ranked.length && ranked[0].v > 0 ? ranked[0] : null;
+      var mine = s[1][myK];
+      var lead = ranked.length && (isRep || ranked[0].v > 0) ? ranked[0] : null;
       var tip = s[0] + ". " + (hidden ? "Set to Only you: you see your own value, the officers see everyone's." : "Click to rank the guild on it.");
       h += "<tr" + (i % 2 ? " class=\"cu-even\"" : "") + "><td class=\"cu-st\"><button type=\"button\" aria-expanded=\"" + (open ? "true" : "false") + "\"" + (open ? " aria-controls=\"" + rankId + "\"" : "") + " data-stat=\"" + id + "\" title=\"" + esc(tip) + "\">" + esc(s[0]) + "</button></td>";
-      h += "<td class=\"cu-r" + (mine ? "" : " cu-mute") + "\">" + esc(statFmt(cat, mine)) + "</td>";
+      h += "<td class=\"cu-r" + (mine != null && (isRep || mine !== 0) ? "" : " cu-mute") + "\"" + statTip(cat, mine) + ">" + esc(statFmt(cat, mine)) + "</td>";
       if (hidden) h += "<td class=\"cu-hid\" title=\"Only the officers see who leads: this category is set to Only you\">-</td>";
       else if (!lead) h += "<td class=\"cu-mute\">nobody yet</td>";
-      else h += "<td><span style=\"color:" + (lead.r.on ? CLASS[lead.r.c] : shade(CLASS[lead.r.c])) + "\">" + esc(lead.r.n) + "</span>" + (lead.r.n === m ? " <span class=\"cu-tag\">(you)</span>" : "") + " <span class=\"cu-tag\">" + esc(statFmt(cat, lead.v)) + "</span></td>";
+      else h += "<td" + statTip(cat, lead.v) + "><span style=\"color:" + (lead.r.on ? CLASS[lead.r.c] : shade(CLASS[lead.r.c])) + "\">" + esc(lead.r.n) + "</span>" + (lead.r.n === m ? " <span class=\"cu-tag\">(you)</span>" : "") + " <span class=\"cu-tag\">" + esc(statFmt(cat, lead.v)) + "</span></td>";
       h += "</tr>";
       if (!open) return;
       h += "<tr class=\"cu-ranked\" id=\"" + rankId + "\"><td colspan=\"3\">";
       if (hidden) h += "<span class=\"cu-mute\">Set to Only you: you see your own value, the officers see everyone's.</span>";
       else {
-        h += "<div class=\"cu-rank\" style=\"grid-template-rows:repeat(" + Math.ceil((ranked.length + noAddon.length) / 3) + ",18px)\">";
-        ranked.forEach(function (x, k) {
+        h += "<div class=\"cu-rank\" style=\"grid-template-rows:repeat(" + Math.ceil((ranked.length + unmet.length + noAddon.length) / 3) + ",18px)\">";
+        ranked.concat(unmet).forEach(function (x, k) {
           var cc = x.r.on ? CLASS[x.r.c] : shade(CLASS[x.r.c]);
-          h += "<div><span class=\"cu-rk\">" + (k + 1) + "</span><span class=\"cu-rn\" style=\"color:" + cc + "\">" + esc(x.r.n) + (x.r.n === m ? " <span class=\"cu-tag\">(you)</span>" : "") + "</span><span class=\"cu-rv" + (x.v > 0 ? "" : " cu-mute") + "\">" + esc(statFmt(cat, x.v)) + "</span></div>";
+          h += "<div" + statTip(cat, x.v) + "><span class=\"cu-rk\">" + (x.v != null ? k + 1 : "") + "</span><span class=\"cu-rn\" style=\"color:" + cc + "\">" + esc(x.r.n) + (x.r.n === m ? " <span class=\"cu-tag\">(you)</span>" : "") + "</span><span class=\"cu-rv" + (x.v != null && (isRep || x.v > 0) ? "" : " cu-mute") + "\">" + esc(statFmt(cat, x.v)) + "</span></div>";
         });
         noAddon.forEach(function (r) { h += "<div><span class=\"cu-rk\"></span><span class=\"cu-rn cu-mute\">" + esc(r.n) + " <span class=\"cu-tag\">(no addon)</span></span></div>"; });
         h += "</div>";
@@ -766,6 +885,8 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     var median = levels[Math.max(0, Math.ceil(levels.length / 2) - 1)], below = levels.filter(function (l) { return l < median; }).length;
     var h = "<div class=\"cu-olines\"><div>" + total + " members, " + withAddon + " with the addon, " + online + " online. Median level " + median + ", " + below + " below it, 0 not seen for a week.</div>";
     if (noAddon.length) h += "<div class=\"cu-dimline\">Without the addon: " + esc(noAddon.sort().join(", ")) + "</div>";
+    var slots = SLOTS.filter(function (slot) { return ENCH[slot]; }).map(function (slot) { return slot + " " + ENCH[slot]; });
+    h += "<div class=\"cu-dimline\">" + esc("Learned in play: " + foundLine(null) + ". Enchants seen on " + (slots.length ? slots.join(", ") : "no slot yet") + ".") + "</div>";
     h += "<div class=\"cu-dimline\">" + esc(describe()) + "</div></div>";
     h += "<div class=\"cu-btns\"><button type=\"button\" class=\"cu-btn\" data-act=\"settings\">Visibility settings</button><button type=\"button\" class=\"cu-btn\" data-act=\"ask\">Ask everyone to resend</button><button type=\"button\" class=\"cu-btn\" data-act=\"policy\">Broadcast policy now</button></div>";
     return h + table("officers");
@@ -783,8 +904,9 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       });
       h += "</div>";
     });
-    // the game's statistics have a page of their own; the Me page says how many, as the window does
-    h += "<div class=\"cu-line\" style=\"padding-top:12px\">Statistics: " + N_GAME + ", on the Statistics page.</div>";
+    // what you discovered and the game's statistics have a page of their own; the Me page counts them, as the window does
+    h += "<div class=\"cu-line\" style=\"padding-top:12px\">" + esc("Discovered: " + foundLine(ADDON.indexOf(r)) + ", on the Statistics page.") + "</div>";
+    h += "<div class=\"cu-line\">Statistics: " + N_GAME + ", on the Statistics page.</div>";
     return h;
   }
   function check(label, on, enabled, data) {
@@ -797,27 +919,30 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     left += "<div class=\"cu-roles\"><span>Role</span>";
     ["Tank", "Heal", "Melee", "Ranged"].forEach(function (role) { left += "<label class=\"cu-ckl\"><input type=\"checkbox\" class=\"cu-ck\" data-role=\"" + role + "\"" + (st.role[m] === role ? " checked" : "") + "> " + role + "</label>"; });
     left += "</div>" + check("Raid spec set (this character)", !!st.raidspec[m], true, "data-raidspec=\"1\"") + "<div class=\"cu-gap\"></div>";
-    [["race", "Race columns", "leveling"], ["prog", "Prog columns", "prog"], ["shame", "Hall of Shame cards", "funny"], ["officers", "Officers columns", "officer"]].forEach(function (p) {
+    [["race", "Race columns"], ["prog", "Prog columns"], ["shame", "Hall of Shame cards"], ["officers", "Officers columns"]].forEach(function (p) {
       if (p[0] === "officers" && !off) return;
       left += "<div class=\"cu-gap\"></div><div class=\"cu-h\">" + p[1] + "</div>";
-      (byCat[p[2]] || []).forEach(function (d) { left += check(d.label, !!st.cols[p[0]][d.id], true, "data-col=\"" + p[0] + ":" + d.id + "\""); });
+      candidates(p[0]).forEach(function (d) { left += check(d.label, !!st.cols[p[0]][d.id], true, "data-col=\"" + p[0] + ":" + d.id + "\""); });
     });
     var right = "<div class=\"cu-h\">Who sees what</div><div class=\"cu-olines\"><div class=\"cu-dimline\">" + esc(describe()) + (off ? "" : " Only officers can change it.") + "</div></div>";
     right += "<div class=\"cu-field\" style=\"justify-content:space-between;padding-right:0\"><span style=\"width:auto;color:var(--cu-ink)\">Officer ranks: 0 to " + st.threshold + "</span><span style=\"width:auto;display:flex;gap:4px\"><button type=\"button\" class=\"cu-btn cu-sm\" data-act=\"thr-\" aria-label=\"Lower the officer rank threshold\"" + (off ? "" : " disabled") + ">-</button><button type=\"button\" class=\"cu-btn cu-sm\" data-act=\"thr+\" aria-label=\"Raise the officer rank threshold\"" + (off ? "" : " disabled") + ">+</button></span></div>";
     right += "<div class=\"cu-btns\" style=\"padding-top:4px\"><button type=\"button\" class=\"cu-btn\" data-act=\"policy\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Broadcast now</button><button type=\"button\" class=\"cu-btn\" data-act=\"reset\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Reset to defaults</button></div>";
     right += "<div class=\"cu-vishead\"><span></span><span>Everyone</span><span>Only you</span></div>";
-    function visRow(label, key) {
+    function visRow(label, key, indent) {
       var v = vis(key);
-      return "<div class=\"cu-visrow\"><span>" + esc(label) + "</span><label aria-label=\"" + esc(label + ": everyone") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + key + "\" data-vis=\"" + key + ":all\"" + (v === "all" ? " checked" : "") + (off ? "" : " disabled") + "></label><label aria-label=\"" + esc(label + ": only you") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + key + "\" data-vis=\"" + key + ":self\"" + (v === "self" ? " checked" : "") + (off ? "" : " disabled") + "></label></div>";
+      return "<div class=\"cu-visrow\"" + (indent ? " style=\"padding-left:20px\"" : "") + "><span>" + esc(label) + "</span><label aria-label=\"" + esc(label + ": everyone") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + key + "\" data-vis=\"" + key + ":all\"" + (v === "all" ? " checked" : "") + (off ? "" : " disabled") + "></label><label aria-label=\"" + esc(label + ": only you") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + key + "\" data-vis=\"" + key + ":self\"" + (v === "self" ? " checked" : "") + (off ? "" : " disabled") + "></label></div>";
     }
     CATS_WITH.forEach(function (c) {
       right += "<div class=\"cu-h\" style=\"height:18px\">" + esc(c[1]) + "</div>";
       (byCat[c[0]] || []).forEach(function (d) { right += visRow(d.label, d.id); });
       right += "<div class=\"cu-gap\"></div>";
     });
-    // the game's statistics: one setting per category, the server decides which statistics are in it
-    right += "<div class=\"cu-h\" style=\"height:18px\">Statistics, per category</div>";
-    STATCATS.forEach(function (c) { right += visRow(c.label, statKey(c)); });
+    // what the guild discovers and the game's statistics: one setting per category, set before anything is found in it as
+    // well as after; a child category takes its parent's unless set, a dungeon's bosses always Bosses'
+    right += "<div class=\"cu-h\" style=\"height:18px\">Statistics</div><div class=\"cu-olines\"><div class=\"cu-dimline\">Discovered in play; a category's choice covers what is found in it.</div></div>";
+    [["bosses", "Bosses"], ["dungeons", "Dungeons"], ["raids", "Raids"], ["rep", "Reputation"]].forEach(function (f) { right += visRow(f[1], "stats:" + f[0]); });
+    right += "<div class=\"cu-olines\"><div class=\"cu-dimline\">Per category; a category's choice covers its statistics.</div></div>";
+    GAME.forEach(function (c) { right += visRow(c.label, statKey(c), c.sub); });
     right += "<div class=\"cu-gap\"></div>";
     return "<div class=\"cu-set\"><div>" + left + "</div><div>" + right + "</div></div>";
   }
@@ -835,7 +960,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       return self.join(" and ") + (self.length === 1 ? " is" : " are") + " set to Only you: " + m + " sees their own, the rest show a dash. Switch to Yezin to see them all.";
     }
     if (st.tab === "shame") return "One card per funny stat, the leader on each. Untick cards on the Settings page.";
-    if (st.tab === "statistics") return "The game's own statistics, every one this client reports at login, by category. Click a statistic to rank the guild on it. Officers set visibility per category on the Settings page.";
+    if (st.tab === "statistics") return "What the guild has found in play, then the game's own statistics, by category. Click one to rank the guild on it. Officers set visibility per category on the Settings page.";
     if (st.tab === "officers") return "Officer ranks only. The three buttons open the visibility list, ask every addon to resend its record, and push the policy out.";
     if (st.tab === "me") return "Your whole record, every stat in the registry. Tick the box to see what members see of you.";
     return off ? "Everyone picks their own columns and cards. The visibility list on the right is the officers' to change, and you are one." : "Everyone picks their own columns and cards. The visibility list on the right is the officers' to change; a member sees it greyed.";
@@ -885,7 +1010,14 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       return;
     }
     var c = e.target.closest("button[data-stcat]");
-    if (c) { st.statCat = c.dataset.stcat; draw(); return; }
+    if (c) {
+      // a parent with no statistics of its own (Bosses) opens its first child, and the focus goes with it
+      var to = CATBY[c.dataset.stcat];
+      st.statCat = to.first || to.id;
+      draw();
+      if (to.first) { var first = scroll.querySelector("[data-stcat=\"" + to.first + "\"]"); if (first) first.focus(); }
+      return;
+    }
     var x = e.target.closest("button[data-stat]");
     if (x) { st.statOpen = st.statOpen === x.dataset.stat ? null : x.dataset.stat; draw(); return; }
     var a = e.target.closest("button[data-act]");
@@ -911,8 +1043,11 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   scroll.addEventListener("keydown", function (e) {
     var b = e.target.closest("button[data-stcat]");
     if (!b) return;
-    var ids = STATCATS.map(function (c) { return c.id; }), at = ids.indexOf(b.dataset.stcat), to = -1;
-    if (e.key === "ArrowDown" || e.key === "ArrowRight") to = (at + 1) % ids.length;
+    // the arrows walk the categories that open; from Bosses, which opens its first child, they start at that child
+    var ids = STATCATS.filter(function (c) { return c.stats.length > 0; }).map(function (c) { return c.id; }), at = ids.indexOf(b.dataset.stcat), to = -1;
+    var down = e.key === "ArrowDown" || e.key === "ArrowRight";
+    if (at < 0) at = ids.indexOf(CATBY[b.dataset.stcat].first) - (down ? 1 : 0);
+    if (down) to = (at + 1) % ids.length;
     else if (e.key === "ArrowUp" || e.key === "ArrowLeft") to = (at - 1 + ids.length) % ids.length;
     else if (e.key === "Home") to = 0;
     else if (e.key === "End") to = ids.length - 1;

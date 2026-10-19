@@ -276,8 +276,11 @@ function R:Entry(name, create)
 end
 
 -- values that arrived from a member's addon. What FromMe takes for yours is your own message come back; a record
--- carrying another's GUID is theirs whatever the sender string
-local MAX_GAME = 1000 -- statistics kept per member from the wire (the probe caps its own at the same)
+-- carrying another's GUID is theirs whatever the sender string. The kinds of a member's enchanted items (the hidden
+-- ench_kinds) teach the guild's knowledge (Stats.lua LearnEnchants), counted once per member by the GUID the record
+-- carries: a delta that comes before any full record has brought the GUID teaches nothing yet (counted under the
+-- sender string, the member would count twice once the GUID came); the full record, which carries both, does
+local MAX_GAME = 1000 -- dynamic values kept per member from the wire, statistics and discoveries together (g, e, i, f)
 function R:Apply(name, kv)
   local me, how = self:FromMe(name, kv.guid)
   if me then self:SelfSender(name, how); return end
@@ -298,13 +301,18 @@ function R:Apply(name, kv)
     end
   end
   local games
+  local dynamic = C.Stats.IsDynamic
   for id, v in pairs(kv) do
     local keep = true
-    if e.stats[id] == nil and id:match("^g%d+$") then
-      if not games then games = 0; for k in pairs(e.stats) do if k:match("^g%d+$") then games = games + 1 end end end
+    if e.stats[id] == nil and dynamic(id) then
+      if not games then games = 0; for k in pairs(e.stats) do if dynamic(k) then games = games + 1 end end end
       if games >= MAX_GAME then keep = false else games = games + 1 end
     end
     if keep then e.stats[id] = v; e.at[id] = t end
+  end
+  local g = e.stats.guid
+  if kv.ench_kinds ~= nil and type(e.stats.ench_kinds) == "string" and type(g) == "string" and g ~= "" then
+    C.Stats.LearnEnchants(C.Stats.EnchantKinds(e.stats.ench_kinds), g)
   end
   e.seen, e.online = t, true
   self.updatedAt = t

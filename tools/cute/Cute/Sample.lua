@@ -1,13 +1,16 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Sampling: reads every stat on its events and on a five-minute heartbeat, keeps the counters and the tracked
--- values this character accumulates (deaths, dances, time stood still), probes the game's statistics at login and
--- re-reads them in one coalesced pass, and tells Comm when something changed.
+-- Sampling: reads every stat on its events and on a one-minute heartbeat, keeps the counters and the tracked
+-- values this character accumulates (deaths, dances, time stood still, the bosses it kills and the instances it
+-- enters), reads the gear and the bags again after every loading screen, discovers the bosses, instances and factions
+-- it meets (Stats.lua's found category), probes the game's statistics at login and re-reads them in one coalesced pass,
+-- and tells Comm when something changed. (Comm sends only what changed, so the heartbeat's reads cost the channel
+-- nothing while nothing moves.)
 -- Every read runs under pcall; a read that errors stores nil and shows "?" with the error in the tooltip.
 local _, C = ...
 local S = { values = {}, at = {}, err = {}, dirty = {}, scheduled = {}, started = false }
 C.Sample = S
 
-local HEARTBEAT = 300  -- seconds between full passes
+local HEARTBEAT = 60   -- seconds between full passes
 local SLICE = 20       -- stats read per slice of the heartbeat
 local TICK = 5         -- the ticker that watches movement, ghosts, taxis and AFK
 local POLL = 1         -- the quick poll for falling and the breath bar (two cheap client calls a second)
@@ -42,6 +45,8 @@ end
 -- reading
 ----------------------------------------------------------------------------
 local function readOne(def)
+  -- a discovered count this character never had is no value at all (a boss it has not killed sends nothing, not a 0)
+  if def.learned and def.track then return counters()[def.id] end
   if def.count or def.track then return counters()[def.id] or (def.kind == "list" and {} or (def.kind == "text" and "" or (def.kind == "flag" and false or (def.kind == "pips" and "" or 0)))) end
   C.lastErr = nil
   local ok, v = pcall(def.read)
@@ -76,8 +81,18 @@ function S:Read(id)
 end
 
 function S:ReadAll()
-  C.Stats.GearClear()
+  C.Stats.GearClear(); C.Stats.BagClear(); C.Stats.FactionsClear()
   for _, def in ipairs(C.Stats.list) do self:Read(def.id) end
+end
+
+-- the gear and the bags read afresh: 2 s and 10 s after every loading screen, for the inventory that arrives after it
+-- (Forever's own character sheet refreshes on UNIT_INVENTORY_CHANGED for that, Stats.lua says where)
+function S:GearPass()
+  C.Stats.GearClear(); C.Stats.BagClear()
+  for _, def in ipairs(C.Stats.list) do if def.gear or def.bag then self:Read(def.id) end end
+end
+function S:GearSoon()
+  for _, wait in ipairs({ 2, 10 }) do C_Timer.After(wait, C.Safe(function() S:GearPass() end, "sample: gear")) end
 end
 
 -- a stat re-read at most once a second, however often its events fire
@@ -111,6 +126,8 @@ local function heartbeat()
   -- the next beat is booked before the reads, so an error in one read never ends the heartbeat for the session
   local more = beatIndex + SLICE < #C.Stats.list
   C_Timer.After(more and 0.5 or HEARTBEAT, C.Safe(heartbeat, "sample: heartbeat"))
+  -- a pass starts on a fresh gear, bag and faction scan
+  if beatIndex == 0 then C.Stats.GearClear(); C.Stats.BagClear(); C.Stats.FactionsClear() end
   slice()
 end
 
@@ -275,7 +292,7 @@ local function on(event, fn) EVENTS[event] = EVENTS[event] or {}; table.insert(E
 local function wire()
   for _, def in ipairs(C.Stats.list) do
     if def.on then for _, ev in ipairs(def.on) do on(ev, function() S:Schedule(def.id) end) end end
-    if def.count and def.count:match("^%u[%u_]+$") and not def.count:match("_ENTERED$") then on(def.count, function() S:Bump(def.id) end) end
+    if def.count and def.count:match("^%u[%u_]+$") then on(def.count, function() S:Bump(def.id) end) end
   end
 end
 
@@ -371,19 +388,28 @@ on("ZONE_CHANGED_NEW_AREA", function()
     S:Set("zones_seen", n)
   end
 end)
-on("PLAYER_ENTERING_WORLD", function()
-  local _, kind = C.Get("GetInstanceInfo")
-  if kind == "party" and not T.inDungeon then S:Bump("dungeons") end
-  if kind == "raid" and not T.inRaid then S:Bump("raids"); S:Bump("weekly_raids") end
-  T.inDungeon, T.inRaid = kind == "party", kind == "raid"
+-- every loading screen: the instance you are in (an entry where it is a new one), the gear and the bags a moment on
+on("PLAYER_ENTERING_WORLD", function(initial, reloading)
+  S:InstanceCheck(C.Plain(initial) == true, C.Plain(reloading) == true)
+  S:GearSoon()
 end)
+-- a Fishing cast is known by its name: C_Spell.GetSpellName of the spell is the Fishing skill line's name as the skills
+-- window gives it, so whatever Fishing spell Forever teaches counts (0.4.0's first build matched Classic's four rank
+-- ids). The name is kept once found; a character without the skill reads it at most once a second (Stats.lua's cache)
+local fishName
+local function fishing(spellId)
+  if type(spellId) ~= "number" then return false end
+  fishName = fishName or C.Stats.SkillName(C.Stats.FISHING)
+  if not fishName then return false end
+  return C.Get(api("C_Spell", "GetSpellName"), spellId) == fishName
+end
 on("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellId)
   if C.Plain(unit) ~= "player" then return end
   spellId = C.Plain(spellId)
   if spellId == 8690 then
     S:Bump("hearths")
     if T.lastFlightEnd and gtime() - T.lastFlightEnd < 120 then S:Bump("hearth_waste") end
-  elseif spellId == 7620 or spellId == 7731 or spellId == 7732 or spellId == 18248 then T.fishingAt = gtime() end
+  elseif fishing(spellId) then T.fishingAt = gtime() end
 end)
 on("LOOT_OPENED", function() if T.fishingAt and gtime() - T.fishingAt < 30 then S:Bump("fish"); T.fishingAt = nil end end)
 -- whispers are counted here; the ticker turns the count into an hourly rate. (Guild lines are counted as you send
@@ -401,35 +427,127 @@ on("TIME_PLAYED_MSG", function(total, level)
   if type(total) == "number" then S:Set("played", total) end
   if type(level) == "number" then S:Set("played_lvl", level) end
 end)
--- raid recipes: asked of the trade skill window by spell id while it is open (there is no recipe list to walk on
--- this client); a recipe once seen learned stays learned
-local function readRecipes()
-  local info = api("C_TradeSkillUI", "GetRecipeInfo")
-  if not info then return end
-  local def = C.Stats.byId.raid_recipes
-  local old = counters().raid_recipes
-  local have, changed = {}, false
-  if type(old) == "table" then for k in pairs(old) do have[k] = true end end
-  for _, e in ipairs(def.of) do
-    local r = C.Get(info, e[1])
-    if type(r) == "table" and C.Plain(r.learned) == true and not have[e[1]] then have[e[1]] = true; changed = true end
-  end
-  if changed then S:Set("raid_recipes", have) end
-end
-on("TRADE_SKILL_LIST_UPDATE", readRecipes)
-on("TRADE_SKILL_SHOW", readRecipes)
--- consumables that leave your bags in a raid
+-- consumables that leave your bags in a raid: the potions, elixirs, flasks and food the bag scan counts by class
 on("BAG_UPDATE_DELAYED", function()
-  if not T.inRaid then return end
+  if not T.inRaid then T.consumables = nil; return end
+  C.Stats.BagClear()
   local total = 0
-  for _, id in ipairs({ "pot_health", "pot_mana", "flasks", "elixirs", "food", "protpots" }) do
-    local def = C.Stats.byId[id]
-    local ok, v = pcall(def.read)
-    if ok and type(C.Plain(v)) == "number" then total = total + v end
+  for _, id in ipairs({ "potions", "elixirs", "flasks", "food" }) do
+    local ok, v = pcall(C.Stats.byId[id].read)
+    v = ok and C.Plain(v) or nil
+    if type(v) == "number" then total = total + v end
   end
   if T.consumables and total < T.consumables then S:Bump("consumed", T.consumables - total) end
   T.consumables = total
 end)
+
+----------------------------------------------------------------------------
+-- discovered in play: instances entered, bosses killed, factions (Stats.lua's found category). Each is a stat defined
+-- the first time it is met, labelled with the game's own name for it, and the label is told to the guild (Comm.lua's
+-- "1L"), so a member who never met it shows it all the same
+----------------------------------------------------------------------------
+local function tell(id) if C.Comm and C.Comm.LabelSoon then C.Comm:LabelSoon(id) end end
+-- the counts behind the summary ints: different bosses killed, different dungeons entered
+local function distinct()
+  local k = C.Stats.Known() or {}
+  local bosses, dungeons = 0, 0
+  for id, v in pairs(counters()) do
+    if type(id) == "string" and type(v) == "number" and v > 0 then
+      if id:match("^e%d+$") then bosses = bosses + 1
+      else
+        local inst = tonumber(id:match("^i(%d+)$"))
+        if inst and k.kind and k.kind[inst] == "party" then dungeons = dungeons + 1 end
+      end
+    end
+  end
+  return bosses, dungeons
+end
+function S:Summaries()
+  local bosses, dungeons = distinct()
+  self:Set("bosses", bosses)
+  self:Set("dungeons_seen", dungeons)
+end
+-- the instance you are in, as GetInstanceInfo says at this moment: name, kind, id. Outside an instance that is the
+-- continent ("Eastern Kingdoms", id 0; "Kalimdor", id 1), so a world boss is filed under its continent, not its zone:
+-- a zone has no instance id of its own, and two zones sharing the continent's would rename it with every kill.
+-- GetRealZoneText names it only where GetInstanceInfo gives no name
+local function instanceNow()
+  local name, kind, _, _, _, _, _, id = C.Get("GetInstanceInfo")
+  if type(name) ~= "string" or name == "" then name = C.Get("GetRealZoneText") end
+  return { name = type(name) == "string" and name or nil, kind = type(kind) == "string" and kind or nil, id = type(id) == "number" and id or nil }
+end
+-- an entry: a dungeon or a raid whose id differs from the last instance this character was in, or the first after a
+-- login (the character left the world). The last one is kept across loading screens, so zoning out and back in, a
+-- wipe's run back, is the same entry; a /reload is never one
+function S:InstanceCheck(initial, reloading)
+  local here = instanceNow()
+  T.inDungeon, T.inRaid = here.kind == "party", here.kind == "raid"
+  local ch = C.Char()
+  if initial and not reloading and not T.leftWorld then T.leftWorld = true; ch.lastInst = nil end
+  if not (T.inDungeon or T.inRaid) or not here.id then return end
+  if reloading then ch.lastInst = here.id; return end
+  if ch.lastInst == here.id then return end
+  ch.lastInst = here.id
+  local id = "i" .. here.id
+  if here.name and C.Stats.Label(id, here.name, true, nil, here.kind) then tell(id) end
+  if C.Stats.byId[id] then self:Bump(id) end
+  if T.inDungeon then self:Bump("dungeons") else self:Bump("raids"); self:Bump("weekly_raids") end
+  self:Summaries()
+end
+-- a boss killed: its count, the first kill's time (kept here, not sent), its label and its instance's
+local function killed(encounter, name, here)
+  local id = "e" .. encounter
+  if not (type(name) == "string" and name ~= "") then name = "Boss " .. encounter end
+  if here.id and here.name then
+    local kind = (here.kind == "party" or here.kind == "raid") and here.kind or "w"
+    if C.Stats.Label("i" .. here.id, here.name, true, nil, kind) then tell("i" .. here.id) end
+  end
+  if C.Stats.Label(id, name, true, here.id) then tell(id) end
+  if not C.Stats.byId[id] then return end -- (the cap)
+  S:Bump(id)
+  local ch = C.Char()
+  ch.firstKill = type(ch.firstKill) == "table" and ch.firstKill or {}
+  if not ch.firstKill[encounter] then ch.firstKill[encounter] = now() end
+  S:Summaries()
+end
+-- ENCOUNTER_END (encounterID, encounterName, difficultyID, groupSize, success): a kill when success is 1. BOSS_KILL
+-- (encounterID, encounterName) counts only where no ENCOUNTER_END for the same encounter came within five seconds
+-- either side, so a kill is never counted twice and a boss the game reports only one way is still counted
+local BOSS_WINDOW = 5
+T.encounterEnd, T.bossKill = {}, {}
+on("ENCOUNTER_END", function(encounter, name, _, _, success)
+  encounter, name, success = C.Plain(encounter), C.Plain(name), C.Plain(success)
+  if type(encounter) ~= "number" or success ~= 1 then return end
+  T.encounterEnd[encounter] = gtime()
+  killed(encounter, name, instanceNow())
+end)
+on("BOSS_KILL", function(encounter, name)
+  encounter, name = C.Plain(encounter), C.Plain(name)
+  if type(encounter) ~= "number" then return end
+  local at, here = gtime(), instanceNow()
+  local function ended() local e = T.encounterEnd[encounter]; return e ~= nil and math.abs(e - at) <= BOSS_WINDOW end
+  if ended() or (T.bossKill[encounter] and at - T.bossKill[encounter] <= BOSS_WINDOW) then return end
+  T.bossKill[encounter] = at
+  C_Timer.After(BOSS_WINDOW, C.Safe(function() if not ended() then killed(encounter, name, here) end end, "sample: boss kill"))
+end)
+-- your factions: the reputation list read once a second at most however many UPDATE_FACTION come; a faction met for
+-- the first time is labelled and told, and every faction's standing is read again
+function S:FactionPass()
+  C.Stats.FactionsClear()
+  local list = C.Stats.Factions()
+  if not list then return end
+  for fid, e in pairs(list) do
+    local id = "f" .. fid
+    if e.name and C.Stats.Label(id, e.name, true) then tell(id) end
+  end
+  for _, def in ipairs(C.Stats.byCat.found) do if def.learned == "rep" then self:Read(def.id) end end
+end
+function S:FactionSoon()
+  if self.factionDue then return end
+  self.factionDue = true
+  C_Timer.After(1, C.Safe(function() S.factionDue = false; S:FactionPass() end, "sample: factions"))
+end
+on("UPDATE_FACTION", function() S:FactionSoon() end)
 
 ----------------------------------------------------------------------------
 -- hooks: the game's own functions, after they run (hooksecurefunc taints nothing)
@@ -506,14 +624,20 @@ function S:Start(initial, reloading)
   local f = CreateFrame("Frame")
   self.frame = f
   f:SetScript("OnEvent", C.Safe(function(_, event, ...)
+    -- a unit event is yours only (RegisterUnitEvent asks for that; a client without it gets every unit's)
+    if event:match("^UNIT_") and C.Plain((...)) ~= "player" then return end
+    -- the client has an item's data now: the gear and bag stats again only when it is one you wear or carry (a chat
+    -- link, another addon or the Legacy window asks about items all the time; Stats.lua keeps the scans' ids)
+    if event == "GET_ITEM_INFO_RECEIVED" and not C.Stats.ItemWanted(C.Plain((...))) then return end
     for _, fn in ipairs(EVENTS[event] or {}) do fn(...) end
   end, "sample: event"))
   for event in pairs(EVENTS) do
     if event == "COMBAT_LOG_EVENT_UNFILTERED" then
       -- never: the client restricts it
-    elseif event:match("^UNIT_") and f.RegisterUnitEvent then
-      -- yours only, not every unit in sight
-      pcall(f.RegisterUnitEvent, f, event, "player")
+    elseif event:match("^UNIT_") then
+      -- yours only, not every unit in sight; where that fails (no RegisterUnitEvent, or it throws) every unit's, and the
+      -- unit check above keeps yours
+      if not pcall(f.RegisterUnitEvent, f, event, "player") then pcall(f.RegisterEvent, f, event) end
     else pcall(f.RegisterEvent, f, event) end
   end
   dayCheck(false)
@@ -538,13 +662,20 @@ function S:Start(initial, reloading)
       if type(name) == "string" and name ~= "" then counters().lc_last = name end
     end
   end
+  -- what the guild learned before: every saved label defines its stat again, the saved records teach the enchants
+  C.Stats.LoadKnown()
   -- load every counter and tracked value into the live table
   for _, def in ipairs(C.Stats.list) do if def.count or def.track then self.values[def.id] = readOne(def); self.at[def.id] = now() end end
+  -- the instance you logged in to, your factions, then every stat
+  self:InstanceCheck(initial, reloading)
+  self:FactionPass()
+  self:Summaries()
   self:ReadAll()
   C_Timer.After(TICK, C.Safe(tick, "sample: tick"))
   C_Timer.After(POLL, C.Safe(poll, "sample: poll"))
   C_Timer.After(HEARTBEAT, C.Safe(heartbeat, "sample: heartbeat"))
   C_Timer.After(60, C.Safe(day, "sample: day"))
+  self:GearSoon()
 end
 
 -- the session's XP, for the pace: across a ding, the rest of the old level counts too

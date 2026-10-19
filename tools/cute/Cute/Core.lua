@@ -1,12 +1,13 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Cute: the guild dashboard of <Cute>. Every member's client reads about a hundred and twenty facts about its own
--- character (Stats.lua), plus the game's own statistics where the client reports them, shares them with the guild
--- on the game's addon channel (Comm.lua), keeps everyone's last known values (Roster.lua) and shows the whole guild
--- in one window (UI.lua). Officers decide, stat by stat, whether members see each other's (Policy.lua). Nothing
--- leaves the guild channel; there is no server.
+-- Cute: the guild dashboard of <Cute>. Every member's client reads about a hundred facts about its own character
+-- (Stats.lua), plus what it meets in play (the bosses it kills, the instances it enters, its factions, the slots it
+-- enchants) and the game's own statistics where the client reports them, shares them with the guild on the game's
+-- addon channel (Comm.lua), keeps everyone's last known values and what the guild has learned (Roster.lua, CuteDB.known)
+-- and shows the whole guild in one window (UI.lua). Officers decide, stat by stat, whether members see each other's
+-- (Policy.lua). Nothing leaves the guild channel; there is no server.
 local ADDON, C = ...
-C.version = "0.3.1"
-C.REGVER = 3 -- the stat registry's wire version (informational: a client ignores ids it does not know)
+C.version = "0.4.0"
+C.REGVER = 4 -- the stat registry's wire version (informational: a client ignores ids it does not know)
 C.COLOR = "|cffe8b24a"
 
 ----------------------------------------------------------------------------
@@ -209,9 +210,14 @@ end
 ----------------------------------------------------------------------------
 -- saved variables
 ----------------------------------------------------------------------------
+-- known: what the guild has learned in play (Stats.lua): what it enchants, by slot and kind of item, the labels of
+-- the bosses, instances and factions it found (and which instance a boss is in, which kind an instance is), the raid
+-- buffs guild mates cast, the standing ranges of the reactions. Kept apart from the roster, so pruning a record loses
+-- none of it
 local DEFAULTS = {
   settings = { columns = {}, density = "normal", offline = true, minimap = true, main = "", sort = {} },
   roster = {}, chars = {}, errors = {},
+  known = { enchant = {}, labels = {}, mine = {}, inst = {}, kind = {}, buffs = {}, reactions = {} },
 }
 local function fill(t, d)
   for k, v in pairs(d) do
@@ -275,7 +281,8 @@ local function errorsList()
   end
 end
 
--- /cute diag: what this client says about you, your gear and the channel's senders, as lines to paste. Values are
+-- /cute diag: what this client says about you, your gear and the channel's senders, and what the guild has learned
+-- (the enchant slots, the labels), as lines to paste. Values are
 -- shown raw: a string quoted with its | doubled (so a Kstring shows its |K...|k), a secret as "secret"
 local function shown(v)
   if issecretvalue and issecretvalue(v) then return "secret" end
@@ -333,6 +340,8 @@ function C.Diag()
     end
     add(string.format("diag slot %d: %s | link %s | %s", slot, returns("GetInventoryItemID", 1, "player", slot), link, returns("GetInventoryItemQuality", 1, "player", slot)))
   end
+  -- what the guild has learned: the enchant slots (how many members were seen with one, the kinds of item), the labels known
+  add("diag " .. C.Stats.KnownReport())
   return lines
 end
 
@@ -346,7 +355,7 @@ SlashCmdList.CUTE = C.Safe(function(msg)
   elseif msg == "api" then C.Print(C.Stats.GameReport()); C.Print(C.ApiReport())
   elseif msg == "diag" then for _, l in ipairs(C.Diag()) do C.Print(l) end
   elseif msg == "help" then
-    C.Print("/cute opens the dashboard. /cute settings, /cute me, /cute resend, /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them).")
+    C.Print("/cute opens the dashboard. /cute settings, /cute me, /cute resend, /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them, and what the guild has learned).")
   else C.UI:Toggle() end
 end, "slash")
 
