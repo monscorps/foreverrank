@@ -21,13 +21,18 @@ local api = C.Api
 ----------------------------------------------------------------------------
 local function counters() return C.Char().counters end
 function S:Counter(id) return counters()[id] or 0 end
+-- the window hears of a change only where it shows the stat and its text changed (UI.lua), so the five-second ticker
+-- that moves time played and the session draws nothing on a page that does not show them
+local function shown(id, old, new) if C.UI and C.UI.ValueChanged then C.UI:ValueChanged(id, old, new) end end
 function S:Set(id, v)
-  if self.values[id] == v then return end
+  local old = self.values[id]
+  if old == v then return end
   local def = C.Stats.byId[id]
   if def and (def.count or def.track) then counters()[id] = v end
   self.values[id], self.at[id], self.err[id] = v, now(), nil
   self.dirty[id] = true
   self:Changed()
+  shown(id, old, v)
 end
 function S:Bump(id, n)
   self:Set(id, (self:Counter(id) or 0) + (n or 1))
@@ -61,14 +66,17 @@ function S:Read(id)
   if not def then return end
   local v, err = readOne(def)
   self.err[id] = err
-  if not same(self.values[id], v) then
+  local old = self.values[id]
+  if not same(old, v) then
     self.values[id], self.at[id] = v, now()
     self.dirty[id] = true
     self:Changed()
+    shown(id, old, v)
   elseif self.at[id] == nil then self.at[id] = now() end
 end
 
 function S:ReadAll()
+  C.Stats.GearClear()
   for _, def in ipairs(C.Stats.list) do self:Read(def.id) end
 end
 
@@ -370,7 +378,7 @@ on("PLAYER_ENTERING_WORLD", function()
   T.inDungeon, T.inRaid = kind == "party", kind == "raid"
 end)
 on("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellId)
-  if unit ~= "player" then return end
+  if C.Plain(unit) ~= "player" then return end
   spellId = C.Plain(spellId)
   if spellId == 8690 then
     S:Bump("hearths")
@@ -426,10 +434,8 @@ end)
 ----------------------------------------------------------------------------
 -- hooks: the game's own functions, after they run (hooksecurefunc taints nothing)
 ----------------------------------------------------------------------------
-local function isMe(who)
-  local me, short = C.Me()
-  return type(who) == "string" and (who == me or who == short or C.Short(who) == short)
-end
+-- your own line: the event's GUID where it gives one, else the name (Roster.lua knows your names, both words on Forever)
+local function isMe(who, guid) return C.Roster:IsMe(who, guid) end
 local function hooks()
   if not hooksecurefunc then return end
   if DoEmote then
@@ -447,9 +453,9 @@ local function hooks()
     for _, id in ipairs({ "emotes", "dance", "sit" }) do
       C.Stats.byId[id].hint = "counted from your lines in the emote chat, which is secret in dungeons and raids: none count there"
     end
-    on("CHAT_MSG_TEXT_EMOTE", function(text, who)
+    on("CHAT_MSG_TEXT_EMOTE", function(text, who, _, _, _, _, _, _, _, _, _, guid)
       text, who = C.Plain(text), C.Plain(who)
-      if not isMe(who) then return end
+      if not isMe(who, guid) then return end
       S:Bump("emotes")
       if type(text) == "string" then
         local t = text:lower()
@@ -518,6 +524,8 @@ function S:Start(initial, reloading)
   T.lastXP, T.lastMax = C.Num("UnitXP", "player"), C.Num("UnitXPMax", "player")
   if not reloading then S:Bump("logins") end
   S:Set("last_login", now())
+  -- your GUID, for the full record only (Stats.lua's hidden stat): set, not marked to send
+  self.values.guid = C.MyGUID()
   -- the game says how long you have played; its chat line is the price
   if RequestTimePlayed then pcall(RequestTimePlayed) end
   -- the game's statistics, where this client reports them

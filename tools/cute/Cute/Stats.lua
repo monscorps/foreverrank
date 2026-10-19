@@ -18,7 +18,9 @@
 --   hint      a line for the tooltip saying how it is measured
 --   game      for a statistics stat: the game's category id, which the visibility policy is set by ("gc" .. id)
 -- Every client API here is in Forever's generated API docs, is read by QuestBank on this client (GetInventoryItemLink),
--- or is called by Blizzard's own Camelot UI code: GetInventoryItemDurability and GetInventoryItemCount by the Camelot
+-- or is called by Blizzard's own Camelot UI code: GetInventoryItemID and GetInventoryItemQuality by Forever's own
+-- character sheet (Blizzard_UIPanels_Game/Camelot/PaperDollFrame.lua:2219-2221, PaperDollItemSlotButton_Update),
+-- GetInventoryItemDurability and GetInventoryItemCount by the Camelot
 -- equipment flyout through EquipmentManager_GetItemInfoByLocation (Blizzard_FrameXML/Camelot/EquipmentFlyout.lua:544),
 -- GetNumUnspentTalents by the mainline TalentFrameBase.lua the camelot game type loads, GetCategoryList, GetCategoryInfo,
 -- GetCategoryNumAchievements and GetAchievementInfo by Blizzard_LegacySystem (Forever's achievement UI, which loads on
@@ -64,10 +66,6 @@ local Get, Num, api = C.Get, C.Num, C.Api
 local function money() return Num("GetMoney") end
 
 local function itemCount(id) return Num(api("C_Item", "GetItemCount"), id) or 0 end
-local function invLink(slot) local l = Get("GetInventoryItemLink", "player", slot); return type(l) == "string" and l or nil end
-local function linkEnchant(link) return link and tonumber(link:match("item:%d+:(%d*)")) or 0 end
-local function itemLevelOf(link) return link and Num(api("C_Item", "GetDetailedItemLevelInfo"), link) or nil end
-local function itemQuality(link) return link and Num(api("C_Item", "GetItemQualityByID"), link) or nil end
 -- the seventeen gear slots the game shows (no shirt, tabard, ammo)
 local GEAR = { 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18 }
 local SLOT = { [1] = "Head", [2] = "Neck", [3] = "Shoulder", [5] = "Chest", [6] = "Waist", [7] = "Legs", [8] = "Feet", [9] = "Wrist",
@@ -77,20 +75,76 @@ local SLOT_OF = {}
 for _, s in ipairs(GEAR) do SLOT_OF[#SLOT_OF + 1] = { s, SLOT[s] } end
 -- the slots an enchant goes on at 60
 local ENCHANTABLE = { [1] = true, [3] = true, [5] = true, [7] = true, [8] = true, [9] = true, [10] = true, [15] = true, [16] = true, [17] = true }
-local function slotSet(test)
-  local out = {}
-  for _, s in ipairs(GEAR) do if test(s, invLink(s)) then out[s] = true end end
+
+-- the gear you wear, slot by slot, read the way Forever's own character sheet reads it (Camelot/PaperDollFrame.lua,
+-- PaperDollItemSlotButton_Update): GetInventoryItemID says what is in a slot, GetInventoryItemQuality its quality.
+-- The item level comes from the id, C_Item.GetDetailedItemLevelInfo (documented; its ItemInfo argument takes an id, a
+-- name or a link), else C_Item.GetItemInfo's fourth return (an item the client has not cached yet reads nothing from
+-- the first). The link is read for the enchant alone, and only when it is a plain string: on this client
+-- GetInventoryItemLink gives nothing readable for most slots (0.3.0 showed 15 of 17 slots empty and no item level on
+-- a character in full gear), so a stat that needs it says so instead of counting wrong. One scan serves every gear
+-- stat read in the same frame; ReadAll starts a fresh one.
+local gearCache, gearAt
+function S.GearClear() gearCache = nil end
+-- a call about a slot of yours: its value made plain, whether the client gave anything (a secret counts), the error.
+-- The secret is asked about first: a value that may be one is never compared, not even with nil (Core.lua)
+local function slotCall(name, slot)
+  local fn = _G[name]
+  if type(fn) ~= "function" then C.Missing(name); return nil, false, C.lastErr end
+  local ok, v = pcall(fn, "player", slot)
+  if not ok then return nil, false, tostring(v) end
+  if issecretvalue and issecretvalue(v) then return nil, true end
+  return v, v ~= nil
+end
+local function gear()
+  local now = (GetTime and GetTime()) or 0
+  if gearCache and gearAt == now then return gearCache end
+  local out = { slot = {}, worn = 0, unreadable = 0, noLevel = 0, noQuality = 0 }
+  local detailed, info, qualityById = api("C_Item", "GetDetailedItemLevelInfo"), api("C_Item", "GetItemInfo"), api("C_Item", "GetItemQualityByID")
+  for _, s in ipairs(GEAR) do
+    local id, there, err = slotCall("GetInventoryItemID", s)
+    if err then C.lastErr = err; return nil end
+    if there then
+      local e = { id = type(id) == "number" and id or nil }
+      out.worn = out.worn + 1
+      if e.id then
+        e.level = detailed and Num(detailed, e.id) or nil
+        if not e.level and info then local r = { Get(info, e.id) }; e.level = type(r[4]) == "number" and r[4] or nil end
+      end
+      if not e.level then out.noLevel = out.noLevel + 1 end
+      local q = slotCall("GetInventoryItemQuality", s)
+      if type(q) ~= "number" and e.id and qualityById then q = Num(qualityById, e.id) end
+      e.quality = type(q) == "number" and q or nil
+      if not e.quality then out.noQuality = out.noQuality + 1 end
+      local link = slotCall("GetInventoryItemLink", s)
+      e.link = (type(link) == "string" and link ~= "" and not C.IsKstring(link)) and link or nil
+      if not e.link then out.unreadable = out.unreadable + 1 end
+      out.slot[s] = e
+    end
+  end
+  gearCache, gearAt = out, now
   return out
 end
--- the item level of what you wear, averaged over the slots with an item in them (this client has no
--- GetAverageItemLevel; C_Item.GetDetailedItemLevelInfo is documented and QuestBank reads it); nil with nothing worn
+local function linkEnchant(link) return tonumber(link:match("item:%d+:(%d*)")) or 0 end
+-- the slots for which test(slot, item) holds (item nil for an empty slot); nil, with the reason, when the scan failed
+local function slotSet(test)
+  local g = gear()
+  if not g then return nil end
+  local out = {}
+  for _, s in ipairs(GEAR) do if test(s, g.slot[s]) then out[s] = true end end
+  return out
+end
+-- the item level of what you wear, averaged over the worn slots whose level reads (this client has no
+-- GetAverageItemLevel); nil with nothing worn, or with the reason when no worn item's level reads
 local function avgItemLevel()
+  local g = gear()
+  if not g then return nil end
   local sum, n = 0, 0
-  for _, s in ipairs(GEAR) do
-    local l = itemLevelOf(invLink(s))
-    if l then sum, n = sum + l, n + 1 end
+  for _, e in pairs(g.slot) do if e.level then sum, n = sum + e.level, n + 1 end end
+  if n == 0 then
+    if g.worn > 0 then C.lastErr = string.format("no item level reads for the %d items worn", g.worn) end
+    return nil
   end
-  if n == 0 then return nil end
   return sum / n
 end
 
@@ -445,23 +499,39 @@ D("ready", "Ready", "prog", { fmt = readyOf, on = { "PLAYER_EQUIPMENT_CHANGED", 
     if not gaps then return nil end
     return #gaps == 0 and 2 or (#gaps <= 2 and 1 or 0)
   end })
-D("ilvl", "Item level", "prog", { read = function() local avg = avgItemLevel(); return avg and math.floor(avg) or nil end, on = "PLAYER_EQUIPMENT_CHANGED",
+local GEAR_ON = { "PLAYER_EQUIPMENT_CHANGED", "GET_ITEM_INFO_RECEIVED" }
+D("ilvl", "Item level", "prog", { read = function() local avg = avgItemLevel(); return avg and math.floor(avg) or nil end, on = GEAR_ON,
   hint = "the average over the items you wear" })
-D("ilvl_slots", "Item level per slot", "prog", { kind = "list", of = SLOT_OF, on = "PLAYER_EQUIPMENT_CHANGED", hint = "slots at or above your average", read = function()
-  local avg = avgItemLevel() or 0
-  return slotSet(function(_, link) local l = itemLevelOf(link); return l ~= nil and l >= avg end)
+D("ilvl_slots", "Item level per slot", "prog", { kind = "list", of = SLOT_OF, on = GEAR_ON, hint = "slots at or above your average", read = function()
+  local avg = avgItemLevel()
+  if not avg then return nil end
+  return slotSet(function(_, e) return e ~= nil and e.level ~= nil and e.level >= avg end)
 end })
 D("empty_slots", "Empty slots", "prog", { kind = "list", of = SLOT_OF, default = "self", on = "PLAYER_EQUIPMENT_CHANGED",
-  read = function() return slotSet(function(s, link) return link == nil and s ~= 17 and s ~= 18 end) end })
-D("unenchanted", "Unenchanted", "prog", { kind = "list", of = SLOT_OF, default = "self", on = "PLAYER_EQUIPMENT_CHANGED",
-  read = function() return slotSet(function(s, link) return ENCHANTABLE[s] and link ~= nil and linkEnchant(link) == 0 end) end })
-D("old_gear", "Gear 10+ levels old", "prog", { kind = "list", of = SLOT_OF, default = "self", on = { "PLAYER_EQUIPMENT_CHANGED", "PLAYER_LEVEL_UP" }, read = function()
-  local lvl = Num("UnitLevel", "player") or 1
-  return slotSet(function(_, link) local l = itemLevelOf(link); return l ~= nil and l < lvl - 10 end)
+  read = function() return slotSet(function(s, e) return e == nil and s ~= 17 and s ~= 18 end) end })
+-- the enchant is in the link alone: where a worn slot that takes one gives no readable link, the count would be wrong,
+-- so the stat reads nil and its tooltip says why
+D("unenchanted", "Unenchanted", "prog", { kind = "list", of = SLOT_OF, default = "self", on = GEAR_ON, read = function()
+  local g = gear()
+  if not g then return nil end
+  local blind = 0
+  for s in pairs(ENCHANTABLE) do local e = g.slot[s]; if e and not e.link then blind = blind + 1 end end
+  if blind > 0 then
+    C.lastErr = string.format("the client gives no readable item link for %d worn slot%s that take%s an enchant, so enchants cannot be read", blind, blind == 1 and "" or "s", blind == 1 and "s" or "")
+    return nil
+  end
+  return slotSet(function(s, e) return ENCHANTABLE[s] and e ~= nil and linkEnchant(e.link) == 0 end)
 end })
-D("greens", "Green items worn", "prog", { default = "self", on = "PLAYER_EQUIPMENT_CHANGED", read = function()
+D("old_gear", "Gear 10+ levels old", "prog", { kind = "list", of = SLOT_OF, default = "self", on = { "PLAYER_EQUIPMENT_CHANGED", "PLAYER_LEVEL_UP", "GET_ITEM_INFO_RECEIVED" }, read = function()
+  local lvl = Num("UnitLevel", "player") or 1
+  return slotSet(function(_, e) return e ~= nil and e.level ~= nil and e.level < lvl - 10 end)
+end })
+D("greens", "Green items worn", "prog", { default = "self", on = GEAR_ON, read = function()
+  local g = gear()
+  if not g then return nil end
+  if g.worn > 0 and g.noQuality == g.worn then C.lastErr = "no item quality reads for the items worn"; return nil end
   local n = 0
-  for _, s in ipairs(GEAR) do local q = itemQuality(invLink(s)); if q ~= nil and q <= 2 then n = n + 1 end end
+  for _, e in pairs(g.slot) do if e.quality ~= nil and e.quality <= 2 then n = n + 1 end end
   return n
 end })
 -- attunements and keys. Quest ids are Classic's; Forever's uploads will correct them
@@ -600,6 +670,16 @@ D("role", "Role", "officer", { kind = "text", read = function() return C.Char().
 D("last_login", "Last login", "officer", { track = true, hint = "epoch seconds", default = "all" })
 D("raid_spec", "Raid spec set", "officer", { kind = "flag", read = function() return C.Char().raidspec == true end, hint = "ticked by you in Settings, per character" })
 D("weekly_raids", "Raids this week", "officer", { track = true, hint = "raid instances entered since Monday" })
+
+----------------------------------------------------------------------------
+-- hidden: your character's GUID, never shown. It goes first in every full record so a receiver can join the record to
+-- the guild roster's member with the same GUID (names are no key on Forever: two words, a Kstring at times; Core.lua)
+-- and drop a record whose GUID is its own (the game hands a guild addon message back to its sender too). Kept out of
+-- S.list and the categories, so no page, column, checklist, policy pair or the web page lists it; Sample sets it at
+-- login, Comm sends it with the full record, a receiver decodes it like any text stat (up to 40 characters)
+----------------------------------------------------------------------------
+S.HIDDEN = { guid = { id = "guid", label = "Character GUID", cat = "hidden", kind = "text", max = 40, default = "all", hidden = true } }
+S.byId.guid = S.HIDDEN.guid
 
 ----------------------------------------------------------------------------
 -- the game's statistics: a dynamic category, defined at login from what the client reports

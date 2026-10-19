@@ -11,7 +11,10 @@
 --   Officers       summaries, the officers' stats, the controls (officer ranks only)
 --   Me             your whole record, with what members see
 -- Columns and cards come from the registry (Stats.lua); the policy (Policy.lua) decides which cells a member sees.
--- Built on first open, rows are pooled, nothing updates while it is hidden.
+-- Built on first open; nothing updates while it is hidden. A guild of a few hundred stays light: the tables and the
+-- Statistics ranking draw only the rows in view (a virtual list, filled as you scroll, the sorted list kept between
+-- scrolls), a redraw comes at most once a second and only for a value the open page shows, and a label's cut is
+-- measured once per text and width.
 local _, C = ...
 local UI = { page = "race", sort = {}, gameOpen = {} }
 C.UI = UI
@@ -35,7 +38,6 @@ local BG = { 0.035, 0.035, 0.035 }
 local PANEL = { 0.07, 0.07, 0.07 }
 local PANEL2 = { 0.11, 0.11, 0.11 }
 local LINE = { 0.2, 0.2, 0.2 }
-local BLACK = { 0, 0, 0 }
 local FLAT = "Interface\\Buttons\\WHITE8x8"
 local LOGO = "Interface\\AddOns\\Cute\\art\\logo.png"
 local LOGO_WIDE = "Interface\\AddOns\\Cute\\art\\logo_wide.png"
@@ -93,6 +95,7 @@ local function line(parent, c)
 end
 local function text(parent, size, c, justify, width)
   local fs = parent:CreateFontString(nil, "OVERLAY")
+  fs.cuteSize = size or 12 -- (fitText's cache is per size)
   fs:SetFontObject(GameFontNormal)
   -- SetFont says whether the file was found; the font object's own face stays otherwise
   if fs:SetFont(FONT, size or 12, "") == false then fs:SetFontObject(GameFontNormal) end
@@ -148,25 +151,51 @@ local function tooltip(owner, fill)
   end, "tooltip"))
   owner:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
--- a label cut after a whole word with "..." when it is wider than its box
+-- a label cut after a whole word with "..." when it is wider than its box; true when it fit whole. The cut is kept per font size, width and
+-- text, so a redraw sets each label once and measures nothing it measured before. Text with a Kstring in it (a name
+-- the client encodes, Core.lua) is cut at words only, never inside the escape; the box clips the rest
+local fitCache, fitCount = {}, 0
 local function fitText(fs, s, room)
-  room = room or (fs:GetWidth() - 4)
+  room = math.floor(room or ((fs:GetWidth() or 0) - 4))
+  s = s == nil and "" or tostring(s)
+  if s == "" then fs:SetText(s); return true end
+  local key = (fs.cuteSize or 12) .. ":" .. room
+  local byText = fitCache[key]
+  if not byText then
+    if fitCount > 4000 then fitCache, fitCount = {}, 0 end
+    byText = {}
+    fitCache[key] = byText
+  end
+  local done = byText[s]
+  if done then fs:SetText(done); return done == s end
+  fitCount = fitCount + 1
   local width = fs.GetUnboundedStringWidth or fs.GetStringWidth
+  local result, shown = s, s
   fs:SetText(s)
-  if width(fs) <= room then return end
-  local cut = s
-  while true do
-    local shorter = cut:match("^(.*%S)%s+%S+$")
-    if not shorter then break end
-    cut = shorter
-    fs:SetText(cut .. "...")
-    if width(fs) <= room then return end
+  if width(fs) > room then
+    -- (no glyph is under two pixels wide, so a long text starts from what could fit at most)
+    local cut = (#s > room / 2 + 8 and not C.IsKstring(s)) and s:sub(1, math.floor(room / 2) + 8) or s
+    result = nil
+    while true do
+      local shorter = cut:match("^(.*%S)%s+%S+$")
+      if not shorter then break end
+      cut = shorter
+      shown = cut .. "..."
+      fs:SetText(shown)
+      if width(fs) <= room then result = shown; break end
+    end
+    while not result and #cut > 1 and not C.IsKstring(cut) do
+      cut = cut:sub(1, -2)
+      shown = cut .. "..."
+      fs:SetText(shown)
+      if width(fs) <= room then result = shown end
+    end
+    -- a Kstring no word cut fits stays whole and the box clips it; the label shows what is kept, first draw or later
+    if not result then result = (C.IsKstring(cut) and cut == s) and s or (cut .. "...") end
+    if result ~= shown then fs:SetText(result) end
   end
-  while #cut > 1 do
-    cut = cut:sub(1, -2)
-    fs:SetText(cut .. "...")
-    if width(fs) <= room then return end
-  end
+  byText[s] = result
+  return result == s
 end
 UI.FitText = fitText
 
@@ -182,6 +211,57 @@ local function pool(parent, make)
   function p:Reset() self.used = 0 end
   function p:HideRest() for i = self.used + 1, #self.items do self.items[i]:Hide() end end
   return p
+end
+
+-- a list drawn only where it shows: of n items, item i sits at top + (i - 1) * h in the scroll child, and only the
+-- ones in view, with MARGIN more either side, get a widget. Widget k holds the items i with (i - 1) % size == k - 1, so
+-- a scroll of a row or two fills a row or two, not the screen. Set gives new contents (every widget fills again as it
+-- shows); Show draws the window at a scroll offset; Refill draws one item again where it shows
+local MARGIN = 4
+local function virtual(parent, make)
+  local v = { items = {}, n = 0, size = 0, gen = 0 }
+  function v:Set(n, top, h, fill) self.n, self.top, self.h, self.fill = n, top, h, fill; self.gen = self.gen + 1 end
+  function v:Clear()
+    self.n = 0
+    for _, w in ipairs(self.items) do if w:IsShown() then w:Hide() end end
+  end
+  function v:Show(offset, view)
+    local h = self.h
+    if self.n == 0 or not h or h <= 0 then self:Clear(); return 0 end
+    local size = math.ceil(view / h) + 2 * MARGIN + 1
+    if size ~= self.size then
+      for _, w in ipairs(self.items) do w.idx = nil; if w:IsShown() then w:Hide() end end
+      self.size = size
+    end
+    local first = math.max(1, math.floor((offset - self.top) / h) + 1 - MARGIN)
+    local last = math.min(self.n, first + size - 1)
+    local filled = 0
+    for i = first, last do
+      local k = (i - 1) % size + 1
+      local w = self.items[k]
+      if not w then w = make(parent); self.items[k] = w end
+      if w.idx ~= i or w.gen ~= self.gen then
+        self.fill(w, i, self.top + (i - 1) * h)
+        w.idx, w.gen = i, self.gen
+        filled = filled + 1
+      end
+      if not w:IsShown() then w:Show() end
+    end
+    for k = 1, size do
+      local w = self.items[k]
+      if w and (w.idx == nil or w.idx < first or w.idx > last) and w:IsShown() then w:Hide() end
+    end
+    self.first, self.last = first, last
+    return filled
+  end
+  function v:Refill(i)
+    if not self.size or self.size == 0 or i > self.n then return end
+    local w = self.items[(i - 1) % self.size + 1]
+    if not w or w.idx ~= i then return end
+    -- in view: filled now; out of it: filled when it comes back
+    if w.gen == self.gen and w:IsShown() then self.fill(w, i, self.top + (i - 1) * self.h) else w.idx = nil end
+  end
+  return v
 end
 
 -- ScrollFrame with a child and a thin flat bar, above the footer line
@@ -205,7 +285,8 @@ local function scrollArea(parent)
   bar:SetMinMaxValues(0, 0)
   bar:SetValueStep(1)
   bar:SetValue(0)
-  bar:SetScript("OnValueChanged", function(_, v) sf:SetVerticalScroll(v) end)
+  -- a scroll draws the rows that come into view and nothing else (UI:OnScroll)
+  bar:SetScript("OnValueChanged", function(_, v) sf:SetVerticalScroll(v); UI:OnScroll() end)
   sf:EnableMouseWheel(true)
   sf:SetScript("OnMouseWheel", function(_, delta)
     local lo, hi = bar:GetMinMaxValues()
@@ -213,10 +294,15 @@ local function scrollArea(parent)
   end)
   sf:SetScript("OnSizeChanged", function(_, w) if w and w > 0 then child:SetWidth(w) end end)
   sf.child, sf.bar = child, bar
-  function sf:SetContentHeight(h)
-    child:SetHeight(math.max(h, 1))
+  -- the height in view
+  function sf:View()
     local view = self:GetHeight() or 0
     if view < 50 then view = (UI.frame:GetHeight() or H) - HEAD - TABS - FOOT - 32 end
+    return view
+  end
+  function sf:SetContentHeight(h)
+    child:SetHeight(math.max(h, 1))
+    local view = self:View()
     local max = math.max(0, h - view)
     bar:SetMinMaxValues(0, max)
     bar:SetShown(max > 0)
@@ -434,13 +520,24 @@ function UI:Build()
   self.footer:SetPoint("BOTTOMLEFT", 10, 6)
   self.footer:SetPoint("BOTTOMRIGHT", -40, 6)
   self.footer:SetHeight(12)
-  self.rows = pool(self.scroll.child, function(parent) return UI:MakeRow(parent) end)
+  -- the members' rows and the Statistics page's two columns are virtual lists: widgets for what is in view only
+  self.rows = virtual(self.scroll.child, function(parent) return UI:MakeRow(parent) end)
   self.cards = pool(self.scroll.child, function(parent) return UI:MakeCard(parent) end)
   self.labels = pool(self.scroll.child, function(parent) return text(parent, 12, INK) end)
   self.buttons = pool(self.scroll.child, function(parent) return button(parent, "", 160) end)
   self.checks = pool(self.scroll.child, function(parent) return check(parent) end)
-  self.lines = pool(self.scroll.child, function(parent) return UI:MakeLine(parent) end)
-  self.header = CreateFrame("Frame", nil, self.scroll.child)
+  self.catLines = virtual(self.scroll.child, function(parent) return UI:MakeLine(parent) end)
+  self.lines = virtual(self.scroll.child, function(parent) return UI:MakeLine(parent) end)
+  -- the band: a strip above the scroll area for what stays in view while the rows scroll (a table's column header,
+  -- the officers' summary, the Statistics page's headings); UI:SetBand gives it its height and moves the scroll area
+  self.band = CreateFrame("Frame", nil, self.content)
+  self.band:SetPoint("TOPLEFT", 8, -8)
+  self.band:SetPoint("TOPRIGHT", -18, -8)
+  self.band:SetHeight(1)
+  self.band:Hide()
+  self.bandLabels = pool(self.band, function(parent) return text(parent, 12, INK) end)
+  self.bandButtons = pool(self.band, function(parent) return button(parent, "", 160) end)
+  self.header = CreateFrame("Frame", nil, self.band)
   self.header:SetPoint("TOPLEFT")
   self.header:SetHeight(ROW)
   self.headerLine = line(self.header)
@@ -499,12 +596,56 @@ function UI:Open(page)
   self.page = page
   if not self.frame:IsShown() then self.frame:Show() else self:Draw() end
 end
--- a redraw, once a second at most, so a burst of guild messages does not draw twenty times
+-- a redraw, at most one a second while the window shows and none while it is hidden (it draws as it opens), so a
+-- burst of guild messages or roster events draws once
+local function clock() return (GetTime and GetTime()) or 0 end
 function UI:Refresh()
   if not (self.frame and self.frame:IsShown()) or self.drawing then return end
   if self.refreshing then return end
   self.refreshing = true
-  C_Timer.After(1, C.Safe(function() UI.refreshing = false; if UI.frame:IsShown() then UI:Draw() end end, "refresh"))
+  local wait = math.min(1, math.max(0.05, 1 - (clock() - (self.drawnAt or -10))))
+  C_Timer.After(wait, C.Safe(function() UI.refreshing = false; if UI.frame:IsShown() then UI:Draw() end end, "refresh"))
+end
+-- one of your own values changed (Sample.lua): nothing to do unless the open page shows it and its text changed. On a
+-- table page your row is the first and moves nowhere, so only it is filled again, once a second at most
+function UI:ValueChanged(id, old, new)
+  if not (self.frame and self.frame:IsShown()) or self.drawing then return end
+  if not (self.shownIds and self.shownIds[id]) then return end
+  local def = C.Stats.byId[id]
+  if def and UI.Format(def, old) == UI.Format(def, new) then return end
+  if self.page == "race" or self.page == "prog" or self.page == "officers" then
+    if self.mineDue or self.refreshing then return end
+    self.mineDue = true
+    C_Timer.After(1, C.Safe(function()
+      UI.mineDue = false
+      if UI.frame:IsShown() and UI.rows.n > 0 then UI.rows:Refill(1) end
+    end, "refresh: your row"))
+  else self:Refresh() end
+end
+-- values from a member's addon (Roster.lua): a new member (the status line counts them), or a value the open page
+-- shows of the members (the Me page shows only yours), draws again
+function UI:Arrived(kv, created)
+  if not (self.frame and self.frame:IsShown()) or self.refreshing then return end
+  if created then self:Refresh() return end
+  if self.page == "me" then return end
+  local ids = self.shownIds
+  if not ids then return end
+  for id in pairs(kv) do if ids[id] then self:Refresh() return end end
+end
+-- the scroll moved: the virtual lists draw the rows that came into view, from the lists the last Draw sorted
+-- the band's height (0 hides it); the scroll area and its bar start under it
+function UI:SetBand(h)
+  if self.bandH == h then return end
+  self.bandH = h
+  self.band:SetHeight(math.max(h, 1))
+  self.band:SetShown(h > 0)
+  self.scroll:SetPoint("TOPLEFT", 8, -8 - h)
+  self.scroll.bar:SetPoint("TOPRIGHT", -7, -8 - h)
+end
+
+function UI:OnScroll()
+  if self.drawing or not self.virtual then return end
+  self.virtual()
 end
 
 ----------------------------------------------------------------------------
@@ -643,11 +784,10 @@ local function fillCell(c, def, row, hidden, w)
     c.label:SetText("")
     for k = 1, math.min(#v, def.pips or 13) do
       local p = c.pips[k]
-      if not p then p = flat(c, "ARTWORK", WHITE, 1); p:SetSize(5, 10); c.pips[k] = p end
+      if not p then p = flat(c, "ARTWORK", WHITE, 1); p:SetSize(5, 10); p:SetPoint("LEFT", 4 + (k - 1) * 7, 0); c.pips[k] = p end
       local d = tonumber(v:sub(k, k)) or 0
       local col = PIP[d] or PIP[0]
       p:SetColorTexture(col[1], col[2], col[3], 1)
-      p:SetPoint("LEFT", 4 + (k - 1) * 7, 0)
       p:Show()
     end
     return
@@ -671,47 +811,63 @@ end
 ----------------------------------------------------------------------------
 -- pages
 ----------------------------------------------------------------------------
+-- the members in a page's order: you, then those with the addon by the sorted column (unreported values last), then
+-- those without it online, then those without it offline, so a big guild's first screen is the members who report.
+-- Each row's sort value is worked out once, not in every comparison
 local function sortRows(rows, page)
   local s = UI.sort[page]
-  if not s or not s.id then
-    if page == "race" then s = { id = "level", desc = true } else return end
+  if not s or not s.id then s = page == "race" and { id = "level", desc = true } or nil end
+  local def = s and C.Stats.byId[s.id]
+  for _, r in ipairs(rows) do
+    r.tier = r.me and 0 or (r.addon and 1 or (r.online and 2 or 3))
+    local v
+    if s then
+      -- (the guild roster still knows the level and zone of a member without the addon)
+      if r.addon then v = r.stats[s.id] else v = (s.id == "level" and r.level) or (s.id == "zone" and r.zone) or nil end
+      if def and def.kind == "list" then v = listCount(def, v)
+      elseif def and def.kind == "pips" then v = type(v) == "string" and select(2, v:gsub("2", "")) or nil end
+      if type(v) == "boolean" then v = v and 1 or 0 end
+      if type(v) ~= "number" and type(v) ~= "string" then v = nil end
+    end
+    r.sv = v
+    r.sx = (s and s.id == "level" and r.addon and type(r.stats.xp) == "number") and r.stats.xp or nil
   end
-  local def = C.Stats.byId[s.id]
+  local desc = s and s.desc
   table.sort(rows, function(a, b)
-    if a.me ~= b.me then return a.me end
-    local va, vb = a.stats[s.id], b.stats[s.id]
-    if def and def.kind == "list" then va, vb = listCount(def, va), listCount(def, vb) end
-    if def and def.kind == "pips" then va, vb = type(va) == "string" and select(2, va:gsub("2", "")) or nil, type(vb) == "string" and select(2, vb:gsub("2", "")) or nil end
-    if type(va) == "boolean" then va = va and 1 or 0 end
-    if type(vb) == "boolean" then vb = vb and 1 or 0 end
-    if va == nil and vb == nil then return a.short < b.short end
-    if va == nil then return false end
-    if vb == nil then return true end
+    if a.tier ~= b.tier then return a.tier < b.tier end
+    local va, vb = a.sv, b.sv
+    if va == nil or vb == nil then
+      if va ~= nil then return true end
+      if vb ~= nil then return false end
+      if not s and a.online ~= b.online then return a.online end
+      return a.sort < b.sort
+    end
     if type(va) ~= type(vb) then va, vb = tostring(va), tostring(vb) end
     if va == vb then
-      if s.id == "level" and type(a.stats.xp) == "number" and type(b.stats.xp) == "number" and a.stats.xp ~= b.stats.xp then
-        if s.desc then return a.stats.xp > b.stats.xp else return a.stats.xp < b.stats.xp end
-      end
-      return a.short < b.short
+      local xa, xb = a.sx, b.sx
+      if xa and xb and xa ~= xb then if desc then return xa > xb else return xa < xb end end
+      return a.sort < b.sort
     end
-    if s.desc then return va > vb else return va < vb end
+    if desc then return va > vb else return va < vb end
   end)
 end
 
--- the members a page lists: everyone, or the online ones and you when offline members are hidden
+-- the members a page lists: everyone, or the online ones and you when offline members are hidden (a copy: the page
+-- sorts it)
 local function rowsShown()
-  local rows = C.Roster:Rows()
-  if C.Settings().offline then return rows end
-  local kept = {}
-  for _, r in ipairs(rows) do if r.online or r.me then kept[#kept + 1] = r end end
-  return kept
+  local all, out = C.Roster:Rows(), {}
+  local offline = C.Settings().offline
+  for _, r in ipairs(all) do if offline or r.online or r.me then out[#out + 1] = r end end
+  return out
 end
 
--- a table page: the header row and one row per member. y0: room above it the page used already (the officers' lines)
+-- a table page: the header row and one row per member, virtual (only the rows in view have widgets; Draw and the
+-- scroll call self.virtual). y0: room above it the page used already (the officers' lines)
 function UI:DrawTable(page, y0)
   y0 = y0 or 0
   local sf = self.scroll
-  local room = sf:Width() - NAME_W - 8
+  local width = sf:Width()
+  local room = width - NAME_W - 8
   local cols, hidden = columnsFor(page, room)
   local officer = C.Roster:MeOfficer()
   local rows = rowsShown()
@@ -720,7 +876,7 @@ function UI:DrawTable(page, y0)
   self.header:Show()
   self.header:ClearAllPoints()
   self.header:SetPoint("TOPLEFT", 0, -y0)
-  self.header:SetWidth(sf:Width())
+  self.header:SetWidth(width)
   self.headerCells:Reset()
   local hc = self.headerCells:Get()
   hc:SetPoint("LEFT", 0, 0)
@@ -731,6 +887,7 @@ function UI:DrawTable(page, y0)
   color(hc.label, DIM)
   local sorted = self.sort[page] or (page == "race" and { id = "level" }) or {}
   local x = NAME_W
+  local sig = {}
   for _, col in ipairs(cols) do
     local h = self.headerCells:Get()
     h:SetPoint("LEFT", x, 0)
@@ -740,47 +897,63 @@ function UI:DrawTable(page, y0)
     fitText(h.label, shortLabel(col.def), col.w - 8)
     color(h.label, sorted.id == col.def.id and WHITE or DIM)
     x = x + col.w
+    sig[#sig + 1] = col.def.id
+    self.shownIds[col.def.id] = true
   end
+  if sorted.id then self.shownIds[sorted.id] = true end
   self.headerCells:HideRest()
-  -- rows
-  self.rows:Reset()
-  local y = y0 + ROW + 2
+  -- rows: the cells are placed again only when the columns, the width or the row height change
   local rowH = C.Settings().density == "compact" and ROW_COMPACT or ROW
-  for i, row in ipairs(rows) do
-    local r = self.rows:Get()
+  local layout = width .. ":" .. rowH .. ":" .. table.concat(sig, ",")
+  if layout ~= self.tableLayout then self.tableLayout = layout; self.layoutGen = (self.layoutGen or 0) + 1 end
+  local layoutGen = self.layoutGen
+  self:SetBand(y0 + ROW + 2)
+  local top = 0
+  self.rows:Set(#rows, top, rowH, function(r, i, y)
+    local row = rows[i]
     r.row = row
     r:SetPoint("TOPLEFT", 0, -y)
-    r:SetWidth(sf:Width())
-    r:SetHeight(rowH)
+    if r.layoutGen ~= layoutGen then
+      r:SetWidth(width)
+      r:SetHeight(rowH)
+      local cx = NAME_W
+      for k, col in ipairs(cols) do
+        local c = self:Cell(r, k)
+        c:SetPoint("LEFT", cx, 0)
+        c:SetWidth(col.w)
+        c:SetHeight(rowH)
+        cx = cx + col.w
+      end
+      for k = #cols + 1, #r.cells do r.cells[k]:Hide() end
+      r.layoutGen = layoutGen
+    end
     r.bg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.03 or 0)
     local cc = row.class and classColor(row.class) or MUTE
     if not row.online then cc = dimmed(cc) end
     local bc = row.me and WHITE or cc
     r.bar:SetColorTexture(bc[1], bc[2], bc[3], 1)
     color(r.name, row.addon and cc or MUTE)
-    local nameText = row.short
-    if row.me then nameText = row.short .. "  (you)" end
-    if not row.addon then nameText = row.short .. "  (no addon)" end
-    fitText(r.name, nameText, NAME_W - 16)
-    local cx = NAME_W
+    -- "(you)" and "(no addon)" only where they fit whole: a two-word name keeps its words, and the grey of a member
+    -- without the addon says it already
+    local suffix = row.me and "  (you)" or (not row.addon and "  (no addon)" or nil)
+    if suffix then
+      -- (fitText says whether the text fit whole: no label text is read back and compared)
+      if not fitText(r.name, row.short .. suffix, NAME_W - 16) then fitText(r.name, row.short, NAME_W - 16) end
+    else fitText(r.name, row.short, NAME_W - 16) end
     for k, col in ipairs(cols) do
-      local c = self:Cell(r, k)
-      c:SetPoint("LEFT", cx, 0)
-      c:SetWidth(col.w)
-      c:SetHeight(rowH)
-      c:Show()
+      local c = r.cells[k]
+      if not c:IsShown() then c:Show() end
       fillCell(c, col.def, row, not C.Policy:CanSee(officer, row.me, col.def.id), col.w)
-      cx = cx + col.w
     end
-    for k = #cols + 1, #r.cells do r.cells[k]:Hide() end
-    y = y + rowH
-  end
-  self.rows:HideRest()
-  if y0 == 0 then self.labels:Reset() end
+  end)
+  self.virtual = function() UI.rows:Show(UI.scroll.bar:GetValue() or 0, UI.scroll:View()) end
+  local y = top + #rows * rowH
+  self.labels:Reset()
   if hidden > 0 then
     local l = self.labels:Get()
+    l:SetJustifyH("LEFT")
     l:SetPoint("TOPLEFT", 6, -y - 6)
-    l:SetWidth(sf:Width() - 12)
+    l:SetWidth(width - 12)
     color(l, MUTE)
     l:SetText(string.format("%d more column%s do not fit: widen the window or untick some in Settings.", hidden, hidden == 1 and "" or "s"))
     y = y + 24
@@ -789,8 +962,9 @@ function UI:DrawTable(page, y0)
   for _, r in ipairs(rows) do if r.addon then reported = reported + 1 end end
   if reported <= 1 then
     local l = self.labels:Get()
+    l:SetJustifyH("LEFT")
     l:SetPoint("TOPLEFT", 6, -y - 6)
-    l:SetWidth(sf:Width() - 12)
+    l:SetWidth(width - 12)
     color(l, MUTE)
     l:SetText(C.Roster:InGuild() and "Nobody else has reported yet. Members appear as their Cute addon says hello." or "You are not in a guild: only your own record shows.")
     y = y + 24
@@ -827,13 +1001,14 @@ function UI:DrawShame()
   local rows = C.Roster:Rows()
   local ticked = UI.Ticked("shame")
   self.header:Hide()
-  self.rows:Reset(); self.rows:HideRest()
+  self.rows:Clear()
   self.cards:Reset()
   self.labels:Reset()
   local perRow = math.max(1, math.floor((sf:Width() + 8) / 244))
   local i, y = 0, 0
   for _, def in ipairs(C.Stats.byCat.funny) do
     if ticked[def.id] then
+      self.shownIds[def.id] = true
       local top = {}
       for _, row in ipairs(rows) do
         local v = row.stats[def.id]
@@ -856,6 +1031,7 @@ function UI:DrawShame()
   y = math.ceil(i / perRow) * 72
   if i == 0 then
     local l = self.labels:Get()
+    l:SetJustifyH("LEFT")
     l:SetPoint("TOPLEFT", 6, -6)
     l:SetWidth(sf:Width() - 12)
     color(l, MUTE)
@@ -882,11 +1058,12 @@ function UI:DrawOfficers()
   local median = levels[math.max(1, math.ceil(#levels / 2))]
   local below = 0
   for _, l in ipairs(levels) do if median and l < median then below = below + 1 end end
-  self.labels:Reset()
+  -- the summary and the controls stay in the band above the table, so they and the column header stay in view
   local y = 4
   local function say(s, c)
-    local l = self.labels:Get()
+    local l = self.bandLabels:Get()
     l:SetPoint("TOPLEFT", 6, -y)
+    l:SetJustifyH("LEFT") -- (a pooled label may come from the Statistics page's right-aligned headings)
     l:SetWidth(sf:Width() - 12)
     color(l, c or INK)
     fitText(l, s, sf:Width() - 16)
@@ -895,17 +1072,19 @@ function UI:DrawOfficers()
   say(string.format("%d members, %d with the addon, %d online. Median level %s, %d below it, %d not seen for a week.",
     total, withAddon, online, median and tostring(median) or "?", below, unseen))
   if #noAddon > 0 then
+    -- the first dozen by name and how many more: a guild of hundreds would make one line of thousands of characters
     table.sort(noAddon)
-    say("Without the addon: " .. table.concat(noAddon, ", "), DIM)
+    local first = {}
+    for i = 1, math.min(12, #noAddon) do first[i] = noAddon[i] end
+    say(string.format("Without the addon (%d): %s%s", #noAddon, table.concat(first, ", "), #noAddon > 12 and string.format(" and %d more", #noAddon - 12) or ""), DIM)
   end
   say(C.Policy:Describe(), DIM)
-  self.buttons:Reset()
   local labels = { { "Visibility settings", function() UI:Open("settings") end },
     { "Ask everyone to resend", function() C.Comm:Ask(); C.Print("asked the guild to send their records again.") end },
     { "Broadcast policy now", function() C.Comm:SendPolicy(); C.Print("sent the visibility policy to the guild.") end } }
   local bx = 6
   for _, d in ipairs(labels) do
-    local b = self.buttons:Get()
+    local b = self.bandButtons:Get()
     b:SetPoint("TOPLEFT", bx, -y - 2)
     b:SetWidth(160)
     b:SetLabel(d[1])
@@ -913,7 +1092,6 @@ function UI:DrawOfficers()
     b:SetScript("OnClick", d[2])
     bx = bx + 166
   end
-  self.buttons:HideRest()
   y = y + 30
   self:DrawTable("officers", y)
 end
@@ -922,11 +1100,11 @@ end
 function UI:DrawMe()
   local sf = self.scroll
   self.header:Hide()
-  self.rows:Reset(); self.rows:HideRest()
+  self.rows:Clear()
   self.cards:Reset(); self.cards:HideRest()
   self.labels:Reset()
   self.checks:Reset()
-  local me = C.Roster:Rows()[1]
+  local me = C.Roster:MeRow()
   local w = sf:Width()
   local colW = math.floor((w - 12) / 2)
   local cb = self.checks:Get()
@@ -949,6 +1127,7 @@ function UI:DrawMe()
       y = y + 20
       local n = 0
       for _, def in ipairs(C.Stats.byCat[cat]) do
+        self.shownIds[def.id] = true
         local col = n % 2
         local ly = y + math.floor(n / 2) * 18
         local a = self.labels:Get()
@@ -1038,14 +1217,14 @@ end
 -- the Statistics page: the game's own statistics as a leaderboard, not a wide table. Left, the categories as the
 -- game groups them (a child under its parent; a click opens one); right, the open category's statistics as rows of
 -- name, your value and the guild's leader; a click on a row ranks every member under it, a dash where the policy
--- keeps a member's value from you. The empty state says why the client reported none.
+-- keeps a member's value from you. The empty state says why the client reported none. Both columns are virtual
+-- lists: a ranking of a few hundred members draws the rows in view, and a scroll draws the ones coming into view
 function UI:DrawGame()
   local sf = self.scroll
   local S = C.Stats
   self.header:Hide()
-  self.rows:Reset(); self.rows:HideRest()
+  self.rows:Clear()
   self.labels:Reset()
-  self.lines:Reset()
   local w = sf:Width()
   local function say(x, y, width, s, c, justify)
     local l = self.labels:Get()
@@ -1057,9 +1236,10 @@ function UI:DrawGame()
     return l
   end
   if #S.byCat.game == 0 then
+    self.catLines:Clear(); self.lines:Clear()
     say(6, 6, w - 12, S.gameNote or "No statistics yet.", INK)
     say(6, 26, w - 12, "The addon's own counters stay on the other pages: deaths, dungeons, quests, flights and the rest.", MUTE)
-    self.labels:HideRest(); self.lines:HideRest()
+    self.labels:HideRest()
     sf:SetContentHeight(50)
     return
   end
@@ -1076,13 +1256,23 @@ function UI:DrawGame()
     for _, cat in ipairs(game.cats) do if #cat.stats > 0 then sel = cat.id; break end end
     self.gameCat = sel
   end
+  -- the headings stay in the band; the two lists scroll under them
+  local function head(x, width, s, justify)
+    local l = self.bandLabels:Get()
+    l:SetPoint("TOPLEFT", x, -4)
+    l:SetWidth(width)
+    l:SetJustifyH(justify or "LEFT")
+    color(l, DIM)
+    fitText(l, s, width - 4)
+  end
+  self:SetBand(ROW + 2)
   -- left: the categories
-  say(4, 4, leftW - 8, "Category", DIM)
-  local y = ROW + 2
-  for i, cat in ipairs(game.cats) do
+  head(4, leftW - 8, "Category")
+  local top = 0
+  self.catLines:Set(#game.cats, top, ROW, function(r, i, y)
+    local cat = game.cats[i]
     local n = #cat.stats
     local open = cat.id == sel
-    local r = self.lines:Get()
     r.cat, r.def, r.member = cat, nil, nil
     r:SetPoint("TOPLEFT", 0, -y)
     r:SetWidth(leftW)
@@ -1107,19 +1297,19 @@ function UI:DrawGame()
       tip:AddLine(n == 1 and "1 statistic" or (n .. " statistics"), 0.7, 0.7, 0.7)
       if n > 0 then tip:AddLine("Click to open.", 0.45, 0.45, 0.45) end
     end
-    y = y + ROW
-  end
-  local leftY = y
-  -- right: the open category's statistics
+  end)
+  local leftY = top + #game.cats * ROW
+  -- right: the open category's statistics, each followed by its ranking where it is open. The list is worked out
+  -- here, once a draw; the scroll only places it
   local vw, ww = 90, math.min(190, math.floor(rightW * 0.36))
   local nw = rightW - vw - ww - 8
-  say(rightX + 8, 4, nw - 8, "Statistic", DIM)
-  say(rightX + rightW - ww - vw - 4, 4, vw, "You", DIM, "RIGHT")
-  say(rightX + rightW - ww - 4, 4, ww, "Leader", DIM, "RIGHT")
-  y = ROW + 2
+  head(rightX + 8, nw - 8, "Statistic")
+  head(rightX + rightW - ww - vw - 4, vw, "You", "RIGHT")
+  head(rightX + rightW - ww - 4, ww, "Leader", "RIGHT")
   local defs = sel and game.byCat[sel] or {}
+  local items = {}
   for i, def in ipairs(defs) do
-    local mine = C.Sample:Value(def.id)
+    self.shownIds[def.id] = true
     -- every member's value as this viewer may see it; the leader among those
     local ranked, best = {}, nil
     for _, row in ipairs(rows) do
@@ -1128,91 +1318,103 @@ function UI:DrawGame()
         local v = row.stats[def.id]
         local e = { row = row, v = (not hidden and type(v) == "number") and v or nil, hidden = hidden, at = row.at and row.at[def.id] }
         ranked[#ranked + 1] = e
-        if e.v and (not best or e.v > best.v or (e.v == best.v and row.short < best.row.short)) then best = e end
+        if e.v and (not best or e.v > best.v or (e.v == best.v and row.sort < best.row.sort)) then best = e end
       end
     end
     local open = self.gameOpen[def.id] == true
-    local r = self.lines:Get()
-    r.cat, r.def, r.member = nil, def, nil
-    r:SetPoint("TOPLEFT", rightX, -y)
-    r:SetWidth(rightW)
-    r:SetHeight(ROW)
-    r.bg:SetColorTexture(1, 1, 1, open and 0.06 or (i % 2 == 0 and 0.03 or 0))
-    r.bar:Hide()
-    r.name:SetPoint("LEFT", 8, 0)
-    r.name:SetWidth(nw - 8)
-    color(r.name, open and WHITE or INK)
-    fitText(r.name, def.label, nw - 12)
-    r.val:Show()
-    r.val:SetPoint("RIGHT", -(ww + 4), 0)
-    r.val:SetWidth(vw)
-    color(r.val, mine == nil and MUTE or INK)
-    r.val:SetText(UI.Format(def, mine))
-    r.who:Show()
-    r.who:SetPoint("RIGHT", -4, 0)
-    r.who:SetWidth(ww)
-    if best then
-      color(r.who, INK)
-      r.who:SetText(hex(best.row.class and classColor(best.row.class) or INK) .. best.row.short .. "|r  " .. UI.Format(def, best.v))
-    else
-      color(r.who, MUTE)
-      r.who:SetText("-")
-    end
-    r.fn = function() UI.gameOpen[def.id] = not UI.gameOpen[def.id]; UI:Draw() end
-    r.tip = function(tip)
-      tip:AddLine(def.label, 1, 1, 1)
-      if def.hint then tip:AddLine(def.hint, 0.7, 0.7, 0.7, true) end
-      tip:AddLine(C.Policy:Vis(def.id) == "all" and "Everyone sees this." or "Only you and the officers see this.", 0.6, 0.6, 0.6)
-      if C.Sample:Error(def.id) then tip:AddLine("Could not read: " .. C.Sample:Error(def.id), 0.9, 0.4, 0.4, true) end
-      tip:AddLine(open and "Click to fold." or "Click to rank every member.", 0.45, 0.45, 0.45)
-    end
-    y = y + ROW
+    items[#items + 1] = { def = def, i = i, best = best, open = open }
     if open then
       -- values first, highest on top; then the members whose value is kept from you; then the unreported
       table.sort(ranked, function(a, b)
         if (a.v ~= nil) ~= (b.v ~= nil) then return a.v ~= nil end
         if a.v ~= nil and a.v ~= b.v then return a.v > b.v end
         if a.hidden ~= b.hidden then return a.hidden end
-        return a.row.short < b.row.short
+        return a.row.sort < b.row.sort
       end)
-      for k, e in ipairs(ranked) do
-        local m = self.lines:Get()
-        m.cat, m.def, m.member = nil, def, e
-        m:SetPoint("TOPLEFT", rightX + 16, -y)
-        m:SetWidth(rightW - 16)
-        m:SetHeight(ROW)
-        m.bg:SetColorTexture(1, 1, 1, 0.015)
-        local cc = e.row.class and classColor(e.row.class) or MUTE
-        if not e.row.online then cc = dimmed(cc) end
-        local bc = e.row.me and WHITE or cc
-        m.bar:Show()
-        m.bar:SetColorTexture(bc[1], bc[2], bc[3], 1)
-        m.name:SetPoint("LEFT", 8, 0)
-        m.name:SetWidth(nw - 24)
-        color(m.name, cc)
-        fitText(m.name, (e.v and (k .. ".  ") or "") .. e.row.short .. (e.row.me and "  (you)" or ""), nw - 28)
-        m.val:Hide()
-        m.who:Show()
-        m.who:SetPoint("RIGHT", -4, 0)
-        m.who:SetWidth(ww + vw)
-        if e.hidden then color(m.who, MUTE); m.who:SetText("-")
-        elseif e.v == nil then color(m.who, MUTE); m.who:SetText("?")
-        else color(m.who, INK); m.who:SetText(UI.Format(def, e.v)) end
-        m.fn = nil
-        m.tip = function(tip)
-          tip:AddLine(e.row.short, 1, 1, 1)
-          if e.hidden then tip:AddLine("Only " .. e.row.short .. " and the officers see this.", 0.6, 0.6, 0.6, true)
-          elseif e.v == nil then tip:AddLine("Not reported yet.", 0.6, 0.6, 0.6)
-          else tip:AddLine(UI.Format(def, e.v), 0.9, 0.9, 0.9) end
-          if e.at then tip:AddLine("Reported " .. (ago(e.at) or ""), 0.45, 0.45, 0.45) end
-        end
-        y = y + ROW
-      end
+      for k, e in ipairs(ranked) do items[#items + 1] = { def = def, member = e, k = k } end
     end
   end
+  self.lines:Set(#items, top, ROW, function(r, i, y)
+    local it = items[i]
+    local def = it.def
+    r.cat, r.def = nil, def
+    r:SetHeight(ROW)
+    if not it.member then
+      -- a statistic: its name, your value, the leader
+      local mine, best, open = C.Sample:Value(def.id), it.best, it.open
+      r.member = nil
+      r:SetPoint("TOPLEFT", rightX, -y)
+      r:SetWidth(rightW)
+      r.bg:SetColorTexture(1, 1, 1, open and 0.06 or (it.i % 2 == 0 and 0.03 or 0))
+      r.bar:Hide()
+      r.name:SetPoint("LEFT", 8, 0)
+      r.name:SetWidth(nw - 8)
+      color(r.name, open and WHITE or INK)
+      fitText(r.name, def.label, nw - 12)
+      r.val:Show()
+      r.val:SetPoint("RIGHT", -(ww + 4), 0)
+      r.val:SetWidth(vw)
+      color(r.val, mine == nil and MUTE or INK)
+      r.val:SetText(UI.Format(def, mine))
+      r.who:Show()
+      r.who:SetPoint("RIGHT", -4, 0)
+      r.who:SetWidth(ww)
+      if best then
+        color(r.who, INK)
+        r.who:SetText(hex(best.row.class and classColor(best.row.class) or INK) .. best.row.short .. "|r  " .. UI.Format(def, best.v))
+      else
+        color(r.who, MUTE)
+        r.who:SetText("-")
+      end
+      r.fn = function() UI.gameOpen[def.id] = not UI.gameOpen[def.id]; UI:Draw() end
+      r.tip = function(tip)
+        tip:AddLine(def.label, 1, 1, 1)
+        if def.hint then tip:AddLine(def.hint, 0.7, 0.7, 0.7, true) end
+        tip:AddLine(C.Policy:Vis(def.id) == "all" and "Everyone sees this." or "Only you and the officers see this.", 0.6, 0.6, 0.6)
+        if C.Sample:Error(def.id) then tip:AddLine("Could not read: " .. C.Sample:Error(def.id), 0.9, 0.4, 0.4, true) end
+        tip:AddLine(open and "Click to fold." or "Click to rank every member.", 0.45, 0.45, 0.45)
+      end
+    else
+      -- a member under an open statistic: the place, the name, the value or a dash
+      local e, k = it.member, it.k
+      r.member = e
+      r:SetPoint("TOPLEFT", rightX + 16, -y)
+      r:SetWidth(rightW - 16)
+      r.bg:SetColorTexture(1, 1, 1, 0.015)
+      local cc = e.row.class and classColor(e.row.class) or MUTE
+      if not e.row.online then cc = dimmed(cc) end
+      local bc = e.row.me and WHITE or cc
+      r.bar:Show()
+      r.bar:SetColorTexture(bc[1], bc[2], bc[3], 1)
+      r.name:SetPoint("LEFT", 8, 0)
+      r.name:SetWidth(nw - 24)
+      color(r.name, cc)
+      fitText(r.name, (e.v and (k .. ".  ") or "") .. e.row.short .. (e.row.me and "  (you)" or ""), nw - 28)
+      r.val:Hide()
+      r.who:Show()
+      r.who:SetPoint("RIGHT", -4, 0)
+      r.who:SetWidth(ww + vw)
+      if e.hidden then color(r.who, MUTE); r.who:SetText("-")
+      elseif e.v == nil then color(r.who, MUTE); r.who:SetText("?")
+      else color(r.who, INK); r.who:SetText(UI.Format(def, e.v)) end
+      r.fn = nil
+      r.tip = function(tip)
+        tip:AddLine(e.row.short, 1, 1, 1)
+        if e.hidden then tip:AddLine("Only " .. e.row.short .. " and the officers see this.", 0.6, 0.6, 0.6, true)
+        elseif e.v == nil then tip:AddLine("Not reported yet.", 0.6, 0.6, 0.6)
+        else tip:AddLine(UI.Format(def, e.v), 0.9, 0.9, 0.9) end
+        if e.at then tip:AddLine("Reported " .. (ago(e.at) or ""), 0.45, 0.45, 0.45) end
+      end
+    end
+  end)
+  self.virtual = function()
+    local off, view = UI.scroll.bar:GetValue() or 0, UI.scroll:View()
+    UI.catLines:Show(off, view)
+    UI.lines:Show(off, view)
+  end
+  local y = top + #items * ROW
   if #defs == 0 then say(rightX + 8, y, rightW - 16, "Nothing in this category.", MUTE); y = y + 20 end
   self.labels:HideRest()
-  self.lines:HideRest()
   sf:SetContentHeight(math.max(leftY, y) + 8)
 end
 
@@ -1227,6 +1429,10 @@ end
 
 function UI:Draw()
   self.drawing = true
+  self.drawnAt = clock()
+  self.draws = (self.draws or 0) + 1
+  -- the page says which stats it shows (a change to another draws nothing) and, for a virtual list, how to scroll
+  self.shownIds, self.virtual = {}, nil
   local page = self.page
   local officer = C.Roster:MeOfficer()
   if page == "officers" and not officer then page = "race"; self.page = page end
@@ -1247,10 +1453,13 @@ function UI:Draw()
   self.scrollTo = nil
   self.header:ClearAllPoints()
   self.header:SetPoint("TOPLEFT")
+  self.header:Hide()
+  self:SetBand(0)
+  self.bandLabels:Reset(); self.bandButtons:Reset()
   self.cards:Reset(); self.cards:HideRest()
   self.buttons:Reset(); self.buttons:HideRest()
   self.checks:Reset(); self.checks:HideRest()
-  self.lines:Reset(); self.lines:HideRest()
+  if page ~= "game" then self.lines:Clear(); self.catLines:Clear() end
   if C.Settings_Draw and page ~= "settings" then C.Settings_Hide() end
   if page == "race" or page == "prog" then self:DrawTable(page)
   elseif page == "shame" then self:DrawShame()
@@ -1258,11 +1467,14 @@ function UI:Draw()
   elseif page == "officers" then self:DrawOfficers()
   elseif page == "me" then self:DrawMe()
   elseif page == "settings" then
-    self.header:Hide(); self.rows:Reset(); self.rows:HideRest(); self.labels:Reset(); self.labels:HideRest()
+    self.header:Hide(); self.rows:Clear(); self.labels:Reset(); self.labels:HideRest()
     C.Settings_Draw(self.scroll)
   end
+  self.bandLabels:HideRest(); self.bandButtons:HideRest()
   local _, maxv = bar:GetMinMaxValues()
   bar:SetValue(math.max(0, math.min(keep, maxv or 0)))
+  -- the rows in view, at the place kept (the scroll's own redraw waits while drawing)
+  if self.virtual then self.virtual() end
   local rows = C.Roster:Rows()
   local online = 0
   for _, r in ipairs(rows) do if r.online and r.addon then online = online + 1 end end
@@ -1272,30 +1484,48 @@ function UI:Draw()
 end
 
 ----------------------------------------------------------------------------
--- the minimap button: the emblem in a one-pixel frame, dragged around the minimap's edge
+-- the minimap button: the round one every addon has (LibDBIcon's, QuestBank's), 32 px: the emblem cut round by the
+-- portrait mask on the minimap's dark disc, under the tracking ring, dragged around the minimap's edge. (The window
+-- stays flat; this sits among the game's own round buttons)
 ----------------------------------------------------------------------------
+local RING = "Interface\\Minimap\\MiniMap-TrackingBorder"
+local DISC = "Interface\\Minimap\\UI-Minimap-Background"
+local ROUND = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+local GLOW = "Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight"
 function UI:OnWorld()
   if not C.Settings().minimap then if self.mini then self.mini:Hide() end return end
   if self.mini then self.mini:Show(); return end
   if not Minimap then return end
-  local b = CreateFrame("Button", "CuteMinimapButton", Minimap, BD)
+  local b = CreateFrame("Button", "CuteMinimapButton", Minimap)
   self.mini = b
-  b:SetSize(24, 24)
+  b:SetSize(32, 32)
   b:SetFrameStrata("MEDIUM")
   b:SetFrameLevel(8)
   b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   b:RegisterForDrag("LeftButton")
   b:SetMovable(true)
-  skin(b, BLACK, 1)
-  local icon = tex(b, "ARTWORK", LOGO)
-  icon:SetPoint("TOPLEFT", 1, -1)
-  icon:SetPoint("BOTTOMRIGHT", -1, 1)
-  icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-  b:SetHighlightTexture(FLAT, "ADD")
-  b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.1)
+  -- the ring's art sits in the top left of its texture, so it is drawn from the corner at 54 px and the disc and the
+  -- emblem centre on its hole
+  local disc = tex(b, "BACKGROUND", DISC, 20, 20)
+  disc:SetPoint("TOPLEFT", 7, -5)
+  local icon = tex(b, "ARTWORK", LOGO, 20, 20)
+  icon:SetPoint("TOPLEFT", 7, -5)
+  if b.CreateMaskTexture and icon.AddMaskTexture then
+    local mask = b:CreateMaskTexture()
+    mask:SetTexture(ROUND, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask:SetAllPoints(icon)
+    pcall(icon.AddMaskTexture, icon, mask)
+    b.mask = mask
+  else
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  end
+  local ring = tex(b, "OVERLAY", RING, 54, 54)
+  ring:SetPoint("TOPLEFT")
+  b.icon, b.ring = icon, ring
+  b:SetHighlightTexture(GLOW, "ADD")
   local function place()
     local angle = math.rad(C.Settings().minimapPos or 220)
-    local r = (Minimap:GetWidth() or 140) / 2 + 6
+    local r = (Minimap:GetWidth() or 140) / 2 + 10
     b:ClearAllPoints()
     b:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * r, math.sin(angle) * r)
   end

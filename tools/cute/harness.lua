@@ -1,7 +1,10 @@
 -- Mock WoW client for Cute. Loads the addon into separate clients (each its own globals), gives them one guild, routes
--- their addon messages, drives events and timers, opens every page for an officer and a member, and fails on any
--- widget method outside a whitelist of real API methods. It lays the window out like the game does and reports
--- clipped text, overlapping text, text the game's font cannot draw, and buttons too near an edge.
+-- their addon messages (back to the sender too, as the game does), drives events and timers, opens every page for an
+-- officer and a member, and fails on any widget method outside a whitelist of real API methods. It lays the window out
+-- like the game does and reports clipped text, overlapping text, text the game's font cannot draw, and buttons too
+-- near an edge. It counts SetPoint and SetText calls (OPS), so a scenario can hold a draw's cost to the rows in view.
+-- Forever's names are mocked as the client gives them: a character made with a surname has UnitName's second return
+-- as that surname, the roster and the channel name it with both words, and a roster name can be a Kstring.
 -- The mock defines what Forever's generated API docs list (C_Club for the guild, C_SpecializationInfo, C_MajorFactions,
 -- C_Traits, C_SkillInfo, GetMirrorTimerProgress...), what QuestBank reads on this client (GetInventoryItemLink, the taxi
 -- nodes) and, named one by one in UNDOCUMENTED below with the evidence for each, the globals no doc lists that Cute
@@ -51,6 +54,7 @@ end
 ----------------------------------------------------------------------------
 local ALL = {}
 local rectOf, GEN = nil, 0 -- (layout, below: a size asked of an anchored frame is worked out as the game would)
+local OPS = { n = 0 } -- SetPoint and SetText calls, every client
 local function newObj(kind, template, parent)
   local o = { __kind = kind, __scripts = {}, __events = {}, __shown = true, __w = 0, __h = 0, __text = "", __value = 0, __min = 0,
               __max = 0, __points = {}, __parent = parent, __alpha = 1, __size = 12, __wrap = true, __justify = "CENTER" }
@@ -64,6 +68,7 @@ local function newObj(kind, template, parent)
       return function(self, ...)
         local a = { ... }
         local n = select("#", ...)
+        if k == "SetPoint" or k == "SetText" then OPS.n = OPS.n + 1 end
         if k == "SetScript" then self.__scripts[a[1]] = a[2]
         elseif k == "GetScript" then return self.__scripts[a[1]]
         elseif k == "HookScript" then local old = self.__scripts[a[1]]; self.__scripts[a[1]] = function(...) if old then old(...) end a[2](...) end
@@ -198,18 +203,27 @@ local function secret(kind) return setmetatable({ __kind = kind }, SECRET_MT) en
 ----------------------------------------------------------------------------
 -- the guild everyone shares, and the addon channel between clients
 ----------------------------------------------------------------------------
-local GUILD = {} -- { { name = "Name-Realm", rank = idx, rankName, level, class, online, zone }, ... }
+local GUILD = {} -- { { name = "Name-Realm" or "First Surname", guid, rank = idx, rankName, level, class, online, zone }, ... }
 local clients = {}
 local BUS = {}
 local lines = {} -- the tooltip's lines, every client
 
+-- a character's GUID, the same for its client and its roster entry: one per first name, made up in order
+local GUIDS, nGuid = {}, 0
+local function guidOf(first)
+  if not GUIDS[first] then nGuid = nGuid + 1; GUIDS[first] = string.format("Player-4242-%08X", 0x0A000000 + nGuid) end
+  return GUIDS[first]
+end
+
+-- every client in the guild gets the message, its sender too (the game hands a guild addon message back to the one who
+-- sent it), named as the channel names that sender (c.sender: "Name-Realm", or a Forever name's two words)
 local function deliver()
   while #BUS > 0 do
     local m = table.remove(BUS, 1)
     for _, c in ipairs(clients) do
-      if c ~= m.from and c.inGuild then
+      if c.inGuild then
         for _, f in ipairs(c.frames) do
-          if f.__events.CHAT_MSG_ADDON and f.__scripts.OnEvent then f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", m.prefix, m.msg, m.channel, m.from.name) end
+          if f.__events.CHAT_MSG_ADDON and f.__scripts.OnEvent then f.__scripts.OnEvent(f, "CHAT_MSG_ADDON", m.prefix, m.msg, m.channel, m.from.sender) end
         end
       end
     end
@@ -278,8 +292,10 @@ BASE.Enum = {
   -- the Camelot achievement stub reads this rule by name; no doc gives its value, so the mock's is made up and Cute looks it up
   GameRule = { AchievementsPanelDisabled = 77 },
 }
--- Blizzard_APIDocumentationGenerated/LegacyConstantsDocumentation.lua, as the client exposes it
-BASE.Constants = { LegacyConsts = { LEGACY_REWARD_TRACK_FACTION_ID = 2802, LEGACY_POINTS_TRAIT_CURRENCY_ID = 4225, LEGACY_TREE_PROFESSIONS_ID = 1187,
+-- Blizzard_APIDocumentationGenerated/LegacyConstantsDocumentation.lua, as the client exposes it; and the name separators
+-- Camelot's NameUtil.lua reads (Blizzard_FrameXMLUtil/Camelot/NameUtil.lua:8; no doc gives their values: the surname's
+-- is a space here, as the roster shows "Thora Bjorn", and Cute falls back to one where the table is missing)
+BASE.Constants = { CharacterNameSeparatorConsts = { CHARACTERNAME_SURNAME_SEPARATOR = " ", CHARACTERNAME_REALMNAME_SEPARATOR = "-" }, LegacyConsts = { LEGACY_REWARD_TRACK_FACTION_ID = 2802, LEGACY_POINTS_TRAIT_CURRENCY_ID = 4225, LEGACY_TREE_PROFESSIONS_ID = 1187,
   LEGACY_TREE_ADVENTURE_ID = 1188, LEGACY_TREE_PROGRESSION_ID = 1189, LEGACY_TREE_ADVENTURE_TALENTED_NODE_ID = 110298,
   LEGACY_DEFAULT_CATEGORY_WARRIOR = 15585, LEGACY_DEFAULT_CATEGORY_PALADIN = 15580, LEGACY_DEFAULT_CATEGORY_HUNTER = 15578,
   LEGACY_DEFAULT_CATEGORY_ROGUE = 15582, LEGACY_DEFAULT_CATEGORY_PRIEST = 15581, LEGACY_DEFAULT_CATEGORY_SHAMAN = 15583,
@@ -292,6 +308,8 @@ local EPOCH = 1792300000
 -- o.without = { GetInventoryItemDurability = true } lacks one. DoEmote is defined only for o.withEmote clients: the
 -- Forever tree is silent on it, so the chat fallback is the path the gate exercises by default.
 local UNDOCUMENTED = {
+  GetInventoryItemID = "Camelot/PaperDollFrame.lua:2221 (PaperDollItemSlotButton_Update: SetItemButtonQuality) and 1809",
+  GetInventoryItemQuality = "Camelot/PaperDollFrame.lua:2219, the same function",
   GetInventoryItemDurability = "Camelot's EquipmentFlyout.lua:544 reaches it through EquipmentManager_GetItemInfoByLocation",
   GetInventoryItemCount = "the same flyout, the line above it",
   GetNumUnspentTalents = "Mainline/TalentFrameBase.lua:140, a file the camelot game type loads",
@@ -325,9 +343,12 @@ local STATS = { { 130, 2001, "Total kills", 1234 }, { 130, 2002, "Total kills th
 local function newClient(o)
   local env = setmetatable({}, { __index = BASE })
   env._G = env
-  local c = { env = env, o = o, name = o.name .. "-" .. (o.realm or "Forever"), timers = {}, clock = 1000, frames = {}, sent = {}, chat = {},
+  o.guid = o.guid or guidOf(o.name)
+  -- c.name: the saved-data key Cute makes (UnitFullName joined); c.sender: how the channel names this client
+  local c = { env = env, o = o, name = o.name .. "-" .. ((o.surname and o.fullNameSurname) and o.surname or (o.realm or "Forever")), timers = {}, clock = 1000, frames = {}, sent = {}, chat = {},
               hooks = {}, C = {}, inGuild = o.inGuild ~= false, secret = false, throw = false, oversize = {}, dayShift = 0,
               showOffline = o.showOffline ~= false }
+  c.sender = o.sender or (o.name .. "-" .. (o.realm or "Forever"))
   env.UIParent = newObj("Frame"); env.UIParent:SetSize(1600, 1000); env.UIParent.__points = {}; env.UIParent.__root = true
   env.Minimap = newObj("Frame", nil, env.UIParent); env.Minimap:SetSize(140, 140); env.Minimap:SetPoint("TOPRIGHT", env.UIParent, "TOPRIGHT", -20, -20)
   env.UISpecialFrames = {}
@@ -373,13 +394,20 @@ local function newClient(o)
   env.GetXPExhaustion = api(function() return o.rested end)
   env.GetZoneText = api(function() return o.zone or "Elwynn Forest" end)
   env.GetSubZoneText = api(function() return o.subzone or "" end)
-  env.UnitName = api(function(unit) if unit == "player" then return o.name end local i = unit:match("^party(%d)$"); return i and (o.party or {})[tonumber(i)] or nil end)
-  env.UnitFullName = api(function() return o.name, o.realm or "Forever" end)
+  -- on camelot the second return is the surname (Camelot/NameUtil.lua); a character without one has none. UnitFullName
+  -- gives the surname there too on an o.fullNameSurname client, the realm on the others (which one Forever does, /cute
+  -- diag will say: Cute must not care)
+  env.UnitName = api(function(unit) if unit == "player" then return o.name, o.surname end local i = unit:match("^party(%d)$"); return i and (o.party or {})[tonumber(i)] or nil end)
+  env.UnitFullName = api(function() return o.name, (o.surname and o.fullNameSurname) and o.surname or (o.realm or "Forever") end)
+  env.UnitGUID = api(function(unit) if unit == "player" then return o.guid end end)
+  env.GetRealmName = api(function() return o.realm or "Forever" end)
   env.UnitClass = api(function() return o.class, o.class, CLASS_ID[o.class] end)
   env.GetNormalizedRealmName = api(function() return o.realm or "Forever" end)
   env.GetMoney = api(function() return o.money or 0 end)
   env.GetBindLocation = api(function() return o.hearth or "Goldshire" end)
-  env.GetInventoryItemLink = api(function(_, slot) return (o.items or {})[slot] end)
+  -- o.secretLinks: the link is a secret for every slot (the owner's client gave nothing readable for most); the item id
+  -- and quality still read, as Forever's character sheet reads them
+  env.GetInventoryItemLink = api(function(_, slot) if o.secretLinks then return secret("string") end return (o.items or {})[slot] end)
   -- baseResistance, realResistance, effectiveResistance: the sheet shows the third
   env.UnitResistance = api(function(_, i) return 0, 0, (o.resist or {})[i] or 0 end)
   -- the Legacy Challenges: id, name, points, completed, month, day, year, description, flags, icon, rewardText, isGuild,
@@ -413,7 +441,10 @@ local function newClient(o)
   local function statValue(s) local v = (o.stat or {})[s[2]]; if v == nil then v = s[4] end return v end
   -- the undocumented globals, each with its evidence in UNDOCUMENTED or the mock is refused; the optional ones
   -- (the statistics API, the latest achievements) only on a client made withStats
+  local function linkId(link) return link and tonumber(tostring(link):match("item:(%d+)")) or nil end
   local undocumented = {
+    GetInventoryItemID = api(function(_, slot) return linkId((o.items or {})[slot]) end),
+    GetInventoryItemQuality = api(function(_, slot) local id = linkId((o.items or {})[slot]); return id and (id % 3) + 1 or nil end),
     GetInventoryItemDurability = api(function(slot) if (o.items or {})[slot] then return o.dur or 80, 100 end end),
     GetInventoryItemCount = api(function() return o.ammo or 0 end),
     GetNumUnspentTalents = api(function() return o.talents or 0 end),
@@ -479,8 +510,12 @@ local function newClient(o)
     GetMemberInfo = api(function(id, i)
       local m = id == 7 and GUILD[i]
       if not m then return nil end
-      return { name = m.name, presence = m.online ~= false and 1 or 3, guildRank = m.rankName or ("Rank " .. m.rank), guildRankOrder = m.rank + 1,
-        level = m.level, classID = CLASS_ID[m.class], zone = m.zone or "Elwynn Forest", isSelf = m.name == c.name }
+      return { name = m.name, guid = m.guid, memberId = i, presence = m.online ~= false and 1 or 3, guildRank = m.rankName or ("Rank " .. m.rank), guildRankOrder = m.rank + 1,
+        level = m.level, classID = CLASS_ID[m.class], zone = m.zone or "Elwynn Forest", isSelf = m.guid == o.guid }
+    end),
+    GetMemberInfoForSelf = api(function(id)
+      if id ~= 7 then return nil end
+      for i, m in ipairs(GUILD) do if m.guid == o.guid then return c.env.C_Club.GetMemberInfo(7, i) end end
     end),
   }
   env.C_CreatureInfo = { GetClassInfo = api(function(id) local file = CLASS_FILE[id]; if file then return { className = file, classFile = file, classID = id } end end) }
@@ -493,13 +528,14 @@ local function newClient(o)
     GetInfo = api(function(i) return { questID = 100 + i, isHeader = false } end),
     IsComplete = api(function(id) return id == 101 end),
   }
-  local function itemId(link) return tonumber(tostring(link):match("item:(%d+)")) or 0 end
+  -- C_Item takes an ItemInfo: an id, a name or a link. o.uncached: GetDetailedItemLevelInfo reads nothing yet
+  local function itemId(x) if type(x) == "number" then return x end return tonumber(tostring(x):match("item:(%d+)")) or 0 end
   env.C_Item = {
     GetItemCount = api(function(id) return (o.counts or {})[id] or 0 end),
-    GetDetailedItemLevelInfo = api(function(link) return 20 + (itemId(link) % 40) end),
+    GetDetailedItemLevelInfo = api(function(link) if o.uncached then return nil end return 20 + (itemId(link) % 40) end),
     GetItemQualityByID = api(function(link) return (itemId(link) % 3) + 1 end),
     -- name, link, quality, level, minLevel, type, subType, stackCount, equipLoc, texture, sellPrice
-    GetItemInfo = api(function(link) local id = itemId(link); return "Item " .. id, link, (id % 3) + 1, 20 + (id % 40), 1, "Misc", "Junk", 20, "", 0, (o.prices or {})[id] or 0 end),
+    GetItemInfo = api(function(link) local id = itemId(link); return "Item " .. id, type(link) == "string" and link or ("item:" .. id), (id % 3) + 1, 20 + (id % 40), 1, "Misc", "Junk", 20, "", 0, (o.prices or {})[id] or 0 end),
   }
   env.C_Container = {
     GetContainerNumFreeSlots = api(function(b) return b == 0 and 4 or 2 end),
@@ -828,7 +864,7 @@ local NAMES = { { "Cutecutecute", 0, "Guild Master", "PRIEST", 44 }, { "Yezin", 
   { "Zephyrine", 3, "Raider", "MAGE", 31 } }
 local function makeGuild()
   GUILD = {}
-  for i, n in ipairs(NAMES) do GUILD[i] = { name = n[1] .. "-Forever", rank = n[2], rankName = n[3], class = n[4], level = n[5], online = i % 3 ~= 0 } end
+  for i, n in ipairs(NAMES) do GUILD[i] = { name = n[1] .. "-Forever", guid = guidOf(n[1]), rank = n[2], rankName = n[3], class = n[4], level = n[5], online = i % 3 ~= 0 } end
 end
 local function charOf(n, extra)
   local o = { name = n[1], realm = "Forever", level = n[5], xp = 350, xpmax = 1000, class = n[4], money = 123456, zone = "Duskwood", rested = 500,
@@ -1007,6 +1043,9 @@ do
   -- one message a second from each
   local last
   for _, m in ipairs(yezin.sent) do if last then assert(m.at - last >= 1 - 1e-9, "one message a second: " .. (m.at - last)) end last = m.at end
+  -- every message came back to its sender too, as the game hands it back: neither keeps a record of itself
+  assert(not yezin.env.CuteDB.roster[yezin.sender] and not kaka.env.CuteDB.roster[kaka.sender], "no client keeps its own messages as a member's record")
+  assert(yezin.sent[1].msg == "1R|" .. yezin.o.guid and e.stats.guid == yezin.o.guid, "the ask and the full record carry the sender's GUID")
   print(string.format("hello: records exchanged, %d messages from Yezin (%d chunks of the full record, longest %d bytes), none closer than a second", #yezin.sent, fulls, longest))
 end
 
@@ -1270,6 +1309,11 @@ do
   yezin.C.UI.frame:ClearAllPoints(); yezin.C.UI.frame:SetPoint("CENTER")
   -- the minimap button and the hall's tooltips
   assert(yezin.C.UI.mini and yezin.C.UI.mini:IsShown(), "the minimap button")
+  -- round, as the game's own: 32 px, the emblem cut by the portrait mask, the tracking ring over it
+  local mini = yezin.C.UI.mini
+  assert(mini.__w == 32 and mini.__h == 32 and not mini.__backdrop, "a 32 px button, no flat frame")
+  assert(mini.icon.__mask and mini.icon.__mask.__tex == "Interface\\CharacterFrame\\TempPortraitAlphaMask" and mini.icon.__tex == "Interface\\AddOns\\Cute\\art\\logo.png", "the emblem masked round")
+  assert(mini.ring.__tex == "Interface\\Minimap\\MiniMap-TrackingBorder" and mini.ring.__layer == "OVERLAY", "under the minimap ring")
   hover(yezin.C.UI.mini)
   yezin.C.UI:Open("shame")
   for _, card in ipairs(yezin.C.UI.cards.items) do if card:IsShown() then hover(card) end end
@@ -1402,8 +1446,41 @@ do
   check(lone.C.UI.frame, "guildless me")
   lone.C.UI:Open("game")
   check(lone.C.UI.frame, "guildless statistics (none on this client)")
+  -- the hello went by while guildless; now Pell joins, the channel naming her with a Kstring that matches none of her
+  -- names. The hello is said on joining, its ask carrying her GUID, before any delta: her own messages, handed back,
+  -- leave no record, and the guild gets her full record
+  assert(not lone.C.Comm.hello, "no hello said while guildless")
+  lone.sender = "|Kq99|k"
+  lone.inGuild = true
+  fire(lone, "PLAYER_GUILD_UPDATE", "player")
+  lone.o.level = lone.o.level + 1
+  fire(lone, "PLAYER_LEVEL_UP", lone.o.level)
+  tickAll(30)
+  assert(lone.C.Comm.hello and msgs(lone, "1R") == 1 and msgs(lone, "1F") >= 1 and lone.sent[1].msg == "1R|" .. lone.o.guid, "the hello on joining, the ask first: " .. tostring(lone.sent[1] and lone.sent[1].msg))
+  assert(msgs(lone, "1D") >= 1, "the level-up went as a delta after the hello")
+  for key, e in pairs(lone.env.CuteDB.roster) do assert(key ~= "|Kq99|k" and e.stats.guid ~= lone.o.guid, "no record of yourself after joining: " .. key) end
+  assert(lone.C.Roster.selfSenders["|Kq99|k"] == "guid" and lone.C.Roster:MyRowCount() == 1, "the Kstring sender known as you by your GUID, one row of you")
+  local mine = 0
+  for _, r in ipairs(lone.C.Roster:Rows()) do if r.me or r.key == "|Kq99|k" or r.short == "Pell" then mine = mine + 1 end end
+  assert(mine == 1, "one row of Pell: " .. mine)
+  local seen = yezin.env.CuteDB.roster["|Kq99|k"]
+  assert(seen and seen.stats.guid == lone.o.guid and seen.stats.level == lone.o.level, "the guild has her record, GUID and the new level")
+  -- leaving owes the hello again, said on the next join
+  lone.inGuild = false
+  fire(lone, "PLAYER_GUILD_UPDATE", "player")
+  assert(not lone.C.Comm.hello, "out of the guild, the hello is owed")
+  lone.inGuild = true
+  local asks = msgs(lone, "1R")
+  fire(lone, "PLAYER_GUILD_UPDATE", "player")
+  tickAll(3)
+  assert(msgs(lone, "1R") == asks + 1, "a rejoin says hello again")
+  -- (the guild's answers to her asks, the statistics a minute and a half on, go out before the next scenario)
+  tickAll(95)
+  yezin.env.CuteDB.roster["|Kq99|k"] = nil
+  kaka.env.CuteDB.roster["|Kq99|k"] = nil
+  lone.inGuild = false
   leave(lone)
-  print("guildless: nothing sent, the window shows your own record")
+  print("guildless: nothing sent, the window shows your own record; a guild joined later gets the hello then, and your own messages leave no record")
 end
 
 -- 14: the trackers: XP pace across a ding, gold in copper, grey sales, recipes, resists, the day and the week
@@ -1649,14 +1726,17 @@ do
   kaka.C.UI:Open("settings")
   check(kaka.C.UI.frame, "member settings, statistics categories")
   -- the page: categories left, the open one's statistics right with your value and the leader; a click ranks everyone
-  local function lineOf(c, test) for _, l in ipairs(c.C.UI.lines.items) do if l:IsShown() and test(l) then return l end end end
+  -- (the page's two columns are two virtual lists: the categories, and the statistics with their rankings)
+  local function lineOf(c, test)
+    for _, list in ipairs({ c.C.UI.catLines, c.C.UI.lines }) do for _, l in ipairs(list.items) do if l:IsShown() and test(l) then return l end end end
+  end
   yezin.C.UI:Open("game")
   assert(yezin.C.UI.page == "game" and yezin.C.UI.gameCat == 130, "opens on the first category with statistics")
   local kills = lineOf(yezin, function(l) return l.def and l.def.id == "g2001" and not l.member end)
   assert(kills and kills.val:GetText() == "1300" and kills.val.__justify == "RIGHT", "your value, right-aligned: " .. tostring(kills and kills.val:GetText()))
   assert(kills.who:GetText():find("Yezin", 1, true) and kills.who:GetText():find("1300", 1, true), "the leader, named and valued: " .. kills.who:GetText())
   local catLines = 0
-  for _, l in ipairs(yezin.C.UI.lines.items) do if l:IsShown() and l.cat then catLines = catLines + 1 end end
+  for _, l in ipairs(yezin.C.UI.catLines.items) do if l:IsShown() and l.cat then catLines = catLines + 1 end end
   assert(catLines == 4, "the four categories on the left: " .. catLines)
   check(yezin.C.UI.frame, "officer statistics")
   press(kills)
@@ -1744,6 +1824,329 @@ do
   tickAll(3)
   assert(kaka.C.Policy:Vis(ids[1]) == yezin.C.Stats.byId[ids[1]].default, "the reset reached the member")
   print(string.format("policy chunks: %d messages for %d entries, applied whole; a reset replaces them", chunks, #ids))
+end
+
+-- 19: Forever's names. A character has two words ("Helga Bluntforce"): UnitName gives the first name and the surname,
+-- the roster and the channel name it with both, and 0.3.0 showed Helga three times ("Helga (you)", "Helga Bluntforce
+-- (no addon)" and a grey "Helga Bluntforce" of question marks: her own messages, handed back by the game, kept as a
+-- member's record). Here: one row for you, named as the roster names you; your own messages dropped, even under a
+-- sender string that matches none of your names (a Kstring), by the GUID they carry; a member whose roster name is a
+-- Kstring joined to its record by GUID; ranks found the same way; 0.3.0's ghost record gone at login; /cute diag
+do
+  local function forever(first, rank, rankName, class, level, rosterName)
+    GUILD[#GUILD + 1] = { name = rosterName, guid = guidOf(first), rank = rank, rankName = rankName, class = class, level = level, online = true }
+    return { first, rank, rankName, class, level }
+  end
+  local H = forever("Helga", 0, "Guild Master", "WARRIOR", 30, "Helga Bluntforce")
+  local T = forever("Thora", 1, "Officer", "PRIEST", 28, "Thora Bjorn")
+  local I = forever("Icee", 3, "Raider", "MAGE", 26, "Icee Cake")
+  local K = forever("Ser", 3, "Raider", "ROGUE", 25, "|Kq77|k") -- the roster gives this one's name as a Kstring
+  forever("Thora Stonehew", 4, "Member", "HUNTER", 50, "Thora Stonehew") -- Thora's namesake, without the addon so far
+  -- 0.3.0 left Helga a record of her own statistics' echo under the channel's name for her
+  local ghost = { roster = { ["Helga Bluntforce"] = { seen = EPOCH + 900, online = true, stats = { g2001 = 3, g2004 = 1 }, at = {} } } }
+  local helga = newClient(charOf(H, { surname = "Bluntforce", fullNameSurname = true, sender = "Helga Bluntforce", withStats = true }))
+  local thora = newClient(charOf(T, { surname = "Bjorn", sender = "Thora Bjorn" }))
+  local icee = newClient(charOf(I, { surname = "Cake", sender = "|Kq88|k" })) -- the channel names Icee with a Kstring
+  local ser = newClient(charOf(K, { surname = "Caliber", sender = "Ser Caliber" }))
+  login(helga, ghost); login(thora); login(icee); login(ser)
+  assert(not helga.env.CuteDB.roster["Helga Bluntforce"], "0.3.0's ghost record of yourself is dropped at login")
+  tickAll(45)
+  for _, c in ipairs({ helga, thora, icee, ser }) do
+    for key, e in pairs(c.env.CuteDB.roster) do
+      assert(key ~= c.sender and e.stats.guid ~= c.o.guid, c.o.name .. " keeps no record of itself: " .. key)
+    end
+  end
+  assert(icee.C.Roster.selfSenders["|Kq88|k"], "a sender string matching none of your names is known as you by the GUID in your ask")
+  -- one row for Helga, the first, named as the roster names her; the members joined by GUID
+  local rows = helga.C.Roster:Rows()
+  local helgas, byShort = 0, {}
+  for _, r in ipairs(rows) do
+    if r.short:find("Helga", 1, true) then helgas = helgas + 1 end
+    byShort[r.short] = r
+  end
+  assert(helgas == 1 and rows[1].me and rows[1].short == "Helga Bluntforce" and helga.C.Roster:MyRowCount() == 1, "one row for you, the roster's name: " .. helgas .. " " .. rows[1].short)
+  assert(byShort["Thora Bjorn"] and byShort["Thora Bjorn"].addon and byShort["Thora Bjorn"].stats.level == 28 and byShort["Thora Bjorn"].online, "Thora's record is on her roster row")
+  assert(byShort["Icee Cake"] and byShort["Icee Cake"].addon and byShort["Icee Cake"].key == "|Kq88|k" and not byShort["|Kq88|k"], "Icee's record, under a Kstring sender, joined by GUID")
+  assert(byShort["|Kq77|k"] and byShort["|Kq77|k"].addon and byShort["|Kq77|k"].stats.level == 25 and not byShort["Ser Caliber"], "a roster name that is a Kstring joined to its record by GUID, no second row")
+  -- ranks through the same join: Helga leads, Thora is an officer, the others are not
+  assert(helga.C.Roster:MeOfficer() and helga.C.Roster:IsOfficer("Thora Bjorn") and not helga.C.Roster:IsOfficer("|Kq88|k") and not helga.C.Roster:IsOfficer("Ser Caliber"), "ranks found by GUID and name")
+  assert(ser.C.Policy:Receive("Thora Bjorn", EPOCH + 10 ^ 7, 1, "gold=a") == true and ser.C.Policy:Vis("gold") == "all", "an officer with two names is an officer")
+  assert(helga.C.Policy:Describe():find("Set by ", 1, true), "who set the policy, named")
+  -- the GUID decides over a name. Thora's saved key is "Thora-Forever" (her first name and the realm), and a channel
+  -- that names her namesake the same matches her by name: a delta before any full record is taken for hers; the
+  -- namesake's full record, carrying another GUID, is theirs, and so are their deltas after it
+  local TR, tdb = thora.C.Roster, thora.env.CuteDB.roster
+  assert(thora.C.Me() == "Thora-Forever", "Thora's saved key: " .. tostring(thora.C.Me()))
+  thora.C.Comm:Receive("1D|3|level=1m", "GUILD", "Thora-Forever")
+  assert(not tdb["Thora-Forever"] and TR.selfSenders["Thora-Forever"] == "name", "a delta under your name, no GUID: taken for yours")
+  thora.C.Comm:Receive("1F|1|1|3|guid=" .. guidOf("Thora Stonehew") .. ";level=1n", "GUILD", "Thora-Forever")
+  local twin = tdb["Thora-Forever"]
+  assert(twin and twin.stats.level == 59 and TR.selfSenders["Thora-Forever"] == nil, "another's GUID under your saved key: their record, the name match forgotten")
+  thora.C.Comm:Receive("1D|3|level=1o", "GUILD", "Thora-Forever")
+  assert(twin.stats.level == 60 and TR.selfSenders["Thora-Forever"] == nil, "their delta after it lands on their record")
+  thora.C.Roster:Refresh()
+  local twins, thoras = nil, 0
+  for _, r in ipairs(TR:Rows()) do
+    if r.short == "Thora Stonehew" then twins = r end
+    if r.me or r.short == "Thora Bjorn" then thoras = thoras + 1 end
+  end
+  assert(twins and twins.addon and twins.key == "Thora-Forever" and twins.stats.level == 60 and thoras == 1, "the namesake's row has their record, Thora one row")
+  assert(TR:Display("Thora-Forever") == "Thora Stonehew", "the key names the namesake: " .. TR:Display("Thora-Forever"))
+  thora.C.Policy:Set("gold", "all")
+  assert(thora.C.Policy:Describe():find("Set by Thora Bjorn,", 1, true), "your own policy is yours, whoever has your saved key: " .. thora.C.Policy:Describe())
+  -- under the sender string Thora's own GUID came under, another's full record is kept as theirs too, and her own
+  -- delta, handed back under it, neither drops nor feeds it
+  assert(TR.selfSenders["Thora Bjorn"] == "guid", "Thora's sender string, known by her GUID")
+  thora.C.Comm:Receive("1F|1|1|3|guid=" .. guidOf("Thora Ashby") .. ";level=a", "GUILD", "Thora Bjorn")
+  assert(tdb["Thora Bjorn"] and tdb["Thora Bjorn"].stats.level == 10, "another's GUID under your own sender string: kept")
+  thora.C.Comm:Receive("1D|3|level=1p", "GUILD", "Thora Bjorn")
+  assert(tdb["Thora Bjorn"] and tdb["Thora Bjorn"].stats.level == 10 and TR.selfSenders["Thora Bjorn"] == "guid", "your delta under it: yours, the other record untouched")
+  tdb["Thora Bjorn"] = nil
+  TR:Changed()
+  -- your own ask, handed back, is not answered; a 0.3.0 client's bare ask still is
+  assert(not helga.C.Comm.answering, "nothing waiting to answer")
+  helga.C.Comm:Receive("1R|" .. helga.o.guid, "GUILD", "Helga Bluntforce")
+  assert(not helga.C.Comm.answering, "your own ask is not answered")
+  helga.C.Comm:Receive("1R", "GUILD", "Old Timer")
+  assert(helga.C.Comm.answering, "a bare 1R is answered")
+  tickAll(25)
+  -- the window: you once, at the top, the officers' tab yours
+  helga.C.UI:Open("race")
+  local you = rowOf(helga, "Helga Bluntforce")
+  assert(you and you.row.me and you.name:GetText() == "Helga Bluntforce  (you)", "the row says you: " .. tostring(you and you.name:GetText()))
+  local shown = 0
+  for _, r in ipairs(helga.C.UI.rows.items) do if r:IsShown() and r.row.short == "Helga Bluntforce" then shown = shown + 1 end end
+  assert(shown == 1 and helga.C.UI.tabs.officers:IsShown(), "one row of you in the window; the guild master sees the Officers tab")
+  check(helga.C.UI.frame, "forever names race")
+  helga.C.UI:Open("officers")
+  check(helga.C.UI.frame, "forever names officers")
+  -- a Kstring wider than its room: the label shows the same on the first draw as on every later one (the box clips it)
+  local fs = helga.C.UI.frame:CreateFontString()
+  helga.C.UI.FitText(fs, "|Kq7777777|k", 20)
+  local firstDraw = fs:GetText()
+  helga.C.UI.FitText(fs, "|Kq7777777|k", 20)
+  assert(firstDraw == "|Kq7777777|k" and fs:GetText() == firstDraw, "a wide Kstring kept whole, the same both draws: " .. tostring(firstDraw) .. " then " .. tostring(fs:GetText()))
+  helga.C.UI.FitText(fs, "Thora Bjorn the Unbowed", 60)
+  firstDraw = fs:GetText()
+  helga.C.UI.FitText(fs, "Thora Bjorn the Unbowed", 60)
+  assert(firstDraw:find("%.%.%.$") and fs:GetText() == firstDraw, "a plain name cut the same both draws: " .. firstDraw)
+  -- your own emote line: the event's GUID decides, whatever name it gives
+  local before = helga.C.Sample:Value("emotes")
+  fire(helga, "CHAT_MSG_TEXT_EMOTE", "You dance.", "Helga", "", "", "", "", 0, 0, "", 0, 1, helga.o.guid)
+  fire(helga, "CHAT_MSG_TEXT_EMOTE", "Thora dances.", "Helga Bluntforce", "", "", "", "", 0, 0, "", 0, 2, thora.o.guid)
+  fire(helga, "CHAT_MSG_TEXT_EMOTE", "You wave.", "Helga Bluntforce")
+  assert(helga.C.Sample:Value("emotes") == before + 2, "your lines count by GUID or by both names, another's not: " .. tostring(helga.C.Sample:Value("emotes") - before))
+  -- /cute diag: lines to paste
+  local n0 = #helga.chat
+  helga.env.SlashCmdList.CUTE("diag")
+  local out = table.concat(helga.chat, "\n", n0 + 1)
+  for _, want in ipairs({ 'UnitName "Helga", "Bluntforce"', 'UnitFullName "Helga", "Bluntforce"', 'GetNormalizedRealmName "Forever"', 'GetRealmName "Forever"',
+    "UnitGUID " .. helga.o.guid:sub(1, 16) .. "\n", 'name "Helga Bluntforce" (plain) | memberId ', "your rows 1", '"Helga Bluntforce" (Cute, you)',
+    "diag slot 1: GetInventoryItemID 1234 | link string | GetInventoryItemQuality 2", "diag slot 16: GetInventoryItemID 1240" }) do
+    assert(out:find(want, 1, true), "/cute diag says " .. want .. ":\n" .. out)
+  end
+  n0 = #ser.chat
+  ser.env.SlashCmdList.CUTE("diag")
+  out = table.concat(ser.chat, "\n", n0 + 1)
+  assert(out:find('roster self: name "||Kq77||k" (a Kstring)', 1, true) and out:find("your rows 1", 1, true), "a Kstring shows raw, its | doubled, and says so:\n" .. out)
+  for _, c in ipairs({ helga, thora, icee, ser }) do leave(c) end
+  makeGuild()
+  print("forever names: one row for you named as the roster names you, your own messages dropped by GUID under any sender string, Kstring names joined by GUID, ranks and emotes by GUID, a namesake's GUID kept as theirs over a name match, 0.3.0's ghost record gone, /cute diag")
+end
+
+-- 20: gear on a client whose GetInventoryItemLink gives a secret for every slot (0.3.0 showed 15 of 17 slots empty,
+-- 0 of 17 unenchanted and item level "?" for a character in full gear): the item ids and qualities read as Forever's
+-- character sheet reads them, the levels from the ids, and the enchants read nil with the reason
+do
+  local c = newClient(charOf(NAMES[10], { secretLinks = true }))
+  login(c)
+  local S = c.C.Sample
+  local function n(id) local v, k = S:Value(id), 0; for _ in pairs(v or {}) do k = k + 1 end return v and k or nil end
+  assert(S:Value("ilvl") == 46, "the item level from the ids: " .. tostring(S:Value("ilvl")))
+  local hi = S:Value("ilvl_slots")
+  assert(hi and hi[1] and hi[5] and hi[7] and not hi[16], "the slots at or above it")
+  assert(n("empty_slots") == 11 and not S:Value("empty_slots")[1] and S:Value("empty_slots")[2], "eleven slots empty, the four worn not: " .. tostring(n("empty_slots")))
+  assert(S:Value("greens") == 3 and n("old_gear") == 1 and S:Value("old_gear")[16], "greens from the slot qualities, old gear from the levels")
+  assert(S:Value("unenchanted") == nil and tostring(S:Error("unenchanted")):find("no readable item link for 4 worn slots that take an enchant", 1, true), "no enchant count without links: " .. tostring(S:Error("unenchanted")))
+  assert(S:Value("ready") == 1, "readiness still reads (an empty slot is its one gap)")
+  c.C.UI:Open("prog")
+  local me = rowOf(c, "Lindel")
+  assert(cellOf(me, "ilvl").label:GetText() == "46" and cellOf(me, "empty_slots").label:GetText() == "11/17" and cellOf(me, "unenchanted").label:GetText() == "?", "the Prog row: 46, 11/17, ?")
+  local l0 = #lines
+  hover(cellOf(me, "unenchanted"))
+  assert(table.concat(lines, "\n", l0 + 1):find("Could not read: the client gives no readable item link", 1, true), "the tooltip says why")
+  check(c.C.UI.frame, "member prog, secret links")
+  -- an item the client has not cached: GetDetailedItemLevelInfo reads nothing, C_Item.GetItemInfo's level stands in
+  c.o.uncached = true
+  fire(c, "PLAYER_EQUIPMENT_CHANGED")
+  tick(c, 2)
+  assert(S:Value("ilvl") == 46, "the fallback level: " .. tostring(S:Value("ilvl")))
+  local n0 = #c.chat
+  c.env.SlashCmdList.CUTE("diag")
+  assert(table.concat(c.chat, "\n", n0 + 1):find("diag slot 5: GetInventoryItemID 1235 | link secret | GetInventoryItemQuality 3", 1, true), "/cute diag shows the secret link")
+  leave(c)
+  -- a client without GetInventoryItemID: every gear stat reads nil with that reason
+  local bare = newClient(charOf(NAMES[10], { without = { GetInventoryItemID = true } }))
+  login(bare)
+  assert(bare.C.Sample:Value("ilvl") == nil and bare.C.Sample:Error("empty_slots") == "GetInventoryItemID is missing on this client", "missing: " .. tostring(bare.C.Sample:Error("empty_slots")))
+  leave(bare)
+  print("gear: with every link a secret, item level 46, 11 of 17 empty, 3 greens from the ids and qualities; enchants read nil with the reason; an uncached item's level from GetItemInfo")
+end
+
+-- 21: a guild of four hundred, a hundred and fifty with the addon: a draw costs the rows in view, not the roster (the
+-- first screen the same as in a guild of a hundred); a scroll fills the rows coming into view and neither sorts nor
+-- reads; the Statistics ranking the same; the sampler's ticks draw nothing; a burst of records draws once, and nothing
+-- while the window is hidden
+do
+  local FIRST = { "Aldric", "Bryn", "Cassia", "Dorn", "Elske", "Fenwick", "Garra", "Hollis", "Isolde", "Jory", "Kestra", "Lorne", "Maren", "Nils",
+    "Orla", "Perrin", "Quenna", "Rurik", "Sable", "Tamsin" }
+  local LAST = { "Ashby", "Brack", "Corwen", "Dunmore", "Eastwold", "Fairholt", "Greaves", "Harrow", "Ironside", "Jessup", "Kettle", "Lowell",
+    "Marsh", "Nettle", "Oakes", "Penrose", "Quill", "Rowan", "Stroud" }
+  local CLASSES = { "WARRIOR", "PRIEST", "HUNTER", "MAGE", "ROGUE", "DRUID", "PALADIN", "WARLOCK", "SHAMAN" }
+  local made, base = {}, {}
+  for i, m in ipairs(GUILD) do base[i] = m end
+  for _, l in ipairs(LAST) do for _, f in ipairs(FIRST) do
+    local i = #made + 1
+    made[i] = { name = f .. " " .. l, guid = guidOf(f .. " " .. l), rank = 3 + i % 2, rankName = i % 2 == 0 and "Raider" or "Member",
+      class = CLASSES[i % #CLASSES + 1], level = 1 + (i * 7) % 60, online = i % 4 == 0, zone = "Stranglethorn Vale" }
+  end end
+  -- a guild of n (the twenty everyone shares, then the made ones) and a client in it whose window has the records of
+  -- the made members 2, 4, ... 2 * records (as the channel names them: both words)
+  local function guildOf(n, records)
+    GUILD = {}
+    for i, m in ipairs(base) do GUILD[i] = m end
+    for i = 1, n - #base do GUILD[#GUILD + 1] = made[i] end
+    local c = newClient(charOf(NAMES[3], { withStats = true }))
+    login(c)
+    local db = c.env.CuteDB.roster
+    for i = 1, records do
+      local m = made[i * 2]
+      db[m.name] = { seen = EPOCH + c.clock, online = true, at = {}, stats = { guid = m.guid, level = m.level, xp = (i * 7) % 100, zone = "Duskwood",
+        played = 3600 * i, quests_done = i, deaths_lvl = i % 9, rested = 0, g2001 = i * 13, g2002 = i, ready = i % 3, ilvl = 30 + i % 30, durability = 50 + i % 50 } }
+    end
+    c.C.Roster:Changed()
+    c.C.UI:Build()
+    return c
+  end
+  local function opsOf(fn) OPS.n = 0; fn(); return OPS.n end
+  -- the first screen does not grow with the guild: the same forty members report in a guild of a hundred and in one of
+  -- four hundred, the same rows are in view, and the first Race and Prog cost the same within a few ops (a cost of one
+  -- op per member would show as three hundred more)
+  local firstOf = {}
+  for _, n in ipairs({ 100, 400 }) do
+    local c = guildOf(n, 40)
+    assert(#GUILD == n and c.C.UI.rows ~= nil, "a guild of " .. n)
+    firstOf[n] = { race = opsOf(function() c.C.UI:Open("race") end), prog = opsOf(function() c.C.UI:Open("prog") end), rows = c.C.UI.rows.n }
+    leave(c)
+  end
+  for _, page in ipairs({ "race", "prog" }) do
+    local a, b = firstOf[100][page], firstOf[400][page]
+    assert(firstOf[100].rows == 100 and firstOf[400].rows == 400 and math.abs(b - a) <= 10, page .. ": the first screen costs the same for 100 and 400 members: " .. a .. " and " .. b)
+  end
+  -- the scenario's guild: four hundred, a hundred and fifty of them reporting
+  local big = guildOf(400, 150)
+  assert(#GUILD == 400, "four hundred members: " .. #GUILD)
+  local UI = big.C.UI
+  local rowsCalls, realRows = 0, big.C.Roster.Rows
+  big.C.Roster.Rows = function(self) rowsCalls = rowsCalls + 1; return realRows(self) end
+  local function shownRows() local n = 0; for _, r in ipairs(UI.rows.items) do if r:IsShown() then n = n + 1 end end return n end
+  local function cols() local n = 0; for _, h in ipairs(UI.headerCells.items) do if h:IsShown() and h.def then n = n + 1 end end return n end
+  local bar = UI.scroll.bar
+  local inView = math.ceil(UI.scroll:View() / 20)
+  local report = {}
+  for _, page in ipairs({ "race", "prog" }) do
+    local first = opsOf(function() UI:Open(page) end)
+    local rows, k = shownRows(), cols()
+    -- a row's fill is its place, its name and a text per cell; the first screen also makes the widgets for the rows in
+    -- view (three anchors a cell) and places the cells, which a redraw of the same columns leaves alone
+    assert(UI.rows.n == 400 and rows <= inView + 9 + 1, page .. ": widgets for the rows in view only: " .. rows .. " of " .. UI.rows.n)
+    -- (and the header, the tabs and the footer, a fixed hundred and twenty at most)
+    assert(first <= rows * (5 + 5 * k) + 120, page .. ": the first screen costs the rows in view: " .. first .. " ops for " .. rows .. " rows")
+    -- the order: you, the members who report, then those without the addon online, then offline
+    local seenNoAddon, ok = false, true
+    for i = 2, 30 do
+      local r = nil
+      for _, w in ipairs(UI.rows.items) do if w:IsShown() and w.idx == i then r = w.row end end
+      if r then if not r.addon then seenNoAddon = true elseif seenNoAddon then ok = false end end
+    end
+    assert(ok, page .. ": the members with the addon come first")
+    local again = opsOf(function() UI:Draw() end)
+    assert(again <= rows * (2 + k) + 200, page .. ": a redraw costs the rows in view: " .. again)
+    check(UI.frame, "officer " .. page .. ", 400 members")
+    -- the middle, a wheel step, the end: rows coming into view, nothing sorted or read again
+    local _, max = bar:GetMinMaxValues()
+    local calls, draws = rowsCalls, UI.draws
+    local mid = opsOf(function() bar:SetValue(math.floor(max / 2)) end)
+    -- (and measures the names and zones it has not cut before, once)
+    assert(mid <= rows * (2 + k) + 80, page .. ": a jump to the middle fills the rows in view: " .. mid)
+    local step = opsOf(function() UI.scroll.__scripts.OnMouseWheel(UI.scroll, -1) end)
+    assert(step <= 4 * (2 + k), page .. ": a wheel step fills the two or three rows coming into view: " .. step)
+    check(UI.frame, "officer " .. page .. ", 400 members, scrolled to the middle")
+    -- the column header stays in view above the rows, in the band, not in the scroll child
+    assert(UI.header.__parent == UI.band and UI.header:IsVisible() and shownHeaders(big) > 0, page .. ": the header is pinned in view at the middle")
+    local endOps = opsOf(function() bar:SetValue(max) end)
+    local last
+    for _, w in ipairs(UI.rows.items) do if w:IsShown() and w.idx == UI.rows.n then last = w.row end end
+    assert(last and not last.addon and not last.online, page .. ": the end shows the last member, offline without the addon")
+    assert(rowsCalls == calls and UI.draws == draws, page .. ": scrolling neither builds the rows again nor draws")
+    check(UI.frame, "officer " .. page .. ", 400 members, scrolled to the end")
+    report[#report + 1] = string.format("%s %d ops first (%d and %d with 100 and 400 members, 40 reporting), %d redraw, %d mid, %d step, %d end (%d of 400 rows have widgets)",
+      page, first, firstOf[100][page], firstOf[400][page], again, mid, step, endOps, rows)
+  end
+  -- the Statistics ranking: Total kills opened ranks 151
+  UI:Open("game")
+  local stat
+  for _, l in ipairs(UI.lines.items) do if l:IsShown() and l.def and l.def.id == "g2001" and not l.member then stat = l end end
+  local opened = opsOf(function() press(stat) end)
+  local lines = 0
+  for _, l in ipairs(UI.lines.items) do if l:IsShown() then lines = lines + 1 end end
+  assert(UI.lines.n >= 151 and lines <= inView + 10 and opened <= 1000, "the ranking draws the lines in view: " .. lines .. " of " .. UI.lines.n .. ", " .. opened .. " ops")
+  check(UI.frame, "officer statistics, 151 ranked")
+  local _, max = bar:GetMinMaxValues()
+  local calls = rowsCalls
+  local mid = opsOf(function() bar:SetValue(math.floor(max / 2)) end)
+  check(UI.frame, "officer statistics, 151 ranked, the middle")
+  bar:SetValue(max)
+  -- the end: the last of the ranking, then Kills' second statistic (closed)
+  local lastRanked, lastLine
+  for _, l in ipairs(UI.lines.items) do
+    if l:IsShown() and l.idx == UI.lines.n then lastLine = l end
+    if l:IsShown() and l.idx == UI.lines.n - 1 then lastRanked = l end
+  end
+  assert(lastLine and lastLine.def.id == "g2002" and not lastLine.member and lastRanked and lastRanked.member, "the ranking scrolls to its end")
+  assert(rowsCalls == calls and mid <= lines * 6 + 20, "the ranking's scroll fills the lines in view, the rows not built again: " .. mid)
+  check(UI.frame, "officer statistics, 151 ranked, the end")
+  report[#report + 1] = string.format("statistics %d ops opened, %d mid (%d of %d lines have widgets)", opened, mid, lines, UI.lines.n)
+  -- ten ticks of the sampler (time played, the session, XP an hour move): no Draw, on Race nor on Statistics
+  for _, page in ipairs({ "race", "game" }) do
+    UI:Open(page)
+    local draws = UI.draws
+    for _ = 1, 10 do tick(big, 5) end
+    assert(UI.draws == draws, page .. ": ten ticks drew " .. (UI.draws - draws) .. " times")
+  end
+  -- a value of yours that the page shows: your row (the first, which no sort moves) is filled again, nothing drawn
+  UI:Open("race")
+  bar:SetValue(0)
+  local draws = UI.draws
+  big.o.level = 43
+  fire(big, "PLAYER_LEVEL_UP", 43)
+  tick(big, 3)
+  local mine = rowOf(big, "Upn")
+  assert(mine and cellOf(mine, "level").label:GetText() == "43" and UI.draws == draws, "your level, refilled in place: " .. tostring(mine and cellOf(mine, "level").label:GetText()))
+  -- a burst of thirty members' records: one Draw a second later; none while the window is hidden
+  draws = UI.draws
+  for i = 1, 30 do big.C.Roster:Apply(made[i * 2].name, { level = 60 }) end
+  tick(big, 2)
+  assert(UI.draws == draws + 1, "thirty records, one draw: " .. (UI.draws - draws))
+  UI.frame:Hide()
+  draws = UI.draws
+  for i = 1, 30 do big.C.Roster:Apply(made[i * 2].name, { level = 59 }) end
+  tick(big, 3)
+  assert(UI.draws == draws, "none while hidden")
+  big.C.Roster.Rows = realRows
+  leave(big)
+  makeGuild()
+  print("400 members: " .. table.concat(report, "; ") .. "; ten sampler ticks draw nothing; thirty records draw once, hidden none")
 end
 
 local seen, unique = {}, {}

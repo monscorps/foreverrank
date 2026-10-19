@@ -1,18 +1,21 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The guild channel. Small addon messages, one a second at most, GUILD only:
 --   1D|regver|k=v;k=v;...          what changed since the last send
---   1F|part|parts|regver|k=v;...   the full record, in chunks (at login, and when asked); the game's statistics, where
+--   1F|part|parts|regver|k=v;...   the full record, in chunks (at the hello, and when asked); the game's statistics, where
 --                                  the client reports them, follow in a pass of their own a minute and a half later
---   1R                             please send your full record (answered after a random 1 to 20 s, the statistics
---                                  60 to 90 s on; one answer however many ask while it waits)
+--   1R|guid                        please send your full record (answered after a random 1 to 20 s, the statistics
+--                                  60 to 90 s on; one answer however many ask while it waits). The asker's GUID tells
+--                                  it its own ask, which the game hands back to it (0.3.0 sent a bare 1R, still answered)
 --   1P|at|threshold|id=a;id=s;...  the officers' visibility policy (a statistics category is gc<id>)
+-- The full record starts with the sender's GUID (guid=, Stats.lua's hidden stat), so a receiver joins it to the roster's
+-- member and knows its own record when the game hands it back.
 -- Values: ints in base 36, flags 1/0, text as ASCII without | ; =, lists as base-36 bitmaps over the stat's list,
 -- pips as digits. A client ignores ids it does not know, except a statistic's ("g" and the game's id), whose value
 -- it keeps as an int: the labels are the client's own, so a client that learns its statistics later shows them at
 -- once. Stats marked slow in the registry (time played, XP into the level, every statistic) go out on a two-minute
 -- flush rather than as they tick.
 local _, C = ...
-local M = { out = {}, lastSent = {}, queued = {}, started = false, hello = false }
+local M = { out = {}, lastSent = {}, queued = {}, started = false, hello = false, helloDue = false, senders = {} }
 C.Comm = M
 local PREFIX = "Cute"
 local LIMIT = 255       -- the client's cap on one addon message, header included
@@ -33,10 +36,11 @@ end
 local function unb36(s) return tonumber(s, 36) end
 M.b36, M.unb36 = b36, unb36
 
--- text as it may travel and be shown: no separators, no control characters, nothing the game's font draws as a box
-local function cleanText(s)
+-- text as it may travel and be shown: no separators, no control characters, nothing the game's font draws as a box;
+-- 24 characters, or the stat's own max (the GUID's 40)
+local function cleanText(s, max)
   s = tostring(s):gsub("[|;=]", ""):gsub("%c", ""):gsub("[\128-\255]", "")
-  return s:sub(1, 24)
+  return s:sub(1, max or 24)
 end
 
 -- a stat's value as its wire text; nil when there is nothing to send
@@ -44,7 +48,7 @@ function M.Encode(def, v)
   if v == nil then return nil end
   if def.kind == "int" then return type(v) == "number" and b36(v) or nil
   elseif def.kind == "flag" then return v and "1" or "0"
-  elseif def.kind == "text" then return type(v) == "string" and cleanText(v) or nil
+  elseif def.kind == "text" then return type(v) == "string" and cleanText(v, def.max) or nil
   elseif def.kind == "pips" then return type(v) == "string" and v:gsub("[^%d]", "") or nil
   elseif def.kind == "list" then
     if type(v) ~= "table" then return nil end
@@ -61,7 +65,7 @@ function M.Decode(def, s)
     if not n or n ~= n or math.abs(n) > 2 ^ 40 then return nil end
     return n
   elseif def.kind == "flag" then if s == "1" then return true elseif s == "0" then return false end return nil
-  elseif def.kind == "text" then return cleanText(s)
+  elseif def.kind == "text" then return cleanText(s, def.max)
   elseif def.kind == "pips" then return s:match("^%d*$") and s or nil
   elseif def.kind == "list" then
     local bits = unb36(s)
@@ -149,7 +153,7 @@ end
 -- send what changed since the last send; slow stats wait for the flush (all = true) unless asked
 function M:Changed(all)
   if not self.started or not C.Roster:InGuild() then return end
-  -- before the hello nothing goes out: the full record at 8 s carries it all
+  -- before the hello nothing goes out: its full record carries it all
   if not self.hello then return end
   local ids = {}
   for id in pairs(C.Sample.dirty) do
@@ -171,10 +175,11 @@ local function chunks(parts)
   end
 end
 
--- the whole record but the statistics, which have their own pass
+-- the whole record but the statistics, which have their own pass; the GUID first, so the first chunk names the sender
 function M:Full()
   if not C.Roster:InGuild() then return end
-  local ids = {}
+  local ids = { "guid" }
+  C.Sample.values.guid = C.MyGUID() or C.Sample.values.guid
   for _, def in ipairs(C.Stats.list) do
     if def.cat ~= "game" then ids[#ids + 1] = def.id; C.Sample.dirty[def.id] = nil end
   end
@@ -191,7 +196,11 @@ function M:FullGame(force)
   chunks(partsFor(ids, force))
 end
 
-function M:Ask() if C.Roster:InGuild() then queue({ msg = "1R" }) end end
+function M:Ask()
+  if not C.Roster:InGuild() then return end
+  local guid = C.MyGUID()
+  queue({ msg = guid and ("1R|" .. (guid:gsub("[|;=]", ""))) or "1R" })
+end
 function M:SendPolicy()
   local at, threshold, parts = C.Policy:Parts()
   if not at or not C.Roster:InGuild() then return end
@@ -221,19 +230,40 @@ local function decodeBody(body)
   return kv
 end
 
+-- the first three senders the channel named, any prefix, for /cute diag (how this client names people, you included).
+-- (Sender strings are compared here, and below, only with sender strings: the channel's own, kept as given, the way
+-- they key CuteDB.roster. None is compared with a name, and a secret is asked about before anything compares it)
+function M:Saw(sender, prefix)
+  if #self.senders >= 3 then return end
+  if issecretvalue and issecretvalue(sender) then self.senders[#self.senders + 1] = { secret = true, prefix = prefix }; return end
+  if sender == nil then return end
+  for _, e in ipairs(self.senders) do if e.sender == sender and e.prefix == prefix then return end end
+  self.senders[#self.senders + 1] = { sender = sender, prefix = prefix }
+end
+
 function M:Receive(text, channel, sender)
   text, channel, sender = C.Plain(text), C.Plain(channel), C.Plain(sender)
   if type(text) ~= "string" or type(sender) ~= "string" then return end
   if channel ~= "GUILD" then return end
-  local me = C.Me()
-  if sender == me then return end
+  local R = C.Roster
   local kind = text:sub(1, 2)
+  -- the GUID a full record or an ask carries decides whether the message is yours, handed back by the game; a delta
+  -- or a policy carries none, and Roster.lua goes by the sender string (R:FromMe)
+  local kv, guid
+  if kind == "1F" then kv = decodeBody(text:match("^1F|%d+|%d+|[^|]*|(.*)$")); guid = kv.guid
+  elseif kind == "1R" then guid = text:match("^1R|(.+)$") end
+  local me, how = R:FromMe(sender, guid)
+  if me then
+    R:SelfSender(sender, how)
+    for _, e in ipairs(self.senders) do if e.sender == sender then e.me = true end end
+    return
+  end
+  if guid then R:NotMe(sender) end
   if kind == "1D" then
     local body = text:match("^1D|[^|]*|(.*)$")
-    C.Roster:Apply(sender, decodeBody(body))
+    R:Apply(sender, decodeBody(body))
   elseif kind == "1F" then
-    local body = text:match("^1F|%d+|%d+|[^|]*|(.*)$")
-    C.Roster:Apply(sender, decodeBody(body))
+    R:Apply(sender, kv)
   elseif kind == "1R" then
     -- everyone answers, spread over twenty seconds so a login does not fire twenty clients at once, and once for all
     -- who ask while the answer waits (an asker is online by the time it goes); an officer adds the policy, so a fresh
@@ -255,6 +285,20 @@ function M:Receive(text, channel, sender)
   end
 end
 
+-- hello: ask for everyone's record (your GUID in the ask, so the game's copy of it tells you your sender string), send
+-- ours, say the policy if we hold one, and the statistics a minute and a half on. Said only in a guild: a character
+-- that logs in without one says it on the first roster refresh after joining (Roster.lua), before any change goes out
+-- as a delta. (A hello counted as said while guildless would let your deltas, which carry no GUID, come back after a
+-- join under a sender string nothing knows as you, and make 0.3.0's ghost row again)
+function M:Hello()
+  if self.hello or not self.helloDue or not self.started or not C.Roster:InGuild() then return end
+  self.hello = true
+  self:Ask()
+  self:Full()
+  if C.Roster:MeOfficer() then self:SendPolicy() end
+  C_Timer.After(GAME_AFTER, C.Safe(function() M:FullGame(false) end, "comm: statistics"))
+end
+
 function M:Start()
   if self.started then return end
   if not (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) then return end
@@ -263,18 +307,14 @@ function M:Start()
   local f = CreateFrame("Frame")
   self.frame = f
   f:SetScript("OnEvent", C.Safe(function(_, event, prefix, text, channel, sender)
-    if event == "CHAT_MSG_ADDON" and C.Plain(prefix) == PREFIX then M:Receive(text, channel, sender) end
+    if event ~= "CHAT_MSG_ADDON" then return end
+    prefix = C.Plain(prefix)
+    if #M.senders < 3 then M:Saw(sender, prefix) end
+    if prefix == PREFIX then M:Receive(text, channel, sender) end
   end, "comm: receiving"))
   f:RegisterEvent("CHAT_MSG_ADDON")
-  -- hello: ask for everyone's record, send ours, and say the policy if we hold one
-  C_Timer.After(8, C.Safe(function()
-    M.hello = true
-    M:Ask()
-    M:Full()
-    if C.Roster:MeOfficer() then M:SendPolicy() end
-  end, "comm: hello"))
-  -- the statistics, a minute and a half after the hello
-  C_Timer.After(8 + GAME_AFTER, C.Safe(function() M:FullGame(false) end, "comm: statistics"))
+  -- the hello, eight seconds in (or when you join a guild)
+  C_Timer.After(8, C.Safe(function() M.helloDue = true; M:Hello() end, "comm: hello"))
   -- the slow stats, every two minutes
   local function flush()
     C_Timer.After(SLOW_FLUSH, C.Safe(flush, "comm: flush"))

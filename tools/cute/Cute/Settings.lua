@@ -84,11 +84,11 @@ local function drawEveryone(x, w)
   local e = widgets.edits:Get()
   e:SetPoint("TOPLEFT", x + 100, -y)
   e:SetWidth(math.min(160, w - 104))
-  -- a redraw while you type leaves your typing alone
+  -- a redraw while you type leaves your typing alone; a main's name may be two words on Forever
   if not e:HasFocus() then e:SetText(s.main or "") end
-  e:SetScript("OnEnterPressed", function(self) s.main = (self:GetText() or ""):gsub("[^%w%-]", ""):sub(1, 24); self:ClearFocus(); C.Sample:Read("main") end)
+  e:SetScript("OnEnterPressed", function(self) s.main = (self:GetText() or ""):gsub("[^%w%- ]", ""):sub(1, 24); self:ClearFocus(); C.Sample:Read("main") end)
   e:SetScript("OnEscapePressed", function(self) self:SetText(s.main or ""); self:ClearFocus() end)
-  e:SetScript("OnEditFocusLost", function(self) s.main = (self:GetText() or ""):gsub("[^%w%-]", ""):sub(1, 24); C.Sample:Read("main") end)
+  e:SetScript("OnEditFocusLost", function(self) s.main = (self:GetText() or ""):gsub("[^%w%- ]", ""):sub(1, 24); C.Sample:Read("main") end)
   y = y + 26
   local l2 = widgets.labels:Get()
   l2:SetPoint("TOPLEFT", x, -y - 2)
@@ -169,7 +169,7 @@ local function drawOfficers(x, w)
   ra:SetOn(officer)
   ra:SetScript("OnClick", function()
     if not officer then return end
-    CuteDB.policy = { vis = {}, by = C.Me(), rank = C.Roster:Rank((C.Me())), at = C.Now(), threshold = C.Policy:Threshold() }
+    CuteDB.policy = { vis = {}, by = C.Me(), mine = true, rank = C.Roster:MyRank(), at = C.Now(), threshold = C.Policy:Threshold() }
     C.UI:Draw()
   end)
   y = y + 30

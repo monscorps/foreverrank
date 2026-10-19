@@ -46,13 +46,13 @@ function P:Set(id, vis)
   local p = CuteDB.policy
   p.vis = p.vis or {}
   p.vis[id] = vis
-  p.by, p.rank, p.at = me, C.Roster:Rank(me), C.Now()
+  p.by, p.mine, p.rank, p.at = me, true, C.Roster:MyRank(), C.Now()
   p.threshold = p.threshold or DEFAULT_THRESHOLD
 end
 function P:SetThreshold(n)
   CuteDB.policy = CuteDB.policy or { vis = {} }
   local p = CuteDB.policy
-  p.threshold, p.by, p.rank, p.at = n, C.Me(), C.Roster:Rank((C.Me())), C.Now()
+  p.threshold, p.by, p.mine, p.rank, p.at = n, C.Me(), true, C.Roster:MyRank(), C.Now()
 end
 
 -- "at|threshold|id=v;id=v" for the wire
@@ -92,7 +92,9 @@ function P:Receive(sender, at, threshold, body)
   if p and (p.at or 0) > at then return false, "older" end
   local vis = {}
   for id, v in (body or ""):gmatch("([%l%d_]+)=([as])") do vis[id] = v == "s" and "self" or "all" end
-  if p and p.at == at and p.by == sender then
+  -- (p.by of a policy from the channel is the sender string it came under, compared with this one's as the table keys of
+  -- CuteDB.roster are; your own policy is marked mine, its p.by your saved-data key, and is never compared with a sender)
+  if p and not p.mine and p.at == at and p.by == sender then
     for id, v in pairs(vis) do p.vis[id] = v end
     p.threshold = threshold
   else
@@ -115,5 +117,5 @@ function P:Describe()
   local p = CuteDB.policy
   if not p or not p.by then return "No policy set: the defaults apply." end
   local when = (date and p.at) and date("%Y-%m-%d %H:%M", p.at) or "?"
-  return string.format("Set by %s, %s.", C.Short(p.by), when)
+  return string.format("Set by %s, %s.", p.mine and C.Roster:MyDisplay() or C.Roster:Display(p.by), when)
 end

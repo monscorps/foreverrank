@@ -5,7 +5,7 @@
 -- in one window (UI.lua). Officers decide, stat by stat, whether members see each other's (Policy.lua). Nothing
 -- leaves the guild channel; there is no server.
 local ADDON, C = ...
-C.version = "0.3.0"
+C.version = "0.3.1"
 C.REGVER = 3 -- the stat registry's wire version (informational: a client ignores ids it does not know)
 C.COLOR = "|cffe8b24a"
 
@@ -53,7 +53,9 @@ function C.Safe(fn, where)
 end
 
 ----------------------------------------------------------------------------
--- the client's values: a secret value (Midnight's restrictions) is nil to us, never compared or concatenated
+-- the client's values: a secret value (Midnight's restrictions) is nil to us, never compared or concatenated. A raw
+-- value is asked issecretvalue (or made plain) before anything compares it, nil included: the client may raise on
+-- the comparison itself, which the test harness cannot show (Lua 5.1 compares a table with nil without asking it)
 ----------------------------------------------------------------------------
 function C.Plain(v)
   if issecretvalue and issecretvalue(v) then return nil end
@@ -109,7 +111,7 @@ end
 -- the client functions no generated API doc lists, which Cute reads all the same (Stats.lua says on what evidence),
 -- and the ones it probes for (the statistics API, the latest achievements). /cute api prints which of them this
 -- client has, a line to paste, so a stat leaning on a missing one can be dropped.
-C.UNDOCUMENTED = { "GetInventoryItemDurability", "GetInventoryItemCount", "GetNumUnspentTalents", "DoEmote", "GetAverageItemLevel",
+C.UNDOCUMENTED = { "GetInventoryItemID", "GetInventoryItemQuality", "GetInventoryItemDurability", "GetInventoryItemCount", "GetNumUnspentTalents", "DoEmote", "GetAverageItemLevel",
   "GetCategoryList", "GetCategoryInfo", "GetCategoryNumAchievements", "GetAchievementInfo", "GetTotalAchievementPoints",
   "GetLatestCompletedAchievements", "GetStatisticsCategoryList", "GetStatistic" }
 -- a global this client has, asked without the note a Get by name leaves when it has not
@@ -133,7 +135,60 @@ function C.Print(msg)
   if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage(C.COLOR .. "Cute|r: " .. tostring(msg)) end
 end
 
--- you, realm-qualified, the way the guild roster and the addon channel name people ("Name-Realm")
+----------------------------------------------------------------------------
+-- who you are. Forever names a character with two words, "Helga Bluntforce": on camelot UnitName's second return is
+-- the surname, not a realm (Blizzard_FrameXMLUtil/Camelot/NameUtil.lua, which loads on camelot only, joins the two with
+-- Constants.CharacterNameSeparatorConsts.CHARACTERNAME_SURNAME_SEPARATOR). The guild roster lists you with both words,
+-- the guild channel names a sender its own way, and ClubMemberInfo.name "may be encoded as a Kstring"
+-- (ClubDocumentation.lua): a |K...|k escape the font draws as the name, which is not the name's text and is never
+-- compared with ==. So no name is a key: your roster member is the one marked isSelf (NeverSecret) or carrying your
+-- GUID, and every full record carries its sender's GUID (the hidden "guid" stat, Stats.lua), which Roster.lua joins on.
+-- Names are matched only where no GUID has come yet, loosely (C.Canon). /cute diag prints what this client gives.
+----------------------------------------------------------------------------
+function C.IsKstring(s) return type(s) == "string" and s:find("|K", 1, true) ~= nil end
+function C.MyGUID()
+  local g = C.Get(UnitGUID, "player")
+  return (type(g) == "string" and g ~= "") and g or nil
+end
+function C.SurnameSep()
+  local t = type(Constants) == "table" and Constants.CharacterNameSeparatorConsts or nil
+  local sep = type(t) == "table" and C.Plain(t.CHARACTERNAME_SURNAME_SEPARATOR) or nil
+  return (type(sep) == "string" and sep ~= "") and sep or " "
+end
+-- your names as this client gives them: the first name, the surname (nil where the client has none) and the two
+-- joined as Forever shows them
+function C.MyName()
+  local first, second = C.Get(UnitName, "player")
+  if type(first) ~= "string" or first == "" or C.IsKstring(first) then return nil end
+  if type(second) == "string" and second ~= "" and not C.IsKstring(second) then return first, second, first .. C.SurnameSep() .. second end
+  return first, nil, first
+end
+-- your realm without spaces, as the channel appends it ("-Realm"); asked once
+local realmCache
+local function myRealm()
+  if realmCache then return realmCache end
+  local r = C.Get(GetNormalizedRealmName)
+  if type(r) ~= "string" or r == "" then r = C.Get(GetRealmName); r = type(r) == "string" and (r:gsub("[%s%-]", "")) or nil end
+  if type(r) == "string" and r ~= "" and not C.IsKstring(r) then realmCache = r end
+  return realmCache
+end
+-- a name with a trailing "-Realm" of your own realm cut
+local function noRealm(s)
+  local realm = myRealm()
+  if realm and #s > #realm + 1 and s:sub(-(#realm + 1)):lower() == ("-" .. realm):lower() then return s:sub(1, -(#realm + 2)) end
+  return s
+end
+-- a name as a loose key: your realm cut, spaces and hyphens one space, lower case; nil for a Kstring, a secret or
+-- nothing. A fallback only: where a GUID is known it decides
+function C.Canon(s)
+  s = C.Plain(s)
+  if type(s) ~= "string" or s == "" or C.IsKstring(s) then return nil end
+  return (noRealm(s):gsub("[%s%-]+", " "):lower())
+end
+
+-- the key this character's saved data lives under (CuteDB.chars), and who set a policy: UnitFullName's two returns
+-- joined with "-", the realm where the second is empty. Kept as 0.3.0 built it, so nobody's counters move; it names
+-- nobody in the window (Roster.lua does that)
 function C.Me()
   local name, realm = C.Get(UnitFullName, "player")
   if type(name) ~= "string" then name = C.Get(UnitName, "player") end
@@ -143,8 +198,13 @@ function C.Me()
   return name .. "-" .. realm, name
 end
 
--- "Name" from "Name-Realm"
-function C.Short(name) return type(name) == "string" and (name:match("^([^%-]+)") or name) or "?" end
+-- a name to show: a trailing "-Realm" of your own realm cut, the rest as given (a Kstring draws itself)
+function C.Short(name)
+  name = C.Plain(name)
+  if type(name) ~= "string" then return "?" end
+  if C.IsKstring(name) then return name end
+  return noRealm(name)
+end
 
 ----------------------------------------------------------------------------
 -- saved variables
@@ -215,6 +275,67 @@ local function errorsList()
   end
 end
 
+-- /cute diag: what this client says about you, your gear and the channel's senders, as lines to paste. Values are
+-- shown raw: a string quoted with its | doubled (so a Kstring shows its |K...|k), a secret as "secret"
+local function shown(v)
+  if issecretvalue and issecretvalue(v) then return "secret" end
+  if type(v) == "string" then return '"' .. (v:gsub("|", "||")) .. '"' end
+  return tostring(v)
+end
+local function returns(name, n, ...)
+  local fn = _G[name]
+  if type(fn) ~= "function" then return name .. " missing" end
+  local r = { pcall(fn, ...) }
+  if not r[1] then return name .. " threw " .. tostring(r[2]) end
+  local out = {}
+  for i = 2, n + 1 do out[#out + 1] = shown(r[i]) end
+  return name .. " " .. table.concat(out, ", ")
+end
+function C.Diag()
+  local lines = {}
+  local function add(s) lines[#lines + 1] = s end
+  add(string.format("diag %s: %s | %s | %s | %s | saved as %s", C.version, returns("UnitName", 2, "player"), returns("UnitFullName", 2, "player"),
+    returns("GetNormalizedRealmName", 1), returns("GetRealmName", 1), shown(C.Me())))
+  local guid = C.MyGUID()
+  add("diag guid: UnitGUID " .. (guid and guid:sub(1, 16) or shown(C.Get(UnitGUID, "player"))))
+  -- the guild roster's member for you, as the client gives it and as Cute matched it
+  local club = type(C_Club) == "table" and C_Club or nil
+  local clubId = club and C.Get(club.GetGuildClubId)
+  local info = (club and clubId ~= nil) and C.Get(club.GetMemberInfoForSelf, clubId) or nil
+  if type(info) == "table" then
+    -- (the secret asked about before anything compares the name)
+    local name, g = info.name, C.Plain(info.guid)
+    local kind = (issecretvalue and issecretvalue(name)) and "secret" or (name == nil and "none" or (C.IsKstring(name) and "a Kstring" or "plain"))
+    add(string.format("diag roster self: name %s (%s) | memberId %s | guid %s | isSelf %s", shown(name), kind, shown(info.memberId),
+      type(g) == "string" and g:sub(1, 16) or shown(g), shown(info.isSelf)))
+  else
+    add("diag roster self: " .. (clubId == nil and "no guild club" or "GetMemberInfoForSelf gave nothing"))
+  end
+  local me = C.Roster and C.Roster.self
+  add(string.format("diag matched: %s | your rows %d | records %d | senders known as you %d",
+    me and ("member " .. shown(me.name) .. (me.guid and (" guid " .. me.guid:sub(1, 16)) or "")) or "no roster member is you yet",
+    C.Roster and C.Roster:MyRowCount() or 0, C.Roster and C.Roster:RecordCount() or 0, C.Roster and C.Roster:SelfSenderCount() or 0))
+  -- the first senders the guild channel named
+  local seen = C.Comm and C.Comm.senders or {}
+  local s = {}
+  for _, e in ipairs(seen) do s[#s + 1] = (e.secret and "secret" or shown(e.sender)) .. " (" .. tostring(e.prefix) .. (e.me and ", you" or "") .. ")" end
+  add("diag senders: " .. (#s > 0 and table.concat(s, ", ") or "none seen yet"))
+  -- three gear slots as Forever's character sheet reads them
+  for _, slot in ipairs({ 1, 5, 16 }) do
+    local fn = _G.GetInventoryItemLink
+    local link = "missing"
+    if type(fn) == "function" then
+      local ok, l = pcall(fn, "player", slot)
+      if not ok then link = "threw"
+      elseif issecretvalue and issecretvalue(l) then link = "secret"
+      elseif l == nil then link = "nil"
+      else link = type(l) end
+    end
+    add(string.format("diag slot %d: %s | link %s | %s", slot, returns("GetInventoryItemID", 1, "player", slot), link, returns("GetInventoryItemQuality", 1, "player", slot)))
+  end
+  return lines
+end
+
 SLASH_CUTE1 = "/cute"
 SlashCmdList.CUTE = C.Safe(function(msg)
   msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
@@ -223,8 +344,9 @@ SlashCmdList.CUTE = C.Safe(function(msg)
   elseif msg == "resend" then C.Comm:Ask(); C.Print("asked the guild to send their records again.")
   elseif msg == "me" then C.UI:Open("me")
   elseif msg == "api" then C.Print(C.Stats.GameReport()); C.Print(C.ApiReport())
+  elseif msg == "diag" then for _, l in ipairs(C.Diag()) do C.Print(l) end
   elseif msg == "help" then
-    C.Print("/cute opens the dashboard. /cute settings, /cute me, /cute resend, /cute errors, /cute api (which client functions exist here).")
+    C.Print("/cute opens the dashboard. /cute settings, /cute me, /cute resend, /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them).")
   else C.UI:Toggle() end
 end, "slash")
 
