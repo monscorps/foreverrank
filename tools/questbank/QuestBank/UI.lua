@@ -4820,22 +4820,106 @@ function UI:CreateSettingsView(parent)
   v.glowCombat:SetScript("OnClick", function(self) QB:Settings().glow.combat = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
   v.glowHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
   v.glowHint:SetPoint("TOPLEFT", LEFT, -1180)
-  v.glowHint:SetHeight(52)
-  v.glowHint:SetText("Gold for a quest object or NPC, green for an herb, orange for ore, blue for a chest. Switching it on sets the game's soft-interact settings; they go back as they were when it is off. Game's own draws nothing of QuestBank's.")
+  v.glowHint:SetHeight(28)
+  v.glowHint:SetText("Gold for a quest object or NPC, green for an herb, orange for ore, blue for a chest. Game's own draws nothing of QuestBank's.")
+  -- the game's settings the light changes (Glow.LIST), one row each under a line naming the columns: its name, the
+  -- game's own value the light found and the light's. One you set yourself is left as you set it, and its row says
+  -- so; one the game would not take back says the game kept its value. The rows this client has, from the top; the
+  -- button puts them all back. (The columns: the names to 164 px, the longest 147; the game's own 118 px, for
+  -- "Keyboard and mouse", 103; the light's 80 px, for "As you set it", 70; "The game kept its value", 119, spans the
+  -- last two)
+  v.glowSetHead = text(p, "GameFontNormal", 12, GOLD_SOFT, "LEFT", 370)
+  v.glowSetHead:SetPoint("TOPLEFT", LEFT, -1214)
+  v.glowSetHead:SetText("The game's settings it changes")
+  local GAME_X, GAME_W, LIGHT_X, LIGHT_W = 168, 118, 290, 80
+  v.glowRowX, v.glowRowY = LEFT, -1250
+  local h1 = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", GAME_W)
+  h1:SetPoint("TOPLEFT", LEFT + GAME_X, -1232)
+  h1:SetText("Game's own")
+  local h2 = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", LIGHT_W)
+  h2:SetPoint("TOPLEFT", LEFT + LIGHT_X, -1232)
+  h2:SetText("The light's")
+  -- how a setting became yours, in its tooltip (Glow.State)
+  local YOURS = {
+    changed = "You changed it while the light was on, so the light leaves it as you set it.",
+    login = "It was at a value of yours at login (set while QuestBank was not running, or before the light set its settings), so the light leaves it as you set it.",
+    on = "It was at a value of yours when you switched the light on, so the light leaves it as you set it.",
+  }
+  v.glowRows = {}
+  for i, s in ipairs(QB.Glow and QB.Glow.LIST or {}) do
+    local r = CreateFrame("Frame", nil, p)
+    r:SetSize(370, 18)
+    r:SetPoint("TOPLEFT", LEFT, -1250 - (i - 1) * 18)
+    r:EnableMouse(true)
+    r.s = s
+    r.name = text(r, "GameFontNormal", 12, INK, "LEFT", GAME_X - 4)
+    r.name:SetPoint("LEFT", r, "LEFT", 0, 0)
+    r.name:SetText(s.label)
+    r.game = text(r, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", GAME_W)
+    r.game:SetPoint("LEFT", r, "LEFT", GAME_X, 0)
+    r.light = text(r, "GameFontNormalSmall", 11, INK, "LEFT", LIGHT_W)
+    r.light:SetPoint("LEFT", r, "LEFT", LIGHT_X, 0)
+    r.note = text(r, "GameFontNormalSmall", 11, { 1, 0.62, 0.3 }, "LEFT", 370 - GAME_X)
+    r.note:SetPoint("LEFT", r, "LEFT", GAME_X, 0)
+    r.note:SetText("The game kept its value")
+    r.note:Hide()
+    tooltip(r, function(tip, self)
+      local G = QB.Glow
+      tip:AddLine(self.s.label, GOLD[1], GOLD[2], GOLD[3])
+      tip:AddLine(self.s.where, 1, 1, 1, true)
+      if self.kept and G then
+        tip:AddLine(string.format("The game kept its value (%s) and would not take back %s, its own before the light. QuestBank tries again at your next login; Restore the game's settings tries now.",
+          G.Words(self.s, self.now), G.Words(self.s, self.was)), 1, 0.62, 0.3, true)
+      end
+      -- what the game's dropdown reads now, from its four settings (Glow.IconsReading): its Default writes nothing
+      -- while it reads Default already
+      local reads = self.s.icons and G and G.IconsReading and G.IconsReading()
+      if reads then
+        local on = G.Settings().on == true
+        local line = "The game's Interact Icons reads " .. reads .. " now."
+        if reads == "Default" then
+          line = line .. " Picking Default there changes nothing; None, then Default, sets the game's Default."
+            .. (on and " Pick Show All or None and the light leaves the interact icons as you pick them." or "")
+        elseif on then
+          line = line .. " Pick there and the light leaves the interact icons as you pick them."
+        end
+        tip:AddLine(line, 0.6, 0.85, 0.6, true)
+      end
+      if self.yours then
+        tip:AddLine((YOURS[self.yours] or YOURS.changed) .. " Switch the light off and on to let it set this again.", 0.6, 0.85, 0.6, true)
+      end
+      tip:AddLine("The game's setting " .. self.s.cvar .. ".", 0.6, 0.6, 0.6, true)
+    end)
+    v.glowRows[i] = r
+  end
+  v.glowRestore = button(p, "Restore the game's settings", 200)
+  v.glowRestore:SetPoint("TOPLEFT", LEFT + 4, -1382)
+  v.glowRestore:SetScript("OnClick", QB.Safe(function()
+    if QB.Glow then QB.Glow.Restore("button") end
+    UI:Refresh()
+  end, "settings: restore the game's settings"))
+  tooltip(v.glowRestore, function(tip)
+    tip:AddLine("Restore the game's settings", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Puts each setting above back to the game's own value and switches the interact light off; one you have set yourself stays as you set it. Chat says what went back.", 1, 1, 1, true)
+    tip:AddLine("/qb sparkle reset does the same.", 0.6, 0.6, 0.6, true)
+  end)
+  v.glowSetHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
+  v.glowSetHint:SetPoint("TOPLEFT", LEFT, -1410)
+  v.glowSetHint:SetHeight(40)
 
   -- health and mana on the portraits: the game's own Status Text (Options, Interface), always shown, so it works in
   -- a fight where an addon may not read an enemy's health
-  heading(p, LEFT, -1240, "Health and mana numbers", 370)
+  heading(p, LEFT, -1462, "Health and mana numbers", 370)
   v.statusBtns = {}
   for i, o in ipairs(UI.STATUS_TEXT) do
     local b = button(p, o[2], 84)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1266)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1488)
     b.value = o[1]
     b:SetScript("OnClick", QB.Safe(function(self) UI.SetStatusText(self.value); UI:Refresh() end, "settings: status text"))
     v.statusBtns[i] = b
   end
   v.statusHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.statusHint:SetPoint("TOPLEFT", LEFT, -1296)
+  v.statusHint:SetPoint("TOPLEFT", LEFT, -1518)
   v.statusHint:SetHeight(30)
   v.statusHint:SetText("On your portrait, your target's and your focus's, always shown. The game's own Status Text option.")
 
@@ -5047,6 +5131,47 @@ function UI:RefreshSettingsView(v)
   v.glowOther:SetChecked(gl.other == true)
   v.glowCombat:SetChecked(gl.combat == true)
   v.glowNpcs:SetEnabled(draws); v.glowOther:SetEnabled(draws); v.glowCombat:SetEnabled(draws)
+  -- the game's settings it changes: the game's own value it keeps (the value now while it keeps none) and the light's,
+  -- greyed while the light is off; a row of yours says so, and one the game would not take back says it kept its
+  -- value. Only the rows this client has, from the top
+  local G = QB.Glow
+  local held = G and G.Held and G.Held() or false
+  local y, nYours, nKept = v.glowRowY, 0, 0
+  for _, r in ipairs(v.glowRows or {}) do
+    local now, was, how, kept
+    if G then now, was, how, kept = G.State(r.s) end
+    r:SetShown(now ~= nil)
+    r.yours, r.kept, r.now, r.was = how, kept == true, now, was
+    if now ~= nil then
+      r:ClearAllPoints()
+      r:SetPoint("TOPLEFT", v.glowRowX, y)
+      y = y - 18
+      r.note:SetShown(r.kept)
+      r.game:SetShown(not r.kept)
+      r.light:SetShown(not r.kept)
+      r.game:SetText(G.Words(r.s, was or now))
+      if r.kept then
+        nKept = nKept + 1
+      elseif r.yours then
+        nYours = nYours + 1
+        r.light:SetText("As you set it")
+        r.light:SetTextColor(0.6, 0.85, 0.6)
+      else
+        local ink = gl.on == true and INK or INK_SOFT
+        r.light:SetText(G.Words(r.s, r.s.want))
+        r.light:SetTextColor(ink[1], ink[2], ink[3])
+      end
+    end
+  end
+  v.glowRestore:SetEnabled(gl.on == true or held)
+  if gl.on == true or held then
+    v.glowSetHint:SetText("Restore puts each back to the game's own value and switches the light off; /qb sparkle reset does the same. "
+      .. (nKept > 0 and "Where the game kept its value, QuestBank tries again at your next login."
+        or nYours > 0 and "The ones marked As you set it are yours: the light leaves them."
+        or "One you change in the game's own Settings while the light is on stays as you set it."))
+  else
+    v.glowSetHint:SetText("The light is off: these are the game's own. Switched on, it sets them and keeps the game's own values to put back.")
+  end
   local rm = QB.Camp and QB.Camp.Settings and QB.Camp.Settings() or (type(set.remind) == "table" and set.remind or {})
   for key, row in pairs(v.remind) do row:SetChecked(rm[key] == true) end
   v.clockLevelMsg:SetChecked(set.clockLevelMsg ~= false)
@@ -5073,7 +5198,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(1340) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(1562) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------

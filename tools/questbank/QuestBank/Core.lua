@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "5.4.2"
+QB.version = "5.4.3"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's escort prompt has said 25: see QB.EscortLimit)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -2682,6 +2682,9 @@ slash = function(msg)
     local m = QB:Settings().minimap
     m.hide = not m.hide
     if QB.Minimap then QB.Minimap:Update() end
+  elseif (cmd == "sparkle" or cmd == "sparkles" or cmd == "glow") and QB.Glow then
+    -- the interact light (Glow.lua): reset puts the game's settings it changed back and switches it off
+    QB.Glow.Command(rest)
   elseif cmd == "route" then
     QB.UI:Open(3)
   elseif cmd == "prep" or cmd == "plan" or cmd == "available" then

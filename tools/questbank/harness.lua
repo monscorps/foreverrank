@@ -4047,8 +4047,9 @@ do
   v5.glowOn:SetChecked(true); v5.glowOn.__scripts.OnClick(v5.glowOn)
   v5.glowStyle[1].__scripts.OnClick(v5.glowStyle[1])
   assert(Glow.Style() == "sparkle" and L:IsShown() and sparksShown() == 7, "Sparkles again")
-  -- the rows below moved down with the two new ones, and the page grew to hold them
-  assert(v5.statusHint.__points[1].y == -1296 and v5.statusBtns[1].__points[1].y == -1266 and v5.scroll.child:GetHeight() == 1340,
+  -- the rows below moved down with the two new ones, and the page grew to hold them (5.4.3: and the game's settings
+  -- the light changes, with the button that puts them back)
+  assert(v5.statusHint.__points[1].y == -1518 and v5.statusBtns[1].__points[1].y == -1488 and v5.scroll.child:GetHeight() == 1562,
     "the health and mana rows sit under the light's rows (and 5.5's marker style row), the page holds them")
   local sf = v5.scroll
   local _, hi = sf.bar:GetMinMaxValues()
@@ -4112,6 +4113,602 @@ do
   c.soft = nil; ev("PLAYER_SOFT_INTERACT_CHANGED")
   c.cvars = {}
   QB:Settings().glow.saved = nil
+end
+
+
+
+-- 5.4.3: nodes and quest objects light up. The owner: "we also never managed to get nodes and quest items to light up
+-- properly". The game makes an object's nameplate (where the light sits) only with its interact icons on objects on
+-- (Accessibility, Interact Icons: Show All turns them on, Default off), and the light never set them. And "make it
+-- easy for people to undo those settings": Settings lists each game setting the light changes with the game's own
+-- value and the light's; Restore the game's settings and /qb sparkle reset put them back and switch it off; a
+-- setting you change yourself is left as you set it; a game that closed or reloaded before they went back is put
+-- right at the next login; nothing is written in a fight
+do
+  local Glow, env = QB.Glow, owner.env
+  local origGlow = Glow -- (the module the stages above loaded; reload() below loads it again, as a new session does)
+  c = owner
+  local f = Glow.frame
+  local function ev(e, ...) local gf = QB.Glow.frame; gf.__scripts.OnEvent(gf, e, ...) end
+  local g = Glow.Settings()
+  local said0 = #c.chat
+  local function mark() said0 = #c.chat end
+  local function saidSince() return table.concat(c.chat, "\n", said0 + 1) end
+  -- the client: CVAR_UPDATE at once for each real change, QuestBank's own too (Blizzard_Setting.lua guards against
+  -- it for the same reason); and never a write in a fight
+  -- (refuse[name]: the game will not take that one, and SetCVar answers false, as for a read-only or secure setting;
+  -- tries[name] counts the writes asked of it)
+  local realSet = env.SetCVar
+  local refuse, tries = {}, {}
+  env.SetCVar = function(name, v)
+    assert(not c.combat, "SetCVar in a fight: " .. tostring(name))
+    tries[name] = (tries[name] or 0) + 1
+    if refuse[name] then return false end
+    local was = c.cvars[name]
+    realSet(name, v)
+    if c.cvars[name] ~= was then ev("CVAR_UPDATE", name, c.cvars[name]) end
+    return true
+  end
+  -- the game's word whether the soft-interact target is an object (UnitIsGameObject; soft.object where its GUID is
+  -- withheld), and whether it is a player
+  local function objectOf(soft) if soft.object ~= nil then return soft.object end return (soft.guid or "GameObject"):find("^GameObject") ~= nil end
+  env.UnitIsGameObject = function(unit) return unit == "softinteract" and c.soft ~= nil and objectOf(c.soft) end
+  env.UnitIsPlayer = function(unit) return unit == "softinteract" and c.soft ~= nil and c.soft.player == true end
+  -- the game makes an object's nameplate only with its icons on objects on, a creature's with the interact nameplate
+  -- on. Which objects the game counts low priority, and whether their plate needs the low-priority icons too, is in
+  -- its own code and not yet seen in game: here one marked low needs both (the light sets both, as Show All does)
+  local plate = env.CreateFrame("Frame")
+  local realPlate = env.C_NamePlate.GetNamePlateForUnit
+  local function gamePlate(unit)
+    if unit ~= "softinteract" or not c.soft then return nil end
+    if objectOf(c.soft) then
+      return c.cvars.SoftTargetIconGameObject == "1" and (not c.soft.low or c.cvars.SoftTargetLowPriorityIcons == "1") and c.soft.plate or nil
+    end
+    return c.cvars.SoftTargetNameplateInteract == "1" and c.soft.plate or nil
+  end
+  env.C_NamePlate.GetNamePlateForUnit = gamePlate
+  -- the game reads its settings from its config as you log in (C_CVar.AreCVarsLoaded; VARIABLES_LOADED when done)
+  local cvarsLoaded = true
+  env.C_CVar.AreCVarsLoaded = function() return cvarsLoaded end
+  -- the game's Accessibility, Interact Icons, as its Settings drive it: one dropdown read from four settings
+  -- (Blizzard_SettingsDefinitions_Frame/Accessibility.lua: all on reads Show All, all off None, any other mix
+  -- Default); a pick writes all four, one after another, and only when the dropdown reads otherwise
+  -- (SettingMixin:ApplyValue, Blizzard_Setting.lua). True when it wrote
+  local ICONS = { "SoftTargetIconEnemy", "SoftTargetIconInteract", "SoftTargetIconGameObject", "SoftTargetLowPriorityIcons" }
+  local PICK = { { "0", "1", "0", "0" }, { "1", "1", "1", "1" }, { "0", "0", "0", "0" } } -- Default, Show All, None
+  local function iconsRead()
+    local on = 0
+    for _, k in ipairs(ICONS) do if c.cvars[k] == "1" then on = on + 1 end end
+    return on == 4 and 2 or on == 0 and 3 or 1
+  end
+  -- the next frame: what was asked for while fn ran (C_Timer.After(0)) runs, as the client runs it once the click
+  -- that wrote the settings is over. QuestBank judges the dropdown's pick, and says what became yours, then
+  local function frame(fn)
+    local n0 = #c.timers
+    fn()
+    for _ = 1, 20 do
+      if #c.timers <= n0 then break end
+      table.remove(c.timers, n0 + 1).f()
+    end
+  end
+  local function pickIcons(value)
+    if iconsRead() == value then return false end
+    frame(function() for i, k in ipairs(ICONS) do env.SetCVar(k, PICK[value][i]) end end)
+    return true
+  end
+  -- a setting changed from the console; its CVAR_UPDATE names it as typed there (asTyped: in any case)
+  local function console(name, v, asTyped) frame(function() realSet(name, v); ev("CVAR_UPDATE", asTyped or name, v) end) end
+  -- a new session (Glow.lua loaded again, as after a reload or at the next login): nothing of the last one's in it
+  local function reload()
+    local chunk = assert(loadfile(HERE .. "/QuestBank/Glow.lua"))
+    setfenv(chunk, env)
+    chunk("QuestBank", QB)
+    QB.Glow:Init()
+    Glow = QB.Glow
+  end
+  local SHOWALL = { SoftTargetIconEnemy = "1", SoftTargetIconInteract = "1", SoftTargetIconGameObject = "1", SoftTargetLowPriorityIcons = "1" }
+  -- Forever as it ships (Controls: Enable Interact Key off; Accessibility: Interact Icons, Default), and one setting
+  -- of the game's the light leaves alone
+  local GAME = { SoftTargetInteract = "1", SoftTargetInteractArc = "0", SoftTargetInteractRange = "10", SoftTargetNameplateInteract = "0",
+                 SoftTargetIconInteract = "1", SoftTargetIconGameObject = "0", SoftTargetLowPriorityIcons = "0", SoftTargetIconEnemy = "0" }
+  local LIGHT = { SoftTargetInteract = "3", SoftTargetInteractArc = "2", SoftTargetInteractRange = "15", SoftTargetNameplateInteract = "1",
+                  SoftTargetIconInteract = "1", SoftTargetIconGameObject = "1", SoftTargetLowPriorityIcons = "1", SoftTargetIconEnemy = "0" }
+  local function copy(t, but) local o = {}; for k, v in pairs(t) do o[k] = v end; for k, v in pairs(but or {}) do o[k] = v end; return o end
+  local function is(want, but)
+    for k, v in pairs(copy(want, but)) do if c.cvars[k] ~= v then return false end end
+    return true
+  end
+  local MINE = { SoftTargetInteractRange = "20" } -- (below: your own range, set while QuestBank was not running)
+  -- a fresh session, nothing kept from the stages above
+  ev("PLAYER_LOGOUT")
+  g.saved, g.yours, g.chars = nil, nil, nil
+  g.on, g.style, g.npcs, g.other, g.combat = true, "sparkle", true, true, false
+  c.cvars = copy(GAME)
+  local L = env.QuestBankGlow
+  local function show(soft) c.soft = soft; ev("PLAYER_SOFT_INTERACT_CHANGED") end
+  -- before: the light on, the game's settings as it ships: an herb has no nameplate, so no light (5.4.2 on Forever)
+  show({ name = "Peacebloom", plate = plate })
+  assert(not L:IsShown() and Glow.kind == "herb", "the game as it ships: no nameplate on an herb, no light (what the owner saw)")
+  -- entering the world sets the light's settings, the icons on objects among them, keeping the game's own values
+  mark()
+  ev("PLAYER_ENTERING_WORLD")
+  assert(is(LIGHT), "entering the world sets the light's settings, the icons on objects and the low-priority ones among them")
+  for k, v in pairs(GAME) do
+    if k ~= "SoftTargetIconEnemy" then assert(g.saved[k] == v, "the game's own " .. k .. " kept") end
+  end
+  assert(g.saved.SoftTargetIconEnemy == nil and next(g.yours) == nil and saidSince() == "",
+    "a setting it does not change is not kept; its own writes (CVAR_UPDATE at once) are not yours")
+  assert(L:IsShown() and L:GetParent() == plate and Glow.kind == "herb", "and the herb lights")
+  -- nodes and quest objects in each of QuestBank's styles, NPCs on and off: the NPCs switch is for units alone
+  local saveObj = env.C_QuestLog.GetQuestObjectives
+  env.C_QuestLog.GetQuestObjectives = function(id) if id == 7 then return { { text = "Kobold Candle: 0/3", finished = false } } end return saveObj(id) end
+  local hadLog7 = QB.state.log[7]
+  QB.state.log[7] = QB.state.log[7] or {}
+  -- the game's word that a unit belongs to a quest in your log (C_QuestLog.UnitIsRelatedToActiveQuest)
+  env.C_QuestLog.UnitIsRelatedToActiveQuest = function(unit) return unit == "softinteract" and c.soft ~= nil and c.soft.related == true end
+  local CREATURE = "Creature-0-4455-0-12-295-0000A1B2C3"
+  for _, style in ipairs({ "sparkle", "light" }) do
+    assert(Glow.SetStyle(style), style)
+    for _, npcs in ipairs({ true, false }) do
+      g.npcs = npcs
+      local how = ": " .. style .. (npcs and ", NPCs on" or ", NPCs off")
+      show({ name = "Peacebloom", plate = plate })
+      assert(L:IsShown() and L:GetParent() == plate and Glow.kind == "herb" and L.style == style, "an herb lights green" .. how)
+      show({ name = "Copper Vein", plate = plate })
+      assert(L:IsShown() and Glow.kind == "ore", "a vein lights orange" .. how)
+      show({ name = "Kobold Candle", plate = plate })
+      assert(L:IsShown() and Glow.kind == "quest" and L.core.__vertex[1] == 1 and L.core.__vertex[3] == 0.2, "a quest object lights gold" .. how)
+      show({ name = "Large Crate", plate = plate, related = true })
+      assert(L:IsShown() and Glow.kind == "quest", "an object the game says is for a quest in your log, named otherwise, gold" .. how)
+      show({ name = "Large Crate", plate = plate })
+      assert(L:IsShown() and Glow.kind == "chest", "the same crate with nothing for you: a chest, blue" .. how)
+      show({ name = "Corina Steele", plate = plate, guid = CREATURE })
+      if npcs then assert(L:IsShown() and Glow.kind == "npc", "an NPC lights" .. how)
+      else assert(not L:IsShown() and Glow.kind == nil, "NPCs off: an NPC does not" .. how) end
+      show({ name = "Corina Steele", plate = plate, guid = CREATURE, related = true })
+      assert(npcs and Glow.kind == "npc" or not npcs and not L:IsShown(), "an NPC keeps its own reading, whatever the game says of quests" .. how)
+      show({ name = "Peacebloom", plate = plate, low = true })
+      assert(L:IsShown() and Glow.kind == "herb", "an herb the game counts low priority lights too" .. how)
+      -- where the game withholds the GUID (a unit's identity restricted), its word on objects tells them apart: an NPC
+      -- keeps to the NPCs switch, an object lights whatever it says, a player stays dark
+      show({ name = "Corina Steele", plate = plate, guid = SECRET.str(), object = false })
+      if npcs then assert(L:IsShown() and Glow.kind == "npc", "an NPC, its GUID withheld, lights as an NPC" .. how)
+      else assert(not L:IsShown() and Glow.kind == nil, "NPCs off: an NPC, its GUID withheld, does not light" .. how) end
+      show({ name = "Peacebloom", plate = plate, guid = SECRET.str(), object = true })
+      assert(L:IsShown() and Glow.kind == "herb", "an herb, its GUID withheld, lights" .. how)
+      show({ name = "Brann Steelhand", plate = plate, guid = SECRET.str(), object = false, player = true })
+      assert(not L:IsShown() and Glow.kind == nil, "a player, its GUID withheld: no light" .. how)
+    end
+  end
+  g.npcs, g.other = true, false
+  show({ name = "Old Jug", plate = plate })
+  assert(not L:IsShown(), "plain objects off: a plain one does not light")
+  show({ name = "Old Jug", plate = plate, related = true })
+  assert(L:IsShown() and Glow.kind == "quest", "an object for a quest in your log still does")
+  g.other = true
+  -- game's own: nothing of QuestBank's, and the herb has the nameplate the game's own interact icon shows on
+  Glow.SetStyle("game")
+  show({ name = "Peacebloom", plate = plate })
+  assert(not L:IsShown() and gamePlate("softinteract") == plate and c.cvars.SoftTargetIconInteract == "1" and c.cvars.SoftTargetIconGameObject == "1",
+    "game's own: the herb's nameplate there for the game's icon, nothing drawn by QuestBank")
+  g.npcs = false
+  ev("PLAYER_ENTERING_WORLD")
+  assert(is(LIGHT), "NPCs off: the game's settings stay as objects need them")
+  g.npcs = true
+  Glow.SetStyle("sparkle")
+  -- the game's lookup without a plate for it: the plate whose unit is it, as the game's own interact icon finds it
+  local plate2, other = env.CreateFrame("Frame"), env.CreateFrame("Frame")
+  plate2.unitToken, other.unitToken = "nameplate3", "nameplate1"
+  local realIs = env.UnitIsUnit
+  env.C_NamePlate.GetNamePlateForUnit = function() return nil end
+  env.C_NamePlate.GetNamePlates = function() return { other, plate2 } end
+  env.UnitIsUnit = function(a, b) if b == "softinteract" then return a == "nameplate3" end return realIs(a, b) end
+  show({ name = "Peacebloom", plate = plate2 })
+  assert(L:IsShown() and L:GetParent() == plate2 and Glow.kind == "herb", "the game's lookup finds none: found among the game's plates")
+  env.C_NamePlate.GetNamePlateForUnit, env.C_NamePlate.GetNamePlates, env.UnitIsUnit = gamePlate, nil, realIs
+  show({ name = "Peacebloom", plate = plate })
+
+  -- Settings: each game setting the light changes, the game's own value it found and the light's
+  local wasTab, wasLast, wasShown = UI.tab, UI.lastTab, UI.frame:IsShown()
+  UI.frame:Show(); UI:ShowTab(5); UI:Refresh()
+  local v5 = UI.views[5]
+  local function row(cvar) for _, r in ipairs(v5.glowRows) do if r.s.cvar == cvar then return r end end end
+  local function says(cvar, name, game, light)
+    local r = row(cvar)
+    return r ~= nil and r:IsShown() and r.name:GetText() == name and r.game:GetText() == game and r.light:GetText() == light
+  end
+  assert(#v5.glowRows == 7 and v5.glowSetHead:GetText() == "The game's settings it changes", "seven rows under their heading")
+  assert(says("SoftTargetInteract", "Interact key", "Gamepad only", "On") and says("SoftTargetInteractArc", "Interact arc", "Straight ahead", "All round")
+    and says("SoftTargetInteractRange", "Interact range", "10 yards", "15 yards") and says("SoftTargetNameplateInteract", "Interact target's nameplate", "Off", "On")
+    and says("SoftTargetIconInteract", "Interact icons", "On", "On") and says("SoftTargetIconGameObject", "Interact icons on objects", "Off", "On")
+    and says("SoftTargetLowPriorityIcons", "Low-priority interact icons", "Off", "On"), "each row: its name, the game's own value, the light's")
+  assert(v5.glowRestore:GetText() == "Restore the game's settings" and v5.glowRestore:IsEnabled(), "the button, live")
+  lines = {}; row("SoftTargetIconGameObject").__scripts.OnEnter(row("SoftTargetIconGameObject"))
+  local tipText = table.concat(lines, "\n")
+  assert(tipText:find("Show All", 1, true) and tipText:find("no nameplate", 1, true) and tipText:find("SoftTargetIconGameObject", 1, true),
+    "its tooltip: where the game has it, why the light needs it, its name: " .. tipText)
+  lines = {}; v5.glowRestore.__scripts.OnEnter(v5.glowRestore)
+  assert(table.concat(lines, "\n"):find("/qb sparkle reset", 1, true), "the button's tooltip names the command")
+  local sf = v5.scroll
+  local _, hi = sf.bar:GetMinMaxValues()
+  sf.bar:SetValue(hi); UI:Refresh()
+  for _, pr in ipairs(checkLayout(UI.frame, "settings, the game's settings the light changes")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(UI.frame, "Settings, the game's settings the light changes")
+
+  -- the game's Interact Icons while the light is on (its Settings driven as the client does, above). The light's mix
+  -- reads Default there, so picking Default writes nothing
+  local function yoursIcons() return g.yours.SoftTargetIconInteract and g.yours.SoftTargetIconGameObject and g.yours.SoftTargetLowPriorityIcons end
+  local function times(s, what) return select(2, s:gsub(what:gsub("%p", "%%%0"), "")) end
+  local function tipOf(cvar) lines = {}; row(cvar).__scripts.OnEnter(row(cvar)); return table.concat(lines, "\n") end
+  mark()
+  assert(iconsRead() == 1 and not pickIcons(1) and is(LIGHT) and next(g.yours) == nil and saidSince() == "",
+    "the light's mix reads Default in the game's dropdown: picking Default writes nothing, and nothing is yours")
+  local tip = tipOf("SoftTargetIconGameObject")
+  assert(tip:find("The game's Interact Icons reads Default now. Picking Default there changes nothing", 1, true) and tip:find("Pick Show All or None", 1, true),
+    "the icons' tooltip says what the dropdown reads, and what does work: " .. tip)
+  -- Show All: only the enemy icons change (the other three are the light's already, and the dropdown writes them
+  -- without a word). Once its writes are done, the icons Show All left at the light's value and not at the game's
+  -- own are yours at it; the interact icons, on as the game had them, keep the game's own value. A logout, the next
+  -- loading screen and Restore all leave Show All as you chose it
+  assert(pickIcons(2) and c.cvars.SoftTargetIconEnemy == "1", "Show All: the enemy icons on")
+  assert(g.yours.SoftTargetIconGameObject == "changed" and g.yours.SoftTargetLowPriorityIcons == "changed" and not g.yours.SoftTargetIconInteract
+    and not g.yours.SoftTargetInteract and g.saved.SoftTargetIconGameObject == "1" and g.saved.SoftTargetIconInteract == "1",
+    "the icons Show All set are yours at it; the interact icons keep the game's own; the rest the light's")
+  assert(times(saidSince(), "These are yours now: Interact icons on objects On, Low-priority interact icons On. The interact light leaves them as you set them.") == 1,
+    "chat says so, once, in one line: " .. saidSince())
+  UI:Refresh()
+  tip = tipOf("SoftTargetIconGameObject")
+  assert(tip:find("reads Show All now", 1, true) and not tip:find("reads Default", 1, true) and tip:find("You changed it while the light was on", 1, true),
+    "its tooltip: the dropdown reads Show All (not Default), and how the setting became yours: " .. tip)
+  show({ name = "Peacebloom", plate = plate, low = true })
+  assert(L:IsShown(), "Show All has objects' icons on: the herb lights")
+  ev("PLAYER_LOGOUT")
+  assert(is(GAME, SHOWALL), "a logout: the rest back as the game had them, Show All left as you chose")
+  mark(); ev("PLAYER_ENTERING_WORLD")
+  assert(is(LIGHT, SHOWALL) and iconsRead() == 2 and saidSince() == "", "the next login: the light's set again, Show All as it was")
+  UI:Refresh()
+  assert(says("SoftTargetIconGameObject", "Interact icons on objects", "On", "As you set it"), "Settings: yours, at your value")
+  mark()
+  v5.glowRestore.__scripts.OnClick(v5.glowRestore)
+  assert(is(GAME, SHOWALL) and iconsRead() == 2 and g.on == false and g.saved == nil, "Restore: the rest back as the game had them, Show All as you chose")
+  assert(saidSince():find("back as you had them: Interact key Gamepad only, Interact arc Straight ahead, Interact range 10 yards, Interact target's nameplate Off.", 1, true),
+    "the icons not among what went back: " .. saidSince())
+  -- (the light off, you pick the game's Default again: its own settings, as it ships)
+  assert(pickIcons(1) and is(GAME), "Default again, the light off")
+  -- 5.4.3 (review): one of the three from the console, as the game names it there (in its own case): the low-priority
+  -- icons off. That one alone is yours: the icons on objects keep the game's own Off and the interact icons its On,
+  -- so switching the light off gives the game's own back (claimed as one, the icons on objects stayed on: the light's
+  -- On taken for yours). (An herb the game counts low priority loses its plate; a plain one keeps its own)
+  v5.glowOn:SetChecked(true); v5.glowOn.__scripts.OnClick(v5.glowOn)
+  assert(is(LIGHT) and next(g.yours) == nil, "on again: all the light's")
+  mark()
+  console("SoftTargetLowPriorityIcons", "0", "softtargetlowpriorityicons")
+  assert(g.yours.SoftTargetLowPriorityIcons == "changed" and g.saved.SoftTargetLowPriorityIcons == "0" and not g.yours.SoftTargetIconGameObject
+    and not g.yours.SoftTargetIconInteract and g.saved.SoftTargetIconGameObject == "0" and g.saved.SoftTargetIconInteract == "1",
+    "a setting named in any case is known; that one is yours, the others keep the game's own values")
+  assert(times(saidSince(), "Low-priority interact icons is yours now (Off): the interact light leaves it as you set it.") == 1
+    and not saidSince():find("These are yours", 1, true), "chat names that one alone: " .. saidSince())
+  show({ name = "Peacebloom", plate = plate, low = true })
+  assert(not L:IsShown(), "a low-priority herb: no plate without the low-priority icons")
+  show({ name = "Peacebloom", plate = plate })
+  assert(L:IsShown(), "a plain herb: lit")
+  v5.glowOn:SetChecked(false); v5.glowOn.__scripts.OnClick(v5.glowOn)
+  assert(is(GAME) and iconsRead() == 1 and g.saved == nil, "switched off: the icons on objects back Off as the game had them, yours as you set them")
+  -- the same with the interact icons, On as the game had them: off from the console, yours. Restore leaves them off,
+  -- and the icons on objects and the low-priority ones go back to the game's own Off, not left at the light's On
+  v5.glowOn:SetChecked(true); v5.glowOn.__scripts.OnClick(v5.glowOn)
+  console("SoftTargetIconInteract", "0")
+  mark()
+  v5.glowRestore.__scripts.OnClick(v5.glowRestore)
+  assert(is(GAME, { SoftTargetIconInteract = "0" }) and saidSince():find("Interact icons on objects Off, Low-priority interact icons Off.", 1, true),
+    "Restore: yours left Off, the other two back to the game's own Off: " .. saidSince())
+  realSet("SoftTargetIconInteract", "1")
+  -- None while the light is on: each of the three moves and is yours as it moves; chat says so in one line once the
+  -- dropdown's writes are done. Then Default (the game's own way to it from None): your value again, not fought
+  v5.glowOn:SetChecked(true); v5.glowOn.__scripts.OnClick(v5.glowOn)
+  assert(is(LIGHT) and next(g.yours) == nil, "on again")
+  mark()
+  assert(pickIcons(3) and is(LIGHT, { SoftTargetIconInteract = "0", SoftTargetIconGameObject = "0", SoftTargetLowPriorityIcons = "0" }) and yoursIcons()
+    and g.saved.SoftTargetIconInteract == "0" and g.saved.SoftTargetIconGameObject == "0" and g.saved.SoftTargetLowPriorityIcons == "0", "None: yours, all off")
+  assert(times(saidSince(), "These are yours now: Interact icons Off, Interact icons on objects Off, Low-priority interact icons Off.") == 1
+    and not saidSince():find("is yours now", 1, true), "chat says so in one line: " .. saidSince())
+  mark()
+  assert(pickIcons(1) and is(LIGHT, { SoftTargetIconGameObject = "0", SoftTargetLowPriorityIcons = "0" }) and iconsRead() == 1
+    and g.saved.SoftTargetIconInteract == "1" and not g.yours.SoftTargetInteract, "then Default: the game's own Default, as you chose")
+  assert(saidSince() == "", "nothing new is yours: chat stays quiet: " .. saidSince())
+  ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(not L:IsShown(), "your choice stands: no icons on objects, so no nameplate on the herb and no light")
+  ev("PLAYER_ENTERING_WORLD")
+  assert(is(LIGHT, { SoftTargetIconGameObject = "0", SoftTargetLowPriorityIcons = "0" }), "not set again at the next loading screen, the rest as the light has them")
+  UI:Refresh()
+  assert(says("SoftTargetIconGameObject", "Interact icons on objects", "Off", "As you set it") and says("SoftTargetInteract", "Interact key", "Gamepad only", "On"),
+    "Settings says which are yours")
+  assert(v5.glowSetHint:GetText():find("marked As you set it", 1, true), "and what that means: " .. v5.glowSetHint:GetText())
+  tip = tipOf("SoftTargetIconGameObject")
+  assert(tip:find("You changed it while the light was on", 1, true) and tip:find("Switch the light off and on", 1, true),
+    "its tooltip says how it became yours, and how to let the light set it again: " .. tip)
+  -- logging out puts the light's settings back and keeps the game's own values (and yours) for the next login
+  ev("PLAYER_LOGOUT")
+  assert(is(GAME), "logging out: the game's own values")
+  assert(g.saved and g.saved.SoftTargetInteract == "1" and g.yours.SoftTargetIconGameObject, "kept, for the next login")
+  -- the game loading its settings as you log in fires CVAR_UPDATE before the light has set them: not yours
+  ev("CVAR_UPDATE", "SoftTargetInteract", "1")
+  assert(not g.yours.SoftTargetInteract, "a setting changed before the light set it this session: not taken for yours")
+  -- while QuestBank was not running you set the interact range to 20 (a console command): at the next login it is
+  -- neither the game's own value kept nor the light's, so it is yours, found at login
+  realSet("SoftTargetInteractRange", "20")
+  mark()
+  ev("PLAYER_ENTERING_WORLD")
+  assert(is(LIGHT, { SoftTargetInteractRange = "20", SoftTargetIconGameObject = "0", SoftTargetLowPriorityIcons = "0" }), "the rest set again, yours left")
+  assert(g.yours.SoftTargetInteractRange == "login" and g.saved.SoftTargetInteractRange == "20" and saidSince():find("Interact range is yours now (20 yards)", 1, true),
+    "found at login, yours: " .. saidSince())
+  UI:Refresh()
+  tip = tipOf("SoftTargetInteractRange")
+  assert(tip:find("It was at a value of yours at login", 1, true) and not tip:find("You changed it while the light was on", 1, true),
+    "its tooltip says it was found at login: " .. tip)
+  -- Restore the game's settings: each back exactly as kept, the light off, and chat says what went back
+  mark()
+  v5.glowRestore.__scripts.OnClick(v5.glowRestore)
+  assert(is(GAME, MINE), "Restore: the game's own values back, yours as you set them")
+  assert(g.on == false and g.saved == nil and g.yours == nil and not L:IsShown() and not v5.glowOn:GetChecked(), "the light off, nothing kept")
+  assert(saidSince():find("The interact light is off, and the game's settings it changed are back as you had them: Interact key Gamepad only, Interact arc Straight ahead, Interact target's nameplate Off.", 1, true),
+    "chat says what went back: " .. saidSince())
+  assert(not v5.glowRestore:IsEnabled() and says("SoftTargetIconGameObject", "Interact icons on objects", "Off", "On") and v5.glowSetHint:GetText():find("The light is off", 1, true),
+    "nothing left to put back: the button greyed, the rows the game's own")
+  -- switched on again: nothing is yours any more, the light sets them all, keeping what it finds as the game's own
+  v5.glowOn:SetChecked(true); v5.glowOn.__scripts.OnClick(v5.glowOn)
+  assert(is(LIGHT) and g.saved.SoftTargetInteractRange == "20" and next(g.yours) == nil, "on again: all set, your 20 yards kept as the game's own")
+  -- /qb sparkle: how it stands; reset: as the button; on
+  mark()
+  env.SlashCmdList.QUESTBANK("sparkle")
+  assert(saidSince():find("The interact light is on, and 6 of the game's settings are changed by it.", 1, true), "/qb sparkle: how it stands: " .. saidSince())
+  mark()
+  env.SlashCmdList.QUESTBANK("sparkle reset")
+  assert(is(GAME, MINE) and g.on == false and g.saved == nil and saidSince():find("are back as you had them: Interact key Gamepad only", 1, true),
+    "/qb sparkle reset: as the button, and says so: " .. saidSince())
+  mark()
+  env.SlashCmdList.QUESTBANK("sparkle reset")
+  assert(saidSince():find("it had nothing to put back", 1, true), "again: nothing to put back, and it says so")
+  env.SlashCmdList.QUESTBANK("sparkle on")
+  assert(g.on == true and is(LIGHT), "/qb sparkle on")
+  -- switched off in Settings: all back, quietly (as before 5.4.3)
+  mark()
+  v5.glowOn:SetChecked(false); v5.glowOn.__scripts.OnClick(v5.glowOn)
+  assert(is(GAME, MINE) and g.saved == nil and saidSince() == "", "switched off: all back, quietly")
+  -- a setting the game will not take back (SetCVar answers false): not said to be back, the game's own value kept to
+  -- try again, and chat says so; the button stays live, and the row says the game kept its value
+  env.SlashCmdList.QUESTBANK("sparkle on")
+  refuse.SoftTargetInteract = true
+  mark()
+  v5.glowRestore.__scripts.OnClick(v5.glowRestore)
+  assert(g.on == false and is(GAME, copy(MINE, { SoftTargetInteract = "3" })), "Restore: the rest back, the interact key refused")
+  assert(g.saved and g.saved.SoftTargetInteract == "1" and g.saved.SoftTargetInteractArc == nil and next(g.yours or {}) == nil and Glow.Held(),
+    "its own value kept, the rest let go")
+  local said2 = saidSince()
+  assert(said2:find("are back as you had them: Interact arc Straight ahead", 1, true) and not said2:find("Interact key Gamepad only,", 1, true)
+    and said2:find("The game would not take back Interact key Gamepad only. QuestBank keeps the game's own value and tries again at your next login", 1, true),
+    "chat: what went back, and what the game would not take: " .. said2)
+  UI:Refresh()
+  local kr = row("SoftTargetInteract")
+  assert(v5.glowRestore:IsEnabled() and kr:IsShown() and kr.note:IsShown() and kr.note:GetText() == "The game kept its value" and not kr.game:IsShown()
+    and not kr.light:IsShown() and not row("SoftTargetInteractArc").note:IsShown(), "the button stays live, to try again; the row says the game kept its value")
+  tip = tipOf("SoftTargetInteract")
+  assert(tip:find("The game kept its value (On) and would not take back Gamepad only", 1, true) and tip:find("tries again at your next login", 1, true),
+    "its tooltip says what the game kept and would not take back: " .. tip)
+  assert(v5.glowSetHint:GetText():find("Where the game kept its value, QuestBank tries again at your next login.", 1, true), "and the hint: " .. v5.glowSetHint:GetText())
+  -- 5.4.3 (review): a loading screen in the same session neither tries it again nor says so again (it did, at each)
+  local n = tries.SoftTargetInteract
+  mark(); ev("PLAYER_ENTERING_WORLD"); ev("PLAYER_ENTERING_WORLD")
+  assert(tries.SoftTargetInteract == n and saidSince() == "" and Glow.Held() and is(GAME, copy(MINE, { SoftTargetInteract = "3" })),
+    "loading screens: not tried again, nothing said: " .. saidSince())
+  -- the next login (a new session) tries it once and says so once, however many loading screens follow
+  reload()
+  mark(); ev("PLAYER_ENTERING_WORLD"); ev("PLAYER_ENTERING_WORLD"); ev("PLAYER_ENTERING_WORLD")
+  assert(tries.SoftTargetInteract == n + 1 and times(saidSince(), "The game would not take back Interact key Gamepad only.") == 1,
+    "the next login: tried once, said once: " .. saidSince())
+  UI:Refresh()
+  assert(row("SoftTargetInteract").note:IsShown(), "and listed so again")
+  -- Restore the game's settings tries now, and answers
+  mark()
+  v5.glowRestore.__scripts.OnClick(v5.glowRestore)
+  assert(tries.SoftTargetInteract == n + 2 and times(saidSince(), "The game would not take back Interact key Gamepad only.") == 1, "the button tries again, and says so: " .. saidSince())
+  -- the game takes it back at the next login: back, and said
+  refuse.SoftTargetInteract = nil
+  reload()
+  mark(); ev("PLAYER_ENTERING_WORLD")
+  assert(is(GAME, MINE) and g.saved == nil and not Glow.Held() and saidSince():find("They are back as you had them: Interact key Gamepad only.", 1, true),
+    "the next login puts it back, and says so: " .. saidSince())
+  UI:Refresh()
+  assert(not row("SoftTargetInteract").note:IsShown() and says("SoftTargetInteract", "Interact key", "Gamepad only", "On"), "its row as before")
+
+  -- a fight: nothing written (SetCVar above errors in one); the light goes out at once, its settings after
+  env.SlashCmdList.QUESTBANK("sparkle on")
+  c.combat = true; ev("PLAYER_REGEN_DISABLED")
+  mark()
+  v5.glowRestore.__scripts.OnClick(v5.glowRestore)
+  assert(g.on == false and is(LIGHT) and g.saved and saidSince():find("when the fight is over", 1, true), "Restore in a fight: off at once, the settings after it")
+  ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(is(LIGHT), "nothing while the fight goes on")
+  -- 5.4.3 (review): while it waits you set the range to 25 (a console command): neither the light's nor the game's
+  -- own kept, so it is yours. It stays at 25, the game's own 20 kept for it is let go, and chat says so once
+  console("SoftTargetInteractRange", "25")
+  c.combat = false; mark(); ev("PLAYER_REGEN_ENABLED")
+  assert(is(GAME, { SoftTargetInteractRange = "25" }) and g.saved == nil and saidSince():find("are back as you had them: Interact key Gamepad only", 1, true)
+    and not saidSince():find("Interact range 20 yards", 1, true)
+    and times(saidSince(), "Left as you set it since the interact light changed it: Interact range 25 yards.") == 1,
+    "the fight over: the rest back, your 25 yards left, and said: " .. saidSince())
+  mark(); ev("PLAYER_ENTERING_WORLD")
+  assert(saidSince() == "" and c.cvars.SoftTargetInteractRange == "25", "said once: nothing more at the next loading screen")
+  realSet("SoftTargetInteractRange", "20") -- (your 20 again, the light off)
+  -- switched on, and the world entered, in a fight: set when it is over
+  c.combat = true
+  v5.glowOn:SetChecked(true); v5.glowOn.__scripts.OnClick(v5.glowOn)
+  ev("PLAYER_ENTERING_WORLD")
+  assert(g.on == true and is(GAME, MINE), "on in a fight: nothing written yet")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED")
+  assert(is(LIGHT) and g.saved.SoftTargetInteract == "1", "set when the fight is over")
+  -- a logout in a fight writes nothing; the game's own values stay kept
+  c.combat = true; ev("PLAYER_LOGOUT")
+  assert(is(LIGHT) and g.saved.SoftTargetInteract == "1", "a logout in a fight: nothing written, the game's own kept")
+  c.combat = false
+  ev("PLAYER_LOGOUT")
+  assert(is(GAME, MINE), "and out of one, back")
+
+  -- a setting the game keeps per character (GetCVarInfo says so) is kept for that character alone: an alt's own value
+  -- is not taken for one you changed. One the game keeps from addons (locked) and one this client has not got are
+  -- left alone, and not listed
+  Glow.Restore()
+  local key = QB.charKey
+  env.C_CVar.GetCVarInfo = function(name)
+    local v = c.cvars[name]
+    return v, v, false, name == "SoftTargetInteractRange", name == "SoftTargetInteractArc", false, false
+  end
+  c.cvars = copy(GAME); c.cvars.SoftTargetLowPriorityIcons = nil
+  Glow.Set(true)
+  assert(g.chars and g.chars[key].saved.SoftTargetInteractRange == "10" and g.saved.SoftTargetInteractRange == nil and c.cvars.SoftTargetInteractRange == "15",
+    "the range kept for this character")
+  assert(c.cvars.SoftTargetInteractArc == "0" and g.saved.SoftTargetInteractArc == nil, "a locked setting: not touched")
+  assert(c.cvars.SoftTargetLowPriorityIcons == nil and g.saved.SoftTargetLowPriorityIcons == nil, "one the client has not got: never written")
+  UI:Refresh()
+  assert(not row("SoftTargetInteractArc"):IsShown() and not row("SoftTargetLowPriorityIcons"):IsShown()
+    and row("SoftTargetInteractRange").__points[1].y == -1250 - 18 and row("SoftTargetIconGameObject").__points[1].y == -1250 - 4 * 18,
+    "neither listed: the rows close up")
+  ev("PLAYER_LOGOUT")
+  QB.charKey = "Alt-ForeverNormal"; c.cvars.SoftTargetInteractRange = "12"
+  mark(); ev("PLAYER_ENTERING_WORLD")
+  assert(c.cvars.SoftTargetInteractRange == "15" and g.chars["Alt-ForeverNormal"].saved.SoftTargetInteractRange == "12" and not saidSince():find("yours", 1, true),
+    "an alt with its own range: kept for the alt, not yours")
+  ev("PLAYER_LOGOUT")
+  assert(c.cvars.SoftTargetInteractRange == "12", "the alt's back at its logout")
+  QB.charKey = key; c.cvars.SoftTargetInteractRange = "10"
+  ev("PLAYER_ENTERING_WORLD")
+  assert(c.cvars.SoftTargetInteractRange == "15" and not g.chars[key].yours.SoftTargetInteractRange, "and on your own character, as before")
+  Glow.Restore()
+  assert(c.cvars.SoftTargetInteractRange == "10" and g.chars and g.chars[key] == nil and g.chars["Alt-ForeverNormal"],
+    "off: this character's back; the alt's kept for the alt's next login")
+  env.C_CVar.GetCVarInfo = nil; g.chars = nil
+
+  -- 5.4.3 (review): no value cut in the section, with the longest in each column: the game's own "Keyboard and mouse"
+  -- (its interact key for the keyboard and mouse alone), "As you set it", and "The game kept its value" across both
+  c.cvars = copy(GAME, { SoftTargetInteract = "2" })
+  Glow.Set(true)
+  console("SoftTargetInteractArc", "1")
+  UI:Refresh(); sf.bar:SetValue(hi); UI:Refresh()
+  assert(says("SoftTargetInteract", "Interact key", "Keyboard and mouse", "On") and says("SoftTargetInteractArc", "Interact arc", "In front", "As you set it"),
+    "the longest values in their columns")
+  local lay = checkLayout(UI.frame, "settings, the game's settings, the longest values")
+  assert(#lay == 0, "nothing cut: " .. table.concat(lay, "; "))
+  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(UI.frame, "Settings, the game's settings: Keyboard and mouse, As you set it")
+  refuse.SoftTargetNameplateInteract = true
+  Glow.Restore("button")
+  UI:Refresh()
+  assert(row("SoftTargetNameplateInteract").note:IsShown() and says("SoftTargetInteract", "Interact key", "Keyboard and mouse", "On")
+    and c.cvars.SoftTargetInteract == "2" and c.cvars.SoftTargetInteractArc == "1", "off: one the game kept, yours left, the game's own back")
+  lay = checkLayout(UI.frame, "settings, the game's settings, one the game kept")
+  assert(#lay == 0, "nothing cut: " .. table.concat(lay, "; "))
+  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(UI.frame, "Settings, the game's settings: one the game kept")
+  refuse.SoftTargetNameplateInteract = nil
+  Glow.Restore("button")
+  assert(not Glow.Held() and c.cvars.SoftTargetNameplateInteract == "0", "Restore tries again: back")
+
+  -- the light switched off in a fight and the game reloaded (or closed) before the fight ended: nothing was written,
+  -- and the saved file holds the light off with the game's own values kept. A new session (Glow.lua loaded again,
+  -- as after a reload): they go back once, when the fight is over, and chat says so
+  c.cvars = copy(GAME, MINE)
+  Glow.Set(true)
+  c.combat = true
+  Glow.Restore("button")
+  ev("PLAYER_LOGOUT")
+  assert(g.on == false and g.saved and is(LIGHT), "a reload in the fight: the light off, its settings left, the game's own kept")
+  reload()
+  ev("PLAYER_ENTERING_WORLD")
+  assert(is(LIGHT), "the next session, still in the fight: nothing written")
+  -- 5.4.3 (review): in the fight you set the arc to In front (a console command): neither the light's nor the game's
+  -- own kept, so the repair leaves it as you set it, lets go of the game's own kept for it, and says so once
+  console("SoftTargetInteractArc", "1")
+  c.combat = false; mark(); ev("PLAYER_REGEN_ENABLED")
+  local ARC = copy(MINE, { SoftTargetInteractArc = "1" })
+  assert(is(GAME, ARC) and g.saved == nil and saidSince():find("the game closed or reloaded before QuestBank could put them back. They are back as you had them: Interact key Gamepad only, Interact range 20 yards", 1, true)
+    and times(saidSince(), "Left as you set it since the interact light changed it: Interact arc In front.") == 1,
+    "put right once the fight is over, your arc left, and said: " .. saidSince())
+  mark(); ev("PLAYER_ENTERING_WORLD")
+  assert(saidSince() == "" and is(GAME, ARC), "once: nothing more at the next loading screen")
+  realSet("SoftTargetInteractArc", "0") -- (the game's own again, the light off)
+  -- QuestBank switched off in the AddOns list with the light's settings left (the file says off, values kept): the
+  -- next login with it puts them back, once the game has read its settings (VARIABLES_LOADED after the first loading
+  -- screen: before, a write is overwritten as they load)
+  g.on, g.saved = false, copy(GAME, MINE); g.saved.SoftTargetIconEnemy = nil
+  c.cvars = copy(LIGHT)
+  cvarsLoaded = false
+  reload(); mark(); ev("PLAYER_ENTERING_WORLD")
+  assert(is(LIGHT) and g.saved and saidSince() == "", "the first loading screen, the game's settings not read yet: nothing written")
+  cvarsLoaded = true; ev("VARIABLES_LOADED")
+  assert(is(GAME, MINE) and g.saved == nil and saidSince():find("They are back as you had them: Interact key Gamepad only", 1, true), "at login, put back: " .. saidSince())
+  -- the light on and the game closed before its logout: the next login finds them as the light left them, not yours,
+  -- and the game's own still kept for the logout
+  QB.Glow.Set(true)
+  reload(); mark(); ev("PLAYER_ENTERING_WORLD")
+  assert(is(LIGHT) and next(g.yours) == nil and g.saved.SoftTargetInteract == "1" and saidSince() == "", "on after a crash: as the light left them, nothing yours")
+  ev("PLAYER_LOGOUT")
+  assert(is(GAME, MINE), "and they go back at the logout")
+  -- while QuestBank was not running you picked Show All in the game's Interact Icons (nothing heard of it): the enemy
+  -- icons moved from the light's reading and the four read Show All, so at the next login the icons on objects and the
+  -- low-priority ones (On, the game's own Off) are yours, not taken for the light's own left behind; the interact icons,
+  -- On as the game had them, need nothing. Restore leaves Show All
+  for k, v in pairs(SHOWALL) do realSet(k, v) end
+  reload(); mark(); ev("PLAYER_ENTERING_WORLD")
+  assert(is(LIGHT, SHOWALL) and g.yours.SoftTargetIconGameObject == "login" and g.yours.SoftTargetLowPriorityIcons == "login" and not g.yours.SoftTargetIconInteract
+    and not g.yours.SoftTargetInteract and times(saidSince(), "These are yours now: Interact icons on objects On, Low-priority interact icons On.") == 1,
+    "Show All chosen while QuestBank was not running: yours at login: " .. saidSince())
+  QB.Glow.Restore("button")
+  assert(is(GAME, copy(MINE, SHOWALL)) and g.saved == nil, "and Restore leaves Show All")
+  -- the same with None (the enemy icons off before and after, so unmoved): the interact icons off is neither the
+  -- game's own kept nor the light's, so they are yours. The icons on objects and the low-priority ones are off as the
+  -- game had them, so the light sets them as ever, and Restore puts them back off: None again
+  local NONE = { SoftTargetIconInteract = "0", SoftTargetIconGameObject = "0", SoftTargetLowPriorityIcons = "0" }
+  assert(pickIcons(1) and is(GAME, MINE), "(the light off: Default again)")
+  QB.Glow.Set(true); ev("PLAYER_LOGOUT")
+  assert(is(GAME, MINE) and g.saved.SoftTargetIconInteract == "1", "the light on, logged out")
+  for k, v in pairs(NONE) do realSet(k, v) end
+  reload(); mark(); ev("PLAYER_ENTERING_WORLD")
+  assert(is(LIGHT, { SoftTargetIconInteract = "0" }) and g.yours.SoftTargetIconInteract == "login" and not g.yours.SoftTargetIconGameObject
+    and not g.yours.SoftTargetLowPriorityIcons and g.saved.SoftTargetIconGameObject == "0" and g.saved.SoftTargetLowPriorityIcons == "0"
+    and times(saidSince(), "Interact icons is yours now (Off): the interact light leaves it as you set it.") == 1,
+    "None chosen while QuestBank was not running: the one you changed is yours at login: " .. saidSince())
+  QB.Glow.Restore()
+  assert(is(GAME, copy(MINE, NONE)) and g.saved == nil, "and Restore gives None back")
+  -- the light on, and the game reads its settings late as you log in: till then the light writes nothing, so the
+  -- values loading (each with its CVAR_UPDATE) are not taken for yours
+  assert(pickIcons(1) and is(GAME, MINE), "(the light off: Default again)")
+  QB.Glow.Set(true); ev("PLAYER_LOGOUT")
+  assert(is(GAME, MINE) and g.saved.SoftTargetInteractRange == "20", "the light on, logged out: the game's own kept")
+  c.cvars = copy(GAME, { SoftTargetInteract = "0", SoftTargetIconInteract = "0" }) -- the client's own defaults, its config not read yet
+  cvarsLoaded = false
+  reload(); mark(); ev("PLAYER_ENTERING_WORLD")
+  assert(is(GAME, { SoftTargetInteract = "0", SoftTargetIconInteract = "0" }) and saidSince() == "", "the first loading screen, nothing read yet: nothing written")
+  for k, v in pairs(copy(GAME, MINE)) do if c.cvars[k] ~= v then realSet(k, v); ev("CVAR_UPDATE", k, v) end end
+  assert(next(g.yours or {}) == nil and saidSince() == "", "the game reading its settings: nothing yours")
+  cvarsLoaded = true; ev("VARIABLES_LOADED")
+  assert(is(LIGHT) and next(g.yours) == nil and g.saved.SoftTargetInteract == "1" and g.saved.SoftTargetInteractRange == "20" and saidSince() == "",
+    "read: the light's set, nothing yours, the game's own as kept")
+  ev("PLAYER_LOGOUT")
+  assert(is(GAME, MINE), "and back at the logout")
+
+  -- tidy: the module the stages above loaded, the game's own mocks
+  QB.Glow.Restore()
+  QB.Glow = origGlow
+  rawset(env, "QuestBankGlow", L)
+  ev("PLAYER_LOGOUT")
+  env.SetCVar, env.C_NamePlate.GetNamePlateForUnit = realSet, realPlate
+  env.UnitIsGameObject, env.UnitIsPlayer, env.C_CVar.AreCVarsLoaded = nil, nil, nil
+  env.C_QuestLog.GetQuestObjectives, env.C_QuestLog.UnitIsRelatedToActiveQuest = saveObj, nil
+  if not hadLog7 then QB.state.log[7] = nil end
+  sf.bar:SetValue(0)
+  if wasTab then UI:ShowTab(wasTab) end
+  UI.lastTab = wasLast
+  UI.frame:SetShown(wasShown)
+  c.soft = nil; c.cvars = {}
+  g.on, g.saved, g.yours, g.chars, g.style = true, nil, nil, nil, "sparkle"
 end
 
 
@@ -5339,7 +5936,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 1340 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 1562 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()
