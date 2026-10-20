@@ -8,7 +8,8 @@ local Cute = Cute
 local E = QB.Engine
 local P = { open = {}, more = false }
 local function redraw() Cute.Refresh() end
-local function minutes(m) return m and (math.floor(m + 0.5) .. " min") or nil end
+-- the minutes to a place or a giver as the engine's own list says them: "here" under a minute
+local function minutes(m) if not m then return nil end return m < 1 and "here" or (math.floor(m + 0.5) .. " min") end
 
 local function placeRow(g, K)
   local open = g.open + g.picks + g.held
