@@ -952,8 +952,23 @@ function DM.ShowTab(tab)
 end
 
 -- the journal is a page of the QuestBank window (UI.lua, page 7): built the first time the page shows, to its size
+-- a frame per size: QuestBank's page has one size; a host's window may be resized (Cute's), and the layout is laid
+-- at the build (the floor art's scale, the panels' widths), so a new size gets its own frame and a size seen before
+-- gets its frame back. The one on show is `frame`, which the rest of the file reads
+local frames = {}
 function DM.Attach(page, w, h)
-  frame = frame or build(page, w, h)
+  if frame and not w and not h then return frame end -- (no size asked: the frame on show)
+  local key = tostring(w or 0) .. "x" .. tostring(h or 0)
+  local f = frames[key]
+  if frame and frame ~= f and frame:IsShown() then frame:Hide() end
+  if not f then
+    f = build(page, w, h)
+    f.builtW, f.builtH, f.builtScale = W, H, SCALE
+    frames[key] = f
+  end
+  W, H, SCALE = f.builtW, f.builtH, f.builtScale
+  frame = f
+  if not f:IsShown() then f:Show() end
   return frame
 end
 
