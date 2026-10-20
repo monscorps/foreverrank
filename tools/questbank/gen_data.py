@@ -217,7 +217,11 @@ DUNGEON = {  # area: (lfg icon, zone, entrance)
     717: ("stormwindstockades", "Stormwind City", None), 721: ("gnomeregan", "Dun Morogh", (1426, 24.4, 39.8)),
     491: ("razorfenkraul", "The Barrens", (1413, 42.3, 89.9)), 796: ("scarletmonastery", "Tirisfal Glades", None),
     722: ("razorfendowns", "The Barrens", None), 1337: ("uldaman", "Badlands", None), 2437: ("ragefirechasm", "Orgrimmar", None),
-    16611: ("ruinsoflordaeron", "Tirisfal Glades", None), 16919: ("dungeon", "", None),
+    16611: ("ruinsoflordaeron", "Tirisfal Glades", None),
+    # The Hall of Thanes: "Inside Ironforge: the way in is from the High Seat, as beta players describe it"
+    # (research/questbank/fc/hall-of-thanes.html); the spot is King Magni's at the High Seat as the catalog places him
+    # (D.NPC), no coordinate of its own yet
+    16919: ("dungeon", "Ironforge", (1455, 39.4, 55.4)),
     1176: ("zulfarak", "Tanaris", None), 2100: ("maraudon", "Desolace", None),
     # Wowhead files the Sunken Temple quests under area 1417; 1477 is the instance's own row
     1417: ("sunkentemple", "Swamp of Sorrows", None), 1477: ("sunkentemple", "Swamp of Sorrows", None),
@@ -2364,6 +2368,19 @@ if SELFTEST_OS:
     os_selftest()
     raise SystemExit(0)
 
+
+# dungeon quests the route cannot lead to: flagged a dungeon's (flag 1), no objective spot, and a category with no
+# entrance. The addon words their step "(<dungeon>: entrance not known yet)" (Guide.lua) and the arrow says "Finish
+# <quest>" (Target.lua): a warning each build, so the gap stays in sight
+_no_way = {}
+for _qid, _v in Q.items():
+    _cat = CATS[_v[7] - 1] if _v[7] else None
+    if _v[9] & 1 and _qid not in SPOT and not (_cat and _cat.get("entrance")):
+        _no_way.setdefault(_cat["name"] if _cat else "no category", []).append(_qid)
+if _no_way:
+    print("WARNING: %d dungeon quests with neither an objective spot nor a category entrance (\"entrance not known yet\" in the addon): %s" % (
+        sum(len(x) for x in _no_way.values()),
+        "; ".join("%s %d: %s" % (name, len(ids), ", ".join(str(i) for i in sorted(ids))) for name, ids in sorted(_no_way.items()))))
 
 SPOT = {q: spots_str(v) for q, v in SPOT.items()}
 START = {q: spots_str(v) for q, v in START.items()}

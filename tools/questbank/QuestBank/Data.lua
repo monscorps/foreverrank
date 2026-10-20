@@ -32,7 +32,7 @@ D.CAT = {
   {key="d16544",name="City of Dalaran",where="",dungeon=true,icon=136334},
   {key="z40",name="Westfall",where="Eastern Kingdoms",cont=0,icon=236852,img=1851091,zi=236852,art=8067830},
   {key="d16732",name="Excavation Site: Wetlands",where="",dungeon=true,icon=136334},
-  {key="d16919",name="The Hall of Thanes",where="",dungeon=true,icon=136334},
+  {key="d16919",name="The Hall of Thanes",where="Ironforge",dungeon=true,cont=0,icon=136334,entrance={m=1455,x=39.4,y=55.4}},
   {key="z10",name="Duskwood",where="Eastern Kingdoms",cont=0,icon=236757,img=1851098,zi=236757,art=8061692},
   {key="z12",name="Elwynn Forest",where="Eastern Kingdoms",cont=0,icon=236761,img=1851068,zi=236761,art=8061966},
   {key="z85",name="Tirisfal Glades",where="Eastern Kingdoms",cont=0,icon=236849,img=1851089,zi=236849,art=7958258},
