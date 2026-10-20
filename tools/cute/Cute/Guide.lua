@@ -737,9 +737,10 @@ function C.Guide_Draw(UI)
         for i = PARTY_ROWS + 1, #members do local m = members[i]; local c = UI.ClassColor(m.class); tip:AddLine(m.name .. ": " .. m.text, c[1], c[2], c[3], true) end
       end)
     end
-  elseif on then
-    -- (ticked, no step yet: the module says why, reading the log or a QuestBank too old for it)
-    local why = (Q and Q.Why and Q.Why()) or "Reading your quest log."
+  elseif on or C.Modules.Waiting() then
+    -- (ticked, no step yet: the module says why, reading the log or a QuestBank too old for it; or its addon waits for
+    -- combat to end before it loads)
+    local why = on and ((Q and Q.Why and Q.Why()) or "Reading your quest log.") or "Quests loads after combat."
     bandRow(why, K.DIM, false, function(tip) tip:AddLine(why, 1, 1, 1, true) end)
   else
     bandRow("Tick Quests in Settings, Modules for the step now.", K.DIM, false,

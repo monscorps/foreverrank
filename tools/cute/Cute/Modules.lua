@@ -165,6 +165,19 @@ function M.Apply(def)
   end
 end
 
+-- a module addon ticked (its own box, the folder's) that waits for combat to end before it loads, its modules not
+-- registered yet (a page that stands in for one of them says so)
+function M.Waiting()
+  for name in pairs(M.pending) do
+    if M.OnKey(name) and not M.byId[name] then
+      local found = false
+      for _, def in ipairs(M.list) do if def.addon == name then found = true end end
+      if not found then return true end
+    end
+  end
+  return false
+end
+
 -- a module whose page shows for this viewer: on, registered, and an officer's where it is for officers
 function M.Page(id, officer)
   local def = M.byId[id]

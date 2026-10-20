@@ -1086,8 +1086,10 @@ run of clicks; Broadcast now sends them again; "Rules to defaults" puts them bac
 switches it on for this character while it is off, and opens it) answers one question, what should you do next and with whom.
 The band, which stays in view, is the step now: with the Quests module on, the quest engine's step (`Cute.QuestBand`,
 Cute_Quest's `Band.lua`) big and white (a click opens Quests, a right-click the step's menu: not now, drop, lock,
-scale, hide), the next two steps, the time to level and your party members' steps; with it off, one dim line saying
-where to switch it on. Under the band one row, then one card:
+scale, hide), the next two steps, the time to level and three of your party members' steps (the rest in one line's
+tooltip); with it off, one dim line saying where to switch it on, and with it on before its first step, what it waits
+for ("Reading your quest log.", "Quests loads after combat.", or the QuestBank it needs). Under the band one row, then
+one card:
 
 - **The next best thing**, the rules' pick from the dungeons in range at your level: "Run The Deadmines: 3 guild mates
   online in range, 7 bosses you have not killed, 5 quests". A dungeon fits when it leaves you something to do (a boss

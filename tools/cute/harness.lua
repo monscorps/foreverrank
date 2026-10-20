@@ -5018,6 +5018,47 @@ do
   end)
 end
 
+-- 36b (v): the band's line while Quests is ticked without a step. "Tick Quests in Settings, Modules" is for Quests off
+-- alone (0.7.0's first build said it with Quests ticked while the engine had not read the log, and while the addon
+-- waited for combat to end); ticked, the band says what it waits for: "Quests loads after combat." until the addon
+-- loads, "Reading your quest log." until the engine has read it
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    if not c.C.Modules.OnKey("guide") then c.C.Modules.Set("guide", true) end
+    c.C.UI:Open("guide")
+    assert(texts(c):find("Tick Quests in Settings, Modules for the step now.", 1, true), "off: where to switch it on")
+    c.combat = true
+    c.C.Modules.Set("Cute_Quest", true)
+    assert(not c.addons[2].loaded and c.C.Modules.pending.Cute_Quest and c.C.Modules.Waiting(), "ticked in combat: waiting")
+    c.C.UI:Open("guide")
+    local t = texts(c)
+    assert(t:find("Quests loads after combat.", 1, true) and not t:find("Tick Quests", 1, true), "the band says it loads after combat:\n" .. t)
+    check(c.C.UI.frame, "guide, Quests waiting for combat to end")
+    c.combat = false
+    fire(c, "PLAYER_REGEN_ENABLED")
+    tick(c, 6)
+    local QB = c.addons[2].private
+    assert(c.addons[2].loaded and QB.logReady and not c.C.Modules.Waiting(), "loaded as combat ends, the log read")
+    c.C.UI:Open("guide")
+    t = texts(c)
+    local steps = QB.Guide.Steps()
+    assert(steps[1] and t:find(QB.Guide.Text(steps[1]), 1, true) and not t:find("after combat", 1, true), "the step now:\n" .. t)
+    -- the log not read yet (the game's QUEST_LOG_UPDATE still to come): the band says so, never to tick Quests
+    QB.logReady = nil
+    c.C.UI:Draw()
+    t = texts(c)
+    assert(t:find("Reading your quest log.", 1, true) and not t:find("Tick Quests", 1, true), "the log unread: the band says so:\n" .. t)
+    QB.logReady = true
+    c.C.UI:Draw()
+    assert(texts(c):find(QB.Guide.Text(steps[1]), 1, true), "read: the step again")
+    leave(c)
+    print("cute quest: the band says what Quests waits for while ticked (combat's end, the log); Tick Quests is for off alone")
+  end)
+end
+
 -- 36c: QuestBank loaded beside Cute: Cute_Quest's copy sleeps. Its files return at their second line (no catalog built, no
 -- event frame, no /qb of its own), the engine the pages read is QuestBankAPI (QuestBank's own table), the band draws
 -- QuestBank's step, the module toggles set none of QuestBank's settings, and QuestBank's step frame is left as it is
