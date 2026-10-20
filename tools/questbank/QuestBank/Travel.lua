@@ -1048,13 +1048,13 @@ function TV.PlanTo(place, mode)
   return TV.Route(me, place, TV.Opts(mode))
 end
 
--- "Tram, boat, flight · about 16 min"
+-- "Tram, boat, flight, about 16 min"
 function TV.Summary(plan)
   if not plan then return nil end
   local parts = {}
   for _, l in ipairs(plan.legs) do if SAY[l.kind] then parts[#parts + 1] = SAY[l.kind] end end
   local what = #parts > 0 and table.concat(parts, ", ") or "on foot"
-  return string.format("%s · about %d min", (what:gsub("^%l", string.upper)), max(1, floor(plan.min + 0.5)))
+  return string.format("%s, about %d min", (what:gsub("^%l", string.upper)), max(1, floor(plan.min + 0.5)))
 end
 
 -- "320 yards", "1.2k yards"
@@ -1096,14 +1096,14 @@ local function say(slot, n, fmt, ...)
   return m.s
 end
 
--- "320 yards · 2 min" (the minutes from a minute and a half)
+-- "320 yards, 2 min" (the minutes from a minute and a half)
 local distKey, distMin, distText
 local function distInfo(yards, mins)
   local key = yards >= 1000 and -floor(yards / 100 + 0.5) or floor(yards / 5 + 0.5)
   local m = mins and mins >= 1.5 and floor(mins + 0.5) or 0
   if key ~= distKey or m ~= distMin then
     distKey, distMin = key, m
-    distText = m > 0 and (TV.DistanceText(yards) .. " · " .. m .. " min") or TV.DistanceText(yards)
+    distText = m > 0 and (TV.DistanceText(yards) .. ", " .. m .. " min") or TV.DistanceText(yards)
   end
   return distText
 end
@@ -1240,7 +1240,7 @@ end
 
 local function onBoard(leg, tnow)
   local m = max(1, floor(leg.min - (tnow - st.rideAt) / 60 + 0.5))
-  return show("underway", leg.finish, leg.step, leg.short, leg.icon, say("board", m, "On board · about %d min", m), nil)
+  return show("underway", leg.finish, leg.step, leg.short, leg.icon, say("board", m, "On board, about %d min", m), nil)
 end
 
 local function hearthStep(leg)

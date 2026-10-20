@@ -6947,7 +6947,7 @@ print("  first leg:", handed.travel:GetText(), handed.name:GetText())
 do
   local nextLeg
   for _, l in ipairs(v3.legs.items) do if not nextLeg and l:IsShown() and l ~= handed then nextLeg = l end end
-  assert(nextLeg and nextLeg.name:GetText():find(QB.routeNow.legs[1].stop.name, 1, true) and nextLeg.travel:GetText():find(" · about %d+ min$"),
+  assert(nextLeg and nextLeg.name:GetText():find(QB.routeNow.legs[1].stop.name, 1, true) and nextLeg.travel:GetText():find(", about %d+ min$"),
     "the next stop: the way the arrow shows it: " .. tostring(nextLeg and nextLeg.travel:GetText()))
   print("  next leg:", nextLeg.travel:GetText(), nextLeg.name:GetText())
 end
@@ -7905,7 +7905,7 @@ do
   assert(g.leg.kind == "fly" and g.state == "at" and g.step == "Fly to Lakeshire" and g.info == "Talk to the flight master"
     and g.act.atlas == "flightmaster" and g.act.file == T.gryphon, "at Stormwind's flight master: fly to Lakeshire: " .. tostring(g.step) .. " / " .. tostring(g.info))
   assert(#g.trail == 2 and g.trail[1] == g.leg.icon and g.trail[2].file == T.foot, "the trail: the flight, then the walk")
-  assert(TV.Summary(g.plan):find("^Flight · about %d+ min$"), "summed up: " .. TV.Summary(g.plan))
+  assert(TV.Summary(g.plan):find("^Flight, about %d+ min$"), "summed up: " .. TV.Summary(g.plan))
   local direct = math.sqrt((toLake.wx - sw[3]) ^ 2 + (toLake.wy - sw[4]) ^ 2) * 1.3 / 7 / 60
   local R = TV.Reach(here(), TV.Opts("pin"))
   assert(TV.Via(R, toLake) < 0.6 * direct, "by time, Lakeshire is near: " .. TV.Via(R, toLake))
@@ -8008,7 +8008,7 @@ do
     c.clock = c.clock + 0.05
     g = TV.Guide(here(), toTh, "pin")
   end
-  assert(g.state == "underway" and g.info:find("^On board · about %d+ min$") and TV.stats.routes == routes, "on board: " .. tostring(g.info))
+  assert(g.state == "underway" and g.info:find("^On board, about %d+ min$") and TV.stats.routes == routes, "on board: " .. tostring(g.info))
   standAt(c, 1, -4016, -4741)
   g = TV.Guide(here(), toTh, "pin")
   assert(g.leg.kind == "walk" and g.state == "walk" and TV.stats.routes == routes + 1, "at Theramore's pier: walk on: " .. tostring(g.state))
@@ -8435,7 +8435,7 @@ do
   -- on the way there, the arrow points at it; the minimap pins it and draws the line to it
   standAt(c, 0, sw[3] + 150, sw[4])
   look()
-  assert(F.dial:IsShown() and not F.act:IsShown() and step() == "Fly to Lakeshire" and F.dist:GetText():find("^150 yards · %d+ min$"),
+  assert(F.dial:IsShown() and not F.act:IsShown() and step() == "Fly to Lakeshire" and F.dist:GetText():find("^150 yards, %d+ min$"),
     "on the way to the flight master: " .. says())
   assert(math.abs(F.tint.__vertex[1] - 0.7) < 0.01 and math.abs(F.tint.__vertex[2] - 0.9) < 0.01 and F.tint.__vertex[3] == 1, "the glass blue on the way to a flight master")
   c.QB.Mini.Place()
@@ -8555,7 +8555,7 @@ do
   routes = TV.stats.routes
   standAt(c, pts[4][1], pts[4][2], pts[4][3])
   for _ = 1, 20 do c.clock = c.clock + 0.05; look() end
-  assert(step() == "Boat to Theramore" and F.dist:GetText():find("^On board · about %d+ min$") and F.act:IsShown() and TV.stats.routes == routes,
+  assert(step() == "Boat to Theramore" and F.dist:GetText():find("^On board, about %d+ min$") and F.act:IsShown() and TV.stats.routes == routes,
     "on board: " .. says())
   sheet("Arrow: on board")
   standAt(c, 1, -4016, -4741)
@@ -14064,7 +14064,7 @@ end
     Mini.Place()
     local F = c.env.QuestBankArrow
     local s1 = QB.Target.Route().legs[1].stop
-    assert(A.t and A.t.kind == "route" and A.t.c == 2991 and s1.c == 2991 and A.t.stop == s1.name and F.dist:GetText():find("yards · %d+ min$"),
+    assert(A.t and A.t.kind == "route" and A.t.c == 2991 and s1.c == 2991 and A.t.stop == s1.name and F.dist:GetText():find("yards, %d+ min$"),
       "the arrow points at the isle's stop: " .. tostring(A.t and A.t.name) .. " | " .. tostring(F.dist:GetText()))
     assert(Mini.aim and Mini.aim.name == A.t.name, "the minimap leads there too: " .. tostring(Mini.aim and Mini.aim.name))
     local pinned = false
