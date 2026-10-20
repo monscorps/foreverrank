@@ -2,7 +2,7 @@
 ## Title: |cffc6af8dQuestBank|r
 ## Notes: Free questing for every level, guided from the first login: the next step, the arrow, what each quest pays, the hand-in route, party sync, banking at level caps. /qb
 ## Author: Mikal
-## Version: 6.0.1
+## Version: 6.1.0
 ## X-License: GPL-3.0-or-later
 ## IconTexture: Interface\QuestFrame\UI-QuestLog-BookIcon
 ## SavedVariables: QuestBankDB
