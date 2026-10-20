@@ -4978,6 +4978,39 @@ do
   end)
 end
 
+-- 36b (iv): the band's party rows. The engine's party steps (one a member of your group, by name) go in the band under
+-- your own and the time to level, three at most; the rest fold into one line, "and N more in your group", whose
+-- tooltip names them all. A raid of five filled 0.7.0's first band with five rows
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    if not c.C.Modules.OnKey("guide") then c.C.Modules.Set("guide", true) end
+    local QB = c.addons[2].private
+    local party = {}
+    for i, n in ipairs({ "Ada", "Bo", "Cy", "Di", "Ed" }) do party[i] = { name = n, class = "MAGE", text = "Kill Kobold Vermin " .. i .. "/8" } end
+    local real = QB.Guide.MemberSteps
+    QB.Guide.MemberSteps = function() return party end
+    c.C.UI:Open("guide")
+    local t = texts(c)
+    assert(t:find("Ada: Kill Kobold Vermin 1/8", 1, true) and t:find("Cy: Kill Kobold Vermin 3/8", 1, true) and not t:find("Di: Kill", 1, true) and not t:find("Ed: Kill", 1, true),
+      "three of the five in the band:\n" .. t)
+    assert(t:find("and 2 more in your group", 1, true), "the rest folded into one line:\n" .. t)
+    local more
+    for _, l in ipairs(c.C.UI.bandLines.items) do if l:IsShown() and l.name:GetText() == "and 2 more in your group" then more = l end end
+    assert(more and tipOf(more):find("Di: Kill Kobold Vermin 4/8", 1, true) and tipOf(more):find("Ed: Kill Kobold Vermin 5/8", 1, true), "its tooltip names them: " .. tostring(more and tipOf(more)))
+    check(c.C.UI.frame, "guide, a party of five in the band")
+    party[4], party[5] = nil, nil
+    c.C.UI:Draw()
+    assert(not texts(c):find("more in your group", 1, true) and texts(c):find("Cy: Kill", 1, true), "three: no fold")
+    QB.Guide.MemberSteps = real
+    leave(c)
+    print("cute quest: the band shows three of the party's steps, the rest in one line's tooltip")
+  end)
+end
+
 -- 36c: QuestBank loaded beside Cute: Cute_Quest's copy sleeps. Its files return at their second line (no catalog built, no
 -- event frame, no /qb of its own), the engine the pages read is QuestBankAPI (QuestBank's own table), the band draws
 -- QuestBank's step, the module toggles set none of QuestBank's settings, and QuestBank's step frame is left as it is

@@ -25,6 +25,7 @@ local G = { invited = {}, open = {} }
 C.Guide = G
 
 local INVITED = 60 -- seconds an invited mate's button says so
+local PARTY_ROWS = 3 -- the band shows this many of your group's steps; the rest in one line's tooltip
 local MATES = 4    -- mates a card shows before "and N more"
 
 local function plural(n, one, many) return n .. " " .. (n == 1 and one or many) end
@@ -727,7 +728,15 @@ function C.Guide_Draw(UI)
     end
     local ttl, _, measured = Q.TimeToLevel()
     if ttl then bandRow(ttl, K.MUTE, false, function(tip) tip:AddLine(measured and "From your XP an hour at this level." or "From the plan's XP a minute.", 1, 1, 1, true) end) end
-    for _, m in ipairs(Q.Members()) do bandRow(m.name .. ": " .. m.text, UI.ClassColor(m.class)) end
+    -- your party's steps, three at most; the rest in one line's tooltip (a raid of forty would fill the band)
+    local members = Q.Members()
+    for i = 1, math.min(PARTY_ROWS, #members) do local m = members[i]; bandRow(m.name .. ": " .. m.text, UI.ClassColor(m.class)) end
+    if #members > PARTY_ROWS then
+      bandRow("and " .. (#members - PARTY_ROWS) .. " more in your group", K.DIM, false, function(tip)
+        tip:AddLine("Your group's steps", 1, 1, 1)
+        for i = PARTY_ROWS + 1, #members do local m = members[i]; local c = UI.ClassColor(m.class); tip:AddLine(m.name .. ": " .. m.text, c[1], c[2], c[3], true) end
+      end)
+    end
   elseif on then
     -- (ticked, no step yet: the module says why, reading the log or a QuestBank too old for it)
     local why = (Q and Q.Why and Q.Why()) or "Reading your quest log."
