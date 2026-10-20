@@ -22,6 +22,11 @@ end
 QB.Engine = QB
 local E = QB
 local UI = E.UI
+-- the engine's chat lines carry Cute's prefix; and the copy is quiet (Core.lua QB.quiet): a quest complete or gone from
+-- the log, a waypoint clicked, a run's start and end and the errors line stay out of chat, since the step frame and
+-- the arrow say those things
+function E:Print(msg) Cute.Print(msg) end
+E.quiet = true
 -- a module that is a switch over the engine's flags (Map, Camp): off, every flag it names goes off and what they were
 -- is kept (s.cuteOff[id]); on, they come back as they were (a fresh install: the engine's defaults). Cute applies a
 -- module's state at every login, so on with nothing kept changes nothing: a flag a row set stays as the row set it,

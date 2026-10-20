@@ -40,7 +40,7 @@ function Err.Record(msg, stack, where)
   while #list > 20 do table.remove(list) end
   if not toldErrors then
     toldErrors = true
-    if QB.Print then QB:Print("ran into a problem and carried on. /qb errors shows the details to copy into the Discord.") end
+    if QB.Print and not QB.quiet then QB:Print("ran into a problem and carried on. /qb errors shows the details to copy into the Discord.") end
   end
 end
 
@@ -667,6 +667,7 @@ function API.SayWaypoint(m, x, y, title, shown)
   if not (m and x and y) then return false end
   local link = API.WaypointLink(m, x, y)
   API.waypointSaid = true
+  if QB.quiet then return true end
   QB:Print(string.format("Waypoint: %s (%.0f, %.0f).%s%s", title or "", x, y,
     shown and " The arrow shows the way until you get there." or "",
     link and (" " .. link .. " puts the game's pin there.") or ""))
@@ -799,6 +800,9 @@ end
 ----------------------------------------------------------------------------
 -- helpers
 ----------------------------------------------------------------------------
+-- (a host that runs this engine inside its own addon replaces QB.Print with its own prefix, and sets QB.quiet: the
+-- lines a step frame and an arrow already say, a quest complete or gone from the log, a waypoint clicked, a run's start
+-- and end, and the errors line, stay out of chat)
 function QB:Print(msg)
   if DEFAULT_CHAT_FRAME then
     DEFAULT_CHAT_FRAME:AddMessage("|cffc6af8dQuestBank|r " .. msg)
@@ -1794,7 +1798,7 @@ local function trackRemovals(s)
         local q = Q.Get(id)
         local value = q and QB.Model.XpAt(q, s.level) or nil
         p.removed[id] = { title = title, at = time and time() or 0, value = value }
-        if QB.loggedIn then
+        if QB.loggedIn and not QB.quiet then
           QB:Print(string.format("%s left your log without a hand-in%s. The route no longer counts it.", title,
             value and (" (worth about " .. QB.Comma(value) .. " XP)") or ""))
         end
@@ -1888,8 +1892,10 @@ function QB:ReadState()
     if e.complete and before == false and QB.loggedIn then
       local q = Q.Get(e.id)
       local value = q and QB.Model.XpAt(q, s.level)
-      QB:Print(string.format("%s is complete%s%s.", e.title, QB:Banking() and ": banked" or ", hand it in",
-        value and value > 0 and (", worth about " .. QB.Comma(value) .. " XP " .. QB:OnTheDay()) or ""))
+      if not QB.quiet then
+        QB:Print(string.format("%s is complete%s%s.", e.title, QB:Banking() and ": banked" or ", hand it in",
+          value and value > 0 and (", worth about " .. QB.Comma(value) .. " XP " .. QB:OnTheDay()) or ""))
+      end
       QB:Announce("complete", e.title)
     end
     QB.wasComplete[e.id] = e.complete and true or false
@@ -2293,7 +2299,7 @@ function Run.Start()
   -- the game's pin doesn't follow the route (QuestBank never sets it: API.SetWaypoint); the arrow does, and TomTom's
   local hint = ""
   if not QB:Settings().arrow and not API.TomTom() then hint = " /qb arrow points you from stop to stop." end
-  QB:Print("Hand-in run started. Each quest is ticked off with the XP it paid, and the rest is planned again from where you stand." .. hint)
+  if not QB.quiet then QB:Print("Hand-in run started. Each quest is ticked off with the XP it paid, and the rest is planned again from where you stand." .. hint) end
   Run.ArmHour()
   QB:MarkDirty()
 end
@@ -2311,7 +2317,7 @@ function Run.Stop()
   -- the bank is cashed in: questing from here, until the next lock
   if QuestBankDB.held and not QB:Lock() then QuestBankDB.held[QB:CharKey()] = nil end
   QB.mode = QB:Mode()
-  QB:Print(string.format("Run ended: %d quests, %s XP in %s.", n, QB.Comma(got), QB.Clock((run.ended - run.started) / 60)))
+  if not QB.quiet then QB:Print(string.format("Run ended: %d quests, %s XP in %s.", n, QB.Comma(got), QB.Clock((run.ended - run.started) / 60))) end
   if n > 0 then Run.Offer("done", run) end
   QB:MarkDirty()
 end

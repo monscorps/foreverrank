@@ -4945,6 +4945,39 @@ do
   end)
 end
 
+-- 36b (iii): the engine's chat for a Cute-only player. Its lines carry Cute's prefix (0.7.0's first build said
+-- "QuestBank" in a guild that never installed it), and the copy is quiet: a quest complete, one gone from the log, a
+-- waypoint clicked, a run's start and end and the "/qb errors ... Discord" line say nothing (the step frame and the
+-- arrow say those things); the rest of the engine's lines still come
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    local QB = c.addons[2].private
+    assert(QB.quiet == true and QB.loggedIn, "the copy quiet, logged in")
+    local function said(fn)
+      local n0 = #c.chat
+      fn()
+      return table.concat(c.chat, "\n", n0 + 1)
+    end
+    assert(said(function() QB:Print("probe line") end) == c.C.COLOR .. "Cute|r: probe line", "Cute's prefix: " .. c.chat[#c.chat])
+    assert(said(function() assert(QB.API.SayWaypoint(1453, 50, 50, "Northshire Abbey", true) == true) end) == "", "a waypoint clicked: nothing said")
+    assert(said(function() QB.Run.Start(); tick(c, 1); QB.Run.Stop() end) == "" and QB.Run.Get() == nil, "a run started and ended: nothing said")
+    -- the quest in the log complete, then gone from the log: nothing said either way
+    local id = next(c.o.log)
+    c.complete = { [id] = true }
+    assert(said(function() fire(c, "QUEST_LOG_UPDATE"); tick(c, 1) end) == "" and QB.wasComplete[id] == true, "a quest complete: nothing said")
+    c.o.log[id] = nil
+    assert(said(function() fire(c, "QUEST_LOG_UPDATE"); tick(c, 1) end) == "" and QB:Plan().removed[id], "a quest gone from the log without a hand-in: nothing said, the plan knows")
+    assert(said(function() QB.Err.Record("a probe error", "", "probe") end) == "" and c.env.CuteQuestDB.errors[1].msg == "a probe error", "the errors line: nothing said, the error recorded")
+    c.env.CuteQuestDB.errors = nil
+    leave(c)
+    print("cute quest: the engine's chat carries Cute's prefix; a quest complete or gone, a waypoint, a run and the errors line say nothing")
+  end)
+end
+
 -- 36c: QuestBank loaded beside Cute: Cute_Quest's copy sleeps. Its files return at their second line (no catalog built, no
 -- event frame, no /qb of its own), the engine the pages read is QuestBankAPI (QuestBank's own table), the band draws
 -- QuestBank's step, the module toggles set none of QuestBank's settings, and QuestBank's step frame is left as it is
