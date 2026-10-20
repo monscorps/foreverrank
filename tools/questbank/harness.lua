@@ -751,7 +751,7 @@ local function newClient(o)
   env.Enum = {
     SpellBookItemType = { None = 0, Spell = 1, FutureSpell = 2, PetAction = 3, Flyout = 4 },
     SpellBookSpellBank = { Player = 0, Pet = 1 },
-    TooltipDataType = { Item = 0, Spell = 1, Unit = 2 },
+    TooltipDataType = { Item = 0, Spell = 1, Unit = 2, Corpse = 3, Object = 4 },
     TooltipDataLineType = { None = 0, Blank = 1, NestedBlock = 2, Separator = 3 },
   }
   c.book = o.book or { { spellID = 6603, itemType = 1 }, { spellID = 20598, itemType = 1 }, { spellID = 635, itemType = 1 }, { spellID = 879, itemType = 2 } }
@@ -770,9 +770,14 @@ local function newClient(o)
   }
   -- what the character wears: o.gear[slot] = item id
   env.GetInventoryItemID = function(unit, slot) return unit == "player" and (o.gear or {})[slot] or nil end
-  -- item tooltips: every post-call hook is kept in c.tipHooks; c.tipLines[id] replaces an item's lines
-  c.tipHooks, c.tipLines = {}, {}
-  env.TooltipDataProcessor = { AddTooltipPostCall = function(kind, fn) if kind == 0 then c.tipHooks[#c.tipHooks + 1] = fn end end }
+  -- item tooltips: every post-call hook is kept in c.tipHooks; c.tipLines[id] replaces an item's lines; every kind's
+  -- hooks in c.tipHooksByKind[kind] (6.0's Tips.lua hooks units and objects)
+  c.tipHooks, c.tipLines, c.tipHooksByKind = {}, {}, {}
+  env.TooltipDataProcessor = { AddTooltipPostCall = function(kind, fn)
+    if kind == 0 then c.tipHooks[#c.tipHooks + 1] = fn end
+    c.tipHooksByKind[kind] = c.tipHooksByKind[kind] or {}
+    table.insert(c.tipHooksByKind[kind], fn)
+  end }
   env.RETRIEVING_ITEM_INFO = "Retrieving item information"
   env.C_TooltipInfo = {
     GetItemByID = function(id)
@@ -1103,7 +1108,7 @@ local function newClient(o)
     local f = line:match("^%s*([%w_]+%.lua)%s*$")
     if f then files[#files + 1] = f end
   end
-  assert(#files >= 8 and files[1] == "Data.lua" and files[#files] == "StepFrame.lua", "the TOC lists the addon's Lua files, Data first and the step frame last")
+  assert(#files >= 8 and files[1] == "Data.lua" and files[#files] == "Tips.lua", "the TOC lists the addon's Lua files, Data first and the tooltips last")
   for _, f in ipairs(files) do
     local chunk = assert(loadfile(HERE .. "/QuestBank/" .. f))
     setfenv(chunk, env)
@@ -16993,6 +16998,57 @@ end)()
     local q1 = QB.Quest.Get(drawn.d.ids[1])
     assert(joined:find(q1.name, 1, true), "the tooltip lists its quests: " .. joined)
     assert(#c.chat == 0 or not c.chat[#c.chat]:find("quest", 1, true), "nothing said in chat")
+  end }
+
+  -- tooltips (Tips.lua): a mob or object that counts for a quest in your log gets "Kobold Vermin: 3/8 (Kobold Camp
+  -- Cleanup)" and the party's counts; nothing when the game hides the unit (a secret guid or name), nothing for a
+  -- mob of no quest, nothing with the switch off
+  G6CASES[#G6CASES + 1] = { "tooltips: Kobold Vermin: 3/8 (Kobold Camp Cleanup), and the party's count", function()
+    local a = newClient({ name = "Tipper", level = 3, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = { { 7, 0 } }, done = { [783] = true }, group = true, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    local b = newClient({ name = "Brann", level = 3, cap = 60, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2, race = "Human",
+      log = { { 7, 0 } }, done = { [783] = true }, group = true, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    login(a); login(b)
+    a.objectives = { [7] = { { text = "Kobold Vermin slain: 3/8", type = "monster", finished = false, numFulfilled = 3, numRequired = 8 } } }
+    b.objectives = { [7] = { { text = "Kobold Vermin slain: 6/8", type = "monster", finished = false, numFulfilled = 6, numRequired = 8 } } }
+    settle(a); settle(b)
+    a.QB.Sync:Broadcast(true); b.QB.Sync:Broadcast(true)
+    for _ = 1, 3 do tick(a, 2); tick(b, 2); deliver() end
+    local hooks = a.tipHooksByKind[2]
+    assert(hooks and #hooks == 1 and a.tipHooksByKind[4] and #a.tipHooksByKind[4] == 1, "one hook each for units and objects")
+    lines = {}
+    hooks[1](a.env.GameTooltip, { type = 2, guid = "Creature-0-4455-0-12-6-0000A1B2C3", lines = { { leftText = "Kobold Vermin" }, { leftText = "Level 1" } } })
+    local joined = table.concat(lines, " | ")
+    assert(joined:find("Kobold Vermin: 3/8 (Kobold Camp Cleanup)", 1, true), "the line: " .. joined)
+    assert(joined:match("Brann[%a ]* 6/8"), "the party's count (a chat sender carries the surname, as the Party page names him): " .. joined)
+    -- the same list reused: a second hover makes the same lines
+    lines = {}
+    hooks[1](a.env.GameTooltip, { type = 2, guid = "Creature-0-4455-0-12-6-0000A1B2C3", lines = { { leftText = "Kobold Vermin" } } })
+    assert(table.concat(lines, " | ") == joined, "the same again")
+    -- a secret guid or name: nothing
+    lines = {}
+    hooks[1](a.env.GameTooltip, { type = 2, guid = SECRET.str(), lines = { { leftText = SECRET.str() } } })
+    assert(#lines == 0, "secret: nothing shown")
+    lines = {}
+    hooks[1](a.env.GameTooltip, { type = 2, guid = "Creature-0-4455-0-12-6-0000A1B2C3", lines = { { leftText = SECRET.str() } } })
+    assert(#lines == 0, "a secret name: nothing shown")
+    -- a mob of no quest: nothing
+    lines = {}
+    hooks[1](a.env.GameTooltip, { type = 2, guid = "Creature-0-4455-0-12-99-0000A1B2C3", lines = { { leftText = "Stormwind Guard" } } })
+    assert(#lines == 0, "no quest: nothing")
+    -- the switch
+    a.QB:Settings().tipProgress = false
+    lines = {}
+    hooks[1](a.env.GameTooltip, { type = 2, guid = "Creature-0-4455-0-12-6-0000A1B2C3", lines = { { leftText = "Kobold Vermin" } } })
+    assert(#lines == 0, "off: nothing")
+    a.QB:Settings().tipProgress = true
+    -- alone: no party line
+    a.env.IsInGroup = function() return false end
+    lines = {}
+    hooks[1](a.env.GameTooltip, { type = 2, guid = "Creature-0-4455-0-12-6-0000A1B2C3", lines = { { leftText = "Kobold Vermin" } } })
+    joined = table.concat(lines, " | ")
+    assert(joined:find("Kobold Vermin: 3/8", 1, true) and not joined:find("Brann", 1, true), "alone: your count only: " .. joined)
+    assert(#a.chat == 0 or not a.chat[#a.chat]:find("Kobold", 1, true), "nothing said in chat")
   end }
 
   for _, case in ipairs(G6CASES) do

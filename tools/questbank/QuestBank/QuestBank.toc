@@ -40,3 +40,4 @@ MapPage.lua
 Gear.lua
 UI.lua
 StepFrame.lua
+Tips.lua

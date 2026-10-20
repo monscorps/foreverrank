@@ -2744,6 +2744,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Arrow then QB.Arrow:Init() end
     if QB.Target then QB.Target:Init() end
     if QB.StepFrame then QB.StepFrame:Init() end -- (the Guide's step frame, StepFrame.lua)
+    if QB.Tips then QB.Tips:Init() end -- (quest progress in mob and object tooltips, Tips.lua)
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
     Run.ArmHour()
