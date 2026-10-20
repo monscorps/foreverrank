@@ -2223,6 +2223,7 @@ function QB:RouteEntries(mode)
   for id in pairs(s.bagStarts) do consider(id) end
   for _, id in ipairs(QB:BagQuests()) do consider(id) end
   if mode == "plan" then for id in pairs(self:Plan().add) do consider(id) end end
+  if mode == "plan" and QB:GuideOn() then for id in pairs(self:Plan().auto) do consider(id) end end -- the Guide's picks (Guide.lua)
   -- quests handed to you on the day by another hand-in, delivered at once
   for _, e in ipairs(list) do inListAt[e.q.id] = gen end
   for id, parent in pairs(D.FOLLOW) do

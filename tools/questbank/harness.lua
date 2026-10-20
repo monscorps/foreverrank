@@ -16385,6 +16385,45 @@ end)()
     assert(#c.chat == 0 or not c.chat[#c.chat]:find("step", 1, true), "nothing said in chat")
   end }
 
+  -- a level-23 human mid-chain (Redridge's chain, Duskwood and Wetlands quests in the log): the fill takes the best
+  -- by XP a minute, never a quest more than two levels above, never grey, never the player's own pick twice, up to the
+  -- free slots minus two and at most AUTO_MAX; a sensible first step, no step for a quest it cannot take
+  G6CASES[#G6CASES + 1] = { "the fill: Now's best, within two levels, never grey, the player's list wins", function()
+    local c = newClient({ name = "Trio", level = 23, cap = 60, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2,
+      race = "Human", log = { { 92, 0 }, { 221, 0 }, { 305, 0 } }, done = { [89] = true, [91] = true }, world = { 0, -9200, -2150 }, map = 1433, bagSlots = {}, bind = "Lakeshire" })
+    login(c)
+    local QB, G, D = c.QB, c.QB.Guide, c.QB.Data
+    QB:Settings().guide.on = true
+    QB:SetAdded(109, true) -- the player's own pick: Report to Gryan Stoutmantle (Westfall)
+    settle(c)
+    local p = QB:Plan()
+    local n = 0
+    for id in pairs(p.auto) do
+      n = n + 1
+      local q = QB.Quest.Get(id)
+      assert(q and q.lvl <= 25 and QB.Quest.ForMe(q) and not QB.API.IsDone(id) and not QB.state.log[id], "an auto pick is for you, not held, within two levels: " .. tostring(id))
+      assert(not p.add[id], "never the player's own pick twice")
+      assert(not QB.QuestMap.Grey(q, 23) or QB:ChainLead(id) >= QB.Model.CHEAP * QB.Scale(23), "never grey unless its chain pays: " .. q.name)
+      assert((q.req or 1) <= 23, "nothing it cannot take yet: " .. q.name)
+    end
+    assert(n > 0 and n <= G.AUTO_MAX and n <= QB.LOG_SLOTS - QB.state.logCount - 2, "picks within the limits: " .. n)
+    assert(p.add[109] and QB:InPlan(QB.Quest.Get(109)), "the player's own pick stays in the plan")
+    local first = G.steps[1]
+    assert(first and (first.kind == "objective" or first.kind == "handin" or first.kind == "accept"), "a first step: " .. tostring(first and G.Text(first)))
+    for _, s in ipairs(G.steps) do
+      if s.kind == "accept" then
+        local q = QB.Quest.Get(s.qid)
+        assert(QB:Status(q).code == "todo" or QB:Status(q).code == "item", "no step for a quest you cannot take: " .. G.Text(s))
+      end
+    end
+    -- the Guide off: the auto picks are not in the plan, the player's are
+    QB:Settings().guide.on = false
+    settle(c)
+    local inPlan = 0
+    for id in pairs(p.auto) do if QB:InPlan(QB.Quest.Get(id)) then inPlan = inPlan + 1 end end
+    assert(inPlan == 0 and QB:InPlan(QB.Quest.Get(109)), "off: the fill is out of the plan, your pick is in")
+  end }
+
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")

@@ -189,6 +189,60 @@ local function readPickups()
   return pickups
 end
 
+-- the fill: the quests Now ranks best (UI:Candidates' rank: XP plus half the chain over trip and loop minutes, a
+-- quarter when probably behind you), weighed by the drop rate as Now weighs it, half again as much when a party
+-- member holds or can take it (Sync); never grey unless its chain pays the planner's low-value line, never more
+-- than two levels above you, never one you put off or skipped, never one on your own list; up to the log's free
+-- slots minus two, at most AUTO_MAX. Picks already made stay while they still qualify, so the plan holds still
+local function partyHas(id)
+  local S = QB.Sync
+  if not (S and S.members) then return false end
+  for _, m in pairs(S.members) do if m.quests and m.quests[id] then return true end end
+  return false
+end
+function G.Rank(c, level)
+  local drop = QB.Data.DROP and QB.Data.DROP[c.id]
+  local weight = (drop and drop < 25) and (0.5 + drop / 50) or 1
+  return (c.rank or 0) * weight * (partyHas(c.id) and 1.5 or 1)
+end
+local ranked = {}
+local function byRank(a, b) if a.grank ~= b.grank then return a.grank > b.grank end return a.id < b.id end
+function G.Fill(level)
+  local p = QB:Plan()
+  local s = QB.state
+  local free = QB.LOG_SLOTS - (s.logCount or 0) - 2
+  local line = QB.Model.CHEAP * QB.Scale(level)
+  local function qualifies(id)
+    local q = QB.Quest.Get(id)
+    if not q or q.lvl > level + 2 or (q.req or 1) > level then return false end
+    if p.add[id] or putOff(id) or QB:IsSkipped(id) or s.log[id] or QB.API.IsDone(id) then return false end
+    local st = QB:Status(q)
+    if st.code ~= "todo" and st.code ~= "item" then return false end
+    if QB.QuestMap and QB.QuestMap.Grey(q, level) and QB:ChainLead(id) < line then return false end
+    return true
+  end
+  -- what is held already: dropped once it no longer qualifies
+  local n = 0
+  for id in pairs(p.auto) do
+    if qualifies(id) then n = n + 1 else p.auto[id] = nil end
+  end
+  if free <= n or n >= AUTO_MAX then return n end
+  for k = #ranked, 1, -1 do ranked[k] = nil end
+  for _, c in ipairs(QB.UI and QB.UI.Candidates and QB.UI:Candidates(nil, level) or {}) do
+    if not p.auto[c.id] and not c.waste and (c.mins == nil or c.mins <= 20) and qualifies(c.id) then
+      c.grank = G.Rank(c, level)
+      if c.value and c.value >= line then ranked[#ranked + 1] = c end
+    end
+  end
+  table.sort(ranked, byRank)
+  for _, c in ipairs(ranked) do
+    if n >= free or n >= AUTO_MAX then break end
+    p.auto[c.id] = true
+    n = n + 1
+  end
+  return n
+end
+
 -- the steps, anew: the target first (its quest's objective spot, or its stop's hand-ins), then the rest of the route
 -- stop by stop (each stop: the objectives of its quests on the way, its hand-ins, then the pick-ups there: what you
 -- hand in to an NPC comes before what you take from the same one), then the pick-ups at no stop of the route
@@ -197,6 +251,19 @@ function G.Replan()
   if not (QB:Settings().guide and QB:Settings().guide.on) then
     if #G.steps > 0 then for k = #G.steps, 1, -1 do G.steps[k] = nil end; G.ver = G.ver + 1 end
     return
+  end
+  if QB:GuideOn() then
+    local before = QB:Plan().auto
+    local n0 = 0
+    for _ in pairs(before) do n0 = n0 + 1 end
+    local n1 = G.Fill(QB.state.level or 1)
+    if n1 ~= n0 and not G.filling then
+      -- new picks: the route is planned again with them, and Replan runs again from QB:Changed
+      G.filling = true
+      QB.sigPlan, QB.sigNow = nil, nil
+      QB:Recompute(true)
+      G.filling = false
+    end
   end
   local was1 = G.steps[1]
   local wasKey = was1 and (was1.kind .. ":" .. tostring(was1.qid) .. ":" .. tostring(was1.npc) .. ":" .. tostring(was1.wx))
