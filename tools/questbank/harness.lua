@@ -4182,9 +4182,13 @@ do
   v5.glowStyle[1].__scripts.OnClick(v5.glowStyle[1])
   assert(Glow.Style() == "sparkle" and L:IsShown() and sparksShown() == 7, "Sparkles again")
   -- the rows below moved down with the two new ones, and the page grew to hold them (5.4.3: and the game's settings
-  -- the light changes, with the button that puts them back)
-  assert(v5.statusHint.__points[1].y == -1656 and v5.statusBtns[1].__points[1].y == -1626 and v5.scroll.child:GetHeight() == 1700,
-    "the health and mana rows sit under the light's rows (and 5.5's marker style row), the page holds them")
+  -- the light changes, with the button that puts them back; 6.0 regrouped the page: the health and mana rows sit in
+  -- the right column under the timers, the light's rows keep their own column, and the page holds the lowest row of
+  -- either column)
+  local lowest = math.min(v5.statusHint.__points[1].y - 30, v5.skipText.__points[1].y - 44, v5.glowSetHint.__points[1].y - 40, v5.ctxText.__points[1].y - 44)
+  assert(v5.statusBtns[1].__points[1].y < v5.clockHint.__points[1].y and v5.statusHint.__points[1].y < v5.statusBtns[1].__points[1].y
+    and v5.glowSetHint.__points[1].y < v5.glowRestore.__points[1].y and v5.scroll.child:GetHeight() >= -lowest,
+    "the health and mana rows sit under the timers' rows, the light's keep their column, the page holds them")
   local sf = v5.scroll
   local _, hi = sf.bar:GetMinMaxValues()
   sf.bar:SetValue(math.min(hi, 990)); UI:Refresh()
@@ -4708,7 +4712,7 @@ do
   assert(c.cvars.SoftTargetLowPriorityIcons == nil and g.saved.SoftTargetLowPriorityIcons == nil, "one the client has not got: never written")
   UI:Refresh()
   assert(not row("SoftTargetInteractArc"):IsShown() and not row("SoftTargetLowPriorityIcons"):IsShown()
-    and row("SoftTargetInteractRange").__points[1].y == -1388 - 18 and row("SoftTargetIconGameObject").__points[1].y == -1388 - 4 * 18,
+    and row("SoftTargetInteractRange").__points[1].y == v5.glowRowY - 18 and row("SoftTargetIconGameObject").__points[1].y == v5.glowRowY - 4 * 18,
     "neither listed: the rows close up")
   ev("PLAYER_LOGOUT")
   QB.charKey = "Alt-ForeverNormal"; c.cvars.SoftTargetInteractRange = "12"
@@ -6080,7 +6084,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 1700 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == v5.contentH - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()
@@ -17049,6 +17053,60 @@ end)()
     joined = table.concat(lines, " | ")
     assert(joined:find("Kobold Vermin: 3/8", 1, true) and not joined:find("Brann", 1, true), "alone: your count only: " .. joined)
     assert(#a.chat == 0 or not a.chat[#a.chat]:find("Kobold", 1, true), "nothing said in chat")
+  end }
+
+  -- Settings regrouped (UI.lua): Guide first, Map and minimap, the modules, Data you share, Banking last; the Guide's
+  -- rows drive their settings and the step frame; nothing clipped
+  G6CASES[#G6CASES + 1] = { "Settings open on Guide; Banking last; every row drives its setting", function()
+    local c = human("Setter", { { 7, 0 } }, { [783] = true }, nil, 5)
+    local QB, UI, SF = c.QB, c.QB.UI, c.QB.StepFrame
+    QB:Settings().welcome = nil
+    settle(c)
+    UI:Open(5); UI:Refresh()
+    local v = UI.views[5]
+    local order = {}
+    for _, h in ipairs(v.headings) do order[#order + 1] = h:GetText() end
+    assert(order[1] == "Guide" and order[2] == "Map and minimap" and order[#order] == "Banking", "the order: " .. table.concat(order, " > "))
+    local seen = {}
+    for _, h in ipairs(order) do seen[h] = true end
+    assert(seen["Data you share"] and seen["Interact light"] and seen["Camp bar"] and seen["Timers"], "the module and data sections are there")
+    local iData, iBank = 0, 0
+    for i, h in ipairs(order) do if h == "Data you share" then iData = i end if h == "Banking" then iBank = i end end
+    assert(iData < iBank and iData > 2, "Data you share before Banking, after the modules")
+    -- the Guide's rows
+    assert(v.guideOn:GetChecked() == true and v.guideFrame:GetChecked() == true and v.arrow:GetChecked() == true, "the rows show the settings")
+    v.guideOn:SetChecked(false); v.guideOn.__scripts.OnClick(v.guideOn)
+    assert(QB:Settings().guide.on == false and not c.env.QuestBankStep:IsShown(), "Guide off: the frame hides")
+    v.guideOn:SetChecked(true); v.guideOn.__scripts.OnClick(v.guideOn)
+    assert(QB:Settings().guide.on == true and c.env.QuestBankStep:IsShown(), "on again")
+    v.guideFrame:SetChecked(false); v.guideFrame.__scripts.OnClick(v.guideFrame)
+    assert(QB:Settings().guide.frame == false and not c.env.QuestBankStep:IsShown(), "the frame's own switch")
+    v.guideFrame:SetChecked(true); v.guideFrame.__scripts.OnClick(v.guideFrame)
+    assert(c.env.QuestBankStep:IsShown(), "and back")
+    v.guideLocked:SetChecked(true); v.guideLocked.__scripts.OnClick(v.guideLocked)
+    assert(QB:Settings().guide.locked == true and c.env.QuestBankStep.__dragOff, "locked in place")
+    v.guideLocked:SetChecked(false); v.guideLocked.__scripts.OnClick(v.guideLocked)
+    v.guideScale.__scripts.OnClick(v.guideScale, "LeftButton")
+    assert(QB:Settings().guide.scale ~= 1 and v.guideScale:GetText():find("%%") and math.abs(c.env.QuestBankStep:GetScale() - QB:Settings().guide.scale) < 0.001, "the scale cycles: " .. v.guideScale:GetText())
+    for _ = 1, 2 do v.guideScale.__scripts.OnClick(v.guideScale, "LeftButton") end
+    assert(QB:Settings().guide.scale == 1, "and round to 100%")
+    assert(v.autoAccept:GetText():find("^Accept for me: ") and v.autoOther and v.autoTurnIn and v.autoKey and v.minimapGivers and v.tipProgress, "auto, the ! and the tooltips sit under Guide")
+    v.minimapGivers:SetChecked(false); v.minimapGivers.__scripts.OnClick(v.minimapGivers)
+    assert(QB:Settings().minimapGivers == false, "the ! switch")
+    v.minimapGivers:SetChecked(true); v.minimapGivers.__scripts.OnClick(v.minimapGivers)
+    v.tipProgress:SetChecked(false); v.tipProgress.__scripts.OnClick(v.tipProgress)
+    assert(QB:Settings().tipProgress == false, "the tooltip switch")
+    v.tipProgress:SetChecked(true); v.tipProgress.__scripts.OnClick(v.tipProgress)
+    -- the Guide's rows sit above the Map's, and the Banking rows below everything else
+    assert(v.guideOn.__points[1].y > v.pins.__points[1].y and v.pins.__points[1].y > v.glowOn.__points[1].y and v.modeBtns[1].__points[1].y < v.glowOn.__points[1].y, "top to bottom: Guide, Map, the light, Banking")
+    -- the page is laid out with nothing clipped (the harness's layout pass covers Settings; this checks it here too)
+    UI:Refresh()
+    local lay = checkLayout(UI.frame, "settings after the regroup")
+    assert(#lay == 0, "settings laid out: " .. table.concat(lay, "; "))
+    STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(UI.frame, "Settings, 6.0")
+    -- the sidebar is untouched
+    assert(UI.SIDEBAR[#UI.SIDEBAR].name == "Settings", "the sidebar as it was")
+    UI.frame:Hide()
   end }
 
   for _, case in ipairs(G6CASES) do

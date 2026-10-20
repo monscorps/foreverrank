@@ -4560,45 +4560,165 @@ function UI:CreateSettingsView(parent)
   v.scroll = scrollArea(v)
   local p = v.scroll.child
   local LEFT, RIGHT = 12, 390
-  -- mode: found for you, or set by you
-  heading(p, LEFT, -12, "Mode", 370)
-  v.modeBtns = {}
-  for i, m in ipairs({ { "auto", "Auto" }, { "off", "Questing" }, { "on", "Banking" } }) do
-    local b = button(p, m[2], 110)
-    b:SetPoint("TOPLEFT", LEFT + (i - 1) * 116, -38)
-    b.val = m[1]
-    b:SetScript("OnClick", QB.Safe(function(self)
-      QB:SetLock(self.val)
-      UI:Refresh()
-    end, "settings: mode"))
-    v.modeBtns[i] = b
+  -- 6.0: the sections in the order the player meets them: Guide, Map and minimap, the modules, Data you share, Banking
+  -- last. Two columns, each laid top to bottom with a running y (yl, yr): a block starts at the column's y and moves
+  -- it down by its own height, so no row stands on another. v.headings keeps the headings in their order
+  v.headings = {}
+  local function head(x, y, label, width)
+    local t = heading(p, x, y, label, width)
+    v.headings[#v.headings + 1] = t
+    return t
   end
-  v.modeText = para(p, "GameFontNormal", 12, INK_SOFT, 370)
-  v.modeText:SetPoint("TOPLEFT", LEFT, -68)
-  v.modeText:SetHeight(64)
-  v.capLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 250)
-  v.capLabel:SetPoint("TOPLEFT", LEFT, -144)
-  v.capDown = button(p, "-", 26)
-  v.capDown:SetPoint("TOPLEFT", LEFT + 262, -140)
-  v.capUp = button(p, "+", 26)
-  v.capUp:SetPoint("TOPLEFT", LEFT + 292, -140)
-  local function moveCap(d)
-    local _, p = QB:LockChoice()
-    local held, nextCap = QB:Lock()
-    local was = QB:Held()
-    local base = held or (was and was.level) or QB.state.level
-    local cur = nextCap or (was and was.next) or math.min(base + 10, QB.MAXLEVEL)
-    local new = math.max(base + 1, math.min(QB.MAXLEVEL, cur + d))
-    p.nextCap = new
-    if was and not held then was.next = new end -- the rush: the cap it went to
-    QB:MarkDirty()
-    UI:Refresh()
+  local function subhead(x, y, label, width)
+    local t = text(p, "GameFontNormal", 12, GOLD_SOFT, "LEFT", width or 330)
+    t:SetPoint("TOPLEFT", x, y)
+    t:SetText(label)
+    return t
   end
-  v.capDown:SetScript("OnClick", function() moveCap(-1) end)
-  v.capUp:SetScript("OnClick", function() moveCap(1) end)
+  local yl, yr = -12, -12
 
-  heading(p, LEFT, -188, "Map", 370)
-  v.pins = checkRow(p, LEFT, -212, "The route's pins on the world map")
+  ----------------------------------------------------------------------------------------------------------------
+  -- Guide (Guide.lua, StepFrame.lua, Arrow.lua, Auto.lua): the step frame, the arrow, what is done for you at the
+  -- quest giver, the minimap's ! and the tooltips' progress
+  ----------------------------------------------------------------------------------------------------------------
+  local y0 = yl
+  head(LEFT, y0, "Guide", 370)
+  v.guideOn = checkRow(p, LEFT, y0 - 24, "Guide me: the step frame, the arrow, the route from here", 340)
+  v.guideOn:SetScript("OnClick", function(self)
+    QB:Settings().guide.on = self:GetChecked() and true or false
+    QB:MarkDirty()
+    if QB.StepFrame then QB.StepFrame.Apply() end
+    UI:Refresh()
+  end)
+  tooltip(v.guideOn, function(tip)
+    tip:AddLine("Guide me", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("The step frame says what to do next, the arrow points there, and the plan takes the quests worth taking around you. Off, QuestBank plans only what you put on your route.", 1, 1, 1, true)
+  end)
+  v.guideFrame = checkRow(p, LEFT + 24, y0 - 52, "The step frame", 316)
+  v.guideFrame:SetScript("OnClick", function(self)
+    QB:Settings().guide.frame = self:GetChecked() and true or false
+    if QB.StepFrame then QB.StepFrame.Apply() end
+  end)
+  v.guideLocked = checkRow(p, LEFT + 24, y0 - 80, "Locked in place", 316)
+  v.guideLocked:SetScript("OnClick", function(self)
+    QB:Settings().guide.locked = self:GetChecked() and true or false
+    if QB.StepFrame then QB.StepFrame.Apply() end
+  end)
+  v.guideScale = button(p, "100%", 70)
+  v.guideScale:SetPoint("TOPLEFT", LEFT + 28, y0 - 108)
+  v.guideScale:SetScript("OnClick", QB.Safe(function()
+    local SF = QB.StepFrame
+    local scales = SF and SF.SCALES or { 0.8, 1, 1.2 }
+    local cur = QB:Settings().guide.scale or 1
+    local i = 2
+    for k, sc in ipairs(scales) do if math.abs(sc - cur) < 0.001 then i = k end end
+    local sc = scales[i % #scales + 1]
+    if SF and SF.SetScale then SF.SetScale(sc) else QB:Settings().guide.scale = sc end
+    UI:Refresh()
+  end, "settings: step frame size"))
+  v.guideScaleLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
+  v.guideScaleLabel:SetPoint("LEFT", v.guideScale, "RIGHT", 8, 0)
+  v.guideScaleLabel:SetText("The step frame's size")
+  v.arrow = checkRow(p, LEFT, y0 - 136, "Direction arrow (right-click it for what it points at)")
+  v.arrow:SetScript("OnClick", function(self) if QB.Arrow then QB.Arrow:Set(self:GetChecked() and true or false) end end)
+  -- the arrow's look (Arrow.lua, arrowStyle): QuestBank's own arrow, or QuestTrail's compass; the button cycles
+  UI.ARROW_STYLES = { questbank = "QuestBank's", compass = "Compass" }
+  v.arrowStyle = button(p, "QuestBank's", 90)
+  v.arrowStyle:SetPoint("TOPLEFT", LEFT + 28, y0 - 164)
+  v.arrowStyle:SetScript("OnClick", QB.Safe(function()
+    local set = QB:Settings()
+    set.arrowStyle = set.arrowStyle == "compass" and "questbank" or "compass"
+    if QB.Arrow and QB.Arrow.Restyle then QB.Arrow:Restyle() end
+    UI:Refresh()
+  end, "settings: arrow look"))
+  tooltip(v.arrowStyle, function(tip)
+    tip:AddLine("The arrow's look", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("QuestBank's: its own arrow, green ahead, gold to the side, red behind, glowing as it points ahead and pinging as you arrive. Compass: QuestTrail's dial and needle, by Krom.", 1, 1, 1, true)
+  end)
+  v.arrowHint = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
+  v.arrowHint:SetPoint("LEFT", v.arrowStyle, "RIGHT", 8, 0)
+  v.arrowHint:SetText("Arrow look. Its right-click menu has it too.")
+  -- at the quest giver: accept and hand in for you (Auto.lua), as the welcome asked. Accept for me: a choice (5.4.4):
+  -- Off, Quests on my route, Quests worth taking; the button cycles, its text says the choice in one line. Then, for
+  -- Quests worth taking, what one outside your route gets
+  local ACCEPT_ORDER = { "off", "route", "worth" }
+  v.autoAccept = button(p, "Accept for me: Off", 300)
+  v.autoAccept:SetPoint("TOPLEFT", LEFT + 4, y0 - 196)
+  v.autoAccept:SetScript("OnClick", QB.Safe(function()
+    local set = QB:Settings()
+    local i = 1
+    for k, m in ipairs(ACCEPT_ORDER) do if m == set.autoAccept then i = k end end
+    set.autoAccept = ACCEPT_ORDER[i % #ACCEPT_ORDER + 1]
+    UI:Refresh()
+  end, "settings: accept for me"))
+  tooltip(v.autoAccept, function(tip)
+    tip:AddLine("Accept for me", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Off: you take every quest yourself.", 1, 1, 1, true)
+    tip:AddLine("Quests on my route: your pick-up list, the Guide's picks, and the next steps of the chains you are on.", 1, 1, 1, true)
+    tip:AddLine("Quests worth taking: those, and any other the route planner thinks worth it (never grey, never one that pays next to nothing).", 1, 1, 1, true)
+  end)
+  v.autoOther = button(p, "Outside my route: Accept them", 300)
+  v.autoOther:SetPoint("TOPLEFT", LEFT + 4, y0 - 222)
+  v.autoOther:SetScript("OnClick", QB.Safe(function()
+    local set = QB:Settings()
+    set.autoAcceptOther = set.autoAcceptOther == "leave" and "accept" or "leave"
+    UI:Refresh()
+  end, "settings: outside my route"))
+  tooltip(v.autoOther, function(tip)
+    tip:AddLine("Quests outside my route", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("With Quests worth taking: a quest worth it that is not on your route is taken for you, or its quest window is left open for you to decide.", 1, 1, 1, true)
+  end)
+  v.acceptHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
+  v.acceptHint:SetPoint("TOPLEFT", LEFT, y0 - 248)
+  v.acceptHint:SetHeight(44)
+  v.acceptHint:SetText("At an NPC and when a party member shares one; escorts are yours to join in the game's prompt. Hold Shift to do it by hand. Not repeatable or grey quests, nor places you skip.")
+  v.autoTurnIn = checkRow(p, LEFT, y0 - 296, "Hand in finished quests for me", 340)
+  v.autoTurnIn:SetScript("OnClick", function(self) QB:Settings().autoTurnIn = self:GetChecked() and true or false end)
+  v.turnInHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
+  v.turnInHint:SetPoint("TOPLEFT", LEFT, y0 - 322)
+  v.turnInHint:SetHeight(58)
+  v.turnInHint:SetText("Questing and the rush: everything. While you bank: only quests you left out of the route, ones that pay next to nothing on the day, and a step you hand in to bank a better one. A reward to choose, or a quest QuestBank can't value, waits for you.")
+  -- the decide-yourself key: held at the NPC, the auto actions above leave the quest to you
+  v.autoKey = button(p, "Shift", 70)
+  v.autoKey:SetPoint("TOPLEFT", LEFT + 4, y0 - 388)
+  v.autoKeyLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 290)
+  v.autoKeyLabel:SetPoint("LEFT", v.autoKey, "RIGHT", 8, 0)
+  v.autoKeyLabel:SetText("held at the NPC: decide the quest yourself")
+  local KEYS = { "shift", "ctrl", "alt", "none" }
+  UI.KEY_NAMES = { shift = "Shift", ctrl = "Ctrl", alt = "Alt", none = "No key" }
+  v.autoKey:SetScript("OnClick", QB.Safe(function()
+    local set = QB:Settings()
+    local i = 1
+    for k, name in ipairs(KEYS) do if name == set.autoKey then i = k end end
+    set.autoKey = KEYS[i % #KEYS + 1]
+    UI:Refresh()
+  end, "settings: key"))
+  -- the minimap's ! (Minimap.lua) and the tooltips' progress (Tips.lua)
+  v.minimapGivers = checkRow(p, LEFT, y0 - 420, "A ! on the minimap for every quest I can take", 340)
+  v.minimapGivers:SetScript("OnClick", function(self)
+    QB:Settings().minimapGivers = self:GetChecked() and true or false
+    if QB.Mini and QB.Mini.Invalidate then QB.Mini.Invalidate() end
+    if QB.Mini and QB.Mini.Place then QB.Mini.Place() end
+  end)
+  tooltip(v.minimapGivers, function(tip)
+    tip:AddLine("The minimap's !", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("The quests you can take now on your map, as the world map shows them: not grey, nothing you hold or have done. Givers a few steps apart share a pin with a count.", 1, 1, 1, true)
+  end)
+  v.tipProgress = checkRow(p, LEFT, y0 - 448, "Quest progress in mob tooltips", 340)
+  v.tipProgress:SetScript("OnClick", function(self) QB:Settings().tipProgress = self:GetChecked() and true or false end)
+  tooltip(v.tipProgress, function(tip)
+    tip:AddLine("Quest progress in tooltips", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("A mob or object that counts for a quest in your log gets its count in its tooltip, \"Kobold Vermin: 3/8\", and your party's counts.", 1, 1, 1, true)
+  end)
+  yl = y0 - 496
+
+  ----------------------------------------------------------------------------------------------------------------
+  -- Map and minimap: the route's pins, the minimap button, the quest icons on the world map (QuestMap.lua), the
+  -- minimap (Minimap.lua, MinimapView.lua, Walk.lua), QuestBank's map page (MapPage.lua), the icons' size
+  ----------------------------------------------------------------------------------------------------------------
+  y0 = yl
+  head(LEFT, y0, "Map and minimap", 370)
+  v.pins = checkRow(p, LEFT, y0 - 24, "The route's pins on the world map")
   v.pins:SetScript("OnClick", function(self)
     if QB.Pins then
       if (self:GetChecked() and true or false) ~= (QB:Settings().pins and true or false) then QB.Pins:Toggle() end
@@ -4607,24 +4727,20 @@ function UI:CreateSettingsView(parent)
     end
     UI:Refresh()
   end)
-  v.minimap = checkRow(p, LEFT, -240, "Button on the minimap")
+  v.minimap = checkRow(p, LEFT, y0 - 52, "Button on the minimap")
   v.minimap:SetScript("OnClick", function(self)
     QB:Settings().minimap.hide = not self:GetChecked()
     if QB.Minimap then QB.Minimap:Update() end
   end)
-  v.arrow = checkRow(p, LEFT, -268, "Direction arrow (right-click it for what it points at)")
-  v.arrow:SetScript("OnClick", function(self) if QB.Arrow then QB.Arrow:Set(self:GetChecked() and true or false) end end)
-
   -- quest icons on each zone's map (QuestMap.lua), the Forever client only: one switch for all, one for each kind
-  heading(p, LEFT, -304, "Map icons", 370)
   local MAP_ICONS = {
-    { "mapIcons", LEFT, -328, "Quest icons on the world map", 340,
+    { "mapIcons", LEFT, y0 - 80, "Quest icons on the world map", 340,
       "On each zone's map, drawn as the game draws its own pins: a ! where quests you can take start, the game's quest pin with its turn-in mark where finished ones are handed in and in progress where to do the ones in your log, and each dungeon's entrance with how many of its quests you have done. Click one for a waypoint; Shift-click a ! to put its quests on your pick-up list. The route's pins have their own switch above." },
-    { "mapGive", LEFT + 24, -356, "Quests you can pick up", 316,
+    { "mapGive", LEFT + 24, y0 - 108, "Quests you can pick up", 316,
       "A yellow ! on the NPCs with quests for your faction, class and level that you haven't done. Grey (low-level) quests are left off, as the game does, and so are quests that need a profession or an item first. Where a route pin stands on the NPC, that pin's tooltip lists the NPC's quests instead." },
-    { "mapTurn", LEFT + 24, -384, "Hand-ins", 316,
+    { "mapTurn", LEFT + 24, y0 - 136, "Hand-ins", 316,
       "The game's quest pin, with its turn-in mark, on the NPC each finished quest in your log goes to." },
-    { "mapObj", LEFT + 24, -412, "Objectives and quest items", 316,
+    { "mapObj", LEFT + 24, y0 - 164, "Objectives and quest items", 316,
       "For the quests in your log, the game's in-progress pin where to do each objective you haven't finished; for quests that start from an item, a red ! where it drops. Each tooltip says where the spot comes from: Wowhead Forever, Classic data or players' games." },
   }
   for _, r in ipairs(MAP_ICONS) do
@@ -4644,203 +4760,8 @@ function UI:CreateSettingsView(parent)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
     v[key] = row
   end
-
-  -- updates: what others on the realm run
-  heading(p, RIGHT, -12, "Updates")
-  v.verText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
-  v.verText:SetPoint("TOPLEFT", RIGHT, -38)
-  v.verText:SetHeight(46)
-  v.updates = checkRow(p, RIGHT, -86, "Tell me when anyone on the realm runs a newer one", 300)
-  v.updates:SetScript("OnClick", function(self)
-    QB:Settings().updates = self:GetChecked() and true or false
-    if QB.Sync and QB.Sync.ApplyVersionSetting then QB.Sync:ApplyVersionSetting() end
-  end)
-  v.link = button(p, "Copy the download link", 190)
-  v.link:SetPoint("TOPLEFT", RIGHT + 4, -116)
-  v.link:SetScript("OnClick", function() UI:CopyLink("QuestBank download page", QB.DOWNLOAD) end)
-
-  heading(p, RIGHT, -154, "Sharing and chat")
-  v.shareParty = checkRow(p, RIGHT, -178, "Share my quests with my party", 300)
-  v.shareParty:SetScript("OnClick", function(self) QB:Settings().share.party = self:GetChecked() and true or false; UI:Refresh() end)
-  v.shareGuild = checkRow(p, RIGHT, -204, "Share them with my guild", 300)
-  v.shareGuild:SetScript("OnClick", function(self) QB:Settings().share.guild = self:GetChecked() and true or false; UI:Refresh() end)
-  v.offers = checkRow(p, RIGHT, -230, "Offer a post during hand-in runs", 300)
-  v.offers:SetScript("OnClick", function(self) QB:Settings().post.auto = self:GetChecked() and true or false end)
-  v.shareHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
-  v.shareHint:SetPoint("TOPLEFT", RIGHT, -258)
-  v.shareHint:SetHeight(30)
-  v.shareHint:SetText("Over the game's addon channel, to QuestBank users only; nothing shows in chat. Posts go out only when you press Post.")
-
-  -- suggestions: how far the Plan page and the swaps look, and where they never look
-  heading(p, RIGHT, -298, "Suggestions")
-  v.rangeAboveLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 210)
-  v.rangeAboveLabel:SetPoint("TOPLEFT", RIGHT, -324)
-  v.rangeAboveDown = button(p, "-", 26)
-  v.rangeAboveDown:SetPoint("TOPLEFT", RIGHT + 214, -320)
-  v.rangeAboveUp = button(p, "+", 26)
-  v.rangeAboveUp:SetPoint("TOPLEFT", RIGHT + 244, -320)
-  v.rangeAuto = button(p, "Auto", 48)
-  v.rangeAuto:SetPoint("TOPLEFT", RIGHT + 276, -320)
-  v.rangeBelowLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 210)
-  v.rangeBelowLabel:SetPoint("TOPLEFT", RIGHT, -350)
-  v.rangeBelowDown = button(p, "-", 26)
-  v.rangeBelowDown:SetPoint("TOPLEFT", RIGHT + 214, -346)
-  v.rangeBelowUp = button(p, "+", 26)
-  v.rangeBelowUp:SetPoint("TOPLEFT", RIGHT + 244, -346)
-  local function moveRange(key, d)
-    local above, below = QB:Range()
-    local cur = key == "rangeAbove" and above or below
-    QB:Settings()[key] = math.max(0, math.min(40, cur + d))
-    UI:Refresh()
-  end
-  v.rangeAboveDown:SetScript("OnClick", function() moveRange("rangeAbove", -1) end)
-  v.rangeAboveUp:SetScript("OnClick", function() moveRange("rangeAbove", 1) end)
-  v.rangeBelowDown:SetScript("OnClick", function() moveRange("rangeBelow", -1) end)
-  v.rangeBelowUp:SetScript("OnClick", function() moveRange("rangeBelow", 1) end)
-  v.rangeAuto:SetScript("OnClick", function()
-    local set = QB:Settings()
-    set.rangeAbove, set.rangeBelow = "auto", "auto"
-    UI:Refresh()
-  end)
-  tooltip(v.rangeAuto, function(tip)
-    tip:AddLine("Auto", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("QuestBank's own window: 12 levels above you while banking (dungeon quests well above you are the big payers), 4 while questing, 7 below.", 0.8, 0.8, 0.8, true)
-  end)
-  v.skipKal = checkRow(p, RIGHT, -372, "Skip Kalimdor", 110)
-  v.skipKal:SetScript("OnClick", function(self) QB:SetSkip(1, self:GetChecked() and true or false) end)
-  v.skipEK = checkRow(p, RIGHT + 146, -372, "Skip Eastern Kingdoms", 170)
-  v.skipEK:SetScript("OnClick", function(self) QB:SetSkip(0, self:GetChecked() and true or false) end)
-  v.skipText = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
-  v.skipText:SetPoint("TOPLEFT", RIGHT, -400)
-  v.skipText:SetHeight(44)
-
-  -- at the quest giver: accept and hand in for you (Auto.lua), off until asked for
-  heading(p, LEFT, -460, "At the quest giver", 370)
-  -- Accept for me: a choice (Auto.lua, 5.4.4): Off, Quests on my route, Quests worth taking; the button cycles, its
-  -- text says the choice in one line. Then, for Quests worth taking, what one outside your route gets
-  local ACCEPT_ORDER = { "off", "route", "worth" }
-  v.autoAccept = button(p, "Accept for me: Off", 300)
-  v.autoAccept:SetPoint("TOPLEFT", LEFT + 4, -484)
-  v.autoAccept:SetScript("OnClick", QB.Safe(function()
-    local set = QB:Settings()
-    local i = 1
-    for k, m in ipairs(ACCEPT_ORDER) do if m == set.autoAccept then i = k end end
-    set.autoAccept = ACCEPT_ORDER[i % #ACCEPT_ORDER + 1]
-    UI:Refresh()
-  end, "settings: accept for me"))
-  tooltip(v.autoAccept, function(tip)
-    tip:AddLine("Accept for me", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("Off: you take every quest yourself.", 1, 1, 1, true)
-    tip:AddLine("Quests on my route: your pick-up list, and the next steps of the chains you are on.", 1, 1, 1, true)
-    tip:AddLine("Quests worth taking: those, and any other the route planner thinks worth it (never grey, never one that pays next to nothing).", 1, 1, 1, true)
-  end)
-  v.autoOther = button(p, "Outside my route: Accept them", 300)
-  v.autoOther:SetPoint("TOPLEFT", LEFT + 4, -510)
-  v.autoOther:SetScript("OnClick", QB.Safe(function()
-    local set = QB:Settings()
-    set.autoAcceptOther = set.autoAcceptOther == "leave" and "accept" or "leave"
-    UI:Refresh()
-  end, "settings: outside my route"))
-  tooltip(v.autoOther, function(tip)
-    tip:AddLine("Quests outside my route", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("With Quests worth taking: a quest worth it that is not on your route is taken for you, or its quest window is left open for you to decide.", 1, 1, 1, true)
-  end)
-  v.acceptHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.acceptHint:SetPoint("TOPLEFT", LEFT, -536)
-  v.acceptHint:SetHeight(44)
-  v.acceptHint:SetText("At an NPC and when a party member shares one; escorts are yours to join in the game's prompt. Hold Shift to do it by hand. Not repeatable or grey quests, nor places you skip.")
-  v.autoTurnIn = checkRow(p, LEFT, -584, "Hand in finished quests for me", 340)
-  v.autoTurnIn:SetScript("OnClick", function(self) QB:Settings().autoTurnIn = self:GetChecked() and true or false end)
-  v.turnInHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.turnInHint:SetPoint("TOPLEFT", LEFT, -610)
-  v.turnInHint:SetHeight(58)
-  v.turnInHint:SetText("Questing and the rush: everything. While you bank: only quests you left out of the route, ones that pay next to nothing on the day, and a step you hand in to bank a better one. A reward to choose, or a quest QuestBank can't value, waits for you.")
-
-  -- party chat: two plain lines, off until asked for
-  heading(p, RIGHT, -460, "Party chat")
-  v.sayAccept = checkRow(p, RIGHT, -484, "Say which quests I pick up", 300)
-  v.sayAccept:SetScript("OnClick", function(self) QB:Settings().sayAccept = self:GetChecked() and true or false end)
-  v.sayComplete = checkRow(p, RIGHT, -510, "Say when a quest is complete", 300)
-  v.sayComplete:SetScript("OnClick", function(self) QB:Settings().sayComplete = self:GetChecked() and true or false end)
-  for key, b in pairs({ accept = v.sayAccept, complete = v.sayComplete }) do
-    tooltip(b, function(tip)
-      tip:AddLine(key == "accept" and "When you pick a quest up" or "When a quest's objectives are done", GOLD[1], GOLD[2], GOLD[3])
-      tip:AddLine("One line in party chat (raid chat in a raid), only while grouped:", 1, 1, 1, true)
-      tip:AddLine(string.format(QB.SAY[key], "Kobold Camp Cleanup"), 0.67, 0.67, 1)
-    end)
-  end
-  v.sayHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
-  v.sayHint:SetPoint("TOPLEFT", RIGHT, -538)
-  v.sayHint:SetHeight(30)
-  v.sayHint:SetText("Only while you are in a party or raid, as plain lines. Nothing else goes to chat without Post.")
-
-  heading(p, RIGHT, -584, "Discoveries")
-  -- the spells and item tooltips of the Forever client (Game.lua) and who drops what (Loot.lua); quests and NPCs are
-  -- always noted. The label names all three: this box is the player's one say over them. Unticking clears what was
-  -- noted, ticking takes over ForeverProbe's notes if it is still there
-  v.noteGame = checkRow(p, RIGHT, -608, "Note items, spells and loot, for foreverrank.com", 300)
-  v.noteGame:SetScript("OnClick", function(self)
-    if QB.Game then QB.Game.SetOn(self:GetChecked() and true or false) end
-    UI:Refresh()
-  end)
-  v.noteGame:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Note items, spells and loot", 1, 1, 1)
-    GameTooltip:AddLine("Tooltips of the items you loot, carry or see, the spells you know, and which creatures and chests dropped what you loot (by id), with no names in them, so foreverrank.com can list them. Unticking forgets what was noted.", nil, nil, nil, true)
-    GameTooltip:Show()
-  end)
-  v.noteGame:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  -- the quest survey (Survey.lua): QuestBank asks the game about the quests it has no rewards for
-  v.survey = checkRow(p, RIGHT, -634, "Learn quests from the game", 300)
-  v.survey:SetScript("OnClick", function(self)
-    if QB.Survey then QB.Survey.SetOn(self:GetChecked() and true or false) else QB:Settings().survey = self:GetChecked() and true or false end
-    UI:Refresh()
-  end)
-  v.survey:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText("Learn quests from the game", 1, 1, 1)
-    GameTooltip:AddLine("Out of combat and outside dungeons, QuestBank asks the game about the quests it has no rewards for, two a second, and shows their rewards in the finders and tooltips at once. Once per game build for the account.", nil, nil, nil, true)
-    if QB.Survey and QB.Survey.Able() then
-      local pr = QB.Survey.Progress()
-      GameTooltip:AddLine(string.format("%s of %s quests done on this build, %s with item rewards. /qb survey says more.", QB.Comma(pr.done), QB.Comma(pr.total), QB.Comma(pr.rewards)), 0.6, 0.8, 1, true)
-    end
-    GameTooltip:Show()
-  end)
-  v.survey:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  v.discText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
-  v.discText:SetPoint("TOPLEFT", RIGHT, -662)
-  v.discText:SetHeight(72)
-
-  -- the decide-yourself key: held at the NPC, the auto actions above leave the quest to you
-  v.autoKey = button(p, "Shift", 70)
-  v.autoKey:SetPoint("TOPLEFT", LEFT, -676)
-  v.autoKeyLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 290)
-  v.autoKeyLabel:SetPoint("LEFT", v.autoKey, "RIGHT", 8, 0)
-  v.autoKeyLabel:SetText("held at the NPC: decide the quest yourself")
-  local KEYS = { "shift", "ctrl", "alt", "none" }
-  UI.KEY_NAMES = { shift = "Shift", ctrl = "Ctrl", alt = "Alt", none = "No key" }
-  v.autoKey:SetScript("OnClick", QB.Safe(function()
-    local set = QB:Settings()
-    local i = 1
-    for k, name in ipairs(KEYS) do if name == set.autoKey then i = k end end
-    set.autoKey = KEYS[i % #KEYS + 1]
-    UI:Refresh()
-  end, "settings: key"))
-
-  -- timers (Timer.lua)
-  heading(p, LEFT, -716, "Timers", 370)
-  v.clockShow = checkRow(p, LEFT, -740, "Show the timer strip (drag it; right-click hides it)", 340)
-  v.clockShow:SetScript("OnClick", function(self) if QB.Timer then QB.Timer.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
-  v.clockLevelMsg = checkRow(p, LEFT, -768, "Say how long each level took, at level-up", 340)
-  v.clockLevelMsg:SetScript("OnClick", function(self) QB:Settings().clockLevelMsg = self:GetChecked() and true or false end)
-  v.clockHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.clockHint:SetPoint("TOPLEFT", LEFT, -794)
-  v.clockHint:SetHeight(44)
-  v.clockHint:SetText("The strip shows your time at this level, the oldest quest in your log and the hand-in run. Quest tooltips say how long a quest took.")
-
   -- the route on the minimap (Minimap.lua)
-  heading(p, LEFT, -846, "Minimap and map", 370)
-  v.minimapPins = checkRow(p, LEFT, -870, "Route stops, pick-ups and dungeon entrances on the minimap", 340)
+  v.minimapPins = checkRow(p, LEFT, y0 - 192, "Route stops, pick-ups and dungeon entrances on the minimap", 340)
   v.minimapPins:SetScript("OnClick", function(self) QB:Settings().minimapPins = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
   tooltip(v.minimapPins, function(tip)
     tip:AddLine("The minimap", GOLD[1], GOLD[2], GOLD[3])
@@ -4848,17 +4769,17 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("/qb minimap reset puts it back as the game had it.", 0.6, 0.6, 0.6, true)
   end)
   -- its far zoom and drag (MinimapView.lua), your trails on it (Walk.lua); the other switches are on its own menu
-  v.mmExtended = checkRow(p, LEFT, -898, "Far zoom and drag", 340)
+  v.mmExtended = checkRow(p, LEFT, y0 - 220, "Far zoom and drag", 340)
   v.mmExtended:SetScript("OnClick", function(self) QB:Settings().mmExtended = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Update(0) end end)
   tooltip(v.mmExtended, function(tip)
     tip:AddLine("Far zoom and drag", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Wheel out past the game's widest, over the game's own minimap tiles. Drag to look around; it comes back to you.", 1, 1, 1, true)
   end)
-  v.walkShow = checkRow(p, LEFT, -926, "Your walked trails", 340)
+  v.walkShow = checkRow(p, LEFT, y0 - 248, "Your walked trails", 340)
   v.walkShow:SetScript("OnClick", function(self) QB:Settings().walkShow = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
   -- how the markers are drawn (Minimap.lua, Arrow.lua): QuestTrail's look, or the game's own icons; the button cycles
   v.markerStyle = button(p, "QuestTrail", 90)
-  v.markerStyle:SetPoint("TOPLEFT", LEFT + 4, -954)
+  v.markerStyle:SetPoint("TOPLEFT", LEFT + 4, y0 - 276)
   UI.MARKER_STYLES = { questtrail = "QuestTrail", game = "Game icons" }
   v.markerStyle:SetScript("OnClick", QB.Safe(function()
     local set = QB:Settings()
@@ -4874,25 +4795,8 @@ function UI:CreateSettingsView(parent)
   v.minimapHint = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 270)
   v.minimapHint:SetPoint("LEFT", v.markerStyle, "RIGHT", 8, 0)
   v.minimapHint:SetText("Marker style. Right-click the minimap for the rest.")
-  -- the arrow's look (Arrow.lua, arrowStyle): QuestBank's own arrow, or QuestTrail's compass; the button cycles
-  UI.ARROW_STYLES = { questbank = "QuestBank's", compass = "Compass" }
-  v.arrowStyle = button(p, "QuestBank's", 90)
-  v.arrowStyle:SetPoint("TOPLEFT", LEFT + 4, -982)
-  v.arrowStyle:SetScript("OnClick", QB.Safe(function()
-    local set = QB:Settings()
-    set.arrowStyle = set.arrowStyle == "compass" and "questbank" or "compass"
-    if QB.Arrow and QB.Arrow.Restyle then QB.Arrow:Restyle() end
-    UI:Refresh()
-  end, "settings: arrow look"))
-  tooltip(v.arrowStyle, function(tip)
-    tip:AddLine("The arrow's look", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("QuestBank's: its own arrow, green ahead, gold to the side, red behind, glowing as it points ahead and pinging as you arrive. Compass: QuestTrail's dial and needle, by Krom.", 1, 1, 1, true)
-  end)
-  v.arrowHint = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 270)
-  v.arrowHint:SetPoint("LEFT", v.arrowStyle, "RIGHT", 8, 0)
-  v.arrowHint:SetText("Arrow look. Its right-click menu has it too.")
   -- the Map: QuestBank's map page on the Map key and the sidebar (MapPage.lua), or the game's world map (UI.OpenMap)
-  v.mapPage = checkRow(p, LEFT, -1010, "Map key opens QuestBank's map", 340)
+  v.mapPage = checkRow(p, LEFT, y0 - 304, "Map key opens QuestBank's map", 340)
   v.mapPage:SetScript("OnClick", function(self) QB:Settings().mapPage = self:GetChecked() and true or false; UI:Refresh() end)
   tooltip(v.mapPage, function(tip)
     tip:AddLine("QuestBank's map", GOLD[1], GOLD[2], GOLD[3])
@@ -4901,7 +4805,7 @@ function UI:CreateSettingsView(parent)
     if not (QB.MapPage and QB.MapPage.Available()) then tip:AddLine("Only on the Forever client.", 1, 0.5, 0.3, true) end
   end)
   v.map = button(p, "Game's map", 110)
-  v.map:SetPoint("TOPLEFT", LEFT + 4, -1038)
+  v.map:SetPoint("TOPLEFT", LEFT + 4, y0 - 332)
   v.map:SetScript("OnClick", QB.Safe(function() UI.OpenMap() end, "settings: map"))
   v.mapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
   v.mapLabel:SetPoint("LEFT", v.map, "RIGHT", 8, 0)
@@ -4909,7 +4813,7 @@ function UI:CreateSettingsView(parent)
   -- QuestBank's quest icons on the maps (Pins.lua, mapIconPct): half the game's size by default; the button cycles
   UI.ICON_SIZES = { { 50, "Half size" }, { 75, "Three quarters" }, { 100, "Game's size" } }
   v.iconSize = button(p, "Half size", 110)
-  v.iconSize:SetPoint("TOPLEFT", LEFT + 4, -1066)
+  v.iconSize:SetPoint("TOPLEFT", LEFT + 4, y0 - 360)
   v.iconSize:SetScript("OnClick", QB.Safe(function()
     local set = QB:Settings()
     local i = 1
@@ -4930,16 +4834,22 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("The game's own world map on your zone, with QuestBank's route and icons on it.", 1, 1, 1, true)
     tip:AddLine(QB.MapPage and QB.MapPage.KEYS or "Keys for it and for each page: Key Bindings, QuestBank.", 0.6, 0.6, 0.6, true)
   end)
+  yl = y0 - 400
 
+  ----------------------------------------------------------------------------------------------------------------
+  -- the modules, one heading each: the interact light (left), the camp bar, the timers, the health and mana
+  -- numbers, party chat and the contexts (right)
+  ----------------------------------------------------------------------------------------------------------------
   -- the light on what your Interact key would use (Glow.lua): its style, and what it lights
-  heading(p, LEFT, -1098, "Interact light", 370)
-  v.glowOn = checkRow(p, LEFT, -1122, "Light what my Interact key would use", 340)
+  y0 = yl
+  head(LEFT, y0, "Interact light", 370)
+  v.glowOn = checkRow(p, LEFT, y0 - 24, "Light what my Interact key would use", 340)
   v.glowOn:SetScript("OnClick", function(self) if QB.Glow then QB.Glow.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
   -- the style: QuestBank's sparkles, its soft light, or the game's own highlight alone; the one in use is greyed
   v.glowStyle = {}
   for i, o in ipairs(UI.GLOW_STYLES) do
     local b = button(p, o[2], 84)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1150)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, y0 - 52)
     b.value = o[1]
     b:SetScript("OnClick", QB.Safe(function(self)
       if QB.Glow then QB.Glow.SetStyle(self.value) else QB:Settings().glow.style = self.value end
@@ -4951,23 +4861,23 @@ function UI:CreateSettingsView(parent)
     end)
     v.glowStyle[i] = b
   end
-  v.glowNpcs = checkRow(p, LEFT + 24, -1178, "NPCs too: quest givers, trainers you can use", 316)
+  v.glowNpcs = checkRow(p, LEFT + 24, y0 - 80, "NPCs too: quest givers, trainers you can use", 316)
   v.glowNpcs:SetScript("OnClick", function(self) QB:Settings().glow.npcs = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
-  v.glowEvery = checkRow(p, LEFT + 24, -1206, "Every other NPC too, in white", 316)
+  v.glowEvery = checkRow(p, LEFT + 24, y0 - 108, "Every other NPC too, in white", 316)
   v.glowEvery:SetScript("OnClick", function(self) QB:Settings().glow.everyNpc = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
-  v.glowOther = checkRow(p, LEFT + 24, -1234, "Plain objects too, in white", 316)
+  v.glowOther = checkRow(p, LEFT + 24, y0 - 136, "Plain objects too, in white", 316)
   v.glowOther:SetScript("OnClick", function(self) QB:Settings().glow.other = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
-  v.glowCombat = checkRow(p, LEFT + 24, -1262, "Keep it on in a fight", 316)
+  v.glowCombat = checkRow(p, LEFT + 24, y0 - 164, "Keep it on in a fight", 316)
   v.glowCombat:SetScript("OnClick", function(self) QB:Settings().glow.combat = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
   -- the game's health bar over what it lights (the soft-interact nameplate): off unless asked for (Glow.lua)
-  v.glowPlates = checkRow(p, LEFT + 24, -1290, "Health bars over what it lights", 316)
+  v.glowPlates = checkRow(p, LEFT + 24, y0 - 192, "Health bars over what it lights", 316)
   v.glowPlates:SetScript("OnClick", function(self) if QB.Glow then QB.Glow.SetPlates(self:GetChecked() and true or false) end; UI:Refresh() end)
   tooltip(v.glowPlates, function(tip)
     tip:AddLine("Health bars over what it lights", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("The game's full nameplate, with its health bar, on the NPC or object under your Interact key. Off, the light sits on the game's interact icon alone. Switched off, the game's setting goes back as you had it.", 1, 1, 1, true)
   end)
   v.glowHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.glowHint:SetPoint("TOPLEFT", LEFT, -1318)
+  v.glowHint:SetPoint("TOPLEFT", LEFT, y0 - 220)
   v.glowHint:SetHeight(28)
   v.glowHint:SetText("Gold for a quest object or NPC, green for an herb, orange for ore, blue for a chest. Game's own draws nothing of QuestBank's.")
   -- the game's settings the light changes (Glow.LIST), one row each under a line naming the columns: its name, the
@@ -4977,15 +4887,15 @@ function UI:CreateSettingsView(parent)
   -- "Keyboard and mouse", 103; the light's 80 px, for "As you set it", 70; "The game kept its value", 119, spans the
   -- last two)
   v.glowSetHead = text(p, "GameFontNormal", 12, GOLD_SOFT, "LEFT", 370)
-  v.glowSetHead:SetPoint("TOPLEFT", LEFT, -1352)
+  v.glowSetHead:SetPoint("TOPLEFT", LEFT, y0 - 254)
   v.glowSetHead:SetText("The game's settings it changes")
   local GAME_X, GAME_W, LIGHT_X, LIGHT_W = 168, 118, 290, 80
-  v.glowRowX, v.glowRowY = LEFT, -1388
+  v.glowRowX, v.glowRowY = LEFT, y0 - 290
   local h1 = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", GAME_W)
-  h1:SetPoint("TOPLEFT", LEFT + GAME_X, -1370)
+  h1:SetPoint("TOPLEFT", LEFT + GAME_X, y0 - 272)
   h1:SetText("Game's own")
   local h2 = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", LIGHT_W)
-  h2:SetPoint("TOPLEFT", LEFT + LIGHT_X, -1370)
+  h2:SetPoint("TOPLEFT", LEFT + LIGHT_X, y0 - 272)
   h2:SetText("The light's")
   -- how a setting became yours, in its tooltip (Glow.State)
   local YOURS = {
@@ -4997,7 +4907,7 @@ function UI:CreateSettingsView(parent)
   for i, s in ipairs(QB.Glow and QB.Glow.LIST or {}) do
     local r = CreateFrame("Frame", nil, p)
     r:SetSize(370, 18)
-    r:SetPoint("TOPLEFT", LEFT, -1388 - (i - 1) * 18)
+    r:SetPoint("TOPLEFT", LEFT, y0 - 290 - (i - 1) * 18)
     r:EnableMouse(true)
     r.s = s
     r.name = text(r, "GameFontNormal", 12, INK, "LEFT", GAME_X - 4)
@@ -5041,7 +4951,7 @@ function UI:CreateSettingsView(parent)
     v.glowRows[i] = r
   end
   v.glowRestore = button(p, "Restore the game's settings", 200)
-  v.glowRestore:SetPoint("TOPLEFT", LEFT + 4, -1520)
+  v.glowRestore:SetPoint("TOPLEFT", LEFT + 4, y0 - 422)
   v.glowRestore:SetScript("OnClick", QB.Safe(function()
     if QB.Glow then QB.Glow.Restore("button") end
     UI:Refresh()
@@ -5052,69 +4962,20 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("/qb sparkle reset does the same.", 0.6, 0.6, 0.6, true)
   end)
   v.glowSetHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.glowSetHint:SetPoint("TOPLEFT", LEFT, -1548)
+  v.glowSetHint:SetPoint("TOPLEFT", LEFT, y0 - 450)
   v.glowSetHint:SetHeight(40)
-
-  -- health and mana on the portraits: the game's own Status Text (Options, Interface), always shown, so it works in
-  -- a fight where an addon may not read an enemy's health
-  heading(p, LEFT, -1600, "Health and mana numbers", 370)
-  v.statusBtns = {}
-  for i, o in ipairs(UI.STATUS_TEXT) do
-    local b = button(p, o[2], 84)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1626)
-    b.value = o[1]
-    b:SetScript("OnClick", QB.Safe(function(self) UI.SetStatusText(self.value); UI:Refresh() end, "settings: status text"))
-    v.statusBtns[i] = b
-  end
-  v.statusHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.statusHint:SetPoint("TOPLEFT", LEFT, -1656)
-  v.statusHint:SetHeight(30)
-  v.statusHint:SetText("On your portrait, your target's and your focus's, always shown. The game's own Status Text option.")
-
-  -- where you are decides (QB:Opt): each row is a context, each column a setting; a button cycles inherit, on, off
-  heading(p, RIGHT, -750, "When you are...")
-  local COLS = { { "autoAccept", "Accept" }, { "autoTurnIn", "Hand in" }, { "sayAccept", "Say got" }, { "sayComplete", "Say done" }, { "clockShow", "Strip" } }
-  local ROWS = { { "dungeon", "In a dungeon" }, { "pvp", "In a PvP zone" }, { "party", "In a party" }, { "cap", "At a level cap" } }
-  v.tri = {}
-  for ci, col in ipairs(COLS) do
-    local h = text(p, "GameFontNormalSmall", 10, INK_SOFT, "CENTER", 48)
-    h:SetPoint("TOPLEFT", RIGHT + 120 + (ci - 1) * 44 - 12, -774)
-    h:SetText(col[2])
-  end
-  for ri, row in ipairs(ROWS) do
-    local y = -792 - (ri - 1) * 26
-    local l = text(p, "GameFontNormal", 12, INK, "LEFT", 118)
-    l:SetPoint("TOPLEFT", RIGHT, y - 4)
-    l:SetText(row[2])
-    for ci, col in ipairs(COLS) do
-      local b = button(p, "\226\128\147", 24)
-      b:SetPoint("TOPLEFT", RIGHT + 120 + (ci - 1) * 44, y)
-      b.ctx, b.key = row[1], col[1]
-      b:SetScript("OnClick", QB.Safe(function(self)
-        local prof = QB:Settings().profiles
-        prof[self.ctx] = prof[self.ctx] or {}
-        local cur, nxt = prof[self.ctx][self.key], nil
-        if cur == nil then nxt = true elseif cur == true then nxt = false end -- inherit -> on -> off -> inherit
-        prof[self.ctx][self.key] = nxt
-        if QB.Timer then QB.Timer.Apply() end
-        UI:Refresh()
-      end, "settings: context"))
-      v.tri[row[1] .. "." .. col[1]] = b
-    end
-  end
-  v.ctxText = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
-  v.ctxText:SetPoint("TOPLEFT", RIGHT, -902)
-  v.ctxText:SetHeight(44)
+  yl = y0 - 502
 
   -- the camp bar (Camp.lua): icons under your character, a switch each; and the banner when you leave a town
-  heading(p, RIGHT, -956, "Camp bar")
+  y0 = yr
+  head(RIGHT, y0, "Camp bar")
   local REMIND = { { "food", "Well Fed, and the food that gives it" }, { "fire", "Campfire: Basic Campfire or a kit" }, { "camp", "Camp features I can place, with the cooldown" },
                    { "bag", "Sleeping bag and Well Rested" }, { "quietInstance", "Hidden in dungeons" }, { "buffs", "Tell me when I leave town without my buffs" },
                    -- (5.4.4: each suggestion of its own)
                    { "sit", "Sit by a campfire near me" }, { "wood", "Fire burned out: where to buy wood" }, { "bagChain", "Where the sleeping bag's quests are" } }
   v.remind = {}
   for i, r in ipairs(REMIND) do
-    local row = checkRow(p, RIGHT, -980 - (i - 1) * 26, r[2], 300)
+    local row = checkRow(p, RIGHT, y0 - 24 - (i - 1) * 26, r[2], 300)
     row.key = r[1]
     row:SetScript("OnClick", function(self)
       local rm = QB.Camp and QB.Camp.Settings and QB.Camp.Settings() or QB:Settings().remind
@@ -5140,6 +5001,248 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("When you leave an inn or a city, a banner above the camp bar shows the buffs you are missing: your class's own, Well Fed, a camp feature's. A click casts one or eats the food. Never in a fight or a dungeon.", 1, 1, 1, true)
     tip:AddLine("/qb buffs shows it any time.", 0.6, 0.6, 0.6, true)
   end)
+  yr = y0 - 24 - #REMIND * 26 - 16
+
+  -- timers (Timer.lua)
+  y0 = yr
+  head(RIGHT, y0, "Timers")
+  v.clockShow = checkRow(p, RIGHT, y0 - 24, "Show the timer strip (drag it; right-click hides it)", 300)
+  v.clockShow:SetScript("OnClick", function(self) if QB.Timer then QB.Timer.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
+  v.clockLevelMsg = checkRow(p, RIGHT, y0 - 52, "Say how long each level took, at level-up", 300)
+  v.clockLevelMsg:SetScript("OnClick", function(self) QB:Settings().clockLevelMsg = self:GetChecked() and true or false end)
+  v.clockHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
+  v.clockHint:SetPoint("TOPLEFT", RIGHT, y0 - 78)
+  v.clockHint:SetHeight(44)
+  v.clockHint:SetText("The strip shows your time at this level, the oldest quest in your log and the hand-in run. Quest tooltips say how long a quest took.")
+  yr = y0 - 134
+
+  -- health and mana on the portraits: the game's own Status Text (Options, Interface), always shown, so it works in
+  -- a fight where an addon may not read an enemy's health
+  y0 = yr
+  head(RIGHT, y0, "Health and mana numbers")
+  v.statusBtns = {}
+  for i, o in ipairs(UI.STATUS_TEXT) do
+    local b = button(p, o[2], 84)
+    b:SetPoint("TOPLEFT", RIGHT + 4 + (i - 1) * 90, y0 - 26)
+    b.value = o[1]
+    b:SetScript("OnClick", QB.Safe(function(self) UI.SetStatusText(self.value); UI:Refresh() end, "settings: status text"))
+    v.statusBtns[i] = b
+  end
+  v.statusHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
+  v.statusHint:SetPoint("TOPLEFT", RIGHT, y0 - 56)
+  v.statusHint:SetHeight(30)
+  v.statusHint:SetText("On your portrait, your target's and your focus's, always shown. The game's own Status Text option.")
+  yr = y0 - 98
+
+  -- party chat: two plain lines, off until asked for
+  y0 = yr
+  head(RIGHT, y0, "Party chat")
+  v.sayAccept = checkRow(p, RIGHT, y0 - 24, "Say which quests I pick up", 300)
+  v.sayAccept:SetScript("OnClick", function(self) QB:Settings().sayAccept = self:GetChecked() and true or false end)
+  v.sayComplete = checkRow(p, RIGHT, y0 - 50, "Say when a quest is complete", 300)
+  v.sayComplete:SetScript("OnClick", function(self) QB:Settings().sayComplete = self:GetChecked() and true or false end)
+  for key, b in pairs({ accept = v.sayAccept, complete = v.sayComplete }) do
+    tooltip(b, function(tip)
+      tip:AddLine(key == "accept" and "When you pick a quest up" or "When a quest's objectives are done", GOLD[1], GOLD[2], GOLD[3])
+      tip:AddLine("One line in party chat (raid chat in a raid), only while grouped:", 1, 1, 1, true)
+      tip:AddLine(string.format(QB.SAY[key], "Kobold Camp Cleanup"), 0.67, 0.67, 1)
+    end)
+  end
+  v.sayHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
+  v.sayHint:SetPoint("TOPLEFT", RIGHT, y0 - 78)
+  v.sayHint:SetHeight(30)
+  v.sayHint:SetText("Only while you are in a party or raid, as plain lines. Nothing else goes to chat without Post.")
+  yr = y0 - 124
+
+  -- where you are decides (QB:Opt): each row is a context, each column a setting; a button cycles inherit, on, off
+  y0 = yr
+  head(RIGHT, y0, "When you are...")
+  local COLS = { { "autoAccept", "Accept" }, { "autoTurnIn", "Hand in" }, { "sayAccept", "Say got" }, { "sayComplete", "Say done" }, { "clockShow", "Strip" } }
+  local ROWS = { { "dungeon", "In a dungeon" }, { "pvp", "In a PvP zone" }, { "party", "In a party" }, { "cap", "At a level cap" } }
+  v.tri = {}
+  for ci, col in ipairs(COLS) do
+    local h = text(p, "GameFontNormalSmall", 10, INK_SOFT, "CENTER", 48)
+    h:SetPoint("TOPLEFT", RIGHT + 120 + (ci - 1) * 44 - 12, y0 - 24)
+    h:SetText(col[2])
+  end
+  for ri, row in ipairs(ROWS) do
+    local y = y0 - 42 - (ri - 1) * 26
+    local l = text(p, "GameFontNormal", 12, INK, "LEFT", 118)
+    l:SetPoint("TOPLEFT", RIGHT, y - 4)
+    l:SetText(row[2])
+    for ci, col in ipairs(COLS) do
+      local b = button(p, "\226\128\147", 24)
+      b:SetPoint("TOPLEFT", RIGHT + 120 + (ci - 1) * 44, y)
+      b.ctx, b.key = row[1], col[1]
+      b:SetScript("OnClick", QB.Safe(function(self)
+        local prof = QB:Settings().profiles
+        prof[self.ctx] = prof[self.ctx] or {}
+        local cur, nxt = prof[self.ctx][self.key], nil
+        if cur == nil then nxt = true elseif cur == true then nxt = false end -- inherit -> on -> off -> inherit
+        prof[self.ctx][self.key] = nxt
+        if QB.Timer then QB.Timer.Apply() end
+        UI:Refresh()
+      end, "settings: context"))
+      v.tri[row[1] .. "." .. col[1]] = b
+    end
+  end
+  v.ctxText = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
+  v.ctxText:SetPoint("TOPLEFT", RIGHT, y0 - 152)
+  v.ctxText:SetHeight(44)
+  yr = y0 - 206
+
+  ----------------------------------------------------------------------------------------------------------------
+  -- Data you share: what is noted in play (Game.lua, Loot.lua, Survey.lua), what goes to your party and guild
+  -- (Sync.lua), and the version notice
+  ----------------------------------------------------------------------------------------------------------------
+  y0 = yr
+  head(RIGHT, y0, "Data you share")
+  subhead(RIGHT, y0 - 26, "Discoveries")
+  -- the spells and item tooltips of the Forever client (Game.lua) and who drops what (Loot.lua); quests and NPCs are
+  -- always noted. The label names all three: this box is the player's one say over them. Unticking clears what was
+  -- noted, ticking takes over ForeverProbe's notes if it is still there
+  v.noteGame = checkRow(p, RIGHT, y0 - 46, "Note items, spells and loot, for foreverrank.com", 300)
+  v.noteGame:SetScript("OnClick", function(self)
+    if QB.Game then QB.Game.SetOn(self:GetChecked() and true or false) end
+    UI:Refresh()
+  end)
+  v.noteGame:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Note items, spells and loot", 1, 1, 1)
+    GameTooltip:AddLine("Tooltips of the items you loot, carry or see, the spells you know, and which creatures and chests dropped what you loot (by id), with no names in them, so foreverrank.com can list them. Unticking forgets what was noted.", nil, nil, nil, true)
+    GameTooltip:Show()
+  end)
+  v.noteGame:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  -- the quest survey (Survey.lua): QuestBank asks the game about the quests it has no rewards for
+  v.survey = checkRow(p, RIGHT, y0 - 72, "Learn quests from the game", 300)
+  v.survey:SetScript("OnClick", function(self)
+    if QB.Survey then QB.Survey.SetOn(self:GetChecked() and true or false) else QB:Settings().survey = self:GetChecked() and true or false end
+    UI:Refresh()
+  end)
+  v.survey:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Learn quests from the game", 1, 1, 1)
+    GameTooltip:AddLine("Out of combat and outside dungeons, QuestBank asks the game about the quests it has no rewards for, two a second, and shows their rewards in the finders and tooltips at once. Once per game build for the account.", nil, nil, nil, true)
+    if QB.Survey and QB.Survey.Able() then
+      local pr = QB.Survey.Progress()
+      GameTooltip:AddLine(string.format("%s of %s quests done on this build, %s with item rewards. /qb survey says more.", QB.Comma(pr.done), QB.Comma(pr.total), QB.Comma(pr.rewards)), 0.6, 0.8, 1, true)
+    end
+    GameTooltip:Show()
+  end)
+  v.survey:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  v.discText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
+  v.discText:SetPoint("TOPLEFT", RIGHT, y0 - 100)
+  v.discText:SetHeight(72)
+  subhead(RIGHT, y0 - 182, "Sharing and chat")
+  v.shareParty = checkRow(p, RIGHT, y0 - 202, "Share my quests with my party", 300)
+  v.shareParty:SetScript("OnClick", function(self) QB:Settings().share.party = self:GetChecked() and true or false; UI:Refresh() end)
+  v.shareGuild = checkRow(p, RIGHT, y0 - 228, "Share them with my guild", 300)
+  v.shareGuild:SetScript("OnClick", function(self) QB:Settings().share.guild = self:GetChecked() and true or false; UI:Refresh() end)
+  v.offers = checkRow(p, RIGHT, y0 - 254, "Offer a post during hand-in runs", 300)
+  v.offers:SetScript("OnClick", function(self) QB:Settings().post.auto = self:GetChecked() and true or false end)
+  v.shareHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 330)
+  v.shareHint:SetPoint("TOPLEFT", RIGHT, y0 - 282)
+  v.shareHint:SetHeight(30)
+  v.shareHint:SetText("Over the game's addon channel, to QuestBank users only; nothing shows in chat. Posts go out only when you press Post.")
+  -- updates: what others on the realm run
+  subhead(RIGHT, y0 - 322, "Updates")
+  v.verText = para(p, "GameFontNormal", 12, INK_SOFT, 330)
+  v.verText:SetPoint("TOPLEFT", RIGHT, y0 - 342)
+  v.verText:SetHeight(46)
+  v.updates = checkRow(p, RIGHT, y0 - 392, "Tell me when anyone on the realm runs a newer one", 300)
+  v.updates:SetScript("OnClick", function(self)
+    QB:Settings().updates = self:GetChecked() and true or false
+    if QB.Sync and QB.Sync.ApplyVersionSetting then QB.Sync:ApplyVersionSetting() end
+  end)
+  v.link = button(p, "Copy the download link", 190)
+  v.link:SetPoint("TOPLEFT", RIGHT + 4, y0 - 422)
+  v.link:SetScript("OnClick", function() UI:CopyLink("QuestBank download page", QB.DOWNLOAD) end)
+  yr = y0 - 460
+
+  ----------------------------------------------------------------------------------------------------------------
+  -- Banking, last: the mode (found for you, or set by you), the next cap, and how far the suggestions look
+  ----------------------------------------------------------------------------------------------------------------
+  y0 = yl
+  head(LEFT, y0, "Banking", 370)
+  v.modeBtns = {}
+  for i, m in ipairs({ { "auto", "Auto" }, { "off", "Questing" }, { "on", "Banking" } }) do
+    local b = button(p, m[2], 110)
+    b:SetPoint("TOPLEFT", LEFT + (i - 1) * 116, y0 - 26)
+    b.val = m[1]
+    b:SetScript("OnClick", QB.Safe(function(self)
+      QB:SetLock(self.val)
+      UI:Refresh()
+    end, "settings: mode"))
+    v.modeBtns[i] = b
+  end
+  v.modeText = para(p, "GameFontNormal", 12, INK_SOFT, 370)
+  v.modeText:SetPoint("TOPLEFT", LEFT, y0 - 56)
+  v.modeText:SetHeight(64)
+  v.capLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 250)
+  v.capLabel:SetPoint("TOPLEFT", LEFT, y0 - 132)
+  v.capDown = button(p, "-", 26)
+  v.capDown:SetPoint("TOPLEFT", LEFT + 262, y0 - 128)
+  v.capUp = button(p, "+", 26)
+  v.capUp:SetPoint("TOPLEFT", LEFT + 292, y0 - 128)
+  local function moveCap(d)
+    local _, p = QB:LockChoice()
+    local held, nextCap = QB:Lock()
+    local was = QB:Held()
+    local base = held or (was and was.level) or QB.state.level
+    local cur = nextCap or (was and was.next) or math.min(base + 10, QB.MAXLEVEL)
+    local new = math.max(base + 1, math.min(QB.MAXLEVEL, cur + d))
+    p.nextCap = new
+    if was and not held then was.next = new end -- the rush: the cap it went to
+    QB:MarkDirty()
+    UI:Refresh()
+  end
+  v.capDown:SetScript("OnClick", function() moveCap(-1) end)
+  v.capUp:SetScript("OnClick", function() moveCap(1) end)
+  -- suggestions: how far the Plan page and the swaps look, and where they never look
+  subhead(LEFT, y0 - 166, "Suggestions", 370)
+  v.rangeAboveLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 210)
+  v.rangeAboveLabel:SetPoint("TOPLEFT", LEFT, y0 - 192)
+  v.rangeAboveDown = button(p, "-", 26)
+  v.rangeAboveDown:SetPoint("TOPLEFT", LEFT + 214, y0 - 188)
+  v.rangeAboveUp = button(p, "+", 26)
+  v.rangeAboveUp:SetPoint("TOPLEFT", LEFT + 244, y0 - 188)
+  v.rangeAuto = button(p, "Auto", 48)
+  v.rangeAuto:SetPoint("TOPLEFT", LEFT + 276, y0 - 188)
+  v.rangeBelowLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 210)
+  v.rangeBelowLabel:SetPoint("TOPLEFT", LEFT, y0 - 218)
+  v.rangeBelowDown = button(p, "-", 26)
+  v.rangeBelowDown:SetPoint("TOPLEFT", LEFT + 214, y0 - 214)
+  v.rangeBelowUp = button(p, "+", 26)
+  v.rangeBelowUp:SetPoint("TOPLEFT", LEFT + 244, y0 - 214)
+  local function moveRange(key, d)
+    local above, below = QB:Range()
+    local cur = key == "rangeAbove" and above or below
+    QB:Settings()[key] = math.max(0, math.min(40, cur + d))
+    UI:Refresh()
+  end
+  v.rangeAboveDown:SetScript("OnClick", function() moveRange("rangeAbove", -1) end)
+  v.rangeAboveUp:SetScript("OnClick", function() moveRange("rangeAbove", 1) end)
+  v.rangeBelowDown:SetScript("OnClick", function() moveRange("rangeBelow", -1) end)
+  v.rangeBelowUp:SetScript("OnClick", function() moveRange("rangeBelow", 1) end)
+  v.rangeAuto:SetScript("OnClick", function()
+    local set = QB:Settings()
+    set.rangeAbove, set.rangeBelow = "auto", "auto"
+    UI:Refresh()
+  end)
+  tooltip(v.rangeAuto, function(tip)
+    tip:AddLine("Auto", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("QuestBank's own window: 12 levels above you while banking (dungeon quests well above you are the big payers), 4 while questing, 7 below.", 0.8, 0.8, 0.8, true)
+  end)
+  v.skipKal = checkRow(p, LEFT, y0 - 240, "Skip Kalimdor", 110)
+  v.skipKal:SetScript("OnClick", function(self) QB:SetSkip(1, self:GetChecked() and true or false) end)
+  v.skipEK = checkRow(p, LEFT + 146, y0 - 240, "Skip Eastern Kingdoms", 170)
+  v.skipEK:SetScript("OnClick", function(self) QB:SetSkip(0, self:GetChecked() and true or false) end)
+  v.skipText = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
+  v.skipText:SetPoint("TOPLEFT", LEFT, y0 - 268)
+  v.skipText:SetHeight(44)
+  yl = y0 - 324
+
+  v.contentH = math.max(-yl, -yr) + 20
   v.Refresh = function() UI:RefreshSettingsView(v) end
   return v
 end
@@ -5213,6 +5316,15 @@ function UI:RefreshSettingsView(v)
   v.pins:SetChecked(set.pins and true or false)
   v.minimap:SetChecked(not (set.minimap and set.minimap.hide))
   v.arrow:SetChecked(set.arrow and true or false)
+  -- the Guide's rows (6.0)
+  local gd = type(set.guide) == "table" and set.guide or {}
+  v.guideOn:SetChecked(gd.on == true)
+  v.guideFrame:SetChecked(gd.frame ~= false)
+  v.guideLocked:SetChecked(gd.locked == true)
+  v.guideScale:SetText(string.format("%d%%", math.floor((tonumber(gd.scale) or 1) * 100 + 0.5)))
+  v.guideFrame:SetEnabled(gd.on == true); v.guideLocked:SetEnabled(gd.on == true); v.guideScale:SetEnabled(gd.on == true)
+  v.minimapGivers:SetChecked(set.minimapGivers ~= false)
+  v.tipProgress:SetChecked(set.tipProgress ~= false)
   local newest = QB.newest
   v.verText:SetText(newest and string.format("You run QuestBank %s. |cff6cdc74%s runs %s: time to update.|r", QB.version, newest.who or "Someone", newest.version)
     or string.format("You run QuestBank %s, the newest anyone on the realm has shown.", QB.version))
@@ -5371,7 +5483,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(1700) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(v.contentH or 1700) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------
