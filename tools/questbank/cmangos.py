@@ -8,6 +8,7 @@ items start quests. gen_data.py prefers Wowhead Forever wherever Forever changed
 
   python3 tools/questbank/cmangos.py     # research/cmangos/ClassicDB.sql.gz -> research/questbank/cmangos.json
   python3 tools/questbank/cmangos.py --sellers  # only the sellers of Simple Wood and Flint and Tinder, into it
+  python3 tools/questbank/cmangos.py --trainers  # only the class trainers (gen_data.py's D.TRAINER), into it
 
 objectives.py reads the same dump through read() and spawn_points() for the objective areas and map icons.
 """
@@ -132,6 +133,21 @@ def sellers(data):
     return {"vendors": sorted(out), "masters": sorted(masters)}
 
 
+def class_trainers(data):
+    """Every class trainer (creature_template NpcFlags & 16, TrainerType 0 = class, TrainerClass the class id) with its
+    spawn points on the two continents: [[entry, name, class id, [[map, x, y], ...]], ...]. CMaNGOS Classic data, GPL-3.0."""
+    stands = spawn_points(data, "npc")
+    out = []
+    for idx, r in data["creature_template"]:
+        flags = r[idx["npcflags"]] or 0
+        if flags & 16 and (r[idx["trainertype"]] or 0) == 0 and (r[idx["trainerclass"]] or 0) > 0:
+            e = r[idx["entry"]]
+            spots = [[m, round(x, 1), round(y, 1)] for m, x, y in stands.get(e, ())]
+            if spots:
+                out.append([e, r[idx["name"]], r[idx["trainerclass"]], spots])
+    return sorted(out)
+
+
 def main():
     if "--sellers" in sys.argv:
         # only the sellers, into the cmangos.json there is (the rest of it as it was)
@@ -140,6 +156,14 @@ def main():
         out["sellers"] = sellers(data)
         json.dump(out, open(OUT, "w"), separators=(",", ":"))
         print("wrote %s: %d sellers of Simple Wood or Flint and Tinder, %d flight masters" % (OUT, len(out["sellers"]["vendors"]), len(out["sellers"]["masters"])))
+        return
+    if "--trainers" in sys.argv:
+        # only the class trainers, into the cmangos.json there is (the rest of it as it was)
+        data = read({"creature_template", "creature", "creature_spawn_entry", "game_event_creature"})
+        out = json.load(open(OUT))
+        out["trainers"] = class_trainers(data)
+        json.dump(out, open(OUT, "w"), separators=(",", ":"))
+        print("wrote %s: %d class trainers" % (OUT, len(out["trainers"])))
         return
     data = read()
     quests = {}
@@ -206,10 +230,11 @@ def main():
         starts.setdefault(r[idx["race"]], [r[idx["race"]], r[idx["map"]], round(r[idx["position_x"]], 1), round(r[idx["position_y"]], 1)])
     out = {"quests": quests, "items": items, "itemnames": itemnames,
            "names": {k: {i: names[k].get(i) for i in wanted[k]} for k in names},
-           "spawns": spawns, "innkeepers": sorted(innkeepers), "starts": [starts[k] for k in sorted(starts)], "sellers": sellers(data)}
+           "spawns": spawns, "innkeepers": sorted(innkeepers), "starts": [starts[k] for k in sorted(starts)], "sellers": sellers(data),
+           "trainers": class_trainers(data)}
     json.dump(out, open(OUT, "w"), separators=(",", ":"))
-    print("wrote %s: %d quests, %d item starts, %d NPC and %d object spawn sets, %d innkeepers, %d starting spots" % (
-        OUT, len(quests), len(items), len(spawns["npc"]), len(spawns["object"]), len(innkeepers), len(starts)))
+    print("wrote %s: %d quests, %d item starts, %d NPC and %d object spawn sets, %d innkeepers, %d starting spots, %d class trainers" % (
+        OUT, len(quests), len(items), len(spawns["npc"]), len(spawns["object"]), len(innkeepers), len(starts), len(out["trainers"])))
     for qid in (249, 248, 94, 19, 219, 166, 155, 1200):
         q = quests.get(qid)
         print(qid, q and {k: q[k] for k in ("title", "min", "level", "prev", "next", "excl", "chain", "objectives", "starts", "ends")})

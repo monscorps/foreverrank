@@ -16609,6 +16609,25 @@ end)()
     assert(G.Text(s):find(", then ", 1, true), "and where the plan goes on: " .. G.Text(s))
   end }
 
+  -- the offline data the Train step reads (Task 7): the class trainers placed on the two continents and each class's
+  -- learn levels
+  G6CASES[#G6CASES + 1] = { "data: class trainers and spell levels are in Data.lua", function()
+    local c = human("Datum")
+    local D = c.QB.Data
+    assert(type(D.TRAINER) == "table" and #D.TRAINER > 50, "D.TRAINER rows: " .. tostring(D.TRAINER and #D.TRAINER))
+    local mage, placed = 0, 0
+    for _, t in ipairs(D.TRAINER) do
+      assert(type(t[1]) == "number" and type(t[2]) == "string" and type(t[3]) == "number" and t[3] >= 1 and t[3] <= 11, "a row: id, name, class id")
+      if t[3] == 8 then mage = mage + 1 end
+      if t[4] == 0 or t[4] == 1 then placed = placed + 1 end
+    end
+    assert(mage >= 10 and placed > #D.TRAINER * 0.8, "mage trainers and most placed on the two continents: " .. mage .. ", " .. placed)
+    assert(type(D.SPELL_LV) == "table" and type(D.SPELL_LV.WARRIOR) == "table" and #D.SPELL_LV.WARRIOR >= 15 and D.SPELL_LV.WARRIOR[1] == 1, "spell levels per class token")
+    for _, tok in ipairs({ "PALADIN", "HUNTER", "ROGUE", "PRIEST", "SHAMAN", "MAGE", "WARLOCK", "DRUID" }) do
+      assert(D.SPELL_LV[tok] and #D.SPELL_LV[tok] >= 10, tok .. " has levels")
+    end
+  end }
+
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")

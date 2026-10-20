@@ -2938,6 +2938,55 @@ print("camp sellers: %d of %d placed (%d Alliance, %d Horde, %d both)%s" % (
     len(CAMP_SELL), len(_SELL["vendors"]), sum(1 for r in CAMP_SELL if r[9] == 1), sum(1 for r in CAMP_SELL if r[9] == 2),
     sum(1 for r in CAMP_SELL if r[9] == 3), ("; no side or map: " + ", ".join(_SELL_OUT)) if _SELL_OUT else ""))
 lines.append("")
+# D.TRAINER: the class trainers, for the Guide's "Train at <name>" step (Guide.lua). CMaNGOS Classic spawns (GPL-3.0),
+# each placed as a camp seller is (TR.locate, overlays through spot_map, the game's place where players saw the NPC
+# more than GAME_MOVE_YD away): {npc id, name, class id (1 Warrior, 2 Paladin, 3 Hunter, 4 Rogue, 5 Priest, 7 Shaman,
+# 8 Mage, 9 Warlock, 11 Druid), continent, world x, world y, uiMap, x, y}. One row per spawn on the two continents
+TRAINERS, _TRAIN_OUT = [], 0
+for _e, _name, _cls, _spots in (_cm.get("trainers") or []):
+    for _c, _wx, _wy in _spots:
+        if _c not in (0, 1):
+            continue
+        _loc = TR.locate(_c, _wx, _wy)
+        if _loc and _loc[0] in OVERLAY:
+            _at = spot_map(_c, _wx, _wy)
+            _loc = (_at[0], round(_at[1], 1), round(_at[2], 1)) if _at else _loc
+        if not _loc:
+            _TRAIN_OUT += 1
+            continue
+        _m, _x, _y, _moved = game_place("npc", _e, _loc[0], _loc[1], _loc[2])
+        if _moved:
+            _c, _wx, _wy = TR.world(_m, _x, _y)
+        TRAINERS.append([_e, _name, _cls, _c, int(round(_wx)), int(round(_wy)), _m, round(_x, 1), round(_y, 1)])
+assert len(TRAINERS) > 50, "cmangos.json has no class trainers: run cmangos.py --trainers"
+lines.append("-- the class trainers (CMaNGOS Classic spawns, GPL-3.0): {npc id, name, class id (1 Warrior, 2 Paladin, 3 Hunter, 4 Rogue,")
+lines.append("-- 5 Priest, 7 Shaman, 8 Mage, 9 Warlock, 11 Druid), continent, world x, world y, uiMap, x, y}; the Guide's Train step (Guide.lua)")
+lines.append("D.TRAINER = {\n" + ",\n".join(lua(r) for r in TRAINERS) + "\n}")
+print("class trainers: %d placed, %d not on a map" % (len(TRAINERS), _TRAIN_OUT))
+lines.append("")
+
+
+# D.SPELL_LV: the levels each class learns a new spell at, from the site's spellbook (codex/spellbook.json, built by
+# tools/build_spellbook.py from the Forever client's tables; first ranks only, so a Train step comes at those levels):
+# the Guide adds a Train step at those levels
+def spell_levels():
+    book = load_json(os.path.join(REPO, "codex", "spellbook.json"), {}) or {}
+    tok = {"Warrior": "WARRIOR", "Paladin": "PALADIN", "Hunter": "HUNTER", "Rogue": "ROGUE", "Priest": "PRIEST",
+           "Shaman": "SHAMAN", "Mage": "MAGE", "Warlock": "WARLOCK", "Druid": "DRUID"}
+    out = {}
+    for sp in book.get("spells") or []:
+        t = tok.get(sp.get("c"))
+        lv = sp.get("lvl")
+        if t and sp.get("src") == "client" and isinstance(lv, int) and 1 <= lv <= MAXLVL:
+            out.setdefault(t, set()).add(lv)
+    return {t: sorted(v) for t, v in out.items()}
+
+
+SPELL_LV = spell_levels()
+assert len(SPELL_LV) == 9 and all(len(v) >= 10 for v in SPELL_LV.values()), "spellbook.json gives too few learn levels: %r" % {k: len(v) for k, v in SPELL_LV.items()}
+lines.append("-- [class token] = the levels the class learns a new spell at (codex/spellbook.json, the Forever client's tables)")
+lines.append("D.SPELL_LV = {\n" + ",\n".join("%s = {%s}" % (t, ",".join(str(l) for l in SPELL_LV[t])) for t in sorted(SPELL_LV)) + "\n}")
+lines.append("")
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 open(OUT, "w").write("\n".join(lines))
 # ---------------------------------------------------------------------------
