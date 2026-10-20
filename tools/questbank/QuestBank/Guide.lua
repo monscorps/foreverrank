@@ -9,6 +9,7 @@
 --   done      a step completes when the game says so: the quest accepted, every objective of its spots done or the
 --             quest complete, the quest handed in, the flight landed, the level reached
 --   skipped   "Not now" for an hour (QuestBankDB.chars[key].guide.later), "Drop" for good (QB:SetSkipped)
+--   time      "about 14 min to level 6" (G.TimeToLevel): the plan's XP a minute, then the measured XP an hour
 --   train     at your level's new spells, the trainer of your class nearest a hand-in stop (D.TRAINER, or learned at
 --             its window into QuestBankDB.disc.trainer); none in reach: a reminder line, no step
 -- Replan runs after each re-plan (Core.lua, QB:Changed) and on the Guide's own events; it reuses its tables, so a
@@ -443,6 +444,39 @@ function G.Grind(level, me)
     grind.c, grind.wx, grind.wy, grind.m, grind.x, grind.y = nil, nil, nil, nil, nil, nil
   end
   return grind
+end
+
+-- "about 14 min to level 6": the XP still needed (the game's bar, else D.TO_NEXT) over the plan's XP a minute until
+-- ten minutes of play have been measured (Timer.XPPerHour), then over the measured rate; nil at the cap or with
+-- nothing to go on. Returns the words, the minutes and whether they are measured
+local function spanText(mins)
+  if mins < 1 then return "under a minute" end
+  if mins < 90 then return string.format("about %d min", math.floor(mins + 0.5)) end
+  local h = math.floor(mins / 60)
+  local m = math.floor((mins - h * 60) / 10 + 0.5) * 10
+  if m == 60 then h, m = h + 1, 0 end
+  return m > 0 and string.format("about %d h %d min", h, m) or string.format("about %d h", h)
+end
+G.SpanText = spanText
+function G.TimeToLevel()
+  local s = QB.state
+  local level = s.level or 1
+  if level >= QB.MAXLEVEL or level >= (QB.CAP or QB.MAXLEVEL) then return nil end
+  local max = (s.xpMax and s.xpMax > 1) and s.xpMax or QB.Data.TO_NEXT[level] or 0
+  local need = max - (s.xp or 0)
+  if need <= 0 then return nil end
+  local rate = QB.Timer and QB.Timer.XPPerHour and QB.Timer.XPPerHour()
+  local mins, measured
+  if rate and rate > 0 then
+    mins, measured = need / rate * 60, true
+  else
+    local r = QB.routePlan
+    if not (r and r.xp and r.xp > 0 and r.t and r.t > 0) then return nil end
+    -- the plan's XP a minute, with a minute a quest of doing (the planner counts travel and hand-ins, not the kills)
+    local perMin = r.xp / (r.t + (r.count or 0))
+    mins, measured = need / perMin, false
+  end
+  return spanText(mins) .. " to level " .. (level + 1), mins, measured
 end
 
 -- the steps, anew: the target first (its quest's objective spot, or its stop's hand-ins), then the rest of the route

@@ -16680,6 +16680,34 @@ end)()
     assert(#c.chat == 0 or not c.chat[#c.chat]:lower():find("train", 1, true), "nothing said in chat")
   end }
 
+  -- "about 14 min to level 6": from the plan's XP a minute until ten minutes of play are measured, then from the
+  -- XP an hour (Timer); nothing at the cap
+  G6CASES[#G6CASES + 1] = { "time to level: from the plan, then from the XP an hour", function()
+    local c = human("Clock", { { 7, 0 }, { 15, 0 }, { 18, 0 } }, { [783] = true }, nil, 5)
+    local QB, G, Timer = c.QB, c.QB.Guide, c.QB.Timer
+    QB:Settings().guide.on = true
+    c.xp = 200
+    c.env.UnitXPMax = function() return 900 end
+    QB:ReadState()
+    settle(c)
+    local text, mins, measured = G.TimeToLevel()
+    assert(text and text:find(" to level 6$") and mins and mins > 0 and not measured, "from the plan: " .. tostring(text))
+    assert(text:match("^about %d+ min") or text:match("^under a minute") or text:match("^about %d+ h"), "the words: " .. text)
+    -- ten minutes of play with 600 XP gained: 3,600 an hour; 100 to go at level 5 (900 - 800): about 2 min
+    Timer.NoteXP()
+    for _ = 1, 10 do c.clock = c.clock + 60; c.xp = c.xp + 60; Timer.NoteXP() end
+    QB:ReadState()
+    local t2, m2, meas2 = G.TimeToLevel()
+    assert(meas2 and m2 and math.abs(m2 - (900 - c.xp) / 3600 * 60) < 0.5 and t2:find("^about %d+ min to level 6"), "measured: " .. tostring(t2) .. " " .. tostring(m2))
+    -- the words at every span
+    assert(G.SpanText(0.4) == "under a minute" and G.SpanText(14.4) == "about 14 min" and G.SpanText(130) == "about 2 h 10 min" and G.SpanText(120) == "about 2 h", "the spans")
+    -- at the cap: nothing
+    local was = QB.state.level
+    QB.state.level = 60
+    assert(G.TimeToLevel() == nil, "nothing at 60")
+    QB.state.level = was
+  end }
+
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")
