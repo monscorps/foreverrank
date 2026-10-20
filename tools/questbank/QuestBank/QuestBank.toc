@@ -9,6 +9,7 @@
 
 Data.lua
 Core.lua
+Lists.lua
 Discover.lua
 Survey.lua
 Game.lua

@@ -50,6 +50,19 @@ do
   end
 end
 
+-- the window-free half of the window (Lists.lua) runs without UI.lua: a client that loads every file but UI.lua
+-- still has the quest tooltip, the menu, the finders, the candidates and the places
+do
+  local toc = assert(io.open(HERE .. "/QuestBank/QuestBank.toc")):read("*a")
+  assert(toc:find("\nCore.lua\nLists.lua\n", 1, true), "Lists.lua follows Core.lua in the toc")
+  local src = assert(io.open(HERE .. "/QuestBank/Lists.lua")):read("*a")
+  for _, name in ipairs({ "QuestTooltip", "QuestMenu", "Candidates", "PlaceGroups", "FindRewards", "Here", "MinutesTo", "ChainLine", "FitText", "Short", "QuestClick" }) do
+    assert(src:find("function UI[.:]" .. name .. "%(") or src:find("\nUI%." .. name .. " = "), "Lists.lua defines UI." .. name)
+  end
+  local win = assert(io.open(HERE .. "/QuestBank/UI.lua")):read("*a")
+  assert(win:find("\nlocal UI = QB.UI\n", 1, true) and not win:find("function UI:Candidates", 1, true), "UI.lua starts from QB.UI and no longer holds Candidates")
+end
+
 ----------------------------------------------------------------------------
 -- text width in Friz Quadrata, close enough to see what doesn't fit
 ----------------------------------------------------------------------------
