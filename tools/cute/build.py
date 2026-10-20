@@ -137,6 +137,10 @@ def build_stats():
     cats = re.findall(r'^\s*\{ id: "[^"]+",.*?", cat: "([^"]+)"', js, re.M)
     if not cats:
         sys.exit("stats.js has no stats")
+    # the mock's Rules section and its enchant voices read these, Rules.lua's and Stats.lua's own
+    for name in ("CUTE_TUNE", "CUTE_RULES", "CUTE_VOICES"):
+        if "window.%s = " % name not in js:
+            sys.exit("stats.js has no window.%s (page_stats.lua writes it)" % name)
     counts = {"n": len(cats)}
     for c in cats:
         counts["n:" + c] = counts.get("n:" + c, 0) + 1
@@ -515,10 +519,51 @@ def check_contrast(page_rules):
     c = contrast((0x44, 0x44, 0x44), resolve_color(t.get("--cu-white", ""), t))
     if c < 4.5:
         bad.append("#444 on the button is %.2f:1" % c)
-    if bad:
-        problem("contrast under 4.5:1: " + "; ".join(bad))
+    # a control's edge (an unticked box, a radio) against the panels it sits on and its own fill: 3:1, a non-text
+    # contrast (WCAG 1.4.11). The window's own box (UI.lua's EDGE, 0.42 on 0.07 and 0.11) is the same grey
+    edge = resolve_color(t.get("--cu-edge", ""), t)
+    if not edge:
+        bad.append("--cu-edge is not a colour")
     else:
-        ok("greys pass 4.5:1 on black, the window, its panels and the stage")
+        for bg in ["--cu-panel", "--cu-panel2"]:
+            b = resolve_color(t.get(bg, ""), t)
+            c = contrast(edge, b) if b else 0
+            if c < 3:
+                bad.append("--cu-edge on %s is %.2f:1 (a control's edge needs 3:1)" % (bg, c))
+    lua = open(os.path.join(HERE, "Cute", "UI.lua"), encoding="utf-8").read()
+    m = re.search(r"^local EDGE = ([\d.]+)", lua, re.M)
+    if not m:
+        bad.append("UI.lua has no EDGE for the check box")
+    else:
+        g = round(float(m.group(1)) * 255)
+        for fill in (0.07, 0.11):
+            f = round(fill * 255)
+            c = contrast((g, g, g), (f, f, f))
+            if c < 3:
+                bad.append("the window's box edge %.2f on %.2f is %.2f:1" % (float(m.group(1)), fill, c))
+    # the window's muted text (UI.lua's and Settings.lua's MUTE: "nobody yet", a dash, the notes) on its panels: 4.5:1
+    for name in ("UI.lua", "Settings.lua"):
+        src = open(os.path.join(HERE, "Cute", name), encoding="utf-8").read()
+        m = re.search(r"^local MUTE = \{ ([\d.]+),", src, re.M)
+        if not m:
+            bad.append("%s has no MUTE" % name); continue
+        g = round(float(m.group(1)) * 255)
+        for fill in (0.07, 0.11):
+            f = round(fill * 255)
+            c = contrast((g, g, g), (f, f, f))
+            if c < 4.5:
+                bad.append("%s's muted text %.2f on %.2f is %.2f:1" % (name, float(m.group(1)), fill, c))
+    # a tag ("(suspect)", "offline") on a picked Officers row, whose background is the panel lightened to #2a2a2a
+    pk = [d.get("color") for sel, d, _ in page_rules if sel.strip() == ".cu-rows tbody tr.cu-picked .cu-tag"]
+    col = resolve_color(pk[0], t) if pk and pk[0] else None
+    if not col:
+        bad.append("no colour for a tag on a picked row")
+    elif contrast(col, (0x2a, 0x2a, 0x2a)) < 4.5:
+        bad.append("a tag on a picked row is %.2f:1" % contrast(col, (0x2a, 0x2a, 0x2a)))
+    if bad:
+        problem("contrast under 4.5:1 (text) or 3:1 (a control's edge): " + "; ".join(bad))
+    else:
+        ok("greys pass 4.5:1 on black, the window, its panels and the stage, a picked row's tags too, and the window's muted text on its panels; a box's edge 3:1 on the page and in the window")
 
 
 def check_download_cascade(page_rules, site_rules):

@@ -3,10 +3,9 @@
 -- draw theirs: one-pixel black borders, near-black panels, white and grey text in the client's narrow font, class
 -- colours on names and nothing else coloured unless it means something (green ready, red low). Numbers sit on the
 -- right of their columns, text on the left; a two-pixel class-coloured bar marks every member's row, white for you.
+-- The tabs are the modules that are on (Modules.lua), in their order, then Settings; the dashboard's pages, drawn
+-- here, are the core's and always on:
 --   Race           every member as a row: level, XP, zone, pace, the leveling stats
---   Guide          what the rules make of the seed and the guild's play (Guide.lua): the dungeons for your level and
---                  the next ones, the enchants you lack, your pace; for officers the guild per dungeon and what the
---                  guild's play changed from the research
 --   Prog           readiness, item level, empty slots, the enchants you lack, consumables, what
 --                  you have met in play, the gaps only you see
 --   Hall of Shame  a card per funny stat with its leader
@@ -15,6 +14,7 @@
 --                  every member (an empty state where there is neither)
 --   Officers       summaries, what the guild has learned, the officers' stats, the controls (officer ranks only)
 --   Me             your whole record, with what members see
+-- A module's page (the Guide, Guide.lua; a module addon's) draws with the same pieces into the same scroll area.
 -- Columns and cards come from the registry (Stats.lua); the policy (Policy.lua) decides which cells a member sees.
 -- Built on first open; nothing updates while it is hidden. A guild of a few hundred stays light: the tables and the
 -- Statistics ranking draw only the rows in view (a virtual list, filled as you scroll, the sorted list kept between
@@ -35,7 +35,7 @@ local NAME_W = 150
 local WHITE = { 0.96, 0.96, 0.96 }
 local INK = { 0.86, 0.86, 0.86 }
 local DIM = { 0.58, 0.58, 0.58 }
-local MUTE = { 0.38, 0.38, 0.38 }
+local MUTE = { 0.52, 0.52, 0.52 } -- (text: 4.5:1 on PANEL2)
 local GOOD = { 0.45, 0.83, 0.47 }
 local WARN = { 0.93, 0.74, 0.35 }
 local BAD = { 0.88, 0.36, 0.33 }
@@ -125,12 +125,16 @@ local function button(parent, label, w, h)
   function b:SetOn(on) self.__off = not on; color(self.label, on and INK or MUTE); self:SetEnabled(on) end
   return b
 end
--- a flat check box: a small square, filled white when checked. Callers set cb.fn rather than the OnClick script,
--- so the fill always follows the click
+-- a flat check box: a small square, filled white when checked, its edge a mid grey (3.5:1 on the window's panels, so
+-- an unticked box shows: a black edge was 1.1:1). Callers set cb.fn rather than the OnClick script, so the fill always
+-- follows the click; a caller with a label beside it widens what a click takes in (SetHitRectInsets, documented:
+-- SimpleFrameAPIDocumentation.lua), so the label ticks it too
+local EDGE = 0.42
 local function check(parent)
   local cb = CreateFrame("CheckButton", nil, parent, BD)
   cb:SetSize(14, 14)
   skin(cb, PANEL2)
+  if cb.SetBackdropBorderColor then cb:SetBackdropBorderColor(EDGE, EDGE, EDGE, 1) end
   cb.fill = flat(cb, "ARTWORK", WHITE, 1)
   cb.fill:SetPoint("TOPLEFT", 3, -3)
   cb.fill:SetPoint("BOTTOMRIGHT", -3, 3)
@@ -147,7 +151,7 @@ local function check(parent)
   function cb:SetOn(on) self:SetEnabled(on); color(self.label, on and INK or MUTE); self.fill:SetVertexColor(1, 1, 1, on and 1 or 0.4) end
   return cb
 end
-UI.Check, UI.Button, UI.Text, UI.Skin = check, button, text, skin
+UI.Check, UI.Button, UI.Text, UI.Skin, UI.Flat = check, button, text, skin, flat
 -- (for Guide.lua, which draws its page with the window's own pieces)
 UI.COLORS = { WHITE = WHITE, INK = INK, DIM = DIM, MUTE = MUTE, GOOD = GOOD, WARN = WARN, BAD = BAD }
 UI.Color, UI.Hex, UI.Dimmed, UI.ROW = color, hex, dimmed, ROW
@@ -334,9 +338,14 @@ local function listCount(def, v)
   for _, e in ipairs(def.of) do if v[e[1]] then n = n + 1 end end
   return n
 end
--- a row's value of a stat as this client shows it: a member's Missing enchants keeps only the slots this client knows
--- the guild enchants (Stats.lua's filter), so an older client's list never names a slot nobody can enchant
+-- a row's value of a stat as this client shows it: a member's level and zone as the guild roster gives them (the
+-- server's word, not their addon's: Roster.lua), and a member's Missing enchants keeping only the slots this client
+-- knows the guild enchants (Stats.lua's filter), so an older client's list never names a slot nobody can enchant
 local function valueOf(def, row)
+  if row.guild and not row.me then
+    if def.id == "level" and type(row.level) == "number" then return row.level end
+    if def.id == "zone" and type(row.zone) == "string" then return row.zone end
+  end
   local v = row.stats[def.id]
   if def.filter and type(v) == "table" and not row.me then return def.filter(v) end
   return v
@@ -347,6 +356,25 @@ local function listNames(def, v)
   if type(v) ~= "table" then return names end
   for _, e in ipairs(def.of) do if v[e[1]] then names[#names + 1] = e[2] end end
   return names
+end
+-- who sees a stat, for a tooltip: everyone, or you and the officers (and why, where the officers' Everyone is kept
+-- with a stat it would tell a member: Policy.lua P:KeptWith)
+-- On an officer's client with a change not saved, what the members go by (the line) comes first, and the change is
+-- marked not saved yet
+function UI.WhoSees(id)
+  local P = C.Policy
+  local pending = P:EditPending()
+  local route = pending and P:LineRoute(id) or P:Route(id)
+  local s
+  if route == "all" then s = "Everyone sees this."
+  else
+    local with = pending and P:LineKeptWith(id) or P:KeptWith(id)
+    s = with and ("Only you and the officers see this: it would tell members " .. P:Label(with) .. ", which the officers keep.") or "Only you and the officers see this."
+  end
+  if pending and P:Route(id) ~= route then
+    s = s .. (route == "all" and " Your change, not saved yet, would keep it to you and the officers." or " Your change, not saved yet, would show it to everyone.")
+  end
+  return s
 end
 function UI.Format(def, v)
   if v == nil then return "?" end
@@ -464,7 +492,45 @@ end
 ----------------------------------------------------------------------------
 -- the window
 ----------------------------------------------------------------------------
-local TAB_DEFS = { { "race", "Race", 64 }, { "guide", "Guide", 64 }, { "prog", "Prog", 64 }, { "shame", "Hall of Shame", 110 }, { "game", "Statistics", 80 }, { "officers", "Officers", 80 }, { "me", "Me", 48 }, { "settings", "Settings", 80 } }
+-- the tabs: one per module whose page shows (Modules.lua), then Settings, the shell's own. A module's tab is as wide as
+-- it says, or fits its title
+local SETTINGS_TAB = { id = "settings", title = "Settings", tab = 80 }
+function UI:Tab(m)
+  local b = self.tabs[m.id]
+  if b then return b end
+  b = button(self.tabRow, m.title, m.tab or 64, TABS)
+  b.w = m.tab
+  if not b.w then
+    local measure = b.label.GetUnboundedStringWidth or b.label.GetStringWidth
+    b.w = math.max(64, math.ceil(measure(b.label) or 0) + 28)
+    b:SetWidth(b.w)
+  end
+  b.page = m.id
+  b.under = flat(b, "OVERLAY", WHITE, 1)
+  b.under:SetPoint("BOTTOMLEFT", 1, 1)
+  b.under:SetPoint("BOTTOMRIGHT", -1, 1)
+  b.under:SetHeight(2)
+  b.under:Hide()
+  b:SetScript("OnClick", function() UI:Open(m.id) end)
+  self.tabs[m.id] = b
+  return b
+end
+function UI:DrawTabs(page, officer)
+  local x = 0
+  local list = C.Modules.Pages(officer)
+  list[#list + 1] = SETTINGS_TAB
+  for _, b in pairs(self.tabs) do b.keep = false end
+  for _, m in ipairs(list) do
+    local b = self:Tab(m)
+    b.keep = true
+    if not b:IsShown() then b:Show() end
+    b:SetPoint("LEFT", x, 0)
+    x = x + b.w + 2
+    color(b.label, m.id == page and WHITE or DIM)
+    b.under:SetShown(m.id == page)
+  end
+  for _, b in pairs(self.tabs) do if not b.keep and b:IsShown() then b:Hide() end end
+end
 
 function UI:Build()
   if self.frame then return end
@@ -525,18 +591,10 @@ function UI:Build()
   tabs:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 8, -4)
   tabs:SetPoint("TOPRIGHT", head, "BOTTOMRIGHT", -8, -4)
   tabs:SetHeight(TABS)
-  self.tabs = {}
-  for _, d in ipairs(TAB_DEFS) do
-    local b = button(tabs, d[2], d[3], TABS)
-    b.page = d[1]
-    b.under = flat(b, "OVERLAY", WHITE, 1)
-    b.under:SetPoint("BOTTOMLEFT", 1, 1)
-    b.under:SetPoint("BOTTOMRIGHT", -1, 1)
-    b.under:SetHeight(2)
-    b.under:Hide()
-    b:SetScript("OnClick", function() UI:Open(d[1]) end)
-    self.tabs[d[1]] = b
-  end
+  -- a tab for every module there is, shown or not (one that registers later gets its own as it first shows)
+  self.tabRow, self.tabs = tabs, {}
+  for _, m in ipairs(C.Modules.list) do if m.page then self:Tab(m) end end
+  self:Tab(SETTINGS_TAB)
   local tabLine = line(f)
   tabLine:SetPoint("TOPLEFT", tabs, "BOTTOMLEFT", 0, -1)
   tabLine:SetPoint("TOPRIGHT", tabs, "BOTTOMRIGHT", 0, -1)
@@ -569,6 +627,8 @@ function UI:Build()
   self.band:Hide()
   self.bandLabels = pool(self.band, function(parent) return text(parent, 12, INK) end)
   self.bandButtons = pool(self.band, function(parent) return button(parent, "", 160) end)
+  -- (a line in the band with a tooltip and a click: the Guide's next best thing and where its knowledge comes from)
+  self.bandLines = pool(self.band, function(parent) return UI:MakeLine(parent) end)
   self.header = CreateFrame("Frame", nil, self.band)
   self.header:SetPoint("TOPLEFT")
   self.header:SetHeight(ROW)
@@ -620,10 +680,13 @@ function UI:Toggle()
   self:Build()
   if self.frame:IsShown() then self.frame:Hide() else self.frame:Show() end
 end
-function UI:Open(page)
+-- a page by its module's id, or Settings (at a section: "general", "vis", "rules", "modules" or a module's id). A page
+-- whose module is off, or an officer's for a member, opens Race
+function UI:Open(page, section)
   self:Build()
-  if page == "officers" and not C.Roster:MeOfficer() then page = "race" end
   page = page or self.page
+  if page ~= "settings" and not C.Modules.Page(page, C.Roster:MeOfficer()) then page = "race" end
+  if section and section ~= self.section then self.section = section; self.scrollTo = 0 end
   if page ~= self.page then self.scrollTo = 0 end -- a new page starts at the top; a redraw keeps the place
   self.page = page
   if not self.frame:IsShown() then self.frame:Show() else self:Draw() end
@@ -665,14 +728,30 @@ function UI:Arrived(kv, created)
   for id in pairs(kv) do if ids[id] then self:Refresh() return end end
 end
 -- the scroll moved: the virtual lists draw the rows that came into view, from the lists the last Draw sorted
+-- a module's own virtual list, by a key of its own: made once on the scroll area with the row make(parent) builds (on
+-- the window's pieces: UI:MakeLine, UI.Text, UI.Button, UI.Flat), widgets for the rows in view only, and cleared by
+-- the draw of a page that does not fill it, as the window's own lists are
+UI.lists = {}
+function UI:List(key, make)
+  local v = self.lists[key]
+  if not v then v = virtual(self.scroll.child, make); self.lists[key] = v end
+  return v
+end
 -- the band's height (0 hides it); the scroll area and its bar start under it
 function UI:SetBand(h)
   if self.bandH == h then return end
   self.bandH = h
   self.band:SetHeight(math.max(h, 1))
   self.band:SetShown(h > 0)
-  self.scroll:SetPoint("TOPLEFT", 8, -8 - h)
+  self.scroll:SetPoint("TOPLEFT", 8 + (self.insetX or 0), -8 - h)
   self.scroll.bar:SetPoint("TOPRIGHT", -7, -8 - h)
+end
+-- room kept on the left of the scroll area and the band (Settings' list of sections); 0 gives it back
+function UI:SetInset(x)
+  if (self.insetX or 0) == x then return end
+  self.insetX = x
+  self.band:SetPoint("TOPLEFT", 8 + x, -8)
+  self.scroll:SetPoint("TOPLEFT", 8 + x, -8 - (self.bandH or 0))
 end
 
 function UI:OnScroll()
@@ -703,7 +782,14 @@ function UI:MakeHeaderCell(parent)
     if not self.def then tip:AddLine(self.label:GetText() or "", 1, 1, 1) return end
     tip:AddLine(self.def.label, 1, 1, 1)
     if self.def.hint then tip:AddLine(self.def.hint, 0.7, 0.7, 0.7, true) end
-    tip:AddLine(C.Policy:Vis(self.def.id) == "all" and "Everyone sees this." or "Only you and the officers see this.", 0.6, 0.6, 0.6)
+    if self.def.id == "ready" then
+      -- (what the members' clients count, the officer's change not saved set aside, and that change marked)
+      local line = C.Stats.ReadyCountsText(C.Policy:LineReadyCounts())
+      tip:AddLine("Counts now: " .. line .. ".", 0.7, 0.7, 0.7, true)
+      local own = C.Stats.ReadyCountsText()
+      if C.Policy:EditPending() and own ~= line then tip:AddLine("Your change, not saved yet, would count " .. own .. ".", 0.7, 0.7, 0.7, true) end
+    end
+    tip:AddLine(UI.WhoSees(self.def.id), 0.6, 0.6, 0.6, true)
     tip:AddLine("Click to sort.", 0.45, 0.45, 0.45)
   end)
   return b
@@ -724,6 +810,13 @@ function UI:MakeRow(parent)
   r.name = text(r, 12, INK, "LEFT", NAME_W - 12)
   r.name:SetPoint("LEFT", 8, 0)
   r.cells = {}
+  -- on the Officers page a click picks the member, for the band's Mark untrusted (DrawOfficers)
+  r:SetScript("OnClick", function(self)
+    local row = self.row
+    if UI.page ~= "officers" or not row or row.me or not row.guid or not row.addon then return end
+    UI.picked = UI.picked ~= row.guid and row.guid or nil
+    UI:Draw()
+  end)
   tooltip(r, function(tip, self)
     local row = self.row
     if not row then return end
@@ -732,6 +825,12 @@ function UI:MakeRow(parent)
     if not row.addon then tip:AddLine("No Cute addon yet.", 0.6, 0.6, 0.6)
     elseif row.me then tip:AddLine("You.", 0.6, 0.6, 0.6)
     else tip:AddLine(row.online and "Online" or ("Last seen " .. (ago(row.seen) or "?")), 0.6, 0.6, 0.6) end
+    -- what the officers alone see: why a member's addon is doubted, and their word on it
+    if not row.me and C.Roster:MeOfficer() then
+      if row.suspect then tip:AddLine("Suspect: " .. tostring(row.suspect.why) .. ", " .. (ago(row.suspect.at) or "") .. ".", 0.9, 0.45, 0.4, true) end
+      if row.untrusted then tip:AddLine("Untrusted: left out of what the guild learns and of the rankings.", 0.9, 0.6, 0.3, true) end
+      if UI.page == "officers" and row.guid and row.addon then tip:AddLine("Click to select, then Mark untrusted above.", 0.45, 0.45, 0.45) end
+    end
   end)
   return r
 end
@@ -798,10 +897,29 @@ function UI:Cell(r, i)
       elseif def.kind == "pips" and type(v) == "string" then
         local done, started = select(2, v:gsub("2", "")), select(2, v:gsub("1", ""))
         tip:AddLine(string.format("%d of %d steps done, %d in the log", done, #v, started), 0.9, 0.9, 0.9)
-      elseif def.id == "ready" and type(v) == "number" and (row.me or C.Roster:MeOfficer()) then
-        -- the gaps behind the verdict, for those who may see the inputs
-        local gaps = C.Stats.ReadyGaps(row.stats) or {}
-        tip:AddLine(#gaps == 0 and "No gaps." or table.concat(gaps, ", "), 0.9, 0.9, 0.9, true)
+      elseif def.id == "ready" and type(v) == "number" then
+        -- the gaps behind the verdict: the ones it counts, which everyone may see; an officer is told the others are
+        -- in their own columns
+        if not row.me and not C.Policy.CurrentReady(row.stats.addon_ver) then
+          -- (a 0.5.x Cute counted every gap: its verdict, not this client's count)
+          tip:AddLine("Counted by Cute " .. tostring(row.stats.addon_ver or "0.5") .. ", every gap: an empty slot, a missing enchant, durability under 50% and no potions.", 0.9, 0.9, 0.9, true)
+        end
+        -- (a member's verdict was counted by the line's policy, which their client routes by: an officer's own change
+        -- not saved counts their own row alone. One counted before a change the member has not reported since says so)
+        local counts = row.me and C.Stats.ReadyCounts() or C.Policy:LineReadyCounts()
+        local n = 0
+        for _ in pairs(counts) do n = n + 1 end
+        if row.me or C.Policy.CurrentReady(row.stats.addon_ver) then
+          local gaps = C.Stats.ReadyGaps(row.stats, counts) or {}
+          tip:AddLine(#gaps == 0 and "No gaps." or table.concat(gaps, ", "), 0.9, 0.9, 0.9, true)
+          tip:AddLine("Counts " .. C.Stats.ReadyCountsText(counts) .. ".", 0.7, 0.7, 0.7, true)
+          if not row.me and v ~= (#gaps == 0 and 2 or (#gaps * 2 <= n and 1 or 0)) then
+            tip:AddLine("Counted before the officers' last change: the member's next report counts it again.", 0.6, 0.6, 0.6, true)
+          end
+        end
+        if C.Roster:MeOfficer() and n < #C.Stats.READY_INPUTS then
+          tip:AddLine("The gaps the officers keep are in their own columns, not counted here.", 0.6, 0.6, 0.6, true)
+        end
       else
         tip:AddLine(UI.Format(def, v), 0.9, 0.9, 0.9)
       end
@@ -983,15 +1101,18 @@ function UI:DrawTable(page, y0)
       for k = #cols + 1, #r.cells do r.cells[k]:Hide() end
       r.layoutGen = layoutGen
     end
-    r.bg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.03 or 0)
+    local picked = page == "officers" and row.guid ~= nil and row.guid == self.picked
+    r.bg:SetColorTexture(1, 1, 1, picked and 0.1 or (i % 2 == 0 and 0.03 or 0))
     local cc = row.class and classColor(row.class) or MUTE
     if not row.online then cc = dimmed(cc) end
     local bc = row.me and WHITE or cc
     r.bar:SetColorTexture(bc[1], bc[2], bc[3], 1)
     color(r.name, row.addon and cc or MUTE)
     -- "(you)" and "(no addon)" only where they fit whole: a two-word name keeps its words, and the grey of a member
-    -- without the addon says it already
+    -- without the addon says it already. An officer sees a member they marked untrusted, or whose addon sent what
+    -- cannot be, marked so (the row's tooltip says why)
     local suffix = row.me and "  (you)" or (not row.addon and "  (no addon)" or nil)
+    if not suffix and officer then suffix = row.untrusted and "  (untrusted)" or (row.suspect and "  (suspect)" or nil) end
     if suffix then
       -- (fitText says whether the text fit whole: no label text is read back and compared)
       if not fitText(r.name, row.short .. suffix, NAME_W - 16) then fitText(r.name, row.short, NAME_W - 16) end
@@ -1011,7 +1132,7 @@ function UI:DrawTable(page, y0)
     l:SetPoint("TOPLEFT", 6, -y - 6)
     l:SetWidth(width - 12)
     color(l, MUTE)
-    l:SetText(string.format("%d more column%s do not fit: widen the window or untick some in Settings.", hidden, hidden == 1 and "" or "s"))
+    l:SetText(string.format("%d more column%s do not fit: widen the window or untick some in Settings, %s.", hidden, hidden == 1 and "" or "s", C.Modules.byId[page].title))
     y = y + 24
   end
   local reported = 0
@@ -1047,6 +1168,7 @@ function UI:MakeCard(parent)
     tip:AddLine(self.def.label, 1, 1, 1)
     if self.def.hint then tip:AddLine(self.def.hint, 0.6, 0.6, 0.6, true) end
     for _, e in ipairs(self.top or {}) do tip:AddDoubleLine(e.short, UI.Format(self.def, e.v), 0.8, 0.8, 0.8, 1, 1, 1) end
+    if self.kept then tip:AddLine("Only the officers see who leads: the officers keep it to themselves.", 0.85, 0.85, 0.85, true) end
   end)
   return c
 end
@@ -1066,16 +1188,20 @@ function UI:DrawShame()
     if ticked[def.id] then
       self.shownIds[def.id] = true
       local top = {}
+      -- (a member the officers marked untrusted is in no ranking)
       for _, row in ipairs(rows) do
         local v = row.stats[def.id]
-        if row.addon and type(v) == "number" and C.Policy:CanSee(officer, row.me, def.id) then top[#top + 1] = { short = row.short, v = v, me = row.me } end
+        if row.addon and not row.untrusted and type(v) == "number" and C.Policy:CanSee(officer, row.me, def.id) then top[#top + 1] = { short = row.short, v = v, me = row.me } end
       end
       table.sort(top, function(a, b) if a.v == b.v then return a.short < b.short end return a.v > b.v end)
       local card = self.cards:Get()
-      card.def, card.top = def, { top[1], top[2], top[3] }
+      -- (a stat the officers keep: a member sees their own value alone, so names no leader, themselves included)
+      local kept = not officer and C.Policy:Route(def.id) == "self"
+      card.def, card.top, card.kept = def, kept and {} or { top[1], top[2], top[3] }, kept
       card:SetPoint("TOPLEFT", (i % perRow) * 244, -math.floor(i / perRow) * 72)
       card.title:SetText(def.label)
-      if top[1] and top[1].v > 0 then
+      if kept then card.leader:SetText(hex(MUTE) .. "only the officers see who leads|r")
+      elseif top[1] and top[1].v > 0 then
         card.leader:SetText(string.format("%s  %s%s|r", top[1].short, hex(DIM), UI.Format(def, top[1].v)))
       else card.leader:SetText(hex(MUTE) .. "nobody yet|r") end
       local mine = C.Sample:Value(def.id)
@@ -1091,7 +1217,7 @@ function UI:DrawShame()
     l:SetPoint("TOPLEFT", 6, -6)
     l:SetWidth(sf:Width() - 12)
     color(l, MUTE)
-    l:SetText("No funny stats ticked. Settings has the list.")
+    l:SetText("No cards ticked. Settings, Hall of Shame has the list.")
     y = 30
   end
   self.labels:HideRest()
@@ -1102,12 +1228,11 @@ end
 -- (every one defined here) or, with mine, the ones your own record has a value for
 local function foundCounts(mine)
   local n, insts = { bosses = 0, dungeons = 0, raids = 0, rep = 0, instances = 0 }, {}
-  local k = C.Stats.Known() or {}
   for _, def in ipairs(C.Stats.byCat.found) do
     local v = C.Sample:Value(def.id)
     if n[def.learned] and (not mine or (type(v) == "number" and (v > 0 or def.learned == "rep"))) then
       n[def.learned] = n[def.learned] + 1
-      local inst = def.learned == "bosses" and k.inst and k.inst[def.num]
+      local inst = def.learned == "bosses" and C.Stats.InstOf(def.num)
       if inst and not insts[inst] then insts[inst] = true; n.instances = n.instances + 1 end
     end
   end
@@ -1161,17 +1286,54 @@ function UI:DrawOfficers()
   for _, e in ipairs(C.Stats.EnchantSlots()) do slots[#slots + 1] = e[2] .. " " .. e[3] end
   say("Learned in play: " .. foundLine(foundCounts(false)) .. ". Enchants seen on " .. (#slots > 0 and table.concat(slots, ", ") or "no slot yet") .. ".", DIM)
   say(C.Policy:Describe(), DIM)
-  local labels = { { "Visibility settings", function() UI:Open("settings") end },
+  -- trust: the member picked (a click on their row) and what is known of them, else who is suspect or untrusted. Mark
+  -- untrusted is the officers' word, kept in the policy and sent with Broadcast like the rest of it
+  local picked
+  for _, r in ipairs(rows) do if self.picked and r.guid == self.picked and not r.me and r.addon then picked = r end end
+  if not picked then self.picked = nil end
+  if picked then
+    local state = picked.untrusted and "untrusted, left out of what the guild learns and of the rankings"
+      or (picked.suspect and ("suspect: " .. tostring(picked.suspect.why)) or "trusted")
+    say(picked.short .. ": " .. state .. ".", picked.untrusted and WARN or (picked.suspect and BAD or INK))
+  else
+    local suspect, distrusted = {}, {}
+    for _, r in ipairs(rows) do
+      if not r.me and r.untrusted then distrusted[#distrusted + 1] = r.short
+      elseif not r.me and r.suspect then suspect[#suspect + 1] = r.short end
+    end
+    if #suspect > 0 or #distrusted > 0 then
+      local function few(list) table.sort(list); local s = table.concat(list, ", ", 1, math.min(5, #list)); return #list > 5 and (s .. " and " .. (#list - 5) .. " more") or s end
+      local parts = {}
+      if #suspect > 0 then parts[#parts + 1] = "Suspect: " .. few(suspect) .. "." end
+      if #distrusted > 0 then parts[#parts + 1] = "Untrusted: " .. few(distrusted) .. "." end
+      say(table.concat(parts, " ") .. " Click a row for why.", DIM)
+    end
+  end
+  local labels = { { "Visibility settings", function() UI:Open("settings", "vis") end },
     { "Ask everyone to resend", function() C.Comm:Ask(); C.Print("asked the guild to send their records again.") end },
-    { "Broadcast policy now", function() C.Comm:SendPolicy(); C.Print("sent the visibility policy to the guild.") end } }
+    { "Broadcast policy now", function() C.Comm:Broadcast() end },
+    { picked and picked.untrusted and "Trust again" or "Mark untrusted", function()
+      if not picked then return end
+      C.Policy:SetUntrusted(picked.guid, not picked.untrusted)
+      C.Comm:PolicySoon()
+      C.Print((picked.untrusted and "trusted again: " or "marked untrusted: ") .. picked.short .. ". The guild hears it with the policy in a few seconds.")
+      UI:Draw()
+    end, picked ~= nil, function(tip)
+      tip:AddLine(picked and picked.untrusted and "Trust again" or "Mark untrusted", 1, 1, 1)
+      tip:AddLine("An untrusted member is left out of what the guild learns and of the rankings; their row says so to the officers. It travels with the policy.", 0.85, 0.85, 0.85, true)
+      if not picked then tip:AddLine("Click a member's row first.", 0.6, 0.6, 0.6) end
+    end } }
   local bx = 6
   for _, d in ipairs(labels) do
     local b = self.bandButtons:Get()
     b:SetPoint("TOPLEFT", bx, -y - 2)
     b:SetWidth(160)
     b:SetLabel(d[1])
-    b:SetOn(true)
+    b:SetOn(d[3] ~= false)
     b:SetScript("OnClick", d[2])
+    -- (a pooled band button may come from Settings' steps, with their tooltip)
+    b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil)
+    if d[4] then tooltip(b, d[4]) end
     bx = bx + 166
   end
   y = y + 30
@@ -1191,9 +1353,14 @@ function UI:DrawMe()
   local colW = math.floor((w - 12) / 2)
   local cb = self.checks:Get()
   cb:SetPoint("TOPLEFT", 6, -6)
-  cb.label:SetText("Show what members see of me")
+  -- (an officer's change not saved routes on their client alone: the members go by Guild Info, so the box waits for
+  -- the save rather than show a value their clients drop)
+  local pending = C.Policy:EditPending()
+  if pending then self.meView = false end
+  cb.label:SetWidth(w - 40)
+  cb.label:SetText(pending and "Show what members see of me: members go by Guild Info, save your change first" or "Show what members see of me")
   cb:Set(self.meView and true or false)
-  cb:SetOn(true)
+  cb:SetOn(not pending)
   cb.fn = function(self) UI.meView = self:GetChecked(); UI:Draw() end
   self.checks:HideRest()
   local y = 30
@@ -1216,7 +1383,7 @@ function UI:DrawMe()
         a:SetPoint("TOPLEFT", 6 + col * colW, -ly)
         a:SetWidth(colW - 130)
         a:SetJustifyH("LEFT")
-        local hidden = self.meView and C.Policy:Vis(def.id) == "self"
+        local hidden = self.meView and C.Policy:Route(def.id) == "self"
         color(a, hidden and MUTE or DIM)
         fitText(a, def.label, colW - 136)
         local b = self.labels:Get()
@@ -1422,10 +1589,11 @@ function UI:DrawGame()
   local items = {}
   for i, def in ipairs(defs) do
     self.shownIds[def.id] = true
-    -- every member's value as this viewer may see it; the leader among those
+    -- every member's value as this viewer may see it; the leader among those (a member the officers marked untrusted
+    -- is in no ranking)
     local ranked, best = {}, nil
     for _, row in ipairs(rows) do
-      if row.addon then
+      if row.addon and not row.untrusted then
         local hidden = not C.Policy:CanSee(officer, row.me, def.id)
         local v = row.stats[def.id]
         local e = { row = row, v = (not hidden and type(v) == "number") and v or nil, hidden = hidden, at = row.at and row.at[def.id] }
@@ -1434,7 +1602,10 @@ function UI:DrawGame()
       end
     end
     local open = self.gameOpen[def.id] == true
-    items[#items + 1] = { def = def, i = i, best = best, open = open }
+    -- (a stat the officers keep: a member sees their own value alone, so names no leader, themselves included)
+    local kept = not officer and C.Policy:Route(def.id) == "self"
+    if kept then best = nil end
+    items[#items + 1] = { def = def, i = i, best = best, open = open, kept = kept }
     if open then
       -- values first, highest on top; then the members whose value is kept from you; then the unreported
       table.sort(ranked, function(a, b)
@@ -1443,7 +1614,8 @@ function UI:DrawGame()
         if a.hidden ~= b.hidden then return a.hidden end
         return a.row.sort < b.row.sort
       end)
-      for k, e in ipairs(ranked) do items[#items + 1] = { def = def, member = e, k = k } end
+      -- (no places where the officers keep it: a member's own value would stand first, alone, "1.")
+      for k, e in ipairs(ranked) do items[#items + 1] = { def = def, member = e, k = not kept and k or nil } end
     end
   end
   -- a discovered value's tooltip: a boss's first kill (yours, kept here), a standing's reaction and number
@@ -1491,12 +1663,14 @@ function UI:DrawGame()
         color(r.who, MUTE)
         r.who:SetText("-")
       end
+      local kept = it.kept
       r.fn = function() UI.gameOpen[def.id] = not UI.gameOpen[def.id]; UI:Draw() end
       r.tip = function(tip)
         tip:AddLine(def.label, 1, 1, 1)
         if def.hint then tip:AddLine(def.hint, 0.7, 0.7, 0.7, true) end
+        if kept then tip:AddLine("Only the officers see who leads.", 0.85, 0.85, 0.85, true) end
         extra(tip, def, mine, true)
-        tip:AddLine(C.Policy:Vis(def.id) == "all" and "Everyone sees this." or "Only you and the officers see this.", 0.6, 0.6, 0.6)
+        tip:AddLine(UI.WhoSees(def.id), 0.6, 0.6, 0.6, true)
         if C.Sample:Error(def.id) then tip:AddLine("Could not read: " .. C.Sample:Error(def.id), 0.9, 0.4, 0.4, true) end
         tip:AddLine(open and "Click to fold." or "Click to rank every member.", 0.45, 0.45, 0.45)
       end
@@ -1515,7 +1689,7 @@ function UI:DrawGame()
       r.name:SetPoint("LEFT", 8, 0)
       r.name:SetWidth(nw - 24)
       color(r.name, cc)
-      fitText(r.name, (e.v and (k .. ".  ") or "") .. e.row.short .. (e.row.me and "  (you)" or ""), nw - 28)
+      fitText(r.name, ((e.v and k) and (k .. ".  ") or "") .. e.row.short .. (e.row.me and "  (you)" or ""), nw - 28)
       r.val:Hide()
       r.who:Show()
       r.who:SetPoint("RIGHT", -4, 0)
@@ -1561,18 +1735,10 @@ function UI:Draw()
   self.shownIds, self.virtual = {}, nil
   local page = self.page
   local officer = C.Roster:MeOfficer()
-  if page == "officers" and not officer then page = "race"; self.page = page end
-  local x = 0
-  for _, d in ipairs(TAB_DEFS) do
-    local b = self.tabs[d[1]]
-    b:SetShown(d[1] ~= "officers" or officer)
-    if b:IsShown() then
-      b:SetPoint("LEFT", x, 0)
-      x = x + d[3] + 2
-      color(b.label, d[1] == page and WHITE or DIM)
-      b.under:SetShown(d[1] == page)
-    end
-  end
+  -- a page whose module went off (or an officer's, for a member) gives way to Race
+  local mod = page ~= "settings" and C.Modules.Page(page, officer) or nil
+  if page ~= "settings" and not mod then page = "race"; self.page = page; mod = C.Modules.Page(page, officer) end
+  self:DrawTabs(page, officer)
   -- the scroll place survives a redraw; a page change starts at the top
   local bar = self.scroll.bar
   local keep = self.scrollTo or bar:GetValue() or 0
@@ -1581,25 +1747,25 @@ function UI:Draw()
   self.header:SetPoint("TOPLEFT")
   self.header:Hide()
   self:SetBand(0)
-  self.bandLabels:Reset(); self.bandButtons:Reset()
+  self.bandLabels:Reset(); self.bandButtons:Reset(); self.bandLines:Reset()
   self.cards:Reset(); self.cards:HideRest()
   self.buttons:Reset(); self.buttons:HideRest()
   self.checks:Reset(); self.checks:HideRest()
-  -- (the Statistics page and the Guide draw their lines with the same virtual list)
-  if page ~= "game" and page ~= "guide" then self.lines:Clear() end
-  if page ~= "game" then self.catLines:Clear(); if self.gameNoteLabel then self.gameNoteLabel:Hide() end end
-  if C.Settings_Draw and page ~= "settings" then C.Settings_Hide() end
-  if page == "race" or page == "prog" then self:DrawTable(page)
-  elseif page == "guide" then C.Guide_Draw(self)
-  elseif page == "shame" then self:DrawShame()
-  elseif page == "game" then self:DrawGame()
-  elseif page == "officers" then self:DrawOfficers()
-  elseif page == "me" then self:DrawMe()
-  elseif page == "settings" then
-    self.header:Hide(); self.rows:Clear(); self.labels:Reset(); self.labels:HideRest()
-    C.Settings_Draw(self.scroll)
-  end
-  self.bandLabels:HideRest(); self.bandButtons:HideRest()
+  self.labels:Reset()
+  if page ~= "game" and self.gameNoteLabel then self.gameNoteLabel:Hide() end
+  if page ~= "settings" and C.Settings_Hide then C.Settings_Hide(self) end
+  -- the virtual lists a page does not fill are cleared after it, so a page change hides the last page's rows
+  local rowsGen, linesGen, catGen = self.rows.gen, self.lines.gen, self.catLines.gen
+  local gens = {}
+  for key, v in pairs(self.lists) do gens[key] = v.gen end
+  if page == "settings" then C.Settings_Draw(self)
+  else C.Safe(function() mod.page(self, self.scroll) end, "page: " .. page)() end
+  if self.rows.gen == rowsGen then self.rows:Clear() end
+  if self.lines.gen == linesGen then self.lines:Clear() end
+  if self.catLines.gen == catGen then self.catLines:Clear() end
+  for key, v in pairs(self.lists) do if v.gen == gens[key] then v:Clear() end end
+  self.labels:HideRest()
+  self.bandLabels:HideRest(); self.bandButtons:HideRest(); self.bandLines:HideRest()
   local _, maxv = bar:GetMinMaxValues()
   bar:SetValue(math.max(0, math.min(keep, maxv or 0)))
   -- the rows in view, at the place kept (the scroll's own redraw waits while drawing)
@@ -1687,3 +1853,23 @@ function UI:OnWorld()
   end)
   place()
 end
+
+----------------------------------------------------------------------------
+-- the dashboard: the core's pages, registered like any module (Modules.lua) and always on. A page with columns or
+-- cards brings its own Settings section, the checklist of them
+----------------------------------------------------------------------------
+local function columns(page, head)
+  return function(_, col)
+    col:Head(head)
+    local ticked = UI.Ticked(page)
+    for _, def in ipairs(UI.Candidates(page)) do
+      col:Check(def.label, ticked[def.id], true, function(on) UI.SetTicked(page, def.id, on) end)
+    end
+  end
+end
+C:RegisterModule({ id = "race", title = "Race", order = 10, core = true, tab = 64, page = function(ui) ui:DrawTable("race") end, settings = columns("race", "Columns") })
+C:RegisterModule({ id = "prog", title = "Prog", order = 30, core = true, tab = 64, page = function(ui) ui:DrawTable("prog") end, settings = columns("prog", "Columns") })
+C:RegisterModule({ id = "shame", title = "Hall of Shame", order = 40, core = true, tab = 110, page = function(ui) ui:DrawShame() end, settings = columns("shame", "Cards") })
+C:RegisterModule({ id = "game", title = "Statistics", order = 50, core = true, tab = 80, page = function(ui) ui:DrawGame() end })
+C:RegisterModule({ id = "officers", title = "Officers", order = 60, core = true, officer = true, tab = 80, page = function(ui) ui:DrawOfficers() end, settings = columns("officers", "Columns") })
+C:RegisterModule({ id = "me", title = "Me", order = 70, core = true, tab = 48, page = function(ui) ui:DrawMe() end })

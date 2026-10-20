@@ -2,6 +2,7 @@
 -- One line per version, newest first: Core.lua prints this version's at the first login on it.
 local _, C = ...
 C.CHANGES = {
+  ["0.6.0"] = "Starts with only the statistics; the Guide, switched on in Settings, Modules, says what to run next and with whom; Only-you values, and what Cute knows would give them away, go to the officers only, by the policy they save in Guild Info; false data is dropped and marked.",
   ["0.5.0"] = "Ships what research and the beta showed about Forever, checks it against the game at login and learns the rest by rules the officers can retune; the Guide page: dungeons for your level, the bosses you still need, the enchants you lack, your pace; says when a guild mate runs a newer Cute.",
   ["0.4.0"] = "Learns what Forever has as the guild finds it: enchantable slots, bosses, dungeons, reputations; Classic attunements gone, consumables counted by type; gear updates without a reload.",
   ["0.3.1"] = "One row for you, under your two-word name; item level and empty slots read by item id; a round minimap button; fast with hundreds of members, the column headings staying in view; /cute diag.",

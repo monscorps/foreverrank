@@ -22,8 +22,13 @@ or below the beta's cap, with players' records) and "data" when only research or
             uploads) mark a fight they ended in the beta, and give it the items of a corpse known to be its boss (the
             game's own creature list, or Wowhead Forever's NPC id for it); a fight only linked by time gives none,
             since the trash looted after a kill is linked the same way. A dungeon the client has no map for yet is
-            awaited (AWAITED, below): the guild adds it when it enters it. Any other dungeon that does not join stops
-            the run.
+            awaited (AWAITED, below): seeded by its name and level range alone, research's word, no instance id and
+            no bosses, so the Guide can list it; an instance of that name two members entered (or where a kill a
+            group mate named back was) gives it the instance's id. Any other dungeon that does not join stops the run.
+  quests    loot.json's quests per dungeon (its wings' together), each with QuestBank's id where the title joins one
+            in its catalog (Data.lua's D.Q and D.QN; several of one title narrowed by side, quest level, required
+            level and the catalog's dungeon flag), the level it opens at and the side it is for: the Guide counts
+            the ones open to you and asks the client whether you have done one (C_QuestLog, by id).
   enchants  codex/recipes.json's Enchanting recipes (not the Season of Discovery leftovers) whose spell enchants an
             item for good (SpellEffect 53) and that Forever has: new in Forever, taught by a trainer, or taught by a
             formula players' uploads or loot.json show, or the Classic database hands out outside its raids (sold, a
@@ -67,7 +72,7 @@ TABLES = ("Map", "LFGDungeons", "DungeonEncounter", "SpellEffect", "SpellEquippe
 BETA_CAP = 30
 # dungeons Forever's sources name that the client has no map for yet (no Map row in any 1.60.1 build under
 # research/wago, no encounter, no LFG row): their instance ids are unknown, so they cannot be keyed and are left to the
-# guild (rule 2 adds an instance the first time a member enters it). The selftest fails once one of them joins, so the
+# guild (rule 2 adds an instance once two members entered it). The selftest fails once one of them joins, so the
 # list never outlives the client
 AWAITED = ("The Drowned City", "Krol'dok Stronghold", "Alcaz Prison", "Blackmaw Hold", "Shaper's Terrace")
 # DungeonEncounter difficulties of a dungeon run: 0 (any) and 1 (normal). The same bosses also sit under the Season
@@ -189,6 +194,23 @@ def norm(s):
     s = re.sub(r"[^a-z0-9 ]+", "", s.lower().replace("’", "'"))
     s = " ".join(s.split())
     return s[4:] if s.startswith("the ") else s
+
+
+def qb_catalog(qb):
+    """QuestBank's catalog (Data.lua): {id: (quest level, required level, side 0 both 1 Alliance 2 Horde, flags)} from
+    D.Q, and {id: title} from D.QN"""
+    m = re.search(r"^D\.Q = \{\n(.*?)\n\}", qb, re.S | re.M)
+    if not m:
+        raise Fail("%s has no D.Q" % QB_DATA)
+    quests = {}
+    for q, b in re.findall(r"^\[(\d+)\]=\{([^}]*)\}", m.group(1), re.M):
+        f = b.split(",")
+        quests[int(q)] = (int(f[0]), int(f[1]), int(f[2]), int(f[9]))
+    m = re.search(r"^D\.QN = \{(.*)\}$", qb, re.M)
+    if not m:
+        raise Fail("%s has no D.QN" % QB_DATA)
+    names = {int(q): n.replace('\\"', '"') for q, n in re.findall(r'\[(\d+)\]="((?:[^"\\]|\\.)*)"', m.group(1))}
+    return quests, names
 
 
 def pick_build():
@@ -436,6 +458,11 @@ class Sources:
         self.factions = {int(r["ID"]): r for r in table(b, "Faction", ["ID", "Name_lang", "ReputationIndex", "ParentFactionID",
                                                                         "ReputationFlags_0", "Flags"])}
         self.qb = open(path(QB_DATA), encoding="utf-8").read()
+        self.qb_quests, self.qb_names = qb_catalog(self.qb)
+        self.qb_by_name = collections.defaultdict(list)  # a title as the joins compare it -> the catalog's ids
+        for q, n in sorted(self.qb_names.items()):
+            if q in self.qb_quests:
+                self.qb_by_name[norm(n)].append(q)
         self.classic = Classic(self.maps)
         # the recipes Classic trainers teach: the trainer's spell itself, or the recipe its learn effect names (the Era
         # client has the teaching spells)
@@ -491,6 +518,56 @@ def near(a, b):
         diff = [i for i in range(len(a)) if a[i] != b[i]]
         return len(diff) == 1 or (len(diff) == 2 and diff[1] == diff[0] + 1 and a[diff[0]] == b[diff[1]] and a[diff[1]] == b[diff[0]])
     return any(long_[:i] + long_[i + 1:] == short for i in range(len(long_)))
+
+
+SIDE = {1: "a", 2: "h"}
+
+
+def quest_id(src, q, report):
+    """the id of a dungeon quest loot.json names, from QuestBank's catalog: the title's ids, narrowed while more than
+    one is left by the side, the quest level, the required level, the catalog's dungeon flag and its Forever flags in
+    turn (a step that would leave none is skipped). None where none or several are left: the Guide then names the quest
+    and cannot ask the client whether it was done"""
+    ids = list(src.qb_by_name.get(norm(q["name"]), ()))
+    side = q.get("side")
+    steps = (
+        lambda i: side not in ("a", "h") or src.qb_quests[i][2] in (0, 1 if side == "a" else 2),
+        lambda i: q.get("level") is None or src.qb_quests[i][0] == q["level"],
+        lambda i: q.get("min") is None or src.qb_quests[i][1] == q["min"],
+        lambda i: src.qb_quests[i][3] & 1,
+        lambda i: not src.qb_quests[i][3] & QB_NOT_FOREVER,
+    )
+    for keep in steps:
+        if len(ids) <= 1:
+            break
+        narrowed = [i for i in ids if keep(i)]
+        if narrowed:
+            ids = narrowed
+    if len(ids) == 1:
+        return ids[0]
+    report["quests"]["ambiguous" if ids else "unknown"].add(q["name"])
+    return None
+
+
+def join_quests(src, ws, report):
+    """a dungeon's quests, its wings' together (Scarlet Monastery's wings share theirs): each once, by id, else by
+    title and side; [{name, id, level, min, side}], side "a" or "h" for one faction's, none for both or not known (the
+    catalog's side where loot.json gives none). Ordered by the level they open at, then title"""
+    out, seen = [], set()
+    for w in ws:
+        for q in w["quests"]:
+            qid = quest_id(src, q, report)
+            side = q.get("side") if q.get("side") in ("a", "h") else None
+            if side is None and qid is not None:
+                side = SIDE.get(src.qb_quests[qid][2])
+            key = qid if qid is not None else (norm(q["name"]), side)
+            if key in seen:
+                continue
+            seen.add(key)
+            level = q.get("level") or (src.qb_quests[qid][0] if qid is not None else None)
+            low = q.get("min") or (src.qb_quests[qid][1] if qid is not None else None)
+            out.append({"name": q["name"], "id": qid, "level": level, "min": low, "side": side})
+    return sorted(out, key=lambda q: (q["min"] or q["level"] or 0, q["name"], q["id"] or 0))
 
 
 def join_dungeons(src, report):
@@ -666,7 +743,13 @@ def join_dungeons(src, report):
                 w["levels"][0] <= BETA_CAP and any(b["src"] for b in w["bosses"]) for w in ws) else "data",
             "kind": "party" if row["InstanceType"] == "1" else "raid", "bosses": bosses, "left": left,
             "wings": [w["name"] for w in ws] if len(ws) > 1 else None,
+            "quests": join_quests(src, ws, report),
         }
+    # an awaited dungeon is seeded by its name and level range alone, research's word (no instance id to key it, no
+    # boss the addon could read without one): the Guide lists it, and an instance of that name two members entered, or
+    # where a kill a group mate named back was, gives it the instance's id (Rules.lua, R:Rebuild)
+    awaited = [{"name": d["name"], "min": d["levels"][0], "max": d["levels"][1], "new": bool(d["new"]), "conf": "data",
+                "kind": "party", "quests": join_quests(src, [d], report)} for d in awaited]
     return dungeons, awaited
 
 
@@ -874,7 +957,8 @@ def new_report():
                          "problems": [], "fits_nothing": [], "no_source": [], "items_why": [],
                          "item_only": collections.defaultdict(list), "left_out": collections.Counter(),
                          "left_out_slot": collections.Counter()},
-            "factions": {"missing": [], "headers": [], "no_standing": [], "unnamed": []}}
+            "factions": {"missing": [], "headers": [], "no_standing": [], "unnamed": []},
+            "quests": {"ambiguous": set(), "unknown": set()}}
 
 
 def build_seed():
@@ -931,6 +1015,8 @@ def counts(seed):
         "slots": len(seed["enchants"]), "enchants": sum(len(e["list"]) for e in seed["enchants"].values()),
         "xp": len(seed["xp"]), "xp_beta": sum(c == "beta" for c in seed["xpConf"].values()),
         "factions": len(seed["factions"]),
+        "quests": sum(len(d["quests"]) for d in list(ds.values()) + seed["awaited"]),
+        "quests_id": sum(q["id"] is not None for d in list(ds.values()) + seed["awaited"] for q in d["quests"]),
     }
 
 
@@ -960,15 +1046,16 @@ def render(seed, report, date):
     tally = ("%d dungeons (%d beta, %d data) from %d of loot.json's %d, wings that share an instance as one; %d bosses "
              "(%d beta, %d data), each a fight of the client's encounter table (%d that loot.json lacks, %d that it names "
              "otherwise), with %d loot item ids; %d enchantable slots with %d enchants; XP to the next level for %d "
-             "levels (%d beta, %d data); %d factions."
+             "levels (%d beta, %d data); %d factions; %d dungeon quests, %d with QuestBank's id."
              % (c["dungeons"], c["dungeons_beta"], c["dungeons"] - c["dungeons_beta"], c["loot_dungeons"],
                 c["loot_dungeons"] + c["awaited"], c["bosses"], c["bosses_beta"], c["bosses"] - c["bosses_beta"],
                 c["bosses_client"], c["bosses_aka"], c["loot"], c["slots"], c["enchants"], c["xp"], c["xp_beta"],
-                c["xp"] - c["xp_beta"], c["factions"]))
+                c["xp"] - c["xp_beta"], c["factions"], c["quests"], c["quests_id"]))
     paras = [head, srcs, tally]
     if seed["awaited"]:
         paras.append("Awaited, in Forever's sources but not in this client's Map table, so not keyed here: " + ", ".join(
-            "%s (%d-%d)" % (d["name"], d["levels"][0], d["levels"][1]) for d in seed["awaited"]) + ".")
+            "%s (%d-%d)" % (d["name"], d["min"], d["max"]) for d in seed["awaited"]) + "; seeded by name and level range "
+            "(awaited, below), each given its instance id once two members enter it (or a kill there a group mate names back).")
     if c["left"]:
         paras.append("Left out: %d of loot.json's bosses that no fight of the client's encounter table fits (rares, "
                      "summoned bosses, Scourge Invasion bosses), named under their dungeon; the addon reads bosses by "
@@ -1006,6 +1093,7 @@ def render(seed, report, date):
           % (mid, lua_str(d["name"]), d["min"], d["max"], "true" if d["new"] else "false", lua_str(d["conf"]), lua_str(d["kind"]), wings))
         if d["left"]:
             w("      -- left out, no fight in the client: " + ", ".join(ascii_text(b["name"]) for b in d["left"]))
+        render_quests(w, d["quests"], "      ")
         if not d["bosses"]:
             w("      bosses = {} },")
             continue
@@ -1024,6 +1112,15 @@ def render(seed, report, date):
                 lua_str(b["name"]), b["enc"], lua_str("beta" if b["beta"] else "data"), lua_ints(b["loot"]),
                 ("  -- " + "; ".join(notes)) if notes else ""))
         w("      } },")
+    w("  },")
+    w("  awaited = {  -- in Forever's sources, not in this client's Map table: by name, no instance id and no bosses yet")
+    for d in seed["awaited"]:
+        w("    { name = %s, min = %d, max = %d, new = %s, conf = %s, kind = %s%s" % (
+            lua_str(d["name"]), d["min"], d["max"], "true" if d["new"] else "false", lua_str(d["conf"]), lua_str(d["kind"]),
+            "," if d["quests"] else " },"))
+        if d["quests"]:
+            render_quests(w, d["quests"], "      ")
+            w("    },")
     w("  },")
     w("  enchants = {  -- [inventory slot]; kinds: \"class.subclass\" of the items that take one, as Stats.lua's itemKind makes them")
     for slot in sorted(seed["enchants"]):
@@ -1052,6 +1149,25 @@ def render(seed, report, date):
     w("  },")
     w("}")
     return "\n".join(L) + "\n"
+
+
+def render_quests(w, quests, pad):
+    """a dungeon's quests, one a line: its QuestBank id where one joins, the level it opens at, the side it is for"""
+    if not quests:
+        return
+    w(pad + "quests = {  -- id: QuestBank's catalog, where the title joins one; side: \"a\" Alliance, \"h\" Horde, none both")
+    for q in quests:
+        parts = ["name = %s" % lua_str(q["name"])]
+        if q["id"] is not None:
+            parts.append("id = %d" % q["id"])
+        if q["level"] is not None:
+            parts.append("level = %d" % q["level"])
+        if q["min"] is not None:
+            parts.append("min = %d" % q["min"])
+        if q["side"]:
+            parts.append("side = %s" % lua_str(q["side"]))
+        w(pad + "  { %s }," % ", ".join(parts))
+    w(pad + "},")
 
 
 def dated(text):
@@ -1083,7 +1199,12 @@ def summary(seed, report):
                     sum(d["kind"] == "party" for d in ds.values()), sum(d["kind"] == "raid" for d in ds.values()),
                     c["loot_dungeons"], c["loot_dungeons"] + c["awaited"], ", ".join(merged) or "none"))
     if seed["awaited"]:
-        lines.append("            awaited %d (no map in the client yet): %s" % (c["awaited"], ", ".join(d["name"] for d in seed["awaited"])))
+        lines.append("            awaited %d (no map in the client yet), seeded by name and level range: %s" % (
+            c["awaited"], ", ".join("%s %d-%d" % (d["name"], d["min"], d["max"]) for d in seed["awaited"])))
+    qr = report["quests"]
+    lines.append("            quests %d, %d with QuestBank's id; by title alone: %d several fit (%s), %d none (%s)" % (
+        c["quests"], c["quests_id"], len(qr["ambiguous"]), ", ".join(sorted(qr["ambiguous"])) or "none",
+        len(qr["unknown"]), ", ".join(sorted(qr["unknown"])) or "none"))
     lines.append("            LFGDungeons names a map on %d rows" % report["lfg_maps"])
     lines.append("  bosses    %3d: %d beta, %d data; %d that loot.json lacks (the client's encounter table), %d it names otherwise, "
                  "%d with items from players' loot records; %d loot item ids"
@@ -1146,6 +1267,29 @@ def selftest(src, seed, report, text):
         check(d["name"] in seeded or d["name"] in awaited, "%s is neither seeded nor awaited" % d["name"])
     check(not report["awaited_joined"], "AWAITED lists dungeons that now join; drop them from it: " + ", ".join(report["awaited_joined"]))
     check(not report["awaited_gone"], "AWAITED lists dungeons loot.json no longer has: " + ", ".join(report["awaited_gone"]))
+    # every awaited dungeon is seeded by its name and loot.json's level range, research's word, with no instance id and
+    # no bosses, so the Guide lists it before anyone has entered it (Next up)
+    levels = {d["name"]: tuple(d["levels"]) for d in src.loot["dungeons"]}
+    for n in AWAITED:
+        a = [d for d in seed["awaited"] if d["name"] == n]
+        check(len(a) == 1 and (a[0]["min"], a[0]["max"]) == levels.get(n) and a[0]["conf"] == "data" and "bosses" not in a[0]
+              and "id" not in a[0], "%s is not seeded once by its name and level range %s: %s" % (n, levels.get(n), a))
+    # the quests: every one loot.json lists for a seeded or awaited dungeon is under it, and every id is the catalog's
+    # quest of that title
+    under = {}
+    for d in seed["dungeons"].values():
+        for w in d["wings"] or [d["name"]]:
+            under[w] = d
+    for d in seed["awaited"]:
+        under[d["name"]] = d
+    for d in src.loot["dungeons"]:
+        have = {norm(q["name"]) for q in under[d["name"]]["quests"]} if d["name"] in under else set()
+        for q in d["quests"]:
+            check(norm(q["name"]) in have, "%s: its quest %s is not in the seed" % (d["name"], q["name"]))
+    for d in list(seed["dungeons"].values()) + seed["awaited"]:
+        for q in d["quests"]:
+            check(q["id"] is None or (q["id"] in src.qb_quests and norm(src.qb_names.get(q["id"], "")) == norm(q["name"])),
+                  "%s: quest %s has id %s, which QuestBank's catalog gives another title" % (d["name"], q["name"], q["id"]))
     # bosses: each an encounter of its instance at a dungeon difficulty, none twice; ALIAS, POOLED and NOT_THAT_FIGHT
     # each still needed and still right
     valid = {(e["id"], e["map"]) for e in src.enc if e["diff"] in DUNGEON_DIFFICULTIES}
@@ -1243,10 +1387,14 @@ def selftest(src, seed, report, text):
                      "for id, d in pairs(K.dungeons) do n = n + 1; for _, x in ipairs(d.bosses) do if x.enc then b = b + 1 end end; "
                      "if type(d.wings) == 'table' then w[#w + 1] = id end end; table.sort(w); "
                      "for i, id in ipairs(w) do w[i] = id .. '=' .. #K.dungeons[id].wings end; "
-                     "io.write(K.build, ' ', n, ' ', b, ' ', #K.xp, ' wings ', table.concat(w, ','))") % lua_str(OUT)
+                     "local q, a = 0, {}; for _, d in pairs(K.dungeons) do q = q + #(d.quests or {}) end; "
+                     "for _, d in ipairs(K.awaited or {}) do q = q + #(d.quests or {}); "
+                     "a[#a + 1] = d.name .. ' ' .. d.min .. '-' .. d.max .. (d.bosses and ' bosses' or '') .. (d.id and ' id' or '') end; "
+                     "io.write(K.build, ' ', n, ' ', b, ' ', #K.xp, ' wings ', table.concat(w, ','), ' quests ', q, ' awaited ', table.concat(a, ', '))") % lua_str(OUT)
             r = subprocess.run([lua, "-e", probe], capture_output=True, text=True)
-            want = "%s %d %d %d wings %s" % (seed["build"], len(seed["dungeons"]), counts(seed)["bosses"], len(xp), ",".join(
-                "%d=%d" % (mid, len(d["wings"])) for mid, d in sorted(seed["dungeons"].items()) if d["wings"]))
+            want = "%s %d %d %d wings %s quests %d awaited %s" % (seed["build"], len(seed["dungeons"]), counts(seed)["bosses"], len(xp), ",".join(
+                "%d=%d" % (mid, len(d["wings"])) for mid, d in sorted(seed["dungeons"].items()) if d["wings"]),
+                counts(seed)["quests"], ", ".join("%s %d-%d" % (d["name"], d["min"], d["max"]) for d in seed["awaited"]))
             check(r.returncode == 0 and r.stdout.strip() == want, "Lua reads the file as %r, not %r: %s" % (r.stdout.strip(), want, r.stderr.strip()))
             # a name with UTF-8, a quote, a backslash and a digit after an escape comes back byte for byte
             name = "König \"Grün\" \\ é1"

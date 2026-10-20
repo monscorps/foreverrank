@@ -27,9 +27,9 @@
 <style>
 /* Every class here starts with cu-: forever.css is loaded for the top nav only and must not reach the page.
    Black and white; the artwork and the class colours in the mock are the only colour. Greys are chosen for 4.5:1
-   on the darkest surface they sit on (build.py checks the pairs). */
+   on the darkest surface they sit on, and a control's edge for 3:1 on the panels (build.py checks the pairs). */
 :root { --cu-black: #000; --cu-white: #f4f4f4; --cu-ink: #dcdcdc; --cu-dim: #969696; --cu-mute: #8a8a8a; --cu-rule: #1c1c1c;
-  --cu-bg: #090909; --cu-panel: #121212; --cu-panel2: #1c1c1c; --cu-stage: #141414;
+  --cu-bg: #090909; --cu-panel: #121212; --cu-panel2: #1c1c1c; --cu-stage: #141414; --cu-edge: #6b6b6b;
   --cu-good: #74d077; --cu-warn: #efbd58; --cu-bad: #e46055; --cu-narrow: 'PT Sans Narrow', 'Arial Narrow', sans-serif; }
 body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); font: 400 1rem/1.55 'Nunito Sans', 'Segoe UI', sans-serif; overflow-x: hidden; }
 .cu-page h1, .cu-page h2, .cu-page h3 { font-family: Fredoka, 'Trebuchet MS', sans-serif; font-weight: 600; letter-spacing: -0.01em; color: var(--cu-white); margin: 0; }
@@ -70,6 +70,11 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-seg button:last-child { border-radius: 0 4px 4px 0; }
 .cu-seg button:hover { color: var(--cu-white); border-color: #444; }
 .cu-seg button[aria-checked="true"], .cu-seg button[aria-checked="true"]:hover { background: var(--cu-white); border-color: var(--cu-white); color: #000; }
+/* the made-up guild's one rank right that changes the window: whether the officer looked as may edit Guild Info */
+.cu-gi { display: inline-flex; align-items: center; gap: .5rem; min-height: 40px; color: var(--cu-ink); cursor: pointer; }
+.cu-gi[hidden] { display: none; }
+.cu-gi .cu-ck { width: 18px; height: 18px; }
+.cu-gi .cu-ck:checked::after { inset: 4px; }
 .cu-swipe { display: none; margin: 0 0 .6rem; color: var(--cu-dim); font-size: .9rem; }
 .cu-stage { background: var(--cu-stage); margin: 0 calc(50% - 50vw); padding: clamp(.75rem, 3vw, 2.5rem) var(--pad); overflow-x: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
 .cu-win { position: relative; min-width: 760px; max-width: 1080px; margin: 0 auto; background: var(--cu-bg); border: 1px solid #000; box-shadow: 0 18px 50px rgba(0,0,0,.75), 0 2px 8px rgba(0,0,0,.6); font-family: var(--cu-narrow); font-size: 12px; line-height: 1.2; color: var(--cu-ink); }
@@ -120,6 +125,12 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-card .cu-cm { position: absolute; left: 8px; bottom: 7px; color: var(--cu-mute); font-size: 11px; }
 .cu-olines div { height: 18px; padding-left: 6px; color: var(--cu-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cu-olines div.cu-dimline { color: var(--cu-dim); }
+.cu-olines div.cu-warn { color: var(--cu-warn); } .cu-olines div.cu-bad { color: var(--cu-bad); }
+.cu-rows tr[data-pick] { cursor: pointer; }
+.cu-rows tbody tr.cu-picked td { background: rgba(255,255,255,.1); }
+.cu-rows tbody tr.cu-picked .cu-tag { color: #a0a0a0; } /* 4.5:1 on the picked row */
+.cu-pick { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cu-pick:focus-visible { outline: 1px solid var(--cu-ink); outline-offset: -1px; }
 /* the Statistics page: the game's own statistics as a leaderboard, the categories down the left, the open one on the right;
    a statistic opens to the whole guild ranked on it. The table is the member table's, striped by a class because the
    opened row would shift the stripes. */
@@ -148,25 +159,63 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-rank .cu-rk { flex: none; width: 16px; color: var(--cu-mute); text-align: right; }
 .cu-rank .cu-rn { overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
 .cu-rank .cu-rv { margin-left: auto; flex: none; }
-/* the Guide: a band saying where its knowledge comes from, held above the list as the window holds it, then one list
-   of 20 px lines (the window's UI.lines rows): a name, a value and a word on the right, both right-aligned */
-.cu-gband { position: sticky; top: -8px; z-index: 1; margin: -8px -8px 4px; padding: 5px 14px 5px; background: var(--cu-panel); border-bottom: 1px solid #000; }
-.cu-gband div { height: 18px; line-height: 18px; color: var(--cu-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cu-gband div:first-child { color: var(--cu-white); }
-.cu-gl { display: grid; grid-template-columns: minmax(0, 1fr) 90px min(260px, 34%); gap: 0 4px; align-items: center; height: 20px; padding: 0 4px 0 8px; }
-.cu-gl > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* a line with nothing to its right, a note or a sub-line, takes the row's whole width, as the window's do (Guide.lua);
-   the indent stays the span's own padding */
-.cu-gl > span:only-child { grid-column: 1 / -1; }
-.cu-gl:hover { background: rgba(255,255,255,.05); }
-.cu-gl.cu-gh { background: rgba(255,255,255,.06); }
-.cu-gl.cu-gi { background: rgba(255,255,255,.025); }
-.cu-gl.cu-gh:hover { background: rgba(255,255,255,.08); }
-.cu-gl.cu-gi:hover { background: rgba(255,255,255,.06); } /* the mute grey of a doubted entry keeps 4.5:1 on it */
-.cu-gl .cu-gv, .cu-gl .cu-gw { text-align: right; }
-.cu-gl .cu-gw2 { grid-column: 2 / 4; }
-.cu-gl .cu-gwhite { color: var(--cu-white); } .cu-gl .cu-gink { color: var(--cu-ink); } .cu-gl .cu-gdim { color: var(--cu-dim); }
-.cu-gl .cu-gmute { color: var(--cu-mute); } .cu-gl .cu-gwarn { color: var(--cu-warn); }
+/* the Guide (Guide.lua): the band, held above the list as the window holds it (the next best thing, then where the
+   knowledge comes from), then one list of 20 px rows. A card is a dungeon in range: its name, its range, a level bar on
+   one scale for the whole page and how sure in one word, a white edge on the next best one; under it, after a label
+   column, the bosses as pips, the quests and the mates online with an Invite button each. Then the gear and pace
+   strips, Next up on a rail, and the officers' lines */
+.cu-gband { position: sticky; top: -8px; z-index: 1; margin: -8px -8px 4px; padding: 4px 8px; background: var(--cu-panel); border-bottom: 1px solid #000; }
+.cu-gband div { height: 20px; line-height: 20px; padding: 0 8px; color: var(--cu-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cu-gband div:first-child { color: var(--cu-white); background: rgba(255,255,255,.05); box-shadow: inset 2px 0 0 var(--cu-white); }
+.cu-gr { display: flex; align-items: center; height: 20px; padding: 0 4px 0 8px; color: var(--cu-ink); white-space: nowrap; }
+.cu-gr:hover { background: rgba(255,255,255,.05); }
+.cu-gr.cu-gh { background: rgba(255,255,255,.06); color: var(--cu-white); }
+.cu-gr.cu-gc { background: rgba(255,255,255,.035); }
+.cu-gr.cu-gs { background: rgba(255,255,255,.025); }
+.cu-gr.cu-gh:hover { background: rgba(255,255,255,.08); }
+.cu-gr.cu-gc:hover { background: rgba(255,255,255,.07); }
+.cu-gr.cu-gs:hover { background: rgba(255,255,255,.06); } /* the mute grey of a doubted entry keeps 4.5:1 on it */
+.cu-gr.cu-gpick { box-shadow: inset 2px 0 0 var(--cu-white); }
+.cu-gr > span { flex: none; overflow: hidden; text-overflow: ellipsis; }
+.cu-gr > .cu-gn { flex: 1 1 auto; min-width: 0; }
+.cu-glab { width: 50px; margin-right: 4px; color: var(--cu-dim); font-size: 11px; }
+.cu-gr.cu-gu > .cu-glab { margin-left: 16px; }
+.cu-gnum { width: 44px; margin: 0 6px 0 8px; text-align: right; }
+.cu-gr > .cu-gbar { position: relative; width: clamp(90px, 18%, 180px); height: 12px; }
+/* the bar's and the pips' colours are Guide.lua's (BAR_COLOR, PIP_COLOR): every mark 3:1 at least on what it sits on,
+   the track only the scale */
+.cu-gbar::before { content: ""; position: absolute; left: 0; right: 0; top: 4px; height: 4px; background: #292929; }
+.cu-gbar i { position: absolute; }
+.cu-gseg { top: 4px; height: 4px; min-width: 2px; }
+.cu-gin { background: var(--cu-good); } .cu-gup { background: #949494; } .cu-gdown { background: #787878; }
+.cu-gmark { top: 0; width: 2px; height: 12px; margin-left: -1px; background: var(--cu-white); }
+.cu-gword { width: 74px; margin-left: 8px; text-align: right; color: var(--cu-dim); }
+.cu-gcount { width: 150px; margin-left: 8px; text-align: right; color: var(--cu-dim); }
+.cu-gwho { width: min(260px, 34%); margin-left: 8px; text-align: right; color: var(--cu-dim); }
+.cu-gwho.cu-gwide { width: calc(min(260px, 34%) + 94px); }
+.cu-gval { width: 90px; margin-left: 4px; text-align: right; }
+.cu-gr > .cu-gpips { flex: 1 1 auto; min-width: 0; display: flex; gap: 3px; }
+.cu-gpips i { flex: none; width: 8px; height: 8px; background: #9e9e9e; }
+.cu-gpips i.cu-gkill { background: #f5f5f5; } .cu-gpips i.cu-gdoubt { background: #6b6b6b; }
+.cu-gr > .cu-gmate { flex: 0 1 170px; min-width: 60px; }
+.cu-glvl { width: 30px; margin-left: 4px; color: var(--cu-dim); }
+.cu-ggrp { margin-left: 6px; color: var(--cu-dim); }
+.cu-btn.cu-ginv { flex: none; width: 58px; height: 16px; margin-left: 6px; padding: 0; font-size: 11px; line-height: 14px; }
+.cu-gmore { appearance: none; width: 100%; border: 0; background: none; color: var(--cu-dim); font: inherit; text-align: left; cursor: pointer; }
+.cu-gat { width: 30px; margin-left: -4px; text-align: right; }
+.cu-gr > .cu-grail { position: relative; align-self: stretch; width: 22px; overflow: visible; }
+.cu-grail::before { content: ""; position: absolute; left: 10px; top: 0; bottom: 0; width: 1px; background: #616161; }
+.cu-grail.cu-gfirst::before { top: 50%; } .cu-grail.cu-glast::before { bottom: 50%; } .cu-grail.cu-gonly::before { display: none; }
+.cu-grail i { position: absolute; left: 7px; top: calc(50% - 4px); width: 7px; height: 7px; background: var(--cu-dim); }
+.cu-grail i.cu-gseen { background: var(--cu-white); }
+.cu-gr .cu-gwhite { color: var(--cu-white); } .cu-gr .cu-gink { color: var(--cu-ink); } .cu-gr .cu-gdim { color: var(--cu-dim); }
+.cu-gr .cu-gmute { color: var(--cu-mute); } .cu-gr .cu-gwarn { color: var(--cu-warn); }
+/* a row's reasons, the window's tooltip: a hover, a focus or a tap shows them in a box drawn like the game's */
+.cu-gr[data-tip], .cu-gband div[data-tip] { cursor: help; }
+.cu-gr[data-tip]:focus-visible, .cu-gband div[data-tip]:focus-visible { outline: 2px solid var(--cu-white); outline-offset: -2px; }
+.cu-tip { position: absolute; z-index: 60; max-width: 340px; padding: 6px 9px 7px; background: var(--cu-bg); border: 1px solid #333; box-shadow: 0 8px 22px rgba(0,0,0,.75); color: var(--cu-dim); font: 12px/1.4 var(--cu-narrow); white-space: pre-wrap; pointer-events: none; }
+.cu-tip b { display: block; color: var(--cu-white); font-weight: 400; }
+.cu-tip[hidden] { display: none; }
 /* Settings: the rules' thresholds, the label, its value right-aligned and a step down and up each; white where an
    officer set one */
 .cu-tune { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 24px; padding-left: 6px; }
@@ -176,10 +225,10 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-tune > span:last-child { display: flex; gap: 4px; flex: none; }
 .cu-btns { display: flex; gap: 6px; padding: 2px 0 8px 6px; }
 .cu-btn { appearance: none; height: 22px; width: 160px; border: 1px solid #000; background: var(--cu-panel2); color: var(--cu-ink); font: 12px var(--cu-narrow); cursor: pointer; }
-.cu-btn:hover:not(:disabled) { background: #242424; }
-.cu-btn:disabled { color: var(--cu-mute); cursor: default; }
+.cu-btn:hover:not(:disabled):not([aria-disabled="true"]) { background: #242424; }
+.cu-btn:disabled, .cu-btn[aria-disabled="true"] { color: var(--cu-mute); cursor: default; }
 .cu-btn.cu-sm { width: 40px; }
-.cu-ck { appearance: none; position: relative; flex: none; width: 14px; height: 14px; margin: 0; border: 1px solid #000; background: var(--cu-panel2); cursor: pointer; }
+.cu-ck { appearance: none; position: relative; flex: none; width: 14px; height: 14px; margin: 0; border: 1px solid var(--cu-edge); background: var(--cu-panel2); cursor: pointer; }
 .cu-ck:checked::after { content: ""; position: absolute; inset: 3px; background: var(--cu-white); }
 .cu-ck:disabled { cursor: default; }
 .cu-ck:disabled:checked::after { opacity: .4; }
@@ -191,7 +240,10 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-me div span:first-child { color: var(--cu-dim); overflow: hidden; text-overflow: ellipsis; }
 .cu-me div span:last-child { flex: none; text-align: right; min-width: 60px; }
 .cu-me div.cu-only span { color: var(--cu-mute); }
-.cu-set { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; align-items: start; }
+/* Settings: the sections down the left (the Statistics page's list), held in view while a long one scrolls; the chosen
+   section in one column */
+.cu-set { display: grid; grid-template-columns: 168px minmax(0, 540px); gap: 0 12px; align-items: start; }
+.cu-set > div:first-child { position: sticky; top: 0; }
 .cu-set .cu-gap { height: 6px; }
 .cu-field { display: flex; align-items: center; height: 26px; padding-left: 6px; gap: 10px; }
 .cu-field span { width: 90px; color: var(--cu-dim); }
@@ -203,6 +255,7 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-visrow { display: grid; grid-template-columns: 1fr 60px 60px; align-items: center; height: 20px; padding-left: 6px; }
 .cu-visrow span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cu-visrow label { display: block; width: 14px; }
+.cu-visrow .cu-mute { color: var(--cu-mute); }
 .cu-foot-note { margin: .9rem 0 0; color: var(--cu-dim); font-size: .95rem; line-height: 1.55; max-width: 72ch; }
 .cu-foot-note b { color: var(--cu-white); font-weight: 600; }
 .cu-print { margin: .3rem 0 0; color: var(--cu-mute); font: 400 .9rem var(--cu-narrow); min-height: 1.4em; }
@@ -277,6 +330,16 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   .cu-rows th, .cu-rows th button { height: 32px; }
   .cu-lbcats button, .cu-lbrows td.cu-st button { height: 32px; }
   .cu-lbh { height: 32px; line-height: 32px; }
+  .cu-gr.cu-gmore { height: 32px; }
+  /* (the Guide's rows take a tap: each as tall as a finger) */
+  .cu-gr, .cu-gband div { height: 32px; line-height: 32px; }
+  .cu-btn.cu-ginv { height: 26px; }
+  /* (Settings' and the Officers page's buttons, Save to Guild Info among them, and the ranks steps) */
+  .cu-btn, .cu-btn.cu-sm { height: 32px; }
+  .cu-tune { height: 36px; }
+  /* (Settings' boxes and pairs, and the Officers page's row pick, take a tap too) */
+  .cu-ckl, .cu-visrow { height: 32px; }
+  .cu-pick { height: 32px; line-height: 32px; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
@@ -306,8 +369,8 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     <h1>The whole guild in one window.</h1>
     <p>The guild's own addon for Forever's November release. Every member's client shares its character over the guild channel, and one window shows the whole guild: the race to 60, readiness, the hall of shame, the statistics, the officers' view. Officers decide who sees what.</p>
     <div class="cu-cta">
-      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.5.0<!--/@v--></span>, <!--@kb-->393<!--/@kb--> KB</small></a>
-      <span class="cu-note">Free, GPL. No server, no accounts, nothing leaves the guild channel. Unzip into <code>Interface\AddOns</code> and type <code>/cute</code>.</span>
+      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.6.0<!--/@v--></span>, <!--@kb-->487<!--/@kb--> KB</small></a>
+      <span class="cu-note">Free, GPL. No server, no accounts, nothing leaves the guild. Unzip into <code>Interface\AddOns</code> and type <code>/cute</code>.</span>
     </div>
   </div>
 </header>
@@ -322,6 +385,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
         <button type="button" role="radio" aria-checked="true" tabindex="0" data-viewer="member">Kaka, raider</button>
         <button type="button" role="radio" aria-checked="false" tabindex="-1" data-viewer="officer">Yezin, officer</button>
       </div>
+      <label class="cu-gi" id="cu-gi-l" hidden><input type="checkbox" class="cu-ck" id="cu-gi" aria-describedby="cu-view-hint" checked> Yezin's rank may edit Guild Info</label>
       <span class="cu-live" id="cu-view-hint" aria-live="polite">A member sees everyone's shared stats and all of their own.</span>
     </div>
     <p class="cu-swipe">The window is wider than your screen: swipe sideways inside it.</p>
@@ -334,7 +398,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
         </div>
         <div class="cu-tabs" role="tablist" aria-label="Pages of the window">
           <button type="button" role="tab" id="cu-tab-race" aria-controls="cu-panel" aria-selected="true" tabindex="0" data-tab="race">Race</button>
-          <button type="button" role="tab" id="cu-tab-guide" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="guide">Guide</button>
+          <button type="button" role="tab" id="cu-tab-guide" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="guide" hidden>Guide</button>
           <button type="button" role="tab" id="cu-tab-prog" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="prog">Prog</button>
           <button type="button" role="tab" id="cu-tab-shame" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="shame">Hall of Shame</button>
           <button type="button" role="tab" id="cu-tab-statistics" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="statistics">Statistics</button>
@@ -357,15 +421,17 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     <h2>Who sees what</h2>
     <div class="cu-rules">
       <div>
-        <p>Every stat has one of two settings, and officers pick it on the window's Settings page. A change is broadcast on the guild channel; members' addons apply it when it comes from an officer rank. Your own row is always complete. The game's own statistics are set per category rather than one by one, since the server decides which there are.</p>
+        <p>Every stat has one of two settings, and officers pick it in the window's Settings, under Who sees what, and save it to the guild's Guild Info, which every member's addon goes by. Your own row is always complete. The game's own statistics are set per category rather than one by one, since the server decides which there are.</p>
         <dl class="cu-lev">
           <dt>Everyone</dt><dd>Every member sees every member's value: the race, who is doing well, the funny stats the officers want on the wall.</dd>
-          <dt class="cu-only">Only you</dt><dd>You see your own; officers and the guild master see everyone's. By default: your gear gaps, gold and the guild bank, whispers.</dd>
+          <dt class="cu-only">Only you</dt><dd>You see your own; officers and the guild master see everyone's. By default, among them: your gear gaps, gold, the guild bank and whispers.</dd>
         </dl>
       </div>
       <div>
         <h3>Privacy</h3>
-        <p>Nothing leaves the guild's addon channel and there is no server behind it. Chat is counted, never read. An Only-you stat is hidden in members' windows, not encrypted: a member reading the saved file could see it, which is fine for a guild and said plainly.</p>
+        <p>Once an officer saves Who sees what to Guild Info, which only ranks allowed to edit it can change (the guild master keeps Modify Guild Info to the officer ranks: the promise rests on it), Only-you values and what Cute knows would give them away are whispered to the officers alone and kept in their saved files; members and officers still on 0.5.x are the exception until they update, so officers update first.</p>
+        <h3>Trust</h3>
+        <p>An edited copy can send anything, but the game says who sent it and at what level and rank, a value that cannot be is dropped and its sender marked for the officers, and nothing the guild learns rests on one member alone: one can only name what nobody has named yet.</p>
       </div>
     </div>
   </div>
@@ -374,7 +440,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
 <section class="cu-sec" id="stats">
   <div class="cu-wrap">
     <h2>What it tracks</h2>
-    <p class="cu-lede"><!--@n-->109<!--/@n--> stats in <!--@v-->0.5.0<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It starts with what research and the beta showed about Forever and learns the rest as the guild plays, setting the research aside where the game turns out different. It is a work in progress and the list changes weekly; this is today's.</p>
+    <p class="cu-lede"><!--@n-->109<!--/@n--> stats in <!--@v-->0.6.0<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It starts with what research and the beta showed about Forever and learns the rest as the guild plays, setting the research aside where the game turns out different. It is a work in progress and the list changes weekly; this is today's.</p>
     <details class="cu-fold">
       <summary>Show the list: <!--@n:leveling-->42<!--/@n:leveling--> for the race, <!--@n:prog-->39<!--/@n:prog--> for prog, <!--@n:funny-->18<!--/@n:funny--> for the hall of shame, <!--@n:officer-->10<!--/@n:officer--> for the officers</summary>
       <div class="cu-bar">
@@ -394,7 +460,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     <ol class="cu-steps">
       <li>Download <a href="Cute.zip">Cute.zip</a> and unzip it. You get one folder, <code>Cute</code>.</li>
       <li>Put the folder in <code>Interface\AddOns</code>, next to your other addons.</li>
-      <li>Log in and type <code>/cute</code>, or click the elf on the minimap. Your record reaches the guild within about half a minute. Officer ranks get the Officers page and the visibility list in Settings.</li>
+      <li>Log in and type <code>/cute</code>, or click the elf on the minimap. Your record reaches the guild within seconds (inside a dungeon, once you leave it). Officer ranks get the Officers page and change Who sees what and the Rules in Settings, and save Who sees what to Guild Info where their rank may edit it; members see those greyed. The Guide switches on in Settings, Modules.</li>
     </ol>
   </div>
 </section>
@@ -403,6 +469,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-wrap">
     <h2>Changelog</h2>
     <ul class="cu-log">
+      <li><b>0.6.0</b>Starts with only the statistics; the Guide, switched on in Settings, Modules, says what to run next and with whom; Only-you values, and what Cute knows would give them away, go to the officers only, by the policy they save in Guild Info; false data is dropped and marked.</li>
       <li><b>0.5.0</b>Ships what research and the beta showed about Forever, checks it against the game at login and learns the rest by rules the officers can retune; the Guide page: dungeons for your level, the bosses you still need, the enchants you lack, your pace; says when a guild mate runs a newer Cute.</li>
       <li><b>0.4.0</b>Learns what Forever has as the guild finds it: enchantable slots, bosses, dungeons, reputations; Classic attunements gone, consumables counted by type; gear updates without a reload.</li>
       <li><b>0.3.1</b>One row for you, under your two-word name; item level and empty slots read by item id; a round minimap button; fast with hundreds of members, the column headings staying in view; /cute diag.</li>
@@ -426,6 +493,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
 (function () {
   "use strict";
   var S = window.CUTE_STATS || [], COLS = window.CUTE_COLS || {}, CATS = window.CUTE_CATS || [], EXTRA = window.CUTE_EXTRA || {};
+  var CAT_RV = window.CUTE_CAT_RV || {}, READY_IN = window.CUTE_READY || ["empty_slots", "unenchanted", "durability", "potions"];
   var byId = {}, byCat = {};
   S.forEach(function (d) { byId[d.id] = d; (byCat[d.cat] = byCat[d.cat] || []).push(d); });
   var CATNAME = {};
@@ -441,9 +509,17 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   // highest, new in Forever, how sure, bosses in the seed's order, "raid" for a raid]; a boss is [name, how many items
   // the research lists for its loot], with how sure after them where that is not its dungeon's. Only the bosses with an
   // encounter id: nothing in play could match the rest, so the addon leaves them out. The enchants per slot
-  // ("class.subclass" of the items that take one, null for any; an enchant that names its own kinds is [name, kinds]),
+  // ("class.subclass" of the items that take one, null for any), each as [name, the kinds it takes], a bare name where
+  // the seed names none; the quests per dungeon, [name, QuestBank's id, quest level, the level it opens at, "a" or "h"
+  // for one side], null where the seed has nothing; the dungeons research names that the client has no map for yet
+  // (awaited: by name and range alone, until two members' entries, or a kill a group mate names back, place one); the
+  // dungeons whose wings share an instance;
   // and the XP each level takes to the next
-  var SEED = { build: [1, 60, 1, 70338], generated: "2026-10-19", cap: 60,
+  // (the kinds of item the seed's enchants name, by the sets they come in)
+  var K_ARMOUR = ["4.0", "4.1", "4.2", "4.3", "4.4"], K_WORN = ["4.1", "4.2", "4.3", "4.4"], K_NECK = ["4.0"], K_SHIELD = ["4.6"],
+    K_2H = ["2.1", "2.5", "2.6", "2.8", "2.10"], K_OFF = ["2.0", "2.4", "2.7", "2.13", "2.14", "2.15"],
+    K_MAIN_NO_FIST = ["2.0", "2.1", "2.4", "2.5", "2.6", "2.7", "2.8", "2.10", "2.13", "2.14", "2.15"], K_MAIN = K_MAIN_NO_FIST.concat(["2.17"]);
+  var SEED = { build: [1, 60, 1, 70338], generated: "2026-10-20", cap: 60,
     dungeons: [
       ["Hall of Thanes", 13, 18, true, "beta", [["Faldrim Anvilmar", 3], ["Infurnus", 3], ["Plunder", 3],
         ["Durgen Dirgehammer", 4]]],
@@ -516,83 +592,206 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
         ["Skul", 3], ["Stonespine", 3]]]
     ],
     enchants: {
-      "Neck": { conf: "data", kinds: ["4.0"],
-        list: ["Enchant Necklace - Agility", "Enchant Necklace - Deflection", "Enchant Necklace - Healing Power",
-          "Enchant Necklace - Spell Power", "Enchant Necklace - Strength"] },
-      "Chest": { conf: "data", kinds: ["4.0", "4.1", "4.2", "4.3", "4.4"],
-        list: ["Enchant Chest - Absorption", "Enchant Chest - Greater Intellect", "Enchant Chest - Greater Stamina",
-          "Enchant Chest - Greater Stats", "Enchant Chest - Inferior Stamina", "Enchant Chest - Intellect",
-          "Enchant Chest - Lesser Absorption", "Enchant Chest - Lesser Intellect", "Enchant Chest - Lesser Stamina",
-          "Enchant Chest - Lesser Stats", "Enchant Chest - Major Intellect", "Enchant Chest - Major Stamina",
-          "Enchant Chest - Minor Absorption", "Enchant Chest - Minor Intellect", "Enchant Chest - Minor Stats",
-          "Enchant Chest - Stamina", "Enchant Chest - Stats", "Enchant Chest - Superior Intellect",
-          "Enchant Chest - Superior Stamina", "Mystic Heavy Armor Kit"] },
-      "Feet": { conf: "data", kinds: ["4.0", "4.1", "4.2", "4.3", "4.4"],
-        list: ["Enchant Boots - Agility", "Enchant Boots - Greater Agility", "Enchant Boots - Greater Stamina",
-          "Enchant Boots - Lesser Agility", "Enchant Boots - Lesser Spirit", "Enchant Boots - Lesser Stamina",
-          "Enchant Boots - Minor Agility", "Enchant Boots - Minor Speed", "Enchant Boots - Minor Stamina",
-          "Enchant Boots - Spirit", "Enchant Boots - Stamina", "Mystic Heavy Armor Kit"] },
+      "Neck": { conf: "data", kinds: K_NECK,
+        list: [["Enchant Necklace - Agility", K_NECK], ["Enchant Necklace - Deflection", K_NECK],
+          ["Enchant Necklace - Healing Power", K_NECK], ["Enchant Necklace - Spell Power", K_NECK],
+          ["Enchant Necklace - Strength", K_NECK]] },
+      "Chest": { conf: "data", kinds: K_ARMOUR,
+        list: [["Enchant Chest - Absorption", K_ARMOUR], ["Enchant Chest - Greater Intellect", K_WORN],
+          ["Enchant Chest - Greater Stamina", K_WORN], ["Enchant Chest - Greater Stats", K_ARMOUR],
+          ["Enchant Chest - Inferior Stamina", K_ARMOUR], ["Enchant Chest - Intellect", K_ARMOUR],
+          ["Enchant Chest - Lesser Absorption", K_ARMOUR], ["Enchant Chest - Lesser Intellect", K_ARMOUR],
+          ["Enchant Chest - Lesser Stamina", K_ARMOUR], ["Enchant Chest - Lesser Stats", K_ARMOUR],
+          ["Enchant Chest - Major Intellect", K_ARMOUR], ["Enchant Chest - Major Stamina", K_ARMOUR],
+          ["Enchant Chest - Minor Absorption", K_ARMOUR], ["Enchant Chest - Minor Intellect", K_ARMOUR],
+          ["Enchant Chest - Minor Stats", K_ARMOUR], ["Enchant Chest - Stamina", K_ARMOUR],
+          ["Enchant Chest - Stats", K_ARMOUR], ["Enchant Chest - Superior Intellect", K_ARMOUR],
+          ["Enchant Chest - Superior Stamina", K_ARMOUR], ["Mystic Heavy Armor Kit", K_WORN]] },
+      "Feet": { conf: "data", kinds: K_ARMOUR,
+        list: [["Enchant Boots - Agility", K_WORN], ["Enchant Boots - Greater Agility", K_WORN],
+          ["Enchant Boots - Greater Stamina", K_WORN], ["Enchant Boots - Lesser Agility", K_ARMOUR],
+          ["Enchant Boots - Lesser Spirit", K_WORN], ["Enchant Boots - Lesser Stamina", K_WORN],
+          ["Enchant Boots - Minor Agility", K_ARMOUR], ["Enchant Boots - Minor Speed", K_WORN],
+          ["Enchant Boots - Minor Stamina", K_ARMOUR], ["Enchant Boots - Spirit", K_WORN],
+          ["Enchant Boots - Stamina", K_WORN], ["Mystic Heavy Armor Kit", K_WORN]] },
       "Wrist": { conf: "data", kinds: null,
-        list: ["Enchant Bracer - Agility", "Enchant Bracer - Deflection", "Enchant Bracer - Greater Agility",
-          "Enchant Bracer - Greater Intellect", "Enchant Bracer - Greater Spellpower",
-          "Enchant Bracer - Greater Spirit", "Enchant Bracer - Greater Stamina", "Enchant Bracer - Greater Strength",
-          "Enchant Bracer - Healing Power", "Enchant Bracer - Inferior Stamina", "Enchant Bracer - Intellect",
-          "Enchant Bracer - Lesser Agility", "Enchant Bracer - Lesser Deflection",
-          "Enchant Bracer - Lesser Healing Power", "Enchant Bracer - Lesser Intellect",
-          "Enchant Bracer - Lesser Spirit", "Enchant Bracer - Lesser Stamina", "Enchant Bracer - Lesser Strength",
-          "Enchant Bracer - Mana Regeneration", "Enchant Bracer - Minor Agility", "Enchant Bracer - Minor Deflect",
-          "Enchant Bracer - Minor Healing Power", "Enchant Bracer - Minor Intellect",
-          "Enchant Bracer - Minor Spirit", "Enchant Bracer - Minor Stamina", "Enchant Bracer - Minor Strength",
-          "Enchant Bracer - Spirit", "Enchant Bracer - Stamina", "Enchant Bracer - Strength",
-          "Enchant Bracer - Superior Agility", "Enchant Bracer - Superior Deflection",
-          "Enchant Bracer - Superior Intellect", "Enchant Bracer - Superior Spirit",
-          "Enchant Bracer - Superior Stamina", "Enchant Bracer - Superior Strength"] },
+        list: [["Enchant Bracer - Agility", K_WORN], ["Enchant Bracer - Deflection", K_WORN],
+          ["Enchant Bracer - Greater Agility", K_WORN], ["Enchant Bracer - Greater Intellect", K_WORN],
+          "Enchant Bracer - Greater Spellpower", ["Enchant Bracer - Greater Spirit", K_WORN],
+          ["Enchant Bracer - Greater Stamina", K_WORN], ["Enchant Bracer - Greater Strength", K_WORN],
+          ["Enchant Bracer - Healing Power", K_WORN], ["Enchant Bracer - Inferior Stamina", K_ARMOUR],
+          ["Enchant Bracer - Intellect", K_WORN], ["Enchant Bracer - Lesser Agility", K_ARMOUR],
+          ["Enchant Bracer - Lesser Deflection", K_WORN], ["Enchant Bracer - Lesser Healing Power", K_WORN],
+          ["Enchant Bracer - Lesser Intellect", K_ARMOUR], ["Enchant Bracer - Lesser Spirit", K_ARMOUR],
+          ["Enchant Bracer - Lesser Stamina", K_ARMOUR], ["Enchant Bracer - Lesser Strength", K_ARMOUR],
+          ["Enchant Bracer - Mana Regeneration", K_WORN], ["Enchant Bracer - Minor Agility", K_ARMOUR],
+          ["Enchant Bracer - Minor Deflect", K_ARMOUR], ["Enchant Bracer - Minor Healing Power", K_ARMOUR],
+          ["Enchant Bracer - Minor Intellect", K_WORN], ["Enchant Bracer - Minor Spirit", K_ARMOUR],
+          ["Enchant Bracer - Minor Stamina", K_ARMOUR], ["Enchant Bracer - Minor Strength", K_ARMOUR],
+          ["Enchant Bracer - Spirit", K_WORN], ["Enchant Bracer - Stamina", K_WORN],
+          ["Enchant Bracer - Strength", K_WORN], ["Enchant Bracer - Superior Agility", K_WORN],
+          ["Enchant Bracer - Superior Deflection", K_WORN], ["Enchant Bracer - Superior Intellect", K_WORN],
+          ["Enchant Bracer - Superior Spirit", K_WORN], ["Enchant Bracer - Superior Stamina", K_WORN],
+          ["Enchant Bracer - Superior Strength", K_WORN]] },
       "Hands": { conf: "data", kinds: null,
-        list: ["Enchant Gloves - Advanced Herbalism", "Enchant Gloves - Advanced Mining",
-          "Enchant Gloves - Advanced Skinning", "Enchant Gloves - Agility", "Enchant Gloves - Arcane Power",
-          "Enchant Gloves - Fishing", "Enchant Gloves - Greater Agility", "Enchant Gloves - Greater Strength",
-          "Enchant Gloves - Herbalism", "Enchant Gloves - Holy Power", "Enchant Gloves - Lotus Claw",
-          "Enchant Gloves - Mining", "Enchant Gloves - Minor Haste", "Enchant Gloves - Natural Power",
-          "Enchant Gloves - Riding Skill", "Enchant Gloves - Skinning", "Enchant Gloves - Strength",
-          "Enchant Gloves - Superior Strength", "Mystic Heavy Armor Kit"] },
+        list: [["Enchant Gloves - Advanced Herbalism", K_ARMOUR], ["Enchant Gloves - Advanced Mining", K_ARMOUR],
+          ["Enchant Gloves - Advanced Skinning", K_ARMOUR], ["Enchant Gloves - Agility", K_ARMOUR],
+          ["Enchant Gloves - Arcane Power", K_ARMOUR], ["Enchant Gloves - Fishing", K_ARMOUR],
+          ["Enchant Gloves - Greater Agility", K_ARMOUR], ["Enchant Gloves - Greater Strength", K_ARMOUR],
+          ["Enchant Gloves - Herbalism", K_ARMOUR], ["Enchant Gloves - Holy Power", K_ARMOUR],
+          "Enchant Gloves - Lotus Claw", ["Enchant Gloves - Mining", K_ARMOUR],
+          ["Enchant Gloves - Minor Haste", K_ARMOUR], ["Enchant Gloves - Natural Power", K_ARMOUR],
+          ["Enchant Gloves - Riding Skill", K_ARMOUR], ["Enchant Gloves - Skinning", K_ARMOUR],
+          ["Enchant Gloves - Strength", K_ARMOUR], ["Enchant Gloves - Superior Strength", K_ARMOUR],
+          ["Mystic Heavy Armor Kit", K_WORN]] },
       "Back": { conf: "data", kinds: null,
-        list: ["Enchant Cloak - Agility", "Enchant Cloak - Defense", "Enchant Cloak - Fire Resistance",
-          "Enchant Cloak - Greater Defense", "Enchant Cloak - Greater Resistance", "Enchant Cloak - Lesser Agility",
-          "Enchant Cloak - Lesser Fire Resistance", "Enchant Cloak - Lesser Protection",
-          "Enchant Cloak - Lesser Shadow Resistance", "Enchant Cloak - Minor Protection",
-          "Enchant Cloak - Minor Resistance", "Enchant Cloak - Resistance", "Enchant Cloak - Superior Defense"] },
-      "Main hand": { conf: "data", kinds: ["2.0", "2.1", "2.4", "2.5", "2.6", "2.7", "2.8", "2.10", "2.13", "2.14", "2.15", "2.17"],
-        list: ["Enchant 2H Weapon - Agility", "Enchant 2H Weapon - Greater Impact", "Enchant 2H Weapon - Impact",
-          "Enchant 2H Weapon - Lesser Agility", "Enchant 2H Weapon - Lesser Impact",
-          "Enchant 2H Weapon - Lesser Intellect", "Enchant 2H Weapon - Lesser Spirit",
-          "Enchant 2H Weapon - Lesser Strength", "Enchant 2H Weapon - Major Intellect",
-          "Enchant 2H Weapon - Major Spirit", "Enchant 2H Weapon - Mighty Healing Power",
-          "Enchant 2H Weapon - Mighty Spell Power", "Enchant 2H Weapon - Minor Impact",
-          "Enchant 2H Weapon - Spellblasting", "Enchant 2H Weapon - Strength", "Enchant 2H Weapon - Superior Impact",
-          "Enchant Weapon - Agility", "Enchant Weapon - Crusader", "Enchant Weapon - Demonslaying",
-          "Enchant Weapon - Fiery Weapon", "Enchant Weapon - Greater Striking", "Enchant Weapon - Icy Chill",
-          "Enchant Weapon - Insight", "Enchant Weapon - Lesser Beastslayer",
-          "Enchant Weapon - Lesser Elemental Slayer", "Enchant Weapon - Lesser Striking",
-          "Enchant Weapon - Lifestealing", "Enchant Weapon - Mighty Intellect", "Enchant Weapon - Mighty Spirit",
-          "Enchant Weapon - Minor Beastslayer", "Enchant Weapon - Minor Striking", "Enchant Weapon - Recovery",
-          "Enchant Weapon - Revelation", "Enchant Weapon - Strength", "Enchant Weapon - Striking",
-          "Enchant Weapon - Superior Striking", "Enchant Weapon - Unholy Weapon", "Enchant Weapon - Winter's Might"] },
+        list: ["Enchant Cloak - Agility", ["Enchant Cloak - Defense", K_WORN],
+          ["Enchant Cloak - Fire Resistance", K_WORN], ["Enchant Cloak - Greater Defense", K_WORN],
+          ["Enchant Cloak - Greater Resistance", K_WORN], ["Enchant Cloak - Lesser Agility", K_WORN],
+          ["Enchant Cloak - Lesser Fire Resistance", K_ARMOUR], "Enchant Cloak - Lesser Protection",
+          ["Enchant Cloak - Lesser Shadow Resistance", K_ARMOUR], ["Enchant Cloak - Minor Protection", K_ARMOUR],
+          ["Enchant Cloak - Minor Resistance", K_ARMOUR], ["Enchant Cloak - Resistance", K_WORN],
+          ["Enchant Cloak - Superior Defense", K_WORN]] },
+      "Main hand": { conf: "data", kinds: K_MAIN,
+        list: [["Enchant 2H Weapon - Agility", K_2H], ["Enchant 2H Weapon - Greater Impact", K_2H],
+          ["Enchant 2H Weapon - Impact", K_2H], ["Enchant 2H Weapon - Lesser Agility", K_2H],
+          ["Enchant 2H Weapon - Lesser Impact", K_2H], ["Enchant 2H Weapon - Lesser Intellect", K_2H],
+          ["Enchant 2H Weapon - Lesser Spirit", K_2H], ["Enchant 2H Weapon - Lesser Strength", K_2H],
+          ["Enchant 2H Weapon - Major Intellect", K_2H], ["Enchant 2H Weapon - Major Spirit", K_2H],
+          ["Enchant 2H Weapon - Mighty Healing Power", K_2H], ["Enchant 2H Weapon - Mighty Spell Power", K_2H],
+          ["Enchant 2H Weapon - Minor Impact", K_2H], ["Enchant 2H Weapon - Spellblasting", K_2H],
+          ["Enchant 2H Weapon - Strength", K_2H], ["Enchant 2H Weapon - Superior Impact", K_2H],
+          ["Enchant Weapon - Agility", K_MAIN_NO_FIST], ["Enchant Weapon - Crusader", K_MAIN],
+          ["Enchant Weapon - Demonslaying", K_MAIN], ["Enchant Weapon - Fiery Weapon", K_MAIN],
+          ["Enchant Weapon - Greater Striking", K_MAIN], ["Enchant Weapon - Icy Chill", K_MAIN],
+          ["Enchant Weapon - Insight", K_MAIN], ["Enchant Weapon - Lesser Beastslayer", K_MAIN],
+          ["Enchant Weapon - Lesser Elemental Slayer", K_MAIN], ["Enchant Weapon - Lesser Striking", K_MAIN],
+          ["Enchant Weapon - Lifestealing", K_MAIN], ["Enchant Weapon - Mighty Intellect", K_MAIN_NO_FIST],
+          ["Enchant Weapon - Mighty Spirit", K_MAIN_NO_FIST], ["Enchant Weapon - Minor Beastslayer", K_MAIN],
+          ["Enchant Weapon - Minor Striking", K_MAIN], ["Enchant Weapon - Recovery", K_MAIN],
+          ["Enchant Weapon - Revelation", K_MAIN], ["Enchant Weapon - Strength", K_MAIN_NO_FIST],
+          ["Enchant Weapon - Striking", K_MAIN], ["Enchant Weapon - Superior Striking", K_MAIN],
+          ["Enchant Weapon - Unholy Weapon", K_MAIN], ["Enchant Weapon - Winter's Might", K_MAIN]] },
       "Off hand": { conf: "data", kinds: null,
         list: ["Enchant Off-Hand - Excellent Spirit", "Enchant Off-Hand - Superior Intellect",
           "Enchant Off-Hand - Wisdom", "Enchant Shield - Critical Strike", "Enchant Shield - Excellent Stamina",
-          "Enchant Shield - Frost Resistance", "Enchant Shield - Greater Spirit", "Enchant Shield - Greater Stamina",
-          "Enchant Shield - Lesser Block", "Enchant Shield - Lesser Protection", "Enchant Shield - Lesser Spirit",
-          "Enchant Shield - Lesser Stamina", "Enchant Shield - Minor Stamina", "Enchant Shield - Spirit",
-          "Enchant Shield - Stamina", "Enchant Shield - Superior Spirit", "Enchant Weapon - Agility",
-          "Enchant Weapon - Crusader", "Enchant Weapon - Demonslaying", "Enchant Weapon - Fiery Weapon",
-          "Enchant Weapon - Greater Striking", "Enchant Weapon - Icy Chill", "Enchant Weapon - Insight",
-          "Enchant Weapon - Lesser Beastslayer", "Enchant Weapon - Lesser Elemental Slayer",
-          "Enchant Weapon - Lesser Striking", "Enchant Weapon - Lifestealing", "Enchant Weapon - Mighty Intellect",
-          "Enchant Weapon - Mighty Spirit", "Enchant Weapon - Minor Beastslayer", "Enchant Weapon - Minor Striking",
-          "Enchant Weapon - Recovery", "Enchant Weapon - Revelation", "Enchant Weapon - Strength",
-          "Enchant Weapon - Striking", "Enchant Weapon - Superior Striking", "Enchant Weapon - Unholy Weapon",
-          "Enchant Weapon - Winter's Might", "Mithril Shield Spike"] }
+          ["Enchant Shield - Frost Resistance", K_SHIELD], ["Enchant Shield - Greater Spirit", K_SHIELD],
+          ["Enchant Shield - Greater Stamina", K_SHIELD], ["Enchant Shield - Lesser Block", K_SHIELD],
+          "Enchant Shield - Lesser Protection", "Enchant Shield - Lesser Spirit",
+          ["Enchant Shield - Lesser Stamina", K_SHIELD], ["Enchant Shield - Minor Stamina", K_SHIELD],
+          ["Enchant Shield - Spirit", K_SHIELD], ["Enchant Shield - Stamina", K_SHIELD],
+          ["Enchant Shield - Superior Spirit", K_SHIELD], ["Enchant Weapon - Agility", K_OFF],
+          ["Enchant Weapon - Crusader", K_OFF], ["Enchant Weapon - Demonslaying", K_OFF],
+          ["Enchant Weapon - Fiery Weapon", K_OFF], ["Enchant Weapon - Greater Striking", K_OFF],
+          ["Enchant Weapon - Icy Chill", K_OFF], ["Enchant Weapon - Insight", K_OFF],
+          ["Enchant Weapon - Lesser Beastslayer", K_OFF], ["Enchant Weapon - Lesser Elemental Slayer", K_OFF],
+          ["Enchant Weapon - Lesser Striking", K_OFF], ["Enchant Weapon - Lifestealing", K_OFF],
+          ["Enchant Weapon - Mighty Intellect", K_OFF], ["Enchant Weapon - Mighty Spirit", K_OFF],
+          ["Enchant Weapon - Minor Beastslayer", K_OFF], ["Enchant Weapon - Minor Striking", K_OFF],
+          ["Enchant Weapon - Recovery", K_OFF], ["Enchant Weapon - Revelation", K_OFF],
+          ["Enchant Weapon - Strength", K_OFF], ["Enchant Weapon - Striking", K_OFF],
+          ["Enchant Weapon - Superior Striking", K_OFF], ["Enchant Weapon - Unholy Weapon", K_OFF],
+          ["Enchant Weapon - Winter's Might", K_OFF], ["Mithril Shield Spike", K_SHIELD]] }
     },
+    quests: {
+      "Hall of Thanes": [["Old Ironforge Incursion", 96393, 16, 9, "a"], ["An Ancient Grudge", 96395, 15, 10, null],
+        ["Important Heirlooms", 96403, 15, 10, "a"], ["The Restless Dead", 96394, 15, 10, "a"]],
+      "Ragefire Chasm": [["Hidden Enemies", 5728, 9, 9, "h"], ["Returning the Lost Satchel", 5724, 16, 9, "h"],
+        ["The Power to Destroy...", 5725, 16, 9, "h"]],
+      "Ruins of Lordaeron": [["A Frightened Request", 92401, 22, 15, "h"], ["Light's Justice", 92421, 22, 15, "h"],
+        ["Remember That I Love You", 92415, 22, 15, "a"], ["The Wrath of Rath'mael", 92422, 22, 15, "h"],
+        ["Abominable Creatures", 95250, 21, 16, "a"], ["Bloodied Insignia", 95195, 22, 16, "a"],
+        ["Crest of Lordaeron", 95189, 22, 16, "a"], ["Crest of Lordaeron", 95204, 22, 16, "h"],
+        ["The New Plague", 95216, 22, 16, "h"], ["Unending Torment", null, 16, null, null]],
+      "Wailing Caverns": [["In Nightmares", null, 10, null, null], ["Leaders of the Fang", 914, 22, 12, "h"],
+        ["Deviate Hides", 1486, 17, 13, null], ["Serpentbloom", 962, 18, 14, "h"],
+        ["Deviate Eradication", 1487, 21, 15, null]],
+      "The Deadmines": [["Collecting Memories", 168, 18, 14, "a"], ["Red Silk Bandanas", 214, 17, 14, "a"],
+        ["The Defias Brotherhood", 166, 22, 14, "a"], ["Oh Brother. . .", 167, 20, 15, "a"],
+        ["Underground Assault", 2040, 20, 15, "a"]],
+      "Shadowfang Keep": [["The Book of Ur", 1013, 26, 16, "h"], ["Arugal Must Die", 1014, 27, 18, "h"],
+        ["Deathstalkers in Shadowfang", 1098, 25, 18, "h"], ["The Orb of Soran'ruk", 1740, 20, 20, null],
+        ["The Test of Righteousness", null, 20, null, null]],
+      "The Stockade": [["Crime and Punishment", 377, 26, 22, "a"], ["What Comes Around...", 386, 25, 22, "a"],
+        ["The Fury Runs Deep", 378, 27, 25, "a"]],
+      "Blackfathom Deeps": [["Knowledge in the Deeps", 971, 23, 10, "a"],
+        ["Allegiance to the Old Gods", 6565, 26, 17, "h"], ["Blackfathom Villainy", 1200, 27, 18, "a"],
+        ["Blackfathom Villainy", 6561, 27, 18, "h"], ["Researching the Corruption", 1275, 24, 18, "a"],
+        ["The Orb of Soran'ruk", 1740, 20, 20, null], ["Twilight Falls", 1199, 25, 20, "a"],
+        ["Baron Aquanis", 6922, 21, 21, "h"]],
+      "Excavation Site: Wetlands": [["Changing Tastes", 95697, 31, 24, "h"], ["Earthen Echo", null, 24, null, null],
+        ["Fallen in the Fen", 95795, 31, 24, "a"], ["Horrors in the Highland", 95646, 31, 24, "a"],
+        ["Horrors in the Highlands", null, 24, null, null], ["Open the Maw", null, 31, 24, "h"],
+        ["Heartwoven", 95809, 24, 27, "a"], ["Prehistoric Prism", 98824, 24, 28, "a"]],
+      "City of Dalaran": [["A Green Sample", 92456, 33, 24, "a"], ["Heart of Disruption", 92458, 33, 24, "h"],
+        ["Power Overwhelming", 92489, 33, 24, "a"], ["Source of Power", 96988, 33, 24, "h"],
+        ["Starving Arcane", 92457, 33, 24, null], ["The Grave Knight", 96986, 33, 24, "h"]],
+      "Scarlet Monastery": [["Vorrel's Revenge", 1051, 33, 25, "h"], ["Compendium of the Fallen", 1049, 38, 28, "h"],
+        ["Mythology of the Titans", 1050, 38, 28, "a"], ["Past Due", 96800, 38, 30, "a"],
+        ["Into The Scarlet Monastery", 1048, 33, 33, "h"], ["In the Name of the Light", 1053, 40, 34, "a"]],
+      "Gnomeregan": [["Gyrodrillmatic Excavationators", 2928, 30, 20, "a"], ["A Fine Mess", 2904, 30, 24, null],
+        ["Data Rescue", 2930, 30, 25, "a"], ["Gnomer-gooooone!", 2843, 35, 25, "h"], ["Rig Wars", 2841, 35, 25, "h"],
+        ["The Grand Betrayal", 2929, 35, 25, "a"], ["The Sparklematic 5200!", null, 30, 25, null]],
+      "Razorfen Kraul": [["Blueleaf Tubers", 1221, 26, 20, null], ["Willix the Importer", 1144, 30, 23, null],
+        ["Mortality Wanes", 1142, 30, 25, "a"], ["An Unholy Alliance", null, 28, null, null],
+        ["A Vengeful Fate", 1102, 34, 29, "h"], ["The Crone of the Kraul", 1101, 34, 29, "a"]],
+      "Razorfen Downs": [["An Unholy Alliance", null, 36, 28, "h"], ["Extinguishing the Idol", 3525, 37, 32, null],
+        ["Bring the End", 3341, 42, 37, "h"], ["Bring the Light", 3636, 42, 39, "a"]],
+      "Uldaman": [["Agmond's Fate", 704, 38, 30, "a"], ["Power Stones", 2418, 36, 30, null],
+        ["Solution to Doom", 709, 40, 30, null], ["The Hidden Chamber", 2240, 40, 35, "a"],
+        ["The Lost Tablets of Will", 1139, 45, 35, "a"], ["Uldaman Reagent Run", 17, 42, 36, "a"],
+        ["Uldaman Reagent Run", 2202, 42, 36, "h"], ["Necklace Recovery, Take 3", 2341, 44, 40, "h"],
+        ["Restoring the Necklace", null, 44, 40, "a"]],
+      "Zul'Farrak": [["Divino-matic Rod", 2768, 47, 40, null], ["Gahz'rilla", 2770, 50, 40, null],
+        ["Tiara of the Deep", 2846, 46, 40, null]],
+      "Maraudon": [["Shadowshard Fragments", 7068, 42, 38, "h"], ["Shadowshard Fragments", 7070, 42, 38, "a"],
+        ["The Pariah's Instructions", 7067, 48, 39, null], ["The Scepter of Celebras", 7046, 49, 41, null],
+        ["Twisted Evils", 7028, 47, 41, null], ["Vyletongue Corruption", 7029, 47, 41, "h"],
+        ["Vyletongue Corruption", 7041, 47, 41, "a"], ["Corruption of Earth and Seed", 7064, 51, 45, "h"],
+        ["Corruption of Earth and Seed", 7065, 51, 45, "a"]],
+      "The Temple of Atal'Hakkar": [["Jammal'an the Prophet", 1446, 53, 38, null],
+        ["The Temple of Atal'Hakkar", 1445, 50, 38, "h"], ["The God Hakkar", 3528, 53, 40, null],
+        ["Into The Temple of Atal'Hakkar", 1475, 50, 41, "a"], ["Secret of the Circle", 3447, 51, 46, null],
+        ["The Essence of Eranikus", 3373, 55, 48, null], ["Da Voodoo", 8413, 52, 50, "h"],
+        ["Voodoo Feathers", 8425, 52, 50, null]],
+      "Blackrock Depths": [["Abandoned Hope", 4242, 54, 48, "a"], ["Dark Iron Legacy", null, 52, 48, null],
+        ["Disharmony of Fire", 3907, 56, 48, "h"], ["Incendius!", 4263, 56, 48, "a"],
+        ["Ribbly Screwspigot", 4136, 53, 48, null], ["The Last Element", 7201, 54, 48, "h"],
+        ["The Princess Saved?", 4004, 60, 48, "h"], ["Hurley Blackbreath", 4126, 55, 50, "a"],
+        ["Jail Break!", 4322, 58, 50, "a"], ["Lost Thunderbrew Recipe", 4134, 55, 50, "h"],
+        ["The Good Stuff", 4286, 56, 50, "a"], ["The Love Potion", 4201, 54, 50, null],
+        ["The Princess's Surprise", 4363, 59, 50, "a"], ["A Taste of Flame", 4024, 58, 52, null],
+        ["Operation: Death to Angerforge", 4132, 58, 52, "h"], ["The Rise of the Machines", 4063, 58, 52, "h"],
+        ["A Binding Contract", null, 60, 60, null]],
+      "Blackrock Spire": [["Drakefire Amulet", null, 60, 50, "a"],
+        ["Bijou's Reconnaissance Report", 4983, 59, 55, "h"],
+        ["Blood of the Black Dragon Champion", null, 60, 55, "h"], ["En-Ay-Es-Tee-Why", 4862, 59, 55, null],
+        ["For The Horde!", null, 60, 55, "h"], ["General Drakkisath's Demise", null, 60, 55, "a"],
+        ["Kibler's Exotic Pets", 4729, 59, 55, null], ["Maxwell's Mission", 5081, 60, 55, "a"],
+        ["Mother's Milk", 4866, 60, 55, null], ["Put Her Down", 4701, 59, 55, "a"],
+        ["The Demon Forge", 5127, 60, 55, null], ["The Pack Mistress", 4724, 59, 55, "h"],
+        ["Urok Doomhowl", 4867, 60, 55, null], ["Warlord's Command", 4903, 60, 55, "h"],
+        ["Delivery to Ridgewell", 4765, 60, 57, "a"], ["Egg Freezing", null, 60, 57, null],
+        ["Seal of Ascension", null, 60, 57, null], ["The Darkstone Tablet", null, 60, 57, "h"]],
+      "Dire Maul": [["Codex of Defense", 7499, 60, 54, null], ["Frost Shock and You", 7505, 60, 54, null],
+        ["Garona: A Study on Stealth and Treachery", 7498, 60, 54, null], ["Harnessing Shadows", 7502, 60, 54, null],
+        ["Holy Bologna: What the Light Won't Tell You", 7504, 60, 54, null],
+        ["Lethtendris's Web", 7488, 57, 54, "a"], ["Lethtendris's Web", 7489, 57, 54, "h"],
+        ["Pusillin and the Elder Azj'Tordin", 7441, 58, 54, null], ["The Arcanist's Cookbook", 7500, 60, 54, null],
+        ["The Emerald Dream...", 7506, 60, 54, null], ["The Greatest Race of Hunters", 7503, 60, 54, null],
+        ["The Light and How To Swing It", 7501, 60, 54, null], ["Shards of the Felvine", 5526, 60, 56, null],
+        ["The Gordok Ogre Suit", 5518, 60, 56, null], ["The Treasure of the Shen'dralar", 7462, 60, 56, "a"],
+        ["The Treasure of the Shen'dralar", 7877, 60, 56, "h"], ["Unfinished Gordok Business", 7703, 60, 56, null],
+        ["The Gordok Taste Test", null, 60, 57, null], ["Falrin's Vendetta", 8949, 60, 58, null]],
+      "Scholomance": [["Alas, Andorhal", null, null, null, null], ["Kirtonos the Herald", 5384, 60, 55, null],
+        ["Dawn's Gambit", 4771, 60, 57, null], ["The Lich, Ras Frostwhisper", 5466, 60, 57, null]],
+      "Stratholme": [["Aurius' Reckoning", 5125, 60, 55, null], ["Houses of the Holy", 5243, 60, 55, null],
+        ["The Active Agent", 5213, 60, 55, null], ["The Great Fras Siabi", 5214, 60, 55, null],
+        ["The Restless Souls", null, 60, 55, null], ["Ramstein", 6163, 60, 56, "h"],
+        ["Dead Man's Plea", 8945, 60, 58, null]]
+    },
+    awaited: [["The Drowned City", 35, 40], ["Krol'dok Stronghold", 40, 45], ["Alcaz Prison", 48, 53], ["Blackmaw Hold", 55, 60], ["Shaper's Terrace", 58, 60]],
+    wings: ["Scarlet Monastery", "Blackrock Spire", "Dire Maul"],
     xp: [400, 900, 1400, 2100, 2800, 3600, 4500, 5400, 6500, 7600, 8800, 10100, 11400, 12900, 14400, 16000, 17700,
       19400, 21300, 23200, 25200, 27300, 29400, 31700, 34000, 36400, 38900, 41400, 44300, 47400, 50800, 54500, 58600,
       62800, 67100, 71600, 76100, 80800, 85700, 90700, 95800, 101000, 106300, 111800, 117500, 123200, 129100, 135100,
@@ -604,7 +803,9 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   // seed's curve, level-ups today and played this level from the session's XP over it, and bosses, dungeons, missing
   // enchants and readiness from what the guild found and wears, further down, as the addon does). Time values are
   // seconds and gold is copper, like the addon's.
-  var POLICY = { by: "Yezin", at: "2026-10-18 20:40", threshold: 1 };
+  // the line the officers saved at the end of the guild's Guild Info (Policy.lua): when, and the officer ranks, who sees
+  // what as the registry's defaults. Every member's client routes by it
+  var POLICY = { at: "2026-10-18 20:40", threshold: 1 };
   var FUNNY = ["deaths", "deaths_today", "falls", "drownings", "fatigue", "hearth_waste", "afk", "dance", "sit", "emotes", "whispers", "gchat", "inspected", "fish", "jumps", "ghost_yards", "where", "grey_gold"];
   // the prog counts, in this order in each member's last array: the consumables by the game's item classes, the bags,
   // the gear lists that are counts here, the five schools' resistances, the PvP rank
@@ -671,11 +872,11 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       ilvl: 34, durability: 47, empty_slots: ["Trinket 2"], enchanted: ["Chest", "Main hand"], gold: 33, bank_in: 0, bank_out: 0, role: "Melee", last_login: "2026-10-18" },
       [10, 1, 4, 1, 0, 0, 0, 1, 0, 30, 7, 210, 2, 0, 7410, 3200, 3, 9], { done: 31, free: 10, renown: 4, prof: 6, adv: 22, prog: 26, last: "The Stockade", cats: "433333000303" },
       [2, 0, 0, 15, 20, 0, 0, 2, 44, 4, 6, 6, 12, 0, 0, 0, 0, 0, 1, 210]),
-    member("Kaka", "PRIEST", "Raider", true, { level: 37, xp: 12, xp_hour: 46500, zone: "Desolace", played: hm(39, 10), quests_done: 276, group: "", rested: 900, legacy: 1,
+    member("Kaka", "PRIEST", "Raider", true, { level: 37, xp: 12, xp_hour: 46500, zone: "Desolace", played: hm(39, 10), quests_done: 276, group: "Boopsy", rested: 900, legacy: 1,
       ilvl: 33, durability: 38, empty_slots: ["Trinket 1", "Trinket 2"], enchanted: ["Chest"], gold: 12, bank_in: 0, bank_out: 0, role: "Heal", last_login: "2026-10-18" },
       [23, 3, 6, 2, 1, 4, 8, 14, 5, 88, 21, 640, 1, 3, 6980, 11200, 9, 6], { done: 29, free: 14, renown: 3, prof: 20, adv: 14, prog: 12, last: "Explore Desolace", cats: "433330300303" },
       [3, 0, 0, 6, 6, 0, 0, 3, 48, 5, 6, 5, 11, 0, 0, 0, 10, 0, 0, 0]),
-    member("Boopsy", "WARLOCK", "Raider", true, { level: 36, xp: 66, xp_hour: 54200, zone: "Thousand Needles", played: hm(30, 40), quests_done: 262, group: "", rested: 1500, legacy: 1,
+    member("Boopsy", "WARLOCK", "Raider", true, { level: 36, xp: 66, xp_hour: 54200, zone: "Thousand Needles", played: hm(30, 40), quests_done: 262, group: "Kaka", rested: 1500, legacy: 1,
       ilvl: 33, durability: 90, empty_slots: [], enchanted: ["Neck", "Chest", "Wrist", "Back"], gold: 44, bank_in: 0, bank_out: 0, role: "Ranged", last_login: "2026-10-18" },
       [8, 1, 2, 0, 0, 1, 2, 4, 6, 19, 5, 150, 3, 0, 3050, 1900, 1, 20], { done: 27, free: 8, renown: 3, prof: 10, adv: 18, prog: 20, last: "Razorfen Kraul", cats: "433330000303" },
       [13, 1, 0, 25, 4, 1, 0, 7, 48, 2, 8, 3, 10, 0, 0, 0, 0, 0, 0, 0]),
@@ -689,7 +890,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { done: 0, free: 0, renown: 0, prof: 0, adv: 0, prog: 0, last: "", cats: "000000000000" },
       [0, 0, 0, 4, 0, 0, 0, 12, 16, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
     // in the guild, online, without the addon: the roster knows the level and the zone, nothing else
-    { n: "Tovi", c: "DRUID", rank: "Raider", on: true, addon: false, s: { level: 33, zone: "Thousand Needles" } }
+    { n: "Tovi", c: "DRUID", rank: "Raider", on: true, addon: false, s: { level: 35, zone: "Thousand Needles" } }
   ];
   // the rest of every record: every stat is sent, so the Me page lists the whole registry and any column ticked in
   // Settings has a value for every member with the addon. Offline members show what they last sent
@@ -733,6 +934,10 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   };
   G.forEach(function (r) { if (FULL[r.n]) Object.keys(FULL[r.n]).forEach(function (k) { r.s[k] = FULL[r.n][k]; }); });
   var ADDON = G.filter(function (r) { return r.addon; });
+  // trust: what the officers alone see. Quillan's addon once sent what cannot be, so the value was dropped and he is
+  // marked suspect with the reason (Stats.lua S.Implausible); an officer can mark any member untrusted on the Officers
+  // page (r.untrusted), which leaves them out of what the guild learns and of the rankings
+  G.filter(function (r) { return r.n === "Quillan"; })[0].suspect = { why: "XP into level 140, out of bounds (0 to 100)", ago: "3 h ago" };
   // the session's XP (the XP an hour since login, over the session) runs back from where the bar stands through the
   // levels before it: each level it reaches past is a level-up today, and the XP into this level at that pace is the
   // time played at it (a level reached before this login, played at the same pace before it)
@@ -747,10 +952,10 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   // and tells the guild; the names are the client's, which the seed's match. One character per member with the addon,
   // in G's order: a digit is the count, a dash never met. A boss's kills never pass the runs of its dungeon (Scarlet
   // Monastery's wings are runs of their own); a member's bosses, dungeons seen and dungeons run are counted from these.
-  // Bosses in the seed's order. Two finds the seed did not have: Krol'dok Stronghold, which Forever's sources name but
-  // the beta's client did not, entered by three members who have met no boss in it yet; and Scarlet Commander
-  // Mograine, whom loot.json names but the beta's client had no fight for, killed on both Cathedral runs. High
-  // Inquisitor Fairbanks, whom those two runs went past, is not met
+  // Bosses in the seed's order. Krol'dok Stronghold is one of the seed's awaited dungeons, named by research but with no
+  // map in the beta's client: three members have entered it, the second entry placed it, and nobody has met a boss in
+  // it yet. Scarlet Commander Mograine, whom loot.json names but the beta's client had no fight for, is the guild's
+  // find, killed on both Cathedral runs. High Inquisitor Fairbanks, whom those two runs went past, is not met
   var FOUND = [
     ["The Deadmines", "33222221221-", [["Rhahk'Zor", "33222221221-"], ["Sneed", "33222221221-"], ["Miner Johnson", "23222121221-"], ["Gilnid", "32222221221-"],
       ["Captain Greenskin", "33222121211-"], ["Mr. Smite", "33222221221-"], ["Cookie", "33222121221-"], ["Edwin VanCleef", "33221221121-"]]],
@@ -802,10 +1007,8 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   var REP_STATS = FACTIONS.slice().sort(byName);
   var LEARNED = [{ id: "bosses", label: "Bosses", learned: "bosses", stats: [], first: BOSS_KIDS[0].id, count: BOSS_KIDS.reduce(function (n, c) { return n + c.stats.length; }, 0) }]
     .concat(BOSS_KIDS, [{ id: "dungeons", label: "Dungeons", learned: "dungeons", stats: DUNGEON_STATS }, { id: "rep", label: "Reputation", learned: "rep", stats: REP_STATS }]);
-  // the slots the guild has seen an enchant in, and on how many members (the Officers page's line)
+  // the equipment slots by the game's names
   var SLOTS = ["Head", "Neck", "Shoulder", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands", "Ring 1", "Ring 2", "Trinket 1", "Trinket 2", "Back", "Main hand", "Off hand", "Ranged"];
-  var ENCH = {};
-  ADDON.forEach(function (r) { r.s.enchanted.forEach(function (slot) { ENCH[slot] = (ENCH[slot] || 0) + 1; }); });
   // what each member wears where an enchant asks the kind of item, as "class.subclass" (Stats.lua's itemKind): the
   // armour by class, mail and plate from 40; a cloak is cloth, a neck miscellaneous; then the main hand, the off hand
   // and the ranged slot. Nothing for an empty slot
@@ -851,22 +1054,10 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
 
   // ---- the rules (Rules.lua): their thresholds, the officers' to retune in Settings, and what they make of the seed and
   // the guild's finds, built again at every draw as the addon builds its model a few seconds after anything changes.
-  // Each threshold as Settings shows it: [name, label, lowest, highest, step, how it reads, what it does]
-  var RULES = { rangeMembers: 5, rangeLow: 0.10, rangeHigh: 0.90, doubtRuns: 3, enchantDoubtDays: 14, enchantDoubtLevel: 30, xpAgree: 3, lootDoubtKills: 5,
-    staleShare: 0.30, guideWindow: 3, guideAhead: 5 };
-  var TUNE = [
-    ["rangeMembers", "Members to learn a range", 1, 40, 1, null, "Members whose kill levels it takes to learn a dungeon's level range."],
-    ["rangeLow", "Range, lower percentile", 0, 0.5, 0.05, "pctile", "A learned range starts at this percentile of the members' kill levels."],
-    ["rangeHigh", "Range, upper percentile", 0.5, 1, 0.05, "pctile", "A learned range ends at this percentile of the members' kill levels."],
-    ["doubtRuns", "Full runs to doubt a boss", 1, 20, 1, null, "Full runs of a dungeon that never meet one of the research's bosses before it is doubted; each more boss missing takes as many runs again."],
-    ["enchantDoubtDays", "Days to doubt a slot", 1, 90, 1, null, "Days of members at the enchant level wearing items in a slot, with no enchant seen there, before the research's slot is doubted."],
-    ["enchantDoubtLevel", "Enchant level", 1, 60, 1, null, "From this level the research's enchant slots count as missing, and members this level or more start the doubt clock."],
-    ["xpAgree", "Members to agree on XP", 1, 20, 1, null, "Members who report the same XP for a level before it replaces the research's."],
-    ["lootDoubtKills", "Kills to note unseen loot", 1, 50, 1, null, "Kills of a boss before the research's loot nobody has seen drop is noted."],
-    ["staleShare", "Stale when absent over", 0.05, 0.95, 0.05, "pct", "The research is stale when this client lacks more than this share of what it names."],
-    ["guideWindow", "Guide: levels near you", 0, 10, 1, null, "The Guide names the members online within this many levels of yours."],
-    ["guideAhead", "Guide: levels ahead", 1, 20, 1, null, "The Guide lists the dungeons opening within this many levels under Next up."]
-  ];
+  // Each threshold as Settings shows it: [name, label, lowest, highest, step, how it reads, what it does, the module whose
+  // section holds it (the Guide's two; the rest are under Rules)], with its default: Rules.lua's own, which
+  // page_stats.lua writes into stats.js, so the bounds here are the window's
+  var RULES = window.CUTE_RULES || {}, TUNE = window.CUTE_TUNE || [];
   var TUNE_BY = {};
   TUNE.forEach(function (t) { TUNE_BY[t[0]] = t; });
   // the enchant slots' clock (rule 4) started five days ago, when the first member at the enchant level was seen wearing an item there
@@ -881,12 +1072,32 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   }
   function members(n) { return plural(n, "member", "members"); }
 
-  // rule 5, enchant slots: a slot counts when a member has an enchant there on that kind of item, or, for a character at
-  // the rules' enchant level, when the seed has one for it (on that kind, where it names kinds) and the guild has not
-  // doubted it (rule 4: nobody has one there enchantDoubtDays after the clock started)
-  function enchLearned(slot, kind) { return enchSeen(slot, kind) > 0; }
-  function enchSeen(slot, kind) { return ADDON.filter(function (r) { return r.s.enchanted.indexOf(slot) >= 0 && (kind == null || kindAt(r, slot) === kind); }).length; }
-  function enchIdSeen(slot, name) { return ADDON.filter(function (r) { return r.s.enchanted.indexOf(slot) >= 0 && pickOf(r, slot) === name; }).length; }
+  // rule 5, enchant slots: a slot counts when the guild has learned an enchant there on that kind of item, or, for a
+  // character at the rules' enchant level, when the seed has one for it (on that kind, where it names kinds) and the
+  // guild has not doubted it (rule 4: nobody has one there enchantDoubtDays after the clock started). Learning needs
+  // more than one voice (Stats.lua S.VOICES, from stats.js): a kind of item in a slot is learned once that many members
+  // were seen with an enchant on it, a member marked untrusted none, and the slot once one of its kinds is. How many
+  // were seen with one, on that kind or (kind null) on any, counts only where it is learned, as the window counts it;
+  // one enchant's wearers (the Guide's tooltip) count whatever their number.
+  // Whose enchants a client hears: an officer's every member's (whispered to it where the officers keep them), a
+  // member's every member's only while Enchanted slots goes to the guild, else its own read alone. What the officers'
+  // clients learned then comes in their word (Rules.lua R.Word): the slots and kinds, no member, no count, no enchant
+  var VOICES = window.CUTE_VOICES || 2;
+  function voters() { return ADDON.filter(function (r) { return !r.untrusted; }); }
+  function hearsEnchants() { return officer() || vis("enchanted") === "all"; }
+  function heard() { var m = me(), all = hearsEnchants(); return voters().filter(function (r) { return all || r.n === m; }); }
+  function wearers(list, slot, kind) {
+    return list.filter(function (r) { var k = kindAt(r, slot); return r.s.enchanted.indexOf(slot) >= 0 && k != null && (kind == null || k === kind); }).length;
+  }
+  function learnedFrom(list, slot, kind) {
+    if (kind != null) return wearers(list, slot, kind) >= VOICES;
+    return list.some(function (r) { return r.s.enchanted.indexOf(slot) >= 0 && kindAt(r, slot) != null && wearers(list, slot, kindAt(r, slot)) >= VOICES; });
+  }
+  // the officers' word on a slot, on a member's client that hears none of the enchants it comes from
+  function wordEnchant(slot, kind) { return !hearsEnchants() && learnedFrom(voters(), slot, kind); }
+  function enchLearned(slot, kind) { return learnedFrom(heard(), slot, kind) || wordEnchant(slot, kind); }
+  function enchSeen(slot, kind) { return learnedFrom(heard(), slot, kind) ? wearers(heard(), slot, kind) : 0; }
+  function enchIdSeen(slot, name) { return heard().filter(function (r) { return r.s.enchanted.indexOf(slot) >= 0 && pickOf(r, slot) === name; }).length; }
   function slotDoubted(slot) {
     var lvl = rule("enchantDoubtLevel");
     return WATCH_DAYS >= rule("enchantDoubtDays") && ADDON.some(function (r) { return r.s.level >= lvl && kindAt(r, slot) != null; });
@@ -906,30 +1117,41 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     return (st2 === "data" || st2 === "beta") && (kinds == null || kinds.indexOf(kind) >= 0);
   }
   function enchKnown(slot, kind, level) { return enchLearned(slot, kind) || seedEnchantable(slot, kind, level); }
-  // where the word that a slot takes an enchant comes from: "seen on 3 members", else the seed's
+  // where the word that a slot takes an enchant comes from: "seen on 3 members", "from the officers", else the seed's
   function enchSource(slot, kind) {
     var n = enchSeen(slot, kind);
-    return n > 0 ? "seen on " + members(n) : seedState(slot) === "beta" ? "seen in the beta" : "from research";
+    return n > 0 ? "seen on " + members(n) : wordEnchant(slot, kind) ? "from the officers" : seedState(slot) === "beta" ? "seen in the beta" : "from research";
   }
-  // readiness as Stats.lua derives it: an empty slot, a missing enchant (as Missing enchants counts them), durability
-  // under half, no potions; no gap is ready (2), one or two is gaps (1), more is no (0)
+  // readiness as Stats.lua derives it: of an empty slot, a missing enchant (as Missing enchants counts them), durability
+  // under half and no potions, the ones everyone may see (with the defaults the last two); no gap is ready (2), half
+  // the gaps it counts or fewer is gaps (1), more is no (0)
+  var READY_WORD = { empty_slots: "an empty slot", unenchanted: "a missing enchant", durability: "durability under 50%", potions: "no potions" };
+  function readyCounts() { var c = {}; READY_IN.forEach(function (id) { if (vis(id) === "all") c[id] = true; }); return c; }
+  function readyCountsText() {
+    var c = readyCounts(), w = READY_IN.filter(function (id) { return c[id]; }).map(function (id) { return READY_WORD[id]; });
+    return w.length === 0 ? "nothing" : w.length === 1 ? w[0] : w.slice(0, -1).join(", ") + " and " + w[w.length - 1];
+  }
   function readyGaps(s) {
-    var gaps = [], empty = s.empty_slots.length, missing = s.unenchanted.length;
+    var c = readyCounts(), gaps = [], empty = c.empty_slots ? s.empty_slots.length : 0, missing = c.unenchanted ? s.unenchanted.length : 0;
     if (empty > 0) gaps.push(empty === 1 ? "an empty slot" : empty + " empty slots");
     if (missing > 0) gaps.push(missing === 1 ? "a missing enchant" : missing + " missing enchants");
-    if (s.durability < 50) gaps.push("durability under 50%");
-    if (s.potions === 0) gaps.push("no potions");
+    if (c.durability && s.durability < 50) gaps.push("durability under 50%");
+    if (c.potions && s.potions === 0) gaps.push("no potions");
     return gaps;
   }
-  // Missing enchants and readiness, worked out again when the rules are retuned: each member's own client asks by their
-  // level
+  // Missing enchants and readiness, worked out again when the rules are retuned or the officers save to Guild Info: each
+  // member's own client asks by their level, and Ready counts what everyone may see by the line in Guild Info, which
+  // every member's client routes by (an officer's change not saved routes on that officer's client alone)
   function derive() {
+    var keep = polFor;
+    polFor = st.saved.policy;
     ADDON.forEach(function (r) {
       var s = r.s;
       s.unenchanted = SLOTS.filter(function (slot) { var kind = kindAt(r, slot); return kind != null && s.enchanted.indexOf(slot) < 0 && enchKnown(slot, kind, s.level); });
-      var gaps = readyGaps(s).length;
-      s.ready = gaps === 0 ? 2 : gaps <= 2 ? 1 : 0;
+      var gaps = readyGaps(s).length, n = Object.keys(readyCounts()).length;
+      s.ready = gaps === 0 ? 2 : gaps * 2 <= n ? 1 : 0;
     });
+    polFor = keep;
   }
   ADDON.forEach(function (r, k) {
     var s = r.s;
@@ -997,26 +1219,60 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   var STATCATS = LEARNED.concat(GAME), CATBY = {};
   var parentCat = null;
   STATCATS.forEach(function (c) { CATBY[c.id] = c; if (!c.sub) parentCat = c; else c.parent = parentCat; c.path = c.sub ? parentCat.label + " > " + c.label : c.label; });
+  // (a game category's parent keeps its children's totals: it goes their way, Stats.lua S.CatReveals)
+  var CAT_KIDS = {};
+  GAME.forEach(function (c) { if (c.parent) (CAT_KIDS[statKey(c.parent)] = CAT_KIDS[statKey(c.parent)] || []).push(statKey(c)); });
   var N_GAME = GAME.reduce(function (n, c) { return n + c.stats.length; }, 0);
   var CLASS = { WARRIOR: "#c79c6e", PRIEST: "#ffffff", MAGE: "#69ccf0", HUNTER: "#abd473", ROGUE: "#fff569", PALADIN: "#f58cba", WARLOCK: "#9482c9", DRUID: "#ff7d0a", SHAMAN: "#0070de" };
   var ME = { member: "Kaka", officer: "Yezin" };
+  // their guild ranks (0 is the guild master): an officer lowers the officer ranks no further than their own
+  var MY_RANK = { member: 3, officer: 1 };
   var MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   // ---- the viewer's settings, as the addon keeps them in CuteDB; the officers' policy on top of the defaults
-  var st = { viewer: "member", tab: "race", sort: {}, statCat: null, statOpen: null, offline: true, minimap: true, compact: false, role: { Kaka: "Heal", Yezin: "Tank" }, raidspec: { Kaka: false, Yezin: false }, meView: false, cols: {}, policy: {}, threshold: POLICY.threshold, rules: {} };
+  // (section: the one open in Settings; mods: the modules switched on per character, as the window keeps them (none on a
+  // fresh install): mods() is the viewer's; policy and threshold: the officer's own, saved: the line in Guild Info;
+  // canEdit: whether Yezin's rank may edit Guild Info, the box beside Looking as)
+  var polFor = null;
+  var st = { viewer: "member", tab: "race", sort: {}, statCat: null, statOpen: null, offline: true, minimap: true, compact: false, role: { Kaka: "Heal", Yezin: "Tank" }, raidspec: { Kaka: false, Yezin: false }, meView: false, cols: {},
+    policy: {}, threshold: POLICY.threshold, saved: { policy: {}, threshold: POLICY.threshold, at: POLICY.at }, canEdit: true, rules: {}, section: "general", mods: {} };
   ["race", "prog", "officers"].forEach(function (p) { st.cols[p] = {}; (COLS[p] || []).forEach(function (id) { st.cols[p][id] = true; }); });
   st.cols.shame = {};
   (byCat.funny || []).forEach(function (d) { st.cols.shame[d.id] = true; });
   derive();
-  function vis(id) { return st.policy[id] || (byId[id] && byId[id].vis) || "all"; }
+  // the officers' choice for a stat or a category, and where it goes: Only you as well while anything it would tell a
+  // member is (the registry's reveals, Policy.lua P:Route): Enchanted slots goes with Missing enchants and Empty slots,
+  // a discovered category with its counts, a parent category with its children, whose totals it keeps
+  // (a stat nobody sets, Addon version, is Everyone always: Stats.lua fixed)
+  function own(id) { if (byId[id] && byId[id].fx) return "all"; return pol()[id] || (byId[id] && byId[id].vis) || "all"; }
+  // the policy this viewer's client routes by (Policy.lua P:Settled): a member's, the line in Guild Info; the officer's,
+  // their own change until they save it. polFor stands in while derive() works out what every member's client sends
+  function pol() { return polFor || (officer() ? st.policy : st.saved.policy); }
+  // the id that keeps it to the officers (itself, or one it reveals), or null
+  function keptBy(id, seen) {
+    seen = seen || {};
+    if (seen[id]) return null;
+    seen[id] = true;
+    if (own(id) === "self") return id;
+    var rv = (byId[id] && byId[id].rv) || CAT_RV[id] || CAT_KIDS[id] || [];
+    for (var i = 0; i < rv.length; i++) { var k = keptBy(rv[i], seen); if (k) return k; }
+    return null;
+  }
+  function vis(id) { return keptBy(id) ? "self" : "all"; }
+  // a policy id as Settings names it: a stat's label, a discovered category's name (as the window's Policy.lua names
+  // them, Raids among them though the mock lists no raid), a statistics category's; never the key
+  var FOUND_NAMES = { "stats:bosses": "Bosses", "stats:dungeons": "Dungeons", "stats:raids": "Raids", "stats:rep": "Reputation" };
+  function idLabel(id) { return byId[id] ? byId[id].label : FOUND_NAMES[id] || (CATBY[id.replace(/^stats:/, "")] || {}).label || "that category"; }
   // a statistics category is one policy entry for all its statistics; the key cannot collide with a registry id
   function statKey(c) { return "stats:" + c.id; }
-  // a category's setting: its own, else its parent's (a dungeon's bosses always take Bosses'), else Everyone
-  function catVis(c) { return st.policy[statKey(c)] || (c.parent ? catVis(c.parent) : "all"); }
+  // a category's setting: its own, else its parent's (a dungeon's bosses always take Bosses'), else Everyone; and Only
+  // you while what it would tell a member is
+  function catVis(c) { return (pol()[statKey(c)] || (c.parent ? catVis(c.parent) : "all")) === "self" || keptBy(statKey(c)) ? "self" : "all"; }
   // the categories that have registry stats: a category the registry names but fills from the server has no list to show
   var CATS_WITH = CATS.filter(function (c) { return (byCat[c[0]] || []).length > 0; });
   function officer() { return st.viewer === "officer"; }
   function me() { return ME[st.viewer]; }
+  function mods() { var m = me(); if (!st.mods[m]) st.mods[m] = { guide: false }; return st.mods[m]; }
   function canSee(rowIsMe, id) { return officer() || rowIsMe || vis(id) === "all"; }
   // every stat a page can show as a column, in order: its category's, then the others it offers (UI.Candidates)
   var PAGE_CAT = { race: "leveling", prog: "prog", officers: "officer", shame: "funny" };
@@ -1102,7 +1358,15 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     // the tooltips that say more than the cell: the gaps behind the verdict (for those who may see the inputs), the
     // slots a list names, each missing enchant with how many members the guild has seen with one there, or the seed's word
     var tip = null;
-    if (d.id === "ready" && (x.me || officer())) { var gaps = readyGaps(r.s); tip = gaps.length ? gaps.join(", ") : "No gaps."; }
+    // (an officer is told that the gaps the officers keep are in their own columns; the verdict was counted by the line
+    // in Guild Info, which the members' clients go by, not by an officer's change not saved: derive())
+    if (d.id === "ready") {
+      var keepPol = polFor;
+      polFor = st.saved.policy;
+      var gaps = readyGaps(r.s);
+      tip = (gaps.length ? gaps.join(", ") : "No gaps.") + "\nCounts " + readyCountsText() + "." + (officer() && Object.keys(readyCounts()).length < READY_IN.length ? "\nThe gaps the officers keep are in their own columns, not counted here." : "");
+      polFor = keepPol;
+    }
     else if (d.id === "unenchanted" && Array.isArray(v)) tip = v.length ? v.map(function (slot) { var kind = x.me ? kindAt(r, slot) : null; return slot + (kind ? " (" + (KIND_NAME[kind] || kind) + ")" : "") + ": " + enchSource(slot, kind); }).join("\n") : "none";
     else if (d.kind === "list" && Array.isArray(v)) tip = v.length ? v.join(", ") : "none";
     if (tip) title = " title=\"" + esc(tip) + "\"";
@@ -1117,6 +1381,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       if (d.kind === "flag") { if (!v) cls += " cu-mute"; }
       if (d.kind === "text" && v === "") cls += " cu-mute";
       if (d.id === "durability" && v < 50) cls += " cu-bad";
+      if (d.id === "ready" && typeof v === "number") cls += v === 2 ? " cu-good" : v === 1 ? " cu-warn" : " cu-bad";
       if (d.id === "xp" && typeof v === "number") inner += "<span class=\"cu-xp\" style=\"width:calc((100% - 8px) * " + (v / 100) + ")\"></span>";
     }
     return "<td class=\"" + cls.trim() + "\"" + title + ">" + inner + "</td>";
@@ -1129,17 +1394,32 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     h += "</colgroup><thead><tr><th scope=\"col\"><button type=\"button\" tabindex=\"-1\" aria-disabled=\"true\">Member</button></th>";
     cols.forEach(function (d) {
       var sorted = s.id === d.id;
-      var tip = d.label + (d.hint ? ". " + d.hint : "") + (vis(d.id) === "all" ? ". Everyone sees this." : ". Only you and the officers see this.") + " Click to sort.";
+      // (what the members go by: the line in Guild Info; an officer's change not saved is marked as such, UI.lua WhoSees)
+      var keepPol = polFor;
+      polFor = st.saved.policy;
+      var lineVis = vis(d.id), lineReady = readyCountsText();
+      polFor = keepPol;
+      var pending = officer() && unsaved();
+      var tip = d.label + (d.hint ? ". " + d.hint : "") + (d.id === "ready" ? ". Counts now: " + lineReady + (pending && readyCountsText() !== lineReady ? ". Your change, not saved yet, would count " + readyCountsText() : "") : "")
+        + (lineVis === "all" ? ". Everyone sees this." : ". Only you and the officers see this.")
+        + (pending && vis(d.id) !== lineVis ? (lineVis === "all" ? " Your change, not saved yet, would keep it to you and the officers." : " Your change, not saved yet, would show it to everyone.") : "") + " Click to sort.";
       h += "<th scope=\"col\" class=\"" + (isRight(d) ? "cu-r" : "") + "\" aria-sort=\"" + (sorted ? (s.desc ? "descending" : "ascending") : "none") + "\"><button type=\"button\" data-k=\"" + d.id + "\" title=\"" + esc(tip) + "\">" + esc(d.short) + "</button></th>";
     });
     h += "</tr></thead><tbody>";
+    var off = officer(), pick = page === "officers";
     sortRows(rows(), page).forEach(function (x) {
-      var r = x.r;
-      var cls = (x.me ? "cu-you " : "") + (r.on ? "" : "cu-off");
+      var r = x.r, mark = off && !x.me && r.addon ? (r.untrusted ? "untrusted" : r.suspect ? "suspect" : null) : null;
+      var picks = pick && !x.me && r.addon, picked = picks && st.picked === r.n;
+      var cls = (x.me ? "cu-you " : "") + (r.on ? "" : "cu-off ") + (picked ? "cu-picked" : "");
       var cc = CLASS[r.c], bar = r.on ? cc : shade(cc);
-      var name = esc(r.n) + (x.me ? " <span class=\"cu-tag\">(you)</span>" : "") + (!r.addon ? " <span class=\"cu-tag\">(no addon)</span>" : "") + (!r.on ? " <span class=\"cu-tag\">offline</span>" : "");
+      var name = esc(r.n) + (x.me ? " <span class=\"cu-tag\">(you)</span>" : "") + (!r.addon ? " <span class=\"cu-tag\">(no addon)</span>" : "") + (mark ? " <span class=\"cu-tag\">(" + mark + ")</span>" : "") + (!r.on ? " <span class=\"cu-tag\">offline</span>" : "");
+      // what the officers alone see: why a member's addon is doubted, and their word on it
       var tip = r.n + ", " + r.rank + ". " + (!r.addon ? "No Cute addon yet." : x.me ? "You." : r.on ? "Online." : "Last seen " + (r.n === "Ondra" ? "2 days ago." : "5 h ago."));
-      h += "<tr class=\"" + cls.trim() + "\" title=\"" + esc(tip) + "\"><td class=\"cu-name\" style=\"color:" + (r.addon ? bar : "var(--cu-mute)") + ";--cu-cc:" + bar + "\">" + name + "</td>";
+      if (off && !x.me && r.suspect) tip += "\nSuspect: " + r.suspect.why + ", " + r.suspect.ago + ".";
+      if (off && !x.me && r.untrusted) tip += "\nUntrusted: left out of what the guild learns and of the rankings.";
+      if (picks) tip += "\nClick to select, then Mark untrusted above.";
+      if (picks) name = "<button type=\"button\" class=\"cu-pick\" data-pick=\"" + esc(r.n) + "\" aria-pressed=\"" + (picked ? "true" : "false") + "\">" + name + "</button>";
+      h += "<tr class=\"" + cls.trim() + "\" title=\"" + esc(tip) + "\"" + (picks ? " data-pick=\"" + esc(r.n) + "\"" : "") + "><td class=\"cu-name\" style=\"color:" + (r.addon ? bar : "var(--cu-mute)") + ";--cu-cc:" + bar + "\">" + name + "</td>";
       cols.forEach(function (d) { h += cell(d, x); });
       h += "</tr>";
     });
@@ -1153,15 +1433,18 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     (byCat.funny || []).forEach(function (d) {
       if (!st.cols.shame[d.id]) return;
       var top = [];
-      G.forEach(function (r) { var v = r.s[d.id]; if (r.addon && typeof v === "number" && canSee(r.n === m, d.id)) top.push({ n: r.n, v: v }); });
+      G.forEach(function (r) { var v = r.s[d.id]; if (r.addon && (!r.untrusted || r.n === m) && typeof v === "number" && canSee(r.n === m, d.id)) top.push({ n: r.n, v: v }); });
       top.sort(function (a, b) { return a.v === b.v ? (a.n < b.n ? -1 : 1) : b.v - a.v; });
       var mine = G.filter(function (r) { return r.n === m; })[0].s[d.id];
-      var tip = d.label + (d.hint ? ". " + d.hint : "") + (top.length ? ". " + top.slice(0, 3).map(function (t) { return t.n + " " + fmt(d, t.v); }).join(", ") : "");
-      h += "<div class=\"cu-card\" title=\"" + esc(tip) + "\"><div class=\"cu-ct\">" + esc(d.label) + "</div><div class=\"cu-cl\">" + (top.length && top[0].v > 0 ? esc(top[0].n) + "<span>" + esc(fmt(d, top[0].v)) + "</span>" : "<span style=\"margin:0;color:var(--cu-mute)\">nobody yet</span>") + "</div><div class=\"cu-cm\">You: " + esc(fmt(d, mine)) + "</div></div>";
+      // (a stat the officers keep: a member sees their own value alone, so the card names no leader, the member included)
+      var kept = !officer() && vis(d.id) === "self";
+      var tip = d.label + (d.hint ? ". " + d.hint : "") + (kept ? ". Only the officers see who leads: the officers keep it to themselves." : top.length ? ". " + top.slice(0, 3).map(function (t) { return t.n + " " + fmt(d, t.v); }).join(", ") : "");
+      var lead = kept ? "<span style=\"margin:0;color:var(--cu-mute)\">only the officers see who leads</span>" : top.length && top[0].v > 0 ? esc(top[0].n) + "<span>" + esc(fmt(d, top[0].v)) + "</span>" : "<span style=\"margin:0;color:var(--cu-mute)\">nobody yet</span>";
+      h += "<div class=\"cu-card\" title=\"" + esc(tip) + "\"><div class=\"cu-ct\">" + esc(d.label) + "</div><div class=\"cu-cl\">" + lead + "</div><div class=\"cu-cm\">You: " + esc(fmt(d, mine)) + "</div></div>";
       n++;
     });
     h += "</div>";
-    if (n === 0) h += "<p class=\"cu-line\">No funny stats ticked. Settings has the list.</p>";
+    if (n === 0) h += "<p class=\"cu-line\">No cards ticked. Settings, Hall of Shame has the list.</p>";
     return h;
   }
   // the statistics as the client formats them, "6,420"; gold the addon's way; a standing by its reaction, its number in
@@ -1193,7 +1476,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     cat.stats.forEach(function (s, i) {
       var id = cat.id + ":" + i, open = st.statOpen === id, rankId = "cu-rank-" + cat.id + "-" + i;
       // values first, highest on top; then the members who have not met it
-      var all = ADDON.map(function (r, k) { return { r: r, v: s[1][k] }; });
+      var all = ADDON.map(function (r, k) { return { r: r, v: s[1][k] }; }).filter(function (x) { return !x.r.untrusted || x.r.n === m; });
       var ranked = all.filter(function (x) { return x.v != null; }), unmet = all.filter(function (x) { return x.v == null; });
       ranked.sort(function (a, b) { return a.v === b.v ? (a.r.n < b.r.n ? -1 : 1) : b.v - a.v; });
       var mine = s[1][myK];
@@ -1226,19 +1509,21 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   // the guild) or doubted (rule 4); a dungeon's range learned from the kill levels (rule 3) or the seed's; a boss's loot,
   // what the research lists and what the guild has seen drop (rule 8)
   function words(f) {
-    if (f.state === "seen") return f.n > 0 ? "seen by " + members(f.n) : "seen in play";
+    if (f.state === "seen") return f.n > 0 ? "seen by " + members(f.n) : f.officers ? "from the officers" : "seen in play";
     if (f.state === "beta") return "seen in the beta";
     if (f.state === "data") return "from research";
-    if (f.state === "doubted") return f.runs ? "doubted: not seen in " + plural(f.runs, "run", "runs") : "doubted";
+    if (f.state === "doubted") return f.runs ? "doubted: not seen in " + plural(f.runs, "run", "runs") : f.officers ? "doubted, from the officers" : "doubted";
     return "";
   }
-  // a dungeon's range in words, and where it comes from: the members' kill levels, else the seed's, as sure as the seed is
+  // a dungeon's range in words, and where it comes from: the members' kill levels, the officers' word, else the seed's,
+  // as sure as the seed is
   function rangeWords(d) {
     if (d.min == null) return ["?", "not known yet: the guild's kills will tell"];
     var r = d.min === d.max ? String(d.min) : d.min + "-" + d.max;
     if (d.range === "learned") return [r, "learned from " + members(d.levels)];
     if (d.range === "seen") return [r, "killed at these levels by " + members(d.levels)];
-    return [r, d.conf === "beta" ? "the beta's range" : "the research's range"];
+    if (d.range === "officers") return [r, "learned by the guild, from the officers"];
+    return [r, d.state === "beta" ? "the beta's range" : "the research's range"];
   }
   // rule 3's ends: the lowest rangeLow and the highest 1 - rangeHigh of the levels set aside, each rounded half up; where
   // nothing would be left, the middle one
@@ -1247,61 +1532,120 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     if (i > j) { i = Math.floor((n + 1) / 2); j = i; }
     return [sorted[Math.max(1, Math.min(n, i)) - 1], sorted[Math.max(1, Math.min(n, j)) - 1]];
   }
-  function model() {
-    var found = {}, list = [];
+  // the model from the evidence a client holds (Rules.lua R.Members): kill(i) whether member i's kills count (heard, and
+  // named back by a group mate: the claims go the kills' way), entry(i) whether their entries do; a member the officers
+  // marked untrusted is in neither. Your own kills show as yours whatever counts
+  function build(kill, entry) {
+    var found = {}, list = [], mine = ADDON.map(function (r) { return r.n; }).indexOf(me());
     FOUND.forEach(function (f) { found[f[0]] = f; });
+    function sum(c, test) { return c.reduce(function (n, v, i) { return n + (v > 0 && test(i) ? v : 0); }, 0); }
     // a boss: the members' kills in G's order, how many members killed it, its kills all told, and of the loot the
     // research lists the share the guild saw drop (one item for every three kills, never more than listed)
     function boss(name, conf, seeded, order, loot, f) {
       var hit = f && f[2].filter(function (b) { return b[0] === name; })[0];
-      var c = hit ? counts(hit[1]) : ADDON.map(function () { return null; });
-      var killers = c.filter(function (v) { return v > 0; }).length, kills = c.reduce(function (n, v) { return n + (v || 0); }, 0);
+      var c = (hit ? counts(hit[1]) : ADDON.map(function () { return null; })).map(function (v, i) { return i === mine || kill(i) ? v : null; });
+      var killers = c.filter(function (v, i) { return v > 0 && kill(i); }).length, kills = sum(c, kill);
       return { name: name, conf: conf, seeded: seeded, order: order, counts: c, n: killers, kills: kills, loot: loot, lootSeen: Math.min(loot, Math.floor(kills / 3)),
         state: killers > 0 || !seeded ? "seen" : conf };
     }
+    // the bosses the seed lacks that the guild's counted kills bring in (rule 2), after the seed's
+    function joined(f, from) {
+      return f ? f[2].filter(function (b) { return counts(b[1]).some(function (v, i) { return v > 0 && kill(i); }); }).map(function (b, i) { return boss(b[0], null, false, from + i, 0, f); }) : [];
+    }
+    // a dungeon: the members' entries in G's order (runs; your own whatever counts), how many members met it, its bosses
     function dungeon(name, conf, seeded, f, bosses) {
-      var runs = f ? counts(f[1]) : [];
-      var n = ADDON.filter(function (r, k) { return runs[k] != null || bosses.some(function (b) { return b.counts[k] > 0; }); }).length;
-      return { name: name, conf: conf, seeded: seeded, n: n, state: n > 0 || !seeded ? "seen" : conf, bosses: bosses };
+      var runs = f ? counts(f[1]).map(function (v, i) { return i === mine || entry(i) ? v : null; }) : [];
+      var n = ADDON.filter(function (r, k) { return (runs[k] != null && entry(k)) || bosses.some(function (b) { return b.counts[k] > 0 && kill(k); }); }).length;
+      return { name: name, conf: conf, seeded: seeded, n: n, state: n > 0 || !seeded ? "seen" : conf, bosses: bosses, runs: runs };
+    }
+    // placed or joined: two members entered it, or a counted kill was there
+    function met(f) {
+      return !!f && (counts(f[1]).filter(function (v, i) { return v != null && entry(i); }).length >= VOICES || f[2].some(function (b) { return counts(b[1]).some(function (v, i) { return v > 0 && kill(i); }); }));
     }
     SEED.dungeons.forEach(function (sd) {
       var f = found[sd[0]];
       var bosses = sd[5].map(function (b, i) { return boss(b[0], b[2] || sd[4], true, i + 1, b[1], f); });
       // rule 2: a boss killed there that the seed lacks joins after the seed's
-      if (f) f[2].forEach(function (b) { if (!bosses.some(function (x) { return x.name === b[0]; })) bosses.push(boss(b[0], null, false, 1000 + bosses.length, 0, f)); });
+      joined(f, 1000 + bosses.length).forEach(function (b) { if (!bosses.some(function (x) { return x.name === b.name; })) bosses.push(b); });
       var d = dungeon(sd[0], sd[4], true, f, bosses);
-      d.seedMin = sd[1]; d.seedMax = sd[2]; d.isNew = sd[3]; d.raid = sd[6] === "raid";
+      d.seedMin = sd[1]; d.seedMax = sd[2]; d.isNew = sd[3]; d.raid = sd[6] === "raid"; d.wings = SEED.wings.indexOf(sd[0]) >= 0;
+      d.quests = SEED.quests[sd[0]] || [];
       list.push(d);
     });
+    // the seed's awaited dungeons: by name and range until the guild's entries into an instance of that name place it
+    // (found: the seed's from then on, its bosses joining as the guild kills them)
+    SEED.awaited.forEach(function (a) {
+      var f = found[a[0]], placed = met(f);
+      var d = dungeon(a[0], "data", true, placed ? f : null, placed ? joined(f, 1000) : []);
+      d.seedMin = a[1]; d.seedMax = a[2]; d.isNew = true; d.raid = false; d.quests = [];
+      if (placed) d.found = true; else d.awaited = true;
+      list.push(d);
+    });
+    function seeded(name) { return SEED.dungeons.some(function (sd) { return sd[0] === name; }) || SEED.awaited.some(function (a) { return a[0] === name; }); }
     FOUND.forEach(function (f) {
-      if (SEED.dungeons.some(function (sd) { return sd[0] === f[0]; })) return;
-      list.push(dungeon(f[0], null, false, f, f[2].map(function (b, i) { return boss(b[0], null, false, 1000 + i, 0, f); })));
+      if (seeded(f[0]) || !met(f)) return;
+      var d = dungeon(f[0], null, false, f, joined(f, 1000));
+      d.quests = [];
+      list.push(d);
     });
     list.forEach(function (d) {
       // rule 3: the members' levels at a first kill there, once rangeMembers have one; else the seed's range; else the
       // levels seen so far
-      var lv = (KILL_LEVELS[d.name] || []).filter(function (v) { return v != null; }).sort(function (a, b) { return a - b; });
+      var lv = (KILL_LEVELS[d.name] || []).filter(function (v, i) { return v != null && kill(i); }).sort(function (a, b) { return a - b; });
       var lo = Math.min(rule("rangeLow"), rule("rangeHigh")), hi = Math.max(rule("rangeLow"), rule("rangeHigh"));
       d.levels = lv.length;
       if (lv.length >= rule("rangeMembers")) { var ends = percentiles(lv, lo, hi); d.min = ends[0]; d.max = ends[1]; d.range = "learned"; }
       else if (d.seeded) { d.min = d.seedMin; d.max = d.seedMax; d.range = "seed"; }
       else if (lv.length) { d.min = lv[0]; d.max = lv[lv.length - 1]; d.range = "seen"; }
       // rule 4: a seeded boss that doubtRuns full runs never met is doubted, each more boss missing taking as many runs
-      // again; a full run is a member who has killed every boss there the guild has met
-      if (!d.seeded) return;
-      var met = d.bosses.filter(function (b) { return b.state === "seen"; }), open = d.bosses.filter(function (b) { return b.seeded && b.state !== "seen"; });
-      if (!met.length || !open.length) return;
-      var runs = ADDON.filter(function (r, k) { return met.every(function (b) { return b.counts[k] > 0; }); }).length;
+      // again; a full run is a member who has killed every boss there the guild has met, and the guild has met two or
+      // more. Never where wings share the instance: a run is one wing
+      if (!d.seeded || d.wings) return;
+      var seen = d.bosses.filter(function (b) { return b.state === "seen"; }), open = d.bosses.filter(function (b) { return b.seeded && b.state !== "seen"; });
+      if (seen.length < 2 || !open.length) return;
+      var runs = ADDON.filter(function (r, k) { return kill(k) && seen.every(function (b) { return b.counts[k] > 0; }); }).length;
       open.forEach(function (b) { b.runs = runs; if (runs >= rule("doubtRuns") * open.length) b.state = "doubted"; });
     });
     return list;
   }
-  // what the guild's play changed from the research, in the window's order: new dungeons, new bosses, ranges learned,
-  // doubted bosses, then the enchant slots doubted or new
+  // the model as this viewer's client builds it. An officer's client holds every member's evidence. Where the officers
+  // keep Bosses or Dungeons to themselves, a member's client hears none of it (its own entries aside) and takes the
+  // officers' word where its own evidence says less (Rules.lua R.TakeWord): the dungeons and bosses the guild met, seen
+  // or doubted, marked as theirs, a range where it was learned; no member, no count, no loot. Grouped with kept to
+  // them keeps the kill claims too, which name the group, so no kill is corroborated there and the word says the bosses
+  function model() {
+    function trusted(i) { return !ADDON[i].untrusted; }
+    var full = build(trusted, trusted);
+    var kills = officer() || (catVis(CATBY.bosses) === "all" && vis("group") === "all"), entries = officer() || catVis(CATBY.dungeons) === "all", mine = ADDON.map(function (r) { return r.n; }).indexOf(me());
+    if (kills && entries) return full;
+    var own = build(function (i) { return kills && trusted(i); }, function (i) { return (entries || i === mine) && trusted(i); }), at = {};
+    own.forEach(function (d) { at[d.name] = d; });
+    // (the word names the dungeons the guild met, and their bosses only where the officers keep Bosses)
+    full.forEach(function (o) {
+      if (!(o.state === "seen" || o.found)) return;
+      var d = at[o.name];
+      if (!d) { d = { name: o.name, conf: null, seeded: false, n: 0, state: "seen", officers: true, bosses: [], runs: [], quests: [], isNew: o.isNew, raid: o.raid }; own.push(d); }
+      if (d.awaited && o.found) { d.awaited = false; d.found = true; d.officers = true; }
+      if (d.n === 0 && d.state !== "seen") { d.state = "seen"; d.officers = true; }
+      if (o.range === "learned" && d.range !== "learned") { d.min = o.min; d.max = o.max; d.range = "officers"; }
+      if (kills) return;
+      o.bosses.forEach(function (ob) {
+        var said = ob.state === "seen" && (ob.n > 0 || !ob.seeded) ? "seen" : ob.state === "doubted" ? "doubted" : null;
+        if (!said) return;
+        var b = d.bosses.filter(function (x) { return x.name === ob.name; })[0];
+        if (!b) { b = { name: ob.name, conf: ob.conf, seeded: ob.seeded, order: 1000 + d.bosses.length, counts: ADDON.map(function () { return null; }), n: 0, kills: 0, loot: ob.loot, lootSeen: 0 }; d.bosses.push(b); }
+        if (b.n === 0) { b.state = said; b.officers = true; }
+      });
+    });
+    return own;
+  }
+  // what the guild's play changed from the research, in the window's order: new dungeons, the awaited ones two members'
+  // entries placed, new bosses, ranges learned, doubted bosses, then the enchant slots doubted or new
   function changes(list) {
     var out = [];
     function byN(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; }
     list.filter(function (d) { return !d.seeded; }).sort(byN).forEach(function (d) { out.push({ what: "New dungeon: " + d.name, detail: words(d) }); });
+    list.filter(function (d) { return d.found; }).sort(byN).forEach(function (d) { out.push({ what: "Found: " + d.name, detail: words(d) + "; the research had it by name alone" }); });
     var bosses = [];
     list.forEach(function (d) { d.bosses.forEach(function (b) { b.dungeon = d.name; bosses.push(b); }); });
     bosses.filter(function (b) { return !b.seeded; }).sort(byN).forEach(function (b) { out.push({ what: "New boss: " + b.name, detail: "in " + b.dungeon + ", " + words(b) }); });
@@ -1313,25 +1657,47 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     });
     SLOTS.forEach(function (slot) {
       if (slotState(slot) === "doubted") out.push({ what: "Doubted: " + slot + " enchants", detail: "none seen in " + plural(rule("enchantDoubtDays"), "day", "days") + " of members at " + rule("enchantDoubtLevel") + " or more", dim: true });
-      else if (!SEED.enchants[slot] && ENCH[slot]) out.push({ what: "New enchant slot: " + slot, detail: "seen on " + members(ENCH[slot]) });
+      else if (!SEED.enchants[slot] && enchLearned(slot)) out.push({ what: "New enchant slot: " + slot, detail: "seen on " + members(enchSeen(slot)) });
     });
     return out;
   }
 
-  // ---- the Guide page, as Guide.lua draws it: the band, then one list of lines. For you and the officers' view are the
-  // viewer's own: Kaka's at 37, Yezin's at 42 with the guild under it
+  // ---- the Guide (Guide.lua), a module: its tab shows once it is switched on in Settings, Modules. It answers one
+  // question, what should you do next and with whom. The band holds the next best thing (the guild's version for
+  // officers) and where the knowledge comes from; under it one list of rows of one height: a card per dungeon in range
+  // at your level, the gear and pace strips, Next up as a timeline, and the officers' lines. Kaka's at 37 and Yezin's
+  // at 42 are their own
   function some(names, max) { return names.length <= max ? names.join(", ") : names.slice(0, max).join(", ") + " and " + (names.length - max) + " more"; }
   function kindName(kind) { return KIND_NAME[kind] || kind; }
+  var MATES = 4;  // the mates a card shows before "and N more"
+  var SIDE = "a"; // the guild is Alliance (UnitFactionGroup): the Horde's quests are left out
+  // what the client says of each viewer's quests, by QuestBank's id (C_QuestLog.IsQuestFlaggedCompleted and
+  // GetLogIndexForQuestID): done, and in the quest log. The rest are to take, or later where they open above your
+  // level; one the seed has no id for cannot be asked about, so it is named and never counted
+  var QDONE = { Kaka: [2928], Yezin: [1050, 96800, 704, 2928, 2904, 2930, 2929] };
+  var QLOG = { Kaka: [2904, 1050], Yezin: [1053, 3525] };
+  var QWORD = { log: "in your log", open: "to take", done: "done", maybe: "not known whether done" };
+  // how sure we are of a fact, in one word (its tooltip has the rules' whole words)
+  var WORD = { seen: "seen", beta: "beta", data: "research", doubted: "doubted" };
+  function word(f) { return WORD[f.state] || ""; }
+  var SOURCE = "From research and the beta, checked against this client, and what the guild has met since.";
+  // the module's notes, as it registers them: its box in Settings, Modules and its section say them
+  var GUIDE_NOTES = "What to do next and with whom: the dungeons in range with their bosses, quests and guild mates to invite, what opens next, your gear and pace; the guild per dungeon for officers.";
+  var mateAll = {}; // the cards whose mates are all shown: a click on "and N more", until "Show fewer"
+  var invitedAt = {}, INVITED = 60000; // the mates invited, and when: their button says Invited for a minute
+  var guideTips = []; // the reasons of the Guide's rows as last drawn, by the rows' data-tip
   // a dungeon's tooltip: its range and where it comes from, how sure, every boss with how sure and your kills, the loot
-  function dungeonTip(d, k) {
+  function dungeonTip(d, k, extra) {
     var rw = rangeWords(d), t = [d.name, "Levels " + rw[0] + ": " + rw[1], (d.raid ? "A raid" : "A dungeon") + (d.isNew ? " new in Forever, " : ", ") + words(d) + "."];
+    if (d.awaited) t.push("Not placed yet: two members entering it, or a kill there a group mate names back, give it its place, and the guild's kills name its bosses.");
     d.bosses.forEach(function (b) {
       t.push(b.name + ": " + words(b) + "; " + (b.counts[k] > 0 ? "you killed it" : "not by you"));
       var unseen = b.loot - b.lootSeen;
       if (b.loot > 0) t.push("   Loot: " + plural(b.lootSeen, "item", "items") + " seen in play" + (unseen > 0 ? ", " + unseen + " from research"
         + (b.seeded && b.kills >= rule("lootDoubtKills") ? " not seen in " + plural(b.kills, "kill", "kills") : "") : ""));
     });
-    if (!d.bosses.length) t.push("No bosses known here yet: the guild's kills name them.");
+    if (!d.bosses.length && !d.awaited) t.push("No bosses known here yet: the guild's kills name them.");
+    if (extra) t.push(extra);
     return t.join("\n");
   }
   // what Forever has for a worn item (Rules.lua SlotEnchants): the seed's enchants for the slot that take its kind, the
@@ -1352,90 +1718,199 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     return { line: line, list: list, unplaced: unplaced };
   }
   function slotTip(label, head, f) {
-    return [label, head].concat(f.list.map(function (x) { return x.name + ": " + (x.state === "seen" ? "seen on " + members(x.n) : words(x)); }),
+    return [label, head].concat(f.line ? [f.line] : [], f.list.map(function (x) { return x.name + ": " + (x.state === "seen" ? "seen on " + members(x.n) : words(x)); }),
       f.unplaced ? [plural(f.unplaced, "more enchant", "more enchants") + " for this slot, for kinds of item the research does not name."] : []).join("\n");
+  }
+  // a dungeon's quests as they stand for you, the other side's left out, in the window's order: in your log, to take,
+  // not known, later, done
+  function questsFor(d, level, who) {
+    var list = [], n = { open: 0, log: 0, done: 0, later: 0, maybe: 0 }, order = { log: 1, open: 2, maybe: 3, later: 4, done: 5 };
+    d.quests.forEach(function (q) {
+      if (q[4] && q[4] !== SIDE) return;
+      var id = q[1], state = id != null && QDONE[who].indexOf(id) >= 0 ? "done" : id != null && QLOG[who].indexOf(id) >= 0 ? "log"
+        : q[3] != null && level < q[3] ? "later" : id == null ? "maybe" : "open";
+      n[state]++;
+      list.push({ name: q[0], level: q[2], min: q[3], state: state });
+    });
+    list.sort(function (a, b) { return a.state !== b.state ? order[a.state] - order[b.state] : (a.min || 0) !== (b.min || 0) ? (a.min || 0) - (b.min || 0) : a.name < b.name ? -1 : 1; });
+    return { list: list, n: n };
+  }
+  // the guild mates online whose level (the roster's, the server's word) is in the dungeon's range and within
+  // guideWindow levels of yours, nearest first; members without the addon too, since the roster gives their level. For a
+  // member, only where the policy lets them see levels
+  function matesFor(d, level, w, group) {
+    if (d.min == null || !canSee(false, "level")) return [];
+    var m = me();
+    return G.filter(function (x) { return x.on && x.n !== m && typeof x.s.level === "number" && x.s.level >= d.min && x.s.level <= d.max && Math.abs(x.s.level - level) <= w; })
+      .sort(function (a, b) { var da = Math.abs(a.s.level - level), db = Math.abs(b.s.level - level); return da !== db ? da - db : G.indexOf(a) - G.indexOf(b); })
+      .map(function (x) { return { r: x, grouped: group.indexOf(x.n) >= 0 }; });
+  }
+  // what a card leaves for you, in words: "2 guild mates online in range, 3 bosses you have not killed, 2 quests"
+  function reasons(c) {
+    var out = [];
+    if (c.mates.length) out.push(plural(c.mates.length, "guild mate online in range", "guild mates online in range"));
+    if (c.left) out.push(plural(c.left, "boss you have not killed", "bosses you have not killed"));
+    if (c.quests) out.push(plural(c.quests, "quest", "quests"));
+    if (c.unexplored) out.push("you have not been in");
+    return out;
+  }
+  function shortOf(c) {
+    var out = [];
+    if (c.mates.length) out.push(plural(c.mates.length, "mate", "mates"));
+    if (c.left) out.push(plural(c.left, "boss", "bosses"));
+    if (c.quests) out.push(plural(c.quests, "quest", "quests"));
+    if (c.unexplored) out.push("not been in");
+    return out.length ? out.join(", ") : "nothing left for you";
+  }
+  // the next best thing, the rules' pick: of the dungeons in range that leave you something to do (a boss you have not
+  // killed, a quest open to you, or, where no boss is known yet, a dungeon you have not been in), the one with the most
+  // guild mates online in range, then the most left for you, then the one closing soonest; else plainly that nothing fits
+  function pickNext(cards, level, soon) {
+    var fit = cards.filter(function (c) { return c.left + c.quests > 0 || c.unexplored; }).sort(function (a, b) {
+      if (a.mates.length !== b.mates.length) return b.mates.length - a.mates.length;
+      var la = a.left + a.quests + (a.unexplored ? 1 : 0), lb = b.left + b.quests + (b.unexplored ? 1 : 0);
+      if (la !== lb) return lb - la;
+      return a.d.max !== b.d.max ? a.d.max - b.d.max : a.d.name < b.d.name ? -1 : 1;
+    });
+    var opens = soon[0] ? ["Next to open: " + soon[0].name + " at " + soon[0].min + "."] : [], after = soon[0] ? "; " + soon[0].name + " opens at " + soon[0].min + "." : ".";
+    var why = ["The next best thing", "The rules' pick from the dungeons in range at level " + level + ": guild mates online in range first, then what is left for you there (bosses you have not killed, quests open to you, a dungeon you have not been in), then the one closing soonest."]
+      .concat(cards.map(function (c) { return c.d.name + ": " + shortOf(c); }), opens).join("\n");
+    if (!cards.length) return { line: "No dungeon known for level " + level + " yet" + after,
+      tip: ["Nothing to run at level " + level, "No dungeon the research or the guild knows holds your level. The guild's entries and kills fill this in."].concat(opens).join("\n") };
+    if (!fit.length) return { line: "Nothing left for you in range at level " + level + after, tip: why };
+    return { line: "Run " + fit[0].d.name + ": " + reasons(fit[0]).join(", "), tip: why, card: fit[0] };
+  }
+  // the guild's version, for officers: where most members are (the roster's levels: the window of twice guideWindow
+  // levels holding the most members, the lowest such) and the dungeon whose range holds the most of them
+  function guildPick(list) {
+    var levels = G.filter(function (x) { return typeof x.s.level === "number"; }).map(function (x) { return x.s.level; }).sort(function (a, b) { return a - b; });
+    var span = Math.max(1, 2 * rule("guideWindow")), lo = levels[0], best = 0;
+    levels.forEach(function (l) { var n = levels.filter(function (x) { return x >= l && x <= l + span - 1; }).length; if (n > best) { lo = l; best = n; } });
+    var hi = lo + span - 1, band = lo === hi ? String(lo) : lo + "-" + hi;
+    var ds = list.filter(function (d) { return d.min != null; }).map(function (d) {
+      var inRange = levels.filter(function (l) { return l >= d.min && l <= d.max; });
+      return { d: d, n: inRange.length, band: inRange.filter(function (l) { return l >= lo && l <= hi; }).length };
+    }).filter(function (e) { return e.n > 0; }).sort(function (a, b) {
+      return a.band !== b.band ? b.band - a.band : a.n !== b.n ? b.n - a.n : a.d.min !== b.d.min ? a.d.min - b.d.min : a.d.name < b.d.name ? -1 : 1;
+    });
+    var tip = ["Where the guild is", best + " of " + levels.length + " members are " + (lo === hi ? "at level " + lo : "between " + lo + " and " + hi) + " by the guild roster's levels, more than in any other " + plural(span, "level", "levels") + "."]
+      .concat(ds.slice(0, 8).map(function (e) { return e.d.name + ": " + plural(e.n, "member", "members") + " in range"; })).join("\n");
+    if (!ds.length || !ds[0].band) return { line: "Most members are " + band + ": no dungeon known for those levels yet.", tip: tip };
+    return { line: "Most members are " + band + ": " + ds[0].d.name, tip: tip };
   }
   function guide() {
     var off = officer(), m = me(), r = G.filter(function (x) { return x.n === m; })[0], k = ADDON.indexOf(r), s = r.s, level = s.level;
     var list = model(), w = rule("guideWindow"), ahead = rule("guideAhead"), items = [];
-    function add(it) { items.push(it); }
+    function add(it) { items.push(it); return it; }
     function byMin(a, b) { return a.min !== b.min ? a.min - b.min : a.name < b.name ? -1 : 1; }
     function tag(d) { return d.name + (d.raid ? " (raid)" : ""); }
     var now = list.filter(function (d) { return d.min != null && d.min <= level && level <= d.max; }).sort(byMin);
     var soon = list.filter(function (d) { return d.min != null && d.min > level && d.min <= level + ahead; }).sort(byMin);
-    // for you: the members online near your level who run the addon (a group to ask), then each dungeon your level is in
-    // range of, with the bosses you have not killed
-    add({ kind: "head", name: "For you, level " + level, who: "the dungeons in range at your level" });
-    var near = !canSee(false, "level") ? [] : G.filter(function (x) { return x.addon && x.on && x.n !== m && Math.abs(x.s.level - level) <= w; })
-      .sort(function (a, b) { var da = Math.abs(a.s.level - level), db = Math.abs(b.s.level - level); return da !== db ? da - db : a.n < b.n ? -1 : 1; })
-      .map(function (x) { return x.n + " " + x.s.level; });
-    if (near.length) add({ kind: "sub", name: "Online near your level: " + some(near, 4), c: "dim", tip: ["Online within " + plural(w, "level", "levels") + " of yours, with the addon"].concat(near).join("\n") });
-    now.forEach(function (d) {
-      var tip = dungeonTip(d, k);
-      add({ kind: "item", name: tag(d), val: rangeWords(d)[0], who: words(d), tip: tip });
-      var left = [], doubted = [];
-      d.bosses.forEach(function (b) { if (!(b.counts[k] > 0)) (b.state === "doubted" ? doubted : left).push(b.name); });
-      var text = !d.bosses.length ? "No bosses known here yet: the guild's kills name them."
-        : !left.length && !doubted.length ? "Every boss here killed."
-        : !left.length ? "Every boss here killed but the doubted: " + doubted.join(", ")
-        : "Bosses left: " + left.join(", ") + (doubted.length ? "; doubted: " + doubted.join(", ") : "");
-      add({ kind: "sub", indent: true, name: text, c: "dim", tip: tip });
+    var group = s.group ? s.group.split(", ") : [];
+    // in range: a card each, with what it leaves for you and who to run it with
+    var cards = now.map(function (d) {
+      var c = { d: d, pips: [], left: 0, doubted: 0 };
+      d.bosses.forEach(function (b) {
+        var state = b.counts[k] > 0 ? "killed" : b.state === "doubted" ? "doubted" : "left";
+        if (state === "left") c.left++; else if (state === "doubted") c.doubted++;
+        c.pips.push({ name: b.name, state: state });
+      });
+      var q = questsFor(d, level, m);
+      c.qlist = q.list; c.qn = q.n; c.quests = q.n.open + q.n.log;
+      c.mates = matesFor(d, level, w, group);
+      c.unexplored = !c.pips.length && !(d.runs[k] > 0);
+      return c;
     });
-    if (!now.length) add({ kind: "note", name: "No dungeon known for level " + level + " yet. The guild's kills fill this in." });
+    var next = pickNext(cards, level, soon);
+    add({ kind: "head", name: "In range at level " + level, who: now.length ? plural(now.length, "dungeon", "dungeons") : "" });
+    cards.forEach(function (c) {
+      var d = c.d, isPick = next.card === c;
+      add({ kind: "card", name: tag(d), val: rangeWords(d)[0], who: word(d), d: d, pick: isPick, tip: dungeonTip(d, k, isPick ? "Your next best thing: " + next.line : null) });
+      // the bosses: a pip each, how many are left
+      add({ kind: "bosses", label: "Bosses", pips: c.pips, tip: dungeonTip(d, k),
+        who: !c.pips.length ? null : c.left ? c.left + " left" + (c.doubted ? ", " + c.doubted + " doubted" : "") : c.doubted ? "every one killed but the doubted" : "every one killed",
+        name: c.pips.length ? null : d.awaited ? "None known: the guild has not placed it yet." : "None known yet: the guild's kills name them." });
+      // the quests the research knows for it, as they stand for you
+      if (c.qlist.length) {
+        var n = c.qn, open = c.qlist.filter(function (x) { return x.state === "log" || x.state === "open" || x.state === "maybe"; }).map(function (x) { return x.name; }), parts = [];
+        if (n.done) parts.push(n.done + " done");
+        if (n.later) parts.push(n.later + " later");
+        add({ kind: "quests", label: "Quests", name: open.length ? some(open, 3) : "None open to you: " + parts.join(", ") + ".", c: open.length ? "ink" : "mute",
+          who: c.quests ? (n.log ? n.log + " in your log" + (n.open ? ", " + n.open + " to take" : "") : n.open + " to take") : n.maybe ? "not known if done" : null,
+          tip: ["Quests for " + d.name, "From research (the dungeon's quests players recorded); done and in your log as the client says."]
+            .concat(c.qlist.map(function (x) { return x.name + (x.level ? " (" + x.level + ")" : "") + ": " + (x.state === "later" ? "from level " + x.min : QWORD[x.state]); })).join("\n") });
+      }
+      // who to run it with: the guild mates online in range, an Invite button each; past a few, a click shows the rest
+      var key = d.name.replace(/[^A-Za-z0-9]+/g, "-"), shown = c.mates.length > MATES + 1 && !mateAll[key] ? MATES : c.mates.length;
+      c.mates.slice(0, shown).forEach(function (mt, i) {
+        add({ kind: "mate", label: i === 0 ? "Online" : "", name: mt.r.n, val: String(mt.r.s.level), mate: mt, key: key,
+          tip: mt.r.n + "\nLevel " + mt.r.s.level + ", online, in " + d.name + "'s range" + (mt.r.addon ? "." : "; no addon.") });
+      });
+      if (!c.mates.length) add({ kind: "mate", label: "Online", name: "Nobody in range online now." });
+      else if (shown < c.mates.length) add({ kind: "more", key: key, name: "and " + (c.mates.length - shown) + " more online in range",
+        tip: ["Online in range"].concat(c.mates.slice(shown).map(function (mt) { return mt.r.n + " " + mt.r.s.level; }), ["Click to show them all."]).join("\n") });
+      else if (mateAll[key] && c.mates.length > MATES + 1) add({ kind: "more", key: key, open: true, name: "Show fewer" });
+    });
+    if (!now.length) add({ kind: "note", name: "No dungeon known for level " + level + " yet. The guild's entries and kills fill this in." });
+    // gear: your Missing enchants, a row a slot, what Forever has for the slot and the kind worn there in its tooltip;
+    // under the enchant level, the slots the research has enchants for, as advice (they count as missing from that
+    // level, rule 5)
     add({ kind: "gap" });
-    add({ kind: "head", name: "Next up", who: "opening within " + plural(ahead, "level", "levels") });
-    soon.forEach(function (d) { add({ kind: "item", name: tag(d), val: rangeWords(d)[0], who: words(d), tip: dungeonTip(d, k) }); });
-    if (!soon.length) add({ kind: "note", name: "Nothing known to open in the next " + plural(ahead, "level", "levels") + "." });
-    // gear: your Missing enchants, each with what Forever has for the slot and the kind of item worn there; under the
-    // enchant level, the slots the research has enchants for, as advice (they count as missing from that level, rule 5)
-    add({ kind: "gap" });
-    add({ kind: "head", name: "Gear", who: "the enchants you lack" });
-    var from = rule("enchantDoubtLevel"), advice = [];
+    var from = rule("enchantDoubtLevel"), advice = [], label = "Gear";
+    function strip(it) { it.kind = "strip"; it.label = label; label = ""; return add(it); }
     SLOTS.forEach(function (slot) {
-      var kind = kindAt(r, slot), label = slot + (kind ? " (" + kindName(kind) + ")" : "");
-      if (s.unenchanted.indexOf(slot) >= 0) {
-        var f = forever(slot, kind), tip = slotTip(label, "Not enchanted. The guild's word: " + enchSource(slot, kind) + ".", f);
-        add({ kind: "item", name: label, val: "missing", who: enchSource(slot, kind), c: "warn", tip: tip });
-        if (f.line) add({ kind: "sub", indent: true, name: f.line, c: "dim", tip: tip });
-      } else if (level < from && kind && s.enchanted.indexOf(slot) < 0 && seedEnchantable(slot, kind, null)) advice.push({ slot: slot, label: label, kind: kind });
+      var kind = kindAt(r, slot), name = slot + (kind ? " (" + kindName(kind) + ")" : "");
+      if (s.unenchanted.indexOf(slot) >= 0) strip({ name: name, val: "missing", who: enchSource(slot, kind), c: "warn", tip: slotTip(name, "Not enchanted. The guild's word: " + enchSource(slot, kind) + ".", forever(slot, kind)) });
+      else if (level < from && kind && s.enchanted.indexOf(slot) < 0 && seedEnchantable(slot, kind, null)) advice.push({ slot: slot, label: name, kind: kind });
     });
-    if (!s.unenchanted.length) add({ kind: "note", name: advice.length ? "Nothing missing: under level " + from + " only what the guild has enchanted counts." : "Every worn item that takes an enchant has one." });
+    if (!s.unenchanted.length) {
+      // (where no slot is known to take an enchant at all, that is what the row says: "every worn item has one" would
+      // claim what nobody knows)
+      var known = SLOTS.some(function (slot) { return enchLearned(slot) || seedEnchantable(slot, null, null); });
+      var note = !known ? "No enchant slots known yet: they are learned as the guild enchants." : advice.length ? "Nothing missing: under level " + from + " only what the guild has enchanted counts." : "Every worn item that takes an enchant has one.";
+      strip({ name: note, c: "mute", tip: note });
+    }
     if (advice.length) {
-      var beta = advice.some(function (a) { return slotState(a.slot) === "beta"; }), data = advice.some(function (a) { return slotState(a.slot) !== "beta"; });
-      add({ kind: "item", name: "Could take one: " + some(advice.map(function (a) { return a.slot; }), 3), val: "level " + from + "+",
-        who: beta && data ? "from research and the beta" : beta ? "seen in the beta" : "from research", c: "dim",
+      var beta = advice.some(function (a) { return seedState(a.slot) === "beta"; }), data = advice.some(function (a) { return seedState(a.slot) !== "beta"; });
+      strip({ name: "Could take one: " + some(advice.map(function (a) { return a.slot; }), 3), val: "level " + from + "+", who: beta && data ? "from research and the beta" : beta ? "seen in the beta" : "from research", c: "dim",
         tip: ["Forever has enchants for these", "They count as missing from level " + from + ", the rules' enchant level; until then only what the guild has enchanted does."]
           .concat(advice.map(function (a) { var line = forever(a.slot, a.kind).line; return a.label + ": " + (line ? line.replace(/^Forever has:? /, "") : ""); })).join("\n") });
     }
     // pace: to the next level and to the cap, at your pace and at the median of the paces you may see
-    add({ kind: "gap" });
-    add({ kind: "head", name: "Pace", who: "at your pace and the guild's median" });
+    label = "Pace";
     var paces = ADDON.filter(function (x) { return x.s.xp_hour > 0 && canSee(x.n === m, "xp_hour"); }).map(function (x) { return x.s.xp_hour; }).sort(function (a, b) { return a - b; });
     var med = paces.length ? (paces.length % 2 ? paces[(paces.length - 1) / 2] : (paces[paces.length / 2 - 1] + paces[paces.length / 2]) / 2) : null;
-    if (level >= SEED.cap) add({ kind: "note", name: "At the cap, level " + SEED.cap + "." });
+    if (level >= SEED.cap) strip({ name: "At the cap, level " + SEED.cap + ".", c: "ink" });
     else {
       [["Level " + (level + 1), xpLeft(level, s.xp, level + 1)], ["The cap, level " + SEED.cap, xpLeft(level, s.xp, SEED.cap)]].forEach(function (p) {
-        var mine = s.xp_hour > 0 ? hours(p[1] / s.xp_hour * 3600) : "no pace yet";
-        add({ kind: "item", name: p[0], val: mine, who: med ? hours(p[1] / med * 3600) + " at the median of " + members(paces.length) : "no median yet", c: "ink",
+        strip({ name: p[0], val: s.xp_hour > 0 ? hours(p[1] / s.xp_hour * 3600) : "no pace yet", who: med ? hours(p[1] / med * 3600) + " at the median of " + members(paces.length) : "no median yet", c: "ink",
           tip: p[0] + "\n" + Math.floor(p[1]) + " XP to go.\n" + (s.xp_hour > 0 ? "Your pace: " + s.xp_hour + " XP an hour, over the last hour of play." : "Your pace shows after a few minutes of play.")
             + (med ? "\nThe guild's median: " + Math.floor(med) + " XP an hour, over " + members(paces.length) + "." : "") });
       });
     }
-    // the officers' view: the dungeons the guild is in range of or has met, one line each (every boss in its tooltip), the
-    // rest counted; and what the guild's play changed from the research
+    // next up: a short timeline of the dungeons opening in the next levels, the seed's awaited ones among them
+    add({ kind: "gap" });
+    add({ kind: "head", name: "Next up", who: "opening in the next " + plural(ahead, "level", "levels") });
+    soon.forEach(function (d, i) {
+      add({ kind: "time", at: d.min, first: i === 0, last: i === soon.length - 1, name: tag(d), val: rangeWords(d)[0], who: word(d), d: d,
+        tip: dungeonTip(d, k, "Opens at level " + d.min + ", " + plural(d.min - level, "level", "levels") + " from yours.") });
+    });
+    if (!soon.length) add({ kind: "note", name: "Nothing known to open in the next " + plural(ahead, "level", "levels") + "." });
+    // the officers' view: the dungeons the guild is in range of or has met, one line each with its bar (every boss in its
+    // tooltip), the rest counted; and what the guild's play changed from the research
     if (off) {
       add({ kind: "gap" });
       add({ kind: "head", name: "The guild, per dungeon", who: "members in range, bosses the guild has killed" });
-      var rest = 0;
-      list.map(function (d) {
+      var rest = 0, shownD = list.map(function (d) {
         var inRange = d.min == null ? 0 : ADDON.filter(function (x) { return x.s.level >= d.min && x.s.level <= d.max; }).length;
         return { d: d, inRange: inRange, killed: d.bosses.filter(function (b) { return b.n > 0; }).length };
       }).filter(function (e) { if (e.inRange > 0 || e.killed > 0 || e.d.n > 0) return true; rest++; return false; })
-        .sort(function (a, b) { return (a.d.min == null) !== (b.d.min == null) ? (a.d.min == null ? 1 : -1) : a.d.min != null && a.d.min !== b.d.min ? a.d.min - b.d.min : a.d.name < b.d.name ? -1 : 1; })
-        .forEach(function (e) {
-          var d = e.d, bosses = d.bosses.length ? e.killed + " of " + plural(d.bosses.length, "boss", "bosses") + " killed" : "no bosses known yet";
-          add({ kind: "item", name: tag(d), val: rangeWords(d)[0], who: (d.min != null ? e.inRange + " in range, " : "") + bosses, tip: dungeonTip(d, k) });
-        });
+        .sort(function (a, b) { return (a.d.min == null) !== (b.d.min == null) ? (a.d.min == null ? 1 : -1) : a.d.min != null && a.d.min !== b.d.min ? a.d.min - b.d.min : a.d.name < b.d.name ? -1 : 1; });
+      shownD.forEach(function (e) {
+        var d = e.d, bosses = d.bosses.length ? e.killed + " of " + plural(d.bosses.length, "boss", "bosses") + " killed" : "no bosses known yet";
+        add({ kind: "item", name: tag(d), val: rangeWords(d)[0], d: d, who: (d.min != null ? e.inRange + " in range, " : "") + bosses, tip: dungeonTip(d, k) });
+      });
+      if (!shownD.length) add({ kind: "note", name: "No dungeon the guild is in range of or has met yet." });
       if (rest > 0) add({ kind: "note", name: plural(rest, "more dungeon", "more dungeons") + " from the research nobody is in range of or has met yet." });
       add({ kind: "gap" });
       var ch = changes(list);
@@ -1443,20 +1918,81 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       ch.forEach(function (c) { add({ kind: "item", name: c.what, who: c.detail, c: c.dim ? "mute" : "ink", tip: c.what + "\n" + c.detail }); });
       if (!ch.length) add({ kind: "note", name: "Nothing yet: the guild's play has matched the research." });
     }
-    // the band: where the knowledge comes from (the client is the seed's build, and nothing the seed names is missing from it)
-    var h = "<div class=\"cu-gband\"><div>From research and the beta, checked against this client, and what the guild has met since.</div><div>Research build " + esc(SEED.build.join(".")) + ", " + esc(SEED.generated) + ".</div></div>";
-    var COLOR = { white: "cu-gwhite", ink: "cu-gink", dim: "cu-gdim", mute: "cu-gmute", warn: "cu-gwarn" };
+    // the bars share one scale across the page: every dungeon drawn, and your level
+    var lo = level, hi = level;
+    items.forEach(function (it) { if (it.d && it.d.min != null) { lo = Math.min(lo, it.d.min); hi = Math.max(hi, it.d.max); } });
+    lo -= 1; hi += 2;
+    function at(l) { return Math.round((l - lo) / Math.max(1, hi - lo) * 1000) / 10; }
+    // a dungeon's level bar: its range on the track, green where your level is in it, grey above you, dim below; your
+    // level a white tick
+    function bar(d) {
+      var h = "<span class=\"cu-gbar\" aria-hidden=\"true\">";
+      if (d.min != null) h += "<i class=\"cu-gseg " + (level >= d.min && level <= d.max ? "cu-gin" : d.min > level ? "cu-gup" : "cu-gdown") + "\" style=\"left:" + at(d.min) + "%;width:" + Math.round((at(d.max + 1) - at(d.min)) * 10) / 10 + "%\"></i>";
+      return h + "<i class=\"cu-gmark\" style=\"left:" + at(level + 0.5) + "%\"></i></span>";
+    }
+    var COL = { white: "cu-gwhite", ink: "cu-gink", dim: "cu-gdim", mute: "cu-gmute", warn: "cu-gwarn" }, PIP = { killed: "killed", left: "not killed", doubted: "doubted" };
+    function sp(cls, text) { return "<span class=\"" + cls + "\">" + esc(text) + "</span>"; }
+    // the band: the next best thing (the guild's version for officers), then where the knowledge comes from (the client
+    // is the seed's build, and nothing the seed names is missing from it). A row's reasons (the band's why, a card's
+    // bosses and loot, a gear row's enchants) are its tooltip in the window; here a hover, a focus or a tap shows them
+    // (showTip, below), and they are the row's description for a screen reader. The rows under a card that repeat it
+    // (its pips) or say no more than they show (a mate) take a tap but no tab stop
+    var tips = [];
+    function tipAttr(tip, tab) {
+      var i = tips.push(tip) - 1;
+      return " data-tip=\"" + i + "\" tabindex=\"" + (tab ? "0" : "-1") + "\" aria-describedby=\"cu-gtip-" + i + "\"";
+    }
+    var top = off ? guildPick(list) : next;
+    var h = "<div class=\"cu-gband\"><div" + tipAttr(top.tip, true) + ">" + esc(top.line) + "</div><div" + tipAttr(SOURCE + "\nResearch build " + SEED.build.join(".") + ", " + SEED.generated + ".", true) + ">" + esc(SOURCE) + "</div></div>";
     items.forEach(function (it) {
-      if (it.kind === "gap") { h += "<div class=\"cu-gl\" aria-hidden=\"true\"></div>"; return; }
-      var row = "cu-gl" + (it.kind === "head" ? " cu-gh" : it.kind === "item" ? " cu-gi" : "");
-      var c = COLOR[it.c || (it.kind === "head" ? "white" : it.kind === "note" ? "mute" : "ink")];
-      h += "<div class=\"" + row + "\"" + (it.kind === "head" ? " role=\"heading\" aria-level=\"3\"" : "") + (it.tip ? " title=\"" + esc(it.tip) + "\"" : "") + ">";
-      h += "<span class=\"" + c + "\"" + (it.indent ? " style=\"padding-left:16px\"" : "") + ">" + esc(it.name) + "</span>";
-      if (it.val != null) h += "<span class=\"cu-gv cu-gink\">" + esc(it.val) + "</span>";
-      if (it.who) h += "<span class=\"cu-gw " + COLOR[it.wc || "dim"] + (it.val == null ? " cu-gw2" : "") + "\">" + esc(it.who) + "</span>";
-      h += "</div>";
+      var kind = it.kind, cls = "cu-gr", attr = it.tip && kind !== "more" ? tipAttr(it.tip, kind !== "bosses" && kind !== "mate") : "", inner = "";
+      if (kind === "gap") { h += "<div class=\"cu-gr\" aria-hidden=\"true\"></div>"; return; }
+      if (kind === "more") {
+        h += "<button type=\"button\" class=\"cu-gr cu-gu cu-gmore\" data-more=\"" + it.key + "\" aria-expanded=\"" + (it.open ? "true" : "false") + "\"" + (it.tip ? " title=\"" + esc(it.tip) + "\"" : "") + ">" + sp("cu-glab", "") + sp("cu-gn", it.name) + "</button>";
+        return;
+      }
+      if (kind === "head") { cls += " cu-gh"; attr += " role=\"heading\" aria-level=\"3\""; inner = sp("cu-gn", it.name) + (it.who ? sp("cu-gwho", it.who) : ""); }
+      else if (kind === "card" || kind === "time") {
+        // a card: the name, the range, the bar and how sure; Next up the same after the level it opens at on a rail
+        cls += " cu-gc" + (it.pick ? " cu-gpick" : "");
+        if (kind === "card") attr += " role=\"heading\" aria-level=\"4\"";
+        if (kind === "time") inner = sp("cu-gat", it.at) + "<span class=\"cu-grail" + (it.first && it.last ? " cu-gonly" : it.first ? " cu-gfirst" : it.last ? " cu-glast" : "") + "\" aria-hidden=\"true\"><i" + (it.d.state === "seen" ? " class=\"cu-gseen\"" : "") + "></i></span>";
+        inner += sp("cu-gn " + (kind === "card" ? "cu-gwhite" : "cu-gink"), it.name) + sp("cu-gnum", it.val) + bar(it.d) + sp("cu-gword", it.who);
+      } else if (kind === "bosses" || kind === "quests" || kind === "mate") {
+        // under a card, after its label: the pips, the quests open to you, or a mate with their level and an Invite
+        // button: the window sends the game's own invite, and the button says Invited, greyed, for a minute; here it
+        // only says so
+        cls += " cu-gu";
+        inner = sp("cu-glab", it.label || "");
+        if (kind === "bosses" && it.pips.length) {
+          inner += "<span class=\"cu-gpips\" role=\"img\" aria-label=\"" + esc(it.pips.map(function (p) { return p.name + ", " + PIP[p.state]; }).join("; ")) + "\">"
+            + it.pips.map(function (p) { return p.state === "left" ? "<i></i>" : "<i class=\"" + (p.state === "killed" ? "cu-gkill" : "cu-gdoubt") + "\"></i>"; }).join("") + "</span>";
+        } else if (kind === "mate" && it.mate) {
+          var mt = it.mate, sent = invitedAt[mt.r.n] != null && Date.now() - invitedAt[mt.r.n] < INVITED;
+          inner += "<span class=\"cu-gmate\" style=\"color:" + CLASS[mt.r.c] + "\">" + esc(it.name) + "</span>" + sp("cu-glvl", it.val);
+          // (the card's key with the name, so a redraw gives the focus back to this card's button)
+          inner += mt.grouped ? sp("cu-ggrp", "in your group") : "<button type=\"button\" class=\"cu-btn cu-ginv\" data-inv=\"" + esc(mt.r.n + "|" + it.key) + "\"" + (sent
+            ? " aria-disabled=\"true\" title=\"Invited.\" aria-label=\"" + esc("Invited " + mt.r.n) + "\">Invited"
+            : " title=\"" + esc("Invite " + mt.r.n + " to your group.") + "\" aria-label=\"" + esc("Invite " + mt.r.n) + "\">Invite") + "</button>";
+        } else inner += sp("cu-gn " + COL[it.c || "mute"], it.name);
+        if (it.who) inner += sp("cu-gcount", it.who);
+      } else if (kind === "strip" || kind === "item") {
+        // a strip after its label (Gear, Pace), an officer's line with its bar where it is a dungeon's
+        cls += " cu-gs";
+        inner = (kind === "strip" ? sp("cu-glab", it.label) : "") + sp("cu-gn " + COL[it.c || "ink"], it.name);
+        if (it.d) inner += sp("cu-gnum", it.val) + bar(it.d);
+        else if (it.val != null) inner += sp("cu-gval", it.val);
+        if (it.who) inner += sp("cu-gwho" + (!it.d && it.val == null ? " cu-gwide" : ""), it.who);
+      } else {
+        // a note: its whole text in the tooltip, which a narrow window cuts
+        inner = sp("cu-gn cu-gmute", it.name);
+        if (!it.tip) attr = " title=\"" + esc(it.name) + "\"";
+      }
+      h += "<div class=\"" + cls + "\"" + attr + ">" + inner + "</div>";
     });
-    return h;
+    // the reasons' text, for the rows' descriptions (hidden: the box shows it)
+    guideTips = tips;
+    return h + "<div hidden>" + tips.map(function (t, i) { return "<span id=\"cu-gtip-" + i + "\">" + esc(t) + "</span>"; }).join("") + "</div>";
   }
   function officers() {
     var total = G.length, withAddon = 0, online = 0, levels = [], noAddon = [];
@@ -1464,17 +2000,75 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     levels.sort(function (a, b) { return a - b; });
     var median = levels[Math.max(0, Math.ceil(levels.length / 2) - 1)], below = levels.filter(function (l) { return l < median; }).length;
     var h = "<div class=\"cu-olines\"><div>" + total + " members, " + withAddon + " with the addon, " + online + " online. Median level " + median + ", " + below + " below it, 0 not seen for a week.</div>";
-    if (noAddon.length) h += "<div class=\"cu-dimline\">Without the addon: " + esc(noAddon.sort().join(", ")) + "</div>";
-    var slots = SLOTS.filter(function (slot) { return ENCH[slot]; }).map(function (slot) { return slot + " " + ENCH[slot]; });
+    // (the first dozen by name and how many more, as the window cuts a guild of hundreds)
+    noAddon.sort();
+    if (noAddon.length) h += "<div class=\"cu-dimline\">" + esc("Without the addon (" + noAddon.length + "): " + noAddon.slice(0, 12).join(", ") + (noAddon.length > 12 ? " and " + (noAddon.length - 12) + " more" : "")) + "</div>";
+    // the slots the guild has learned an enchant in, on how many members (two at least on one kind of item)
+    var slots = SLOTS.filter(function (slot) { return enchLearned(slot); }).map(function (slot) { return slot + " " + enchSeen(slot); });
     h += "<div class=\"cu-dimline\">" + esc("Learned in play: " + foundLine(null) + ". Enchants seen on " + (slots.length ? slots.join(", ") : "no slot yet") + ".") + "</div>";
-    h += "<div class=\"cu-dimline\">" + esc(describe()) + "</div></div>";
-    h += "<div class=\"cu-btns\"><button type=\"button\" class=\"cu-btn\" data-act=\"settings\">Visibility settings</button><button type=\"button\" class=\"cu-btn\" data-act=\"ask\">Ask everyone to resend</button><button type=\"button\" class=\"cu-btn\" data-act=\"policy\">Broadcast policy now</button></div>";
+    h += "<div class=\"cu-dimline\">" + esc(describe()) + "</div>";
+    // trust: the member picked (a click on their row) and what is known of them, else who is suspect or untrusted
+    var picked = G.filter(function (r) { return r.n === st.picked && r.n !== me() && r.addon; })[0];
+    if (!picked) st.picked = null;
+    if (picked) {
+      var state = picked.untrusted ? "untrusted, left out of what the guild learns and of the rankings" : picked.suspect ? "suspect: " + picked.suspect.why : "trusted";
+      h += "<div class=\"" + (picked.untrusted ? "cu-warn" : picked.suspect ? "cu-bad" : "") + "\">" + esc(picked.n + ": " + state + ".") + "</div>";
+    } else {
+      var suspect = [], distrusted = [];
+      G.forEach(function (r) { if (r.n === me() || !r.addon) return; if (r.untrusted) distrusted.push(r.n); else if (r.suspect) suspect.push(r.n); });
+      var few = function (list) { list.sort(); return list.slice(0, 5).join(", ") + (list.length > 5 ? " and " + (list.length - 5) + " more" : ""); };
+      if (suspect.length || distrusted.length) h += "<div class=\"cu-dimline\">" + esc((suspect.length ? "Suspect: " + few(suspect) + ". " : "") + (distrusted.length ? "Untrusted: " + few(distrusted) + ". " : "") + "Click a row for why.") + "</div>";
+    }
+    h += "</div>";
+    var trustTip = (picked && picked.untrusted ? "Trust again" : "Mark untrusted") + ". An untrusted member is left out of what the guild learns and of the rankings; their row says so to the officers. It travels with the policy." + (picked ? "" : " Click a member's row first.");
+    h += "<div class=\"cu-btns\"><button type=\"button\" class=\"cu-btn\" data-act=\"settings\">Visibility settings</button><button type=\"button\" class=\"cu-btn\" data-act=\"ask\">Ask everyone to resend</button><button type=\"button\" class=\"cu-btn\" data-act=\"policy\">Broadcast policy now</button>"
+      + "<button type=\"button\" class=\"cu-btn\" data-act=\"trust\" title=\"" + esc(trustTip) + "\"" + (picked ? "" : " disabled") + ">" + (picked && picked.untrusted ? "Trust again" : "Mark untrusted") + "</button></div>";
     return h + table("officers");
   }
-  function describe() { return "Set by " + POLICY.by + ", " + POLICY.at + "."; }
+  // ---- the line in Guild Info (Policy.lua): "Cute 1 <stamp> <ranks> <fingerprint> <what differs>", a token for each
+  // stat or category that differs from the defaults, "+" Everyone or "-" Only you before its code (two letters for a stat
+  // or a discovered category, a statistics category its number, three digits here). Guild Info takes 499 letters; where
+  // the guild's own text leaves no room for the whole line, nothing is saved (no line carries its fingerprint alone)
+  var INFO_MAX = 499, LINE_BARE = 32, GUILD_TEXT = 212; // (the made-up guild's own text, in letters)
+  // what differs from the defaults, by key here (the line by code): a stat from its registry default, a discovered
+  // category from Everyone, a child category from its parent's
+  function diffOf(p) {
+    return Object.keys(p).filter(function (key) {
+      var c = CATBY[key.replace(/^stats:/, "")];
+      return p[key] !== (byId[key] ? byId[key].vis || "all" : c && c.parent ? p[statKey(c.parent)] || "all" : "all");
+    }).sort();
+  }
+  function lineOf(p, thr) { return thr + ":" + diffOf(p).map(function (k) { return (p[k] === "all" ? "+" : "-") + k; }).join(";"); }
+  // the officer's own change, not in Guild Info yet; a change back to what the line says is none (Policy.lua P:Unsaved)
+  function unsaved() { return lineOf(st.policy, st.threshold) !== lineOf(st.saved.policy, st.saved.threshold); }
+  // what saving would write, as Settings shows it (Policy.lua P:SaveState): the line's letters and Guild Info's, and why
+  // where it cannot be saved
+  function saveState() {
+    var what = diffOf(st.policy).reduce(function (n, k) { return n + (/^stats:/.test(k) && !FOUND_NAMES[k] ? 4 : 3); }, 0);
+    var line = LINE_BARE + (what ? 1 + what : 0), over = GUILD_TEXT + 1 + line - INFO_MAX;
+    return { line: line, text: GUILD_TEXT + 1 + line, ok: st.canEdit && over <= 0,
+      why: over > 0 ? "Guild Info is full: its text needs " + over + " bytes fewer for Cute's line (a letter such as \u00e6 takes two)." : st.canEdit ? null : "Saving needs a rank allowed to edit Guild Info." };
+  }
+  // what the policy is, one line (Policy.lua P:Describe), and the one under it in Settings (Settings.lua saveNote, s
+  // while the officer has a change to save)
+  function describe() { return officer() && unsaved() ? "Your change, not saved: only your client routes by it." : "Saved to Guild Info " + st.saved.at + "."; }
+  function saveNote(s) {
+    if (!officer()) return "Only officers can change it. Guild Info keeps it.";
+    if (!s) return "Kept in Guild Info: only ranks allowed to edit it can change it (keep Modify Guild Info to the officer ranks).";
+    return s.ok ? "Unsaved. Cute's line: " + s.line + " letters, Guild Info " + s.text + " of " + INFO_MAX + " bytes." : s.why;
+  }
+  function saveTip(s) {
+    return "Save to Guild Info\nWrites the policy as one line at the end of the guild's Guild Info, the guild's own text kept. Every client routes by it, and only ranks allowed to edit Guild Info can change it."
+      + (s && s.why ? "\n" + s.why : "");
+  }
+  // a time as the window says it (date "%Y-%m-%d %H:%M")
+  function when(d) { var two = function (n) { return (n < 10 ? "0" : "") + n; }; return d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()) + " " + two(d.getHours()) + ":" + two(d.getMinutes()); }
   function mePage() {
     var r = G.filter(function (x) { return x.n === me(); })[0];
-    var h = "<label class=\"cu-ckl\" style=\"margin-top:-2px\"><input type=\"checkbox\" class=\"cu-ck\" data-set=\"meView\"" + (st.meView ? " checked" : "") + "> Show what members see of me</label>";
+    // (an officer's change not saved: the members go by Guild Info, so the box waits for the save, UI.lua DrawMe)
+    var pending = officer() && unsaved();
+    if (pending) st.meView = false;
+    var h = "<label class=\"cu-ckl\" style=\"margin-top:-2px\"><input type=\"checkbox\" class=\"cu-ck\" data-set=\"meView\"" + (st.meView ? " checked" : "") + (pending ? " disabled" : "") + "> Show what members see of me" + (pending ? ": members go by Guild Info, save your change first" : "") + "</label>";
     CATS_WITH.forEach(function (c) {
       h += "<div class=\"cu-h\" style=\"margin-top:8px\">" + esc(c[1]) + "</div><div class=\"cu-me\">";
       (byCat[c[0]] || []).forEach(function (d) {
@@ -1492,79 +2086,130 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   function check(label, on, enabled, data) {
     return "<label class=\"cu-ckl" + (enabled ? "" : " cu-off") + "\"><input type=\"checkbox\" class=\"cu-ck\" " + data + (on ? " checked" : "") + (enabled ? "" : " disabled") + "> " + esc(label) + "</label>";
   }
+  // a rule's threshold as Settings shows it: the label, its value apart from it against a step down and up (a narrow
+  // window cuts the label, never the number); the steps' tooltip says what it does, its default and who set it
+  function tuneRow(t, label, off) {
+    var name = t[0], v = rule(name), set = st.rules[name];
+    var tip = t[1] + "\n" + t[6] + "\nDefault " + showRule(name, RULES[name]) + (set ? ". Set to " + showRule(name) + " by " + set.by + "." : ".");
+    var h = "<div class=\"cu-tune\"><span" + (set ? " class=\"cu-set-by\"" : "") + ">" + esc(label) + "</span><span class=\"cu-tv" + (set ? " cu-set-by" : "") + "\">" + esc(showRule(name)) + "</span><span>";
+    h += "<button type=\"button\" class=\"cu-btn cu-sm\" data-rule=\"" + name + ":-1\" title=\"" + esc(tip) + "\" aria-label=\"" + esc("Lower: " + label + ", " + showRule(name)) + "\"" + (off && v > t[2] + 1e-9 ? "" : " disabled") + ">-</button>";
+    return h + "<button type=\"button\" class=\"cu-btn cu-sm\" data-rule=\"" + name + ":1\" title=\"" + esc(tip) + "\" aria-label=\"" + esc("Raise: " + label + ", " + showRule(name)) + "\"" + (off && v < t[3] - 1e-9 ? "" : " disabled") + ">+</button></span></div>";
+  }
+  // the sections down the left, as Settings.lua lists them: the core's, then one per module that is on and has settings,
+  // in the modules' order (the Officers page's for officers only); [id, title, set by the officers]
+  function sections(off) {
+    var out = [["general", "General"], ["vis", "Who sees what", true], ["rules", "Rules", true], ["modules", "Modules"], ["race", "Race"]];
+    if (mods().guide) out.push(["guide", "Guide", false, GUIDE_NOTES]);
+    out.push(["prog", "Prog"], ["shame", "Hall of Shame"]);
+    if (off) out.push(["officers", "Officers"]);
+    return out;
+  }
+  // Settings: the sections down the left, the chosen one on the right in one column, each starting with a heading
   function settings() {
-    var off = officer(), m = me();
-    var left = "<div class=\"cu-h\">Display</div>" + check("Show offline members", st.offline, true, "data-set=\"offline\"") + check("Minimap button", st.minimap, true, "data-set=\"minimap\"") + check("Compact rows", st.compact, true, "data-set=\"compact\"");
-    left += "<div class=\"cu-gap\"></div><div class=\"cu-h\">About you</div><div class=\"cu-field\"><span>Main character</span><input class=\"cu-edit\" value=\"" + esc(m) + "\" aria-label=\"Main character\" maxlength=\"24\"></div>";
-    left += "<div class=\"cu-roles\"><span>Role</span>";
-    ["Tank", "Heal", "Melee", "Ranged"].forEach(function (role) { left += "<label class=\"cu-ckl\"><input type=\"checkbox\" class=\"cu-ck\" data-role=\"" + role + "\"" + (st.role[m] === role ? " checked" : "") + "> " + role + "</label>"; });
-    left += "</div>" + check("Raid spec set (this character)", !!st.raidspec[m], true, "data-raidspec=\"1\"") + "<div class=\"cu-gap\"></div>";
-    [["race", "Race columns"], ["prog", "Prog columns"], ["shame", "Hall of Shame cards"], ["officers", "Officers columns"]].forEach(function (p) {
-      if (p[0] === "officers" && !off) return;
-      left += "<div class=\"cu-gap\"></div><div class=\"cu-h\">" + p[1] + "</div>";
-      candidates(p[0]).forEach(function (d) { left += check(d.label, !!st.cols[p[0]][d.id], true, "data-col=\"" + p[0] + ":" + d.id + "\""); });
+    var off = officer(), m = me(), list = sections(off);
+    var sec = list.filter(function (x) { return x[0] === st.section; })[0] || list[0];
+    st.section = sec[0];
+    var nav = "<div class=\"cu-lbcats\" role=\"tablist\" aria-orientation=\"vertical\" aria-label=\"Settings sections\">";
+    list.forEach(function (x) {
+      var on = x === sec;
+      nav += "<button type=\"button\" role=\"tab\" id=\"cu-sec-" + x[0] + "\" aria-selected=\"" + (on ? "true" : "false") + "\" aria-controls=\"cu-secp\" tabindex=\"" + (on ? "0" : "-1") + "\" data-sec=\"" + x[0] + "\"" + (x[2] ? " title=\"Set by the officers" + (off ? " for the guild." : "; only they can change it.") + "\"" : x[3] ? " title=\"" + esc(x[3]) + "\"" : "") + ">" + esc(x[1]) + (x[2] ? "<span>officers</span>" : "") + "</button>";
     });
-    var right = "<div class=\"cu-h\">Who sees what</div><div class=\"cu-olines\"><div class=\"cu-dimline\">" + esc(describe()) + (off ? "" : " Only officers can change it.") + "</div></div>";
-    right += "<div class=\"cu-field\" style=\"justify-content:space-between;padding-right:0\"><span style=\"width:auto;color:var(--cu-ink)\">Officer ranks: 0 to " + st.threshold + "</span><span style=\"width:auto;display:flex;gap:4px\"><button type=\"button\" class=\"cu-btn cu-sm\" data-act=\"thr-\" aria-label=\"Lower the officer rank threshold\"" + (off ? "" : " disabled") + ">-</button><button type=\"button\" class=\"cu-btn cu-sm\" data-act=\"thr+\" aria-label=\"Raise the officer rank threshold\"" + (off ? "" : " disabled") + ">+</button></span></div>";
-    right += "<div class=\"cu-btns\" style=\"padding-top:4px\"><button type=\"button\" class=\"cu-btn\" data-act=\"policy\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Broadcast now</button><button type=\"button\" class=\"cu-btn\" data-act=\"reset\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Reset to defaults</button></div>";
-    right += "<div class=\"cu-h\">Rules the Guide learns by</div><div class=\"cu-olines\"><div class=\"cu-dimline\">White: set by an officer. " + (off ? "Broadcast now sends them." : "Only officers can change them.") + "</div></div>";
-    TUNE.forEach(function (t) {
-      // the label, its value apart from it against the steps (a narrow window cuts the label, never the number); the
-      // steps' tooltip says what it does, its default and who set it
-      var name = t[0], v = rule(name), set = st.rules[name];
-      var tip = t[1] + "\n" + t[6] + "\nDefault " + showRule(name, RULES[name]) + (set ? ". Set to " + showRule(name) + " by " + set.by + "." : ".");
-      right += "<div class=\"cu-tune\"><span" + (set ? " class=\"cu-set-by\"" : "") + ">" + esc(t[1]) + "</span><span class=\"cu-tv" + (set ? " cu-set-by" : "") + "\">" + esc(showRule(name)) + "</span><span>";
-      right += "<button type=\"button\" class=\"cu-btn cu-sm\" data-rule=\"" + name + ":-1\" title=\"" + esc(tip) + "\" aria-label=\"" + esc("Lower: " + t[1] + ", " + showRule(name)) + "\"" + (off && v > t[2] + 1e-9 ? "" : " disabled") + ">-</button>";
-      right += "<button type=\"button\" class=\"cu-btn cu-sm\" data-rule=\"" + name + ":1\" title=\"" + esc(tip) + "\" aria-label=\"" + esc("Raise: " + t[1] + ", " + showRule(name)) + "\"" + (off && v < t[3] - 1e-9 ? "" : " disabled") + ">+</button></span></div>";
-    });
-    right += "<div class=\"cu-btns\" style=\"padding-top:4px\"><button type=\"button\" class=\"cu-btn\" data-act=\"rules\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Rules to defaults</button></div><div class=\"cu-gap\"></div>";
-    right += "<div class=\"cu-vishead\"><span></span><span>Everyone</span><span>Only you</span></div>";
-    function visRow(label, key, indent) {
-      var v = vis(key);
-      return "<div class=\"cu-visrow\"" + (indent ? " style=\"padding-left:20px\"" : "") + "><span>" + esc(label) + "</span><label aria-label=\"" + esc(label + ": everyone") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + key + "\" data-vis=\"" + key + ":all\"" + (v === "all" ? " checked" : "") + (off ? "" : " disabled") + "></label><label aria-label=\"" + esc(label + ": only you") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + key + "\" data-vis=\"" + key + ":self\"" + (v === "self" ? " checked" : "") + (off ? "" : " disabled") + "></label></div>";
+    nav += "</div>";
+    var col = "", id = sec[0];
+    if (id === "general") {
+      col += "<div class=\"cu-h\">Display</div>" + check("Show offline members", st.offline, true, "data-set=\"offline\"") + check("Minimap button", st.minimap, true, "data-set=\"minimap\"") + check("Compact rows", st.compact, true, "data-set=\"compact\"");
+      col += "<div class=\"cu-gap\"></div><div class=\"cu-h\">About you</div><div class=\"cu-field\"><span>Main character</span><input class=\"cu-edit\" value=\"" + esc(m) + "\" aria-label=\"Main character\" maxlength=\"24\"></div>";
+      col += "<div class=\"cu-roles\"><span>Role</span>";
+      ["Tank", "Heal", "Melee", "Ranged"].forEach(function (role) { col += "<label class=\"cu-ckl\"><input type=\"checkbox\" class=\"cu-ck\" data-role=\"" + role + "\"" + (st.role[m] === role ? " checked" : "") + "> " + role + "</label>"; });
+      col += "</div>" + check("Raid spec set (this character)", !!st.raidspec[m], true, "data-raidspec=\"1\"");
+    } else if (id === "vis") {
+      // (a member's pairs and ranks are the line in Guild Info, the officer's their own change; while the officer has one
+      // to save, the line's letters, or why it cannot be saved, under what the policy is, as Settings.lua's band says it)
+      var sv = off && unsaved() ? saveState() : null;
+      col += "<div class=\"cu-h\">Policy</div><div class=\"cu-olines\"><div class=\"cu-dimline\">" + esc(describe()) + "</div><div class=\"cu-dimline\">" + esc(saveNote(sv)) + "</div><div class=\"cu-dimline\">Only you: whispered to the officers online, never sent to members.</div></div>";
+      col += "<div class=\"cu-tune\"><span>Officer ranks</span><span class=\"cu-tv\">0 to " + (off ? st.threshold : st.saved.threshold) + "</span><span><button type=\"button\" class=\"cu-btn cu-sm\" data-act=\"thr-\" aria-label=\"Lower the officer rank threshold\"" + (off && st.threshold - 1 >= MY_RANK.officer ? "" : " disabled") + ">-</button><button type=\"button\" class=\"cu-btn cu-sm\" data-act=\"thr+\" aria-label=\"Raise the officer rank threshold\" title=\"The made-up guild's raiders are rank 3: here the officer ranks stop at 2.\"" + (off && st.threshold < MY_RANK.member - 1 ? "" : " disabled") + ">+</button></span></div>";
+      col += "<div class=\"cu-btns\"><button type=\"button\" class=\"cu-btn\" data-act=\"save\" style=\"width:150px\" title=\"" + esc(saveTip(sv)) + "\"" + (sv && sv.ok ? "" : " disabled") + ">Save to Guild Info</button><button type=\"button\" class=\"cu-btn\" data-act=\"policy\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Broadcast now</button><button type=\"button\" class=\"cu-btn\" data-act=\"reset\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Reset to defaults</button></div>";
+      col += "<div class=\"cu-vishead\"><span></span><span>Everyone</span><span>Only you</span></div>";
+      // (a stat the officers leave to Everyone that would tell members one they keep shows Only you, greyed, with that
+      // one: Enchanted slots with Missing enchants)
+      // (a child category with no choice of its own shows its parent's, as the window's Policy.lua P:Vis reads it)
+      var ownVis = function (key) {
+        var c = pol()[key] ? null : /^stats:/.test(key) && CATBY[key.replace(/^stats:/, "")];
+        return c && c.parent ? ownVis(statKey(c.parent)) : own(key);
+      };
+      var visRow = function (label, key, indent) {
+        var fixed = !!(byId[key] && byId[key].fx);
+        var by = keptBy(key), kept = by && by !== key, v = kept ? "self" : ownVis(key), live = off && !kept && !fixed;
+        var title = kept ? " title=\"" + esc("Kept to the officers while " + idLabel(by) + " is: a member could work it out from this.") + "\""
+          : fixed ? " title=\"" + esc("Everyone, always: it says which officers take the Only-you values and what each member's Ready counts.") + "\"" : "";
+        return "<div class=\"cu-visrow\"" + (indent ? " style=\"padding-left:20px\"" : "") + title + "><span>" + esc(label) + (kept ? " <span class=\"cu-mute\">with " + esc(idLabel(by)) + "</span>" : fixed ? " <span class=\"cu-mute\">always</span>" : "") + "</span><label aria-label=\"" + esc(label + ": everyone") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + key + "\" data-vis=\"" + key + ":all\"" + (v === "all" ? " checked" : "") + (live ? "" : " disabled") + "></label><label aria-label=\"" + esc(label + ": only you") + "\"><input type=\"radio\" class=\"cu-ck\" name=\"vis-" + key + "\" data-vis=\"" + key + ":self\"" + (v === "self" ? " checked" : "") + (live ? "" : " disabled") + "></label></div>";
+      };
+      CATS_WITH.forEach(function (c) {
+        col += "<div class=\"cu-gap\"></div><div class=\"cu-h\">" + esc(c[1]) + "</div>";
+        (byCat[c[0]] || []).forEach(function (d) { col += visRow(d.label, d.id); });
+      });
+      // what the guild discovers and the game's statistics: one setting per category, set before anything is found in it as
+      // well as after; a child category takes its parent's unless set, a dungeon's bosses always Bosses'
+      col += "<div class=\"cu-gap\"></div><div class=\"cu-h\">Statistics</div><div class=\"cu-olines\"><div class=\"cu-dimline\">Discovered in play; a category's choice covers what is found in it.</div></div>";
+      [["bosses", "Bosses"], ["dungeons", "Dungeons"], ["raids", "Raids"], ["rep", "Reputation"]].forEach(function (f) { col += visRow(f[1], "stats:" + f[0]); });
+      col += "<div class=\"cu-olines\"><div class=\"cu-dimline\">Per category; a category's choice covers its statistics.</div><div class=\"cu-dimline\">A statistic may count what a stat of Cute's own counts (deaths, quests): set both.</div></div>";
+      GAME.forEach(function (c) { col += visRow(c.label, statKey(c), c.sub); });
+    } else if (id === "rules") {
+      col += "<div class=\"cu-h\">Thresholds</div><div class=\"cu-olines\"><div class=\"cu-dimline\">White: set by an officer. " + (off ? "A change goes to the guild on its own." : "Only officers can change them.") + "</div></div>";
+      TUNE.forEach(function (t) { if (!t[7]) col += tuneRow(t, t[1], off); });
+      col += "<div class=\"cu-btns\"><button type=\"button\" class=\"cu-btn\" data-act=\"policy\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Broadcast now</button><button type=\"button\" class=\"cu-btn\" data-act=\"rules\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Rules to defaults</button></div>";
+    } else if (id === "modules") {
+      col += "<div class=\"cu-h\">On for this character</div><div class=\"cu-olines\"><div class=\"cu-dimline\">Each adds its page and its own section here.</div></div>";
+      col += "<label class=\"cu-ckl\" title=\"" + esc("Guide\n" + GUIDE_NOTES) + "\"><input type=\"checkbox\" class=\"cu-ck\" data-mod=\"guide\"" + (mods().guide ? " checked" : "") + "> Guide</label>";
+    } else if (id === "guide") {
+      col += "<div class=\"cu-h\">Levels</div><div class=\"cu-olines\"><div class=\"cu-dimline\">White: set by an officer. " + (off ? "A change goes to the guild on its own." : "Only officers can change them.") + "</div></div>";
+      col += tuneRow(TUNE_BY.guideWindow, "Members near your level", off) + tuneRow(TUNE_BY.guideAhead, "Dungeons ahead", off);
+      col += "<div class=\"cu-btns\"><button type=\"button\" class=\"cu-btn\" data-act=\"policy\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Broadcast now</button></div>";
+    } else {
+      // a dashboard page's own section: its columns, or the Hall of Shame's cards
+      col += "<div class=\"cu-h\">" + (id === "shame" ? "Cards" : "Columns") + "</div>";
+      candidates(id).forEach(function (d) { col += check(d.label, !!st.cols[id][d.id], true, "data-col=\"" + id + ":" + d.id + "\""); });
     }
-    CATS_WITH.forEach(function (c) {
-      right += "<div class=\"cu-h\" style=\"height:18px\">" + esc(c[1]) + "</div>";
-      (byCat[c[0]] || []).forEach(function (d) { right += visRow(d.label, d.id); });
-      right += "<div class=\"cu-gap\"></div>";
-    });
-    // what the guild discovers and the game's statistics: one setting per category, set before anything is found in it as
-    // well as after; a child category takes its parent's unless set, a dungeon's bosses always Bosses'
-    right += "<div class=\"cu-h\" style=\"height:18px\">Statistics</div><div class=\"cu-olines\"><div class=\"cu-dimline\">Discovered in play; a category's choice covers what is found in it.</div></div>";
-    [["bosses", "Bosses"], ["dungeons", "Dungeons"], ["raids", "Raids"], ["rep", "Reputation"]].forEach(function (f) { right += visRow(f[1], "stats:" + f[0]); });
-    right += "<div class=\"cu-olines\"><div class=\"cu-dimline\">Per category; a category's choice covers its statistics.</div></div>";
-    GAME.forEach(function (c) { right += visRow(c.label, statKey(c), c.sub); });
-    right += "<div class=\"cu-gap\"></div>";
-    return "<div class=\"cu-set\"><div>" + left + "</div><div>" + right + "</div></div>";
+    return "<div class=\"cu-set\"><div>" + nav + "</div><div role=\"tabpanel\" id=\"cu-secp\" aria-labelledby=\"cu-sec-" + id + "\">" + col + "</div></div>";
   }
 
   // ---- drawing, and what the page says under the window
   var tabs = Array.prototype.slice.call(document.querySelectorAll("[role=tab]"));
   var footEl = document.getElementById("cu-foot"), statusEl = document.getElementById("cu-status"), hintEl = document.getElementById("cu-view-hint"), printEl = document.getElementById("cu-print");
+  // the box beside Looking as: whether Yezin's rank may edit Guild Info, shown while looking as him
+  var giLabel = document.getElementById("cu-gi-l"), giBox = document.getElementById("cu-gi");
+  giBox.checked = st.canEdit; // (a browser may bring back the box as it was before a reload)
+  giBox.addEventListener("change", function () { st.canEdit = giBox.checked; draw(); });
   function footText() {
     var off = officer(), m = me();
     if (st.tab === "race") return "Click a column header to sort. Your own row stays on top. Hover a row or a cell for its tooltip.";
-    if (st.tab === "guide") return off ? "Your own guide, then the guild per dungeon and what its play changed from the research. The thresholds the rules use are on the Settings page."
-      : "Hover a dungeon for its bosses and where its range comes from, a slot for the enchants Forever has. Switch to Yezin for the guild per dungeon and what play changed.";
+    if (st.tab === "guide") return off ? "The band is the guild's version: where most members are and the dungeon for them; hover or tap it for why. Under your own cards, the guild per dungeon and what its play changed from the research. Its two thresholds are in its own section in Settings."
+      : "The band is the next best thing; hover or tap it for why, a card for its bosses and loot, a gear row for the enchants Forever has. Invite sends the game's own invite in the window; here the button only says Invited.";
     if (st.tab === "prog") {
       var self = columnsFor("prog", room()).cols.filter(function (d) { return vis(d.id) === "self"; }).map(function (d) { return d.short; });
       if (off) return "An officer sees every cell, including the stats set to Only you.";
       if (!self.length) return "Nothing on this page is set to Only you, so every cell shows.";
       return self.join(" and ") + (self.length === 1 ? " is" : " are") + " set to Only you: " + m + " sees their own, the rest show a dash. Switch to Yezin to see them all.";
     }
-    if (st.tab === "shame") return "One card per funny stat, the leader on each. Untick cards on the Settings page.";
-    if (st.tab === "statistics") return "What the guild has found in play, then the game's own statistics, by category. Click one to rank the guild on it. Officers set visibility per category on the Settings page.";
-    if (st.tab === "officers") return "Officer ranks only. The three buttons open the visibility list, ask every addon to resend its record, and push the policy out.";
-    if (st.tab === "me") return "Your whole record, every stat in the registry. Tick the box to see what members see of you.";
-    return off ? "Everyone picks their own columns and cards. The rules and the visibility list on the right are the officers' to change, and you are one." : "Everyone picks their own columns and cards. The rules and the visibility list on the right are the officers' to change; a member sees them greyed.";
+    if (st.tab === "shame") return "One card per funny stat, the leader on each. Untick cards in Settings, Hall of Shame.";
+    if (st.tab === "statistics") return "What the guild has found in play, then the game's own statistics, by category. Click one to rank the guild on it. Officers set visibility per category in Settings, Who sees what.";
+    if (st.tab === "officers") return "Officer ranks only. Click a member's row to pick them: the line above the buttons says whether they are trusted, and why one is suspect. The four buttons open the visibility list, ask every addon to resend its record, push the policy out, and mark the picked member untrusted or trust them again.";
+    if (st.tab === "me") return "Your whole record, every stat in the registry. " + (officer() && unsaved() ? "Save your change to Guild Info first: members go by it, and the box shows what they see of you." : "Tick the box to see what members see of you.");
+    if (st.section === "vis") return off ? "Who sees what is the officers' to change, and you are one. A change routes only your own client, your own values included, until you save it to Guild Info, the line every member's client goes by. Untick the box by Looking as for an officer whose rank may not edit Guild Info."
+      : "Who sees what is the officers' to change; a member sees it greyed, as the officers saved it in Guild Info, the line every member's client goes by.";
+    return off ? "A section per page for its columns or cards. Who sees what and the rules are the officers' to change, and you are one. Modules switches the Guide on." : "A section per page for its columns or cards. Who sees what and the rules are the officers' to change; a member sees them greyed. Modules switches the Guide on.";
   }
   function draw() {
     var off = officer();
+    hideTip();
     var keep = document.activeElement && panel.contains(document.activeElement) ? keepOf(document.activeElement) : null;
     var keepScroll = scroll.scrollTop;
     var officersTab = document.getElementById("cu-tab-officers");
     officersTab.hidden = !off;
     if (st.tab === "officers" && !off) st.tab = "race";
+    // the Guide is a module: its tab shows while it is switched on in Settings, Modules
+    document.getElementById("cu-tab-guide").hidden = !mods().guide;
+    if (st.tab === "guide" && !mods().guide) st.tab = "race";
     tabs.forEach(function (b) {
       var on = b.dataset.tab === st.tab;
       b.setAttribute("aria-selected", on ? "true" : "false");
@@ -1576,17 +2221,21 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     scroll.scrollTop = keepScroll;
     var online = G.filter(function (r) { return r.on && r.addon; }).length;
     statusEl.textContent = online + " online with the addon  |  " + (off ? "officer view" : "member view");
-    hintEl.textContent = off ? "An officer sees everything, and the Officers page appears." : "A member sees everyone's shared stats and all of their own.";
+    hintEl.textContent = off ? "An officer sees everything, and the Officers page appears. The guild master gives ranks their rights in the game: without this one, Save to Guild Info is greyed and Settings say why."
+      : "A member sees everyone's shared stats and all of their own.";
+    giLabel.hidden = !off;
     footEl.textContent = footText();
     if (keep) {
-      var again = scroll.querySelector("[data-" + keep[0] + "=\"" + keep[1] + "\"]");
+      // (the control itself, never a row that carries the same data: a row takes no focus)
+      var again = null, all = scroll.querySelectorAll("[data-" + keep[0] + "=\"" + keep[1] + "\"]");
+      for (var j = 0; j < all.length && !again; j++) if (/^(BUTTON|INPUT|SELECT)$/.test(all[j].tagName) || all[j].hasAttribute("tabindex")) again = all[j];
       // (a step that reached its limit is disabled and takes no focus: the other step of the pair has it)
       if (again && again.disabled) again = again.parentNode.querySelector("button:not([disabled])") || panel;
       if (again) again.focus();
     }
   }
   // the data attribute that names a control in the panel, so a redraw can hand the focus back to it
-  var KEEP = ["k", "set", "col", "vis", "act", "role", "raidspec", "stcat", "stat", "rule"];
+  var KEEP = ["k", "set", "col", "vis", "act", "role", "raidspec", "stcat", "stat", "rule", "sec", "mod", "more", "pick", "inv", "tip"];
   function keepOf(el) {
     for (var i = 0; i < KEEP.length; i++) if (el.dataset[KEEP[i]] !== undefined) return [KEEP[i], el.dataset[KEEP[i]]];
     return null;
@@ -1613,8 +2262,24 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       if (to.first) { var first = scroll.querySelector("[data-stcat=\"" + to.first + "\"]"); if (first) first.focus(); }
       return;
     }
+    var pk = e.target.closest("[data-pick]");
+    if (pk) { st.picked = st.picked === pk.dataset.pick ? null : pk.dataset.pick; draw(); return; }
     var x = e.target.closest("button[data-stat]");
     if (x) { st.statOpen = st.statOpen === x.dataset.stat ? null : x.dataset.stat; draw(); return; }
+    var sc = e.target.closest("button[data-sec]");
+    if (sc) { st.section = sc.dataset.sec; scroll.scrollTop = 0; draw(); return; }
+    var mo = e.target.closest("button[data-more]");
+    if (mo) { mateAll[mo.dataset.more] = !mateAll[mo.dataset.more]; draw(); return; }
+    // Invite: the window sends the game's own invite and says Invited, greyed, for a minute (Guide.lua G.Invite); here
+    // only the button changes, and changes back after the minute
+    var iv = e.target.closest("button[data-inv]");
+    if (iv) {
+      if (iv.getAttribute("aria-disabled") === "true") return;
+      invitedAt[iv.dataset.inv.split("|")[0]] = Date.now();
+      draw();
+      setTimeout(function () { if (st.tab === "guide") draw(); }, INVITED + 500);
+      return;
+    }
     // a rule's step down or up: the officers' value, dropped where it comes back to the default
     var t = e.target.closest("button[data-rule]");
     if (t) {
@@ -1630,25 +2295,112 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     var a = e.target.closest("button[data-act]");
     if (!a || a.disabled) return;
     var act = a.dataset.act;
-    if (act === "settings") { st.tab = "settings"; draw(); document.getElementById("cu-tab-settings").focus(); }
+    if (act === "settings") { st.tab = "settings"; st.section = "vis"; draw(); document.getElementById("cu-tab-settings").focus(); }
     else if (act === "ask") print("asked the guild to send their records again.");
-    else if (act === "policy") print("sent the visibility policy to the guild.");
-    else if (act === "rules") { st.rules = {}; derive(); draw(); }
+    // (who sees what goes by Guild Info: Broadcast now sends the rules and the untrusted, Comm.lua M:Broadcast)
+    else if (act === "policy") print("sent the rules and the untrusted; who sees what goes by Guild Info" + (officer() && unsaved() ? ": Save to Guild Info to change it." : "."));
+    else if (act === "save") {
+      // the officer's change becomes the line every member's client routes by, and Ready counts by it
+      if (!officer() || !unsaved() || !st.canEdit) return;
+      var copy = {};
+      Object.keys(st.policy).forEach(function (k) { copy[k] = st.policy[k]; });
+      st.saved = { policy: copy, threshold: st.threshold, at: when(new Date()) };
+      derive();
+      print("saved the policy to Guild Info: every client routes by it.");
+      draw();
+    }
+    else if (act === "trust") {
+      // the officers' word on the member picked: kept in the policy, which goes to the guild a few seconds on
+      var p = G.filter(function (r) { return r.n === st.picked; })[0];
+      if (!p) return;
+      p.untrusted = !p.untrusted;
+      derive();
+      print((p.untrusted ? "marked untrusted: " : "trusted again: ") + p.n + ". The guild hears it with the policy in a few seconds.");
+      draw();
+    }
+    // (the rules' own thresholds back to their defaults: a module's, the Guide's two, stay, as in the window)
+    else if (act === "rules") { Object.keys(st.rules).forEach(function (k) { if (!(TUNE_BY[k] && TUNE_BY[k][7])) delete st.rules[k]; }); derive(); draw(); }
+    // (who sees what and the ranks: the officer's own change, routed on their client alone until saved to Guild Info)
     else if (act === "reset") { st.policy = {}; draw(); }
-    else if (act === "thr-") { st.threshold = Math.max(0, st.threshold - 1); draw(); }
-    else if (act === "thr+") { st.threshold = Math.min(9, st.threshold + 1); draw(); }
+    else if (act === "thr-") { st.threshold = Math.max(MY_RANK[st.viewer], st.threshold - 1); draw(); }
+    else if (act === "thr+") { st.threshold = Math.min(MY_RANK.member - 1, st.threshold + 1); draw(); }
   });
   scroll.addEventListener("change", function (e) {
     var t = e.target;
     if (t.dataset.set) { st[t.dataset.set] = t.checked; draw(); }
     else if (t.dataset.col) { var p = t.dataset.col.split(":"); st.cols[p[0]][p[1]] = t.checked; }
-    else if (t.dataset.vis) { var q = t.dataset.vis.lastIndexOf(":"); st.policy[t.dataset.vis.slice(0, q)] = t.dataset.vis.slice(q + 1); }
+    // (a choice can keep another stat with it: drawn again. What Ready counts changes once it is saved)
+    else if (t.dataset.vis) { var q = t.dataset.vis.lastIndexOf(":"); st.policy[t.dataset.vis.slice(0, q)] = t.dataset.vis.slice(q + 1); draw(); }
     else if (t.dataset.raidspec) { st.raidspec[me()] = t.checked; G.filter(function (r) { return r.n === me(); })[0].s.raid_spec = t.checked; }
+    else if (t.dataset.mod) { mods()[t.dataset.mod] = t.checked; draw(); }
     else if (t.dataset.role) { st.role[me()] = t.checked ? t.dataset.role : ""; G.filter(function (r) { return r.n === me(); })[0].s.role = st.role[me()]; draw(); }
   });
 
+  // ---- the Guide's reasons: a row's text in a box drawn like the game's tooltip, on the page as the game's is on the
+  // screen (the window's edge cuts nothing), under the row or over it; on a hover, a focus or a tap, and Escape, a tap
+  // elsewhere or leaving the row puts it away. The box is for the eye: the row's description (aria-describedby) says
+  // the same to a screen reader
+  var tipEl = document.createElement("div"), tipOn = null;
+  tipEl.className = "cu-tip";
+  tipEl.hidden = true;
+  tipEl.setAttribute("aria-hidden", "true");
+  document.body.appendChild(tipEl);
+  function hideTip() { tipEl.hidden = true; tipOn = null; }
+  function placeTip() {
+    if (!tipOn) return;
+    var r = tipOn.getBoundingClientRect(), sr = scroll.getBoundingClientRect();
+    // (a row scrolled out of the panel takes its box with it)
+    if (r.bottom <= sr.top || r.top >= sr.bottom) { hideTip(); return; }
+    var vw = document.documentElement.clientWidth, vh = window.innerHeight, w = tipEl.offsetWidth, ht = tipEl.offsetHeight;
+    var x = Math.max(8, Math.min(Math.max(r.left, sr.left) + 24, vw - w - 8)), y = r.bottom + 2;
+    // (over the row only where it fits there whole; else under it, the page scrolling to the rest, never over the row)
+    if (y + ht > vh - 8 && r.top - 2 - ht >= 8) y = r.top - 2 - ht;
+    tipEl.style.left = (x + window.scrollX) + "px";
+    tipEl.style.top = (y + window.scrollY) + "px";
+  }
+  function showTip(el) {
+    var t = guideTips[el.dataset.tip];
+    if (t == null || !scroll.contains(el)) { hideTip(); return; }
+    var lines = String(t).split("\n");
+    tipEl.innerHTML = "<b>" + esc(lines[0]) + "</b>" + esc(lines.slice(1).join("\n"));
+    tipEl.hidden = false;
+    tipOn = el;
+    placeTip();
+  }
+  // (a button in a row, Invite, has its own tooltip)
+  scroll.addEventListener("mouseover", function (e) {
+    if (e.target.closest("button")) { if (tipOn && document.activeElement !== tipOn) hideTip(); return; }
+    var el = e.target.closest("[data-tip]");
+    if (el && el !== tipOn) showTip(el);
+  });
+  scroll.addEventListener("mouseout", function (e) {
+    var el = e.target.closest("[data-tip]");
+    if (el && el === tipOn && !el.contains(e.relatedTarget) && document.activeElement !== el) hideTip();
+  });
+  scroll.addEventListener("focusin", function (e) { if (e.target.dataset && e.target.dataset.tip !== undefined) showTip(e.target); else hideTip(); });
+  scroll.addEventListener("focusout", function (e) { if (tipOn && !(e.relatedTarget && tipOn.contains(e.relatedTarget))) hideTip(); });
+  scroll.addEventListener("keydown", function (e) { if (e.key === "Escape" && tipOn) hideTip(); });
+  // (the panel, the stage sideways on a phone, the page: the box follows its row)
+  document.addEventListener("scroll", placeTip, true);
+  window.addEventListener("resize", hideTip);
+
   // the category list on the Statistics page is redrawn with the page, so its arrow keys are handled here, not by roving()
   scroll.addEventListener("keydown", function (e) {
+    var sb = e.target.closest("button[data-sec]");
+    if (sb) {
+      var ids = sections(officer()).map(function (x) { return x[0]; }), at = ids.indexOf(sb.dataset.sec), to = -1;
+      if (e.key === "ArrowDown" || e.key === "ArrowRight") to = (at + 1) % ids.length;
+      else if (e.key === "ArrowUp" || e.key === "ArrowLeft") to = (at - 1 + ids.length) % ids.length;
+      else if (e.key === "Home") to = 0;
+      else if (e.key === "End") to = ids.length - 1;
+      if (to < 0) return;
+      e.preventDefault();
+      st.section = ids[to];
+      draw();
+      var nb = scroll.querySelector("[data-sec=\"" + ids[to] + "\"]");
+      if (nb) nb.focus();
+      return;
+    }
     var b = e.target.closest("button[data-stcat]");
     if (!b) return;
     // the arrows walk the categories that open; from Bosses, which opens its first child, they start at that child
@@ -1706,6 +2458,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   var deep = /^#(race|guide|prog|shame|statistics|officers|me|settings)(?:-(member|officer))?$/.exec(location.hash);
   if (deep) {
     st.tab = deep[1];
+    if (deep[1] === "guide") Object.keys(ME).forEach(function (v) { st.mods[ME[v]] = { guide: true }; });
     setViewer(deep[2] === "officer" || deep[1] === "officers" ? "officer" : "member");
     document.getElementById("window").scrollIntoView({ behavior: "instant", block: "start" });
   }
@@ -1721,9 +2474,11 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     if (d.fmt === "ready") return "ready, gaps or no";
     return KIND[d.kind];
   }
+  // who sees a stat with the officers' defaults: Only you as well where it would tell members one they keep
+  function byDefault(id) { var keep = polFor; polFor = {}; var by = keptBy(id); polFor = keep; return by; }
   function desc(d) {
-    var hint = d.hint ? d.hint.charAt(0).toUpperCase() + d.hint.slice(1) + ". " : "";
-    return kindOf(d).charAt(0).toUpperCase() + kindOf(d).slice(1) + ", on the " + CATNAME[d.cat] + " page. " + hint + (d.vis === "self" ? "Only you and the officers see it" : "Everyone sees it") + " by default; the officers can change that.";
+    var hint = d.hint ? d.hint.charAt(0).toUpperCase() + d.hint.slice(1) + ". " : "", by = byDefault(d.id);
+    return kindOf(d).charAt(0).toUpperCase() + kindOf(d).slice(1) + ", on the " + CATNAME[d.cat] + " page. " + hint + (d.fx ? "Everyone sees it, always: it says which officers take the Only-you values and what each member's Ready counts." : (by ? "Only you and the officers see it" : "Everyone sees it") + " by default" + (by && by !== d.id ? ", as it would tell members " + idLabel(by) : "") + "; the officers can change that.");
   }
   var catsEl = document.getElementById("cu-cats"), groupsEl = document.getElementById("cu-groups"), noneEl = document.getElementById("cu-none"), qEl = document.getElementById("cu-q");
   var catBtns = [["all", "All", S.length]].concat(CATS_WITH.map(function (c) { return [c[0], c[1], (byCat[c[0]] || []).length]; })).map(function (c, i) {
@@ -1736,7 +2491,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   groupsEl.innerHTML = CATS_WITH.map(function (c) {
     return "<section class=\"cu-group\" data-cat=\"" + c[0] + "\"><h3 id=\"cu-g-" + c[0] + "\">" + esc(c[1]) + "<span>" + (byCat[c[0]] || []).length + " stats</span></h3><ul class=\"cu-list\" aria-labelledby=\"cu-g-" + c[0] + "\">" +
       (byCat[c[0]] || []).map(function (d) {
-        return "<li data-id=\"" + d.id + "\" data-q=\"" + esc((d.label + " " + (d.hint || "")).toLowerCase()) + "\"><button type=\"button\" class=\"cu-stat\" aria-expanded=\"false\" aria-controls=\"cu-d-" + d.id + "\">" + esc(d.label) + (d.vis === "self" ? "<span class=\"cu-vis\">only you</span>" : "") + "</button><p class=\"cu-desc\" id=\"cu-d-" + d.id + "\" hidden>" + esc(desc(d)) + "</p></li>";
+        return "<li data-id=\"" + d.id + "\" data-q=\"" + esc((d.label + " " + (d.hint || "")).toLowerCase()) + "\"><button type=\"button\" class=\"cu-stat\" aria-expanded=\"false\" aria-controls=\"cu-d-" + d.id + "\">" + esc(d.label) + (byDefault(d.id) ? "<span class=\"cu-vis\">only you</span>" : "") + "</button><p class=\"cu-desc\" id=\"cu-d-" + d.id + "\" hidden>" + esc(desc(d)) + "</p></li>";
       }).join("") + "</ul></section>";
   }).join("");
   var ex = { cat: "all", q: "" };

@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: |cffe8b24aCute|r Example
+## Notes: The harness's example module: a page, a Settings section, an event and a stat.
+## Author: Mikal
+## Version: 0.1.0
+## X-License: GPL-3.0-or-later
+## Dependencies: Cute
+## LoadOnDemand: 1
+## X-Cute-Module: 1
+
+Example.lua

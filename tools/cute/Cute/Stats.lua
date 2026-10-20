@@ -21,6 +21,16 @@
 --   game      for a statistics stat: the game's category id, which the visibility policy is set by ("gc" .. id)
 --   learned   for a discovered stat: bosses | dungeons | raids | rep, its category on the Statistics page and in the
 --             policy ("gc_" .. learned)
+--   lo, hi    the bounds a member's value must keep to on receipt (0 to 2^31 unless given; S.Implausible, below)
+--   grows     a lifetime count: a member's value never goes down
+--   with      for a hidden stat: the stat whose route it travels under (Policy.lua P:Route)
+--   fixed     a stat nobody sets, Everyone always (Policy.lua P:Vis): Addon version, which says which officers take a
+--             whisper and whose Ready counts what (closed, every member's whispers to the officers stopped)
+--   reveals   the stats (or categories, "gc_bosses") a member could work out exactly from this one's value, with what
+--             else the guild sees (Enchanted slots and the slots the guild knows take an enchant give Missing
+--             enchants): its route is the strictest of its own and theirs, so no Everyone value rebuilds an Only-you one
+--   counts    for a stat made of others (Ready): the ones it may count, each only while the guild may see it (routed
+--             "all"), so it tells nobody what the officers keep to themselves
 -- Learned, not listed: Forever is an exploring game whose content is revealed over time, so no content is fixed here.
 -- Only the game's structure is (the equipment slots, the classes, the damage schools, the item class enums), and the
 -- few ids no documented call can tell apart, each named where it is used (README, "Adding a stat"). What the guild
@@ -56,6 +66,29 @@ S.CAT_LABEL = { leveling = "Race", prog = "Prog", funny = "Hall of Shame", offic
 S.CAT_DEFAULT = { leveling = "all", prog = "all", funny = "all", officer = "self", game = "all", found = "all" }
 local KINDS = { int = true, flag = true, text = true, list = true, pips = true }
 
+-- each stat's code: two letters for life, the short name the officers' policy calls it by in the guild's Guild Info
+-- line and on the wire (Policy.lua). A code is never given to another stat, not even after its own stat is gone: a
+-- client holding an older policy would read it as the new stat's. A stat taken out leaves its code in RETIRED. A
+-- module's stat without one goes by "_" and its id. The discovered categories have theirs in S.FOUND, a statistics
+-- category goes by its number
+S.CODES = { level = "le", xp = "xp", xp_hour = "xh", xp_session = "xs", played = "pl", played_lvl = "pa", to60 = "to", rested = "re",
+  zone = "zo", subzone = "su", group = "gr", logins = "lo", session = "se", longest = "ln", quests_done = "qd", quests_today = "qt",
+  quests_log = "ql", quests_ready = "qr", dungeons = "du", kills = "ki", zones_seen = "zs", flights_known = "fk", flights = "fl",
+  longest_flight = "lf", hearth = "he", hearths = "ha", deaths_lvl = "dl", ghost_time = "gt", gold_earned = "ge", gold_quests = "gq",
+  vendor_sales = "vs", mount = "mo", talents_free = "tf", spec = "sp", prof1 = "pr", prof2 = "po", fishing = "fi", cooking = "co",
+  first_aid = "fa", legacy = "lg", levelups = "lv", still = "st", ready = "ra", ilvl = "il", ilvl_slots = "is", empty_slots = "es",
+  enchanted = "en", unenchanted = "un", old_gear = "og", greens = "gn", durability = "dr", potions = "pt", elixirs = "el", flasks = "fs",
+  food = "fo", bandages = "ba", stones = "so", ammo = "am", bags_free = "bf", bags_size = "bs", buffs_missing = "bm", bosses = "bo",
+  dungeons_seen = "ds", raids = "ri", resist_fire = "rf", resist_nature = "rn", resist_frost = "rs", resist_shadow = "rt",
+  resist_arcane = "rr", pvp_rank = "pv", pvp_pts = "pp", lc_done = "ld", lc_total = "lt", lc_pts = "lp", lc_free = "lc", lc_renown = "lr",
+  lc_prof = "la", lc_adv = "lb", lc_prog = "lh", lc_last = "ll", lc_cats = "ls", gold = "go", bank_in = "bi", bank_out = "bn",
+  consumed = "cn", addon_ver = "av", deaths = "de", deaths_today = "dt", falls = "fb", drownings = "do", fatigue = "ft",
+  hearth_waste = "hw", afk = "af", dance = "da", sit = "si", emotes = "em", whispers = "wh", gchat = "gc", inspected = "in", fish = "fh",
+  jumps = "ju", ghost_yards = "gy", where = "we", grey_gold = "gg", main = "ma", role = "ro", last_login = "li", raid_spec = "rd",
+  weekly_raids = "wr" }
+S.RETIRED = {}
+S.byCode = {}
+
 function S.def(id, label, cat, o)
   assert(type(id) == "string" and id:match("^[%l%d_]+$") and #id <= 16, "stat id: " .. tostring(id))
   assert(not S.byId[id], "stat defined twice: " .. id)
@@ -66,8 +99,17 @@ function S.def(id, label, cat, o)
   assert(o.kind ~= "list" or (type(o.of) == "table" and #o.of >= 1 and #o.of <= 30), "a list stat needs 1 to 30 things: " .. id)
   assert(o.read or o.count or o.track, "a stat reads, counts or tracks: " .. id)
   if type(o.on) == "string" then o.on = { o.on } end
+  for _, r in ipairs(o.reveals or {}) do assert(type(r) == "string" and r ~= id, "a stat reveals other ids: " .. id) end
   o.id, o.label, o.cat = id, label, cat
   o.default = o.default or S.CAT_DEFAULT[cat]
+  -- (a statistic and a discovered stat go by their category, which has the code)
+  if cat ~= "game" and cat ~= "found" then
+    o.code = o.code or S.CODES[id] or ("_" .. id)
+    assert(type(o.code) == "string" and o.code:match("^[%l_][%l%d_]+$") and not S.byCode[o.code] and not S.RETIRED[o.code], "stat code: " .. id)
+    S.byCode[o.code] = id
+    -- (a code named after load, a module's: a policy held from before that carried it unknown names it now)
+    S.codeVersion = (S.codeVersion or 0) + 1
+  end
   S.list[#S.list + 1] = o
   S.byId[id] = o
   S.byCat[cat][#S.byCat[cat] + 1] = o
@@ -211,17 +253,69 @@ end
 -- has an enchant for is never asked for: a head or shoulder enchant, which Forever has none of yet, only once someone
 -- wears one. (0.4.0's first build learned slots alone; such a record, with no kinds, teaches nothing.) n only grows:
 -- it says how many members the guild has seen with one, not how many have one now. kinds: { [slot] = kind }. True when
--- a slot or kind is new to the guild's knowledge
+-- a slot or kind is new to the guild's knowledge.
+-- Learning needs more than one voice: a slot or a kind counts as learned once VOICES members (by GUID, the ones the
+-- officers marked untrusted left out) were seen with an enchant there, so one modified addon claiming an enchant asks
+-- nobody for one. The first member's is kept, waiting for the second
 local WHO_CAP = 1000
+S.VOICES = 2
 local function seenOn(rec, who)
   if type(rec.who) ~= "table" then rec.who = {} end
   if type(who) == "string" and who ~= "" and not rec.who[who] and (rec.n or 0) < WHO_CAP then rec.who[who] = true; rec.n = (rec.n or 0) + 1 end
 end
+-- the members a fact was seen on that count: its count, less the members the officers marked untrusted; never fewer
+-- than were counted when the members' GUIDs were taken out of it (kept: the officers closed Enchanted slots on a
+-- member's client, StripEnchantTraces), so what was learned stays and nobody seen again then counts twice
+local function voices(rec)
+  if type(rec) ~= "table" then return 0 end
+  local n = type(rec.n) == "number" and rec.n or 0
+  local P = C.Policy
+  if P and P.UntrustedSet and type(rec.who) == "table" then
+    for g in pairs(P:UntrustedSet()) do if rec.who[g] then n = n - 1 end end
+  end
+  local kept = type(rec.kept) == "number" and rec.kept or 0
+  return n > kept and n or kept
+end
+S.Voices = voices
+-- on a member's client whose officers keep Enchanted slots to themselves (Policy.lua P:Purge): the other members'
+-- GUIDs out of what the guild learned of its enchants, per slot, kind and enchant, the counts kept (only: where given,
+-- the GUIDs it says yes to alone, as Rules.lua R.StripTraces). The number taken out
+function S.StripEnchantTraces(only)
+  local k = S.Known()
+  if not (k and type(k.enchant) == "table") then return 0 end
+  local mine, n = C.MyGUID(), 0
+  local function strip(rec)
+    if type(rec) ~= "table" or type(rec.who) ~= "table" then return end
+    local v, gone = voices(rec), 0
+    for g in pairs(rec.who) do if g ~= mine and g ~= "me" and (only == nil or only(g)) then rec.who[g] = nil; gone = gone + 1 end end
+    if gone > 0 then
+      local left = 0
+      for _ in pairs(rec.who) do left = left + 1 end
+      rec.kept, rec.n = v, left
+      n = n + gone
+    end
+  end
+  for _, rec in pairs(k.enchant) do
+    strip(rec)
+    for _, kr in pairs(type(rec) == "table" and type(rec.kinds) == "table" and rec.kinds or {}) do strip(kr) end
+    for _, er in pairs(type(rec) == "table" and type(rec.ench) == "table" and rec.ench or {}) do strip(er) end
+  end
+  return n
+end
+local function untrusted(who) return C.Policy ~= nil and C.Policy.Untrusted ~= nil and C.Policy:Untrusted(who) end
 -- enchs: { [slot] = the enchant's id as the link carries it }, where the record says (0.5.0 sends it; the Guide marks
--- the seed's enchants the guild has on an item as seen). rec.ench = { [id] = { n, at, who } }
+-- the seed's enchants the guild has on an item as seen). rec.ench = { [id] = { n, at, who } }. A kind or an enchant
+-- new to a slot is kept for one voice only while that voice has fewer than ALONE_CAP there that it alone named: one
+-- edited copy sending a new kind each time grows the file by a few entries, not without end
+local ALONE_CAP = 4
+local function alone(list, who)
+  local n = 0
+  for _, r in pairs(list) do if type(r) == "table" and r.n == 1 and type(r.who) == "table" and r.who[who] then n = n + 1 end end
+  return n
+end
 function S.LearnEnchants(kinds, who, enchs)
   local k = S.Known()
-  if not k or type(kinds) ~= "table" then return false end
+  if not k or type(kinds) ~= "table" or untrusted(who) then return false end
   k.enchant = type(k.enchant) == "table" and k.enchant or {}
   local new = false
   for _, e in ipairs(SLOT_OF) do
@@ -231,35 +325,54 @@ function S.LearnEnchants(kinds, who, enchs)
       if type(rec) ~= "table" then rec = { n = 0, at = C.Now(), who = {} }; k.enchant[slot] = rec end
       rec.kinds = type(rec.kinds) == "table" and rec.kinds or {}
       local kr = rec.kinds[kind]
-      if type(kr) ~= "table" then kr = { n = 0, at = C.Now(), who = {} }; rec.kinds[kind] = kr; new = true end
-      seenOn(rec, who)
-      seenOn(kr, who)
-      local id = type(enchs) == "table" and tonumber(enchs[slot]) or nil
-      if id and id > 0 then
-        rec.ench = type(rec.ench) == "table" and rec.ench or {}
-        local er = rec.ench[id]
-        if type(er) ~= "table" then er = { n = 0, at = C.Now(), who = {} }; rec.ench[id] = er end
-        seenOn(er, who)
+      if type(kr) ~= "table" and alone(rec.kinds, who) < ALONE_CAP then kr = { n = 0, at = C.Now(), who = {} }; rec.kinds[kind] = kr end
+      if type(kr) == "table" then
+        local was = voices(kr) >= S.VOICES
+        seenOn(rec, who)
+        seenOn(kr, who)
+        -- (new to the guild's knowledge: the kind reached its second voice)
+        if not was and voices(kr) >= S.VOICES then new = true end
+        local id = type(enchs) == "table" and tonumber(enchs[slot]) or nil
+        if id and id > 0 then
+          rec.ench = type(rec.ench) == "table" and rec.ench or {}
+          local er = rec.ench[id]
+          if type(er) ~= "table" and alone(rec.ench, who) < ALONE_CAP then er = { n = 0, at = C.Now(), who = {} }; rec.ench[id] = er end
+          if type(er) == "table" then seenOn(er, who) end
+        end
       end
     end
   end
   if new and C.Rules then C.Rules:Dirty() end
   if new then
-    -- your own Missing enchants (and the verdict) are asked again, and the window learns of it
+    -- your own Missing enchants (and the verdict) are asked again, and the window learns of it; an officer's client
+    -- tells the members, who hear no member's enchants with the defaults (Comm.lua's 1N)
     if C.Sample and C.Sample.started then C.Sample:Schedule("unenchanted"); C.Sample:Schedule("ready") end
     if C.UI and C.UI.Refresh then C.UI:Refresh() end
+    if C.Comm and C.Comm.WordSoon then C.Comm:WordSoon() end
   end
   return new
 end
--- has the guild seen an enchant in this slot: on this kind of item, or (kind nil) on any
-function S.EnchantLearned(slot, kind)
+-- has this client seen an enchant in this slot, from enough members: on this kind of item, or (kind nil) on any
+local function ownLearned(slot, kind)
   local k = S.Known()
   local rec = k and type(k.enchant) == "table" and k.enchant[slot]
   local kinds = type(rec) == "table" and rec.kinds
   if type(kinds) ~= "table" then return false end
-  if kind ~= nil then return type(kinds[kind]) == "table" end
+  if kind ~= nil then return voices(kinds[kind]) >= S.VOICES end
+  for _, kr in pairs(kinds) do if voices(kr) >= S.VOICES then return true end end
+  return false
+end
+-- what the officers say the guild has learned there (Rules.lua R.Word: their 1N, which a member's client takes where
+-- the officers keep Enchanted slots to themselves and it hears no member's enchants): on this kind, or on any
+function S.WordEnchant(slot, kind)
+  local w = C.Rules and C.Rules.Word and C.Rules.Word()
+  local kinds = w and w.enchant[slot]
+  if not kinds then return false end
+  if kind ~= nil then return kinds[kind] == true end
   return next(kinds) ~= nil
 end
+-- has the guild learned an enchant in this slot: seen on enough members here, or the officers' word
+function S.EnchantLearned(slot, kind) return ownLearned(slot, kind) or S.WordEnchant(slot, kind) end
 -- does the slot take an enchant, on this kind of item or (kind nil) on any: the guild has seen one there, or the seed
 -- says so and the rules let it count (Rules.lua rule 5: a fresh seed, the slot neither doubted nor absent, and, where
 -- a level is given, a character at the rules' enchant level)
@@ -272,23 +385,25 @@ function S.EnchantIdSeen(slot, id)
   local k = S.Known()
   local rec = k and type(k.enchant) == "table" and k.enchant[slot]
   local er = type(rec) == "table" and type(rec.ench) == "table" and rec.ench[id]
-  return type(er) == "table" and type(er.n) == "number" and er.n or 0
+  return voices(er)
 end
--- where the word that a slot takes an enchant comes from, for a tooltip: "seen on 3 members", else the seed's own
--- word on the slot, however many members the guild has seen with one on other kinds of item there
+-- where the word that a slot takes an enchant comes from, for a tooltip: "seen on 3 members", "from the officers"
+-- (their word, where this client hears no member's enchants), else the seed's own word on the slot, however many
+-- members the guild has seen with one on other kinds of item there
 function S.EnchantSource(slot, kind)
   local n = S.EnchantSeen(slot, kind)
   if n > 0 then return n == 1 and "seen on 1 member" or ("seen on " .. n .. " members") end
+  if S.WordEnchant(slot, kind) then return "from the officers" end
   local st = C.Rules and C.Rules.SeedSlotState(slot)
   if st == "beta" then return "seen in the beta" end
   return "from research"
 end
--- how many members the guild has seen with an enchant in this slot (on this kind of item, where kind is given)
+-- how many members this client has seen with an enchant in this slot (on this kind of item, where kind is given); 0
+-- where only the officers' word says so (it names no member and counts none)
 function S.EnchantSeen(slot, kind)
-  if not S.EnchantLearned(slot, kind) then return 0 end
+  if not ownLearned(slot, kind) then return 0 end
   local rec = S.Known().enchant[slot]
-  local r = kind ~= nil and rec.kinds[kind] or rec
-  return type(r.n) == "number" and r.n or 0
+  return voices(kind ~= nil and rec.kinds[kind] or rec)
 end
 -- a kind's name as the client gives it (C_Item.GetItemSubClassInfo: "Bows", "Shields"), the class.subclass where none
 function S.KindName(kind)
@@ -297,14 +412,23 @@ function S.KindName(kind)
   local name = Get(api("C_Item", "GetItemSubClassInfo"), tonumber(class), tonumber(sub))
   return (type(name) == "string" and name ~= "") and name or kind
 end
--- the slots learned, in the slots' order, with how many members were seen with one and the kinds of item:
--- { { slot, label, n, { { kind, n }, ... } }, ... }
-function S.EnchantSlots()
+-- the slots learned, in the slots' order, with how many members were seen with one and the kinds of item (a kind the
+-- officers' word alone gives counts 0): { { slot, label, n, { { kind, n }, ... } }, ... }. own: what this client saw
+-- itself only, the officers' word left out (what an officer's client says to the guild, Rules.lua R.WordParts)
+function S.EnchantSlots(own)
   local out = {}
   for _, e in ipairs(SLOT_OF) do
-    if S.EnchantLearned(e[1]) then
-      local kinds = {}
-      for kind, r in pairs(S.Known().enchant[e[1]].kinds) do if type(r) == "table" then kinds[#kinds + 1] = { kind, type(r.n) == "number" and r.n or 0 } end end
+    if ownLearned(e[1]) or (not own and S.WordEnchant(e[1])) then
+      local kinds, seen = {}, {}
+      local rec = (S.Known() or {}).enchant
+      rec = type(rec) == "table" and rec[e[1]]
+      for kind, r in pairs(type(rec) == "table" and type(rec.kinds) == "table" and rec.kinds or {}) do
+        if voices(r) >= S.VOICES then kinds[#kinds + 1] = { kind, voices(r) }; seen[kind] = true end
+      end
+      if not own then
+        local w = C.Rules and C.Rules.Word and C.Rules.Word()
+        for kind in pairs(w and w.enchant[e[1]] or {}) do if not seen[kind] then kinds[#kinds + 1] = { kind, 0 } end end
+      end
       table.sort(kinds, function(a, b) return a[1] < b[1] end)
       out[#out + 1] = { e[1], e[2], S.EnchantSeen(e[1]), kinds }
     end
@@ -686,11 +810,14 @@ local D = S.def
 D("level", "Level", "leveling", { read = function() return Num("UnitLevel", "player") end, on = "PLAYER_LEVEL_UP" })
 D("xp", "XP into level", "leveling", { read = function() local x, m = Num("UnitXP", "player"), Num("UnitXPMax", "player"); if x and m and m > 0 then return math.floor(x * 100 / m) end end,
   on = { "PLAYER_XP_UPDATE", "PLAYER_LEVEL_UP" }, fmt = pct, slow = true, hint = "percent of the level" })
-D("xp_hour", "XP/hour", "leveling", { track = true, slow = true, hint = "XP gained in the last hour of play" })
-D("xp_session", "XP/hour today", "leveling", { track = true, slow = true, hint = "XP an hour since you logged in" })
-D("played", "Time played", "leveling", { track = true, slow = true, fmt = hours })
+-- (the three paces give one another back, so they go together: Hours to 60 is the XP the levels ahead take over XP/hour,
+-- the level and the XP into it being everyone's, so either gives the other; XP/hour today counts the same XP over the
+-- same span in each session's first hour, and the change in it, times the Session, the last hour's XP after that)
+D("xp_hour", "XP/hour", "leveling", { track = true, slow = true, reveals = { "to60", "xp_session" }, hint = "XP gained in the last hour of play" })
+D("xp_session", "XP/hour today", "leveling", { track = true, slow = true, reveals = { "xp_hour" }, hint = "XP an hour since you logged in" })
+D("played", "Time played", "leveling", { track = true, slow = true, fmt = hours, reveals = { "played_lvl" } })
 D("played_lvl", "Played this level", "leveling", { track = true, slow = true, fmt = hours })
-D("to60", "Hours to 60", "leveling", { track = true, slow = true, fmt = orDash, hint = "at the last hour's pace, over the XP each level ahead takes as the guild has learned it" })
+D("to60", "Hours to 60", "leveling", { track = true, slow = true, fmt = orDash, reveals = { "xp_hour" }, hint = "at the last hour's pace, over the XP each level ahead takes as the guild has learned it" })
 D("rested", "Rested XP", "leveling", { read = function() local r = Num("GetXPExhaustion"); return r or 0 end, on = "UPDATE_EXHAUSTION" })
 D("zone", "Zone", "leveling", { read = function() local z = Get("GetZoneText"); return type(z) == "string" and z or nil end, kind = "text",
   on = { "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "PLAYER_ENTERING_WORLD" } })
@@ -704,7 +831,7 @@ end })
 D("logins", "Logins this week", "leveling", { track = true, hint = "logins, not reloads; the week starts on Monday" })
 D("session", "Session", "leveling", { track = true, slow = true, fmt = hours, hint = "this login so far" })
 D("longest", "Longest session", "leveling", { track = true, slow = true, fmt = hours })
-D("quests_done", "Quests done", "leveling", { read = function()
+D("quests_done", "Quests done", "leveling", { reveals = { "quests_today" }, read = function()
   local all = Get(api("C_QuestLog", "GetAllCompletedQuestIDs"))
   if type(all) == "table" then return #all end
 end, on = "QUEST_TURNED_IN" })
@@ -722,7 +849,7 @@ D("quests_ready", "Ready to hand in", "leveling", { on = "QUEST_LOG_UPDATE", rea
   end
   return ready
 end })
-D("dungeons", "Dungeons run", "leveling", { track = true, hint = "dungeon instances entered, not counting reloads; the same dungeon again only after another or a new session" })
+D("dungeons", "Dungeons run", "leveling", { track = true, reveals = { "gc_dungeons" }, hint = "dungeon instances entered, not counting reloads; the same dungeon again only after another or a new session" })
 D("kills", "XP gains", "leveling", { count = "CHAT_MSG_COMBAT_XP_GAIN", slow = true, hint = "XP messages, counted: kills, quests and discoveries alike (the text is secret on this client)" })
 D("zones_seen", "Zones visited", "leveling", { track = true })
 D("flights_known", "Flight paths", "leveling", { track = true, hint = "known, as the taxi map last showed" })
@@ -769,34 +896,71 @@ D("still", "Longest stood still", "leveling", { track = true, slow = true, fmt =
 -- progression
 ----------------------------------------------------------------------------
 -- readiness: the gaps a record shows, by name; nil until the gear and bags have been read. An empty slot, a missing
--- enchant (Missing enchants, below), durability under half, no potion in the bags
+-- enchant (Missing enchants, below), durability under half, no potion in the bags. Ready counts only the ones the
+-- guild may see (S.ReadyCounts): with the defaults the officers keep the empty slots and the missing enchants to
+-- themselves, and a verdict that counted them would tell every member whether a character has any (0.6.0's first
+-- build: "ready" said none). The officers see those in their own columns
 local READY_INPUTS = { "empty_slots", "unenchanted", "durability", "potions" }
+S.READY_INPUTS = READY_INPUTS
+local READY_WORD = { empty_slots = "an empty slot", unenchanted = "a missing enchant", durability = "durability under 50%", potions = "no potions" }
+-- the inputs Ready counts now: { [id] = true } for each the policy routes to the guild (Policy.lua P:Route)
+function S.ReadyCounts()
+  local out = {}
+  for _, id in ipairs(READY_INPUTS) do if not C.Policy or C.Policy:Route(id) == "all" then out[id] = true end end
+  return out
+end
+-- the gaps Ready counts now (or counts names), in words: "durability under 50% and no potions"
+function S.ReadyCountsText(counts)
+  local words = {}
+  counts = counts or S.ReadyCounts()
+  for _, id in ipairs(READY_INPUTS) do if counts[id] then words[#words + 1] = READY_WORD[id] end end
+  if #words == 0 then return "nothing" end
+  if #words == 1 then return words[1] end
+  return table.concat(words, ", ", 1, #words - 1) .. " and " .. words[#words]
+end
 local function listCount(v) local k = 0; if type(v) == "table" then for _, e in ipairs(SLOT_OF) do if v[e[1]] then k = k + 1 end end end return k end
-function S.ReadyGaps(v)
-  if type(v) ~= "table" or (v.durability == nil and v.potions == nil and type(v.empty_slots) ~= "table") then return nil end
+-- the gaps among the inputs counts names (S.ReadyCounts() where none is given); nil where none of them has been read
+function S.ReadyGaps(v, counts)
+  counts = counts or S.ReadyCounts()
+  if type(v) ~= "table" then return nil end
+  local read = false
+  for id in pairs(counts) do if v[id] ~= nil then read = true end end
+  if not read then return nil end
   local gaps = {}
-  local empty, missing = listCount(v.empty_slots), listCount(v.unenchanted)
+  local empty, missing = counts.empty_slots and listCount(v.empty_slots) or 0, counts.unenchanted and listCount(v.unenchanted) or 0
   if empty > 0 then gaps[#gaps + 1] = empty == 1 and "an empty slot" or (empty .. " empty slots") end
   if missing > 0 then gaps[#gaps + 1] = missing == 1 and "a missing enchant" or (missing .. " missing enchants") end
-  if type(v.durability) == "number" and v.durability < 50 then gaps[#gaps + 1] = "durability under 50%" end
-  if v.potions == 0 then gaps[#gaps + 1] = "no potions" end
+  if counts.durability and type(v.durability) == "number" and v.durability < 50 then gaps[#gaps + 1] = "durability under 50%" end
+  if counts.potions and v.potions == 0 then gaps[#gaps + 1] = "no potions" end
   return gaps
 end
 local GEAR_ON = { "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED" }
 local BAG_ON = { "BAG_UPDATE_DELAYED", "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED" }
 D("ready", "Ready", "prog", { fmt = readyOf, gear = true, bag = true, on = { "PLAYER_EQUIPMENT_CHANGED", "UNIT_INVENTORY_CHANGED", "GET_ITEM_INFO_RECEIVED", "UPDATE_INVENTORY_DURABILITY", "BAG_UPDATE_DELAYED" },
-  hint = "ready with no gap, gaps with one or two, no with more: an empty slot, a missing enchant (as Missing enchants counts them), durability under 50%, no potions",
+  counts = READY_INPUTS,
+  hint = "ready with no gap, gaps with half the gaps it counts or fewer, no with more. It counts the ones everyone may see: durability under 50% and no potions, and an empty slot and a missing enchant once the officers open them",
   read = function()
-    -- from the inputs' live reads, so it never depends on which stat happened to be read first
-    local v = {}
-    for _, id in ipairs(READY_INPUTS) do local ok, x = pcall(S.byId[id].read); if ok then v[id] = C.Plain(x) end end
-    local gaps = S.ReadyGaps(v)
+    -- from the inputs' live reads, so it never depends on which stat happened to be read first; only the ones the
+    -- guild may see
+    local counts = S.ReadyCounts()
+    local v, n = {}, 0
+    for _, id in ipairs(READY_INPUTS) do
+      if counts[id] then
+        n = n + 1
+        local ok, x = pcall(S.byId[id].read)
+        if ok then v[id] = C.Plain(x) end
+      end
+    end
+    local gaps = S.ReadyGaps(v, counts)
     if not gaps then return nil end
-    return #gaps == 0 and 2 or (#gaps <= 2 and 1 or 0)
+    return #gaps == 0 and 2 or (#gaps * 2 <= n and 1 or 0)
   end })
 D("ilvl", "Item level", "prog", { read = function() local avg = avgItemLevel(); return avg and math.floor(avg) or nil end, on = GEAR_ON, gear = true,
   hint = "the average over the items you wear" })
-D("ilvl_slots", "Item level per slot", "prog", { kind = "list", of = SLOT_OF, on = GEAR_ON, gear = true, hint = "slots at or above your average", read = function()
+-- (a slot it lists is worn, and with the average and your level it names the old ones where the whole set is old:
+-- it follows Empty slots and Gear 10+ levels old)
+D("ilvl_slots", "Item level per slot", "prog", { kind = "list", of = SLOT_OF, on = GEAR_ON, gear = true, hint = "slots at or above your average",
+  reveals = { "empty_slots", "old_gear" }, read = function()
   local avg = avgItemLevel()
   if not avg then return nil end
   return slotSet(function(_, e) return e ~= nil and e.level ~= nil and e.level >= avg end)
@@ -804,11 +968,15 @@ end })
 D("empty_slots", "Empty slots", "prog", { kind = "list", of = SLOT_OF, default = "self", on = GEAR_ON, gear = true,
   read = function() return slotSet(function(s, e) return e == nil and s ~= 17 and s ~= 18 end) end })
 -- the enchants, from the links alone: where a worn slot gives no readable link the stat reads nil and its tooltip says
--- why, rather than a count that would be wrong. Enchanted is the slots (everyone sees it; no column); the guild learns
--- from it with the kind of each enchanted item, which travels beside it as the hidden ench_kinds (end of the file).
+-- why, rather than a count that would be wrong. Enchanted is the slots (no column); the guild learns from it with the
+-- kind of each enchanted item, which travels beside it as the hidden ench_kinds (end of the file). It follows Missing
+-- enchants and Empty slots: with the slots the guild knows take an enchant, the ones it leaves out are missing or
+-- empty, so any member could list a character's missing enchants from it (0.6.0's first build sent it on GUILD while
+-- Missing enchants went to the officers alone). With the defaults it goes to the officers, and the members learn what
+-- takes an enchant from their word (Rules.lua R.Word).
 -- Missing enchants is the worn items without one where the guild has enchanted the same kind of item in that slot,
 -- or, from the rules' enchant level, where the seed has an enchant for that slot and kind (Rules.lua rule 5)
-D("enchanted", "Enchanted slots", "prog", { kind = "list", of = SLOT_OF, default = "all", on = GEAR_ON, gear = true,
+D("enchanted", "Enchanted slots", "prog", { kind = "list", of = SLOT_OF, default = "all", on = GEAR_ON, gear = true, reveals = { "unenchanted", "empty_slots" },
   hint = "worn slots whose item carries an enchant; the guild learns from these, with the kind of item, what takes one", read = function()
   local g = gear()
   if not g then return nil end
@@ -880,11 +1048,13 @@ D("durability", "Durability", "prog", { fmt = pct, gear = true, on = { "UPDATE_I
   end
   return worst
 end })
--- consumables by the game's item classes (bags, above)
-D("potions", "Potions", "prog", { read = consumables("potions"), on = BAG_ON, bag = true, hint = "in your bags, every potion the game calls one" })
-D("elixirs", "Elixirs", "prog", { read = consumables("elixirs"), on = BAG_ON, bag = true, hint = "in your bags" })
-D("flasks", "Flasks", "prog", { read = consumables("flasks"), on = BAG_ON, bag = true, hint = "in your bags, flasks and phials" })
-D("food", "Food and drink", "prog", { read = consumables("food"), on = BAG_ON, bag = true, hint = "in your bags" })
+-- consumables by the game's item classes (bags, above). What leaves the bags in a raid is Consumables used in raids,
+-- so each count follows it
+local USED = { "consumed" }
+D("potions", "Potions", "prog", { read = consumables("potions"), on = BAG_ON, bag = true, reveals = USED, hint = "in your bags, every potion the game calls one" })
+D("elixirs", "Elixirs", "prog", { read = consumables("elixirs"), on = BAG_ON, bag = true, reveals = USED, hint = "in your bags" })
+D("flasks", "Flasks", "prog", { read = consumables("flasks"), on = BAG_ON, bag = true, reveals = USED, hint = "in your bags, flasks and phials" })
+D("food", "Food and drink", "prog", { read = consumables("food"), on = BAG_ON, bag = true, reveals = USED, hint = "in your bags" })
 D("bandages", "Bandages", "prog", { read = consumables("bandages"), on = BAG_ON, bag = true, hint = "in your bags" })
 -- healthstones by item id: the one class reagent with evidence on Forever (QuestBank's uploads find Minor and Lesser
 -- Healthstones, 5512 and 5511, in Forever characters' bags); soul shards, shaman totems and rogue poisons had none. The
@@ -901,10 +1071,12 @@ D("bags_size", "Bag slots", "prog", { read = function() return bagTotal("GetCont
 D("buffs_missing", "Raid buffs missing", "prog", { default = "self", on = { "UNIT_AURA", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD" },
   hint = "long buffs two guild mates (or one, three times) have cast on you in the last two weeks that you have not got now; counted in a group or an instance",
   read = function() local k = S.Known(); if not k then return nil end return #S.MissingBuffs() end })
--- what this character has met in play, counted from the discovered stats (Sample.lua keeps them)
-D("bosses", "Bosses killed", "prog", { track = true, hint = "different bosses this character has killed, as the game reports encounters" })
-D("dungeons_seen", "Dungeons seen", "prog", { track = true, hint = "different dungeons this character has entered" })
-D("raids", "Raids attended", "prog", { track = true, hint = "raid instances entered, counted" })
+-- what this character has met in play, counted from the discovered stats (Sample.lua keeps them). Each is its
+-- category's count, so the two go together: the category tells the count (Stats.CatReveals, below), and the count,
+-- watched as it grows, tells when each new one came; and Raids attended, less what it was on Monday, is Raids this week
+D("bosses", "Bosses killed", "prog", { track = true, reveals = { "gc_bosses" }, hint = "different bosses this character has killed, as the game reports encounters" })
+D("dungeons_seen", "Dungeons seen", "prog", { track = true, reveals = { "gc_dungeons" }, hint = "different dungeons this character has entered" })
+D("raids", "Raids attended", "prog", { track = true, reveals = { "gc_raids", "weekly_raids" }, hint = "raid instances entered, counted" })
 -- the effective resistance (third return), the one the character sheet shows; the damage schools are the game's structure
 local function resist(n) return function() local _, _, v = Get("UnitResistance", "player", n); return type(v) == "number" and v or nil end end
 D("resist_fire", "Fire resist", "prog", { read = resist(2), on = GEAR_ON, gear = true })
@@ -942,13 +1114,18 @@ D("lc_cats", "Challenge categories", "prog", { kind = "pips", pips = 13, on = "A
 D("gold", "Gold", "officer", { read = money, fmt = goldOf, on = "PLAYER_MONEY" })
 D("bank_in", "Guild bank deposits", "officer", { track = true, fmt = goldOf, hint = "while the guild bank was open" })
 D("bank_out", "Guild bank withdrawals", "officer", { track = true, fmt = goldOf, hint = "while the guild bank was open" })
-D("consumed", "Consumables used in raids", "officer", { track = true, hint = "potions, elixirs, flasks and food that left your bags in a raid" })
-D("addon_ver", "Addon version", "officer", { kind = "text", read = function() return C.version end, default = "all" })
+-- (everyone's by default: the bag counts, which everyone sees, fall as they are used, so a member watching them in a
+-- raid sees each one go; closing it closes the counts with it)
+D("consumed", "Consumables used in raids", "officer", { track = true, default = "all", hint = "potions, elixirs, flasks and food that left your bags in a raid" })
+-- (nobody's to set: it says which officers take a whisper and whose Ready counts what, Roster.lua R:TakesWhispers)
+D("addon_ver", "Addon version", "officer", { kind = "text", read = function() return C.version end, default = "all", fixed = true })
 
 ----------------------------------------------------------------------------
 -- the hall of shame
 ----------------------------------------------------------------------------
-D("deaths", "Deaths", "funny", { count = "PLAYER_DEAD" })
+-- (today's deaths are the lifetime count less what it was this morning, and the ones while leveling what it was at the
+-- cap: Deaths follows both)
+D("deaths", "Deaths", "funny", { count = "PLAYER_DEAD", reveals = { "deaths_today", "deaths_lvl" } })
 D("deaths_today", "Deaths today", "funny", { count = "PLAYER_DEAD" })
 D("falls", "Fall deaths", "funny", { track = true, hint = "died within three seconds of falling" })
 D("drownings", "Drownings", "funny", { track = true, hint = "died with the breath bar empty" })
@@ -972,9 +1149,11 @@ D("grey_gold", "Gold from greys", "funny", { track = true, fmt = goldOf, hint = 
 ----------------------------------------------------------------------------
 D("main", "Declared main", "officer", { kind = "text", read = function() return C.Settings().main or "" end, default = "all" })
 D("role", "Role", "officer", { kind = "text", read = function() return C.Char().role or "" end, default = "all" })
-D("last_login", "Last login", "officer", { track = true, hint = "epoch seconds", default = "all" })
+D("last_login", "Last login", "officer", { track = true, hint = "the day this character last logged in", default = "all" })
 D("raid_spec", "Raid spec set", "officer", { kind = "flag", read = function() return C.Char().raidspec == true end, hint = "ticked by you in Settings, per character" })
-D("weekly_raids", "Raids this week", "officer", { track = true, hint = "raid instances entered since Monday" })
+-- (everyone's by default: Raids attended, which everyone sees, less what it was on Monday is this; closing it closes
+-- Raids attended and the Raids category with it)
+D("weekly_raids", "Raids this week", "officer", { track = true, default = "all", reveals = { "gc_raids" }, hint = "raid instances entered since Monday" })
 
 ----------------------------------------------------------------------------
 -- hidden: what a record carries for the addon, never shown. Kept out of S.list and the categories, so no page, column,
@@ -990,14 +1169,65 @@ D("weekly_raids", "Raids this week", "officer", { track = true, hint = "raid ins
 --   xpmax       the XP your level takes, "level:max" (UnitXPMax at the level you are), which the guild learns its XP
 --               curve from (Rules.lua rule 6). The level travels in it, so a receiver never pairs a new level with
 --               the last one's XP. Slow: it changes once a level
+-- The two last go the way of what they tell (with): the kinds of your enchanted items Enchanted slots' way (to the
+-- officers wherever Missing enchants or Empty slots is theirs), the XP your level takes the level's. The GUID is the
+-- roster's to give anyone, and always travels
 ----------------------------------------------------------------------------
 S.HIDDEN = { guid = { id = "guid", label = "Character GUID", cat = "hidden", kind = "text", max = 40, default = "all", hidden = true },
-  ench_kinds = { id = "ench_kinds", label = "Enchanted item kinds", cat = "hidden", kind = "text", max = KINDS_MAX, default = "all", hidden = true },
-  xpmax = { id = "xpmax", label = "XP this level takes", cat = "hidden", kind = "text", max = 16, default = "all", hidden = true, slow = true } }
+  ench_kinds = { id = "ench_kinds", label = "Enchanted item kinds", cat = "hidden", kind = "text", max = KINDS_MAX, default = "all", hidden = true, with = "enchanted" },
+  xpmax = { id = "xpmax", label = "XP this level takes", cat = "hidden", kind = "text", max = 16, default = "all", hidden = true, slow = true, with = "level" } }
 S.HIDDEN_ORDER = { "guid", "ench_kinds", "xpmax" }
 S.byId.guid = S.HIDDEN.guid
 S.byId.ench_kinds = S.HIDDEN.ench_kinds
 S.byId.xpmax = S.HIDDEN.xpmax
+
+----------------------------------------------------------------------------
+-- plausibility: what a member's addon may say. Anyone can edit their copy of Cute and send any number; the game cannot
+-- stop that, so a value from the channel is checked on receipt (Roster.lua) and one outside its stat's bounds is
+-- dropped, its sender marked suspect with the reason, which only the officers see. An int keeps to 0 to 2^31 unless
+-- its stat says otherwise (lo, hi): a percentage to 100, a rate to what an hour of play allows, a standing below zero.
+-- A lifetime count the addon keeps (grows) never goes down; a reinstall that lost the saved variables does, and the
+-- officers see that for what it is. (What the client reads afresh each time, the Legacy counts among them, can read
+-- low while its data loads, and is not held to it.) A level is at most the cap and within one of the level the game's roster gives the member (a
+-- ding reaches the channel before the roster); the level of a first kill (k<id>) is a level. Text, lists and pips are
+-- bounded by their decoding (Comm.lua)
+----------------------------------------------------------------------------
+local INT_MAX = 2 ^ 31
+for _, id in ipairs({ "played", "deaths", "deaths_lvl", "falls", "drownings", "fatigue", "hearth_waste", "afk", "dance", "sit", "emotes",
+  "gchat", "inspected", "fish", "jumps", "ghost_yards", "where", "grey_gold", "dungeons", "kills", "zones_seen", "flights", "hearths",
+  "ghost_time", "gold_earned", "gold_quests", "vendor_sales", "bosses", "dungeons_seen", "raids", "bank_in", "bank_out",
+  "consumed", "longest", "longest_flight", "still" }) do S.byId[id].grows = true end
+-- (an hour of play: a million XP is past any level's, an hour has 3600 seconds to be whispered in, a day a few levels)
+for id, hi in pairs({ xp = 100, durability = 100, ready = 2, xp_hour = 1000000, xp_session = 1000000, whispers = 3600, levelups = 60 }) do S.byId[id].hi = hi end
+for _, id in ipairs({ "resist_fire", "resist_nature", "resist_frost", "resist_shadow", "resist_arcane" }) do S.byId[id].lo = -INT_MAX end
+-- why a member's value cannot be what they say (nil where it can): v the value, old the one held for them, ctx the
+-- roster's level for them and the level cap
+-- (called for every value a member sends: no table or closure made per call)
+local NO_CTX = {}
+local function levelWhy(id, label, ctx, l)
+  if type(l) ~= "number" or l < 1 or (ctx.cap and l > ctx.cap) then return string.format("%s %s, past the level cap", label, tostring(l)) end
+  if id ~= "level" and id ~= "xpmax" then return nil end
+  if ctx.level and math.abs(l - ctx.level) > 1 then return string.format("level %d where the guild roster says %d", l, ctx.level) end
+end
+function S.Implausible(id, v, old, ctx)
+  ctx = ctx or NO_CTX
+  local def = S.byId[id]
+  local label = def and def.label or id
+  if id == "xpmax" then
+    local l, mx = tostring(v):match("^(%d+):(%d+)$")
+    l, mx = tonumber(l), tonumber(mx)
+    if not (l and mx and mx > 0 and mx < INT_MAX) then return "XP this level takes: " .. tostring(v) end
+    return levelWhy(id, label, ctx, l)
+  end
+  if type(v) ~= "number" then return nil end
+  local p = id:match("^([gefik])%d+$")
+  local lo, hi = (def and def.lo) or (p == "f" and -INT_MAX) or 0, (def and def.hi) or INT_MAX
+  if v < lo or v > hi then return string.format("%s %s, out of bounds (%s to %s)", label, tostring(v), tostring(lo), tostring(hi)) end
+  if id == "level" or p == "k" then local why = levelWhy(id, label, ctx, v); if why then return why end end
+  if ((def and def.grows) or p == "e" or p == "i") and type(old) == "number" and v < old then
+    return string.format("%s went down from %s to %s", label, tostring(old), tostring(v))
+  end
+end
 
 ----------------------------------------------------------------------------
 -- the game's statistics: a dynamic category, defined at login from what the client reports
@@ -1013,6 +1243,7 @@ S.byId.xpmax = S.HIDDEN.xpmax
 -- full-record pass, never as they tick), read on the heartbeat and by Sample's coalesced pass.
 S.game = { cats = {}, byCat = {}, byId = {}, defined = false }
 S.gameNote = nil
+S.gamePending = nil -- true while the probe is to be asked again (Sample.lua: an empty list at login)
 S.GAME_CAP = 1000 -- statistics defined at most, so a client cannot fill the registry or the channel past reason
 
 -- the quantity string as a number: separators of any locale dropped ("1,234", "1 234", "1.234"); "--" is the game's
@@ -1089,6 +1320,32 @@ function S.ProbeGame()
   return false, S.gameNote, false
 end
 
+-- what a category tells beyond its own stats, as a stat's reveals (Policy.lua P:Route): a discovered category its
+-- counts (Bosses killed is how many of Bosses' stats are not 0, Dungeons run and Dungeons seen Dungeons' sum and count,
+-- Raids attended and Raids this week Raids'); a statistics category its children, whose totals the game keeps in the
+-- parent ("Total deaths" beside a child's deaths by cause). The game's own statistics are learned at login, so this
+-- is built from the categories the client reported, never listed
+local FOUND_REVEALS = { gc_bosses = { "bosses" }, gc_dungeons = { "dungeons", "dungeons_seen" }, gc_raids = { "raids", "weekly_raids" } }
+local childCache, childOf
+function S.CatReveals(id)
+  if type(id) ~= "string" then return nil end
+  local found = FOUND_REVEALS[id]
+  if found then return found end
+  local cat = tonumber(id:match("^gc(%d+)$"))
+  if not cat then return nil end
+  if childOf ~= S.game then
+    childCache, childOf = {}, S.game
+    for _, e in ipairs(S.game.cats or {}) do
+      if type(e.parent) == "number" and e.parent ~= -1 then
+        local p = "gc" .. e.parent
+        childCache[p] = childCache[p] or {}
+        table.insert(childCache[p], "gc" .. e.id)
+      end
+    end
+  end
+  return childCache[id]
+end
+
 -- one line for /cute api
 function S.GameReport()
   if #S.byCat.game > 0 then return string.format("statistics: %d defined in %d categories", #S.byCat.game, #S.game.cats) end
@@ -1099,7 +1356,8 @@ end
 -- discovered: what the guild meets in play, defined at run time (the sixth category, found)
 ----------------------------------------------------------------------------
 -- Three kinds of stat, each defined the first time a label for it is known, from your own play or from the guild
--- channel, and kept by receivers like the game's statistics (any client keeps the values of an id it has not defined):
+-- channel (S.Found: there, once a member's value for it came or two members agree), and kept by receivers like the
+-- game's statistics (any client keeps the values of an id it has not defined):
 --   e<encounterID>  kills of a boss by this character (ENCOUNTER_END with success, BOSS_KILL where none came; Sample.lua),
 --                   labelled with the encounter's name, grouped by the instance it was killed in
 --   i<instanceID>   times this character entered an instance, labelled with its name, a dungeon or a raid as the
@@ -1109,11 +1367,24 @@ end
 -- its label wins over another locale's), inst[encounterID] (the instance a boss was killed in), kind[instanceID]
 -- ("party", "raid", or "world" for the continent an open-world boss stood on, which is what GetInstanceInfo names
 -- outside an instance) and reactions[r] (the standing range of a reaction,
--- learned from your own factions, so a member's standing can be named). A label from the channel fills a gap and never
--- replaces one this client found. Comm.lua carries them in "1L" messages.
-S.FOUND_CAP = 1000 -- discovered stats defined at most
+-- learned from your own factions, so a member's standing can be named). Comm.lua carries them in "1L" messages.
+-- A label from the channel is one member's word, weighed by who said it (voice[id]: the GUIDs and what each said, four
+-- at most; vn[GUID]: how many ids each named, LABELS_EACH at most): it names what nobody has named yet, and never
+-- replaces one this client found. What decides anything takes two members who agree (sure[id], S.Sure): the kind of an
+-- instance (where a value travels, Policy.lua P:Route), the instance an awaited dungeon is, a name over the seed's,
+-- a faction met (Rules.lua). Until two agree, the first one's name stands, and one an edited copy sent first gives way
+-- to the two. And a label alone defines no stat: it needs your own play, two members' word, or a member's value for it
+-- (S.Found), with LABEL_CAP and FOUND_CAP for the channel's and FOUND_EACH for one member's, so junk labels from one
+-- copy fill nothing and never keep your own bosses, instances and factions out
+S.FOUND_CAP = 1000 -- discovered stats defined from the guild channel at most (your own always are)
+S.FOUND_EACH = 400 -- of those, at most this many first named by one member
+S.FOUND_OWN = 3000 -- your own, at most (a safety net: no character meets that many)
 S.LABEL_CAP = 4000 -- labels kept at most from the channel (a client's own always are), so no sender can fill the saved variables
-S.FOUND = { { "bosses", "Bosses" }, { "dungeons", "Dungeons" }, { "raids", "Raids" }, { "rep", "Reputation" } }
+S.LABELS_EACH = 500 -- ids one member's labels may name
+local VOICES_EACH = 4 -- voices kept per id: two that agree are what counts
+-- (the third: each category's code, for life, as S.CODES)
+S.FOUND = { { "bosses", "Bosses", "cb" }, { "dungeons", "Dungeons", "cd" }, { "raids", "Raids", "cr" }, { "rep", "Reputation", "cp" } }
+for _, f in ipairs(S.FOUND) do assert(not S.byCode[f[3]], "a discovered category's code: " .. f[1]); S.byCode[f[3]] = "gc_" .. f[1] end
 S.foundVersion = 0
 S.LABEL_MAX = 60
 local KIND_OF = { party = "party", raid = "raid", p = "party", r = "raid", w = "world" }
@@ -1202,23 +1473,107 @@ function S.Factions()
   return out
 end
 
+-- a label two members agree on, or this client's own: what may decide something (S.Label above)
+function S.Sure(id)
+  local k = S.Known()
+  return k ~= nil and ((type(k.mine) == "table" and k.mine[id] == true) or (type(k.sure) == "table" and k.sure[id] == true))
+end
+-- an instance's kind and whether it is sure: your own entry's, the seed's for an instance it names (one member's word
+-- never overrides it), two members' who agree; else the first member's word, unsure (the Statistics page groups by it,
+-- and a value goes the stricter of Dungeons and Raids by it: Policy.lua). Nil where nobody said
+local EMPTY_T = {}
+function S.KindOf(num)
+  local k = S.Known()
+  if type(num) ~= "number" then return nil, false end
+  local id = "i" .. num
+  local kind = k and type(k.kind) == "table" and k.kind[num] or nil
+  if kind and type(k.mine) == "table" and k.mine[id] then return kind, true end
+  local seed = C.Rules and C.Rules.Seed and C.Rules.Seed()
+  local d = seed and seed.dungeons[num]
+  if d then return d.kind, true end
+  if kind and type(k.sure) == "table" and k.sure[id] then return kind, true end
+  if kind then return kind, false end
+  local v = k and type(k.voice) == "table" and k.voice[id] or nil
+  for g, x in pairs(type(v) == "table" and v or EMPTY_T) do
+    local kd = not untrusted(g) and KIND_OF[tostring(x):match("\1(.*)$") or ""]
+    if kd then return kd, false end
+  end
+  return nil, false
+end
+
 -- the group a discovered id belongs in, and its number; nil for an instance whose kind is not known yet
 local function groupOf(id)
   local prefix, num = id:match("^([efi])(%d+)$")
   num = tonumber(num)
   if not (prefix and num) then return nil end
-  local k = S.Known()
   if prefix == "e" then return "bosses", num end
   if prefix == "f" then return "rep", num end
-  local kind = k and k.kind and k.kind[num]
+  local kind = S.KindOf(num)
   if kind == "party" then return "dungeons", num elseif kind == "raid" then return "raids", num end
   return nil, num
 end
 
--- define (or relabel) a discovered stat from what is known of it; the def, or nil when it cannot be shown yet
-function S.Found(id)
+-- the seed's name for a boss or a dungeon it names, and a boss's instance (Rules.lua R.Seed)
+local function seeded(id)
+  local s = C.Rules and C.Rules.Seed and C.Rules.Seed()
+  local p, num = id:match("^([ei])(%d+)$")
+  num = tonumber(num)
+  if not (s and num) then return nil end
+  if p == "e" then local b = s.bosses[num]; return b and b.name, b and b.inst end
+  local d = s.dungeons[num]
+  return d and d.name
+end
+-- a name only members the officers marked untrusted said (each voice kept, k.voice): none of theirs names anything,
+-- what they said before the mark included
+local function distrusted(id)
   local k = S.Known()
-  local label = k and k.labels and k.labels[id]
+  local v = k and type(k.voice) == "table" and k.voice[id] or nil
+  if type(v) ~= "table" or next(v) == nil then return false end
+  for g in pairs(v) do if not untrusted(g) then return false end end
+  return true
+end
+-- the name a discovered id goes by on the Statistics page, and a boss's instance: your own, or two members' who agree
+-- (S.Sure); else the seed's, where it names it; else the first member's, unless only untrusted members said it. One
+-- member's word renames nothing the seed names, nor files its boss under another instance
+function S.LabelOf(id)
+  local k = S.Known()
+  local sure = S.Sure(id)
+  if not sure then local name = seeded(id); if name then return name end end
+  local label = k and type(k.labels) == "table" and k.labels[id] or nil
+  if label and not sure and distrusted(id) then return nil end
+  return label
+end
+function S.InstOf(num)
+  local k = S.Known()
+  if not S.Sure("e" .. num) then local _, inst = seeded("e" .. num); if inst then return inst end end
+  return k and type(k.inst) == "table" and k.inst[num] or nil
+end
+-- the voices an id was named by that may still define a stat from the channel (FOUND_EACH a voice): the one whose
+-- value or word defines it first, then the others, lowest GUID first
+local function voicesOf(id, voice)
+  local k = S.Known()
+  local v = k and type(k.voice) == "table" and k.voice[id] or nil
+  local list = {}
+  for g in pairs(type(v) == "table" and v or EMPTY_T) do if g ~= voice then list[#list + 1] = g end end
+  table.sort(list)
+  if type(voice) == "string" then table.insert(list, 1, voice) end
+  return list
+end
+-- does a member's record hold a value for it (the voice's own, or, at login, any: S.valued)
+local function valued(id, voice)
+  if S.valued and S.valued[id] then return true end
+  if type(voice) ~= "string" then return false end
+  local key = C.Roster and C.Roster.KeysByGuid and C.Roster:KeysByGuid()[voice]
+  local e = key and CuteDB.roster[key]
+  return type(e) == "table" and type(e.stats) == "table" and e.stats[id] ~= nil
+end
+S.foundChannel, S.foundOwn, S.foundBy = 0, 0, {}
+-- define (or relabel) a discovered stat from what is known of it; the def, or nil when it cannot be shown yet. own:
+-- this client met it (always defined); else from the channel: once two members agree on it or a member's value for
+-- it came (held), within FOUND_CAP and FOUND_EACH of the voice that named it first
+function S.Found(id, own, voice, held)
+  local k = S.Known()
+  local label = S.LabelOf(id)
   if type(label) ~= "string" or label == "" then return nil end
   local group, num = groupOf(id)
   if not group then return nil end
@@ -1228,7 +1583,22 @@ function S.Found(id)
     if def.label ~= label or def.learned ~= group then def.label, def.learned = label, group; S.foundVersion = S.foundVersion + 1 end
     return def
   end
-  if #S.byCat.found >= S.FOUND_CAP then return nil end
+  own = own or (type(k.mine) == "table" and k.mine[id] == true)
+  local who
+  if own then
+    if S.foundOwn >= S.FOUND_OWN then return nil end
+    S.foundOwn = S.foundOwn + 1
+  else
+    if S.foundChannel >= S.FOUND_CAP then return nil end
+    if not (held or S.Sure(id) or valued(id, voice)) then return nil end
+    -- (charged to the voice whose value or word defines it, else another that named it with quota left: a copy that
+    -- named four hundred first blocks nobody's discoveries)
+    local voices = voicesOf(id, voice)
+    for _, g in ipairs(voices) do if (S.foundBy[g] or 0) < S.FOUND_EACH then who = g break end end
+    if #voices > 0 and not who then return nil end
+    S.foundChannel = S.foundChannel + 1
+    if who then S.foundBy[who] = (S.foundBy[who] or 0) + 1 end
+  end
   local o = { learned = group, default = "all", num = num }
   if group == "rep" then
     -- the standing is read from the list; it moves with every kill of the faction's foes, so it travels on the flush
@@ -1248,50 +1618,119 @@ function S.Found(id)
   return def
 end
 
--- a label learned: own (this client met it) or from the guild channel. For a boss the instance it was killed in, for an
--- instance its kind. Returns true when this client found something new to tell the guild (an own discovery, or an own
--- label that differs from the one it had)
-function S.Label(id, label, own, inst, kind)
+-- a label learned: own (this client met it) or from the guild channel, voice the GUID of the member who said it (none:
+-- nothing taken). For a boss the instance it was killed in, for an instance its kind. Returns true when this client
+-- found something new to tell the guild (an own discovery, or an own label that differs from the one it had)
+local function agreed(v)
+  local n = {}
+  for g, x in pairs(v) do
+    if not untrusted(g) then n[x] = (n[x] or 0) + 1; if n[x] >= S.VOICES then return x end end
+  end
+  return nil
+end
+function S.Label(id, label, own, inst, kind, voice)
   local k = S.Known()
   if not k or type(id) ~= "string" or not id:match("^[efi]%d+$") then return false end
   label = S.CleanLabel(label)
   if label == "" then return false end
   k.labels, k.mine, k.inst, k.kind = k.labels or {}, k.mine or {}, k.inst or {}, k.kind or {}
+  k.voice, k.vn, k.sure = k.voice or {}, k.vn or {}, k.sure or {}
   if not S.labelCount then S.labelCount = 0; for _ in pairs(k.labels) do S.labelCount = S.labelCount + 1 end end
-  local tell = false
+  local num, p = tonumber(id:sub(2)), id:sub(1, 1)
+  kind = KIND_OF[kind or ""]
+  local function bump() S.foundVersion = S.foundVersion + 1 end
   if own then
-    tell = not k.mine[id] or k.labels[id] ~= label
+    local tell = not k.mine[id] or k.labels[id] ~= label
     if k.labels[id] == nil then S.labelCount = S.labelCount + 1 end
+    if k.labels[id] ~= label then bump() end
     k.labels[id], k.mine[id] = label, true
-  elseif k.labels[id] == nil then
-    if S.labelCount >= S.LABEL_CAP then return false end
+    if p == "e" and type(inst) == "number" and inst >= 0 and k.inst[num] ~= inst then k.inst[num] = inst; bump() end
+    if p == "i" and kind and k.kind[num] ~= kind then k.kind[num] = kind; bump() end
+    S.Found(id, true)
+    return tell
+  end
+  if type(voice) ~= "string" or voice == "" then return false end
+  -- the voice, kept: what it said, the boss's instance or the instance's kind with it
+  local extra = (p == "e" and type(inst) == "number" and inst >= 0 and tostring(inst)) or (p == "i" and kind) or ""
+  local text = label .. "\1" .. extra
+  local v = k.voice[id]
+  if not (type(v) == "table" and v[voice] == text) then
+    if not (type(v) == "table" and v[voice] ~= nil) then
+      local nv = 0
+      for _ in pairs(type(v) == "table" and v or EMPTY_T) do nv = nv + 1 end
+      if nv >= VOICES_EACH or (k.vn[voice] or 0) >= S.LABELS_EACH or (nv == 0 and S.labelCount >= S.LABEL_CAP) then return false end
+      k.vn[voice] = (k.vn[voice] or 0) + 1
+    end
+    if type(v) ~= "table" then v = {}; k.voice[id] = v end
+    v[voice] = text
+  end
+  if k.mine[id] then return false end
+  local sure = agreed(v)
+  if sure then
+    -- two who agree: their name, their instance or kind, even over a first one's
+    local l, x = sure:match("^(.-)\1(.*)$")
+    if k.labels[id] == nil then S.labelCount = S.labelCount + 1 end
+    if k.labels[id] ~= l then k.labels[id] = l; bump() end
+    if not k.sure[id] then k.sure[id] = true; bump() end
+    if p == "e" and tonumber(x) and k.inst[num] ~= tonumber(x) then k.inst[num] = tonumber(x); bump() end
+    if p == "i" and KIND_OF[x] and k.kind[num] ~= KIND_OF[x] then k.kind[num] = KIND_OF[x]; bump() end
+  elseif k.labels[id] == nil and not seeded(id) then
+    -- the first one's: a name where none is (the seed's stands where it names it, S.LabelOf), and a boss's instance to
+    -- file it under; nothing it decides
     k.labels[id] = label
     S.labelCount = S.labelCount + 1
+    bump()
+    if p == "e" and type(inst) == "number" and inst >= 0 and k.inst[num] == nil then k.inst[num] = inst end
   end
-  local num = tonumber(id:sub(2))
-  if id:sub(1, 1) == "e" and type(inst) == "number" and inst >= 0 and (own or k.inst[num] == nil) then
-    if k.inst[num] ~= inst then k.inst[num] = inst; S.foundVersion = S.foundVersion + 1 end
-  end
-  kind = KIND_OF[kind or ""]
-  if id:sub(1, 1) == "i" and kind and (own or k.kind[num] == nil) then
-    if k.kind[num] ~= kind then k.kind[num] = kind; S.foundVersion = S.foundVersion + 1 end
-  end
-  S.Found(id)
-  return tell
+  S.Found(id, false, voice)
+  return false
+end
+-- a member's value for a discovered id came (Roster.lua R:Apply): one a label named is defined now
+function S.ValueCame(id, key)
+  if S.byId[id] or not id:match("^[efi]%d+$") then return end
+  if not S.LabelOf(id) then return end
+  local e = CuteDB.roster[key]
+  local voice = C.Roster and type(e) == "table" and C.Roster:VoiceOf(key, e) or nil
+  if S.Found(id, false, voice, true) and C.Rules and C.Rules.Dirty then C.Rules:Dirty() end
 end
 
--- at login: every label saved defines its stat again, and the records saved teach the enchants (a member who has left
--- since still taught them), each by the GUID it carries; a record without one teaches nothing (it would count a member
--- a second time once the GUID comes)
+-- at login: every label saved defines its stat again, your own first, then the ones two members agree on, then the
+-- ones a member's value is held for (S.Found), and the records saved teach the enchants (S.LearnSaved)
 function S.LoadKnown()
   local k = S.Known()
   if not k then return end
-  for id in pairs(k.labels or {}) do if type(id) == "string" then S.Found(id) end end
+  local held = {}
   for _, e in pairs(CuteDB.roster or {}) do
+    -- (an untrusted member's values define nothing)
+    if type(e) == "table" and type(e.stats) == "table" and not untrusted(e.stats.guid) then
+      for id in pairs(e.stats) do if type(id) == "string" and id:match("^[efi]%d+$") then held[id] = true end end
+    end
+  end
+  -- (every id named: a label kept, or a member's voice for one the seed names, S.LabelOf)
+  local ids, seen = {}, {}
+  for _, t in ipairs({ k.labels or {}, k.voice or {} }) do
+    for id in pairs(t) do if type(id) == "string" and not seen[id] then seen[id] = true; ids[#ids + 1] = id end end
+  end
+  table.sort(ids)
+  local mine, sure = type(k.mine) == "table" and k.mine or {}, type(k.sure) == "table" and k.sure or {}
+  for _, id in ipairs(ids) do if mine[id] then S.Found(id, true) end end
+  for _, id in ipairs(ids) do if not mine[id] and sure[id] then S.Found(id) end end
+  S.valued = held
+  for _, id in ipairs(ids) do if not mine[id] and not sure[id] then S.Found(id) end end
+  S.valued = nil
+  S.LearnSaved()
+end
+-- the records saved teach the enchants (a member who has left since still taught them), each by the GUID it speaks for
+-- (Roster.lua R:VoiceOf: none before the roster is known, whose first refresh calls this again); a record without one
+-- teaches nothing (it would count a member a second time once the GUID comes)
+function S.LearnSaved()
+  if not S.Known() then return end
+  for key, e in pairs(CuteDB.roster or {}) do
     local st = type(e) == "table" and e.stats
-    if type(st) == "table" and type(st.ench_kinds) == "string" and type(st.guid) == "string" and st.guid ~= "" then
+    local g = type(st) == "table" and type(st.ench_kinds) == "string" and C.Roster:VoiceOf(key, e) or nil
+    if g then
       local kinds, enchs = S.EnchantKinds(st.ench_kinds)
-      S.LearnEnchants(kinds, st.guid, enchs)
+      S.LearnEnchants(kinds, g, enchs)
     end
   end
 end
@@ -1310,7 +1749,7 @@ function S.Board()
   local groups, inst = { dungeons = {}, raids = {}, rep = {} }, {}
   for _, def in ipairs(S.byCat.found) do
     if def.learned == "bosses" then
-      local i = (k.inst and k.inst[def.num]) or -1
+      local i = S.InstOf(def.num) or -1
       inst[i] = inst[i] or {}
       table.insert(inst[i], def)
     elseif groups[def.learned] then
@@ -1323,7 +1762,7 @@ function S.Board()
     local children = {}
     for i, list in pairs(inst) do
       table.sort(list, byLabel)
-      local name = (i >= 0 and k.labels and k.labels["i" .. i]) or "Instance not named yet"
+      local name = (i >= 0 and S.LabelOf("i" .. i)) or "Instance not named yet"
       local child = { id = "b" .. i, name = name, parent = "bosses", path = "Bosses > " .. name, stats = list, learned = "bosses" }
       for _, def in ipairs(list) do def.hint = "kills by this character, in " .. name end
       children[#children + 1] = child
@@ -1350,7 +1789,8 @@ function S.KnownReport()
   local slots = {}
   for _, e in ipairs(S.EnchantSlots()) do
     local kinds = {}
-    for _, kd in ipairs(e[4]) do kinds[#kinds + 1] = S.KindName(kd[1]) .. " " .. kd[2] end
+    -- (a kind only the officers' word gives: "Bows, the officers")
+    for _, kd in ipairs(e[4]) do kinds[#kinds + 1] = S.KindName(kd[1]) .. (kd[2] > 0 and (" " .. kd[2]) or ", the officers") end
     slots[#slots + 1] = e[2] .. " (" .. e[3] .. ": " .. table.concat(kinds, ", ") .. ")"
   end
   local n = { e = 0, i = 0, f = 0 }

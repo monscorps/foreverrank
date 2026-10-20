@@ -5,10 +5,12 @@
 -- addon channel (Comm.lua), keeps everyone's last known values and what the guild has learned (Roster.lua, CuteDB.known)
 -- and shows the whole guild in one window (UI.lua). Officers decide, stat by stat, whether members see each other's
 -- (Policy.lua). What research and the beta showed of Forever ships as a seed (Known.lua), checked against the live
--- client at login and outgrown by the rules that learn from the guild's play (Rules.lua), which the Guide page shows
--- (Guide.lua). Nothing leaves the guild channel; there is no server.
+-- client at login and outgrown by the rules that learn from the guild's play (Rules.lua). Every page is a module
+-- (Modules.lua): the dashboard is the core and always on; the Guide (Guide.lua) and the module addons are switched on
+-- in Settings > Modules, per character. Nothing leaves the guild's addon channel (and the whispers to the officers that
+-- carry what they keep to themselves, Comm.lua); there is no server.
 local ADDON, C = ...
-C.version = "0.5.0"
+C.version = "0.6.0"
 C.REGVER = 4 -- the stat registry's wire version (informational: a client ignores ids it does not know)
 C.COLOR = "|cffe8b24a"
 
@@ -132,7 +134,8 @@ end
 -- client has, a line to paste, so a stat leaning on a missing one can be dropped.
 C.UNDOCUMENTED = { "GetInventoryItemID", "GetInventoryItemQuality", "GetInventoryItemDurability", "GetInventoryItemCount", "GetNumUnspentTalents", "DoEmote", "GetAverageItemLevel",
   "GetCategoryList", "GetCategoryInfo", "GetCategoryNumAchievements", "GetAchievementInfo", "GetTotalAchievementPoints",
-  "GetLatestCompletedAchievements", "GetStatisticsCategoryList", "GetStatistic", "GetNumLootItems", "GetLootSlotLink", "GetLootSlotInfo" }
+  "GetLatestCompletedAchievements", "GetStatisticsCategoryList", "GetStatistic", "GetNumLootItems", "GetLootSlotLink", "GetLootSlotInfo",
+  "CanEditGuildInfo" }
 -- a global this client has, asked without the note a Get by name leaves when it has not
 function C.Callable(name) return type(_G[name]) == "function" end
 function C.ApiReport()
@@ -149,6 +152,9 @@ function C.ApiReport()
 end
 
 function C.Now() return (time and time()) or os.time() end
+-- the server's clock (GetServerTime, SystemTimeDocumentation.lua), the one every client shares: the policy is stamped
+-- with it and a stamp is judged against it (Policy.lua); this client's own where the call reads nothing
+function C.ServerNow() return (C.Callable("GetServerTime") and C.Num("GetServerTime")) or C.Now() end
 
 -- a chat line, "Cute: " first; bare: the line as given (it names Cute its own way)
 function C.Print(msg, bare)
@@ -198,15 +204,26 @@ function C.SawVersion(v)
   end
   if C.UI and C.UI.DrawStatus then C.UI:DrawStatus() end
 end
--- at login (and after a /reload): the versions the saved records keep, yours left out
-local function savedVersions()
+-- at login (and after a /reload), once the roster is known (Roster.lua calls it then too): the versions the saved
+-- records keep, yours left out, each only from a record whose GUID the roster lists and the officers have not marked
+-- untrusted (Roster.lua R:Apply the same): one edited copy's made-up version announces nothing
+function C.SavedVersions()
+  if not C.versionsStarted or not C.Roster.trusted then return end
   for key, e in pairs(CuteDB.roster or {}) do
     local st = type(e) == "table" and type(e.stats) == "table" and e.stats or nil
-    if st and type(st.addon_ver) == "string" and not C.Roster:IsSelfRecord(key, e) then C.SawVersion(st.addon_ver) end
+    local g = st and C.Roster:VoiceOf(key, e)
+    if g and type(st.addon_ver) == "string" and not C.Roster:IsSelfRecord(key, e) and not C.Policy:Untrusted(g) then C.SawVersion(st.addon_ver) end
   end
 end
--- the first login on this version: its changelog line, once, ten seconds on, after the login's own lines
+-- the first login on this version: its changelog line, once, ten seconds on, after the login's own lines. A first run
+-- (saved variables empty) says hello instead, naming /cute: what changed since a version nobody ran is no news
 function C.WhatsNew()
+  if C.firstRun then
+    C.firstRun = false
+    CuteDB.toldChanges = C.version
+    C.Print("welcome to the guild's dashboard: /cute opens it, /cute help lists the rest.")
+    return
+  end
   local line = type(C.CHANGES) == "table" and C.CHANGES[C.version] or nil
   if type(line) ~= "string" or line == "" or CuteDB.toldChanges == C.version then return end
   CuteDB.toldChanges = C.version
@@ -276,6 +293,17 @@ function C.Me()
   return name .. "-" .. realm, name
 end
 
+-- a name's shape, never the name, for /cute diag: "Kstring", "none", or how many words it has and whether your realm
+-- trails it ("2 words + realm")
+function C.NameShape(s)
+  s = C.Plain(s)
+  if type(s) ~= "string" or s == "" then return "none" end
+  if C.IsKstring(s) then return "Kstring" end
+  local bare, n = noRealm(s), 0
+  for _ in bare:gmatch("[^%s%-]+") do n = n + 1 end
+  return n .. (n == 1 and " word" or " words") .. (bare ~= s and " + realm" or "")
+end
+
 -- a name to show: a trailing "-Realm" of your own realm cut, the rest as given (a Kstring draws itself)
 function C.Short(name)
   name = C.Plain(name)
@@ -291,12 +319,12 @@ end
 -- the bosses, instances and factions it found (and which instance a boss is in, which kind an instance is), the raid
 -- buffs guild mates cast, the standing ranges of the reactions; and what the rules weigh (Rules.lua): the XP each
 -- level takes as members reported it, the loot seen per boss, when members were first seen wearing items in a slot,
--- Rule 0's verdict on the seed and the model built from it all. Kept apart from the roster, so pruning a record loses
--- none of it
+-- the boss kills corroborated by a group mate (kills), Rule 0's verdict on the seed and the model built from it all.
+-- Kept apart from the roster, so pruning a record loses none of it
 local DEFAULTS = {
   settings = { columns = {}, density = "normal", offline = true, minimap = true, main = "", sort = {} },
   roster = {}, chars = {}, errors = {},
-  known = { enchant = {}, labels = {}, mine = {}, inst = {}, kind = {}, buffs = {}, reactions = {}, xp = {}, loot = {}, watch = {} },
+  known = { enchant = {}, labels = {}, mine = {}, inst = {}, kind = {}, buffs = {}, reactions = {}, xp = {}, loot = {}, watch = {}, kills = {} },
 }
 local function fill(t, d)
   for k, v in pairs(d) do
@@ -307,8 +335,19 @@ local function fill(t, d)
   end
 end
 function C.InitDB()
+  C.firstRun = type(CuteDB) ~= "table" or next(CuteDB) == nil
   CuteDB = type(CuteDB) == "table" and CuteDB or {}
+  local was = CuteDB.version
   fill(CuteDB, DEFAULTS)
+  -- (0.5.x showed every character the Guide as a fixed tab; from 0.6.0 it is a module, and every character starts
+  -- with the statistics alone, as What's new says at the first login on it: Settings > Modules switches it on)
+  -- before 0.6.0 only the guild channel made records (there were no whispers): each is one heard there (Roster.lua
+  -- R:GuildSender takes a whisper only from such a sender string)
+  if C.ParseVersion(was) and C.VersionNewer("0.6.0", was) then
+    for _, e in pairs(CuteDB.roster) do if type(e) == "table" then e.ch = true end end
+  end
+  -- (what members passed on to each other in 0.6.0's builds before the policy lived in Guild Info)
+  CuteDB.relay = nil
   CuteDB.version = C.version
 end
 function C.Settings() return CuteDB.settings end
@@ -316,7 +355,7 @@ function C.Settings() return CuteDB.settings end
 function C.Char()
   local me = C.Me() or "?"
   local rec = CuteDB.chars[me]
-  if not rec then rec = { counters = {} }; CuteDB.chars[me] = rec end
+  if not rec then rec = { counters = {}, modules = {} }; CuteDB.chars[me] = rec end
   rec.counters = rec.counters or {}
   if rec.role == nil then
     -- 0.1.0 kept the role in the account-wide settings, where the warrior's "Tank" became the priest's: take it once
@@ -342,7 +381,9 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
     if not C.loaded then C.InitDB(); C.loaded = true end
     -- (isInitialLogin, isReloadingUi): a /reload is not a login
     local initial, reloading = C.Plain(a1) == true, C.Plain(a2) == true
-    -- each on its own, so one part failing never hides the others (the minimap button in particular)
+    -- each on its own, so one part failing never hides the others (the minimap button in particular). The modules
+    -- that are on start first, so the stats they define are read with the rest
+    C.Safe(function() C.Modules.Start() end, "modules: start")()
     C.Safe(function() C.Roster:Start() end, "roster: start")()
     C.Safe(function() C.Sample:Start(initial, reloading) end, "sample: start")()
     C.Safe(function() C.Comm:Start() end, "comm: start")()
@@ -355,7 +396,7 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
       if initial then CuteDB.toldNewer = nil end
       if not C.versionsStarted then
         C.versionsStarted = true
-        savedVersions()
+        C.SavedVersions()
         C_Timer.After(10, C.Safe(C.WhatsNew, "what is new"))
       end
     end, "versions")()
@@ -413,6 +454,10 @@ function C.Diag()
   add(string.format("diag matched: %s | your rows %d | records %d | senders known as you %d",
     me and ("member " .. shown(me.name) .. (me.guid and (" guid " .. me.guid:sub(1, 16)) or "")) or "no roster member is you yet",
     C.Roster and C.Roster:MyRowCount() or 0, C.Roster and C.Roster:RecordCount() or 0, C.Roster and C.Roster:SelfSenderCount() or 0))
+  -- how the senders and the roster's names look here, as shapes (never a name), and how the GUIDs that came fared
+  add("diag names: " .. C.Roster:NameShapes())
+  -- where the policy comes from: Guild Info's line, and whether this client holds the policy it names
+  add("diag policy: " .. C.Policy:Report())
   -- the first senders the guild channel named
   local seen = C.Comm and C.Comm.senders or {}
   local s = {}
@@ -435,23 +480,60 @@ function C.Diag()
   add("diag " .. C.Stats.KnownReport())
   -- the seed: fresh or stale and why, what Rule 0 found absent, how many facts are in each state
   add("diag " .. C.Rules.Report())
+  -- the modules on for this character (the dashboard always is) and the ones there that are off, each with its state
+  -- where it is not as its box says
+  local officer = C.Roster:MeOfficer()
+  local on, off = {}, {}
+  for _, e in ipairs(C.Modules.Available(officer)) do
+    local list = e.on and on or off
+    list[#list + 1] = e.title .. (e.addon and (" (" .. e.key .. ")") or "") .. (e.status and (": " .. e.status) or "")
+  end
+  add("diag modules: on " .. (#on > 0 and table.concat(on, ", ") or "none") .. " | off " .. (#off > 0 and table.concat(off, ", ") or "none"))
+  -- the trust marks: the members marked suspect and the ones the officers marked untrusted, counted; who and why for an
+  -- officer alone (the marks are the officers')
+  local suspect, untrusted = {}, {}
+  for _, r in ipairs(C.Roster:Rows()) do
+    if not r.me and r.suspect then suspect[#suspect + 1] = r.short .. " (" .. tostring(r.suspect.why) .. ")" end
+    if not r.me and r.untrusted then untrusted[#untrusted + 1] = r.short end
+  end
+  table.sort(suspect); table.sort(untrusted)
+  local function named(list) return (officer and #list > 0) and (": " .. table.concat(list, ", ", 1, math.min(8, #list)) .. (#list > 8 and (" and " .. (#list - 8) .. " more") or "")) or "" end
+  add(string.format("diag trust: suspect %d%s | untrusted %d%s", #suspect, named(suspect), #untrusted, named(untrusted)))
   return lines
 end
 
+-- /cute: the window. /cute <page> opens a page by its module's id or title (race, prog, shame, statistics, officers,
+-- me; guide and a module addon's while they are on); /cute settings and /cute modules open Settings; /cute resend asks
+-- the guild again; /cute errors, api, diag and rules print lines to paste
+local function pageFor(msg)
+  for _, def in ipairs(C.Modules.list) do
+    local title = def.title:lower()
+    if def.page and (msg == def.id or msg == title or msg == (title:gsub("%s+", ""))) then return def end
+  end
+end
 SLASH_CUTE1 = "/cute"
 SlashCmdList.CUTE = C.Safe(function(msg)
   msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
-  if msg == "settings" or msg == "options" then C.UI:Open("settings")
+  if msg == "" then C.UI:Toggle()
+  elseif msg == "settings" or msg == "options" then C.UI:Open("settings")
+  elseif msg == "modules" then C.UI:Open("settings", "modules")
   elseif msg == "errors" then errorsList()
   elseif msg == "resend" then C.Comm:Ask(); C.Print("asked the guild to send their records again.")
-  elseif msg == "me" then C.UI:Open("me")
   elseif msg == "api" then C.Print(C.Stats.GameReport()); C.Print(C.ApiReport())
   elseif msg == "diag" then for _, l in ipairs(C.Diag()) do C.Print(l) end
   elseif msg == "rules" then for _, l in ipairs(C.Rules.RulesReport()) do C.Print(l) end
-  elseif msg == "guide" then C.UI:Open("guide")
   elseif msg == "help" then
-    C.Print("/cute opens the dashboard. /cute guide, /cute settings, /cute me, /cute resend, /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them, what the guild has learned, the seed's state), /cute rules (each rule's threshold and who set it).")
-  else C.UI:Toggle() end
+    C.Print("/cute opens the window; /cute race, prog, shame, statistics, officers or me opens that page, and so does a module's name while it is on (/cute guide); /cute settings and /cute modules open Settings. /cute resend asks the guild to send their records again. To paste: /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them, what the guild has learned, the seed's state), /cute rules (each rule's threshold and who set it).")
+  else
+    local def, officer = pageFor(msg), C.Roster:MeOfficer()
+    if not def then C.Print("no page or command \"" .. msg .. "\". /cute help lists them.")
+    elseif def.officer and not officer then C.Print("the " .. def.title .. " page is for officer ranks.")
+    elseif not C.Modules.Page(def.id, officer) then
+      -- a module that is off says where it is switched on, and opens it there
+      C.Print(def.title .. " is switched off. Tick it in Settings, Modules.")
+      C.UI:Open("settings", "modules")
+    else C.UI:Open(def.id) end
+  end
 end, "slash")
 
 -- the key bindings (Bindings.xml)

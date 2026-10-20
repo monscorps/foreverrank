@@ -15,6 +15,12 @@
 -- update. The evidence the rules weigh travels as before: boss kills and dungeon entries in the discoveries pass, the
 -- level a member had at a boss's first kill beside it (k<encounterID>, below), the XP a level takes in the hidden xpmax
 -- stat, the loot a boss dropped in the labels message (Comm.lua).
+-- Learning needs more than one voice. Anyone can edit their copy of Cute and claim anything, so nothing one member says
+-- changes the guild's knowledge alone: a range, an XP value, an enchant slot (Stats.lua), a boss's loot and a dungeon
+-- the research lacks each take two members at least (the thresholds' lowest is two), and a boss kill counts only where
+-- another member of the same group reported the same encounter within a minute (rule 9). The members the officers
+-- marked untrusted (Policy.lua) are left out of all of it. What a member's client cannot learn because the officers
+-- keep its evidence to themselves (the enchants, with the defaults) it takes from the officers' word (R.Word).
 local _, C = ...
 local R = { version = 0, started = false }
 C.Rules = R
@@ -23,31 +29,39 @@ R.RULES = { rangeMembers = 5, rangeLow = 0.10, rangeHigh = 0.90, doubtRuns = 3, 
   xpAgree = 3, lootDoubtKills = 5, staleShare = 0.30, guideWindow = 3, guideAhead = 5 }
 -- every threshold as Settings shows it (a label short enough for the narrow window), the bounds an officer can set it
 -- to, how it reads, and what it does in a sentence (the step buttons' tooltip): { name, label, lowest, highest, step,
--- how it reads, what }. A value from the channel outside its bounds is dropped, never clamped
+-- how it reads, what, the module whose Settings section holds it }. A value from the channel outside its bounds is
+-- dropped, never clamped
 R.TUNE = {
-  { "rangeMembers", "Members to learn a range", 1, 40, 1, nil, "Members whose kill levels it takes to learn a dungeon's level range." },
+  { "rangeMembers", "Members to learn a range", 2, 40, 1, nil, "Members whose kill levels it takes to learn a dungeon's level range." },
   { "rangeLow", "Range, lower percentile", 0, 0.5, 0.05, "pctile", "A learned range starts at this percentile of the members' kill levels." },
   { "rangeHigh", "Range, upper percentile", 0.5, 1, 0.05, "pctile", "A learned range ends at this percentile of the members' kill levels." },
   { "doubtRuns", "Full runs to doubt a boss", 1, 20, 1, nil, "Full runs of a dungeon that never meet one of the research's bosses before it is doubted; each more boss missing takes as many runs again." },
   { "enchantDoubtDays", "Days to doubt a slot", 1, 90, 1, nil, "Days of members at the enchant level wearing items in a slot, with no enchant seen there, before the research's slot is doubted." },
   { "enchantDoubtLevel", "Enchant level", 1, 60, 1, nil, "From this level the research's enchant slots count as missing, and members this level or more start the doubt clock." },
-  { "xpAgree", "Members to agree on XP", 1, 20, 1, nil, "Members who report the same XP for a level before it replaces the research's." },
+  { "xpAgree", "Members to agree on XP", 2, 20, 1, nil, "Members who report the same XP for a level before it replaces the research's." },
   { "lootDoubtKills", "Kills to note unseen loot", 1, 50, 1, nil, "Kills of a boss before the research's loot nobody has seen drop is noted." },
   { "staleShare", "Stale when absent over", 0.05, 0.95, 0.05, "pct", "The research is stale when this client lacks more than this share of what it names." },
-  { "guideWindow", "Guide: levels near you", 0, 10, 1, nil, "The Guide names the members online within this many levels of yours." },
-  { "guideAhead", "Guide: levels ahead", 1, 20, 1, nil, "The Guide lists the dungeons opening within this many levels under Next up." },
+  -- (the Guide's own two, in its section; the rest are in Settings > Rules)
+  { "guideWindow", "Guide: levels near you", 0, 10, 1, nil, "The Guide names the guild mates online in a dungeon's range within this many levels of yours; for officers, where most members are, over twice as many.", "guide" },
+  { "guideAhead", "Guide: levels ahead", 1, 20, 1, nil, "The Guide lists the dungeons opening within this many levels under Next up.", "guide" },
 }
 R.TUNE_BY, R.LOWER = {}, {}
 for _, t in ipairs(R.TUNE) do R.TUNE_BY[t[1]] = t; R.LOWER[t[1]:lower()] = t[1] end
 
 local WHO_CAP = 1000 -- members kept per fact (a guild holds a thousand)
-local LOOT_CAP = 40  -- items kept per boss from the channel
+local LOOT_CAP = 40  -- items kept per boss from the channel (your own always are: one member's item gives way to them)
+local LOOT_EACH = 24 -- of those, items only one member brought, a member (R.LearnLoot)
+local LOOT_BOSSES, LOOT_BOSSES_EACH = 600, 200 -- bosses whose loot the channel may bring, in all and first from one member
 local SLICE = 50     -- Rule 0's checks per frame
 local DAY = 86400
 
 local function count(t) local n = 0; if type(t) == "table" then for _ in pairs(t) do n = n + 1 end end return n end
 local function num(v) return type(v) == "number" and v == v and v or nil end
 local function known() return C.Stats and C.Stats.Known() or nil end
+local function untrusted(g) return C.Policy ~= nil and C.Policy:Untrusted(g) end
+-- the members a set of GUIDs holds that count: the untrusted left out
+local function voices(set) local n = 0; for g in pairs(type(set) == "table" and set or {}) do if not untrusted(g) then n = n + 1 end end return n end
+local function VOICES() return C.Stats.VOICES end
 
 ----------------------------------------------------------------------------
 -- the thresholds: the officers' value where one is set (Policy.lua), else the default
@@ -96,6 +110,8 @@ end
 function R:Retuned()
   self:Dirty()
   if C.Sample and C.Sample.started then C.Sample:Schedule("unenchanted"); C.Sample:Schedule("ready") end
+  -- (a member marked untrusted or trusted again changes what an officer's client says the guild learned: at once)
+  if C.Comm and C.Comm.WordSoon then C.Comm:WordSoon(true) end
 end
 
 ----------------------------------------------------------------------------
@@ -111,23 +127,45 @@ local function kindSet(list)
   for _, kd in ipairs(list) do if type(kd) == "string" and kd:match("^%d+%.%d+$") then out[kd] = true end end
   return out
 end
+-- a name as the joins compare it (gen_known.py's norm): case, punctuation and a leading "The" left out, so the seed's
+-- "The Drowned City" is the client's "the Drowned City" or "Drowned City"; nil for no name
+function R.Norm(s)
+  if type(s) ~= "string" then return nil end
+  s = s:lower():gsub("[^a-z0-9 ]+", ""):gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
+  if s:sub(1, 4) == "the " then s = s:sub(5) end
+  return s ~= "" and s or nil
+end
+-- a dungeon's quests as the seed lists them: { name, id (QuestBank's, where the title joins one), level, min (the
+-- level it opens at), side ("a", "h", nil for both or not known) }; a quest without a name is none
+local function quests(list)
+  local out = {}
+  for _, q in ipairs(type(list) == "table" and list or {}) do
+    if type(q) == "table" and type(q.name) == "string" and q.name ~= "" then
+      out[#out + 1] = { name = q.name, id = num(q.id), level = num(q.level), min = num(q.min), side = (q.side == "a" or q.side == "h") and q.side or nil }
+    end
+  end
+  return out
+end
 -- Beside the fixed format the seed may mark a dungeon whose wings share one instance (wings = true, or the wings'
 -- names: Scarlet Monastery's four, Dire Maul's three), a boss that is no fight every run meets (optional = true: a
 -- rare spawn, an event, a boss a quest spares) and the kinds of item each enchant takes (a list's kinds, beside the
 -- slot's). Rule 4 never doubts in the first or the second; the Guide names for a worn item only the enchants that take
--- its kind. A boss the seed names without an encounter id is kept by name, to be matched when the guild meets it
+-- its kind. A boss the seed names without an encounter id is kept by name, to be matched when the guild meets it.
+-- A dungeon's quests come with it (the Guide counts the ones open to you), and the dungeons research names that the
+-- client it was made from has no map for (awaited) by name and level range alone, no instance id and no bosses: an
+-- instance of that name two members entered, or where a kill a group mate named back was, gives one its id (R:Rebuild)
 function R.Seed()
   if seed ~= nil then return seed or nil end
   local K = C.Known
   if type(K) ~= "table" then seed = false; return nil end
   local s = { build = type(K.build) == "string" and K.build or nil, generated = type(K.generated) == "string" and K.generated or nil,
-    cap = num(K.cap), betaCap = num(K.betaCap), dungeons = {}, bosses = {}, enchants = {}, xp = {}, xpConf = {}, factions = {},
+    cap = num(K.cap), betaCap = num(K.betaCap), dungeons = {}, awaited = {}, bosses = {}, enchants = {}, xp = {}, xpConf = {}, factions = {},
     items = {}, spells = {}, sources = {} }
   for _, src in ipairs(type(K.sources) == "table" and K.sources or {}) do if type(src) == "string" then s.sources[#s.sources + 1] = src end end
   for id, d in pairs(type(K.dungeons) == "table" and K.dungeons or {}) do
     if num(id) and type(d) == "table" and type(d.name) == "string" and d.name ~= "" then
       local e = { id = id, name = d.name, min = num(d.min), max = num(d.max), new = d.new == true, conf = conf(d.conf),
-        kind = d.kind == "raid" and "raid" or "party", bosses = {}, named = {},
+        kind = d.kind == "raid" and "raid" or "party", bosses = {}, named = {}, quests = quests(d.quests),
         wings = (d.wings == true or (type(d.wings) == "table" and next(d.wings) ~= nil)) or nil }
       if e.min and e.max and e.min > e.max then e.min, e.max = e.max, e.min end
       if not (e.min and e.max) then e.min, e.max = nil, nil end
@@ -147,6 +185,13 @@ function R.Seed()
         end
       end
       s.dungeons[id] = e
+    end
+  end
+  for _, d in ipairs(type(K.awaited) == "table" and K.awaited or {}) do
+    local key = type(d) == "table" and R.Norm(d.name)
+    if key and num(d.min) and num(d.max) then
+      s.awaited[#s.awaited + 1] = { name = d.name, key = key, min = math.min(d.min, d.max), max = math.max(d.min, d.max), new = d.new == true,
+        conf = conf(d.conf), kind = d.kind == "raid" and "raid" or "party", quests = quests(d.quests) }
     end
   end
   for slot, en in pairs(type(K.enchants) == "table" and K.enchants or {}) do
@@ -169,7 +214,7 @@ function R.Seed()
     if num(id) and type(f) == "table" and type(f.name) == "string" then s.factions[id] = { id = id, name = f.name, conf = conf(f.conf) } end
   end
   -- (a seed that names nothing is none: the Guide says nothing shipped rather than "from research")
-  if not (next(s.dungeons) or next(s.enchants) or next(s.xp) or next(s.factions)) then seed = false; return nil end
+  if not (next(s.dungeons) or s.awaited[1] or next(s.enchants) or next(s.xp) or next(s.factions)) then seed = false; return nil end
   seed = s
   return s
 end
@@ -287,25 +332,34 @@ end
 
 ----------------------------------------------------------------------------
 -- the evidence: you, then every saved record that carries a GUID (one without would count its member twice once the
--- GUID came), one per GUID, with the discovered values (boss kills e<id>, dungeon entries i<id>, kill levels k<id>)
+-- GUID came), one per GUID, with the discovered values (boss kills e<id>, dungeon entries i<id>, kill levels k<id>).
+-- A member the officers marked untrusted is left out; a kill and its level count only where rule 9 corroborated it;
+-- a member's level is the roster's where it lists them (the server's word over their addon's)
 ----------------------------------------------------------------------------
 local DYN = "^[eik]%d+$"
+local function witnessed(id, guid)
+  if id:sub(1, 1) == "i" then return true end
+  return R.Corroborated(tonumber(id:sub(2)), guid)
+end
 function R.Members()
   local out, seen = {}, {}
   local me = C.MyGUID() or "me"
   local v = C.Sample and C.Sample.values or {}
   local dyn = {}
-  for id, x in pairs(C.Char().counters) do if type(id) == "string" and id:match(DYN) and type(x) == "number" and x > 0 then dyn[id] = x end end
+  for id, x in pairs(C.Char().counters) do if type(id) == "string" and id:match(DYN) and type(x) == "number" and x > 0 and witnessed(id, me) then dyn[id] = x end end
   out[1] = { guid = me, me = true, level = num(v.level), dyn = dyn, stats = v }
   seen[me] = true
+  local byGuid = C.Roster.byGuid or {}
   for key, e in pairs(CuteDB and CuteDB.roster or {}) do
     local st = type(e) == "table" and type(e.stats) == "table" and e.stats or nil
-    local g = st and st.guid
-    if type(g) == "string" and g ~= "" and not seen[g] and not C.Roster:IsSelfRecord(key, e) then
+    -- (the GUID the roster lets the record speak for: none before the roster is known, Roster.lua R:VoiceOf)
+    local g = st and C.Roster:VoiceOf(key, e)
+    if type(g) == "string" and g ~= "" and not seen[g] and not untrusted(g) and not C.Roster:IsSelfRecord(key, e) then
       seen[g] = true
       local d = {}
-      for id, x in pairs(st) do if type(id) == "string" and type(x) == "number" and x > 0 and id:match(DYN) then d[id] = x end end
-      out[#out + 1] = { guid = g, level = num(st.level), dyn = d, stats = st, key = key }
+      for id, x in pairs(st) do if type(id) == "string" and type(x) == "number" and x > 0 and id:match(DYN) and witnessed(id, g) then d[id] = x end end
+      local m = byGuid[g]
+      out[#out + 1] = { guid = g, level = (m and num(m.level)) or num(st.level), dyn = d, stats = st, key = key }
     end
   end
   return out
@@ -322,6 +376,9 @@ function R.SeenBeatsBelieved(fact, now, old)
   for g in pairs(type(old.who) == "table" and old.who or {}) do if n < WHO_CAP then who[g] = true; n = n + 1 end end
   for g in pairs(fact.seenNow or {}) do if not who[g] and n < WHO_CAP then who[g] = true; n = n + 1 end end
   fact.seenNow = nil
+  -- (kept: how many had met it when the officers' policy took the members' GUIDs out of it, R.StripTraces)
+  fact.kept = num(old.kept)
+  if fact.kept and fact.kept > n then n = fact.kept end
   fact.who, fact.n = who, n
   if fact.n > 0 or not fact.seeded then
     fact.at = old.at or now
@@ -330,20 +387,36 @@ function R.SeenBeatsBelieved(fact, now, old)
 end
 
 -- 2. New things join. An instance entered or a boss killed that the seed lacks is added as seen: a dungeon or a raid
--- by the instance's label and kind (Sample.lua labels it on entry), a boss under the instance it was killed in. A boss
+-- by the instance's label and kind (Sample.lua labels it on entry; from the channel, two members' who agree: Stats.lua
+-- S.KindOf), a boss under the instance it was killed in. A boss
 -- whose name is one the seed gives under that instance without an encounter id is the seed's, met at last: it joins as
--- the seed's, not as new
-function R.NewThingsJoin(m, k)
-  local labels, kinds, inst = k.labels or {}, k.kind or {}, k.inst or {}
+-- the seed's, not as new. Each needs more than one voice: a boss a corroborated kill (rule 9), a dungeon two members
+-- who entered it or a corroborated kill in it (members: the evidence, R.Members)
+function R.NewThingsJoin(m, k, members)
+  local labels, inst = k.labels or {}, k.inst or {}
+  local kinds = {}
+  for id in pairs(type(k.kind) == "table" and k.kind or {}) do
+    local kind, sure = C.Stats.KindOf(id)
+    if sure and C.Stats.Sure("i" .. id) then kinds[id] = kind end
+  end
+  local killed, entered, killedIn = {}, {}, {}
+  for _, mem in ipairs(members or {}) do
+    for id in pairs(mem.dyn) do
+      local p, n = id:sub(1, 1), tonumber(id:sub(2))
+      if p == "e" then killed[n] = true elseif p == "i" then entered[n] = (entered[n] or 0) + 1 end
+    end
+  end
+  for enc in pairs(killed) do local i = inst[enc]; if i ~= nil then killedIn[i] = true end end
   for id, kind in pairs(kinds) do
-    if (kind == "party" or kind == "raid") and not m.dungeons[id] and type(labels["i" .. id]) == "string" then
+    if (kind == "party" or kind == "raid") and not m.dungeons[id] and type(labels["i" .. id]) == "string"
+      and ((entered[id] or 0) >= VOICES() or killedIn[id]) then
       m.dungeons[id] = { id = id, name = labels["i" .. id], kind = kind, seeded = false, state = "seen", bosses = {} }
     end
   end
   local joined = {}
   for enc, i in pairs(inst) do
     local label = labels["e" .. enc]
-    if num(enc) and not m.bosses[enc] and m.dungeons[i] and type(label) == "string" then
+    if num(enc) and killed[enc] and not m.bosses[enc] and m.dungeons[i] and type(label) == "string" then
       local named = m.dungeons[i].named and m.dungeons[i].named[label:lower()]
       if named then
         m.bosses[enc] = { enc = enc, name = label, seedName = named.name ~= label and named.name or nil, inst = i, seeded = true,
@@ -365,9 +438,10 @@ function R.NewThingsJoin(m, k)
 end
 
 -- 3. Level ranges learn. A dungeon's range is the rangeLow to rangeHigh percentile of the levels members had at their
--- first kill of one of its bosses (each member once, their lowest), once rangeMembers distinct members have; until
--- then the seed's range stands. With no seed for it (none shipped, a stale one, or Rule 0 still asking) the levels
--- seen so far stand in, and say so. The percentiles set the tails aside: the lowest rangeLow and the highest
+-- first kill of one of its bosses (each member once, their lowest; a corroborated kill, rule 9), once rangeMembers
+-- distinct members have; until then the seed's range stands. With no seed for it (none shipped, a stale one, or Rule 0
+-- still asking) the levels seen so far stand in, and say so, once two members have them: one member's levels are no
+-- range. The percentiles set the tails aside: the lowest rangeLow and the highest
 -- 1 - rangeHigh of the levels, each rounded half up, so five members at 10 % set one aside at either end and one
 -- member boosted through at 12, or one farming it at 60, never stretches the range (where a tail rounds to nothing,
 -- four members at 10 % or a 0 % an officer chose, the lowest or the highest level is the end; where nothing would be
@@ -390,7 +464,7 @@ function R.LevelRangesLearn(d, levels)
     d.range = "learned"
   elseif d.seeded and d.seedMin and R.SeedUsable() then
     d.min, d.max, d.range = d.seedMin, d.seedMax, "seed"
-  elseif #list > 0 then
+  elseif #list >= VOICES() then
     d.min, d.max, d.range = list[1], list[#list], "seen"
   else
     d.min, d.max, d.range = nil, nil, nil
@@ -463,8 +537,9 @@ function R.SeedSlotState(slot)
     for _, x in ipairs(e.list) do if R.check.missing.spell[x.spell] then absent = absent + 1 end end
     if absent == #e.list then return "absent" end
   end
-  -- (an enchant there on any kind of item is the guild's play agreeing with the seed: no doubt)
-  if R.SlotDoubted(slot) and not C.Stats.EnchantLearned(slot) then return "doubted" end
+  -- (an enchant there on any kind of item is the guild's play agreeing with the seed: no doubt. On a member's client
+  -- the officers' word says it too, where they keep the empty slots the clock runs on)
+  if (R.SlotDoubted(slot) or R.WordDoubted(slot)) and not C.Stats.EnchantLearned(slot) then return "doubted" end
   return base(e.conf)
 end
 -- a slot as the model and /cute diag show it: seen once the guild has an enchant there on any kind of item, else the
@@ -529,8 +604,9 @@ end
 
 -- 6. The XP curve learns. Each member reports UnitXPMax at each level they reach (the hidden xpmax stat, "level:max");
 -- once xpAgree members agree on a level, that value replaces the seed's. A sample that matches the seed makes it seen;
--- with no seed for a level (or a stale one) the value most members reported stands. Hours to 60 and the Guide's pace
--- use the curve, levels nobody reported estimated from their neighbours (XPCurve)
+-- with no seed for a level (or a stale one) the value most members reported stands, once two agree on it. Hours to 60
+-- and the Guide's pace use the curve, levels nobody reported estimated from their neighbours (XPCurve). An untrusted
+-- member's samples are kept and not counted
 function R.LearnXP(level, who, max)
   local k = known()
   level, max = num(tonumber(level)), num(tonumber(max))
@@ -553,9 +629,18 @@ function R.XPCurveLearns(level)
   local k = known()
   local samples = k and type(k.xp) == "table" and k.xp[level] or nil
   local votes, best, bestN = {}, nil, 0
-  for _, v in pairs(type(samples) == "table" and samples or {}) do
-    if num(v) then
+  for who, v in pairs(type(samples) == "table" and samples or {}) do
+    if num(v) and not untrusted(who) then
       votes[v] = (votes[v] or 0) + 1
+      if votes[v] > bestN or (votes[v] == bestN and v > best) then best, bestN = v, votes[v] end
+    end
+  end
+  -- (the members a value was seen on before the officers closed Level on this client: R.StripTraces. The more of the
+  -- two counts, never their sum: a member seen again since is among both)
+  local kept = k and type(k.xpKept) == "table" and type(k.xpKept[level]) == "table" and k.xpKept[level] or nil
+  for v, c in pairs(kept or {}) do
+    if num(v) and num(c) then
+      votes[v] = math.max(votes[v] or 0, c)
       if votes[v] > bestN or (votes[v] == bestN and v > best) then best, bestN = v, votes[v] end
     end
   end
@@ -566,7 +651,7 @@ function R.XPCurveLearns(level)
     if votes[sv] then return sv, "seen", votes[sv], sv end
     return sv, base(s.xpConf[level] or "data"), 0, sv
   end
-  if best then return best, "seen", bestN end
+  if best and bestN >= VOICES() then return best, "seen", bestN end
   return nil
 end
 -- the XP each level takes, 1 to the cap (60 at least): learned or seeded, the gaps estimated, a straight line between
@@ -620,7 +705,8 @@ end
 
 -- 7. The level cap is the game's: GetMaxPlayerLevel and GetMaxLevelForPlayerExpansion, the lower of the two that
 -- reads ten or more (as QuestBank reads them); the seed's 60 where neither does. The highest level any member has
--- reached is never above it: a member past it means the game lets them go further
+-- reached is never above it: a member the guild roster lists past it (the server's word, Roster.lua keeps the
+-- highest), or you, means the game lets them go further
 function R.LevelCap()
   local cap
   for _, name in ipairs({ "GetMaxPlayerLevel", "GetMaxLevelForPlayerExpansion" }) do
@@ -631,33 +717,98 @@ function R.LevelCap()
   end
   local s = R.Seed()
   cap = cap or (s and s.cap) or 60
-  for _, r in ipairs(C.Roster:Rows()) do if num(r.level) and r.level > cap then cap = r.level end end
+  local top = num(C.Roster.maxLevel)
+  if top and top > cap then cap = top end
+  local mine = num(C.Sample and C.Sample.values and C.Sample.values.level)
+  if mine and mine > cap then cap = mine end
   return math.floor(cap)
 end
 function R.Cap()
-  local key = R.version .. ":" .. C.Roster.version
+  local key = R.version .. ":" .. C.Roster.levelVersion .. ":" .. tostring(C.Sample and C.Sample.values and C.Sample.values.level)
   if R.capAt ~= key or not R.cap then R.cap, R.capAt = R.LevelCap(), key end
   return R.cap
 end
 
 -- 8. Loot learns. The items in the first corpse's loot window this character opens within a minute of a boss kill,
 -- in the same instance, that holds something green or better (Sample.lua reads the window, never loots from it; a
--- container opened from the bags is no corpse), are that boss's loot as seen, told to the guild in the labels
--- message; seeded loot not seen stays data, and once the guild has killed the boss lootDoubtKills times the tooltip
--- says it has not been seen in that many kills (a drop can be rare: never doubted)
-function R.LearnLoot(enc, ids, own)
+-- container opened from the bags is no corpse), are that boss's loot as seen once two members saw them (each window
+-- told to the guild in the labels message, who saw it by GUID: rec.by); seeded loot not seen stays data, and once the
+-- guild has killed the boss lootDoubtKills times the tooltip says it has not been seen in that many kills (a drop can
+-- be rare: never doubted). own: this character's window; who: the member's GUID, from the channel
+-- (the bosses the channel brought loot for: how many, and how many each member brought first)
+local function lootFrom(k)
+  if type(k.lootFrom) ~= "table" then
+    k.lootFrom = { n = 0, by = {} }
+    for _, rec in pairs(k.loot) do
+      if type(rec) == "table" and not rec.own then
+        k.lootFrom.n = k.lootFrom.n + 1
+        if type(rec.from) == "string" then k.lootFrom.by[rec.from] = (k.lootFrom.by[rec.from] or 0) + 1 end
+      end
+    end
+  end
+  return k.lootFrom
+end
+function R.LearnLoot(enc, ids, own, who)
   local k = known()
   if not (k and num(enc)) or type(ids) ~= "table" then return false end
+  if own then who = C.MyGUID() or "me" end
   k.loot = type(k.loot) == "table" and k.loot or {}
   local rec = k.loot[enc]
-  if type(rec) ~= "table" then rec = { items = {}, mine = {} }; k.loot[enc] = rec end
+  if type(rec) ~= "table" then
+    if not own then
+      -- (a boss the channel brings: within LOOT_BOSSES, and LOOT_BOSSES_EACH of one member's, so junk fills nothing)
+      local lf = lootFrom(k)
+      if lf.n >= LOOT_BOSSES or (type(who) == "string" and (lf.by[who] or 0) >= LOOT_BOSSES_EACH) then return false end
+      lf.n = lf.n + 1
+      if type(who) == "string" then lf.by[who] = (lf.by[who] or 0) + 1 end
+    end
+    rec = { items = {}, mine = {}, own = own or nil, from = (not own and type(who) == "string") and who or nil }
+    k.loot[enc] = rec
+  end
+  if own and not rec.own then rec.own = true; if type(k.lootFrom) == "table" then k.lootFrom = nil end end
   rec.items = type(rec.items) == "table" and rec.items or {}
   rec.mine = type(rec.mine) == "table" and rec.mine or {}
+  rec.by = type(rec.by) == "table" and rec.by or {}
+  -- the items only one member's voice brought, by that voice: LOOT_EACH of them a member (one window's worth), so one
+  -- copy's junk, or one member's honest windows of world greens, fills a boss for nobody; and where the boss is full,
+  -- a new item from your own window or from a member holding fewer takes the place of the oldest one of the member who
+  -- holds the most
+  local function single()
+    local by, n = {}, {}
+    for x, at in pairs(rec.items) do
+      local set = rec.by[x]
+      if not rec.mine[x] and voices(set) <= 1 then
+        local g = type(set) == "table" and next(set) or "?"
+        by[g] = by[g] or {}
+        by[g][#by[g] + 1] = { id = x, at = num(at) or 0 }
+        n[g] = (n[g] or 0) + 1
+      end
+    end
+    return by, n
+  end
   local new = false
   for _, id in ipairs(ids) do
     if num(id) and id > 0 and id < 2 ^ 31 then
-      if rec.items[id] == nil and count(rec.items) < LOOT_CAP then rec.items[id] = C.Now(); new = true end
+      if rec.items[id] == nil then
+        local by, n = single()
+        local mineN = (not own and type(who) == "string" and n[who]) or 0
+        local room = own or mineN < LOOT_EACH
+        if room and count(rec.items) >= LOOT_CAP then
+          local most, mostN = nil, 0
+          for g, k in pairs(n) do if k > mostN or (k == mostN and most and g < most) then most, mostN = g, k end end
+          if most and (own or mostN > mineN + 1) then
+            table.sort(by[most], function(a, b) if a.at ~= b.at then return a.at < b.at end return a.id < b.id end)
+            local x = by[most][1].id
+            rec.items[x], rec.by[x] = nil, nil
+          elseif not own then room = false end
+        end
+        if room then rec.items[id] = C.Now(); new = true end
+      end
       if own and rec.items[id] and not rec.mine[id] then rec.mine[id] = true; new = true end
+      if rec.items[id] and type(who) == "string" and who ~= "" then
+        local by = type(rec.by[id]) == "table" and rec.by[id] or {}
+        if not by[who] and count(by) < WHO_CAP then by[who] = true; rec.by[id] = by; new = true end
+      end
     end
   end
   if new then R:Dirty() end
@@ -681,14 +832,445 @@ function R.LootLearns(m, k)
   local need = R.Get("lootDoubtKills")
   for enc, b in pairs(m.bosses) do
     local rec = type(loot[enc]) == "table" and type(loot[enc].items) == "table" and loot[enc].items or {}
-    for id, at in pairs(rec) do if num(id) then b.loot[id] = "seen"; b.lootAt = b.lootAt or {}; b.lootAt[id] = at end end
+    local by = type(loot[enc]) == "table" and type(loot[enc].by) == "table" and loot[enc].by or {}
+    local kept = type(loot[enc]) == "table" and type(loot[enc].kept) == "table" and loot[enc].kept or {}
+    for id, at in pairs(rec) do
+      if num(id) and math.max(voices(by[id]), num(kept[id]) or 0) >= VOICES() then b.loot[id] = "seen"; b.lootAt = b.lootAt or {}; b.lootAt[id] = at end
+    end
     if b.seeded and (b.kills or 0) >= need then b.lootQuiet = true end
   end
 end
 
+-- 9. Kills need a witness. A boss kill counts toward what the guild learns (rules 1 to 4) only where another member in
+-- the same group reported the same encounter within a minute. Every Cute tells the guild its kill with the GUIDs of its
+-- group at that moment (your party, then the rest of a raid: UnitGUID of party1-4 and raid1-40, 24 at most), the
+-- encounter and the server's time (GetServerTime; "1K", Comm.lua). Two members' claims that name each other, a minute
+-- apart or less, corroborate both kills. One modified addon can claim any kill in any group; it cannot make another
+-- member's Cute name it back. A kill alone, or in a group with nobody else running Cute, teaches nothing (it still
+-- counts on the Statistics page). Corroborated kills are kept (CuteDB.known.kills[encounter][GUID]), and each
+-- character's first kill of a boss in a group is kept with it (CuteDB.chars[me].claims) and told again with the
+-- discoveries, so a member who was offline at the time weighs it too
+-- The session keeps CLAIM_CAP claims: CLAIMS_EACH of a member's per boss and CLAIMS_SENDER of a member's in all, the
+-- oldest out, and past CLAIM_CAP the oldest of the member who has the most, so neither one copy's junk nor an
+-- established guild's first kills, told again at every login, refuse anyone's claim, your own least of all
+local CLAIM_WINDOW, CLAIM_CAP, CLAIMS_EACH, CLAIMS_SENDER = 60, 4000, 4, 400
+local claims, nClaims = {}, 0 -- this session's: [encounter][GUID] = { { t, with }, ... }
+local order = {} -- [GUID] = { { enc, t }, ... }, each member's claims, oldest first
+local function forget(guid, x)
+  local q = order[guid]
+  if q then for i, y in ipairs(q) do if y.enc == x.enc and y.t == x.t then table.remove(q, i) break end end; if #q == 0 then order[guid] = nil end end
+  local list = claims[x.enc] and claims[x.enc][guid]
+  if list then
+    for i, c in ipairs(list) do if c.t == x.t then table.remove(list, i); nClaims = nClaims - 1 break end end
+    if #list == 0 then claims[x.enc][guid] = nil end
+  end
+end
+function R.Corroborated(enc, guid)
+  local k = known()
+  local rec = k and type(k.kills) == "table" and k.kills[enc]
+  return type(rec) == "table" and rec[guid] == true and not untrusted(guid)
+end
+-- a kill of this boss a group mate named back, by anyone
+function R.KilledSeen(enc)
+  local k = known()
+  local rec = k and type(k.kills) == "table" and k.kills[enc]
+  return type(rec) == "table" and next(rec) ~= nil
+end
+local function corroborate(enc, guid)
+  local k = known()
+  if not k then return end
+  k.kills = type(k.kills) == "table" and k.kills or {}
+  local rec = type(k.kills[enc]) == "table" and k.kills[enc] or {}
+  if rec[guid] or count(rec) >= WHO_CAP then return end
+  rec[guid] = true
+  k.kills[enc] = rec
+  R:Dirty()
+end
+-- a member's claim (theirs from the channel, yours at your kill): kept for the session, and weighed against the claims
+-- of each member it names
+function R.Claim(guid, enc, t, with)
+  if type(guid) ~= "string" or guid == "" or not num(enc) or not num(t) or type(with) ~= "table" or untrusted(guid) then return end
+  claims[enc] = claims[enc] or {}
+  local list = claims[enc][guid] or {}
+  for _, c in ipairs(list) do if c.t == t then return end end
+  if #list >= CLAIMS_EACH then forget(guid, { enc = enc, t = list[1].t }) end
+  if order[guid] and #order[guid] >= CLAIMS_SENDER then forget(guid, order[guid][1]) end
+  if nClaims >= CLAIM_CAP then
+    local most, n = nil, 0
+    for g, q in pairs(order) do if #q > n then most, n = g, #q end end
+    if most then forget(most, order[most][1]) end
+  end
+  list = claims[enc][guid] or {}
+  list[#list + 1] = { t = t, with = with }
+  claims[enc][guid] = list
+  nClaims = nClaims + 1
+  order[guid] = order[guid] or {}
+  table.insert(order[guid], { enc = enc, t = t })
+  for g in pairs(with) do
+    for _, other in ipairs(claims[enc][g] or {}) do
+      if type(other.with) == "table" and other.with[guid] and math.abs(other.t - t) <= CLAIM_WINDOW then
+        corroborate(enc, guid)
+        corroborate(enc, g)
+      end
+    end
+  end
+end
+-- On a member's client whose officers keep Bosses (or Dungeons, Raids) to themselves (Policy.lua P:Purge): the other
+-- members' GUIDs out of what the guild learned, as the values themselves are out of the records. Bosses: the
+-- corroborated kills (kills[encounter]) and who saw a boss's loot (loot[encounter].by[item]); and in the model, who met
+-- each boss, and each dungeon (its entries and the kills in it) where Bosses or its own kind is closed; and where
+-- Level is, the XP each level takes by member; and who said each label (the voices, Stats.lua S.Label) of a boss
+-- (Bosses), an instance (its kind's category, both where its kind is not sure) or a faction (Reputation), with how many
+-- labels each of them said, and who brought a boss's loot first (Bosses). What was learned stays, with how many members
+-- it was seen on (kept), and what two members agreed on stays agreed, so a member seen again later never counts
+-- twice. closed: { bosses, party, raid, rep, level }; only: where given, the GUIDs it says yes to alone (Policy.lua:
+-- another guild's policy takes out its own members' traces, never the first guild's). The number of GUIDs taken out
+function R.StripTraces(closed, only)
+  local k = known()
+  if not (k and type(closed) == "table") then return 0 end
+  local mine, n = C.MyGUID(), 0
+  local function other(g) return g ~= mine and g ~= "me" and (only == nil or only(g)) end
+  -- a set of GUIDs left with yours alone; how many counted in it before
+  local function strip(set)
+    if type(set) ~= "table" then return nil end
+    local v, gone = voices(set), 0
+    for g in pairs(set) do if other(g) then set[g] = nil; gone = gone + 1 end end
+    n = n + gone
+    return gone > 0 and v or nil
+  end
+  if closed.bosses then
+    for _, rec in pairs(type(k.kills) == "table" and k.kills or {}) do strip(rec) end
+    for _, rec in pairs(type(k.loot) == "table" and k.loot or {}) do
+      if type(rec) == "table" and type(rec.by) == "table" then
+        for id, by in pairs(rec.by) do
+          local v = strip(by)
+          if v then rec.kept = type(rec.kept) == "table" and rec.kept or {}; rec.kept[id] = math.max(num(rec.kept[id]) or 0, v) end
+        end
+      end
+      if type(rec) == "table" and type(rec.from) == "string" and other(rec.from) then rec.from = nil; n = n + 1 end
+    end
+    -- (who brought each boss's loot first, counted again from what is left when next asked)
+    if k.lootFrom ~= nil then k.lootFrom = nil end
+  end
+  -- the labels' voices: a label of a category closed keeps no other member's GUID
+  if type(k.voice) == "table" then
+    local gone = {}
+    for id, v in pairs(k.voice) do
+      local p, x = tostring(id):match("^([efi])(%d+)$")
+      local shut = (p == "e" and closed.bosses) or (p == "f" and closed.rep)
+      if p == "i" then
+        local kind, sure = C.Stats.KindOf(tonumber(x))
+        shut = (sure and closed[kind or ""]) or (not sure and (closed.party or closed.raid))
+      end
+      if shut and type(v) == "table" then
+        for g in pairs(v) do if other(g) then v[g] = nil; gone[g] = (gone[g] or 0) + 1; n = n + 1 end end
+        if next(v) == nil then k.voice[id] = nil end
+      end
+    end
+    if type(k.vn) == "table" then
+      for g, c in pairs(gone) do
+        local left = (num(k.vn[g]) or 0) - c
+        k.vn[g] = left > 0 and left or nil
+      end
+    end
+  end
+  if closed.level and type(k.xp) == "table" then
+    k.xpKept = type(k.xpKept) == "table" and k.xpKept or {}
+    for level, t in pairs(k.xp) do
+      if type(t) == "table" then
+        -- (every voice counted, yours too: what you and one other agreed on stays agreed, R.XPCurveLearns)
+        local votes, gone = {}, false
+        for g, v in pairs(t) do
+          if num(v) and not untrusted(g) then votes[v] = (votes[v] or 0) + 1 end
+          if other(g) then gone = true end
+        end
+        if gone then
+          for g in pairs(t) do if other(g) then t[g] = nil; n = n + 1 end end
+          -- (the most it was seen on: a member seen again later counts again live, never twice, R.XPCurveLearns)
+          local kept = type(k.xpKept[level]) == "table" and k.xpKept[level] or {}
+          for v, c in pairs(votes) do kept[v] = math.max(num(kept[v]) or 0, c) end
+          k.xpKept[level] = kept
+        end
+      end
+    end
+  end
+  local m = type(k.model) == "table" and k.model or nil
+  local function fact(f)
+    if type(f) ~= "table" then return end
+    local before = num(f.n) or 0
+    if strip(f.who) then f.kept = math.max(num(f.kept) or 0, before) end
+  end
+  if m then
+    if closed.bosses then for _, b in pairs(type(m.bosses) == "table" and m.bosses or {}) do fact(b) end end
+    for _, d in pairs(type(m.dungeons) == "table" and m.dungeons or {}) do
+      if type(d) == "table" and (closed.bosses or closed[d.kind]) then fact(d) end
+    end
+  end
+  if n > 0 then R:Dirty() end
+  return n
+end
+
+-- this character's kept claims: { [encounter] = { t, with = { [GUID] = true } } }
+function R.OwnClaims()
+  local ch = C.Char()
+  return type(ch.claims) == "table" and ch.claims or {}
+end
+-- the group you are in, by GUID, you left out: your party (in a raid, party1-4 are the others of your five), then the
+-- rest of a raid, lowest GUID first, CLAIM_WITH in all, so a claim fits one message (Comm.lua: 255 bytes, each GUID's
+-- last part nine with its dot; a raid of forty named whole was 364, never sent). Two of one five always name each
+-- other; across a raid, the lowest GUIDs are named by everyone
+local CLAIM_WITH = 24
+local function group()
+  local out, n, mine, rest = {}, 0, C.MyGUID(), {}
+  local function guid(u) local g = C.Get("UnitGUID", u); return (type(g) == "string" and g ~= "" and g ~= mine) and g or nil end
+  for i = 1, 4 do local g = guid("party" .. i); if g and not out[g] then out[g] = true; n = n + 1 end end
+  if type(C.Get("UnitInRaid", "player")) == "number" then
+    for i = 1, 40 do local g = guid("raid" .. i); if g and not out[g] then rest[#rest + 1] = g end end
+    table.sort(rest)
+  end
+  for _, g in ipairs(rest) do if n < CLAIM_WITH and not out[g] then out[g] = true; n = n + 1 end end
+  return out
+end
+-- your own kill (Sample.lua): your claim, weighed as any member's; the first kill of a boss in a group kept; told
+function R:Killed(enc)
+  local t = (C.Callable("GetServerTime") and C.Num("GetServerTime")) or C.Now()
+  local with = group()
+  local mine = C.MyGUID()
+  if mine then R.Claim(mine, enc, t, with) end
+  if next(with) == nil then return end
+  local ch = C.Char()
+  ch.claims = type(ch.claims) == "table" and ch.claims or {}
+  if type(ch.claims[enc]) ~= "table" then ch.claims[enc] = { t = t, with = with } end
+  if C.Comm and C.Comm.Claim then C.Comm:Claim(enc, t, with) end
+end
+
+----------------------------------------------------------------------------
+-- the officers' word. Where the officers keep a stat to themselves, a member's client receives none of the members'
+-- values of it, so it can learn nothing from them: with the defaults it hears no member's enchants (Enchanted slots
+-- follows Missing enchants), where Bosses is the officers', no kill, kill level or claim, and where Grouped with is, no
+-- claim, so no kill it hears is corroborated. So each officer's client
+-- tells the guild what it learned from what members do not receive (Comm.lua's 1N), and a member's client takes it
+-- from a sender the roster names an officer by (Roster.lua R:OfficerVoice), marked as the officers' word. What the
+-- guild learned only, never who: the slots and kinds of item that take an enchant and the slots the guild doubts (no
+-- enchant ids, which one member's enchant would name), the dungeons and bosses met (seen or doubted, their names, a
+-- range only where it was learned from rangeMembers members): no GUID, no member's value, no count, so nothing in it
+-- names a member. On the wire, key=value parts:
+--   n<slot>=<kind>,<kind>          the kinds of item learned to take an enchant in that slot (Enchanted slots theirs)
+--   x<slot>=d                      the research's slot the guild doubts (rule 4: Empty slots theirs)
+--   d<inst>:<p|r>[:lo-hi]=<name>   a dungeon or raid the guild met, its range where learned (Bosses, Grouped with or
+--                                  its kind theirs)
+--   b<enc>:<inst>:<s|d>=<name>     a boss the guild killed, seen or doubted (Bosses or Grouped with theirs)
+----------------------------------------------------------------------------
+local WORD_CAP = 400  -- parts kept per officer, and said at most
+local WORD_SENDERS = 12 -- officers whose word is kept
+local wordVersion = 0
+local KIND_CAT = { party = "gc_dungeons", raid = "gc_raids" }
+-- (while an officer's change of who sees what is not saved, the members route by the line, not by it: the word said
+-- last goes as it was (Comm.lua), and where none was said yet this session it says everything, which names nobody, so
+-- no member loses what it learned from the word by a change it does not route by)
+local function closed(id) return C.Policy:EditPending() or C.Policy:Route(id) == "self" end
+-- an officer's word, as its parts ("n9=4.1,4.2", ...), sorted; none where the officers keep nothing the guild learns from
+function R.WordParts()
+  local out, k = {}, known()
+  if not k then return out end
+  if closed("enchanted") then
+    for _, e in ipairs(C.Stats.EnchantSlots(true)) do
+      local kinds = {}
+      for _, kd in ipairs(e[4]) do kinds[#kinds + 1] = kd[1] end
+      if #kinds > 0 then out[#out + 1] = "n" .. e[1] .. "=" .. table.concat(kinds, ",") end
+    end
+  end
+  if closed("empty_slots") then
+    for slot = 1, 19 do if R.SeedSlotState(slot) == "doubted" then out[#out + 1] = "x" .. slot .. "=d" end end
+  end
+  local m = R.model
+  if m then
+    -- (a kill claim names its group, so while the officers keep Grouped with no member's client hears one, and no kill
+    -- is corroborated there, its own included: the bosses and dungeons met go in the word then too)
+    local bosses = closed("gc_bosses") or closed("group")
+    for id, d in pairs(m.dungeons) do
+      local name = C.Stats.CleanLabel(d.name)
+      local met = not d.seeded or (d.n or 0) > 0 or d.found
+      if met and name ~= "" and (bosses or closed(KIND_CAT[d.kind] or "gc_dungeons")) then
+        local range = (d.range == "learned" and d.min and d.max) and (":" .. math.floor(d.min) .. "-" .. math.floor(d.max)) or ""
+        out[#out + 1] = "d" .. id .. ":" .. (d.kind == "raid" and "r" or "p") .. range .. "=" .. name
+      end
+    end
+    if bosses then
+      for enc, b in pairs(m.bosses) do
+        local name = C.Stats.CleanLabel(b.name)
+        local state = (b.state == "seen" and ((b.n or 0) > 0 or not b.seeded) and "s") or (b.state == "doubted" and "d") or nil
+        if state and num(b.inst) and name ~= "" then out[#out + 1] = "b" .. enc .. ":" .. b.inst .. ":" .. state .. "=" .. name end
+      end
+    end
+  end
+  -- (the enchant slots and the doubts first, then the dungeons, then the bosses, each sorted: what is cut past the cap,
+  -- or past the 64 messages a receiver takes, Comm.lua, is bosses first, never a slot)
+  local rank = { n = 1, x = 1, d = 2, b = 3 }
+  table.sort(out, function(a, b)
+    local ra, rb = rank[a:sub(1, 1)] or 4, rank[b:sub(1, 1)] or 4
+    if ra ~= rb then return ra < rb end
+    return a < b
+  end)
+  while #out > WORD_CAP do table.remove(out) end
+  return out
+end
+-- an officer's word from the channel (Comm.lua has checked the sender): kept per officer, a newer one replacing theirs
+-- once every part of it is in (part of parts: a long word comes in several messages under one stamp, and one half
+-- arrived would take back what its later parts say); a word with no part count is taken as it comes. One stamped more
+-- than a minute past the server's clock is not taken (it would hold the officer's place against every later word),
+-- and one this client holds stamped so gives way. True when it was taken
+local WORD_AHEAD = 60
+local wordParts = {} -- [sender] = { at, n, got, have, parts }: a word whose parts are still coming
+local function takeParts(e, n, body)
+  local changed = false
+  for key, v in (body or ""):gmatch("([^=;]+)=([^;]*)") do
+    if #key <= 24 and #v <= 80 and (e.parts[key] ~= nil or n < WORD_CAP) then
+      if e.parts[key] == nil then n = n + 1 end
+      if e.parts[key] ~= v then changed = true end
+      e.parts[key] = v
+    end
+  end
+  return n, changed
+end
+function R.ReceiveWord(sender, at, body, part, parts)
+  local k = known()
+  at, part, parts = num(tonumber(at)), num(tonumber(part)), num(tonumber(parts))
+  if not (k and type(sender) == "string" and at) then return false end
+  if part and not (parts and part >= 1 and part <= parts and parts <= 64) then return false end
+  local now = C.ServerNow()
+  if at > now + WORD_AHEAD then return false end
+  k.word = type(k.word) == "table" and k.word or {}
+  local e = k.word[sender]
+  local pinned = type(e) == "table" and num(e.at) and e.at > now + WORD_AHEAD
+  if type(e) == "table" and num(e.at) and e.at > at and not pinned then return false end
+  if type(e) == "table" and e.at == at and type(e.parts) == "table" and not pinned then
+    -- (the stamp held: an echo, or a part the word held lacks; only a part it lacked changes the model)
+    local _, changed = takeParts(e, count(e.parts), body)
+    if changed then
+      wordVersion = wordVersion + 1
+      R:Dirty()
+    end
+    return true
+  end
+  local w = wordParts[sender]
+  if not w or w.at ~= at then
+    if w and w.at > at then return false end
+    w = { at = at, n = parts or 1, got = {}, have = 0, parts = {} }
+    wordParts[sender] = w
+  end
+  local key = part or 1
+  if w.got[key] then return false end
+  w.got[key], w.have = true, w.have + 1
+  takeParts(w, count(w.parts), body)
+  if part and w.have < w.n then return false end
+  wordParts[sender] = nil
+  -- (the oldest officer's word goes first, past the cap)
+  if type(e) ~= "table" and count(k.word) >= WORD_SENDERS then
+    local oldest, oldAt
+    for s2, x in pairs(k.word) do local t = type(x) == "table" and num(x.at) or 0; if not oldAt or t < oldAt then oldest, oldAt = s2, t end end
+    k.word[oldest] = nil
+  end
+  k.word[sender] = { at = at, parts = w.parts }
+  wordVersion = wordVersion + 1
+  R:Dirty()
+  return true
+end
+-- what the officers say the guild learned, from every officer's word this client holds (a sender the roster names an
+-- officer by now): { at, enchant = { [slot] = { [kind] = true } }, doubted = { [slot] = true }, dungeons = { [inst] =
+-- { kind, name, lo, hi } }, bosses = { [enc] = { inst, state, name } } }. Nil on an officer's own client, which
+-- has what the word is made of, and before the roster is known
+local wordCache, wordAt
+function R.Word()
+  local Ro = C.Roster
+  if not (Ro and Ro.trusted) or Ro:MeOfficer() then return nil end
+  -- (and the policy's version: an officer the officers marked untrusted since is a voice no more)
+  local key = wordVersion .. ":" .. Ro.idVersion .. ":" .. C.Policy:LineThreshold() .. ":" .. C.Policy.ver
+  if wordCache and wordAt == key then return wordCache end
+  local w = { at = 0, enchant = {}, doubted = {}, dungeons = {}, bosses = {} }
+  local k = known()
+  for sender, e in pairs(k and type(k.word) == "table" and k.word or {}) do
+    if type(e) == "table" and type(e.parts) == "table" and num(e.at) and Ro:OfficerVoice(sender) then
+      if e.at > w.at then w.at = e.at end
+      for key, v in pairs(e.parts) do
+        local slot = tonumber(key:match("^n(%d+)$"))
+        local xslot = tonumber(key:match("^x(%d+)$"))
+        local d, dk, lo, hi = key:match("^d(%d+):([pr]):?(%d*)%-?(%d*)$")
+        local b, bi, bs = key:match("^b(%d+):(%d+):([sd])$")
+        if slot and C.Stats.SLOT[slot] then
+          w.enchant[slot] = w.enchant[slot] or {}
+          for kind in v:gmatch("(%d+%.%d+)") do w.enchant[slot][kind] = true end
+        elseif xslot and C.Stats.SLOT[xslot] and v == "d" then w.doubted[xslot] = true
+        elseif d then
+          local name = C.Stats.CleanLabel(v)
+          lo, hi = tonumber(lo), tonumber(hi)
+          if name ~= "" then w.dungeons[tonumber(d)] = { kind = dk == "r" and "raid" or "party", name = name, lo = (lo and hi and lo <= hi) and lo or nil, hi = (lo and hi and lo <= hi) and hi or nil } end
+        elseif b then
+          local name = C.Stats.CleanLabel(v)
+          local prev = w.bosses[tonumber(b)]
+          -- (one officer's seen over another's doubted: a kill outweighs a run that missed it)
+          if name ~= "" and not (prev and prev.state == "s") then w.bosses[tonumber(b)] = { inst = tonumber(bi), state = bs, name = name } end
+        end
+      end
+    end
+  end
+  wordCache, wordAt = w, key
+  return w
+end
+-- the newest officer's word this client holds, which its ask carries (Comm.lua): an officer whose own is no newer
+-- does not answer it
+function R.WordStamp() local w = R.Word(); return w and w.at or 0 end
+-- the officers' word in the model (R:Rebuild, after rules 1 to 4): taken where this client's own evidence says less,
+-- each fact marked as theirs (R.Words says "from the officers"). A dungeon the research named without an instance id
+-- is placed by its name, as the guild's entries place it
+function R.TakeWord(m)
+  local w = R.Word()
+  if not w then return end
+  for id, x in pairs(w.dungeons) do
+    local d = m.dungeons[id]
+    if not d then
+      local key, hit = R.Norm(x.name), nil
+      for i, a in ipairs(m.awaited) do if key and R.Norm(a.name) == key then hit = i end end
+      if hit then
+        d = table.remove(m.awaited, hit)
+        d.awaited, d.id, d.found, d.kind = nil, id, true, x.kind
+        if x.name ~= d.name then d.seedName, d.name = d.name, x.name end
+      else
+        d = { id = id, name = x.name, kind = x.kind, seeded = false, state = "seen", bosses = {}, n = 0 }
+      end
+      m.dungeons[id] = d
+      d.officers = true
+    elseif (d.n or 0) == 0 and d.state ~= "seen" then
+      d.state, d.officers = "seen", true
+    end
+    if x.lo and d.range ~= "learned" then d.min, d.max, d.range = x.lo, x.hi, "officers" end
+  end
+  local joined = {}
+  for enc, x in pairs(w.bosses) do
+    local b, d = m.bosses[enc], m.dungeons[x.inst]
+    if not b and d then
+      local named = d.named and d.named[x.name:lower()]
+      b = { enc = enc, name = x.name, inst = x.inst, seeded = named ~= nil, conf = named and named.conf or nil, optional = named and named.optional or nil, loot = {}, n = 0 }
+      m.bosses[enc] = b
+      joined[#joined + 1] = enc
+    end
+    if b and (b.n or 0) == 0 then b.state, b.officers = x.state == "d" and "doubted" or "seen", true end
+  end
+  table.sort(joined)
+  for _, enc in ipairs(joined) do
+    local b = m.bosses[enc]
+    local d = m.dungeons[b.inst]
+    d.bosses[#d.bosses + 1] = enc
+    b.order = 1000 + #d.bosses
+  end
+end
+-- a research slot the officers say the guild doubts (rule 4, from what members do not receive)
+function R.WordDoubted(slot) local w = R.Word(); return w ~= nil and w.doubted[slot] == true end
+
 ----------------------------------------------------------------------------
 -- the model: the seed, Rule 0's verdict and the guild's play, built again at login and a few seconds after anything
--- the rules weigh changes. CuteDB.known.model = { seed, dungeons, bosses, enchants, xp, factions }
+-- the rules weigh changes. CuteDB.known.model = { seed, dungeons, awaited, bosses, enchants, xp, factions }: awaited
+-- holds the seed's dungeons no instance id has come for yet, by name
 ----------------------------------------------------------------------------
 function R:Rebuild()
   local k = known()
@@ -699,23 +1281,26 @@ function R:Rebuild()
   local oldOf = function(t, id) return type(old[t]) == "table" and old[t][id] or nil end
   local st, why = R.SeedState()
   local missing = (self.check and self.check.missing) or { item = {}, spell = {}, faction = {} }
-  local m = { at = now, seed = st, why = why, dungeons = {}, bosses = {}, enchants = {}, xp = {}, factions = {} }
+  local m = { at = now, seed = st, why = why, dungeons = {}, awaited = {}, bosses = {}, enchants = {}, xp = {}, factions = {} }
   -- (a dungeon or boss is shown by the name this game gives it once a member met it, the discoveries' label; the seed's
   -- name, where it differs, goes in its tooltip)
+  -- (a member's label alone renames nothing the seed names: your own, or two members' who agree, Stats.lua S.Sure)
   local labels = type(k.labels) == "table" and k.labels or {}
+  local sure = {}
+  for id, label in pairs(labels) do if C.Stats.Sure(id) then sure[id] = label end end
   local function named(seedName, label)
     if type(label) == "string" and label ~= "" and label ~= seedName then return label, seedName end
     return seedName, nil
   end
   if s then
     for id, d in pairs(s.dungeons) do
-      local name, seedName = named(d.name, labels["i" .. id])
+      local name, seedName = named(d.name, sure["i" .. id])
       local dm = { id = id, name = name, seedName = seedName, kind = d.kind, seeded = true, new = d.new, conf = d.conf, state = base(d.conf),
-        seedMin = d.min, seedMax = d.max, bosses = {}, named = d.named, wings = d.wings }
+        seedMin = d.min, seedMax = d.max, bosses = {}, named = d.named, wings = d.wings, quests = d.quests }
       m.dungeons[id] = dm
       for _, enc in ipairs(d.bosses) do
         local b = s.bosses[enc]
-        local bname, bseed = named(b.name, labels["e" .. enc])
+        local bname, bseed = named(b.name, sure["e" .. enc])
         local bm = { enc = enc, name = bname, seedName = bseed, inst = id, order = b.order, seeded = true, conf = b.conf, state = base(b.conf),
           optional = b.optional, loot = {} }
         for _, item in ipairs(b.loot) do bm.loot[item] = missing.item[item] and "absent" or base(b.conf) end
@@ -724,23 +1309,73 @@ function R:Rebuild()
       end
     end
   end
-  R.NewThingsJoin(m, k)
   -- what the guild met, member by member
   local members = R.Members()
+  -- the dungeons the seed names without an instance id (awaited: the client it was made from had no map for them): an
+  -- instance whose name is one of them, as the joins compare names (R.Norm), gives it its id once two members entered
+  -- it or a kill a group mate named back was there, like every other thing the guild learns (one member's entry, or
+  -- one edited copy's label and entry, places nothing), and from then on it is the seed's dungeon like the rest, its
+  -- range the seed's until the guild's kills learn one, its bosses joining as the guild kills them (rule 2). Where two
+  -- instances carry the name, the one more members entered is it, so one edited copy naming another instance cannot
+  -- hold it against the guild's entries. Until then it is listed by its name and range alone
+  if s and s.awaited[1] then
+    local entered, killedIn, byKey = {}, {}, {}
+    local inst = type(k.inst) == "table" and k.inst or {}
+    for _, mem in ipairs(members) do
+      for id in pairs(mem.dyn) do
+        local p, n = id:sub(1, 1), tonumber(id:sub(2))
+        if p == "i" then entered[n] = (entered[n] or 0) + 1
+        -- (a kill here is in the evidence only where it was corroborated: R.Members)
+        elseif p == "e" and num(inst[n]) then killedIn[inst[n]] = true end
+      end
+    end
+    for id in pairs(killedIn) do entered[id] = entered[id] or 0 end
+    -- (the instance's name and kind two members' word, or your own: one edited copy's label places nothing)
+    for id, n in pairs(entered) do
+      local key = R.Norm(sure["i" .. id])
+      local kind, kindSure = C.Stats.KindOf(id)
+      if key and not m.dungeons[id] and kindSure and (kind == "party" or kind == "raid") and (n >= VOICES() or killedIn[id]) then
+        local best = byKey[key]
+        if not best or n > best.n or (n == best.n and id < best.id) then byKey[key] = { id = id, n = n } end
+      end
+    end
+    for _, a in ipairs(s.awaited) do
+      local hit = byKey[a.key]
+      local d = { name = a.name, kind = a.kind, seeded = true, new = a.new, conf = a.conf, state = base(a.conf), seedMin = a.min, seedMax = a.max,
+        bosses = {}, named = {}, quests = a.quests }
+      if hit and not m.dungeons[hit.id] then
+        d.id, d.found, d.kind = hit.id, true, (C.Stats.KindOf(hit.id))
+        d.name, d.seedName = named(a.name, sure["i" .. hit.id])
+        m.dungeons[hit.id] = d
+      else
+        d.awaited = true
+        m.awaited[#m.awaited + 1] = d
+      end
+    end
+  end
+  R.NewThingsJoin(m, k, members)
+  -- (on a member's client, who met a dungeon is taken only where neither Bosses nor its kind is the officers': what
+  -- R.StripTraces took out of it is not put back from the category still open)
+  local officer = C.Roster:MeOfficer()
+  local P = C.Policy
+  local bossesOpen = officer or P:Route("gc_bosses") == "all"
+  local kindOpen = { party = officer or P:Route("gc_dungeons") == "all", raid = officer or P:Route("gc_raids") == "all" }
+  local function metDungeon(d, mem)
+    if not d then return end
+    if mem.me or (bossesOpen and kindOpen[d.kind] ~= false) then d.seenNow = d.seenNow or {}; d.seenNow[mem.guid] = true end
+  end
   local levels = {}
   for _, mem in ipairs(members) do
     for id, v in pairs(mem.dyn) do
       local p, n = id:sub(1, 1), tonumber(id:sub(2))
       if p == "i" then
-        local d = m.dungeons[n]
-        if d then d.seenNow = d.seenNow or {}; d.seenNow[mem.guid] = true end
+        metDungeon(m.dungeons[n], mem)
       elseif p == "e" then
         local b = m.bosses[n]
         if b then
           b.seenNow = b.seenNow or {}; b.seenNow[mem.guid] = true
           b.kills = (b.kills or 0) + v
-          local d = m.dungeons[b.inst]
-          if d then d.seenNow = d.seenNow or {}; d.seenNow[mem.guid] = true end
+          metDungeon(m.dungeons[b.inst], mem)
         end
       elseif p == "k" then
         local b = m.bosses[n]
@@ -755,7 +1390,11 @@ function R:Rebuild()
   for id, d in pairs(m.dungeons) do R.SeenBeatsBelieved(d, now, oldOf("dungeons", id)) end
   for enc, b in pairs(m.bosses) do R.SeenBeatsBelieved(b, now, oldOf("bosses", enc)) end
   for id, d in pairs(m.dungeons) do R.LevelRangesLearn(d, levels[id]) end
+  for _, d in ipairs(m.awaited) do R.LevelRangesLearn(d, nil) end
   R.DoubtNeverDelete(m, members)
+  -- what the officers say the guild learned from what this client does not receive (a member's client, where they
+  -- keep Bosses, or a kind of instance, to themselves)
+  R.TakeWord(m)
   R.LootLearns(m, k)
   -- the enchant slots: the seed's and the guild's
   watch(k, members)
@@ -773,16 +1412,24 @@ function R:Rebuild()
     local v, state, n, sv = R.XPCurveLearns(l)
     if v then m.xp[l] = { v = v, state = state, n = n, seed = sv } end
   end
-  -- the factions: seen once on a reputation list (yours, or a member's label), absent where the client lacks them
+  -- the factions: seen once on a reputation list (yours, or two members' labels), absent where the client lacks them
   if s then
     for id, f in pairs(s.factions) do
-      local seen = type(k.labels) == "table" and k.labels["f" .. id] ~= nil
+      local seen = C.Stats.Sure("f" .. id)
       m.factions[id] = { id = id, name = f.name, state = seen and "seen" or (missing.faction[id] and "absent" or base(f.conf)) }
     end
   end
   k.model = m
   self.model = m
   self.version = self.version + 1
+  -- an officer's client tells the guild what it learned, where that changed (Comm.lua's 1N); a member's asks its own
+  -- Missing enchants again where the officers' word did
+  if C.Comm and C.Comm.WordSoon then C.Comm:WordSoon() end
+  local wk = wordVersion .. ":" .. tostring(C.Roster.trusted) .. ":" .. tostring(C.Roster:MeOfficer())
+  if wk ~= self.wordSeen then
+    self.wordSeen = wk
+    if C.Sample and C.Sample.started then C.Sample:Schedule("unenchanted"); C.Sample:Schedule("ready") end
+  end
   return m
 end
 
@@ -798,11 +1445,11 @@ function R:Dirty()
     if C.UI and C.UI.page == "guide" and C.UI.Refresh then C.UI:Refresh() end
   end, "rules: rebuild"))
 end
--- a member's values arrived (Roster.lua): their XP sample learned at once, the model built again when it weighs them
+-- a member's values arrived (Roster.lua): their XP sample learned at once, by the GUID the record speaks for (g: none
+-- before the roster is known, Roster.lua R:VoiceOf), the model built again when it weighs them
 local WEIGH = { level = true, empty_slots = true, ench_kinds = true, xpmax = true }
-function R:Observe(stats, kv)
-  local g = type(stats) == "table" and stats.guid or nil
-  if kv.xpmax ~= nil and type(g) == "string" and g ~= "" then
+function R:Observe(stats, kv, g)
+  if kv.xpmax ~= nil and type(stats) == "table" and type(g) == "string" and g ~= "" and not untrusted(g) then
     local l, mx = R.ParseXP(stats.xpmax)
     if l then R.LearnXP(l, g, mx) end
   end
@@ -811,18 +1458,27 @@ function R:Observe(stats, kv)
   end
 end
 
--- at login: the XP samples the saved records carry (a member's level at the time), then Rule 0, which builds the model
+-- at login: your kept claims (a member's resent one names you back against them), the XP samples the saved records
+-- carry (a member's level at the time), then Rule 0, which builds the model
 function R:Start()
   if self.started then return end
   self.started = true
+  local mine = C.MyGUID()
+  if mine then for enc, c in pairs(R.OwnClaims()) do if type(c) == "table" then R.Claim(mine, enc, c.t, c.with) end end end
+  self:LearnSaved()
+  self:CheckSeed()
+end
+-- the XP samples the saved records carry, each by the GUID the record speaks for: none before the roster is known,
+-- whose first refresh calls this again (Roster.lua)
+function R:LearnSaved()
   for key, e in pairs(CuteDB.roster or {}) do
     local st = type(e) == "table" and type(e.stats) == "table" and e.stats or nil
-    if st and type(st.guid) == "string" and st.guid ~= "" and not C.Roster:IsSelfRecord(key, e) then
+    local g = st and C.Roster:VoiceOf(key, e)
+    if g and not C.Roster:IsSelfRecord(key, e) then
       local l, mx = R.ParseXP(st.xpmax)
-      if l then R.LearnXP(l, st.guid, mx) end
+      if l then R.LearnXP(l, g, mx) end
     end
   end
-  self:CheckSeed()
 end
 
 ----------------------------------------------------------------------------
@@ -832,10 +1488,10 @@ local function members(n) return n == 1 and "1 member" or (n .. " members") end
 function R.Words(fact)
   if type(fact) ~= "table" then return "" end
   local st = fact.state
-  if st == "seen" then return (fact.n or 0) > 0 and ("seen by " .. members(fact.n)) or "seen in play" end
+  if st == "seen" then return (fact.n or 0) > 0 and ("seen by " .. members(fact.n)) or (fact.officers and "from the officers") or "seen in play" end
   if st == "beta" then return "seen in the beta" end
   if st == "data" then return "from research" end
-  if st == "doubted" then return fact.runs and ("doubted: not seen in " .. fact.runs .. " runs") or "doubted" end
+  if st == "doubted" then return fact.runs and ("doubted: not seen in " .. fact.runs .. " runs") or (fact.officers and "doubted, from the officers") or "doubted" end
   if st == "absent" then return "not in this client" end
   if st == "stale" then return "from research this game no longer matches" end
   if st == "estimated" then return "estimated" end
@@ -847,6 +1503,7 @@ function R.RangeWords(d)
   local r = d.min == d.max and tostring(d.min) or (d.min .. "-" .. d.max)
   if d.range == "learned" then return r, "learned from " .. members(d.levels) end
   if d.range == "seen" then return r, "killed at these levels by " .. members(d.levels) end
+  if d.range == "officers" then return r, "learned by the guild, from the officers" end
   return r, d.state == "beta" and "the beta's range" or "the research's range"
 end
 function R.Model()
@@ -854,14 +1511,23 @@ function R.Model()
   return R.model
 end
 
--- the dungeons for a level: the ones whose range holds it, and the ones opening within guideAhead levels above it; each
--- sorted by its lowest level, then name
-function R.DungeonsFor(level)
+-- every dungeon the model holds: by instance id, then the seed's that no instance has come for yet (awaited)
+function R.EachDungeon()
   local m = R.Model()
+  local list = {}
+  if m then
+    for _, d in pairs(m.dungeons) do list[#list + 1] = d end
+    for _, d in ipairs(m.awaited or {}) do list[#list + 1] = d end
+  end
+  return list
+end
+-- the dungeons for a level: the ones whose range holds it, and the ones opening within guideAhead levels above it; each
+-- sorted by its lowest level, then name. The seed's awaited dungeons are among them, by their range alone
+function R.DungeonsFor(level)
   local now, soon = {}, {}
-  if not (m and num(level)) then return now, soon end
+  if not num(level) then return now, soon end
   local ahead = R.Get("guideAhead")
-  for _, d in pairs(m.dungeons) do
+  for _, d in ipairs(R.EachDungeon()) do
     if d.min and d.state ~= "stale" then
       if d.min <= level and level <= d.max then now[#now + 1] = d
       elseif d.min > level and d.min <= level + ahead then soon[#soon + 1] = d end
@@ -902,6 +1568,10 @@ function R.Changes()
   if research then
     for _, d in pairs(m.dungeons) do if not d.seeded then list[#list + 1] = d end end
     for _, d in ipairs(byName(list)) do add("New " .. (d.kind == "raid" and "raid" or "dungeon") .. ": " .. d.name, R.Words(d), "new") end
+    -- (a dungeon the research named without an instance id, which a member's entry placed)
+    list = {}
+    for _, d in pairs(m.dungeons) do if d.found then list[#list + 1] = d end end
+    for _, d in ipairs(byName(list)) do add("Found: " .. d.name, R.Words(d) .. "; the research had it by name alone", "found") end
     list = {}
     for _, b in pairs(m.bosses) do if not b.seeded then list[#list + 1] = b end end
     for _, b in ipairs(byName(list)) do add("New boss: " .. b.name, "in " .. ((m.dungeons[b.inst] or {}).name or "?") .. ", " .. R.Words(b), "new") end

@@ -343,21 +343,28 @@ on("CRITERIA_UPDATE", function() S:GamePass() end)
 
 -- the statistics probe (Stats.lua ProbeGame): at login, and again at 30 s and at two minutes when the client has the
 -- function but listed nothing yet (achievement data can still be on its way at PLAYER_ENTERING_WORLD). Statistics
--- defined late are read at once; their first values go out with the next flush, and an asker gets them in full
+-- defined late are read at once; their first values go out with the next flush, and an asker gets them in full. While
+-- a probe is still to come (Stats.gamePending) a member's client holds the guild's values of statistics it has not
+-- defined aside, and the probe's last word keeps or drops them by their category (Roster.lua R:ReleaseHeld)
 local RETRY = { 30, 120 }
 function S:ProbeGame(attempt)
   attempt = attempt or 1
   local ok, what, again = C.Stats.ProbeGame()
   if ok then
+    C.Stats.gamePending = false
     if attempt > 1 then
       for _, def in ipairs(C.Stats.byCat.game) do self:Read(def.id) end
       if C.UI and C.UI.Refresh then C.UI:Refresh() end
     end
+    C.Roster:ReleaseHeld()
     return
   end
   if again and RETRY[attempt] then
+    C.Stats.gamePending = true
     C_Timer.After(RETRY[attempt], C.Safe(function() S:ProbeGame(attempt + 1) end, "sample: statistics probe"))
   else
+    C.Stats.gamePending = false
+    C.Roster:ReleaseHeld()
     C.Err.Note(tostring(what), "statistics")
   end
 end
@@ -501,7 +508,8 @@ function S:InstanceCheck(initial, reloading)
 end
 -- a boss killed: its count, the first kill's time (kept here, not sent), its label and its instance's, and the level
 -- you were at the first kill (k<encounterID>: no stat of its own, it goes with the discoveries and Rules.lua learns the
--- dungeon's level range from it). The kill opens a minute for its loot window (LOOT_OPENED, below)
+-- dungeon's level range from it); the kill's claim with your group, which a group mate's corroborates (Rules.lua rule
+-- 9). The kill opens a minute for its loot window (LOOT_OPENED, below)
 local LOOT_WINDOW = 60
 local function killed(encounter, name, here)
   local id = "e" .. encounter
@@ -522,6 +530,7 @@ local function killed(encounter, name, here)
   end
   T.lastKill = { enc = encounter, inst = here.id, at = gtime() }
   S:Summaries()
+  C.Rules:Killed(encounter)
   C.Rules:Dirty()
 end
 -- ENCOUNTER_END (encounterID, encounterName, difficultyID, groupSize, success): a kill when success is 1. BOSS_KILL
@@ -708,8 +717,11 @@ function S:Start(initial, reloading)
       if type(name) == "string" and name ~= "" then counters().lc_last = name end
     end
   end
-  -- what the guild learned before: every saved label defines its stat again, the saved records teach the enchants
+  -- what the guild learned before: every saved label defines its stat again, the saved records teach the enchants;
+  -- then, every value's route known, the saved records keep none of the others' Only-you values (Roster.lua)
   C.Stats.LoadKnown()
+  self.loaded = true
+  C.Roster:PurgeCheck()
   -- load every counter and tracked value into the live table, and the levels of your first kills (Rules.lua's evidence)
   for _, def in ipairs(C.Stats.list) do if def.count or def.track then self.values[def.id] = readOne(def); self.at[def.id] = now() end end
   for id, v in pairs(counters()) do if type(id) == "string" and id:match("^k%d+$") and type(v) == "number" then self.values[id] = v end end
@@ -725,6 +737,26 @@ function S:Start(initial, reloading)
   C_Timer.After(HEARTBEAT, C.Safe(heartbeat, "sample: heartbeat"))
   C_Timer.After(60, C.Safe(day, "sample: day"))
   self:GearSoon()
+end
+
+-- the stats a module defines once Sample has started (Modules.lua): wired to their events and read now, as Start does
+-- for the registry; the heartbeat reads them from then on. Before Start they are in the registry already and Start
+-- does it
+function S:Adopt(defs)
+  if not self.started then return end
+  for _, def in ipairs(defs) do
+    local events = {}
+    if def.on then for _, ev in ipairs(def.on) do on(ev, function() S:Schedule(def.id) end); events[#events + 1] = ev end end
+    if def.count and def.count:match("^%u[%u_]+$") then on(def.count, function() S:Bump(def.id) end); events[#events + 1] = def.count end
+    for _, ev in ipairs(events) do
+      if ev == "COMBAT_LOG_EVENT_UNFILTERED" then
+        -- never: the client restricts it
+      elseif ev:match("^UNIT_") then
+        if not pcall(self.frame.RegisterUnitEvent, self.frame, ev, "player") then pcall(self.frame.RegisterEvent, self.frame, ev) end
+      else pcall(self.frame.RegisterEvent, self.frame, ev) end
+    end
+    if def.count or def.track then self.values[def.id] = readOne(def); self.at[def.id] = now() else self:Read(def.id) end
+  end
 end
 
 -- the session's XP, for the pace: across a ding, the rest of the old level counts too
