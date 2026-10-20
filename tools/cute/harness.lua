@@ -50,8 +50,16 @@ RegisterForClicks SetEnabled Enable Disable IsEnabled GetFontString SetOrientati
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
 SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetUnboundedStringWidth GetStringHeight
 SetAutoFocus SetFocus ClearFocus SetMaxLetters HasFocus SetChecked GetChecked GetLeft GetTop GetChildren GetNumPoints
-SetResizable SetResizeBounds StartSizing CreateMaskTexture AddMaskTexture SetScale GetScale SetHitRectInsets]])
+SetResizable SetResizeBounds StartSizing CreateMaskTexture AddMaskTexture SetScale GetScale SetHitRectInsets
+IsForbidden SetPushedTexture GetTextColor SetMultiLine HighlightText SetRotation SetAtlas SetPassThroughButtons SetCooldown
+SetHideCountdownNumbers SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness CreateLine SetTextInsets
+SetAttribute GetAttribute SetGradient SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias]])
+-- (the last three lines: the quest engine's, for a client made with o.quest = true; QuestBank's harness lists them)
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
+-- a PlayerModel's own and a QuestPOIFrame's own (the quest engine's journal and map files), as QuestBank's harness has them
+local MODEL = { SetDisplayInfo = true, SetCreature = true, SetPortraitZoom = true, ClearModel = true, SetKeepModelOnHide = true }
+local POI = { DrawBlob = true, DrawNone = true, SetMapID = true, SetFillTexture = true, SetBorderTexture = true, SetFillAlpha = true,
+  SetBorderAlpha = true, SetBorderScalar = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 14, ChatFontNormal = 14 }
 local FONT_FILE = { NumberFontNormal = "Fonts\\ARIALN.TTF", ChatFontNormal = "Fonts\\ARIALN.TTF" }
 
@@ -107,12 +115,39 @@ local function newObj(kind, template, parent)
   adopt(parent, o)
   local mt = {}
   mt.__index = function(t, k)
-    if METHODS[k] or (BACKDROP[k] and t.__backdrop) then
+    if METHODS[k] or (BACKDROP[k] and t.__backdrop) or (MODEL[k] and kind == "PlayerModel") or (POI[k] and kind == "QuestPOIFrame") then
       return function(self, ...)
         local a = { ... }
         local n = select("#", ...)
         if k == "SetPoint" or k == "SetText" then OPS.n = OPS.n + 1 end
         if k == "SetScript" then self.__scripts[a[1]] = a[2]
+        -- (the quest engine's: a line, the minimap's zoom, an atlas, an attribute, a model, a quest area)
+        elseif k == "CreateLine" then local x = newObj("Line", nil, self); x.__layer = a[2] or "ARTWORK"; return x
+        elseif k == "SetThickness" then self.__thick = a[1]
+        elseif k == "SetStartPoint" then self.__start = { a[1], a[2], a[3], a[4] }
+        elseif k == "SetEndPoint" then self.__stop = { a[1], a[2], a[3], a[4] }
+        elseif k == "GetZoom" then return self.__zoom or 0
+        elseif k == "SetZoom" then self.__zoom = a[1]
+        elseif k == "GetZoomLevels" then return 6
+        elseif k == "GetTextColor" then local col = self.__color or { 1, 1, 1 }; return col[1], col[2], col[3], 1
+        elseif k == "SetRotation" then self.__rot = a[1]
+        elseif k == "PingLocation" then self.__pings = self.__pings or {}; table.insert(self.__pings, { a[1], a[2] })
+        elseif k == "SetAtlas" then self.__tex = "atlas:" .. tostring(a[1]); self.__atlas = a[1]; self.__color = nil
+        elseif k == "SetCooldown" then self.__cd = { a[1], a[2] }
+        elseif k == "SetAttribute" then self.__attr = self.__attr or {}; self.__attr[a[1]] = a[2]
+        elseif k == "GetAttribute" then return self.__attr and self.__attr[a[1]] or nil
+        elseif k == "IsForbidden" then return false
+        elseif k == "SetDisplayInfo" then self.__display, self.__creature = a[1], nil
+        elseif k == "SetCreature" then self.__creature, self.__display = a[1], nil
+        elseif k == "SetPortraitZoom" then self.__portraitZoom = a[1]
+        elseif k == "ClearModel" then self.__display, self.__creature = nil, nil
+        elseif k == "SetKeepModelOnHide" then self.__keepModel = a[1]
+        elseif k == "SetMapID" then self.__poiMap = a[1]
+        elseif k == "DrawBlob" then self.__blobQuest, self.__blobs = a[1], (self.__blobs or 0) + 1
+        elseif k == "DrawNone" then self.__blobQuest = nil
+        elseif k == "SetPassThroughButtons" then
+          if self.__client and self.__client.combat then error("ADDON_ACTION_BLOCKED: SetPassThroughButtons in combat", 2) end
+          self.__passThrough = { ... }
         elseif k == "GetScript" then return self.__scripts[a[1]]
         elseif k == "HookScript" then local old = self.__scripts[a[1]]; self.__scripts[a[1]] = function(...) if old then old(...) end a[2](...) end
         elseif k == "RegisterEvent" then self.__events[a[1]] = true
@@ -201,7 +236,7 @@ local function newObj(kind, template, parent)
         elseif k == "EnableMouse" then self.__mouse = a[1] and true or false
         elseif k == "GetChildren" then
           local out = {}
-          for _, x in everything() do if x.__parent == self and x.__kind ~= "Texture" and x.__kind ~= "FontString" then out[#out + 1] = x end end
+          for _, x in everything() do if x.__parent == self and x.__kind ~= "Texture" and x.__kind ~= "FontString" and x.__kind ~= "Line" then out[#out + 1] = x end end
           return unpack(out)
         elseif k == "ClearAllPoints" then self.__points = {}
         elseif k == "SetAllPoints" then
@@ -927,7 +962,11 @@ local function newClient(o)
   c.addonState, c.addonCalls = o.addonState or {}, {}
   local list = { { name = "Cute", toc = readToc(HERE .. "/Cute/Cute.toc"), loaded = true } }
   for _, name in ipairs(o.modules or {}) do
-    local a = { name = name, dir = MODULES_DIR .. "/" .. name, private = {} }
+    -- (a folder under test/ first, else beside Cute/, where the build writes Cute_Quest)
+    local dir = MODULES_DIR .. "/" .. name
+    local probe = io.open(dir .. "/" .. name .. ".toc")
+    if probe then probe:close() else dir = HERE .. "/" .. name end
+    local a = { name = name, dir = dir, private = {} }
     a.toc = readToc(a.dir .. "/" .. name .. ".toc")
     a.lod = a.toc.fields.LoadOnDemand == "1"
     if (o.lod or {})[name] ~= nil then a.lod = o.lod[name] end
@@ -977,6 +1016,9 @@ local function newClient(o)
     end,
   }
   env.InCombatLockdown = function() return c.combat == true end
+  -- o.quest: the quest engine's mocks (test/quest_mocks.lua), what Cute_Quest's copy of QuestBank reads that Cute's own
+  -- mock lacks; after Cute's (the addon list among them), never over them
+  if o.quest then dofile(HERE .. "/test/quest_mocks.lua")(env, c, o, newObj, api, secret) end
 
   -- load the addon, file by file, as the TOC lists them. Known.lua is the seed of the pass (the fixture, or none), or
   -- the one a client asks for: o.seed = "real" (the generated file), "fixture", false (none) or a source of its own
@@ -4614,6 +4656,39 @@ do
     leave(nl2)
     leave(pim)
     print(string.format("modules: a fresh install the dashboard alone, 0.5.0's characters too (What's new says so), a new one and 0.4.0's start without and stay without at the later logins; a module addon found by its toc, loaded at once when ticked (after combat when ticked in combat) with its tab, section, event and stat, gone at once when unticked and off in the game's AddOns list, so the next login does not load it, on again when ticked there; a module the game loads itself shows nothing while off in Cute; %d Settings sections and every page at both sizes for both views", seen))
+  end)
+end
+
+-- 36b: Cute_Quest, the quest engine as a module addon (tools/cute/Cute_Quest, written by build.py from QuestBank): listed
+-- by its toc's title and not loaded; its folder's row ticked, it loads, the saved variables are one table under two
+-- names, the engine logs in from the bridge (never from PLAYER_LOGIN, which is past), the catalog is built, the step
+-- frame is up and flat; Data.lua is never loaded for a character that keeps every quest module off
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local state = {}
+    local rone = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true }))
+    login(rone)
+    tickAll(5)
+    local M = rone.C.Modules
+    assert(#M.found == 1 and M.found[1].name == "Cute_Quest" and M.found[1].lod and M.found[1].title == "Cute Quest", "found by its toc: " .. tostring(M.found[1] and M.found[1].title))
+    assert(not rone.addons[2].loaded and rone.addons[2].private.Data == nil, "not loaded: no catalog in memory")
+    rone.C.UI:Open("settings", "modules")
+    local box = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Cute Quest" end)
+    assert(box, "its row in Settings > Modules")
+    click(box)
+    tick(rone, 6) -- (the bridge's login, the engine's first plan four seconds on)
+    local a = rone.addons[2]
+    local QB = a.private
+    assert(a.loaded and QB.Data and QB.Data.Q and QB.Engine == QB and not QB.dormant, "loaded: the catalog built, this copy the engine")
+    assert(rone.env.CuteQuestDB and rone.env.QuestBankDB == rone.env.CuteQuestDB and rone.env.CuteQuestDB.settings, "one saved table under both names, the settings in it")
+    assert(QB.loginDone and QB.state and QB.state.level == 5, "the engine logged in from the bridge: level " .. tostring(QB.state and QB.state.level))
+    assert(rone.env.CuteQuestDB.settings.mapPage == false and rone.env.CuteQuestDB.settings.post.auto == false and rone.env.CuteQuestDB.settings.welcome == nil, "the module's defaults set once")
+    assert(rone.env.SlashCmdList.QUESTBANK, "/qb is routed")
+    assert(#(rone.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    for _, l in ipairs(rone.chat) do assert(not l:find("QuestBank", 1, true) and not l:find("/qb", 1, true), "the engine said nothing at login: " .. l) end
+    leave(rone)
+    print("cute quest: listed by its toc and not loaded; ticked, the engine's copy loads, logs in from the bridge, builds its catalog; one saved table under both names; /qb routed")
   end)
 end
 
