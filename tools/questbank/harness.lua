@@ -16525,16 +16525,36 @@ end)()
     local goulash
     for _, s in ipairs(G.steps) do if s.kind == "objective" and s.qid == 92 then goulash = s break end end
     assert(goulash and goulash.n == 1 and not G.Text(goulash):find("more here", 1, true), "one quest's spawn spots are no 'more here': " .. tostring(goulash and G.Text(goulash)))
-    local c = human("Twoquests", { { 7, 0 }, { 15, 0 } }, { [783] = true })
+    -- (the mock puts every map point where the player stands; Elwynn gets its real yards here, as the walk case gives
+    -- Hillsbrad its own, so the mine's two quests are forty yards apart and the vineyard's is six hundred away)
+    local ELWYNN = { wy0 = 1535.4, wyx = -34.704, wx0 = -7939.5, wxy = -23.147 }
+    local c = newClient({ name = "Twoquests", level = 2, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = { { 7, 0 }, { 15, 0 }, { 18, 0 } }, done = { [783] = true }, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    local env = c.env
+    local function toMap(wx, wy) return (wy - ELWYNN.wy0) / ELWYNN.wyx / 100, (wx - ELWYNN.wx0) / ELWYNN.wxy / 100 end
+    env.C_Map.GetBestMapForUnit = function() return 1429 end
+    env.MapUtil.GetDisplayableMapForPlayer = function() return 1429 end
+    env.C_Map.GetPlayerMapPosition = function(m) if m ~= 1429 then return nil end; local x, y = toMap(-8914, -133); return { x = x, y = y, GetXY = function(self) return self.x, self.y end } end
+    local wpos = env.C_Map.GetWorldPosFromMapPos
+    env.C_Map.GetWorldPosFromMapPos = function(m, v) if m ~= 1429 then return wpos(m, v) end; return 0, { x = ELWYNN.wx0 + ELWYNN.wxy * v.y * 100, y = ELWYNN.wy0 + ELWYNN.wyx * v.x * 100, GetXY = function(self) return self.x, self.y end } end
+    env.C_Map.GetMapPosFromWorldPos = function(cont, pos, m) if cont ~= 0 or m ~= 1429 then return nil end; return m, env.CreateVector2D(toMap(pos.x, pos.y)) end
+    env.C_Map.GetMapRectOnMap = function() return nil end
+    login(c)
     c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/8", type = "monster", finished = false, numFulfilled = 3, numRequired = 8 } },
-                     [15] = { { text = "Investigate Echo Ridge: 0/1", type = "event", finished = false, numFulfilled = 0, numRequired = 1 } } }
-    c.QB:Settings().welcome = nil
+                     [15] = { { text = "Investigate Echo Ridge: 0/1", type = "event", finished = false, numFulfilled = 0, numRequired = 1 } },
+                     [18] = { { text = "Red Burlap Bandana: 0/12", type = "item", finished = false, numFulfilled = 0, numRequired = 12 } } }
+    c.QB:Settings().guide.on = true; c.QB:Settings().welcome = nil
     settle(c)
     local G2 = c.QB.Guide
-    local k, r
-    for _, s in ipairs(G2.steps) do if s.kind == "objective" and s.qid == 7 then k = s end; if s.kind == "objective" and s.qid == 15 then r = s end end
-    assert(k and r and G2.Text(k) == "Kill Kobold Vermin 3/8, and 1 more here" and G2.Text(r) == "Kill Investigate Echo Ridge 0/1, and 1 more here",
-      "two quests at the mine count each other: " .. tostring(k and G2.Text(k)) .. " / " .. tostring(r and G2.Text(r)))
+    local k, r, v
+    for _, s in ipairs(G2.steps) do
+      if s.kind == "objective" and s.qid == 7 then k = s elseif s.kind == "objective" and s.qid == 15 then r = s elseif s.kind == "objective" and s.qid == 18 then v = s end
+    end
+    assert(k and r and v, "three objective steps")
+    assert(math.abs(k.wx - r.wx) < 150 and (k.wx - v.wx) ^ 2 + (k.wy - v.wy) ^ 2 > 150 * 150, "the mine's two close, the vineyard far, in Elwynn's yards")
+    assert(G2.Text(k) == "Kill Kobold Vermin 3/8, and 1 more here" and G2.Text(r) == "Kill Investigate Echo Ridge 0/1, and 1 more here",
+      "two quests at the mine count each other: " .. G2.Text(k) .. " / " .. G2.Text(r))
+    assert(G2.Text(v):find("^Collect ") and not G2.Text(v):find("more here", 1, true), "the vineyard's quest counts nothing: " .. G2.Text(v))
   end }
 
   -- out of order: an objective finished before its pick-up step (the quest taken by hand first), and a quest handed
