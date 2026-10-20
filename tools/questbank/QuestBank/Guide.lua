@@ -63,7 +63,7 @@ end
 G.ParseLine = parseLine
 
 -- the verb for a spot kind (Data.lua's D.SPOT kinds)
-local VERB = { k = "Kill", c = "Collect", u = "Use", b = "Buy", e = "Go to", f = "Gather", s = "Find" }
+local VERB = { k = "Kill", c = "Collect", u = "Use", b = "Buy", e = "Go to", f = "Gather", s = "Find", d = "Do" }
 
 -- the words of a step, made when asked (the frame asks each refresh; no string is kept on the step)
 function G.Text(s)
@@ -74,6 +74,13 @@ function G.Text(s)
     if s.near then return s.n and s.n > 1 and string.format("Hand in %d quests here", s.n) or ("Hand in " .. questName(s.qid) .. " here") end
     return s.n and s.n > 1 and string.format("Hand in %d quests at %s", s.n, npcName(s.npc)) or ("Hand in " .. questName(s.qid))
   elseif k == "objective" then
+    -- a quest with no objective spot in the world (a dungeon's: its objectives are inside): "Do <quest> in <dungeon>",
+    -- or, with the way in not known, "Do <quest> (<dungeon>: entrance not known yet)"; no dungeon: "Do <quest>"
+    if s.obj == "d" then
+      local t = "Do " .. questName(s.qid)
+      if s.dungeon then t = t .. (s.noEntrance and (" (" .. s.dungeon .. ": entrance not known yet)") or (" in " .. s.dungeon)) end
+      return t
+    end
     local e = QB.state.log[s.qid]
     local o = e and e.objectives and e.objectives[s.slot or 1]
     local name, have, need = parseLine(o and o.text)
@@ -108,11 +115,12 @@ local function placeNpc(s, idx)
 end
 
 -- the objective steps of one quest: its open spots (QuestMap.OpenSpots: finished objectives left out) clustered within
--- CLUSTER yards, nearest to `me` first; the kept spot (Target.lua's cur) leads when it is this quest's
+-- CLUSTER yards, nearest to `me` first; the kept spot (Target.lua's cur) leads when it is this quest's. Returns how
+-- many steps it made
 local spotsOf, spotPool, taken = {}, {}, {}
 local function objectiveSteps(e, me, lead)
   local QM, M = QB.QuestMap, QB.Model
-  if not (QM and QM.OpenSpots) or e.complete then return end
+  if not (QM and QM.OpenSpots) or e.complete then return 0 end
   for k = #spotsOf, 1, -1 do spotsOf[k] = nil end
   for k in pairs(taken) do taken[k] = nil end
   local n = 0
@@ -131,8 +139,10 @@ local function objectiveSteps(e, me, lead)
     if lead and (a.sp == lead) ~= (b.sp == lead) then return a.sp == lead end
     return a.d < b.d
   end)
+  local made = 0
   for i, a in ipairs(spotsOf) do
     if not taken[i] then
+      made = made + 1
       local s = step("objective")
       s.qid, s.obj, s.slot = e.id, a.sp.kind, a.sp.slot > 0 and a.sp.slot or nil
       s.c, s.wx, s.wy, s.m, s.x, s.y = a.c, a.wx, a.wy, a.sp.m, a.sp.x * 100, a.sp.y * 100
@@ -144,6 +154,31 @@ local function objectiveSteps(e, me, lead)
       G.steps[#G.steps + 1] = s
     end
   end
+  return made
+end
+
+-- a quest in your log, not complete, with no objective step (no spot in the world: a dungeon's, done inside): never a
+-- "Hand in" step (6.0.0 made one, and the owner in Ironforge was told to hand in Old Ironforge Incursion at 0/1), but
+-- "Do <quest> in <dungeon>" at the dungeon's entrance when the catalog has one (D.CAT's entrance), else at the hand-in
+-- NPC, worded "(<dungeon>: entrance not known yet)"; a quest of no dungeon: "Do <quest>" at its hand-in NPC
+local function doStep(e, q, turnIdx)
+  local s = step("objective")
+  s.qid, s.obj, s.n = e.id, "d", 1
+  local cat = q and q.cat
+  if cat and cat.dungeon then
+    s.dungeon = cat.name
+    local ent = cat.entrance
+    local w = ent and QB.Model.World(ent.m, ent.x, ent.y, wbuf)
+    if w then
+      s.c, s.wx, s.wy, s.m, s.x, s.y = w.c, w.wx, w.wy, ent.m, ent.x, ent.y
+      G.steps[#G.steps + 1] = s
+      return s
+    end
+    s.noEntrance = true
+  end
+  placeNpc(s, turnIdx)
+  G.steps[#G.steps + 1] = s
+  return s
 end
 
 -- "and N more here": the objective steps of other quests within CLUSTER yards of a step (one quest's spawn spots
@@ -649,10 +684,14 @@ function G.Replan()
   for _, leg in ipairs(legs) do
     local stop = leg.stop
     if stop then
-      -- the objectives of this stop's quests still open (the target's quest is moved first below)
+      -- the objectives of this stop's quests still open (the target's quest is moved first below); one with no spot
+      -- in the world gets its Do step (doStep) and no hand-in until it is complete
       for _, row in ipairs(leg.rows or {}) do
         local e = log[row.q.id]
-        if e and not e.complete and not putOff(e.id) then objectiveSteps(e, me, nil) end
+        if e and not e.complete and not putOff(e.id) and not doneQ[e.id] and objectiveSteps(e, me, nil) == 0 then
+          doStep(e, row.q, row.q.turnIdx)
+          doneQ[e.id] = true
+        end
       end
       -- its hand-ins, one step per NPC: the quests ready now, and the ones still to do after their objectives
       for k in pairs(byNpc) do byNpc[k] = nil end
@@ -676,6 +715,15 @@ function G.Replan()
       pickupsAt(stop)
     end
   end
+  -- the quests held and not done that the route leaves out (Model.lua's route.waiting: a dungeon's, nothing to hand
+  -- in yet, no spot to lead to): their Do steps, after the route's
+  for _, w in ipairs(r and r.waiting or {}) do
+    local e = log[w.q.id]
+    if e and not e.complete and not doneQ[e.id] and not putOff(e.id) and objectiveSteps(e, me, nil) == 0 then
+      doStep(e, w.q, w.q.turnIdx)
+      doneQ[e.id] = true
+    end
+  end
   -- pick-ups at no stop of the route (a giver away from every hand-in): after the route, the nearest to you first
   -- (off your continent last, then by id)
   for k = #left, 1, -1 do left[k] = nil end
@@ -696,8 +744,9 @@ function G.Replan()
   end
   countNear(G.steps)
   -- the first step is the target's: when the target leads to an objective spot of a quest, that quest's nearest
-  -- objective step goes first (Target.lua keeps the quest and the spot; the list follows it, never the other way)
-  if cur and cur.name and cur.obj and cur.qid and not (G.steps[1] and (G.steps[1].near or G.steps[1].kind == "corpse")) then
+  -- objective step goes first (Target.lua keeps the quest and the spot; the list follows it, never the other way); so
+  -- does its Do step when the target is a dungeon's entrance, or a hand-in with nothing done yet (cur.pending)
+  if cur and cur.name and (cur.obj or cur.pending) and cur.qid and not (G.steps[1] and (G.steps[1].near or G.steps[1].kind == "corpse")) then
     for i, s in ipairs(G.steps) do
       if s.kind == "objective" and s.qid == cur.qid then
         if i > 1 then table.remove(G.steps, i); table.insert(G.steps, 1, s) end

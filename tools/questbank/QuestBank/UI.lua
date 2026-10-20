@@ -3835,6 +3835,15 @@ local function travelIcon(kind)
 end
 
 -- one leg: the clock, how you get there, the stop, and the quests handed in there
+-- the Route page's blocks after the legs: what the route could not place, and what waits on a dungeon run (one table,
+-- read each refresh; icon: D.TEX's key)
+local SIDE_BLOCKS = {
+  { key = "unplaced", travel = "Not on the route", icon = "unknown",
+    note = "Handed in inside a dungeon, or where QuestBank has no position for the NPC. Hand them in on the way." },
+  { key = "waiting", travel = "After a dungeon run", icon = "questGeneric",
+    note = "Done inside first; the plan counts nothing for these until they are." },
+}
+
 local function layLeg(l, width, y, parent)
   l:ClearAllPoints()
   l:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
@@ -4117,37 +4126,41 @@ function UI:RefreshRouteView(v)
     y = y + ry + 10
   end
 
-  -- what the route could not place
-  if r.unplaced and #r.unplaced > 0 then
-    local l = v.legs:Get()
-    l.divider:Hide()
-    layLeg(l, width, y, v.scroll.child)
-    l.node:SetTexture(T.taxiGray); l.node:SetTexCoord(0, 1, 0, 1)
-    l.clock:SetText("")
-    l.travelIcon:SetTexture(T.unknown)
-    l.travel:SetText("Not on the route")
-    l.name:SetText(#r.unplaced .. (#r.unplaced == 1 and " quest" or " quests"))
-    l.level:SetText("")
-    l.pin:Hide()
-    l.note:SetText("Handed in inside a dungeon, or where QuestBank has no position for the NPC. Hand them in on the way.")
-    local ry = 64
-    for k, e in ipairs(r.unplaced) do
-      local rr = legRow(l, k)
-      rr:ClearAllPoints()
-      rr:SetPoint("TOPLEFT", 66, -ry)
-      rr:SetWidth(width - 74)
-      rr.q, rr.st, rr.xpv, rr.pct, rr.plvl, rr.doneXP = e.q, e.st, QB:Value(e.q.id), nil, nil, nil
-      routeMark(rr, e.q, e.st)
-      rr.name:SetText(e.q.name)
-      rr.name:SetTextColor(INK[1], INK[2], INK[3])
-      rr.npc:SetText(e.q.turn and (e.q.turn.inside and (e.q.turn.n .. ", inside") or e.q.turn.n) or "NPC unknown")
-      rr.xp:SetText(QB.Comma(rr.xpv or 0))
-      ry = ry + 20
+  -- what the route could not place, and what waits on a dungeon run (Model.lua's route.waiting: held, not done, no
+  -- spot to lead to; the plan counts nothing for it until it is done)
+  for _, blk in ipairs(SIDE_BLOCKS) do
+    local list = r[blk.key]
+    if list and #list > 0 then
+      local l = v.legs:Get()
+      l.divider:Hide()
+      layLeg(l, width, y, v.scroll.child)
+      l.node:SetTexture(T.taxiGray); l.node:SetTexCoord(0, 1, 0, 1)
+      l.clock:SetText("")
+      l.travelIcon:SetTexture(T[blk.icon])
+      l.travel:SetText(blk.travel)
+      l.name:SetText(#list .. (#list == 1 and " quest" or " quests"))
+      l.level:SetText("")
+      l.pin:Hide()
+      l.note:SetText(blk.note)
+      local ry = 64
+      for k, e in ipairs(list) do
+        local rr = legRow(l, k)
+        rr:ClearAllPoints()
+        rr:SetPoint("TOPLEFT", 66, -ry)
+        rr:SetWidth(width - 74)
+        rr.q, rr.st, rr.xpv, rr.pct, rr.plvl, rr.doneXP = e.q, e.st, QB:Value(e.q.id), nil, nil, nil
+        routeMark(rr, e.q, e.st)
+        rr.name:SetText(e.q.name)
+        rr.name:SetTextColor(INK[1], INK[2], INK[3])
+        rr.npc:SetText(e.q.turn and (e.q.turn.inside and (e.q.turn.n .. ", inside") or e.q.turn.n) or "NPC unknown")
+        rr.xp:SetText(QB.Comma(rr.xpv or 0))
+        ry = ry + 20
+      end
+      for k = #list + 1, #l.rows do l.rows[k]:Hide() end
+      l:SetAlpha(1)
+      l:SetHeight(ry + 10)
+      y = y + ry + 10
     end
-    for k = #r.unplaced + 1, #l.rows do l.rows[k]:Hide() end
-    l:SetAlpha(1)
-    l:SetHeight(ry + 10)
-    y = y + ry + 10
   end
   v.legs:HideRest()
   v.scroll:SetContentHeight(y + 10)

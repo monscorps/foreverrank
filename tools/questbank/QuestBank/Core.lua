@@ -1773,7 +1773,7 @@ function QB:OnTheDay() return self:Banking() and "on the day" or "at your level"
 -- state
 ----------------------------------------------------------------------------
 QB.state = { level = 1, xp = 0, log = {}, logOrder = {}, bagStarts = {} }
-local function emptyRoute() return { legs = {}, t = 0, xp = 0, level = 0, at60 = 0, count = 0, byQuest = {}, unplaced = {}, empty = true } end
+local function emptyRoute() return { legs = {}, t = 0, xp = 0, level = 0, at60 = 0, count = 0, byQuest = {}, unplaced = {}, waiting = {}, empty = true } end
 QB.routeNow, QB.routePlan = emptyRoute(), emptyRoute()
 local turnedIn = {} -- this session, so a hand-in is never mistaken for an abandon
 

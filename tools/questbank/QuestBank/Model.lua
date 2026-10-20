@@ -339,36 +339,72 @@ end
 ----------------------------------------------------------------------------
 -- the problem, in plain numbers so one evaluation is cheap
 ----------------------------------------------------------------------------
+-- a quest held and not done whose doing the route cannot lead to: a dungeon's with no objective spot in the world
+-- (its objectives are inside; Target.lua leads to the entrance when the catalog has one). Its hand-in waits on a
+-- dungeon run: it pays nothing in the plan (the time to level, Guide.lua) and counts no hand-in, and a stop with
+-- nothing else is cheap and never "passed" on the way: it waits behind every real hand-in. (6.0.0 counted its XP as a
+-- hand-in's and put the owner's Ironforge stop first, in reach, with Old Ironforge Incursion at 0/1.) Only a quest in
+-- your log: the planner's own cases hand it entries of their own
+local function pendingRow(e)
+  local q = e.q
+  local log = QB.state and QB.state.log
+  local le = log and log[q.id]
+  if not le or le.complete then return false end
+  local cat = q.cat
+  return (cat and cat.dungeon and not (D.SPOT and D.SPOT[q.id])) and true or false
+end
+
 local function problem(entries, opts)
   D = QB.Data
   local fac = opts.fac or "A"
   local mf = M.Factor(opts.mounted)
   local stops, unplaced = buildStops(entries, fac)
+  -- a stop with nothing to hand in yet (every row pendingRow) is no hand-in stop: left out while any other stop
+  -- stands, its entries in P.waiting (the Guide's Do steps, the Route page's "After a dungeon run"); with no other
+  -- stop it stays, so the arrow has a target (the dungeon's entrance, or "Finish <quest>": Target.lua)
+  local waiting, anyReal, stopPend = {}, false, {}
+  for i, st in ipairs(stops) do
+    local all = true
+    for _, e in ipairs(st.rows) do if not pendingRow(e) then all = false break end end
+    stopPend[i] = all
+    if not all then anyReal = true end
+  end
+  if anyReal then
+    local kept = {}
+    for i, st in ipairs(stops) do
+      if stopPend[i] then for _, e in ipairs(st.rows) do waiting[#waiting + 1] = e end else kept[#kept + 1] = st end
+    end
+    stops = kept
+  end
   local n = #stops
-  local P = { stops = stops, unplaced = unplaced, n = n, fac = fac, mf = mf, level = opts.level, xp = opts.xp,
+  local P = { stops = stops, unplaced = unplaced, waiting = waiting, n = n, fac = fac, mf = mf, level = opts.level, xp = opts.xp,
               goal = opts.goal or "hour", C = {}, K = {}, start = {}, startKind = {}, hearth = {},
-              inn = {}, work = {}, rowFull = {}, rowLvl = {}, rowAfter = {}, rowId = {} }
+              inn = {}, work = {}, rowFull = {}, rowLvl = {}, rowAfter = {}, rowId = {}, rowPend = {}, pending = {} }
   for i = 1, n do
     local a = stops[i]
     P.C[i], P.K[i] = {}, {}
     for j = 1, n do P.C[i][j], P.K[i][j] = M.Between(a, stops[j], fac, mf) end
     step() -- (the flights you know: a flight master's minutes to all the others, worked out the first time asked)
     P.work[i] = a.work + a.inner * mf
-    local full, lvl, after, ids = {}, {}, {}, {}
+    local full, lvl, after, ids, pend, allPend = {}, {}, {}, {}, {}, true
     for k, e in ipairs(a.rows) do
       full[k] = raw(e.q)
       lvl[k] = e.q.lvl
       after[k] = e.after or false
       ids[k] = e.q.id
+      pend[k] = pendingRow(e)
+      if not pend[k] then allPend = false end
       if e.after then P.hasAfter = true end
     end
-    P.rowFull[i], P.rowLvl[i], P.rowAfter[i], P.rowId[i] = full, lvl, after, ids
+    P.rowFull[i], P.rowLvl[i], P.rowAfter[i], P.rowId[i], P.rowPend[i] = full, lvl, after, ids, pend
+    P.pending[i] = allPend and #a.rows > 0
   end
-  -- a stop worth next to nothing waits until everything worth the trip is handed in
+  -- a stop worth next to nothing waits until everything worth the trip is handed in (a quest held and not done pays
+  -- nothing yet: pendingRow)
   P.cheap = {}
   for i = 1, n do
     local worth = 0
-    for r = 1, #P.rowFull[i] do worth = worth + xpAt(P.rowFull[i][r], P.rowLvl[i][r], opts.level) end
+    for r = 1, #P.rowFull[i] do if not P.rowPend[i][r] then worth = worth + xpAt(P.rowFull[i][r], P.rowLvl[i][r], opts.level) end end
     P.cheap[i] = worth < CHEAP * QB.Scale(opts.level)
   end
   -- where the run starts: free (log out at the first stop) or from where you stand
@@ -473,7 +509,7 @@ local function evaluate(P, order, keep)
       if P.cheap[s] then
         local nxt = order[k + 1]
         local passing = false
-        if P.here and nxt and nxt ~= 0 and kind ~= "hearth" and kind ~= "none" then
+        if P.here and nxt and nxt ~= 0 and kind ~= "hearth" and kind ~= "none" and not P.pending[s] then
           local direct = prev and P.C[prev][nxt] or P.start[nxt]
           passing = travel + P.C[s][nxt] - direct < PASS
         end
@@ -481,10 +517,13 @@ local function evaluate(P, order, keep)
       elseif cheapSeen then outOfOrder = true end
       local arrive = keep and (level >= CAP and CAP or level + xp / T[level])
       local rows = keep and {} or nil
-      local full, lvl, after = P.rowFull[s], P.rowLvl[s], P.rowAfter[s]
+      local full, lvl, after, pend = P.rowFull[s], P.rowLvl[s], P.rowAfter[s], P.rowPend[s]
       for r = 1, #full do
         local a = after[r]
-        if not a or (handed and handed[a] == gen) then
+        if pend[r] then
+          -- (held and not done, a dungeon's: nothing yet; its row stands for the hand-in to come)
+          if rows then rows[#rows + 1] = { e = P.stops[s].rows[r], q = P.stops[s].rows[r].q, xp = 0, pct = 0, plvl = level, pending = true } end
+        elseif not a or (handed and handed[a] == gen) then
           local m = level - lvl[r]
           local f = full[r]
           if m >= 10 then f = f * 0.1 elseif m >= 6 then f = f * (1 - (m - 5) * 0.2) end
@@ -778,7 +817,7 @@ function M.Plan(entries, opts, prev)
   local P = problem(entries, opts)
   local startFrac = M.Frac(opts.level, opts.xp)
   local route = { legs = {}, t = 0, xp = 0, level = startFrac, at60 = startFrac, count = 0, byQuest = {},
-                  unplaced = P.unplaced, fac = P.fac, mounted = opts.mounted, fromHere = P.here ~= nil, goal = P.goal, jump = opts.jump }
+                  unplaced = P.unplaced, waiting = P.waiting, fac = P.fac, mounted = opts.mounted, fromHere = P.here ~= nil, goal = P.goal, jump = opts.jump }
   if P.n == 0 then return route end
 
   local scored = {}
@@ -879,8 +918,10 @@ function M.Plan(entries, opts, prev)
   route.firstLeft = (left and f == left) or nil
   if P.here then route.startC, route.startX, route.startY = opts.start.c, opts.start.wx, opts.start.wy end
   for _, l in ipairs(legs) do
-    route.count = route.count + #l.rows
-    for _, row in ipairs(l.rows) do route.byQuest[row.q.id] = row.xp end
+    for _, row in ipairs(l.rows) do
+      if not row.pending then route.count = route.count + 1 end
+      route.byQuest[row.q.id] = row.xp
+    end
     if l.kind == "hearth" then route.bind = { hub = l.inn, town = D.HUB[P.fac][l.inn][1], before = l.stop.name } end
     if l.late and not route.lateFrom then route.lateFrom = l end
   end

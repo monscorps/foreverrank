@@ -82,13 +82,15 @@ local function stopOne()
 end
 
 -- the target: one table, filled anew when it changes (the arrow's guide sees a new target by its name and place).
--- kind "route"; obj: an objective's spot (else the stop); name, c, wx, wy (continent yards), m, x, y (its map, in
+-- kind "route"; obj: an objective's spot, or a dungeon's entrance (else the stop); pending: the stop has nothing to
+-- hand in yet (a quest held and not done leads: pendingOf); name, c, wx, wy (continent yards), m, x, y (its map, in
 -- percent), qid (the quest whose colour it takes), quests and what (the arrow's tooltip), verb and head (the arrow's
 -- words), after (what comes next), stop (the stop's name)
 local cur = { kind = "route" }
 T.cur = cur
 local was = { gen = 0 }                -- the stop it was worked out for, the quest and the objective spot kept
 local spots, spotPool, spotsAt, spotsGen = {}, {}, -1, -1 -- the open spots of the stop's quests, and what for
+local pendCache                                           -- the stop's pending quest (pendingOf), read with the spots
 local wbuf = {}                        -- (a world position read into it)
 local idList = {}
 
@@ -152,6 +154,40 @@ local function pickSpot(me)
     if not (db <= NEARER * dk and dk - db >= NEARER_YD) then best = keep end
   end
   return best
+end
+
+-- none of the stop's quests complete (its quests in your log, idList as readSpots sorted them), and no spot to lead to:
+-- nothing to hand in there yet. A quest of the stop held and not done leads instead: the lowest id with a dungeon
+-- entrance the catalog places (D.CAT's entrance: "Enter <dungeon>", to do it there), else the lowest id, the stop
+-- itself as "Finish <quest>" (its pin and place as before: the minimap's stroke and label stay the stop's). Nil with
+-- a quest complete there, or none held (a stop of quests not taken yet is the stop as before). One table reused:
+-- { qid, n (held and not done there), ent, cat, c, wx, wy (the entrance's) }
+-- (6.0.0 took the stop itself "to hand in there": the owner in Ironforge with Old Ironforge Incursion at 0/1, a quest
+-- of The Hall of Thanes with no spot and no entrance, was sent to King Magni and told "You're there")
+local pendBuf = {}
+local function pendingOf()
+  local log = QB.state and QB.state.log or {}
+  local first, firstCat, n = nil, nil, 0
+  local ent, entQ, entCat
+  for _, id in ipairs(idList) do
+    local e = log[id]
+    if e then
+      if e.complete then return nil end
+      n = n + 1
+      local q = QB.Quest.Get(id)
+      local cat = q and q.cat
+      if not first then first, firstCat = id, (cat and cat.dungeon) and cat or nil end
+      if not ent then
+        local en = cat and cat.dungeon and cat.entrance
+        local w = en and QB.Model.World(en.m, en.x, en.y, wbuf)
+        if w then ent, entQ, entCat = en, id, cat; pendBuf.c, pendBuf.wx, pendBuf.wy = w.c, w.wx, w.wy end
+      end
+    end
+  end
+  if not first then return nil end
+  pendBuf.n, pendBuf.ent = n, ent
+  if ent then pendBuf.qid, pendBuf.cat = entQ, entCat else pendBuf.qid, pendBuf.cat = first, firstCat end
+  return pendBuf
 end
 
 -- the stop's quests: its pin's (Pins.lua's ids), else the leg's hand-ins; and the lowest id of them, whose colour the
@@ -280,7 +316,7 @@ end
 local function nothing()
   if cur.name ~= nil then
     if QB.tracing then QB.Trace("target: %s -> nothing", cur.name) end
-    cur.name, cur.c, cur.wx, cur.wy, cur.obj = nil, nil, nil, nil, nil
+    cur.name, cur.c, cur.wx, cur.wy, cur.obj, cur.pending = nil, nil, nil, nil, nil, nil
     T.ver = T.ver + 1
   end
   return nil
@@ -333,7 +369,7 @@ function T.Get(me)
       local e = log[row.q.id]
       if e and e.complete and row.q.turnIdx == np.npc then nearIds[row.q.id] = true end
     end
-    cur.near, cur.obj, cur.c, cur.wx, cur.wy = np.npc, false, np.c, np.wx, np.wy
+    cur.near, cur.obj, cur.pending, cur.c, cur.wx, cur.wy = np.npc, false, nil, np.c, np.wx, np.wy
     cur.name = nn > 1 and (n and n[1] or nst.name) or nq.name
     cur.m, cur.x, cur.y = n and n[2], n and n[3], n and n[4]
     cur.qid, cur.stop, cur.ids, cur.quests, cur.what = nq.id, nst.name, nearIds, nn, "to hand in there"
@@ -377,19 +413,45 @@ function T.Get(me)
   if spotsGen ~= was.gen or spotsAt ~= QB.changed then
     spotsGen, spotsAt = was.gen, QB.changed
     readSpots(idsOf(d, leg))
+    pendCache = pendingOf()
   end
   local s = #spots > 0 and pickSpot(me) or nil
+  local pend = (not s) and pendCache or nil
+  local pendName
+  if pend then
+    local q = QB.Quest.Get(pend.qid)
+    pendName = pend.ent and pend.cat.name or (q and q.name or ("Quest " .. pend.qid))
+  end
   local before = cur.name
   cur.ids = idsOf(d, leg) -- (the stop's quests: the arrow's menu skips one)
-  local changed = cur.name ~= (s and s.name or name) or cur.stop ~= name or cur.obj ~= (s ~= nil)
-    or (s and (s.sp ~= was.spot or s.qid ~= was.spotQ))
+  local changed = cur.name ~= ((s and s.name) or (pend and pend.ent and pendName) or name) or cur.stop ~= name or cur.obj ~= (s ~= nil or (pend and pend.ent ~= nil) or false)
+    or (cur.pending or false) ~= (pend ~= nil) or (s and (s.sp ~= was.spot or s.qid ~= was.spotQ)) or (pend and cur.qid ~= pend.qid)
   was.spot, was.spotQ = s and s.sp or nil, s and s.qid or nil
   cur.stop = name
+  cur.pending, cur.labelShort = pend ~= nil, nil
+  if changed or not pend then cur.label = nil end
   if s then
     cur.obj, cur.name, cur.c, cur.wx, cur.wy = true, s.name, s.c, s.wx, s.wy
     cur.m, cur.x, cur.y, cur.qid = s.sp.m, s.sp.x * 100, s.sp.y * 100, s.qid
     cur.quests, cur.what, cur.verb, cur.head = nil, nil, "Objective", "Objective: %s"
     if cur.afterFor ~= name then cur.after, cur.afterFor = "Then hand it in at " .. name .. ".", name end
+  elseif pend and pend.ent then
+    -- nothing to hand in there yet: the dungeon's entrance, to do the quest there
+    cur.obj, cur.name, cur.c, cur.wx, cur.wy = true, pendName, pend.c, pend.wx, pend.wy
+    cur.m, cur.x, cur.y, cur.qid = pend.ent.m, pend.ent.x, pend.ent.y, pend.qid
+    cur.quests, cur.what, cur.verb, cur.head = pend.n, "to do there", "Enter", "Enter %s"
+    if changed then cur.after, cur.afterFor = "Then hand in at " .. name .. ".", nil end
+  elseif pend then
+    -- nothing to hand in there yet, and no way in known: the stop as it is, to finish the quest first ("Finish
+    -- <quest>" on the arrow; its tooltip's head the same, the quest's name in it: no %s)
+    cur.obj, cur.name, cur.c, cur.wx, cur.wy = false, name, c, wx, wy
+    cur.m, cur.x, cur.y, cur.qid = d and d.m or st.m, d and d.x or st.x, d and d.y or st.y, pend.qid
+    cur.quests, cur.what, cur.verb = pend.n, "to do first, then hand in there", "Finish"
+    if changed then
+      cur.label = "Finish " .. pendName
+      cur.head = cur.label:gsub("%%", "%%%%")
+      cur.after, cur.afterFor = pend.cat and (pend.cat.name .. ": entrance not known yet.") or nil, nil
+    end
   else
     cur.obj, cur.name, cur.c, cur.wx, cur.wy = false, name, c, wx, wy
     cur.m, cur.x, cur.y = d and d.m or st.m, d and d.x or st.x, d and d.y or st.y

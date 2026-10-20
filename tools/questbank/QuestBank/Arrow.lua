@@ -916,6 +916,9 @@ function A:Update()
   end
   g = g or straight(me, t)
   A.g = g
+  -- a hand-in with nothing done yet (Target.lua's pending target, no way in known: "Finish <quest>"): standing there
+  -- is not "You're there", there is nothing to hand in
+  if t.pending and not t.obj and g.state == "there" then g.info = "Finish it first, then hand in here" end
   -- shown for a waypoint: it goes a few seconds after you get there; shown beside TomTom's arrow for the way there,
   -- it goes once only the last walk is left (TomTom's arrow has that)
   if t.temp then

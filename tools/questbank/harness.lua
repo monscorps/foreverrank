@@ -6342,7 +6342,9 @@ v3.modePlan.__scripts.OnClick(v3.modePlan)
 QB.Model.Finish()
 UI:Refresh()
 print("route plan:", v3.summary:GetText())
-assert(v3.summary:GetText() == "93,610 XP  |  level 23.61  |  121 min  |  at 60 min 23.42", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
+-- (6.0.1: Gnogaine, 2926, held at 0/1, a Gnomeregan quest with no spot in the world, waits on the dungeon run: no stop
+-- of its own in the plan and none of its 3,445 XP; the search settles on another order without it)
+assert(v3.summary:GetText() == "90,165 XP  |  level 23.49  |  137 min  |  at 60 min 23.34", "the owner's full plan is unchanged, got: " .. tostring(v3.summary:GetText()))
 -- each row says what it is at a glance: a check to hand in, the game's ! to pick up first, the quest's icon while it is
 -- still being done; the waypoint button is the game's own pin, not a quest's ?
 do
@@ -7607,7 +7609,8 @@ do
   F.__scripts.OnUpdate(F, 1)
   print("arrow:", F.name:GetText(), "|", F.dist:GetText(), "| rotation", F.arrow.__rot and string.format("%.2f", F.arrow.__rot))
   assert(F.name:GetText() ~= "" and F.dist:GetText() ~= "", "it names the stop and how far")
-  lines = {}; F.__scripts.OnEnter(F); assert(lines[1]:find("Next stop"))
+  -- (the route's first stop, or the objective spot of a quest it takes: the planner's order decides which)
+  lines = {}; F.__scripts.OnEnter(F); assert(lines[1]:find("Next stop") or lines[1]:find("^Objective:"), "the tooltip heads with the stop or its objective: " .. tostring(lines[1]))
   for _, pr in ipairs(checkLayout(F, "arrow")) do problems[#problems + 1] = pr end
   -- 3.4.0: what it points at is yours to choose
   assert(A.Mode() == "route" and A.Target().kind == "route", "it starts on the route")
@@ -17377,6 +17380,133 @@ end)()
     -- the sidebar is untouched
     assert(UI.SIDEBAR[#UI.SIDEBAR].name == "Settings", "the sidebar as it was")
     UI.frame:Hide()
+  end }
+
+  -- 6.0.1: a dungeon quest in your log, not done, with no objective spot in the world (the owner in Ironforge holding
+  -- Old Ironforge Incursion, 96393, at 0/1: a quest of The Hall of Thanes handed in to King Magni, no spot, and its
+  -- category had no entrance). 6.0.0 made it a "Hand in" step, the target stood on Magni "to hand in there", the
+  -- arrow said "You're there" with nothing to do, and two real hand-ins waited in Menethil and Loch Modan. Now: a
+  -- "Do <quest> in <dungeon>" step at the dungeon's entrance when the catalog has one, else at the hand-in NPC worded
+  -- "(<dungeon>: entrance not known yet)"; never a hand-in until it is complete; the plan pays nothing for it and
+  -- counts no hand-in, and a stop with nothing else waits behind every real hand-in
+  G6CASES[#G6CASES + 1] = { "a dungeon quest in the log at 0/1: a Do step, never a hand-in; the route leads with a real hand-in", function()
+    local c = newClient({ name = "Bronn", level = 21, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Gnome", log = { { 96393, 0 }, { 469, 1 }, { 468, 1 } }, done = { [96391] = true }, world = { 0, -4822, -1155 }, map = 1455, bagSlots = {}, bind = "Ironforge" })
+    c.QB.UI.Candidates = function() return {} end -- (no fill: Ironforge's stop holds Magni alone, as the owner's did; a pick-up there would make it a real stop)
+    login(c)
+    local QB, G, T, A = c.QB, c.QB.Guide, c.QB.Target, c.QB.Arrow
+    c.objectives = { [96393] = { { text = "Durgen Dirgehammer's Head: 0/1", type = "item", finished = false, numFulfilled = 0, numRequired = 1 } } }
+    local ifh = hubOf(c, "Ironforge")
+    c.taxiKnown = { [ifh[6]] = true, [hubOf(c, "Menethil Harbor")[6]] = true, [hubOf(c, "Thelsamar")[6]] = true }
+    fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+    QB:Settings().guide.on = true
+    QB:Settings().arrowMode = "route"
+    A:Set(true)
+    settle(c)
+    -- the steps: no hand-in of 96393; a Do step of it instead (at the entrance once the catalog has one, else at Magni)
+    local doStep
+    for _, s in ipairs(G.steps) do
+      assert(not (s.kind == "handin" and s.qid == 96393), "never a hand-in of a quest at 0/1: " .. G.Text(s))
+      if s.kind == "objective" and s.qid == 96393 then doStep = s end
+    end
+    assert(doStep and G.Text(doStep):find("^Do Old Ironforge Incursion"), "a Do step of it: " .. tostring(doStep and G.Text(doStep)))
+    local cat = QB.Quest.Get(96393).cat
+    if cat.entrance then
+      assert(G.Text(doStep) == "Do Old Ironforge Incursion in The Hall of Thanes" and doStep.m == cat.entrance.m and doStep.x == cat.entrance.x and doStep.y == cat.entrance.y,
+        "at the entrance: " .. G.Text(doStep))
+    else
+      assert(G.Text(doStep) == "Do Old Ironforge Incursion (The Hall of Thanes: entrance not known yet)" and doStep.npc == 361, "at Magni, worded so: " .. G.Text(doStep))
+    end
+    local s1 = G.steps[1]
+    assert(s1 and not (s1.kind == "handin" and s1.qid == 96393), "the first step is no hand-in of it: " .. tostring(s1 and G.Text(s1)))
+    -- the route: its first stop is a real hand-in (Menethil's or Loch Modan's), and the plan pays nothing for 96393
+    local r = QB.routePlan
+    local real = false
+    for _, row in ipairs(r.legs[1].rows) do local e = QB.state.log[row.q.id]; if e and e.complete then real = true end end
+    assert(real, "the route's first stop is a real hand-in: " .. tostring(r.legs[1].stop.name))
+    local others = 0
+    for _, l in ipairs(r.legs) do for _, row in ipairs(l.rows) do if row.q.id ~= 96393 then others = others + row.xp end end end
+    assert((r.byQuest[96393] or 0) == 0 and r.xp == others, "no XP of it in the plan until it is done: " .. tostring(r.byQuest[96393]) .. " of " .. tostring(r.xp))
+    local waiting = false
+    for _, w in ipairs(r.waiting or {}) do if w.q.id == 96393 then waiting = true end end
+    assert(waiting, "it waits on the dungeon run (route.waiting), no stop of its own")
+    -- the target is never Magni to hand in there
+    local t = T.Get(QB.API.WorldPosition())
+    assert(t and t.name and not (t.qid == 96393 and t.what == "to hand in there"), "the target: " .. tostring(t and t.name) .. ", " .. tostring(t and t.what))
+    -- standing at Magni the arrow never says "You're there" or "Hand in"
+    standAt(c, 0, -4862, -1025)
+    local F = c.env.QuestBankArrow
+    for _ = 1, 5 do tick(c, 1); F.__scripts.OnUpdate(F, 1) end
+    assert(F.dist:GetText() ~= "You're there" and not (F.name:GetText() or ""):find("^Hand in"),
+      "the arrow at Magni: " .. tostring(F.name:GetText()) .. " / " .. tostring(F.dist:GetText()))
+    -- the map: no ? at Magni while it is 0/1; the entrance pin on Ironforge's map once the catalog has one
+    local QM = QB.QuestMap
+    local function readyHere() for _, q in ipairs((QM.ZoneQuests(1455))) do if q.id == 96393 then return true end end return false end
+    assert(not readyHere(), "no ? on Magni at 0/1")
+    if cat.entrance then
+      local found = false
+      for _, e in ipairs(QM.Entrances(cat.entrance.m)) do if e.name == "The Hall of Thanes" then found = true end end
+      assert(found, "the Hall of Thanes' entrance pin on its map")
+    end
+    -- done: a hand-in as any other, in reach at Magni
+    c.log[1][2] = 1; c.objectives[96393][1].finished, c.objectives[96393][1].numFulfilled = true, 1
+    settle(c)
+    assert(G.steps[1].kind == "handin" and G.steps[1].qid == 96393 and G.steps[1].near and G.Text(G.steps[1]) == "Hand in Old Ironforge Incursion here",
+      "complete: the hand-in first, here: " .. G.Text(G.steps[1]))
+    for _ = 1, 3 do tick(c, 1); F.__scripts.OnUpdate(F, 1) end
+    assert((F.name:GetText() or ""):find("^Hand in"), "the arrow: hand in here: " .. tostring(F.name:GetText()))
+    assert(readyHere(), "and the ? on Magni")
+  end }
+
+  -- a dungeon quest with a known entrance (Underground Assault, 2040, the Deadmines, handed in to Shoni in Stormwind):
+  -- "Do Underground Assault in The Deadmines" at the entrance, the target "Enter The Deadmines" to do it there; one
+  -- with none known (The Stockade Riots, 391): "Finish The Stockade Riots" at the warden, never "You're there"; done,
+  -- a hand-in as any other
+  G6CASES[#G6CASES + 1] = { "a dungeon quest with a known entrance: Do it at the entrance, Enter; none known: Finish; done: a hand-in", function()
+    local c = newClient({ name = "Tamsin", level = 24, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = { { 2040, 0 }, { 391, 0 } }, done = {}, world = { 0, -8833, 479 }, map = 1453, bagSlots = {}, bind = "Stormwind" })
+    c.QB.UI.Candidates = function() return {} end -- (no fill: the two quests alone make the route)
+    login(c)
+    local QB, G, T, A = c.QB, c.QB.Guide, c.QB.Target, c.QB.Arrow
+    c.objectives = { [2040] = { { text = "Gnoam Sprecklesprocket: 0/1", type = "monster", finished = false, numFulfilled = 0, numRequired = 1 } },
+                     [391] = { { text = "Bazil Thredd slain: 0/1", type = "monster", finished = false, numFulfilled = 0, numRequired = 1 } } }
+    QB:Settings().guide.on = true
+    QB:Settings().arrowMode = "route"
+    A:Set(true)
+    settle(c)
+    local function stepOf(qid, kind) for _, s in ipairs(G.steps) do if s.qid == qid and s.kind == kind then return s end end end
+    local dm = stepOf(2040, "objective")
+    assert(dm and G.Text(dm) == "Do Underground Assault in The Deadmines" and dm.m == 1436 and dm.x == 42.5 and dm.y == 71.7,
+      "the Deadmines quest: a Do step at its entrance: " .. tostring(dm and G.Text(dm)))
+    local sk = stepOf(391, "objective")
+    assert(sk and G.Text(sk) == "Do The Stockade Riots (The Stockade: entrance not known yet)" and sk.npc == QB.Quest.Get(391).turnIdx,
+      "the Stockade's: at the warden, worded so: " .. tostring(sk and G.Text(sk)))
+    assert(not stepOf(2040, "handin") and not stepOf(391, "handin"), "no hand-in of either")
+    -- the target: the stop holds nothing complete: the entrance of the quest that has one, "Enter", to do it there
+    local t = T.Get(QB.API.WorldPosition())
+    assert(t and t.pending and t.name == "The Deadmines" and t.verb == "Enter" and t.head == "Enter %s" and t.qid == 2040 and t.what == "to do there",
+      "the target is the Deadmines' entrance: " .. tostring(t and t.name) .. ", " .. tostring(t and t.verb) .. ", " .. tostring(t and t.what))
+    assert(G.steps[1] == dm, "and the Do step leads: " .. G.Text(G.steps[1]))
+    -- the plan pays nothing and counts no hand-in until they are done; no time to level from it
+    local r = QB.routePlan
+    assert(r.xp == 0 and r.count == 0 and r.byQuest[2040] == 0, "no XP and no hand-in counted: " .. tostring(r.xp) .. ", " .. tostring(r.count))
+    assert(G.TimeToLevel() == nil, "no time to level from a plan that pays nothing")
+    -- the Stockade's alone: no entrance known: Finish it, at the warden; standing there the arrow never says You're there
+    c.log = { { 391, 0 } }
+    settle(c)
+    t = T.Get(QB.API.WorldPosition())
+    assert(t and t.pending and t.verb == "Finish" and t.label == "Finish The Stockade Riots" and t.qid == 391, "Finish: " .. tostring(t and t.label))
+    standAt(c, 0, -8789, 830)
+    local F = c.env.QuestBankArrow
+    for _ = 1, 5 do tick(c, 1); F.__scripts.OnUpdate(F, 1) end
+    assert((F.name:GetText() or ""):find("^Finish The Stockade") and F.dist:GetText() ~= "You're there",
+      "the arrow at the warden: " .. tostring(F.name:GetText()) .. " / " .. tostring(F.dist:GetText()))
+    -- done: a hand-in as any other
+    c.log[1][2] = 1; c.objectives[391][1].finished, c.objectives[391][1].numFulfilled = true, 1
+    settle(c)
+    assert(G.steps[1].kind == "handin" and G.steps[1].qid == 391 and G.steps[1].near, "complete: the hand-in first: " .. G.Text(G.steps[1]))
+    for _ = 1, 3 do tick(c, 1); F.__scripts.OnUpdate(F, 1) end
+    assert((F.name:GetText() or ""):find("^Hand in The Stockade"), "the arrow: hand in here: " .. tostring(F.name:GetText()))
   end }
 
   for _, case in ipairs(G6CASES) do
