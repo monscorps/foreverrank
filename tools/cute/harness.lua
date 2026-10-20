@@ -4815,6 +4815,55 @@ do
   end)
 end
 
+-- 36c: QuestBank loaded beside Cute: Cute_Quest's copy sleeps. Its files return at their second line (no catalog built, no
+-- event frame, no /qb of its own), the engine the pages read is QuestBankAPI (QuestBank's own table), the band draws
+-- QuestBank's step, the module toggles set none of QuestBank's settings, and QuestBank's step frame is left as it is
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Pim", 3) }, function()
+    local pim = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local isLoaded = pim.env.C_AddOns.IsAddOnLoaded
+    pim.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+    local settings = { guide = { on = true, frame = true }, arrow = true, mapIcons = true, pins = true, campBar = true, glow = { on = true, style = "sparkle" }, remind = { buffs = true, bag = true, wood = true }, share = { party = true }, djShow = { boss = true, rare = true, trash = false, other = true } }
+    local step = { kind = "objective", qid = 7, text = "Kill Kobold Vermin 3/8" }
+    pim.env.QuestBankAPI = {
+      version = "6.1.0", logReady = true, state = { level = 5, log = {} }, routeNow = { legs = {}, xp = 0, level = 5, t = 0 },
+      Settings = function() return settings end, MarkDirty = function() end, Comma = tostring, Short = tostring,
+      Model = { Busy = function() return false end }, Data = { CAT = {} }, Quest = { Get = function() return nil end },
+      Guide = { Steps = function() return { step } end, Text = function(s) return s.text end, TimeToLevel = function() return "about 9 min to level 6", 9, true end, MemberSteps = function() return {} end },
+      StepFrame = { Menu = function() end, Apply = function() end }, Arrow = { Set = function(on) settings.arrow = on end },
+      UI = { PlaceGroups = function() return {}, {}, nil, nil, nil end, Candidates = function() return {} end, QuestClick = function() end, QuestTooltip = function() end },
+      Target = { Route = function() return { legs = {}, xp = 0, level = 5, t = 0 } end }, Run = { Get = function() return nil end },
+      DMap = { Attach = function() end, Refresh = function() end }, Gear = { Attach = function() end, Refresh = function() end, RefreshSoon = function() end },
+    }
+    login(pim)
+    tickAll(5)
+    local framesBefore = #pim.frames
+    pim.C.Modules.Set("Cute_Quest", true)
+    tick(pim, 6)
+    local a = pim.addons[2]
+    local QB = a.private
+    assert(a.loaded and QB.dormant == true and QB.Engine == pim.env.QuestBankAPI, "loaded, dormant, the engine QuestBank's")
+    assert(QB.Data == nil and QB.Guide == nil and QB.eventFrame == nil and QB.loginDone == nil, "the copy's files returned at once: no catalog, no guide, no event frame")
+    assert(pim.env.SLASH_QUESTBANK1 == nil and pim.env.SlashCmdList.QUESTBANK == nil, "no /qb from the copy")
+    -- (the registry's own frame per module, redrawing a page while it is on, is Cute's, not the copy's)
+    local registry = {}
+    for _, def in pairs(pim.C.Modules.byId) do if def.frame then registry[def.frame] = true end end
+    for i = framesBefore + 1, #pim.frames do
+      local f = pim.frames[i]
+      assert(registry[f] or not (f.__events and f.__events.QUEST_TURNED_IN), "no frame of the copy hears QUEST_TURNED_IN")
+    end
+    assert(pim.env.CuteQuestDB == nil, "no saved table of the copy's own while it sleeps")
+    if not pim.C.Modules.OnKey("guide") then pim.C.Modules.Set("guide", true) end
+    pim.C.UI:Open("guide")
+    assert(texts(pim):find("Kill Kobold Vermin 3/8", 1, true) and texts(pim):find("about 9 min to level 6", 1, true), "the band draws QuestBank's step:\n" .. texts(pim))
+    pim.C.Modules.Set("Cute_Quest", false)
+    assert(settings.guide.on == true and settings.arrow == true, "the toggle set none of QuestBank's settings")
+    leave(pim)
+    print("cute quest: with QuestBank loaded the copy sleeps, the pages read QuestBankAPI, nothing runs twice")
+  end)
+end
+
 -- 37: Only-you is routing, not hiding (0.6.0). Three officers (Ofa the guild master, Ofb, Ofc) and two members (Mia,
 -- with 300 statistics, and Mo) log in together; the officers keep Gold, the gear gaps and the Kills statistics to
 -- themselves. Every message each client receives is read off the bus: a member's client never gets another member's
