@@ -167,6 +167,11 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-gband { position: sticky; top: -8px; z-index: 1; margin: -8px -8px 4px; padding: 4px 8px; background: var(--cu-panel); border-bottom: 1px solid #000; }
 .cu-gband div { height: 20px; line-height: 20px; padding: 0 8px; color: var(--cu-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cu-gband div:first-child { color: var(--cu-white); background: rgba(255,255,255,.05); box-shadow: inset 2px 0 0 var(--cu-white); }
+.cu-gband div.cu-qbig { height: 26px; line-height: 26px; font-size: 15px; }
+.cu-gband div.cu-gone { color: var(--cu-dim); background: none; box-shadow: none; }
+.cu-gband div.cu-gmute { color: var(--cu-mute); }
+.cu-gband.cu-qroute { display: flex; align-items: center; gap: 8px; }
+.cu-gband.cu-qroute div { flex: 1 1 auto; min-width: 0; }
 .cu-gr { display: flex; align-items: center; height: 20px; padding: 0 4px 0 8px; color: var(--cu-ink); white-space: nowrap; }
 .cu-gr:hover { background: rgba(255,255,255,.05); }
 .cu-gr.cu-gh { background: rgba(255,255,255,.06); color: var(--cu-white); }
@@ -251,6 +256,7 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-roles { display: flex; align-items: center; height: 28px; padding-left: 6px; gap: 0; }
 .cu-roles span { width: 86px; color: var(--cu-dim); }
 .cu-roles label { width: 62px; padding-left: 0; }
+.cu-roles.cu-qch label { width: auto; margin-right: 12px; }
 .cu-vishead { display: grid; grid-template-columns: 1fr 60px 60px; height: 18px; padding-left: 6px; color: var(--cu-dim); }
 .cu-visrow { display: grid; grid-template-columns: 1fr 60px 60px; align-items: center; height: 20px; padding-left: 6px; }
 .cu-visrow span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -369,7 +375,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     <h1>The whole guild in one window.</h1>
     <p>The guild's own addon for Forever's November release. Every member's client shares its character over the guild channel, and one window shows the whole guild: the race to 60, readiness, the hall of shame, the statistics, the officers' view. Officers decide who sees what.</p>
     <div class="cu-cta">
-      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.6.1<!--/@v--></span>, <!--@kb-->1287<!--/@kb--> KB</small></a>
+      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.7.0<!--/@v--></span>, <!--@kb-->1287<!--/@kb--> KB</small></a>
       <span class="cu-note">Free, GPL. No server, no accounts, nothing leaves the guild. Unzip into <code>Interface\AddOns</code> and type <code>/cute</code>.</span>
     </div>
   </div>
@@ -399,6 +405,10 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
         <div class="cu-tabs" role="tablist" aria-label="Pages of the window">
           <button type="button" role="tab" id="cu-tab-race" aria-controls="cu-panel" aria-selected="true" tabindex="0" data-tab="race">Race</button>
           <button type="button" role="tab" id="cu-tab-guide" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="guide" hidden>Guide</button>
+          <button type="button" role="tab" id="cu-tab-quests" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="quests" hidden>Quests</button>
+          <button type="button" role="tab" id="cu-tab-route" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="route" hidden>Route</button>
+          <button type="button" role="tab" id="cu-tab-journal" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="journal" hidden>Journal</button>
+          <button type="button" role="tab" id="cu-tab-gear" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="gear" hidden>Gear</button>
           <button type="button" role="tab" id="cu-tab-prog" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="prog">Prog</button>
           <button type="button" role="tab" id="cu-tab-shame" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="shame">Hall of Shame</button>
           <button type="button" role="tab" id="cu-tab-statistics" aria-controls="cu-panel" aria-selected="false" tabindex="-1" data-tab="statistics">Statistics</button>
@@ -440,7 +450,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
 <section class="cu-sec" id="stats">
   <div class="cu-wrap">
     <h2>What it tracks</h2>
-    <p class="cu-lede"><!--@n-->109<!--/@n--> stats in <!--@v-->0.6.1<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It starts with what research and the beta showed about Forever and learns the rest as the guild plays, setting the research aside where the game turns out different. It is a work in progress and the list changes weekly; this is today's.</p>
+    <p class="cu-lede"><!--@n-->109<!--/@n--> stats in <!--@v-->0.7.0<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It starts with what research and the beta showed about Forever and learns the rest as the guild plays, setting the research aside where the game turns out different. It is a work in progress and the list changes weekly; this is today's.</p>
     <details class="cu-fold">
       <summary>Show the list: <!--@n:leveling-->42<!--/@n:leveling--> for the race, <!--@n:prog-->39<!--/@n:prog--> for prog, <!--@n:funny-->18<!--/@n:funny--> for the hall of shame, <!--@n:officer-->10<!--/@n:officer--> for the officers</summary>
       <div class="cu-bar">
@@ -458,9 +468,9 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-wrap">
     <h2>Install</h2>
     <ol class="cu-steps">
-      <li>Download <a href="Cute.zip">Cute.zip</a> and unzip it. You get one folder, <code>Cute</code>.</li>
-      <li>Put the folder in <code>Interface\AddOns</code>, next to your other addons.</li>
-      <li>Log in and type <code>/cute</code>, or click the elf on the minimap. Your record reaches the guild within seconds (inside a dungeon, once you leave it). Officer ranks get the Officers page and change Who sees what and the Rules in Settings, and save Who sees what to Guild Info where their rank may edit it; members see those greyed. The Guide switches on in Settings, Modules.</li>
+      <li>Download <a href="Cute.zip">Cute.zip</a> and unzip it. You get two folders, <code>Cute</code> and <code>Cute_Quest</code>.</li>
+      <li>Put both in <code>Interface\AddOns</code>, next to your other addons. <code>Cute_Quest</code> loads only while one of its modules is on.</li>
+      <li>Log in and type <code>/cute</code>, or click the elf on the minimap. Your record reaches the guild within seconds (inside a dungeon, once you leave it). Officer ranks get the Officers page and change Who sees what and the Rules in Settings, and save Who sees what to Guild Info where their rank may edit it; members see those greyed. The Guide, Quests, Route, Map, Journal, Gear and Camp switch on in Settings, Modules; with Quests on, the Guide shows your next step.</li>
     </ol>
   </div>
 </section>
@@ -469,6 +479,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-wrap">
     <h2>Changelog</h2>
     <ul class="cu-log">
+      <li><b>0.7.0</b>QuestBank's guiding inside Cute: the step now on the Guide, and Quests, Route, Journal, Gear, Map and Camp as modules you switch on.</li>
       <li><b>0.6.1</b>Every check in Settings is a row that takes the click anywhere on it, and /cute guide switches the Guide on; an error the game swallows no longer stops the window, Rule 0 or the saved choice, and lands in /cute errors with where it happened.</li>
       <li><b>0.6.0</b>Starts with only the statistics; the Guide, switched on in Settings, Modules, says what to run next and with whom; Only-you values, and what Cute knows would give them away, go to the officers only, by the policy they save in Guild Info; false data is dropped and marked.</li>
       <li><b>0.5.0</b>Ships what research and the beta showed about Forever, checks it against the game at login and learns the rest by rules the officers can retune; the Guide page: dungeons for your level, the bosses you still need, the enchants you lack, your pace; says when a guild mate runs a newer Cute.</li>
@@ -1236,7 +1247,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   // canEdit: whether Yezin's rank may edit Guild Info, the box beside Looking as)
   var polFor = null;
   var st = { viewer: "member", tab: "race", sort: {}, statCat: null, statOpen: null, offline: true, minimap: true, compact: false, role: { Kaka: "Heal", Yezin: "Tank" }, raidspec: { Kaka: false, Yezin: false }, meView: false, cols: {},
-    policy: {}, threshold: POLICY.threshold, saved: { policy: {}, threshold: POLICY.threshold, at: POLICY.at }, canEdit: true, rules: {}, section: "general", mods: {} };
+    policy: {}, threshold: POLICY.threshold, saved: { policy: {}, threshold: POLICY.threshold, at: POLICY.at }, canEdit: true, rules: {}, section: "general", mods: {}, q: {} };
   ["race", "prog", "officers"].forEach(function (p) { st.cols[p] = {}; (COLS[p] || []).forEach(function (id) { st.cols[p][id] = true; }); });
   st.cols.shame = {};
   (byCat.funny || []).forEach(function (d) { st.cols.shame[d.id] = true; });
@@ -1273,7 +1284,9 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   var CATS_WITH = CATS.filter(function (c) { return (byCat[c[0]] || []).length > 0; });
   function officer() { return st.viewer === "officer"; }
   function me() { return ME[st.viewer]; }
-  function mods() { var m = me(); if (!st.mods[m]) st.mods[m] = { guide: false }; return st.mods[m]; }
+  function mods() { var m = me(); if (!st.mods[m]) st.mods[m] = { guide: false, quests: false, route: false, map: false, journal: false, gear: false, camp: false }; return st.mods[m]; }
+  // the quest modules' settings (the engine's, per character in game): a key per row, its default until clicked
+  function qv(key, def) { return st.q[key] == null ? def : st.q[key]; }
   function canSee(rowIsMe, id) { return officer() || rowIsMe || vis(id) === "all"; }
   // every stat a page can show as a column, in order: its category's, then the others it offers (UI.Candidates)
   var PAGE_CAT = { race: "leveling", prog: "prog", officers: "officer", shame: "funny" };
@@ -1684,6 +1697,33 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   var SOURCE = "From research and the beta, checked against this client, and what the guild has met since.";
   // the module's notes, as it registers them: its box in Settings, Modules and its section say them
   var GUIDE_NOTES = "What to do next and with whom: the dungeons in range with their bosses, quests and guild mates to invite, what opens next, your gear and pace; the guild per dungeon for officers.";
+  // Cute_Quest's six modules, as they register (their notes are their boxes' tooltips and their sections'); the four
+  // with a page of their own. Map and Camp are switches over the game's map and the camp bar: a section each, no tab
+  var QUEST_MODULES = [
+    ["quests", "Quests", "The three places worth your time, the rest folded, the highest XP; the step now in the Guide."],
+    ["route", "Route", "The hand-in stops in order with minutes; the first is where the arrow points."],
+    ["map", "Map", "Quest icons and the route on the game's world map and minimap."],
+    ["journal", "Journal", "Every dungeon: its bosses, their recorded loot, its quests, its floors."],
+    ["gear", "Gear", "What you wear and the best upgrade for each slot: a quest reward in reach or a dungeon drop."],
+    ["camp", "Camp", "The camp bar, the missing-buffs banner and the interact light."]];
+  var QUEST_BY = {};
+  QUEST_MODULES.forEach(function (q) { QUEST_BY[q[0]] = q; });
+  var QUEST_PAGES = { quests: true, route: true, journal: true, gear: true };
+  // the step band the quest engine gives the Guide while Quests is on: the step now, the next two, the time to level
+  // (Kaka in Desolace, Yezin in Duskwood, as the fixture has them)
+  var QSTEPS = { Kaka: ["Kill Scorpashi Snappers 4/12", "Hand in Reagents for Reclaimers Inc. at Nijel's Point", "Accept The Karnitol Shipwreck at Nijel's Point"],
+    Yezin: ["Kill Nightbane Dark Runners 5/8", "Hand in Wolves at Our Heels to Commander Althea Ebonlocke", "Run to Raven Hill"] };
+  var QTTL = { Kaka: "about 14 min to level 38", Yezin: "about 2 h to level 43" };
+  // the Quests page: the three places worth your time from where you stand, the first open on its quests; the rest
+  // folded; the highest XP at your level. A place: name, quests, minutes away; a quest: name, XP, what the engine says
+  var QFIX = {
+    Kaka: { hub: "Nijel's Point", places: [["Nijel's Point", 4, "here", [["Reagents for Reclaimers Inc.", "4,550 XP", "in your log"], ["Sceptre of Light", "4,900 XP", "in your log"], ["The Karnitol Shipwreck", "5,050 XP", "to take"]]], ["Sargeron", 3, "6 min"], ["Kodo Graveyard", 2, "9 min"]], more: 5,
+      top: [["Portals of the Legion", "6,600 XP", "Desolace"], ["Book of the Ancients", "5,900 XP", "12 min"], ["Sceptre of Light", "4,900 XP", "here"]],
+      route: ["14,500 XP, level 37.6, 23 min", [["Nijel's Point", "2 min", 3], ["Kodo Graveyard", "9 min", 2]]] },
+    Yezin: { hub: "Darkshire", places: [["Darkshire", 5, "here", [["Wolves at Our Heels", "5,100 XP", "in your log"], ["The Night Watch", "4,750 XP", "to take"], ["Look to the Stars", "5,500 XP", "to take"]]], ["Raven Hill", 2, "7 min"], ["The Rotting Orchard", 3, "11 min"]], more: 4,
+      top: [["Morbent Fel", "7,500 XP", "16 min"], ["Mistmantle's Revenge", "7,100 XP", "11 min"], ["The Weathered Grave", "6,200 XP", "Duskwood"]],
+      route: ["10,250 XP, level 42.4, 18 min", [["Darkshire", "1 min", 2], ["Raven Hill", "7 min", 2]]] } };
+  var qOpen = {}; // the places opened on their quests, by name (the first is open to start with)
   var mateAll = {}; // the cards whose mates are all shown: a click on "and N more", until "Show fewer"
   var invitedAt = {}, INVITED = 60000; // the mates invited, and when: their button says Invited for a minute
   var guideTips = []; // the reasons of the Guide's rows as last drawn, by the rows' data-tip
@@ -1943,9 +1983,38 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
       var i = tips.push(tip) - 1;
       return " data-tip=\"" + i + "\" tabindex=\"" + (tab ? "0" : "-1") + "\" aria-describedby=\"cu-gtip-" + i + "\"";
     }
-    var top = off ? guildPick(list) : next;
-    var h = "<div class=\"cu-gband\"><div" + tipAttr(top.tip, true) + ">" + esc(top.line) + "</div><div" + tipAttr(SOURCE + "\nResearch build " + SEED.build.join(".") + ", " + SEED.generated + ".", true) + ">" + esc(SOURCE) + "</div></div>";
+    // the band: the step now from the quest module, big and white, the next two steps and the time to level; with
+    // Quests off, one line saying where to switch it on
+    var h = "<div class=\"cu-gband\">";
+    if (mods().quests) {
+      var qs = QSTEPS[m] || [];
+      h += "<div class=\"cu-qbig\"" + tipAttr(qs[0] + "\nClick: the Quests page. Right-click: not now, drop, lock, scale, hide.", true) + ">" + esc(qs[0]) + "</div>";
+      qs.slice(1, 3).forEach(function (q) { h += "<div" + tipAttr(q, false) + ">" + esc(q) + "</div>"; });
+      h += "<div class=\"cu-gmute\"" + tipAttr("From your XP an hour at this level.", false) + ">" + esc(QTTL[m]) + "</div>";
+    } else {
+      h += "<div class=\"cu-gone\"" + tipAttr("The quest engine's step frame, in this band: what to do now, the next two steps, the time to level, your party's steps.", true) + ">Tick Quests in Settings, Modules for the step now.</div>";
+    }
+    h += "</div>";
+    // the page: the pick's line as its head (the officer's guild line at its right where the column holds it whole, else
+    // on a line of its own under the head, so nothing is cut), then the picked dungeon's rows alone; everything else
+    // (the other cards, the strips, Next up, the officers' lines) lives in the head's tooltip or nowhere
+    var top = next, guild = off ? guildPick(list) : null, learned = [], inLearned = false;
     items.forEach(function (it) {
+      if (it.kind === "head") inLearned = /^Learned/.test(it.name || "");
+      else if (inLearned && (it.kind === "item" || it.kind === "note")) learned.push((it.name || "") + (it.who ? ": " + it.who : ""));
+    });
+    var headTip = top.tip + "\n\n" + SOURCE + "\nResearch build " + SEED.build.join(".") + ", " + SEED.generated + "." + (guild ? "\n\n" + guild.line + "\n" + guild.tip : "")
+      + (off && learned.length ? "\n\nLearned in play\n" + learned.join("\n") : "");
+    var guildFits = !guild || guild.line.length <= 36;
+    var shown = [{ kind: "head", name: top.line, who: guild && guildFits ? guild.line : null, tip: headTip }];
+    if (guild && !guildFits) shown.push({ kind: "note", name: guild.line, c: "dim", tip: guild.line + "\n" + guild.tip });
+    var take = false;
+    items.forEach(function (it) {
+      if (it.kind === "card") take = it.pick === true;
+      else if (it.kind === "gap" || it.kind === "head") take = false;
+      if (take) shown.push(it);
+    });
+    shown.forEach(function (it) {
       var kind = it.kind, cls = "cu-gr", attr = it.tip && kind !== "more" ? tipAttr(it.tip, kind !== "bosses" && kind !== "mate") : "", inner = "";
       if (kind === "gap") { h += "<div class=\"cu-gr\" aria-hidden=\"true\"></div>"; return; }
       if (kind === "more") {
@@ -1986,7 +2055,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
         if (it.who) inner += sp("cu-gwho" + (!it.d && it.val == null ? " cu-gwide" : ""), it.who);
       } else {
         // a note: its whole text in the tooltip, which a narrow window cuts
-        inner = sp("cu-gn cu-gmute", it.name);
+        inner = sp("cu-gn " + COL[it.c || "mute"], it.name);
         if (!it.tip) attr = " title=\"" + esc(it.name) + "\"";
       }
       h += "<div class=\"" + cls + "\"" + attr + ">" + inner + "</div>";
@@ -1994,6 +2063,41 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     // the reasons' text, for the rows' descriptions (hidden: the box shows it)
     guideTips = tips;
     return h + "<div hidden>" + tips.map(function (t, i) { return "<span id=\"cu-gtip-" + i + "\">" + esc(t) + "</span>"; }).join("") + "</div>";
+  }
+  // the quest modules' pages. Quests and Route are drawn as the window draws them from the engine's lists; Journal and
+  // Gear are the engine's own pages on a frame inside the window, which the mock has no engine to draw
+  function questRow(kind, name, val, who, c, attrs) {
+    var h = "<div class=\"cu-gr" + (kind === "head" ? " cu-gh" : kind === "place" ? " cu-gc" : "") + "\"" + (attrs || "") + ">";
+    h += "<span class=\"cu-gn " + (c || (kind === "head" ? "cu-gwhite" : "cu-gink")) + "\"" + (kind === "quest" ? " style=\"padding-left:16px\"" : "") + ">" + esc(name) + "</span>";
+    if (val != null) h += "<span class=\"cu-gval\">" + esc(val) + "</span>";
+    if (who != null) h += "<span class=\"cu-gcount\">" + esc(who) + "</span>";
+    return h + "</div>";
+  }
+  function questsPage() {
+    var m = me(), f = QFIX[m], h = "";
+    if (qOpen[m] == null) qOpen[m] = f.places[0][0];
+    h += questRow("head", "Now", null, "from " + f.hub);
+    f.places.forEach(function (pl) {
+      var open = qOpen[m] === pl[0];
+      h += questRow("place", pl[0], null, plural(pl[1], "quest", "quests") + ", " + pl[2], null, " role=\"button\" tabindex=\"0\" data-place=\"" + esc(pl[0]) + "\" aria-expanded=\"" + (open ? "true" : "false") + "\" title=\"" + esc(pl[0] + "\nClick: its quests.") + "\"");
+      if (open) (pl[3] || [["Nothing worth the walk here right now.", null, null]]).forEach(function (q) { h += questRow("quest", q[0], q[1], q[2], q[1] ? null : "cu-gmute", " title=\"" + esc(q[0] + (q[2] ? ", " + q[2] : "")) + "\""); });
+    });
+    h += questRow("head", "Available", null, plural(f.more, "more place", "more places"));
+    h += "<button type=\"button\" class=\"cu-gr cu-gmore\" data-qmore=\"1\" aria-expanded=\"" + (st.qmore ? "true" : "false") + "\"><span class=\"cu-gn cu-gdim\">" + (st.qmore ? "Fewer" : "Show them") + "</span></button>";
+    if (st.qmore) for (var i = 0; i < f.more; i++) h += questRow("place", "Another place in range", null, plural(2 + i % 3, "quest", "quests") + ", " + (12 + 4 * i) + " min");
+    h += questRow("head", "Highest XP");
+    f.top.forEach(function (q) { h += questRow("quest", q[0], q[1], q[2], null, " title=\"" + esc(q[0] + ", " + q[2]) + "\""); });
+    return h;
+  }
+  function routePage() {
+    // the band: the route's sum at the left, the run button at the right, as the window's
+    var f = QFIX[me()], r = f.route, h = "<div class=\"cu-gband cu-qroute\"><div class=\"cu-gone\">" + esc(r[0]) + "</div>";
+    h += "<button type=\"button\" class=\"cu-btn\" data-run=\"1\" style=\"width:160px\">" + (st.run ? "End run" : "Start run") + "</button></div>";
+    r[1].forEach(function (leg, i) { h += questRow(i === 0 ? "place" : "leg", (i + 1) + ". " + leg[0], leg[1], plural(leg[2], "quest", "quests"), i === 0 ? "cu-gwhite" : null, " title=\"" + esc(leg[0] + (i === 0 ? ": where the arrow points." : "")) + "\""); });
+    return h;
+  }
+  function enginePage(id) {
+    return questRow("note", (id === "journal" ? "The Dungeon Journal" : "Gear") + " is drawn by the quest engine in game, in Cute's skin; this mock has no engine.", null, null, "cu-gmute");
   }
   function officers() {
     var total = G.length, withAddon = 0, online = 0, levels = [], noAddon = [];
@@ -2096,11 +2200,29 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     h += "<button type=\"button\" class=\"cu-btn cu-sm\" data-rule=\"" + name + ":-1\" title=\"" + esc(tip) + "\" aria-label=\"" + esc("Lower: " + label + ", " + showRule(name)) + "\"" + (off && v > t[2] + 1e-9 ? "" : " disabled") + ">-</button>";
     return h + "<button type=\"button\" class=\"cu-btn cu-sm\" data-rule=\"" + name + ":1\" title=\"" + esc(tip) + "\" aria-label=\"" + esc("Raise: " + label + ", " + showRule(name)) + "\"" + (off && v < t[3] - 1e-9 ? "" : " disabled") + ">+</button></span></div>";
   }
+  // a quest module's rows: a check is a row, a choice a label with a box per option, as the window's Settings column
+  function qcheck(label, key, def) { return check(label, qv(key, def), true, "data-q=\"" + key + "\""); }
+  function qchoice(label, key, options, def) {
+    var h = "<div class=\"cu-roles cu-qch\"><span>" + esc(label) + "</span>";
+    options.forEach(function (o) { h += "<label class=\"cu-ckl\"><input type=\"checkbox\" class=\"cu-ck\" data-qc=\"" + key + ":" + esc(o) + "\"" + (qv(key, def) === o ? " checked" : "") + "> " + esc(o) + "</label>"; });
+    return h + "</div>";
+  }
+  function questSection(id) {
+    var col = "<div class=\"cu-h\">" + esc(QUEST_BY[id][1]) + "</div>";
+    if (id === "quests") col += qchoice("Accept for me", "quests:accept", ["Off", "On my route", "Worth taking"], "Off") + qcheck("Hand finished quests in for me", "quests:turnin", false) + qcheck("Progress in mob tooltips", "quests:tips", true) + qcheck("Share with your party", "quests:share", true) + qcheck("Note what the game shows, for foreverrank.com", "quests:note", true);
+    else if (id === "route") col += qchoice("Follow", "route:follow", ["The plan", "Ready now"], "The plan") + qcheck("Show the way step by step on the arrow", "route:travel", true) + qcheck("The hearthstone may be a step", "route:hearth", true);
+    else if (id === "map") col += qcheck("Quest icons on the world map", "map:icons", true) + qcheck("Route pins on the world map", "map:pins", true) + qcheck("Route on the minimap", "map:minimap", true) + qcheck("A ! on the minimap for quests you can take", "map:givers", true) + qcheck("Minimap far view", "map:far", true);
+    else if (id === "journal") col += qcheck("Bosses", "journal:boss", true) + qcheck("Rares", "journal:rare", true) + qcheck("Trash", "journal:trash", false) + qcheck("Chests and events", "journal:other", true);
+    else if (id === "gear") col += qcheck("Quests up to 2 levels ahead", "gear:ahead", false) + "<div class=\"cu-olines\"><div class=\"cu-dimline\">An upgrade is a quest reward in reach or a dungeon drop at your level, judged for your class and skills.</div></div>";
+    else if (id === "camp") col += qcheck("Camp bar", "camp:bar", true) + qcheck("Missing buffs when you leave town", "camp:buffs", true) + qcheck("Sleeping bag", "camp:bag", true) + qcheck("Sellers of camp goods", "camp:wood", true) + qcheck("Interact light", "camp:light", true) + qchoice("Light style", "camp:style", ["Sparkle", "Light", "Game's"], "Sparkle");
+    return col;
+  }
   // the sections down the left, as Settings.lua lists them: the core's, then one per module that is on and has settings,
   // in the modules' order (the Officers page's for officers only); [id, title, set by the officers]
   function sections(off) {
     var out = [["general", "General"], ["vis", "Who sees what", true], ["rules", "Rules", true], ["modules", "Modules"], ["race", "Race"]];
     if (mods().guide) out.push(["guide", "Guide", false, GUIDE_NOTES]);
+    QUEST_MODULES.forEach(function (q) { if (mods()[q[0]]) out.push([q[0], q[1], false, q[2]]); });
     out.push(["prog", "Prog"], ["shame", "Hall of Shame"]);
     if (off) out.push(["officers", "Officers"]);
     return out;
@@ -2162,7 +2284,13 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     } else if (id === "modules") {
       col += "<div class=\"cu-h\">On for this character</div><div class=\"cu-olines\"><div class=\"cu-dimline\">Each adds its page and its own section here.</div></div>";
       col += "<label class=\"cu-ckl\" title=\"" + esc("Guide\n" + GUIDE_NOTES) + "\"><input type=\"checkbox\" class=\"cu-ck\" data-mod=\"guide\"" + (mods().guide ? " checked" : "") + "> Guide</label>";
+      QUEST_MODULES.forEach(function (q) { col += "<label class=\"cu-ckl\" title=\"" + esc(q[1] + "\n" + q[2]) + "\"><input type=\"checkbox\" class=\"cu-ck\" data-mod=\"" + q[0] + "\"" + (mods()[q[0]] ? " checked" : "") + "> " + esc(q[1]) + "</label>"; });
+    } else if (QUEST_BY[id]) {
+      col += questSection(id);
     } else if (id === "guide") {
+      if (mods().quests) {
+        col += "<div class=\"cu-h\">The step now</div>" + qcheck("Step frame", "guide:frame", true) + qcheck("Direction arrow", "guide:arrow", true) + qcheck("Lock the step frame", "guide:locked", false) + "<div class=\"cu-gap\"></div>";
+      }
       col += "<div class=\"cu-h\">Levels</div><div class=\"cu-olines\"><div class=\"cu-dimline\">White: set by an officer. " + (off ? "A change goes to the guild on its own." : "Only officers can change them.") + "</div></div>";
       col += tuneRow(TUNE_BY.guideWindow, "Members near your level", off) + tuneRow(TUNE_BY.guideAhead, "Dungeons ahead", off);
       col += "<div class=\"cu-btns\"><button type=\"button\" class=\"cu-btn\" data-act=\"policy\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Broadcast now</button></div>";
@@ -2184,8 +2312,11 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   function footText() {
     var off = officer(), m = me();
     if (st.tab === "race") return "Click a column header to sort. Your own row stays on top. Hover a row or a cell for its tooltip.";
-    if (st.tab === "guide") return off ? "The band is the guild's version: where most members are and the dungeon for them; hover or tap it for why. Under your own cards, the guild per dungeon and what its play changed from the research. Its two thresholds are in its own section in Settings."
-      : "The band is the next best thing; hover or tap it for why, a card for its bosses and loot, a gear row for the enchants Forever has. Invite sends the game's own invite in the window; here the button only says Invited.";
+    if (st.tab === "guide") return off ? "The band is the step now from the Quests module, or one line saying where to switch it on. Under it the next best thing, with the guild's line, where most members are and the dungeon for them, at its right or under it; hover or tap the line for why, the source and what the guild learned. Then the picked dungeon's card. Its two thresholds are in its own section in Settings."
+      : "The band is the step now from the Quests module, or one line saying where to switch it on. Under it the next best thing; hover or tap it for why, the card for its bosses and loot. Invite sends the game's own invite in the window; here the button only says Invited.";
+    if (st.tab === "quests") return "Now: the three places worth your time from where you stand, a click on one opening its quests; Available folds the rest; Highest XP is what pays most at your level. In game the step now is the Guide's band too.";
+    if (st.tab === "route") return "The hand-in stops in order with the minutes to each; the first is where the arrow points. Start run times the run against the plan.";
+    if (st.tab === "journal" || st.tab === "gear") return "The quest engine draws this page in game, on a frame inside the window, in Cute's skin.";
     if (st.tab === "prog") {
       var self = columnsFor("prog", room()).cols.filter(function (d) { return vis(d.id) === "self"; }).map(function (d) { return d.short; });
       if (off) return "An officer sees every cell, including the stats set to Only you.";
@@ -2198,7 +2329,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     if (st.tab === "me") return "Your whole record, every stat in the registry. " + (officer() && unsaved() ? "Save your change to Guild Info first: members go by it, and the box shows what they see of you." : "Tick the box to see what members see of you.");
     if (st.section === "vis") return off ? "Who sees what is the officers' to change, and you are one. A change routes only your own client, your own values included, until you save it to Guild Info, the line every member's client goes by. Untick the box by Looking as for an officer whose rank may not edit Guild Info."
       : "Who sees what is the officers' to change; a member sees it greyed, as the officers saved it in Guild Info, the line every member's client goes by.";
-    return off ? "A section per page for its columns or cards. Who sees what and the rules are the officers' to change, and you are one. Modules switches the Guide on." : "A section per page for its columns or cards. Who sees what and the rules are the officers' to change; a member sees them greyed. Modules switches the Guide on.";
+    return off ? "A section per page for its columns or cards. Who sees what and the rules are the officers' to change, and you are one. Modules switches the Guide and the quest modules on." : "A section per page for its columns or cards. Who sees what and the rules are the officers' to change; a member sees them greyed. Modules switches the Guide and the quest modules on.";
   }
   function draw() {
     var off = officer();
@@ -2211,13 +2342,17 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     // the Guide is a module: its tab shows while it is switched on in Settings, Modules
     document.getElementById("cu-tab-guide").hidden = !mods().guide;
     if (st.tab === "guide" && !mods().guide) st.tab = "race";
+    Object.keys(QUEST_PAGES).forEach(function (id) {
+      document.getElementById("cu-tab-" + id).hidden = !mods()[id];
+      if (st.tab === id && !mods()[id]) st.tab = "race";
+    });
     tabs.forEach(function (b) {
       var on = b.dataset.tab === st.tab;
       b.setAttribute("aria-selected", on ? "true" : "false");
       b.tabIndex = on ? 0 : -1;
     });
     panel.setAttribute("aria-labelledby", "cu-tab-" + st.tab);
-    var body = st.tab === "race" || st.tab === "prog" ? table(st.tab) : st.tab === "guide" ? guide() : st.tab === "shame" ? shame() : st.tab === "statistics" ? statistics() : st.tab === "officers" ? officers() : st.tab === "me" ? mePage() : settings();
+    var body = st.tab === "race" || st.tab === "prog" ? table(st.tab) : st.tab === "guide" ? guide() : st.tab === "quests" ? questsPage() : st.tab === "route" ? routePage() : (st.tab === "journal" || st.tab === "gear") ? enginePage(st.tab) : st.tab === "shame" ? shame() : st.tab === "statistics" ? statistics() : st.tab === "officers" ? officers() : st.tab === "me" ? mePage() : settings();
     scroll.innerHTML = body + "<div class=\"cu-updated\">Updated just now</div>";
     scroll.scrollTop = keepScroll;
     var online = G.filter(function (r) { return r.on && r.addon; }).length;
@@ -2236,7 +2371,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     }
   }
   // the data attribute that names a control in the panel, so a redraw can hand the focus back to it
-  var KEEP = ["k", "set", "col", "vis", "act", "role", "raidspec", "stcat", "stat", "rule", "sec", "mod", "more", "pick", "inv", "tip"];
+  var KEEP = ["k", "set", "col", "vis", "act", "role", "raidspec", "stcat", "stat", "rule", "sec", "mod", "more", "pick", "inv", "tip", "q", "qc", "place", "qmore", "run"];
   function keepOf(el) {
     for (var i = 0; i < KEEP.length; i++) if (el.dataset[KEEP[i]] !== undefined) return [KEEP[i], el.dataset[KEEP[i]]];
     return null;
@@ -2247,6 +2382,10 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     print.t = setTimeout(function () { printEl.textContent = ""; }, 5000);
   }
   scroll.addEventListener("click", function (e) {
+    var qp = e.target.closest("[data-place]");
+    if (qp) { qOpen[me()] = qOpen[me()] === qp.dataset.place ? "" : qp.dataset.place; draw(); return; }
+    if (e.target.closest("button[data-qmore]")) { st.qmore = !st.qmore; draw(); return; }
+    if (e.target.closest("button[data-run]")) { st.run = !st.run; draw(); return; }
     var b = e.target.closest("button[data-k]");
     if (b) {
       var s = st.sort[st.tab] || (st.tab === "race" ? { id: "level", desc: true } : {});
@@ -2334,6 +2473,8 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     else if (t.dataset.vis) { var q = t.dataset.vis.lastIndexOf(":"); st.policy[t.dataset.vis.slice(0, q)] = t.dataset.vis.slice(q + 1); draw(); }
     else if (t.dataset.raidspec) { st.raidspec[me()] = t.checked; G.filter(function (r) { return r.n === me(); })[0].s.raid_spec = t.checked; }
     else if (t.dataset.mod) { mods()[t.dataset.mod] = t.checked; draw(); }
+    else if (t.dataset.q) { st.q[t.dataset.q] = t.checked; }
+    else if (t.dataset.qc) { var qc = t.dataset.qc.indexOf(":"); st.q[t.dataset.qc.slice(0, qc)] = t.dataset.qc.slice(qc + 1); draw(); }
     else if (t.dataset.role) { st.role[me()] = t.checked ? t.dataset.role : ""; G.filter(function (r) { return r.n === me(); })[0].s.role = st.role[me()]; draw(); }
   });
 
@@ -2456,10 +2597,14 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   }
   draw();
   // a link straight to a page of the window: #prog, #officers, #settings-officer ...
-  var deep = /^#(race|guide|prog|shame|statistics|officers|me|settings)(?:-(member|officer))?$/.exec(location.hash);
+  var deep = /^#(race|guide|quests|route|journal|gear|prog|shame|statistics|officers|me|settings)(?:-(member|officer))?$/.exec(location.hash);
   if (deep) {
     st.tab = deep[1];
-    if (deep[1] === "guide") Object.keys(ME).forEach(function (v) { st.mods[ME[v]] = { guide: true }; });
+    if (deep[1] === "guide" || QUEST_PAGES[deep[1]]) Object.keys(ME).forEach(function (v) {
+      var was = st.viewer; st.viewer = v; var mm = mods(); st.viewer = was;
+      mm.guide = true;
+      if (QUEST_PAGES[deep[1]]) { mm[deep[1]] = true; mm.quests = true; }
+    });
     setViewer(deep[2] === "officer" || deep[1] === "officers" ? "officer" : "member");
     document.getElementById("window").scrollIntoView({ behavior: "instant", block: "start" });
   }

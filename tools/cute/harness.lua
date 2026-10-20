@@ -1868,10 +1868,14 @@ do
     for _, r in ipairs(yezin.C.UI.lists.guide.items) do if r:IsShown() and r.bar:IsShown() then n = n + 1 end end
     assert(n == (plan.next.card and 1 or 0), "one card, marked, or none: " .. n)
     local head = guideHead(yezin)
-    -- (the guild's line at the right, cut after a word where the column is narrower than it; whole in the tooltip)
-    local who = head and head.who:GetText() or ""
-    assert(head and head.name:GetText() == plan.next.line and (who == plan.guild.line or (who:find("%.%.%.$") and plan.guild.line:find(who:sub(1, -4), 1, true) == 1)),
-      "the officer's head: the pick's line, the guild's line at its right: " .. who)
+    -- (the guild's line at the right where the column holds it whole; else, never cut, on a line of its own under the
+    -- head, the head's right empty)
+    local who = head and head.who:IsShown() and head.who:GetText() or ""
+    local under
+    for _, r in ipairs(yezin.C.UI.lists.guide.items) do if r:IsShown() and r.idx == 2 then under = r.name:GetText() end end
+    assert(head and head.name:GetText() == plan.next.line and (who == plan.guild.line or (who == "" and under == plan.guild.line)),
+      "the officer's head: the pick's line, the guild's line whole at its right or on the line under it: " .. who .. " / " .. tostring(under))
+    assert(not t:find("%.%.%.\n") or not t:find(plan.guild.line:sub(1, 12), 1, true) or t:find(plan.guild.line, 1, true), "the guild's line never cut")
     local ht = tipOf(head)
     assert(ht:find("Learned in play", 1, true) and ht:find(SEEDED and "From research" or "Nothing shipped with this copy", 1, true) and ht:find(plan.guild.line, 1, true),
       "the head's tooltip: the reasons, the source, the guild's line, what the guild learned:\n" .. ht)
@@ -4404,6 +4408,9 @@ do
     local vera, neo = newClient(char("Vera")), newClient(char("Neo"))
     local V = vera.C
     local mine = V.version
+    -- two versions newer than this one (the minor bumped), so the scenario moves with the toc
+    local function bump(v, n) local major, minor = v:match("^(%d+)%.(%d+)"); return major .. "." .. (tonumber(minor) + n) .. ".0" end
+    local newer1, newer2 = bump(mine, 1), bump(mine, 2)
     -- numbers, not text; anything but dotted numbers is no version
     assert(V.VersionNewer("0.5.10", "0.5.9") and not V.VersionNewer("0.5.9", "0.5.10") and V.VersionNewer("0.6", "0.5.9") and not V.VersionNewer("0.5.0", "0.5")
       and V.VersionNewer("1.0.0", "0.99.99") and not V.VersionNewer(mine, mine), "versions compared number by number")
@@ -4418,15 +4425,15 @@ do
     assert(told(wim, "is out") == 0 and wim.C.newer == nil and not wim.C.UI.status:GetText():find("update", 1, true), "older, equal and malformed: nothing")
     leave(wim)
     -- Neo runs a newer Cute: his full record at the hello tells Vera, once; Neo hears an older one and says nothing
-    neo.C.version = "0.6.2"
+    neo.C.version = newer1
     login(vera); login(neo)
     tickAll(45)
-    assert(told(vera, "Cute 0.6.2|r is out (you have " .. mine .. "): foreverrank.com/addons/cute") == 1 and V.newer == "0.6.2", "Vera told once:\n" .. table.concat(vera.chat, "\n"))
+    assert(told(vera, "Cute " .. newer1 .. "|r is out (you have " .. mine .. "): foreverrank.com/addons/cute") == 1 and V.newer == newer1, "Vera told once:\n" .. table.concat(vera.chat, "\n"))
     assert(told(neo, "is out") == 0 and neo.C.newer == nil, "Neo, newer than Vera, is told nothing")
     -- a newer one again, and junk: no second line; the status line keeps the newest
-    for _, v in ipairs({ "0.4.9", mine, "0.7.0-beta", "banana" }) do vera.C.Roster:Apply("Jumble-Forever", { guid = guidOf("Jumble"), addon_ver = v }) end
-    vera.C.Roster:Apply("Neo-Forever", { addon_ver = "0.7.0" })
-    assert(told(vera, "is out") == 1 and V.newer == "0.7.0", "one line a session, the newest kept: " .. tostring(V.newer))
+    for _, v in ipairs({ "0.4.9", mine, newer2 .. "-beta", "banana" }) do vera.C.Roster:Apply("Jumble-Forever", { guid = guidOf("Jumble"), addon_ver = v }) end
+    vera.C.Roster:Apply("Neo-Forever", { addon_ver = newer2 })
+    assert(told(vera, "is out") == 1 and V.newer == newer2, "one line a session, the newest kept: " .. tostring(V.newer))
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       vera.C.UI:Open("race")
       vera.C.UI.frame:SetSize(size[1], size[2])
@@ -4448,21 +4455,21 @@ do
     local again = newClient(char("Vera"))
     login(again, db, true)
     tick(again, 20)
-    assert(again.C.newer == "0.7.0" and told(again, "is out") == 0 and told(again, news) == 0, "after a /reload: the update shown, nothing said")
+    assert(again.C.newer == newer2 and told(again, "is out") == 0 and told(again, news) == 0, "after a /reload: the update shown, nothing said")
     leave(again)
     -- the next login says the update again, not what is new
     local nextDay = newClient(char("Vera"))
     login(nextDay, db)
     tick(nextDay, 20)
-    assert(told(nextDay, "Cute 0.7.0|r is out (you have " .. mine .. ")") == 1 and told(nextDay, news) == 0, "the next login: the update said again, what is new not:\n" .. table.concat(nextDay.chat, "\n"))
+    assert(told(nextDay, "Cute " .. newer2 .. "|r is out (you have " .. mine .. ")") == 1 and told(nextDay, news) == 0, "the next login: the update said again, what is new not:\n" .. table.concat(nextDay.chat, "\n"))
     leave(nextDay)
-    -- updated to 0.7.0 with the same saved records: nothing; and a first login on a version whose line Changes.lua
+    -- updated to the newer one with the same saved records: nothing; and a first login on a version whose line Changes.lua
     -- lacks says nothing of it
     local updated = newClient(char("Vera"))
-    updated.C.version = "0.7.0"
+    updated.C.version = newer2
     login(updated, db)
     tick(updated, 20)
-    assert(updated.C.newer == nil and told(updated, "is out") == 0 and told(updated, "Cute 0.7.0|r: ") == 0, "updated: nothing")
+    assert(updated.C.newer == nil and told(updated, "is out") == 0 and told(updated, "Cute " .. newer2 .. "|r: ") == 0, "updated: nothing")
     leave(updated)
     -- saved variables of 0.4.0: what is new in this version, once, the page's line for it; no welcome
     local old = newClient(char("Vera"))
@@ -4739,10 +4746,21 @@ do
     local sf = rone.env.QuestBankStep
     assert(sf and sf:IsShown() and sf.__flat, "the step frame up, in Cute's skin")
     check(rone.C.UI.frame, "guide with the quest band")
+    -- the officer's guild line whole: at the head's right where it fits, else on a line of its own under the head
+    local _, gp = rone.C.Guide.Items(true)
+    assert(gp.guild and gp.guild.line and texts(rone):find(gp.guild.line, 1, true), "the guild's line whole on the Guide, nothing cut: " .. tostring(gp.guild and gp.guild.line) .. "\n" .. texts(rone))
     rone.C.UI:Open("quests")
     local tq = texts(rone)
     assert(tq:find("Now", 1, true) and tq:find("Available", 1, true) and tq:find("Highest XP", 1, true), "the Quests page's three heads:\n" .. tq)
     check(rone.C.UI.frame, "quests page")
+    -- the right column (quests and minutes) keeps clear of the scroll view's edge and the window's
+    local view, win = rectOf(rone.C.UI.scroll), rectOf(rone.C.UI.frame)
+    for _, row in ipairs(rone.C.UI.lists.quests.items) do
+      if row:IsShown() and row.who:IsShown() then
+        local rr = rectOf(row.who)
+        assert(rr and rr.r <= view.r - 4 and rr.r <= win.r - 24, string.format("the Quests page's right column at the edge: '%s' ends %d px from the view's edge, %d from the window's", tostring(row.who:GetText()), view.r - rr.r, win.r - rr.r))
+      end
+    end
     rone.C.UI:Open("settings", "quests")
     local ts = texts(rone)
     assert(ts:find("Accept for me", 1, true) and ts:find("Progress in mob tooltips", 1, true), "the Quests section's rows:\n" .. ts)

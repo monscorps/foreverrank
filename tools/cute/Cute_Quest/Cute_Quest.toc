@@ -2,7 +2,7 @@
 ## Title: |cffe8b24aCute|r Quest
 ## Notes: QuestBank's guiding as Cute modules: the step now in the Guide, and Quests, Route, Map, Journal, Gear and Camp, each a switch in Settings, Modules. Loads only while one is on.
 ## Author: Mikal
-## Version: 0.6.1
+## Version: 0.7.0
 ## X-License: GPL-3.0-or-later
 ## X-QuestBank: 6.0.1
 ## Dependencies: Cute

@@ -2,6 +2,7 @@
 -- One line per version, newest first: Core.lua prints this version's at the first login on it.
 local _, C = ...
 C.CHANGES = {
+  ["0.7.0"] = "QuestBank's guiding inside Cute: the step now on the Guide, and Quests, Route, Journal, Gear, Map and Camp as modules you switch on.",
   ["0.6.1"] = "Every check in Settings is a row that takes the click anywhere on it, and /cute guide switches the Guide on; an error the game swallows no longer stops the window, Rule 0 or the saved choice, and lands in /cute errors with where it happened.",
   ["0.6.0"] = "Starts with only the statistics; the Guide, switched on in Settings, Modules, says what to run next and with whom; Only-you values, and what Cute knows would give them away, go to the officers only, by the policy they save in Guild Info; false data is dropped and marked.",
   ["0.5.0"] = "Ships what research and the beta showed about Forever, checks it against the game at login and learns the rest by rules the officers can retune; the Guide page: dungeons for your level, the bosses you still need, the enchants you lack, your pace; says when a guild mate runs a newer Cute.",

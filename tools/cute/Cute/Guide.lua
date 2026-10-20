@@ -779,17 +779,33 @@ function C.Guide_Draw(UI)
     if it.kind == "head" then inLearned = (it.name or ""):find("^Learned") ~= nil
     elseif inLearned and (it.kind == "item" or it.kind == "note") then learned[#learned + 1] = (it.name or "") .. (it.who and (": " .. it.who) or "") end
   end
-  local shown = { { kind = "head", name = top.line, who = officer and plan.guild and plan.guild.line or nil, tip = function(tip)
+  -- the officer's guild line at the head's right where the right column holds it whole; else on a line of its own under
+  -- the head, so nothing on the page is cut (its counts stay in the head's tooltip either way)
+  local guildLine = officer and plan.guild and plan.guild.line or nil
+  local guildRow
+  if guildLine then
+    UI.measure = UI.measure or UI.Text(UI.band, 12, K.DIM, "RIGHT")
+    UI.measure:Hide()
+    UI.measure:SetText(guildLine)
+    local width = UI.measure.GetUnboundedStringWidth or UI.measure.GetStringWidth
+    if width(UI.measure) > ww - 4 then
+      local guild = plan.guild
+      guildRow = { kind = "note", name = guildLine, c = K.DIM, tip = function(tip) tip:AddLine(guildLine, 1, 1, 1, true); if guild.tip then guild.tip(tip) end end }
+      guildLine = nil
+    end
+  end
+  local shown = { { kind = "head", name = top.line, who = guildLine, tip = function(tip)
     if top.tip then top.tip(tip) end
     tip:AddLine(" ")
     tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
-    -- (the guild's line whole: the row's right column cuts it in a narrow window)
+    -- (the guild's line and its counts, whole)
     if officer and plan.guild and plan.guild.tip then tip:AddLine(" "); tip:AddLine(plan.guild.line, 1, 1, 1, true); plan.guild.tip(tip) end
     if officer and #learned > 0 then
       tip:AddLine(" "); tip:AddLine("Learned in play", 1, 1, 1)
       for _, l in ipairs(learned) do tip:AddLine(l, 0.8, 0.8, 0.8, true) end
     end
   end } }
+  if guildRow then shown[#shown + 1] = guildRow end
   local take = false
   for _, it in ipairs(items) do
     if it.kind == "card" then take = it.pick == true

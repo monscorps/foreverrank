@@ -45,8 +45,10 @@ Cute/UI.lua         the window: the tabs from the registry, the dashboard's page
 Cute/Guide.lua      the Guide, a built-in module: what to do next and with whom. The next best thing (the guild's version for officers), a card per dungeon in range (a level bar, pips, quests, the mates online to invite), gear and pace as strips, Next up as a timeline; the guild per dungeon and what play changed from the research, for officers; its two thresholds as its Settings section
 Cute/Settings.lua   the sections down the left (General, Who sees what, Rules, Modules, one per module that is on), the chosen one in one column drawn with the same pieces everywhere
 Cute/art/           logo.png (the emblem, for the minimap), logo_wide.png (the header)
+Cute_Quest/         QuestBank's engine, copied by build.py (every file QuestBank.toc lists but UI.lua, and its art; never edited here); its own nine files: Shim (QB.dormant, the saved variables), Bridge (QB.Engine, the window verbs, the login, the first-run defaults, /qb), Band (the Guide's step band and rows, the engine's skin), six pages (PageQuests, PageRoute, PageMap, PageJournal, PageGear, PageCamp)
 harness.lua         the mock client and every scenario
 test/Cute_Example/  the harness's module addon (a page, a section, an event, a stat): the path every module takes; never in the zip
+test/quest_mocks.lua  the quest engine's mocks (ported from QuestBank's harness): what Cute_Quest's copy reads that Cute's own mock lacks, loaded for a client made with quest = true
 page_stats.lua      writes addons/cute/stats.js from the registry, UI.lua's defaults and the rules' thresholds (Rules.lua, the mock's bounds)
 build.py            builds, stamps and checks the page (see Ship)
 ```
@@ -916,6 +918,32 @@ SimpleFrameAPIDocumentation.lua): a black edge was 1.1:1, and only the box took 
   Cute loads only what is on anyway. A module's stats are defined the first time it is on in a session and stay until
   the next login, which its box says when it is unticked.
 
+One addon may register several modules, each with `addon = ADDON` in its entry. The first it registers is its primary
+(`def.primary`), keyed by the folder (`def.key = "Cute_Quest"`): its row in Settings > Modules is the folder's, named
+by the toc's title until it registers; the rest are keyed under the folder (`"Cute_Quest:route"`) with a row each.
+The addon is loaded while any of its keys is on (`M.AddonWanted`) and left off when none is; `onToggle(on)` runs when
+a module's choice changes with the addon loaded, so a module that is a switch over another engine's flags (Map, Camp)
+can set them. A page another engine draws sits on a host, `Cute.Host(ui, key)`, a frame under the scroll area shown
+with the page and hidden with it. The global `Cute` is the module addons' door: `Cute:RegisterModule`, `Cute.Open`,
+`Cute.Refresh`, `Cute.Print`, `Cute.Page`, `Cute.ModuleOn`, `Cute.Safe`, `Cute.Font`, `Cute.Host`.
+
+`Cute_Quest` is that addon: QuestBank's guiding as six modules, Quests (the primary: the three places worth your time,
+the rest folded, the highest XP, and the step now in the Guide's band), Route, Map, Journal, Gear and Camp, in a
+second folder the zip ships beside `Cute`, loaded only while one of them is on. Its Lua is QuestBank's engine, every
+file `QuestBank.toc` lists but the window (`UI.lua`), copied byte for byte by `build.py` (`build_quest`, the folder's
+only writer besides its own nine files); each engine file begins `if QB.dormant then return end`. `Shim.lua` runs
+first and asks the client whether the addon QuestBank is loaded (`C_AddOns.IsAddOnLoaded`): if it is, the copy
+sleeps, every engine file returns at that line (no catalog, no event frame, no `/qb` of its own), `Bridge.lua` sets
+`QB.Engine = QuestBankAPI`, QuestBank's own table (6.1 or newer; older, the pages say what they need), and the pages
+read QuestBank's engine while QuestBank keeps its own window, step frame and settings (the modules' toggles set none
+of them). Without it the copy is the engine: its saved variables are `CuteQuestDB`, one table the engine reads and
+writes under its own name `QuestBankDB`; the Bridge logs the engine in after `ADDON_LOADED` (loaded on demand, after
+`PLAYER_LOGIN`, which the engine never sees), reads the quest log at once, sets the module's defaults once (no map
+page, no posting, no update nag, no level-up line, no welcome card, no minimap button) and routes `/qb` to Cute's pages
+(the engine's own words, skip, way, done, arrow and the rest, go to its handler); `Band.lua` gives the engine Cute's
+skin (`QB.Skin`: the font, the greys, a flat backdrop), so the step frame and the arrow the copy draws look like Cute.
+Design: `docs/superpowers/specs/2026-10-20-cute-quest-modules-design.md`.
+
 The choice is per character, in `CuteDB.chars[me].modules` (by id, or by folder for a module addon). Every character
 starts with the dashboard alone, a fresh install and one that ran 0.5.x alike, as What's new says at the first login
 on 0.6.0 ("Starts with only the statistics; the Guide, switched on in Settings, Modules, ..."). 0.5.x showed every
@@ -1056,7 +1084,10 @@ run of clicks; Broadcast now sends them again; "Rules to defaults" puts them bac
 
 **The Guide** (a built-in module, off on a fresh install: Settings > Modules puts its tab after Race; `/cute guide`
 switches it on for this character while it is off, and opens it) answers one question, what should you do next and with whom.
-The band, which stays in view, holds two lines, each with its tooltip:
+The band, which stays in view, is the step now: with the Quests module on, the quest engine's step (`Cute.QuestBand`,
+Cute_Quest's `Band.lua`) big and white (a click opens Quests, a right-click the step's menu: not now, drop, lock,
+scale, hide), the next two steps, the time to level and your party members' steps; with it off, one dim line saying
+where to switch it on. Under the band one row, then one card:
 
 - **The next best thing**, the rules' pick from the dungeons in range at your level: "Run The Deadmines: 3 guild mates
   online in range, 7 bosses you have not killed, 5 quests". A dungeon fits when it leaves you something to do (a boss
@@ -1067,14 +1098,18 @@ The band, which stays in view, holds two lines, each with its tooltip:
   20; Blackfathom Deeps opens at 24.", or that it is still checking the research. Officers get the guild's version
   instead: "Most members are 18-23: The Deadmines", the window of twice `guideWindow` levels holding the most members
   by the guild roster's levels (the server's word), and the dungeon whose range holds the most of them; the tooltip
-  has the counts. An officer's own pick is still marked on its card.
-- Where the knowledge comes from: research checked against this client, research this game no longer matches,
-  nothing shipped, or still checking; the build and date (and a build the beta's facts count as research on) in its
-  tooltip.
+  has the counts. The pick's line is the page's head row; the officer's guild line sits at its right where the right
+  column holds it whole, else on a line of its own under the head, so nothing on the page is cut. The head's tooltip
+  holds the reasons, where the knowledge comes from (research checked against this client, research this game no
+  longer matches, nothing shipped, or still checking; the build and date), the guild's line with its counts, and
+  what the guild learned in play.
+- **The picked dungeon's card** alone (`UI:List`, every row one height), as a card is described below. The other cards,
+  the gear and pace strips, Next up and the officers' per-dungeon lines are gathered (`G.Items`) but not drawn: what
+  the spec keeps lives in the head's tooltip, the rest nowhere.
 
-Under it one virtual list (`UI:List`), every row one height, headings included:
+A card:
 
-- **Dungeon cards**, one per dungeon in range, the next best one marked: the name; a level bar, the range drawn on a
+- **A dungeon card**, the next best one marked: the name; a level bar, the range drawn on a
   track against your level (green where your level is in it, grey above you, dim below; every bar on the page on one
   scale), the range in numbers beside it; how sure we are in one word (seen, beta, research, doubted). Under the name
   the bosses as pips (killed white, not killed grey, doubted dim; how many are left on the right; each with your kills
@@ -1115,8 +1150,8 @@ shown. A dungeon's, boss's or slot's tooltip has the rest: the range's source, e
 the loot seen and not. A row with nothing to its right takes the row's whole width, and a note's tooltip holds its
 whole text, which a narrow window cuts. Your group, your quests and combat draw the open page again (the module's
 events: `GROUP_ROSTER_UPDATE`, `QUEST_ACCEPTED`, `QUEST_TURNED_IN`, `PLAYER_REGEN_DISABLED` and `_ENABLED`, all in
-Forever's generated docs), at most once a second. When the leveling module (QuestBank's Quests, the first module to
-come over) is on, its best places for your level are meant to join the same pick; it is not here yet.
+Forever's generated docs), at most once a second. With the Quests module on, the Guide's section gains the step
+frame's rows (Step frame, Direction arrow, Lock the step frame), the engine's settings.
 
 ## Versions: a newer Cute, what is new
 
@@ -1150,8 +1185,8 @@ or command say so; `/cute settings` (or options) opens Settings, `/cute modules`
 cd tools/cute && luajit harness.lua
 ```
 
-Must end `layout problems: 0` and `OK`. Fifty-two scenarios, every one run twice in a loop (the file loads itself
-once per pass; the two that need a seed run in the first only): once with a seed, a small fixture standing in for
+Must end `layout problems: 0` and `OK`. Fifty-five scenarios, every one run twice in a loop (the file loads itself
+once per pass; the three that need a seed run in the first only): once with a seed, a small fixture standing in for
 `Known.lua` (four dungeons, one past the beta's cap with no boss known, one of wings sharing an instance, eleven
 bosses, one optional, with thirty-nine items, four enchant slots of kinds no shared scenario wears, the main hand's
 enchants each naming their kinds, a smooth XP curve, five factions: fifty facts for Rule 0, so its shares are whole
@@ -1274,7 +1309,19 @@ and saying so, unticked with its tab, section and event gone at once and off in 
 the next login not loading it and ticked there on in the list again before it loads; one that is no LoadOnDemand
 addon loaded by the game and showing nothing while off in Cute, left out by the game after it is unticked; every
 Settings section (the officers' greyed for the member) and every page at both sizes for both views, the Guide and the
-module on. And the privacy and trust of 0.6.0: three officers and two members logging in together, the officers
+module on. And Cute_Quest (the harness loads the copy build.py wrote, with the engine's mocks of `test/quest_mocks.lua`):
+listed by its toc's title and not loaded, its catalog not in memory; ticked, loaded at once, the engine logging in
+from the Bridge, the catalog built, one saved table under both names, the module's defaults set once, `/qb` routed,
+nothing said in chat; the step now in the Guide's band and the step frame flat; the Quests page's three heads, Route's
+band and legs, Journal and Gear on their hosts (one shown at a time), Map and Camp as sections whose switches set the
+engine's flags on and off with the module; the officer's guild line whole on the Guide and the Quests page's right
+column clear of the window's edge; every page and section at both sizes with every quest module on; Quests unticked
+hiding the frame and the band saying so again. With the addon QuestBank loaded beside Cute, the copy sleeps: its
+files return at their guard, the engine the pages read is `QuestBankAPI`, the band draws QuestBank's step, the
+toggles set none of QuestBank's settings. In the seeded pass, the memory gates, QuestBank's budgets: under 11 MB kept
+after login with every quest page opened (what is reachable from the module's private table and its saved variables,
+in LuaJIT's layout), a refresh with the window shut under 100 KB of garbage, the Guide's Replan under 64 KB (`ownBytes`
+charges an allocation to the file of the function that made it: `Cute_Quest/` only). And the privacy and trust of 0.6.0: three officers and two members logging in together, the officers
 keeping Gold, the gear gaps and the Kills statistics to themselves, every message each client received read off the
 bus (a member's client never receives another member's Only-you values, on GUILD or whispered, and holds none; the
 officers get them, whispered to each and to no one else; each client under twenty messages in its first minute, a
@@ -1490,8 +1537,12 @@ python3 tools/cute/build.py
 
 One command, nothing typed by hand: it writes the seed (`Cute/Known.lua` from `gen_known.py`, see The seed) and runs
 the seed's `--selftest`, the build stopping with the problems when either fails, writes `Cute/Changes.lua` from the
-page's changelog (Versions; the build stops when the toc's version has no line there), zips the addon (the same
-`zip -rq ... Cute -x "*.DS_Store"` as before; `--no-zip` keeps the zip you have), regenerates `addons/cute/stats.js`
+page's changelog (Versions; the build stops when the toc's version has no line there), copies QuestBank's engine
+into `Cute_Quest` (`build_quest`: every file `QuestBank.toc` lists but `UI.lua`, byte for byte, and its art; it stops on
+a file it does not know, a copy that differs from its source, a Lua file without its dormant guard, or a stray file in
+the folder, and writes `Cute_Quest.toc` with Cute's version and QuestBank's; the folder's own nine files are the only
+ones edited by hand), zips both folders (`zip -rq ... Cute Cute_Quest -x "*.DS_Store"`; `--no-zip` keeps the zip you
+have), regenerates `addons/cute/stats.js`
 from the registry, the window's defaults and the rules' thresholds with their bounds (`page_stats.lua`), stamps the version from `Cute.toc`, the zip's size in
 KB and the stat counts into `addons/cute/index.html` between `<!--@name-->` markers, then checks the page: every link
 and image exists, every class is `cu-` and none collides with `forever.css`, no hand-typed version or placeholder is
