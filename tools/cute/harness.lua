@@ -204,7 +204,10 @@ local function newObj(kind, template, parent)
         elseif k == "SetTexture" then self.__tex = a[1]; self.__color = nil
         elseif k == "SetColorTexture" then self.__tex = "color"; self.__color = { a[1], a[2], a[3], a[4] }
         elseif k == "SetVertexColor" then self.__vertex = { a[1], a[2], a[3], a[4] }
-        elseif k == "SetBackdrop" then self.__inset = a[1] and a[1].insets and a[1].insets.left or 0
+        elseif k == "SetBackdrop" then
+          self.__inset = a[1] and a[1].insets and a[1].insets.left or 0
+          -- (a flat one: the window's skin, a 1 px edge of the plain white texture; the quest engine's frames take it from Cute)
+          self.__flat = (a[1] and a[1].edgeFile == "Interface\\Buttons\\WHITE8x8" and a[1].edgeSize == 1) or nil
         elseif k == "SetThumbTexture" then self.__thumb = a[1]
         elseif k == "SetBackdropColor" then self.__bdc = { a[1], a[2], a[3], a[4] }
         elseif k == "SetBackdropBorderColor" then self.__bdb = { a[1], a[2], a[3], a[4] }
@@ -4711,6 +4714,39 @@ do
     assert(rone.env.SlashCmdList.QUESTBANK, "/qb is routed")
     assert(#(rone.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     for _, l in ipairs(rone.chat) do assert(not l:find("QuestBank", 1, true) and not l:find("/qb", 1, true), "the engine said nothing at login: " .. l) end
+    -- the Quests module registered as the folder's primary: its tab after the Guide, its section; the Guide's band
+    -- shows the step now (the engine's first step for a level-5 warrior in Northshire with quest 7 in the log)
+    local function boxOf(c, title) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == title end) end
+    assert(M.byId.quests and M.byId.quests.primary and M.byId.quests.active, "Quests on, the folder's primary")
+    if not rone.C.Modules.OnKey("guide") then rone.C.Modules.Set("guide", true) end
+    assert(tabsShown(rone):find(" guide quests ", 1, true), "the Quests tab after the Guide: " .. tabsShown(rone))
+    rone.C.UI:Open("guide")
+    local t = texts(rone)
+    assert(not t:find("Tick Quests in Settings", 1, true), "the band no longer says to switch Quests on:\n" .. t)
+    local steps = QB.Guide.Steps()
+    assert(steps[1] and t:find(QB.Guide.Text(steps[1]), 1, true), "the step now in the band: " .. tostring(steps[1] and QB.Guide.Text(steps[1])) .. "\n" .. t)
+    local sf = rone.env.QuestBankStep
+    assert(sf and sf:IsShown() and sf.__flat, "the step frame up, in Cute's skin")
+    check(rone.C.UI.frame, "guide with the quest band")
+    rone.C.UI:Open("quests")
+    local tq = texts(rone)
+    assert(tq:find("Now", 1, true) and tq:find("Available", 1, true) and tq:find("Highest XP", 1, true), "the Quests page's three heads:\n" .. tq)
+    check(rone.C.UI.frame, "quests page")
+    rone.C.UI:Open("settings", "quests")
+    local ts = texts(rone)
+    assert(ts:find("Accept for me", 1, true) and ts:find("Progress in mob tooltips", 1, true), "the Quests section's rows:\n" .. ts)
+    rone.C.UI:Open("settings", "guide")
+    assert(texts(rone):find("Step frame", 1, true) and texts(rone):find("Direction arrow", 1, true), "the Guide's section gained the frame and arrow rows")
+    -- unticked: the engine's guide off, the frame hidden, the band says so again
+    rone.C.UI:Open("settings", "modules")
+    click(boxOf(rone, "Quests"))
+    assert(not M.byId.quests.active and rone.env.CuteQuestDB.settings.guide.on == false and not sf:IsShown(), "off: the engine's guide off, the frame hidden")
+    rone.C.UI:Open("guide")
+    assert(texts(rone):find("Tick Quests in Settings, Modules", 1, true), "the band says so again")
+    rone.C.UI:Open("settings", "modules")
+    click(boxOf(rone, "Quests"))
+    assert(M.byId.quests.active and sf:IsShown(), "on again: the frame back")
+    assert(#(rone.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(rone)
     print("cute quest: listed by its toc and not loaded; ticked, the engine's copy loads, logs in from the bridge, builds its catalog; one saved table under both names; /qb routed")
   end)

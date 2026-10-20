@@ -66,6 +66,12 @@ f:SetScript("OnEvent", E.Safe(function(self, _, name)
   self:UnregisterEvent("ADDON_LOADED")
   firstRun()
   E:Login()
+  -- the engine takes the log as read at the game's next QUEST_LOG_UPDATE, which after PLAYER_LOGIN comes at once;
+  -- loaded on demand in the middle of a session it could wait minutes for one, so the log is read now
+  if not E.logReady and E.eventFrame then
+    local handler = E.eventFrame:GetScript("OnEvent")
+    if handler then handler(E.eventFrame, "QUEST_LOG_UPDATE") end
+  end
 end, "cute quest: login"))
 
 -- /qb and /questbank: the pages Cute has, by name; everything else is the engine's own command (skip, way, done,
