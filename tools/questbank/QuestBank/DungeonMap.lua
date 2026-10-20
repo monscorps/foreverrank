@@ -6,6 +6,7 @@
 -- and the Map button on a dungeon's card on the Party page. Inside an instance the game hides where you are, so the
 -- map is a map, not a tracker.
 local _, QB = ...
+if QB.dormant then return end
 local DM = {}
 QB.DMap = DM
 
@@ -19,7 +20,7 @@ local ROW_H = 68
 local BOSS_W, BOSS_H = 216, 42  -- the boss list's width, and a boss's row: its face, its name on one or two lines
 local MAX_ITEMS = 12
 
-local ART = "Interface\\AddOns\\QuestBank\\art\\"
+local ART = QB.ART or "Interface\\AddOns\\QuestBank\\art\\" -- (a host holding a copy of the engine names its own folder: QB.ART)
 local plain = QB.Plain
 local DARK = { 0.07, 0.06, 0.05 }
 local GOLD = { 1, 0.82, 0.3 }

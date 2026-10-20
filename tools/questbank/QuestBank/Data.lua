@@ -4,6 +4,7 @@
 -- software under the GPL-3.0 (LICENSE.txt).
 -- Edit the generator, not this file.
 local _, QB = ...
+if QB.dormant then return end
 local D = {}
 QB.Data = D
 

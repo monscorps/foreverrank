@@ -6,6 +6,7 @@
 --   disc.walk[c] = { { x1, y1, x2, y2, ... }, ... }   (c = 0 Eastern Kingdoms, 1 Kalimdor; whole yards)
 -- Only reads: your position, as the arrow reads it.
 local _, QB = ...
+if QB.dormant then return end
 local Walk = {}
 QB.Walk = Walk
 

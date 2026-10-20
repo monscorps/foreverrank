@@ -4,6 +4,7 @@
 -- client knows them by ID only). QuestTrail made the table from the community listfile
 -- (world/minimaps/<continent>/map<col>_<row>.blp). MinimapView.lua lays the far zoom out of them.
 local _, QB = ...
+if QB.dormant then return end
 QB.MinimapTiles = {
   kalimdor = {
     [0]=207562,[1]=207563,[2]=207564,[100]=207565,[101]=207566,[102]=207567,[200]=207568,[201]=207569,[202]=207570,[1912]=207571,[1913]=207572,[1914]=207573,

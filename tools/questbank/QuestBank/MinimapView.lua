@@ -9,6 +9,7 @@
 -- minimap goes through one view (MV.View): its centre and radius in continent yards (QB.Model.World's), its scale in
 -- pixels a yard and its turn.
 local _, QB = ...
+if QB.dormant then return end
 local MV = { MAX_YARDS = 12000, STEP = 1.5, SMOOTH = 0.12, DRAG = 4, RETURN = 3, TILE = 1600 / 3, ARROW = 32 }
 QB.MiniView = MV
 

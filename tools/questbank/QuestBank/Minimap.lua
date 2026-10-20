@@ -22,11 +22,12 @@
 --   then through the minimap's view (MV.View: its centre, its radius in yards from C_Minimap.GetViewRadius or the far
 --   zoom, its turn with your facing under rotateMinimap).
 local _, QB = ...
+if QB.dormant then return end
 local Mini = {}
 QB.Mini = Mini
 
 local TICK = 0.05          -- seconds between placements (the pins follow you); every frame while the view moves
-local ART = "Interface\\AddOns\\QuestBank\\art\\"
+local ART = QB.ART or "Interface\\AddOns\\QuestBank\\art\\" -- (a host holding a copy of the engine names its own folder: QB.ART)
 local MAX_PINS = 60        -- pins at once: the step and the stops first, then the nearest
 local EDGE = 7             -- the rim: pins kept on it sit this far inside the minimap's edge
 local LIST_EVERY = 30      -- seconds the list is kept at most, a safety net: it is made again at once when

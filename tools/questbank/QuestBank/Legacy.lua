@@ -22,6 +22,7 @@
 -- QuestBankDB.diag.legacy = { reads, events, trees = { [tree] = config id or false }, ranks = { [node] = rank }, at }:
 -- what this client answered, so the uploads show it.
 local _, QB = ...
+if QB.dormant then return end
 local L = {}
 QB.Legacy = L
 

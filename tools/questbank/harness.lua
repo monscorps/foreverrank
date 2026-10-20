@@ -37,6 +37,19 @@ local PROTECTED_CALL = { Show = true, Hide = true, SetShown = true, SetPoint = t
   SetSize = true, SetWidth = true, SetHeight = true, SetAttribute = true, SetParent = true }
 local FONT_SIZE = { GameFontNormal = 12, GameFontNormalLarge = 16, GameFontHighlightSmall = 10, GameFontNormalSmall = 10, NumberFontNormal = 12, ChatFontNormal = 13 }
 
+-- every engine file sleeps when a host sets QB.dormant before it runs (Cute_Quest holds a copy of the engine and
+-- sleeps it while QuestBank itself is loaded): the guard is the first statement after the file's vararg line
+do
+  local toc = assert(io.open(HERE .. "/QuestBank/QuestBank.toc")):read("*a")
+  for file in toc:gmatch("\n([%w_]+%.lua)") do
+    if file ~= "UI.lua" then
+      local src = assert(io.open(HERE .. "/QuestBank/" .. file)):read("*a")
+      assert(src:find("local [%w_]+, QB = %.%.%.\n", 1), file .. " has no `local _, QB = ...` line")
+      assert(src:find("local [%w_]+, QB = %.%.%.\nif QB%.dormant then return end\n", 1), file .. " lacks `if QB.dormant then return end` after its vararg line")
+    end
+  end
+end
+
 ----------------------------------------------------------------------------
 -- text width in Friz Quadrata, close enough to see what doesn't fit
 ----------------------------------------------------------------------------

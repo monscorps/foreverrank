@@ -33,6 +33,7 @@
 -- Also here: the jumps in place that plan the route again (a loading screen, landing from a flight, a hearth, a portal:
 -- 300 yards within a second, or another continent), and /qb trace, the opt-in diagnostic for a report.
 local _, QB = ...
+if QB.dormant then return end
 local T = {}
 QB.Target = T
 

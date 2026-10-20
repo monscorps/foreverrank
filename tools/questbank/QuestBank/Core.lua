@@ -2,7 +2,11 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
+if QB.dormant then return end
 QB.version = "6.0.1"
+-- the engine, for a host that runs beside QuestBank and must not run a second one (Cute_Quest reads this table
+-- instead of its own copy while QuestBank is loaded); QuestBank itself never reads it
+QuestBankAPI = QB
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's escort prompt has said 25: see QB.EscortLimit)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -2618,6 +2622,44 @@ end
 ----------------------------------------------------------------------------
 -- events
 ----------------------------------------------------------------------------
+-- the login: the character's key, the state read, every part's Init, the first plan a few seconds on. From the
+-- PLAYER_LOGIN event; or from a host that loaded the engine on demand after it, which never sees that event
+-- (Cute_Quest's Bridge.lua). Once a session
+function QB:Login()
+  if QB.loginDone then return end
+  QB.loginDone = true
+  local nr = GetNormalizedRealmName and GetNormalizedRealmName()
+  if nr then QB.charKey = (UnitName("player") or "?") .. "-" .. nr; QB:MergeCharKeys() end
+  QB:ReadState()
+  if QB.Minimap then QB.Minimap:Create() end
+  if QB.Pins then QB.Pins:Init() end
+  if QB.QuestMap then QB.QuestMap:Init() end
+  if QB.Sync then QB.Sync:Init() end
+  if QB.Discover then QB.Discover:Init() end
+  if QB.Survey then QB.Survey:Init() end
+  if QB.Game then QB.Game:Init() end
+  if QB.Loot then QB.Loot:Init() end
+  if QB.Observe then QB.Observe:Init() end
+  if QB.Timer then QB.Timer:Init() end
+  if QB.Link then QB.Link:Init() end
+  if QB.Mini then QB.Mini:Init() end
+  if QB.MapPage then QB.MapPage:Init() end
+  if QB.Glow then QB.Glow:Init() end
+  if QB.Walk then QB.Walk:Init() end
+  if QB.Legacy then QB.Legacy:Init() end
+  if QB.Camp then QB.Camp:Init() end
+  if QB.Travel then QB.Travel:Init() end
+  if QB.Arrow then QB.Arrow:Init() end
+  if QB.Target then QB.Target:Init() end
+  if QB.StepFrame then QB.StepFrame:Init() end -- (the Guide's step frame, StepFrame.lua)
+  if QB.Tips then QB.Tips:Init() end -- (quest progress in mob and object tooltips, Tips.lua)
+  -- after the other addons have loaded and run their own login code
+  C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
+  Run.ArmHour()
+  C_Timer.After(8, QB.Safe(function() QB:Snapshot("login") end, "login snapshot"))
+  C_Timer.After(4, QB.Safe(function() QB:Changed() end, "login"))
+end
+
 local frame = CreateFrame("Frame")
 QB.eventFrame = frame
 local pending = false
@@ -2728,36 +2770,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Auto then QB.Auto.OnEvent(event, a1, a2) end -- after the window's XP is on record
     if QB.liveVer == before then return end -- nothing new: the plan stands
   elseif event == "PLAYER_LOGIN" then
-    local nr = GetNormalizedRealmName and GetNormalizedRealmName()
-    if nr then QB.charKey = (UnitName("player") or "?") .. "-" .. nr; QB:MergeCharKeys() end
-    QB:ReadState()
-    if QB.Minimap then QB.Minimap:Create() end
-    if QB.Pins then QB.Pins:Init() end
-    if QB.QuestMap then QB.QuestMap:Init() end
-    if QB.Sync then QB.Sync:Init() end
-    if QB.Discover then QB.Discover:Init() end
-    if QB.Survey then QB.Survey:Init() end
-    if QB.Game then QB.Game:Init() end
-    if QB.Loot then QB.Loot:Init() end
-    if QB.Observe then QB.Observe:Init() end
-    if QB.Timer then QB.Timer:Init() end
-    if QB.Link then QB.Link:Init() end
-    if QB.Mini then QB.Mini:Init() end
-    if QB.MapPage then QB.MapPage:Init() end
-    if QB.Glow then QB.Glow:Init() end
-    if QB.Walk then QB.Walk:Init() end
-    if QB.Legacy then QB.Legacy:Init() end
-    if QB.Camp then QB.Camp:Init() end
-    if QB.Travel then QB.Travel:Init() end
-    if QB.Arrow then QB.Arrow:Init() end
-    if QB.Target then QB.Target:Init() end
-    if QB.StepFrame then QB.StepFrame:Init() end -- (the Guide's step frame, StepFrame.lua)
-    if QB.Tips then QB.Tips:Init() end -- (quest progress in mob and object tooltips, Tips.lua)
-    -- after the other addons have loaded and run their own login code
-    C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
-    Run.ArmHour()
-    C_Timer.After(8, QB.Safe(function() QB:Snapshot("login") end, "login snapshot"))
-    C_Timer.After(4, QB.Safe(function() QB:Changed() end, "login"))
+    QB:Login()
     return
   elseif event == "PLAYER_LOGOUT" then
     QB:Snapshot("logout")

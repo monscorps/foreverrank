@@ -20,6 +20,7 @@
 --     client gave, so the uploads show what this client answers
 -- Only reads: QuestBank never takes a flight or uses the hearthstone for you.
 local _, QB = ...
+if QB.dormant then return end
 local TV = {}
 QB.Travel = TV
 

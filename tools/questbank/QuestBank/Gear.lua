@@ -7,6 +7,7 @@
 -- choice (one reward of several) is offered for one slot only: the slot with the most to lose without it. A click puts
 -- the quest on your pick-up list or opens the journal on the boss; Shift links the item in chat, Ctrl tries it on.
 local _, QB = ...
+if QB.dormant then return end
 local G = {}
 QB.Gear = G
 

@@ -21,6 +21,7 @@
 -- rank of, your class's trainer with new spells); every other NPC only with "Every other NPC too" (glow.everyNpc). The
 -- game's own interact icon is the game's, on the one thing under your Interact key.
 local _, QB = ...
+if QB.dormant then return end
 local Glow = {}
 QB.Glow = Glow
 
@@ -584,7 +585,7 @@ local function changed(name, value)
 end
 
 -- the light's art: QuestBank's own textures (art/, drawn by make_art.py)
-local ART = "Interface\\AddOns\\QuestBank\\art\\"
+local ART = QB.ART or "Interface\\AddOns\\QuestBank\\art\\" -- (a host holding a copy of the engine names its own folder: QB.ART)
 -- the sparkles of the sparkle style: each on its own orbit (r its radius, w its turn in radians a second, a0 where
 -- it starts), twinkling at its own pace (f, p) and size (s). A fixed set, so the burst looks the same at every
 -- object, and the client's own random is never needed

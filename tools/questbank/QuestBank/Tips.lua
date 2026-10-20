@@ -6,6 +6,7 @@
 -- when the name or the guid is a secret value. Only reads, only its lines; nothing in chat. The line tables are
 -- pooled: a hover makes its strings and nothing more.
 local _, QB = ...
+if QB.dormant then return end
 local Tips = {}
 QB.Tips = Tips
 

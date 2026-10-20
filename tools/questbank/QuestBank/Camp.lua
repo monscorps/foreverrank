@@ -39,6 +39,7 @@
 -- (D.CAMP[id].sp, seen on UNIT_SPELLCAST_SUCCEEDED), the campfire under your Interact key, and your rested state
 -- (IsResting, PLAYER_UPDATE_RESTING).
 local _, QB = ...
+if QB.dormant then return end
 local Camp = {}
 QB.Camp = Camp
 
@@ -463,7 +464,7 @@ end
 ----------------------------------------------------------------------------
 -- the bar
 ----------------------------------------------------------------------------
-local ART = "Interface\\AddOns\\QuestBank\\art\\"
+local ART = QB.ART or "Interface\\AddOns\\QuestBank\\art\\" -- (a host holding a copy of the engine names its own folder: QB.ART)
 local SIZE, GAP = 40, 6
 local ORDER = { "sit", "food", "fire", "camp", "bag" }
 local bar, icons = nil, {}

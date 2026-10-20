@@ -12,6 +12,7 @@
 -- It does what the ForeverProbe addon did: that addon's notes are taken over once, and while it is still
 -- loaded QuestBank says, once a version, that its folder can go.
 local _, QB = ...
+if QB.dormant then return end
 local Game = {}
 QB.Game = Game
 

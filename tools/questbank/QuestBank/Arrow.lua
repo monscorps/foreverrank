@@ -24,6 +24,7 @@
 -- your heading, glowing while it points ahead, pinging as you arrive and popping at a new step), or as QuestTrail's
 -- compass (the dial, A.QT) when chosen in Settings or the arrow's right-click menu (arrowStyle).
 local _, QB = ...
+if QB.dormant then return end
 local A = {}
 QB.Arrow = A
 
@@ -500,7 +501,7 @@ end
 -- ping or pop in this look. The game style keeps the game's own tutorial arrow, greyed and coloured by your heading,
 -- with its glow and pulses, the name in gold above the step line.
 ----------------------------------------------------------------------------
-local ART = "Interface\\AddOns\\QuestBank\\art\\"
+local ART = QB.ART or "Interface\\AddOns\\QuestBank\\art\\" -- (a host holding a copy of the engine names its own folder: QB.ART)
 local TRAVEL_KIND = { fly = true, boat = true, zeppelin = true, tram = true, portal = true }
 local VERB = { route = "Turn in", handin = "Turn in", pickup = "Take", pin = "Go to", corpse = "Run to" } -- what to do at the target
 local EASE = 12                   -- how fast the needle catches up (QuestTrail's: most of the way in about 0.2 s)

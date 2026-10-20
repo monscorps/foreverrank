@@ -7,6 +7,7 @@
 -- reminder or the party's steps changed, twice a second at most; nothing is made per tick. Secure parts (the item
 -- button) change only out of a fight. No chat line comes from here.
 local _, QB = ...
+if QB.dormant then return end
 local SF = {}
 QB.StepFrame = SF
 

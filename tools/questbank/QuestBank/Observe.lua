@@ -9,6 +9,7 @@
 -- Only on the Forever client, under the same Settings box as the item notes (unticking clears it). Only reads:
 -- nothing is cast, moved or targeted, so the game has nothing of QuestBank's to block. /qb events lists the counts.
 local _, QB = ...
+if QB.dormant then return end
 local Observe = {}
 QB.Observe = Observe
 

@@ -7,6 +7,7 @@
 -- game's atlases at the sizes the game draws them (P.Atlas), and its quest POI, quest offer and POI pin looks
 -- (P.StylePoi, P.StyleOffer, P.StyleMark), which QuestMap.lua's icons and MapPage.lua's layers draw with too.
 local _, QB = ...
+if QB.dormant then return end
 local P = { list = {} }
 QB.Pins = P
 
@@ -449,7 +450,7 @@ end
 -- log highlights the quest): col = { r, g, b, a }, or nil for none. A layer with a lit(data) function lights its
 -- frames as they are drawn (QuestBank's map page: the quest hovered or picked in its list, the arrow's step). The
 -- atlas keeps the game's own colour; a client without it gets art/glow.tga in col, as the minimap's pins have
-local GLOW = "Interface\\AddOns\\QuestBank\\art\\glow.tga"
+local GLOW = (QB.ART or "Interface\\AddOns\\QuestBank\\art\\") .. "glow.tga"
 function P.Glow(f, col)
   if not (col or f.glow) then return end
   if not f.glow then

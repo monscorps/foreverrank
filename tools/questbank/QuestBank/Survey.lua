@@ -19,6 +19,7 @@
 -- QuestBankDB.diag.survey counts this build's questions (asked, loaded, with rewards, failed): /qb survey.
 -- Settings: "Learn quests from the game", on by default. No names: quest ids, titles, item ids and numbers.
 local _, QB = ...
+if QB.dormant then return end
 local Survey = {}
 QB.Survey = Survey
 

@@ -9,6 +9,7 @@
 --   1R                                                                         please send yours
 --   1G|text                                                                    the Guide's first step (6.0), for the others' step frames
 local _, QB = ...
+if QB.dormant then return end
 local S = { members = {}, out = {}, live = {}, stepVer = 0 }
 QB.Sync = S
 -- stepVer: up whenever a member comes, goes, or sends a step or status (1G, 1S), so the Guide's member-step list

@@ -19,6 +19,7 @@
 -- Replan runs after each re-plan (Core.lua, QB:Changed) and on the Guide's own events; it reuses its tables, so a
 -- re-plan makes a few kilobytes and a tick none.
 local _, QB = ...
+if QB.dormant then return end
 local G = { steps = {}, ver = 0, later = nil }
 QB.Guide = G
 

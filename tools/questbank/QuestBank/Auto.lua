@@ -16,6 +16,7 @@
 -- Every decision and click runs a moment after the game's own window opens, after Core has read the XP
 -- the window shows, so the number the game reports is the one the decision uses.
 local _, QB = ...
+if QB.dormant then return end
 local Auto = {}
 QB.Auto = Auto
 local Q = QB.Quest

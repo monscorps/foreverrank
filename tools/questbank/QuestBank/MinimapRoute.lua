@@ -7,10 +7,11 @@
 -- gold along your trails, paler and thinner where it crosses ground you never walked. All in pixels from the
 -- minimap's centre, where the view (MinimapView.lua) puts them; Minimap.lua says what to draw.
 local _, QB = ...
+if QB.dormant then return end
 local MR = { THICK = 6, GAP = 3, SOFT = 0.55 } -- (THICK 8 before 5.4.4: a quarter thinner, the owner's "slightly thinner")
 QB.MiniRoute = MR
 
-local TEX = "Interface\\AddOns\\QuestBank\\art\\line_arrow.png"
+local TEX = (QB.ART or "Interface\\AddOns\\QuestBank\\art\\") .. "line_arrow.png"
 local sqrt, min, max, abs = math.sqrt, math.min, math.max, math.abs
 
 -- no snapping to the pixel grid: a slanted or scaled stroke jitters and stair-steps when snapped

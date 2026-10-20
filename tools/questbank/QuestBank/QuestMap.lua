@@ -13,6 +13,7 @@
 -- share one icon that lists each of them; where a route pin stands on an NPC, that pin's tooltip lists what
 -- the NPC has besides.
 local _, QB = ...
+if QB.dormant then return end
 local QM = {}
 QB.QuestMap = QM
 

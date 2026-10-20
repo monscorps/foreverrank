@@ -14,6 +14,7 @@
 -- tooltip queue (QB.Game.Want), so its name and stats are read without anyone hovering it.
 -- Only reads: no loot is taken, no window closed, no roll made, so the game has nothing of QuestBank's to block.
 local _, QB = ...
+if QB.dormant then return end
 local Loot = {}
 QB.Loot = Loot
 

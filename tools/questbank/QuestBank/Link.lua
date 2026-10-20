@@ -9,6 +9,7 @@
 -- Item tooltips: an item a quest gives (the catalog's reward lists) gains "Reward of: Quest (level, where)" lines,
 -- through the one tooltip post-call Game.lua already holds.
 local _, QB = ...
+if QB.dormant then return end
 local Link = {}
 QB.Link = Link
 

@@ -7,6 +7,7 @@
 -- Only reads and its own frame: nothing of the game's is touched. The strip is off until Settings turns it on
 -- (settings.clock.show, or a context profile's clockShow: QB:Opt), and its ticker only runs while it is shown.
 local _, QB = ...
+if QB.dormant then return end
 local Timer = {}
 QB.Timer = Timer
 

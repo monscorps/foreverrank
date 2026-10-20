@@ -10,6 +10,7 @@
 -- It never leaves your PC on its own: upload QuestBank.lua at foreverrank.com/questbank/, or let QuestBank
 -- Uploader send it on Windows. Everyone's notes are merged into the next QuestBank release.
 local _, QB = ...
+if QB.dormant then return end
 local Disc = {}
 QB.Discover = Disc
 

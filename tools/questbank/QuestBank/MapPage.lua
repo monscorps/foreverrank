@@ -11,6 +11,7 @@
 -- your zone, a waypoint). It opens on your zone and follows you until you go elsewhere. The game's world map is left
 -- as it was, QuestBank's layers on it as before; the game's own map key always opens it, QuestBank's Map key this page.
 local _, QB = ...
+if QB.dormant then return end
 local MP = { follow = true }
 QB.MapPage = MP
 

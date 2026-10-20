@@ -12,6 +12,7 @@
 -- A new plan keeps the last one's first stop unless it is clearly better (5%, QuestTrail's margin): what the arrow, the
 -- minimap and the Map page lead to (Target.lua) changes on what you do, not on a near tie.
 local _, QB = ...
+if QB.dormant then return end
 local M = {}
 QB.Model = M
 
