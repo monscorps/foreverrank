@@ -183,15 +183,24 @@ function Auto.Progress()
   end)
 end
 
--- the reward window: finish when there is nothing to choose and nothing to pay
+-- the reward window: finish when there is nothing to choose and nothing to pay. Several rewards to choose from are
+-- yours to pick: the Guide holds QuestBank's pick and the step frame marks it (Guide.lua, with Hand in for me off too
+-- while the Guide is on)
 function Auto.Complete()
-  if byHand() or not on("autoTurnIn") then return end
+  if byHand() then return end
+  local turnIn = on("autoTurnIn")
+  if not turnIn and not QB:GuideOn() then return end
   local id = qid()
   later("reward", function()
-    if byHand() or qid() ~= id or not Auto.MayTurnIn(id) then return end
-    if GetQuestMoneyToGet and (GetQuestMoneyToGet() or 0) > 0 then return end -- it costs money: the game asks
+    if byHand() or qid() ~= id then return end
     local choices = (GetNumQuestChoices and GetNumQuestChoices()) or 0
-    if choices <= 1 then GetQuestReward(choices) end -- one reward: take it; none: finish; several: yours to pick
+    if choices > 1 then
+      if QB.Guide and QB.Guide.HoldReward then QB.Guide.HoldReward(id, choices) end
+      return
+    end
+    if not turnIn or not Auto.MayTurnIn(id) then return end
+    if GetQuestMoneyToGet and (GetQuestMoneyToGet() or 0) > 0 then return end -- it costs money: the game asks
+    GetQuestReward(choices) -- one reward: take it; none: finish
   end)
 end
 

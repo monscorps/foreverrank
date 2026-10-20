@@ -110,12 +110,73 @@ local function place(f)
   f:SetScale(s.scale or 1)
 end
 
+-- the quest-item button: the game's secure button for the first step's quest item (type item, item:<id>), as
+-- Camp.lua's icons; made, set, shown and hidden out of a fight only, else the change waits (SF.pendingItem) for the
+-- next refresh out of it. Under UIParent, anchored to the frame's corner: a frame holding a secure button is
+-- protected with it, and the step frame must still grow, move and hide in a fight
+local function itemButton(f)
+  local b = CreateFrame("Button", "QuestBankStepItem", UIParent, "SecureActionButtonTemplate")
+  b:SetSize(22, 22)
+  b:SetPoint("TOPRIGHT", f, "TOPRIGHT", -PAD, -PAD + 2)
+  b:SetFrameStrata("MEDIUM")
+  b:SetFrameLevel((f:GetFrameLevel() or 0) + 5)
+  b:RegisterForClicks("AnyUp", "AnyDown")
+  b.icon = b:CreateTexture(nil, "ARTWORK")
+  b.icon:SetAllPoints()
+  b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  b:Hide()
+  return b
+end
+function SF.RefreshItem(s)
+  local f = SF.frame
+  if not f then return end
+  local id, _, tex = G.ItemFor(s)
+  local want = id and ("item:" .. id) or nil
+  if not f:IsShown() or (f.card and f.card:IsShown()) then want = nil end -- (the frame away or on a card: no button)
+  if fighting() then SF.pendingItem = true return end
+  SF.pendingItem = nil
+  if want and not f.item then f.item = itemButton(f) end
+  local b = f.item
+  if not b then return end
+  if want then
+    if b:GetAttribute("item") ~= want then b:SetAttribute("type", "item"); b:SetAttribute("item", want) end
+    if tex then b.icon:SetTexture(tex) end
+    if not b:IsShown() then b:Show() end
+  elseif b:IsShown() then
+    b:Hide()
+  end
+end
+
+-- the reward window's pick (G.reward), marked with QuestBank's own glow (Pins.Glow, the game's quest-POI glow) over
+-- the game's button (QuestInfoFrame.rewardsFrame.RewardButtons[index], QuestInfo.lua); never the button itself
+function SF.MarkReward()
+  local r = G.reward
+  local rf = QuestInfoFrame and QuestInfoFrame.rewardsFrame
+  local buttons = rf and rf.RewardButtons
+  local b = r and buttons and buttons[r.index]
+  if not b then
+    if SF.mark and SF.mark:IsShown() then SF.mark:Hide() end
+    return
+  end
+  if not SF.mark then
+    SF.mark = CreateFrame("Frame", nil, UIParent)
+    SF.mark:SetFrameStrata("HIGH")
+    SF.mark.kind = { glow = 170 }
+    if QB.Pins and QB.Pins.Glow then QB.Pins.Glow(SF.mark, GOLD) end
+  end
+  SF.mark:ClearAllPoints()
+  SF.mark:SetPoint("TOPLEFT", b, "TOPLEFT", -4, 4)
+  SF.mark:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 4, -4)
+  SF.mark:Show()
+end
+
 local lastVer, lastTime, lastRemind, lastMembers = -1, nil, false, ""
--- the lines, when something changed
+-- the lines, when something changed (and the item button, once a fight is over)
 function SF.Refresh()
   local f = SF.frame
   if not (f and f:IsShown()) then return end
-  if f.card and f.card:IsShown() then return end
+  if f.card and f.card:IsShown() then SF.RefreshItem(nil) return end
+  if SF.pendingItem and not fighting() then lastVer = -1 end
   local steps = G.Steps()
   local text = G.TimeToLevel()
   local remind = (G.reminder and GetTime and GetTime() < G.reminder) and true or false
@@ -150,7 +211,8 @@ function SF.Refresh()
   end
   for i = #members + 1, #f.members do f.members[i]:Hide() end
   f:SetHeight(y + PAD)
-  if SF.RefreshItem then SF.RefreshItem(steps[1]) end
+  SF.RefreshItem(steps[1])
+  SF.MarkReward()
 end
 
 -- shown while the Guide and the frame are on, or a welcome waits
@@ -164,7 +226,7 @@ function SF.Apply()
   f.__dragOff = s.locked and true or nil -- (the drag script reads the setting; the harness reads this flag)
   f:SetShown(want and true or false)
   lastVer = -1
-  if want then SF.Refresh() end
+  if want then SF.Refresh() else SF.RefreshItem(nil) end
   if SF.AskPending then SF.AskPending() end
 end
 

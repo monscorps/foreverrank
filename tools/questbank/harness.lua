@@ -647,6 +647,21 @@ local function newClient(o)
     return "|cff1eff00|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r"
   end
   env.GetQuestItemInfo = function(kind, i) return nil end
+  -- a quest's usable item in the log (the objective tracker's button): c.questItems[questID] = { itemID, texture }
+  c.questItems = {}
+  env.GetQuestLogSpecialItemInfo = function(index)
+    local e = c.log[index - 2]
+    local it = e and c.questItems[e[1]]
+    if not it then return nil end
+    return "|cffffffff|Hitem:" .. it[1] .. "::::::::1:::::|h[Quest Item]|h|r", it[2], 0, false
+  end
+  -- the game's reward window: its choice buttons, as QuestInfo.lua lays them out (rewardsFrame.RewardButtons)
+  env.QuestInfoFrame = { rewardsFrame = { RewardButtons = {} } }
+  for i = 1, 4 do
+    local rb = newObj("Button", nil, env.UIParent)
+    rb:SetSize(140, 40)
+    env.QuestInfoFrame.rewardsFrame.RewardButtons[i] = rb
+  end
   -- opening the chat box from QuestBank's code writes the game's chat globals and the box's fields as QuestBank:
   -- never done (the link goes into a box you have open, or into the chat window for you to Shift-click)
   env.ChatFrame_OpenChat = function() error("QuestBank opened the chat box (ChatFrame_OpenChat)", 2) end
@@ -16798,6 +16813,53 @@ end)()
     end
     SF.SetScale(1)
     assert(#c.chat == 0 or not c.chat[#c.chat]:find("step", 1, true), "nothing said in chat")
+  end }
+
+  -- the quest-item button: the game's secure button for the first step's quest item, set, shown and hidden out of a
+  -- fight only; a reward window with a choice: Hand in for me stops, QuestBank's pick is marked with its own glow
+  -- over the game's button, nothing is chosen, and the step says so
+  G6CASES[#G6CASES + 1] = { "the quest-item button out of a fight; a reward choice stops, marks, does not choose", function()
+    local c = human("Itemer", { { 7, 0 } }, { [783] = true }, nil, 5)
+    local QB, G, SF = c.QB, c.QB.Guide, c.QB.StepFrame
+    c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/8", type = "monster", finished = false, numFulfilled = 3, numRequired = 8 } } }
+    c.questItems[7] = { 6948, 134414 }
+    QB:Settings().guide.on = true; QB:Settings().welcome = nil
+    settle(c); SF.Apply(); SF.Refresh()
+    local f = c.env.QuestBankStep
+    assert(f.item and f.item:IsShown() and f.item:GetAttribute("type") == "item" and f.item:GetAttribute("item") == "item:6948", "the item button set: " .. tostring(f.item and f.item:GetAttribute("item")))
+    -- in a fight the button stays as it is; the change waits
+    c.combat = true
+    c.questItems[7] = nil
+    settle(c); SF.Refresh()
+    assert(f.item:IsShown() and f.item:GetAttribute("item") == "item:6948", "in a fight: nothing changes")
+    c.combat = false
+    c.ev(QB.eventFrame, "PLAYER_REGEN_ENABLED")
+    SF.Refresh()
+    assert(not f.item:IsShown(), "out of it: the button goes")
+    -- a reward window with two choices: Hand in for me stops, the Gear finder's pick is marked, nothing chosen
+    QB:Settings().autoTurnIn = true
+    c.window = { id = 7, xp = 85, title = "Kobold Camp Cleanup", rc = { 2362, 2361 } } -- a shield and a hammer
+    c.auto = {}
+    c.ev(QB.eventFrame, "QUEST_COMPLETE")
+    tick(c, 1)
+    for _, a in ipairs(c.auto) do assert(not a:find("^GetQuestReward"), "nothing chosen: " .. a) end
+    assert(G.reward and G.reward.qid == 7 and (G.reward.index == 1 or G.reward.index == 2), "the Guide holds the choice: " .. tostring(G.reward and G.reward.index))
+    SF.Refresh()
+    assert(f.now:GetText():find("^Choose a reward: "), "the step says so: " .. f.now:GetText())
+    assert(SF.mark and SF.mark:IsShown(), "the pick is marked")
+    c.ev(QB.eventFrame, "QUEST_FINISHED")
+    assert(not SF.mark:IsShown() and G.reward == nil, "the window shut: the mark goes")
+    SF.Refresh()
+    assert(not f.now:GetText():find("^Choose a reward: "), "the step is back: " .. f.now:GetText())
+    -- with Hand in for me off, the Guide still holds the pick (the window is yours; the mark helps)
+    QB:Settings().autoTurnIn = false
+    c.ev(QB.eventFrame, "QUEST_COMPLETE")
+    tick(c, 1)
+    assert(G.reward and G.reward.qid == 7, "the pick is held with Hand in for me off")
+    for _, a in ipairs(c.auto) do assert(not a:find("^GetQuestReward"), "and nothing chosen: " .. a) end
+    c.ev(QB.eventFrame, "QUEST_FINISHED")
+    c.window = nil
+    assert(#c.chat == 0 or not c.chat[#c.chat]:find("reward", 1, true), "nothing said in chat")
   end }
 
   for _, case in ipairs(G6CASES) do

@@ -9,6 +9,8 @@
 --   done      a step completes when the game says so: the quest accepted, every objective of its spots done or the
 --             quest complete, the quest handed in, the flight landed, the level reached
 --   skipped   "Not now" for an hour (QuestBankDB.chars[key].guide.later), "Drop" for good (QB:SetSkipped)
+--   reward    a hand-in with a choice: Auto.lua hands it here (G.HoldReward), the step says QuestBank's pick, the
+--             frame marks it over the game's button; nothing is chosen for you
 --   party     the fill weighs what the party holds (G.Rank); each member's first step comes by Sync's 1G line
 --             (G.MemberSteps) for the frame
 --   time      "about 14 min to level 6" (G.TimeToLevel): the plan's XP a minute, then the measured XP an hour
@@ -482,6 +484,47 @@ function G.TimeToLevel()
   return spanText(mins) .. " to level " .. (level + 1), mins, measured
 end
 
+-- the quest's usable item, for the frame's button (GetQuestLogSpecialItemInfo, as the objective tracker's button:
+-- link, texture, charges, showItemWhenComplete): id, link, texture; nil without one
+function G.ItemFor(s)
+  if not (s and s.qid and type(GetQuestLogSpecialItemInfo) == "function") then return nil end
+  local e = QB.state.log[s.qid]
+  if not (e and e.index) then return nil end
+  local ok, link, tex = pcall(GetQuestLogSpecialItemInfo, e.index)
+  link, tex = ok and plain(link) or nil, ok and plain(tex) or nil
+  local id = type(link) == "string" and tonumber(link:match("item:(%d+)"))
+  if not id then return nil end
+  return id, link, tex
+end
+
+-- a hand-in with a reward to choose: the Guide holds QuestBank's pick (UI.BestReward's gear, else the first trinket,
+-- else the first) and the frame marks it; nothing is chosen for you. G.reward = { qid, index, name } while the window
+-- with the choice is open; the list is made again so the step says so
+function G.HoldReward(qid, n)
+  local level = QB.state.level or 1
+  local UI = QB.UI
+  local best = UI and UI.BestReward and (UI.BestReward(qid, "gear", level) or UI.BestReward(qid, "trinket", level)) or nil
+  local index, name = 1, nil
+  if type(GetQuestItemLink) == "function" then
+    for i = 1, n do
+      local ok, link = pcall(GetQuestItemLink, "choice", i)
+      link = ok and plain(link) or nil
+      local id = type(link) == "string" and tonumber(link:match("item:(%d+)"))
+      if id and best and id == best then index = i end
+      if i == index and type(link) == "string" then name = link:match("%[(.-)%]") end
+    end
+  end
+  G.reward = { qid = qid, index = index, name = name }
+  G.Replan()
+  if QB.StepFrame and QB.StepFrame.MarkReward then QB.StepFrame.MarkReward() end
+end
+function G.DropReward()
+  if not G.reward then return end
+  G.reward = nil
+  G.Replan()
+  if QB.StepFrame and QB.StepFrame.MarkReward then QB.StepFrame.MarkReward() end
+end
+
 -- the steps, anew: the target first (its quest's objective spot, or its stop's hand-ins), then the rest of the route
 -- stop by stop (each stop: the objectives of its quests on the way, its hand-ins, then the pick-ups there: what you
 -- hand in to an NPC comes before what you take from the same one), then the pick-ups at no stop of the route
@@ -619,10 +662,16 @@ function G.Replan()
   else
     G.reminder, G.remindedAt = nil, nil
   end
+  -- a reward to choose in the open window: that first, whatever else stands
+  if G.reward then
+    local s = step("reward")
+    s.qid, s.name = G.reward.qid, G.reward.name
+    table.insert(G.steps, 1, s)
+  end
   -- the arrow's step on the way to the first step (a flight master, a pier, the tram: Target.lua's T.Step) goes before it
   local ts, onWay = nil, false
   if QB.Target and QB.Target.Step then ts, onWay = QB.Target.Step() end
-  if ts and onWay and G.steps[1] and G.steps[1].kind ~= "corpse" then
+  if ts and onWay and G.steps[1] and G.steps[1].kind ~= "corpse" and G.steps[1].kind ~= "reward" then
     local s = step("travel")
     s.text, s.c, s.wx, s.wy = ts.name, ts.c, ts.wx, ts.wy
     s.atlas, s.icon = ts.atlas, ts.icon
@@ -683,6 +732,7 @@ function G.OnEvent(event, a1, a2)
     return
   end
   if event == "TRAINER_SHOW" then onTrainer() return end
+  if event == "QUEST_FINISHED" then G.DropReward() return end
   if event == "QUEST_ACCEPTED" or event == "QUEST_TURNED_IN" or event == "PLAYER_LEVEL_UP" then
     QB:MarkDirty() -- (Core.lua marks it too: the list is made again after the re-plan)
   end
