@@ -1,0 +1,11 @@
+# GitHub Pages runs Jekyll over the whole repo. Only the site's own folders are pages; the rest holds the addons'
+# sources, the design docs and the worker, which Jekyll must not render (a "{%" in a design doc broke the whole
+# build on 2026-10-20).
+exclude:
+  - docs
+  - tools
+  - worker
+  - research
+  - README.md
+  - SOURCES.md
+  - questbank/img/README.md
