@@ -138,7 +138,7 @@ local function newObj(kind, template, parent)
         elseif k == "GetStringWidth" or k == "GetUnboundedStringWidth" then return textWidth(self.__text, self.__size)
         elseif k == "GetStringHeight" then return self.__size + 2
         elseif k == "GetFont" then return "Fonts\\FRIZQT__.TTF", self.__size, ""
-        elseif k == "SetFont" then self.__size = a[2] or self.__size
+        elseif k == "SetFont" then self.__fontFile = a[1] or self.__fontFile; self.__size = a[2] or self.__size
         elseif k == "SetFontObject" then self.__size = a[1] and a[1].__fontSize or 12
         elseif k == "SetJustifyH" then self.__justify = a[1]
         elseif k == "SetWordWrap" then self.__wrap = a[1] and true or false
@@ -18190,6 +18190,28 @@ end)()
   assert(v1 - v0 < (v2 - v1) - 4096, "the views at login take at least 4 MB less than 5.4.1's")
   c = owner
 end)()
+
+-- a host's skin (Cute_Quest): set before the login, the step frame's text takes its font and colours and its frame
+-- its backdrop; the arrow's lines and the Gear page's text too; QuestBank itself sets none and looks as before
+do
+  local c = newClient({ name = "Skinned", level = 5, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+    log = { { 7, 0 } }, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+  local backdrops = 0
+  c.QB.Skin = { font = "Fonts\\ARIALN.TTF", INK = { 0.86, 0.86, 0.86 }, SOFT = { 0.58, 0.58, 0.58 }, ACCENT = { 0.96, 0.96, 0.96 },
+    Backdrop = function(f) backdrops = backdrops + 1; f.__flat = true end }
+  login(c)
+  c.QB:Settings().guide.on, c.QB:Settings().guide.frame, c.QB:Settings().welcome = true, true, nil
+  c.QB.StepFrame.Apply(); c.QB.StepFrame.Refresh()
+  local f = c.env.QuestBankStep
+  -- (the mock records a SetBackdrop call as __inset; __backdrop is the frame's template)
+  assert(f and f.__flat and backdrops == 1 and f.__inset == nil, "the step frame took the host's backdrop and not its own")
+  assert(f.now.__fontFile == "Fonts\\ARIALN.TTF", "the step now in the skin's font: " .. tostring(f.now.__fontFile))
+  local r, g, b = f.now:GetTextColor()
+  assert(math.abs(r - 0.86) < 0.01 and math.abs(g - 0.86) < 0.01, "the step now in the skin's ink")
+  c.QB.Arrow:Set(true)
+  local a = c.env.QuestBankArrow
+  assert(a and a.name.__fontFile == "Fonts\\ARIALN.TTF", "the arrow's name line in the skin's font")
+end
 
 local seen = {}
 local unique = {}

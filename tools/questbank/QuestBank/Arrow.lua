@@ -768,6 +768,19 @@ function A:ApplyLook()
     f.kind:Hide()
     if f.bg then f.bg:Hide() end
   end
+  -- a host's skin (QB.Skin: Cute_Quest): its font on every line, its colours; QuestBank sets none
+  local sk = QB.Skin
+  if sk then
+    for _, t in ipairs({ f.name, f.step, f.kind, f.dist, f.hint }) do
+      if sk.font then t:SetFont(sk.font, t == f.name and 13 or 11, "") end
+    end
+    local ink, soft, accent = sk.INK or { 1, 1, 1 }, sk.SOFT or { 0.85, 0.85, 0.85 }, sk.ACCENT or { 1, 0.82, 0 }
+    f.name:SetTextColor(ink[1], ink[2], ink[3])
+    f.step:SetTextColor(soft[1], soft[2], soft[3])
+    f.dist:SetTextColor(soft[1], soft[2], soft[3])
+    f.kind:SetTextColor(accent[1], accent[2], accent[3])
+    f.hint:SetTextColor(soft[1], soft[2], soft[3])
+  end
   f.act:SetSize(A.actSize, A.actSize)
   -- (laid out afresh: the puck, the lines' places, the steps row)
   A.pointing, A.distY, A.h, A.trailY, A.trailPlan, A.line1, A.hintY = nil, nil, nil, nil, nil, nil, nil

@@ -29,6 +29,13 @@ local ASK_FOR = 15       -- seconds an asked-for item counts as loading
 local INK = { 0.93, 0.88, 0.78 }
 local SOFT = { 0.66, 0.60, 0.50 }
 local GOLD = { 1, 0.82, 0 }
+-- a host's skin (QB.Skin: Cute_Quest): its font, and its colours for INK, SOFT and GOLD (the skin's ACCENT)
+local function tone(c)
+  local sk = QB.Skin
+  if not sk then return c end
+  if c == INK then return sk.INK or c elseif c == SOFT then return sk.SOFT or c elseif c == GOLD then return sk.ACCENT or c end
+  return c
+end
 local GOOD = { 0.42, 0.86, 0.45 }
 local QUALITY = { [0] = { 0.62, 0.62, 0.62 }, { 1, 1, 1 }, { 0.12, 1, 0 }, { 0, 0.44, 0.87 }, { 0.64, 0.21, 0.93 }, { 1, 0.5, 0 },
                   { 0.9, 0.8, 0.5 }, { 0, 0.8, 1 } }
@@ -291,7 +298,8 @@ local frame
 local function fs(parent, font, size, color, w, justify)
   local t = parent:CreateFontString(nil, "OVERLAY", font or "GameFontNormal")
   if size and t.SetFont then local f, _, fl = t:GetFont(); if f then t:SetFont(f, size, fl) end end
-  if color then t:SetTextColor(color[1], color[2], color[3]) end
+  if QB.Skin and QB.Skin.font and t.SetFont then t:SetFont(QB.Skin.font, size or select(2, t:GetFont()), "") end
+  if color then color = tone(color); t:SetTextColor(color[1], color[2], color[3]) end
   if w then t:SetWidth(w) end
   t:SetJustifyH(justify or "LEFT")
   t:SetWordWrap(false)

@@ -14,7 +14,14 @@ QB.StepFrame = SF
 local G = QB.Guide
 local WIDTH, PAD, ROW = 260, 12, 18 -- (PAD: the text sits inside the 12 px border art)
 local SLATE = { 0.055, 0.07, 0.095 }
-local INK, INK_SOFT, GOLD = { 0.93, 0.88, 0.78 }, { 0.62, 0.60, 0.54 }, { 1, 0.82, 0.3 }
+local LOOK = { INK = { 0.93, 0.88, 0.78 }, SOFT = { 0.62, 0.60, 0.54 }, GOLD = { 1, 0.82, 0.3 } }
+-- a host's skin (QB.Skin: Cute_Quest sets one before the login; QuestBank none): its font and its colours for
+-- the frame's INK, SOFT and GOLD (the skin's ACCENT), and its backdrop
+local function tone(key)
+  local sk = QB.Skin
+  if sk then return (key == "GOLD" and sk.ACCENT) or sk[key] or LOOK[key] end
+  return LOOK[key]
+end
 local TICK = 0.5
 local SCALES = { 0.8, 1, 1.2 }
 SF.SCALES = SCALES
@@ -22,14 +29,19 @@ SF.SCALES = SCALES
 local function settings() return QB:Settings().guide end
 local function fighting() return InCombatLockdown and InCombatLockdown() or false end
 
-local function fs(parent, size, color, width)
+local function fs(parent, size, key, width)
   local t = parent:CreateFontString(nil, "OVERLAY")
   local fo = GameFontNormal
-  if fo then
+  local sk = QB.Skin
+  if sk and sk.font then
+    if fo then t:SetFontObject(fo) end
+    t:SetFont(sk.font, size, "")
+  elseif fo then
     t:SetFontObject(fo)
     local path, _, flags = fo:GetFont()
     if path then t:SetFont(path, size, flags) end
   end
+  local color = tone(key)
   t:SetTextColor(color[1], color[2], color[3])
   t:SetJustifyH("LEFT")
   t:SetWordWrap(false)
@@ -48,6 +60,7 @@ local function rowEnter(self)
   local full = s and G.Text(s) or ""
   if full == "" or self.text:GetText() == full then return end
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+  local INK = tone("INK")
   GameTooltip:AddLine(full, INK[1], INK[2], INK[3], true)
   GameTooltip:Show()
 end
@@ -61,11 +74,15 @@ local function build()
   f:SetMovable(true)
   f:EnableMouse(true)
   f:RegisterForDrag("LeftButton")
-  if f.SetBackdrop then
+  local sk = QB.Skin
+  if sk and sk.Backdrop then
+    sk.Backdrop(f)
+  elseif f.SetBackdrop then
     f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize = 12,
       insets = { left = 3, right = 3, top = 3, bottom = 3 } })
     f:SetBackdropColor(SLATE[1], SLATE[2], SLATE[3], 0.92)
-    f:SetBackdropBorderColor(GOLD[1], GOLD[2], GOLD[3], 0.5)
+    local gold = tone("GOLD")
+    f:SetBackdropBorderColor(gold[1], gold[2], gold[3], 0.5)
   end
   f:SetScript("OnDragStart", function(self) if not settings().locked then self:StartMoving() end end)
   f:SetScript("OnDragStop", QB.Safe(function(self)
@@ -80,7 +97,7 @@ local function build()
     b:SetSize(WIDTH - PAD * 2, ROW)
     b:SetPoint("TOPLEFT", PAD, -PAD - (i - 1) * ROW)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    b.text = fs(b, i == 1 and 12 or 11, i == 1 and INK or INK_SOFT, WIDTH - PAD * 2)
+    b.text = fs(b, i == 1 and 12 or 11, i == 1 and "INK" or "SOFT", WIDTH - PAD * 2)
     b.text:SetPoint("LEFT", 0, 0)
     b.i = i
     b:SetScript("OnClick", QB.Safe(function(self, button)
@@ -99,9 +116,9 @@ local function build()
     f.rows[i] = b
   end
   f.now, f.next1, f.next2 = f.rows[1].text, f.rows[2].text, f.rows[3].text
-  f.time = fs(f, 10, INK_SOFT, WIDTH - PAD * 2)
+  f.time = fs(f, 10, "SOFT", WIDTH - PAD * 2)
   f.time:SetPoint("TOPLEFT", PAD, -PAD - ROW * 3)
-  f.remind = fs(f, 10, GOLD, WIDTH - PAD * 2)
+  f.remind = fs(f, 10, "GOLD", WIDTH - PAD * 2)
   f.remind:SetPoint("TOPLEFT", PAD, -PAD - ROW * 4)
   f.remind:Hide()
   f.members = {}
@@ -193,7 +210,7 @@ function SF.MarkReward()
     SF.mark = CreateFrame("Frame", nil, UIParent)
     SF.mark:SetFrameStrata("HIGH")
     SF.mark.kind = { glow = 170 }
-    if QB.Pins and QB.Pins.Glow then QB.Pins.Glow(SF.mark, GOLD) end
+    if QB.Pins and QB.Pins.Glow then QB.Pins.Glow(SF.mark, tone("GOLD")) end
   end
   SF.mark:ClearAllPoints()
   SF.mark:SetPoint("TOPLEFT", b, "TOPLEFT", -4, 4)
@@ -234,7 +251,7 @@ function SF.Refresh()
   end
   for i, m in ipairs(members) do
     local t = f.members[i]
-    if not t then t = fs(f, 10, INK_SOFT, WIDTH - PAD * 2); f.members[i] = t end
+    if not t then t = fs(f, 10, "SOFT", WIDTH - PAD * 2); f.members[i] = t end
     t:ClearAllPoints()
     t:SetPoint("TOPLEFT", PAD, -y)
     local name = (QB.Sync and QB.Sync.ColorName) and QB.Sync.ColorName(m.name, m.class) or m.name
@@ -263,7 +280,7 @@ local function buildCard(f)
   local card = CreateFrame("Frame", nil, f)
   card:SetPoint("TOPLEFT", PAD, -PAD)
   card:SetSize(CARD_W, 140)
-  card.title = fs(card, 12, INK, CARD_W)
+  card.title = fs(card, 12, "INK", CARD_W)
   card.title:SetPoint("TOPLEFT", 0, 0)
   card.title:SetWordWrap(true)
   -- the welcome's rows: the title's two lines, then a button, a button, the check, Done
@@ -274,7 +291,7 @@ local function buildCard(f)
   card.turnIn = CreateFrame("CheckButton", nil, card, "UICheckButtonTemplate")
   card.turnIn:SetSize(24, 24)
   card.turnIn:SetPoint("TOPLEFT", -4, -88)
-  card.turnIn.label = fs(card, 11, INK, CARD_W - 28)
+  card.turnIn.label = fs(card, 11, "INK", CARD_W - 28)
   card.turnIn.label:SetPoint("LEFT", card.turnIn, "RIGHT", 2, 0)
   card.turnIn.label:SetText("Hand in finished quests for me")
   card.done = cardButton(card, "Done", 90)
