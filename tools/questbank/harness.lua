@@ -16628,6 +16628,58 @@ end)()
     end
   end }
 
+  -- a level-10 human warrior in Northshire (10 is a warrior learn level) with a hand-in in Goldshire: "Train at
+  -- Lyria Du Lac" (Goldshire's warrior trainer) comes before the Goldshire hand-in; the window read with nothing
+  -- left to learn completes it; no trainer known near the route gives a reminder line, not a step; TRAINER_SHOW at
+  -- an unknown trainer learns it (one the seed knows is not written down again)
+  G6CASES[#G6CASES + 1] = { "the train step before the next town hand-in; a trainer learned in play", function()
+    local c = human("Trainee", { { 62, 1 } }, {}, nil, 10) -- The Fargodeep Mine, handed in to Marshal Dughan in Goldshire
+    local QB, G, D = c.QB, c.QB.Guide, c.QB.Data
+    QB:Settings().guide.on = true
+    assert(G.NeedsTraining(10), "level 10 is a warrior learn level and nothing trained yet")
+    settle(c)
+    local train, handin
+    for i, s in ipairs(G.steps) do
+      if s.kind == "train" then train = i end
+      if s.kind == "handin" and s.qid == 62 and not handin then handin = i end
+    end
+    assert(train and handin and train < handin, "Train before the Goldshire hand-in: " .. tostring(train) .. " / " .. tostring(handin))
+    assert(G.Text(G.steps[train]) == "Train at Lyria Du Lac", G.Text(G.steps[train]))
+    assert(not G.reminder, "a step, so no reminder")
+    -- the window: everything learned
+    c.env.IsTradeskillTrainer = function() return false end
+    c.env.GetNumTrainerServices = function() return 1 end
+    c.env.GetTrainerServiceInfo = function() return "Heroic Strike", "used", 0, 10 end
+    c.npcName = "Lyria Du Lac"
+    c.npcGUID = "Creature-0-4455-0-12-913-0000A1B2C3"
+    c.ev(QB.eventFrame, "TRAINER_SHOW")
+    settle(c)
+    for _, s in ipairs(G.steps) do assert(s.kind ~= "train", "trained: no train step") end
+    assert(G.DB().trained == 10, "noted as trained at 10")
+    assert(not (QB.Discover.DB().trainer and QB.Discover.DB().trainer["c913"]), "a trainer the seed knows is not written down")
+    -- a class with no known trainer near the route: a reminder, no step
+    local keep = D.TRAINER
+    D.TRAINER = {}
+    G.DB().trained = 0
+    settle(c)
+    for _, s in ipairs(G.steps) do assert(s.kind ~= "train", "no trainer known: no step") end
+    assert(G.reminder and G.reminder > c.clock, "a reminder line instead")
+    -- learned in play: the window at an unknown trainer notes it, and the step is back
+    c.npcGUID = "Creature-0-4455-0-12-999999-0000A1B2C3"
+    c.env.GetTrainerServiceInfo = function() return "Rend", "available", 0, 10 end
+    c.ev(QB.eventFrame, "TRAINER_SHOW")
+    local t = QB.Discover.DB().trainer and QB.Discover.DB().trainer["c999999"]
+    assert(t and t.n == "Lyria Du Lac" and t.cl == 1 and t.m == 1429, "the trainer learned: name, class, place")
+    assert(G.DB().trained == 0, "something still to learn: not trained")
+    settle(c)
+    local back = false
+    for _, s in ipairs(G.steps) do if s.kind == "train" then back = true end end
+    assert(back, "a learned trainer gives the step")
+    assert(not G.reminder, "and the reminder goes")
+    D.TRAINER = keep
+    assert(#c.chat == 0 or not c.chat[#c.chat]:lower():find("train", 1, true), "nothing said in chat")
+  end }
+
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")

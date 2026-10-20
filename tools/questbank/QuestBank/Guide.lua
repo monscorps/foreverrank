@@ -9,6 +9,8 @@
 --   done      a step completes when the game says so: the quest accepted, every objective of its spots done or the
 --             quest complete, the quest handed in, the flight landed, the level reached
 --   skipped   "Not now" for an hour (QuestBankDB.chars[key].guide.later), "Drop" for good (QB:SetSkipped)
+--   train     at your level's new spells, the trainer of your class nearest a hand-in stop (D.TRAINER, or learned at
+--             its window into QuestBankDB.disc.trainer); none in reach: a reminder line, no step
 -- Replan runs after each re-plan (Core.lua, QB:Changed) and on the Guide's own events; it reuses its tables, so a
 -- re-plan makes a few kilobytes and a tick none.
 local _, QB = ...
@@ -279,6 +281,120 @@ function G.Fill(level)
   return n
 end
 
+-- the Train step: your level teaches something (D.SPELL_LV, the levels a class learns a new spell at) that you have
+-- not trained yet (QuestBankDB.chars[key].guide.trained, the last level trained at), and a trainer of your class
+-- (the seed D.TRAINER, or one learned at its window: QuestBankDB.disc.trainer) stands within TRAIN_MIN minutes'
+-- walk of a route stop with a hand-in: "Train at <name>" goes before that stop's hand-in. No trainer known in reach:
+-- G.reminder holds a deadline while the frame shows "New spells at your class trainer" (REMIND_S), once a level
+local TRAIN_MIN, REMIND_S = 3, 180
+G.TRAIN_MIN, G.REMIND_S = TRAIN_MIN, REMIND_S
+
+local function classID()
+  if type(UnitClass) ~= "function" then return nil, nil end
+  local ok, _, tok, id = pcall(UnitClass, "player")
+  if not ok then return nil, nil end
+  return plain(id), plain(tok)
+end
+
+function G.NeedsTraining(level)
+  if not level or level <= 1 then return false end -- (a new character holds its first spells)
+  local _, tok = classID()
+  local levels = tok and QB.Data.SPELL_LV and QB.Data.SPELL_LV[tok]
+  if not levels then return false end
+  if (laterDB().trained or 0) >= level then return false end
+  for _, l in ipairs(levels) do if l == level then return true end end
+  return false
+end
+
+-- the trainers of your class as places ({name, c, wx, wy, m, x, y, hub = 0, walk = 0}: on foot, M.Between): the seed's
+-- rows and those learned in play; made again only when the seed table or the learned count changed
+local trainerBuf, trainerFor, trainerN, trainerCls = {}, nil, -1, nil
+local function trainers()
+  local id = classID()
+  local disc = QB.Discover and QB.Discover.DB and QB.Discover.DB()
+  local learned = disc and disc.trainer
+  local n = 0
+  if learned then for _ in pairs(learned) do n = n + 1 end end
+  if trainerFor == QB.Data.TRAINER and trainerN == n and trainerCls == id then return trainerBuf end
+  trainerFor, trainerN, trainerCls = QB.Data.TRAINER, n, id
+  for k = #trainerBuf, 1, -1 do trainerBuf[k] = nil end
+  if not id then return trainerBuf end
+  for _, t in ipairs(QB.Data.TRAINER or {}) do
+    if t[3] == id then trainerBuf[#trainerBuf + 1] = { name = t[2], c = t[4], wx = t[5], wy = t[6], m = t[7], x = t[8], y = t[9], hub = 0, walk = 0 } end
+  end
+  for _, t in pairs(learned or {}) do
+    if t.cl == id and t.m and t.x and t.y then
+      local w = QB.Model.World(t.m, t.x, t.y, wbuf)
+      if w then trainerBuf[#trainerBuf + 1] = { name = t.n, c = w.c, wx = w.wx, wy = w.wy, m = t.m, x = t.x, y = t.y, hub = 0, walk = 0 } end
+    end
+  end
+  return trainerBuf
+end
+
+-- the nearest trainer of your class within TRAIN_MIN minutes of a stop (a place: {c, wx, wy, hub, walk})
+function G.Trainer(stop)
+  if not (stop and stop.c and stop.hub) then return nil end
+  local M = QB.Model
+  local mf = M.Factor(QB:Mounted())
+  local best, bm
+  for _, t in ipairs(trainers()) do
+    if t.c == stop.c then
+      local m = M.Between(stop, t, QB.faction, mf)
+      if m and m <= TRAIN_MIN and (not bm or m < bm) then best, bm = t, m end
+    end
+  end
+  return best
+end
+
+-- the seed knows this NPC already (by id): nothing to write down
+local function seeded(key)
+  local id = tonumber(key and key:match("^c(%d+)$"))
+  if not id then return false end
+  for _, t in ipairs(QB.Data.TRAINER or {}) do if t[1] == id then return true end end
+  return false
+end
+
+-- the trainer's window: the NPC is written down as a trainer of your class (a class trainer's window opens for its
+-- class alone; a profession's is told apart by IsTradeskillTrainer), and with nothing left to learn, this level is
+-- trained. Nothing said in chat
+local function onTrainer()
+  if type(IsTradeskillTrainer) == "function" then
+    local ok, trade = pcall(IsTradeskillTrainer)
+    if ok and plain(trade) == true then return end
+  end
+  local id = classID()
+  local okG, guid, okN, name = false, nil, false, nil
+  if type(UnitGUID) == "function" then okG, guid = pcall(UnitGUID, "npc") end
+  if type(UnitName) == "function" then okN, name = pcall(UnitName, "npc") end
+  local key = okG and QB.Discover and QB.Discover.Key and QB.Discover.Key(guid)
+  name = okN and plain(name) or nil
+  if key and type(name) == "string" and id and not seeded(key) and QB.Discover.DB then
+    local m = plain(QB.API.MapID())
+    local pos = type(m) == "number" and C_Map and C_Map.GetPlayerMapPosition and select(2, pcall(C_Map.GetPlayerMapPosition, m, "player"))
+    pos = plain(pos)
+    local x, y = type(pos) == "table" and plain(pos.x), type(pos) == "table" and plain(pos.y)
+    if type(x) == "number" and type(y) == "number" then
+      local disc = QB.Discover.DB()
+      disc.trainer = disc.trainer or {}
+      local t = disc.trainer[key]
+      if type(t) ~= "table" then t = {}; disc.trainer[key] = t end
+      t.n, t.cl, t.m, t.x, t.y = name, id, m, x * 100, y * 100
+    end
+  end
+  local okS, n = false, 0
+  if type(GetNumTrainerServices) == "function" then okS, n = pcall(GetNumTrainerServices) end
+  n = okS and plain(n) or 0
+  local avail = 0
+  if type(n) == "number" and type(GetTrainerServiceInfo) == "function" then
+    for i = 1, n do
+      local okI, _, kind = pcall(GetTrainerServiceInfo, i)
+      if okI and plain(kind) == "available" then avail = avail + 1 end
+    end
+  end
+  if avail == 0 then laterDB().trained = QB.state.level or 1 end
+  QB:MarkDirty()
+end
+
 -- nothing worth taking in reach: where to kill until the next level that opens quests, and where they are. The
 -- whole catalog is scanned for the nearest kill spot, but only when the list is empty (rare); one table reused
 local grind = { kind = "grind" }
@@ -439,6 +555,33 @@ function G.Replan()
       end
     end
   end
+  -- new spells to learn: Train at the trainer nearest a stop with a hand-in to come, before that hand-in; none within
+  -- reach: the reminder line (once a level)
+  local level = QB.state.level or 1
+  if G.NeedsTraining(level) then
+    local placed = false
+    for i, s in ipairs(G.steps) do
+      if s.kind == "handin" and not s.near then
+        local stop
+        for _, leg in ipairs(legs) do if leg.stop and leg.stop.seen and leg.stop.seen[s.npc] then stop = leg.stop break end end
+        local t = stop and G.Trainer(stop)
+        if t then
+          local ts = step("train")
+          ts.name, ts.c, ts.wx, ts.wy, ts.m, ts.x, ts.y = t.name, t.c, t.wx, t.wy, t.m, t.x, t.y
+          table.insert(G.steps, i, ts)
+          placed = true
+          break
+        end
+      end
+    end
+    if placed then
+      G.reminder, G.remindedAt = nil, nil
+    elseif G.remindedAt ~= level then
+      G.reminder, G.remindedAt = (GetTime and GetTime() or 0) + REMIND_S, level
+    end
+  else
+    G.reminder, G.remindedAt = nil, nil
+  end
   -- the arrow's step on the way to the first step (a flight master, a pier, the tram: Target.lua's T.Step) goes before it
   local ts, onWay = nil, false
   if QB.Target and QB.Target.Step then ts, onWay = QB.Target.Step() end
@@ -488,6 +631,7 @@ function G.OnEvent(event, a1, a2)
     if QB.Arrow and QB.Arrow.Invalidate then QB.Arrow.Invalidate() end
     return
   end
+  if event == "TRAINER_SHOW" then onTrainer() return end
   if event == "QUEST_ACCEPTED" or event == "QUEST_TURNED_IN" or event == "PLAYER_LEVEL_UP" then
     QB:MarkDirty() -- (Core.lua marks it too: the list is made again after the re-plan)
   end
