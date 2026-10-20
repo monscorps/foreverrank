@@ -259,7 +259,8 @@ function M.Set(key, on)
     if on then if not registered(key) then M.Load(key) else enable(key, true) end
     else M.pending[key] = nil; enable(key, false) end
   end
-  if C.UI and C.UI.frame and C.UI.frame:IsShown() then C.UI:Draw() end
+  -- (the redraw on its own: an error in it leaves the choice made and recorded under /cute errors)
+  if C.UI and C.UI.frame and C.UI.frame:IsShown() then C.Safe(function() C.UI:Draw() end, "modules: set " .. key)() end
 end
 
 -- what Settings > Modules lists: the built-in modules and the module addons the client has, each { key, title, on,

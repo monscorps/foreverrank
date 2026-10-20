@@ -45,11 +45,13 @@ function Err.Record(msg, stack, where, quiet)
 end
 function Err.Note(msg, where) Err.Record(msg, "", where, true) end
 
--- a function that records its errors instead of raising them
-function C.Safe(fn, where)
+-- a function that records its errors instead of raising them; finally, where given, runs after fn on every path,
+-- error or none, before the error is recorded (or, under CUTE_DEV, raised): a flag the body sets is reset by it
+function C.Safe(fn, where, finally)
   return function(...)
     local n, args = select("#", ...), { ... }
     local ok, err = xpcall(function() return fn(unpack(args, 1, n)) end, catch)
+    if finally then finally() end
     if not ok then
       if CUTE_DEV then error(err.msg .. "\n" .. err.stack, 0) end
       Err.Record(err.msg, err.stack, where)

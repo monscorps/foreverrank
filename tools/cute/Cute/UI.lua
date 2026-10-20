@@ -142,10 +142,11 @@ local function check(parent)
   cb.label:SetPoint("LEFT", cb, "RIGHT", 6, 0)
   cb:SetHighlightTexture(FLAT, "ADD")
   cb:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.08)
-  cb:SetScript("OnClick", function(self, ...)
+  -- (an error in a click's path is recorded, never left with the window half drawn: Core.lua C.Safe)
+  cb:SetScript("OnClick", C.Safe(function(self, ...)
     self.fill:SetShown(self:GetChecked())
     if self.fn then self.fn(self, ...) end
-  end)
+  end, "check"))
   function cb:Set(on) self:SetChecked(on); self.fill:SetShown(on and true or false) end
   function cb:SetOn(on) self:SetEnabled(on); color(self.label, on and INK or MUTE); self.fill:SetVertexColor(1, 1, 1, on and 1 or 0.4) end
   return cb
@@ -172,10 +173,10 @@ local function checkRow(parent)
   r.label:SetPoint("LEFT", r.box, "RIGHT", 6, 0)
   r:SetHighlightTexture(FLAT, "ADD")
   r:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
-  r:SetScript("OnClick", function(self, ...)
+  r:SetScript("OnClick", C.Safe(function(self, ...)
     self:Set(not self.on)
     if self.fn then self.fn(self, ...) end
-  end)
+  end, "check"))
   function r:Set(on) self.on = on and true or false; self.fill:SetShown(self.on) end
   function r:GetChecked() return self.on == true end
   function r:SetOn(on) self:SetEnabled(on); color(self.label, on and INK or MUTE); self.fill:SetVertexColor(1, 1, 1, on and 1 or 0.4) end
@@ -1757,8 +1758,10 @@ function UI:DrawFooter()
   self.footer:SetText(s)
 end
 
-function UI:Draw()
-  self.drawing = true
+-- the whole draw runs under C.Safe: an error anywhere in it (the client swallows one with scriptErrors off) lands in
+-- /cute errors as "draw", and drawing is reset on every path, so the next Refresh, ValueChanged or scroll draws
+-- again instead of returning early for the rest of the session (0.6.0 left the flag set)
+local function drawBody(self)
   self.drawnAt = clock()
   self.draws = (self.draws or 0) + 1
   -- the page says which stats it shows (a change to another draws nothing) and, for a virtual list, how to scroll
@@ -1802,7 +1805,11 @@ function UI:Draw()
   if self.virtual then self.virtual() end
   self:DrawStatus(officer)
   self:DrawFooter()
-  self.drawing = false
+end
+local drawSafe = C.Safe(drawBody, "draw", function() UI.drawing = false end)
+function UI:Draw()
+  self.drawing = true
+  drawSafe(self)
 end
 -- the status line: who is online with the addon, your view, and "update available" while a guild mate runs a newer
 -- Cute than yours (Core.lua C.SawVersion, which draws it again when one arrives)

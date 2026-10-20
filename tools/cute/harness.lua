@@ -9320,6 +9320,77 @@ do
   print("the tenth round: " .. table.concat(said, "; "))
 end
 
+-- 51: what the owner's live client showed (0.6.1): ticking the Guide in Settings > Modules did nothing, and no Lua
+-- model of the client reproduced it. Each case closes one way it could happen on a client that swallows errors
+-- (scriptErrors 0), modelled as that client would meet it: the harness's fatal errors are off for the moment the
+-- error is thrown. (a) An error thrown in a click's path, in the draw (a secret compared, say) or before it: recorded
+-- under /cute errors with its path, the choice kept, drawing reset, so the window draws again at the next refresh
+-- (0.6.0 left UI.drawing set and every later Refresh returned early). (b) Rule 0: an ask that throws mid-chain is
+-- recorded and the chain goes on to its verdict; a chain that stalls (a frame that never comes) is closed by the
+-- watchdog thirty seconds on, the Guide filling in, and the band says how far it got meanwhile. (c) A character key
+-- that flips call by call (UnitFullName's second return the surname one call, nothing the next) saves and reads the
+-- modules under one key: the first non-nil key is this session's
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 42, online = true } end
+  local function char(name, rank, extra) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "WARRIOR", 42 }, extra)) end
+  local function guideBox(c) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Guide" end) end
+  local function errorsWhere(c) local out = {}; for _, e in ipairs(c.env.CuteDB.errors or {}) do out[#out + 1] = tostring(e.where) end; return table.concat(out, ", ") end
+  local function chatHas(c, s) local n = 0; for _, l in ipairs(c.chat) do if l:find(s, 1, true) then n = n + 1 end end return n end
+  local said = {}
+
+  -- (a) the error in the draw: Roster:MeOfficer throws on its second call of the click (Settings_Draw's), as a secret
+  -- rank compared with <= would on the live client; then an error before the draw, in Modules.Set
+  isolated({ member("Helga", 1), member("Pim", 3) }, function()
+    local c = char("Helga", 1, { surname = "Bluntforce", fullNameSurname = true, sender = "Helga Bluntforce" })
+    login(c)
+    c.env.SlashCmdList.CUTE("modules")
+    local box = guideBox(c)
+    assert(box and not box:GetChecked(), "the Guide's row, unticked")
+    local n0 = #(c.env.CuteDB.errors or {}) -- (a quiet note or two from login: a client function this mock lacks)
+    local R = c.C.Roster
+    local real, calls = R.MeOfficer, 0
+    R.MeOfficer = function(self) calls = calls + 1; if calls == 2 then error("attempt to compare a secret number value") end return real(self) end
+    c.env.CUTE_DEV = false
+    click(box)
+    c.env.CUTE_DEV = true
+    R.MeOfficer = real
+    local me = c.C.Me()
+    assert(c.env.CuteDB.chars[me].modules.guide == true and c.C.Modules.byId.guide.active, "the tick took: the choice saved, the module on")
+    local e = c.env.CuteDB.errors[1]
+    assert(e and e.where == "draw" and e.msg:find("secret number", 1, true) and #c.env.CuteDB.errors == n0 + 1, "the error recorded under its path: " .. errorsWhere(c))
+    assert(chatHas(c, "ran into a problem and carried on. /cute errors shows the details.") == 1, "and said once")
+    assert(c.C.UI.drawing == false, "drawing reset after the failed draw")
+    local l0 = #c.chat
+    c.env.SlashCmdList.CUTE("errors")
+    local listed = false
+    for i = l0 + 1, #c.chat do if c.chat[i]:find("secret number", 1, true) and c.chat[i]:find("(x1, last ", 1, true) and c.chat[i]:find(") draw", 1, true) then listed = true end end
+    assert(listed, "/cute errors lists it with its path: " .. table.concat(c.chat, "\n", l0 + 1))
+    -- the next refresh draws the window whole: the Guide's tab and section there
+    c.C.UI:Refresh()
+    tick(c, 1)
+    assert(tabsShown(c):find("^race guide prog") and sectionsShown(c):find("modules race guide", 1, true) and guideBox(c):GetChecked(),
+      "the window keeps refreshing: the tab, the section, the row ticked: " .. tabsShown(c) .. " / " .. sectionsShown(c))
+    check(c.C.UI.frame, "officer settings, modules, after a swallowed error in the draw")
+    -- an error before the draw, in the choice itself: recorded under the check, the window drawn again all the same
+    local M = c.C.Modules
+    local realSet = M.Set
+    M.Set = function(key, on) error("boom in Set " .. key) end
+    c.env.CUTE_DEV = false
+    click(guideBox(c))
+    c.env.CUTE_DEV = true
+    M.Set = realSet
+    assert(c.env.CuteDB.errors[1].where == "check" and c.env.CuteDB.errors[1].msg:find("boom in Set guide", 1, true), "the error in the choice recorded under the check: " .. errorsWhere(c))
+    assert(c.env.CuteDB.chars[me].modules.guide == true and not c.C.UI.drawing, "the choice as it was; drawing clear")
+    c.C.UI:Refresh()
+    tick(c, 1)
+    assert(guideBox(c):GetChecked() and tabsShown(c):find("^race guide prog"), "drawn again from the choice kept: " .. tabsShown(c))
+    leave(c)
+  end)
+  said[#said + 1] = "an error in a click's path is recorded with its path, the choice kept, the window drawing again"
+
+  print("the owner's client: " .. table.concat(said, "; "))
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
