@@ -141,11 +141,13 @@ local function firstStep(q, st)
 end
 A.FirstStep = firstStep
 
--- quests in your plan you haven't taken yet, by the NPC who gives them (or gives their first open step)
+-- quests in your plan you haven't taken yet (your own list, and the Guide's picks while it is on: 6.0), by the NPC who
+-- gives them (or gives their first open step)
 local function pickupList()
   local Q, M = QB.Quest, QB.Model
   local byNpc, list = {}, {}
-  for id in pairs(QB:Plan().add) do
+  local plan = QB:Plan()
+  local function consider(id)
     local q = Q.Get(id)
     if q and not QB.state.log[id] and not QB.API.IsDone(id) and not QB:IsSkipped(id) then
       local st = QB:Status(q)
@@ -166,6 +168,8 @@ local function pickupList()
       end
     end
   end
+  for id in pairs(plan.add) do consider(id) end
+  if QB:GuideOn() then for id in pairs(plan.auto or {}) do if not plan.add[id] then consider(id) end end end
   return list
 end
 

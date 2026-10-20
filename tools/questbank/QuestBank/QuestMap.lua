@@ -406,9 +406,9 @@ end
 QM.Unchecked = unchecked
 
 -- the quests you can take now from the NPCs of map m: what the game would show a ! for (QM:Build, QM.ZoneQuests)
-local function givers(m)
+local function givers(m, level)
   local s = QB.state
-  local level = s.level or 1
+  level = level or s.level or 1
   local range = greyRange(level)
   local out = {}
   for _, g in ipairs(giversOn(m) or {}) do
@@ -421,6 +421,27 @@ local function givers(m)
       end
     end
   end
+  return out
+end
+
+-- the givers on a map with quests you can take now, for the minimap's ! (6.0, Minimap.lua): the same filter the world
+-- map's ! uses. Each: the NPC's index, its quest ids in id order, its place on the map (D.NPC's row: map, x, y)
+function QM.GiversNear(m, level)
+  local out, byNpc = {}, {}
+  for _, q in ipairs(givers(m, level)) do
+    local idx = q.giveIdx
+    local n = idx and idx > 0 and D.NPC[idx]
+    if n and not (q.give and q.give.inside) then
+      local g = byNpc[idx]
+      if not g then
+        g = { npc = idx, ids = {}, m = n[2], x = n[3], y = n[4] }
+        byNpc[idx] = g
+        out[#out + 1] = g
+      end
+      g.ids[#g.ids + 1] = q.id
+    end
+  end
+  table.sort(out, function(a, b) return a.npc < b.npc end)
   return out
 end
 

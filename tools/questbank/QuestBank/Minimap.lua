@@ -36,7 +36,7 @@ Mini.TICK, Mini.MAX_PINS = TICK, MAX_PINS
 local RANK = { step = 0, stop = 1, turn = 1 }
 local PINNED = { step = true, stop = true, turn = true } -- out of reach: on the rim, the way to go
 -- the game-icon style's sizes; QuestTrail's come from the marker size setting (Mini.Sizes)
-local SIZE_GAME = { stop = 22, step = 18, dungeon = 18, obj = 16, pickup = 16, turn = 16 }
+local SIZE_GAME = { stop = 22, step = 18, dungeon = 18, obj = 16, pickup = 16, turn = 16, give = 16 }
 local SIZE = {}
 local GOLD, BLUE = { 1, 0.84, 0.18 }, { 0.4, 0.55, 1 } -- the game style's strokes: you to the target, stop to stop
 Mini.GOLD, Mini.BLUE = GOLD, BLUE -- (the Map page's strokes, MapPage.lua)
@@ -79,7 +79,7 @@ function Mini.Sizes()
   end
   local ring = max(8, min(40, tonumber(s.mmRing) or 18))
   local glyph = max(4, floor(ring * (tonumber(s.mmGlyphPct) or 100) / 100 / 2 + 0.5) * 2)
-  SIZE.stop, SIZE.step, SIZE.dungeon, SIZE.obj, SIZE.pickup, SIZE.turn = ring, glyph, ring * DUNGEON_SIZE, ring, glyph, glyph
+  SIZE.stop, SIZE.step, SIZE.dungeon, SIZE.obj, SIZE.pickup, SIZE.turn, SIZE.give = ring, glyph, ring * DUNGEON_SIZE, ring, glyph, glyph, glyph
   SIZE.ring, SIZE.glyph = ring, glyph
   return SIZE
 end
@@ -177,7 +177,8 @@ function Mini.About(d)
     return n > 0 and { ids = ids } or nil
   elseif d.kind == "turn" and d.id then return { qid = d.id, what = "turn" }
   elseif d.kind == "obj" and d.id then return { qid = d.id, what = "obj" }
-  elseif d.kind == "pickup" and d.qid then return { qid = d.qid, what = "give" } end
+  elseif d.kind == "pickup" and d.qid then return { qid = d.qid, what = "give" }
+  elseif d.kind == "give" and d.ids and d.ids[1] then return { qid = d.ids[1], what = "give" } end
   return nil
 end
 
@@ -189,9 +190,9 @@ local function firstId(ids)
 end
 
 -- what goes on the minimap: the arrow's step toward the one target (a flight master, a pier; left out with noStep), the
--- route's stops, the pick-up list, the hand-ins of your finished quests, the objectives of the others still to do
--- (MAX_SPOTS of them, the nearest first), the dungeon entrances of your continent; and the quests' colours, handed out
--- in that order
+-- route's stops, the pick-up list, the hand-ins of your finished quests, a ! for every quest you can take now (6.0),
+-- the objectives of the others still to do (MAX_SPOTS of them, the nearest first), the dungeon entrances of your
+-- continent; and the quests' colours, handed out in that order
 local MAX_SPOTS = 120
 local function nearFirst(a, b)
   if a.far ~= b.far then return a.far < b.far end
@@ -244,6 +245,43 @@ function Mini.List(noStep)
       keys[#keys + 1] = -e.id
     end
   end
+  -- a ! for every quest you can take now on your map (6.0; the world map's own filter, QuestMap.GiversNear): givers
+  -- within GIVER_MERGE yards one pin with a count, the nearest GIVER_MAX first; none where a stop, a pick-up or a
+  -- hand-in has its pin already
+  if QB:Settings().minimapGivers ~= false and QB.QuestMap and QB.QuestMap.GiversNear then
+    local m = QB.state.mapID or QB.API.MapID()
+    local me = QB.API.WorldPosition()
+    local G = QB.Guide
+    local MERGE, MAX = (G and G.GIVER_MERGE or 30), (G and G.GIVER_MAX or 40)
+    local taken = {}
+    for _, d in ipairs(out) do if d.m then taken[keyOf(d)] = true end end
+    local gl = {}
+    if type(m) == "number" then
+      for _, g in ipairs(QB.QuestMap.GiversNear(m, QB.state.level)) do
+        local d = { m = g.m, x = g.x, y = g.y, name = QB.Data.NPC[g.npc][1], kind = "give", n = 1 }
+        local w = not taken[keyOf(d)] and worldPos(d)
+        if w then
+          d.c, d.wx, d.wy = w.c, w.wx, w.wy
+          d.far = (me and me.c == w.c) and ((w.wx - me.wx) ^ 2 + (w.wy - me.wy) ^ 2) or math.huge
+          local home
+          for _, o in ipairs(gl) do
+            if o.c == w.c and (o.wx - w.wx) ^ 2 + (o.wy - w.wy) ^ 2 <= MERGE * MERGE then home = o break end
+          end
+          if home then
+            home.n = home.n + 1
+            for _, id in ipairs(g.ids) do home.ids[#home.ids + 1] = id end
+            if d.far < home.far then home.far = d.far end
+          else
+            d.ids = {}
+            for _, id in ipairs(g.ids) do d.ids[#d.ids + 1] = id end
+            gl[#gl + 1] = d
+          end
+        end
+      end
+    end
+    table.sort(gl, nearFirst)
+    for i = 1, math.min(MAX, #gl) do out[#out + 1] = gl[i] end
+  end
   if QB.QuestMap and QB.QuestMap.PruneOpen then QB.QuestMap.PruneOpen(QB.state.log) end
   if QB:Settings().minimapObjectives ~= false and QB.Data.SPOT and QB.QuestMap and QB.QuestMap.OpenSpots then
     -- (a finished objective's spots left out, as the map leaves them out: 5.4.3 kept them, and led you to them)
@@ -286,11 +324,12 @@ local cache = {}
 function Mini.ListCached()
   local s, now, c = QB:Settings(), GetTime(), cache
   local pl, lo = QB.Pins and QB.Pins.list, QB.state and QB.state.logOrder
+  local gv, mp = s.minimapGivers, QB.state and QB.state.mapID
   if c.list and now >= c.at and now - c.at < LIST_EVERY and c.v == QB.changed and c.pk == s.minimapPickups
-    and c.ob == s.minimapObjectives and c.en == s.minimapEntrances and c.pl == pl and c.lo == lo then return c.list end
+    and c.ob == s.minimapObjectives and c.en == s.minimapEntrances and c.pl == pl and c.lo == lo and c.gv == gv and c.mp == mp then return c.list end
   local list = Mini.List(true)
   for _, d in ipairs(list) do d.key = d.kind .. ":" .. keyOf(d) .. ":" .. (d.id or d.num or "") end
-  c.list, c.at, c.v, c.pk, c.ob, c.en, c.pl, c.lo = list, now, QB.changed, s.minimapPickups, s.minimapObjectives, s.minimapEntrances, pl, lo
+  c.list, c.at, c.v, c.pk, c.ob, c.en, c.pl, c.lo, c.gv, c.mp = list, now, QB.changed, s.minimapPickups, s.minimapObjectives, s.minimapEntrances, pl, lo, gv, mp
   return list
 end
 
@@ -482,6 +521,13 @@ local function newPin()
     for _, l in ipairs(d.lines or {}) do GameTooltip:AddDoubleLine(l[1], l[2], 0.9, 0.9, 0.9, 0.6, 0.8, 0.6) end
     if d.kind == "dungeon" then GameTooltip:AddLine(d.done and "Dungeon entrance. Its quests are all done." or "Dungeon entrance", 0.8, 0.8, 0.8) end
     if d.kind == "pickup" then GameTooltip:AddLine("On your pick-up list", 0.8, 0.8, 0.8) end
+    if d.kind == "give" and d.ids then
+      -- the quests to take here, as the world map's ! lists them (one hover: a short list)
+      GameTooltip:AddLine(#d.ids == 1 and "A quest to take here" or (#d.ids .. " quests to take here"), 0.8, 0.8, 0.8)
+      local quests = {}
+      for _, id in ipairs(d.ids) do local q = QB.Quest.Get(id); if q then quests[#quests + 1] = q end end
+      if QB.QuestMap and QB.QuestMap.QuestLines then QB.QuestMap.QuestLines(GameTooltip, quests) end
+    end
     GameTooltip:AddLine(string.format(d.m and "%d yards. Click: show it on the arrow for now." or "%d yards.", self.yards or 0), 0.5, 0.5, 0.5)
     GameTooltip:Show()
   end)
@@ -495,9 +541,15 @@ local function shown(t, on) if (t:IsShown() and true or false) ~= (on and true o
 -- the game's own crisp art where the client has it (the quest-number pin, the dungeon and quest marks), QuestBank's
 -- textures otherwise: the game style. The quest picked on QuestBank's Map glows blue, pulsing (Mini.Pulse)
 local atlasOr = QB.Art
+-- a merged !'s count sits on the pin's bottom-right corner; a stop's number in its middle
+local function placeNum(p, d)
+  p.num:ClearAllPoints()
+  if d.kind == "give" then p.num:SetPoint("CENTER", p, "BOTTOMRIGHT", -2, 2) else p.num:SetPoint("CENTER", 0, 0) end
+end
 local function styleGame(p, it)
   local d = it.d
   p.num:SetText(it.label or "")
+  placeNum(p, d)
   p.badge:SetSize(10, 10)
   p.badge:ClearAllPoints()
   p.badge:SetPoint("BOTTOMRIGHT", 3, -3)
@@ -532,7 +584,8 @@ end
 -- bottom-left corner. The picked quest's markers blue, pulsing toward white (Mini.Pulse)
 local function styleQT(p, it)
   local d, sz = it.d, it.size
-  p.num:SetText("")
+  p.num:SetText(d.kind == "give" and it.label or "")
+  placeNum(p, d)
   p.glow:Hide()
   local disc, frame, elite, glyph, ring = false, false, false, nil, false
   if d.kind == "obj" then
@@ -688,7 +741,7 @@ local function addItem(v, me, d, w, wx, wy, focus)
   itemPool[n], items[n] = it, it
   local dn, dw = wx - me.wx, wy - me.wy
   it.d, it.key, it.x, it.y, it.alpha, it.size, it.yards = d, d.key or d.kind, x, y, alpha, size, sqrt(dn * dn + dw * dw)
-  it.label, it.focus, it.pin = d.num and tostring(d.num) or nil, (focus ~= nil and d.id == focus) or nil, nil
+  it.label, it.focus, it.pin = d.num and tostring(d.num) or (d.kind == "give" and d.n and d.n > 1 and tostring(d.n)) or nil, (focus ~= nil and d.id == focus) or nil, nil
   return it
 end
 local function byRank(a, b)

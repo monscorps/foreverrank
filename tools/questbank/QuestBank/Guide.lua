@@ -26,6 +26,7 @@ local CLUSTER = 150        -- yards: objective spots this close are one step
 local LATER = 3600         -- seconds "Not now" holds
 local AUTO_MAX = 8         -- auto picks at once (G.Fill)
 G.CLUSTER, G.LATER, G.AUTO_MAX = CLUSTER, LATER, AUTO_MAX
+G.GIVER_MERGE, G.GIVER_MAX = 30, 40 -- the minimap's ! (Minimap.lua): givers this close are one pin; at most this many
 
 local plain = QB.Plain
 local sqrt, huge = math.sqrt, math.huge

@@ -16925,6 +16925,76 @@ end)()
     assert(#d.chat == n0 + 1 and d.chat[#d.chat]:find("guiding you", 1, true), "the one line after Done")
   end }
 
+  -- the minimap: a ! for every quest you can take now on your map (the world map's own filter: for you, not grey,
+  -- prerequisites done, not held, not done), givers within 30 yards one pin with a count, forty at most, the nearest
+  -- first; a ? where a finished quest is handed in as before; the pin draws the game's !; the switch takes them off
+  G6CASES[#G6CASES + 1] = { "the minimap: a ! for every quest you can take now, merged, forty at most, a ? where to hand in", function()
+    local c = human("Pinner", { { 7, 1 } }, { [783] = true }, nil, 3)
+    local QB, Mini, QM, D = c.QB, c.QB.Mini, c.QB.QuestMap, c.QB.Data
+    QB:Settings().guide.on = true; QB:Settings().welcome = nil
+    c.objectives = { [7] = { { text = "Kobold Vermin slain: 8/8", type = "monster", finished = true, numFulfilled = 8, numRequired = 8 } } }
+    settle(c)
+    local gives = QM.GiversNear(1429, 3)
+    assert(#gives > 0, "givers with quests for a level-3 human on Elwynn's map")
+    for _, g in ipairs(gives) do
+      assert(g.npc and D.NPC[g.npc] and g.m == 1429 and g.x and g.y and #g.ids > 0, "a giver: its NPC, its place, its quests")
+      for _, id in ipairs(g.ids) do
+        local q = QB.Quest.Get(id)
+        local st = QB:Status(q)
+        assert(st.code == "todo" or st.code == "item", "every quest listed is one you can take: " .. q.name .. " " .. st.code)
+        assert(not QM.Grey(q, 3), "never a grey one: " .. q.name)
+        assert(not QB.state.log[id] and not QB.API.IsDone(id), "not held, not done: " .. q.name)
+      end
+    end
+    local list = Mini.List()
+    local give, turn, n = 0, 0, 0
+    for _, d in ipairs(list) do
+      if d.kind == "give" then give = give + 1; n = n + (d.n or 1) end
+      if d.kind == "turn" then turn = turn + 1 end
+    end
+    assert(give > 0 and give <= 40 and n >= give, "! pins, merged, forty at most: " .. give .. " for " .. n .. " givers")
+    assert(turn >= 1, "a ? for Kobold Camp Cleanup's hand-in")
+    -- two givers within 30 yards are one pin with a count
+    local merged = false
+    for _, d in ipairs(list) do if d.kind == "give" and (d.n or 1) > 1 then merged = true; assert(#d.ids >= d.n, "the merged pin carries every quest") end end
+    assert(merged, "Northshire's givers at the abbey merge")
+    -- the nearest first, and never one where a hand-in's pin stands (the ? at McBride takes the !)
+    local last = -1
+    for _, d in ipairs(list) do
+      if d.kind == "give" then
+        assert(d.far >= last, "the nearest first")
+        last = d.far
+        for _, t in ipairs(list) do
+          if t.kind == "turn" then assert(not (t.m == d.m and t.x == d.x and t.y == d.y), "no ! under a ?: " .. tostring(d.name)) end
+        end
+      end
+    end
+    -- the switch
+    QB:Settings().minimapGivers = false
+    for _, d in ipairs(Mini.List()) do assert(d.kind ~= "give", "off: no !") end
+    assert(Mini.ListCached() ~= nil, "the cached list follows the switch")
+    for _, d in ipairs(Mini.ListCached()) do assert(d.kind ~= "give", "off: the cached list has no ! either") end
+    QB:Settings().minimapGivers = true
+    -- placed: a ! pin on the minimap, drawn with the game's own atlas, the count on a merged one
+    Mini.Invalidate(); Mini.Place()
+    local drawn, counted = nil, false
+    for _, child in ipairs(c.frames) do
+      if child.__parent == c.env.QuestBankMinimap and child.d and child:IsShown() and child.d.kind == "give" then
+        drawn = child
+        if (child.d.n or 1) > 1 and child.num:GetText() == tostring(child.d.n) then counted = true end
+      end
+    end
+    assert(drawn and drawn.icon.__tex == "atlas:QuestNormal", "a ! drawn on the minimap with the game's atlas: " .. tostring(drawn and drawn.icon.__tex))
+    assert(counted, "a merged pin shows its count")
+    -- its tooltip lists the quests
+    lines = {}
+    drawn.__scripts.OnEnter(drawn)
+    local joined = table.concat(lines, " | ")
+    local q1 = QB.Quest.Get(drawn.d.ids[1])
+    assert(joined:find(q1.name, 1, true), "the tooltip lists its quests: " .. joined)
+    assert(#c.chat == 0 or not c.chat[#c.chat]:find("quest", 1, true), "nothing said in chat")
+  end }
+
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")
