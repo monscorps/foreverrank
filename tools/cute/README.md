@@ -951,7 +951,10 @@ major version than the seed's, makes the whole seed `stale`: it neither counts a
 Guide says the game differs and runs on the guild's play. A new minor version or build alone is no verdict, since the
 share of absent facts is the evidence that the game changed; on any build other than the seed's the beta's facts
 count as `data` until the guild sees them. Until Rule 0 is done the seed counts for nothing (the Guide says it is
-checking). A seed that names nothing is none; a partial one is read for what it has. Beside the fixed format the seed
+checking, and how far it got: 150 of 4000). Each ask runs under a pcall of its own, so one id the client chokes on is
+recorded under /cute errors and skipped, never the end of the chain; a chain that reaches no verdict all the same (a
+frame's callback the client dropped) is closed by a watchdog thirty seconds on, judged on what was asked, and says so
+under /cute errors (0.6.0's chain ended on the first swallowed error, "checking" for the rest of the session). A seed that names nothing is none; a partial one is read for what it has. Beside the fixed format the seed
 may mark a dungeon whose wings share one instance (`wings`), a boss that is no fight every run meets (`optional`), the
 kinds of item each enchant takes (a `list` entry's `kinds`), and name a boss without an encounter id, which is kept by
 name and joins as the seed's when the guild kills a boss of that name in that instance. A dungeon may list its quests

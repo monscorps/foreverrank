@@ -3532,7 +3532,7 @@ do
     fire(slow, "PLAYER_ENTERING_WORLD", true, false)
     assert(slow.C.Rules.SeedState() == "checking" and slow.C.Rules.check.i == 50 and not slow.C.Stats.EnchantKnown(9), "fifty asked in the first frame, still checking: " .. slow.C.Rules.check.i)
     openGuide(slow)
-    assert(texts(slow):find("Checking what we knew against this client.", 1, true), "the Guide says it is checking")
+    assert(texts(slow):find("Checking what we knew against this client, 50 of 50.", 1, true), "the Guide says it is checking, and how far it got:\n" .. texts(slow))
     check(slow.C.UI.frame, "member guide, checking")
     tick(slow, 1)
     assert(slow.C.Rules.SeedState() == "fresh" and slow.C.Stats.EnchantKnown(9, "4.1") and slow.C.Sample:Value("unenchanted")[9], "done a frame on: the seed's wrist now asks for an enchant")
@@ -9387,6 +9387,60 @@ do
     leave(c)
   end)
   said[#said + 1] = "an error in a click's path is recorded with its path, the choice kept, the window drawing again"
+
+  -- (b) Rule 0, with the seed (the fixture's fifty facts, asked in one frame, the verdict a frame on). First an ask
+  -- that throws past C.Ask's own pcall on one item (the live client indexing a secret, say): recorded with the id,
+  -- skipped, the other forty-nine asked and the verdict in. Then a chain that stalls: the frame's callback dropped
+  -- (the one zero-second timer Cute sets), the band saying how far it got, the watchdog closing it at thirty seconds
+  -- on what was asked, saying so under /cute errors, the Guide filling in
+  local function errorOf(c, where) for _, e in ipairs(c.env.CuteDB.errors or {}) do if e.where == where then return e end end end
+  if SEEDED then isolated({ member("Helga", 1) }, function()
+    local c = char("Helga", 1)
+    c.env.CuteDB = {}
+    fire(c, "ADDON_LOADED", "Cute")
+    local realAsk = c.C.Ask
+    c.C.Ask = function(fn, id, ...) if tostring(id) == "30010" then error("attempt to index a secret value") end return realAsk(fn, id, ...) end
+    c.env.CUTE_DEV = false
+    fire(c, "PLAYER_ENTERING_WORLD", true, false)
+    c.env.CUTE_DEV = true
+    local R = c.C.Rules
+    assert(R.SeedState() == "checking" and R.check.i == 50 and R.check.n == 50, "fifty asked in the first frame, one of them thrown: " .. tostring(R.check.i))
+    local e = errorOf(c, "rules: rule 0")
+    assert(e and e.msg == "rule 0: item 30010: attempt to index a secret value" or (e and e.msg:find("^rule 0: item 30010: .*attempt to index a secret value")), "the throw recorded with its kind and id: " .. tostring(e and e.msg))
+    openGuide(c)
+    assert(texts(c):find("Checking what we knew against this client, 50 of 50.", 1, true), "the band says how far it got:\n" .. texts(c))
+    tick(c, 1)
+    c.C.Ask = realAsk
+    assert(R.SeedState() == "fresh" and R.check.total == 49 and R.check.absent == 0, "the verdict a frame on, on the forty-nine answered: " .. R.SeedState() .. " " .. tostring(R.check.total))
+    assert(not errorOf(c, "rules: rule 0 watchdog"), "no watchdog needed")
+    c.C.UI:Draw()
+    assert(texts(c):find("From research and the beta, checked against this client", 1, true), "the Guide filled in")
+    check(c.C.UI.frame, "officer guide, after an ask that threw")
+    leave(c)
+    -- the stalled chain
+    local d = char("Helga", 1)
+    d.env.CuteDB = {}
+    fire(d, "ADDON_LOADED", "Cute")
+    local realAfter, dropped = d.env.C_Timer.After, 0
+    d.env.C_Timer.After = function(sec, f) if sec == 0 then dropped = dropped + 1; return end return realAfter(sec, f) end
+    fire(d, "PLAYER_ENTERING_WORLD", true, false)
+    d.env.C_Timer.After = realAfter
+    local RD = d.C.Rules
+    assert(dropped == 1 and RD.SeedState() == "checking" and RD.check.i == 50, "the next frame's step dropped: still checking")
+    openGuide(d)
+    tick(d, 20)
+    assert(RD.SeedState() == "checking" and texts(d):find("Checking what we knew against this client, 50 of 50.", 1, true), "twenty seconds on, still checking, the band saying so")
+    tick(d, 11)
+    assert(RD.SeedState() == "fresh" and RD.check.state == "done" and RD.check.total == 50, "the watchdog closed it at thirty seconds, on what was asked: " .. RD.SeedState())
+    local w = errorOf(d, "rules: rule 0 watchdog")
+    assert(w and w.msg == "rule 0 did not finish: 50 of 50 asked in 30 s; judged on those", "and said so under /cute errors: " .. tostring(w and w.msg))
+    d.C.UI:Draw()
+    assert(texts(d):find("From research and the beta, checked against this client", 1, true) and not texts(d):find("Checking what we knew", 1, true), "the Guide filled in:\n" .. texts(d))
+    tick(d, 30)
+    assert(RD.check.total == 50 and errorOf(d, "rules: rule 0 watchdog").count == 1, "nothing counted twice")
+    leave(d)
+  end) end
+  said[#said + 1] = "Rule 0 skips an ask that throws, the watchdog closes a stalled chain, the band says how far it got"
 
   print("the owner's client: " .. table.concat(said, "; "))
 end

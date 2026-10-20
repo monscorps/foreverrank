@@ -38,13 +38,22 @@ local function some(names, max)
 end
 local function hoursText(h) return h and C.Stats.FmtHours(h * 3600) or nil end
 
+-- the line while Rule 0 is still checking the seed: how far it got (Rules.lua chk.i of chk.n), so a chain that
+-- stalls shows where, and a long one shows it moving
+function G.Checking()
+  local chk = C.Rules.check
+  if type(chk) == "table" and type(chk.n) == "number" and chk.n > 0 then
+    return string.format("Checking what we knew against this client, %d of %d.", math.min(chk.i or 0, chk.n), chk.n)
+  end
+  return "Checking what we knew against this client."
+end
 -- where the knowledge comes from, as the band says it: a line, and its detail (the band's tooltip)
 function G.Source()
   local R = C.Rules
   local st, why = R.SeedState()
   local s = R.Seed()
   if st == "none" then return "Nothing shipped with this copy: everything here is learned from the guild's play.", "Dungeons, ranges, enchants and the XP curve fill in as members meet them." end
-  if st == "checking" then return "Checking what we knew against this client.", "The Guide fills in when it is done." end
+  if st == "checking" then return G.Checking(), "The Guide fills in when it is done; thirty seconds at most." end
   if st == "stale" then return "The game differs from what we knew; learning from the guild.", "The research: " .. (why or "") .. "." end
   local chk = R.check or {}
   local detail = "Research build " .. (s.build or "?") .. (s.generated and (", " .. s.generated) or "") .. "."
@@ -259,7 +268,7 @@ function G.Pick(cards, level, soon, st)
     if soon[1] then tip:AddLine("Next to open: " .. soon[1].name .. " at " .. soon[1].min .. ".", 0.6, 0.6, 0.6, true) end
   end
   if st == "checking" then
-    return { line = "Checking what we knew against this client.", tip = function(tip) tip:AddLine("The Guide fills in when it is done.", 1, 1, 1, true) end }
+    return { line = G.Checking(), tip = function(tip) tip:AddLine("The Guide fills in when it is done; thirty seconds at most.", 1, 1, 1, true) end }
   end
   local after = soon[1] and ("; " .. soon[1].name .. " opens at " .. soon[1].min .. ".") or "."
   if #cards == 0 then
@@ -371,7 +380,7 @@ function G.Items(officer)
   local now, soon = R.DungeonsFor(level)
   plan.soon = soon
   add({ kind = "head", name = "In range at level " .. level, who = alone or (#now > 0 and plural(#now, "dungeon", "dungeons") or "") })
-  if st == "checking" then add({ kind = "note", name = "Checking what we knew against this client." }) end
+  if st == "checking" then add({ kind = "note", name = G.Checking() }) end
   for _, d in ipairs(now) do
     scale(d)
     local card = { d = d, pips = {}, left = 0, doubted = 0 }

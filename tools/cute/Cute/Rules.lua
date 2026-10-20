@@ -254,23 +254,37 @@ function R:CheckSeed()
     table.sort(ids)
     for _, id in ipairs(ids) do list[#list + 1] = { kind, id } end
   end
-  local chk = { state = "checking", total = 0, absent = 0, i = 0, kinds = {}, missing = { item = {}, spell = {}, faction = {} } }
+  -- (chk.i of chk.n asked so far: the Guide's band says how far it got while it is checking)
+  local chk = { state = "checking", total = 0, absent = 0, i = 0, n = #list, kinds = {}, missing = { item = {}, spell = {}, faction = {} } }
   for _, kind in ipairs(R.KINDS) do chk.kinds[kind] = { n = 0, absent = 0 } end
   if C.Callable("GetBuildInfo") then
     local v, b = C.Get("GetBuildInfo")
     if type(v) == "string" and v ~= "" then chk.client = v .. ((type(b) == "string" and b ~= "") and ("." .. b) or "") end
   end
   self.check = chk
+  -- one fact asked: nil where the client says nothing either way
+  local function askOne(e)
+    local fn = fns[e[1]]
+    if not fn then return nil end
+    local v, said = C.Ask(fn, e[2])
+    if said then return ASK[e[1]][3](v) end
+    return nil
+  end
+  -- each ask under pcall of its own: one id the client chokes on (an error past C.Ask's, a judge given something it
+  -- cannot read) is recorded and skipped, never the end of the chain (0.6.0's chain ended on the first error the
+  -- client swallowed, the seed "checking" for the rest of the session and the Guide saying so)
+  local bad = 0
   local function step()
+    if chk.state == "done" then return end -- (the watchdog closed it; nothing to add)
     for _ = 1, SLICE do
       chk.i = chk.i + 1
       local e = list[chk.i]
       if not e then return R:Checked() end
-      local has
-      local fn = fns[e[1]]
-      if fn then
-        local v, said = C.Ask(fn, e[2])
-        if said then has = ASK[e[1]][3](v) end
+      local ok, has = pcall(askOne, e)
+      if not ok then
+        bad = bad + 1
+        if bad <= 3 then C.Err.Note(string.format("rule 0: %s %s: %s", e[1], tostring(e[2]), tostring(has)), "rules: rule 0") end
+        has = nil
       end
       if has ~= nil then
         local kd = chk.kinds[e[1]]
@@ -280,6 +294,13 @@ function R:CheckSeed()
     end
     C_Timer.After(0, C.Safe(step, "rules: rule 0"))
   end
+  -- the watchdog: a chain that never reaches its verdict (a frame's callback the client dropped, an error in the
+  -- step itself) is closed thirty seconds on, on what was asked by then, and says so under /cute errors
+  C_Timer.After(30, C.Safe(function()
+    if R.check ~= chk or chk.state == "done" then return end
+    C.Err.Note(string.format("rule 0 did not finish: %d of %d asked in 30 s; judged on those", chk.i, chk.n), "rules: rule 0 watchdog")
+    R:Checked()
+  end, "rules: rule 0 watchdog"))
   step()
 end
 -- Rule 0 done: the verdict kept for /cute diag, the model built, your Missing enchants asked again (the seed may count
