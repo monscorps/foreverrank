@@ -265,8 +265,7 @@ function G.Replan()
       G.filling = false
     end
   end
-  local was1 = G.steps[1]
-  local wasKey = was1 and (was1.kind .. ":" .. tostring(was1.qid) .. ":" .. tostring(was1.npc) .. ":" .. tostring(was1.wx))
+  local wasKey = G.FirstKey()
   for k = #G.steps, 1, -1 do G.steps[k] = nil end
   used = 0
   local T, A = QB.Target, QB.Arrow
@@ -347,14 +346,20 @@ function G.Replan()
       end
     end
   end
-  local now1 = G.steps[1]
-  local nowKey = now1 and (now1.kind .. ":" .. tostring(now1.qid) .. ":" .. tostring(now1.npc) .. ":" .. tostring(now1.wx))
+  local nowKey = G.FirstKey()
   G.ver = G.ver + 1 -- (the texts may have changed: the frame redraws on any Replan; the key feeds the trace)
-  if QB.tracing and nowKey ~= wasKey then QB.Trace("guide: first step %s -> %s", tostring(wasKey or "none"), tostring(nowKey or "none")) end
+  if QB.tracing and nowKey ~= wasKey then QB.Trace("guide: first step %s -> %s", wasKey ~= "" and wasKey or "none", nowKey ~= "" and nowKey or "none") end
 end
 
 function G.Current() return G.steps[1] end
 function G.Steps() return G.steps end
+
+-- the first step told apart as the target tells stops: its kind, its quest, its NPC and its place
+function G.FirstKey()
+  local s = G.steps[1]
+  if not s then return "" end
+  return s.kind .. ":" .. tostring(s.qid) .. ":" .. tostring(s.npc) .. ":" .. tostring(s.wx and math.floor(s.wx) or "")
+end
 
 -- "Not now" (an hour) or "Drop" (for good); the list is made again
 function G.Skip(id, how)

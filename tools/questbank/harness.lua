@@ -16424,6 +16424,112 @@ end)()
     assert(inPlan == 0 and QB:InPlan(QB.Quest.Get(109)), "off: the fill is out of the plan, your pick is in")
   end }
 
+  -- out of order: an objective finished before its pick-up step (the quest taken by hand first), and a quest handed
+  -- in that the plan had later: the engine plans from the state, never from a list
+  G6CASES[#G6CASES + 1] = { "out of order: planned from the state, never a fixed list", function()
+    local c = human("Oona", { { 7, 0 } }, { [783] = true }, nil, 2) -- (level 2: Brotherhood of Thieves needs it)
+    local QB, G = c.QB, c.QB.Guide
+    c.objectives = { [7] = { { text = "Kobold Vermin slain: 0/8", type = "monster", finished = false, numFulfilled = 0, numRequired = 8 } } }
+    QB:Settings().guide.on = true
+    QB:SetAdded(15, true); QB:SetAdded(18, true) -- Investigate Echo Ridge, Brotherhood of Thieves
+    settle(c)
+    local function has(kind, qid) for _, s in ipairs(G.steps) do if s.kind == kind and s.qid == qid then return true end end return false end
+    assert(has("accept", 15) and has("accept", 18), "the two pick-ups are steps")
+    -- Brotherhood of Thieves taken by hand and already 12/12: no accept step, no kill step, a hand-in step
+    c.log = { { 7, 0 }, { 18, 1 } }
+    c.objectives[18] = { { text = "Kobold Worker slain: 12/12", type = "monster", finished = true, numFulfilled = 12, numRequired = 12 } }
+    c.ev(QB.eventFrame, "QUEST_ACCEPTED", 2, 18)
+    settle(c)
+    assert(not has("accept", 18) and not has("objective", 18) and has("handin", 18), "finished before its step: only the hand-in is left")
+    -- Investigate Echo Ridge handed in while the plan had it later: nothing of it remains
+    c.log = { { 7, 0 } }; c.done[15] = true
+    c.ev(QB.eventFrame, "QUEST_TURNED_IN", 15, 40)
+    settle(c)
+    assert(not has("accept", 15) and not has("objective", 15) and not has("handin", 15), "handed in early: gone")
+    assert(not QB:Plan().auto[15] and not QB:Plan().add[15] or QB.API.IsDone(15), "and not picked again")
+  end }
+
+  -- the owner's walk from Southshore into Alterac (RCASES' client and walk): the first step does not change without a
+  -- real event; Not now puts a quest off for an hour, Drop for good
+  G6CASES[#G6CASES + 1] = { "the walk: the first step changes only on a real event; Not now and Drop", function()
+    local HILLS = {
+      [1424] = { wy0 = 1066.91, wyx = -32.0059, wx0 = 400.10, wxy = -21.3354 },
+      [1416] = { wy0 = 783.55, wyx = -28.0005, wx0 = 1499.91, wxy = -18.6646 },
+    }
+    local c = newClient({ name = "Walker", level = 30, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = { { 500, 0 }, { 504, 0 } }, done = {}, world = { 0, -852, -517 }, map = 1424, bagSlots = {}, bind = "Southshore" })
+    local env = c.env
+    c.me = { wx = -852, wy = -517 }
+    local function toMap(m, wx, wy) local t = HILLS[m]; if not t then return nil end; return (wy - t.wy0) / t.wyx / 100, (wx - t.wx0) / t.wxy / 100 end
+    local function mapAt(wx, wy) local _, y = toMap(1424, wx, wy); return y < 0.14 and 1416 or 1424 end
+    env.C_Map.GetBestMapForUnit = function() return mapAt(c.me.wx, c.me.wy) end
+    env.MapUtil.GetDisplayableMapForPlayer = function() return mapAt(c.me.wx, c.me.wy) end
+    env.C_Map.GetPlayerMapPosition = function(m) local x, y = toMap(m, c.me.wx, c.me.wy); if not x then return nil end; return { x = x, y = y, GetXY = function(self) return self.x, self.y end } end
+    local wpos = env.C_Map.GetWorldPosFromMapPos
+    env.C_Map.GetWorldPosFromMapPos = function(m, v) local t = HILLS[m]; if not t then return wpos(m, v) end; return 0, { x = t.wx0 + t.wxy * v.y * 100, y = t.wy0 + t.wyx * v.x * 100, GetXY = function(self) return self.x, self.y end } end
+    env.C_Map.GetMapPosFromWorldPos = function(cont, pos, m) local x, y = toMap(m, pos.x, pos.y); if cont ~= 0 or not x then return nil end; return m, env.CreateVector2D(x, y) end
+    env.C_Map.GetMapRectOnMap = function() return nil end
+    env.IsInInstance = function() return false, "none" end
+    login(c)
+    local QB, G = c.QB, c.QB.Guide
+    QB:Settings().guide.on = true
+    c.objectives = { [500] = { { text = "Crushridge Ogre slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } },
+                     [504] = { { text = "Crushridge Mage slain: 0/5", type = "monster", finished = false, numFulfilled = 0, numRequired = 5 } } }
+    QB.Arrow:Set(true)
+    settle(c)
+    local key = G.FirstKey()
+    assert(key and key ~= "", "a first step on the walk: " .. tostring(key))
+    -- the walk north, 60 yards a look, 25 looks: no event, the first step stays
+    for i = 1, 25 do
+      c.me.wx = -852 + i * 60
+      c.o.world = { 0, c.me.wx, c.me.wy }
+      if mapAt(c.me.wx, c.me.wy) ~= mapAt(c.me.wx - 60, c.me.wy) then c.ev(QB.eventFrame, "ZONE_CHANGED_NEW_AREA") end
+      for _ = 1, 12 do frame(c, 0.1) end
+      QB.Model.Finish()
+      assert(G.FirstKey() == key, string.format("look %d: the first step changed with nothing done: %s -> %s", i, key, G.FirstKey()))
+    end
+    -- Not now: the quest's steps go for an hour; Drop: for good
+    local qid = G.steps[1].qid
+    G.Skip(qid, "later")
+    settle(c)
+    for _, s in ipairs(G.steps) do assert(s.qid ~= qid, "put off: no step of it") end
+    assert(G.PutOff(qid), "put off for an hour")
+    G.DB().later[qid] = (c.env.time() - 3601)
+    settle(c)
+    assert(not G.PutOff(qid), "an hour on: back")
+    local other = G.steps[1].qid
+    G.Skip(other, "drop")
+    settle(c)
+    assert(QB:IsSkipped(other), "dropped for good")
+    for _, s in ipairs(G.steps) do assert(s.qid ~= other, "dropped: no step of it") end
+  end }
+
+  -- Zephras Isle at level 5 (RCASES' isle client): the steps are the isle's, with places on its own world
+  G6CASES[#G6CASES + 1] = { "Zephras Isle at level 5", function()
+    local ISLE = { minx = 1247.917, maxx = 4956.25, miny = -1331.25, maxy = 4231.25 }
+    local c = newClient({ name = "Isla", level = 5, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = { { 92470, 1 }, { 92544, 0 } }, done = {}, world = { 2991, 3200, 1650 }, map = 2521, bagSlots = {}, bind = "Shen'dar Village" })
+    local env = c.env
+    c.me = { wx = 3200, wy = 1650 }
+    local function toMap(wx, wy) return (ISLE.maxy - wy) / (ISLE.maxy - ISLE.miny), (ISLE.maxx - wx) / (ISLE.maxx - ISLE.minx) end
+    env.C_Map.GetBestMapForUnit = function() return 2521 end
+    env.MapUtil.GetDisplayableMapForPlayer = function() return 2521 end
+    env.C_Map.GetPlayerMapPosition = function(m) if m ~= 2521 then return nil end; local x, y = toMap(c.me.wx, c.me.wy); return { x = x, y = y, GetXY = function(self) return self.x, self.y end } end
+    env.C_Map.GetMapPosFromWorldPos = function(cont, pos, m) if cont ~= 2991 or m ~= 2521 then return nil end; return m, env.CreateVector2D(toMap(pos.x, pos.y)) end
+    env.C_Map.GetMapRectOnMap = function() return nil end
+    env.IsInInstance = function() return false, "none" end
+    login(c)
+    local QB, G = c.QB, c.QB.Guide
+    QB:Settings().guide.on = true
+    settle(c)
+    local s1 = G.steps[1]
+    assert(s1 and s1.c == 2991 and s1.m == 2521, "the first step is on the isle: " .. tostring(s1 and G.Text(s1)))
+    local isle = 0
+    for id in pairs(QB:Plan().auto) do local q = QB.Quest.Get(id); if q and q.cat and q.cat.name == "Zephras Isle" then isle = isle + 1 end end
+    assert(isle > 0, "the fill picks the isle's quests")
+    for _, s in ipairs(G.steps) do assert(s.c == 2991 or s.kind == "travel", "every step on the isle or a way off it: " .. G.Text(s)) end
+  end }
+
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")
