@@ -17599,6 +17599,23 @@ end)()
   print(string.format("a re-plan of both routes: %.0f KB of garbage", plan / 1024))
   assert(plan < 1024 * 1024, string.format("a re-plan made %.0f KB of garbage (at most 1 MB)", plan / 1024))
 
+  -- 6.0: the Guide. A Replan with nothing changed makes under 64 KB (its steps are pooled, its texts made on demand);
+  -- a tick of the step frame with nothing changed makes nothing; the Guide on for the twin changes neither of the two
+  -- gates below by more than their budgets allow (they run with it on from here)
+  QB:Settings().guide.on, QB:Settings().guide.frame, QB:Settings().welcome = true, true, nil
+  QB.Guide.Replan()
+  QB.StepFrame.Apply(); QB.StepFrame.Refresh()
+  QB.Guide.Replan()
+  local replan = ownBytes(function() QB.Guide.Replan() end)
+  print(string.format("the Guide: a re-plan of the steps %.0f KB of garbage", replan / 1024))
+  assert(replan < 64 * 1024, string.format("the Guide's Replan made %.0f KB (at most 64)", replan / 1024))
+  local sfr = QB.StepFrame.frame
+  assert(sfr and sfr:IsShown() and sfr.now:GetText() ~= "", "the step frame is up on the twin with a step: " .. tostring(sfr and sfr.now:GetText()))
+  sfr.elapsed = 1; sfr.__scripts.OnUpdate(sfr, 0.016)
+  local ticks = ownBytes(function() for _ = 1, 100 do sfr.elapsed = 1; sfr.__scripts.OnUpdate(sfr, 0.016) end end)
+  print(string.format("the step frame: 100 ticks with nothing changed %.0f bytes", ticks))
+  assert(ticks < 2048, string.format("the step frame's tick allocates: %.0f bytes over 100 ticks", ticks))
+
   -- 7. a refresh with the window shut and nothing changed (QUEST_LOG_UPDATE fires all the time while questing): the
   -- same window afterwards, and a few tens of kilobytes (5.4.1: about 400 KB, statuses, item lists and strings anew)
   QB:Changed()

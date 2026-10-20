@@ -464,6 +464,8 @@ local function spanText(mins)
   return m > 0 and string.format("about %d h %d min", h, m) or string.format("about %d h", h)
 end
 G.SpanText = spanText
+-- (the words are kept while they would read the same: the frame asks twice a second, and a tick makes no string)
+local ttlLevel, ttlKey, ttlText = nil, nil, nil
 function G.TimeToLevel()
   local s = QB.state
   local level = s.level or 1
@@ -482,7 +484,12 @@ function G.TimeToLevel()
     local perMin = r.xp / (r.t + (r.count or 0))
     mins, measured = need / perMin, false
   end
-  return spanText(mins) .. " to level " .. (level + 1), mins, measured
+  -- the minutes as the words round them: under one, whole minutes to 90, then tens
+  local key = mins < 1 and 0 or (mins < 90 and math.floor(mins + 0.5) or math.floor(mins / 10 + 0.5) * 10)
+  if level ~= ttlLevel or key ~= ttlKey then
+    ttlLevel, ttlKey, ttlText = level, key, spanText(mins) .. " to level " .. (level + 1)
+  end
+  return ttlText, mins, measured
 end
 
 -- the quest's usable item, for the frame's button (GetQuestLogSpecialItemInfo, as the objective tracker's button:
