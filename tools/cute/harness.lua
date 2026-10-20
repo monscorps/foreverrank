@@ -4804,15 +4804,30 @@ do
     rone.C.UI:Open("gear")
     assert(not host:IsShown() and rone.C.UI.hosts.gear and rone.C.UI.hosts.gear:IsShown(), "the gear host shown, the journal's hidden")
     check(rone.C.UI.frame, "gear page")
-    rone.C.UI:Open("settings", "journal")
-    assert(texts(rone):find("Chests and events", 1, true), "the Journal section")
+    -- the Journal's four kinds are its band's chips, no section: a click flips one and the journal draws again
+    rone.C.UI:Open("journal")
+    local function chip(label) for _, b in ipairs(rone.C.UI.bandButtons.items) do if b:IsShown() and b.label:GetText() == label then return b end end end
+    assert(chip("Bosses") and chip("Rares") and chip("Trash") and chip("Chests and events"), "the four kinds as chips:\n" .. texts(rone))
+    assert(rone.env.CuteQuestDB.settings.djShow.trash == false and not sectionsShown(rone):find("journal", 1, true), "trash off by the engine's default; no Journal section: " .. sectionsShown(rone))
+    press(chip("Trash"))
+    assert(rone.env.CuteQuestDB.settings.djShow.trash == true, "a chip clicked: the kind shown")
+    press(chip("Trash"))
+    assert(rone.env.CuteQuestDB.settings.djShow.trash == false, "and hidden again")
     rone.C.UI:Open("settings", "gear")
-    assert(texts(rone):find("2 levels ahead", 1, true), "the Gear section")
+    assert(texts(rone):find("2 levels ahead", 1, true) and not texts(rone):find("An upgrade is", 1, true), "the Gear section: its one row, no note")
     -- Map and Camp: no page, a section each; their switches set the engine's flags, on and off with the module
     rone.C.UI:Open("settings", "modules")
     for _, name in ipairs({ "Map", "Camp" }) do click(boxOf(rone, name)) end
     assert(not tabsShown(rone):find("map", 1, true) and not tabsShown(rone):find("camp", 1, true), "no tab for a module without a page: " .. tabsShown(rone))
     assert(sectionsShown(rone):find("map", 1, true) and sectionsShown(rone):find("camp", 1, true), "their sections: " .. sectionsShown(rone))
+    -- the rows that went: the frame's lock (its own menu has it), the engine's note of what the game shows (dead in
+    -- Cute), the minimap's far view, the sleeping bag and the sellers
+    rone.C.UI:Open("settings", "quests")
+    assert(not texts(rone):find("Lock the step frame", 1, true) and not texts(rone):find("foreverrank.com", 1, true) and texts(rone):find("Step frame", 1, true), "Quests: no lock row, no note row")
+    rone.C.UI:Open("settings", "map")
+    assert(not texts(rone):find("far view", 1, true) and texts(rone):find("Route pins on the world map", 1, true), "Map: no far view row")
+    rone.C.UI:Open("settings", "camp")
+    assert(not texts(rone):find("Sleeping bag", 1, true) and not texts(rone):find("Sellers", 1, true) and texts(rone):find("Camp bar", 1, true), "Camp: the bar, the banner and the light alone:\n" .. texts(rone))
     local s = rone.env.CuteQuestDB.settings
     assert(s.mapIcons == true and s.pins == true and s.minimapGivers == true and s.campBar == true and s.glow.on == true, "on: the switches on")
     rone.C.UI:Open("settings", "map")
@@ -4829,7 +4844,7 @@ do
         rone.C.UI:Open(page)
         check(rone.C.UI.frame, string.format("officer, every quest module on: %s, %dx%d", page, size[1], size[2]))
       end
-      for _, section in ipairs({ "quests", "route", "map", "journal", "gear", "camp", "guide" }) do
+      for _, section in ipairs({ "quests", "route", "map", "gear", "camp", "guide" }) do
         rone.C.UI:Open("settings", section)
         check(rone.C.UI.frame, string.format("officer, every quest module on: settings %s, %dx%d", section, size[1], size[2]))
       end
@@ -5140,7 +5155,7 @@ do
       assert(tp:find(LINE, 1, true), page .. " page: the one line:\n" .. tp)
       check(pim.C.UI.frame, "QuestBank 6.0.1 beside Cute: " .. page)
     end
-    for _, section in ipairs({ "quests", "route", "map", "journal", "gear", "camp" }) do
+    for _, section in ipairs({ "quests", "route", "map", "gear", "camp" }) do
       pim.C.UI:Open("settings", section)
       local ts = texts(pim)
       assert(ts:find(LINE, 1, true), section .. " section: the one line:\n" .. ts)

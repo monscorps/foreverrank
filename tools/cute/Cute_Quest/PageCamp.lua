@@ -1,6 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Camp: no page of its own. The camp bar, the missing-buffs banner, the sleeping bag and the sellers (Camp.lua), and
--- the interact light (Glow.lua), as switches. Off, the bar, the banner and the light are off; on, all three on.
+-- Camp: no page of its own. The camp bar and the missing-buffs banner (Camp.lua) and the interact light (Glow.lua), as
+-- switches. Off, the bar, the banner and the light are off; on, each as its row says.
 local ADDON, QB = ...
 local Cute = Cute
 local E = QB.Engine
@@ -14,8 +14,6 @@ function Cp.Settings(_, col)
   col:Head("Camp")
   col:Check("Camp bar", s.campBar ~= false, true, function(on) s.campBar = on end)
   col:Check("Missing buffs when you leave town", s.remind.buffs ~= false, true, function(on) s.remind.buffs = on end)
-  col:Check("Sleeping bag", s.remind.bag ~= false, true, function(on) s.remind.bag = on end)
-  col:Check("Sellers of camp goods", s.remind.wood ~= false, true, function(on) s.remind.wood = on end)
   col:Check("Interact light", s.glow.on ~= false, true, function(on) light(s, on) end)
   local names, current = {}, "Sparkle"
   for _, st in ipairs(STYLES) do names[#names + 1] = st[1]; if s.glow.style == st[2] then current = st[1] end end

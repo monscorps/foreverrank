@@ -102,17 +102,15 @@ function P.Settings(_, col)
   if not E then return QB.NeedSettings(col, "Quests") end
   local s = E:Settings()
   col:Head("Quests")
-  -- the step frame and the arrow (the engine's settings; QuestBank's own while it is loaded)
+  -- the step frame and the arrow (the engine's settings; QuestBank's own while it is loaded; the frame's own menu locks it)
   col:Check("Step frame", s.guide.frame == true, true, function(on) s.guide.frame = on; if E.StepFrame then E.StepFrame.Apply() end end)
   col:Check("Direction arrow", s.arrow == true, true, function(on) if E.Arrow then E.Arrow:Set(on) else s.arrow = on end end)
-  col:Check("Lock the step frame", s.guide.locked == true, true, function(on) s.guide.locked = on; if E.StepFrame then E.StepFrame.Apply() end end)
   local names, current = {}, "Off"
   for _, a in ipairs(ACCEPT) do names[#names + 1] = a[1]; if s.autoAccept == a[2] then current = a[1] end end
   col:Choice("Accept for me", names, current, function(v) for _, a in ipairs(ACCEPT) do if a[1] == v then s.autoAccept = a[2] end end end)
   col:Check("Hand finished quests in for me", s.autoTurnIn == true, true, function(on) s.autoTurnIn = on end)
   col:Check("Progress in mob tooltips", s.tipProgress ~= false, true, function(on) s.tipProgress = on end)
   col:Check("Share with your party", s.share.party ~= false, true, function(on) s.share.party = on end)
-  col:Check("Note what the game shows, for foreverrank.com", s.noteGame ~= false, true, function(on) s.noteGame = on end)
 end
 
 -- the switch: the engine's guide (the step band, the frame as its row says) with it; off, the arrow is put away and

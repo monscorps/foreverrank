@@ -20,7 +20,6 @@ function G.Settings(_, col)
   local s = E:Settings()
   col:Head("Gear")
   col:Check("Quests up to 2 levels ahead", s.finderAhead == true, true, function(on) s.finderAhead = on; if E.Gear and E.Gear.RefreshSoon then E.Gear.RefreshSoon() end end)
-  col:Note("An upgrade is a quest reward in reach or a dungeon drop at your level, judged for your class and skills.")
 end
 
 Cute:RegisterModule({ id = "gear", addon = ADDON, title = "Gear", order = 25,

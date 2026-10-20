@@ -18,7 +18,6 @@ function M.Settings(_, col)
   col:Check("Route pins on the world map", s.pins ~= false, true, function(on) pins(s, on) end)
   col:Check("Route on the minimap", s.minimapPins ~= false and s.minimapLines ~= false, true, function(on) s.minimapPins, s.minimapLines = on, on; mini() end)
   col:Check("A ! on the minimap for quests you can take", s.minimapGivers == true, true, function(on) s.minimapGivers = on; mini() end)
-  col:Check("Minimap far view", s.mmExtended ~= false, true, function(on) s.mmExtended = on; mini() end)
 end
 
 -- the switch: the engine's map flags with the box (QB.Follow keeps a row's choice across off and on). Before the

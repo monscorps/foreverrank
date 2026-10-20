@@ -172,6 +172,9 @@ body.cu-page { margin: 0; background: var(--cu-black); color: var(--cu-ink); fon
 .cu-gband div.cu-gmute { color: var(--cu-mute); }
 .cu-gband.cu-qroute { display: flex; align-items: center; gap: 8px; }
 .cu-gband.cu-qroute div { flex: 1 1 auto; min-width: 0; }
+.cu-gband.cu-qchips { display: flex; gap: 6px; }
+.cu-gband.cu-qchips .cu-btn { flex: 0 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--cu-white); }
+.cu-gband.cu-qchips .cu-btn.cu-chipoff { color: var(--cu-mute); }
 .cu-gr { display: flex; align-items: center; height: 20px; padding: 0 4px 0 8px; color: var(--cu-ink); white-space: nowrap; }
 .cu-gr:hover { background: rgba(255,255,255,.05); }
 .cu-gr.cu-gh { background: rgba(255,255,255,.06); color: var(--cu-white); }
@@ -2096,8 +2099,16 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     r[1].forEach(function (leg, i) { h += questRow(i === 0 ? "place" : "leg", (i + 1) + ". " + leg[0], leg[1], plural(leg[2], "quest", "quests"), i === 0 ? "cu-gwhite" : null, " title=\"" + esc(leg[0] + (i === 0 ? ": where the arrow points." : "")) + "\""); });
     return h;
   }
+  // the Journal's four kinds as the band's chips: on, white; off, muted; a click flips one (the Journal has no section)
+  var JOURNAL_KINDS = [["boss", "Bosses", true], ["rare", "Rares", true], ["trash", "Trash", false], ["other", "Chests and events", true]];
   function enginePage(id) {
-    return questRow("note", (id === "journal" ? "The Dungeon Journal" : "Gear") + " is drawn by the quest engine in game, in Cute's skin; this mock has no engine.", null, null, "cu-gmute");
+    var h = "";
+    if (id === "journal") {
+      h = "<div class=\"cu-gband cu-qchips\">";
+      JOURNAL_KINDS.forEach(function (k) { var on = qv("journal:" + k[0], k[2]); h += "<button type=\"button\" class=\"cu-btn" + (on ? "" : " cu-chipoff") + "\" data-qchip=\"journal:" + k[0] + "\" title=\"" + esc(k[1] + (on ? ": shown. Click to hide." : ": hidden. Click to show.")) + "\">" + esc(k[1]) + "</button>"; });
+      h += "</div>";
+    }
+    return h + questRow("note", (id === "journal" ? "The Dungeon Journal" : "Gear") + " is drawn by the quest engine in game, in Cute's skin; this mock has no engine.", null, null, "cu-gmute");
   }
   function officers() {
     var total = G.length, withAddon = 0, online = 0, levels = [], noAddon = [];
@@ -2209,12 +2220,11 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   }
   function questSection(id) {
     var col = "<div class=\"cu-h\">" + esc(QUEST_BY[id][1]) + "</div>";
-    if (id === "quests") col += qcheck("Step frame", "quests:frame", true) + qcheck("Direction arrow", "quests:arrow", true) + qcheck("Lock the step frame", "quests:locked", false) + qchoice("Accept for me", "quests:accept", ["Off", "On my route", "Worth taking"], "Off") + qcheck("Hand finished quests in for me", "quests:turnin", false) + qcheck("Progress in mob tooltips", "quests:tips", true) + qcheck("Share with your party", "quests:share", true) + qcheck("Note what the game shows, for foreverrank.com", "quests:note", true);
+    if (id === "quests") col += qcheck("Step frame", "quests:frame", true) + qcheck("Direction arrow", "quests:arrow", true) + qchoice("Accept for me", "quests:accept", ["Off", "On my route", "Worth taking"], "Off") + qcheck("Hand finished quests in for me", "quests:turnin", false) + qcheck("Progress in mob tooltips", "quests:tips", true) + qcheck("Share with your party", "quests:share", true);
     else if (id === "route") col += qchoice("Follow", "route:follow", ["The plan", "Ready now"], "The plan") + qcheck("Show the way step by step on the arrow", "route:travel", true) + qcheck("The hearthstone may be a step", "route:hearth", true);
-    else if (id === "map") col += qcheck("Quest icons on the world map", "map:icons", true) + qcheck("Route pins on the world map", "map:pins", true) + qcheck("Route on the minimap", "map:minimap", true) + qcheck("A ! on the minimap for quests you can take", "map:givers", true) + qcheck("Minimap far view", "map:far", true);
-    else if (id === "journal") col += qcheck("Bosses", "journal:boss", true) + qcheck("Rares", "journal:rare", true) + qcheck("Trash", "journal:trash", false) + qcheck("Chests and events", "journal:other", true);
-    else if (id === "gear") col += qcheck("Quests up to 2 levels ahead", "gear:ahead", false) + "<div class=\"cu-olines\"><div class=\"cu-dimline\">An upgrade is a quest reward in reach or a dungeon drop at your level, judged for your class and skills.</div></div>";
-    else if (id === "camp") col += qcheck("Camp bar", "camp:bar", true) + qcheck("Missing buffs when you leave town", "camp:buffs", true) + qcheck("Sleeping bag", "camp:bag", true) + qcheck("Sellers of camp goods", "camp:wood", true) + qcheck("Interact light", "camp:light", true) + qchoice("Light style", "camp:style", ["Sparkle", "Light", "Game's"], "Sparkle");
+    else if (id === "map") col += qcheck("Quest icons on the world map", "map:icons", true) + qcheck("Route pins on the world map", "map:pins", true) + qcheck("Route on the minimap", "map:minimap", true) + qcheck("A ! on the minimap for quests you can take", "map:givers", true);
+    else if (id === "gear") col += qcheck("Quests up to 2 levels ahead", "gear:ahead", false);
+    else if (id === "camp") col += qcheck("Camp bar", "camp:bar", true) + qcheck("Missing buffs when you leave town", "camp:buffs", true) + qcheck("Interact light", "camp:light", true) + qchoice("Light style", "camp:style", ["Sparkle", "Light", "Game's"], "Sparkle");
     return col;
   }
   // the sections down the left, as Settings.lua lists them: the core's, then one per module that is on and has settings,
@@ -2222,7 +2232,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   function sections(off) {
     var out = [["general", "General"], ["vis", "Who sees what", true], ["rules", "Rules", true], ["modules", "Modules"], ["race", "Race"]];
     if (mods().guide) out.push(["guide", "Guide", false, GUIDE_NOTES]);
-    QUEST_MODULES.forEach(function (q) { if (mods()[q[0]]) out.push([q[0], q[1], false, q[2]]); });
+    QUEST_MODULES.forEach(function (q) { if (mods()[q[0]] && q[0] !== "journal") out.push([q[0], q[1], false, q[2]]); });
     out.push(["prog", "Prog"], ["shame", "Hall of Shame"]);
     if (off) out.push(["officers", "Officers"]);
     return out;
@@ -2383,6 +2393,8 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     if (qp) { qOpen[me()] = qOpen[me()] === qp.dataset.place ? "" : qp.dataset.place; draw(); return; }
     if (e.target.closest("button[data-qmore]")) { st.qmore = !st.qmore; draw(); return; }
     if (e.target.closest("button[data-run]")) { st.run = !st.run; draw(); return; }
+    var chip = e.target.closest("button[data-qchip]");
+    if (chip) { var ck = chip.dataset.qchip, kd = JOURNAL_KINDS.filter(function (k) { return "journal:" + k[0] === ck; })[0]; st.q[ck] = !qv(ck, kd ? kd[2] : true); draw(); return; }
     var b = e.target.closest("button[data-k]");
     if (b) {
       var s = st.sort[st.tab] || (st.tab === "race" ? { id: "level", desc: true } : {});
