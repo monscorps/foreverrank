@@ -4984,6 +4984,52 @@ do
   end)
 end
 
+-- 36c (ii): QuestBank 6.0.1 beside Cute, the one shipped before QuestBankAPI: loaded, so the copy sleeps, and no engine
+-- for the pages. 0.7.0's first build took the sleeping copy for the engine (nil or QB) and every page but Quests
+-- errored; the band said to tick Quests while it was ticked. Now there is no engine (QB.Engine nil, QB.missing the
+-- line), every page draws that one line, every section has it, and the band says it where the step would be
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Pim", 3) }, function()
+    local pim = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    local isLoaded, meta = pim.env.C_AddOns.IsAddOnLoaded, pim.env.C_AddOns.GetAddOnMetadata
+    pim.env.C_AddOns.IsAddOnLoaded = function(x) if x == "QuestBank" then return true, true end return isLoaded(x) end
+    pim.env.C_AddOns.GetAddOnMetadata = function(x, field) if x == "QuestBank" then return field == "Version" and "6.0.1" or nil end return meta(x, field) end
+    pim.env.QuestBankAPI = nil
+    login(pim)
+    tickAll(5)
+    for _, key in ipairs({ "Cute_Quest", "Cute_Quest:route", "Cute_Quest:map", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:camp" }) do pim.C.Modules.Set(key, true) end
+    if not pim.C.Modules.OnKey("guide") then pim.C.Modules.Set("guide", true) end
+    tick(pim, 6)
+    local QB = pim.addons[2].private
+    local LINE = "QuestBank 6.1.0 or newer is needed; yours is 6.0.1."
+    assert(QB.dormant == true and QB.Engine == nil and QB.missing == LINE, "no engine, the line: " .. tostring(QB.missing))
+    assert(pim.env.Cute.QuestBand and pim.env.Cute.QuestBand.On() == false and pim.env.Cute.QuestBand.Why() == LINE, "the band registered, off, with the line")
+    local function errors() return #((pim.env.CuteDB and pim.env.CuteDB.errors) or {}) + #((pim.env.CuteQuestDB and pim.env.CuteQuestDB.errors) or {}) end
+    local n0 = errors()
+    pim.C.UI:Open("guide")
+    local t = texts(pim)
+    assert(t:find(LINE, 1, true) and not t:find("Tick Quests", 1, true), "the Guide's band says what is needed, not to tick Quests:\n" .. t)
+    for _, page in ipairs({ "quests", "route", "journal", "gear" }) do
+      pim.C.UI:Open(page)
+      local tp = texts(pim)
+      assert(tp:find(LINE, 1, true), page .. " page: the one line:\n" .. tp)
+      check(pim.C.UI.frame, "QuestBank 6.0.1 beside Cute: " .. page)
+    end
+    for _, section in ipairs({ "quests", "route", "map", "journal", "gear", "camp" }) do
+      pim.C.UI:Open("settings", section)
+      local ts = texts(pim)
+      assert(ts:find(LINE, 1, true), section .. " section: the one line:\n" .. ts)
+    end
+    assert(errors() == n0, "no error recorded: " .. (errors() - n0))
+    -- the switches set nothing, off and on
+    for _, key in ipairs({ "Cute_Quest:map", "Cute_Quest:camp", "Cute_Quest" }) do pim.C.Modules.Set(key, false) end
+    assert(errors() == n0 and pim.env.CuteQuestDB == nil, "unticked: nothing set, no table of the copy's own")
+    leave(pim)
+    print("cute quest: QuestBank 6.0.1 beside Cute: no engine, every page and section one line saying what is needed, the band too")
+  end)
+end
+
 -- 36d: memory: what the module keeps after login with every quest page opened (reachable from its private table and its
 -- saved variables; LuaJIT's layout), and the garbage the engine's own code makes with nothing changed. The budgets are
 -- QuestBank's (its harness, the memory block): 11 MB kept, a re-plan with the window shut under 100 KB, the Guide's

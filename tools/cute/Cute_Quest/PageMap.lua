@@ -11,6 +11,7 @@ local function mini() if E.Mini and E.Mini.Invalidate then E.Mini.Invalidate() e
 local function icons(s, on) s.mapIcons = on; if E.QuestMap and E.QuestMap.Update then E.QuestMap:Update() end end
 local function pins(s, on) s.pins = on; if E.Pins and E.Pins.Update then E.Pins:Update() end end
 function M.Settings(_, col)
+  if not E then return QB.NeedSettings(col, "Map") end
   local s = E:Settings()
   col:Head("Map")
   col:Check("Quest icons on the world map", s.mapIcons ~= false, true, function(on) icons(s, on) end)

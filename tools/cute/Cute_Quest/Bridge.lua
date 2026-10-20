@@ -6,12 +6,20 @@
 -- defaults; /qb routed to Cute's pages and otherwise to the engine's own handler.
 local ADDON, QB = ...
 local Cute = Cute
-QB.Engine = QB.dormant and QuestBankAPI or QB
+local NEED = "6.1.0" -- the first QuestBank that sets QuestBankAPI
 if QB.dormant then
-  -- (QuestBank older than 6.1 sets no QuestBankAPI: the pages say so and draw nothing)
-  if not QB.Engine then QB.missing = "QuestBank 6.1 or newer" end
+  -- (an older QuestBank sets no QuestBankAPI: no engine for the pages, which say so and draw nothing more; never
+  -- this copy, whose files returned at their second line)
+  QB.Engine = QuestBankAPI
+  if type(QB.Engine) ~= "table" then
+    QB.Engine = nil
+    local A = type(C_AddOns) == "table" and C_AddOns or nil
+    local ok, v = pcall(A and A.GetAddOnMetadata or error, "QuestBank", "Version")
+    QB.missing = string.format("QuestBank %s or newer is needed; yours is %s.", NEED, (ok and type(v) == "string" and v ~= "") and v or "older")
+  end
   return
 end
+QB.Engine = QB
 local E = QB
 local UI = E.UI
 -- a module that is a switch over the engine's flags (Map, Camp): off, every flag it names goes off and what they were

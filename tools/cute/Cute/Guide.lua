@@ -714,7 +714,8 @@ function C.Guide_Draw(UI)
   if UI.bandBig then UI.bandBig:Hide() end
   local Q = Cute.QuestBand
   local qm = C.Modules.byId.quests
-  if qm and qm.active and Q and Q.On() then
+  local on = qm ~= nil and qm.active
+  if on and Q and Q.On() then
     local steps = Q.Steps()
     local s1 = steps[1]
     local text1 = s1 and Q.Text(s1) or "Nothing to do yet: Quests says why."
@@ -727,6 +728,10 @@ function C.Guide_Draw(UI)
     local ttl, _, measured = Q.TimeToLevel()
     if ttl then bandRow(ttl, K.MUTE, false, function(tip) tip:AddLine(measured and "From your XP an hour at this level." or "From the plan's XP a minute.", 1, 1, 1, true) end) end
     for _, m in ipairs(Q.Members()) do bandRow(m.name .. ": " .. m.text, UI.ClassColor(m.class)) end
+  elseif on then
+    -- (ticked, no step yet: the module says why, reading the log or a QuestBank too old for it)
+    local why = (Q and Q.Why and Q.Why()) or "Reading your quest log."
+    bandRow(why, K.DIM, false, function(tip) tip:AddLine(why, 1, 1, 1, true) end)
   else
     bandRow("Tick Quests in Settings, Modules for the step now.", K.DIM, false,
       function(tip) tip:AddLine("The quest engine's step frame, in this band: what to do now, the next two steps, the time to level, your party's steps.", 1, 1, 1, true) end,

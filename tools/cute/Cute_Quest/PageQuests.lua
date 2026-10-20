@@ -31,7 +31,6 @@ end
 
 local function items(K)
   local out = {}
-  if QB.missing then out[1] = { kind = "note", name = "Quests needs " .. QB.missing .. ".", c = K.MUTE }; return out end
   if not E.logReady then out[1] = { kind = "note", name = "Reading your quest log.", c = K.MUTE }; return out end
   local order, _, _, _, hubName = E.UI.PlaceGroups(nil, true)
   local avail = E.UI.PlaceGroups()
@@ -72,6 +71,7 @@ local function make(parent, ui)
 end
 
 function P.Draw(ui, scroll)
+  if not E then return QB.NeedPage(ui, scroll, "quests") end
   local K, ROW = ui.COLORS, ui.ROW
   local w = scroll:Width()
   local list = items(K)
@@ -99,6 +99,7 @@ end
 
 local ACCEPT = { { "Off", "off" }, { "On my route", "route" }, { "Worth taking", "worth" } }
 function P.Settings(_, col)
+  if not E then return QB.NeedSettings(col, "Quests") end
   local s = E:Settings()
   col:Head("Quests")
   local names, current = {}, "Off"

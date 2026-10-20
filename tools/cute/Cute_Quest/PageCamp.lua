@@ -9,6 +9,7 @@ local STYLES = { { "Sparkle", "sparkle" }, { "Light", "light" }, { "Game's", "ga
 
 local function light(s, on) if E.Glow then E.Glow.Set(on) else s.glow.on = on end end
 function Cp.Settings(_, col)
+  if not E then return QB.NeedSettings(col, "Camp") end
   local s = E:Settings()
   col:Head("Camp")
   col:Check("Camp bar", s.campBar ~= false, true, function(on) s.campBar = on end)

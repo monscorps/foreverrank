@@ -7,6 +7,7 @@ local G = {}
 local H = 440
 
 function G.Draw(ui, scroll)
+  if not E then return QB.NeedPage(ui, scroll, "gear") end
   local w = scroll:Width()
   local host = Cute.Host(ui, "gear")
   host:ClearAllPoints(); host:SetPoint("TOPLEFT", 0, 0); host:SetSize(w, H)
@@ -15,6 +16,7 @@ function G.Draw(ui, scroll)
 end
 
 function G.Settings(_, col)
+  if not E then return QB.NeedSettings(col, "Gear") end
   local s = E:Settings()
   col:Head("Gear")
   col:Check("Quests up to 2 levels ahead", s.finderAhead == true, true, function(on) s.finderAhead = on; if E.Gear and E.Gear.RefreshSoon then E.Gear.RefreshSoon() end end)

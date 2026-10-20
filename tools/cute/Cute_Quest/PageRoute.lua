@@ -8,6 +8,7 @@ local R = {}
 local function redraw() Cute.Refresh() end
 
 function R.Draw(ui, scroll)
+  if not E then return QB.NeedPage(ui, scroll, "route") end
   local K, ROW = ui.COLORS, ui.ROW
   local w = scroll:Width()
   local r = (E.Target and E.Target.Route()) or E.routeNow or { legs = {} }
@@ -56,6 +57,7 @@ function R.Draw(ui, scroll)
 end
 
 function R.Settings(_, col)
+  if not E then return QB.NeedSettings(col, "Route") end
   local s = E:Settings()
   col:Head("Route")
   col:Choice("Follow", { "The plan", "Ready now" }, s.routeQuest == "now" and "Ready now" or "The plan", function(v) s.routeQuest = v == "Ready now" and "now" or nil; E:MarkDirty() end)

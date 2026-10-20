@@ -5,7 +5,27 @@
 local ADDON, QB = ...
 local Cute = Cute
 local E = QB.Engine
-if not E then return end
+if not E then
+  -- QuestBank loaded without QuestBankAPI (older than 6.1): no engine. The band says what is needed where the step
+  -- would be, and each page draws that one line (QB.NeedPage) or has it as its section (QB.NeedSettings)
+  local line = QB.missing or "QuestBank 6.1.0 or newer is needed."
+  Cute.QuestBand = { On = function() return false end, Why = function() return line end }
+  function QB.NeedPage(ui, scroll, key)
+    local K, ROW = ui.COLORS, ui.ROW
+    local w = scroll:Width()
+    local v = ui:List(key, function(parent) return ui:MakeLine(parent) end)
+    v:Set(1, 0, ROW, function(r, _, ly)
+      r:SetHeight(ROW); r:ClearAllPoints(); r:SetPoint("TOPLEFT", 0, -ly); r:SetWidth(w)
+      r.bg:SetColorTexture(1, 1, 1, 0); r.bar:Hide(); r.val:Hide(); r.who:Hide(); r.fn, r.tip = nil, nil
+      r.name:ClearAllPoints(); r.name:SetPoint("LEFT", 8, 0); r.name:SetWidth(w - 16); r.name:SetJustifyH("LEFT")
+      ui.Color(r.name, K.MUTE); ui.FitText(r.name, line, w - 20); r.name:Show()
+    end)
+    ui.virtual = function() v:Show(ui.scroll.bar:GetValue() or 0, ui.scroll:View()) end
+    scroll:SetContentHeight(ROW + 8)
+  end
+  function QB.NeedSettings(col, title) col:Head(title); col:Note(line) end
+  return
+end
 
 if not QB.dormant then
   local INK, SOFT, WHITE = { 0.86, 0.86, 0.86 }, { 0.58, 0.58, 0.58 }, { 0.96, 0.96, 0.96 }
@@ -23,6 +43,8 @@ end
 
 Cute.QuestBand = {
   On = function() return Cute.ModuleOn("quests") and E.logReady == true end,
+  -- why not, in a line (the engine reads the log at the game's first QUEST_LOG_UPDATE)
+  Why = function() return "Reading your quest log." end,
   Steps = function() return E.Guide.Steps() end,
   Text = function(s) return E.Guide.Text(s) end,
   TimeToLevel = function() return E.Guide.TimeToLevel() end,

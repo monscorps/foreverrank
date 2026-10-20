@@ -8,6 +8,7 @@ local J = {}
 local H = 468
 
 function J.Draw(ui, scroll)
+  if not E then return QB.NeedPage(ui, scroll, "journal") end
   local w = scroll:Width()
   local host = Cute.Host(ui, "journal")
   host:ClearAllPoints(); host:SetPoint("TOPLEFT", 0, 0); host:SetSize(w, H)
@@ -17,6 +18,7 @@ end
 
 local KINDS = { { "boss", "Bosses" }, { "rare", "Rares" }, { "trash", "Trash" }, { "other", "Chests and events" } }
 function J.Settings(_, col)
+  if not E then return QB.NeedSettings(col, "Journal") end
   local s = E:Settings()
   col:Head("Journal")
   for _, k in ipairs(KINDS) do
