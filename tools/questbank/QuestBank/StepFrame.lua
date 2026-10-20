@@ -197,7 +197,7 @@ function SF.MarkReward()
   SF.mark:Show()
 end
 
-local lastVer, lastTime, lastRemind, lastMembers = -1, nil, false, ""
+local lastVer, lastTime, lastRemind, lastMembers = -1, nil, false, -1
 -- the lines, when something changed (and the item button, once a fight is over)
 function SF.Refresh()
   local f = SF.frame
@@ -207,11 +207,9 @@ function SF.Refresh()
   local steps = G.Steps()
   local text = G.TimeToLevel()
   local remind = (G.reminder and GetTime and GetTime() < G.reminder) and true or false
-  local members = G.MemberSteps()
-  local mkey = ""
-  for _, m in ipairs(members) do mkey = mkey .. m.name .. "=" .. m.text .. ";" end
-  if G.ver == lastVer and text == lastTime and remind == lastRemind and mkey == lastMembers then return end
-  lastVer, lastTime, lastRemind, lastMembers = G.ver, text, remind, mkey
+  local members = G.MemberSteps() -- (the list stands until G.memberVer moves: no table and no string a tick)
+  if G.ver == lastVer and text == lastTime and remind == lastRemind and G.memberVer == lastMembers then return end
+  lastVer, lastTime, lastRemind, lastMembers = G.ver, text, remind, G.memberVer
   -- the first row makes room for the item button only while one shows (in a fight, as the button stands)
   local itemUp = fighting() and (f.item ~= nil and f.item:IsShown()) or (not fighting() and G.ItemFor(steps[1]) ~= nil)
   f.rows[1].text:SetWidth(WIDTH - PAD * 2 - (itemUp and 30 or 0))

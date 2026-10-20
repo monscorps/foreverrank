@@ -16831,6 +16831,38 @@ end)()
     assert(#a.chat == 0 or not a.chat[#a.chat]:find("step", 1, true), "nothing said in chat")
   end }
 
+  -- the party's lines stand until something changed (Sync's member-step version, G.memberVer): a new step from a
+  -- member moves the line, leaving the group clears them; nothing is made in between (the memory gate measures it)
+  G6CASES[#G6CASES + 1] = { "the party's lines: made again only when a member's step or the group changed", function()
+    local a = newClient({ name = "Rone", level = 3, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = { { 7, 0 } }, done = { [783] = true }, group = true, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    local b = newClient({ name = "Brann", level = 3, cap = 60, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2, race = "Human",
+      log = { { 7, 0 }, { 15, 0 } }, done = { [783] = true }, group = true, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    login(a); login(b)
+    for _, cc in ipairs({ a, b }) do cc.QB:Settings().guide.on = true; cc.QB:Settings().welcome = nil end
+    settle(a); settle(b)
+    a.QB.Sync:Broadcast(true); b.QB.Sync:Broadcast(true)
+    for _ = 1, 3 do tick(a, 2); tick(b, 2); deliver() end
+    settle(a); settle(b)
+    for _ = 1, 3 do tick(a, 2); tick(b, 2); deliver() end
+    a.QB.StepFrame.Apply(); a.QB.StepFrame.Refresh()
+    local af, G = a.env.QuestBankStep, a.QB.Guide
+    assert(#G.MemberSteps() == 1 and af.members[1] and af.members[1]:IsShown() and af.members[1]:GetText():find("Brann", 1, true), "Brann's step shown: " .. tostring(af.members[1] and af.members[1]:GetText()))
+    local v0, list = G.memberVer, G.MemberSteps()
+    for _ = 1, 20 do af.elapsed = 1; af.__scripts.OnUpdate(af, 0.016) end
+    assert(G.memberVer == v0 and G.MemberSteps() == list, "nothing changed: the same list, the same version")
+    -- Brann's step changes: the line follows
+    b.QB.Sync.stepAt = nil
+    b.QB.Sync:Step("Hand in Kobold Camp Cleanup")
+    tick(b, 2); deliver()
+    a.QB.StepFrame.Refresh()
+    assert(G.memberVer > v0 and af.members[1]:GetText():find("Hand in Kobold Camp Cleanup", 1, true), "a new step from Brann: the line follows: " .. tostring(af.members[1]:GetText()))
+    -- out of the group: the lines go
+    a.o.group = false
+    a.QB.StepFrame.Refresh()
+    assert(#G.MemberSteps() == 0 and not af.members[1]:IsShown(), "alone: no member lines")
+  end }
+
   -- the step frame (StepFrame.lua): the step now in ink, the two next greyed, "about N min to level 6"; a click opens
   -- the Quest Log on the quest; a right-click is the menu; scale and lock kept; hidden by its setting; nothing clipped
   -- at any scale (the sheets go to the layout page)
@@ -17766,6 +17798,36 @@ end)()
   local ticks = ownBytes(function() for _ = 1, 100 do sfr.elapsed = 1; sfr.__scripts.OnUpdate(sfr, 0.016) end end)
   print(string.format("the step frame: 100 ticks with nothing changed %.0f bytes", ticks))
   assert(ticks < 2048, string.format("the step frame's tick allocates: %.0f bytes over 100 ticks", ticks))
+  -- the same gate grouped (6.0.0's review: a member's step made a list, a row and a key string a tick, ~130 bytes of
+  -- QuestBank's own): a party of two, each seeing the other's step, then 100 ticks with nothing changed
+  do
+    local ga = newClient({ name = "Rone", level = 3, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = { { 7, 0 } }, done = { [783] = true }, group = true, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    local gb = newClient({ name = "Brann", level = 3, cap = 60, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2, race = "Human",
+      log = { { 7, 0 }, { 15, 0 } }, done = { [783] = true }, group = true, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    login(ga); login(gb)
+    local function settleG(c)
+      c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE")
+      tick(c, 0.5)
+      c.QB.Model.Finish(); c.QB:Recompute(true); c.QB.Model.Finish()
+      tick(c, 0.3)
+      c.QB.Guide.Replan()
+    end
+    for _, c in ipairs({ ga, gb }) do c.QB:Settings().guide.on = true; c.QB:Settings().welcome = nil end
+    settleG(ga); settleG(gb)
+    ga.QB.Sync:Broadcast(true); gb.QB.Sync:Broadcast(true)
+    for _ = 1, 3 do tick(ga, 2); tick(gb, 2); deliver() end
+    settleG(ga); settleG(gb)
+    for _ = 1, 3 do tick(ga, 2); tick(gb, 2); deliver() end
+    ga.QB.StepFrame.Apply(); ga.QB.StepFrame.Refresh()
+    local gf = ga.env.QuestBankStep
+    assert(#ga.QB.Guide.MemberSteps() == 1 and gf.members[1] and gf.members[1]:IsShown() and gf.members[1]:GetText():find("Brann", 1, true),
+      "the grouped frame shows Brann's step: " .. tostring(gf.members[1] and gf.members[1]:GetText()))
+    gf.elapsed = 1; gf.__scripts.OnUpdate(gf, 0.016)
+    local gticks = ownBytes(function() for _ = 1, 100 do gf.elapsed = 1; gf.__scripts.OnUpdate(gf, 0.016) end end)
+    print(string.format("the step frame, grouped: 100 ticks with nothing changed %.0f bytes", gticks))
+    assert(gticks < 2048, string.format("the grouped step frame's tick allocates: %.0f bytes over 100 ticks", gticks))
+  end
 
   -- 7. a refresh with the window shut and nothing changed (QUEST_LOG_UPDATE fires all the time while questing): the
   -- same window afterwards, and a few tens of kilobytes (5.4.1: about 400 KB, statuses, item lists and strings anew)

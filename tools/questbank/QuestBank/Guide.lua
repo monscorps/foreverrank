@@ -764,17 +764,34 @@ end
 
 function G.Current() return G.steps[1] end
 
--- the party's steps (Sync's 1G line, one a member, received into m.step), by name; one list reused, made on the
--- frame's refresh only (S:Members makes a list each call)
-local memberSteps = {}
+-- the party's steps (Sync's 1G line, one a member, received into m.step), by name: one list and its rows reused,
+-- made again only when Sync's member-step version moved (a member came, went, or sent a step or status) or the
+-- group state changed; a tick with nothing changed makes no table and no string (S:Members makes a list each call).
+-- G.memberVer tells the frame which list it has
+local memberSteps, memberPool = {}, {}
+local memberFor, memberGrouped = -1, false
+G.memberVer = 0
+local function byName(x, y) return x.name < y.name end
 function G.MemberSteps()
-  for k = #memberSteps, 1, -1 do memberSteps[k] = nil end
   local S = QB.Sync
-  if not (S and S.Members and S.members and IsInGroup and IsInGroup()) then return memberSteps end
+  local grouped = (S and S.Members and S.members and IsInGroup and IsInGroup()) and true or false
+  local ver = S and S.stepVer or 0
+  if ver == memberFor and grouped == memberGrouped then return memberSteps end
+  memberFor, memberGrouped = ver, grouped
+  G.memberVer = G.memberVer + 1
+  for k = #memberSteps, 1, -1 do memberSteps[k] = nil end
+  if not grouped then return memberSteps end
+  local n = 0
   for _, m in ipairs(S:Members()) do
-    if type(m.step) == "string" and m.step ~= "" then memberSteps[#memberSteps + 1] = { name = m.name or m.key, class = m.class, text = m.step } end
+    if type(m.step) == "string" and m.step ~= "" then
+      n = n + 1
+      local row = memberPool[n]
+      if not row then row = {}; memberPool[n] = row end
+      row.name, row.class, row.text = m.name or m.key, m.class, m.step
+      memberSteps[n] = row
+    end
   end
-  table.sort(memberSteps, function(x, y) return x.name < y.name end)
+  table.sort(memberSteps, byName)
   return memberSteps
 end
 function G.Steps() return G.steps end

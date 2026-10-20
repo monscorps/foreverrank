@@ -9,8 +9,11 @@
 --   1R                                                                         please send yours
 --   1G|text                                                                    the Guide's first step (6.0), for the others' step frames
 local _, QB = ...
-local S = { members = {}, out = {}, live = {} }
+local S = { members = {}, out = {}, live = {}, stepVer = 0 }
 QB.Sync = S
+-- stepVer: up whenever a member comes, goes, or sends a step or status (1G, 1S), so the Guide's member-step list
+-- (G.MemberSteps) and the step frame can tell nothing changed without a table or a string a tick
+local function memberChanged() S.stepVer = S.stepVer + 1 end
 local PREFIX = "QuestBank"
 local STALE = 30 * 60
 
@@ -258,6 +261,7 @@ function S:Receive(msg, channel, sender)
   if kind == "1S" and statusIsMine(msg) then
     -- our own echo, under a sender string we didn't recognise: it is us from now on
     S.mySender = sender
+    if self.members[sender] then memberChanged() end
     self.members[sender] = nil
     return
   end
@@ -265,10 +269,12 @@ function S:Receive(msg, channel, sender)
   if not m and kind ~= "1R" then
     m = { key = sender, name = sender:match("^([^%-]+)") or sender }
     self.members[sender] = m
+    memberChanged()
   end
   if m then m.seen, m.via = now(), channel end
   if kind == "1S" then
     local f = split(msg, "|")
+    if m.class ~= f[5] or m.level == nil then memberChanged() end -- (the frame colours the name by class; a member is listed once its level is known)
     m.level, m.xp, m.fac, m.class = tonumber(f[2]), tonumber(f[3]), f[4] == "H" and "H" or "A", f[5]
     m.banked, m.plan, m.at60 = (tonumber(f[6]) or 0) / 100, (tonumber(f[7]) or 0) / 100, (tonumber(f[8]) or 0) / 100
     local runMin = tonumber(f[9]) or -1
@@ -287,7 +293,8 @@ function S:Receive(msg, channel, sender)
     if part == parts then m.quests, m.pending = m.pending, nil end
   elseif kind == "1G" then
     local text = msg:match("^1G|(.*)$")
-    m.step = (text and text ~= "") and text:sub(1, STEP_LEN) or nil
+    local step = (text and text ~= "") and text:sub(1, STEP_LEN) or nil
+    if step ~= m.step then m.step = step; memberChanged() end
     if QB.StepFrame and QB.StepFrame.Refresh then QB.StepFrame.Refresh() end
     return
   elseif kind == "1L" then
@@ -318,7 +325,7 @@ function S:Members()
   local t = now()
   for key, m in pairs(self.members) do
     m.age = t - (m.seen or t)
-    if m.age > STALE then self.members[key] = nil elseif m.level then out[#out + 1] = m end
+    if m.age > STALE then self.members[key] = nil; memberChanged() elseif m.level then out[#out + 1] = m end
   end
   table.sort(out, function(a, b)
     if (a.runStart or false) ~= (b.runStart or false) then return a.runStart or false end
