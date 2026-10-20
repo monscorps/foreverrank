@@ -17057,6 +17057,34 @@ end)()
     assert(#d.chat == n0 + 1 and d.chat[#d.chat]:find("guiding you", 1, true), "the one line after Done")
   end }
 
+  -- a 5.x save's two new switches (6.0.0's review: the DEFAULTS turned the minimap's ! and the tooltip progress on
+  -- behind a "Not now"): off from the migration, off after Not now, on with Yes; a fresh install has both on
+  G6CASES[#G6CASES + 1] = { "a 5.x save: the ! and the tooltip progress wait for Yes", function()
+    local saved = function() return { settings = { v544 = true, autoAccept = "route", arrow = false, tab = 6 } } end
+    local c = human("Holdout", { { 7, 1 } }, { [783] = true }, saved(), 8)
+    local QB, SF = c.QB, c.QB.StepFrame
+    local s = QB:Settings()
+    assert(s.minimapGivers == false and s.tipProgress == false and s.welcome == "ask", "a 5.x save: the ! and the tooltip progress off until it says yes")
+    settle(c); SF.Apply()
+    local f = c.env.QuestBankStep
+    f.card.no.__scripts.OnClick(f.card.no, "LeftButton")
+    settle(c)
+    assert(s.minimapGivers == false and s.tipProgress == false, "Not now: still off")
+    for _, it in ipairs(QB.Mini.List()) do assert(it.kind ~= "give", "no ! on the minimap for a 5.x player who said Not now") end
+    local d = human("Joiner", { { 7, 1 } }, { [783] = true }, saved(), 8)
+    settle(d); d.QB.StepFrame.Apply()
+    local g = d.env.QuestBankStep
+    g.card.yes.__scripts.OnClick(g.card.yes, "LeftButton")
+    local t = d.QB:Settings()
+    assert(t.minimapGivers == true and t.tipProgress == true and t.guide.on == true, "Yes: both on with the Guide")
+    settle(d)
+    local gives = 0
+    for _, it in ipairs(d.QB.Mini.List()) do if it.kind == "give" then gives = gives + 1 end end
+    assert(gives > 0, "and the ! pins come")
+    local fresh = human("Starter")
+    assert(fresh.QB:Settings().minimapGivers == true and fresh.QB:Settings().tipProgress == true, "a fresh install: both on")
+  end }
+
   -- the minimap: a ! for every quest you can take now on your map (the world map's own filter: for you, not grey,
   -- prerequisites done, not held, not done), givers within 30 yards one pin with a count, forty at most, the nearest
   -- first; a ? where a finished quest is handed in as before; the pin draws the game's !; the switch takes them off

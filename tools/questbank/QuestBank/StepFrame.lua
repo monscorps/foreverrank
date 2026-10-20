@@ -311,7 +311,9 @@ local function buildCard(f)
   card.yes:SetScript("OnClick", QB.Safe(function()
     local s = QB:Settings()
     s.guide.on, s.guide.frame, s.arrow = true, true, true
+    s.minimapGivers, s.tipProgress = true, true -- (6.0's two switches, kept off for a 5.x save until now: QB.Migrate600)
     if QB.Arrow then QB.Arrow:Set(true) end
+    if QB.Mini and QB.Mini.Invalidate then QB.Mini.Invalidate() end
     s.welcome = "fresh"
     QB:MarkDirty()
     SF.Ask("fresh")

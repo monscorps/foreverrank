@@ -1369,13 +1369,16 @@ end
 
 -- 6.0: the Guide. A fresh install guides from the first login: the step frame, QuestBank's arrow, and the welcome
 -- card that asks the auto choice (s.welcome "fresh"). A save from 5.x is asked once in the step frame instead
--- ("ask"); until it says yes the Guide is off and nothing else of its settings moves
+-- ("ask"); until it says yes the Guide is off and nothing else of its settings moves: 6.0's two new switches (the
+-- minimap's ! for every quest you can take, the progress in mob tooltips) start off for it too, as the DEFAULTS
+-- would have turned them on behind a "Not now"; Yes turns them on with the Guide (StepFrame.lua)
 function QB.Migrate600(s, fresh)
   s.v600 = true
   if fresh then
     s.guide.on, s.guide.frame, s.arrow, s.welcome = true, true, true, "fresh"
   else
     s.guide.on, s.welcome = false, "ask"
+    s.minimapGivers, s.tipProgress = false, false
   end
 end
 
