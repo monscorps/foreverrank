@@ -1087,14 +1087,19 @@ local function newClient(o)
     setfenv(chunk, env)
     chunk("QuestBank", c.QB)
   end
-  -- (6.0 turns QuestBank's arrow on for a fresh install, QB.Migrate600 at ADDON_LOADED; the 5.x cases were written with
-  -- it off, the minimap leading to the target and not to the arrow's step, a click shown with the arrow off, the arrow's
-  -- frame made when a case turns it on: off again for them before the login sets it up. The 6.0 block sets HARNESS_60,
-  -- and its clients log in as a fresh install does)
+  -- (6.0 turns QuestBank's arrow and the Guide on for a fresh install, QB.Migrate600 at ADDON_LOADED; the 5.x cases were
+  -- written with the arrow off (the minimap leading to the target and not to the arrow's step, a click shown with the
+  -- arrow off, the arrow's frame made when a case turns it on) and without a Guide (whose Replan reads the target at
+  -- each re-plan, so the quest kept is chosen at login, before a case swaps the catalog's spots): both off again for
+  -- them before the login sets them up. The 6.0 block sets HARNESS_60, and its clients log in as a fresh install does;
+  -- each of its cases turns the Guide on itself)
   local onEvent = c.QB.eventFrame.__scripts.OnEvent
   c.ev = function(f, event, ...)
     onEvent(f, event, ...)
-    if event == "ADDON_LOADED" and not HARNESS_60 and c.QB:Settings().welcome == "fresh" then c.QB:Settings().arrow = false end
+    if event == "ADDON_LOADED" and not HARNESS_60 and c.QB:Settings().welcome == "fresh" then
+      c.QB:Settings().arrow = false
+      c.QB:Settings().guide.on = false
+    end
   end
   clients[#clients + 1] = c
   return c
@@ -16338,6 +16343,46 @@ end)()
     o.guide.on = false
     assert(old.QB:InPlan(old.QB.Quest.Get(7)) == false, "with the Guide off it is not")
     assert(#fresh.chat == 0 or not fresh.chat[#fresh.chat]:find("guiding you", 1, true), "no welcome line before the choice")
+  end }
+
+  -- a level-1 human in Northshire holding Kobold Camp Cleanup (3/8) with A Threat Within (783) handed in: the first
+  -- step is the kobolds (the target's objective spot), then the hand-in at Marshal McBride, then the pick-up the plan
+  -- holds; each completes by itself as the game reports it
+  G6CASES[#G6CASES + 1] = { "steps from the target: kill, hand in, pick up; each completes by itself", function()
+    local c = human("Rone", { { 7, 0 } }, { [783] = true })
+    local QB, G = c.QB, c.QB.Guide
+    c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/8", type = "monster", finished = false, numFulfilled = 3, numRequired = 8 } } }
+    QB:Settings().guide.on = true
+    QB:SetAdded(15, true) -- Investigate Echo Ridge, from Marshal McBride too
+    settle(c)
+    local s1, s2, s3 = G.steps[1], G.steps[2], G.steps[3]
+    assert(s1 and s1.kind == "objective" and s1.qid == 7 and G.Text(s1) == "Kill Kobold Vermin 3/8", "the first step: " .. tostring(s1 and G.Text(s1)))
+    assert(s2 and s2.kind == "handin" and s2.qid == 7 and G.Text(s2) == "Hand in Kobold Camp Cleanup", "then the hand-in: " .. tostring(s2 and G.Text(s2)))
+    assert(s3 and s3.kind == "accept" and s3.qid == 15 and G.Text(s3):find("^Accept Investigate Echo Ridge from "), "then the pick-up: " .. tostring(s3 and G.Text(s3)))
+    assert(s1.c == 0 and s1.wx and s1.m == 1429, "a step has a place: continent yards and its map")
+    local v = G.ver
+    -- the count grows: the step stays the first, its text follows
+    c.objectives[7][1].numFulfilled = 5; c.objectives[7][1].text = "Kobold Vermin slain: 5/8"
+    settle(c)
+    assert(G.steps[1].kind == "objective" and G.Text(G.steps[1]) == "Kill Kobold Vermin 5/8", "the count follows: " .. G.Text(G.steps[1]))
+    -- done: the game says the quest is complete, and the hand-in is the first step
+    c.objectives[7][1].finished, c.objectives[7][1].numFulfilled = true, 8
+    c.log[1][2] = 1
+    settle(c)
+    assert(G.steps[1].kind == "handin" and G.steps[1].qid == 7, "complete: the hand-in first: " .. G.Text(G.steps[1]))
+    assert(G.ver > v, "the version went up")
+    -- handed in: gone; the pick-up leads
+    c.log = {}; c.done[7] = true
+    c.ev(QB.eventFrame, "QUEST_TURNED_IN", 7, 85)
+    settle(c)
+    assert(G.steps[1].kind == "accept" and G.steps[1].qid == 15, "handed in: the pick-up first: " .. G.Text(G.steps[1]))
+    -- accepted: gone, its objective next
+    c.log = { { 15, 0 } }
+    c.objectives = { [15] = { { text = "Investigate Echo Ridge: 0/1", type = "event", finished = false, numFulfilled = 0, numRequired = 1 } } }
+    c.ev(QB.eventFrame, "QUEST_ACCEPTED", 1, 15)
+    settle(c)
+    assert(G.steps[1].qid == 15 and G.steps[1].kind == "objective", "accepted: its objective: " .. G.Text(G.steps[1]))
+    assert(#c.chat == 0 or not c.chat[#c.chat]:find("step", 1, true), "nothing said in chat")
   end }
 
   for _, case in ipairs(G6CASES) do

@@ -35,6 +35,7 @@ Arrow.lua
 Target.lua
 Sync.lua
 Auto.lua
+Guide.lua
 MapPage.lua
 Gear.lua
 UI.lua

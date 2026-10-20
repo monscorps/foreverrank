@@ -2632,6 +2632,7 @@ function QB:Changed()
   -- is drawn below already counts as new
   QB.changed = (QB.changed or 0) + 1
   QB.Try("plan", QB.Recompute, QB)
+  if QB.Guide then QB.Try("guide", QB.Guide.Replan) end -- the Guide's steps from the route just planned (Guide.lua)
   -- the window shows what was just worked out, without working it out again
   QB.fresh = true
   if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.Try("window", QB.UI.Refresh, QB.UI) end
@@ -2693,6 +2694,8 @@ local function onTurnIn(questID, xpReward)
 end
 
 frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
+  -- (the Guide hears every event of this frame, as Auto does for the quest window's; it marks the plan dirty itself)
+  if event ~= "ADDON_LOADED" and QB.Guide and QB.Guide.OnEvent then QB.Try("guide", QB.Guide.OnEvent, event, a1, a2) end
   if event == "ADDON_LOADED" then
     -- (the quest survey's rows first: the game's XP for one of them applies like any other's)
     if a1 == ADDON then QB:Settings(); if QB.Survey then QB.Try("quest survey", QB.Survey.Load) end; Live.Apply() end
