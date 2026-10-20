@@ -1087,7 +1087,15 @@ local function newClient(o)
     setfenv(chunk, env)
     chunk("QuestBank", c.QB)
   end
-  c.ev = c.QB.eventFrame.__scripts.OnEvent
+  -- (6.0 turns QuestBank's arrow on for a fresh install, QB.Migrate600 at ADDON_LOADED; the 5.x cases were written with
+  -- it off, the minimap leading to the target and not to the arrow's step, a click shown with the arrow off, the arrow's
+  -- frame made when a case turns it on: off again for them before the login sets it up. The 6.0 block sets HARNESS_60,
+  -- and its clients log in as a fresh install does)
+  local onEvent = c.QB.eventFrame.__scripts.OnEvent
+  c.ev = function(f, event, ...)
+    onEvent(f, event, ...)
+    if event == "ADDON_LOADED" and not HARNESS_60 and c.QB:Settings().welcome == "fresh" then c.QB:Settings().arrow = false end
+  end
   clients[#clients + 1] = c
   return c
 end
@@ -16268,6 +16276,73 @@ end)()
   for _, case in ipairs(B6CASES) do
     case[2]()
     print("5.4.4 review, " .. (case[3] or "round 2") .. ": " .. case[1] .. ": ok")
+  end
+end)()
+
+----------------------------------------------------------------------------
+-- 6.0: the Guide, on by default (docs/superpowers/specs/2026-10-20-questbank-guide-design.md). Each case below is in
+-- G6CASES, in order, after the harness's helpers
+----------------------------------------------------------------------------
+;(function()
+  HARNESS_60 = true -- (login: the clients below are 6.0's, the arrow on as a fresh install has it)
+  local G6CASES = {}
+  local function frame(c, dt)
+    c.clock = c.clock + dt
+    table.sort(c.timers, function(a, b) return a.t < b.t end)
+    while c.timers[1] and c.timers[1].t <= c.clock do table.remove(c.timers, 1).f() end
+    for _, f in ipairs(c.frames) do
+      local u = f.__scripts.OnUpdate
+      if u and f:IsVisible() then u(f, dt) end
+    end
+  end
+  local function settle(c)
+    c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 5 do frame(c, 0.1) end
+    c.QB.Model.Finish()
+    c.QB:Recompute(true)
+    c.QB.Model.Finish()
+    for _ = 1, 3 do frame(c, 0.1) end
+    if c.QB.Guide then c.QB.Guide.Replan() end
+  end
+  -- a level-1 human in Northshire, questing; saved: a QuestBankDB to start from (nil: a fresh install)
+  local function human(name, log, done, saved, level)
+    local c = newClient({ name = name, level = level or 1, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = log or {}, done = done or {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    if saved then c.env.QuestBankDB = saved end
+    login(c)
+    return c
+  end
+  local function npcIndex(c, name, map)
+    for i, n in ipairs(c.QB.Data.NPC) do if n[1] == name and (not map or n[2] == map) then return i, n end end
+  end
+
+  G6CASES[#G6CASES + 1] = { "settings: a fresh install guides, a 5.x save is asked, auto picks are a table of their own", function()
+    local fresh = human("Newcomer")
+    local s = fresh.QB:Settings()
+    assert(s.guide and s.guide.on == true and s.guide.frame == true and s.guide.scale == 1 and s.arrow == true and s.welcome == "fresh" and s.v600 == true,
+      "a fresh install: the Guide on, the frame on, the arrow on, the welcome to ask")
+    assert(s.minimapGivers == true and s.tipProgress == true, "the ! on the minimap and the tooltip progress on")
+    assert(s.autoAccept == "off" and s.autoTurnIn == false, "auto still off until the welcome asks")
+    local old = human("Veteran", nil, nil, { settings = { v544 = true, autoAccept = "route", arrow = false, tab = 6 } })
+    local o = old.QB:Settings()
+    assert(o.guide.on == false and o.welcome == "ask" and o.arrow == false and o.autoAccept == "route" and o.v600 == true,
+      "a 5.x save: nothing changed, one question pending: " .. tostring(o.welcome))
+    local p = old.QB:Plan()
+    assert(type(p.auto) == "table", "the plan has an auto table")
+    p.auto[7] = true
+    assert(old.QB:IsAuto(7) and not old.QB:IsAdded(7), "an auto pick is not the player's own pick")
+    o.guide.on = true
+    old.QB:ReadState()
+    assert(old.QB:InPlan(old.QB.Quest.Get(7)) == true, "with the Guide on an auto pick is in the plan")
+    assert(old.QB.Auto.OnRoute(7) == true, "and on the route for Accept for me")
+    o.guide.on = false
+    assert(old.QB:InPlan(old.QB.Quest.Get(7)) == false, "with the Guide off it is not")
+    assert(#fresh.chat == 0 or not fresh.chat[#fresh.chat]:find("guiding you", 1, true), "no welcome line before the choice")
+  end }
+
+  for _, case in ipairs(G6CASES) do
+    case[2]()
+    print("6.0 guide: " .. case[1] .. ": ok")
   end
 end)()
 

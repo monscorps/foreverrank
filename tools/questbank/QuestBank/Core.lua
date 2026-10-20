@@ -1318,6 +1318,11 @@ local DEFAULTS = {
   djShow = { boss = true, rare = true, trash = false, other = true },
   -- the Quest Log's reward finders (Best gear, Trinkets, Recipes): also quests you can take within 2 levels, not only now
   finderAhead = false,
+  -- the Guide (6.0, Guide.lua and StepFrame.lua): on, the step frame shown, unlocked, at scale 1 where it was dragged.
+  -- welcome: "fresh" asks the auto choice in the step frame once; "ask" asks a 5.x save whether to guide (QB.Migrate600)
+  guide = { on = true, frame = true, locked = false, scale = 1 },
+  minimapGivers = true, -- a ! on the minimap for every quest you can take now (Minimap.lua)
+  tipProgress = true,   -- "Kobold Vermin: 3/8 (Kobold Camp Cleanup)" in mob and object tooltips (Tips.lua)
 }
 
 function QB:Settings()
@@ -1329,6 +1334,7 @@ function QB:Settings()
   end
   db.settings = db.settings or {}
   local s = db.settings
+  local fresh = next(s) == nil
   for k, v in pairs(DEFAULTS) do
     if s[k] == nil then
       if type(v) == "table" then
@@ -1345,6 +1351,7 @@ function QB:Settings()
   db.plans = db.plans or {}
   if not QB.pruned then QB.pruned = true; QB.PruneLogs(db) end
   if s.v544 == nil then QB.Migrate544(s) end
+  if s.v600 == nil then QB.Migrate600(s, fresh) end
   return s
 end
 
@@ -1358,6 +1365,18 @@ function QB.Migrate544(s)
   if s.zmWidth == 8 then s.zmWidth = 6 end
   if s.gpWidth == 8 then s.gpWidth = 6 end
   if s.arrowMode == "pin" then s.arrowMode = "route" end
+end
+
+-- 6.0: the Guide. A fresh install guides from the first login: the step frame, QuestBank's arrow, and the welcome
+-- card that asks the auto choice (s.welcome "fresh"). A save from 5.x is asked once in the step frame instead
+-- ("ask"); until it says yes the Guide is off and nothing else of its settings moves
+function QB.Migrate600(s, fresh)
+  s.v600 = true
+  if fresh then
+    s.guide.on, s.guide.frame, s.arrow, s.welcome = true, true, true, "fresh"
+  else
+    s.guide.on, s.welcome = false, "ask"
+  end
 end
 
 -- The saved hand-in runs, kept to their newest (5.4.2: they grew for as long as the account played, 3 to 6 KB each,
@@ -1471,6 +1490,7 @@ function QB:Plan()
   p.add, p.cut, p.seen, p.removed = p.add or {}, p.cut or {}, p.seen or {}, p.removed or {}
   p.handed, p.rep = p.handed or {}, p.rep or {}
   p.skip = p.skip or {} -- quests skipped for good (QB:SetSkipped): [id] = true
+  p.auto = p.auto or {} -- the Guide's own picks (Guide.lua, G.Fill): [id] = true; never one of p.add
   return p
 end
 
@@ -2117,13 +2137,16 @@ function QB:ChainCost(q)
   return { n = #steps, xp = xp, minutes = known and math.floor(minutes + 0.5) or nil, first = steps[1].q or nil }
 end
 function QB:IsAdded(id) return self:Plan().add[id] and true or false end
+function QB:IsAuto(id) return id ~= nil and self:Plan().auto[id] == true end
+-- the Guide runs while questing (banking keeps 5.x's planner as it is)
+function QB:GuideOn() return self:Settings().guide.on == true and self:Mode() == "quest" end
 
 function QB:InPlan(q, st)
   if self:IsCut(q.id) or self:IsSkipped(q.id) then return false end
   st = st or self:Status(q)
   if st.code == "done" or st.code == "wrong" then return false end
   if self.state.log[q.id] or st.bag then return true end
-  return self:IsAdded(q.id)
+  return self:IsAdded(q.id) or (self:IsAuto(q.id) and self:GuideOn())
 end
 
 -- in the log: cut it or keep it; not in the log: fetch it or not. A skipped quest is routed again (un-skipped, and

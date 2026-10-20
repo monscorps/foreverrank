@@ -44,6 +44,7 @@ function Auto.OnRoute(id)
   if not id or id == 0 then return false end
   local plan = QB:Plan()
   if plan.add[id] then return true end
+  if plan.auto[id] and QB:GuideOn() then return true end
   local q = Q.Get(id)
   if not q then return false end
   for pid in pairs(plan.add) do
