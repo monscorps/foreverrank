@@ -7,6 +7,7 @@
 --   1Q|part|parts|id.code[have/need],...                                    quests (b banked, a in the log with progress, p to fetch)
 --   1L|id:xp:level,...                                                         XP the game reported
 --   1R                                                                         please send yours
+--   1G|text                                                                    the Guide's first step (6.0), for the others' step frames
 local _, QB = ...
 local S = { members = {}, out = {}, live = {} }
 QB.Sync = S
@@ -130,9 +131,36 @@ function S:Whisper(name)
   QB:Print("Sent your quests to " .. name .. " and asked for theirs. They need QuestBank too.")
 end
 
--- a change: tell the others a few seconds later, once
+-- 1G|text: your Guide's first step, for the others' step frames (6.0, Guide.lua). Sent to the group when it changes,
+-- at most once every STEP_GAP seconds (a change within the gap goes when it ends), cut to STEP_LEN bytes, no escape
+-- codes (the Guide's texts are plain). An empty text clears it for them
+local STEP_GAP, STEP_LEN = 10, 120
+function S:Step(text)
+  if not self.ready or type(text) ~= "string" then return end
+  text = text:gsub("|", ""):sub(1, STEP_LEN)
+  if text == (self.lastStep or "") then return end
+  local t = now()
+  if self.stepAt and t - self.stepAt < STEP_GAP then
+    if not self.stepSoon then
+      self.stepSoon = true
+      C_Timer.After(STEP_GAP - (t - self.stepAt), QB.Safe(function()
+        S.stepSoon = false
+        S:Step(QB.Guide and QB.Guide.Text(QB.Guide.Current()) or "")
+      end, "party sync: step"))
+    end
+    return
+  end
+  local chan = groupChannel()
+  if not chan or not QB:Settings().share.party then return end
+  self.lastStep, self.stepAt = text, t
+  queue("1G|" .. text, chan)
+end
+
+-- a change: tell the others a few seconds later, once (the Guide's step at once, when it changed)
 function S:Changed()
-  if not self.ready or self.waiting then return end
+  if not self.ready then return end
+  if QB.Guide and QB.Guide.Current then self:Step(QB.Guide.Text(QB.Guide.Current())) end
+  if self.waiting then return end
   self.waiting = true
   C_Timer.After(3, QB.Safe(function()
     S.waiting = false
@@ -257,6 +285,11 @@ function S:Receive(msg, channel, sender)
       m.pending[tonumber(id)] = { code = code, prog = prog ~= "" and prog or nil }
     end
     if part == parts then m.quests, m.pending = m.pending, nil end
+  elseif kind == "1G" then
+    local text = msg:match("^1G|(.*)$")
+    m.step = (text and text ~= "") and text:sub(1, STEP_LEN) or nil
+    if QB.StepFrame and QB.StepFrame.Refresh then QB.StepFrame.Refresh() end
+    return
   elseif kind == "1L" then
     local before = QB.liveVer
     for id, xp, lvl in msg:gmatch("(%d+):(%d+):(%d+)") do

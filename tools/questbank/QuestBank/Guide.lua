@@ -9,6 +9,8 @@
 --   done      a step completes when the game says so: the quest accepted, every objective of its spots done or the
 --             quest complete, the quest handed in, the flight landed, the level reached
 --   skipped   "Not now" for an hour (QuestBankDB.chars[key].guide.later), "Drop" for good (QB:SetSkipped)
+--   party     the fill weighs what the party holds (G.Rank); each member's first step comes by Sync's 1G line
+--             (G.MemberSteps) for the frame
 --   time      "about 14 min to level 6" (G.TimeToLevel): the plan's XP a minute, then the measured XP an hour
 --   train     at your level's new spells, the trainer of your class nearest a hand-in stop (D.TRAINER, or learned at
 --             its window into QuestBankDB.disc.trainer); none in reach: a reminder line, no step
@@ -256,7 +258,8 @@ function G.Fill(level)
     if not q or q.lvl > level + 2 or (q.req or 1) > level then return false end
     if p.add[id] or putOff(id) or QB:IsSkipped(id) or s.log[id] or QB.API.IsDone(id) then return false end
     local st = QB:Status(q)
-    if st.code ~= "todo" and st.code ~= "item" then return false end
+    -- (a chain's later step counts as Now lists it: the pick-ups lead to the chain's first open step)
+    if st.code ~= "todo" and st.code ~= "item" and st.code ~= "prereq" then return false end
     if QB.QuestMap and QB.QuestMap.Grey(q, level) and QB:ChainLead(id) < line then return false end
     return true
   end
@@ -640,6 +643,20 @@ function G.Replan()
 end
 
 function G.Current() return G.steps[1] end
+
+-- the party's steps (Sync's 1G line, one a member, received into m.step), by name; one list reused, made on the
+-- frame's refresh only (S:Members makes a list each call)
+local memberSteps = {}
+function G.MemberSteps()
+  for k = #memberSteps, 1, -1 do memberSteps[k] = nil end
+  local S = QB.Sync
+  if not (S and S.Members and S.members and IsInGroup and IsInGroup()) then return memberSteps end
+  for _, m in ipairs(S:Members()) do
+    if type(m.step) == "string" and m.step ~= "" then memberSteps[#memberSteps + 1] = { name = m.name or m.key, class = m.class, text = m.step } end
+  end
+  table.sort(memberSteps, function(x, y) return x.name < y.name end)
+  return memberSteps
+end
 function G.Steps() return G.steps end
 
 -- the first step told apart as the target tells stops: its kind, its quest, its NPC and its place

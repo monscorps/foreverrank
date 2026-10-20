@@ -16708,6 +16708,41 @@ end)()
     QB.state.level = was
   end }
 
+  -- a party of two: Rone holds Kobold Camp Cleanup, Brann holds it too and Investigate Echo Ridge; the fill prefers
+  -- what the party holds, and each sees the other's step (Sync's 1G line)
+  G6CASES[#G6CASES + 1] = { "a party of two: shared quests first, each member's step shown", function()
+    local a = newClient({ name = "Rone", level = 3, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Human",
+      log = { { 7, 0 } }, done = { [783] = true }, group = true, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    local b = newClient({ name = "Brann", level = 3, cap = 60, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2, race = "Human",
+      log = { { 7, 0 }, { 15, 0 } }, done = { [783] = true }, group = true, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    login(a); login(b)
+    a.objectives = { [7] = { { text = "Kobold Vermin slain: 1/8", type = "monster", finished = false, numFulfilled = 1, numRequired = 8 } } }
+    b.objectives = { [7] = { { text = "Kobold Vermin slain: 4/8", type = "monster", finished = false, numFulfilled = 4, numRequired = 8 } },
+                     [15] = { { text = "Investigate Echo Ridge: 0/1", type = "event", finished = false, numFulfilled = 0, numRequired = 1 } } }
+    for _, c in ipairs({ a, b }) do c.QB:Settings().guide.on = true end
+    settle(a); settle(b)
+    a.QB.Sync:Broadcast(true); b.QB.Sync:Broadcast(true)
+    for _ = 1, 3 do tick(a, 2); tick(b, 2); deliver() end
+    settle(a); settle(b)
+    for _ = 1, 3 do tick(a, 2); tick(b, 2); deliver() end
+    -- the fill: Rone's plan holds Investigate Echo Ridge (Brann has it) ahead of other picks of the same worth
+    assert(a.QB:Plan().auto[15] or a.QB:Plan().add[15], "Rone's plan takes the quest Brann holds")
+    -- each other's step
+    -- (a chat sender carries the surname: "Brann Steelhand", as the Party page names him)
+    local function listed(ms) local t = {} for _, m in ipairs(ms) do t[#t + 1] = m.name .. ": " .. m.text end return table.concat(t, " | ") end
+    local ms = a.QB.Guide.MemberSteps()
+    assert(#ms == 1 and ms[1].name:find("^Brann") and ms[1].text == b.QB.Guide.Text(b.QB.Guide.steps[1]), "Rone sees Brann's step: " .. listed(ms))
+    local mb = b.QB.Guide.MemberSteps()
+    assert(#mb == 1 and mb[1].name:find("^Rone"), "Brann sees Rone's: " .. listed(mb))
+    -- the message sent is the first step's text (one line, under 255 bytes, no escape codes)
+    assert(a.QB.Sync.lastStep and a.QB.Sync.lastStep == a.QB.Guide.Text(a.QB.Guide.steps[1]), "the step text sent is the first step's")
+    -- the same step again sends nothing; a change within STEP_GAP waits and then goes
+    local sent = #a.outbox
+    a.QB.Sync:Step(a.QB.Sync.lastStep)
+    assert(#a.outbox == sent, "the same step is not sent again")
+    assert(#a.chat == 0 or not a.chat[#a.chat]:find("step", 1, true), "nothing said in chat")
+  end }
+
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")
