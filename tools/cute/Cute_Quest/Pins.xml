@@ -1,0 +1,86 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+  <!-- QuestBank's own frames on a map canvas (the world map's, and the Map page's): Pins.lua makes them out of combat,
+       places and scales them, and sets their mouse scripts. They are never the map canvas's pins (no mixin or scripts
+       here, nothing the canvas hands out): Pins.lua says why. Each is the game's own pin drawn again, region for
+       region, so QuestBank's pins look like the ones the game puts beside them. -->
+  <!-- the game's quest POI (Blizzard_POIButton/POIButton.xml, POIButtonTemplate): a 20x20 button with its 32x32 textures
+       centred on it: the disc (its NormalTexture), the glyph on the disc (its Display's Icon: in progress, or ready to
+       hand in), and the inner glow for the mouse (its HighlightTexture). The route's stops, the hand-ins and the
+       objectives of the quests in your log -->
+  <Frame name="QuestBankPoiTemplate" virtual="true" enableMouse="true">
+    <Size x="20" y="20"/>
+    <Layers>
+      <Layer level="ARTWORK">
+        <Texture parentKey="Disc">
+          <Size x="32" y="32"/>
+          <Anchors>
+            <Anchor point="CENTER"/>
+          </Anchors>
+        </Texture>
+      </Layer>
+      <Layer level="ARTWORK" textureSubLevel="1">
+        <Texture parentKey="Glyph">
+          <Size x="32" y="32"/>
+          <Anchors>
+            <Anchor point="CENTER"/>
+          </Anchors>
+        </Texture>
+      </Layer>
+      <Layer level="OVERLAY">
+        <Texture parentKey="Hi" alphaMode="ADD" hidden="true">
+          <Size x="32" y="32"/>
+          <Anchors>
+            <Anchor point="CENTER"/>
+          </Anchors>
+        </Texture>
+      </Layer>
+    </Layers>
+  </Frame>
+  <!-- the game's quest offer (Blizzard_SharedMapDataProviders/QuestOfferDataProvider.xml, QuestOfferPinTemplate): the !
+       at its own 32 px on a 22x22 frame whose hit box is 4 px narrower on each side. Quests you can pick up, the
+       pick-ups the route plans, and where the item that starts a quest drops -->
+  <Frame name="QuestBankOfferTemplate" virtual="true" enableMouse="true">
+    <Size x="22" y="22"/>
+    <HitRectInsets left="4" right="4" top="0" bottom="0"/>
+    <Layers>
+      <Layer level="ARTWORK">
+        <Texture parentKey="Texture">
+          <Size x="32" y="32"/>
+          <Anchors>
+            <Anchor point="CENTER"/>
+          </Anchors>
+        </Texture>
+      </Layer>
+    </Layers>
+  </Frame>
+  <!-- the game's POI pin (SharedMapPoiTemplates.xml, BaseMapPoiPinTemplate): one atlas at its own size, the frame sized to
+       it; the same atlas lit over it while the mouse is on it (made in Lua). A dungeon's entrance (with how many of its
+       quests you have done under it, and the ready check's tick once that is all of them: QuestBank's own), a flight
+       point, the arrow's step -->
+  <Frame name="QuestBankMarkTemplate" virtual="true" enableMouse="true">
+    <Size x="32" y="32"/>
+    <Layers>
+      <Layer level="ARTWORK">
+        <Texture parentKey="Texture">
+          <Size x="32" y="32"/>
+          <Anchors>
+            <Anchor point="CENTER"/>
+          </Anchors>
+        </Texture>
+      </Layer>
+      <Layer level="OVERLAY">
+        <Texture parentKey="Badge" hidden="true">
+          <Size x="14" y="14"/>
+          <Anchors>
+            <Anchor point="BOTTOMLEFT" x="-3" y="-3"/>
+          </Anchors>
+        </Texture>
+        <FontString parentKey="Count" inherits="NumberFontNormalSmall" justifyH="CENTER" hidden="true">
+          <Anchors>
+            <Anchor point="TOP" relativeKey="$parent.Texture" relativePoint="BOTTOM" x="0" y="1"/>
+          </Anchors>
+        </FontString>
+      </Layer>
+    </Layers>
+  </Frame>
+</Ui>

@@ -4,8 +4,9 @@
   python3 tools/cute/build.py [--no-zip] [--online]
 
 In order: write the seed (Cute/Known.lua, gen_known.py) and run its selftest (the build stops when either fails), write
-Cute/Changes.lua from the page's changelog (the build stops when the toc's version has no entry), zip the addon the
-way the owner does (skipped with --no-zip or when the Cute folder is missing), regenerate
+Cute/Changes.lua from the page's changelog (the build stops when the toc's version has no entry), copy QuestBank's
+engine into Cute_Quest (build_quest: the only writer of that folder but its own nine files), zip both folders the
+way the owner does (skipped with --no-zip or when a folder is missing), regenerate
 addons/cute/stats.js from the registry (luajit page_stats.lua), stamp the version (Cute.toc), the zip size (KB) and
 the stat counts into addons/cute/index.html between <!--@name--> ... <!--/@name--> markers, then check the page:
   - every local href/src exists beside the page; every site-absolute path exists under the repo
@@ -19,7 +20,7 @@ the stat counts into addons/cute/index.html between <!--@name--> ... <!--/@name-
     and on hover
   --online also fetches every external link (needs the network).
 Prints each check; exits 1 with the problems when any fails. Python 3 standard library only."""
-import html as htmlmod, os, re, subprocess, sys
+import html as htmlmod, os, re, shutil, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -31,6 +32,20 @@ ZIP = os.path.join(PAGE_DIR, "Cute.zip")
 STATS = os.path.join(PAGE_DIR, "stats.js")
 CHANGES = os.path.join(ADDON, "Changes.lua")
 SITE_CSS = os.path.join(ROOT, "forever.css")
+QB_DIR = os.path.join(ROOT, "tools", "questbank", "QuestBank")
+QB_TOC = os.path.join(QB_DIR, "QuestBank.toc")
+QUEST = os.path.join(HERE, "Cute_Quest")
+QUEST_TOC = os.path.join(QUEST, "Cute_Quest.toc")
+# QuestBank's engine, as Cute_Quest carries it: every file QuestBank.toc may list. UI.lua (the window) is never copied;
+# a file not here stops the build until it has been checked in Cute's harness
+ENGINE_KNOWN = {
+    "Data.lua", "Core.lua", "Lists.lua", "Discover.lua", "Survey.lua", "Game.lua", "Loot.lua", "Observe.lua", "Timer.lua",
+    "Link.lua", "MinimapTiles.lua", "MinimapView.lua", "MinimapRoute.lua", "Minimap.lua", "DungeonMap.lua", "Glow.lua",
+    "Walk.lua", "Camp.lua", "Model.lua", "Legacy.lua", "Travel.lua", "Pins.lua", "QuestMap.lua", "Pins.xml", "Arrow.lua",
+    "Target.lua", "Sync.lua", "Auto.lua", "Guide.lua", "MapPage.lua", "Gear.lua", "StepFrame.lua", "Tips.lua",
+}
+# Cute_Quest's own files, in the toc's order after the engine
+OWN = ["Bridge.lua", "Band.lua", "PageQuests.lua", "PageRoute.lua", "PageMap.lua", "PageJournal.lua", "PageGear.lua", "PageCamp.lua"]
 
 problems = []
 
@@ -115,17 +130,77 @@ def build_changes(version):
     ok("Changes.lua: %d changelog lines, %s's there (%s)" % (len(entries), version, "written" if old != src else "unchanged"))
 
 
+def qb_version():
+    m = re.search(r"^## Version:\s*(\S+)", open(QB_TOC, encoding="utf-8").read(), re.M)
+    return m.group(1) if m else "?"
+
+
+def build_quest(version):
+    """Cute_Quest: QuestBank's engine files copied byte for byte (UI.lua left out), its art, and the toc this writes.
+    Stops on a file QuestBank.toc lists that ENGINE_KNOWN does not, a copy that differs from its source after writing,
+    a copied Lua file without its dormant guard, or a stray file in the folder"""
+    listed = [l.strip() for l in open(QB_TOC, encoding="utf-8").read().splitlines() if re.match(r"^[\w]+\.(lua|xml)$", l.strip())]
+    unknown = [f for f in listed if f not in ENGINE_KNOWN and f != "UI.lua"]
+    if unknown:
+        sys.exit("QuestBank.toc lists files build.py does not know: %s. Check each in Cute's harness, then add it to ENGINE_KNOWN." % ", ".join(unknown))
+    engine = [f for f in listed if f != "UI.lua"]
+    os.makedirs(os.path.join(QUEST, "art"), exist_ok=True)
+    pairs = [(os.path.join(QB_DIR, f), os.path.join(QUEST, f)) for f in engine]
+    for name in sorted(os.listdir(os.path.join(QB_DIR, "art"))):
+        if not name.startswith("."):
+            pairs.append((os.path.join(QB_DIR, "art", name), os.path.join(QUEST, "art", name)))
+    written = 0
+    for src, dst in pairs:
+        data = open(src, "rb").read()
+        if not os.path.isfile(dst) or open(dst, "rb").read() != data:
+            shutil.copyfile(src, dst)
+            written += 1
+        if open(dst, "rb").read() != data:
+            problem("Cute_Quest/%s differs from its source after the copy" % os.path.relpath(dst, QUEST))
+    for f in engine:
+        if f.endswith(".lua"):
+            src = open(os.path.join(QUEST, f), encoding="ascii", errors="replace").read()
+            if not re.search(r"^local \w+, QB = \.\.\.\nif QB\.dormant then return end\n", src, re.M):
+                problem("Cute_Quest/%s has no `if QB.dormant then return end` after its vararg line" % f)
+    own = {"Shim.lua"} | set(OWN)
+    for name in sorted(os.listdir(QUEST)):
+        if name.endswith((".lua", ".xml")) and name not in engine and name not in own:
+            problem("Cute_Quest/%s is neither QuestBank's nor one of Cute_Quest's own files: remove it" % name)
+    for name in sorted(own):
+        if not os.path.isfile(os.path.join(QUEST, name)):
+            problem("Cute_Quest/%s is missing" % name)
+    toc = "\n".join([
+        "## Interface: 16001",
+        "## Title: |cffe8b24aCute|r Quest",
+        "## Notes: QuestBank's guiding as Cute modules: the step now in the Guide, and Quests, Route, Map, Journal, Gear and Camp, each a switch in Settings, Modules. Loads only while one is on.",
+        "## Author: Mikal",
+        "## Version: %s" % version,
+        "## X-License: GPL-3.0-or-later",
+        "## X-QuestBank: %s" % qb_version(),
+        "## Dependencies: Cute",
+        "## LoadOnDemand: 1",
+        "## X-Cute-Module: 1",
+        "## SavedVariables: CuteQuestDB",
+        "",
+        "Shim.lua",
+    ] + engine + OWN) + "\n"
+    old = open(QUEST_TOC, encoding="ascii").read() if os.path.isfile(QUEST_TOC) else None
+    if old != toc:
+        open(QUEST_TOC, "w", encoding="ascii", newline="\n").write(toc)
+    ok("Cute_Quest: %d engine files from QuestBank %s (%d written), toc %s" % (len(engine), qb_version(), written, "written" if old != toc else "unchanged"))
+
+
 def build_zip():
     if "--no-zip" in sys.argv:
         print("  skip zip (--no-zip)")
         return
-    if not os.path.isdir(ADDON):
-        print("  skip zip (no Cute folder)")
+    if not (os.path.isdir(ADDON) and os.path.isdir(QUEST)):
+        print("  skip zip (no Cute or Cute_Quest folder)")
         return
     if os.path.exists(ZIP):
         os.remove(ZIP)
-    subprocess.run(["zip", "-rq", ZIP, "Cute", "-x", "*.DS_Store"], cwd=HERE, check=True)
-    ok("Cute.zip built, %d bytes" % os.path.getsize(ZIP))
+    subprocess.run(["zip", "-rq", ZIP, "Cute", "Cute_Quest", "-x", "*.DS_Store"], cwd=HERE, check=True)
+    ok("Cute.zip built, %d bytes (Cute and Cute_Quest)" % os.path.getsize(ZIP))
 
 
 def build_stats():
@@ -616,6 +691,12 @@ def main():
     version = toc_version()
     build_known()
     build_changes(version)
+    build_quest(version)
+    if problems:
+        print("problems: %d" % len(problems))
+        for p in problems:
+            print("  - " + p)
+        sys.exit(1)
     build_zip()
     if not os.path.isfile(ZIP):
         sys.exit("no Cute.zip at %s: build it or drop --no-zip" % ZIP)

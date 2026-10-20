@@ -1,0 +1,54 @@
+## Interface: 16001
+## Title: |cffe8b24aCute|r Quest
+## Notes: QuestBank's guiding as Cute modules: the step now in the Guide, and Quests, Route, Map, Journal, Gear and Camp, each a switch in Settings, Modules. Loads only while one is on.
+## Author: Mikal
+## Version: 0.6.1
+## X-License: GPL-3.0-or-later
+## X-QuestBank: 6.0.1
+## Dependencies: Cute
+## LoadOnDemand: 1
+## X-Cute-Module: 1
+## SavedVariables: CuteQuestDB
+
+Shim.lua
+Data.lua
+Core.lua
+Lists.lua
+Discover.lua
+Survey.lua
+Game.lua
+Loot.lua
+Observe.lua
+Timer.lua
+Link.lua
+MinimapTiles.lua
+MinimapView.lua
+MinimapRoute.lua
+Minimap.lua
+DungeonMap.lua
+Glow.lua
+Walk.lua
+Camp.lua
+Model.lua
+Legacy.lua
+Travel.lua
+Pins.lua
+QuestMap.lua
+Pins.xml
+Arrow.lua
+Target.lua
+Sync.lua
+Auto.lua
+Guide.lua
+MapPage.lua
+Gear.lua
+StepFrame.lua
+Tips.lua
+Bridge.lua
+Band.lua
+PageQuests.lua
+PageRoute.lua
+PageMap.lua
+PageJournal.lua
+PageGear.lua
+PageCamp.lua
