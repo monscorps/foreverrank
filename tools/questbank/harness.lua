@@ -693,7 +693,13 @@ local function newClient(o)
   env.GetQuestLink = function(id) for _, e in ipairs(c.log) do if e[1] == id then return "|cffffff00|Hquest:" .. id .. ":20|h[Quest " .. id .. "]|h|r" end end end
   env.GetItemInfo = function(id) return "Item " .. id, "|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r" end
   env.UnitXP = function() return c.xp or 0 end
-  env.UnitXPMax = function() return 23200 end
+  -- the bar's top: the game's XP to the next level at your level (D.TO_NEXT, as Data.lua has it; 6.0.0's review: a
+  -- flat 23,200 made every sheet's time line "about 5 h to level 2")
+  env.UnitXPMax = function()
+    local D = c.QB and c.QB.Data
+    local level = c.level or o.level or 1
+    return D and D.TO_NEXT and D.TO_NEXT[level] or 23200
+  end
   env.UnitClass = function(unit) local pm = partyOf(unit); if pm then return pm[2], pm[2], 0 end return o.className, o.class, o.classID end
   env.UnitRace = function() return o.race, o.race end
   env.UnitFactionGroup = function() return o.faction end
@@ -16453,6 +16459,19 @@ end)()
     end
     assert(at334 and at233 and at334 < at233, "the far pick-ups nearest first: " .. tostring(at334) .. " / " .. tostring(at233))
     assert(G.steps[1].npc == willem, "and Willem still first: " .. G.Text(G.steps[1]))
+  end }
+
+  -- the mock's XP bar (6.0.0's review: UnitXPMax = 23,200 at every level made the sheets' time line "about 5 h to
+  -- level 2"): a fresh level 1 needs 400, and the plan's minutes to level 2 read like a first evening's
+  G6CASES[#G6CASES + 1] = { "the mock's XP bar is the level's, and the time line at level 1 is minutes, not hours", function()
+    local c = human("Firstbar")
+    local QB, G, D = c.QB, c.QB.Guide, c.QB.Data
+    QB:Settings().welcome = nil
+    settle(c)
+    assert(QB.state.xpMax == D.TO_NEXT[1] and D.TO_NEXT[1] == 400, "level 1's bar: " .. tostring(QB.state.xpMax))
+    local text, mins, measured = G.TimeToLevel()
+    assert(text and mins and not measured and mins < 60 and text:find(" to level 2$"), "a first evening's minutes to level 2, not hours: " .. tostring(text))
+    assert(c.env.UnitXPMax("player") == 400, "the mock answers the level's XP")
   end }
 
   -- a level-23 human mid-chain (Redridge's chain, Duskwood and Wetlands quests in the log): the fill takes the best
