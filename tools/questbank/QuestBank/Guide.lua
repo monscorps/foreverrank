@@ -91,6 +91,13 @@ function G.Text(s)
   return s.text or ""
 end
 
+-- the shorter words, when the frame's row cannot hold the whole line: "Accept X" without the giver (the row's
+-- tooltip names them); nil for the other kinds, which are cut with "..." as before
+function G.Short(s)
+  if s and s.kind == "accept" then return "Accept " .. questName(s.qid) end
+  return nil
+end
+
 -- the place of a stop's NPC, in continent yards and on its map (Data.lua's D.NPC row: name, uiMap, x, y, continent,
 -- world x, world y)
 local function placeNpc(s, idx)

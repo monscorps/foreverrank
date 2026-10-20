@@ -36,10 +36,21 @@ local function fs(parent, size, color, width)
   return t
 end
 
--- a row's words: whole when they fit, else cut with "..." (Arrow.lua's A.Fit measures the string)
-local function rowText(t, text)
-  if QB.Arrow and QB.Arrow.Fit then QB.Arrow.Fit(t, text, nil, t:GetWidth() or WIDTH) else t:SetText(text) end
+-- a row's words: whole when they fit, else the step's shorter form ("Accept X" without the giver, G.Short), else cut
+-- with "..." (Arrow.lua's A.Fit measures the string). A row that does not say it all gets the whole line in its
+-- tooltip, so the giver's name is a hover away
+local function rowText(t, text, short)
+  if QB.Arrow and QB.Arrow.Fit then QB.Arrow.Fit(t, text, short, t:GetWidth() or WIDTH) else t:SetText(text) end
 end
+local function rowEnter(self)
+  local s = G.Steps()[self.i]
+  local full = s and G.Text(s) or ""
+  if full == "" or self.text:GetText() == full then return end
+  GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+  GameTooltip:AddLine(full, INK[1], INK[2], INK[3], true)
+  GameTooltip:Show()
+end
+local function rowLeave() if GameTooltip:GetOwner() then GameTooltip:Hide() end end
 
 local function build()
   local f = CreateFrame("Frame", "QuestBankStep", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
@@ -82,6 +93,8 @@ local function build()
         QB.UI:Open(3) -- (a travel, train, grind or corpse step: the Route page shows the way)
       end
     end, "step frame"))
+    b:SetScript("OnEnter", QB.Safe(rowEnter, "step frame"))
+    b:SetScript("OnLeave", rowLeave)
     f.rows[i] = b
   end
   f.now, f.next1, f.next2 = f.rows[1].text, f.rows[2].text, f.rows[3].text
@@ -191,7 +204,7 @@ function SF.Refresh()
   f.rows[1].text.qbText = nil -- (fitted again at the new width)
   for i = 1, 3 do
     local s = steps[i]
-    rowText(f.rows[i].text, s and G.Text(s) or (i == 1 and "Nothing to do: /qb" or ""))
+    rowText(f.rows[i].text, s and G.Text(s) or (i == 1 and "Nothing to do: /qb" or ""), s and G.Short(s) or nil)
     f.rows[i]:SetShown(i == 1 or s ~= nil)
   end
   f.time:SetText(text or "")

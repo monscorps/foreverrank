@@ -16820,9 +16820,9 @@ end)()
     SF.Apply(); SF.Refresh()
     local f = c.env.QuestBankStep
     assert(f and f:IsShown(), "the frame is up")
-    -- (a row too long for the frame is cut with "...": Arrow.lua's A.Fit)
-    local function rowIs(t, full) local got = t:GetText(); return got == full or (got:sub(-3) == "..." and full:sub(1, #got - 3) == got:sub(1, -4)) end
-    assert(rowIs(f.now, G.Text(G.steps[1])) and rowIs(f.next1, G.Text(G.steps[2])) and rowIs(f.next2, G.Text(G.steps[3])),
+    -- (a row too long for the frame shows the step's short form, else is cut with "...": Arrow.lua's A.Fit)
+    local function rowIs(t, s) local got, full = t:GetText(), G.Text(s); return got == full or got == G.Short(s) or (got:sub(-3) == "..." and full:sub(1, #got - 3) == got:sub(1, -4)) end
+    assert(rowIs(f.now, G.steps[1]) and rowIs(f.next1, G.steps[2]) and rowIs(f.next2, G.steps[3]),
       "the three lines: " .. tostring(f.now:GetText()) .. " | " .. tostring(f.next1:GetText()) .. " | " .. tostring(f.next2:GetText()))
     local r, g = f.next1:GetTextColor()
     assert(r < 0.8 and g < 0.8, "the next steps greyed")
@@ -16861,6 +16861,39 @@ end)()
     end
     SF.SetScale(1)
     assert(#c.chat == 0 or not c.chat[#c.chat]:find("step", 1, true), "nothing said in chat")
+  end }
+
+  -- a pick-up too long for the row (6.0.0's review: "Accept Dwarven Outfitters from Sten Stou..." cut at the giver's
+  -- name): the row says "Accept Dwarven Outfitters" and its tooltip the whole line with the giver; a row that says
+  -- it all has no tooltip
+  G6CASES[#G6CASES + 1] = { "the step frame: a long pick-up shows Accept X, the giver in the row's tooltip", function()
+    local c = newClient({ name = "Coldridge", level = 1, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Dwarf", log = {}, done = {}, world = { 0, -6215, 330 }, map = 1426, bagSlots = {}, bind = "Kharanos" })
+    login(c)
+    local QB, G, SF = c.QB, c.QB.Guide, c.QB.StepFrame
+    QB:Settings().welcome = nil
+    settle(c); SF.Apply(); SF.Refresh()
+    local f = c.env.QuestBankStep
+    local cut = 0
+    for i = 1, 3 do
+      local s = G.steps[i]
+      local t = f.rows[i].text
+      if s then
+        local full = G.Text(s)
+        lines = {}
+        f.rows[i].__scripts.OnEnter(f.rows[i])
+        if t:GetText() == full then
+          assert(#lines == 0, "a row that says it all has no tooltip: " .. table.concat(lines, " | "))
+        else
+          assert(s.kind == "accept" and t:GetText() == G.Short(s) and not t:GetText():find("...", 1, true), "a cut pick-up row says Accept X: " .. t:GetText())
+          assert(#lines == 1 and lines[1] == full, "its tooltip is the whole line: " .. table.concat(lines, " | "))
+          cut = cut + 1
+        end
+        f.rows[i].__scripts.OnLeave(f.rows[i])
+      end
+    end
+    assert(cut >= 1, "a pick-up row too long for the frame (Sten Stoutarm's)")
+    assert(G.Short(G.steps[1]) == "Accept Dwarven Outfitters" and G.Short({ kind = "handin" }) == nil, "the short form is the pick-up's alone")
   end }
 
   -- the quest-item button: the game's secure button for the first step's quest item, set, shown and hidden out of a
