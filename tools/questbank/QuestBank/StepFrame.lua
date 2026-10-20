@@ -134,6 +134,7 @@ local function itemButton(f)
   b:SetFrameStrata("MEDIUM")
   b:SetFrameLevel((f:GetFrameLevel() or 0) + 5)
   b:RegisterForClicks("AnyUp", "AnyDown")
+  b:SetScale(settings().scale or 1) -- (under UIParent, the frame's scale does not reach it: SF.SetScale keeps them equal)
   b.icon = b:CreateTexture(nil, "ARTWORK")
   b.icon:SetAllPoints()
   b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -151,6 +152,8 @@ function SF.RefreshItem(s)
   if want and not f.item then f.item = itemButton(f) end
   local b = f.item
   if not b then return end
+  local sc = settings().scale or 1
+  if b:GetScale() ~= sc then b:SetScale(sc) end -- (a scale chosen in a fight waited here)
   if want then
     if b:GetAttribute("item") ~= want then b:SetAttribute("type", "item"); b:SetAttribute("item", want) end
     if tex then b.icon:SetTexture(tex) end
@@ -381,9 +384,16 @@ function SF.Apply()
   if SF.AskPending then SF.AskPending() end
 end
 
+-- the frame's scale, and the item button's with it (a child of UIParent: the frame's scale does not reach it); the
+-- button is secure, so in a fight its scale waits for the fight's end (SF.pendingItem, SF.OnRegen)
 function SF.SetScale(sc)
   settings().scale = sc
-  if SF.frame then SF.frame:SetScale(sc) end
+  local f = SF.frame
+  if not f then return end
+  f:SetScale(sc)
+  if f.item then
+    if fighting() then SF.pendingItem = true else f.item:SetScale(sc) end
+  end
 end
 
 function SF:Menu(s)

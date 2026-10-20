@@ -17026,6 +17026,34 @@ end)()
     assert(f.item:IsShown() and f.item:GetAttribute("item") == "item:6948", "the fight over: the button is back for the shown frame")
   end }
 
+  -- the item button's scale (6.0.0's review: a child of UIParent, the frame's SetScale did not reach it): it follows
+  -- SF.SetScale; chosen in a fight, the secure button waits for the fight's end; one made at a chosen scale starts there
+  G6CASES[#G6CASES + 1] = { "the item button scales with the frame; in a fight it waits", function()
+    local c = human("Scaler", { { 7, 0 } }, { [783] = true }, nil, 5)
+    local QB, SF = c.QB, c.QB.StepFrame
+    c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/8", type = "monster", finished = false, numFulfilled = 3, numRequired = 8 } } }
+    c.questItems[7] = { 6948, 134414 }
+    QB:Settings().guide.on = true; QB:Settings().welcome = nil
+    settle(c); SF.Apply(); SF.Refresh()
+    local f = c.env.QuestBankStep
+    assert(f.item and f.item:IsShown(), "the item button up")
+    SF.SetScale(1.2)
+    assert(math.abs(f:GetScale() - 1.2) < 0.001 and math.abs(f.item:GetScale() - 1.2) < 0.001, "the button scales with the frame: " .. tostring(f.item:GetScale()))
+    c.combat = true
+    SF.SetScale(0.8)
+    assert(math.abs(f:GetScale() - 0.8) < 0.001 and math.abs(f.item:GetScale() - 1.2) < 0.001 and SF.pendingItem, "in a fight the secure button waits")
+    c.combat = false
+    c.ev(QB.eventFrame, "PLAYER_REGEN_ENABLED")
+    assert(math.abs(f.item:GetScale() - 0.8) < 0.001 and f.item:IsShown(), "the fight over: the button follows: " .. tostring(f.item:GetScale()))
+    SF.SetScale(1)
+    local d = human("Scaled", { { 7, 0 } }, { [783] = true }, nil, 5)
+    d.objectives = c.objectives; d.questItems[7] = { 6948, 134414 }
+    d.QB:Settings().guide.on = true; d.QB:Settings().welcome = nil; d.QB:Settings().guide.scale = 1.2
+    settle(d); d.QB.StepFrame.Apply(); d.QB.StepFrame.Refresh()
+    local g = d.env.QuestBankStep
+    assert(g.item and math.abs(g.item:GetScale() - 1.2) < 0.001, "made at the chosen scale")
+  end }
+
   -- a fresh install: the step frame opens on the welcome card (the auto choice, the outside-route choice, hand in for
   -- me), Done keeps the choices, says the one chat line and gives way to the steps; nothing else is said
   G6CASES[#G6CASES + 1] = { "a fresh install: the welcome card asks the auto choice; one line in chat, nothing else", function()
