@@ -4864,6 +4864,105 @@ do
   end)
 end
 
+-- 36d: memory: what the module keeps after login with every quest page opened (reachable from its private table and its
+-- saved variables; LuaJIT's layout), and the garbage the engine's own code makes with nothing changed. The budgets are
+-- QuestBank's (its harness, the memory block): 11 MB kept, a re-plan with the window shut under 100 KB, the Guide's
+-- Replan under 64 KB. ownBytes charges an allocation to the file of the function that made it: Cute_Quest/ only
+if SEEDED then
+  local function ownBytes(fn)
+    local getinfo, count = debug.getinfo, collectgarbage
+    local acc, mine, last, mark = 0, false, 0, 0
+    local function hook(ev)
+      local now = count("count")
+      if mine then acc = acc + (now - last) end
+      local info = getinfo(ev == "call" and 2 or 3, "S")
+      if info and info.what ~= "C" then mine = info.source:find("Cute_Quest/", 1, true) ~= nil end
+      if count("count") - mark > 65536 then collectgarbage("collect"); collectgarbage("stop"); mark = count("count") end
+      last = count("count")
+    end
+    if jit then jit.off(); jit.flush() end
+    collectgarbage("collect"); collectgarbage("stop")
+    last = count("count"); mark = last
+    debug.sethook(hook, "cr")
+    fn()
+    debug.sethook()
+    collectgarbage("restart")
+    if jit then jit.on() end
+    return acc * 1024
+  end
+  -- what a client's quest module keeps: everything reachable from the roots (a widget counted as a small table, the
+  -- module's own fields on it followed; the upvalues of the module's own functions followed, where its caches live)
+  local function pow2(n) local p = 1; while p < n do p = p * 2 end; return p end
+  local function kept(c, roots)
+    collectgarbage("collect"); collectgarbage("collect") -- (a weak table's dead entries go first)
+    local seen = { [c] = true, [c.env] = true, [BASE] = true, [_G] = true, [ALL] = true, [clients] = true, [c.frames] = true, [c.timers] = true }
+    seen[c.C] = true
+    local total, queue, qi = 0, roots, 1
+    local function push(v)
+      local tv = type(v)
+      if tv == "string" then
+        if not seen[v] then seen[v] = true; total = total + 17 + #v end
+      elseif (tv == "table" or tv == "function") and not seen[v] then
+        queue[#queue + 1] = v
+      end
+    end
+    while qi <= #queue do
+      local v = queue[qi]
+      queue[qi], qi = false, qi + 1
+      if v and not seen[v] then
+        seen[v] = true
+        if type(v) == "table" then
+          if rawget(v, "__kind") and rawget(v, "__scripts") then
+            total = total + 150
+            for k, x in pairs(v) do if type(k) ~= "string" or not k:find("^__") then push(k); push(x) end end
+            for _, s in pairs(rawget(v, "__scripts")) do push(s) end
+          else
+            local n, h = #v, 0
+            for k in pairs(v) do if not (type(k) == "number" and k >= 1 and k <= n and k % 1 == 0) then h = h + 1 end end
+            total = total + 64 + (n > 0 and pow2(n) * 8 or 0) + (h > 0 and pow2(h) * 24 or 0)
+            local mt = debug.getmetatable(v)
+            if type(mt) == "table" then push(mt) end
+            for k, x in pairs(v) do push(k); push(x) end
+          end
+        else
+          local info = debug.getinfo(v, "Su")
+          total = total + 40 + 8 * (info.nups or 0)
+          if info.source:find("Cute_Quest/", 1, true) then
+            for i = 1, info.nups or 0 do local _, x = debug.getupvalue(v, i); push(x) end
+          end
+        end
+      end
+    end
+    return total / 1024
+  end
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = "Officer", class = "PALADIN", level = 20, online = true } end
+  isolated({ member("Memo", 1) }, function()
+    local mc = newClient(charOf({ "Memo", 1, "Officer", "PALADIN", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(mc)
+    tickAll(5)
+    for _, key in ipairs({ "Cute_Quest", "Cute_Quest:route", "Cute_Quest:map", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:camp" }) do mc.C.Modules.Set(key, true) end
+    if not mc.C.Modules.OnKey("guide") then mc.C.Modules.Set("guide", true) end
+    tick(mc, 6)
+    local QB = mc.addons[2].private
+    QB.Model.Finish()
+    for _, page in ipairs({ "guide", "quests", "route", "journal", "gear" }) do mc.C.UI:Open(page) end
+    mc.C.UI.frame:Hide()
+    local KEEP_BUDGET = 11 * 1024
+    local keptKB = kept(mc, { QB, mc.env.QuestBankDB })
+    print(string.format("cute quest memory: kept after login and every page %.0f KB (budget %d KB)", keptKB, KEEP_BUDGET))
+    assert(keptKB < KEEP_BUDGET, string.format("the quest module keeps %.0f KB, over its budget of %d KB", keptKB, KEEP_BUDGET))
+    QB:Changed()
+    local refresh = ownBytes(function() QB:Changed(); QB:Changed() end) / 2
+    print(string.format("cute quest: a refresh with the window shut %.0f KB of garbage", refresh / 1024))
+    assert(refresh < 100 * 1024, string.format("a refresh with nothing changed made %.0f KB (at most 100)", refresh / 1024))
+    QB.Guide.Replan()
+    local replan = ownBytes(function() QB.Guide.Replan() end)
+    print(string.format("cute quest: the Guide's Replan with nothing changed %.0f KB", replan / 1024))
+    assert(replan < 64 * 1024, string.format("the Guide's Replan made %.0f KB (at most 64)", replan / 1024))
+    leave(mc)
+  end)
+end
+
 -- 37: Only-you is routing, not hiding (0.6.0). Three officers (Ofa the guild master, Ofb, Ofc) and two members (Mia,
 -- with 300 statistics, and Mo) log in together; the officers keep Gold, the gear gaps and the Kills statistics to
 -- themselves. Every message each client receives is read off the bus: a member's client never gets another member's
