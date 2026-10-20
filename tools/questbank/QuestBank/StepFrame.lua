@@ -68,7 +68,7 @@ local function build()
     b:SetSize(WIDTH - PAD * 2, ROW)
     b:SetPoint("TOPLEFT", PAD, -PAD - (i - 1) * ROW)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    b.text = fs(b, i == 1 and 12 or 11, i == 1 and INK or INK_SOFT, WIDTH - PAD * 2 - (i == 1 and 30 or 0))
+    b.text = fs(b, i == 1 and 12 or 11, i == 1 and INK or INK_SOFT, WIDTH - PAD * 2)
     b.text:SetPoint("LEFT", 0, 0)
     b.i = i
     b:SetScript("OnClick", QB.Safe(function(self, button)
@@ -185,6 +185,10 @@ function SF.Refresh()
   for _, m in ipairs(members) do mkey = mkey .. m.name .. "=" .. m.text .. ";" end
   if G.ver == lastVer and text == lastTime and remind == lastRemind and mkey == lastMembers then return end
   lastVer, lastTime, lastRemind, lastMembers = G.ver, text, remind, mkey
+  -- the first row makes room for the item button only while one shows (in a fight, as the button stands)
+  local itemUp = fighting() and (f.item ~= nil and f.item:IsShown()) or (not fighting() and G.ItemFor(steps[1]) ~= nil)
+  f.rows[1].text:SetWidth(WIDTH - PAD * 2 - (itemUp and 30 or 0))
+  f.rows[1].text.qbText = nil -- (fitted again at the new width)
   for i = 1, 3 do
     local s = steps[i]
     rowText(f.rows[i].text, s and G.Text(s) or (i == 1 and "Nothing to do: /qb" or ""))
