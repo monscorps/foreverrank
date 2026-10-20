@@ -45,12 +45,15 @@ local function pool(parent, make)
   function p:HideRest() for i = self.used + 1, #self.items do self.items[i]:Hide() end end
   return p
 end
-local POOLS = { "checks", "labels", "values", "buttons", "edits", "navLines" }
+local POOLS = { "checks", "boxes", "labels", "values", "buttons", "edits", "navLines" }
 
 local function ensure(ui)
   if widgets.checks then return end
   local parent = ui.scroll.child
-  widgets.checks = pool(parent, function(p) return C.UI.Check(p) end)
+  -- (a check with a label is a row button, ticked by a click anywhere on it: UI.lua checkRow; a box alone, the
+  -- Everyone / Only-you pairs, is a check box)
+  widgets.checks = pool(parent, function(p) return C.UI.CheckRow(p) end)
+  widgets.boxes = pool(parent, function(p) return C.UI.Check(p) end)
   widgets.labels = pool(parent, function(p) return C.UI.Text(p, 12, INK, "LEFT", 300) end)
   -- (a step's value, right-aligned against its buttons, apart from its label so a narrow window cuts the label and
   -- never the number)
@@ -117,17 +120,17 @@ function Col:Note(s)
   label(self, self.x, self.y, self.w, s, DIM)
   self.y = self.y + NOTE
 end
--- a check box with its label; right: a few dim words at the row's end; tip: function(tooltip) for its tooltip
+-- a check row: the box with its label, one button the width of the column (up to the right-hand words), so a click
+-- anywhere on the row ticks it; right: a few dim words at the row's end; tip: function(tooltip) for its tooltip
 function Col:Check(text, on, enabled, fn, right, tip)
   self.fresh = false
   local cb = widgets.checks:Get()
   cb:ClearAllPoints()
-  cb:SetPoint("TOPLEFT", self.x, -self.y - 3)
-  local room = self.w - 26 - (right and 186 or 0)
-  cb.label:SetWidth(room)
-  C.UI.FitText(cb.label, text, room - 4)
-  -- (the label ticks the box too: the whole row up to the right-hand words)
-  cb:SetHitRectInsets(0, -(6 + room), -3, -3)
+  cb:SetPoint("TOPLEFT", self.x, -self.y)
+  local room = self.w - (right and 186 or 0)
+  cb:SetWidth(room)
+  cb.label:SetWidth(room - 24)
+  C.UI.FitText(cb.label, text, room - 28)
   cb:Set(on and true or false)
   cb:SetOn(enabled ~= false)
   cb.statId, cb.vis = nil, nil
@@ -140,7 +143,8 @@ function Col:Check(text, on, enabled, fn, right, tip)
   self.y = self.y + ROWH
   return cb
 end
--- a choice of one among a few, in a row after its label (unticking the chosen one chooses none)
+-- a choice of one among a few, in a row after its label (unticking the chosen one chooses none): each option a short
+-- check row, box and word
 function Col:Choice(text, options, current, fn)
   self.fresh = false
   label(self, self.x, self.y + 2, 90, text, DIM)
@@ -148,10 +152,10 @@ function Col:Choice(text, options, current, fn)
   for _, opt in ipairs(options) do
     local cb = widgets.checks:Get()
     cb:ClearAllPoints()
-    cb:SetPoint("TOPLEFT", cx, -self.y - 3)
+    cb:SetPoint("TOPLEFT", cx, -self.y)
+    cb:SetWidth(64)
     cb.label:SetWidth(44)
     C.UI.FitText(cb.label, opt, 42)
-    cb:SetHitRectInsets(0, -50, -3, -3)
     cb:Set(current == opt)
     cb:SetOn(true)
     cb.statId, cb.vis = nil, nil
@@ -300,13 +304,12 @@ function Col:Pair(id, text, indent)
     t:AddLine("Everyone, always: it says which officers take the Only-you values and what each member's Ready counts.", 0.85, 0.85, 0.85, true)
   end or nil
   with = with or (fixed and id) or nil
-  -- (each box under the middle of its heading)
+  -- (each box under the middle of its heading; a box alone, no row: the label is the stat's, left of both)
   for _, d in ipairs({ { "all", 96 }, { "self", 27 } }) do
-    local cb = widgets.checks:Get()
+    local cb = widgets.boxes:Get()
     cb:ClearAllPoints()
     cb:SetPoint("TOPLEFT", self.x + self.w - d[2], -self.y - 3)
     cb.label:SetText("")
-    cb:SetHitRectInsets(0, 0, -3, -3)
     cb.statId, cb.vis = id, d[1]
     cb:Set(vis == d[1])
     cb:SetOn(officer and not with)

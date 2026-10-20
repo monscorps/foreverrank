@@ -127,8 +127,7 @@ local function button(parent, label, w, h)
 end
 -- a flat check box: a small square, filled white when checked, its edge a mid grey (3.5:1 on the window's panels, so
 -- an unticked box shows: a black edge was 1.1:1). Callers set cb.fn rather than the OnClick script, so the fill always
--- follows the click; a caller with a label beside it widens what a click takes in (SetHitRectInsets, documented:
--- SimpleFrameAPIDocumentation.lua), so the label ticks it too
+-- follows the click. A box alone (the Everyone / Only-you pairs); a box with a label is a check row, below
 local EDGE = 0.42
 local function check(parent)
   local cb = CreateFrame("CheckButton", nil, parent, BD)
@@ -151,7 +150,38 @@ local function check(parent)
   function cb:SetOn(on) self:SetEnabled(on); color(self.label, on and INK or MUTE); self.fill:SetVertexColor(1, 1, 1, on and 1 or 0.4) end
   return cb
 end
-UI.Check, UI.Button, UI.Text, UI.Skin, UI.Flat = check, button, text, skin, flat
+-- a check row: one full-width button, as the Settings sections and the Statistics categories are rows (UI:MakeLine),
+-- with the box drawn inside it as a visual (a plain frame, which takes no mouse) and the label beside. A click
+-- anywhere on the row ticks it: the row is the button, so nothing depends on a hit rect widened over the label
+-- (0.6.0 did that with SetHitRectInsets, and on the live client the Modules boxes took no click). Callers set r.fn,
+-- called after the fill follows the click; Set, SetOn and GetChecked as the check box's
+local function checkRow(parent)
+  local r = CreateFrame("Button", nil, parent)
+  r:SetHeight(ROW)
+  r.checkRow = true
+  r.box = CreateFrame("Frame", nil, r, BD)
+  r.box:SetSize(14, 14)
+  r.box:SetPoint("LEFT", 0, 0)
+  skin(r.box, PANEL2)
+  if r.box.SetBackdropBorderColor then r.box:SetBackdropBorderColor(EDGE, EDGE, EDGE, 1) end
+  r.fill = flat(r.box, "ARTWORK", WHITE, 1)
+  r.fill:SetPoint("TOPLEFT", 3, -3)
+  r.fill:SetPoint("BOTTOMRIGHT", -3, 3)
+  r.fill:Hide()
+  r.label = text(r, 12, INK, "LEFT", 220)
+  r.label:SetPoint("LEFT", r.box, "RIGHT", 6, 0)
+  r:SetHighlightTexture(FLAT, "ADD")
+  r:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
+  r:SetScript("OnClick", function(self, ...)
+    self:Set(not self.on)
+    if self.fn then self.fn(self, ...) end
+  end)
+  function r:Set(on) self.on = on and true or false; self.fill:SetShown(self.on) end
+  function r:GetChecked() return self.on == true end
+  function r:SetOn(on) self:SetEnabled(on); color(self.label, on and INK or MUTE); self.fill:SetVertexColor(1, 1, 1, on and 1 or 0.4) end
+  return r
+end
+UI.Check, UI.CheckRow, UI.Button, UI.Text, UI.Skin, UI.Flat = check, checkRow, button, text, skin, flat
 -- (for Guide.lua, which draws its page with the window's own pieces)
 UI.COLORS = { WHITE = WHITE, INK = INK, DIM = DIM, MUTE = MUTE, GOOD = GOOD, WARN = WARN, BAD = BAD }
 UI.Color, UI.Hex, UI.Dimmed, UI.ROW = color, hex, dimmed, ROW

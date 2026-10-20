@@ -920,7 +920,11 @@ starts with the dashboard alone, a fresh install and one that ran 0.5.x alike, a
 on 0.6.0 ("Starts with only the statistics; the Guide, switched on in Settings, Modules, ..."). 0.5.x showed every
 character the Guide as a fixed tab, and 0.6.0's first builds kept it on for them under that line; the carry-over went
 (it was the only path of its kind, and it had already turned the Guide on for 0.4.x's characters by mistake once).
-`/cute modules` opens the section.
+`/cute modules` lists each module, on or off, and opens the section; `/cute guide` (a built-in module's name while it
+is off) switches it on for this character, as its box would, and opens its page: a second way to the box. Every check
+in Settings is a row button the column's width, its box a visual inside it (UI.lua checkRow), so a click anywhere on
+the row ticks it and nothing leans on a hit rect widened over the label (0.6.0 did, and the live client's Modules
+boxes took no click).
 
 ## The rules and the Guide
 
@@ -1046,8 +1050,8 @@ bounds here is the default again; the members it takes to learn a range or to ag
 officer's one is dropped, the default back). A change goes to the guild on its own, three seconds after the last of a
 run of clicks; Broadcast now sends them again; "Rules to defaults" puts them back. `/cute rules` prints them.
 
-**The Guide** (a built-in module, off on a fresh install: Settings > Modules puts its tab after Race; `/cute guide`,
-which says where it is switched on while it is off) answers one question, what should you do next and with whom.
+**The Guide** (a built-in module, off on a fresh install: Settings > Modules puts its tab after Race; `/cute guide`
+switches it on for this character while it is off, and opens it) answers one question, what should you do next and with whom.
 The band, which stays in view, holds two lines, each with its tooltip:
 
 - **The next best thing**, the rules' pick from the dungeons in range at your level: "Run The Deadmines: 3 guild mates
@@ -1130,9 +1134,10 @@ nothing. A first run (saved variables empty) says hello instead, "welcome to the
 /cute help lists the rest.", and counts this version as told: what changed in a version nobody ran is no news.
 
 `/cute` opens the window; `/cute` and a page's name (a module's id or title: race, prog, shame or hall of shame,
-statistics, officers, me, and guide or a module addon's while it is on) opens that page, a module that is off says
-where it is switched on and opens Settings there, an officer's page asked for by a member and a word that is no page
-or command say so; `/cute settings` (or options) and `/cute modules` open Settings; `/cute resend`, `/cute errors`,
+statistics, officers, me, and guide or a module addon's while it is on) opens that page, a built-in module that is off
+(the Guide) goes on for this character first and says so, a module addon that is off says where it is switched on and
+opens Settings there, an officer's page asked for by a member and a word that is no page
+or command say so; `/cute settings` (or options) opens Settings, `/cute modules` lists the modules, on or off, and opens Settings there; `/cute resend`, `/cute errors`,
 `/cute api`, `/cute diag` and `/cute rules` as above; `/cute help` lists them.
 
 ## Test
@@ -1254,7 +1259,7 @@ a newer version from a member's hello said once and kept in the status line at b
 ones nothing, a /reload saying nothing again, the next login saying it, an updated client nothing; what is new printed
 once a version, ten seconds on, from 0.4.0's saved variables, a first run saying hello with /cute instead; Changes.lua
 holding the page's every changelog line and the toc loading it). And the modules of 0.6.0: a fresh install showing the dashboard alone for the officer and the
-member, the Guide asked for opening Race and `/cute guide` saying where to switch it on, `/cute` and a page's id or
+member, the Guide asked for opening Race and `/cute guide` switching it on and opening it, `/cute modules` listing it on or off, `/cute` and a page's id or
 title opening it, an officer's page and an unknown word only saying so; its box in Settings > Modules
 bringing its tab after Race and its section at once, kept for the character, its two thresholds greyed for the member;
 0.5.0's saved variables starting every character in them with the dashboard alone too, What's new saying so, a

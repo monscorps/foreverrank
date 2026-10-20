@@ -503,35 +503,53 @@ function C.Diag()
 end
 
 -- /cute: the window. /cute <page> opens a page by its module's id or title (race, prog, shame, statistics, officers,
--- me; guide and a module addon's while they are on); /cute settings and /cute modules open Settings; /cute resend asks
--- the guild again; /cute errors, api, diag and rules print lines to paste
+-- me; guide and a module addon's while they are on; a built-in module that is off, the Guide, goes on for this
+-- character first, as its box would do it); /cute settings opens Settings; /cute modules lists the modules, on or
+-- off, and opens Settings there; /cute resend asks the guild again; /cute errors, api, diag and rules print lines to
+-- paste
 local function pageFor(msg)
   for _, def in ipairs(C.Modules.list) do
     local title = def.title:lower()
     if def.page and (msg == def.id or msg == title or msg == (title:gsub("%s+", ""))) then return def end
   end
 end
+-- each module Settings > Modules lists, on or off, in one line
+local function modulesLine()
+  local parts = {}
+  for _, e in ipairs(C.Modules.Available(C.Roster:MeOfficer())) do
+    parts[#parts + 1] = e.title .. (e.addon and (" (" .. e.key .. ")") or "") .. (e.on and " on" or " off") .. (e.status and (", " .. e.status) or "")
+  end
+  return "modules: " .. (#parts > 0 and table.concat(parts, "; ") or "none") .. ". The dashboard's pages are always on."
+end
 SLASH_CUTE1 = "/cute"
 SlashCmdList.CUTE = C.Safe(function(msg)
   msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
   if msg == "" then C.UI:Toggle()
   elseif msg == "settings" or msg == "options" then C.UI:Open("settings")
-  elseif msg == "modules" then C.UI:Open("settings", "modules")
+  elseif msg == "modules" then C.Print(modulesLine()); C.UI:Open("settings", "modules")
   elseif msg == "errors" then errorsList()
   elseif msg == "resend" then C.Comm:Ask(); C.Print("asked the guild to send their records again.")
   elseif msg == "api" then C.Print(C.Stats.GameReport()); C.Print(C.ApiReport())
   elseif msg == "diag" then for _, l in ipairs(C.Diag()) do C.Print(l) end
   elseif msg == "rules" then for _, l in ipairs(C.Rules.RulesReport()) do C.Print(l) end
   elseif msg == "help" then
-    C.Print("/cute opens the window; /cute race, prog, shame, statistics, officers or me opens that page, and so does a module's name while it is on (/cute guide); /cute settings and /cute modules open Settings. /cute resend asks the guild to send their records again. To paste: /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them, what the guild has learned, the seed's state), /cute rules (each rule's threshold and who set it).")
+    C.Print("/cute opens the window; /cute race, prog, shame, statistics, officers or me opens that page, and so does a module's name (/cute guide switches the Guide on for this character when it is off); /cute settings opens Settings, /cute modules lists the modules and opens Settings there. /cute resend asks the guild to send their records again. To paste: /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them, what the guild has learned, the seed's state), /cute rules (each rule's threshold and who set it).")
   else
     local def, officer = pageFor(msg), C.Roster:MeOfficer()
     if not def then C.Print("no page or command \"" .. msg .. "\". /cute help lists them.")
     elseif def.officer and not officer then C.Print("the " .. def.title .. " page is for officer ranks.")
     elseif not C.Modules.Page(def.id, officer) then
-      -- a module that is off says where it is switched on, and opens it there
-      C.Print(def.title .. " is switched off. Tick it in Settings, Modules.")
-      C.UI:Open("settings", "modules")
+      if def.builtin then
+        -- a built-in module that is off goes on for this character, as its box in Settings > Modules would do it,
+        -- and its page opens: the command is a second way to the box, for a client where the box takes no click
+        C.Modules.Set(def.key, true)
+        C.Print(def.title .. " is on for this character; untick it in Settings, Modules to switch it off.")
+        C.UI:Open(def.id)
+      else
+        -- a module addon that is off says where it is switched on, and opens it there
+        C.Print(def.title .. " is switched off. Tick it in Settings, Modules.")
+        C.UI:Open("settings", "modules")
+      end
     else C.UI:Open(def.id) end
   end
 end, "slash")

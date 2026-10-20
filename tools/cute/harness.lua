@@ -1055,7 +1055,8 @@ local function sameColor(a, b) return a and b and math.abs(a[1] - b[1]) < 0.01 a
 local function rowOf(c, short) for _, r in ipairs(c.C.UI.rows.items) do if r:IsShown() and r.row and r.row.short == short then return r end end end
 local function cellOf(r, id) for _, cell in ipairs(r.cells) do if cell:IsShown() and cell.def and cell.def.id == id then return cell end end end
 local function shownHeaders(c) local n = 0; for _, h in ipairs(c.C.UI.headerCells.items) do if h:IsShown() then n = n + 1 end end return n end
-local function checkBox(c, test) for _, fr in ipairs(c.frames) do if fr.__kind == "CheckButton" and fr:IsVisible() and test(fr) then return fr end end end
+-- a check box (a CheckButton) or a check row (a Button holding its box as a visual, UI.lua checkRow) that is shown
+local function checkBox(c, test) for _, fr in ipairs(c.frames) do if (fr.__kind == "CheckButton" or fr.checkRow) and fr:IsVisible() and test(fr) then return fr end end end
 -- every text shown in a client's window, for a scenario that asks what is there (or never is)
 local texts
 
@@ -1786,11 +1787,23 @@ do
   assert(tabsShown(kaka) == "race prog shame game me settings", "the member's: " .. tabsShown(kaka))
   yezin.C.UI:Open("guide")
   assert(yezin.C.UI.page == "race", "the Guide off: asking for its page opens Race")
-  -- /cute guide says where it is switched on and opens Settings there
+  -- /cute guide while it is off switches it on for this character, as its box would, says so and opens its page
+  -- (0.6.1: a second way to the box); /cute modules lists each module, on or off, and opens Settings there
   local c0 = #yezin.chat
   yezin.env.SlashCmdList.CUTE("guide")
-  assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules" and table.concat(yezin.chat, "\n", c0 + 1):find("Guide is switched off. Tick it in Settings, Modules.", 1, true),
+  assert(yezin.C.UI.page == "guide" and yezin.C.Char().modules.guide == true and yezin.C.Modules.byId.guide.active
+    and table.concat(yezin.chat, "\n", c0 + 1):find("Guide is on for this character; untick it in Settings, Modules to switch it off.", 1, true),
     "/cute guide while it is off: " .. table.concat(yezin.chat, "\n", c0 + 1))
+  assert(tabsShown(yezin):find("^race guide prog"), "its tab after Race: " .. tabsShown(yezin))
+  c0 = #yezin.chat
+  yezin.env.SlashCmdList.CUTE("modules")
+  assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules" and yezin.chat[#yezin.chat]:find("modules: Guide on. The dashboard's pages are always on.", 1, true),
+    "/cute modules lists the Guide on and opens Settings there: " .. table.concat(yezin.chat, "\n", c0 + 1))
+  yezin.C.Modules.Set("guide", false)
+  assert(yezin.chat[#yezin.chat] == yezin.chat[c0 + 1], "switched off by the box, nothing said")
+  yezin.env.SlashCmdList.CUTE("modules")
+  assert(yezin.chat[#yezin.chat]:find("modules: Guide off. The dashboard's pages are always on.", 1, true), "/cute modules lists it off: " .. yezin.chat[#yezin.chat])
+  yezin.C.UI:Open("settings", "modules")
   assert(sectionsShown(yezin) == "general vis rules modules race prog shame officers", "the officer's sections: " .. sectionsShown(yezin))
   check(yezin.C.UI.frame, "officer settings, modules, a fresh install")
   -- /cute <page>: a page by its module's id or title; an officer's page asked for by a member, and a word that is no
@@ -6443,8 +6456,20 @@ do
     assert(tipOf(card):find("Only the officers see who leads", 1, true), "and its tooltip says why")
     check(mia.C.UI.frame, "member hall of shame, a card kept to the officers")
     mia.C.UI:Open("settings", "modules")
+    -- (0.6.1: the row is the button, the box a visual inside it, so a click anywhere on the row ticks it; nothing
+    -- leans on a hit rect widened over the label, which the live client's Modules boxes never took)
     local box = checkBox(mia, function(fr) return fr.label and fr.label:GetText() == "Guide" end)
-    assert(box and box.__hit and box.__hit[2] <= -(6 + 40), "the Guide's box takes a click on its label too")
+    assert(box and box.checkRow and box.__kind == "Button" and not box.__hit and box.box.__kind == "Frame" and not box.box.__mouse, "the Guide's row is a button, its box a frame inside it, no hit-rect insets")
+    GEN = GEN + 1
+    local rr, lr, br = rectOf(box), rectOf(box.label), rectOf(box.box)
+    assert(rr and lr and br and rr.l <= br.l and br.r <= lr.l and lr.r <= rr.r and rr.r - rr.l >= 300 and rr.t - rr.b == 20 and rr.t >= br.t and br.b >= rr.b,
+      string.format("the row spans its box and its label: row %d-%d, box %d-%d, label %d-%d", rr.l, rr.r, br.l, br.r, lr.l, lr.r))
+    -- every check in Settings is such a row: none left with a hit rect
+    for _, fr in ipairs(mia.frames) do assert(not fr.__hit, "a widget with hit-rect insets: " .. tostring(fr.__kind) .. " '" .. tostring(fr.label and fr.label:GetText()) .. "'") end
+    mia.C.UI:Open("settings", "general")
+    local n = 0
+    for _, fr in ipairs(mia.frames) do if fr.checkRow and fr:IsVisible() then n = n + 1 end end
+    assert(n == 8, "General: four check rows and the four Role choices, all rows: " .. n)
     for _, c in ipairs({ ofa, mia, mo }) do leave(c) end
   end)
   print("the third round: " .. table.concat(said, "; "))
