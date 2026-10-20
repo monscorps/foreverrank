@@ -237,7 +237,10 @@ end
 -- quarter when probably behind you), weighed by the drop rate as Now weighs it, half again as much when a party
 -- member holds or can take it (Sync); never grey unless its chain pays the planner's low-value line, never more
 -- than two levels above you, never one you put off or skipped, never one on your own list; up to the log's free
--- slots minus two, at most AUTO_MAX. Picks already made stay while they still qualify, so the plan holds still
+-- slots minus two, at most AUTO_MAX. Picks already made stay while they still qualify, so the plan holds still.
+-- Its reach: a giver within 20 minutes, but 3 + your level minutes under 17 (a level-1 character is led around its
+-- own valley, not 2,700 yards across the mountains to Coldridge: the straight-line minutes make that 8), and under
+-- level 10 only a giver placed on your own map, never one the catalog cannot place
 local function partyHas(id)
   local S = QB.Sync
   if not (S and S.members) then return false end
@@ -272,9 +275,19 @@ function G.Fill(level)
     if qualifies(id) then n = n + 1 else p.auto[id] = nil end
   end
   if free <= n or n >= AUTO_MAX then return n end
+  local reach, myMap = math.min(20, 3 + level), s.mapID
+  local function inReach(c)
+    if c.mins == nil then return level >= 10 end
+    if c.mins > reach then return false end
+    if level < 10 and myMap then
+      local g = c.give and c.give > 0 and QB.Data.NPC[c.give]
+      if not (g and g[2] == myMap) then return false end
+    end
+    return true
+  end
   for k = #ranked, 1, -1 do ranked[k] = nil end
   for _, c in ipairs(QB.UI and QB.UI.Candidates and QB.UI:Candidates(nil, level) or {}) do
-    if not p.auto[c.id] and not c.waste and (c.mins == nil or c.mins <= 20) and qualifies(c.id) then
+    if not p.auto[c.id] and not c.waste and inReach(c) and qualifies(c.id) then
       c.grank = G.Rank(c, level)
       if c.value and c.value >= line then ranked[#ranked + 1] = c end
     end
@@ -535,8 +548,26 @@ end
 
 -- the steps, anew: the target first (its quest's objective spot, or its stop's hand-ins), then the rest of the route
 -- stop by stop (each stop: the objectives of its quests on the way, its hand-ins, then the pick-ups there: what you
--- hand in to an NPC comes before what you take from the same one), then the pick-ups at no stop of the route
-local doneQ, byNpc = {}, {}
+-- hand in to an NPC comes before what you take from the same one), then the pick-ups at no stop of the route,
+-- the nearest first
+local doneQ, byNpc, left = {}, {}, {}
+-- a pick-up belongs to a stop when its giver is one of the stop's hand-in NPCs (stop.seen, Model.lua) or stands
+-- within CLUSTER yards of one of its places on the same continent (Deputy Willem, twenty yards from the abbey's
+-- hand-ins, is no hand-in of anyone's quest yet)
+local function atStop(stop, idx)
+  if stop.seen and stop.seen[idx] then return true end
+  local n = QB.Data.NPC[idx]
+  if not (n and n[5] == stop.c) then return false end
+  local places = stop.places
+  if places and #places > 0 then
+    for _, p in ipairs(places) do
+      if (p.wx - n[6]) ^ 2 + (p.wy - n[7]) ^ 2 <= CLUSTER * CLUSTER then return true end
+    end
+    return false
+  end
+  return stop.wx ~= nil and (stop.wx - n[6]) ^ 2 + (stop.wy - n[7]) ^ 2 <= CLUSTER * CLUSTER
+end
+local function byFar(a, b) if a.far ~= b.far then return a.far < b.far end return a.qid < b.qid end
 function G.Replan()
   if not (QB:Settings().guide and QB:Settings().guide.on) then
     if #G.steps > 0 then for k = #G.steps, 1, -1 do G.steps[k] = nil end; G.ver = G.ver + 1 end
@@ -583,7 +614,7 @@ function G.Replan()
   local pickups = readPickups()
   local function pickupsAt(stop)
     for _, d in ipairs(pickups) do
-      if d.qid and not doneQ[d.qid] and not putOff(d.qid) and d.idx and stop.seen and stop.seen[d.idx] then
+      if d.qid and not doneQ[d.qid] and not putOff(d.qid) and d.idx and atStop(stop, d.idx) then
         local s = step("accept")
         s.qid = d.qid
         placeNpc(s, d.idx)
@@ -622,15 +653,23 @@ function G.Replan()
       pickupsAt(stop)
     end
   end
-  -- pick-ups at no stop of the route (a giver away from every hand-in): after the route, in the plan's order
+  -- pick-ups at no stop of the route (a giver away from every hand-in): after the route, the nearest to you first
+  -- (off your continent last, then by id)
+  for k = #left, 1, -1 do left[k] = nil end
   for _, d in ipairs(pickups) do
     if d.qid and not doneQ[d.qid] and not putOff(d.qid) then
-      local s = step("accept")
-      s.qid = d.qid
-      placeNpc(s, d.idx)
-      G.steps[#G.steps + 1] = s
-      doneQ[d.qid] = true
+      local n = QB.Data.NPC[d.idx]
+      d.far = (me and n and n[5] == me.c) and ((n[6] - me.wx) ^ 2 + (n[7] - me.wy) ^ 2) or huge
+      left[#left + 1] = d
     end
+  end
+  table.sort(left, byFar)
+  for _, d in ipairs(left) do
+    local s = step("accept")
+    s.qid = d.qid
+    placeNpc(s, d.idx)
+    G.steps[#G.steps + 1] = s
+    doneQ[d.qid] = true
   end
   -- the first step is the target's: when the target leads to an objective spot of a quest, that quest's nearest
   -- objective step goes first (Target.lua keeps the quest and the spot; the list follows it, never the other way)

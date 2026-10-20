@@ -16416,6 +16416,45 @@ end)()
     assert(#c.chat == 0 or not c.chat[#c.chat]:find("step", 1, true), "nothing said in chat")
   end }
 
+  -- a fresh level-1 human at the abbey with nothing in the log and nothing added by hand (6.0.0's review: the first
+  -- step was Sten Stoutarm in Coldridge, 2,700 yards across the mountains, while Deputy Willem stood twenty yards
+  -- off): the fill reaches 3 + level minutes under 17 and stays on your own map under 10, never a giver the catalog
+  -- cannot place; a pick-up joins the stop its giver stands within CLUSTER yards of; the pick-ups at no stop come
+  -- nearest first
+  G6CASES[#G6CASES + 1] = { "a fresh level 1: the first step is at Deputy Willem, the fill stays in the valley, far pick-ups nearest first", function()
+    local c = human("Rookie")
+    local QB, G, D = c.QB, c.QB.Guide, c.QB.Data
+    QB:Settings().welcome = nil
+    settle(c)
+    local willem = npcIndex(c, "Deputy Willem", 1429)
+    local s1 = G.steps[1]
+    assert(s1 and s1.kind == "accept" and s1.npc == willem and G.Text(s1) == "Accept A Threat Within from Deputy Willem", "the first step: " .. tostring(s1 and G.Text(s1)))
+    local n = 0
+    for id in pairs(QB:Plan().auto) do
+      local q = QB.Quest.Get(id)
+      local g = q and q.giveIdx and D.NPC[q.giveIdx]
+      assert(g and g[2] == 1429, "an auto pick at level 1 starts on your own map: " .. tostring(q and q.name))
+      assert(id ~= 179 and id ~= 233, "never Coldridge's quests from Northshire")
+      n = n + 1
+    end
+    assert(n > 0, "the fill picked the valley's quests")
+    for _, s in ipairs(G.steps) do
+      assert(s.c == 0 and math.abs(s.wx + 8914) < 1000 and math.abs(s.wy + 133) < 1000, "every step within the valley: " .. G.Text(s))
+    end
+    -- two of the player's own picks whose givers stand away from every hand-in stop: Package for Thurman (Rema
+    -- Schneider in Stormwind, 850 yards) comes before Coldridge Valley Mail Delivery (its chain's first step, Dwarven
+    -- Outfitters from Sten Stoutarm, 2,700 yards); Willem's pick-up stays first
+    QB:SetAdded(334, true); QB:SetAdded(233, true)
+    settle(c)
+    local at334, at233
+    for i, s in ipairs(G.steps) do
+      if s.kind == "accept" and s.qid == 334 then at334 = i end
+      if s.kind == "accept" and (s.qid == 233 or s.qid == 179) then at233 = i end
+    end
+    assert(at334 and at233 and at334 < at233, "the far pick-ups nearest first: " .. tostring(at334) .. " / " .. tostring(at233))
+    assert(G.steps[1].npc == willem, "and Willem still first: " .. G.Text(G.steps[1]))
+  end }
+
   -- a level-23 human mid-chain (Redridge's chain, Duskwood and Wetlands quests in the log): the fill takes the best
   -- by XP a minute, never a quest more than two levels above, never grey, never the player's own pick twice, up to the
   -- free slots minus two and at most AUTO_MAX; a sensible first step, no step for a quest it cannot take
