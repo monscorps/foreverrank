@@ -681,30 +681,60 @@ function C.Guide_Draw(UI)
   local w = sf:Width()
   local officer = C.Roster:MeOfficer()
   local items, plan = G.Items(officer)
-  -- the band: the next best thing (the guild's version for officers), then where the knowledge comes from; the
-  -- reason and the detail in their tooltips
+  -- the band: the step now from the quest module (Cute.QuestBand, Cute_Quest's Band.lua) big and white, the next two
+  -- steps, the time to level, your party's steps; with the module off, one line saying where to switch it on
   local first, detail = G.Source()
-  local top = officer and plan.guild or plan.next
   local y = 4
-  for i, s in ipairs({ { top.line, top.tip, K.WHITE }, { first, function(tip) tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true) end, K.DIM } }) do
+  local function bandRow(s, c, big, tip, fn)
     local l = UI.bandLines:Get()
     l:ClearAllPoints()
     l:SetPoint("TOPLEFT", 0, -y)
-    l:SetSize(w, ROW)
-    l.bg:SetColorTexture(1, 1, 1, i == 1 and 0.05 or 0)
-    l.bar:SetShown(i == 1)
+    local h = big and (ROW + 6) or ROW
+    l:SetSize(w, h)
+    l.bg:SetColorTexture(1, 1, 1, big and 0.05 or 0)
+    l.bar:SetShown(big)
     l.bar:SetColorTexture(K.WHITE[1], K.WHITE[2], K.WHITE[3], 1)
-    l.name:ClearAllPoints(); l.name:SetPoint("LEFT", 8, 0); l.name:SetWidth(w - 16); l.name:SetJustifyH("LEFT")
-    color(l.name, s[3])
-    fitText(l.name, s[1], w - 20)
     l.val:Hide(); l.who:Hide()
-    l.fn, l.tip = nil, s[2]
-    y = y + ROW
+    l.fn, l.tip = fn, tip
+    if big then
+      UI.bandBig = UI.bandBig or UI.Text(UI.band, 15, K.WHITE)
+      UI.bandBig:ClearAllPoints(); UI.bandBig:SetPoint("LEFT", l, "LEFT", 8, 0); UI.bandBig:SetWidth(w - 16)
+      fitText(UI.bandBig, s, w - 20)
+      UI.bandBig:Show()
+      l.name:Hide()
+    else
+      l.name:ClearAllPoints(); l.name:SetPoint("LEFT", 8, 0); l.name:SetWidth(w - 16); l.name:SetJustifyH("LEFT")
+      color(l.name, c)
+      fitText(l.name, s, w - 20)
+      l.name:Show()
+    end
+    y = y + h
+    return l
+  end
+  if UI.bandBig then UI.bandBig:Hide() end
+  local Q = Cute.QuestBand
+  local qm = C.Modules.byId.quests
+  if qm and qm.active and Q and Q.On() then
+    local steps = Q.Steps()
+    local s1 = steps[1]
+    local text1 = s1 and Q.Text(s1) or "Nothing to do yet: Quests says why."
+    bandRow(text1, K.WHITE, true, function(tip) tip:AddLine(text1, 1, 1, 1, true); tip:AddLine("Click: the Quests page. Right-click: not now, drop, lock, scale, hide.", 0.5, 0.5, 0.5, true) end,
+      function(_, which) if which == "RightButton" and s1 then Q.Menu(s1) else Q.Open() end end)
+    for i = 2, 3 do
+      local s = steps[i]
+      if s then local t = Q.Text(s); bandRow(t, K.DIM, false, function(tip) tip:AddLine(t, 1, 1, 1, true) end) end
+    end
+    local ttl, _, measured = Q.TimeToLevel()
+    if ttl then bandRow(ttl, K.MUTE, false, function(tip) tip:AddLine(measured and "From your XP an hour at this level." or "From the plan's XP a minute.", 1, 1, 1, true) end) end
+    for _, m in ipairs(Q.Members()) do bandRow(m.name .. ": " .. m.text, UI.ClassColor(m.class)) end
+  else
+    bandRow("Tick Quests in Settings, Modules for the step now.", K.DIM, false,
+      function(tip) tip:AddLine("The quest engine's step frame, in this band: what to do now, the next two steps, the time to level, your party's steps.", 1, 1, 1, true) end,
+      function() C.UI:Open("settings", "modules") end)
   end
   UI:SetBand(y + 4)
-  -- what the page shows of yours draws it again when it changes (UI:ValueChanged); the pace is read again with the next
-  -- draw, not with every five-second tick of XP an hour
-  for _, id in ipairs({ "level", "unenchanted", "enchanted" }) do UI.shownIds[id] = true end
+  -- what the page shows of yours draws it again when it changes (UI:ValueChanged)
+  UI.shownIds.level = true
   local level = plan.level
   local combat = G.InCombat()
   local invites = true
@@ -740,9 +770,35 @@ function C.Guide_Draw(UI)
     fitText(fs, s, width - 4)
     fs:Show()
   end
+  -- the page: the pick's line as its head (the officer's guild line at its right), then the picked dungeon's rows
+  -- alone; everything else G.Items gathers (the other cards, the strips, Next up, the officers' lines) lives in the
+  -- head's tooltip where the spec keeps it (the reasons, the source, the learned lines) or nowhere
+  local top = plan.next
+  local learned, inLearned = {}, false
+  for _, it in ipairs(items) do
+    if it.kind == "head" then inLearned = (it.name or ""):find("^Learned") ~= nil
+    elseif inLearned and (it.kind == "item" or it.kind == "note") then learned[#learned + 1] = (it.name or "") .. (it.who and (": " .. it.who) or "") end
+  end
+  local shown = { { kind = "head", name = top.line, who = officer and plan.guild and plan.guild.line or nil, tip = function(tip)
+    if top.tip then top.tip(tip) end
+    tip:AddLine(" ")
+    tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
+    -- (the guild's line whole: the row's right column cuts it in a narrow window)
+    if officer and plan.guild and plan.guild.tip then tip:AddLine(" "); tip:AddLine(plan.guild.line, 1, 1, 1, true); plan.guild.tip(tip) end
+    if officer and #learned > 0 then
+      tip:AddLine(" "); tip:AddLine("Learned in play", 1, 1, 1)
+      for _, l in ipairs(learned) do tip:AddLine(l, 0.8, 0.8, 0.8, true) end
+    end
+  end } }
+  local take = false
+  for _, it in ipairs(items) do
+    if it.kind == "card" then take = it.pick == true
+    elseif it.kind == "gap" or it.kind == "head" then take = false end
+    if take then shown[#shown + 1] = it end
+  end
   local list = UI:List("guide", G.MakeRow)
-  list:Set(#items, 0, ROW, function(r, i, ly)
-    local it = items[i]
+  list:Set(#shown, 0, ROW, function(r, i, ly)
+    local it = shown[i]
     local kind = it.kind
     r:SetHeight(ROW)
     r:SetPoint("TOPLEFT", 0, -ly)
@@ -842,7 +898,7 @@ function C.Guide_Draw(UI)
     end
   end)
   UI.virtual = function() list:Show(UI.scroll.bar:GetValue() or 0, UI.scroll:View()) end
-  sf:SetContentHeight(#items * ROW + 8)
+  sf:SetContentHeight(#shown * ROW + 8)
 end
 
 -- a built-in module, off until it is switched on in Settings > Modules (a character that ran 0.5.x, where it was a fixed
@@ -859,6 +915,9 @@ C:RegisterModule({
     col:Rule("guideWindow", "Members near your level")
     col:Rule("guideAhead", "Dungeons ahead")
     col:Broadcast()
+    -- (the quest module on: the engine's step frame and arrow, its rows)
+    local Q, qm = Cute.QuestBand, C.Modules.byId.quests
+    if qm and qm.active and Q and Q.Settings then Q.Settings(col) end
   end,
   events = { PLAYER_REGEN_DISABLED = redraw, PLAYER_REGEN_ENABLED = redraw, GROUP_ROSTER_UPDATE = redraw, QUEST_TURNED_IN = redraw, QUEST_ACCEPTED = redraw },
 })

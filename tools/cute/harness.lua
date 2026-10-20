@@ -1065,6 +1065,9 @@ local function hover(o) if o.__scripts.OnEnter then o.__scripts.OnEnter(o) end e
 local function openGuide(c) if not c.C.Modules.OnKey("guide") then c.C.Modules.Set("guide", true) end c.C.UI:Open("guide") end
 -- the Guide's band, line by line (the next best thing, where the knowledge comes from), and a line's tooltip
 local function bandLine(c, i) local n = 0; for _, l in ipairs(c.C.UI.bandLines.items) do if l:IsShown() then n = n + 1; if n == i then return l end end end end
+-- the Guide's head row: the pick's line, the first row of its list (its tooltip holds the reasons, the source and, for
+-- an officer, the guild's line and what the guild learned)
+local function guideHead(c) for _, r in ipairs(c.C.UI.lists.guide.items) do if r:IsShown() and r.idx == 1 then return r end end end
 local function tipOf(o) local l0 = #lines; if o.__scripts.OnEnter then o.__scripts.OnEnter(o) end; return table.concat(lines, "\n", l0 + 1) end
 -- a row's tooltip filler read into text, a double line as "left | right"
 local function tipText(fill) local out = {}; fill({ AddLine = function(_, t) out[#out + 1] = t end, AddDoubleLine = function(_, l, r) out[#out + 1] = l .. " | " .. r end }); return table.concat(out, "\n") end
@@ -1837,6 +1840,31 @@ do
     and table.concat(yezin.chat, "\n", c0 + 1):find("Guide is on for this character; untick it in Settings, Modules to switch it off.", 1, true),
     "/cute guide while it is off: " .. table.concat(yezin.chat, "\n", c0 + 1))
   assert(tabsShown(yezin):find("^race guide prog"), "its tab after Race: " .. tabsShown(yezin))
+  -- the page as 0.7.0 draws it: the band says the quest module is off (one line; a click opens Settings > Modules), the
+  -- list is the pick's line and the picked dungeon alone, the rest in the head's tooltip
+  do
+    local t = texts(yezin)
+    local _, plan = yezin.C.Guide.Items(true)
+    assert(t:find("Tick Quests in Settings, Modules for the step now.", 1, true), "the band says the quest module is off:\n" .. t)
+    -- (with the seed the pick is a dungeon and its card follows; with none nothing is known at 42 and the head stands alone)
+    assert(t:find(plan.next.line, 1, true) and (not plan.next.card or (t:find("Bosses", 1, true) and t:find("Online", 1, true))), "the pick's line, then its card: name, bosses, mates:\n" .. t)
+    assert(not t:find("Missing enchants", 1, true) and not t:find("Next up", 1, true) and not t:find("Pace", 1, true) and not t:find("Learned in play", 1, true)
+      and not t:find("In range at level", 1, true) and not t:find("The guild, per dungeon", 1, true), "nothing else on the page:\n" .. t)
+    local n = 0
+    for _, r in ipairs(yezin.C.UI.lists.guide.items) do if r:IsShown() and r.bar:IsShown() then n = n + 1 end end
+    assert(n == (plan.next.card and 1 or 0), "one card, marked, or none: " .. n)
+    local head = guideHead(yezin)
+    -- (the guild's line at the right, cut after a word where the column is narrower than it; whole in the tooltip)
+    local who = head and head.who:GetText() or ""
+    assert(head and head.name:GetText() == plan.next.line and (who == plan.guild.line or (who:find("%.%.%.$") and plan.guild.line:find(who:sub(1, -4), 1, true) == 1)),
+      "the officer's head: the pick's line, the guild's line at its right: " .. who)
+    local ht = tipOf(head)
+    assert(ht:find("Learned in play", 1, true) and ht:find(SEEDED and "From research" or "Nothing shipped with this copy", 1, true) and ht:find(plan.guild.line, 1, true),
+      "the head's tooltip: the reasons, the source, the guild's line, what the guild learned:\n" .. ht)
+    press(bandLine(yezin, 1))
+    assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules", "a click on the band's line opens Settings > Modules")
+    yezin.C.UI:Open("guide")
+  end
   c0 = #yezin.chat
   yezin.env.SlashCmdList.CUTE("modules")
   assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules" and yezin.chat[#yezin.chat]:find("modules: Guide on. The dashboard's pages are always on.", 1, true),
@@ -3579,7 +3607,7 @@ do
     tick(slow, 1)
     assert(slow.C.Rules.SeedState() == "fresh" and slow.C.Stats.EnchantKnown(9, "4.1") and slow.C.Sample:Value("unenchanted")[9], "done a frame on: the seed's wrist now asks for an enchant")
     slow.C.UI:Draw()
-    assert(texts(slow):find("From research and the beta, checked against this client", 1, true), "and the Guide says where its knowledge comes from")
+    assert(tipOf(guideHead(slow)):find("From research and the beta, checked against this client", 1, true), "and the Guide's head says where its knowledge comes from")
     leave(slow)
     -- a partial seed: a dungeon without a range, one without a name, one whose range is upside down, a boss without an id,
     -- loot that is no id, an enchant slot past the gear, a recipe without a name, an XP value below zero
@@ -3715,8 +3743,7 @@ if SEEDED then isolated({ { name = "Rulo-Forever", guid = guidOf("Rulo"), rank =
   local now, soon = F.DungeonsFor(20)
   assert(#now == 0 and #soon == 0, "and recommends nothing")
   openGuide(forty)
-  local t = texts(forty)
-  assert(t:find("The game differs from what we knew; learning from the guild.", 1, true) and t:find("from the guild's play alone", 1, true), "the Guide says so:\n" .. t)
+  assert(tipOf(guideHead(forty)):find("The game differs from what we knew; learning from the guild.", 1, true), "the Guide's head says so:\n" .. tipOf(guideHead(forty)))
   for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
     forty.C.UI.frame:SetSize(size[1], size[2])
     openGuide(forty)
@@ -3763,7 +3790,7 @@ if SEEDED then isolated({ { name = "Rulo-Forever", guid = guidOf("Rulo"), rank =
   assert(L.SeedState() == "fresh" and L.BetaAsData() and L.Model().dungeons[36].state == "data" and L.Model().xp[20].state == "data" and L.SlotState(9) == "data",
     "another build: the beta's facts read as research")
   openGuide(later)
-  assert(tipOf(bandLine(later, 2)):find("This client is 1.60.1.70450: what the beta showed counts as research until the guild sees it.", 1, true), "the band's source says so in its tooltip")
+  assert(tipOf(guideHead(later)):find("This client is 1.60.1.70450: what the beta showed counts as research until the guild sees it.", 1, true), "the head's source says so in its tooltip")
   check(later.C.UI.frame, "member guide, another build")
   local minor = client({ build = "1.61.0.71000" })
   assert(minor.C.Rules.SeedState() == "fresh" and minor.C.Rules.BetaAsData() and minor.C.Rules.Model().dungeons[36].state == "data",
@@ -4112,7 +4139,9 @@ do
     end
     openGuide(cy)
     local first = texts(cy)
-    assert(first:find(SEEDED and "From research and the beta, checked against this client" or "Nothing shipped with this copy", 1, true) and first:find("In range at level 20", 1, true), "the page opens on where it comes from and you")
+    local _, cyPlan = cy.C.Guide.Items(false)
+    assert(first:find(cyPlan.next.line, 1, true) and tipOf(guideHead(cy)):find(SEEDED and "From research and the beta, checked against this client" or "Nothing shipped with this copy", 1, true),
+      "the page opens on the pick, where it comes from in the head's tooltip")
     -- /cute diag on the officer: the seed's state, with what was learned
     local d0 = #ruler.chat
     ruler.env.SlashCmdList.CUTE("diag")
@@ -4321,16 +4350,11 @@ do
     local function items() local out = {}; for _, it in ipairs(c.C.Guide.Items(true)) do if it.name then out[it.name] = it end end return out end
     local note = "No enchant slots known yet: they are learned as the guild enchants."
     assert(items()[note] and not items()["Every worn item that takes an enchant has one."], "the Gear line says nothing is known yet")
-    -- at 760 wide the note is whole, and its tooltip holds it
+    -- (0.7.0: the gear strips left the page; the note stays in G.Items for the officers' tooling and the page is one
+    -- card at 760 wide)
     openGuide(c)
     c.C.UI.frame:SetSize(760, 420)
     openGuide(c)
-    local row
-    for _, l in ipairs(c.C.UI.lists.guide.items) do if l:IsShown() and l.name:GetText():find("^No enchant slots") then row = l end end
-    assert(row and row.name:GetText() == note, "the note whole at 760 wide: " .. tostring(row and row.name:GetText()))
-    local l0 = #lines
-    hover(row)
-    assert(table.concat(lines, "\n", l0 + 1):find(note, 1, true), "its tooltip holds the whole text")
     check(c.C.UI.frame, "officer guide, nothing known to take an enchant, 760x420")
     c.C.UI.frame:SetSize(1040, 640)
     -- the chest enchanted: one voice, nothing known yet; a guild mate's record with an enchanted chest: a slot known,
@@ -5122,8 +5146,8 @@ do
       assert(dm and dm.val == "18-23" and dm.who == "beta" and dm.pick and plan.next.card and plan.next.card.d.id == 36, "the Deadmines' card, its range, its word, marked the pick")
       assert(plan.next.line == "Run The Deadmines: 6 guild mates online in range, 4 bosses you have not killed, 1 quest", "the next best thing: " .. plan.next.line)
       vee.C.UI:Open("guide")
-      local band = bandLine(vee, 1)
-      assert(band.name:GetText() == plan.next.line, "the band's first line: " .. tostring(band.name:GetText()))
+      local band = guideHead(vee)
+      assert(band.name:GetText() == plan.next.line, "the list's head: " .. tostring(band.name:GetText()))
       local why = tipOf(band)
       assert(why:find("guild mates online in range first, then what is left for you there", 1, true) and why:find("The Deadmines | 6 mates, 4 bosses, 1 quest", 1, true), "its reason in the tooltip:\n" .. why)
       -- the card's parts: four pips not killed; the quests for an Alliance priest at 20; six mates, four shown
@@ -5190,8 +5214,8 @@ do
       -- the guild's version, for the officer
       local _, gp = gil.C.Guide.Items(true)
       gil.C.UI:Open("guide")
-      assert(gp.guild.line == "Most members are 18-23: The Deadmines" and bandLine(gil, 1).name:GetText() == gp.guild.line, "the officer's band: " .. tostring(gp.guild.line))
-      assert(tipOf(bandLine(gil, 1)):find("8 of 10 members are between 18 and 23", 1, true), "its counts in the tooltip")
+      assert(gp.guild.line == "Most members are 18-23: The Deadmines" and guideHead(gil).who:GetText() == gp.guild.line, "the officer's head, the guild's line at its right: " .. tostring(gp.guild.line))
+      assert(tipOf(guideHead(gil)):find("8 of 10 members are between 18 and 23", 1, true), "its counts in the tooltip")
       -- the awaited dungeon found. Its tooltip says what places it; one member's entry does not (one edited copy's
       -- label and entry would): Gil alone in "the Drowned City", instance 9100, and Vee alone in "Drowned City" (9200)
       -- place nothing; with Bo's entry too, two members' entries place 9100, and Vee's lone 9200 neither takes it nor
@@ -9510,7 +9534,7 @@ do
     assert(R.SeedState() == "fresh" and R.check.total == 49 and R.check.absent == 0, "the verdict a frame on, on the forty-nine answered: " .. R.SeedState() .. " " .. tostring(R.check.total))
     assert(not errorOf(c, "rules: rule 0 watchdog"), "no watchdog needed")
     c.C.UI:Draw()
-    assert(texts(c):find("From research and the beta, checked against this client", 1, true), "the Guide filled in")
+    assert(not texts(c):find("Checking what we knew", 1, true) and tipOf(guideHead(c)):find("From research and the beta, checked against this client", 1, true), "the Guide filled in")
     check(c.C.UI.frame, "officer guide, after an ask that threw")
     leave(c)
     -- the stalled chain
@@ -9531,7 +9555,7 @@ do
     local w = errorOf(d, "rules: rule 0 watchdog")
     assert(w and w.msg == "rule 0 did not finish: 50 of 50 asked in 30 s; judged on those", "and said so under /cute errors: " .. tostring(w and w.msg))
     d.C.UI:Draw()
-    assert(texts(d):find("From research and the beta, checked against this client", 1, true) and not texts(d):find("Checking what we knew", 1, true), "the Guide filled in:\n" .. texts(d))
+    assert(tipOf(guideHead(d)):find("From research and the beta, checked against this client", 1, true) and not texts(d):find("Checking what we knew", 1, true), "the Guide filled in:\n" .. texts(d))
     tick(d, 30)
     assert(RD.check.total == 50 and errorOf(d, "rules: rule 0 watchdog").count == 1, "nothing counted twice")
     leave(d)

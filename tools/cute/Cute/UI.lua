@@ -1507,7 +1507,9 @@ function UI:MakeLine(parent)
   r.val:SetPoint("RIGHT", -4, 0)
   r.who = text(r, 12, INK, "RIGHT")
   r.who:SetPoint("RIGHT", -4, 0)
-  r:SetScript("OnClick", function(self) if self.fn then self.fn(self) end end)
+  -- (both buttons: a row's fn hears which, the Guide's band row opens a step's menu on the right one)
+  r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  r:SetScript("OnClick", function(self, which) if self.fn then self.fn(self, which) end end)
   tooltip(r, function(tip, self) if self.tip then self.tip(tip, self) end end)
   return r
 end
