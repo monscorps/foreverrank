@@ -102,6 +102,10 @@ function P.Settings(_, col)
   if not E then return QB.NeedSettings(col, "Quests") end
   local s = E:Settings()
   col:Head("Quests")
+  -- the step frame and the arrow (the engine's settings; QuestBank's own while it is loaded)
+  col:Check("Step frame", s.guide.frame == true, true, function(on) s.guide.frame = on; if E.StepFrame then E.StepFrame.Apply() end end)
+  col:Check("Direction arrow", s.arrow == true, true, function(on) if E.Arrow then E.Arrow:Set(on) else s.arrow = on end end)
+  col:Check("Lock the step frame", s.guide.locked == true, true, function(on) s.guide.locked = on; if E.StepFrame then E.StepFrame.Apply() end end)
   local names, current = {}, "Off"
   for _, a in ipairs(ACCEPT) do names[#names + 1] = a[1]; if s.autoAccept == a[2] then current = a[1] end end
   col:Choice("Accept for me", names, current, function(v) for _, a in ipairs(ACCEPT) do if a[1] == v then s.autoAccept = a[2] end end end)

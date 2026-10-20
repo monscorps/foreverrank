@@ -945,9 +945,6 @@ C:RegisterModule({
     col:Rule("guideWindow", "Members near your level")
     col:Rule("guideAhead", "Dungeons ahead")
     col:Broadcast()
-    -- (the quest module on: the engine's step frame and arrow, its rows)
-    local Q, qm = Cute.QuestBand, C.Modules.byId.quests
-    if qm and qm.active and Q and Q.Settings then Q.Settings(col) end
   end,
   events = { PLAYER_REGEN_DISABLED = redraw, PLAYER_REGEN_ENABLED = redraw, GROUP_ROSTER_UPDATE = redraw, QUEST_TURNED_IN = redraw, QUEST_ACCEPTED = redraw },
 })

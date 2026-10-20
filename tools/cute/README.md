@@ -1150,8 +1150,8 @@ shown. A dungeon's, boss's or slot's tooltip has the rest: the range's source, e
 the loot seen and not. A row with nothing to its right takes the row's whole width, and a note's tooltip holds its
 whole text, which a narrow window cuts. Your group, your quests and combat draw the open page again (the module's
 events: `GROUP_ROSTER_UPDATE`, `QUEST_ACCEPTED`, `QUEST_TURNED_IN`, `PLAYER_REGEN_DISABLED` and `_ENABLED`, all in
-Forever's generated docs), at most once a second. With the Quests module on, the Guide's section gains the step
-frame's rows (Step frame, Direction arrow, Lock the step frame), the engine's settings.
+Forever's generated docs), at most once a second. The step frame's and the arrow's rows are the Quests module's, in
+its section.
 
 ## Versions: a newer Cute, what is new
 

@@ -2209,7 +2209,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   }
   function questSection(id) {
     var col = "<div class=\"cu-h\">" + esc(QUEST_BY[id][1]) + "</div>";
-    if (id === "quests") col += qchoice("Accept for me", "quests:accept", ["Off", "On my route", "Worth taking"], "Off") + qcheck("Hand finished quests in for me", "quests:turnin", false) + qcheck("Progress in mob tooltips", "quests:tips", true) + qcheck("Share with your party", "quests:share", true) + qcheck("Note what the game shows, for foreverrank.com", "quests:note", true);
+    if (id === "quests") col += qcheck("Step frame", "quests:frame", true) + qcheck("Direction arrow", "quests:arrow", true) + qcheck("Lock the step frame", "quests:locked", false) + qchoice("Accept for me", "quests:accept", ["Off", "On my route", "Worth taking"], "Off") + qcheck("Hand finished quests in for me", "quests:turnin", false) + qcheck("Progress in mob tooltips", "quests:tips", true) + qcheck("Share with your party", "quests:share", true) + qcheck("Note what the game shows, for foreverrank.com", "quests:note", true);
     else if (id === "route") col += qchoice("Follow", "route:follow", ["The plan", "Ready now"], "The plan") + qcheck("Show the way step by step on the arrow", "route:travel", true) + qcheck("The hearthstone may be a step", "route:hearth", true);
     else if (id === "map") col += qcheck("Quest icons on the world map", "map:icons", true) + qcheck("Route pins on the world map", "map:pins", true) + qcheck("Route on the minimap", "map:minimap", true) + qcheck("A ! on the minimap for quests you can take", "map:givers", true) + qcheck("Minimap far view", "map:far", true);
     else if (id === "journal") col += qcheck("Bosses", "journal:boss", true) + qcheck("Rares", "journal:rare", true) + qcheck("Trash", "journal:trash", false) + qcheck("Chests and events", "journal:other", true);
@@ -2288,9 +2288,6 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     } else if (QUEST_BY[id]) {
       col += questSection(id);
     } else if (id === "guide") {
-      if (mods().quests) {
-        col += "<div class=\"cu-h\">The step now</div>" + qcheck("Step frame", "guide:frame", true) + qcheck("Direction arrow", "guide:arrow", true) + qcheck("Lock the step frame", "guide:locked", false) + "<div class=\"cu-gap\"></div>";
-      }
       col += "<div class=\"cu-h\">Levels</div><div class=\"cu-olines\"><div class=\"cu-dimline\">White: set by an officer. " + (off ? "A change goes to the guild on its own." : "Only officers can change them.") + "</div></div>";
       col += tuneRow(TUNE_BY.guideWindow, "Members near your level", off) + tuneRow(TUNE_BY.guideAhead, "Dungeons ahead", off);
       col += "<div class=\"cu-btns\"><button type=\"button\" class=\"cu-btn\" data-act=\"policy\" style=\"width:150px\"" + (off ? "" : " disabled") + ">Broadcast now</button></div>";

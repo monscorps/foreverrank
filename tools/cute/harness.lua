@@ -4774,8 +4774,15 @@ do
     rone.C.UI:Open("settings", "quests")
     local ts = texts(rone)
     assert(ts:find("Accept for me", 1, true) and ts:find("Progress in mob tooltips", 1, true), "the Quests section's rows:\n" .. ts)
+    assert(ts:find("Step frame", 1, true) and ts:find("Direction arrow", 1, true), "the step frame's and the arrow's rows are the Quests section's:\n" .. ts)
     rone.C.UI:Open("settings", "guide")
-    assert(texts(rone):find("Step frame", 1, true) and texts(rone):find("Direction arrow", 1, true), "the Guide's section gained the frame and arrow rows")
+    assert(not texts(rone):find("Step frame", 1, true) and not texts(rone):find("Direction arrow", 1, true), "and not the Guide's")
+    -- the arrow's row writes the engine's setting and shows or hides the arrow
+    rone.C.UI:Open("settings", "quests")
+    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Direction arrow" end))
+    assert(rone.env.CuteQuestDB.settings.arrow == false and rone.env.QuestBankArrow and not rone.env.QuestBankArrow:IsShown(), "the arrow's row: off")
+    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Direction arrow" end))
+    assert(rone.env.CuteQuestDB.settings.arrow == true and rone.env.QuestBankArrow:IsShown(), "and on again")
     -- Route, ticked: keyed under the folder, its tab; the band's summary and run button, the legs numbered
     rone.C.UI:Open("settings", "modules")
     click(boxOf(rone, "Route"))
