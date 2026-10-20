@@ -1638,6 +1638,9 @@ function QB:Banking() return self:Mode() ~= "quest" end
 -- two plain lines in party chat (raid chat in a raid), only when asked for in Settings and only while grouped, signed
 -- the way a player would read it: "QuestBank: Kobold Camp Cleanup - completed"
 QB.SAY = { accept = "QuestBank: %s - accepted", complete = "QuestBank: %s - completed" }
+-- the one chat line 6.0 adds: after the welcome card's Done (StepFrame.lua), once a character; nothing else of the
+-- Guide, the step frame, the tooltips or the minimap prints
+QB.WELCOME = "QuestBank is guiding you. /qb opens the full window; right-click the step frame for its options."
 function QB:Announce(kind, title)
   if kind == "accept" and self:Opt("sayAccept") ~= true then return end
   if kind == "complete" and self:Opt("sayComplete") ~= true then return end

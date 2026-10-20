@@ -16862,6 +16862,69 @@ end)()
     assert(#c.chat == 0 or not c.chat[#c.chat]:find("reward", 1, true), "nothing said in chat")
   end }
 
+  -- a fresh install: the step frame opens on the welcome card (the auto choice, the outside-route choice, hand in for
+  -- me), Done keeps the choices, says the one chat line and gives way to the steps; nothing else is said
+  G6CASES[#G6CASES + 1] = { "a fresh install: the welcome card asks the auto choice; one line in chat, nothing else", function()
+    local c = human("Newbie", { { 7, 0 } }, { [783] = true }, nil, 2)
+    local QB, SF, A = c.QB, c.QB.StepFrame, c.QB.Arrow
+    settle(c); SF.Apply()
+    local f = c.env.QuestBankStep
+    assert(f and f:IsShown() and f.card and f.card:IsShown(), "the frame with the welcome card")
+    assert(f.card.accept:GetText() == "Accept for me: Off" and f.card.turnIn:GetChecked() == false and not f.card.other:IsEnabled(), "the choices start at Off: " .. tostring(f.card.accept:GetText()))
+    assert(A.frame and A.frame:IsShown(), "QuestBank's arrow is on")
+    assert(QB:Settings().arrowStyle == "questbank", "QuestBank's own arrow, not the compass")
+    local before = #c.chat
+    f.card.accept.__scripts.OnClick(f.card.accept, "LeftButton")
+    f.card.accept.__scripts.OnClick(f.card.accept, "LeftButton")
+    assert(f.card.accept:GetText() == "Accept for me: Quests worth taking" and f.card.other:IsEnabled(), "two clicks: Quests worth taking, the outside choice opens")
+    f.card.other.__scripts.OnClick(f.card.other, "LeftButton")
+    assert(f.card.other:GetText() == "Outside my route: Leave the window to me", f.card.other:GetText())
+    f.card.turnIn:SetChecked(true); f.card.turnIn.__scripts.OnClick(f.card.turnIn)
+    assert(#c.chat == before, "nothing said while choosing")
+    checkLayout(f, "welcome card")
+    f.card.done.__scripts.OnClick(f.card.done, "LeftButton")
+    local s = QB:Settings()
+    assert(s.autoAccept == "worth" and s.autoAcceptOther == "leave" and s.autoTurnIn == true and s.welcome == nil, "the choices kept")
+    assert(#c.chat == before + 1 and c.chat[#c.chat]:find("QuestBank is guiding you. /qb opens the full window; right%-click the step frame for its options%."), "the one line: " .. tostring(c.chat[#c.chat]))
+    assert(not f.card:IsShown() and f.now:GetText() ~= "", "the card gives way to the steps")
+    settle(c); SF.Refresh()
+    assert(#c.chat == before + 1, "and nothing more")
+    checkLayout(f, "steps after the welcome")
+  end }
+
+  -- a 5.x save: "Let QuestBank guide you?" once; Not now changes nothing and hides the frame (Settings brings the
+  -- Guide back later); Yes turns the Guide and the arrow on, the welcome card follows from the player's own choices
+  G6CASES[#G6CASES + 1] = { "a 5.x save: one question, both answers", function()
+    local saved = function() return { settings = { v544 = true, autoAccept = "route", autoTurnIn = true, arrow = false, arrowStyle = "compass", tab = 6 } } end
+    -- Not now
+    local c = human("Oldhand", { { 7, 0 } }, { [783] = true }, saved(), 8)
+    local QB, SF = c.QB, c.QB.StepFrame
+    settle(c); SF.Apply()
+    local f = c.env.QuestBankStep
+    assert(f:IsShown() and f.card:IsShown() and f.card.title:GetText() == "Let QuestBank guide you?", "the question: " .. tostring(f.card.title:GetText()))
+    checkLayout(f, "the 5.x question")
+    local before = #c.chat
+    f.card.no.__scripts.OnClick(f.card.no, "LeftButton")
+    local s = QB:Settings()
+    assert(s.guide.on == false and s.welcome == nil and s.arrow == false and s.arrowStyle == "compass" and s.autoAccept == "route" and s.autoTurnIn == true, "Not now: nothing changed")
+    assert(not f:IsShown() and #c.chat == before, "the frame hides, nothing said")
+    s.guide.on = true; SF.Apply()
+    assert(f:IsShown() and not f.card:IsShown(), "Settings turns the Guide on later: the frame is back with steps")
+    -- Yes
+    local d = human("Convert", { { 7, 0 } }, { [783] = true }, saved(), 8)
+    local QD, SD = d.QB, d.QB.StepFrame
+    settle(d); SD.Apply()
+    local g = d.env.QuestBankStep
+    local n0 = #d.chat
+    g.card.yes.__scripts.OnClick(g.card.yes, "LeftButton")
+    local t = QD:Settings()
+    assert(t.guide.on == true and t.arrow == true and t.autoAccept == "route" and t.autoTurnIn == true and t.arrowStyle == "compass", "Yes: the Guide and the arrow on, the rest as it was")
+    assert(g.card:IsShown() and g.card.accept and g.card.accept:GetText() == "Accept for me: Quests on my route", "then the welcome card, starting from their own choice")
+    assert(d.QB.Arrow.frame and d.QB.Arrow.frame:IsShown(), "the arrow is up")
+    g.card.done.__scripts.OnClick(g.card.done, "LeftButton")
+    assert(#d.chat == n0 + 1 and d.chat[#d.chat]:find("guiding you", 1, true), "the one line after Done")
+  end }
+
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")

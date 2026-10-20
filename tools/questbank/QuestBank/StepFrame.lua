@@ -3,7 +3,7 @@
 -- step needs one, "about 14 min to level 6", the trainer reminder, and the party's steps. Small, movable (a drag;
 -- locked in Settings or its menu), in the window's slate. A click on a step opens it in the window; a right-click is
 -- its menu: Not now (an hour), Drop (for good), Lock, Scale, Hide, Settings. The welcome (a fresh install) and the
--- 5.x question are cards in the same frame (SF.Ask, later). Redrawn when the Guide's version, the time line, the
+-- 5.x question are cards in the same frame (SF.Ask). Redrawn when the Guide's version, the time line, the
 -- reminder or the party's steps changed, twice a second at most; nothing is made per tick. Secure parts (the item
 -- button) change only out of a fight. No chat line comes from here.
 local _, QB = ...
@@ -217,6 +217,126 @@ function SF.Refresh()
   f:SetHeight(y + PAD)
   SF.RefreshItem(steps[1])
   SF.MarkReward()
+end
+
+-- the welcome (a fresh install: the auto choice, the outside-route choice, hand in for me) and the 5.x question
+-- ("Let QuestBank guide you?"), as a card in the frame over the rows. Done, Yes or Not now is the only way out; the
+-- one chat line (QB.WELCOME) comes after Done, and nothing is said while choosing
+local ACCEPT_ORDER = { "off", "route", "worth" }
+local CARD_W = WIDTH - PAD * 2
+local function cardButton(parent, label, width)
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  b:SetSize(width, 22)
+  b:SetText(label)
+  return b
+end
+local function buildCard(f)
+  local card = CreateFrame("Frame", nil, f)
+  card:SetPoint("TOPLEFT", PAD, -PAD)
+  card:SetSize(CARD_W, 140)
+  card.title = fs(card, 12, INK, CARD_W)
+  card.title:SetPoint("TOPLEFT", 0, 0)
+  card.title:SetWordWrap(true)
+  -- the welcome's rows: the title's two lines, then a button, a button, the check, Done
+  card.accept = cardButton(card, "", CARD_W)
+  card.accept:SetPoint("TOPLEFT", 0, -36)
+  card.other = cardButton(card, "", CARD_W)
+  card.other:SetPoint("TOPLEFT", 0, -62)
+  card.turnIn = CreateFrame("CheckButton", nil, card, "UICheckButtonTemplate")
+  card.turnIn:SetSize(24, 24)
+  card.turnIn:SetPoint("TOPLEFT", -4, -88)
+  card.turnIn.label = fs(card, 11, INK, CARD_W - 28)
+  card.turnIn.label:SetPoint("LEFT", card.turnIn, "RIGHT", 2, 0)
+  card.turnIn.label:SetText("Hand in finished quests for me")
+  card.done = cardButton(card, "Done", 90)
+  card.done:SetPoint("TOPLEFT", 0, -118)
+  -- the question's: the title's one line, then Yes and Not now
+  card.yes = cardButton(card, "Yes", 90)
+  card.yes:SetPoint("TOPLEFT", 0, -24)
+  card.no = cardButton(card, "Not now", 110)
+  card.no:SetPoint("TOPLEFT", 100, -24)
+  local function words()
+    local s = QB:Settings()
+    card.accept:SetText("Accept for me: " .. (QB.Auto.WORDS[s.autoAccept] or QB.Auto.WORDS.off))
+    card.other:SetText("Outside my route: " .. (QB.Auto.OTHER[s.autoAcceptOther] or QB.Auto.OTHER.accept))
+    card.other:SetEnabled(s.autoAccept == "worth")
+    card.turnIn:SetChecked(s.autoTurnIn == true)
+  end
+  card.Words = words
+  card.accept:SetScript("OnClick", QB.Safe(function()
+    local s = QB:Settings()
+    local i = 1
+    for k, v in ipairs(ACCEPT_ORDER) do if v == s.autoAccept then i = k end end
+    s.autoAccept = ACCEPT_ORDER[i % #ACCEPT_ORDER + 1]
+    words()
+  end, "welcome"))
+  card.other:SetScript("OnClick", QB.Safe(function()
+    local s = QB:Settings()
+    s.autoAcceptOther = s.autoAcceptOther == "leave" and "accept" or "leave"
+    words()
+  end, "welcome"))
+  card.turnIn:SetScript("OnClick", QB.Safe(function(self) QB:Settings().autoTurnIn = self:GetChecked() and true or false end, "welcome"))
+  card.done:SetScript("OnClick", QB.Safe(function()
+    QB:Settings().welcome = nil
+    QB:Print(QB.WELCOME)
+    SF.Apply() -- (no welcome waits: the card gives way to the rows)
+  end, "welcome"))
+  card.yes:SetScript("OnClick", QB.Safe(function()
+    local s = QB:Settings()
+    s.guide.on, s.guide.frame, s.arrow = true, true, true
+    if QB.Arrow then QB.Arrow:Set(true) end
+    s.welcome = "fresh"
+    QB:MarkDirty()
+    SF.Ask("fresh")
+  end, "welcome"))
+  card.no:SetScript("OnClick", QB.Safe(function()
+    QB:Settings().welcome = nil
+    SF.Apply() -- (the Guide stays off: the frame hides)
+  end, "welcome"))
+  card:Hide()
+  return card
+end
+
+-- kind: "fresh" (the auto choice) or "ask" (Let QuestBank guide you?); the rows step aside while the card shows
+function SF.Ask(kind)
+  local f = SF.frame
+  if not f then return end
+  f.card = f.card or buildCard(f)
+  local card = f.card
+  for i = 1, 3 do f.rows[i]:Hide() end
+  f.time:Hide(); f.remind:Hide()
+  for _, t in ipairs(f.members) do t:Hide() end
+  if kind == "ask" then
+    card.title:SetText("Let QuestBank guide you?")
+    card.accept:Hide(); card.other:Hide(); card.turnIn:Hide(); card.turnIn.label:Hide(); card.done:Hide()
+    card.yes:Show(); card.no:Show()
+    f:SetHeight(PAD * 2 + 48)
+  else
+    card.title:SetText("QuestBank guides you from here. At quest givers:")
+    card.yes:Hide(); card.no:Hide()
+    card.accept:Show(); card.other:Show(); card.turnIn:Show(); card.turnIn.label:Show(); card.done:Show()
+    card.Words()
+    f:SetHeight(PAD * 2 + 140)
+  end
+  card:Show()
+  f:Show()
+  SF.RefreshItem(nil) -- (no item button over a card)
+end
+
+-- a welcome waiting (QB:Settings().welcome) is asked as the frame is applied; answered, the rows come back
+function SF.AskPending()
+  local w = QB:Settings().welcome
+  local f = SF.frame
+  if not f then return end
+  if w == "fresh" or w == "ask" then
+    SF.Ask(w)
+  elseif f.card and f.card:IsShown() then
+    f.card:Hide()
+    for i = 1, 3 do f.rows[i]:Show() end
+    f.time:Show()
+    lastVer = -1
+    SF.Refresh()
+  end
 end
 
 -- shown while the Guide and the frame are on, or a welcome waits
