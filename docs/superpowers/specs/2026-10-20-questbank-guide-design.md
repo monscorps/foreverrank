@@ -33,12 +33,18 @@ done. That is the pitch nobody else can make. 6.0 makes it the default experienc
   Cleanup from Marshal McBride", "Kill Kobold Vermin 3/8", "Hand in Kobold Camp Cleanup"), the next two steps
   greyed beneath, a quest-item button when the step needs one, and a small "about 14 min to level 6" line. A click
   on a step opens it in the window; right-click skips it ("not now") or drops the quest from the plan.
-- **The arrow on**, pointing at the step's spot. When the player is dead it points at the corpse
-  (C_DeathInfo.GetCorpseMapPosition, DeathInfoDocumentation.lua:11) and says so.
-- **Auto accept and hand-in on**, for the plan's quests only; Shift held pauses it; a hand-in with a reward choice
-  stops and marks the best choice (the Gear finder's pick) without choosing it.
-- **One welcome line**: "QuestBank is guiding you. /qb opens the full window; right-click the step frame for its
-  options." No other chat lines from QuestBank unless the player asks.
+- **The arrow on**, QuestBank's own arrow (players preferred it to 5.4.1's compass; the compass stays an option),
+  pointing at the step's spot. When the player is dead it points at the corpse (C_DeathInfo.GetCorpseMapPosition,
+  DeathInfoDocumentation.lua:11) and says so. A clicked waypoint pins it only until that place is reached or its
+  quest handed in; then it goes back to the route (5.4.4).
+- **Auto accept is the player's choice**, asked once in the welcome: Off / Quests on my route / Quests worth taking
+  (never grey, never under the low-value line), with a separate choice for quests outside the route (accept, or leave
+  the game's window to the player). Hand-in for me is asked with it; Shift held pauses both; a hand-in with a reward
+  choice stops and marks the best choice (the Gear finder's pick) without choosing it.
+- **One welcome line** with the auto choice: "QuestBank is guiding you. /qb opens the full window; right-click the
+  step frame for its options." No other chat lines from QuestBank unless the player asks.
+- **Hand-ins in reach first**: a quest the player can hand in where they stand, or on the way, is handed in now
+  whatever its XP; the low-value rule only defers stops that cost a trip (5.4.4).
 - **Existing players** (a 5.x saved file) see one question in the step frame instead: "Let QuestBank guide you?
   Yes / Not now". "Not now" leaves their settings as they were; the step frame then stays hidden until they switch
   the Guide on in Settings.
@@ -99,7 +105,9 @@ One engine, separate from every frame, so Cute's leveling module can reuse it la
 - Then "Map and minimap", then one switch per module with its details inside (interact light, camp bar, far zoom,
   golden path), then "Data you share", then "Banking" last.
 - Nothing QuestBank sets in the game's own options (interact icons, status text) is changed by the Guide; those stay
-  with their modules.
+  with their modules. The interact light ("sparkle") marks quest givers, hand-ins and quest objects; the health bars
+  the game's soft-target nameplates add are a separate option, off by default; profession and class trainers light
+  up only when the player can use them (5.4.4).
 
 ## Not in 6.0
 
@@ -110,7 +118,8 @@ Cute's report), pacing to the slowest party member.
 ## Testing
 
 Harness scenarios (tools/questbank/harness.lua), each with the memory and garbage gates:
-- a fresh install: welcome line, step frame on, arrow on, auto on for planned quests only, nothing else in chat;
+- a fresh install: welcome line with the auto choice, step frame on, QuestBank's arrow on, auto as chosen, nothing
+  else in chat;
 - a 5.x saved file: the one question, both answers;
 - a level-1 human in Northshire through the first hand-ins: steps in order, each completing by itself;
 - a level-23 character mid-chain with quests from three zones: a sensible first step, no step for a quest it cannot
