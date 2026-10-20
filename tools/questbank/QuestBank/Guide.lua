@@ -279,6 +279,56 @@ function G.Fill(level)
   return n
 end
 
+-- nothing worth taking in reach: where to kill until the next level that opens quests, and where they are. The
+-- whole catalog is scanned for the nearest kill spot, but only when the list is empty (rare); one table reused
+local grind = { kind = "grind" }
+function G.Grind(level, me)
+  local UI, D, M = QB.UI, QB.Data, QB.Model
+  if not (UI and UI.Candidates) then return nil end
+  local nextReq, nextCat
+  for _, cand in ipairs(UI:Candidates(nil, level, level + 3)) do
+    if cand.req and cand.req > level and (not nextReq or cand.req < nextReq or (cand.req == nextReq and (cand.mins or huge) < (nextCat and nextCat.mins or huge))) then
+      nextReq, nextCat = cand.req, cand
+    end
+  end
+  if not nextReq then return nil end
+  -- the nearest kill spot of a quest around your level, for you
+  local best, bd, bname
+  local bit = QB.API.ClassBit()
+  if me and D.SPOT and QB.QuestMap and QB.QuestMap.Spots then
+    for id, r in pairs(D.Q) do
+      if r[1] >= level - 2 and r[1] <= level + 1 and D.SPOT[id] then
+        local side, cls = r[3], r[9]
+        if (side == 0 or (side == 1 and QB.faction == "A") or (side == 2 and QB.faction == "H")) and (cls == 0 or bit == 0 or math.floor(cls / bit) % 2 == 1) then
+          for _, sp in ipairs(QB.QuestMap.Spots(D.SPOT[id]) or {}) do
+            if sp.kind == "k" then
+              local w = M.World(sp.m, sp.x * 100, sp.y * 100, wbuf)
+              if w and w.c == me.c then
+                local d = (w.wx - me.wx) ^ 2 + (w.wy - me.wy) ^ 2
+                if not bd or d < bd then
+                  best, bd = sp, d
+                  bname = (sp.name and D.SN and D.SN[sp.name]) or (D.MAPNAME and D.MAPNAME[sp.m]) or nil
+                  grind.c, grind.wx, grind.wy, grind.m, grind.x, grind.y = w.c, w.wx, w.wy, sp.m, sp.x * 100, sp.y * 100
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  local cat = D.CAT[nextCat.cat]
+  local where = cat and cat.name or "the next zone"
+  grind["until"] = nextReq
+  if best then
+    grind.text = string.format("Kill around %s until level %d, then %s", bname or "here", nextReq, where)
+  else
+    grind.text = string.format("Kill around here until level %d, then %s", nextReq, where)
+    grind.c, grind.wx, grind.wy, grind.m, grind.x, grind.y = nil, nil, nil, nil, nil, nil
+  end
+  return grind
+end
+
 -- the steps, anew: the target first (its quest's objective spot, or its stop's hand-ins), then the rest of the route
 -- stop by stop (each stop: the objectives of its quests on the way, its hand-ins, then the pick-ups there: what you
 -- hand in to an NPC comes before what you take from the same one), then the pick-ups at no stop of the route
@@ -397,6 +447,15 @@ function G.Replan()
     s.text, s.c, s.wx, s.wy = ts.name, ts.c, ts.wx, ts.wy
     s.atlas, s.icon = ts.atlas, ts.icon
     table.insert(G.steps, 1, s)
+  end
+  -- nothing at all: where to grind until the next level opens quests
+  if #G.steps == 0 then
+    local g = G.Grind(QB.state.level or 1, me)
+    if g then
+      local s = step("grind")
+      s.text, s["until"], s.c, s.wx, s.wy, s.m, s.x, s.y = g.text, g["until"], g.c, g.wx, g.wy, g.m, g.x, g.y
+      G.steps[1] = s
+    end
   end
   local nowKey = G.FirstKey()
   G.ver = G.ver + 1 -- (the texts may have changed: the frame redraws on any Replan; the key feeds the trace)

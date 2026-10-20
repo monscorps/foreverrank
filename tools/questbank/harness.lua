@@ -16592,6 +16592,23 @@ end)()
     if QB.Arrow.MiniStep() then assert(travel and travel < handin, "a travel step before the hand-in it leads to") end
   end }
 
+  -- nothing worth taking in reach: a level-22 human in Northshire with every Elwynn quest done (the catalog's quests
+  -- for the level band marked done, the rest too high): one step says to grind, where, until which level, and where
+  -- the plan goes on
+  G6CASES[#G6CASES + 1] = { "nothing worth taking in reach: the grind step", function()
+    local c = human("Grinder", {}, {}, nil, 22)
+    local QB, G, D = c.QB, c.QB.Guide, c.QB.Data
+    for id, r in pairs(D.Q) do if r[2] <= 22 then c.done[id] = true end end -- everything you could take: done
+    QB.API.RefreshDone()
+    QB:Settings().guide.on = true
+    settle(c)
+    local s = G.steps[1]
+    assert(s and s.kind == "grind", "a grind step: " .. tostring(s and G.Text(s)))
+    assert(G.Text(s):match("^Kill around .+ until level (%d+)") and s["until"] and s["until"] > 22, "it names the level: " .. G.Text(s))
+    assert(#G.steps == 1, "the only step")
+    assert(G.Text(s):find(", then ", 1, true), "and where the plan goes on: " .. G.Text(s))
+  end }
+
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")
