@@ -160,6 +160,20 @@ function SF.RefreshItem(s)
   end
 end
 
+-- the fight over (PLAYER_REGEN_ENABLED, from Core.lua's frame): a change that waited goes through now. The frame
+-- shown: its next refresh does it all; hidden (Hide in a fight, the Guide turned off): its OnUpdate never runs, so the
+-- button would stand on screen for good without this
+function SF.OnRegen()
+  if not SF.pendingItem or fighting() then return end
+  local f = SF.frame
+  if f and f:IsShown() and not (f.card and f.card:IsShown()) then
+    lastVer = -1
+    SF.Refresh()
+  else
+    SF.RefreshItem(nil)
+  end
+end
+
 -- the reward window's pick (G.reward), marked with QuestBank's own glow (Pins.Glow, the game's quest-POI glow) over
 -- the game's button (QuestInfoFrame.rewardsFrame.RewardButtons[index], QuestInfo.lua); never the button itself
 function SF.MarkReward()

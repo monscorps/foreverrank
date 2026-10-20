@@ -16967,6 +16967,33 @@ end)()
     assert(#c.chat == 0 or not c.chat[#c.chat]:find("reward", 1, true), "nothing said in chat")
   end }
 
+  -- the step frame hidden in a fight (6.0.0's review: the secure item button stayed on screen for good, as the hidden
+  -- frame's OnUpdate never runs): the fight's end (PLAYER_REGEN_ENABLED, Core.lua's frame) hides the button; shown
+  -- again in a fight, the button waits and comes with the fight's end
+  G6CASES[#G6CASES + 1] = { "the item button goes when the frame was hidden in a fight, once the fight is over", function()
+    local h = human("Hider", { { 7, 0 } }, { [783] = true }, nil, 5)
+    local QB, SF = h.QB, h.QB.StepFrame
+    h.objectives = { [7] = { { text = "Kobold Vermin slain: 3/8", type = "monster", finished = false, numFulfilled = 3, numRequired = 8 } } }
+    h.questItems[7] = { 6948, 134414 }
+    QB:Settings().guide.on = true; QB:Settings().welcome = nil
+    settle(h); SF.Apply(); SF.Refresh()
+    local f = h.env.QuestBankStep
+    assert(f.item and f.item:IsShown(), "the item button up")
+    h.combat = true
+    QB:Settings().guide.frame = false; SF.Apply()
+    assert(not f:IsShown() and f.item:IsShown() and SF.pendingItem, "hidden in a fight: the button stands, the change waits")
+    h.combat = false
+    h.ev(QB.eventFrame, "PLAYER_REGEN_ENABLED")
+    for _ = 1, 30 do frame(h, 0.1) end
+    assert(not f.item:IsShown() and not SF.pendingItem, "the fight over: the button goes with the hidden frame")
+    h.combat = true
+    QB:Settings().guide.frame = true; SF.Apply()
+    assert(f:IsShown() and not f.item:IsShown() and SF.pendingItem, "shown in a fight: the button waits")
+    h.combat = false
+    h.ev(QB.eventFrame, "PLAYER_REGEN_ENABLED")
+    assert(f.item:IsShown() and f.item:GetAttribute("item") == "item:6948", "the fight over: the button is back for the shown frame")
+  end }
+
   -- a fresh install: the step frame opens on the welcome card (the auto choice, the outside-route choice, hand in for
   -- me), Done keeps the choices, says the one chat line and gives way to the steps; nothing else is said
   G6CASES[#G6CASES + 1] = { "a fresh install: the welcome card asks the auto choice; one line in chat, nothing else", function()
