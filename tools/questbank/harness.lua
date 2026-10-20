@@ -960,6 +960,12 @@ local function newClient(o)
     rawset(t, name, function(...) local r = { old(...) }; fn(...); return unpack(r) end)
   end
   env.UnitIsDeadOrGhost = function() return c.ghost or false end
+  -- where your corpse lies on a map, while you are a ghost: c.corpse = { m, x, y } (map percent 0-1)
+  env.C_DeathInfo = { GetCorpseMapPosition = function(m)
+    local k = c.corpse
+    if not (k and c.ghost and k[1] == m) then return nil end
+    return { x = k[2], y = k[3], GetXY = function(self) return self.x, self.y end }
+  end }
   env.ERR_NEWTAXIPATH = "New flight path discovered!"
   -- Legacy (Blizzard_LegacySystem's trait trees): c.legacy = { [node] = rank } gives every tree a config and each
   -- node its committed rank; nil is a client with no Legacy loaded (no config). c.traitCalls counts the reads
@@ -16528,6 +16534,62 @@ end)()
     for id in pairs(QB:Plan().auto) do local q = QB.Quest.Get(id); if q and q.cat and q.cat.name == "Zephras Isle" then isle = isle + 1 end end
     assert(isle > 0, "the fill picks the isle's quests")
     for _, s in ipairs(G.steps) do assert(s.c == 2991 or s.kind == "travel", "every step on the isle or a way off it: " .. G.Text(s)) end
+  end }
+
+  -- dead: the arrow and the first step lead to the corpse and say so; alive again, back to the route with the same
+  -- first step (a release is no jump: Target.lua)
+  G6CASES[#G6CASES + 1] = { "death: the arrow to the corpse and back", function()
+    local c = human("Ghost", { { 7, 0 } }, { [783] = true })
+    local QB, G, A = c.QB, c.QB.Guide, c.QB.Arrow
+    c.objectives = { [7] = { { text = "Kobold Vermin slain: 2/8", type = "monster", finished = false, numFulfilled = 2, numRequired = 8 } } }
+    QB:Settings().guide.on = true
+    A:Set(true)
+    settle(c)
+    local key = G.FirstKey()
+    c.ghost = true
+    c.corpse = { 1429, 0.48, 0.42 }
+    c.ev(QB.eventFrame, "PLAYER_DEAD")
+    for _ = 1, 15 do frame(c, 0.1) end
+    local s1 = G.steps[1]
+    assert(s1 and s1.kind == "corpse" and G.Text(s1) == "Run to your corpse" and s1.m == 1429 and math.abs(s1.x - 48) < 0.01, "the first step: the corpse: " .. tostring(s1 and G.Text(s1)))
+    assert(A.t and A.t.kind == "corpse" and A.t.wx == s1.wx and A.t.wy == s1.wy, "the arrow points at it: " .. tostring(A.t and A.t.kind))
+    assert(c.env.QuestBankArrow.name:GetText():find("corpse", 1, true), "and says so: " .. tostring(c.env.QuestBankArrow.name:GetText()))
+    c.ghost = false; c.corpse = nil
+    c.ev(QB.eventFrame, "PLAYER_UNGHOST")
+    for _ = 1, 15 do frame(c, 0.1) end
+    assert(G.FirstKey() == key, "alive: the same first step as before: " .. key .. " / " .. G.FirstKey())
+    assert(A.t and A.t.kind == "route", "the arrow back on the route")
+  end }
+
+  -- travel: a hand-in across a flight the character knows: the step before it is the arrow's ("Fly to Stormwind")
+  G6CASES[#G6CASES + 1] = { "travel steps come from the arrow's way", function()
+    local c = human("Flyer", {}, {}, nil, 12)
+    local QB, G, D = c.QB, c.QB.Guide, c.QB.Data
+    -- a quest handed in in Stormwind City while standing in Northshire: the route flies or walks; a travel step precedes it
+    local function stormwindQuest()
+      local ids = {}
+      for id in pairs(D.Q) do ids[#ids + 1] = id end
+      table.sort(ids)
+      for _, id in ipairs(ids) do
+        local q = QB.Quest.Get(id)
+        local n = q and q.turnIdx and q.turnIdx > 0 and D.NPC[q.turnIdx]
+        if n and n[2] == 1453 and q.lvl <= 14 and QB.Quest.ForMe(q) and not q.repeatable then return id end
+      end
+    end
+    local sw = stormwindQuest()
+    assert(sw, "a Stormwind hand-in for a level-12 human")
+    c.log = { { sw, 1 } }
+    QB:Settings().guide.on = true
+    QB.Arrow:Set(true)
+    settle(c)
+    for _ = 1, 10 do frame(c, 0.1) end
+    local travel, handin
+    for i, s in ipairs(G.steps) do
+      if s.kind == "travel" and not travel then travel = i end
+      if s.kind == "handin" and s.qid == sw then handin = i end
+    end
+    assert(handin, "the hand-in is a step")
+    if QB.Arrow.MiniStep() then assert(travel and travel < handin, "a travel step before the hand-in it leads to") end
   end }
 
   for _, case in ipairs(G6CASES) do

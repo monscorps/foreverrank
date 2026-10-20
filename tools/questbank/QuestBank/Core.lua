@@ -2697,6 +2697,7 @@ end
 frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
   -- (the Guide hears every event of this frame, as Auto does for the quest window's; it marks the plan dirty itself)
   if event ~= "ADDON_LOADED" and QB.Guide and QB.Guide.OnEvent then QB.Try("guide", QB.Guide.OnEvent, event, a1, a2) end
+  if event == "PLAYER_DEAD" or event == "PLAYER_UNGHOST" or event == "PLAYER_ALIVE" then return end -- (the Guide's alone: no re-plan for a release)
   if event == "ADDON_LOADED" then
     -- (the quest survey's rows first: the game's XP for one of them applies like any other's)
     if a1 == ADDON then QB:Settings(); if QB.Survey then QB.Try("quest survey", QB.Survey.Load) end; Live.Apply() end
@@ -2804,7 +2805,8 @@ for _, e in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_LOGOUT", "QUEST_LOG
   "QUEST_ACCEPTED", "QUEST_REMOVED", "BAG_UPDATE_DELAYED", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE",
   "ZONE_CHANGED_NEW_AREA", "UNIT_AURA", "HEARTHSTONE_BOUND", "UNIT_SPELLCAST_SUCCEEDED", "QUEST_DETAIL", "QUEST_COMPLETE",
   "QUEST_PROGRESS", "QUEST_GREETING", "GOSSIP_SHOW",
-  "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED" }) do
+  "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED",
+  "PLAYER_DEAD", "PLAYER_UNGHOST", "PLAYER_ALIVE" }) do -- (the Guide: your corpse, Guide.lua)
   if (e == "UNIT_AURA" or e == "UNIT_SPELLCAST_SUCCEEDED") and frame.RegisterUnitEvent then
     pcall(frame.RegisterUnitEvent, frame, e, "player") -- not every unit in sight
   else

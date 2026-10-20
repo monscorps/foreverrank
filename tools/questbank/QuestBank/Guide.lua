@@ -152,6 +152,42 @@ local function putOff(id)
 end
 G.PutOff = putOff
 
+-- dead: where your corpse lies (C_DeathInfo.GetCorpseMapPosition, DeathInfoDocumentation.lua, on the map you are on),
+-- in continent yards; nil alive or where the client won't say. One table, read again once a second (the arrow asks
+-- 20 times a second). G.dead: whether the last look found you a ghost (Target.lua's look turns the Guide on a client
+-- that fires none of the death events)
+local corpse = { kind = "corpse", name = "Your corpse" }
+local corpseAt, corpseHad = -1, false
+local function ghost()
+  if type(UnitIsDeadOrGhost) ~= "function" then return false end
+  local ok, v = pcall(UnitIsDeadOrGhost, "player")
+  return ok and plain(v) == true
+end
+function G.Corpse()
+  if not ghost() then G.dead = false; corpseAt = -1; return nil end
+  G.dead = true
+  if not (C_DeathInfo and C_DeathInfo.GetCorpseMapPosition) then return nil end
+  local now = GetTime and GetTime() or 0
+  if corpseAt >= 0 and now - corpseAt < 1 then return corpseHad and corpse or nil end
+  corpseAt, corpseHad = now, false
+  local m = QB.API.MapID()
+  if type(m) ~= "number" then return nil end
+  local ok, pos = pcall(C_DeathInfo.GetCorpseMapPosition, m)
+  pos = ok and plain(pos) or nil
+  if type(pos) ~= "table" then return nil end
+  local x, y = plain(pos.x), plain(pos.y)
+  if pos.GetXY then
+    local ok2, gx, gy = pcall(pos.GetXY, pos)
+    if ok2 then x, y = plain(gx), plain(gy) end
+  end
+  if type(x) ~= "number" or type(y) ~= "number" then return nil end
+  local w = QB.Model.World(m, x * 100, y * 100, wbuf)
+  if not w then return nil end
+  corpse.m, corpse.x, corpse.y, corpse.c, corpse.wx, corpse.wy = m, x * 100, y * 100, w.c, w.wx, w.wy
+  corpseHad = true
+  return corpse
+end
+
 -- the pick-ups: the quests of the plan (your own list, and the Guide's picks while it is on) you don't hold, each by
 -- the giver of its first open step (Arrow.lua's A.FirstStep: a chain's next step you can take), or, when all that is
 -- left of its chain is a step you hold, by its own giver: it comes right after that hand-in, so the frame shows it as
@@ -275,8 +311,15 @@ function G.Replan()
   local r = T and T.Route()
   local legs = r and r.legs or {}
   for k in pairs(doneQ) do doneQ[k] = nil end
+  -- dead: the corpse first; the route's steps follow, so the frame still shows what comes after
+  local k = G.Corpse()
+  if k then
+    local s = step("corpse")
+    s.c, s.wx, s.wy, s.m, s.x, s.y = k.c, k.wx, k.wy, k.m, k.x, k.y
+    G.steps[1] = s
+  end
   -- a hand-in in reach: first, whatever its value (Target.lua)
-  if cur and cur.name and cur.near then
+  if cur and cur.name and cur.near and not k then
     local s = step("handin")
     s.qid, s.n, s.near = cur.qid, cur.quests, true
     placeNpc(s, cur.near)
@@ -337,7 +380,7 @@ function G.Replan()
   end
   -- the first step is the target's: when the target leads to an objective spot of a quest, that quest's nearest
   -- objective step goes first (Target.lua keeps the quest and the spot; the list follows it, never the other way)
-  if cur and cur.name and cur.obj and cur.qid and not (G.steps[1] and G.steps[1].near) then
+  if cur and cur.name and cur.obj and cur.qid and not (G.steps[1] and (G.steps[1].near or G.steps[1].kind == "corpse")) then
     for i, s in ipairs(G.steps) do
       if s.kind == "objective" and s.qid == cur.qid then
         if i > 1 then table.remove(G.steps, i); table.insert(G.steps, 1, s) end
@@ -345,6 +388,15 @@ function G.Replan()
         break
       end
     end
+  end
+  -- the arrow's step on the way to the first step (a flight master, a pier, the tram: Target.lua's T.Step) goes before it
+  local ts, onWay = nil, false
+  if QB.Target and QB.Target.Step then ts, onWay = QB.Target.Step() end
+  if ts and onWay and G.steps[1] and G.steps[1].kind ~= "corpse" then
+    local s = step("travel")
+    s.text, s.c, s.wx, s.wy = ts.name, ts.c, ts.wx, ts.wy
+    s.atlas, s.icon = ts.atlas, ts.icon
+    table.insert(G.steps, 1, s)
   end
   local nowKey = G.FirstKey()
   G.ver = G.ver + 1 -- (the texts may have changed: the frame redraws on any Replan; the key feeds the trace)
@@ -369,8 +421,14 @@ function G.Skip(id, how)
   QB:MarkDirty()
 end
 
--- the game's events, from Core.lua's frame
+-- the game's events, from Core.lua's frame (and Target.lua's look, for a death the client did not announce)
 function G.OnEvent(event, a1, a2)
+  if event == "PLAYER_DEAD" or event == "PLAYER_UNGHOST" or event == "PLAYER_ALIVE" then
+    -- (no re-plan: a release is no jump, and the route stands; the list is made again with or without the corpse)
+    G.Replan()
+    if QB.Arrow and QB.Arrow.Invalidate then QB.Arrow.Invalidate() end
+    return
+  end
   if event == "QUEST_ACCEPTED" or event == "QUEST_TURNED_IN" or event == "PLAYER_LEVEL_UP" then
     QB:MarkDirty() -- (Core.lua marks it too: the list is made again after the re-plan)
   end

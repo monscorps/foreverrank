@@ -189,6 +189,8 @@ A.ListFor = listFor
 -- place QuestBank can lead to (an island, a dungeon with no known way in) is a target without a position
 function A.Target(here)
   if A.temp then return A.temp end -- (a place clicked, shown for now: A:Show)
+  local k = QB.Guide and QB.Guide.Corpse and QB.Guide.Corpse()
+  if k then return k end -- (dead: your corpse, whatever the mode, until you are alive again: Guide.lua)
   local m = A.Mode()
   if m == "pin" then
     local p = QB:Settings().arrowPin
@@ -202,8 +204,9 @@ function A.Target(here)
 end
 
 local NOTHING = { route = { "No stop to go to", nil }, handin = { "Nothing finished to hand in", "Finish a quest and the arrow finds its NPC" },
-                  pickup = { "Nothing on your pick-up list", "The ! on a quest on Available puts it there" }, pin = { "Nothing chosen yet", "Click a quest or a stop in QuestBank" } }
-local HEAD = { route = "Next stop: %s", handin = "Hand in at %s", pickup = "Pick up at %s", pin = "You chose: %s" }
+                  pickup = { "Nothing on your pick-up list", "The ! on a quest on Available puts it there" }, pin = { "Nothing chosen yet", "Click a quest or a stop in QuestBank" },
+                  corpse = { "Your corpse", nil } }
+local HEAD = { route = "Next stop: %s", handin = "Hand in at %s", pickup = "Pick up at %s", pin = "You chose: %s", corpse = "Run to %s" }
 
 -- world x runs north and world y west; facing counts anticlockwise from north, as SetRotation turns
 function A.Bearing(me, t, facing)
@@ -495,7 +498,7 @@ end
 ----------------------------------------------------------------------------
 local ART = "Interface\\AddOns\\QuestBank\\art\\"
 local TRAVEL_KIND = { fly = true, boat = true, zeppelin = true, tram = true, portal = true }
-local VERB = { route = "Turn in", handin = "Turn in", pickup = "Take", pin = "Go to" } -- what to do at the target
+local VERB = { route = "Turn in", handin = "Turn in", pickup = "Take", pin = "Go to", corpse = "Run to" } -- what to do at the target
 local EASE = 12                   -- how fast the needle catches up (QuestTrail's: most of the way in about 0.2 s)
 local LABEL_W, LINE_H, GAP = 200, 13, 2
 A.EASE, A.VERB = EASE, VERB
@@ -901,6 +904,8 @@ function A:Update()
   if t.none then
     none.act = TV.Icons(QB.faction or QB.API.Faction()).unreachable
     g = none
+  elseif t.kind == "corpse" then
+    g = straight(me, t) -- (as the crow flies, lit: the travel guide shows "Resurrect first" to a ghost)
   elseif A.Guided() then
     g = travel(TV.Guide, me, t, t.temp and "pin" or A.Mode())
     A.guided = g ~= nil

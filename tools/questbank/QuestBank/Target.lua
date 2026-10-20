@@ -443,6 +443,9 @@ end
 function T.Look()
   local me = QB.API.WorldPosition(nil, look)
   local taxi = onTaxi()
+  -- (the Guide turns to your corpse and back on the death events; a client that fires none of them: this look does)
+  local G = QB.Guide
+  if G and G.dead ~= nil and G.OnEvent and G.dead ~= yes(UnitIsDeadOrGhost, "player") then G.OnEvent(G.dead and "PLAYER_ALIVE" or "PLAYER_DEAD") end
   if yes(UnitIsDeadOrGhost, "player") then
     last.dead, last.taxi = true, taxi
     return
