@@ -1,25 +1,21 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The Guide: what should you do next, and with whom. What the rules (Rules.lua) make of the seed and the guild's play,
 -- drawn around that one question:
---   band        the next best thing, one line, its reason in the tooltip: the rules' pick from the dungeons in range
---               at your level (guild mates online in range first, then what is left for you there: the bosses you have
---               not killed, the quests open to you, a dungeon you have not been in; then the one closing soonest), or
---               plainly that nothing fits. Officers get the guild's version: where most members are and the dungeon
---               that holds them. Under it, where the knowledge comes from, its detail in the tooltip
---   cards       one per dungeon in range: its name, a level bar with its range drawn against your level, how sure we
+--   band        the step now from the Quests module (Cute.QuestBand: the step, the next two, the time to level, three
+--               of your party's steps), or one line saying to tick Quests, or what it waits for
+--   head        the next best thing, one line: the rules' pick from the dungeons in range at your level (guild mates
+--               online in range first, then what is left for you there: the bosses you have not killed, the quests
+--               open to you, a dungeon you have not been in; then the one closing soonest), or plainly that nothing
+--               fits. Officers get the guild's line at its right (where most members are and the dungeon that holds
+--               them). The tooltip holds the reasons, every dungeon in range with its counts, where the knowledge
+--               comes from, the guild's counts and what the guild learned in play
+--   card        the picked dungeon alone: its name, a level bar with its range drawn against your level, how sure we
 --               are in one word, the bosses as pips (killed, not killed, doubted), the quests known for it as they
 --               stand for you, and the guild mates online in range, class-coloured, each with an Invite button
---               (C_PartyInfo.InviteUnit, out of combat only). Your next best one is marked
---   strips      gear (your Missing enchants, rule 5, a row a slot, what Forever has for each in its tooltip; under the
---               rules' enchant level, the slots the research has enchants for, as advice) and pace (hours to the next
---               level and to the cap, at your pace and at the guild's median), a row each, no paragraphs
---   Next up     a short timeline of the dungeons opening within guideAhead levels, the seed's awaited ones too
---   Officers    the dungeons the guild is in range of or has met, each with its members in range and how many of its
---               bosses the guild has killed (every boss in its tooltip); and what the guild's play changed from the
---               research: new dungeons and bosses, learned ranges, doubted entries, a stale seed
--- Where the seed is stale or none shipped, every section runs on the guild's play alone and its heading says so. The
--- page is one virtual list of rows of one height (the window's kind: UI:List), headings included, so a guild's thirty
--- dungeons and their members draw only the rows in view; the next best thing and the source stay in the band above.
+--               (C_PartyInfo.InviteUnit, out of combat only)
+-- Where the seed is stale or none shipped, everything runs on the guild's play alone. The page is one virtual list of
+-- rows of one height (the window's kind: UI:List); G.Items works out only what the page draws: every dungeon in
+-- range is weighed for the pick (its counts), the rows are the picked one's.
 local _, C = ...
 local G = { invited = {}, open = {} }
 C.Guide = G
@@ -37,7 +33,6 @@ local function some(names, max)
   for i = 1, max do first[i] = names[i] end
   return table.concat(first, ", ") .. " and " .. (#names - max) .. " more"
 end
-local function hoursText(h) return h and C.Stats.FmtHours(h * 3600) or nil end
 
 -- the line while Rule 0 is still checking the seed: how far it got (Rules.lua chk.i of chk.n), so a chain that
 -- stalls shows where, and a long one shows it moving
@@ -115,6 +110,8 @@ local function dungeonTip(d, extra)
     if extra then extra(tip) end
   end
 end
+
+G.DungeonTip = dungeonTip -- (the harness reads a dungeon's tooltip whether or not it is the pick)
 
 ----------------------------------------------------------------------------
 -- you and the guild, per dungeon
@@ -212,20 +209,6 @@ end
 local function invitedRecently(mate)
   local t = G.invited[mate.guid or mate.invite or ""]
   return t ~= nil and C.Now() - t < INVITED
-end
-
--- the median of the members' XP an hour that this viewer may see, and how many it is over
-local function guildPace(rows, officer)
-  local list = {}
-  for _, r in ipairs(rows) do
-    local v = r.addon and r.stats.xp_hour
-    if type(v) == "number" and v > 0 and C.Policy:CanSee(officer, r.me, "xp_hour") then list[#list + 1] = v end
-  end
-  if #list == 0 then return nil, 0 end
-  table.sort(list)
-  local n = #list
-  local med = n % 2 == 1 and list[(n + 1) / 2] or (list[n / 2] + list[n / 2 + 1]) / 2
-  return med, n
 end
 
 ----------------------------------------------------------------------------
@@ -342,287 +325,140 @@ end
 ----------------------------------------------------------------------------
 -- The rows, worked out once a draw, each one row high: { kind, name, val, who, label, c (the name's colour), wc (the
 -- right's), tip, ... } where kind is
---   head     a heading: name, and who on the right
---   card     a dungeon in range: name, its range (val) by a level bar (d), how sure in one word (who); pick marks the
---            next best one
+--   head     a heading: name, and who on the right (the page's own: the pick's line, the officer's guild line)
+--   card     the picked dungeon: name, its range (val) by a level bar (d), how sure in one word (who); pick marks it
 --   bosses   its bosses as pips ({ name, state = killed | left | doubted }), who how many are left
 --   quests   its quests open to you by name, who how many
 --   mate     a guild mate online in range: name in the class's colour, level (val), an Invite button (mate)
 --   more     "and N more online in range", a click shows them (fn)
---   strip    a compact row with a label: Gear, Pace
---   time     Next up: the level it opens at (at), the rail and a dot, then like a card's head
---   item     an officer's line: name, val, who (a dungeon's with its bar)
---   note     a line of text, its whole text in the tooltip; gap: a blank row
--- and the plan beside them: the cards, the next best thing, the guild's version (officers), the bars' level scale
-function G.Items(officer)
-  local R, S = C.Rules, C.Stats
-  local K = C.UI.COLORS
-  local items = {}
-  -- (a note's tooltip holds its whole text, which a narrow window cuts)
-  local function add(it)
-    if it.kind == "note" and not it.tip then local text = it.name; it.tip = function(tip) tip:AddLine(text, 1, 1, 1, true) end end
-    items[#items + 1] = it
-    return it
+--   note     a line of text, its whole text in the tooltip
+-- and the plan beside them: every dungeon in range with its counts (cards), the next best thing (next), the guild's
+-- version and what it learned (guild, learned; officers), the bar's level scale (lo, hi)
+
+-- a dungeon's bosses as pips, and how many are left or doubted, for its card
+local function pipsOf(d)
+  local m = C.Rules.Model()
+  local pips, left, doubted = {}, 0, 0
+  for _, enc in ipairs(bossesOf(d)) do
+    local b = m.bosses[enc]
+    local state = killedIt(enc) and "killed" or (b.state == "doubted" and "doubted" or "left")
+    if state == "left" then left = left + 1 elseif state == "doubted" then doubted = doubted + 1 end
+    pips[#pips + 1] = { name = b.name, state = state }
   end
+  return pips, left, doubted
+end
+
+-- a card's rows: the dungeon, its bosses, its quests, its mates (the page draws the picked one's; the harness reads any)
+function G.CardRows(card, plan)
+  local R = C.Rules
+  local K = C.UI.COLORS
+  local d = card.d
+  local pick = plan and plan.next and plan.next.card == card
+  local out = {}
+  local function add(it) out[#out + 1] = it; return it end
+  add({ kind = "card", name = d.name .. (d.kind == "raid" and " (raid)" or ""), val = R.RangeWords(d), who = G.Word(d), d = d, pick = pick,
+    tip = dungeonTip(d, pick and function(tip) tip:AddLine("Your next best thing: " .. plan.next.line, 0.9, 0.9, 0.9, true) end or nil) })
+  -- the bosses: a pip each, how many are left
+  local pips, left, doubted = pipsOf(d)
+  local who
+  if #pips == 0 then who = nil
+  elseif left > 0 then who = left .. " left" .. (doubted > 0 and (", " .. doubted .. " doubted") or "")
+  elseif doubted > 0 then who = "every one killed but the doubted"
+  else who = "every one killed" end
+  add({ kind = "bosses", label = "Bosses", pips = pips, who = who, d = d, tip = dungeonTip(d), c = #pips == 0 and K.MUTE or nil,
+    name = #pips == 0 and (d.awaited and "None known: the guild has not placed it yet." or "None known yet: the guild's kills name them.") or nil })
+  -- the quests known for it, as they stand for you
+  if #card.qlist > 0 then
+    local open, n = {}, card.qn
+    for _, x in ipairs(card.qlist) do if x.state == "log" or x.state == "open" or x.state == "maybe" then open[#open + 1] = x.q.name end end
+    local whoQ
+    if card.quests > 0 then
+      whoQ = n.log > 0 and (n.log .. " in your log" .. (n.open > 0 and (", " .. n.open .. " to take") or "")) or (n.open .. " to take")
+    elseif n.maybe > 0 then whoQ = "not known if done" end
+    local parts = {}
+    if n.done > 0 then parts[#parts + 1] = n.done .. " done" end
+    if n.later > 0 then parts[#parts + 1] = n.later .. " later" end
+    add({ kind = "quests", label = "Quests", name = #open > 0 and some(open, 3) or ("None open to you: " .. table.concat(parts, ", ") .. "."),
+      c = #open > 0 and K.INK or K.MUTE, who = whoQ, d = d, qlist = card.qlist, tip = function(tip)
+        tip:AddLine("Quests for " .. d.name, 1, 1, 1)
+        tip:AddLine("From research (the dungeon's quests players recorded); done and in your log as the client says.", 0.6, 0.6, 0.6, true)
+        local words = { log = "in your log", open = "to take", done = "done", maybe = "not known whether done" }
+        for _, x in ipairs(card.qlist) do
+          local q = x.q
+          local word = x.state == "later" and ("from level " .. q.min) or words[x.state]
+          local dim = x.state == "done" and 0.45 or 0.8
+          tip:AddDoubleLine(q.name .. (q.level and (" (" .. q.level .. ")") or ""), word, dim, dim, dim, 0.65, 0.65, 0.65)
+        end
+      end })
+  end
+  -- who to run it with: the guild mates online in range, an Invite button each; past a few, a click shows the rest
+  local key = d.id or d.name
+  local shown = (#card.mates > MATES + 1 and not G.open[key]) and MATES or #card.mates
+  for i = 1, shown do
+    local mt = card.mates[i]
+    add({ kind = "mate", label = i == 1 and "Online" or nil, name = mt.name, val = tostring(mt.level), mate = mt, c = C.UI.ClassColor(mt.class),
+      who = mt.grouped and "in your group" or nil, tip = function(tip)
+        tip:AddLine(mt.name, 1, 1, 1)
+        tip:AddLine("Level " .. mt.level .. ", online, in " .. d.name .. "'s range" .. (mt.row.addon and "." or "; no addon."), 0.7, 0.7, 0.7, true)
+      end })
+  end
+  if #card.mates == 0 then
+    add({ kind = "mate", label = "Online", name = "Nobody in range online now.", c = K.MUTE })
+  elseif shown < #card.mates then
+    local rest = {}
+    for i = shown + 1, #card.mates do rest[#rest + 1] = card.mates[i].name .. " " .. card.mates[i].level end
+    add({ kind = "more", name = "and " .. (#card.mates - shown) .. " more online in range", c = K.DIM, fn = function() G.open[key] = true; C.UI:Draw() end,
+      tip = function(tip)
+        tip:AddLine("Online in range", 1, 1, 1)
+        for _, n in ipairs(rest) do tip:AddLine(n, 0.8, 0.8, 0.8) end
+        tip:AddLine("Click to show them all.", 0.45, 0.45, 0.45)
+      end })
+  elseif G.open[key] and #card.mates > MATES + 1 then
+    add({ kind = "more", name = "Show fewer", c = K.DIM, fn = function() G.open[key] = nil; C.UI:Draw() end })
+  end
+  return out
+end
+
+function G.Items(officer)
+  local R = C.Rules
   local st = R.SeedState()
-  local alone = (st == "stale" or st == "none") and "from the guild's play alone" or nil
   local rows = C.Roster:Rows()
   local level = C.Sample.values.level or C.Num("UnitLevel", "player") or 1
-  local w, ahead = R.Get("guideWindow"), R.Get("guideAhead")
-  local cap = R.Cap()
+  local w = R.Get("guideWindow")
   local m = R.Model()
   local side, group = mySide(), groupGuids()
   local plan = { level = level, cards = {} }
-  -- the bars share one scale across the page: every dungeon drawn, and your level
-  local lo, hi = level, level
-  local function scale(d) if d and d.min then lo = math.min(lo, d.min); hi = math.max(hi, d.max) end end
-
-  -- in range: a card each
+  -- in range: what each dungeon leaves you, the counts the pick weighs (the rows are the picked one's alone, below)
   local now, soon = R.DungeonsFor(level)
   plan.soon = soon
-  add({ kind = "head", name = "In range at level " .. level, who = alone or (#now > 0 and plural(#now, "dungeon", "dungeons") or "") })
-  if st == "checking" then add({ kind = "note", name = G.Checking() }) end
   for _, d in ipairs(now) do
-    scale(d)
-    local card = { d = d, pips = {}, left = 0, doubted = 0 }
+    local card = { d = d, left = 0, doubted = 0, known = 0 }
     for _, enc in ipairs(bossesOf(d)) do
-      local b = m.bosses[enc]
-      local state = killedIt(enc) and "killed" or (b.state == "doubted" and "doubted" or "left")
-      if state == "left" then card.left = card.left + 1 elseif state == "doubted" then card.doubted = card.doubted + 1 end
-      card.pips[#card.pips + 1] = { name = b.name, state = state }
+      card.known = card.known + 1
+      if killedIt(enc) then
+      elseif m.bosses[enc].state == "doubted" then card.doubted = card.doubted + 1
+      else card.left = card.left + 1 end
     end
     card.qlist, card.qn = questsFor(d, level, side)
     card.quests = card.qn.open + card.qn.log
     card.mates = matesFor(d, rows, level, w, officer, group)
-    card.unexplored = #card.pips == 0 and not beenIn(d)
+    card.unexplored = card.known == 0 and not beenIn(d)
     plan.cards[#plan.cards + 1] = card
   end
   plan.next = G.Pick(plan.cards, level, soon, st)
-  if officer then plan.guild = G.GuildPick(rows) end
-  for _, card in ipairs(plan.cards) do
-    local d = card.d
-    local pick = plan.next.card == card
-    add({ kind = "card", name = d.name .. (d.kind == "raid" and " (raid)" or ""), val = R.RangeWords(d), who = G.Word(d), d = d, pick = pick,
-      tip = dungeonTip(d, pick and function(tip) tip:AddLine("Your next best thing: " .. plan.next.line, 0.9, 0.9, 0.9, true) end or nil) })
-    -- the bosses: a pip each, how many are left
-    local who
-    if #card.pips == 0 then who = nil
-    elseif card.left > 0 then who = card.left .. " left" .. (card.doubted > 0 and (", " .. card.doubted .. " doubted") or "")
-    elseif card.doubted > 0 then who = "every one killed but the doubted"
-    else who = "every one killed" end
-    add({ kind = "bosses", label = "Bosses", pips = card.pips, who = who, d = d, tip = dungeonTip(d), c = #card.pips == 0 and K.MUTE or nil,
-      name = #card.pips == 0 and (d.awaited and "None known: the guild has not placed it yet." or "None known yet: the guild's kills name them.") or nil })
-    -- the quests known for it, as they stand for you
-    if #card.qlist > 0 then
-      local open, n = {}, card.qn
-      for _, x in ipairs(card.qlist) do if x.state == "log" or x.state == "open" or x.state == "maybe" then open[#open + 1] = x.q.name end end
-      local whoQ
-      if card.quests > 0 then
-        whoQ = n.log > 0 and (n.log .. " in your log" .. (n.open > 0 and (", " .. n.open .. " to take") or "")) or (n.open .. " to take")
-      elseif n.maybe > 0 then whoQ = "not known if done" end
-      local parts = {}
-      if n.done > 0 then parts[#parts + 1] = n.done .. " done" end
-      if n.later > 0 then parts[#parts + 1] = n.later .. " later" end
-      add({ kind = "quests", label = "Quests", name = #open > 0 and some(open, 3) or ("None open to you: " .. table.concat(parts, ", ") .. "."),
-        c = #open > 0 and K.INK or K.MUTE, who = whoQ, d = d, qlist = card.qlist, tip = function(tip)
-          tip:AddLine("Quests for " .. d.name, 1, 1, 1)
-          tip:AddLine("From research (the dungeon's quests players recorded); done and in your log as the client says.", 0.6, 0.6, 0.6, true)
-          local words = { log = "in your log", open = "to take", done = "done", maybe = "not known whether done" }
-          for _, x in ipairs(card.qlist) do
-            local q = x.q
-            local word = x.state == "later" and ("from level " .. q.min) or words[x.state]
-            local dim = x.state == "done" and 0.45 or 0.8
-            tip:AddDoubleLine(q.name .. (q.level and (" (" .. q.level .. ")") or ""), word, dim, dim, dim, 0.65, 0.65, 0.65)
-          end
-        end })
-    end
-    -- who to run it with: the guild mates online in range, an Invite button each; past a few, a click shows the rest
-    local key = d.id or d.name
-    local shown = (#card.mates > MATES + 1 and not G.open[key]) and MATES or #card.mates
-    for i = 1, shown do
-      local mt = card.mates[i]
-      add({ kind = "mate", label = i == 1 and "Online" or nil, name = mt.name, val = tostring(mt.level), mate = mt, c = C.UI.ClassColor(mt.class),
-        who = mt.grouped and "in your group" or nil, tip = function(tip)
-          tip:AddLine(mt.name, 1, 1, 1)
-          tip:AddLine("Level " .. mt.level .. ", online, in " .. d.name .. "'s range" .. (mt.row.addon and "." or "; no addon."), 0.7, 0.7, 0.7, true)
-        end })
-    end
-    if #card.mates == 0 then
-      add({ kind = "mate", label = "Online", name = "Nobody in range online now.", c = K.MUTE })
-    elseif shown < #card.mates then
-      local rest = {}
-      for i = shown + 1, #card.mates do rest[#rest + 1] = card.mates[i].name .. " " .. card.mates[i].level end
-      add({ kind = "more", name = "and " .. (#card.mates - shown) .. " more online in range", c = K.DIM, fn = function() G.open[key] = true; C.UI:Draw() end,
-        tip = function(tip)
-          tip:AddLine("Online in range", 1, 1, 1)
-          for _, n in ipairs(rest) do tip:AddLine(n, 0.8, 0.8, 0.8) end
-          tip:AddLine("Click to show them all.", 0.45, 0.45, 0.45)
-        end })
-    elseif G.open[key] and #card.mates > MATES + 1 then
-      add({ kind = "more", name = "Show fewer", c = K.DIM, fn = function() G.open[key] = nil; C.UI:Draw() end })
-    end
+  if officer then
+    plan.guild = G.GuildPick(rows)
+    -- what the guild's play changed from the research (R.Changes; with no research to weigh it against, what the
+    -- guild learned), for the head's tooltip
+    plan.learned = {}
+    for _, ch in ipairs(R.Changes()) do plan.learned[#plan.learned + 1] = ch.what .. (ch.detail and (": " .. ch.detail) or "") end
+    if #plan.learned == 0 then plan.learned[1] = "Nothing yet: the guild's play has matched the research." end
   end
-  if #now == 0 and st ~= "checking" then add({ kind = "note", name = "No dungeon known for level " .. level .. " yet. The guild's entries and kills fill this in." }) end
-
-  -- gear: Missing enchants, a row a slot, what Forever has for the slot and kind in the tooltip; under the enchant
-  -- level, the slots the research has enchants for, as advice (they count as missing from that level, rule 5)
-  add({ kind = "gap" })
-  local missing = C.Sample:Value("unenchanted")
-  local g = S.Gear and S.Gear() or nil
-  local from = R.Get("enchantDoubtLevel")
-  local label = "Gear"
-  local function strip(it) it.kind, it.label = "strip", label; label = nil; return add(it) end
-  -- what Forever has for a worn item: the names of the enchants that take its kind, or, where the research does not
-  -- say which of a hand slot's enchants take it, how many it has for the slot
-  local function forever(slot, kind)
-    local list, unplaced = R.SlotEnchants(slot, kind)
-    local names = {}
-    for _, x in ipairs(list) do if x.state ~= "absent" then names[#names + 1] = x.name end end
-    local line
-    if #names > 0 then line = "Forever has: " .. some(names, 3)
-    elseif unplaced > 0 then line = "Forever has " .. plural(unplaced, "enchant", "enchants") .. " for this slot; which take " .. S.KindName(kind) .. " is not in the research" end
-    return line, list, unplaced
-  end
-  local function slotTip(slot, name, kind, head)
-    local line, list, unplaced = forever(slot, kind)
-    return function(tip)
-      tip:AddLine(name, 1, 1, 1)
-      tip:AddLine(head, 0.7, 0.7, 0.7, true)
-      if line and R.SeedUsable() then tip:AddLine(line, 0.8, 0.8, 0.8, true) end
-      for _, x in ipairs(list) do
-        local word = x.state == "seen" and ("seen on " .. plural(x.n, "member", "members")) or R.Words({ state = x.state })
-        tip:AddDoubleLine(x.name, word, 0.85, 0.85, 0.85, 0.7, 0.7, 0.7)
-      end
-      if unplaced > 0 then tip:AddLine(plural(unplaced, "more enchant", "more enchants") .. " for this slot, for kinds of item the research does not name.", 0.6, 0.6, 0.6, true) end
-    end
-  end
-  if type(missing) ~= "table" then
-    local err = C.Sample:Error("unenchanted")
-    strip({ name = err and ("Could not read your enchants: " .. err) or "Your enchants have not been read yet.", c = K.MUTE })
-  else
-    local any, advice = false, {}
-    for _, slot in ipairs(S.GEAR) do
-      local worn = g and g.slot[slot]
-      local kind = worn and worn.kind or nil
-      local name = (S.SLOT[slot] or ("Slot " .. slot)) .. (kind and (" (" .. S.KindName(kind) .. ")") or "")
-      if missing[slot] then
-        any = true
-        strip({ name = name, val = "missing", who = S.EnchantSource(slot, kind), c = K.WARN,
-          tip = slotTip(slot, name, kind, "Not enchanted. The guild's word: " .. S.EnchantSource(slot, kind) .. ".") })
-      elseif level < from and worn and worn.link and (worn.enchant or 0) == 0 and kind and R.SeedEnchantable(slot, kind) then
-        advice[#advice + 1] = { slot = slot, label = name, kind = kind }
-      end
-    end
-    if not any then
-      -- (where no slot is known to take an enchant at all, neither by the guild nor by research it can use, that is
-      -- what the line says: "every worn item has one" would claim what nobody knows)
-      local known = false
-      for _, slot in ipairs(S.GEAR) do if S.EnchantLearned(slot) or R.SeedEnchantable(slot) then known = true; break end end
-      local note = "Every worn item that takes an enchant has one."
-      if not known then note = "No enchant slots known yet: they are learned as the guild enchants."
-      elseif #advice > 0 then note = "Nothing missing: under level " .. from .. " only what the guild has enchanted counts." end
-      strip({ name = note, c = K.MUTE, tip = function(tip) tip:AddLine(note, 1, 1, 1, true) end })
-    end
-    if #advice > 0 then
-      local names, beta, data = {}, false, false
-      for _, a in ipairs(advice) do
-        names[#names + 1] = S.SLOT[a.slot]
-        if R.SeedSlotState(a.slot) == "beta" then beta = true else data = true end
-      end
-      local source = (beta and data) and "from research and the beta" or (beta and "seen in the beta" or "from research")
-      strip({ name = "Could take one: " .. some(names, 3), val = "level " .. from .. "+", who = source, c = K.DIM, tip = function(tip)
-        tip:AddLine("Forever has enchants for these", 1, 1, 1)
-        tip:AddLine("They count as missing from level " .. from .. ", the rules' enchant level; until then only what the guild has enchanted does.", 0.7, 0.7, 0.7, true)
-        for _, a in ipairs(advice) do
-          local line = forever(a.slot, a.kind)
-          tip:AddDoubleLine(a.label, line and line:gsub("^Forever has:? ", "") or "", 0.85, 0.85, 0.85, 0.6, 0.6, 0.6)
-        end
-      end })
-    end
-  end
-  -- pace: a row to the next level and one to the cap, at your pace and at the guild's median
-  label = "Pace"
-  local rate = C.Sample.values.xp_hour
-  local med, n = guildPace(rows, officer)
-  local xp, max = C.Num("UnitXP", "player"), C.Num("UnitXPMax", "player")
-  if level >= cap then
-    strip({ name = "At the cap, level " .. cap .. ".", c = K.INK })
-  elseif xp and max then
-    local function at(left, r) return (left and r and r > 0) and hoursText(left / r) or nil end
-    local nextLeft = math.max(0, max - xp)
-    local capLeft = R.XPLeft(level, xp, max, cap)
-    local mine = type(rate) == "number" and rate > 0 and rate or nil
-    local function pace(name, left, why)
-      local yours = at(left, mine) or (left and "no pace yet" or "not known")
-      local theirs = at(left, med)
-      strip({ name = name, val = yours, who = theirs and (theirs .. " at the median of " .. plural(n, "member", "members")) or (left and "no median yet" or ""),
-        c = K.INK, tip = function(tip)
-          tip:AddLine(name, 1, 1, 1)
-          if left then tip:AddLine(string.format("%d XP to go.", math.floor(left)), 0.8, 0.8, 0.8) else tip:AddLine(why, 0.8, 0.8, 0.8, true) end
-          tip:AddLine(mine and string.format("Your pace: %d XP an hour, over the last hour of play.", mine) or "Your pace shows after a few minutes of play.", 0.6, 0.6, 0.6, true)
-          if med then tip:AddLine(string.format("The guild's median: %d XP an hour, over %s.", math.floor(med), plural(n, "member", "members")), 0.6, 0.6, 0.6, true) end
-        end })
-    end
-    pace("Level " .. (level + 1), nextLeft)
-    pace("The cap, level " .. cap, capLeft, "The XP each level takes is not known that far yet: the guild's levels fill it in.")
-  else
-    strip({ name = "Your XP does not read on this client.", c = K.MUTE })
-  end
-
-  -- next up: a short timeline of the dungeons opening in the next levels, the seed's awaited ones among them
-  add({ kind = "gap" })
-  add({ kind = "head", name = "Next up", who = alone or ("opening in the next " .. plural(ahead, "level", "levels")) })
-  for i, d in ipairs(soon) do
-    scale(d)
-    add({ kind = "time", at = d.min, first = i == 1, last = i == #soon, name = d.name .. (d.kind == "raid" and " (raid)" or ""), val = R.RangeWords(d), who = G.Word(d), d = d,
-      tip = dungeonTip(d, function(tip) tip:AddLine("Opens at level " .. d.min .. ", " .. plural(d.min - level, "level", "levels") .. " from yours.", 0.8, 0.8, 0.8, true) end) })
-  end
-  if #soon == 0 and st ~= "checking" then add({ kind = "note", name = "Nothing known to open in the next " .. plural(ahead, "level", "levels") .. "." }) end
-
-  -- the officers' view: the dungeons the guild is in range of or has met, and what the guild's play changed from the
-  -- research. A dungeon's line folds its bosses into a count, one count per fact (the members seen killing each, kept
-  -- as members leave); every boss is in its tooltip
-  if officer and m then
-    add({ kind = "gap" })
-    add({ kind = "head", name = "The guild, per dungeon", who = alone or "members in range, bosses the guild has killed" })
-    local list, rest = {}, 0
-    for _, d in ipairs(R.EachDungeon()) do
-      if d.state ~= "stale" then
-        local inRange, killed = 0, 0
-        local bosses = bossesOf(d)
-        if d.min then for _, r in ipairs(rows) do if r.addon and type(r.level) == "number" and r.level >= d.min and r.level <= d.max then inRange = inRange + 1 end end end
-        for _, enc in ipairs(bosses) do if (m.bosses[enc].n or 0) > 0 then killed = killed + 1 end end
-        if inRange > 0 or killed > 0 or (d.n or 0) > 0 then list[#list + 1] = { d = d, inRange = inRange, killed = killed, bosses = #bosses } else rest = rest + 1 end
-      end
-    end
-    table.sort(list, function(a, b)
-      a, b = a.d, b.d
-      if (a.min ~= nil) ~= (b.min ~= nil) then return a.min ~= nil end
-      if a.min and a.min ~= b.min then return a.min < b.min end
-      return a.name < b.name
-    end)
-    for _, e in ipairs(list) do
-      local d = e.d
-      scale(d)
-      local bosses = e.bosses > 0 and (e.killed .. " of " .. plural(e.bosses, "boss", "bosses") .. " killed") or "no bosses known yet"
-      add({ kind = "item", name = d.name .. (d.kind == "raid" and " (raid)" or ""), val = R.RangeWords(d), d = d,
-        who = (d.min and (e.inRange .. " in range, ") or "") .. bosses, tip = dungeonTip(d) })
-    end
-    if #list == 0 then add({ kind = "note", name = "No dungeon the guild is in range of or has met yet." }) end
-    if rest > 0 then add({ kind = "note", name = plural(rest, "more dungeon", "more dungeons") .. " from the research nobody is in range of or has met yet." }) end
-    add({ kind = "gap" })
-    -- (with no research to weigh it against, what the guild learned, not changes from research: R.Changes)
-    local changes = R.Changes()
-    add({ kind = "head", name = "Learned in play", who = alone or (#changes > 0 and plural(#changes, "change", "changes") .. " from the research" or "") })
-    for _, ch in ipairs(changes) do
-      add({ kind = "item", name = ch.what, who = ch.detail, c = ch.kind == "doubted" and K.MUTE or K.INK, tip = function(tip)
-        tip:AddLine(ch.what, 1, 1, 1)
-        tip:AddLine(ch.detail, 0.8, 0.8, 0.8, true)
-        for _, name in ipairs(ch.names or {}) do tip:AddLine(name, 0.7, 0.7, 0.7) end
-      end })
-    end
-    if #changes == 0 then add({ kind = "note", name = "Nothing yet: the guild's play has matched the research." }) end
-  end
+  local items = plan.next.card and G.CardRows(plan.next.card, plan) or {}
+  -- the bar's scale: the picked dungeon's range and your level
+  local lo, hi = level, level
+  local d = plan.next.card and plan.next.card.d
+  if d and d.min then lo = math.min(lo, d.min); hi = math.max(hi, d.max) end
   plan.lo, plan.hi = lo - 1, hi + 2
   return items, plan
 end
@@ -638,8 +474,7 @@ local BAR_COLOR = { track = { 0.16, 0.16, 0.16 }, above = { 0.58, 0.58, 0.58 }, 
 
 -- a row of the Guide's list: the window's line (a background, the mark on the left, the name, a value and a right
 -- column, the tooltip and the click) with the Guide's pieces added: a label column, the level bar (its track, the range
--- on it and your level), the pips, the timeline's rail and dot, and an Invite button. Each fill shows what its kind
--- uses and hides the rest
+-- on it and your level), the pips and an Invite button. Each fill shows what its kind uses and hides the rest
 function G.MakeRow(parent)
   local UI = C.UI
   local K = UI.COLORS
@@ -651,10 +486,6 @@ function G.MakeRow(parent)
   r.seg:SetHeight(4)
   r.mark = UI.Flat(r, "OVERLAY", K.WHITE, 1)
   r.mark:SetSize(2, 12)
-  r.rail = UI.Flat(r, "BORDER", K.MUTE, 1)
-  r.rail:SetWidth(1)
-  r.dot = UI.Flat(r, "ARTWORK", K.DIM, 1)
-  r.dot:SetSize(7, 7)
   r.pips = {}
   r.invite = UI.Button(r, "Invite", 58, 16)
   r.invite:SetScript("OnClick", function(self) if self.mate then G.Invite(self.mate) end end)
@@ -665,7 +496,7 @@ function G.MakeRow(parent)
   end, "tooltip"))
   r.invite:SetScript("OnLeave", function() GameTooltip:Hide() end)
   -- (what a fill hides first, kept once: the fill runs for every row in view on each draw and scroll step)
-  r.pieces = { r.label, r.track, r.seg, r.mark, r.rail, r.dot, r.invite, r.val, r.who }
+  r.pieces = { r.label, r.track, r.seg, r.mark, r.invite, r.val, r.who }
   return r
 end
 local PIP, PIP_GAP = 8, 3
@@ -756,8 +587,7 @@ function C.Guide_Draw(UI)
   local can = type(C_PartyInfo) == "table" and C_PartyInfo.CanInvite or nil
   if type(can) == "function" and C.Get(can) == false then invites = false end
   -- the columns from the right: how sure (a card's word) or a count; the level bar beside it; the range left of the bar
-  local ww = math.min(260, math.floor(w * 0.34)) -- an officer's line's and a strip's right column
-  local vw = 90                                  -- a strip's value
+  local ww = math.min(260, math.floor(w * 0.34)) -- the head's right column (the officer's guild line, a note's)
   local word = 74                                -- a card's word
   local count = 150                              -- a card part's count
   local bw = math.max(90, math.min(180, math.floor(w * 0.18)))
@@ -785,15 +615,10 @@ function C.Guide_Draw(UI)
     fitText(fs, s, width - 4)
     fs:Show()
   end
-  -- the page: the pick's line as its head (the officer's guild line at its right), then the picked dungeon's rows
-  -- alone; everything else G.Items gathers (the other cards, the strips, Next up, the officers' lines) lives in the
-  -- head's tooltip where the spec keeps it (the reasons, the source, the learned lines) or nowhere
+  -- the page: the pick's line as its head (the officer's guild line at its right), then the picked dungeon's rows;
+  -- the head's tooltip holds the reasons, the source, the guild's counts and the learned lines
   local top = plan.next
-  local learned, inLearned = {}, false
-  for _, it in ipairs(items) do
-    if it.kind == "head" then inLearned = (it.name or ""):find("^Learned") ~= nil
-    elseif inLearned and (it.kind == "item" or it.kind == "note") then learned[#learned + 1] = (it.name or "") .. (it.who and (": " .. it.who) or "") end
-  end
+  local learned = plan.learned or {}
   -- the officer's guild line at the head's right where the right column holds it whole; else on a line of its own under
   -- the head, so nothing on the page is cut (its counts stay in the head's tooltip either way)
   local guildLine = officer and plan.guild and plan.guild.line or nil
@@ -821,12 +646,7 @@ function C.Guide_Draw(UI)
     end
   end } }
   if guildRow then shown[#shown + 1] = guildRow end
-  local take = false
-  for _, it in ipairs(items) do
-    if it.kind == "card" then take = it.pick == true
-    elseif it.kind == "gap" or it.kind == "head" then take = false end
-    if take then shown[#shown + 1] = it end
-  end
+  for _, it in ipairs(items) do shown[#shown + 1] = it end
   local list = UI:List("guide", G.MakeRow)
   list:Set(#shown, 0, ROW, function(r, i, ly)
     local it = shown[i]
@@ -834,33 +654,21 @@ function C.Guide_Draw(UI)
     r:SetHeight(ROW)
     r:SetPoint("TOPLEFT", 0, -ly)
     r:SetWidth(w)
-    r.bg:SetColorTexture(1, 1, 1, (kind == "head" and 0.06) or ((kind == "card" or kind == "time") and 0.035) or ((kind == "item" or kind == "strip") and 0.025) or 0)
+    r.bg:SetColorTexture(1, 1, 1, (kind == "head" and 0.06) or (kind == "card" and 0.035) or 0)
     r.bar:SetShown(kind == "card" and it.pick == true)
     r.bar:SetColorTexture(K.WHITE[1], K.WHITE[2], K.WHITE[3], 1)
     for _, piece in ipairs(r.pieces) do piece:Hide() end
     for _, p in ipairs(r.pips) do p:Hide() end
     r.fn, r.tip = it.fn, it.tip
     r.invite.mate = nil
-    -- the left: the name's edge after a label column (a card's parts under its name, a strip at the left edge) or the
-    -- timeline's level, rail and dot
+    -- the left: the name's edge after a label column (a card's parts under its name)
     local x = 8
-    if UNDER[kind] then put(r.label, "LEFT", 24, 50, it.label or "", K.DIM, "LEFT"); x = 78
-    elseif kind == "strip" then put(r.label, "LEFT", 8, 50, it.label or "", K.DIM, "LEFT"); x = 62
-    elseif kind == "time" then
-      put(r.label, "LEFT", 4, 30, tostring(it.at), K.INK, "RIGHT")
-      r.rail:ClearAllPoints()
-      r.rail:SetPoint("TOP", r, "TOPLEFT", 44, it.first and -ROW / 2 or 0)
-      r.rail:SetPoint("BOTTOM", r, "BOTTOMLEFT", 44, it.last and ROW / 2 or 0)
-      r.rail:SetShown(not (it.first and it.last))
-      local dc = it.d.state == "seen" and K.WHITE or K.DIM
-      r.dot:ClearAllPoints(); r.dot:SetPoint("CENTER", r, "LEFT", 44, 0); r.dot:SetColorTexture(dc[1], dc[2], dc[3], 1); r.dot:Show()
-      x = 56
-    end
-    -- the right, from the row's edge in: the right column, then a dungeon's bar and range, or a strip's value, or a
-    -- mate's Invite button and level
+    if UNDER[kind] then put(r.label, "LEFT", 24, 50, it.label or "", K.DIM, "LEFT"); x = 78 end
+    -- the right, from the row's edge in: the right column, then a dungeon's bar and range, or a mate's Invite button
+    -- and level
     local right = 4
     local hasWho = it.who ~= nil and it.who ~= ""
-    if kind == "card" or kind == "time" then
+    if kind == "card" then
       if hasWho then put(r.who, "RIGHT", -4, word, it.who, it.wc or K.DIM, "RIGHT") end
       right = 4 + word + 8
     elseif kind == "bosses" or kind == "quests" or kind == "more" then
@@ -887,20 +695,11 @@ function C.Guide_Draw(UI)
         b:Show()
       end
       right = w - x - nameW
-    elseif kind == "item" or kind == "strip" then
-      if it.d then
-        if hasWho then put(r.who, "RIGHT", -4, ww, it.who, it.wc or K.DIM, "RIGHT") end
-        right = 4 + ww + 8
-      else
-        if hasWho then put(r.who, "RIGHT", -4, it.val and ww or (ww + vw + 4), it.who, it.wc or K.DIM, "RIGHT") end
-        if it.val then put(r.val, "RIGHT", -(ww + 8), vw, it.val, K.INK, "RIGHT"); right = ww + 8 + vw + 4
-        elseif hasWho then right = 4 + ww + vw + 8 end
-      end
     elseif hasWho then
       put(r.who, "RIGHT", -4, ww, it.who, it.wc or K.DIM, "RIGHT")
       right = 4 + ww + 4
     end
-    if it.d and (kind == "card" or kind == "time" or kind == "item") then
+    if it.d and kind == "card" then
       local x0 = levelBar(r, it.d, right)
       r.val:ClearAllPoints(); r.val:SetPoint("RIGHT", r, "LEFT", x0 - 6, 0); r.val:SetWidth(44); r.val:SetJustifyH("RIGHT")
       color(r.val, K.INK)

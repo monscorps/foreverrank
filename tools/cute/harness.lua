@@ -1074,6 +1074,12 @@ local function guideHead(c) for _, r in ipairs(c.C.UI.lists.guide.items) do if r
 local function tipOf(o) local l0 = #lines; if o.__scripts.OnEnter then o.__scripts.OnEnter(o) end; return table.concat(lines, "\n", l0 + 1) end
 -- a row's tooltip filler read into text, a double line as "left | right"
 local function tipText(fill) local out = {}; fill({ AddLine = function(_, t) out[#out + 1] = t end, AddDoubleLine = function(_, l, r) out[#out + 1] = l .. " | " .. r end }); return table.concat(out, "\n") end
+-- a dungeon in range's card as the Guide would draw it, whether or not it is the pick (G.Items draws the pick's rows
+-- alone; G.CardRows any card's): its rows, the card and the plan
+local function cardOf(c, name, officer)
+  local _, plan = c.C.Guide.Items(officer)
+  for _, card in ipairs(plan.cards) do if card.d.name == name then return c.C.Guide.CardRows(card, plan), card, plan end end
+end
 -- the tabs shown, left to right, and Settings' sections listed, top to bottom, by id
 local function tabsShown(c)
   local out = {}
@@ -1867,6 +1873,12 @@ do
     local n = 0
     for _, r in ipairs(yezin.C.UI.lists.guide.items) do if r:IsShown() and r.bar:IsShown() then n = n + 1 end end
     assert(n == (plan.next.card and 1 or 0), "one card, marked, or none: " .. n)
+    -- G.Items works out what the page draws alone: the pick's card's rows (none where nothing fits), nothing of
+    -- 0.6.0's page (the other cards' rows, the gear and pace strips, Next up, the officers' lines)
+    local items = yezin.C.Guide.Items(true)
+    assert(#items == (plan.next.card and #yezin.C.Guide.CardRows(plan.next.card, plan) or 0), "the items are the pick's card's rows alone: " .. #items)
+    for _, it in ipairs(items) do assert(it.kind == "card" or it.kind == "bosses" or it.kind == "quests" or it.kind == "mate" or it.kind == "more", "no row of another kind: " .. tostring(it.kind)) end
+    assert(type(plan.learned) == "table" and plan.learned[1] and (plan.cards[1] == nil or plan.cards[1].known ~= nil), "the plan: the learned lines for the officer, every dungeon in range with its counts")
     -- the module's notes say what this page is (its box's tooltip in Settings, Modules; the page's mock says the same),
     -- not 0.6.0's page of every dungeon, the gear and pace strips and Next up
     local notes = "The step now from Quests, then the one dungeon to run: its bosses, quests and guild mates to invite; officers see the guild per dungeon in its tooltip."
@@ -3714,12 +3726,9 @@ C.Known = { build = "1.60.1.70338", dungeons = { [36] = { name = "The Deadmines"
     -- the research's slots count from the enchant level: the bracer at 20 is advice, at 30 it is missing
     assert(not real.C.Sample:Value("unenchanted")[9] and boss.C.Sample:Value("unenchanted")[9] and boss.C.Sample:Value("unenchanted")[16]
       and boss.C.Sample:Value("unenchanted")[17], "under 30 the research's wrist is not missing; at 30 the wrist, the dagger and the shield are")
-    local advice
-    for _, it in ipairs(real.C.Guide.Items(false)) do if it.name and it.name:find("^Could take one: ") then advice = it end end
-    assert(advice and advice.name:find("Wrist", 1, true) and advice.val == "level 30+", "under 30 the Guide gives the research's slots as advice")
-    for _, it in ipairs(boss.C.Guide.Items(true)) do
-      assert(not (it.name or ""):find("2H Weapon", 1, true) and not (it.name or ""):find("Off-Hand", 1, true), "the officer's Gear offers the dagger and the shield only what takes them: " .. tostring(it.name))
-    end
+    -- (the research's slots under the enchant level were the Guide's advice row; 0.7.0's page is the pick alone, and
+    -- the fact stands in the rules: the cloth wrist is one the seed can enchant, counted as missing from level 30)
+    assert(RR.SeedEnchantable(9, "4.1") and not RR.SeedEnchantable(9, "4.1", 20) and RR.SeedEnchantable(9, "4.1", 30), "under 30 the research's wrist is advice, not missing: counted from 30")
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ real, boss }) do
         c.C.UI:Build()
@@ -3789,18 +3798,14 @@ if SEEDED then isolated({ { name = "Rulo-Forever", guid = guidOf("Rulo"), rank =
   F.Claim("Player-9-0000RUN2", 1230, EPOCH + 3, { ["Player-9-0000RUN1"] = true })
   F:Rebuild()
   assert(F.Model().dungeons[36].state == "seen" and F.Model().dungeons[36].min == 35 and F.Model().bosses[1236].state == "stale", "the Deadmines met, its other bosses still stale")
-  local gi = forty.C.Guide.Items(true)
-  local left, perDungeon, quests
-  for i, it in ipairs(gi) do
-    if it.kind == "card" and it.name == "The Deadmines" then left, quests = gi[i + 1], gi[i + 2] elseif it.kind == "item" and it.name == "The Deadmines" then perDungeon = it end
-  end
+  local rows, dmCard = cardOf(forty, "The Deadmines", true)
+  assert(dmCard, "the Deadmines in range, met")
+  local left, quests = rows[2], rows[3]
   assert(quests and quests.kind ~= "quests", "a stale seed's quests are neither listed nor counted: " .. tostring(quests and quests.name))
   assert(left and left.kind == "bosses" and #left.pips == 1 and left.pips[1].name == "Rhahk'Zor" and left.pips[1].state == "left" and left.who == "1 left",
     "the card's pips name the met boss alone: " .. tostring(left and left.pips and #left.pips))
-  assert(perDungeon and perDungeon.who:find("1 of 1 boss killed$"), "the officers' line counts one of one: " .. tostring(perDungeon and perDungeon.who))
-  local said = {}
-  perDungeon.tip({ AddLine = function(_, t) said[#said + 1] = t end, AddDoubleLine = function(_, l, r) said[#said + 1] = l .. " | " .. r end })
-  said = table.concat(said, "\n")
+  assert(dmCard.known == 1 and (F.Model().bosses[1230].n or 0) > 0, "the guild's count: one boss known, killed by the guild: " .. tostring(dmCard.known))
+  local said = tipText(rows[1].tip)
   assert(said:find("Rhahk'Zor", 1, true) and not said:find("Glubtok", 1, true) and not said:find("Edwin VanCleef", 1, true), "its tooltip names the met boss alone:\n" .. said)
   forty.C.UI.frame:SetSize(760, 420)
   openGuide(forty)
@@ -4074,21 +4079,21 @@ do
     assert(ada.C.Policy:Receive("Ruler-Forever", ada.env.CuteDB.policy.at + 5, 1, "r_rangemembers=99:" .. ruler.o.guid .. ";r_doubtruns=2:" .. ruler.o.guid) and ada.C.Rules.Get("rangeMembers") == 5
       and ada.C.Rules.Get("doubtRuns") == 2, "out of bounds dropped (the default back), in bounds kept")
     -- the Guide: Cy (a member, 20) and Ruler (the officer), at both sizes
-    local items = cy.C.Guide.Items(false)
-    local byName, at = {}, nil
-    for i, it in ipairs(items) do if it.name then byName[it.name] = it end; if it.kind == "card" and it.name == "The Deadmines" then at = i end end
-    assert(byName["In range at level 20"] and at and items[at].val == "19-22" and items[at].who == "seen", "Cy's dungeons: the Deadmines, learned 19-22, seen")
+    -- the Guide: Cy (a member, 20) and Ruler (the officer), at both sizes. The Deadmines' card as the Guide draws it
+    -- (the page draws the pick's rows alone; G.CardRows any dungeon in range's)
+    local rows, dmCard, cyPlan = cardOf(cy, "The Deadmines", false)
+    assert(dmCard and rows[1].kind == "card" and rows[1].val == "19-22" and rows[1].who == "seen", "Cy's dungeons: the Deadmines, learned 19-22, seen")
     -- under its card: the bosses as pips, the quests, and the guild mates online in its range within three levels of
     -- Cy's (Bo, in Cy's group already; Ada at 18 below the range, Di at 23 past it since her ding)
-    local pips, quests, mates = items[at + 1], nil, {}
-    for i = at + 1, #items do
-      local it = items[i]
-      if it.kind == "card" or it.kind == "gap" then break end
+    local pips, quests, mates = rows[2], nil, {}
+    for i = 2, #rows do
+      local it = rows[i]
       if it.kind == "quests" then quests = it end
       if it.kind == "mate" and it.mate then mates[#mates + 1] = it.name .. " " .. it.val .. (it.mate.grouped and " (" .. it.who .. ")" or "") end
     end
     assert(table.concat(mates, ", ") == "Bo 19 (in your group)", "the mates online in range near Cy's level: " .. table.concat(mates, ", "))
     local function states(p) local out = {}; for _, x in ipairs(p.pips) do out[#out + 1] = x.name .. "=" .. x.state end return table.concat(out, ",") end
+    local RC = cy.C.Rules
     if SEEDED then
       assert(pips.kind == "bosses" and pips.who == "every one killed but the doubted" and states(pips) == "Rhahk'Zor=killed,Glubtok=killed,Mr. Smite=doubted,Edwin VanCleef=killed",
         "Cy's bosses as pips, every one killed but the doubted: " .. states(pips))
@@ -4096,59 +4101,63 @@ do
       -- opening at 21, the Horde's left out
       assert(quests and quests.who == "2 to take" and quests.name == "Red Silk Bandanas, The Defias Brotherhood, Oh Brother. . ." and #quests.qlist == 4,
         "the Deadmines' quests for Cy: " .. tostring(quests and quests.name) .. " / " .. tostring(quests and quests.who))
-      local advice = byName["Could take one: Wrist"]
-      assert(byName["Blackfathom Deeps"] and not byName["Wrist (Cloth)"] and advice and advice.val == "level 30+" and advice.who == "seen in the beta",
-        "Blackfathom next up for Cy; at 20 the research's wrist is advice, not missing")
-      local said = {}
-      advice.tip({ AddLine = function(_, t) said[#said + 1] = t end, AddDoubleLine = function(_, l, r) said[#said + 1] = l .. " | " .. r end })
-      assert(table.concat(said, "\n"):find("Wrist (Cloth) | Enchant Bracer - Minor Deflection, Enchant Bracer - Minor Health", 1, true), "its tooltip names what Forever has:\n" .. table.concat(said, "\n"))
+      -- Blackfathom in range for Cy too (the pick's tooltip weighs both); at 20 the research's cloth wrist is not
+      -- missing (the rules count it from the enchant level, 30), and the rules name what Forever has for it (the
+      -- Guide's advice and gear strips left the page in 0.7.0)
+      local bfd
+      for _, card in ipairs(cyPlan.cards) do if card.d.name == "Blackfathom Deeps" then bfd = card end end
+      assert(bfd and tipText(cyPlan.next.tip):find("Blackfathom Deeps | ", 1, true) and tipText(cyPlan.next.tip):find("The Deadmines | ", 1, true), "Blackfathom in range for Cy, both weighed in the pick's tooltip:\n" .. tipText(cyPlan.next.tip))
+      assert(RC.SeedEnchantable(9, "4.1") and not RC.SeedEnchantable(9, "4.1", 20) and not cy.C.Sample:Value("unenchanted")[9] and RC.SeedSlotState(9) == "beta",
+        "at 20 the research's wrist is advice, not missing")
+      local names = {}
+      for _, x in ipairs((RC.SlotEnchants(9, "4.1"))) do if x.state ~= "absent" then names[#names + 1] = x.name end end
+      assert(table.concat(names, ", ") == "Enchant Bracer - Minor Deflection, Enchant Bracer - Minor Health", "what Forever has for a cloth wrist: " .. table.concat(names, ", "))
     else
-      assert(pips.kind == "bosses" and pips.who == "every one killed" and #pips.pips == 3 and not quests and not byName["Wrist (Cloth)"],
+      assert(pips.kind == "bosses" and pips.who == "every one killed" and #pips.pips == 3 and not quests and not cy.C.Sample:Value("unenchanted")[9],
         "no seed: the bosses the guild met, all killed; no quests known; no enchant asked for: " .. states(pips))
     end
-    -- Ed, at 31: the wrist missing, with what Forever has for a cloth bracer
+    -- Ed, at 31: the wrist missing, by the seed's word
     if SEEDED then
-      local edItems = {}
-      for _, it in ipairs(ed.C.Guide.Items(false)) do if it.name then edItems[it.name] = it end end
-      local wrist = edItems["Wrist (Cloth)"]
-      assert(wrist and wrist.kind == "strip" and wrist.val == "missing" and wrist.who == "seen in the beta"
-        and tipText(wrist.tip):find("Forever has: Enchant Bracer - Minor Deflection, Enchant Bracer - Minor Health", 1, true),
-        "at 31 the wrist is missing, a strip with what Forever has for it in its tooltip")
+      assert(ed.C.Sample:Value("unenchanted")[9] and ed.C.Stats.EnchantSource(9, "4.1") == "seen in the beta", "at 31 the wrist is missing, by the seed's word: " .. tostring(ed.C.Stats.EnchantSource(9, "4.1")))
     end
-    assert(byName["Level 21"] and byName["Level 21"].val ~= "no pace yet" and byName["The cap, level 60"], "the pace: " .. tostring(byName["Level 21"] and byName["Level 21"].val))
-    local officer = {}
-    for _, it in ipairs(ruler.C.Guide.Items(true)) do if it.name then officer[it.name] = it end end
-    -- one line per dungeon the guild is in range of or has met, its bosses folded into a count, each in the tooltip
-    local dmLine = officer["The Deadmines"]
-    assert(officer["The guild, per dungeon"] and officer["Learned in play"] and dmLine and dmLine.val == "19-22"
-      and dmLine.who == "2 in range, 3 of " .. (SEEDED and "4 bosses" or "3 bosses") .. " killed" and not officer["Rhahk'Zor"], "the officer's view per dungeon: " .. tostring(dmLine and dmLine.who))
-    local said = {}
-    dmLine.tip({ AddLine = function(_, t) said[#said + 1] = t end, AddDoubleLine = function(_, l, r) said[#said + 1] = l .. " | " .. r end })
-    said = table.concat(said, "\n")
+    assert(type(cy.C.Sample.values.xp_hour) == "number" and cy.C.Sample.values.xp_hour > 0, "Cy's pace read: " .. tostring(cy.C.Sample.values.xp_hour))
+    -- the officer: what the guild learned is the head's tooltip (plan.learned, from R.Changes); a dungeon's tooltip
+    -- names every boss with how many members were seen killing it
+    local _, rulerPlan = ruler.C.Guide.Items(true)
+    local RR2 = ruler.C.Rules
+    local learned = {}
+    for _, ch in ipairs(RR2.Changes()) do learned[ch.what] = ch end
+    local function learnedLine(what) for _, l in ipairs(rulerPlan.learned) do if l:sub(1, #what) == what then return l end end end
+    local dm = RR2.Model().dungeons[36]
+    assert(dm and RR2.RangeWords(dm) == "19-22", "the Deadmines learned 19-22: " .. tostring(dm and RR2.RangeWords(dm)))
+    local killed, known = 0, 0
+    for _, enc in ipairs(dm.bosses or {}) do local b = RR2.Model().bosses[enc]; if b and b.state ~= "stale" then known = known + 1; if (b.n or 0) > 0 then killed = killed + 1 end end end
+    assert(killed == 3 and known == (SEEDED and 4 or 3), "the guild killed 3 of its " .. known .. " bosses: " .. killed)
+    local said = tipText(ruler.C.Guide.DungeonTip(dm))
     assert(said:find("Rhahk'Zor | seen by 5 members", 1, true) and (not SEEDED or said:find("Mr. Smite | doubted: not seen in 3 runs; not by you", 1, true)), "every boss in its tooltip, one count each:\n" .. said)
     if SEEDED then
-      assert(officer["New boss: Krol'dok the Brute"] and officer["Learned in play"].who:find(" from the research", 1, true), "what the guild's play changed")
-      assert(officer["Doubted: Mr. Smite"] and officer["XP to reach 32: 43000"] and officer["Range learned: The Deadmines"].who == "19-22 (research 18-23), from 5 members"
-        and officer["2 more dungeons from the research nobody is in range of or has met yet."], "doubted, the XP corrected, the range learned against the research's, the rest counted (the awaited one among them)")
+      assert(learned["New boss: Krol'dok the Brute"] and learnedLine("New boss: Krol'dok the Brute") and RR2.SeedState() == "fresh" and #RR2.Changes() > 0, "what the guild's play changed")
+      assert(learned["Doubted: Mr. Smite"] and learned["XP to reach 32: 43000"] and learned["Range learned: The Deadmines"].detail == "19-22 (research 18-23), from 5 members"
+        and learnedLine("Range learned: The Deadmines") == "Range learned: The Deadmines: 19-22 (research 18-23), from 5 members",
+        "doubted, the XP corrected, the range learned against the research's, each in the head's tooltip")
     else
       -- with no research nothing is a change from it: Learned in play is what the guild learned, each dungeon once with
       -- its bosses counted on its line and named in its tooltip, no line a boss (the first 0.5.0 build said "13 changes
       -- from the research" here, a line for every dungeon and boss)
-      local changes = ruler.C.Rules.Changes()
+      local changes = RR2.Changes()
       local whats = {}
       for _, ch in ipairs(changes) do
         whats[#whats + 1] = ch.what
         assert(not ch.what:find("^New ") and not ch.detail:find("research", 1, true), "no seed: nothing called a change from research: " .. ch.what .. " | " .. ch.detail)
       end
-      assert(#changes == 7 and officer["Learned in play"].who == "from the guild's play alone" and officer["No research shipped with this copy"], "no seed: what the guild learned:\n" .. table.concat(whats, "\n"))
-      local dl = officer["Dungeon: The Deadmines"]
-      assert(dl and dl.who == "3 bosses, seen by 5 members" and officer["Dungeon: Krol'dok Stronghold"].who == "2 bosses, seen by 2 members"
-        and officer["Dungeon: Blackfathom Deeps"].who == "1 boss, seen by 4 members" and officer["Range learned: The Deadmines"].who == "19-22, from 5 members"
-        and officer["Enchant slot: Chest"] and not officer["Krol'dok the Brute"], "no seed: each dungeon once, its bosses counted: " .. tostring(dl and dl.who))
-      said = {}
-      dl.tip({ AddLine = function(_, t) said[#said + 1] = t end, AddDoubleLine = function(_, l, r) said[#said + 1] = l .. " | " .. r end })
-      said = table.concat(said, "\n")
-      assert(said:find("Rhahk'Zor", 1, true) and said:find("Glubtok", 1, true) and said:find("Edwin VanCleef", 1, true), "its bosses in its tooltip:\n" .. said)
+      assert(#changes == 7 and RR2.SeedState() == "none" and learned["No research shipped with this copy"], "no seed: what the guild learned:\n" .. table.concat(whats, "\n"))
+      local dl = learned["Dungeon: The Deadmines"]
+      assert(dl and dl.detail == "3 bosses, seen by 5 members" and learned["Dungeon: Krol'dok Stronghold"].detail == "2 bosses, seen by 2 members"
+        and learned["Dungeon: Blackfathom Deeps"].detail == "1 boss, seen by 4 members" and learned["Range learned: The Deadmines"].detail == "19-22, from 5 members"
+        and learned["Enchant slot: Chest"] and not learned["Krol'dok the Brute"], "no seed: each dungeon once, its bosses counted: " .. tostring(dl and dl.detail))
+      assert(learnedLine("Dungeon: The Deadmines") == "Dungeon: The Deadmines: 3 bosses, seen by 5 members", "and in the head's tooltip")
+      local names = table.concat(dl.names or {}, "\n")
+      assert(names:find("Rhahk'Zor", 1, true) and names:find("Glubtok", 1, true) and names:find("Edwin VanCleef", 1, true), "its bosses named:\n" .. names)
     end
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ cy, ruler }) do
@@ -4313,18 +4322,10 @@ do
     for _, c in ipairs({ lea, clo, lia, kit, lex }) do login(c, gapsOpen()) end
     tickAll(45)
     local function missing(c) return (c.C.Sample:Value("unenchanted") or {})[9] == true end
-    local function guide(c) local out = {}; for _, it in ipairs(c.C.Guide.Items(false)) do if it.name then out[it.name] = it end end return out end
-    local function tipOf(it)
-      local said = {}
-      it.tip({ AddLine = function(_, t) said[#said + 1] = t end, AddDoubleLine = function(_, l, r) said[#said + 1] = l .. " | " .. r end })
-      return table.concat(said, "\n")
-    end
     for _, c in ipairs({ clo, lia, kit }) do
       assert(c.C.Stats.EnchantLearned(9, "4.2") and not c.C.Stats.EnchantLearned(9, "4.1"), c.o.name .. ": the guild has seen the wrist enchanted on leather alone")
     end
     assert(missing(lia) and not missing(lea) and lia.C.Stats.EnchantSource(9, "4.2") == "seen on 2 members", "Lia's bare leather bracer missing by the guild's word, Lea's enchanted")
-    local gl = guide(lia)["Wrist (Leather)"]
-    assert(gl and gl.val == "missing" and gl.who == "seen on 2 members", "Lia's Guide: the leather bracer missing, seen on two members")
     if SEEDED then
       local R = clo.C.Rules
       assert(R.SlotState(9) == "seen" and R.SeedSlotState(9) == "beta", "the wrist seen by the guild, the seed's own word on it kept: " .. tostring(R.SeedSlotState(9)))
@@ -4333,17 +4334,9 @@ do
       local list = R.SlotEnchants(9, "4.1")
       assert(#list == 2 and list[1].name == "Enchant Bracer - Minor Health" and list[1].state == "seen" and list[1].n == 2 and list[2].state == "beta",
         "each enchant seen only once that enchant was: " .. tostring(list[2] and list[2].state))
-      local g = guide(clo)
-      local line = g["Wrist (Cloth)"]
-      local said = tipOf(line)
-      assert(line and line.kind == "strip" and line.val == "missing" and line.who == "seen in the beta" and said:find("Forever has: Enchant Bracer - Minor Health, Enchant Bracer - Minor Deflection", 1, true),
-        "Clo's Guide: the cloth bracer missing by the seed's word, with what Forever has in its tooltip")
-      assert(said:find("Enchant Bracer - Minor Health | seen on 2 members", 1, true) and said:find("Enchant Bracer - Minor Deflection | seen in the beta", 1, true)
-        and not said:find("seen on 0", 1, true), "its tooltip: the enchant Lea wears seen, the other the beta's:\n" .. said)
-      local advice = guide(kit)["Could take one: Wrist"]
-      assert(not missing(kit) and advice and advice.who == "seen in the beta", "Kit at 20: the cloth bracer is advice, the beta's")
+      assert(not missing(kit) and kit.C.Rules.SeedEnchantable(9, "4.1") and not kit.C.Rules.SeedEnchantable(9, "4.1", 20) and kit.C.Rules.SeedSlotState(9) == "beta", "Kit at 20: the cloth bracer is advice, the beta's")
     else
-      assert(not missing(clo) and not guide(clo)["Wrist (Cloth)"], "no seed: a cloth bracer nobody enchanted is not asked for")
+      assert(not missing(clo), "no seed: a cloth bracer nobody enchanted is not asked for")
     end
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       for _, c in ipairs({ clo, kit }) do
@@ -4375,11 +4368,10 @@ do
     login(c)
     tickAll(10)
     assert(c.C.Rules.SeedState() == (SEEDED and "stale" or "none"), "the seed: " .. c.C.Rules.SeedState())
-    local function items() local out = {}; for _, it in ipairs(c.C.Guide.Items(true)) do if it.name then out[it.name] = it end end return out end
-    local note = "No enchant slots known yet: they are learned as the guild enchants."
-    assert(items()[note] and not items()["Every worn item that takes an enchant has one."], "the Gear line says nothing is known yet")
-    -- (0.7.0: the gear strips left the page; the note stays in G.Items for the officers' tooling and the page is one
-    -- card at 760 wide)
+    local function learned() local out = {}; for _, ch in ipairs(c.C.Rules.Changes()) do out[ch.what] = ch end return out end
+    local function known() for _, slot in ipairs(c.C.Stats.GEAR) do if c.C.Stats.EnchantLearned(slot) or c.C.Rules.SeedEnchantable(slot) then return true end end return false end
+    assert(not known(), "no slot known to take an enchant yet")
+    -- (0.7.0: the gear strips left the page; the page is one card at 760 wide)
     openGuide(c)
     c.C.UI.frame:SetSize(760, 420)
     openGuide(c)
@@ -4390,19 +4382,20 @@ do
     c.o.items[5] = "item:1235:2"
     fire(c, "UNIT_INVENTORY_CHANGED", "player")
     tick(c, 5)
-    assert(items()[note], "Nolo's chest alone teaches nothing")
+    assert(not known(), "Nolo's chest alone teaches nothing")
     listed(c, { { "Mate-Forever", guidOf("Mate"), 35 } })
     c.C.Roster:Apply("Mate-Forever", { guid = guidOf("Mate"), enchanted = { [5] = true }, ench_kinds = "5:15.0:2" })
     tick(c, 5)
-    local it = items()
-    assert(it["Every worn item that takes an enchant has one."] and not it[note], "a slot known: every worn item that takes one has one")
-    assert(it["Enchant slot: Chest"] and it["Enchant slot: Chest"].who == "seen on 2 members" and not it["New enchant slot: Chest"]
-      and it["Learned in play"].who == "from the guild's play alone", "Learned in play: the slot learned, not new to research: " .. tostring(it["Learned in play"].who))
+    local it = learned()
+    assert(known() and c.C.Stats.EnchantLearned(5) and not c.C.Sample:Value("unenchanted")[5], "a slot known: nothing missing (the chest enchanted)")
+    local _, plan = c.C.Guide.Items(true)
+    assert(it["Enchant slot: Chest"] and it["Enchant slot: Chest"].detail == "seen on 2 members" and not it["New enchant slot: Chest"]
+      and plan.learned[1] and table.concat(plan.learned, "\n"):find("Enchant slot: Chest: seen on 2 members", 1, true), "Learned in play: the slot learned, not new to research, in the head's tooltip")
     openGuide(c)
     check(c.C.UI.frame, "officer guide, a slot learned with no research to weigh it, 1040x640")
     leave(c)
   end)
-  print("guide: nothing known to take an enchant said so (no seed or a stale one), a note whole at 760 wide with its text in the tooltip; a slot learned with no research named as learned")
+  print("guide: nothing known to take an enchant (no seed or a stale one), the page one card at 760 wide; a slot learned with no research named as learned in the head's tooltip")
 end
 
 -- 35: versions. Every Cute sends its version (addon_ver); one newer than yours, number by number (0.5.10 is newer than
@@ -5757,8 +5750,9 @@ do
       assert(rowOfMate(vee, "Pi") and rowOfMate(vee, "Nox"), "a click shows them all")
       views("six mates shown")
       vee.C.Guide.open[36] = nil
-      -- Next up: Blackfathom at 24 for Vee; Krol'dok and The Drowned City (awaited, no instance id) for Gil
-      local function nextUp(c, officer) local out = {}; for _, it in ipairs(c.C.Guide.Items(officer)) do if it.kind == "time" then out[#out + 1] = it.at .. " " .. it.name .. " " .. it.val end end return table.concat(out, ", ") end
+      -- next to open (plan.soon, the pick's tooltip names the first): Blackfathom at 24 for Vee; Krol'dok and The Drowned
+      -- City (awaited, no instance id) for Gil
+      local function nextUp(c, officer) local _, p = c.C.Guide.Items(officer); local out = {}; for _, d in ipairs(p.soon) do out[#out + 1] = d.min .. " " .. d.name .. " " .. c.C.Rules.RangeWords(d) end return table.concat(out, ", ") end
       assert(nextUp(vee, false) == "24 Blackfathom Deeps 24-32", "Vee's next up: " .. nextUp(vee, false))
       assert(nextUp(gil, true) == "32 Krol'dok Stronghold 32-38, 35 The Drowned City 35-40", "Gil's next up, the awaited one by name: " .. nextUp(gil, true))
       local dc = gil.C.Rules.Model().awaited[1]
@@ -5773,7 +5767,8 @@ do
       -- place nothing; with Bo's entry too, two members' entries place 9100, and Vee's lone 9200 neither takes it nor
       -- joins
       local awaitedTip
-      for _, it in ipairs(gil.C.Guide.Items(true)) do if it.kind == "time" and it.name == "The Drowned City" and it.tip then awaitedTip = tipText(it.tip) end end
+      local _, gp0 = gil.C.Guide.Items(true)
+      for _, d in ipairs(gp0.soon) do if d.name == "The Drowned City" then awaitedTip = tipText(gil.C.Guide.DungeonTip(d)) end end
       assert(awaitedTip and awaitedTip:find("two members entering it, or a kill there a group mate names back, give it its place", 1, true), "the awaited one's tooltip:\n" .. tostring(awaitedTip))
       local function enter(c, id, name) c.o.instance, c.o.instanceID, c.o.instName = "party", id, name; fire(c, "PLAYER_ENTERING_WORLD", false, false) end
       enter(gil, 9100, "the Drowned City"); enter(vee, 9200, "Drowned City")

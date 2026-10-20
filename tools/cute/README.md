@@ -1105,9 +1105,11 @@ one card:
   holds the reasons, where the knowledge comes from (research checked against this client, research this game no
   longer matches, nothing shipped, or still checking; the build and date), the guild's line with its counts, and
   what the guild learned in play.
-- **The picked dungeon's card** alone (`UI:List`, every row one height), as a card is described below. The other cards,
-  the gear and pace strips, Next up and the officers' per-dungeon lines are gathered (`G.Items`) but not drawn: what
-  the spec keeps lives in the head's tooltip, the rest nowhere.
+- **The picked dungeon's card** alone (`UI:List`, every row one height), as a card is described below. `G.Items` works
+  out what the page draws and no more: every dungeon in range is weighed for the pick (its counts: bosses left, quests,
+  mates, not been in), the rows are the picked one's (`G.CardRows`), and for officers the guild's line and what the
+  guild learned in play (`R.Changes`, the head's tooltip). 0.6.0's gear and pace strips, Next up and the officers'
+  per-dungeon lines are gone from the page and from the work.
 
 A card:
 
@@ -1128,29 +1130,11 @@ A card:
   and a press invites nobody; combat starting and ending draws the page again), greyed where the client says you
   cannot invite (`C_PartyInfo.CanInvite`), "Invited" for a minute after; a mate in your group says so instead. No chat
   line is sent and the chat box never opens.
-- **Gear and pace** as compact strips, a row each, their detail in the tooltips. Gear: your Missing enchants, a row a
-  slot with the guild's word on it, the enchants Forever has for that slot and the kind of item worn there in its
-  tooltip (the seed's, absent ones left out, the ones the guild has on an item first). Under the enchant level, the
-  worn slots the seed has enchants for, as one row of advice ("Could take one: Wrist"). Where no slot is known to take
-  an enchant at all (no seed, or a stale one, and nothing enchanted in the guild yet) the row says so, "No enchant
-  slots known yet: they are learned as the guild enchants", rather than that every worn item has one. Pace: hours to
-  the next level and to the cap, at your pace and at the median of the members' paces you may see.
-- **Next up**, a short timeline of the dungeons opening within `guideAhead` (5) levels above yours: the level each
-  opens at, a dot on a rail, its name, its bar and its word; the seed's awaited dungeons among them by their range.
-- **For officers**: one line per dungeon the guild is in range of or has met, with its bar, its members in range and
-  how many of its bosses the guild has killed (every boss in its tooltip, with how many members were seen killing it),
-  the rest counted on one line; and Learned in play, what the guild's play changed from the research (new dungeons and
-  bosses, a dungeon research named without an instance id found, new enchant slots, learned ranges, doubted bosses and
-  slots, corrected XP, absent facts, a stale or missing seed). With no research to weigh the play against (none
-  shipped, or a stale seed) nothing there is called a change from it: it is what the guild learned, each dungeon or
-  raid it met once with its bosses counted on the line and named in the tooltip, the ranges it learned, the enchant
-  slots it found.
-
-With a stale seed or none, every section runs on the guild's play and its heading says so: a stale seed's bosses
-nobody has met are neither left to kill, nor counted on the officers' line, nor in a tooltip, and its quests are not
-shown. A dungeon's, boss's or slot's tooltip has the rest: the range's source, every boss with your kills and how sure,
-the loot seen and not. A row with nothing to its right takes the row's whole width, and a note's tooltip holds its
-whole text, which a narrow window cuts. Your group, your quests and combat draw the open page again (the module's
+With a stale seed or none, everything runs on the guild's play: a stale seed's bosses nobody has met are neither left
+to kill, nor in a tooltip, and its quests are not shown; what the guild learned is then what it learned, not changes
+from research. A dungeon's tooltip has the rest: the range's source, every boss with your kills and how sure, the loot
+seen and not. A row with nothing to its right takes the row's whole width, and a note's tooltip holds its whole text,
+which a narrow window cuts. Your group, your quests and combat draw the open page again (the module's
 events: `GROUP_ROSTER_UPDATE`, `QUEST_ACCEPTED`, `QUEST_TURNED_IN`, `PLAYER_REGEN_DISABLED` and `_ENABLED`, all in
 Forever's generated docs), at most once a second. The step frame's and the arrow's rows are the Quests module's, in
 its section.
