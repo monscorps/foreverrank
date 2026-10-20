@@ -136,12 +136,28 @@ local function objectiveSteps(e, me, lead)
       local s = step("objective")
       s.qid, s.obj, s.slot = e.id, a.sp.kind, a.sp.slot > 0 and a.sp.slot or nil
       s.c, s.wx, s.wy, s.m, s.x, s.y = a.c, a.wx, a.wy, a.sp.m, a.sp.x * 100, a.sp.y * 100
-      s.n = 1
+      s.n = 1 -- (the spawn spots merged here are one objective; other quests' steps near it are counted below)
       for j = i + 1, #spotsOf do
         local b = spotsOf[j]
-        if not taken[j] and b.c == a.c and (b.wx - a.wx) ^ 2 + (b.wy - a.wy) ^ 2 <= CLUSTER * CLUSTER then taken[j] = true; s.n = s.n + 1 end
+        if not taken[j] and b.c == a.c and (b.wx - a.wx) ^ 2 + (b.wy - a.wy) ^ 2 <= CLUSTER * CLUSTER then taken[j] = true end
       end
       G.steps[#G.steps + 1] = s
+    end
+  end
+end
+
+-- "and N more here": the objective steps of other quests within CLUSTER yards of a step (one quest's spawn spots
+-- are one objective, never "more"); counted once the list is whole
+local function countNear(steps)
+  for i = 1, #steps do
+    local a = steps[i]
+    if a.kind == "objective" then
+      a.n = 1
+      for j = 1, #steps do
+        local b = steps[j]
+        if j ~= i and b.kind == "objective" and b.qid ~= a.qid and b.c == a.c and b.wx and a.wx
+          and (b.wx - a.wx) ^ 2 + (b.wy - a.wy) ^ 2 <= CLUSTER * CLUSTER then a.n = a.n + 1 end
+      end
     end
   end
 end
@@ -678,6 +694,7 @@ function G.Replan()
     G.steps[#G.steps + 1] = s
     doneQ[d.qid] = true
   end
+  countNear(G.steps)
   -- the first step is the target's: when the target leads to an objective spot of a quest, that quest's nearest
   -- objective step goes first (Target.lua keeps the quest and the spot; the list follows it, never the other way)
   if cur and cur.name and cur.obj and cur.qid and not (G.steps[1] and (G.steps[1].near or G.steps[1].kind == "corpse")) then

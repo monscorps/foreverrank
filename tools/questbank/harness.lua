@@ -16494,6 +16494,30 @@ end)()
     assert(inPlan == 0 and QB:InPlan(QB.Quest.Get(109)), "off: the fill is out of the plan, your pick is in")
   end }
 
+  -- "and N more here" (6.0.0's review: "Collect Redridge Goulash, and 13 more here" counted one objective's spawn
+  -- spots): a quest alone says nothing more; two quests at the same mine count each other
+  G6CASES[#G6CASES + 1] = { "and N more here: other quests' steps within CLUSTER, never one objective's spawn spots", function()
+    local e = newClient({ name = "Goulash", level = 23, cap = 60, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2,
+      race = "Human", log = { { 92, 0 } }, done = { [89] = true, [91] = true }, world = { 0, -9200, -2150 }, map = 1433, bagSlots = {}, bind = "Lakeshire" })
+    login(e)
+    e.QB:Settings().guide.on = true; e.QB:Settings().welcome = nil
+    settle(e)
+    local G = e.QB.Guide
+    local goulash
+    for _, s in ipairs(G.steps) do if s.kind == "objective" and s.qid == 92 then goulash = s break end end
+    assert(goulash and goulash.n == 1 and not G.Text(goulash):find("more here", 1, true), "one quest's spawn spots are no 'more here': " .. tostring(goulash and G.Text(goulash)))
+    local c = human("Twoquests", { { 7, 0 }, { 15, 0 } }, { [783] = true })
+    c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/8", type = "monster", finished = false, numFulfilled = 3, numRequired = 8 } },
+                     [15] = { { text = "Investigate Echo Ridge: 0/1", type = "event", finished = false, numFulfilled = 0, numRequired = 1 } } }
+    c.QB:Settings().welcome = nil
+    settle(c)
+    local G2 = c.QB.Guide
+    local k, r
+    for _, s in ipairs(G2.steps) do if s.kind == "objective" and s.qid == 7 then k = s end; if s.kind == "objective" and s.qid == 15 then r = s end end
+    assert(k and r and G2.Text(k) == "Kill Kobold Vermin 3/8, and 1 more here" and G2.Text(r) == "Kill Investigate Echo Ridge 0/1, and 1 more here",
+      "two quests at the mine count each other: " .. tostring(k and G2.Text(k)) .. " / " .. tostring(r and G2.Text(r)))
+  end }
+
   -- out of order: an objective finished before its pick-up step (the quest taken by hand first), and a quest handed
   -- in that the plan had later: the engine plans from the state, never from a list
   G6CASES[#G6CASES + 1] = { "out of order: planned from the state, never a fixed list", function()
