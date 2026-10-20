@@ -905,7 +905,8 @@ SimpleFrameAPIDocumentation.lua): a black edge was 1.1:1, and only the box took 
 - **Module addons**: a folder of their own whose toc says `## Dependencies: Cute`, `## X-Cute-Module: 1` and
   `## LoadOnDemand: 1`. The first loading screen of a session finds them in the client's addon list
   (`C_AddOns.GetNumAddOns`, `GetAddOnInfo`, `GetAddOnMetadata`, `GetAddOnDependencies`, `IsAddOnLoadOnDemand`, all in
-  Forever's `AddOnsDocumentation.lua`), listed by their toc's title until they register. Ticked, one loads at once with
+  Forever's `AddOnsDocumentation.lua`), listed by their toc's `## X-Cute-Title` (the primary's title: Cute_Quest's
+  row says Quests before it loads), else the toc's title, until they register. Ticked, one loads at once with
   `C_AddOns.LoadAddOn` (documented on this client; Blizzard's Camelot code calls it), no reload, and calls
   `Cute:RegisterModule` from its files, the one global Cute makes; ticked in combat, it waits for
   `PLAYER_REGEN_ENABLED` (`InCombatLockdown`, documented), since loading one may make frames, and its box says so.
@@ -920,7 +921,8 @@ SimpleFrameAPIDocumentation.lua): a black edge was 1.1:1, and only the box took 
 
 One addon may register several modules, each with `addon = ADDON` in its entry. The first it registers is its primary
 (`def.primary`), keyed by the folder (`def.key = "Cute_Quest"`): its row in Settings > Modules is the folder's, named
-by the toc's title until it registers; the rest are keyed under the folder (`"Cute_Quest:route"`) with a row each.
+by the toc's `X-Cute-Title` (else its title) until it registers; the rest are keyed under the folder
+(`"Cute_Quest:route"`) with a row each.
 The addon is loaded while any of its keys is on (`M.AddonWanted`) and left off when none is; `onToggle(on)` runs when
 a module's choice changes with the addon loaded, so a module that is a switch over another engine's flags (Map, Camp)
 can set them. A page another engine draws sits on a host, `Cute.Host(ui, key)`, a frame under the scroll area shown
@@ -1296,7 +1298,7 @@ the next login not loading it and ticked there on in the list again before it lo
 addon loaded by the game and showing nothing while off in Cute, left out by the game after it is unticked; every
 Settings section (the officers' greyed for the member) and every page at both sizes for both views, the Guide and the
 module on. And Cute_Quest (the harness loads the copy build.py wrote, with the engine's mocks of `test/quest_mocks.lua`):
-listed by its toc's title and not loaded, its catalog not in memory; ticked, loaded at once, the engine logging in
+listed as Quests (its toc's X-Cute-Title) and not loaded, its catalog not in memory; ticked, loaded at once, the engine logging in
 from the Bridge, the catalog built, one saved table under both names, the module's defaults set once, `/qb` routed,
 nothing said in chat; the step now in the Guide's band and the step frame flat; the Quests page's three heads, Route's
 band and legs, Journal and Gear on their hosts (one shown at a time), Map and Camp as sections whose switches set the

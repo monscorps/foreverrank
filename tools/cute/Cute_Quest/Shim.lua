@@ -13,7 +13,6 @@ local function loaded(name)
   return ok and v == true
 end
 QB.dormant = loaded("QuestBank")
-QB.host = "Cute"
 QB.ADDON = ADDON
 QB.ART = "Interface\\AddOns\\" .. ADDON .. "\\art\\"
 -- the modules' switches by module id (PageQuests, PageMap and PageCamp set theirs), for the Bridge to run again once

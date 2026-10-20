@@ -15,7 +15,8 @@
 --   core      the dashboard (Race, Prog, Hall of Shame, Statistics, Officers, Me): always on, never listed
 --   built-in  shipped inside Cute, switched on in Settings > Modules (the Guide, off on a fresh install)
 --   external  an addon folder of its own whose toc says "## Dependencies: Cute" and "## X-Cute-Module: 1", ideally
---             "## LoadOnDemand: 1": listed in Settings > Modules from the client's addon list (C_AddOns, documented
+--             "## LoadOnDemand: 1" and "## X-Cute-Title: <its primary's title>": listed in Settings > Modules from
+--             the client's addon list (C_AddOns, documented
 --             in Forever's AddOnsDocumentation.lua) and loaded with C_AddOns.LoadAddOn when switched on, no reload;
 --             its files call Cute:RegisterModule as they load. Switched off, its tab, section and events go at once
 --             and it is not loaded at the next login (Cute loads only what is on, and the game's AddOns list has it
@@ -66,8 +67,8 @@ function C:RegisterModule(def)
     if not def.addon then note("module " .. id .. " was not registered: no addon folder named"); return false end
   end
   if def.addon then
-    -- an addon's first module is its primary, keyed by the folder (Settings > Modules names the folder by its toc
-    -- until it registers); the rest are keyed under it, each its own row and choice
+    -- an addon's first module is its primary, keyed by the folder (Settings > Modules names the folder by its toc's
+    -- X-Cute-Title, else its title, until it registers); the rest are keyed under it, each its own row and choice
     local first = true
     for _, d in ipairs(M.list) do if d.addon == def.addon then first = false end end
     def.primary = first
@@ -231,7 +232,9 @@ function M.Scan()
   for i = 1, math.min(n, 500) do
     local name, title, notes = C.Get(A.GetAddOnInfo, i)
     if type(name) == "string" and name ~= "" and name:lower() ~= "cute" and tonumber(C.Get(A.GetAddOnMetadata, i, "X-Cute-Module")) == 1 and needsCute(A, i) then
-      out[#out + 1] = { name = name, title = plainTitle(title, name), notes = plainTitle(notes, nil),
+      -- (its row's title before it registers: "## X-Cute-Title", its primary's, else the toc's title, the AddOns list's)
+      local own = plainTitle(C.Get(A.GetAddOnMetadata, i, "X-Cute-Title"), nil)
+      out[#out + 1] = { name = name, title = own or plainTitle(title, name), notes = plainTitle(notes, nil),
         lod = type(A.IsAddOnLoadOnDemand) == "function" and C.Get(A.IsAddOnLoadOnDemand, i) == true }
     end
   end
@@ -310,7 +313,7 @@ function M.Set(key, on)
 end
 
 -- what Settings > Modules lists: the built-in modules and the module addons the client has, each { key, title, on,
--- status, notes }; an external one is named by its toc until it registers
+-- status, notes }; an external one is named by its toc (X-Cute-Title, else the title) until it registers
 function M.Available(officer)
   local out = {}
   for _, def in ipairs(M.list) do

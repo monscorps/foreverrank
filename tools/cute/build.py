@@ -180,6 +180,7 @@ def build_quest(version):
         "## Dependencies: Cute",
         "## LoadOnDemand: 1",
         "## X-Cute-Module: 1",
+        "## X-Cute-Title: Quests",
         "## SavedVariables: CuteQuestDB",
         "",
         "Shim.lua",

@@ -4719,11 +4719,11 @@ do
     login(rone)
     tickAll(5)
     local M = rone.C.Modules
-    assert(#M.found == 1 and M.found[1].name == "Cute_Quest" and M.found[1].lod and M.found[1].title == "Cute Quest", "found by its toc: " .. tostring(M.found[1] and M.found[1].title))
+    assert(#M.found == 1 and M.found[1].name == "Cute_Quest" and M.found[1].lod and M.found[1].title == "Quests", "found by its toc, its row titled Quests from the start (X-Cute-Title): " .. tostring(M.found[1] and M.found[1].title))
     assert(not rone.addons[2].loaded and rone.addons[2].private.Data == nil, "not loaded: no catalog in memory")
     rone.C.UI:Open("settings", "modules")
-    local box = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Cute Quest" end)
-    assert(box, "its row in Settings > Modules")
+    local box = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Quests" end)
+    assert(box, "its row in Settings > Modules, Quests before it loads")
     click(box)
     tick(rone, 6) -- (the bridge's login, the engine's first plan four seconds on)
     local a = rone.addons[2]
