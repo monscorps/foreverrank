@@ -4492,6 +4492,25 @@ do
     tick(moda, 70)
     assert(moda.C.Sample:Value("ex_heard") == 1, "its stat read on the heartbeat")
 
+    -- the folder's second module: its own row, off; ticked, its tab and its onToggle; the first unticked alone keeps
+    -- the folder on in the AddOns list, both off turns it off
+    local M2 = moda.C.Modules
+    moda.C.UI:Open("settings", "modules")
+    assert(M2.byId.example_two and M2.byId.example_two.key == "Cute_Example:example_two" and M2.byId.example.primary == true and not M2.byId.example_two.primary, "the second module keyed under the folder")
+    assert(boxOf(moda, "Example two") and not boxOf(moda, "Example two"):GetChecked() and not tabsShown(moda):find("example_two"), "listed off, no tab")
+    click(boxOf(moda, "Example two"))
+    assert(M2.byId.example_two.active and tabsShown(moda):find("example_two") and moda.addons[2].private.toggled == 1 and moda.addons[2].private.lastOn == true, "ticked: its tab, onToggle(true) once: " .. tabsShown(moda))
+    click(boxOf(moda, "Example")) -- (the primary's row, named as it registered)
+    assert(not M2.byId.example.active and M2.byId.example_two.active and not (state.Cute_Example and state.Cute_Example[moda.o.guid] == false) and M2.AddonOn("Cute_Example"), "the first off alone: the folder stays on in the AddOns list")
+    click(boxOf(moda, "Example two"))
+    assert(moda.addons[2].private.toggled == 2 and moda.addons[2].private.lastOn == false and state.Cute_Example[moda.o.guid] == false, "both off: onToggle(false), off in the AddOns list")
+    click(boxOf(moda, "Example")) -- (back where the scenario's next lines expect it: the first on)
+    moda.C.UI:Open("example")
+    local host = moda.C.UI:Host("example_host")
+    assert(host:IsShown() and host:GetParent() == moda.C.UI.scroll.child, "a host frame under the scroll child")
+    moda.C.UI:Open("race")
+    assert(not host:IsShown(), "a draw that does not ask for the host hides it")
+
     -- ticked in combat: nothing loads until combat ends, and the box says so
     local pim = newClient(char("Pim", { modules = { "Cute_Example" } }))
     login(pim)

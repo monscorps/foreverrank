@@ -768,6 +768,16 @@ function UI:List(key, make)
   if not v then v = virtual(self.scroll.child, make); self.lists[key] = v end
   return v
 end
+-- a frame of a page's own under the scroll child (a module that attaches a view it draws itself: the quest engine's
+-- journal and gear pages); hidden by the next draw that does not ask for it, as the virtual lists are cleared
+UI.hosts = {}
+function UI:Host(key)
+  local f = self.hosts[key]
+  if not f then f = CreateFrame("Frame", nil, self.scroll.child); self.hosts[key] = f end
+  f.gen = self.drawGen
+  f:Show()
+  return f
+end
 -- the band's height (0 hides it); the scroll area and its bar start under it
 function UI:SetBand(h)
   if self.bandH == h then return end
@@ -1791,12 +1801,14 @@ local function drawBody(self)
   local rowsGen, linesGen, catGen = self.rows.gen, self.lines.gen, self.catLines.gen
   local gens = {}
   for key, v in pairs(self.lists) do gens[key] = v.gen end
+  self.drawGen = (self.drawGen or 0) + 1
   if page == "settings" then C.Settings_Draw(self)
   else C.Safe(function() mod.page(self, self.scroll) end, "page: " .. page)() end
   if self.rows.gen == rowsGen then self.rows:Clear() end
   if self.lines.gen == linesGen then self.lines:Clear() end
   if self.catLines.gen == catGen then self.catLines:Clear() end
   for key, v in pairs(self.lists) do if v.gen == gens[key] then v:Clear() end end
+  for _, f in pairs(self.hosts) do if f.gen ~= self.drawGen and f:IsShown() then f:Hide() end end
   self.labels:HideRest()
   self.bandLabels:HideRest(); self.bandButtons:HideRest(); self.bandLines:HideRest()
   local _, maxv = bar:GetMinMaxValues()

@@ -65,7 +65,17 @@ function C:RegisterModule(def)
     def.addon = type(def.addon) == "string" and def.addon or M.loading
     if not def.addon then note("module " .. id .. " was not registered: no addon folder named"); return false end
   end
-  def.key = def.addon or id
+  if def.addon then
+    -- an addon's first module is its primary, keyed by the folder (Settings > Modules names the folder by its toc
+    -- until it registers); the rest are keyed under it, each its own row and choice
+    local first = true
+    for _, d in ipairs(M.list) do if d.addon == def.addon then first = false end end
+    def.primary = first
+    def.key = first and def.addon or (def.addon .. ":" .. id)
+  else
+    def.key = id
+  end
+  if def.onToggle ~= nil and type(def.onToggle) ~= "function" then note("module " .. id .. " was not registered: onToggle is no function"); return false end
   def.active = def.core == true -- (the dashboard is on from the start; the rest as Apply finds them)
   M.byId[id] = def
   M.list[#M.list + 1] = def
@@ -75,13 +85,22 @@ function C:RegisterModule(def)
   return true
 end
 
--- the one global Cute makes for module addons: Cute:RegisterModule({ ... }) from their own files, external always
+-- the one global Cute makes for module addons: Cute:RegisterModule({ ... }) from their own files, external always; and
+-- what a module's pages need of the window and the core without reaching into them
 Cute = { version = C.version }
 function Cute:RegisterModule(def)
   -- (an external module is never core nor built in, and starts off: a fresh install starts with the dashboard)
   if type(def) == "table" then def.core, def.builtin, def.default = nil, nil, nil end
   return C:RegisterModule(def)
 end
+function Cute.Open(page, section) C.UI:Open(page, section) end
+function Cute.Refresh() if C.UI and C.UI.frame and C.UI.frame:IsShown() then C.UI:Refresh() end end
+function Cute.Print(msg) C.Print(msg) end
+function Cute.Page() return C.UI and C.UI.page or nil end
+function Cute.ModuleOn(id) local def = M.byId[id]; return def ~= nil and def.active == true end
+function Cute.Safe(fn, where) return C.Safe(fn, where) end
+function Cute.Font() return C.UI and C.UI.FONT or "Fonts\\ARIALN.TTF" end
+function Cute.Host(ui, key) return ui:Host(key) end
 
 ----------------------------------------------------------------------------
 -- on and off
@@ -95,6 +114,18 @@ end
 function M.On(def)
   if def.core then return true end
   return M.OnKey(def.key, def.default)
+end
+-- the folder of a key ("Cute_Quest:route" is Cute_Quest's)
+local function folderOf(key) return key:match("^(.-):") or key end
+-- is any of an addon's modules wanted by this character: the primary's key (the folder) or one keyed under it
+function M.AddonWanted(name)
+  for key, v in pairs(choices()) do if v == true and folderOf(key) == name then return true end end
+  return false
+end
+-- is any of an addon's registered modules on
+function M.AddonOn(name)
+  for _, def in ipairs(M.list) do if def.addon == name and M.On(def) then return true end end
+  return false
 end
 
 -- the stats a module defines, in Stats.lua's registry and read like the rest (Sample.lua adopts them once it runs)
@@ -116,6 +147,7 @@ function M.Apply(def)
   local on = M.On(def)
   if on == def.active then return end
   def.active = on
+  if def.onToggle then C.Safe(def.onToggle, "module " .. def.id .. ": toggle")(on) end
   if on then
     C.Safe(defineStats, "module " .. def.id .. ": stats")(def)
     if def.events and next(def.events) then
@@ -255,9 +287,10 @@ function M.Set(key, on)
   on = on and true or false
   choices()[key] = on
   for _, def in ipairs(M.list) do if def.key == key then M.Apply(def) end end
-  if M.Found(key) then
-    if on then if not registered(key) then M.Load(key) else enable(key, true) end
-    else M.pending[key] = nil; enable(key, false) end
+  local name = folderOf(key)
+  if M.Found(name) then
+    if on then if not registered(name) then M.Load(name) else enable(name, true) end
+    elseif not M.AddonWanted(name) then M.pending[name] = nil; enable(name, false) end
   end
   -- (the redraw on its own: an error in it leaves the choice made and recorded under /cute errors)
   if C.UI and C.UI.frame and C.UI.frame:IsShown() then C.Safe(function() C.UI:Draw() end, "modules: set " .. key)() end
@@ -271,9 +304,15 @@ function M.Available(officer)
     if def.builtin and (not def.officer or officer) then out[#out + 1] = { key = def.key, title = def.title, notes = def.notes, def = def } end
   end
   for _, a in ipairs(M.found) do
-    local def = registered(a.name)
-    if not (def and def.officer and not officer) then
-      out[#out + 1] = { key = a.name, title = def and def.title or a.title, notes = (def and def.notes) or a.notes, def = def, addon = a }
+    local primary = registered(a.name)
+    if not (primary and primary.officer and not officer) then
+      out[#out + 1] = { key = a.name, title = primary and primary.title or a.title, notes = (primary and primary.notes) or a.notes, def = primary, addon = a }
+    end
+    -- the rest of the folder's modules, each its own row, once it has registered them
+    for _, def in ipairs(M.list) do
+      if def.addon == a.name and not def.primary and (not def.officer or officer) then
+        out[#out + 1] = { key = def.key, title = def.title, notes = def.notes, def = def, addon = a }
+      end
     end
   end
   for _, e in ipairs(out) do
@@ -302,8 +341,8 @@ function M.Start()
   for _, def in ipairs(M.list) do M.Apply(def) end
   M.found = M.Scan()
   for _, a in ipairs(M.found) do
-    if M.OnKey(a.name) and not registered(a.name) then
-      if offInList(a.name) then choices()[a.name] = false else M.Load(a.name) end
+    if M.AddonWanted(a.name) and not registered(a.name) then
+      if offInList(a.name) then for key in pairs(choices()) do if folderOf(key) == a.name then choices()[key] = false end end else M.Load(a.name) end
     end
   end
 end

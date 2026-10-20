@@ -29,3 +29,19 @@ Cute:RegisterModule({
   events = { PLAYER_LEVEL_UP = function() E.heard = E.heard + 1 end },
   stats = function(D) D("ex_heard", "Level ups heard", "funny", { read = function() return E.heard end }) end,
 })
+
+-- a second module from the same folder: its own row in Settings > Modules (keyed Cute_Example:example_two), its own
+-- choice; the folder loads when either is on and is off in the AddOns list only when both are off
+Cute:RegisterModule({
+  id = "example_two", addon = ADDON, title = "Example two", order = 91,
+  notes = "The example's second module.",
+  page = function(ui, scroll)
+    local l = ui.labels:Get()
+    l:SetPoint("TOPLEFT", 6, -6)
+    l:SetWidth(scroll:Width() - 12)
+    ui.FitText(l, "Toggled " .. (E.toggled or 0) .. " times.", scroll:Width() - 16)
+    scroll:SetContentHeight(30)
+  end,
+  settings = function(_, col) col:Head("Example two") end,
+  onToggle = function(on) E.toggled = (E.toggled or 0) + 1; E.lastOn = on end,
+})
