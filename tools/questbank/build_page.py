@@ -312,6 +312,7 @@ STALE = [
     (r"Next: pins on the minimap", "a promise already kept"),
     (r"\bTODO\b|\bFIXME\b|lorem|\bXXX\b", "a placeholder"),
     (r"\bcoming soon\b", "coming soon"),
+    (r"off on a new install", "off on a new install (6.0 asks the auto choice in the welcome)"),
 ]
 
 
@@ -502,6 +503,15 @@ def check_mock(html, story):
         problem("the mock's quests: " + "; ".join(bad))
     else:
         ok("the mock's %d quest rows name catalog quests at their catalog levels" % n)
+    # 6.0: the step frame beside the arrow: the step now, the next two, the time line; its quests are catalog quests
+    step = mock.get("step")
+    if not (isinstance(step, dict) and step.get("now") and isinstance(step.get("next"), list) and len(step["next"]) == 2 and step.get("time")):
+        problem("the mock has no step frame (step: now, next[2], time)"); return
+    missing = [t for t in step["next"] if not any(name in t for name in names)]
+    if missing:
+        problem("the step frame's next steps name no catalog quest: " + "; ".join(missing))
+    else:
+        ok("the mock's step frame: %s" % step["now"])
 
 
 NODE_CHECK = r"""
@@ -568,6 +578,14 @@ if (text.indexOf(mock.who.name) < 0) fail("the character's name is not drawn");
 const arrow = byId["qb-arrow"];
 if (!arrow.innerHTML || arrow.innerHTML.indexOf(mock.arrow.name) < 0) fail("the arrow is not drawn with its target");
 balanced(arrow.innerHTML, "the arrow");
+const stepEl = byId["qb-step"];
+if (!stepEl || !stepEl.innerHTML || stepEl.innerHTML.indexOf(mock.step.now) < 0) fail("the step frame is not drawn with its step");
+else {
+  const escd = t => t.replace(/&/g, "&amp;").replace(/'/g, "&#39;");
+  for (const n of mock.step.next) if (stepEl.innerHTML.indexOf(escd(n)) < 0 && stepEl.innerHTML.indexOf(n) < 0) fail("the step frame lacks its next step: " + n);
+  if (stepEl.innerHTML.indexOf(mock.step.time) < 0) fail("the step frame lacks its time line");
+  balanced(stepEl.innerHTML, "the step frame");
+}
 ok("mock: window " + win.innerHTML.length + " chars, " + mock.cards.length + " cards, " + mock.cards.reduce((n, c) => n + c.rows.length, 0) + " rows; arrow to " + mock.arrow.name);
 // the gallery: a picture that loads shows its slot, one that fails leaves it hidden (never a broken picture)
 if (images.length !== shots.length) fail("the gallery asked for " + images.length + " pictures, has " + shots.length + " slots");
@@ -621,7 +639,7 @@ def check_length(html):
     words = len(re.findall(r"\d[\d,.]*|[A-Za-z][A-Za-z'’]*", text))  # a number is one word
     # a phone at 375 px: about 7 words a line at 15 px, 23 px a line, plus the blocks that take space on their own
     lines = words / 7.0
-    fixed = 56 + 300 + 660 + 60 + 6 * 44 + 3 * 60 + 300 + 6 * 56 + 24 * 6  # nav, hero art, the stage, the swipe note, tiles, buttons, chart, gallery slots, folds
+    fixed = 56 + 300 + 660 + 90 + 60 + 6 * 44 + 3 * 60 + 300 + 6 * 56 + 24 * 6  # nav, hero art, the stage, the step frame, the swipe note, tiles, buttons, chart, gallery slots, folds
     px = lines * 23 + fixed
     screens = px / 812.0
     note = "visible words %d (target %d), about %.1f phone screens at 375 px (target %d); folded text not counted" % (words, WORD_TARGET, screens, SCREEN_TARGET)

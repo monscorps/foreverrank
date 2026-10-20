@@ -152,6 +152,12 @@
 .qb-a-trail i { width: 14px; height: 14px; border-radius: 50%; background: #1d5a1d; box-shadow: inset 0 0 0 2px #7fe07f; }
 .qb-a-trail img { width: 14px; height: 14px; border-radius: 2px; opacity: .5; }
 @keyframes qb-breathe { 0%, 100% { transform: scale(.92); opacity: .75; } 50% { transform: scale(1.08); opacity: 1; } }
+/* the step frame (6.0): the step now, the two next greyed, the time to level; beside the arrow, in the window's slate */
+.qb-step { position: absolute; left: 1046px; top: 160px; width: 260px; box-sizing: border-box; padding: 9px 12px 8px; background: rgba(14,18,24,.92); border: 1px solid rgba(255,210,77,.5); border-radius: 4px; box-shadow: 0 12px 30px rgba(0,0,0,.55); color: var(--qb-wink); font: 500 12px/18px var(--body); text-shadow: 1px 1px 0 #000; }
+.qb-s-now { color: #f2ead9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qb-s-next { color: #9ea5a8; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qb-s-time { color: #9ea5a8; font-size: 10px; line-height: 14px; margin-top: 4px; }
+.qb-s-item { position: absolute; right: 8px; top: 8px; width: 22px; height: 22px; border-radius: 3px; }
 
 /* install */
 .qb-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; counter-reset: s; }
@@ -232,6 +238,9 @@
 .qb-fold .qb-log li:last-child { border-bottom: 0; }
 
 @media (max-width: 1340px) { .qb-swipe { display: block; } }
+@media (max-width: 720px) {
+  .qb-step { left: 12px; top: 12px; width: 220px; }  /* a phone sees the window's left edge first: the step frame goes over it, not off screen */
+}
 @media (max-width: 860px) {
   .qb-steps, .qb-tiles, .qb-shots { grid-template-columns: 1fr; }
   .qb-counters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -282,12 +291,13 @@
 
 <section class="qb-sec qb-stage-sec" id="window">
   <div class="qb-wrap">
-    <p class="qb-lede">Now, drawn as in game: a level 20 paladin in Stormwind, and the arrow.</p>
+    <p class="qb-lede">The step frame, the arrow, the window behind them: a level 20 paladin in Stormwind.</p>
     <p class="qb-swipe">The window is wider than your screen: swipe sideways inside it.</p>
   </div>
   <div class="qb-stage">
     <div class="qb-scene">
       <div class="qb-win" id="qb-win" aria-label="QuestBank's window on its Now page"><noscript><p class="qb-w-head">The mock needs JavaScript. The real window runs in game.</p></noscript></div>
+      <div class="qb-step" id="qb-step" aria-label="QuestBank's step frame"></div>
       <div class="qb-arrow" id="qb-arrow" aria-label="QuestBank's arrow"></div>
     </div>
   </div>
@@ -381,7 +391,7 @@
       <details><summary>The XP differs from the plan</summary><p>The chat line after a hand-in shows both numbers. From then on QuestBank uses the game's number and shares it with your party; upload your file and the next release carries it for everyone.</p></details>
       <details><summary>It offers a quest I did already</summary><p>Type <code>/qb done</code> and the quest's name to see what the game says about it. If a quest you did before QuestBank still shows, tell the Discord its name.</p></details>
       <details><summary>Do I need TomTom?</summary><p>No. Waypoints show on QuestBank's own arrow, and a link in chat puts the game's map pin there. With TomTom installed, it gets them too.</p></details>
-      <details><summary>Does it accept or hand in for me?</summary><p>Only if you choose so in Settings: <b>Accept for me</b> and <b>Hand in finished quests for me</b> are off on a new install. Hold Shift at an NPC and it keeps its hands off.</p></details>
+      <details><summary>Does it accept or hand in for me?</summary><p>Only as you chose in the welcome: Off, quests on your route, or quests worth taking, and whether finished quests are handed in for you. Settings' Guide section changes it; hold Shift at an NPC and it keeps its hands off.</p></details>
       <details><summary>How do I update?</summary><p>Unzip the new QuestBank over the old folder; your plan and settings are kept. QuestBank users tell each other when a newer one is out, and <code>/qb update</code> copies the download link.</p></details>
     </div>
   </div>
@@ -459,7 +469,9 @@
       {"mark": "wait", "held": true, "icon": "achievement_zone_wetlands_01", "name": "Digging Through the Ooze", "lvl": "L24", "note": "In your log: 3/10 · 1 in the same spot", "kind": "log", "xp": "2,400"},
       {"mark": "wait", "held": true, "bag": true, "icon": "achievement_zone_wetlands_01", "name": "Tramping Paws", "lvl": "L21", "chain": true, "note": "In your log: 3/10 · 2 in the same spot", "kind": "log", "xp": "1,250"}]}
   ],
-  "arrow": {"fly": "Fly to Lakeshire", "then": ", then Go to", "name": "Lakeshire", "dist": "150 yards · 3 min", "foot": "ability_rogue_sprint"}
+  "arrow": {"fly": "Fly to Lakeshire", "then": ", then Go to", "name": "Lakeshire", "dist": "150 yards · 3 min", "foot": "ability_rogue_sprint"},
+  "step": {"now": "Kill Defias Trapper 4/15", "next": ["Hand in The People's Militia", "Accept The Defias Brotherhood from Gryan Stoutmantle"],
+           "time": "about 14 min to level 21", "item": null, "members": []}
 }
 </script>
 <script>
@@ -519,6 +531,15 @@
       '<div class="qb-a-step"><i class="qb-a-fm"></i><span class="qb-a-fly">' + esc(a.fly) + '</span><span class="qb-a-then">' + esc(a.then) + '</span></div>' +
       '<div class="qb-a-name">' + esc(a.name) + '</div><div class="qb-a-dist">' + esc(a.dist) + '</div>' +
       '<div class="qb-a-trail"><i></i>' + icon(a.foot, "") + '</div>';
+  }
+  // the step frame (StepFrame.lua): the step now, the next two, the time line, and the quest-item button when the
+  // step has one
+  var stepEl = document.getElementById("qb-step");
+  if (M && M.step && stepEl) {
+    var st = M.step;
+    stepEl.innerHTML = '<div class="qb-s-now">' + esc(st.now) + '</div>' +
+      st.next.map(function (n) { return '<div class="qb-s-next">' + esc(n) + '</div>'; }).join("") +
+      '<div class="qb-s-time">' + esc(st.time) + '</div>' + (st.item ? icon(st.item, "qb-s-item") : "");
   }
 
   // the gallery: each slot loads its picture itself and shows only once it is there (the owner captures them in
