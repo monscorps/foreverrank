@@ -4338,10 +4338,10 @@ do
     assert(told(wim, "is out") == 0 and wim.C.newer == nil and not wim.C.UI.status:GetText():find("update", 1, true), "older, equal and malformed: nothing")
     leave(wim)
     -- Neo runs a newer Cute: his full record at the hello tells Vera, once; Neo hears an older one and says nothing
-    neo.C.version = "0.6.1"
+    neo.C.version = "0.6.2"
     login(vera); login(neo)
     tickAll(45)
-    assert(told(vera, "Cute 0.6.1|r is out (you have " .. mine .. "): foreverrank.com/addons/cute") == 1 and V.newer == "0.6.1", "Vera told once:\n" .. table.concat(vera.chat, "\n"))
+    assert(told(vera, "Cute 0.6.2|r is out (you have " .. mine .. "): foreverrank.com/addons/cute") == 1 and V.newer == "0.6.2", "Vera told once:\n" .. table.concat(vera.chat, "\n"))
     assert(told(neo, "is out") == 0 and neo.C.newer == nil, "Neo, newer than Vera, is told nothing")
     -- a newer one again, and junk: no second line; the status line keeps the newest
     for _, v in ipairs({ "0.4.9", mine, "0.7.0-beta", "banana" }) do vera.C.Roster:Apply("Jumble-Forever", { guid = guidOf("Jumble"), addon_ver = v }) end
@@ -4439,7 +4439,9 @@ do
     assert(not (db.chars["Alt-Forever"].modules or {}).guide and db.chars[old.name].counters.falls == 3, "every character 0.5.0 saved, its counters kept")
     tick(old, 11)
     local told = false
-    for _, l in ipairs(old.chat) do if l:find("Starts with only the statistics", 1, true) then told = true end end
+    -- (this version's line, from Changes.lua: 0.6.0's said "Starts with only the statistics")
+    local line = old.C.CHANGES[old.C.version]
+    for _, l in ipairs(old.chat) do if type(line) == "string" and l:find(line, 1, true) then told = true end end
     assert(told, "and What's new says so")
     leave(old)
     local alt = newClient(char("Pim"))

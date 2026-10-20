@@ -293,7 +293,8 @@ hello is said only in a guild: a character that joins one after login says it th
 goes out (the ghost row would come back otherwise). `Rows()` gives you exactly one row, the first, named as the roster
 names you; ranks and the officers' check go by the member the sender string names, never by a GUID, and a policy you
 set is marked yours rather than matched by name. `C.Me()` stays 0.3.0's key for your saved counters (`CuteDB.chars`),
-so nothing moves. Your emote lines count by the event's GUID. A value the client may make secret is asked `issecretvalue` (or made plain) before anything compares
+so nothing moves, and is read once a session (the first non-nil key), so a second return that reads one way early and
+another later cannot save a choice under one key and read it under another. Your emote lines count by the event's GUID. A value the client may make secret is asked `issecretvalue` (or made plain) before anything compares
 it, `nil` included.
 Records are kept for up to a thousand members, a guild's most (0.3.0 kept two hundred).
 
