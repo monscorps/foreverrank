@@ -1207,6 +1207,18 @@ local function interactive(o)
 end
 local function inside(o, root) for _, a in ipairs(ancestors(o)) do if a == root then return true end end return false end
 local EDGE_GAP = 5
+-- what a widget is clipped to: every scrolling ancestor's view, intersected (a scroll frame inside another, as the
+-- quest engine's journal list under Cute's scroll area, shows only what both let through)
+local function clipOf(o)
+  local clip
+  for _, a in ipairs(ancestors(o)) do
+    if a.__child then
+      local cr = rectOf(a)
+      if cr then clip = clip and { l = math.max(clip.l, cr.l), r = math.min(clip.r, cr.r), t = math.min(clip.t, cr.t), b = math.max(clip.b, cr.b) } or cr end
+    end
+  end
+  return clip
+end
 local function checkLayout(root, label)
   GEN = GEN + 1
   local problems, texts = {}, {}
@@ -1222,8 +1234,7 @@ local function checkLayout(root, label)
           problems[#problems + 1] = string.format("%s: clipped '%s' (%.0f of %.0f px)", label, plain(o.__text):sub(1, 60), r.r - r.l, tw)
         end
         local ir = ink(o, r)
-        local clip
-        for _, a in ipairs(ancestors(o)) do if a.__child then clip = rectOf(a); break end end
+        local clip = clipOf(o)
         if clip and (ir.r > clip.r + 2 or ir.l < clip.l - 2) then
           problems[#problems + 1] = string.format("%s: '%s' runs out of the scroll view", label, plain(o.__text):sub(1, 50))
         end
@@ -1238,8 +1249,7 @@ local function checkLayout(root, label)
     if interactive(o) and visible(o) and inside(o, root) and o ~= root then
       local r = rectOf(o)
       if r and r.r - r.l > 0 and r.t - r.b > 0 then
-        local clip
-        for _, a in ipairs(ancestors(o)) do if a.__child then clip = rectOf(a); break end end
+        local clip = clipOf(o)
         local inset = root.__inset or 0
         if not clip then
           local gaps = { { "left", r.l - (rootRect.l + inset) }, { "right", (rootRect.r - inset) - r.r }, { "top", (rootRect.t - inset) - r.t }, { "bottom", r.b - (rootRect.b + inset) } }
@@ -1305,7 +1315,8 @@ local function dumpLayout(root, label)
           it.checked, it.off = o.__checked or nil, o.__disabled or nil
         end
         if it then
-          for _, a in ipairs(anc) do if a.__child then local cr = rectOf(a); it.clip = { x = cr.l - rr.l, y = rr.t - cr.t, w = cr.r - cr.l, h = cr.t - cr.b }; break end end
+          local cr = clipOf(o)
+          if cr then it.clip = { x = cr.l - rr.l, y = rr.t - cr.t, w = cr.r - cr.l, h = cr.t - cr.b } end
           items[#items + 1] = it
         end
       end
@@ -4762,6 +4773,33 @@ do
     assert(texts(rone):find("Chests and events", 1, true), "the Journal section")
     rone.C.UI:Open("settings", "gear")
     assert(texts(rone):find("2 levels ahead", 1, true), "the Gear section")
+    -- Map and Camp: no page, a section each; their switches set the engine's flags, on and off with the module
+    rone.C.UI:Open("settings", "modules")
+    for _, name in ipairs({ "Map", "Camp" }) do click(boxOf(rone, name)) end
+    assert(not tabsShown(rone):find("map", 1, true) and not tabsShown(rone):find("camp", 1, true), "no tab for a module without a page: " .. tabsShown(rone))
+    assert(sectionsShown(rone):find("map", 1, true) and sectionsShown(rone):find("camp", 1, true), "their sections: " .. sectionsShown(rone))
+    local s = rone.env.CuteQuestDB.settings
+    assert(s.mapIcons == true and s.pins == true and s.minimapGivers == true and s.campBar == true and s.glow.on == true, "on: the switches on")
+    rone.C.UI:Open("settings", "map")
+    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Minimap far view" end))
+    assert(s.mmExtended == false, "a row writes the engine's setting")
+    rone.C.UI:Open("settings", "modules")
+    click(boxOf(rone, "Map")); click(boxOf(rone, "Camp"))
+    assert(s.mapIcons == false and s.pins == false and s.minimapPins == false and s.campBar == false and s.glow.on == false, "off: the switches off")
+    for _, name in ipairs({ "Map", "Camp" }) do click(boxOf(rone, name)) end
+    -- every page at both sizes for an officer with every quest module on
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      rone.C.UI.frame:SetSize(size[1], size[2])
+      for _, page in ipairs({ "guide", "quests", "route", "journal", "gear", "settings" }) do
+        rone.C.UI:Open(page)
+        check(rone.C.UI.frame, string.format("officer, every quest module on: %s, %dx%d", page, size[1], size[2]))
+      end
+      for _, section in ipairs({ "quests", "route", "map", "journal", "gear", "camp", "guide" }) do
+        rone.C.UI:Open("settings", section)
+        check(rone.C.UI.frame, string.format("officer, every quest module on: settings %s, %dx%d", section, size[1], size[2]))
+      end
+    end
+    rone.C.UI.frame:SetSize(1040, 640)
     -- unticked: the engine's guide off, the frame hidden, the band says so again
     rone.C.UI:Open("settings", "modules")
     click(boxOf(rone, "Quests"))

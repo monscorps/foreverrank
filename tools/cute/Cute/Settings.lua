@@ -455,7 +455,8 @@ function C.Settings_Draw(ui)
   ui:SetInset(NAV_W + NAV_GAP)
   -- the list of sections, the open one white with the bar beside it, as the Statistics page's categories
   nav:Show()
-  local NROW = C.UI.ROW
+  -- (every module on in a short window: the rows a little shorter, so the list ends above the footer)
+  local NROW = math.max(16, math.min(C.UI.ROW, math.floor((nav:GetHeight() or 300) / math.max(1, #sections))))
   for i, s in ipairs(sections) do
     local r = widgets.navLines:Get()
     local open = s == sel

@@ -551,12 +551,21 @@ function UI:DrawTabs(page, officer)
   local list = C.Modules.Pages(officer)
   list[#list + 1] = SETTINGS_TAB
   for _, b in pairs(self.tabs) do b.keep = false end
+  -- more tabs than the row holds (every module on, the window narrow): each narrower by the same share, its title cut
+  -- after a word where it must be, so the row never runs past the window
+  local total = 0
+  for _, m in ipairs(list) do total = total + self:Tab(m).w + 2 end
+  local room = (self.frame:GetWidth() or W) - 16
+  local share = total > room and room / total or 1
   for _, m in ipairs(list) do
     local b = self:Tab(m)
     b.keep = true
     if not b:IsShown() then b:Show() end
     b:SetPoint("LEFT", x, 0)
-    x = x + b.w + 2
+    local bw = share < 1 and math.floor(b.w * share) or b.w
+    b:SetWidth(bw)
+    UI.FitText(b.label, m.title, bw - 8)
+    x = x + bw + 2
     color(b.label, m.id == page and WHITE or DIM)
     b.under:SetShown(m.id == page)
   end
