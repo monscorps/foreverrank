@@ -2944,6 +2944,14 @@ slash = function(msg)
     -- the Guide on or off (the player asks: one line answers)
     local s = QB:Settings().guide
     s.on = not s.on
+    if s.on and QB:Settings().welcome == "ask" then
+      -- a 5.x save never asked: the command is the answer: no question, the frame, the arrow and 6.0's two
+      -- switches as Yes gives them (StepFrame.lua)
+      local all = QB:Settings()
+      all.welcome, s.frame, all.arrow, all.minimapGivers, all.tipProgress = nil, true, true, true, true
+      if QB.Arrow then QB.Arrow:Set(true) end
+      if QB.Mini and QB.Mini.Invalidate then QB.Mini.Invalidate() end
+    end
     QB:MarkDirty()
     if QB.StepFrame then QB.StepFrame.Apply() end
     QB:Print(s.on and "QuestBank is guiding you: the step frame and the arrow lead; /qb guide turns it off." or "The Guide is off. /qb guide turns it on; the window and its pages work as before.")

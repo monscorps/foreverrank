@@ -17089,6 +17089,26 @@ end)()
     assert(#d.chat == n0 + 1 and d.chat[#d.chat]:find("guiding you", 1, true), "the one line after Done")
   end }
 
+  -- /qb guide on a 5.x save never asked (6.0.0's review: the Guide came on under the question, the arrow off): the
+  -- command answers it: no question, the frame with steps, the arrow and 6.0's switches on, the one line; off again
+  -- asks nothing
+  G6CASES[#G6CASES + 1] = { "/qb guide answers a 5.x save's question", function()
+    local d = human("Slash", { { 7, 0 } }, { [783] = true }, { settings = { v544 = true, arrow = false, tab = 6 } }, 8)
+    local QB = d.QB
+    settle(d); QB.StepFrame.Apply()
+    local f = d.env.QuestBankStep
+    assert(f.card and f.card:IsShown() and QB:Settings().welcome == "ask", "the question is up")
+    d.env.SlashCmdList.QUESTBANK("guide")
+    local s = QB:Settings()
+    assert(s.guide.on == true and s.welcome == nil and s.arrow == true and s.guide.frame == true, "/qb guide answers the question: on, no welcome, the arrow on")
+    assert(not f.card:IsShown() and f:IsShown() and f.rows[1]:IsShown() and f.now:GetText() ~= "", "the frame shows steps, not the question: " .. tostring(f.now:GetText()))
+    assert(QB.Arrow.frame and QB.Arrow.frame:IsShown(), "the arrow is up")
+    assert(s.minimapGivers == true and s.tipProgress == true, "6.0's switches on as Yes gives them")
+    assert(d.chat[#d.chat] and d.chat[#d.chat]:find("guiding you", 1, true), "the one line: " .. tostring(d.chat[#d.chat]))
+    d.env.SlashCmdList.QUESTBANK("guide")
+    assert(s.guide.on == false and s.welcome == nil, "off again, no question")
+  end }
+
   -- a 5.x save's two new switches (6.0.0's review: the DEFAULTS turned the minimap's ! and the tooltip progress on
   -- behind a "Not now"): off from the migration, off after Not now, on with Yes; a fresh install has both on
   G6CASES[#G6CASES + 1] = { "a 5.x save: the ! and the tooltip progress wait for Yes", function()
