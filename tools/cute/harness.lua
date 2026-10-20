@@ -4737,6 +4737,17 @@ do
     assert(ts:find("Accept for me", 1, true) and ts:find("Progress in mob tooltips", 1, true), "the Quests section's rows:\n" .. ts)
     rone.C.UI:Open("settings", "guide")
     assert(texts(rone):find("Step frame", 1, true) and texts(rone):find("Direction arrow", 1, true), "the Guide's section gained the frame and arrow rows")
+    -- Route, ticked: keyed under the folder, its tab; the band's summary and run button, the legs numbered
+    rone.C.UI:Open("settings", "modules")
+    click(boxOf(rone, "Route"))
+    assert(M.byId.route and M.byId.route.key == "Cute_Quest:route" and M.byId.route.active and tabsShown(rone):find("route", 1, true), "Route on, keyed under the folder: " .. tabsShown(rone))
+    rone.C.UI:Open("route")
+    local tr = texts(rone)
+    assert(tr:find(" XP, level ", 1, true) and (tr:find("Start run", 1, true) or tr:find("End run", 1, true)), "the route's band: the summary and the run button:\n" .. tr)
+    assert(tr:find("^1%. ") or tr:find("\n1%. ") or tr:find("Nothing to hand in yet.", 1, true), "the legs numbered, or the empty line:\n" .. tr)
+    check(rone.C.UI.frame, "route page")
+    rone.C.UI:Open("settings", "route")
+    assert(texts(rone):find("Follow", 1, true) and texts(rone):find("hearthstone", 1, true), "the Route section's rows")
     -- unticked: the engine's guide off, the frame hidden, the band says so again
     rone.C.UI:Open("settings", "modules")
     click(boxOf(rone, "Quests"))

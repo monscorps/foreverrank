@@ -1804,6 +1804,8 @@ local function drawBody(self)
   local gens = {}
   for key, v in pairs(self.lists) do gens[key] = v.gen end
   self.drawGen = (self.drawGen or 0) + 1
+  -- (the Guide's big band line is its own FontString, not a pooled one: hidden before any page draws, shown by its own)
+  if self.bandBig then self.bandBig:Hide() end
   if page == "settings" then C.Settings_Draw(self)
   else C.Safe(function() mod.page(self, self.scroll) end, "page: " .. page)() end
   if self.rows.gen == rowsGen then self.rows:Clear() end
