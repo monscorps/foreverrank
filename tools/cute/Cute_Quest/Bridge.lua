@@ -14,6 +14,43 @@ if QB.dormant then
 end
 local E = QB
 local UI = E.UI
+-- a module that is a switch over the engine's flags (Map, Camp): off, every flag it names goes off and what they were
+-- is kept (s.cuteOff[id]); on, they come back as they were (a fresh install: the engine's defaults). Cute applies a
+-- module's state at every login, so on with nothing kept changes nothing: a flag a row set stays as the row set it,
+-- and off with every flag already off keeps what was kept. keys are the settings' names, "remind.buffs" a field of a
+-- table. Returns true where a flag changed
+local function field(s, key)
+  local t, k = s, key
+  local head, rest = key:match("^(.-)%.(.+)$")
+  if head then t, k = s[head], rest end
+  return t, k
+end
+function QB.Follow(id, keys, on)
+  local s = E:Settings()
+  local kept = s.cuteOff and s.cuteOff[id]
+  local changed = false
+  if on then
+    if not kept then return false end
+    for _, key in ipairs(keys) do
+      local t, k = field(s, key)
+      local v = kept[key]
+      if t and v ~= nil and (t[k] == true) ~= v then t[k] = v; changed = true end
+    end
+    s.cuteOff[id] = nil
+    return changed
+  end
+  local was, any = {}, false
+  for _, key in ipairs(keys) do
+    local t, k = field(s, key)
+    was[key] = t ~= nil and t[k] == true
+    if was[key] then any = true end
+  end
+  if not any then return false end
+  s.cuteOff = s.cuteOff or {}
+  s.cuteOff[id] = was
+  for _, key in ipairs(keys) do local t, k = field(s, key); if t then t[k] = false end end
+  return true
+end
 
 -- QuestBank's tab numbers (its UI.lua: 1 Quest Log, 2 Plan, 3 Route, 4 Party, 5 Settings, 6 Now, 7 Journal, 8 Map)
 -- as Cute's pages
@@ -65,6 +102,8 @@ f:SetScript("OnEvent", E.Safe(function(self, _, name)
   if name ~= ADDON then return end
   self:UnregisterEvent("ADDON_LOADED")
   firstRun()
+  -- the modules' switches, now on the saved table (before the engine's login: its files read the flags as they start)
+  for id, fn in pairs(QB.Toggles) do fn(Cute.ModuleOn(id)) end
   E:Login()
   -- the engine takes the log as read at the game's next QUEST_LOG_UPDATE, which after PLAYER_LOGIN comes at once;
   -- loaded on demand in the middle of a session it could wait minutes for one, so the log is read now

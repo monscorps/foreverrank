@@ -4799,8 +4799,8 @@ do
     local s = rone.env.CuteQuestDB.settings
     assert(s.mapIcons == true and s.pins == true and s.minimapGivers == true and s.campBar == true and s.glow.on == true, "on: the switches on")
     rone.C.UI:Open("settings", "map")
-    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Minimap far view" end))
-    assert(s.mmExtended == false, "a row writes the engine's setting")
+    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "A ! on the minimap for quests you can take" end))
+    assert(s.minimapGivers == false, "a row writes the engine's setting")
     rone.C.UI:Open("settings", "modules")
     click(boxOf(rone, "Map")); click(boxOf(rone, "Camp"))
     assert(s.mapIcons == false and s.pins == false and s.minimapPins == false and s.campBar == false and s.glow.on == false, "off: the switches off")
@@ -4830,6 +4830,108 @@ do
     assert(#(rone.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(rone)
     print("cute quest: listed by its toc and not loaded; ticked, the engine's copy loads, logs in from the bridge, builds its catalog; one saved table under both names; /qb routed")
+  end)
+end
+
+-- 36b (ii): the switches follow the boxes, on the saved table. The module's files register as they load, before the
+-- saved variables arrive (ADDON_LOADED), and 0.7.0's first build ran each switch then, on a table thrown away a moment
+-- later: Quests ticked alone left the engine's defaults on (map icons, route pins, the minimap route, the camp bar and
+-- the light, with Map and Camp unticked), Map ticked alone set nothing, at the next login with Quests alone the guide
+-- stayed off, and the once-a-session prune of the runs ran on the thrown-away table. Now the Bridge runs each switch
+-- again once the table is in; a switch off keeps what its flags were for the switch on, so a row's choice survives
+-- off and on and a login; Quests off puts the arrow away and on brings it back
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local function copy(t) if type(t) ~= "table" then return t end local o = {} for k, v in pairs(t) do o[k] = copy(v) end return o end
+  isolated({ member("Rone", 1) }, function()
+    local state = {}
+    local function client() return newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = state, quest = true })) end
+    local function flags(s) return string.format("mapIcons=%s pins=%s minimapPins=%s minimapLines=%s minimapGivers=%s mmExtended=%s campBar=%s buffs=%s glow=%s guide=%s frame=%s arrow=%s",
+      tostring(s.mapIcons), tostring(s.pins), tostring(s.minimapPins), tostring(s.minimapLines), tostring(s.minimapGivers), tostring(s.mmExtended),
+      tostring(s.campBar), tostring(s.remind.buffs), tostring(s.glow.on), tostring(s.guide.on), tostring(s.guide.frame), tostring(s.arrow)) end
+    local function stepShown(c) return c.env.QuestBankStep ~= nil and c.env.QuestBankStep:IsShown() end
+    -- a saved table from before with more runs than the engine keeps: the prune must run on it, not on a throwaway
+    local runs = {}
+    for i = 1, 25 do runs[i] = { started = i, ended = i + 1, done = {} } end
+    local c = client()
+    c.env.CuteQuestDB = { runs = runs }
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    local QB, s = c.addons[2].private, c.env.CuteQuestDB.settings
+    assert(QB.ready and c.env.QuestBankDB == c.env.CuteQuestDB and #c.env.CuteQuestDB.runs == QB.MAX_RUNS, "the prune ran on the saved table: " .. #c.env.CuteQuestDB.runs .. " runs kept")
+    assert(s.guide.on == true and s.guide.frame == true and stepShown(c), "Quests ticked alone: the guide on, the frame up: " .. flags(s))
+    assert(s.mapIcons == false and s.pins == false and s.minimapPins == false and s.minimapLines == false and s.minimapGivers == false and s.mmExtended == false,
+      "Map unticked: no quest icons, no route pins, no route on the minimap, no far view: " .. flags(s))
+    assert(s.campBar == false and s.remind.buffs == false and s.glow.on == false, "Camp unticked: no camp bar, no buffs banner, no light: " .. flags(s))
+    assert(s.cuteOff.map.mapIcons == true and s.cuteOff.camp.campBar == true, "what the flags were is kept for the switch on")
+    -- Map ticked: its flags back as they were (the engine's defaults); a row's choice survives off and on
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    assert(s.mapIcons == true and s.pins == true and s.minimapPins == true and s.minimapLines == true and s.minimapGivers == true and s.mmExtended == true and s.cuteOff.map == nil, "Map ticked: every flag back on: " .. flags(s))
+    s.minimapGivers = false -- (the row "A ! on the minimap for quests you can take")
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    assert(s.mapIcons == false and s.minimapGivers == false, "Map unticked again: off")
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    assert(s.mapIcons == true and s.pins == true and s.minimapGivers == false, "Map ticked again: the row's choice kept: " .. flags(s))
+    -- Camp ticked: the bar and the light; the light's switch goes through Glow.Set, which puts the game's settings back
+    c.C.Modules.Set("Cute_Quest:camp", true); tick(c, 1)
+    assert(s.campBar == true and s.remind.buffs == true and s.glow.on == true, "Camp ticked: the bar, the banner, the light: " .. flags(s))
+    c.C.Modules.Set("Cute_Quest:camp", false); tick(c, 1)
+    assert(s.campBar == false and s.glow.on == false, "Camp unticked: off again: " .. flags(s))
+    -- Quests off: the guide off, the arrow put away; on: the arrow back
+    assert(s.arrow == true, "the engine's arrow on (its default)")
+    c.C.Modules.Set("Cute_Quest", false); tick(c, 1)
+    assert(s.guide.on == false and s.arrow == false and s.cuteArrow == true and not stepShown(c), "Quests unticked: the guide off, the arrow put away: " .. flags(s))
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 1)
+    assert(s.guide.on == true and s.arrow == true and s.cuteArrow == nil and stepShown(c) and c.env.QuestBankArrow and c.env.QuestBankArrow:IsShown(), "Quests ticked again: the arrow back: " .. flags(s))
+    -- the step frame hidden by its row stays hidden over the switch and a login (0.7.0's switch set it shown again)
+    s.guide.frame = false; QB.StepFrame.Apply()
+    assert(not stepShown(c), "the frame hidden by its row")
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    c.C.Modules.Set("Cute_Quest", false); tick(c, 1)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    local db, qdb = c.env.CuteDB, copy(c.env.CuteQuestDB)
+    leave(c)
+    -- the next login, nothing on: Map ticked alone loads the addon and sets its flags alone (its row's choice kept)
+    local c2 = client()
+    c2.env.CuteQuestDB = qdb
+    login(c2, db); tickAll(5)
+    assert(not c2.addons[2].loaded, "nothing on: not loaded")
+    c2.C.Modules.Set("Cute_Quest:map", true); tick(c2, 6)
+    local s2 = c2.env.CuteQuestDB.settings
+    assert(c2.addons[2].loaded and s2.mapIcons == true and s2.pins == true and s2.minimapPins == true and s2.mmExtended == true and s2.minimapGivers == false,
+      "Map ticked alone at a login: its flags on, the row's choice kept: " .. flags(s2))
+    assert(s2.guide.on == false and s2.arrow == false and s2.campBar == false and s2.glow.on == false and not stepShown(c2), "Quests and Camp unticked: the guide, the arrow, the bar and the light off: " .. flags(s2))
+    c2.C.Modules.Set("Cute_Quest:map", false); tick(c2, 1)
+    assert(#(c2.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    local db2, qdb2 = c2.env.CuteDB, copy(c2.env.CuteQuestDB)
+    leave(c2)
+    -- the next login, Quests ticked alone: the guide on, the arrow back, the frame still hidden as its row left it; the
+    -- Guide's band shows the step
+    local c3 = client()
+    c3.env.CuteQuestDB = qdb2
+    login(c3, db2); tickAll(5)
+    c3.C.Modules.Set("Cute_Quest", true); tick(c3, 6)
+    local s3, QB3 = c3.env.CuteQuestDB.settings, c3.addons[2].private
+    assert(s3.guide.on == true and s3.arrow == true and s3.cuteArrow == nil and s3.guide.frame == false and not stepShown(c3), "Quests ticked alone at a login: the guide on, the arrow back, the frame as its row left it: " .. flags(s3))
+    assert(s3.mapIcons == false and s3.campBar == false and s3.glow.on == false, "Map and Camp still off: " .. flags(s3))
+    if not c3.C.Modules.OnKey("guide") then c3.C.Modules.Set("guide", true) end
+    c3.C.UI:Open("guide")
+    local steps = QB3.Guide.Steps()
+    assert(steps[1] and texts(c3):find(QB3.Guide.Text(steps[1]), 1, true) and not texts(c3):find("Tick Quests", 1, true), "the band shows the step now:\n" .. texts(c3))
+    -- the frame's row ticked again: up at this login and the next, where Cute loads the module itself (Quests still on)
+    s3.guide.frame = true; QB3.StepFrame.Apply()
+    assert(stepShown(c3), "the frame back by its row")
+    local db3, qdb3 = c3.env.CuteDB, copy(c3.env.CuteQuestDB)
+    leave(c3)
+    local c4 = client()
+    c4.env.CuteQuestDB = qdb3
+    login(c4, db3); tickAll(6)
+    local s4 = c4.env.CuteQuestDB.settings
+    assert(c4.addons[2].loaded and c4.C.Modules.byId.quests.active and s4.guide.on == true and s4.arrow == true and stepShown(c4), "loaded by Cute at the login with Quests on: the guide on, the frame up: " .. flags(s4))
+    assert(s4.mapIcons == false and s4.minimapGivers == false and s4.campBar == false, "Map and Camp still off: " .. flags(s4))
+    assert(#(c4.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c4)
+    print("cute quest: the switches run on the saved table, each flag following its box; a row's choice and the frame's survive off, on and a login; Quests off puts the arrow away, on brings it back")
   end)
 end
 

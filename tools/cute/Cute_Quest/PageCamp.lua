@@ -21,12 +21,18 @@ function Cp.Settings(_, col)
   col:Choice("Light style", names, current, function(v) for _, st in ipairs(STYLES) do if st[1] == v then if E.Glow then E.Glow.SetStyle(st[2]) else s.glow.style = st[2] end end end end)
 end
 
+-- the switch: the bar, the banner and the light with the box (QB.Follow keeps a row's choice across off and on); the
+-- light is set through Glow.Set, which puts the game's settings back as it goes off. Before the engine's login the
+-- flags alone: Glow:Init and Camp:Init read them
 function Cp.Toggle(on)
-  if QB.dormant or not E then return end
+  if QB.dormant or not E or not QB.ready then return end
   local s = E:Settings()
-  s.campBar, s.remind.buffs = on, on
-  light(s, on)
+  local lit = s.glow.on == true
+  if not QB.Follow("camp", { "campBar", "remind.buffs", "glow.on" }, on) or not E.loginDone then return end
+  if E.Glow and (s.glow.on == true) ~= lit then E.Glow.Set(s.glow.on == true) end
+  if E.Camp and E.Camp.Refresh then E.Camp.Refresh() end
 end
+QB.Toggles.camp = Cp.Toggle
 
 Cute:RegisterModule({ id = "camp", addon = ADDON, title = "Camp", order = 26,
   notes = "The camp bar, the missing-buffs banner and the interact light.", settings = Cp.Settings, onToggle = Cp.Toggle })

@@ -1,7 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Map: no page of its own. The switches of the engine's map files, which draw on the game's world map and minimap
--- (QuestMap.lua, Pins.lua, Minimap.lua, MinimapView.lua). Off, every switch is off; on, every one on. The flags are
--- set and the files told to draw again (their own /qb toggles say so in chat; a Settings row says nothing).
+-- (QuestMap.lua, Pins.lua, Minimap.lua, MinimapView.lua). Off, every switch is off; on, each as its row says. The
+-- flags are set and the files told to draw again (their own /qb toggles say so in chat; a Settings row says nothing).
 local ADDON, QB = ...
 local Cute = Cute
 local E = QB.Engine
@@ -20,15 +20,17 @@ function M.Settings(_, col)
   col:Check("Minimap far view", s.mmExtended ~= false, true, function(on) s.mmExtended = on; mini() end)
 end
 
+-- the switch: the engine's map flags with the box (QB.Follow keeps a row's choice across off and on). Before the
+-- engine's login the flags alone: its files read them as they start
 function M.Toggle(on)
-  if QB.dormant or not E then return end
-  local s = E:Settings()
-  icons(s, on)
-  pins(s, on)
-  s.minimapPins, s.minimapLines, s.minimapGivers, s.mmExtended = on, on, on, on
+  if QB.dormant or not E or not QB.ready then return end
+  if not QB.Follow("map", { "mapIcons", "pins", "minimapPins", "minimapLines", "minimapGivers", "mmExtended" }, on) or not E.loginDone then return end
+  if E.QuestMap and E.QuestMap.Update then E.QuestMap:Update() end
+  if E.Pins and E.Pins.Update then E.Pins:Update() end
   mini()
   E:MarkDirty()
 end
+QB.Toggles.map = M.Toggle
 
 Cute:RegisterModule({ id = "map", addon = ADDON, title = "Map", order = 23,
   notes = "Quest icons and the route on the game's world map and minimap.", settings = M.Settings, onToggle = M.Toggle })

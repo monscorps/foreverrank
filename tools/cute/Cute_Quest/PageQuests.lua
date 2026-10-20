@@ -110,18 +110,28 @@ function P.Settings(_, col)
   col:Check("Note what the game shows, for foreverrank.com", s.noteGame ~= false, true, function(on) s.noteGame = on end)
 end
 
--- the switch: the engine's guide (the step band, the frame) with it; off, the arrow too (the Guide's row brings it
--- back). While QuestBank is loaded its settings are its own: nothing is set
+-- the switch: the engine's guide (the step band, the frame as its row says) with it; off, the arrow is put away and
+-- on brings it back (s.cuteArrow remembers that it was up). While QuestBank is loaded its settings are its own:
+-- nothing is set. Before the engine's login the flags alone: Arrow:Init and StepFrame:Init read them
 function P.Toggle(on)
-  if QB.dormant or not E then Cute.Refresh() return end
+  if QB.dormant or not E or not QB.ready then Cute.Refresh() return end
   local s = E:Settings()
-  s.guide.on, s.guide.frame = on, on
+  s.guide.on = on
   if s.welcome then s.welcome = nil end
-  if not on and E.Arrow then E.Arrow:Set(false) end
-  if on and s.arrow and E.Arrow then E.Arrow:Set(true) end
+  if on then
+    if s.cuteArrow then
+      s.cuteArrow = nil
+      if E.loginDone and E.Arrow then E.Arrow:Set(true) else s.arrow = true end
+    end
+  elseif s.arrow then
+    s.cuteArrow = true
+    if E.loginDone and E.Arrow then E.Arrow:Set(false) else s.arrow = false end
+  end
+  if not E.loginDone then return end
   if E.StepFrame then E.StepFrame.Apply() end
   E:MarkDirty()
 end
+QB.Toggles.quests = P.Toggle
 
 Cute:RegisterModule({
   id = "quests", addon = ADDON, title = "Quests", order = 21,
