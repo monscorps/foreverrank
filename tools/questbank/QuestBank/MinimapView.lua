@@ -423,10 +423,14 @@ local function hideBlob()
   if blob and blob.use then for _, p in ipairs(blob.use) do if p:IsShown() then p:Hide() end end end
 end
 
--- the quest whose areas show: the one picked on QuestBank's Map, else the first quest of your log at route stop 1
+-- the quest whose areas show: the one picked on QuestBank's Map, else the one target's quest (Target.lua), else the first
+-- quest of your log at route stop 1
 function MV.AreaQuest()
   local picked = QB.MapPage and QB.MapPage.focus
   if picked then return picked end
+  -- the quest the one target leads to: an objective's spot, or a hand-in in reach (Target.lua)
+  local t = QB.Target and QB.Target.cur
+  if t and t.name and (t.obj or t.near) and t.qid then return t.qid end
   for _, d in ipairs(QB.Pins and QB.Pins.list or {}) do
     if d.num == 1 then
       for _, e in ipairs(QB.state.logOrder or {}) do if d.ids and d.ids[e.id] then return e.id end end
@@ -605,13 +609,33 @@ function MV.Menu(d)
   end
   MenuUtil.CreateContextMenu(UIParent, function(_, root)
     if d and d.m then
-      root:CreateButton("Waypoint here", function() QB.API.SetWaypoint(d.m, d.x, d.y, d.name) end)
+      root:CreateButton("Show it on the arrow", function() QB.API.SetWaypoint(d.m, d.x, d.y, d.name, nil, nil, QB.Mini.About and QB.Mini.About(d)) end)
       root:CreateDivider()
     end
     check(root, "Back to me after a drag", "mmCenter", function(on) if on then MV.Recentre() end end)
     root:CreateButton("Back to me", function() MV.Recentre() end)
     root:CreateDivider()
     for _, s in ipairs(SWITCHES) do check(root, s[1], s[2]) end
+    -- Accept for me and what it does outside your route (Auto.lua), a line each, as Settings says them; a click moves on
+    local Au = QB.Auto
+    if Au and Au.WORDS then
+      root:CreateDivider()
+      local set = QB:Settings()
+      local mode = set.autoAccept == true and "worth" or set.autoAccept
+      root:CreateButton("Accept for me: " .. (Au.WORDS[mode] or "Off"), function()
+        local nxt = { off = "route", route = "worth", worth = "off" }
+        set.autoAccept = nxt[mode] or "route"
+        QB:Print("Accept for me: " .. Au.WORDS[set.autoAccept] .. ".")
+        if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.UI:Refresh() end
+      end)
+      if mode == "worth" then
+        root:CreateButton("Outside my route: " .. Au.OTHER[set.autoAcceptOther == "leave" and "leave" or "accept"], function()
+          set.autoAcceptOther = set.autoAcceptOther == "leave" and "accept" or "leave"
+          QB:Print("Quests outside your route: " .. (set.autoAcceptOther == "leave" and "the quest window is left to you." or "taken for you when worth it."))
+          if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.UI:Refresh() end
+        end)
+      end
+    end
     root:CreateDivider()
     root:CreateButton("QuestBank settings", function() if QB.UI then QB.UI:Open(5) end end)
   end)

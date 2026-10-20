@@ -65,6 +65,7 @@ local TALENT_LEVEL = 10                      -- talents start here without Talen
 L.CAMP_CD = 3600
 
 local ranks, readAt = nil, nil
+local flier = nil -- Frequent Flier's rank at the last read: the flights' minutes move only when it does
 local function diag()
   QuestBankDB = QuestBankDB or {}
   QuestBankDB.diag = type(QuestBankDB.diag) == "table" and QuestBankDB.diag or {}
@@ -99,7 +100,14 @@ function L.Read()
   local d = diag()
   d.reads, d.trees, d.ranks, d.at = d.reads + 1, trees, out, (time and time() or 0)
   L.ver = (L.ver or 0) + 1
-  if QB.Travel and QB.Travel.Refly then QB.Travel.Refly() end
+  -- (only Frequent Flier changes a flight's minutes: the route and the arrow's way are planned again for it, not for
+  -- every trait event, which comes with each talent and Legacy point)
+  local fl = out[L.NODE.FLIER] or 0
+  if fl ~= flier then
+    local was = flier
+    flier = fl
+    if QB.Travel and QB.Travel.Refly then QB.Travel.Refly(was ~= nil) end
+  end
   return out
 end
 

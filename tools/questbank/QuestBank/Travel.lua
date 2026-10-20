@@ -7,7 +7,9 @@
 -- ready and QuestBank knows where it lands. The router is Dijkstra over the faction's flight masters and docks (D.HUB,
 -- D.FLY, D.LINK) with you, the hearth's landing and the target added; TV.Guide turns its plan into what the arrow
 -- shows, tick by tick.
---   QuestBankDB.travel[character] = { known = { [TaxiNodes id] = "m" the world map | "t" the flight master's map |
+--   QuestBankDB.travel[character] (by the character's GUID, "g" and UnitGUID("player"); 5.4.4: by its name and realm
+--     before, so a character deleted and made again under the same name inherited what the old one knew, and its data
+--     kept no record of whose it was) = { guid, known = { [TaxiNodes id] = "m" the world map | "t" the flight master's map |
 --     "n" "New flight path discovered!" | "f" flown | false not known }, readC = { [continent] = time() read },
 --     bind = { name, c, wx, wy, src = "bound" | "landed", at },
 --     flown = { ["from>to" (TaxiNodes ids)] = { n = flights, secs = seconds in the air, the mean of the last few } }:
@@ -30,6 +32,8 @@ local HEARTH_COST = 3   -- minutes charged for spending the hearthstone's hour, 
 local READY = 90        -- seconds: a hearthstone or Astral Recall this close to ready is a step
 local JUMP = 300        -- yards in one look: a summons, a portal, a loading screen
 local DRIFT_YD, DRIFT_S = 30, 2 -- moved this far, plan again this often (kept only if clearly better)
+local KEEP_TRAVEL = 0.05 -- a way that travels stays so while it saves this share over walking (TV.Route)
+local ARRIVE_S = 20     -- seconds after a loading screen in which a new plan travels on at KEEP_TRAVEL's line (replan)
 local HEARTH_S = 5      -- seconds between looks at the hearthstone
 local NEAR = 60         -- yards: at a flight master
 local LEARN_NEAR = 40   -- yards: "Learn this flight path"
@@ -80,13 +84,43 @@ end
 ----------------------------------------------------------------------------
 -- what QuestBank keeps per character, and what the client said
 ----------------------------------------------------------------------------
+-- this character's key: "g" and its GUID (read once a session), or its name and realm where the client won't say
+local guidKey
+local function charKey()
+  if guidKey then return guidKey end
+  if type(UnitGUID) == "function" then
+    local ok, g = pcall(UnitGUID, "player")
+    g = ok and plain(g) or nil
+    if type(g) == "string" and g:find("^Player%-") then guidKey = "g" .. g; return guidKey end
+  end
+  return QB:CharKey()
+end
+TV.CharKey = charKey
+
+-- An entry kept by name and realm (before 5.4.4) is taken over by this character once, keeping only what is its own
+-- beyond doubt: the flights it timed (flown: seconds in the air, used only between flight masters it knows) and where
+-- its hearthstone lands (bind). The flight paths it knew are let go: nothing recorded whose they were, and a character
+-- made again under an old name inherited them. The client says again which this character knows (the world map's
+-- flight points 3 seconds after login, and every flight master's map you open: TV.Learn, TV.ReadTaxiMap)
+local function adopt(all, key)
+  local old = all[QB:CharKey()]
+  if key == QB:CharKey() or type(old) ~= "table" then return nil end
+  all[QB:CharKey()] = nil
+  return { flown = type(old.flown) == "table" and old.flown or nil, bind = type(old.bind) == "table" and old.bind or nil }
+end
+TV.Adopt = adopt
+
 function TV.DB()
   QuestBankDB = QuestBankDB or {}
   local all = type(QuestBankDB.travel) == "table" and QuestBankDB.travel or {}
   QuestBankDB.travel = all
-  local key = QB:CharKey()
-  local t = type(all[key]) == "table" and all[key] or {}
-  all[key] = t
+  local key = charKey()
+  local t = all[key]
+  if type(t) ~= "table" then
+    t = adopt(all, key) or {}
+    all[key] = t
+  end
+  if key:sub(1, 1) == "g" then t.guid = key:sub(2) end
   if type(t.known) ~= "table" then t.known = {} end
   if type(t.readC) ~= "table" then t.readC = {} end
   if type(t.flown) ~= "table" then t.flown = {} end
@@ -187,10 +221,16 @@ end
 
 -- the graph's flight minutes from the tables' (G.flyModel): a flight you flew counts its own seconds; the rest the
 -- tables' minutes with Frequent Flier's faster mount (QB.Legacy.FlightMinutes). A flight you flew in one go that the
--- tables have no edge for (through flight masters you know) becomes an edge of its own
+-- tables have no edge for (through flight masters you know) becomes an edge of its own. True when a minute moved
+local function same(a, b)
+  if not b or #a ~= #b then return false end
+  for k = 1, #a do if a[k] ~= b[k] then return false end end
+  return true
+end
 function TV.ApplyFlights(G)
   local flown = TV.DB().flown
   local L = QB.Legacy
+  local moved = false
   for u = 1, G.h do
     local f, m, has = {}, G.flyModel[u], {}
     for k = 1, #m, 2 do
@@ -208,15 +248,19 @@ function TV.ApplyFlights(G)
         end
       end
     end
+    if not same(f, G.fly[u]) then moved = true end
     G.fly[u] = f
   end
+  return moved
 end
 
--- the flights changed (a flight learned, a Legacy perk read): every graph's again, and the plans with them
-function TV.Refly()
-  local any = false
-  for _, G in pairs(graphs) do TV.ApplyFlights(G); any = true end
-  if any then TV.ver = TV.ver + 1 end
+-- the flights changed (a flight timed, Frequent Flier's rank read): every graph's again, and the plans with them when
+-- some minutes moved (force: the tables' minutes moved, Frequent Flier, which the planner reads without a graph).
+-- 5.4.4 as first built planned the route again, and the arrow's way, at every trait event, nothing changed
+function TV.Refly(force)
+  local moved = force and true or false
+  for _, G in pairs(graphs) do if TV.ApplyFlights(G) then moved = true end end
+  if moved then TV.ver = TV.ver + 1 end
 end
 
 -- the hub of a town on a continent (a flight master's first, where a town has two rows)
@@ -246,13 +290,29 @@ end
 -- which flight paths this character knows
 ----------------------------------------------------------------------------
 -- can a flight start or end at graph node i: never at a node without flights (flag 1) or a world-PvP tower (4), at a
--- druids' one (2) only for a druid; then what QuestBank knows, and a continent never read counts every flight master
+-- druids' one (2) only for a druid; then what this character knows. A continent never read counts every flight master
+-- only on a client that has not said a word about flight paths this session (TV.tells: an old client without the
+-- calls, or the first seconds after login); once it has, an unread continent counts only what it said. 5.4.3 counted
+-- every flight master there whatever the client said, and a level-21 mage whose world map named only the six flight
+-- paths he had (too few of the continent's for a read) was sent to fly to Sentinel Hill
 local function usable(G, i, druid, known, readC)
   local f = G.flag[i]
   if G.kind[i] ~= "m" or f == 1 or f == 4 or (f == 2 and not druid) then return false end
   local k = known[G.taxi[i]]
   if k ~= nil then return k ~= false end
-  return not readC[G.c[i]]
+  return not readC[G.c[i]] and not TV.tells
+end
+
+-- the client's first word this session on the flight paths (TV.tells). Before it, a continent never read counted every
+-- flight master, so a plan made then (at login, a few seconds before the client is asked) may start at a stop reached
+-- by flights this character lacks: the next plan starts afresh, as after a jump in place (Target.lua), where 5.4.4 as
+-- first built kept that first stop against the plan by the flights it knows. Both continents read already: the plan
+-- before it counted the same flights, and nothing starts afresh
+local function told()
+  local readC = TV.DB().readC
+  local unread = not (readC[0] and readC[1])
+  TV.tells = true
+  if unread and QB.Target and QB.Target.Jump then QB.Target.Jump("the client named your flight paths") end
 end
 
 function TV.Usable(fac, i, druid)
@@ -260,6 +320,27 @@ function TV.Usable(fac, i, druid)
   if druid == nil then druid = class() == "DRUID" end
   return usable(TV.Graph(fac), i, druid, db.known, db.readC)
 end
+
+-- The route planner's flights (Model.lua): which flight masters you can fly from, worked out again when what the router
+-- counts on changes (TV.ver). doors[i]: usable; partial: one with flights is not, so the planner goes by the flights
+-- you know (TV.HubMinutes) instead of the tables' whole network. Asked for every pair of stops: a few reads
+local doors = {}
+local function doorsOf(fac)
+  local d = doors[fac]
+  if d and d.ver == TV.ver then return d end
+  local G, db = TV.Graph(fac), TV.DB()
+  local druid = class() == "DRUID"
+  d = { ver = TV.ver, partial = false }
+  for i = 1, G.h do
+    d[i] = usable(G, i, druid, db.known, db.readC)
+    if G.flag[i] == 0 and not d[i] then d.partial = true end
+  end
+  doors[fac] = d
+  return d
+end
+function TV.Partial(fac) return doorsOf(fac).partial end
+-- a flight master you can fly from, on this land
+function TV.Door(fac, i, land) return doorsOf(fac)[i] and TV.Graph(fac).land[i] == land end
 
 -- flight masters the router can use on a continent, of how many, and whether the client ever said which
 function TV.Known(fac, c)
@@ -297,6 +378,15 @@ local function nodesOn(map)
   list = ok and plain(list) or nil
   return type(list) == "table" and list or nil
 end
+-- the game's own word that a map shows flight points at all (the world map's FlightPointDataProvider asks it before
+-- it lists them): true or false, nil where the call is missing, errors or hides its answer
+local function showsNodes(map)
+  if not (C_TaxiMap and type(C_TaxiMap.ShouldMapShowTaxiNodes) == "function") then return nil end
+  local ok, v = pcall(C_TaxiMap.ShouldMapShowTaxiNodes, map)
+  v = ok and plain(v) or nil
+  if type(v) ~= "boolean" then return nil end
+  return v
+end
 
 -- the world map's flight points, anywhere: each continent's map, then the zone map of every flight master the continent
 -- left out (once a map). A secret or missing answer is skipped. Never overrides the taxi map, a flight or the message
@@ -321,10 +411,13 @@ function TV.Learn()
     end
     return n
   end
-  local cont, zone, asked = 0, 0, {}
+  local cont, zone, asked, answered = 0, 0, {}, 0
   for _, map in pairs(CONT_MAP) do
     local list = nodesOn(map)
-    if list then cont = cont + take(list) end
+    if list then
+      cont = cont + take(list)
+      if showsNodes(map) == true then answered = answered + 1 end
+    end
   end
   for i = 1, G.h do
     local m = D.HUB[G.fac][i][7]
@@ -334,6 +427,12 @@ function TV.Learn()
       if list then zone = zone + take(list) end
     end
   end
+  -- the client has said which flight paths this character has: from now on only those count (usable). Forever's world
+  -- map lists only the flight paths you found, so a character who has found none gets empty lists: both continents'
+  -- maps answering with a list, each saying it shows flight points, is that word too ("none yet"). 5.4.4 as first built
+  -- waited for a name, and before your first flight path the plan flew you everywhere. A client without the calls, or
+  -- one whose maps say they show none, still says nothing: every flight counts there, as before
+  if (cont + zone > 0 or answered == 2) and not TV.tells then told(); changed = true end
   -- a continent is read once the client answered for most of its flight masters (a doubted map reads nothing)
   if not bad then
     for c = 0, 1 do
@@ -415,6 +514,7 @@ function TV.ReadTaxiMap()
   local d = diag()
   d.open = matched
   if matched == 0 and unmatched == 0 then return end -- nothing on it QuestBank can read
+  if not TV.tells then told(); TV.ver = TV.ver + 1 end
   -- the flight master you talk to is one you know, whatever the list says of it
   if not TV.cur and me then TV.cur = nearestMaster(G, me, NEAR) end
   if TV.cur then listed[TV.cur], known[TV.cur] = true, true end
@@ -643,10 +743,12 @@ function TV.Hearth(mode)
   end
   local b, why = TV.Bind()
   if not b then return nil, why end
-  if b.c ~= 0 and b.c ~= 1 then return nil, "unknown" end
+  -- (a continent, or an open map off the two where you landed or bound: Zephras Isle's inn, walked from there)
+  if type(b.c) ~= "number" or b.c < 0 then return nil, "unknown" end
   local penalty = HEARTH_COST
   if mode == "route" then
-    local leg = QB.routeNow and QB.routeNow.legs and QB.routeNow.legs[1]
+    local r = QB.Target and QB.Target.Route() or QB.routeNow
+    local leg = r and r.legs and r.legs[1]
     if not (leg and leg.kind == "hearth") then return nil, "route" end
     penalty = 0
   end
@@ -827,7 +929,9 @@ end
 
 -- the way from one place to another ({c, wx, wy}, the target with its name): plan = {key, ver, min, legs}, or nil and
 -- "unreachable". On one land travel has to save a fair bit (15% and a minute) over walking straight there, or the plan
--- is that walk. leg = {kind = "fly"|"boat"|"zeppelin"|"tram"|"portal"|"hearth"|"recall"|"walk", from, to (graph
+-- is that walk; a way that travels already (o.keepTravel, the guide's plan for the same target) stays so while it saves
+-- 5%: between the two the guide keeps what it had, so standing near the cut-off never flips walk and flight.
+-- leg = {kind = "fly"|"boat"|"zeppelin"|"tram"|"portal"|"hearth"|"recall"|"walk", from, to (graph
 -- nodes), start = {c, wx, wy, r} (nil for the hearth and the last walk), finish = {c, wx, wy, r}, town, walk (minutes
 -- on foot to its start), min (minutes of the step), rest (minutes after it), link (D.LINK row of a ride), step, short,
 -- wait, pick, going (its texts), icon}
@@ -841,7 +945,8 @@ function TV.Route(from, to, o)
   if cost < huge then
     local direct = lS == lT and ydTo(from, to) * walkMin() * o.mf
     local legs, total
-    if direct and not (cost <= 0.85 * direct and direct - cost >= 1) then
+    local travel = direct and (o.keepTravel and cost <= (1 - KEEP_TRAVEL) * direct or cost <= 0.85 * direct and direct - cost >= 1)
+    if direct and not travel then
       legs, total = { { kind = "walk", walk = direct, min = 0, rest = 0, finish = spot(to.c, to.wx, to.wy, THERE) } }, direct
     else
       legs, total = legsOf(G, to, o)
@@ -891,6 +996,48 @@ function TV.Via(R, place)
   local h, d = R.hearth, R.d[G.n + 2]
   if h and d < best and TV.Land(h.c, h.wx, h.wy) == lp then best = math.min(best, d + ydTo(h, place) * k) end
   return best
+end
+
+-- The route planner's minutes from one flight master to another over the flights you know (Model.lua, once some are not
+-- known): the router run from the first one's spot to everywhere, then on foot to the other's (no hearthstone: the
+-- planner has its own), with the main way taken (the longest step that isn't a walk). A row a flight master, kept until
+-- what the router counts on or the walking pace changes; the walking at mf, as the planner's
+local MODEL_KIND = { fly = "flight", boat = "boat", zeppelin = "zeppelin", tram = "tram", portal = "portal" }
+local rows = {}
+local function hubRow(fac, a, mf)
+  local G = TV.Graph(fac)
+  local from = G.pos[a]
+  run(G, from, nil, { fac = fac, mf = mf, druid = class() == "DRUID" })
+  local k, n = walkMin() * mf, G.n
+  local dist, prev, how = G.dist, G.prev, G.how
+  local mins, kinds = {}, {}
+  for b = 1, G.h do
+    local p, lp = G.pos[b], G.land[b]
+    local best, via = G.land[a] == lp and ydTo(from, p) * k or huge, nil
+    for v = 1, n do
+      local d = dist[v]
+      if d < best and G.land[v] == lp then
+        d = d + yd(G.c[v], G.wx[v], G.wy[v], p.c, p.wx, p.wy) * k
+        if d < best then best, via = d, v end
+      end
+    end
+    local kind, most = "foot", 0
+    local v = via
+    while v and prev[v] do
+      local m = dist[v] - dist[prev[v]]
+      if MODEL_KIND[how[v]] and m > most then kind, most = MODEL_KIND[how[v]], m end
+      v = prev[v]
+    end
+    mins[b], kinds[b] = best, kind
+  end
+  return { min = mins, kind = kinds }
+end
+function TV.HubMinutes(fac, a, b, mf)
+  local R, mk = rows[fac], floor(mf * 1000 + 0.5)
+  if not (R and R.ver == TV.ver and R.mk == mk) then R = { ver = TV.ver, mk = mk }; rows[fac] = R end
+  local row = R[a]
+  if not row then row = hubRow(fac, a, mf); R[a] = row end
+  return row.min[b], row.kind[b]
 end
 
 -- the way from where you stand now; mode as the arrow's (the route's own hearth only on the route)
@@ -1038,18 +1185,35 @@ local function eta(me, plan, t)
 end
 
 -- plan again from here. Forced (the target, what you know, the hearthstone, a jump, a step done): the new plan. Else
--- only a plan whose first step is the same one, or one clearly quicker than going on, so the arrow doesn't flicker
-local function replan(me, t, mode, forced)
+-- (you moved, a new zone) only a plan whose first step is the same one, or one clearly quicker than going on, so the
+-- arrow doesn't flicker. A plan for the same target that travels keeps travelling while that saves 5% (TV.Route).
+-- why: what made it plan again, for /qb trace
+-- Just off a ride, a flight, the hearthstone or an instance's door (st.arrived, ARRIVE_S), a new plan travels on as one
+-- that travels already would: you came by a way that travels, and stand at its station. 5.4.3, off the tram in
+-- Ironforge with a hand-in at Menethil Harbor: the flight you knew (3.2 minutes with the walk to the flight master) lost
+-- to walking straight there (3.8 minutes, the 1.2k yards through the mountains that a straight line is) by the fresh
+-- plan's 15% and a minute, and the arrow said "Go to Menethil, 1.2k yards". A plan carried over the tram for the same
+-- target kept the flight from this round on; a target new at the far end, or none before, did not
+local function replan(me, t, mode, forced, why)
   local o = TV.Opts(mode)
+  local cur = st.plan
+  local sameTarget = st.planFor == st.tkey
+  o.keepTravel = (sameTarget and cur and #cur.legs > 1) or (st.arrived and now() - st.arrived < ARRIVE_S) or nil
   local plan = TV.Route(me, t, o)
   st.planned, st.planAt, st.pc, st.px, st.py = true, now(), me.c, me.wx, me.wy
-  st.ver, st.hSig, st.mf, st.force = TV.ver, hearthSig(o.hearth), o.mf, false
-  local cur = st.plan
+  st.ver, st.hSig, st.mf, st.force, st.why, st.planFor = TV.ver, hearthSig(o.hearth), o.mf, false, nil, st.tkey
   local a, b = cur and cur.legs[1], plan and plan.legs[1]
   local same = a and b and a.kind == b.kind and a.to == b.to
   if not forced and cur and not same then
     local left = eta(me, cur, t)
-    if not plan or plan.min >= left - max(0.5, 0.1 * left) then return end
+    if not plan or plan.min >= left - max(0.5, 0.1 * left) then
+      if QB.tracing then QB.Trace("way to %s: planned again (%s), the first step kept: %s", tostring(t.name), why or "moved", a.step or "walk") end
+      return
+    end
+  end
+  if QB.tracing and (forced or not same) then
+    QB.Trace("way to %s: planned again (%s, %s): %s%s", tostring(t.name), forced and "forced" or "not forced", why or "moved",
+      b and (b.step or "walk") or "no way", (cur and not same) and (", was " .. (a.step or "walk")) or "")
   end
   if not same then st.reached = false end
   st.plan = plan
@@ -1099,10 +1263,15 @@ function TV.Guide(me, t, mode)
   g.at, g.cd, g.eta, st.t = tnow, nil, nil, t
   local tx, ty = floor(t.wx / 5), floor(t.wy / 5)
   if st.tname ~= t.name or st.tc ~= t.c or st.tx ~= tx or st.ty ~= ty then
-    st.tname, st.tc, st.tx, st.ty, st.force = t.name, t.c, tx, ty, true
+    st.tname, st.tc, st.tx, st.ty, st.force, st.why = t.name, t.c, tx, ty, true, "a new target"
+    st.tkey = (st.tkey or 0) + 1
   end
-  if TV.force then TV.force, st.force = false, true end
-  if st.mode ~= mode then st.mode, st.force = mode, true end
+  if TV.force then TV.force, st.force, st.why, st.arrived = false, true, st.why or TV.forceWhy or "a loading screen", tnow end
+  -- a new zone: planned again, but kept unless clearly better (5.4.3 forced it, and at the walk-or-fly cut-off the
+  -- first step could flip at a zone's border)
+  local soft = TV.soft
+  TV.soft = false
+  if st.mode ~= mode then st.mode, st.force, st.why = mode, true, st.why or "the arrow's choice" end
   local I = icons(faction())
   local leg = st.plan and st.plan.legs[1]
   g.plan, g.leg = st.plan, leg
@@ -1123,7 +1292,7 @@ function TV.Guide(me, t, mode)
     return flying(tnow, I)
   elseif st.lock == "fly" then
     if mark(TV.Graph(faction()), st.flyTo, "f") then TV.ver = TV.ver + 1 end
-    st.lock, TV.flying, st.force = nil, nil, true
+    st.lock, TV.flying, st.force, st.why, st.arrived = nil, nil, true, "landed", tnow
   end
   -- the tram has no position: ride to the end
   if tram then
@@ -1133,13 +1302,13 @@ function TV.Guide(me, t, mode)
     end
     return show("nopos", nil, g.step, g.short, g.icon, "", nil)
   elseif st.lock == "tram" then
-    st.lock, st.force = nil, true
+    st.lock, st.force, st.why, st.arrived = nil, true, "off the tram", tnow
   end
   -- casting the hearthstone, and the loading screen after it
   local cast = TV.cast
   if cast then
     if cast.done and me and landed(me) then
-      st.force = true
+      st.force, st.why, st.arrived = true, "hearthed", tnow
     elseif not cast.done and tnow - cast.at > 15 then
       TV.cast = nil -- (no end of the cast heard)
     else
@@ -1156,7 +1325,7 @@ function TV.Guide(me, t, mode)
   if st.lock == "ride" then
     if ydTo(me, leg.finish) <= leg.finish.r or ydTo(me, leg.start) <= leg.start.r or tnow - st.rideAt > 3 * leg.min * 60
       or (offTrack(me, leg) > 120 and ydTo(me, leg.start) > 80) then
-      st.lock, st.force, st.reached = nil, true, false
+      st.lock, st.force, st.reached, st.why, st.arrived = nil, true, false, "off the boat", tnow
     else
       return onBoard(leg, tnow)
     end
@@ -1172,16 +1341,20 @@ function TV.Guide(me, t, mode)
   end
   -- plan again: something changed, or you got to the far end of a step (the portal's) and stand on its land; or, every
   -- few seconds, you moved
-  if jumped or TV.ver ~= st.ver or (leg and leg.start and ydTo(me, leg.finish) <= leg.finish.r
-    and TV.Land(me.c, me.wx, me.wy) == TV.Land(leg.finish.c, leg.finish.wx, leg.finish.wy)) then st.force = true end
+  if jumped then st.force, st.why, st.arrived = true, st.why or "a jump", tnow
+  elseif TV.ver ~= st.ver then st.force, st.why = true, st.why or "the flight paths or the hearthstone"
+  elseif leg and leg.start and ydTo(me, leg.finish) <= leg.finish.r
+    and TV.Land(me.c, me.wx, me.wy) == TV.Land(leg.finish.c, leg.finish.wx, leg.finish.wy) then st.force, st.why = true, st.why or "a step done" end
   if tnow - (st.hAt or -huge) >= HEARTH_S then
     st.hAt = tnow
-    if hearthSig(TV.Hearth(mode)) ~= st.hSig then st.force = true end
+    if hearthSig(TV.Hearth(mode)) ~= st.hSig then st.force, st.why = true, st.why or "the hearthstone" end
   end
   if st.force or not st.planned then
-    replan(me, t, mode, true)
+    replan(me, t, mode, true, st.why or "first look")
+  elseif soft then
+    replan(me, t, mode, false, "a new zone")
   elseif tnow - st.planAt >= DRIFT_S and yd(me.c, me.wx, me.wy, st.pc, st.px, st.py) >= DRIFT_YD then
-    replan(me, t, mode, false)
+    replan(me, t, mode, false, "moved")
   end
   local plan = st.plan
   leg = plan and plan.legs[1]
@@ -1280,7 +1453,11 @@ function TV.WayLines()
   end
   local c = me and me.c or 0
   local n, total, read = TV.Known(faction(), c)
-  out[#out + 1] = string.format("Flight paths: %d of %d known on %s (%s).", n, total, CONT_NAME[c], read and "read" or "assumed")
+  -- (an open map off the two continents, Zephras Isle, has none)
+  -- (read: the client answered for most of the continent; named: it said which, too few for a read, and only those
+  -- count; assumed: it said nothing yet, and every one counts)
+  out[#out + 1] = CONT_NAME[c] and string.format("Flight paths: %d of %d known on %s (%s).", n, total, CONT_NAME[c],
+    read and "read" or (TV.tells and "those the game named" or "assumed")) or "Flight paths: none here."
   out[#out + 1] = TV.HearthLine()
   return out
 end
@@ -1290,10 +1467,10 @@ end
 ----------------------------------------------------------------------------
 function TV.OnEvent(event, a1, a2, a3)
   if event == "PLAYER_ENTERING_WORLD" then
-    TV.force = true
+    TV.force, TV.forceWhy = true, "a loading screen"
     C_Timer.After(3, QB.Safe(TV.Learn, "flight paths"))
   elseif event == "ZONE_CHANGED_NEW_AREA" then
-    TV.force = true
+    TV.soft = true -- (planned again, and kept unless clearly better: TV.Guide)
   elseif event == "TAXIMAP_OPENED" then
     TV.ReadTaxiMap()
     C_Timer.After(0, QB.Safe(TV.TaxiMark, "taxi map mark"))

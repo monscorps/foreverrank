@@ -38,8 +38,9 @@ PAGES = {
     "/bis/": ("WoW Forever BiS Lists at Level 30 · ForeverRank",
               "WoW Forever best-in-slot gear at the beta's level-30 cap: every slot ranked per class, spec and faction by The Forge's stat weights, with where each piece comes from.",
               "/codex/img/excavation-site.jpg"),
-    "/questbank/": ("QuestBank · free WoW Forever questing addon · ForeverRank",
-                    "QuestBank is a free questing addon for WoW Forever, level 1 to 60, both factions: what every quest pays, which chains to carry on, quest icons on every zone map, the fastest hand-in route, party sync, and banking for level cap raises.",
+    "/questbank/": ("QuestBank, the free WoW Forever questing addon · ForeverRank",
+                    "QuestBank is a free questing addon for WoW Forever, level 1 to 60, Alliance and Horde: your next step, an arrow to it, the game's own pins on the map, and every quest priced as Forever pays it.",
+                    # build_page.py writes img/share.jpg (1200x630) from img/shot-now.jpg once it exists; switch to it then
                     "/questbank/img/route.jpg"),
     "/news/": ("WoW Forever News and Datamines · ForeverRank",
                "WoW Forever news in one place, newest first: Blizzard posts, fansite coverage and ForeverRank's own beta client datamines.",

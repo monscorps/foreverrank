@@ -7,7 +7,7 @@
 -- gold along your trails, paler and thinner where it crosses ground you never walked. All in pixels from the
 -- minimap's centre, where the view (MinimapView.lua) puts them; Minimap.lua says what to draw.
 local _, QB = ...
-local MR = { THICK = 8 }
+local MR = { THICK = 6, GAP = 3, SOFT = 0.55 } -- (THICK 8 before 5.4.4: a quarter thinner, the owner's "slightly thinner")
 QB.MiniRoute = MR
 
 local TEX = "Interface\\AddOns\\QuestBank\\art\\line_arrow.png"
@@ -76,7 +76,8 @@ function MR.Clip(x1, y1, x2, y2, r, square)
 end
 
 -- The strokes' frames over the minimap: the route's (and the trails', Minimap.lua) at +2, the golden path's at +3,
--- over the far ground (+1) and under QuestBank's pins (+5). Each a pool of lines; r and square: where they are cut
+-- over the far ground (+1) and under QuestBank's pins (+5), the ! and ? among them: a stroke never covers a quest's
+-- icon. Each a pool of lines; r and square: where they are cut
 MR.route, MR.gold = { lines = {}, used = 0 }, { lines = {}, used = 0 }
 local CONTEXTS = { MR.route, MR.gold }
 function MR.Frames()
@@ -116,26 +117,146 @@ end
 local function hideFrom(ctx, k) for i = k, #ctx.lines do MR.Show(ctx.lines[i], false) end end
 MR.HideFrom = hideFrom -- (the Map page's strokes, MapPage.lua)
 
--- a stroke that stops 0.45 of the pin's size short of its end (at the pin's edge); none under 6 pixels
-function MR.Stroke(ctx, x1, y1, x2, y2, col, thick, alpha, size)
+-- the parts of a stroke from (x1, y1) to (x2, y2) that cross a quest's icon other than the two it joins (marks:
+-- { x, y, r } in the same pixels, n of them, each widened by pad; an icon round either end is one it joins), as
+-- fractions of the stroke, in order and merged: spans[1], spans[2] the first, and so on. Returns how many. Into one
+-- table kept here: nothing is made
+local spans = {}
+MR.spans = spans
+function MR.Spans(x1, y1, x2, y2, marks, n, pad)
+  local dx, dy = x2 - x1, y2 - y1
+  local l2 = dx * dx + dy * dy
+  local k = 0
+  if l2 <= 0 then return 0 end
+  pad = pad or 0
+  for i = 1, n or 0 do
+    local m = marks[i]
+    local r = m.r + pad + MR.GAP
+    local r2 = r * r
+    if (m.x - x1) ^ 2 + (m.y - y1) ^ 2 > r2 and (m.x - x2) ^ 2 + (m.y - y2) ^ 2 > r2 then
+      local rr = m.r + pad
+      local fx, fy = x1 - m.x, y1 - m.y
+      local b = 2 * (fx * dx + fy * dy)
+      local disc = b * b - 4 * l2 * (fx * fx + fy * fy - rr * rr)
+      if disc > 0 then
+        local sq = sqrt(disc)
+        local t0, t1 = max(0, (-b - sq) / (2 * l2)), min(1, (-b + sq) / (2 * l2))
+        if t0 < t1 then
+          -- (kept in order of their start as they come: a few at most)
+          k = k + 1
+          local j = k
+          while j > 1 and spans[2 * j - 3] > t0 do
+            spans[2 * j - 1], spans[2 * j] = spans[2 * j - 3], spans[2 * j - 2]
+            j = j - 1
+          end
+          spans[2 * j - 1], spans[2 * j] = t0, t1
+        end
+      end
+    end
+  end
+  -- (overlapping ones as one)
+  local m = 0
+  for j = 1, k do
+    local a, b = spans[2 * j - 1], spans[2 * j]
+    if m > 0 and a <= spans[2 * m] then
+      if b > spans[2 * m] then spans[2 * m] = b end
+    else
+      m = m + 1
+      spans[2 * m - 1], spans[2 * m] = a, b
+    end
+  end
+  return m
+end
+
+-- a stroke between two pins that stops a little short of each (5.4.4: half the pin's size and GAP pixels more, a small
+-- gap round each icon, so the icon reads clearly; 5.4.3 ran to 0.45 of it at the end and into the pin at the start).
+-- size: the pin at its end; size0: the one at its start (0 or nil: none, the stroke starts where it starts). None
+-- under 6 pixels, nor where the gaps leave nothing. With marks (n of them, widened by pad: MR.Spans), softened (SOFT)
+-- only where it crosses another quest's icon, a line for each part: 5.4.4 as first built softened the whole stroke,
+-- and the stroke from you dimmed and came back as you walked past an icon beside it. True when any of it was drawn
+function MR.Stroke(ctx, x1, y1, x2, y2, col, thick, alpha, size, size0, marks, n, pad)
   local dx, dy = x2 - x1, y2 - y1
   local len = sqrt(dx * dx + dy * dy)
   if len < 6 then return false end
-  local back = min(size * 0.45, len)
-  return MR.Line(ctx, x1, y1, x2 - dx / len * back, y2 - dy / len * back, col, thick, alpha)
+  local back = (size or 0) > 0 and size * 0.5 + MR.GAP or 0
+  local front = (size0 or 0) > 0 and size0 * 0.5 + MR.GAP or 0
+  -- (a short one keeps 6 pixels: the gap at its start gives way first, then the one at its end)
+  if back + front > len - 6 then
+    front = max(0, len - 6 - back)
+    if back > len - 6 then back = max(0, len - 6) end
+  end
+  local ux, uy = dx / len, dy / len
+  local k = 0
+  if marks and (n or 0) > 0 then
+    -- (judged on its part on the minimap: a stroke cut at the edge joins the pin on the rim there, its stop's)
+    local a1, b1, a2, b2 = MR.Clip(x1, y1, x2, y2, ctx.r, ctx.square)
+    if a1 then
+      local l2 = len * len
+      local c0 = ((a1 - x1) * dx + (b1 - y1) * dy) / l2
+      local c1 = ((a2 - x1) * dx + (b2 - y1) * dy) / l2
+      k = MR.Spans(a1, b1, a2, b2, marks, n, pad)
+      for j = 1, 2 * k do spans[j] = c0 + spans[j] * (c1 - c0) end
+    end
+  end
+  -- (each line drawn names its stroke, line.of: the strokes counted from the context's first, ctx.strokes)
+  ctx.strokes = (ctx.strokes or 0) + 1
+  local was = ctx.used
+  local drew = false
+  if k == 0 then
+    drew = MR.Line(ctx, x1 + ux * front, y1 + uy * front, x2 - ux * back, y2 - uy * back, col, thick, alpha)
+  else
+    local t, tEnd = front / len, 1 - back / len
+    for j = 1, k do
+      local a, b = max(t, spans[2 * j - 1]), min(tEnd, spans[2 * j])
+      if a < b then
+        if a > t and MR.Line(ctx, x1 + dx * t, y1 + dy * t, x1 + dx * a, y1 + dy * a, col, thick, alpha) then drew = true end
+        if MR.Line(ctx, x1 + dx * a, y1 + dy * a, x1 + dx * b, y1 + dy * b, col, thick, alpha * MR.SOFT) then drew = true end
+        t = b
+      end
+    end
+    if tEnd > t and MR.Line(ctx, x1 + dx * t, y1 + dy * t, x1 + dx * tEnd, y1 + dy * tEnd, col, thick, alpha) then drew = true end
+  end
+  for i = was + 1, ctx.used do ctx.lines[i].of = ctx.strokes end
+  return drew
+end
+
+-- how much a stroke from (x1, y1) to (x2, y2) is softened, as a whole: SOFT where it crosses a quest's icon other than
+-- the two it joins (marks: { x, y, r } in the same pixels, n of them; an icon round either end is one it joins), else
+-- 1. The golden path's pieces, a few yards each, take it whole; a stroke is softened only where it crosses (MR.Stroke)
+function MR.Soften(x1, y1, x2, y2, marks, n, pad)
+  local dx, dy = x2 - x1, y2 - y1
+  local l2 = dx * dx + dy * dy
+  for i = 1, n or 0 do
+    local m = marks[i]
+    local r = m.r + (pad or 0) + MR.GAP
+    local r2 = r * r
+    if (m.x - x1) ^ 2 + (m.y - y1) ^ 2 > r2 and (m.x - x2) ^ 2 + (m.y - y2) ^ 2 > r2 then
+      local t = l2 > 0 and ((m.x - x1) * dx + (m.y - y1) * dy) / l2 or 0
+      if t > 0 and t < 1 then
+        local ex, ey = x1 + dx * t - m.x, y1 + dy * t - m.y
+        local rr = m.r + (pad or 0)
+        if ex * ex + ey * ey <= rr * rr then return MR.SOFT end
+      end
+    end
+  end
+  return 1
 end
 
 -- the route's strokes, segs[i] = { x1, y1, x2, y2, col, alpha, size (of the pin at its end), gold (you to the next
--- place: left to the golden path when that is drawn) }. A stroke to a place off the minimap runs to its edge, pointing
--- the way, and stops short of nothing. Returns how many were drawn
-function MR.DrawRoute(ctx, segs, n, thick, skipGold)
-  ctx.used = 0
+-- place: left to the golden path when that is drawn) }, softened where they cross another quest's icon (marks, nm:
+-- Minimap.lua's, MR.Stroke). Each starts a gap off the pin before it (the one before's end; from you, your arrow's)
+-- and stops a gap short of its own; a stroke to a place off the minimap runs to its edge, pointing the way, and stops
+-- short of nothing. Returns how many were drawn
+MR.YOU = 10 -- pixels: the gap round your arrow, where the first stroke starts
+function MR.DrawRoute(ctx, segs, n, thick, skipGold, marks, nm)
+  ctx.used, ctx.strokes = 0, 0
   local drawn = 0
   for i = 1, n do
     local sg = segs[i]
     if not (sg.gold and skipGold) then
       local cut = QB.MiniView.Reach(sg.x2, sg.y2) > ctx.r
-      if MR.Stroke(ctx, sg.x1, sg.y1, sg.x2, sg.y2, sg.col, thick, sg.alpha, cut and 0 or sg.size) then drawn = drawn + 1 end
+      local start = i == 1 and MR.YOU or (QB.MiniView.Reach(sg.x1, sg.y1) > ctx.r and 0 or segs[i - 1].size or 0)
+      if MR.Stroke(ctx, sg.x1, sg.y1, sg.x2, sg.y2, sg.col, thick, sg.alpha, cut and 0 or sg.size, start, marks, nm, thick * 0.5) then drawn = drawn + 1 end
     end
   end
   hideFrom(ctx, ctx.used + 1)
@@ -147,13 +268,17 @@ end
 -- ("own": along your trails; "line": the straight bits from you to the trails and from them to the place, when longer
 -- than JOIN_LINE yards), cut in pieces of SPACING yards to draw. Searched again for a new place; for the same one, not
 -- until you moved MOVE yards: then trimmed behind you while you walk along it (searched again after REFRESH seconds,
--- for trails noted meanwhile), else searched again, at most every EVERY seconds. In continent yards
+-- for trails noted meanwhile), else searched again, at most every EVERY seconds. In continent yards.
+-- Both edges have a band (5.4.4): you join the way within ON_WAY yards of it and leave it past ON_WAY_KEEP; the trails
+-- are found within Walk.REACH yards of you and kept to Walk.REACH_KEEP while a way is shown. On the edge itself (5.4.3)
+-- the path came and went, and was searched again, with each step. GP.searches counts the searches (/qb trace)
 -------------------------------------------------------------------------
-local GP = { MOVE = 8, EVERY = 2, REFRESH = 15, SIMPLIFY = 1, JOIN_LINE = 20, ON_WAY = 20, MAX_SUB = 200, SPACING = 15 / 0.9144,
-  NEAR = 20 / 0.9144, THICK = 8, ALPHA = 0.9, LINE_PALE = 0.7, LINE_THIN = 0.6, n = 0, np = 0,
-  x = {}, y = {}, seg = {}, ax = {}, ay = {}, bx = {}, by = {}, pk = {}, wx = {}, wy = {}, wk = {}, stack = {} }
+local GP = { MOVE = 8, EVERY = 2, REFRESH = 15, SIMPLIFY = 1, JOIN_LINE = 20, ON_WAY = 20, ON_WAY_KEEP = 35, MAX_SUB = 200,
+  SPACING = 15 / 0.9144, NEAR = 20 / 0.9144, THICK = 6, ALPHA = 0.9, LINE_PALE = 0.7, LINE_THIN = 0.6, n = 0, np = 0, searches = 0,
+  x = {}, y = {}, seg = {}, ax = {}, ay = {}, bx = {}, by = {}, pk = {}, wx = {}, wy = {}, wk = {}, stack = {},
+  dx = {}, dy = {}, dk = {}, dn = 0 }
 MR.GP = GP
-GP.DEFAULTS = { gpSpacing = 15, gpWidth = 8, gpAlpha = 0.9, gpColor = { 1, 0.82, 0 } }
+GP.DEFAULTS = { gpSpacing = 15, gpWidth = 6, gpAlpha = 0.9, gpColor = { 1, 0.82, 0 } }
 
 -- QuestTrail's settings: shown (goldenPath), its pieces in metres (gpSpacing 5 to 50), its width in pixels (gpWidth 2
 -- to 32), its opacity (gpAlpha 0.2 to 1) and its colour (gpColor)
@@ -205,14 +330,15 @@ local function simplify(xs, ys, i, j, tol, keep)
   end
 end
 
--- the way cut in pieces: SPACING yards each (at most MAX_SUB of them), the way's own corners kept; each piece keeps
--- its stretch's kind
+-- the drawn way (GP.dx, dy, dk, dn: you, where you join the way, and the way on from there; GP.Aim) cut in pieces:
+-- SPACING yards each (at most MAX_SUB of them), the way's own corners kept; each piece keeps its stretch's kind
 function GP.Cut()
   local spacing = GP.Spacing()
   if GP.len and GP.len / spacing > GP.MAX_SUB then spacing = GP.len / GP.MAX_SUB end
   local np, nextCut, walked = 0, spacing, 0
-  for i = 1, GP.n - 1 do
-    local x1, y1, x2, y2 = GP.x[i], GP.y[i], GP.x[i + 1], GP.y[i + 1]
+  local DX, DY, DK = GP.dx, GP.dy, GP.dk
+  for i = 1, GP.dn - 1 do
+    local x1, y1, x2, y2 = DX[i], DY[i], DX[i + 1], DY[i + 1]
     local dx, dy = x2 - x1, y2 - y1
     local segLen = sqrt(dx * dx + dy * dy)
     local from = 0
@@ -220,29 +346,105 @@ function GP.Cut()
       local t = (nextCut - walked) / segLen
       np = np + 1
       GP.ax[np], GP.ay[np] = x1 + dx * from / segLen, y1 + dy * from / segLen
-      GP.bx[np], GP.by[np], GP.pk[np] = x1 + dx * t, y1 + dy * t, GP.seg[i]
+      GP.bx[np], GP.by[np], GP.pk[np] = x1 + dx * t, y1 + dy * t, DK[i]
       from = nextCut - walked
       nextCut = nextCut + spacing
     end
     if from < segLen then
       np = np + 1
       GP.ax[np], GP.ay[np] = x1 + dx * from / segLen, y1 + dy * from / segLen
-      GP.bx[np], GP.by[np], GP.pk[np] = x2, y2, GP.seg[i]
+      GP.bx[np], GP.by[np], GP.pk[np] = x2, y2, DK[i]
     end
     walked = walked + segLen
   end
   GP.np = np
 end
 
--- whether any stretch of the way runs along your trails (GP.own): one that is all straight line is no golden path
+-- whether any stretch of the drawn way runs along your trails (GP.own): one that is all straight line is no golden path
 local function walked()
-  for i = 1, GP.n - 1 do if GP.seg[i] == "own" then return true end end
+  for i = 1, GP.dn - 1 do if GP.dk[i] == "own" then return true end end
   return false
 end
 
--- You still on the way (within ON_WAY yards of one of its first segments): the points behind you dropped, the way
--- starting where you stand. Anywhere: joined from you to its nearest point, however far (that first bit straight,
--- when long). False when you left it
+-- Where you join the way (5.4.4, the owner: "even if I run the right direction, if I cut pathing the yellow line wants
+-- me to 'go back' a while until it updates"): 5.4.3 drew the way from you to the next point after its nearest one, and
+-- searched again only for a new place, so a corner you cut was a point behind you. The way itself (GP.x, y, seg) is kept
+-- as before, anchored at its nearest point to you and trimmed behind you, so being on it or off it is judged as before;
+-- what is drawn (GP.dx, dy, dk) joins it further on: at the furthest point within AHEAD yards of you, clear of its own
+-- detours (from you along the way while it stays within reach: where it leaves the circle round you, round a lake or a
+-- wall, the join stops; at most LOOK segments looked through). Worked out again at every look, without a search, and
+-- never behind the anchor; the line shortens as you go. Straight to the place when it is within that reach, or nearer
+-- than the join, or, off the way (you left it, cutting across), when going straight there is shorter than rejoining
+-- (off a trail both count the roads' DETOUR, along it the way's own length). In place, on the arrays kept: no table made
+GP.AHEAD, GP.LOOK = 80, 40
+function GP.Aim(px, py, near)
+  local X, Y, S, n = GP.x, GP.y, GP.seg, GP.n
+  local DX, DY, DK = GP.dx, GP.dy, GP.dk
+  local R = GP.AHEAD
+  local ai, at = 1, 0
+  for i = 1, min(n - 1, GP.LOOK) do
+    local ax, ay = X[i], Y[i]
+    local dx, dy = X[i + 1] - ax, Y[i + 1] - ay
+    local a = dx * dx + dy * dy
+    local t2 = 1
+    if a > 0 then
+      local fx, fy = ax - px, ay - py
+      local b = 2 * (fx * dx + fy * dy)
+      local disc = b * b - 4 * a * (fx * fx + fy * fy - R * R)
+      if disc < 0 then break end
+      t2 = (-b + sqrt(disc)) / (2 * a)
+    end
+    if t2 >= 1 then
+      ai, at = i, 1
+    else
+      ai, at = i, max(0, t2)
+      break
+    end
+  end
+  local jx, jy = X[ai] + (X[ai + 1] - X[ai]) * at, Y[ai] + (Y[ai + 1] - Y[ai]) * at
+  local tx, ty = X[n], Y[n]
+  local d1 = sqrt((jx - px) ^ 2 + (jy - py) ^ 2)
+  -- the bit from you to J: the way's own where every stretch it stands for is, and you are on the way
+  local kind = "own"
+  for i = 1, ai do if S[i] ~= "own" then kind = "line" end end
+  if not near and d1 > GP.JOIN_LINE then kind = "line" end
+  local straight = (ai == n - 1 and at >= 0.999) or (tx - px) ^ 2 + (ty - py) ^ 2 <= d1 * d1
+  if not straight and not near then
+    -- (once straight, kept so while you stay off the way, until rejoining is a tenth cheaper: no flip at the edge)
+    local detour = (QB.Model and QB.Model.DETOUR) or 1.3
+    local rest = sqrt((X[ai + 1] - jx) ^ 2 + (Y[ai + 1] - jy) ^ 2)
+    for i = ai + 1, n - 1 do rest = rest + sqrt((X[i + 1] - X[i]) ^ 2 + (Y[i + 1] - Y[i]) ^ 2) end
+    local direct, rejoin = sqrt((tx - px) ^ 2 + (ty - py) ^ 2) * detour, d1 * detour + rest
+    if direct <= (GP.straight and rejoin / 0.9 or rejoin) then straight, kind = true, "line" end
+  end
+  GP.straight = (straight and not near) or nil
+  local dn = 1
+  DX[1], DY[1] = px, py
+  if straight then
+    dn = 2
+    DX[2], DY[2], DK[1] = tx, ty, kind
+  else
+    DK[1] = kind
+    if at < 0.999 then dn = dn + 1; DX[dn], DY[dn], DK[dn] = jx, jy, S[ai] end
+    for i = ai + 1, n do
+      dn = dn + 1
+      DX[dn], DY[dn], DK[dn] = X[i], Y[i], S[i]
+    end
+  end
+  for k = dn + 1, #DX do DX[k], DY[k], DK[k] = nil, nil, nil end
+  DK[dn] = nil
+  GP.dn = dn
+  local len = 0
+  for i = 1, dn - 1 do len = len + sqrt((DX[i + 1] - DX[i]) ^ 2 + (DY[i + 1] - DY[i]) ^ 2) end
+  GP.len, GP.own = len, walked()
+  GP.Cut()
+end
+
+-- You still on the way (within ON_WAY yards of one of its first segments, ON_WAY_KEEP while you were on it at the last
+-- look): the points behind you dropped, the way starting at its point nearest you (the anchor: on the way itself, never
+-- behind the last one). 5.4.3 started it where you stood, and its first stretch, from your last place, kept you "on the
+-- way" as you ran off it at an angle: a cut corner was pointed back at for up to 15 seconds, until the next search.
+-- Anywhere: joined to its nearest point, however far. Then what is drawn (GP.Aim). False when you left it
 function GP.Advance(px, py, anywhere)
   local bestI, bestD, bestT
   for i = 1, anywhere and GP.n - 1 or min(GP.n - 1, 8) do
@@ -254,7 +456,10 @@ function GP.Advance(px, py, anywhere)
     local d = ex * ex + ey * ey
     if not bestD or d < bestD then bestI, bestD, bestT = i, d, t end
   end
-  if not bestD or (bestD > GP.ON_WAY * GP.ON_WAY and not anywhere) then return false end
+  local onWay = GP.onWay and GP.ON_WAY_KEEP or GP.ON_WAY
+  local near = bestD and bestD <= onWay * onWay
+  if not anywhere then GP.onWay = near or false end
+  if not bestD or (not near and not anywhere) then return false end
   local drop = bestI - 1
   if bestT >= 1 then drop = bestI end
   if drop > 0 then
@@ -264,16 +469,12 @@ function GP.Advance(px, py, anywhere)
     GP.n = n - drop
   end
   if GP.n < 2 then return false end
-  GP.x[1], GP.y[1] = px, py
-  if bestD > GP.ON_WAY * GP.ON_WAY then GP.seg[1] = "line" end
-  GP.own = walked()
-  local len = 0
-  for i = 1, GP.n - 1 do
-    local dx, dy = GP.x[i + 1] - GP.x[i], GP.y[i + 1] - GP.y[i]
-    len = len + sqrt(dx * dx + dy * dy)
+  local ax, ay = GP.x[1], GP.y[1]
+  if bestT < 1 and drop == bestI - 1 then
+    ax, ay = ax + (GP.x[2] - ax) * bestT, ay + (GP.y[2] - ay) * bestT
   end
-  GP.len = len
-  GP.Cut()
+  GP.x[1], GP.y[1] = ax, ay
+  GP.Aim(px, py, near)
   return true
 end
 
@@ -290,14 +491,21 @@ function GP.Update(c, px, py, tx, ty)
       return GP.n > 1 and GP.own
     end
   end
+  -- (the same place as before and a way shown: the trails are looked for a little further, the band at their edge; a
+  -- new place: nothing kept of the last one's way)
+  local keep = GP.c == c and GP.tx == tx and GP.ty == ty and GP.n > 1 and GP.own
+  if not (GP.c == c and GP.tx == tx and GP.ty == ty) then GP.straight = nil end
   GP.c, GP.tx, GP.ty, GP.fx, GP.fy, GP.at = c, tx, ty, px, py, now
-  local pts = QB.Walk and QB.Walk.Path(c, { wx = px, wy = py }, { wx = tx, wy = ty })
-  if not pts then GP.n, GP.np, GP.own = 0, 0, false; return false end
-  -- the points simplified (a trail noted every 15 yards is mostly straight runs); the bits from you and to the place
-  -- kept as they are
-  local xs, ys, keep, cnt = GP.wx, GP.wy, GP.wk, #pts
+  GP.searches = GP.searches + 1
+  local pts = QB.Walk and QB.Walk.Path(c, { wx = px, wy = py }, { wx = tx, wy = ty }, keep and QB.Walk.REACH_KEEP or nil)
+  GP.onWay = true -- (a way found starts where you stand)
+  if not pts then GP.n, GP.np, GP.dn, GP.own = 0, 0, 0, false; return false end
+  -- the way from its first point on your trails (the search's first point is you: what is drawn starts there, GP.Aim),
+  -- simplified (a trail noted every 15 yards is mostly straight runs); its first and last points and the bit to the
+  -- place kept as they are
+  local xs, ys, keep, cnt = GP.wx, GP.wy, GP.wk, #pts - 1
   for k in pairs(keep) do keep[k] = nil end
-  for k = 1, cnt do xs[k], ys[k] = pts[k][1], pts[k][2] end
+  for k = 1, cnt do xs[k], ys[k] = pts[k + 1][1], pts[k + 1][2] end
   keep[1], keep[cnt] = true, true
   if cnt > 2 then
     keep[2], keep[cnt - 1] = true, true
@@ -314,11 +522,13 @@ function GP.Update(c, px, py, tx, ty)
     local dx, dy = GP.x[i + 1] - GP.x[i], GP.y[i + 1] - GP.y[i]
     local d = sqrt(dx * dx + dy * dy)
     len = len + d
-    GP.seg[i] = ((i == 1 or i == n - 1) and d > GP.JOIN_LINE) and "line" or "own"
+    GP.seg[i] = (i == n - 1 and d > GP.JOIN_LINE) and "line" or "own"
   end
   for k = n, #GP.seg do GP.seg[k] = nil end
-  GP.len, GP.own = len, walked()
-  GP.Cut()
+  -- what is drawn: joined ahead of you from the start (a search starts at the trail point nearest you, which may lie
+  -- behind you); on the way when that point is within ON_WAY yards
+  local nd = n >= 1 and sqrt((GP.x[1] - px) ^ 2 + (GP.y[1] - py) ^ 2) or 0
+  if n >= 2 then GP.Aim(px, py, nd <= GP.ON_WAY) else GP.n, GP.dn, GP.len, GP.own = 0, 0, 0, false; GP.Cut() end
   return GP.own
 end
 
@@ -343,15 +553,43 @@ function MR.Gold(me, w)
   return GP.Update(me.c, me.wx, me.wy, w.wx, w.wy) and not GP.Hidden(me.wx, me.wy, w.wx, w.wy)
 end
 
+-- the part of a piece outside the circle of radius r round (cx, cy): its end pulled back to the circle (atEnd), or its
+-- start pushed out to it; nil when the whole piece is inside. The golden path's gap round its target's pin and your arrow
+local function outside(x1, y1, x2, y2, cx, cy, r, atEnd)
+  local r2 = r * r
+  local in1 = (x1 - cx) ^ 2 + (y1 - cy) ^ 2 < r2
+  local in2 = (x2 - cx) ^ 2 + (y2 - cy) ^ 2 < r2
+  if in1 and in2 then return nil end
+  if (atEnd and not in2) or (not atEnd and not in1) then return x1, y1, x2, y2 end
+  -- where the piece meets the circle: |P(t) - C| = r, the root on the piece
+  local dx, dy = x2 - x1, y2 - y1
+  local a = dx * dx + dy * dy
+  if a <= 0 then return nil end
+  local b = 2 * (dx * (x1 - cx) + dy * (y1 - cy))
+  local c = (x1 - cx) ^ 2 + (y1 - cy) ^ 2 - r2
+  local disc = b * b - 4 * a * c
+  if disc < 0 then return x1, y1, x2, y2 end
+  local sq = sqrt(disc)
+  if atEnd then
+    local t = (-b - sq) / (2 * a)
+    return x1, y1, x1 + dx * t, y1 + dy * t
+  end
+  local t = (-b + sq) / (2 * a)
+  return x1 + dx * t, y1 + dy * t, x2, y2
+end
+MR.Outside = outside
+
 -- the golden path on the view v: its pieces within the minimap (the stroke's whole width inside), turning with it;
--- zoomed far out, where a piece is under 4 pixels, the way's own stretches instead, a line each
-function MR.DrawGold(v)
+-- zoomed far out, where a piece is under 4 pixels, the way's own stretches instead, a line each. It stops a gap short of
+-- the pin it leads to (tsize: that pin's size; 0 none) and off your arrow, and is softened where it crosses another
+-- quest's icon (marks, nm: Minimap.lua's, as MR.Soften reads them)
+function MR.DrawGold(v, marks, nm, tsize)
   local ctx = MR.gold
   local thick, alpha = GP.Thickness(), GP.Alpha()
   ctx.used, ctx.r, ctx.square = 0, v.R - thick / 2 - 1, v.square
   local ax, ay, bx, by, pk, count = GP.ax, GP.ay, GP.bx, GP.by, GP.pk, GP.np
   local whole = GP.Spacing() * v.scale < 4
-  if whole then ax, ay, bx, by, pk, count = GP.x, GP.y, nil, nil, GP.seg, GP.n - 1 end
+  if whole then ax, ay, bx, by, pk, count = GP.dx, GP.dy, nil, nil, GP.dk, GP.dn - 1 end
   local Point = QB.MiniView.Point
   -- a piece wholly further from the view's centre than the minimap reaches (its corner, when square) is not drawn
   -- (MR.Line would cut all of it away): skipped in yards, before it is turned and scaled. A long way has hundreds of
@@ -359,9 +597,17 @@ function MR.DrawGold(v)
   local cx, cy = v.wx, v.wy
   local lim = (ctx.r * (v.square and 1.4143 or 1) + 2) / v.scale
   local lim2 = lim * lim
+  -- the gaps: round the target's pin (the way's last point) and round you (its first)
+  local n = GP.dn
+  local tx, ty, sx, sy, tr = 0, 0, 0, 0, 0
+  if n >= 2 then
+    tx, ty = Point(v, GP.dx[n], GP.dy[n])
+    sx, sy = Point(v, GP.dx[1], GP.dy[1])
+    tr = (tsize or 0) > 0 and tsize * 0.5 + MR.GAP or 0
+  end
   for k = 1, count do
     local ux, uy = ax[k], ay[k]
-    local wx, wy = whole and GP.x[k + 1] or bx[k], whole and GP.y[k + 1] or by[k]
+    local wx, wy = whole and GP.dx[k + 1] or bx[k], whole and GP.dy[k + 1] or by[k]
     local dx, dy = wx - ux, wy - uy
     local l2 = dx * dx + dy * dy
     local t = l2 > 0 and ((cx - ux) * dx + (cy - uy) * dy) / l2 or 0
@@ -370,7 +616,11 @@ function MR.DrawGold(v)
     if ex * ex + ey * ey <= lim2 then
       local x1, y1 = Point(v, ux, uy)
       local x2, y2 = Point(v, wx, wy)
-      MR.Line(ctx, x1, y1, x2, y2, GP.ColorOf(pk[k]), thick * GP.WidthOf(pk[k]), alpha)
+      if tr > 0 then x1, y1, x2, y2 = outside(x1, y1, x2, y2, tx, ty, tr, true) end
+      if x1 then x1, y1, x2, y2 = outside(x1, y1, x2, y2, sx, sy, MR.YOU, false) end
+      if x1 then
+        MR.Line(ctx, x1, y1, x2, y2, GP.ColorOf(pk[k]), thick * GP.WidthOf(pk[k]), alpha * MR.Soften(x1, y1, x2, y2, marks, nm, thick * 0.5))
+      end
     end
   end
   hideFrom(ctx, ctx.used + 1)
@@ -380,14 +630,14 @@ end
 -- each placing (Mini.Place): the route's strokes (thick pixels wide: QuestTrail's stroke width setting, MR.THICK when
 -- not given) and, when gold, the golden path in place of the first one. Returns the strokes and the golden path's
 -- pieces drawn
-function MR.Draw(v, segs, n, gold, thick)
+function MR.Draw(v, segs, n, gold, thick, marks, nm)
   MR.Frames()
   thick = thick or MR.THICK
   local ctx = MR.route
   ctx.r, ctx.square = v.R - thick * 0.55, v.square
-  local lines = MR.DrawRoute(ctx, segs, n, thick, gold)
+  local lines = MR.DrawRoute(ctx, segs, n, thick, gold, marks, nm)
   local pieces = 0
-  if gold then pieces = MR.DrawGold(v) else hideFrom(MR.gold, 1) end
+  if gold then pieces = MR.DrawGold(v, marks, nm, n > 0 and segs[1].size or 0) else hideFrom(MR.gold, 1) end
   MR.goldShown = pieces
   return lines, pieces
 end

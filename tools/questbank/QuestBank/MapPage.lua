@@ -23,7 +23,7 @@ local TOGGLE_W = 44     -- a layer's switch under the map: its 20 px icon and it
 local ROW_H, HEAD_H, SEL_H = 28, 24, 34 -- the quest panel's rows, its sections' headers and its selection bar
 local LIST_W = PANEL_W - 8 - 20         -- the panel's list, its knob on the right
 local NAME_W = LIST_W - 28 - 52         -- a row's title, between its icon and its XP
-local LINE_W = 5        -- the route's strokes, in pixels on screen at any zoom
+local LINE_W = 4        -- the route's strokes, in pixels on screen at any zoom (5 before 5.4.4: a quarter thinner)
 local TICK = 0.25       -- seconds between looks at where you stand and at the arrow's step
 local FLASH = 1.2       -- seconds a row shown from the map stays lit
 local GOLD = { 1, 0.82, 0.3 }
@@ -173,32 +173,138 @@ local function canvasScale(map)
   return s > 0 and s or 1
 end
 
+-- a place in the world (continent c, yards) as fractions of map m, also beyond its edges (a stop in the next zone): from
+-- where the map's corners lie in the world. Nil where the client won't say
+local cornerA, cornerB = {}, {}
+local function fracOf(m, c, wx, wy)
+  local M = QB.Model
+  local a, b = M.World(m, 0, 0, cornerA), M.World(m, 100, 100, cornerB)
+  if not (a and b and a.c == c and b.c == c) then return nil end
+  local dx, dy = b.wx - a.wx, b.wy - a.wy
+  if dx == 0 or dy == 0 then return nil end
+  return (wy - a.wy) / dy, (wx - a.wx) / dx
+end
+-- a pin's place ({m, x, y} in percent) on map m: on it (P.Project), else beyond its edge through the world
+local wspot = {}
+local function spotOn(d, m)
+  local x, y = P.Project(d, m)
+  if x then return x, y end
+  local w = d.m and QB.Model.World(d.m, d.x, d.y, wspot)
+  if w then return fracOf(m, w.c, w.wx, w.wy) end
+end
+
+-- the part of a segment within the rectangle of half-sizes hw, hh round the centre (Liang-Barsky, an edge at a time),
+-- and whether its end was cut; nil when none of it is
+local function edge(p, q, t0, t1)
+  if not t0 then return nil end
+  if p == 0 then
+    if q < 0 then return nil end
+    return t0, t1
+  end
+  local t = q / p
+  if p < 0 then
+    if t > t1 then return nil end
+    if t > t0 then t0 = t end
+  else
+    if t < t0 then return nil end
+    if t < t1 then t1 = t end
+  end
+  return t0, t1
+end
+local function clipRect(x1, y1, x2, y2, hw, hh)
+  local dx, dy = x2 - x1, y2 - y1
+  local t0, t1 = edge(-dx, x1 + hw, 0, 1)
+  t0, t1 = edge(dx, hw - x1, t0, t1)
+  t0, t1 = edge(-dy, y1 + hh, t0, t1)
+  t0, t1 = edge(dy, hh - y1, t0, t1)
+  if not t0 or t0 >= t1 then return nil end
+  return x1 + dx * t0, y1 + dy * t0, x1 + dx * t1, y1 + dy * t1, t1 < 1
+end
+
 -- the route's strokes: one frame over the whole map (Fit sizes it to the canvas, as the quest areas are sized), a line
--- of art/line_arrow.png from you to stop 1 (gold) and from each stop to the next (blue) where both are on this map,
--- drawn as the minimap draws its strokes (MinimapRoute.lua) and LINE_W pixels thick on screen at any zoom. data:
--- { stops = { { x, y, num }, ... }, you = { x, y } or nil }
+-- of art/line_arrow.png from you to the one target (gold: Target.lua's, the same the arrow and the minimap lead to: stop
+-- 1, a spot of an objective of its quest, or the arrow's step toward it), on to stop 1 when that is not it, and from each
+-- stop to the next (blue), drawn as the minimap draws its strokes (MinimapRoute.lua) and LINE_W pixels thick on screen
+-- at any zoom. A place off this map (stop 1 in the zone you just left) is drawn to the map's edge, the way it lies: the
+-- page follows you over a zone's border, and 5.4.3 dropped the stroke to it there. data: { stops = { { x, y, num }, ...
+-- }, via = { the arrow's step, an objective's spot: { x, y }, those there are, in that order }, you = { x, y } or nil,
+-- tv (Target.lua's T.ver when drawn) }
 local Lines = {}
 function Lines:Fit(canvas)
   local d, map, MR = self.data, self.layer:GetMap(), QB.MiniRoute
   if not (d and map) then return end
   local w, h = canvas:GetWidth() or 0, canvas:GetHeight() or 0
   self:SetSize(w, h)
-  local thick, size = LINE_W / canvasScale(map), P.ROUTE.size * P.PinScale(map, P.ROUTE.scale) -- (a stroke ends at its pin's disc)
+  -- (a stroke stops short of its pin's disc, drawn at the icon scale: P.IconScale)
+  local thick, size = LINE_W / canvasScale(map), P.ROUTE.size * P.IconScale() * P.PinScale(map, P.ROUTE.scale)
   local ctx = self.ctx or { frame = self, lines = {}, square = true }
   self.ctx = ctx
-  ctx.used, ctx.r = 0, max(w, h)
-  local function stroke(a, b, col, alpha)
-    MR.Stroke(ctx, (a.x - 0.5) * w, (0.5 - a.y) * h, (b.x - 0.5) * w, (0.5 - b.y) * h, col, thick, alpha, size)
+  ctx.used, ctx.strokes, ctx.r = 0, 0, max(w, h)
+  -- the quest icons on the page (QuestMap.lua's and Pins.lua's layers), each { x, y, r } in this frame's units: a stroke
+  -- crossing one it doesn't join is softened there, and only there (MR.Stroke). Strokes are drawn under every pin (the
+  -- canvas's frame levels, MP.Levels: the quest blob's under the offers' and the quests')
+  local marks, nm = self.marks or {}, 0
+  self.marks = marks
+  local r = size * 0.5
+  for _, layer in ipairs({ QB.QuestMap.pageProvider, P.pageProvider }) do
+    for _, f in ipairs(layer and layer.active or {}) do
+      local fx, fy = f.qX or f.mapX, f.qY or f.mapY
+      if fx and fy then
+        nm = nm + 1
+        local m = marks[nm] or {}
+        marks[nm] = m
+        m.x, m.y, m.r = (fx - 0.5) * w, (0.5 - fy) * h, r
+      end
+    end
   end
-  local prev
-  for _, s in ipairs(d.stops) do
-    if s.num == 1 and d.you then stroke(d.you, s, QB.Mini.GOLD, 1) end
-    if prev and prev.num == s.num - 1 then stroke(prev, s, QB.Mini.BLUE, 0.85) end
-    prev = s
+  for i = nm + 1, #marks do marks[i] = nil end
+  -- a stroke from a to b: a gap off the pin at each end (from you, your arrow's), softened over another icon
+  local function stroke(a, b, col, alpha, fromYou)
+    local x1, y1, x2, y2, cut = clipRect((a.x - 0.5) * w, (0.5 - a.y) * h, (b.x - 0.5) * w, (0.5 - b.y) * h, w / 2, h / 2)
+    if not x1 then return end
+    local cut0 = math.abs(x1 - (a.x - 0.5) * w) + math.abs(y1 - (0.5 - a.y) * h) > 0.5
+    MR.Stroke(ctx, x1, y1, x2, y2, col, thick, alpha, cut and 0 or size, cut0 and 0 or (fromYou and MR.YOU / canvasScale(map) or size),
+      marks, nm, thick * 0.5)
+  end
+  -- you, then the step and the spot on the way, then stop 1 (the first stroke gold, the rest blue); then stop to stop.
+  -- A stroke with both ends off this map is left out: it would cross the map touching neither
+  local gold, blue = QB.Mini.GOLD, QB.Mini.BLUE
+  local function inside(p) return p.x >= 0 and p.x <= 1 and p.y >= 0 and p.y <= 1 end
+  local prev, col, alpha = d.you, gold, 1
+  local function to(p)
+    if prev and (inside(prev) or inside(p)) then stroke(prev, p, col, alpha, prev == d.you) end
+    prev, col, alpha = p, blue, 0.85
+  end
+  for _, p in ipairs(d.via) do to(p) end
+  local s = d.stops
+  if s[1] and s[1].num == 1 then to(s[1]) end
+  for i = 2, #s do
+    if s[i].num == s[i - 1].num + 1 and (inside(s[i - 1]) or inside(s[i])) then stroke(s[i - 1], s[i], blue, 0.85) end
   end
   MR.HideFrom(ctx, ctx.used + 1)
 end
 local LINES = { level = "PIN_FRAME_LEVEL_QUEST_BLOB", mouse = false, methods = Lines }
+
+-- the arrow's step toward the one target (while the arrow leads elsewhere its step is a pin of its own, drawStep), and
+-- the target's objective spot or the hand-in in reach before stop 1 (a stop target is stop 1's own pin): on map m in
+-- fractions, beyond its edge too. (Your place read into one table: the page's tick asks four times a second)
+local herePos = {}
+local function viaOn(m)
+  local out, T = {}, QB.Target
+  if not T then return out end
+  local t = T.Get(QB.API.WorldPosition(nil, herePos))
+  local s, via = T.Step()
+  if not via then s = nil end
+  for _, p in ipairs({ s or false, (t and (t.obj or t.near)) and t or false }) do
+    if p then
+      local x, y = nil, nil
+      if p ~= s and p.m then x, y = P.Project(p, m) end
+      if not x then x, y = fracOf(m, p.c, p.wx, p.wy) end
+      if x then out[#out + 1] = { x = x, y = y } end
+    end
+  end
+  return out
+end
 
 local function drawLines(layer, m)
   if MP.frame then MP.Strip() end -- (the route's count: the route has just changed)
@@ -206,10 +312,13 @@ local function drawLines(layer, m)
   local stops = {}
   for _, d in ipairs(P.list) do
     local x, y = nil, nil
-    if d.num then x, y = P.Project(d, m) end
+    if d.num then x, y = spotOn(d, m) end
     if x then stops[#stops + 1] = { x = x, y = y, num = d.num } end
   end
-  if #stops > 0 then layer:Add(LINES, { stops = stops, you = youOn(m) }, 0.5, 0.5) end
+  table.sort(stops, function(a, b) return a.num < b.num end)
+  local via = viaOn(m)
+  local T = QB.Target
+  if #stops > 0 or #via > 0 then layer:Add(LINES, { stops = stops, via = via, you = youOn(m), tv = T and T.ver }, 0.5, 0.5) end
 end
 
 -- the arrow's step (a flight master, a pier, the tram) where it sends you first: its own icon on the game's POI pin,
@@ -224,10 +333,12 @@ Step.OnMouseEnter = QB.Safe(function(self) tip(self, self.data.name, "Where the 
 Step.OnMouseLeave = untip
 local STEP = { template = "QuestBankMarkTemplate", level = "PIN_FRAME_LEVEL_AREA_POI", scale = { 1, 1.0, 1.2 }, mouse = true, methods = Step, size = 24 }
 
--- the step now, and a key that changes when it does
+-- the step now (the arrow's, whatever it leads to: Target.lua's T.Step), and a key that changes when it does or when
+-- it comes on or off the way to the one target (the strokes go by it then)
 local function stepNow()
-  local s = QB.Arrow and QB.Arrow.MiniStep()
-  return s, s and string.format("%s:%d:%d", s.name or "", floor(s.wx), floor(s.wy)) or false
+  local s, via
+  if QB.Target then s, via = QB.Target.Step() end
+  return s, s and string.format("%s:%d:%d:%s", s.name or "", floor(s.wx), floor(s.wy), via and "on" or "off") or false
 end
 
 local function drawStep(layer, m)
@@ -338,6 +449,23 @@ function MP.Glow()
   end
 end
 
+-- The page's own canvas orders its pins as the world map does (Blizzard_WorldMap.lua, AddStandardDataProviders): the
+-- explored areas, the quests' blue areas (and the route's strokes, on that level), the zone's highlight, the dungeon
+-- entrances, the flight points, the arrow's step, the quest offers, the quests, the super-tracked one, your party. A
+-- bare canvas has one level for every pin (PIN_FRAME_LEVEL_DEFAULT), and 5.4.3's gold stroke could cover a ! or a ?
+-- (the owner: "hard to see quests with the yellow line"). Its own manager, QuestBank's canvas: nothing of the game's
+local LEVELS = { { "PIN_FRAME_LEVEL_MAP_EXPLORATION" }, { "PIN_FRAME_LEVEL_QUEST_BLOB" }, { "PIN_FRAME_LEVEL_MAP_HIGHLIGHT" },
+  { "PIN_FRAME_LEVEL_DUNGEON_ENTRANCE" }, { "PIN_FRAME_LEVEL_FLIGHT_POINT" }, { "PIN_FRAME_LEVEL_AREA_POI" },
+  { "PIN_FRAME_LEVEL_QUEST_OFFER", 200 }, { "PIN_FRAME_LEVEL_ACTIVE_QUEST", 60 }, { "PIN_FRAME_LEVEL_SUPER_TRACKED_QUEST" },
+  { "PIN_FRAME_LEVEL_GROUP_MEMBER" } }
+MP.LEVELS = LEVELS
+function MP.Levels(canvas)
+  local mgr = canvas.GetPinFrameLevelsManager and canvas:GetPinFrameLevelsManager()
+  if type(mgr) ~= "table" or type(mgr.AddFrameLevel) ~= "function" then return false end
+  for _, l in ipairs(LEVELS) do pcall(mgr.AddFrameLevel, mgr, l[1], l[2]) end
+  return true
+end
+
 -- the canvas, once, out of combat: Blizzard's providers make their pins as they are added, and a pin made in a fight
 -- calls a protected function (SetPassThroughButtons) as QuestBank. Built hidden on a holder of its own, as the
 -- templates would build it, and put into the page when the page first shows (MP.Place)
@@ -361,6 +489,7 @@ local function build()
   canvas.BorderFrame = CreateFrame("Frame", nil, canvas)
   canvas.BorderFrame:SetAllPoints(canvas)
   canvas:OnLoad()
+  MP.Levels(canvas)
   for _, s in ipairs({ "OnUpdate", "OnShow", "OnHide", "OnEvent" }) do canvas:SetScript(s, canvas[s]) end
   canvas:SetFrameStrata("MEDIUM")
   -- a click into a zone opens it, a right-click goes up to its parent; the wheel zooms and a drag pans
@@ -1087,7 +1216,15 @@ function MP.Tick(dt)
   if MP.wait > 0 or not MP.canvas then return end
   MP.wait = TICK
   local m = shownMap()
+  -- the one target changed (an objective's spot done, the next one taken): the strokes again, from it
+  local T = QB.Target
+  if T then T.Get(QB.API.WorldPosition(nil, herePos)) end
   local lines = MP.lines.active[1]
+  if T and T.ver ~= (lines and lines.data.tv or MP.linesTv) then
+    MP.linesTv = T.ver
+    MP.lines:RefreshAllData()
+    lines = MP.lines.active[1]
+  end
   if lines then
     local you, was = youOn(m), lines.data.you
     if (you == nil) ~= (was == nil) or (you and abs(you.x - was.x) + abs(you.y - was.y) > 0.0005) then
@@ -1099,6 +1236,7 @@ function MP.Tick(dt)
   if key ~= MP.stepKey then
     MP.stepKey = key
     MP.step:RefreshAllData()
+    MP.lines:RefreshAllData() -- (the step is on the way: the strokes go by it)
   end
 end
 

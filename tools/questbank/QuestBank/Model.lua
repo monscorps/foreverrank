@@ -7,6 +7,10 @@
 -- the faction's flights, boats, zeppelins and the tram, and walking on. The hearthstone is one
 -- jump to an inn you bind first. The order comes from a local search (move a stop, reverse a
 -- run of stops, move the hearthstone) over several starting tours, spread over frames.
+-- Once this character's flight paths are read and some are not known, the flights between flight masters are only
+-- those it knows (Travel.lua's router, as the arrow goes), so the plan, the arrow and the minutes agree.
+-- A new plan keeps the last one's first stop unless it is clearly better (5%, QuestTrail's margin): what the arrow, the
+-- minimap and the Map page lead to (Target.lua) changes on what you do, not on a near tie.
 local _, QB = ...
 local M = {}
 QB.Model = M
@@ -22,7 +26,10 @@ local PER_QUEST = 0.06 -- minutes per extra quest at the same NPC
 local HEARTH = 0.5     -- the cast and the loading screen
 local MOUNT = 0.625    -- a 60% mount, until this character's own is measured
 local TAKEOFF = 0.25   -- minutes a flight's takeoff takes before the air (travel.py's TAKEOFF)
-local CHEAP = 400      -- a stop worth less XP than this goes last
+local CHEAP = 400      -- a stop worth less XP than this goes last, unless it is in reach or on the way (below)
+local REACH = 60       -- yards: a stop whose NPC stands this near where you plan from is handed in first
+local PASS = 1         -- minutes: a cheap stop that costs no more of a detour than this is handed in as you pass
+M.CHEAP, M.REACH, M.PASS = CHEAP, REACH, PASS
 M.MOUNT, M.RUN, M.DETOUR, M.TAKEOFF = MOUNT, RUN, DETOUR, TAKEOFF
 
 -- this character's pace: yards a second on foot and the mounted factor (minutes mounted against on foot), measured
@@ -44,6 +51,17 @@ function M.Factor(mounted)
 end
 
 local function round(x) return floor(x + 0.5) end
+
+-- planning in the background (M.Async, below) yields at these points once its slice of the frame is used
+M.SLICE = 6 -- milliseconds a frame while planning in the background
+local function clock()
+  if debugprofilestop then return debugprofilestop() end
+  return os.clock() * 1000
+end
+local function step()
+  if M.async and clock() - M.sliceStart > M.SLICE then coroutine.yield() end
+end
+
 -- the game's own rounding of quest XP (the server's RoundXPValue): to 5 up to 100, to 10 up to 500, to 25 up to
 -- 1,000, to 50 above. Hand-ins on 2026-10-02 showed it: 590 paid 600, 870 paid 875, 4,935 paid 4,950.
 local function roundQuestXp(e)
@@ -119,6 +137,21 @@ local function yards(a, b)
   return sqrt(dx * dx + dy * dy)
 end
 
+-- the flight paths this character can't take: true once the client said which it knows and one with flights is not
+-- among them (Travel.lua). Until then every flight counts, as it always did
+local function partial(fac)
+  local TV = QB.Travel
+  return TV and TV.Partial and TV.Partial(fac) or false
+end
+
+-- minutes from one flight master to another (D.HUB indices, not the same), walking at mf, and the main way: the tables'
+-- whole network (D.DIST, travel.py's), or with flight paths not known, only those you know (Travel.lua's router)
+local function hubTrip(fac, a, b, mf)
+  if partial(fac) then return QB.Travel.HubMinutes(fac, a, b, mf) end
+  local f, w, kind = M.HubTravel(fac, a, b)
+  return f + w * mf, kind
+end
+
 -- minutes from one place to another (places: {c, wx, wy, hub, walk}) and the main way there
 function M.Between(a, b, fac, mf)
   if a == b then return 0, "foot" end
@@ -129,23 +162,48 @@ function M.Between(a, b, fac, mf)
     if a.hub == b.hub then
       via = (a.walk + b.walk) * mf
     else
-      local f, w
-      f, w, k = M.HubTravel(fac, a.hub, b.hub)
-      via = f + (a.walk + w + b.walk) * mf
+      via, k = hubTrip(fac, a.hub, b.hub, mf)
+      via = via + (a.walk + b.walk) * mf
     end
     if via < best then best, kind = via, k end
   end
   return best, kind
 end
 
+-- An open map off the two continents (Zephras Isle, map 2991 under its zone map 2521): a zone map (or a continent's)
+-- whose world is no instance. The client places a point there as on a continent, by that map's own id and yards, and
+-- Data.lua gives its NPCs the same (gen_data.py, OPEN_MAPS); no flight master stands there, so the route, the arrow and
+-- the minutes walk there as on one land. A dungeon's map (and a battleground's, an orphan) still places nothing: inside
+-- an instance the rule is as it was. Before 5.4.4 nothing off the two continents was placed, and the isle had no
+-- arrow, minimap pins, minutes or route. Asked of the client once a map (again while it doesn't answer)
+local openMap = {}
+local function isOpen(mapID)
+  local v = openMap[mapID]
+  if v ~= nil then return v end
+  if not (C_Map and C_Map.GetMapInfo) then return false end
+  local ok, info = pcall(C_Map.GetMapInfo, mapID)
+  info = ok and QB.Plain(info) or nil
+  local kind = type(info) == "table" and QB.Plain(info.mapType) or nil
+  if type(kind) ~= "number" then return false end
+  local E = Enum and Enum.UIMapType
+  v = kind == ((E and E.Zone) or 3) or kind == ((E and E.Continent) or 2)
+  openMap[mapID] = v
+  return v
+end
+
+-- a land off the two continents (a place's c, as M.World gives it): no flight master, walked on alone
+function M.Off(c) return type(c) == "number" and c > 1 end
+
 -- world position of a map point: {c, wx, wy} (into the table into when given)
 function M.World(mapID, x, y, into)
   if not (C_Map and C_Map.GetWorldPosFromMapPos and CreateVector2D) then return nil end
   local ok, cont, pos = pcall(C_Map.GetWorldPosFromMapPos, mapID, CreateVector2D(x / 100, y / 100))
   if not ok or not cont or not pos then return nil end
+  cont = QB.Plain(cont)
+  if type(cont) ~= "number" then return nil end
   local wx, wy = pos.x, pos.y
   if pos.GetXY then wx, wy = pos:GetXY() end
-  if cont ~= 0 and cont ~= 1 then return nil end
+  if cont ~= 0 and cont ~= 1 and not (cont > 1 and isOpen(mapID)) then return nil end
   if into then into.c, into.wx, into.wy = cont, wx, wy; return into end
   return { c = cont, wx = wx, wy = wy }
 end
@@ -163,16 +221,25 @@ function M.MapPos(c, wx, wy, mapID)
   return x, y
 end
 
--- a place tied to the nearest flight master of the faction
+-- a place tied to the nearest flight master of the faction; with flight paths not known, the nearest you can fly from
+-- on the same land (walking north out of Southshore, Chillwind Camp's was nearest long before you knew it). A land
+-- where you can fly from none (Darnassus with only Rut'theran Village known, a continent before its first flight path)
+-- takes the nearest on the continent all the same, as 5.4.3 did: the planner goes on from there by the flights you know
+-- (Travel.lua's router walks you to them), so the route still starts from you (5.4.4 as first built found none there,
+-- and the route, the minutes on the cards and Here had no start)
 function M.Place(fac, c, wx, wy)
-  local best, bi = huge, 0
+  local best, bi, any, ai = huge, 0, huge, 0
+  local TV = QB.Travel
+  local land = partial(fac) and TV.Land(c, wx, wy)
   for i, h in ipairs(QB.Data.HUB[fac]) do
     if h[2] == c then
       local dx, dy = h[3] - wx, h[4] - wy
       local d = dx * dx + dy * dy
-      if d < best then best, bi = d, i end
+      if d < any then any, ai = d, i end
+      if land and d < best and TV.Door(fac, i, land) then best, bi = d, i end
     end
   end
+  if bi == 0 then best, bi = any, ai end
   return { c = c, wx = wx, wy = wy, hub = bi, walk = bi > 0 and sqrt(best) * DETOUR / RUN / 60 or 0 }
 end
 
@@ -181,7 +248,11 @@ local function npcPlace(i, fac)
   if not n or n[5] < 0 then return nil end
   local hub, walk = n[8], n[9]
   if fac == "H" then hub, walk = n[10], n[11] end
-  if not hub or hub == 0 then return nil end
+  if not hub or hub == 0 then
+    -- on an open map off the two continents (Zephras Isle): no flight master, walked to on its own land
+    if not M.Off(n[5]) then return nil end
+    hub, walk = 0, 0
+  end
   return { c = n[5], wx = n[6], wy = n[7], hub = hub, walk = walk, npc = i }
 end
 M.NpcPlace = npcPlace
@@ -189,9 +260,9 @@ M.NpcPlace = npcPlace
 ----------------------------------------------------------------------------
 -- stops
 ----------------------------------------------------------------------------
--- is this NPC in the flight master's town (one stop for the whole town)?
+-- is this NPC in the flight master's town (one stop for the whole town)? (Off the two continents there is none)
 local function inTown(n, place, fac)
-  if n[12] then return false end
+  if n[12] or place.hub == 0 then return false end
   local town = D.HUB[fac][place.hub][1]
   local zone = D.MAPNAME[n[2]] or ""
   return (zone ~= "" and (zone:find(town, 1, true) or town:find(zone, 1, true))) or place.walk <= 1.2
@@ -231,9 +302,10 @@ local function buildStops(entries, fac)
     end
   end
   for _, s in ipairs(stops) do
-    -- walk the NPCs nearest-first from the flight master, and stand where you start
-    local hub = D.HUB[fac][s.hub]
-    local from = { wx = hub[3], wy = hub[4] }
+    -- walk the NPCs nearest-first from the flight master (off the two continents, from the first), and stand where
+    -- you start
+    local hub = s.hub > 0 and D.HUB[fac][s.hub] or nil
+    local from = hub and { wx = hub[3], wy = hub[4] } or s.places[1]
     local left, tour, walkYards = {}, {}, 0
     for i, pl in ipairs(s.places) do left[i] = pl end
     while #left > 0 do
@@ -280,6 +352,7 @@ local function problem(entries, opts)
     local a = stops[i]
     P.C[i], P.K[i] = {}, {}
     for j = 1, n do P.C[i][j], P.K[i][j] = M.Between(a, stops[j], fac, mf) end
+    step() -- (the flights you know: a flight master's minutes to all the others, worked out the first time asked)
     P.work[i] = a.work + a.inner * mf
     local full, lvl, after, ids = {}, {}, {}, {}
     for k, e in ipairs(a.rows) do
@@ -300,8 +373,27 @@ local function problem(entries, opts)
   end
   -- where the run starts: free (log out at the first stop) or from where you stand
   local here = opts.start and M.Place(fac, opts.start.c, opts.start.wx, opts.start.wy)
-  if here and here.hub == 0 then here = nil end
+  if here and here.hub == 0 and not M.Off(here.c) then here = nil end
   P.here = here
+  -- a stop in reach of where you stand (one of its NPCs within REACH yards, with a quest ready to hand in to that NPC)
+  -- is handed in now, whatever its value: never cheap, and first (5.4.4: a level-21 mage a few yards from a hand-in worth
+  -- little was sent to Booty Bay first; the low-value rule is for stops that cost a trip). Only a quest ready now, as
+  -- the arrow's "Hand in X here" (Target.lua): 5.4.4 as first built put any stop within 60 yards first, its quests done
+  -- or not, and a re-plan made beside an unfinished quest's NPC changed the objective to that quest. None in the air or
+  -- as a ghost (opts.noReach): nothing is handed in there
+  P.near = {}
+  if here and not opts.noReach then
+    local sc, sx, sy = opts.start.c, opts.start.wx, opts.start.wy
+    for i = 1, n do
+      for _, p in ipairs(stops[i].places) do
+        if p.c == sc and (p.wx - sx) ^ 2 + (p.wy - sy) ^ 2 <= REACH * REACH then
+          for _, e in ipairs(stops[i].rows) do
+            if e.q.turnIdx == p.npc and e.st and e.st.code == "banked" then P.near[i], P.cheap[i], P.hasNear = true, false, true break end
+          end
+        end
+      end
+    end
+  end
   for i = 1, n do
     if here then
       P.start[i], P.startKind[i] = M.Between(here, stops[i], fac, mf)
@@ -309,23 +401,23 @@ local function problem(entries, opts)
       P.start[i], P.startKind[i] = 0, "start"
     end
   end
-  -- the hearthstone lands at the inn nearest the stop it jumps to
+  -- the hearthstone lands at the inn nearest the stop it jumps to (none off the two continents)
   local hubs = D.HUB[fac]
   for i = 1, n do
     local s = stops[i]
     local best, inn = huge, 0
-    for h = 1, #hubs do
+    for h = 1, s.hub > 0 and #hubs or 0 do
       if hubs[h][5] == 1 then
         local c
         if h == s.hub then
           c = s.walk * mf
         else
-          local f, w = M.HubTravel(fac, h, s.hub)
-          c = f + (w + s.walk) * mf
+          c = hubTrip(fac, h, s.hub, mf) + s.walk * mf
         end
         if c < best then best, inn = c, h end
       end
     end
+    step()
     P.hearth[i], P.inn[i] = HEARTH + best, inn
   end
   P.canHearth = not opts.noHearth and n > 1
@@ -333,17 +425,23 @@ local function problem(entries, opts)
   return P
 end
 
--- order: stop indices, 0 for the hearthstone. Returns level at 60 min, level at the end, minutes.
+-- A leg with no way known (to or from an open map off the two continents: the planner knows no boat or portal to
+-- Zephras Isle) is no minutes: it counts GAP in the search's minutes, so an order crosses as few times as it can, and
+-- what comes after it is past the first hour; the minutes shown leave it out (its kind "none": "No known way there")
+local GAP = 10000
+
+-- order: stop indices, 0 for the hearthstone. Returns level at 60 min, level at the end, minutes (the search's, with
+-- GAP a leg with no known way), XP, the legs when keep, and the minutes as shown.
 -- The quests handed in so far (for a follow-up handed you by another hand-in) are marked in one table per plan with
 -- the evaluation's number, not in a new table each time: a plan evaluates thousands of orders (5.4.2: that table made
 -- about 11 MB of garbage a re-plan)
 local function evaluate(P, order, keep)
   local T, CAP = D.TO_NEXT, QB.CAP
   local level, xp = P.level, P.xp
-  local t, total = 0, 0
+  local t, total, gaps = 0, 0, 0
   local at60 = level >= CAP and CAP or level + xp / T[level]
   local prev, hearthNext = nil, false
-  local cheapSeen, outOfOrder = false, false
+  local cheapSeen, outOfOrder, otherSeen = false, false, false
   local handed, gen = P.handed, nil
   if handed then gen = P.gen + 1; P.gen = gen end
   local legs = keep and {} or nil
@@ -361,8 +459,26 @@ local function evaluate(P, order, keep)
       else
         travel, kind = P.C[prev][s], P.K[prev][s]
       end
+      if travel == huge then gaps, travel, kind = gaps + 1, 0, "none" end
       t = t + travel + P.work[s]
-      if P.cheap[s] then cheapSeen = true elseif cheapSeen then outOfOrder = true end
+      -- a stop in reach of you comes before every other
+      if P.near[s] then
+        if otherSeen then outOfOrder = true end
+      else
+        otherSeen = true
+      end
+      -- a cheap stop goes after the rest, unless a route from where you stand passes it: under PASS minutes of detour
+      -- between the stops either side of it (from you, when it is the first). (A banked route, planned free, keeps
+      -- them last)
+      if P.cheap[s] then
+        local nxt = order[k + 1]
+        local passing = false
+        if P.here and nxt and nxt ~= 0 and kind ~= "hearth" and kind ~= "none" then
+          local direct = prev and P.C[prev][nxt] or P.start[nxt]
+          passing = travel + P.C[s][nxt] - direct < PASS
+        end
+        if not passing then cheapSeen = true end
+      elseif cheapSeen then outOfOrder = true end
       local arrive = keep and (level >= CAP and CAP or level + xp / T[level])
       local rows = keep and {} or nil
       local full, lvl, after = P.rowFull[s], P.rowLvl[s], P.rowAfter[s]
@@ -385,17 +501,18 @@ local function evaluate(P, order, keep)
         end
       end
       local fr = level >= CAP and CAP or level + xp / T[level]
-      if t <= 60 then at60 = fr end
+      if t <= 60 and gaps == 0 then at60 = fr end
       if legs then
         legs[#legs + 1] = { stop = P.stops[s], travel = travel, kind = kind, t = t, arrive = arrive, leave = fr,
-                            rows = rows, late = t > 60, inn = kind == "hearth" and P.inn[s] or nil }
+                            rows = rows, late = t > 60 or gaps > 0, inn = kind == "hearth" and P.inn[s] or nil }
       end
       prev = s
     end
   end
   local final = level >= CAP and CAP or level + xp / T[level]
-  if outOfOrder then return at60 - 100, final - 100, t, total, legs end
-  return at60, final, t, total, legs
+  local score = t + gaps * GAP
+  if outOfOrder then return at60 - 100, final - 100, score, total, legs, t end
+  return at60, final, score, total, legs, t
 end
 
 local function better(P, a60, af, at, b60, bf, bt)
@@ -410,15 +527,6 @@ end
 ----------------------------------------------------------------------------
 -- search
 ----------------------------------------------------------------------------
-M.SLICE = 6 -- milliseconds a frame while planning in the background
-local function clock()
-  if debugprofilestop then return debugprofilestop() end
-  return os.clock() * 1000
-end
-local function step()
-  if M.async and clock() - M.sliceStart > M.SLICE then coroutine.yield() end
-end
-
 local function copy(t)
   local c = {}
   for i = 1, #t do c[i] = t[i] end
@@ -438,7 +546,7 @@ local function nearestTour(P, first, pool)
   for _ = 2, #pool do
     local best, bj = huge, nil
     for _, j in ipairs(pool) do
-      if not used[j] and P.C[cur][j] < best then best, bj = P.C[cur][j], j end
+      if not used[j] and (not bj or P.C[cur][j] < best) then best, bj = P.C[cur][j], j end
     end
     order[#order + 1] = bj
     used[bj] = true
@@ -456,7 +564,7 @@ local function appendCheap(P, tour)
     for j = 1, P.n do
       if P.cheap[j] and not used[j] then
         local c = cur and cur ~= 0 and P.C[cur][j] or 0
-        if c < best then best, bj = c, j end
+        if not bj or c < best then best, bj = c, j end
       end
     end
     if not bj then break end
@@ -511,15 +619,39 @@ local function seeds(P)
   return out
 end
 
+-- an order's first stop (0 is the hearthstone, not a stop)
+local function firstOf(order)
+  for k = 1, #order do if order[k] ~= 0 then return order[k] end end
+end
+-- does an order lead with stop pin: its first stop, or, for a stop not in reach, its first after the stops in reach
+-- (those go first whatever is kept: P.near)
+local function leads(P, order, pin)
+  local near = P.near[pin]
+  for k = 1, #order do
+    local s = order[k]
+    if s ~= 0 and (near or not P.near[s]) then return s == pin end
+  end
+  return false
+end
+-- an order's first stop past those in reach (the stop a plan keeps: route.lead), else its first
+local function leadOf(P, order)
+  for k = 1, #order do
+    local s = order[k]
+    if s ~= 0 and not P.near[s] then return s end
+  end
+  return firstOf(order)
+end
+
 -- first-improvement local search: move one element, reverse a run, add or drop the hearthstone. Each candidate is
 -- written into one spare array, which becomes the order when it wins (the order before it the spare): two arrays a
--- search, not one for every candidate
-local function improve(P, order, score, budget)
+-- search, not one for every candidate. With pin, only orders that lead with that stop (leads)
+local function improve(P, order, score, budget, pin)
   local b60, bf, bt = score[1], score[2], score[3]
   local evals = 0
   local improved = true
   local spare = {}
   local function try(cand)
+    if pin and not leads(P, cand, pin) then return false end
     local a60, af, at = evaluate(P, cand)
     evals = evals + 1
     step()
@@ -571,23 +703,31 @@ local function improve(P, order, score, budget)
   return order, { b60, bf, bt }, evals
 end
 
--- the last route as a seed: its stops in the same order, the hearthstone where it was, new stops after
--- the old ones and before the cheap tail. Without it a fresh search can land on a worse order than the
--- one it had (adding Ratchet once cost 0.2 levels in the first hour).
-local function carried(P, prev)
-  if not (prev and prev.legs and #prev.legs > 0) then return nil end
+-- this problem's stops by their town and their NPCs, to find a stop of the last route again
+local function stopKeys(P)
   local byKey = {}
   for i, s in ipairs(P.stops) do
     if s.town then byKey["t" .. s.town] = i end
     for _, npc in ipairs(s.npcs) do byKey["n" .. npc] = byKey["n" .. npc] or i end
   end
+  return byKey
+end
+local function indexOf(byKey, st)
+  local i = st and st.town and byKey["t" .. st.town]
+  if st and not i then
+    for _, npc in ipairs(st.npcs or {}) do i = byKey["n" .. npc]; if i then break end end
+  end
+  return i
+end
+
+-- the last route as a seed: its stops in the same order, the hearthstone where it was, new stops after
+-- the old ones and before the cheap tail. Without it a fresh search can land on a worse order than the
+-- one it had (adding Ratchet once cost 0.2 levels in the first hour).
+local function carried(P, prev, byKey)
+  if not (prev and prev.legs and #prev.legs > 0) then return nil end
   local main, tail, used = {}, {}, {}
   for _, l in ipairs(prev.legs) do
-    local st = l.stop
-    local i = st and st.town and byKey["t" .. st.town]
-    if st and not i then
-      for _, npc in ipairs(st.npcs or {}) do i = byKey["n" .. npc]; if i then break end end
-    end
+    local i = indexOf(byKey, l.stop)
     if i and not used[i] then
       used[i] = true
       if P.cheap[i] then
@@ -608,22 +748,43 @@ local function carried(P, prev)
   return main
 end
 
+-- The first stop kept (QuestTrail keeps its target unless another plan is 5% better): a plan that starts somewhere else
+-- than the last one did must be clearly better than the best that starts where the last one did, in the planner's own
+-- terms: the levels gained (the first hour's, then the run's), then the minutes (5% and half a minute fewer). Before
+-- 5.4.4 a tie to a millionth decided, and walking north out of Southshore the next stop swapped back and forth
+local SWITCH, SWITCH_MIN = 0.05, 0.5
+M.SWITCH = SWITCH
+local function clearly(P, a, b, start)
+  for k = P.goal == "hour" and 1 or 2, 2 do
+    local ga, gb = a[k] - start, b[k] - start
+    if ga > gb + math.max(SWITCH * math.abs(gb), 1e-6) then return true end
+    if ga < gb - 1e-6 then return false end
+  end
+  local at, bt = a[3], b[3]
+  return bt - at > SWITCH * bt and bt - at >= SWITCH_MIN
+end
+
 ----------------------------------------------------------------------------
 -- plan: entries = { {q=, st=, after=parentId}, ... }
--- opts = { level, xp, mounted, goal ("hour" | "route"), fac, start = {c, wx, wy}, noHearth }
--- prev: the route planned last time, to start from
+-- opts = { level, xp, mounted, goal ("hour" | "route"), fac, start = {c, wx, wy}, noHearth, jump (the jumps in place so
+-- far: Core.lua's QB.jumpVer, for a route from where you stand), noReach (in the air or a ghost: no stop in reach) }
+-- prev: the route planned last time, to start from; its first stop is kept unless another is clearly better (route.held:
+-- the first stop kept against a free plan that scored better; route.alt: the plan that lost, { first, t, level };
+-- route.lead: the first stop past those in reach, the one the next plan keeps; route.firstNear: its first stop is there
+-- only for being in reach)
 ----------------------------------------------------------------------------
 function M.Plan(entries, opts, prev)
   D = QB.Data
   local P = problem(entries, opts)
   local startFrac = M.Frac(opts.level, opts.xp)
   local route = { legs = {}, t = 0, xp = 0, level = startFrac, at60 = startFrac, count = 0, byQuest = {},
-                  unplaced = P.unplaced, fac = P.fac, mounted = opts.mounted, fromHere = P.here ~= nil, goal = P.goal }
+                  unplaced = P.unplaced, fac = P.fac, mounted = opts.mounted, fromHere = P.here ~= nil, goal = P.goal, jump = opts.jump }
   if P.n == 0 then return route end
 
   local scored = {}
   local all = seeds(P)
-  local warm = carried(P, prev)
+  local byKey = prev and stopKeys(P)
+  local warm = byKey and carried(P, prev, byKey)
   if warm then all[#all + 1] = warm end
   for _, s in ipairs(all) do
     local a60, af, at = evaluate(P, s)
@@ -642,8 +803,81 @@ function M.Plan(entries, opts, prev)
     if budget <= 0 then break end
   end
 
-  local at60, final, t, total, legs = evaluate(P, best.order, true)
+  -- the last route's first stop, kept unless the best above is clearly better: on a route from where you stand (the
+  -- stop you walk to; a banked route starts where you log out, and only a change of the bank moves its first stop). A
+  -- stop that is gone (its quests handed in, abandoned or failed, or no longer placed) is no stop of this problem, and
+  -- the best above stands
+  -- A stop in reach with a quest ready (P.near) goes first, and the stop kept comes next: while the last route's first
+  -- stop was put first only for being in reach (prev.firstNear: in reach still, walked on past without handing in, or
+  -- handed in with another of its quests still to do), or is gone (handed in), its lead is kept (its first stop past
+  -- those in reach, route.lead), so a hand-in on the way neither drops the stop kept nor leaves the next one to a near
+  -- tie once it is handed in (5.4.4 as first built dropped it, and after the hand-in the first stop was the one it had
+  -- been kept against), and a stop in reach left behind takes its place in the route as any other (5.4.4 as first built
+  -- kept it first from then on, behind you, for having been in reach once). A first stop kept for its own sake is kept,
+  -- in reach or walked off from, as before.
+  -- Walked away from (that stop still a stop, no longer in reach: Target.lua's leftBehind plans again for it) and
+  -- kept first all the same, going back being clearly quicker (a hand-in 100 yards behind you against a trip back
+  -- later), it is marked (route.firstLeft) and kept as any first stop from then on, and Target.lua plans again as you
+  -- walk on, each REACH_KEEP yards further, until going back is no longer clearly quicker: then the stop walked away
+  -- from gives way. (5.4.4 as first built made that one plan and no other until something else changed, and the stop
+  -- stayed behind you as stop 1 for good; forcing the lead instead costs minutes: 100 yards out of Southshore with
+  -- its hand-in ready, the lead first is 10 minutes against 7)
+  local keep, left
+  if P.here and byKey then
+    local first = prev.legs[1] and indexOf(byKey, prev.legs[1].stop)
+    local lead = prev.lead and indexOf(byKey, prev.lead)
+    keep = first
+    if lead and (not first or prev.firstNear) then keep = lead end
+    left = (prev.firstNear or prev.firstLeft) and first and not P.near[first] and first or nil
+  end
+  -- (planned again after a jump in place: a flight, the hearthstone, a boat, a portal. You are somewhere else, and the
+  -- stop kept from where you were may lie back where you came from: the best from here stands. 5.4.4 as first built
+  -- kept it, and off a flight to Menethil Harbor the route flew you back to Southshore first. A last route planned with
+  -- no place to start from (in a dungeon, where the client gives none) counts as before the jump out: it kept its free
+  -- first stop, and out of the door the route sent you back to it)
+  if keep and opts.jump and prev.jump ~= opts.jump then keep, left = nil, nil end
+  if keep and not leads(P, best.order, keep) then
+    -- the best order with the kept stop moved to the front (after the stops in reach), or the last route carried on,
+    -- whichever is better; then searched with that stop leading
+    local cand = copy(best.order)
+    for k = #cand, 1, -1 do if cand[k] == keep then table.remove(cand, k) end end
+    local at = #cand + 1
+    if P.near[keep] then
+      at = 1
+    else
+      for k = 1, #cand do if cand[k] ~= 0 and not P.near[cand[k]] then at = k break end end
+    end
+    table.insert(cand, at, keep)
+    local k60, kf, kt = evaluate(P, cand)
+    if warm and leads(P, warm, keep) then
+      local w60, wf, wt = evaluate(P, warm)
+      if better(P, w60, wf, wt, k60, kf, kt) then cand, k60, kf, kt = copy(warm), w60, wf, wt end
+    end
+    local order, score = improve(P, cand, { k60, kf, kt }, 1000 + 15 * P.n * P.n, keep)
+    local lost
+    if clearly(P, best.score, score, startFrac) then
+      lost = { first = P.stops[keep].name, t = score[3], level = score[2], at60 = score[1] }
+    else
+      lost = { first = P.stops[leadOf(P, best.order)].name, t = best.score[3], level = best.score[2], at60 = best.score[1] }
+      best = { order = order, score = score }
+      route.held = true
+    end
+    route.alt = lost
+  end
+
+  local at60, final, _, total, legs, t = evaluate(P, best.order, true)
   route.legs, route.t, route.xp, route.level, route.at60 = legs, t, total, final, at60
+  route.lead = P.stops[leadOf(P, best.order)]
+  -- (its first stop put first only for being in reach, ahead of the lead: the next plan keeps the lead, and Target.lua
+  -- plans again once you walk away from it without handing in. A plan with no stop kept too, the first of a session
+  -- or one after a jump, landing or logging in beside a hand-in: 5.4.4 as first built marked only a plan with a stop
+  -- kept, and the hand-in you walked past stayed first, behind you, and was kept for having been first)
+  local f = firstOf(best.order)
+  -- (a stop kept first after walking away from it, for going back being clearly quicker, back in reach: in reach
+  -- again, not kept for its own sake)
+  route.firstNear = (f and P.near[f] and (f ~= keep or (prev and prev.firstLeft)) and P.stops[f] ~= route.lead) or nil
+  route.firstLeft = (left and f == left) or nil
+  if P.here then route.startC, route.startX, route.startY = opts.start.c, opts.start.wx, opts.start.wy end
   for _, l in ipairs(legs) do
     route.count = route.count + #l.rows
     for _, row in ipairs(l.rows) do route.byQuest[row.q.id] = row.xp end

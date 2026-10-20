@@ -162,14 +162,21 @@ local function readVignette(id)
   return t
 end
 
--- a vendor: who, how many wares, and the first one's id, price and link
+-- a vendor: who, how many wares, and the first one's id, price and link. Forever's merchant window is the Mainline
+-- one (Blizzard_UIPanels_Game/Mainline/MerchantFrame.lua), which reads a ware through C_MerchantFrame.GetItemInfo
+-- (name, price, stack, ...); the old global GetMerchantItemInfo it never calls gave uploads a nil price and link at
+-- MERCHANT_SHOW (5.4.4), so that one is read only on a client without the new call. The wares come in after the
+-- window opens: read again on MERCHANT_UPDATE
 local function readMerchant()
   local t = { guid = call(UnitGUID, "npc") }
   local n = call(GetMerchantNumItems)
   t.items = n
   if type(plain(n)) == "number" and n > 0 then
     t.id = call(GetMerchantItemID, 1)
-    if GetMerchantItemInfo then
+    if C_MerchantFrame and C_MerchantFrame.GetItemInfo then
+      local ok, info = pcall(C_MerchantFrame.GetItemInfo, 1)
+      t.price = ok and type(info) == "table" and val(info.price) or NIL
+    elseif GetMerchantItemInfo then
       local ok, _, _, price = pcall(GetMerchantItemInfo, 1)
       t.price = ok and val(price) or NIL
     else t.price = NIL end
@@ -191,7 +198,7 @@ local function clock() return GetTime and GetTime() or NIL end
 Observe.UNIT_EVENTS = { "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_SUCCEEDED", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_INTERRUPTED",
                         "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_STOP", "UNIT_HEALTH" }
 Observe.EVENTS = { "PLAYER_TARGET_CHANGED", "UNIT_AURA", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "VIGNETTE_MINIMAP_UPDATED",
-                   "MERCHANT_SHOW", "LOOT_OPENED", "ENCOUNTER_START", "ENCOUNTER_END", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
+                   "MERCHANT_SHOW", "MERCHANT_UPDATE", "LOOT_OPENED", "ENCOUNTER_START", "ENCOUNTER_END", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
 
 function Observe.OnEvent(event, a1, a2, a3, ...)
   if event == "PLAYER_TARGET_CHANGED" then
@@ -203,7 +210,7 @@ function Observe.OnEvent(event, a1, a2, a3, ...)
     if unit then Observe.Note(event, Observe.ReadUnit(unit)) end
   elseif event == "VIGNETTE_MINIMAP_UPDATED" then
     Observe.Note(event, readVignette(a1))
-  elseif event == "MERCHANT_SHOW" then
+  elseif event == "MERCHANT_SHOW" or event == "MERCHANT_UPDATE" then
     Observe.Note(event, readMerchant())
   elseif event == "LOOT_OPENED" then
     Observe.Note(event, readLoot())

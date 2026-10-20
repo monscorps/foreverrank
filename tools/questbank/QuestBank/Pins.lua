@@ -460,7 +460,7 @@ function P.Glow(f, col)
     f.glowAtlas = atlas
   end
   if col then
-    local size = f.kind.glow or (f:GetWidth() or 20) * 2.2
+    local size = (f.kind.glow or (f:GetWidth() or 20) * 2.2) * (f.iconK or 1) -- (a smaller icon, a smaller glow)
     f.glow:SetSize(size, size)
     if f.glowAtlas then f.glow:SetVertexColor(1, 1, 1, col[4] or 1) else f.glow:SetVertexColor(col[1], col[2], col[3], col[4] or 1) end
   end
@@ -573,16 +573,34 @@ local DISC = { normal = { 0.875, 1, 0.875, 1 }, pressed = { 0.75, 0.875, 0.875, 
 -- (the regions' anchors are the template's; set once here too, so a frame built without the template's anchors, as
 -- the harness builds them, stands the same)
 local function centre(tex) tex:ClearAllPoints(); tex:SetPoint("CENTER", 0, 0) end
+
+-- QuestBank's quest icons (a quest POI, an offer's !) drawn at mapIconPct of the game's own art (5.4.4: half, from the
+-- owner's "quest icons on the map are massive, can be halved"; a size you set stays yours), 30 to 100 percent. Only
+-- the art: the frame, and so where a click lands, stays the game's own pin's (20 by 20 for a quest POI, 22 for an
+-- offer), and it scales with the map's zoom as the game's pins do (each kind's scale)
+function P.IconScale()
+  local pct = tonumber(QB:Settings().mapIconPct) or 50
+  return math.max(0.3, math.min(1, pct / 100))
+end
+-- an atlas at the game's size times the icon scale (P.Atlas, then sized down)
+local function atlasScaled(tex, atlas, file, coords, k)
+  local w, h, has = P.Atlas(tex, atlas, file, coords)
+  if k ~= 1 then tex:SetSize(w * k, h * k) end
+  return w * k, h * k, has
+end
+P.AtlasScaled = atlasScaled
+
 function P.StylePoi(f, look)
   local fam = FAMILY[look.family or "basic"] or FAMILY.basic
-  f.look, f.pressed = look, nil
+  local k = P.IconScale()
+  f.look, f.pressed, f.iconK = look, nil, k
   if not f.anchored then f.anchored = true; centre(f.Disc); centre(f.Hi) end
-  P.Atlas(f.Disc, fam.disc .. (look.tracked and "-SuperTracked" or ""), DISC_FILE, DISC.normal)
-  if look.complete then P.Atlas(f.Glyph, fam.turn, T.questActive)
-  else P.Atlas(f.Glyph, look.tracked and "Quest-In-Progress-Icon-Brown" or "Quest-In-Progress-Icon-yellow", T.questActive) end
+  atlasScaled(f.Disc, fam.disc .. (look.tracked and "-SuperTracked" or ""), DISC_FILE, DISC.normal, k)
+  if look.complete then atlasScaled(f.Glyph, fam.turn, T.questActive, nil, k)
+  else atlasScaled(f.Glyph, look.tracked and "Quest-In-Progress-Icon-Brown" or "Quest-In-Progress-Icon-yellow", T.questActive, nil, k) end
   f.Glyph:ClearAllPoints()
   f.Glyph:SetPoint("CENTER", 0, 0)
-  P.Atlas(f.Hi, fam.hi, DISC_FILE, DISC.hi)
+  atlasScaled(f.Hi, fam.hi, DISC_FILE, DISC.hi, k)
   f.Hi:SetBlendMode("ADD")
   f.Hi:Hide()
   f.Disc:SetDesaturated(look.late or false)
@@ -594,7 +612,7 @@ function P.Press(f, down)
   if not (rawget(f, "Disc") and f.look) then return end
   local fam = FAMILY[f.look.family or "basic"] or FAMILY.basic
   f.pressed = down or nil
-  P.Atlas(f.Disc, fam.disc .. (down and "-Pressed" or "") .. (f.look.tracked and "-SuperTracked" or ""), DISC_FILE, down and DISC.pressed or DISC.normal)
+  atlasScaled(f.Disc, fam.disc .. (down and "-Pressed" or "") .. (f.look.tracked and "-SuperTracked" or ""), DISC_FILE, down and DISC.pressed or DISC.normal, f.iconK or 1)
   f.Glyph:ClearAllPoints()
   f.Glyph:SetPoint("CENTER", down and 1 or 0, down and -1 or 0)
 end
@@ -606,7 +624,8 @@ function P.StyleOffer(f, look)
   local fam = FAMILY[look.family or "basic"] or FAMILY.basic
   f.look = look
   if not f.anchored then f.anchored = true; centre(f.Texture) end
-  P.Atlas(f.Texture, fam.bang, T.questAvail)
+  f.iconK = P.IconScale()
+  atlasScaled(f.Texture, fam.bang, T.questAvail, nil, f.iconK)
   f.Texture:SetDesaturated(look.drop or false)
   if look.drop then f.Texture:SetVertexColor(1, 0.22, 0.18) else f.Texture:SetVertexColor(1, 1, 1) end
   f:SetAlpha(look.trivial and 0.5 or 1)
@@ -682,15 +701,51 @@ Pin.OnMouseEnter = QB.Safe(function(self)
     local map = self.layer and self.layer:GetMap()
     QM.AlsoHere(GameTooltip, d, map and QB.Plain(map:GetMapID()))
   end
-  P.Instruct(GameTooltip, "Click to set a waypoint")
+  P.Instruct(GameTooltip, "Click to show it on the arrow for now")
+  -- the one labelled change to the route a pin makes: a pick-up taken out of it, or a stop's quests skipped (the
+  -- quest icons' Shift-click routes them again)
+  local ids, n = P.PinQuests(d)
+  if n > 0 then
+    P.Instruct(GameTooltip, d.num and (n > 1 and "Shift-click: skip these quests" or "Shift-click: skip this quest") or "Shift-click: take it out of my route")
+  end
   GameTooltip:Show()
 end, "map pin tooltip")
 
 function Pin:OnMouseLeave() GameTooltip:Hide() end
 
+-- a route pin's quests: a stop's in your log (what its Shift-click skips, and what ends the arrow's showing it), a
+-- pick-up's on your list. Returns them as a set, and how many
+function P.PinQuests(d)
+  local ids, n = {}, 0
+  for id in pairs(d.ids or {}) do
+    if type(id) == "number" and ((d.num and QB.state.log[id]) or (not d.num and QB:IsAdded(id))) then ids[id], n = true, n + 1 end
+  end
+  return ids, n
+end
+
+-- a click: the place on the arrow for now (it ends as you get there, or as the stop's quests are handed in), nothing
+-- more. Shift-click: the labelled change, a stop's quests skipped or a pick-up off the list
 function Pin:OnMouseClickAction(button)
   local d = self.data
-  if d and button ~= "RightButton" then QB.API.SetWaypoint(d.m, d.x, d.y, d.name) end
+  if not d or button == "RightButton" then return end
+  local ids, n = P.PinQuests(d)
+  if IsShiftKeyDown and IsShiftKeyDown() and n > 0 then
+    local names = {}
+    for id in pairs(ids) do
+      if d.num then QB:SetSkipped(id, true) else QB:SetAdded(id, false) end
+      local q = QB.Quest.Get(id)
+      names[#names + 1] = q and q.name or ("Quest " .. id)
+    end
+    table.sort(names)
+    QB:Print((d.num and "Skipped, out of your route: " or "Out of your route (off your pick-up list): ") .. table.concat(names, ", ") .. ".")
+    return
+  end
+  local about = d.num and n > 0 and { ids = ids } or nil
+  if not d.num then
+    local first = next(ids)
+    if first then about = { qid = first, what = "give" } end
+  end
+  QB.API.SetWaypoint(d.m, d.x, d.y, d.name, nil, nil, about)
 end
 
 -- the stops: the game's quest POI, the same size at every zoom (QuestPinMixin: SetScalingLimits(1, 1, 1)), on the
@@ -750,12 +805,10 @@ function P.AddTo(map)
   return P.pageProvider
 end
 
--- the route on screen: the run's rest, or what is banked now, else the full plan
-function P:Route()
-  local now, plan = QB.routeNow, QB.routePlan
-  if QB.Run.Get() or (now and now.legs and #now.legs > 0) then return now end
-  return plan
-end
+-- the route on screen: the one the arrow, the minimap and the Map page follow (Target.lua, T.Mode): the run's rest;
+-- questing, the planned route (what is ready now while the Route page shows that); banking, what is ready now (the
+-- planned route while that page shows it)
+function P:Route() return QB.Target.Route() end
 
 function P:Build()
   local list = {}
@@ -778,7 +831,7 @@ function P:Build()
         -- who: the NPC the pin stands on (a stop stands at its first NPC, and may be named for its town or place);
         -- ids: the quests it lists. The quest icons (QuestMap.lua) read both
         local first = s.npcs and s.npcs[1] and QB.Data.NPC[s.npcs[1]]
-        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, who = first and first[1] or nil, ids = ids, icon = T.questActive,
+        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, who = first and first[1] or nil, ids = ids, icon = T.questActive, stop = s,
                             quests = quests, ready = ready, family = family, late = (leg.late and r.goal == "hour") or nil,
                             when = string.format("Stop %d of %d, at %s: level %.1f to %.1f", i, #r.legs, QB.Clock(leg.t), leg.arrive, leg.leave), lines = lines }
       end
@@ -795,7 +848,7 @@ function P:Build()
   end
   for id in pairs(QB:Plan().add) do
     local q = QB.Quest.Get(id)
-    if q and not q.repeatable and not QB.state.log[id] then
+    if q and not q.repeatable and not QB.state.log[id] and not QB:IsSkipped(id) then
       local st = QB:Status(q)
       if st.code == "todo" or st.code == "prereq" then
         -- a chain: the first open step's giver, or the held step's hand-in (what the click and the arrow aim at)

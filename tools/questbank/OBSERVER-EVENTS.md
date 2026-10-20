@@ -22,7 +22,7 @@ Part B; until then, `/qb events` in game prints the same table).
 | UNIT_AURA (player, party1-4) | unit, n, name, spellId, source, kind | | | | | |
 | NAME_PLATE_UNIT_ADDED / _REMOVED | the nameplate's unit reads | | | | | |
 | VIGNETTE_MINIMAP_UPDATED | id, objectGUID, atlas, name | | | | | |
-| MERCHANT_SHOW | guid, items, id, price, link | | | | | |
+| MERCHANT_SHOW / _UPDATE | guid, items, id, price (C_MerchantFrame.GetItemInfo since 5.4.4: the old GetMerchantItemInfo gave nil), link | | | | | |
 | LOOT_OPENED | slots, src | | | | | |
 | ENCOUNTER_START / _END | id, diff, t | | | | | |
 | PLAYER_REGEN_DISABLED / _ENABLED | t | | | | | |

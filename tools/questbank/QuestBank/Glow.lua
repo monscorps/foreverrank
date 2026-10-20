@@ -13,6 +13,13 @@
 -- log out. One you change yourself (while it is on, or since it set it) is left as you set it, that one alone: every
 -- other goes back to its own value. Only reads of units and cvar writes: nothing of the game's is replaced, and
 -- nothing is written in a fight or before the game has read its settings.
+-- 5.4.4, the owner's play test ("people like sparkle but hate the health bars popping up with it"): the soft-interact
+-- nameplate (SoftTargetNameplateInteract) is what put a health bar over every NPC the light was on. It is an option of
+-- its own now, off (glow.plates): the light sits on the game's interact icon's plate, which carries no bar, and a save
+-- that had the setting changed by 5.4.3 gets the player's own value back at the next login (release, below). And the
+-- light picks its NPCs: quest givers and hand-ins, and a trainer you can use (a profession you could learn or train a
+-- rank of, your class's trainer with new spells); every other NPC only with "Every other NPC too" (glow.everyNpc). The
+-- game's own interact icon is the game's, on the one thing under your Interact key.
 local _, QB = ...
 local Glow = {}
 QB.Glow = Glow
@@ -36,8 +43,8 @@ local LIST = {
     where = "Not in the game's Settings: how far round you the Interact key looks." },
   { cvar = "SoftTargetInteractRange", want = "15", label = "Interact range", unit = "yards",
     where = "Not in the game's Settings: how far away the Interact key looks." },
-  { cvar = "SoftTargetNameplateInteract", want = "1", label = "Interact target's nameplate", values = ONOFF,
-    where = "Not in the game's Settings: a nameplate on what the Interact key would use. The light sits on it." },
+  { cvar = "SoftTargetNameplateInteract", want = "1", label = "Interact target's nameplate", values = ONOFF, plates = true,
+    where = "Not in the game's Settings: a full nameplate, with its health bar, on what the Interact key would use. Set only with the light's Health bars option on." },
   { cvar = "SoftTargetIconInteract", want = "1", label = "Interact icons", values = ONOFF, icons = true,
     where = "The game's Settings: Accessibility, Interact Icons (Default and Show All turn it on)." },
   { cvar = "SoftTargetIconGameObject", want = "1", label = "Interact icons on objects", values = ONOFF, icons = true,
@@ -85,6 +92,12 @@ local function settings()
   return g
 end
 Glow.Settings = settings
+-- the health bars over what the light is on (the soft-interact nameplate): only when asked for
+local function platesOn() return settings().plates == true end
+Glow.PlatesOn = platesOn
+-- a setting the light sets now: every one, but the nameplate's with the health bars off
+local function sets(s) return not s.plates or platesOn() end
+Glow.Sets = sets
 
 function Glow.Style() return settings().style end
 function Glow.SetStyle(style)
@@ -348,17 +361,43 @@ end
 -- QuestBank was not running, Show All not picked, cannot be told from the light's own left by a game that closed
 -- before it could put it back, and goes back as the game's own. In a fight, or before the game has read its
 -- settings, when that is over
+-- A setting the light no longer sets (the nameplate's, with the health bars off): the game's own value it holds goes
+-- back, where the setting is still at the light's value (a 5.4.3 save, or the option just switched off); one you set
+-- since is yours and left as it is. The value is let go either way. Out of a fight only (apply's caller sees to it);
+-- refused by the game: kept, to try again at the next login. The names put back, for chat
+local function release(s, back)
+  local name = s.cvar
+  mine[name] = nil
+  local v, perChar = current(name)
+  local b = v ~= nil and holder(name, perChar, false) or nil
+  if not b then return end
+  local was = b.saved[name]
+  if was ~= nil and not b.yours[name] and not same(v, was) and same(v, s.want) then
+    if write(name, was) then
+      b.saved[name] = nil
+      back[#back + 1] = s.label .. " " .. Glow.Words(s, was)
+    else
+      refusedNow[name] = true
+    end
+    return
+  end
+  b.saved[name], b.yours[name] = nil, nil
+end
+Glow.Release = release
+
 local function apply(how)
   how = how or "login"
   if not SetCVar then return end
   if not free() then pending, pendingWhy = "apply", how; return end
   pending, pendingWhy = nil, nil
   local showAll = showAllPicked(true)
-  local yours = {}
+  local yours, back = {}, {}
   for _, s in ipairs(LIST) do
     local name, want = s.cvar, s.want
     local v, perChar = current(name)
-    if v ~= nil then
+    if v ~= nil and not sets(s) then
+      release(s, back)
+    elseif v ~= nil then
       local b = holder(name, perChar, true)
       local was = b.saved[name]
       if b.yours[name] then
@@ -377,7 +416,11 @@ local function apply(how)
     end
   end
   told(yours)
+  if #back > 0 then
+    QB:Print("The interact light no longer puts a health bar over what it lights (Settings, Interact light, has it as an option): " .. table.concat(back, ", ") .. " is back as you had it.")
+  end
 end
+Glow.Apply = apply
 
 -- put the game's own values back, each where it differs; one of yours stays as it is. Before each write, the value
 -- now: one that is neither the light's nor the game's own kept (or one of the interact icons a Show All pick left
@@ -673,6 +716,122 @@ local function isObject()
   return nil
 end
 
+----------------------------------------------------------------------------
+-- which NPCs light (5.4.4): quest givers and hand-ins, and the trainers you can use. "It highlights the herbalism
+-- trainer, why? Why would I need that when I have 2 professions?" (the owner, a level-21 mage): 5.4.3 lit every NPC
+-- under the Interact key in white, as the NPCs switch did. A trainer is known by the line the game shows under its name
+-- ("Herbalism Trainer", the unit's own tooltip data); a profession's is worth a light while you could learn it (fewer
+-- than two of the game's main ones, or a secondary one you lack) or train a rank of it (your skill near its cap), your
+-- class's while it has a spell for you (read at its window: TRAINER_SHOW; until then, at an even level, Classic's
+-- rhythm). Every other NPC lights only with Every other NPC too
+----------------------------------------------------------------------------
+local SECONDARY = { Cooking = true, ["First Aid"] = true, Fishing = true } -- (Classic's three; the client's own names)
+local RANK_NEAR = 25 -- skill points under its cap: a rank to train
+local subtitles = {} -- ["Creature:id"] = the line under an NPC's name, or false: read once a session
+-- (by the creature's id in its GUID: the line is the creature's, the same for every spawn of it. 5.4.4 as first built
+-- kept one a spawn, and a long session's spawns piled up)
+local function npcKey(guid)
+  if type(guid) ~= "string" then return nil end
+  local kind, id = guid:match("^(%a+)%-%d+%-%d+%-%d+%-%d+%-(%d+)%-")
+  return kind and (kind .. ":" .. id) or nil
+end
+Glow.NpcKey = npcKey
+
+-- the line under the soft-interact NPC's name ("Herbalism Trainer"; the game wraps a subtitle in <>), or nil
+function Glow.Subtitle(guid)
+  local key = npcKey(guid)
+  if key and subtitles[key] ~= nil then return subtitles[key] or nil end
+  local TI = C_TooltipInfo
+  local line
+  if TI and TI.GetUnit then
+    local ok, data = pcall(TI.GetUnit, "softinteract")
+    data = ok and plain(data) or nil
+    local lines = type(data) == "table" and plain(data.lines) or nil
+    local l2 = type(lines) == "table" and plain(lines[2]) or nil
+    local text = type(l2) == "table" and plain(l2.leftText) or nil
+    if type(text) == "string" and text ~= "" then line = (text:gsub("^<(.*)>$", "%1")) end
+  end
+  if key then subtitles[key] = line or false end
+  return line
+end
+
+-- your professions as the game lists them: by name, { skill, cap, main }; and how many main ones (the first two)
+local function professions()
+  local out, mains = {}, 0
+  if type(GetProfessions) ~= "function" or type(GetProfessionInfo) ~= "function" then return out, 0 end
+  local ok, a, b, c3, c4, c5, c6, c7 = pcall(GetProfessions)
+  if not ok then return out, 0 end
+  for i, idx in ipairs({ a or false, b or false, c3 or false, c4 or false, c5 or false, c6 or false, c7 or false }) do
+    if idx then
+      local okI, name, _, skill, cap = pcall(GetProfessionInfo, idx)
+      name, skill, cap = plain(name), plain(skill), plain(cap)
+      if okI and type(name) == "string" then
+        out[name] = { skill = type(skill) == "number" and skill or 0, cap = type(cap) == "number" and cap or 0, main = i <= 2 }
+        if i <= 2 then mains = mains + 1 end
+      end
+    end
+  end
+  return out, mains
+end
+Glow.Professions = professions
+
+-- what this character's class trainer has for it, as its window last showed (QuestBankDB.chars[you].trainer):
+-- { level, avail (spells to learn then), next (the lowest level a spell it lists needs) }
+local function trainerDB(make)
+  local db = QuestBankDB
+  local chars = type(db) == "table" and type(db.chars) == "table" and db.chars or nil
+  local ch = chars and QB.charKey and chars[QB.charKey]
+  if type(ch) ~= "table" then return nil end
+  if make and type(ch.trainer) ~= "table" then ch.trainer = {} end
+  return type(ch.trainer) == "table" and ch.trainer or nil
+end
+function Glow.ReadTrainer()
+  if type(GetNumTrainerServices) ~= "function" or type(GetTrainerServiceInfo) ~= "function" then return end
+  if type(IsTradeskillTrainer) == "function" then
+    local ok, trade = pcall(IsTradeskillTrainer)
+    if ok and plain(trade) == true then return end -- (a profession's: its own rule above)
+  end
+  local ok, n = pcall(GetNumTrainerServices)
+  n = ok and plain(n) or 0
+  if type(n) ~= "number" then return end
+  local avail, nextLvl = 0, nil
+  local lvl = UnitLevel and plain(UnitLevel("player")) or 0
+  for i = 1, n do
+    -- (name, its type: "available", "unavailable", "used" or "header", icon, the level it needs: Blizzard_TrainerUI.lua)
+    local okS, _, kind, _, req = pcall(GetTrainerServiceInfo, i)
+    req, kind = okS and plain(req) or nil, okS and plain(kind) or nil
+    if kind == "available" then avail = avail + 1
+    elseif kind == "unavailable" and type(req) == "number" and req > (type(lvl) == "number" and lvl or 0) and (not nextLvl or req < nextLvl) then nextLvl = req end
+  end
+  local t = trainerDB(true)
+  if t then t.level, t.avail, t.next = lvl, avail, nextLvl end
+end
+
+-- an NPC worth the light: a quest NPC ("quest"), a trainer you can use ("npc"), or nil
+function Glow.Useful(name, guid)
+  if Glow.QuestNPC(name) then return "quest" end
+  local sub = Glow.Subtitle(guid)
+  local what = type(sub) == "string" and sub:match("^(.-) Trainer$")
+  if not what then return nil end
+  local okC, className = pcall(UnitClass, "player")
+  className = okC and plain(className) or nil
+  local lvl = UnitLevel and plain(UnitLevel("player")) or 0
+  if type(lvl) ~= "number" then lvl = 0 end
+  if what == className then
+    local t = trainerDB(false)
+    if t and t.level then
+      if (t.avail or 0) > 0 and lvl >= t.level then return "npc" end
+      return (t.next and lvl >= t.next) and "npc" or nil
+    end
+    return (lvl > 1 and lvl % 2 == 0) and "npc" or nil
+  end
+  local mine, mains = professions()
+  local p = mine[what]
+  if p then return (p.cap > 0 and p.skill >= p.cap - RANK_NEAR) and "npc" or nil end
+  if SECONDARY[what] then return "npc" end
+  return mains < 2 and "npc" or nil
+end
+
 -- the light goes on the soft-interact target's nameplate; without one there is no place on screen for it
 function Glow.Update()
   local g = settings()
@@ -702,7 +861,13 @@ function Glow.Update()
   end
   local name = plain(UnitName and UnitName("softinteract"))
   local kind
-  if isNPC then kind = Glow.QuestNPC(name) and "quest" or "npc"
+  if isNPC then
+    -- a quest NPC or a trainer you can use; any other only with Every other NPC too
+    kind = Glow.Useful(name, guid)
+    if not kind then
+      if not g.everyNpc then return off(nil) end
+      kind = "npc"
+    end
   else kind = Glow.Kind(name, nil) or "other" end
   -- an object the game says belongs to a quest in your log is a quest object, whatever its name (an herb or a vein
   -- keeps its own colour, as by name)
@@ -719,6 +884,14 @@ function Glow.Update()
   f:SetFrameLevel((plate.GetFrameLevel and plate:GetFrameLevel() or 1) + 1)
   f:Show()
   Glow.kind, Glow.name = kind, name
+end
+
+-- the health bars over what it lights (the soft-interact nameplate), on or off: set, or put back as you had it, now
+-- (in a fight, when it is over) while the light is on
+function Glow.SetPlates(on)
+  settings().plates = on and true or false
+  if settings().on then apply("on") end
+  Glow.Update()
 end
 
 -- on: the light's settings set (in a fight, when it is over); off: every one put back as the game had it
@@ -759,6 +932,7 @@ function Glow:Init()
   self.frame = f
   f:SetScript("OnEvent", QB.Safe(function(_, event, ...)
     if event == "CVAR_UPDATE" then return changed(...) end
+    if event == "TRAINER_SHOW" or event == "TRAINER_UPDATE" then Glow.ReadTrainer(); return end
     if event == "PLAYER_LOGOUT" then
       -- put back, keeping them for the next login; nothing in a fight (the next login puts right what is left)
       if not free() then return end
@@ -785,7 +959,7 @@ function Glow:Init()
   end, "glow"))
   for _, e in ipairs({ "PLAYER_SOFT_INTERACT_CHANGED", "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_REGEN_DISABLED",
                        "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "PLAYER_LOGOUT", "QUEST_LOG_UPDATE", "CVAR_UPDATE",
-                       "VARIABLES_LOADED" }) do
+                       "VARIABLES_LOADED", "TRAINER_SHOW", "TRAINER_UPDATE" }) do
     pcall(f.RegisterEvent, f, e)
   end
 end

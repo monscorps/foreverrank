@@ -2,21 +2,42 @@
 -- The camp bar: a row of icons, the way a WeakAura shows a buff, up whenever one of them has something to say. Each
 -- icon is the game's secure button for its item or spell, so a click is yours: QuestBank only sets what it uses, and
 -- only out of a fight. Each has its own switch in Settings:
+--   sit    (5.4.4) a fire near you, any fire (yours, another player's, a quest giver's: the game's "Campfire Nearby"),
+--          and no Camp Benefits on you: lit, "Sit by the fire for a minute", a click sits you down (a /sit macro: the
+--          game keeps sitting itself from addons); sitting, "Stay put" and the seconds of the game's own countdown;
+--          then Camp Benefits with its hour
 --   food   Well Fed with its minutes; gone: the food you carry that gives it, lit, a click eats it; none: grey
 --   fire   a campfire: the campfire kit you carry and how many (a kit's fire is the one that holds camp features, and
 --          on Forever the kit is the fire), else Cooking's Basic Campfire when you know the spell (the Simple Wood you
 --          carry, its cooldown); one icon, never both. Lit while a feature waits and no fire is near; a click lights
---          it. A feature to place and no way to light a fire: grey, saying where a kit comes from
+--          it. A feature to place and no way to light a fire: grey, saying where a kit comes from. 5.4.4: the fire you
+--          sat by burned out (its aura gone while you stood still, or your kit's 15 minutes up) and you have no kit:
+--          a cook short of Simple Wood or Flint and Tinder is shown the nearest general goods vendor with its minutes
+--          (its own switch, wood); nobody sells a kit, and one who doesn't cook is told nothing
 --   camp   the best camp feature you can place: the shared one-hour cooldown as a sweep, lit when a campfire is near
 --          and the cooldown is up; a click places it
---   bag    the Cozy Sleeping Bag with your Well Rested stacks, lit when you stand still under three; a click unfurls it
+--   bag    the Cozy Sleeping Bag with your Well Rested stacks, lit when you stand still under three outside a rested
+--          place and its cooldown is up; a click unfurls it. 5.4.4: none from level 14, grey, where its quest chain goes
+--          on (it starts at the Nailed Plank in Westfall, or the Burned-Out Remains in the Barrens; its own switch,
+--          bagChain); once the chain is done, a seller you have seen
 -- Alt-drag moves the bar. In a fight it dims and keeps its buttons as they are; in dungeons it hides if asked.
 -- Leaving a town without your buffs (an inn or a city: the game's rested state ends) puts a banner above the bar in
 -- the same style: "Missing buffs" and an icon each, a click casts it or eats the food. Never in a fight or a dungeon,
--- once per departure, gone after 12 seconds or with its X; /qb buffs shows it any time.
--- What the game tells: your professions (GetProfessions), your bags (Game.ScanItems), your buffs (C_UnitAuras), the
--- spells you know (C_SpellBook.IsSpellKnown), the spell a kit casts (D.CAMP[id].sp, seen on UNIT_SPELLCAST_SUCCEEDED),
--- the campfire under your Interact key, and your rested state (IsResting, PLAYER_UPDATE_RESTING).
+-- once per departure, gone after 12 seconds untouched or with its X; /qb buffs shows it any time. Used, it stays: a
+-- click on one of its icons, the mouse on it, a cast or a meal under way keep it up, and an icon goes only once its
+-- buff is on you (5.4.4: "as soon as I clicked a buff I was missing, the other buffs I could get disappeared": its 12
+-- seconds ran from when it showed, whatever you did, and took every icon with it mid-cast).
+-- Sellers (5.4.4): each merchant you open who sells camp goods (a campfire kit, Simple Wood, the Cozy Sleeping Bag, a
+-- food that makes you Well Fed) is noted with where it stands (QuestBankDB.disc.sell, in the uploads). A grey fire (no
+-- kit, no wood) or no sleeping bag: the icon names the nearest known seller and how far, and a click shows it on the
+-- arrow for now (an optional detour: it ends once the item is in your bags or you get there, and the arrow is back on
+-- your route). Sellers someone has seen first; for Simple Wood and Flint and Tinder also the Classic database's general
+-- goods vendors (D.CAMP_SELL), said to be Classic data that may have moved until a player's game has seen the seller.
+-- Nothing is said in chat: the bar and its tooltips say it.
+-- What the game tells: your professions (GetProfessions), your bags (Game.ScanItems), your buffs (C_UnitAuras, read out
+-- of a fight, and again on UNIT_AURA), the spells you know (C_SpellBook.IsSpellKnown), the spell a kit casts
+-- (D.CAMP[id].sp, seen on UNIT_SPELLCAST_SUCCEEDED), the campfire under your Interact key, and your rested state
+-- (IsResting, PLAYER_UPDATE_RESTING).
 local _, QB = ...
 local Camp = {}
 QB.Camp = Camp
@@ -33,11 +54,12 @@ Camp.FoodText = foodText
 
 local plain = QB.Plain
 local function now() return GetTime and GetTime() or 0 end
+-- (each suggestion of 5.4.4 has a switch of its own, on until you untick it: sit, wood, bagChain)
+local ON = { "fire", "buffs", "sit", "wood", "bagChain" }
 local function settings()
   local s = QB:Settings()
   if type(s.remind) ~= "table" then s.remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true, buffs = true } end
-  if s.remind.fire == nil then s.remind.fire = true end
-  if s.remind.buffs == nil then s.remind.buffs = true end
+  for _, k in ipairs(ON) do if s.remind[k] == nil then s.remind[k] = true end end
   return s.remind
 end
 Camp.Settings = settings
@@ -45,8 +67,23 @@ Camp.Settings = settings
 -- Basic Campfire (spell 818, Cooking) lights a fire from one Simple Wood (4470) and has a 5-minute cooldown (the
 -- client's SpellReagents and SpellCooldowns). Classic Era's cooks learn it with the skill; Forever's tables
 -- (1.60.1.70338) mark it never learned, and Forever's own Basic Campfire (1229737) is a recipe that makes the Basic
--- Campfire Kit (279981) from the same wood: there the kit is the fire
+-- Campfire Kit (279981) from the same wood, with Flint and Tinder (4471) as its tool, learned at Cooking 1: there the
+-- kit is the fire. No vendor sells a kit (cooks make them)
 Camp.FIRE_SPELL, Camp.FIRE_ICON, Camp.WOOD, Camp.BASIC_KIT = 818, 135805, 4470, 279981
+Camp.FLINT, Camp.KIT_RECIPE = 4471, 1229737
+Camp.BAG = 211527 -- the Cozy Sleeping Bag
+Camp.BAG_LEVEL = 14 -- its quest chain's first step asks for level 14
+-- the game's own camp auras (1.60.1.70338): "Campfire Nearby" while a fire burns within about 100 yards of you (yours,
+-- another player's, a quest giver's); "Welcoming Campfire", the minute you sit by one counting down (its newer form
+-- counts crafting too, as long as you don't move); then "Camp Benefits" for an hour, with the buffs of that fire's camp
+-- features. Read out of a fight only: the client hides auras in one
+Camp.NEARBY, Camp.BENEFITS = 1283391, 1229741
+Camp.WELCOME = { [1229739] = true, [1289723] = true }
+Camp.KIT_BURN = 900 -- seconds a kit's fire burns
+-- the fire gone out: shown this long, while you stay within this many yards of where it went out; it went out when
+-- its aura left you within STILL_YD of where you had it last (walking away from a fire is not its going out)
+local OUT_S, OUT_YD, STILL_YD = 600, 200, 10
+Camp.OUT_S, Camp.OUT_YD = OUT_S, OUT_YD
 
 -- the long buffs each class keeps on itself, Classic's: the class's rows in the client's SkillLineAbility, the same ids
 -- on Forever (1.60.1.70338) and Classic Era (1.15.9). Each entry is one buff to have: the spells that give it (the one
@@ -148,9 +185,14 @@ function Camp.Professions()
   end
   return out
 end
+-- a cook: Cooking among your professions, or its Basic Campfire Kit recipe known (learned at Cooking 1)
+function Camp.Cook(profs)
+  return (profs or Camp.Professions()).Cooking ~= nil or knows(Camp.KIT_RECIPE)
+end
 
 -- your helpful auras by name: the stacks of one (Camp.Buffs), or what the game says of it (Camp.Auras: stacks, when
--- it runs out on GetTime's clock, its icon); Camp.Auras also gives the set of their spell ids
+-- it runs out on GetTime's clock, its icon); Camp.Auras also gives their spell ids, each with what the game says of it
+-- (true for one with no name)
 function Camp.Auras()
   local out, ids = {}, {}
   local get = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
@@ -163,6 +205,7 @@ function Camp.Auras()
       if type(n) == "string" then
         local exp = plain(a.expirationTime)
         local e = { n = plain(a.applications) or 1, exp = type(exp) == "number" and exp > 0 and exp or nil, icon = plain(a.icon) }
+        if type(id) == "number" and id > 0 then ids[id] = e end
         -- the Cozy Sleeping Bag's buff is 429959 "Well-Rested" (1.60.1.70338), with a hyphen; the Legacy perk's hidden
         -- passive 1225478 is "Well Rested" and is never the bag's. Either name counts when the id isn't the perk's
         local L = QB.Legacy
@@ -230,6 +273,152 @@ function Camp.Fire(bags)
   return nil
 end
 
+----------------------------------------------------------------------------
+-- sellers of camp goods, learned as you open merchants (QuestBankDB.disc.sell[npc key] = { n = its name, p = "uiMap:x,y",
+-- c, wx, wy = where it stands, i = { the camp goods it sells }, at }): at most MAX_SELLERS, the longest unseen let go
+----------------------------------------------------------------------------
+local MAX_SELLERS = 60
+Camp.MAX_SELLERS = MAX_SELLERS
+-- a camp good: a campfire kit, Simple Wood, Flint and Tinder, the Cozy Sleeping Bag, a food that makes you Well Fed
+-- (D.CAMP, D.FOOD)
+local function campGood(id)
+  if id == Camp.WOOD or id == Camp.FLINT or id == Camp.BAG then return true end
+  local e = (QB.Data.CAMP or {})[id]
+  if e and e.t == "kit" then return true end
+  return (QB.Data.FOOD or {})[id] ~= nil
+end
+Camp.CampGood = campGood
+
+local function sellDB(make)
+  local Disc = QB.Discover
+  local d = Disc and Disc.DB and Disc.DB()
+  if not d then return nil end
+  if make and type(d.sell) ~= "table" then d.sell = {} end
+  return type(d.sell) == "table" and d.sell or nil
+end
+Camp.SellDB = sellDB
+
+-- the merchant window open (MERCHANT_SHOW, and MERCHANT_UPDATE as its wares come in): its NPC, where it stands and the
+-- camp goods it sells, noted; one that sells none (any more) let go
+function Camp.NoteMerchant()
+  if type(GetMerchantNumItems) ~= "function" or type(GetMerchantItemID) ~= "function" then return end
+  local Disc = QB.Discover
+  local key = Disc and Disc.Who and Disc.Who("npc")
+  if not key then return end
+  local ok, n = pcall(GetMerchantNumItems)
+  n = ok and plain(n) or nil
+  if type(n) ~= "number" then return end
+  local items = {}
+  for i = 1, math.min(n, 200) do
+    local okI, id = pcall(GetMerchantItemID, i)
+    id = okI and plain(id) or nil
+    if type(id) == "number" and campGood(id) then items[#items + 1] = id end
+  end
+  local db = sellDB(#items > 0)
+  if not db then return end
+  if #items == 0 then db[key] = nil; return end
+  table.sort(items)
+  local me = QB.API.WorldPosition()
+  if not me then return end
+  local okN, name = pcall(UnitName, "npc")
+  name = okN and plain(name) or nil
+  db[key] = { n = type(name) == "string" and name ~= "" and name or nil, p = Disc.Here and Disc.Here() or nil,
+              c = me.c, wx = math.floor(me.wx + 0.5), wy = math.floor(me.wy + 0.5), i = items, at = time and time() or 0 }
+  local count, oldest = 0, nil
+  for k, e in pairs(db) do
+    count = count + 1
+    if type(e) ~= "table" then db[k] = nil
+    elseif not oldest or (e.at or 0) < (db[oldest].at or 0) then oldest = k end
+  end
+  if count > MAX_SELLERS and oldest then db[oldest] = nil end
+end
+
+-- the seed: D.CAMP_SELL's general goods vendors of your side, as sellers are kept ({ n, c, wx, wy, i, seed = true, key =
+-- the NPC's key, m, x, y = its map and place on it }), made once a session
+local seedList, seedFac
+local function seed()
+  local fac = QB.faction or (QB.API.Faction and QB.API.Faction())
+  if seedList and seedFac == fac then return seedList end
+  seedList, seedFac = {}, fac
+  local side = fac == "A" and 1 or fac == "H" and 2 or 0
+  for _, r in ipairs(QB.Data.CAMP_SELL or {}) do
+    if side > 0 and r[10] % (side * 2) >= side then
+      local i = {}
+      if r[9] % 2 == 1 then i[#i + 1] = Camp.WOOD end
+      if r[9] >= 2 then i[#i + 1] = Camp.FLINT end
+      seedList[#seedList + 1] = { n = r[2], c = r[3], wx = r[4], wy = r[5], m = r[6], x = r[7], y = r[8], i = i, seed = true, key = "c" .. r[1] }
+    end
+  end
+  return seedList
+end
+Camp.Seed = seed
+
+-- The nearest seller of the items in want (a set) on your land: the seller and its minutes away (by your flight paths
+-- and boats where the arrow's router knows the way, else on foot as the crow flies), or nil. A seller of every item
+-- in all (a list, optional) comes before one of some of them. Sellers your games have seen; with seeded also the seed's
+-- (D.CAMP_SELL), each counting its minutes half again and one more (Classic data: it may have moved), so a seller seen
+-- in play wins at about the same distance; a seed seller a game has seen is the one seen
+function Camp.NearestSeller(want, all, seeded)
+  local db = sellDB(false)
+  if not (db or seeded) then return nil end
+  local me = QB.API.WorldPosition()
+  if not me then return nil end
+  local TV, R = QB.Travel, nil
+  local walk = QB.Model.DETOUR / QB.Model.RUN / 60
+  local best, bm, bScore, bMiss
+  local function look(e)
+    if type(e) ~= "table" or e.c ~= me.c or type(e.wx) ~= "number" or type(e.wy) ~= "number" then return end
+    local sells, miss = false, 0
+    for _, id in ipairs(e.i or {}) do if want[id] then sells = true end end
+    if not sells then return end
+    for _, id in ipairs(all or {}) do
+      local has = false
+      for _, x in ipairs(e.i or {}) do if x == id then has = true end end
+      if not has then miss = miss + 1 end
+    end
+    local m
+    if TV and TV.Reach and TV.Via then
+      if R == nil then local okR, r = pcall(TV.Reach, me, TV.Opts("pin")); R = okR and r or false end
+      if R then local okV, v = pcall(TV.Via, R, e); if okV then m = v end end
+    end
+    if not m or m == math.huge then m = math.sqrt((e.wx - me.wx) ^ 2 + (e.wy - me.wy) ^ 2) * walk end
+    local score = e.seed and (m * 1.5 + 1) or m
+    if not best or miss < bMiss or (miss == bMiss and score < bScore) then best, bm, bScore, bMiss = e, m, score, miss end
+  end
+  for _, e in pairs(db or {}) do look(e) end
+  if seeded then
+    for _, e in ipairs(seed()) do
+      if not (db and db[e.key]) then look(e) end
+    end
+  end
+  return best, bm
+end
+
+-- the seller's line in an icon's tooltip: "Sold by X, 4 min away. Click: show it on the arrow."
+-- what: what the seller sells, named where the icon's own item is not what it sells ("Lindsay Ashlock sells both, ...")
+local function sellerLine(e, m, what)
+  local far = m < 1 and "here" or string.format("%d min away", math.floor(m + 0.5))
+  if what then return string.format("%s sells %s, %s. Click: show it on the arrow.", e.n or "A merchant you have seen", what, far) end
+  return string.format("Sold by %s, %s. Click: show it on the arrow.", e.n or "a merchant you have seen", far)
+end
+-- a seller of a campfire kit (a seller someone's game has seen: no vendor of the Classic database sells one)
+local function sellsKit(e)
+  for _, id in ipairs(e.i or {}) do
+    local c = (QB.Data.CAMP or {})[id]
+    if c and c.t == "kit" then return id end
+  end
+  return nil
+end
+Camp.SEED_NOTE = "Classic data, may have moved."
+
+-- a seller shown on the arrow for now, an optional detour: it ends once the item is in your bags (every one of a list
+-- of items) or you get there, and the arrow is back on your route (Arrow.lua's A:Show)
+function Camp.GoTo(e, item)
+  if not (e and QB.Arrow) then return false end
+  local about = type(item) == "table" and { items = item } or { item = item }
+  return QB.Arrow:Show(e.n or "A merchant", { c = e.c, wx = e.wx, wy = e.wy }, about)
+end
+
 -- the class's own buffs (Camp.SELF): the spell of an entry that is on you (true for one of its also names), or nil
 local function selfOn(entry, names, ids)
   for _, sp in ipairs(entry) do
@@ -276,9 +465,10 @@ end
 ----------------------------------------------------------------------------
 local ART = "Interface\\AddOns\\QuestBank\\art\\"
 local SIZE, GAP = 40, 6
-local ORDER = { "food", "fire", "camp", "bag" }
+local ORDER = { "sit", "food", "fire", "camp", "bag" }
 local bar, icons = nil, {}
 local campAt, fireAt, lastMove, lastPos
+local herePos = {} -- where you stand, read into this one table at each look
 
 local function quiet()
   if settings().quietInstance ~= false and IsInInstance then
@@ -355,12 +545,32 @@ local function newIcon(name, parent, hint)
   return b
 end
 
+-- the click of a grey icon, or one with nothing of the game's to use, with a place to go (Camp.State's seller, or dest:
+-- the sleeping bag's quest chain): that place on the arrow for now. The game's own click does nothing there (no item
+-- or wood), and this runs beside it, once a click
+local lastGo = -10
+local function goSeller(self)
+  local d = self.state
+  if not (d and (d.seller or d.dest)) or (IsAltKeyDown and IsAltKeyDown()) then return end
+  if not d.grey and (d.item or d.spell or d.macro) then return end
+  local t = now()
+  if t - lastGo < 0.3 then return end -- (a click's down and up)
+  lastGo = t
+  if d.dest then
+    if QB.Arrow then QB.Arrow:Show(d.dest.name, d.dest, d.dest.about) end
+  else
+    Camp.GoTo(d.seller, d.sellItem)
+  end
+end
+Camp.GoSeller = goSeller
+
 local function icon(key)
   local b = icons[key]
   if b then return b end
   b = newIcon("QuestBankCamp_" .. key, barFrame(), "Alt-drag moves the bar.")
   b:HookScript("OnMouseDown", moveStart)
   b:HookScript("OnMouseUp", moveStop)
+  b:HookScript("OnClick", QB.Safe(goSeller, "camp bar: seller"))
   icons[key] = b
   return b
 end
@@ -405,13 +615,215 @@ function Camp.CooldownText()
   return string.format("All camp features share a %d-minute cooldown (Field Guide).", math.floor(cd / 60 + 0.5))
 end
 
--- what each icon shows now: nil to hide it, else { tex, time, count, lit, grey, item or spell, cd = { start, dur }, tip }
+-- what a grey fire's seller may sell: a kit or Simple Wood; the bag's: the bag
+local fireSet
+local function fireGoods()
+  if fireSet then return fireSet end
+  fireSet = { [Camp.WOOD] = true }
+  for id, e in pairs(QB.Data.CAMP or {}) do if e.t == "kit" then fireSet[id] = true end end
+  return fireSet
+end
+local BAG_GOODS = { [211527] = true }
+local KIT_GOODS = { [4470] = true, [4471] = true }
+local WOOD_ONLY, FLINT_ONLY, BOTH = { 4470 }, { 4471 }, { 4470, 4471 }
+local RIX = "Rix Xizzix, the lost and found in Booty Bay, may sell it once the chain is done."
+Camp.RIX = RIX
+
+local function level()
+  if type(UnitLevel) ~= "function" then return 0 end
+  local ok, l = pcall(UnitLevel, "player")
+  l = ok and plain(l) or nil
+  return type(l) == "number" and l or 0
+end
+local function isResting()
+  if type(IsResting) ~= "function" then return false end
+  local ok, v = pcall(IsResting)
+  return ok and plain(v) == true
+end
+local function near(a, b, yd)
+  return a ~= nil and b ~= nil and a.c == b.c and (a.wx - b.wx) * (a.wx - b.wx) + (a.wy - b.wy) * (a.wy - b.wy) <= yd * yd
+end
+-- a place kept: where you stand copied into a table of its own (the bar reads where you stand into one table each look)
+local function keep(into, p)
+  if not p then return nil end
+  into = into or {}
+  into.c, into.wx, into.wy = p.c, p.wx, p.wy
+  return into
+end
+-- minutes from you to a place ({c, wx, wy}): by your flight paths and boats where the arrow's router knows the way,
+-- else on foot as the crow flies; nil off your land
+local function away(me, p)
+  if not (me and p and p.c == me.c) then return nil end
+  local TV, m = QB.Travel, nil
+  if TV and TV.Reach and TV.Via then
+    local okR, R = pcall(TV.Reach, me, TV.Opts("pin"))
+    if okR and R then local okV, v = pcall(TV.Via, R, p); if okV then m = v end end
+  end
+  if not m or m == math.huge then m = math.sqrt((p.wx - me.wx) ^ 2 + (p.wy - me.wy) ^ 2) * QB.Model.DETOUR / QB.Model.RUN / 60 end
+  return m
+end
+local function awayText(m) return (not m) and "" or (m < 1 and ", here" or string.format(", %d min away", math.floor(m + 0.5))) end
+
+----------------------------------------------------------------------------
+-- the fire you are by, watched out of a fight (the client hides auras in one). Its aura on you and then gone while
+-- you stood still (within STILL_YD of one spot for STILL_S seconds) is a fire burned out; so is your kit's fire, 15
+-- minutes after you lit it, with you still by it. When and where it went out are kept a while (OUT_S, OUT_YD) for the
+-- fire icon's offer. Walking away from a fire is not its going out
+----------------------------------------------------------------------------
+local STILL_S = 4
+local nearOn, anchor, stillSince, litAt, litPos, outAt, outPos
+local function watchFire(ids, t, me)
+  if me and not near(me, anchor, STILL_YD) then anchor, stillSince = keep(anchor, me), t end
+  local still = me ~= nil and stillSince ~= nil and t - stillSince >= STILL_S
+  if ids[Camp.NEARBY] then
+    fireAt, outAt, nearOn = t, nil, true
+  elseif nearOn then
+    nearOn = false
+    if still then outAt, outPos, fireAt = t, keep(outPos, me), nil end
+  end
+  if litAt and t - litAt >= Camp.KIT_BURN then
+    if near(me, litPos, 100) and not ids[Camp.NEARBY] then outAt, outPos, fireAt = litAt + Camp.KIT_BURN, litPos, nil end
+    litAt, litPos = nil, nil
+  end
+end
+-- (a fire gone out, for the tests: its time and place, or nil)
+function Camp.FireOut() return outAt, outPos end
+function Camp.ForgetFire() nearOn, litAt, litPos, outAt, outPos = nil, nil, nil, nil, nil end
+
+-- the fire burned out and you carry no kit: a cook short of Simple Wood or Flint and Tinder (Cooking's Basic Campfire
+-- Kit is made from the one with the other) is shown the nearest general goods vendor, a click puts it on the arrow
+-- until you have bought them; with both in your bags, the kit is yours to make. Nothing for one who doesn't cook
+local function woodOffer(bags, profs, t, me)
+  if not (outAt and t - outAt < OUT_S and near(me, outPos, OUT_YD)) then return nil end
+  if Camp.Kits(bags)[1] or not Camp.Cook(profs) then return nil end
+  local wood, flint = count(Camp.WOOD) > 0, count(Camp.FLINT) > 0
+  local kit = (QB.Data.CAMP or {})[Camp.BASIC_KIT] or {}
+  local d = { tex = "Interface\\Icons\\" .. (kit.i or "inv_camelot_camping_welcomingcampfire") }
+  if wood and flint then
+    d.tip = { "The fire burned out", "You carry Simple Wood and Flint and Tinder: make a Basic Campfire Kit in your Cooking window." }
+    return d
+  end
+  local need = (not wood and not flint) and BOTH or (wood and FLINT_ONLY or WOOD_ONLY)
+  d.lit = true
+  d.tip = { "The fire burned out", "A Basic Campfire Kit (Cooking) takes Simple Wood and Flint and Tinder: "
+    .. ((not wood and not flint) and "you have neither." or (wood and "you have no Flint and Tinder." or "you have no Simple Wood.")) }
+  local e, m = Camp.NearestSeller(KIT_GOODS, need, true)
+  if e then
+    d.seller, d.sellItem = e, need
+    d.tip[3] = sellerLine(e, m, #need == 2 and "both" or "it")
+    if e.seed then d.tip[4] = Camp.SEED_NOTE end
+  else
+    d.tip[3] = "A general goods vendor sells both."
+  end
+  return d
+end
+
+-- the sleeping bag's quest chain (D.SLEEP_CHAIN) for your side, made once a session: the first step is one quest a
+-- side (id, alt: either counts), at your side's place
+local sleepSteps, sleepFac
+function Camp.SleepSteps()
+  local fac = QB.faction or (QB.API.Faction and QB.API.Faction())
+  if sleepSteps and sleepFac == fac then return sleepSteps end
+  sleepSteps, sleepFac = {}, fac
+  for i, step in ipairs(QB.Data.SLEEP_CHAIN or {}) do
+    local p = (fac and step[fac]) or step
+    sleepSteps[i] = { id = step.id, alt = step.alt, name = step.name, where = p.where, m = p.m, x = p.x, y = p.y }
+  end
+  return sleepSteps
+end
+-- a step done (or a later step of its chain held or done), and in your log
+function Camp.StepDone(step)
+  local API, Q = QB.API, QB.Quest
+  if API.IsDone(step.id) or (step.alt and API.IsDone(step.alt)) then return true end
+  return Q.Behind(step.id) ~= nil or (step.alt ~= nil and Q.Behind(step.alt) ~= nil)
+end
+function Camp.StepHeld(step, log)
+  log = log or (QB.state and QB.state.log) or {}
+  return log[step.id] ~= nil or (step.alt ~= nil and log[step.alt] ~= nil)
+end
+-- the chain's next step: the first one in your log, else the first not done (nil once all are), whether you hold it,
+-- how many are done, and of how many
+function Camp.SleepNext()
+  local steps = Camp.SleepSteps()
+  local nextStep, held, done = nil, false, 0
+  for _, step in ipairs(steps) do
+    local d = Camp.StepDone(step)
+    if d then done = done + 1 end
+    if not nextStep or not held then
+      if Camp.StepHeld(step) then nextStep, held = step, true
+      elseif not d and not nextStep then nextStep = step end
+    end
+  end
+  return nextStep, held, done, #steps
+end
+
+-- the grey bag's way to the chain's next step: where it starts (or, held, where it is handed in, as the catalog places
+-- it), with the minutes, and the place to show on the arrow until the step is taken (or handed in). Worked out again
+-- for another step, every 30 seconds or 30 yards on (the bar looks every 2 seconds)
+local hint = {}
+local function chainHint(step, held, done, total, me)
+  local t = now()
+  if hint.d and hint.step == step and hint.held == held and t - hint.at < 30 and (not me or near(me, hint.me, 30)) then return hint.d end
+  hint.step, hint.held, hint.at, hint.me = step, held, t, keep(hint.me, me)
+  hint.d = nil
+  local qid = step.id
+  if step.alt then
+    -- (the first step's quest of your side: the one in your log, else the catalog's)
+    local log, q = QB.state and QB.state.log or {}, QB.Quest.Get(step.id)
+    if log[step.alt] or (not log[step.id] and not (q and QB.Quest.ForMe(q))) then qid = step.alt end
+  end
+  local m, x, y, where = step.m, step.x, step.y, step.where
+  local q = held and QB.Quest.Get(qid)
+  if q and q.turn and q.turn.m and q.turn.m > 0 and not q.turn.inside then m, x, y, where = q.turn.m, q.turn.x, q.turn.y, q.turn.n end
+  local p = m and QB.Model.World(m, x, y)
+  local mins = away(me, p)
+  local d = { tex = "Interface\\Icons\\" .. ((QB.Data.CAMP[Camp.BAG] or {}).i or "inv_misc_bag_bigbagofenchantments"), grey = true }
+  local place = where and (m and string.format("%s (%.1f, %.1f)", where, x, y) or where) or "where the bag's note points"
+  if done == 0 and not held then
+    d.tip = { "Cozy Sleeping Bag", string.format("You have none: a quest chain from level %d gives it. It starts at %s%s.", Camp.BAG_LEVEL, place, awayText(mins)) }
+  elseif held then
+    d.tip = { "Cozy Sleeping Bag", string.format("Its quest chain, step %d of %d: %s is in your log, handed in at %s%s.", done + 1, total, step.name, place, awayText(mins)) }
+  else
+    d.tip = { "Cozy Sleeping Bag", string.format("Its quest chain, step %d of %d: %s, at %s%s.", done + 1, total, step.name, place, awayText(mins)) }
+  end
+  if p then
+    d.dest = { name = (where or step.name):match("^([^,]+)") or step.name, c = p.c, wx = p.wx, wy = p.wy, about = { qid = qid, what = held and "turn" or "give" } }
+    d.tip[#d.tip + 1] = "Click: show it on the arrow."
+  end
+  d.tip[#d.tip + 1] = "A minute in the bag: +1% XP from kills and quests, up to 3%. " .. RIX
+  hint.d = d
+  return d
+end
+
+-- what each icon shows now: nil to hide it, else { tex, time, count, lit, grey, item or spell or macro, cd = { start,
+-- dur }, tip, seller = a seller of what it lacks (a click shows it on the arrow), dest = a place a click shows }
 function Camp.State()
   local s = settings()
   local out = {}
   local auras, ids = Camp.Auras()
   local bags, t, profs = carried(), now(), Camp.Professions()
+  local me = QB.API.WorldPosition(nil, herePos)
   noteSelf(auras, ids)
+  if not fighting() then watchFire(ids, t, me) end
+  if s.sit then
+    -- by a fire: sit a minute for Camp Benefits; sitting, its countdown; then the hour of Camp Benefits
+    local nearA, ben, wel = ids[Camp.NEARBY], ids[Camp.BENEFITS], nil
+    for id in pairs(Camp.WELCOME) do if ids[id] then wel = ids[id] end end
+    local kit = (QB.Data.CAMP or {})[Camp.BASIC_KIT] or {}
+    local fireTex = type(nearA) == "table" and nearA.icon or ("Interface\\Icons\\" .. (kit.i or "inv_camelot_camping_welcomingcampfire"))
+    if wel then
+      local left = type(wel) == "table" and wel.exp and math.max(0, wel.exp - t) or nil
+      out.sit = { tex = type(wel) == "table" and wel.icon or fireTex, lit = true, macro = "/sit", time = left and mins(left) or "",
+                  tip = { left and string.format("Stay put: %d s", math.ceil(left)) or "Stay put", "Sitting by the fire: Camp Benefits once the minute is up." } }
+    elseif nearA and not ben then
+      out.sit = { tex = fireTex, lit = true, macro = "/sit",
+                  tip = { "Sit by the fire for a minute", "A minute sitting by it gives Camp Benefits for an hour: the buffs of its camp features. Click to sit down." } }
+    elseif ben then
+      local left = type(ben) == "table" and ben.exp and ben.exp - t or nil
+      out.sit = { tex = type(ben) == "table" and ben.icon or fireTex, time = left and mins(left) or "",
+                  tip = { "Camp Benefits", left and ("Runs out in " .. mins(left) .. ".") or "On you." } }
+    end
+  end
   if s.food then
     local fed = auras["Well Fed"]
     if fed then
@@ -442,9 +854,14 @@ function Camp.State()
                            table.concat(names, "\n"), up and (near and "Click to place the first." or "Light a campfire, then click to place the first.") or Camp.CooldownText() } }
     end
   end
-  if s.fire then
+  local fire = Camp.Fire(bags)
+  -- the fire you sat by burned out and you have no kit (nor Classic Era's Basic Campfire): the wood offer in the fire's
+  -- place, under its own switch
+  local offer = s.wood and not fire and woodOffer(bags, profs, t, me) or nil
+  if offer then
+    out.fire = offer
+  elseif s.fire then
     local waits = out.camp and not out.camp.grey and not fireNear(t)
-    local fire = Camp.Fire(bags)
     if fire and fire.spell then
       local st, du = spellCD(fire.spell)
       local up = du == 0 or st + du - t <= 0
@@ -452,6 +869,11 @@ function Camp.State()
       out.fire = { tex = spellIcon(fire.spell, Camp.FIRE_ICON), spell = fire.spell, count = wood, grey = wood == 0,
                    lit = wood > 0 and up and waits and true or false, cd = (not up) and { st, du } or nil, time = (not up) and mins(st + du - t) or "",
                    tip = { spellName(fire.spell, "Basic Campfire"), wood > 0 and "Click to light a campfire." or "Needs Simple Wood." } }
+      if wood == 0 then
+        -- no wood: the nearest seller of it (or of a kit), a click shows it on the arrow
+        local e, m = Camp.NearestSeller(fireGoods())
+        if e then out.fire.seller, out.fire.sellItem, out.fire.tip[3] = e, Camp.WOOD, sellerLine(e, m) end
+      end
     elseif fire and fire.kit then
       local k = fire.kit
       local st, du = itemCD(k.id)
@@ -460,23 +882,56 @@ function Camp.State()
                    cd = (not up) and { st, du } or nil, time = (not up) and mins(st + du - t) or "",
                    tip = { k.e.n, string.format("Holds %d camp feature%s. Click to light it.", k.e.cap or 3, (k.e.cap or 3) == 1 and "" or "s") } }
     elseif out.camp then
-      -- a feature to place and nothing to light its fire with: where a kit comes from
+      -- a feature to place and nothing to light its fire with: where a kit comes from. A seller named says what it sells
+      -- (nobody is known to sell a kit: one your games saw selling one, else, for a cook, Simple Wood's)
       local kit = (QB.Data.CAMP or {})[Camp.BASIC_KIT] or {}
+      local cook = Camp.Cook(profs)
       out.fire = { tex = "Interface\\Icons\\" .. (kit.i or "inv_camelot_camping_welcomingcampfire"), grey = true,
-                   tip = { "No campfire kit", profs.Cooking and "Cooking's Basic Campfire makes one from Simple Wood." or "A cook makes them from Simple Wood." } }
+                   tip = { "No campfire kit", cook and "Cooking's Basic Campfire makes one from Simple Wood, with Flint and Tinder." or "A cook makes them from Simple Wood." } }
+      local e, m = Camp.NearestSeller(fireGoods())
+      local k = e and sellsKit(e)
+      if e and (k or cook) then
+        out.fire.seller, out.fire.sellItem = e, k or Camp.WOOD
+        out.fire.tip[3] = sellerLine(e, m, k and "campfire kits" or "Simple Wood")
+      end
     end
   end
-  if s.bag and bags[211527] then
-    local me = QB.API.WorldPosition()
-    if me and lastPos and math.abs(me.wx - lastPos.wx) + math.abs(me.wy - lastPos.wy) > 2 then lastMove = t end
-    if me then lastPos = me end
-    lastMove = lastMove or t
-    local rested = auras["Well Rested"]
-    local stacks = rested and rested.n or 0
-    local still = t - lastMove >= STILL and not (UnitOnTaxi and plain(UnitOnTaxi("player")) == true)
-    out.bag = { tex = "Interface\\Icons\\" .. ((QB.Data.CAMP[211527] or {}).i or "inv_misc_bag_bigbagofenchantments"), count = stacks > 0 and stacks or nil,
-                time = rested and rested.exp and mins(rested.exp - t) or "", lit = stacks < 3 and still, grey = stacks == 0 and not still, item = 211527,
-                tip = { "Well Rested " .. stacks .. "/3", "A minute in the Cozy Sleeping Bag adds a stack of bonus XP. Click to unfurl it." } }
+  local bagTex = "Interface\\Icons\\" .. ((QB.Data.CAMP[Camp.BAG] or {}).i or "inv_misc_bag_bigbagofenchantments")
+  if bags[Camp.BAG] then
+    if s.bag then
+      if me and lastPos and math.abs(me.wx - lastPos.wx) + math.abs(me.wy - lastPos.wy) > 2 then lastMove = t end
+      if me then lastPos = keep(lastPos, me) end
+      lastMove = lastMove or t
+      local rested = auras["Well Rested"]
+      local stacks = rested and rested.n or 0
+      local still = t - lastMove >= STILL and not (UnitOnTaxi and plain(UnitOnTaxi("player")) == true)
+      -- (never in a rested place, where the game won't unfurl it; its own cooldown, an hour on this client)
+      local st, du = itemCD(Camp.BAG)
+      local up = du == 0 or st + du - t <= 0
+      local town = isResting()
+      out.bag = { tex = bagTex, count = stacks > 0 and stacks or nil, cd = (not up) and { st, du } or nil,
+                  time = rested and rested.exp and mins(rested.exp - t) or ((not up) and mins(st + du - t) or ""),
+                  lit = stacks < 3 and still and up and not town, grey = stacks == 0 and not still, item = Camp.BAG,
+                  tip = { "Well Rested " .. stacks .. "/3", "A minute in the Cozy Sleeping Bag adds a stack of bonus XP. Click to unfurl it.",
+                          town and "You are in a rested place, a town or an inn: the game won't unfurl it here." or ((not up) and ("Ready in " .. mins(st + du - t) .. ".") or nil) } }
+    end
+  elseif not ((tonumber(plain(QB.API.ItemCount(Camp.BAG, true))) or 0) > 0) then
+    -- (none in your bags or your bank)
+    local step, held, done, total = Camp.SleepNext()
+    if step and s.bagChain and level() >= Camp.BAG_LEVEL then
+      -- none, the chain not done: where it goes on, a click shows it on the arrow
+      out.bag = chainHint(step, held, done, total, me)
+    elseif not step and s.bag then
+      -- the chain done and no bag in your bags: a seller you have seen, its nearest named; a click shows it on the arrow
+      local e, m = Camp.NearestSeller(BAG_GOODS)
+      if e then
+        out.bag = { tex = bagTex, grey = true, seller = e, sellItem = Camp.BAG,
+                    tip = { "Cozy Sleeping Bag", string.format("You have none: sold by %s, %s.", e.n or "a merchant you have seen",
+                            m < 1 and "here" or string.format("%d min away", math.floor(m + 0.5))), "Click: show it on the arrow. A minute in it adds a stack of bonus XP." } }
+      else
+        out.bag = { tex = bagTex, grey = true, tip = { "Cozy Sleeping Bag", "You have none. " .. RIX } }
+      end
+    end
   end
   return out
 end
@@ -491,6 +946,7 @@ Camp.BANNER_SECS, Camp.QUIET = BANNER_SECS, QUIET
 Camp.shows = 0             -- banners shown, for the tests
 local banner, bicons = nil, {}
 local shownAt, hideLater, wasRested, pendingAt, lastAuto
+local usedAt, eating -- your last click on one of its icons; the food you clicked to eat ({ id, e }), while you eat
 
 local function yes(fn, ...)
   if type(fn) ~= "function" then return false end
@@ -499,6 +955,20 @@ local function yes(fn, ...)
 end
 local function resting() return yes(IsResting) end
 local function inInstance() return yes(IsInInstance) end
+-- a cast or a channel of yours under way, or a meal (the game's Food or Drink buff on you)
+local MEAL = { Food = true, Drink = true, ["Food & Drink"] = true, Refreshment = true }
+local function busy(names)
+  local function casting(fn)
+    if type(fn) ~= "function" then return false end
+    local ok, v = pcall(fn, "player")
+    return ok and plain(v) ~= nil
+  end
+  if casting(UnitCastingInfo) or casting(UnitChannelInfo) then return true end
+  names = names or Camp.Auras()
+  for n in pairs(MEAL) do if names[n] then return true end end
+  return false
+end
+Camp.Busy = busy
 
 -- what you could have on and don't, each with what a click does: { tex, item or spell (self: cast on you), count, tip }
 function Camp.Missing()
@@ -508,10 +978,14 @@ function Camp.Missing()
   local bags, t = carried(), now()
   if s.food and not names["Well Fed"] then
     local f = Camp.Foods(bags)[1]
+    -- (the last piece eaten: its icon stays while you eat it, until Well Fed is on you)
+    if not f and eating and busy(names) then f = eating end
     if f then
       out[#out + 1] = { key = "food", tex = "Interface\\Icons\\" .. f.e.i, item = f.id, count = count(f.id),
                         tip = { "Well Fed", f.e.n .. ": " .. foodText(f.e.g or "Well Fed") .. ".", "Click to eat it." } }
     end
+  elseif eating then
+    eating = nil
   end
   for i, sp in ipairs(Camp.SelfMissing(names, ids)) do
     out[#out + 1] = { key = "self" .. i, tex = spellIcon(sp.id, sp.icon), spell = sp.id, self = true, tip = { sp.name, "Click to cast it on yourself." } }
@@ -571,7 +1045,10 @@ local function bannerFrame()
   banner.left:SetColorTexture(1, 0.75, 0.2, 0.85)
   banner:SetScript("OnUpdate", QB.Safe(function(self)
     if not shownAt then return end
-    local left = BANNER_SECS - (now() - shownAt)
+    -- in use, it stays: the mouse on it, or a click on it with a cast or a meal under way, starts its time again
+    local t = now()
+    if self:IsMouseOver() or (usedAt and t - usedAt < BANNER_SECS * 4 and busy()) then shownAt = t end
+    local left = BANNER_SECS - (t - shownAt)
     self.left:SetWidth(math.max(1, (self:GetWidth() - 2) * math.max(0, left) / BANNER_SECS))
     if left <= 0 then Camp.HideBanner() end
   end, "buff banner"))
@@ -590,7 +1067,12 @@ local function layBanner(list)
   local x = math.floor((w - row) / 2)
   for i, d in ipairs(list) do
     local b = bicons[i]
-    if not b then b = newIcon("QuestBankBuff_" .. i, f); bicons[i] = b end
+    if not b then
+      b = newIcon("QuestBankBuff_" .. i, f)
+      -- a click on it: the banner stays while you use it, its time from now (and the food you eat is kept in mind)
+      b:HookScript("OnClick", function(self) Camp.Used(self.state) end)
+      bicons[i] = b
+    end
     b.icon:SetTexture(d.tex)
     b.icon:SetDesaturated(false)
     b.icon:SetAlpha(1)
@@ -612,10 +1094,20 @@ local function layBanner(list)
   for i = n + 1, #bicons do bicons[i]:Hide() end
 end
 
+-- one of the banner's icons clicked: its time starts again, and it holds while the cast or the meal is under way
+function Camp.Used(d)
+  local t = now()
+  usedAt, shownAt = t, shownAt and t or shownAt
+  if d and d.key == "food" and d.item then
+    local e = (QB.Data.FOOD or {})[d.item]
+    if e then eating = { id = d.item, e = e } end
+  end
+end
+
 function Camp.HideBanner()
   if not banner then return end
   if fighting() then hideLater = true; return end -- its buttons are the game's: they go when the fight is over
-  shownAt, hideLater = nil, nil
+  shownAt, hideLater, usedAt = nil, nil, nil
   banner:Hide()
 end
 
@@ -688,9 +1180,10 @@ function Camp.Refresh()
       b.state = d
       if not fight then
         if b:GetAttribute("alt-type1") ~= "noop" then b:SetAttribute("alt-type1", "noop") end -- Alt-click moves the bar, never uses it
-        b:SetAttribute("type", d.item and "item" or (d.spell and "spell") or nil)
+        b:SetAttribute("type", d.item and "item" or (d.spell and "spell") or (d.macro and "macro") or nil)
         b:SetAttribute("item", d.item and ("item:" .. d.item) or nil)
         b:SetAttribute("spell", d.spell)
+        b:SetAttribute("macrotext", d.macro) -- (the sit icon's /sit: the game's own slash command, as a macro of yours)
         b:ClearAllPoints()
         b:SetPoint("LEFT", f, "LEFT", x, 0)
         b:Show()
@@ -739,6 +1232,8 @@ function Camp.OnEvent(event, a1, a2, a3)
   if event == "UNIT_SPELLCAST_SUCCEEDED" then
     if plain(a1) ~= "player" then return end
     local sp = plain(a3)
+    -- (a kit's fire: when and where, for its 15 minutes)
+    if KIT[sp] and KIT[sp] ~= true then litAt, litPos = now(), QB.API.WorldPosition() end
     if KIT[sp] then Camp.OnFire() end
     if FEATURE[sp] then campAt = now(); Camp.Refresh() end
   elseif event == "PLAYER_SOFT_INTERACT_CHANGED" then
@@ -752,13 +1247,20 @@ function Camp.OnEvent(event, a1, a2, a3)
     if wasRested and not r then departed() end
     wasRested = r
   elseif event == "UNIT_AURA" then
-    if plain(a1) == "player" then Camp.RefreshBanner() end
+    if plain(a1) ~= "player" then return end
+    Camp.RefreshBanner()
+    -- out of a fight, the bar looks again within a moment: a fire near, the minute by it, Camp Benefits (one look for
+    -- a burst of these)
+    local f = Camp.frame
+    if f and not fighting() then f.elapsed = math.max(f.elapsed or 0, TICK - 0.3) end
   elseif event == "PLAYER_REGEN_ENABLED" then
     Camp.Refresh()
     -- you left town in a fight: the banner now, if it was within the minute and you're still out
     if pendingAt and now() - pendingAt <= QUIET and not resting() then departed() else pendingAt = nil end
   elseif event == "PLAYER_REGEN_DISABLED" or event == "BAG_UPDATE_DELAYED" then
     Camp.Refresh()
+  elseif event == "MERCHANT_SHOW" or event == "MERCHANT_UPDATE" then
+    Camp.NoteMerchant()
   elseif event == "PLAYER_ENTERING_WORLD" then
     lastMove = now()
     wasRested, pendingAt = resting(), nil
@@ -781,7 +1283,7 @@ function Camp:Init()
     Camp.Refresh()
   end, "camp bar"))
   for _, e in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "PLAYER_SOFT_INTERACT_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
-                       "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "PLAYER_UPDATE_RESTING" }) do
+                       "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "PLAYER_UPDATE_RESTING", "MERCHANT_SHOW", "MERCHANT_UPDATE" }) do
     pcall(f.RegisterEvent, f, e)
   end
   if f.RegisterUnitEvent then pcall(f.RegisterUnitEvent, f, "UNIT_AURA", "player") else pcall(f.RegisterEvent, f, "UNIT_AURA") end

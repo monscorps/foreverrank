@@ -7,10 +7,11 @@ RequiredRaces, who starts and ends each quest, where every creature and object s
 items start quests. gen_data.py prefers Wowhead Forever wherever Forever changed something.
 
   python3 tools/questbank/cmangos.py     # research/cmangos/ClassicDB.sql.gz -> research/questbank/cmangos.json
+  python3 tools/questbank/cmangos.py --sellers  # only the sellers of Simple Wood and Flint and Tinder, into it
 
 objectives.py reads the same dump through read() and spawn_points() for the objective areas and map icons.
 """
-import gzip, json, os, re
+import gzip, json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -24,7 +25,12 @@ WANT = {"quest_template", "creature_questrelation", "creature_involvedrelation",
         "creature_spawn_entry", "gameobject_spawn_entry", "game_event_creature", "game_event_gameobject",
         "game_event_quest", "quest_poi", "quest_poi_points",
         # for gen_data.py's D.BIND: where each race starts, which is where a new character's hearthstone is bound
-        "playercreateinfo"}
+        "playercreateinfo",
+        # for gen_data.py's D.CAMP_SELL: who sells Simple Wood and Flint and Tinder (sellers())
+        "npc_vendor", "npc_vendor_template"}
+# the camp bar's goods a general goods vendor sells: Simple Wood and Flint and Tinder, what Cooking's Basic Campfire Kit
+# (1229737) is made from and with
+CAMP_GOODS = (4470, 4471)
 FIELD = re.compile(r"'((?:[^'\\]|\\.)*)'|(NULL)|(-?[\d.eE+-]+)")
 
 
@@ -59,8 +65,8 @@ def rows_of(values):
         yield row
 
 
-def read():
-    cols, data, table = {}, {t: [] for t in WANT}, None
+def read(want=WANT):
+    cols, data, table = {}, {t: [] for t in want}, None
     with gzip.open(SRC, "rt", encoding="utf-8", errors="replace") as f:
         for line in f:
             if line.startswith("CREATE TABLE `"):
@@ -72,7 +78,7 @@ def read():
                 continue
             if line.startswith("INSERT INTO `"):
                 t = line.split("`")[1]
-                if t in WANT:
+                if t in want:
                     body = line[line.index("VALUES") + 6:].strip().rstrip(";")
                     idx = {c.lower(): k for k, c in enumerate(cols[t])}
                     for r in rows_of(body):
@@ -100,7 +106,41 @@ def spawn_points(data, kind, maps=(0, 1), event=False):
     return out
 
 
+def sellers(data):
+    """Every creature that sells Simple Wood or Flint and Tinder (npc_vendor, or the npc_vendor_template its
+    VendorTemplateId names): [entry, name, subname, faction template, [the goods it sells], [[map, x, y], ...] on the
+    two continents], and the flight masters' faction templates with where they stand (NpcFlags 8), which gen_data.py
+    matches to the client's flight points to tell whose side a template is on."""
+    goods = {}
+    for idx, r in data["npc_vendor"]:
+        if r[idx["item"]] in CAMP_GOODS:
+            goods.setdefault(r[idx["entry"]], set()).add(r[idx["item"]])
+    tmpl = {}
+    for idx, r in data["npc_vendor_template"]:
+        if r[idx["item"]] in CAMP_GOODS:
+            tmpl.setdefault(r[idx["entry"]], set()).add(r[idx["item"]])
+    stands = spawn_points(data, "npc")
+    out, masters = [], []
+    for idx, r in data["creature_template"]:
+        e = r[idx["entry"]]
+        have = set(goods.get(e, ())) | set(tmpl.get(r[idx["vendortemplateid"]], ()) if r[idx["vendortemplateid"]] else ())
+        spots = [[m, round(x, 1), round(y, 1)] for m, x, y in stands.get(e, ()) if m in (0, 1)]
+        if have and spots:
+            out.append([e, r[idx["name"]], r[idx["subname"]], r[idx["faction"]], sorted(have), spots])
+        if (r[idx["npcflags"]] or 0) & 8 and spots:
+            masters.append([e, r[idx["faction"]], spots])
+    return {"vendors": sorted(out), "masters": sorted(masters)}
+
+
 def main():
+    if "--sellers" in sys.argv:
+        # only the sellers, into the cmangos.json there is (the rest of it as it was)
+        data = read({"npc_vendor", "npc_vendor_template", "creature_template", "creature", "creature_spawn_entry", "game_event_creature"})
+        out = json.load(open(OUT))
+        out["sellers"] = sellers(data)
+        json.dump(out, open(OUT, "w"), separators=(",", ":"))
+        print("wrote %s: %d sellers of Simple Wood or Flint and Tinder, %d flight masters" % (OUT, len(out["sellers"]["vendors"]), len(out["sellers"]["masters"])))
+        return
     data = read()
     quests = {}
     for idx, r in data["quest_template"]:
@@ -166,7 +206,7 @@ def main():
         starts.setdefault(r[idx["race"]], [r[idx["race"]], r[idx["map"]], round(r[idx["position_x"]], 1), round(r[idx["position_y"]], 1)])
     out = {"quests": quests, "items": items, "itemnames": itemnames,
            "names": {k: {i: names[k].get(i) for i in wanted[k]} for k in names},
-           "spawns": spawns, "innkeepers": sorted(innkeepers), "starts": [starts[k] for k in sorted(starts)]}
+           "spawns": spawns, "innkeepers": sorted(innkeepers), "starts": [starts[k] for k in sorted(starts)], "sellers": sellers(data)}
     json.dump(out, open(OUT, "w"), separators=(",", ":"))
     print("wrote %s: %d quests, %d item starts, %d NPC and %d object spawn sets, %d innkeepers, %d starting spots" % (
         OUT, len(quests), len(items), len(spawns["npc"]), len(spawns["object"]), len(innkeepers), len(starts)))

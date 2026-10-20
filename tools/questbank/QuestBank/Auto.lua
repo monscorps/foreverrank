@@ -1,10 +1,13 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- QuestBank Auto: the two conveniences Questie users know, off until you switch them on in Settings.
---   Accept for me: at a quest giver, take the quests offered that are for you (faction, class, race),
---     and the ones a party member shares. Not repeatable or grey ones, not in a place you skipped, not
---     when the log is full, and while you bank not a quest the Plan page would cut (next to nothing on the
---     day, leading nowhere). Hold Shift and QuestBank keeps its hands off. An escort a party member starts
---     is yours to join, in the game's own prompt (Auto.Escort says why).
+--   Accept for me: a choice (5.4.4; it was a switch that took every quest that wasn't grey): Off; Quests on my route
+--     (your pick-up list, and the next steps of the chains you are on or picked); or Quests worth taking (those, and any
+--     other the planner thinks worth it: never grey, never under its low-value line, Model.lua's CHEAP). With Quests
+--     worth taking, one outside your route is taken or left in the game's quest window for you, as you choose
+--     (autoAcceptOther). For you only (faction, class, race), not repeatable, not a quest you skipped or one in a place
+--     you skipped, not when the log is full, and while you bank not a quest the Plan page would cut (next to nothing on
+--     the day, leading nowhere). Hold Shift and QuestBank keeps its hands off. An escort a party member starts is yours
+--     to join, in the game's own prompt (Auto.Escort says why).
 --   Hand in for me: at the quest taker, hand in what is finished when there is nothing to choose (one
 --     reward or none) and nothing to pay. Smart about banking: while you bank, only what the Plan page
 --     says to hand in now (quests you cut, ones that pay next to nothing on the day, and the step you hand
@@ -18,6 +21,44 @@ QB.Auto = Auto
 local Q = QB.Quest
 
 local function on(key) return QB:Opt(key) == true end -- (where you are can override the setting: QB:Opt)
+
+-- Accept for me as it applies now: "off", "route" or "worth". A context row (QB:Opt) says on or off: on is your own
+-- choice, or Quests worth taking where that is Off; an older save's true is Quests worth taking
+local ACCEPT = { off = true, route = true, worth = true }
+function Auto.AcceptMode()
+  local v = QB:Opt("autoAccept")
+  if v == true then
+    local own = QB:Settings().autoAccept
+    return (own == "route" or own == "worth") and own or "worth"
+  end
+  if v == false or v == nil then return "off" end
+  return ACCEPT[v] and v or "off"
+end
+local function accepting() return Auto.AcceptMode() ~= "off" end
+Auto.WORDS = { off = "Off", route = "Quests on my route", worth = "Quests worth taking" }
+Auto.OTHER = { accept = "Accept them", leave = "Leave the window to me" }
+
+-- on your route: on your pick-up list, or a step of a chain you picked (its first open step), or the next step of a
+-- quest you hold or just handed in (the chain you are on)
+function Auto.OnRoute(id)
+  if not id or id == 0 then return false end
+  local plan = QB:Plan()
+  if plan.add[id] then return true end
+  local q = Q.Get(id)
+  if not q then return false end
+  for pid in pairs(plan.add) do
+    local pq = Q.Get(pid)
+    if pq and pq.pre then for _, p in ipairs(pq.pre) do if p == id then return true end end end
+  end
+  for _, p in ipairs(q.pre or {}) do
+    if QB.state.log[p] or QB.API.IsDone(p) then
+      -- the step straight before this one is yours: carrying the chain on
+      if q.pre[#q.pre] == p then return true end
+    end
+  end
+  return false
+end
+
 -- the quest the window shows: 0 when there is none, or when the client hides the id (a secret value)
 local function qid()
   local id = GetQuestID and GetQuestID()
@@ -38,15 +79,29 @@ local function banking() return QB:Mode() == "lock" end
 local function level() return QB.state.level or 1 end
 local function logFull() return (QB.state.logCount or 0) >= QB.LOG_SLOTS end
 
--- take this quest? A quest QuestBank knows nothing about is new to Forever: yes. Known: for you, not in a
--- place you skipped, and while you bank not one the Plan page would cut.
-function Auto.MayAccept(id, trivial, repeatable)
-  if trivial or repeatable or logFull() then return false end
+-- worth taking, as the planner judges a stop: not grey (the game's trivial), and paying at least the planner's
+-- low-value line at your level (Model.lua's CHEAP, which grey quests' tenth of their XP never reaches)
+function Auto.Worth(id, trivial)
+  if trivial then return false end
   local q = id and id ~= 0 and Q.Get(id)
-  if not q then return true end
-  if q.repeatable or not Q.ForMe(q) or QB:SkipsQuest(q) then return false end
-  if banking() and QB.Model.XpAt(q, level()) < 500 * QB.Scale(level()) and not QB:Upgrade(q) then return false end
-  return true
+  if not q then return true end -- (new to Forever: no number to judge by, as before)
+  local lvl = level()
+  return QB.Model.XpAt(q, lvl) >= (QB.Model.CHEAP or 400) * QB.Scale(lvl)
+end
+
+-- take this quest? Off: no. For you, not repeatable, not skipped (the quest or its place), the log not full; on your
+-- route: yes; else with Quests worth taking, worth taking and your choice for quests outside the route. A quest
+-- QuestBank knows nothing about is new to Forever: on no route, and worth taking. While you bank, not one the Plan page
+-- would cut
+function Auto.MayAccept(id, trivial, repeatable)
+  local mode = Auto.AcceptMode()
+  if mode == "off" or repeatable or logFull() then return false end
+  local q = id and id ~= 0 and Q.Get(id)
+  if q and (q.repeatable or not Q.ForMe(q) or QB:SkipsQuest(q)) then return false end
+  if q and banking() and QB.Model.XpAt(q, level()) < 500 * QB.Scale(level()) and not QB:Upgrade(q) then return false end
+  if q and Auto.OnRoute(id) then return not trivial end
+  if mode ~= "worth" or QB:Settings().autoAcceptOther == "leave" then return false end
+  return Auto.Worth(id, trivial)
 end
 
 -- hand this one in now? Questing and the rush: yes. Banking: only what the Plan page says to hand in now.
@@ -66,7 +121,7 @@ end
 -- at an NPC: a finished quest to hand in first, else the first quest offered that you should take
 function Auto.Greeting(event)
   if byHand() then return end
-  local accept, turnIn = on("autoAccept"), on("autoTurnIn")
+  local accept, turnIn = accepting(), on("autoTurnIn")
   if not accept and not turnIn then return end
   later("greeting", function()
     if byHand() then return end
@@ -104,7 +159,7 @@ end
 
 -- the quest window: take it, unless the game would first ask you about PvP
 function Auto.Detail()
-  if not on("autoAccept") or byHand() then return end
+  if not accepting() or byHand() then return end
   local id = qid()
   if id == 0 then return end
   later("accept", function()
@@ -148,7 +203,7 @@ end
 -- and hides nothing, and says so once a session to whoever has Accept for me on.
 local toldEscort = false
 function Auto.Escort(who, title)
-  if not on("autoAccept") or toldEscort then return end
+  if not accepting() or toldEscort then return end
   toldEscort = true
   QB:Print(string.format("%s started %s: say yes in the game's prompt to join. Accept for me leaves escorts to you.",
     who or "A party member", title or "a quest"))

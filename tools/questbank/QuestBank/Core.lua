@@ -2,7 +2,7 @@
 -- QuestBank core: game state, quest status, the plan, the hand-in run, settings, events, export.
 -- Everything here reads the game. Nothing accepts, abandons or hands in a quest for you.
 local ADDON, QB = ...
-QB.version = "5.4.3"
+QB.version = "5.4.4"
 QB.MAXLEVEL = 60
 QB.LOG_SLOTS = 40 -- quests the Forever log holds (the game's escort prompt has said 25: see QB.EscortLimit)
 QB.CAP = 60 -- the level XP runs to in the plans: set from the level lock in ReadState
@@ -652,45 +652,65 @@ local function entranceOf(m)
   end
 end
 
+-- the waypoint's line in chat, with the game's map-pin link for the spot (QuestBank never sets the game's own pin: the
+-- player's click on the link does, as Blizzard's code). Said for the first waypoint of a session, then only when
+-- nothing on screen shows the waypoint (the arrow neither up nor shown for it) or the click was a Shift-click (the
+-- game's way to put something in chat); Shift-click on the arrow says it again for the waypoint it points at
+-- (API.SayWaypoint). Before 5.4.4 every click said it. API.waypointSaid: said this session
+API.waypointSaid = false
+local lastWaypoint = {}
+function API.SayWaypoint(m, x, y, title, shown)
+  if not (m and x and y) then return false end
+  local link = API.WaypointLink(m, x, y)
+  API.waypointSaid = true
+  QB:Print(string.format("Waypoint: %s (%.0f, %.0f).%s%s", title or "", x, y,
+    shown and " The arrow shows the way until you get there." or "",
+    link and (" " .. link .. " puts the game's pin there.") or ""))
+  return true
+end
+-- the last waypoint clicked, which the arrow points at ({m, x, y, title}; the arrow's Shift-click), or nil
+function API.LastWaypoint() return lastWaypoint.m and lastWaypoint or nil end
+
 -- quiet: the run's own, as the next stop changes (Pins.lua): only TomTom hears of it, QuestBank's arrow follows the
 -- route by itself. place: where the arrow points (worked out from m, x, y when not given); false: the route's own, the
--- arrow stays on what it points at, if it is up
-function API.SetWaypoint(m, x, y, title, quiet, place)
+-- arrow stays on what it points at, if it is up. about: what the click was for ({ qid, what, ids, item }: Arrow.lua's
+-- A:Show), which ends the arrow's showing it besides getting there.
+-- A click shows the place on the arrow for now, the arrow on or off (5.4.4; 5.4.3 switched an arrow that was up to
+-- "where you last clicked" for good, and the route was lost after one click): it changes no plan, and once you get there
+-- or its quest is done the arrow is back on the route (A:Show, A:EndTemp). The place is kept as the last one clicked,
+-- for the arrow's "Where you last clicked" when you choose that in its menu
+function API.SetWaypoint(m, x, y, title, quiet, place, about)
   local tomtom = API.TomTom()
   local shown = false
-  if not quiet and QB.Arrow then
-    -- the arrow shown for the last click goes: this click shows its own, or none (only a walk left beside TomTom's
-    -- arrow, no way there), never the old place
-    if place ~= false then QB.Arrow:EndTemp() end
+  if not quiet and QB.Arrow and place ~= false then
     local p, pin = place or (QB.Model and QB.Model.World and QB.Model.World(m, x, y)), title
-    if not p and place == nil then
-      p, pin = entranceOf(m)
-      if not p then
-        -- nowhere QuestBank can lead (an island, an instance with no known way in): said so, never the old target
-        local set = QB:Settings()
-        set.arrowPin = { name = title, none = true }
-        if set.arrow then set.arrowMode = "pin" end
-        QB.Arrow.Invalidate()
-      end
-    end
+    if not p and place == nil then p, pin = entranceOf(m) end
+    local set = QB:Settings()
     if p then
-      if place ~= false then QB.Arrow:Pin(pin, p.c, p.wx, p.wy) end
-      -- the arrow switched off: shown for this waypoint, until you get there (TomTom's own arrow does that job, but
-      -- only as the crow flies: with TomTom QuestBank's shows the way while there is more to it than the last walk)
-      if not tomtom then
-        shown = QB.Arrow:ShowFor(pin, p.c, p.wx, p.wy)
-      elseif QB.Travel and QB:Settings().arrowTravel ~= false then
-        local plan = QB.Travel.PlanTo(p, "pin")
-        if plan and #plan.legs > 1 and QB.Arrow:ShowFor(pin, p.c, p.wx, p.wy) then QB.Arrow.temp.travel = true end
-      end
+      QB.Arrow:Pin(pin, p.c, p.wx, p.wy)
+    else
+      -- nowhere QuestBank can lead (an island, an instance with no known way in): said so, never the old place
+      set.arrowPin = { name = title, none = true }
+      QB.Arrow.Invalidate()
     end
+    -- shown for now: the arrow up, or the arrow off for this one place until you get there (TomTom's own arrow does
+    -- that job, but only as the crow flies: with TomTom QuestBank's shows the way while there is more to it than the
+    -- last walk). The last click's goes either way: never the old place
+    shown = QB.Arrow:Show(p and pin or title, p, about, tomtom)
+    -- (the place shown carries its waypoint: the arrow's Shift-click says this one, never an older click's)
+    local t = shown and QB.Arrow.temp
+    if t and m and x and y and m ~= 0 then t.wp = { m = m, x = x, y = y, title = title } end
   end
   if not (m and x and y) or m == 0 then return false end
   if tomtom then
     local w = { m = m, x = x, y = y, title = title }
     if mapOpen() then
       tomtomLater = w
-      if not quiet then QB:Print(string.format("Waypoint: %s (%.0f, %.0f). TomTom gets it when you close the map.", title or "", x, y)) end
+      -- (said once a session too, or on a Shift-click: TomTom's arrow shows the waypoint once the map shuts)
+      if not quiet and (not API.waypointSaid or (IsShiftKeyDown and IsShiftKeyDown())) then
+        API.waypointSaid = true
+        QB:Print(string.format("Waypoint: %s (%.0f, %.0f). TomTom gets it when you close the map.", title or "", x, y))
+      end
     else
       tomtomLater = nil
       toTomTom(tomtom, w)
@@ -698,10 +718,14 @@ function API.SetWaypoint(m, x, y, title, quiet, place)
     return true
   end
   if quiet then return false end
-  local link = API.WaypointLink(m, x, y)
-  QB:Print(string.format("Waypoint: %s (%.0f, %.0f).%s%s", title or "", x, y,
-    shown and " The arrow shows the way until you get there." or "",
-    link and (" " .. link .. " puts the game's pin there.") or ""))
+  -- the arrow up and moved there (it points at it, or says it knows no way) or shown for this one: the line once a
+  -- session. The route's own asked for (/qb next: the arrow stays as it is) is always said
+  if place ~= false then
+    lastWaypoint.m, lastWaypoint.x, lastWaypoint.y, lastWaypoint.title = m, x, y, title
+    local shift = IsShiftKeyDown and IsShiftKeyDown()
+    if API.waypointSaid and (shown or QB:Settings().arrow) and not shift then return true end
+  end
+  API.SayWaypoint(m, x, y, title, shown)
   return true
 end
 
@@ -1232,8 +1256,11 @@ local DEFAULTS = {
   -- 1 Kalimdor) you told QuestBank to leave out of its suggestions
   rangeAbove = "auto", rangeBelow = "auto", skipCat = {}, skipCont = {},
   -- off until asked for: accept quests for you (at an NPC, and ones a party member shares), hand finished ones in
-  -- for you (Auto.lua decides when that is wise), and two party-chat lines
-  autoAccept = false, autoTurnIn = false, sayAccept = false, sayComplete = false,
+  -- for you (Auto.lua decides when that is wise), and two party-chat lines. Accept for me is a choice (5.4.4): "off",
+  -- "route" (quests on your route: your pick-up list and the chains you are on) or "worth" (any quest worth taking:
+  -- never grey, never under the planner's low-value line); autoAcceptOther: what "worth" does with one outside your
+  -- route, "accept" it or "leave" the game's quest window to you
+  autoAccept = "off", autoAcceptOther = "accept", autoTurnIn = false, sayAccept = false, sayComplete = false,
   autoKey = "shift", -- hold this key at an NPC to decide a quest yourself: shift, ctrl, alt, or none (Auto.lua)
   -- where you are decides: each context may override autoAccept, autoTurnIn, sayAccept, sayComplete and clockShow;
   -- a key left out inherits the setting above (QB:Opt). Checked in this order: dungeon, pvp, party, cap
@@ -1249,22 +1276,31 @@ local DEFAULTS = {
   -- all (mmColor "quest" or "single", oneColor), the strokes' width and opacity (zmWidth 2 to 24, zmAlpha 0.2 to 1),
   -- your arrow's size on the minimap (mmArrowSize, the party dots follow it), the golden path (goldenPath; its pieces
   -- in metres, its width, its opacity and its colour), the compass dial's size in screen pixels (compassSize 24 to
-  -- 128) and a dark backdrop behind it (compassBg)
+  -- 128) and a dark backdrop behind it (compassBg). The strokes and the golden path a quarter thinner since 5.4.4
+  -- (6 pixels; 8 before, and a save still at 8 is moved to 6 once: QB:Settings)
   markerStyle = "questtrail", mmRing = 18, mmGlyphPct = 100, mmColor = "quest", oneColor = { 1, 0.82, 0 },
-  zmWidth = 8, zmAlpha = 1, mmArrowSize = 32,
-  goldenPath = true, gpSpacing = 15, gpWidth = 8, gpAlpha = 0.9, gpColor = { 1, 0.82, 0 },
+  zmWidth = 6, zmAlpha = 1, mmArrowSize = 32,
+  goldenPath = true, gpSpacing = 15, gpWidth = 6, gpAlpha = 0.9, gpColor = { 1, 0.82, 0 },
   compassSize = 48, compassBg = false,
+  -- the direction arrow's look (Arrow.lua): QuestBank's own arrow ("questbank": the game's tutorial arrow coloured by
+  -- your heading, its glow and pulses; the default again since 5.4.4) or QuestTrail's compass ("compass")
+  arrowStyle = "questbank",
+  -- QuestBank's quest icons on the world map and the Map page, in percent of the game's own pins' art (their click area
+  -- stays the game's): half since 5.4.4
+  mapIconPct = 50,
   -- the minimap's far zoom over the game's tiles and its drag (MinimapView.lua); back to you after a drag; your party
   -- and the quest's areas on the far ground; the stops the strokes join (MinimapRoute.lua; QuestTrail's 16)
   mmExtended = true, mmCenter = true, mmParty = true, mmAreas = true, minimapSteps = 16,
-  -- the interact light (Glow.lua): its style (sparkle, light, or the game's own highlight), NPCs lit too, plain
-  -- objects too, kept on in a fight
-  glow = { on = true, style = "sparkle", npcs = true, other = true, combat = false },
+  -- the interact light (Glow.lua): its style (sparkle, light, or the game's own highlight), NPCs lit too (quest NPCs,
+  -- and the trainers you can use), every other NPC too (everyNpc), plain objects too, kept on in a fight, and the
+  -- game's health bar over what it lights (plates: the soft-interact nameplate; off since 5.4.4)
+  glow = { on = true, style = "sparkle", npcs = true, everyNpc = false, other = true, combat = false, plates = false },
   walkRecord = true, walkShow = false, -- walked trails (Walk.lua): noted as you go; drawn on the minimap when asked
   -- the camp bar (Camp.lua): Well Fed, the campfire (Basic Campfire or a kit), camp features with their cooldown, the
   -- sleeping bag; hidden in dungeons when quietInstance. campBar = false hides the bar. buffs: the missing-buffs banner
-  -- when you leave a town
-  remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true, buffs = true }, campBar = true,
+  -- when you leave a town. 5.4.4's suggestions, each its own: sit (by a fire near you), wood (a seller when the fire
+  -- burned out), bagChain (where the sleeping bag's quest chain goes on)
+  remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true, buffs = true, sit = true, wood = true, bagChain = true }, campBar = true,
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
   -- the arrow guides you step by step, by the flight paths you know, boats and the hearthstone (Travel.lua); off, it
   -- points straight at its target. arrowHearth: the hearthstone may be one of the steps
@@ -1308,7 +1344,20 @@ function QB:Settings()
   db.runs = db.runs or {}
   db.plans = db.plans or {}
   if not QB.pruned then QB.pruned = true; QB.PruneLogs(db) end
+  if s.v544 == nil then QB.Migrate544(s) end
   return s
+end
+
+-- A save from before 5.4.4, once: Accept for me was a switch (on: Quests worth taking, as it took every quest that
+-- wasn't grey; the context rows keep their on and off, read by Auto.lua's AcceptMode), the strokes' and the golden
+-- path's width 8 the default (no setting ever showed them: the old default moves to the new one), and a click pinned
+-- the arrow for good (arrowMode "pin" came from a click: back to the route)
+function QB.Migrate544(s)
+  s.v544 = true
+  if s.autoAccept == true then s.autoAccept = "worth" elseif s.autoAccept ~= "route" and s.autoAccept ~= "worth" then s.autoAccept = "off" end
+  if s.zmWidth == 8 then s.zmWidth = 6 end
+  if s.gpWidth == 8 then s.gpWidth = 6 end
+  if s.arrowMode == "pin" then s.arrowMode = "route" end
 end
 
 -- The saved hand-in runs, kept to their newest (5.4.2: they grew for as long as the account played, 3 to 6 KB each,
@@ -1421,6 +1470,7 @@ function QB:Plan()
   end
   p.add, p.cut, p.seen, p.removed = p.add or {}, p.cut or {}, p.seen or {}, p.removed or {}
   p.handed, p.rep = p.handed or {}, p.rep or {}
+  p.skip = p.skip or {} -- quests skipped for good (QB:SetSkipped): [id] = true
   return p
 end
 
@@ -1606,6 +1656,7 @@ function QB:Skipped(catIdx, cont)
 end
 
 function QB:SkipsQuest(q)
+  if self:IsSkipped(q.id) then return true end -- (the quest itself skipped: QB:SetSkipped)
   local r = D.Q[q.id]
   local turn = D.NPC[q.turnIdx]
   return r ~= nil and self:Skipped(r[8], turn and turn[5])
@@ -1617,6 +1668,7 @@ function QB:SkipSignature()
   for k in pairs(s.skipCat) do parts[#parts + 1] = k end
   for k in pairs(s.skipCont) do parts[#parts + 1] = "c" .. k end
   table.sort(parts)
+  if (QB.skipVer or 0) > 0 then parts[#parts + 1] = "q" .. QB.skipVer end -- (a quest skipped or routed again)
   return table.concat(parts, ",")
 end
 
@@ -1703,7 +1755,9 @@ local turnedIn = {} -- this session, so a hand-in is never mistaken for an aband
 local function trackRemovals(s)
   if not QB.logReady then return end
   local p = QB:Plan()
-  for id in pairs(p.add) do if API.IsDone(id) then p.add[id] = nil end end
+  -- a pick-up mark never outlives its quest: it goes as the quest is handed in, and as it is taken (abandoned later,
+  -- it is not on the list again of its own accord)
+  for id in pairs(p.add) do if API.IsDone(id) or s.log[id] then p.add[id] = nil end end
   for id, title in pairs(p.seen) do
     if not s.log[id] then
       if not turnedIn[id] and not API.IsDone(id) then
@@ -1945,6 +1999,24 @@ end
 ----------------------------------------------------------------------------
 function QB:IsCut(id) return self:Plan().cut[id] and true or false end
 
+-- Skip this quest (5.4.4): out of the route for good, per character, wherever the route points at it (the arrow and its
+-- menu, the route's rows, the pins), and never back through Accept for me, Now, Available or the arrow until routed
+-- again (the same place's Route it again). A quest you hold is cut as well, so the route's own rules leave it out
+function QB:IsSkipped(id) return id ~= nil and self:Plan().skip[id] == true end
+function QB:SetSkipped(id, on)
+  local p = self:Plan()
+  if not id then return false end
+  on = on and true or nil
+  if p.skip[id] == on then return false end
+  p.skip[id] = on
+  QB.skipVer = (QB.skipVer or 0) + 1
+  local q = Q.Get(id)
+  if self.state.log[id] or (q and self:Status(q).bag) then p.cut[id] = on end
+  if on then p.add[id] = nil end
+  self:MarkDirty()
+  return true
+end
+
 -- what a quest leads on to, for you: the XP of its follow-up steps (three on at most) at your level,
 -- the ones you haven't done or taken. Questing, a quest that opens a chain is worth more than it pays.
 function QB:ChainLead(id)
@@ -2047,17 +2119,25 @@ end
 function QB:IsAdded(id) return self:Plan().add[id] and true or false end
 
 function QB:InPlan(q, st)
-  if self:IsCut(q.id) then return false end
+  if self:IsCut(q.id) or self:IsSkipped(q.id) then return false end
   st = st or self:Status(q)
   if st.code == "done" or st.code == "wrong" then return false end
   if self.state.log[q.id] or st.bag then return true end
   return self:IsAdded(q.id)
 end
 
--- in the log: cut it or keep it; not in the log: fetch it or not
+-- in the log: cut it or keep it; not in the log: fetch it or not. A skipped quest is routed again (un-skipped, and
+-- put on the pick-up list where you don't hold it): the ! on Available, Pick up and the map pin's Shift-click say so,
+-- where 5.4.4 as first built put it on the list and left it skipped, out of the route
 function QB:ToggleAdd(id)
   local p = self:Plan()
   local q = Q.Get(id)
+  if self:IsSkipped(id) then
+    self:SetSkipped(id, false)
+    if not (self.state.log[id] or (q and self:Status(q).bag)) then p.add[id] = true end
+    self:MarkDirty()
+    return
+  end
   if self.state.log[id] or (q and self:Status(q).bag) then
     p.cut[id] = (not p.cut[id]) or nil
   else
@@ -2112,7 +2192,7 @@ function QB:RouteEntries(mode)
     if mode == "plan" then
       want = self:InPlan(q, st)
     else
-      want = st.code == "banked" and not self:IsCut(id)
+      want = st.code == "banked" and not self:IsCut(id) and not self:IsSkipped(id)
     end
     if want then list[#list + 1] = { q = q, st = st } end
   end
@@ -2179,7 +2259,7 @@ function Run.Start()
   -- the game's pin doesn't follow the route (QuestBank never sets it: API.SetWaypoint); the arrow does, and TomTom's
   local hint = ""
   if not QB:Settings().arrow and not API.TomTom() then hint = " /qb arrow points you from stop to stop." end
-  QB:Print("Hand-in run started. Each quest is ticked off with the XP it paid; the route re-plans from where you stand." .. hint)
+  QB:Print("Hand-in run started. Each quest is ticked off with the XP it paid, and the rest is planned again from where you stand." .. hint)
   Run.ArmHour()
   QB:MarkDirty()
 end
@@ -2324,15 +2404,43 @@ end
 ----------------------------------------------------------------------------
 -- recompute: two routes, cached until something they depend on changes, planned in the background
 ----------------------------------------------------------------------------
+-- What a plan depends on, and nothing else: a route is planned again only when one of these changed. Your level (not
+-- the XP within it: 5.4.3 planned again every fiftieth of a level), the mount, the goal, the faction, the hearthstone
+-- ready or used, the cap, the mode, your hand-ins (by how many there have been), a jump in place for a route from
+-- where you stand (a flight, a boat, a hearth, a portal, a loading screen: Target.lua; 5.4.3 counted the flight master
+-- nearest you as the crow flies, which changed as you walked), a hand-in in reach left behind (Target.lua, once), the
+-- flight paths you know and the hearthstone's bind (Travel.lua's TV.ver), and the route's quests with their state and
+-- the XP the game reported for each of them. Crossing a zone's border, a bag event or a kill changes none of it, nor
+-- the XP the game shows for a quest outside the route (a quest giver's window, a party member's report: 5.4.4 as first
+-- built counted any of those, and planned the route again from where you stood). PARTS names them for /qb trace
+local PARTS = { "your level", "the mount", "the goal", "the faction", "the hearthstone", "the cap", "the mode",
+                "a hand-in", "a jump in place", "a hand-in in reach left behind", "the flight paths or the bind" }
 local function signature(list, opts)
-  -- XP counts in fiftieths of a level (every kill would re-plan otherwise); XP numbers the game
-  -- reported count by how many there have been
-  local T = QB.Data.TO_NEXT
-  local xpq = math.floor((opts.xp or 0) * 50 / (T[opts.level] or 1))
-  local parts = { opts.level, xpq, tostring(opts.mounted), opts.goal, opts.fac,
-                  opts.startHub or "-", tostring(opts.noHearth), opts.cap or 0, opts.mode or "", QB.liveVer or 0, QB.doneVer or 0 }
-  for _, e in ipairs(list) do parts[#parts + 1] = e.q.id .. (e.st and e.st.code or "") end
-  return table.concat(parts, ":")
+  local parts = { opts.level, tostring(opts.mounted), opts.goal, opts.fac, tostring(opts.noHearth), opts.cap or 0, opts.mode or "",
+                  QB.doneVer or 0, opts.start and (QB.jumpVer or 0) or "-", opts.start and (QB.reachVer or 0) or "-",
+                  QB.Travel and QB.Travel.ver or 0 }
+  for _, e in ipairs(list) do
+    local live, code = e.q.liveFull, e.st and e.st.code or ""
+    parts[#parts + 1] = live and (e.q.id .. code .. "=" .. live) or (e.q.id .. code)
+  end
+  return table.concat(parts, ":"), parts
+end
+
+-- /qb trace: what changed between two signatures' parts, in words (a quest's part is its id and state, then "=" and
+-- the XP the game reported for it)
+local function whatChanged(was, now)
+  if not was then return "the first plan" end
+  local out = {}
+  for i, name in ipairs(PARTS) do if was[i] ~= now[i] then out[#out + 1] = name end end
+  local quests, xp = #was ~= #now, false
+  for i = #PARTS + 1, math.max(#was, #now) do
+    if was[i] ~= now[i] then
+      if tostring(was[i]):match("^[^=]*") == tostring(now[i]):match("^[^=]*") then xp = true else quests = true end
+    end
+  end
+  if quests then out[#out + 1] = "your quests or their state" end
+  if xp then out[#out + 1] = "the game's XP numbers" end
+  return #out > 0 and table.concat(out, ", ") or "nothing (asked again)"
 end
 
 function QB:Recompute(sync)
@@ -2345,29 +2453,51 @@ function QB:Recompute(sync)
   }
   local nowOpts = {}
   for k, v in pairs(opts) do nowOpts[k] = v end
-  -- mid-run, or questing: the route from where you stand. (At a lock you log out where the route starts.)
+  -- mid-run, or questing: the route from where you stand. (At a lock you log out where the route starts.) Where you
+  -- stand is read when the route is planned again for another reason, or after a jump in place (QB.jumpVer)
   local run = Run.Get()
   if run or mode == "quest" then
     local wp = API.WorldPosition()
     if wp then
+      -- (on an open map off the two continents, Zephras Isle, no flight master: the route walks from you all the same)
       local place = QB.Model.Place(QB.faction, wp.c, wp.wx, wp.wy)
-      if place.hub > 0 then nowOpts.start, nowOpts.startHub = wp, place.hub end
+      if place.hub > 0 or QB.Model.Off(place.c) then nowOpts.start, nowOpts.jump = wp, QB.jumpVer or 0 end
     end
     nowOpts.noHearth = (run and run.hearthUsed) or not API.HearthReady()
     nowOpts.goal = "route"
-    if mode == "quest" then opts.start, opts.startHub, opts.noHearth = nowOpts.start, nowOpts.startHub, nowOpts.noHearth end
+    -- (in the air or as a ghost nothing is handed in where you are: no stop in reach goes first, Model.lua)
+    nowOpts.noReach = QB.Target and QB.Target.NoHandin and QB.Target.NoHandin() or nil
+    if mode == "quest" then opts.start, opts.jump, opts.noHearth, opts.noReach = nowOpts.start, nowOpts.jump, nowOpts.noHearth, nowOpts.noReach end
   end
   local now, plan = self:RouteEntries("now"), self:RouteEntries("plan")
-  local sigNow, sigPlan = signature(now, nowOpts), signature(plan, opts)
+  local sigNow, partsNow = signature(now, nowOpts)
+  local sigPlan, partsPlan = signature(plan, opts)
   local needNow = sigNow ~= self.sigNow
   local needPlan = sigPlan ~= self.sigPlan
   if not (needNow or needPlan) then return self.routeNow, self.routePlan end
   local want = sigNow .. "|" .. sigPlan
   if self.pending == want and not sync then return self.routeNow, self.routePlan end
+  if QB.tracing then
+    local wp = nowOpts.start
+    local was, is = self.partsPlan, partsPlan
+    if needNow then was, is = self.partsNow, partsNow end
+    QB.Trace("re-plan%s%s: %s%s", needNow and " (ready now)" or "", needPlan and " (the plan)" or "", whatChanged(was, is),
+      wp and string.format("; you at %d: %.0f, %.0f", wp.c, wp.wx, wp.wy) or "")
+  end
   local function work()
-    -- each starts from the last route, so a change can only move it to a better one
-    if needNow then self.routeNow, self.sigNow = QB.Model.Plan(now, nowOpts, self.routeNow), sigNow end
-    if needPlan then self.routePlan, self.sigPlan = QB.Model.Plan(plan, opts, self.routePlan), sigPlan end
+    -- each starts from the last route, so a change can only move it to a better one, and keeps its first stop unless
+    -- another is clearly better (Model.lua)
+    local was = QB.tracing and QB.Target and QB.Target.Route()
+    local wasFirst = was and was.legs and was.legs[1] and was.legs[1].stop.name
+    if needNow then self.routeNow, self.sigNow, self.partsNow = QB.Model.Plan(now, nowOpts, self.routeNow), sigNow, partsNow end
+    if needPlan then self.routePlan, self.sigPlan, self.partsPlan = QB.Model.Plan(plan, opts, self.routePlan), sigPlan, partsPlan end
+    if QB.tracing and QB.Target then
+      local r = QB.Target.Route()
+      local first = r and r.legs and r.legs[1] and r.legs[1].stop.name
+      local alt = r and r.alt
+      QB.Trace("first stop: %s%s%s", tostring(wasFirst or "none"), first == wasFirst and " kept" or (" -> " .. tostring(first or "none")),
+        alt and string.format(" (%.1f min; %s first %.1f min)", r.t or 0, tostring(alt.first), alt.t or 0) or "")
+    end
   end
   if sync then
     self.pending = nil
@@ -2580,6 +2710,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Camp then QB.Camp:Init() end
     if QB.Travel then QB.Travel:Init() end
     if QB.Arrow then QB.Arrow:Init() end
+    if QB.Target then QB.Target:Init() end
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
     Run.ArmHour()
@@ -2615,7 +2746,8 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if rested == QB.lastRested then return end
     QB.lastRested = rested
   elseif event == "PLAYER_XP_UPDATE" then
-    -- kills move the bar all the time: re-plan when it has moved a fiftieth of a level
+    -- kills move the bar all the time: what shows it is refreshed when it has moved a fiftieth of a level (the routes are
+    -- planned again for a level, not for the XP within one: the signature above)
     local T = QB.Data.TO_NEXT
     local lvl = UnitLevel("player") or 1
     local step = math.floor((UnitXP("player") or 0) * 50 / (T[lvl] or 1))
@@ -2717,6 +2849,9 @@ slash = function(msg)
   elseif cmd == "buffs" and QB.Camp then
     -- the missing-buffs banner, now (Camp.lua)
     QB.Camp.Command()
+  elseif cmd == "trace" and QB.Target then
+    -- not listed anywhere: why the route and the arrow change, for a report (Target.lua)
+    QB.Target.TraceCommand(rest, function(m) QB:Print(m) end)
   elseif cmd == "way" and QB.Travel then
     -- the steps to what the arrow points at, the flight paths QuestBank counts on, and the hearthstone
     for _, line in ipairs(QB.Travel.WayLines()) do QB:Print(line) end

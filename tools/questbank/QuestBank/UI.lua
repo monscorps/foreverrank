@@ -308,7 +308,7 @@ end
 local function npcLine(tip, label, n)
   if not n then return end
   local where
-  -- (off the two continents but on a map of its own, as on Zephras Isle, an NPC still has a place to name)
+  -- (on a battleground's island off the two continents, with a map of its own, an NPC still has a place to name)
   if n.inside and not (n.m and n.m > 0) then
     where = n.n .. ", inside the dungeon"
   else
@@ -598,15 +598,19 @@ questClick = function(q, st, which)
     UI:Refresh()
     return
   end
-  local target = q.turn
-  if st and (st.code == "todo" or st.code == "locked" or st.code == "prereq") and q.give then target = q.give end
+  local target, about = q.turn, { qid = q.id, what = "turn" }
+  if st and (st.code == "todo" or st.code == "locked" or st.code == "prereq") and q.give then target, about.what = q.give, "give" end
   if st and st.code == "prereq" and QB.Arrow then
     -- a chain: the giver of its first open step, or the turn-in of the step you hold
     local first, held = QB.Arrow.FirstStep(q, st)
-    if first then target = (held and first.turn) or first.give or target end
+    if first then
+      target = (held and first.turn) or first.give or target
+      about.qid, about.what = first.id, held and "turn" or "give"
+    end
   end
   if target and not target.inside then
-    QB.API.SetWaypoint(target.m, target.x, target.y, target.n, nil, QB.Model.NpcPlace(target.idx, QB.faction))
+    -- shown on the arrow for now (it ends once you get there, or the quest is taken or handed in); no plan changes
+    QB.API.SetWaypoint(target.m, target.x, target.y, target.n, nil, QB.Model.NpcPlace(target.idx, QB.faction), about)
   elseif not target and q.surveyOnly then
     -- a quest the survey alone knows: no NPC to point at, and it says so
     QB:Print(string.format("Who gives %s isn't known yet. The game told QuestBank its rewards, not where it starts.", q.name))
@@ -860,22 +864,27 @@ end
 function UI.QuestMenu(q, st)
   st = st or QB:Status(q)
   local items = {}
-  local function way(n, what)
+  local function way(n, what, kind)
     if n and not n.inside and n.m and n.m > 0 then
-      items[#items + 1] = { string.format("Waypoint: %s (%s)", n.n, what), function() QB.API.SetWaypoint(n.m, n.x, n.y, n.n) end }
+      items[#items + 1] = { string.format("Waypoint: %s (%s)", n.n, what), function() QB.API.SetWaypoint(n.m, n.x, n.y, n.n, nil, nil, { qid = q.id, what = kind }) end }
     end
   end
-  way(q.give, "gives it")
-  if not (q.give and q.turn and q.give.idx == q.turn.idx) then way(q.turn, "hand in") end
+  way(q.give, "gives it", QB.state.log[q.id] and "turn" or "give")
+  if not (q.give and q.turn and q.give.idx == q.turn.idx) then way(q.turn, "hand in", "turn") end
   local held = QB.state.log[q.id] or st.bag
-  if held then
-    items[#items + 1] = { QB:IsCut(q.id) and "Keep it in the route" or "Leave it out of the route", function() QB:ToggleAdd(q.id); UI:Refresh() end }
-    if QB.state.log[q.id] then
-      items[#items + 1] = { "|cffe05a4aAbandon this quest|r", function()
-        UI:ShowMenu("Abandon " .. q.name .. "?", { { "|cffe05a4aYes, abandon it|r", function() UI.Abandon(q) end }, { "No, keep it", function() end } })
-      end }
-    end
+  -- Skip this quest (out of the route for good, everywhere), and the same place brings it back
+  if QB:IsSkipped(q.id) then
+    items[#items + 1] = { "Route it again", function() UI.RouteAgain(q) end }
+  elseif held and QB:IsCut(q.id) then
+    items[#items + 1] = { "Keep it in the route", function() QB:ToggleAdd(q.id); UI:Refresh() end }
   elseif st.code ~= "done" and st.code ~= "wrong" then
+    items[#items + 1] = { "Skip this quest", function() UI.SkipQuest(q) end }
+  end
+  if held then
+    if QB.state.log[q.id] then
+      items[#items + 1] = { "|cffe05a4aAbandon this quest|r", function() UI.ConfirmAbandon(q) end }
+    end
+  elseif st.code ~= "done" and st.code ~= "wrong" and not QB:IsSkipped(q.id) then
     items[#items + 1] = { QB:IsAdded(q.id) and "Take it off my pick-up list" or "Put it on my pick-up list", function() QB:ToggleAdd(q.id); UI:Refresh() end }
   end
   local rw = Q.Rewards(q)
@@ -893,6 +902,49 @@ function UI.QuestMenu(q, st)
   end
   items[#items + 1] = { "Copy the Wowhead link", function() UI:CopyLink(q.name, "https://www.wowhead.com/forever/quest=" .. q.id) end }
   UI:ShowMenu(q.name, items)
+end
+
+-- a name cut to n letters with "...", for a menu's line
+function UI.Short(name, n)
+  name = tostring(name or "")
+  if #name <= n then return name end
+  -- (a letter cut short at the end goes whole: its lead byte and whatever followed it; a letter of one byte stays)
+  return (name:sub(1, n - 3):gsub("[%z\1-\127\194-\244][\128-\191]*$", function(c) return c:byte() >= 128 and "" or c end)) .. "..."
+end
+
+-- Skip this quest (QB:SetSkipped): out of the route for good, and never back through Accept for me, Now, Available or the
+-- arrow until routed again; the route goes on to its next step at once. A quest in your log may also be given up, as a
+-- second choice of its own (never on its own accord): "Also abandon it", asked in the game's own words
+function UI.SkipQuest(q)
+  if not q then return end
+  QB:SetSkipped(q.id, true)
+  QB:Print(string.format("Skipped %s: out of your route for good. Right-click it in QuestBank (or Shift-click its pin on the map) to Route it again.", q.name))
+  if UI.frame and UI.frame:IsShown() then UI:Refresh() end
+  if QB.state.log[q.id] then
+    UI:ShowMenu("Skipped: " .. UI.Short(q.name, 22), { { "Keep it in my quest log", function() end },
+      { "|cffe05a4aAlso abandon it|r", function() UI.ConfirmAbandon(q) end } })
+  end
+end
+-- Route it again: un-skipped, and a quest you don't hold back on the pick-up list (skipping took it off), so it is
+-- in the route as chat says (5.4.4 as first built said so of a pick-up that stayed out)
+function UI.RouteAgain(q)
+  if not q then return end
+  QB:SetSkipped(q.id, false)
+  local st = QB:Status(q)
+  local pick = not (QB.state.log[q.id] or st.bag) and st.code ~= "done" and st.code ~= "wrong"
+  if pick then QB:SetAdded(q.id, true) end
+  QB:Print(string.format(pick and "%s is back in your route (on your pick-up list)." or "%s is back in your route.", q.name))
+  if UI.frame and UI.frame:IsShown() then UI:Refresh() end
+end
+
+-- the game's own question before a quest is given up (ABANDON_QUEST_CONFIRM: 'Abandon "%s"?'), in QuestBank's menu: the
+-- game's popup itself is never raised by QuestBank (its popup list would be written as QuestBank, and the game's next
+-- popup could then be blocked; see the harness's calls QuestBank never makes), so the question is the game's and the
+-- answer a click of yours
+function UI.ConfirmAbandon(q)
+  local ask = type(ABANDON_QUEST_CONFIRM) == "string" and ABANDON_QUEST_CONFIRM:find("%s", 1, true) and ABANDON_QUEST_CONFIRM:format(UI.Short(q.name, 20))
+    or ("Abandon " .. UI.Short(q.name, 20) .. "?")
+  UI:ShowMenu(ask, { { "|cffe05a4aYes, abandon it|r", function() UI.Abandon(q) end }, { "No, keep it", function() end } })
 end
 
 -- abandon a quest in your log, the game's own way (select it, mark it, abandon); a click in QuestBank's menu, asked twice
@@ -1074,7 +1126,7 @@ function UI:StatTooltip(tip, key)
     tip:AddLine("Finished quests in your log, and the XP they pay at your level.", 1, 1, 1, true)
   elseif key == "rested" then
     tip:AddLine("Rested XP", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("Kills pay double until it runs out. Inns, cities, a camp tent and the Cozy Sleeping Bag build it.", 1, 1, 1, true)
+    tip:AddLine("Kills pay double until it runs out. Inns, cities and a camp tent build it; the Cozy Sleeping Bag's bonus is a buff of its own.", 1, 1, 1, true)
   elseif key == "rate" then
     tip:AddLine("XP an hour", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Since you logged in, kills and quests together. Shown after ten minutes.", 1, 1, 1, true)
@@ -1919,14 +1971,15 @@ end
 
 -- the best quests to fetch: for your faction and class, not done, not held, most XP on the day first.
 -- Not the ones handed in inside a dungeon: those can't wait in your log for the day.
--- where you stand: the place the route model uses, the mount factor, and the flight master's town
+-- where you stand: the place the route model uses, the mount factor, and the flight master's town (none on an open
+-- map off the two continents, Zephras Isle, where you walk)
 function UI.Here()
   local fac = QB.faction
   local wp = QB.API.WorldPosition()
   local here
   if wp then
     here = QB.Model.Place(fac, wp.c, wp.wx, wp.wy)
-    if here.hub == 0 then here = nil end
+    if here.hub == 0 and not QB.Model.Off(here.c) then here = nil end
   end
   local mf = QB.Model.Factor(QB:Mounted())
   local hub = here and QB.Data.HUB[fac] and QB.Data.HUB[fac][here.hub]
@@ -1988,7 +2041,8 @@ function UI:Candidates(limit, level, reqMax, finder)
       -- nor, but in the reward finders, repeatables, a quest the survey alone knows or a writ's turn-in
       and (finder or (math.floor(r[10] / 4096) % 2 == 0 and math.floor(r[10] / 65536) % 2 == 0 and math.floor(r[10] / 131072) % 2 == 0))
       and not (turn and turn[5] < 0)
-      and not QB:Skipped(r[8], turn and turn[5]) then -- nor anything where you said to skip
+      and not QB:Skipped(r[8], turn and turn[5]) -- nor anything where you said to skip
+      and not QB:IsSkipped(id) then -- nor a quest you skipped
       local live = QuestBankDB.live and QuestBankDB.live[id]
       out[#out + 1] = { id = id, full = live and live.full or math.floor(r[4] * r[5] + 0.5), lvl = r[1], req = r[2], cat = r[8], give = r[7],
                         turn = (fac == "H" and D.TURNH and D.TURNH[id]) or r[6] }
@@ -2252,7 +2306,8 @@ function UI:RefreshLogView(v)
       -- what to do about a slot that earns nothing: the advice the old Make room card gave
       if it.q then
         local low = (it.value or 0) < 500 * QB.Scale(s.level)
-        if it.cut then b.advice = QB.Data.CUT_NOTES[it.e.id] or "Left out of the route: hand it in or abandon it to free the slot."
+        if it.cut then b.advice = QB:IsSkipped(it.e.id) and "Skipped: out of the route for good. Right-click: Route it again."
+          or QB.Data.CUT_NOTES[it.e.id] or "Left out of the route: hand it in or abandon it to free the slot."
         elseif low then b.advice = QB.Data.CUT_NOTES[it.e.id] or string.format(it.e.complete and "Pays next to nothing at level %d: hand it in now for the rewards." or "Pays next to nothing at level %d: abandon it to free the slot.", s.level) end
       end
       if it.q then b.q, b.st = it.q, it.st end
@@ -2808,8 +2863,8 @@ makeDetail = function(parent)
     b:SetScript("OnClick", QB.Safe(function() fn(d) end, "quest detail"))
     return b
   end
-  d.goGive = btn("Giver", 70, 10, function(self) local n = self.q and self.q.give; if n and not n.inside then QB.API.SetWaypoint(n.m, n.x, n.y, n.n) end end)
-  d.goTurn = btn("Hand-in", 80, 84, function(self) local n = self.q and self.q.turn; if n and not n.inside then QB.API.SetWaypoint(n.m, n.x, n.y, n.n) end end)
+  d.goGive = btn("Giver", 70, 10, function(self) local n = self.q and self.q.give; if n and not n.inside then QB.API.SetWaypoint(n.m, n.x, n.y, n.n, nil, nil, { qid = self.q.id, what = "give" }) end end)
+  d.goTurn = btn("Hand-in", 80, 84, function(self) local n = self.q and self.q.turn; if n and not n.inside then QB.API.SetWaypoint(n.m, n.x, n.y, n.n, nil, nil, { qid = self.q.id, what = "turn" }) end end)
   d.goObj = btn("Objective", 86, 168, function(self) UI.WaypointObjective(self.q) end)
   d.pick = btn("Pick up", 76, 258, function(self) if self.q then QB:ToggleAdd(self.q.id); UI:Refresh() end end)
   d.report = btn("Report", 70, 338, function(self) if self.q then UI.ReportMenu(self.q) end end)
@@ -2826,7 +2881,7 @@ function UI.WaypointObjective(q)
     local dd = (here and w and here.c == w.c) and ((w.wx - here.wx) ^ 2 + (w.wy - here.wy) ^ 2) or 1e12
     if not bd or dd < bd then best, bd = sp, dd end
   end
-  if best then QB.API.SetWaypoint(best.m, best.x * 100, best.y * 100, q.name) else QB:Print("No objective place known for " .. q.name .. " yet.") end
+  if best then QB.API.SetWaypoint(best.m, best.x * 100, best.y * 100, q.name, nil, nil, { qid = q.id, what = "obj" }) else QB:Print("No objective place known for " .. q.name .. " yet.") end
 end
 
 -- a problem with a quest, noted for foreverrank.com: it goes up with your next upload
@@ -3548,26 +3603,20 @@ function UI:RefreshPrepView(v)
     end
     v.sections:HideRest()
   end
-  -- the sleeping bag chain, last, while you don't have the bag (not under a filter, not on Now)
+  -- the sleeping bag chain, last, while you don't have the bag (not under a filter, not on Now). 5.4.4: from its first
+  -- step, "... and that note you found" (one quest a side, at your side's place: Camp.SleepSteps); before, it started at
+  -- Stepping Stones and its line described the Legacy perk, not the bag
   if QB.API.ItemCount(211527) == 0 and not filter and not v.now then
     local c = v.cards:Get()
     shownCards = shownCards + 1
-    local steps, doneSteps = #D.SLEEP_CHAIN, 0
-    local nextStep, heldStep
-    for _, step in ipairs(D.SLEEP_CHAIN) do
-      local done = QB.API.IsDone(step.id) or QB.Quest.Behind(step.id) ~= nil
-      if done then doneSteps = doneSteps + 1 end
-      if not nextStep then
-        if s.log[step.id] then nextStep, heldStep = step, true
-        elseif not done then nextStep = step end
-      end
-    end
-    header(c, { 0.10, 0.12, 0.22 }, T.sleep, "Cozy Sleeping Bag", "Finish Stepping Stones: a bag that builds rested XP faster.", "Bag",
+    local chain = QB.Camp.SleepSteps()
+    local nextStep, heldStep, doneSteps, steps = QB.Camp.SleepNext()
+    header(c, { 0.10, 0.12, 0.22 }, T.sleep, "Cozy Sleeping Bag", "From level 14. A minute in the bag: +1% XP, up to 3%.", "Bag",
       string.format("%d of %d steps done", doneSteps, steps))
     c.head.key = nil
     c.caret:Hide()
     c.details:Reset(); c.details:HideRest()
-    local hq = heldStep and QB.Quest.Get(nextStep.id)
+    local hq = heldStep and QB.Quest.Get((s.log[nextStep.id] or not nextStep.alt) and nextStep.id or nextStep.alt)
     if hq and hq.turn and hq.turn.m and hq.turn.m > 0 and not hq.turn.inside then
       c.pin:SetShown(true)
       c.pin.entrance = { m = hq.turn.m, x = hq.turn.x, y = hq.turn.y }; c.pin.label = hq.turn.n
@@ -3576,15 +3625,15 @@ function UI:RefreshPrepView(v)
       if nextStep then c.pin.entrance = nextStep.m and { m = nextStep.m, x = nextStep.x, y = nextStep.y } or nil; c.pin.label = nextStep.where end
     end
     local ry = 50
-    for _, step in ipairs(D.SLEEP_CHAIN) do
+    for _, step in ipairs(chain) do
       local r = c.rows:Get()
       r:ClearAllPoints()
       r:SetPoint("TOPLEFT", 4, -ry)
       r:SetWidth(width - 8)
       r.q, r.st, r.entry = nil, nil, nil
       r.step = step
-      local done = QB.API.IsDone(step.id) or QB.Quest.Behind(step.id) ~= nil
-      r.mark:SetTexture(done and T.ready or (s.log[step.id] and T.waiting or T.questAvail))
+      local done, held = QB.Camp.StepDone(step), QB.Camp.StepHeld(step, s.log)
+      r.mark:SetTexture(done and T.ready or (held and T.waiting or T.questAvail))
       r.mark:Show()
       r.pick.pickable = nil
       r.pick:EnableMouse(false)
@@ -3604,7 +3653,7 @@ function UI:RefreshPrepView(v)
       local where = step.where or ""
       r.status:SetText(where)
       if r.status:GetStringWidth() > r.status:GetWidth() - 4 then where = (where:gsub(",[^,]*$", "")) end -- without the zone when it is tight
-      r.status:SetText(done and "Done" or (s.log[step.id] and "In your log" or where))
+      r.status:SetText(done and "Done" or (held and "In your log" or where))
       local sc = done and GOOD or INK_SOFT
       r.status:SetTextColor(sc[1], sc[2], sc[3])
       r.away:SetText("")
@@ -3651,7 +3700,7 @@ end
 ----------------------------------------------------------------------------
 local KIND = {
   start = "Start here", hearth = "Hearthstone", flight = "Flight", foot = "On foot", tram = "Deeprun Tram", boat = "Boat",
-  zeppelin = "Zeppelin", portal = "Portal", done = "Handed in",
+  zeppelin = "Zeppelin", portal = "Portal", done = "Handed in", none = "No known way there",
 }
 
 local function makeLeg(parent)
@@ -3718,8 +3767,16 @@ function UI:CreateRouteView(parent)
   v.modeNow:SetPoint("TOPLEFT", 14, -10)
   v.modePlan = button(v, "Log and pick-ups", 130)
   v.modePlan:SetPoint("TOPLEFT", 128, -10)
-  v.modeNow:SetScript("OnClick", function() QB:Settings().routeMode = "now"; UI:Refresh() end)
-  v.modePlan:SetScript("OnClick", function() QB:Settings().routeMode = "plan"; UI:Refresh() end)
+  -- (questing and banking each keep their own choice, Target.lua's T.Mode; the route on screen changes with it, so the
+  -- map's pins, the minimap and the arrow follow at once)
+  local function setMode(m)
+    local set = QB:Settings()
+    if QB:Banking() then set.routeMode = m else set.routeQuest = m end
+    QB:MarkDirty()
+    UI:Refresh()
+  end
+  v.modeNow:SetScript("OnClick", function() setMode("now") end)
+  v.modePlan:SetScript("OnClick", function() setMode("plan") end)
   v.run = button(v, "Start run", 96)
   v.run:SetPoint("TOPRIGHT", -14, -10)
   v.run:SetScript("OnClick", QB.Safe(function()
@@ -3764,7 +3821,8 @@ end
 local function travelIcon(kind)
   if kind == "hearth" then return T.hearth elseif kind == "flight" then return QB.faction == "H" and T.wyvern or T.gryphon
   elseif kind == "boat" then return T.boat elseif kind == "tram" then return T.tram elseif kind == "zeppelin" then return T.zeppelin
-  elseif kind == "portal" then return T.portal elseif kind == "start" then return T.book elseif kind == "done" then return T.ready end
+  elseif kind == "portal" then return T.portal elseif kind == "start" then return T.book elseif kind == "done" then return T.ready
+  elseif kind == "none" then return T.unknown end
   return QB:Mounted() and T.mount or T.foot
 end
 
@@ -3836,8 +3894,11 @@ end
 function UI:RefreshRouteView(v)
   local set = QB:Settings()
   local run = QB.Run.Get()
-  local mode = run and "now" or (set.routeMode == "plan" and "plan" or "now")
-  local r = mode == "plan" and QB.routePlan or QB.routeNow
+  local mode = QB.Target.Mode()
+  -- the route on screen (Target.lua's T.Route): with Ready now (Banked now) chosen and nothing ready, the plan, which
+  -- the arrow, the minimap and the pins follow, said so in the setup line (5.4.4 as first built showed an empty list)
+  local r = QB.Target.Route() or (mode == "plan" and QB.routePlan or QB.routeNow)
+  local fallback = mode == "now" and r ~= QB.routeNow
   v.modeNow:SetEnabled(mode ~= "now")
   v.modePlan:SetEnabled(mode ~= "plan" and not run)
   local banking = QB:Banking()
@@ -3877,6 +3938,11 @@ function UI:RefreshRouteView(v)
       line = line .. "."
     end
     if r.lateFrom and r.goal == "hour" then line = line .. " Stops after the first hour come last." end
+  end
+  if fallback and not run then
+    local first = r.legs and r.legs[1] and r.legs[1].stop.name
+    line = (banking and "Nothing is banked yet" or "Nothing is ready to hand in yet") .. ": the arrow and the map follow Log and pick-ups."
+      .. (first and ("  First stop: |cffe8c35a" .. first .. "|r.") or "")
   end
   v.setup:SetText(line or "")
 
@@ -3971,7 +4037,7 @@ function UI:RefreshRouteView(v)
 
   if (not r.legs or #r.legs == 0) and #doLegs == 0 then
     v.empty:SetText(run and "Everything that was ready is handed in. End the run to save it." or
-      (mode == "now" and ((QB:Banking() and "Nothing is banked yet." or "Nothing is ready to hand in yet.") .. " Finished quests and quest items in your bags show up here in hand-in order. Full plan shows the route you're building towards.") or
+      (mode == "now" and ((QB:Banking() and "Nothing is banked yet." or "Nothing is ready to hand in yet.") .. " Finished quests and quest items in your bags show up here in hand-in order. Log and pick-ups shows the route you're building towards.") or
         "Nothing in your log or on your pick-up list yet. The ! on a quest on Available puts it there."))
     v.empty:ClearAllPoints()
     v.empty:SetPoint("TOPLEFT", 60, -y - 20)
@@ -3998,7 +4064,9 @@ function UI:RefreshRouteView(v)
     if kind == "start" then
       label = QB.mode == "lock" and "Log in here" or "Start here"
     else
-      label = label .. string.format(", about %d min", math.max(1, math.floor(leg.travel + 0.5)))
+      -- (no known way: to or from an open map off the two continents, Zephras Isle, the planner knows no boat or
+      -- portal; the arrow's way below may, by the hearthstone)
+      if kind ~= "none" then label = label .. string.format(", about %d min", math.max(1, math.floor(leg.travel + 0.5))) end
       if kind == "hearth" and leg.inn then label = label .. " to " .. QB.Data.HUB[r.fac][leg.inn][1] end
       -- the next stop from where you stand: the way the arrow shows it, by the flight paths you know (Travel.lua)
       local plan = i == 1 and mode == "now" and QB.Arrow.Guided() and QB.Travel.PlanTo(s, "route")
@@ -4640,16 +4708,43 @@ function UI:CreateSettingsView(parent)
 
   -- at the quest giver: accept and hand in for you (Auto.lua), off until asked for
   heading(p, LEFT, -460, "At the quest giver", 370)
-  v.autoAccept = checkRow(p, LEFT, -484, "Accept quests for me", 340)
-  v.autoAccept:SetScript("OnClick", function(self) QB:Settings().autoAccept = self:GetChecked() and true or false end)
+  -- Accept for me: a choice (Auto.lua, 5.4.4): Off, Quests on my route, Quests worth taking; the button cycles, its
+  -- text says the choice in one line. Then, for Quests worth taking, what one outside your route gets
+  local ACCEPT_ORDER = { "off", "route", "worth" }
+  v.autoAccept = button(p, "Accept for me: Off", 300)
+  v.autoAccept:SetPoint("TOPLEFT", LEFT + 4, -484)
+  v.autoAccept:SetScript("OnClick", QB.Safe(function()
+    local set = QB:Settings()
+    local i = 1
+    for k, m in ipairs(ACCEPT_ORDER) do if m == set.autoAccept then i = k end end
+    set.autoAccept = ACCEPT_ORDER[i % #ACCEPT_ORDER + 1]
+    UI:Refresh()
+  end, "settings: accept for me"))
+  tooltip(v.autoAccept, function(tip)
+    tip:AddLine("Accept for me", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Off: you take every quest yourself.", 1, 1, 1, true)
+    tip:AddLine("Quests on my route: your pick-up list, and the next steps of the chains you are on.", 1, 1, 1, true)
+    tip:AddLine("Quests worth taking: those, and any other the route planner thinks worth it (never grey, never one that pays next to nothing).", 1, 1, 1, true)
+  end)
+  v.autoOther = button(p, "Outside my route: Accept them", 300)
+  v.autoOther:SetPoint("TOPLEFT", LEFT + 4, -510)
+  v.autoOther:SetScript("OnClick", QB.Safe(function()
+    local set = QB:Settings()
+    set.autoAcceptOther = set.autoAcceptOther == "leave" and "accept" or "leave"
+    UI:Refresh()
+  end, "settings: outside my route"))
+  tooltip(v.autoOther, function(tip)
+    tip:AddLine("Quests outside my route", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("With Quests worth taking: a quest worth it that is not on your route is taken for you, or its quest window is left open for you to decide.", 1, 1, 1, true)
+  end)
   v.acceptHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.acceptHint:SetPoint("TOPLEFT", LEFT, -510)
+  v.acceptHint:SetPoint("TOPLEFT", LEFT, -536)
   v.acceptHint:SetHeight(44)
   v.acceptHint:SetText("At an NPC and when a party member shares one; escorts are yours to join in the game's prompt. Hold Shift to do it by hand. Not repeatable or grey quests, nor places you skip.")
-  v.autoTurnIn = checkRow(p, LEFT, -558, "Hand in finished quests for me", 340)
+  v.autoTurnIn = checkRow(p, LEFT, -584, "Hand in finished quests for me", 340)
   v.autoTurnIn:SetScript("OnClick", function(self) QB:Settings().autoTurnIn = self:GetChecked() and true or false end)
   v.turnInHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.turnInHint:SetPoint("TOPLEFT", LEFT, -584)
+  v.turnInHint:SetPoint("TOPLEFT", LEFT, -610)
   v.turnInHint:SetHeight(58)
   v.turnInHint:SetText("Questing and the rush: everything. While you bank: only quests you left out of the route, ones that pay next to nothing on the day, and a step you hand in to bank a better one. A reward to choose, or a quest QuestBank can't value, waits for you.")
 
@@ -4710,7 +4805,7 @@ function UI:CreateSettingsView(parent)
 
   -- the decide-yourself key: held at the NPC, the auto actions above leave the quest to you
   v.autoKey = button(p, "Shift", 70)
-  v.autoKey:SetPoint("TOPLEFT", LEFT, -650)
+  v.autoKey:SetPoint("TOPLEFT", LEFT, -676)
   v.autoKeyLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 290)
   v.autoKeyLabel:SetPoint("LEFT", v.autoKey, "RIGHT", 8, 0)
   v.autoKeyLabel:SetText("held at the NPC: decide the quest yourself")
@@ -4725,19 +4820,19 @@ function UI:CreateSettingsView(parent)
   end, "settings: key"))
 
   -- timers (Timer.lua)
-  heading(p, LEFT, -690, "Timers", 370)
-  v.clockShow = checkRow(p, LEFT, -714, "Show the timer strip (drag it; right-click hides it)", 340)
+  heading(p, LEFT, -716, "Timers", 370)
+  v.clockShow = checkRow(p, LEFT, -740, "Show the timer strip (drag it; right-click hides it)", 340)
   v.clockShow:SetScript("OnClick", function(self) if QB.Timer then QB.Timer.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
-  v.clockLevelMsg = checkRow(p, LEFT, -742, "Say how long each level took, at level-up", 340)
+  v.clockLevelMsg = checkRow(p, LEFT, -768, "Say how long each level took, at level-up", 340)
   v.clockLevelMsg:SetScript("OnClick", function(self) QB:Settings().clockLevelMsg = self:GetChecked() and true or false end)
   v.clockHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.clockHint:SetPoint("TOPLEFT", LEFT, -768)
+  v.clockHint:SetPoint("TOPLEFT", LEFT, -794)
   v.clockHint:SetHeight(44)
   v.clockHint:SetText("The strip shows your time at this level, the oldest quest in your log and the hand-in run. Quest tooltips say how long a quest took.")
 
   -- the route on the minimap (Minimap.lua)
-  heading(p, LEFT, -820, "Minimap and map", 370)
-  v.minimapPins = checkRow(p, LEFT, -844, "Route stops, pick-ups and dungeon entrances on the minimap", 340)
+  heading(p, LEFT, -846, "Minimap and map", 370)
+  v.minimapPins = checkRow(p, LEFT, -870, "Route stops, pick-ups and dungeon entrances on the minimap", 340)
   v.minimapPins:SetScript("OnClick", function(self) QB:Settings().minimapPins = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
   tooltip(v.minimapPins, function(tip)
     tip:AddLine("The minimap", GOLD[1], GOLD[2], GOLD[3])
@@ -4745,17 +4840,17 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("/qb minimap reset puts it back as the game had it.", 0.6, 0.6, 0.6, true)
   end)
   -- its far zoom and drag (MinimapView.lua), your trails on it (Walk.lua); the other switches are on its own menu
-  v.mmExtended = checkRow(p, LEFT, -872, "Far zoom and drag", 340)
+  v.mmExtended = checkRow(p, LEFT, -898, "Far zoom and drag", 340)
   v.mmExtended:SetScript("OnClick", function(self) QB:Settings().mmExtended = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Update(0) end end)
   tooltip(v.mmExtended, function(tip)
     tip:AddLine("Far zoom and drag", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Wheel out past the game's widest, over the game's own minimap tiles. Drag to look around; it comes back to you.", 1, 1, 1, true)
   end)
-  v.walkShow = checkRow(p, LEFT, -900, "Your walked trails", 340)
+  v.walkShow = checkRow(p, LEFT, -926, "Your walked trails", 340)
   v.walkShow:SetScript("OnClick", function(self) QB:Settings().walkShow = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
   -- how the markers are drawn (Minimap.lua, Arrow.lua): QuestTrail's look, or the game's own icons; the button cycles
   v.markerStyle = button(p, "QuestTrail", 90)
-  v.markerStyle:SetPoint("TOPLEFT", LEFT + 4, -928)
+  v.markerStyle:SetPoint("TOPLEFT", LEFT + 4, -954)
   UI.MARKER_STYLES = { questtrail = "QuestTrail", game = "Game icons" }
   v.markerStyle:SetScript("OnClick", QB.Safe(function()
     local set = QB:Settings()
@@ -4771,8 +4866,25 @@ function UI:CreateSettingsView(parent)
   v.minimapHint = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 270)
   v.minimapHint:SetPoint("LEFT", v.markerStyle, "RIGHT", 8, 0)
   v.minimapHint:SetText("Marker style. Right-click the minimap for the rest.")
+  -- the arrow's look (Arrow.lua, arrowStyle): QuestBank's own arrow, or QuestTrail's compass; the button cycles
+  UI.ARROW_STYLES = { questbank = "QuestBank's", compass = "Compass" }
+  v.arrowStyle = button(p, "QuestBank's", 90)
+  v.arrowStyle:SetPoint("TOPLEFT", LEFT + 4, -982)
+  v.arrowStyle:SetScript("OnClick", QB.Safe(function()
+    local set = QB:Settings()
+    set.arrowStyle = set.arrowStyle == "compass" and "questbank" or "compass"
+    if QB.Arrow and QB.Arrow.Restyle then QB.Arrow:Restyle() end
+    UI:Refresh()
+  end, "settings: arrow look"))
+  tooltip(v.arrowStyle, function(tip)
+    tip:AddLine("The arrow's look", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("QuestBank's: its own arrow, green ahead, gold to the side, red behind, glowing as it points ahead and pinging as you arrive. Compass: QuestTrail's dial and needle, by Krom.", 1, 1, 1, true)
+  end)
+  v.arrowHint = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 270)
+  v.arrowHint:SetPoint("LEFT", v.arrowStyle, "RIGHT", 8, 0)
+  v.arrowHint:SetText("Arrow look. Its right-click menu has it too.")
   -- the Map: QuestBank's map page on the Map key and the sidebar (MapPage.lua), or the game's world map (UI.OpenMap)
-  v.mapPage = checkRow(p, LEFT, -958, "Map key opens QuestBank's map", 340)
+  v.mapPage = checkRow(p, LEFT, -1010, "Map key opens QuestBank's map", 340)
   v.mapPage:SetScript("OnClick", function(self) QB:Settings().mapPage = self:GetChecked() and true or false; UI:Refresh() end)
   tooltip(v.mapPage, function(tip)
     tip:AddLine("QuestBank's map", GOLD[1], GOLD[2], GOLD[3])
@@ -4781,11 +4893,30 @@ function UI:CreateSettingsView(parent)
     if not (QB.MapPage and QB.MapPage.Available()) then tip:AddLine("Only on the Forever client.", 1, 0.5, 0.3, true) end
   end)
   v.map = button(p, "Game's map", 110)
-  v.map:SetPoint("TOPLEFT", LEFT + 4, -986)
+  v.map:SetPoint("TOPLEFT", LEFT + 4, -1038)
   v.map:SetScript("OnClick", QB.Safe(function() UI.OpenMap() end, "settings: map"))
   v.mapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
   v.mapLabel:SetPoint("LEFT", v.map, "RIGHT", 8, 0)
   v.mapLabel:SetText("Your zone on the game's world map")
+  -- QuestBank's quest icons on the maps (Pins.lua, mapIconPct): half the game's size by default; the button cycles
+  UI.ICON_SIZES = { { 50, "Half size" }, { 75, "Three quarters" }, { 100, "Game's size" } }
+  v.iconSize = button(p, "Half size", 110)
+  v.iconSize:SetPoint("TOPLEFT", LEFT + 4, -1066)
+  v.iconSize:SetScript("OnClick", QB.Safe(function()
+    local set = QB:Settings()
+    local i = 1
+    for k, o in ipairs(UI.ICON_SIZES) do if o[1] == tonumber(set.mapIconPct) then i = k end end
+    set.mapIconPct = UI.ICON_SIZES[i % #UI.ICON_SIZES + 1][1]
+    if QB.Pins then QB.Pins:Update() end
+    UI:Refresh()
+  end, "settings: map icon size"))
+  tooltip(v.iconSize, function(tip)
+    tip:AddLine("Quest icons' size", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("QuestBank's !, ? and route stops on the world map and the Map page, against the game's own pins. Where a click lands stays the game's size.", 1, 1, 1, true)
+  end)
+  v.iconLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
+  v.iconLabel:SetPoint("LEFT", v.iconSize, "RIGHT", 8, 0)
+  v.iconLabel:SetText("Quest icons on the maps")
   tooltip(v.map, function(tip)
     tip:AddLine("Game's map", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("The game's own world map on your zone, with QuestBank's route and icons on it.", 1, 1, 1, true)
@@ -4793,14 +4924,14 @@ function UI:CreateSettingsView(parent)
   end)
 
   -- the light on what your Interact key would use (Glow.lua): its style, and what it lights
-  heading(p, LEFT, -1018, "Interact light", 370)
-  v.glowOn = checkRow(p, LEFT, -1042, "Light what my Interact key would use", 340)
+  heading(p, LEFT, -1098, "Interact light", 370)
+  v.glowOn = checkRow(p, LEFT, -1122, "Light what my Interact key would use", 340)
   v.glowOn:SetScript("OnClick", function(self) if QB.Glow then QB.Glow.Set(self:GetChecked() and true or false) end; UI:Refresh() end)
   -- the style: QuestBank's sparkles, its soft light, or the game's own highlight alone; the one in use is greyed
   v.glowStyle = {}
   for i, o in ipairs(UI.GLOW_STYLES) do
     local b = button(p, o[2], 84)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1070)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1150)
     b.value = o[1]
     b:SetScript("OnClick", QB.Safe(function(self)
       if QB.Glow then QB.Glow.SetStyle(self.value) else QB:Settings().glow.style = self.value end
@@ -4812,14 +4943,23 @@ function UI:CreateSettingsView(parent)
     end)
     v.glowStyle[i] = b
   end
-  v.glowNpcs = checkRow(p, LEFT + 24, -1098, "NPCs too: gold with a quest for you", 316)
+  v.glowNpcs = checkRow(p, LEFT + 24, -1178, "NPCs too: quest givers, trainers you can use", 316)
   v.glowNpcs:SetScript("OnClick", function(self) QB:Settings().glow.npcs = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
-  v.glowOther = checkRow(p, LEFT + 24, -1126, "Plain objects too, in white", 316)
+  v.glowEvery = checkRow(p, LEFT + 24, -1206, "Every other NPC too, in white", 316)
+  v.glowEvery:SetScript("OnClick", function(self) QB:Settings().glow.everyNpc = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
+  v.glowOther = checkRow(p, LEFT + 24, -1234, "Plain objects too, in white", 316)
   v.glowOther:SetScript("OnClick", function(self) QB:Settings().glow.other = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
-  v.glowCombat = checkRow(p, LEFT + 24, -1154, "Keep it on in a fight", 316)
+  v.glowCombat = checkRow(p, LEFT + 24, -1262, "Keep it on in a fight", 316)
   v.glowCombat:SetScript("OnClick", function(self) QB:Settings().glow.combat = self:GetChecked() and true or false; if QB.Glow then QB.Glow.Update() end end)
+  -- the game's health bar over what it lights (the soft-interact nameplate): off unless asked for (Glow.lua)
+  v.glowPlates = checkRow(p, LEFT + 24, -1290, "Health bars over what it lights", 316)
+  v.glowPlates:SetScript("OnClick", function(self) if QB.Glow then QB.Glow.SetPlates(self:GetChecked() and true or false) end; UI:Refresh() end)
+  tooltip(v.glowPlates, function(tip)
+    tip:AddLine("Health bars over what it lights", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("The game's full nameplate, with its health bar, on the NPC or object under your Interact key. Off, the light sits on the game's interact icon alone. Switched off, the game's setting goes back as you had it.", 1, 1, 1, true)
+  end)
   v.glowHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.glowHint:SetPoint("TOPLEFT", LEFT, -1180)
+  v.glowHint:SetPoint("TOPLEFT", LEFT, -1318)
   v.glowHint:SetHeight(28)
   v.glowHint:SetText("Gold for a quest object or NPC, green for an herb, orange for ore, blue for a chest. Game's own draws nothing of QuestBank's.")
   -- the game's settings the light changes (Glow.LIST), one row each under a line naming the columns: its name, the
@@ -4829,15 +4969,15 @@ function UI:CreateSettingsView(parent)
   -- "Keyboard and mouse", 103; the light's 80 px, for "As you set it", 70; "The game kept its value", 119, spans the
   -- last two)
   v.glowSetHead = text(p, "GameFontNormal", 12, GOLD_SOFT, "LEFT", 370)
-  v.glowSetHead:SetPoint("TOPLEFT", LEFT, -1214)
+  v.glowSetHead:SetPoint("TOPLEFT", LEFT, -1352)
   v.glowSetHead:SetText("The game's settings it changes")
   local GAME_X, GAME_W, LIGHT_X, LIGHT_W = 168, 118, 290, 80
-  v.glowRowX, v.glowRowY = LEFT, -1250
+  v.glowRowX, v.glowRowY = LEFT, -1388
   local h1 = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", GAME_W)
-  h1:SetPoint("TOPLEFT", LEFT + GAME_X, -1232)
+  h1:SetPoint("TOPLEFT", LEFT + GAME_X, -1370)
   h1:SetText("Game's own")
   local h2 = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", LIGHT_W)
-  h2:SetPoint("TOPLEFT", LEFT + LIGHT_X, -1232)
+  h2:SetPoint("TOPLEFT", LEFT + LIGHT_X, -1370)
   h2:SetText("The light's")
   -- how a setting became yours, in its tooltip (Glow.State)
   local YOURS = {
@@ -4849,7 +4989,7 @@ function UI:CreateSettingsView(parent)
   for i, s in ipairs(QB.Glow and QB.Glow.LIST or {}) do
     local r = CreateFrame("Frame", nil, p)
     r:SetSize(370, 18)
-    r:SetPoint("TOPLEFT", LEFT, -1250 - (i - 1) * 18)
+    r:SetPoint("TOPLEFT", LEFT, -1388 - (i - 1) * 18)
     r:EnableMouse(true)
     r.s = s
     r.name = text(r, "GameFontNormal", 12, INK, "LEFT", GAME_X - 4)
@@ -4893,7 +5033,7 @@ function UI:CreateSettingsView(parent)
     v.glowRows[i] = r
   end
   v.glowRestore = button(p, "Restore the game's settings", 200)
-  v.glowRestore:SetPoint("TOPLEFT", LEFT + 4, -1382)
+  v.glowRestore:SetPoint("TOPLEFT", LEFT + 4, -1520)
   v.glowRestore:SetScript("OnClick", QB.Safe(function()
     if QB.Glow then QB.Glow.Restore("button") end
     UI:Refresh()
@@ -4904,22 +5044,22 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("/qb sparkle reset does the same.", 0.6, 0.6, 0.6, true)
   end)
   v.glowSetHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.glowSetHint:SetPoint("TOPLEFT", LEFT, -1410)
+  v.glowSetHint:SetPoint("TOPLEFT", LEFT, -1548)
   v.glowSetHint:SetHeight(40)
 
   -- health and mana on the portraits: the game's own Status Text (Options, Interface), always shown, so it works in
   -- a fight where an addon may not read an enemy's health
-  heading(p, LEFT, -1462, "Health and mana numbers", 370)
+  heading(p, LEFT, -1600, "Health and mana numbers", 370)
   v.statusBtns = {}
   for i, o in ipairs(UI.STATUS_TEXT) do
     local b = button(p, o[2], 84)
-    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1488)
+    b:SetPoint("TOPLEFT", LEFT + 4 + (i - 1) * 90, -1626)
     b.value = o[1]
     b:SetScript("OnClick", QB.Safe(function(self) UI.SetStatusText(self.value); UI:Refresh() end, "settings: status text"))
     v.statusBtns[i] = b
   end
   v.statusHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.statusHint:SetPoint("TOPLEFT", LEFT, -1518)
+  v.statusHint:SetPoint("TOPLEFT", LEFT, -1656)
   v.statusHint:SetHeight(30)
   v.statusHint:SetText("On your portrait, your target's and your focus's, always shown. The game's own Status Text option.")
 
@@ -4961,7 +5101,9 @@ function UI:CreateSettingsView(parent)
   -- the camp bar (Camp.lua): icons under your character, a switch each; and the banner when you leave a town
   heading(p, RIGHT, -956, "Camp bar")
   local REMIND = { { "food", "Well Fed, and the food that gives it" }, { "fire", "Campfire: Basic Campfire or a kit" }, { "camp", "Camp features I can place, with the cooldown" },
-                   { "bag", "Sleeping bag and Well Rested" }, { "quietInstance", "Hidden in dungeons" }, { "buffs", "Tell me when I leave town without my buffs" } }
+                   { "bag", "Sleeping bag and Well Rested" }, { "quietInstance", "Hidden in dungeons" }, { "buffs", "Tell me when I leave town without my buffs" },
+                   -- (5.4.4: each suggestion of its own)
+                   { "sit", "Sit by a campfire near me" }, { "wood", "Fire burned out: where to buy wood" }, { "bagChain", "Where the sleeping bag's quests are" } }
   v.remind = {}
   for i, r in ipairs(REMIND) do
     local row = checkRow(p, RIGHT, -980 - (i - 1) * 26, r[2], 300)
@@ -4973,6 +5115,18 @@ function UI:CreateSettingsView(parent)
     end)
     v.remind[r[1]] = row
   end
+  tooltip(v.remind.sit, function(tip)
+    tip:AddLine("Sit by a campfire", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Near any fire (yours, another player's, a quest giver's) without Camp Benefits: an icon that sits you down. A minute by it gives Camp Benefits for an hour.", 1, 1, 1, true)
+  end)
+  tooltip(v.remind.wood, function(tip)
+    tip:AddLine("When the fire burns out", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("With no campfire kit, a cook short of Simple Wood or Flint and Tinder is shown the nearest general goods vendor and its minutes. A click puts it on the arrow until you have bought them, then back to your route.", 1, 1, 1, true)
+  end)
+  tooltip(v.remind.bagChain, function(tip)
+    tip:AddLine("The Cozy Sleeping Bag", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("From level 14, with no bag: where its quest chain starts or goes on. A click puts it on the arrow.", 1, 1, 1, true)
+  end)
   tooltip(v.remind.buffs, function(tip)
     tip:AddLine("Missing buffs", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("When you leave an inn or a city, a banner above the camp bar shows the buffs you are missing: your class's own, Well Fed, a camp feature's. A click casts one or eats the food. Never in a fight or a dungeon.", 1, 1, 1, true)
@@ -5100,7 +5254,11 @@ function UI:RefreshSettingsView(v)
   v.rangeBelowLabel:SetText(string.format("Down to %d below%s", below, autoB and " (auto)" or ""))
   v.skipKal:SetChecked(set.skipCont[1] == true)
   v.skipEK:SetChecked(set.skipCont[0] == true)
-  v.autoAccept:SetChecked(set.autoAccept == true)
+  local AW = QB.Auto and QB.Auto.WORDS or {}
+  local am = QB.Auto and QB.Auto.AcceptMode and (set.autoAccept == true and "worth" or set.autoAccept) or "off"
+  v.autoAccept:SetText("Accept for me: " .. (AW[am] or "Off"))
+  v.autoOther:SetText("Outside my route: " .. ((QB.Auto and QB.Auto.OTHER or {})[set.autoAcceptOther == "leave" and "leave" or "accept"] or "Accept them"))
+  v.autoOther:SetEnabled(am == "worth")
   v.autoTurnIn:SetChecked(set.autoTurnIn == true)
   v.sayAccept:SetChecked(set.sayAccept == true)
   v.sayComplete:SetChecked(set.sayComplete == true)
@@ -5113,6 +5271,10 @@ function UI:RefreshSettingsView(v)
   v.mmExtended:SetChecked(set.mmExtended ~= false)
   v.walkShow:SetChecked(set.walkShow ~= false)
   v.markerStyle:SetText(UI.MARKER_STYLES[set.markerStyle] or UI.MARKER_STYLES.questtrail)
+  v.arrowStyle:SetText(UI.ARROW_STYLES[set.arrowStyle] or UI.ARROW_STYLES.questbank)
+  local sizeWord = "Half size"
+  for _, o in ipairs(UI.ICON_SIZES) do if o[1] == tonumber(set.mapIconPct) then sizeWord = o[2] end end
+  v.iconSize:SetText(sizeWord)
   -- QuestBank's map page: greyed out where the client has none (Classic Era)
   local page = QB.MapPage and QB.MapPage.Available()
   v.mapPage:SetEnabled(page)
@@ -5128,9 +5290,12 @@ function UI:RefreshSettingsView(v)
   -- what it lights and when: nothing to choose while the game's own highlight is in use
   local draws = gl.on == true and style ~= "game"
   v.glowNpcs:SetChecked(gl.npcs ~= false)
+  v.glowEvery:SetChecked(gl.everyNpc == true)
   v.glowOther:SetChecked(gl.other == true)
   v.glowCombat:SetChecked(gl.combat == true)
-  v.glowNpcs:SetEnabled(draws); v.glowOther:SetEnabled(draws); v.glowCombat:SetEnabled(draws)
+  v.glowPlates:SetChecked(gl.plates == true)
+  v.glowNpcs:SetEnabled(draws); v.glowEvery:SetEnabled(draws); v.glowOther:SetEnabled(draws); v.glowCombat:SetEnabled(draws)
+  v.glowPlates:SetEnabled(gl.on == true)
   -- the game's settings it changes: the game's own value it keeps (the value now while it keeps none) and the light's,
   -- greyed while the light is off; a row of yours says so, and one the game would not take back says it kept its
   -- value. Only the rows this client has, from the top
@@ -5157,8 +5322,8 @@ function UI:RefreshSettingsView(v)
         r.light:SetText("As you set it")
         r.light:SetTextColor(0.6, 0.85, 0.6)
       else
-        local ink = gl.on == true and INK or INK_SOFT
-        r.light:SetText(G.Words(r.s, r.s.want))
+        local ink = gl.on == true and G.Sets(r.s) and INK or INK_SOFT
+        r.light:SetText(G.Sets(r.s) and G.Words(r.s, r.s.want) or "Left alone")
         r.light:SetTextColor(ink[1], ink[2], ink[3])
       end
     end
@@ -5198,7 +5363,7 @@ function UI:RefreshSettingsView(v)
   v.skipText:SetText(#zones > 0 and ("Skipped: " .. table.concat(first, ", ") .. (more > 0 and string.format(" and %d more", more) or "")
       .. ". Back on its card on Available, or /qb skip and the name, brings one back; /qb skip lists them all.")
     or "Skip a zone or dungeon with the Skip button on its Plan card, or /qb skip and its name. Skipped places are never suggested; what you already hold there stays.")
-  v.scroll:SetContentHeight(1562) -- here, once the view has its height, so the knob runs exactly what doesn't fit
+  v.scroll:SetContentHeight(1700) -- here, once the view has its height, so the knob runs exactly what doesn't fit
 end
 
 ----------------------------------------------------------------------------
@@ -5242,8 +5407,10 @@ function MB:Create()
     local r = QB.routeNow
     if r and r.legs and r.legs[1] then
       tip:AddLine(string.format("%s: %s XP, level %.1f", QB:Banking() and "Banked" or "Ready to hand in", QB.Comma(r.xp), r.level), 1, 1, 1)
-      tip:AddLine("Next stop: " .. r.legs[1].stop.name, 0.8, 0.8, 0.8)
     end
+    -- (the next stop of the route on screen, the one the arrow and the minimap follow: Target.lua)
+    local on = QB.Target and QB.Target.Route() or r
+    if on and on.legs and on.legs[1] then tip:AddLine("Next stop: " .. on.legs[1].stop.name, 0.8, 0.8, 0.8) end
     if QB.Run.Get() then
       local got, n = QB.Run.Totals()
       tip:AddLine(string.format("Run %s: %d in, +%s XP", QB.Clock(QB.Run.Elapsed()), n, QB.Comma(got)), 0.4, 1, 0.4)

@@ -57,9 +57,10 @@ end
 -- Points the cap drops keep their ids (ids below first are skipped) until they are half as many as the points kept;
 -- then the graph is built again with fresh ids: once in thousands of points.
 local JOIN, REACH, MAX_NODES = 25, 80, 6000
+local REACH_KEEP = 110 -- yards: the trails looked for this far while a way to the same place is shown (MinimapRoute.lua)
 local JCELL = 50 -- yards: no smaller than JOIN
 local CELL = 250 -- yards: the draw cells, as the minimap looks round you
-Walk.JOIN, Walk.REACH = JOIN, REACH
+Walk.JOIN, Walk.REACH, Walk.REACH_KEEP = JOIN, REACH, REACH_KEEP
 local G = { ver = 0, stale = true, n = 0 }
 Walk.G = G
 Walk.builds = 0 -- (graphs built whole: once at the first look, then only when the trails change under it or once in
@@ -172,14 +173,21 @@ function Walk.Note(me)
   return true
 end
 
--- the trail segments within reach of a point: { {x1, y1, x2, y2}, ... }, at most DRAW_MAX (cell by cell, each cell's in
--- the order noted, as 5.4.1 listed them). The list and its entries are reused by the next call (the minimap draws them
--- at once, 20 times a second)
+-- the trail segments within reach of a point: { {x1, y1, x2, y2}, ... }, at most DRAW_MAX, the nearest to the point
+-- first (5.4.3 took them cell by cell from the window's corner and stopped at DRAW_MAX, so patches round you came and
+-- went as you walked). The list and its entries are reused by the next call (the minimap draws them at once, 20 times
+-- a second), and the same list is handed back while the point stays within a few yards and the trails are the same
+-- (the list is a heap while it is made: the farthest kept on top, and put back by a nearer one once DRAW_MAX are in. No
+-- sort of everything in reach: zoomed far out that is thousands)
 local nearOut, nearPool = {}, {}
+local nearAt = {}
 function Walk.Near(c, wx, wy, reach)
   local g = graph(c)
   local out = nearOut
+  local qx, qy = floor(wx / 4), floor(wy / 4)
+  if nearAt.c == c and nearAt.x == qx and nearAt.y == qy and nearAt.r == reach and nearAt.v == g.ver and nearAt.f == g.first then return out end
   for k = #out, 1, -1 do out[k] = nil end
+  nearAt.c = nil
   local X, Y, dnext, dhead, first = g.x, g.y, g.dnext, g.dhead, g.first
   if not X then return out end
   local cx, cy = floor(wx / CELL), floor(wy / CELL)
@@ -191,19 +199,45 @@ function Walk.Near(c, wx, wy, reach)
       while i > 0 do
         if i >= first then
           local x1, y1, x2, y2 = X[i], Y[i], X[i + 1], Y[i + 1]
-          if (x1 - wx) ^ 2 + (y1 - wy) ^ 2 <= r2 or (x2 - wx) ^ 2 + (y2 - wy) ^ 2 <= r2 then
-            n = n + 1
-            local s = nearPool[n]
-            if not s then s = {}; nearPool[n] = s end
-            s[1], s[2], s[3], s[4] = x1, y1, x2, y2
-            out[n] = s
-            if n >= DRAW_MAX then return out end
+          local d1, d2 = (x1 - wx) ^ 2 + (y1 - wy) ^ 2, (x2 - wx) ^ 2 + (y2 - wy) ^ 2
+          if d1 <= r2 or d2 <= r2 then
+            local d = d1 < d2 and d1 or d2
+            if n < DRAW_MAX then
+              -- in, then up the heap past nearer ones
+              n = n + 1
+              local s = nearPool[n]
+              if not s then s = {}; nearPool[n] = s end
+              s[1], s[2], s[3], s[4], s[5] = x1, y1, x2, y2, d
+              local h = n
+              while h > 1 do
+                local p = floor(h / 2)
+                if out[p][5] >= d then break end
+                out[h] = out[p]
+                h = p
+              end
+              out[h] = s
+            elseif d < out[1][5] then
+              -- in place of the farthest, then down the heap past farther ones
+              local s = out[1]
+              s[1], s[2], s[3], s[4], s[5] = x1, y1, x2, y2, d
+              local h = 1
+              while true do
+                local k = h * 2
+                if k > n then break end
+                if k < n and out[k + 1][5] > out[k][5] then k = k + 1 end
+                if out[k][5] <= d then break end
+                out[h] = out[k]
+                h = k
+              end
+              out[h] = s
+            end
           end
         end
         i = dnext[i]
       end
     end
   end
+  nearAt.c, nearAt.x, nearAt.y, nearAt.r, nearAt.v, nearAt.f = c, qx, qy, reach, g.ver, g.first
   return out
 end
 
@@ -277,10 +311,11 @@ local function relax(nb, cur, cx, cy, cg)
   end
 end
 
-function Walk.Path(c, from, to)
+function Walk.Path(c, from, to, reach)
   local g = graph(c)
   if g.n == 0 then return nil end
-  local a, b = nearestNode(g, from.wx, from.wy, REACH), nearestNode(g, to.wx, to.wy, REACH)
+  reach = reach or REACH
+  local a, b = nearestNode(g, from.wx, from.wy, reach), nearestNode(g, to.wx, to.wy, reach)
   if not a or not b then return nil end
   local X, Y = g.x, g.y
   if a == b then return { { from.wx, from.wy }, { X[a], Y[a] }, { to.wx, to.wy } } end

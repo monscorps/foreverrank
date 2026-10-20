@@ -328,6 +328,51 @@ function QM.Loose(objs, list)
   return out
 end
 
+-- the spots of a quest of your log whose objective is not finished yet, on any map (the marks QM:Build draws, by the
+-- same rule: a slot or a kind matched to a finished line goes; an unmatched one shows until the quest is complete). The
+-- minimap's objectives and the one target's (Target.lua) come from here, so a finished objective leads nowhere
+-- (each quest's list kept while its objectives read the same in your log: the minimap's list is made again whenever the
+-- log changes, for every quest in it)
+local NO_SPOTS, openOf = {}, {}
+local function sameLines(c, objs)
+  if #objs ~= c.n then return false end
+  for i, o in ipairs(objs) do
+    if (QB.Plain(o.done) and true or false) ~= c.done[i] or QB.Plain(o.have) ~= c.have[i] then return false end
+  end
+  return true
+end
+-- the lists of the quests gone from your log, dropped (the minimap's list, made again as the log changes: Minimap.lua).
+-- 5.4.4 as first built kept one for every quest the session's log had held
+function QM.PruneOpen(log)
+  for id in pairs(openOf) do if not (log and log[id]) then openOf[id] = nil end end
+end
+-- how many quests' lists are kept (the harness weighs them)
+function QM.KeptLists()
+  local n = 0
+  for _ in pairs(openOf) do n = n + 1 end
+  return n
+end
+function QM.OpenSpots(e)
+  local str = e and not e.complete and D.SPOT and D.SPOT[e.id]
+  local all = str and spots(str)
+  if not all or #all == 0 then return NO_SPOTS end
+  local kept, now = openOf[e.id], e.objectives
+  if kept and now and kept.str == str and sameLines(kept, now) then return kept.out end
+  local need, objs = needOf(e.id), objectivesOf(e)
+  local lines, loose = QM.Match(objs, all, need.count, namesOf(need)), QM.Loose(objs, all)
+  local out = {}
+  for _, sp in ipairs(all) do
+    local line = (sp.slot > 0 and lines[sp.slot]) or (sp.slot == 0 and loose[sp.kind]) or nil
+    if not (line and line.done) then out[#out + 1] = sp end
+  end
+  if now then
+    kept = { str = str, n = #now, done = {}, have = {}, out = out }
+    for i, o in ipairs(now) do kept.done[i], kept.have[i] = QB.Plain(o.done) and true or false, QB.Plain(o.have) end
+    openOf[e.id] = kept
+  end
+  return out
+end
+
 ----------------------------------------------------------------------------
 -- the icons for one map
 ----------------------------------------------------------------------------
@@ -335,8 +380,8 @@ end
 -- reputation (gen_data, from the Classic database), which QuestBank doesn't check, and the game shows no ! to a
 -- player without them. Read as { [questId] = what it needs }, a list of quest ids, or "id,id,...".
 -- An older Data.lua has none: then the "Other quests" of the Classic and Season of Discovery databases stand in
--- (professions, library books, mount exchanges, battlegrounds); Forever's own (Zephras Isle and on, from 90000)
--- are ordinary quests the catalog files there for want of a zone.
+-- (professions, library books, mount exchanges, battlegrounds); Forever's own (from 90000) are ordinary quests the
+-- catalog files there for want of a zone (Zephras Isle's have a card of their own since 5.4.4).
 local FOREVER_OWN = 90000
 local lockSet, lockFrom = nil, false
 local function locks()
@@ -678,11 +723,30 @@ local READY_WORD = function() return P.Word("QUEST_WATCH_QUEST_READY", "Ready fo
 local function offersWord(n) return n > 1 and P.Word("QUEST_HUB_TOOLTIP_AVAILABLE_QUESTS_HEADER", "Available Quests") or P.Word("AVAILABLE_QUEST", "Available quest") end
 
 local function source(tip, src) tip:AddLine("Position: " .. (SOURCE[src] or CLASSIC), 0.6, 0.6, 0.6, true) end
-local function waypointLine(tip) P.Instruct(tip, "Click to set a waypoint") end
+-- a click shows the place on the arrow for now and nothing more (5.4.4): the route changes only by the labelled
+-- Shift-click below each pin's tooltip (QM.Track)
+local function waypointLine(tip) P.Instruct(tip, "Click to show it on the arrow for now") end
 
 local function allAdded(quests)
   for _, q in ipairs(quests) do if not QB:IsAdded(q.id) then return false end end
   return true
+end
+
+-- a ? or an objective's mark: its Shift-click takes its quest (or the NPC's, all of them) out of the route for good
+-- (Skip this quest), and the same Shift-click routes it again
+local function skipIds(d)
+  local out = {}
+  if d.kind == "obj" then out[1] = d.id
+  else for _, q in ipairs(d.quests or {}) do out[#out + 1] = q.id end end
+  return out
+end
+QM.SkipIds = skipIds
+local function skipLine(tip, d)
+  local ids = skipIds(d)
+  if #ids == 0 then return end
+  local all = true
+  for _, id in ipairs(ids) do if not QB:IsSkipped(id) then all = false end end
+  P.Instruct(tip, all and "Shift-click: route it again" or (#ids > 1 and "Shift-click: skip these quests" or "Shift-click: skip this quest"))
 end
 
 local LABEL = { k = "Kill %s", c = "Loot %s", u = "Use %s", b = "Buy %s from the vendor here", e = "Go to %s", f = "%s: fish, pick pockets or skin here" }
@@ -744,9 +808,7 @@ function TIP.give(tip, d)
     source(tip, npcSource(d))
   end
   waypointLine(tip)
-  local many = #d.quests > 1
-  P.Instruct(tip, allAdded(d.quests) and (many and "Shift-click to take them off your pick-up list" or "Shift-click to take it off your pick-up list")
-    or (many and "Shift-click to put them on your pick-up list" or "Shift-click to put it on your pick-up list"))
+  P.Instruct(tip, allAdded(d.quests) and "Shift-click: take it out of my route" or "Shift-click: add to my route")
 end
 -- a ? as the game's quest pin for a quest that is complete: the quests ready for turn-in here, and what else the NPC
 -- offers
@@ -764,6 +826,7 @@ function TIP.turn(tip, d)
     source(tip, npcSource(d))
   end
   waypointLine(tip)
+  skipLine(tip, d)
 end
 -- an objective's mark as the game's quest pin for a quest in progress: "[level] name", every objective not finished
 -- yet as "- the game's line"; then QuestBank's: what this spot is for, and where it comes from
@@ -782,6 +845,7 @@ function TIP.obj(tip, d)
   tip:AddLine(name and string.format(LABEL[sp.kind] or "%s", name) or (BARE[sp.kind] or "Here"), 0.8, 0.8, 0.8, true)
   source(tip, sp.src)
   waypointLine(tip)
+  skipLine(tip, d)
 end
 -- where the item that starts a quest drops: the ! in red
 function TIP.start(tip, d)
@@ -791,7 +855,7 @@ function TIP.start(tip, d)
   questLines(tip, { q })
   source(tip, d.spot.src)
   waypointLine(tip)
-  P.Instruct(tip, QB:IsAdded(q.id) and "Shift-click to take it off your pick-up list" or "Shift-click to put it on your pick-up list")
+  P.Instruct(tip, QB:IsAdded(q.id) and "Shift-click: take it out of my route" or "Shift-click: add to my route")
 end
 QM.TIP = TIP
 
@@ -831,13 +895,31 @@ end
 -- its quest item buttons keep their quest in secure attributes that UseQuestLogSpecialItem reads. Nothing QuestBank
 -- can do makes that call clean, so it leaves the game's tracker alone: the quest log tracks a quest.
 function QM.Track(d)
+  if d.kind == "turn" or d.kind == "obj" then
+    -- a quest in your log: out of the route for good (Skip this quest), or routed again
+    local ids = skipIds(d)
+    if #ids == 0 then return false end
+    local all = true
+    for _, id in ipairs(ids) do if not QB:IsSkipped(id) then all = false end end
+    for _, id in ipairs(ids) do QB:SetSkipped(id, not all) end
+    QB:Print((all and "Back in your route: " or "Skipped, out of your route: ") .. names(ids) .. ".")
+    return true
+  end
   if not (d.kind == "give" or d.kind == "start") then return false end
   local ids = idsOf(d)
   if #ids == 0 then return false end
+  -- a skipped quest's ! (the game shows it all the same): routed again, as the Skip line in chat says
+  local skipped = false
+  for _, id in ipairs(ids) do if QB:IsSkipped(id) then skipped = true end end
+  if skipped then
+    for _, id in ipairs(ids) do QB:SetSkipped(id, false); QB:SetAdded(id, true) end
+    QB:Print("Back in your route (on your pick-up list): " .. names(ids) .. ".")
+    return true
+  end
   local all = true
   for _, id in ipairs(ids) do if not QB:IsAdded(id) then all = false end end
   for _, id in ipairs(ids) do if QB:IsAdded(id) == all then QB:ToggleAdd(id) end end
-  QB:Print((all and "Off your pick-up list: " or "On your pick-up list: ") .. names(ids) .. ".")
+  QB:Print((all and "Out of your route (off your pick-up list): " or "Added to your route (on your pick-up list): ") .. names(ids) .. ".")
   return true
 end
 
@@ -851,7 +933,10 @@ local function click(d, button)
     return
   end
   if IsShiftKeyDown and IsShiftKeyDown() and QM.Track(d) then return end
-  QB.API.SetWaypoint(d.m, d.x * 100, d.y * 100, d.title)
+  -- a plain click: shown on the arrow for now, and nothing more (it ends there, or as its quest is taken or done)
+  local ids = idsOf(d)
+  local what = (d.kind == "give" or d.kind == "start") and "give" or (d.kind == "obj" and "obj" or (d.kind == "turn" and "turn" or nil))
+  QB.API.SetWaypoint(d.m, d.x * 100, d.y * 100, d.title, nil, nil, what and ids[1] and { qid = ids[1], what = what } or nil)
 end
 
 ----------------------------------------------------------------------------

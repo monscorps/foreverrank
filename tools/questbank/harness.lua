@@ -322,9 +322,30 @@ function GAME_LEVELS.Valid(t, i)
   return start + math.min(math.max(i or 1, 1), GAME_LEVELS.RANGE[t] or 1) - 1
 end
 BASE.GAME_LEVELS = GAME_LEVELS
+-- a bare map canvas's pin levels, as Blizzard_MapCanvas makes them (MapCanvas_PinFrameLevelsManager.lua: MapCanvasMixin
+-- OnLoad creates one manager knowing PIN_FRAME_LEVEL_DEFAULT alone, at 2000; every type it was never told of gets that
+-- level; AddFrameLevel puts a type above the others). The world map's own adds its long list (Blizzard_WorldMap.lua,
+-- AddStandardDataProviders: GAME_LEVELS above); a canvas QuestBank builds has only what QuestBank adds (5.4.4: before,
+-- the mock handed every canvas the world map's levels, and hid that the Map page's strokes and pins shared one level)
+local function canvasLevels()
+  local m = { defs = { PIN_FRAME_LEVEL_DEFAULT = { start = 2000, range = 1 } }, maxLevel = 2000 }
+  function m:AddFrameLevel(t, range)
+    if self.defs[t] or t == "PIN_FRAME_LEVEL_TOPMOST" then return false end
+    range = range or 1
+    self.defs[t] = { start = self.maxLevel + 1, range = range }
+    self.maxLevel = self.maxLevel + range
+    return true
+  end
+  function m:GetValidFrameLevel(t, i)
+    local d = self.defs[t] or self.defs.PIN_FRAME_LEVEL_DEFAULT
+    return d.start + math.min(math.max(i or 1, 1), d.range) - 1
+  end
+  return m
+end
 BASE.MapCanvasMixin = {
   OnLoad = function(self)
     self.dataProviders, self.__calls, self.__clickHandlers = {}, {}, {}
+    self.pinFrameLevelsManager = canvasLevels()
     self:EvaluateLockReasons()
   end,
   OnShow = cleared, OnUpdate = cleared, OnMapChanged = cleared,
@@ -351,7 +372,7 @@ BASE.MapCanvasMixin = {
   GetCanvasScale = function() return 1 end,
   GetCanvasZoomPercent = function() return 0 end,
   GetGlobalPinScale = function() return 1 end,
-  GetPinFrameLevelsManager = function() return { GetValidFrameLevel = function(_, t, i) return GAME_LEVELS.Valid(t, i) or 2000 end } end,
+  GetPinFrameLevelsManager = function(self) return self.pinFrameLevelsManager end,
   AddCanvasClickHandler = function(self, fn) table.insert(self.__clickHandlers, fn) end,
   TriggerEvent = asked("TriggerEvent"), RegisterCallback = asked("RegisterCallback"), PanTo = asked("PanTo"),
   PanAndZoomTo = asked("PanAndZoomTo"), ResetZoom = asked("ResetZoom"), NavigateToParentMap = asked("NavigateToParentMap"),
@@ -804,6 +825,9 @@ local function newClient(o)
     [1443] = true, [1444] = true, [1445] = true, [1446] = true, [1447] = true, [1448] = true, [1449] = true, [1450] = true, [1451] = true,
     [1452] = true, [1454] = true, [1456] = true, [1457] = true, [2521] = true, [2524] = true }
   local function continentOf(id) return KALIMDOR[id] and 1414 or 1415 end
+  -- UiMapAssignment's rectangles for the islands' maps (world yards: x north, y west) and UiMap's types
+  local ISLE = { [2521] = { cont = 2991, kind = 3, minx = 1247.917, maxx = 4956.25, miny = -1331.25, maxy = 4231.25 },
+                 [2524] = { cont = 2997, kind = 6, minx = -835.416, maxx = 447.916, miny = 993.75, maxy = 2918.75 } }
   local function mapName(id)
     return ({ [947] = "Azeroth", [1414] = "Kalimdor", [1415] = "Eastern Kingdoms" })[id] or c.QB.Data.MAPNAME[id] or ("Map " .. id)
   end
@@ -836,6 +860,13 @@ local function newClient(o)
     -- stands, as the mock's maps go
     GetWorldPosFromMapPos = function(m, v)
       if (c.instWorld or {})[m] then return 36, { x = 0, y = 0, GetXY = function(self) return self.x, self.y end } end
+      -- the islands off the two continents, on worlds of their own as the client's UiMapAssignment has them: Zephras
+      -- Isle (2521, an open map on 2991) and the Darkspear Islands (2524, a battleground on 2997)
+      local isle = ISLE[m]
+      if isle and type(v) == "table" then
+        return isle.cont, { x = isle.maxx - (v.y or 0) * (isle.maxx - isle.minx), y = isle.maxy - (v.x or 0) * (isle.maxy - isle.miny),
+                            GetXY = function(self) return self.x, self.y end }
+      end
       local cont = continentOf(m) == 1414 and 1 or 0
       local okM, mine = pcall(env.C_Map.GetBestMapForUnit, "player") -- (his own map is where he stands, whatever continent a test put him on)
       if m ~= (okM and mine or nil) and (o.world[1] == 0 or o.world[1] == 1) and cont ~= o.world[1] and type(v) == "table" and c.QB.Data.HUB then
@@ -854,9 +885,11 @@ local function newClient(o)
     -- zones and cities 3, continents 2, the world 1 (Enum.UIMapType); c.mapTypes overrides one. Azeroth holds the two
     -- continents, a zone lies in its own (Kalimdor's by D.MAPNAME's ids, else the Eastern Kingdoms); names as
     -- D.MAPNAME has them
+    -- (a map inside an instance, c.instWorld, is a dungeon's, 4; the islands as ISLE has them, under Azeroth)
     GetMapInfo = function(id)
-      local kind = (c.mapTypes or {})[id] or ({ [947] = 1, [1414] = 2, [1415] = 2 })[id] or 3
-      return { mapID = id, mapType = kind, parentMapID = kind == 1 and 0 or kind == 3 and continentOf(id) or 947, name = mapName(id) }
+      local kind = (c.mapTypes or {})[id] or ((c.instWorld or {})[id] and 4) or (ISLE[id] and ISLE[id].kind)
+        or ({ [947] = 1, [1414] = 2, [1415] = 2 })[id] or 3
+      return { mapID = id, mapType = kind, parentMapID = kind == 1 and 0 or (kind == 3 and not ISLE[id]) and continentOf(id) or 947, name = mapName(id) }
     end,
     -- c.noArt[id]: a map without art of its own
     MapHasArt = function(id) return not (c.noArt or {})[id] end,
@@ -893,11 +926,12 @@ local function newClient(o)
   end }
   env.InCombatLockdown = function() return c.combat or false end
   -- flight points (Travel.lua). c.taxiKnown = { [TaxiNodes id] = true }: the world map's flight points this character
-  -- has found (nil: the client answers nothing); every flight master of the faction with an id is listed, on its own
-  -- map and its continent's (1415, 1414). c.taxiNoContinent: the continent maps answer nothing. c.taxiSecret: ids and
-  -- flags are secret values. c.taxiOpen = { map, nodes = { { nodeID, name, state (0 here, 1 can fly, 2 can't), slotIndex } } }:
-  -- a flight master's map, open (openTaxi below)
+  -- has found (nil: the client answers nothing, and its maps say they show none); every flight master of the faction
+  -- with an id is listed, on its own map and its continent's (1415, 1414). c.taxiNoContinent: the continent maps answer
+  -- nothing. c.taxiSecret: ids and flags are secret values. c.taxiOpen = { map, nodes = { { nodeID, name, state (0
+  -- here, 1 can fly, 2 can't), slotIndex } } }: a flight master's map, open (openTaxi below)
   env.C_TaxiMap = {
+    ShouldMapShowTaxiNodes = function(m) return c.taxiKnown ~= nil and not (c.taxiNoContinent and (m == 1414 or m == 1415)) end,
     GetTaxiNodesForMap = function(m)
       if c.taxiKnown == nil or (c.taxiNoContinent and (m == 1414 or m == 1415)) then return {} end
       local out = {}
@@ -1669,7 +1703,7 @@ do
   local function ctx() local t = {} for _, c in ipairs(QB.Contexts()) do if c ~= "cap" then t[#t + 1] = c end end return table.concat(t, ",") end
   local inGroup, inInst = env.IsInGroup, env.IsInInstance
   env.IsInGroup = function() return false end
-  assert(ctx() == "" and QB:Opt("autoAccept") == false, "alone outdoors: no context, the plain setting: " .. ctx())
+  assert(ctx() == "" and QB:Opt("autoAccept") == "off", "alone outdoors: no context, the plain setting (Accept for me: Off, 5.4.4): " .. ctx())
   env.IsInGroup = function() return true end
   assert(ctx() == "party", "in a group: the party context")
   set.profiles.party.autoAccept = true
@@ -1833,14 +1867,19 @@ do
   QB:Settings().markerStyle = nil
   Mini.Place()
   assert(g.num:GetText() == "" and g.disc.__shown and g.__w == 18, "and back to QuestTrail's")
-  -- 5.4: the strokes (MinimapRoute.lua): QuestTrail's line_arrow.png, you to stop 1 (stopping at the pin's edge, 0.45 of
-  -- its 18 px short), 1 to 2, and 2 to the far stop cut at the minimap's edge, pointing the way; 5.5: each in its stop's
-  -- colour, the stroke width setting's 8 px
+  -- 5.4: the strokes (MinimapRoute.lua): QuestTrail's line_arrow.png, you to stop 1, 1 to 2, and 2 to the far stop cut
+  -- at the minimap's edge, pointing the way; 5.5: each in its stop's colour, the stroke width setting's px. 5.4.4: 6 px
+  -- (a quarter thinner), and a gap round each pin (half its 18 px and 3 more short of it) and off your arrow; a short
+  -- stroke (you to stop 1, 21 px) keeps 6 px, the gap at its start giving way first
   local MR = QB.MiniRoute
   local stroke = MR.route.lines
-  assert(Mini.linesShown == 3 and stroke[1].__tex == ART .. "line_arrow.png" and math.abs(stroke[1].__stop[4] - 12.9) < 0.01
-    and stroke[1].__vertex[1] == pal[1][1] and stroke[1].__vertex[2] == pal[1][2] and stroke[1].__vertex[4] == 1 and stroke[1].__thick == 8,
-    "you to stop 1, 1 to 2, 2 to 3: " .. tostring(Mini.linesShown))
+  assert(Mini.linesShown == 3 and stroke[1].__tex == ART .. "line_arrow.png" and math.abs(stroke[1].__stop[4] - 9) < 0.01 and math.abs(stroke[1].__start[4] - 3) < 0.01
+    and stroke[1].__vertex[1] == pal[1][1] and stroke[1].__vertex[2] == pal[1][2] and stroke[1].__vertex[4] == 1 and stroke[1].__thick == 6,
+    "you to stop 1, 1 to 2, 2 to 3: " .. tostring(Mini.linesShown) .. " (" .. tostring(stroke[1].__start and stroke[1].__start[4]) .. " to " .. tostring(stroke[1].__stop and stroke[1].__stop[4]) .. ")")
+  -- 1 to 2: starts a gap off stop 1's pin and stops a gap short of stop 2's (12 px each, of 35)
+  local s2 = stroke[2]
+  local len2 = math.sqrt((s2.__stop[3] - s2.__start[3]) ^ 2 + (s2.__stop[4] - s2.__start[4]) ^ 2)
+  assert(math.abs(len2 - (math.sqrt(28 * 28 + 21 * 21) - 24)) < 0.05, "stop to stop: a gap at both pins: " .. len2)
   local ex, ey = stroke[3].__stop[3], stroke[3].__stop[4]
   assert(stroke[3].__shown and math.sqrt(ex * ex + ey * ey) < 70 and ex > 60 and math.abs(ey) < 0.01, string.format("the stroke to the far stop ends at the edge (%s, %s)", ex, ey))
   -- QuestTrail's rim: an objective out of reach is gone (400 yards west at 200), one inside fades over its last width
@@ -2163,7 +2202,7 @@ do
   gp.__scripts.OnClick(gp, "RightButton")
   nextFrame(n0)
   m = c.contextMenus[#c.contextMenus]
-  assert(#c.contextMenus == menus + 2 and m[1].text == "Waypoint here" and m[1].kind == "button" and entry(m, "Far zoom"), "a pin's right-click: Waypoint here, then the switches")
+  assert(#c.contextMenus == menus + 2 and m[1].text == "Show it on the arrow" and m[1].kind == "button" and entry(m, "Far zoom"), "a pin's right-click: Show it on the arrow, then the switches")
   env.GetCursorPosition = saveCursor
   QB.MinimapTiles = realTiles
   -- no menu that doesn't exist (5.3's StopMenu), and the game's arrow left alone (QuestTrail sized it with calls
@@ -2321,9 +2360,18 @@ do
   env.Minimap.__scripts.OnMouseUp(env.Minimap, "RightButton")
   for i = #c.timers, n0 + 1, -1 do table.remove(c.timers, i).f() end
   local menu = c.contextMenus[#c.contextMenus]
-  local want, got = { "Back to me after a drag", "Back to me", "Far zoom", "Route", "Lines", "Golden path", "Pick-ups", "Objectives", "Dungeons", "Trails", "Party", "Quest areas", "Label", "QuestBank settings" }, {}
+  -- (5.4.4: Accept for me in one line, as Settings says it; with Quests worth taking, what it does outside your route)
+  local want, got = { "Back to me after a drag", "Back to me", "Far zoom", "Route", "Lines", "Golden path", "Pick-ups", "Objectives", "Dungeons", "Trails", "Party", "Quest areas", "Label", "Accept for me: Off", "QuestBank settings" }, {}
   for _, e in ipairs(menu) do if e.text then got[#got + 1] = e.text end end
   assert(table.concat(got, ",") == table.concat(want, ","), "the minimap's menu: " .. table.concat(got, ","))
+  for _, e in ipairs(menu) do if e.text == "Accept for me: Off" then e.set() end end
+  assert(QB:Settings().autoAccept == "route", "the menu's line moves Accept for me on: " .. tostring(QB:Settings().autoAccept))
+  QB:Settings().autoAccept = "worth"
+  QB.MiniView.Menu()
+  got = {}
+  for _, e in ipairs(c.contextMenus[#c.contextMenus]) do if e.text and e.text:find("^Accept for me") or (e.text and e.text:find("^Outside my route")) then got[#got + 1] = e.text end end
+  assert(table.concat(got, ",") == "Accept for me: Quests worth taking,Outside my route: Accept them", "with Quests worth taking, its line for quests outside the route: " .. table.concat(got, ","))
+  QB:Settings().autoAccept = "off"
   for _, e in ipairs(menu) do if e.text == "Quest areas" then e.set() end end
   assert(QB:Settings().mmAreas == false, "Quest areas off from the menu")
   QB:Settings().mmAreas = nil
@@ -2491,7 +2539,8 @@ do
   assert(f and QB:Settings().glow.on == true and QB:Settings().glow.other == true, "on by default, plain objects too")
   c.cvars = { SoftTargetInteract = "0", SoftTargetInteractArc = "0", SoftTargetInteractRange = "10", SoftTargetNameplateInteract = "0", SoftTargetIconInteract = "1" }
   ev("PLAYER_ENTERING_WORLD")
-  assert(c.cvars.SoftTargetInteract == "3" and c.cvars.SoftTargetInteractArc == "2" and c.cvars.SoftTargetNameplateInteract == "1", "entering the world sets the soft-interact settings")
+  assert(c.cvars.SoftTargetInteract == "3" and c.cvars.SoftTargetInteractArc == "2" and c.cvars.SoftTargetNameplateInteract == "0",
+    "entering the world sets the soft-interact settings, the health bars' nameplate left as the game has it (5.4.4)")
   assert(QB:Settings().glow.saved.SoftTargetInteract == "0" and QB:Settings().glow.saved.SoftTargetIconInteract == "1", "and keeps what they were")
   local plate = env.CreateFrame("Frame")
   c.soft = { name = "Peacebloom", plate = plate }
@@ -2506,7 +2555,10 @@ do
   assert(not L:IsShown() and Glow.kind == nil, "plain objects switched off: nothing")
   QB:Settings().glow.other = true
   c.soft = { name = "Corina Steele", plate = plate, guid = "Creature-0-4455-0-12-295-0000A1B2C3" }; ev("PLAYER_SOFT_INTERACT_CHANGED")
-  assert(L:IsShown() and Glow.kind == "npc", "an NPC lights too, white without a quest for you (5.4, below)")
+  assert(not L:IsShown() and Glow.kind == nil, "an NPC with nothing for you: no light (5.4.4; 5.4.3 lit every NPC in white)")
+  QB:Settings().glow.everyNpc = true; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(L:IsShown() and Glow.kind == "npc", "with Every other NPC too: white")
+  QB:Settings().glow.everyNpc = nil
   c.soft = { name = "Brann Steelhand", plate = plate, guid = "Player-1234-0000ABCD" }; ev("PLAYER_SOFT_INTERACT_CHANGED")
   assert(not L:IsShown(), "a player keeps the game's own cursor icon, no light")
   c.soft = { name = "Sunken Chest", plate = plate }; ev("PLAYER_SOFT_INTERACT_CHANGED")
@@ -2596,35 +2648,44 @@ do
   local saveList2 = P.list
   P.list = { { m = 1429, x = 50, y = 48.5, num = 1, name = "Along the trail", when = "", lines = {} } } -- (0.485 * 2000 = 970 ... see the flat world below)
   env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = 1000 + (0.5 - v.y) * 3000, y = 2000 + (0.5 - v.x) * 4000, GetXY = function(self) return self.x, self.y end } end
-  -- the stop at map (51.125, 50) is 45 yards east: (1000, 2000 - 45)... our trail runs north; put the trail east instead
-  W[0] = { { 1000, 2000, 1000, 1985, 1000, 1970, 1000, 1955 } }
+  -- the stop at map (57.5, 50) is 300 yards west: (1000, 1700), at the end of a trail from where you stand, a point
+  -- every 15 yards
+  local tr = {}
+  for k = 0, 20 do tr[#tr + 1] = 1000; tr[#tr + 1] = 2000 - 15 * k end
+  W[0] = { tr }
   Walk.dirty, Walk.dirtyNodes = true, true
-  P.list = { { m = 1429, x = 51.125, y = 50, num = 1, name = "Along the trail", when = "", lines = {} } }
+  P.list = { { m = 1429, x = 57.5, y = 50, num = 1, name = "Along the trail", when = "", lines = {} } }
   QB:Settings().minimapObjectives = false -- (the stop is the target here, not one of your log's objectives)
   QB.Arrow:EndTemp() -- (nor the arrow's step for a waypoint clicked long ago, planned anew in this flat world)
   Mini.Invalidate(); Mini.Place()
   -- 5.4: the golden path, QuestTrail's (MinimapRoute.lua): gold along your trail, in pieces of 15 metres; the straight
-  -- stroke to stop 1 left to it
+  -- stroke to stop 1 left to it. 5.4.4: you join it at the furthest point within 80 yards of you (GP.Join)
   local MR, GP = QB.MiniRoute, QB.MiniRoute.GP
-  local function kinds() local t = {}; for i = 1, GP.n - 1 do t[i] = GP.seg[i] end; return table.concat(t, ",") end
-  assert(GP.n == 4 and kinds() == "own,own,own" and MR.goldShown >= 3 and Mini.linesShown == 0 and MR.gold.lines[1].__vertex[3] == 0,
+  -- (what is drawn: GP.dx, dy, dk, from you through the point you join the way at; the way itself, GP.x, as before)
+  local function kinds() local t = {}; for i = 1, GP.dn - 1 do t[i] = GP.dk[i] end; return table.concat(t, ",") end
+  assert(not kinds():find("line", 1, true) and GP.dn >= 2 and MR.goldShown >= 3 and Mini.linesShown == 0 and MR.gold.lines[1].__vertex[3] == 0,
     "the way to stop 1 along the trail, gold: " .. kinds() .. ", " .. tostring(MR.goldShown) .. " pieces, " .. tostring(Mini.linesShown) .. " strokes")
-  -- from 30 yards west of the trail to a stop 40 yards past its end: straight, paler and thinner on those two bits
-  local px, py = 0.5, 0.5
+  -- from 30 yards north of the trail to a stop 40 yards past its end: straight, paler and thinner on those two bits;
+  -- joined 80 yards from you, on the trail (not at its start, behind you as you go)
+  local px, py = 0.5, 0.49 -- (1030, 2000)
   env.C_Map.GetPlayerMapPosition = function() return { x = px, y = py, GetXY = function(self) return self.x, self.y end } end
-  px = 0.4925 -- (1000, 2030)
-  P.list[1].x = 52.125 -- (1000, 1915)
+  P.list[1].x = 58.5 -- (1000, 1660)
   Mini.Invalidate(); Mini.Place()
+  -- (the first piece the straight bit from you: paler and thinner; the place itself is past the minimap's reach here,
+  -- the last piece drawn one of the trail's own)
   local last = MR.gold.lines[MR.goldShown]
-  assert(kinds() == "line,own,line" and GP.n == 4 and math.abs(MR.gold.lines[1].th - 4.8) < 0.01 and last.__vertex[3] == 0.7 and last.th == 4.8,
-    "the bits off the trail, straight: " .. kinds())
-  -- walking along it, the points behind you are dropped and the way starts where you stand (no new search)
+  assert(kinds() == "line,own,line" and GP.dn == 4 and math.abs(GP.dy[2] - (2000 - math.sqrt(80 * 80 - 30 * 30))) < 0.5
+    and math.abs(MR.gold.lines[1].th - 3.6) < 0.01 and MR.gold.lines[1].__vertex[3] == 0.7 and last.__vertex[3] == 0 and last.th == 6,
+    "the bits off the trail, straight; joined 80 yards from you: " .. kinds() .. ", " .. tostring(GP.dy[2]) .. ", n " .. GP.dn .. ", th " .. tostring(MR.gold.lines[1].th) .. "/" .. tostring(last and last.th) .. ", " .. tostring(last and last.__vertex[3]))
+  -- walking along it, the points behind you are dropped and the way starts where you stand (no new search), joined
+  -- ahead of you
   local searches, realPath = 0, Walk.Path
   Walk.Path = function(...) searches = searches + 1; return realPath(...) end
-  px = 0.505 -- (1000, 1980): on the trail, past its start
+  local len0 = GP.len
+  px, py = 0.505, 0.5 -- (1000, 1980): on the trail, past its start
   Mini.Place()
-  assert(searches == 0 and GP.n == 3 and GP.x[1] == 1000 and math.abs(GP.y[1] - 1980) < 0.01 and kinds() == "own,line",
-    "walked on: the way trimmed behind you: " .. kinds() .. ", " .. GP.n .. " points")
+  assert(searches == 0 and GP.x[1] == 1000 and math.abs(GP.y[1] - 1980) < 0.01 and GP.n == 3 and kinds() == "own,own,line" and math.abs(GP.dy[2] - 1900) < 0.5 and GP.len < len0,
+    "walked on: the way trimmed behind you, joined ahead: " .. kinds() .. ", " .. GP.n .. " points")
   Walk.Path = realPath
   -- 5.5: the Golden path switch (the minimap's menu): off, the plain stroke
   QB:Settings().goldenPath = false
@@ -3093,9 +3154,12 @@ do
   c.mapRects = { [1429] = { c = 0, x = -8530, y = 980, size = 1000 } }
   MP.Go(1429, "user")
   local strokes = MP.lines.active[1]
+  -- (a stroke is a line for each part, softened only where it crosses a quest's icon: the first line of each stroke)
   local function shown()
-    local out = {}
-    for _, l in ipairs(strokes and strokes.ctx.lines or {}) do if l.__shown then out[#out + 1] = l end end
+    local out, seen = {}, {}
+    for _, l in ipairs(strokes and strokes.ctx.lines or {}) do
+      if l.__shown and not seen[l.of or l] then seen[l.of or l] = true; out[#out + 1] = l end
+    end
     return out
   end
   local drawn = shown()
@@ -3104,21 +3168,27 @@ do
   assert(w == canvas:GetCanvas():GetWidth() and h == canvas:GetCanvas():GetHeight(), "the strokes' frame covers the map")
   local first = drawn[1]
   local gold, blue = QB.Mini.GOLD, QB.Mini.BLUE
-  assert(first.__start[2] == strokes and first.__start[3] == 0 and math.abs(first.__start[4] - 0.2 * h) < 1e-6 and first.__vertex[1] == gold[1]
-    and drawn[2].__vertex[1] == blue[1] and drawn[3].__vertex[3] == blue[3], "from you (gold), then stop to stop (blue)")
-  assert(first.__thick == 5 and first.__layer == "OVERLAY" and first.__tex == "Interface\\AddOns\\QuestBank\\art\\line_arrow.png", "5 pixels of line_arrow.png")
-  -- zoomed in to twice the size: still 5 pixels on screen
+  -- (5.4.4: each stroke a gap off the pins it joins, the first a gap off you: 10 pixels toward stop 1)
+  local function off(p, x0, y0) return math.sqrt((p[3] - x0) ^ 2 + (p[4] - y0) ^ 2) end
+  local sx, sy = (0.2 - 0.5) * w, (0.5 - 0.2) * h
+  local ux, uy = sx / math.sqrt(sx * sx + (sy - 0.2 * h) ^ 2), (sy - 0.2 * h) / math.sqrt(sx * sx + (sy - 0.2 * h) ^ 2)
+  -- (the first goes to the one target: stop 1, or the spot or hand-in before it; a short one gives up its gap first)
+  assert(first.__start[2] == strokes and off(first.__start, 0, 0.2 * h) > 0 and off(first.__start, 0, 0.2 * h) <= 10 + 1e-6 and first.__vertex[1] == gold[1]
+    and drawn[2].__vertex[1] == blue[1] and drawn[3].__vertex[3] == blue[3], "from you (gold, a gap off you), then stop to stop (blue): "
+    .. string.format("%.3f, %.3f (w %s h %s) off %.3f want x %.3f", first.__start[3], first.__start[4], w, h, off(first.__start, 0, 0.2 * h), 10 * ux))
+  assert(first.__thick == 4 and first.__layer == "OVERLAY" and first.__tex == "Interface\\AddOns\\QuestBank\\art\\line_arrow.png", "4 pixels of line_arrow.png (5.4.4: a quarter thinner)")
+  -- zoomed in to twice the size: still 4 pixels on screen
   local scaleOf = canvas.GetCanvasScale
   canvas.GetCanvasScale = function() return 2 end
   MP.lines:OnCanvasScaleChanged()
-  assert(first.__thick == 2.5, "zoomed in: thinner on the canvas, the same on screen: " .. tostring(first.__thick))
+  assert(first.__thick == 2, "zoomed in: thinner on the canvas, the same on screen: " .. tostring(first.__thick))
   canvas.GetCanvasScale = scaleOf
   MP.lines:OnCanvasScaleChanged()
   -- you walk on: the stroke from you follows at the next look; off the map, it goes
   local world = owner.o.world
   owner.o.world = { 0, -8830, 580 }
   MP.Tick(1)
-  assert(math.abs(first.__start[3] - (-0.1 * w)) < 1e-6 and #shown() == 3, "the stroke from you moved with you")
+  assert(math.abs(off(first.__start, -0.1 * w, first.__start[4]) ) < 10 + 1e-6 and math.abs(first.__start[3] - (-0.1 * w)) <= 10 + 1e-6 and #shown() == 3, "the stroke from you moved with you")
   c.noPos = true
   MP.Tick(1)
   assert(#shown() == 2 and not first.__shown or shown()[1] ~= first or #shown() == 2, "nowhere on the map: no stroke from you")
@@ -3138,9 +3208,9 @@ do
   assert(QM:Build(1429, true) and P.RouteOn(true) == (set.pins and true or false), "the world map's pins keep their own switch")
   rt.__scripts.OnClick(rt)
   assert(set.mapRoute == true and count(P.pageProvider) == 5 and #shown() == 3 and rt.__alpha == 1, "Route on")
-  -- the arrow's step, lit, where the arrow sends you first
-  local MiniStep = QB.Arrow.MiniStep
-  QB.Arrow.MiniStep = function() return { c = 0, wx = -8830, wy = 480, name = "Fly to Lakeshire", atlas = "flightmaster", icon = 1 } end
+  -- the arrow's step toward the one target (Target.lua), lit, where the arrow sends you first
+  local TStep = QB.Target.Step
+  QB.Target.Step = function() return { c = 0, wx = -8830, wy = 480, name = "Fly to Lakeshire", atlas = "flightmaster", icon = 1 } end
   MP.Tick(1)
   local st = MP.step.active[1]
   assert(#MP.step.active == 1 and st.Texture.__atlas == "flightmaster" and st.__w == 24 and st.Texture.__w == 24 and math.abs(st.mapX - 0.5) < 1e-6 and math.abs(st.mapY - 0.3) < 1e-6
@@ -3148,7 +3218,7 @@ do
   lines = {}
   st.__scripts.OnEnter(st)
   assert(lines[1] == "Fly to Lakeshire", "its tooltip")
-  QB.Arrow.MiniStep = MiniStep
+  QB.Target.Step = TStep
   MP.Tick(1)
   assert(#MP.step.active == 0, "no step: none")
   P.list, env.C_Map.GetMapRectOnMap, c.mapRects = route, rectOnMap, nil
@@ -3170,7 +3240,8 @@ do
   -- tooltip: hovered, the name (and the game's "Undiscovered ... Flightpoint") goes to the map's own area label
   for _, fp in ipairs(fl) do
     assert(fp.__w == 21 and fp.Texture.__w == 21 and fp.hi and fp.hi.__atlas == fp.Texture.__atlas and fp.hi.__alpha == 0.4
-      and fp.levelType == "PIN_FRAME_LEVEL_FLIGHT_POINT" and fp.__frameLevel == env.GAME_LEVELS.PIN_FRAME_LEVEL_FLIGHT_POINT and fp.kind.scale[3] == 1.2,
+      and fp.levelType == "PIN_FRAME_LEVEL_FLIGHT_POINT" and fp.__frameLevel == canvas:GetPinFrameLevelsManager():GetValidFrameLevel("PIN_FRAME_LEVEL_FLIGHT_POINT")
+      and fp.__frameLevel ~= 2000 and fp.kind.scale[3] == 1.2,
       "a flight point as the game's: 21 px, lit under the mouse, on its level")
   end
   lines = {}
@@ -3599,8 +3670,9 @@ do
   owner.o.bagSlots = saveBags; c.profs = nil; c.buffs = nil
   Camp.Refresh()
 end
--- 5.3: the minimap leads to the work: objectives as the game's cursor icons, the line to the nearest unfinished one, its name in a
--- label
+-- 5.3: the minimap leads to the work: objectives as the game's cursor icons, the line to an unfinished one, its name in a
+-- label. 5.4.4: the work of the one target (Target.lua): the spot of an objective of stop 1's quest, never another quest's
+-- nearer one, and never a finished objective's
 do
   local Mini, env, P, D = QB.Mini, owner.env, QB.Pins, QB.Data
   c = owner
@@ -3608,9 +3680,12 @@ do
   env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = -v.y * 3000, y = -v.x * 4000, GetXY = function(self) return self.x, self.y end } end
   env.C_Map.GetPlayerMapPosition = function() return { x = 0.50, y = 0.50, GetXY = function(self) return self.x, self.y end } end
   D.SPOT[777777] = "k,1,1429,520,500,10,c"                      -- 80 yards east of you
-  QB.Quest.Get(777777) -- (unknown to the catalog: named by id)
-  table.insert(QB.state.logOrder, 1, { id = 777777, complete = false })
-  P.list = { { m = 1429, x = 50, y = 40, num = 1, name = "Goldshire", when = "", lines = {} } } -- 300 yards north
+  D.SPOT[777778] = "k,1,1429,505,500,10,c"                      -- another quest's, 20 yards east: nearer
+  QB.Quest.Get(777777); QB.Quest.Get(777778) -- (unknown to the catalog: named by id)
+  local e1, e2 = { id = 777777, complete = false }, { id = 777778, complete = false }
+  table.insert(QB.state.logOrder, 1, e1); table.insert(QB.state.logOrder, 2, e2)
+  QB.state.log[777777], QB.state.log[777778] = e1, e2
+  P.list = { { m = 1429, x = 50, y = 40, num = 1, name = "Goldshire", when = "", lines = {}, ids = { [777777] = true } } } -- 300 yards north
   c.miniRadius = 200
   Mini.Invalidate(); Mini.Place()
   local obj
@@ -3621,7 +3696,9 @@ do
   QB:Settings().markerStyle = "game"
   Mini.Place()
   assert((obj.icon.__tex == "atlas:Crosshair_Attack_32" or obj.icon.__tex == 131013) and not obj.glyph.__shown, "the game-icon style: the game's sword cursor: " .. tostring(obj.icon.__tex))
-  assert(Mini.target and Mini.target.kind == "obj" and Mini.target.id == 777777, "the nearer objective is the target, not stop 1")
+  assert(Mini.target and Mini.target.kind == "obj" and Mini.target.id == 777777, "stop 1's quest's objective is the target, not stop 1, nor another quest's nearer one")
+  assert(QB.Target.Get(QB.API.WorldPosition()) == QB.Arrow.Target() and QB.Arrow.Target().obj and QB.Arrow.Target().qid == 777777 or QB.Arrow.Mode() ~= "route",
+    "the arrow's route mode reads the same target")
   assert(Mini.linesShown >= 1 and env.QuestBankMinimapLabel:IsShown() and Mini.labelText == "Quest 777777", "a line to it, and its name in the label: " .. tostring(Mini.labelText))
   QB:Settings().markerStyle = nil
   Mini.Place()
@@ -3629,11 +3706,22 @@ do
   QB:Settings().minimapObjectives = false
   c.miniRadius = 400 -- (Goldshire inside the circle, so its label shows)
   Mini.Place()
-  assert(Mini.target and Mini.target.kind == "stop" and Mini.labelText == "Goldshire", "objectives off: stop 1 is the target")
-  c.miniRadius = 200
+  local objPins = 0
+  for _, d in ipairs(Mini.ListCached()) do if d.kind == "obj" then objPins = objPins + 1 end end
+  assert(objPins == 0 and Mini.target and Mini.target.kind == "obj" and Mini.target.id == 777777, "objectives off: no marks, the stroke still to the one target")
+  -- its objective done: that spot leads nowhere any more (5.4.3 kept a finished objective's spots and led to them), and
+  -- stop 1 is the target
+  owner.objectives = { [777777] = { { text = "Kobold Vermin slain: 10/10", type = "monster", finished = true, numFulfilled = 10, numRequired = 10 } } }
+  QB.changed = QB.changed + 1
   QB:Settings().minimapObjectives = nil
-  D.SPOT[777777] = nil
-  table.remove(QB.state.logOrder, 1)
+  Mini.Invalidate(); Mini.Place()
+  for _, d in ipairs(Mini.ListCached()) do assert(not (d.kind == "obj" and d.id == 777777), "a finished objective's spot is not on the minimap") end
+  assert(Mini.target and Mini.target.kind == "stop" and Mini.labelText == "Goldshire", "its objective done: stop 1 is the target: " .. tostring(Mini.labelText))
+  owner.objectives = nil
+  c.miniRadius = 200
+  D.SPOT[777777], D.SPOT[777778] = nil, nil
+  table.remove(QB.state.logOrder, 1); table.remove(QB.state.logOrder, 1)
+  QB.state.log[777777], QB.state.log[777778] = nil, nil
   P.list = saveList
   env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
   Mini.Invalidate(); Mini.Place()
@@ -3952,13 +4040,16 @@ do
   assert(Glow.SetStyle("game") and not L:IsShown() and Glow.kind == nil, "game's own: nothing of QuestBank's")
   c.cvars = { SoftTargetInteract = "0", SoftTargetNameplateInteract = "0", SoftTargetIconInteract = "0" }
   ev("PLAYER_ENTERING_WORLD")
-  assert(not L:IsShown() and c.cvars.SoftTargetNameplateInteract == "1" and c.cvars.SoftTargetInteract == "3" and c.cvars.SoftTargetIconInteract == "1",
-    "the game's own highlight stays on: its nameplate and icon settings are set")
+  assert(not L:IsShown() and c.cvars.SoftTargetNameplateInteract == "0" and c.cvars.SoftTargetInteract == "3" and c.cvars.SoftTargetIconInteract == "1",
+    "the game's own highlight stays on: its icon settings are set, the health bars' nameplate left alone (5.4.4)")
   assert(Glow.SetStyle("sparkle") and L:IsShown() and sparksShown() == 7, "back to sparkles")
   -- NPCs: one with nothing for you white, a quest NPC gold; off with glow.npcs while objects still light
   local CREATURE = "Creature-0-4455-0-12-295-0000A1B2C3"
   c.soft = { name = "Corina Steele", plate = plate, guid = CREATURE }; ev("PLAYER_SOFT_INTERACT_CHANGED")
-  assert(L:IsShown() and Glow.kind == "npc" and L.core.__vertex[1] == 0.9 and L.core.__vertex[3] == 0.9, "a vendor: white")
+  assert(not L:IsShown() and Glow.kind == nil, "a vendor: no light (5.4.4: a quest NPC or a trainer you can use)")
+  QB:Settings().glow.everyNpc = true; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(L:IsShown() and Glow.kind == "npc" and L.core.__vertex[1] == 0.9 and L.core.__vertex[3] == 0.9, "a vendor with Every other NPC too: white")
+  QB:Settings().glow.everyNpc = nil
   local D = QB.Data
   local turnName, givers = nil, {}
   for id, e in pairs(QB.state.log) do
@@ -4003,7 +4094,10 @@ do
   end
   assert(idle, "a hand-in NPC of a quest in progress with nothing else for the owner")
   c.soft = { name = idle, plate = plate, guid = CREATURE }; ev("PLAYER_SOFT_INTERACT_CHANGED")
-  assert(Glow.kind == "npc" and L.core.__vertex[1] == 0.9, "a hand-in you are not ready for: white (" .. idle .. ")")
+  assert(not L:IsShown() and Glow.kind == nil, "a hand-in you are not ready for: no light (" .. idle .. ")")
+  QB:Settings().glow.everyNpc = true; ev("PLAYER_SOFT_INTERACT_CHANGED")
+  assert(Glow.kind == "npc" and L.core.__vertex[1] == 0.9, "with Every other NPC too: white (" .. idle .. ")")
+  QB:Settings().glow.everyNpc = nil
   QB:Settings().glow.npcs = false
   c.soft = { name = giveName, plate = plate, guid = CREATURE }; ev("PLAYER_SOFT_INTERACT_CHANGED")
   assert(not L:IsShown() and Glow.kind == nil, "NPCs switched off: nothing on a quest giver")
@@ -4049,7 +4143,7 @@ do
   assert(Glow.Style() == "sparkle" and L:IsShown() and sparksShown() == 7, "Sparkles again")
   -- the rows below moved down with the two new ones, and the page grew to hold them (5.4.3: and the game's settings
   -- the light changes, with the button that puts them back)
-  assert(v5.statusHint.__points[1].y == -1518 and v5.statusBtns[1].__points[1].y == -1488 and v5.scroll.child:GetHeight() == 1562,
+  assert(v5.statusHint.__points[1].y == -1656 and v5.statusBtns[1].__points[1].y == -1626 and v5.scroll.child:GetHeight() == 1700,
     "the health and mana rows sit under the light's rows (and 5.5's marker style row), the page holds them")
   local sf = v5.scroll
   local _, hi = sf.bar:GetMinMaxValues()
@@ -4223,6 +4317,9 @@ do
   ev("PLAYER_LOGOUT")
   g.saved, g.yours, g.chars = nil, nil, nil
   g.on, g.style, g.npcs, g.other, g.combat = true, "sparkle", true, true, false
+  -- (5.4.3's stages: the health bars' nameplate set by the light, and every NPC lit, as they were then; 5.4.4 has both
+  -- as options, off: the play test's block checks those)
+  g.plates, g.everyNpc = true, true
   c.cvars = copy(GAME)
   local L = env.QuestBankGlow
   local function show(soft) c.soft = soft; ev("PLAYER_SOFT_INTERACT_CHANGED") end
@@ -4571,7 +4668,7 @@ do
   assert(c.cvars.SoftTargetLowPriorityIcons == nil and g.saved.SoftTargetLowPriorityIcons == nil, "one the client has not got: never written")
   UI:Refresh()
   assert(not row("SoftTargetInteractArc"):IsShown() and not row("SoftTargetLowPriorityIcons"):IsShown()
-    and row("SoftTargetInteractRange").__points[1].y == -1250 - 18 and row("SoftTargetIconGameObject").__points[1].y == -1250 - 4 * 18,
+    and row("SoftTargetInteractRange").__points[1].y == -1388 - 18 and row("SoftTargetIconGameObject").__points[1].y == -1388 - 4 * 18,
     "neither listed: the rows close up")
   ev("PLAYER_LOGOUT")
   QB.charKey = "Alt-ForeverNormal"; c.cvars.SoftTargetInteractRange = "12"
@@ -4709,6 +4806,7 @@ do
   UI.frame:SetShown(wasShown)
   c.soft = nil; c.cvars = {}
   g.on, g.saved, g.yours, g.chars, g.style = true, nil, nil, nil, "sparkle"
+  g.plates, g.everyNpc = false, false
 end
 
 
@@ -5714,7 +5812,7 @@ end
 -- 3.3.5: accept and hand in for me, and the party chat lines. All off by default.
 do
   local set = QB:Settings()
-  assert(not set.autoAccept and not set.autoTurnIn and not set.sayAccept and not set.sayComplete, "all four off by default")
+  assert(set.autoAccept == "off" and not set.autoTurnIn and not set.sayAccept and not set.sayComplete, "all four off by default")
   local function last() return owner.auto[#owner.auto] end
   owner.window = { id = 1654, xp = 0, title = "The Test of Righteousness" }
   owner.ev(QB.eventFrame, "QUEST_DETAIL"); tick(owner, 1)
@@ -5875,7 +5973,7 @@ do
   assert(#owner.auto == n, "the escort prompt with Shift: nothing pressed")
   QB:SetLock("auto"); QB:Recompute(true)
   assert(QB:Mode() == "lock", "back to banking")
-  set.autoAccept, set.autoTurnIn = false, false
+  set.autoAccept, set.autoTurnIn = "off", false
   owner.window, owner.completable, owner.choices = nil, nil, nil
   -- party chat: a quest arriving in the log, and one turning complete, as plain lines to the party
   local said = #owner.said
@@ -5905,7 +6003,13 @@ do
   -- the four boxes on the Settings page
   UI:ShowTab(5); UI:Refresh()
   local v5 = UI.views[5]
-  for _, name in ipairs({ "autoAccept", "autoTurnIn", "sayAccept", "sayComplete" }) do
+  -- Accept for me (5.4.4): a button through Off, Quests on my route, Quests worth taking, its text the choice in one line
+  assert(v5.autoAccept:GetText() == "Accept for me: Off" and not v5.autoOther:IsEnabled(), "Accept for me starts Off, the outside-route row greyed: " .. v5.autoAccept:GetText())
+  for _, want in ipairs({ { "route", "Accept for me: Quests on my route" }, { "worth", "Accept for me: Quests worth taking" }, { "off", "Accept for me: Off" } }) do
+    v5.autoAccept.__scripts.OnClick(v5.autoAccept, "LeftButton")
+    assert(QB:Settings().autoAccept == want[1] and v5.autoAccept:GetText() == want[2], "Accept for me cycles to " .. want[2] .. ": " .. v5.autoAccept:GetText())
+  end
+  for _, name in ipairs({ "autoTurnIn", "sayAccept", "sayComplete" }) do
     local cb = v5[name]
     assert(cb and not cb:GetChecked(), name .. " starts unticked")
     cb:SetChecked(true); cb.__scripts.OnClick(cb, "LeftButton")
@@ -5936,7 +6040,7 @@ do
   assert(#lay == 0, "the longer Settings page fits across and scrolls down: " .. table.concat(lay, "; "))
   local sf = v5.scroll
   local lo, hi = sf.bar:GetMinMaxValues()
-  assert(sf.bar:IsShown() and hi > 0 and hi == 1562 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
+  assert(sf.bar:IsShown() and hi > 0 and hi == 1700 - sf:GetHeight(), "the knob runs exactly what does not fit: " .. tostring(hi) .. " of " .. tostring(sf:GetHeight()))
   sf.__scripts.OnMouseWheel(sf, -1)
   assert(sf.bar:GetValue() == 44, "a wheel notch scrolls 44 px")
   sf.bar:SetValue(hi); UI:Refresh()
@@ -6654,10 +6758,16 @@ do
   -- cut from the menu, and keep again
   local id = b.q.id
   b.__scripts.OnClick(b, "RightButton")
-  for _, it in ipairs(m.items) do if it:IsShown() and it.label:GetText() == "Leave it out of the route" then it.__scripts.OnClick(it) end end
-  assert(QB:IsCut(id), "the menu cuts a quest")
-  QB:ToggleAdd(id)
-  assert(not QB:IsCut(id))
+  -- (5.4.4: Skip this quest, for good, and its follow-up: keep it in the log or also abandon it; Route it again)
+  for _, it in ipairs(m.items) do if it:IsShown() and it.label:GetText() == "Skip this quest" then it.__scripts.OnClick(it) end end
+  assert(QB:IsCut(id) and QB:IsSkipped(id), "the menu skips a quest, out of the route")
+  local keepIt
+  for _, it in ipairs(m.items) do if it:IsShown() and it.label:GetText() == "Keep it in my quest log" then keepIt = it end end
+  assert(keepIt and m.title:GetText():find("^Skipped: "), "then asks whether to give it up too, keeping it by default")
+  keepIt.__scripts.OnClick(keepIt)
+  UI.QuestMenu(QB.Quest.Get(id)) -- (its row moved down with the skipped ones: its own menu)
+  for _, it in ipairs(m.items) do if it:IsShown() and it.label:GetText() == "Route it again" then it.__scripts.OnClick(it) end end
+  assert(not QB:IsCut(id) and not QB:IsSkipped(id), "Route it again: back")
   m.catcher.__scripts.OnClick(m.catcher)
 end
 
@@ -6921,9 +7031,12 @@ assert(#routePins > 0, "the route has pins on the world map")
 for _, pin in ipairs(routePins) do lines = {}; pin:OnMouseEnter(); assert(#lines > 0); pin:OnMouseLeave() end
 -- waypoints: QuestBank never sets the game's own (C_Map.SetUserWaypoint, C_SuperTrack error here), map open or shut,
 -- in combat or not. Its arrow points there at once, and the chat line carries the game's map-pin link: the player's
--- click on it is Blizzard's handler, which sets the pin as the game's own code
+-- click on it is Blizzard's handler, which sets the pin as the game's own code. 5.4.4: the line is said for the first
+-- waypoint of a session, then only when nothing on screen shows the waypoint; Shift-click on the arrow says it again
+-- (5.4.3 said it at every click)
 do
   local A = QB.Arrow
+  QB.API.waypointSaid = false -- (a new session)
   local said = #owner.chat
   assert(owner.map.shown, "the world map is open here")
   QB.API.SetWaypoint(1429, 42, 65, "Goldshire")
@@ -6939,17 +7052,31 @@ do
   assert(not QB:Settings().arrow and A.temp and A.temp.name == "Goldshire" and owner.env.QuestBankArrow:IsShown(),
     "the arrow off: it shows for the waypoint")
   assert(line:find("The arrow shows the way until you get there.", 1, true), "and the line says so")
-  -- the map shut, and in combat: the same, and still nothing set by QuestBank
+  -- the map shut, and in combat: the arrow shows the next one, nothing said; Shift-click on the arrow says it, with its
+  -- link, and still nothing set by QuestBank
+  local Fa = owner.env.QuestBankArrow
+  local function shiftClick() owner.shift = true; Fa.__scripts.OnClick(Fa, "LeftButton"); owner.shift = false end
   owner.map:Close()
   owner.combat = true
+  said = #owner.chat
   QB.API.SetWaypoint(1429, 30.06, 70.5, "Somewhere")
+  assert(#owner.chat == said and A.temp and A.temp.name == "Somewhere", "a second waypoint the arrow shows: nothing in chat")
+  lines = {}
+  Fa.__scripts.OnEnter(Fa)
+  local tipText = table.concat(lines, "\n")
+  assert(tipText:find("Shift-click: the waypoint in chat, with the game's map pin.", 1, true), "the arrow's tooltip says so: " .. tipText)
+  shiftClick()
   line = owner.chat[#owner.chat]
-  assert(line:find("|Hworldmap:1429:3006:7050|h", 1, true) and #owner.pins == 1, "the map shut, in combat: the link, nothing set: " .. line)
+  assert(#owner.chat == said + 1 and line:find("Waypoint: Somewhere (30, ", 1, true) and line:find("|Hworldmap:1429:3006:7050|h", 1, true) and #owner.pins == 1,
+    "Shift-click on the arrow, the map shut, in combat: the line with the link, nothing set: " .. line)
   owner.combat = false
   owner.map:Open()
   -- a map the game has no pins for: no link (the arrow still points)
   owner.noPins = { [1581] = true }
+  said = #owner.chat
   QB.API.SetWaypoint(1581, 50, 50, "Inside")
+  assert(#owner.chat == said, "the arrow shows its entrance: nothing in chat")
+  shiftClick()
   assert(not owner.chat[#owner.chat]:find("worldmap", 1, true) and owner.chat[#owner.chat]:find("Waypoint: Inside", 1, true), "no pins on that map: no link")
   owner.noPins = nil
   -- the run's own waypoint, as the next stop changes (quiet): nothing said, nothing set
@@ -6978,6 +7105,7 @@ do
     owner.env.TomTom, owner.addons = case[2], case[3]
     assert(QB.API.TomTom() == nil, case[1] .. ": not TomTom to QuestBank")
     said = #owner.chat
+    QB.API.waypointSaid = false -- (each case a session of its own: its first waypoint's line)
     QB.API.SetWaypoint(1429, 44, 66, "Stand-in")
     QB.API.SetWaypoint(1429, 45, 67, "Stand-in, quiet", true)
     owner.map:Close(); tick(owner, 0); QB:Changed(); owner.map:Open()
@@ -7000,11 +7128,14 @@ do
   assert(owner.map.shown, "the map is open")
   QB.API.SetWaypoint(1429, 40, 40, "Next stop", true)
   assert(#tt == 0 and #owner.chat == said, "the run's quiet waypoint with the map open: TomTom waits, nothing said")
+  QB.API.waypointSaid = false -- (the session's first waypoint: its line; later ones with the map open are not said)
   QB.API.SetWaypoint(1429, 42, 65, "Goldshire")
   line = owner.chat[#owner.chat]
   assert(#tt == 0 and #owner.chat == said + 1 and line:find("Waypoint: Goldshire (42, 65). TomTom gets it when you close the map.", 1, true) and not A.temp,
     "a click with the map open: TomTom waits, one line says so, no arrow of QuestBank's shown for it: " .. line)
   print("waypoint, TomTom, the map open:", line)
+  QB.API.SetWaypoint(1429, 42, 65, "Goldshire")
+  assert(#tt == 0 and #owner.chat == said + 1, "a second click with the map open: TomTom waits, nothing said this time")
   QB:Changed()
   assert(#tt == 0, "a refresh with the map still open: still waiting")
   owner.map:Close()
@@ -7483,7 +7614,8 @@ do
   local expect = held and q343.turn.n or first.give.n
   assert(QB:Settings().arrowPin and QB:Settings().arrowPin.name == expect, "clicking the chain quest sets the waypoint on " .. (held and "the held step's turn-in" or "the first open step's giver") .. ": " .. tostring(QB:Settings().arrowPin and QB:Settings().arrowPin.name))
   print("chain with a held step:", QB:Status(q346).text, "-> waypoint", expect)
-  assert(A.Mode() == "pin", "the click re-aimed the arrow at what was clicked")
+  -- 5.4.4: a click shows the place on the arrow for now; what the arrow points at stays the player's choice
+  assert(A.Mode() == "pickup" and A.temp and A.temp.name == expect and A.Target() == A.temp, "the click shows the place for now, the arrow's choice kept")
   A:SetMode("pickup")
   -- a chain whose only open step is the one you hold: a hand-in, not a pick-up
   do
@@ -7529,7 +7661,7 @@ do
   Mn:Hide()
   F.__scripts.OnUpdate(F, 1)
   assert(F.name:GetText() == "Nothing chosen yet", "the arrow itself says nothing is chosen: " .. F.name:GetText())
-  -- clicking a waypoint in QuestBank pins the arrow to it
+  -- clicking a waypoint in QuestBank shows it on the arrow for now (5.4.4: it pinned the arrow there for good)
   owner.env.SlashCmdList.QUESTBANK("arrow route")
   QB:Settings().arrowPin = nil -- earlier clicks in this run pinned things while the arrow was off, as they should
   assert(A.Mode() == "route", "back on the route")
@@ -7547,25 +7679,36 @@ do
   assert(det and det.from:GetText():find(rq.give.n, 1, true), "the details name the giver")
   det.goGive.__scripts.OnClick(det.goGive)
   t = A.Target()
-  assert(A.Mode() == "pin" and t and t.kind == "pin" and t.name == rq.give.n, "the Giver button pins the arrow to the giver: " .. tostring(t and t.name))
+  assert(A.Mode() == "route" and t and t.kind == "pin" and t.temp and t.name == rq.give.n and t.qid == rq.id and t.what == "give",
+    "the Giver button shows the giver on the arrow for now: " .. tostring(t and t.name))
+  F.__scripts.OnUpdate(F, 1)
+  assert(F.name:GetText():find("^Showing ") and F.hint:IsShown() and F.hint:GetText() == "Right-click: back to your route",
+    "its label says so, and how to get back: " .. F.name:GetText() .. " / " .. tostring(F.hint:GetText()))
   row.__scripts.OnClick(row, "LeftButton")
   assert(not UI.detailOpen[rq.id], "a second click closes it")
-  assert(A.toldPin, "and it said so, once this session (the first pin above did)")
-  -- the right-click menu: the four targets, the hearthstone in the steps, and Hide
+  -- a right-click while it is shown: back to the route at once, said once in the label
+  F.__scripts.OnClick(F, "RightButton")
+  F.__scripts.OnUpdate(F, 1)
+  assert(not A.temp and A.Target() and A.Target().kind == "route" and F.hint:GetText() == "Back to your route", "right-click: back to your route")
+  -- the right-click menu: the quest the route leads to (Skip it), the four targets, the hearthstone, the look, and Hide
   F.__scripts.OnClick(F, "RightButton")
   local M = owner.env.QuestBankMenu
   assert(M and M:IsShown(), "right-click opens the menu")
-  local labels, hide, route = {}, nil, nil
+  local labels, hide, route, nowAt, hearthAt, lookAt = {}, nil, nil, nil, nil, nil
   for _, b in ipairs(M.items) do
     if b:IsShown() then
-      labels[#labels + 1] = b.label:GetText()
-      if b.label:GetText() == "Hide the arrow" then hide = b end
-      if b.label:GetText():find("^The next stop") then route = b end
+      local l = b.label:GetText()
+      labels[#labels + 1] = l
+      if l == "Hide the arrow" then hide = b end
+      if l:find("^The next stop") then route = b end
+      if l:find("%(now%)") then nowAt = #labels end
+      if l == "Hearthstone in the steps: on" then hearthAt = #labels end
+      if l == "Look: QuestBank's arrow" then lookAt = #labels end
     end
   end
   print("arrow menu: " .. table.concat(labels, " | "))
-  assert(#labels == 6 and hide and route and labels[4]:find("%(now%)") and labels[5] == "Hearthstone in the steps: on",
-    "the menu lists the four targets, the current one marked, the hearthstone, and Hide: " .. table.concat(labels, " | "))
+  assert(hide and route and nowAt and hearthAt and lookAt == hearthAt + 1 and labels[#labels] == "Hide the arrow",
+    "the menu lists the targets, the current one marked, the hearthstone, the look, and Hide: " .. table.concat(labels, " | "))
   for _, pr in ipairs(checkLayout(M, "arrow menu")) do problems[#problems + 1] = pr end
   route.__scripts.OnClick(route)
   assert(not M:IsShown() and A.Mode() == "route", "choosing the route from the menu")
@@ -7869,14 +8012,17 @@ do
   assert(not hearthLeg() and not TV.Hearth("pin"), "the hearthstone switched off: no hearth step")
   set.arrowHearth = true
   TV.ver = TV.ver + 1
-  local saveRoute = c.QB.routeNow
+  -- (the route on screen, Target.lua's T.Route: questing, the planned one)
+  local saveRoute, savePlan = c.QB.routeNow, c.QB.routePlan
   c.QB.routeNow = { legs = { { kind = "flight" } } }
+  c.QB.routePlan = c.QB.routeNow
   assert(not has(TV.Guide(here(), toInn, "route").plan, "hearth"), "on the route, only the route's own hearth")
   c.QB.routeNow = { legs = { { kind = "hearth" } } }
+  c.QB.routePlan = c.QB.routeNow
   TV.ver = TV.ver + 1 -- (or the next look at the hearthstone, within 5 seconds)
   hl = has(TV.Guide(here(), toInn, "route").plan, "hearth")
   assert(hl and TV.Hearth("route").penalty == 0, "the route's hearth: a step, free")
-  c.QB.routeNow = saveRoute
+  c.QB.routeNow, c.QB.routePlan = saveRoute, savePlan
   c.o.bagSlots = {}
   tick(c, 5.1)
   assert(not hearthLeg() and TV.HearthLine() == nil, "no hearthstone: no step, no line")
@@ -7948,14 +8094,15 @@ do
   assert(boarded == 1 and g.leg.kind == "walk" and table.concat(after, " "):find("^walk[ walk]*$"),
     "the ferry to Feathermoon: on board once, then the walk: " .. boarded .. " boardings, then " .. table.concat(after, " "))
   standAt(c, 0, sw[3], sw[4])
-  -- a waypoint inside a dungeon: its entrance; an island with no way in: said so
-  c.instWorld = { [1581] = true, [2521] = true }
+  -- a waypoint inside a dungeon: its entrance; an island with no way in (a battleground's): said so
+  c.instWorld = { [1581] = true }
+  c.QB.API.waypointSaid = false -- (the session's first waypoint: its line)
   c.QB.API.SetWaypoint(1581, 50, 50, "Inside")
   assert(set.arrowPin.name == "The Deadmines entrance" and c.chat[#c.chat]:find("Waypoint: Inside", 1, true),
     "a click inside the Deadmines: the arrow's pin at its entrance: " .. tostring(set.arrowPin.name))
   assert(not set.arrow and c.QB.Arrow.temp and c.QB.Arrow.temp.name == "The Deadmines entrance", "the arrow off: shown for that click")
-  c.QB.API.SetWaypoint(2521, 50, 50, "Zephras Isle")
-  assert(set.arrowPin.none and set.arrowPin.name == "Zephras Isle", "no way in known: the pin says so")
+  c.QB.API.SetWaypoint(2524, 50, 50, "Darkspear Islands")
+  assert(set.arrowPin.none and set.arrowPin.name == "Darkspear Islands", "no way in known: the pin says so")
   assert(not c.QB.Arrow.temp and not c.env.QuestBankArrow:IsShown(), "and the arrow shown for the last click goes: never the old place")
   c.instWorld = nil
   -- TomTom, the arrow off: QuestBank's arrow shows the way while there is more to it than the last walk; each click
@@ -7968,10 +8115,8 @@ do
   assert(not c.QB.Arrow.temp and not c.env.QuestBankArrow:IsShown(), "with TomTom, a walk after Gadgetzan: TomTom's arrow alone, not the way to Gadgetzan")
   c.QB.API.SetWaypoint(1446, 50, 30, "Gadgetzan", nil, toGz)
   assert(c.QB.Arrow.temp and c.QB.Arrow.temp.name == "Gadgetzan", "Gadgetzan again: QuestBank's arrow again")
-  c.instWorld = { [2521] = true }
-  c.QB.API.SetWaypoint(2521, 50, 50, "Zephras Isle")
+  c.QB.API.SetWaypoint(2524, 50, 50, "Darkspear Islands")
   assert(not c.QB.Arrow.temp and not c.env.QuestBankArrow:IsShown(), "with TomTom, no way in known: not the way to Gadgetzan either")
-  c.instWorld = nil
   c.addons, c.env.TomTom = nil, nil
   set.arrowPin, set.arrowMode = nil, "route"
 
@@ -7988,8 +8133,8 @@ do
   assert(db.known[2] == "t" and db.known[5] == "t" and db.known[4] == false and db.known[32] == nil and db.readC[0] and not db.readC[1]
     and tdiag.scanBad == "70170", "the map leaves Sentinel Hill out: not known, and the world map is doubted on this build")
   fireTV(c, "TAXIMAP_CLOSED")
-  assert(db.known[4] == false and db.known[32] == nil and not db.readC[1] and TV.Usable("A", select(2, hubOf(c, "Theramore"))),
-    "a doubted world map: its 'found' counts for nothing, and Kalimdor, never read but by it, counts every flight master again")
+  assert(db.known[4] == false and db.known[32] == nil and not db.readC[1] and not TV.Usable("A", select(2, hubOf(c, "Theramore"))),
+    "a doubted world map: its 'found' counts for nothing, and Kalimdor, never read but by it, counts only what the client confirmed (5.4.4; 5.4.3 counted every flight master there again)")
   local saveAll = c.env.C_TaxiMap.GetAllTaxiNodes
   c.env.C_TaxiMap.GetAllTaxiNodes = function() return {} end
   openTaxi(c, { { name = "Stormwind, Elwynn", state = 0, slotIndex = 1 }, { name = "Ironforge, Dun Morogh", state = 1, slotIndex = 2 },
@@ -8150,11 +8295,15 @@ do
   local set, db = c.QB:Settings(), TV.DB()
   local function here() return c.QB.API.WorldPosition() end
   local function learn() fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1) end
-  local function aimAt(name, cont, wx, wy) set.arrowMode, set.arrowPin = "pin", { name = name, c = cont, wx = wx, wy = wy } end
+  -- (the arrow aimed by its menu's "Where you last clicked": a place shown for now by a click goes, quietly)
+  local function aimAt(name, cont, wx, wy) A:EndTemp(nil, true); set.arrowMode, set.arrowPin = "pin", { name = name, c = cont, wx = wx, wy = wy } end
   local function has(kind) for _, l in ipairs(A.g and A.g.plan and A.g.plan.legs or {}) do if l.kind == kind then return l end end end
   local sw, lake, gz, th = hubOf(c, "Stormwind"), hubOf(c, "Lakeshire"), hubOf(c, "Gadgetzan"), hubOf(c, "Theramore")
   local inn = {}
   for _, r in ipairs(D.BIND) do inn[r[1]] = r end
+  -- (QuestTrail's compass chosen: its look is what this block checks; QuestBank's own arrow, the default since 5.4.4, is
+  -- the game-icon style's below and the play test's block)
+  set.arrowStyle = "compass"
   A:Set(true)
   local F = c.env.QuestBankArrow
   -- one look: the 20-a-second update and a frame drawn
@@ -8201,7 +8350,8 @@ do
   lines = {}; F.__scripts.OnEnter(F)
   local tip = table.concat(lines, "\n")
   assert(tip:find("|A:flightmaster:14:14|a Fly to Lakeshire | ", 1, true) and tip:find("Walk to Lakeshire | %d+ min") and tip:find("About %d+ min in all%.")
-    and tip:find("Flight paths: 2 of 18 known here", 1, true) and lines[#lines]:find("^Click: the Hand%-in Route"), "the tooltip lists the steps: " .. tip)
+    and tip:find("Flight paths: 2 of 18 known here", 1, true) and lines[#lines - 1]:find("^Click: the Route page")
+    and lines[#lines]:find("^Shift%-click: the waypoint in chat"), "the tooltip lists the steps (a waypoint: Shift-click last): " .. tip)
   sheet("Arrow: at the flight master")
   -- on the way there, the arrow points at it; the minimap pins it and draws the line to it
   standAt(c, 0, sw[3] + 150, sw[4])
@@ -8211,9 +8361,32 @@ do
   assert(math.abs(F.tint.__vertex[1] - 0.7) < 0.01 and math.abs(F.tint.__vertex[2] - 0.9) < 0.01 and F.tint.__vertex[3] == 1, "the glass blue on the way to a flight master")
   c.QB.Mini.Place()
   local Mini = c.QB.Mini
-  assert(Mini.target and Mini.target.kind == "step" and Mini.labelText == "Fly to Lakeshire" and Mini.linesShown >= 1,
-    "the minimap: the flight master is the target, named: " .. tostring(Mini.labelText))
+  -- 5.4.4: the minimap follows the one target (Target.lua), the route's; the arrow aimed at a waypoint of yours leads
+  -- there alone
+  assert(Mini.target and Mini.target.kind ~= "step" and Mini.labelText == c.QB.Target.cur.name,
+    "a waypoint on the arrow: the minimap keeps to the route's target: " .. tostring(Mini.labelText))
   sheet("Arrow: on the way to a flight master")
+  -- the route's own stop in Lakeshire: the arrow on the route, its step on the minimap, the stroke to it named
+  do
+    local QB2, P2 = c.QB, c.QB.Pins
+    local saveNow, savePlan, saveList, saveMode = QB2.routeNow, QB2.routePlan, P2.list, set.routeMode
+    local stopL = { name = "Lakeshire", c = 0, wx = lake[3] + 50, wy = lake[4], m = 1433, x = 25, y = 58, npcs = {} }
+    QB2.routeNow = { legs = { { stop = stopL, rows = {}, kind = "flight", t = 10 } }, t = 10, xp = 0, level = 30, at60 = 30, count = 0, byQuest = {}, unplaced = {} }
+    set.routeMode = "now"
+    P2.list = { { m = 1433, x = 25, y = 58, num = 1, name = "Lakeshire", ids = {}, quests = {}, lines = {}, stop = stopL } }
+    set.arrowMode = "route"
+    look()
+    c.QB.Mini.Invalidate(); c.QB.Mini.Place()
+    assert(A.t == c.QB.Target.cur and Mini.target and Mini.target.kind == "step" and Mini.labelText == "Fly to Lakeshire" and Mini.linesShown >= 1,
+      "the minimap: the flight master is the target, named: " .. tostring(Mini.labelText))
+    -- (the stroke to the flight master blue, as the arrow's glass is on the way there; then on in the stop's colour)
+    local l1 = c.QB.MiniRoute.route.lines[1]
+    assert(not Mini.QT() or (l1.__vertex[1] == Mini.TRAVEL[1] and l1.__vertex[2] == Mini.TRAVEL[2] and l1.__vertex[3] == Mini.TRAVEL[3]),
+      "the stroke to the flight master: blue")
+    QB2.routeNow, QB2.routePlan, P2.list, set.routeMode = saveNow, savePlan, saveList, saveMode
+    aimAt("Lakeshire", 0, lake[3] + 50, lake[4])
+    c.QB.Mini.Invalidate()
+  end
   -- Lakeshire not known: a walk, no step line
   c.taxiKnown[5] = nil
   fireTV(c, "TAXI_NODE_STATUS_CHANGED"); tick(c, 1.5)
@@ -8374,7 +8547,7 @@ do
   -- the client never says which flight paths you know: they all count, and the tooltip says so
   local saveTaxi = c.env.C_TaxiMap
   c.env.C_TaxiMap = nil
-  db.known, db.readC = {}, {}
+  db.known, db.readC, TV.tells = {}, {}, nil -- (a client that has never said a word about them)
   TV.ver = TV.ver + 1
   standAt(c, 0, sw[3], sw[4])
   aimAt("Gadgetzan", 1, gz[3] + 30, gz[4])
@@ -8395,10 +8568,9 @@ do
   assert(F.dist:GetText() == "Leave the dungeon first" and F.act.__atlas == "dungeon" and F.act.__alpha == 0.5, "in a dungeon")
   sheet("Arrow: in a dungeon")
   c.env.IsInInstance = nil
-  c.instWorld = { [2521] = true }
-  c.QB.API.SetWaypoint(2521, 50, 50, "Zephras Isle")
+  c.QB.API.SetWaypoint(2524, 50, 50, "Darkspear Islands")
   look()
-  assert(F.name:GetText() == "Zephras Isle" and F.dist:GetText() == "No known way there" and F.act.__atlas == "Waypoint-MapPin-Untracked"
+  assert(F.name:GetText() == "Showing Darkspear Islands" and F.dist:GetText() == "No known way there" and F.act.__atlas == "Waypoint-MapPin-Untracked"
     and F.act.__desat and F.act.__alpha == 0.5 and not F.step:IsShown(), "a click on an island QuestBank can't lead to: " .. says())
   sheet("Arrow: no known way there")
   c.instWorld = nil
@@ -8502,7 +8674,7 @@ do
   set.compassSize, set.compassBg = nil, nil
   look()
   assert(F.dial.__w == 48 and not F.bg:IsShown(), "and the default again")
-  set.markerStyle = "game"
+  set.arrowStyle = "questbank"
   c.facing = b0
   look()
   tick(c, 1)
@@ -8512,9 +8684,10 @@ do
   tick(c, 1)
   assert(F.arrow.__vertex[1] > F.arrow.__vertex[2] and F.glow.__alpha == 0, "behind you: red")
   c.facing = b0
-  set.markerStyle = nil
+  set.arrowStyle = "compass"
   look()
   assert(A.QT() and F.dial:IsShown() and not F.arrow:IsShown(), "and QuestTrail's dial again")
+  set.arrowStyle = nil
   set.arrowPin, set.arrowMode = nil, "route"
   A:Set(false)
 
@@ -10456,10 +10629,17 @@ do
   assert(#legs >= 1 and legs[1].quests[1].id == e1.id and legs[1].mins >= 0 and legs[1].yards >= 0, "the nearest unfinished quest's place comes first")
   U:ShowTab(3); U:Refresh()
   local v3n = U.views[3]
+  -- (5.4.4: questing, the page opens on the planned route, the one the arrow follows; Ready now is a click away)
+  assert(N.Target.Mode() == "plan" and not v3n.modePlan:IsEnabled() and v3n.modeNow:GetText() == "Ready now", "questing: the page opens on the plan")
+  v3n.modeNow.__scripts.OnClick(v3n.modeNow)
+  assert(N:Settings().routeQuest == "now" and N.Target.Mode() == "now" and N.Target.Route() == (#N.routeNow.legs > 0 and N.routeNow or N.routePlan),
+    "Ready now: the route on screen is what is ready")
   local first
   for _, l in ipairs(v3n.legs.items) do if l:IsShown() and not first then first = l end end
   assert(first and first.divider:IsShown() and first.divider:GetText() == "Do now" and first.name:GetText() == legs[1].name, "the page opens with Do now")
   assert(first.pin.stop and first.pin.stop.m == 1429, "with a waypoint on the place")
+  v3n.modePlan.__scripts.OnClick(v3n.modePlan)
+  assert(N:Settings().routeQuest == "plan" and N.Target.Route() == N.routePlan, "and back to the plan")
   D.SPOT[e1.id] = saveSpot
 end
 
@@ -11169,10 +11349,11 @@ do
   print(string.format("map icons, Elwynn at level 3: %d !, %d ?, %d objective marks, %d item drops, %d areas", #give, #turn, #obj, #start, #areas()))
   assert(#give > 0 and #turn == 1 and #obj == 4 and #start == 1 and #areas() == 0, "the ! , ? , objectives and the item drop are all there; no areas of QuestBank's own (the game's blob is the area)")
   -- ! only for quests you can take now: todo, not in the log, not done, for your side; the game's own offer pin:
-  -- QuestNormal at its 32 px on a 22 px frame, on the offers' level, 1.0 to 1.2 as you zoom in
+  -- QuestNormal on a 22 px frame (where a click lands, the game's), on the offers' level, 1.0 to 1.2 as you zoom in; its
+  -- art at half its 32 px since 5.4.4 (the owner: "quest icons on the map are massive, can be halved")
   for _, pin in ipairs(give) do
     assert(pin.levelType == "PIN_FRAME_LEVEL_QUEST_OFFER" and pin.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_QUEST_OFFER and pin.Texture.__atlas == "QuestNormal"
-      and pin.Texture.__w == 32 and pin.__w == 22 and pin.kind.template == "QuestBankOfferTemplate" and pin.kind.scale[2] == 1.0 and pin.kind.scale[3] == 1.2
+      and pin.Texture.__w == 16 and pin.__w == 22 and pin.kind.template == "QuestBankOfferTemplate" and pin.kind.scale[2] == 1.0 and pin.kind.scale[3] == 1.2
       and pin.Texture.__vertex[1] == 1 and pin.Texture.__vertex[2] == 1 and not pin.Texture.__desat,
       "a ! is the game's offer pin, on the offers' level")
     for _, q in ipairs(pin.data.quests) do
@@ -11189,7 +11370,7 @@ do
   for i, e in ipairs(MQ.state.logOrder) do if e.id == 33 then eaganIndex = i end end
   assert(eagan.data.title == "Eagan Peltskinner" and eagan.data.quests[1].id == 33 and near(eagan, 0.489, 0.402)
     and eagan.kind.template == "QuestBankPoiTemplate" and eagan.Disc.__atlas == "UI-QuestPoi-QuestNumber" and eagan.Glyph.__atlas == "UI-QuestIcon-TurnIn-Normal"
-    and eagan.Disc.__w == 32 and eagan.Glyph.__w == 32 and eagan.__w == 20 and eagan.Hi.__atlas == "UI-QuestPoi-InnerGlow" and not eagan.Hi:IsShown()
+    and eagan.Disc.__w == 16 and eagan.Glyph.__w == 16 and eagan.__w == 20 and eagan.Hi.__atlas == "UI-QuestPoi-InnerGlow" and not eagan.Hi:IsShown()
     and eagan.kind.scale[1] == 1 and eagan.kind.scale[2] == 1 and eagan.kind.scale[3] == 1 and eagan.levelType == "PIN_FRAME_LEVEL_ACTIVE_QUEST"
     and eagan.levelIndex == eaganIndex and eagan.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_ACTIVE_QUEST + eaganIndex - 1,
     "a ? where the finished quest is handed in, as the game's complete quest pin: " .. tostring(eagan.data.title) .. " on level " .. tostring(eagan.levelIndex))
@@ -11202,7 +11383,7 @@ do
     for i, e in ipairs(MQ.state.logOrder) do if e.id == pin.data.id then li = i end end
     assert(pin.levelType == "PIN_FRAME_LEVEL_ACTIVE_QUEST" and pin.levelIndex == li and pin.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_ACTIVE_QUEST + li - 1
       and pin.kind.template == "QuestBankPoiTemplate" and pin.Disc.__atlas == "UI-QuestPoi-QuestNumber" and pin.Glyph.__atlas == "Quest-In-Progress-Icon-yellow"
-      and pin.Disc.__w == 32 and pin.__w == 20 and pin.kind.scale[3] == 1, "an objective's mark is the game's in-progress quest pin, on its quest's level: " .. tostring(pin.levelIndex))
+      and pin.Disc.__w == 16 and pin.__w == 20 and pin.kind.scale[3] == 1, "an objective's mark is the game's in-progress quest pin, on its quest's level: " .. tostring(pin.levelIndex))
     if pin.data.id == 18 then assert(pin.data.spot.name == 2 and near(pin, 0.54, 0.30), "the bandanas' spot, not the finished masks'") end
   end
   -- the item that starts Welcome! (from a Northshire Gift Voucher): where it drops, the game's ! in red (QuestTrail's
@@ -11216,23 +11397,23 @@ do
   -- the game's own words first (QuestDataProvider's tooltip: "[level] name" in its colour, "- " and each unfinished
   -- objective), then QuestBank's (what this spot is for, where it comes from) and the game's green instruction line
   assert(t7:find("%[%d+%] Kobold Camp Cleanup") and t7:find("- Kobold Vermin slain: 3/10", 1, true) and t7:find("Kill Kobold Vermin", 1, true)
-    and t7:find("Position: Classic data (may have moved in Forever)", 1, true) and t7:find("<Click to set a waypoint>", 1, true) and not t7:find("Shift-click", 1, true)
-    and t7:find("^%[%d+%] Kobold Camp Cleanup\n%- Kobold Vermin slain: 3/10\nKill Kobold Vermin\nPosition"), "the kill mark's tooltip: " .. t7)
+    and t7:find("Position: Classic data (may have moved in Forever)", 1, true) and t7:find("<Click to show it on the arrow for now>", 1, true) and t7:find("<Shift-click: skip this quest>", 1, true)
+    and t7:find("^%[%d+%] Kobold Camp Cleanup\n%- Kobold Vermin slain: 3/10\nKill Kobold Vermin\nPosition"), "the kill mark's tooltip (5.4.4: a click shows it for now, Shift-click skips it): " .. t7)
   local sources = {}
   for _, pin in ipairs(icons()) do
     local t = tipOf(pin)
-    assert(#t > 0 and t:find("<Click to set a waypoint>", 1, true) and not t:find("Click: ", 1, true), "every icon has a tooltip, its click the game's way: " .. t)
+    assert(#t > 0 and t:find("<Click to show it on the arrow for now>", 1, true) and not t:find("Click: ", 1, true), "every icon has a tooltip, its click the game's way: " .. t)
     for _, src in pairs(QMm.SOURCE) do if t:find("Position: " .. src, 1, true) then sources[src] = true end end
   end
   assert(sources["Wowhead Forever"] and sources["seen in players' games"] and sources["Classic data (may have moved in Forever)"], "tooltips name all three sources")
   local tStart = tipOf(start[1])
-  assert(tStart:find("Northshire Gift Voucher", 1, true) and tStart:find("Drops here, and starts:\n[1] Welcome!", 1, true) and tStart:find("<Shift%-click to put it on your pick%-up list>"),
+  assert(tStart:find("Northshire Gift Voucher", 1, true) and tStart:find("Drops here, and starts:\n[1] Welcome!", 1, true) and tStart:find("<Shift%-click: add to my route>"),
     "the drop's tooltip names the item and the quest: " .. tStart)
   local tGive = tipOf(give[1])
-  assert(tGive:find("^" .. give[1].data.title:gsub("%p", "%%%0") .. "\nAvailable [Qq]uests?\n%[%d+%] ") and tGive:find("<Click to set a waypoint>", 1, true)
-    and tGive:find("<Shift%-click to put [ti][th]e?m? on your pick%-up list>"), "a !'s tooltip: the NPC, the game's Available quest, each quest as the game titles it: " .. tGive)
+  assert(tGive:find("^" .. give[1].data.title:gsub("%p", "%%%0") .. "\nAvailable [Qq]uests?\n%[%d+%] ") and tGive:find("<Click to show it on the arrow for now>", 1, true)
+    and tGive:find("<Shift%-click: add to my route>"), "a !'s tooltip: the NPC, the game's Available quest, each quest as the game titles it: " .. tGive)
   local tTurn = tipOf(eagan)
-  assert(tTurn:find("^Eagan Peltskinner\nReady for turn%-in\n%[%d+%] Wolves Across the Border") and tTurn:find("<Click to set a waypoint>", 1, true) and not tTurn:find("Shift", 1, true),
+  assert(tTurn:find("^Eagan Peltskinner\nReady for turn%-in\n%[%d+%] Wolves Across the Border") and tTurn:find("<Click to show it on the arrow for now>", 1, true) and tTurn:find("<Shift-click: skip this quest>", 1, true),
     "a ?'s tooltip: the NPC, the game's Ready for turn-in, the quest: " .. tTurn)
   print("map icon tooltip:", (t7:gsub("\n", " | ")))
   print("map icon tooltip, !:", (tipOf(give[1]):gsub("\n", " | ")))
@@ -11259,6 +11440,8 @@ do
   lines = {}; mark.__scripts.OnEnter(mark); assert(#lines > 0, "hovering shows the tooltip"); mark.__scripts.OnLeave(mark)
   mark.__scripts.OnMouseUp(mark, "LeftButton", false)
   assert(#M.chat == said, "let go outside the icon: no click")
+  -- (each click below is a session's first waypoint, so it shows in chat: later ones the arrow shows are not said)
+  MQ.API.waypointSaid = false
   mark.__scripts.OnMouseUp(mark, "LeftButton", true)
   assert(#M.chat == said + 1 and lastLine():find("worldmap:", 1, true), "let go over it: a click")
   -- /qb next: the next stop's line and link, the map open or not
@@ -11268,9 +11451,11 @@ do
   -- in combat, the map shut or open: the same, at once
   M.map:Close()
   M.combat = true
+  MQ.API.waypointSaid = false
   MQ.API.SetWaypoint(1429, 40, 50, "Test spot")
   assert(lastLine():find("|Hworldmap:1429:4000:5000|h", 1, true) and #M.pins == 1, "in combat, the map shut: the line at once, nothing set")
   M.map:Open()
+  MQ.API.waypointSaid = false
   MQ.API.SetWaypoint(1429, 41, 51, "Test spot")
   assert(lastLine():find("|Hworldmap:1429:4100:5100|h", 1, true) and #M.pins == 1, "in combat, the map open: the same")
   M.combat = false
@@ -11280,13 +11465,21 @@ do
   give, turn, obj, start = icons("give"), icons("turn"), icons("obj"), icons("start")
   eagan = turn[1]
   mark = icons("obj")[1]
-  -- Shift-click on a mark or a ?: the game's tracker is left alone (C_QuestLog.AddQuestWatch errors here); a waypoint
+  -- Shift-click on a mark or a ?: the game's tracker is left alone (C_QuestLog.AddQuestWatch errors here); 5.4.4: the
+  -- labelled change, its quest out of the route for good (Skip this quest), and the same click routes it again
   M.shift = true
   said = #M.chat
+  local markId = mark.data.id
   mark:OnMouseClickAction("LeftButton")
-  assert(#M.chat == said + 1 and lastLine():find("worldmap:", 1, true) and not M.watched, "Shift-click on an objective: a waypoint, the game's tracker untouched")
+  assert(#M.chat == said + 1 and lastLine():find("Skipped, out of your route", 1, true) and MQ:IsSkipped(markId) and not M.watched,
+    "Shift-click on an objective: its quest skipped, the game's tracker untouched: " .. lastLine())
+  assert(tipOf(mark):find("<Shift-click: route it again>", 1, true), "its tooltip says the same click routes it again")
+  mark:OnMouseClickAction("LeftButton")
+  assert(not MQ:IsSkipped(markId) and lastLine():find("Back in your route", 1, true), "and it does")
   eagan:OnMouseClickAction("LeftButton")
-  assert(not M.watched and #tipOf(eagan) > 0 and not tipOf(eagan):find("Shift-click", 1, true), "and on a ?: no Shift-click promised")
+  assert(not M.watched and MQ:IsSkipped(33) and tipOf(eagan):find("<Shift-click: route it again>", 1, true), "and on a ?: its quest skipped, said so")
+  eagan:OnMouseClickAction("LeftButton")
+  assert(not MQ:IsSkipped(33), "routed again")
   M.map:Close(); M.map:Open()
   give, turn, obj, start = icons("give"), icons("turn"), icons("obj"), icons("start")
   eagan = turn[1]
@@ -11297,18 +11490,24 @@ do
   assert(not MQ:IsAdded(gid), "not on the pick-up list yet")
   g:OnMouseClickAction("LeftButton")
   M.shift = false
-  assert(MQ:IsAdded(gid) and M.chat[#M.chat]:find("On your pick-up list", 1, true), "Shift-click on a ! puts its quests on the pick-up list")
+  assert(MQ:IsAdded(gid) and M.chat[#M.chat]:find("Added to your route", 1, true), "Shift-click on a ! puts its quests on the pick-up list (Add to my route)")
   MQ:Settings().pins = true
   redraw()
+  -- (its own !, or folded into a stop of the route that stands on its giver: questing, the route on screen is the
+  -- planned one, which takes the pick-up in)
   local routed = false
-  for _, r in ipairs(MQ.Pins.list) do if r.name == gd.title then routed = true end end
+  for _, r in ipairs(MQ.Pins.list) do if r.name == gd.title or (r.num and r.ids and r.ids[gid] and (r.who == gd.title or r.name == gd.title)) then routed = true end end
   assert(routed, "the route's pins show that ! now")
   for _, pin in ipairs(icons("give")) do assert(pin.data.title ~= gd.title, "and the map icons leave that NPC to them") end
-  -- with the route's pins on, a hand-in on the route is theirs too
-  -- (a stop is named for its place when NPCs share it: "Elwynn Forest (49, 40)"; it stands where Eagan does)
+  -- with the route's pins on, a hand-in on the route is theirs too: the Route page on Ready now, its one stop Eagan's
+  -- (a stop is named for its place when NPCs share it: "Elwynn Forest (49, 40)"; it stands where Eagan does. Questing,
+  -- the planned route's stop 1 there takes Deputy Willem's quests too, and stands at his)
+  MQ:Settings().routeQuest = "now"
+  redraw()
   local eaganOnRoute = false
   for _, r in ipairs(MQ.Pins.list) do if r.num and r.m == 1429 and math.abs(r.x - 48.9) < 0.6 and math.abs(r.y - 40.2) < 0.6 then eaganOnRoute = true end end
   assert(eaganOnRoute and #icons("turn") == 0, "the route stands on Eagan: no second ? there")
+  MQ:Settings().routeQuest = nil
   for _, id in ipairs(gd.quests) do if MQ:IsAdded(id.id) then MQ:ToggleAdd(id.id) end end
   MQ:Settings().pins = false
   redraw()
@@ -11488,7 +11687,7 @@ do
     local stops = {}
     for _, f in ipairs(routePins()) do if f.data.num then stops[f.data.num] = f end end
     local one = stops[1]
-    assert(one and one.kind.template == "QuestBankPoiTemplate" and one.Disc.__atlas == "UI-QuestPoi-QuestNumber-SuperTracked" and one.Disc.__w == 32
+    assert(one and one.kind.template == "QuestBankPoiTemplate" and one.Disc.__atlas == "UI-QuestPoi-QuestNumber-SuperTracked" and one.Disc.__w == 16
       and one.levelType == "PIN_FRAME_LEVEL_SUPER_TRACKED_QUEST" and one.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_SUPER_TRACKED_QUEST
       and (one.Glyph.__atlas == (one.data.ready and "UI-QuestIcon-TurnIn-Normal" or "Quest-In-Progress-Icon-Brown")),
       "stop 1: the game's super-tracked quest pin: " .. tostring(one and one.Glyph.__atlas))
@@ -11504,7 +11703,7 @@ do
     end
     -- the tooltip: the place, each quest as the game titles it with its XP, which stop it is, the click
     local t = tipOf(one)
-    assert(t:find("^" .. one.data.name:gsub("%p", "%%%0") .. "\n%[%d+%] ") and t:find("Stop 1 of %d+, at ") and t:find("<Click to set a waypoint>", 1, true) and not t:find("Click: ", 1, true),
+    assert(t:find("^" .. one.data.name:gsub("%p", "%%%0") .. "\n%[%d+%] ") and t:find("Stop 1 of %d+, at ") and t:find("<Click to show it on the arrow for now>", 1, true) and not t:find("Click: ", 1, true),
       "a stop's tooltip: " .. t)
     -- the mouse on a quest pin: the inner glow, as the game's HighlightTexture; the button held: the pressed disc and
     -- the glyph a pixel right and down; let go: as it was
@@ -11522,7 +11721,7 @@ do
     if pick then
       assert(pick.kind.template == "QuestBankOfferTemplate" and pick.Texture.__atlas == "QuestNormal" and pick.levelType == "PIN_FRAME_LEVEL_QUEST_OFFER", "a planned pick-up: the game's !")
       local tp = tipOf(pick)
-      assert(tp:find("\nAvailable [Qq]uests?\n%[%d+%] ") and tp:find("<Click to set a waypoint>", 1, true), "its tooltip: " .. tp)
+      assert(tp:find("\nAvailable [Qq]uests?\n%[%d+%] ") and tp:find("<Click to show it on the arrow for now>", 1, true), "its tooltip: " .. tp)
     end
   end
   -- a dungeon's entrance as the game's own pin: the Dungeon atlas at its 32 px, the frame sized to it, on the
@@ -11538,7 +11737,7 @@ do
       and dm.__frameLevel == M.map.levels.PIN_FRAME_LEVEL_DUNGEON_ENTRANCE and dm.kind.scale[3] == 1.2 and dm.kind.rightClick,
       "the Deadmines' entrance as the game's dungeon pin")
     local td = tipOf(dm)
-    assert(td:find("^" .. dm.data.cat.name:gsub("%p", "%%%0") .. " | %d+/%d+ quests done\nDungeon, level %d+%-%d+\n") and td:find("<Click to set a waypoint>", 1, true)
+    assert(td:find("^" .. dm.data.cat.name:gsub("%p", "%%%0") .. " | %d+/%d+ quests done\nDungeon, level %d+%-%d+\n") and td:find("<Click to show it on the arrow for now>", 1, true)
       and td:find("<Right Click to open the Dungeon Journal>", 1, true), "its tooltip: " .. td)
     local SetWaypoint, got = MQ.API.SetWaypoint, nil
     MQ.API.SetWaypoint = function(...) got = { ... } end
@@ -11787,7 +11986,7 @@ do
   -- the atlas missing: the file id
   M.noAtlas = { QuestNormal = true }
   redraw()
-  assert(icons("give")[1].Texture.__tex == MD.TEX.questAvail and icons("give")[1].Texture.__w == 32, "no atlas: the gossip ! file, at the atlas's size")
+  assert(icons("give")[1].Texture.__tex == MD.TEX.questAvail and icons("give")[1].Texture.__w == 16, "no atlas: the gossip ! file, at the icons' size")
   M.noAtlas = { ["UI-QuestPoi-QuestNumber"] = true, ["UI-QuestIcon-TurnIn-Normal"] = true }
   redraw()
   local tp0 = icons("turn")[1]
@@ -11930,7 +12129,7 @@ do
         for _, q in ipairs(d.quests or {}) do assert(q.id ~= 1618 and q.id ~= 4161, "no ! for a profession's quest: " .. q.name) end
       end
     end
-    assert(zephras and not QMm.Unchecked(zephras), "Forever's own quests filed under Other quests keep theirs")
+    assert(zephras and not QMm.Unchecked(zephras), "Forever's own quests keep theirs (Zephras Isle's on a card of their own)")
   end
 
   -- D.QLOCK (gen_data: the quests that need a profession's skill or a reputation) replaces that stand-in: a quest
@@ -12018,7 +12217,7 @@ do
       assert(t:find("William Pestle\nAvailable [Qq]uests?\n") and t:find("Priestess Josetta\nAvailable [Qq]uests?\n") and t:find(jw.give[1].name, 1, true)
         and t:find(pw.give[1].name, 1, true), "its tooltip names each NPC with its quests: " .. t)
       local _, nPos = t:gsub("Position: ", "")
-      assert(nPos == 1 and t:find("<Shift-click to put them on your pick-up list>", 1, true), "one Position line when both places come from the same data")
+      assert(nPos == 1 and t:find("<Shift-click: add to my route>", 1, true), "one Position line when both places come from the same data")
       -- their places from different data: a line under each
       MD.NSRC = { [pw.npc] = "w", [jw.npc] = "c" } -- (none before this: one line above)
       t = tipOf(pestle)
@@ -12033,7 +12232,7 @@ do
       t = tipOf(tp)
       assert(tp.data.kind == "turn" and tp.Glyph.__atlas == "UI-QuestIcon-TurnIn-Normal" and #tp.data.quests == 1 and tp.data.quests[1].id == 60 and #tp.data.offers >= #jw.give
         and t:find("William Pestle\nReady for turn%-in\n%[7%] Kobold Candles") and t:find("Priestess Josetta\nAvailable [Qq]uests?\n")
-        and t:find("<Click to set a waypoint>", 1, true) and not t:find("Shift%-click"), "a ? at the spot, each NPC's part on it: " .. t)
+        and t:find("<Click to show it on the arrow for now>", 1, true) and t:find("<Shift%-click: skip this quest>"), "a ? at the spot, each NPC's part on it: " .. t)
       print("map icons, a ? and a ! at one spot:", (t:gsub("\n", " | ")))
       table.remove(M.log)
       redraw()
@@ -13098,6 +13297,2981 @@ do
 end
 
 ----------------------------------------------------------------------------
+-- 5.4.4: one sticky target. The owner, after 5.4.3: "map is still broken, lines on map go haywire sometimes, and
+-- routing just swaps mid zone if I run, so the objective completely changes running from Southshore to Alterac". The
+-- arrow, the minimap and the Map page each picked their own target, again and again: the planner's first stop flipped
+-- on a tie as the flight master nearest you (as the crow flies, known or not) changed, the minimap took the nearest spot
+-- of any quest 20 times a second, finished objectives too, and the travel guide re-planned at each zone's border. Each
+-- case below failed on 5.4.3's files (run them alone against an older QuestBank: the cases are in RCASES, in order) and
+-- passes now. Hillsbrad and Alterac as the client has them: each map's corners in the world, fitted to the catalog's
+-- NPCs (the world map's own GetWorldPosFromMapPos does this in game)
+----------------------------------------------------------------------------
+;(function()
+  local RCASES = {}
+  local HILLS = {
+    [1424] = { wy0 = 1066.91, wyx = -32.0059, wx0 = 400.10, wxy = -21.3354 },   -- Hillsbrad Foothills
+    [1416] = { wy0 = 783.55, wyx = -28.0005, wx0 = 1499.91, wxy = -18.6646 },   -- Alterac Mountains
+  }
+  -- a client standing in Hillsbrad: where it stands (c.me, continent yards) is read by the game's map calls through the
+  -- two maps above; the map it is on is the one whose edges hold it (Alterac north of Hillsbrad's top)
+  local function hillsClient(name, log, done)
+    local c = newClient({ name = name, level = 30, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = log, done = done or {}, world = { 0, -852, -517 }, map = 1424, bagSlots = {}, bind = "Southshore" })
+    local env = c.env
+    c.me = { wx = -852, wy = -517 }
+    local function toMap(m, wx, wy)
+      local t = HILLS[m]
+      if not t then return nil end
+      return (wy - t.wy0) / t.wyx / 100, (wx - t.wx0) / t.wxy / 100
+    end
+    local function mapAt(wx, wy)
+      local _, y = toMap(1424, wx, wy)
+      return y < 0.14 and 1416 or 1424
+    end
+    c.mapAt = mapAt
+    env.C_Map.GetBestMapForUnit = function() return mapAt(c.me.wx, c.me.wy) end
+    env.MapUtil.GetDisplayableMapForPlayer = function() return mapAt(c.me.wx, c.me.wy) end
+    env.C_Map.GetPlayerMapPosition = function(m)
+      local x, y = toMap(m, c.me.wx, c.me.wy)
+      if not x then return nil end
+      return { x = x, y = y, GetXY = function(self) return self.x, self.y end }
+    end
+    local wpos = env.C_Map.GetWorldPosFromMapPos
+    env.C_Map.GetWorldPosFromMapPos = function(m, v)
+      local t = HILLS[m]
+      if not t then return wpos(m, v) end
+      return 0, { x = t.wx0 + t.wxy * v.y * 100, y = t.wy0 + t.wyx * v.x * 100, GetXY = function(self) return self.x, self.y end }
+    end
+    env.C_Map.GetMapPosFromWorldPos = function(cont, pos, m)
+      local x, y = toMap(m, pos.x, pos.y)
+      if cont ~= 0 or not x then return nil end
+      return m, env.CreateVector2D(x, y)
+    end
+    -- (zones beside each other: neither lies inside the other)
+    env.C_Map.GetMapRectOnMap = function() return nil end
+    env.IsInInstance = function() return false, "none" end
+    login(c)
+    return c
+  end
+  -- one frame of play: the clock, the timers due, every shown frame's OnUpdate once
+  local function frame(c, dt)
+    c.clock = c.clock + dt
+    table.sort(c.timers, function(a, b) return a.t < b.t end)
+    while c.timers[1] and c.timers[1].t <= c.clock do table.remove(c.timers, 1).f() end
+    for _, f in ipairs(c.frames) do
+      local u = f.__scripts.OnUpdate
+      if u and f:IsVisible() then u(f, dt) end
+    end
+  end
+  -- you walk to a spot: a new zone is the game's event to QuestBank's frames (its events, the travel guide's, the Map page's)
+  local function walkTo(c, wx, wy)
+    local was = c.mapAt(c.me.wx, c.me.wy)
+    c.me.wx, c.me.wy = wx, wy
+    c.o.world = { 0, wx, wy }
+    if c.mapAt(wx, wy) ~= was then
+      c.ev(c.QB.eventFrame, "ZONE_CHANGED_NEW_AREA")
+      for _, f in ipairs({ c.QB.Travel.frame, c.QB.MapPage and c.QB.MapPage.events }) do
+        if f and f.__scripts.OnEvent then f.__scripts.OnEvent(f, "ZONE_CHANGED_NEW_AREA") end
+      end
+    end
+  end
+  -- a minimap entry's place: continent yards (Target.lua's entries), else its map's spot through the world
+  local function worldOf(QB, d)
+    if not d then return nil end
+    if d.wx then return d end
+    return d.m and QB.Model.World(d.m, d.x, d.y)
+  end
+  local function firstStop(QB)
+    local r = QB.Target and QB.Target.Route() or (QB.routeNow and QB.routeNow.legs[1] and QB.routeNow or QB.routePlan)
+    return r and r.legs[1] and r.legs[1].stop.name
+  end
+
+  -- R1: two objective spots of stop 1's quest either side of a straight walk, stop 1 farther. 5.4.3's minimap took the
+  -- nearer spot at each look: the stroke flipped at every crossing of the line halfway, and went to a finished
+  -- objective's spot as readily. Now the spot is kept until another is clearly nearer, and a finished one leads nowhere
+  RCASES[#RCASES + 1] = { "R1 objective spots: no flip on the midline, no finished objective", function()
+    local c = hillsClient("Rone", { { 500, 0 }, { 504, 0 } })
+    local QB, D = c.QB, c.QB.Data
+    local Mini, P = QB.Mini, QB.Pins
+    QB.Arrow:Set(true)
+    -- 500's two spots on Alterac's map, either side of a walk north along wy = -700: A west (wy -640), B east (wy -760);
+    -- the walk crosses the line halfway between them at wx = 300; stop 1 (Southshore) is far south
+    local function spot(wx, wy) local t = HILLS[1416]; return string.format("%d,%d", math.floor((wy - t.wy0) / t.wyx * 10 + 0.5), math.floor((wx - t.wx0) / t.wxy * 10 + 0.5)) end
+    local saveSpot = { D.SPOT[500], D.SPOT[504] }
+    D.SPOT[500] = "k,1,1416," .. spot(270, -640) .. ",20,c;k,2,1416," .. spot(330, -760) .. ",20,c"
+    D.SPOT[504] = nil
+    -- (two lines the game tells apart by their counts)
+    c.objectives = { [500] = { { text = "Crushridge Ogre slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 },
+                               { text = "Crushridge Brute slain: 0/6", type = "monster", finished = false, numFulfilled = 0, numRequired = 6 } } }
+    local saveReq = D.SREQ[500]
+    D.SREQ[500] = "1:10,2:6"
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); frame(c, 1); QB.Model.Finish(); frame(c, 1)
+    assert(firstStop(QB) == "Southshore", "stop 1 is Southshore, where both quests go: " .. tostring(firstStop(QB)))
+    walkTo(c, 200, -700)
+    -- (put there in one step: a jump in place, which the next look counts and picks the spot afresh for; the walk
+    -- across the line starts after it)
+    frame(c, 1.1)
+    for _ = 1, 3 do frame(c, 0.1) end
+    Mini.Place()
+    local start = Mini.target and Mini.target.kind == "obj" and Mini.target.id == 500 and Mini.target
+    assert(start, "the stroke goes to a spot of stop 1's quest: " .. tostring(Mini.target and Mini.target.kind))
+    -- back and forth across the line halfway, 20 yards each way
+    local flips, last = 0, nil
+    for _, wx in ipairs({ 290, 310, 290, 310, 290, 312, 288, 310 }) do
+      walkTo(c, wx, -700)
+      frame(c, 0.1)
+      Mini.Place()
+      local w = worldOf(QB, Mini.target)
+      local key = w and string.format("%s:%.0f:%.0f", tostring(Mini.target.kind), w.wx, w.wy)
+      if last and key ~= last then flips = flips + 1 end
+      last = key
+    end
+    assert(flips == 0, "the stroke keeps its spot across the line halfway: " .. flips .. " flips")
+    -- the kept spot's objective done: it leads nowhere any more, the other spot takes over at once
+    local kept = worldOf(QB, Mini.target).wy > -700 and 1 or 2
+    c.objectives[500][kept].finished, c.objectives[500][kept].numFulfilled = true, c.objectives[500][kept].numRequired
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); frame(c, 1)
+    Mini.Invalidate(); Mini.Place()
+    local w = worldOf(QB, Mini.target)
+    assert(Mini.target and Mini.target.kind == "obj" and w and (w.wy > -700) == (kept == 2), "its objective done, the other spot is the target")
+    for _, d in ipairs(Mini.ListCached()) do
+      if d.kind == "obj" and d.id == 500 then
+        local w = QB.Model.World(d.m, d.x, d.y)
+        assert(w and ((kept == 1) == (w.wy < -700)), "and the finished objective's spot is gone from the minimap")
+      end
+    end
+    D.SREQ[500], D.SPOT[500], D.SPOT[504] = saveReq, saveSpot[1], saveSpot[2]
+  end }
+
+  -- R2: hand-ins at Southshore, Tarren Mill and Alterac and one far away, planned again at each step of a walk north and
+  -- back over the point where two tours tie. 5.4.3 kept nothing: the first stop flipped at each crossing. Now another
+  -- first stop must be 5% and half a minute quicker (or reach a higher level by 5%), and walking back over the tie flips
+  -- nothing
+  RCASES[#RCASES + 1] = { "R2 the planner keeps its first stop unless clearly better", function()
+    local c = hillsClient("Rtwo", { { 7, 0 } })
+    local M = c.QB.Model
+    local function fake(id, npc) return { q = { id = id, turnIdx = npc, lvl = 30, base = 3000, mult = 1, name = "Q" .. id }, st = { code = "banked" } } end
+    local entries = { fake(990001, 279), fake(990002, 276), fake(990003, 288), fake(990004, 5) } -- Redpath, Lydon, Valik, Northshire
+    local from, to = { -852, -517 }, { 203, -818 }
+    local prev, changes, back = nil, 0, 0
+    local path = {}
+    for k = 0, 24 do path[#path + 1] = k / 24 end                                                  -- north to Alterac
+    for _, f in ipairs({ 0.5, 0.54, 0.5, 0.46, 0.5, 0.54, 0.58, 0.54, 0.5, 0.46, 0.5 }) do path[#path + 1] = f end -- to and fro by the tie
+    for i, f in ipairs(path) do
+      local wx, wy = from[1] + (to[1] - from[1]) * f, from[2] + (to[2] - from[2]) * f
+      local r = M.Plan(entries, { level = 30, xp = 0, goal = "route", fac = "A", start = { c = 0, wx = wx, wy = wy }, mounted = false }, prev)
+      if prev and r.legs[1].stop.name ~= prev.legs[1].stop.name then
+        changes = changes + 1
+        if i > 25 then back = back + 1 end
+        local alt = r.alt
+        assert(alt and alt.first == prev.legs[1].stop.name and alt.t - r.t >= math.max(M.SWITCH * alt.t, 0.5) - 1e-9,
+          string.format("a new first stop only when clearly quicker: %s, %.2f min against %s first %s", r.legs[1].stop.name, r.t,
+            prev.legs[1].stop.name, alt and string.format("%.2f", alt.t) or "(not weighed)"))
+      end
+      prev = r
+    end
+    assert(changes == 1 and back == 0, string.format("north to Alterac the first stop changes once, and to and fro by the tie never: %d, %d", changes, back))
+    -- a first stop that is gone (its quest handed in) gives way at once, margin or none
+    local keptName, rest = prev.legs[1].stop.name, {}
+    for _, e in ipairs(entries) do if e.q.turnIdx ~= prev.legs[1].stop.npcs[1] then rest[#rest + 1] = e end end
+    local r = M.Plan(rest, { level = 30, xp = 0, goal = "route", fac = "A", start = { c = 0, wx = -350, wy = -660 }, mounted = false }, prev)
+    assert(#rest == 3 and r.legs[1].stop.name ~= keptName and not r.held, "the kept stop handed in: another first at once: " .. r.legs[1].stop.name)
+  end }
+
+  -- R3: the same log and XP, 230 yards north from Tarren Mill into Alterac: 5.4.3's signature held the flight master
+  -- nearest you (Southshore's, then Chillwind Camp's, which an Alliance player there rarely knows) and planned again. Now
+  -- walking plans nothing again: the route, and its first stop, stay as they were
+  RCASES[#RCASES + 1] = { "R3 walking 230 yards plans nothing again", function()
+    local c = hillsClient("Rthree", { { 500, 1 }, { 504, 1 }, { 501, 1 }, { 509, 1 }, { 535, 1 } })
+    local QB = c.QB
+    walkTo(c, -6, -899)
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); frame(c, 1); QB.Model.Finish(); frame(c, 1)
+    QB:Recompute(true)
+    local route, sig, first = QB.routeNow, QB.sigNow, firstStop(QB)
+    assert(QB.Model.Place("A", 0, -6, -899).hub == 21 and QB.Model.Place("A", 0, 203, -818).hub == 4, "the nearest flight master as the crow flies: Southshore's, then Chillwind Camp's")
+    walkTo(c, 203, -818)
+    c.xp = (c.xp or 0) + 900; c.ev(QB.eventFrame, "PLAYER_XP_UPDATE", "player")
+    c.ev(QB.eventFrame, "BAG_UPDATE_DELAYED")
+    for _ = 1, 20 do frame(c, 0.1) end
+    QB.Model.Finish()
+    QB:Recompute()
+    assert(QB.routeNow == route and QB.sigNow == sig, "no plan again for walking, a kill's XP or the bags")
+    assert(firstStop(QB) == first, "the first stop is the same: " .. tostring(first) .. ", " .. tostring(firstStop(QB)))
+  end }
+
+  -- R4: a target where flying and walking come out about even, a zone's border crossed: 5.4.3 planned the way again
+  -- forced, at a hard cut-off, and the first step flipped between the flight and the walk. Now a new zone plans again as
+  -- walking does (kept unless clearly better), and a way that flies keeps flying while that saves 5%
+  RCASES[#RCASES + 1] = { "R4 the arrow's first step at the walk-or-fly cut-off", function()
+    local c = newClient({ name = "Rfour", level = 30, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1, race = "Dwarf",
+      log = { { 7, 0 } }, done = {}, world = { 0, -8833, 479 }, bind = "Goldshire", bagSlots = {}, map = 1453 })
+    c.ev(c.QB.eventFrame, "ADDON_LOADED", "QuestBank"); c.ev(c.QB.eventFrame, "PLAYER_LOGIN"); tick(c, 1)
+    local TV = c.QB.Travel
+    c.taxiKnown = { [2] = true, [5] = true }
+    local f = TV.frame
+    f.__scripts.OnEvent(f, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+    local sw, lake = hubOf(c, "Stormwind"), hubOf(c, "Lakeshire")
+    local me0 = { c = 0, wx = sw[3], wy = sw[4] }
+    local function at(k) return { name = "Spot", c = 0, wx = sw[3] + (lake[3] - sw[3]) * k, wy = sw[4] + (lake[4] - sw[4]) * k } end
+    local function flies(me, t) local p = TV.Route(me, t, TV.Opts("pin")); return p and #p.legs > 1 end
+    -- the cut-off on the way from Stormwind's flight master toward Lakeshire's
+    local lo, hi = 0.05, 1
+    assert(not flies(me0, at(lo)) and flies(me0, at(hi)), "near Stormwind a walk, at Lakeshire a flight")
+    for _ = 1, 40 do local mid = (lo + hi) / 2; if flies(me0, at(mid)) then hi = mid else lo = mid end end
+    local t = at(hi + 0.002)
+    -- 12 yards on toward it: under the hard cut-off a walk
+    local dx, dy = t.wx - me0.wx, t.wy - me0.wy
+    local len = math.sqrt(dx * dx + dy * dy)
+    local me1 = { c = 0, wx = me0.wx + dx / len * 12, wy = me0.wy + dy / len * 12 }
+    assert(flies(me0, t) and not flies(me1, t), "the spot lies at the cut-off")
+    standAt(c, 0, me0.wx, me0.wy)
+    local g = TV.Guide(me0, t, "pin")
+    assert(g.leg and g.leg.kind == "fly", "at Stormwind's flight master: fly")
+    standAt(c, 0, me1.wx, me1.wy)
+    f.__scripts.OnEvent(f, "ZONE_CHANGED_NEW_AREA")
+    g = TV.Guide(me1, t, "pin")
+    assert(g.leg and g.leg.kind == "fly", "a zone's border 12 yards on: still fly, not a walk: " .. tostring(g.leg and g.leg.kind))
+  end }
+
+  -- R5: more trail segments within the minimap's reach than it draws (160): 5.4.3 took them cell by cell from a corner of
+  -- the window and stopped at 160, and the trail you stand on was left out. Now the nearest to you are drawn
+  RCASES[#RCASES + 1] = { "R5 the trails nearest you are drawn", function()
+    local c = hillsClient("Rfive", { { 7, 0 } })
+    local Walk = c.QB.Walk
+    local W = Walk.DB()
+    local far, near = {}, {}
+    for i = 0, 240 do far[#far + 1] = -300; far[#far + 1] = -120 + i end         -- 240 segments 300 yards west, in the window's first cells
+    for i = 0, 4 do near[#near + 1] = 15 * i; near[#near + 1] = 5 end              -- your trail: 4 segments where you stand
+    W[0] = { far, near }
+    Walk.dirty = true
+    local got = Walk.Near(0, 0, 0, 400)
+    local mine, worst = 0, 0
+    for _, s in ipairs(got) do
+      if s[2] == 5 and s[4] == 5 then mine = mine + 1 end
+      worst = math.max(worst, math.min(s[1] ^ 2 + s[2] ^ 2, s[3] ^ 2 + s[4] ^ 2))
+    end
+    assert(#got == 160 and mine == 4, string.format("160 drawn, your own trail's 4 among them: %d, %d", #got, mine))
+    -- and none drawn is farther than one left out
+    local left = 0
+    for i = 1, #far - 3, 2 do
+      local d = math.min(far[i] ^ 2 + far[i + 1] ^ 2, far[i + 2] ^ 2 + far[i + 3] ^ 2)
+      local drawn = false
+      for _, s in ipairs(got) do if s[1] == far[i] and s[2] == far[i + 1] then drawn = true end end
+      if not drawn and d < worst then left = left + 1 end
+    end
+    assert(left == 0, "the 160 nearest: " .. left .. " nearer ones left out")
+    W[0] = nil
+    Walk.dirty = true
+  end }
+
+  -- the golden path at its edges: 5.4.3 found your trails within 80 yards of you and kept you on the way within 20, and
+  -- at either edge the path came and went, and was searched again, with each step. Now a band at each: a way shown keeps
+  -- to 110 yards of your trails, and you stay on the way to 35 yards of it
+  RCASES[#RCASES + 1] = { "the golden path keeps across the 80-yard and 20-yard edges", function()
+    local c = hillsClient("Rgold", { { 7, 0 } })
+    local QB = c.QB
+    local Walk, MR = QB.Walk, QB.MiniRoute
+    local W = Walk.DB()
+    local trail = {}
+    for i = 0, 100 do trail[#trail + 1] = i * 15; trail[#trail + 1] = 0 end -- 1,500 yards east along wy = 0
+    W[0] = { trail }
+    Walk.dirty = true
+    local searches, path = 0, Walk.Path
+    Walk.Path = function(...) searches = searches + 1; return path(...) end
+    local goal = { c = 0, wx = 1500, wy = 0 }
+    local function look(wx, wy) c.clock = c.clock + 2.1; return MR.Gold({ c = 0, wx = wx, wy = wy }, goal) end
+    -- beside your trails, 75 and 85 yards off them in turn, 40 yards a step (off the way found a step before)
+    local shown, changes, was = 0, 0, nil
+    for k = 0, 9 do
+      local on = look(100 + k * 40, k % 2 == 0 and 75 or 85)
+      if on then shown = shown + 1 end
+      if was ~= nil and on ~= was then changes = changes + 1 end
+      was = on
+    end
+    assert(shown == 10 and changes == 0, string.format("75 and 85 yards off your trails: the way shown all along: %d shown, %d changes", shown, changes))
+    -- along them, 18 and 22 yards off in turn (within the 15 seconds after which the way is searched again anyway, for
+    -- trails noted meanwhile): on the way all along, no search again
+    look(300, 0)
+    searches = 0
+    for k = 1, 6 do look(300 + k * 12, k % 2 == 0 and 18 or 22) end
+    assert(searches == 0, "18 and 22 yards off the way: you stay on it, nothing searched again: " .. searches)
+    Walk.Path = path
+    W[0] = nil
+    Walk.dirty = true
+  end }
+
+  -- the minimap's objective marks, at most 120: 5.4.3 filled them in the quest log's order, and a first quest's far spots
+  -- crowded out the ones round you. Now the nearest
+  RCASES[#RCASES + 1] = { "the minimap's 120 objective spots are the nearest", function()
+    local c = hillsClient("Rspots", { { 500, 0 }, { 504, 0 } })
+    local QB, D, Mini = c.QB, c.QB.Data, c.QB.Mini
+    local saveSpot = { D.SPOT[500], D.SPOT[504] }
+    local far = {}
+    for i = 1, 130 do far[#far + 1] = string.format("k,1,1416,%d,%d,10,c", 300 + i, 300) end -- 130 spots up in Alterac
+    D.SPOT[500] = table.concat(far, ";")
+    D.SPOT[504] = "k,1,1424,500,590,10,c;k,1,1424,505,590,10,c" -- 2 where you stand, in Southshore
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); frame(c, 1)
+    Mini.Invalidate()
+    local n, mine = 0, 0
+    for _, d in ipairs(Mini.List(true)) do
+      if d.kind == "obj" then n = n + 1; if d.id == 504 then mine = mine + 1 end end
+    end
+    assert(n == 120 and mine == 2, string.format("120 marks, the 2 round you among them: %d, %d", n, mine))
+    D.SPOT[500], D.SPOT[504] = saveSpot[1], saveSpot[2]
+  end }
+
+  -- R6: the Map page on Alterac (it follows you over the border), stop 1 back in Southshore on Hillsbrad's map, stops 2
+  -- and 3 on Alterac's: 5.4.3 drew 2 to 3 only (a stop off the map had no place). Now the stroke from you to stop 1 runs to
+  -- the map's edge the way it lies, then on from there to stop 2
+  RCASES[#RCASES + 1] = { "R6 the Map page's strokes to a stop in the next zone", function()
+    local c = hillsClient("Rsix", { { 7, 0 } })
+    local QB, P, MP = c.QB, c.QB.Pins, c.QB.MapPage
+    walkTo(c, -6, -899) -- Tarren Mill, on Alterac's map
+    c.QB.UI:Open(8)
+    assert(MP.canvas and MP.lines, "the Map page is built")
+    local saveList = P.list
+    P.list = { { m = 1424, x = 49.5, y = 58.7, num = 1, name = "Southshore", ids = {}, quests = {}, lines = {} },
+               { m = 1416, x = 57.2, y = 69.5, num = 2, name = "Henchman Valik", ids = {}, quests = {}, lines = {} },
+               { m = 1416, x = 45, y = 50, num = 3, name = "Crushridge Hold", ids = {}, quests = {}, lines = {} } }
+    MP.Go(1416, "user")
+    MP.lines:RefreshAllData()
+    local strokes = MP.lines.active[1]
+    local drawn, ends = {}, {}
+    -- (each stroke's first and last line: one crossing a quest's icon is a line for each part)
+    local seen = {}
+    for _, l in ipairs(strokes and strokes.ctx.lines or {}) do
+      if l.__shown then
+        if not seen[l.of or l] then seen[l.of or l] = true; drawn[#drawn + 1] = l end
+        ends[#drawn] = l
+      end
+    end
+    assert(#drawn == 3, "you to stop 1 (to the map's edge), stop 1 to 2 (from it), 2 to 3: " .. #drawn)
+    local h = strokes:GetHeight()
+    assert(math.abs(ends[1].__stop[4] + h / 2) < 1 and math.abs(drawn[2].__start[4] + h / 2) < 1,
+      "the strokes to and from stop 1 meet the map's bottom edge, the way Southshore lies")
+    P.list = saveList
+    P:Update()
+  end }
+
+  -- The walk the owner made: from Southshore north into Alterac, the Crushridge quests' objectives up there, their
+  -- hand-in in Southshore. At every step the arrow (on the route), the minimap's stroke and the Map page's first stroke
+  -- lead to one and the same place; the route is not planned again for walking, a kill, the bags or the zone's border,
+  -- and what they lead to changes only when something real happens: a step of another quest's objective, an objective
+  -- done, a quest complete. A quest done as the game reports it (complete in the log) keeps the target on the other
+  -- quest's spot: 5.4.4 as first built then followed what was ready to hand in, and sent the arrow, the minimap and the
+  -- Map page back to Southshore, 1,300 yards off, the other quest's spot at hand (the case set the objective done but
+  -- not the quest complete, which the game never shows, and missed it); a delivery taken on the way (complete as you
+  -- take it, handed in at Stormwind) sent them 9,000 yards off
+  RCASES[#RCASES + 1] = { "the walk from Southshore to Alterac: one target, changed only by what you do", function()
+    local c = hillsClient("Rwalk", { { 500, 0 }, { 504, 0 }, { 535, 0 } })
+    local QB, D, A, Mini, MP = c.QB, c.QB.Data, c.QB.Arrow, c.QB.Mini, c.QB.MapPage
+    local function spot(wx, wy) local t = HILLS[1416]; return string.format("%d,%d", math.floor((wy - t.wy0) / t.wyx * 10 + 0.5), math.floor((wx - t.wx0) / t.wxy * 10 + 0.5)) end
+    local saveSpot, saveReq = { D.SPOT[500], D.SPOT[504], D.SPOT[535] }, { D.SREQ[500], D.SREQ[504] }
+    D.SPOT[500] = "k,1,1416," .. spot(420, -700) .. ",20,c;k,1,1416," .. spot(520, -660) .. ",20,c"
+    D.SPOT[504] = "k,1,1416," .. spot(470, -760) .. ",20,c"
+    D.SPOT[535] = nil
+    D.SREQ[500], D.SREQ[504] = "1:10", "1:10"
+    c.objectives = { [500] = { { text = "Crushridge Ogre slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } },
+                     [504] = { { text = "Crushridge Mage slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } } }
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 10 do frame(c, 0.1) end
+    QB.Model.Finish()
+    QB.Arrow:Set(true)
+    QB.UI:Open(8)
+    for _ = 1, 5 do frame(c, 0.1) end
+    local plans = 0
+    local sigNow, sigPlan = QB.sigNow, QB.sigPlan
+    local function replans()
+      if QB.sigNow ~= sigNow then plans = plans + 1; sigNow = QB.sigNow end
+      if QB.sigPlan ~= sigPlan then plans = plans + 1; sigPlan = QB.sigPlan end
+    end
+    -- one look: the arrow, the minimap and the Map page lead to the same place (the Map page's first stroke drawn, at
+    -- every look: a look with no stroke there checks nothing, and counts as a failure)
+    local function agree(label)
+      local t = A.t
+      assert(t and t.kind == "route" and t.name, label .. ": the arrow is on the route")
+      local aim = Mini.aim
+      assert(aim and aim.name == t.name and math.abs((aim.wx or 0) - t.wx) + math.abs((aim.wy or 0) - t.wy) < 40 or (aim and aim.kind == "stop" and aim.name == t.name),
+        label .. ": the minimap leads where the arrow does: " .. tostring(aim and aim.name) .. " / " .. tostring(t.name))
+      local lines = MP.lines and MP.lines.active[1]
+      assert(lines and lines.data, label .. ": the Map page draws its strokes")
+      local d = lines.data
+      local toward = d.via[#d.via] or d.stops[1]
+      local m = MP.canvas:GetMapID()
+      local x, y = QB.Model.MapPos(t.c, t.wx, t.wy, m)
+      if not x then
+        local tt = HILLS[m]
+        x, y = (t.wy - tt.wy0) / tt.wyx / 100, (t.wx - tt.wx0) / tt.wxy / 100
+      end
+      assert(toward and math.abs(toward.x - x) < 0.02 and math.abs(toward.y - y) < 0.02,
+        string.format("%s: the Map page's first stroke leads there too: %.3f, %.3f against %.3f, %.3f", label, toward and toward.x or -1, toward and toward.y or -1, x, y))
+    end
+    local function look()
+      for _ = 1, 6 do frame(c, 0.1) end
+      QB.Model.Finish(); Mini.Place(); MP.Tick(1)
+    end
+    frame(c, 0.1); Mini.Place(); MP.Tick(1)
+    local first, target = firstStop(QB), A.t and A.t.name
+    local targetAt = A.t and string.format("%.0f:%.0f", A.t.wx, A.t.wy)
+    local startQ = A.t and A.t.obj and A.t.qid
+    assert(startQ == 500 or startQ == 504, "at Southshore: a spot of one of the Crushridge quests: " .. tostring(A.t and A.t.name))
+    local otherQ = startQ == 500 and 504 or 500
+    agree("at Southshore")
+    -- north, 40 yards a step, with what play brings on the way: a kill's XP, the bags, a step of that quest's objective
+    local from, to = { -852, -517 }, { 470, -700 }
+    for k = 1, 34 do
+      local f = k / 34
+      walkTo(c, from[1] + (to[1] - from[1]) * f, from[2] + (to[2] - from[2]) * f)
+      if k % 3 == 0 then c.xp = (c.xp or 0) + 450; c.ev(QB.eventFrame, "PLAYER_XP_UPDATE", "player") end
+      if k % 5 == 0 then c.ev(QB.eventFrame, "BAG_UPDATE_DELAYED") end
+      if k % 7 == 0 then c.objectives[startQ][1].numFulfilled = c.objectives[startQ][1].numFulfilled + 1; c.ev(QB.eventFrame, "QUEST_LOG_UPDATE") end
+      for _ = 1, 6 do frame(c, 0.1) end
+      QB.Model.Finish()
+      replans()
+      Mini.Place(); MP.Tick(1)
+      agree("step " .. k)
+      assert(firstStop(QB) == first, string.format("step %d: the first stop stays %s: %s", k, first, tostring(firstStop(QB))))
+      assert(A.t.name == target and string.format("%.0f:%.0f", A.t.wx, A.t.wy) == targetAt,
+        string.format("step %d: what they lead to stays %s: %s", k, target, A.t.name))
+    end
+    assert(plans == 0, "walking, kills, the bags and the zone's border planned nothing again: " .. plans)
+    -- a kill for the other quest: the quest kept stays (the first stop too). 5.4.4 as first built took the target to
+    -- the other quest's spot: you were doing that one now; and a mob that counted for the quest kept and dropped an
+    -- item for the other flipped it on every mob (the review's fourth round, B6CASES)
+    c.objectives[otherQ][1].numFulfilled = 1
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+    look()
+    agree("a kill for the other quest")
+    assert(A.t.obj and A.t.qid == startQ and firstStop(QB) == first, "a kill for the other quest: the quest kept, the same first stop: " .. tostring(A.t.name))
+    c.objectives[otherQ][1].numFulfilled = 0
+    -- the ogres done, as the game reports it: the objective finished and the quest complete. The target is the mages'
+    -- spot, by the planned route (Log and pick-ups), whose first stop, Southshore, stays
+    c.objectives[500][1].finished, c.objectives[500][1].numFulfilled = true, 10
+    c.log = { { 500, 1 }, { 504, 0 }, { 535, 0 } }
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+    look()
+    agree("the ogres done")
+    assert(QB.Target.Route() == QB.routePlan and #QB.routeNow.legs > 0, "questing: the route on screen is the planned one, a quest ready or not")
+    assert(A.t.obj and A.t.qid == 504 and firstStop(QB) == first and math.sqrt((A.t.wx - 470) ^ 2 + (A.t.wy + 760) ^ 2) < 1,
+      "the ogres done: the mages' spot, the same first stop: " .. tostring(A.t.name) .. ", " .. tostring(firstStop(QB)))
+    -- both complete: everything goes back to Southshore to hand them in, and the three agree on it
+    c.log = { { 500, 1 }, { 504, 1 }, { 535, 0 } }
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+    look()
+    agree("both complete")
+    assert(not A.t.obj and A.t.name == "Southshore", "both complete: back to Southshore: " .. tostring(A.t.name))
+    -- a delivery taken on the way: complete as you take it, handed in at Stormwind. The route is planned again for it,
+    -- and the target is no hand-in of what is ready that the planner did not put first (Stormwind, 9,000 yards off):
+    -- Southshore still, or, where the planner found the first stop it kept clearly worse (the hearthstone now best
+    -- kept for Stormwind), the one it found better
+    local deliver
+    local ids = {}
+    for id in pairs(D.Q) do ids[#ids + 1] = id end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+      local q = QB.Quest.Get(id)
+      local n = q and q.turnIdx and q.turnIdx > 0 and D.NPC[q.turnIdx]
+      if n and n[2] == 1453 and QB.Quest.ForMe(q) and not q.repeatable and (q.req or 1) <= 30 and not (q.turn and q.turn.inside) then deliver = q break end
+    end
+    assert(deliver, "a quest handed in at Stormwind")
+    c.log = { { 500, 1 }, { 504, 1 }, { 535, 0 }, { deliver.id, 1 } }
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+    look()
+    agree("a delivery taken")
+    local r = QB.Target.Route()
+    local alt = r.alt
+    assert(r == QB.routePlan and A.t.name ~= "Stormwind" and A.t.name == firstStop(QB), "a delivery for Stormwind taken: the route's first stop: " .. tostring(A.t.name))
+    assert(firstStop(QB) == first or (alt and alt.first == first and alt.t - r.t >= math.max(QB.Model.SWITCH * alt.t, 0.5) - 1e-9),
+      "Southshore still, or a first stop clearly better: " .. tostring(firstStop(QB)))
+    D.SPOT[500], D.SPOT[504], D.SPOT[535] = saveSpot[1], saveSpot[2], saveSpot[3]
+    D.SREQ[500], D.SREQ[504] = saveReq[1], saveReq[2]
+  end }
+
+  -- Two quests of the stop, their spots strung along the walk north (the mages' passed on the way, the ogres' at its
+  -- end), nothing done: 5.4.4 as first built kept the spot but not the quest, handed over to any spot of any of the
+  -- stop's quests a quarter and 30 yards nearer, and three quarters of the way the objective went from one quest to the
+  -- other with nothing done ("the objective completely changes running from Southshore to Alterac"). Now the quest is
+  -- kept: one quest all the way, a kill for the other too (the review's fourth round: 5.4.4 as first built took the
+  -- target to the other quest at that, and a mob that counted for one and dropped an item for the other flipped it)
+  RCASES[#RCASES + 1] = { "two quests' spots along the walk: one quest all the way", function()
+    local c = hillsClient("Rtwo", { { 500, 0 }, { 504, 0 } })
+    local QB, D, A, Mini = c.QB, c.QB.Data, c.QB.Arrow, c.QB.Mini
+    local function spot(wx, wy) local t = HILLS[1416]; return string.format("%d,%d", math.floor((wy - t.wy0) / t.wyx * 10 + 0.5), math.floor((wx - t.wx0) / t.wxy * 10 + 0.5)) end
+    local saveSpot, saveReq = { D.SPOT[500], D.SPOT[504] }, { D.SREQ[500], D.SREQ[504] }
+    D.SPOT[500] = "k,1,1416," .. spot(420, -700) .. ",20,c"
+    D.SPOT[504] = "k,1,1416," .. spot(-300, -600) .. ",20,c"
+    D.SREQ[500], D.SREQ[504] = "1:10", "1:10"
+    c.objectives = { [500] = { { text = "Crushridge Ogre slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } },
+                     [504] = { { text = "Crushridge Mage slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } } }
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 10 do frame(c, 0.1) end
+    QB.Model.Finish()
+    QB.Arrow:Set(true)
+    for _ = 1, 5 do frame(c, 0.1) end
+    local qids, changes, was = {}, 0, nil
+    local from, to = { -852, -517 }, { 470, -700 }
+    for k = 0, 34 do
+      local f = k / 34
+      walkTo(c, from[1] + (to[1] - from[1]) * f, from[2] + (to[2] - from[2]) * f)
+      for _ = 1, 6 do frame(c, 0.1) end
+      QB.Model.Finish(); Mini.Place()
+      local t = A.t
+      assert(t and t.obj and (t.qid == 500 or t.qid == 504), "step " .. k .. ": an objective's spot: " .. tostring(t and t.name))
+      assert(Mini.aim and Mini.aim.name == t.name, "step " .. k .. ": the minimap leads there too")
+      if was and t.qid ~= was then changes = changes + 1 end
+      was = t.qid
+      qids[t.qid] = true
+    end
+    assert(changes == 0 and qids[504] and not qids[500], "one quest all the way, the mages' (the nearer at Southshore): " .. changes .. " changes")
+    -- an ogre slain at the end of the walk: still the mages' spot
+    c.objectives[500][1].numFulfilled = 1
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 6 do frame(c, 0.1) end
+    QB.Model.Finish(); Mini.Place()
+    assert(A.t.obj and A.t.qid == 504, "an ogre slain: still the mages' spot: " .. tostring(A.t.name))
+    D.SPOT[500], D.SPOT[504] = saveSpot[1], saveSpot[2]
+    D.SREQ[500], D.SREQ[504] = saveReq[1], saveReq[2]
+  end }
+
+  -- the flight paths you know: once the client says which, the planner flies only those (as the arrow does). Near Alterac
+  -- the flight master you fly from is Southshore's, not Chillwind Camp's you never found, and the planner's minutes to
+  -- Stormwind are the arrow's way's
+  RCASES[#RCASES + 1] = { "the planner flies the flight paths you know", function()
+    local c = hillsClient("Rfly", { { 7, 0 } })
+    local QB, TV, M = c.QB, c.QB.Travel, c.QB.Model
+    c.taxiKnown = { [2] = true, [14] = true } -- Stormwind and Southshore
+    local f = TV.frame
+    f.__scripts.OnEvent(f, "PLAYER_ENTERING_WORLD"); frame(c, 3.1)
+    assert(M.Place("A", 0, 203, -818).hub == 21 and TV.Partial("A"), "flight paths read, Chillwind Camp's not known: Southshore's is the one to fly from")
+    local sw = hubOf(c, "Stormwind")
+    local here, swPlace = M.Place("A", 0, 203, -818), M.Place("A", 0, sw[3] + 20, sw[4])
+    local plan = TV.Route({ c = 0, wx = 203, wy = -818 }, { name = "Stormwind", c = 0, wx = sw[3] + 20, wy = sw[4] }, TV.Opts("route"))
+    local mins = M.Between(here, swPlace, "A", M.Factor(false))
+    assert(plan and math.abs(mins - plan.min) < 1.5, string.format("the planner's minutes to Stormwind are the arrow's: %.1f and %.1f", mins, plan and plan.min or -1))
+    c.taxiKnown = nil
+  end }
+
+  -- /qb trace: opt-in, a ring of 200 lines in the saved file, the last 30 printed, cleared when switched off
+  RCASES[#RCASES + 1] = { "/qb trace", function()
+    local c = hillsClient("Rtrace", { { 500, 1 }, { 501, 1 } })
+    local QB, env = c.QB, c.env
+    assert(not QB.tracing and env.QuestBankDB.trace == nil, "off by default")
+    env.SlashCmdList.QUESTBANK("trace on")
+    assert(QB.tracing and env.QuestBankDB.trace.on, "on")
+    QB.Arrow:Set(true)
+    for _ = 1, 5 do frame(c, 0.1) end
+    -- Southshore's quest handed in: the route goes to Tarren Mill
+    c.log, c.done[500] = { { 501, 1 } }, true
+    c.ev(QB.eventFrame, "QUEST_TURNED_IN", 500, 1150, 0)
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 10 do frame(c, 0.1) end
+    QB.Model.Finish()
+    for _ = 1, 5 do frame(c, 0.1) end
+    local lines = env.QuestBankDB.trace.lines
+    local all = table.concat(lines, "\n")
+    assert(all:find("re-plan", 1, true) and all:find("your quests or their state", 1, true) and all:find("target: ", 1, true), "a re-plan and why, the target:\n" .. all)
+    for i = 1, 260 do QB.Trace("line %d", i) end
+    assert(#lines == 200 and lines[200]:find("line 260$"), "the last 200 kept")
+    c.chat = {}
+    env.SlashCmdList.QUESTBANK("trace print")
+    assert(#c.chat == 31 and c.chat[#c.chat]:find("line 260"), "print: a header and the last 30: " .. #c.chat)
+    -- a loading screen: noted as a jump alone (the re-plan line says whether one followed: Core.lua)
+    local T = QB.Target
+    T.frame.__scripts.OnEvent(T.frame, "PLAYER_ENTERING_WORLD")
+    assert(lines[#lines]:find("a jump in place %(a loading screen%)$"), "a jump, noted as such: " .. lines[#lines])
+    env.SlashCmdList.QUESTBANK("trace off")
+    assert(not QB.tracing and env.QuestBankDB.trace == nil, "off: cleared")
+  end }
+
+  -- Zephras Isle, Forever's own starting zone, lies off the two continents on a world of its own (map 2991 under its
+  -- zone map 2521). 5.4.3 placed nothing there: Data.lua gave its 56 NPCs continent -1, as inside an instance, so the
+  -- 120 quests handed in there were left out of Now, Available and Highest XP (and filed under "Other quests" where
+  -- they showed), the route could not place them, and the arrow, the minimap and the minutes had nothing to go on. A
+  -- level-5 character on the isle: the client places it as Data.lua does, its quests are on a card of their own with
+  -- minutes, a hand-in there is routed, and the arrow and the minimap lead to it. Inside a dungeon nothing is placed,
+  -- as before
+  local ISLE = { minx = 1247.917, maxx = 4956.25, miny = -1331.25, maxy = 4231.25 } -- UiMapAssignment's, map 2521
+  local function isleClient(name, log, done)
+    local c = newClient({ name = name, level = 5, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = log, done = done or {}, world = { 2991, 3200, 1650 }, map = 2521, bagSlots = {}, bind = "Shen'dar Village" })
+    local env = c.env
+    c.me = { wx = 3200, wy = 1650 }
+    local function toMap(wx, wy) return (ISLE.maxy - wy) / (ISLE.maxy - ISLE.miny), (ISLE.maxx - wx) / (ISLE.maxx - ISLE.minx) end
+    env.C_Map.GetBestMapForUnit = function() return 2521 end
+    env.MapUtil.GetDisplayableMapForPlayer = function() return 2521 end
+    env.C_Map.GetPlayerMapPosition = function(m)
+      if m ~= 2521 then return nil end
+      local x, y = toMap(c.me.wx, c.me.wy)
+      return { x = x, y = y, GetXY = function(self) return self.x, self.y end }
+    end
+    env.C_Map.GetMapPosFromWorldPos = function(cont, pos, m)
+      if cont ~= 2991 or m ~= 2521 then return nil end
+      return m, env.CreateVector2D(toMap(pos.x, pos.y))
+    end
+    env.C_Map.GetMapRectOnMap = function() return nil end
+    env.IsInInstance = function() return false, "none" end
+    login(c)
+    return c
+  end
+  RCASES[#RCASES + 1] = { "Zephras Isle at level 5", function()
+    -- Foul Matriarch done (Aetheen of the Gales takes it, 900 yards north), Al'Aketh Thugs under way, a quest of Elwynn's
+    -- done too (handed in across the sea, which the planner knows no way to)
+    local c = isleClient("Isle", { { 92470, 1 }, { 92544, 0 }, { 7, 1 } })
+    local QB, D, M, UI, A, Mini = c.QB, c.QB.Data, c.QB.Model, c.QB.UI, c.QB.Arrow, c.QB.Mini
+    local function npc(name) for i, n in ipairs(D.NPC) do if n[1] == name and n[2] == 2521 then return i, n end end end
+    local ai, an = npc("Aetheen of the Gales")
+    local w = M.World(2521, an[3], an[4])
+    assert(an[5] == 2991 and w and w.c == 2991 and math.abs(w.wx - an[6]) < 2 and math.abs(w.wy - an[7]) < 2,
+      "the client and Data.lua place the isle alike, on its own world: " .. tostring(w and w.c))
+    local me = QB.API.WorldPosition()
+    assert(me and me.c == 2991 and math.abs(me.wx - 3200) < 1, "where you stand on the isle")
+    local q = QB.Quest.Get(92470)
+    assert(q.cat and q.cat.name == "Zephras Isle" and q.cat.key ~= "misc" and not q.turn.inside, "the isle's quests on its own card, not Other quests, and not inside")
+    c.instWorld = { [1581] = true }
+    assert(M.World(1581, 50, 50) == nil, "a dungeon's map: nothing placed, as before")
+    c.instWorld = nil
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); frame(c, 1); QB.Model.Finish(); frame(c, 1)
+    QB:Recompute(true)
+    -- the route: Aetheen first, walked to from where you stand; Elwynn after, across the sea: by the hearthstone (the
+    -- planner's, an inn you bind first), or with no way known and no minutes made up for it
+    local r = QB.routeNow
+    local l1 = r and r.legs[1]
+    assert(r and r.fromHere and l1 and l1.stop.c == 2991 and l1.stop.npcs[1] == ai and l1.kind == "foot" and l1.travel > 1 and l1.travel < 10 and #r.unplaced == 0,
+      "the hand-in on the isle is routed, walked to from you: " .. tostring(l1 and l1.stop.name) .. ", " .. tostring(l1 and l1.kind) .. " " .. tostring(l1 and l1.travel))
+    local l2 = r.legs[2]
+    assert(#r.legs == 2 and l2.stop.c == 0 and ((l2.kind == "none" and l2.late) or l2.kind == "hearth") and r.t < 60,
+      string.format("then Elwynn, after the isle: %s by %s, %.1f min in all", tostring(l2 and l2.stop.name), tostring(l2 and l2.kind), r.t))
+    -- the hearthstone not ready: no way to Elwynn known from the isle. That leg counts no minutes (the route's own stay
+    -- the isle's), comes after the isle and reads so on the Route page
+    local function fake(id, npc) return { q = { id = id, turnIdx = npc, lvl = 5, base = 500, mult = 1, name = "Q" .. id }, st = { code = "banked" } } end
+    local rr = M.Plan({ fake(990101, QB.Quest.Get(7).turnIdx), fake(990102, ai) },
+      { level = 5, xp = 0, goal = "route", fac = "A", start = { c = 2991, wx = 3200, wy = 1650 }, mounted = false, noHearth = true })
+    assert(#rr.legs == 2 and rr.legs[1].stop.c == 2991 and rr.legs[2].kind == "none" and rr.legs[2].late and rr.legs[2].travel == 0 and rr.t < 30,
+      string.format("no way known: %s by %s, %.1f min in all", tostring(rr.legs[2] and rr.legs[2].stop.name), tostring(rr.legs[2] and rr.legs[2].kind), rr.t))
+    local keep, keepPlan = QB.routeNow, QB.routePlan
+    QB.routeNow, QB.routePlan = rr, rr -- (questing, the page shows the planned route)
+    UI:Open(3); UI:Refresh()
+    local said
+    for _, l in ipairs(UI.views[3].legs.items) do if l:IsShown() and l.travel:GetText() == "No known way there" then said = true end end
+    assert(said, "the Route page: No known way there")
+    QB.routeNow, QB.routePlan = keep, keepPlan
+    -- the minutes: the isle's givers walked to, in Available's rows and the Highest XP finder
+    local cand
+    for _, cc in ipairs(UI:Candidates(nil, 5)) do if cc.id == 92472 then cand = cc end end
+    assert(cand and cand.mins and cand.mins > 0 and cand.mins < 15 and not cand.waste, "The Next Step: a candidate with its minutes on foot: " .. tostring(cand and cand.mins))
+    -- Now and Available: a Zephras Isle card with minutes, no isle quest under Other quests
+    for _, tab in ipairs({ 6, 2 }) do
+      UI:Open(tab); QB.Model.Finish(); UI:Refresh()
+      local isle, misc
+      for _, card in ipairs(UI.views[tab].cards.items) do
+        if card:IsShown() and card.title:GetText() == "Zephras Isle" then isle = card end
+        if card:IsShown() and card.title:GetText() == "Other quests" then misc = card end
+      end
+      assert(isle and (isle.where:GetText():find("min away", 1, true) or isle.where:GetText():find("you're here", 1, true)),
+        (tab == 6 and "Now" or "Available") .. ": a Zephras Isle card with minutes: " .. tostring(isle and isle.where:GetText()))
+      for _, row in ipairs(misc and misc.rows.items or {}) do
+        assert(not (row:IsShown() and row.q and row.q.cat and row.q.cat.name == "Zephras Isle"), "no isle quest under Other quests")
+      end
+    end
+    UI:Open(1); UI.findMode = "xp"; UI:Refresh()
+    local xpRow
+    for _, row in ipairs(UI.views[1].swaps) do if row:IsShown() and row.add and row.add.cat and row.add.cat.name == "Zephras Isle" then xpRow = row break end end
+    assert(xpRow and (xpRow.cutName:GetText():find(" · %d+ min") or xpRow.cutName:GetText():find(" · here", 1, true)),
+      "Highest XP: the isle's quests, with their trip: " .. tostring(xpRow and xpRow.cutName:GetText()))
+    -- the arrow and the minimap lead to the route's first stop, on the isle (questing, the planned route: Aetheen, or
+    -- the Thugs' hand-in or a spot of theirs), in yards and minutes
+    A:Set(true)
+    for _ = 1, 5 do frame(c, 0.1) end
+    Mini.Place()
+    local F = c.env.QuestBankArrow
+    local s1 = QB.Target.Route().legs[1].stop
+    assert(A.t and A.t.kind == "route" and A.t.c == 2991 and s1.c == 2991 and A.t.stop == s1.name and F.dist:GetText():find("yards · %d+ min$"),
+      "the arrow points at the isle's stop: " .. tostring(A.t and A.t.name) .. " | " .. tostring(F.dist:GetText()))
+    assert(Mini.aim and Mini.aim.name == A.t.name, "the minimap leads there too: " .. tostring(Mini.aim and Mini.aim.name))
+    local pinned = false
+    for _, d in ipairs(Mini.ListCached()) do
+      local dw = d.wx and d or (d.m and M.World(d.m, d.x, d.y))
+      if dw and dw.c == 2991 then pinned = true end
+    end
+    assert(pinned, "and pins the isle's stop and spots on the minimap")
+    -- the Map page on the isle's map, nothing amiss
+    UI:Open(8)
+    for _ = 1, 3 do frame(c, 0.1) end
+    QB.MapPage.Tick(1)
+    assert(QB.MapPage.canvas:GetMapID() == 2521, "the Map page shows the isle")
+    UI.findMode = nil
+  end }
+
+  -- The review of 5.4.4 (each case below failed on the files before this round):
+  -- the world map lists only the flight paths you found, and you know none on your land (only Theramore's, across the
+  -- sea): the planner found no flight master to start from, and the route, from Southshore, started at Tarren Mill
+  local function onlyFound(c)
+    local all = c.env.C_TaxiMap.GetTaxiNodesForMap
+    c.env.C_TaxiMap.GetTaxiNodesForMap = function(m)
+      local out = {}
+      for _, e in ipairs(all(m)) do if not e.isUndiscovered then out[#out + 1] = e end end
+      return out
+    end
+  end
+  RCASES[#RCASES + 1] = { "flight paths known only off your land: the route starts from you", function()
+    local c = hillsClient("Roff", { { 500, 1 }, { 501, 1 } })
+    local QB, TV, M = c.QB, c.QB.Travel, c.QB.Model
+    onlyFound(c)
+    c.taxiKnown = { [hubOf(c, "Theramore")[6]] = true }
+    local f = TV.frame
+    f.__scripts.OnEvent(f, "PLAYER_ENTERING_WORLD"); frame(c, 3.1)
+    QB:Recompute(true); QB.Model.Finish()
+    local r = QB.routeNow
+    assert(TV.tells and TV.Partial("A") and M.Place("A", 0, -852, -517).hub > 0, "Theramore alone known: a place to start from all the same")
+    assert(r.fromHere and r.legs[1] and r.legs[1].kind ~= "start" and QB.routePlan.fromHere and QB.UI.Here(),
+      "the route from where you stand: " .. tostring(r.legs[1] and r.legs[1].kind) .. " to " .. tostring(r.legs[1] and r.legs[1].stop.name))
+    c.taxiKnown = nil
+  end }
+
+  -- the minimap's blue quest area: the quest the one target leads to (5.4.4 as first built showed the first quest of
+  -- your log at stop 1, the ogres' while the arrow led to the mages')
+  RCASES[#RCASES + 1] = { "the minimap's quest area is the target's quest", function()
+    local c = hillsClient("Rarea", { { 500, 0 }, { 504, 0 } })
+    local QB, D, A, Mini, MV = c.QB, c.QB.Data, c.QB.Arrow, c.QB.Mini, c.QB.MiniView
+    local function spot(wx, wy) local t = HILLS[1416]; return string.format("%d,%d", math.floor((wy - t.wy0) / t.wyx * 10 + 0.5), math.floor((wx - t.wx0) / t.wxy * 10 + 0.5)) end
+    local saveSpot, saveReq = { D.SPOT[500], D.SPOT[504] }, { D.SREQ[500], D.SREQ[504] }
+    D.SPOT[500] = "k,1,1416," .. spot(420, -700) .. ",20,c"
+    D.SPOT[504] = "k,1,1416," .. spot(470, -790) .. ",20,c"
+    D.SREQ[500], D.SREQ[504] = "1:10", "1:10"
+    c.objectives = { [500] = { { text = "Crushridge Ogre slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } },
+                     [504] = { { text = "Crushridge Mage slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } } }
+    standAt(c, 0, 470, -790); c.me.wx, c.me.wy = 470, -790
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 10 do frame(c, 0.1) end
+    QB.Model.Finish()
+    A:Set(true)
+    for _ = 1, 5 do frame(c, 0.1) end
+    Mini.Place()
+    assert(A.t and A.t.obj and A.t.qid == 504 and MV.AreaQuest() == 504, "the mages' spot, and their area: " .. tostring(MV.AreaQuest()))
+    D.SPOT[500], D.SPOT[504] = saveSpot[1], saveSpot[2]
+    D.SREQ[500], D.SREQ[504] = saveReq[1], saveReq[2]
+  end }
+
+  -- a stroke softened only where it crosses another quest's icon: walking sideways past an icon beside the stroke from
+  -- you, its first part (from you) stays at full strength (5.4.4 as first built dimmed the whole stroke as long as any
+  -- icon lay on it, and it came back at the band's edge)
+  RCASES[#RCASES + 1] = { "the stroke from you, softened only where it crosses an icon", function()
+    local c = hillsClient("Rsoft", { { 500, 0 }, { 7, 0 } })
+    local QB, D, A, Mini, MR = c.QB, c.QB.Data, c.QB.Arrow, c.QB.Mini, c.QB.MiniRoute
+    local function spot(wx, wy) local t = HILLS[1416]; return string.format("%d,%d", math.floor((wy - t.wy0) / t.wyx * 10 + 0.5), math.floor((wx - t.wx0) / t.wxy * 10 + 0.5)) end
+    local saveSpot, saveReq = { D.SPOT[500], D.SPOT[7], D.SPOT[504] }, { D.SREQ[500], D.SREQ[7] }
+    D.SPOT[500] = "k,1,1416," .. spot(450, -700) .. ",20,c"
+    D.SPOT[7] = "k,1,1416," .. spot(260, -697) .. ",20,c"
+    D.SPOT[504] = nil
+    D.SREQ[500], D.SREQ[7] = "1:10", "1:10"
+    c.objectives = { [500] = { { text = "Crushridge Ogre slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } },
+                     [7] = { { text = "Kobold Vermin slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } } }
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 10 do frame(c, 0.1) end
+    QB.Model.Finish()
+    A:Set(true)
+    walkTo(c, 200, -700)
+    for _ = 1, 10 do frame(c, 0.1) end
+    QB.Model.Finish(); Mini.Place()
+    assert(A.t and A.t.obj and A.t.qid == 500, "the target: the ogres' spot, the kobolds' icon on the way")
+    -- each look: the alphas of the stroke from you (its parts: the lines of stroke 1)
+    local full, soft, dimmedWhole = QB:Settings().zmAlpha or 1, 0, 0
+    for k = 0, 16 do
+      walkTo(c, 200, -760 + k * 7.5)
+      frame(c, 0.05)
+      Mini.Place()
+      local most, least = 0, 1
+      for i = 1, MR.route.used do
+        local l = MR.route.lines[i]
+        -- (before 5.4.4's review a stroke was one line: the first)
+        if l.of == 1 or (l.of == nil and i == 1) then most, least = math.max(most, l.__vertex[4]), math.min(least, l.__vertex[4]) end
+      end
+      if most < full - 1e-6 then dimmedWhole = dimmedWhole + 1 end
+      if least < full - 1e-6 then soft = soft + 1 end
+    end
+    assert(dimmedWhole == 0, "the stroke from you never dimmed whole: " .. dimmedWhole .. " looks")
+    assert(soft > 0, "and softened where it crosses the kobolds' icon")
+    D.SPOT[500], D.SPOT[7], D.SPOT[504] = saveSpot[1], saveSpot[2], saveSpot[3]
+    D.SREQ[500], D.SREQ[7] = saveReq[1], saveReq[2]
+  end }
+
+  for _, case in ipairs(RCASES) do
+    case[2]()
+    print("5.4.4 " .. case[1] .. ": ok")
+  end
+end)()
+
+----------------------------------------------------------------------------
+-- 5.4.4: the owner's play test of 5.4.3 (2026-10-20, a level-21 mage), and what he asked for after it. Each case below
+-- failed on the files before this round (run them alone against an older QuestBank: the cases are in B3CASES, in
+-- order, after the harness's helpers, with HERE pointed there) and passes now:
+--   a hand-in in reach first, whatever its value ("it told me to go to Booty Bay despite standing a few meters from a
+--   quest hand-in"); a click shows a place for now and changes no route ("all it takes for me to break routing is
+--   clicking a quest"); QuestBank's own arrow by default again; Accept for me a choice; the sparkle without health
+--   bars; no light on a trainer you can't use; thinner strokes under the quest icons; the missing-buffs banner kept
+--   while you use it; sellers of camp goods learned; Skip this quest; flight paths per character; quest icons half
+--   size; the golden path joined ahead of you
+----------------------------------------------------------------------------
+;(function()
+  local B3CASES = {}
+  -- a level-21 human mage of the Alliance, questing (no cap, no lock), standing at (wx, wy) on the Eastern Kingdoms
+  local function mage(name, log, done, wx, wy, saved)
+    local c = newClient({ name = name, level = 21, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = log or {}, done = done or {}, world = { 0, wx or -9200, wy or -2150 }, map = 1433, bagSlots = {}, bind = "Lakeshire" })
+    if saved then c.env.QuestBankDB = saved end
+    login(c)
+    return c
+  end
+  -- one frame of play: the clock, the timers due, every shown frame's OnUpdate once
+  local function frame(c, dt)
+    c.clock = c.clock + dt
+    table.sort(c.timers, function(a, b) return a.t < b.t end)
+    while c.timers[1] and c.timers[1].t <= c.clock do table.remove(c.timers, 1).f() end
+    for _, f in ipairs(c.frames) do
+      local u = f.__scripts.OnUpdate
+      if u and f:IsVisible() then u(f, dt) end
+    end
+  end
+  local function settle(c)
+    c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 5 do frame(c, 0.1) end
+    c.QB.Model.Finish()
+    c.QB:Recompute(true)
+    c.QB.Model.Finish()
+    for _ = 1, 3 do frame(c, 0.1) end
+  end
+  local function said(c) return c.chat[#c.chat] or "" end
+  local function copy(t)
+    if type(t) ~= "table" then return t end
+    local o = {}
+    for k, v in pairs(t) do o[k] = copy(v) end
+    return o
+  end
+  -- the catalog's quests for a level-21 Alliance mage: pred(q, npc, xp) over each one with a hand-in NPC on a continent,
+  -- the lowest id first
+  local function catalog(c, pred)
+    local QB, D = c.QB, c.QB.Data
+    local ids = {}
+    for id in pairs(D.Q) do ids[#ids + 1] = id end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+      local q = QB.Quest.Get(id)
+      local n = q and q.turnIdx and q.turnIdx > 0 and D.NPC[q.turnIdx]
+      if n and n[5] == 0 and QB.Quest.ForMe(q) and not q.repeatable and not (q.turn and q.turn.inside) and (q.req or 1) <= 21 then
+        local xp = QB.Model.XpAt(q, 21)
+        if pred(q, n, xp) then return q, n end
+      end
+    end
+  end
+  local function line(c) return (c.QB.Model.CHEAP or 400) * c.QB.Scale(21) end
+
+  -- 1. a hand-in a few yards away comes first, whatever it pays; one the route passes goes as it passes; one that costs
+  -- a trip still goes last
+  B3CASES[#B3CASES + 1] = { "a hand-in in reach first, whatever its value", function()
+    local c = mage("Bone")
+    local QB, M, D = c.QB, c.QB.Model, c.QB.Data
+    local cheap, cn = catalog(c, function(q, n, xp) return n[2] == 1433 and xp > 0 and xp < line(c) end)
+    local rich, rn = catalog(c, function(q, n, xp) return n[2] == 1436 and xp >= 4 * line(c) end)
+    assert(cheap and rich, "a hand-in worth little in Redridge and one worth a lot in Westfall")
+    -- the mage stands 10 yards from the cheap one's NPC, both quests done
+    c.log = { { cheap.id, 1 }, { rich.id, 1 } }
+    standAt(c, 0, cn[6] + 10, cn[7])
+    settle(c)
+    local r = QB.routeNow
+    assert(r and r.legs[1] and r.legs[1].stop.npcs[1] == cheap.turnIdx and r.legs[2] and r.legs[2].stop.npcs[1] == rich.turnIdx,
+      "the route hands the near one in first: " .. tostring(r and r.legs[1] and r.legs[1].stop.name))
+    local t = QB.Target.Get(QB.API.WorldPosition())
+    assert(t and not t.obj and t.qid == cheap.id and (t.label or ""):find("^Hand in ") and (t.label or ""):find(" here$"),
+      "the one target: Hand in " .. cheap.name .. " here: " .. tostring(t and t.label))
+    QB.Arrow:Set(true)
+    for _ = 1, 3 do frame(c, 0.1) end
+    local F = c.env.QuestBankArrow
+    assert(F.name:GetText() == t.label or F.name:GetText():find("^Hand in here: "), "the arrow's label says so (a long name: the words first): " .. tostring(F.name:GetText()))
+    -- the planner on its own: a stop in reach first; a cheap one the route passes (under a minute's detour) handed in on
+    -- the way; a cheap one off the way (a trip of its own) last
+    local function fake(id, npc, base) return { q = { id = id, turnIdx = npc, lvl = 21, base = base, mult = 1, name = "Q" .. id }, st = { code = "banked" } } end
+    -- three NPCs in a line east of Lakeshire's flight master, out of town (400, 650 and 900 yards; the middle one 5
+    -- yards off the line), made for the case, and one far off (the Westfall hand-in above)
+    local lh, lhi = hubOf(c, "Lakeshire")
+    local walkOf = function(d) return d * M.DETOUR / M.RUN / 60 end
+    local base = #D.NPC
+    for k, d in ipairs({ 400, 650, 900 }) do
+      D.NPC[base + k] = { "Case NPC " .. k, 1433, 50, 50, 0, lh[3], lh[4] - d + (k == 2 and 5 or 0), lhi, walkOf(d), 0, 0 }
+    end
+    local a, mid, b = base + 1, base + 2, base + 3
+    local far = rn and rich.turnIdx
+    local na = D.NPC[a]
+    local start = { c = 0, wx = na[6] + 5, wy = na[7] }
+    local entries = { fake(990301, a, 3000), fake(990302, b, 3000), fake(990303, mid, 50), fake(990304, far, 50) }
+    local plan = M.Plan(entries, { level = 21, xp = 0, goal = "hour", fac = "A", start = start, mounted = false })
+    local order = {}
+    for _, l in ipairs(plan.legs) do order[#order + 1] = l.stop.npcs[1] == a and "near" or l.stop.npcs[1] == b and "far end" or l.stop.npcs[1] == mid and "passed" or "trip" end
+    for k = 1, 3 do D.NPC[base + k] = nil end
+    assert(table.concat(order, ",") == "near,passed,far end,trip", "in reach first, the one passed on the way, then the far end; the cheap trip last: " .. table.concat(order, ","))
+  end }
+
+  -- 2. a click shows the place on the arrow for now; reached and handed in, the route is the one a player who never
+  -- clicked has. And on the world map (QuestBank's layer) and the Map page: a plain click shows, a labelled Shift-click
+  -- adds or takes out
+  B3CASES[#B3CASES + 1] = { "a click shows it for now; the route as if it never happened", function()
+    local q, n = nil, nil
+    local function twin(name)
+      local c = mage(name)
+      if not q then
+        q, n = catalog(c, function(qq, nn, xp) return nn[2] == 1433 and xp >= 1000 end)
+        assert(q, "a quest handed in in Redridge")
+      end
+      local other = catalog(c, function(qq, nn, xp) return qq.id ~= q.id and nn[2] == 1433 and xp >= 1000 and qq.turnIdx ~= q.turnIdx end)
+      c.log = { { q.id, 1 }, { other.id, 1 } }
+      standAt(c, 0, n[6] + 400, n[7] + 300)
+      settle(c)
+      c.QB.Arrow:Set(true)
+      for _ = 1, 3 do frame(c, 0.1) end
+      return c
+    end
+    local clicked, plain = twin("Clicker"), twin("Plain")
+    local QB, A, F = clicked.QB, clicked.QB.Arrow, clicked.env.QuestBankArrow
+    local plan0 = copy(QB:Plan())
+    QB.UI.QuestClick(q, QB:Status(q), "LeftButton")
+    frame(clicked, 0.1)
+    local t = A.Target()
+    assert(A.Mode() == "route" and t and t.temp and t.qid == q.id and t.what == "turn", "a click: the hand-in shown for now, the arrow's choice kept on the route")
+    assert(F.name:GetText():find("^Showing ") and F.hint:IsShown() and F.hint:GetText() == "Right-click: back to your route", "its label: Showing, and the way back: " .. F.name:GetText())
+    for _, k in ipairs({ "add", "cut", "skip" }) do assert(next(QB:Plan()[k] or {}) == next(plan0[k] or {}), "the click changed no plan: " .. k) end
+    -- reached: it goes a few seconds later, and the arrow says it is back on the route
+    standAt(clicked, 0, n[6] + 3, n[7])
+    for _ = 1, 60 do frame(clicked, 0.1) end
+    assert(not A.temp and A.Target() and A.Target().kind == "route" and F.hint:GetText() == "Back to your route", "reached: back on the route, said once")
+    -- handed in, by both
+    for _, c in ipairs({ clicked, plain }) do
+      for i = #c.log, 1, -1 do if c.log[i][1] == q.id then table.remove(c.log, i) end end
+      c.done[q.id] = true
+      c.ev(c.QB.eventFrame, "QUEST_TURNED_IN", q.id, 1000, 0)
+      standAt(c, 0, n[6] + 3, n[7])
+      settle(c)
+    end
+    local function route(c)
+      local out = {}
+      for _, l in ipairs(c.QB.routeNow.legs) do out[#out + 1] = l.stop.name end
+      return table.concat(out, " > ")
+    end
+    assert(route(clicked) == route(plain) and #clicked.QB.routeNow.legs > 0, "the route as a player's who never clicked: " .. route(clicked) .. " / " .. route(plain))
+    assert(A.Mode() == "route" and A.Target().kind == "route" and A.Target().name == plain.QB.Arrow.Target().name, "the arrow on the route, as the other's")
+    -- clicked again, then handed in without getting there: over at once
+    local other = clicked.log[1][1]
+    local oq = QB.Quest.Get(other)
+    QB.UI.QuestClick(oq, QB:Status(oq), "LeftButton")
+    assert(A.temp and A.temp.qid == other, "shown for now")
+    clicked.log = {}
+    clicked.done[other] = true
+    settle(clicked)
+    assert(not A.temp and A.Target() == nil or (A.Target() and not A.Target().temp), "its quest handed in: over, without getting there")
+    -- the world map's quest icons and the Map page's (QuestMap.lua's click, one for both): a plain click shows, Shift adds
+    local QM = QB.QuestMap
+    local give
+    for _, d in ipairs(QM:Build(1433, false)) do if d.kind == "give" and d.quests and d.quests[1] then give = give or d end end
+    assert(give, "a ! on Redridge's map")
+    local gid = give.quests[1].id
+    clicked.shift = false
+    QM.ClickForTest(give, "LeftButton")
+    assert(A.temp and A.temp.what == "give" and not QB:IsAdded(gid) and A.Mode() == "route", "a plain click on a !: shown for now, and nothing more")
+    clicked.shift = true
+    QM.ClickForTest(give, "LeftButton")
+    assert(QB:IsAdded(gid) and said(clicked):find("Added to your route", 1, true), "Shift-click: Add to my route, said so")
+    QM.ClickForTest(give, "LeftButton")
+    assert(not QB:IsAdded(gid) and said(clicked):find("Out of your route", 1, true), "Shift-click again: out of it")
+    clicked.shift = false
+    lines = {}
+    QM.IconMethods.OnMouseEnter({ data = give, layer = { world = true } })
+    local tip = table.concat(lines, "\n")
+    assert(tip:find("<Click to show it on the arrow for now>", 1, true) and tip:find("<Shift-click: add to my route>", 1, true), "its tooltip says both: " .. tip)
+    -- the route's own pins (Pins.lua, on the world map and the Map page): a click shows, nothing more
+    local P = QB.Pins
+    local pin
+    for _, d in ipairs(P.list or {}) do if d.num then pin = pin or d end end
+    if pin then
+      local before = copy(QB:Plan())
+      P.Pin.OnMouseClickAction({ data = pin }, "LeftButton")
+      assert(A.temp and A.Mode() == "route" and next(QB:Plan().skip) == next(before.skip or {}), "a route pin: shown for now, nothing more")
+    end
+    -- right-click while shown: back to the route at once
+    F.__scripts.OnClick(F, "RightButton")
+    assert(not A.temp and A.Target() == nil or not A.Target().temp, "right-click: back")
+  end }
+
+  -- 3. QuestBank's own arrow is the default again; the compass an option, kept by a save that chose it
+  B3CASES[#B3CASES + 1] = { "QuestBank's own arrow by default; the compass kept where chosen", function()
+    local function arrowOf(c)
+      c.QB.Arrow:Set(true)
+      for _ = 1, 3 do frame(c, 0.1) end
+      return c.env.QuestBankArrow
+    end
+    local fresh = mage("Fresh")
+    local F = arrowOf(fresh)
+    assert(not fresh.QB.Arrow.QT() and fresh.QB:Settings().arrowStyle == "questbank" and F.arrow.__atlas == "npe_arrowup" and not F.dial:IsShown(),
+      "a fresh save: QuestBank's arrow (the game's tutorial arrow, coloured by your heading)")
+    local old = mage("Old", nil, nil, nil, nil, { settings = { markerStyle = "questtrail", arrow = true, compassSize = 48 } })
+    assert(not old.QB.Arrow.QT(), "a 5.4.3 save that never chose: QuestBank's arrow")
+    local chose = mage("Chose", nil, nil, nil, nil, { settings = { arrowStyle = "compass", arrow = true } })
+    local CF = arrowOf(chose)
+    assert(chose.QB.Arrow.QT() and CF.dial:IsShown() and not CF.arrow:IsShown(), "a save that chose the compass keeps it")
+    -- the arrow's right-click menu and Settings switch it, each in one place
+    F.__scripts.OnClick(F, "RightButton")
+    local Mn = fresh.env.QuestBankMenu
+    local look
+    for _, b in ipairs(Mn.items) do if b:IsShown() and b.label:GetText() == "Look: QuestBank's arrow" then look = b end end
+    assert(look, "the menu names the look")
+    look.__scripts.OnClick(look)
+    assert(fresh.QB.Arrow.QT() and fresh.QB:Settings().arrowStyle == "compass", "the menu: the compass")
+    fresh.QB.UI:Open(5); fresh.QB.UI:Refresh()
+    local v5 = fresh.QB.UI.views[5]
+    assert(v5.arrowStyle:GetText() == "Compass", "Settings says so")
+    v5.arrowStyle.__scripts.OnClick(v5.arrowStyle)
+    assert(not fresh.QB.Arrow.QT() and v5.arrowStyle:GetText() == "QuestBank's", "Settings: QuestBank's again")
+  end }
+
+  -- 4. Accept for me: Off for a new install; a save that had it on takes Quests worth taking; grey and low-value
+  -- quests left; a quest on your route taken; one outside it taken or left as you choose
+  B3CASES[#B3CASES + 1] = { "Accept for me is a choice", function()
+    local c = mage("Acceptor", nil, nil, nil, nil, { settings = { autoAccept = true } })
+    local QB, Au = c.QB, c.QB.Auto
+    local low = catalog(c, function(q, n, xp) return xp > 0 and xp < line(c) and QB:Status(q).code == "todo" end)
+    local worth = catalog(c, function(q, n, xp) return xp >= 2 * line(c) and QB:Status(q).code == "todo" end)
+    local other = catalog(c, function(q, n, xp) return q.id ~= worth.id and xp >= 2 * line(c) and QB:Status(q).code == "todo" end)
+    assert(low and worth and other, "a quest worth little and two worth taking")
+    -- the quest window, as the game opens it
+    local function offered(id, trivial)
+      c.auto = {}
+      c.window = { id = id, xp = 0, title = "Q" .. id }
+      c.env.C_QuestLog.IsQuestTrivial = function() return trivial or false end
+      c.ev(QB.eventFrame, "QUEST_DETAIL")
+      tick(c, 1)
+      return c.auto[#c.auto] == "AcceptQuest " .. id
+    end
+    assert(not offered(low.id), "a save that had it on, a quest worth little at your level: left to you (5.4.3 took it)")
+    assert(QB:Settings().autoAccept == "worth", "that save: Quests worth taking")
+    local fresh = mage("Newbie")
+    assert(fresh.QB:Settings().autoAccept == "off", "a new install: off")
+    assert(not offered(worth.id, true), "grey: left to you")
+    assert(offered(worth.id), "worth taking: taken")
+    QB:Settings().autoAcceptOther = "leave"
+    assert(not offered(worth.id), "outside your route, with Leave the window to me: left")
+    QB:SetAdded(worth.id, true)
+    assert(offered(worth.id), "on your route: taken")
+    QB:SetAdded(low.id, true)
+    assert(offered(low.id), "on your route, though worth little: you chose it, taken")
+    QB:Settings().autoAccept = "route"
+    QB:Settings().autoAcceptOther = "accept"
+    assert(not offered(other.id) and offered(worth.id), "Quests on my route: only those")
+    QB:Settings().autoAccept = "off"
+    assert(not offered(worth.id), "Off: none")
+    -- Settings and the minimap's menu say it, a line each
+    QB.UI:Open(5); QB:Settings().autoAccept = "worth"; QB.UI:Refresh()
+    local v5 = QB.UI.views[5]
+    assert(v5.autoAccept:GetText() == "Accept for me: Quests worth taking" and v5.autoOther:GetText() == "Outside my route: Accept them" and v5.autoOther:IsEnabled(),
+      "Settings: " .. v5.autoAccept:GetText() .. " / " .. v5.autoOther:GetText())
+    c.env.C_QuestLog.IsQuestTrivial = nil
+  end }
+
+  -- 5. the sparkle without the health bars: the soft-interact nameplate left as the game has it; a 5.4.3 save that had
+  -- it changed gets it back; an option of its own, which Restore covers
+  B3CASES[#B3CASES + 1] = { "the sparkle without health bars", function()
+    local GAME = { SoftTargetInteract = "1", SoftTargetInteractArc = "0", SoftTargetInteractRange = "10", SoftTargetNameplateInteract = "0",
+                   SoftTargetIconInteract = "1", SoftTargetIconGameObject = "0", SoftTargetLowPriorityIcons = "0", SoftTargetIconEnemy = "0" }
+    local function pew(c) local f = c.QB.Glow.frame; f.__scripts.OnEvent(f, "PLAYER_ENTERING_WORLD") end
+    local fresh = mage("Sparky")
+    fresh.cvars = copy(GAME)
+    pew(fresh)
+    assert(fresh.cvars.SoftTargetInteract == "3" and fresh.cvars.SoftTargetIconGameObject == "1" and fresh.cvars.SoftTargetNameplateInteract == "0",
+      "the light on: its settings set, the health bars' nameplate left off")
+    -- a 5.4.3 save: the light had set the nameplate on, keeping the game's own Off to put back
+    local saved = { settings = { glow = { on = true, style = "sparkle", npcs = true, other = true, combat = false,
+      saved = { SoftTargetInteract = "1", SoftTargetInteractArc = "0", SoftTargetInteractRange = "10", SoftTargetNameplateInteract = "0",
+                SoftTargetIconGameObject = "0", SoftTargetLowPriorityIcons = "0" }, yours = {} } } }
+    local old = mage("Oldspark", nil, nil, nil, nil, saved)
+    old.cvars = copy(GAME, nil)
+    for k, v in pairs({ SoftTargetInteract = "3", SoftTargetInteractArc = "2", SoftTargetInteractRange = "15", SoftTargetNameplateInteract = "1",
+                        SoftTargetIconGameObject = "1", SoftTargetLowPriorityIcons = "1" }) do old.cvars[k] = v end
+    pew(old)
+    assert(old.cvars.SoftTargetNameplateInteract == "0" and old.cvars.SoftTargetInteract == "3" and said(old):find("no longer puts a health bar", 1, true),
+      "a 5.4.3 save: the nameplate back to the player's own Off, said once: " .. said(old))
+    assert(old.QB:Settings().glow.saved.SoftTargetNameplateInteract == nil, "and nothing kept for it")
+    -- the option: on, set; off, back; Restore puts back the player's own
+    old.QB.Glow.SetPlates(true)
+    assert(old.cvars.SoftTargetNameplateInteract == "1" and old.QB:Settings().glow.saved.SoftTargetNameplateInteract == "0", "Health bars on: set, the game's own kept")
+    old.QB.Glow.SetPlates(false)
+    assert(old.cvars.SoftTargetNameplateInteract == "0", "off: back")
+    old.QB.Glow.SetPlates(true)
+    old.QB.Glow.Restore("button")
+    assert(old.cvars.SoftTargetNameplateInteract == "0" and old.cvars.SoftTargetInteract == "1", "Restore: the player's own values")
+    old.QB:Settings().glow.plates = false
+  end }
+
+  -- 6. the light picks its NPCs: a herbalist with two professions gets none on a herbalism trainer; a trainer she can use
+  -- lights; her class trainer while it has new spells
+  B3CASES[#B3CASES + 1] = { "no light on a trainer you can't use", function()
+    local c = mage("Herby")
+    local QB, Glow, env = c.QB, c.QB.Glow, c.env
+    local plate = env.CreateFrame("Frame")
+    local sub = "Herbalism Trainer"
+    env.C_TooltipInfo.GetUnit = function(unit) return { lines = { { leftText = c.soft and c.soft.name or "" }, { leftText = "<" .. sub .. ">" } } } end
+    local n = 0
+    local function at(name, subtitle)
+      sub, n = subtitle, n + 1
+      c.soft = { name = name, plate = plate, guid = string.format("Creature-0-4455-0-12-%d-0000A1B2C3", 9000 + n) }
+      Glow.Update()
+      return env.QuestBankGlow:IsShown() and Glow.kind
+    end
+    c.profs = { { "Herbalism", 150 }, { "Alchemy", 120 } }
+    assert(not at("Test Herbalist", "Herbalism Trainer"), "two professions, Herbalism far from its cap: no light on its trainer")
+    c.profs = { { "Herbalism", 290 }, { "Alchemy", 120 } }
+    assert(at("Test Herbalist", "Herbalism Trainer") == "npc", "a rank to train: lit")
+    c.profs = { { "Mining", 40 } }
+    assert(at("Test Herbalist", "Herbalism Trainer") == "npc", "one profession: a second to learn, lit")
+    assert(at("Test Cook", "Cooking Trainer") == "npc", "a secondary one not learned: lit")
+    assert(not at("Test Weaponmaster", "Weapon Master"), "not a trainer you use: no light")
+    -- the class's trainer: new spells at an even level (Classic's), until its window says when the next ones come
+    c.level = 22
+    assert(at("Test Mage", "Mage Trainer") == "npc", "the mage's trainer at 22: lit")
+    env.GetNumTrainerServices = function() return 2 end
+    env.GetTrainerServiceInfo = function(i) if i == 1 then return "Frostbolt", "used", 0, 20 end return "Fire Blast", "unavailable", 0, 24 end
+    env.IsTradeskillTrainer = function() return false end
+    local f = Glow.frame
+    f.__scripts.OnEvent(f, "TRAINER_SHOW")
+    assert(not at("Test Mage", "Mage Trainer"), "its window said the next spell is at 24: no light at 22")
+    c.level = 24
+    assert(at("Test Mage", "Mage Trainer") == "npc", "at 24: lit")
+    -- every other NPC: only when asked for
+    c.level = 21
+    assert(not at("Test Smith", "Weaponsmith"), "a vendor: no light")
+    QB:Settings().glow.everyNpc = true
+    assert(at("Test Smith", "Weaponsmith") == "npc", "Every other NPC too: white")
+    QB:Settings().glow.everyNpc = false
+    c.soft, c.profs = nil, nil
+  end }
+
+  -- 7. the strokes a quarter thinner (a width you set kept), under every quest icon on the Map page (its canvas orders
+  -- its pins as the world map does), a gap round each pin, softened over another icon
+  B3CASES[#B3CASES + 1] = { "thinner strokes under the quest icons", function()
+    local fresh = mage("Thin")
+    local set = fresh.QB:Settings()
+    assert(set.zmWidth == 6 and set.gpWidth == 6 and fresh.QB.MiniRoute.THICK == 6, "6 pixels, not 8")
+    local old = mage("Thick", nil, nil, nil, nil, { settings = { zmWidth = 8, gpWidth = 8 } })
+    assert(old.QB:Settings().zmWidth == 6 and old.QB:Settings().gpWidth == 6, "a save at the old default: the new one")
+    local own = mage("Own", nil, nil, nil, nil, { settings = { zmWidth = 10, gpWidth = 12 } })
+    assert(own.QB:Settings().zmWidth == 10 and own.QB:Settings().gpWidth == 12, "a width of your own: yours")
+    -- the Map page: its strokes' level under the offers' and the quests'
+    fresh.QB.UI:Open(8)
+    for _ = 1, 3 do frame(fresh, 0.1) end
+    local MP = fresh.QB.MapPage
+    local mgr = MP.canvas:GetPinFrameLevelsManager()
+    local blob, offer, quest = mgr:GetValidFrameLevel("PIN_FRAME_LEVEL_QUEST_BLOB"), mgr:GetValidFrameLevel("PIN_FRAME_LEVEL_QUEST_OFFER"), mgr:GetValidFrameLevel("PIN_FRAME_LEVEL_ACTIVE_QUEST")
+    assert(blob < offer and offer < quest, string.format("the strokes' level (%d) under the offers' (%d) and the quests' (%d)", blob, offer, quest))
+    -- drawn: three stops across Redridge's map with its ! icons about, the strokes' frame under every icon's; a sheet of
+    -- it for the layout page ("Map page: strokes under the quest icons")
+    local P = fresh.QB.Pins
+    local saveList = P.list
+    P.list = { { m = 1433, x = 20, y = 60, num = 1, name = "One", ids = {}, quests = {}, lines = {} },
+               { m = 1433, x = 50, y = 45, num = 2, name = "Two", ids = {}, quests = {}, lines = {} },
+               { m = 1433, x = 80, y = 60, num = 3, name = "Three", ids = {}, quests = {}, lines = {} } }
+    MP.Go(1433, "user")
+    MP.RefreshLayers()
+    local strokes = MP.lines.active[1]
+    local lowest
+    for _, layer in ipairs({ fresh.QB.QuestMap.pageProvider, P.pageProvider }) do
+      for _, f in ipairs(layer and layer.active or {}) do lowest = math.min(lowest or 1e9, f.__frameLevel or 0) end
+    end
+    assert(strokes and lowest and (strokes.__frameLevel or 0) < lowest, string.format("the strokes' frame (%s) under every icon (the lowest %s)", tostring(strokes and strokes.__frameLevel), tostring(lowest)))
+    if layouts and dumpLayout then layouts[#layouts + 1] = dumpLayout(fresh.QB.UI.frame, "Map page: strokes under the quest icons (5.4.4)") end
+    P.list = saveList
+    -- a stroke stops a gap short of the pins it joins, and is softened where it crosses another icon
+    local MR = fresh.QB.MiniRoute
+    local ctx = { frame = fresh.env.CreateFrame("Frame"), lines = {}, used = 0, r = 1000, square = true }
+    MR.Stroke(ctx, 0, 0, 100, 0, { 1, 1, 1 }, 4, 1, 16, 16)
+    local l = ctx.lines[1]
+    assert(math.abs(l.__start[3] - 11) < 1e-6 and math.abs(l.__stop[3] - 89) < 1e-6, "a gap of half the pin and 3 pixels at each end: " .. l.__start[3] .. ", " .. l.__stop[3])
+    local marks = { { x = 50, y = 2, r = 8 }, { x = 0, y = 0, r = 8 } }
+    assert(MR.Soften(0, 0, 100, 0, marks, 2, 2) == MR.SOFT and MR.Soften(0, 0, 100, 0, { marks[2] }, 1, 2) == 1,
+      "softened over an icon on its way, not over the one it starts at")
+  end }
+
+  -- 8. the missing-buffs banner: a click on one keeps the others, through the cast and the meal
+  B3CASES[#B3CASES + 1] = { "the missing-buffs banner kept while you use it", function()
+    local c = mage("Hungry")
+    local QB, env, Camp = c.QB, c.env, c.QB.Camp
+    c.known = { [1459] = true, [168] = true }
+    c.o.bagSlots = { { 2888, 1 } }
+    c.buffs = {}
+    local f = Camp.frame
+    local function ev(e, ...) f.__scripts.OnEvent(f, e, ...) end
+    c.resting = true; ev("PLAYER_ENTERING_WORLD")
+    c.resting = false; ev("PLAYER_UPDATE_RESTING")
+    local B = env.QuestBankBuffBanner
+    local function icons()
+      local out = {}
+      for i = 1, 6 do
+        local b = env["QuestBankBuff_" .. i]
+        if b and b:IsShown() then out[#out + 1] = b.state.key end
+      end
+      return table.concat(out, ",")
+    end
+    assert(B:IsShown() and icons() == "food,self1,self2", "left town: food, Arcane Intellect, Frost Armor: " .. icons())
+    -- Arcane Intellect clicked: its cast under way, 13 seconds on the banner's clock
+    local ai = env.QuestBankBuff_2
+    if ai.__scripts.OnClick then ai.__scripts.OnClick(ai, "LeftButton") end -- (the game's own click; QuestBank's hook on it)
+    env.UnitCastingInfo = function(unit) return unit == "player" and "Arcane Intellect" or nil end
+    tick(c, 13)
+    assert(B:IsShown() and icons() == "food,self1,self2", "13 seconds on, the cast under way: every icon still there: " .. icons())
+    env.UnitCastingInfo = nil
+    c.buffs = { "Arcane Intellect" }
+    ev("UNIT_AURA", "player")
+    assert(B:IsShown() and icons() == "food,self1", "Arcane Intellect on: that one gone, the others stay: " .. icons())
+    -- the food: the last piece eaten, the meal under way
+    local food = env.QuestBankBuff_1
+    if food.__scripts.OnClick then food.__scripts.OnClick(food, "LeftButton") end
+    c.o.bagSlots = {}
+    c.buffs = { "Arcane Intellect", "Food" }
+    ev("UNIT_AURA", "player")
+    tick(c, 20)
+    assert(B:IsShown() and icons() == "food,self1", "eating it, the last one: the food stays until Well Fed: " .. icons())
+    c.buffs = { "Arcane Intellect", "Well Fed" }
+    ev("UNIT_AURA", "player")
+    assert(B:IsShown() and icons() == "self1", "Well Fed: the food gone, Frost Armor left: " .. icons())
+    -- untouched, it goes after its 12 seconds as before
+    tick(c, 13)
+    assert(not B:IsShown(), "untouched: gone")
+    c.known, c.buffs = nil, nil
+  end }
+
+  -- 9. sellers of camp goods: learned at their window; a grey fire or no sleeping bag names the nearest with its minutes,
+  -- and a click shows it on the arrow until the item is in your bags
+  B3CASES[#B3CASES + 1] = { "sellers of camp goods, learned", function()
+    -- (the bag's quest chain done: a seller of the bag is named only then, B4CASES)
+    local chain = {}
+    for _, id in ipairs({ 79007, 79008, 79192, 79980, 79974, 79975, 79976 }) do chain[id] = true end
+    local c = mage("Camper", nil, chain)
+    local QB, env, Camp, A = c.QB, c.env, c.QB.Camp, c.QB.Arrow
+    local f = Camp.frame
+    local here = QB.API.WorldPosition()
+    c.npcGUID, c.npcName = "Creature-0-4455-0-12-5814-0000A1B2C3", "Innkeeper Farley"
+    c.merchant = { 159, 4470, 211527 }
+    f.__scripts.OnEvent(f, "MERCHANT_SHOW")
+    local sell = env.QuestBankDB.disc.sell
+    local e = sell and sell.c5814
+    assert(e and e.n == "Innkeeper Farley" and #e.i == 2 and e.i[1] == 4470 and e.i[2] == 211527 and e.c == here.c and math.abs(e.wx - here.wx) <= 1,
+      "a merchant with Simple Wood and the bag: noted, with where it stands, the water left out")
+    -- 600 yards on, knowing Basic Campfire and no wood: the fire grey, its seller named
+    standAt(c, 0, here.wx + 600, here.wy)
+    c.known = { [818] = true }
+    Camp.Refresh()
+    local fire, bag = env.QuestBankCamp_fire, env.QuestBankCamp_bag
+    assert(fire and fire:IsShown() and fire.state.grey and (fire.state.tip[3] or ""):find("^Sold by Innkeeper Farley, %d+ min away"), "the grey fire names the seller: " .. tostring(fire and fire.state.tip[3]))
+    assert(bag and bag:IsShown() and bag.state.grey and bag.state.tip[2]:find("sold by Innkeeper Farley", 1, true), "no bag: shown grey, its seller named: " .. tostring(bag and bag.state.tip[2]))
+    -- a click: shown on the arrow for now; the wood in the bags, over
+    fire.__scripts.OnClick(fire, "LeftButton")
+    assert(A.temp and A.temp.item == 4470 and A.temp.name == "Innkeeper Farley", "a click: the seller on the arrow, for now")
+    c.o.bagSlots = { { 4470, 2 } }
+    A:Update()
+    assert(not A.temp, "the wood in your bags: over")
+    -- a merchant who sells none of them: nothing noted
+    c.npcGUID, c.merchant = "Creature-0-4455-0-12-999-0000A1B2C3", { 159 }
+    f.__scripts.OnEvent(f, "MERCHANT_SHOW")
+    assert(sell.c999 == nil, "a merchant with no camp goods: not noted")
+    c.known, c.merchant = nil, {}
+  end }
+
+  -- 10. Skip this quest: from the arrow's menu; out of the route for good, and never back through Accept for me, Now,
+  -- Available or the arrow until routed again; giving it up too is a second choice of its own, asked in the game's words
+  B3CASES[#B3CASES + 1] = { "Skip this quest", function()
+    local c = mage("Skipper")
+    local QB, A = c.QB, c.QB.Arrow
+    local q, n = catalog(c, function(qq, nn, xp) return nn[2] == 1433 and xp >= 1000 end)
+    c.log = { { q.id, 0 } }
+    c.objectives = { [q.id] = { { text = "Something: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } } }
+    standAt(c, 0, n[6] + 300, n[7])
+    QB:Settings().routeMode = "plan"
+    settle(c)
+    A:Set(true)
+    for _ = 1, 3 do frame(c, 0.1) end
+    local F = c.env.QuestBankArrow
+    assert(A.t and A.t.kind == "route", "the arrow leads to the quest's stop")
+    F.__scripts.OnClick(F, "RightButton")
+    local Mn = c.env.QuestBankMenu
+    local skip
+    for _, b in ipairs(Mn.items) do if b:IsShown() and b.label:GetText():find("^Skip ") then skip = skip or b end end
+    assert(skip, "the arrow's menu: Skip, the quest it leads to")
+    skip.__scripts.OnClick(skip)
+    settle(c)
+    assert(QB:IsSkipped(q.id) and QB:IsCut(q.id), "skipped: out of the route for good")
+    for _, l in ipairs(QB.routePlan.legs or {}) do for _, row in ipairs(l.rows) do assert(row.q.id ~= q.id, "not in the route") end end
+    assert(said(c):find("Skipped " .. q.name, 1, true), "said so: " .. said(c))
+    -- the follow-up: keep it in the log, or also abandon it, asked again in the game's words
+    local keep, also
+    for _, b in ipairs(Mn.items) do
+      if b:IsShown() and b.label:GetText() == "Keep it in my quest log" then keep = b end
+      if b:IsShown() and b.label:GetText():find("Also abandon it", 1, true) then also = b end
+    end
+    assert(Mn:IsShown() and keep and also, "then: keep it, or also abandon it")
+    local calls = {}
+    c.env.C_QuestLog.SetSelectedQuest = function(id) calls[#calls + 1] = "select " .. id end
+    c.env.C_QuestLog.SetAbandonQuest = function() calls[#calls + 1] = "mark" end
+    c.env.C_QuestLog.AbandonQuest = function() calls[#calls + 1] = "abandon" end
+    also.__scripts.OnClick(also)
+    assert(#calls == 0 and Mn:IsShown() and Mn.title:GetText():find(q.name:sub(1, 6), 1, true), "Also abandon it: asked once more, nothing given up yet")
+    local yes
+    for _, b in ipairs(Mn.items) do if b:IsShown() and b.label:GetText():find("Yes, abandon it", 1, true) then yes = b end end
+    yes.__scripts.OnClick(yes)
+    assert(table.concat(calls, ",") == "select " .. q.id .. ",mark,abandon", "yes: the game's own abandon")
+    c.env.C_QuestLog.SetSelectedQuest, c.env.C_QuestLog.SetAbandonQuest, c.env.C_QuestLog.AbandonQuest = nil, nil, nil
+    -- given up: it never comes back on its own (Accept for me on, as it would take any other)
+    c.log = {}
+    settle(c)
+    QB:Settings().autoAccept = "worth"
+    assert(not QB.Auto.MayAccept(q.id, false, false), "never taken again by Accept for me")
+    for _, cand in ipairs(QB.UI:Candidates(400) or {}) do assert(cand.id ~= q.id, "nor suggested on Now or Available") end
+    QB:SetAdded(q.id, true)
+    assert(not QB:IsAdded(q.id) or not QB:InPlan(q), "nor routed as a pick-up")
+    QB:SetAdded(q.id, false)
+    QB:Settings().autoAccept = "off"
+    -- Route it again, from its menu
+    QB.UI.QuestMenu(q)
+    local again
+    for _, b in ipairs(Mn.items) do if b:IsShown() and b.label:GetText() == "Route it again" then again = b end end
+    assert(again, "its menu: Route it again")
+    again.__scripts.OnClick(again)
+    assert(not QB:IsSkipped(q.id), "routed again")
+    Mn:Hide()
+  end }
+
+  -- 11. flight paths per character: two characters on one account (one saved file), one knows Sentinel Hill. The other,
+  -- whose world map names only the flight paths it found, is never sent there
+  B3CASES[#B3CASES + 1] = { "flight paths per character", function()
+    local elsa = mage("Elsa")
+    local sw, swi = hubOf(elsa, "Stormwind")
+    local sh, shi = hubOf(elsa, "Sentinel Hill")
+    local gs = hubOf(elsa, "Lakeshire")
+    elsa.taxiKnown = { [sw[6]] = true, [sh[6]] = true, [gs[6]] = true }
+    fireTV(elsa, "PLAYER_ENTERING_WORLD"); tick(elsa, 3.1)
+    assert(elsa.QB.Travel.Usable("A", shi), "Elsa knows Sentinel Hill")
+    -- the account's file, as Magee logs in after her; and an entry by Magee's name from before 5.4.4, which says she
+    -- knows it (a character of that name before)
+    local file = copy(elsa.env.QuestBankDB)
+    file.travel["Magee-ForeverNormal"] = { known = { [sh[6]] = "t", [sw[6]] = "t" }, readC = { [0] = 1 }, flown = {} }
+    local magee = newClient({ name = "Magee", level = 21, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8, race = "Human",
+      log = {}, done = {}, world = { 0, sw[3] + 10, sw[4] }, map = 1453, bagSlots = {}, bind = "Lakeshire" })
+    magee.env.QuestBankDB = file
+    -- her world map names only the flight paths she found (Stormwind and Lakeshire): too few of the continent's to read it
+    magee.taxiKnown = { [sw[6]] = true, [gs[6]] = true }
+    local all = magee.env.C_TaxiMap.GetTaxiNodesForMap
+    magee.env.C_TaxiMap.GetTaxiNodesForMap = function(m)
+      local out = {}
+      for _, e in ipairs(all(m)) do if not e.isUndiscovered then out[#out + 1] = e end end
+      return out
+    end
+    login(magee)
+    fireTV(magee, "PLAYER_ENTERING_WORLD"); tick(magee, 3.1)
+    local TV = magee.QB.Travel
+    assert(not TV.Usable("A", shi) and TV.Usable("A", swi), "Magee: Sentinel Hill not hers, Stormwind hers")
+    assert(file.travel["Magee-ForeverNormal"] == nil and file.travel[TV.CharKey()] and TV.CharKey():find("^gPlayer%-"), "her data kept by her GUID; the old entry by name let go")
+    local ek = file.travel[elsa.QB.Travel.CharKey()]
+    assert(ek and ek.known[sh[6]] and elsa.QB.Travel.CharKey() ~= TV.CharKey(), "Elsa's own left as it was, under her own GUID")
+    -- the way to Westfall from Stormwind: never by Sentinel Hill
+    local plan = TV.Route({ c = 0, wx = sw[3] + 10, wy = sw[4] }, { name = "Sentinel Hill", c = 0, wx = sh[3] + 30, wy = sh[4] }, TV.Opts("pin"))
+    for _, l in ipairs(plan and plan.legs or {}) do assert(not (l.kind == "fly" and l.to == shi), "no flight to Sentinel Hill") end
+    local plannerFlies = magee.QB.Model.Between(magee.QB.Model.Place("A", 0, sw[3] + 10, sw[4]), magee.QB.Model.Place("A", 0, sh[3] + 30, sh[4]), "A", 1)
+    assert(TV.Partial("A") and plannerFlies > 3, "the planner walks to Westfall too: " .. tostring(plannerFlies))
+  end }
+
+  -- 12. QuestBank's quest icons half the game's size on the maps; where a click lands still the game's pin; a size you
+  -- set kept
+  B3CASES[#B3CASES + 1] = { "quest icons half size", function()
+    local c = mage("Iconic")
+    local P = c.QB.Pins
+    local poi = c.env.CreateFrame("Frame", nil, c.env.UIParent, "QuestBankPoiTemplate")
+    P.StylePoi(poi, { complete = true })
+    local offer = c.env.CreateFrame("Frame", nil, c.env.UIParent, "QuestBankOfferTemplate")
+    P.StyleOffer(offer, {})
+    assert(poi.Disc.__w == 16 and poi.Glyph.__w == 16 and poi.__w == 20 and offer.Texture.__w == 16 and offer.__w == 22,
+      "half the game's 32 px art, on the game's 20 and 22 px frames")
+    local mine = mage("Bigicons", nil, nil, nil, nil, { settings = { mapIconPct = 75 } })
+    local p2 = mine.env.CreateFrame("Frame", nil, mine.env.UIParent, "QuestBankPoiTemplate")
+    mine.QB.Pins.StylePoi(p2, {})
+    assert(p2.Disc.__w == 24, "a size you set: yours")
+  end }
+
+  -- 13. the golden path joined ahead of you: cutting the bend of a walked path you are never pointed behind yourself,
+  -- and the line shortens as you go
+  B3CASES[#B3CASES + 1] = { "the golden path joined ahead of you", function()
+    local c = mage("Cutter")
+    local QB = c.QB
+    local Walk, MR = QB.Walk, QB.MiniRoute
+    local GP = MR.GP
+    local W = Walk.DB()
+    -- a walked trail east 300 yards, then north 300, as walked trails are (a yard or two this way and that: every
+    -- point kept)
+    local trail = {}
+    for i = 0, 20 do trail[#trail + 1] = i * 15; trail[#trail + 1] = (i % 2 == 0) and 2 or -2 end
+    for i = 1, 20 do trail[#trail + 1] = 300 + ((i % 2 == 0) and 2 or -2); trail[#trail + 1] = i * 15 end
+    W[0] = { trail }
+    Walk.dirty, Walk.dirtyNodes = true, true
+    local goal = { c = 0, wx = 300, wy = 300 }
+    local lastLen
+    -- along the trail to x 150, then straight across the bend (north-east), as a player cutting it runs
+    local walk = {}
+    for i = 0, 10 do walk[#walk + 1] = { i * 15, 0 } end
+    for i = 1, 10 do walk[#walk + 1] = { 150 + i * 15, i * 15 } end
+    for k, p in ipairs(walk) do
+      c.clock = c.clock + 2.1
+      MR.Gold({ c = 0, wx = p[1], wy = p[2] }, goal)
+      assert(GP.n >= 2, "a way")
+      if k > 11 then -- (across the bend: the way you run, north-east)
+        local hx, hy = p[1] - walk[k - 1][1], p[2] - walk[k - 1][2]
+        local ax, ay = (GP.dx or GP.x)[2], (GP.dy or GP.y)[2] -- (what is drawn: from you on)
+        local dx, dy = ax - p[1], ay - p[2]
+        assert(dx * hx + dy * hy > 0, string.format("at (%d, %d) the way leads ahead of you, not behind: toward (%.0f, %.0f)", p[1], p[2], ax, ay))
+      end
+      assert(not lastLen or GP.len <= lastLen + 1, string.format("the line shortens as you go: %.0f after %.0f", GP.len, lastLen or 0))
+      lastLen = GP.len
+    end
+    W[0] = nil
+    Walk.dirty, Walk.dirtyNodes = true, true
+  end }
+
+  for _, case in ipairs(B3CASES) do
+    case[2]()
+    print("5.4.4 play test: " .. case[1] .. ": ok")
+  end
+end)()
+
+----------------------------------------------------------------------------
+-- 5.4.4: camping that guides, and the way on after the tram. The owner, on 5.4.3: "Didn't suggest me to /sit on a
+-- nearby camp in Redridge; when the fire disappeared it didn't suggest an NPC that sells fire and wood as an optional
+-- re-route of my in-game activities and then continue on my path for questing after it. Still hasn't suggested me a
+-- sleeping bag either in the same way", and "when coming out of the tram it didn't guide me to the flight path, just
+-- said go to Menethil 1.2k yards away". Each case below failed on the files before this round (run them alone against
+-- an older QuestBank: the cases are in B4CASES, in order, after the harness's helpers, with HERE pointed there) and
+-- passes now:
+--   the game's "Campfire Nearby" without Camp Benefits lights a /sit button, its countdown says "Stay put", Camp
+--   Benefits shows its hour; a fire burned out with Cooking and no wood offers the nearest seller (one seen in play
+--   before the Classic seed, the seed said to be Classic data), and the arrow is back on the route once both are
+--   bought; no Cooking, no offer and no seller; a kit's fire out after its 15 minutes; a level-14 Alliance player with
+--   no bag is shown the Nailed Plank, the chain starting at 79007; merchant reads by C_MerchantFrame.GetItemInfo, again
+--   on MERCHANT_UPDATE; off the tram in either city with a hand-in at Menethil, the arrow's steps at once
+----------------------------------------------------------------------------
+;(function()
+  local B4CASES = {}
+  -- a level-21 human mage of the Alliance by Lakeshire, in Redridge (Lindsay Ashlock's general goods stand 75 yards on)
+  local function camper(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 21, cap = 60, faction = o.faction or "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = o.faction == "Horde" and "Troll" or "Human", log = {}, done = o.done or {}, world = o.world or { 0, -9200, -2150 }, map = 1433,
+      bagSlots = {}, bind = "Lakeshire" })
+    login(c)
+    c.buffs, c.known, c.profs = {}, {}, nil
+    return c
+  end
+  local NEARBY = { name = "Campfire Nearby", spellId = 1283391, icon = 4620680 }
+  local function aura(name, id, c, secs) return { name = name, spellId = id, icon = 134400 + id % 7, expirationTime = c.clock + secs } end
+  local function quiet(c, n0) assert(#c.chat == n0, "nothing said in chat: " .. tostring(c.chat[#c.chat])) end
+
+  -- 1. by any fire (no kit of yours lit: a quest giver's): sit for a minute, the countdown, Camp Benefits' hour
+  B4CASES[#B4CASES + 1] = { "a fire near you: sit by it, stay put, Camp Benefits", function()
+    local c = camper("Sitter")
+    local QB, env, Camp = c.QB, c.env, c.QB.Camp
+    local n0 = #c.chat
+    assert(Camp.Settings().sit and Camp.Settings().wood and Camp.Settings().bagChain, "each suggestion on by default")
+    c.buffs = { NEARBY }
+    Camp.Refresh()
+    local sit = env.QuestBankCamp_sit
+    assert(sit and sit:IsShown() and sit.state.lit and sit:GetAttribute("type") == "macro" and sit:GetAttribute("macrotext") == "/sit"
+      and sit.state.tip[1] == "Sit by the fire for a minute" and sit.icon.__tex == 4620680, "Campfire Nearby, no Camp Benefits: the /sit button, lit")
+    -- a click is the game's: QuestBank's own hook shows nothing on the arrow
+    if sit.__scripts.OnClick then sit.__scripts.OnClick(sit, "LeftButton") end
+    assert(not QB.Arrow.temp, "the click sits you down, nothing else")
+    -- in a fight: the aura unread, the button left as it was, no fire gone out
+    c.combat = true; Camp.frame.__scripts.OnEvent(Camp.frame, "PLAYER_REGEN_DISABLED")
+    c.buffs = {}
+    Camp.Refresh()
+    assert(sit:IsShown() and sit:GetAttribute("macrotext") == "/sit" and Camp.FireOut() == nil, "in a fight nothing changes")
+    c.combat = false
+    c.buffs = { NEARBY, aura("Welcoming Campfire", 1229739, c, 42) }
+    Camp.frame.__scripts.OnEvent(Camp.frame, "PLAYER_REGEN_ENABLED")
+    assert(sit.state.tip[1] == "Stay put: 42 s" and sit.time:GetText() == "42s" and sit.state.lit, "sitting: the game's own countdown: " .. tostring(sit.state.tip[1]))
+    c.buffs = { NEARBY, aura("Welcoming Campfire", 1289723, c, 9) }
+    Camp.Refresh()
+    assert(sit.state.tip[1] == "Stay put: 9 s", "its newer form counts the same")
+    c.buffs = { NEARBY, aura("Camp Benefits", 1229741, c, 3540) }
+    Camp.Refresh()
+    assert(sit:IsShown() and not sit.state.lit and sit.state.tip[1] == "Camp Benefits" and sit.time:GetText() == "59m" and sit:GetAttribute("type") == nil,
+      "Camp Benefits on: its hour, nothing to click: " .. tostring(sit.time:GetText()))
+    -- the UNIT_AURA of the game: the bar looks again within a moment
+    c.buffs = { NEARBY }
+    Camp.frame.__scripts.OnEvent(Camp.frame, "UNIT_AURA", "player")
+    Camp.frame.__scripts.OnUpdate(Camp.frame, 0.35)
+    assert(sit.state.tip[1] == "Sit by the fire for a minute", "a moment after the aura changed")
+    Camp.Settings().sit = false
+    Camp.Refresh()
+    assert(not sit:IsShown(), "its switch off: no sit button")
+    Camp.Settings().sit = true
+    quiet(c, n0)
+  end }
+
+  -- 2. the fire went out where you sat: a cook with no kit and no wood is shown the nearest seller, a seller seen in
+  -- play before the Classic seed, and the arrow goes back to the route once both are bought
+  B4CASES[#B4CASES + 1] = { "the fire burned out: the nearest seller of wood, and back to the route", function()
+    local c = camper("Cook")
+    local QB, env, Camp, A = c.QB, c.env, c.QB.Camp, c.QB.Arrow
+    local n0 = #c.chat
+    c.profs = { { "Cooking", 15 } }
+    local here = QB.API.WorldPosition()
+    -- walking away from a fire is not its going out
+    c.buffs = { NEARBY }
+    Camp.Refresh()
+    for i = 1, 3 do standAt(c, 0, here.wx + 15 * i, here.wy); c.clock = c.clock + 1.5; Camp.Refresh() end
+    c.buffs = {}
+    standAt(c, 0, here.wx + 60, here.wy); c.clock = c.clock + 1.5
+    Camp.Refresh()
+    assert(Camp.FireOut() == nil and not (env.QuestBankCamp_fire and env.QuestBankCamp_fire:IsShown()), "walked away: no fire gone out")
+    -- sat by it, then it went out
+    standAt(c, 0, here.wx, here.wy)
+    c.buffs = { NEARBY }
+    Camp.Refresh(); tick(c, 6)
+    c.buffs = {}
+    Camp.Refresh()
+    local fire = env.QuestBankCamp_fire
+    assert(Camp.FireOut() and fire and fire:IsShown() and fire.state.tip[1] == "The fire burned out" and fire.state.tip[2]:find("you have neither", 1, true),
+      "the fire out where you sat: said so: " .. tostring(fire and fire.state.tip[2]))
+    assert(fire.state.seller and fire.state.seller.n == "Lindsay Ashlock" and fire.state.seller.seed and fire.state.tip[4] == Camp.SEED_NOTE
+      and fire.state.tip[3]:find("^Lindsay Ashlock sells both, "), "none seen in play: the Classic seed's nearest, said to be Classic data: " .. tostring(fire.state.tip[3]))
+    for _, l in ipairs(fire.state.tip) do assert(not l:lower():find("sold by", 1, true), "never a seller of the kit itself: " .. l) end
+    -- a seller seen in play, twice as far: before the seed's
+    c.npcGUID, c.npcName, c.merchant = "Creature-0-4455-0-12-5814-0000A1B2C3", "Innkeeper Farley", { 159, 4470, 4471 }
+    standAt(c, 0, here.wx + 150, here.wy)
+    Camp.frame.__scripts.OnEvent(Camp.frame, "MERCHANT_SHOW")
+    standAt(c, 0, here.wx, here.wy)
+    Camp.Refresh()
+    assert(fire.state.seller.n == "Innkeeper Farley" and not fire.state.seller.seed and fire.state.tip[4] == nil, "seen in play beats the seed: " .. tostring(fire.state.tip[3]))
+    -- Lindsay's own window: the seed's seller confirmed, seen in play, no longer "Classic data"
+    c.npcGUID, c.npcName, c.merchant = "Creature-0-4455-0-12-791-0000A1B2C3", "Lindsay Ashlock", { 4470, 4471, 4496 }
+    standAt(c, 0, -9260, -2195)
+    Camp.frame.__scripts.OnEvent(Camp.frame, "MERCHANT_SHOW")
+    standAt(c, 0, here.wx, here.wy)
+    Camp.Refresh()
+    assert(fire.state.seller.n == "Lindsay Ashlock" and not fire.state.seller.seed and fire.state.tip[4] == nil, "the seed's seller seen: in play")
+    -- a click: shown on the arrow for now, until both are in your bags; then back to the route
+    fire.__scripts.OnClick(fire, "LeftButton")
+    assert(A.temp and A.temp.name == "Lindsay Ashlock" and A.temp.items and #A.temp.items == 2, "a click: the seller on the arrow, for now")
+    c.o.bagSlots = { { 4470, 4 } }
+    A:Update()
+    assert(A.temp, "the wood alone: still shown")
+    Camp.Refresh()
+    assert(fire.state.tip[2]:find("no Flint and Tinder", 1, true) and fire.state.sellItem[1] == 4471, "and the fire still asks for the flint")
+    c.o.bagSlots = { { 4470, 4 }, { 4471, 1 } }
+    A:Update()
+    assert(not A.temp and (A.back or not QB:Settings().arrow), "both bought: back to your route")
+    Camp.Refresh()
+    assert(fire:IsShown() and fire.state.tip[2]:find("make a Basic Campfire Kit", 1, true) and not fire.state.seller, "both in your bags: make the kit")
+    -- its switch off
+    Camp.Settings().wood = false
+    Camp.Refresh()
+    assert(not fire:IsShown(), "the wood switch off: nothing")
+    Camp.Settings().wood = true
+    -- the offer goes when you walk on
+    c.o.bagSlots = {}
+    standAt(c, 0, here.wx + Camp.OUT_YD + 20, here.wy)
+    Camp.Refresh()
+    assert(not fire:IsShown(), "walked on past " .. Camp.OUT_YD .. " yards: gone")
+    quiet(c, n0)
+    c.npcGUID, c.merchant = nil, {}
+  end }
+
+  -- 3. no Cooking: no kit offer and no seller named; your kit's fire out after its 15 minutes
+  B4CASES[#B4CASES + 1] = { "no Cooking: no offer; a kit's fire out after 15 minutes", function()
+    local c = camper("Nocook")
+    local QB, env, Camp, D = c.QB, c.env, c.QB.Camp, c.QB.Data
+    c.buffs = { NEARBY }
+    Camp.Refresh(); tick(c, 6)
+    c.buffs = {}
+    Camp.Refresh()
+    local st = Camp.State()
+    assert(Camp.FireOut() and st.fire == nil, "the fire out, no Cooking: nothing offered, no seller named")
+    -- a cook who lights a kit (its fire's aura never read here): out after 15 minutes, still by it
+    c.profs = { { "Cooking", 1 } }
+    Camp.ForgetFire()
+    c.o.bagSlots = { { 279981, 1 } }
+    Camp.frame.__scripts.OnEvent(Camp.frame, "UNIT_SPELLCAST_SUCCEEDED", "player", nil, D.CAMP[279981].sp)
+    c.o.bagSlots = {}
+    tick(c, 60)
+    assert(Camp.FireOut() == nil, "a minute on: still burning")
+    tick(c, 845)
+    local fire = env.QuestBankCamp_fire
+    assert(Camp.FireOut() and fire and fire:IsShown() and fire.state.tip[1] == "The fire burned out" and fire.state.seller, "15 minutes: the kit's fire out, the seller shown")
+  end }
+
+  -- 4. the Cozy Sleeping Bag: from level 14 with none, where the chain starts (one quest a side, 79007 and 79008); with
+  -- one, lit only where and when the game unfurls it
+  B4CASES[#B4CASES + 1] = { "the sleeping bag's chain from level 14, and the bag lit where it can be used", function()
+    local c = camper("Bagless", { level = 14 })
+    local QB, env, Camp, A = c.QB, c.env, c.QB.Camp, c.QB.Arrow
+    local D = QB.Data
+    assert(D.SLEEP_CHAIN[1].id == 79007 and D.SLEEP_CHAIN[1].alt == 79008 and D.SLEEP_CHAIN[1].name == "... and that note you found"
+      and D.SLEEP_CHAIN[2].id == 79192, "the chain starts with ... and that note you found, then Stepping Stones")
+    local young = camper("Young", { level = 13 })
+    assert(young.QB.Camp.State().bag == nil, "level 13: nothing yet")
+    local n0 = #c.chat
+    Camp.Refresh()
+    local bag = env.QuestBankCamp_bag
+    assert(bag and bag:IsShown() and bag.state.grey and bag.state.tip[2]:find("starts at the Nailed Plank, Westfall (37.4, 50.9)", 1, true),
+      "level 14, Alliance, no bag: the Nailed Plank in Westfall: " .. tostring(bag and bag.state.tip[2]))
+    local rix = false
+    for _, l in ipairs(bag.state.tip) do if l:find("Rix Xizzix", 1, true) and l:find("once the chain is done", 1, true) then rix = true end end
+    assert(rix and not bag.state.seller, "Rix Xizzix only as may sell it once the chain is done")
+    bag.__scripts.OnClick(bag, "LeftButton")
+    assert(A.temp and A.temp.name == "the Nailed Plank" and (A.temp.qid == 79007 or A.temp.qid == 79008) and A.temp.what == "give", "a click: the plank on the arrow, until you take its quest")
+    A:EndTemp("back")
+    Camp.Settings().bagChain = false
+    Camp.Refresh()
+    assert(not bag:IsShown(), "its switch off: nothing")
+    Camp.Settings().bagChain = true
+    -- the window's card: from its first step, what the bag gives
+    c.env.SlashCmdList.QUESTBANK("")
+    local U = QB.UI
+    U:ShowTab(2); QB.Model.Finish(); U:Refresh()
+    local card
+    for _, k in ipairs(U.views[2].cards.items) do if k:IsShown() and k.title:GetText() == "Cozy Sleeping Bag" then card = k end end
+    assert(card and card.where:GetText() == "From level 14. A minute in the bag: +1% XP, up to 3%.", "the card says what the bag gives: " .. tostring(card and card.where:GetText()))
+    local first
+    for _, r in ipairs(card.rows.items) do if r:IsShown() and r.step and not first then first = r end end
+    assert(first and first.name:GetText() == "... and that note you found" and first.step.where == "the Nailed Plank, Westfall", "its first row: where your side starts")
+    for _, pr in ipairs(checkLayout(U.frame, "Available, the sleeping bag's card")) do problems[#problems + 1] = pr end
+    U.frame:Hide()
+    -- the Horde's start
+    local h = camper("Bagless", { level = 14, faction = "Horde", world = { 1, -400, -2600 } })
+    h.QB.Camp.Refresh()
+    local hb = h.env.QuestBankCamp_bag
+    assert(hb and hb:IsShown() and hb.state.tip[2]:find("the Burned-Out Remains, The Barrens (46.4, 73.8)", 1, true), "the Horde: the Burned-Out Remains in the Barrens: " .. tostring(hb and hb.state.tip[2]))
+    -- the chain done, the bag gone and no seller seen: Rix, no click
+    local done = {}
+    for _, s in ipairs(D.SLEEP_CHAIN) do done[s.id] = true end
+    local d = camper("Lostbag", { level = 30, done = done })
+    d.QB.Camp.Refresh()
+    local db = d.env.QuestBankCamp_bag
+    assert(db and db:IsShown() and db.state.tip[2]:find("Rix Xizzix", 1, true) and not db.state.seller and not db.state.dest, "the chain done, no bag: Rix may sell it")
+    -- with the bag: lit standing still out of a rested place with its cooldown up
+    c.o.bagSlots = { { 211527, 1 } }
+    Camp.Refresh()
+    c.resting = true
+    tick(c, 25); Camp.Refresh()
+    assert(bag:IsShown() and not bag.state.lit and bag.state.tip[3]:find("rested place", 1, true), "in a town: not lit, said why")
+    c.resting = false
+    c.hearthCD = c.clock - 600 -- (the mock's item cooldowns: the bag's hour, 50 minutes left)
+    Camp.Refresh()
+    assert(not bag.state.lit and bag.state.cd and bag.state.tip[3]:find("^Ready in"), "its cooldown: not lit")
+    c.hearthCD = nil
+    Camp.Refresh()
+    assert(bag.state.lit and bag:GetAttribute("item") == "item:211527", "out of town, still, the cooldown up: lit, a click unfurls it")
+    quiet(c, n0)
+  end }
+
+  -- 5. a vendor's wares by the Mainline merchant window's own call, read again as they come in
+  B4CASES[#B4CASES + 1] = { "merchant reads by C_MerchantFrame.GetItemInfo, again on MERCHANT_UPDATE", function()
+    local c = camper("Shopper")
+    local Ob, Camp = c.QB.Observe, c.QB.Camp
+    local DB = c.env.QuestBankDB
+    assert(Ob.frame and Ob.On(), "the probe is on")
+    local f = Ob.frame
+    local function fire(event) f.__scripts.OnEvent(f, event) end
+    local asked = 0
+    c.env.GetMerchantItemInfo = function() error("the old global the Mainline merchant window never calls") end
+    c.env.C_MerchantFrame = { GetItemInfo = function(i) asked = asked + 1; return { name = "Simple Wood", price = 38, stackCount = 1, numAvailable = -1, isPurchasable = true, isUsable = true } end }
+    c.env.GetMerchantItemLink = function(i) return "|cffffffff|Hitem:4470::::::::21:::::|h[Simple Wood]|h|r" end
+    c.npcGUID, c.npcName = "Creature-0-4455-0-12-791-0000A1B2C3", "Lindsay Ashlock"
+    c.merchant = {}
+    fire("MERCHANT_SHOW")
+    Camp.frame.__scripts.OnEvent(Camp.frame, "MERCHANT_SHOW")
+    c.merchant = { 4470, 4471 }
+    fire("MERCHANT_UPDATE")
+    Camp.frame.__scripts.OnEvent(Camp.frame, "MERCHANT_UPDATE")
+    local r = DB.diag.ev.MERCHANT_UPDATE
+    assert(asked > 0 and r and r.ok == 1 and r.s.price == "number" and r.s.link == "string" and r.s.id == "number",
+      "the wares as they came in: price and link read by C_MerchantFrame.GetItemInfo")
+    local e = DB.disc.sell and DB.disc.sell.c791
+    assert(e and #e.i == 2 and e.i[1] == 4470 and e.i[2] == 4471, "and the camp bar noted the seller then, Flint and Tinder too")
+    c.env.GetMerchantItemInfo, c.env.C_MerchantFrame, c.env.GetMerchantItemLink, c.merchant = nil, nil, nil, {}
+  end }
+
+  -- 6. off the tram in Ironforge or Stormwind, a hand-in at Menethil Harbor: the arrow's steps at once, the flight
+  -- where you know it; a straight walk only where walking straight is the plan
+  B4CASES[#B4CASES + 1] = { "off the tram, to a hand-in at Menethil Harbor", function()
+    local STATION = { Ironforge = { -4840, -1330 }, Stormwind = { -8346, 514 } }
+    local function ride(to, knowsMen, carried)
+      local from = to == "Ironforge" and "Stormwind" or "Ironforge"
+      local c = newClient({ name = "Rider" .. to:sub(1, 2) .. (knowsMen and "K" or "U") .. (carried and "C" or "N"), level = 25, cap = 60, faction = "Alliance",
+        className = "Mage", class = "MAGE", classID = 8, race = "Human", log = {}, done = {}, world = { 0, STATION[from][1], STATION[from][2] }, map = 1453,
+        bagSlots = {}, bind = "Lakeshire" })
+      login(c)
+      local TV = c.QB.Travel
+      local sw, ifh, men = hubOf(c, "Stormwind"), hubOf(c, "Ironforge"), hubOf(c, "Menethil Harbor")
+      c.taxiKnown = { [sw[6]] = true, [ifh[6]] = true }
+      if knowsMen then c.taxiKnown[men[6]] = true end
+      fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+      local t = { name = "Menethil hand-in", c = 0, wx = men[3] + 30, wy = men[4] + 10 }
+      local function here() return c.QB.API.WorldPosition() end
+      if carried then TV.Guide(here(), t, "pin") end
+      -- the tram: no position; (not carried: the hand-in chosen on the way)
+      c.instance, c.noPos = { "Deeprun Tram", 0, 369 }, true
+      fireTV(c, "PLAYER_ENTERING_WORLD")
+      TV.Guide(here(), t, "pin")
+      c.instance, c.noPos = nil, nil
+      standAt(c, 0, STATION[to][1], STATION[to][2])
+      fireTV(c, "PLAYER_ENTERING_WORLD")
+      return TV.Guide(here(), t, "pin"), c
+    end
+    -- the owner's ride: the way to Menethil planned in Stormwind (the tram, then the flight), carried over the tram
+    local g = ride("Ironforge", true, true)
+    assert(g.leg and g.leg.kind == "fly" and g.step == "Fly to Menethil Harbor" and (g.state == "approach" or g.state == "at"),
+      "Ironforge, the flight known, the way carried over the tram: to the flight master at once: " .. tostring(g.state) .. " / " .. tostring(g.step) .. " / " .. tostring(g.info))
+    -- the hand-in chosen on the tram, a plan new at the far end, in either city
+    g = ride("Ironforge", true, false)
+    assert(g.leg and g.leg.kind == "fly" and g.step == "Fly to Menethil Harbor" and (g.state == "approach" or g.state == "at"),
+      "Ironforge, the flight known, the hand-in new: the flight at once: " .. tostring(g.state) .. " / " .. tostring(g.step) .. " / " .. tostring(g.info))
+    g = ride("Ironforge", false, false)
+    assert(g.leg and g.leg.kind == "walk" and g.state == "walk" and #g.plan.legs == 1, "Ironforge, no flight to Menethil known: walking is the plan")
+    g = ride("Stormwind", true, false)
+    assert(g.leg and g.leg.kind ~= "walk" and g.step and (g.state == "approach" or g.state == "at"), "Stormwind, the flight known: a step: " .. tostring(g.step))
+    g = ride("Stormwind", false, false)
+    assert(g.leg and g.leg.kind == "tram" and g.step == "Tram to Ironforge", "Stormwind, no flight known: the tram back first: " .. tostring(g.step))
+    -- out of a dungeon's door in Ironforge, the hand-in at Menethil: the flight at once
+    local c = newClient({ name = "Delver", level = 25, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8, race = "Human",
+      log = {}, done = {}, world = { 0, -4840, -1330 }, map = 1455, bagSlots = {}, bind = "Lakeshire" })
+    login(c)
+    local TV = c.QB.Travel
+    local ifh, men = hubOf(c, "Ironforge"), hubOf(c, "Menethil Harbor")
+    c.taxiKnown = { [ifh[6]] = true, [men[6]] = true }
+    fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+    tick(c, 30) -- (long after the login's own loading screen)
+    local t = { name = "Menethil hand-in", c = 0, wx = men[3] + 30, wy = men[4] + 10 }
+    local inside = true
+    c.env.IsInInstance = function() return inside, inside and "party" or "none" end
+    local g = TV.Guide(c.QB.API.WorldPosition(), t, "pin")
+    assert(g.state == "instance", "inside: leave the dungeon first")
+    inside = false
+    fireTV(c, "PLAYER_ENTERING_WORLD")
+    g = TV.Guide(c.QB.API.WorldPosition(), t, "pin")
+    assert(g.leg and g.leg.kind == "fly" and g.step == "Fly to Menethil Harbor", "out of the door: the flight at once: " .. tostring(g.step))
+    -- and a new target half a minute on, standing there: the fresh plan's line again (a flight that saves too little
+    -- is not taken)
+    tick(c, 30)
+    g = TV.Guide(c.QB.API.WorldPosition(), { name = "Menethil, again", c = 0, wx = men[3] + 40, wy = men[4] + 10 }, "pin")
+    assert(g.leg and g.leg.kind == "walk", "half a minute on, a new target: as any plan")
+  end }
+
+  for _, case in ipairs(B4CASES) do
+    case[2]()
+    print("5.4.4 camping and travel: " .. case[1] .. ": ok")
+  end
+end)()
+
+----------------------------------------------------------------------------
+-- 5.4.4, the review before release. Each case below failed on the files before this round (run them alone against an
+-- older QuestBank: the cases are in B5CASES, in order, after the harness's helpers, with HERE pointed there) and passes
+-- now: a click on a place whose quest already stands as the click asks (the hand-in of a quest not taken, the giver of
+-- one held, a row banked in your bags) is shown, where it ended the moment it began and chat said the arrow showed the
+-- way; two hand-ins in reach keep the one chosen, and none is offered in the air or as a ghost; a character who has
+-- found no flight path flies none; flight paths known only off your land (Darnassus with Rut'theran Village, Lakeshire
+-- with Auberdine) still plan from you, with minutes; a re-plan after a flight starts afresh from where you land; a
+-- Legacy trait event that changes no rank plans nothing again; a stroke softened only where it crosses an icon; the
+-- interact light's subtitles kept by creature, not by spawn, and the minimap's objective lists by the quests in your log
+----------------------------------------------------------------------------
+;(function()
+  local B5CASES = {}
+  local function mage(name, log, done, wx, wy, cont, map)
+    local c = newClient({ name = name, level = 21, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = log or {}, done = done or {}, world = { cont or 0, wx or -9200, wy or -2150 }, map = map or 1433, bagSlots = {}, bind = "Lakeshire" })
+    login(c)
+    return c
+  end
+  local function frame(c, dt)
+    c.clock = c.clock + dt
+    table.sort(c.timers, function(a, b) return a.t < b.t end)
+    while c.timers[1] and c.timers[1].t <= c.clock do table.remove(c.timers, 1).f() end
+    for _, f in ipairs(c.frames) do
+      local u = f.__scripts.OnUpdate
+      if u and f:IsVisible() then u(f, dt) end
+    end
+  end
+  local function settle(c)
+    c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 5 do frame(c, 0.1) end
+    c.QB.Model.Finish()
+    c.QB:Recompute(true)
+    c.QB.Model.Finish()
+    for _ = 1, 3 do frame(c, 0.1) end
+  end
+  local function catalog(c, pred)
+    local QB, D = c.QB, c.QB.Data
+    local ids = {}
+    for id in pairs(D.Q) do ids[#ids + 1] = id end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+      local q = QB.Quest.Get(id)
+      local n = q and q.turnIdx and q.turnIdx > 0 and D.NPC[q.turnIdx]
+      if n and n[5] == 0 and QB.Quest.ForMe(q) and not q.repeatable and not (q.turn and q.turn.inside) and (q.req or 1) <= 21 then
+        local xp = QB.Model.XpAt(q, 21)
+        if pred(q, n, xp) then return q, n end
+      end
+    end
+  end
+  -- the world map listing only the flight paths found (Forever's, as the 5.4.3 play test showed)
+  local function onlyFound(c)
+    local all = c.env.C_TaxiMap.GetTaxiNodesForMap
+    c.env.C_TaxiMap.GetTaxiNodesForMap = function(m)
+      local out = {}
+      for _, e in ipairs(all(m)) do if not e.isUndiscovered then out[#out + 1] = e end end
+      return out
+    end
+  end
+
+  -- 1. a click on a place whose quest stands as the click asks: shown until you get there or it changes
+  B5CASES[#B5CASES + 1] = { "a click shown whatever its quest already stands at", function()
+    local c = mage("Nohold")
+    local QB, A = c.QB, c.QB.Arrow
+    settle(c)
+    local q = catalog(c, function(qq, nn, xp) return nn[2] == 1433 and xp > 0 and qq.give and not qq.give.inside and (qq.give.m or 0) > 0 end)
+    local q2 = catalog(c, function(qq, nn, xp) return qq.id ~= q.id and nn[2] == 1433 and xp > 0 and qq.give and not qq.give.inside and (qq.give.m or 0) > 0 end)
+    assert(q and q2, "two quests of Redridge")
+    A:Set(true)
+    for _ = 1, 3 do frame(c, 0.1) end
+    local F = c.env.QuestBankArrow
+    -- the hand-in of a quest not taken (the quest menu's or the detail's Hand-in)
+    QB.API.SetWaypoint(q.turn.m, q.turn.x, q.turn.y, q.turn.n, nil, nil, { qid = q.id, what = "turn" })
+    for _ = 1, 3 do frame(c, 0.1) end
+    assert(A.temp and A.Target() and A.Target().temp and F.name:GetText():find("^Showing ") and F.hint:GetText() == "Right-click: back to your route",
+      "the hand-in of a quest not taken: shown: " .. tostring(F.name:GetText()))
+    -- taken: still shown; handed in: over
+    c.log = { { q.id, 0 } }; settle(c)
+    assert(A.temp and A.temp.qid == q.id, "taken: still shown")
+    c.log = {}; c.done[q.id] = true; settle(c)
+    assert(not A.temp, "handed in: over")
+    -- a row banked in your bags (its quest not in the log): its hand-in shown
+    QB.UI.QuestClick(q2, { code = "banked", bag = true, text = "" }, "LeftButton")
+    for _ = 1, 3 do frame(c, 0.1) end
+    assert(A.temp and A.temp.qid == q2.id, "a row banked in your bags: shown")
+    -- the giver of a quest you hold (the detail's Giver): shown until you hand it in
+    c.log = { { q2.id, 0 } }; settle(c)
+    QB.API.SetWaypoint(q2.give.m, q2.give.x, q2.give.y, q2.give.n, nil, nil, { qid = q2.id, what = "give" })
+    for _ = 1, 10 do frame(c, 0.1) end
+    assert(A.temp and A.temp.what == "give" and A.temp.qid == q2.id, "the giver of a quest held: shown")
+    c.log = {}; c.done[q2.id] = true; settle(c)
+    assert(not A.temp, "handed in: over")
+    -- the arrow off: shown for the waypoint, as chat says
+    local off = mage("Offarrow")
+    settle(off)
+    assert(not off.QB:Settings().arrow, "the arrow off")
+    off.QB.API.SetWaypoint(q.turn.m, q.turn.x, q.turn.y, q.turn.n, nil, nil, { qid = q.id, what = "turn" })
+    for _ = 1, 3 do frame(off, 0.1) end
+    local line = off.chat[#off.chat] or ""
+    assert(off.QB.Arrow.temp and off.env.QuestBankArrow:IsShown() and line:find("The arrow shows the way until you get there", 1, true),
+      "the arrow off: shown, as chat says: " .. line)
+  end }
+
+  -- 2. two hand-ins in reach (McBride and Willem, 39 yards apart in Northshire): walking round between them keeps the
+  -- one chosen; right by the other, it takes over; none in the air or as a ghost
+  B5CASES[#B5CASES + 1] = { "two hand-ins in reach: the one chosen kept; none in the air or as a ghost", function()
+    local c = newClient({ name = "Twohand", level = 5, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = { { 7, 1 }, { 18, 1 } }, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Northshire Abbey" })
+    login(c)
+    local QB, D, A = c.QB, c.QB.Data, c.QB.Arrow
+    settle(c)
+    A:Set(true)
+    for _ = 1, 3 do frame(c, 0.1) end
+    local q7, q18 = QB.Quest.Get(7), QB.Quest.Get(18)
+    local n7, n18 = D.NPC[q7.turnIdx], D.NPC[q18.turnIdx]
+    local function along(f) return n7[6] + (n18[6] - n7[6]) * f, n7[7] + (n18[7] - n7[7]) * f end
+    local flips, last, ver = 0, nil, QB.Target.ver
+    for i = 1, 8 do
+      local x, y = along(i % 2 == 1 and 0.35 or 0.65)
+      standAt(c, 0, x, y)
+      A:Update()
+      local lab = A.t and A.t.label
+      assert(lab and lab:find("^Hand in "), "a hand-in in reach: " .. tostring(lab))
+      if last and lab ~= last then flips = flips + 1 end
+      last = lab
+    end
+    assert(flips == 0 and QB.Target.ver - ver <= 1, "walking round between them: the one chosen kept: " .. flips .. " flips")
+    standAt(c, 0, n18[6] + 2, n18[7])
+    A:Update()
+    assert(A.t.label == "Hand in " .. q18.name .. " here", "right by the other: it takes over: " .. tostring(A.t.label))
+    -- in the air over it: no hand-in here
+    c.taxi = true
+    standAt(c, 0, n7[6] + 40, n7[7])
+    A:Update()
+    assert(not QB.Target.cur.near and not (A.t and A.t.label), "in the air: no hand-in in reach")
+    c.taxi = false
+    c.ghost = true
+    standAt(c, 0, n18[6] + 40, n18[7])
+    A:Update()
+    assert(not QB.Target.cur.near and not (A.t and A.t.label), "a ghost: no hand-in in reach")
+    c.ghost = false
+  end }
+
+  -- 3. a character who has found no flight path, on a world map that lists only those found: none flown, and /qb way
+  -- says the count is the game's; a client that says nothing still counts them all
+  B5CASES[#B5CASES + 1] = { "no flight path found yet: none flown", function()
+    local function at(name, says)
+      local c = mage(name)
+      local sw = hubOf(c, "Stormwind")
+      standAt(c, 0, sw[3] + 10, sw[4])
+      onlyFound(c)
+      if not says then c.env.C_TaxiMap.ShouldMapShowTaxiNodes = nil end
+      c.taxiKnown = {}
+      fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+      return c, sw
+    end
+    local c, sw = at("Walker", true)
+    local TV = c.QB.Travel
+    local sh, shi = hubOf(c, "Sentinel Hill")
+    local plan = TV.Route({ c = 0, wx = sw[3] + 10, wy = sw[4] }, { name = "Sentinel Hill", c = 0, wx = sh[3] + 30, wy = sh[4] }, TV.Opts("pin"))
+    local flies = false
+    for _, l in ipairs(plan and plan.legs or {}) do if l.kind == "fly" then flies = true end end
+    assert(TV.tells and not TV.Usable("A", shi) and TV.Partial("A") and plan and not flies, "none found: none flown")
+    local way = TV.WayLines()
+    assert(way[2] and way[2]:find("0 of %d+ known on Eastern Kingdoms %(those the game named%)"), "/qb way: " .. tostring(way[2]))
+    local old = at("Oldclient", false)
+    assert(not old.QB.Travel.tells and old.QB.Travel.Usable("A", shi), "a client that says nothing: every one counts, as before")
+    assert(old.QB.Travel.WayLines()[2]:find("(assumed)", 1, true), "and /qb way says assumed")
+  end }
+
+  -- 4. flight paths known only off your land: the route still starts from you, and Now and Available have minutes
+  B5CASES[#B5CASES + 1] = { "flight paths known only off your land: planned from you, with minutes", function()
+    local probe = mage("Probe")
+    local ready = catalog(probe, function(qq, nn, xp) return nn[2] == 1433 and xp > 0 and not qq.pre end)
+    local rut, aub = hubOf(probe, "Rut'theran Village"), hubOf(probe, "Auberdine")
+    for _, case in ipairs({ { "Lakeshire", { [aub[6]] = true }, 0, -9200, -2150, 1433 }, { "Darnassus", { [rut[6]] = true }, 1, 9950, 2300, 1438 } }) do
+      local c = mage("At" .. case[1], { { ready.id, 1 } }, nil, case[4], case[5], case[3], case[6])
+      local QB, TV, M = c.QB, c.QB.Travel, c.QB.Model
+      c.taxiKnown = case[2]
+      fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+      settle(c)
+      local wp = QB.API.WorldPosition()
+      local here, mf = QB.UI.Here()
+      assert(TV.Partial("A") and M.Place("A", wp.c, wp.wx, wp.wy).hub > 0 and QB.routeNow.fromHere and here,
+        case[1] .. ": the route from where you stand")
+      assert(QB.UI.MinutesTo(QB.Quest.Get(ready.id), here, mf), case[1] .. ": minutes to a quest")
+    end
+  end }
+
+  -- 5. a re-plan after a jump in place (landing at Menethil Harbor, 80 yards from Stoutfist) starts afresh: the free
+  -- plan's first stop, not the one kept from Southshore, which the route flew you back to. (The plan kept from is made
+  -- 120 yards out of Southshore: made beside Redpath with his quest ready, its first stop is there for being in reach,
+  -- and walked away from it gives the lead its place, round 4)
+  B5CASES[#B5CASES + 1] = { "after a flight, the plan starts afresh from where you land", function()
+    local c = mage("Lander")
+    local M, D = c.QB.Model, c.QB.Data
+    local function fake(id, npc) return { q = { id = id, turnIdx = npc, lvl = 30, base = 3000, mult = 1, name = "Q" .. id }, st = { code = "banked" } } end
+    local es = {}
+    for k, n in ipairs({ 279, 255, 11, 25, 32, 72, 249, 163, 1041, 106 }) do es[#es + 1] = fake(990500 + k, n) end
+    local function opts(wx, wy, jump) return { level = 30, xp = 0, goal = "route", fac = "A", start = { c = 0, wx = wx, wy = wy }, mounted = false, jump = jump } end
+    local prev = M.Plan(es, opts(D.NPC[279][6] + 120, D.NPC[279][7], 1))
+    assert(not prev.firstNear, "out of reach of Redpath: Southshore first for its own sake")
+    local free = M.Plan(es, opts(-3733 + 80, -799, 2))
+    local walked = M.Plan(es, opts(-3733 + 80, -799, 1), prev)
+    local landed = M.Plan(es, opts(-3733 + 80, -799, 2), prev)
+    assert(prev.legs[1].stop.name ~= free.legs[1].stop.name and walked.held, "walked there, the first stop is kept (as before): " .. walked.legs[1].stop.name)
+    assert(not landed.held and landed.legs[1].stop.name == free.legs[1].stop.name, "landed there: the best from here: " .. landed.legs[1].stop.name)
+  end }
+
+  -- 6. a Legacy trait event that changes no rank plans nothing again; Frequent Flier's rank does
+  B5CASES[#B5CASES + 1] = { "a trait event plans nothing again unless Frequent Flier changed", function()
+    local c = mage("Traits", { { 20, 1 } })
+    local QB, TV, L = c.QB, c.QB.Travel, c.QB.Legacy
+    settle(c)
+    QB.Arrow:Set(true)
+    for _ = 1, 3 do frame(c, 0.1) end
+    TV.Graph("A")
+    local ver, sNow, sPlan = TV.ver, QB.sigNow, QB.sigPlan
+    for _, ev in ipairs({ "TRAIT_CONFIG_UPDATED", "TRAIT_NODE_CHANGED", "TRAIT_CONFIG_LIST_UPDATED" }) do L.OnEvent(ev) end
+    QB:Recompute(true); QB.Model.Finish()
+    assert(TV.ver == ver and QB.sigNow == sNow and QB.sigPlan == sPlan, "no rank changed: nothing planned again")
+    c.legacy = { [L.NODE.FLIER] = 1 }
+    L.OnEvent("TRAIT_NODE_CHANGED")
+    assert(TV.ver > ver, "Frequent Flier learned: the flights' minutes, and the plans, again")
+    c.legacy = nil
+  end }
+
+  -- 7. a stroke softened only where it crosses another quest's icon: a line for each part, the part over the icon soft
+  B5CASES[#B5CASES + 1] = { "a stroke softened only over the icon it crosses", function()
+    local c = mage("Strokes")
+    local MR = c.QB.MiniRoute
+    local ctx = { frame = c.env.CreateFrame("Frame"), lines = {}, used = 0, r = 1000, square = true }
+    local marks = { { x = 50, y = 2, r = 8 }, { x = 0, y = 0, r = 8 } }
+    assert(MR.Stroke(ctx, 0, 0, 100, 0, { 1, 1, 1 }, 4, 1, 16, 16, marks, 2, 2) and ctx.used == 3, "three parts: " .. ctx.used)
+    local l1, l2, l3 = ctx.lines[1], ctx.lines[2], ctx.lines[3]
+    assert(l1.__vertex[4] == 1 and math.abs(l2.__vertex[4] - MR.SOFT) < 1e-6 and l3.__vertex[4] == 1, "full, soft over the icon, full")
+    assert(math.abs(l1.__start[3] - 11) < 1e-6 and math.abs(l3.__stop[3] - 89) < 1e-6 and l1.__stop[3] < 50 and l3.__start[3] > 50,
+      "the gaps at both ends kept; the soft part round the icon")
+    assert(l1.of == l2.of and l2.of == l3.of, "one stroke")
+    ctx.used = 0
+    assert(MR.Stroke(ctx, 0, 0, 100, 0, { 1, 1, 1 }, 4, 1, 16, 16, { marks[2] }, 1, 2) and ctx.used == 1 and ctx.lines[1].__vertex[4] == 1,
+      "the icon it starts at: one line, not softened")
+  end }
+
+  -- 8. the caches that grew all session: the interact light's subtitles, read once a creature (not a spawn); the
+  -- minimap's objective lists, kept only for the quests in your log
+  B5CASES[#B5CASES + 1] = { "subtitles by creature, objective lists by the log", function()
+    local c = mage("Caches", { { 20, 0 } })
+    local QB, Glow, env = c.QB, c.QB.Glow, c.env
+    local asked = 0
+    env.C_TooltipInfo.GetUnit = function() asked = asked + 1; return { lines = { { leftText = "Test" }, { leftText = "<Herbalism Trainer>" } } } end
+    for spawn = 1, 50 do
+      assert(Glow.Subtitle(string.format("Creature-0-4455-0-12-908-%010X", spawn)) == "Herbalism Trainer", "the subtitle")
+    end
+    assert(asked == 1 and Glow.NpcKey("Creature-0-4455-0-12-908-0000A1B2C3") == "Creature:908", "fifty spawns of one creature: asked once: " .. asked)
+    local QM, D = QB.QuestMap, QB.Data
+    local saveSpot = D.SPOT[20]
+    D.SPOT[20] = "k,1,1433,50,50,10,c"
+    settle(c)
+    QB.Mini.Invalidate(); QB.Mini.List(true)
+    assert(QM.KeptLists() >= 1, "a list for the quest in your log")
+    c.log = {}
+    settle(c)
+    QB.Mini.Invalidate(); QB.Mini.List(true)
+    assert(QM.KeptLists() == 0, "gone from your log: its list gone: " .. QM.KeptLists())
+    D.SPOT[20] = saveSpot
+  end }
+
+  for _, case in ipairs(B5CASES) do
+    case[2]()
+    print("5.4.4 review: " .. case[1] .. ": ok")
+  end
+end)()
+
+----------------------------------------------------------------------------
+-- 5.4.4, the review's second round. "Routing just swaps mid zone if I run, so the objective completely changes running
+-- from Southshore to Alterac... might be natural for a reason but also moments where it's weird and awkward." What was
+-- still left of it, each case failing on the files before this round (run them alone against an older QuestBank: the
+-- cases are in B6CASES, in order, after the harness's helpers, with HERE pointed there) and passing now: the planner put
+-- any stop within 60 yards first, its quests done or not, and dropped the stop it kept; a hand-in on the way lost the
+-- stop kept for after it; a plan made where the client gives no place (a dungeon) kept its free first stop out of the
+-- door; banking at the cap the arrow said "Hand in X here" of a quest kept banked; a quest taken or handed in elsewhere
+-- in town reset the objective's quest, and a flight kept it from where you took off; a release to the graveyard was a
+-- jump in place; the login plan, made before the client named your flight paths, kept its first stop after; progress
+-- on another quest far from its spots took the target behind you; Skip, then Route it again, left a pick-up out of the
+-- route; the arrow's Shift-click printed an older waypoint over a camp seller; the Route page showed an empty Ready
+-- now while every map followed the plan; and a letter cut in two at the end of a menu's line
+----------------------------------------------------------------------------
+;(function()
+  local B6CASES = {}
+  local HILLS = {
+    [1424] = { wy0 = 1066.91, wyx = -32.0059, wx0 = 400.10, wxy = -21.3354 },   -- Hillsbrad Foothills
+    [1416] = { wy0 = 783.55, wyx = -28.0005, wx0 = 1499.91, wxy = -18.6646 },   -- Alterac Mountains
+  }
+  local function toMap(m, wx, wy)
+    local t = HILLS[m]
+    if not t then return nil end
+    return (wy - t.wy0) / t.wyx / 100, (wx - t.wx0) / t.wxy / 100
+  end
+  -- a client standing in Hillsbrad (as RCASES has it; c.nopos: the client gives no place, as in a dungeon); pre(c) runs
+  -- before login (an NPC made for the case); start: where it logs in, Southshore unless given
+  local function hillsClient(name, log, done, pre, start)
+    local function mapAt(wx, wy)
+      local _, y = toMap(1424, wx, wy)
+      return y < 0.14 and 1416 or 1424
+    end
+    local sx, sy = start and start[1] or -852, start and start[2] or -517
+    local c = newClient({ name = name, level = 30, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = log, done = done or {}, world = { 0, sx, sy }, map = mapAt(sx, sy), bagSlots = {}, bind = "Southshore" })
+    local env = c.env
+    c.me = { wx = sx, wy = sy }
+    c.mapAt = mapAt
+    env.C_Map.GetBestMapForUnit = function() return mapAt(c.me.wx, c.me.wy) end
+    env.MapUtil.GetDisplayableMapForPlayer = function() return mapAt(c.me.wx, c.me.wy) end
+    env.C_Map.GetPlayerMapPosition = function(m)
+      if c.nopos then return nil end
+      local x, y = toMap(m, c.me.wx, c.me.wy)
+      if not x then return nil end
+      return { x = x, y = y, GetXY = function(self) return self.x, self.y end }
+    end
+    local wpos = env.C_Map.GetWorldPosFromMapPos
+    env.C_Map.GetWorldPosFromMapPos = function(m, v)
+      local t = HILLS[m]
+      if not t then return wpos(m, v) end
+      return 0, { x = t.wx0 + t.wxy * v.y * 100, y = t.wy0 + t.wyx * v.x * 100, GetXY = function(self) return self.x, self.y end }
+    end
+    env.C_Map.GetMapPosFromWorldPos = function(cont, pos, m)
+      local x, y = toMap(m, pos.x, pos.y)
+      if cont ~= 0 or not x then return nil end
+      return m, env.CreateVector2D(x, y)
+    end
+    env.C_Map.GetMapRectOnMap = function() return nil end
+    env.IsInInstance = function() return false, "none" end
+    if pre then pre(c) end
+    login(c)
+    return c
+  end
+  local function frame(c, dt)
+    c.clock = c.clock + dt
+    table.sort(c.timers, function(a, b) return a.t < b.t end)
+    while c.timers[1] and c.timers[1].t <= c.clock do table.remove(c.timers, 1).f() end
+    for _, f in ipairs(c.frames) do
+      local u = f.__scripts.OnUpdate
+      if u and f:IsVisible() then u(f, dt) end
+    end
+  end
+  local function walkTo(c, wx, wy)
+    local was = c.mapAt(c.me.wx, c.me.wy)
+    c.me.wx, c.me.wy = wx, wy
+    c.o.world = { 0, wx, wy }
+    if c.mapAt(wx, wy) ~= was then
+      c.ev(c.QB.eventFrame, "ZONE_CHANGED_NEW_AREA")
+      for _, f in ipairs({ c.QB.Travel.frame, c.QB.MapPage and c.QB.MapPage.events }) do
+        if f and f.__scripts.OnEvent then f.__scripts.OnEvent(f, "ZONE_CHANGED_NEW_AREA") end
+      end
+    end
+  end
+  local function settle(c)
+    c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 5 do frame(c, 0.1) end
+    c.QB.Model.Finish()
+    c.QB:Recompute(true)
+    c.QB.Model.Finish()
+    for _ = 1, 3 do frame(c, 0.1) end
+  end
+  -- a look a second or so: the target's look, the plan finished
+  local function look(c) for _ = 1, 6 do frame(c, 0.1) end; c.QB.Model.Finish(); for _ = 1, 3 do frame(c, 0.1) end end
+  local function firstStop(QB)
+    local r = QB.Target.Route()
+    return r and r.legs[1] and r.legs[1].stop.name
+  end
+  local function spot(m, wx, wy)
+    local t = HILLS[m]
+    return string.format("k,1,%d,%d,%d,20,c", m, math.floor((wy - t.wy0) / t.wyx * 10 + 0.5), math.floor((wx - t.wx0) / t.wxy * 10 + 0.5))
+  end
+  local function mage(name, log, done, wx, wy, cont, map)
+    local c = newClient({ name = name, level = 21, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = log or {}, done = done or {}, world = { cont or 0, wx or -9200, wy or -2150 }, map = map or 1433, bagSlots = {}, bind = "Lakeshire" })
+    login(c)
+    return c
+  end
+  -- B5's ten stops on the Eastern Kingdoms, and a plan's options from a place with its jumps in place so far
+  local function tenStops(code)
+    local es = {}
+    for k, n in ipairs({ 279, 255, 11, 25, 32, 72, 249, 163, 1041, 106 }) do
+      es[#es + 1] = { q = { id = 990500 + k, turnIdx = n, lvl = 30, base = 3000, mult = 1, name = "Q" .. k }, st = { code = code or "banked" } }
+    end
+    return es
+  end
+  local function at(wx, wy, jump) return { level = 30, xp = 0, goal = "route", fac = "A", start = { c = 0, wx = wx, wy = wy }, mounted = false, jump = jump } end
+  -- the Crushridge quests' objectives, unfinished
+  local function crushridge(c, extra)
+    c.objectives = { [500] = { { text = "Crushridge Ogre slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } },
+                     [504] = { { text = "Crushridge Mage slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } } }
+    for id, o in pairs(extra or {}) do c.objectives[id] = o end
+  end
+  local function saveSpots(D, ids)
+    local s = {}
+    for _, id in ipairs(ids) do s[id] = { D.SPOT[id], D.SREQ[id] } end
+    return function() for id, v in pairs(s) do D.SPOT[id], D.SREQ[id] = v[1], v[2] end end
+  end
+
+  -- 1. the planner: a stop within 60 yards whose quests are not done is no hand-in in reach. Two yards either side of
+  -- the line, the first stop is the same (it was the NPC's stop at 59 yards, the one kept at 61); with a quest ready
+  -- there, that stop goes first, and the stop kept comes next
+  B6CASES[#B6CASES + 1] = { "a stop in reach with nothing ready keeps the first stop", function()
+    local c = mage("Nearopen")
+    local M, D = c.QB.Model, c.QB.Data
+    local lh, lhi = hubOf(c, "Lakeshire")
+    local walkOf = function(d) return d * M.DETOUR / M.RUN / 60 end
+    local base = #D.NPC
+    D.NPC[base + 1] = { "Case K", 1433, 50, 50, 0, lh[3], lh[4] - 600, lhi, walkOf(600), 0, 0 }
+    D.NPC[base + 2] = { "Case N", 1433, 50, 50, 0, lh[3], lh[4] - 750, lhi, walkOf(750), 0, 0 }
+    local K, N = D.NPC[base + 1], D.NPC[base + 2]
+    local function fake(id, npc, code) return { q = { id = id, turnIdx = npc, lvl = 21, base = 3000, mult = 1, name = "Q" .. id }, st = { code = code } } end
+    local function entries(nCode)
+      local es = { fake(990601, base + 1, "active"), fake(990602, base + 2, nCode) }
+      for k, n in ipairs({ 255, 11, 25, 32, 72, 249 }) do es[#es + 1] = fake(990610 + k, n, "active") end
+      return es
+    end
+    local function who(r, k) local s = r.legs[k] and r.legs[k].stop; return s and (s.npcs[1] == base + 1 and "K" or s.npcs[1] == base + 2 and "N" or s.name) end
+    local es = entries("active")
+    local opts = function(wx, wy) local o = at(wx, wy, 1); o.level = 21; return o end
+    local prev = M.Plan(es, opts(K[6] + 5, K[7]))
+    local at61 = M.Plan(es, opts(N[6], N[7] + 61), prev)
+    local at59 = M.Plan(es, opts(N[6], N[7] + 59), prev)
+    assert(who(prev, 1) == "K", "planned by K: K first: " .. tostring(who(prev, 1)))
+    assert(who(at59, 1) == who(at61, 1) and who(at59, 1) == "K", "nothing ready at N: two yards change nothing: " .. who(at61, 1) .. " / " .. who(at59, 1))
+    -- N's quest ready: N first (whatever it pays), then K, the stop kept
+    local ready = entries("banked")
+    local near = M.Plan(ready, opts(N[6], N[7] + 30), prev)
+    assert(who(near, 1) == "N" and who(near, 2) == "K" and near.lead and near.lead.npcs[1] == base + 1,
+      "a quest ready at N: N first, then K: " .. tostring(who(near, 1)) .. ", " .. tostring(who(near, 2)))
+    -- in the air over it, or a ghost: no hand-in in reach
+    local o = opts(N[6], N[7] + 30); o.noReach = true
+    assert(who(M.Plan(ready, o, prev), 1) == "K", "in the air: nothing in reach")
+    D.NPC[base + 1], D.NPC[base + 2] = nil, nil
+  end }
+
+  -- 2. a hand-in on the way: walked to a place where the route keeps Southshore against a better start, a quest ready
+  -- 20 yards off goes first and Southshore next; handed in, Southshore is the first stop again, not the stop it was
+  -- kept against (5.4.4 as first built dropped the stop kept)
+  B6CASES[#B6CASES + 1] = { "a hand-in on the way keeps the stop kept for after it", function()
+    local c = mage("Onway")
+    local M, D = c.QB.Model, c.QB.Data
+    local es = tenStops()
+    local prev = M.Plan(es, at(-852, -517, 1))
+    local tested = 0
+    for _, s in ipairs({ { -3733 + 80, -799 }, { -5000, -1000 }, { -3400, -900 } }) do
+      local walked = M.Plan(es, at(s[1], s[2], 1), prev)
+      local fresh = M.Plan(es, at(s[1], s[2], 1))
+      if walked.held and walked.legs[1].stop.name ~= fresh.legs[1].stop.name then
+        local P = M.Place("A", 0, s[1] + 20, s[2])
+        local idx = #D.NPC + 1
+        D.NPC[idx] = { "Case Way", 1437, 50, 50, 0, s[1] + 20, s[2], P.hub, math.max(P.walk, 1.3), 0, 0 }
+        local es2 = tenStops()
+        es2[#es2 + 1] = { q = { id = 990599, turnIdx = idx, lvl = 30, base = 3000, mult = 1, name = "Way" }, st = { code = "banked" } }
+        local near = M.Plan(es2, at(s[1], s[2], 1), walked)
+        local after = M.Plan(es, at(s[1], s[2], 1), near)
+        D.NPC[idx] = nil
+        assert(near.legs[1].stop.npcs[1] == idx and near.legs[2].stop.name == walked.legs[1].stop.name,
+          "the hand-in in reach first, then the stop kept: " .. near.legs[1].stop.name .. ", " .. near.legs[2].stop.name)
+        assert(after.legs[1].stop.name == walked.legs[1].stop.name and after.held,
+          "handed in: the stop kept again, not " .. fresh.legs[1].stop.name .. ": " .. after.legs[1].stop.name)
+        tested = tested + 1
+      end
+    end
+    assert(tested >= 1, "a place where the route keeps its stop against a better one")
+  end }
+
+  -- 3. a plan made with no place to start from (in a dungeon) is a plan from before the jump out: out of the door, the
+  -- best from there (5.4.4 as first built kept the dungeon plan's free first stop, Southshore, out at Menethil Harbor);
+  -- and on the client: no place and a loading screen, then the place back and a loading screen, the plan from the door
+  B6CASES[#B6CASES + 1] = { "out of a dungeon, the plan starts afresh at the door", function()
+    local c = mage("Dungeon")
+    local M = c.QB.Model
+    local es = tenStops()
+    local before = M.Plan(es, at(-852, -517, 1))
+    local inside = M.Plan(es, { level = 30, xp = 0, goal = "route", fac = "A", mounted = false }, before)
+    local fresh = M.Plan(es, at(-3733 + 80, -799, 2))
+    local out = M.Plan(es, at(-3733 + 80, -799, 2), inside)
+    assert(not inside.fromHere and inside.legs[1].stop.name ~= fresh.legs[1].stop.name, "inside: a free plan, another first stop")
+    assert(not out.held and out.legs[1].stop.name == fresh.legs[1].stop.name, "out of the door: the best from there: " .. out.legs[1].stop.name)
+    -- the client
+    local h = hillsClient("Indoors", { { 500, 1 }, { 504, 1 }, { 535, 1 } })
+    local QB, f = h.QB, h.QB.Target.frame
+    settle(h)
+    h.nopos = true
+    h.env.IsInInstance = function() return true, "party" end
+    f.__scripts.OnEvent(f, "PLAYER_ENTERING_WORLD")
+    settle(h)
+    assert(not QB.routePlan.fromHere, "inside: no place, a free plan")
+    h.nopos = false
+    h.env.IsInInstance = function() return false, "none" end
+    walkTo(h, -852 + 300, -517 - 1900)
+    f.__scripts.OnEvent(f, "PLAYER_ENTERING_WORLD")
+    settle(h)
+    local wp = QB.API.WorldPosition()
+    local fr = M.Plan(QB:RouteEntries("plan"), { level = 30, xp = 0, goal = "route", fac = "A", start = wp, mounted = false, jump = QB.jumpVer })
+    assert(QB.routePlan.fromHere and not QB.routePlan.held and firstStop(QB) == fr.legs[1].stop.name,
+      "out: the plan from the door: " .. tostring(firstStop(QB)) .. " / " .. fr.legs[1].stop.name)
+  end }
+
+  -- 4. banking at the cap (the owner's paladin, level 20 at the 20 cap): what is ready stays banked for the run, and the
+  -- arrow says no "Hand in X here" by one of the route's NPCs (5.4.4 as first built told him to hand in Dry Times)
+  B6CASES[#B6CASES + 1] = { "banking at the cap: no hand-in in reach", function()
+    local c = newClient({ name = "Mikal", level = 20, cap = 20, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2,
+      race = "Human", log = OWNER_LOG, world = { 0, -8830, 480 }, bagSlots = {},
+      done = { [96393] = true, [96394] = true, [96395] = true, [96403] = true, [98423] = true, [96391] = true, [6981] = true,
+               [155] = true, [142] = true, [141] = true, [135] = true, [132] = true, [65] = true, [389] = true, [373] = true } })
+    login(c)
+    local QB, A = c.QB, c.QB.Arrow
+    settle(c)
+    assert(QB.mode == "lock" and QB.Target.Route() == QB.routeNow, "banking: the route on screen is what is ready")
+    local r = QB.Target.Route()
+    local leg = r.legs[2] or r.legs[1]
+    local p = leg.stop.places[1]
+    standAt(c, p.c, p.wx + 10, p.wy)
+    A:Set(true)
+    A:Update()
+    assert(not QB.Target.cur.near and not (A.t and A.t.label and A.t.label:find("^Hand in ")),
+      "at the cap by " .. leg.stop.name .. ": no hand-in in reach: " .. tostring(A.t and A.t.label))
+  end }
+
+  -- 5. the objective's quest is kept while its stop is the same town, whichever of the town's NPCs the tour starts at: a
+  -- quest taken whose NPC stands nearer the flight master (Southshore's tour starts there now), then handed in again
+  B6CASES[#B6CASES + 1] = { "a quest taken or handed in elsewhere in town keeps the objective's quest", function()
+    local npc
+    local c = hillsClient("Intown", { { 500, 0 }, { 504, 0 } }, nil, function(c)
+      local D = c.QB.Data
+      local ss, ssi
+      for i, h in ipairs(D.HUB.A) do if h[1] == "Southshore" then ss, ssi = h, i end end
+      local wx, wy = ss[3] + 15, ss[4]
+      local t = HILLS[1424]
+      npc = #D.NPC + 1
+      D.NPC[npc] = { "Case Townsman", 1424, (wy - t.wy0) / t.wyx, (wx - t.wx0) / t.wxy, 0, wx, wy, ssi, 15 * 1.3 / 7 / 60, 0, 0 }
+      c.saveTurn = D.Q[535][6]
+      D.Q[535][6] = npc
+    end)
+    local QB, D, A = c.QB, c.QB.Data, c.QB.Arrow
+    local restore = saveSpots(D, { 500, 504, 535 })
+    D.SPOT[500], D.SPOT[504], D.SPOT[535] = spot(1416, 470, -700), spot(1416, 300, -700), nil
+    D.SREQ[500], D.SREQ[504] = "1:10", "1:10"
+    crushridge(c)
+    settle(c)
+    A:Set(true)
+    look(c)
+    walkTo(c, 450, -700); look(c)
+    c.objectives[500][1].numFulfilled = 1
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c)
+    walkTo(c, 250, -700); look(c)
+    assert(A.t and A.t.obj and A.t.qid == 500 and firstStop(QB) == "Southshore", "an ogre slain: the ogres' quest kept, nearer the mages' spot")
+    local anchor = QB.Target.Route().legs[1].stop.wx
+    c.log = { { 500, 0 }, { 504, 0 }, { 535, 0 } }
+    c.ev(QB.eventFrame, "QUEST_ACCEPTED", 535)
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c); look(c)
+    assert(firstStop(QB) == "Southshore" and QB.Target.Route().legs[1].stop.wx ~= anchor, "taken: the same stop, its tour from another NPC")
+    assert(A.t.obj and A.t.qid == 500, "taken: still the ogres' quest: " .. tostring(A.t.name))
+    c.log = { { 500, 0 }, { 504, 0 } }
+    c.done[535] = true
+    c.ev(QB.eventFrame, "QUEST_TURNED_IN", 535, 0)
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c); look(c)
+    assert(A.t.obj and A.t.qid == 500, "handed in: still the ogres' quest: " .. tostring(A.t.name))
+    restore()
+    D.Q[535][6] = c.saveTurn
+    D.NPC[npc] = nil
+  end }
+
+  -- 6. a jump in place: the objective's quest kept from where you took off is from there. Picked afresh where you land
+  -- (5.4.4 as first built led 1,550 yards back to the ogres' spot, the mages' 22 yards away)
+  B6CASES[#B6CASES + 1] = { "after a jump the objective is picked afresh", function()
+    local c = hillsClient("Jumper", { { 500, 0 }, { 504, 0 } })
+    local QB, D, A = c.QB, c.QB.Data, c.QB.Arrow
+    local restore = saveSpots(D, { 500, 504 })
+    D.SPOT[500], D.SPOT[504] = spot(1416, 470, -700), spot(1424, -1100, -700)
+    D.SREQ[500], D.SREQ[504] = "1:10", "1:10"
+    crushridge(c)
+    settle(c)
+    A:Set(true)
+    look(c)
+    walkTo(c, 450, -690); look(c)
+    c.objectives[500][1].numFulfilled = 1
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c)
+    assert(A.t.obj and A.t.qid == 500, "an ogre slain: the ogres' quest")
+    local jv = QB.jumpVer
+    walkTo(c, -1080, -690)
+    frame(c, 1.1)
+    look(c); look(c)
+    local d = math.sqrt((A.t.wx + 1080) ^ 2 + (A.t.wy + 690) ^ 2)
+    assert(QB.jumpVer ~= jv and A.t.obj and A.t.qid == 504 and d < 100, string.format("landed: the mages' spot at hand: %s, %.0f yards", tostring(A.t.name), d))
+    restore()
+  end }
+
+  -- 7. a death: the release to a graveyard 420 yards off, and the run back as a ghost, are no jump in place; brought
+  -- back at the body nothing is planned afresh; resurrected by the spirit healer (alive at the graveyard) it is
+  B6CASES[#B6CASES + 1] = { "a release to the graveyard is no jump", function()
+    local c = hillsClient("Ghost", { { 500, 0 }, { 504, 0 } })
+    local QB = c.QB
+    settle(c)
+    for _ = 1, 12 do frame(c, 0.1) end
+    local jv, sig = QB.jumpVer, QB.sigPlan
+    c.ghost = true
+    walkTo(c, -852 + 420, -517)
+    frame(c, 1.1)
+    local f = QB.Target.frame
+    f.__scripts.OnEvent(f, "PLAYER_ENTERING_WORLD") -- (a release that loads the graveyard)
+    look(c)
+    for _, x in ipairs({ 300, 150, 0 }) do walkTo(c, -852 + x, -517); frame(c, 1.1) end
+    c.ghost = false
+    frame(c, 1.1); look(c)
+    assert(QB.jumpVer == jv and QB.sigPlan == sig, "released, ran back, alive at the body: no jump in place: " .. tostring(jv) .. " -> " .. tostring(QB.jumpVer))
+    c.ghost = true; frame(c, 1.1)
+    walkTo(c, -852 + 420, -517); frame(c, 1.1)
+    c.ghost = false; frame(c, 1.1)
+    assert(QB.jumpVer ~= jv, "alive at the graveyard (the spirit healer): a jump in place")
+    -- the hand-in in reach and the planner: nothing in reach as a ghost
+    c.ghost = true
+    assert(QB.Target.NoHandin(), "a ghost hands nothing in")
+    c.ghost = false
+  end }
+
+  -- 8. the first plan of a session is made before the client names your flight paths (TV.Learn, three seconds after the
+  -- loading screen): with a continent not read yet, its answer starts the plan afresh, as a jump does; with both read,
+  -- nothing changes for it
+  B6CASES[#B6CASES + 1] = { "the client naming your flight paths starts the plan afresh", function()
+    for _, read in ipairs({ false, true }) do
+      local c = mage(read and "Readboth" or "Newchar", { { 20, 0 } }, nil, -8830, 480, 0, 1453)
+      local QB, TV = c.QB, c.QB.Travel
+      settle(c)
+      local db = TV.DB()
+      if read then db.readC[0], db.readC[1] = 1, 1 else db.readC[0], db.readC[1] = nil, nil end
+      TV.tells = nil
+      c.taxiKnown = { [hubOf(c, "Stormwind")[6]] = true }
+      local jv = QB.jumpVer
+      fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+      settle(c)
+      assert(TV.tells, "the client named them")
+      if read then
+        assert(QB.jumpVer == jv, "both continents read before: nothing afresh")
+      else
+        assert(QB.jumpVer ~= jv and QB.routePlan.jump == QB.jumpVer and not QB.routePlan.held, "a continent not read: the plan afresh")
+      end
+    end
+  end }
+
+  -- 9. progress on another quest of the stop far from its spots (a mob of it on the way, 744 yards from its only spot)
+  -- leaves the target where it is; at its spots it takes it (the walk's case)
+  B6CASES[#B6CASES + 1] = { "progress far from a quest's spots keeps the target", function()
+    local c = hillsClient("Faraway", { { 500, 0 }, { 504, 0 } })
+    local QB, D, A = c.QB, c.QB.Data, c.QB.Arrow
+    local restore = saveSpots(D, { 500, 504 })
+    D.SPOT[500] = spot(1424, -400, -600) .. ";" .. spot(1416, 420, -700)
+    D.SPOT[504] = spot(1424, -1400, -500)
+    D.SREQ[500], D.SREQ[504] = "1:10", "1:10"
+    crushridge(c)
+    settle(c)
+    A:Set(true)
+    look(c)
+    local from, to = { -852, -517 }, { 470, -700 }
+    for k = 1, 34 do
+      local fr = k / 34
+      walkTo(c, from[1] + (to[1] - from[1]) * fr, from[2] + (to[2] - from[2]) * fr)
+      if k == 5 then c.objectives[504][1].numFulfilled = 1; c.ev(QB.eventFrame, "QUEST_LOG_UPDATE") end
+      look(c)
+      assert(A.t.obj and A.t.qid == 500, "step " .. k .. ": the ogres' quest: " .. tostring(A.t.name))
+    end
+    -- back by the mages' spot: a mage slain there takes the target
+    walkTo(c, -1380, -500); look(c)
+    c.objectives[504][1].numFulfilled = 2
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c)
+    assert(A.t.obj and A.t.qid == 504, "a mage slain at its spot: the mages' quest")
+    restore()
+  end }
+
+  -- 10. Skip a pick-up, then Route it again: back on the pick-up list and in the route, as chat says; skipped again, a
+  -- Shift-click on its ! routes it again (chat said so), and the ! on Available does too
+  B6CASES[#B6CASES + 1] = { "Skip a pick-up, then route it again", function()
+    local c = mage("Pickskip")
+    local QB, QM = c.QB, c.QB.QuestMap
+    settle(c)
+    local q
+    for _, cand in ipairs(QB.UI:Candidates(400) or {}) do
+      local qq = QB.Quest.Get(cand.id)
+      if qq and not QB.state.log[qq.id] and QB:Status(qq).code == "todo" then q = qq break end
+    end
+    assert(q, "a quest to pick up")
+    local function routed()
+      settle(c)
+      for _, e in ipairs(QB:RouteEntries("plan")) do if e.q.id == q.id then return QB:InPlan(q) end end
+      return false
+    end
+    QB:SetAdded(q.id, true)
+    assert(routed(), "on the pick-up list: in the route")
+    QB.UI.SkipQuest(q)
+    assert(not routed() and QB:IsSkipped(q.id), "skipped: out")
+    QB.UI.RouteAgain(q)
+    assert(routed() and not QB:IsSkipped(q.id) and c.chat[#c.chat]:find("back in your route", 1, true), "Route it again: in the route, as chat says")
+    QB.UI.SkipQuest(q)
+    assert(not routed(), "skipped again")
+    QM.Track({ kind = "give", id = q.id })
+    assert(routed() and not QB:IsSkipped(q.id) and c.chat[#c.chat]:find("Back in your route", 1, true), "a Shift-click on its !: in the route: " .. c.chat[#c.chat])
+    QB.UI.SkipQuest(q)
+    QB:ToggleAdd(q.id)
+    assert(routed() and not QB:IsSkipped(q.id), "the ! on Available: in the route")
+    QB:SetAdded(q.id, false)
+  end }
+
+  -- 11. the arrow's Shift-click says the waypoint it shows: a camp seller shown after a click on a quest's place has
+  -- none, and its Shift-click prints nothing of the older one
+  B6CASES[#B6CASES + 1] = { "the arrow's Shift-click says only its own waypoint", function()
+    local c = mage("Shifty")
+    local QB, A = c.QB, c.QB.Arrow
+    settle(c)
+    A:Set(true)
+    QB.API.SetWaypoint(1433, 30.5, 45.5, "Marshal Marris")
+    for _ = 1, 3 do frame(c, 0.1) end
+    local F = c.env.QuestBankArrow
+    c.shift = true
+    local n0 = #c.chat
+    F.__scripts.OnClick(F, "LeftButton")
+    assert(#c.chat > n0 and c.chat[#c.chat]:find("Marshal Marris", 1, true), "the waypoint shown: its line")
+    QB.Camp.GoTo({ n = "Some General Goods Vendor", c = 0, wx = -9465, wy = 10 }, { 4470, 4471 })
+    for _ = 1, 3 do frame(c, 0.1) end
+    assert(A.t and A.t.temp and A.t.name == "Some General Goods Vendor", "the seller shown")
+    n0 = #c.chat
+    F.__scripts.OnClick(F, "LeftButton")
+    for k = n0 + 1, #c.chat do assert(not c.chat[k]:find("Marshal Marris", 1, true), "no older waypoint said: " .. c.chat[k]) end
+    c.shift = false
+    A:EndTemp("back")
+  end }
+
+  -- 12. the Route page shows the route on screen: with Ready now chosen and nothing ready, the plan the arrow, the
+  -- minimap and the pins follow, and says so
+  B6CASES[#B6CASES + 1] = { "the Route page shows the route the maps follow", function()
+    local c = hillsClient("Readynow", { { 500, 0 }, { 504, 0 } })
+    local QB = c.QB
+    QB:Settings().routeQuest = "now"
+    settle(c)
+    QB.UI:Open(3)
+    QB.UI:Refresh()
+    local v = QB.UI.views[3]
+    assert(QB.Target.Route() == QB.routePlan, "nothing ready: the maps follow the plan")
+    assert(v.setup:GetText():find("follow Log and pick-ups", 1, true) and v.summary:GetText():find("min"), "the page says so: " .. v.setup:GetText())
+    local bad = checkLayout(QB.UI.frame, "the Route page, the plan with nothing ready")
+    assert(#bad == 0, "and it fits: " .. tostring(bad[1]))
+    QB:Settings().routeQuest = nil
+  end }
+
+  -- 13. the arrow's menu on a hand-in in reach: Skip, the quest ready there; a stop's pick-ups only where you hold none
+  -- of its quests. And a menu's line cut inside a letter drops the whole letter
+  B6CASES[#B6CASES + 1] = { "Skip on a hand-in in reach; a letter never cut in two", function()
+    local c = newClient({ name = "Nearskip", level = 5, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = { { 7, 1 }, { 18, 1 } }, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Northshire Abbey" })
+    login(c)
+    local QB, D, A = c.QB, c.QB.Data, c.QB.Arrow
+    settle(c)
+    A:Set(true)
+    local n7 = D.NPC[QB.Quest.Get(7).turnIdx]
+    standAt(c, 0, n7[6] + 2, n7[7])
+    A:Update()
+    assert(A.t.label and A.t.label:find("^Hand in "), "a hand-in in reach")
+    local ids = A.Skippable(A.t)
+    assert(#ids >= 1 and QB.state.log[ids[1]], "Skip: the quest ready there: " .. #ids)
+    local cut = QB.UI.Short("Ab\195\169" .. string.rep("x", 30), 6)
+    assert(cut == "Ab...", "a letter cut short goes whole: " .. cut:gsub("[\128-\255]", "?"))
+  end }
+
+  -- 14. the map's open-spot lists are kept for the quests in your log with the minimap's pins off too
+  B6CASES[#B6CASES + 1] = { "open-spot lists kept by the log, the minimap off", function()
+    local c = hillsClient("Nomini", { { 500, 0 }, { 504, 0 } })
+    local QB, D, A, QM = c.QB, c.QB.Data, c.QB.Arrow, c.QB.QuestMap
+    local restore = saveSpots(D, { 500, 504 })
+    D.SPOT[500], D.SPOT[504] = spot(1416, 470, -700), spot(1416, 300, -700)
+    D.SREQ[500], D.SREQ[504] = "1:10", "1:10"
+    crushridge(c)
+    QB:Settings().minimapPins = false
+    settle(c)
+    A:Set(true)
+    look(c)
+    assert(QM.KeptLists() >= 1, "the target's quest read")
+    c.log = {}
+    settle(c); look(c)
+    assert(QM.KeptLists() == 0, "gone from your log: its list gone: " .. QM.KeptLists())
+    QB:Settings().minimapPins = nil
+    restore()
+  end }
+
+  --------------------------------------------------------------------------
+  -- 5.4.4, the review's third round, each case failing on the files before it (B6CASES, after round 2's, with
+  -- "round 3"): a kill that counted for two quests of the stop flipped the objective between them on every kill; a
+  -- stop put first only for its hand-in in reach stayed first, behind you, once you walked on (and after a hand-in
+  -- that left one of its quests to do); a quest taken or handed in at a stop out of town renamed it, and the
+  -- objective's quest went back to the nearest; a quest giver's window or a party member's XP for a quest outside the
+  -- route planned the route again; and while the arrow led to a hand-in or a pick-up, the minimap and the Map page
+  -- lost its step
+  --------------------------------------------------------------------------
+  local R3 = "round 3"
+
+  -- 15. one kill for both quests of the stop (a mob two quests ask for): the quest kept stays, and the target with it
+  B6CASES[#B6CASES + 1] = { "a kill that counts for two quests keeps the objective", function()
+    local c = hillsClient("Shared", { { 500, 0 }, { 504, 0 } })
+    local QB, D, A = c.QB, c.QB.Data, c.QB.Arrow
+    local restore = saveSpots(D, { 500, 504 })
+    D.SPOT[500], D.SPOT[504] = spot(1416, 470, -700), spot(1416, 300, -700)
+    D.SREQ[500], D.SREQ[504] = "1:10", "1:10"
+    crushridge(c)
+    settle(c)
+    A:Set(true)
+    look(c)
+    walkTo(c, 420, -700); look(c) -- (nearer the ogres' spot: that quest is the one kept)
+    c.objectives[500][1].numFulfilled = 1
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c)
+    assert(A.t.obj and A.t.qid == 500, "an ogre slain: the ogres' quest")
+    local ver = QB.Target.ver
+    for k = 2, 6 do
+      c.objectives[500][1].numFulfilled = k
+      c.objectives[504][1].numFulfilled = k - 1
+      c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c)
+      assert(A.t.obj and A.t.qid == 500 and QB.Target.ver == ver,
+        string.format("kill %d for both: still the ogres' quest: %s (target changed %d times)", k, tostring(A.t.qid), QB.Target.ver - ver))
+    end
+    restore()
+  end, R3 }
+
+  -- 16. a stop put first only for its hand-in in reach: walked on past it (a plan from 0 to 500 yards beyond the stop
+  -- kept), the stop kept leads again, as a plan from there with no history says; and a hand-in there that leaves
+  -- another of its quests to do keeps the stop kept for after it (or loses it only to a clearly better one)
+  B6CASES[#B6CASES + 1] = { "a stop in reach left behind is not kept first", function()
+    local c = mage("Leftnear")
+    local M, D = c.QB.Model, c.QB.Data
+    local lh, lhi = hubOf(c, "Lakeshire")
+    local walkOf = function(d) return d * M.DETOUR / M.RUN / 60 end
+    local base = #D.NPC
+    D.NPC[base + 1] = { "Case K", 1433, 50, 50, 0, lh[3], lh[4] - 600, lhi, walkOf(600), 0, 0 }
+    D.NPC[base + 2] = { "Case N", 1433, 50, 50, 0, lh[3], lh[4] - 750, lhi, walkOf(750), 0, 0 }
+    local K, N = D.NPC[base + 1], D.NPC[base + 2]
+    local function fake(id, npc, code) return { q = { id = id, turnIdx = npc, lvl = 21, base = 3000, mult = 1, name = "Q" .. id }, st = { code = code } } end
+    local es = { fake(990601, base + 1, "active"), fake(990602, base + 2, "banked") }
+    for k, n in ipairs({ 255, 11, 25, 32, 72, 249 }) do es[#es + 1] = fake(990610 + k, n, "active") end
+    local function who(r, k) local s = r.legs[k] and r.legs[k].stop; return s and (s.npcs[1] == base + 1 and "K" or s.npcs[1] == base + 2 and "N" or s.name) end
+    local opts = function(wx, wy) local o = at(wx, wy, 1); o.level = 21; return o end
+    local prev = M.Plan(es, opts(K[6] + 5, K[7]))
+    local near = M.Plan(es, opts(N[6], N[7] + 30), prev)
+    assert(who(near, 1) == "N" and who(near, 2) == "K", "N in reach: first, for that alone; K next")
+    for _, dy in ipairs({ 0, 100, 200, 300, 500 }) do
+      local fresh = M.Plan(es, opts(K[6], K[7] + dy))
+      local on = M.Plan(es, opts(K[6], K[7] + dy), near)
+      assert(who(on, 1) == who(fresh, 1) and who(on, 1) ~= "N" and not on.firstNear,
+        string.format("%d yards past K: %s first, as from there with no history (%s)", dy, tostring(who(on, 1)), tostring(who(fresh, 1))))
+    end
+    D.NPC[base + 1], D.NPC[base + 2] = nil, nil
+    -- the hand-in on the way, another quest of that NPC's still to do
+    local es10 = tenStops()
+    local prev2 = M.Plan(es10, at(-852, -517, 1))
+    local tested = 0
+    for _, s in ipairs({ { -3733 + 80, -799 }, { -5000, -1000 }, { -3400, -900 } }) do
+      local walked = M.Plan(es10, at(s[1], s[2], 1), prev2)
+      local fresh = M.Plan(es10, at(s[1], s[2], 1))
+      if walked.held and walked.legs[1].stop.name ~= fresh.legs[1].stop.name then
+        local P = M.Place("A", 0, s[1] + 20, s[2])
+        local idx = #D.NPC + 1
+        D.NPC[idx] = { "Case Way", 1437, 50, 50, 0, s[1] + 20, s[2], P.hub, math.max(P.walk, 1.3), 0, 0 }
+        local todo = { q = { id = 990598, turnIdx = idx, lvl = 30, base = 3000, mult = 1, name = "WayC" }, st = { code = "active" } }
+        local es2 = tenStops()
+        es2[#es2 + 1] = { q = { id = 990599, turnIdx = idx, lvl = 30, base = 3000, mult = 1, name = "Way" }, st = { code = "banked" } }
+        es2[#es2 + 1] = todo
+        local nearW = M.Plan(es2, at(s[1], s[2], 1), walked)
+        local es3 = tenStops()
+        es3[#es3 + 1] = todo
+        local after = M.Plan(es3, at(s[1], s[2], 1), nearW)
+        D.NPC[idx] = nil
+        local kept = walked.legs[1].stop.name
+        assert(nearW.legs[1].stop.npcs[1] == idx and nearW.lead.name == kept, "Way in reach first, " .. kept .. " kept after it")
+        assert((after.held and after.legs[1].stop.name == kept) or (after.alt and after.alt.first == kept),
+          "Way handed in, WayC still to do: " .. kept .. " kept (or beaten clearly): " .. after.legs[1].stop.name .. ", held " .. tostring(after.held))
+        tested = tested + 1
+      end
+    end
+    assert(tested >= 1, "a place where the route keeps its stop against a better one")
+  end, R3 }
+
+  -- 17. on the client: the route from Southshore, Southshore first, then Valik in Alterac; walked to 30 yards from
+  -- Valik (nothing planned on the way), a quest of Southshore's taken back into progress plans it again there: Valik's
+  -- stop first for its hand-in in reach alone, Southshore kept after it. Walked on toward Southshore past 90 yards
+  -- without handing in for a few seconds, the route is planned again (5.4.4 as first built kept his stop first,
+  -- behind you, until something else changed, and then kept it for having been first): Southshore is the stop kept,
+  -- and loses only to a plan clearly better (going back 90 yards, against Southshore and back); walking on plans
+  -- nothing more while Southshore leads, and while Valik's stop is kept first for going back being clearly quicker
+  -- only each 90 yards further, until Southshore leads (round 4: the one plan made for walking away was the last
+  -- until something else changed, and the stop stayed behind you as stop 1)
+  B6CASES[#B6CASES + 1] = { "walked off a hand-in in reach: planned again, the stop kept after it kept", function()
+    local probe = hillsClient("Valikfrom", { { 500, 1 }, { 504, 1 }, { 535, 1 } })
+    local n = probe.QB.Data.NPC[probe.QB.Quest.Get(535).turnIdx]
+    local ux, uy = -852 - n[6], -517 - n[7]
+    local len = math.sqrt(ux * ux + uy * uy)
+    ux, uy = ux / len, uy / len
+    -- (logged in 150 yards out of Southshore, on the way to Valik: Southshore is first for its own sake. Logged in
+    -- beside its hand-in, it is first for being in reach, and walking out of town gives it up for Alterac: case 22)
+    local c = hillsClient("Walkon", { { 500, 1 }, { 504, 1 }, { 535, 1 } }, nil, nil, { n[6] + (len - 150) * ux, n[7] + (len - 150) * uy })
+    local QB, D, A, T = c.QB, c.QB.Data, c.QB.Arrow, c.QB.Target
+    settle(c)
+    A:Set(true)
+    look(c)
+    assert(firstStop(QB) == "Southshore" and not T.Route().firstNear, "out of Southshore: Southshore first, for its own sake")
+    local function walkOn(from, to, by)
+      for d = from, to, by or 7 do
+        walkTo(c, n[6] + d * ux, n[7] + d * uy)
+        frame(c, 1.0)
+      end
+      look(c)
+    end
+    local jv = QB.jumpVer
+    walkOn(len, 30, -7)
+    c.log = { { 500, 0 }, { 504, 1 }, { 535, 1 } }
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c); look(c)
+    local r = T.Route()
+    local alterac = r.legs[1].stop.name
+    assert(QB.jumpVer == jv and r.lead and r.lead.name == "Southshore" and alterac ~= "Southshore" and T.cur.near,
+      "in reach of Valik: " .. alterac .. " first for that, Southshore after it: " .. tostring(A.t and A.t.label))
+    local reach = QB.reachVer or 0
+    walkOn(37, 86)
+    assert((QB.reachVer or 0) == reach and T.Route() == r and T.cur.near, "within 90 yards: still the hand-in in reach, nothing planned")
+    walkOn(93, 135) -- (past 90 yards for a few seconds: T.LEFT_FOR)
+    local again = T.Route()
+    assert(QB.jumpVer == jv and (QB.reachVer or 0) == reach + 1 and again ~= r, "past 90 yards: planned again, once, and no jump")
+    assert((firstStop(QB) == "Southshore" and not again.firstLeft) or (again.alt and again.alt.first == "Southshore" and again.firstLeft),
+      "Southshore kept, or beaten only clearly (and then marked): " .. tostring(firstStop(QB)) .. ", alt " .. tostring(again.alt and again.alt.first))
+    local plans = QB.reachVer
+    walkOn(142, 400)
+    if again.firstLeft then
+      assert(QB.jumpVer == jv and QB.reachVer <= plans + 3 and (firstStop(QB) == "Southshore" or T.Route().firstLeft),
+        "walking on: planned again each 90 yards while Valik's stop is kept first: " .. (QB.reachVer - plans) .. " plans, " .. tostring(firstStop(QB)))
+    else
+      assert((QB.reachVer or 0) == reach + 1 and T.Route() == again, "walking on plans nothing more")
+    end
+  end, R3 }
+
+  -- 18. a stop out of town (two NPCs 30 yards apart in Alterac, 500 and 504 handed in at one): a quest taken whose NPC
+  -- is the other, nearer the flight master, renames the stop after it; the objective's quest is kept
+  B6CASES[#B6CASES + 1] = { "a stop out of town renamed keeps the objective's quest", function()
+    local n1, n2, save
+    local c = hillsClient("Cluster", { { 500, 0 }, { 504, 0 } }, nil, function(c)
+      local D = c.QB.Data
+      local ssi
+      for i, h in ipairs(D.HUB.A) do if h[1] == "Southshore" then ssi = i end end
+      local t = HILLS[1416]
+      local function mk(wx, wy, name)
+        local i = #D.NPC + 1
+        D.NPC[i] = { name, 1416, (wy - t.wy0) / t.wyx, (wx - t.wx0) / t.wxy, 0, wx, wy, ssi, 2.5, 0, 0 }
+        return i
+      end
+      n1 = mk(400, -760, "Case One")
+      n2 = mk(370, -760, "Case Two") -- (nearer Southshore's flight master: the stop's tour starts at it)
+      save = { D.Q[500][6], D.Q[504][6], D.Q[535][6] }
+      D.Q[500][6], D.Q[504][6], D.Q[535][6] = n1, n1, n2
+    end)
+    local QB, D, A = c.QB, c.QB.Data, c.QB.Arrow
+    local restore = saveSpots(D, { 500, 504, 535 })
+    D.SPOT[500], D.SPOT[504], D.SPOT[535] = spot(1416, 470, -700), spot(1416, 300, -700), nil
+    D.SREQ[500], D.SREQ[504] = "1:10", "1:10"
+    crushridge(c)
+    settle(c)
+    A:Set(true)
+    look(c)
+    walkTo(c, 450, -700); look(c)
+    c.objectives[500][1].numFulfilled = 1
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c)
+    walkTo(c, 250, -700); look(c)
+    local name = firstStop(QB)
+    assert(A.t.obj and A.t.qid == 500 and name ~= "Southshore", "an ogre slain: the ogres' quest kept, nearer the mages' spot, at " .. tostring(name))
+    c.log = { { 500, 0 }, { 504, 0 }, { 535, 0 } }
+    c.ev(QB.eventFrame, "QUEST_ACCEPTED", 535)
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c); look(c)
+    assert(firstStop(QB) ~= name, "taken: the stop named after the other NPC: " .. tostring(firstStop(QB)))
+    assert(A.t.obj and A.t.qid == 500, "taken: still the ogres' quest: " .. tostring(A.t.name))
+    restore()
+    D.Q[500][6], D.Q[504][6], D.Q[535][6] = save[1], save[2], save[3]
+    D.NPC[n2], D.NPC[n1] = nil, nil
+  end, R3 }
+
+  -- 19. the XP the game shows for a quest outside the route (a quest giver's window, a party member's report) plans
+  -- nothing again; for a quest of the route it does
+  B6CASES[#B6CASES + 1] = { "XP read for a quest outside the route plans nothing again", function()
+    local c = hillsClient("Viewer", { { 500, 0 }, { 504, 0 } })
+    local QB, D = c.QB, c.QB.Data
+    crushridge(c)
+    settle(c)
+    look(c)
+    local ids = {}
+    for id in pairs(D.Q) do ids[#ids + 1] = id end
+    table.sort(ids)
+    local picks = {}
+    for _, id in ipairs(ids) do
+      local q = QB.Quest.Get(id)
+      if q and id ~= 500 and id ~= 504 and q.lvl and q.lvl >= 29 and q.lvl <= 33 and not q.liveFull and not (c.env.QuestBankDB.live or {})[id]
+        and QB.Model.Listed(q) > 0 and QB.Model.Pct(q.lvl, 30) >= 100 then
+        picks[#picks + 1] = { id, QB.Model.Listed(q) }
+        if #picks == 2 then break end
+      end
+    end
+    assert(#picks == 2, "two quests to read")
+    local sig, plan, live = QB.sigPlan, QB.routePlan, QB.liveVer
+    c.window = { id = picks[1][1], xp = picks[1][2] }
+    c.ev(QB.eventFrame, "QUEST_DETAIL"); look(c)
+    c.window = nil
+    assert(QB.liveVer ~= live, "the window's XP is on record")
+    QB.Live.Record(picks[2][1], QB.Model.RoundXp(math.floor(picks[2][2] * 1.2)), 30, "party"); QB:MarkDirty(); look(c)
+    assert(QB.sigPlan == sig and QB.routePlan == plan, "a quest giver's window and a party member's report: no new plan")
+    local q500 = QB.Quest.Get(500)
+    QB.Live.Record(500, QB.Model.RoundXp(math.floor(QB.Model.Listed(q500) * 1.2)), 30, "npc"); QB:MarkDirty(); look(c)
+    assert(QB.sigPlan ~= sig, "the game's XP for a quest of the route: planned again")
+    c.env.QuestBankDB.live[500] = nil
+  end, R3 }
+
+  -- 20. the arrow leading to a hand-in (its hand-in mode) by a flight: the minimap and the Map page show its step, as
+  -- 5.4.3 did, but draw no stroke by it to the route's target
+  B6CASES[#B6CASES + 1] = { "the arrow's step on the minimap in its hand-in mode", function()
+    local probe = mage("Finder")
+    local D = probe.QB.Data
+    local _, lhi = hubOf(probe, "Lakeshire")
+    local pick
+    for id, q in pairs(D.Q) do
+      local n = q[6] and D.NPC[q[6]]
+      if n and n[8] == lhi and n[5] == 0 and (not pick or id < pick) then pick = id end
+    end
+    local c = mage("Stepper", { { pick, 1 } }, nil, -8830, 480, 0, 1453)
+    local QB, A, Mini = c.QB, c.QB.Arrow, c.QB.Mini
+    settle(c)
+    A:Set(true)
+    standAt(c, 0, -8700, 650)
+    local function stepIn()
+      for _, d in ipairs(Mini.List()) do if d.kind == "step" then return d end end
+    end
+    for _, m in ipairs({ "handin", "route" }) do
+      A:SetMode(m)
+      for _ = 1, 3 do A:Update(); look(c) end
+      local s, via = QB.Target.Step()
+      assert(s and stepIn() and s.name == A.MiniStep().name, m .. ": the arrow's step on the minimap: " .. tostring(s and s.name))
+      assert((m == "handin") == (A.t ~= QB.Target.cur), m .. ": the arrow leads to " .. (m == "handin" and "the hand-in" or "the one target"))
+      assert(via == (m == "route"), m .. ": strokes by it only on the way to the one target")
+    end
+  end, R3 }
+
+  --------------------------------------------------------------------------
+  -- 5.4.4, the review's fourth round, each case failing on the files before it (B6CASES, "round 4"): a hand-in put
+  -- first only for being in reach by the session's first plan, or the first after a jump in place (a login, a landing,
+  -- a hearth beside it), was not marked for that, so walked past it stayed first, behind you, and the next plan kept
+  -- it for having been first; and a mob that counted for the quest kept and dropped an item for another quest of the
+  -- stop, the kill in one read of the log and the loot in the next, flipped the objective between the two on every mob
+  --------------------------------------------------------------------------
+  local R4 = "round 4"
+
+  -- 21. the planner: a plan with no history (none, or the empty one a login starts from) or the first after a jump
+  -- in place, made 30 yards from N with its quest ready, puts N first for that alone (route.firstNear) with K next;
+  -- a plan on from past K with it as history puts K first, as a plan with no history does, not N behind you
+  B6CASES[#B6CASES + 1] = { "a stop in reach first in the first plan, or after a jump, is not kept first", function()
+    local c = mage("Firstnear")
+    local M, D = c.QB.Model, c.QB.Data
+    local lh, lhi = hubOf(c, "Lakeshire")
+    local walkOf = function(d) return d * M.DETOUR / M.RUN / 60 end
+    local base = #D.NPC
+    D.NPC[base + 1] = { "Case K", 1433, 50, 50, 0, lh[3], lh[4] - 600, lhi, walkOf(600), 0, 0 }
+    D.NPC[base + 2] = { "Case N", 1433, 50, 50, 0, lh[3], lh[4] - 750, lhi, walkOf(750), 0, 0 }
+    local K, N = D.NPC[base + 1], D.NPC[base + 2]
+    local function fake(id, npc, code) return { q = { id = id, turnIdx = npc, lvl = 21, base = 3000, mult = 1, name = "Q" .. id }, st = { code = code } } end
+    local es = { fake(990601, base + 1, "active"), fake(990602, base + 2, "banked") }
+    for k, n in ipairs({ 255, 11, 25, 32, 72, 249 }) do es[#es + 1] = fake(990610 + k, n, "active") end
+    local function who(r, k) local s = r.legs[k] and r.legs[k].stop; return s and (s.npcs[1] == base + 1 and "K" or s.npcs[1] == base + 2 and "N" or s.name) end
+    local opts = function(wx, wy, jump) local o = at(wx, wy, jump or 2); o.level = 21; return o end
+    local function history(kind)
+      if kind == "none" then return nil end
+      if kind == "login" then return { legs = {} } end
+      return M.Plan(es, opts(K[6] + 5, K[7], 1)) -- (K first, a jump ago)
+    end
+    for _, kind in ipairs({ "none", "login", "a jump" }) do
+      local near = M.Plan(es, opts(N[6], N[7] + 30), history(kind))
+      assert(who(near, 1) == "N" and who(near, 2) == "K" and near.firstNear and near.lead and near.lead.npcs[1] == base + 1,
+        kind .. ": N in reach first, for that alone (firstNear " .. tostring(near.firstNear) .. "); K next and the lead")
+      for _, dy in ipairs({ 0, 100, 300, 500 }) do
+        local fresh = M.Plan(es, opts(K[6], K[7] + dy))
+        local on = M.Plan(es, opts(K[6], K[7] + dy), near)
+        assert(who(on, 1) == who(fresh, 1) and who(on, 1) ~= "N" and not on.firstNear,
+          string.format("%s, %d yards past K: %s first, as from there with no history (%s), not N behind you", kind, dy, tostring(who(on, 1)), tostring(who(fresh, 1))))
+      end
+    end
+    D.NPC[base + 1], D.NPC[base + 2] = nil, nil
+  end, R4 }
+
+  -- 22. on the client: a jump in place to 30 yards from Valik with a quest ready there (a landing, a hearth), and a
+  -- login there: Valik's stop first for its hand-in in reach alone, Southshore kept after it. A step past 90 yards
+  -- and back within a second plans nothing; walked on toward Southshore past 90 yards for a few seconds without
+  -- handing in, the route is planned again: Southshore, the stop kept, leads unless going back is clearly quicker (it
+  -- is, 100 yards against a trip back later: Valik's stop stays first, marked); walking on, it is planned again each
+  -- 90 yards further and no oftener, and well before Southshore it leads, nothing leading back to Valik behind you,
+  -- and nothing is planned again from then on
+  B6CASES[#B6CASES + 1] = { "a hand-in in reach after a jump, or at login, left behind is not kept first", function()
+    local probe = hillsClient("Valikwhere", { { 500, 1 }, { 504, 1 }, { 535, 1 } })
+    local n = probe.QB.Data.NPC[probe.QB.Quest.Get(535).turnIdx]
+    local ux, uy = -852 - n[6], -517 - n[7]
+    local len = math.sqrt(ux * ux + uy * uy)
+    ux, uy = ux / len, uy / len
+    local function atYards(d) return n[6] + d * ux, n[7] + d * uy end
+    for _, how in ipairs({ "a jump", "a login" }) do
+      local c
+      if how == "a jump" then
+        c = hillsClient("Jumpnear", { { 500, 1 }, { 504, 1 }, { 535, 1 } })
+      else
+        c = hillsClient("Loginnear", { { 500, 1 }, { 504, 1 }, { 535, 1 } }, nil, nil, { atYards(30) })
+      end
+      local QB, A, T = c.QB, c.QB.Arrow, c.QB.Target
+      settle(c)
+      A:Set(true)
+      look(c)
+      local function walkOn(from, to, by)
+        for d = from, to, by or 7 do
+          walkTo(c, atYards(d))
+          frame(c, 1.0)
+        end
+        look(c)
+      end
+      if how == "a jump" then
+        walkTo(c, atYards(30)) -- (a hearth or a landing: 1,000 yards within a look)
+        frame(c, 1.0); look(c); look(c)
+      end
+      local r = T.Route()
+      local alterac = r.legs[1].stop.name
+      assert(r.lead and r.lead.name == "Southshore" and alterac ~= "Southshore" and r.firstNear and T.cur.near,
+        how .. " beside Valik: " .. alterac .. " first for its hand-in in reach alone, Southshore after it: " .. tostring(A.t and A.t.label))
+      local reach, jv = QB.reachVer or 0, QB.jumpVer
+      walkTo(c, atYards(95)); frame(c, 1.0)
+      walkTo(c, atYards(30)); look(c)
+      assert((QB.reachVer or 0) == reach and T.Route() == r and T.cur.near, how .. ": a step past 90 yards and back: nothing planned")
+      walkOn(37, 135)
+      local again = T.Route()
+      assert(QB.jumpVer == jv and (QB.reachVer or 0) == reach + 1 and again ~= r, how .. ": walked away: planned again, once, and no jump")
+      assert(firstStop(QB) == alterac and again.firstLeft and again.alt and again.alt.first == "Southshore",
+        how .. ": going back 100 yards clearly quicker: Valik's stop first still, marked: " .. tostring(firstStop(QB)))
+      local led
+      for d = 142, 800, 7 do
+        walkTo(c, atYards(d)); frame(c, 1.0)
+        if not led and firstStop(QB) == "Southshore" then led = d end
+      end
+      look(c)
+      assert(led and led < 400, how .. ": walking on, Southshore leads well before you get there: " .. tostring(led))
+      assert(QB.jumpVer == jv and (QB.reachVer or 0) - reach <= (led - 37) / T.REACH_KEEP + 2,
+        how .. ": planned again each 90 yards and no oftener: " .. ((QB.reachVer or 0) - reach) .. " plans by " .. led .. " yards")
+      assert(firstStop(QB) == "Southshore" and A.t and A.t.name == "Southshore" and not A.t.near and not T.Route().firstLeft,
+        how .. ": nothing leads back to Valik behind you: " .. tostring(A.t and A.t.name))
+      local plans = QB.reachVer
+      walkOn(807, 850)
+      assert(QB.reachVer == plans, how .. ": Southshore leading, walking on plans nothing more")
+    end
+  end, R4 }
+
+  -- 23. a mob that counts for the quest kept (the ogres) and drops an item for the other quest of the stop (the mages):
+  -- the kill read in one log update and the loot in the next, five mobs over: the ogres' quest and its spot all the way,
+  -- the target unchanged; and half a minute later a count of the mages' quest growing alone, twice, moves it no more
+  B6CASES[#B6CASES + 1] = { "a kill for one quest and loot for the other, read apart, keep the objective", function()
+    local c = hillsClient("Interleaved", { { 500, 0 }, { 504, 0 } })
+    local QB, D, A = c.QB, c.QB.Data, c.QB.Arrow
+    local restore = saveSpots(D, { 500, 504 })
+    D.SPOT[500], D.SPOT[504] = spot(1416, 470, -700), spot(1416, 300, -700)
+    D.SREQ[500], D.SREQ[504] = "1:10", "1:10"
+    crushridge(c)
+    settle(c)
+    A:Set(true)
+    look(c)
+    walkTo(c, 420, -700); look(c) -- (nearer the ogres' spot: that quest is the one kept)
+    c.objectives[500][1].numFulfilled = 1
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c)
+    assert(A.t.obj and A.t.qid == 500, "an ogre slain: the ogres' quest")
+    local ver, at = QB.Target.ver, string.format("%.0f:%.0f", A.t.wx, A.t.wy)
+    local function still(what)
+      assert(A.t.obj and A.t.qid == 500 and QB.Target.ver == ver and string.format("%.0f:%.0f", A.t.wx, A.t.wy) == at,
+        string.format("%s: still the ogres' quest and its spot: %s (target changed %d times)", what, tostring(A.t.qid), QB.Target.ver - ver))
+    end
+    for k = 1, 5 do
+      c.objectives[504][1].numFulfilled = k
+      c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c)
+      still("loot " .. k .. " for the mages' quest")
+      c.objectives[500][1].numFulfilled = k + 1
+      c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c)
+      still("kill " .. (k + 1) .. " for the ogres' quest")
+    end
+    for _ = 1, 30 do frame(c, 1.0) end
+    for k = 6, 7 do
+      c.objectives[504][1].numFulfilled = k
+      c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); look(c)
+      still("the mages' quest alone, count " .. k)
+    end
+    restore()
+  end, R4 }
+
+  for _, case in ipairs(B6CASES) do
+    case[2]()
+    print("5.4.4 review, " .. (case[3] or "round 2") .. ": " .. case[1] .. ": ok")
+  end
+end)()
+
+----------------------------------------------------------------------------
 -- 5.4.2: memory, and the lag that grew through a session ("QuestBank made me lag towards the end, using 80 MB").
 -- The trails' graph was built again from scratch at each point noted, inside the minimap's update (half a second at
 -- 12,000 points, and megabytes of garbage each time); a re-plan made 15 MB of garbage; every frame's error wrapper,
@@ -13547,10 +16721,14 @@ end
     local r, want = v.R - GP.Thickness() / 2 - 1, 0
     -- (zoomed far out, a piece under 4 pixels, the way's own stretches are drawn instead)
     local whole = GP.Spacing() * v.scale < 4
-    for k = 1, whole and GP.n - 1 or GP.np do
-      local x1, y1 = MV.Point(v, whole and GP.x[k] or GP.ax[k], whole and GP.y[k] or GP.ay[k])
-      local x2, y2 = MV.Point(v, whole and GP.x[k + 1] or GP.bx[k], whole and GP.y[k + 1] or GP.by[k])
-      local u1, w1, u2, w2 = MR.Clip(x1, y1, x2, y2, r, v.square)
+    -- (5.4.4: the pieces round your arrow give way to its gap, MR.YOU pixels)
+    local sx, sy = MV.Point(v, GP.dx[1], GP.dy[1])
+    for k = 1, whole and GP.dn - 1 or GP.np do
+      local x1, y1 = MV.Point(v, whole and GP.dx[k] or GP.ax[k], whole and GP.dy[k] or GP.ay[k])
+      local x2, y2 = MV.Point(v, whole and GP.dx[k + 1] or GP.bx[k], whole and GP.dy[k + 1] or GP.by[k])
+      x1, y1, x2, y2 = MR.Outside(x1, y1, x2, y2, sx, sy, MR.YOU, false)
+      local u1, w1, u2, w2
+      if x1 then u1, w1, u2, w2 = MR.Clip(x1, y1, x2, y2, r, v.square) end
       if u1 and (u2 - u1) ^ 2 + (w2 - w1) ^ 2 > 0.25 then want = want + 1 end
     end
     assert(shown == want and shown > 0 and calls < 100, string.format("the golden path: %d pieces drawn of %d (as cutting all: %d), %d cut", shown, GP.np, want, calls))
@@ -13567,7 +16745,9 @@ end
     return table.concat(t, ",") .. string.format(" %.6f %.4f", r.level, r.t)
   end
   QB.Model.Finish()
-  local plan = ownBytes(function() QB.liveVer = (QB.liveVer or 0) + 1; QB:Recompute(true) end)
+  -- (both routes planned again: their signatures forgotten. 5.4.4's signature no longer counts QB.liveVer, the XP the
+  -- game reported for any quest, only each route quest's own)
+  local plan = ownBytes(function() QB.sigNow, QB.sigPlan, QB.pending = nil, nil, nil; QB:Recompute(true) end)
   local entries = QB:RouteEntries("plan")
   local opts = { level = QB.state.level, xp = QB.state.xp, goal = "hour", fac = QB.faction }
   local first, again = QB.Model.Plan(entries, opts), QB.Model.Plan(entries, opts)

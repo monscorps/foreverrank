@@ -800,10 +800,18 @@ for _qid, _q in CM.items():
 # ---------------------------------------------------------------------------
 HUB_INDEX = {fac: {hid: k + 1 for k, hid in enumerate(TR.order[fac])} for fac in ("A", "H")}
 NPCS, NPC_AT, USED_MAPS = [], {}, set()
-# Open maps off the two continents (Zephras Isle, the Darkspear Islands): an NPC there keeps its map and place for
-# the world map's icons, but no continent and no flight hub (continent -1, as inside an instance), so the route
-# leaves it out as before
+# Maps off the two continents an NPC keeps its map and place on, for the world map's icons (Zephras Isle, the Darkspear
+# Islands)
 ISLANDS = {2521, 2524}
+# Of those, the open ones: a world map of its own that is no instance (Map.csv's InstanceType 0) and that a zone map
+# (UiMap Type 3) is drawn over, as Zephras Isle (map 2991, uiMap 2521) is. The client places a point there as on a
+# continent (C_Map.GetWorldPosFromMapPos gives 2991 and yards, by the same UiMapAssignment), so an NPC there gets that
+# continent and its yards: no flight master stands there, so no hub, and the route walks there as on one land. Before
+# 5.4.4 it got continent -1, as inside an instance, and the route, the arrow and the minutes left the isle out. The
+# Darkspear Islands are a battleground (InstanceType 3) and keep -1
+_UI_TYPE = {int(r["ID"]): int(r["Type"]) for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "UiMap.csv")))}
+_INSTANCE_TYPE = {int(r["ID"]): int(r["InstanceType"]) for r in csv.DictReader(open(os.path.join(REPO, "research", "wago", BUILD, "Map.csv")))}
+OPEN_MAPS = {m["cont"] for uid, m in TR.maps.items() if m["cont"] not in (0, 1) and _UI_TYPE.get(uid) == 3 and _INSTANCE_TYPE.get(m["cont"]) == 0}
 
 
 def add_npc(name, m, x, y, place=None):
@@ -823,6 +831,9 @@ def add_npc(name, m, x, y, place=None):
             if near:
                 rec[k] = HUB_INDEX[fac][near[0]]
                 rec[k + 1] = round(near[1] * DETOUR / RUN / 60.0, 1)
+        USED_MAPS.add(m)
+    elif w and w[0] in OPEN_MAPS:
+        rec[4:7] = [w[0], round(w[1]), round(w[2])]
         USED_MAPS.add(m)
     elif m in ISLANDS:
         USED_MAPS.add(m)
@@ -1142,7 +1153,7 @@ def races(qid):
 # ---------------------------------------------------------------------------
 # categories: a dungeon, a zone, class quests or the rest
 # ---------------------------------------------------------------------------
-CATS, CAT_AT = [], {}
+CATS, CAT_AT, OPEN_CAT = [], {}, {}
 # a zone name back to its area, for the continent of a dungeon's parent zone (0 Eastern Kingdoms, 1 Kalimdor)
 _AREA_BY_NAME = {}
 for _aid, _name in AREAS.items():
@@ -1183,6 +1194,16 @@ def cat_for(qid):
                          "icon": zone_icon(AREAS[area])})
             CAT_AT[key] = len(CATS)
         return CAT_AT[key]
+    # a zone on an open map off the two continents (Zephras Isle: Wowhead files its quests under -2, no continent): a
+    # zone card of its own, as a zone's, not "Other quests". Numbered after every other card (OPEN_CAT, below the
+    # records), so the cards before keep their numbers
+    row = AREA_ROW.get(area) if area in AREAS else None
+    if c2 != 4 and row and int(row["ContinentID"]) in OPEN_MAPS:
+        key = "z%d" % area
+        if key in CAT_AT:
+            return CAT_AT[key]
+        OPEN_CAT[key] = area
+        return key
     key = "class" if c2 == 4 or q.get("reqclass") else "misc"
     if key not in CAT_AT:
         CATS.append({"key": key, "name": "Class quests" if key == "class" else "Other quests", "where": "",
@@ -1367,6 +1388,14 @@ for qid in IDS:
         EXCL_GROUPS.setdefault(cmq["excl"], []).append(qid)
     if extra.get("follow"):
         FOLLOW[qid] = extra["follow"]
+# the zone cards of open maps off the two continents (cat_for), last: no continent of the two, no "where"
+for _key in sorted(OPEN_CAT):
+    _area = OPEN_CAT[_key]
+    CATS.append({"key": _key, "name": AREAS[_area], "where": "", "icon": zone_icon(AREAS[_area])})
+    CAT_AT[_key] = len(CATS)
+for _qid, _rec in Q.items():
+    if isinstance(_rec[7], str):
+        _rec[7] = CAT_AT[_rec[7]]
 # the steps that come after a quest (for "advance the chain")
 NEXT = {}
 for qid in IDS:
@@ -2738,7 +2767,7 @@ QLOCK = {q: v for q, v in ((q, (_SPOTS.get("lock") or {}).get(str(q))) for q in 
 lines.append("-- [id] = what the giver checks beyond level, side, class and the chain: \"skill\" a profession, \"rep\" a standing")
 lines.append("-- with a faction (at least or at most), \"skill,rep\" both; from the Classic database")
 lines.append("D.QLOCK = " + keyed(QLOCK))
-lines.append("-- {name, uiMap, x, y, continent (-1 inside an instance, or on an island off the continents: Zephras Isle keeps its uiMap), world x, world y, Alliance hub, minutes on foot from it, Horde hub, minutes, place}")
+lines.append("-- {name, uiMap, x, y, continent (0, 1, an open map's own off them as Zephras Isle's 2991, or -1 inside an instance or on a battleground's island, which keeps its uiMap), world x, world y, Alliance hub, minutes on foot from it, Horde hub, minutes, place}")
 lines.append("D.NPC = {\n" + ",\n".join(lua(n) for n in NPCS) + "\n}")
 # hand-placed NPCs (CURATED) have no SOURCE: they read as Classic data, the cautious claim
 lines.append("-- where each D.NPC place comes from, one letter per NPC: w Wowhead Forever, c the CMaNGOS spawn (Classic data), g players' games")
@@ -2842,13 +2871,72 @@ lines.append("D.TRACKED_ITEMS = " + lua([
     {"id": 268540, "name": "Bloodied Insignia", "need": 10, "quest": 95195, "icon": 133328, "side": 1},
     {"id": 4371, "name": "Bronze Tube", "need": 1, "quest": 174, "icon": 133024, "side": 1},
 ]))
+# the Cozy Sleeping Bag's quest chain, from level 14 (Wowhead Forever's quest pages, research/questbank/det2.json and
+# det3.json). It starts with "... and that note you found", one quest a side, at the Nailed Plank in Westfall (Alliance)
+# and the Burned-Out Remains in the Barrens (Horde): 79007 and 79008, either counting as the step done (Wowhead
+# Forever's pages give 79008 to the Alliance and 79007 to the Horde; the camp research the other way round). Before
+# 5.4.4 the chain started at Stepping Stones and the bag's card never said where to begin
 lines.append("D.SLEEP_CHAIN = " + lua([
+    {"id": 79007, "alt": 79008, "name": "... and that note you found",
+     "A": {"where": "the Nailed Plank, Westfall", "m": 1436, "x": 37.4, "y": 50.9},
+     "H": {"where": "the Burned-Out Remains, The Barrens", "m": 1413, "x": 46.4, "y": 73.8}},
     {"id": 79192, "name": "Stepping Stones", "where": "Pocket Litter, Stonetalon Mountains", "m": 1442, "x": 40.7, "y": 52.4},
     {"id": 79980, "name": "Scramble", "where": "Mound of Dirt, Stonetalon Mountains", "m": 1442, "x": 39.6, "y": 49.9},
     {"id": 79974, "name": "Wet Job", "where": "Carved Figurine on the Stonewrought Dam, Loch Modan", "m": 1432, "x": 49.4, "y": 12.9},
     {"id": 79975, "name": "Eagle's Fist", "where": "Messenger Bag on Thoradin's Wall, Arathi Highlands", "m": 1417, "x": 22.4, "y": 24.2},
     {"id": 79976, "name": "This Must Be The Place", "where": "Rolled-Up Satchel, where the bag's note points", "m": None, "x": None, "y": None},
 ]))
+# D.CAMP_SELL: who sells Simple Wood (4470) and Flint and Tinder (4471), what Cooking's Basic Campfire Kit (1229737) is
+# made from and with, for the camp bar's burned-out fire (Camp.lua). No vendor sells a campfire kit. The CMaNGOS Classic
+# database's sellers (cmangos.py's sellers(): npc_vendor and npc_vendor_template, GPL-3.0), each placed as npc_from
+# places a Classic spawn (the map it lies on, a Forever-only map only where hinted; the game's place where players saw
+# it more than GAME_MOVE_YD away), for the side whose flight masters wear its faction template, or, a template no flight
+# master wears, the side of the flight point nearest it within 1,000 yards. Classic data: Forever may have moved some,
+# and the camp bar says so until a player's game has seen the seller.
+#   {npc id, name, continent, world x, world y, uiMap, x, y, goods (1 Simple Wood, 2 Flint and Tinder), side (1 Alliance,
+#    2 Horde, 3 both)}
+_SELL = (_cm.get("sellers") or {})
+assert _SELL.get("vendors"), "cmangos.json has no sellers: run cmangos.py --sellers"
+
+
+def _near_sides(c, wx, wy, within, more=0):
+    """The sides of the flight point nearest a spot within some yards, and of any other within `more` yards more of it
+    (a town's two flight masters, one a side: Light's Hope, Cenarion Hold, Thorium Point); None with none."""
+    near = sorted((math.hypot(n["x"] - wx, n["y"] - wy), n["id"], n) for n in TR.nodes.values() if n["cont"] == c and n["id"] > 0)
+    near = [x for x in near if x[0] <= within]
+    if not near:
+        return None
+    return set().union(*(n["fac"] for d, _, n in near if d <= near[0][0] + more))
+
+
+_TEMPLATE_SIDE = {}
+for _e, _faction, _spots in _SELL.get("masters") or []:
+    for _c, _x, _y in _spots:
+        _sides = _near_sides(_c, _x, _y, 80)  # (a flight master stands at its own side's flight point)
+        if _sides:
+            _TEMPLATE_SIDE.setdefault(_faction, set()).update(_sides)
+CAMP_SELL, _SELL_OUT = [], []
+for _e, _name, _sub, _faction, _goods, _spots in _SELL["vendors"]:
+    _c, _wx, _wy = _spots[0]
+    _side = _TEMPLATE_SIDE.get(_faction)
+    if not _side:
+        _side = _near_sides(_c, _wx, _wy, 1000, 150)
+    _loc = TR.locate(_c, _wx, _wy)
+    if _loc and _loc[0] in OVERLAY:
+        _at = spot_map(_c, _wx, _wy)
+        _loc = (_at[0], round(_at[1], 1), round(_at[2], 1)) if _at else _loc
+    if not (_side and _loc):
+        _SELL_OUT.append(_name)
+        continue
+    _m, _x, _y, _moved = game_place("npc", _e, _loc[0], _loc[1], _loc[2])
+    if _moved:
+        _c, _wx, _wy = TR.world(_m, _x, _y)
+    CAMP_SELL.append([_e, _name, _c, int(round(_wx)), int(round(_wy)), _m, round(_x, 1), round(_y, 1),
+                      (1 if 4470 in _goods else 0) + (2 if 4471 in _goods else 0), (1 if "A" in _side else 0) + (2 if "H" in _side else 0)])
+lines.append("D.CAMP_SELL = {\n" + ",\n".join(lua(r) for r in CAMP_SELL) + "\n}")
+print("camp sellers: %d of %d placed (%d Alliance, %d Horde, %d both)%s" % (
+    len(CAMP_SELL), len(_SELL["vendors"]), sum(1 for r in CAMP_SELL if r[9] == 1), sum(1 for r in CAMP_SELL if r[9] == 2),
+    sum(1 for r in CAMP_SELL if r[9] == 3), ("; no side or map: " + ", ".join(_SELL_OUT)) if _SELL_OUT else ""))
 lines.append("")
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 open(OUT, "w").write("\n".join(lines))
@@ -2942,7 +3030,7 @@ def gap_report():
         return {
             "no_page": [q for q in lst if Q[q][9] & 8],
             "no_turn": [q for q in lst if not Q[q][5]],
-            # (an NPC on an island off the continents, Zephras Isle, has no continent either, but isn't inside a dungeon)
+            # (an NPC on a battleground's island off the continents has no continent either, but isn't inside a dungeon)
             "inside": [q for q in lst if Q[q][5] and NPCS[Q[q][5] - 1][4] < 0 and NPCS[Q[q][5] - 1][1] not in ISLANDS],
             "no_give": [q for q in lst if not Q[q][6] and not (Q[q][9] & 4)],
             "no_chain": [q for q in lst if not chain_known(q)],
@@ -3091,6 +3179,7 @@ print("wrote %s: %d bytes, %d quests (both %d, Alliance %d, Horde %d), %d routab
       % (OUT, os.path.getsize(OUT), len(Q), by_side[0], by_side[1], by_side[2], routable, unconfirmed, len(NPCS), len(CATS)))
 print("gaps over %d Forever quests: %d multipliers, %d turn-ins, %d inside dungeons, %d givers, %d chains; %d Classic-only quests (GAPS.md)" % g)
 print("redrawn maps: %d Wowhead coordinates moved from the Classic frame to Forever's, %d already in Forever's" % (FRAME.fixed, FRAME.kept))
+print("open maps off the two continents: %s; %d NPCs placed there, %d zone cards" % (sorted(OPEN_MAPS), sum(1 for n in NPCS if n[4] in OPEN_MAPS), len(OPEN_CAT)))
 print("map icons: objective spots for %d quests (%d from CMaNGOS spawns, %d from its quest POIs only, %d from Wowhead Forever, "
       "%d from players' games alone, %d more with players' spots; %d players' areas inside a Classic or Wowhead one left out), "
       "%d spots on %d maps; %d quests that start from an item show where it drops; %d names; islands: %d givers and %d turn-ins on their map" % (

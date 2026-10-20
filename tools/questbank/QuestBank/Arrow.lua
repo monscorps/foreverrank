@@ -3,21 +3,26 @@
 -- The direction arrow (opt-in, Settings or /qb arrow): points from where you stand and the way you
 -- face to a target, with its name and how far it is. What it points at is yours to choose: right-click
 -- it, or /qb arrow route|handin|pickup|pin.
---   route    the next stop on your route, as it re-plans (questing and mid-run, from where you stand;
---            banking, the one you'll run)
+--   route    the next stop on your route, or a spot of an objective of its quest still to do: the one target the
+--            minimap and the Map page lead to as well (Target.lua), kept until something real changes
 --   handin   the nearest NPC you can hand a finished quest in to
 --   pickup   the nearest giver of a quest in your plan you haven't taken yet (a chain: its first open
 --            step; a chain whose only step left is one you hold is a hand-in, which handin covers)
---   pin      whatever you last clicked a waypoint for in QuestBank: a quest, a stop, an entrance.
---            Clicking one while the arrow is up switches to this by itself.
--- With the arrow switched off, a waypoint you click shows it anyway, for that one place: it points
--- there until you get there, then goes (the switch stays off). QuestBank never sets the game's own
+--   pin      whatever you last clicked a waypoint for in QuestBank: a quest, a stop, an entrance; only when you
+--            choose it here (5.4.3 and before switched to it at every click, for good).
+-- A click on a quest, a pin, a waypoint or the map shows that place on the arrow for now (A:Show), whether the arrow
+-- is on or off: its label says "Showing X" and a right-click goes back to the route at once. It ends by itself when you
+-- get there, or the quest it was for is handed in or given up (an item it was for is in your bags); then the arrow is
+-- back on what it points at, and says so once ("Back to your route"), or hides again where it was off. A click changes
+-- no plan: the route goes on from where you stand as if it never happened. QuestBank never sets the game's own
 -- waypoint (Core.lua, API.SetWaypoint), so this is what shows the way at once.
 -- It shows the way step by step (Travel.lua, TV.Guide; /qb arrow straight points straight instead): the arrow points
 -- at the step's start (a flight master, a pier, the tram), the step's icon takes its place where there is something
 -- to do (talk, wait, use the hearthstone), a line names the step, the next says how far or what to do, and a row of
 -- icons shows the steps left. The turn, the colour for your heading and the pulses are drawn every frame; the rest
--- 20 times a second. Drawn as QuestTrail's compass by default (the dial, A.QT), or as the game's own arrow.
+-- 20 times a second. Drawn as QuestBank's own arrow by default (5.4.4, again: the game's tutorial arrow, coloured by
+-- your heading, glowing while it points ahead, pinging as you arrive and popping at a new step), or as QuestTrail's
+-- compass (the dial, A.QT) when chosen in Settings or the arrow's right-click menu (arrowStyle).
 local _, QB = ...
 local A = {}
 QB.Arrow = A
@@ -90,23 +95,9 @@ function A.Nearest(list, here, mode)
   return best
 end
 
--- (the target is kept while the route's first leg is the same one: a route's legs never change once planned, and the
--- arrow asks 20 times a second)
-local routeLeg, routeT
-local function routeTarget()
-  local set = QB:Settings()
-  local r = QB.routeNow
-  if QB:Banking() and not (QB.Run and QB.Run.Get()) and set.routeMode == "plan" then r = QB.routePlan end
-  local leg = r and r.legs and r.legs[1]
-  if not leg or not leg.stop then return nil end
-  if leg == routeLeg then return routeT end
-  local st = leg.stop
-  local first = leg.rows and leg.rows[1] and leg.rows[1].q
-  routeLeg = leg
-  routeT = { name = st.name, c = st.c, wx = st.wx, wy = st.wy, quests = #(leg.rows or {}), what = "to hand in there", kind = "route",
-             qid = first and first.id } -- (its first quest: the colour of the dial and the minimap's stroke)
-  return routeT
-end
+-- the route's next place: the one target the minimap and the Map page lead to as well (Target.lua): the route's first
+-- stop, or a spot of an objective of its quest still to do, kept until something real changes
+local function routeTarget(here) return QB.Target.Get(here or QB.API.WorldPosition()) end
 
 -- an NPC as a target: where it stands in the world, and on its map (for the minimap's pins)
 local function npcTarget(idx, p, name, what, kind)
@@ -120,7 +111,7 @@ local function handinList()
   local Q, M = QB.Quest, QB.Model
   local byNpc, list = {}, {}
   for _, e in ipairs(QB.state.logOrder or {}) do
-    if e.complete then
+    if e.complete and not QB:IsSkipped(e.id) then -- (a quest you skipped: never back through the arrow)
       local q = Q.Get(e.id)
       local p = q and q.turn and not q.turn.inside and M.NpcPlace(q.turnIdx, QB.faction)
       if p then
@@ -156,7 +147,7 @@ local function pickupList()
   local byNpc, list = {}, {}
   for id in pairs(QB:Plan().add) do
     local q = Q.Get(id)
-    if q and not QB.state.log[id] and not QB.API.IsDone(id) then
+    if q and not QB.state.log[id] and not QB.API.IsDone(id) and not QB:IsSkipped(id) then
       local st = QB:Status(q)
       if st.code == "todo" or st.code == "prereq" then
         local g, held = firstStep(q, st)
@@ -197,7 +188,7 @@ A.ListFor = listFor
 -- what the arrow points at, judged from where you stand (passed in, so one read serves the whole tick). A pin with no
 -- place QuestBank can lead to (an island, a dungeon with no known way in) is a target without a position
 function A.Target(here)
-  if A.temp and not QB:Settings().arrow then return A.temp end
+  if A.temp then return A.temp end -- (a place clicked, shown for now: A:Show)
   local m = A.Mode()
   if m == "pin" then
     local p = QB:Settings().arrowPin
@@ -207,7 +198,7 @@ function A.Target(here)
   elseif m == "handin" or m == "pickup" then
     return A.Nearest(listFor(m), here or QB.API.WorldPosition(), m)
   end
-  return routeTarget()
+  return routeTarget(here)
 end
 
 local NOTHING = { route = { "No stop to go to", nil }, handin = { "Nothing finished to hand in", "Finish a quest and the arrow finds its NPC" },
@@ -275,47 +266,153 @@ end
 
 local distanceText = TV.DistanceText
 
--- what you clicked a waypoint for in QuestBank: remembered, and pointed at while the arrow is up
+-- what you clicked a waypoint for in QuestBank: remembered as the last place clicked, which the arrow points at only
+-- when you choose "Where you last clicked" in its menu (a click no longer switches to it: A:Show shows it for now)
 function A:Pin(name, c, wx, wy)
   if not (c and wx and wy) then return end
-  local set = QB:Settings()
-  set.arrowPin = { name = name, c = c, wx = wx, wy = wy }
+  QB:Settings().arrowPin = { name = name, c = c, wx = wx, wy = wy }
   A.Invalidate()
-  if set.arrow and A.Mode() ~= "pin" then
-    set.arrowMode = "pin"
-    if not self.toldPin then
-      self.toldPin = true
-      QB:Print(string.format("The arrow points at %s now. Right-click it to follow the route again.", name or "your waypoint"))
-    end
-  end
-  self:Update()
 end
 
--- the arrow switched off: shown for this one waypoint, until you get there. False when it is on (it points there
--- already, A:Pin) or there is nowhere to point
-function A:ShowFor(name, c, wx, wy)
-  if QB:Settings().arrow or not (c and wx and wy) then return false end
-  A.temp = { name = name or "your waypoint", c = c, wx = wx, wy = wy, kind = "pin", temp = true }
+-- A place clicked, shown on the arrow for now (Core.lua's API.SetWaypoint, the camp bar's sellers): p = {c, wx, wy}, or
+-- nil where QuestBank knows no way there (said so while the arrow is up); about = { qid, what = "give" | "turn" |
+-- "obj", ids = { [quest id] = true } for a stop's, item = an item id, items = { item ids }: every one in your bags }
+-- (each optional): what ends it besides getting there. tomtom: TomTom's arrow is there too, and with the arrow off QuestBank's shows only while there is more to the
+-- way than the last walk. True when the arrow shows it (still, after its first look: a click it ended at once is not)
+function A:Show(name, p, about, tomtom)
+  local on = QB:Settings().arrow
+  self:EndTemp(nil, true)
+  if not p and not on then return false end
+  local t = { name = name or "your waypoint", kind = "pin", temp = true, shown = true, on = on and true or false }
+  if p then t.c, t.wx, t.wy = p.c, p.wx, p.wy else t.none = true end
+  if type(about) == "table" then t.qid, t.what, t.ids, t.item, t.items = about.qid, about.what, about.ids, about.item, about.items end
+  A.Mark(t)
+  if not on and tomtom then
+    -- (TomTom's own arrow points at it as the crow flies: QuestBank's shows the way while it is more than a walk)
+    local plan = QB.Travel and QB:Settings().arrowTravel ~= false and QB.Travel.PlanTo(p, "pin")
+    if not (plan and #plan.legs > 1) then return false end
+    t.travel = true
+  end
+  A.temp = t
+  A.back = nil
   A.Invalidate()
   self:Create()
   self.frame:Show()
   self:Update()
-  return true
+  return A.temp == t
+end
+-- the waypoint the arrow shows, for its Shift-click ({m, x, y, title}), or nil: a place shown for now carries its own
+-- (t.wp, set by API.SetWaypoint only: a camp seller or the bag chain's next step has none, where 5.4.4 as first built
+-- printed the last waypoint clicked, an unrelated place); "Where you last clicked" is the last waypoint
+function A.Waypoint()
+  local t = A.t
+  if not (t and t.kind == "pin") then return nil end
+  if t.temp then return t.wp end
+  return QB.API.LastWaypoint()
+end
+-- (the older name: the arrow switched off, shown for one waypoint)
+function A:ShowFor(name, c, wx, wy)
+  if QB:Settings().arrow or not (c and wx and wy) then return false end
+  return self:Show(name, { c = c, wx = wx, wy = wy })
 end
 
--- the arrow shown for a waypoint goes (you got there, or hid it); the switch is as it was
-function A:EndTemp()
-  if not A.temp then return end
+-- the place shown for now goes (you got there, its quest was handed in or given up, you right-clicked, another click):
+-- the arrow is back on what it points at, and says so once in its label ("Back to your route"); where it was off, it
+-- hides again. why: "back" (a right-click), "done" (it ended by itself); quiet: another click replaces it
+function A:EndTemp(why, quiet, noUpdate)
+  local t = A.temp
+  if not t then return end
   A.temp = nil
-  if self.frame and not QB:Settings().arrow then self.frame:Hide() end
+  A.Invalidate()
+  if not self.frame then return end
+  if not QB:Settings().arrow then
+    self.frame:Hide()
+  elseif not quiet then
+    A.back = (GetTime and GetTime() or 0) + A.BACK_S -- the label says so once, a few seconds
+    if QB.tracing then QB.Trace("arrow: %s no longer shown (%s), back to the route", tostring(t.name), why or "ended") end
+    if not noUpdate then self:Update() end
+  end
 end
+A.BACK_S = 6
+
+-- what a place shown for now is about, as it stands at the click (A:Show): its quest held, complete, handed in; the
+-- stop's quests still open; its items in your bags. Only a change from this ends it (tempOver)
+local function bagsHold(t)
+  local API = QB.API
+  if not API.ItemCount then return false end
+  if t.item and API.ItemCount(t.item) > 0 then return true end
+  if t.items then
+    for _, id in ipairs(t.items) do if API.ItemCount(id) == 0 then return false end end
+    return true
+  end
+  return false
+end
+function A.Mark(t)
+  local log, API = QB.state and QB.state.log or {}, QB.API
+  local id = t.qid
+  if id then
+    local e = log[id]
+    t.held, t.complete, t.done = e ~= nil, (e and e.complete) and true or false, API.IsDone(id) and true or false
+  end
+  if t.ids then
+    t.open = false
+    for qid in pairs(t.ids) do if type(qid) == "number" and not API.IsDone(qid) and log[qid] then t.open = true end end
+  end
+  t.bagged = (t.item or t.items) and bagsHold(t) or false
+end
+
+-- the place shown for now: ended by what happened to it since the click (true: it is over). Its quest handed in;
+-- given up (a hand-in's or an objective's quest that was in your log, gone from it); taken (a giver's, not held at the
+-- click); complete (an objective's, not complete at the click); every quest of a stop that was open handed in; the item
+-- in your bags that was not (every one of the items: the camp bar's Simple Wood and Flint and Tinder). What already
+-- stood so at the click (the hand-in of a quest you have not taken, the giver of one you hold, a quest done or already
+-- complete) ends it only when you get there. (5.4.4 as first built judged the state alone, and such a click ended the
+-- moment it began: nothing shown, and chat said the arrow showed the way)
+local function tempOver(t)
+  local log, API = QB.state and QB.state.log or {}, QB.API
+  local id = t.qid
+  if id then
+    if API.IsDone(id) and not t.done then return true end
+    local e = log[id]
+    if t.what == "give" and e and not t.held then return true end
+    if (t.what == "turn" or t.what == "obj") and not e and t.held then return true end
+    if t.what == "obj" and e and e.complete and not t.complete then return true end
+  end
+  if t.ids and t.open then
+    local open = false
+    for qid in pairs(t.ids) do if type(qid) == "number" and not API.IsDone(qid) and log[qid] then open = true end end
+    if not open then return true end
+  end
+  if (t.item or t.items) and not t.bagged and bagsHold(t) then return true end
+  return false
+end
+A.TempOver = tempOver
 
 function A:SetMode(m)
   if not MODES[m] then return end
+  self:EndTemp(nil, true) -- (what it points at chosen: a place shown for now goes)
   QB:Settings().arrowMode = m
   A.Invalidate()
   self:Update()
 end
+
+-- the quests the arrow leads to now, to skip: an objective's quest, a hand-in in reach's (those ready there), or a
+-- stop's (its pin's quests, Target.lua): those you hold first, the pick-ups folded into the stop only where you hold
+-- none of its quests; at most three, the lowest ids first
+local function skippable(t)
+  local out = {}
+  if not t or t.kind ~= "route" then return out end
+  if t.obj and t.qid then out[1] = t.qid; return out end
+  local log = QB.state and QB.state.log or {}
+  for id in pairs(t.ids or {}) do if type(id) == "number" and log[id] then out[#out + 1] = id end end
+  if #out == 0 then
+    for id in pairs(t.ids or {}) do if type(id) == "number" then out[#out + 1] = id end end
+  end
+  table.sort(out)
+  for i = #out, 4, -1 do out[i] = nil end
+  return out
+end
+A.Skippable = skippable
 
 function A:Menu()
   if not QB.UI then return end
@@ -323,6 +420,14 @@ function A:Menu()
   -- shown for a waypoint only: choosing what it points at keeps it up (the switch goes on)
   local set = QB:Settings()
   local temp = A.temp and not set.arrow
+  if A.temp and set.arrow then
+    items[#items + 1] = { "Back to your route", function() A:EndTemp("back") end }
+  end
+  -- the quest the route leads to: Skip it, for good (its menu in QuestBank, or its map pin's Shift-click, routes it again)
+  for _, id in ipairs(skippable(A.t)) do
+    local q = QB.Quest.Get(id)
+    if q then items[#items + 1] = { "Skip " .. QB.UI.Short(q.name, 26), function() QB.UI.SkipQuest(q) end } end
+  end
   for _, m in ipairs(ORDER) do
     local label = (MODES[m]:gsub("^%l", string.upper))
     if A.Mode() == m and not temp then label = label .. "  (now)" end
@@ -338,6 +443,13 @@ function A:Menu()
     TV.ver = TV.ver + 1
     QB:Print(set.arrowHearth and "The arrow may send you by hearthstone again." or "The arrow leaves your hearthstone out of its steps.")
     A:Update()
+  end }
+  -- the look: QuestBank's own arrow, or QuestTrail's compass (Settings has the same)
+  items[#items + 1] = { A.QT() and "Look: QuestTrail's compass" or "Look: QuestBank's arrow", function()
+    set.arrowStyle = A.QT() and "questbank" or "compass"
+    A:Restyle()
+    QB:Print(A.QT() and "The arrow is QuestTrail's compass. Its menu or Settings brings QuestBank's own arrow back." or "The arrow is QuestBank's own again.")
+    if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.UI:Refresh() end
   end }
   items[#items + 1] = { "Hide the arrow", function()
     A:Set(false)
@@ -362,7 +474,10 @@ local function tipSteps(t, g)
     GameTooltip:AddLine(string.format("About %d min in all.", max(1, floor((g.eta or plan.min) + 0.5))), 0.8, 0.8, 0.8)
   end
   local n, total, read = TV.Known(QB.faction or QB.API.Faction(), A.me and A.me.c or t.c)
-  GameTooltip:AddLine(read and string.format("Flight paths: %d of %d known here", n, total) or "Flight paths: not read yet, so all count", 0.8, 0.8, 0.8)
+  -- (none on an open map off the two continents, Zephras Isle: no line)
+  if total > 0 then
+    GameTooltip:AddLine((read or TV.tells) and string.format("Flight paths: %d of %d known here", n, total) or "Flight paths: not read yet, so all count", 0.8, 0.8, 0.8)
+  end
   local hearth = TV.HearthLine()
   if hearth then GameTooltip:AddLine(hearth, 0.8, 0.8, 0.8, true) end
 end
@@ -385,7 +500,9 @@ local EASE = 12                   -- how fast the needle catches up (QuestTrail'
 local LABEL_W, LINE_H, GAP = 200, 13, 2
 A.EASE, A.VERB = EASE, VERB
 
-function A.QT() return QB:Settings().markerStyle ~= "game" end
+-- the look: QuestTrail's compass only where chosen (arrowStyle "compass"); QuestBank's own arrow otherwise (a save that
+-- never chose has it, 5.4.4). The minimap's Marker style no longer decides it
+function A.QT() return QB:Settings().arrowStyle == "compass" end
 
 -- the dial's size (compassSize, 24 to 128 screen pixels) in the frame's own units, whatever the UI scale
 function A.DialSize()
@@ -408,6 +525,7 @@ function A.TintFor(t, g)
   local Mini = QB.Mini
   local leg = g and g.leg
   if leg and TRAVEL_KIND[leg.kind] and (g.state == "approach" or g.state == "at" or g.state == "underway") then return Mini.TRAVEL end
+  if t and t.obj and t.qid then return Mini.ColorFor(t.qid, "progress") end -- (an objective's spot: its quest's, as its marker)
   if t and (t.kind == "route" or t.kind == "handin") and t.qid then return Mini.ColorFor(t.qid, "finish") end
   if t and t.kind == "pickup" and t.qid then return Mini.ColorFor(t.qid, "start") end
   return Mini.SINGLE
@@ -533,6 +651,14 @@ function A:Create()
   f.dist:SetPoint("TOP", 0, -73)
   f.dist:SetWidth(TEXT_W)
   f.dist:SetWordWrap(false)
+  -- the last line: "Right-click: back to your route" while a place clicked is shown for now, and "Back to your route"
+  -- for a few seconds once it is over (A.hint)
+  f.hint = f:CreateFontString(nil, "OVERLAY")
+  f.hint:SetFontObject(GameFontHighlightSmall)
+  f.hint:SetTextColor(0.6, 0.85, 0.6)
+  f.hint:SetWidth(TEXT_W)
+  f.hint:SetWordWrap(false)
+  f.hint:Hide()
   f.trail = {}
   for i = 1, 6 do
     f.trail[i] = f:CreateTexture(nil, "OVERLAY")
@@ -542,23 +668,37 @@ function A:Create()
   -- what the frame shows now, so a tick sets only what changed
   A.clock, A.distY, A.h, A.shownRot, A.shownAlpha, A.cr, A.cg, A.cb = 0, -73, 98, huge, -1, -1, -1, -1
   f:SetScript("OnShow", function() A.snap = true end)
+  -- (Shift-click on a waypoint: its line in chat again, with the game's map-pin link, which QuestBank says once a
+  -- session: Core.lua, API.SayWaypoint)
   f:SetScript("OnClick", QB.Safe(function(_, which)
-    if which == "RightButton" then A:Menu()
+    -- (a place shown for now with the arrow up: the right-click is the one click back to the route)
+    if which == "RightButton" and A.temp and QB:Settings().arrow then A:EndTemp("back")
+    elseif which == "RightButton" then A:Menu()
+    elseif IsShiftKeyDown and IsShiftKeyDown() and A.Waypoint() then
+      local w = A.Waypoint()
+      QB.API.SayWaypoint(w.m, w.x, w.y, w.title, A.temp ~= nil)
     elseif QB.UI then QB.UI:Open(3) end
   end, "arrow click"))
   f:SetScript("OnEnter", QB.Safe(function(self)
     A:Update()
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     local t, m, g = A.t, A.Mode(), A.g
-    GameTooltip:AddLine(t and string.format(HEAD[t.kind] or "%s", t.name) or NOTHING[m][1], 1, 0.82, 0)
+    GameTooltip:AddLine(t and string.format(t.head or (t.temp and t.on and "Showing %s for now") or HEAD[t.kind] or "%s", t.name) or NOTHING[m][1], 1, 0.82, 0)
     if t and t.quests then GameTooltip:AddLine(string.format("%d quest%s %s.", t.quests, t.quests == 1 and "" or "s", t.what or ""), 1, 1, 1) end
+    if t and t.after then GameTooltip:AddLine(t.after, 1, 1, 1, true) end
     if t and g and A.guided then tipSteps(t, g) end
-    if t and t.temp then
+    if t and t.temp and t.on then
+      GameTooltip:AddLine("Shown for now: it goes when you get there or its quest is done, and the arrow is back on your route.", 0.8, 0.8, 0.8, true)
+    elseif t and t.temp then
       GameTooltip:AddLine("Shown for this waypoint: it goes when you get there. Settings or /qb arrow keeps it up.", 0.8, 0.8, 0.8, true)
     else
       GameTooltip:AddLine("Pointing at " .. MODES[m] .. ".", 0.8, 0.8, 0.8)
     end
-    GameTooltip:AddLine("Click: the Hand-in Route. Drag: move. Right-click: choose what it points at, or hide it.", 0.6, 0.6, 0.6, true)
+    GameTooltip:AddLine(t and t.temp and t.on and "Click: the Route page. Drag: move. Right-click: back to your route."
+      or "Click: the Route page. Drag: move. Right-click: choose what it points at, skip a quest, or hide it.", 0.6, 0.6, 0.6, true)
+    if A.Waypoint() then
+      GameTooltip:AddLine("Shift-click: the waypoint in chat, with the game's map pin.", 0.6, 0.6, 0.6, true)
+    end
     GameTooltip:Show()
   end, "arrow tooltip"))
   f:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -622,7 +762,7 @@ function A:ApplyLook()
   end
   f.act:SetSize(A.actSize, A.actSize)
   -- (laid out afresh: the puck, the lines' places, the steps row)
-  A.pointing, A.distY, A.h, A.trailY, A.trailPlan, A.line1 = nil, nil, nil, nil, nil, nil
+  A.pointing, A.distY, A.h, A.trailY, A.trailPlan, A.line1, A.hintY = nil, nil, nil, nil, nil, nil, nil
   f.step.qbText, f.name.qbText, f.dist.qbText = nil, nil, nil
   A.shownRot, A.shownAlpha, A.cr = huge, -1, -1
   self:Update()
@@ -735,8 +875,21 @@ function A:Update()
   local set = QB:Settings()
   if A.lookKey ~= (A.QT() and "qt" or "game") .. ":" .. tostring(set.compassSize) .. ":" .. tostring(set.compassBg) then self:ApplyLook(); return end
   local me = QB.API.WorldPosition(nil, here)
+  -- a place shown for now whose quest was handed in, given up or taken (its item in your bags): over
+  if A.temp and tempOver(A.temp) then
+    self:EndTemp("done", nil, true)
+    if not f:IsShown() then return end
+  end
   local t = A.Target(me)
   A.t, A.me, A.guided = t, me, false
+  -- the last line: how to get back to the route while a click is shown, and that it is back once it is over
+  local hint
+  if t and t.temp and t.on then
+    hint = "Right-click: back to your route"
+  elseif A.back then
+    if (GetTime and GetTime() or 0) < A.back then hint = "Back to your route" else A.back = nil end
+  end
+  A.hint = hint
   if not t then
     local m = A.Mode()
     nothing.info = NOTHING[m][2] or (QB:Banking() and "Nothing banked yet" or "Nothing ready to hand in")
@@ -761,13 +914,15 @@ function A:Update()
     if s == "there" then
       local now = GetTime and GetTime() or 0
       t.there = t.there or now
-      if now - t.there >= 4 then self:EndTemp(); return end
+      if now - t.there >= 4 then self:EndTemp("done", nil, true); return f:IsShown() and self:Update() end
     else
       t.there = nil
     end
-    if t.travel and (s == "walk" or s == "straight" or s == "there") then self:EndTemp(); return end
+    if t.travel and (s == "walk" or s == "straight" or s == "there") then self:EndTemp("done", nil, true); return f:IsShown() and self:Update() end
   end
-  self:Draw(t.name, g, me)
+  -- the label: "Showing X" while a click is shown for now (the arrow up), "Hand in X here" at a hand-in in reach
+  -- (Target.lua), else the target's name
+  self:Draw((t.temp and t.on) and ("Showing " .. t.name) or t.label or t.name, g, me, t.labelShort)
 end
 
 -- QuestTrail's first line, laid out as one centred line: the step's icon, the step (blue) and what to do at the
@@ -775,7 +930,7 @@ end
 -- with no step; nothing while carried, or with no target). Returns the line's width
 local function line1(f, step, g, S)
   local t = A.t
-  local verb = t and (VERB[t.kind] or "Go to") or ""
+  local verb = t and (t.verb or VERB[t.kind] or "Go to") or ""
   local kindText = step and (g.state == "underway" and "" or (verb ~= "" and (", then " .. verb) or "")) or verb
   local iw = (step and g.icon) and 17 or 0
   if f.kind.qbText ~= kindText then f.kind.qbText = kindText; f.kind:SetText(kindText) end
@@ -831,8 +986,8 @@ local function fitBg(f, S, lineW, trailY)
       t:SetColorTexture(0, 0, 0, 0.6)
     end
   end
-  local w = max(S, lineW, f.name:GetStringWidth() or 0, f.dist:GetStringWidth() or 0)
-  local bottom = trailY and (trailY - TRAIL) or (-(S + GAP + 2 * LINE_H) - LINE_H)
+  local w = max(S, lineW, f.name:GetStringWidth() or 0, f.dist:GetStringWidth() or 0, A.hint and (f.hint:GetStringWidth() or 0) or 0)
+  local bottom = trailY and (trailY - TRAIL) or (-(S + GAP + 2 * LINE_H) - LINE_H - (A.hint and LINE_H or 0))
   if f.bg.w ~= w or f.bg.bottom ~= bottom then
     f.bg.w, f.bg.bottom = w, bottom
     f.bg:ClearAllPoints()
@@ -844,16 +999,16 @@ end
 
 -- the frame for what the guide says (TV.Guide's g, or the same fields when straight): the name, the step and info
 -- lines, the puck (the arrow toward g.aim, or g.act in its place), the row of steps left, the pulses
-function A:Draw(name, g, me)
+function A:Draw(name, g, me, short)
   local f = self.frame
   local qt, S = A.qt, A.dialPx
   local step = g.step
   local lineW = 0
   if qt then
-    A.Fit(f.name, name, nil, LABEL_W)
+    A.Fit(f.name, name, short, LABEL_W)
     lineW = line1(f, step, g, S)
   else
-    A.Fit(f.name, name, nil, TEXT_W)
+    A.Fit(f.name, name, short, TEXT_W)
     if step then
       if A.Fit(f.step, step, g.short, STEP_W) then
         -- the icon just left of the text, which is centred
@@ -876,6 +1031,15 @@ function A:Draw(name, g, me)
     f.dist:ClearAllPoints()
     f.dist:SetPoint("TOP", 0, y)
   end
+  -- the hint line under it (A.hint), a line's height lower; the steps' row and the frame make room for it
+  local hint = A.hint
+  local hy = y - (qt and LINE_H or 13)
+  if hint then
+    A.Fit(f.hint, hint, nil, TEXT_W)
+    if A.hintY ~= hy then A.hintY = hy; f.hint:ClearAllPoints(); f.hint:SetPoint("TOP", 0, hy) end
+  end
+  if (hint ~= nil) ~= (A.hintShown == true) then f.hint:SetShown(hint ~= nil); A.hintShown = hint ~= nil end
+  local extra = hint and (qt and LINE_H or 13) or 0
   -- the puck. An aim on another continent (a boat on its way over) shows the step's icon instead
   local act, aim = g.act, g.aim
   if aim and not act and not (me and me.c == aim.c) then act, aim = g.icon, nil end
@@ -931,7 +1095,7 @@ function A:Draw(name, g, me)
   local tr = g.trail
   local n = (tr and not NO_TRAIL[g.state]) and min(#tr, #f.trail) or 0
   if n < 2 then n = 0 end
-  local ty = qt and -(S + GAP + 3 * LINE_H + 2) or (step and -106 or -90)
+  local ty = (qt and -(S + GAP + 3 * LINE_H + 2) or (step and -106 or -90)) - extra
   if g.plan ~= A.trailPlan or n ~= A.trailN or ty ~= A.trailY then
     A.trailPlan, A.trailN, A.trailY = g.plan, n, ty
     local x0 = -(n * TRAIL + (n - 1) * 4) / 2
@@ -948,8 +1112,8 @@ function A:Draw(name, g, me)
     end
   end
   local h
-  if qt then h = S + GAP + 3 * LINE_H + 10 + (n > 0 and (TRAIL + 4) or 0)
-  else h = (step and 114 or 98) + (n > 0 and 16 or 0) end
+  if qt then h = S + GAP + 3 * LINE_H + 10 + (n > 0 and (TRAIL + 4) or 0) + extra
+  else h = (step and 114 or 98) + (n > 0 and 16 or 0) + extra end
   if h ~= A.h then
     A.h = h
     f:SetHeight(h)
