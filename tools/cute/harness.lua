@@ -4748,6 +4748,20 @@ do
     check(rone.C.UI.frame, "route page")
     rone.C.UI:Open("settings", "route")
     assert(texts(rone):find("Follow", 1, true) and texts(rone):find("hearthstone", 1, true), "the Route section's rows")
+    -- Journal and Gear: the engine's pages on hosts under the scroll area, one shown at a time
+    rone.C.UI:Open("settings", "modules")
+    for _, name in ipairs({ "Journal", "Gear" }) do click(boxOf(rone, name)) end
+    rone.C.UI:Open("journal")
+    local host = rone.C.UI.hosts.journal
+    assert(host and host:IsShown() and #(host.__kids or {}) > 0, "the journal attached to its host")
+    check(rone.C.UI.frame, "journal page")
+    rone.C.UI:Open("gear")
+    assert(not host:IsShown() and rone.C.UI.hosts.gear and rone.C.UI.hosts.gear:IsShown(), "the gear host shown, the journal's hidden")
+    check(rone.C.UI.frame, "gear page")
+    rone.C.UI:Open("settings", "journal")
+    assert(texts(rone):find("Chests and events", 1, true), "the Journal section")
+    rone.C.UI:Open("settings", "gear")
+    assert(texts(rone):find("2 levels ahead", 1, true), "the Gear section")
     -- unticked: the engine's guide off, the frame hidden, the band says so again
     rone.C.UI:Open("settings", "modules")
     click(boxOf(rone, "Quests"))
