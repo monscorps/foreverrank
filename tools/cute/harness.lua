@@ -9442,6 +9442,32 @@ do
   end) end
   said[#said + 1] = "Rule 0 skips an ask that throws, the watchdog closes a stalled chain, the band says how far it got"
 
+  -- (c) the key flips call by call: UnitFullName's second return the surname one call, nothing the next (so 0.6.0's
+  -- C.Me gave Helga-Bluntforce and Helga-Forever by turns, and a choice saved under one was read under the other)
+  isolated({ member("Helga", 1), member("Pim", 3) }, function()
+    local c = char("Helga", 1, { surname = "Bluntforce", fullNameSurname = true, sender = "Helga Bluntforce" })
+    local n = 0
+    c.env.UnitFullName = function() n = n + 1; if n % 2 == 1 then return "Helga", "Bluntforce" end return "Helga", "" end
+    login(c)
+    local me = c.C.Me()
+    assert(me == "Helga-Bluntforce" and c.C.Me() == me and c.C.Me() == me, "the first read is the session's key: " .. tostring(me))
+    c.env.SlashCmdList.CUTE("modules")
+    click(guideBox(c))
+    local keys = {}
+    for k in pairs(c.env.CuteDB.chars) do keys[#keys + 1] = k end
+    assert(#keys == 1 and keys[1] == me and c.env.CuteDB.chars[me].modules.guide == true, "saved under that key alone: " .. table.concat(keys, ", "))
+    assert(c.C.Modules.byId.guide.active and tabsShown(c):find("^race guide prog") and guideBox(c):GetChecked(), "and read back under it: the tab, the row ticked: " .. tabsShown(c))
+    assert(c.C.Char() == c.env.CuteDB.chars[me], "C.Char is that record, every call")
+    -- a /reload reads the same file under the same key, whichever way the call reads first
+    local db = c.env.CuteDB
+    leave(c)
+    local d = char("Helga", 1, { surname = "Bluntforce", fullNameSurname = true, sender = "Helga Bluntforce" })
+    login(d, db, true)
+    assert(d.C.Me() == me and d.C.Modules.byId.guide.active, "after a /reload: the Guide on for this character")
+    leave(d)
+  end)
+  said[#said + 1] = "a key that flips call by call saves and reads under one"
+
   print("the owner's client: " .. table.concat(said, "; "))
 end
 

@@ -285,14 +285,19 @@ end
 
 -- the key this character's saved data lives under (CuteDB.chars), and who set a policy: UnitFullName's two returns
 -- joined with "-", the realm where the second is empty. Kept as 0.3.0 built it, so nobody's counters move; it names
--- nobody in the window (Roster.lua does that)
+-- nobody in the window (Roster.lua does that). Read once a session: the first non-nil key is this session's, so a
+-- second return that reads one way early and another later (the surname one call, the realm the next) cannot save
+-- a choice under one key and read it back under another
+local meKey, meName
 function C.Me()
+  if meKey then return meKey, meName end
   local name, realm = C.Get(UnitFullName, "player")
   if type(name) ~= "string" then name = C.Get(UnitName, "player") end
   if type(name) ~= "string" then return nil end
   if type(realm) ~= "string" or realm == "" then realm = C.Get(GetNormalizedRealmName) end
-  if type(realm) ~= "string" or realm == "" then return name, name end
-  return name .. "-" .. realm, name
+  local key = (type(realm) ~= "string" or realm == "") and name or (name .. "-" .. realm)
+  meKey, meName = key, name
+  return key, name
 end
 
 -- a name's shape, never the name, for /cute diag: "Kstring", "none", or how many words it has and whether your realm
