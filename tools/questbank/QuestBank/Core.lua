@@ -2634,6 +2634,7 @@ function QB:Changed()
   QB.changed = (QB.changed or 0) + 1
   QB.Try("plan", QB.Recompute, QB)
   if QB.Guide then QB.Try("guide", QB.Guide.Replan) end -- the Guide's steps from the route just planned (Guide.lua)
+  if QB.StepFrame and QB.StepFrame.frame then QB.Try("step frame", QB.StepFrame.Refresh) end
   -- the window shows what was just worked out, without working it out again
   QB.fresh = true
   if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.Try("window", QB.UI.Refresh, QB.UI) end
@@ -2739,6 +2740,7 @@ frame:SetScript("OnEvent", QB.Safe(function(_, event, a1, a2, a3)
     if QB.Travel then QB.Travel:Init() end
     if QB.Arrow then QB.Arrow:Init() end
     if QB.Target then QB.Target:Init() end
+    if QB.StepFrame then QB.StepFrame:Init() end -- (the Guide's step frame, StepFrame.lua)
     -- after the other addons have loaded and run their own login code
     C_Timer.After(12, QB.Safe(QB.NoteAddons, "addon note"))
     Run.ArmHour()
@@ -2925,6 +2927,18 @@ slash = function(msg)
     QB.QuestMap:Toggle()
   elseif cmd == "next" and QB.Pins then
     QB.Pins:PinNext(true)
+  elseif cmd == "guide" then
+    -- the Guide on or off (the player asks: one line answers)
+    local s = QB:Settings().guide
+    s.on = not s.on
+    QB:MarkDirty()
+    if QB.StepFrame then QB.StepFrame.Apply() end
+    QB:Print(s.on and "QuestBank is guiding you: the step frame and the arrow lead; /qb guide turns it off." or "The Guide is off. /qb guide turns it on; the window and its pages work as before.")
+  elseif cmd == "step" then
+    -- the step frame shown or hidden
+    local s = QB:Settings().guide
+    s.frame = not s.frame
+    if QB.StepFrame then QB.StepFrame.Apply() end
   elseif cmd == "errors" then
     if rest == "clear" then
       QuestBankDB.errors = {}

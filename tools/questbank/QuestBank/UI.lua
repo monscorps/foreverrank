@@ -649,6 +649,7 @@ local function menuFrame()
 end
 
 function UI:ShowMenu(title, items)
+  UI.lastMenu = items
   local m = menuFrame()
   m.title:SetText(title)
   local y = -30
@@ -2355,6 +2356,13 @@ function UI:RefreshLogView(v)
     end
   end
   v.cells = cells
+  -- the step frame's click (StepFrame.lua): that quest's slot framed in gold, this once
+  if UI.scrollToQuest then
+    for _, b in ipairs(v.slots) do
+      if b.q and b.q.id == UI.scrollToQuest then b.frame:SetVertexColor(GOLD[1], GOLD[2], GOLD[3]); b.frame:SetAlpha(1); b.frame:Show() end
+    end
+    UI.scrollToQuest = nil
+  end
 
   -- bags: the sleeping bag, and quests that wait in your bags
   local bagItems = {}

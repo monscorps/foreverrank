@@ -19,7 +19,7 @@ EnableMouseWheel SetMovable SetClampedToScreen RegisterForDrag StartMoving StopM
 SetScrollChild SetVerticalScroll GetVerticalScroll SetText GetText SetNormalTexture SetHighlightTexture SetPushedTexture
 RegisterForClicks SetEnabled Enable Disable GetFontString SetOrientation SetThumbTexture SetMinMaxValues GetMinMaxValues
 SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexColor SetDesaturated SetBlendMode
-SetFontObject SetFont GetFont SetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetUnboundedStringWidth GetStringHeight
+SetFontObject SetFont GetFont SetTextColor GetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetUnboundedStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
 SetAtlas SetPassThroughButtons SetCooldown SetHideCountdownNumbers SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient
 SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias]])
@@ -117,6 +117,7 @@ local function newObj(kind, template, parent)
         elseif k == "SetJustifyH" then self.__justify = a[1]
         elseif k == "SetWordWrap" then self.__wrap = a[1] and true or false
         elseif k == "SetTextColor" then self.__color = { a[1], a[2], a[3] }
+        elseif k == "GetTextColor" then local col = self.__color or { 1, 1, 1 }; return col[1], col[2], col[3], 1
         elseif k == "SetAlpha" then self.__alpha = a[1]
         elseif k == "GetAlpha" then return self.__alpha
         elseif k == "SetAttribute" then self.__attr = self.__attr or {}; self.__attr[a[1]] = a[2]
@@ -1087,7 +1088,7 @@ local function newClient(o)
     local f = line:match("^%s*([%w_]+%.lua)%s*$")
     if f then files[#files + 1] = f end
   end
-  assert(#files >= 8 and files[1] == "Data.lua" and files[#files] == "UI.lua", "the TOC lists the addon's Lua files, Data first and UI last")
+  assert(#files >= 8 and files[1] == "Data.lua" and files[#files] == "StepFrame.lua", "the TOC lists the addon's Lua files, Data first and the step frame last")
   for _, f in ipairs(files) do
     local chunk = assert(loadfile(HERE .. "/QuestBank/" .. f))
     setfenv(chunk, env)
@@ -16741,6 +16742,62 @@ end)()
     a.QB.Sync:Step(a.QB.Sync.lastStep)
     assert(#a.outbox == sent, "the same step is not sent again")
     assert(#a.chat == 0 or not a.chat[#a.chat]:find("step", 1, true), "nothing said in chat")
+  end }
+
+  -- the step frame (StepFrame.lua): the step now in ink, the two next greyed, "about N min to level 6"; a click opens
+  -- the Quest Log on the quest; a right-click is the menu; scale and lock kept; hidden by its setting; nothing clipped
+  -- at any scale (the sheets go to the layout page)
+  G6CASES[#G6CASES + 1] = { "the step frame: one line now, two greyed, the time line, click and right-click", function()
+    local c = human("Framer", { { 7, 0 } }, { [783] = true }, nil, 5)
+    local QB, G, SF, UI = c.QB, c.QB.Guide, c.QB.StepFrame, c.QB.UI
+    c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/8", type = "monster", finished = false, numFulfilled = 3, numRequired = 8 } } }
+    QB:Settings().guide.on = true; QB:Settings().welcome = nil
+    QB:SetAdded(15, true); QB:SetAdded(18, true)
+    settle(c)
+    SF.Apply(); SF.Refresh()
+    local f = c.env.QuestBankStep
+    assert(f and f:IsShown(), "the frame is up")
+    -- (a row too long for the frame is cut with "...": Arrow.lua's A.Fit)
+    local function rowIs(t, full) local got = t:GetText(); return got == full or (got:sub(-3) == "..." and full:sub(1, #got - 3) == got:sub(1, -4)) end
+    assert(rowIs(f.now, G.Text(G.steps[1])) and rowIs(f.next1, G.Text(G.steps[2])) and rowIs(f.next2, G.Text(G.steps[3])),
+      "the three lines: " .. tostring(f.now:GetText()) .. " | " .. tostring(f.next1:GetText()) .. " | " .. tostring(f.next2:GetText()))
+    local r, g = f.next1:GetTextColor()
+    assert(r < 0.8 and g < 0.8, "the next steps greyed")
+    assert(f.time:GetText():find(" to level 6$"), "the time line: " .. tostring(f.time:GetText()))
+    -- a click: the window on the Quest Log, the step's quest framed
+    f.rows[1].__scripts.OnClick(f.rows[1], "LeftButton")
+    assert(UI.frame and UI.frame:IsShown() and UI.tab == 1, "a click opens the Quest Log")
+    assert(UI.scrollToQuest == nil, "the quest was shown once")
+    UI.frame:Hide()
+    -- the right-click menu: Not now, Drop, Lock, scales, Hide, Settings
+    f.rows[1].__scripts.OnClick(f.rows[1], "RightButton")
+    local labels = {}
+    for _, it in ipairs(UI.lastMenu or {}) do labels[#labels + 1] = it[1] end
+    local joined = table.concat(labels, " | ")
+    assert(joined:find("Not now", 1, true) and joined:find("Drop ", 1, true) and joined:find("Lock", 1, true) and joined:find("Scale: 80%", 1, true)
+      and joined:find("Hide", 1, true) and joined:find("Settings", 1, true), "the menu: " .. joined)
+    -- Not now from the menu puts the first step's quest off
+    for _, it in ipairs(UI.lastMenu) do if it[1] == "Not now" then it[2]() end end
+    settle(c); SF.Refresh()
+    assert(G.PutOff(7), "Not now put the quest off")
+    -- scale and lock are kept
+    SF.SetScale(1.2)
+    assert(QB:Settings().guide.scale == 1.2 and math.abs(f:GetScale() - 1.2) < 0.001, "scale kept")
+    QB:Settings().guide.locked = true; SF.Apply()
+    assert(f.__dragOff, "locked: no drag")
+    -- off: hidden
+    QB:Settings().guide.frame = false; SF.Apply()
+    assert(not f:IsShown(), "hidden by the setting")
+    QB:Settings().guide.frame = true; QB:Settings().guide.locked = false; SF.SetScale(1); SF.Apply()
+    assert(f:IsShown() and not f.__dragOff, "back, and unlocked")
+    -- the layout: nothing clipped at any scale; the sheets for the layout page
+    for _, sc in ipairs({ 0.8, 1, 1.2 }) do
+      SF.SetScale(sc); SF.Refresh()
+      for _, pr in ipairs(checkLayout(f, "step frame at " .. sc)) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+      STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(f, "Step frame at " .. sc)
+    end
+    SF.SetScale(1)
+    assert(#c.chat == 0 or not c.chat[#c.chat]:find("step", 1, true), "nothing said in chat")
   end }
 
   for _, case in ipairs(G6CASES) do
