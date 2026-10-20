@@ -1676,11 +1676,11 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     return out;
   }
 
-  // ---- the Guide (Guide.lua), a module: its tab shows once it is switched on in Settings, Modules. It answers one
-  // question, what should you do next and with whom. The band holds the next best thing (the guild's version for
-  // officers) and where the knowledge comes from; under it one list of rows of one height: a card per dungeon in range
-  // at your level, the gear and pace strips, Next up as a timeline, and the officers' lines. Kaka's at 37 and Yezin's
-  // at 42 are their own
+  // ---- the Guide (Guide.lua), a module: its tab shows once it is switched on in Settings, Modules. The band holds the
+  // step now from the Quests module (or the line saying to tick it); under it the pick's line as the head, the officer's
+  // guild line at its right, and the one dungeon to run: its card, its bosses as pips, its quests and the guild mates
+  // online in range to invite. The rest (the reasons, the source, the guild per dungeon, what was learned in play) is
+  // the head's tooltip. Kaka's at 37 and Yezin's at 42 are their own
   function some(names, max) { return names.length <= max ? names.join(", ") : names.slice(0, max).join(", ") + " and " + (names.length - max) + " more"; }
   function kindName(kind) { return KIND_NAME[kind] || kind; }
   var MATES = 4;  // the mates a card shows before "and N more"
@@ -1696,7 +1696,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   function word(f) { return WORD[f.state] || ""; }
   var SOURCE = "From research and the beta, checked against this client, and what the guild has met since.";
   // the module's notes, as it registers them: its box in Settings, Modules and its section say them
-  var GUIDE_NOTES = "What to do next and with whom: the dungeons in range with their bosses, quests and guild mates to invite, what opens next, your gear and pace; the guild per dungeon for officers.";
+  var GUIDE_NOTES = "The step now from Quests, then the one dungeon to run: its bosses, quests and guild mates to invite; officers see the guild per dungeon in its tooltip.";
   // Cute_Quest's six modules, as they register (their notes are their boxes' tooltips and their sections'); the four
   // with a page of their own. Map and Camp are switches over the game's map and the camp bar: a section each, no tab
   var QUEST_MODULES = [

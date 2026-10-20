@@ -928,7 +928,7 @@ end
 local function redraw() if C.UI and C.UI.page == "guide" and C.UI.frame and C.UI.frame:IsShown() then C.UI:Refresh() end end
 C:RegisterModule({
   id = "guide", title = "Guide", order = 20, builtin = true, default = false, tab = 64,
-  notes = "What to do next and with whom: the dungeons in range with their bosses, quests and guild mates to invite, what opens next, your gear and pace; the guild per dungeon for officers.",
+  notes = "The step now from Quests, then the one dungeon to run: its bosses, quests and guild mates to invite; officers see the guild per dungeon in its tooltip.",
   page = function(ui) C.Guide_Draw(ui) end,
   settings = function(_, col)
     col:Head("Levels")

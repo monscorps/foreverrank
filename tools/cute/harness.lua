@@ -1867,6 +1867,16 @@ do
     local n = 0
     for _, r in ipairs(yezin.C.UI.lists.guide.items) do if r:IsShown() and r.bar:IsShown() then n = n + 1 end end
     assert(n == (plan.next.card and 1 or 0), "one card, marked, or none: " .. n)
+    -- the module's notes say what this page is (its box's tooltip in Settings, Modules; the page's mock says the same),
+    -- not 0.6.0's page of every dungeon, the gear and pace strips and Next up
+    local notes = "The step now from Quests, then the one dungeon to run: its bosses, quests and guild mates to invite; officers see the guild per dungeon in its tooltip."
+    assert(yezin.C.Modules.byId.guide.notes == notes, "the Guide's notes: " .. tostring(yezin.C.Modules.byId.guide.notes))
+    yezin.C.UI:Open("settings", "modules")
+    local box = checkBox(yezin, function(cb) return cb.label and cb.label:GetText() == "Guide" end)
+    assert(tipOf(box):find(notes, 1, true), "its box's tooltip says so:\n" .. tipOf(box))
+    local mock = assert(io.open(HERE .. "/../../addons/cute/index.html")):read("*a")
+    assert(mock:find('GUIDE_NOTES = "' .. notes .. '"', 1, true), "the page's mock says the same")
+    yezin.C.UI:Open("guide")
     local head = guideHead(yezin)
     -- (the guild's line at the right where the column holds it whole; else, never cut, on a line of its own under the
     -- head, the head's right empty)
