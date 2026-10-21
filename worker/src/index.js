@@ -20,6 +20,8 @@
  * ever claim otherwise.
  */
 
+import { stripSavedVariables } from './allow.js';
+
 const WCL_BANDS = [
   { min: 100, band: 'gold' },
   { min: 99, band: 'pink' },
@@ -696,13 +698,17 @@ async function handleStats(env) {
 /* ------------------------------------------------------------------------
  * QuestBank uploads: what players saw in the game, crowdsourced.
  *
- * Anyone may POST. What is accepted: QuestBank.lua straight from WoW's
- * SavedVariables, and from the retired ForeverProbe (old trays never update, so
- * these stay accepted for good) its export ("FPROBE2:" + JSON) or its
- * ForeverProbe.lua. Everything else is refused. The text is
- * stored gzipped in D1 with a short summary; the merge into QuestBank's data
- * happens offline (tools/probe_pull.py, behind PROBE_ADMIN_KEY). Uploads carry
- * no account identity: only what the addon noted. Duplicates (same bytes) are
+ * Anyone may POST. What is accepted: QuestBank.lua and Cute_Quest.lua (Cute's
+ * copy of QuestBank) straight from WoW's SavedVariables, and from the retired
+ * ForeverProbe (old trays never update, so these stay accepted for good) its
+ * export ("FPROBE2:" + JSON) or its ForeverProbe.lua. Everything else is
+ * refused, Cute.lua (the guild's roster) by name. A QuestBank.lua or
+ * Cute_Quest.lua is cut to the allow-list before anything is kept (allow.js:
+ * the parts that hold no name), so a page or an old tray that sends the whole
+ * file stores no more than the uploader sends. The text is stored gzipped in
+ * D1 with a short summary; the merge into QuestBank's data happens offline
+ * (tools/probe_pull.py, behind PROBE_ADMIN_KEY). Uploads carry no account
+ * identity: only what the addon noted. Duplicates (same bytes once cut) are
  * acknowledged, not stored twice.
  * ---------------------------------------------------------------------- */
 const PROBE_MAX_TEXT = 6 * 1024 * 1024;   // bytes of text accepted
@@ -711,7 +717,10 @@ const PROBE_KINDS = {
   export: /^FPROBE[12]:/,
   'probe-savedvars': /^\s*ForeverProbeDB\s*=/,
   'questbank-savedvars': /^\s*QuestBankDB\s*=/,
+  'cutequest-savedvars': /^\s*CuteQuestDB\s*=/,
 };
+const NEVER = /^\s*CuteDB\s*=/;           // Cute.lua: the guild's roster, GUIDs and members' Only-you values
+const STRIPPED = new Set(['questbank-savedvars', 'cutequest-savedvars']);
 
 async function gzipText(text) {
   const cs = new CompressionStream('gzip');
@@ -828,9 +837,15 @@ async function handleProbeUpload(req, env, ctx) {
   }
   if (!text || text.length > PROBE_MAX_TEXT) return json({ error: text ? 'too large (6 MB at most)' : 'nothing to upload' }, text ? 413 : 400);
   // the addon's copy box is one line; a pasted SavedVariables file is many. Trim only the ends.
-  const trimmed = text.replace(/^\uFEFF/, '').trim();
+  let trimmed = text.replace(/^\uFEFF/, '').trim();
+  if (NEVER.test(trimmed)) return json({ error: 'Cute.lua is never accepted: it holds your guild\'s roster. Send Cute_Quest.lua.' }, 400);
   const kind = Object.keys(PROBE_KINDS).find((k) => PROBE_KINDS[k].test(trimmed));
   if (!kind) return json({ error: 'not a QuestBank.lua file (it is in WTF\\Account\\<account>\\SavedVariables under the game folder)' }, 400);
+  if (STRIPPED.has(kind)) {
+    const cut = stripSavedVariables(trimmed);
+    if (!cut) return json({ error: 'that file is cut short: log out once so the game writes it whole, then send it again' }, 400);
+    trimmed = cut.trim();
+  }
 
   const hash = await sha256Hex(trimmed);
   const dup = await env.DB.prepare('SELECT id, received FROM probe_uploads WHERE hash = ?').bind(hash).first();
@@ -937,6 +952,67 @@ async function handleHits(req, url, env) {
   return json({ since, days, total: perDay.reduce((a, r) => a + r.n, 0), perDay, perPage, perRef });
 }
 
+/* ---------- the finds, back to players ----------
+ * What players' files agree on (two files or more: a book's place, an object opened with the key Lock.csv names, an
+ * object looted and what kind its items are, a rare and its level), as tools/probe_pull.py merges it offline and
+ * publishes with the admin key (python3 tools/probe_pull.py --publish-finds). The QuestBank Uploader fetches it once a
+ * day into the QuestBank_Finds addon. The shape is checked here as the uploader checks it again: numbers, the four
+ * kinds, short titles; nothing else is stored or served. */
+const FINDS_MAX = 2 * 1024 * 1024;
+const FINDS_ROWS = 5000;
+const FINDS_TABLE = 'CREATE TABLE IF NOT EXISTS finds_data (id INTEGER PRIMARY KEY CHECK (id = 1), body TEXT NOT NULL, updated INTEGER NOT NULL)';
+
+const whole = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
+const utf8 = new TextEncoder();
+/** null when the set is the shape the uploader writes from, else why not. */
+export function findsProblem(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return 'not an object';
+  for (const k of Object.keys(data)) if (!['v', 'at', 'rows'].includes(k)) return 'a field outside the shape: ' + k;
+  if (data.v !== 1) return 'not version 1';
+  if (!whole(data.at, 20260101, 20991231)) return 'no date';
+  if (!Array.isArray(data.rows) || data.rows.length > FINDS_ROWS) return 'no rows, or too many';
+  for (const r of data.rows) {
+    if (!Array.isArray(r) || r.length !== 6) return 'a row of another shape';
+    const [map, kind, id, spots, votes, extra] = r;
+    if (!whole(map, 1, 99999) || !whole(id, 0, 99999999) || !whole(votes, 0, 9999)) return 'a number out of range';
+    if (!['b', 'k', 'h', 'r'].includes(kind)) return 'a kind outside the shape';
+    if (typeof spots !== 'string' || !/^\d{1,4},\d{1,4}(;\d{1,4},\d{1,4}){0,3}$/.test(spots)) return 'a spot list that isn\'t one';
+    if (kind === 'b' && !(typeof extra === 'string' && extra.trim() && utf8.encode(extra).length <= 60 && !/[|;=\u0000-\u001f\u007f]/.test(extra))) return 'a title outside the shape';
+    if (kind === 'h' && !(typeof extra === 'string' && /^\d{1,2}\.\d{1,3}$/.test(extra))) return 'a kind of items outside the shape';
+    if (kind === 'k' && !whole(extra, 0, 99999999)) return 'a key outside the shape';
+    if (kind === 'r' && !whole(extra, 0, 100)) return 'a level outside the shape';
+  }
+  return null;
+}
+
+async function handleFindsGet(env) {
+  let row = null;
+  try { row = await env.DB.prepare('SELECT body, updated FROM finds_data WHERE id = 1').first(); }
+  catch (err) { if (!/no such table/i.test(String(err && err.message))) throw err; }
+  // none published yet: an empty set dated today, so the uploader writes it and asks again tomorrow
+  const today = Number(new Date().toISOString().slice(0, 10).replace(/-/g, ''));
+  const body = row ? row.body : JSON.stringify({ v: 1, at: today, rows: [] });
+  return new Response(body, { headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*',
+    'cache-control': 'public, max-age=3600' } });
+}
+
+async function handleFindsPost(req, env) {
+  const key = req.headers.get('x-admin-key') || '';
+  if (!env.PROBE_ADMIN_KEY || !key || (await sha256Hex(key)) !== (await sha256Hex(env.PROBE_ADMIN_KEY)))
+    return json({ error: 'unauthorised' }, 401);
+  const text = await req.text();
+  if (text.length > FINDS_MAX) return json({ error: 'too large' }, 413);
+  let data;
+  try { data = JSON.parse(text); } catch { return json({ error: 'not JSON' }, 400); }
+  const why = findsProblem(data);
+  if (why) return json({ error: why }, 400);
+  const body = JSON.stringify({ v: 1, at: data.at, rows: data.rows });
+  await env.DB.prepare(FINDS_TABLE).run();
+  await env.DB.prepare('INSERT INTO finds_data (id, body, updated) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET body = excluded.body, updated = excluded.updated')
+    .bind(body, now()).run();
+  return json({ ok: true, rows: data.rows.length, at: data.at });
+}
+
 /** The merge tool's read: rows after an id, bodies as base64 gzip. Only with the admin key. */
 async function handleProbePull(req, url, env) {
   const key = req.headers.get('x-admin-key') || '';
@@ -992,12 +1068,14 @@ export default {
       if (url.pathname === '/api/probe' && req.method === 'POST') return await handleProbeUpload(req, env, ctx);
       if (url.pathname === '/api/probe/stats') return await handleProbeStats(env);
       if (url.pathname === '/api/probe/pull') return await handleProbePull(req, url, env);
+      if (url.pathname === '/api/finds.json' && req.method === 'GET') return await handleFindsGet(env);
+      if (url.pathname === '/api/finds' && req.method === 'POST') return await handleFindsPost(req, env);
       if (url.pathname === '/api/hit' && req.method === 'POST') return await handleHit(req, env);
       if (url.pathname === '/api/hits') return await handleHits(req, url, env);
       if (url.pathname === '/' || url.pathname === '/api')
         return json({
           service: 'foreverrank',
-          routes: ['/api/stats', '/api/leaderboard', '/api/baseline', '/api/rares', '/api/enrol', '/api/submit', '/api/hello', '/api/clients', '/api/probe', '/api/probe/stats', '/api/hit'],
+          routes: ['/api/stats', '/api/leaderboard', '/api/baseline', '/api/rares', '/api/enrol', '/api/submit', '/api/hello', '/api/clients', '/api/probe', '/api/probe/stats', '/api/finds.json', '/api/hit'],
           board: 'https://foreverrank.com',
         });
       return json({ error: 'not found' }, 404);
