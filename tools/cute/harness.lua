@@ -5242,11 +5242,21 @@ do
     local n0 = #c.chat
     fire(c, "QUEST_TURNED_IN", next(c.o.log), 450); tick(c, 1)
     assert(#c.chat == n0, "a hand-in: nothing said: " .. tostring(c.chat[#c.chat]))
-    -- the engine's errors and a call the game blocked: on /cute errors (Cute says so once a session, as for its own)
+    -- the engine's errors and a call the game blocked: on /cute errors. (The review round) a blocked call is noted
+    -- quietly, no line in chat (Cute's "ran into a problem" included); an engine error says so once a session, as
+    -- Cute's own do; a repeat of either goes no further than the engine's own count (no Cute.Safe each time: an error
+    -- in an OnUpdate repeats twenty times a second)
     c.env.CUTE_DEV = false
-    QB.Err.Record("an engine probe error", "", "probe")
+    local safeCalls, realSafe = 0, c.env.Cute.Safe
+    c.env.Cute.Safe = function(...) safeCalls = safeCalls + 1; return realSafe(...) end
     local bf = QB.blockedFrame
-    bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "Cute_Quest", "Frame:SetPassThroughButtons()")
+    local b0 = #c.chat
+    for _ = 1, 3 do bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "Cute_Quest", "Frame:SetPassThroughButtons()") end
+    assert(#c.chat == b0, "a blocked call: nothing in chat: " .. tostring(c.chat[#c.chat]))
+    assert(safeCalls == 0, "a blocked call: noted, never raised through Cute.Safe: " .. safeCalls)
+    for _ = 1, 3 do QB.Err.Record("an engine probe error", "", "probe") end
+    assert(safeCalls == 1, "an engine error three times: to Cute once: " .. safeCalls)
+    c.env.Cute.Safe = realSafe
     c.env.CUTE_DEV = true
     local list, probe, held = c.env.CuteDB.errors or {}, nil, nil
     for _, e in ipairs(list) do

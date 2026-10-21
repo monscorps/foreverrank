@@ -34,23 +34,47 @@ E.NAME, E.CMD, E.host = "Cute", "/cute quests", true
 -- Alt-drag, right-click menu, size and place, and the tracking menu's Target; off, the game's own
 function E.MapOn() return Cute.ModuleOn("map") end
 
--- the engine's errors on Cute's list too (/cute errors), through Cute's public Cute.Safe: an error raised inside it is
--- recorded with where it happened (Cute says so once a session, as for its own). A call the game blocked goes there as
--- well, and nowhere else (Core.lua's Err.Blocked says nothing in chat). Under CUTE_DEV (the harness) Cute.Safe raises:
--- the pcall keeps the engine's own record going either way
+-- the engine's errors on Cute's list too (/cute errors). A real error goes through Cute's public Cute.Safe: recorded
+-- with where it happened (Cute says so once a session, as for its own). A call the game blocked is noted there quietly,
+-- as Cute's own quiet notes are (Cute/Core.lua, Err.Record with quiet: its shape, the newest first, 20 kept; Cute's API
+-- has no public quiet note), and says nothing in chat, Cute's "ran into a problem" line included (Core.lua's
+-- Err.Blocked says nothing either). Each goes to Cute the first time it is seen: the engine's own list counts the
+-- repeats (an error in an OnUpdate repeats twenty times a second, a blocked call once a redraw, and each Cute.Safe made
+-- closures, a table and a stack). Under CUTE_DEV (the harness) Cute.Safe raises: the pcall keeps the engine's own
+-- record going either way
+local seenError, seenBlocked = {}, {}
 local function toCute(msg, where)
   pcall(Cute.Safe(function() error(msg, 0) end, "quest engine: " .. tostring(where or "?")))
+end
+local function noteCute(msg, where)
+  local db = type(CuteDB) == "table" and CuteDB or nil
+  if not db then return end
+  if type(db.errors) ~= "table" then db.errors = {} end
+  local list = db.errors
+  local now = date and date("%Y-%m-%d %H:%M:%S") or ""
+  for _, e in ipairs(list) do
+    if e.msg == msg then e.count, e.last = (e.count or 1) + 1, now; return end
+  end
+  table.insert(list, 1, { msg = msg, stack = "", where = where, count = 1, first = now, last = now, version = Cute.version })
+  while #list > 20 do table.remove(list) end
 end
 local record, blocked = E.Err.Record, E.Err.Blocked
 function E.Err.Record(msg, stack, where)
   record(msg, stack, where)
+  local key = tostring(msg)
+  if seenError[key] then return end
+  seenError[key] = true
   toCute(msg, where)
 end
 function E.Err.Blocked(event, who, fn, stack)
   local kept = blocked(event, who, fn, stack)
-  if kept then
-    toCute(string.format("the game %s %s%s", event == "ADDON_ACTION_FORBIDDEN" and "forbade" or "blocked", tostring(E.Plain(fn) or "?"),
-      (InCombatLockdown and InCombatLockdown()) and " in combat" or ""), "blocked call")
+  if not kept then return kept end
+  local name = E.Plain(fn)
+  local key = type(name) == "string" and name or "?"
+  if not seenBlocked[key] then
+    seenBlocked[key] = true
+    noteCute(string.format("the game %s %s%s", event == "ADDON_ACTION_FORBIDDEN" and "forbade" or "blocked", key,
+      (InCombatLockdown and InCombatLockdown()) and " in combat" or ""), "quest engine: blocked call")
   end
   return kept
 end
