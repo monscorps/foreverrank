@@ -163,7 +163,8 @@ pump = C.Safe(function()
   end
   if r == "later" then
     e.tries = e.tries + 1
-    if e.tries <= RETRIES then book(3) return end
+    -- (the newest checkpoint is never given up for a throttle: it waits its 3 s as often as it takes)
+    if e.tries <= RETRIES or e.kind == "2V" then book(3) return end
     r, why = "drop", "still throttled after " .. RETRIES .. " tries"
   end
   if r == "nogroup" then RC.out = {}; return end
@@ -222,7 +223,9 @@ function RC:Receive(prefix, text, channel, sender)
   if channel ~= "PARTY" and channel ~= "RAID" and channel ~= "INSTANCE_CHAT" then return end
   local Runs = C.Runs
   local who = Runs and Runs.UnitOf and Runs.UnitOf(sender)
-  if not who or who.me then return end
+  -- (a sender no group unit names: counted for /cute diag runs, which says whether the group's names read inside)
+  if not who then RC.unknown = (RC.unknown or 0) + 1 return end
+  if who.me then return end
   local kind, rest = text:match("^(2%u)|(.*)$")
   if not kind then return end
   if kind == "2V" or kind == "2A" or kind == "2W" then
@@ -247,7 +250,7 @@ function RC.Report()
   local r11 = {}
   for _, r in ipairs(RC.results) do r11[#r11 + 1] = r.kind .. (r.encounter and " in an encounter" or " out of one") end
   local restricted = type(C_ChatInfo) == "table" and type(C_ChatInfo.AreOutgoingAddonChatMessagesRestricted) == "function" and C.Get(C_ChatInfo.AreOutgoingAddonChatMessagesRestricted)
-  return string.format("group channel: sent %s | waiting %d%s | result 11: %s | outgoing restricted %s | locked %s",
+  return string.format("group channel: sent %s | waiting %d%s | result 11: %s | outgoing restricted %s | locked %s | from no group unit %d",
     #kinds > 0 and table.concat(kinds, ", ") or "nothing", #RC.out, RC.held and (" (held: " .. RC.held.why .. ")") or "",
-    #r11 > 0 and table.concat(r11, ", ", math.max(1, #r11 - 5)) or "none", tostring(restricted), tostring(C.Comm and C.Comm:Locked() or false))
+    #r11 > 0 and table.concat(r11, ", ", math.max(1, #r11 - 5)) or "none", tostring(restricted), tostring(C.Comm and C.Comm:Locked() or false), RC.unknown or 0)
 end
