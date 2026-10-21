@@ -695,6 +695,15 @@ function ST.Redraw()
   if win and win.frame and win.frame:IsShown() then win:Draw() end
 end
 
+-- the open section's 2 px bar in its category's colour (the design's section 7): QUEST for the quest sections, GROUP for
+-- Dungeons and gear, NEW for Data you share, WHITE for the rest (UI.COLORS: bars only, never text)
+local function barColor(sec)
+  local K = C.UI.COLORS
+  if sec.id == "dungeons" then return K.GROUP end
+  if sec.id == "share" then return K.NEW end
+  if sec.group == "quests" then return K.QUEST end
+  return K.WHITE
+end
 function C.Settings_Draw(ui)
   ensure(ui)
   resetAll()
@@ -731,7 +740,8 @@ function C.Settings_Draw(ui)
     r:SetHeight(NAV_ROW)
     r.bg:SetColorTexture(1, 1, 1, open and 0.06 or 0)
     r.bar:SetShown(open)
-    r.bar:SetColorTexture(WHITE[1], WHITE[2], WHITE[3], 1)
+    local bc = barColor(s)
+    r.bar:SetColorTexture(bc[1], bc[2], bc[3], 1)
     r.name:ClearAllPoints()
     r.name:SetPoint("LEFT", 12, 0)
     r.name:SetWidth(NAV_W - 16)

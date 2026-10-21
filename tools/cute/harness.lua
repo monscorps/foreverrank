@@ -11439,7 +11439,7 @@ end
 -- (the merge round) the Quests section has the engine's two switches QuestBank's Guide section has: "Say XP after each
 -- hand-in" (sayXP, off: the line in chat as a quest is handed in, complete or dropped) and "Hide the game's quest tracker
 -- while the step frame shows" (guide.hideTracker, on); each writes the engine's setting, both labels whole at either
--- window size, and the section keeps eight rows at most
+-- window size, and the section keeps nine rows at most
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
   isolated({ member("Rone", 1), member("Pim", 3) }, function()
@@ -11467,11 +11467,12 @@ do
     assert(s.guide.hideTracker == false, "the tracker's row unticked: the engine's setting off")
     click(row(TRACKER))
     assert(s.guide.hideTracker == true, "and on again")
-    -- eight rows at most (a Check, a Choice, a Step or an Edit is a row)
+    -- nine rows at most (a Check, a Choice, a Step or an Edit is a row): the design's eight (section 7, with "Backdrop
+    -- behind the step frame", windows W21) and this round's Say XP
     local n = 0
     local col = setmetatable({}, { __index = function(_, k) return function() if k == "Check" or k == "Choice" or k == "Step" or k == "Edit" then n = n + 1 end end end })
     c.C.Modules.byId.quests.settings(c.C.Modules.byId.quests, col)
-    assert(n <= 8, "the Quests section keeps eight rows at most: " .. n)
+    assert(n <= 9, "the Quests section keeps nine rows at most: " .. n)
     -- both labels whole at either size (Cute's FitText would cut a label too long with "...")
     for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
       sizeAll(c, size[1], size[2])
@@ -12724,6 +12725,47 @@ do
     assert(windows(f) == "guild" and f.C.Keys.held.L == nil, "no key held for a window that is not there: " .. windows(f))
     leave(f)
     print("windows W20: a 0.7 character's Cute_Quest, off in the AddOns list by 0.7, switched on and loaded as the base: the card's rows the engine's, the keys counting L; after a fight's end when the login was in one; none of it for a base that does not load")
+  end)
+end
+
+-- W21 (the review of sub-project C): Settings as section 7 draws it. Quests has "Backdrop behind the step frame" (off;
+-- greyed while the step frame is off), the row the step frame's own menu had alone; it brings Cute's flat backdrop
+-- behind the frame at once and takes it away again. The open section's 2 px bar is in its category's colour: QUEST
+-- for the quest sections, GROUP for Dungeons and gear, NEW for Data you share, WHITE for the rest
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    c.C.Modules.Set("Cute_Quest:journal", true); tick(c, 1)
+    local s, f = c.env.CuteQuestDB.settings, c.env.QuestBankStep
+    local BD = "Backdrop behind the step frame"
+    local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    c.C.UI:Open("settings", "quests")
+    local r = row(BD)
+    assert(r and not r:GetChecked() and not r.__disabled and s.guide.backdrop ~= true and not f.__flat, "Settings > Quests: the backdrop row, off:\n" .. texts(c))
+    click(r)
+    assert(s.guide.backdrop == true and f.__flat, "ticked: Cute's flat backdrop behind the step frame")
+    click(row(BD))
+    assert(s.guide.backdrop == nil and not f.__flat, "unticked: none again")
+    s.guide.frame = false; c.addons[2].private.StepFrame.Apply()
+    c.C.UI:Open("settings", "quests")
+    assert(row(BD) and row(BD).__disabled, "greyed while the step frame is off")
+    s.guide.frame = true; c.addons[2].private.StepFrame.Apply()
+    -- the open section's bar
+    local K = c.C.UI.COLORS
+    local function bar(id)
+      c.C.UI:Open("settings", id)
+      for _, fr in ipairs(c.frames) do if fr.section == id and fr:IsVisible() then return fr.bar:IsShown() and fr.bar.__color end end
+    end
+    for _, want in ipairs({ { "quests", K.QUEST }, { "route", K.QUEST }, { "dungeons", K.GROUP }, { "share", K.NEW }, { "general", K.WHITE }, { "rules", K.WHITE } }) do
+      local col = bar(want[1])
+      assert(col and sameColor(col, want[2]), "the open section's bar in its category's colour: " .. want[1] .. " " .. (col and table.concat(col, ",") or "none"))
+    end
+    check(c.C.UI.Window("settings").frame, "W21 Settings > Quests with the backdrop row")
+    hideAll(c)
+    leave(c)
+    print("windows W21: Settings > Quests has the backdrop row (off, greyed with the frame off, Cute's flat one at once); the open section's bar in its category's colour")
   end)
 end
 
