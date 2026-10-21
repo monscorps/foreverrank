@@ -1261,7 +1261,7 @@ S.GAME_CAP = 1000 -- statistics defined at most, so a client cannot fill the reg
 -- part
 local COIN = { Gold = 10000, Silver = 100, Copper = 1 }
 local function amount(s)
-  s = s:gsub("[%s']", ""):gsub("\194\160", ""):gsub("\226\128\175", "")
+  s = s:gsub("[%s']", ""):gsub("\194\160", ""):gsub("\226\128\175", ""):gsub("%%$", "")
   if s:match("^%d+$") then return tonumber(s) end
   if not s:match("^%d[%d%.,]*%d$") then return nil end
   local last = s:match(".*([%.,])")

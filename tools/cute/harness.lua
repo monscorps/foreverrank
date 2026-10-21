@@ -2494,7 +2494,8 @@ do
     "the label from GetAchievementInfo, the category path as the hint, the category id, slow ints")
   assert(yezin.C.Sample:Value("g2001") == 1234 and yezin.C.Sample:Value("g2008") == nil, "the quantity string parsed, -- read as nothing")
   assert(S.Quantity("1 234") == 1234 and S.Quantity("1.234.567") == 1234567 and S.Quantity("--") == nil and S.Quantity("") == nil and S.Quantity(nil) == nil
-    and S.Quantity("1,5") == 1 and S.Quantity("1,234.5") == 1234 and S.Quantity("|cffffffff42|r") == 42
+    and S.Quantity("1,5") == 1 and S.Quantity("1,234.5") == 1234 and S.Quantity("|cffffffff42|r") == 42 and S.Quantity("75%") == 75
+    and S.Quantity("1 day 2 hours") == nil
     and S.Quantity("12|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t 34|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t 56|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t") == 123456,
     "the parser: separators, decimals, colours, money as copper")
   assert(#S.game.cats == 4 and S.game.cats[1].name == "Kills" and S.game.cats[2].name == "Creatures" and S.game.cats[2].parent == 130 and S.game.cats[2].path == "Kills > Creatures"
