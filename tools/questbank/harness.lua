@@ -18109,14 +18109,57 @@ end)()
     p.QB:Settings().autoTurnIn = true
     p.env.C_Item.GetItemStats = c.env.C_Item.GetItemStats
     check(p, window(p, { 10657, 10658 }), 2, true, "QuestBank's pick: +4 Stamina, +4 Intellect")
-    -- the game has not sent the items yet: the first choice, grey, said so
+    -- nothing known fits among the window's items (the mage's pick, Talbar Mantle, is not one of them): the first
+    -- choice, its mark plainly weaker, said so
+    local u = char("Unfitted", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
+    u.QB:Settings().autoTurnIn = true
+    local um = check(u, window(u, { 10658, 2140 }), 1, false, "First choice: no better pick known")
+    local grey = um.edges and um.edges[1].__color
+    assert(ink and grey and (ink[1] ~= grey[1] or ink[4] ~= grey[4]), "a first choice looks unlike a pick")
+    u.QB.StepFrame.Refresh()
+    assert(u.QB.Guide.Text(u.QB.Guide.Steps()[1]) == "Choose a reward: first choice, no better pick known", "the step says so: " .. u.QB.Guide.Text(u.QB.Guide.Steps()[1]))
+    -- (the review round) on the window's parchment (QuestBG-Parchment, a light tan: the owner's 5-reward-choice) the
+    -- pick's ring stands out, 3:1 at least, with a line of the frame's ink inside it against the dark icon; a first
+    -- choice's plainly less, and no inner line. (The launch round's ring was the frame's ink, a cream: 1.2:1 there)
+    local PARCH = { 0.84, 0.76, 0.60 }
+    local function lum(c) local function ch(v) return v <= 0.03928 and v / 12.92 or ((v + 0.055) / 1.055) ^ 2.4 end return 0.2126 * ch(c[1]) + 0.7152 * ch(c[2]) + 0.0722 * ch(c[3]) end
+    local function onParch(c)
+      local a = c[4] or 1
+      local mix = { c[1] * a + PARCH[1] * (1 - a), c[2] * a + PARCH[2] * (1 - a), c[3] * a + PARCH[3] * (1 - a) }
+      local l1, l2 = lum(mix), lum(PARCH)
+      if l1 < l2 then l1, l2 = l2, l1 end
+      return (l1 + 0.05) / (l2 + 0.05)
+    end
+    assert(onParch(ink) >= 3, string.format("the pick's ring on parchment: %.1f:1", onParch(ink)))
+    assert(onParch(grey) < onParch(ink) - 1, string.format("a first choice's ring weaker: %.1f:1 against %.1f:1", onParch(grey), onParch(ink)))
+    assert(m.inner and m.inner[1]:IsShown() and m.inner[1].__color and m.inner[1].__color[1] > 0.8 and not (um.inner and um.inner[1]:IsShown()),
+      "the pick's inner line in the frame's ink (against the icon), none on a first choice")
+    -- (the review round) the game has not sent the items yet: nothing marked, the line says it is reading them; once
+    -- they come (QUEST_ITEM_UPDATE), the pick. (The launch round marked the first choice "no better pick known" for good)
     local q = char("Hasty", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
     q.QB:Settings().autoTurnIn = true
-    local qm = check(q, window(q, { 10657, 10658 }, { [10657] = true, [10658] = true }), 1, false, "First choice: no better pick known")
-    local grey = qm.edges and qm.edges[1].__color
-    assert(ink and grey and (ink[1] ~= grey[1] or ink[4] ~= grey[4]), "a first choice looks unlike a pick")
-    q.QB.StepFrame.Refresh()
-    assert(q.QB.Guide.Text(q.QB.Guide.Steps()[1]) == "Choose a reward: first choice, no better pick known", "the step says so: " .. q.QB.Guide.Text(q.QB.Guide.Steps()[1]))
+    q.env.C_Item.GetItemStats = nil
+    local unl = { [10657] = true, [10658] = true }
+    local qrf = window(q, { 10657, 10658 }, unl)
+    local QG, QSF = q.QB.Guide, q.QB.StepFrame
+    assert(QG.reward and QG.reward.reading and not QG.reward.pick, "the items not sent yet: reading them")
+    assert(not (QSF.mark and QSF.mark:IsShown()) and QSF.why and QSF.why:IsShown() and QSF.why:GetText() == "Reading the rewards...",
+      "nothing marked, the line says so: " .. tostring(QSF.why and QSF.why:GetText()))
+    QSF.Refresh()
+    assert(QG.Text(QG.Steps()[1]) == "Choose a reward: reading the rewards...", "the step says so: " .. QG.Text(QG.Steps()[1]))
+    unl[10657], unl[10658] = nil, nil
+    local ev = QG.rewardFrame
+    assert(ev and ev.qbOn and ev.__scripts.OnEvent, "the Guide hears the items come")
+    ev.__scripts.OnEvent(ev, "QUEST_ITEM_UPDATE"); tick(q, 1)
+    check(q, qrf, 1, true, "QuestBank's pick: item level 26, the best you can use here")
+    q.ev(q.QB.eventFrame, "QUEST_FINISHED")
+    assert(not ev.qbOn, "the window shut: no more listening")
+    -- the links not loaded, but the window tells the items' ids (GetQuestItemInfo's sixth value): the pick at once
+    local k = char("Knowing", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
+    k.QB:Settings().autoTurnIn = true
+    k.env.C_Item.GetItemStats = nil
+    k.env.GetQuestItemInfo = function(kind, i) local id = k.window and k.window.rc and k.window.rc[i]; return "Item", 134400, 1, 2, true, id end
+    check(k, window(k, { 10657, 10658 }, { [10657] = true, [10658] = true }), 1, true, "QuestBank's pick: item level 26, the best you can use here")
     -- no stats from the client: the item level
     local n = char("Plainly", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
     n.QB:Settings().autoTurnIn = true

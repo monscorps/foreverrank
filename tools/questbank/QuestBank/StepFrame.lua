@@ -429,14 +429,19 @@ function SF.OnRegen()
   end
 end
 
--- the reward window's pick (G.reward), marked as QuestBank's own and never as the game's: a thin outline in the frame's
--- ink round the item's icon, inside the window's reward frame (it scrolls and clips with it), nothing over the item's
--- name and nothing gold or additive (the game's own choice is a gold glow over the whole button, QuestInfoItemHighlight);
--- and one line beside the Complete Quest button, whose pick it is and why: "QuestBank's pick: +4 Intellect, +2 Stamina"
--- (the item's stats, the class's own first: C_Item.GetItemStats), else its item level. A first choice for want of a
--- pick (G.reward.pick false: nothing known fits, or the game had not sent the items) is grey, thinner, and says so.
--- (6.1 drew the map pins' round additive glow, 170 px of gold on a HIGH frame: it read as the game's own selection
--- and washed the name out.) The button itself is never touched
+-- the reward window's pick (G.reward), marked as QuestBank's own and never as the game's: a thin outline round the
+-- item's icon, inside the window's reward frame (it scrolls and clips with it), nothing over the item's name and nothing
+-- gold or additive (the game's own choice is a gold glow over the whole button, QuestInfoItemHighlight); and one line
+-- beside the Complete Quest button, whose pick it is and why: "QuestBank's pick: +4 Intellect, +2 Stamina" (the item's
+-- stats, the class's own first: C_Item.GetItemStats), else its item level. The outline (the review round): 2 px near
+-- black, which reads on the window's parchment (QuestFramePanelTemplate's QuestBG-Parchment, a light tan) as on a dark
+-- frame, with a 1 px line of the frame's ink inside it against the item's dark icon (the launch round's ink alone, a
+-- cream, all but vanished on the parchment). A first choice for want of a pick (G.reward.pick false: nothing known fits)
+-- is 1 px of the same dark at a third, no inner line, and says so; while the window's items are still coming
+-- (G.reward.reading) nothing is marked and the line says that. (6.1 drew the map pins' round additive glow, 170 px of
+-- gold on a HIGH frame: it read as the game's own selection and washed the name out.) The button itself is never
+-- touched
+local RING = { 0.08, 0.06, 0.04 }
 local STAT_WORD = { STRENGTH = "Strength", AGILITY = "Agility", STAMINA = "Stamina", INTELLECT = "Intellect", SPIRIT = "Spirit" }
 local STAT_FIRST = { WARRIOR = "STRENGTH", PALADIN = "STRENGTH", ROGUE = "AGILITY", HUNTER = "AGILITY", MAGE = "INTELLECT", WARLOCK = "INTELLECT",
                      PRIEST = "INTELLECT", DRUID = "INTELLECT", SHAMAN = "INTELLECT" }
@@ -462,6 +467,7 @@ local function statsLine(link)
   return #out > 0 and table.concat(out, ", ") or nil
 end
 local function whyLine(r)
+  if r.reading then return "Reading the rewards..." end
   if not r.pick then return "First choice: no better pick known" end
   local why = statsLine(r.link)
   if not why and r.item and QB.UI and QB.UI.ItemFacts then
@@ -474,36 +480,50 @@ function SF.MarkReward()
   local r = G.reward
   local rf = QuestInfoFrame and QuestInfoFrame.rewardsFrame
   local buttons = rf and rf.RewardButtons
-  local b = r and buttons and buttons[r.index]
+  local b = r and r.index and buttons and buttons[r.index]
   local m = SF.mark
-  if not b then
+  local anchor = QuestFrameCompleteQuestButton
+  if not b and not (r and r.reading and buttons and anchor) then
     if m and m:IsShown() then m:Hide() end
     if SF.why and SF.why:IsShown() then SF.why:Hide() end
     return
   end
-  local parent = b:GetParent() or UIParent -- (the window's reward frame: QuestInfo.lua swaps the map's and the window's)
-  if not m then
-    m = CreateFrame("Frame", nil, parent)
-    SF.mark = m
-    m.edges = {}
-    for i = 1, 4 do m.edges[i] = m:CreateTexture(nil, "OVERLAY") end
+  if b then
+    local parent = b:GetParent() or UIParent -- (the window's reward frame: QuestInfo.lua swaps the map's and the window's)
+    if not m then
+      m = CreateFrame("Frame", nil, parent)
+      SF.mark = m
+      m.edges, m.inner = {}, {}
+      for i = 1, 4 do m.edges[i] = m:CreateTexture(nil, "OVERLAY"); m.inner[i] = m:CreateTexture(nil, "OVERLAY") end
+    end
+    if m:GetParent() ~= parent then m:SetParent(parent) end
+    m:SetFrameLevel((b:GetFrameLevel() or 1) + 2)
+    local icon = rawget(b, "Icon") or rawget(b, "icon") -- (the template's parentKey; a plain field)
+    local edge = r.pick and 2 or 1
+    m:ClearAllPoints()
+    m:SetPoint("TOPLEFT", icon or b, "TOPLEFT", -edge, edge)
+    m:SetPoint("BOTTOMRIGHT", icon or b, icon and "BOTTOMRIGHT" or "BOTTOMLEFT", edge, -edge)
+    if not icon then m:SetWidth((b:GetHeight() or 40) + edge * 2) end -- (a button with no icon of its name: its square end)
+    -- four sides of `width` px, `inset` px in from the mark's edges
+    local function ring(e, width, inset)
+      e[1]:ClearAllPoints(); e[1]:SetPoint("TOPLEFT", inset, -inset); e[1]:SetPoint("TOPRIGHT", -inset, -inset); e[1]:SetHeight(width)
+      e[2]:ClearAllPoints(); e[2]:SetPoint("BOTTOMLEFT", inset, inset); e[2]:SetPoint("BOTTOMRIGHT", -inset, inset); e[2]:SetHeight(width)
+      e[3]:ClearAllPoints(); e[3]:SetPoint("TOPLEFT", inset, -inset); e[3]:SetPoint("BOTTOMLEFT", inset, inset); e[3]:SetWidth(width)
+      e[4]:ClearAllPoints(); e[4]:SetPoint("TOPRIGHT", -inset, -inset); e[4]:SetPoint("BOTTOMRIGHT", -inset, inset); e[4]:SetWidth(width)
+    end
+    ring(m.edges, edge, 0)
+    for i = 1, 4 do m.edges[i]:SetColorTexture(RING[1], RING[2], RING[3], r.pick and 1 or 0.33) end
+    if r.pick then
+      ring(m.inner, 1, edge)
+      local c = tone("INK")
+      for i = 1, 4 do m.inner[i]:SetColorTexture(c[1], c[2], c[3], 1); m.inner[i]:Show() end
+    else
+      for i = 1, 4 do m.inner[i]:Hide() end
+    end
+    m:Show()
+  elseif m and m:IsShown() then
+    m:Hide()
   end
-  if m:GetParent() ~= parent then m:SetParent(parent) end
-  m:SetFrameLevel((b:GetFrameLevel() or 1) + 2)
-  local icon = rawget(b, "Icon") or rawget(b, "icon") -- (the template's parentKey; a plain field)
-  local edge = r.pick and 2 or 1
-  m:ClearAllPoints()
-  m:SetPoint("TOPLEFT", icon or b, "TOPLEFT", -edge, edge)
-  m:SetPoint("BOTTOMRIGHT", icon or b, icon and "BOTTOMRIGHT" or "BOTTOMLEFT", edge, -edge)
-  if not icon then m:SetWidth((b:GetHeight() or 40) + edge * 2) end -- (a button with no icon of its name: its square end)
-  local e = m.edges
-  e[1]:ClearAllPoints(); e[1]:SetPoint("TOPLEFT"); e[1]:SetPoint("TOPRIGHT"); e[1]:SetHeight(edge)
-  e[2]:ClearAllPoints(); e[2]:SetPoint("BOTTOMLEFT"); e[2]:SetPoint("BOTTOMRIGHT"); e[2]:SetHeight(edge)
-  e[3]:ClearAllPoints(); e[3]:SetPoint("TOPLEFT"); e[3]:SetPoint("BOTTOMLEFT"); e[3]:SetWidth(edge)
-  e[4]:ClearAllPoints(); e[4]:SetPoint("TOPRIGHT"); e[4]:SetPoint("BOTTOMRIGHT"); e[4]:SetWidth(edge)
-  local c = tone(r.pick and "INK" or "SOFT")
-  for i = 1, 4 do e[i]:SetColorTexture(c[1], c[2], c[3], r.pick and 1 or 0.7) end
-  m:Show()
   -- the line: beside the Complete Quest button (QuestFrame.xml: the reward panel's, at the window's bottom left), else
   -- under the marked button
   local w = SF.why
@@ -518,8 +538,7 @@ function SF.MarkReward()
   end
   local holder = w.holder
   if holder:GetParent() ~= host then holder:SetParent(host) end
-  local anchor = QuestFrameCompleteQuestButton
-  holder:SetFrameLevel(((anchor and anchor:GetFrameLevel()) or (b:GetFrameLevel() or 1)) + 1)
+  holder:SetFrameLevel(((anchor and anchor:GetFrameLevel()) or (b and b:GetFrameLevel()) or 1) + 1)
   holder:ClearAllPoints(); w:ClearAllPoints()
   if anchor then
     holder:SetPoint("LEFT", anchor, "RIGHT", 8, 0)

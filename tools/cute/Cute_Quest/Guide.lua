@@ -96,6 +96,7 @@ function G.Text(s)
   elseif k == "corpse" then return "Run to your corpse"
   elseif k == "reward" then
     local r = G.reward
+    if r and r.qid == s.qid and r.reading then return "Choose a reward: reading the rewards..." end
     if r and r.qid == s.qid and not r.pick then return "Choose a reward: first choice, no better pick known" end
     return "Choose a reward: " .. (s.name or "the marked one") .. " is " .. (QB.NAME or "QuestBank") .. "'s pick"
   end
@@ -633,32 +634,71 @@ function G.ItemFor(s)
 end
 
 -- a hand-in with a reward to choose: the Guide holds QuestBank's pick (UI.BestReward's gear, else the first trinket,
--- else the first) and the frame marks it; nothing is chosen for you. G.reward = { qid, index, name } while the window
--- with the choice is open; the list is made again so the step says so
+-- else the first) and the frame marks it; nothing is chosen for you. G.reward = { qid, n, index, name, ... } while the
+-- window with the choice is open; the list is made again so the step says so
+-- (the review round) the window's items as the client sends them: while a choice's link is missing, the pick is read
+-- again a fifth of a second after QUEST_ITEM_UPDATE (the quest window's own event, QuestFrame.lua) or
+-- GET_ITEM_INFO_RECEIVED. (The launch round read them once, 0.05 s after QUEST_COMPLETE: a link not loaded yet left
+-- "First choice: no better pick known" up all the while, a better pick known)
+local rewardFrame, rewardSoon = nil, false
+local function rereadRewards()
+  rewardSoon = false
+  local r = G.reward
+  if r and r.unloaded then G.HoldReward(r.qid, r.n) end
+end
+local function watchRewards(on)
+  if on and not rewardFrame then
+    rewardFrame = CreateFrame("Frame")
+    G.rewardFrame = rewardFrame
+    rewardFrame:SetScript("OnEvent", QB.Safe(function()
+      if rewardSoon or not (G.reward and G.reward.unloaded) then return end
+      rewardSoon = true
+      C_Timer.After(0.2, QB.Safe(rereadRewards, "guide: rewards"))
+    end, "guide: rewards"))
+  end
+  if not rewardFrame or (on and true or false) == (rewardFrame.qbOn == true) then return end
+  rewardFrame.qbOn = on and true or nil
+  for _, e in ipairs({ "QUEST_ITEM_UPDATE", "GET_ITEM_INFO_RECEIVED" }) do
+    if on then pcall(rewardFrame.RegisterEvent, rewardFrame, e) else pcall(rewardFrame.UnregisterEvent, rewardFrame, e) end
+  end
+end
 function G.HoldReward(qid, n)
   local level = QB.state.level or 1
   local UI = QB.UI
   local best = UI and UI.BestReward and (UI.BestReward(qid, "gear", level) or UI.BestReward(qid, "trinket", level)) or nil
-  -- (the launch round) a pick only where the Gear finder's best is among the links the window gives; else the first
-  -- choice, marked and said as no more than that (nothing known fits you, or the game had not sent the items yet: 6.1
-  -- marked it as a pick all the same). link: the pick's, for the frame's line (its stats)
-  local index, name, link, firstName, firstLink = nil, nil, nil, nil, nil
+  -- (the launch round) a pick only where the Gear finder's best is among the items the window gives; else the first
+  -- choice, marked and said as no more than that (nothing known fits you: 6.1 marked it as a pick all the same). link:
+  -- the pick's, for the frame's line (its stats). (The review round) an item whose link is not loaded yet is told by
+  -- its id all the same (GetQuestItemInfo's sixth value, as QuestInfo.lua and Discover.lua read it); with an item not
+  -- told at all and a pick known, the window is still being read (reading: no mark yet, the line says so)
+  local index, name, link, firstName, firstLink, untold, unloaded = nil, nil, nil, nil, nil, false, false
   if type(GetQuestItemLink) == "function" then
     for i = 1, n do
       local ok, l = pcall(GetQuestItemLink, "choice", i)
       l = ok and plain(l) or nil
-      local id = type(l) == "string" and tonumber(l:match("item:(%d+)"))
-      if i == 1 and type(l) == "string" then firstName, firstLink = l:match("%[(.-)%]"), l end
-      if id and best and id == best and not index then index, name, link = i, l:match("%[(.-)%]"), l end
+      if type(l) ~= "string" then l, unloaded = nil, true end
+      local id = l and tonumber(l:match("item:(%d+)"))
+      if not id and type(GetQuestItemInfo) == "function" then
+        local okI, _, _, _, _, _, itemID = pcall(GetQuestItemInfo, "choice", i)
+        itemID = okI and plain(itemID) or nil
+        if type(itemID) == "number" and itemID > 0 then id = itemID end
+      end
+      if not id then untold = true end
+      if i == 1 and l then firstName, firstLink = l:match("%[(.-)%]"), l end
+      if id and best and id == best and not index then index, name, link = i, l and l:match("%[(.-)%]"), l end
     end
   end
-  G.reward = { qid = qid, index = index or 1, name = index and name or firstName, link = index and link or firstLink, item = index and best or nil, pick = index ~= nil }
+  local reading = best ~= nil and not index and untold
+  G.reward = { qid = qid, n = n, index = index or ((not reading) and 1 or nil), name = index and name or firstName, link = index and link or firstLink,
+               item = index and best or nil, pick = index ~= nil, reading = reading or nil, unloaded = unloaded or nil }
+  watchRewards(unloaded)
   G.Replan()
   if QB.StepFrame and QB.StepFrame.MarkReward then QB.StepFrame.MarkReward() end
 end
 function G.DropReward()
   if not G.reward then return end
   G.reward = nil
+  watchRewards(false)
   G.Replan()
   if QB.StepFrame and QB.StepFrame.MarkReward then QB.StepFrame.MarkReward() end
 end
