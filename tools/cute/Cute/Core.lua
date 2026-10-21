@@ -548,17 +548,26 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
 end, "core: events"))
 
 -- (Cute's own, then the quest engine's where Cute_Quest runs: its errors are kept in CuteQuestDB, which /qb errors
--- alone listed)
+-- alone listed.) Each once: Cute_Quest's Bridge.lua copies an engine error's first sighting onto Cute's list too
+-- (where "quest engine: ..."), so Cute says it once a session, while the engine's own list counts every repeat. The
+-- merge review: both were listed, "x1" beside the true count. Such a copy is left out while the engine's own entry
+-- stands; a call the game blocked is on Cute's list alone and shows
+local ENGINE_WHERE = "quest engine: "
 local function errorsList()
   local list = CuteDB and CuteDB.errors or {}
   local engine = type(CuteQuestDB) == "table" and type(CuteQuestDB.errors) == "table" and CuteQuestDB.errors or {}
   if #list == 0 and #engine == 0 then C.Print("no errors recorded.") return end
+  local own = {}
+  for _, e in ipairs(engine) do if type(e) == "table" and e.msg ~= nil then own[tostring(e.msg)] = true end end
   local function say(e, from)
     if type(e) ~= "table" then return end
     -- (a | doubled: an error's text names a texture or a link, which chat would draw as one)
     C.Print(string.format("%s%s (x%d, last %s) %s", from, (tostring(e.msg):gsub("|", "||")), tonumber(e.count) or 1, tostring(e.last or ""), (tostring(e.where or ""):gsub("|", "||"))))
   end
-  for _, e in ipairs(list) do say(e, "") end
+  for _, e in ipairs(list) do
+    local copy = type(e) == "table" and tostring(e.where or ""):sub(1, #ENGINE_WHERE) == ENGINE_WHERE and own[tostring(e.msg)]
+    if not copy then say(e, "") end
+  end
   for _, e in ipairs(engine) do say(e, "quests: ") end
 end
 

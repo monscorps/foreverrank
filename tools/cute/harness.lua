@@ -11430,6 +11430,40 @@ do
   end)
 end
 
+-- (the merge review) /cute errors lists an engine error once, with the engine's own count: Bridge.lua copies its first
+-- sighting onto Cute's list (where "quest engine: probe") and the engine's own list counts every repeat; the list
+-- shows that one. A call the game blocked, noted on Cute's list alone, still shows
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    local QB = c.addons[2].private
+    c.env.CUTE_DEV = false
+    for _ = 1, 3 do QB.Err.Record("a merge probe error", "", "probe") end
+    local bf = QB.blockedFrame
+    bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "Cute_Quest", "Frame:SetPassThroughButtons()")
+    c.env.CUTE_DEV = true
+    local onCute = false
+    for _, e in ipairs(c.env.CuteDB.errors or {}) do if e.msg == "a merge probe error" and e.where == "quest engine: probe" then onCute = true end end
+    assert(onCute and c.env.CuteQuestDB.errors[1].count == 3, "the error on Cute's list once and the engine's, counted three times")
+    local e0 = #c.chat
+    c.env.SlashCmdList.CUTE("errors")
+    local probe, held = {}, {}
+    for i = e0 + 1, #c.chat do
+      if c.chat[i]:find("a merge probe error", 1, true) then probe[#probe + 1] = c.chat[i] end
+      if c.chat[i]:find("the game blocked Frame:SetPassThroughButtons()", 1, true) then held[#held + 1] = c.chat[i] end
+    end
+    assert(#probe == 1 and probe[1]:find("(x3, ", 1, true), "/cute errors: the engine's error on one line, x3:\n" .. table.concat(probe, "\n"))
+    assert(#held == 1, "/cute errors: the blocked call once: " .. #held)
+    c.env.CuteDB.errors, c.env.CuteQuestDB.errors = nil, nil
+    if c.env.CuteQuestDB.diag then c.env.CuteQuestDB.diag.blocked = nil end
+    leave(c)
+    print("merge1: /cute errors lists an engine error once (x3), and the blocked call")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end
