@@ -32,7 +32,7 @@ $WatchFiles = @("QuestBank.lua", "Cute_Quest.lua")   # the engine's saved file, 
 $NeverSend  = @("Cute.lua")                          # CuteDB: the guild's roster, GUIDs and members' Only-you values
 $MaxBytes   = 6 * 1024 * 1024   # the endpoint's limit
 # What may leave the PC, the same list as the site's (tools/probe_pull.py ALLOW, worker/src/allow.js): every other
-# part of the saved file stays here. Hand-in times go to the minute, an error as its message and where it was caught
+# part of the saved file stays here. Every time goes to the minute, an error as its message and where it was caught
 $Allow      = @("disc", "game", "live", "liveEra", "turnins", "diag", "errors")
 $ErrorKeys  = @("msg", "where", "count", "version")
 $FindsAddon = "QuestBank_Finds"  # the data addon the finds go into, once a day
@@ -201,8 +201,8 @@ function Get-SavedEntries([string]$text) {
   return @{ name = $m.Groups[1].Value; entries = $out }
 }
 
-# The file as it goes to foreverrank.com: the allow-list's entries only, hand-in times to the minute, errors as their
-# message and where (never their stack or times). Read and written byte for byte (Latin-1 keeps every byte as it was,
+# The file as it goes to foreverrank.com: the allow-list's entries only, every time to the minute (hand-ins' dates, and
+# each ["at"] the game wrote in seconds), errors as their message and where (never their stack or times). Read and written byte for byte (Latin-1 keeps every byte as it was,
 # a name in UTF-8 included). Throws when the file is no QuestBank or Cute_Quest file, or Cute.lua
 function Get-UploadText([string]$File) {
   if (Test-NeverSend $File) { throw "Cute.lua never leaves this PC" }
@@ -219,6 +219,9 @@ function Get-UploadText([string]$File) {
     if ($e.key -eq "errors") {
       $keep = ($ErrorKeys | ForEach-Object { [regex]::Escape($_) }) -join "|"
       $body = [regex]::Replace($body, '\["(?!(?:' + $keep + ')")[^"\\]*"\]\s*=\s*(?:"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|true|false|nil)\s*,?', '')
+    } else {
+      # a time the game wrote in seconds since 1970 (ten digits) under ["at"]: to the minute
+      $body = [regex]::Replace($body, '(\["at"\]\s*=\s*)([0-9]{10})(?![0-9.eE])', { param($m) $m.Groups[1].Value + [string][long][math]::Floor([double]$m.Groups[2].Value / 60) })
     }
     $kept += $body
   }

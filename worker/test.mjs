@@ -97,6 +97,14 @@ const full = (name) => `${name} = {
 			["at"] = "2026-10-22 18:04:31",
 		}, -- [1]
 	},
+	["game"] = {
+		["items"] = {
+			[2589] = {
+				["at"] = 1791100000,
+				["n"] = "Linen Cloth",
+			},
+		},
+	},
 	["travel"] = {
 		["gPlayer-1-0001"] = {
 		},
@@ -108,7 +116,8 @@ console.log('=== the allow-list');
 check('the list', JSON.stringify(ALLOW) === JSON.stringify(['disc', 'game', 'live', 'liveEra', 'turnins', 'diag', 'errors']));
 const cut = stripSavedVariables(full('QuestBankDB'));
 console.log(cut.split('\n').map((l) => '  | ' + l).join('\n'));
-check('only the allowed parts, in the file\'s order', [...cut.matchAll(/^\t\["(\w+)"\] = /gm)].map((m) => m[1]).join(',') === 'disc,errors,turnins');
+check('only the allowed parts, in the file\'s order', [...cut.matchAll(/^\t\["(\w+)"\] = /gm)].map((m) => m[1]).join(',') === 'disc,errors,turnins,game');
+check('a time in seconds cut to the minute', cut.includes('["at"] = 29851666,') && !/\["at"\]\s*=\s*\d{10}/.test(cut));
 check('no name past it', !cut.includes('Helga'));
 check('a string with a brace and a comma read whole', cut.includes('"a } and a , inside"'));
 check('hand-in times to the minute', cut.includes('["at"] = "2026-10-22 18:04",') && !cut.includes('18:04:31'));

@@ -186,19 +186,36 @@ def parse_savedvariables(text):
 # What may leave a player's PC (docs/superpowers/specs/2026-10-21-cute-windows-design.md, 11.2 and 11.5): one allow-list
 # for QuestBank.lua and Cute_Quest.lua alike, applied by the uploader before it sends, by the page's upload script, by
 # the Worker before it stores, and here to every upload as it is read (the rows stored before the list existed carry
-# the rest: characters by name, their bank, plans, travel, runs, settings). Hand-in times are cut to the minute, and an
-# error keeps its message (which carries the file and line) and where it was caught, never its stack or times. The same
+# the rest: characters by name, their bank, plans, travel, runs, settings). Hand-in times are cut to the minute, as is
+# every other ["at"] the client wrote in seconds (time()), and an error keeps its message (which carries the file and
+# line) and where it was caught, never its stack or times. The same
 # list is written in uploader/QuestBank-Uploader.ps1 and worker/src/allow.js; --selftest checks all three agree
 ALLOW = ("disc", "game", "live", "liveEra", "turnins", "diag", "errors")
 ERROR_KEYS = ("msg", "where", "count", "version")
 SAVEDVARS = ("questbank-savedvars", "cutequest-savedvars")  # the engine's own file, under QuestBank or under Cute
 
 
+def _minute(v):
+    """A time as the client's time() wrote it (seconds since 1970, ten digits) cut to the minute; any other value as it
+    was. Minutes are eight digits until the year 2160, so a time cut once is never cut again."""
+    return v // 60 if isinstance(v, int) and not isinstance(v, bool) and 10 ** 9 <= v < 10 ** 10 else v
+
+
+def _cut_times(v):
+    """Every ["at"] in a kept part to the minute (game.snap, game.items, disc.sell, disc.rides, diag.blocked,
+    diag.legacy write time()): no time to the second leaves the PC (11.5)."""
+    if isinstance(v, dict):
+        return {k: (_minute(x) if k == "at" else _cut_times(x)) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_cut_times(x) for x in v]
+    return v
+
+
 def strip(data):
-    """A QuestBankDB or CuteQuestDB as it may be kept: the allow-list's parts only."""
+    """A QuestBankDB or CuteQuestDB as it may be kept: the allow-list's parts only, every time to the minute."""
     if not isinstance(data, dict):
         return data
-    out = {k: data[k] for k in ALLOW if k in data}
+    out = {k: (_cut_times(data[k]) if k not in ("turnins", "errors") else data[k]) for k in ALLOW if k in data}
     t = out.get("turnins")
     if isinstance(t, list):
         out["turnins"] = [dict(r, at=_at(r["at"])) if isinstance(r, dict) and "at" in r else r for r in t]
@@ -776,10 +793,10 @@ def merge_probe(acc, kind, data):
         cv = ".".join(parts[:-1]) if len(parts) == 4 else None
         if b and b < FIRST_FOREVER_BUILD:
             continue  # an older client's tooltip (an Era ForeverProbe.lua or export): not Forever's numbers
-        at = it.get("at") if isinstance(it.get("at"), (int, float)) else 0
+        at = _minute(it.get("at")) if isinstance(it.get("at"), (int, float)) else 0
         old = tips.get(str(iid))
-        if old and (int(old.get("b") or 0), old.get("at") or 0) > (b, at):
-            continue
+        if old and (int(old.get("b") or 0), _minute(old.get("at") or 0)) > (b, at):
+            continue  # (a reading kept before the cut to the minute is in seconds: compared in minutes)
         tips[str(iid)] = {"b": b, "at": at, "n": it["n"], "q": it.get("q"), "l": it.get("l"), "r": it.get("r"), "el": it.get("el"),
                           "c": it.get("c"), "u": it.get("u"), "e": it.get("e"), "ic": it.get("ic"), "x": [str(v) for v in x][:40]}
         if cv:
@@ -1502,7 +1519,7 @@ def selftest():
     tip_text = qb_text.replace('["at"] = 1791100000,', '["at"] = 1791100600,')
     assert tip_text != qb_text
     assert merge_upload(acc3, tip_text, "fixture") == ("questbank-savedvars", False)
-    assert acc3["meta"]["repeats"] == 1 and pr["items"]["2361"] == 3 and pr["items"]["159"] == 2 and t["2361"]["at"] == 1791100600
+    assert acc3["meta"]["repeats"] == 1 and pr["items"]["2361"] == 3 and pr["items"]["159"] == 2 and t["2361"]["at"] == 1791100600 // 60
     assert acc3["q"]["33"]["n"] == 1 and acc3["seen"]["33"] == {"170:2:70205:turnin:9": 1}, "the notes were not merged again"
     # (with an undated quest-window reading, as QuestBank before 3.4.6 wrote them: it counts each time the notes merge)
     notes_text = tip_text.replace('["lv"] = 2,\n\t\t\t\t["min"] = 1,', '["lv"] = 3,\n\t\t\t\t["min"] = 1,').replace(
@@ -1710,8 +1727,12 @@ def selftest_finds():
     def sv(name, db):
         return "%s = %s\n" % (name, _lua(db))
     names = {"Helga-ForeverNormal": {"level": 20}}
-    full = {"disc": {"v": 1, "q": {}, "build": "70338", "iface": 16001}, "game": {"iface": 16001}, "live": {}, "liveEra": 3,
-            "turnins": [{"id": 300, "xp": 900, "level": 12, "at": "2026-10-22 18:04:31"}], "diag": {"addons": {"iface": 16001}},
+    full = {"disc": {"v": 1, "q": {}, "build": "70338", "iface": 16001, "sell": {"c1234": {"n": "Innkeeper Farley", "at": 1791100031}},
+                     "rides": {"b:Menethil Harbor>Theramore": {"n": 1, "t": 290, "at": 1791100059}}},
+            "game": {"iface": 16001, "snap": {"MAGE": {"class": "MAGE", "level": 20, "at": 1791100001}},
+                     "items": {"2589": {"b": "1.60.1.70338", "at": 1791100000, "n": "Linen Cloth"}}}, "live": {}, "liveEra": 3,
+            "turnins": [{"id": 300, "xp": 900, "level": 12, "at": "2026-10-22 18:04:31"}],
+            "diag": {"addons": {"iface": 16001}, "blocked": [{"fn": "X", "at": 1791100002}], "legacy": {"reads": 1, "at": 1791100003}},
             "errors": [{"msg": "Interface/AddOns/QuestBank/Finds.lua:12: oops", "stack": "Helga's stack", "where": "finds", "count": 2,
                         "first": "2026-10-22 18:04:31", "last": "2026-10-22 18:05:59", "version": "6.2.0"}],
             "bank": {"Helga": 1}, "chars": names, "plans": {"Helga": 1}, "held": {}, "travel": {"gHelga": {}}, "runs": {}, "lock": {},
@@ -1722,6 +1743,14 @@ def selftest_finds():
         assert data["turnins"][0]["at"] == "2026-10-22 18:04" and data["errors"] == [
             {"msg": "Interface/AddOns/QuestBank/Finds.lua:12: oops", "where": "finds", "count": 2, "version": "6.2.0"}], data["errors"]
         assert "Helga" not in json.dumps(data), "no name past the allow-list"
+
+        def seconds(v):  # every whole number the size of a time in seconds (10 digits) left in the kept parts
+            if isinstance(v, dict):
+                return [x for k in v for x in seconds(v[k])] + (["at"] if isinstance(v.get("at"), int) and v["at"] >= 10 ** 9 else [])
+            return [x for e in v for x in seconds(e)] if isinstance(v, list) else []
+        assert seconds(data) == [], "no time to the second: %r" % seconds(data)
+        assert data["game"]["items"]["2589"]["at"] == 1791100000 // 60 and data["disc"]["sell"]["c1234"]["at"] == 1791100031 // 60 \
+            and data["diag"]["blocked"][0]["at"] == 1791100002 // 60, "times to the minute"
     try:
         decode(sv("CuteDB", {"roster": {"Helga": {}}}))
         raise AssertionError("Cute.lua was read")

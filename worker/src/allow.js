@@ -4,8 +4,9 @@
  * uploader before it sends (uploader/QuestBank-Uploader.ps1), by the page's upload script, by the Worker before it
  * stores (this file), and by tools/probe_pull.py to every stored row as it reads it; probe_pull.py --selftest checks
  * the lists agree. Kept: the notes about the world (disc), the client's items and spells (game), the XP the game
- * showed (live, liveEra, turnins: times cut to the minute) and the client's diagnostics and errors (an error as its
- * message, where it was caught, its count and version). Everything else of the file stays on the PC: characters by
+ * showed (live, liveEra, turnins) and the client's diagnostics and errors (an error as its message, where it was
+ * caught, its count and version). Every time goes to the minute: hand-ins' dates, and each ["at"] the client wrote in
+ * seconds. Everything else of the file stays on the PC: characters by
  * name, their bank, plans, travel, runs, settings, reports, the trace.
  *
  * Plain JavaScript with no imports, so the page can carry the same function.
@@ -17,6 +18,9 @@ const HEAD = /^\s*(QuestBankDB|CuteQuestDB)\s*=\s*\{/;
 const TOKEN = /"(?:[^"\\]|\\.)*"|--[^\n]*|[{},]/g;
 const KEY = /^\s*(?:--[^\n]*\n\s*)*\["([^"\\]*)"\]\s*=/;
 const AT = /(\["at"\]\s*=\s*"\d{4}-\d{2}-\d{2} \d{2}:\d{2}):\d{2}"/g;
+// a time the client wrote with time() (seconds since 1970, ten digits) under ["at"]: game.snap, game.items, disc.sell,
+// disc.rides, diag.blocked and diag.legacy have them. Cut to the minute (eight digits until 2160, never cut twice)
+const SECONDS = /(\["at"\]\s*=\s*)(\d{10})(?![\d.eE])/g;
 const ERROR_FIELD = new RegExp(
   '\\["(?!(?:' + ERROR_KEYS.join('|') + ')")[^"\\\\]*"\\]\\s*=\\s*(?:"(?:[^"\\\\]|\\\\.)*"|-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?|true|false|nil)\\s*,?',
   'g');
@@ -53,7 +57,7 @@ export function savedEntries(text) {
   return null;
 }
 
-/** The file as it may be kept: the allow-list's entries only, in the file's order, hand-in times to the minute,
+/** The file as it may be kept: the allow-list's entries only, in the file's order, every time to the minute,
  *  errors without their stack or times. null when the text is no whole QuestBank or Cute_Quest file. */
 export function stripSavedVariables(text) {
   const sv = savedEntries(text.replace(/^\uFEFF/, ''));
@@ -64,6 +68,7 @@ export function stripSavedVariables(text) {
     let body = e.text;
     if (e.key === 'turnins') body = body.replace(AT, '$1"');
     if (e.key === 'errors') body = body.replace(ERROR_FIELD, '');
+    else body = body.replace(SECONDS, (_, k, n) => k + Math.floor(Number(n) / 60));
     out += '\t' + body + ',\n';
   }
   return out + '}\n';

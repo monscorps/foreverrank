@@ -594,6 +594,17 @@ CuteQuestDB = {
 	},
 	["game"] = {
 		["iface"] = 16001,
+		["items"] = {
+			[2589] = {
+				["at"] = 1791100000,
+				["n"] = "Linen Cloth",
+			},
+		},
+		["snap"] = {
+			["MAGE"] = {
+				["at"] = 1791100059,
+			},
+		},
 	},
 	["held"] = {
 	},
@@ -655,6 +666,7 @@ Check "a string with braces and commas inside is read whole" ($out.Contains('"a 
 Check "hand-in times to the minute" ($out.Contains('["at"] = "2026-10-22 18:04",') -and -not $out.Contains("18:04:31"))
 Check "an error keeps its message, where, count and version, never its stack or times" ($out.Contains('Finds.lua:12: oops') -and $out.Contains('["where"] = "finds"') -and $out.Contains('["count"] = 2') -and -not $out.Contains('stack') -and -not $out.Contains('first') -and -not $out.Contains('"last"'))
 Check "the variable keeps its name" ($out.StartsWith("CuteQuestDB = {"))
+Check "a time in seconds goes to the minute" ($out.Contains('["at"] = 29851666,') -and $out.Contains('["at"] = 29851667,') -and -not ($out -match '\["at"\]\s*=\s*\d{10}'))
 Set-Content -LiteralPath "/tmp/up/cut.lua" -Value "QuestBankDB = {`n[`"disc`"] = {`n" -NoNewline
 $e = $null; try { Get-UploadText "/tmp/up/cut.lua" | Out-Null } catch { $e = $_.Exception.Message }
 Check "a file cut short is not sent" ($e -like "not a QuestBank.lua*")
