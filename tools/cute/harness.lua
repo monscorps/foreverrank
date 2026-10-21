@@ -11915,6 +11915,45 @@ do local function runsStage()
   end)
   said[#said + 1] = "a flood of hellos and 2Rs: one answer waiting at a time, once a minute a sender, the queue short, the end at once"
 
+  -- (3.6, 12) the scribe's 2W gives a member's checkpoint back as the group and the policy are now: a stranger who
+  -- joined since keeps the guild's codes out of it, and a scribe whose policy is in doubt sends none
+  isolated({ gmember("Sa", 1), gmember("Xo", 3) }, function()
+    local cs = { gchar("Sa", 1), gchar("Xo", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local sa, xo = cs[1], cs[2]
+    xo.env.JumpOrAscendStart()
+    die(G, xo); tickAll(3); rez(G, xo)
+    fight(G, 30, { Xo = { [0] = 600 } }, 1230)
+    tickAll(40)
+    local m = sa.C.Runs.Current().members[sfx(xo)]
+    assert(m and m.v and m.v.ju == 1 and m.v.de == 1, "the scribe holds Xo's guild-only counts from the all-guild group")
+    -- a pug fills a slot; Xo, back from a crash, asks
+    G.members[#G.members + 1] = entryOf({ name = "Pug", class = "WARRIOR" })
+    each(G, function(c) fire(c, "GROUP_ROSTER_UPDATE") end)
+    tickAll(6)
+    local id = sa.C.Runs.Current().id
+    local w0 = #sa.rsent
+    sa.C.RunComm:Receive("CuteRun", "2R|" .. id .. "|" .. sfx(xo), "PARTY", xo.sender)
+    tickAll(3)
+    local w
+    for k = w0 + 1, #sa.rsent do if sa.rsent[k].msg:sub(1, 3) == "2W|" then w = sa.rsent[k].msg end end
+    assert(w and w:find("dm=", 1, true), "the 2W went: " .. tostring(w))
+    for _, k in ipairs({ "de", "dt", "fd", "ju", "wy", "cn", "lv", "gd" }) do assert(not w:find("[|;]" .. k .. "="), "a guild-only key in the 2W with a stranger in the group: " .. k .. " in " .. w) end
+    -- (the scribe's policy in doubt: no 2W at all)
+    tickAll(61)
+    sa.C.Policy.doubt = true
+    w0 = #sa.rsent
+    sa.C.RunComm:Receive("CuteRun", "2R|" .. id .. "|" .. sfx(xo), "PARTY", xo.sender)
+    tickAll(1)
+    for k = w0 + 1, #sa.rsent do assert(sa.rsent[k].msg:sub(1, 3) ~= "2W|", "a 2W from a scribe in doubt") end
+    sa.C.Policy.doubt = nil
+  end)
+  said[#said + 1] = "a 2W as the group and the policy are now: no guild code with a stranger since, none from a scribe in doubt"
+
   -- (4) the lockdown: a 2V answered 11 spends no try, the Chat restriction's Activating holds it and only its Inactive
   -- lets it go, once; a lockdown for the whole stay sends nothing inside, a disband inside gives each client its own
   -- report, and the id and the scribe settle once the group is out; the meter read only out of combat; a secret

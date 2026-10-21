@@ -1037,8 +1037,16 @@ function R:Heard(kind, rest, who)
     -- (a member back from a crash: the scribe gives it back its last checkpoint)
     local sfx = body:match("^(%w+)$")
     if sfx ~= who.sfx or not self:IsScribe() or not (m and m.v) or not R.Once("2R", sfx) then return end
-    local kv = encode(m.v)
-    C.RunComm:Send("2W", function() return C.RunComm.Pack("2W|" .. run.id .. "|" .. sfx .. "|", kv) end)
+    -- (built as it leaves, by the group and the policy then, as a 2V is: a field closed since, or a code the guild set
+    -- for itself with anyone else in the group now, stays out; a scribe whose policy is in doubt sends none)
+    C.RunComm:Send("2W", function()
+      if R.run ~= run or not m.v then return nil end
+      local settled = C.Policy:Settled()
+      if not settled then return nil end
+      local guildOnly = allGuild()
+      local kv = encode(m.v, function(k) return sendable(k, settled, guildOnly) end)
+      return C.RunComm.Pack("2W|" .. run.id .. "|" .. sfx .. "|", kv)
+    end)
   elseif kind == "2W" then
     local sfx, data = body:match("^(%w+)|(.*)$")
     if sfx ~= mySfx() or not self.asked or who.sfx ~= self:Scribe() then return end
