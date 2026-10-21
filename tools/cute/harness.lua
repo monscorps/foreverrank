@@ -14053,7 +14053,8 @@ do local function cardsStage()
     local c0 = #ola.chat
     ola.env.SlashCmdList.CUTE("diag cards")
     local diag = table.concat(ola.chat, "\n", c0 + 1)
-    assert(diag:find("records on", 1, true) and diag:find("1O sent", 1, true) and not diag:find("Bea", 1, true) and not diag:find("Eli", 1, true), "/cute diag cards, the records' line:\n" .. diag)
+    assert(diag:find("records on", 1, true) and diag:find("1O sent", 1, true) and diag:find("a faster clear with one voice", 1, true) and Rc(ola).lone > 0
+      and not diag:find("Bea", 1, true) and not diag:find("Eli", 1, true), "/cute diag cards, the records' line:\n" .. diag)
     -- (19) the table at its cap, and the list
     local E = Rc(ola).Entries()
     for i = 1, 500 do E["g" .. (900000 + i)] = { v = 123456789, g = bea.o.guid, n = "Abcdefghijkl", c = "WARRIOR", t = 1800000000 } end

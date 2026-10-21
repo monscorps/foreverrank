@@ -35,7 +35,7 @@
 --            heading's switch for every instance, and Add (the stat picker) for a game statistic
 -- Nothing of a member's in /cute diag cards: counts and states.
 local _, C = ...
-local Rec = { announced = 0, quiet = 0, suggested = 0, sent = 0, taken = 0, refused = 0, defs = 0, heardAt = 0 }
+local Rec = { announced = 0, quiet = 0, suggested = 0, sent = 0, taken = 0, refused = 0, defs = 0, heardAt = 0, lone = 0 }
 C.Records = Rec
 
 local MAX = 400             -- entries in the table at most
@@ -304,6 +304,12 @@ function Rec:Clear(n, live)
   for i, a in ipairs(list) do
     for j, b in ipairs(list) do if i ~= j and math.abs(a.v - b.v) <= GAP then best = a break end end
     if best then break end
+  end
+  -- (a faster time no second voice backs: counted, so /cute diag cards says whether a group's times agree in game)
+  local first = list[1]
+  if first and first ~= best then
+    local had = Rec.Entries()[id]
+    if not had or first.v < had.v then Rec.lone = Rec.lone + 1 end
   end
   if not best then return end
   local group = {}
@@ -731,9 +737,9 @@ function Rec.Diag()
   local on = 0
   for _ in pairs(Rec.List().codes) do on = on + 1 end
   return {
-    string.format("diag cards: records %s (guild %s) | %d on, list %s | table %d entries (%d clears), clear stats %d | shown %d, quiet %d, Record? rows %d | 1O sent %d, taken %d, refused %d",
+    string.format("diag cards: records %s (guild %s) | %d on, list %s | table %d entries (%d clears), clear stats %d, a faster clear with one voice %d | shown %d, quiet %d, Record? rows %d | 1O sent %d, taken %d, refused %d",
       moduleOn() and "on" or "off", Rec.GuildOn() and "on" or "off", on, Rec.Stamp() > 0 and (math.floor(now() - Rec.Stamp()) .. " s old") or "never set", n, clears, Rec.defs,
-      Rec.announced, Rec.quiet, Rec.suggested, Rec.sent, Rec.taken, Rec.refused),
+      Rec.lone, Rec.announced, Rec.quiet, Rec.suggested, Rec.sent, Rec.taken, Rec.refused),
   }
 end
 
