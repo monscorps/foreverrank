@@ -123,10 +123,19 @@ function G.Title(s)
   if k == "handin" then return (s.n and s.n > 1) and string.format("%d quests to hand in", s.n) or questName(s.qid) end
   return G.Text(s)
 end
--- where: the leg's stop (the town, or a place out in a zone), else the zone the step's spot is in
+-- where: the leg's stop (the town, or a place out in a zone), an objective's own (Replan: spotPlace), else the zone the
+-- step's spot is in
 function G.Place(s)
   if not s then return nil end
   return s.stop or (s.m and QB.Data.MAPNAME and QB.Data.MAPNAME[s.m]) or nil
+end
+-- (the review round) an objective's place: its dungeon for a Do step, else the town within 150 yards of its spot, else
+-- the spot's zone. (The launch round gave it its quest's hand-in stop and that leg's trip: Blackrock Menace's kills
+-- read "Blackrock Menace - Lakeshire" out at the Blackrock camps, and the hand-in after them lost its place)
+local function spotPlace(s)
+  if s.obj == "d" and s.dungeon then return s.dungeon end
+  local TV = QB.Travel
+  return (TV and TV.TownNear and TV.TownNear(s.c, s.wx, s.wy, 150)) or (s.m and QB.Data.MAPNAME and QB.Data.MAPNAME[s.m]) or nil
 end
 -- who and where: the NPC of a pick-up or a hand-in, the quest of an objective spot, then the place; the place alone
 -- where nobody is to be found (a dungeon's Do step, travel, training)
@@ -761,10 +770,11 @@ function G.Replan()
         end
       end
       pickupsAt(stop)
-      -- the leg on each step made for it: its stop's name, the minutes to it from the stop before, how, which leg
+      -- the leg on each step made for the stop (its hand-ins and pick-ups): its stop's name, the minutes to it from the
+      -- stop before, how, which leg. An objective on the way is where its spot is, on no trip of the route's (below)
       for i = n0 + 1, #G.steps do
         local s = G.steps[i]
-        s.stop, s.mins, s.way, s.leg = place, leg.travel, leg.kind, li
+        if s.kind ~= "objective" then s.stop, s.mins, s.way, s.leg = place, leg.travel, leg.kind, li end
       end
     end
   end
@@ -808,6 +818,10 @@ function G.Replan()
         break
       end
     end
+  end
+  -- each objective's place, from its spot as it stands now (the target's above included)
+  for _, s in ipairs(G.steps) do
+    if s.kind == "objective" then s.stop = spotPlace(s) end
   end
   -- new spells to learn: Train at the trainer nearest a stop with a hand-in to come, before that hand-in; none within
   -- reach: the reminder line (once a level)

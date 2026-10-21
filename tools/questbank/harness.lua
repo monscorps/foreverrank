@@ -18244,6 +18244,51 @@ end)()
     assert(found, "a right-click on the note: the frame's menu with Show the game's quest tracker")
   end }
 
+  -- 12. (the review round) An objective step took its quest's hand-in stop for its place and its leg's minutes: Blackrock
+  -- Menace's kills read "Blackrock Menace - Lakeshire" with the trip to Lakeshire, while the arrow led out to the
+  -- Blackrock camps, and the hand-in after it lost its place (the same leg). Now an objective says where its spot is
+  -- (the town within 150 yards, else the zone), a Do step its dungeon, neither carries a leg, and the hand-in after an
+  -- objective keeps its place
+  ENGCASES[#ENGCASES + 1] = { "an objective step says where the objective is, not the hand-in's town; the hand-in keeps its place", function()
+    -- (out at the Blackrock camps, 540 yards from Marshal Marris: the mock's maps put every spot where you stand)
+    local c = char("Menaced", "WARRIOR", "Warrior", 1, {}, { level = 18, world = { 0, -8747, -2223 }, log = { { 20, 0 }, { 391, 0 } } })
+    local QB = c.QB
+    local G, SF, TV, D = QB.Guide, QB.StepFrame, QB.Travel, QB.Data
+    QB:Settings().welcome = nil
+    planned(c)
+    local objs, hand, dos, texts = {}, nil, nil, {}
+    for _, s in ipairs(G.steps) do
+      texts[#texts + 1] = G.Text(s) .. " @ " .. tostring(G.Place(s))
+      if s.kind == "objective" and s.qid == 20 then objs[#objs + 1] = s end
+      if s.kind == "handin" and s.qid == 20 then hand = s end
+      if s.kind == "objective" and s.obj == "d" then dos = s end
+    end
+    assert(#objs >= 1, "Blackrock Menace's objective steps: " .. table.concat(texts, " / "))
+    local away = false
+    for _, s in ipairs(objs) do
+      local want = TV.TownNear(s.c, s.wx, s.wy, 150) or D.MAPNAME[s.m]
+      assert(G.Place(s) == want and s.leg == nil and G.Mins(s) == nil,
+        "an objective's place is its spot's: " .. tostring(G.Place(s)) .. " against " .. tostring(want) .. " (" .. G.Text(s) .. ", leg " .. tostring(s.leg) .. ")")
+      if want ~= "Lakeshire" then
+        away = true
+        assert(not G.Where(s):find("Lakeshire", 1, true), "out of town, not the hand-in's town: " .. G.Where(s))
+      end
+    end
+    assert(away, "a spot out of Lakeshire among them: " .. table.concat(texts, " / "))
+    if hand then assert(G.Place(hand) == "Lakeshire" and hand.leg ~= nil, "the hand-in: Lakeshire, on its leg: " .. tostring(G.Place(hand))) end
+    if dos then assert(dos.dungeon and G.Place(dos) == dos.dungeon and dos.leg == nil, "a Do step: its dungeon: " .. tostring(G.Place(dos))) end
+    -- the frame: an objective out of town, then the hand-in at Lakeshire: the hand-in's place shows
+    local keep = G.steps
+    local far
+    for _, s in ipairs(objs) do if G.Place(s) ~= "Lakeshire" then far = s end end
+    G.steps = { far, hand or handStep(QB, 20, "Marshal Marris", "Lakeshire", 6, 1) }
+    G.ver = G.ver + 1; SF.Apply(); SF.Refresh()
+    local r1, r2 = c.env.QuestBankStep.rows[1], c.env.QuestBankStep.rows[2]
+    assert(not r1.where:GetText():find("Lakeshire", 1, true), "the objective now: not Lakeshire: " .. r1.where:GetText())
+    assert(r2.text:GetText():find(" %- Lakeshire$"), "the hand-in after an objective keeps its place: " .. r2.text:GetText())
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")
