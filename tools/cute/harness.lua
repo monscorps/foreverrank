@@ -786,7 +786,8 @@ local function newClient(o)
     GetClubMembers = api(function(id) local out = {}; if id == 7 then for i = 1, #GUILD do out[i] = i end end return out end),
     -- (ClubDocumentation.lua: the club's memberCount, NeverSecret; c.memberCount stands in for a guild the list is
     -- still loading for)
-    GetClubInfo = api(function(id) if id == 7 then return { clubId = 7, name = "Cute", clubType = 2, memberCount = c.memberCount or #GUILD } end end),
+    -- (c.noMemberCount: ClubInfo.memberCount is Nilable, and a client may give none)
+    GetClubInfo = api(function(id) if id == 7 then return { clubId = 7, name = "Cute", clubType = 2, memberCount = (not c.noMemberCount) and (c.memberCount or #GUILD) or nil } end end),
     GetMemberInfo = api(function(id, i)
       local m = id == 7 and GUILD[i]
       if not m then return nil end
@@ -11021,6 +11022,23 @@ do
     end
   end
   said[#said + 1] = "an officer out of the guild by any road keeps no Only-you values; another guild's alt parks them whole"
+
+  -- (x) a client whose list never reads whole (ClubInfo.memberCount is Nilable) still keeps its file bounded: a record
+  -- unseen ninety days goes, and past the cap the longest unseen. 0.7.1's first build pruned by age and cap only at a
+  -- whole list, and such a file grew for good
+  isolated({ member("Coraline", 1), member("Cobb", 3) }, function()
+    local roster = { ["Gone-Forever"] = { seen = EPOCH + 1000 - 91 * 86400, stats = { level = 20 }, at = {}, ch = true } }
+    for i = 1, 1005 do roster["Zz" .. i .. "-Forever"] = { seen = EPOCH + i, stats = { level = 20 }, at = {}, ch = true } end
+    local off = char("Coraline", 1)
+    off.noMemberCount = true
+    login(off, { policyClub = "7", roster = roster })
+    tickAll(80)
+    assert(not off.C.Roster.listedWhole, "no list reads whole")
+    local n = 0
+    for _ in pairs(off.env.CuteDB.roster) do n = n + 1 end
+    assert(off.env.CuteDB.roster["Gone-Forever"] == nil and n <= 1000 and off.env.CuteDB.roster["Zz1005-Forever"], "unseen ninety days gone, the file within its cap: " .. n)
+  end)
+  said[#said + 1] = "a list that never reads whole still prunes by age and cap"
 
   print("core: " .. table.concat(said, "; "))
 end

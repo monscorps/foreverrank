@@ -281,7 +281,12 @@ function R:Refresh(event)
         end
       end
     end
-    if pruneNow and self:Expire() then changed = true; self:Identity() end
+    -- (age and cap, whatever the list: at the session's first read, hourly, and with every prune. 0.7.1's first build
+    -- pruned them only at a whole list, and a client whose list never reads whole kept every record for good)
+    if pruneNow or not self.expiredAt or now() - self.expiredAt >= PRUNE_EVERY then
+      self.expiredAt = now()
+      if self:Expire() then changed = true; self:Identity() end
+    end
     if pruneNow then self.prunedRec = self.recVersion end
   end)
   -- Guild Info read where the event says it may have changed, and the policy it names applied, with the officers' word
@@ -329,7 +334,8 @@ function R:LeftGuild()
 end
 
 -- records unseen ninety days, and the longest unseen past the cap: whatever the list, which says nothing of them (a
--- client whose lists never read whole still keeps its file bounded). True when one went
+-- client whose lists never read whole still keeps its file bounded: R:Refresh runs it hourly whatever the list says).
+-- True when one went
 function R:Expire()
   local db, t, gone, count = CuteDB.roster, now(), false, 0
   for key, e in pairs(db) do
