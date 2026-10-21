@@ -1112,7 +1112,9 @@ function UI.PlaceGroups(level, now)
         end
       end
       local T, est, walk, work = M.QuestMinutes(q.id, 0, mf, kf, M.PartyHas(q.id), left)
-      if left == 0 then T, walk = M.HANDIN, 0 end
+      -- (held and begun: you have been at its objectives, the trip takes you to its hand-in: no walk, as the route's
+      -- work counts it, Model.lua)
+      if left == 0 then T, walk = M.HANDIN, 0 elseif held and left < 1 then T, walk = T - walk, 0 end
       local trip = mins
       if held then
         local to = here and q.turnIdx and q.turnIdx > 0 and M.NpcPlace(q.turnIdx, fac)

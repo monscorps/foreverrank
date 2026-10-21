@@ -18403,6 +18403,8 @@ end)()
     local UI = c.QB.UI
     local o1, o2 = UI.PlaceGroups(nil, true), UI.PlaceGroups()
     local changed = c.QB.changed
+    -- (the JIT off, as the game runs Lua 5.1: LuaJIT's traces of the loop counted as garbage, 2 to 17 KB a run)
+    if jit then jit.off(); jit.flush() end
     collectgarbage("collect")
     collectgarbage("stop")
     local before = collectgarbage("count")
@@ -18411,6 +18413,7 @@ end)()
     end
     local kb = collectgarbage("count") - before
     collectgarbage("restart")
+    if jit then jit.on() end
     assert(c.QB.changed == changed and kb < 16, string.format("200 calls: %.1f KB", kb))
     print(string.format("xpm: 200 PlaceGroups calls with nothing changed: %.1f KB (the mock's map positions included)", kb))
   end }
@@ -18658,6 +18661,49 @@ end)()
     local heads = 0
     for _, it in ipairs(g.set) do if (it.id == 1074 or it.id == 1077) and it.b1 then heads = heads + 1 end end
     assert(heads == 1, "Covert Ops rides in one head: " .. heads)
+  end }
+
+  -- the review: the route's work (route.W: the time to level, and the planner's levels an hour) counted a held quest's
+  -- whole walk from its giver however far along it was, and a dungeon's run for each of its quests. A quest held: the
+  -- work left, and its walk only while nothing of it is done (once you have been at its objectives, the route's travel
+  -- takes you to its hand-in); a dungeon's quests: one run
+  F62CASES[#F62CASES + 1] = { "the route's work: what is left of a quest held, one run a dungeon", function()
+    local function zero(c, ids)
+      c.objectives = {}
+      for _, id in ipairs(ids) do c.objectives[id] = { { text = "Thing: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } } end
+    end
+    -- Selling Fish half done: its work left, no walk
+    -- (the Guide off: its picks' minutes are a pick-up's, all of them)
+    local function quiet(x) x.QB:Settings().guide.on = false; for k in pairs(x.QB:Plan().auto) do x.QB:Plan().auto[k] = nil end end
+    local c = char("Half", { world = { 0, -9260, -2200 }, log = { { 127, 0 } } })
+    c.objectives = { [127] = { { text = "Spotted Sunfish: 5/10", type = "item", finished = false, numFulfilled = 5, numRequired = 10 } } }
+    quiet(c)
+    settle(c)
+    local M = c.QB.Model
+    local mf = M.Factor(c.QB:Mounted())
+    local _, _, _, work = M.QuestMinutes(127, 0, mf, 1, false, 0.5)
+    assert(math.abs(c.QB.routePlan.W - work) < 1e-6, string.format("half done: its work left alone, %.2f against %.2f", c.QB.routePlan.W, work))
+    local _, groups = c.QB.UI.PlaceGroups(nil, true)
+    local held
+    for _, it in ipairs(groups[catNamed(c, "Redridge Mountains")].set) do if it.id == 127 then held = it end end
+    assert(held and held.walk == 0 and math.abs(held.own - work - M.HANDIN) < 1e-6, "and so in its place's set: " .. tostring(held and held.own))
+    -- four quests of the Deadmines, nothing done: one run, and their walks
+    local ids = { 214, 168, 167, 166 }
+    local d = char("Delver", { world = { 0, -10508, 1046 }, map = 1436, bind = "Sentinel Hill", log = { { 214, 0 }, { 168, 0 }, { 167, 0 }, { 166, 0 } } })
+    zero(d, ids)
+    quiet(d)
+    settle(d)
+    local r, run, walks = d.QB.routePlan, 0, 0
+    mf = M.Factor(d.QB:Mounted())
+    local inRoute = {}
+    for _, l in ipairs(r.legs) do for _, row in ipairs(l.rows) do if not row.pending then inRoute[row.q.id] = true end end end
+    for _, id in ipairs(ids) do
+      assert(inRoute[id] and d.QB.Quest.Get(id).dungeon, d.QB.Data.QN[id] .. ": a dungeon's quest in the route")
+      local _, _, walk, w = d.QB.Model.QuestMinutes(id, 0, mf, 1, false, 1)
+      run, walks = math.max(run, w), walks + walk
+    end
+    assert(math.abs(r.W - (run + walks)) < 1e-6, string.format("one run and the walks: %.1f against %.1f", r.W, run + walks))
+    print(string.format("xpm: four Deadmines quests held: %.0f min of work (one run), not %.0f", r.W, 4 * run + walks))
   end }
 
   for _, case in ipairs(F62CASES) do
