@@ -3265,6 +3265,8 @@ lines.append("")
 # bags then; a spell of a lock type (a plain chest's Opening 3365 is type 5) opens with no key. The client's mechanics,
 # never a list of Forever's objects: those are learned in play
 # ---------------------------------------------------------------------------
+sys.path.insert(0, os.path.dirname(HERE))
+import probe_pull  # noqa: E402  (tools/probe_pull.py: Lock.csv's keys, the secret chains' keys, what players' files agree on)
 _SKILL_LOCKS = {1, 2, 3, 4, 8, 11, 14, 16, 18}  # lockpicking, herbalism, mining, disarm trap, closing, attacking, blasting
 OPEN = dict(sorted((int(r["SpellID"]), int(r["EffectMiscValue_0"] or 0)) for r in csv.DictReader(open(os.path.join(_WI, "SpellEffect.csv")))
                    if r["Effect"] == "33" and int(r["EffectMiscValue_0"] or 0) not in _SKILL_LOCKS
@@ -3274,6 +3276,13 @@ assert OPEN.get(3366) == 0 and OPEN.get(3365) == 5 and OPEN.get(6477) == 12 and 
 lines.append("-- [spell] = the lock type it opens: the client's opening spells (an open-lock effect of no skill's lock type,")
 lines.append("-- SpellEffect.csv); 0 opens with a key, the lock's item (Finds.lua)")
 lines.append("D.OPEN = {" + ",".join("[%d]=%d" % kv for kv in sorted(OPEN.items())) + "}")
+# D.LOCKKEY: the items the client's Lock.csv names as a lock's key (a Type 1 entry), whatever their class: 89 of them
+# are no key-class item (the Keystone Fragment is miscellaneous, the Black Tome a quest item), and Finds.lua counts them
+# among the key candidates beside the key-class items. The client's own table, read whole: no list of Forever's locks
+LOCKKEY = sorted(probe_pull.lock_keys(os.path.join(_WI, "Lock.csv")))
+assert 216523 in LOCKKEY and 277136 in LOCKKEY and 281350 in LOCKKEY and len(LOCKKEY) > 100, "Lock.csv's keys: %d" % len(LOCKKEY)
+lines.append("-- [item] = true: the items the client's Lock.csv names as a lock's key, whatever their class (Finds.lua)")
+lines.append("D.LOCKKEY = {" + ",".join("[%d]=true" % i for i in LOCKKEY) + "}")
 
 # ---------------------------------------------------------------------------
 # D.FIND: what the world holds beyond quests, per map: { kind, id, "x,y;x,y" (thousandths), files, extra, source }.
@@ -3307,8 +3316,6 @@ FIND_SEED_LOCKS = [(216523, 1435, 61.0, 22.0)]
 # the secret chains' keys past their first step (the Keystone chain's Fragments and Stone Key, the Dormant Runestone,
 # the Tome of Dalaran's Black Tome): never seeded, and what they open never ships from players' files either. One list,
 # probe_pull.py's SECRET_KEYS
-sys.path.insert(0, os.path.dirname(HERE))
-import probe_pull  # noqa: E402
 FIND_SECRET_KEYS = probe_pull.SECRET_KEYS
 FIND_REDRAWN = {1412, 1423, 1433, 1453}  # Mulgore, Eastern Plaguelands, Redridge, Stormwind: Forever redrew them (GAPS.md),
                                          # so a guide's place there is in the old frame

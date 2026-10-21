@@ -206,13 +206,16 @@ local function classOf(id)
   return cls, sub or 0
 end
 
--- the key-class items in your bags (Enum.ItemClass.Key, 13), and the ones the client has no row for (a server-sent
--- key has none): the candidates, at most KEYS, most likely first. Those with no row, then the highest ids: Forever's
--- own keys (the Brooch of the Wardens 277136) are newer than every Classic key a keyring carries (5396 to 18249)
+-- the key-class items in your bags (Enum.ItemClass.Key, 13), the items the client's Lock.csv names as a lock's key
+-- whatever their class (D.LOCKKEY: the Keystone Fragment is a miscellaneous item, the Black Tome a quest item), and
+-- the ones the client has no row for (a server-sent key has none): the candidates, at most KEYS, most likely first.
+-- Those with no row, then the highest ids: Forever's own keys (the Brooch of the Wardens 277136) are newer than every
+-- Classic key a keyring carries (5396 to 18249)
 local KEY_CLASS = (Enum and Enum.ItemClass and Enum.ItemClass.Key) or 13
 local function keyCandidates()
   local C = C_Container
   if not (C and C.GetContainerNumSlots and C.GetContainerItemID and C_Item and type(C_Item.GetItemInfoInstant) == "function") then return {} end
+  local lockKey = type(QB.Data.LOCKKEY) == "table" and QB.Data.LOCKKEY or {}
   local seen, out, rowless = {}, {}, {}
   local bags = { -1 } -- (Enum.BagIndex.Keyring, where the client has one)
   for b = 0, (NUM_BAG_SLOTS or 4) do bags[#bags + 1] = b end
@@ -226,7 +229,7 @@ local function keyCandidates()
         seen[id] = true
         local cls = classOf(id)
         if cls == nil then diag("iu"); rowless[id] = true end
-        if cls == nil or cls == KEY_CLASS then out[#out + 1] = id end
+        if cls == nil or cls == KEY_CLASS or lockKey[id] then out[#out + 1] = id end
       end
     end
   end

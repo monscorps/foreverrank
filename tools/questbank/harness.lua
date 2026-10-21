@@ -19005,9 +19005,10 @@ end)()
     local c = char("Keyhold", { bags = { { 216523, 1 }, { 282406, 1 }, { 2589, 4 } } })
     local F, D = c.QB.Finds, c.QB.Data
     c.klass = { [216523] = { 13, 0 }, [2589] = { 7, 5 } }
-    local keep = D.OPEN
-    -- (the client's opening spells and the lock type each opens: 0 none, a key's; 5 Open, a plain chest's)
-    D.OPEN = { [3366] = 0, [3365] = 5 }
+    local keep, lockKey = D.OPEN, D.LOCKKEY
+    -- (the client's opening spells and the lock type each opens: 0 none, a key's; 5 Open, a plain chest's. Lock.csv's
+    -- keys of another class, below)
+    D.OPEN, D.LOCKKEY = { [3366] = 0, [3365] = 5 }, {}
     assert(table.concat(F.KeyCandidates(), ",") == "282406,216523", "an item the client has no row for, then a key: " .. table.concat(F.KeyCandidates(), ","))
     c.soft = { name = "Rusted Cage", guid = OBJ:format(424080) }
     c.mp = { 0.61, 0.22 }
@@ -19057,7 +19058,13 @@ end)()
     c.o.bagSlots = { { 277136, 1 }, { 216523, 1 } }
     ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-9", 3366)
     assert(table.concat(finds(c).o600001.k, ",") == "277136", "what both keyrings held: " .. table.concat(finds(c).o600001.k, ","))
-    D.OPEN = keep
+    -- an item the client's Lock.csv names as a key is one whatever its class (a quest item or a trinket opens locks too:
+    -- 89 of Lock.csv's 169 keys are no key-class item); one it doesn't name, of another class, is none
+    D.LOCKKEY = { [4882] = true }
+    c.klass[4882], c.klass[6948] = { 12, 0 }, { 15, 0 }
+    c.o.bagSlots = { { 4882, 1 }, { 6948, 1 }, { 216523, 1 } }
+    assert(table.concat(F.KeyCandidates(), ",") == "216523,4882", "Lock.csv's key of another class: " .. table.concat(F.KeyCandidates(), ","))
+    D.OPEN, D.LOCKKEY = keep, lockKey
   end }
 
   FINDCASES[#FINDCASES + 1] = { "a book read keeps the object, the spot and the title, never the text; an item read, a letter, the mailbox", function()
@@ -19491,6 +19498,8 @@ end)()
     -- Data.lua's own: the client's opening spells, and the guides' day-one seed (a library book, the cage by its key)
     assert(D.OPEN[3366] == 0 and D.OPEN[3365] == 5 and D.OPEN[6477] == 12 and not D.OPEN[2366],
       "D.OPEN: the client's opening spells and the lock type each opens (0, a key's), no gathering")
+    assert(D.LOCKKEY[216523] and D.LOCKKEY[277136] and D.LOCKKEY[2589] and not D.LOCKKEY[6948] and countOf(D.LOCKKEY) == 169,
+      "D.LOCKKEY: the items the client's Lock.csv names as keys")
     local seeded = 0
     for _, r in ipairs(D.FIND[1429] or {}) do
       if r[1] == "b" and r[5] == "Archmage Theocritus' Research Journal" then
