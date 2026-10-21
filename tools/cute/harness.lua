@@ -12055,6 +12055,17 @@ do local function runsStage()
     gus.C.Policy.doubt = true; assert(state() == "Waiting for Guild Info", "greyed while the policy is in doubt"); gus.C.Policy.doubt = nil
     local keep = gus.group; gus.group = nil; assert(state() == "Not in a group", "greyed without a group"); gus.group = keep
     assert(state() == "live", "live otherwise")
+    -- (the button follows the game while the screen shows, no combat event needed; a refused click says why at once)
+    CF:DrawSend()
+    gus.chatLocked = true; tickAll(2)
+    assert(CF.sendButton.label:GetText() == "Outside the instance" and not CF.sendButton:IsEnabled(), "greyed on its own as the lockdown comes: " .. CF.sendButton.label:GetText())
+    gus.chatLocked = false; tickAll(2)
+    assert(CF.sendButton.label:GetText() == "Send to party" and CF.sendButton:IsEnabled(), "live again on its own: " .. CF.sendButton.label:GetText())
+    gus.encounter = true
+    local refused = #gus.chatOut
+    press(CF.sendButton)
+    assert(#gus.chatOut == refused and CF.sendButton.label:GetText() == "After the fight", "a refused click posts nothing and says why: " .. CF.sendButton.label:GetText())
+    gus.encounter = false
     -- the click: every line in it, on PARTY, at most 255 bytes, nothing the font cannot draw but names; the lines never
     -- counted as typed; then Sent, and the others see who posted
     local typed = 0
@@ -12104,6 +12115,40 @@ do local function runsStage()
     row.__scripts.OnClick(row, "RightButton")
     local menu = gus.menus[#gus.menus]
     assert(menu and menu[2] and menu[2].text == "Delete from history", "right-click: Delete from history")
+    -- (Send to party is for the report of the run that just ended, to the group it ran with: an older one from the
+    -- history, one half an hour old, or one of another group stays on this screen)
+    local latest = lastReport(gus)
+    local sentFor = Rn.sentFor
+    Rn.sentFor = nil
+    local function copy(t, extra) local o = {}; for k, v in pairs(t) do o[k] = v end; for k, v in pairs(extra) do o[k] = v end return o end
+    local older = copy(latest, { id = "old-1" })
+    table.insert(Rn.DB().list, 2, older)
+    local function why(r) local ok, w = CF.SendState(r); return ok and "live" or w end
+    assert(why(older) == "Earlier run", "an older report: " .. why(older))
+    assert(why(copy(latest, { at = latest.at - 1900 })) == "Earlier run", "half an hour on: Earlier run")
+    assert(why(copy(latest, { members = { ZZZZZZZZ = { n = "Zed" } } })) == "Not this group", "another group's: Not this group")
+    assert(why(latest) == "live", "the run that just ended, live: " .. why(latest))
+    table.remove(Rn.DB().list, 2)
+    Rn.sentFor = sentFor
+    -- (a closed field takes its awards off a report opened again from the history: the screen, the row's tooltip and
+    -- the party line; the officers close Meter in runs a day later)
+    local A = gus.C.Awards
+    local meterTitles = {}
+    for _, a in ipairs(A.LIST) do for _, code in ipairs(a.reads) do if code == "rm" then meterTitles[#meterTitles + 1] = a.title end end end
+    local metered = false
+    for _, x in ipairs(latest.cards) do for _, code in ipairs(A.BY[x[2]].reads) do if code == "rm" then metered = true end end end
+    assert(metered, "the report had a meter card: " .. cardsOf(latest))
+    local held = gus.env.CuteDB.policy
+    gus.env.CuteDB.policy = { vis = { run_meter = "self" } }
+    gus.C.UI:Draw()
+    row.__scripts.OnClick(row, "LeftButton")
+    for _, x in ipairs(CF.rep.cards) do for _, code in ipairs(A.BY[x[2]].reads) do assert(code ~= "rm", "a closed field's card on the screen: " .. cardsOf(CF.rep)) end end
+    local tip = tipText(row.tip)
+    local line = table.concat(A.Text(CF.rep, function() return "X" end), "\n")
+    for _, t in ipairs(meterTitles) do
+      assert(not tip:find(t, 1, true) and not line:find(t, 1, true), "a closed field's award in the row's tooltip or on the party line: " .. t)
+    end
+    gus.env.CuteDB.policy = held
     -- Settings > Runs
     gus.C.UI:Open("settings", "runs")
     assert(texts(gus):find("Show the report when a run ends", 1, true) and texts(gus):find("Long groups outside instances", 1, true), "Settings > Runs: its rows")

@@ -30,10 +30,12 @@ function RU.SendToParty(rep)
   local CI = C_ChatInfo
   RU.lastPost = { at = C.Now(), ok = ok and true or false, why = why,
     lockdown = type(CI) == "table" and type(CI.InChatMessagingLockdown) == "function" and C.Get(CI.InChatMessagingLockdown) == true or false }
-  if not ok then return false end
+  if not ok then CF:DrawSend(); return false end
   local channel = C.RunComm.Channel()
   if not (channel and type(CI) == "table" and type(CI.SendChatMessage) == "function") then return false end
-  local lines = A().Text(rep, nameIn(rep))
+  -- (the cards the policy lets onto the party line now: a field closed since, or a code the guild set for itself with
+  -- anyone else in the group, keeps its card here)
+  local lines = A().Text(R().Visible(rep), nameIn(rep), R().CardRoute(R().AllGuild()))
   -- (Cute's own lines never count as typed: Sample.lua's chat hook passes them by)
   C.Sample.quiet = true
   for _, line in ipairs(lines) do pcall(CI.SendChatMessage, line, channel) end
@@ -232,7 +234,8 @@ function RU.Draw(ui)
     if rep.kind == "g" then r.icon:SetTexCoord(0, 1, 0, 1); r.icon:SetTexture(SPRINT) else r.icon:SetAtlas(rep.kind == "r" and "Raid" or "Dungeon") end
     r.date:SetText(date and rep.start and date("%a %d %b %H:%M", rep.start) or "")
     -- the right: your own card's title in its kind's colour, then the time and the bosses
-    local mine = rep.mine and A().Of(rep.mine[1])
+    local vis = R().Visible(rep)
+    local mine = vis.mine and A().Of(vis.mine[1])
     r.who:ClearAllPoints(); r.who:SetPoint("RIGHT", -4, 0); r.who:SetWidth(MINE); r.who:SetJustifyH("RIGHT")
     color(r.who, (mine and C.Cards.KindColor(mine.kind)) or K.DIM)
     U.FitText(r.who, mine and mine.title or "", MINE - 4)
@@ -260,7 +263,7 @@ function RU.Draw(ui)
     r.tip = function(tip)
       tip:AddLine(rep.place or "?", 1, 1, 1)
       tip:AddLine((date and rep.start and date("%A %d %B %H:%M", rep.start) or "") .. DOT .. placeLine(rep), 0.7, 0.7, 0.7)
-      for _, c in ipairs(rep.cards or {}) do
+      for _, c in ipairs(R().Visible(rep).cards or {}) do
         local a = A().Of(c[2])
         local m = rep.members and rep.members[c[1]]
         if a then tip:AddLine(a.title .. ": " .. (m and m.n or "?"), 0.85, 0.85, 0.85) end

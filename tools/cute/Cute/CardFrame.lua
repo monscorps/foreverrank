@@ -109,13 +109,15 @@ local function when(rep)
   return s .. DOT .. rep.n .. (rep.n == 1 and " member" or " members")
 end
 
--- the Send to party button's state (8.4): greyed with the reason where the game blocks the post or the report is not
--- ready to go
+-- the Send to party button's state (8.4): greyed with the reason where the game blocks the post, the report is not
+-- ready to go, or it is not the run that just ended with this group (Earlier run, Not this group)
 function CF.SendState(rep)
   if not rep then return false, "No report" end
   if rep.test then return true end
   if not (C.RunComm.Channel()) then return false, "Not in a group" end
   if C.Runs.sentFor == rep.id then return false, "Sent" end
+  local fresh, why = C.Runs.Postable(rep)
+  if not fresh then return false, why end
   if not C.Policy:Settled() then return false, "Waiting for Guild Info" end
   local IE = C_InstanceEncounter
   if call("InCombatLockdown") == true or (type(IE) == "table" and type(IE.IsEncounterInProgress) == "function" and C.Get(IE.IsEncounterInProgress) == true) then
@@ -131,6 +133,8 @@ function CF:Report(rep, opts)
   opts = opts or {}
   local f = build()
   local U = C.UI
+  -- (as the policy held now lets it show: a field closed since takes its cards off, Runs.lua R.Visible)
+  rep = C.Runs.Visible(rep)
   self.rep, self.test = rep, opts.test
   local cards = rep.cards or {}
   -- the header: the cover (a dungeon's or a raid's, where Cute_Quest gives one) or the atlas beside the label
@@ -261,6 +265,20 @@ function CF:Report(rep, opts)
   CF.posted:SetText("")
   CF:DrawSend()
   f:Show()
+  CF.Watch()
+end
+
+-- Send to party's state follows the game while the screen shows (an encounter, the lockdown, the group, the policy
+-- settling, a loading screen): drawn again once a second, one timer at a time, none while the screen is closed
+function CF.Watch()
+  if CF.watching then return end
+  CF.watching = true
+  C_Timer.After(1, C.Safe(function()
+    CF.watching = false
+    if not (CF.frame and CF.frame:IsShown() and CF.sendButton) then return end
+    CF:DrawSend()
+    CF.Watch()
+  end, "card screen: Send to party"))
 end
 
 -- the GUID behind a suffix: the run's member, else the roster's

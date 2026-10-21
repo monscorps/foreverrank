@@ -6,7 +6,7 @@
 --   A.Pick(members, facts, route)  the cards (and a raid's mentions) for a run: members { sfx, guid, name, v = { key =
 --                                  value } }, facts { n, raid, bosses, runId, history }, route(code) whether this
 --                                  client's policy lets that code's fields onto a card (Everyone, and settled)
---   A.Text(report, nameOf)         the lines Send to party posts
+--   A.Text(report, nameOf, route)  the lines Send to party posts
 --   A.Sample(kind, members)        a test report's made-up values (a new set of five awards each time)
 -- The values a run reads, each client's own (2V keys, Runs.lua) and what every client observes (the meter's rows,
 -- deaths, the loot history): a key whose policy code routes Only you never leaves the client, and an award reading it is
@@ -425,7 +425,8 @@ end
 
 ----------------------------------------------------------------------------
 -- Send to party: plain text for those without the addon, Windows-1252 but the names, each line at most 255 bytes.
--- report: { title, place, bosses, known, dur, wipes, deaths, cards, mentions, gone }; nameOf(sfx) the member's name
+-- report: { title, place, bosses, known, dur, wipes, deaths, cards, mentions, gone }; nameOf(sfx) the member's name;
+-- route(code), where given, the fields the line may carry
 ----------------------------------------------------------------------------
 local DOT = " \194\183 " -- (a middle dot, in Windows-1252; the file stays ASCII)
 A.DOT = DOT
@@ -439,8 +440,10 @@ local function cut(s, max)
 end
 -- the colour codes a card's value may carry (an item quality's), off for chat
 local function bare(s) return (tostring(s):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
-function A.Text(report, nameOf)
+function A.Text(report, nameOf, route)
   local lines = {}
+  -- (route, where given: a card or mention whose award it does not let through stays off the line)
+  local function ok(a) if not route then return true end return eligible(a, route) end
   local head = "Cute recap" .. DOT .. tostring(report.place or "?")
   if report.kind ~= "g" then
     local known = math.max(report.known or 0, report.bosses or 0)
@@ -450,7 +453,7 @@ function A.Text(report, nameOf)
   lines[1] = cut(head, 255)
   for _, card in ipairs(report.cards or {}) do
     local a = BY[card[2]]
-    if a and not A.PARTY_SKIP[a.code] then
+    if a and not A.PARTY_SKIP[a.code] and ok(a) then
       local v, what = a.show(card[3])
       lines[#lines + 1] = cut(string.format("%s%s%s: %s, %s %s. %s", A.KINDS[a.kind], DOT, a.title, nameOf(card[1]) or "?", bare(v), what, a.quip), 255)
     end
@@ -458,7 +461,7 @@ function A.Text(report, nameOf)
   local mentions = {}
   for _, mn in ipairs(report.mentions or {}) do
     local a = BY[mn[2]]
-    if a and not A.PARTY_SKIP[a.code] then
+    if a and not A.PARTY_SKIP[a.code] and ok(a) then
       local v, what = a.show(mn[3])
       mentions[#mentions + 1] = string.format("%s %s (%s %s)", a.title, nameOf(mn[1]) or "?", bare(v), what)
     end

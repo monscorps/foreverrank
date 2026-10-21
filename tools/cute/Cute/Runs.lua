@@ -746,6 +746,39 @@ function R.Keep(rep)
   while #db.list > db.keep do table.remove(db.list) end
   redraw()
 end
+-- a report as this client shows it now: the cards and mentions whose award reads a field the policy held routes Only
+-- you taken off (a closed field takes its awards off every card, screen and chat line, 6: the history keeps what was
+-- built, and a field the officers closed since leaves its screen, its row and its party line). The same table where
+-- nothing is taken off; a test as it is
+function R.Visible(rep)
+  if type(rep) ~= "table" or rep.test then return rep end
+  local P, S = C.Policy, C.Stats
+  local function keep(c)
+    local a = A().Of(c[2])
+    if not a then return false end
+    for _, code in ipairs(a.reads) do local id = S.byCode[code]; if not id or P:Route(id) ~= "all" then return false end end
+    return true
+  end
+  local cards, mentions, cut = {}, {}, false
+  for _, c in ipairs(rep.cards or {}) do if keep(c) then cards[#cards + 1] = c else cut = true end end
+  for _, c in ipairs(rep.mentions or {}) do if keep(c) then mentions[#mentions + 1] = c else cut = true end end
+  if not cut then return rep end
+  local out = {}
+  for k, v in pairs(rep) do out[k] = v end
+  out.cards, out.mentions = cards, mentions
+  if rep.mine and not keep({ nil, rep.mine[1] }) then out.mine = nil end
+  return out
+end
+-- may this report go to the party line: the run that just ended (the history's newest, half an hour at most) to the
+-- group it ran with (a member it names still in yours); an older one from the history stays on this screen
+local FRESH = 1800
+function R.Postable(rep)
+  local db = R.DB()
+  if not (db.list[1] and db.list[1].id == rep.id) or now() - (rep.at or 0) > FRESH then return false, "Earlier run" end
+  local g, me = R.Group(), mySfx()
+  for sfx in pairs(rep.members or {}) do if sfx ~= me and g[sfx] then return true end end
+  return false, "Not this group"
+end
 -- the run stats, from the card this client's own build gives you (a 2A only shows)
 local function bump(rep)
   local S = C.Sample
