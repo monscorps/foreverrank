@@ -297,7 +297,11 @@ function R.Draw(ui, scroll)
   box.open:ClearAllPoints(); box.open:SetPoint("TOPLEFT", 0, -(MAP_H + 8))
   box.open:SetLabel("Open the map")
   box.open:SetOn(true)
-  box.open:SetScript("OnClick", Cute.Safe(function() if E.UI and E.UI.OpenMap then E.UI.OpenMap() end end, "route: the map"))
+  -- (the game's map is UIParent's MEDIUM but for its border, Blizzard_WorldMap.xml:67-85, under Cute's HIGH window: L
+  -- steps aside once the map is open)
+  box.open:SetScript("OnClick", Cute.Safe(function()
+    if E.UI and E.UI.OpenMap and E.UI.OpenMap() and ui.frame then ui.frame:Hide() end
+  end, "route: the map"))
   -- the stops
   local w = scroll:Width()
   local host = Cute.Host(ui, "route")

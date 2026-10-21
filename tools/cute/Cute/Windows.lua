@@ -4,8 +4,10 @@
 --                            the game's micro button, so the press runs the game's button as the game (Guild &
 --                            Communities, the Quest log). It is no child of the window (a protected child would make
 --                            the window protected, and Cute's windows open and close in a fight): it sits over its
---                            place in the header, parented to UIParent, placed and shown out of combat; in a fight a
---                            plain stand-in says "After combat" until it ends
+--                            place in the header, parented to UIParent, placed and shown out of combat, at its window's
+--                            strata and never over a Cute window in front of its own; in a fight a plain stand-in says
+--                            "After combat" until it ends. The game's window it opens stands under Cute's, so Cute's
+--                            steps aside as it opens
 --   the menu                 right-click on the minimap button (or the game's addon compartment): every window's tabs,
 --                            each Settings section, the on-screen switches; a parent opens its own window when clicked
 --   the slash words          /cute quests | route | dungeons | gear | settings [section] | keys | setup | menu; the
@@ -20,10 +22,14 @@ local function inCombat() return callable("InCombatLockdown") and C.Get(InCombat
 ----------------------------------------------------------------------------
 -- the header's button to the game's own window
 ----------------------------------------------------------------------------
--- (MainMenuBarMicroButtons.xml:196 QuestLogMicroButton, :229 GuildMicroButton; SecureTemplates.lua:557 the click action)
+-- (MainMenuBarMicroButtons.xml:196 QuestLogMicroButton, :229 GuildMicroButton; SecureTemplates.lua:557 the click action).
+-- frames: the game's windows its click may open (ToggleGuildFrame: the Communities frame, or the Friends frame's guild tab
+-- with useClassicGuildUI, Mainline/Game.lua:1-23; ToggleQuestLog: the world map's quest panel, MainMenuBarMicroButtons.lua
+-- :1136-1146), each in UIParent's MEDIUM strata, under Cute's HIGH windows
 local GAME = {
-  guild = { label = "Guild & Communities", micro = "GuildMicroButton", tip = "The game's Guild & Communities: chat, the message of the day, notes, ranks and invites." },
-  quests = { label = "Quest log", micro = "QuestLogMicroButton", tip = "The game's own quest log." },
+  guild = { label = "Guild & Communities", micro = "GuildMicroButton", tip = "The game's Guild & Communities: chat, the message of the day, notes, ranks and invites.",
+    frames = { "CommunitiesFrame", "FriendsFrame", "GuildFrame" } },
+  quests = { label = "Quest log", micro = "QuestLogMicroButton", tip = "The game's own quest log.", frames = { "WorldMapFrame", "QuestLogFrame" } },
 }
 W.GAME = GAME
 local secure = {}
@@ -50,14 +56,27 @@ function W.GameButton(win)
   win.gameStand = b
   W.Place(win)
 end
+-- whether one of the game's windows a header button opens shows now
+function W.GameShown(key)
+  for _, name in ipairs(GAME[key] and GAME[key].frames or {}) do
+    local f = _G[name]
+    if type(f) == "table" and type(f.IsShown) == "function" and f:IsShown() then return true end
+  end
+  return false
+end
 local function makeSecure(win)
   local g = GAME[win.key]
   local micro = g and _G[g.micro]
   if secure[win.key] or not micro or inCombat() then return secure[win.key] end
   local UI = C.UI
   local s = CreateFrame("Button", nil, UIParent, "SecureActionButtonTemplate" .. (BackdropTemplateMixin and ",BackdropTemplate" or ""))
-  s:SetFrameStrata("DIALOG")
+  -- (its window's strata: a window in front draws over it, as over the window's own header; W.Place sets its level)
+  s:SetFrameStrata("HIGH")
+  -- the press on the mouse's release, as every button: the template acts on the down or the up as the
+  -- ActionButtonUseKeyDown CVar says (on by default), unless the button's "useOnKeyDown" says otherwise
+  -- (SecureTemplates.lua:792-813), and it hears only the release it is registered for
   s:RegisterForClicks("AnyUp")
+  s:SetAttribute("useOnKeyDown", false)
   s:SetAttribute("type", "click")
   s:SetAttribute("clickbutton", micro)
   UI.Skin(s, { 0.11, 0.11, 0.11 })
@@ -69,61 +88,144 @@ local function makeSecure(win)
   s:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.06)
   s:SetScript("OnEnter", win.gameStand:GetScript("OnEnter"))
   s:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  -- the game's window opened (it stands in MEDIUM, under Cute's HIGH window): Cute's window steps aside. A plain
+  -- frame, hidden after the press the game ran; closed by the press, Cute's window stays
+  s:SetScript("PostClick", C.Safe(function()
+    GameTooltip:Hide()
+    if W.GameShown(win.key) then win.frame:Hide() end
+  end, "game button: the game's window"))
   s:Hide()
   secure[win.key] = s
   return s
 end
 W.secure = secure
--- the secure button over its stand-in while the window shows, out of combat; hidden otherwise. Placed by the
+-- another shown Cute window in front of this one (the same HIGH strata, toplevel: the one raised last stands higher)
+-- over the stand-in's place: the secure button would draw and take clicks above that window, so it is not shown
+local function covered(win, stand)
+  local f = win.frame
+  local level = f:GetFrameLevel() or 0
+  local l, t, w = stand:GetLeft(), stand:GetTop(), stand:GetWidth()
+  if type(l) ~= "number" or type(t) ~= "number" then return false end
+  local r, b = l + (w or 0), t - 20
+  for _, o in pairs(C.UI.windows) do
+    local of = o ~= win and rawget(o, "frame")
+    if of and of:IsShown() and (of:GetFrameLevel() or 0) > level then
+      local ol, ot, ow, oh = of:GetLeft(), of:GetTop(), of:GetWidth(), of:GetHeight()
+      if type(ol) == "number" and type(ot) == "number" and ol < r and ol + (ow or 0) > l and ot > b and ot - (oh or 0) < t then return true end
+    end
+  end
+  return false
+end
+-- the secure button over its stand-in while the window shows, uncovered, out of combat; hidden otherwise. Placed by the
 -- stand-in's place on the screen, never anchored to the window (a protected frame anchored to a frame that moves in a
--- fight)
+-- fight), at a level just over the stand-in's
 function W.Place(win)
   local stand = win.gameStand
   if not stand or inCombat() then return end
   local s = makeSecure(win)
   if not s then return end
-  if win.frame:IsShown() then
+  s.cuteCovered = nil
+  if win.frame:IsShown() and not win.dragging then
     local x, y = stand:GetLeft(), stand:GetTop()
     if type(x) ~= "number" or type(y) ~= "number" then s:Hide() return end
+    if covered(win, stand) then s.cuteCovered = true; s:Hide() return end
     s:ClearAllPoints()
     s:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
     s:SetSize(stand:GetWidth() or 120, 20)
+    s:SetFrameLevel((stand:GetFrameLevel() or 0) + 2)
     s:Show()
   else
     s:Hide()
   end
 end
--- before a fight's lockdown (PLAYER_REGEN_DISABLED comes before it) every secure button hides; after it, each is placed
--- again
+-- every window's, as one window's show, hide, raise or move may cover or uncover another's
+function W.PlaceAll()
+  for _, win in pairs(C.UI.windows) do if rawget(win, "gameStand") then W.Place(win) end end
+end
+-- the windows' order and places, read four times a second while one with a game button shows out of combat: a click
+-- anywhere in a toplevel window raises it (no script hears that), and the buttons follow. Nothing is made per look
+local watch = CreateFrame("Frame")
+watch:Hide()
+W.watch = watch
+local seen, since = {}, 0
+local function moved()
+  local changed = false
+  for key, win in pairs(C.UI.windows) do
+    local f = rawget(win, "frame")
+    local was = seen[key]
+    if not was then was = {}; seen[key] = was end
+    local shown = f and f:IsShown() or false
+    local level, l, t = shown and (f:GetFrameLevel() or 0) or -1, shown and f:GetLeft() or -1, shown and f:GetTop() or -1
+    local w, h = shown and f:GetWidth() or -1, shown and f:GetHeight() or -1
+    if was[1] ~= level or was[2] ~= l or was[3] ~= t or was[4] ~= w or was[5] ~= h then
+      was[1], was[2], was[3], was[4], was[5] = level, l, t, w, h
+      changed = true
+    end
+  end
+  return changed
+end
+W.Moved = moved
+local function wanted()
+  if inCombat() then return false end
+  for _, win in pairs(C.UI.windows) do
+    local f = rawget(win, "gameStand") and rawget(win, "frame")
+    if f and f:IsShown() then return true end
+  end
+  return false
+end
+local look = C.Safe(function(self)
+  if not wanted() then self:Hide() return end
+  if moved() then W.PlaceAll() end
+end, "game buttons: watch")
+-- (the frames between two looks cost a sum and a compare: nothing is made for them)
+watch:SetScript("OnUpdate", function(self, elapsed)
+  since = since + (elapsed or 0)
+  if since < 0.25 then return end
+  since = 0
+  look(self)
+end)
+function W.Watch() if wanted() then since = 0; watch:Show() else watch:Hide() end end
+-- before a fight's lockdown (PLAYER_REGEN_DISABLED comes before it) every secure button hides; after it, every window
+-- with a game button is placed again (one first built in the fight gets its secure button then)
 local ev = CreateFrame("Frame")
 ev:RegisterEvent("PLAYER_REGEN_DISABLED")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:SetScript("OnEvent", C.Safe(function(_, event)
-  for key, s in pairs(secure) do
-    if event == "PLAYER_REGEN_DISABLED" then s:Hide()
-    else local win = C.UI.windows[key]; if win then W.Place(win) end end
+  if event == "PLAYER_REGEN_DISABLED" then
+    for _, s in pairs(secure) do s:Hide() end
+    watch:Hide()
+  else
+    W.PlaceAll()
+    W.Watch()
   end
   for _, win in pairs(C.UI.windows) do
-    if win.gameStand then C.UI.Color(win.gameStand.label, event == "PLAYER_REGEN_DISABLED" and C.UI.COLORS.MUTE or C.UI.COLORS.INK) end
+    if rawget(win, "gameStand") then C.UI.Color(win.gameStand.label, event == "PLAYER_REGEN_DISABLED" and C.UI.COLORS.MUTE or C.UI.COLORS.INK) end
   end
 end, "game buttons: combat"))
 
--- each window built: its game button, and the secure one following it as it shows, hides, moves and is resized
+-- each window built (Settings too: it may stand over another's header): its game button, and the secure ones following
+-- the windows as they show (raised: the window opened last stands in front), hide, move, are resized or raised. While
+-- a window is dragged or sized its secure button is away, placed again where it is let go
 local built = C.UI.OnBuilt
 function C.UI:OnBuilt()
   if built then built(self) end
   W.GameButton(self)
-  if self.gameStand then
-    self.frame:HookScript("OnShow", function() W.Place(self) end)
-    self.frame:HookScript("OnHide", function() W.Place(self) end)
-    self.frame:HookScript("OnSizeChanged", function() W.Place(self) end)
-    self.head:HookScript("OnDragStop", function() W.Place(self) end)
-    self.grip:HookScript("OnMouseUp", function() W.Place(self) end)
-  end
+  local win, f = self, self.frame
+  local function away() win.dragging = true; local s = secure[win.key]; if s and not inCombat() then s:Hide() end end
+  local function back() win.dragging = nil; W.PlaceAll() end
+  f:HookScript("OnShow", function() if f.Raise then f:Raise() end W.PlaceAll(); W.Watch() end)
+  f:HookScript("OnHide", function() win.dragging = nil; W.PlaceAll(); W.Watch() end)
+  f:HookScript("OnSizeChanged", function() if not win.dragging then W.PlaceAll() end end)
+  f:HookScript("OnMouseDown", function() W.PlaceAll() end)
+  self.head:HookScript("OnMouseDown", function() W.PlaceAll() end)
+  self.head:HookScript("OnDragStart", away)
+  self.head:HookScript("OnDragStop", back)
+  self.grip:HookScript("OnMouseDown", away)
+  self.grip:HookScript("OnMouseUp", back)
 end
 
--- /cute diag's line for what only the live client shows: each game button (none, waiting, shown, hidden, and whether
--- the client calls its frame protected), the keys held by override (the key names alone), whether they wait for a
+-- /cute diag's line for what only the live client shows: each game button (none, waiting, shown, covered by a Cute
+-- window in front, hidden, and whether the client calls its frame protected), the keys held by override (the key names alone), whether they wait for a
 -- fight's end, and the game's menus. Never a name
 function W.DiagLine()
   local parts = {}
@@ -135,7 +237,7 @@ function W.DiagLine()
     else
       -- (IsProtected's answer may be secret: SimpleScriptRegionAPIDocumentation.lua:540, ObjectSecurity)
       local okP, prot = pcall(s.IsProtected, s)
-      state = (s:IsShown() and "shown" or "hidden") .. ((okP and C.Plain(prot) == true) and " protected" or "")
+      state = (s:IsShown() and "shown" or (s.cuteCovered and "covered" or "hidden")) .. ((okP and C.Plain(prot) == true) and " protected" or "")
     end
     parts[#parts + 1] = key .. " " .. state
   end

@@ -54,7 +54,7 @@ SetResizable SetResizeBounds StartSizing CreateMaskTexture AddMaskTexture SetSca
 IsForbidden SetPushedTexture GetTextColor SetMultiLine HighlightText SetRotation SetAtlas SetPassThroughButtons SetCooldown
 SetHideCountdownNumbers SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness CreateLine SetTextInsets
 SetAttribute GetAttribute SetGradient SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias
-EnableKeyboard SetPropagateKeyboardInput IsProtected SetShadowOffset SetShadowColor]])
+EnableKeyboard SetPropagateKeyboardInput IsProtected SetShadowOffset SetShadowColor Raise Click]])
 -- (the last three lines: the quest engine's, for a client made with o.quest = true; QuestBank's harness lists them)
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 -- a PlayerModel's own and a QuestPOIFrame's own (the quest engine's journal and map files), as QuestBank's harness has them
@@ -105,6 +105,7 @@ local function everything()
   end
 end
 local rectOf, GEN = nil, 0 -- (layout, below: a size asked of an anchored frame is worked out as the game would)
+local RAISED = 0 -- (Raise: the frames raised, in order, every client)
 local OPS = { n = 0 } -- SetPoint and SetText calls, every client
 local function newObj(kind, template, parent)
   local o = { __kind = kind, __scripts = {}, __events = {}, __shown = true, __w = 0, __h = 0, __text = "", __value = 0, __min = 0,
@@ -137,7 +138,7 @@ local function newObj(kind, template, parent)
         elseif k == "SetAtlas" then self.__tex = "atlas:" .. tostring(a[1]); self.__atlas = a[1]; self.__color = nil
         elseif k == "SetCooldown" then self.__cd = { a[1], a[2] }
         elseif k == "SetAttribute" then self.__attr = self.__attr or {}; self.__attr[a[1]] = a[2]
-        elseif k == "GetAttribute" then return self.__attr and self.__attr[a[1]] or nil
+        elseif k == "GetAttribute" then if self.__attr then return self.__attr[a[1]] end return nil -- (false is an answer)
         elseif k == "IsForbidden" then return false
         elseif k == "SetDisplayInfo" then self.__display, self.__creature = a[1], nil
         elseif k == "SetCreature" then self.__creature, self.__display = a[1], nil
@@ -243,6 +244,15 @@ local function newObj(kind, template, parent)
         elseif k == "GetNumPoints" then return #self.__points
         elseif k == "GetFrameLevel" then return self.__frameLevel or 2
         elseif k == "SetFrameLevel" then self.__frameLevel = a[1]
+        elseif k == "SetFrameStrata" then self.__strata = a[1]
+        -- (a toplevel frame raised to the front of its strata: above every frame raised before it)
+        elseif k == "Raise" then RAISED = RAISED + 1; self.__frameLevel = 1000 + RAISED
+        -- (the clicks a button hears, RegisterForClicks; a mouse click below delivers only those)
+        elseif k == "RegisterForClicks" then self.__clicks = { ... }
+        -- (Button:Click runs its OnClick as a press would, and its PostClick)
+        elseif k == "Click" then
+          if self.__scripts.OnClick then self.__scripts.OnClick(self, a[1] or "LeftButton", a[2] or false) end
+          if self.__scripts.PostClick then self.__scripts.PostClick(self, a[1] or "LeftButton", a[2] or false) end
         elseif k == "EnableMouse" then self.__mouse = a[1] and true or false
         elseif k == "GetChildren" then
           local out = {}
@@ -1101,6 +1111,16 @@ local function newClient(o)
   if not o.noMicro then
     env.GuildMicroButton = newObj("Button", nil, env.UIParent); env.GuildMicroButton.__name = "GuildMicroButton"
     env.QuestLogMicroButton = newObj("Button", nil, env.UIParent); env.QuestLogMicroButton.__name = "QuestLogMicroButton"
+    -- their clicks open the game's windows (ToggleGuildFrame: the Communities frame; ToggleQuestLog: the world map's quest
+    -- panel, o.quest clients' map), each a toggle; c.microClicks counts them
+    c.microClicks = 0
+    env.CommunitiesFrame = newObj("Frame", nil, env.UIParent); env.CommunitiesFrame.__name = "CommunitiesFrame"; env.CommunitiesFrame:Hide()
+    env.GuildMicroButton:SetScript("OnClick", function() c.microClicks = c.microClicks + 1; env.CommunitiesFrame:SetShown(not env.CommunitiesFrame:IsShown()) end)
+    env.QuestLogMicroButton:SetScript("OnClick", function()
+      c.microClicks = c.microClicks + 1
+      if not env.OpenWorldMap then return end
+      if c.map and c.map.shown then env.HideUIPanel(env.WorldMapFrame) else env.OpenWorldMap() end
+    end)
   end
   -- o.quest: the quest engine's mocks (test/quest_mocks.lua), what Cute_Quest's copy of QuestBank reads that Cute's own
   -- mock lacks; after Cute's (the addon list among them), never over them
@@ -12045,6 +12065,10 @@ do
     c.C.UI:Open("race"); c.C.UI:Open("quests")
     local W = c.C.Windows
     local g, q = W.secure.guild, W.secure.quests
+    -- (J and L apart, so neither header stands under the other window: W19 weighs a window in front)
+    c.C.UI.frame.__left, c.C.UI.frame.__top, c.C.UI.gameStand.__left, c.C.UI.gameStand.__top = 0, 1000, 800, 994
+    qwin(c).frame.__left, qwin(c).frame.__top, qwin(c).gameStand.__left, qwin(c).gameStand.__top = 0, 300, 860, 294
+    if W.PlaceAll then W.PlaceAll() end
     assert(g and q and g.__template:find("SecureActionButtonTemplate", 1, true), "secure buttons for both")
     assert(g:GetAttribute("type") == "click" and g:GetAttribute("clickbutton") == c.env.GuildMicroButton and q:GetAttribute("clickbutton") == c.env.QuestLogMicroButton, "a click on the game's micro buttons")
     assert(g.__parent == c.env.UIParent and g:IsShown() and q:IsShown(), "parented to UIParent, shown with their windows")
@@ -12526,6 +12550,124 @@ do
     assert(said[#said]:find("^diag windows: "), "the windows line last: " .. said[#said])
     leave(c)
     print("windows W18: /cute diag's look line: the game's tracker and the game's map, no names")
+  end)
+end
+
+-- the review of the windows round. A mouse click on a button as the client delivers it: OnClick for each transition the
+-- button is registered for (RegisterForClicks: the down, then the up), each followed by PostClick. A button made from
+-- SecureActionButtonTemplate with no OnClick of its own runs the template's, SecureActionButton_OnClick
+-- (SecureTemplates.xml:8, SecureTemplates.lua:802-813): with no "useOnKeyDown" attribute it reads the
+-- ActionButtonUseKeyDown CVar (keyDown here; on in a new client, "Cast action keybinds on key down") and acts on the
+-- down when it is on, on the up when off; a type "click" runs its clickbutton's Click (:557-563)
+local function mouseClick(b, keyDown)
+  local clicks = b.__clicks or { "LeftButtonUp" }
+  local function hears(down)
+    for _, r in ipairs(clicks) do
+      if (r == "AnyDown" and down) or (r == "AnyUp" and not down) or r == (down and "LeftButtonDown" or "LeftButtonUp") then return true end
+    end
+    return false
+  end
+  local c = b.__client
+  if c then c.hardware = true end
+  for _, down in ipairs({ true, false }) do
+    if b:IsShown() and hears(down) then
+      if b.__template and b.__template:find("SecureActionButtonTemplate", 1, true) and not b.__scripts.OnClick then
+        local use = b:GetAttribute("useOnKeyDown")
+        if use == nil then use = keyDown ~= false end
+        if (down and use) or (not down and not use) then
+          local d = b:GetAttribute("type") == "click" and b:GetAttribute("clickbutton")
+          if d then d:Click("LeftButton") end
+        end
+      elseif b.__scripts.OnClick then
+        b.__scripts.OnClick(b, "LeftButton", down)
+      end
+      if b.__scripts.PostClick then b.__scripts.PostClick(b, "LeftButton", down) end
+    end
+  end
+  if c then c.hardware = false end
+end
+
+-- W19 (the review of sub-project C): the header's buttons to the game's windows, as the client delivers a click. A
+-- press opens the game's window whatever the ActionButtonUseKeyDown CVar says (the template acts on the down with it
+-- on, the default, and a button that heard only the release never pressed); the game's window stands under Cute's, so
+-- Cute's steps aside as it opens, and stays where the press shut the game's. Each button in its window's strata at a
+-- level over its header, and none over a Cute window in front of its own: J and L open at the same place, and J's
+-- button stood over L's header, so a click on L's "Quest log" opened the guild's. A click raising a window in the
+-- back puts its button back (the watch), a drag puts it away until it is let go. A window first opened in a fight
+-- gets its button once the fight ends (it waited for the window's next opening). Route's "Open the map" puts L away
+-- for the game's map, which stands under it
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(6)
+    local UI, W, CF = c.C.UI, c.C.Windows, c.env.CommunitiesFrame
+    UI:Open("race")
+    local g = W.secure.guild
+    assert(g and g:IsShown(), "J's button shown with J")
+    assert(g.__strata == "HIGH" and (g.__frameLevel or 0) > UI.gameStand:GetFrameLevel(), "in J's strata, over its header: " .. tostring(g.__strata) .. " " .. tostring(g.__frameLevel))
+    -- the press, with the CVar on and off: the game's window, and J steps aside with its button
+    for _, keyDown in ipairs({ true, false }) do
+      CF:Hide()
+      UI:Open("race")
+      local n = c.microClicks
+      mouseClick(g, keyDown)
+      assert(c.microClicks == n + 1 and CF:IsShown(), "a click opens the game's Guild & Communities (key down " .. tostring(keyDown) .. "): " .. (c.microClicks - n) .. " presses")
+      assert(not UI.frame:IsShown() and not g:IsShown(), "and J steps aside, its button with it")
+    end
+    -- the press that shuts the game's window leaves J open
+    UI:Open("race")
+    mouseClick(g)
+    assert(not CF:IsShown() and UI.frame:IsShown() and g:IsShown(), "the game's window shut by the press: J stays")
+    -- L opened over J at the same place: L's button over its header, J's not shown over L
+    UI:Open("quests")
+    local L = qwin(c)
+    local q = W.secure.quests
+    assert(q and q:IsShown() and not g:IsShown(), "L in front: its button shown, J's away")
+    assert(W.DiagLine():find("game buttons guild covered, quests shown", 1, true), "/cute diag says J's is covered: " .. W.DiagLine())
+    -- a click on J raises it (no script hears that): the watch puts J's button back and L's away
+    UI.frame:Raise()
+    W.watch.__scripts.OnUpdate(W.watch, 0.3)
+    assert(g:IsShown() and not q:IsShown(), "J raised: J's button back, L's away")
+    -- apart, both shown; L dragged: its button away until it is let go
+    UI.frame.__left, UI.frame.__top, UI.gameStand.__left, UI.gameStand.__top = 0, 1000, 800, 994
+    L.frame.__left, L.frame.__top, L.gameStand.__left, L.gameStand.__top = 0, 300, 860, 294
+    W.watch.__scripts.OnUpdate(W.watch, 0.3)
+    assert(g:IsShown() and q:IsShown(), "apart: both shown")
+    L.head.__scripts.OnDragStart(L.head)
+    assert(not q:IsShown() and g:IsShown(), "L dragged: its button away")
+    L.head.__scripts.OnDragStop(L.head)
+    assert(q:IsShown(), "let go: placed again")
+    -- "Quest log": the game's map with its quest panel, and L steps aside
+    mouseClick(q)
+    assert(c.map.shown and not L.frame:IsShown() and not q:IsShown(), "a click opens the game's quest log on its map, L steps aside")
+    c.env.HideUIPanel(c.env.WorldMapFrame)
+    -- Route's "Open the map": the game's map, L away
+    UI:Open("route")
+    local open
+    for _, b in ipairs(c.frames) do if b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "Open the map" then open = b end end
+    assert(open, "Route's Open the map:\n" .. texts(c))
+    press(open)
+    assert(c.map.shown and not L.frame:IsShown(), "Open the map: the game's map, L away")
+    c.env.HideUIPanel(c.env.WorldMapFrame)
+    hideAll(c)
+    leave(c)
+    -- a window first opened in a fight: its button once the fight ends
+    local p = newClient(charOf({ "Pim", 3, "Raider", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(p); tickAll(6)
+    p.combat = true
+    fire(p, "PLAYER_REGEN_DISABLED")
+    p.C.UI:Toggle()
+    assert(p.C.UI.frame:IsShown() and p.C.UI.gameStand and not p.C.Windows.secure.guild, "J opened in a fight: the stand-in, no secure button yet")
+    p.combat = false
+    fire(p, "PLAYER_REGEN_ENABLED")
+    local pg = p.C.Windows.secure.guild
+    assert(pg and pg:IsShown(), "the fight over: J's button made and shown")
+    local n = p.microClicks
+    mouseClick(pg)
+    assert(p.microClicks == n + 1 and p.env.CommunitiesFrame:IsShown(), "and it opens the game's window")
+    leave(p)
+    print("windows W19: the header's game buttons press on the release whatever the key-down CVar, Cute's window steps aside for the game's, none over a Cute window in front (the watch follows a raise), away while dragged; a window opened in a fight gets its button after it; Open the map puts L away")
   end)
 end
 
