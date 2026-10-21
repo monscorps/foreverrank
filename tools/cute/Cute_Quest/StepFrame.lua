@@ -160,6 +160,8 @@ local function rowEnter(self)
 end
 local function rowLeave() if GameTooltip:GetOwner() then GameTooltip:Hide() end end
 
+local place, arrowFollows -- (below: where the frame stands, and the arrow under it)
+
 local function build()
   local f = CreateFrame("Frame", "QuestBankStep", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
   f:SetSize(WIDTH, PAD * 2 + ROW1 + ROW * 3)
@@ -179,10 +181,18 @@ local function build()
     f:SetBackdropBorderColor(gold[1], gold[2], gold[3], 0.5)
   end
   f:SetScript("OnDragStart", function(self) if not settings().locked then self:StartMoving() end end)
+  -- (the review round) kept by its middle against the screen's, where the drag left it, whatever point the game
+  -- anchors a moved frame by (place() anchors it so again); the arrow follows it at once
   f:SetScript("OnDragStop", QB.Safe(function(self)
     self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint(1)
-    if type(x) == "number" and type(y) == "number" then settings().x, settings().y = x, y end
+    local cx, cy = self:GetCenter()
+    local fs, us = self:GetEffectiveScale() or 1, UIParent:GetEffectiveScale() or 1
+    if type(cx) == "number" and type(cy) == "number" and fs > 0 then
+      settings().x = cx - (UIParent:GetWidth() or 0) * us / (2 * fs)
+      settings().y = cy - (UIParent:GetHeight() or 0) * us / (2 * fs)
+      place(self)
+    end
+    arrowFollows()
   end, "step frame"))
   -- three rows: the step now (its name, then who and where with the minutes), the two next (name and place, the
   -- minutes where a new trip starts); each a button for its click and menu, with the kind's icon
@@ -274,7 +284,7 @@ SF.TrackerLeft = trackerLeft
 -- the arrow. The arrow stands under the frame (Arrow.lua, A.Place: SF.Below)
 local TOP_Y = 190
 SF.TOP_Y = TOP_Y
-local function place(f)
+function place(f)
   local s = settings()
   local sc = s.scale or 1
   f:ClearAllPoints()
@@ -282,20 +292,34 @@ local function place(f)
   if type(s.x) == "number" and type(s.y) == "number" then f:SetPoint("CENTER", UIParent, "CENTER", s.x, s.y) return end
   local W = UIParent:GetWidth() or 1920
   local over = W / 2 + WIDTH * sc / 2 - (trackerLeft(W) - 16)
-  f.qbX = over > 0 and -over or 0 -- (its middle across from the screen's, in UIParent's units: SF.Below)
+  f.qbX = over > 0 and -over or 0 -- (its middle across from the screen's, in UIParent's units: SF.Box)
   f:SetPoint("TOP", UIParent, "TOP", f.qbX / sc, -TOP_Y / sc)
 end
 
--- where the frame ends at its default place, for the arrow under it: its middle across from the screen's middle and
--- its bottom down from the screen's top, in UIParent's units; nil while it is away or stands where it was dragged
-function SF.Below()
+-- where the frame stands, for the arrow (Arrow.lua, A.Place): its middle across from the screen's middle, its top and
+-- its bottom down from the screen's top and its half width, in UIParent's units; nil while it is away. At its default
+-- place or where it was dragged to (place(): its middle against the screen's, at its scale). (Until the review round
+-- a dragged frame said nothing, and the arrow stood at the frame's default place: on the frame nudged a little)
+function SF.Box()
   local f = SF.frame
+  if not (f and f:IsShown()) then return nil end
   local s = settings()
-  if not (f and f:IsShown()) or (type(s.x) == "number" and type(s.y) == "number") then return nil end
-  return f.qbX or 0, TOP_Y + (f:GetHeight() or 0) * (f:GetScale() or 1)
+  local sc = f:GetScale() or 1
+  local h = (f:GetHeight() or 0) * sc
+  if type(s.x) == "number" and type(s.y) == "number" then
+    local mid = (UIParent:GetHeight() or 768) / 2 - s.y * sc
+    return s.x * sc, mid - h / 2, mid + h / 2, WIDTH * sc / 2
+  end
+  return f.qbX or 0, TOP_Y, TOP_Y + h, WIDTH * sc / 2
 end
--- the arrow placed again (its default place follows the frame's height, scale and showing)
-local function arrowFollows() if QB.Arrow and QB.Arrow.Place then QB.Arrow.Place() end end
+-- its middle across and its bottom (SF.Box)
+function SF.Below()
+  local x, _, bottom = SF.Box()
+  if not x then return nil end
+  return x, bottom
+end
+-- the arrow placed again (its default place follows the frame's place, height, scale and showing)
+function arrowFollows() if QB.Arrow and QB.Arrow.Place then QB.Arrow.Place() end end
 
 -- the quest-item button: the game's secure button for the first step's quest item (type item, item:<id>), as
 -- Camp.lua's icons; made, set, shown and hidden out of a fight only, else the change waits (SF.pendingItem) for the

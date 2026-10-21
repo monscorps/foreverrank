@@ -17689,7 +17689,8 @@ end)()
             GEN = GEN + 1
             local hr = rectOf(env.ObjectiveTrackerFrame.Header)
             local err = { l = W / 2 - 256, r = W / 2 + 256, t = H - 122, b = H - 182 }
-            assert(apart(sr, ar) and ar.t <= sr.b - 4, where .. ": the arrow under the step frame: " .. box(ar) .. " against " .. box(sr))
+            -- (under it, or beside it where under would run onto the camp bar's place: the review round's case 10)
+            assert(apart(sr, ar) and (ar.t <= sr.b - 4 or ar.r <= sr.l - 4 or ar.l >= sr.r + 4), where .. ": the arrow off the step frame: " .. box(ar) .. " against " .. box(sr))
             assert(sr.t <= err.b - 4 and ar.t <= err.b - 4, where .. ": both under the game's error text: " .. box(sr) .. ", " .. box(ar))
             assert(apart(sr, hr) and apart(ar, hr), where .. ": both clear of the tracker's header " .. box(hr) .. ": " .. box(sr) .. ", " .. box(ar))
             assert(sr.l >= 0 and sr.r <= W and ar.l >= 0 and ar.r <= W and ar.b >= 0, where .. ": both on the screen: " .. box(sr) .. ", " .. box(ar))
@@ -17728,7 +17729,8 @@ end)()
     QB:Settings().guide.x, QB:Settings().guide.y = -500, 200
     SF.Apply()
     p = env.QuestBankArrow.__points[1]
-    assert(p.point == "TOP" and p.x == 0 and p.y == -SF.TOP_Y, "the frame dragged away: the arrow at its own default place: " .. tostring(p.x) .. ", " .. tostring(p.y))
+    local _, _, fb = SF.Box()
+    assert(p.point == "TOP" and p.x == -500 and p.y == -(fb + 6), "the frame dragged away: the arrow under it there: " .. tostring(p.x) .. ", " .. tostring(p.y))
     QB:Settings().guide.x, QB:Settings().guide.y = nil, nil
     G.MemberSteps = real
     print(string.format("engine: %d layouts checked (four screens, two tracker places, three scales, alone and in a party of five)", seen))
@@ -18116,6 +18118,89 @@ end)()
     n.QB:Settings().autoTurnIn = true
     n.env.C_Item.GetItemStats = nil
     check(n, window(n, { 10657, 10658 }), 1, true, "QuestBank's pick: item level 26, the best you can use here")
+  end }
+
+  -- 10. (the review round) A step frame dragged from its default place left the arrow there (TOP 0 -190): nudged 20 px,
+  -- the frame stood on it as soon as it grew; a 6.1 save's arrow, dragged out from under the frame of then (TOP 0 -245),
+  -- sat on today's frame, 50 px lower and 16 px taller; and a tall frame on a short screen (a party at 120%) pushed the
+  -- arrow down onto the camp bar's place (CENTER 0 -190, 40 px). Now the arrow stands under the frame wherever it is,
+  -- follows a drag at once, leaves a dragged place the frame stands on, and goes beside the frame where under it would
+  -- run onto the camp bar
+  ENGCASES[#ENGCASES + 1] = { "the arrow under the step frame wherever it stands; a 6.1 arrow on it moves; beside it over the camp bar", function()
+    local c = char("Nudger", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local env, QB = c.env, c.QB
+    local SF, A, G = QB.StepFrame, QB.Arrow, QB.Guide
+    QB:Settings().welcome = nil; SF.Apply(); A:Set(true); A:Update()
+    local sf, af = env.QuestBankStep, env.QuestBankArrow
+    local party = {}
+    for i, n in ipairs({ "Ada", "Bo", "Cy", "Di" }) do party[i] = { name = n, class = "MAGE", text = "Kill Kobold Vermin " .. i .. "/8" } end
+    local none, real = {}, G.MemberSteps
+    local members = none
+    G.MemberSteps = function() return members end
+    local function grow(list) members = list; G.memberVer = G.memberVer + 1; SF.Refresh() end
+    local function under(what)
+      local sr, ar = placed(sf), placed(af, 143)
+      assert(apart(sr, ar) and ar.t <= sr.b - 4 and math.abs((ar.l + ar.r) / 2 - (sr.l + sr.r) / 2) < 1, what .. ": the arrow under the frame: " .. box(ar) .. " against " .. box(sr))
+    end
+    -- a drag that ends 20 px right of the default place (the game leaves a moved frame on a point of its own choosing:
+    -- its middle is what counts)
+    local h = sf:GetHeight()
+    rawset(sf, "GetCenter", function() return 800 + 20, 1000 - 190 - h / 2 end)
+    sf.__scripts.OnDragStart(sf); sf.__scripts.OnDragStop(sf)
+    local s = QB:Settings().guide
+    assert(s.x == 20 and math.abs(s.y - (500 - 190 - h / 2)) < 0.01, "kept by its middle: " .. tostring(s.x) .. ", " .. tostring(s.y))
+    under("dragged 20 px")
+    grow(party)
+    under("dragged 20 px, then grown")
+    -- dragged up the middle, at 120%
+    rawset(sf, "GetCenter", function() return 800, 700 end)
+    sf.__scripts.OnDragStart(sf); sf.__scripts.OnDragStop(sf)
+    under("dragged up the middle")
+    SF.SetScale(1.2)
+    under("dragged up the middle, at 120%")
+    -- to the screen's middle: under it the arrow would reach the camp bar's place (its top 170 px under the middle):
+    -- beside it
+    rawset(sf, "GetCenter", function() return 800, 500 end)
+    sf.__scripts.OnDragStart(sf); sf.__scripts.OnDragStop(sf)
+    local sr, ar = placed(sf), placed(af, 143)
+    assert(apart(sr, ar) and ar.b >= 500 - 170 + 4 and ar.l >= 0, "dragged to the middle: beside it, above the camp bar: " .. box(ar) .. " against " .. box(sr))
+    SF.SetScale(1); grow(none)
+    s.x, s.y = nil, nil; SF.Apply()
+    under("back at its default place")
+    -- a 6.1 save: its arrow dragged out from under the frame of then, to TOP 0 -245. Today's frame stands there: the
+    -- arrow goes under it, and the place is kept
+    QB:Settings().arrowPos = { "TOP", 0, -245 }
+    A.Place()
+    under("a 6.1 arrow at TOP 0 -245")
+    assert(QB:Settings().arrowPos and QB:Settings().arrowPos[3] == -245, "its place kept")
+    -- the frame away: the arrow where it was put
+    QB:Settings().guide.frame = false; SF.Apply()
+    local p = af.__points[1]
+    assert(p.point == "TOP" and p.x == 0 and p.y == -245, "the frame off: the arrow where it was dragged: " .. tostring(p.y))
+    QB:Settings().guide.frame = true; SF.Apply()
+    -- a place clear of the frame stays
+    QB:Settings().arrowPos = { "TOP", 300, -420 }
+    A.Place()
+    p = af.__points[1]
+    assert(p.x == 300 and p.y == -420, "an arrow dragged clear of the frame: kept")
+    QB:Settings().arrowPos = nil; A.Place()
+    -- 1024 x 768 at 120% with a party of five and the trainer line: under the frame the arrow would run onto the camp
+    -- bar's place; beside the frame, clear of it, the tracker's header and the screen's edges
+    env.UIParent:SetSize(1024, 768)
+    SF.SetScale(1.2)
+    G.reminder = env.GetTime() + 600
+    grow(party)
+    SF.Apply()
+    sr, ar = placed(sf), placed(af, 143)
+    local campTop = 768 / 2 - 190 + 20
+    GEN = GEN + 1
+    local hr = rectOf(env.ObjectiveTrackerFrame.Header)
+    assert(apart(sr, ar) and ar.b >= campTop + 4 and ar.l >= 0 and apart(ar, hr), "beside the frame, above the camp bar's place (top " .. campTop .. "): " .. box(ar) .. " against " .. box(sr))
+    assert(sr.b - 6 - 143 < campTop + 4, "(a frame this tall: under it the arrow would reach the camp bar: " .. box(sr) .. ")")
+    G.reminder = nil
+    env.UIParent:SetSize(1600, 1000)
+    SF.SetScale(1); grow(none)
+    G.MemberSteps = real
   end }
 
   for _, case in ipairs(ENGCASES) do

@@ -583,17 +583,28 @@ function A.Tint(f, c)
   f.tint:SetVertexColor(r, g, b)
 end
 
--- where the arrow stands: where it was dragged to (arrowPos, kept by its top), else under the step frame while that
--- stands at its own default place (StepFrame.lua, SF.Below: followed as the frame grows, shrinks or scales), else where
--- the step frame would start (under the game's error text); moved left as far as it takes to stay 16 px clear of the
--- quest tracker's header, as the step frame is. (6.1 put the arrow at TOP 0 -170 and the step frame at -140: the
--- arrow sat on the frame's second and third rows and its time line)
-local GAP_Y = 6
+-- where the arrow stands: where it was dragged to (arrowPos, kept by its top), else under the step frame wherever that
+-- stands (StepFrame.lua, SF.Box: followed as the frame moves, grows, shrinks or scales), else where the step frame
+-- would start (under the game's error text); moved left as far as it takes to stay 16 px clear of the quest tracker's
+-- header, as the step frame is. (6.1 put the arrow at TOP 0 -170 and the step frame at -140: the arrow sat on the
+-- frame's second and third rows and its time line.) TALL: the arrow at its tallest, its frame and the lines under it
+local GAP_Y, GAP_X, TALL = 6, 8, 143
+-- does the arrow, the middle of its top at x, y (across from the screen's middle, down from its top), stand on the
+-- step frame's box (SF.Box: bx, top, bottom, half)
+local function onFrame(x, y, bx, top, bottom, half)
+  return bx ~= nil and x - WIDTH / 2 < bx + half and bx - half < x + WIDTH / 2 and y < bottom and top < y + TALL
+end
 function A.Place()
   local f = A.frame
   if not f or f.qbDragging then return end -- (in a drag: left where the cursor has it)
+  local SF = QB.StepFrame
+  local bx, top, bottom, half = nil, nil, nil, nil
+  if SF and SF.Box then bx, top, bottom, half = SF.Box() end
   local pos = QB:Settings().arrowPos
-  if pos then
+  -- (the review round) where it was dragged to, unless the step frame stands there now: a 6.1 save's arrow, dragged out
+  -- from under the frame of then to TOP 0 -245, met today's frame 50 px lower and 16 px taller; or the frame grew or
+  -- was dragged onto it. Then under the frame, as by default; the place is kept for when the frame goes
+  if pos and not (pos[1] == "TOP" and onFrame(tonumber(pos[2]) or 0, -(tonumber(pos[3]) or 0), bx, top, bottom, half)) then
     if f.qbPos ~= pos then
       f.qbPos, f.qbX, f.qbY = pos, nil, nil
       f:ClearAllPoints()
@@ -601,12 +612,22 @@ function A.Place()
     end
     return
   end
-  local SF = QB.StepFrame
-  local bx, by = nil, nil
-  if SF and SF.Below then bx, by = SF.Below() end
-  local x, y = bx or 0, by and (by + GAP_Y) or (SF and SF.TOP_Y or 190)
+  local x, y = bx or 0, bottom and (bottom + GAP_Y) or (SF and SF.TOP_Y or 190)
   local W = UIParent:GetWidth() or 1920
   local lim = (SF and SF.TrackerLeft) and (SF.TrackerLeft(W) - 16) or W
+  -- (the review round) never past the screen's bottom nor down onto the camp bar's place (Camp.lua, Camp.BarTop: a
+  -- tall frame on a short screen, a party's lines at 120%): beside the frame then, on its left, else on its right,
+  -- where it fits
+  if bottom then
+    local floor = (UIParent:GetHeight() or 768) - 8
+    local camp = QB.Camp and QB.Camp.BarTop and QB.Camp.BarTop()
+    if camp and camp - 4 < floor then floor = camp - 4 end
+    if y + TALL > floor then
+      local left, right = bx - half - GAP_X - WIDTH / 2, bx + half + GAP_X + WIDTH / 2
+      if W / 2 + left - WIDTH / 2 >= 0 then x, y = left, top
+      elseif W / 2 + right + WIDTH / 2 <= lim then x, y = right, top end
+    end
+  end
   local over = W / 2 + x + WIDTH / 2 - lim
   if over > 0 then x = x - over end
   if f.qbX == x and f.qbY == y and not f.qbPos then return end

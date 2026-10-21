@@ -500,6 +500,14 @@ local function quiet()
 end
 local function fighting() return InCombatLockdown and InCombatLockdown() or false end
 
+-- (the review round) the bar's top at its own place (CENTER 0 -190), down from the screen's top in UIParent's units,
+-- for the arrow, which keeps above it (Arrow.lua, A.Place); nil once the bar was dragged elsewhere
+function Camp.BarTop()
+  local pos = settings().pos
+  if type(pos) == "table" and pos.x then return nil end
+  return (UIParent:GetHeight() or 768) / 2 + 190 - SIZE / 2
+end
+
 local function barFrame()
   if bar then return bar end
   bar = CreateFrame("Frame", "QuestBankCampBar", UIParent)
