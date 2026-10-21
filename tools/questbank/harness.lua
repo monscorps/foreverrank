@@ -20036,6 +20036,62 @@ end)()
     UI.frame:Hide()
   end }
 
+  -- 4. (the merge review) a quest no way is known to shows no minutes: a new character on Zephras Isle (a world of its
+  -- own, no flight master) sees Elwynn's quests on Available and Now with no "inf min" (Candidates' trip is math.huge
+  -- there: M.Between knows no way across), as before XP a minute; its rate stays 0, a waste
+  MERGECASES[#MERGECASES + 1] = { "Zephras Isle: a quest no way is known to shows no minutes, never inf", function()
+    local ISLE = { minx = 1247.917, maxx = 4956.25, miny = -1331.25, maxy = 4231.25 } -- UiMapAssignment's, map 2521
+    local c = newClient({ name = "Islander", level = 5, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = { { 92544, 0 } }, done = {}, world = { 2991, 3200, 1650 }, map = 2521, bagSlots = {}, bind = "Shen'dar Village" })
+    local env = c.env
+    local function toMap(wx, wy) return (ISLE.maxy - wy) / (ISLE.maxy - ISLE.miny), (ISLE.maxx - wx) / (ISLE.maxx - ISLE.minx) end
+    env.C_Map.GetBestMapForUnit = function() return 2521 end
+    env.MapUtil.GetDisplayableMapForPlayer = function() return 2521 end
+    env.C_Map.GetPlayerMapPosition = function(m)
+      if m ~= 2521 then return nil end
+      local x, y = toMap(3200, 1650)
+      return { x = x, y = y, GetXY = function(self) return self.x, self.y end }
+    end
+    env.C_Map.GetMapPosFromWorldPos = function(cont, pos, m)
+      if cont ~= 2991 or m ~= 2521 then return nil end
+      return m, env.CreateVector2D(toMap(pos.x, pos.y))
+    end
+    env.C_Map.GetMapRectOnMap = function() return nil end
+    env.IsInInstance = function() return false, "none" end
+    login(c)
+    local QB, UI = c.QB, c.QB.UI
+    QB:Settings().welcome = nil
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1); QB.Model.Finish(); tick(c, 1)
+    -- the case is real: a candidate across the sea, its trip never ending, its rate 0 and a waste
+    local far
+    for _, cc in ipairs(UI:Candidates(nil, 5)) do if cc.away == math.huge then far = cc end end
+    assert(far and far.rate == 0 and far.waste and not far.mins, "a candidate with no way known: " .. tostring(far and far.id))
+    local function bad(t) t = tostring(t or ""); return t:find("inf", 1, true) or t:find("nan", 1, true) end
+    local U = UI
+    local saveAll, saveCard, saveExp = U.allOpen, U.cardOpen, U.expanded
+    for _, tab in ipairs({ 2, 6 }) do
+      U.allOpen, U.cardOpen, U.expanded = true, {}, {}
+      for _, cat in ipairs(QB.Data.CAT) do U.expanded[cat.key] = true end
+      U:Open(tab); QB.Model.Finish(); U:Refresh()
+      local rows, farRow = 0, false
+      for _, card in ipairs(U.views[tab].cards.items) do
+        if card:IsShown() then
+          assert(not bad(card.where and card.where:GetText()), "a card's line: " .. tostring(card.where and card.where:GetText()))
+          for _, r in ipairs(card.rows.items) do
+            if r:IsShown() and r.q then
+              rows = rows + 1
+              if r.q.id == far.id then farRow = true end
+              assert(not bad(r.away:GetText()), (tab == 2 and "Available" or "Now") .. ": " .. r.q.name .. "'s minutes: " .. tostring(r.away:GetText()))
+            end
+          end
+        end
+      end
+      if tab == 2 then assert(farRow, "Available lists the quest across the sea (" .. far.id .. ") among " .. rows .. " rows") end
+    end
+    U.allOpen, U.cardOpen, U.expanded = saveAll, saveCard, saveExp
+    UI.frame:Hide()
+  end }
+
   for _, case in ipairs(MERGECASES) do
     case[2]()
     print("merge1: " .. case[1] .. ": ok")

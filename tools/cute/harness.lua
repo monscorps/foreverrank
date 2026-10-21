@@ -11464,6 +11464,35 @@ do
   end)
 end
 
+-- (the merge review) a quest no way is known to (its minutes math.huge: Zephras Isle to Elwynn, M.Between knows no way
+-- across) reads its place in Most XP a minute, never "inf min"
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    local QB = c.addons[2].private
+    local real = QB.UI.Candidates
+    local D = QB.Data
+    QB.UI.Candidates = function(self, limit, ...)
+      if limit == 8 then return { { id = 7, full = 450, T = math.huge, mins = nil, cat = D.Q[7][8], rate = 0, rank = 0 } } end
+      return real(self, limit, ...)
+    end
+    c.C.UI:Open("quests")
+    local t = texts(c)
+    QB.UI.Candidates = real
+    local cat = D.CAT[D.Q[7][8]].name
+    assert(t:find("Most XP a minute", 1, true) and not t:find("inf min", 1, true) and not t:find("nan min", 1, true), "Most XP a minute: no inf min:\n" .. t)
+    local row
+    for _, r in ipairs(c.C.UI.lists.quests.items) do if r:IsShown() and r.name:GetText() == QB.Quest.Get(7).name then row = r end end
+    assert(row and row.who:GetText() == cat, "the quest's place in its minutes' stead: " .. tostring(row and row.who:GetText()))
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print("merge1: Most XP a minute: a quest no way is known to reads its place, never inf min")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

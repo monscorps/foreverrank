@@ -71,7 +71,8 @@ local function items(K)
   for _, c in ipairs(E.UI:Candidates(8, E.state.level)) do
     local q = E.Quest.Get(c.id)
     if q then
-      local who = (c.T and E.Model.MinutesText and E.Model.MinutesText(c.T, c.est)) or minutes(c.mins) or (D.CAT[c.cat] and D.CAT[c.cat].name) or nil
+      -- (a quest no way is known to: its minutes are math.huge, so its place's name, never "inf min")
+      local who = (c.T and c.T < math.huge and E.Model.MinutesText and E.Model.MinutesText(c.T, c.est)) or minutes(c.mins) or (D.CAT[c.cat] and D.CAT[c.cat].name) or nil
       out[#out + 1] = questRow(q, E:Status(q), c.full, who, K)
     end
   end

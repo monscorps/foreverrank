@@ -2283,9 +2283,10 @@ local function fillRow(r, it, width, v)
   local mins = (not held and st.code ~= "done" and not st.behind) and it.mins or nil
   local awayText = mins and (mins < 1 and "here" or string.format("%d min", math.floor(mins + 0.5))) or ""
   -- questing: the quest's own minutes, the trip to its giver included (Model.lua's quest minutes; "est." where its work
-  -- is its zone's median), not the trip alone
+  -- is its zone's median), not the trip alone. A quest no way is known to (Candidates' trip math.huge: Zephras Isle to
+  -- Elwynn) shows none, as before XP a minute, never "inf min" (the merge review)
   local est = false
-  if it.T and not held and st.code ~= "done" and not st.behind then awayText, est = QB.Model.MinutesText(it.T, it.est), it.est and true or false end
+  if it.T and it.T < math.huge and not held and st.code ~= "done" and not st.behind then awayText, est = QB.Model.MinutesText(it.T, it.est), it.est and true or false end
   -- a chain opens under its row; a step shown under one carries no toggle of its own
   local chained = not it.sub and ((q.pre ~= nil) or (q.nextSteps ~= nil and #q.nextSteps > 0))
   if chained then
