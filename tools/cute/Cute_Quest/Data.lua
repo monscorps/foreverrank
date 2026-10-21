@@ -6223,8 +6223,9 @@ D.TRAINER = {
 {13417,"Sagorne Creststrider",7,1,1938,-4223,1454,38.7,35.9}
 }
 
--- [spell] = true: the client's opening spells (an open-lock effect of no skill's lock type, SpellEffect.csv): Finds.lua
-D.OPEN = {[3365]=true,[3366]=true,[5107]=true,[6247]=true,[6249]=true,[6477]=true,[6478]=true,[6527]=true,[6529]=true,[6658]=true,[6802]=true,[8517]=true,[10738]=true,[11437]=true,[11535]=true,[11792]=true,[13478]=true,[13564]=true,[13565]=true,[14125]=true,[15276]=true,[17432]=true,[18952]=true,[21248]=true,[21288]=true,[21651]=true,[22810]=true,[26587]=true,[26588]=true,[26868]=true,[423088]=true,[423632]=true,[461679]=true,[463320]=true,[1221363]=true,[1236393]=true,[1269930]=true,[1277271]=true,[1308379]=true,[1309310]=true,[1309978]=true,[1310156]=true,[1310491]=true}
+-- [spell] = the lock type it opens: the client's opening spells (an open-lock effect of no skill's lock type,
+-- SpellEffect.csv); 0 opens with a key, the lock's item (Finds.lua)
+D.OPEN = {[3365]=5,[3366]=0,[5107]=0,[6247]=10,[6249]=0,[6477]=12,[6478]=13,[6527]=0,[6529]=0,[6658]=0,[6802]=0,[8517]=0,[10738]=0,[11437]=0,[11535]=0,[11792]=0,[13478]=0,[13564]=0,[13565]=0,[14125]=0,[15276]=0,[17432]=0,[18952]=0,[21248]=0,[21288]=0,[21651]=17,[22810]=13,[26587]=0,[26588]=0,[26868]=17,[423088]=0,[423632]=0,[461679]=0,[463320]=0,[1221363]=5,[1236393]=209,[1269930]=5,[1277271]=0,[1308379]=209,[1309310]=209,[1309978]=209,[1310156]=209,[1310491]=209}
 -- [uiMap] = {{kind, id, "x,y;x,y" (thousandths), files, extra, source}, ...}: what the world holds beyond quests (b a
 -- book and its title, k an object and the key Lock.csv names, h an object looted and its items' kind, r a rare and
 -- its level); source p what two players' files agree on, g a guide's place (Finds.lua; QuestBank_Finds adds f)

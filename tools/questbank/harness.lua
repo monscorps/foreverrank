@@ -19001,37 +19001,62 @@ end)()
     assert(#r.p == 5, "another map keeps its own four")
   end }
 
-  FINDCASES[#FINDCASES + 1] = { "an object opened keeps the key-class items in your bags; by the Interact key or the next object looted", function()
+  FINDCASES[#FINDCASES + 1] = { "an object opened with a key keeps the key-class items in your bags; by the Interact key or the next object looted", function()
     local c = char("Keyhold", { bags = { { 216523, 1 }, { 282406, 1 }, { 2589, 4 } } })
     local F, D = c.QB.Finds, c.QB.Data
     c.klass = { [216523] = { 13, 0 }, [2589] = { 7, 5 } }
     local keep = D.OPEN
-    D.OPEN = { [3365] = true }
-    assert(table.concat(F.KeyCandidates(), ",") == "216523,282406", "a key, and an item the client has no row for: " .. table.concat(F.KeyCandidates(), ","))
+    -- (the client's opening spells and the lock type each opens: 0 none, a key's; 5 Open, a plain chest's)
+    D.OPEN = { [3366] = 0, [3365] = 5 }
+    assert(table.concat(F.KeyCandidates(), ",") == "282406,216523", "an item the client has no row for, then a key: " .. table.concat(F.KeyCandidates(), ","))
     c.soft = { name = "Rusted Cage", guid = OBJ:format(424080) }
     c.mp = { 0.61, 0.22 }
-    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-1", 3365)
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-1", 3366)
     local r = finds(c).o424080
-    assert(r and table.concat(r.k, ",") == "216523,282406" and r.p[1][2] == 610 and r.p[1][3] == 220, "the cage, its key candidates, its spot")
+    assert(r and table.concat(r.k, ",") == "282406,216523" and r.p[1][2] == 610 and r.p[1][3] == 220, "the cage, its key candidates, its spot")
     -- no Interact key: the next object looted within ten seconds is the one opened; past that, no object is
     c.soft = nil
-    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-2", 3365)
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-2", 3366)
     c.clock = c.clock + 3
     c.loot = { { id = 2589, src = { { OBJ:format(500100), 1 } } } }
     ev(c, "LOOT_OPENED", false, false)
-    assert(finds(c).o500100 and table.concat(finds(c).o500100.k, ",") == "216523,282406", "the chest opened, by its loot window")
-    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-3", 3365)
+    assert(finds(c).o500100 and table.concat(finds(c).o500100.k, ",") == "282406,216523", "the chest opened, by its loot window")
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-3", 3366)
     c.clock = c.clock + 11
     c.loot = { { id = 2589, src = { { OBJ:format(500200), 1 } } } }
     ev(c, "LOOT_OPENED", false, false)
     assert(finds(c).o500200 and finds(c).o500200.k == nil, "eleven seconds on: looted, not opened")
-    -- another spell, or the same with no key in the bags: no key noted
+    -- a plain chest's Opening (a lock type, no key) or another spell, or a key's with no key in the bags: no key noted
     c.soft = { guid = OBJ:format(500300) }
     ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-4", 133)
     assert(finds(c).o500300 == nil, "a Fireball opens nothing")
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-6", 3365)
+    assert(finds(c).o500300 == nil, "a plain chest's Opening: the keys you carry name nothing")
+    c.soft = nil
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-7", 3365)
+    c.clock = c.clock + 2
+    c.loot = { { id = 2589, src = { { OBJ:format(500400), 1 } } } }
+    ev(c, "LOOT_OPENED", false, false)
+    assert(finds(c).o500400 and finds(c).o500400.k == nil, "a plain chest looted after its Opening: looted, no keys")
     c.o.bagSlots = { { 2589, 4 } }
-    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-5", 3365)
+    c.soft = { guid = OBJ:format(500300) }
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-5", 3366)
     assert(finds(c).o500300 == nil, "no key in the bags: nothing to note")
+    -- Forever's keys have the highest ids: a keyring of nine Classic keys never pushes the Brooch of the Wardens out
+    local ring = { 5396, 6893, 7146, 11000, 12382, 13704, 18249, 4882, 3467 }
+    c.o.bagSlots = {}
+    for _, id in ipairs(ring) do c.klass[id] = { 13, 0 }; c.o.bagSlots[#c.o.bagSlots + 1] = { id, 1 } end
+    c.klass[277136] = { 13, 0 }
+    c.o.bagSlots[#c.o.bagSlots + 1] = { 277136, 1 }
+    local cands = F.KeyCandidates()
+    assert(#cands == F.KEYS and cands[1] == 277136, "the newest key first, the oldest Classic ones out: " .. table.concat(cands, ","))
+    c.soft = { guid = OBJ:format(600001) }
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-8", 3366)
+    assert(finds(c).o600001.k[1] == 277136, "the prison keeps the Brooch")
+    -- opened again with another keyring: a key that opened it is in the bags each time, so the candidates narrow
+    c.o.bagSlots = { { 277136, 1 }, { 216523, 1 } }
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-9", 3366)
+    assert(table.concat(finds(c).o600001.k, ",") == "277136", "what both keyrings held: " .. table.concat(finds(c).o600001.k, ","))
     D.OPEN = keep
   end }
 
@@ -19295,14 +19320,14 @@ end)()
     local F, D = c.QB.Finds, c.QB.Data
     c.klass = { [216523] = { 13, 0 } }
     local keep = D.OPEN
-    D.OPEN = { [3365] = true }
+    D.OPEN = { [3366] = 0 }
     c.plates = { nameplate1 = { cls = "rare", guid = CRE:format(6583), level = 30 } }
     c.text = { title = "A Held Book" }
     c.soft = { guid = OBJ:format(420001) }
     c.loot = { { id = 2589, src = { { OBJ:format(420002), 1 } } } }
     local function all()
       ev(c, "LOOT_OPENED", false, false)
-      ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-1", 3365)
+      ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-1", 3366)
       read(c)
       ev(c, "NAME_PLATE_UNIT_ADDED", "nameplate1")
     end
@@ -19464,7 +19489,8 @@ end)()
     local c = char("Datafile", { finds = file })
     local D, F = c.QB.Data, c.QB.Finds
     -- Data.lua's own: the client's opening spells, and the guides' day-one seed (a library book, the cage by its key)
-    assert(D.OPEN[3365] and D.OPEN[6477] and not D.OPEN[2366], "D.OPEN: the client's opening spells, no gathering")
+    assert(D.OPEN[3366] == 0 and D.OPEN[3365] == 5 and D.OPEN[6477] == 12 and not D.OPEN[2366],
+      "D.OPEN: the client's opening spells and the lock type each opens (0, a key's), no gathering")
     local seeded = 0
     for _, r in ipairs(D.FIND[1429] or {}) do
       if r[1] == "b" and r[5] == "Archmage Theocritus' Research Journal" then

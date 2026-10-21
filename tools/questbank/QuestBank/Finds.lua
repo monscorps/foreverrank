@@ -6,8 +6,8 @@
 --                    p = { { uiMap, x, y, n }, ... } where you stood (thousandths of the map, about 5 yards out; at most
 --                    POINTS a map, merged within Discover's OS_NEAR), outdoors only; n = times noted; v = build;
 --                    h = { ["class.subclass"] = items } an object looted, its kind learned from the items it gave;
---                    k = { item ids } the key-class items in your bags when you opened it (the site joins them with the
---                    client's Lock.csv to say which key it was); b = a book's title (ItemTextGetItem, never the text);
+--                    k = { item ids } the key-class items in your bags when you opened it with a key, most likely first
+--                    (the site joins them with the client's Lock.csv to say which key it was); b = a book's title (ItemTextGetItem, never the text);
 --                    r = a rare's level (its nameplate said "rare" or "rareelite")
 --   disc.findN       a counter, bumped on every note; disc.findAt[key] its value when the key was last touched
 --   disc.rides["x:<map>:<x>,<y>><map>:<x>,<y>"] = { b = { c, wx, wy }, l = { c, wx, wy }, t = seconds (the mean of the
@@ -84,10 +84,10 @@ local function build()
 end
 
 -- counts of what the client showed, so the uploads settle what it hands addons here: loot windows with an object
--- outdoors (lo), opening casts (op) and the object they named (oo by the Interact key, ol by the next loot window),
--- books read (bk) by object (bo), by item (bi) or neither (bn), a text someone wrote left alone (bw), rare plates (rp),
--- crossings kept (xk), jumps left out as a D.LINK leg (xl) or a teleport (xt), items whose class the client didn't
--- know (iu)
+-- outdoors (lo), opening casts (op), those with a key (ok) and the object they named (oo by the Interact key, ol by the
+-- next loot window), books read (bk) by object (bo), by item (bi) or neither (bn), a text someone wrote left alone (bw),
+-- rare plates (rp), crossings kept (xk), jumps left out as a D.LINK leg (xl) or a teleport (xt), items whose class the
+-- client didn't know (iu)
 local function diag(k)
   if not QuestBankDB then return end
   QuestBankDB.diag = QuestBankDB.diag or {}
@@ -207,12 +207,13 @@ local function classOf(id)
 end
 
 -- the key-class items in your bags (Enum.ItemClass.Key, 13), and the ones the client has no row for (a server-sent
--- key has none): the candidates, at most KEYS, lowest id first
+-- key has none): the candidates, at most KEYS, most likely first. Those with no row, then the highest ids: Forever's
+-- own keys (the Brooch of the Wardens 277136) are newer than every Classic key a keyring carries (5396 to 18249)
 local KEY_CLASS = (Enum and Enum.ItemClass and Enum.ItemClass.Key) or 13
 local function keyCandidates()
   local C = C_Container
   if not (C and C.GetContainerNumSlots and C.GetContainerItemID and C_Item and type(C_Item.GetItemInfoInstant) == "function") then return {} end
-  local seen, out = {}, {}
+  local seen, out, rowless = {}, {}, {}
   local bags = { -1 } -- (Enum.BagIndex.Keyring, where the client has one)
   for b = 0, (NUM_BAG_SLOTS or 4) do bags[#bags + 1] = b end
   for _, bag in ipairs(bags) do
@@ -224,12 +225,15 @@ local function keyCandidates()
       if id and not seen[id] then
         seen[id] = true
         local cls = classOf(id)
-        if cls == nil then diag("iu") end
+        if cls == nil then diag("iu"); rowless[id] = true end
         if cls == nil or cls == KEY_CLASS then out[#out + 1] = id end
       end
     end
   end
-  table.sort(out)
+  table.sort(out, function(a, b)
+    if rowless[a] ~= rowless[b] then return rowless[a] == true end
+    return a > b
+  end)
   while #out > KEYS do table.remove(out) end
   return out
 end
@@ -282,18 +286,17 @@ local function softObject()
   return nil
 end
 
--- an object opened: its key candidates, at the spot
+-- an object opened with a key: its key candidates, at the spot. A key that opens it is in the bags each time, so a
+-- second opening keeps what both keyrings held (in this opening's order), or this opening's alone when they share none
 local function noteLocked(key, keys, m, x, y)
   local rec = record(key)
   addPoint(rec, m, x, y)
-  local k = type(rec.k) == "table" and rec.k or {}
-  local has = {}
-  for _, id in ipairs(k) do has[id] = true end
-  for _, id in ipairs(keys) do
-    if not has[id] then has[id] = true; k[#k + 1] = id end
-  end
-  table.sort(k)
-  while #k > KEYS do table.remove(k) end
+  local had = {}
+  for _, id in ipairs(type(rec.k) == "table" and rec.k or {}) do had[id] = true end
+  local both = {}
+  for _, id in ipairs(keys) do if had[id] then both[#both + 1] = id end end
+  local k = {}
+  for _, id in ipairs(#both > 0 and both or keys) do if #k < KEYS then k[#k + 1] = id end end
   rec.k = k
 end
 
@@ -355,13 +358,17 @@ function Finds.LootOpened(isFromItem)
 end
 
 -- a cast of yours went off: one of the client's opening spells (D.OPEN: an open-lock effect of a lock type that is no
--- gathering skill, gen_data.py from SpellEffect.csv) on a game object is an object opened. The object is the one the
--- Interact key points at, else the next object looted within OPEN_S
+-- gathering skill, gen_data.py from SpellEffect.csv) on a game object is an object opened. One that opens no lock type
+-- (0: Opening 3366 and the named ones, Opening Cage and the like) opens with a key, the lock's item (a spell of a lock
+-- type opens that type's locks, with no key: a plain chest's Opening 3365 is type 5), and only then are the keys in
+-- the bags noted. The object is the one the Interact key points at, else the next object looted within OPEN_S
 function Finds.Cast(spell)
   spell = num(spell)
   local open = QB.Data.OPEN
   if not (spell and type(open) == "table" and open[spell]) or not noting() then return end
   diag("op")
+  if open[spell] ~= 0 then return end
+  diag("ok")
   local keys = keyCandidates()
   local key = softObject()
   if key then

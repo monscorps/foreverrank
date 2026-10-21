@@ -3259,17 +3259,21 @@ lines.append("")
 
 # ---------------------------------------------------------------------------
 # D.OPEN: the client's own opening spells (SpellEffect.csv: an open-lock effect, 33, whose lock type is no gathering
-# or lockpicking skill, closing or blasting, named Opening or Unlocking): a cast of one on a game object is an object
-# opened, and Finds.lua notes the key-class items in the bags then. The client's mechanics, never a list of Forever's
-# objects: those are learned in play
+# or lockpicking skill, closing or blasting, named Opening or Unlocking), each with the lock type it opens: a cast of
+# one on a game object is an object opened. Lock type 0 is none: such a spell opens a lock by its item, a key (Opening
+# 3366, which the secrets research saw on the Keystone Fragment's lock), and Finds.lua notes the key-class items in the
+# bags then; a spell of a lock type (a plain chest's Opening 3365 is type 5) opens with no key. The client's mechanics,
+# never a list of Forever's objects: those are learned in play
 # ---------------------------------------------------------------------------
 _SKILL_LOCKS = {1, 2, 3, 4, 8, 11, 14, 16, 18}  # lockpicking, herbalism, mining, disarm trap, closing, attacking, blasting
-OPEN = sorted({int(r["SpellID"]) for r in csv.DictReader(open(os.path.join(_WI, "SpellEffect.csv")))
-               if r["Effect"] == "33" and int(r["EffectMiscValue_0"] or 0) not in _SKILL_LOCKS
-               and re.match(r"^(Opening|Unlocking)\b", _SPELL_NAME.get(r["SpellID"]) or "")})
-assert 3365 in OPEN and 6477 in OPEN and 2366 not in OPEN and 1804 not in OPEN, "the client's opening spells: %r" % OPEN[:20]
-lines.append("-- [spell] = true: the client's opening spells (an open-lock effect of no skill's lock type, SpellEffect.csv): Finds.lua")
-lines.append("D.OPEN = {" + ",".join("[%d]=true" % i for i in OPEN) + "}")
+OPEN = dict(sorted((int(r["SpellID"]), int(r["EffectMiscValue_0"] or 0)) for r in csv.DictReader(open(os.path.join(_WI, "SpellEffect.csv")))
+                   if r["Effect"] == "33" and int(r["EffectMiscValue_0"] or 0) not in _SKILL_LOCKS
+                   and re.match(r"^(Opening|Unlocking)\b", _SPELL_NAME.get(r["SpellID"]) or "")))
+assert OPEN.get(3366) == 0 and OPEN.get(3365) == 5 and OPEN.get(6477) == 12 and 2366 not in OPEN and 1804 not in OPEN, \
+    "the client's opening spells: %r" % sorted(OPEN.items())[:20]
+lines.append("-- [spell] = the lock type it opens: the client's opening spells (an open-lock effect of no skill's lock type,")
+lines.append("-- SpellEffect.csv); 0 opens with a key, the lock's item (Finds.lua)")
+lines.append("D.OPEN = {" + ",".join("[%d]=%d" % kv for kv in sorted(OPEN.items())) + "}")
 
 # ---------------------------------------------------------------------------
 # D.FIND: what the world holds beyond quests, per map: { kind, id, "x,y;x,y" (thousandths), files, extra, source }.
