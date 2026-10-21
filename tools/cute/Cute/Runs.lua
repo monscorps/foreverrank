@@ -256,6 +256,7 @@ function R:Start(kind, place)
   C.RunComm.counts, C.RunComm.results = {}, {}
   self:Sync()
   self:Counting(true)
+  R.MarkSessions(run)
   -- the damage meter here (DamageMeterDocumentation.lua IsDamageMeterAvailable: isAvailable, failureReason)
   local DM = C_DamageMeter
   if type(DM) == "table" and type(DM.IsDamageMeterAvailable) == "function" then
@@ -502,6 +503,19 @@ end
 -- Enum.DamageMeterType (DamageMeterConstantsDocumentation.lua): DamageDone 0, HealingDone 2, Absorbs 4, Interrupts 5,
 -- Dispels 6, DamageTaken 7, AvoidableDamageTaken 8, Deaths 9
 local TYPES = { { 0, "dm" }, { 2, "hl" }, { 4, "ab" }, { 5, "in" }, { 6, "dp" }, { 7, "tk" }, { 8, "av" }, { 9, "dd" } }
+-- the sessions the meter lists now, marked read without reading them: at a run's start they are fights from before it
+-- (the meter keeps them unless the player's damageMeterResetOnNewInstance is on, and a group run enters no instance;
+-- a session has no start time to tell, DamageMeterAvailableCombatSession), so neither your own row nor a member's
+-- counts them. GetAvailableCombatSessions is no secret in combat (DamageMeterDocumentation.lua)
+function R.MarkSessions(run)
+  local DM = C_DamageMeter
+  if not run or type(DM) ~= "table" or type(DM.GetAvailableCombatSessions) ~= "function" then return end
+  local list = C.Get(DM.GetAvailableCombatSessions)
+  for _, s in ipairs(type(list) == "table" and list or {}) do
+    local sid = type(s) == "table" and C.Plain(s.sessionID) or nil
+    if type(sid) == "number" then run.meter.done[sid] = true end
+  end
+end
 function R:ReadMeter()
   local run = self.run
   local DM = C_DamageMeter
@@ -1116,6 +1130,9 @@ function R:Resume(saved, login)
   local lt = lootNow()
   if lt then saved.lc = lt - (now() - saved.start) end
   self:Counting(not saved.out and not saved.ended)
+  -- (after a relog the meter's sessions and their ids are its own again: the marks start over from what it lists, the
+  -- sums read so far kept; a /reload keeps the meter and the marks)
+  if login and type(saved.meter) == "table" then saved.meter.done = {}; R.MarkSessions(saved) end
   if login then self:Sync(); self:Hello() end
 end
 

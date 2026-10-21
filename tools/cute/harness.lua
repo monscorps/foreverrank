@@ -11216,14 +11216,15 @@ do local function runsStage()
       IsDamageMeterAvailable = function() if c.noMeter then return false, "the damage meter is switched off" end return true, "" end,
       GetAvailableCombatSessions = function()
         local out = {}
-        for _, s in ipairs(c.group and c.group.sessions or {}) do out[#out + 1] = { sessionID = s.id, name = "Fight", durationSeconds = s.dur } end
+        -- (a session with s.only is that client's alone: a fight before it joined the others)
+        for _, s in ipairs(c.group and c.group.sessions or {}) do if not s.only or s.only == c then out[#out + 1] = { sessionID = s.id, name = "Fight", durationSeconds = s.dur } end end
         return out
       end,
       GetCombatSessionFromID = function(id, kind)
         if c.combat then c.meterInCombat = (c.meterInCombat or 0) + 1; return secret("table") end
         c.meterReads = (c.meterReads or 0) + 1
         for _, s in ipairs(c.group and c.group.sessions or {}) do
-          if s.id == id then
+          if s.id == id and (not s.only or s.only == c) then
             local rows = {}
             for g, amounts in pairs(s.by) do
               if amounts[kind] then
@@ -11692,6 +11693,29 @@ do local function runsStage()
     for _, k in ipairs({ "de", "dt", "fd", "ju", "gd" }) do assert(not keys[k], "a guild-only key with a member whose GUID does not read: " .. k) end
   end)
   said[#said + 1] = "a member whose GUID does not read counts as a stranger: the guild's codes stay home"
+
+  -- (4.3) the meter keeps fights from before the run (unless the player has it reset on a new instance): neither your
+  -- own row nor any member's counts them, so an honest member's claim matches what the others saw of them
+  isolated({ gmember("Uma", 1), gmember("Vin", 3) }, function()
+    local cs = { gchar("Uma", 1), gchar("Vin", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    -- (Vin's fights alone, an hour of questing before the run: on Vin's meter only)
+    G.sid = G.sid + 1
+    G.sessions[#G.sessions + 1] = { id = G.sid, dur = 600, by = { [guidOf("Vin")] = { [0] = 50000 } }, only = cs[2] }
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    fight(G, 60, { Uma = { [0] = 3000 }, Vin = { [0] = 2000 } }, 1230)
+    tickAll(40)
+    local run = cs[1].C.Runs.Current()
+    local vin = run.members[sfx(cs[2])]
+    assert(vin.v and vin.v.dm == 2000, "Vin's own row counts the run's fights alone: " .. tostring(vin.v and vin.v.dm))
+    local v = cs[1].C.Runs.MemberValues(run, sfx(cs[2]), vin, 200)
+    local key = cs[1].C.Roster:KeysByGuid()[cs[2].o.guid]
+    assert(v.dm == 2000 and not cs[1].env.CuteDB.roster[key].suspect, "no honest member marked suspect: " .. tostring(v.dm))
+  end)
+  said[#said + 1] = "the meter's fights from before the run are no member's: an honest claim matches the others' rows"
 
   -- (20) an edited copy in the group: a 2Q, 2A or 2W from a member who is not the scribe is ignored; a 2A naming a
   -- suffix nobody saw is not shown; a 2V value out of bounds is dropped, one an observed value contradicts loses; a 2H
