@@ -107,6 +107,12 @@ Assumptions: level-21 Alliance mage on foot, nothing done in these zones. The aw
 
 Darkshore drops from first to third.
 
+**As built** (D.DO and the harness's xpm stage, after review):
+- The work matches the table. The walk is shorter where spots.json's map icons put an objective nearer than objectives.json's first area: Blackrock Menace 12.9 min (walk 0.9, not 3.3), Dusky Crab Cakes 10.3 (2.1, not 7.2), Solomon's Law 13.5.
+- Dusky Crab Cakes now passes the floor at 21 (775 / 10.3 = 75 XP/min against F = 65).
+- D.DO keeps Murloc Poachers (9.4) and Selling Fish (17.3) apart. A place's set pays their walk once (one spot) but not their murlocs: D.OBJ names the creature only for kill objectives, and both are item drops, so the pair counts 24.8 min, not 18.4.
+- The sets take every open quest over the floor, est. ones included, not only quests with spawn data. From Southshore: Redridge 182 > Wetlands 169 > Duskwood 152 > Darkshore 118 XP/min (Ashenvale, 183, is first).
+
 **Single quests, trip included:**
 - Today the ranks sit within 1.7×: An Unwelcome Guest 907, Selling Fish 590, Fruit of the Sea 541.
 - New, the spread is 3.9×: 171, 47 and 44 XP/min.

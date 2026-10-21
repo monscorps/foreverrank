@@ -4812,7 +4812,19 @@ do
     assert(gp.guild and gp.guild.line and texts(rone):find(gp.guild.line, 1, true), "the guild's line whole on the Guide, nothing cut: " .. tostring(gp.guild and gp.guild.line) .. "\n" .. texts(rone))
     rone.C.UI:Open("quests")
     local tq = texts(rone)
-    assert(tq:find("Now", 1, true) and tq:find("Available", 1, true) and tq:find("Highest XP", 1, true), "the Quests page's three heads:\n" .. tq)
+    assert(tq:find("Now", 1, true) and tq:find("Available", 1, true) and tq:find("Most XP a minute", 1, true), "the Quests page's three heads:\n" .. tq)
+    -- (xpm) the page's first place is the engine's Now order[1], by XP a minute, its set's XP and minutes on the row
+    do
+      local order = QB.UI.PlaceGroups(nil, true)
+      local rows = rone.C.UI.lists.quests.items
+      local g1 = order[1]
+      assert(g1 and rows[1].name:GetText() == "Now" and rows[2].name:GetText() == g1.cat.name,
+        "the first place is the engine's: " .. tostring(rows[2] and rows[2].name:GetText()) .. " against " .. tostring(g1 and g1.cat.name))
+      if #g1.set > 0 then
+        assert(rows[2].who:GetText():find("^%d+ quests?, %d+ min$") and rows[2].val:GetText() == QB.Short(g1.setXP) .. " XP",
+          "its set's quests, minutes and XP: " .. tostring(rows[2].who:GetText()) .. " / " .. tostring(rows[2].val:GetText()))
+      end
+    end
     check(rone.C.UI.frame, "quests page")
     -- the right column (quests and minutes) keeps clear of the scroll view's edge and the window's
     local view, win = rectOf(rone.C.UI.scroll), rectOf(rone.C.UI.frame)

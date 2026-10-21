@@ -834,7 +834,7 @@ function P:Build()
         local first = s.npcs and s.npcs[1] and QB.Data.NPC[s.npcs[1]]
         list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, who = first and first[1] or nil, ids = ids, icon = T.questActive, stop = s,
                             quests = quests, ready = ready, family = family, late = (leg.late and r.goal == "hour") or nil,
-                            when = string.format("Stop %d of %d, at %s: level %.1f to %.1f", i, #r.legs, QB.Clock(leg.t), leg.arrive, leg.leave), lines = lines }
+                            when = string.format("Stop %d of %d, at %s: %s", i, #r.legs, QB.Clock(leg.t), QB.Model.Gain(leg)), lines = lines }
       end
     end
   end

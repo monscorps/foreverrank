@@ -11,7 +11,8 @@ race played, and item tooltips (what ForeverProbe used to note); 3.6.2 adds who 
 (QuestBankDB.disc.loot: creature or chest id, item ids, dungeon and difficulty, no names), which
 tools/apply_loot.py takes to codex/loot.json. This tool pulls the new rows,
 keeps each decoded body under research/probe/, and merges every discovery into
-research/questbank/disc.json, which gen_data.py reads: a quest seen in Forever loses its
+research/questbank/disc.json, which gen_data.py reads (and, from QuestBank 6.2, the work each quest took: "dur", no
+character in it): a quest seen in Forever loses its
 "Classic only" flag, quests seen in game that are not in the catalog at all are listed in
 GAPS.md, and where objectives ticked become the map's "seen in players' games" spots. Votes are
 kept, not winners: disc.json records how many uploads reported each XP value, each NPC position
@@ -788,6 +789,41 @@ def _digest(v):
     return hashlib.sha256(json.dumps(v, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:20]
 
 
+# ----------------------------------------------------------------------------------- the work a quest takes
+# QuestBank's Timer.lua (6.2) notes per character, in QuestBankDB.chars[key].timer.quests, the seconds of work at each
+# quest's objectives: w over k looks of the log where its objectives moved, and c when it was first complete. A quest
+# complete (c) and seen move in DUR_K looks or more is one sample: disc.json "dur" = { quest id: { sample: seconds } },
+# the sample named by a digest of the quest and its own numbers (taken, complete, work), never by the character, so the
+# same completion sent again is one sample and no name is kept. gen_data.py takes the median as the quest's work once
+# three samples stand (DUR_MIN there). More than DUR_MAX seconds is no measure of a quest's work
+DUR_K, DUR_MAX = 3, 4 * 3600
+
+
+def merge_dur(acc, chars):
+    """One upload's characters' timer rows into disc.json's "dur"; returns how many samples were new."""
+    out = acc.setdefault("dur", {})
+    added = 0
+    for ch in (chars or {}).values() if isinstance(chars, dict) else ():
+        timer = ch.get("timer") if isinstance(ch, dict) else None
+        rows = timer.get("quests") if isinstance(timer, dict) else None
+        if not isinstance(rows, dict):
+            continue
+        for qid, r in rows.items():
+            if not isinstance(r, dict):
+                continue
+            w, k, c = r.get("w"), r.get("k"), r.get("c")
+            if not (isinstance(w, (int, float)) and isinstance(k, (int, float)) and isinstance(c, (int, float))):
+                continue
+            if k < DUR_K or not 0 < w <= DUR_MAX or not str(qid).isdigit():
+                continue
+            key = _digest({"q": str(qid), "a": r.get("a"), "c": c, "w": round(w, 1)})[:12]
+            d = out.setdefault(str(int(qid)), {})
+            if key not in d:
+                d[key] = round(float(w), 1)
+                added += 1
+    return added
+
+
 def merge_upload(acc, text, source="local"):
     """Decode one upload and merge it. Returns (kind, had_notes). The same notes arriving again (an unchanged file re-sent,
     or ForeverProbe's copy of QuestBank's notes next to QuestBank's own file) are merged once. A QuestBank.lua has three
@@ -829,6 +865,9 @@ def merge_upload(acc, text, source="local"):
                 seen_hashes.append(h)
                 spotted = merge_loot(acc, loot) > 0 or spotted
                 fresh = True
+        # the work quests took (Timer.lua), sample by sample: a sample already merged is not counted again
+        if merge_dur(acc, data.get("chars")) > 0:
+            spotted = fresh = True
         # what the game told the quest survey (Survey.lua), a part of its own the same way
         disc = disc_of(kind, data) or {}
         if disc.get("survey") or disc.get("surveyNo"):
@@ -1201,6 +1240,44 @@ def selftest():
     assert merge_upload(acc6, grown, "fixture") == ("questbank-savedvars", True)
     assert sv["99999"]["u"] == 2 and sv["99999"]["rw"]["276903|"] == [2, 70338] and sv["99994"]["b"] == 70400
     assert acc6["meta"]["with_notes"] == 1, "a new survey answer merges the survey alone, not the notes again"
+    # the work quests took: a complete quest seen move in three looks or more is a sample, named by no character; the
+    # same file again adds none, a new completion one
+    dur_text = notes_text.replace("QuestBankDB = {", """QuestBankDB = {
+	["chars"] = {
+		["Helga-ForeverNormal"] = {
+			["timer"] = {
+				["quests"] = {
+					[127] = {
+						["a"] = 1760000000,
+						["w"] = 512.5,
+						["k"] = 12,
+						["c"] = 1760000900,
+						["lv"] = 21,
+					},
+					[34] = {
+						["w"] = 40,
+						["k"] = 2,
+						["c"] = 1760001000,
+					},
+					[20] = {
+						["a"] = 1760000100,
+						["w"] = 300,
+						["k"] = 9,
+					},
+				},
+				["levels"] = {
+				},
+			},
+		},
+	},""", 1)
+    acc7 = empty()
+    merge_upload(acc7, dur_text, "fixture")
+    assert acc7["dur"] == {"127": {list(acc7["dur"]["127"])[0]: 512.5}}, acc7["dur"]
+    assert "Helga" not in json.dumps(acc7["dur"]) and "Forever" not in json.dumps(acc7["dur"]), "no character in the samples"
+    merge_upload(acc7, dur_text, "fixture")
+    assert len(acc7["dur"]["127"]) == 1, "the same completion again is one sample"
+    again = dur_text.replace('["c"] = 1760000900,', '["c"] = 1760005000,')
+    assert merge_upload(acc7, again, "fixture")[1] and len(acc7["dur"]["127"]) == 2, "a new completion is a new sample"
     print("selftest OK:", summary(acc))
     print("selftest OK:", summary(acc3))
 

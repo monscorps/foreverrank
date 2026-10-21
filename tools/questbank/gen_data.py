@@ -31,6 +31,8 @@ Icons and textures: file IDs from the Forever client's interface manifest; a mis
                                                      # (its own fixture and made-up uploads; writes nothing)
   python3 tools/questbank/gen_data.py --selftest-survey  # check the quest survey's answers (probe_pull.py's merge of its
                                                          # fixture) as the build reads them; writes nothing
+  python3 tools/questbank/gen_data.py --selftest-dur  # check players' times of a quest's work (disc.json "dur", made up)
+                                                      # as D.DO takes them; writes nothing
 """
 import collections, csv, html, json, math, os, re, sys
 from travel import Travel, DETOUR, RUN
@@ -1940,16 +1942,18 @@ lines.append("-- 16 Undead, 32 Tauren, 64 Gnome, 128 Troll), and quests that rul
 lines.append("D.NEXT = " + keyed(NEXT))
 
 # where each quest is done: up to three spawn areas per quest from the Classic database (objectives.py),
-# {continent, world x, world y, radius in yards}, the busiest first. The Available tab uses them to say which
-# quests are done in the same spot.
+# {continent, world x, world y, radius in yards, spawns there, the creature killed there (0 for an item or an object)},
+# the busiest first. The Available tab uses them to say which quests are done in the same spot; the place value
+# (Lists.lua's PlaceGroups) pays the walk once for quests done in one spot, and the kills once for one creature
 _OBJ_SRC = load("objectives.json", {}) or {}
 OBJ = {}
 for qid in IDS:
     areas = []
     for e in _OBJ_SRC.get(str(qid)) or []:
+        who = int(e.get("id") or 0) if e.get("how") == "kill" and e.get("kind") == "npc" else 0
         for a in e.get("areas") or []:
             if len(a) >= 5 and a[0] in (0, 1):
-                areas.append((a[4], [int(a[0]), int(round(a[1])), int(round(a[2])), int(round(a[3]))]))
+                areas.append((a[4], [int(a[0]), int(round(a[1])), int(round(a[2])), int(round(a[3])), int(a[4]), who]))
     if areas:
         areas.sort(key=lambda t: -t[0])
         seen_a, out_a = set(), []
@@ -1961,7 +1965,8 @@ for qid in IDS:
             if len(out_a) == 3:
                 break
         OBJ[qid] = out_a
-lines.append("-- [id] = { {continent, world x, world y, radius}, ... }: where the quest is done, from the Classic database")
+lines.append("-- [id] = { {continent, world x, world y, radius, spawns, creature killed or 0}, ... }: where the quest is done, from the")
+lines.append("-- Classic database")
 lines.append("D.OBJ = " + keyed(OBJ))
 
 # ---------------------------------------------------------------------------
@@ -2417,6 +2422,255 @@ lines.append("D.SPOT = " + keyed(SPOT))
 lines.append("D.START = " + keyed(START))
 lines.append("D.SN = " + lua(SN))
 lines.append("D.SREQ = " + keyed(SREQ))
+
+# ---------------------------------------------------------------------------
+# D.DO: how long a quest takes from its giver to its hand-in, in minutes (Model.lua's M.QuestMinutes adds the trip to
+# the giver, the mount and this character's own pace). Owner, 2026-10-21: "quests + time walking & time to do quest
+# comparatively to XP it gives. I would rather go in a zone with 3 quests for 5k each than one with 15 for 15k total."
+#   walk  giver -> each objective's nearest area (the nearest objective first) -> turn-in, DETOUR x the straight line at
+#         RUN yards a second; a leg to another land by the faction's flights and boats (travel.py's minutes), when quicker
+#   work  a kill KILL_S plus the walk between spawns (sqrt(pi r^2 / n) x DETOUR / RUN, the busiest area's r and n), a
+#         kill beyond the areas' spawns at least RESPAWN_S / n; an item at p% (drops.json, the worst item; 100 when its
+#         source is known and not listed, 50 when nothing is known) 100 / p kills an item; a use or an object USE_S plus
+#         the walk between; explore or buy EXPLORE_S; an escort EVENT_S; a single spawn (a named mob) NAMED_S more; a
+#         delivery (the item the giver hands you, or no objective at all) nothing; a dungeon's quest DUNGEON_MIN, a run
+#   unknown  no objective data (Forever's own quests, most of them): the work is its zone's median, and the number is
+#         stored negative: the addon says "est."
+#   players  disc.json "dur" (probe_pull.py's merge of Timer.lua's measured work, no character in it): with
+#         DUR_MIN samples or more their median replaces the estimated work, but for a dungeon's quest (the run is not
+#         measured) and a group quest (whether a party did it is not recorded)
+# D.DO[id] = walk tenths * 4096 + work tenths (work at most 409.5 minutes); negative when the work is its zone's median.
+# A group quest's work is a party's: the addon triples it for you alone (Model.lua)
+# ---------------------------------------------------------------------------
+KILL_S, RESPAWN_S, USE_S, EXPLORE_S, EVENT_S, NAMED_S = 25.0, 300.0, 6.0, 30.0, 360.0, 60.0
+GAP_S = 10.0          # seconds between spawns where no area is known
+DUNGEON_MIN = 35.0    # a dungeon run, until Timer.lua measures one
+DUR_MIN = 3           # players' samples before their median replaces the estimate
+_DUR = DISC.get("dur") or {}
+SELFTEST_DUR = "--selftest-dur" in sys.argv
+
+
+def _leg_min(a, b, fac):
+    """Minutes from one world point (continent, x, y) to another: on foot on one land, or by the faction's flights and
+    boats between their nearest flight masters, whichever is quicker; None with no way known."""
+    best = None
+    if a[0] == b[0]:
+        best = math.hypot(a[1] - b[1], a[2] - b[2]) * DETOUR / RUN / 60.0
+    if a[0] in (0, 1) and b[0] in (0, 1):
+        ha, hb = TR.nearest_hub(fac, a[0], a[1], a[2]), TR.nearest_hub(fac, b[0], b[1], b[2])
+        if ha and hb:
+            ends = (ha[1] + hb[1]) * DETOUR / RUN / 60.0
+            p = (0.0, 0.0, None) if ha[0] == hb[0] else TR.pair(fac, ha[0], hb[0])
+            if p and (best is None or p[0] + p[1] + ends < best):
+                best = p[0] + p[1] + ends
+    return best
+
+
+def _kills(n_kills, areas):
+    """Seconds to kill n_kills mobs spread over areas [(continent, x, y, r, spawns)], respawns included."""
+    if n_kills <= 0:
+        return 0.0
+    if not areas:
+        return n_kills * (KILL_S + GAP_S)
+    busy = max(areas, key=lambda a: a[4])
+    per = KILL_S + math.sqrt(math.pi * busy[3] * busy[3] / max(1, busy[4])) * DETOUR / RUN
+    total = max(1, sum(a[4] for a in areas))
+    if n_kills <= total:
+        return n_kills * per
+    return total * per + (n_kills - total) * max(per, RESPAWN_S / total)
+
+
+def _uses(n, areas):
+    if n <= 0:
+        return 0.0
+    if not areas:
+        return n * (USE_S + GAP_S)
+    busy = max(areas, key=lambda a: a[4])
+    return n * (USE_S + math.sqrt(math.pi * busy[3] * busy[3] / max(1, busy[4])) * DETOUR / RUN)
+
+
+def quest_work(qid):
+    """(seconds of work, known): what the objectives take; known False when nothing says what they are."""
+    flags = Q[qid][9]
+    if flags & 1:
+        return DUNGEON_MIN * 60, True
+    cm = CM.get(qid)
+    need = _NEED.get(str(qid)) or {}
+    objs = _OBJ_SRC.get(str(qid)) or []
+    if flags & 2048:
+        return EVENT_S, True
+    if not cm and not need and not objs:
+        return 0.0, False
+    req = {int(k): int(v) for k, v in (need.get("req") or {}).items()}
+    ty = {int(k): t for k, t in (need.get("ty") or {}).items()}
+    items = {int(k): int(v) for k, v in (need.get("items") or {}).items()}
+    src = int((cm or {}).get("src") or 0)
+    # a delivery: what it asks for is what the giver hands you (or it asks for nothing)
+    if cm and not need.get("event") and all(k >= 5 and items.get(k) == src for k in req) and (not req or src):
+        return 0.0, True
+    kills = [e for e in objs if e.get("how") in ("kill", "use")]
+    loot = {int(e.get("item") or 0): e for e in objs if e.get("how") == "loot"}
+    area = lambda e: [(a[0], a[1], a[2], a[3], a[4]) for a in (e or {}).get("areas") or [] if len(a) >= 5]
+    drop = _DROPS.get(str(qid))
+    secs, k = 0.0, 0
+    for slot in sorted(req):
+        n, t = req[slot], ty.get(slot)
+        if slot < 5:
+            e = kills[k] if k < len(kills) else None
+            k += 1
+            ar = area(e)
+            if t == "npc":
+                secs += _kills(n, ar)
+                if ar and sum(a[4] for a in ar) == 1:
+                    secs += NAMED_S
+            else:
+                secs += _uses(n, ar)
+        else:
+            item = items.get(slot)
+            if item and item == src:
+                continue
+            e = loot.get(item)
+            ar = area(e)
+            # (drops.json has the quest's worst item: one source alone, a chest or a named mob, gives its item)
+            p = drop if drop is not None and not (ar and sum(a[4] for a in ar) == 1) else (100.0 if e else 50.0)
+            p = min(100.0, max(5.0, float(p)))
+            if e is None and _spot_kinds(qid, slot) == {"b"}:
+                secs += EXPLORE_S
+                continue
+            secs += _kills(n * 100.0 / p, ar)
+            if ar and sum(a[4] for a in ar) == 1:
+                secs += NAMED_S
+    if need.get("event"):
+        secs += EXPLORE_S
+    if not req and not need.get("event"):
+        return 0.0, bool(cm)
+    return secs, True
+
+
+def _spot_kinds(qid, slot):
+    return {o.get("k") for o in ((_SPOT_Q.get(str(qid)) or {}).get("obj") or []) if o.get("slot") == slot}
+
+
+def quest_points(qid):
+    """Each objective's areas as world points [(continent, x, y)], from the map icons' spots (spots.json), else
+    objectives.json's areas."""
+    out = []
+    for o in (_SPOT_Q.get(str(qid)) or {}).get("obj") or []:
+        pts = [(int(s[0]), float(s[1]), float(s[2])) for s in o.get("spots") or [] if s and s[0] in (0, 1)]
+        if pts:
+            out.append(pts)
+    if not out:
+        for e in _OBJ_SRC.get(str(qid)) or []:
+            pts = [(int(a[0]), float(a[1]), float(a[2])) for a in e.get("areas") or [] if len(a) >= 3 and a[0] in (0, 1)]
+            if pts:
+                out.append(pts)
+    return out
+
+
+def quest_walk(qid):
+    """Minutes from the giver to the objectives (nearest first, each objective's nearest area) to the turn-in; None
+    when neither the giver nor the turn-in is placed."""
+    row = Q[qid]
+    fac = "H" if row[2] == 2 else "A"
+    give, turn = npc_world(row[6]), npc_world(row[5])
+    if give and give[0] not in (0, 1) and not (turn and turn[0] == give[0]):
+        give = None
+    if turn and turn[0] not in (0, 1) and not (give and give[0] == turn[0]):
+        turn = None
+    start = give or turn
+    if not start:
+        return None
+    left = quest_points(qid)
+    at, mins = start, 0.0
+    while left:
+        best = None
+        for i, pts in enumerate(left):
+            for p in pts:
+                m = _leg_min(at, p, fac)
+                if m is not None and (best is None or m < best[0]):
+                    best = (m, i, p)
+        if best is None:
+            break
+        mins += best[0]
+        at = best[2]
+        left.pop(best[1])
+    if turn:
+        m = _leg_min(at, turn, fac)
+        mins += m if m is not None else 0.0
+    return mins
+
+
+# gen_data.py --selftest-dur: made-up players' times in place of disc.json's (as probe_pull.py's merge writes them),
+# three samples of ten minutes each for the first quest of the open world, the first dungeon's quest and the first group
+# quest whose work is estimated from their objectives; dur_selftest() below checks what D.DO took
+_DUR_TEST = {}
+if SELFTEST_DUR:
+    for _flag in (0, 1, 2):
+        _DUR_TEST[_flag] = next(q for q in IDS if Q[q][9] & 3 == _flag and quest_work(q)[1] and 0 < quest_work(q)[0] != 600)
+    _DUR = {str(q): {"a1": 600.0, "b2": 600.0, "c3": 600.0} for q in _DUR_TEST.values()}
+
+DO, _DO_WORK, _DO_WALK = {}, {}, {}
+_by_cat_work, _by_cat_walk = collections.defaultdict(list), collections.defaultdict(list)
+for qid in IDS:
+    w, known = quest_work(qid)
+    walk = quest_walk(qid)
+    samples = [float(v) for v in ((_DUR.get(str(qid)) or {}).values())]
+    # (not a dungeon's quest: Timer.lua times its objectives' ticks, never the run; nor a group quest: a party's work
+    # or one player's, the samples don't say which)
+    if len(samples) >= DUR_MIN and not Q[qid][9] & 3:
+        w, known = sorted(samples)[len(samples) // 2], True  # (seconds of work, as Timer.lua measures it)
+    _DO_WORK[qid] = (w / 60.0, known)
+    _DO_WALK[qid] = walk
+    if known and w > 0:
+        _by_cat_work[Q[qid][7]].append(w / 60.0)
+    if walk is not None:
+        _by_cat_walk[Q[qid][7]].append(walk)
+
+
+def _median(xs):
+    xs = sorted(xs)
+    return xs[len(xs) // 2] if xs else None
+
+
+_ALL_WORK = _median([w for v in _by_cat_work.values() for w in v]) or 5.0
+_ALL_WALK = _median([w for v in _by_cat_walk.values() for w in v]) or 3.0
+DO_EST = 0
+for qid in IDS:
+    work, known = _DO_WORK[qid]
+    walk = _DO_WALK[qid]
+    cat = Q[qid][7]
+    est = not known or walk is None
+    if not known:
+        work = _median(_by_cat_work.get(cat) or []) or _ALL_WORK
+    if walk is None:
+        walk = _median(_by_cat_walk.get(cat) or []) or _ALL_WALK
+    wt, kt = min(4000, int(round(walk * 10))), min(4095, int(round(work * 10)))
+    DO[qid] = -(wt * 4096 + kt) if est else wt * 4096 + kt
+    DO_EST += est
+lines.append("-- [id] = walk tenths * 4096 + work tenths: the minutes from the giver to the hand-in (the walk: giver, objectives,")
+lines.append("-- turn-in) and the objectives' own (the work); negative when the work is the zone's median (\"est.\"). gen_data.py")
+lines.append("D.DO = " + keyed(DO))
+print("quest minutes: %d quests, %d estimated from their zone (D.DO); %d with players' times" % (
+    len(DO), DO_EST, sum(1 for v in _DUR.values() if len(v) >= DUR_MIN)))
+
+
+def dur_selftest():
+    """--selftest-dur: players' times replace an open-world quest's estimated work; a dungeon's quest keeps its run (the
+    times are its objectives' alone) and a group quest its estimate (a party's work or one player's: they don't say)."""
+    for flag, q in sorted(_DUR_TEST.items()):
+        work = abs(DO[q]) % 4096
+        est = int(round(quest_work(q)[0] / 6.0))
+        if flag == 0:
+            assert work == 100, ("an open-world quest takes the players' ten minutes", q, work)
+        else:
+            assert work == est and work != 100, ("a %s keeps its estimate" % ("dungeon's quest" if flag == 1 else "group quest"), q, work, est)
+    print("selftest-dur: OK (players' times taken for quest %d, not for a dungeon's %d nor a group quest %d)" % (
+        _DUR_TEST[0], _DUR_TEST[1], _DUR_TEST[2]))
+
+
+if SELFTEST_DUR:
+    dur_selftest()
+    raise SystemExit(0)
 
 # ---------------------------------------------------------------------------
 # reward items

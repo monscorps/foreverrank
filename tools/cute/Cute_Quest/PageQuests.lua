@@ -1,8 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Quests: the three places worth your time (the engine's Now view, its first three), the rest folded (the Available
--- view's order), and the highest XP as a finder; a place opens to its quests. One list in Cute's rows. The module is
--- the folder's primary: its switch loads Cute_Quest, and switches the engine's guide (the step band, the frame) on
--- with it.
+-- Quests: the three places worth your time (the engine's Now view, its first three, by XP a minute), the rest folded
+-- (the Available view's order), and the quests that pay the most XP a minute; a place opens to its quests. One list in
+-- Cute's rows. The module is the folder's primary: its switch loads Cute_Quest, and switches the engine's guide (the
+-- step band, the frame) on with it.
 local ADDON, QB = ...
 local Cute = Cute
 local E = QB.Engine
@@ -11,10 +11,21 @@ local function redraw() Cute.Refresh() end
 -- the minutes to a place or a giver as the engine's own list says them: "here" under a minute
 local function minutes(m) if not m then return nil end return m < 1 and "here" or (math.floor(m + 0.5) .. " min") end
 
+-- banking (an engine that cannot say: no)
+local function banking() return E.Banking ~= nil and E:Banking() or false end
+
+-- a place: questing, what its set pays and the minutes it takes, the trip there included (the owner: "3 quests for 5k
+-- each" against "15 for 15k total"); banking, or an engine older than XP a minute, what you hold and could fetch there
+-- and the nearest giver
 local function placeRow(g, K)
   local open = g.open + g.picks + g.held
-  return { kind = "place", g = g, name = g.cat and g.cat.name or "?", val = E.Short(g.fetch + g.left) .. " XP",
-    who = open .. (open == 1 and " quest" or " quests") .. (g.nearest and (", " .. minutes(g.nearest)) or ""),
+  local val = E.Short(g.fetch + g.left) .. " XP"
+  local who = open .. (open == 1 and " quest" or " quests") .. (g.nearest and (", " .. minutes(g.nearest)) or "")
+  if g.set and #g.set > 0 and (g.setXP or 0) > 0 and g.setMins and not banking() then
+    val = E.Short(g.setXP) .. " XP"
+    who = #g.set .. (#g.set == 1 and " quest, " or " quests, ") .. (g.tripEst and "est. " or "") .. math.max(1, math.floor(g.setMins + 0.5)) .. " min"
+  end
+  return { kind = "place", g = g, name = g.cat and g.cat.name or "?", val = val, who = who,
     c = P.open[g.idx] and K.WHITE or K.INK,
     fn = function() P.open[g.idx] = not P.open[g.idx] or nil; Cute.Refresh() end,
     tip = function(tip)
@@ -53,12 +64,14 @@ local function items(K)
     out[#out + 1] = { kind = "more", name = P.more and "Fewer" or "Show them", c = K.DIM, fn = function() P.more = not P.more; Cute.Refresh() end }
     if P.more then for _, g in ipairs(rest) do place(g) end end
   end
-  out[#out + 1] = { kind = "head", name = "Highest XP" }
+  -- the quests that pay the most for your time (the engine's candidates, ranked by XP a minute; banking, by XP), each
+  -- with its minutes, the trip to its giver included ("est." where its zone's usual stands in)
+  out[#out + 1] = { kind = "head", name = banking() and "Highest XP" or "Most XP a minute" }
   local D = E.Data
   for _, c in ipairs(E.UI:Candidates(8, E.state.level)) do
     local q = E.Quest.Get(c.id)
     if q then
-      local who = minutes(c.mins) or (D.CAT[c.cat] and D.CAT[c.cat].name) or nil
+      local who = (c.T and E.Model.MinutesText and E.Model.MinutesText(c.T, c.est)) or minutes(c.mins) or (D.CAT[c.cat] and D.CAT[c.cat].name) or nil
       out[#out + 1] = questRow(q, E:Status(q), c.full, who, K)
     end
   end
@@ -140,7 +153,7 @@ QB.Toggles.quests = P.Toggle
 
 Cute:RegisterModule({
   id = "quests", addon = ADDON, title = "Quests", order = 21,
-  notes = "The three places worth your time, the rest folded, the highest XP; the step now in the Guide.",
+  notes = "The three places worth your time, the rest folded, the most XP a minute; the step now in the Guide.",
   page = P.Draw, settings = P.Settings, onToggle = P.Toggle,
   events = { QUEST_LOG_UPDATE = redraw, QUEST_ACCEPTED = redraw, QUEST_TURNED_IN = redraw, PLAYER_LEVEL_UP = redraw, ZONE_CHANGED_NEW_AREA = redraw },
 })

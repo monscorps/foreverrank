@@ -8902,17 +8902,24 @@ do
     end
   end
   -- 3.4.1/3.4.3: questing ranks by XP for the time, counts what a chain leads on to, and keeps long runs
-  -- for little off the swap list (flagged, still on the Plan page)
+  -- for little off the swap list (flagged, still on the Plan page). XP a minute (the xpm stage): the trip, the quest's
+  -- minutes, the steps its chain carries when they raise the rate, a waste under the floor
   do
     U.candMemo = nil
     local cands = U:Candidates(400)
     assert(#cands > 0 and N:Mode() == "quest", "the newbie quests")
     local kept, waste, withLead, unknown = 0, 0, 0, 0
+    local F = N.Model.Floor(N.state.level)
     for _, c in ipairs(cands) do
-      assert(c.away and c.back and c.lead and c.rank and c.time and c.time <= 1, "every questing candidate carries its trip, loop, lead and time: " .. QB.Data.QN[c.id])
-      if c.waste then waste = waste + 1; assert(c.away > 4, "nothing under four minutes is a waste: " .. QB.Data.QN[c.id]) else kept = kept + 1; assert(c.away <= 20, "a suggestion is within twenty minutes: " .. QB.Data.QN[c.id]) end
+      assert(c.away and c.T and c.lead and c.leadT and c.rank and c.rate and c.T >= c.away + N.Model.HANDIN - 1e-9,
+        "every questing candidate carries its trip, its minutes, its chain's steps and its XP a minute: " .. QB.Data.QN[c.id])
+      if c.waste then waste = waste + 1; assert(c.rate < F, "a waste is under the floor: " .. QB.Data.QN[c.id]) else kept = kept + 1; assert(c.rate >= F, "a suggestion makes the floor: " .. QB.Data.QN[c.id]) end
       if c.lead > 0 then withLead = withLead + 1 end
-      if c.give == 0 then unknown = unknown + 1; assert(not c.waste and c.away == 10, "an unknown giver stands in as ten minutes and is never a waste: " .. QB.Data.QN[c.id]) end
+      if c.give == 0 then
+        unknown = unknown + 1
+        local turn = c.turn and c.turn > 0 and N.Model.NpcPlace(c.turn, N.faction)
+        assert(c.away == 10 or turn, "an unknown giver: the trip to its turn-in, else ten minutes: " .. QB.Data.QN[c.id])
+      end
     end
     assert(kept > 0 and waste > 0 and U.candDropped == waste, "candidates come back flagged, and the flags are counted: " .. kept .. " kept, " .. waste .. " waste")
     assert(withLead > 0, "a chain's first step counts what it leads on to")
@@ -8922,8 +8929,8 @@ do
     end
     -- a quest that leads on ranks above its own XP for the time
     local leader
-    for _, c in ipairs(cands) do if c.lead > 0 then leader = leader or c end end
-    assert(leader and leader.rank > leader.value * leader.time, "a quest that leads on ranks above its own XP for the time: " .. QB.Data.QN[leader.id])
+    for _, c in ipairs(cands) do if c.lead > 0 and not c.behind and not c.locked then leader = leader or c end end
+    assert(leader and leader.rank > leader.value / leader.T, "a quest that leads on ranks above its own XP a minute: " .. QB.Data.QN[leader.id])
     -- no position: nothing is a waste and nothing is away
     local savePos = newbie.env.C_Map.GetPlayerMapPosition
     newbie.env.C_Map.GetPlayerMapPosition = function() return nil end
@@ -9546,10 +9553,11 @@ end
 do
   local U = QB.UI
   U.candMemo = nil
-  local pick
+  local pick, pickV
+  -- (the richest of them: the free slots take the picks richest first; the candidates come by XP a minute)
   for _, c in ipairs(U:Candidates(60)) do
     local q = QB.Quest.Get(c.id)
-    if q and not QB.state.log[c.id] and QB:Status(q).code == "todo" and not QB:Plan().add[c.id] then pick = q break end
+    if q and not QB.state.log[c.id] and QB:Status(q).code == "todo" and not QB:Plan().add[c.id] and (not pickV or c.value > pickV) then pick, pickV = q, c.value end
   end
   assert(pick, "a quest to choose")
   QB:Plan().add[pick.id] = true
@@ -17313,6 +17321,9 @@ end)()
     QB:Settings().guide.on = true; QB:Settings().welcome = nil
     c.objectives = { [7] = { { text = "Kobold Vermin slain: 8/8", type = "monster", finished = true, numFulfilled = 8, numRequired = 8 } } }
     settle(c)
+    -- (the pick-up pins off: a pick-up's pin takes its giver's !, and which givers the fill picks is its own choice, by
+    -- XP a minute since the xpm stage; the abbey's two givers merge when neither is a pick-up)
+    QB:Settings().minimapPickups = false
     local gives = QM.GiversNear(1429, 3)
     assert(#gives > 0, "givers with quests for a level-3 human on Elwynn's map")
     for _, g in ipairs(gives) do
@@ -17372,6 +17383,7 @@ end)()
     local q1 = QB.Quest.Get(drawn.d.ids[1])
     assert(joined:find(q1.name, 1, true), "the tooltip lists its quests: " .. joined)
     assert(#c.chat == 0 or not c.chat[#c.chat]:find("quest", 1, true), "nothing said in chat")
+    QB:Settings().minimapPickups = nil
   end }
 
   -- tooltips (Tips.lua): a mob or object that counts for a quest in your log gets "Kobold Vermin: 3/8 (Kobold Camp
@@ -18062,6 +18074,10 @@ end)()
     local function stop(m, x, y, num, name) return { m = m, x = x, y = y, num = num, name = name, when = "", ids = {}, lines = {} } end
     P.list = { stop(1429, 50, 48, 1, "Goldshire"), stop(1429, 52, 50, 2, "Crossroads"), stop(1429, 55, 52, 3, "Third") }
     c.miniRadius = 200
+    -- (the arrow's own way follows the real route, which the fill's picks send elsewhere since the xpm stage: no step of
+    -- its on these made-up stops)
+    local saveStep = QB.Arrow.MiniStep
+    QB.Arrow.MiniStep = function() return nil end
     Mini.Invalidate(); Mini.Place()
     local pins = 0
     for _, ch in ipairs(c.frames) do if ch.__parent == env.QuestBankMinimap and ch.d and ch.d.num and ch:IsShown() then pins = pins + 1 end end
@@ -18070,6 +18086,7 @@ end)()
     Mini.Invalidate(); Mini.Place()
     assert(Mini.linesShown == 3, "the whole route: you to 1, 1 to 2, 2 to 3: " .. Mini.linesShown)
     s.wholeRoute = false
+    QB.Arrow.MiniStep = saveStep
     env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
     -- the Map page: three stops, you at 0.5, 0.3 of Elwynn (the client's world yards for it)
     c.mapRects = { [1429] = { c = 0, x = -8530, y = 980, size = 1000 } }
@@ -18130,6 +18147,754 @@ end)()
   for _, case in ipairs(F61CASES) do
     case[2]()
     print("6.1.1: " .. case[1] .. ": ok")
+  end
+end)()
+
+-- [stage: xpm] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- XP a minute (docs/superpowers/specs/2026-10-21-questbank-xp-per-minute-design.md). The owner: "quests + time walking &
+-- time to do quest comparatively to XP it gives. I would rather go in a zone with 3 quests for 5k each than one with 15
+-- for 15k total." Each case is in F62CASES, a level-21 character as 6.1.1's char() makes one
+----------------------------------------------------------------------------
+;(function()
+  local F62CASES = {}
+  local function char(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 21, cap = 60, faction = o.faction or "Alliance", className = o.className or "Mage",
+      class = o.class or "MAGE", classID = o.classID or 8, race = o.race or "Human", log = o.log or {}, done = o.done or {},
+      world = o.world or { 0, -9200, -2150 }, map = o.map or 1433, bagSlots = {}, bind = o.bind or "Lakeshire", xp = o.xp })
+    if o.saved then c.env.QuestBankDB = o.saved end
+    c.known, c.buffs, c.resting = {}, {}, false
+    if o.party then c.party, c.o.group = o.party, true end
+    login(c)
+    return c
+  end
+  local function frame(c, dt)
+    c.clock = c.clock + dt
+    table.sort(c.timers, function(a, b) return a.t < b.t end)
+    while c.timers[1] and c.timers[1].t <= c.clock do table.remove(c.timers, 1).f() end
+    for _, f in ipairs(c.frames) do
+      local u = f.__scripts.OnUpdate
+      if u and f:IsVisible() then u(f, dt) end
+    end
+  end
+  local function settle(c)
+    c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 5 do frame(c, 0.1) end
+    c.QB.Model.Finish()
+    c.QB:Recompute(true)
+    c.QB.Model.Finish()
+    for _ = 1, 3 do frame(c, 0.1) end
+    if c.QB.Guide then c.QB.Guide.Replan() end
+  end
+  local function catNamed(c, name) for i, cat in ipairs(c.QB.Data.CAT) do if cat.name == name then return i end end end
+  local function at(order, idx) for i, g in ipairs(order) do if g.idx == idx then return i, g end end end
+
+  -- 1. the owner's toy: every giver ten minutes away, three 5k quests that take 24 minutes against fifteen 1k quests
+  -- that take 72. 6.1.1's Now weighed each quest by 1/(1 + (trip + loop + 3)/10): a tie, 6,522 each. Now: 441 XP a minute
+  -- against 183
+  F62CASES[#F62CASES + 1] = { "the toy: three quests for 5k each beat fifteen for 15k", function()
+    local c = char("Toy")
+    local UI = c.QB.UI
+    local function was(n, xp) local s = 0 for _ = 1, n do s = s + xp / (1 + (10 + 0 + 3) / 10) end return s end
+    assert(math.abs(was(3, 5000) - was(15, 1000)) < 1e-6, "6.1.1: a tie")
+    local A, B = {}, {}
+    for i = 1, 3 do A[i] = { id = -i, xp = 5000, own = 8, walk = 2, work = 5.5 } end
+    for i = 1, 15 do B[i] = { id = -100 - i, xp = 1000, own = 4.8, walk = 2, work = 2.3 } end
+    local va, ma = UI.PlaceValue(A, 3, 10)
+    local vb, mb = UI.PlaceValue(B, 15, 10)
+    assert(math.abs(ma - 34) < 1e-6 and math.abs(mb - 82) < 1e-6, "the trip once, the quests' minutes: " .. ma .. ", " .. mb)
+    assert(va >= 2 * vb and math.floor(va) == 441 and math.floor(vb) == 182, "441 XP a minute against 183: " .. va .. ", " .. vb)
+  end }
+
+  -- 3. from Southshore (Hillsbrad, map 1424, nothing done there at 21): Redridge comes before Darkshore, and no step
+  -- behind another sets Darkshore's trip (6.1.1 counted The Absent Minded Prospector, 943, a fifth step given in
+  -- Menethil: "2.2 min")
+  F62CASES[#F62CASES + 1] = { "from Southshore: Redridge before Darkshore; a locked step sets no trip", function()
+    local c = char("Shore", { world = { 0, -711, -515 }, map = 1424, bind = "Southshore" })
+    local UI = c.QB.UI
+    local order = UI.PlaceGroups(nil, true)
+    local red, dark = catNamed(c, "Redridge Mountains"), catNamed(c, "Darkshore")
+    local ri, rg = at(order, red)
+    local di, dg = at(order, dark)
+    assert(ri and di and ri < di, "Redridge first: " .. tostring(ri) .. " against " .. tostring(di))
+    assert(rg.value > dg.value, "more XP a minute: " .. rg.value .. " against " .. dg.value)
+    local m943 = UI.MinutesTo(c.QB.Quest.Get(943), UI.Here())
+    for _, it in ipairs(dg.set) do assert(it.id ~= 943 and it.grp ~= 4, "no locked step in Darkshore's set: " .. it.q.name) end
+    assert(not (m943 and dg.trip and math.abs(dg.trip - m943) < 1e-6) and not (m943 and dg.nearest and math.abs(dg.nearest - m943) < 1e-6),
+      "Darkshore's trip and nearest giver are not 943's: " .. tostring(dg.trip) .. ", " .. tostring(dg.nearest) .. ", " .. tostring(m943))
+    print(string.format("xpm: from Southshore, Redridge %.0f XP a minute (%d quests, %.0f min), Darkshore %.0f (%d, %.0f min)",
+      rg.value, #rg.set, rg.setMins, dg.value, #dg.set, dg.setMins))
+    -- the spec's four (section 4: Redridge 150 > Wetlands 113 > Darkshore 102 > Duskwood 83, its sets the open quests with
+    -- spawn data alone). As built the sets take every open quest over the floor, the est. ones too, and Duskwood's
+    -- (Dusky Crab Cakes among them: 775 XP in 10.3 minutes, 75 a minute, where the spec's 15.5 left it out at 50) puts it
+    -- over Darkshore: Redridge > Wetlands > Duskwood > Darkshore
+    local wi, wg = at(order, catNamed(c, "Wetlands"))
+    local ki, kg = at(order, catNamed(c, "Duskwood"))
+    assert(wi and ki and ri < wi and wi < ki and ki < di, string.format("Redridge %s, Wetlands %s, Duskwood %s, Darkshore %s", ri, wi, ki, di))
+    print(string.format("xpm: from Southshore, Redridge %.0f > Wetlands %.0f > Duskwood %.0f > Darkshore %.0f XP a minute (the spec: 150, 113, 83, 102)",
+      rg.value, wg.value, kg.value, dg.value))
+  end }
+
+  -- 5. a chain's head carries the steps it opens when they raise its rate: The Tower of Althalaxx's delivery (965, 680 XP)
+  -- ranks with 966; The Absent Minded Prospector's fifth step (943) counts only once the fourth (942) is handed in
+  F62CASES[#F62CASES + 1] = { "bundles: 965 ranks with 966; 943 counts only after 942", function()
+    local c = char("Aubrey", { world = { 1, 6341, 558 }, map = 1439, bind = "Auberdine" })
+    local UI = c.QB.UI
+    local function cand(id) for _, x in ipairs(UI:Candidates(nil)) do if x.id == id then return x end end end
+    local c965, c943 = cand(965), cand(943)
+    assert(c965 and c965.lead >= 1300 and c965.rate > 680 / c965.T, "965 carries 966: " .. tostring(c965 and c965.lead))
+    assert(c943 and c943.locked and c943.rank == 0, "943 behind 942: no rank of its own")
+    local _, groups = UI.PlaceGroups(nil, true)
+    local dg = groups[catNamed(c, "Darkshore")]
+    for _, it in ipairs(dg.set) do assert(it.id ~= 943, "nor in Darkshore's set") end
+    local d = char("Aubrey2", { world = { 1, 6341, 558 }, map = 1439, bind = "Auberdine", done = { [729] = true, [731] = true, [741] = true, [942] = true } })
+    local after
+    for _, x in ipairs(d.QB.UI:Candidates(nil)) do if x.id == 943 then after = x end end
+    assert(after and not after.locked and after.rank > 0, "942 handed in: 943 ranks")
+  end }
+
+  -- 4. at Lakeshire with the Guide on and an empty log: the fill takes Redridge's quests (the Now view's first place:
+  -- alone, out of a dungeon, as the fill: a run is no pick), the most XP a minute first
+  F62CASES[#F62CASES + 1] = { "at Lakeshire: the fill takes Redridge's quests in rate order", function()
+    local c = char("Lark", { world = { 0, -9260, -2200 } })
+    local QB, UI = c.QB, c.QB.UI
+    QB:Settings().guide.on = true
+    settle(c)
+    local red = catNamed(c, "Redridge Mountains")
+    local order = UI.PlaceGroups(nil, true)
+    local first = order[1]
+    assert(first.idx == red, "Redridge is where to go now: " .. tostring(first.cat.name))
+    order = { first }
+    local auto, n = QB:Plan().auto, 0
+    for id in pairs(auto) do
+      n = n + 1
+      assert(QB.Data.Q[id][8] == red, "a pick in Redridge: " .. QB.Data.QN[id])
+    end
+    assert(n == QB.Guide.AUTO_MAX, "eight picks: " .. n)
+    -- the eight best by XP a minute of Redridge's set that the fill may take (two levels above you at most)
+    local set = {}
+    for _, it in ipairs(order[1].set) do if it.grp == 2 and it.q.lvl <= 23 and (it.q.req or 1) <= 21 then set[#set + 1] = it end end
+    local cand = {}
+    for _, x in ipairs(UI:Candidates(nil)) do cand[x.id] = x end
+    table.sort(set, function(a, b) local ra, rb = cand[a.id].rank, cand[b.id].rank if ra ~= rb then return ra > rb end return a.id < b.id end)
+    for i = 1, n do assert(auto[set[i].id], "the fill took the best of the set, in order: " .. set[i].q.name .. " at " .. i) end
+    assert(not auto[118], "nor The Price of Shoes, a 340-XP delivery to Goldshire")
+  end }
+
+  -- 8. the planner, questing (goal "rate"): a stop worth less than the floor of XP a minute pays for the way there and
+  -- back from its nearest stop and its work is cheap and goes last, unless it is on the way (PASS). On an open map with no
+  -- flight master (Zephras Isle), the minutes are the walk alone: a 450-XP stop near you but six minutes off the line to
+  -- the town goes last (6.1.1 took it first, the quickest order); one on the line stays before the town
+  F62CASES[#F62CASES + 1] = { "the planner: a 450-XP stop six minutes off the way goes last; on the way it stays", function()
+    local c = char("Ploughman")
+    local M, D = c.QB.Model, c.QB.Data
+    local function npc(name, wx, wy)
+      D.NPC[#D.NPC + 1] = { name, 2521, 50, 50, 2991, wx, wy, 0, 0, 0, 0 }
+      return #D.NPC
+    end
+    local A = npc("Town Crier", 6000, 1000)
+    local B = npc("Roadside Pilgrim", 4500, 1000)
+    local X = npc("Hilltop Hermit", 3000, 2557)
+    local start = { c = 2991, wx = 3000, wy = 1000 }
+    local function entry(id, idx, xp) return { q = { id = id, turnIdx = idx, lvl = 21, base = xp, mult = 1, name = "Quest " .. id }, st = { code = "banked" } } end
+    local entries = { entry(990001, A, 4000), entry(990002, B, 450), entry(990003, X, 450) }
+    local here = M.Place("A", 2991, start.wx, start.wy)
+    local function at(i) local n = D.NPC[i]; return { c = 2991, wx = n[6], wy = n[7], hub = 0, walk = 0 } end
+    local direct = M.Between(here, at(A), "A", 1)
+    local viaX = M.Between(here, at(X), "A", 1) + M.Between(at(X), at(A), "A", 1)
+    local viaB = M.Between(here, at(B), "A", 1) + M.Between(at(B), at(A), "A", 1)
+    assert(math.abs(viaX - direct - 6) < 0.1 and viaB - direct < M.PASS, "X six minutes off the way, B on it: " .. viaX - direct .. ", " .. viaB - direct)
+    local r = M.Plan(entries, { level = 21, xp = 0, goal = "rate", fac = "A", start = start, noHearth = true })
+    local pos = {}
+    for i, l in ipairs(r.legs) do pos[l.stop.npcs[1]] = i end
+    assert(pos[X] == 3 and pos[B] < pos[A], "X last, B before the town: " .. tostring(pos[A]) .. " " .. tostring(pos[B]) .. " " .. tostring(pos[X]))
+    -- 6.1.1's rule (under 400 XP at level 20's scale) kept a 450-XP stop where the minutes put it: first
+    local old = M.Plan(entries, { level = 21, xp = 0, goal = "route", fac = "A", start = start, noHearth = true })
+    local oldPos = {}
+    for i, l in ipairs(old.legs) do oldPos[l.stop.npcs[1]] = i end
+    assert(oldPos[X] == 1, "6.1.1 took X first: " .. tostring(oldPos[X]))
+  end }
+
+  -- the owner's screenshot: "[18] The Price of Shoes 340 XP / Stop 6 of 6, at 0:51: level 21.4 to 21.4". Held at 21 in
+  -- Lakeshire with Redridge's quests, its stop in Goldshire goes after them, and its tooltip says what it gives: the XP
+  -- and the share of a level, never "level 21.4 to 21.4"
+  F62CASES[#F62CASES + 1] = { "The Price of Shoes: last, and its stop says +340 XP and the share of a level", function()
+    local c = char("Shoes", { world = { 0, -9260, -2200 }, xp = 10000, log = { { 118, 1 }, { 127, 1 }, { 34, 1 }, { 20, 1 } } })
+    local QB, M = c.QB, c.QB.Model
+    settle(c)
+    local r = QB.routePlan
+    local shoes
+    for i, l in ipairs(r.legs) do for _, row in ipairs(l.rows) do if row.q.id == 118 then shoes = i end end end
+    assert(shoes == #r.legs and #r.legs >= 2, "Goldshire's stop goes last: " .. tostring(shoes) .. " of " .. #r.legs)
+    local leg = r.legs[shoes]
+    local words = M.Gain(leg)
+    assert(words:find("^%+340 XP, %d+%% of a level$") and not words:find("level %d"), "the stop's gain in words: " .. words)
+    QB.Pins:Build()
+    local pin
+    for _, d in ipairs(QB.Pins.list) do if d.num == shoes then pin = d end end
+    assert(pin and pin.when:find(", at %d+:%d%d: %+340 XP, %d+%% of a level$"), "the pin's tooltip: " .. tostring(pin and pin.when))
+    -- a stop that moves the level by a tenth or more still says the levels
+    local big = { arrive = 21.2, leave = 21.5, rows = { { xp = 7500 } } }
+    assert(M.Gain(big) == "level 21.2 to 21.5", M.Gain(big))
+  end }
+
+  -- time to level from the plan: its travel and its quests' minutes (route.W), not a minute a quest
+  F62CASES[#F62CASES + 1] = { "time to level: the plan's travel and its quests' own minutes", function()
+    local c = char("Clock", { world = { 0, -9260, -2200 }, log = { { 127, 0 }, { 20, 0 }, { 34, 0 } } })
+    local QB, G = c.QB, c.QB.Guide
+    settle(c)
+    local r = QB.routePlan
+    assert(r.W and r.W > 5, "the route's quests still ask work: " .. tostring(r.W))
+    local _, mins, measured = G.TimeToLevel()
+    local need = (QB.state.xpMax and QB.state.xpMax > 1 and QB.state.xpMax or QB.Data.TO_NEXT[21]) - (QB.state.xp or 0)
+    assert(not measured and math.abs(mins - need / (r.xp / (r.t + r.W))) < 1e-6, "minutes from the plan's XP over its minutes and work: " .. tostring(mins))
+  end }
+
+  -- the walk (the owner saw the route flip from Southshore to Alterac mid-run): north out of Southshore into Alterac, 60
+  -- yards a look in a straight line, a kill ticking a count at each look, the Guide on with free slots in the log. Nothing
+  -- real happens (no quest done, handed in, taken or abandoned, no level, no jump): the first step, the route's first stop
+  -- and the picks stay; the Now view's first place changes at most once on the way, never back and forth.
+  -- (The review: nothing in it planned again, and the floor never read a measured rate. Ten minutes of kills come
+  -- first, so the floor would read them if it still read all the XP; a narrow level window leaves the fill fewer quests
+  -- than it may pick, so its gate is what keeps the picks still; and halfway a third quest, handed in at the same stop,
+  -- is complete: a re-plan with the last plan, which keeps the first stop)
+  F62CASES[#F62CASES + 1] = { "the walk: the first step stays without a real event", function()
+    local HILLS = {
+      [1424] = { wy0 = 1066.91, wyx = -32.0059, wx0 = 400.10, wxy = -21.3354 },
+      [1416] = { wy0 = 783.55, wyx = -28.0005, wx0 = 1499.91, wxy = -18.6646 },
+    }
+    local third
+    do
+      local D0 = char("Scout").QB.Data
+      local turn = D0.Q[500][6]
+      for id, r in pairs(D0.Q) do
+        if id ~= 500 and id ~= 504 and r[6] == turn and r[3] ~= 2 and r[1] <= 32 and r[2] <= 30 and r[10] % 4 == 0 and (not third or id < third) then third = id end
+      end
+    end
+    assert(third, "a third quest handed in where 500 is")
+    local c = newClient({ name = "Rambler", level = 30, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = { { 500, 0 }, { 504, 0 }, { third, 0 } }, done = {}, world = { 0, -852, -517 }, map = 1424, bagSlots = {}, bind = "Southshore" })
+    local env = c.env
+    c.me = { wx = -852, wy = -517 }
+    local function toMap(m, wx, wy) local t = HILLS[m]; if not t then return nil end; return (wy - t.wy0) / t.wyx / 100, (wx - t.wx0) / t.wxy / 100 end
+    local function mapAt(wx, wy) local _, y = toMap(1424, wx, wy); return y < 0.14 and 1416 or 1424 end
+    env.C_Map.GetBestMapForUnit = function() return mapAt(c.me.wx, c.me.wy) end
+    env.MapUtil.GetDisplayableMapForPlayer = function() return mapAt(c.me.wx, c.me.wy) end
+    env.C_Map.GetPlayerMapPosition = function(m) local x, y = toMap(m, c.me.wx, c.me.wy); if not x then return nil end; return { x = x, y = y, GetXY = function(self) return self.x, self.y end } end
+    local wpos = env.C_Map.GetWorldPosFromMapPos
+    env.C_Map.GetWorldPosFromMapPos = function(m, v) local t = HILLS[m]; if not t then return wpos(m, v) end; return 0, { x = t.wx0 + t.wxy * v.y * 100, y = t.wy0 + t.wyx * v.x * 100, GetXY = function(self) return self.x, self.y end } end
+    env.C_Map.GetMapPosFromWorldPos = function(cont, pos, m) local x, y = toMap(m, pos.x, pos.y); if cont ~= 0 or not x then return nil end; return m, env.CreateVector2D(x, y) end
+    env.C_Map.GetMapRectOnMap = function() return nil end
+    env.IsInInstance = function() return false, "none" end
+    login(c)
+    local QB, G, T = c.QB, c.QB.Guide, c.QB.Target
+    QB:Settings().guide.on = true
+    -- (every place skipped but Hillsbrad and Alterac, and the picks made again in it: fewer than the fill was left, a fill)
+    for _, cat in ipairs(QB.Data.CAT) do
+      if cat.key and cat.name ~= "Hillsbrad Foothills" and cat.name ~= "Alterac Mountains" then QB:Settings().skipCat[cat.key] = true end
+    end
+    for id in pairs(QB:Plan().auto) do QB:Plan().auto[id] = nil end
+    c.objectives = { [500] = { { text = "Crushridge Ogre slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } },
+                     [504] = { { text = "Crushridge Mage slain: 0/5", type = "monster", finished = false, numFulfilled = 0, numRequired = 5 } },
+                     [third] = { { text = "Thing: 9/10", type = "monster", finished = false, numFulfilled = 9, numRequired = 10 } } }
+    settle(c)
+    local Tm, F0 = QB.Timer, QB.Model.Floor(30)
+    for _ = 1, 21 do tick(c, 30); c.xp = (c.xp or 0) + 400; Tm.Record("PLAYER_XP_UPDATE", "player") end
+    assert(Tm.XPPerHour() and QB.Model.Floor(30) == F0, "ten minutes of kills measured; the floor where it was")
+    settle(c)
+    local function key() local s = G.steps[1]; return s and (s.kind .. ":" .. tostring(s.qid)) or "none" end
+    local function first() local r = T.Route(); return r and r.legs[1] and r.legs[1].stop.name or "none" end
+    local function place() local g = QB.UI.PlaceGroups(nil, true)[1]; return g and g.cat.name or "none" end
+    local function picks() local t = {} for id in pairs(QB:Plan().auto) do t[#t + 1] = id end table.sort(t) return table.concat(t, ",") end
+    local k0, f0, p0, a0 = key(), first(), place(), picks()
+    local nPicks = 0
+    for _ in pairs(QB:Plan().auto) do nPicks = nPicks + 1 end
+    assert(nPicks > 0 and nPicks < G.AUTO_MAX, "fewer picks than the fill may make: " .. nPicks)
+    local plans = 0
+    local plan = QB.Model.Plan
+    QB.Model.Plan = function(...) plans = plans + 1; return plan(...) end
+    local seq = { p0 }
+    for i = 1, 25 do
+      if i == 13 then
+        for _, e in ipairs(c.log) do if e[1] == third then e[2] = 1 end end
+        c.objectives[third][1].numFulfilled, c.objectives[third][1].finished = 10, true
+      end
+      c.me.wx = -852 + i * 60
+      c.o.world = { 0, c.me.wx, c.me.wy }
+      if mapAt(c.me.wx, c.me.wy) ~= mapAt(c.me.wx - 60, c.me.wy) then c.ev(QB.eventFrame, "ZONE_CHANGED_NEW_AREA") end
+      local o = c.objectives[500][1]
+      o.numFulfilled = math.min(9, math.floor(i / 3))
+      o.text = "Crushridge Ogre slain: " .. o.numFulfilled .. "/10"
+      c.ev(QB.eventFrame, "QUEST_LOG_UPDATE")
+      for _ = 1, 12 do frame(c, 0.1) end
+      QB.Model.Finish()
+      assert(key() == k0 and first() == f0, string.format("look %d: the first step %s -> %s, the first stop %s -> %s", i, k0, key(), f0, first()))
+      assert(picks() == a0, string.format("look %d: picks made for walking on: %s -> %s", i, a0, picks()))
+      local p = place()
+      if p ~= seq[#seq] then seq[#seq + 1] = p end
+    end
+    QB.Model.Plan = plan
+    assert(#seq <= 2, "the Now view's first place changed back and forth on the walk: " .. table.concat(seq, " > "))
+    assert(plans > 0, "planned again on the way")
+    print("xpm: the walk: " .. k0 .. ", first stop " .. f0 .. ", picks " .. (a0 ~= "" and a0 or "none") .. ", Now: " .. table.concat(seq, " > ")
+      .. string.format(", %d plans, %s complete halfway", plans, QB.Data.QN[third]))
+  end }
+
+  -- 9. the places are kept while nothing changed (Cute asks twice a redraw): a hundred calls of each view with QB.changed
+  -- where it was give the same tables and next to no garbage
+  F62CASES[#F62CASES + 1] = { "a hundred PlaceGroups calls with nothing changed: the same lists, next to no garbage", function()
+    local c = char("Steady", { world = { 0, -9429, -2231 } })
+    local UI = c.QB.UI
+    local o1, o2 = UI.PlaceGroups(nil, true), UI.PlaceGroups()
+    local changed = c.QB.changed
+    -- (the JIT off, as the game runs Lua 5.1: LuaJIT's traces of the loop counted as garbage, 2 to 17 KB a run)
+    if jit then jit.off(); jit.flush() end
+    collectgarbage("collect")
+    collectgarbage("stop")
+    local before = collectgarbage("count")
+    for _ = 1, 100 do
+      assert(UI.PlaceGroups(nil, true) == o1 and UI.PlaceGroups() == o2, "the same lists come back")
+    end
+    local kb = collectgarbage("count") - before
+    collectgarbage("restart")
+    if jit then jit.on() end
+    assert(c.QB.changed == changed and kb < 16, string.format("200 calls: %.1f KB", kb))
+    print(string.format("xpm: 200 PlaceGroups calls with nothing changed: %.1f KB (the mock's map positions included)", kb))
+  end }
+
+  -- 2. a quest's minutes by what it asks: a named mob's tusk is quick (An Unwelcome Guest, 34), ten sunfish at 45% are
+  -- not (Selling Fish, 127), a letter carried is no work (Messenger to Darkshire, 146), an escort is six minutes
+  -- (Therylune's Escape, 945), and a Forever quest nobody has data for takes its zone's median, said "est." (98197)
+  F62CASES[#F62CASES + 1] = { "a quest's minutes by what it asks; est. where nothing is known", function()
+    local c = char("Minna")
+    local M = c.QB.Model
+    local t34, est34 = M.QuestMinutes(34, 0, 1, 1)
+    local t127 = M.QuestMinutes(127, 0, 1, 1)
+    local _, est146, walk146, work146 = M.QuestMinutes(146, 0, 1, 1)
+    local _, _, _, work945 = M.QuestMinutes(945, 0, 1, 1)
+    local t98197, est98197 = M.QuestMinutes(98197, 0, 1, 1)
+    assert(t34 < 5 and not est34, "An Unwelcome Guest under five minutes: " .. tostring(t34))
+    assert(t127 > 15, "Selling Fish over fifteen: " .. tostring(t127))
+    assert(work146 == 0 and walk146 > 0 and not est146, "a letter carried: no work, the walk alone: " .. tostring(work146) .. ", " .. tostring(walk146))
+    assert(work945 >= 6, "an escort, six minutes: " .. tostring(work945))
+    assert(est98197 and t98197 > 0.5, "nothing known: the zone's median, an estimate: " .. tostring(t98197))
+    assert(M.MinutesText(t98197, est98197):find("est.", 1, true) and not M.MinutesText(t34, est34):find("est.", 1, true),
+      "the words say est. for the estimate alone: " .. M.MinutesText(t98197, est98197) .. " / " .. M.MinutesText(t34, est34))
+    -- the trip, the mount and the pace: the trip adds, a mount shortens the walk, a quick character the work
+    local base = M.QuestMinutes(127, 0, 1, 1)
+    assert(math.abs(M.QuestMinutes(127, 5, 1, 1) - base - 5) < 1e-6, "the trip adds its minutes")
+    assert(M.QuestMinutes(127, 0, 0.6, 1) < base and M.QuestMinutes(127, 0, 1, 0.5) < base, "a mount and a quick pace shorten it")
+    -- a group quest is a party's work: three times it alone
+    local grp
+    for id, r in pairs(c.QB.Data.Q) do
+      local v = c.QB.Data.DO[id] or 0
+      if not grp and math.floor(r[10] / 2) % 2 == 1 and r[10] % 2 == 0 and v > 0 and v % 4096 > 20 then grp = id end
+    end
+    local _, _, _, wSolo = M.QuestMinutes(grp, 0, 1, 1)
+    local _, _, _, wParty = M.QuestMinutes(grp, 0, 1, 1, true)
+    assert(grp and math.abs(wSolo - 3 * wParty) < 1e-6, "a group quest alone is three times the work: " .. tostring(grp))
+    -- the spec's table (section 4) against D.DO as built: the work is the spec's; the walk is shorter where the map
+    -- icons' spots (spots.json) put an objective nearer than objectives.json's first area (Blackrock Menace 0.9 against
+    -- 3.3, Dusky Crab Cakes 2.1 against 7.2); the spec's "Murloc Poachers + Selling Fish 18.4" is the pair done
+    -- together with the murlocs killed once, which D.DO keeps apart (9.4 and 17.3) and a place's set shares only in
+    -- part: the walk once (one spot), but not the kills, as D.OBJ names the creature of a kill objective alone and
+    -- both are item drops (24.8 minutes). Dusky Crab Cakes passes the floor now (75 XP a minute against the spec's 50)
+    local spec = { { 34, 2.9 }, { 128, 12.8 }, { 91, 13.8 }, { 20, 15.3 }, { 93, 15.5 }, { 150, 10.5 }, { 127, 18.4 } }
+    local out = {}
+    for _, row in ipairs(spec) do
+      local t = M.QuestMinutes(row[1], 0, 1, 1)
+      out[#out + 1] = string.format("%s %.1f (%.1f)", c.QB.Data.QN[row[1]], t, row[2])
+      assert(t <= row[2] + 0.05, "no quest over the spec's minutes: " .. out[#out])
+    end
+    print("xpm: minutes as built (the spec's): " .. table.concat(out, ", "))
+    local F = M.Floor(21)
+    assert(c.QB.Model.XpAt(c.QB.Quest.Get(93), 21) / M.QuestMinutes(93, 0, 1, 1) > F, "Dusky Crab Cakes over the floor")
+    local function item(id) local _, _, walk, work = M.QuestMinutes(id, 0, 1, 1); return { id = id, xp = 1, own = (M.QuestMinutes(id, 0, 1, 1)), walk = walk, work = work } end
+    local _, pair = c.QB.UI.PlaceValue({ item(150), item(127) }, 2, 0)
+    local _, _, w150 = M.QuestMinutes(150, 0, 1, 1)
+    assert(math.abs(pair - (M.QuestMinutes(150, 0, 1, 1) + M.QuestMinutes(127, 0, 1, 1) - w150)) < 1e-6,
+      "Murloc Poachers with Selling Fish: one walk: " .. pair)
+  end }
+
+  -- 6. the work measured (Timer.lua, from Discover.lua's look of the log): each look where objectives moved gives the
+  -- time since the last one, never more than 90 seconds (a walk or a break between counts no more), shared among the
+  -- quests that moved in it; the first time a quest is complete its row says when and at what level. At most 300
+  -- quests, and nothing but numbers
+  F62CASES[#F62CASES + 1] = { "the work measured: 90 seconds at most, shared in a look, 300 quests, numbers only", function()
+    local c = char("Tamsin", { log = { { 127, 0 }, { 34, 0 } } })
+    local Tm, f = c.QB.Timer, c.QB.Discover.frame
+    c.objectives = { [127] = { { text = "Spotted Sunfish: 0/10", type = "item", finished = false, numFulfilled = 0, numRequired = 10 } },
+                     [34] = { { text = "Bellygrub's Tusk: 0/1", type = "item", finished = false, numFulfilled = 0, numRequired = 1 } } }
+    local function look(dt) f.__scripts.OnEvent(f, "QUEST_LOG_UPDATE"); tick(c, dt) end
+    look(0); tick(c, 15); look(1) -- (past the first seconds after login: a look learns where things stand)
+    local rows = Tm.DB().quests
+    c.objectives[127][1].numFulfilled = 1
+    look(0)
+    local w0 = rows[127] and rows[127].w or 0
+    tick(c, 600)
+    c.objectives[127][1].numFulfilled = 2
+    look(0)
+    assert(rows[127] and math.abs(rows[127].w - w0 - 90) < 1e-6 and rows[127].k == 2, "ten minutes away count 90 seconds: " .. tostring(rows[127] and rows[127].w))
+    tick(c, 40)
+    c.objectives[127][1].numFulfilled = 3
+    c.objectives[34][1].numFulfilled, c.objectives[34][1].finished = 1, true
+    look(0)
+    assert(math.abs(rows[127].w - w0 - 110) < 1e-6 and math.abs(rows[34].w - 20) < 1e-6, "two quests in one look share its 40 seconds: " .. rows[127].w .. ", " .. rows[34].w)
+    assert(rows[34].c and rows[34].lv == 21 and not rows[127].c, "complete: when, and at what level")
+    local cBefore = rows[34].c
+    tick(c, 30); c.objectives[34][1].numFulfilled = 1; look(0)
+    assert(rows[34].c == cBefore, "the first time only")
+    -- 300 quests at most, ids and numbers only
+    local ids = {}
+    for i = 1, 320 do ids[1] = 600000 + i; tick(c, 1); Tm.Tick(ids, 1) end
+    local n = 0
+    for id, q in pairs(rows) do
+      n = n + 1
+      assert(type(id) == "number" and type(q) == "table", "a row per quest id")
+      for k, v in pairs(q) do assert(type(k) == "string" and #k <= 2 and type(v) == "number", "a row holds numbers: " .. tostring(k) .. " = " .. tostring(v)) end
+    end
+    assert(n <= Tm.QUESTS and n >= Tm.QUESTS - 1 and rows[600320] and rows[600320].k == 1, "the table stays at 300 quests, the newest kept: " .. n)
+  end }
+
+  -- 7. this character's pace: the median of measured against estimated work over the last 20 completions, from 0.5 to 2;
+  -- five quests done in a fifth of the time make it 0.5, and the quest minutes follow
+  F62CASES[#F62CASES + 1] = { "the pace: 0.5 after five fast completions, and the minutes follow", function()
+    local c = char("Brisk")
+    local Tm, M = c.QB.Timer, c.QB.Model
+    assert(Tm.SpeedFactor() == 1, "nothing measured: 1")
+    local before = M.QuestMinutes(127, 0, 1, Tm.SpeedFactor())
+    local rows = Tm.DB().quests
+    local ids = {}
+    for id, v in pairs(c.QB.Data.DO) do if v > 0 and v % 4096 >= 10 then ids[#ids + 1] = id end end
+    table.sort(ids)
+    local function done(id, ratio)
+      local _, work = M.Do(id)
+      rows[id] = { a = 1, w = work * 60 * ratio, k = 5 }
+      Tm.Done(id)
+      tick(c, 2)
+    end
+    for i = 1, 5 do done(ids[i], 0.2) end
+    assert(Tm.SpeedFactor() == 0.5, "five fast completions: 0.5, " .. tostring(Tm.SpeedFactor()))
+    assert(M.QuestMinutes(127, 0, 1, Tm.SpeedFactor()) < before, "the minutes follow the pace")
+    -- twenty slow ones after them: the last twenty count, up to 2 at most
+    for i = 6, 25 do done(ids[i], 10) end
+    assert(Tm.SpeedFactor() == 2, "slow: 2 at most, " .. tostring(Tm.SpeedFactor()))
+  end }
+
+  -- the review of 6.2's first build: the character's summary (QB:Snapshot, eight seconds after login and at logout)
+  -- was written as a new table, and every table kept beside it went: the work measured, the pace, the Guide's "Not
+  -- now", the run speed. The uploads had "quests = { }" and one level, the session's
+  F62CASES[#F62CASES + 1] = { "the work measured and the pace live past the login and logout snapshots", function()
+    local c = char("Keeper", { log = { { 127, 0 } } })
+    local QB, Tm, M = c.QB, c.QB.Timer, c.QB.Model
+    local ids = {}
+    for id, v in pairs(QB.Data.DO) do if v > 0 and v % 4096 >= 10 then ids[#ids + 1] = id end end
+    table.sort(ids)
+    for i = 1, 4 do
+      local _, work = M.Do(ids[i])
+      Tm.DB().quests[ids[i]] = { a = 1, w = work * 60 * 0.5, k = 5 }
+      Tm.Done(ids[i])
+      tick(c, 2)
+    end
+    assert(Tm.SpeedFactor() == 0.5, "four quests done in half the time: 0.5")
+    QB.Guide.DB().later[127] = 12345
+    QB:Snapshot("logout")
+    c.ev(QB.eventFrame, "PLAYER_LOGOUT")
+    local rows = Tm.DB().quests
+    for i = 1, 4 do assert(rows[ids[i]] and rows[ids[i]].w and rows[ids[i]].c, "the row of " .. ids[i] .. " is kept") end
+    assert(QB.Guide.DB().later[127] == 12345, "the Guide's Not now is kept")
+    local key = QB:CharKey()
+    assert(c.env.QuestBankDB.chars[key].reason == "logout" and c.env.QuestBankDB.chars[key].timer == Tm.DB(), "one table: the summary and what is kept beside it")
+    -- and the pace still counts them after the next completion
+    local _, work = M.Do(ids[5])
+    rows[ids[5]] = { a = 1, w = work * 60 * 0.5, k = 5 }
+    Tm.Done(ids[5])
+    assert(Tm.SpeedFactor() == 0.5, "the pace from five quests: " .. tostring(Tm.SpeedFactor()))
+  end }
+
+  -- the strip's "quest 12m" (Timer.Text) reads the oldest quest accepted; a row the work made (Timer.Tick: no "a", the
+  -- quest was in the log before the timers began) is no quest accepted
+  F62CASES[#F62CASES + 1] = { "the timer strip with rows the work made: no error", function()
+    local c = char("Strip", { log = { { 127, 0 }, { 34, 0 } } })
+    local QB, Tm = c.QB, c.QB.Timer
+    Tm.Set(true)
+    Tm.Tick({ 127 }, 1)
+    assert(Tm.DB().quests[127] and not Tm.DB().quests[127].a, "a row without an accept time")
+    local ok, text = pcall(Tm.Text)
+    assert(ok and not text:find("quest ", 1, true), "the strip without the quest: " .. tostring(text))
+    Tm.DB().quests[34] = { a = c.env.time() - 600 }
+    for _ = 1, 3 do
+      ok, text = pcall(Tm.Text)
+      assert(ok and text:find("quest 10m", 1, true), "the oldest accepted: " .. tostring(text))
+    end
+    Tm.Set(false)
+  end }
+
+  -- the review: from Lakeshire at 21, Now put Ruins of Lordaeron first, "528 XP a minute", its trip the flight to
+  -- Stormwind where its quests are handed in (no giver placed, nothing done in the world, no entrance known), while the
+  -- Guide, alone, never picks a run. Alone, the places out of a dungeon come first; a trip nothing gives (no giver, no
+  -- objective, no entrance placed: the turn-in stands in) is an estimate, after the places whose trip is known, in a
+  -- party too; a quest held sets no place's trip while one can be taken there
+  F62CASES[#F62CASES + 1] = { "Now: alone, no dungeon first; a trip from a turn-in is an estimate, after the known", function()
+    local c = char("Lorde", { world = { 0, -9260, -2200 }, log = { { 95189, 0 } } })
+    local QB, UI = c.QB, c.QB.UI
+    local rol = catNamed(c, "Ruins of Lordaeron")
+    local function check(solo)
+      local order = UI.PlaceGroups(nil, true)
+      local _, rg = at(order, rol)
+      assert(rg and rg.tripEst and #rg.set > 0, "Ruins of Lordaeron: its trip an estimate")
+      local held, take
+      for _, it in ipairs(rg.set) do
+        if it.id == 95189 then held = it elseif it.trip and (not take or it.trip < take) then take = it.trip end
+      end
+      assert(held and held.grp == 3 and held.trip and take and rg.trip == take, "95189 held: its hand-in is not the place's trip")
+      -- (alone, a dungeon after the open places; an estimated trip after the known ones; nothing to do there, last)
+      local last = -1
+      for i, g in ipairs(order) do
+        if not g.skipped then
+          local tier = (g.value > 0 and 0 or 4) + ((solo and g.cat.dungeon) and 2 or 0) + (g.tripEst and 1 or 0)
+          assert(tier >= last, string.format("%s at %d (%d) after one at %d", g.cat.name, i, tier, last))
+          last = tier
+        end
+      end
+      if solo then assert(not order[1].cat.dungeon, "alone, the first place is out of a dungeon: " .. order[1].cat.name) end
+      return order
+    end
+    check(true)
+    c.o.group = true
+    QB:MarkDirty()
+    local order = check(false)
+    print(string.format("xpm: from Lakeshire in a party: %s first (%.0f XP a minute); Ruins of Lordaeron's trip an estimate", order[1].cat.name, order[1].value))
+    c.o.group = false
+  end }
+
+  -- the review: a pick stays while it qualifies, and qualifying never asked whether it is still worth the time. A pick
+  -- under the floor of XP a minute now (made at a lower level, or by 6.1.1's rule, saved with the character) goes at
+  -- the next fill (a real event: the login's here), and its stop with it. (The Price of Shoes, 118, the owner's
+  -- screenshot, is not one: it carries Return to Verner and its next step back to Lakeshire, 2,375 XP, its bundle)
+  F62CASES[#F62CASES + 1] = { "a pick no longer worth the time goes at the next fill, and its stop with it", function()
+    local c0 = char("Saved0", { world = { 0, -9260, -2200 } })
+    local F, waste = c0.QB.Model.Floor(21), nil
+    for _, x in ipairs(c0.QB.UI:Candidates(nil)) do
+      local q = c0.QB.Quest.Get(x.id)
+      if x.id == 118 then assert(not x.waste and x.lead >= 2000 and x.rate > F, "118 carries its way back: " .. x.rate) end
+      if not waste and x.waste and not x.locked and q.lvl <= 23 and (q.req or 1) <= 21 and c0.QB:Status(q).code == "todo"
+        and not c0.QB.QuestMap.Grey(q, 21) and q.turnIdx and q.turnIdx > 0 then waste = x end
+    end
+    assert(waste, "a quest under the floor at Lakeshire")
+    -- (saved with the character: the pick is there before the login's fill)
+    local c = char("Saved", { world = { 0, -9260, -2200 }, saved = { plans = { ["Saved-ForeverNormal"] = { auto = { [waste.id] = true } } } } })
+    local QB = c.QB
+    QB:Settings().guide.on = true
+    settle(c)
+    assert(not QB:Plan().auto[waste.id], "the pick under the floor is gone: " .. QB.Data.QN[waste.id])
+    for _, l in ipairs(QB.routePlan.legs) do for _, row in ipairs(l.rows) do assert(row.q.id ~= waste.id, "and its stop") end end
+    local n = 0
+    for _ in pairs(QB:Plan().auto) do n = n + 1 end
+    assert(n == QB.Guide.AUTO_MAX, "the fill took others in its place: " .. n)
+  end }
+
+  -- the review: a head carried any "next step" that could be taken, one open on its own too (Alther's Mill, 98386, lists
+  -- Blackrock Blockade, 98387, which needs Blackrock Menace alone), and a step two heads open (Covert Ops - Alpha and
+  -- Beta, 1079 and 1080, after both Ineptitude + Chemicals = Fun, 1074, and Special Delivery for Gaxim, 1077) rode in
+  -- both: a place's set counted them twice. A head carries a step only it opens, and a set counts each quest once
+  F62CASES[#F62CASES + 1] = { "a place's set counts each quest once: no step open on its own, none in two heads", function()
+    local function once(c, catName, must)
+      local QB, UI = c.QB, c.QB.UI
+      local _, groups = UI.PlaceGroups(nil, true)
+      local g = groups[catNamed(c, catName)]
+      local count, xp = {}, 0
+      local function note(id) count[id] = (count[id] or 0) + 1; xp = xp + QB.Model.XpAt(QB.Quest.Get(id), QB.state.level) end
+      for _, it in ipairs(g.set) do
+        note(it.id)
+        for _, b in ipairs({ it.b1 or false, it.b2 or false, it.b3 or false }) do if b then note(b) end end
+      end
+      for id, k in pairs(count) do assert(k == 1, catName .. ": " .. QB.Data.QN[id] .. " counted " .. k .. " times") end
+      for _, id in ipairs(must) do assert(count[id], catName .. ": " .. QB.Data.QN[id] .. " in the set") end
+      assert(math.abs(xp - g.setXP) < 1, string.format("%s: the set's XP is its quests' once each: %d against %d", catName, xp, g.setXP))
+      return g
+    end
+    local c = char("Mill", { world = { 0, -9260, -2200 }, done = { [20] = true } })
+    once(c, "Redridge Mountains", { 98386, 98387 })
+    for _, x in ipairs(c.QB.UI:Candidates(nil)) do
+      if x.id == 98386 then assert(x.b1 ~= 98387 and x.lead == 0, "Alther's Mill carries no Blackrock Blockade") end
+    end
+    local n = c.QB.Data.NPC[551]
+    local d = char("Gaxim", { world = { n[5], n[6], n[7] }, map = n[2], done = { [1085] = true, [1071] = true, [1072] = true, [1073] = true, [1075] = true, [1076] = true } })
+    local cat = c.QB.Data.CAT[c.QB.Data.Q[1074][8]].name
+    local g = once(d, cat, {})
+    local heads = 0
+    for _, it in ipairs(g.set) do if (it.id == 1074 or it.id == 1077) and it.b1 then heads = heads + 1 end end
+    assert(heads == 1, "Covert Ops rides in one head: " .. heads)
+  end }
+
+  -- the review: the route's work (route.W: the time to level, and the planner's levels an hour) counted a held quest's
+  -- whole walk from its giver however far along it was, and a dungeon's run for each of its quests. A quest held: the
+  -- work left, and its walk only while nothing of it is done (once you have been at its objectives, the route's travel
+  -- takes you to its hand-in); a dungeon's quests: one run
+  F62CASES[#F62CASES + 1] = { "the route's work: what is left of a quest held, one run a dungeon", function()
+    local function zero(c, ids)
+      c.objectives = {}
+      for _, id in ipairs(ids) do c.objectives[id] = { { text = "Thing: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } } end
+    end
+    -- Selling Fish half done: its work left, no walk
+    -- (the Guide off: its picks' minutes are a pick-up's, all of them)
+    local function quiet(x) x.QB:Settings().guide.on = false; for k in pairs(x.QB:Plan().auto) do x.QB:Plan().auto[k] = nil end end
+    local c = char("Half", { world = { 0, -9260, -2200 }, log = { { 127, 0 } } })
+    c.objectives = { [127] = { { text = "Spotted Sunfish: 5/10", type = "item", finished = false, numFulfilled = 5, numRequired = 10 } } }
+    quiet(c)
+    settle(c)
+    local M = c.QB.Model
+    local mf = M.Factor(c.QB:Mounted())
+    local _, _, _, work = M.QuestMinutes(127, 0, mf, 1, false, 0.5)
+    assert(math.abs(c.QB.routePlan.W - work) < 1e-6, string.format("half done: its work left alone, %.2f against %.2f", c.QB.routePlan.W, work))
+    local _, groups = c.QB.UI.PlaceGroups(nil, true)
+    local held
+    for _, it in ipairs(groups[catNamed(c, "Redridge Mountains")].set) do if it.id == 127 then held = it end end
+    assert(held and held.walk == 0 and math.abs(held.own - work - M.HANDIN) < 1e-6, "and so in its place's set: " .. tostring(held and held.own))
+    -- four quests of the Deadmines, nothing done: one run, and their walks
+    local ids = { 214, 168, 167, 166 }
+    local d = char("Delver", { world = { 0, -10508, 1046 }, map = 1436, bind = "Sentinel Hill", log = { { 214, 0 }, { 168, 0 }, { 167, 0 }, { 166, 0 } } })
+    zero(d, ids)
+    quiet(d)
+    settle(d)
+    local r, run, walks = d.QB.routePlan, 0, 0
+    mf = M.Factor(d.QB:Mounted())
+    local inRoute = {}
+    for _, l in ipairs(r.legs) do for _, row in ipairs(l.rows) do if not row.pending then inRoute[row.q.id] = true end end end
+    for _, id in ipairs(ids) do
+      assert(inRoute[id] and d.QB.Quest.Get(id).dungeon, d.QB.Data.QN[id] .. ": a dungeon's quest in the route")
+      local _, _, walk, w = d.QB.Model.QuestMinutes(id, 0, mf, 1, false, 1)
+      run, walks = math.max(run, w), walks + walk
+    end
+    assert(math.abs(r.W - (run + walks)) < 1e-6, string.format("one run and the walks: %.1f against %.1f", r.W, run + walks))
+    print(string.format("xpm: four Deadmines quests held: %.0f min of work (one run), not %.0f", r.W, 4 * run + walks))
+  end }
+
+  -- the review: players' times (disc.json "dur") replaced the estimate for a dungeon's quest, where Timer.lua times the
+  -- objectives' ticks and never the run, and for a group quest, a party's work or one player's; the pace compared the
+  -- same against the estimate. Neither counts now: gen_data.py --selftest-dur (made-up times, where the generator's
+  -- inputs are), and the pace from three such quests done in a fifth of the time stays 1
+  F62CASES[#F62CASES + 1] = { "players' times and the pace leave out a dungeon's quests and group quests", function()
+    local inputs = io.open(HERE .. "/../../research/questbank/manifest.json")
+    if inputs then
+      inputs:close()
+      local p = io.popen("cd '" .. HERE .. "' && python3 gen_data.py --selftest-dur 2>&1")
+      local out = p and p:read("*a") or ""
+      if p then p:close() end
+      assert(out:find("selftest-dur: OK", 1, true), "gen_data.py --selftest-dur:\n" .. out)
+      print("xpm: " .. (out:match("(selftest%-dur: OK[^\n]*)")))
+    else
+      print("xpm: gen_data.py --selftest-dur: skipped (no research/ here)")
+    end
+    local c = char("Party")
+    local Tm, M, D = c.QB.Timer, c.QB.Model, c.QB.Data
+    local picked = {}
+    for _, flag in ipairs({ 1, 2 }) do
+      local ids = {}
+      for id, v in pairs(D.DO) do if v > 0 and v % 4096 >= 10 and D.Q[id] and D.Q[id][10] % 4 == flag then ids[#ids + 1] = id end end
+      table.sort(ids)
+      for i = 1, 3 do picked[#picked + 1] = ids[i] end
+    end
+    for _, id in ipairs(picked) do
+      local _, work = M.Do(id)
+      Tm.DB().quests[id] = { a = 1, w = work * 60 * 0.2, k = 5 }
+      Tm.Done(id)
+      tick(c, 2)
+    end
+    assert(#picked == 6 and Tm.SpeedFactor() == 1, "six dungeon's and group quests done fast: the pace stays 1, " .. tostring(Tm.SpeedFactor()))
+  end }
+
+  -- the review: questing, the first stop kept changed for any order 5% more levels an hour; with hand-ins alone (no work
+  -- left, route.W 0) that is 5% fewer minutes, and on a short route a few seconds: the arrow's stop changed for 18
+  -- seconds saved. As for the other goals, the minutes saved must be half a minute at least (SWITCH_MIN)
+  F62CASES[#F62CASES + 1] = { "the planner, questing: the first stop kept for 18 seconds saved", function()
+    local c = char("Keepsake")
+    local M, D = c.QB.Model, c.QB.Data
+    local function npc(name, wx, wy)
+      D.NPC[#D.NPC + 1] = { name, 2521, 50, 50, 2991, wx, wy, 0, 0, 0, 0 }
+      return #D.NPC
+    end
+    local A, B = npc("East Post", 3400, 1000), npc("West Post", 2700, 1000)
+    local start = { c = 2991, wx = 3000, wy = 1000 }
+    local function entry(id, idx) return { q = { id = id, turnIdx = idx, lvl = 21, base = 4000, mult = 1, name = "Quest " .. id }, st = { code = "banked" } } end
+    local entries = { entry(990011, A), entry(990012, B) }
+    local opts = { level = 21, xp = 0, goal = "rate", fac = "A", start = start, noHearth = true }
+    local free = M.Plan(entries, opts)
+    local tA = free.t
+    assert(free.legs[1].stop.npcs[1] == B and free.W == 0, "the free plan: the west post first")
+    local prev = { legs = { { stop = { npcs = { A } } } } }
+    local kept = M.Plan(entries, opts, prev)
+    assert(kept.legs[1].stop.npcs[1] == A, "the east post kept first: " .. kept.legs[1].stop.name)
+    assert(kept.t / tA > 1 + M.SWITCH and kept.t - tA < 0.5, string.format("5%% more minutes, under half a minute: %.2f against %.2f", kept.t, tA))
+  end }
+
+  -- the review: the floor's measured part (Model.lua's Floor: six tenths of what you make) read all the XP of the
+  -- session, kills too, against quests' rewards alone, and moved with the clock: ten minutes of kills put most quests
+  -- under it, and any re-plan after could make the kept first stop cheap. It reads the quests' XP now, as it stood at
+  -- the last hand-in (a real event): kills move no floor, nor does the clock between hand-ins
+  F62CASES[#F62CASES + 1] = { "the floor: the quests' XP alone, moved by a hand-in, not by kills or the clock", function()
+    local c = char("Floor")
+    local QB, Tm, M = c.QB, c.QB.Timer, c.QB.Model
+    local base = 60 * QB.Scale(21)
+    local function xp(n) c.xp = (c.xp or 0) + n; Tm.Record("PLAYER_XP_UPDATE", "player") end
+    xp(0)
+    for _ = 1, 17 do tick(c, 36); xp(150) end
+    assert(Tm.XPPerHour() and Tm.XPPerHour() > 14000, "ten minutes of kills: the time to level counts them")
+    assert(M.Floor(21) == base, "kills raise no floor: " .. M.Floor(21))
+    xp(3000)
+    Tm.Record("QUEST_TURNED_IN", 20, 3000, 0)
+    local F = M.Floor(21)
+    assert(F > base, "a hand-in measured: the floor from the quests' XP, " .. F)
+    tick(c, 600)
+    for _ = 1, 10 do xp(150) end
+    assert(M.Floor(21) == F, "between hand-ins the floor holds: " .. M.Floor(21) .. " against " .. F)
+    -- (a reward the game hides: the catalog's figure)
+    Tm.Record("QUEST_TURNED_IN", 34, nil, 0)
+    assert(M.Floor(21) ~= F, "the next hand-in moves it")
+  end }
+
+  -- the review: the fill's gate (a real event alone) counted the party's step version, and a member's step text changes
+  -- with every kill they make ("Kill Crushridge Ogre 3/10", 1G every ten seconds at most): in a party the fill ran
+  -- again on nearly every refresh, picking where you stood. A member's quests are the event, not their step
+  F62CASES[#F62CASES + 1] = { "the fill: a party member's kills are no event, a quest they take is", function()
+    local c = char("Partner", { world = { 0, -9260, -2200 } })
+    local QB, G, S = c.QB, c.QB.Guide, c.QB.Sync
+    QB:Settings().guide.on = true
+    settle(c)
+    S.members["Pal"] = { quests = { [20] = { code = "t" } }, step = "Kill Blackrock Outrunner 1/10" }
+    S.stepVer = (S.stepVer or 0) + 1
+    G.Fill(21)
+    local calls, cand = 0, QB.UI.Candidates
+    QB.UI.Candidates = function(...) calls = calls + 1; return cand(...) end
+    for k = 2, 6 do
+      S.members["Pal"].step = "Kill Blackrock Outrunner " .. k .. "/10"
+      S.stepVer = S.stepVer + 1
+      G.Fill(21)
+    end
+    local kills = calls
+    S.members["Pal"].quests[34] = { code = "t" }
+    G.Fill(21)
+    QB.UI.Candidates = cand
+    S.members["Pal"] = nil
+    assert(kills == 0, "a member's kills made " .. kills .. " fills")
+    assert(calls == 1, "a quest a member takes is an event: " .. calls)
+  end }
+
+  -- the review: at the level cap a stop said "+2,450 XP, 1% of a level", XP never earned
+  F62CASES[#F62CASES + 1] = { "a stop at the level cap: no XP claimed", function()
+    local c = char("Capstone")
+    local M, CAP = c.QB.Model, c.QB.CAP
+    local words = M.Gain({ arrive = CAP, leave = CAP, rows = { { xp = 2450 } } })
+    assert(not words:find("XP,", 1, true) and words:find("level cap", 1, true), "at the cap: " .. words)
+    assert(M.Gain({ arrive = 21.2, leave = 21.25, rows = { { xp = 340 } } }):find("^%+340 XP"), "under it, the XP")
+  end }
+
+  for _, case in ipairs(F62CASES) do
+    case[2]()
+    print("xpm: " .. case[1] .. ": ok")
+    collectgarbage("collect")
   end
 end)()
 
