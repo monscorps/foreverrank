@@ -18324,6 +18324,37 @@ end)()
     G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
   end }
 
+  -- 13. (the review round) The next steps' tooltips said "about 11 min there" from the leg's minutes, counted from the
+  -- stop before them, not from now: the second NPC at the step now's stop said 11 while the row above said 3, and the
+  -- next trip 4 while it was 7 away. Now they count from now: the step now's minutes and each new trip's after it
+  ENGCASES[#ENGCASES + 1] = { "the next steps' tooltips count the minutes from now", function()
+    local c = char("Counter", "WARRIOR", "Warrior", 1, {}, { level = 20 })
+    local QB = c.QB
+    local G, SF, A = QB.Guide, QB.StepFrame, QB.Arrow
+    QB:Settings().welcome = nil; SF.Apply()
+    local keep = G.steps
+    G.steps = { handStep(QB, 3370, "Mathrengyl Bearwalker", "Darnassus", 11.2, 1, "boat"), handStep(QB, 741, "Chief Archaeologist Greywhisker", "Darnassus", 11.2, 1, "boat"),
+                handStep(QB, 731, "Archaeologist Hollee", "Auberdine", 4.4, 2, "fly") }
+    G.ver = G.ver + 1; SF.Refresh()
+    local rows = c.env.QuestBankStep.rows
+    local function there(i) return tonumber(rowTip(rows[i]):match("about (%d+) min there")) end
+    -- the arrow leads to the step now: 3 min; the second NPC there 3 too, the next trip 3 + 4
+    A:Set(true)
+    local sv = { A.g, A.t }
+    A.g, A.t = { eta = 3.2, trail = {} }, { c = G.steps[1].c, wx = G.steps[1].wx, wy = G.steps[1].wy }
+    G.ver = G.ver + 1; SF.Refresh()
+    assert(rows[1].mins:GetText() == "3 min", "the step now: the arrow's 3: " .. rows[1].mins:GetText())
+    assert(there(2) == 3, "the second NPC at that stop: 3 from now: " .. rowTip(rows[2]))
+    assert(there(3) == 7, "the next trip: 3 and +4, 7 from now (the row says +4): " .. rowTip(rows[3]))
+    A.g, A.t = sv[1], sv[2]
+    -- the arrow off: the plan's 11 for the step now (Darnassus, over the sea), and on from it
+    A:Set(false)
+    G.ver = G.ver + 1; SF.Refresh()
+    assert(rows[1].mins:GetText() == "11 min", "the arrow off: the plan's minutes: " .. rows[1].mins:GetText())
+    assert(there(2) == 11 and there(3) == 15, "from now: 11 and 15: " .. rowTip(rows[2]) .. " / " .. rowTip(rows[3]))
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")

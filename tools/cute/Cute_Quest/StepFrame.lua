@@ -160,6 +160,21 @@ local function minsNow(s)
 end
 SF.MinsNow = minsNow
 
+-- the minutes to a step from now, for its tooltip: the step now's (minsNow), and for a next one those and each new
+-- trip's on the way to it (G.Mins: the rows' "+N min") while every step between is on a leg of the route; nil past an
+-- objective (how long one takes is nobody's guess). (The launch round said "about 11 min there" from the leg's
+-- minutes, counted from the stop before: 11 for the second NPC at the stop the row above put 3 min away)
+local function minsFromNow(steps, i)
+  local total = minsNow(steps[1])
+  if i == 1 or not (total and steps[1].leg) then return i == 1 and total or nil end
+  for j = 2, i do
+    local s = steps[j]
+    if not s.leg then return nil end
+    total = total + (G.Mins(s, steps[j - 1]) or 0)
+  end
+  return total
+end
+
 -- every row's tooltip: the whole step, who and where (the NPC's spot on its map), the minutes and the XP, the clicks
 local function rowEnter(self)
   local steps = G.Steps()
@@ -172,10 +187,12 @@ local function rowEnter(self)
   if where then
     GameTooltip:AddLine(where .. ((s.npc and s.x and s.y) and string.format(" (%.0f, %.0f)", s.x, s.y) or ""), INK[1], INK[2], INK[3], true)
   end
-  local mins = self.i == 1 and minsNow(s) or (s.mins and s.mins >= 0.5 and math.floor(s.mins + 0.5)) or nil
+  local mins = minsFromNow(steps, self.i)
+  local trip = not (mins and mins > 0) and self.i > 1 and G.Mins(s, steps[self.i - 1]) or nil
+  local when = (mins and mins > 0) and string.format("about %d min there", mins) or (trip and string.format("a trip of about %d min", trip)) or nil
   local xp = s.qid and QB:Value(s.qid)
-  if mins or xp then
-    GameTooltip:AddDoubleLine(mins and string.format("about %d min there", mins) or " ", xp and (QB.Comma(xp) .. " XP") or "", SOFT[1], SOFT[2], SOFT[3], SOFT[1], SOFT[2], SOFT[3])
+  if when or xp then
+    GameTooltip:AddDoubleLine(when or " ", xp and (QB.Comma(xp) .. " XP") or "", SOFT[1], SOFT[2], SOFT[3], SOFT[1], SOFT[2], SOFT[3])
   end
   GameTooltip:AddLine(s.qid and "Click: the quest. Right-click: Not now, Drop, the game's quest tracker and more."
     or "Click: the way there. Right-click: the game's quest tracker and more.", SOFT[1], SOFT[2], SOFT[3], true)
