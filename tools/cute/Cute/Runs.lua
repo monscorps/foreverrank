@@ -717,7 +717,8 @@ function R:Build(run, why)
     end
   end
   local db = R.DB()
-  local cards, mentions = A().Pick(members, { n = #members, raid = run.kind == "r" or #members >= 6, bosses = run.nb, runId = run.id, history = db.list }, R.CardRoute(allGuild()))
+  -- (a raid's choice is six members or more, 7.6, whatever the instance: three in a raid instance each get a card)
+  local cards, mentions = A().Pick(members, { n = #members, raid = #members >= 6, bosses = run.nb, runId = run.id, history = db.list }, R.CardRoute(allGuild()))
   local _, known = R.KnownBosses(run.inst)
   local rep = { id = run.id, kind = run.kind, inst = run.inst, map = run.map, place = placeOf(run), start = run.start, dur = endT,
     bosses = run.nb, known = math.max(known, run.nb), wipes = run.wipes, deaths = deaths, cards = cards, mentions = mentions, gone = gone,

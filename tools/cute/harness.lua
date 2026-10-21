@@ -11746,6 +11746,23 @@ do local function runsStage()
   end)
   said[#said + 1] = "deaths this client could not see are no data: no Not a Scratch, Iron Wall or Steady Hands from them"
 
+  -- (7.5, 7.6) a raid is six or more members: three guild mates in a raid instance get a card each, no mentions
+  isolated({ gmember("Rae", 1), gmember("Sev", 3), gmember("Tib", 3) }, function()
+    local cs = { gchar("Rae", 1), gchar("Sev", 3), gchar("Tib", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs, { raid = true })
+    zone(cs, "raid", 409, "Molten Core")
+    tickAll(40)
+    local dmg = { Rae = { [0] = 9000 }, Sev = { [0] = 1000 }, Tib = { [0] = 1200 } }
+    for _, enc in ipairs({ 663, 664 }) do fight(G, 60, dmg, enc); tickAll(100) end
+    disband(G)
+    tickAll(5)
+    local rep = lastReport(cs[1])
+    assert(rep and rep.kind == "r" and #rep.cards == 3 and #rep.mentions == 0, "three in a raid: a card each, no mentions: " .. cardsOf(rep))
+  end)
+  said[#said + 1] = "three in a raid instance: a card each, no mentions (a raid is six or more)"
+
   -- (20) an edited copy in the group: a 2Q, 2A or 2W from a member who is not the scribe is ignored; a 2A naming a
   -- suffix nobody saw is not shown; a 2V value out of bounds is dropped, one an observed value contradicts loses; a 2H
   -- id older than 30 s before this client's start is ignored
