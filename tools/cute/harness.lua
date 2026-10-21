@@ -12083,6 +12083,18 @@ do local function runsStage()
     for _, r in ipairs(gus.C.UI.lists.runs.items) do if r:IsShown() then row = r end end
     assert(row and row.name:GetText() == "The Deadmines", "the history's row: " .. tostring(row and row.name:GetText()))
     check(gus.C.UI.frame, "runs: the Runs tab, a report in the history")
+    -- (a group run's row on the widget that drew the dungeon's atlas: the sprint icon whole, the atlas's crop reset,
+    -- as Blizzard_CustomAuraButton.lua resets the texcoords between SetAtlas and SetTexture)
+    local Rn = gus.C.Runs
+    Rn.Keep({ id = "g-test", kind = "g", place = "Map 1429", start = lastReport(gus).start + 3600, dur = 1000, bosses = 0, known = 0, wipes = 0, deaths = 0,
+      cards = {}, mentions = {}, gone = {}, members = {}, n = 2 })
+    gus.C.UI:Draw()
+    local grow
+    for _, r in ipairs(gus.C.UI.lists.runs.items) do if r:IsShown() and r.icon.__tex == 132307 then grow = r end end
+    local tc = grow and grow.icon.__tc
+    assert(tc and tc[1] == 0 and tc[2] == 1 and tc[3] == 0 and tc[4] == 1, "the sprint icon whole on a row that drew an atlas: " .. tostring(tc and table.concat(tc, ",")))
+    table.remove(Rn.DB().list, 1)
+    gus.C.UI:Draw()
     gus.C.UI.frame:SetSize(760, 420)
     gus.C.UI:Draw()
     check(gus.C.UI.frame, "runs: the Runs tab, small")

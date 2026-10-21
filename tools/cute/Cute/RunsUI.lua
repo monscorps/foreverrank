@@ -227,7 +227,9 @@ function RU.Draw(ui)
     r.bg:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.03 or 0)
     r.bar:Show()
     r.bar:SetColorTexture(C.Cards.GROUP[1], C.Cards.GROUP[2], C.Cards.GROUP[3], 1)
-    if rep.kind == "g" then r.icon:SetTexture(SPRINT) else r.icon:SetAtlas(rep.kind == "r" and "Raid" or "Dungeon") end
+    -- (a pooled row that drew an atlas keeps its crop through SetTexture: whole again first, as
+    -- Blizzard_CustomAuraButton.lua resets the texcoords between the two)
+    if rep.kind == "g" then r.icon:SetTexCoord(0, 1, 0, 1); r.icon:SetTexture(SPRINT) else r.icon:SetAtlas(rep.kind == "r" and "Raid" or "Dungeon") end
     r.date:SetText(date and rep.start and date("%a %d %b %H:%M", rep.start) or "")
     -- the right: your own card's title in its kind's colour, then the time and the bosses
     local mine = rep.mine and A().Of(rep.mine[1])
