@@ -2824,6 +2824,14 @@ local KIND = {
   zeppelin = "Zeppelin", portal = "Portal", done = "Handed in", none = "No known way there",
 }
 
+-- (the merge round) a stop in words, as the map's pins, the step frame and the arrow name it (Travel.lua's TV.StopPlace:
+-- "Goldshire", never Model.lua's "Elwynn Forest (42, 65)", which stays the stop's name, for matching): the Route page's
+-- rows and setup line, in Ready now and the plan, a stop's waypoint, and the minimap button's next stop
+local function stopPlace(s)
+  if not s then return "" end
+  return (QB.Travel and QB.Travel.StopPlace and QB.Travel.StopPlace(s)) or s.name or ""
+end
+
 local function makeLeg(parent)
   local l = CreateFrame("Frame", nil, parent)
   l.line = tex(l, "BACKGROUND")
@@ -2842,9 +2850,9 @@ local function makeLeg(parent)
   l.pin = pinButton(l, 20)
   l.pin:SetScript("OnClick", function(self)
     local s = self.stop
-    if s and s.m and s.m > 0 then QB.API.SetWaypoint(s.m, s.x, s.y, s.name) end
+    if s and s.m and s.m > 0 then QB.API.SetWaypoint(s.m, s.x, s.y, stopPlace(s)) end
   end)
-  tooltip(l.pin, function(tip, self) tip:AddLine("Waypoint: " .. (self.stop and self.stop.name or ""), GOLD[1], GOLD[2], GOLD[3]) end)
+  tooltip(l.pin, function(tip, self) tip:AddLine("Waypoint: " .. stopPlace(self.stop), GOLD[1], GOLD[2], GOLD[3]) end)
   l.note = text(l, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 500)
   l.rows = {}
   return l
@@ -3055,12 +3063,12 @@ function UI:RefreshRouteView(v)
       elseif pace > 0 then line = line .. string.format("  %.0f min ahead of the plan.", pace)
       else line = line .. string.format("  |cffe05a4a%.0f min behind the plan.|r", -pace) end
     end
-    if r.legs[1] then line = line .. "  Next: |cffe8c35a" .. r.legs[1].stop.name .. "|r." end
+    if r.legs[1] then line = line .. "  Next: |cffe8c35a" .. stopPlace(r.legs[1].stop) .. "|r." end
   elseif not banking then
-    line = r.legs and r.legs[1] and ("From where you stand. First stop: |cffe8c35a" .. r.legs[1].stop.name .. "|r.")
+    line = r.legs and r.legs[1] and ("From where you stand. First stop: |cffe8c35a" .. stopPlace(r.legs[1].stop) .. "|r.")
       or (mode == "now" and "Nothing in your log is ready to hand in yet." or "Nothing on your pick-up list yet. The ! on a quest on Available puts it there, and the route takes it in.")
   elseif r.legs and r.legs[1] then
-    line = (QB.mode == "rush" and "Start at |cffe8c35a" or "Log out at |cffe8c35a") .. r.legs[1].stop.name .. "|r."
+    line = (QB.mode == "rush" and "Start at |cffe8c35a" or "Log out at |cffe8c35a") .. stopPlace(r.legs[1].stop) .. "|r."
     if r.bind then
       local bind = QB.API.BindName()
       line = line .. " Bind your hearthstone in |cffe8c35a" .. r.bind.town .. "|r"
@@ -3070,7 +3078,7 @@ function UI:RefreshRouteView(v)
     if r.lateFrom and r.goal == "hour" then line = line .. " Stops after the first hour come last." end
   end
   if fallback and not run then
-    local first = r.legs and r.legs[1] and r.legs[1].stop.name
+    local first = r.legs and r.legs[1] and stopPlace(r.legs[1].stop)
     line = (banking and "Nothing is banked yet" or "Nothing is ready to hand in yet") .. ": the arrow and the map follow Log and pick-ups."
       .. (first and ("  First stop: |cffe8c35a" .. first .. "|r.") or "")
   end
@@ -3209,7 +3217,7 @@ function UI:RefreshRouteView(v)
     end
     l.travel:SetText(label)
     local here = mapID and mapID == s.m and "  |cff6cdc74you are here|r" or ""
-    l.name:SetText(s.name .. here)
+    l.name:SetText(stopPlace(s) .. here)
     l.level:SetText(QB.Model.Gain(leg, " > "))
     l.pin.stop = s
     l.pin:SetShown(s.m and s.m > 0)
@@ -4701,7 +4709,7 @@ function MB:Create()
     end
     -- (the next stop of the route on screen, the one the arrow and the minimap follow: Target.lua)
     local on = QB.Target and QB.Target.Route() or r
-    if on and on.legs and on.legs[1] then tip:AddLine("Next stop: " .. on.legs[1].stop.name, 0.8, 0.8, 0.8) end
+    if on and on.legs and on.legs[1] then tip:AddLine("Next stop: " .. stopPlace(on.legs[1].stop), 0.8, 0.8, 0.8) end
     if QB.Run.Get() then
       local got, n = QB.Run.Totals()
       tip:AddLine(string.format("Run %s: %d in, +%s XP", QB.Clock(QB.Run.Elapsed()), n, QB.Comma(got)), 0.4, 1, 0.4)

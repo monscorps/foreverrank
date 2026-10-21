@@ -19918,6 +19918,87 @@ end)()
   end
 end)()
 
+-- [stage: merge1] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The merge round: what each launch track left for the others. QuestBank's own Route page (Ready now and the plan)
+-- names a stop as the map's pins, the step frame and the arrow do (TV.StopPlace: "Goldshire", never Model.lua's
+-- "Elwynn Forest (42, 65)"), and so do a stop's waypoint and the minimap button's next stop. Each case is in MERGECASES
+----------------------------------------------------------------------------
+;(function()
+  local MERGECASES = {}
+  -- a character in Elwynn, the arrow and the Guide on, as the engine stage's char() makes one; no fill (the Guide's
+  -- picks are the best place's set since the xpm stage: the route here is the log's hand-ins alone)
+  local function char(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 18, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = o.log or {}, done = o.done or {}, world = o.world or { 0, -8914, -133 }, map = o.map or 1429, bagSlots = {}, bind = o.bind or "Goldshire" })
+    c.known, c.buffs, c.resting = {}, {}, false
+    login(c)
+    c.QB.UI.Candidates = function() return {} end
+    for id in pairs(c.QB:Plan().auto) do c.QB:Plan().auto[id] = nil end
+    return c
+  end
+  local function planned(c)
+    c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1)
+    c.QB.Model.Finish(); c.QB:Recompute(true); c.QB.Model.Finish(); tick(c, 1)
+    c.QB.Guide.Replan()
+  end
+  local function tipOf(o) lines = {}; o.__scripts.OnEnter(o); if o.__scripts.OnLeave then o.__scripts.OnLeave(o) end; return table.concat(lines, " / ") end
+
+  -- 1. The Price of Shoes handed in to Smith Argus, a stop out of a town (Model.lua names it "Elwynn Forest (42, 65)",
+  -- for matching): the Route page's first stop, its row, its waypoint and the minimap button say "Goldshire", in Ready
+  -- now, in the plan and in a run
+  MERGECASES[#MERGECASES + 1] = { "the Route page and the minimap button name a stop by its place, in Ready now, the plan and a run", function()
+    local c = char("Placer", { log = { { 118, 1 } } })
+    local env, QB, UI = c.env, c.QB, c.QB.UI
+    QB:Settings().welcome = nil
+    planned(c)
+    local leg = QB.routeNow and QB.routeNow.legs[1]
+    assert(leg and not leg.stop.town and leg.stop.name:find("%(%d+, %d+%)$"), "a stop out of a town, named by its zone and spot: " .. tostring(leg and leg.stop.name))
+    local place = QB.Travel.StopPlace(leg.stop)
+    assert(place == "Goldshire", "its place in words: " .. tostring(place))
+    local function noSpot(what, t) assert(not t:find("Elwynn Forest (", 1, true), what .. ": no zone and spot: " .. t) end
+    UI:Open(3); UI:Refresh()
+    local v = UI.views[3]
+    local function firstLeg()
+      -- (the plan's stop may be its own table: by the stop's name, which Model.lua keeps for matching)
+      for _, l in ipairs(v.legs.items) do if l:IsShown() and l.pin and l.pin.stop and l.pin.stop.name == leg.stop.name then return l end end
+    end
+    for _, mode in ipairs({ "now", "plan" }) do
+      local b = mode == "now" and v.modeNow or v.modePlan
+      if b:IsEnabled() then b.__scripts.OnClick(b) end
+      planned(c); UI:Refresh()
+      assert(QB.Target.Mode() == mode, "the page in " .. mode .. ": " .. tostring(QB.Target.Mode()))
+      local setup = v.setup:GetText()
+      assert(setup:find("First stop: |cffe8c35a" .. place .. "|r", 1, true), mode .. ": the setup line names the place: " .. setup)
+      noSpot(mode .. "'s setup line", setup)
+      local l = firstLeg()
+      assert(l and l.name:GetText():find("^" .. place), mode .. ": the stop's row: " .. tostring(l and l.name:GetText()))
+      local tip = tipOf(l.pin)
+      assert(tip:find("^Waypoint: " .. place), mode .. ": the row's waypoint: " .. tip)
+      noSpot(mode .. "'s waypoint", tip)
+    end
+    -- a run: the setup line's next stop
+    QB.Run.Start(true); UI:Refresh()
+    local setup = v.setup:GetText()
+    assert(setup:find("Next: |cffe8c35a" .. place .. "|r", 1, true), "a run: the next stop by its place: " .. setup)
+    QB.Run.Stop(true); UI:Refresh()
+    -- the minimap button's tooltip
+    local mb = QB.Minimap.button or env.QuestBankMinimapButton
+    assert(mb, "the minimap button")
+    local tip = tipOf(mb)
+    assert(tip:find("Next stop: " .. place, 1, true), "the minimap button's next stop: " .. tip)
+    noSpot("the minimap button", tip)
+    UI.frame:Hide()
+  end }
+
+  for _, case in ipairs(MERGECASES) do
+    case[2]()
+    print("merge1: " .. case[1] .. ": ok")
+    collectgarbage("collect")
+  end
+end)()
+
 ----------------------------------------------------------------------------
 -- 5.4.2: memory, and the lag that grew through a session ("QuestBank made me lag towards the end, using 80 MB").
 -- The trails' graph was built again from scratch at each point noted, inside the minimap's update (half a second at
