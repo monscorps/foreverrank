@@ -777,6 +777,8 @@ local KIND = { b = true, k = true, h = true, r = true }
 -- a find's identity on its map: the object or creature, or for a guide's place with no object (id 0) its title or key
 local function identity(kind, id, extra) return kind .. ":" .. (id ~= 0 and tostring(id) or tostring(extra)) end
 Finds.Identity = identity
+-- a book's title or a locked object's key: what a guide's place (id 0) of it is known by, or nil
+local function named(kind, extra) return (kind == "b" or kind == "k") and kind .. ":" .. tostring(extra) or nil end
 
 -- one row of the data file, checked: { map, kind, id, spots "x,y;x,y", votes, extra } with every field in range;
 -- false for anything else
@@ -793,23 +795,29 @@ local function goodRow(r)
 end
 Finds.GoodRow = goodRow
 
--- the data file's rows into D.FIND (source "f"), never over a row Data.lua has; its stamp is Finds.dataAt. Returns
--- the rows added
+-- the data file's rows into D.FIND (source "f"), never over a row Data.lua has (the same object, or the guides' place
+-- of the same book or key); its stamp is Finds.dataAt. Returns the rows added
 function Finds.LoadData()
   local F = _G and _G.QuestBank_Finds or QuestBank_Finds
   local D = QB.Data
   if type(F) ~= "table" or F.v ~= 1 or type(F.rows) ~= "table" then return 0 end
   D.FIND = type(D.FIND) == "table" and D.FIND or {}
-  local have = {}
+  -- (Data.lua's rows by their object, and its guides' places by title or key too, as gen_data.py's find_rows: a file
+  -- row of the same book or the same key's lock is that find, never a second row beside it)
+  local have, guide = {}, {}
   for m, rows in pairs(D.FIND) do
-    for _, r in ipairs(rows) do have[m .. ":" .. identity(r[1], r[2], r[5])] = true end
+    for _, r in ipairs(rows) do
+      have[m .. ":" .. identity(r[1], r[2], r[5])] = true
+      local n = r[2] == 0 and named(r[1], r[5])
+      if n then guide[m .. ":" .. n] = true end
+    end
   end
   local added = 0
   for i = 1, math.min(#F.rows, 5000) do
     local r = F.rows[i]
     if goodRow(r) then
-      local k = r[1] .. ":" .. identity(r[2], r[3], r[6])
-      if not have[k] then
+      local k, n = r[1] .. ":" .. identity(r[2], r[3], r[6]), named(r[2], r[6])
+      if not have[k] and not (n and guide[r[1] .. ":" .. n]) then
         have[k] = true
         D.FIND[r[1]] = D.FIND[r[1]] or {}
         local list = D.FIND[r[1]]

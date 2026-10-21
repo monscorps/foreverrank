@@ -3319,8 +3319,8 @@ def find_rows(disc, keys=None):
     for m, kind, fid, spots, files, extra in probe_pull.finds_rows(disc, lock):
         out[m].append([kind, fid, spots, files, extra, "p"])
         seen.add((m, kind, fid if fid else extra))
-        if kind == "b":
-            seen.add((m, "b", extra))
+        if kind in ("b", "k"):
+            seen.add((m, kind, extra))  # (a book by its title, a locked object by its key: the guides' place of it)
     spot = lambda x, y: "%d,%d" % (int(round(x * 10)), int(round(y * 10)))  # noqa: E731
     for item, m, x, y in FIND_SEED_BOOKS:
         title = _ITEM_NAME.get(item)
@@ -3369,6 +3369,11 @@ def find_selftest():
     assert {r[4] for r in g if r[0] == "b"} <= set(_ITEM_NAME.values()), "titles as the client names the books"
     assert [r for r in g if r[0] == "k"] == [["k", 0, "610,220", 0, 216523, "g"]], "the cage, by its key"
     assert not FIND_SECRET_KEYS & {k for k, *_ in FIND_SEED_LOCKS} and not FIND_REDRAWN & {m for _, m, *_ in FIND_SEED_BOOKS}
+    # players' files placing the guides' cage (a real object, the same key) stand for its seed row: one row, not two
+    probe_pull.merge_find(acc, {"o424080": {"p": [[1435, 609, 221, 1]], "k": [216523]}}, "tA", 3)
+    probe_pull.merge_find(acc, {"o424080": {"p": [[1435, 612, 219, 1]], "k": [216523]}}, "tB", 4)
+    cage = [r for r in find_rows(acc).get(1435, []) if r[0] == "k" and r[4] == 216523]
+    assert cage == [["k", 424080, "611,220", 2, 216523, "p"]], "the players' cage stands for the guides' place of the same key: %r" % cage
     assert lua_text("Bjørn \"x\" \\") == '"Bj\\195\\184rn \\"x\\" \\\\"'
     print("selftest-find: OK (%d players' rows from two files, %d seeded from the guides on %d maps)" % (
         len(p), len(g), len({m for m, rs in rows.items() if any(r[5] == "g" for r in rs)})))

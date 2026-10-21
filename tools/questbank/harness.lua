@@ -19492,6 +19492,21 @@ end)()
     D.FIND = { [1429] = { { "h", 2843, "500,500", 4, "7.5", "p" } } }
     assert(F.LoadData() == 4 and #rows(1429) == 3 and has(1429, "h", 2843, nil, "p") and not has(1429, "h", 2843, nil, "f"), "never over Data.lua's")
     assert(F.LoadData() == 0, "loaded twice: nothing new")
+    -- the file's row for a find Data.lua seeds from the guides (no object there, the book's title or the cage's key):
+    -- the same find, by a real object id, never a second row beside the guides'
+    D.FIND = keep
+    c.env.QuestBank_Finds = { v = 1, at = 20261023, rows = {
+      { 1429, "b", 410001, "652,701", 2, "Archmage Theocritus' Research Journal" },
+      { 1435, "k", 424080, "605,223", 2, 216523 },
+      { 1435, "k", 424081, "640,250", 2, 216523 } } }
+    local before = #rows(1429) + #rows(1435)
+    local books, cages = 0, 0
+    F.LoadData()
+    for _, r in ipairs(rows(1429)) do if r[1] == "b" and r[5] == "Archmage Theocritus' Research Journal" then books = books + 1 end end
+    for _, r in ipairs(rows(1435)) do if r[1] == "k" and r[5] == 216523 then cages = cages + 1 end end
+    assert(books == 1 and has(1429, "b", 0, nil, "g"), "one row for the guides' book, Data.lua's: " .. books)
+    assert(cages == 1 and has(1435, "k", 0, 216523, "g") and #rows(1429) + #rows(1435) == before,
+      "one row for the guides' cage, Data.lua's; a second cage of that key on the map is the guides' too: " .. cages)
     -- no file, or one of another version: nothing
     c.env.QuestBank_Finds = { v = 2, rows = { { 1429, "b", 0, "1,1", 2, "New" } } }
     assert(F.LoadData() == 0, "another version")
