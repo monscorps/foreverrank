@@ -954,7 +954,7 @@ def merge_find(acc, find, who, stamp):
                 h[k] = c
         if h:
             r["h"] = dict(sorted(h.items(), key=lambda kv: -kv[1])[:6])
-        keys = sorted({x for x in (_whole(v, 1, 99999999) for _, v in _pairs(rec.get("k"))) if x})[:8]
+        keys = list(dict.fromkeys(x for x in (_whole(v, 1, 99999999) for _, v in _pairs(rec.get("k"))) if x))[:8]  # (the addon's order: most likely first)
         if keys:
             r["k"] = keys
         b = _clean_title(rec.get("b"))
@@ -994,16 +994,36 @@ def lock_keys(path=None):
 
 
 FIND_NEAR = SPOT_NEAR  # thousandths: two files' points this close on one map are the same place (the addon's OS_NEAR)
+# the secret chains' keys past their first step (docs/superpowers/specs/2026-10-21-forever-secrets-research.md, sections
+# 2 and 3: the Keystone chain's three Fragments and its Stone Key, the Dormant Runestone, the Tome of Dalaran's Black
+# Tome). What one of them opens is a chain's next step, shown only once you or two guild mates found it: never in
+# finds.json, the site's /api/finds.json or D.FIND (gen_data.py reads this set too)
+SECRET_KEYS = frozenset({281350, 284092, 284093, 281358, 281359, 276561})
+
+
+def _key_spread(finds):
+    """{key: how many finds, in every file, carry it among their key candidates}: a keyring carried everywhere is in
+    many, a key in the few it opens."""
+    spread = collections.Counter()
+    for votes in finds.values():
+        spread.update({x for rec in votes.values() for x in rec.get("k") or []})
+    return spread
 
 
 def finds_rows(acc, keys=None):
     """What two files agree on: [[uiMap, kind, id, "x,y;x,y", files, extra], ...], kind b (a book: extra its title), k (an
     object opened with a key Lock.csv names: extra that key), h (an object looted: extra its items' kind) or r (a rare:
     extra its level). A place ships when points of two files or more lie within FIND_NEAR of each other on one map (their
-    mean, at most four places a map); a book's title, a key or a level when two of those files say it. Sorted."""
+    mean, at most four places a map); a book's title or a level when two of those files say it. A key Lock.csv names
+    when it was among the candidates of every one of those files that opened it by key (two at least: the key that
+    opened it was in each one's bags) and, of those, is carried at the fewest finds (_key_spread); a tie names none, and
+    the object stands as looted. An object a secret chain's key may have opened (SECRET_KEYS) ships no row at all.
+    Sorted."""
     keys = lock_keys() if keys is None else keys
+    finds = acc.get("find") or {}
+    spread = _key_spread(finds)
     rows = []
-    for key, votes in sorted((acc.get("find") or {}).items()):
+    for key, votes in sorted(finds.items()):
         kind0, fid = key[0], int(key[1:])
         if kind0 == "i":
             continue  # an item read has no place
@@ -1045,13 +1065,17 @@ def finds_rows(acc, keys=None):
                 lv = said("r")
                 rows.append([m, "r", fid, spots, files, lv or 0])
                 continue
+            held = [set(votes[who]["k"]) for who in sorted(who_here) if votes[who].get("k")]
+            both = set.intersection(*held) if len(held) >= 2 else set()
+            if SECRET_KEYS & both:
+                continue  # (a secret chain's next step)
             title = said("b")
             if title:
                 rows.append([m, "b", fid, spots, files, title])
                 continue
-            k = said("k", lambda x: x in keys)
-            if k:
-                rows.append([m, "k", fid, spots, files, k])
+            best = sorted((x for x in both if x in keys), key=lambda x: (spread[x], x))
+            if best and (len(best) == 1 or spread[best[0]] != spread[best[1]]):
+                rows.append([m, "k", fid, spots, files, best[0]])
                 continue
             kinds = collections.Counter()
             for who in who_here:
@@ -1741,6 +1765,42 @@ def selftest_finds():
     assert "x1" not in acc["find"] and "o9" not in acc["find"] and "i281347" in acc["find"], "only the addon's keys"
     # a key Lock.csv doesn't name is no key: the object stands as looted (or not at all)
     assert not [r for r in finds_rows(acc, {}) if r[1] == "k"]
+
+    # keys: the file's order kept (the addon's most likely first), never the lowest ids; the key is in the bags of every
+    # file that opened the object, and of those the one carried at the fewest finds; a tie names none, and the object
+    # stands as looted
+    ring = [277136, 18249, 13704, 12382, 11000, 7146, 6893, 5396, 4882]
+    kacc = empty()
+    merge_find(kacc, {"o600001": {"p": [[1424, 300, 300, 1]], "k": ring}}, "tK", 1)
+    assert list(kacc["find"]["o600001"].values())[0]["k"] == ring[:8], "the file's order, the oldest Classic key out"
+    lk = {277136: [4467], 18249: [1], 5396: [84], 6893: [2], 216523: [3732], 281350: [4572], 281358: [4580]}
+    chest = lambda x, y, k: {"p": [[1427, x, y, 1]], "h": {"15.0": 1}, "k": k}  # noqa: E731
+    kacc = empty()
+    for who, dx in (("tP", 0), ("tQ", 3)):
+        # each file: two chests and the prison opened by key with the same keyring, the Brooch and the Key to Searing
+        # Gorge: which key opened which, nobody can say
+        merge_find(kacc, {"o700001": chest(400 + dx, 400, [277136, 5396]), "o700002": chest(600 + dx, 600, [277136, 5396]),
+                          "o600001": {"p": [[1424, 300 + dx, 300, 1]], "k": [277136, 5396]}}, who, 1)
+    rows = finds_rows(kacc, lk)
+    got = {r[2]: r for r in rows}
+    assert got[700001][1] == "h" and got[700002][1] == "h" and 600001 not in got, \
+        "a keyring carried at every opening names nothing: the chests stand as looted, the prison not at all: %r" % rows
+    kacc = empty()
+    for who, dx in (("tP", 0), ("tQ", 3)):
+        # the Key to Searing Gorge at every opening, the Brooch at the prison's alone; two keys at one chest alone
+        merge_find(kacc, {"o700001": chest(400 + dx, 400, [5396]), "o700002": chest(600 + dx, 600, [18249, 6893, 5396]),
+                          "o700003": chest(800 + dx, 800, [5396]),
+                          "o600001": {"p": [[1424, 300 + dx, 300, 1]], "k": [277136, 5396]}}, who, 1)
+    got = {r[2]: r for r in finds_rows(kacc, lk)}
+    assert got[600001][1:3] == ["k", 600001] and got[600001][5] == 277136, "the Brooch opened the prison: %r" % got[600001]
+    assert got[700002][1] == "h", "two keys, neither the better one: looted, no key: %r" % got[700002]
+    # a secret chain's step past its first (the satchel the Keystone Fragment opens) is never shipped: no row at all
+    kacc = empty()
+    for who, dx in (("tP", 0), ("tQ", 3)):
+        merge_find(kacc, {"o800001": {"p": [[1428, 500 + dx, 500, 1]], "h": {"13.0": 1}, "k": [281350]},
+                          "o800002": {"p": [[1428, 700 + dx, 700, 1]], "b": "A Burnt Page", "k": [281358, 216523]}}, who, 1)
+    assert [r for r in finds_rows(kacc, lk) if r[2] in (800001, 800002)] == [], "a secret chain's step: never shipped"
+    assert SECRET_KEYS >= {281350, 284092, 284093, 281358, 281359, 276561}
     assert "aaaaaaaaaaaaaaaa" not in json.dumps(acc), "the token itself is never kept"
 
     # the world: flights, crossings and boat legs, sellers, trainers, trails; one voice a file

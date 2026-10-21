@@ -3305,8 +3305,11 @@ FIND_SEED_BOOKS = [
 # Cage Key's cage in the Swamp of Sorrows holds a library book (A Luddite's Guide, above)
 FIND_SEED_LOCKS = [(216523, 1435, 61.0, 22.0)]
 # the secret chains' keys past their first step (the Keystone chain's Fragments and Stone Key, the Dormant Runestone,
-# the Tome of Dalaran's Black Tome): never seeded
-FIND_SECRET_KEYS = {281350, 284092, 284093, 281358, 281359, 276561}
+# the Tome of Dalaran's Black Tome): never seeded, and what they open never ships from players' files either. One list,
+# probe_pull.py's SECRET_KEYS
+sys.path.insert(0, os.path.dirname(HERE))
+import probe_pull  # noqa: E402
+FIND_SECRET_KEYS = probe_pull.SECRET_KEYS
 FIND_REDRAWN = {1412, 1423, 1433, 1453}  # Mulgore, Eastern Plaguelands, Redridge, Stormwind: Forever redrew them (GAPS.md),
                                          # so a guide's place there is in the old frame
 _ITEM_NAME = {int(r["ID"]): r["Display_lang"] for r in csv.DictReader(open(os.path.join(_WI, "ItemSparse.csv")))
@@ -3322,6 +3325,8 @@ def find_rows(disc, keys=None):
     out = collections.defaultdict(list)
     seen = set()
     for m, kind, fid, spots, files, extra in probe_pull.finds_rows(disc, lock):
+        if kind == "k" and extra in FIND_SECRET_KEYS:
+            continue  # (finds_rows ships none: a secret chain's next step)
         out[m].append([kind, fid, spots, files, extra, "p"])
         seen.add((m, kind, fid if fid else extra))
         if kind in ("b", "k"):
@@ -3381,6 +3386,12 @@ def find_selftest():
     probe_pull.merge_find(acc, {"o424080": {"p": [[1435, 612, 219, 1]], "k": [216523]}}, "tB", 4)
     cage = [r for r in find_rows(acc).get(1435, []) if r[0] == "k" and r[4] == 216523]
     assert cage == [["k", 424080, "611,220", 2, 216523, "p"]], "the players' cage stands for the guides' place of the same key: %r" % cage
+    # what a secret chain's key opens never ships from players' files either: no row of it at all
+    probe_pull.merge_find(acc, {"o800001": {"p": [[1428, 500, 500, 1]], "h": {"13.0": 1}, "k": [281350]}}, "tA", 5)
+    probe_pull.merge_find(acc, {"o800001": {"p": [[1428, 503, 501, 1]], "h": {"13.0": 1}, "k": [281350]}}, "tB", 6)
+    assert not [r for r in find_rows(acc).get(1428, []) if r[1] == 800001], "the Keystone Fragment's satchel: never shipped"
+    assert not [r for rs in find_rows(acc, {281350: [4572]}).values() for r in rs if r[0] == "k" and r[4] in FIND_SECRET_KEYS]
+    assert FIND_SECRET_KEYS == probe_pull.SECRET_KEYS, "one list of the secret chains' keys"
     assert lua_text("Bjørn \"x\" \\") == '"Bj\\195\\184rn \\"x\\" \\\\"'
     print("selftest-find: OK (%d players' rows from two files, %d seeded from the guides on %d maps)" % (
         len(p), len(g), len({m for m, rs in rows.items() if any(r[5] == "g" for r in rs)})))
