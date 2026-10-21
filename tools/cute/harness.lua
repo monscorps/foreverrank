@@ -182,7 +182,11 @@ local function newObj(kind, template, parent)
           return self.__label
         elseif k == "GetHighlightTexture" then if not self.__hi then self.__hi = newObj("Texture", nil, self); self.__hi.__layer = "HIGHLIGHT" end return self.__hi
         elseif k == "GetStringWidth" or k == "GetUnboundedStringWidth" then return textWidth(self.__text, self.__size)
-        elseif k == "GetStringHeight" then return self.__size + 2
+        -- (a wrapping string with its width set takes as many lines as its text needs, as the layout below counts them)
+        elseif k == "GetStringHeight" then
+          local w = self.__w or 0
+          if self.__wrap and self.__wset and w > 0 then return math.max(1, math.ceil(textWidth(self.__text, self.__size) / w)) * (self.__size + 2) end
+          return self.__size + 2
         elseif k == "GetFont" then return self.__fontFile or "Fonts\\FRIZQT__.TTF", self.__size, ""
         elseif k == "SetFont" then self.__fontFile = a[1]; self.__size = a[2] or self.__size; return true
         elseif k == "SetFontObject" then self.__size = a[1] and a[1].__fontSize or 12
@@ -1238,6 +1242,13 @@ local function interactive(o)
   return k == "Button" or k == "CheckButton" or k == "EditBox" or k == "Slider"
 end
 local function inside(o, root) for _, a in ipairs(ancestors(o)) do if a == root then return true end end return false end
+-- what Settings and the setup card draw is never cut (their frames or widgets carry cuteNoCut): a label FitText cut
+-- there (fs.cuteCut, UI.lua) is a layout problem at any window size
+local function noCut(o)
+  local x = o
+  while x do if x.cuteNoCut then return true end; x = x.__parent or x.__scrollParent end
+  return false
+end
 local EDGE_GAP = 5
 -- what a widget is clipped to: every scrolling ancestor's view, intersected (a scroll frame inside another, as the
 -- quest engine's journal list under Cute's scroll area, shows only what both let through)
@@ -1259,6 +1270,7 @@ local function checkLayout(root, label)
     if o.__kind == "FontString" and o.__text ~= "" and visible(o) and inside(o, root) then
       local bad = undrawable(o.__text)
       if bad then problems[#problems + 1] = string.format("%s: '%s' has %s, which the game's font draws as a box", label, plain(o.__text):sub(1, 40), bad) end
+      if o.cuteCut and noCut(o) then problems[#problems + 1] = string.format("%s: '%s' is cut where nothing may be (it must wrap)", label, plain(o.__text):sub(1, 60)) end
       local r = rectOf(o)
       if r then
         local tw = textWidth(o.__text, o.__size)
@@ -4086,7 +4098,7 @@ do
       GEN = GEN + 1
       local out = {}
       for _, o in everything() do
-        if o.__kind == "FontString" and o.__shown and visible(o) and o.__parent and o.__parent.__client == ruler and o.__justify == "RIGHT" and o.__w == 44 then out[#out + 1] = o end
+        if o.__kind == "FontString" and o.__shown and visible(o) and o.__parent and o.__parent.__client == ruler and o.cuteStepValue then out[#out + 1] = o end
       end
       table.sort(out, function(a, b) return rectOf(a).t > rectOf(b).t end)
       local texts = {}
@@ -7437,7 +7449,7 @@ do
     assert(box and box.checkRow and box.__kind == "Button" and not box.__hit and box.box.__kind == "Frame" and not box.box.__mouse, "the Guide's row is a button, its box a frame inside it, no hit-rect insets")
     GEN = GEN + 1
     local rr, lr, br = rectOf(box), rectOf(box.label), rectOf(box.box)
-    assert(rr and lr and br and rr.l <= br.l and br.r <= lr.l and lr.r <= rr.r and rr.r - rr.l >= 300 and rr.t - rr.b == 20 and rr.t >= br.t and br.b >= rr.b,
+    assert(rr and lr and br and rr.l <= br.l and br.r <= lr.l and lr.r <= rr.r and rr.r - rr.l >= 300 and rr.t - rr.b == 22 and rr.t >= br.t and br.b >= rr.b,
       string.format("the row spans its box and its label: row %d-%d, box %d-%d, label %d-%d", rr.l, rr.r, br.l, br.r, lr.l, lr.r))
     -- every check in Settings is such a row: none left with a hit rect
     for _, fr in ipairs(mia.frames) do assert(not fr.__hit, "a widget with hit-rect insets: " .. tostring(fr.__kind) .. " '" .. tostring(fr.label and fr.label:GetText()) .. "'") end
@@ -11452,6 +11464,63 @@ do
     assert(d.env.CuteQuestDB.settings.share.guild == false, "guild sharing off again at the next load")
     leave(d)
     print("windows W1: nothing to or from GUILD under Cute (a hand-set true off again), no RAID sync in a raid, the party still heard; the game's map by OpenWorldMap and HideUIPanel, never in a fight")
+  end)
+end
+
+-- W2 (sub-project A): Settings never cuts. 0.7 gave a choice's options 42 px ("On my route" showed "On my..."), notes one
+-- line and rows 20 px. Now a choice measures each option and wraps them under its label, labels and notes wrap and their
+-- row grows, rows are 22 px, and a cut label anywhere in Settings is a layout problem (the gate) for both views, every
+-- section, at both sizes; a choice's ticked option clicked again stays ticked (Role, which may be none, clears)
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    for _, key in ipairs({ "Cute_Quest:route", "Cute_Quest:map", "Cute_Quest:journal", "Cute_Quest:gear", "Cute_Quest:camp" }) do c.C.Modules.Set(key, true) end
+    tick(c, 1)
+    local s = c.env.CuteQuestDB.settings
+    local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
+    local cuts0 = #problems
+    c.C.UI:Open("settings", "quests")
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      c.C.UI.frame:SetSize(size[1], size[2])
+      c.C.UI:Open("settings", "quests")
+      for _, opt in ipairs({ "Off", "On my route", "Worth taking" }) do
+        local r = row(opt)
+        assert(r and not r.label.cuteCut and r:GetWidth() >= textWidth(opt, 13) + 20, "Accept for me's '" .. opt .. "' whole at " .. size[1] .. ": " .. tostring(r and r.label:GetText()))
+      end
+      local step = row("Step frame")
+      assert(step and step:GetHeight() == 22, "a check row is 22 px: " .. tostring(step and step:GetHeight()))
+      for _, sec in ipairs(c.C.SettingsPage.Sections(true)) do
+        c.C.UI:Open("settings", sec.id)
+        check(c.C.UI.frame, string.format("W2 settings %s at %dx%d", sec.id, size[1], size[2]))
+      end
+    end
+    -- a long note wraps and its row grows: Who sees what's line about Guild Info at the small size
+    c.C.UI:Open("settings", "vis")
+    local wrapped
+    for _, o in everything() do
+      if o.__kind == "FontString" and visible(o) and o.__wrap and o.__text:find("Only you: whispered to the officers online", 1, true) and o.__parent and o.__parent.__client == c then wrapped = o end
+    end
+    assert(wrapped and not wrapped.cuteCut, "the visibility note shown whole, wrapping")
+    -- a choice's ticked option clicked again stays ticked; Role clears
+    c.C.UI:Open("settings", "quests")
+    assert(s.autoAccept == "off" and row("Off"):GetChecked(), "Accept for me: Off")
+    click(row("Off"))
+    assert(s.autoAccept == "off" and row("Off"):GetChecked(), "the ticked option clicked again: still Off, still ticked")
+    click(row("On my route"))
+    assert(s.autoAccept == "route" and row("On my route"):GetChecked() and not row("Off"):GetChecked(), "On my route chosen, the section drawn again")
+    click(row("On my route")); click(row("Off"))
+    c.C.UI:Open("settings", "general")
+    click(row("Tank"))
+    assert(c.C.Char().role == "Tank", "a role")
+    click(row("Tank"))
+    assert(c.C.Char().role == "" and not row("Tank"):GetChecked(), "Role, which may be none: cleared")
+    c.C.UI.frame:SetSize(1040, 640)
+    assert(#problems == cuts0, "no cut label in Settings: " .. tostring(problems[cuts0 + 1]))
+    leave(c)
+    print("windows W2: Settings never cuts: options measured and wrapped, labels and notes wrap, rows 22 px, the cut gate on every section at both sizes; a ticked option stays ticked, Role clears")
   end)
 end
 

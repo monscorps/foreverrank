@@ -198,10 +198,12 @@ end
 -- a label cut after a whole word with "..." when it is wider than its box; true when it fit whole. The cut is kept per font size, width and
 -- text, so a redraw sets each label once and measures nothing it measured before. Text with a Kstring in it (a name
 -- the client encodes, Core.lua) is cut at words only, never inside the escape; the box clips the rest
+-- A label that was cut says so (fs.cuteCut): Settings and the setup card never cut, and the harness fails one shown there
 local fitCache, fitCount = {}, 0
 local function fitText(fs, s, room)
   room = math.floor(room or ((fs:GetWidth() or 0) - 4))
   s = s == nil and "" or tostring(s)
+  fs.cuteCut = nil
   if s == "" then fs:SetText(s); return true end
   local key = (fs.cuteSize or 12) .. ":" .. room
   local byText = fitCache[key]
@@ -211,7 +213,7 @@ local function fitText(fs, s, room)
     fitCache[key] = byText
   end
   local done = byText[s]
-  if done then fs:SetText(done); return done == s end
+  if done then fs:SetText(done); fs.cuteCut = done ~= s or nil; return done == s end
   fitCount = fitCount + 1
   local width = fs.GetUnboundedStringWidth or fs.GetStringWidth
   local result, shown = s, s
@@ -239,6 +241,7 @@ local function fitText(fs, s, room)
     if result ~= shown then fs:SetText(result) end
   end
   byText[s] = result
+  fs.cuteCut = result ~= s or nil
   return result == s
 end
 UI.FitText = fitText

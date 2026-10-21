@@ -25,9 +25,15 @@ local MUTE = { 0.52, 0.52, 0.52 }
 
 local NAV_W = 168   -- the list of sections
 local NAV_GAP = 12  -- between it and the column
-local COL_MAX = 540 -- the column: wider, a label and its boxes read as two things far apart
--- the column's spacing, the same in every section
-local HEAD, NOTE, ROWH, STEP, BTNS, GAP, BTN_GAP = 20, 18, 20, 24, 28, 10, 6
+local COL_MAX = 560 -- the column: wider, a label and its boxes read as two things far apart
+-- the column's spacing, the same in every section. Nothing in Settings is cut: a label or a note wraps and its row grows
+-- to the lines it needs (from 22 px), a choice measures its options and wraps them under its label, and the list of
+-- sections never shrinks its rows (it scrolls)
+local HEAD, NOTE, ROWH, STEP, BTNS, GAP, BTN_GAP = 20, 18, 22, 24, 28, 10, 6
+local LABEL_W = 120  -- a choice's label column
+local STEPPER = 74   -- a step's buttons and value: 20 + 34 + 20
+local RIGHT_W = 176  -- the words on a check row's right
+local NAV_ROW, NAV_HEAD = 22, 20
 
 local widgets = {}
 local nav
@@ -37,7 +43,8 @@ local function pool(parent, make)
   function p:Get()
     self.used = self.used + 1
     local it = self.items[self.used]
-    if not it then it = make(parent); self.items[self.used] = it end
+    -- (everything Settings draws is never cut: the harness fails a cut label under a frame marked so)
+    if not it then it = make(parent); it.cuteNoCut = true; self.items[self.used] = it end
     it:Show()
     return it
   end
@@ -67,6 +74,9 @@ local function ensure(ui)
     e:SetFont(C.UI.FONT, 12, "")
     return e
   end)
+  -- (a choice's options and a button's label are measured on this one, never shown)
+  widgets.measure = C.UI.Text(parent, 13, INK, "LEFT")
+  widgets.measure:Hide()
   -- the list of sections: a frame of its own beside the scroll area, so it stays while a long section scrolls
   nav = CreateFrame("Frame", nil, ui.content)
   nav:SetPoint("TOPLEFT", 8, -8)
@@ -97,40 +107,78 @@ local function column(x, w, band)
     or { labels = widgets.labels, values = widgets.values, buttons = widgets.buttons }
   return setmetatable({ x = x, w = w, y = 4, fresh = true, p = p }, Col)
 end
-local function label(col, x, y, w, s, c, justify)
+-- a FontString at a size of its own (a pooled one may come from a smaller use)
+local function sized(fs, n)
+  if fs.cuteSize ~= n then
+    if fs:SetFont(C.UI.FONT, n, "") == false then fs:SetFontObject(GameFontNormal) end
+    fs.cuteSize = n
+  end
+end
+-- the height a wrapped label takes: the game lays it out at its width (GetStringHeight), one line at least
+local function heightOf(fs, n) return math.max(n + 2, math.ceil(fs:GetStringHeight() or 0)) end
+-- a label, never cut: it wraps to its width, and the caller takes the height it returns
+local function label(col, x, y, w, s, c, justify, size)
   local l = col.p.labels:Get()
   l:ClearAllPoints()
   l:SetPoint("TOPLEFT", x, -y)
   l:SetWidth(w)
   l:SetJustifyH(justify or "LEFT")
+  l:SetWordWrap(true)
+  sized(l, size or 13)
   color(l, c)
-  C.UI.FitText(l, s, w - 4)
-  return l
+  l:SetText(s or "")
+  l.cuteCut, l.cuteStepValue = nil, nil
+  return l, heightOf(l, size or 13)
 end
+-- the width a text takes at a size, measured on a hidden FontString of the column's own
+local function measure(s, size)
+  local m = widgets.measure
+  sized(m, size)
+  m:SetText(s or "")
+  return math.ceil(((m.GetUnboundedStringWidth or m.GetStringWidth)(m)) or 0)
+end
+-- after a click that changes what the section shows (a choice, a pair): the section drawn again
+local function redraw() if C.SettingsPage.Redraw then C.SettingsPage.Redraw() end end
+
 -- a heading, white; a gap above it unless it is the first thing in the column
 function Col:Head(s)
   if not self.fresh then self.y = self.y + GAP end
   self.fresh = false
-  label(self, self.x, self.y, self.w, s, WHITE)
-  self.y = self.y + HEAD
+  local _, h = label(self, self.x, self.y, self.w, s, WHITE, nil, 13)
+  self.y = self.y + math.max(HEAD, h + 5)
 end
--- a line of explanation, dim
+-- a line of explanation, dim, wrapping to the column
 function Col:Note(s)
   self.fresh = false
-  label(self, self.x, self.y, self.w, s, DIM)
-  self.y = self.y + NOTE
+  local _, h = label(self, self.x, self.y + 1, self.w, s, DIM, nil, 12)
+  self.y = self.y + math.max(NOTE, h + 4)
 end
 -- a check row: the box with its label, one button the width of the column (up to the right-hand words), so a click
--- anywhere on the row ticks it; right: a few dim words at the row's end; tip: function(tooltip) for its tooltip
-function Col:Check(text, on, enabled, fn, right, tip)
+-- anywhere on the row ticks it; the label wraps and the row grows with it. right: a few dim words at the row's end
+-- (176 px, wrapping too); tip: function(tooltip) for its tooltip; indent: room on the left (a module's tab under its
+-- window)
+function Col:Check(text, on, enabled, fn, right, tip, indent)
   self.fresh = false
+  indent = indent or 0
   local cb = widgets.checks:Get()
-  cb:ClearAllPoints()
-  cb:SetPoint("TOPLEFT", self.x, -self.y)
-  local room = self.w - (right and 186 or 0)
-  cb:SetWidth(room)
+  local room = self.w - indent - (right and (RIGHT_W + 8) or 0)
+  sized(cb.label, 13)
+  cb.label:ClearAllPoints()
+  cb.label:SetPoint("TOPLEFT", 20, -4)
   cb.label:SetWidth(room - 24)
-  C.UI.FitText(cb.label, text, room - 28)
+  cb.label:SetWordWrap(true)
+  cb.label:SetText(text or "")
+  cb.label.cuteCut = nil
+  local h = heightOf(cb.label, 13)
+  local rh
+  if right then
+    local _, rh2 = label(self, self.x + self.w - RIGHT_W, self.y + 5, RIGHT_W, right, MUTE, "RIGHT", 11)
+    rh = rh2
+  end
+  local rowH = math.max(ROWH, h + 7, (rh or 0) + 10)
+  cb:ClearAllPoints()
+  cb:SetPoint("TOPLEFT", self.x + indent, -self.y)
+  cb:SetSize(room, rowH)
   cb:Set(on and true or false)
   cb:SetOn(enabled ~= false)
   cb.statId, cb.vis = nil, nil
@@ -139,90 +187,108 @@ function Col:Check(text, on, enabled, fn, right, tip)
     fn(b:GetChecked())
   end
   tipOn(cb, tip)
-  if right then label(self, self.x + self.w - 180, self.y + 3, 180, right, MUTE, "RIGHT") end
-  self.y = self.y + ROWH
+  self.y = self.y + rowH
   return cb
 end
--- a choice of one among a few, in a row after its label (unticking the chosen one chooses none): each option a short
--- check row, box and word
-function Col:Choice(text, options, current, fn)
+-- a choice of one among a few: the label in a column of its own, then each option as a box and its word, measured (a
+-- cell is the box, 6 px, the word and 12 px), wrapping under the label where the row is full. A click on the chosen one
+-- keeps it (none: it chooses none, for a choice that may have none, as Role); the section draws again either way
+function Col:Choice(text, options, current, fn, none)
   self.fresh = false
-  label(self, self.x, self.y + 2, 90, text, DIM)
-  local cx = self.x + 92
+  local _, lh = label(self, self.x, self.y + 4, LABEL_W - 4, text, INK, nil, 13)
+  local x0, right = self.x + LABEL_W, self.x + self.w
+  local cx, line = x0, 0
   for _, opt in ipairs(options) do
+    local cell = 14 + 6 + measure(opt, 13) + 12
+    if cx > x0 and cx + cell > right then cx = x0; line = line + 1 end
     local cb = widgets.checks:Get()
+    sized(cb.label, 13)
+    cb.label:ClearAllPoints()
+    cb.label:SetPoint("TOPLEFT", 20, -4)
+    cb.label:SetWidth(cell - 20)
+    cb.label:SetWordWrap(true)
+    cb.label:SetText(opt)
+    cb.label.cuteCut = nil
     cb:ClearAllPoints()
-    cb:SetPoint("TOPLEFT", cx, -self.y)
-    cb:SetWidth(64)
-    cb.label:SetWidth(44)
-    C.UI.FitText(cb.label, opt, 42)
+    cb:SetPoint("TOPLEFT", cx, -(self.y + line * ROWH))
+    cb:SetSize(math.min(cell, right - cx), ROWH)
     cb:Set(current == opt)
     cb:SetOn(true)
     cb.statId, cb.vis = nil, nil
-    cb.fn = function(b) fn(b:GetChecked() and opt or "") end
+    cb.fn = function(b)
+      if not b:GetChecked() and not none then b:Set(true) return end
+      fn(b:GetChecked() and opt or "")
+      redraw()
+    end
     tipOn(cb, nil)
-    cx = cx + 66
+    cx = cx + cell
   end
-  self.y = self.y + ROWH
+  self.y = self.y + math.max((line + 1) * ROWH, lh + 7)
 end
 -- a text box after its label: get gives what it shows, set takes what was typed (Enter, or leaving the box); a redraw
 -- while you type leaves your typing alone
 function Col:Edit(text, get, set)
   self.fresh = false
-  label(self, self.x, self.y + 3, 90, text, DIM)
+  local _, lh = label(self, self.x, self.y + 4, LABEL_W - 4, text, INK, nil, 13)
   local e = widgets.edits:Get()
   e:ClearAllPoints()
-  e:SetPoint("TOPLEFT", self.x + 100, -self.y)
-  e:SetWidth(math.min(160, self.w - 104))
+  e:SetPoint("TOPLEFT", self.x + LABEL_W + 6, -self.y - 1)
+  e:SetWidth(math.min(160, self.w - LABEL_W - 10))
   if not e:HasFocus() then e:SetText(get() or "") end
   e:SetScript("OnEnterPressed", function(b) set(b:GetText() or ""); b:ClearFocus() end)
   e:SetScript("OnEscapePressed", function(b) b:SetText(get() or ""); b:ClearFocus() end)
   e:SetScript("OnEditFocusLost", function(b) set(b:GetText() or "") end)
-  self.y = self.y + STEP
+  self.y = self.y + math.max(STEP, lh + 7)
 end
--- a value with a step down and up: the label, the value right-aligned against the buttons at the column's right edge,
--- both white where white is true; down and up nil where that step is shut (greyed); tip, the buttons' tooltip
+-- a value with a step down and up: the label in the rest of the width (wrapping), the stepper on the right, 74 px (20 px
+-- buttons, the value between), both white where white is true; down and up nil where that step is shut (greyed); tip,
+-- the buttons' tooltip
 function Col:Step(text, value, white, down, up, tip)
   self.fresh = false
   local x, w = self.x, self.w
-  label(self, x, self.y + 3, w - 140, text, white and WHITE or INK)
+  local _, lh = label(self, x, self.y + 4, w - STEPPER - 8, text, white and WHITE or INK, nil, 13)
   local val = self.p.values:Get()
   val:ClearAllPoints()
-  val:SetPoint("TOPLEFT", x + w - 134, -self.y - 3)
-  val:SetWidth(44)
-  val:SetJustifyH("RIGHT")
+  val:SetPoint("TOPLEFT", x + w - STEPPER + 20, -self.y - 5)
+  val:SetWidth(STEPPER - 40)
+  val:SetJustifyH("CENTER")
+  val:SetWordWrap(false)
+  sized(val, 12)
   color(val, white and WHITE or INK)
-  C.UI.FitText(val, value, 42)
+  C.UI.FitText(val, value, STEPPER - 40)
+  val.cuteStepValue = true -- (the harness reads a step's value by it)
   for i, d in ipairs({ { "-", down }, { "+", up } }) do
     local b = self.p.buttons:Get()
     b:ClearAllPoints()
-    b:SetPoint("TOPLEFT", x + w - 84 + (i - 1) * 44, -self.y)
-    b:SetWidth(40)
+    b:SetPoint("TOPLEFT", x + w - STEPPER + (i - 1) * (STEPPER - 20), -self.y - 1)
+    b:SetSize(20, 20)
     b:SetLabel(d[1])
     b:SetOn(d[2] ~= nil)
-    b:SetScript("OnClick", function() if d[2] then d[2]() end end)
+    b:SetScript("OnClick", C.Safe(function() if d[2] then d[2]() end end, "settings: step"))
     tipOn(b, tip)
   end
-  self.y = self.y + STEP
+  self.y = self.y + math.max(STEP, lh + 7)
 end
--- a row of buttons, { label, enabled, fn, tip } each, 150 px, left to right, a little apart from the rows above; tip:
--- function(tooltip) for its tooltip
+-- a row of buttons, { label, enabled, fn, tip } each, as wide as its label (90 px at least), left to right and onto a
+-- second row where the column is full, a little apart from the rows above; tip: function(tooltip) for its tooltip
 function Col:Buttons(list)
   if not self.fresh then self.y = self.y + BTN_GAP end
   self.fresh = false
-  local bx = self.x
+  local bx, line = self.x, 0
   for _, d in ipairs(list) do
+    local bw = math.max(90, measure(d[1], 12) + 24)
+    if bx > self.x and bx + bw > self.x + self.w then bx = self.x; line = line + 1 end
     local b = self.p.buttons:Get()
     b:ClearAllPoints()
-    b:SetPoint("TOPLEFT", bx, -self.y - 2)
-    b:SetWidth(150)
+    b:SetPoint("TOPLEFT", bx, -self.y - 2 - line * BTNS)
+    b:SetSize(bw, 22)
     b:SetLabel(d[1])
     b:SetOn(d[2] and true or false)
-    b:SetScript("OnClick", function() if d[2] then d[3]() end end)
+    b:SetScript("OnClick", C.Safe(function() if d[2] then d[3]() end end, "settings: " .. tostring(d[1])))
     tipOn(b, d[4])
-    bx = bx + 156
+    bx = bx + bw + 6
   end
-  self.y = self.y + BTNS
+  self.y = self.y + BTNS * (line + 1)
 end
 
 -- a rule's threshold (Rules.lua): its value and a step down and up, the officers' to set and greyed for members, sent
@@ -241,14 +307,14 @@ function Col:Rule(name, text)
     -- back at the default clears the officers' setting (an "x and nil or v" would always give v)
     if math.abs(v - R.RULES[name]) < 1e-9 then C.Policy:SetRule(name, nil) else C.Policy:SetRule(name, v) end
     C.Comm:PolicySoon()
-    C.UI:Draw()
+    redraw()
   end
   local v = R.Get(name)
   self:Step(text or t[2], R.Show(name), R.SetBy(name) ~= nil,
     (officer and v > lo + 1e-9) and function() set(R.Get(name) - step) end or nil,
     (officer and v < hi - 1e-9) and function() set(R.Get(name) + step) end or nil,
     function(tip)
-      tip:AddLine(t[2], 1, 1, 1)
+      tip:AddLine(text or t[2], 1, 1, 1)
       tip:AddLine(t[7], 0.85, 0.85, 0.85, true)
       local by = R.SetBy(name)
       tip:AddLine("Default " .. R.Show(name, R.RULES[name]) .. (by and (". Set to " .. R.Show(name) .. " by " .. R.WhoName(by) .. ".") or "."), 0.7, 0.7, 0.7, true)
@@ -261,7 +327,7 @@ function Col:Broadcast() self:Buttons({ { "Broadcast now", C.Roster:MeOfficer(),
 -- Save to Guild Info (Policy.lua P:Save, a click): the officers' policy where every client reads it and only the ranks
 -- allowed to edit Guild Info can change it. Shown while there is a change to save or the guild has no line; the line
 -- that would be written, and its length, in the band; why where it cannot be
-local function save() C.Comm:SaveLine(); C.UI:Draw() end
+local function save() C.Comm:SaveLine(); redraw() end
 local function saveNote(officer, st, unsaved)
   local kept = type(C.Policy.line) == "table"
   if not officer then return kept and "Only officers can change it. Guild Info keeps it." or "Only officers can change it." end
@@ -279,7 +345,7 @@ end
 
 -- one Everyone / Only-you pair; id is a stat's, or a category's ("gc" .. its id, "gc_" .. a discovered kind). A stat
 -- the officers leave to Everyone that would tell members one they keep (Policy.lua P:KeptWith: Enchanted slots while
--- Missing enchants is theirs) shows Only you, greyed, with the one it goes with; it opens with that one
+-- Missing enchants is theirs) shows Only you, greyed, with the one it goes with; it opens with that one. The label wraps
 function Col:Pair(id, text, indent)
   self.fresh = false
   -- (an officer sets it once Guild Info has been read: Policy.lua P.Editable)
@@ -288,13 +354,10 @@ function Col:Pair(id, text, indent)
   local with = C.Policy:KeptWith(id)
   local fixed = C.Policy.Fixed(id)
   local lw = self.w - 136 - indent
-  if with then
-    label(self, self.x + indent, self.y + 3, lw, text .. "  |cff8a8a8awith " .. C.Policy:Label(with) .. "|r", INK)
-  elseif fixed then
-    label(self, self.x + indent, self.y + 3, lw, text .. "  |cff8a8a8aalways|r", INK)
-  else
-    label(self, self.x + indent, self.y + 3, lw, text, INK)
-  end
+  local s = text
+  if with then s = text .. "  |cff8a8a8awith " .. C.Policy:Label(with) .. "|r"
+  elseif fixed then s = text .. "  |cff8a8a8aalways|r" end
+  local _, lh = label(self, self.x + indent, self.y + 4, lw, s, INK, nil, 13)
   local vis = with and "self" or C.Policy:Vis(id)
   local tip = with and function(t)
     t:AddLine(text, 1, 1, 1)
@@ -308,21 +371,21 @@ function Col:Pair(id, text, indent)
   for _, d in ipairs({ { "all", 96 }, { "self", 27 } }) do
     local cb = widgets.boxes:Get()
     cb:ClearAllPoints()
-    cb:SetPoint("TOPLEFT", self.x + self.w - d[2], -self.y - 3)
+    cb:SetPoint("TOPLEFT", self.x + self.w - d[2], -self.y - 4)
     cb.label:SetText("")
     cb.statId, cb.vis = id, d[1]
     cb:Set(vis == d[1])
     cb:SetOn(officer and not with)
-    cb.fn = function(b) if officer and not with then C.Policy:Set(id, d[1]); C.Comm:PolicySoon(); C.UI:Draw() else b:Set(vis == d[1]) end end
+    cb.fn = function(b) if officer and not with then C.Policy:Set(id, d[1]); C.Comm:PolicySoon(); redraw() else b:Set(vis == d[1]) end end
     tipOn(cb, tip)
   end
-  self.y = self.y + ROWH
+  self.y = self.y + math.max(ROWH, lh + 7)
 end
 -- the two headings over the pairs, against the column's right edge
 function Col:PairHeads()
   self.fresh = false
-  label(self, self.x + self.w - 126, self.y, 60, "Everyone", DIM, "RIGHT")
-  label(self, self.x + self.w - 60, self.y, 60, "Only you", DIM, "RIGHT")
+  label(self, self.x + self.w - 126, self.y, 60, "Everyone", DIM, "RIGHT", 11)
+  label(self, self.x + self.w - 60, self.y, 60, "Only you", DIM, "RIGHT", 11)
   self.y = self.y + NOTE
 end
 
@@ -339,7 +402,8 @@ local function drawGeneral(col)
   -- (a main's name may be two words on Forever)
   local function main(v) s.main = (v:gsub("[^%w%- ]", "")):sub(1, 24); C.Sample:Read("main") end
   col:Edit("Main character", function() return s.main end, main)
-  col:Choice("Role", { "Tank", "Heal", "Melee", "Ranged" }, ch.role, function(role) ch.role = role; C.Sample:Read("role"); C.UI:Draw() end)
+  -- (a role may be none: its ticked option clicked again clears it)
+  col:Choice("Role", { "Tank", "Heal", "Melee", "Ranged" }, ch.role, function(role) ch.role = role; C.Sample:Read("role") end, true)
   col:Check("Raid spec set (this character)", ch.raidspec == true, true, function(on) ch.raidspec = on and true or nil; C.Sample:Read("raid_spec") end)
 end
 
@@ -440,6 +504,9 @@ end
 
 local function resetAll() for _, k in ipairs(POOLS) do widgets[k]:Reset() end end
 local function hideRest() for _, k in ipairs(POOLS) do widgets[k]:HideRest() end end
+
+-- a click that changes what the section shows draws it again
+function ST.Redraw() if C.UI and C.UI.frame and C.UI.frame:IsShown() then C.UI:Draw() end end
 
 function C.Settings_Draw(ui)
   ensure(ui)
