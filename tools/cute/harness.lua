@@ -1106,17 +1106,19 @@ local function cardOf(c, name, officer)
   local _, plan = c.C.Guide.Items(officer)
   for _, card in ipairs(plan.cards) do if card.d.name == name then return c.C.Guide.CardRows(card, plan), card, plan end end
 end
--- the tabs shown, left to right, and Settings' sections listed, top to bottom, by id
+-- the tabs shown, left to right, and Settings' sections listed, top to bottom, by id. (The Runs module, on by default,
+-- is left out of both lists: the runs stage's scenarios check its tab and its section)
+local ASIDE = { runs = true }
 local function tabsShown(c)
   local out = {}
-  for id, b in pairs(c.C.UI.tabs) do if b:IsShown() then out[#out + 1] = { id = id, x = b.__points[1].x } end end
+  for id, b in pairs(c.C.UI.tabs) do if b:IsShown() and not ASIDE[id] then out[#out + 1] = { id = id, x = b.__points[1].x } end end
   table.sort(out, function(a, b) return a.x < b.x end)
   for i, t in ipairs(out) do out[i] = t.id end
   return table.concat(out, " ")
 end
 local function sectionsShown(c)
   local out = {}
-  for _, f in ipairs(c.frames) do if f.section and f:IsVisible() then out[#out + 1] = { id = f.section, y = f.__points[1].y } end end
+  for _, f in ipairs(c.frames) do if f.section and f:IsVisible() and not ASIDE[f.section] then out[#out + 1] = { id = f.section, y = f.__points[1].y } end end
   table.sort(out, function(a, b) return a.y > b.y end)
   for i, t in ipairs(out) do out[i] = t.id end
   return table.concat(out, " ")
@@ -1939,12 +1941,12 @@ do
   end
   c0 = #yezin.chat
   yezin.env.SlashCmdList.CUTE("modules")
-  assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules" and yezin.chat[#yezin.chat]:find("modules: Guide on. The dashboard's pages are always on.", 1, true),
+  assert(yezin.C.UI.page == "settings" and yezin.C.UI.section == "modules" and yezin.chat[#yezin.chat]:find("modules: Guide on; Runs on. The dashboard's pages are always on.", 1, true),
     "/cute modules lists the Guide on and opens Settings there: " .. table.concat(yezin.chat, "\n", c0 + 1))
   yezin.C.Modules.Set("guide", false)
   assert(yezin.chat[#yezin.chat] == yezin.chat[c0 + 1], "switched off by the box, nothing said")
   yezin.env.SlashCmdList.CUTE("modules")
-  assert(yezin.chat[#yezin.chat]:find("modules: Guide off. The dashboard's pages are always on.", 1, true), "/cute modules lists it off: " .. yezin.chat[#yezin.chat])
+  assert(yezin.chat[#yezin.chat]:find("modules: Guide off; Runs on. The dashboard's pages are always on.", 1, true), "/cute modules lists it off: " .. yezin.chat[#yezin.chat])
   yezin.C.UI:Open("settings", "modules")
   assert(sectionsShown(yezin) == "general vis rules modules race prog shame officers", "the officer's sections: " .. sectionsShown(yezin))
   check(yezin.C.UI.frame, "officer settings, modules, a fresh install")
@@ -11133,6 +11135,256 @@ end
 do local function runsStage()
   local said = {}
 
+  -- the group: the mock gains what the run reads, documented or called by Camelot's own code, each where its doc says:
+  -- the group's units (UnitName, UnitGUID, UnitClass, UnitRace, UnitSex, UnitIsGroupLeader, UnitIsDeadOrGhost,
+  -- UnitIsVisible: UnitDocumentation.lua; IsInGroup, IsInRaid, GetNumGroupMembers: ChatFrameEditBox.lua:581-590 and
+  -- ChatFrameUtil.lua:455 call them), C_Secrets.ShouldUnitIdentityBeSecret (SecretPredicateAPIDocumentation.lua),
+  -- C_Map.GetBestMapForUnit (the player and party members only: MapDocumentation.lua), GetUnitSpeed,
+  -- C_InstanceEncounter.IsEncounterInProgress, C_DamageMeter (DamageMeterDocumentation.lua: sessions, sources,
+  -- isLocalPlayer, a secret in combat, a sourceGUID made secret on request), C_LootHistory (its own clock), PlayerModel's
+  -- SetUnit (FrameAPICharacterModelBaseDocumentation.lua: a success; false for a unit out of sight or of secret identity),
+  -- SetCamDistanceScale, SetFacing (SimpleModelAPIDocumentation.lua), SetAnimation, C_CreatureInfo.GetRaceInfo,
+  -- GetPlayerInfoByGUID's race and sex, MenuUtil (Blizzard_Menu, as quest_mocks.lua), and a group bus: CuteRun on
+  -- PARTY, RAID and INSTANCE_CHAT to the group's clients (the sender's too, as the game hands it back), result 11 for
+  -- the chat lockdown or a lockdown of the whole instance on request (G.locked), and SendChatMessage recorded
+  local RACE_ID = { Human = 1, Orc = 2, Dwarf = 3, NightElf = 4, Scourge = 5, Tauren = 6, Gnome = 7, Troll = 8, BloodElf = 10, Draenei = 11 }
+  local CLASS_NUM = { WARRIOR = 1, PALADIN = 2, HUNTER = 3, ROGUE = 4, PRIEST = 5, SHAMAN = 7, MAGE = 8, WARLOCK = 9, DRUID = 11 }
+  MODEL.SetCamDistanceScale, MODEL.SetFacing, MODEL.SetAnimation = true, true, true
+  local function gmember(name, rank, class) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = class or "MAGE", level = 30, online = true } end
+  local function gchar(name, rank, extra)
+    extra = extra or {}
+    return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", extra.class or "MAGE", 30 }, extra))
+  end
+  local function entryOf(x)
+    if type(x) == "table" and x.env then return { c = x, name = x.o.name, guid = x.o.guid, class = x.o.class, race = x.o.race or "Human", sex = x.o.sex or 2 } end
+    return { name = x.name, guid = guidOf(x.name), class = x.class or "ROGUE", race = x.race or "Orc", sex = x.sex or 3 }
+  end
+  local function memberAt(c, unit)
+    local G = c.group
+    if not G or type(unit) ~= "string" then return nil end
+    local me, idx
+    for k, e in ipairs(G.members) do if e.c == c then me, idx = e, k end end
+    if not me then return nil end
+    if unit == "player" then return me end
+    local i = tonumber(unit:match("^party(%d)$"))
+    if i then
+      local others, sub = {}, G.raid and math.floor((idx - 1) / 5) or 0
+      for k, e in ipairs(G.members) do if e ~= me and (not G.raid or math.floor((k - 1) / 5) == sub) then others[#others + 1] = e end end
+      return others[i]
+    end
+    i = tonumber(unit:match("^raid(%d+)$"))
+    if i then return G.raid and G.members[i] or nil end
+    local g = c.units and c.units[unit]
+    if g then for _, e in ipairs(G.members) do if e.guid == g then return e end end end
+    return nil
+  end
+  local function wire(c, G)
+    local env, o = c.env, c.o
+    c.group, c.units, c.rsent, c.chatOut = G, c.units or {}, c.rsent or {}, c.chatOut or {}
+    if c.wired then return end
+    c.wired = true
+    local function at(u) return memberAt(c, u) end
+    local origName, origPlayerInfo = env.UnitName, env.GetPlayerInfoByGUID
+    env.UnitName = function(u) if u == "player" then return origName(u) end local e = at(u); if e then return e.name end end
+    env.UnitGUID = function(u) if u == "player" then return o.guid end local e = at(u); return e and e.guid or nil end
+    env.UnitExists = function(u) if u == "player" then return true end return at(u) ~= nil end
+    env.UnitClass = function(u) local e = at(u) or (u == "player" and { class = o.class }); if e then return e.class, e.class, CLASS_NUM[e.class] end end
+    env.UnitRace = function(u) local e = at(u) or (u == "player" and { race = o.race or "Human" }); if e then return e.race, e.race, RACE_ID[e.race] end end
+    env.UnitSex = function(u) local e = at(u) or (u == "player" and { sex = o.sex or 2 }); return e and e.sex or nil end
+    env.UnitIsGroupLeader = function(u) local e = at(u); return e ~= nil and c.group ~= nil and e == c.group.members[c.group.leader] end
+    env.UnitIsDeadOrGhost = function(u) local e = at(u); if not e then return u == "player" and c.dead == true end return c.group.dead[e.guid] == true end
+    env.UnitIsVisible = function(u) local e = at(u); return e ~= nil and c.group.hidden[e.guid] ~= true end
+    env.C_Secrets = { ShouldUnitIdentityBeSecret = function(u) local e = at(u); return e ~= nil and c.group.secretId[e.guid] == true end }
+    env.C_Map = env.C_Map or {}
+    env.C_Map.GetBestMapForUnit = function(u)
+      if u ~= "player" and not tostring(u):match("^party%d$") then return nil end
+      local e = at(u)
+      if not e then return u == "player" and c.map or nil end
+      return c.group.map[e.guid]
+    end
+    env.C_Map.GetMapInfo = env.C_Map.GetMapInfo or function(id) return { mapID = id, name = "Map " .. id, mapType = 3 } end
+    env.GetNumGroupMembers = function() return c.group and #c.group.members or 0 end
+    env.IsInGroup = function(cat) if not c.group then return false end if cat == 2 then return c.group.lfg == true end return true end
+    env.IsInRaid = function() return c.group ~= nil and c.group.raid == true end
+    env.GetUnitSpeed = function() if c.speedSecret then return secret("number") end return c.speed or 0, 7, 7, 4.72 end
+    env.C_InstanceEncounter = { IsEncounterInProgress = function() return c.encounter == true end }
+    env.C_DamageMeter = {
+      IsDamageMeterAvailable = function() if c.noMeter then return false, "the damage meter is switched off" end return true, "" end,
+      GetAvailableCombatSessions = function()
+        local out = {}
+        for _, s in ipairs(c.group and c.group.sessions or {}) do out[#out + 1] = { sessionID = s.id, name = "Fight", durationSeconds = s.dur } end
+        return out
+      end,
+      GetCombatSessionFromID = function(id, kind)
+        if c.combat then c.meterInCombat = (c.meterInCombat or 0) + 1; return secret("table") end
+        c.meterReads = (c.meterReads or 0) + 1
+        for _, s in ipairs(c.group and c.group.sessions or {}) do
+          if s.id == id then
+            local rows = {}
+            for g, amounts in pairs(s.by) do
+              if amounts[kind] then
+                rows[#rows + 1] = { sourceGUID = (c.group.meterSecret and g ~= o.guid) and secret("string") or g, isLocalPlayer = g == o.guid, totalAmount = amounts[kind],
+                  name = "x", classFilename = "MAGE", deathTimeSeconds = 0, amountPerSecond = 0 }
+              end
+            end
+            return { combatSources = rows, maxAmount = 0, totalAmount = 0, durationSeconds = s.dur }
+          end
+        end
+        return { combatSources = {}, maxAmount = 0, totalAmount = 0 }
+      end,
+    }
+    env.C_LootHistory = {
+      GetLootHistoryTime = function() return c.clock + 77777 end,
+      GetAllEncounterInfos = function() return c.group and c.group.lootInfos or {} end,
+      GetSortedDropsForEncounter = function(enc) return c.group and c.group.lootDrops[enc] or nil end,
+    }
+    env.GetPlayerInfoByGUID = function(g)
+      for _, e in ipairs(c.everMet or {}) do if e.guid == g then return e.class, e.class, e.race, e.race, e.sex, e.name, "" end end
+      return origPlayerInfo(g)
+    end
+    env.C_CreatureInfo.GetRaceInfo = function(id) for name, rid in pairs(RACE_ID) do if rid == id then return { raceName = name, clientFileString = name, raceID = id } end end end
+    c.menus = {}
+    env.MenuUtil = { CreateContextMenu = function(owner, gen)
+      local entries, root = {}, {}
+      function root:CreateButton(text, fn) entries[#entries + 1] = { text = text, fn = fn } end
+      function root:CreateTitle(text) entries[#entries + 1] = { title = text } end
+      function root:CreateDivider() end
+      gen(owner, root)
+      c.menus[#c.menus + 1] = entries
+    end }
+    local origSend, origChat = env.C_ChatInfo.SendAddonMessage, env.C_ChatInfo.SendChatMessage
+    env.C_ChatInfo.SendAddonMessage = function(prefix, msg, channel, target)
+      if prefix ~= "CuteRun" then return origSend(prefix, msg, channel, target) end
+      assert(channel == "PARTY" or channel == "RAID" or channel == "INSTANCE_CHAT", "CuteRun on the group's channel: " .. tostring(channel))
+      assert(#msg <= 255, "a group message over the limit: " .. #msg)
+      local G2 = c.group
+      if not G2 then return 5 end
+      if c.chatLocked or G2.locked then c.r11 = (c.r11 or 0) + 1; return 11 end
+      if c.rthrottle and c.rthrottle > 0 then c.rthrottle = c.rthrottle - 1; return 3 end
+      c.rsent[#c.rsent + 1] = { msg = msg, at = c.clock, channel = channel }
+      for _, e in ipairs(G2.members) do if e.c then BUS[#BUS + 1] = { from = c, prefix = prefix, msg = msg, channel = channel, to = e.c } end end
+      return 0
+    end
+    env.C_ChatInfo.SendChatMessage = function(text, kind, ...)
+      c.chatOut[#c.chatOut + 1] = { text = text, kind = kind, hw = c.hardware }
+      return origChat(text, kind, ...)
+    end
+    local origCreate = env.CreateFrame
+    env.CreateFrame = function(kind, name, parent, template)
+      local f = origCreate(kind, name, parent, template)
+      if kind == "PlayerModel" then
+        rawset(f, "SetUnit", function(self, u)
+          self.__unit, self.__display = u, nil
+          local e = at(u)
+          local ok = e ~= nil and env.UnitIsVisible(u) and not env.C_Secrets.ShouldUnitIdentityBeSecret(u)
+          self.__unitOK = ok
+          return ok
+        end)
+      end
+      return f
+    end
+  end
+  local function group(list, o)
+    o = o or {}
+    local G = { members = {}, leader = 1, raid = o.raid or #list > 5, dead = {}, hidden = {}, secretId = {}, map = {}, sessions = {}, lootInfos = {}, lootDrops = {}, sid = 0 }
+    for i, x in ipairs(list) do G.members[i] = entryOf(x) end
+    for _, e in ipairs(G.members) do
+      if e.c then
+        wire(e.c, G)
+        e.c.everMet = e.c.everMet or {}
+        for _, f in ipairs(G.members) do table.insert(e.c.everMet, f) end
+      end
+    end
+    for _, e in ipairs(G.members) do if e.c then fire(e.c, "GROUP_JOINED"); fire(e.c, "GROUP_ROSTER_UPDATE") end end
+    return G
+  end
+  local function clientsOf(G) local out = {}; for _, e in ipairs(G.members) do if e.c then out[#out + 1] = e.c end end return out end
+  local function each(G, fn) for _, c in ipairs(clientsOf(G)) do fn(c) end end
+  local function entry(G, who) for _, e in ipairs(G.members) do if e.c == who or e.name == who then return e end end end
+  -- a loading screen into a place for these clients (kind "party", "raid" or "none")
+  local function zone(list, kind, id, name)
+    for _, c in ipairs(list) do
+      c.o.instance, c.o.instanceID, c.o.instName = kind, kind ~= "none" and id or 0, kind ~= "none" and name or nil
+      fire(c, "PLAYER_ENTERING_WORLD", false, false)
+    end
+  end
+  -- a fight: combat on every client of the group for secs, the meter's session for it (amounts by name, then by
+  -- DamageMeterType), a boss killed at its end where enc is given
+  local function fight(G, secs, amounts, enc, success)
+    G.sid = G.sid + 1
+    each(G, function(c) c.combat = true; fire(c, "PLAYER_REGEN_DISABLED") end)
+    tickAll(secs)
+    local by = {}
+    for name, a in pairs(amounts or {}) do by[guidOf(name)] = a end
+    G.sessions[#G.sessions + 1] = { id = G.sid, dur = secs, by = by }
+    if enc then each(G, function(c) fire(c, "ENCOUNTER_END", enc, "Boss " .. enc, 1, #G.members, success == false and 0 or 1) end) end
+    each(G, function(c) c.combat = false; fire(c, "PLAYER_REGEN_ENABLED") end)
+  end
+  local function die(G, who)
+    local e = entry(G, who)
+    G.dead[e.guid] = true
+    if e.c then fire(e.c, "PLAYER_DEAD") end
+    each(G, function(c) fire(c, "UNIT_DIED", e.guid) end)
+  end
+  local function rez(G, who)
+    local e = entry(G, who)
+    G.dead[e.guid] = nil
+    if e.c then fire(e.c, "PLAYER_ALIVE") end
+  end
+  local function leaveGroup(G, who)
+    local e = entry(G, who)
+    for i, x in ipairs(G.members) do if x == e then table.remove(G.members, i) break end end
+    if e.c then e.c.group = nil; fire(e.c, "GROUP_LEFT"); fire(e.c, "GROUP_ROSTER_UPDATE") end
+    each(G, function(c) fire(c, "GROUP_ROSTER_UPDATE") end)
+  end
+  local function disband(G) local list = clientsOf(G); G.members = {}; for _, c in ipairs(list) do c.group = nil; fire(c, "GROUP_LEFT"); fire(c, "GROUP_ROSTER_UPDATE") end end
+  local function rkinds(c, from) local out = {}; for i = from or 1, #c.rsent do out[#out + 1] = c.rsent[i].msg:sub(1, 2) end return table.concat(out, " ") end
+  local function rcount(c, kind) local n = 0; for _, m in ipairs(c.rsent) do if m.msg:sub(1, 2) == kind then n = n + 1 end end return n end
+  local function lastReport(c) local db = c.env.CuteDB.chars[c.C.Me()]; return db and db.runs and db.runs.list and db.runs.list[1] or nil end
+  local function cardsOf(rep) local out = {}; for _, x in ipairs(rep and rep.cards or {}) do out[#out + 1] = x[1] .. "." .. x[2] end return table.concat(out, " ") end
+  local function pace(c) local last; for _, m in ipairs(c.rsent) do if last then assert(m.at - last >= 1 - 1e-9, c.o.name .. " sent two group messages within a second") end last = m.at end end
+
+  -- (1) five clients run a dungeon to a full clear and zone out: one report on every client within 20 s, the same
+  -- five cards everywhere, the leader the scribe, one 2A, no client more than one message a second
+  isolated({ gmember("Lead", 1), gmember("Ash", 3), gmember("Bree", 3), gmember("Cole", 3), gmember("Dove", 3) }, function()
+    local cs = { gchar("Lead", 1, { class = "WARRIOR" }), gchar("Ash", 3, { class = "MAGE" }), gchar("Bree", 3, { class = "PRIEST" }), gchar("Cole", 3, { class = "ROGUE" }), gchar("Dove", 3, { class = "HUNTER" }) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(10)
+    for _, c in ipairs(cs) do local r = c.C.Runs.Current(); assert(r and r.kind == "d" and r.inst == 36, c.o.name .. " started a dungeon run") end
+    tickAll(30)
+    local ids, n = {}, 0
+    for _, c in ipairs(cs) do local r = c.C.Runs.Current(); if not ids[r.id] then ids[r.id] = true; n = n + 1 end end
+    assert(n == 1, "one run id for the group after the hellos: " .. n)
+    assert(cs[3].C.Runs:Scribe() == cs[1].o.guid:match("([^%-]+)$"), "the leader is the scribe")
+    local dmg = { Lead = { [0] = 3000, [7] = 9000, [5] = 6 }, Ash = { [0] = 9000, [8] = 400 }, Bree = { [2] = 8000, [0] = 500, [6] = 7 }, Cole = { [0] = 4000 }, Dove = { [0] = 3500, [8] = 2000 } }
+    for _, enc in ipairs({ 1230, 1236, 1238, 1234 }) do
+      fight(G, 40)
+      tickAll(20)
+      fight(G, 60, dmg, enc)
+      tickAll(40)
+    end
+    die(G, cs[4]); tickAll(10); rez(G, cs[4])
+    tickAll(30)
+    zone(cs, "none", 0)
+    tickAll(20)
+    local first = lastReport(cs[1])
+    assert(first and #first.cards == 5, "the scribe's report, five cards: " .. cardsOf(first))
+    for _, c in ipairs(cs) do
+      local rep = lastReport(c)
+      assert(rep and rep.id == first.id and cardsOf(rep) == cardsOf(first), c.o.name .. "'s report the same cards: " .. cardsOf(rep) .. " / " .. cardsOf(first))
+      assert(not c.C.Runs.Current(), c.o.name .. " has no run on")
+      assert(c == cs[1] or rep.from == "scribe", c.o.name .. " shows the scribe's report, not one of its own")
+      pace(c)
+    end
+    local a = 0
+    for _, c in ipairs(cs) do a = a + rcount(c, "2A") end
+    assert(a == 1 and rcount(cs[1], "2A") == 1, "one 2A, the leader's: " .. a)
+    said[#said + 1] = "five clients, a full clear: one report everywhere within 20 s, the same five cards (" .. (cardsOf(first):gsub("%w+%.", "")) .. "), the leader the scribe, one 2A"
+  end)
+
   -- (12) the choice, on tables alone (Awards.lua makes no client call): a member { sfx, guid, name, v }
   do
     local A = yezin.C.Awards
@@ -11163,7 +11415,7 @@ do local function runsStage()
     local base = function() return { t = 1800, de = 1, dt = 20, dm = 100, hl = 100, ab = 0, tk = 100, av = 10, ["in"] = 0, dp = 0, ch = 0, wy = 0, yd = 500, ju = 0, cn = 0, lv = 0, gd = 0 } end
     local FIX12 = {
       HD = { dm = 5000 }, LF = { hl = 5000 }, OS = { ["in"] = 9 }, CW = { dp = 7 }, IW = { tk = 9000, de = 0 }, BW = { ab = 900 },
-      TJ = { dm = 900, hl = 200 }, NS = { de = 0, tk = 400 }, PW = { q = { 11, 12, 13 } }, LB = { lq = 4, ln = 2 }, FH = { hr = 100 },
+      TJ = { dm = 900, hl = 200 }, NS = { de = 0, tk = 400 }, PW = { q = { 11, 12, 13, 14 } }, LB = { lq = 4, ln = 2 }, FH = { hr = 100 },
       TB = { yd = 2400 }, NR = { ch = 30 }, DG = { lv = 1 }, CM = { gd = 5000 }, WL = { cn = 6 }, FI = { de = 6 }, OA = { fd = 60 },
       SP = { dt = 400 }, WF = { av = 900 }, LO = { wy = 2 }, PG = { ju = 250 }, NA = { nd = 5 }, BD = { lr = 2 } }
     for code, extra in pairs(FIX12) do
@@ -11172,6 +11424,7 @@ do local function runsStage()
         local v = base()
         if i == 1 then for k, x in pairs(extra) do v[k] = x end end
         if code == "PW" and i == 2 then v.q = { 11, 12, 13 } end
+        if code == "PW" and i == 3 then v.q = { 14 } end
         if code == "NS" then v.de = (i == 1) and 0 or 2; if i == 2 then v.tk = 900 end end
         if code == "TJ" and i == 2 then v.hl, v.dm = 400, 1000 end
         ms[i] = mem(name, v)

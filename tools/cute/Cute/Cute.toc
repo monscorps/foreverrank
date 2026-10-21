@@ -20,5 +20,8 @@ Comm.lua
 UI.lua
 Guide.lua
 Awards.lua
+RunComm.lua
+Runs.lua
+RunsUI.lua
 Settings.lua
 Bindings.xml
