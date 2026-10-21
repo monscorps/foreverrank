@@ -10414,7 +10414,8 @@ do
     local resend
     for k = r0 + 1, #a3.sent do if a3.sent[k].msg:sub(1, 3) == "1R|" then resend = a3.sent[k].msg end end
     assert(resend and #(resend:match("|(%x*)$") or "") == 16, "/cute resend asks whole: " .. tostring(resend))
-    tickAll(60)
+    -- (its answer, whole, had all come before the hold: (ab), M:Borne)
+    tickAll(150)
     fire(a3, "PLAYER_LOGOUT")
     leave(a3)
     -- (f) Cobb's file lost Cyra's record (0.7.0's partial roster deleted such), his hold still says he has the guild
@@ -11095,6 +11096,29 @@ do
     assert(db.policies["8"].roster["Far-Forever"].stats.g3001 == nil and db.policies["8"].roster["Far-Forever"].stats.level == 20, "and in a parked guild's records")
   end)
   said[#said + 1] = "a file's statistics stored as 0 from never recorded go once at load"
+
+  -- (ab) an ask whole after a since-ask of the same login (/cute resend, the officers' button, many records missing) is
+  -- answered, record and pass, though it comes within ASK_AGAIN of the first: the first's answer was a part. 0.7.1's
+  -- first build passed it by as an ask made a moment ago (and a file missing many records, which marks each asked,
+  -- never had them that session)
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+    local off, a = char("Coraline", 1), char("Cobb", 3, { withStats = true })
+    login(off); login(a)
+    tickAll(700)
+    local fp = a.C.Policy:Fp()
+    a.C.Comm:Receive("1R|" .. guidOf("Cyra") .. "|0|0|" .. fp .. string.format("%x", math.floor(a.C.Comm.base + 5)), "GUILD", "Cyra-Forever")
+    tickAll(60)
+    local s0 = #a.sent
+    a.C.Comm:Receive("1R|" .. guidOf("Cyra") .. "|0|0|" .. fp, "GUILD", "Cyra-Forever")
+    tickAll(45)
+    local whole, pass = false, false
+    for i = s0 + 1, #a.sent do if a.sent[i].msg:find("^1F|1|%d+|%d+|guid=") then whole = true end end
+    assert(whole, "her ask whole, a minute after her since-ask, answered whole: " .. kinds(a, s0 + 1))
+    tickAll(120)
+    for i = s0 + 1, #a.sent do if a.sent[i].msg:find("g2001=", 1, true) then pass = true end end
+    assert(pass, "and with the pass: " .. kinds(a, s0 + 1))
+  end)
+  said[#said + 1] = "an ask whole after a since-ask is answered, record and pass"
 
   print("core: " .. table.concat(said, "; "))
 end

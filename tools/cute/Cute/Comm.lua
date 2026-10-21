@@ -1703,7 +1703,7 @@ end
 -- pass last answered each member's (once in GAME_AGAIN seconds a member; an officer's always): a copy that asks every
 -- few seconds makes nobody resend
 local ASK_AGAIN, GAME_AGAIN, POLICY_AGAIN, UNTRUSTED_AGAIN = 180, 1800, 30, 300
-M.answered, M.gameAnswered, M.policyAsked = {}, {}, {}
+M.answered, M.answeredSince, M.gameAnswered, M.policyAsked = {}, {}, {}, {}
 
 function M:Receive(text, channel, sender)
   text, channel, sender = C.Plain(text), C.Plain(channel), C.Plain(sender)
@@ -1814,6 +1814,11 @@ function M:Receive(text, channel, sender)
     if bad then return end
     local t, who = C.Now(), g or sender
     local fresh = not (M.answered[who] and t - M.answered[who] < ASK_AGAIN)
+    -- (an ask whole after a since-ask of the asker answered lately (its /cute resend, the officers' button, many records
+    -- missing: M:AskWholes) is answered once more, record and pass: the first's answer was a part. 0.7.1's first build
+    -- passed it by, and a file missing many records, which marks each one asked, never had them that session)
+    local wider = not fresh and since == nil and stamp ~= nil and M.answeredSince[who] ~= nil
+    if wider then fresh = true end
     -- (since: an asker that holds the guild from a time is sent what changed since, M:Answer, where this client's answer
     -- to its ask before that time bears it out, each part on its own (M:Borne); the earliest of the asks an answer
     -- covers, the whole record where one wants it. Each ask kept with how it was answered, M.owe: one passed by bears
@@ -1827,7 +1832,7 @@ function M:Receive(text, channel, sender)
     -- pass after it: everyone online hears both. A login wave's asks no longer make each client send its record twice)
     local covered = self.hello and not self.reloaded and not self.fullOut
     if fresh then
-      M.answered[who] = t
+      M.answered[who], M.answeredSince[who] = t, since ~= nil or nil
       ent.rec, ent.nr = true, sRec or 0
       if covered then await(self.helloQueued and "sentRec" or "helloRec", ent)
       else
@@ -1844,7 +1849,7 @@ function M:Receive(text, channel, sender)
       -- (an ask while a pass waits is answered by it: counted only where it makes that pass the guild's too. A since this
       -- client's last pass to the asker does not bear out gets the whole pass whatever GAME_AGAIN says: the ten-minute
       -- pass bounds what that costs)
-      local gameFresh = not (M.gameAnswered[who] and t - M.gameAnswered[who] < GAME_AGAIN) or (s ~= nil and sPass == nil)
+      local gameFresh = not (M.gameAnswered[who] and t - M.gameAnswered[who] < GAME_AGAIN) or (s ~= nil and sPass == nil) or wider
       if gameFresh then
         ent.pass, ent.np = true, sPass or 0
         if covered then await(self.helloPassQueued and "sentPass" or "helloPass", ent)
