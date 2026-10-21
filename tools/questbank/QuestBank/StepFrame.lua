@@ -37,7 +37,8 @@ local function settings() return QB:Settings().guide end
 local function fighting() return InCombatLockdown and InCombatLockdown() or false end
 local trackerOut, trackerHooked, trackerWait = false, false, false -- (the game's quest tracker: SF.Tracker)
 -- the first time the tracker goes out of sight the frame says where it went, for NOTE_S seconds, once for good
--- (guide.trackerTold); its menu brings the tracker back
+-- (guide.trackerTold, set as the note shows: a /reload under the welcome card still has it to tell); its menu brings
+-- the tracker back
 local NOTE_S, NOTE_H = 60, 24
 local TRACKER_NOTE = "The game's quest tracker is hidden while this frame shows. Right-click here to show it."
 SF.noteUntil, SF.notePending = nil, nil -- (pending: told when the steps next show, not under a welcome card)
@@ -181,6 +182,11 @@ local function build()
     f:SetBackdropBorderColor(gold[1], gold[2], gold[3], 0.5)
   end
   f:SetScript("OnDragStart", function(self) if not settings().locked then self:StartMoving() end end)
+  -- (the review round) a right-click anywhere on the frame is its menu, as on a step: the tracker's note under the steps
+  -- says "Right-click here", and only the steps took one (a welcome card's own buttons answer for it)
+  f:SetScript("OnMouseUp", QB.Safe(function(self, button)
+    if button == "RightButton" and not (self.card and self.card:IsShown()) then SF:Menu(G.Steps()[1]) end
+  end, "step frame"))
   -- (the review round) kept by its middle against the screen's, where the drag left it, whatever point the game
   -- anchors a moved frame by (place() anchors it so again); the arrow follows it at once
   f:SetScript("OnDragStop", QB.Safe(function(self)
@@ -494,7 +500,10 @@ function SF.Refresh()
   local text = G.TimeToLevel()
   local remind = (G.reminder and GetTime and GetTime() < G.reminder) and true or false
   local members = G.MemberSteps() -- (the list stands until G.memberVer moves: no table and no string a tick)
-  if SF.notePending then SF.notePending, SF.noteUntil = nil, (GetTime and GetTime() or 0) + NOTE_S end
+  if SF.notePending then
+    SF.notePending, SF.noteUntil = nil, (GetTime and GetTime() or 0) + NOTE_S
+    settings().trackerTold = true
+  end
   local note = (SF.noteUntil and GetTime and GetTime() < SF.noteUntil) and true or false
   local mins = steps[1] and minsNow(steps[1]) or nil -- (the step now's minutes, as you go: a number, no string a tick)
   if G.ver == lastVer and text == lastTime and remind == lastRemind and G.memberVer == lastMembers and note == lastNote and mins == lastMins then return end
@@ -702,10 +711,7 @@ function SF.Tracker()
         if fighting() then trackerWait = true else self:SetAlpha(0) end
       end)
     end
-    if not trackerOut and not settings().trackerTold then
-      settings().trackerTold = true
-      SF.notePending = true
-    end
+    if not trackerOut and not settings().trackerTold then SF.notePending = true end
     trackerOut = true
     if t:GetAlpha() ~= 0 then t:SetAlpha(0) end
   elseif trackerOut then
@@ -762,6 +768,7 @@ function SF:Menu(s)
   end
   items[#items + 1] = { "Hide (Settings brings it back)", function() set.frame = false; SF.Apply() end }
   -- the game's quest tracker: back, or out of sight again while the frame shows (Settings has the same row)
+  if SF.noteUntil or SF.notePending then set.trackerTold = true end
   SF.noteUntil, SF.notePending = nil, nil -- (the menu found: the note has done its work)
   if trackerOut then
     items[#items + 1] = { "Show the game's quest tracker", function() set.hideTracker = false; SF.Tracker(); lastVer = -1; SF.Refresh() end }

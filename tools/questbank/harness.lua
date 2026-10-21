@@ -18203,6 +18203,47 @@ end)()
     G.MemberSteps = real
   end }
 
+  -- the review round's cases (11 on): a step of the Guide's made by hand, as the owner's frame had it (case 6's hand)
+  local function npcIdx(D, name) for i, n in ipairs(D.NPC) do if n[1] == name then return i end end end
+  local function handStep(QB, qid, who, stop, mins, leg, way)
+    local D = QB.Data
+    local i = assert(npcIdx(D, who), who)
+    local n = D.NPC[i]
+    return { kind = "handin", qid = qid, n = 1, npc = i, m = n[2], x = n[3], y = n[4], c = n[5], wx = n[6], wy = n[7], stop = stop, mins = mins, leg = leg, way = way or "walk" }
+  end
+  local function rowTip(r) lines = {}; r.__scripts.OnEnter(r); r.__scripts.OnLeave(r); return table.concat(lines, " | ") end
+  local function planned(c)
+    c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1)
+    c.QB.Model.Finish(); c.QB:Recompute(true); c.QB.Model.Finish(); tick(c, 1)
+    c.QB.Guide.Replan()
+  end
+
+  -- 11. (the review round) The tracker's note says "Right-click here to show it.", and a right-click on the note (the
+  -- bare frame under the steps) did nothing: only the steps took one. And the note was marked told as the tracker went
+  -- out of sight, before it showed: a /reload under the welcome card lost it for good. Now a right-click anywhere on the
+  -- frame is its menu, and the note is told once it shows
+  ENGCASES[#ENGCASES + 1] = { "the tracker's note: a right-click on it is the menu; a reload under the welcome card keeps it to tell", function()
+    local w = char("Reloader", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    w.QB.StepFrame.Apply()
+    local wf = w.env.QuestBankStep
+    assert(wf.card and wf.card:IsShown() and w.env.ObjectiveTrackerFrame:GetAlpha() == 0, "a fresh install: the welcome card up, the tracker out of sight")
+    assert(not w.QB:Settings().guide.trackerTold, "not told yet: the note has not shown")
+    -- a /reload before the card is answered: the note still to tell
+    local d = char("Reloader", "WARRIOR", "Warrior", 1, {}, { level = 5, saved = w.env.QuestBankDB })
+    d.QB:Settings().welcome = nil; d.QB.StepFrame.Apply(); d.QB.StepFrame.Refresh()
+    local f = d.env.QuestBankStep
+    assert(f.note:IsShown() and d.QB:Settings().guide.trackerTold == true, "the card answered after the reload: the note shows, and is told now")
+    -- a right-click on the frame itself, where the note is: the frame's menu, Show the game's quest tracker in it
+    assert(f.__scripts.OnMouseUp, "the frame takes a click of its own")
+    d.QB.UI.lastMenu = nil
+    f.__scripts.OnMouseUp(f, "LeftButton")
+    assert(d.QB.UI.lastMenu == nil, "a left click (a drag's end): no menu")
+    f.__scripts.OnMouseUp(f, "RightButton")
+    local found = false
+    for _, it in ipairs(d.QB.UI.lastMenu or {}) do if it[1] == "Show the game's quest tracker" then found = true end end
+    assert(found, "a right-click on the note: the frame's menu with Show the game's quest tracker")
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")
