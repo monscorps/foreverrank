@@ -4079,11 +4079,12 @@ function UI:CreateSettingsView(parent)
   v.glowSetHint:SetHeight(40)
   yl = y0 - 502
 
-  -- the camp bar (Camp.lua): icons under your character, a switch each; and the banner when you leave a town
+  -- the camp bar (Camp.lua): icons under your character, a switch each; and the banner while a buff is missing
   y0 = yr
   head(RIGHT, y0, "Camp bar")
   local REMIND = { { "food", "Well Fed, and the food that gives it" }, { "fire", "Campfire: Basic Campfire or a kit" }, { "camp", "Camp features I can place, with the cooldown" },
-                   { "bag", "Sleeping bag and Well Rested" }, { "quietInstance", "Hidden in dungeons" }, { "buffs", "Tell me when I leave town without my buffs" },
+                   { "bag", "Sleeping bag and Well Rested" }, { "quietInstance", "Hidden in dungeons" }, { "buffs", "Missing buffs, a click to cast them" },
+                   { "party", "Party members' buffs" },
                    -- (5.4.4: each suggestion of its own)
                    { "sit", "Sit by a campfire near me" }, { "wood", "Fire burned out: where to buy wood" }, { "bagChain", "Where the sleeping bag's quests are" } }
   v.remind = {}
@@ -4111,8 +4112,12 @@ function UI:CreateSettingsView(parent)
   end)
   tooltip(v.remind.buffs, function(tip)
     tip:AddLine("Missing buffs", GOLD[1], GOLD[2], GOLD[3])
-    tip:AddLine("When you leave an inn or a city, a banner above the camp bar shows the buffs you are missing: your class's own, Well Fed, a camp feature's. A click casts one or eats the food. Never in a fight or a dungeon.", 1, 1, 1, true)
+    tip:AddLine("While a buff you can give yourself is missing, a banner above the camp bar shows it: your class's own, Well Fed, a camp feature's. A click casts one or eats the food. Never in a fight; its X hides it for ten minutes.", 1, 1, 1, true)
     tip:AddLine("/qb buffs shows it any time.", 0.6, 0.6, 0.6, true)
+  end)
+  tooltip(v.remind.party, function(tip)
+    tip:AddLine("Party members' buffs", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("In a party (not a raid), the banner also shows each member missing a buff of yours that can be cast on others, with their name. A click casts it on them; out of range it is dimmed.", 1, 1, 1, true)
   end)
   yr = y0 - 24 - #REMIND * 26 - 16
 

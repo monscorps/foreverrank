@@ -296,7 +296,9 @@ end })
 BASE.CreateVector2D = function(x, y) return { x = x, y = y } end
 BASE.Ambiguate = function(name) return name end
 BASE.CLASS_ICON_TCOORDS = { PALADIN = { 0, 0.25, 0.5, 0.75 }, WARRIOR = { 0, 0.25, 0, 0.25 }, SHAMAN = { 0.25, 0.49, 0.25, 0.5 } }
-BASE.RAID_CLASS_COLORS = { PALADIN = { r = 0.96, g = 0.55, b = 0.73 }, WARRIOR = { r = 0.78, g = 0.61, b = 0.43 }, SHAMAN = { r = 0, g = 0.44, b = 0.87 } }
+BASE.RAID_CLASS_COLORS = { PALADIN = { r = 0.96, g = 0.55, b = 0.73 }, WARRIOR = { r = 0.78, g = 0.61, b = 0.43 }, SHAMAN = { r = 0, g = 0.44, b = 0.87 },
+  MAGE = { r = 0.25, g = 0.78, b = 0.92 }, PRIEST = { r = 1, g = 1, b = 1 }, ROGUE = { r = 1, g = 0.96, b = 0.41 }, DRUID = { r = 1, g = 0.49, b = 0.04 },
+  HUNTER = { r = 0.67, g = 0.83, b = 0.45 }, WARLOCK = { r = 0.53, g = 0.53, b = 0.93 } }
 BASE.CreateFromMixins = function(...)
   local t = {}
   for i = 1, select("#", ...) do for k, v in pairs(select(i, ...)) do t[k] = v end end
@@ -472,6 +474,22 @@ local function newClient(o)
   env.GetProfessions = function() local p = c.profs or {}; return p[1] and 1 or nil, p[2] and 2 or nil, nil, p[3] and 3 or nil, p[4] and 4 or nil, p[5] and 5 or nil end
   env.GetProfessionInfo = function(i) local p = (c.profs or {})[i]; if not p then return nil end return p[1], 0, p[2], 300, 0, 0, 0, 0 end
   env.UnitOnTaxi = env.UnitOnTaxi or function() return c.taxi or false end
+  -- the secure state driver (Blizzard_RestrictedAddOnEnvironment/SecureStateDriver.lua): RegisterStateDriver(frame,
+  -- "visibility", "[combat] hide; show") has the game's secure code show and hide the frame, protected or not, as a
+  -- fight starts and ends (its manager looks every 0.2 s: tick resolves it). Registering goes through a protected
+  -- frame's attribute: blocked in a fight
+  c.drivers = {}
+  function c.resolveDrivers()
+    for f, values in pairs(c.drivers) do
+      if values == "[combat] hide; show" then rawset(f, "__shown", not c.combat) end
+    end
+  end
+  env.RegisterStateDriver = function(f, state, values)
+    if c.combat then error("ADDON_ACTION_BLOCKED: RegisterStateDriver in a fight", 2) end
+    assert(state == "visibility" and values == "[combat] hide; show", "a state driver the mock knows: " .. tostring(state) .. " " .. tostring(values))
+    c.drivers[f] = values
+    c.resolveDrivers()
+  end
   env.C_Minimap = { GetViewRadius = function() return c.miniRadius or 233.33 end,
     GetNumTrackingTypes = function() return #c.tracking end,
     GetTrackingFilter = function(i) local t = c.tracking[i]; return t and { filterID = t.filterID } or nil end,
@@ -644,6 +662,14 @@ local function newClient(o)
   -- expirationTime = }, ... } as HELPFUL
   env.C_UnitAuras = {
     GetAuraDataByIndex = function(unit, i, filter)
+      -- a party member's: c.party[i].buffs = { name or { name =, spellId = }, ... } (a name may be a secret value)
+      local pi = type(unit) == "string" and unit:match("^party(%d)$")
+      if pi then
+        local pm = (c.party or {})[tonumber(pi)]
+        local n = filter == "HELPFUL" and pm and (pm.buffs or {})[i]
+        if type(n) == "table" and getmetatable(n) ~= SECRET_MT then return { name = n.name, spellId = n.spellId or 0 } end
+        return n and { name = n, spellId = 0 } or nil
+      end
       if filter == "HELPFUL" and c.buffs then
         local n = c.buffs[i]
         if type(n) == "table" then return { name = n.name, spellId = n.spellId or 0, applications = n.applications, expirationTime = n.expirationTime, icon = n.icon } end
@@ -732,7 +758,7 @@ local function newClient(o)
   env.GetNormalizedRealmName = function() return c.realmGone and nil or "ForeverNormal" end
   env.GetRealmName = function() return "Forever Normal" end
   env.IsInGroup = function() return o.group or false end
-  env.IsInRaid = function() return false end
+  env.IsInRaid = function() return c.raid or false end
   -- the party without you (c.party), whether a unit is you, and whether you fly (c.flying)
   env.GetNumSubgroupMembers = function() return c.party and #c.party or 0 end
   env.UnitIsUnit = function(a, b) return a == b end
@@ -1012,7 +1038,17 @@ local function newClient(o)
     assert(type(old) == "function", "hooksecurefunc needs a function: " .. tostring(name))
     rawset(t, name, function(...) local r = { old(...) }; fn(...); return unpack(r) end)
   end
-  env.UnitIsDeadOrGhost = function() return c.ghost or false end
+  -- a party member's own (c.party[i].dead, .offline); yours is c.ghost
+  env.UnitIsDeadOrGhost = function(unit)
+    local i = type(unit) == "string" and unit:match("^party(%d)$")
+    if i then local pm = (c.party or {})[tonumber(i)]; return pm and pm.dead or false end
+    return c.ghost or false
+  end
+  env.UnitIsConnected = function(unit)
+    local i = type(unit) == "string" and unit:match("^party(%d)$")
+    if i then local pm = (c.party or {})[tonumber(i)]; return pm ~= nil and not pm.offline end
+    return true
+  end
   -- where your corpse lies on a map, while you are a ghost: c.corpse = { m, x, y } (map percent 0-1)
   env.C_DeathInfo = { GetCorpseMapPosition = function(m)
     local k = c.corpse
@@ -1047,6 +1083,14 @@ local function newClient(o)
   env.C_Spell = {
     GetSpellTexture = function(id) return id == 556 and 136010 or 134400 end,
     GetSpellCooldown = function() return { startTime = c.recallCD or 0, duration = c.recallCD and 900 or 0, isEnabled = true, modRate = 1 } end,
+    -- (SpellDocumentation.lua: true in range, false out, nil when the check can't be made; a party member's .far,
+    -- .rangeUnknown)
+    IsSpellInRange = function(spell, unit)
+      local i = type(unit) == "string" and unit:match("^party(%d)$")
+      local pm = i and (c.party or {})[tonumber(i)]
+      if not pm or pm.rangeUnknown then return nil end
+      return not pm.far
+    end,
   }
   -- chat people read: one line of at most 255 bytes, no escape codes, only to a channel you're in
   c.said, c.chatErrors = {}, {}
@@ -1198,6 +1242,7 @@ end
 
 -- run what is due on the client's clock, then advance it
 local function tick(c, seconds)
+  if c.resolveDrivers then c.resolveDrivers() end
   local target = c.clock + (seconds or 0)
   for _ = 1, 1000 do
     table.sort(c.timers, function(a, b) return a.t < b.t end)
@@ -5395,7 +5440,7 @@ do
   assert(B and B:IsShown() and env.QuestBankBuff_1 and env.QuestBankBuff_1.state.tip[2]:find("30 min", 1, true), "the banner: the ribs, 30 min")
   for _, pr in ipairs(checkLayout(B, "Missing buffs banner, Gourmand")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
   STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(B, "Missing buffs banner, Gourmand 3: the ribs' 30 min")
-  Camp.HideBanner()
+  Camp.Snooze()
   c.legacy[110313] = 0; L.Read(); Camp.Refresh()
   assert(food.state.tip[2]:find("15 min", 1, true), "no Gourmand: 15 min")
 
@@ -12717,7 +12762,7 @@ do
   local spellCD = {}
   env.C_Spell.GetSpellCooldown = function(id) local s = spellCD[id]; return { startTime = s or 0, duration = s and 300 or 0, isEnabled = true, modRate = 1 } end
   -- the camp features' shared hour from the camp bar's own test runs out first
-  tick(owner, Camp.QUIET + 3600)
+  tick(owner, 60 + 3600)
   local SMITH = { { "Blacksmithing", 150 }, { "Alchemy", 10 }, { "Fishing", 0 }, { "Cooking", 60 }, { "First Aid", 30 } }
   assert(Camp.FIRE_SPELL == 818 and Camp.WOOD == 4470 and D.CAMP[Camp.BASIC_KIT] and D.CAMP[Camp.BASIC_KIT].t == "kit", "Basic Campfire, Simple Wood, the Basic Campfire Kit")
   -- every class's buffs: names, an icon, ranks lowest first, each id once
@@ -12779,16 +12824,16 @@ do
   c.combat = false; ev("PLAYER_REGEN_ENABLED")
   assert(fire:GetAttribute("type") == "item" and fire:GetAttribute("item") == "item:279981" and fire:GetAttribute("spell") == nil, "after the fight: the kit")
 
-  -- (b) the banner: a mage who knows two ranks of Arcane Intellect, ribs in the bag, nothing on, in town
+  -- (b) the banner (6.1.1: up whenever a buff you can give yourself is missing, out of a fight; 6.1.0 showed it once as
+  -- you left a town, for 12 seconds): a mage who knows two ranks of Arcane Intellect, ribs in the bag, nothing on
   owner.o.class, c.profs, c.buffs = "MAGE", nil, {}
   c.known = { [1459] = true, [1460] = true }
   owner.o.bagSlots = { { 2888, 5 } }
+  local shows = Camp.shows
   c.resting = true
   ev("PLAYER_ENTERING_WORLD")
-  local shows = Camp.shows
-  c.resting = false; ev("PLAYER_UPDATE_RESTING")
   local B = env.QuestBankBuffBanner
-  assert(B and B:IsShown() and Camp.shows == shows + 1 and B.title:GetText() == "Missing buffs", "left town without buffs: the banner")
+  assert(B and B:IsShown() and Camp.shows == shows + 1 and B.title:GetText() == "Missing buffs", "buffs missing: the banner, in town too")
   assert(btn(1):IsShown() and btn(1):GetAttribute("type") == "item" and btn(1):GetAttribute("item") == "item:2888" and btn(1).count:GetText() == "5",
     "Well Fed missing: the ribs, a click eats one")
   assert(btn(2):IsShown() and btn(2):GetAttribute("type") == "spell" and btn(2):GetAttribute("spell") == 1460 and btn(2):GetAttribute("unit") == "player"
@@ -12796,8 +12841,8 @@ do
   assert(not (btn(3) and btn(3):IsShown()), "two icons")
   for _, pr in ipairs(checkLayout(B, "Missing buffs banner")) do problems[#problems + 1] = pr end
   layouts[#layouts + 1] = dumpLayout(B, "Missing buffs banner")
-  ev("PLAYER_UPDATE_RESTING")
-  assert(Camp.shows == shows + 1, "the same departure: once")
+  c.resting = false; ev("PLAYER_UPDATE_RESTING")
+  assert(B:IsShown() and Camp.shows == shows + 1, "out of town: the same banner")
   -- a buff cast takes its icon away; all on, the banner goes
   c.buffs = { "Arcane Intellect" }
   ev("UNIT_AURA", "player")
@@ -12805,49 +12850,36 @@ do
   c.buffs = { "Well Fed", "Arcane Intellect" }
   ev("UNIT_AURA", "player")
   assert(not B:IsShown(), "everything on: the banner goes")
-  -- the next departure, after the quiet minute: up, and gone after 12 seconds
+  -- they run out: back at once, and it stays
   c.buffs = {}
-  tick(owner, Camp.QUIET + 1)
-  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
-  assert(B:IsShown() and Camp.shows == shows + 2, "the next departure: the banner again")
-  tick(owner, Camp.BANNER_SECS - 1)
-  assert(B:IsShown() and B.left:GetWidth() < B:GetWidth() / 4, "after 11 s: still up, its time line nearly run out")
-  tick(owner, 1.5)
-  assert(not B:IsShown(), "after 12 s: gone")
-  -- a town's edge crossed back and forth: not again within the minute
-  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
-  assert(not B:IsShown() and Camp.shows == shows + 2, "within the minute: not again")
-  -- /qb buffs: any time; its X closes it
-  env.SlashCmdList.QUESTBANK("buffs")
-  assert(B:IsShown() and Camp.shows == shows + 3 and btn(2):GetAttribute("spell") == 1460, "/qb buffs shows it")
+  ev("UNIT_AURA", "player")
+  assert(B:IsShown() and Camp.shows == shows + 2, "the buffs gone: the banner again")
+  tick(owner, 30)
+  assert(B:IsShown(), "and it stays up")
+  -- its X: ten minutes; /qb buffs: any time
   B.close.__scripts.OnClick(B.close, "LeftButton")
   assert(not B:IsShown(), "the X closes it")
-  -- not in a fight: after it, within the minute
-  tick(owner, Camp.QUIET + 1)
-  c.combat = true; ev("PLAYER_REGEN_DISABLED")
-  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
-  assert(not B:IsShown() and Camp.shows == shows + 3, "left town in a fight: no banner")
+  tick(owner, 60)
+  assert(not B:IsShown(), "a minute on: still closed")
+  env.SlashCmdList.QUESTBANK("buffs")
+  assert(B:IsShown() and Camp.shows == shows + 3 and btn(2):GetAttribute("spell") == 1460, "/qb buffs shows it")
+  -- in a fight: hidden by the game's state driver, its buttons left alone; after it, back
+  c.combat = true; ev("PLAYER_REGEN_DISABLED"); tick(owner, 1)
+  assert(not B:IsVisible() and btn(2):GetAttribute("spell") == 1460, "in a fight: not shown, its buttons kept")
   local n = #owner.chat
   env.SlashCmdList.QUESTBANK("buffs")
-  assert(not B:IsShown() and #owner.chat == n + 1 and said():find("Not in a fight", 1, true), "/qb buffs in a fight: says so")
-  c.combat = false; ev("PLAYER_REGEN_ENABLED")
-  assert(B:IsShown() and Camp.shows == shows + 4, "the fight over: the banner, once")
-  -- a fight while it is up: dimmed, its buttons left alone, gone when the fight is over
-  c.combat = true; ev("PLAYER_REGEN_DISABLED")
-  tick(owner, Camp.BANNER_SECS + 1)
-  assert(B:IsShown() and B:GetAlpha() < 1 and btn(2):GetAttribute("spell") == 1460, "in a fight: dimmed, kept")
-  c.combat = false; ev("PLAYER_REGEN_ENABLED")
-  assert(not B:IsShown(), "the fight over: gone")
+  assert(not B:IsVisible() and #owner.chat == n + 1 and said():find("Not in a fight", 1, true), "/qb buffs in a fight: says so")
+  c.combat = false; ev("PLAYER_REGEN_ENABLED"); tick(owner, 1)
+  assert(B:IsVisible(), "the fight over: back")
   -- not in a dungeon
-  tick(owner, Camp.QUIET + 1)
   env.IsInInstance = function() return true, "party" end
-  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
-  assert(not B:IsShown() and Camp.shows == shows + 4, "in a dungeon: no banner")
+  Camp.Refresh()
+  assert(not B:IsShown(), "in a dungeon: no banner")
   env.IsInInstance = saveInst
   -- everything on: nothing to say
   c.buffs = { "Well Fed", "Arcane Brilliance" }
-  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
-  assert(not B:IsShown() and Camp.shows == shows + 4, "all on (Arcane Brilliance counts): no banner")
+  Camp.Refresh()
+  assert(not B:IsShown(), "all on (Arcane Brilliance counts): no banner")
   n = #owner.chat
   env.SlashCmdList.QUESTBANK("buffs")
   assert(not B:IsShown() and said():find("No buffs missing.", 1, true), "/qb buffs with all on: says so")
@@ -12855,11 +12887,11 @@ do
   c.buffs = {}
   local v5 = owner.QB.UI.views[5]
   owner.QB.UI:Open(5)
-  assert(v5.remind.buffs and v5.remind.buffs:GetChecked() and v5.remind.buffs.label:GetText() == "Tell me when I leave town without my buffs", "the switch, on")
+  assert(v5.remind.buffs and v5.remind.buffs:GetChecked() and v5.remind.buffs.label:GetText() == "Missing buffs, a click to cast them", "the switch, on")
   v5.remind.buffs:SetChecked(false); v5.remind.buffs.__scripts.OnClick(v5.remind.buffs, "LeftButton")
   assert(owner.QB:Settings().remind.buffs == false, "switched off")
-  c.resting = true; ev("PLAYER_UPDATE_RESTING"); c.resting = false; ev("PLAYER_UPDATE_RESTING")
-  assert(not B:IsShown() and Camp.shows == shows + 4, "switched off: no banner")
+  Camp.Refresh()
+  assert(not B:IsShown(), "switched off: no banner")
   v5.remind.buffs:SetChecked(true); v5.remind.buffs.__scripts.OnClick(v5.remind.buffs, "LeftButton")
   -- the armor: Ice Armor before Frost Armor; the one last seen on you first; any rank, by name or id
   c.known = { [1459] = true, [168] = true, [7300] = true, [7302] = true, [6117] = true }
@@ -12891,7 +12923,7 @@ do
   -- a feature that gives no buff (the Repair Bot: repairs and reagents) is no missing buff
   assert(D.CAMP[279949] and not D.CAMP[279949].b, "the Repair Bot gives no aura")
   owner.o.bagSlots, c.profs, c.buffs = { { 279949, 1 }, { 279981, 1 } }, { { "Engineering", 150 } }, { "Well Fed" }
-  tick(owner, Camp.QUIET + 3601)
+  tick(owner, 60 + 3601)
   env.SlashCmdList.QUESTBANK("buffs")
   assert(not B:IsShown() and said():find("No buffs missing.", 1, true), "an engineer's Repair Bot: nothing missing")
   -- the Expert Campfire Kit ("Builds an expert campfire") is a kit too: the fire icon uses it
@@ -14616,9 +14648,9 @@ end)()
     c.buffs = { "Arcane Intellect", "Well Fed" }
     ev("UNIT_AURA", "player")
     assert(B:IsShown() and icons() == "self1", "Well Fed: the food gone, Frost Armor left: " .. icons())
-    -- untouched, it goes after its 12 seconds as before
+    -- untouched, it stays while Frost Armor is missing (6.1.1; 6.1.0 took it away after its 12 seconds)
     tick(c, 13)
-    assert(not B:IsShown(), "untouched: gone")
+    assert(B:IsShown() and icons() == "self1", "untouched: still up for Frost Armor: " .. icons())
     c.known, c.buffs = nil, nil
   end }
 
@@ -17538,6 +17570,167 @@ end)()
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")
+  end
+end)()
+
+----------------------------------------------------------------------------
+-- 6.1.1: the owner's in-game test of 6.1.0 (and Cute 0.7.0). Each case is in F61CASES, in order, after the harness's
+-- helpers, and failed on 6.1.0's files
+----------------------------------------------------------------------------
+;(function()
+  local F61CASES = {}
+  -- a character out in the world (never rested this session) who knows `known`, carrying nothing
+  local function char(name, class, className, classID, known, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 20, cap = 60, faction = o.faction or "Alliance", className = className, class = class,
+      classID = classID, race = o.race or "Human", log = o.log or {}, done = o.done or {}, world = o.world or { 0, -9200, -2150 }, map = o.map or 1433,
+      bagSlots = {}, bind = o.bind or "Lakeshire" })
+    c.known, c.buffs, c.resting = known or {}, {}, false
+    if o.party then c.party, c.o.group = o.party, true end
+    login(c)
+    return c
+  end
+  local function campEv(c, e, ...) local f = c.QB.Camp.frame; f.__scripts.OnEvent(f, e, ...) end
+
+  -- A. "I did not get the notification bar about missing buffs and options to click them on me": 6.1.0 showed the
+  -- banner once when you left an inn or a city (PLAYER_UPDATE_RESTING, Camp.lua's departed), for 12 seconds; a
+  -- character who logs in out in the world, or rides out without the rested state changing, never saw it
+  F61CASES[#F61CASES + 1] = { "missing buffs: up whenever one is missing, out of a fight; its X hides it ten minutes", function()
+    local c = char("Ilsa", "MAGE", "Mage", 8, { [1459] = true, [1460] = true })
+    local env, Camp = c.env, c.QB.Camp
+    local B = env.QuestBankBuffBanner
+    assert(B and B:IsVisible(), "out in the world with Arcane Intellect missing: the banner is up")
+    local ai = env.QuestBankBuff_1
+    assert(ai:IsShown() and ai:GetAttribute("type") == "spell" and ai:GetAttribute("spell") == 1460 and ai:GetAttribute("unit") == "player",
+      "Arcane Intellect, the highest rank, cast on yourself")
+    tick(c, 60)
+    assert(B:IsVisible(), "a minute on: still up")
+    B.close.__scripts.OnClick(B.close, "LeftButton")
+    assert(not B:IsShown(), "the X hides it")
+    tick(c, 9 * 60)
+    assert(not B:IsShown(), "nine minutes on: still hidden")
+    tick(c, 62)
+    assert(B:IsVisible(), "ten minutes on and still missing: back")
+    -- a fight: never shown in one (the game's state driver hides what holds the buttons), its buttons left alone
+    c.combat = true; campEv(c, "PLAYER_REGEN_DISABLED")
+    tick(c, 1)
+    assert(not B:IsVisible() and ai:GetAttribute("spell") == 1460, "in a fight: not shown, its button as it was")
+    c.combat = false; campEv(c, "PLAYER_REGEN_ENABLED")
+    tick(c, 1)
+    assert(B:IsVisible(), "the fight over: up again")
+    -- on a flight or dead: not shown
+    c.taxi = true; tick(c, 3)
+    assert(not B:IsShown(), "on a flight: hidden")
+    c.taxi, c.ghost = false, true; tick(c, 3)
+    assert(not B:IsShown(), "dead: hidden")
+    c.ghost = false; tick(c, 3)
+    assert(B:IsShown(), "alive again: up")
+    -- the buff on: nothing missing, gone; off again: back
+    c.buffs = { "Arcane Intellect" }; campEv(c, "UNIT_AURA", "player")
+    assert(not B:IsShown(), "Arcane Intellect on: gone")
+    c.buffs = {}; campEv(c, "UNIT_AURA", "player")
+    assert(B:IsShown(), "it ran out: back at once")
+    -- /qb buffs shows it within the X's ten minutes
+    B.close.__scripts.OnClick(B.close, "LeftButton")
+    env.SlashCmdList.QUESTBANK("buffs")
+    assert(B:IsShown(), "/qb buffs: shown at once")
+    -- the switch off: never
+    c.QB:Settings().remind.buffs = false; tick(c, 3)
+    assert(not B:IsShown(), "switched off: hidden")
+    c.QB:Settings().remind.buffs = true; tick(c, 3)
+    assert(B:IsShown(), "on again: up")
+    for _, pr in ipairs(checkLayout(B, "Missing buffs banner, out in the world")) do problems[#problems + 1] = pr end
+  end }
+
+  -- A. 1.1 "Same options to click on missing buffs I can do on party members if I'm not in a raid": a priest in a party
+  -- of four: Fortitude (any rank, or Prayer of Fortitude) is cast on others (SpellMisc RangeIndex 4, 30 yards); Inner
+  -- Fire is Self Only (RangeIndex 1) and never offered for a member
+  F61CASES[#F61CASES + 1] = { "party members' buffs: an icon each, the name in class colour, a click casts it on them", function()
+    local party = {
+      { "Brom", "WARRIOR", 20, buffs = {} },
+      { "Sela", "MAGE", 20, buffs = { "Power Word: Fortitude" } },
+      { "Kett", "ROGUE", 20, buffs = {}, far = true },
+      { "Wren", "DRUID", 20, buffs = {}, dead = true },
+    }
+    local c = char("Anselm", "PRIEST", "Priest", 5, { [1243] = true, [1244] = true, [588] = true }, { party = party })
+    local env, Camp = c.env, c.QB.Camp
+    assert(Camp.SELF.PRIEST[1].other and not Camp.SELF.PRIEST[2].other and Camp.SELF.MAGE[1].other and not Camp.SELF.MAGE[2].other
+      and Camp.SELF.DRUID[1].other and not Camp.SELF.WARLOCK[1].other and not Camp.SELF.SHAMAN[1].other and not Camp.SELF.HUNTER[1].other
+      and Camp.SELF.PALADIN[1].other, "the buffs cast on others: Intellect, Fortitude, Mark of the Wild, Thorns, the blessings")
+    local B = env.QuestBankBuffBanner
+    assert(B and B:IsVisible(), "the banner is up")
+    local function member(i) return env["QuestBankBuffParty_" .. i] end
+    local function shown()
+      local out = {}
+      for i = 1, 8 do local b = member(i); if b and b:IsShown() then out[#out + 1] = b.label:GetText() end end
+      return table.concat(out, ",")
+    end
+    -- Brom (in range) and Kett (out of range: shown, dimmed); Sela has it; Wren is dead
+    assert(shown() == "Brom,Kett", "Brom and Kett: " .. shown())
+    local brom, kett = member(1), member(2)
+    assert(brom:GetAttribute("type") == "spell" and brom:GetAttribute("spell") == 1244 and brom:GetAttribute("unit") == "party1",
+      "Brom: Fortitude's highest rank known, cast on party1")
+    local wr = env.RAID_CLASS_COLORS.WARRIOR
+    local r, g, b2 = brom.label:GetTextColor()
+    assert(math.abs(r - wr.r) < 0.01 and math.abs(g - wr.g) < 0.01 and math.abs(b2 - wr.b) < 0.01, "his name in the warrior's colour")
+    assert(brom:GetAlpha() == 1 and kett:GetAlpha() < 1 and kett:GetAttribute("unit") == "party3", "Kett out of range: dimmed, still a click")
+    -- the priest's own: Fortitude and Inner Fire, on yourself
+    assert(env.QuestBankBuff_1:GetAttribute("unit") == "player" and env.QuestBankBuff_2:GetAttribute("spell") == 588, "your own row: Fortitude and Inner Fire")
+    for _, pr in ipairs(checkLayout(B, "Missing buffs banner, a party")) do problems[#problems + 1] = pr end
+    layouts[#layouts + 1] = dumpLayout(B, "Missing buffs banner, a priest and two party members")
+    -- Brom gets it: his icon goes; Kett comes in range: lit
+    party[1].buffs = { { name = "Power Word: Fortitude", spellId = 1244 } }
+    party[3].far = nil
+    tick(c, 3)
+    assert(shown() == "Kett" and member(1):GetAttribute("unit") == "party3" and member(1):GetAlpha() == 1, "Brom buffed, Kett in range: " .. shown())
+    -- offline, and auras the game hides (secret): not offered
+    party[3].offline = true
+    party[4].dead, party[4].buffs = nil, { SECRET.str() }
+    tick(c, 3)
+    assert(shown() == "", "offline, and a member whose auras can't be read: none: " .. shown())
+    party[3].offline = nil
+    tick(c, 3)
+    assert(shown() == "Kett", "online again: " .. shown())
+    -- in a fight the buttons stay as they are; after it they are made again
+    c.combat = true; campEv(c, "PLAYER_REGEN_DISABLED")
+    party[1].buffs = {}
+    tick(c, 3)
+    assert(shown() == "Kett" and not B:IsVisible(), "in a fight: hidden, nothing set")
+    c.combat = false; campEv(c, "PLAYER_REGEN_ENABLED")
+    tick(c, 1)
+    assert(shown() == "Brom,Kett" and B:IsVisible(), "the fight over: made again: " .. shown())
+    -- a raid: your own buffs only
+    c.raid = true; tick(c, 3)
+    assert(shown() == "" and env.QuestBankBuff_1:IsShown(), "in a raid: no party icons: " .. shown())
+    c.raid = false; tick(c, 3)
+    assert(shown() == "Brom,Kett", "out of the raid: " .. shown())
+    -- the setting, in QuestBank's camp section
+    c.QB.UI:Open(5)
+    local v5 = c.QB.UI.views[5]
+    assert(v5.remind.party and v5.remind.party:GetChecked() and v5.remind.party.label:GetText() == "Party members' buffs", "the Party members' buffs row, on")
+    v5.remind.party:SetChecked(false); v5.remind.party.__scripts.OnClick(v5.remind.party, "LeftButton")
+    tick(c, 3)
+    assert(c.QB:Settings().remind.party == false and shown() == "", "unticked: no party icons: " .. shown())
+    v5.remind.party:SetChecked(true); v5.remind.party.__scripts.OnClick(v5.remind.party, "LeftButton")
+    tick(c, 3)
+    assert(shown() == "Brom,Kett", "ticked again: " .. shown())
+    -- only party members missing: up all the same
+    c.buffs = { "Power Word: Fortitude", "Inner Fire" }; campEv(c, "UNIT_AURA", "player")
+    tick(c, 3)
+    assert(B:IsShown() and not env.QuestBankBuff_1:IsShown() and shown() == "Brom,Kett", "your own on, theirs missing: up with their icons")
+    for _, pr in ipairs(checkLayout(B, "Missing buffs banner, the party alone")) do problems[#problems + 1] = pr end
+    -- a mage's party: Arcane Intellect for them, never the armor
+    local m = char("Ivo", "MAGE", "Mage", 8, { [1459] = true, [168] = true }, { party = { { "Tam", "PRIEST", 20, buffs = {} } } })
+    local mb = m.env.QuestBankBuffParty_1
+    assert(mb and mb:IsShown() and mb:GetAttribute("spell") == 1459 and mb:GetAttribute("unit") == "party1" and not (m.env.QuestBankBuffParty_2 and m.env.QuestBankBuffParty_2:IsShown()),
+      "a mage: Arcane Intellect on Tam, no armor")
+    -- (out of the party bus: later blocks deliver party messages between grouped clients)
+    c.o.group, m.o.group = false, false
+  end }
+
+  for _, case in ipairs(F61CASES) do
+    case[2]()
+    print("6.1.1: " .. case[1] .. ": ok")
   end
 end)()
 

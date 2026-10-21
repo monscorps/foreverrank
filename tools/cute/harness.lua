@@ -4821,6 +4821,15 @@ do
     assert(not texts(rone):find("far view", 1, true) and texts(rone):find("Route pins on the world map", 1, true), "Map: no far view row")
     rone.C.UI:Open("settings", "camp")
     assert(not texts(rone):find("Sleeping bag", 1, true) and not texts(rone):find("Sellers", 1, true) and texts(rone):find("Camp bar", 1, true), "Camp: the bar, the banner and the light alone:\n" .. texts(rone))
+    -- 6.1.1: the party's buffs (QuestBank's camp section has the same row); six rows at most in Camp and in Map
+    assert(texts(rone):find("Party members' buffs", 1, true) and texts(rone):find("Missing buffs", 1, true), "Camp: the missing-buffs and party rows:\n" .. texts(rone))
+    local function rowsOf(id)
+      local n = 0
+      local col = setmetatable({}, { __index = function(_, k) return function() if k == "Check" or k == "Choice" or k == "Step" or k == "Edit" then n = n + 1 end end end })
+      M.byId[id].settings(M.byId[id], col)
+      return n
+    end
+    assert(rowsOf("camp") <= 6 and rowsOf("map") <= 6, string.format("Camp and Map keep six rows at most: %d, %d", rowsOf("camp"), rowsOf("map")))
     local s = rone.env.CuteQuestDB.settings
     assert(s.mapIcons == true and s.pins == true and s.minimapGivers == true and s.campBar == true and s.glow.on == true, "on: the switches on")
     rone.C.UI:Open("settings", "map")
@@ -4887,7 +4896,7 @@ do
     assert(s.guide.on == true and s.guide.frame == true and stepShown(c), "Quests ticked alone: the guide on, the frame up: " .. flags(s))
     assert(s.mapIcons == false and s.pins == false and s.minimapPins == false and s.minimapLines == false and s.minimapGivers == false and s.mmExtended == false,
       "Map unticked: no quest icons, no route pins, no route on the minimap, no far view: " .. flags(s))
-    assert(s.campBar == false and s.remind.buffs == false and s.glow.on == false, "Camp unticked: no camp bar, no buffs banner, no light: " .. flags(s))
+    assert(s.campBar == false and s.remind.buffs == false and s.remind.party == false and s.glow.on == false, "Camp unticked: no camp bar, no buffs banner, no party's buffs, no light: " .. flags(s))
     assert(s.cuteOff.map.mapIcons == true and s.cuteOff.camp.campBar == true, "what the flags were is kept for the switch on")
     -- Map ticked: its flags back as they were (the engine's defaults); a row's choice survives off and on
     c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
@@ -4899,7 +4908,7 @@ do
     assert(s.mapIcons == true and s.pins == true and s.minimapGivers == false, "Map ticked again: the row's choice kept: " .. flags(s))
     -- Camp ticked: the bar and the light; the light's switch goes through Glow.Set, which puts the game's settings back
     c.C.Modules.Set("Cute_Quest:camp", true); tick(c, 1)
-    assert(s.campBar == true and s.remind.buffs == true and s.glow.on == true, "Camp ticked: the bar, the banner, the light: " .. flags(s))
+    assert(s.campBar == true and s.remind.buffs == true and s.remind.party == true and s.glow.on == true, "Camp ticked: the bar, the banner, the party's buffs, the light: " .. flags(s))
     c.C.Modules.Set("Cute_Quest:camp", false); tick(c, 1)
     assert(s.campBar == false and s.glow.on == false, "Camp unticked: off again: " .. flags(s))
     -- Quests off: the guide off, the arrow put away; on: the arrow back

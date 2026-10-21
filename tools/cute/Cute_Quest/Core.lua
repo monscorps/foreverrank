@@ -1308,7 +1308,7 @@ local DEFAULTS = {
   -- sleeping bag; hidden in dungeons when quietInstance. campBar = false hides the bar. buffs: the missing-buffs banner
   -- when you leave a town. 5.4.4's suggestions, each its own: sit (by a fire near you), wood (a seller when the fire
   -- burned out), bagChain (where the sleeping bag's quest chain goes on)
-  remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true, buffs = true, sit = true, wood = true, bagChain = true }, campBar = true,
+  remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true, buffs = true, sit = true, wood = true, bagChain = true, party = true }, campBar = true,
   arrowMode = "route", -- what the direction arrow points at: route, handin, pickup, or pin (Arrow.lua)
   -- the arrow guides you step by step, by the flight paths you know, boats and the hearthstone (Travel.lua); off, it
   -- points straight at its target. arrowHearth: the hearthstone may be one of the steps

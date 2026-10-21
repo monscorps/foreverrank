@@ -21,12 +21,16 @@
 --          on (it starts at the Nailed Plank in Westfall, or the Burned-Out Remains in the Barrens; its own switch,
 --          bagChain); once the chain is done, a seller you have seen
 -- Alt-drag moves the bar. In a fight it dims and keeps its buttons as they are; in dungeons it hides if asked.
--- Leaving a town without your buffs (an inn or a city: the game's rested state ends) puts a banner above the bar in
--- the same style: "Missing buffs" and an icon each, a click casts it or eats the food. Never in a fight or a dungeon,
--- once per departure, gone after 12 seconds untouched or with its X; /qb buffs shows it any time. Used, it stays: a
--- click on one of its icons, the mouse on it, a cast or a meal under way keep it up, and an icon goes only once its
--- buff is on you (5.4.4: "as soon as I clicked a buff I was missing, the other buffs I could get disappeared": its 12
--- seconds ran from when it showed, whatever you did, and took every icon with it mid-cast).
+-- A buff you can give yourself missing puts a banner above the bar in the same style: "Missing buffs" and an icon
+-- each, a click casts it or eats the food. 6.1.1: it is up whenever one is missing, out of a fight, alive and not on a
+-- flight (6.1.0 showed it once as you left an inn or a city, for 12 seconds: "I did not get the notification bar about
+-- missing buffs"); its X hides it for ten minutes; in a dungeon it hides with the bar if asked; in a fight the game's
+-- own state driver hides it (it holds the game's secure buttons, which an addon may not hide then); /qb buffs shows it
+-- any time. An icon goes once its buff is on you. In a party (not a raid), a second row: each member alive, online and
+-- not wearing a buff of yours that can be cast on another (Camp.SELF's other), an icon with the name in the class's
+-- colour, a click casts it on them; out of the spell's range (C_Spell.IsSpellInRange: UnitInRange's answers are
+-- secret on Forever) the icon is dimmed. Their auras are read out of a fight; a member whose auras the game hides is
+-- left out. Its own switch, party.
 -- Sellers (5.4.4): each merchant you open who sells camp goods (a campfire kit, Simple Wood, the Cozy Sleeping Bag, a
 -- food that makes you Well Fed) is noted with where it stands (QuestBankDB.disc.sell, in the uploads). A grey fire (no
 -- kit, no wood) or no sleeping bag: the icon names the nearest known seller and how far, and a click shows it on the
@@ -55,8 +59,8 @@ Camp.FoodText = foodText
 
 local plain = QB.Plain
 local function now() return GetTime and GetTime() or 0 end
--- (each suggestion of 5.4.4 has a switch of its own, on until you untick it: sit, wood, bagChain)
-local ON = { "fire", "buffs", "sit", "wood", "bagChain" }
+-- (each suggestion of 5.4.4 has a switch of its own, on until you untick it: sit, wood, bagChain; 6.1.1's party)
+local ON = { "fire", "buffs", "sit", "wood", "bagChain", "party" }
 local function settings()
   local s = QB:Settings()
   if type(s.remind) ~= "table" then s.remind = { camp = true, food = true, bag = true, fire = true, quietInstance = true, buffs = true } end
@@ -90,20 +94,22 @@ Camp.OUT_S, Camp.OUT_YD = OUT_S, OUT_YD
 -- on Forever (1.60.1.70338) and Classic Era (1.15.9). Each entry is one buff to have: the spells that give it (the one
 -- last seen on you first, then in this order), each with its icon and its ranks, lowest first. The highest rank you
 -- know is cast; any rank counts as on, and so do the names in also (a group version, another aspect or blessing).
--- Battle Shout and the other short ones are left out
+-- Battle Shout and the other short ones are left out. other: every spell of the entry can be cast on another player
+-- (SpellMisc's RangeIndex 4, Medium Range, 30 yards, on 1.60.1.70338; the armors, Inner Fire, Lightning Shield and
+-- Aspect of the Hawk are RangeIndex 1, Self Only), offered for party members
 Camp.SELF = {
   MAGE = {
-    { { "Arcane Intellect", 135932, { 1459, 1460, 1461, 10156, 10157 } }, also = { "Arcane Brilliance" } },
+    { { "Arcane Intellect", 135932, { 1459, 1460, 1461, 10156, 10157 } }, also = { "Arcane Brilliance" }, other = true },
     { { "Ice Armor", 135843, { 7302, 7320, 10219, 10220 } }, { "Frost Armor", 135843, { 168, 7300, 7301 } },
       { "Mage Armor", 135991, { 6117, 22782, 22783 } } },
   },
   PRIEST = {
-    { { "Power Word: Fortitude", 135987, { 1243, 1244, 1245, 2791, 10937, 10938 } }, also = { "Prayer of Fortitude" } },
+    { { "Power Word: Fortitude", 135987, { 1243, 1244, 1245, 2791, 10937, 10938 } }, also = { "Prayer of Fortitude" }, other = true },
     { { "Inner Fire", 135926, { 588, 7128, 602, 1006, 10951, 10952 } } },
   },
   DRUID = {
-    { { "Mark of the Wild", 136078, { 1126, 5232, 6756, 5234, 8907, 9884, 9885 } }, also = { "Gift of the Wild" } },
-    { { "Thorns", 136104, { 467, 782, 1075, 8914, 9756, 9910 } } },
+    { { "Mark of the Wild", 136078, { 1126, 5232, 6756, 5234, 8907, 9884, 9885 } }, also = { "Gift of the Wild" }, other = true },
+    { { "Thorns", 136104, { 467, 782, 1075, 8914, 9756, 9910 } }, other = true },
   },
   WARLOCK = {
     { { "Demon Armor", 136185, { 706, 1086, 11733, 11734, 11735 } }, { "Demon Skin", 136185, { 687, 696 } } },
@@ -119,7 +125,7 @@ Camp.SELF = {
     { { "Blessing of Might", 135906, { 19740, 19834, 19835, 19836, 19837, 19838, 25291 } },
       { "Blessing of Wisdom", 135970, { 19742, 19850, 19852, 19853, 19854, 25290 } },
       also = { "Blessing of Kings", "Blessing of Salvation", "Blessing of Light", "Blessing of Sanctuary", "Greater Blessing of Might",
-               "Greater Blessing of Wisdom", "Greater Blessing of Kings", "Greater Blessing of Salvation", "Greater Blessing of Light" } },
+               "Greater Blessing of Wisdom", "Greater Blessing of Kings", "Greater Blessing of Salvation", "Greater Blessing of Light" }, other = true },
   },
 }
 
@@ -193,15 +199,17 @@ end
 
 -- your helpful auras by name: the stacks of one (Camp.Buffs), or what the game says of it (Camp.Auras: stacks, when
 -- it runs out on GetTime's clock, its icon); Camp.Auras also gives their spell ids, each with what the game says of it
--- (true for one with no name)
-function Camp.Auras()
-  local out, ids = {}, {}
+-- (true for one with no name). unit: "player" when nil; a third answer is true when the game hid an aura's name (a
+-- secret value), so what is missing can't be told
+function Camp.Auras(unit)
+  local out, ids, hidden = {}, {}, false
   local get = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
   if get then
     for i = 1, 60 do
-      local ok, a = pcall(get, "player", i, "HELPFUL")
+      local ok, a = pcall(get, unit or "player", i, "HELPFUL")
       if not ok or type(a) ~= "table" then break end
       local n, id = plain(a.name), plain(a.spellId)
+      if n == nil and issecretvalue and issecretvalue(a.name) then hidden = true end
       if type(id) == "number" and id > 0 then ids[id] = true end
       if type(n) == "string" then
         local exp = plain(a.expirationTime)
@@ -218,7 +226,7 @@ function Camp.Auras()
       end
     end
   end
-  return out, ids
+  return out, ids, hidden
 end
 function Camp.Buffs()
   local out = {}
@@ -444,18 +452,30 @@ local function noteSelf(names, ids)
     end
   end
 end
--- the class's buffs you know and don't have on: { id = the highest rank you know, name, icon }, in Camp.SELF's order
-function Camp.SelfMissing(names, ids)
+-- the spell to cast for an entry: the one last seen on you first, then in Camp.SELF's order, the highest rank you know;
+-- { id, name, icon } or nil
+local function castFor(class, i, entry)
+  local last = seen[class .. i]
+  for pass = 1, 2 do
+    for _, sp in ipairs(entry) do
+      if (pass == 1) == (sp[1] == last) then
+        for r = #sp[3], 1, -1 do
+          local id = sp[3][r]
+          if knows(id) then return { id = id, name = spellName(id, sp[1]), icon = sp[2] } end
+        end
+      end
+    end
+  end
+  return nil
+end
+-- the class's buffs you know and don't have on: { id = the highest rank you know, name, icon }, in Camp.SELF's order.
+-- other: only those that can be cast on another player (for a party member's auras)
+function Camp.SelfMissing(names, ids, other)
   local class, out = myClass(), {}
   for i, entry in ipairs(Camp.SELF[class] or {}) do
-    if not selfOn(entry, names, ids) then
-      local order = {}
-      for _, sp in ipairs(entry) do if sp[1] == seen[class .. i] then table.insert(order, 1, sp) else order[#order + 1] = sp end end
-      for _, sp in ipairs(order) do
-        local id
-        for r = #sp[3], 1, -1 do if knows(sp[3][r]) then id = sp[3][r]; break end end
-        if id then out[#out + 1] = { id = id, name = spellName(id, sp[1]), icon = sp[2] }; break end
-      end
+    if (entry.other or not other) and not selfOn(entry, names, ids) then
+      local sp = castFor(class, i, entry)
+      if sp then out[#out + 1] = sp end
     end
   end
   return out
@@ -938,24 +958,24 @@ function Camp.State()
 end
 
 ----------------------------------------------------------------------------
--- the missing-buffs banner: your class's own buffs, Well Fed and a camp feature's, when you leave a town without them
+-- the missing-buffs banner: your class's own buffs, Well Fed and a camp feature's, and your party's, while one is
+-- missing
 ----------------------------------------------------------------------------
-local BANNER_SECS = 12     -- on screen this long
-local QUIET = 60           -- at least this long between two banners of their own accord (a town's edge crossed twice)
+local SNOOZE = 600         -- its X hides it this long
 local TOP = 34             -- the title's strip above the icons
-Camp.BANNER_SECS, Camp.QUIET = BANNER_SECS, QUIET
+local COL = 76             -- a party member's column: the icon, the name under it
+local NAME_H = 14          -- the name's line
+Camp.SNOOZE = SNOOZE
 Camp.shows = 0             -- banners shown, for the tests
-local banner, bicons = nil, {}
-local shownAt, hideLater, wasRested, pendingAt, lastAuto
-local usedAt, eating -- your last click on one of its icons; the food you clicked to eat ({ id, e }), while you eat
+local holder, banner, bicons, picons = nil, nil, {}, {}
+local snoozeUntil, driven, fightStarted
+local eating -- the food you clicked to eat ({ id, e }), while you eat
 
 local function yes(fn, ...)
   if type(fn) ~= "function" then return false end
   local ok, v = pcall(fn, ...)
   return ok and plain(v) == true
 end
-local function resting() return yes(IsResting) end
-local function inInstance() return yes(IsInInstance) end
 -- a cast or a channel of yours under way, or a meal (the game's Food or Drink buff on you)
 local MEAL = { Food = true, Drink = true, ["Food & Drink"] = true, Refreshment = true }
 local function busy(names)
@@ -1018,9 +1038,54 @@ function Camp.Missing()
   return out
 end
 
+-- your party's: in a party and not a raid, each member alive, online and with auras the game lets you read, lacking a
+-- buff of yours that can be cast on another (Camp.SELF's other): the first such, { unit, who, class, id, name, icon,
+-- far }. far: out of the spell's range (C_Spell.IsSpellInRange, a plain answer; UnitInRange's are secret on Forever:
+-- UnitDocumentation.lua's SecretReturns), shown dimmed; nil when the game can't tell
+function Camp.PartyMissing()
+  local out = {}
+  if settings().party == false or yes(IsInRaid) or not yes(IsInGroup) then return out end
+  local n = 0
+  if type(GetNumSubgroupMembers) == "function" then
+    local ok, v = pcall(GetNumSubgroupMembers)
+    v = ok and plain(v) or nil
+    n = type(v) == "number" and math.min(v, 4) or 0
+  end
+  for p = 1, n do
+    local unit = "party" .. p
+    if yes(UnitIsConnected, unit) and not yes(UnitIsDeadOrGhost, unit) then
+      local names, ids, hidden = Camp.Auras(unit)
+      local sp = not hidden and Camp.SelfMissing(names, ids, true)[1]
+      if sp then
+        local okN, who = pcall(UnitName, unit)
+        who = okN and plain(who) or nil
+        local okC, _, class = pcall(UnitClass, unit)
+        class = okC and plain(class) or nil
+        local far = false
+        if C_Spell and type(C_Spell.IsSpellInRange) == "function" then
+          local okR, r = pcall(C_Spell.IsSpellInRange, sp.id, unit)
+          far = okR and plain(r) == false
+        end
+        out[#out + 1] = { unit = unit, who = type(who) == "string" and who or nil, class = type(class) == "string" and class or nil,
+                          id = sp.id, name = sp.name, icon = sp.icon, far = far }
+      end
+    end
+  end
+  return out
+end
+
+-- the banner sits in a holder the game's state driver hides in a fight and shows after it (an addon may not hide a
+-- frame holding the game's secure buttons in a fight: Blizzard_RestrictedAddOnEnvironment/SecureStateDriver.lua's
+-- RegisterStateDriver, "visibility"); without one, the banner goes clear in a fight
 local function bannerFrame()
   if banner then return banner end
-  banner = CreateFrame("Frame", "QuestBankBuffBanner", UIParent)
+  holder = CreateFrame("Frame", "QuestBankBuffHolder", UIParent)
+  holder:SetSize(1, 1)
+  holder:SetPoint("CENTER")
+  if type(RegisterStateDriver) == "function" then
+    driven = pcall(RegisterStateDriver, holder, "visibility", "[combat] hide; show")
+  end
+  banner = CreateFrame("Frame", "QuestBankBuffBanner", holder)
   banner:SetFrameStrata("MEDIUM")
   banner:SetClampedToScreen(true)
   banner:SetSize(160, TOP + SIZE + 12)
@@ -1038,51 +1103,52 @@ local function bannerFrame()
   banner.title:SetText("Missing buffs")
   banner.close = CreateFrame("Button", nil, banner, "UIPanelCloseButton")
   banner.close:SetPoint("TOPRIGHT", -4, -4)
-  banner.close:SetScript("OnClick", QB.Safe(function() Camp.HideBanner() end, "buff banner: close"))
-  -- the time left, a gold line along the bottom that runs out
+  banner.close:SetScript("OnClick", QB.Safe(function() Camp.Snooze() end, "buff banner: close"))
+  -- a gold line along the bottom, as the bar's lit icons
   banner.left = banner:CreateTexture(nil, "ARTWORK")
   banner.left:SetPoint("BOTTOMLEFT", 1, 1)
-  banner.left:SetSize(158, 2)
+  banner.left:SetPoint("BOTTOMRIGHT", -1, 1)
+  banner.left:SetHeight(2)
   banner.left:SetColorTexture(1, 0.75, 0.2, 0.85)
-  banner:SetScript("OnUpdate", QB.Safe(function(self)
-    if not shownAt then return end
-    -- in use, it stays: the mouse on it, or a click on it with a cast or a meal under way, starts its time again
-    local t = now()
-    if self:IsMouseOver() or (usedAt and t - usedAt < BANNER_SECS * 4 and busy()) then shownAt = t end
-    local left = BANNER_SECS - (t - shownAt)
-    self.left:SetWidth(math.max(1, (self:GetWidth() - 2) * math.max(0, left) / BANNER_SECS))
-    if left <= 0 then Camp.HideBanner() end
-  end, "buff banner"))
   banner:Hide()
   return banner
 end
 Camp.BannerFrame = bannerFrame
 
--- the icons, centred under the title: the game's secure buttons, set out of a fight only
-local function layBanner(list)
+-- one icon's look, the same for every row
+local function paint(b, d)
+  b.icon:SetTexture(d.tex)
+  b.icon:SetDesaturated(false)
+  b.icon:SetAlpha(1)
+  b.time:SetText("")
+  b.count:SetText(d.count and d.count > 1 and tostring(d.count) or "")
+  b.glow:Hide()
+  b.edge:SetColorTexture(1, 0.75, 0.2, 1)
+  b.cd:SetCooldown(0, 0)
+  b.tip, b.state = d.tip, d
+end
+
+-- the icons, centred under the title: yours, then your party's with their names under them. The game's secure
+-- buttons, set out of a fight only
+local function layBanner(list, party)
   local f = bannerFrame()
-  local n = #list
-  local row = n * SIZE + (n - 1) * GAP
-  local w = math.max(row + 24, 160)
-  f:SetSize(w, TOP + SIZE + 12)
-  local x = math.floor((w - row) / 2)
+  local n, m = #list, #party
+  local row1 = n > 0 and n * SIZE + (n - 1) * GAP or 0
+  local row2 = m > 0 and m * COL or 0
+  local w = math.max(row1 + 24, row2 + 24, 160)
+  local h = TOP + (n > 0 and SIZE + 10 or 0) + (m > 0 and SIZE + NAME_H + 12 or 0) + 2
+  f:SetSize(w, h)
+  local x = math.floor((w - row1) / 2)
   for i, d in ipairs(list) do
     local b = bicons[i]
     if not b then
       b = newIcon("QuestBankBuff_" .. i, f)
-      -- a click on it: the banner stays while you use it, its time from now (and the food you eat is kept in mind)
+      -- (the food you click to eat is kept in mind: its icon stays while you eat the last piece)
       b:HookScript("OnClick", function(self) Camp.Used(self.state) end)
       bicons[i] = b
     end
-    b.icon:SetTexture(d.tex)
-    b.icon:SetDesaturated(false)
-    b.icon:SetAlpha(1)
-    b.time:SetText("")
-    b.count:SetText(d.count and d.count > 1 and tostring(d.count) or "")
-    b.glow:Hide()
-    b.edge:SetColorTexture(1, 0.75, 0.2, 1)
-    b.cd:SetCooldown(0, 0)
-    b.tip, b.state = d.tip, d
+    paint(b, d)
+    b:SetAlpha(1)
     b:SetAttribute("type", d.item and "item" or "spell")
     b:SetAttribute("item", d.item and ("item:" .. d.item) or nil)
     b:SetAttribute("spell", d.spell)
@@ -1093,68 +1159,96 @@ local function layBanner(list)
     x = x + SIZE + GAP
   end
   for i = n + 1, #bicons do bicons[i]:Hide() end
+  local y = -(TOP + (n > 0 and SIZE + 10 or 0))
+  x = math.floor((w - row2) / 2)
+  for i, d in ipairs(party) do
+    local b = picons[i]
+    if not b then
+      b = newIcon("QuestBankBuffParty_" .. i, f)
+      b.label = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+      b.label:SetPoint("TOP", b, "BOTTOM", 0, -3)
+      b.label:SetWidth(COL - 4)
+      b.label:SetWordWrap(false)
+      picons[i] = b
+    end
+    local who = d.who or "Party member"
+    paint(b, { tex = spellIcon(d.id, d.icon), tip = { d.name, "Click to cast it on " .. who .. "." } })
+    if d.far then b.tip[3] = "Out of range." end
+    b.label:SetText(who)
+    local col = d.class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[d.class]
+    if col then b.label:SetTextColor(col.r, col.g, col.b) else b.label:SetTextColor(1, 1, 1) end
+    b:SetAlpha(d.far and 0.4 or 1)
+    b:SetAttribute("type", "spell")
+    b:SetAttribute("spell", d.id)
+    b:SetAttribute("unit", d.unit)
+    b:ClearAllPoints()
+    b:SetPoint("TOPLEFT", f, "TOPLEFT", x + math.floor((COL - SIZE) / 2), y)
+    b:Show()
+    x = x + COL
+  end
+  for i = m + 1, #picons do picons[i]:Hide() end
 end
 
--- one of the banner's icons clicked: its time starts again, and it holds while the cast or the meal is under way
+-- one of the banner's icons clicked: the food you eat is kept in mind (its icon stays while you eat the last piece)
 function Camp.Used(d)
-  local t = now()
-  usedAt, shownAt = t, shownAt and t or shownAt
   if d and d.key == "food" and d.item then
     local e = (QB.Data.FOOD or {})[d.item]
     if e then eating = { id = d.item, e = e } end
   end
 end
 
-function Camp.HideBanner()
-  if not banner then return end
-  if fighting() then hideLater = true; return end -- its buttons are the game's: they go when the fight is over
-  shownAt, hideLater, usedAt = nil, nil, nil
-  banner:Hide()
+-- its X: hidden for ten minutes
+function Camp.Snooze()
+  if fighting() then return end
+  snoozeUntil = now() + SNOOZE
+  if banner then banner:Hide() end
 end
 
--- why: "rest" (you left a town) or "ask" (/qb buffs). True when it shows, else false and why not: fight, instance, none
-function Camp.Announce(why)
-  if fighting() then return false, "fight" end
-  if why ~= "ask" and inInstance() then return false, "instance" end
-  local list = Camp.Missing()
-  if #list == 0 then return false, "none" end
-  layBanner(list)
-  shownAt, hideLater = now(), nil
+-- up whenever something is missing (Camp.Missing, Camp.PartyMissing), out of a fight, alive, not on a flight, its
+-- switch on, not hidden by its X, and not in a dungeon while the bar hides there. ask (/qb buffs): whatever the switch,
+-- the X, a flight or a dungeon. Laid out out of a fight only. True when up, else false and why not: fight, off, away,
+-- instance, none
+function Camp.UpdateBanner(ask)
+  if fighting() or fightStarted then
+    -- (the state driver hides it; without one it goes clear, its buttons as they are)
+    if banner and not driven then banner:SetAlpha(0) end
+    return false, "fight"
+  end
+  local why
+  if not ask then
+    if not settings().buffs then why = "off"
+    elseif snoozeUntil and now() < snoozeUntil then why = "off"
+    elseif yes(UnitOnTaxi, "player") or yes(UnitIsDeadOrGhost, "player") then why = "away"
+    elseif quiet() then why = "instance" end
+  end
+  local list, party
+  if not why then
+    list, party = Camp.Missing(), Camp.PartyMissing()
+    if #list == 0 and #party == 0 then why = "none" end
+  end
+  if why then
+    if banner and banner:IsShown() then banner:Hide() end
+    return false, why
+  end
+  layBanner(list, party)
   banner:SetAlpha(1)
-  banner:Show()
-  Camp.shows = Camp.shows + 1
+  if not banner:IsShown() then
+    banner:Show()
+    Camp.shows = Camp.shows + 1
+  end
   return true
 end
 
--- on screen: what is still missing (a buff cast, the food eaten, a fire lit), dimmed in a fight
-function Camp.RefreshBanner()
-  if not (banner and banner:IsShown()) then return end
-  if fighting() then banner:SetAlpha(0.45); return end
-  banner:SetAlpha(1)
-  if hideLater then Camp.HideBanner(); return end
-  local list = Camp.Missing()
-  if #list == 0 then Camp.HideBanner() else layBanner(list) end
-end
-
--- you left a town: the banner once, not in a fight (then when it ends, within a minute), on a flight or dead
-local function departed()
-  pendingAt = nil
-  if not settings().buffs then return end
-  if lastAuto and now() - lastAuto < QUIET then return end
-  if fighting() then pendingAt = now(); return end
-  if yes(UnitOnTaxi, "player") or yes(UnitIsDeadOrGhost, "player") then return end
-  if Camp.Announce("rest") then lastAuto = now() end
-end
-
--- /qb buffs
+-- /qb buffs: the banner now, the X's ten minutes forgotten
 function Camp.Command()
-  local ok, why = Camp.Announce("ask")
+  if not fighting() then snoozeUntil = nil end
+  local ok, why = Camp.UpdateBanner(true)
   if ok then return end
   QB:Print(why == "fight" and "Not in a fight: type /qb buffs after it." or "No buffs missing.")
 end
 
 function Camp.Refresh()
-  Camp.RefreshBanner()
+  Camp.UpdateBanner()
   local f = barFrame()
   if quiet() then
     if not fighting() then f:Hide() end
@@ -1243,29 +1337,31 @@ function Camp.OnEvent(event, a1, a2, a3)
     if type(name) == "string" and type(guid) == "string" and guid:find("^GameObject") and name:lower():find("campfire", 1, true) then
       if not fireAt or now() - fireAt > 60 then Camp.OnFire() end
     end
-  elseif event == "PLAYER_UPDATE_RESTING" then
-    local r = resting()
-    if wasRested and not r then departed() end
-    wasRested = r
+  elseif event == "PLAYER_UPDATE_RESTING" or event == "GROUP_ROSTER_UPDATE" then
+    Camp.UpdateBanner()
   elseif event == "UNIT_AURA" then
     if plain(a1) ~= "player" then return end
-    Camp.RefreshBanner()
+    Camp.UpdateBanner()
     -- out of a fight, the bar looks again within a moment: a fire near, the minute by it, Camp Benefits (one look for
     -- a burst of these)
     local f = Camp.frame
     if f and not fighting() then f.elapsed = math.max(f.elapsed or 0, TICK - 0.3) end
   elseif event == "PLAYER_REGEN_ENABLED" then
+    -- (the banner's buttons made again, now they may be)
+    fightStarted = false
     Camp.Refresh()
-    -- you left town in a fight: the banner now, if it was within the minute and you're still out
-    if pendingAt and now() - pendingAt <= QUIET and not resting() then departed() else pendingAt = nil end
-  elseif event == "PLAYER_REGEN_DISABLED" or event == "BAG_UPDATE_DELAYED" then
+  elseif event == "PLAYER_REGEN_DISABLED" then
+    -- a fight starts: the game sends this before its lockdown, so the banner can still go now (the state driver
+    -- hides it if the lockdown came first)
+    fightStarted = true
+    if banner and banner:IsShown() and not fighting() then banner:Hide() end
+    Camp.Refresh()
+  elseif event == "BAG_UPDATE_DELAYED" then
     Camp.Refresh()
   elseif event == "MERCHANT_SHOW" or event == "MERCHANT_UPDATE" then
     Camp.NoteMerchant()
   elseif event == "PLAYER_ENTERING_WORLD" then
     lastMove = now()
-    wasRested, pendingAt = resting(), nil
-    if inInstance() then Camp.HideBanner() end
     Camp.Refresh()
   end
 end
@@ -1284,7 +1380,8 @@ function Camp:Init()
     Camp.Refresh()
   end, "camp bar"))
   for _, e in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "PLAYER_SOFT_INTERACT_CHANGED", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
-                       "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "PLAYER_UPDATE_RESTING", "MERCHANT_SHOW", "MERCHANT_UPDATE" }) do
+                       "PLAYER_ENTERING_WORLD", "BAG_UPDATE_DELAYED", "PLAYER_UPDATE_RESTING", "MERCHANT_SHOW", "MERCHANT_UPDATE",
+                       "GROUP_ROSTER_UPDATE" }) do
     pcall(f.RegisterEvent, f, e)
   end
   if f.RegisterUnitEvent then pcall(f.RegisterUnitEvent, f, "UNIT_AURA", "player") else pcall(f.RegisterEvent, f, "UNIT_AURA") end
