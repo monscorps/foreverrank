@@ -1296,6 +1296,14 @@ end
 function R:Resume(saved, login)
   self.run = saved
   saved.at = now()
+  -- (an answer waiting its judging: the timer did not survive; judged again after a /reload, whose clock goes on; a
+  -- login's clock starts over, and its hello is a resume's, not a newcomer's)
+  saved.offerDue = nil
+  if login then saved.offers, saved.helloAt = nil, nil
+  elseif saved.offers then
+    saved.offerDue = true
+    C_Timer.After(SETTLE, C.Safe(function() R:TakeOffer(saved) end, "runs: answer"))
+  end
   -- (the loot history's clock read again: kept at the start and at each resume)
   local lt = lootNow()
   if lt then saved.lc = lt - (now() - saved.start) end

@@ -11842,7 +11842,7 @@ do local function runsStage()
   -- (3.2, 13.1) an edited copy's answer, back-dated a day, to members in the run a while (a pug leader without Cute):
   -- no answer is taken past a minute after this client's own hello, nor one older than a raid lasts; nobody moves,
   -- asks for a checkpoint or counts anything twice. A newcomer takes the scribe's answer, not the forged one
-  isolated({ gmember("Oz", 3), gmember("Pax", 3), gmember("Mo", 3), gmember("Lu", 3) }, function()
+  isolated({ gmember("Oz", 3), gmember("Pax", 3), gmember("Mo", 3), gmember("Lu", 3), gmember("Mi", 3) }, function()
     local cs = { gchar("Oz", 3), gchar("Pax", 3), gchar("Mo", 3) }
     for _, c in ipairs(cs) do login(c) end
     tickAll(40)
@@ -11878,6 +11878,24 @@ do local function runsStage()
     forged(lu, start - 86400)
     tickAll(30)
     assert(lu.C.Runs.Current() and lu.C.Runs.Current().id == id, "the newcomer on the group's id: " .. tostring(lu.C.Runs.Current() and lu.C.Runs.Current().id) .. " / " .. id)
+    -- (a newcomer whose /reload comes while an answer waits its judging: judged after the reload all the same; Lu
+    -- leaves first, a party has five)
+    leaveGroup(G, lu)
+    tickAll(5)
+    local mi = gchar("Mi", 3)
+    login(mi)
+    tickAll(5)
+    G.members[#G.members + 1] = entryOf(mi)
+    wire(mi, G)
+    mi.everMet = {}
+    for _, e in ipairs(G.members) do table.insert(mi.everMet, e); if e.c and e.c ~= mi then e.c.everMet = e.c.everMet or {}; table.insert(e.c.everMet, G.members[#G.members]) end end
+    each(G, function(c) fire(c, "GROUP_ROSTER_UPDATE") end)
+    zone({ mi }, "party", 36, "The Deadmines")
+    for _ = 1, 8 do if mi.C.Runs.Current() and mi.C.Runs.Current().offers then break end tickAll(1) end
+    assert(mi.C.Runs.Current().offers, "an answer waits its judging")
+    local mi2 = again(G, mi, mi.env.CuteDB, true)
+    tickAll(30)
+    assert(mi2.C.Runs.Current() and mi2.C.Runs.Current().id == id, "after the /reload the answer taken: " .. tostring(mi2.C.Runs.Current() and mi2.C.Runs.Current().id) .. " / " .. id)
   end)
   said[#said + 1] = "one member in 45 s early: the rest keep their own id, the early one joins it with the 2Q, one report; a forged back-dated answer moves nobody in the run a while, and a newcomer takes the scribe's"
 
