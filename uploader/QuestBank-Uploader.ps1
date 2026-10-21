@@ -889,11 +889,12 @@ function Find-BundledFinds {
   return $null
 }
 
-# Puts QuestBank_Finds into each game folder that has QuestBank or Cute's quests: its .toc always, its Finds.lua only
-# where none is there yet (one fetched from the site is newer than the download's). One @{ game; ok; new; error } a
-# game folder it went into, new when it was not there before. From the download, or from the copy Install keeps beside
-# the installed script, so a QuestBank or Cute put in after Install gets it at the next pass
-function Add-FindsAddon($cfg) {
+# Puts QuestBank_Finds into each game folder that has QuestBank or Cute's quests and not it yet (with -Refresh, at
+# install, its .toc again where it is): its Finds.lua only where none is there yet (one fetched from the site is newer
+# than the download's). One @{ game; ok; new; error } a game folder it went into, new when it was not there before.
+# From the download, or from the copy Install keeps beside the installed script, so a QuestBank or Cute put in after
+# Install gets it at the next pass
+function Add-FindsAddon($cfg, [switch]$Refresh) {
   $src = Find-BundledFinds
   if (-not $src) { return }
   foreach ($g in @(Get-GameFolders -Root $cfg.wowPath)) {
@@ -903,6 +904,7 @@ function Add-FindsAddon($cfg) {
     $label = Split-Path $g -Leaf
     if ((Test-Path -LiteralPath $dest) -and ((Resolve-Path -LiteralPath $dest).Path -eq (Resolve-Path -LiteralPath $src).Path)) { @{ game = $label; ok = $true; new = $false }; continue }
     $had = Test-Path -LiteralPath (PathOf $dest ($FindsAddon + ".toc"))
+    if ($had -and -not $Refresh) { continue }
     try {
       New-Item -ItemType Directory -Force -Path $dest -ErrorAction Stop | Out-Null
       Copy-Item -LiteralPath (PathOf $src ($FindsAddon + ".toc")) -Destination $dest -Force -ErrorAction Stop
@@ -917,7 +919,7 @@ function Add-FindsAddon($cfg) {
 # At install: QuestBank_Finds into each game folder that has QuestBank or Cute's quests, then the day's finds, once
 function Install-FindsAddon($cfg) {
   $n = 0
-  foreach ($a in @(Add-FindsAddon $cfg)) {
+  foreach ($a in @(Add-FindsAddon $cfg -Refresh)) {
     if ($a.ok) { $n++ } else { Write-Host ("    " + $a.game + ": could not put the finds in :: " + $a.error) -ForegroundColor Red }
   }
   if ($n -gt 0) {

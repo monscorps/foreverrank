@@ -751,6 +751,9 @@ if (Test-Path /w/Cute-Uploader.zip) {
   Check "QuestBank_Finds goes in beside Cute put in later, the day's finds in it" ((Test-Path "$beta/Interface/AddOns/QuestBank_Finds/QuestBank_Finds.toc") -and ([System.IO.File]::ReadAllText("$beta/Interface/AddOns/QuestBank_Finds/Finds.lua")) -eq $lua)
   Check "not where Cute isn't" (-not (Test-Path "$era/Interface/AddOns/QuestBank_Finds"))
   Check "the log says so" (@(Get-Content $LogFile) -match 'QuestBank_Finds put in _classic_beta_')
+  Add-Content "$beta/Interface/AddOns/QuestBank_Finds/QuestBank_Finds.toc" "## X-Mark: kept"
+  Send-Changes | Out-Null
+  Check "a later pass leaves it be" ((Get-Content "$beta/Interface/AddOns/QuestBank_Finds/QuestBank_Finds.toc") -contains "## X-Mark: kept" -and @(@(Get-Content $LogFile) -match 'QuestBank_Finds put in').Count -eq 1)
   $s = Get-StatusText (Read-Config); Show "status, Cute in" $s
   Check "status: Cute's version in that game folder" ($s -match '_classic_beta_: Cute 0\.7\.1')
   # a file that could not go is named as it is
