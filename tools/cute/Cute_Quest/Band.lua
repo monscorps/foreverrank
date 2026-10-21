@@ -29,8 +29,12 @@ end
 
 if not QB.dormant then
   local INK, SOFT, WHITE = { 0.86, 0.86, 0.86 }, { 0.58, 0.58, 0.58 }, { 0.96, 0.96, 0.96 }
+  -- (the windows round) the step frame as a stop of the route (StepFrame.lua's stop look): on the world with no
+  -- backdrop unless the player asks for one (guide.backdrop, the frame's menu), its text outlined, the progress bar in
+  -- the quest gold, "ready" in Cute's GOOD
   E.Skin = {
-    font = Cute.Font(), INK = INK, SOFT = SOFT, ACCENT = WHITE,
+    font = Cute.Font(), INK = INK, SOFT = SOFT, ACCENT = WHITE, GOOD = { 0.45, 0.83, 0.47 }, QUEST = { 1, 0.82, 0 },
+    stop = true, outline = true,
     -- a flat fill and a 1 px edge, as Cute's window (UI.lua's skin)
     Backdrop = function(f)
       if not f.SetBackdrop then return end

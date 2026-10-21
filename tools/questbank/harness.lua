@@ -22,7 +22,7 @@ SetValueStep SetValue GetValue SetTexture SetColorTexture SetTexCoord SetVertexC
 SetFontObject SetFont GetFont SetTextColor GetTextColor SetJustifyH SetJustifyV SetWordWrap GetStringWidth GetUnboundedStringWidth GetStringHeight
 SetAutoFocus HighlightText SetFocus ClearFocus SetMultiLine SetChecked GetChecked SetMaxLetters HasFocus IsEnabled SetRotation RegisterUnitEvent
 SetAtlas SetPassThroughButtons SetCooldown SetHideCountdownNumbers SetScale GetScale GetLeft GetTop GetChildren GetNumPoints SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness GetFrameLevel CreateLine SetTextInsets SetAttribute GetAttribute CreateMaskTexture AddMaskTexture SetGradient
-SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias]])
+SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias SetShadowOffset SetShadowColor]])
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 -- a PlayerModel's own: the creature it shows, by display id or by NPC id, its camera, and whether it keeps the model
 -- while hidden
@@ -138,7 +138,8 @@ local function newObj(kind, template, parent)
         elseif k == "GetStringWidth" or k == "GetUnboundedStringWidth" then return textWidth(self.__text, self.__size)
         elseif k == "GetStringHeight" then return self.__size + 2
         elseif k == "GetFont" then return "Fonts\\FRIZQT__.TTF", self.__size, ""
-        elseif k == "SetFont" then self.__fontFile = a[1] or self.__fontFile; self.__size = a[2] or self.__size
+        elseif k == "SetFont" then self.__fontFile = a[1] or self.__fontFile; self.__size = a[2] or self.__size; self.__fontFlags = a[3]
+        elseif k == "SetShadowOffset" then self.__shadow = { a[1], a[2] }
         elseif k == "SetFontObject" then self.__size = a[1] and a[1].__fontSize or 12
         elseif k == "SetJustifyH" then self.__justify = a[1]
         elseif k == "SetWordWrap" then self.__wrap = a[1] and true or false
@@ -20775,6 +20776,8 @@ local function lookChar(name, o)
     bind = "Goldshire", trackerX = o.trackerX })
   if o.ui then c.env.UIParent:SetSize(o.ui[1], o.ui[2]) end
   if o.saved then c.env.QuestBankDB = o.saved end
+  if o.skin then c.QB.Skin = o.skin end
+  if o.objectives then c.objectives = o.objectives end
   login(c)
   -- (the harness's older blocks log in with the Guide off: on, as a fresh install has it, its welcome answered)
   if not o.saved then c.QB:Settings().guide.on, c.QB:Settings().welcome = true, nil; c.QB.StepFrame.Apply() end
@@ -20878,6 +20881,103 @@ do
   table.sort(other)
   assert(#other == 0, "nothing but its alpha and its scale asked of the tracker: " .. table.concat(other, ", "))
   print("windows D3: the game's quest tracker out of sight at alpha 0 and scale 0.01 (no click lands on it), its scale kept and put back with the alpha, never in a fight, back for Edit Mode and out again after it; nothing else called on it")
+end
+
+-- D4. The step frame as a stop of the route, in a host's look (Cute's QB.Skin.stop): it stands on the world with no
+-- backdrop until guide.backdrop asks for the host's, its text outlined and shadowed, the step's icon at 24 px and its
+-- words at 15 px with the count apart and its share on a 2 px bar. Under the steps, the quests you hold (guide.quests:
+-- none for QuestBank's own players, as before; Cute's first run 3): the ones the step now and the next two name left
+-- out, the route's first, "+N more quests" for the rest; a quest's usable item a secure button at its left, which in a
+-- fight neither moves nor changes, nor does the list's order. At 0, 3 and 10 quests and the three scales nothing is cut
+-- and nothing overlaps
+do
+  local LOG = { { 7, 0 }, { 33, 1 }, { 18, 0 }, { 15, 0 }, { 21, 0 }, { 47, 0 }, { 60, 0 }, { 62, 0 }, { 85, 0 }, { 106, 0 }, { 86, 0 }, { 88, 0 }, { 109, 0 }, { 11, 0 } }
+  local OBJ = { [7] = { { text = "Kobold Vermin slain: 3/10", finished = false, numFulfilled = 3, numRequired = 10 } },
+    [18] = { { text = "Red Burlap Bandana: 2/12", finished = false, numFulfilled = 2, numRequired = 12 }, { text = "Defias Mask: 12/12", finished = true, numFulfilled = 12, numRequired = 12 } } }
+  local backdrops = 0
+  local skin = { font = "Fonts\\ARIALN.TTF", INK = { 0.86, 0.86, 0.86 }, SOFT = { 0.58, 0.58, 0.58 }, ACCENT = { 0.96, 0.96, 0.96 }, GOOD = { 0.45, 0.83, 0.47 },
+    QUEST = { 1, 0.82, 0 }, stop = true, outline = true, Backdrop = function(f) backdrops = backdrops + 1; f.__flat = true end }
+  local c = lookChar("Stopper", { log = LOG, skin = skin, objectives = OBJ })
+  local QB, SF, G = c.QB, c.QB.StepFrame, c.QB.Guide
+  local g = QB:Settings().guide
+  local f = c.env.QuestBankStep
+  assert(f and f:IsShown() and backdrops == 0 and not f.__flat and f.__inset == nil, "the stop look: on the world, no backdrop")
+  local r1 = f.rows[1]
+  assert(r1.icon.__w == 24 and f.now.__size == 15 and f.now.__fontFlags == "OUTLINE" and f.now.__shadow, "the step now: a 24 px icon, its words at 15 px, outlined and shadowed")
+  assert(f.rows[2].icon.__w == 14 and f.next1.__size == 12 and not f.time:IsShown(), "the next steps at 14 px and 12 px; no time line")
+  -- an objective step: its words without the count, the count at the right, its share on the bar
+  local s1 = G.Steps()[1]
+  if s1 and s1.kind == "objective" then
+    local words, have, need = G.Parts(s1)
+    assert(not words:find("%d+/%d+") and r1.mins:GetText() == have .. "/" .. need and f.fill:IsShown() and f.track:IsShown(), "the count apart: " .. words .. " | " .. tostring(r1.mins:GetText()))
+  end
+  -- QuestBank's own players see no quests under the steps
+  assert(not (f.quests[1] and f.quests[1]:IsShown()), "guide.quests unset: no quests listed")
+  -- three: the ones the steps name left out, in the list's order; the rest counted
+  g.quests = 3
+  SF.Apply()
+  local steps = G.Steps()
+  local named = {}
+  for i = 1, 3 do if steps[i] and steps[i].qid then named[steps[i].qid] = true end end
+  local shown = {}
+  for _, b in ipairs(f.quests) do if b:IsShown() then shown[#shown + 1] = b.id; assert(not named[b.id], "a quest the steps name is left out: " .. b.id) end end
+  local list, total = SF.QuestList(steps, 3)
+  assert(#shown == 3 and shown[1] == list[1] and shown[3] == list[3], "three quests, in the list's order: " .. table.concat(shown, ","))
+  assert(f.more and f.more:IsShown() and f.more.text:GetText() == "+" .. (total - 3) .. " more quests", "the rest counted: " .. tostring(f.more and f.more.text:GetText()))
+  -- the route's first: a quest a later step names comes before one only the log holds
+  local routeFirst
+  for i = 4, #steps do if steps[i].qid and not named[steps[i].qid] then routeFirst = steps[i].qid; break end end
+  if routeFirst then assert(list[1] == routeFirst, "the route's first: " .. tostring(list[1]) .. " for " .. routeFirst) end
+  -- a quest's level, name and its open objectives with their glyphs; "ready" for a finished one
+  local b1 = f.quests[1]
+  assert(b1.lvl:GetText() ~= "" and b1.name:GetText() ~= "" and b1.glyphs[1].__tex, "a quest's level, name and glyph")
+  -- its usable item: a secure button at its left, set out of a fight
+  local id1 = b1.id
+  c.questItems[id1] = { 1307, 133472 }
+  g.quests = 3; SF.Apply()
+  local ib = f.qitems[1]
+  assert(ib and ib:IsShown() and ib:GetAttribute("type") == "item" and ib:GetAttribute("item") == "item:1307" and ib.__template == "SecureActionButtonTemplate" and ib.__parent == c.env.UIParent,
+    "the quest's item: the game's secure button, under UIParent")
+  local p = ib.__points[1]
+  assert(p.point == "TOPRIGHT" and p.rel == f and p.relPoint == "TOPLEFT", "at the quest's left")
+  -- a fight: the words change, nothing moves, the buttons wait
+  local y1, x1 = f.qLayout[1].y, p.y
+  c.combat = true
+  c.objectives[7] = { { text = "Kobold Vermin slain: 10/10", finished = true, numFulfilled = 10, numRequired = 10 } }
+  c.questItems[id1] = nil
+  c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 2)
+  SF.Refresh()
+  assert(f.qLayout[1].y == y1 and f.quests[1].id == id1 and ib:IsShown() and ib.__points[1].y == x1, "in a fight nothing moves and the button stays")
+  c.combat = false
+  c.ev(QB.eventFrame, "PLAYER_REGEN_ENABLED")
+  assert(not ib:IsShown(), "the fight over: the button follows the log")
+  -- 0, 3 and 10 quests at the three scales: nothing cut, nothing overlapping
+  for _, n in ipairs({ 0, 3, 10 }) do
+    for _, sc in ipairs({ 0.8, 1, 1.2 }) do
+      g.quests = n
+      SF.SetScale(sc)
+      SF.Apply()
+      local label = string.format("Step frame, the stop look, %d quests, scale %.1f", n, sc)
+      for _, pr in ipairs(checkLayout(f, label)) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+      if sc == 1 then STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(f, label) end
+    end
+  end
+  SF.SetScale(1)
+  -- the host's backdrop at its word
+  g.backdrop = true; SF.Apply()
+  assert(backdrops == 1 and f.__flat, "Backdrop behind the step frame: the host's")
+  g.backdrop = nil; SF.Apply()
+  assert(f.__inset == 0, "and off again")
+  -- QuestBank's own look lists them too, at the player's word
+  local q = lookChar("Plainlook", { log = LOG, objectives = OBJ })
+  q.QB:Settings().guide.quests = 3; q.QB.StepFrame.Apply()
+  local qf = q.env.QuestBankStep
+  local n = 0
+  for _, b in ipairs(qf.quests) do if b:IsShown() then n = n + 1 end end
+  assert(n == 3 and qf.__inset == 3, "QuestBank's look: its own backdrop, the quests under the steps")
+  for _, pr in ipairs(checkLayout(qf, "Step frame, QuestBank's look, 3 quests")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+  STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(qf, "Step frame, QuestBank's look, 3 quests")
+  print(string.format("windows D4: the step frame as a stop of the route (no backdrop, outlined, a 24 px icon, the count apart); the quests under it, %d shown of %d, the steps' own left out, the route's first; their items secure and still in a fight; 0, 3 and 10 quests at three scales", #shown, total))
 end
 
 local seen = {}

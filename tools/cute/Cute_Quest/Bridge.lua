@@ -219,6 +219,8 @@ local function firstRun()
   if s.cuteDefaults == true then
     s.cuteDefaults = 2
     s.mapIconPct = 100
+    -- (the step frame in place of the game's tracker: the quests you hold under the steps, three; Settings > Quests)
+    if type(s.guide) == "table" and s.guide.quests == nil then s.guide.quests = 3 end
     local MF = type(Enum) == "table" and Enum.MinimapTrackingFilter or nil
     if type(C_Minimap) == "table" and type(C_Minimap.IsFilteredOut) == "function" and MF and MF.TrivialQuests then
       local ok, out = pcall(C_Minimap.IsFilteredOut, MF.TrivialQuests)

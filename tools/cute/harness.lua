@@ -54,7 +54,7 @@ SetResizable SetResizeBounds StartSizing CreateMaskTexture AddMaskTexture SetSca
 IsForbidden SetPushedTexture GetTextColor SetMultiLine HighlightText SetRotation SetAtlas SetPassThroughButtons SetCooldown
 SetHideCountdownNumbers SetUserPlaced GetZoom SetZoom GetZoomLevels SetStartPoint SetEndPoint SetThickness CreateLine SetTextInsets
 SetAttribute GetAttribute SetGradient SetClipsChildren PingLocation SetSnapToPixelGrid SetTexelSnappingBias
-EnableKeyboard SetPropagateKeyboardInput IsProtected]])
+EnableKeyboard SetPropagateKeyboardInput IsProtected SetShadowOffset SetShadowColor]])
 -- (the last three lines: the quest engine's, for a client made with o.quest = true; QuestBank's harness lists them)
 local BACKDROP = { SetBackdrop = true, SetBackdropColor = true, SetBackdropBorderColor = true }
 -- a PlayerModel's own and a QuestPOIFrame's own (the quest engine's journal and map files), as QuestBank's harness has them
@@ -189,7 +189,8 @@ local function newObj(kind, template, parent)
           if self.__wrap and self.__wset and w > 0 then return math.max(1, math.ceil(textWidth(self.__text, self.__size) / w)) * (self.__size + 2) end
           return self.__size + 2
         elseif k == "GetFont" then return self.__fontFile or "Fonts\\FRIZQT__.TTF", self.__size, ""
-        elseif k == "SetFont" then self.__fontFile = a[1]; self.__size = a[2] or self.__size; return true
+        elseif k == "SetFont" then self.__fontFile = a[1]; self.__size = a[2] or self.__size; self.__fontFlags = a[3]; return true
+        elseif k == "SetShadowOffset" then self.__shadow = { a[1], a[2] }
         elseif k == "SetFontObject" then self.__size = a[1] and a[1].__fontSize or 12
         elseif k == "SetJustifyH" then self.__justify = a[1]
         elseif k == "SetWordWrap" then self.__wrap = a[1] and true or false
@@ -4878,7 +4879,8 @@ do
     local steps = QB.Guide.Steps()
     assert(steps[1] and t:find(QB.Guide.Text(steps[1]), 1, true), "the step now in the band: " .. tostring(steps[1] and QB.Guide.Text(steps[1])) .. "\n" .. t)
     local sf = rone.env.QuestBankStep
-    assert(sf and sf:IsShown() and sf.__flat, "the step frame up, in Cute's skin")
+    -- (the windows round: Cute's look is the stop of the route, on the world with no backdrop, its text outlined: W11)
+    assert(sf and sf:IsShown() and not sf.__flat and sf.now.__fontFlags == "OUTLINE", "the step frame up, in Cute's look")
     check(L.frame, "the quest window, Quests with its band")
     -- the officer's guild line whole: at the head's right where it fits, else on a line of its own under the head
     local _, gp = rone.C.Guide.Items(true)
@@ -12116,6 +12118,49 @@ do
     assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(c)
     print("windows W10: the step frame's quest read in the quest window (Ctrl: the arrow, no window); the tracker's row greyed with the frame off; a guild redraw with nothing new sorts nothing; a module's refresh leaves the guild's own pages alone")
+  end)
+end
+
+-- W11 (sub-project D): the step frame in Cute's look, in place of the game's tracker: a stop of the route standing on the
+-- world with no backdrop (its menu brings Cute's flat one back), its text outlined and shadowed, the step's words at
+-- 15 px; the first run lists three of the quests you hold under it, and Settings > Quests' "Quests under the step" sets
+-- how many (0 to 10), at once
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true,
+      log = { [7] = 2, [33] = 1, [18] = 1, [15] = 1, [21] = 1, [47] = 1, [60] = 1 } }))
+    login(c); tickAll(6)
+    local s = c.env.CuteQuestDB.settings
+    local f = c.env.QuestBankStep
+    assert(s.guide.quests == 3, "the first run: three quests under the step: " .. tostring(s.guide.quests))
+    assert(f and f:IsShown() and not f.__flat and f.__inset == nil, "on the world: no backdrop")
+    assert(f.now.__size == 15 and f.now.__fontFlags == "OUTLINE" and f.now.__shadow and f.rows[1].icon.__w == 24, "the step now: 15 px, outlined and shadowed, its icon 24 px")
+    local function shown() local n = 0; for _, b in ipairs(f.quests) do if b:IsShown() then n = n + 1 end end return n end
+    local n3 = shown()
+    assert(n3 >= 1 and n3 <= 3, "up to three quests under it: " .. n3)
+    check(f, "W11 the step frame, Cute's look, 3 quests")
+    -- Settings > Quests: the stepper, at once
+    c.C.UI:Open("settings", "quests")
+    local plus, value
+    for _, b in ipairs(c.frames) do if b.__kind == "Button" and b:IsVisible() and b.label and b.label.GetText and b.label:GetText() == "+" then plus = b end end
+    for _, o in everything() do if o.cuteStepValue and visible(o) and o.__parent and o.__parent.__client == c then value = o end end
+    assert(plus and value and value:GetText() == "3" and texts(c):find("Quests under the step", 1, true), "the row: Quests under the step, 3:\n" .. texts(c))
+    press(plus)
+    assert(s.guide.quests == 4, "one more: " .. tostring(s.guide.quests))
+    assert(shown() >= n3, "the frame lists them at once")
+    -- the frame's menu: a backdrop behind it, Cute's flat one
+    local m0 = #c.contextMenus
+    c.addons[2].private.StepFrame:Menu(c.addons[2].private.Guide.Steps()[1])
+    local menu = c.contextMenus[#c.contextMenus]
+    local bd
+    for _, e in ipairs(menu or {}) do if e.text == "Backdrop behind this frame" then bd = e end end
+    assert(#c.contextMenus == m0 + 1 and bd, "the frame's menu offers its backdrop")
+    bd.set()
+    assert(s.guide.backdrop == true and f.__flat, "Cute's flat backdrop behind it")
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print(string.format("windows W11: the step frame in Cute's look (no backdrop, outlined, 15 px, a 24 px icon); %d quests under it from the first run, the Settings row's stepper at once; the frame's menu brings the backdrop", n3))
   end)
 end
 

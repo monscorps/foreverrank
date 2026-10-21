@@ -129,6 +129,15 @@ function P.Settings(_, col)
   col:Head("Quests")
   -- the step frame and the arrow (the engine's settings; QuestBank's own while it is loaded; the frame's own menu locks it)
   col:Check("Step frame", s.guide.frame == true, true, function(on) s.guide.frame = on; if E.StepFrame then E.StepFrame.Apply() end end)
+  -- (the windows round) the quests you hold listed under the steps (StepFrame.lua SF.DrawQuests), 0 to 10; its backdrop
+  -- is the frame's own menu's (right-click it)
+  local nq = math.max(0, math.min((E.StepFrame and E.StepFrame.QUESTS_MAX) or 10, tonumber(s.guide.quests) or 0))
+  local function setQ(n) s.guide.quests = n; if E.StepFrame then E.StepFrame.Apply() end; Cute.Refresh() end
+  col:Step("Quests under the step", tostring(nq), false, nq > 0 and function() setQ(nq - 1) end or nil,
+    nq < ((E.StepFrame and E.StepFrame.QUESTS_MAX) or 10) and function() setQ(nq + 1) end or nil, function(tip)
+      tip:AddLine("Quests under the step", 1, 1, 1)
+      tip:AddLine("The quests you hold that the step and the next two do not name, the route's first. 0 shows none. Right-click the step frame for a backdrop behind it.", 0.85, 0.85, 0.85, true)
+    end)
   col:Check("Direction arrow", s.arrow == true, true, function(on) if E.Arrow then E.Arrow:Set(on) else s.arrow = on end end)
   -- (6.1.1) the game's quest tracker out of sight while the step frame shows (the engine's StepFrame.lua SF.Tracker)
   -- (greyed while the step frame is off: the tracker is the game's then)
