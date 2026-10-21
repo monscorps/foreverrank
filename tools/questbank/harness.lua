@@ -18605,24 +18605,59 @@ end)()
   -- the next fill (a real event: the login's here), and its stop with it. (The Price of Shoes, 118, the owner's
   -- screenshot, is not one: it carries Return to Verner and its next step back to Lakeshire, 2,375 XP, its bundle)
   F62CASES[#F62CASES + 1] = { "a pick no longer worth the time goes at the next fill, and its stop with it", function()
-    local c = char("Saved", { world = { 0, -9260, -2200 } })
-    local QB, UI, M = c.QB, c.QB.UI, c.QB.Model
-    local F, waste = M.Floor(21), nil
-    for _, x in ipairs(UI:Candidates(nil)) do
-      local q = QB.Quest.Get(x.id)
+    local c0 = char("Saved0", { world = { 0, -9260, -2200 } })
+    local F, waste = c0.QB.Model.Floor(21), nil
+    for _, x in ipairs(c0.QB.UI:Candidates(nil)) do
+      local q = c0.QB.Quest.Get(x.id)
       if x.id == 118 then assert(not x.waste and x.lead >= 2000 and x.rate > F, "118 carries its way back: " .. x.rate) end
-      if not waste and x.waste and not x.locked and q.lvl <= 23 and (q.req or 1) <= 21 and QB:Status(q).code == "todo"
-        and not QB.QuestMap.Grey(q, 21) and q.turnIdx and q.turnIdx > 0 then waste = x end
+      if not waste and x.waste and not x.locked and q.lvl <= 23 and (q.req or 1) <= 21 and c0.QB:Status(q).code == "todo"
+        and not c0.QB.QuestMap.Grey(q, 21) and q.turnIdx and q.turnIdx > 0 then waste = x end
     end
     assert(waste, "a quest under the floor at Lakeshire")
+    -- (saved with the character: the pick is there before the login's fill)
+    local c = char("Saved", { world = { 0, -9260, -2200 }, saved = { plans = { ["Saved-ForeverNormal"] = { auto = { [waste.id] = true } } } } })
+    local QB = c.QB
     QB:Settings().guide.on = true
-    QB:Plan().auto[waste.id] = true
     settle(c)
     assert(not QB:Plan().auto[waste.id], "the pick under the floor is gone: " .. QB.Data.QN[waste.id])
     for _, l in ipairs(QB.routePlan.legs) do for _, row in ipairs(l.rows) do assert(row.q.id ~= waste.id, "and its stop") end end
     local n = 0
     for _ in pairs(QB:Plan().auto) do n = n + 1 end
     assert(n == QB.Guide.AUTO_MAX, "the fill took others in its place: " .. n)
+  end }
+
+  -- the review: a head carried any "next step" that could be taken, one open on its own too (Alther's Mill, 98386, lists
+  -- Blackrock Blockade, 98387, which needs Blackrock Menace alone), and a step two heads open (Covert Ops - Alpha and
+  -- Beta, 1079 and 1080, after both Ineptitude + Chemicals = Fun, 1074, and Special Delivery for Gaxim, 1077) rode in
+  -- both: a place's set counted them twice. A head carries a step only it opens, and a set counts each quest once
+  F62CASES[#F62CASES + 1] = { "a place's set counts each quest once: no step open on its own, none in two heads", function()
+    local function once(c, catName, must)
+      local QB, UI = c.QB, c.QB.UI
+      local _, groups = UI.PlaceGroups(nil, true)
+      local g = groups[catNamed(c, catName)]
+      local count, xp = {}, 0
+      local function note(id) count[id] = (count[id] or 0) + 1; xp = xp + QB.Model.XpAt(QB.Quest.Get(id), QB.state.level) end
+      for _, it in ipairs(g.set) do
+        note(it.id)
+        for _, b in ipairs({ it.b1 or false, it.b2 or false, it.b3 or false }) do if b then note(b) end end
+      end
+      for id, k in pairs(count) do assert(k == 1, catName .. ": " .. QB.Data.QN[id] .. " counted " .. k .. " times") end
+      for _, id in ipairs(must) do assert(count[id], catName .. ": " .. QB.Data.QN[id] .. " in the set") end
+      assert(math.abs(xp - g.setXP) < 1, string.format("%s: the set's XP is its quests' once each: %d against %d", catName, xp, g.setXP))
+      return g
+    end
+    local c = char("Mill", { world = { 0, -9260, -2200 }, done = { [20] = true } })
+    once(c, "Redridge Mountains", { 98386, 98387 })
+    for _, x in ipairs(c.QB.UI:Candidates(nil)) do
+      if x.id == 98386 then assert(x.b1 ~= 98387 and x.lead == 0, "Alther's Mill carries no Blackrock Blockade") end
+    end
+    local n = c.QB.Data.NPC[551]
+    local d = char("Gaxim", { world = { n[5], n[6], n[7] }, map = n[2], done = { [1085] = true, [1071] = true, [1072] = true, [1073] = true, [1075] = true, [1076] = true } })
+    local cat = c.QB.Data.CAT[c.QB.Data.Q[1074][8]].name
+    local g = once(d, cat, {})
+    local heads = 0
+    for _, it in ipairs(g.set) do if (it.id == 1074 or it.id == 1077) and it.b1 then heads = heads + 1 end end
+    assert(heads == 1, "Covert Ops rides in one head: " .. heads)
   end }
 
   for _, case in ipairs(F62CASES) do

@@ -655,19 +655,31 @@ end
 
 -- A chain's head carries its next open steps, three at most along the best-paying line, when they raise its XP a minute
 -- (the owner's rule; it replaced "half of what the chain leads on to"): The Tower of Althalaxx's delivery (965, 680 XP)
--- carries the step it opens (966). xp and t: the head's XP and minutes. Returns the steps' XP and minutes counted (0, 0
--- when no step raises the rate): each step's own minutes (Model.lua's QuestMinutes) and the way from the step before's
--- turn-in to its giver
+-- carries the step it opens (966). Only a step the one before opens (gatedBy: it is in the step's prerequisites, and
+-- no other quest of the same choice is done): a "next step" the game offers on its own (Blackrock Blockade, 98387,
+-- after Alther's Mill but needing only Blackrock Menace) is a quest of its own, not counted twice. xp and t: the head's
+-- XP and minutes. Returns the steps' XP and minutes counted (0, 0 when no step raises the rate): each step's own
+-- minutes (Model.lua's QuestMinutes) and the way from the step before's turn-in to its giver; and the steps counted,
+-- their ids (three at most: PlaceGroups counts each once in a place's set)
 local NO_STEPS = {}
+local function gatedBy(nq, cur)
+  for _, p in ipairs(nq.pre or NO_STEPS) do
+    if p == cur.id then return true end
+    if type(p) == "table" then
+      for _, x in ipairs(p) do if x == cur.id then return not Q.PreDone(p) end end
+    end
+  end
+  return false
+end
 local function bundle(q, level, xp, t, mf, kf)
   local M, fac = QB.Model, QB.faction
-  local bx, bt, keepX, keepT, best = 0, 0, 0, 0, xp / t
-  local cur = q
-  for _ = 1, 3 do
+  local bx, bt, keepX, keepT, best, keepN = 0, 0, 0, 0, xp / t, 0
+  local cur, s1, s2, s3 = q, nil, nil, nil
+  for k = 1, 3 do
     local nq, nv
     for _, nid in ipairs(cur.nextSteps or NO_STEPS) do
       local x = Q.Get(nid)
-      if x and QB:StepOpen(x, level) then
+      if x and QB:StepOpen(x, level) and gatedBy(x, cur) then
         local v = M.XpAt(x, level)
         if not nv or v > nv then nq, nv = x, v end
       end
@@ -683,10 +695,11 @@ local function bundle(q, level, xp, t, mf, kf)
       end
     end
     bx, bt = bx + nv, bt + leg + M.QuestMinutes(nq.id, 0, mf, kf, M.PartyHas(nq.id))
-    if (xp + bx) / (t + bt) > best then best, keepX, keepT = (xp + bx) / (t + bt), bx, bt end
+    if k == 1 then s1 = nq.id elseif k == 2 then s2 = nq.id else s3 = nq.id end
+    if (xp + bx) / (t + bt) > best then best, keepX, keepT, keepN = (xp + bx) / (t + bt), bx, bt, k end
     cur = nq
   end
-  return keepX, keepT
+  return keepX, keepT, keepN >= 1 and s1 or nil, keepN >= 2 and s2 or nil, keepN >= 3 and s3 or nil
 end
 
 -- the minutes from where you stand to where a quest's work is, for a quest whose giver the catalog can't place: the
@@ -801,7 +814,7 @@ function UI:Candidates(limit, level, reqMax, finder)
       c.own = c.T - c.away
       c.locked = QB:Locked(q) or nil
       c.lead, c.leadT = 0, 0
-      if q.nextSteps then c.lead, c.leadT = bundle(q, level, f, c.T, mf, kf) end
+      if q.nextSteps then c.lead, c.leadT, c.b1, c.b2, c.b3 = bundle(q, level, f, c.T, mf, kf) end
       c.rate = (f + c.lead) / (c.T + c.leadT)
       c.ownRate = (f + c.lead) / (c.own + c.leadT)
       c.rank = c.locked and 0 or c.rate * (c.behind and 0.25 or 1)
@@ -985,7 +998,7 @@ local WEAK = { __mode = "v" }
 -- in a party (the game's own word; a secret value is no)
 local function grouped() return IsInGroup ~= nil and QB.Plain(IsInGroup()) == true end
 UI.Grouped = grouped
-local memoNow, memoAll, nowKept, posBuf = setmetatable({}, WEAK), setmetatable({}, WEAK), {}, {}
+local memoNow, memoAll, nowKept, posBuf, carried = setmetatable({}, WEAK), setmetatable({}, WEAK), {}, {}, {}
 local CELL = 25 -- yards: the minutes are worked out again once you have moved this far
 -- the places you skip, told apart without a string: how many, and their keys' letters
 local function skipMark(set)
@@ -1042,6 +1055,7 @@ function UI.PlaceGroups(level, now)
     return g
   end
   local seen = {}
+  for k in pairs(carried) do carried[k] = nil end
   -- grp: 1 to pick up, 2 available now, 3 in your log, 4 not yet, 5 probably behind you, 6 done (counted, not shown)
   local function add(q, near, mins, c)
     if seen[q.id] then return end
@@ -1085,7 +1099,7 @@ function UI.PlaceGroups(level, now)
     if banking or it.grp == 6 or it.grp == 5 then return end
     if c and c.T then
       it.T, it.est, it.trip, it.lead, it.leadT, it.walk, it.work = c.T, c.est, c.away, c.lead, c.leadT, c.walk, c.work
-      it.tripEst = c.awayEst
+      it.tripEst, it.b1, it.b2, it.b3 = c.awayEst, c.b1, c.b2, c.b3
     else
       -- held (what is left of its work; complete, the hand-in alone, the trip to its turn-in), or chosen outside the
       -- candidates (the trip to its giver)
@@ -1108,7 +1122,11 @@ function UI.PlaceGroups(level, now)
       it.trip, it.est, it.walk, it.work = trip, est, walk, work
       it.T = T + (trip or 0)
       it.lead, it.leadT = 0, 0
-      if q.nextSteps then it.lead, it.leadT = bundle(q, level, value, it.T, mf, kf) end
+      if q.nextSteps then it.lead, it.leadT, it.b1, it.b2, it.b3 = bundle(q, level, value, it.T, mf, kf) end
+    end
+    -- a step another member of a set carries already counts there alone: this one's own XP and minutes, no steps
+    if (it.b1 and carried[it.b1]) or (it.b2 and carried[it.b2]) or (it.b3 and carried[it.b3]) then
+      it.lead, it.leadT, it.b1, it.b2, it.b3 = 0, 0, nil, nil, nil
     end
     it.rate = (value + it.lead) / (it.T + it.leadT)
     it.xp, it.own, it.run = value + it.lead, it.T - (it.trip or 0) + it.leadT, q.dungeon or nil
@@ -1117,6 +1135,9 @@ function UI.PlaceGroups(level, now)
     -- moves no place: picked or not, a quest counts the same)
     if (it.grp == 3 and not cut) or ((it.grp == 1 or it.grp == 2) and ownRate >= F) then
       g.set[#g.set + 1] = it
+      if it.b1 then carried[it.b1] = true end
+      if it.b2 then carried[it.b2] = true end
+      if it.b3 then carried[it.b3] = true end
       -- the place's trip: the nearest quest you could take there whose trip is known; while none is, the nearest
       -- taken from its turn-in or ten minutes (an estimate: g.tripEst); a quest held only where nothing can be taken
       if it.trip then
