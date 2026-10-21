@@ -57,7 +57,9 @@ local CONT_NAME = { [0] = "Eastern Kingdoms", [1] = "Kalimdor" }
 local STEP = {
   fly = { "Fly to %s", "Talk to the flight master" }, boat = { "Boat to %s", "Wait for the boat" },
   zeppelin = { "Zeppelin to %s", "Wait for the zeppelin" }, tram = { "Tram to %s", "Take the tram" },
-  portal = { "Portal to %s", "Step into the portal" }, hearth = { "Hearth to %s", "Use your Hearthstone" },
+  -- (the portal: the walk-in one between Rut'theran Village and Darnassus, its step "Portal in <here> to <there>": 6.1.1,
+  -- "Portal to Darnassus" read as the mage spell Portal: Darnassus)
+  portal = { "Portal in %s to %s", "Step into the portal" }, hearth = { "Hearth to %s", "Use your Hearthstone" },
   recall = { "Recall to %s", "Cast Astral Recall" },
 }
 local SAY = { fly = "flight", boat = "boat", zeppelin = "zeppelin", tram = "tram", portal = "portal", hearth = "hearthstone", recall = "Astral Recall" }
@@ -866,7 +868,9 @@ local function icons(fac)
   local I = {
     fly = { atlas = "flightmaster", file = bird }, flying = { file = bird },
     boat = { atlas = "flightmasterferry", file = T.boat }, zeppelin = { file = T.zeppelin }, tram = { file = T.tram },
-    portal = { atlas = "mageportalalliance", file = T.portal }, hearth = { file = T.hearth },
+    -- (a world portal on the map, the client's atlas "portalpurple": UiTextureAtlasMember 4705; 6.1.1, never the mage's
+    -- "mageportalalliance")
+    portal = { atlas = "portalpurple", file = T.portal }, hearth = { file = T.hearth },
     recall = { file = type(recall) == "number" and recall or T.hearth },
     there = { atlas = "Waypoint-MapPin-Tracked", file = T.mapPin }, unreachable = { atlas = "Waypoint-MapPin-Untracked", file = T.mapPin },
     ghost = { atlas = "Navigation-Tombstone-Icon", file = T.unknown }, instance = { atlas = "dungeon", file = dungeon },
@@ -979,7 +983,8 @@ local function legsOf(G, to, o)
     rest = rest + leg.walk + leg.min
     local say = STEP[leg.kind]
     if say then
-      leg.step, leg.short, leg.wait, leg.icon = string.format(say[1], leg.town), leg.town, say[2], I[leg.kind]
+      local step = leg.kind == "portal" and string.format(say[1], G.town[leg.from] or "?", leg.town) or string.format(say[1], leg.town)
+      leg.step, leg.short, leg.wait, leg.icon = step, leg.town, say[2], I[leg.kind]
       if leg.kind == "fly" then leg.pick, leg.going = "Pick " .. leg.town, "Flying to " .. leg.town end
       if leg.kind == "tram" then leg.going = "On the tram to " .. leg.town end
     end

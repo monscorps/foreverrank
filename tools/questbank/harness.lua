@@ -17996,6 +17996,42 @@ end)()
     print(string.format("6.1.1: Southshore to Darkshore with the Menethil flight known, the ferry not ridden yet: %s (%.1f min)", tostring(g.step), g.plan and g.plan.min or -1))
   end }
 
+  -- E. "It's showing portal Darnassus but I'm not lvl 30 yet, can't do that, and only mages": the only portal QuestBank
+  -- plans is the walk-in one from Rut'theran Village up to Darnassus (D.LINK's p row), but its step read "Portal to
+  -- Darnassus" (the mage spell is "Portal: Darnassus") with the "mageportalalliance" atlas (Travel.lua), and the Route
+  -- page's portal leg wore Spell_Arcane_PortalDarnassus (D.TEX.portal), the mage spell's own icon
+  F61CASES[#F61CASES + 1] = { "the Rut'theran portal says where it stands; no class spell is ever a step", function()
+    local c = newClient({ name = "Wayfarer", level = 25, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
+      race = "Human", log = {}, done = {}, world = { 0, -711, -505 }, map = 1424, bagSlots = {}, bind = "Southshore" })
+    login(c)
+    local TV, D = c.QB.Travel, c.QB.Data
+    local dn, aub = hubOf(c, "Darnassus"), hubOf(c, "Auberdine")
+    local o = TV.Opts("pin")
+    local up = TV.Route({ c = 0, wx = -711, wy = -505 }, { name = "Darnassus", c = 1, wx = dn[3], wy = dn[4] }, o)
+    local portal, before
+    for i, l in ipairs(up.legs) do if l.kind == "portal" then portal, before = l, up.legs[i - 1] end end
+    assert(portal and portal.step == "Portal in Rut'theran Village to Darnassus", "the portal's step says where it stands: " .. tostring(portal and portal.step))
+    assert(portal.icon and portal.icon.atlas == "portalpurple" and portal.icon.file ~= 135741, "a world portal's icon, not the mage's")
+    assert(before and before.town == "Rut'theran Village", "it comes after the way to Rut'theran Village")
+    local down = TV.Route({ c = 1, wx = dn[3], wy = dn[4] }, { name = "Auberdine", c = 1, wx = aub[3], wy = aub[4] }, o)
+    assert(down.legs[1].kind == "portal" and down.legs[1].step == "Portal in Darnassus to Rut'theran Village", "and down: " .. tostring(down.legs[1].step))
+    assert(D.TEX.portal ~= 135741, "the Route page's portal icon is not Spell_Arcane_PortalDarnassus")
+    -- only a way onto Teldrassil's canopy takes it: every Alliance flight master off it, from Southshore, none does
+    local G = TV.Graph("A")
+    for i = 1, G.h do
+      local land = TV.Land(G.c[i], G.wx[i], G.wy[i])
+      local plan = TV.Route({ c = 0, wx = -711, wy = -505 }, { name = G.town[i], c = G.c[i], wx = G.wx[i], wy = G.wy[i] }, o)
+      local uses = false
+      for _, l in ipairs(plan and plan.legs or {}) do if l.kind == "portal" then uses = true end end
+      assert(uses == (land == 2), G.town[i] .. ": the portal only onto the canopy (land " .. land .. ")")
+    end
+    -- no class spell is ever a step: the kinds are travel's own, Astral Recall a shaman's who knows it
+    for _, l in ipairs(up.legs) do assert(({ fly = 1, boat = 1, zeppelin = 1, tram = 1, portal = 1, hearth = 1, recall = 1, walk = 1 })[l.kind], "a step's kind: " .. l.kind) end
+    c.o.riding = true -- (IsPlayerSpell says yes to anything)
+    local h = TV.Hearth("pin")
+    assert(not h or h.kind ~= "recall", "a warrior: never Astral Recall, whatever IsPlayerSpell says")
+  end }
+
   for _, case in ipairs(F61CASES) do
     case[2]()
     print("6.1.1: " .. case[1] .. ": ok")

@@ -3176,7 +3176,7 @@ function UI:RefreshRouteView(v)
     l.node:SetTexture(i == 1 and T.taxiY or T.taxiGray); l.node:SetTexCoord(0, 1, 0, 1)
     l.clock:SetText(QB.Clock(leg.t))
     local kind = leg.kind
-    l.travelIcon:SetTexture(travelIcon(kind))
+    l.travelIcon:SetTexture(travelIcon(kind)) -- (the portal's, D.TEX.portal: a world portal, never the mage spell's icon: 6.1.1)
     local label = KIND[kind] or kind
     if kind == "start" then
       label = QB.mode == "lock" and "Log in here" or "Start here"

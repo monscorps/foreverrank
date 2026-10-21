@@ -1555,7 +1555,7 @@ T = {k: tex(v) for k, v in {
 T.update({"hearth": icon("inv_misc_rune_01"), "mount": icon("ability_mount_ridinghorse"), "foot": icon("ability_rogue_sprint"),
           "sleep": 133662, "hourglass": icon("inv_misc_pocketwatch_01"), "gryphon": icon("ability_mount_gryphon_01"),
           "wyvern": icon("ability_mount_wyvern_01"), "boat": icon("inv_misc_anchor"), "tram": icon("inv_gizmo_02"),
-          "zeppelin": icon("inv_zeppelinmount"), "portal": icon("spell_arcane_portaldarnassus"),
+          "zeppelin": icon("inv_zeppelinmount"), "portal": icon("inv_misc_ticket_tarot_portal_01"),  # (6.1.1: not the mage spell's portaldarnassus)
           "unknown": icon("inv_misc_questionmark"), "questGeneric": icon("inv_misc_note_01"), "map": icon("inv_misc_map_01"),
           "party": icon("inv_misc_groupneedmore"), "rally": icon("ability_warrior_rallyingcry"), "letter": icon("inv_letter_15"),
           "note": icon("inv_misc_note_06"), "start": icon("inv_misc_coin_01"),
