@@ -47,13 +47,22 @@ DRUID_ONLY = {62, 63}       # Nighthaven: flights out only, for druids
 TOWERS = {84, 85, 86, 87}   # the Eastern Plaguelands world-PvP towers: their flights hang on who holds them
 # the rides the step-by-step arrow can take: (factions, kind b boat / z zeppelin / t tram / p portal, minutes of the
 # ride with the average wait and no walking at the ends, source, town at end 1, town at end 2, map hint for the ends).
-# A ("path", TaxiPath id) source has its two stops in TaxiPathNode (Flags 2); a ("trigger", id, id) source is the
-# tram's doors or the portal in AreaTrigger. The Feathermoon ferry's 3 minutes is an estimate.
+# A ("path", TaxiPath id) source has its two stops in TaxiPathNode (Flags 2); a ("loop", TaxiPath id) source marks no
+# stop, and leaves from its first point and turns back at the point farthest from it; a ("trigger", id, id) source is
+# the tram's doors or the portal in AreaTrigger. The Feathermoon ferry's 3 minutes is an estimate.
+# The Southshore ferry (6.1.1): TaxiNodes 46 "Southshore Ferry, Hillsbrad" (flags 1024: no faction bit, so the
+# Alliance town's) and TaxiPath 253 from it to node 7, Menethil Harbor's flight master: 30 points on the Eastern
+# Kingdoms, none a stop, 3,209 yd out down the coast to a turn 55 yd from the pier the Auberdine boat leaves Menethil
+# from (TaxiPath 295's stop), 3,108 yd back. Its 7.3 minutes are an estimate: that length at the other boats' minutes
+# a yard with the wait (Menethil-Theramore 6.0 for 2,441 yd one way, Rut'theran-Auberdine 5.0 for 2,219, Booty
+# Bay-Ratchet 6.0 for 2,787: 0.00229 a yard). The owner says it goes to Darkshore; QuestBank learns each ride (where
+# it lands, how long it takes: Travel.lua), so a landing elsewhere replaces this end for that player.
 LINKS = [("A", "b", 6.0, ("path", 292), "Menethil Harbor", "Theramore", None),
          ("A", "b", 7.0, ("path", 295), "Menethil Harbor", "Auberdine", None),
          ("A", "b", 5.0, ("path", 293), "Rut'theran Village", "Auberdine", None),
          ("AH", "b", 6.0, ("path", 241), "Booty Bay", "Ratchet", None),
          ("AH", "b", 3.0, ("path", 303), "Feathermoon", "the Forgotten Coast", None),
+         ("A", "b", 7.3, ("loop", 253), "Southshore", "Menethil Harbor", None),
          ("A", "t", 2.0, ("trigger", 2173, 2175), "Stormwind", "Ironforge", None),
          ("A", "p", 0.3, ("trigger", 542, 527), "Rut'theran Village", "Darnassus", None),
          ("H", "z", 6.5, ("path", 285), "Orgrimmar", "Grom'gol", 1411),
@@ -291,6 +300,11 @@ class Travel:
             track = []
             if src[0] == "trigger":
                 ends = [at[src[1]], at[src[2]]]
+            elif src[0] == "loop":
+                p = [(c, x, y) for _, x, y, c, _ in self.paths[src[1]]]
+                far = max(range(len(p)), key=lambda k: math.hypot(p[k][1] - p[0][1], p[k][2] - p[0][2]))
+                stops = [0, far]
+                ends = [p[0], p[far]]
             else:
                 p = [(c, x, y) for _, x, y, c, _ in self.paths[src[1]]]
                 stops = [k for k, r in enumerate(self.paths[src[1]]) if r[4] & 2]
@@ -307,7 +321,7 @@ class Travel:
                 yd = near(town, e)
                 # a town with no hub (the Forgotten Coast) is checked against AreaTable by gen_data.py
                 assert yd is None or yd < DOCK_NEAR, "the %s end of %s lies %d yd from its hub" % (town, src, yd)
-            if src[0] == "path":
+            if src[0] in ("path", "loop"):
                 first = next(k for k in stops if same(p[k], ends[0]))
                 track = self.track(p[first:] + p[:first + 1], [(k - first) % len(p) for k in stops])
             placed = []

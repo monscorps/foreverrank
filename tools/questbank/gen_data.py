@@ -2827,8 +2827,8 @@ AREA_NAMES = {r["AreaName_lang"].lower() for r in AREA_ROW.values()}
 # the docks on an island: Rut'theran's pier and the portal's lower end at Teldrassil's foot (4), its upper end on the
 # canopy (2), Feathermoon's pier on Sardor Isle (3)
 DOCK_LAND = {("Rut'theran Village", "b"): 4, ("Rut'theran Village", "p"): 4, ("Darnassus", "p"): 2, ("Auberdine", "b"): 1,
-             ("the Forgotten Coast", "b"): 1, ("Feathermoon", "b"): 3}
-assert len(LINK) == 10, "rides changed: %d" % len(LINK)
+             ("the Forgotten Coast", "b"): 1, ("Feathermoon", "b"): 3, ("Southshore", "b"): 0}
+assert len(LINK) == 11, "rides changed: %d" % len(LINK)
 for fac, kind, minutes, a, b, track in LINK:
     for e in (a, b):
         assert e[0] in (0, 1) and e[3], "a %s dock of %s off the continents' maps: %s" % (kind, fac, e)

@@ -18,6 +18,12 @@
 --     Flier (QB.Legacy) }
 --   QuestBankDB.diag.taxi = { cont, zone, open, known, scanBad, bind, at }: how many flight points each read of the
 --     client gave, so the uploads show what this client answers
+--   QuestBankDB.disc.rides (6.1.1, every character's: a boat sails the same for all) = { ["<kind>:<town>><town>" (D.LINK's
+--     ends, the one boarded first)] = { b = where you boarded { c, wx, wy }, l = where you landed, t = seconds on board
+--     (the mean of the last few), n = rides, at = time() } }: each boat or zeppelin leg ridden to its far end, or off it
+--     through a loading screen. The graph takes the measured time from then on, and a landing more than LAND_YD from
+--     the seed's end in that end's place (the Southshore ferry: the client's track turns at Menethil Harbor; the owner
+--     says it goes to Darkshore)
 -- Only reads: QuestBank never takes a flight or uses the hearthstone for you.
 local _, QB = ...
 if QB.dormant then return end
@@ -159,12 +165,61 @@ local function push(list, ...) for i = 1, select("#", ...) do list[#list + 1] = 
 
 local AT -- D.ALPHA's characters, by byte: 0 to 63
 local graphs = {}
+
+-- rides learned (QuestBankDB.disc.rides): the key of D.LINK row li ridden from its end `from` (1 or 2)
+local LAND_YD, RIDE_MEAN = 150, 5
+TV.LAND_YD = LAND_YD
+local function rideKey(li, from)
+  local l = D.LINK[li]
+  if not l then return nil end
+  local a, b = l[from == 1 and 4 or 5], l[from == 1 and 5 or 4]
+  return l[2] .. ":" .. tostring(a[7]) .. ">" .. tostring(b[7])
+end
+TV.RideKey = rideKey
+-- the table, kept to the keys of today's D.LINK (a ride of a link the data no longer has goes)
+local ridesPruned = false
+local function rides()
+  local db = QuestBankDB
+  if type(db) ~= "table" then return nil end
+  if type(db.disc) ~= "table" then db.disc = {} end
+  local r = db.disc.rides
+  if type(r) ~= "table" then r = {}; db.disc.rides = r end
+  if not ridesPruned then
+    ridesPruned = true
+    local ok = {}
+    for li in ipairs(D.LINK) do ok[rideKey(li, 1)], ok[rideKey(li, 2)] = true, true end
+    for k in pairs(r) do if not ok[k] then r[k] = nil end end
+  end
+  return r
+end
+-- what a ride of row li from end `from` taught, or nil
+function TV.RideLearned(li, from)
+  local all = rides()
+  local e = all and all[rideKey(li, from)]
+  return type(e) == "table" and type(e.t) == "number" and e.t > 0 and e or nil
+end
+-- an end of a ride as the graph has it: the seed's, or the landing you learned when it lies more than LAND_YD away
+-- (its town then the nearest flight master's of the faction on that continent)
+local function placeEnd(e, r, hubs)
+  local l = r and type(r.l) == "table" and r.l
+  if not (l and type(l[1]) == "number" and type(l[2]) == "number" and type(l[3]) == "number") then return e[1], e[2], e[3], e[7] end
+  if l[1] == e[1] and (l[2] - e[2]) ^ 2 + (l[3] - e[3]) ^ 2 <= LAND_YD * LAND_YD then return e[1], e[2], e[3], e[7] end
+  local town, best = e[7], 2000 * 2000
+  for _, h in ipairs(hubs) do
+    if h[2] == l[1] then
+      local d = (h[3] - l[2]) ^ 2 + (h[4] - l[3]) ^ 2
+      if d < best then town, best = h[1], d end
+    end
+  end
+  return l[1], l[2], l[3], town
+end
+
 function TV.Graph(fac)
   if graphs[fac] then return graphs[fac] end
   if not AT then AT = {}; for i = 1, #D.ALPHA do AT[D.ALPHA:byte(i)] = i - 1 end end
   local hubs = D.HUB[fac]
   local G = { fac = fac, h = #hubs, c = {}, wx = {}, wy = {}, land = {}, taxi = {}, flag = {}, town = {}, kind = {},
-              pos = {}, fly = {}, ride = {}, track = {}, byTaxi = {}, W = {},
+              pos = {}, fly = {}, ride = {}, track = {}, byTaxi = {}, W = {}, endOf = {},
               dist = {}, prev = {}, how = {}, via = {}, done = {}, use = {}, path = {} }
   local n = 0
   local function node(c, wx, wy, taxi, flag, town, kind)
@@ -179,11 +234,15 @@ function TV.Graph(fac)
   end
   for li, l in ipairs(D.LINK) do
     if l[1]:find(fac, 1, true) then
-      local e1, e2 = l[4], l[5]
-      local a = node(e1[1], e1[2], e1[3], 0, 0, e1[7], l[2])
-      local b = node(e2[1], e2[2], e2[3], 0, 0, e2[7], l[2])
-      push(G.ride[a], b, l[3], KIND[l[2]], li)
-      push(G.ride[b], a, l[3], KIND[l[2]], li)
+      -- (what your rides taught: the minutes measured, an end where you landed instead of the seed's)
+      local r12, r21 = TV.RideLearned(li, 1), TV.RideLearned(li, 2)
+      local c1, x1, y1, t1 = placeEnd(l[4], r21, hubs)
+      local c2, x2, y2, t2 = placeEnd(l[5], r12, hubs)
+      local a = node(c1, x1, y1, 0, 0, t1, l[2])
+      local b = node(c2, x2, y2, 0, 0, t2, l[2])
+      G.endOf[a], G.endOf[b] = 1, 2
+      push(G.ride[a], b, r12 and r12.t / 60 or l[3], KIND[l[2]], li)
+      push(G.ride[b], a, r21 and r21.t / 60 or l[3], KIND[l[2]], li)
       local tr = {}
       for c, x, y in l[6]:gmatch("(%-?%d+),(%-?[%d.]+),(%-?[%d.]+)") do push(tr, tonumber(c), tonumber(x), tonumber(y)) end
       G.track[li] = tr
@@ -1238,6 +1297,26 @@ local function flying(tnow, I)
   return show("underway", G.pos[to], say("flying", to, "Flying to %s", G.town[to]), G.town[to], I.flying, info, nil)
 end
 
+-- a ride of a boat or zeppelin leg, from its pier to where you got off after secs seconds on board: learned
+-- (QuestBankDB.disc.rides), and every graph made again with it
+function TV.NoteRide(leg, me, secs)
+  local G = TV.Graph(faction())
+  local from = leg.link and G.endOf[leg.from]
+  local key = from and rideKey(leg.link, from)
+  local all = key and rides()
+  if not (all and me and secs and secs > 0) then return end
+  local e = all[key]
+  if type(e) ~= "table" or type(e.n) ~= "number" or type(e.t) ~= "number" then e = { n = 0 }; all[key] = e end
+  local n = math.min(e.n, RIDE_MEAN - 1)
+  e.t = floor(((e.t or secs) * n + secs) / (n + 1) + 0.5)
+  e.n = e.n + 1
+  e.b = { leg.start.c, floor(leg.start.wx + 0.5), floor(leg.start.wy + 0.5) }
+  e.l = { me.c, floor(me.wx + 0.5), floor(me.wy + 0.5) }
+  e.at = type(time) == "function" and time() or nil
+  for k in pairs(graphs) do graphs[k] = nil end
+  TV.ver = TV.ver + 1
+end
+
 local function onBoard(leg, tnow)
   local m = max(1, floor(leg.min - (tnow - st.rideAt) / 60 + 0.5))
   return show("underway", leg.finish, leg.step, leg.short, leg.icon, say("board", m, "On board, about %d min", m), nil)
@@ -1324,8 +1403,11 @@ function TV.Guide(me, t, mode)
   -- on board: the plan stands until the far pier, you are back on the pier, clearly off the boat's way, or it takes far
   -- too long. Boarding again takes the pier again
   if st.lock == "ride" then
-    if ydTo(me, leg.finish) <= leg.finish.r or ydTo(me, leg.start) <= leg.start.r or tnow - st.rideAt > 3 * leg.min * 60
+    local atEnd = ydTo(me, leg.finish) <= leg.finish.r
+    if atEnd or ydTo(me, leg.start) <= leg.start.r or tnow - st.rideAt > 3 * leg.min * 60
       or (offTrack(me, leg) > 120 and ydTo(me, leg.start) > 80) then
+      -- (off at the far end, or somewhere else through a loading screen, not back at the pier: the ride learned)
+      if atEnd or (jumped and ydTo(me, leg.start) > LAND_YD) then TV.NoteRide(leg, me, tnow - st.rideAt) end
       st.lock, st.force, st.reached, st.why, st.arrived = nil, true, false, "off the boat", tnow
     else
       return onBoard(leg, tnow)

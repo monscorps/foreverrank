@@ -7642,7 +7642,7 @@ do
     end
   end
   assert(#D.FLY.A == 588 and #D.FLY.H == 612, "147 Alliance and 153 Horde flights: " .. #D.FLY.A / 4 .. ", " .. #D.FLY.H / 4)
-  assert(#D.LINK == 10, "ten rides: " .. #D.LINK)
+  assert(#D.LINK == 11, "eleven rides (6.1.1: the Southshore ferry): " .. #D.LINK)
   for _, l in ipairs(D.LINK) do
     for e = 4, 5 do assert(l[e][1] == 0 or l[e][1] == 1, l[2] .. " to " .. l[e][7] .. " ends on a continent") end
   end
@@ -7921,7 +7921,7 @@ do
   assert(off and off.legs[1].kind == "portal" and has(off, "fly", "Auberdine"), "Dolanaar to Auberdine: the portal down, then the flight: " .. kinds(off))
   local home = TV.Route({ c = 1, wx = 6341, wy = 558 }, { name = "Denalan", c = 1, wx = 9510, wy = 719 }, opts)
   assert(home and has(home, "portal", "Darnassus"), "Auberdine to Denalan by Lake Al'Ameth: the portal up on the way: " .. kinds(home))
-  assert(TV.Graph("A").n == 60 and TV.Graph("H").n == 50 and TV.Graph("A").h == #D.HUB.A, "the graphs: the hubs in D.HUB's order, then two docks a ride")
+  assert(TV.Graph("A").n == 62 and TV.Graph("H").n == 50 and TV.Graph("A").h == #D.HUB.A, "the graphs: the hubs in D.HUB's order, then two docks a ride (6.1.1: the Southshore ferry's two)")
   local inn = {}
   for _, r in ipairs(D.BIND) do inn[r[1]] = r end
   for _, case in ipairs({ { "Stormwind City", "Stormwind" }, { "Goldshire", "Goldshire" }, { "Northshire Abbey", "Northshire Abbey" },
@@ -17907,6 +17907,93 @@ end)()
     -- a save from before has no such setting: off
     local old = char("Oskar", "WARRIOR", "Warrior", 1, {}, { level = 25, saved = { settings = { v544 = true, v600 = true } } })
     assert(old.QB:Settings().mapLowLevel == false, "an old save: off")
+  end }
+
+  -- D. "Standing in Southshore it tells me to fly to Menethil Harbor instead of taking boat from Southshore to
+  -- Darkshore": D.LINK had no Southshore ferry. The client has one: TaxiNodes 46 "Southshore Ferry, Hillsbrad"
+  -- (flags 1024, no faction bit) and TaxiPath 253 from it to node 7 (Menethil Harbor's flight master), 30 points on
+  -- the Eastern Kingdoms marking no stop: out 3,209 yards down the coast, turning 55 yards from the pier the Auberdine
+  -- boat leaves Menethil from, and 3,108 back. So the seed is a boat from the ferry's dock to Menethil Harbor, the
+  -- time estimated, and QuestBank learns each ride: where you boarded and landed and how long it took
+  -- (QuestBankDB.disc.rides), the measured time used from then on, a landing more than 150 yards from the seed's
+  -- end taking its place for this player
+  F61CASES[#F61CASES + 1] = { "the Southshore ferry: a way to Darkshore; a ride learned, its time and where it lands", function()
+    local function rider(name, knowMen)
+      local c = newClient({ name = name, level = 25, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8, race = "Human",
+        log = {}, done = {}, world = { 0, -711, -505 }, map = 1424, bagSlots = {}, bind = "Southshore" })
+      login(c)
+      local ss, men, aub = hubOf(c, "Southshore"), hubOf(c, "Menethil Harbor"), hubOf(c, "Auberdine")
+      c.taxiKnown = { [ss[6]] = true, [aub[6]] = true }
+      if knowMen then c.taxiKnown[men[6]] = true end
+      fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+      return c, ss, men, aub
+    end
+    local c, ss, men, aub = rider("Ferryman", false)
+    local TV, D = c.QB.Travel, c.QB.Data
+    local ferry
+    for li, l in ipairs(D.LINK) do if l[2] == "b" and l[4][7] == "Southshore" then ferry = li end end
+    assert(ferry, "a boat from Southshore in D.LINK")
+    local L = D.LINK[ferry]
+    assert(L[1] == "A" and L[5][7] == "Menethil Harbor" and L[4][1] == 0 and L[5][1] == 0, "Alliance's, Southshore to Menethil Harbor on the Eastern Kingdoms")
+    assert(math.abs(L[4][2] + 988) < 5 and math.abs(L[4][3] + 546) < 5 and math.abs(L[5][2] + 3748) < 5 and math.abs(L[5][3] + 537) < 5, "its ends: the ferry's dock and its turn at Menethil")
+    assert(L[3] > 6 and L[3] < 8 and #L[6] > 0, "an estimated ride of about 7 minutes, the track drawn")
+    local here = function() return c.QB.API.WorldPosition() end
+    local toDs = { name = "Darkshore hand-in", c = 1, wx = aub[3] + 30, wy = aub[4] + 10 }
+    local g = TV.Guide(here(), toDs, "pin")
+    assert(g.leg and g.leg.kind == "boat" and g.leg.link == ferry and g.step == "Boat to Menethil Harbor",
+      "no flight to Menethil known: the ferry first, not the walk there: " .. tostring(g.step))
+    -- a ride: on the dock, out along the track, two and a half minutes on board, off at the Menethil end
+    local function look(s, cont, x, y)
+      standAt(c, cont, x, y)
+      for _ = 1, math.max(1, math.floor(s / 0.5)) do c.clock = c.clock + 0.5; g = TV.Guide(here(), toDs, "pin") end
+      return g
+    end
+    look(1, 0, L[4][2], L[4][3])
+    assert(g.state == "at" and g.info == "Wait for the boat", "on the ferry's dock: wait for the boat: " .. tostring(g.info))
+    look(2, 0, -1280, -748)
+    assert(g.state == "underway", "out on the ferry's way: on board")
+    look(150, 0, -2456, -852)
+    look(1, 0, L[5][2] + 10, L[5][3])
+    local rides = c.env.QuestBankDB.disc.rides
+    local r = rides and rides["b:Southshore>Menethil Harbor"]
+    assert(r and r.n == 1 and math.abs(r.t - 151) < 4 and r.b[1] == 0 and math.abs(r.l[2] - (L[5][2] + 10)) < 2,
+      "the ride learned: boarded, landed, about 151 seconds: " .. tostring(r and r.t))
+    assert(g.leg and g.leg.kind == "boat" and g.step == "Boat to Auberdine", "off at Menethil: the Auberdine boat next: " .. tostring(g.step))
+    -- the measured time from then on
+    local G = TV.Graph("A")
+    local mins
+    for u = 1, G.n do local rr = G.ride[u]; for i = 1, #rr, 4 do if rr[i + 3] == ferry and G.town[u] == "Southshore" then mins = rr[i + 1] end end end
+    assert(mins and math.abs(mins - r.t / 60) < 0.01, "the ferry's minutes are the measured ones: " .. tostring(mins))
+
+    -- if it landed elsewhere (a loading screen to Auberdine's pier, as the owner says it goes), that end is replaced
+    -- for this player: the next plan from Southshore to Darkshore is the ferry, not the flight to Menethil
+    local c2, ss2, men2, aub2 = rider("Seafarer", false)
+    local TV2 = c2.QB.Travel
+    here = function() return c2.QB.API.WorldPosition() end
+    c = c2; TV = TV2
+    g = TV.Guide(here(), toDs, "pin")
+    look(1, 0, L[4][2], L[4][3])
+    look(2, 0, -1280, -748)
+    assert(g.state == "underway", "on board")
+    look(100, 0, -1793, -887)
+    look(1, 1, 6406, 823) -- (a loading screen: Auberdine's pier)
+    local r2 = c2.env.QuestBankDB.disc.rides["b:Southshore>Menethil Harbor"]
+    assert(r2 and r2.l[1] == 1 and math.abs(r2.l[2] - 6406) < 2, "the landing kept: Darkshore")
+    c2.taxiKnown[men2[6]] = true
+    fireTV(c2, "TAXI_NODE_STATUS_CHANGED"); tick(c2, 2)
+    standAt(c2, 0, -711, -505)
+    fireTV(c2, "PLAYER_ENTERING_WORLD"); tick(c2, 3.1)
+    g = TV.Guide(here(), toDs, "pin")
+    assert(g.leg and g.leg.kind == "boat" and g.leg.link == ferry and g.step == "Boat to Auberdine",
+      "the ferry learned to land in Darkshore: the boat from Southshore, not the flight to Menethil: " .. tostring(g.step))
+    -- bounded: one entry a ride and direction
+    local n = 0
+    for _ in pairs(c2.env.QuestBankDB.disc.rides) do n = n + 1 end
+    assert(n <= 2 * #D.LINK, "rides kept per link and direction: " .. n)
+    -- (a plain player who knows the flight: the estimate, ferry and boat against the flight and boat)
+    local c3 = rider("Flier", true)
+    g = c3.QB.Travel.Guide(c3.QB.API.WorldPosition(), toDs, "pin")
+    print(string.format("6.1.1: Southshore to Darkshore with the Menethil flight known, the ferry not ridden yet: %s (%.1f min)", tostring(g.step), g.plan and g.plan.min or -1))
   end }
 
   for _, case in ipairs(F61CASES) do
