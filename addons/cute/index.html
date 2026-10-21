@@ -2220,7 +2220,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   }
   function questSection(id) {
     var col = "<div class=\"cu-h\">" + esc(QUEST_BY[id][1]) + "</div>";
-    if (id === "quests") col += qcheck("Step frame", "quests:frame", true) + qcheck("Direction arrow", "quests:arrow", true) + qchoice("Accept for me", "quests:accept", ["Off", "On my route", "Worth taking"], "Off") + qcheck("Hand finished quests in for me", "quests:turnin", false) + qcheck("Progress in mob tooltips", "quests:tips", true) + qcheck("Share with your party", "quests:share", true);
+    if (id === "quests") col += qcheck("Step frame", "quests:frame", true) + qcheck("Direction arrow", "quests:arrow", true) + qcheck("Hide the game's quest tracker", "quests:tracker", true) + qchoice("Accept for me", "quests:accept", ["Off", "On my route", "Worth taking"], "Off") + qcheck("Hand finished quests in for me", "quests:turnin", false) + qcheck("Progress in mob tooltips", "quests:tips", true) + qcheck("Share with your party", "quests:share", true);
     else if (id === "route") col += qchoice("Follow", "route:follow", ["The plan", "Ready now"], "The plan") + qcheck("Show the way step by step on the arrow", "route:travel", true) + qcheck("The hearthstone may be a step", "route:hearth", true);
     else if (id === "map") col += qcheck("Quest icons on the world map", "map:icons", true) + qcheck("Route pins on the world map", "map:pins", true) + qcheck("Route on the minimap", "map:minimap", true) + qcheck("A ! on the minimap for quests you can take", "map:givers", true);
     else if (id === "gear") col += qcheck("Quests up to 2 levels ahead", "gear:ahead", false);

@@ -439,6 +439,30 @@ local function newClient(o)
   local c = { env = env, o = o, timers = {}, clock = 1000, outbox = {}, pins = {}, chat = {}, frames = {}, QB = {} }
   env.UIParent = newObj("Frame"); env.UIParent:SetSize(1600, 1000); env.UIParent.__points = {}
   env.UIParent.__root = true
+  -- the game's quest tracker (Blizzard_ObjectiveTracker, mainline's, which Forever loads; no QuestWatchFrame there):
+  -- ObjectiveTrackerFrame at the screen's top right, its Header 260 x 32 with the MinimizeButton at its right end
+  -- (Blizzard_ObjectiveTrackerContainer.xml), placed by the right-hand managed container at TOPRIGHT, x -5 less the
+  -- right action bars, y -260 (EditModeUtil:GetRightContainerAnchor, RIGHT_CONTAINER_OFFSET_Y); o.trackerX moves it
+  -- left as right action bars would. A managed frame: shown, hidden, moved or reparented by an addon, the container's
+  -- layout runs as that addon (ManagedFrameSystem.lua), so those calls fail here; its alpha is the game's own way to
+  -- put a managed frame out of sight (AnimOutManagedFrames)
+  do
+    local otf = newObj("Frame", nil, env.UIParent)
+    otf:SetSize(260, 300)
+    otf:SetPoint("TOPRIGHT", env.UIParent, "TOPRIGHT", o.trackerX or -5, -260)
+    otf.Header = newObj("Frame", nil, otf)
+    otf.Header:SetSize(260, 32)
+    otf.Header:SetPoint("TOPLEFT", otf, "TOPLEFT", 0, 0)
+    otf.Header.MinimizeButton = newObj("Button", nil, otf.Header)
+    otf.Header.MinimizeButton:SetSize(18, 19)
+    otf.Header.MinimizeButton:SetPoint("RIGHT", otf.Header, "RIGHT", -1, 0)
+    -- (its left edge as the game lays it out: from UIParent's right edge, wherever the screen's width is now)
+    rawset(otf.Header, "GetLeft", function() return env.UIParent.__w + otf.__points[1].x - 260 end)
+    for _, m in ipairs({ "Show", "Hide", "SetShown", "SetPoint", "ClearAllPoints", "SetAllPoints", "SetParent", "SetScale", "EnableMouse" }) do
+      rawset(otf, m, function() error("an addon called " .. m .. " on the game's quest tracker (a managed frame: its layout would run as the addon)", 2) end)
+    end
+    env.ObjectiveTrackerFrame = otf
+  end
   -- the minimap in its cluster and container, as the client builds it (Blizzard_Minimap/Mainline/Minimap.xml)
   env.MinimapCluster = newObj("Frame", nil, env.UIParent); env.MinimapCluster:SetSize(256, 256)
   env.MinimapCluster.__left, env.MinimapCluster.__top = 1344, 1000
@@ -17584,7 +17608,9 @@ end)()
     o = o or {}
     local c = newClient({ name = name, level = o.level or 20, cap = 60, faction = o.faction or "Alliance", className = className, class = class,
       classID = classID, race = o.race or "Human", log = o.log or {}, done = o.done or {}, world = o.world or { 0, -9200, -2150 }, map = o.map or 1433,
-      bagSlots = {}, bind = o.bind or "Lakeshire" })
+      bagSlots = {}, bind = o.bind or "Lakeshire", trackerX = o.trackerX })
+    if o.ui then c.env.UIParent:SetSize(o.ui[1], o.ui[2]) end
+    if o.saved then c.env.QuestBankDB = o.saved end
     c.known, c.buffs, c.resting = known or {}, {}, false
     if o.party then c.party, c.o.group = o.party, true end
     login(c)
@@ -17726,6 +17752,104 @@ end)()
       "a mage: Arcane Intellect on Tam, no armor")
     -- (out of the party bus: later blocks deliver party messages between grouped clients)
     c.o.group, m.o.group = false, false
+  end }
+
+  -- B. "Option in settings to hide objectives and it's hidden by default there in game, Blizzard one, if they use
+  -- ours": Forever loads mainline's tracker (ObjectiveTrackerFrame, Blizzard_ObjectiveTracker; the Camelot override
+  -- only changes its timer bar and tags), an Edit Mode system whose settings are height, background opacity and text
+  -- size, and no CVar hides it. A right-hand managed frame: shown, hidden or moved by an addon, the container's layout
+  -- runs as the addon. Its alpha is how the game itself puts a managed frame out of sight (ManagedFrameSystem.lua)
+  F61CASES[#F61CASES + 1] = { "the game's quest tracker: out of sight while the step frame shows, never touched in a fight, back at once", function()
+    local c = char("Tilda", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local env, SF, s = c.env, c.QB.StepFrame, c.QB:Settings()
+    local T = env.ObjectiveTrackerFrame
+    s.welcome = nil; SF.Apply() -- (the welcome card answered: the frame shows the steps)
+    assert(env.QuestBankStep and env.QuestBankStep:IsShown(), "the step frame shows")
+    assert(s.guide.hideTracker == true, "the setting: on by default")
+    assert(T:GetAlpha() == 0 and T:IsShown(), "the tracker out of sight by its alpha, never hidden, moved or reparented")
+    -- the game puts a managed frame's alpha back (AnimInManagedFrames, UpdateFrameAlphaState): out of sight again
+    T:SetAlpha(1)
+    assert(T:GetAlpha() == 0, "the game's SetAlpha(1): out of sight again")
+    -- in a fight it is never touched; after it, out of sight again
+    c.combat = true
+    T:SetAlpha(1)
+    assert(T:GetAlpha() == 1, "in a fight: left as the game set it")
+    c.combat = false; c.ev(c.QB.eventFrame, "PLAYER_REGEN_ENABLED")
+    assert(T:GetAlpha() == 0, "the fight over: out of sight again")
+    -- the row in the Guide section: off, back at once; on, out of sight
+    c.QB.UI:Open(5)
+    local v5 = c.QB.UI.views[5]
+    assert(v5.guideTracker and v5.guideTracker:GetChecked() and v5.guideTracker.label:GetText() == "Hide the game's quest tracker", "the Guide section's row, on")
+    v5.guideTracker:SetChecked(false); v5.guideTracker.__scripts.OnClick(v5.guideTracker, "LeftButton")
+    assert(s.guide.hideTracker == false and T:GetAlpha() == 1, "unticked: the tracker back at once")
+    T:SetAlpha(1)
+    assert(T:GetAlpha() == 1, "and the game's own alpha left alone")
+    v5.guideTracker:SetChecked(true); v5.guideTracker.__scripts.OnClick(v5.guideTracker, "LeftButton")
+    assert(T:GetAlpha() == 0, "ticked: out of sight")
+    -- the step frame goes: the tracker back; the Guide off: back too
+    v5.guideFrame:SetChecked(false); v5.guideFrame.__scripts.OnClick(v5.guideFrame, "LeftButton")
+    assert(not env.QuestBankStep:IsShown() and T:GetAlpha() == 1, "the step frame off: the tracker back")
+    v5.guideFrame:SetChecked(true); v5.guideFrame.__scripts.OnClick(v5.guideFrame, "LeftButton")
+    assert(env.QuestBankStep:IsShown() and T:GetAlpha() == 0, "the step frame on: out of sight")
+    s.guide.on, s.welcome = false, nil; SF.Apply()
+    assert(T:GetAlpha() == 1, "the Guide off: the tracker back")
+    s.guide.on = true; SF.Apply()
+    assert(T:GetAlpha() == 0, "on again: out of sight")
+    -- a save from 6.1.0 has no such setting: it gets the default
+    local old = char("Brenna", "WARRIOR", "Warrior", 1, {}, { level = 5, saved = { settings = { v544 = true, v600 = true, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
+    assert(old.QB:Settings().guide.hideTracker == true and old.env.ObjectiveTrackerFrame:GetAlpha() == 0, "a 6.1.0 save: on, out of sight")
+  end }
+
+  -- B. "it won't let me minimize my quest list in game": the step frame's default place is the top's middle
+  -- (StepFrame.lua place: TOP, 0, -140, 260 px at its scale, growing down with the party's lines and the reminder); the
+  -- tracker's header is at the top right, 260 px down, 260 px wide, its minimise button at its right end, further left
+  -- with right action bars. On a screen narrower than about 800 px of UI (a 4:3 or 5:4 screen, a large UI scale) or with
+  -- right action bars, the step frame at 120% reaches over the header and, in the MEDIUM strata over the tracker's LOW,
+  -- takes its clicks. The default place keeps clear of it; a place the player dragged to stays
+  F61CASES[#F61CASES + 1] = { "the step frame's default place is clear of the tracker's header and its minimise button", function()
+    -- the frame's box in UIParent's units (rectOf leaves a frame's own scale out)
+    local function placed(f)
+      GEN = GEN + 1
+      local p = f.__points[1]
+      local sc = f:GetScale() or 1
+      local rr = rectOf(p.rel or f.__parent)
+      local ax, ay = anchorXY(rr, p.relPoint)
+      ax, ay = ax + (p.x or 0) * sc, ay + (p.y or 0) * sc
+      local w, h = (f:GetWidth() or 0) * sc, (f:GetHeight() or 0) * sc
+      local l = p.point:find("LEFT") and ax or (p.point:find("RIGHT") and ax - w or ax - w / 2)
+      local t = p.point:find("TOP") and ay or (p.point:find("BOTTOM") and ay + h or ay + h / 2)
+      return { l = l, r = l + w, t = t, b = t - h }
+    end
+    -- one character; the screen's size, the right action bars (the header further left) and the frame's scale changed
+    -- under it, the default place made again each time (SF.Apply)
+    local c = char("Wide", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local env, SF = c.env, c.QB.StepFrame
+    local hp = env.ObjectiveTrackerFrame.__points[1]
+    for _, ui in ipairs({ { 1600, 1000 }, { 1024, 768 }, { 800, 600 }, { 760, 600 } }) do
+      for _, bars in ipairs({ -5, -100 }) do
+        for _, sc in ipairs({ 0.8, 1, 1.2 }) do
+          env.UIParent:SetSize(ui[1], ui[2])
+          hp.x = bars
+          SF.SetScale(sc)
+          SF.Apply()
+          local f = env.QuestBankStep
+          assert(f and f:IsShown(), "the step frame shows")
+          GEN = GEN + 1
+          local hr = rectOf(env.ObjectiveTrackerFrame.Header)
+          local fr = placed(f)
+          -- (the frame grows down with the party's steps and the reminder: across is what must stay clear)
+          assert(fr.r <= hr.l - 8 and fr.l >= 0,
+            string.format("%dx%d, right bars %d, scale %.1f: the step frame %d..%d, the tracker's header from %d", ui[1], ui[2], bars, sc, fr.l, fr.r, hr.l))
+        end
+      end
+    end
+    env.UIParent:SetSize(1600, 1000); hp.x = -5; SF.SetScale(1)
+    -- a place the player dragged to stays as it is
+    local g = c.QB:Settings().guide
+    g.x, g.y = 200, 150
+    SF.Apply()
+    local p = env.QuestBankStep.__points[1]
+    assert(p.point == "CENTER" and p.x == 200 and p.y == 150, "a dragged place kept")
   end }
 
   for _, case in ipairs(F61CASES) do

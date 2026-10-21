@@ -3717,8 +3717,19 @@ function UI:CreateSettingsView(parent)
     QB:Settings().guide.locked = self:GetChecked() and true or false
     if QB.StepFrame then QB.StepFrame.Apply() end
   end)
+  -- (6.1.1) the game's quest tracker out of sight while the step frame shows (StepFrame.lua's SF.Tracker): "it's hidden
+  -- by default there in game, Blizzard's one, if they use ours"
+  v.guideTracker = checkRow(p, LEFT + 24, y0 - 108, "Hide the game's quest tracker", 316)
+  v.guideTracker:SetScript("OnClick", function(self)
+    QB:Settings().guide.hideTracker = self:GetChecked() and true or false
+    if QB.StepFrame then QB.StepFrame.Apply() end
+  end)
+  tooltip(v.guideTracker, function(tip)
+    tip:AddLine("Hide the game's quest tracker", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("While the step frame shows, the game's own quest list at the right of the screen is out of sight. It comes back as soon as you untick this or the step frame goes. Never changed in a fight.", 1, 1, 1, true)
+  end)
   v.guideScale = button(p, "100%", 70)
-  v.guideScale:SetPoint("TOPLEFT", LEFT + 28, y0 - 108)
+  v.guideScale:SetPoint("TOPLEFT", LEFT + 28, y0 - 136)
   v.guideScale:SetScript("OnClick", QB.Safe(function()
     local SF = QB.StepFrame
     local scales = SF and SF.SCALES or { 0.8, 1, 1.2 }
@@ -3732,12 +3743,12 @@ function UI:CreateSettingsView(parent)
   v.guideScaleLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
   v.guideScaleLabel:SetPoint("LEFT", v.guideScale, "RIGHT", 8, 0)
   v.guideScaleLabel:SetText("The step frame's size")
-  v.arrow = checkRow(p, LEFT, y0 - 136, "Direction arrow (right-click it for what it points at)")
+  v.arrow = checkRow(p, LEFT, y0 - 164, "Direction arrow (right-click it for what it points at)")
   v.arrow:SetScript("OnClick", function(self) if QB.Arrow then QB.Arrow:Set(self:GetChecked() and true or false) end end)
   -- the arrow's look (Arrow.lua, arrowStyle): QuestBank's own arrow, or QuestTrail's compass; the button cycles
   UI.ARROW_STYLES = { questbank = "QuestBank's", compass = "Compass" }
   v.arrowStyle = button(p, "QuestBank's", 90)
-  v.arrowStyle:SetPoint("TOPLEFT", LEFT + 28, y0 - 164)
+  v.arrowStyle:SetPoint("TOPLEFT", LEFT + 28, y0 - 192)
   v.arrowStyle:SetScript("OnClick", QB.Safe(function()
     local set = QB:Settings()
     set.arrowStyle = set.arrowStyle == "compass" and "questbank" or "compass"
@@ -3756,7 +3767,7 @@ function UI:CreateSettingsView(parent)
   -- Quests worth taking, what one outside your route gets
   local ACCEPT_ORDER = { "off", "route", "worth" }
   v.autoAccept = button(p, "Accept for me: Off", 300)
-  v.autoAccept:SetPoint("TOPLEFT", LEFT + 4, y0 - 196)
+  v.autoAccept:SetPoint("TOPLEFT", LEFT + 4, y0 - 224)
   v.autoAccept:SetScript("OnClick", QB.Safe(function()
     local set = QB:Settings()
     local i = 1
@@ -3771,7 +3782,7 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("Quests worth taking: those, and any other the route planner thinks worth it (never grey, never one that pays next to nothing).", 1, 1, 1, true)
   end)
   v.autoOther = button(p, "Outside my route: Accept them", 300)
-  v.autoOther:SetPoint("TOPLEFT", LEFT + 4, y0 - 222)
+  v.autoOther:SetPoint("TOPLEFT", LEFT + 4, y0 - 250)
   v.autoOther:SetScript("OnClick", QB.Safe(function()
     local set = QB:Settings()
     set.autoAcceptOther = set.autoAcceptOther == "leave" and "accept" or "leave"
@@ -3782,18 +3793,18 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("With Quests worth taking: a quest worth it that is not on your route is taken for you, or its quest window is left open for you to decide.", 1, 1, 1, true)
   end)
   v.acceptHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.acceptHint:SetPoint("TOPLEFT", LEFT, y0 - 248)
+  v.acceptHint:SetPoint("TOPLEFT", LEFT, y0 - 276)
   v.acceptHint:SetHeight(44)
   v.acceptHint:SetText("At an NPC and when a party member shares one; escorts are yours to join in the game's prompt. Hold Shift to do it by hand. Not repeatable or grey quests, nor places you skip.")
-  v.autoTurnIn = checkRow(p, LEFT, y0 - 296, "Hand in finished quests for me", 340)
+  v.autoTurnIn = checkRow(p, LEFT, y0 - 324, "Hand in finished quests for me", 340)
   v.autoTurnIn:SetScript("OnClick", function(self) QB:Settings().autoTurnIn = self:GetChecked() and true or false end)
   v.turnInHint = para(p, "GameFontNormalSmall", 11, INK_SOFT, 370)
-  v.turnInHint:SetPoint("TOPLEFT", LEFT, y0 - 322)
+  v.turnInHint:SetPoint("TOPLEFT", LEFT, y0 - 350)
   v.turnInHint:SetHeight(58)
   v.turnInHint:SetText("Questing and the rush: everything. While you bank: only quests you left out of the route, ones that pay next to nothing on the day, and a step you hand in to bank a better one. A reward to choose, or a quest QuestBank can't value, waits for you.")
   -- the decide-yourself key: held at the NPC, the auto actions above leave the quest to you
   v.autoKey = button(p, "Shift", 70)
-  v.autoKey:SetPoint("TOPLEFT", LEFT + 4, y0 - 388)
+  v.autoKey:SetPoint("TOPLEFT", LEFT + 4, y0 - 416)
   v.autoKeyLabel = text(p, "GameFontNormal", 12, INK, "LEFT", 290)
   v.autoKeyLabel:SetPoint("LEFT", v.autoKey, "RIGHT", 8, 0)
   v.autoKeyLabel:SetText("held at the NPC: decide the quest yourself")
@@ -3807,7 +3818,7 @@ function UI:CreateSettingsView(parent)
     UI:Refresh()
   end, "settings: key"))
   -- the minimap's ! (Minimap.lua) and the tooltips' progress (Tips.lua)
-  v.minimapGivers = checkRow(p, LEFT, y0 - 420, "A ! on the minimap for every quest I can take", 340)
+  v.minimapGivers = checkRow(p, LEFT, y0 - 448, "A ! on the minimap for every quest I can take", 340)
   v.minimapGivers:SetScript("OnClick", function(self)
     QB:Settings().minimapGivers = self:GetChecked() and true or false
     if QB.Mini and QB.Mini.Invalidate then QB.Mini.Invalidate() end
@@ -3817,13 +3828,13 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("The minimap's !", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("The quests you can take now on your map, as the world map shows them: not grey, nothing you hold or have done. Givers a few steps apart share a pin with a count.", 1, 1, 1, true)
   end)
-  v.tipProgress = checkRow(p, LEFT, y0 - 448, "Quest progress in mob tooltips", 340)
+  v.tipProgress = checkRow(p, LEFT, y0 - 476, "Quest progress in mob tooltips", 340)
   v.tipProgress:SetScript("OnClick", function(self) QB:Settings().tipProgress = self:GetChecked() and true or false end)
   tooltip(v.tipProgress, function(tip)
     tip:AddLine("Quest progress in tooltips", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("A mob or object that counts for a quest in your log gets its count in its tooltip, \"Kobold Vermin: 3/8\", and your party's counts.", 1, 1, 1, true)
   end)
-  yl = y0 - 496
+  yl = y0 - 524
 
   ----------------------------------------------------------------------------------------------------------------
   -- Map and minimap: the route's pins, the minimap button, the quest icons on the world map (QuestMap.lua), the
@@ -4439,8 +4450,10 @@ function UI:RefreshSettingsView(v)
   v.guideOn:SetChecked(gd.on == true)
   v.guideFrame:SetChecked(gd.frame ~= false)
   v.guideLocked:SetChecked(gd.locked == true)
+  v.guideTracker:SetChecked(gd.hideTracker ~= false)
   v.guideScale:SetText(string.format("%d%%", math.floor((tonumber(gd.scale) or 1) * 100 + 0.5)))
   v.guideFrame:SetEnabled(gd.on == true); v.guideLocked:SetEnabled(gd.on == true); v.guideScale:SetEnabled(gd.on == true)
+  v.guideTracker:SetEnabled(gd.on == true)
   v.minimapGivers:SetChecked(set.minimapGivers ~= false)
   v.tipProgress:SetChecked(set.tipProgress ~= false)
   local newest = QB.newest

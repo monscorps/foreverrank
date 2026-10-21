@@ -1328,7 +1328,7 @@ local DEFAULTS = {
   finderAhead = false,
   -- the Guide (6.0, Guide.lua and StepFrame.lua): on, the step frame shown, unlocked, at scale 1 where it was dragged.
   -- welcome: "fresh" asks the auto choice in the step frame once; "ask" asks a 5.x save whether to guide (QB.Migrate600)
-  guide = { on = true, frame = true, locked = false, scale = 1 },
+  guide = { on = true, frame = true, locked = false, scale = 1, hideTracker = true },
   minimapGivers = true, -- a ! on the minimap for every quest you can take now (Minimap.lua)
   tipProgress = true,   -- "Kobold Vermin: 3/8 (Kobold Camp Cleanup)" in mob and object tooltips (Tips.lua)
 }
@@ -1354,6 +1354,8 @@ function QB:Settings()
       end
     end
   end
+  -- (6.1.1's new switch inside a table a save already has: the default)
+  if type(s.guide) == "table" and s.guide.hideTracker == nil then s.guide.hideTracker = true end
   db.turnins = db.turnins or {}
   db.runs = db.runs or {}
   db.plans = db.plans or {}

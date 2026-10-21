@@ -4768,6 +4768,13 @@ do
     local ts = texts(rone)
     assert(ts:find("Accept for me", 1, true) and ts:find("Progress in mob tooltips", 1, true), "the Quests section's rows:\n" .. ts)
     assert(ts:find("Step frame", 1, true) and ts:find("Direction arrow", 1, true), "the step frame's and the arrow's rows are the Quests section's:\n" .. ts)
+    -- 6.1.1: the game's quest tracker out of sight while the step frame shows (QuestBank's Guide section has the same)
+    local trk = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker" end)
+    assert(trk and trk:GetChecked() and rone.env.CuteQuestDB.settings.guide.hideTracker == true, "the tracker's row, on:\n" .. ts)
+    click(trk)
+    assert(rone.env.CuteQuestDB.settings.guide.hideTracker == false, "unticked: the engine's setting off")
+    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker" end))
+    assert(rone.env.CuteQuestDB.settings.guide.hideTracker == true, "ticked again")
     rone.C.UI:Open("settings", "guide")
     assert(not texts(rone):find("Step frame", 1, true) and not texts(rone):find("Direction arrow", 1, true), "and not the Guide's")
     -- the arrow's row writes the engine's setting and shows or hides the arrow

@@ -28,6 +28,7 @@ SF.SCALES = SCALES
 
 local function settings() return QB:Settings().guide end
 local function fighting() return InCombatLockdown and InCombatLockdown() or false end
+local trackerOut, trackerHooked, trackerWait = false, false, false -- (the game's quest tracker: SF.Tracker)
 
 local function fs(parent, size, key, width)
   local t = parent:CreateFontString(nil, "OVERLAY")
@@ -133,12 +134,38 @@ local function build()
   return f
 end
 
+-- the left edge of the game's quest tracker's header, in UIParent's units: its minimise button sits at the header's
+-- right end. Not laid out yet: where the game puts it (EditModeUtil:GetRightContainerAnchor: the screen's right edge
+-- less 5 px and the right action bars, here two of them; the header 260 px wide)
+local function trackerLeft(W)
+  local t = ObjectiveTrackerFrame
+  local h = type(t) == "table" and t.Header or nil
+  if type(h) == "table" and type(h.GetLeft) == "function" then
+    local ok, l = pcall(h.GetLeft, h)
+    l = ok and QB.Plain(l) or nil
+    if type(l) == "number" then
+      local ok2, k = pcall(h.GetEffectiveScale, h)
+      k = ok2 and QB.Plain(k) or 1
+      local u = UIParent:GetEffectiveScale() or 1
+      return l * (type(k) == "number" and k or 1) / u
+    end
+  end
+  return W - 5 - 90 - 260
+end
+SF.TrackerLeft = trackerLeft
+
+-- where the frame stands: where it was dragged to, else the top's middle, 140 px down, moved left as far as it takes to
+-- stay 16 px clear of the tracker's header (6.1.1: "it won't let me minimise my quest list": on a narrow screen of UI
+-- or with right action bars, the frame there, in a strata above the tracker's, reached over the minimise button)
 local function place(f)
   local s = settings()
+  local sc = s.scale or 1
   f:ClearAllPoints()
-  if type(s.x) == "number" and type(s.y) == "number" then f:SetPoint("CENTER", UIParent, "CENTER", s.x, s.y)
-  else f:SetPoint("TOP", UIParent, "TOP", 0, -140) end
-  f:SetScale(s.scale or 1)
+  f:SetScale(sc)
+  if type(s.x) == "number" and type(s.y) == "number" then f:SetPoint("CENTER", UIParent, "CENTER", s.x, s.y) return end
+  local W = UIParent:GetWidth() or 1920
+  local over = W / 2 + WIDTH * sc / 2 - (trackerLeft(W) - 16)
+  f:SetPoint("TOP", UIParent, "TOP", over > 0 and -over / sc or 0, -140)
 end
 
 -- the quest-item button: the game's secure button for the first step's quest item (type item, item:<id>), as
@@ -185,6 +212,7 @@ end
 -- shown: its next refresh does it all; hidden (Hide in a fight, the Guide turned off): its OnUpdate never runs, so the
 -- button would stand on screen for good without this
 function SF.OnRegen()
+  if trackerWait and not fighting() then SF.Tracker() end
   if not SF.pendingItem or fighting() then return end
   local f = SF.frame
   if f and f:IsShown() and not (f.card and f.card:IsShown()) then
@@ -387,6 +415,43 @@ function SF.AskPending()
   end
 end
 
+-- (6.1.1) the game's quest tracker out of sight while the step frame shows and guide.hideTracker is on ("hidden by
+-- default there in game, Blizzard's one, if they use ours"). Forever loads mainline's tracker, ObjectiveTrackerFrame
+-- (Blizzard_ObjectiveTracker; the Camelot override changes only its timer bar and tags): an Edit Mode system whose
+-- settings are height, background opacity and text size, and no CVar hides it. It is a right-hand managed frame: shown,
+-- hidden, moved or reparented by an addon, the right-hand container's layout would run as the addon. So it goes out of
+-- sight by its alpha, the way the game's own managed-frame system does it (ManagedFrameSystem.lua,
+-- AnimOutManagedFrames), never in a fight; when the game puts the alpha back (AnimInManagedFrames) it goes again, after
+-- the fight if in one. Back at once when the setting or the step frame goes off. (Out of sight, its lines still take a
+-- click where they stand, as the game's own fade leaves them.)
+local function tracker()
+  local t = ObjectiveTrackerFrame
+  return type(t) == "table" and type(t.SetAlpha) == "function" and type(t.GetAlpha) == "function" and t or nil
+end
+function SF.Tracker()
+  local t = tracker()
+  if not t then return end
+  local f = SF.frame
+  local want = settings().hideTracker ~= false and f ~= nil and f:IsShown() and true or false
+  if fighting() then trackerWait = true return end
+  trackerWait = false
+  if want then
+    if not trackerHooked and type(hooksecurefunc) == "function" then
+      trackerHooked = true
+      hooksecurefunc(t, "SetAlpha", function(self, a)
+        if not trackerOut or a == 0 then return end
+        if fighting() then trackerWait = true else self:SetAlpha(0) end
+      end)
+    end
+    trackerOut = true
+    if t:GetAlpha() ~= 0 then t:SetAlpha(0) end
+  elseif trackerOut then
+    trackerOut = false
+    t:SetAlpha(1)
+  end
+end
+SF.TrackerOut = function() return trackerOut end
+
 -- shown while the Guide and the frame are on, or a welcome waits
 function SF.Apply()
   local s = settings()
@@ -400,6 +465,7 @@ function SF.Apply()
   lastVer = -1
   if want then SF.Refresh() else SF.RefreshItem(nil) end
   if SF.AskPending then SF.AskPending() end
+  SF.Tracker()
 end
 
 -- the frame's scale, and the item button's with it (a child of UIParent: the frame's scale does not reach it); the
