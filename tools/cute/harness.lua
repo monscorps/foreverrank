@@ -11179,6 +11179,7 @@ do local function runsStage()
     if g then for _, e in ipairs(G.members) do if e.guid == g then return e end end end
     return nil
   end
+  local function inside(c) return c.o.instance == "party" or c.o.instance == "raid" end
   local function wire(c, G)
     local env, o = c.env, c.o
     c.group, c.units, c.rsent, c.chatOut = G, c.units or {}, c.rsent or {}, c.chatOut or {}
@@ -11257,6 +11258,10 @@ do local function runsStage()
       gen(owner, root)
       c.menus[#c.menus + 1] = entries
     end }
+    -- (a lockdown for the whole stay, 13.1, unknown on the live client and so both ways here: G.mapLock makes
+    -- InChatMessagingLockdown true on a dungeon's map, SecretPredicatesDocumentation.lua; G.lockInside answers every
+    -- group message sent inside 11; G.deafInside: none reaches a client inside either)
+    env.C_ChatInfo.InChatMessagingLockdown = function() return c.chatLocked == true or (c.group ~= nil and c.group.mapLock == true and inside(c)) end
     local origSend, origChat = env.C_ChatInfo.SendAddonMessage, env.C_ChatInfo.SendChatMessage
     env.C_ChatInfo.SendAddonMessage = function(prefix, msg, channel, target)
       if prefix ~= "CuteRun" then return origSend(prefix, msg, channel, target) end
@@ -11264,11 +11269,11 @@ do local function runsStage()
       assert(#msg <= 255, "a group message over the limit: " .. #msg)
       local G2 = c.group
       if not G2 then return 5 end
-      if c.chatLocked or G2.locked then c.r11 = (c.r11 or 0) + 1; return 11 end
+      if c.chatLocked or G2.locked or (G2.lockInside and inside(c)) then c.r11 = (c.r11 or 0) + 1; return 11 end
       if c.rthrottle and c.rthrottle > 0 then c.rthrottle = c.rthrottle - 1; return 3 end
       if c.rgeneral and c.rgeneral > 0 then c.rgeneral = c.rgeneral - 1; return 9 end
       c.rsent[#c.rsent + 1] = { msg = msg, at = c.clock, channel = channel }
-      for _, e in ipairs(G2.members) do if e.c then BUS[#BUS + 1] = { from = c, prefix = prefix, msg = msg, channel = channel, to = e.c } end end
+      for _, e in ipairs(G2.members) do if e.c and not (G2.deafInside and inside(e.c)) then BUS[#BUS + 1] = { from = c, prefix = prefix, msg = msg, channel = channel, to = e.c } end end
       return 0
     end
     env.C_ChatInfo.SendChatMessage = function(text, kind, ...)
@@ -11883,7 +11888,8 @@ do local function runsStage()
     tickAll(10)
     zone({ cs[2] }, "none", 0); tickAll(3); zone({ cs[2] }, "party", 36, "The Deadmines")
     tickAll(50)
-    fight(G, 60, { Wa = { [0] = 1000 } })
+    fight(G, 60, { Wa = { [0] = 1000 }, Xb = { [0] = 700 }, Yc = { [0] = 600 } }, 1230)
+    tickAll(30)
     local n = 0
     local ids = {}
     for _, c in ipairs(cs) do local id = c.C.Runs.Current().id; if not ids[id] then ids[id] = true; n = n + 1 end end
@@ -11894,8 +11900,64 @@ do local function runsStage()
     ids, n = {}, 0
     for _, c in ipairs(cs) do local id = c.C.Runs.Current().id; if not ids[id] then ids[id] = true; n = n + 1 end end
     assert(n == 1 and cs[3].C.Runs:Scribe() == sfx(cs[1]), "out: one id and the leader the scribe")
+    -- (the checkpoints held inside go with the id the client holds as they leave: the scribe has every one)
+    for i = 2, 3 do
+      local m = cs[1].C.Runs.Current().members[sfx(cs[i])]
+      assert(m and m.v and m.v.dm, "the scribe holds " .. cs[i].o.name .. "'s checkpoint from inside")
+    end
   end)
   said[#said + 1] = "the lockdown: 11 again and again spends no try, Activating holds and Inactive lets it go once; a whole stay locked sends nothing inside, a disband there gives each its own report, the id and scribe settle once out; the meter out of combat, a secret GUID the own row alone"
+
+  -- (13.1, 3.2) a lockdown for the whole stay: InChatMessagingLockdown true on the dungeon's map and every group message
+  -- tried inside answered 11 (result 11 kept for /cute diag runs, so the testers can tell). Each client its own id
+  -- inside; the leader, in a second after the others (its id nobody's to adopt), leaves first after a full clear: its
+  -- hello, 2Q and 2A go out, and every member ends with a report and no run left, whether those inside hear them or not
+  for _, deaf in ipairs({ false, true }) do
+    isolated({ gmember("La", 1), gmember("Mo", 3), gmember("Ny", 3) }, function()
+      local cs = { gchar("La", 1), gchar("Mo", 3), gchar("Ny", 3) }
+      for _, c in ipairs(cs) do login(c) end
+      tickAll(40)
+      local G = group(cs)
+      G.mapLock, G.lockInside, G.deafInside = true, true, deaf
+      zone({ cs[2], cs[3] }, "party", 36, "The Deadmines")
+      tickAll(1)
+      zone({ cs[1] }, "party", 36, "The Deadmines")
+      tickAll(40)
+      local dmg = { La = { [7] = 20000, [0] = 2000 }, Mo = { [0] = 9000, [5] = 6 }, Ny = { [2] = 7000, [0] = 500 } }
+      for _, enc in ipairs({ 1230, 1236, 1238, 1234 }) do fight(G, 60, dmg, enc); tickAll(60) end
+      for _, c in ipairs(cs) do assert(#c.rsent == 0 and #c.C.RunComm.results > 0, c.o.name .. ": tried inside, each 11 kept: " .. #c.C.RunComm.results) end
+      zone({ cs[1] }, "none", 0)
+      tickAll(30)
+      zone({ cs[2], cs[3] }, "none", 0)
+      tickAll(60)
+      for _, c in ipairs(cs) do
+        assert(not c.C.Runs.Current(), c.o.name .. " has no run left" .. (deaf and " (deaf inside)" or ""))
+        assert(lastReport(c), c.o.name .. " has a report" .. (deaf and " (deaf inside)" or ""))
+      end
+      if not deaf then
+        for _, c in ipairs(cs) do assert(lastReport(c).id == lastReport(cs[1]).id and cardsOf(lastReport(c)) == cardsOf(lastReport(cs[1])), c.o.name .. " shows the leader's report") end
+      end
+    end)
+  end
+  -- (and where the dungeon's map makes chat secret but lets the group's addon messages through: the hellos and the
+  -- checkpoints go inside, the id settles there)
+  isolated({ gmember("Ox", 1), gmember("Pe", 3), gmember("Qu", 3) }, function()
+    local cs = { gchar("Ox", 1), gchar("Pe", 3), gchar("Qu", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    G.mapLock = true
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    assert(cs[2].env.C_ChatInfo.InChatMessagingLockdown(), "chat locked on the map")
+    fight(G, 60, { Ox = { [0] = 1000 }, Pe = { [0] = 700 }, Qu = { [0] = 600 } }, 1230)
+    tickAll(30)
+    local ids, n = {}, 0
+    for _, c in ipairs(cs) do local id = c.C.Runs.Current().id; if not ids[id] then ids[id] = true; n = n + 1 end end
+    local m = cs[1].C.Runs.Current().members[sfx(cs[2])]
+    assert(n == 1 and m and m.v and m.v.dm, "inside, one id and the checkpoints held: " .. n)
+  end)
+  said[#said + 1] = "a lockdown for the whole stay: tried inside and each 11 kept, the leader out first after a full clear ends every member's run with its report, heard inside or not; a map whose chat is secret but lets the group's messages through settles the id inside"
 
   -- (8) a raid of 40 (nine with Cute): five cards and up to ten mentions, no member twice; each client at most three
   -- messages at the end; a member joining late draws one hello's answer, two at most; a raidN outside your subgroup is

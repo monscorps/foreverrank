@@ -12,8 +12,8 @@
 --   2P|<run>                         Send to party was clicked here
 --   2R|<run>|<suffix>                a member back from a crash asks for its last checkpoint
 --   2W|<run>|<suffix>|<i>/<n>|k=v;... the scribe: that member's last checkpoint, back
--- The queue is its own and keeps Comm's rule for the chat lockdown (Comm.lua M:Locked, asked before each send): one
--- message a second; hellos, 2E, 2Q, 2A, 2R and 2W ahead of 2P and 2V; a newer 2V takes the place of one waiting; a
+-- The queue is its own: it waits while the game says addon chat is restricted (RC.Restricted, asked before each send)
+-- and tries on a dungeon's map whose chat is locked down (a result 11 holds it there); one message a second; hellos, 2E, 2Q, 2A, 2R and 2W ahead of 2P and 2V; a newer 2V takes the place of one waiting; a
 -- checkpoint waits for the end of combat. Results as Comm reads them (Enum.SendAddonMessageResult,
 -- ChatConstantsDocumentation.lua): 3 and 8 (throttle) try again in 3 s, 9 (GeneralError) in 10 s, five times (a
 -- checkpoint as often as it takes); 5 (NotInGroup) empties the queue;
@@ -130,6 +130,20 @@ local function holdOn(why)
   RC.held = RC.held or { since = C.Now(), why = why }
   book(POLL)
 end
+-- the addon chat restriction as the game says it: ADDON_RESTRICTION_STATE_CHANGED's Activating or Active for the Chat
+-- type within the last 10 s (Comm keeps when, M.lockEvent, as its own M:Locked reads it) and
+-- C_RestrictedActions.IsAddOnRestrictionActive(Chat) ("addon chat communications are restricted",
+-- RestrictedActionsConstantsDocumentation.lua). Not the chat lockdown of a dungeon's map alone
+-- (C_ChatInfo.InChatMessagingLockdown: chat made secret there, SecretPredicatesDocumentation.lua), which may or may not
+-- hold addon messages to the group (17): there a message is tried, and a result 11 holds the queue and is kept for
+-- /cute diag runs, which so tells the testers which it is
+function RC.Restricted()
+  local M = C.Comm
+  if M and M.lockEvent and C.Now() - M.lockEvent < 10 then return true end
+  local RA, kinds = C_RestrictedActions, Enum and Enum.AddOnRestrictionType
+  local kind = type(kinds) == "table" and C.Plain(kinds.Chat) or nil
+  return type(RA) == "table" and type(RA.IsAddOnRestrictionActive) == "function" and kind ~= nil and C.Get(RA.IsAddOnRestrictionActive, kind) == true
+end
 pump = C.Safe(function()
   RC.booked = false
   local e = nextUp(RC)
@@ -137,14 +151,15 @@ pump = C.Safe(function()
   if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then RC.out = {}; return end
   local channel = RC.Channel()
   if not channel then RC.out = {}; return end
-  -- (the chat lockdown as Comm knows it: the functions, its event's Activating, a recent result 11)
-  if C.Comm and C.Comm.Locked and C.Comm:Locked() then holdOn("lockdown") return end
+  if RC.Restricted() then holdOn("restriction") return end
   -- (a result 11 the functions do not report: waited out POLL seconds at a time, no try spent)
   if RC.waitInactive and C.Now() - RC.waitInactive < POLL then holdOn("result 11") return end
   RC.waitInactive = nil
   RC.held = nil
   if not e.msgs then
-    local msgs = type(e.body) == "function" and e.body() or { e.kind .. "|" .. e.body }
+    -- (a body built as it leaves may give nothing: a 2Q of a client no longer scribe, a checkpoint of a run over)
+    local msgs
+    if type(e.body) == "function" then msgs = e.body() else msgs = { e.kind .. "|" .. e.body } end
     if type(msgs) == "string" then msgs = { msgs } end
     if type(msgs) ~= "table" or #msgs == 0 then
       for i, x in ipairs(RC.out) do if x == e then table.remove(RC.out, i) break end end
@@ -159,6 +174,7 @@ pump = C.Safe(function()
     local IE = C_InstanceEncounter
     local inEnc = type(IE) == "table" and type(IE.IsEncounterInProgress) == "function" and C.Get(IE.IsEncounterInProgress) == true or false
     RC.results[#RC.results + 1] = { at = C.Now(), kind = e.kind, encounter = inEnc }
+    RC.n11 = (RC.n11 or 0) + 1
     while #RC.results > 20 do table.remove(RC.results, 1) end
     RC.waitInactive = C.Now()
     holdOn("result 11")
@@ -253,8 +269,10 @@ function RC.Report()
   for _, k in ipairs({ "2H", "2V", "2Q", "2A", "2E", "2P", "2R", "2W" }) do if RC.counts[k] then kinds[#kinds + 1] = k .. " " .. RC.counts[k] end end
   local r11 = {}
   for _, r in ipairs(RC.results) do r11[#r11 + 1] = r.kind .. (r.encounter and " in an encounter" or " out of one") end
-  local restricted = type(C_ChatInfo) == "table" and type(C_ChatInfo.AreOutgoingAddonChatMessagesRestricted) == "function" and C.Get(C_ChatInfo.AreOutgoingAddonChatMessagesRestricted)
-  return string.format("group channel: sent %s | waiting %d%s | result 11: %s | outgoing restricted %s | locked %s | from no group unit %d",
+  local CI = C_ChatInfo
+  local restricted = type(CI) == "table" and type(CI.AreOutgoingAddonChatMessagesRestricted) == "function" and C.Get(CI.AreOutgoingAddonChatMessagesRestricted)
+  local lockdown = type(CI) == "table" and type(CI.InChatMessagingLockdown) == "function" and C.Get(CI.InChatMessagingLockdown)
+  return string.format("group channel: sent %s | waiting %d%s | result 11: %d, %s | outgoing restricted %s | chat lockdown %s | addon chat restricted %s | from no group unit %d",
     #kinds > 0 and table.concat(kinds, ", ") or "nothing", #RC.out, RC.held and (" (held: " .. RC.held.why .. ")") or "",
-    #r11 > 0 and table.concat(r11, ", ", math.max(1, #r11 - 5)) or "none", tostring(restricted), tostring(C.Comm and C.Comm:Locked() or false), RC.unknown or 0)
+    RC.n11 or 0, #r11 > 0 and table.concat(r11, ", ", math.max(1, #r11 - 5)) or "none", tostring(restricted), tostring(lockdown), tostring(RC.Restricted()), RC.unknown or 0)
 end

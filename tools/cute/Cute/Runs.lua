@@ -9,7 +9,9 @@
 --           part) and every client adopts the earliest it hears within 30 s of its own start; a member who joins later
 --           is answered by the scribe (another holder only after 2 to 6 s with no answer heard) and adopts the answer
 --   Scribe  the leader's client where the leader said hello, else the smallest GUID among the hellos held of members
---           still in the group; each client works it out alone, and only the scribe's 2Q, 2A and 2W are taken
+--           still in the group; each client works it out alone, and only the scribe's 2Q, 2A and 2W are taken. A
+--           member is heard under the run's id or the one its hello said for this run (ids settle late after a
+--           lockdown for the whole stay), and the scribe's id is taken with its 2Q or 2A
 --   Ends    the leader's End run (2E), a full clear with the scribe out alive, the scribe out alive past the grace (3
 --           minutes, 10 in a raid), an open-world group apart for 5 minutes or under two; a disband, or leaving within
 --           10 minutes of the last boss, ends your run with a report built here; leaving at another time is leaving
@@ -234,10 +236,14 @@ end
 local function flags(run, answer)
   return run.kind .. "." .. b36(run.inst or run.map or 0) .. (answer and ".a" or "")
 end
+-- (built as it leaves, with the id the run holds then: a hello held by a lockdown says the id settled meanwhile)
 function R:Hello(answer)
   local run = self.run
   if not run then return end
-  C.RunComm:Send("2H", run.id .. "|" .. C.version .. "|" .. flags(run, answer))
+  C.RunComm:Send("2H", function()
+    if R.run ~= run then return nil end
+    return { "2H|" .. run.id .. "|" .. C.version .. "|" .. flags(run, answer) }
+  end)
 end
 
 function R:Start(kind, place)
@@ -255,7 +261,7 @@ function R:Start(kind, place)
   end
   self.run = run
   save(run)
-  C.RunComm.counts, C.RunComm.results = {}, {}
+  C.RunComm.counts, C.RunComm.results, C.RunComm.n11 = {}, {}, 0
   self:Sync()
   self:Counting(true)
   R.MarkSessions(run)
@@ -403,20 +409,20 @@ local function decode(body, dur)
 end
 R.Encode, R.Decode = encode, decode
 
--- this client's values as a 2V, built as it leaves (the policy then): every key it may send
+-- this client's values as a 2V, built as it leaves (the policy then, and the id the run holds then: a checkpoint held
+-- by a lockdown goes with the id settled meanwhile): every key it may send
 function R:Values(final)
   local run = self.run
   if not run then return end
   run.seq = (run.seq or 0) + 1
-  local id, seq = run.id, run.seq
   C.RunComm:Send("2V", function()
-    local r = R.run
-    if not r or r.id ~= id then return nil end
+    if R.run ~= run then return nil end
     local settled = C.Policy:Settled()
     local guildOnly = allGuild()
     local kv = encode(R:OwnValues(), function(k) return sendable(k, settled, guildOnly) end)
     R.sentKeys = kv
-    return C.RunComm.Pack("2V|" .. id .. "|" .. seq .. "|", kv)
+    run.sentId = run.id
+    return C.RunComm.Pack("2V|" .. run.id .. "|" .. run.seq .. "|", kv)
   end, { ooc = not final, key = "2V" })
 end
 
@@ -895,8 +901,7 @@ function R:ScribeReport()
     if #b > 0 then kv[#kv + 1] = "j=" .. list(b) end
   end
   if #rep.gone > 0 then kv[#kv + 1] = "g=" .. table.concat(rep.gone, ".", 1, math.min(#rep.gone, 20)) end
-  local id = run.id
-  C.RunComm:Send("2A", function() if R.ScribeOf(run) ~= mySfx() then return nil end return C.RunComm.Pack("2A|" .. id .. "|", kv) end)
+  C.RunComm:Send("2A", function() if R.ScribeOf(run) ~= mySfx() then return nil end return C.RunComm.Pack("2A|" .. run.id .. "|", kv) end)
   self:Finish(rep)
 end
 
@@ -965,6 +970,15 @@ local function rebase(run, t)
   run.joined = (run.joined or 0) + shift
 end
 R.Rebase = rebase
+-- a group's id taken: the clock moved back where it is older; a checkpoint already gone under the old id goes again
+-- under this one (the members hold it by the new), the newest in place of any waiting
+local function adopt(run, id, t)
+  if not id or run.id == id then return end
+  run.id = id
+  if t then rebase(run, t) end
+  if run.sentId and run.sentId ~= id then R:Values(run.ended ~= nil or run.out ~= nil) end
+end
+R.Adopt = adopt
 
 function R:Heard(kind, rest, who)
   local run = self.run
@@ -981,8 +995,10 @@ function R:Heard(kind, rest, who)
     return
   end
   local id, body = rest:match("^([^|]*)|?(.*)$")
-  if id ~= run.id then return end
   local m = run.members[who.sfx]
+  -- (the run's id, or the one this member said in its hello for this run, kind and place: a client that has not taken
+  -- the group's id yet, as after a lockdown for the whole stay, is heard all the same)
+  if id ~= run.id and not (m and m.id == id) then return end
   if kind == "2V" then
     local seq, data = body:match("^(%d+)|(.*)$")
     seq = tonumber(seq)
@@ -993,11 +1009,13 @@ function R:Heard(kind, rest, who)
     -- (a member out: its counting stopped while the scribe stays)
     if m.v.o and m.v.o > 0 then m.out = m.v.o end
   elseif kind == "2Q" then
-    if who.sfx == self:Scribe() then self:Ended() end
+    -- (the scribe's id is the group's: taken, so this client's last values reach it)
+    if who.sfx == self:Scribe() then adopt(run, id, (idTime(id))); self:Ended() end
   elseif kind == "2E" then
     if call("UnitIsGroupLeader", who.unit) == true and self:IsScribe() then self:GroupEnd("leader") end
   elseif kind == "2A" then
     if who.sfx ~= self:Scribe() then return end
+    adopt(run, id, (idTime(id)))
     self:HeardReport(body)
   elseif kind == "2R" then
     -- (a member back from a crash: the scribe gives it back its last checkpoint)
@@ -1037,7 +1055,8 @@ function R:HeardHello(rest, who)
   if not run then return end
   if kind ~= run.kind or place ~= (run.inst or run.map or 0) then return end
   local m = run.members[who.sfx]
-  if m then m.hello = ver ~= "" and ver or true end
+  -- (the id this member says for this run, kind and place: its messages under it are heard, R:Heard)
+  if m then m.hello = ver ~= "" and ver or true; m.id = id end
   if id == run.id then
     if answer then self.answerHeard = gtime() end
     return
@@ -1047,8 +1066,8 @@ function R:HeardHello(rest, who)
   -- the leader said hello); then a 2R, in case this client counted in it before a crash
   if answer then
     if t < myT and (not run.answered) and (who.sfx == self:Scribe() or not (R.Group().leader and run.members[R.Group().leader] and run.members[R.Group().leader].hello)) then
-      run.id, run.answered = id, true
-      rebase(run, t)
+      run.answered = true
+      adopt(run, id, t)
       self.asked = true
       C.RunComm:Send("2R", id .. "|" .. mySfx())
     end
@@ -1056,7 +1075,7 @@ function R:HeardHello(rest, who)
   end
   -- within 30 s of this client's start: the smaller time, then the smaller suffix
   if math.abs(t - myT) <= 30 then
-    if t < myT or (t == myT and sfx < mySf) then run.id = id; rebase(run, t) end
+    if t < myT or (t == myT and sfx < mySf) then adopt(run, id, t) end
     return
   end
   -- a newcomer (its start later than ours by more than 30 s): the scribe answers at once, another holder after 2 to
