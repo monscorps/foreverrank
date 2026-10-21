@@ -608,7 +608,7 @@ function MV.Menu(d)
   end
   MenuUtil.CreateContextMenu(UIParent, function(_, root)
     if d and d.m then
-      root:CreateButton("Show it on the arrow", function() QB.API.SetWaypoint(d.m, d.x, d.y, d.name, nil, nil, QB.Mini.About and QB.Mini.About(d)) end)
+      root:CreateButton("Show it on the arrow", function() QB.API.SetWaypoint(d.m, d.x, d.y, d.place or d.name, nil, nil, QB.Mini.About and QB.Mini.About(d)) end)
       root:CreateDivider()
     end
     check(root, "Back to me after a drag", "mmCenter", function(on) if on then MV.Recentre() end end)

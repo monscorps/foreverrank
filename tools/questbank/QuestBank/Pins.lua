@@ -746,7 +746,7 @@ function Pin:OnMouseClickAction(button)
     local first = next(ids)
     if first then about = { qid = first, what = "give" } end
   end
-  QB.API.SetWaypoint(d.m, d.x, d.y, d.name, nil, nil, about)
+  QB.API.SetWaypoint(d.m, d.x, d.y, d.place or d.name, nil, nil, about)
 end
 
 -- the stops: the game's quest POI, the same size at every zoom (QuestPinMixin: SetScalingLimits(1, 1, 1)), on the
@@ -882,7 +882,9 @@ function P:Build()
         -- ids: the quests it lists. The quest icons (QuestMap.lua) read both
         local first = s.npcs and s.npcs[1] and QB.Data.NPC[s.npcs[1]]
         local ago = fromNow(leg.t, r) -- (and t, route, ago: P.WhenNow counts it again as a tooltip shows)
-        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, title = P.StopTitle(s), who = first and first[1] or nil, ids = ids, icon = T.questActive, stop = s,
+        -- (the merge review) place: the stop in words (Travel.lua's TV.StopPlace, "Goldshire"), for a click's waypoint
+        -- here and on the minimap (Minimap.lua), and the minimap's label; name stays Model.lua's, for matching
+        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, title = P.StopTitle(s), place = QB.Travel.StopPlace(s), who = first and first[1] or nil, ids = ids, icon = T.questActive, stop = s,
                             quests = quests, ready = ready, family = family, late = (leg.late and r.goal == "hour") or nil,
                             when = string.format("Stop %d of %d, %s: %s", i, #r.legs, ago, QB.Model.Gain(leg)), lines = lines,
                             t = leg.t, route = r, ago = ago }
@@ -957,7 +959,7 @@ function P:Update()
     local key = s.name .. (s.m or 0) .. (s.x or 0) .. (s.y or 0)
     if key ~= self.next then
       self.next = key
-      QB.API.SetWaypoint(s.m, s.x, s.y, s.name, true)
+      QB.API.SetWaypoint(s.m, s.x, s.y, QB.Travel.StopPlace(s) or s.name, true)
     end
   end
 end
@@ -970,7 +972,7 @@ function P:PinNext(announce)
     return
   end
   local s = leg.stop
-  QB.API.SetWaypoint(s.m, s.x, s.y, s.name, not announce, false) -- the route's own: the arrow stays as it is
+  QB.API.SetWaypoint(s.m, s.x, s.y, QB.Travel.StopPlace(s) or s.name, not announce, false) -- the route's own: the arrow stays as it is
 end
 
 function P:Toggle()

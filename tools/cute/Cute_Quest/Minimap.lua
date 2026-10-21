@@ -211,7 +211,9 @@ function Mini.List(noStep)
     for _, d in ipairs(P.list) do
       if d.m and d.m > 0 then
         local cid = firstId(d.ids)
-        out[#out + 1] = { m = d.m, x = d.x, y = d.y, name = d.name, num = d.num, kind = "stop", when = d.when, lines = d.lines, late = d.late,
+        -- (the merge review) title and place: the stop as the world map's pin names it (Pins.lua: "Smith Argus,
+        -- Goldshire" its tooltip's head, "Goldshire" its label and a click's waypoint); name stays Model.lua's
+        out[#out + 1] = { m = d.m, x = d.x, y = d.y, name = d.name, title = d.title, place = d.place, num = d.num, kind = "stop", when = d.when, lines = d.lines, late = d.late,
                           cid = cid, ids = d.ids, pin = d }
         stopAt[keyOf(d)] = true
         local sorted = {}
@@ -509,7 +511,7 @@ local function newPin()
     if not d then return end
     if button == "RightButton" then QB.MiniView.OpenMenu(d); return end
     -- shown on the arrow for now, nothing more (the arrow's step: the arrow points there already)
-    if d.m then QB.API.SetWaypoint(d.m, d.x, d.y, d.name, nil, nil, Mini.About(d)) end
+    if d.m then QB.API.SetWaypoint(d.m, d.x, d.y, d.place or d.name, nil, nil, Mini.About(d)) end
   end, "minimap pin"))
   p:SetScript("OnEnter", function(self)
     local d = self.d
@@ -517,7 +519,7 @@ local function newPin()
     -- QuestTrail's look: the game's quest tooltip on a quest's own marker
     if Mini.QT() and d.id and (d.kind == "obj" or d.kind == "turn") then Mini.QuestTooltip(self, d.id); return end
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:SetText(d.name or "", 1, 1, 1)
+    GameTooltip:SetText(d.title or d.name or "", 1, 1, 1)
     if d.when then GameTooltip:AddLine((d.pin and QB.Pins and QB.Pins.WhenNow) and QB.Pins.WhenNow(d.pin) or d.when, 0.8, 0.8, 0.8) end -- (counted as it shows)
     if d.kind == "turn" then GameTooltip:AddLine("Hand in here", 0.3, 0.9, 0.3) end
     for _, l in ipairs(d.lines or {}) do GameTooltip:AddDoubleLine(l[1], l[2], 0.9, 0.9, 0.9, 0.6, 0.8, 0.6) end
@@ -890,6 +892,7 @@ function Mini.Place(me, v)
       local kind = t.obj and "obj" or (t.near and "turn" or "stop")
       aimEntry.kind, aimEntry.id, aimEntry.name, aimEntry.c, aimEntry.wx, aimEntry.wy = kind, t.qid, t.name, t.c, t.wx, t.wy
       aimEntry.cid, aimEntry.num, aimEntry.key = t.qid, kind == "stop" and 1 or nil, "aim:" .. kind
+      aimEntry.place = kind == "stop" and t.stopWords or nil -- (the arrow's words for the stop: Target.lua)
       aim, aw = aimEntry, aimEntry
     end
   end
@@ -963,9 +966,11 @@ function Mini.Label(target, f)
     label.text = label:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     label.text:SetPoint("CENTER", 0, 0)
   end
-  Mini.labelText = target and target.d.name or nil
+  -- (a stop by its place, "Goldshire", as the arrow and the world map's pin name it: Mini.List)
+  local name = target and (target.d.place or target.d.name) or nil
+  Mini.labelText = name
   if not (target and not target.far and QB:Settings().minimapLabel ~= false and not Mini.QT()) then label:Hide(); return end
-  label.text:SetText(target.d.name or "")
+  label.text:SetText(name or "")
   label:SetSize(math.min(200, (label.text:GetStringWidth() or 80) + 18), 22)
   label:ClearAllPoints()
   label:SetPoint("BOTTOM", f, "CENTER", target.x, target.y + 12)

@@ -19993,6 +19993,42 @@ end)()
     assert(tip:find("Next stop: " .. place, 1, true), "the minimap button's next stop: " .. tip)
     noSpot("the minimap button", tip)
     UI.frame:Hide()
+    -- (the merge review) the minimap names the stop as the rest do: its label pill ("Goldshire", Mini.labelText), its
+    -- pin's tooltip head (the NPC and the place, as the world map's pin titles it, P.StopTitle), its click and its
+    -- menu's "Show it on the arrow" (the waypoint by its place); and so do the world map's pin click and /qb next
+    local Mini, P = QB.Mini, QB.Pins
+    c.miniRadius = 800 -- (Goldshire's stop inside the circle, from Northshire)
+    Mini.Invalidate(); Mini.Place()
+    assert(Mini.target and Mini.target.kind == "stop" and Mini.labelText == place, "the minimap's label names the stop by its place: " .. tostring(Mini.labelText))
+    local pin
+    for _, o in ipairs(c.frames) do if o.d and o.d.kind == "stop" and o.d.num == 1 and o:IsShown() then pin = o end end
+    assert(pin, "stop 1's pin on the minimap")
+    local GT = env.GameTooltip
+    rawset(GT, "SetText", function(_, s) lines[#lines + 1] = "HEAD:" .. tostring(s) end)
+    local head = tipOf(pin)
+    rawset(GT, "SetText", nil)
+    assert(head:find("^HEAD:Smith Argus, " .. place), "the minimap pin's tooltip head, the NPC and the place: " .. head)
+    noSpot("the minimap pin's tooltip", head)
+    local function waypoint(what, fn)
+      local line = said(c, fn)
+      local wp = QB.API.LastWaypoint()
+      assert(wp and wp.title == place, what .. ": the waypoint by its place: " .. tostring(wp and wp.title))
+      noSpot(what .. "'s line", line)
+    end
+    waypoint("the minimap pin's click", function() pin.__scripts.OnClick(pin, "LeftButton") end)
+    waypoint("the minimap menu's Show it on the arrow", function()
+      QB.MiniView.Menu(pin.d)
+      local m = c.contextMenus[#c.contextMenus]
+      assert(m and m[1].text == "Show it on the arrow", "the minimap pin's menu")
+      m[1].set()
+    end)
+    local d1
+    for _, d in ipairs(P.list or {}) do if d.num == 1 then d1 = d end end
+    assert(d1 and d1.title == "Smith Argus, " .. place, "the world map's stop 1: " .. tostring(d1 and d1.title))
+    waypoint("the world map pin's click", function() P.Pin.OnMouseClickAction({ data = d1 }, "LeftButton") end)
+    waypoint("/qb next", function() env.SlashCmdList.QUESTBANK("next") end)
+    QB.Arrow:EndTemp(nil, true)
+    c.miniRadius = nil
   end }
 
   -- 2. The Guide section's switches for what the step frame's menu has: "Say XP after each hand-in" (off; ticked, the
