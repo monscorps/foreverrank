@@ -1229,6 +1229,15 @@ function R:Rows()
 end
 function R:MeRow() local rows = self:Rows(); return (rows[1] and rows[1].me) and rows[1] or nil end
 
+-- for /cute diag: the last list against the club's count, and the namesakes nobody can tell apart (unsure GUIDs, sender
+-- strings two members share, members online whose name reads in no form)
+function R:ListReport()
+  local unsure, shared = 0, 0
+  for _ in pairs(self.unsureGuid) do unsure = unsure + 1 end
+  for _ in pairs(self.shared) do shared = shared + 1 end
+  return string.format("list: %s of %s read (%d not read), %s | unsure namesakes %d, shared senders %d, unread names online %d",
+    tostring(self.listed or 0), tostring(self.expected or "?"), self.skipped or 0, self.listedWhole and "whole" or "not whole", unsure, shared, self.unread or 0)
+end
 -- for /cute diag
 function R:MyRowCount() local n = 0; for _, r in ipairs(self:Rows()) do if r.me then n = n + 1 end end return n end
 function R:RecordCount() local n = 0; for _ in pairs(CuteDB and CuteDB.roster or {}) do n = n + 1 end return n end

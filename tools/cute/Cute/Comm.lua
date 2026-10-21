@@ -306,6 +306,29 @@ function M:Locked()
   if type(RA) == "table" and type(RA.IsAddOnRestrictionActive) == "function" and kind ~= nil and C.Get(RA.IsAddOnRestrictionActive, kind) == true then return true end
   return self.lockSeen ~= nil and C.Now() - self.lockSeen < LOCK_POLL
 end
+-- (for /cute diag: the channel as this client last used it, by way: the last result of each, never a name; the queue,
+-- what was given up, the prefix's registration; and whether this rank may speak in guild chat at all
+-- (GuildInfoDocumentation.lua: C_GuildInfo.CanSpeakInGuildChat))
+function M:ChannelReport()
+  local function last(way)
+    local r = self.lastResult[way]
+    if not r then return way .. " none sent" end
+    return string.format("%s result %s %d s ago", way, tostring(r.res), math.floor(C.Now() - (r.at or C.Now())))
+  end
+  local GI = type(C_GuildInfo) == "table" and C_GuildInfo or {}
+  local speak = type(GI.CanSpeakInGuildChat) == "function" and tostring(C.Get(GI.CanSpeakInGuildChat)) or "missing"
+  return string.format("channel: %s | %s | queue %d, given up %d (%d past the cap)%s | prefix %s | CanSpeakInGuildChat %s",
+    last("GUILD"), last("WHISPER"), #self.out, self.drops or 0, self.capped or 0, self.paused and (", held since " .. math.floor(C.Now() - self.paused) .. " s") or "",
+    tostring(self.prefixResult), speak)
+end
+-- (and how far this character holds the guild, and this login's record: M:Wire, M:Logout)
+function M:SyncReport()
+  local h, club = C.Char().hold, C.Roster:ClubId()
+  local held = (type(h) == "table" and club ~= nil and h.club == tostring(club) and tonumber(h.at)) and (math.floor(C.ServerNow() - h.at) .. " s ago") or "nothing"
+  return string.format("sync: holds the guild to %s | this login %s, its record %s, %s | asked %s",
+    held, self.reloaded and "reloaded" or "fresh", self.base and ("whole " .. math.floor(C.ServerNow() - self.base) .. " s ago") or "not whole yet",
+    self.passAt and ("a pass " .. math.floor(C.Now() - self.passAt) .. " s ago") or "no pass forced", self.askOwed and "not yet (owed)" or (self.askLeft and (math.floor(C.Now() - self.askLeft) .. " s ago") or "not this login"))
+end
 -- (for /cute diag: what each way of asking says now)
 function M:LockReport()
   local function said(fn, ...) if type(fn) ~= "function" then return "missing" end local v = C.Get(fn, ...); return tostring(v) end
@@ -427,7 +450,7 @@ pump = C.Safe(function()
   based(e, r)
   mark(e, r, kept, back)
   if e.done then e.done() end
-  if r == "drop" then M.drops = M.drops + 1; C.Err.Note("addon message not sent (" .. tostring(extra) .. "); its stats go with the next change", "comm: sending") end
+  if r == "drop" then M.drops = M.drops + 1; C.Perf.Count("drops"); C.Err.Note("addon message not sent (" .. tostring(extra) .. "); its stats go with the next change", "comm: sending") end
   current = nil
 end, "comm: sending", function()
   local e = current
@@ -441,6 +464,7 @@ end, "comm: sending", function()
     pcall(mark, e, "drop")
     if e.done then pcall(e.done) end
     M.drops = M.drops + 1
+    C.Perf.Count("drops")
   end
   book(1)
 end)
@@ -528,6 +552,7 @@ local function room()
       table.remove(M.out, i)
       pcall(mark, m, "drop")
       M.drops, M.capped = M.drops + 1, (M.capped or 0) + 1
+      C.Perf.Count("drops")
       return
     end
   end
@@ -1728,7 +1753,8 @@ function M:Start(reloading)
   -- (every addon's messages come here, DBM's and WeakAuras' in a raid too: Cute's prefix is picked out before anything
   -- else runs, and only Cute's go through C.Safe; ADDON_RESTRICTION_STATE_CHANGED is the lockdown, M:Restriction)
   local saw = C.Safe(function(sender, prefix) M:Saw(sender, prefix) end, "comm: senders")
-  local receive = C.Safe(function(text, channel, sender) M:Receive(text, channel, sender) end, "comm: receiving")
+  local timed = C.Perf.Timed("receive", function(text, channel, sender) C.Perf.Count("cute"); M:Receive(text, channel, sender) end)
+  local receive = C.Safe(timed, "comm: receiving")
   local restriction = C.Safe(function(kind, state) M:Restriction(kind, state) end, "comm: chat lockdown")
   f:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
     if event == "CHAT_MSG_ADDON" then

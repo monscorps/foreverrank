@@ -513,6 +513,10 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
     -- the seed checked against this client (Rule 0, spread over frames), after the roster, before the Guide draws
     C.Safe(function() C.Rules:Start() end, "rules: start")()
     C.Safe(function() if C.UI and C.UI.OnWorld then C.UI:OnWorld() end end, "minimap button")()
+    -- (the window's draws timed for /cute diag perf, once)
+    C.Safe(function()
+      if C.UI and type(C.UI.Draw) == "function" and not C.drawTimed then C.drawTimed = true; C.UI.Draw = C.Perf.Timed("draw", C.UI.Draw) end
+    end, "perf")()
     -- versions: a login (not a /reload, nor a loading screen) may say a newer Cute again; the saved records' versions
     -- once a session; what is new in this one ten seconds on
     C.Safe(function()
@@ -625,6 +629,12 @@ function C.Diag()
   table.sort(suspect); table.sort(untrusted)
   local function named(list) return (officer and #list > 0) and (": " .. table.concat(list, ", ", 1, math.min(8, #list)) .. (#list > 8 and (" and " .. (#list - 8) .. " more") or "")) or "" end
   add(string.format("diag trust: suspect %d%s | untrusted %d%s", #suspect, named(suspect), #untrusted, named(untrusted)))
+  -- the channel and the load: the last send each way, the lockdown, the list against the club, the busy paths' cost
+  add("diag " .. C.Comm:ChannelReport())
+  add("diag " .. C.Comm:LockReport())
+  add("diag " .. C.Comm:SyncReport())
+  add("diag " .. C.Roster:ListReport())
+  add("diag " .. C.Perf.Report())
   return lines
 end
 

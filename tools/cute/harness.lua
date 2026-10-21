@@ -817,7 +817,7 @@ local function newClient(o)
   -- Guild Info (GuildInfoDocumentation.lua): the guild's text (c.infoSecret: a secret, as inside an encounter), and
   -- SetInfoText, which only a character allowed to edit it calls, from a click (c.hardware), the client's 499 letters at
   -- most (Blizzard_Communities/GuildInfo.lua: the edit box's SetMaxLetters)
-  env.C_GuildInfo = { GuildRoster = function() c.rosterAsked = (c.rosterAsked or 0) + 1; c.timers[#c.timers + 1] = { t = c.clock + 0.5, f = function() fire(c, "GUILD_ROSTER_UPDATE") end } end,
+  env.C_GuildInfo = { CanSpeakInGuildChat = api(function() return c.mute ~= true end), GuildRoster = function() c.rosterAsked = (c.rosterAsked or 0) + 1; c.timers[#c.timers + 1] = { t = c.clock + 0.5, f = function() fire(c, "GUILD_ROSTER_UPDATE") end } end,
     GetInfoText = api(function()
       if c.infoSecret then return secret("string") end
       return INFO[c.env.C_Club.GetGuildClubId()] or ""
@@ -10654,6 +10654,33 @@ do
     assert(scans == 1, "twenty bag changes in a raid: one scan: " .. scans)
   end)
   said[#said + 1] = "a newer line beside ours read as ours, statistics in slices, the mount on its events, a raid's bags once a burst"
+
+  -- (n) /cute diag says what launch day needs to see, no name in it: the last send result each way, the lockdown as each
+  -- function says it, whether this rank may speak in guild chat, how far this character holds the guild, the list
+  -- against the club's count and the namesakes nobody can tell apart, and what the busy paths cost
+  isolated({ member("Coraline", 1), member("Cobb", 3) }, function()
+    local off, c = char("Coraline", 1), char("Cobb", 3)
+    login(off); login(c)
+    tickAll(130)
+    local n0 = #c.chat
+    c.env.SlashCmdList.CUTE("diag")
+    local out = table.concat(c.chat, "\n", n0 + 1)
+    for _, want in ipairs({ "diag channel: GUILD result 0 ", "| WHISPER ", "| prefix 0 | CanSpeakInGuildChat true",
+      "diag lockdown off (InChatMessagingLockdown false, restriction false, event never, result 11 never) | AreOutgoingAddonChatMessagesRestricted false",
+      "diag sync: holds the guild to nothing | this login fresh, its record whole ", "diag list: 2 of 2 read (0 not read), whole | unsure namesakes 0",
+      "diag perf: refresh ", "rebuild ", "receive ", "| last minute: addon " }) do
+      assert(out:find(want, 1, true), "/cute diag says " .. want .. ":\n" .. out)
+    end
+    local tail = out:sub((out:find("diag channel:", 1, true)))
+    assert(not tail:find("Coraline", 1, true) and not tail:find("Cobb", 1, true), "and names nobody:\n" .. tail)
+    c.chatLocked = true
+    lock(c)
+    n0 = #c.chat
+    c.env.SlashCmdList.CUTE("diag")
+    assert(table.concat(c.chat, "\n", n0 + 1):find("diag lockdown on (InChatMessagingLockdown true, restriction true", 1, true), "the lockdown said as it holds")
+    unlock(c)
+  end)
+  said[#said + 1] = "/cute diag: the channel, the lockdown, the hold, the list, the cost, no name"
 
   print("core: " .. table.concat(said, "; "))
 end
