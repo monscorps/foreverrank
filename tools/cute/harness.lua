@@ -12367,6 +12367,13 @@ do local function runsStage()
         mem("Fd", { t = 1800, de = 0, lv = 2 }), mem("Fe", { t = 1800, de = 1, wy = 1 }) }
       local f = A.Pick(fun, { n = 5, bosses = 1, runId = "f" }, ALL)
       assert(holder(f, "LO") == fun[5].sfx, "the one blooper placed before the shout-outs fill the last card: " .. codes(f))
+      -- (the blooper's holder also holds a higher shout-out: the blooper still placed, right after the headline)
+      local busy = { mem("Ia", { t = 1800, de = 0, dm = 9000 }), mem("Ib", { t = 1800, de = 3, ch = 200 }), mem("Ic", { t = 1800, de = 0, cn = 90 }),
+        mem("Id", { t = 1800, de = 0, gd = 99999 }), mem("Ie", { t = 1800, de = 0, lv = 1 }) }
+      local b = A.Pick(busy, { n = 5, bosses = 1, runId = "b" }, ALL)
+      local nb = 0
+      for _, c in ipairs(b) do if A.BY[c[2]].kind == "blooper" then nb = nb + 1 end end
+      assert(#b == 5 and nb == 1 and holder(b, "FI") == busy[2].sfx, "a report with something to tease has its blooper: " .. codes(b))
     end
     -- a repeat in the scribe's last two reports scores lower; ties fall by the run id; the same input the same cards
     do

@@ -368,14 +368,14 @@ function A.Pick(members, facts, route)
     if #cards == 0 then for _, p in ipairs(pairs_) do if p.a.kind == kind and free(p) then take(p); break end end end
   end
   local headline = cards[1] ~= nil
-  -- the rest by score; where a blooper pair exists, the best free one is placed before the shout-outs fill the last card
-  local wantBlooper = maxBloopers > 0
+  -- where a blooper pair exists, the best free one right after the headline (so a report with something to tease has
+  -- one, even where its holder also holds a better shout-out); then the rest by score
+  if maxBloopers > 0 and #cards < cap then
+    for _, p in ipairs(pairs_) do if p.a.kind == "blooper" and free(p) then take(p); break end end
+  end
   while #cards < cap do
     local pick
-    if wantBlooper and bloopers == 0 and #cards == cap - 1 then
-      for _, p in ipairs(pairs_) do if p.a.kind == "blooper" and free(p) then pick = p; break end end
-    end
-    if not pick then for _, p in ipairs(pairs_) do if free(p) then pick = p; break end end end
+    for _, p in ipairs(pairs_) do if free(p) then pick = p; break end end
     if not pick then break end
     take(pick)
   end
