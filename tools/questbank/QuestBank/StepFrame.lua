@@ -486,7 +486,10 @@ function SF.Refresh()
       rowText(r.where, s and G.Where(s) or "", nil)
       r.mins:SetText(mins and (mins .. " min") or "")
     elseif s then
-      rowTwo(r.text, G.Title(s), G.Place(s))
+      -- (the place once a trip: a step at the place of the one before it, or on its leg, gives its name alone)
+      local place, prev = G.Place(s), steps[i - 1]
+      if prev and ((s.leg and prev.leg == s.leg) or (place and place == G.Place(prev))) then place = nil end
+      rowTwo(r.text, G.Title(s), place)
       local m = G.Mins(s, steps[i - 1])
       r.mins:SetText(m and ("+" .. m .. " min") or "")
     end

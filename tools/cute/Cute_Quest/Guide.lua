@@ -731,6 +731,7 @@ function G.Replan()
     local stop = leg.stop
     if stop then
       local n0 = #G.steps
+      local place = QB.Travel.StopPlace(stop) -- ("Northshire Abbey", not "Elwynn Forest (48, 43)")
       -- the objectives of this stop's quests still open (the target's quest is moved first below); one with no spot
       -- in the world gets its Do step (doStep) and no hand-in until it is complete
       for _, row in ipairs(leg.rows or {}) do
@@ -763,7 +764,7 @@ function G.Replan()
       -- the leg on each step made for it: its stop's name, the minutes to it from the stop before, how, which leg
       for i = n0 + 1, #G.steps do
         local s = G.steps[i]
-        s.stop, s.mins, s.way, s.leg = stop.name, leg.travel, leg.kind, li
+        s.stop, s.mins, s.way, s.leg = place, leg.travel, leg.kind, li
       end
     end
   end
@@ -791,7 +792,7 @@ function G.Replan()
     local s = step("accept")
     s.qid = d.qid
     placeNpc(s, d.idx)
-    s.stop = s.m and QB.Data.MAPNAME and QB.Data.MAPNAME[s.m] or nil -- (no stop of the route: its zone)
+    s.stop = QB.Travel.TownNear(s.c, s.wx, s.wy, 150) or (s.m and QB.Data.MAPNAME and QB.Data.MAPNAME[s.m]) or nil -- (no stop of the route: its town or zone)
     G.steps[#G.steps + 1] = s
     doneQ[d.qid] = true
   end

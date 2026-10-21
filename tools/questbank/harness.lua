@@ -17018,8 +17018,12 @@ end)()
     -- (the launch round: the step now's name, who and where under it; the next two, name and place on one line; a row
     -- too long for the frame is cut with "...", the place kept)
     local function rowIs(t, want) local got = t:GetText(); return got == want or got:find("...", 1, true) ~= nil end
-    local function nextRow(s) local p = G.Place(s); return p and (G.Title(s) .. " - " .. p) or G.Title(s) end
-    assert(rowIs(f.now, G.Title(G.steps[1])) and rowIs(f.rows[1].where, G.Where(G.steps[1]) or "") and rowIs(f.next1, nextRow(G.steps[2])) and rowIs(f.next2, nextRow(G.steps[3])),
+    local function nextRow(s, prev)
+      local p = G.Place(s)
+      if (s.leg and prev.leg == s.leg) or (p and p == G.Place(prev)) then p = nil end
+      return p and (G.Title(s) .. " - " .. p) or G.Title(s)
+    end
+    assert(rowIs(f.now, G.Title(G.steps[1])) and rowIs(f.rows[1].where, G.Where(G.steps[1]) or "") and rowIs(f.next1, nextRow(G.steps[2], G.steps[1])) and rowIs(f.next2, nextRow(G.steps[3], G.steps[2])),
       "the three steps: " .. tostring(f.now:GetText()) .. " / " .. tostring(f.rows[1].where:GetText()) .. " | " .. tostring(f.next1:GetText()) .. " | " .. tostring(f.next2:GetText()))
     local r, g = f.next1:GetTextColor()
     assert(r < 0.8 and g < 0.8, "the next steps greyed")
@@ -17892,7 +17896,8 @@ end)()
     for i, s in ipairs(G.steps) do
       if s.leg then
         local leg = r.legs[s.leg]
-        assert(leg and s.stop == leg.stop.name and s.mins == leg.travel and s.way == leg.kind, "a step carries its leg: " .. G.Text(s))
+        assert(leg and s.stop == QB.Travel.StopPlace(leg.stop) and s.mins == leg.travel and s.way == leg.kind, "a step carries its leg: " .. G.Text(s))
+        assert(not s.stop:find("%(%d+, %d+%)$"), "its place in words, not a zone and a spot: " .. s.stop)
         tagged = tagged + 1
         if i > 1 and G.steps[i - 1].leg == s.leg then assert(G.Mins(s, G.steps[i - 1]) == nil, "the minutes once a leg: " .. G.Text(s)) end
       end
@@ -17926,7 +17931,7 @@ end)()
     -- one trip, two hand-ins: the minutes once
     G.steps[2].leg = 1
     G.ver = G.ver + 1; SF.Refresh()
-    assert(r2.mins:GetText() == "", "the same stop as the step before: no minutes of its own")
+    assert(r2.mins:GetText() == "" and r2.text:GetText() == "The Absent Minded Prospector", "the same trip as the step before: its name alone, no minutes: " .. r2.text:GetText())
     -- every row's tooltip: the whole step, the NPC and the place, the minutes and the XP
     for i = 1, 3 do
       lines = {}

@@ -820,6 +820,32 @@ end
 
 local function hearthSig(h) return h and (h.kind .. ":" .. h.name .. ":" .. h.c .. ":" .. floor(h.wx) .. ":" .. floor(h.wy)) or "-" end
 
+-- (the launch round) places in words for the step frame and the map's stops. The inn town within `yards` of a spot
+-- (D.BIND: the towns with an inn, Goldshire 77 yards from Smith Argus), the nearest; nil out in the wilds
+local NO_BIND = {}
+function TV.TownNear(c, wx, wy, yards)
+  if not (c and wx and wy) then return nil end
+  local lim, best, town = (yards or 150) ^ 2, nil, nil
+  for _, b in ipairs(QB.Data.BIND or NO_BIND) do
+    if b[2] == c then
+      local d = (b[3] - wx) ^ 2 + (b[4] - wy) ^ 2
+      if d <= lim and (not best or d < best) then best, town = d, b[1] end
+    end
+  end
+  return town
+end
+-- a route stop's place: its flight master's town, else the inn town within 150 yards of its first NPC, else that NPC's
+-- own place or zone; never a zone and a spot ("Elwynn Forest (42, 65)", Model.lua's name for a stop out of a town:
+-- the spot is the tooltip's)
+function TV.StopPlace(s)
+  if not s then return nil end
+  if s.town then return s.name end
+  local D = QB.Data
+  local n = s.npcs and s.npcs[1] and D.NPC[s.npcs[1]]
+  if not n then return s.name end
+  return TV.TownNear(n[5], n[6], n[7], 150) or n[12] or (D.MAPNAME and D.MAPNAME[n[2]]) or s.name
+end
+
 -- the hearthstone in a line, for the arrow's tooltip and /qb way; nil with no hearthstone
 function TV.HearthLine()
   if not QB.API.HasHearth() then return nil end

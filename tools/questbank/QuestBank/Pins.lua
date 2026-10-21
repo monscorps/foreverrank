@@ -813,25 +813,14 @@ function P:Route() return QB.Target.Route() end
 
 -- (the launch round) a stop's title: the NPC its pin stands on and the town, "Smith Argus, Goldshire" (6.1 titled a
 -- stop out of a flight master's town by its zone and spot, "Elwynn Forest (42, 65)", beside the map's own Goldshire):
--- the stop's town, else the inn town within NEAR_INN yards of the NPC (D.BIND), else the NPC's place or zone. A stop of
--- several NPCs: the town (or the place) alone. Its name (Model.lua) stays as it is: stops are matched by it
-local NEAR_INN = 150
+-- the place as Travel.lua's TV.StopPlace words it (the stop's town, else the inn town within 150 yards, else the zone).
+-- A stop of several NPCs: the place alone. Its name (Model.lua) stays as it is: stops are matched by it
 function P.StopTitle(s)
   local D = QB.Data
   local npcs = s and s.npcs
   local n = npcs and npcs[1] and D.NPC[npcs[1]]
   if not n then return s and s.name end
-  local town = s.town and s.name or nil
-  if not town then
-    local best
-    for _, b in ipairs(D.BIND or {}) do
-      if b[2] == n[5] then
-        local d = (b[3] - n[6]) ^ 2 + (b[4] - n[7]) ^ 2
-        if d <= NEAR_INN * NEAR_INN and (not best or d < best) then best, town = d, b[1] end
-      end
-    end
-  end
-  town = town or n[12] or (D.MAPNAME and D.MAPNAME[n[2]])
+  local town = QB.Travel.StopPlace(s)
   if #npcs > 1 then return town or s.name end
   if not town or town == n[1] then return n[1] end
   return n[1] .. ", " .. town
