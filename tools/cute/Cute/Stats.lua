@@ -1257,7 +1257,8 @@ S.GAME_CAP = 1000 -- statistics defined at most, so a client cannot fill the reg
 -- before its coin's icon (GlobalStrings.csv: GOLD_AMOUNT_TEXTURE "%d|TInterface\\MoneyFrame\\UI-GoldIcon:%d:%d:2:0|t",
 -- the silver and copper ones the same), read as copper (0.7.0 joined every digit, the icons' sizes too, into nonsense
 -- past 2^31, and every receiver marked the sender suspect); any other icon is dropped. Separators of any locale go
--- where they group thousands ("1,234", "1 234", "1.234", a no-break space), and a decimal ("1,5") reads as its whole part
+-- where they group thousands ("1,234", "1 234", "1.234", a no-break space), and a decimal ("1,5") reads as its whole
+-- part
 local COIN = { Gold = 10000, Silver = 100, Copper = 1 }
 local function amount(s)
   s = s:gsub("[%s']", ""):gsub("\194\160", ""):gsub("\226\128\175", "")

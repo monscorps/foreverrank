@@ -145,9 +145,9 @@ end
 -- panel reads only its permissions, so Cute asks for the roster then, R:Start). One that comes while C_Club lists
 -- nobody yet is read at the first refresh that lists the guild (R.infoDue)
 local INFO = { GUILD_ROSTER_UPDATE = true }
--- each part of a refresh on its own: one that raises (a saved record left odd, say) leaves the rest to run, Guild Info's
--- read above all (0.7.0 ran the whole refresh as one, and a raise in the prune left the policy unread for the session:
--- nothing of yours ever went)
+-- each part of a refresh on its own: one that raises (a saved record left odd, say) leaves the rest to run, Guild
+-- Info's read above all (0.7.0 ran the whole refresh as one, and a raise in the prune left the policy unread for the
+-- session: nothing of yours ever went)
 local function step(where, fn)
   local ok, err = pcall(fn)
   if not ok then

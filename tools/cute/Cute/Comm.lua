@@ -3,11 +3,19 @@
 --   1D|regver|k=v;k=v;...          what changed since the last send
 --   1F|part|parts|regver|k=v;...   the full record, in chunks (at the hello, and when asked); the game's statistics, where
 --                                  the client reports them, and what this character discovered (bosses, instances,
---                                  factions) follow in a pass of their own a minute and a half later
---   1R|guid|stamp|word|fp          please send your full record (answered after a random 1 to 20 s, the statistics
+--                                  factions) follow in a pass of their own a minute and a half later. regver "4s":
+--                                  the part of it that went on GUILD after an ask's since (M:Full), which a receiver
+--                                  holding no record of the sender takes as a part and asks the whole of (1Q)
+--   1R|guid|stamp|word|fp[since]   please send your full record (answered after a random 2 to 40 s, the statistics
 --                                  60 to 90 s on; one answer however many ask while it waits, one ask a sender in
---                                  three minutes, the statistics once in half an hour; an officer's always gets the
---                                  part the officers keep, whispered). The asker's GUID tells
+--                                  three minutes, the statistics once in half an hour and one pass forced for the
+--                                  guild in ten minutes whoever asks, never for a bare 0.3/0.5 ask; an officer's always
+--                                  gets the part the officers keep, whispered; one heard before this login's own record
+--                                  went is answered by it). since, in hex right after the fingerprint (a 0.6 or 0.7
+--                                  client reads a field of another length as no fingerprint, which it never answers
+--                                  by): the server time to which the asker holds everything said on GUILD (M:Logout),
+--                                  and a responder whose record went whole before it sends only what went after it. A
+--                                  /reload asks nothing (M:Wire). The asker's GUID tells
 --                                  it its own ask, which the game hands back to it (0.3.0 sent a bare 1R, 0.5.x no
 --                                  stamp: both still answered; they take the GUID to be everything after "1R|", which
 --                                  names nobody they know, so the rest passes them by). stamp: when the officers' word
@@ -16,6 +24,9 @@
 --                                  by it, Guild Info's line carries the policy itself); word: when the
 --                                  newest officers' word the asker holds was said (1N): an officer whose own is newer
 --                                  answers with it
+--   1Q|guid                        the record of the member with this GUID, whole: asked by a client that holds none
+--                                  of it after a part since its since or a delta came (M:WantWhole), answered by that
+--                                  member alone with its guild part; a 0.5-0.7 client passes it by
 --   1N|at|i/n|key=value;...        the officers' word: what the guild learned from what members' clients do not receive
 --                                  (with the defaults, which slots and kinds of item take an enchant), no GUID, no
 --                                  member's value, no count (Rules.lua R.WordParts). Sent by an officer's client when it
@@ -1734,7 +1745,8 @@ function M:Hello()
   self.hello, self.holding, self.helloAt = true, true, C.Now()
   self.holdGen = (self.holdGen or 0) + 1
   -- (a /reload asks nothing: the saved records are the guild as it was a moment ago, M:Wire; an ask of this login that
-  -- never left goes now. The ask waits for the roster to read: answers that came before it would crowd the early buffer)
+  -- never left goes now. The ask waits for the roster to read: answers that came before it would crowd the early
+  -- buffer)
   if not self.reloaded or self.askOwed then
     if C.Roster.trusted then self:Ask() else self.askDue = true end
   end

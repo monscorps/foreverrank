@@ -541,8 +541,8 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
   end
 end, "core: events"))
 
--- (Cute's own, then the quest engine's where Cute_Quest runs: its errors are kept in CuteQuestDB, which /qb errors alone
--- listed)
+-- (Cute's own, then the quest engine's where Cute_Quest runs: its errors are kept in CuteQuestDB, which /qb errors
+-- alone listed)
 local function errorsList()
   local list = CuteDB and CuteDB.errors or {}
   local engine = type(CuteQuestDB) == "table" and type(CuteQuestDB.errors) == "table" and CuteQuestDB.errors or {}
