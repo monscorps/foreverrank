@@ -18345,14 +18345,27 @@ end)()
   -- the walk (the owner saw the route flip from Southshore to Alterac mid-run): north out of Southshore into Alterac, 60
   -- yards a look in a straight line, a kill ticking a count at each look, the Guide on with free slots in the log. Nothing
   -- real happens (no quest done, handed in, taken or abandoned, no level, no jump): the first step, the route's first stop
-  -- and the picks stay; the Now view's first place changes at most once on the way, never back and forth
+  -- and the picks stay; the Now view's first place changes at most once on the way, never back and forth.
+  -- (The review: nothing in it planned again, and the floor never read a measured rate. Ten minutes of kills come
+  -- first, so the floor would read them if it still read all the XP; a narrow level window leaves the fill fewer quests
+  -- than it may pick, so its gate is what keeps the picks still; and halfway a third quest, handed in at the same stop,
+  -- is complete: a re-plan with the last plan, which keeps the first stop)
   F62CASES[#F62CASES + 1] = { "the walk: the first step stays without a real event", function()
     local HILLS = {
       [1424] = { wy0 = 1066.91, wyx = -32.0059, wx0 = 400.10, wxy = -21.3354 },
       [1416] = { wy0 = 783.55, wyx = -28.0005, wx0 = 1499.91, wxy = -18.6646 },
     }
+    local third
+    do
+      local D0 = char("Scout").QB.Data
+      local turn = D0.Q[500][6]
+      for id, r in pairs(D0.Q) do
+        if id ~= 500 and id ~= 504 and r[6] == turn and r[3] ~= 2 and r[1] <= 32 and r[2] <= 30 and r[10] % 4 == 0 and (not third or id < third) then third = id end
+      end
+    end
+    assert(third, "a third quest handed in where 500 is")
     local c = newClient({ name = "Rambler", level = 30, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
-      race = "Human", log = { { 500, 0 }, { 504, 0 } }, done = {}, world = { 0, -852, -517 }, map = 1424, bagSlots = {}, bind = "Southshore" })
+      race = "Human", log = { { 500, 0 }, { 504, 0 }, { third, 0 } }, done = {}, world = { 0, -852, -517 }, map = 1424, bagSlots = {}, bind = "Southshore" })
     local env = c.env
     c.me = { wx = -852, wy = -517 }
     local function toMap(m, wx, wy) local t = HILLS[m]; if not t then return nil end; return (wy - t.wy0) / t.wyx / 100, (wx - t.wx0) / t.wxy / 100 end
@@ -18368,16 +18381,36 @@ end)()
     login(c)
     local QB, G, T = c.QB, c.QB.Guide, c.QB.Target
     QB:Settings().guide.on = true
+    -- (every place skipped but Hillsbrad and Alterac, and the picks made again in it: fewer than the fill was left, a fill)
+    for _, cat in ipairs(QB.Data.CAT) do
+      if cat.key and cat.name ~= "Hillsbrad Foothills" and cat.name ~= "Alterac Mountains" then QB:Settings().skipCat[cat.key] = true end
+    end
+    for id in pairs(QB:Plan().auto) do QB:Plan().auto[id] = nil end
     c.objectives = { [500] = { { text = "Crushridge Ogre slain: 0/10", type = "monster", finished = false, numFulfilled = 0, numRequired = 10 } },
-                     [504] = { { text = "Crushridge Mage slain: 0/5", type = "monster", finished = false, numFulfilled = 0, numRequired = 5 } } }
+                     [504] = { { text = "Crushridge Mage slain: 0/5", type = "monster", finished = false, numFulfilled = 0, numRequired = 5 } },
+                     [third] = { { text = "Thing: 9/10", type = "monster", finished = false, numFulfilled = 9, numRequired = 10 } } }
+    settle(c)
+    local Tm, F0 = QB.Timer, QB.Model.Floor(30)
+    for _ = 1, 21 do tick(c, 30); c.xp = (c.xp or 0) + 400; Tm.Record("PLAYER_XP_UPDATE", "player") end
+    assert(Tm.XPPerHour() and QB.Model.Floor(30) == F0, "ten minutes of kills measured; the floor where it was")
     settle(c)
     local function key() local s = G.steps[1]; return s and (s.kind .. ":" .. tostring(s.qid)) or "none" end
     local function first() local r = T.Route(); return r and r.legs[1] and r.legs[1].stop.name or "none" end
     local function place() local g = QB.UI.PlaceGroups(nil, true)[1]; return g and g.cat.name or "none" end
     local function picks() local t = {} for id in pairs(QB:Plan().auto) do t[#t + 1] = id end table.sort(t) return table.concat(t, ",") end
     local k0, f0, p0, a0 = key(), first(), place(), picks()
+    local nPicks = 0
+    for _ in pairs(QB:Plan().auto) do nPicks = nPicks + 1 end
+    assert(nPicks > 0 and nPicks < G.AUTO_MAX, "fewer picks than the fill may make: " .. nPicks)
+    local plans = 0
+    local plan = QB.Model.Plan
+    QB.Model.Plan = function(...) plans = plans + 1; return plan(...) end
     local seq = { p0 }
     for i = 1, 25 do
+      if i == 13 then
+        for _, e in ipairs(c.log) do if e[1] == third then e[2] = 1 end end
+        c.objectives[third][1].numFulfilled, c.objectives[third][1].finished = 10, true
+      end
       c.me.wx = -852 + i * 60
       c.o.world = { 0, c.me.wx, c.me.wy }
       if mapAt(c.me.wx, c.me.wy) ~= mapAt(c.me.wx - 60, c.me.wy) then c.ev(QB.eventFrame, "ZONE_CHANGED_NEW_AREA") end
@@ -18392,8 +18425,11 @@ end)()
       local p = place()
       if p ~= seq[#seq] then seq[#seq + 1] = p end
     end
+    QB.Model.Plan = plan
     assert(#seq <= 2, "the Now view's first place changed back and forth on the walk: " .. table.concat(seq, " > "))
-    print("xpm: the walk: " .. k0 .. ", first stop " .. f0 .. ", picks " .. (a0 ~= "" and a0 or "none") .. ", Now: " .. table.concat(seq, " > "))
+    assert(plans > 0, "planned again on the way")
+    print("xpm: the walk: " .. k0 .. ", first stop " .. f0 .. ", picks " .. (a0 ~= "" and a0 or "none") .. ", Now: " .. table.concat(seq, " > ")
+      .. string.format(", %d plans, %s complete halfway", plans, QB.Data.QN[third]))
   end }
 
   -- 9. the places are kept while nothing changed (Cute asks twice a redraw): a hundred calls of each view with QB.changed
