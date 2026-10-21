@@ -4839,11 +4839,11 @@ do
     assert(ts:find("Accept for me", 1, true) and ts:find("Progress in mob tooltips", 1, true), "the Quests section's rows:\n" .. ts)
     assert(ts:find("Step frame", 1, true) and ts:find("Direction arrow", 1, true), "the step frame's and the arrow's rows are the Quests section's:\n" .. ts)
     -- 6.1.1: the game's quest tracker out of sight while the step frame shows (QuestBank's Guide section has the same)
-    local trk = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker while the step frame shows" end)
+    local trk = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker with the step frame" end)
     assert(trk and trk:GetChecked() and rone.env.CuteQuestDB.settings.guide.hideTracker == true, "the tracker's row, on:\n" .. ts)
     click(trk)
     assert(rone.env.CuteQuestDB.settings.guide.hideTracker == false, "unticked: the engine's setting off")
-    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker while the step frame shows" end))
+    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Hide the game's quest tracker with the step frame" end))
     assert(rone.env.CuteQuestDB.settings.guide.hideTracker == true, "ticked again")
     rone.C.UI:Open("settings", "guide")
     assert(not texts(rone):find("Step frame", 1, true) and not texts(rone):find("Direction arrow", 1, true), "and not the Guide's")
@@ -11342,8 +11342,8 @@ end
 -- [stage: merge1] that stage's tests go right below this line
 -- (the merge round) the Quests section has the engine's two switches QuestBank's Guide section has: "Say XP after each
 -- hand-in" (sayXP, off: the line in chat as a quest is handed in, complete or dropped) and "Hide the game's quest tracker
--- while the step frame shows" (guide.hideTracker, on); each writes the engine's setting, both labels whole at either
--- window size, and the section keeps eight rows at most
+-- with the step frame" (guide.hideTracker, on); each writes the engine's setting, both labels whole at either window
+-- size, and the section keeps eight rows at most
 do
   local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
   isolated({ member("Rone", 1), member("Pim", 3) }, function()
@@ -11351,7 +11351,7 @@ do
     login(c); tickAll(5)
     c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
     local s = c.env.CuteQuestDB.settings
-    local SAY, TRACKER = "Say XP after each hand-in", "Hide the game's quest tracker while the step frame shows"
+    local SAY, TRACKER = "Say XP after each hand-in", "Hide the game's quest tracker with the step frame"
     local function row(label) return checkBox(c, function(cb) return cb.label and cb.label:GetText() == label end) end
     c.C.UI:Open("settings", "quests")
     local say, trk = row(SAY), row(TRACKER)

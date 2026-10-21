@@ -18823,7 +18823,7 @@ end)()
     -- the row in the Guide section: off, back at once; on, out of sight
     c.QB.UI:Open(5)
     local v5 = c.QB.UI.views[5]
-    assert(v5.guideTracker and v5.guideTracker:GetChecked() and v5.guideTracker.label:GetText() == "Hide the game's quest tracker while the step frame shows", "the Guide section's row, on")
+    assert(v5.guideTracker and v5.guideTracker:GetChecked() and v5.guideTracker.label:GetText() == "Hide the game's quest tracker with the step frame", "the Guide section's row, on")
     v5.guideTracker:SetChecked(false); v5.guideTracker.__scripts.OnClick(v5.guideTracker, "LeftButton")
     assert(s.guide.hideTracker == false and T:GetAlpha() == 1, "unticked: the tracker back at once")
     T:SetAlpha(1)
@@ -19924,7 +19924,9 @@ end)()
 -- names a stop as the map's pins, the step frame and the arrow do (TV.StopPlace: "Goldshire", never Model.lua's
 -- "Elwynn Forest (42, 65)"), and so do a stop's waypoint and the minimap button's next stop; the Settings' Guide section
 -- has the switches the step frame's menu has: "Say XP after each hand-in" (sayXP, off) and "Hide the game's quest
--- tracker while the step frame shows" (guide.hideTracker, on). Each case is in MERGECASES
+-- tracker with the step frame" (guide.hideTracker, on). The merge review: the minimap, the world map's click and /qb next
+-- name the stop the same way, the Guide's labels keep room to spare, and a quest no way is known to shows no minutes.
+-- Each case is in MERGECASES
 ----------------------------------------------------------------------------
 ;(function()
   local MERGECASES = {}
@@ -20032,7 +20034,7 @@ end)()
   end }
 
   -- 2. The Guide section's switches for what the step frame's menu has: "Say XP after each hand-in" (off; ticked, the
-  -- hand-in's line in chat; unticked, quiet again) and "Hide the game's quest tracker while the step frame shows" (on),
+  -- hand-in's line in chat; unticked, quiet again) and "Hide the game's quest tracker with the step frame" (on),
   -- under the Guide's other rows, above the Map's, the page laid out with nothing clipped
   MERGECASES[#MERGECASES + 1] = { "Settings' Guide section: Say XP after each hand-in, off; the tracker's row, on", function()
     local c = char("Sayer", { level = 5, log = { { 7, 1 }, { 33, 1 } } })
@@ -20043,7 +20045,7 @@ end)()
     UI:Open(5); UI:Refresh()
     local v = UI.views[5]
     assert(v.sayXP and v.sayXP.label:GetText() == "Say XP after each hand-in" and not v.sayXP:GetChecked() and QB:Settings().sayXP ~= true, "the Say XP row, off")
-    assert(v.guideTracker:GetChecked() and v.guideTracker.label:GetText() == "Hide the game's quest tracker while the step frame shows", "the tracker's row, on: " .. v.guideTracker.label:GetText())
+    assert(v.guideTracker:GetChecked() and v.guideTracker.label:GetText() == "Hide the game's quest tracker with the step frame", "the tracker's row, on: " .. v.guideTracker.label:GetText())
     local function turnIn(id, xp) c.ev(QB.eventFrame, "QUEST_TURNED_IN", id, xp); tick(c, 1) end
     assert(said(c, function() turnIn(7, 450) end) == "", "off: a hand-in says nothing")
     v.sayXP:SetChecked(true); v.sayXP.__scripts.OnClick(v.sayXP)
@@ -20069,6 +20071,24 @@ end)()
     UI:Refresh()
     local lay = checkLayout(UI.frame, "settings, the merge round")
     assert(#lay == 0, "settings laid out: " .. table.concat(lay, "; "))
+    UI.frame:Hide()
+  end }
+
+  -- 3. (the merge review) the tracker's row has room to spare: its label sits in a 316 px box that does not wrap, and the
+  -- harness's font widths are rough ("close enough"), so a label within 1% of the box ("Hide the game's quest tracker
+  -- while the step frame shows", 313 of 316) may end in "..." in the game. Every Guide row's label keeps a tenth spare
+  MERGECASES[#MERGECASES + 1] = { "Settings' Guide rows: each label a tenth short of its box", function()
+    local c = char("Roomy", { level = 5 })
+    local QB, UI = c.QB, c.QB.UI
+    QB:Settings().welcome = nil
+    UI:Open(5); UI:Refresh()
+    local v = UI.views[5]
+    for _, key in ipairs({ "guideLocked", "guideTracker", "sayXP" }) do
+      local fs = v[key].label
+      local w, box = textWidth(fs:GetText(), 12), fs:GetWidth()
+      assert(w <= box * 0.9, string.format("%s: \"%s\" %.0f px of %d: a tenth spare", key, fs:GetText(), w, box))
+    end
+    assert(v.guideTracker.label:GetText() == "Hide the game's quest tracker with the step frame", "the tracker's label: " .. v.guideTracker.label:GetText())
     UI.frame:Hide()
   end }
 

@@ -3740,14 +3740,15 @@ function UI:CreateSettingsView(parent)
     if QB.StepFrame then QB.StepFrame.Apply() end
   end)
   -- (6.1.1) the game's quest tracker out of sight while the step frame shows (StepFrame.lua's SF.Tracker): "it's hidden
-  -- by default there in game, Blizzard's one, if they use ours"
-  v.guideTracker = checkRow(p, LEFT + 24, y0 - 108, "Hide the game's quest tracker while the step frame shows", 316)
+  -- by default there in game, Blizzard's one, if they use ours". (The merge review: "... while the step frame shows" took
+  -- 313 of the box's 316 px in the harness's rough widths, and a no-wrap label over its box ends in "..." in the game)
+  v.guideTracker = checkRow(p, LEFT + 24, y0 - 108, "Hide the game's quest tracker with the step frame", 316)
   v.guideTracker:SetScript("OnClick", function(self)
     QB:Settings().guide.hideTracker = self:GetChecked() and true or false
     if QB.StepFrame then QB.StepFrame.Apply() end
   end)
   tooltip(v.guideTracker, function(tip)
-    tip:AddLine("Hide the game's quest tracker while the step frame shows", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Hide the game's quest tracker with the step frame", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("While the step frame shows, the game's own quest list at the right of the screen is out of sight. It comes back as soon as you untick this or the step frame goes. Never changed in a fight.", 1, 1, 1, true)
   end)
   v.guideScale = button(p, "100%", 70)
