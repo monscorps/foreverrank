@@ -281,20 +281,22 @@ local function mySfx() return sfxOf(C.MyGUID()) end
 ----------------------------------------------------------------------------
 -- the scribe
 ----------------------------------------------------------------------------
-function R:Scribe()
-  local run = self.run
+-- (of a given run, the group as it is now: a message queued while this client was scribe is judged again as it leaves)
+function R.ScribeOf(run)
   if not run then return nil end
   local g = R.Group()
   local me = mySfx()
   local lead = g.leader
-  if lead and (lead == me or (run.members[lead] and run.members[lead].hello)) then return lead end
+  local lm = lead and run.members[lead]
+  if lead and (lead == me or (lm and lm.hello and not lm.out)) then return lead end
   if not inGroup() then return me end
   local best, bestG = me, C.MyGUID() or ""
   for sfx, m in pairs(run.members) do
-    if m.hello and g[sfx] and not m.gone and m.g < bestG then best, bestG = sfx, m.g end
+    if m.hello and g[sfx] and not m.gone and not m.out and m.g < bestG then best, bestG = sfx, m.g end
   end
   return best
 end
+function R:Scribe() return R.ScribeOf(self.run) end
 function R:IsScribe() return self:Scribe() == mySfx() end
 
 ----------------------------------------------------------------------------
@@ -622,7 +624,11 @@ function R.MemberValues(run, sfx, m, endT)
       local o = tot[k]
       if type(o) == "number" then
         local x = v[k]
-        if type(x) ~= "number" or math.abs(x - o) > 0.1 * math.max(math.abs(o), math.abs(x), 1) then v[k] = math.floor(o) end
+        if type(x) ~= "number" or math.abs(x - o) > 0.1 * math.max(math.abs(o), math.abs(x), 1) then
+          -- (a guild member's own value the meter contradicts: their record marked suspect for the officers, once a run)
+          if type(x) == "number" and m and not m.suspect then m.suspect = true; R.Suspect(m.g, k) end
+          v[k] = math.floor(o)
+        end
       end
     end
   end
@@ -642,6 +648,14 @@ function R.MemberValues(run, sfx, m, endT)
   local first = own and (run.joined or 0) or (m and m.first or 0)
   v.t = math.max(0, math.min(endT, (m and m.gone) or endT) - first)
   return v
+end
+
+-- a guild member's record marked suspect (Roster.lua R:Suspect: the reason, which the officers alone see)
+function R.Suspect(guid, key)
+  local Ro = C.Roster
+  local k = Ro and Ro.KeysByGuid and Ro:KeysByGuid()[guid]
+  local e = k and CuteDB.roster[k]
+  if type(e) == "table" then Ro:Suspect(e, "run values the damage meter contradicts (" .. tostring(key) .. ")") end
 end
 
 function R:Build(run, why)
@@ -723,7 +737,8 @@ function R:Finish(rep, shown)
   local run = self.run
   if not run then return end
   self.run = nil
-  -- (no new run in this instance until a new entry: the members still inside hear the roster change after the end)
+  -- (no new run in this instance until you have been out of it: the members still inside hear the roster change after
+  -- the end)
   local _, inst = instanceNow()
   self.endedIn = inst
   save(nil)
@@ -756,7 +771,8 @@ function R:GroupEnd(why)
   run.ended, run.endWhy = el(run), why
   self:ReadMeter()
   self:ReadLoot()
-  C.RunComm:Send("2Q", run.id)
+  -- (sent only while this client is the scribe as it leaves: a held one is dropped where another is scribe by then)
+  C.RunComm:Send("2Q", function() if R.ScribeOf(run) ~= mySfx() then return nil end return { "2Q|" .. run.id } end)
   run.qAt = gtime()
   local id = run.id
   local function done()
@@ -802,7 +818,7 @@ function R:ScribeReport()
   end
   if #rep.gone > 0 then kv[#kv + 1] = "g=" .. table.concat(rep.gone, ".", 1, math.min(#rep.gone, 20)) end
   local id = run.id
-  C.RunComm:Send("2A", function() return C.RunComm.Pack("2A|" .. id .. "|", kv) end)
+  C.RunComm:Send("2A", function() if R.ScribeOf(run) ~= mySfx() then return nil end return C.RunComm.Pack("2A|" .. id .. "|", kv) end)
   self:Finish(rep)
 end
 
@@ -1045,9 +1061,8 @@ function R:World(initial, reloading)
     run = nil
   end
   if reloading then return end
-  -- (a new entry ends the guard a run that ended here set: Sample.lua keeps lastInst across a ghost's loading screens)
-  local entry = C.Char().lastInst ~= inst
-  if entry then self.endedIn = nil end
+  -- (outside an instance the guard a run that ended in one set is over: the group may reset it and run it again)
+  if not kind then self.endedIn = nil end
   if run then
     if run.kind == "g" then
       -- an instance entered ends a group run (its report where it lasted 15 minutes) and starts one there

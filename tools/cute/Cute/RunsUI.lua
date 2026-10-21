@@ -164,16 +164,18 @@ function RU.Draw(ui)
     local room = w - 16 - (leader and 80 or 0)
     l.name:SetWidth(room)
     U.FitText(l.name, text, room - 4)
+    -- (the band's pooled buttons, anchored and sized as every page anchors them: TOPLEFT, the pool's height)
     if leader then
       local b = ui.bandButtons:Get()
       b:ClearAllPoints()
-      b:SetPoint("TOPRIGHT", ui.band, "TOPRIGHT", -4, -(y + 1))
-      b:SetSize(70, 18)
+      b:SetPoint("TOPLEFT", w - 74, -y)
+      b:SetWidth(70)
       b:SetLabel("End run")
       b:SetOn(true)
       b:SetScript("OnClick", function() R():EndRun(); C.UI:Draw() end)
+      b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil)
     end
-    y = y + ROW
+    y = y + 24
   end
   local list = db.list
   if #list == 0 then
@@ -182,12 +184,13 @@ function RU.Draw(ui)
     U.FitText(l.name, "No runs yet.", w - 204)
     local b = ui.bandButtons:Get()
     b:ClearAllPoints()
-    b:SetPoint("TOPRIGHT", ui.band, "TOPRIGHT", -4, -(y + 1))
-    b:SetSize(150, 18)
+    b:SetPoint("TOPLEFT", w - 154, -y)
+    b:SetWidth(150)
     b:SetLabel("Show a test report")
     b:SetOn(true)
     b:SetScript("OnClick", function() RU.Test(false) end)
-    y = y + ROW
+    b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil)
+    y = y + 24
   end
   ui:SetBand(y > 4 and (y + 4) or 0)
   local rows = ui:List("runs", makeRow)

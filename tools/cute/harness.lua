@@ -11684,6 +11684,8 @@ do local function runsStage()
     assert(m.v and m.v["in"] == nil and m.v.t, "an interrupt count past its bounds dropped")
     local v = oz.C.Runs.MemberValues(oz.C.Runs.Current(), sfx(pax), m, 200)
     assert(v.dm == 1000, "the damage the meter showed this client wins over the claim: " .. tostring(v.dm))
+    local key = oz.C.Roster:KeysByGuid()[pax.o.guid]
+    assert(key and oz.env.CuteDB.roster[key].suspect and oz.env.CuteDB.roster[key].suspect.why:find("damage meter", 1, true), "and the claimant's record marked suspect for the officers")
     from(pax, "2H|" .. oz.C.Comm.b36(run.start - 100) .. "-" .. sfx(pax) .. "|0.7.1|d." .. oz.C.Comm.b36(36))
     assert(oz.C.Runs.Current().id == id, "a hello backdated past 30 s: ignored")
   end)
