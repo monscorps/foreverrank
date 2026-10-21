@@ -825,7 +825,8 @@ function P:ReadLine()
       line = type(self.line) == "table" and self.line or copyLine(k.line)
       if not self.missing then
         self.missing = true
-        if text ~= "" and C.Roster:MeOfficer() then C.Print("Cute's line is missing from Guild Info; Save to Guild Info to put it back.") end
+        -- (said after "Cute: ", so not "Cute's line" again)
+        if text ~= "" and C.Roster:MeOfficer() then C.Print("the policy line is missing from Guild Info; Save to Guild Info to put it back.") end
       end
       self.doubt = true
       k.doubt, k.wait = true, nil
