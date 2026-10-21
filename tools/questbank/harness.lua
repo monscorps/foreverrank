@@ -18942,6 +18942,8 @@ end)()
     return c
   end
   local function ev(c, event, ...) local f = c.QB.Finds.frame; f.__scripts.OnEvent(f, event, ...) end
+  -- a text opened and its page shown, as the client sends them
+  local function read(c) ev(c, "ITEM_TEXT_BEGIN"); ev(c, "ITEM_TEXT_READY"); ev(c, "ITEM_TEXT_CLOSED") end
   local function finds(c) return c.env.QuestBankDB.disc.find or {} end
   -- every string in a table, deep: what a saved file would carry
   local function strings(t, out, seen)
@@ -19040,29 +19042,37 @@ end)()
     c.text = { title = "Archmage Theocritus' Research Journal", body = "SECRET-PAGE-TEXT, the whole of it" }
     c.soft = { guid = OBJ:format(410001) }
     c.mp = { 0.654, 0.701 }
-    ev(c, "ITEM_TEXT_BEGIN")
+    read(c)
     local r = finds(c).o410001
     assert(r and r.b == "Archmage Theocritus' Research Journal" and r.p[1][2] == 654 and r.p[1][3] == 701, "the book, its title and spot")
     assert(not carries(DB, "SECRET-PAGE-TEXT"), "never the text")
     -- an item in the bags of that name: an item read, no place; the object the Interact key points at gets nothing
     c.text = { title = "Torn Page", body = "SECRET-PAGE-TEXT" }
     c.soft = { guid = OBJ:format(410002) }
-    ev(c, "ITEM_TEXT_BEGIN")
+    read(c)
     assert(finds(c).i281347 and finds(c).i281347.b == "Torn Page" and finds(c).i281347.p == nil and finds(c).o410002 == nil, "the page read from the bags")
-    -- a letter someone wrote (its writer named), or anything read at the mailbox: nothing
+    -- a letter someone wrote (its writer named), or anything read at the mailbox: nothing. The writer is read with the
+    -- page (ITEM_TEXT_READY), as the client's own frame reads it, never at ITEM_TEXT_BEGIN when it may not be known yet
     c.text = { title = "Hi Helga", body = "SECRET-PAGE-TEXT", creator = "Brann" }
+    read(c)
+    c.text = { title = "Dear Helga", body = "SECRET-PAGE-TEXT" }
     ev(c, "ITEM_TEXT_BEGIN")
+    c.text.creator = "Brann"
+    ev(c, "ITEM_TEXT_READY")
+    -- (a page turned: ITEM_TEXT_READY again, with no ITEM_TEXT_BEGIN before it, notes nothing)
+    c.text = { title = "Turned Page" }
+    ev(c, "ITEM_TEXT_READY")
     c.text = { title = "From the mailbox" }
     c.env.MailFrame = c.env.CreateFrame("Frame", "MailFrame", c.env.UIParent)
-    ev(c, "ITEM_TEXT_BEGIN")
+    read(c)
     c.env.MailFrame:Hide()
-    assert(finds(c).o410002 == nil and not carries(DB.disc, "Helga") and not carries(DB.disc, "Brann") and not carries(DB.disc, "mailbox"),
-      "a letter and the mailbox: nothing")
-    assert(DB.diag.finds.bw == 2 and DB.diag.finds.bo == 1 and DB.diag.finds.bi == 1, "diag: a letter and the mailbox left alone")
+    assert(finds(c).o410002 == nil and not carries(DB.disc, "Helga") and not carries(DB.disc, "Brann") and not carries(DB.disc, "mailbox")
+      and not carries(DB.disc, "Turned"), "two letters and the mailbox: nothing")
+    assert(DB.diag.finds.bw == 3 and DB.diag.finds.bo == 1 and DB.diag.finds.bi == 1, "diag: two letters and the mailbox left alone")
     -- a title is one line of at most 60 bytes, with no escape code, cut on a whole character
     c.text = { title = "|cffff0000Red|r\n" .. string.rep("long ", 20) .. "\195\166" }
     c.soft = { guid = OBJ:format(410003) }
-    ev(c, "ITEM_TEXT_BEGIN")
+    read(c)
     local t = finds(c).o410003.b
     assert(#t <= 60 and not t:find("[|%c]") and t:find("^cffff0000Red") , "cleaned: " .. t)
     assert(c.QB.Finds.CleanTitle(string.rep("a", 59) .. "\195\166") == string.rep("a", 59), "never half a character")
@@ -19293,7 +19303,7 @@ end)()
     local function all()
       ev(c, "LOOT_OPENED", false, false)
       ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-1", 3365)
-      ev(c, "ITEM_TEXT_BEGIN")
+      read(c)
       ev(c, "NAME_PLATE_UNIT_ADDED", "nameplate1")
     end
     -- the event (a fight starting: Combat, Activating), then over (Inactive)

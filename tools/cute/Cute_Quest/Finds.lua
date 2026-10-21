@@ -409,16 +409,16 @@ local function cleanTitle(s)
 end
 Finds.CleanTitle = cleanTitle
 
--- a text opened (ITEM_TEXT_BEGIN): an item in your bags of that name is one read (no place: it could be read
--- anywhere); else a game object the Interact key points at is a book where you stand. The title only, never the text.
--- A text someone wrote (ItemTextGetCreator names its writer: a letter kept from the mail) is never noted, nor anything
--- read at the mailbox
+-- a text opened (ITEM_TEXT_BEGIN): its title and the game object the Interact key points at, kept until its page is
+-- shown (ITEM_TEXT_READY), where the writer is known: the client's own ItemTextFrame reads ItemTextGetItem at BEGIN and
+-- ItemTextGetCreator only at READY (Blizzard_UIPanels_Game/Mainline/ItemTextFrame.lua; the events in
+-- ItemTextDocumentation.lua). Then an item in your bags of that name is one read (no place: it could be read
+-- anywhere); else the object is a book where you stand. The title only, never the text. A text someone wrote
+-- (ItemTextGetCreator names its writer: a letter kept from the mail) is never noted, nor anything read at the mailbox
+local reading -- { title, key } from ITEM_TEXT_BEGIN to its first ITEM_TEXT_READY
 function Finds.TextBegin()
+  reading = nil
   if not noting() or type(ItemTextGetItem) ~= "function" then return end
-  if type(ItemTextGetCreator) == "function" then
-    local okC, who = pcall(ItemTextGetCreator)
-    if not okC or who ~= nil then diag("bw"); return end
-  end
   local mail = _G and _G.MailFrame
   if type(mail) == "table" and mail.IsShown then
     local okM, open = pcall(mail.IsShown, mail)
@@ -427,21 +427,32 @@ function Finds.TextBegin()
   local ok, t = pcall(ItemTextGetItem)
   local title = ok and cleanTitle(t) or nil
   if not title then return end
+  reading = { title = title, key = softObject() }
+end
+
+-- the page shown (ITEM_TEXT_READY): the text ITEM_TEXT_BEGIN opened noted, once (a page turned sends READY again)
+function Finds.TextReady()
+  local r = reading
+  reading = nil
+  if not r or not noting() then return end
+  if type(ItemTextGetCreator) == "function" then
+    local okC, who = pcall(ItemTextGetCreator)
+    if not okC or who ~= nil then diag("bw"); return end
+  end
   diag("bk")
-  local item = bagItemNamed(title)
+  local item = bagItemNamed(r.title)
   if item then
     diag("bi")
-    record("i" .. item).b = title
+    record("i" .. item).b = r.title
     return
   end
-  local key = softObject()
-  if key then
+  if r.key then
     local m, x, y = QB.Discover.Spot()
     if not m then return end
     diag("bo")
-    local rec = record(key)
+    local rec = record(r.key)
     addPoint(rec, m, x, y)
-    rec.b = title
+    rec.b = r.title
     return
   end
   diag("bn")
@@ -853,6 +864,10 @@ function Finds.OnEvent(event, a1, a2, a3)
     if key and key:sub(1, 1) == "o" then soft = { key = key, at = now() } end
   elseif event == "ITEM_TEXT_BEGIN" then
     Finds.TextBegin()
+  elseif event == "ITEM_TEXT_READY" then
+    Finds.TextReady()
+  elseif event == "ITEM_TEXT_CLOSED" then
+    reading = nil
   elseif event == "NAME_PLATE_UNIT_ADDED" then
     Finds.Plate(a1)
   elseif event == "CONFIRM_SUMMON" then
@@ -887,6 +902,7 @@ function Finds:Init()
   if not (G and G.Forever()) then return end -- Classic Era: nothing to note, as Loot.lua
   f:SetScript("OnEvent", QB.Safe(function(_, event, ...) Finds.OnEvent(event, ...) end, "finds"))
   for _, e in ipairs({ "ADDON_RESTRICTION_STATE_CHANGED", "LOOT_OPENED", "PLAYER_SOFT_INTERACT_CHANGED", "ITEM_TEXT_BEGIN",
+                       "ITEM_TEXT_READY", "ITEM_TEXT_CLOSED",
                        "NAME_PLATE_UNIT_ADDED", "CONFIRM_SUMMON", "PLAYER_ENTERING_WORLD", "LOADING_SCREEN_ENABLED",
                        "PLAYER_LEAVING_WORLD" }) do
     pcall(f.RegisterEvent, f, e)
