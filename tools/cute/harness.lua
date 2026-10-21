@@ -12822,6 +12822,125 @@ do local function runsStage()
   print("runs: " .. table.concat(said, "; "))
 end runsStage() end
 
+-- [stage: cards] that stage's tests go right below this line
+-- cards: the cards and publishing (R2 of the run report's design, 2026-10-21): the Halls tab and its chips (the live
+-- Hall of Shame, News, the officers' Queue), the queue with its digest rows, New card, compose, preview, publish and
+-- withdraw, the guild chat line and its filter, halls with Update and the stat picker, 1C with its sources, 1G, 1W,
+-- the toast and the announcement with their limits, the test announcement, and the weekly Deaths and Quests. Its
+-- scenarios carry the design's numbers (15, 16)
+do local function cardsStage()
+  local said = {}
+
+  -- the mock gains what the cards read, documented or called by Camelot's own code, each where its doc says:
+  -- ChatFrameUtil.AddMessageEventFilter (Blizzard_ChatFrameBase/Shared/ChatFrameFilters.lua:202; a filter is not run
+  -- for a line it cannot read, ChatFrameFilters.lua:114), CHAT_MSG_GUILD through those filters to each guild client's
+  -- chat, C_ChatInfo.SendChatMessage to GUILD recorded with whether a click sent it, MenuUtil with submenus
+  -- (Blizzard_Menu: a CreateButton's description takes buttons of its own, Blizzard_Calendar.lua:3158; SetScrollMode,
+  -- Menu.lua:227), C_InstanceEncounter.IsEncounterInProgress
+  local function gmember(name, rank, class) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = class or "MAGE", level = 30, online = true } end
+  local function menuNode()
+    local node = { entries = {} }
+    function node:CreateTitle(text) self.entries[#self.entries + 1] = { title = text } end
+    function node:CreateButton(text, fn) local sub = menuNode(); sub.text, sub.fn = text, fn; self.entries[#self.entries + 1] = sub; return sub end
+    function node:CreateDivider() end
+    function node:SetScrollMode(h) self.scroll = h end
+    return node
+  end
+  local function guildLine(from, text)
+    local secretLine = type(text) == "table"
+    from.lineId = (from.lineId or 0) + 1
+    for _, c in ipairs(clients) do
+      if c.inGuild then
+        local hidden = false
+        -- (a line the filter cannot read is never handed to it: ChatFrameFilters.lua ApplyFilter's canaccessvalue)
+        if not secretLine then
+          for _, fn in ipairs((c.filters or {}).CHAT_MSG_GUILD or {}) do
+            if fn({}, "CHAT_MSG_GUILD", text, from.sender, "", "", from.sender, "", 0, 0, "", 0, from.lineId, from.o.guid) then hidden = true end
+          end
+        end
+        c.guildChat = c.guildChat or {}
+        if not hidden then c.guildChat[#c.guildChat + 1] = secretLine and "<secret>" or text end
+      end
+    end
+  end
+  local function equip(c)
+    local env = c.env
+    c.menus, c.filters, c.guildOut = {}, {}, {}
+    env.MenuUtil = { CreateContextMenu = function(owner, gen) local root = menuNode(); root.owner = owner; gen(owner, root); c.menus[#c.menus + 1] = root end }
+    env.ChatFrameUtil = { AddMessageEventFilter = function(event, fn) c.filters[event] = c.filters[event] or {}; table.insert(c.filters[event], fn) end }
+    env.C_InstanceEncounter = { IsEncounterInProgress = function() return c.encounter == true end }
+    local orig = env.C_ChatInfo.SendChatMessage
+    env.C_ChatInfo.SendChatMessage = function(text, kind, ...)
+      if kind == "GUILD" then
+        c.guildOut[#c.guildOut + 1] = { text = text, hw = c.hardware }
+        assert(#text <= 255, "a guild line over 255 bytes: " .. #text)
+        if not c.chatLocked then guildLine(c, text) end
+      end
+      return orig(text, kind, ...)
+    end
+    return c
+  end
+  local function cchar(name, rank, extra)
+    extra = extra or {}
+    return equip(newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", extra.class or "MAGE", 30 }, extra)))
+  end
+  local function H(c) return c.C.Halls end
+  local function sfx(c) return c.o.guid:match("([^%-]+)$") end
+  -- the menu last opened on a client, an entry by its path of texts ("Hall of Shame", "Deaths this week")
+  local function menuEntry(c, ...)
+    local node = c.menus[#c.menus]
+    for _, text in ipairs({ ... }) do
+      local found
+      for _, e in ipairs(node and node.entries or {}) do if e.text == text then found = e end end
+      node = found
+    end
+    return node
+  end
+
+  -- the two weekly stats (section 10): Deaths this week and Quests this week, the core's, counted by Sample whatever
+  -- module is on, reset on Monday; each lifetime count reveals its week; the value a reset replaced kept for Last week,
+  -- yours by Sample and a member's by the officer's roster
+  isolated({ gmember("Wora", 1), gmember("Wim", 3) }, function()
+    local o, m = cchar("Wora", 1), cchar("Wim", 3)
+    login(o); login(m)
+    tickAll(30)
+    local S, P = m.C.Stats, m.C.Policy
+    local dw, qw = S.byId.deaths_week, S.byId.quests_week
+    assert(dw and dw.cat == "funny" and dw.code == "dw" and dw.label == "Deaths this week", "Deaths this week, code dw, the Hall of Shame's")
+    assert(qw and qw.cat == "leveling" and qw.code == "qw" and qw.label == "Quests this week", "Quests this week, code qw, leveling's")
+    local function reveals(id, other) for _, r in ipairs(S.byId[id].reveals or {}) do if r == other then return true end end return false end
+    assert(reveals("deaths", "deaths_week") and reveals("quests_done", "quests_week"), "each lifetime count reveals its week")
+    assert(m.C.Sample.WEEKLY.deaths_week and m.C.Sample.WEEKLY.quests_week, "both reset on Monday")
+    -- (a lifetime count goes the strictest way of what it reveals: a week the officers close keeps its count closed too)
+    assert(P:Set("deaths_week", "self") and P:Route("deaths") == "self" and P:Route("deaths_week") == "self", "a closed week closes its lifetime count")
+    P:Set("deaths_week", "all")
+    assert(P:Route("deaths") == "all", "and opened, opens it")
+    fire(m, "PLAYER_DEAD"); fire(m, "PLAYER_DEAD"); fire(m, "QUEST_TURNED_IN", 214, 0, 0)
+    assert(m.C.Sample:Counter("deaths_week") == 2 and m.C.Sample:Counter("quests_week") == 1, "counted: 2 deaths, 1 quest this week")
+    tickAll(5)
+    local rec = o.env.CuteDB.roster[m.sender]
+    assert(rec and rec.stats.deaths_week == 2 and rec.stats.quests_week == 1, "the officer has them")
+    -- the week turns: the member's reset sends 0; the officer keeps the 2 for Last week, and the member keeps its own
+    o.dayShift, m.dayShift = 7 * 86400, 7 * 86400
+    tickAll(601)
+    assert(m.C.Sample:Counter("deaths_week") == 0, "Monday reset the week")
+    local lw = m.C.Char().lastWeek
+    assert(lw and lw.v and lw.v.deaths_week == 2 and lw.v.quests_week == 1, "the member's own last week kept")
+    assert(rec.stats.deaths_week == 0, "the officer has the reset")
+    assert(H(o).LastWeek(m.o.guid, "deaths_week") == 2 and H(o).LastWeek(m.o.guid, "quests_week") == 1, "the officer's roster keeps the value the reset replaced")
+    assert(H(m).LastWeek(m.o.guid, "deaths_week") == 2, "and the member's own, by Sample")
+    -- a week later still, last week's is the week just gone (its 0), and two weeks back is no week's
+    o.dayShift, m.dayShift = 14 * 86400, 14 * 86400
+    tickAll(601)
+    assert(H(o).LastWeek(m.o.guid, "deaths_week") == 0 and H(m).LastWeek(m.o.guid, "deaths_week") == 0, "a week on, last week's is the week just gone")
+    o.dayShift = 28 * 86400
+    assert(H(o).LastWeek(m.o.guid, "deaths_week") == nil, "a value from weeks ago is no last week's")
+  end)
+  said[#said + 1] = "Deaths this week and Quests this week: the core's, revealed by their lifetime counts, counted by Sample, reset on Monday, the value a reset replaced kept for Last week (yours and a member's)"
+
+  print("cards: " .. table.concat(said, "; "))
+end cardsStage() end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

@@ -20,6 +20,7 @@ Comm.lua
 UI.lua
 Cards.lua
 CardFrame.lua
+Halls.lua
 Guide.lua
 Awards.lua
 RunComm.lua

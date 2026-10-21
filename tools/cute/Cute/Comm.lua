@@ -1778,12 +1778,16 @@ function M:Receive(text, channel, sender)
   if kind == "1D" then
     local body = text:match("^1D|[^|]*|(.*)$")
     local had = CuteDB.roster[sender] ~= nil
-    R:Apply(sender, decodeBody(body), whispered)
+    local dkv = decodeBody(body)
+    -- (the weekly values a reset replaces, kept for the halls' Last week before the record takes the new: Halls.lua)
+    if C.Halls then C.Halls:Seen(sender, dkv) end
+    R:Apply(sender, dkv, whispered)
     if not whispered then self:WantWhole(sender, had, true) end
   elseif kind == "1F" then
     -- (the record as it came: Apply vets its GUID again and marks the sender; a part since an ask's since, its version
     -- field marked "s", from a sender this client held no record of, asks for the whole one)
     local had = CuteDB.roster[sender] ~= nil
+    if C.Halls then C.Halls:Seen(sender, kv) end
     R:Apply(sender, kv, whispered)
     if not whispered then self:WantWhole(sender, had, (text:match("^1F|%d+|%d+|([^|]*)|") or ""):sub(-1) == "s") end
     -- (whispers that waited for this sender's record to carry its GUID are taken now)

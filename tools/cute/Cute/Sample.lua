@@ -146,7 +146,8 @@ end
 ----------------------------------------------------------------------------
 local DAILY = { quests_today = true, deaths_today = true, levelups = true }
 local WEEKLY = { logins = true, weekly_raids = true }
--- (the weekly run stats join it from Runs.lua: Runs, Shout-outs and Bloopers this week)
+-- (the weekly run stats join it from Runs.lua: Runs, Shout-outs and Bloopers this week; Halls.lua's Deaths and Quests
+-- this week too)
 S.WEEKLY = WEEKLY
 -- live: called by the ten-minute timer, not by Start (which resets here and then counts the login itself)
 local function dayCheck(live)
@@ -161,6 +162,12 @@ local function dayCheck(live)
   end
   if ch.week ~= week then
     local turned = ch.week ~= nil -- (nil: the first run on this character)
+    -- (the values a reset replaces, with the week they were and the week it is: the halls' Last week, Halls.lua)
+    if turned then
+      local was = {}
+      for id in pairs(WEEKLY) do was[id] = counters()[id] end
+      ch.lastWeek = { from = ch.week, to = week, v = was }
+    end
     ch.week = week
     for id in pairs(WEEKLY) do counters()[id] = 0; S.values[id] = 0; S.dirty[id] = true end
     -- a week turning while you play: this session is its first login
