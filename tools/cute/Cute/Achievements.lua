@@ -24,7 +24,8 @@
 --            "Guild first?" row: a suggestion, never published by itself
 -- Nothing of a member's in /cute diag cards: counts and states.
 local _, C = ...
-local A = { refused = 0, sent = 0, earned = 0, lines = 0, secret = 0, taken = 0, firsts = 0, takenFrom = {}, recentTaken = {}, news = { state = "none", n = 0, guild = 0 } }
+local A = { refused = 0, sent = 0, earned = 0, lines = 0, secret = 0, taken = 0, firsts = 0, takenFrom = {}, recentTaken = {}, serverDone = {},
+  news = { state = "none", n = 0, guild = 0 } }
 C.Achievements = A
 
 local RECENT_MAX, RECENT_DAYS, RECENT_BYTES = 20, 14, 200
@@ -292,8 +293,8 @@ function A:Earn(e)
   local server = e.src == "line" or e.src == "news"
   local d = store()
   local key = e.g .. ":" .. e.id
-  -- (a repeat from ach_recent, which tells an earn for 14 days: nothing new)
-  if d.achSeen[key] and e.approx and not server then return false end
+  -- (a repeat from ach_recent, which tells an earn for 14 days, or from guild news, read every hour: nothing new)
+  if d.achSeen[key] and ((e.approx and not server) or (server and A.serverDone[key])) then return false end
   local m = member(e.g)
   if not m or C.Policy:Untrusted(e.g) then A.refused = A.refused + 1; return false end
   local info = A.Info(e.id)
@@ -305,6 +306,7 @@ function A:Earn(e)
     -- (the server shows one Cute sent: marked so in the queue; one dated by its day alone takes the 1A's time)
     local it = H().Item(id)
     if it and server and not it.mark then it.mark = "server"; H().Refresh() end
+    if server then A.serverDone[key] = true end
     if it and it.approx and not e.approx then it.t, it.approx = t, nil; if it.card then it.card.value = "Earned " .. dayText(t) end end
     return false
   end
