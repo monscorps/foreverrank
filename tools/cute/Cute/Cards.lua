@@ -239,3 +239,9 @@ function Cards.Fill(f, d)
   f.tip = d.tip
   f:Show()
 end
+
+-- the card screen for a set (the design's unit interface, 2.3): R1 shows a run's report ("report", or "test" for the
+-- test report); the halls' announcement and preview modes come with them
+function Cards:Show(set, mode)
+  if C.CardFrame and C.CardFrame.Report then C.CardFrame:Report(set, { test = mode == "test" }) end
+end

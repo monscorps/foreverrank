@@ -11985,6 +11985,8 @@ do local function runsStage()
     assert(CF.frame:IsShown() and CF.rep.test, "/cute run test")
     gus.env.SlashCmdList.CUTE("run")
     assert(CF.rep.id == lastReport(gus).id, "/cute run: the last report")
+    gus.C.Cards:Show(t1, "test")
+    assert(CF.rep == t1 and CF.label:GetText() == "TEST RECAP", "Cards:Show, the design's interface")
     local d0 = #gus.chat
     gus.env.SlashCmdList.CUTE("diag runs")
     local diag = table.concat(gus.chat, "\n", d0 + 1)
