@@ -8509,7 +8509,7 @@ do
   lines = {}; F.__scripts.OnEnter(F)
   local tip = table.concat(lines, "\n")
   assert(tip:find("|A:flightmaster:14:14|a Fly to Lakeshire | ", 1, true) and tip:find("Walk to Lakeshire | %d+ min") and tip:find("About %d+ min in all%.")
-    and tip:find("Flight paths: 2 of 18 known here", 1, true) and lines[#lines - 1]:find("^Click: the Route page")
+    and tip:find("Flight paths on Eastern Kingdoms: 2 of 18 known", 1, true) and lines[#lines - 1]:find("^Click: the Route page")
     and lines[#lines]:find("^Shift%-click: the waypoint in chat"), "the tooltip lists the steps (a waypoint: Shift-click last): " .. tip)
   sheet("Arrow: at the flight master")
   -- on the way there, the arrow points at it; the minimap pins it and draws the line to it
@@ -8712,7 +8712,7 @@ do
   aimAt("Gadgetzan", 1, gz[3] + 30, gz[4])
   look()
   lines = {}; F.__scripts.OnEnter(F)
-  assert(has("fly") and table.concat(lines, "\n"):find("Flight paths: not read yet, so all count", 1, true), "assumed: " .. table.concat(lines, " / "))
+  assert(has("fly") and table.concat(lines, "\n"):find("Flight paths on [%a ]+: not read yet, so all count"), "assumed: " .. table.concat(lines, " / "))
   sheet("Arrow: a long way, every flight path counted")
   c.env.C_TaxiMap = saveTaxi
 
@@ -17937,6 +17937,45 @@ end)()
     end
     SF.SetScale(1)
     G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
+  -- 7. The owner's arrow at Menethil's pier, bound for a hand-in in Darnassus (2-arrow-boat-darnassus): its tooltip said
+  -- "Flight paths: 17 of 18 known here", the Eastern Kingdoms' count, while the way's one flight is on Kalimdor, and
+  -- ended "Walk to Darnassus" after the portal into Darnassus. Now each flight's continent is named and counted, and the
+  -- last walk names the NPC the quest goes to; /qb way says the same
+  ENGCASES[#ENGCASES + 1] = { "the arrow's tooltip: the flights of this way, by continent; the last walk to the NPC", function()
+    local c = char("Pierside", "MAGE", "Mage", 8, {}, { level = 21, world = { 0, -3709, -575 }, map = 1437, log = { { 3370, 1 } }, bind = "Menethil Harbor" })
+    local env, QB = c.env, c.QB
+    local men, aub, rut = hubOf(c, "Menethil Harbor"), hubOf(c, "Auberdine"), hubOf(c, "Rut'theran Village")
+    c.taxiKnown = { [men[6]] = true, [aub[6]] = true, [rut[6]] = true }
+    fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1)
+    QB.Model.Finish(); QB:Recompute(true); QB.Model.Finish()
+    local A = QB.Arrow
+    A:Set(true); A:Update()
+    local F = env.QuestBankArrow
+    local t = A.t
+    assert(t and t.kind == "route" and t.qid == 3370, "the arrow leads to In Nightmares' hand-in: " .. tostring(t and t.name))
+    lines = {}; F.__scripts.OnEnter(F)
+    local tip = table.concat(lines, " / ")
+    F.__scripts.OnLeave(F)
+    assert(tip:find("Walk to Mathrengyl Bearwalker", 1, true) and not tip:find("Walk to Darnassus", 1, true), "the last walk names the NPC: " .. tip)
+    assert(not tip:find("known here", 1, true), "no count of where you stand: " .. tip)
+    local flies = false
+    for _, l in ipairs(A.g and A.g.plan and A.g.plan.legs or {}) do if l.kind == "fly" then flies = true end end
+    assert(flies and tip:find("Flight paths on Kalimdor: %d+ of %d+ known") and not tip:find("on Eastern Kingdoms", 1, true),
+      "the way's flight is on Kalimdor, and so is the count: " .. tip)
+    print("engine: the owner's arrow at Menethil: " .. tip)
+    local n0 = #c.chat
+    env.SlashCmdList.QUESTBANK("way")
+    assert(table.concat(c.chat, " / ", n0 + 1):find("Walk to Mathrengyl Bearwalker", 1, true), "/qb way: the same last walk: " .. table.concat(c.chat, " / ", n0 + 1))
+    -- a way with no flight in it: no flight line at all
+    local W = { c = 0, wx = -3709 + 60, wy = -575 }
+    A:Show("A spot on the pier", W)
+    A:Update()
+    lines = {}; F.__scripts.OnEnter(F)
+    assert(not table.concat(lines, " / "):find("Flight paths", 1, true), "a walk along the pier: no flight line: " .. table.concat(lines, " / "))
+    F.__scripts.OnLeave(F)
   end }
 
   for _, case in ipairs(ENGCASES) do

@@ -479,8 +479,21 @@ function A:Menu()
   QB.UI:ShowMenu("The arrow points at", items)
 end
 
--- the steps in the tooltip: each one left with its minutes, the total, the flight paths QuestBank counts on, and the
--- hearthstone
+-- who the last walk goes to: a route stop's one hand-in NPC (6.1 said "Walk to Darnassus" right after the portal into
+-- Darnassus: the stop's town), else the target's name (a stop of several hand-ins, a pick-up's giver, a place clicked)
+function A.WalkTo(t)
+  if t and t.kind == "route" and t.qid and not t.obj and (t.quests or 1) == 1 then
+    local q = QB.Quest.Get(t.qid)
+    local who = q and q.turn and q.turn.n
+    if type(who) == "string" and who ~= "" then return who end
+  end
+  return t and t.name
+end
+
+-- the steps in the tooltip: each one left with its minutes, the total, the flight paths this way flies on (the
+-- continent of each flight in it: 6.1 counted the continent you stand on, "17 of 18 known here", while the way's one
+-- flight was on the other), and the hearthstone
+local NO_LEGS, flownOn = {}, {}
 local function tipSteps(t, g)
   local plan = g.plan
   if plan and #plan.legs > 1 then
@@ -488,15 +501,25 @@ local function tipSteps(t, g)
     for i, l in ipairs(plan.legs) do
       local c = i == 1 and 1 or 0.7
       local icon = l.icon or foot
-      GameTooltip:AddDoubleLine((icon and inline(icon) or "") .. (l.step or ("Walk to " .. t.name)),
+      GameTooltip:AddDoubleLine((icon and inline(icon) or "") .. (l.step or ("Walk to " .. (A.WalkTo(t) or "it"))),
         string.format("%d min", max(1, floor(l.walk + l.min + 0.5))), c, c, c, c, c, c)
     end
     GameTooltip:AddLine(string.format("About %d min in all.", max(1, floor((g.eta or plan.min) + 0.5))), 0.8, 0.8, 0.8)
   end
-  local n, total, read = TV.Known(QB.faction or QB.API.Faction(), A.me and A.me.c or t.c)
-  -- (none on an open map off the two continents, Zephras Isle: no line)
-  if total > 0 then
-    GameTooltip:AddLine((read or TV.tells) and string.format("Flight paths: %d of %d known here", n, total) or "Flight paths: not read yet, so all count", 0.8, 0.8, 0.8)
+  -- (a way with no flight: no line)
+  for k in pairs(flownOn) do flownOn[k] = nil end
+  local fac = QB.faction or QB.API.Faction()
+  for _, l in ipairs(plan and plan.legs or NO_LEGS) do
+    local c = l.kind == "fly" and l.start and l.start.c
+    local name = c and TV.CONT_NAME and TV.CONT_NAME[c]
+    if name and not flownOn[c] then
+      flownOn[c] = true
+      local n, total, read = TV.Known(fac, c)
+      if total > 0 then
+        GameTooltip:AddLine((read or TV.tells) and string.format("Flight paths on %s: %d of %d known", name, n, total)
+          or string.format("Flight paths on %s: not read yet, so all count", name), 0.8, 0.8, 0.8)
+      end
+    end
   end
   local hearth = TV.HearthLine()
   if hearth then GameTooltip:AddLine(hearth, 0.8, 0.8, 0.8, true) end

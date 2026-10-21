@@ -53,6 +53,7 @@ local KIND = { b = "boat", z = "zeppelin", t = "tram", p = "portal" }
 local STRONG = { t = true, n = true, f = true } -- evidence the world map's word never overrides
 local CONT_MAP = { [0] = 1415, [1] = 1414 }
 local CONT_NAME = { [0] = "Eastern Kingdoms", [1] = "Kalimdor" }
+TV.CONT_NAME = CONT_NAME
 -- each kind of step: its step line, and what to do at its start
 local STEP = {
   fly = { "Fly to %s", "Talk to the flight master" }, boat = { "Boat to %s", "Wait for the boat" },
@@ -1537,7 +1538,7 @@ function TV.WayLines()
     else
       local steps = {}
       for _, l in ipairs(plan.legs) do
-        steps[#steps + 1] = string.format("%s (%d min)", l.step or ("Walk to " .. (t.name or "it")), max(1, floor(l.walk + l.min + 0.5)))
+        steps[#steps + 1] = string.format("%s (%d min)", l.step or ("Walk to " .. ((A.WalkTo and A.WalkTo(t)) or t.name or "it")), max(1, floor(l.walk + l.min + 0.5)))
       end
       out[1] = string.format("Way to %s, about %d min: %s.", t.name or "it", max(1, floor(plan.min + 0.5)), table.concat(steps, ". "))
     end
