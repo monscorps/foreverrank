@@ -259,7 +259,7 @@ function Mini.List(noStep)
     local gl = {}
     if type(m) == "number" then
       for _, g in ipairs(QB.QuestMap.GiversNear(m, QB.state.level)) do
-        local d = { m = g.m, x = g.x, y = g.y, name = QB.Data.NPC[g.npc][1], kind = "give", n = 1 }
+        local d = { m = g.m, x = g.x, y = g.y, name = QB.Data.NPC[g.npc][1], kind = "give", n = 1, low = g.low }
         local w = not taken[keyOf(d)] and worldPos(d)
         if w then
           d.c, d.wx, d.wy = w.c, w.wx, w.wy
@@ -270,6 +270,7 @@ function Mini.List(noStep)
           end
           if home then
             home.n = home.n + 1
+            if not g.low then home.low = nil end
             for _, id in ipairs(g.ids) do home.ids[#home.ids + 1] = id end
             if d.far < home.far then home.far = d.far end
           else
@@ -737,6 +738,7 @@ local function addItem(v, me, d, w, wx, wy, focus)
   if d.kind == "obj" then size = even(size * weightScale(w)) end
   local x, y, alpha = place(v, d.kind, wx, wy, size)
   if not x then return nil end
+  if d.low then alpha = alpha * 0.5 end -- (a ! of grey quests alone, Low-level quests on: half bright, as the game's)
   local n = #items + 1
   local it = itemPool[n] or {}
   itemPool[n], items[n] = it, it

@@ -1330,6 +1330,7 @@ local DEFAULTS = {
   -- welcome: "fresh" asks the auto choice in the step frame once; "ask" asks a 5.x save whether to guide (QB.Migrate600)
   guide = { on = true, frame = true, locked = false, scale = 1, hideTracker = true },
   minimapGivers = true, -- a ! on the minimap for every quest you can take now (Minimap.lua)
+  mapLowLevel = false, -- (6.1.1) quests the game counts as trivial (grey): their ! on the world map, the Map page and the minimap
   tipProgress = true,   -- "Kobold Vermin: 3/8 (Kobold Camp Cleanup)" in mob and object tooltips (Tips.lua)
 }
 

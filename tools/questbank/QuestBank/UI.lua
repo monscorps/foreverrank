@@ -3861,10 +3861,10 @@ function UI:CreateSettingsView(parent)
     { "mapIcons", LEFT, y0 - 80, "Quest icons on the world map", 340,
       "On each zone's map, drawn as the game draws its own pins: a ! where quests you can take start, the game's quest pin with its turn-in mark where finished ones are handed in and in progress where to do the ones in your log, and each dungeon's entrance with how many of its quests you have done. Click one for a waypoint; Shift-click a ! to put its quests on your pick-up list. The route's pins have their own switch above." },
     { "mapGive", LEFT + 24, y0 - 108, "Quests you can pick up", 316,
-      "A yellow ! on the NPCs with quests for your faction, class and level that you haven't done. Grey (low-level) quests are left off, as the game does, and so are quests that need a profession or an item first. Where a route pin stands on the NPC, that pin's tooltip lists the NPC's quests instead." },
-    { "mapTurn", LEFT + 24, y0 - 136, "Hand-ins", 316,
+      "A yellow ! on the NPCs with quests for your faction, class and level that you haven't done. Grey (low-level) quests are left off, as the game does, unless Low-level quests is ticked; so are quests that need a profession or an item first. Where a route pin stands on the NPC, that pin's tooltip lists the NPC's quests instead." },
+    { "mapTurn", LEFT + 24, y0 - 164, "Hand-ins", 316,
       "The game's quest pin, with its turn-in mark, on the NPC each finished quest in your log goes to." },
-    { "mapObj", LEFT + 24, y0 - 164, "Objectives and quest items", 316,
+    { "mapObj", LEFT + 24, y0 - 192, "Objectives and quest items", 316,
       "For the quests in your log, the game's in-progress pin where to do each objective you haven't finished; for quests that start from an item, a red ! where it drops. Each tooltip says where the spot comes from: Wowhead Forever, Classic data or players' games." },
   }
   for _, r in ipairs(MAP_ICONS) do
@@ -3884,8 +3884,21 @@ function UI:CreateSettingsView(parent)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
     v[key] = row
   end
+  -- (6.1.1) the quests the game counts as trivial (grey): their ! off unless asked ("we also show low level quests as
+  -- default?"), on the world map, the Map page and the minimap's (QuestMap.lua givers)
+  v.mapLow = checkRow(p, LEFT + 48, y0 - 136, "Low-level quests", 292)
+  v.mapLow:SetScript("OnClick", function(self)
+    QB:Settings().mapLowLevel = self:GetChecked() and true or false
+    if QB.QuestMap and QB.QuestMap.Update then QB.QuestMap:Update() end
+    if QB.Mini then QB.Mini.Invalidate(); QB.Mini.Place() end
+    UI:Refresh()
+  end)
+  tooltip(v.mapLow, function(tip)
+    tip:AddLine("Low-level quests", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Quests the game counts as trivial (grey) for your level: their ! on the world map, the Map page and the minimap, half bright as the game draws them. Off, they are left out, as the game leaves them out.", 1, 1, 1, true)
+  end)
   -- the route on the minimap (Minimap.lua)
-  v.minimapPins = checkRow(p, LEFT, y0 - 192, "Route stops, pick-ups and dungeon entrances on the minimap", 340)
+  v.minimapPins = checkRow(p, LEFT, y0 - 220, "Route stops, pick-ups and dungeon entrances on the minimap", 340)
   v.minimapPins:SetScript("OnClick", function(self) QB:Settings().minimapPins = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
   tooltip(v.minimapPins, function(tip)
     tip:AddLine("The minimap", GOLD[1], GOLD[2], GOLD[3])
@@ -3893,17 +3906,17 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("/qb minimap reset puts it back as the game had it.", 0.6, 0.6, 0.6, true)
   end)
   -- its far zoom and drag (MinimapView.lua), your trails on it (Walk.lua); the other switches are on its own menu
-  v.mmExtended = checkRow(p, LEFT, y0 - 220, "Far zoom and drag", 340)
+  v.mmExtended = checkRow(p, LEFT, y0 - 248, "Far zoom and drag", 340)
   v.mmExtended:SetScript("OnClick", function(self) QB:Settings().mmExtended = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Update(0) end end)
   tooltip(v.mmExtended, function(tip)
     tip:AddLine("Far zoom and drag", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Wheel out past the game's widest, over the game's own minimap tiles. Drag to look around; it comes back to you.", 1, 1, 1, true)
   end)
-  v.walkShow = checkRow(p, LEFT, y0 - 248, "Your walked trails", 340)
+  v.walkShow = checkRow(p, LEFT, y0 - 276, "Your walked trails", 340)
   v.walkShow:SetScript("OnClick", function(self) QB:Settings().walkShow = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
   -- how the markers are drawn (Minimap.lua, Arrow.lua): QuestTrail's look, or the game's own icons; the button cycles
   v.markerStyle = button(p, "QuestTrail", 90)
-  v.markerStyle:SetPoint("TOPLEFT", LEFT + 4, y0 - 276)
+  v.markerStyle:SetPoint("TOPLEFT", LEFT + 4, y0 - 304)
   UI.MARKER_STYLES = { questtrail = "QuestTrail", game = "Game icons" }
   v.markerStyle:SetScript("OnClick", QB.Safe(function()
     local set = QB:Settings()
@@ -3920,7 +3933,7 @@ function UI:CreateSettingsView(parent)
   v.minimapHint:SetPoint("LEFT", v.markerStyle, "RIGHT", 8, 0)
   v.minimapHint:SetText("Marker style. Right-click the minimap for the rest.")
   -- the Map: QuestBank's map page on the Map key and the sidebar (MapPage.lua), or the game's world map (UI.OpenMap)
-  v.mapPage = checkRow(p, LEFT, y0 - 304, "Map key opens QuestBank's map", 340)
+  v.mapPage = checkRow(p, LEFT, y0 - 332, "Map key opens QuestBank's map", 340)
   v.mapPage:SetScript("OnClick", function(self) QB:Settings().mapPage = self:GetChecked() and true or false; UI:Refresh() end)
   tooltip(v.mapPage, function(tip)
     tip:AddLine("QuestBank's map", GOLD[1], GOLD[2], GOLD[3])
@@ -3929,7 +3942,7 @@ function UI:CreateSettingsView(parent)
     if not (QB.MapPage and QB.MapPage.Available()) then tip:AddLine("Only on the Forever client.", 1, 0.5, 0.3, true) end
   end)
   v.map = button(p, "Game's map", 110)
-  v.map:SetPoint("TOPLEFT", LEFT + 4, y0 - 332)
+  v.map:SetPoint("TOPLEFT", LEFT + 4, y0 - 360)
   v.map:SetScript("OnClick", QB.Safe(function() UI.OpenMap() end, "settings: map"))
   v.mapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
   v.mapLabel:SetPoint("LEFT", v.map, "RIGHT", 8, 0)
@@ -3937,7 +3950,7 @@ function UI:CreateSettingsView(parent)
   -- QuestBank's quest icons on the maps (Pins.lua, mapIconPct): half the game's size by default; the button cycles
   UI.ICON_SIZES = { { 50, "Half size" }, { 75, "Three quarters" }, { 100, "Game's size" } }
   v.iconSize = button(p, "Half size", 110)
-  v.iconSize:SetPoint("TOPLEFT", LEFT + 4, y0 - 360)
+  v.iconSize:SetPoint("TOPLEFT", LEFT + 4, y0 - 388)
   v.iconSize:SetScript("OnClick", QB.Safe(function()
     local set = QB:Settings()
     local i = 1
@@ -3958,7 +3971,7 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("The game's own world map on your zone, with QuestBank's route and icons on it.", 1, 1, 1, true)
     tip:AddLine(QB.MapPage and QB.MapPage.KEYS or "Keys for it and for each page: Key Bindings, QuestBank.", 0.6, 0.6, 0.6, true)
   end)
-  yl = y0 - 400
+  yl = y0 - 428
 
   ----------------------------------------------------------------------------------------------------------------
   -- the modules, one heading each: the interact light (left), the camp bar, the timers, the health and mana
@@ -4455,6 +4468,7 @@ function UI:RefreshSettingsView(v)
   v.guideFrame:SetEnabled(gd.on == true); v.guideLocked:SetEnabled(gd.on == true); v.guideScale:SetEnabled(gd.on == true)
   v.guideTracker:SetEnabled(gd.on == true)
   v.minimapGivers:SetChecked(set.minimapGivers ~= false)
+  v.mapLow:SetChecked(set.mapLowLevel == true)
   v.tipProgress:SetChecked(set.tipProgress ~= false)
   local newest = QB.newest
   v.verText:SetText(newest and string.format("You run QuestBank %s. |cff6cdc74%s runs %s: time to update.|r", QB.version, newest.who or "Someone", newest.version)

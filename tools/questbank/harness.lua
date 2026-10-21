@@ -923,6 +923,8 @@ local function newClient(o)
     GetLogIndexForQuestID = function(id) for i, e in ipairs(c.log) do if e[1] == id then return i + 2 end end end,
     -- the quest's tag: elite (c.elite[id]) as the Forever client says it, tag 1
     GetQuestTagInfo = function(id) if (c.elite or {})[id] then return { tagID = 1, isElite = true, tagName = "Elite" } end return nil end,
+    -- the game's own word on a quest, in the log or not (QuestOfferDataProvider.lua hides an offer by it): c.trivial[id]
+    IsQuestTrivial = function(id) return (c.trivial or {})[id] == true end,
   }
   local KALIMDOR = { [1411] = true, [1412] = true, [1413] = true, [1438] = true, [1439] = true, [1440] = true, [1441] = true, [1442] = true,
     [1443] = true, [1444] = true, [1445] = true, [1446] = true, [1447] = true, [1448] = true, [1449] = true, [1450] = true, [1451] = true,
@@ -17850,6 +17852,61 @@ end)()
     SF.Apply()
     local p = env.QuestBankStep.__points[1]
     assert(p.point == "CENTER" and p.x == 200 and p.y == 150, "a dragged place kept")
+  end }
+
+  -- C. "we also show low level quests as default?": QuestBank's maps judged grey by the catalog's quest level and a
+  -- level range (QuestMap.lua greyRange: UnitQuestTrivialLevelRange, else Classic's rule), never by the game's own word
+  -- (C_QuestLog.IsQuestTrivial, which the game's own map hides its offers by: QuestOfferDataProvider.lua), so a quest
+  -- the game counts as trivial still had its ! on the world map, the Map page and the minimap. Now hidden there unless
+  -- "Low-level quests" is on, then drawn half bright as the game draws a trivial offer
+  F61CASES[#F61CASES + 1] = { "low-level quests: hidden on the world map, the Map page and the minimap unless asked", function()
+    local c = char("Hedda", "WARRIOR", "Warrior", 1, {}, { level = 25, map = 1437, world = { 0, -3700, -800 } })
+    local QB, QM, s = c.QB, c.QB.QuestMap, c.QB:Settings()
+    local function ids(list) local t = {} for _, g in ipairs(list) do for _, id in ipairs(g.ids or {}) do t[id] = true end end return t end
+    local before = QM.GiversNear(1437, 25)
+    assert(#before > 2, "Wetlands at 25: quests to take")
+    local X = before[1].ids[1]
+    assert(s.mapLowLevel == false, "the setting: off by default")
+    -- the game says X is trivial: gone from the minimap's givers, the world map's icons and the Map page's list
+    c.trivial = { [X] = true }
+    assert(not ids(QM.GiversNear(1437, 25))[X], "the game's trivial quest: no ! for the minimap")
+    local function onMap()
+      for _, d in ipairs(QM:Build(1437)) do if d.kind == "give" then for _, q in ipairs(d.quests or {}) do if q.id == X then return d end end end end
+    end
+    assert(not onMap(), "nor on the world map")
+    local _, _, pick = QM.ZoneQuests(1437)
+    local inList = false
+    for _, q in ipairs(pick) do if q.id == X then inList = true end end
+    assert(not inList, "nor in the Map page's list")
+    -- shown when asked, half bright as the game draws a trivial offer
+    s.mapLowLevel = true
+    assert(ids(QM.GiversNear(1437, 25))[X], "Low-level quests on: the minimap's !")
+    local d = onMap()
+    assert(d and (d.trivial or #d.quests > 1), "and the world map's, a trivial one marked")
+    local g
+    for _, x in ipairs(QM.GiversNear(1437, 25)) do for _, id in ipairs(x.ids) do if id == X then g = x end end end
+    assert(g and (g.low or #g.ids > 1), "the minimap's giver marked low when all its quests are")
+    QB.Mini.Invalidate()
+    local mini
+    for _, e in ipairs(QB.Mini.List(true)) do if e.kind == "give" then for _, id in ipairs(e.ids or {}) do if id == X then mini = e end end end end
+    assert(mini and (mini.low or #mini.ids > 1), "on the minimap's list, half bright when alone")
+    -- and the ones grey by their level alone: Elwynn's at 25, none by default, some when asked
+    s.mapLowLevel = false
+    local n0 = #QM.GiversNear(1429, 25)
+    s.mapLowLevel = true
+    local n1 = #QM.GiversNear(1429, 25)
+    assert(n1 > n0, string.format("Elwynn's grey quests: %d shown by default, %d when asked", n0, n1))
+    s.mapLowLevel = false
+    -- the row in the map section
+    QB.UI:Open(5)
+    local v5 = QB.UI.views[5]
+    assert(v5.mapLow and not v5.mapLow:GetChecked() and v5.mapLow.label:GetText() == "Low-level quests", "the map section's row, off")
+    v5.mapLow:SetChecked(true); v5.mapLow.__scripts.OnClick(v5.mapLow, "LeftButton")
+    assert(s.mapLowLevel == true, "ticked: shown")
+    v5.mapLow:SetChecked(false); v5.mapLow.__scripts.OnClick(v5.mapLow, "LeftButton")
+    -- a save from before has no such setting: off
+    local old = char("Oskar", "WARRIOR", "Warrior", 1, {}, { level = 25, saved = { settings = { v544 = true, v600 = true } } })
+    assert(old.QB:Settings().mapLowLevel == false, "an old save: off")
   end }
 
   for _, case in ipairs(F61CASES) do

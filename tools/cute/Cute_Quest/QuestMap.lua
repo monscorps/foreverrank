@@ -198,7 +198,17 @@ local function greyRange(level)
   if level < 60 then return floor(level / 5) end
   return 8
 end
-local function grey(q, level, range) return (q.lvl or 0) > 0 and level - q.lvl > range end
+-- grey: the game's own word first (C_QuestLog.IsQuestTrivial, for a quest in the log or not: the game's map hides its
+-- offers by it, QuestOfferDataProvider.lua), or the catalog's level that far below yours. 6.1.1: the level alone
+-- missed what the game counts as trivial ("we also show low level quests as default?")
+local function grey(q, level, range)
+  local f = C_QuestLog and C_QuestLog.IsQuestTrivial
+  if f and q.id then
+    local ok, v = pcall(f, q.id)
+    if ok and QB.Plain(v) == true then return true end
+  end
+  return (q.lvl or 0) > 0 and level - q.lvl > range
+end
 function QM.Grey(q, level) return grey(q, level, greyRange(level)) end
 
 local function num(v)
@@ -406,11 +416,13 @@ local function unchecked(q)
 end
 QM.Unchecked = unchecked
 
--- the quests you can take now from the NPCs of map m: what the game would show a ! for (QM:Build, QM.ZoneQuests)
+-- the quests you can take now from the NPCs of map m: what the game would show a ! for (QM:Build, QM.ZoneQuests). Grey
+-- ones only with "Low-level quests" on (mapLowLevel, 6.1.1: off), then out.low[id] says which
 local function givers(m, level)
   local s = QB.state
   level = level or s.level or 1
   local range = greyRange(level)
+  local low = QB:Settings().mapLowLevel == true
   local out = {}
   for _, g in ipairs(giversOn(m) or {}) do
     for _, id in ipairs(g.ids) do
@@ -418,7 +430,15 @@ local function givers(m, level)
       local n = q and q.give
       if n and n.m == m and not q.repeatable and not q.sodLeftover and not unchecked(q) and not s.log[id] then
         local st = QB:Status(q)
-        if st.code == "todo" and not st.behind and not grey(q, level, range) then out[#out + 1] = q end
+        if st.code == "todo" and not st.behind then
+          if not grey(q, level, range) then
+            out[#out + 1] = q
+          elseif low then
+            out[#out + 1] = q
+            out.low = out.low or {}
+            out.low[id] = true
+          end
+        end
       end
     end
   end
@@ -429,17 +449,21 @@ end
 -- map's ! uses. Each: the NPC's index, its quest ids in id order, its place on the map (D.NPC's row: map, x, y)
 function QM.GiversNear(m, level)
   local out, byNpc = {}, {}
-  for _, q in ipairs(givers(m, level)) do
+  local list = givers(m, level)
+  local low = list.low
+  for _, q in ipairs(list) do
     local idx = q.giveIdx
     local n = idx and idx > 0 and D.NPC[idx]
     if n and not (q.give and q.give.inside) then
       local g = byNpc[idx]
       if not g then
-        g = { npc = idx, ids = {}, m = n[2], x = n[3], y = n[4] }
+        -- (low: every quest of this giver grey, drawn half bright)
+        g = { npc = idx, ids = {}, m = n[2], x = n[3], y = n[4], low = true }
         byNpc[idx] = g
         out[#out + 1] = g
       end
       g.ids[#g.ids + 1] = q.id
+      if not (low and low[q.id]) then g.low = nil end
     end
   end
   table.sort(out, function(a, b) return a.npc < b.npc end)
@@ -550,9 +574,12 @@ function QM:Build(m, page)
       if n and n.m == m then atNpc("turn", n, q) end
     end
   end
-  -- ! where the quests you can take now start
+  -- ! where the quests you can take now start (grey ones only with Low-level quests on: low)
+  local low
   if set.mapGive ~= false then
-    for _, q in ipairs(givers(m)) do atNpc("give", q.give, q) end
+    local gl = givers(m)
+    low = gl.low
+    for _, q in ipairs(gl) do atNpc("give", q.give, q) end
   end
   -- what each icon shows: its hand-ins (quests), and the quests to pick up there (on a ?, offers); the family of
   -- the game's pin (Recurring for repeatables) and the level the game gives it (a ? among the quest pins, in the
@@ -574,6 +601,11 @@ function QM:Build(m, page)
     end
     if d.offers and #d.offers == 0 then d.offers = nil end
     if d.index == 999 then d.index = nil end
+    -- a ! whose quests are all grey: half bright, as the game draws a trivial offer
+    if d.kind == "give" and low then
+      d.trivial = true
+      for _, q in ipairs(d.quests) do if not low[q.id] then d.trivial = nil break end end
+    end
   end
   -- the ! and ? first: the cap below only ever trims marks and areas
   for _, d in ipairs(npcs) do
@@ -629,7 +661,7 @@ function QM:Build(m, page)
       if q and not s.log[it.id] then
         if starts[it.id] == nil then
           local st = QB:Status(q)
-          starts[it.id] = st.code == "item" and not grey(q, level, range) and {} or false
+          starts[it.id] = st.code == "item" and (set.mapLowLevel == true or not grey(q, level, range)) and {} or false
           if starts[it.id] then groups[#groups + 1] = starts[it.id] end
         end
         local g = starts[it.id]
@@ -973,7 +1005,7 @@ local READY = "Interface\\RaidFrame\\ReadyCheck-Ready"
 -- a ! (the quests you can take there, or where the item that starts one drops: red) or a ? (complete) or a mark (in
 -- progress): the look for what the pin is, in the family of its quests
 function Icon:Setup(d)
-  if d.kind == "give" then P.StyleOffer(self, { family = d.family })
+  if d.kind == "give" then P.StyleOffer(self, { family = d.family, trivial = d.trivial })
   elseif d.kind == "start" then P.StyleOffer(self, { family = d.family, drop = true })
   else P.StylePoi(self, { complete = d.kind == "turn", family = d.family }) end
 end

@@ -18,6 +18,8 @@ function M.Settings(_, col)
   col:Check("Route pins on the world map", s.pins ~= false, true, function(on) pins(s, on) end)
   col:Check("Route on the minimap", s.minimapPins ~= false and s.minimapLines ~= false, true, function(on) s.minimapPins, s.minimapLines = on, on; mini() end)
   col:Check("A ! on the minimap for quests you can take", s.minimapGivers == true, true, function(on) s.minimapGivers = on; mini() end)
+  -- (6.1.1) grey quests' ! on the world map and the minimap only when asked (the engine's QuestMap.lua givers)
+  col:Check("Low-level quests", s.mapLowLevel == true, true, function(on) s.mapLowLevel = on; if E.QuestMap and E.QuestMap.Update then E.QuestMap:Update() end; mini() end)
 end
 
 -- the switch: the engine's map flags with the box (QB.Follow keeps a row's choice across off and on). Before the

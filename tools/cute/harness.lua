@@ -4826,6 +4826,13 @@ do
     assert(not texts(rone):find("Lock the step frame", 1, true) and not texts(rone):find("foreverrank.com", 1, true) and texts(rone):find("Step frame", 1, true), "Quests: no lock row, no note row")
     rone.C.UI:Open("settings", "map")
     assert(not texts(rone):find("far view", 1, true) and texts(rone):find("Route pins on the world map", 1, true), "Map: no far view row")
+    -- 6.1.1: low-level (grey) quests' ! off unless asked (QuestBank's map section has the same row)
+    local low = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Low-level quests" end)
+    assert(low and not low:GetChecked() and rone.env.CuteQuestDB.settings.mapLowLevel == false, "Map: the Low-level quests row, off:\n" .. texts(rone))
+    click(low)
+    assert(rone.env.CuteQuestDB.settings.mapLowLevel == true, "ticked: the engine's setting on")
+    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Low-level quests" end))
+    assert(rone.env.CuteQuestDB.settings.mapLowLevel == false, "and off again")
     rone.C.UI:Open("settings", "camp")
     assert(not texts(rone):find("Sleeping bag", 1, true) and not texts(rone):find("Sellers", 1, true) and texts(rone):find("Camp bar", 1, true), "Camp: the bar, the banner and the light alone:\n" .. texts(rone))
     -- 6.1.1: the party's buffs (QuestBank's camp section has the same row); six rows at most in Camp and in Map
