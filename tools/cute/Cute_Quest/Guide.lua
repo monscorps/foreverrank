@@ -106,6 +106,45 @@ function G.Short(s)
   return nil
 end
 
+-- (the launch round) the step frame's words in parts: the owner's frame read "Hand in In Nightmares" / "Hand in The
+-- Absent Minded Prospector" / "Hand in Ziz Fizziks", one stop or three trips nobody could tell, and five quests share
+-- the Prospector's name. Now a step carries its leg of the route (s.stop, s.mins, s.way, s.leg: Replan) and the frame
+-- shows, beside the kind's game icon, the name (G.Title), who and where (G.Where, "Mathrengyl Bearwalker - Darnassus";
+-- G.Place, the stop alone) and the minutes to that stop (G.Mins)
+-- the name: a quest's for a pick-up or a hand-in (the icon says which), "3 quests to hand in" for several, else the
+-- step's own words
+function G.Title(s)
+  if not s then return "" end
+  local k = s.kind
+  if k == "accept" then return questName(s.qid) end
+  if k == "handin" then return (s.n and s.n > 1) and string.format("%d quests to hand in", s.n) or questName(s.qid) end
+  return G.Text(s)
+end
+-- where: the leg's stop (the town, or a place out in a zone), else the zone the step's spot is in
+function G.Place(s)
+  if not s then return nil end
+  return s.stop or (s.m and QB.Data.MAPNAME and QB.Data.MAPNAME[s.m]) or nil
+end
+-- who and where: the NPC of a pick-up or a hand-in, the quest of an objective spot, then the place; the place alone
+-- where nobody is to be found (a dungeon's Do step, travel, training)
+function G.Where(s)
+  if not s then return nil end
+  local place = G.Place(s)
+  local who
+  if (s.kind == "accept" or s.kind == "handin") and s.npc then who = npcName(s.npc)
+  elseif s.kind == "objective" and s.obj ~= "d" and s.qid then who = questName(s.qid) end
+  if who and place and who ~= place then return who .. " - " .. place end
+  return who or place
+end
+-- the minutes to the step's stop from the stop before it (the plan's leg), where a new leg starts: nil on the leg of the
+-- step before it (prev), for a step of no leg, and under half a minute
+function G.Mins(s, prev)
+  if not (s and s.leg and s.mins) then return nil end
+  if prev and prev.leg == s.leg then return nil end
+  if s.mins < 0.5 then return nil end
+  return math.floor(s.mins + 0.5)
+end
+
 -- the place of a stop's NPC, in continent yards and on its map (Data.lua's D.NPC row: name, uiMap, x, y, continent,
 -- world x, world y)
 local function placeNpc(s, idx)
@@ -682,9 +721,10 @@ function G.Replan()
       end
     end
   end
-  for _, leg in ipairs(legs) do
+  for li, leg in ipairs(legs) do
     local stop = leg.stop
     if stop then
+      local n0 = #G.steps
       -- the objectives of this stop's quests still open (the target's quest is moved first below); one with no spot
       -- in the world gets its Do step (doStep) and no hand-in until it is complete
       for _, row in ipairs(leg.rows or {}) do
@@ -714,6 +754,11 @@ function G.Replan()
         end
       end
       pickupsAt(stop)
+      -- the leg on each step made for it: its stop's name, the minutes to it from the stop before, how, which leg
+      for i = n0 + 1, #G.steps do
+        local s = G.steps[i]
+        s.stop, s.mins, s.way, s.leg = stop.name, leg.travel, leg.kind, li
+      end
     end
   end
   -- the quests held and not done that the route leaves out (Model.lua's route.waiting: a dungeon's, nothing to hand
@@ -740,6 +785,7 @@ function G.Replan()
     local s = step("accept")
     s.qid = d.qid
     placeNpc(s, d.idx)
+    s.stop = s.m and QB.Data.MAPNAME and QB.Data.MAPNAME[s.m] or nil -- (no stop of the route: its zone)
     G.steps[#G.steps + 1] = s
     doneQ[d.qid] = true
   end

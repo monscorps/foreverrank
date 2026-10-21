@@ -17015,10 +17015,12 @@ end)()
     SF.Apply(); SF.Refresh()
     local f = c.env.QuestBankStep
     assert(f and f:IsShown(), "the frame is up")
-    -- (a row too long for the frame shows the step's short form, else is cut with "...": Arrow.lua's A.Fit)
-    local function rowIs(t, s) local got, full = t:GetText(), G.Text(s); return got == full or got == G.Short(s) or (got:sub(-3) == "..." and full:sub(1, #got - 3) == got:sub(1, -4)) end
-    assert(rowIs(f.now, G.steps[1]) and rowIs(f.next1, G.steps[2]) and rowIs(f.next2, G.steps[3]),
-      "the three lines: " .. tostring(f.now:GetText()) .. " | " .. tostring(f.next1:GetText()) .. " | " .. tostring(f.next2:GetText()))
+    -- (the launch round: the step now's name, who and where under it; the next two, name and place on one line; a row
+    -- too long for the frame is cut with "...", the place kept)
+    local function rowIs(t, want) local got = t:GetText(); return got == want or got:find("...", 1, true) ~= nil end
+    local function nextRow(s) local p = G.Place(s); return p and (G.Title(s) .. " - " .. p) or G.Title(s) end
+    assert(rowIs(f.now, G.Title(G.steps[1])) and rowIs(f.rows[1].where, G.Where(G.steps[1]) or "") and rowIs(f.next1, nextRow(G.steps[2])) and rowIs(f.next2, nextRow(G.steps[3])),
+      "the three steps: " .. tostring(f.now:GetText()) .. " / " .. tostring(f.rows[1].where:GetText()) .. " | " .. tostring(f.next1:GetText()) .. " | " .. tostring(f.next2:GetText()))
     local r, g = f.next1:GetTextColor()
     assert(r < 0.8 and g < 0.8, "the next steps greyed")
     assert(f.time:GetText():find(" to level 6$"), "the time line: " .. tostring(f.time:GetText()))
@@ -17059,9 +17061,9 @@ end)()
   end }
 
   -- a pick-up too long for the row (6.0.0's review: "Accept Dwarven Outfitters from Sten Stou..." cut at the giver's
-  -- name): the row says "Accept Dwarven Outfitters" and its tooltip the whole line with the giver; a row that says
-  -- it all has no tooltip
-  G6CASES[#G6CASES + 1] = { "the step frame: a long pick-up shows Accept X, the giver in the row's tooltip", function()
+  -- name). The launch round: the row names the quest beside the pick-up's icon, the step now's second line the giver
+  -- and where, and every row has a tooltip with the whole step and the giver
+  G6CASES[#G6CASES + 1] = { "the step frame: a pick-up names its quest, the giver under it and in every row's tooltip", function()
     local c = newClient({ name = "Coldridge", level = 1, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
       race = "Dwarf", log = {}, done = {}, world = { 0, -6215, 330 }, map = 1426, bagSlots = {}, bind = "Kharanos" })
     login(c)
@@ -17069,25 +17071,24 @@ end)()
     QB:Settings().welcome = nil
     settle(c); SF.Apply(); SF.Refresh()
     local f = c.env.QuestBankStep
-    local cut = 0
+    local pickups = 0
     for i = 1, 3 do
       local s = G.steps[i]
-      local t = f.rows[i].text
       if s then
-        local full = G.Text(s)
         lines = {}
         f.rows[i].__scripts.OnEnter(f.rows[i])
-        if t:GetText() == full then
-          assert(#lines == 0, "a row that says it all has no tooltip: " .. table.concat(lines, " | "))
-        else
-          assert(s.kind == "accept" and t:GetText() == G.Short(s) and not t:GetText():find("...", 1, true), "a cut pick-up row says Accept X: " .. t:GetText())
-          assert(#lines == 1 and lines[1] == full, "its tooltip is the whole line: " .. table.concat(lines, " | "))
-          cut = cut + 1
+        assert(lines[1] == G.Text(s), "every row's tooltip starts with the whole step: " .. table.concat(lines, " | "))
+        if s.kind == "accept" then
+          local giver = c.QB.Data.NPC[s.npc][1]
+          assert(table.concat(lines, " | "):find(giver, 1, true), "a pick-up's tooltip names the giver: " .. table.concat(lines, " | "))
+          assert(f.rows[i].text:GetText():find(G.Title(s):sub(1, 6), 1, true) and not f.rows[i].text:GetText():find("^Accept "), "the row names the quest beside the pick-up's icon: " .. f.rows[i].text:GetText())
+          if i == 1 then assert((f.rows[1].where:GetText() or ""):find(giver, 1, true), "the step now's second line: the giver: " .. tostring(f.rows[1].where:GetText())) end
+          pickups = pickups + 1
         end
         f.rows[i].__scripts.OnLeave(f.rows[i])
       end
     end
-    assert(cut >= 1, "a pick-up row too long for the frame (Sten Stoutarm's)")
+    assert(pickups >= 1, "a pick-up among the steps (Sten Stoutarm's)")
     assert(G.Short(G.steps[1]) == "Accept Dwarven Outfitters" and G.Short({ kind = "handin" }) == nil, "the short form is the pick-up's alone")
   end }
 
@@ -17851,6 +17852,91 @@ end)()
     d.QB:Settings().welcome = nil; d.QB.StepFrame.Apply(); d.QB.StepFrame.Refresh()
     local g = d.env.QuestBankStep
     assert(d.env.ObjectiveTrackerFrame:GetAlpha() == 0 and not (g.note and g.note:IsShown()), "told before: hidden, nothing said")
+  end }
+
+  -- 6. The owner's step frame (1-step-frame-handins): "Hand in In Nightmares" / "Hand in The Absent Minded
+  -- Prospector" / "Hand in Ziz Fizziks", the quest's name and nothing else, so nobody could tell one stop from three
+  -- trips, and the Prospector's name belongs to five quests handed in at four places. Now each step carries its leg of
+  -- the route (G.Replan: s.stop, s.mins, s.way, s.leg) and the frame shows the kind's game icon, the name, who and where
+  -- under it with the minutes, and the next two with their place and "+N min" where a new trip starts; every row's
+  -- tooltip has the whole step, the NPC and the place, the minutes and the XP
+  ENGCASES[#ENGCASES + 1] = { "each step says where: its icon, name, who and where, minutes; a tooltip on every row", function()
+    local c = char("Wayfarer", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -8914, -133 }, map = 1429, log = { { 7, 1 }, { 33, 0 } } })
+    local env, QB = c.env, c.QB
+    local G, SF, D = QB.Guide, QB.StepFrame, QB.Data
+    QB:Settings().welcome = nil
+    QB:SetAdded(15, true); QB:SetAdded(18, true)
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1)
+    QB.Model.Finish(); QB:Recompute(true); QB.Model.Finish(); tick(c, 1)
+    G.Replan()
+    -- a real plan: the steps made for a leg carry it; the minutes once a leg
+    local r = QB.Target.Route()
+    local tagged = 0
+    for i, s in ipairs(G.steps) do
+      if s.leg then
+        local leg = r.legs[s.leg]
+        assert(leg and s.stop == leg.stop.name and s.mins == leg.travel and s.way == leg.kind, "a step carries its leg: " .. G.Text(s))
+        tagged = tagged + 1
+        if i > 1 and G.steps[i - 1].leg == s.leg then assert(G.Mins(s, G.steps[i - 1]) == nil, "the minutes once a leg: " .. G.Text(s)) end
+      end
+      assert(G.Title(s) ~= "" and (G.Place(s) == nil or type(G.Place(s)) == "string"), "a name and a place for each step")
+    end
+    assert(tagged >= 1, "the route's steps carry their legs: " .. #G.steps .. " steps")
+    -- the owner's three hand-ins, as the Guide made them that day
+    local function npc(name) for i, n in ipairs(D.NPC) do if n[1] == name then return i end end end
+    local function hand(qid, who, stop, mins, leg)
+      local i = assert(npc(who), who)
+      local n = D.NPC[i]
+      return { kind = "handin", qid = qid, n = 1, npc = i, m = n[2], x = n[3], y = n[4], c = n[5], wx = n[6], wy = n[7], stop = stop, mins = mins, leg = leg }
+    end
+    local keep = G.steps
+    G.steps = { hand(3370, "Mathrengyl Bearwalker", "Darnassus", 11.2, 1), hand(731, "Archaeologist Hollee", "Auberdine", 4.4, 2),
+                hand(1483, "Ziz Fizziks", "Stonetalon Mountains (59, 62)", 9, 3) }
+    G.ver = G.ver + 1
+    SF.Apply(); SF.Refresh()
+    local f = env.QuestBankStep
+    local r1, r2, r3 = f.rows[1], f.rows[2], f.rows[3]
+    assert(r1.text:GetText() == "In Nightmares" and r1.where:GetText() == "Mathrengyl Bearwalker - Darnassus" and r1.mins:GetText() == "11 min",
+      "the step now: " .. r1.text:GetText() .. " / " .. r1.where:GetText() .. " / " .. r1.mins:GetText())
+    assert(r1.icon:IsShown() and (r1.icon.__atlas == "QuestTurnin" or r1.icon.__tex == D.TEX.questActive), "the hand-in's ? beside it: " .. tostring(r1.icon.__tex))
+    assert(r2.text:GetText():find(" - Auberdine$") and r2.text:GetText():find("^The Absent Mind") and r2.mins:GetText() == "+4 min",
+      "the next: name and place, the trip's minutes: " .. r2.text:GetText() .. " / " .. r2.mins:GetText())
+    assert(r3.text:GetText():find("^Ziz F") and r3.text:GetText():find("Stonetalon Mountains", 1, true) and r3.mins:GetText() == "+9 min",
+      "the third: " .. r3.text:GetText() .. " / " .. r3.mins:GetText())
+    -- the Prospector's five quests share a name: who and where tell them apart
+    local other = hand(729, "Prospector Remtravel", "Darkshore (35, 85)", 6, 2)
+    assert(QB.Quest.Get(729).name == QB.Quest.Get(731).name and G.Where(other) ~= G.Where(G.steps[2]), "one name, two hand-ins: " .. G.Where(other) .. " / " .. G.Where(G.steps[2]))
+    -- one trip, two hand-ins: the minutes once
+    G.steps[2].leg = 1
+    G.ver = G.ver + 1; SF.Refresh()
+    assert(r2.mins:GetText() == "", "the same stop as the step before: no minutes of its own")
+    -- every row's tooltip: the whole step, the NPC and the place, the minutes and the XP
+    for i = 1, 3 do
+      lines = {}
+      f.rows[i].__scripts.OnEnter(f.rows[i])
+      local tip = table.concat(lines, " | ")
+      local s = G.steps[i]
+      assert(lines[1] == G.Text(s) and tip:find(D.NPC[s.npc][1], 1, true) and tip:find(G.Place(s), 1, true) and tip:find(" XP", 1, true),
+        "row " .. i .. "'s tooltip: " .. tip)
+      if i ~= 2 then assert(tip:find("about %d+ min there"), "row " .. i .. "'s minutes: " .. tip) end
+      f.rows[i].__scripts.OnLeave(f.rows[i])
+    end
+    -- the arrow leads there: the step now's minutes are the arrow's, from where you stand
+    local A = QB.Arrow
+    local sv = { A.g, A.t }
+    A:Set(true)
+    A.g, A.t = { eta = 3.4, trail = {} }, { c = G.steps[1].c, wx = G.steps[1].wx + 5, wy = G.steps[1].wy }
+    SF.Refresh()
+    assert(r1.mins:GetText() == "3 min", "the arrow's minutes for the step now: " .. r1.mins:GetText())
+    A.g, A.t = sv[1], sv[2]
+    -- the layout at every scale, an item button up or not: nothing cut, nothing on anything
+    for _, sc in ipairs({ 0.8, 1, 1.2 }) do
+      SF.SetScale(sc); G.ver = G.ver + 1; SF.Refresh()
+      for _, pr in ipairs(checkLayout(f, "step frame, three trips, at " .. sc)) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+      STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(f, "Step frame: three trips at " .. sc)
+    end
+    SF.SetScale(1)
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
   end }
 
   for _, case in ipairs(ENGCASES) do
