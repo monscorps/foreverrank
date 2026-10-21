@@ -1207,6 +1207,19 @@ function SF.Tracker()
   end
 end
 SF.TrackerOut = function() return trackerOut end
+-- /cute diag's words for the game's tracker: out of sight or not, its alpha and scale as the client reads them now,
+-- the scale kept to put back, and whether Edit Mode has it
+function SF.TrackerDiag()
+  local t = tracker()
+  if not t then return "tracker: none" end
+  local okA, a = pcall(t.GetAlpha, t)
+  a = okA and QB.Plain(a) or nil
+  local sc = scaleOf(t)
+  return string.format("tracker: %s, alpha %s, scale %s, kept %s%s%s", trackerOut and "out of sight" or "shown",
+    type(a) == "number" and string.format("%.2f", a) or "?", sc and string.format("%.2f", sc) or "?",
+    trackerScale and string.format("%.2f", trackerScale) or "none", trackerEditing and ", in Edit Mode" or "",
+    trackerWait and ", waiting for the fight's end" or "")
+end
 -- Edit Mode, and the layouts it applies (SF.Init registers them)
 local function editMode(on)
   trackerEditing = on

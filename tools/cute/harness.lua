@@ -12512,6 +12512,23 @@ do
   end)
 end
 
+-- W18 (sub-project D): what only the live client can show of the look, in /cute diag (no names): the game's tracker
+-- (out of sight or not, its alpha and scale now, the scale kept to put back) and the game's map (how many of our
+-- quests the game drew itself, how many pins merged). The windows line stays the last
+do
+  isolated({ { name = "Rone-Forever", guid = guidOf("Rone"), rank = 1, rankName = "Officer", class = "WARRIOR", level = 20, online = true } }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+    login(c); tickAll(30)
+    local said = c.C.Diag()
+    local look
+    for _, l in ipairs(said) do if l:find("^diag look: ") then look = l end end
+    assert(look and look:find("tracker: ", 1, true) and look:find("game's map: ", 1, true) and not look:find("Rone", 1, true), "/cute diag's look line: " .. tostring(look))
+    assert(said[#said]:find("^diag windows: "), "the windows line last: " .. said[#said])
+    leave(c)
+    print("windows W18: /cute diag's look line: the game's tracker and the game's map, no names")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

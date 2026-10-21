@@ -150,6 +150,12 @@ do
   local coreDiag = C.Diag
   function C.Diag()
     local lines = coreDiag and coreDiag() or {}
+    -- (the look: the game's tracker and the game's map, while the Quests module is on: Cute_Quest's Band.lua)
+    local band = C.API and C.API.QuestBand
+    if band and type(band.Diag) == "function" then
+      local _, look = pcall(band.Diag)
+      lines[#lines + 1] = "diag look: " .. tostring(look)
+    end
     local ok, l = pcall(W.DiagLine)
     lines[#lines + 1] = ok and l or ("diag windows: " .. tostring(l))
     return lines

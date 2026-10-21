@@ -193,6 +193,14 @@ Cute.QuestBand = {
     local name = E.UI.Short(q.name, 24)
     E.UI:ShowMenu(q.name, { { "Not now", function() E.Guide.Skip(q.id, "later") end }, { "Drop " .. name, function() E.Guide.Skip(q.id, "drop") end } })
   end,
+  -- /cute diag's look line (the windows round): the game's tracker and the game's map as only the live client shows
+  -- them, no names (StepFrame.lua SF.TrackerDiag, QuestMap.lua QM.DiagLine; an older QuestBank without them: "?")
+  Diag = function()
+    local SF, QM = E.StepFrame, E.QuestMap
+    local t = SF and type(SF.TrackerDiag) == "function" and SF.TrackerDiag() or "tracker: ?"
+    local m = QM and type(QM.DiagLine) == "function" and QM.DiagLine() or "game's map: ?"
+    return t .. "; " .. m
+  end,
 }
 -- the on-screen switches in Cute's menu (Quests (L) > Step frame, Direction arrow): the engine's own settings, the
 -- copy's (while QuestBank is loaded its settings are its own: none)

@@ -11500,6 +11500,9 @@ do
   -- (a save from 5.4.4 on, at half size: these cases weigh the pins' art at it; a new install draws the game's own size,
   -- windows D2)
   MQ:Settings().mapIconPct = 50
+  -- (these cases weigh each NPC's and each mark's own pin, so nothing merges here: the merge of pins that would touch
+  -- is windows D8's)
+  QMm.MERGE_PX = 0
   assert(QMm.provider, "on Forever the icons have their own provider on the world map")
   assert(#MQ.Pins.layers == 2 and MQ.Pins.watcher and MQ.Pins.watcher.__parent == M.map:GetCanvas(),
     "no hook on the world map (the mock's HookScript errors): both layers hear it shut as its providers, and a frame of QuestBank's on its canvas watches the keys")
@@ -21107,6 +21110,87 @@ do
   local q, qchest = gearChar("Plaingear", nil)
   assert(qchest.button.rim.__tex ~= "color" and qchest.arrow:GetWidth() == 12 and (not qchest.best or not qchest.best.q or qchest.up.face.__tex == qchest.best.q.icon), "QuestBank's own: the game's frame, the arrow between, the quest's icon")
   print("windows D7: the Gear page under Cute's skin: quality edges, the arrow on the upgrade, lifted names, the quest's source as the map draws it; QuestBank's own as before")
+end
+
+-- D8. Fewer pins on the game's own world map: where the game itself draws a pin for a quest (its quest POI for a quest in
+-- your log, C_QuestLog.GetQuestsOnMap; its offer for a quest line's start, C_QuestLine.GetAvailableQuestLines) QuestBank
+-- draws none of its own for that quest; and its pins that would touch at the map's zoom (closer than a pin, 22 px on
+-- screen) merge into one with a count on its corner (the hand-in's glyph first, then in progress, then the offer), its
+-- tooltip naming every one; zoomed in they part. QuestBank's own Map page draws them all
+do
+  local c = newClient({ name = "Thinner", level = 3, cap = 60, faction = "Alliance", className = "Priest", class = "PRIEST", classID = 5, race = "Human",
+    log = { { 7, 0 }, { 18, 0 }, { 33, 1 } }, done = {}, group = false, guild = false, world = { 0, -8914, -133 }, bind = "Northshire Abbey", riding = false,
+    bagSlots = {}, map = 1429 })
+  c.map.id = 1429
+  local QB, env = c.QB, c.env
+  local MD, QMm = QB.Data, QB.QuestMap
+  login(c)
+  QB:Settings().pins = false
+  -- two of quest 7's spots 10 px apart at the map's zoom (1002 px wide), one of quest 18's far off; both away from the
+  -- hand-in at Eagan Peltskinner (a ? near them would stand for them all, its glyph first)
+  MD.SN = { [1] = "Kobold Vermin", [2] = "Red Burlap Bandana" }
+  MD.SPOT = { [7] = "k,1,1429,700,200,25,c,1;k,1,1429,710,200,25,c,1", [18] = "c,5,1429,200,700,40,w,2" }
+  MD.SREQ = { [7] = "1:10", [18] = "5:12" }
+  c.objectives = { [7] = { { text = "Kobold Vermin slain: 3/10", finished = false, numFulfilled = 3, numRequired = 10 } },
+    [18] = { { text = "Red Burlap Bandana: 2/12", finished = false, numFulfilled = 2, numRequired = 12 } } }
+  local function redraw() QB:Recompute(true); QB.Model.Finish(); QB.Pins:Update(); QMm:Update() end
+  local function pins(kind) local out = {}; for _, f in ipairs(ours(c, "QuestBankQuestPinTemplate")) do if not kind or f.data.kind == kind then out[#out + 1] = f end end return out end
+  redraw()
+  local objs = pins("obj")
+  local merged
+  for _, f in ipairs(objs) do if f.data.count then merged = f end end
+  assert(merged and merged.data.count == 2 and merged.qbCount and merged.qbCount:IsShown() and merged.qbCount:GetText() == "2", "two marks 10 px apart: one pin with a count")
+  lines = {}; merged:OnMouseEnter(); merged:OnMouseLeave()
+  local tipText = table.concat(lines, "\n")
+  assert(tipText:find("Kobold", 1, true), "its tooltip names what is here:\n" .. tipText)
+  -- zoomed in four times: they part
+  c.map.scale = 4
+  for _, p in ipairs(c.map.providers) do if p.OnCanvasScaleChanged then p:OnCanvasScaleChanged() end end
+  tick(c, 1)
+  local parted = 0
+  for _, f in ipairs(pins("obj")) do if f.data.id == 7 and not f.data.count then parted = parted + 1 end end
+  assert(parted == 2, "zoomed in, the two marks part: " .. parted)
+  c.map.scale = 1
+  for _, p in ipairs(c.map.providers) do if p.OnCanvasScaleChanged then p:OnCanvasScaleChanged() end end
+  tick(c, 1)
+  -- the game draws quest 18's POI on this map: none of ours for it
+  local before = 0
+  for _, f in ipairs(pins("obj")) do if f.data.id == 18 then before = before + 1 end end
+  assert(before == 1, "quest 18's mark drawn while the game draws nothing for it")
+  env.C_QuestLog.GetQuestsOnMap = function(m) if m == 1429 then return { { questID = 18, x = 0.2, y = 0.7 } } end return {} end
+  -- (with the game's quest POIs off, the "questPOI" CVar, the game draws none: ours stay)
+  redraw()
+  local off = 0
+  for _, f in ipairs(pins("obj")) do if f.data.id == 18 then off = off + 1 end end
+  assert(off == 1 and QMm.gameDrawn == 0, "the game's quest POIs off: our mark stays")
+  c.cvars = c.cvars or {}; c.cvars.questPOI = "1"
+  redraw()
+  local after = 0
+  for _, f in ipairs(pins("obj")) do if f.data.id == 18 then after = after + 1 end end
+  assert(after == 0 and QMm.gameDrawn == 1, "the game's own POI for quest 18: none of ours")
+  -- the game offers a quest line's start: its ! is the game's
+  local give = pins("give")
+  assert(#give > 0, "a ! of ours to begin with")
+  local offered = give[1].data.quests[1].id
+  -- (a hidden one, the game's trivial offer, it draws only while the minimap tracks hidden quests: ours stays)
+  env.C_QuestLine = { GetAvailableQuestLines = function(m) if m == 1429 then return { { questID = offered, isHidden = true } } end return {} end }
+  redraw()
+  local still = false
+  for _, f in ipairs(pins("give")) do for _, q in ipairs(f.data.quests) do if q.id == offered then still = true end end end
+  assert(still, "the game's hidden offer, not drawn: our ! stays")
+  env.C_QuestLine = { GetAvailableQuestLines = function(m) if m == 1429 then return { { questID = offered } } end return {} end }
+  redraw()
+  for _, f in ipairs(pins("give")) do for _, q in ipairs(f.data.quests) do assert(q.id ~= offered, "the game's offer: no ! of ours for it") end end
+  env.C_QuestLog.GetQuestsOnMap, env.C_QuestLine, c.cvars.questPOI = nil, nil, nil
+  -- marks under the hand-in's ?: one pin, the hand-in's glyph, counting all three
+  MD.SPOT[7] = "k,1,1429,483,397,25,c,1;k,1,1429,493,397,25,c,1"
+  redraw()
+  local turn
+  for _, f in ipairs(pins("turn")) do if f.data.count then turn = f end end
+  local seven = 0
+  for _, f in ipairs(pins("obj")) do if f.data.id == 7 then seven = seven + 1 end end
+  assert(turn and turn.data.count == 3 and seven == 0 and turn.qbCount:GetText() == "3", "the hand-in's glyph first, its count all three")
+  print("windows D8: the game's world map: two pins 10 px apart one with a count, parted zoomed in; none of ours where the game draws its quest POI or its offer")
 end
 
 local seen = {}
