@@ -8,7 +8,8 @@
 --                                  holding no record of the sender takes as a part and asks the whole of (1Q)
 --   1R|guid|stamp|word|fp[since]   please send your full record (answered after a random 2 to 40 s, the statistics
 --                                  60 to 90 s on; one answer however many ask while it waits, one ask a sender in
---                                  three minutes, the statistics once in half an hour and one pass forced for the
+--                                  three minutes (and one whole after its since-ask), the statistics once in half an
+--                                  hour (or where its since is not borne out) and one pass forced for the
 --                                  guild in ten minutes whoever asks, never for a bare 0.3/0.5 ask; an officer's always
 --                                  gets the part the officers keep, whispered; one heard before this login's own record
 --                                  went is answered by it). since, in hex right after the fingerprint (a 0.6 or 0.7
@@ -25,9 +26,10 @@
 --                                  by it, Guild Info's line carries the policy itself); word: when the
 --                                  newest officers' word the asker holds was said (1N): an officer whose own is newer
 --                                  answers with it
---   1Q|guid                        the record of the member with this GUID, whole: asked by a client that holds none
---                                  of it after a part since its since or a delta came (M:WantWhole), answered by that
---                                  member alone with its guild part; a 0.5-0.7 client passes it by
+--   1Q|guid                        the record of the member with this GUID, whole, and its statistics pass: asked by a
+--                                  client that holds none of it after a part since its since or a delta came
+--                                  (M:WantWhole), answered by that member alone with its guild part; a 0.5-0.7 client
+--                                  passes it by
 --   1N|at|i/n|key=value;...        the officers' word: what the guild learned from what members' clients do not receive
 --                                  (with the defaults, which slots and kinds of item take an enchant), no GUID, no
 --                                  member's value, no count (Rules.lua R.WordParts). Sent by an officer's client when it
