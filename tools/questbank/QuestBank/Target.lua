@@ -66,7 +66,7 @@ function T.Route()
   return plan
 end
 
--- (the review round) a stop as the arrow names it (cur.shown): its place in words, as the map's pins and the step frame do
+-- (the review round) a stop as the arrow names it (cur.stopWords): its place in words, as the map's pins and the step frame do
 -- (Travel.lua's TV.StopPlace: "Goldshire", never Model.lua's "Elwynn Forest (42, 65)", which stays the stop's name, for
 -- matching); and the tooltip's head with it. Worked out once a stop, no string a look
 local placeFor, placeName, placeShown, placeHead = nil, nil, nil, nil
@@ -475,7 +475,7 @@ function T.Get(me)
     cur.what, cur.verb, cur.head, cur.after, cur.afterFor = "to hand in there", nil, nil, nil, nil
     if shown ~= name then cur.head = head end
   end
-  cur.shown = shown ~= cur.name and cur.name == name and shown or nil -- (the arrow's words for the stop: Arrow.lua)
+  cur.stopWords = shown ~= cur.name and cur.name == name and shown or nil -- (the arrow's words for the stop: Arrow.lua)
   if changed then
     T.ver = T.ver + 1
     if QB.tracing then
