@@ -684,7 +684,7 @@ Pin.OnMouseEnter = QB.Safe(function(self)
   if not d then return end
   local QM = QB.QuestMap
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-  GameTooltip:AddLine(d.name, 1, 0.82, 0)
+  GameTooltip:AddLine(d.title or d.name, 1, 0.82, 0)
   if not d.num then
     local many = #(d.quests or {}) > 1
     GameTooltip:AddLine(many and P.Word("QUEST_HUB_TOOLTIP_AVAILABLE_QUESTS_HEADER", "Available Quests") or P.Word("AVAILABLE_QUEST", "Available quest"), 1, 1, 1, true)
@@ -811,6 +811,38 @@ end
 -- planned route while that page shows it)
 function P:Route() return QB.Target.Route() end
 
+-- (the launch round) a stop's title: the NPC its pin stands on and the town, "Smith Argus, Goldshire" (6.1 titled a
+-- stop out of a flight master's town by its zone and spot, "Elwynn Forest (42, 65)", beside the map's own Goldshire):
+-- the stop's town, else the inn town within NEAR_INN yards of the NPC (D.BIND), else the NPC's place or zone. A stop of
+-- several NPCs: the town (or the place) alone. Its name (Model.lua) stays as it is: stops are matched by it
+local NEAR_INN = 150
+function P.StopTitle(s)
+  local D = QB.Data
+  local npcs = s and s.npcs
+  local n = npcs and npcs[1] and D.NPC[npcs[1]]
+  if not n then return s and s.name end
+  local town = s.town and s.name or nil
+  if not town then
+    local best
+    for _, b in ipairs(D.BIND or {}) do
+      if b[2] == n[5] then
+        local d = (b[3] - n[6]) ^ 2 + (b[4] - n[7]) ^ 2
+        if d <= NEAR_INN * NEAR_INN and (not best or d < best) then best, town = d, b[1] end
+      end
+    end
+  end
+  town = town or n[12] or (D.MAPNAME and D.MAPNAME[n[2]])
+  if #npcs > 1 then return town or s.name end
+  if not town or town == n[1] then return n[1] end
+  return n[1] .. ", " .. town
+end
+-- the minutes to a stop from now in words, "51 min from now", "1 h 05 min from now" (6.1's "at 0:51" read as a clock)
+local function fromNow(t)
+  t = math.max(0, math.floor((t or 0) + 0.5))
+  if t < 60 then return t .. " min from now" end
+  return string.format("%d h %02d min from now", math.floor(t / 60), t % 60)
+end
+
 function P:Build()
   local list = {}
   local r = self:Route()
@@ -832,9 +864,9 @@ function P:Build()
         -- who: the NPC the pin stands on (a stop stands at its first NPC, and may be named for its town or place);
         -- ids: the quests it lists. The quest icons (QuestMap.lua) read both
         local first = s.npcs and s.npcs[1] and QB.Data.NPC[s.npcs[1]]
-        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, who = first and first[1] or nil, ids = ids, icon = T.questActive, stop = s,
+        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, title = P.StopTitle(s), who = first and first[1] or nil, ids = ids, icon = T.questActive, stop = s,
                             quests = quests, ready = ready, family = family, late = (leg.late and r.goal == "hour") or nil,
-                            when = string.format("Stop %d of %d, at %s: level %.1f to %.1f", i, #r.legs, QB.Clock(leg.t), leg.arrive, leg.leave), lines = lines }
+                            when = string.format("Stop %d of %d, %s: level %.1f to %.1f", i, #r.legs, fromNow(leg.t), leg.arrive, leg.leave), lines = lines }
       end
     end
   end

@@ -11864,7 +11864,7 @@ do
     end
     -- the tooltip: the place, each quest as the game titles it with its XP, which stop it is, the click
     local t = tipOf(one)
-    assert(t:find("^" .. one.data.name:gsub("%p", "%%%0") .. "\n%[%d+%] ") and t:find("Stop 1 of %d+, at ") and t:find("<Click to show it on the arrow for now>", 1, true) and not t:find("Click: ", 1, true),
+    assert(t:find("^" .. (one.data.title or one.data.name):gsub("%p", "%%%0") .. "\n%[%d+%] ") and t:find("Stop 1 of %d+, %d+ min from now") and t:find("<Click to show it on the arrow for now>", 1, true) and not t:find("Click: ", 1, true),
       "a stop's tooltip: " .. t)
     -- the mouse on a quest pin: the inner glow, as the game's HighlightTexture; the button held: the pressed disc and
     -- the glyph a pixel right and down; let go: as it was
@@ -17976,6 +17976,35 @@ end)()
     lines = {}; F.__scripts.OnEnter(F)
     assert(not table.concat(lines, " / "):find("Flight paths", 1, true), "a walk along the pier: no flight line: " .. table.concat(lines, " / "))
     F.__scripts.OnLeave(F)
+  end }
+
+  -- 8. The owner's world map (4-map-tooltip): the route's stop at Smith Argus was titled "Elwynn Forest (42, 65)" (a stop
+  -- out of a flight master's town is named after its zone and spot, Model.lua) beside the Goldshire label, and said
+  -- "Stop 6 of 6, at 0:51", which reads as a clock. Now its title names the NPC and the town (the stop's town, else the
+  -- inn town within 150 yards, else the zone) and the stop says how many minutes from now
+  ENGCASES[#ENGCASES + 1] = { "a route stop's tooltip: the NPC and the town, minutes from now", function()
+    local c = char("Shoemaker", "WARRIOR", "Warrior", 1, {}, { level = 18, world = { 0, -9460, 60 }, map = 1429, log = { { 118, 1 } }, bind = "Goldshire" })
+    local QB = c.QB
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1)
+    QB.Model.Finish(); QB:Recompute(true); QB.Model.Finish()
+    local list = QB.Pins:Build()
+    local stop
+    for _, d in ipairs(list) do if d.num and d.ids and d.ids[118] then stop = d end end
+    assert(stop, "The Price of Shoes' stop on the map")
+    assert(stop.title == "Smith Argus, Goldshire", "titled by its NPC and the town: " .. tostring(stop.title) .. " (named " .. tostring(stop.name) .. ")")
+    assert(stop.when:find("^Stop %d+ of %d+, %d+ min from now: ") or stop.when:find("^Stop %d+ of %d+, %d+ h %d+ min from now: "), "minutes from now: " .. stop.when)
+    -- the tooltip's title line
+    local pin = { data = stop, Route = function() return QB.Pins:Route() end }
+    lines = {}
+    QB.Pins.Pin.OnMouseEnter(pin)
+    assert(lines[1] == "Smith Argus, Goldshire", "the tooltip's title: " .. tostring(lines[1]))
+    -- a stop in a flight master's town of one NPC: that NPC and the town; several NPCs: the town
+    local P = QB.Pins
+    local D = QB.Data
+    local function idx(name) for i, n in ipairs(D.NPC) do if n[1] == name then return i end end end
+    local mm = idx("Marshal McBride")
+    assert(P.StopTitle({ town = true, name = "Northshire Abbey", npcs = { mm } }) == "Marshal McBride, Northshire Abbey", "one NPC in a town")
+    assert(P.StopTitle({ town = true, name = "Northshire Abbey", npcs = { mm, idx("Eagan Peltskinner") } }) == "Northshire Abbey", "several: the town")
   end }
 
   for _, case in ipairs(ENGCASES) do
