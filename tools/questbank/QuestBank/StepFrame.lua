@@ -196,8 +196,11 @@ local function rowEnter(self)
   if when or xp then
     GameTooltip:AddDoubleLine(when or " ", xp and (QB.Comma(xp) .. " XP") or "", SOFT[1], SOFT[2], SOFT[3], SOFT[1], SOFT[2], SOFT[3])
   end
+  -- (a step with no quest opens the Route page, or a host's page for it: UI.PageName, Cute's Quests while its Route
+  -- module is off; the launch round said "the way there" whatever opened)
   GameTooltip:AddLine(s.qid and "Click: the quest. Right-click: Not now, Drop, the game's quest tracker and more."
-    or "Click: the way there. Right-click: the game's quest tracker and more.", SOFT[1], SOFT[2], SOFT[3], true)
+    or ("Click: the " .. ((QB.UI and QB.UI.PageName and QB.UI.PageName(3)) or "Route") .. " page. Right-click: the game's quest tracker and more."),
+    SOFT[1], SOFT[2], SOFT[3], true)
   GameTooltip:Show()
 end
 local function rowLeave() if GameTooltip:GetOwner() then GameTooltip:Hide() end end

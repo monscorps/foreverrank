@@ -5186,6 +5186,18 @@ do
     s.arrowMode = "pin"; s.arrowPin = nil
     A:Set(true); A:Update()
     assert(c.env.QuestBankArrow.dist:GetText() == "Click a quest or a stop in Cute", "the arrow's empty line names Cute: " .. tostring(c.env.QuestBankArrow.dist:GetText()))
+    -- (the review round) and a step with no quest in the step frame: its tooltip names the page its click opens
+    do
+      local G0, SF0 = QB.Guide, QB.StepFrame
+      local keep0 = G0.steps
+      G0.steps = { { kind = "travel", text = "Fly to Ironforge", c = 0, wx = -4821, wy = -1155 } }
+      G0.ver = G0.ver + 1; SF0.Apply(); SF0.Refresh()
+      local row = c.env.QuestBankStep.rows[1]
+      local rowTip = tipOf(row)
+      if row.__scripts.OnLeave then row.__scripts.OnLeave(row) end
+      assert(rowTip:find("Click: the Quests page.", 1, true) and not rowTip:find("the way there", 1, true), "a travel step's click, as it is: " .. rowTip)
+      G0.steps = keep0; G0.ver = G0.ver + 1; SF0.Refresh()
+    end
     s.arrowMode = nil
     A:Menu()
     local looked = false

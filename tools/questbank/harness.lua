@@ -18401,6 +18401,27 @@ end)()
     G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
   end }
 
+  -- 16. (the review round) A step with no quest (travel, train, grind, a corpse) said "Click: the way there." while its
+  -- click opens the Route page, and in Cute with Route off the Quests page. Now it names the page, as the arrow does
+  ENGCASES[#ENGCASES + 1] = { "a step with no quest: its tooltip names the page its click opens", function()
+    local c = char("Traveller", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local QB = c.QB
+    local G, SF = QB.Guide, QB.StepFrame
+    QB:Settings().welcome = nil; SF.Apply()
+    local keep = G.steps
+    G.steps = { { kind = "travel", text = "Fly to Ironforge", c = 0, wx = -4821, wy = -1155 } }
+    G.ver = G.ver + 1; SF.Refresh()
+    local r1 = c.env.QuestBankStep.rows[1]
+    local tip = rowTip(r1)
+    assert(tip:find("Click: the Route page.", 1, true) and not tip:find("the way there", 1, true), "QuestBank: the Route page: " .. tip)
+    local had = QB.UI.PageName
+    QB.UI.PageName = function() return "Quests" end
+    tip = rowTip(r1)
+    assert(tip:find("Click: the Quests page.", 1, true), "a host's page: " .. tip)
+    QB.UI.PageName = had
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")
