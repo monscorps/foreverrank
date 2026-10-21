@@ -1,15 +1,19 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- CardFrame: CuteCardFrame, the card screen (the run report's design, 8.3 and 8.4), in report mode: a run's header
+-- CardFrame: CuteCardFrame, the card screen (the run report's design, 8.3 and 8.4). Report mode: a run's header
 -- (the label, the place, the day and the members, the facts on the right; a dungeon's or a raid's cover where
 -- Cute_Quest gives one), up to five cards centred, the gone-early line, a raid's mentions, and Send to party, History
 -- and Close (a test report: Print to chat, Next and Close). A plain frame, strata DIALOG, dragged by its header, closed
 -- by Esc (UISpecialFrames) or Close; the windows design's tokens and type. Width 32 + n x 180 + (n - 1) x 12 units for
--- n cards, at least 420; height 560, a raid's 662; scaled to fit where the screen is narrower.
+-- n cards, at least 420; height 560, a raid's 662; scaled to fit where the screen is narrower. Announcement mode (CF:Announce):
+-- a published set (GUILD NEWS, GUILD FIRST, NEW RECORD, HALL OF FAME, HALL OF SHAME), who published it and when, a
+-- hall's Members ranked, its cards, News and Close; Preview mode: an officer's set before it goes, the guild chat line
+-- it would post under the cards, Publish and Back.
 local _, C = ...
 local CF = { cards = {} }
 C.CardFrame = CF
 
 local W_MIN, H, MENTIONS_H = 420, 560, 102
+local H_SET = H -- (an announcement's height: a report's without mentions)
 local WHITE, INK, DIM, MUTE = { 0.96, 0.96, 0.96 }, { 0.86, 0.86, 0.86 }, { 0.58, 0.58, 0.58 }, { 0.52, 0.52, 0.52 }
 local BG, LINE = { 0.035, 0.035, 0.035 }, { 0.2, 0.2, 0.2 }
 local DOT = " \194\183 " -- (a middle dot in Windows-1252; the file stays ASCII)
@@ -135,7 +139,7 @@ function CF:Report(rep, opts)
   local U = C.UI
   -- (as the policy held now lets it show: a field closed since takes its cards off, Runs.lua R.Visible)
   rep = C.Runs.Visible(rep)
-  self.rep, self.test = rep, opts.test
+  self.rep, self.test, self.set, self.publishButton = rep, opts.test, nil, nil
   local cards = rep.cards or {}
   -- the header: the cover (a dungeon's or a raid's, where Cute_Quest gives one) or the atlas beside the label
   local cover = rep.kind ~= "g" and rep.inst and Cute and type(Cute.QuestCover) == "function" and Cute.QuestCover(rep.inst) or nil
@@ -185,8 +189,8 @@ function CF:Report(rep, opts)
     local fc, d = CF.facts[i], facts[i]
     if d then
       local x = right - (#facts - i + 1) * 76
-      fc.v:ClearAllPoints(); fc.v:SetPoint("TOPLEFT", x, -18); fc.v:SetText(d[1]); fc.v:Show()
-      fc.l:ClearAllPoints(); fc.l:SetPoint("TOPLEFT", x, -40); fc.l:SetText(d[2]); fc.l:Show()
+      fc.v:ClearAllPoints(); fc.v:SetPoint("TOPLEFT", x, -18); fc.v:SetWidth(76); fc.v:SetText(d[1]); fc.v:Show()
+      fc.l:ClearAllPoints(); fc.l:SetPoint("TOPLEFT", x, -40); fc.l:SetWidth(76); fc.l:SetText(d[2]); fc.l:Show()
     else fc.v:Hide(); fc.l:Hide() end
   end
   -- (the title and its line take the room the facts leave)
@@ -249,6 +253,7 @@ function CF:Report(rep, opts)
   local bx = w - 16
   for i, d in ipairs(list) do
     local b = CF.buttons[i]
+    b:Show()
     b:SetWidth(d[2])
     bx = bx - d[2]
     b:ClearAllPoints()
@@ -300,6 +305,7 @@ local RULE = {
   OA = "The run's first death", SP = "The longest dead, three minutes or more", WF = "The most avoidable damage, 1.5 times the median",
   LO = "Asked where everyone was", PG = "The most jumps, at least 100", NA = "The most need rolls, at least 4", BD = "The lowest roll, 5 or less",
   GC = "In the run with us", SH = "Deaths at most the group's middle" }
+CF.RULE = RULE
 function CF.Tip(tip, rep, c)
   local a = A().Of(c[2])
   tip:AddLine((a and a.title or c[2]) .. ": " .. (nameOf(rep, c[1]) or "?"), 1, 1, 1)
@@ -319,3 +325,122 @@ function CF:DrawSend()
   if posted and posted.id == self.rep.id then self.posted:SetText(posted.by .. " posted") else self.posted:SetText("") end
 end
 function CF:Posted(id) if self.frame and self.frame:IsShown() and self.rep and self.rep.id == id then self:DrawSend() end end
+
+----------------------------------------------------------------------------
+-- announcement and preview (8.3): a set from the officers (Halls.lua). The header: its label in its colour (GUILD
+-- FIRST, NEW RECORD and HALL OF FAME the cards' STAR, HALL OF SHAME their BLOOPER, GUILD NEWS white), its title, who
+-- published it and when; a hall's Members ranked on the right. Its cards centred, a first with the white edge. The
+-- buttons from the right: Close and News; a preview Back and Publish, with the guild chat line it would post under the
+-- cards; a test Close alone
+----------------------------------------------------------------------------
+local FACT_W = 100 -- ("Members ranked" at 11)
+function CF:Announce(set, opts)
+  opts = opts or {}
+  if type(set) ~= "table" then return end
+  local f = build()
+  local U, HL = C.UI, C.Halls
+  self.rep, self.test, self.set, self.sendButton, self.publishButton = nil, opts.test, set, nil, nil
+  self.preview = opts.preview
+  local cards = set.cards or {}
+  CF.cover:Hide(); CF.atlas:Hide()
+  local x0 = 16
+  CF.label:ClearAllPoints(); CF.label:SetPoint("TOPLEFT", x0, -12)
+  color(CF.label, HL.HeadColor(set.kind))
+  CF.label:SetText((HL.HEAD[set.kind] or HL.HEAD.n) .. (opts.preview and " PREVIEW" or ""))
+  CF.title:ClearAllPoints(); CF.title:SetPoint("TOPLEFT", x0, -30)
+  CF.sub:ClearAllPoints(); CF.sub:SetPoint("TOPLEFT", x0, -54)
+  local sub
+  if opts.preview then sub = "Not published yet"
+  elseif opts.test then sub = "A test: nothing is sent or kept"
+  else sub = "Published by " .. (set.by or "?") .. ((set.got or set.at) and (DOT .. (U.Ago(set.got or set.at) or "")) or "") end
+  local facts = ((set.kind == "h" or set.kind == "s") and tonumber(set.ranked)) and { { tostring(set.ranked), "Members ranked" } } or {}
+  local factsW = #facts * FACT_W
+  local width = CF.title.GetUnboundedStringWidth or CF.title.GetStringWidth
+  CF.title:SetText(set.title or ""); CF.sub:SetText(sub)
+  local need = x0 + math.max(width(CF.title), width(CF.sub)) + 20 + factsW + 40
+  local w = math.max(CF.Width(#cards), math.min(980, math.ceil(need)))
+  f:SetSize(w, H_SET)
+  local uw = UIParent and UIParent:GetWidth() or 1600
+  f:SetScale((uw > 0 and uw < w + 40) and (uw - 40) / w or 1)
+  local right = w - 40
+  for i = 1, 4 do
+    local fc, d = CF.facts[i], facts[i]
+    if d then
+      local x = right - (#facts - i + 1) * FACT_W
+      fc.v:ClearAllPoints(); fc.v:SetPoint("TOPLEFT", x, -18); fc.v:SetWidth(FACT_W); fc.v:SetText(d[1]); fc.v:Show()
+      fc.l:ClearAllPoints(); fc.l:SetPoint("TOPLEFT", x, -40); fc.l:SetWidth(FACT_W); fc.l:SetText(d[2]); fc.l:Show()
+    else fc.v:Hide(); fc.l:Hide() end
+  end
+  local room = right - factsW - x0 - 12
+  CF.title:SetWidth(room); CF.sub:SetWidth(room)
+  U.FitText(CF.title, set.title or "", room - 4)
+  U.FitText(CF.sub, sub, room - 4)
+  local total = #cards * 180 + math.max(0, #cards - 1) * 12
+  local cx = math.floor((w - total) / 2)
+  for i = 1, 5 do
+    local card, c = CF.cards[i], cards[i]
+    if c then
+      card:ClearAllPoints()
+      card:SetPoint("TOPLEFT", cx + (i - 1) * 192, -88)
+      C.Cards.Fill(card, { guid = c.guid, name = c.name or "?", class = c.class, race = c.race, sex = c.sex, kind = c.kind, label = HL.LABEL[c.kind] or "",
+        title = c.title or "", line = c.line or "", value = c.value or "", valueLabel = c.valueLabel or "", icon = c.icon, headline = c.kind == "first",
+        tip = function(tip) HL.CardTip(tip, set, c) end })
+    else card:Hide() end
+  end
+  for i = 1, 10 do CF.mentions[i]:Hide() end
+  -- (a preview: the guild chat line the set would post, where the officer ticked it)
+  if opts.preview and set.chat then
+    CF.gone:ClearAllPoints(); CF.gone:SetPoint("TOPLEFT", 16, -472); CF.gone:SetWidth(w - 32)
+    U.FitText(CF.gone, "Guild chat: " .. HL.ChatLine(set), w - 36)
+    CF.gone:Show()
+  else CF.gone:Hide() end
+  local by = H_SET - 58
+  local list
+  if opts.preview then
+    list = { { "Back", 80, function() f:Hide() end }, { "Publish", 90, function() HL.PublishClick(set) end } }
+  elseif opts.test then
+    list = { { "Close", 80, function() f:Hide() end } }
+  else
+    list = { { "Close", 80, function() f:Hide() end }, { "News", 90, function() f:Hide(); HL.OpenChip("news") end } }
+  end
+  local bx = w - 16
+  for i = 1, 3 do
+    local b, d = CF.buttons[i], list[i]
+    if d then
+      b:SetWidth(d[2])
+      bx = bx - d[2]
+      b:ClearAllPoints()
+      b:SetPoint("TOPLEFT", bx, -by)
+      b:SetLabel(d[1])
+      b.fn, b.why = d[3], nil
+      b:SetOn(true)
+      b:Show()
+      bx = bx - 8
+    else b:Hide() end
+  end
+  CF.posted:SetText("")
+  self.publishButton = opts.preview and CF.buttons[2] or nil
+  CF:DrawPublish()
+  f:Show()
+  CF.WatchPublish()
+end
+-- Publish's state on the button (the grey words say why: Wait a minute, Checking for news...), once a second while
+-- the preview shows
+function CF:DrawPublish()
+  local b = self.publishButton
+  if not (b and self.set and self.frame) then return end
+  local ok, why = C.Halls.PublishState(self.set)
+  b:SetOn(ok and true or false)
+  b:SetLabel(ok and "Publish" or why)
+  b.why = ok and "Sends the set to the guild: every member with Cute sees it." or why
+end
+function CF.WatchPublish()
+  if CF.watchingPublish then return end
+  CF.watchingPublish = true
+  C_Timer.After(1, C.Safe(function()
+    CF.watchingPublish = false
+    if not (CF.frame and CF.frame:IsShown() and CF.publishButton) then return end
+    CF:DrawPublish()
+    CF.WatchPublish()
+  end, "card screen: Publish"))
+end
