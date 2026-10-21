@@ -1065,8 +1065,8 @@ def finds_rows(acc, keys=None):
 # ------------------------------------------------------------------------------- what else a file shares
 # The rest of QuestBank's world notes, each file's latest word per thing (votes per voice, as the finds):
 #   "flown"  { "<TaxiNodes>><TaxiNodes>": { voice: [seconds, flights, Frequent Flier rank] } }  (disc.flown, 6.2)
-#   "rides"  { "<kind>:<town>><town>" or "x:<map>:<x>,<y>><map>:<x>,<y>": { voice: { t, n, b, l } } }  (disc.rides: the
-#            boat legs D.LINK knows, and 6.2's crossings no row knows)
+#   "rides"  { "<kind>:<town>><town>" or "x:<map>:<x>,<y>><map>:<x>,<y>": { voice: { t, n, b, l, f } } }  (disc.rides: the
+#            boat legs D.LINK knows, and 6.2's crossings no row knows, with the side that took them)
 #   "sell"   { npc key: { voice: { n, p "uiMap:x,y", i [camp goods] } } }  (disc.sell, Camp.lua's camp-goods sellers)
 #   "trainer" { npc key: { voice: { n, cl, m, x, y } } }  (disc.trainer: the class trainers players opened, Guide.lua)
 #   "walk"   { voice: { continent: [cells] } }  (disc.walk: every 50-yard cell a file's trails pass through)
@@ -1107,6 +1107,8 @@ def merge_world(acc, d, who, stamp):
                 rec["b"] = b
             if l:
                 rec["l"] = l
+            if e.get("f") in ("A", "H"):
+                rec["f"] = e["f"]  # the side that took it (6.2's crossings): a city's portal is one side's
             _voted(acc.setdefault("rides", {}), key, who, rec, stamp)
             n += 1
     for key, e in _pairs(d.get("sell")):
@@ -1743,7 +1745,7 @@ def selftest_finds():
 
     # the world: flights, crossings and boat legs, sellers, trainers, trails; one voice a file
     world = {"flown": {"12>34": {"n": 3, "secs": 118, "ff": 1}, "bad": {"n": 1, "secs": 5}},
-             "rides": {"x:1429:300,400>1438:555,888": {"n": 2, "t": 8, "b": [0, -9000, 100], "l": [1, 9000, 900], "at": 29000000},
+             "rides": {"x:1429:300,400>1438:555,888": {"n": 2, "t": 8, "b": [0, -9000, 100], "l": [1, 9000, 900], "at": 29000000, "f": "A"},
                        "b:Menethil Harbor>Theramore": {"n": 1, "t": 290, "b": [0, -3905, -586], "l": [1, -4016, -4741]},
                        "x:junk": {"n": 1, "t": 1}},
              "sell": {"c1234": {"n": "Innkeeper Farley", "p": "1429:43.8,65.8", "c": 0, "wx": 1, "wy": 2, "i": [4470, 4471], "at": 1760000000}},
@@ -1756,7 +1758,7 @@ def selftest_finds():
     assert len(acc["flown"]["12>34"]) == 2 and list(acc["flown"]) == ["12>34"], acc["flown"]
     assert set(acc["rides"]) == {"x:1429:300,400>1438:555,888", "b:Menethil Harbor>Theramore"} and len(acc["rides"]["x:1429:300,400>1438:555,888"]) == 2
     one = list(acc["rides"]["x:1429:300,400>1438:555,888"].values())[0]
-    assert one["t"] == 8 and one["b"] == [0, -9000, 100] and "at" in one and one["at"] < 1000, "votes, no time of day: %r" % one
+    assert one["t"] == 8 and one["b"] == [0, -9000, 100] and one["f"] == "A" and "at" in one and one["at"] < 1000, "votes, the side, no time of day: %r" % one
     assert list(acc["sell"]["c1234"].values())[0] == {"n": "Innkeeper Farley", "p": "1429:43.8,65.8", "i": [4470, 4471], "at": 1}
     assert list(acc["trainer"]["c5497"].values())[0]["cl"] == 8
     w = list(acc["walk"].values())[0]

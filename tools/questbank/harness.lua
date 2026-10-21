@@ -19112,8 +19112,9 @@ end)()
     local k = xkeys(c)
     assert(#k == 1 and k[1] == "x:1429:300,400>1438:555,888", "the crossing's key: " .. table.concat(k, " "))
     local e = DB.disc.rides[k[1]]
-    assert(e.n == 1 and e.t == 8 and e.b[1] == 0 and e.b[2] == -9000 and e.l[1] == 1 and e.l[2] == 9000 and type(e.at) == "number" and e.at < 1e9,
-      "from the stand, seconds since leaving it, the ends in world yards, when in minutes: " .. tostring(e.t))
+    assert(e.n == 1 and e.t == 8 and e.b[1] == 0 and e.b[2] == -9000 and e.l[1] == 1 and e.l[2] == 9000 and type(e.at) == "number" and e.at < 1e9
+      and e.f == "A",
+      "from the stand, seconds since leaving it, the ends in world yards, when in minutes, the side that took it: " .. tostring(e.t))
     -- again, a step to the side at each end: the same crossing, ridden twice
     fresh(c); at(c, 1429, 0.305, 0.396, { 0, -9002, 102 }); stand(c, 11)
     at(c, 1438, 0.560, 0.880, { 1, 9004, 904 }); look(c, 2)
@@ -19383,7 +19384,7 @@ end)()
     env.C_Map.GetWorldPosFromMapPos = function() wpos.x, wpos.y = c.o.world[2], c.o.world[3]; return c.o.world[1], wpos end
     fresh(c); at(c, 1429, 0.2, 0.2, { 0, -9000, 100 })
     look(c)
-    if jit then jit.off(); jit.flush() end
+    if jit then jit.off() end
     collectgarbage("collect")
     collectgarbage("stop")
     local before = collectgarbage("count")
@@ -19395,6 +19396,8 @@ end)()
     local kb = collectgarbage("count") - before
     collectgarbage("restart")
     if jit then jit.on() end
+    -- (the JIT off, as the game runs Lua 5.1, its traces never flushed: flushing them here left the 5.4.2 memory gate's
+    -- first reading 250 KB high)
     assert(kb < 8, string.format("five minutes of looks: %.1f KB", kb))
     print(string.format("finds: five minutes of looks, walking with a stand a minute: %.1f KB", kb))
   end }

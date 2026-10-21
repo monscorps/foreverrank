@@ -11,15 +11,17 @@
 --                    r = a rare's level (its nameplate said "rare" or "rareelite")
 --   disc.findN       a counter, bumped on every note; disc.findAt[key] its value when the key was last touched
 --   disc.rides["x:<map>:<x>,<y>><map>:<x>,<y>"] = { b = { c, wx, wy }, l = { c, wx, wy }, t = seconds (the mean of the
---                    last few), n = crossings, at = minutes } a jump in place that is no flight, hearth, death, summons
---                    or instance door: a portal, the way to Zephras Isle (Travel.lua keeps D.LINK's boat legs there)
+--                    last few), n = crossings, at = minutes, f = "A" or "H" the faction that took it } a jump in place
+--                    that is no flight, hearth, death, summons or instance door: a portal, the way to Zephras Isle
+--                    (Travel.lua keeps D.LINK's boat legs there). The faction, so a release never routes the other
+--                    side through a city's portal
 --   disc.flown["<TaxiNodes id>><TaxiNodes id>"] = { n, secs, ff = Frequent Flier's rank }: Travel's measured flights,
 --                    every character's, with no character in them
 --   disc.token       a random token made once per saved file: the site counts files, not re-uploads of a growing one
 --   disc.qtime       the work each quest took, every character's, name-free (Timer.lua keeps it per character)
 -- Every value is read through QB.Plain, nothing is noted while the game holds addons back (ADDON_RESTRICTION_STATE_CHANGED)
 -- or outside the Forever client, and all of it sits under Settings' "Note items, spells and loot" box (unticking clears
--- it, as it clears the loot notes). No names: not yours, not a creature's, not an object's.
+-- it, as it clears the loot notes). Never a player's name: a book's title is the only text kept.
 -- Also here: QuestBank_Finds, the uploader's data addon, read into D.FIND at login where Data.lua has no row.
 -- Only reads: nothing is looted, opened, targeted or cast.
 local _, QB = ...
@@ -564,6 +566,8 @@ function Finds.NoteCrossing(a, b, secs)
   e.b = { a.c, floor(a.wx + 0.5), floor(a.wy + 0.5) }
   e.l = { b.c, floor(b.wx + 0.5), floor(b.wy + 0.5) }
   e.at = minutes()
+  local fac = QB.faction or (QB.API and QB.API.Faction and QB.API.Faction())
+  if fac == "A" or fac == "H" then e.f = fac end
   capCrossings(all)
   diag("xk")
   return key
