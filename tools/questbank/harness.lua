@@ -18225,6 +18225,15 @@ end)()
       "Darkshore's trip and nearest giver are not 943's: " .. tostring(dg.trip) .. ", " .. tostring(dg.nearest) .. ", " .. tostring(m943))
     print(string.format("xpm: from Southshore, Redridge %.0f XP a minute (%d quests, %.0f min), Darkshore %.0f (%d, %.0f min)",
       rg.value, #rg.set, rg.setMins, dg.value, #dg.set, dg.setMins))
+    -- the spec's four (section 4: Redridge 150 > Wetlands 113 > Darkshore 102 > Duskwood 83, its sets the open quests with
+    -- spawn data alone). As built the sets take every open quest over the floor, the est. ones too, and Duskwood's
+    -- (Dusky Crab Cakes among them: 775 XP in 10.3 minutes, 75 a minute, where the spec's 15.5 left it out at 50) puts it
+    -- over Darkshore: Redridge > Wetlands > Duskwood > Darkshore
+    local wi, wg = at(order, catNamed(c, "Wetlands"))
+    local ki, kg = at(order, catNamed(c, "Duskwood"))
+    assert(wi and ki and ri < wi and wi < ki and ki < di, string.format("Redridge %s, Wetlands %s, Duskwood %s, Darkshore %s", ri, wi, ki, di))
+    print(string.format("xpm: from Southshore, Redridge %.0f > Wetlands %.0f > Duskwood %.0f > Darkshore %.0f XP a minute (the spec: 150, 113, 83, 102)",
+      rg.value, wg.value, kg.value, dg.value))
   end }
 
   -- 5. a chain's head carries the steps it opens when they raise its rate: The Tower of Althalaxx's delivery (965, 680 XP)
@@ -18485,6 +18494,27 @@ end)()
     local _, _, _, wSolo = M.QuestMinutes(grp, 0, 1, 1)
     local _, _, _, wParty = M.QuestMinutes(grp, 0, 1, 1, true)
     assert(grp and math.abs(wSolo - 3 * wParty) < 1e-6, "a group quest alone is three times the work: " .. tostring(grp))
+    -- the spec's table (section 4) against D.DO as built: the work is the spec's; the walk is shorter where the map
+    -- icons' spots (spots.json) put an objective nearer than objectives.json's first area (Blackrock Menace 0.9 against
+    -- 3.3, Dusky Crab Cakes 2.1 against 7.2); the spec's "Murloc Poachers + Selling Fish 18.4" is the pair done
+    -- together with the murlocs killed once, which D.DO keeps apart (9.4 and 17.3) and a place's set shares only in
+    -- part: the walk once (one spot), but not the kills, as D.OBJ names the creature of a kill objective alone and
+    -- both are item drops (24.8 minutes). Dusky Crab Cakes passes the floor now (75 XP a minute against the spec's 50)
+    local spec = { { 34, 2.9 }, { 128, 12.8 }, { 91, 13.8 }, { 20, 15.3 }, { 93, 15.5 }, { 150, 10.5 }, { 127, 18.4 } }
+    local out = {}
+    for _, row in ipairs(spec) do
+      local t = M.QuestMinutes(row[1], 0, 1, 1)
+      out[#out + 1] = string.format("%s %.1f (%.1f)", c.QB.Data.QN[row[1]], t, row[2])
+      assert(t <= row[2] + 0.05, "no quest over the spec's minutes: " .. out[#out])
+    end
+    print("xpm: minutes as built (the spec's): " .. table.concat(out, ", "))
+    local F = M.Floor(21)
+    assert(c.QB.Model.XpAt(c.QB.Quest.Get(93), 21) / M.QuestMinutes(93, 0, 1, 1) > F, "Dusky Crab Cakes over the floor")
+    local function item(id) local _, _, walk, work = M.QuestMinutes(id, 0, 1, 1); return { id = id, xp = 1, own = (M.QuestMinutes(id, 0, 1, 1)), walk = walk, work = work } end
+    local _, pair = c.QB.UI.PlaceValue({ item(150), item(127) }, 2, 0)
+    local _, _, w150 = M.QuestMinutes(150, 0, 1, 1)
+    assert(math.abs(pair - (M.QuestMinutes(150, 0, 1, 1) + M.QuestMinutes(127, 0, 1, 1) - w150)) < 1e-6,
+      "Murloc Poachers with Selling Fish: one walk: " .. pair)
   end }
 
   -- 6. the work measured (Timer.lua, from Discover.lua's look of the log): each look where objectives moved gives the
