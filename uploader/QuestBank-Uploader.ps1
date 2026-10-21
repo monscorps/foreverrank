@@ -276,14 +276,17 @@ function Send-Changes {
   $files = @(Find-SavedVariables -Root $cfg.wowPath)
   $watched = ($files -join "; ")
   if ($script:lastWatched -ne $watched) {
-    if ($files.Count -eq 0) { Log "no QuestBank.lua found" } else { Log ("watching " + $files.Count + " file(s): " + $watched) }
+    if ($files.Count -eq 0 -and (Test-CuteBundle)) { Log "no Cute_Quest.lua found" }
+    elseif ($files.Count -eq 0) { Log "no QuestBank.lua found" }
+    else { Log ("watching " + $files.Count + " file(s): " + $watched) }
     $script:lastWatched = $watched
   }
   if ($files.Count -eq 0) {
     Update-Finds $cfg
+    if (Test-CuteBundle) { return "No Cute_Quest.lua found yet. Log a character out once with one of Cute's quest modules on." }
     return "No QuestBank.lua found yet. Log a character out once with QuestBank installed."
   }
-  $posted = 0; $failed = 0; $why = ""; $names = @()
+  $posted = 0; $failed = 0; $why = ""; $whyFile = ""; $names = @()
   foreach ($f in $files) {
     $hash = (Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash
     if ($cfg.sent[$f] -eq $hash) { continue }
@@ -291,7 +294,7 @@ function Send-Changes {
     if ($size -gt $MaxBytes) {
       $failed++
       $script:failedLast[$f] = "over the 6 MB limit"
-      if (-not $why) { $why = $script:failedLast[$f] }
+      if (-not $why) { $why = $script:failedLast[$f]; $whyFile = [System.IO.Path]::GetFileName($f) }
       Log ("SKIPPED " + $f + " :: " + [math]::Round($size / 1MB, 1) + " MB is over the 6 MB limit")
       continue
     }
@@ -319,6 +322,7 @@ function Send-Changes {
       Log ("FAILED " + $f + " :: " + $_.Exception.Message)
     }
     if ($failed -gt 0 -and -not $why) { $why = $script:failedLast[$f] }
+    if ($failed -gt 0 -and -not $whyFile) { $whyFile = [System.IO.Path]::GetFileName($f) }
   }
   Save-Config $cfg
   Update-Finds $cfg
@@ -337,7 +341,7 @@ function Send-Changes {
   $what = "QuestBank.lua"
   if ($one.Count -eq 1) { $what = $one[0] }
   if ($failed -gt 0 -and $posted -gt 0) { return "Sent $posted file(s); $failed could not go: see Status." }
-  if ($failed -gt 0) { return "Could not send QuestBank.lua: " + $why + ". It tries again in 30 minutes." }
+  if ($failed -gt 0) { return "Could not send " + $whyFile + ": " + $why + ". It tries again in 30 minutes." }
   if ($posted -eq 1) { return "Sent " + $what + " to foreverrank.com." }
   if ($posted -gt 1 -and $one.Count -eq 1) { return "Sent $posted " + $what + " files to foreverrank.com." }
   if ($posted -gt 1) { return "Sent $posted files to foreverrank.com." }
@@ -438,11 +442,16 @@ function Get-FindsFolders($cfg) {
   return $out
 }
 
-# Once a day (or now, -Force): fetch, check, write. Never throws: the sending must go on whatever the site answers
+# Once a day (or now, -Force, or when QuestBank_Finds just went in somewhere): fetch, check, write. First, every pass,
+# QuestBank_Finds goes in beside QuestBank or Cute's quests put in since (Add-FindsAddon). Never throws: the sending
+# must go on whatever the site answers
 function Update-Finds($cfg, [switch]$Force) {
   try {
+    $added = @(Add-FindsAddon $cfg)
+    foreach ($a in $added) { if (-not $a.ok) { Log ("QuestBank_Finds not put in " + $a.game + " :: " + $a.error) } elseif ($a.new) { Log ("QuestBank_Finds put in " + $a.game) } }
+    $fresh = @($added | Where-Object { $_.ok -and $_.new }).Count
     $today = (Get-Date).ToString("yyyy-MM-dd", [System.Globalization.CultureInfo]::InvariantCulture)
-    if (-not $Force -and $cfg.findsDay -eq $today) { return }
+    if (-not $Force -and $fresh -eq 0 -and $cfg.findsDay -eq $today) { return }
     $dirs = @(Get-FindsFolders $cfg)
     if ($dirs.Count -eq 0) { return }
     $lua = ConvertTo-FindsLua (Get-FindsJson (Get-FindsUrl $cfg))
@@ -487,6 +496,8 @@ function Describe-File($f, $cfg) {
   $ver = Get-WriterVersion $f
   $writer = "an unknown QuestBank"
   if ($ver) { $writer = "QuestBank " + $ver }
+  # (Cute_Quest.lua: Cute's copy of QuestBank wrote it, and the version is the engine's)
+  if ([System.IO.Path]::GetFileName($f) -ieq "Cute_Quest.lua") { $writer = "Cute"; if ($ver) { $writer = "Cute (QuestBank engine " + $ver + ")" } }
   $state = "not sent yet"
   try {
     $hash = (Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash
@@ -581,6 +592,24 @@ function Describe-QuestBankState($st) {
   return "QuestBank is not installed here."
 }
 
+# Cute in one game folder's Interface\AddOns: whether Cute.toc is there, its version, and whether Cute_Quest (Cute's
+# quest modules, which write Cute_Quest.lua) is beside it
+function Get-CuteState($game) {
+  $addons = PathOf $game "Interface" "AddOns"
+  $toc = PathOf $addons "Cute" "Cute.toc"
+  $r = @{ ok = (Test-Path -LiteralPath $toc); ver = $null; quest = (Test-Path -LiteralPath (PathOf $addons "Cute_Quest" "Cute_Quest.toc")) }
+  if ($r.ok) { $r.ver = (Read-Toc $toc).ver }
+  return $r
+}
+
+function Describe-CuteState($cs) {
+  if (-not $cs.ok) { return "Cute is not installed here. Copy the Cute and Cute_Quest folders from Cute's download into Interface\AddOns." }
+  $name = "Cute"
+  if ($cs.ver) { $name = "Cute " + $cs.ver }
+  if (-not $cs.quest) { return $name + ", without its Cute_Quest folder: copy that from Cute's download into Interface\AddOns too." }
+  return $name
+}
+
 # What to say about an old ForeverProbe folder in this game folder, or $null when there is none. QuestBank
 # takes ForeverProbe's notes over at a login while ForeverProbe is still there and marks that in
 # QuestBank.lua (["imported"] = true); once the folder is gone they can't be, so, like QuestBank's own chat
@@ -635,9 +664,19 @@ function Get-StatusText($cfg) {
   $out += "WoW folder: " + $where
   $descs = @(Find-SavedVariables -Root $cfg.wowPath | ForEach-Object { Describe-File $_ $cfg })
   $shown = 0
+  $cute = Test-CuteBundle
   foreach ($g in @(Get-GameFolders -Root $cfg.wowPath)) {
     $st = Get-QuestBankState $g
     $saves = @($descs | Where-Object { $_.game -eq $g } | Sort-Object { $_.written } -Descending)
+    if ($cute) {
+      # (the copy that came with Cute: Cute in each game folder it is in, and the saved files)
+      $cs = Get-CuteState $g
+      if (-not $cs.ok -and -not $cs.quest -and $saves.Count -eq 0) { continue }
+      $out += ""
+      $out += (Split-Path $g -Leaf) + ": " + (Describe-CuteState $cs)
+      foreach ($d in $saves) { if ($shown -lt 6) { $out += "   " + $d.text; $shown++ } }
+      continue
+    }
     # game folders where QuestBank never was are none of our business
     if ($st.state -eq "missing" -and -not $st.probe -and $saves.Count -eq 0) { continue }
     $out += ""
@@ -660,7 +699,8 @@ function Get-StatusText($cfg) {
     }
     if ($hidden -gt 0) { $out += "   ... and " + $hidden + " more" }
   }
-  if ($descs.Count -eq 0) { $out += ""; $out += "No QuestBank.lua yet: log a character out once with QuestBank installed." }
+  if ($descs.Count -eq 0 -and $cute) { $out += ""; $out += "No Cute_Quest.lua yet: log a character out once with one of Cute's quest modules on (Cute's Settings, Modules)." }
+  elseif ($descs.Count -eq 0) { $out += ""; $out += "No QuestBank.lua yet: log a character out once with QuestBank installed." }
   $tail = @()
   if (Test-Path -LiteralPath $LogFile) { $tail = @(Get-Content -LiteralPath $LogFile -Tail 5) }
   if ($tail.Count -eq 0) { $tail = @("none yet") }
@@ -850,24 +890,35 @@ function Find-BundledFinds {
 }
 
 # Puts QuestBank_Finds into each game folder that has QuestBank or Cute's quests: its .toc always, its Finds.lua only
-# where none is there yet (one fetched from the site is newer than the download's). Then the day's finds, once
-function Install-FindsAddon($cfg) {
+# where none is there yet (one fetched from the site is newer than the download's). One @{ game; ok; new; error } a
+# game folder it went into, new when it was not there before. From the download, or from the copy Install keeps beside
+# the installed script, so a QuestBank or Cute put in after Install gets it at the next pass
+function Add-FindsAddon($cfg) {
   $src = Find-BundledFinds
   if (-not $src) { return }
-  $n = 0
   foreach ($g in @(Get-GameFolders -Root $cfg.wowPath)) {
     $addons = PathOf $g "Interface" "AddOns"
     if (-not ((Test-Path -LiteralPath (PathOf $addons "QuestBank" "QuestBank.toc")) -or (Test-Path -LiteralPath (PathOf $addons "Cute_Quest" "Cute_Quest.toc")))) { continue }
     $dest = PathOf $addons $FindsAddon
-    if ((Test-Path -LiteralPath $dest) -and ((Resolve-Path -LiteralPath $dest).Path -eq (Resolve-Path -LiteralPath $src).Path)) { $n++; continue }
+    $label = Split-Path $g -Leaf
+    if ((Test-Path -LiteralPath $dest) -and ((Resolve-Path -LiteralPath $dest).Path -eq (Resolve-Path -LiteralPath $src).Path)) { @{ game = $label; ok = $true; new = $false }; continue }
+    $had = Test-Path -LiteralPath (PathOf $dest ($FindsAddon + ".toc"))
     try {
       New-Item -ItemType Directory -Force -Path $dest -ErrorAction Stop | Out-Null
       Copy-Item -LiteralPath (PathOf $src ($FindsAddon + ".toc")) -Destination $dest -Force -ErrorAction Stop
       if (-not (Test-Path -LiteralPath (PathOf $dest "Finds.lua"))) { Copy-Item -LiteralPath (PathOf $src "Finds.lua") -Destination $dest -Force -ErrorAction Stop }
-      $n++
+      @{ game = $label; ok = $true; new = (-not $had) }
     } catch {
-      Write-Host ("    " + (Split-Path $g -Leaf) + ": could not put the finds in :: " + $_.Exception.Message) -ForegroundColor Red
+      @{ game = $label; ok = $false; new = $false; error = $_.Exception.Message }
     }
+  }
+}
+
+# At install: QuestBank_Finds into each game folder that has QuestBank or Cute's quests, then the day's finds, once
+function Install-FindsAddon($cfg) {
+  $n = 0
+  foreach ($a in @(Add-FindsAddon $cfg)) {
+    if ($a.ok) { $n++ } else { Write-Host ("    " + $a.game + ": could not put the finds in :: " + $a.error) -ForegroundColor Red }
   }
   if ($n -gt 0) {
     Write-Host ("  What players' games found and agree on comes into the game once a day (QuestBank_Finds, " + $n + " game folder(s)).")
@@ -962,6 +1013,10 @@ function Copy-QuestBank($src, $addons) {
 function Install-QuestBankAddon($cfg) {
   if (Test-CuteBundle) {
     Write-Host "  This copy came with Cute, so QuestBank is not put in: Cute carries its own."
+    if (@(Get-GameFolders -Root $cfg.wowPath | Where-Object { (Get-CuteState $_).quest }).Count -eq 0) {
+      Write-Host "  Copy the Cute and Cute_Quest folders from this download into your game's Interface\AddOns,"
+      Write-Host "  as with Cute alone. The uploader puts its finds beside them by itself, then or later."
+    }
     return
   }
   $src = Find-BundledQuestBank
@@ -1106,6 +1161,17 @@ function Install-Uploader {
     Copy-Item -LiteralPath $Self -Destination $target -Force
     $srcIco = PathOf (Split-Path -Parent $Self) $IconFile
     if (Test-Path -LiteralPath $srcIco) { Copy-Item -LiteralPath $srcIco -Destination (PathOf $AppDir $IconFile) -Force }
+    # the installed copy keeps whether it came with Cute (Cute.txt) and the data addon, to put in beside a QuestBank or
+    # a Cute that comes later
+    $cuteTxt = PathOf (Split-Path -Parent $Self) "Cute.txt"
+    if (Test-Path -LiteralPath $cuteTxt) { Copy-Item -LiteralPath $cuteTxt -Destination (PathOf $AppDir "Cute.txt") -Force }
+    elseif (Test-Path -LiteralPath (PathOf $AppDir "Cute.txt")) { Remove-Item -LiteralPath (PathOf $AppDir "Cute.txt") -Force }
+    $finds = Find-BundledFinds
+    if ($finds) {
+      $keep = PathOf $AppDir $FindsAddon
+      New-Item -ItemType Directory -Force -Path $keep | Out-Null
+      foreach ($n in @(($FindsAddon + ".toc"), "Finds.lua")) { Copy-Item -LiteralPath (PathOf $finds $n) -Destination $keep -Force }
+    }
   }
 
   # only now that its settings are ours: the old uploader goes
@@ -1167,7 +1233,8 @@ function Install-Uploader {
   Write-Host "  30 minutes and comes back at every login; right-click it for Send now, Status"
   Write-Host "  and Exit. The desktop icon opens the same Status box."
   $found = @(Find-SavedVariables -Root $cfg.wowPath)
-  if ($found.Count -eq 0) { Write-Host "  No QuestBank.lua yet: it appears after your first logout with QuestBank." }
+  if ($found.Count -eq 0 -and (Test-CuteBundle)) { Write-Host "  No Cute_Quest.lua yet: it appears after your first logout with one of Cute's quest modules on." }
+  elseif ($found.Count -eq 0) { Write-Host "  No QuestBank.lua yet: it appears after your first logout with QuestBank." }
   else { foreach ($f in $found) { Write-Host ("  Watching " + $f) } }
 }
 

@@ -13,7 +13,10 @@ Setup, once: double-click Install.bat in this folder. It also puts the
 QuestBank addon from this download into your game's Interface\AddOns.
 A copy you already have is updated (the old one is kept as
 Interface\QuestBank.bak); where there is none, it asks once. The copy
-that comes with Cute never puts QuestBank in.
+that comes with Cute never puts QuestBank in: copy its Cute and
+Cute_Quest folders into Interface\AddOns yourself, as with Cute alone.
+QuestBank_Finds goes in beside QuestBank or Cute, also when you add
+them after Install.
 
 Then the QuestBank Uploader icon sits in the system tray by the clock.
 It sends every 30 minutes and starts again with Windows. Right-click it:

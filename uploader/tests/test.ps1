@@ -729,6 +729,38 @@ if (Test-Path /w/Cute-Uploader.zip) {
   $o = Run-Install; Show "install from Cute's download" $o
   Check "never puts QuestBank in, never asks" (-not (Test-Path "$beta/Interface/AddOns/QuestBank") -and -not (Test-Path "$era/Interface/AddOns/QuestBank") -and (Asked).Count -eq 0 -and $o -match 'This copy came with Cute, so QuestBank is not put in')
   Check "the finds go in beside Cute's quests" (Test-Path "$beta/Interface/AddOns/QuestBank_Finds/QuestBank_Finds.toc")
+  # what it says to a Cute player, Install run before Cute is in AddOns: Cute's file and modules, never "install QuestBank"
+  Reset-App
+  Remove-Item -Recurse -Force /tmp/wow -ErrorAction SilentlyContinue
+  foreach ($g in $beta, $era) { New-Item -ItemType Directory -Force -Path "$g/Interface/AddOns", "$g/WTF/Account/ACC1/SavedVariables" | Out-Null }
+  $script:Self = "/tmp/dlc/QuestBank Uploader/QuestBank-Uploader.ps1"; $script:WowPath = "/tmp/wow"
+  $o = Run-Install; Show "install from Cute's download, no Cute in AddOns yet" $o
+  Check "install: Cute's file and modules, and where Cute goes; never QuestBank's" ($o -match 'No Cute_Quest\.lua yet' -and $o -match 'Copy the Cute and Cute_Quest folders' -and -not ($o -match 'with QuestBank|QuestBank\.lua'))
+  Check "the installed copy keeps that it came with Cute, and the data addon" ((Test-Path "$AppDir/Cute.txt") -and (Test-Path "$AppDir/QuestBank_Finds/QuestBank_Finds.toc") -and (Test-Path "$AppDir/QuestBank_Finds/Finds.lua"))
+  $script:Self = "$AppDir/QuestBank-Uploader.ps1"
+  $r = Send-Changes
+  Check "the tray: Cute_Quest.lua, never QuestBank" ($r -match 'No Cute_Quest\.lua found yet' -and -not ($r -match 'QuestBank'))
+  $s = Get-StatusText (Read-Config); Show "status, Cute" $s
+  Check "status: Cute's words, never QuestBank's install" ($s -match 'No Cute_Quest\.lua yet' -and -not ($s -match 'QuestBank is not installed|with QuestBank installed|No QuestBank\.lua'))
+  # Cute put in afterwards: the next pass puts the data addon beside it and writes the day's finds
+  New-Item -ItemType Directory -Force -Path "$beta/Interface/AddOns/Cute", "$beta/Interface/AddOns/Cute_Quest" | Out-Null
+  Set-Content "$beta/Interface/AddOns/Cute/Cute.toc" "## Interface: 16001`n## Version: 0.7.1"
+  Set-Content "$beta/Interface/AddOns/Cute_Quest/Cute_Quest.toc" "## Interface: 16001"
+  $script:findsReply = $fx
+  $r = Send-Changes
+  Check "QuestBank_Finds goes in beside Cute put in later, the day's finds in it" ((Test-Path "$beta/Interface/AddOns/QuestBank_Finds/QuestBank_Finds.toc") -and ([System.IO.File]::ReadAllText("$beta/Interface/AddOns/QuestBank_Finds/Finds.lua")) -eq $lua)
+  Check "not where Cute isn't" (-not (Test-Path "$era/Interface/AddOns/QuestBank_Finds"))
+  Check "the log says so" (@(Get-Content $LogFile) -match 'QuestBank_Finds put in _classic_beta_')
+  $s = Get-StatusText (Read-Config); Show "status, Cute in" $s
+  Check "status: Cute's version in that game folder" ($s -match '_classic_beta_: Cute 0\.7\.1')
+  # a file that could not go is named as it is
+  Set-Content "$beta/WTF/Account/ACC1/SavedVariables/Cute_Quest.lua" "CuteQuestDB = {`n}`n"
+  $script:sendFails = "HTTP 500, oops"
+  $r = Send-Changes
+  Check "a failure names Cute_Quest.lua" ($r -eq "Could not send Cute_Quest.lua: HTTP 500, oops. It tries again in 30 minutes.")
+  $script:sendFails = $null
+  $s = Get-StatusText (Read-Config)
+  Check "status: the file as Cute's" ($s -match 'Cute_Quest\.lua, account ACC1: \d+ KB, written [0-9: -]+ by Cute')
 } else { Check "Cute's download was built for the test" $false }
 
 "`n" + ($script:checks - $script:fails) + " of " + $script:checks + " checks passed"
