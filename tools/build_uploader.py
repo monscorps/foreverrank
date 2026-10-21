@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Build QuestBank-Uploader.zip: the Windows uploader plus the QuestBank addon it installs.
+"""Build QuestBank-Uploader.zip: the Windows uploader plus the QuestBank addon it installs; or, with --cute, Cute's
+download with the uploader beside it.
 
-Run from anywhere:  python3 tools/build_uploader.py [--out PATH] [--icon] [--test]
+Run from anywhere:  python3 tools/build_uploader.py [--out PATH] [--icon] [--test] [--cute]
 
-The zip holds two folders:
+The zip holds three folders:
   QuestBank Uploader/   Install.bat, Uninstall.bat, QuestBank-Uploader.ps1, README.txt, QuestBank.ico
   QuestBank/            the addon, as tools/questbank/QuestBank is now (Install.bat puts it in AddOns)
+  QuestBank_Finds/      the data addon the uploader writes the site's merged finds into once a day (uploader/)
+--cute builds "Cute with the uploader" instead (default addons/cute/Cute-Uploader.zip): Cute/ and Cute_Quest/ as
+tools/cute has them, the uploader with Cute.txt beside its script (Install then never puts QuestBank in: a loaded
+QuestBank puts Cute_Quest to sleep), and QuestBank_Finds/; no QuestBank/.
 
 Default output is questbank/QuestBank-Uploader.zip. The icon (uploader/QuestBank.ico) is drawn
 here when it is missing, or again with --icon. Text files go in with CRLF line ends (cmd.exe reads
@@ -14,8 +19,8 @@ PowerShell 5.1 reads a script without a byte-order mark in the system code page,
 Norwegian or any other non-English Windows turns other characters into something else.
 The zip carries no key: the uploader posts to the site's open upload endpoint.
 
---test builds into a temporary folder instead and runs uploader/tests/test.ps1 against that zip in
-Docker (mcr.microsoft.com/dotnet/sdk:8.0, no network). Both go in on stdin, since Docker on a Mac
+--test builds both zips into a temporary folder instead and runs uploader/tests/test.ps1 against them in
+Docker (mcr.microsoft.com/dotnet/sdk:8.0, no network). They go in on stdin, since Docker on a Mac
 doesn't see /private/tmp.
 """
 import argparse, io, os, re, subprocess, sys, tarfile, tempfile, time, zipfile
@@ -23,8 +28,12 @@ import argparse, io, os, re, subprocess, sys, tarfile, tempfile, time, zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "uploader")
 ADDON = os.path.join(ROOT, "tools", "questbank", "QuestBank")
+FINDS = os.path.join(SRC, "QuestBank_Finds")
+CUTE = os.path.join(ROOT, "tools", "cute")
 ICON = os.path.join(SRC, "QuestBank.ico")
 TEXT = ("Install.bat", "Uninstall.bat", "QuestBank-Uploader.ps1", "README.txt")
+CUTE_TXT = ("This copy of the QuestBank Uploader came with Cute. It sends what Cute noted in the world to\n"
+            "foreverrank.com and brings the finds back; it never puts the QuestBank addon in (Cute carries its own).\n")
 
 
 def draw_book(size, small=False):
@@ -131,11 +140,13 @@ def add_dir(zf, arc):
     zf.writestr(info, b"")
 
 
-def run_tests(zip_path):
+def run_tests(zip_path, cute_zip=None):
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tf:
         tf.add(os.path.join(SRC, "tests", "test.ps1"), "test.ps1")
         tf.add(zip_path, "QuestBank-Uploader.zip")
+        if cute_zip:
+            tf.add(cute_zip, "Cute-Uploader.zip")
     cmd = ["docker", "run", "-i", "--rm", "--network", "none", "mcr.microsoft.com/dotnet/sdk:8.0", "sh", "-c",
            "mkdir /w && tar -C /w -xf - 2>/dev/null && pwsh -NoProfile -File /w/test.ps1"]
     return subprocess.run(cmd, input=buf.getvalue()).returncode
@@ -146,21 +157,55 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "questbank", "QuestBank-Uploader.zip"))
     ap.add_argument("--icon", action="store_true", help="draw uploader/QuestBank.ico again")
     ap.add_argument("--test", action="store_true", help="build into a temporary folder and run the tests in Docker")
+    ap.add_argument("--cute", action="store_true", help="build Cute's download with the uploader (addons/cute/Cute-Uploader.zip)")
     a = ap.parse_args()
 
     if a.icon or not os.path.exists(ICON):
         write_icon()
     ver = check_addon()
+    check_finds()
     if a.test:
         with tempfile.TemporaryDirectory() as tmp:
-            out = os.path.join(tmp, "QuestBank-Uploader.zip")
+            out, cute = os.path.join(tmp, "QuestBank-Uploader.zip"), os.path.join(tmp, "Cute-Uploader.zip")
             build(out, ver)
+            build(cute, ver, for_cute=True)
             sys.stdout.flush()
-            sys.exit(run_tests(out))
+            sys.exit(run_tests(out, cute))
+    if a.cute:
+        out = a.out if a.out != ap.get_default("out") else os.path.join(ROOT, "addons", "cute", "Cute-Uploader.zip")
+        build(os.path.abspath(out), ver, for_cute=True)
+        return
     build(os.path.abspath(a.out), ver)
 
 
-def build(out, ver):
+def check_finds():
+    """The data addon: its .toc and Finds.lua, ASCII, the file a valid empty set the engine reads (QuestBank_Finds)."""
+    for name in ("QuestBank_Finds.toc", "Finds.lua"):
+        path = os.path.join(FINDS, name)
+        if not os.path.isfile(path):
+            sys.exit("no " + os.path.relpath(path, ROOT))
+        if any(b > 127 for b in open(path, "rb").read()):
+            sys.exit(os.path.relpath(path, ROOT) + " is not plain ASCII")
+    if not re.search(r"^QuestBank_Finds = \{\n  v = 1,", open(os.path.join(FINDS, "Finds.lua")).read(), re.M):
+        sys.exit("uploader/QuestBank_Finds/Finds.lua is not version 1 of the data file")
+
+
+def add_folder(zf, src, arc):
+    """A folder into the zip under arc/, its files as they are (dot files left out)."""
+    add_dir(zf, arc + "/")
+    for base, dirs, files in os.walk(src):
+        dirs[:] = sorted(x for x in dirs if not x.startswith("."))
+        rel = os.path.relpath(base, src)
+        if rel != ".":
+            add_dir(zf, arc + "/" + rel.replace(os.sep, "/"))
+        for f in sorted(files):
+            if f.startswith("."):
+                continue
+            path = os.path.join(base, f)
+            add_bytes(zf, arc + "/" + os.path.relpath(path, src).replace(os.sep, "/"), open(path, "rb").read(), path)
+
+
+def build(out, ver, for_cute=False):
     ps1 = open(os.path.join(SRC, "QuestBank-Uploader.ps1"), "rb").read()
     bad = [i for i, b in enumerate(ps1) if b > 127]
     if bad:
@@ -175,21 +220,16 @@ def build(out, ver):
             src = os.path.join(SRC, name)
             add_bytes(zf, "QuestBank Uploader/" + name, crlf(open(src, "rb").read()), src)
         add_bytes(zf, "QuestBank Uploader/QuestBank.ico", open(ICON, "rb").read(), ICON)
-        add_dir(zf, "QuestBank/")
-        for base, dirs, files in os.walk(ADDON):
-            dirs[:] = sorted(x for x in dirs if not x.startswith("."))
-            rel = os.path.relpath(base, ADDON)
-            if rel != ".":
-                add_dir(zf, "QuestBank/" + rel.replace(os.sep, "/"))
-            for f in sorted(files):
-                if f.startswith("."):
-                    continue
-                src = os.path.join(base, f)
-                arc = "QuestBank/" + os.path.relpath(src, ADDON).replace(os.sep, "/")
-                add_bytes(zf, arc, open(src, "rb").read(), src)
+        if for_cute:
+            add_bytes(zf, "QuestBank Uploader/Cute.txt", crlf(CUTE_TXT.encode("ascii")), ICON)
+            add_folder(zf, os.path.join(CUTE, "Cute"), "Cute")
+            add_folder(zf, os.path.join(CUTE, "Cute_Quest"), "Cute_Quest")
+        else:
+            add_folder(zf, ADDON, "QuestBank")
+        add_folder(zf, FINDS, "QuestBank_Finds")
     os.replace(tmp, out)
 
-    print("wrote", out, os.path.getsize(out) // 1024, "KB, with QuestBank", ver)
+    print("wrote", out, os.path.getsize(out) // 1024, "KB, with " + ("Cute" if for_cute else "QuestBank " + ver))
     for i in zipfile.ZipFile(out).infolist():
         print("  %9d  %s" % (i.file_size, i.filename))
 

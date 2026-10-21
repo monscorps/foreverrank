@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: QuestBank Finds
+## Notes: What players' games found in the world and agree on, merged by foreverrank.com. The QuestBank Uploader writes it once a day; QuestBank and Cute read it at login.
+## Author: Mikal
+## X-License: GPL-3.0-or-later
+## LoadOnDemand: 0
+## OptionalDeps: QuestBank
+
+Finds.lua

@@ -78,6 +78,12 @@ function Ask-YesNo([string]$question) {
 function Get-GameInterface($game) { return $script:ifaces[(Split-Path $game -Leaf)] }
 function Get-WowStart($game) { return $script:wowStart[(Split-Path $game -Leaf)] }
 function Pick-WowFolder { Note "pick"; return $script:pickAnswer }
+# the site's merged finds: $script:findsReply (as Invoke-RestMethod hands JSON back), $null is offline
+function Get-FindsJson([string]$Url) {
+  Note ("finds " + $Url)
+  if ($null -eq $script:findsReply) { throw "offline" }
+  return $script:findsReply
+}
 function Send-File {
   param([string]$Url, [string]$File)
   Note ("post " + $Url + " " + $File)
@@ -118,7 +124,7 @@ function Reset-App {
   $script:calls.Clear(); $script:answers = @(); $script:legacyTask = $false; $script:runningMutex = @()
   $script:ifaces = @{ "_classic_beta_" = 16001; "_classic_era_" = 11507; "_retail_" = 110200 }
   $script:wowStart = @{}; $script:pickAnswer = ""; $script:posts = 0; $script:sendFails = $null
-  $script:failedLast = $null; $script:fileState = $null; $script:lastWatched = $null
+  $script:failedLast = $null; $script:fileState = $null; $script:lastWatched = $null; $script:findsReply = $null
   $script:WowPath = ""; $script:Endpoint = ""; $script:Self = $src
 }
 function Cfg { return (Get-Content -LiteralPath $CfgFile -Raw | ConvertFrom-Json) }
@@ -190,7 +196,7 @@ $o = Run-Install
 Check "a reinstall keeps the override" ((Cfg).endpoint -eq "http://127.0.0.1:8787/api/probe")
 Save-Lua $betaSV "3.5.10"; Add-Content $betaSV "-- changed"
 $r = Send-Changes
-Check "the override is where it posts" ($r -like "Sent*" -and ($script:calls[-1] -match '^post http://127\.0\.0\.1:8787'))
+Check "the override is where it posts, and where the finds come from" ($r -like "Sent*" -and (@($script:calls -match '^post ')[-1] -match '^post http://127\.0\.0\.1:8787') -and (@($script:calls -match '^finds ')[-1] -eq 'finds http://127.0.0.1:8787/api/finds.json'))
 $script:Endpoint = $DefaultEndpoint; $script:answers = @("n")
 $o = Run-Install
 Check "-Endpoint with the default clears the override" (-not (Cfg).PSObject.Properties["endpoint"])
@@ -464,9 +470,11 @@ $job = Start-ThreadJob {
   return $got
 }
 Start-Sleep -Milliseconds 800
-# a file with bytes past ASCII (a name like Bjoern written with o-slash, in UTF-8): they must arrive as they are
+# a file with bytes past ASCII (an NPC named Bjoern with o-slash, in UTF-8): they must arrive as they are, and the
+# characters' table never
 $up = "/tmp/up/QuestBank.lua"; New-Item -ItemType Directory -Force /tmp/up | Out-Null
-[System.IO.File]::WriteAllBytes($up, [byte[]](@(0x51, 0x42, 0x20, 0x3d, 0x20, 0x22, 0x42, 0x6a, 0xc3, 0xb8, 0x72, 0x6e, 0x22, 0x0d, 0x0a, 0x00, 0xff)))
+$utf = [Text.Encoding]::UTF8
+[System.IO.File]::WriteAllBytes($up, $utf.GetBytes("QuestBankDB = {`r`n[`"chars`"] = {`r`n[`"Helga-Realm`"] = {`r`n},`r`n},`r`n[`"disc`"] = {`r`n[`"npc`"] = {`r`n[`"c1`"] = {`r`n[`"n`"] = `"Bj" + [char]0xf8 + "rn`",`r`n},`r`n},`r`n},`r`n}`r`n"))
 $r = Send-File -Url "http://127.0.0.1:8787/api/probe" -File $up
 Check "a 200 reply comes back as the object" ($r.ok -and $r.id -eq 7 -and $r.summary.quests -eq 12)
 $e = $null; try { Send-File -Url "http://127.0.0.1:8787/api/probe" -File $up | Out-Null } catch { $e = $_.Exception.Message }
@@ -478,7 +486,8 @@ $latin = [Text.Encoding]::GetEncoding("ISO-8859-1")
 $body = $latin.GetString($req.body)
 Check "multipart with source=uploader" ($req.ct -match '^multipart/form-data; boundary=' -and $body.Contains("name=`"source`"`r`n`r`nuploader`r`n"))
 Check "the file goes as QuestBank.lua" ($body.Contains('name="file"; filename="QuestBank.lua"'))
-$fileBytes = [System.IO.File]::ReadAllBytes($up)
+$fileBytes = Get-UploadText $up
+Check "what goes is the file's allowed part" (-not $latin.GetString($fileBytes).Contains("Helga") -and $latin.GetString($fileBytes).Contains("Bj" + [char]0xc3 + [char]0xb8 + "rn"))
 $head = "Content-Type: text/plain`r`n`r`n"
 $at = $body.IndexOf($head) + $head.Length
 Check "the file's bytes arrive exactly" ([Convert]::ToBase64String($req.body[$at..($at + $fileBytes.Length - 1)]) -eq [Convert]::ToBase64String($fileBytes) -and $body.Substring($at + $fileBytes.Length).StartsWith("`r`n--"))
@@ -539,6 +548,174 @@ Save-Config $c2
 Check "saving over a broken config.json keeps the good backup" ((Cfg).wowPath -eq "/tmp/wow" -and (Read-ConfigFile $CfgBak).wowPath -eq "/tmp/wow")
 Set-Content -LiteralPath $CfgFile -Value "" -NoNewline; Remove-Item $CfgBak
 Check "both broken or gone: defaults, still installed" ((Read-Config).wowPath -eq "" -and $null -ne (Read-Config))
+
+"`n=== M. Cute_Quest.lua beside QuestBank.lua, never Cute.lua; only the allowed parts leave; the finds come back"
+Reset-App; New-Wow
+$acc = "$beta/WTF/Account/ACC1/SavedVariables"
+# what the game writes: every part of QuestBankDB, a name in the keys of some
+$full = @'
+CuteQuestDB = {
+	["bank"] = {
+		["Helga-ForeverNormal"] = 1,
+	},
+	["chars"] = {
+		["Helga-ForeverNormal"] = {
+			["level"] = 20,
+		},
+	},
+	["diag"] = {
+		["addons"] = {
+			["iface"] = 16001,
+		},
+	},
+	["disc"] = {
+		["v"] = 1,
+		["token"] = "0123456789abcdef",
+		["npc"] = {
+			["c197"] = {
+				["n"] = "Kobold Laborer",
+				["p"] = {
+					"1429:48.2,42.1", -- [1]
+				},
+			},
+		},
+		["note"] = "a } and a , and -- inside a string",
+	},
+	["errors"] = {
+		{
+			["msg"] = "Interface/AddOns/Cute_Quest/Finds.lua:12: oops",
+			["stack"] = "[string \"Helga\"]:1: in main chunk\n",
+			["where"] = "finds",
+			["count"] = 2,
+			["first"] = "2026-10-22 18:04:31",
+			["last"] = "2026-10-22 18:05:59",
+			["version"] = "6.2.0",
+		}, -- [1]
+	},
+	["game"] = {
+		["iface"] = 16001,
+	},
+	["held"] = {
+	},
+	["imported"] = true,
+	["live"] = {
+	},
+	["liveEra"] = 3,
+	["lock"] = {
+	},
+	["plans"] = {
+		["Helga-ForeverNormal"] = {
+		},
+	},
+	["profiles"] = {
+	},
+	["reports"] = {
+	},
+	["run"] = {
+	},
+	["runs"] = {
+	},
+	["settings"] = {
+		["welcome"] = "done",
+	},
+	["somethingNew"] = {
+		["Helga"] = 1,
+	},
+	["trace"] = {
+		["lines"] = {
+			"12:00:01 Helga", -- [1]
+		},
+	},
+	["travel"] = {
+		["gPlayer-1-0001"] = {
+		},
+	},
+	["turnins"] = {
+		{
+			["id"] = 300,
+			["xp"] = 900,
+			["at"] = "2026-10-22 18:04:31",
+		}, -- [1]
+	},
+}
+'@
+Set-Content -LiteralPath "$acc/Cute_Quest.lua" -Value $full -NoNewline
+Set-Content -LiteralPath "$acc/Cute.lua" -Value "CuteDB = {`n[`"roster`"] = {`n[`"Helga`"] = {`n},`n},`n}`n" -NoNewline
+$found = @(Find-SavedVariables -Root "/tmp/wow" | ForEach-Object { [System.IO.Path]::GetFileName($_) } | Sort-Object -Unique)
+Check "watches Cute_Quest.lua beside QuestBank.lua" (($found -join ",") -eq "Cute_Quest.lua,QuestBank.lua")
+Check "refuses Cute.lua by name" (Test-NeverSend "$acc/Cute.lua")
+$e = $null; try { Get-UploadText "$acc/Cute.lua" | Out-Null } catch { $e = $_.Exception.Message }
+Check "Cute.lua never leaves, even when asked for" ($e -eq "Cute.lua never leaves this PC")
+$out = $latin.GetString((Get-UploadText "$acc/Cute_Quest.lua"))
+Show "what goes" $out
+$keys = @([regex]::Matches($out, '(?m)^\t\["(\w+)"\] = ') | ForEach-Object { $_.Groups[1].Value })
+Check "only the allowed parts, in the file's order" (($keys -join ",") -eq "diag,disc,errors,game,live,liveEra,turnins")
+Check "no name past the list" (-not $out.Contains("Helga"))
+Check "a string with braces and commas inside is read whole" ($out.Contains('"a } and a , and -- inside a string"'))
+Check "hand-in times to the minute" ($out.Contains('["at"] = "2026-10-22 18:04",') -and -not $out.Contains("18:04:31"))
+Check "an error keeps its message, where, count and version, never its stack or times" ($out.Contains('Finds.lua:12: oops') -and $out.Contains('["where"] = "finds"') -and $out.Contains('["count"] = 2') -and -not $out.Contains('stack') -and -not $out.Contains('first') -and -not $out.Contains('"last"'))
+Check "the variable keeps its name" ($out.StartsWith("CuteQuestDB = {"))
+Set-Content -LiteralPath "/tmp/up/cut.lua" -Value "QuestBankDB = {`n[`"disc`"] = {`n" -NoNewline
+$e = $null; try { Get-UploadText "/tmp/up/cut.lua" | Out-Null } catch { $e = $_.Exception.Message }
+Check "a file cut short is not sent" ($e -like "not a QuestBank.lua*")
+New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
+@{ wowPath = "/tmp/wow"; sent = @{} } | ConvertTo-Json | Set-Content $CfgFile
+$r = Send-Changes
+Check "Cute_Quest.lua and QuestBank.lua go, Cute.lua never" ($r -eq "Sent 2 files to foreverrank.com." -and @($script:calls -match '^post .*Cute_Quest\.lua$').Count -eq 1 -and @($script:calls -match 'Cute\.lua$').Count -eq 0)
+# the finds: the site's reply written as Lua from a fixed shape, refused whole when anything is outside it
+$fx = '{"v":1,"at":20261022,"rows":[[1429,"b",0,"412,654",2,"Archmage Theocritus'' Research Journal"],[1435,"k",424080,"605,223",3,216523],[1429,"h",2843,"413,655;100,200",2,"7.5"],[1438,"r",6582,"303,298",2,35],[1429,"b",0,"1,1",2,"Bjørn \"the\" |cffff0000Red|r"]]}' | ConvertFrom-Json
+$lua = ConvertTo-FindsLua $fx
+Show "Finds.lua" $lua
+Check "the rows as Lua, numbers and cleaned titles" ($lua.Contains("    { 1429, `"b`", 0, `"412,654`", 2, `"Archmage Theocritus' Research Journal`" },") -and $lua.Contains("    { 1435, `"k`", 424080, `"605,223`", 3, 216523 },") -and $lua.Contains("    { 1438, `"r`", 6582, `"303,298`", 2, 35 },"))
+Check "a title in ASCII: no escape codes, quotes escaped, other bytes as \ddd" ($lua.Contains('"Bj\195\184rn \"the\" cffff0000Redr"'))
+Check "the file is ASCII" (@([Text.Encoding]::UTF8.GetBytes($lua) | Where-Object { $_ -gt 127 }).Count -eq 0)
+foreach ($bad in @('{"v":1,"at":20261022,"rows":[],"code":"os.exit()"}', '{"v":2,"at":20261022,"rows":[]}', '{"v":1,"at":20261022,"rows":[[1429,"x",1,"1,1",2,5]]}',
+                   '{"v":1,"at":20261022,"rows":[[1429,"b",1,"1,1",2,"t",7]]}', '{"v":1,"at":20261022,"rows":[[1429,"h",1,"1,1",2,"os.exit()"]]}',
+                   '{"v":1,"at":20261022,"rows":[[1429,"b",1,"1,1;x",2,"t"]]}', '{"v":1,"at":20261022,"rows":[[1429,"b",1,"1,1",2,"|;="]]}',
+                   '{"v":1,"at":20261022,"rows":[[1429,"k","1","1,1",2,5]]}', '{"v":1,"at":20261022,"rows":[[999999,"k",1,"1,1",2,5]]}')) {
+  $e = $null
+  try { ConvertTo-FindsLua ($bad | ConvertFrom-Json -ErrorAction Stop) | Out-Null } catch { $e = $_.Exception.Message }
+  Check ("refused: " + $bad) ($null -ne $e)
+}
+# once a day into each game folder that has QuestBank_Finds; a refused reply keeps the file there
+New-Item -ItemType Directory -Force -Path "$beta/Interface/AddOns/QuestBank_Finds" | Out-Null
+Set-Content "$beta/Interface/AddOns/QuestBank_Finds/QuestBank_Finds.toc" "## Interface: 16001"
+$script:findsReply = $fx; $script:calls.Clear()
+$c = Read-Config
+Update-Finds $c
+Check "fetched from the site's own address" (@($script:calls -match '^finds https://foreverrank\.andustemme\.workers\.dev/api/finds\.json$').Count -eq 1)
+Check "written into QuestBank_Finds" (([System.IO.File]::ReadAllText("$beta/Interface/AddOns/QuestBank_Finds/Finds.lua")) -eq $lua -and (Cfg).findsDay)
+Update-Finds (Read-Config)
+Check "once a day" (@($script:calls -match '^finds ').Count -eq 1)
+$script:findsReply = ('{"v":1,"at":20261023,"rows":[],"extra":1}' | ConvertFrom-Json)
+Update-Finds (Read-Config) -Force
+Check "a reply outside the shape: the old file stays, and the log says why" (([System.IO.File]::ReadAllText("$beta/Interface/AddOns/QuestBank_Finds/Finds.lua")) -eq $lua -and ((Get-Content $LogFile) -match 'finds not written :: a field outside the shape: extra'))
+# Install puts the data addon in where QuestBank or Cute's quests are, keeping a Finds.lua fetched already
+Reset-App; New-Wow
+Put-Toc "$beta/Interface/AddOns/QuestBank" $BV
+New-Item -ItemType Directory -Force -Path "$era/Interface/AddOns/Cute_Quest" | Out-Null
+Set-Content "$era/Interface/AddOns/Cute_Quest/Cute_Quest.toc" "## Interface: 16001"
+New-Item -ItemType Directory -Force -Path "$era/Interface/AddOns/QuestBank_Finds" | Out-Null
+Set-Content "$era/Interface/AddOns/QuestBank_Finds/Finds.lua" "-- fetched yesterday"
+$script:WowPath = "/tmp/wow"; $script:answers = @("n", "n")
+$o = Run-Install; Show "install, finds" $o
+Check "the data addon put in where QuestBank is" ((Test-Path "$beta/Interface/AddOns/QuestBank_Finds/QuestBank_Finds.toc") -and (Test-Path "$beta/Interface/AddOns/QuestBank_Finds/Finds.lua"))
+Check "and where Cute's quests are, its fetched file kept" ((Test-Path "$era/Interface/AddOns/QuestBank_Finds/QuestBank_Finds.toc") -and ((Get-Content "$era/Interface/AddOns/QuestBank_Finds/Finds.lua") -eq "-- fetched yesterday"))
+Check "not where neither is" (-not (Test-Path "$retail/Interface/AddOns/QuestBank_Finds"))
+Check "install says so once" ($o -match 'once a day \(QuestBank_Finds, 2 game folder\(s\)\)')
+# the copy that comes with Cute never puts QuestBank in
+if (Test-Path /w/Cute-Uploader.zip) {
+  Reset-App; New-Wow
+  Remove-Item -Recurse -Force /tmp/dlc -ErrorAction SilentlyContinue
+  Expand-Archive -LiteralPath /w/Cute-Uploader.zip -DestinationPath /tmp/dlc
+  Check "Cute's download: Cute, Cute_Quest, the uploader with Cute.txt and the data addon; no QuestBank" ((Test-Path "/tmp/dlc/Cute/Cute.toc") -and (Test-Path "/tmp/dlc/Cute_Quest/Cute_Quest.toc") -and (Test-Path "/tmp/dlc/QuestBank Uploader/Cute.txt") -and (Test-Path "/tmp/dlc/QuestBank_Finds/QuestBank_Finds.toc") -and -not (Test-Path "/tmp/dlc/QuestBank"))
+  New-Item -ItemType Directory -Force -Path "$beta/Interface/AddOns/Cute_Quest" | Out-Null
+  Set-Content "$beta/Interface/AddOns/Cute_Quest/Cute_Quest.toc" "## Interface: 16001"
+  $script:Self = "/tmp/dlc/QuestBank Uploader/QuestBank-Uploader.ps1"; $script:WowPath = "/tmp/wow"; $script:answers = @("y", "y", "y")
+  $o = Run-Install; Show "install from Cute's download" $o
+  Check "never puts QuestBank in, never asks" (-not (Test-Path "$beta/Interface/AddOns/QuestBank") -and -not (Test-Path "$era/Interface/AddOns/QuestBank") -and (Asked).Count -eq 0 -and $o -match 'This copy came with Cute, so QuestBank is not put in')
+  Check "the finds go in beside Cute's quests" (Test-Path "$beta/Interface/AddOns/QuestBank_Finds/QuestBank_Finds.toc")
+} else { Check "Cute's download was built for the test" $false }
 
 "`n" + ($script:checks - $script:fails) + " of " + $script:checks + " checks passed"
 if ($script:fails -gt 0) { exit 1 }

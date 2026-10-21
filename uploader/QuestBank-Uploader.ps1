@@ -1,11 +1,13 @@
-# QuestBank Uploader: sends your QuestBank.lua to foreverrank.com, automatically.
+# QuestBank Uploader: sends what QuestBank (or Cute) noted in the world to foreverrank.com, automatically.
 #
-# What it does, in full: finds WTF\Account\<account>\SavedVariables\QuestBank.lua in your WoW game
-# folders and, when the file changes (WoW writes it at logout and on /reload), uploads it to
-# foreverrank.com. Nothing else is read or sent, nothing runs inside the game, no account or login is
-# involved, and you can read every line below. Uploads are stored privately and never published as they
-# are (the file holds your characters' names); only what QuestBank noted about quests, NPCs, items,
-# spells and XP goes into QuestBank's data releases.
+# What it does, in full: finds WTF\Account\<account>\SavedVariables\QuestBank.lua (and Cute_Quest.lua,
+# Cute's copy of QuestBank) in your WoW game folders and, when one changes (WoW writes it at logout and on
+# /reload), uploads the parts of it that hold no name: what was noted about quests, NPCs, places, drops,
+# items, spells and XP, the client's diagnostics and errors (Get-UploadText below; the same list as the
+# site's own). Characters, their bank, plans and settings never leave this PC, nor does Cute.lua (your
+# guild's roster). Once a day it fetches the finds the site merged (what two players' files agree on) into
+# the QuestBank_Finds addon, as numbers and short titles only. Nothing else is read or sent, nothing runs
+# inside the game, no account or login is involved, and you can read every line below.
 #
 # Install:   Install.bat (or: .\QuestBank-Uploader.ps1 -Install). It also puts the QuestBank addon that
 #            came in the same download into your game folders: it updates the copy you have and asks
@@ -26,7 +28,14 @@ param(
 
 $DefaultEndpoint = "https://foreverrank.andustemme.workers.dev/api/probe"
 $WatchFile  = "QuestBank.lua"
+$WatchFiles = @("QuestBank.lua", "Cute_Quest.lua")   # the engine's saved file, under QuestBank and under Cute
+$NeverSend  = @("Cute.lua")                          # CuteDB: the guild's roster, GUIDs and members' Only-you values
 $MaxBytes   = 6 * 1024 * 1024   # the endpoint's limit
+# What may leave the PC, the same list as the site's (tools/probe_pull.py ALLOW, worker/src/allow.js): every other
+# part of the saved file stays here. Hand-in times go to the minute, an error as its message and where it was caught
+$Allow      = @("disc", "game", "live", "liveEra", "turnins", "diag", "errors")
+$ErrorKeys  = @("msg", "where", "count", "version")
+$FindsAddon = "QuestBank_Finds"  # the data addon the finds go into, once a day
 $AppName    = "QuestBank Uploader"
 $AppDir     = Join-Path $env:APPDATA $AppName
 $CfgFile    = Join-Path $AppDir "config.json"
@@ -52,13 +61,14 @@ function Log([string]$msg) {
 }
 
 # The settings: wowPath (empty means the usual install folders), sent (each file's SHA-256 when it was
-# last sent), declined (game folders the player said no to QuestBank in, so Install doesn't ask again)
-# and, only when someone picked another one, endpoint. With no endpoint stored, a change to the site's
-# own reaches every install.
+# last sent), declined (game folders the player said no to QuestBank in, so Install doesn't ask again),
+# findsDay (the day the finds were last fetched) and, only when someone picked another one, endpoint. With
+# no endpoint stored, a change to the site's own reaches every install.
 function ConvertTo-Config($raw) {
-  $cfg = @{ wowPath = ""; sent = @{}; declined = @(); endpointSet = ""; endpoint = $DefaultEndpoint }
+  $cfg = @{ wowPath = ""; sent = @{}; declined = @(); endpointSet = ""; endpoint = $DefaultEndpoint; findsDay = "" }
   if ($raw) {
     if ($raw.PSObject.Properties["wowPath"] -and $raw.wowPath) { $cfg.wowPath = [string]$raw.wowPath }
+    if ($raw.PSObject.Properties["findsDay"] -and $raw.findsDay) { $cfg.findsDay = [string]$raw.findsDay }
     if ($raw.PSObject.Properties["sent"] -and $raw.sent) { $raw.sent.PSObject.Properties | ForEach-Object { $cfg.sent[$_.Name] = [string]$_.Value } }
     if ($raw.PSObject.Properties["declined"] -and $raw.declined) { $cfg.declined = @($raw.declined | ForEach-Object { [string]$_ }) }
     if ($raw.PSObject.Properties["endpoint"] -and $raw.endpoint -and [string]$raw.endpoint -ne $DefaultEndpoint) {
@@ -89,6 +99,7 @@ function Read-Config {
 function Save-Config($cfg) {
   $out = [ordered]@{ wowPath = $cfg.wowPath; sent = $cfg.sent }
   if (@($cfg.declined).Count -gt 0) { $out.declined = @($cfg.declined) }
+  if ($cfg.findsDay) { $out.findsDay = $cfg.findsDay }
   if ($cfg.endpointSet) { $out.endpoint = $cfg.endpointSet }
   New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
   $tmp = $CfgFile + "." + $PID + ".tmp"
@@ -133,26 +144,96 @@ function Get-GameFolders {
   return $out
 }
 
-# QuestBank.lua is account-wide, so only WTF\Account\<account>\SavedVariables counts (never a character's folder)
+# QuestBank.lua and Cute_Quest.lua are account-wide, so only WTF\Account\<account>\SavedVariables counts (never a
+# character's folder). Cute.lua beside them is never one of these, whatever is asked
 function Find-SavedVariables {
   param([string]$Root)
   foreach ($g in @(Get-GameFolders -Root $Root)) {
     $acct = PathOf $g "WTF" "Account"
     if (-not (Test-Path -LiteralPath $acct)) { continue }
     foreach ($a in @(Get-ChildItem -LiteralPath $acct -Directory -ErrorAction SilentlyContinue)) {
-      $p = PathOf $a.FullName "SavedVariables" $WatchFile
-      if (Test-Path -LiteralPath $p) { $p }
+      foreach ($w in $WatchFiles) {
+        $p = PathOf $a.FullName "SavedVariables" $w
+        if ((Test-Path -LiteralPath $p) -and -not (Test-NeverSend $p)) { $p }
+      }
     }
   }
 }
 
-# One multipart POST: source=uploader, file=QuestBank.lua. The reply is JSON:
-# { ok, id, kind, summary, message } or { ok, duplicate } or { error }.
+# A file that never leaves the PC, by its name (Cute.lua)
+function Test-NeverSend([string]$path) {
+  $leaf = [System.IO.Path]::GetFileName($path)
+  foreach ($n in $NeverSend) { if ($leaf -ieq $n) { return $true } }
+  return $false
+}
+
+# The top-level entries of the table a SavedVariables file assigns to its one variable (QuestBankDB = { ... }), as
+# @{ name; entries = @( @{ key; text } ) }, or $null when the text is no QuestBank or Cute_Quest file. Strings (with
+# their \ escapes) and "--" comments are stepped over; the client ends every entry with a comma
+function Get-SavedEntries([string]$text) {
+  $m = [regex]::Match($text, '^\s*(QuestBankDB|CuteQuestDB)\s*=\s*\{')
+  if (-not $m.Success) { return $null }
+  $open = $m.Index + $m.Length - 1
+  $depth = 0; $start = $open + 1; $entries = New-Object System.Collections.ArrayList; $closed = $false
+  $tok = [regex]::new('"(?:[^"\\]|\\.)*"|--[^\n]*|[{},]')
+  $t = $tok.Match($text, $open)
+  while ($t.Success) {
+    $v = $t.Value
+    if ($v -eq "{") { $depth++ }
+    elseif ($v -eq "}") {
+      $depth--
+      if ($depth -eq 0) {
+        $last = $text.Substring($start, $t.Index - $start)
+        if ($last.Trim()) { [void]$entries.Add($last) }
+        $closed = $true
+        break
+      }
+    }
+    elseif ($v -eq "," -and $depth -eq 1) { [void]$entries.Add($text.Substring($start, $t.Index - $start)); $start = $t.Index + 1 }
+    $t = $t.NextMatch()
+  }
+  if (-not $closed) { return $null }  # (a file cut short)
+  $out = @()
+  foreach ($e in $entries) {
+    $k = [regex]::Match($e, '^\s*(?:--[^\n]*\n\s*)*\["([^"\\]*)"\]\s*=')
+    if ($k.Success) { $out += @{ key = $k.Groups[1].Value; text = $e.Trim() } }
+  }
+  return @{ name = $m.Groups[1].Value; entries = $out }
+}
+
+# The file as it goes to foreverrank.com: the allow-list's entries only, hand-in times to the minute, errors as their
+# message and where (never their stack or times). Read and written byte for byte (Latin-1 keeps every byte as it was,
+# a name in UTF-8 included). Throws when the file is no QuestBank or Cute_Quest file, or Cute.lua
+function Get-UploadText([string]$File) {
+  if (Test-NeverSend $File) { throw "Cute.lua never leaves this PC" }
+  $latin = [System.Text.Encoding]::GetEncoding("ISO-8859-1")
+  $text = $latin.GetString([System.IO.File]::ReadAllBytes($File))
+  if ($text.Length -gt 0 -and [int]$text[0] -eq 0xEF -and $text.Length -gt 2 -and [int]$text[1] -eq 0xBB -and [int]$text[2] -eq 0xBF) { $text = $text.Substring(3) }
+  $sv = Get-SavedEntries $text
+  if (-not $sv) { throw "not a QuestBank.lua or Cute_Quest.lua the game wrote whole" }
+  $kept = @()
+  foreach ($e in $sv.entries) {
+    if (-not ($Allow -ccontains $e.key)) { continue }
+    $body = $e.text
+    if ($e.key -eq "turnins") { $body = [regex]::Replace($body, '(\["at"\]\s*=\s*"\d{4}-\d{2}-\d{2} \d{2}:\d{2}):\d{2}"', '$1"') }
+    if ($e.key -eq "errors") {
+      $keep = ($ErrorKeys | ForEach-Object { [regex]::Escape($_) }) -join "|"
+      $body = [regex]::Replace($body, '\["(?!(?:' + $keep + ')")[^"\\]*"\]\s*=\s*(?:"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?|true|false|nil)\s*,?', '')
+    }
+    $kept += $body
+  }
+  $out = $sv.name + " = {`n"
+  foreach ($b in $kept) { $out += "`t" + $b + ",`n" }
+  return [byte[]]$latin.GetBytes($out + "}`n")
+}
+
+# One multipart POST: source=uploader, file=QuestBank.lua (or Cute_Quest.lua) as Get-UploadText leaves it. The reply
+# is JSON: { ok, id, kind, summary, message } or { ok, duplicate } or { error }.
 function Send-File {
   param([string]$Url, [string]$File)
   $boundary = [System.Guid]::NewGuid().ToString()
   $LF = "`r`n"
-  $bytes = [System.IO.File]::ReadAllBytes($File)
+  $bytes = Get-UploadText $File
   $enc = [System.Text.Encoding]::GetEncoding("ISO-8859-1")
   $name = [System.IO.Path]::GetFileName($File)
   $pre = "--$boundary$LF" +
@@ -195,8 +276,11 @@ function Send-Changes {
     if ($files.Count -eq 0) { Log "no QuestBank.lua found" } else { Log ("watching " + $files.Count + " file(s): " + $watched) }
     $script:lastWatched = $watched
   }
-  if ($files.Count -eq 0) { return "No QuestBank.lua found yet. Log a character out once with QuestBank installed." }
-  $posted = 0; $failed = 0; $why = ""
+  if ($files.Count -eq 0) {
+    Update-Finds $cfg
+    return "No QuestBank.lua found yet. Log a character out once with QuestBank installed."
+  }
+  $posted = 0; $failed = 0; $why = ""; $names = @()
   foreach ($f in $files) {
     $hash = (Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash
     if ($cfg.sent[$f] -eq $hash) { continue }
@@ -214,6 +298,7 @@ function Send-Changes {
         $cfg.sent[$f] = $hash
         $script:failedLast.Remove($f)
         $posted++
+        $names += [System.IO.Path]::GetFileName($f)
         if ($r.duplicate) { Log ("already there: " + $f) }
         else {
           $bits = @()
@@ -233,6 +318,7 @@ function Send-Changes {
     if ($failed -gt 0 -and -not $why) { $why = $script:failedLast[$f] }
   }
   Save-Config $cfg
+  Update-Finds $cfg
   $script:sentThisPass = $posted
   # each file's state in the log when it changes (and once per tray start), never on every pass;
   # only the tray: a Status click or -SendNow is a process of its own and would log them all again
@@ -244,11 +330,131 @@ function Send-Changes {
       }
     }
   }
+  $one = @($names | Select-Object -Unique)
+  $what = "QuestBank.lua"
+  if ($one.Count -eq 1) { $what = $one[0] }
   if ($failed -gt 0 -and $posted -gt 0) { return "Sent $posted file(s); $failed could not go: see Status." }
   if ($failed -gt 0) { return "Could not send QuestBank.lua: " + $why + ". It tries again in 30 minutes." }
-  if ($posted -eq 1) { return "Sent QuestBank.lua to foreverrank.com." }
-  if ($posted -gt 1) { return "Sent $posted QuestBank.lua files to foreverrank.com." }
+  if ($posted -eq 1) { return "Sent " + $what + " to foreverrank.com." }
+  if ($posted -gt 1 -and $one.Count -eq 1) { return "Sent $posted " + $what + " files to foreverrank.com." }
+  if ($posted -gt 1) { return "Sent $posted files to foreverrank.com." }
   return "Nothing new since the last upload."
+}
+
+# ---- the finds, back into the game ---------------------------------------------------------------
+# Once a day the site's merged finds (what two players' files agree on: a book's place, a locked object and its key, a
+# chest, a rare) are fetched and written as QuestBank_Finds\Finds.lua in each game folder that has the QuestBank_Finds
+# addon. The file is written here from a fixed shape, numbers and cleaned short titles only: nothing from the site is
+# ever run as it came. A reply outside that shape is refused whole and the old file stays
+
+# The site's merged finds, as JSON objects (a stand-in in the tests)
+function Get-FindsJson([string]$Url) { return Invoke-RestMethod -Uri $Url -TimeoutSec 30 }
+
+function Get-FindsUrl($cfg) { return ([string]$cfg.endpoint -replace '/api/probe/?$', '/api/finds.json') }
+
+# a whole number in lo..hi from a JSON value, or $null
+function Get-Whole($v, [long]$lo, [long]$hi) {
+  if ($null -eq $v -or $v -is [bool] -or $v -is [string]) { return $null }
+  try { $d = [double]$v } catch { return $null }
+  if ($d -ne [math]::Floor($d) -or $d -lt $lo -or $d -gt $hi) { return $null }
+  return [long]$d
+}
+
+# a title as the addon cleans one: no escape codes or separators, one line, at most 60 bytes on a whole character, as
+# a Lua string in ASCII (other bytes as \ddd); $null when nothing is left
+function ConvertTo-LuaTitle($v) {
+  if (-not ($v -is [string])) { return $null }
+  $t = ($v -replace '[|;=]', '') -replace '[\x00-\x1f\x7f]', ' '
+  $t = ($t -replace '\s+', ' ').Trim()
+  $b = [System.Text.Encoding]::UTF8.GetBytes($t)
+  if ($b.Length -gt 60) {
+    $n = 60
+    while ($n -gt 0 -and ($b[$n] -band 0xC0) -eq 0x80) { $n-- }
+    if ($n -le 0) { return $null }
+    $b = $b[0..($n - 1)]
+  }
+  $sb = New-Object System.Text.StringBuilder
+  foreach ($x in $b) {
+    if ($x -eq 34 -or $x -eq 92) { [void]$sb.Append('\' + [char]$x) }
+    elseif ($x -ge 32 -and $x -lt 127) { [void]$sb.Append([char]$x) }
+    else { [void]$sb.Append('\' + ([int]$x).ToString("000")) }
+  }
+  $s = $sb.ToString().Trim()
+  if (-not $s) { return $null }
+  return '"' + $s + '"'
+}
+
+# The Lua file from the site's JSON: { v = 1, at = yyyymmdd, rows = { { map, kind, id, "x,y;x,y", files, extra } } };
+# throws why when anything is outside that shape (another key, another kind, a number out of range, a spot list that
+# isn't one, a title with nothing left)
+function ConvertTo-FindsLua($data) {
+  if ($null -eq $data -or -not ($data -is [System.Management.Automation.PSCustomObject])) { throw "not an object" }
+  $names = @($data.PSObject.Properties | ForEach-Object { $_.Name })
+  foreach ($n in $names) { if (-not (@("v", "at", "rows") -ccontains $n)) { throw ("a field outside the shape: " + $n) } }
+  if ((Get-Whole $data.v 1 1) -ne 1) { throw "not version 1" }
+  $at = Get-Whole $data.at 20260101 20991231
+  if ($null -eq $at) { throw "no date" }
+  $rows = @($data.rows)
+  if ($null -eq $data.rows -or $rows.Count -gt 5000) { throw "no rows, or too many" }
+  $sb = New-Object System.Text.StringBuilder
+  [void]$sb.Append("-- QuestBank_Finds: what players' files agree on, merged by foreverrank.com and written by the QuestBank`n")
+  [void]$sb.Append("-- Uploader. Numbers and short titles only; the uploader writes it again once a day.`n")
+  [void]$sb.Append("QuestBank_Finds = {`n  v = 1,`n  at = " + $at + ",`n  rows = {`n")
+  foreach ($r in $rows) {
+    $r = @($r)
+    if ($r.Count -ne 6) { throw "a row of another shape" }
+    $map = Get-Whole $r[0] 1 99999
+    $kind = $r[1]
+    $id = Get-Whole $r[2] 0 99999999
+    $votes = Get-Whole $r[4] 0 9999
+    if ($null -eq $map -or $null -eq $id -or $null -eq $votes) { throw "a number out of range" }
+    if (-not ($kind -is [string]) -or -not (@("b", "k", "h", "r") -ccontains $kind)) { throw ("a kind outside the shape: " + $kind) }
+    if (-not ($r[3] -is [string]) -or -not ($r[3] -cmatch '^\d{1,4},\d{1,4}(;\d{1,4},\d{1,4}){0,3}$')) { throw "a spot list that isn't one" }
+    $extra = $null
+    switch ($kind) {
+      "b" { $extra = ConvertTo-LuaTitle $r[5] }
+      "h" { if ($r[5] -is [string] -and $r[5] -cmatch '^\d{1,2}\.\d{1,3}$') { $extra = '"' + $r[5] + '"' } }
+      "k" { $x = Get-Whole $r[5] 0 99999999; if ($null -ne $x) { $extra = [string]$x } }
+      "r" { $x = Get-Whole $r[5] 0 100; if ($null -ne $x) { $extra = [string]$x } }
+    }
+    if ($null -eq $extra) { throw ("a " + $kind + " row's last field outside the shape") }
+    [void]$sb.Append("    { " + $map + ', "' + $kind + '", ' + $id + ', "' + $r[3] + '", ' + $votes + ", " + $extra + " },`n")
+  }
+  [void]$sb.Append("  },`n}`n")
+  return $sb.ToString()
+}
+
+# The game folders with the QuestBank_Finds addon, each its folder
+function Get-FindsFolders($cfg) {
+  $out = @()
+  foreach ($g in @(Get-GameFolders -Root $cfg.wowPath)) {
+    $d = PathOf $g "Interface" "AddOns" $FindsAddon
+    if (Test-Path -LiteralPath (PathOf $d ($FindsAddon + ".toc"))) { $out += $d }
+  }
+  return $out
+}
+
+# Once a day (or now, -Force): fetch, check, write. Never throws: the sending must go on whatever the site answers
+function Update-Finds($cfg, [switch]$Force) {
+  try {
+    $today = (Get-Date).ToString("yyyy-MM-dd", [System.Globalization.CultureInfo]::InvariantCulture)
+    if (-not $Force -and $cfg.findsDay -eq $today) { return }
+    $dirs = @(Get-FindsFolders $cfg)
+    if ($dirs.Count -eq 0) { return }
+    $lua = ConvertTo-FindsLua (Get-FindsJson (Get-FindsUrl $cfg))
+    $bytes = [System.Text.Encoding]::ASCII.GetBytes($lua)
+    foreach ($d in $dirs) {
+      $f = PathOf $d "Finds.lua"
+      $tmp = $f + ".tmp"
+      [System.IO.File]::WriteAllBytes($tmp, $bytes)
+      Move-Item -LiteralPath $tmp -Destination $f -Force
+    }
+    $cfg.findsDay = $today
+    Save-Config $cfg
+    Log ("finds written to " + $dirs.Count + " game folder(s)")
+  } catch {
+    Log ("finds not written :: " + $_.Exception.Message)
+  }
 }
 
 # The QuestBank version that last wrote this file: QuestBank stamps its version into what it saves
@@ -283,7 +489,7 @@ function Describe-File($f, $cfg) {
     if ($cfg.sent[$f] -eq $hash) { $state = "sent" } elseif ($cfg.sent[$f]) { $state = "changed since the last send, goes next" }
   } catch { }
   if ($script:failedLast -and $script:failedLast[$f]) { $state = "failed last time: " + $script:failedLast[$f] }
-  $text = "QuestBank.lua, account " + $acct + ": " + $kb + " KB, written " + $when + " by " + $writer + "; " + $state
+  $text = [System.IO.Path]::GetFileName($f) + ", account " + $acct + ": " + $kb + " KB, written " + $when + " by " + $writer + "; " + $state
   return @{ text = $text; ver = $ver; when = $when; written = $item.LastWriteTime; acct = $acct; game = $game; flavor = (Split-Path $game -Leaf); path = $f; key = ($when + "|" + $writer + "|" + $state) }
 }
 
@@ -622,6 +828,49 @@ function Ask-YesNo([string]$question) {
   return $false
 }
 
+# This copy came with Cute (Cute.txt beside the script): it never puts QuestBank in, since a loaded QuestBank puts
+# Cute's quests to sleep
+function Test-CuteBundle {
+  if (-not $Self) { return $false }
+  return (Test-Path -LiteralPath (PathOf (Split-Path -Parent $Self) "Cute.txt"))
+}
+
+# The QuestBank_Finds data addon that came in the same download: next to this folder, or inside it
+function Find-BundledFinds {
+  if (-not $Self) { return $null }
+  $here = Split-Path -Parent $Self
+  foreach ($c in @((PathOf (Split-Path -Parent $here) $FindsAddon), (PathOf $here $FindsAddon))) {
+    if (Test-Path -LiteralPath (PathOf $c ($FindsAddon + ".toc"))) { return $c }
+  }
+  return $null
+}
+
+# Puts QuestBank_Finds into each game folder that has QuestBank or Cute's quests: its .toc always, its Finds.lua only
+# where none is there yet (one fetched from the site is newer than the download's). Then the day's finds, once
+function Install-FindsAddon($cfg) {
+  $src = Find-BundledFinds
+  if (-not $src) { return }
+  $n = 0
+  foreach ($g in @(Get-GameFolders -Root $cfg.wowPath)) {
+    $addons = PathOf $g "Interface" "AddOns"
+    if (-not ((Test-Path -LiteralPath (PathOf $addons "QuestBank" "QuestBank.toc")) -or (Test-Path -LiteralPath (PathOf $addons "Cute_Quest" "Cute_Quest.toc")))) { continue }
+    $dest = PathOf $addons $FindsAddon
+    if ((Test-Path -LiteralPath $dest) -and ((Resolve-Path -LiteralPath $dest).Path -eq (Resolve-Path -LiteralPath $src).Path)) { $n++; continue }
+    try {
+      New-Item -ItemType Directory -Force -Path $dest -ErrorAction Stop | Out-Null
+      Copy-Item -LiteralPath (PathOf $src ($FindsAddon + ".toc")) -Destination $dest -Force -ErrorAction Stop
+      if (-not (Test-Path -LiteralPath (PathOf $dest "Finds.lua"))) { Copy-Item -LiteralPath (PathOf $src "Finds.lua") -Destination $dest -Force -ErrorAction Stop }
+      $n++
+    } catch {
+      Write-Host ("    " + (Split-Path $g -Leaf) + ": could not put the finds in :: " + $_.Exception.Message) -ForegroundColor Red
+    }
+  }
+  if ($n -gt 0) {
+    Write-Host ("  What players' games found and agree on comes into the game once a day (QuestBank_Finds, " + $n + " game folder(s)).")
+    Update-Finds $cfg -Force
+  }
+}
+
 # The QuestBank addon folder that came in the same download: next to this folder, or inside it
 function Find-BundledQuestBank {
   if (-not $Self) { return $null }
@@ -707,6 +956,10 @@ function Copy-QuestBank($src, $addons) {
 # player's own, and a game folder without QuestBank is asked about once (only where its game can load
 # QuestBank). Only Interface\AddOns\QuestBank is written: never WTF, saved files or other addons.
 function Install-QuestBankAddon($cfg) {
+  if (Test-CuteBundle) {
+    Write-Host "  This copy came with Cute, so QuestBank is not put in: Cute carries its own."
+    return
+  }
   $src = Find-BundledQuestBank
   if (-not $src) {
     Write-Host "  The QuestBank addon folder didn't come with this copy, so your addons are as they were."
@@ -821,8 +1074,9 @@ function Show-Banner {
 
 function Install-Uploader {
   Show-Banner
-  Write-Host "  Sends your QuestBank.lua to foreverrank.com after each session, so what"
-  Write-Host "  you discover in game reaches everyone's QuestBank. No account, nothing to type."
+  Write-Host "  Sends what QuestBank or Cute noted in the world to foreverrank.com after each"
+  Write-Host "  session, never a name, so what you discover in game reaches everyone's QuestBank."
+  Write-Host "  No account, nothing to type."
   Write-Host ""
   New-Item -ItemType Directory -Force -Path $AppDir | Out-Null
   Stop-Tray
@@ -899,6 +1153,7 @@ function Install-Uploader {
 
   Write-Host ""
   Install-QuestBankAddon $cfg
+  Install-FindsAddon $cfg
   Log "installed"
   Start-Tray
 
