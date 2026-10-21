@@ -14,8 +14,8 @@
 --            30), greys the queue items it published in every officer's queue, and shows once as a toast: one at a
 --            time, three waiting, two an hour, none in combat, an encounter, a loading screen or a dungeon or raid,
 --            nothing from a sender past 10 sets in an hour and nothing for an answer to 1G (News alone). A card whose
---            source the policy routes Only you now is dropped. Cute's own guild line from that officer is hidden for a
---            minute, so a member with Cute sees a set once
+--            source the policy routes Only you now is dropped. Cute's own guild line from an officer is hidden
+--            (H.LineFilter), so a member with Cute sees a set once
 --   1G       every client once, a minute after its hello: the newest set it holds. An officer holding newer ones answers
 --            with them (the last five), the lowest GUID first and the others only where no answer came meanwhile, once
 --            in half an hour an asker
@@ -1232,11 +1232,21 @@ function H.Draw(ui)
     end
   elseif chip == "queue" and not H.draft then
     local n = #H.Ticked()
-    local bx = w
-    bx = bx - 90; bandButton(ui, bx, 90, "New card", true, function() H.draft = { mode = "card", kind = "n", title = "Guild news", cards = { { kind = "shout", title = "", line = "" } }, chat = H.Prefs().chat ~= false }; C.UI:Draw() end)
+    local function newCard()
+      H.draft = { mode = "card", kind = "n", title = "Guild news", cards = { { kind = "shout", title = "", line = "" } }, chat = H.Prefs().chat ~= false }
+      C.UI:Draw()
+    end
+    local function compose()
+      local d = H:Compose(H.Ticked())
+      d.mode = "set"
+      H.draft = d
+      C.UI:Draw()
+    end
+    local why = n == 0 and "Tick one to five items first." or (n > 5 and "Five cards at most: untick some." or "Makes a set of the items ticked.")
+    local bx = w - 90
+    bandButton(ui, bx, 90, "New card", true, newCard)
     bx = bx - 94; bandButton(ui, bx, 90, "New hall", true, function() H.NewHall("shame", "a"); C.UI:Draw() end)
-    bx = bx - 94; bandButton(ui, bx, 90, "Compose", n >= 1 and n <= 5, function() local d = H:Compose(H.Ticked()); d.mode = "set"; H.draft = d; C.UI:Draw() end,
-      function(tip) tip:AddLine("Compose", 1, 1, 1); tip:AddLine(n == 0 and "Tick one to five items first." or (n > 5 and "Five cards at most: untick some." or "Makes a set of the items ticked."), 0.85, 0.85, 0.85, true) end)
+    bx = bx - 94; bandButton(ui, bx, 90, "Compose", n >= 1 and n <= 5, compose, function(tip) tip:AddLine("Compose", 1, 1, 1); tip:AddLine(why, 0.85, 0.85, 0.85, true) end)
   end
   ui:SetBand(28)
   if chip == "shame" then if ui.DrawShame then ui:DrawShame() end
@@ -1430,7 +1440,13 @@ function H.DrawQueue(ui)
       color(r.name, INK)
       U.FitText(r.name, "Draft", 116)
       local set = it.set or {}
-      U.FitText(r.what, (set.title or "") .. DOT .. #(set.cards or {}) .. (#(set.cards or {}) == 1 and " card" or " cards"), whatW)
+      -- (a hall's draft: its title and the cards its statistics make)
+      local title, n = set.title or "", #(set.cards or {})
+      if set.hall then
+        title, n = set.hall.title or "", 0
+        for i = 1, 5 do if set.hall.stats and set.hall.stats[i] then n = n + 1 end end
+      end
+      U.FitText(r.what, title .. DOT .. n .. (n == 1 and " card" or " cards"), whatW)
       r.who:SetText(U.Ago(it.at) or "")
       r.fn = function(_, which)
         if which == "RightButton" then H:Unqueue({ it.id }); C.UI:Draw() return end
@@ -1439,7 +1455,7 @@ function H.DrawQueue(ui)
         H.draft = d
         C.UI:Draw()
       end
-      r.tip = function(tip) tip:AddLine("Draft: " .. (set.title or ""), 1, 1, 1); tip:AddLine("Click: open it. Right-click: delete it.", 0.7, 0.7, 0.7, true) end
+      r.tip = function(tip) tip:AddLine("Draft: " .. title, 1, 1, 1); tip:AddLine("Click: open it. Right-click: delete it.", 0.7, 0.7, 0.7, true) end
       return
     end
     local c = it.card or {}
@@ -1793,8 +1809,8 @@ function H.Diag()
   return {
     string.format("diag cards: %d sets held (newest %s), %d unseen | queue %d rows, %d items, %d drafts | officer %s", #d.sets, newest > 0 and (math.floor(now() - newest) .. " s ago") or "none",
       H.Unseen(), rows, items, drafts, tostring(officer())),
-    string.format("diag cards: toasts shown %d, waiting %d, %d this hour, now %s | guild lines hidden %d, posted %d | refused %d | 1G %s, answers %d | 1W sent %d, held %d",
-      H.toastsShown or 0, #H.toasts, recent(H.toastLog, HOUR), quiet and "free" or ("held: " .. tostring(why)), H.hidden or 0, H.posted or 0, H.refused or 0,
+    string.format("diag cards: toasts shown %d, waiting %d, %d this hour, now %s | guild line filter %s, lines hidden %d, posted %d | refused %d | 1G %s, answers %d | 1W sent %d, held %d",
+      H.toastsShown or 0, #H.toasts, recent(H.toastLog, HOUR), quiet and "free" or ("held: " .. tostring(why)), H.filterOK and "on" or "missing", H.hidden or 0, H.posted or 0, H.refused or 0,
       H.asked and "asked" or "not asked", H.answers or 0, H.wSent or 0, type(C.Char().pendingW) == "table" and #C.Char().pendingW or 0),
   }
 end
@@ -1833,7 +1849,7 @@ ev:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
     if not H.filtered then
       H.filtered = true
       local CF = ChatFrameUtil
-      if type(CF) == "table" and type(CF.AddMessageEventFilter) == "function" then pcall(CF.AddMessageEventFilter, "CHAT_MSG_GUILD", H.LineFilter) end
+      if type(CF) == "table" and type(CF.AddMessageEventFilter) == "function" then H.filterOK = pcall(CF.AddMessageEventFilter, "CHAT_MSG_GUILD", H.LineFilter) end
     end
     if initial and not H.loginAt then H.loginAt = gtime() end
     if not reloading and not H.askStarted then H.askStarted = true; C_Timer.After(5, C.Safe(askLater, "halls: ask")) end

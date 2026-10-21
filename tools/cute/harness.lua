@@ -13286,6 +13286,14 @@ do local function cardsStage()
     local saved
     for _, r in ipairs(H(vala).Rows()) do if r.src == "draft" then saved = r end end
     assert(saved and saved.set.cards[1].title == "Before", "cleared: the saved draft as it was")
+    -- (a hall's draft row says its title and how many cards its statistics make)
+    H(vala).NewHall("shame", "a")
+    assert(H(vala):SaveDraft(H(vala).draft), "a hall saved as a draft")
+    H(vala).draft = nil
+    H(vala).OpenChip("queue")
+    local hallRow
+    for _, r in pairs(rowsOf(vala, "halls.queue")) do if r.what:IsShown() and r.what:GetText():find("All time", 1, true) then hallRow = r end end
+    assert(hallRow and hallRow.what:GetText():find("5 cards", 1, true), "a hall's draft row: its title and cards")
     -- New card: a member typed, a label from the menu, a title
     press(buttonOf(vala, "New card"))
     typeInto(edits(vala)[2], "wyn")
