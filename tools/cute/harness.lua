@@ -10865,6 +10865,33 @@ do
   end)
   said[#said + 1] = "an ask heard while the record waits for the policy is answered as it goes"
 
+  -- (s) an answer owed through a lockdown the event never ends (an open-world encounter: InChatMessagingLockdown alone,
+  -- or a client the event never reaches) is paid within LOCK_POLL seconds of its end, the queue empty or not, and the
+  -- statistics pass with it. 0.7.1's first build paid it only at the event, a loading screen or the policy settling
+  -- (with his queue as it is, and with it empty, its pump stopped)
+  for _, empty in ipairs({ false, true }) do isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+    local off, r = char("Coraline", 1), char("Cobb", 3, { withStats = true })
+    login(off); login(r)
+    tickAll(150)
+    r.chatLocked = true
+    local a = char("Cyra", 3)
+    login(a)
+    tickAll(120)
+    assert(r.C.Comm.answerOwed and r.C.Comm.gameOwed and not a.env.CuteDB.roster[r.sender], "Cobb owes Cyra his record and pass")
+    if empty then
+      for i = #r.C.Comm.out, 1, -1 do table.remove(r.C.Comm.out, i) end
+      tickAll(15)
+    end
+    r.chatLocked = false
+    tickAll(60)
+    local rec = a.env.CuteDB.roster[r.sender]
+    assert(not r.C.Comm.answerOwed and rec and rec.stats.guid == r.o.guid, "paid as the lockdown ended, no event: " .. tostring(r.C.Comm.answerOwed))
+    tickAll(30)
+    assert(not r.C.Comm.gameOwed and rec.stats.g2001 == 1234, "and the pass: " .. tostring(rec.stats.g2001))
+    for _, x in ipairs({ off, r, a }) do leave(x) end
+  end) end
+  said[#said + 1] = "an answer owed through a lockdown with no end event is paid as it ends"
+
   print("core: " .. table.concat(said, "; "))
 end
 

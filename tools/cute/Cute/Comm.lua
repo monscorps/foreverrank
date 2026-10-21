@@ -537,7 +537,8 @@ pump = C.Safe(function()
   if not e then pumping = false; booked = true return end
   -- (the lockdown: nothing goes, no try counted, the queue asked again in a while or when it ends)
   if M:Locked() then M.paused = M.paused or C.Now(); book(LOCK_POLL) return end
-  M.paused = nil
+  -- (the lockdown over, however it ended: the answers it held back go too)
+  if M.paused then M.paused = nil; M:PayOwed() end
   current = e
   local msg, kept, back = build(e)
   local r, extra = "none", nil
@@ -1364,7 +1365,7 @@ end
 local PASS_EVERY = 600
 function M:AnswerGame()
   -- (while the record waits for the policy, the pass waits too: paid as it goes, M:Release)
-  if M.holding then M.gameOwed = true return end
+  if M.holding then M.gameOwed = true; M:OwedSoon() return end
   local guild, since = M.answerGameGuild, (not M.gameFull) and M.gameSince or nil
   M.answerGameGuild, M.gameFull, M.gameSince = false, nil, nil
   local officers = takeAskers("gameAskers")
@@ -1383,7 +1384,7 @@ function M:AnswerGame()
         C_Timer.After(wait, C.Safe(function()
           M.passDue = false
           M.answerGameGuild, M.gameFull = true, true
-          if not C.Policy:Settled() or M:Locked() then M.gameOwed = true; return end
+          if not C.Policy:Settled() or M:Locked() then M.gameOwed = true; M:OwedSoon(); return end
           M:AnswerGame()
         end, "comm: statistics, the next pass"))
       end
@@ -1406,7 +1407,7 @@ function M:AnswerSoon()
     -- (while this client waits for the line, P.doubt, or the game holds addon chat back, or its own record waits for the
     -- policy, the answer waits too: what it would queue could not leave. Paid as that ends, M:PayOwed; 0.7.1's first
     -- build dropped one whose time came while the record waited, and a /reload's release sends only what changed)
-    if M.holding or not C.Policy:Settled() or M:Locked() then M.answerOwed = true; return end
+    if M.holding or not C.Policy:Settled() or M:Locked() then M.answerOwed = true; M:OwedSoon(); return end
     M:Answer()
   end, "comm: answer"))
 end
@@ -1534,6 +1535,19 @@ function M:PolicySettled(settled)
   if self.policyOwed and C.Roster:MeOfficer() then self:SendPolicy() end
   self:PayOwed()
   M.Kick()
+end
+-- an answer owed is looked at again every LOCK_POLL seconds until it is paid: a lockdown no event ends (one only
+-- InChatMessagingLockdown or a result 11 said, or a client the event never reaches) pays it within seconds of its end,
+-- the queue empty or not (0.7.1's first build paid it only at the event, a loading screen or the policy settling)
+function M:OwedSoon()
+  if self.owedDue or not (self.answerOwed or self.gameOwed) then return end
+  self.owedDue = true
+  C_Timer.After(LOCK_POLL, C.Safe(function()
+    M.owedDue = false
+    if not (M.answerOwed or M.gameOwed) then return end
+    M:PayOwed()
+    M:OwedSoon()
+  end, "comm: answers owed"))
 end
 -- the answers that waited (for the policy Guild Info names, or for the lockdown to end), once each, by the policy now
 function M:PayOwed()
@@ -1774,7 +1788,7 @@ function M:Receive(text, channel, sender)
         local wait = GAME_AFTER - 30 + (math.random and (29 * math.random()) or 5)
         C_Timer.After(wait, C.Safe(function()
           M.answeringGame = false
-          if not C.Policy:Settled() or M:Locked() then M.gameOwed = true; return end
+          if not C.Policy:Settled() or M:Locked() then M.gameOwed = true; M:OwedSoon(); return end
           M:AnswerGame()
         end, "comm: answer statistics"))
       end
