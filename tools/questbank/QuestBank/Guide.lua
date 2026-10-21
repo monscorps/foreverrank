@@ -94,7 +94,10 @@ function G.Text(s)
   elseif k == "train" then return "Train at " .. (s.name or "your class trainer")
   elseif k == "grind" then return s.text or "Kill around here"
   elseif k == "corpse" then return "Run to your corpse"
-  elseif k == "reward" then return "Choose a reward: " .. (s.name or "the marked one") .. " is " .. (QB.NAME or "QuestBank") .. "'s pick"
+  elseif k == "reward" then
+    local r = G.reward
+    if r and r.qid == s.qid and not r.pick then return "Choose a reward: first choice, no better pick known" end
+    return "Choose a reward: " .. (s.name or "the marked one") .. " is " .. (QB.NAME or "QuestBank") .. "'s pick"
   end
   return s.text or ""
 end
@@ -623,17 +626,20 @@ function G.HoldReward(qid, n)
   local level = QB.state.level or 1
   local UI = QB.UI
   local best = UI and UI.BestReward and (UI.BestReward(qid, "gear", level) or UI.BestReward(qid, "trinket", level)) or nil
-  local index, name = 1, nil
+  -- (the launch round) a pick only where the Gear finder's best is among the links the window gives; else the first
+  -- choice, marked and said as no more than that (nothing known fits you, or the game had not sent the items yet: 6.1
+  -- marked it as a pick all the same). link: the pick's, for the frame's line (its stats)
+  local index, name, link, firstName, firstLink = nil, nil, nil, nil, nil
   if type(GetQuestItemLink) == "function" then
     for i = 1, n do
-      local ok, link = pcall(GetQuestItemLink, "choice", i)
-      link = ok and plain(link) or nil
-      local id = type(link) == "string" and tonumber(link:match("item:(%d+)"))
-      if id and best and id == best then index = i end
-      if i == index and type(link) == "string" then name = link:match("%[(.-)%]") end
+      local ok, l = pcall(GetQuestItemLink, "choice", i)
+      l = ok and plain(l) or nil
+      local id = type(l) == "string" and tonumber(l:match("item:(%d+)"))
+      if i == 1 and type(l) == "string" then firstName, firstLink = l:match("%[(.-)%]"), l end
+      if id and best and id == best and not index then index, name, link = i, l:match("%[(.-)%]"), l end
     end
   end
-  G.reward = { qid = qid, index = index, name = name }
+  G.reward = { qid = qid, index = index or 1, name = index and name or firstName, link = index and link or firstLink, item = index and best or nil, pick = index ~= nil }
   G.Replan()
   if QB.StepFrame and QB.StepFrame.MarkReward then QB.StepFrame.MarkReward() end
 end

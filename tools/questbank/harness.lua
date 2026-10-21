@@ -18007,6 +18007,95 @@ end)()
     assert(P.StopTitle({ town = true, name = "Northshire Abbey", npcs = { mm, idx("Eagan Peltskinner") } }) == "Northshire Abbey", "several: the town")
   end }
 
+  -- 9. The owner's reward window (5-reward-glow): QuestBank's pick was the map pins' round additive glow, 170 px of
+  -- gold on a HIGH frame over the quest window: it read as the game's own selection and washed the item's name out, and
+  -- nothing said it was QuestBank's or why; a first choice taken for want of a pick (nothing fits you, or the game had
+  -- not sent the items) looked the same. Now a thin outline in the frame's ink round the pick's icon, inside the quest
+  -- window's own frames, nothing over the name, nothing additive or gold; one line by the Complete Quest button says
+  -- whose pick it is and why (the stats it gives, the class's own first); a first choice is grey and says so
+  ENGCASES[#ENGCASES + 1] = { "the reward pick: QuestBank's own mark, the name readable, one line says why; a first choice says so", function()
+    local function window(c, rc, unloaded)
+      local env = c.env
+      env.QuestFrame = env.QuestFrame or newObj("Frame", nil, env.UIParent)
+      env.QuestFrame:SetSize(338, 496); env.QuestFrame:SetPoint("TOPLEFT", env.UIParent, "TOPLEFT", 16, -116)
+      env.QuestFrameCompleteQuestButton = env.QuestFrameCompleteQuestButton or newObj("Button", nil, env.QuestFrame)
+      env.QuestFrameCompleteQuestButton:SetSize(120, 22); env.QuestFrameCompleteQuestButton:SetPoint("BOTTOMLEFT", env.QuestFrame, "BOTTOMLEFT", 6, 4)
+      local rf = newObj("Frame", nil, env.QuestFrame)
+      rf:SetSize(285, 200); rf:SetPoint("TOPLEFT", env.QuestFrame, "TOPLEFT", 20, -80)
+      rf.RewardButtons = {}
+      for i = 1, 2 do
+        local b = newObj("Button", nil, rf)
+        b:SetSize(147, 41); b:SetPoint("TOPLEFT", rf, "TOPLEFT", (i - 1) * 148, -30)
+        b.Icon = b:CreateTexture(nil, "BORDER"); b.Icon:SetSize(39, 39); b.Icon:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
+        b.Name = b:CreateFontString(nil, "OVERLAY"); b.Name:SetPoint("LEFT", b.Icon, "RIGHT", 6, 0); b.Name:SetText("Item " .. rc[i])
+        rf.RewardButtons[i] = b
+      end
+      env.QuestInfoFrame = { rewardsFrame = rf }
+      c.window = { id = 3369, xp = 1650, title = "In Nightmares", rc = rc, unloaded = unloaded }
+      c.auto = {}
+      c.ev(c.QB.eventFrame, "QUEST_COMPLETE")
+      tick(c, 1)
+      return rf
+    end
+    local function gold(o) local v = o.__vertex or o.__color; return v and v[1] > 0.9 and v[2] > 0.7 and v[2] < 0.9 and v[3] < 0.5 end
+    local function check(c, rf, want, pick, line)
+      local QB, SF, G = c.QB, c.QB.StepFrame, c.QB.Guide
+      for _, a in ipairs(c.auto) do assert(not a:find("^GetQuestReward"), "nothing chosen: " .. a) end
+      assert(G.reward and G.reward.index == want and G.reward.pick == pick, "the pick: " .. tostring(G.reward and G.reward.index) .. " " .. tostring(G.reward and G.reward.pick))
+      local m, b = SF.mark, rf.RewardButtons[want]
+      assert(m and m:IsShown() and m:GetParent() == rf and (m.__frameStrata == nil or m.__frameStrata ~= "HIGH"), "the mark inside the reward frame, not over the window")
+      for _, x in ipairs(ALL) do
+        if x.__parent == m and x.__kind == "Texture" then
+          assert(x.__blend ~= "ADD" and not gold(x), "a mark of its own: no additive glow, no gold")
+        end
+      end
+      GEN = GEN + 1
+      local mr, nr, ir = rectOf(m), rectOf(b.Name), rectOf(b.Icon)
+      assert(mr.r <= ir.r + 3 and mr.l >= ir.l - 3 and not (mr.r > nr.l + 1), "round the icon, clear of the name: " .. mr.l .. ".." .. mr.r .. " name from " .. nr.l)
+      local w = SF.why
+      assert(w and w:IsShown() and w:GetText() == line, "the line by Complete Quest: " .. tostring(w and w:GetText()))
+      return m
+    end
+    -- a mage: Talbar Mantle (cloth) over Quagmire Galoshes (mail); its stats, the class's own first
+    local c = char("Mageling", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
+    c.QB:Settings().autoTurnIn = true
+    c.env.C_Item.GetItemStats = function(link)
+      if link:find("item:10657", 1, true) then return { ITEM_MOD_STAMINA_SHORT = 2, ITEM_MOD_INTELLECT_SHORT = 4 } end
+      return { ITEM_MOD_STAMINA_SHORT = 4, ITEM_MOD_INTELLECT_SHORT = 4 }
+    end
+    local rf = window(c, { 10657, 10658 })
+    local m = check(c, rf, 1, true, "QuestBank's pick: +4 Intellect, +2 Stamina")
+    local ink = m.edges and m.edges[1].__color
+    -- the line beside the Complete Quest button, two lines at most, inside the window, on nothing
+    GEN = GEN + 1
+    local wr, br, qr = rectOf(c.QB.StepFrame.why), rectOf(c.env.QuestFrameCompleteQuestButton), rectOf(c.env.QuestFrame)
+    assert(wr.l >= br.r + 4 and wr.r <= qr.r - 6 and wr.t - wr.b <= 2 * 12 and wr.b >= qr.b and not (wr.l < br.r and br.l < wr.r),
+      string.format("the line beside the button, in the window: %d..%d x %d..%d, the button to %d, the window to %d", wr.l, wr.r, wr.b, wr.t, br.r, qr.r))
+    for _, rb in ipairs(rf.RewardButtons) do local rr = rectOf(rb); assert(wr.t <= rr.b or wr.b >= rr.t, "the line on no reward") end
+    c.QB.StepFrame.Refresh()
+    assert(c.QB.Guide.Text(c.QB.Guide.Steps()[1]):find("is QuestBank's pick", 1, true), "the step says whose pick")
+    c.ev(c.QB.eventFrame, "QUEST_FINISHED")
+    assert(not c.QB.StepFrame.mark:IsShown() and not c.QB.StepFrame.why:IsShown(), "the window shut: the mark and the line go")
+    -- a paladin: mail at 21, the Galoshes
+    local p = char("Paladine", "PALADIN", "Paladin", 2, {}, { level = 21, log = { { 3369, 1 } } })
+    p.QB:Settings().autoTurnIn = true
+    p.env.C_Item.GetItemStats = c.env.C_Item.GetItemStats
+    check(p, window(p, { 10657, 10658 }), 2, true, "QuestBank's pick: +4 Stamina, +4 Intellect")
+    -- the game has not sent the items yet: the first choice, grey, said so
+    local q = char("Hasty", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
+    q.QB:Settings().autoTurnIn = true
+    local qm = check(q, window(q, { 10657, 10658 }, { [10657] = true, [10658] = true }), 1, false, "First choice: no better pick known")
+    local grey = qm.edges and qm.edges[1].__color
+    assert(ink and grey and (ink[1] ~= grey[1] or ink[4] ~= grey[4]), "a first choice looks unlike a pick")
+    q.QB.StepFrame.Refresh()
+    assert(q.QB.Guide.Text(q.QB.Guide.Steps()[1]) == "Choose a reward: first choice, no better pick known", "the step says so: " .. q.QB.Guide.Text(q.QB.Guide.Steps()[1]))
+    -- no stats from the client: the item level
+    local n = char("Plainly", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
+    n.QB:Settings().autoTurnIn = true
+    n.env.C_Item.GetItemStats = nil
+    check(n, window(n, { 10657, 10658 }), 1, true, "QuestBank's pick: item level 26, the best you can use here")
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")

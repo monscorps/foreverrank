@@ -355,27 +355,109 @@ function SF.OnRegen()
   end
 end
 
--- the reward window's pick (G.reward), marked with QuestBank's own glow (Pins.Glow, the game's quest-POI glow) over
--- the game's button (QuestInfoFrame.rewardsFrame.RewardButtons[index], QuestInfo.lua); never the button itself
+-- the reward window's pick (G.reward), marked as QuestBank's own and never as the game's: a thin outline in the frame's
+-- ink round the item's icon, inside the window's reward frame (it scrolls and clips with it), nothing over the item's
+-- name and nothing gold or additive (the game's own choice is a gold glow over the whole button, QuestInfoItemHighlight);
+-- and one line beside the Complete Quest button, whose pick it is and why: "QuestBank's pick: +4 Intellect, +2 Stamina"
+-- (the item's stats, the class's own first: C_Item.GetItemStats), else its item level. A first choice for want of a
+-- pick (G.reward.pick false: nothing known fits, or the game had not sent the items) is grey, thinner, and says so.
+-- (6.1 drew the map pins' round additive glow, 170 px of gold on a HIGH frame: it read as the game's own selection
+-- and washed the name out.) The button itself is never touched
+local STAT_WORD = { STRENGTH = "Strength", AGILITY = "Agility", STAMINA = "Stamina", INTELLECT = "Intellect", SPIRIT = "Spirit" }
+local STAT_FIRST = { WARRIOR = "STRENGTH", PALADIN = "STRENGTH", ROGUE = "AGILITY", HUNTER = "AGILITY", MAGE = "INTELLECT", WARLOCK = "INTELLECT",
+                     PRIEST = "INTELLECT", DRUID = "INTELLECT", SHAMAN = "INTELLECT" }
+local STAT_ORDER = { "STRENGTH", "AGILITY", "STAMINA", "INTELLECT", "SPIRIT" }
+-- "+4 Intellect, +2 Stamina": the item's main stats as the client gives them (ITEM_MOD_<STAT>_SHORT), the class's own
+-- first, then Stamina, two at most; nil when the client gives none
+local function statsLine(link)
+  local get = C_Item and C_Item.GetItemStats
+  if type(get) ~= "function" or type(link) ~= "string" then return nil end
+  local ok, t = pcall(get, link)
+  if not (ok and type(t) == "table") then return nil end
+  local have = {}
+  for k, v in pairs(t) do
+    local stat = type(k) == "string" and k:match("^ITEM_MOD_(%u+)_SHORT$")
+    v = QB.Plain(v)
+    if stat and STAT_WORD[stat] and type(v) == "number" and v > 0 then have[stat] = v end
+  end
+  local out, first = {}, STAT_FIRST[QB.state and QB.state.class or ""]
+  local function add(stat) if have[stat] and #out < 2 then out[#out + 1] = "+" .. have[stat] .. " " .. STAT_WORD[stat]; have[stat] = nil end end
+  if first then add(first) end
+  add("STAMINA")
+  for _, stat in ipairs(STAT_ORDER) do add(stat) end
+  return #out > 0 and table.concat(out, ", ") or nil
+end
+local function whyLine(r)
+  if not r.pick then return "First choice: no better pick known" end
+  local why = statsLine(r.link)
+  if not why and r.item and QB.UI and QB.UI.ItemFacts then
+    local _, _, _, ilvl = QB.UI.ItemFacts(r.item)
+    if type(ilvl) == "number" and ilvl > 0 then why = "item level " .. ilvl .. ", the best you can use here" end
+  end
+  return (QB.NAME or "QuestBank") .. "'s pick: " .. (why or "the best you can use here")
+end
 function SF.MarkReward()
   local r = G.reward
   local rf = QuestInfoFrame and QuestInfoFrame.rewardsFrame
   local buttons = rf and rf.RewardButtons
   local b = r and buttons and buttons[r.index]
+  local m = SF.mark
   if not b then
-    if SF.mark and SF.mark:IsShown() then SF.mark:Hide() end
+    if m and m:IsShown() then m:Hide() end
+    if SF.why and SF.why:IsShown() then SF.why:Hide() end
     return
   end
-  if not SF.mark then
-    SF.mark = CreateFrame("Frame", nil, UIParent)
-    SF.mark:SetFrameStrata("HIGH")
-    SF.mark.kind = { glow = 170 }
-    if QB.Pins and QB.Pins.Glow then QB.Pins.Glow(SF.mark, tone("GOLD")) end
+  local parent = b:GetParent() or UIParent -- (the window's reward frame: QuestInfo.lua swaps the map's and the window's)
+  if not m then
+    m = CreateFrame("Frame", nil, parent)
+    SF.mark = m
+    m.edges = {}
+    for i = 1, 4 do m.edges[i] = m:CreateTexture(nil, "OVERLAY") end
   end
-  SF.mark:ClearAllPoints()
-  SF.mark:SetPoint("TOPLEFT", b, "TOPLEFT", -4, 4)
-  SF.mark:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 4, -4)
-  SF.mark:Show()
+  if m:GetParent() ~= parent then m:SetParent(parent) end
+  m:SetFrameLevel((b:GetFrameLevel() or 1) + 2)
+  local icon = rawget(b, "Icon") or rawget(b, "icon") -- (the template's parentKey; a plain field)
+  local edge = r.pick and 2 or 1
+  m:ClearAllPoints()
+  m:SetPoint("TOPLEFT", icon or b, "TOPLEFT", -edge, edge)
+  m:SetPoint("BOTTOMRIGHT", icon or b, icon and "BOTTOMRIGHT" or "BOTTOMLEFT", edge, -edge)
+  if not icon then m:SetWidth((b:GetHeight() or 40) + edge * 2) end -- (a button with no icon of its name: its square end)
+  local e = m.edges
+  e[1]:ClearAllPoints(); e[1]:SetPoint("TOPLEFT"); e[1]:SetPoint("TOPRIGHT"); e[1]:SetHeight(edge)
+  e[2]:ClearAllPoints(); e[2]:SetPoint("BOTTOMLEFT"); e[2]:SetPoint("BOTTOMRIGHT"); e[2]:SetHeight(edge)
+  e[3]:ClearAllPoints(); e[3]:SetPoint("TOPLEFT"); e[3]:SetPoint("BOTTOMLEFT"); e[3]:SetWidth(edge)
+  e[4]:ClearAllPoints(); e[4]:SetPoint("TOPRIGHT"); e[4]:SetPoint("BOTTOMRIGHT"); e[4]:SetWidth(edge)
+  local c = tone(r.pick and "INK" or "SOFT")
+  for i = 1, 4 do e[i]:SetColorTexture(c[1], c[2], c[3], r.pick and 1 or 0.7) end
+  m:Show()
+  -- the line: beside the Complete Quest button (QuestFrame.xml: the reward panel's, at the window's bottom left), else
+  -- under the marked button
+  local w = SF.why
+  local host = QuestFrame or UIParent
+  if not w then
+    local holder = CreateFrame("Frame", nil, host)
+    holder:SetSize(1, 1)
+    w = fs(holder, 10, "INK", 190) -- (two lines at most, beside the button: as tall as it is)
+    w:SetWordWrap(true)
+    w.holder = holder
+    SF.why = w
+  end
+  local holder = w.holder
+  if holder:GetParent() ~= host then holder:SetParent(host) end
+  local anchor = QuestFrameCompleteQuestButton
+  holder:SetFrameLevel(((anchor and anchor:GetFrameLevel()) or (b:GetFrameLevel() or 1)) + 1)
+  holder:ClearAllPoints(); w:ClearAllPoints()
+  if anchor then
+    holder:SetPoint("LEFT", anchor, "RIGHT", 8, 0)
+    w:SetPoint("LEFT", anchor, "RIGHT", 8, 0)
+  else
+    holder:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -4)
+    w:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -4)
+  end
+  local wc = tone(r.pick and "INK" or "SOFT")
+  w:SetTextColor(wc[1], wc[2], wc[3])
+  w:SetText(whyLine(r))
+  holder:Show(); w:Show()
 end
 
 -- the lines, when something changed (and the item button, once a fight is over)
