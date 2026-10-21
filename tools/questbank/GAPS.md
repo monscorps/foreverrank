@@ -24,7 +24,7 @@ Every quest in the catalog is one the game offers: placeholders (<UNUSED>, <NYI>
 holidays, repeatable turn-ins, raids and battlegrounds are left out. The crafting writs' deliveries stay for the reward finders
 alone (174 quests: 150 of Forever's crafting orders, 24 of the Argent Dawn's; no XP, never suggested).
 
-NPC positions: 420 from Wowhead Forever, 1332 from the CMaNGOS spawn table where Wowhead has none.
+NPC positions: 422 from Wowhead Forever, 1332 from the CMaNGOS spawn table where Wowhead has none.
 Forever redrew Mulgore, Eastern Plaguelands, Redridge and Stormwind: 247 Wowhead coordinates there were in the old
 Classic frame and were moved to Forever's; 81 were already in Forever's.
 Instant follow-ups planned on the day: 308. Race-limited quests: 418. Quests in mutually exclusive groups: 497.

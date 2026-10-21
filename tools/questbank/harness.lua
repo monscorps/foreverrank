@@ -18099,6 +18099,34 @@ end)()
     assert(old.QB:Settings().wholeRoute == false, "an old save: off")
   end }
 
+  -- H. two catalog rows (docs/superpowers/specs/2026-10-21-forever-secrets-research.md, section 6). "... and that note you
+  -- found", the Cozy Sleeping Bag chain's first step, one quest a side: both used one NPC row, "Burned-Out Remains" at
+  -- Westfall 37.4, 50.6, to start and to hand in (Wowhead Forever places both Burned-Out Remains objects, 415106 and
+  -- 415107, there), so Camp.chainHint sent an Alliance player holding 79008 back to Westfall. The Alliance's starts at
+  -- the Nailed Plank in Westfall (37.4, 50.9) and is handed in at the Burned-Out Remains in the Barrens (46.4, 73.8), the
+  -- Horde's 79007 the other way round. And Rumi of Gnomeregan (79093), an Alliance library book, was handed in to Owen
+  -- Thadd in Undercity (Wowhead's page): the Alliance's books go back to Garion Wendell, who gives them
+  F61CASES[#F61CASES + 1] = { "the bag's first step across the sea; Rumi's book back to Garion Wendell", function()
+    local a = char("Notefinder", "WARRIOR", "Warrior", 1, {}, { level = 20, log = { { 79008, 0 } } })
+    local D = a.QB.Data
+    local q8, q7 = D.Q[79008], D.Q[79007]
+    local function npc(i) return D.NPC[i] or {} end
+    assert(npc(q8[7])[1] == "Nailed Plank" and npc(q8[7])[2] == 1436 and npc(q8[7])[3] == 37.4 and npc(q8[7])[4] == 50.9,
+      "the Alliance's starts at the Nailed Plank in Westfall: " .. tostring(npc(q8[7])[1]))
+    assert(npc(q8[6])[1] == "Burned-Out Remains" and npc(q8[6])[2] == 1413 and npc(q8[6])[3] == 46.4 and npc(q8[6])[4] == 73.8,
+      "and is handed in at the Burned-Out Remains in the Barrens: " .. tostring(npc(q8[6])[2]))
+    assert(q7[7] == q8[6] and q7[6] == q8[7] and q8[6] ~= q8[7], "the Horde's the other way round, two entries")
+    local bag = a.QB.Camp.State().bag
+    assert(bag and bag.dest and bag.dest.c == 1 and bag.tip[2]:find("Burned-Out Remains (46.4, 73.8)", 1, true),
+      "an Alliance player holding it: to the Barrens: " .. tostring(bag and bag.tip[2]))
+    local h = char("Notekeeper", "WARRIOR", "Warrior", 1, {}, { level = 20, faction = "Horde", race = "Orc", world = { 1, -400, -2600 }, map = 1413, log = { { 79007, 0 } } })
+    local hb = h.QB.Camp.State().bag
+    assert(hb and hb.dest and hb.dest.c == 0 and hb.tip[2]:find("Nailed Plank (37.4, 50.9)", 1, true),
+      "a Horde player holding 79007: to Westfall: " .. tostring(hb and hb.tip[2]))
+    local r = D.Q[79093]
+    assert(npc(r[6])[1] == "Garion Wendell" and r[6] == r[7], "Rumi of Gnomeregan handed in to Garion Wendell, who gives it: " .. tostring(npc(r[6])[1]))
+  end }
+
   for _, case in ipairs(F61CASES) do
     case[2]()
     print("6.1.1: " .. case[1] .. ": ok")

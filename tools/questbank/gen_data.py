@@ -1400,6 +1400,24 @@ for _key in sorted(OPEN_CAT):
 for _qid, _rec in Q.items():
     if isinstance(_rec[7], str):
         _rec[7] = CAT_AT[_rec[7]]
+# Two ends the pages get wrong (6.1.1; docs/superpowers/specs/2026-10-21-forever-secrets-research.md, section 6), set
+# after every NPC is placed, their rows added at the end of D.NPC so no other NPC's index moves:
+# "... and that note you found", the Cozy Sleeping Bag chain's first step, one quest a side: Wowhead Forever's pages
+# give 79008 (Alliance) and 79007 (Horde) the two Burned-Out Remains objects (415106, 415107) and place both at
+# Westfall 37.4, 50.6, so both quests started and ended at one Westfall row and Camp.chainHint sent an Alliance player
+# holding 79008 back to Westfall. The Alliance's starts at the Nailed Plank in Westfall and is handed in at the
+# Burned-Out Remains in the Barrens (the guides; SLEEP_CHAIN's starts below), the Horde's the other way round. The old
+# row stays for Stepping Stones (79192), whose giver came from it.
+# Rumi of Gnomeregan (79093), an Alliance library book: its page ends it at Owen Thadd in Undercity, where the Horde's
+# books go; the Alliance's other book starts and ends at Garion Wendell, who gives this one: handed in to him.
+NOTE_A, NOTE_H = add_npc("Nailed Plank", 1436, 37.4, 50.9), add_npc("Burned-Out Remains", 1413, 46.4, 73.8)
+for _qid, _give, _turn in ((79008, NOTE_A, NOTE_H), (79007, NOTE_H, NOTE_A)):
+    if _qid in Q:
+        Q[_qid][5], Q[_qid][6] = _turn, _give
+        # (the two places are Wowhead Forever's, its Nailed Plank objects 424010 and 417072)
+        SOURCE.setdefault(_give, "wowhead"); SOURCE.setdefault(_turn, "wowhead")
+if 79093 in Q and NPCS[Q[79093][6] - 1][0] == "Garion Wendell":
+    Q[79093][5] = Q[79093][6]
 # the steps that come after a quest (for "advance the chain")
 NEXT = {}
 for qid in IDS:
