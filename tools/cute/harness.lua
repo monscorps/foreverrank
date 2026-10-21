@@ -13056,7 +13056,7 @@ do local function cardsStage()
     end
     for _, l in ipairs(ofa.guildChat or {}) do assert(not l:find("Cute \194\183", 1, true), "the publisher's own line hidden too") end
     assert(H(mel).Sets()[1].by == "Ofa", "named by the publisher's roster entry")
-    check(mel.env.CuteToast, "halls: the toast")
+    check(H(mel).toastFrame, "halls: the toast")
     -- (another officer's queue: the item Ofa published greys there)
     local obiHd
     for _, r in ipairs(H(obi).Rows()) do if r.card and r.card.title == "Headliner" then obiHd = r end end
@@ -13150,12 +13150,13 @@ do local function cardsStage()
     tickAll(3)
     assert(H(mel).Sets()[1].title ~= week0 and H(mel).Sets()[1].title == H(ofa).WeekTitle() and H(mel).Sets()[1].cards[1].name == "Mel", "Update rolls the week's title on: " .. H(mel).Sets()[1].title)
     -- ten in an hour from one officer
-    H(ofa).mine = {}
-    for k = 1, 10 do H(ofa).mine[k] = ofa.env.GetServerTime() - 100 end
-    H(ofa).lastSetAt = nil
+    local mine = H(ofa).Mine()
+    for k = #mine, 1, -1 do mine[k] = nil end
+    for k = 1, 10 do mine[k] = ofa.env.GetServerTime() - 100 end
+    H(ofa).DB().lastSetAt = nil
     ok, why = H(ofa).PublishState({ cards = { { name = "x" } } })
     assert(not ok and why == "10 sets this hour", "ten sets in an hour from one officer: " .. tostring(why))
-    H(ofa).mine = {}
+    for k = #mine, 1, -1 do mine[k] = nil end
 
     -- withdraw: Ofa's right-click on a News row; gone from every member's News
     H(ofa).OpenChip("news")
@@ -13172,7 +13173,7 @@ do local function cardsStage()
     -- officers hear the first answer and say nothing; an answer greys no officer's Publish
     tickAll(61)
     for k = 1, 4 do
-      H(ofa).lastSetAt = nil
+      H(ofa).DB().lastSetAt = nil
       assert(H(ofa):Publish({ kind = "n", title = "Set " .. k, cards = { { guid = moe.o.guid, name = "Moe", class = "DRUID", kind = "shout", title = "T" .. k, line = "L", source = "" } } }), "set " .. k)
       tickAll(2)
     end
@@ -13210,7 +13211,7 @@ do local function cardsStage()
     tam.o.instance = "party"
     H(ula).Prefs().toast = false
     local function publish(k)
-      H(pia).lastSetAt, H(pia).mine = nil, {}
+      H(pia).DB().lastSetAt, H(pia).DB().mine = nil, {}
       assert(H(pia):Publish({ kind = "n", title = "News " .. k, cards = { { guid = rex.o.guid, name = "Rex", class = "WARLOCK", kind = "shout", title = "T", line = "L", source = "" } } }), "published " .. k)
     end
     for k = 1, 6 do publish(k); tickAll(1) end
@@ -13238,7 +13239,7 @@ do local function cardsStage()
     rex.env.SlashCmdList.CUTE("card test")
     local CF = rex.C.CardFrame
     assert(CF.frame:IsShown() and CF.label:GetText() == "GUILD NEWS" and CF.cards[1].label:GetText() == "ACHIEVEMENT" and CF.cards[2].label:GetText() == "GUILD FIRST"
-      and CF.cards[3].label:GetText() == "RECORD" and rex.env.CuteToast:IsShown(), "the test: the toast and three cards")
+      and CF.cards[3].label:GetText() == "RECORD" and H(rex).toastFrame:IsShown(), "the test: the toast and three cards")
     check(CF.frame, "halls: the test announcement, three cards")
     tickAll(3)
     assert(msgs(rex, "1C") == c0 and shownSets(rex) == s0, "nothing sent or kept")

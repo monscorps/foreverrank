@@ -456,15 +456,20 @@ end
 ----------------------------------------------------------------------------
 -- publishing (9.2, 9.6)
 ----------------------------------------------------------------------------
-H.mine = {}
+-- this officer's sets in the last hour and the last set heard from any officer, kept across a /reload and a relog
+-- (H.DB: the limits are the guild's, not a session's)
+local function mine() local d = H.DB(); if type(d.mine) ~= "table" then d.mine = {} end return d.mine end
+H.Mine = mine
+local function lastSet() return tonumber(H.DB().lastSetAt) end
+local function setHeard() H.DB().lastSetAt = now() end
 -- may this officer publish now: true, or false and why (the button's grey words)
 function H.PublishState(set)
   if not (C.Roster and C.Roster:InGuild()) then return false, "Not in a guild" end
   if not officer() then return false, "Officers only" end
   if not C.Policy:Settled() then return false, "Waiting for Guild Info" end
   if H.loginAt and gtime() - H.loginAt < LOGIN_WAIT and not H.answerHeard then return false, "Checking for news" end
-  if H.lastSetAt and now() - H.lastSetAt < GAP then return false, "Wait a minute" end
-  if recent(H.mine, HOUR) >= PUBLISH_HOUR then return false, "10 sets this hour" end
+  if lastSet() and now() - lastSet() < GAP then return false, "Wait a minute" end
+  if recent(mine(), HOUR) >= PUBLISH_HOUR then return false, "10 sets this hour" end
   if set then
     if #(set.cards or {}) == 0 then return false, "No cards" end
     for _, c in ipairs(set.cards) do if not H.Open(c.source) then return false, "A card is Only you" end end
@@ -478,10 +483,14 @@ function H.ChatState()
   return true
 end
 -- the guild chat line for a set (9.2), 255 bytes at most: "Cute, a dot, Guild first: Brann earned ..." for one
--- achievement, else the title and each card's member and title
+-- achievement, else the title (a hall's after its kind) and each card's member and title
 H.PREFIX = "Cute" .. DOT
+local HALL_WORD = { h = "Hall of Fame", s = "Hall of Shame" }
 function H.ChatLine(set)
-  local head = H.PREFIX .. ((set.title and set.title ~= "") and set.title or H.HEAD[set.kind or "n"]) .. ": "
+  local title = (set.title and set.title ~= "") and set.title or H.HEAD[set.kind or "n"]
+  -- (a hall says which: "Hall of Fame, Week of 19 Oct")
+  if HALL_WORD[set.kind] and title ~= HALL_WORD[set.kind] then title = HALL_WORD[set.kind] .. ", " .. title end
+  local head = H.PREFIX .. title .. ": "
   local cards = set.cards or {}
   local function fit(s) if #s <= LIMIT then return s end return s:sub(1, LIMIT) end
   if #cards == 1 and (cards[1].source or ""):match("^a%d") then return fit(head .. (cards[1].name or "?") .. " earned " .. (cards[1].title or "") .. ".") end
@@ -514,8 +523,8 @@ function H:Publish(set, chatLine)
   for i, c in ipairs(set.cards) do if i <= 5 then out.cards[i] = sendable(c) end end
   for _, m in ipairs(H.Messages(out, false)) do C.Comm.Queue({ msg = m }) end
   keep(out)
-  H.lastSetAt = now()
-  H.mine[#H.mine + 1] = now()
+  setHeard()
+  table.insert(mine(), now())
   H:Unqueue(set.from)
   if set.draftId then H:Unqueue({ set.draftId }) end
   H.draft = nil
@@ -621,7 +630,7 @@ function H:Took(set, sender, answer)
   keep(set)
   if officer() then self:Grey(set, set.by) end
   if not answer then
-    H.lastSetAt = now()
+    setHeard()
     local who = g or sender
     H.senders[who] = H.senders[who] or {}
     local list = H.senders[who]
@@ -971,7 +980,7 @@ end
 local function toastFrame()
   if H.toastFrame then return H.toastFrame end
   local U = C.UI
-  local f = CreateFrame("Button", "CuteToast", UIParent, BD)
+  local f = CreateFrame("Button", nil, UIParent, BD)
   f:SetSize(420, 48)
   f:SetPoint("TOP", UIParent, "TOP", 0, -100)
   f:SetFrameStrata("DIALOG")
@@ -1203,6 +1212,8 @@ function H.Draw(ui)
   ui.header:Hide()
   local w = ui.scroll:Width()
   local x = 0
+  -- (News open: what came is seen now, its count gone from the chip as it opens)
+  if chip == "news" then H.DB().seenAt = H.Newest() end
   local unseen = H.Unseen()
   for _, c in ipairs(list) do
     local title = c.title
@@ -1228,7 +1239,7 @@ function H.Draw(ui)
       function(tip) tip:AddLine("Compose", 1, 1, 1); tip:AddLine(n == 0 and "Tick one to five items first." or (n > 5 and "Five cards at most: untick some." or "Makes a set of the items ticked."), 0.85, 0.85, 0.85, true) end)
   end
   ui:SetBand(28)
-  if chip == "shame" then ui:DrawShame()
+  if chip == "shame" then if ui.DrawShame then ui:DrawShame() end
   elseif chip == "news" then H.DrawNews(ui)
   elseif chip == "queue" then if H.draft then H.DrawCompose(ui) else H.DrawQueue(ui) end
   else valid[chip].draw(ui) end
@@ -1248,6 +1259,8 @@ local function makeRow(parent)
   r.icon = r:CreateTexture(nil, "ARTWORK")
   r.icon:SetSize(16, 16)
   r.what = U.Text(r, 12, INK, "LEFT", 200)
+  r.kind = U.Text(r, 11, DIM, "LEFT", 104)
+  r.kind:Hide()
   r.lock = r:CreateTexture(nil, "ARTWORK")
   r.lock:SetSize(12, 12)
   return r
@@ -1291,7 +1304,6 @@ function H.DrawNews(ui)
   local sf = ui.scroll
   local w = sf:Width()
   ui.rows:Clear()
-  H.DB().seenAt = H.Newest()
   local list = H.News(H.filter or "all")
   local y = 4
   if #list == 0 then
@@ -1318,11 +1330,15 @@ function H.DrawNews(ui)
     local kc = set.kind == "n" and C.Cards.EDGE or H.HeadColor(set.kind)
     r.bar:Show(); r.bar:SetColorTexture(kc[1], kc[2], kc[3], 1)
     r.box:Hide(); r.icon:Hide(); r.lock:Hide()
-    r.name:ClearAllPoints(); r.name:SetPoint("LEFT", 8, 0); r.name:SetWidth(200); r.name:SetJustifyH("LEFT")
+    -- (the label in its colour, GUILD NEWS dim: what kind of set, before its title)
+    r.kind:ClearAllPoints(); r.kind:SetPoint("LEFT", 8, 0); r.kind:Show()
+    color(r.kind, set.kind == "n" and DIM or H.HeadColor(set.kind))
+    U.FitText(r.kind, H.HEAD[set.kind] or "", 100)
+    r.name:ClearAllPoints(); r.name:SetPoint("LEFT", 112, 0); r.name:SetWidth(180); r.name:SetJustifyH("LEFT")
     color(r.name, INK)
-    U.FitText(r.name, set.title or "", 196)
-    r.what:ClearAllPoints(); r.what:SetPoint("LEFT", 216, 0); r.what:SetWidth(w - 216 - DAY - 12); r.what:Show()
-    U.FitText(r.what, names(set, 3), w - 216 - DAY - 16)
+    U.FitText(r.name, set.title or "", 176)
+    r.what:ClearAllPoints(); r.what:SetPoint("LEFT", 300, 0); r.what:SetWidth(w - 300 - DAY - 12); r.what:Show()
+    U.FitText(r.what, names(set, 3), w - 300 - DAY - 16)
     r.val:Hide()
     r.who:ClearAllPoints(); r.who:SetPoint("RIGHT", -4, 0); r.who:SetWidth(DAY); r.who:SetJustifyH("RIGHT"); r.who:Show()
     color(r.who, DIM)
@@ -1380,6 +1396,7 @@ function H.DrawQueue(ui)
     local e = entries[i]
     local it = e.it
     local ind = e.sub and 16 or 0
+    r.kind:Hide()
     r:SetHeight(ROW)
     r:ClearAllPoints()
     r:SetPoint("TOPLEFT", 0, -ly)
@@ -1525,9 +1542,11 @@ function Col:Head(s)
   self:Label(self.x, self.y, self.w, s, WHITE)
   self.y = self.y + HEAD_H
 end
-function Col:Note(s, c)
+-- a line of explanation, dim; under a box where under
+function Col:Note(s, c, under)
   self.fresh = false
-  self:Label(self.x, self.y, self.w, s, c or DIM)
+  local x = under and (self.x + LABEL_W + 10) or self.x
+  self:Label(x, self.y, self.w - (x - self.x), s, c or DIM)
   self.y = self.y + 18
 end
 -- a text box after its label (max letters; wide: the line's): what is typed is kept as it is typed
@@ -1689,7 +1708,7 @@ local function drawCards(cc, d)
         c.guid, c.sfx, c.name, c.class = row and row.guid, row and sfxOf(row.guid), row and row.short, row and row.class
         if d.shown ~= (row and row.guid or false) then d.shown = row and row.guid or false; C.UI:Refresh() end
       end, NAME * 2)
-      cc:Note(c.guid and classed(c.name, c.class) or "No member by that name yet.", c.guid and INK or MUTE)
+      cc:Note(c.guid and classed(c.name, c.class) or "No member by that name yet.", c.guid and INK or MUTE, true)
     else
       cc:Head("Card " .. i .. ": " .. classed(c.name, c.class))
     end
@@ -1834,5 +1853,9 @@ do
     def.title, def.tab = "Halls", 64
     def.page = function(ui) H.Draw(ui) end
     def.settings = function(ui, col) H.SettingsSection(ui, col); if cards then cards(ui, col) end end
+  else
+    -- (a window without the shame page: the tab registered here under its id, the live cards where the window has them)
+    C:RegisterModule({ id = "shame", title = "Halls", order = 40, core = true, tab = 64, page = function(ui) H.Draw(ui) end,
+      settings = function(ui, col) H.SettingsSection(ui, col) end })
   end
 end
