@@ -23,7 +23,7 @@ local function placeRow(g, K)
   local who = open .. (open == 1 and " quest" or " quests") .. (g.nearest and (", " .. minutes(g.nearest)) or "")
   if g.set and #g.set > 0 and (g.setXP or 0) > 0 and g.setMins and not banking() then
     val = E.Short(g.setXP) .. " XP"
-    who = #g.set .. (#g.set == 1 and " quest, " or " quests, ") .. math.max(1, math.floor(g.setMins + 0.5)) .. " min"
+    who = #g.set .. (#g.set == 1 and " quest, " or " quests, ") .. (g.tripEst and "est. " or "") .. math.max(1, math.floor(g.setMins + 0.5)) .. " min"
   end
   return { kind = "place", g = g, name = g.cat and g.cat.name or "?", val = val, who = who,
     c = P.open[g.idx] and K.WHITE or K.INK,

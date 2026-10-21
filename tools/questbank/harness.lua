@@ -18245,16 +18245,16 @@ end)()
     assert(after and not after.locked and after.rank > 0, "942 handed in: 943 ranks")
   end }
 
-  -- 4. at Lakeshire with the Guide on and an empty log: the fill takes Redridge's quests (the Now view's first place out
-  -- of a dungeon: alone, a run is no pick), the most XP a minute first
+  -- 4. at Lakeshire with the Guide on and an empty log: the fill takes Redridge's quests (the Now view's first place:
+  -- alone, out of a dungeon, as the fill: a run is no pick), the most XP a minute first
   F62CASES[#F62CASES + 1] = { "at Lakeshire: the fill takes Redridge's quests in rate order", function()
     local c = char("Lark", { world = { 0, -9260, -2200 } })
     local QB, UI = c.QB, c.QB.UI
     QB:Settings().guide.on = true
     settle(c)
     local red = catNamed(c, "Redridge Mountains")
-    local order, first = UI.PlaceGroups(nil, true), nil
-    for _, g in ipairs(order) do if not first and not g.cat.dungeon then first = g end end
+    local order = UI.PlaceGroups(nil, true)
+    local first = order[1]
     assert(first.idx == red, "Redridge is where to go now: " .. tostring(first.cat.name))
     order = { first }
     local auto, n = QB:Plan().auto, 0
@@ -18560,6 +18560,44 @@ end)()
       assert(ok and text:find("quest 10m", 1, true), "the oldest accepted: " .. tostring(text))
     end
     Tm.Set(false)
+  end }
+
+  -- the review: from Lakeshire at 21, Now put Ruins of Lordaeron first, "528 XP a minute", its trip the flight to
+  -- Stormwind where its quests are handed in (no giver placed, nothing done in the world, no entrance known), while the
+  -- Guide, alone, never picks a run. Alone, the places out of a dungeon come first; a trip nothing gives (no giver, no
+  -- objective, no entrance placed: the turn-in stands in) is an estimate, after the places whose trip is known, in a
+  -- party too; a quest held sets no place's trip while one can be taken there
+  F62CASES[#F62CASES + 1] = { "Now: alone, no dungeon first; a trip from a turn-in is an estimate, after the known", function()
+    local c = char("Lorde", { world = { 0, -9260, -2200 }, log = { { 95189, 0 } } })
+    local QB, UI = c.QB, c.QB.UI
+    local rol = catNamed(c, "Ruins of Lordaeron")
+    local function check(solo)
+      local order = UI.PlaceGroups(nil, true)
+      local _, rg = at(order, rol)
+      assert(rg and rg.tripEst and #rg.set > 0, "Ruins of Lordaeron: its trip an estimate")
+      local held, take
+      for _, it in ipairs(rg.set) do
+        if it.id == 95189 then held = it elseif it.trip and (not take or it.trip < take) then take = it.trip end
+      end
+      assert(held and held.grp == 3 and held.trip and take and rg.trip == take, "95189 held: its hand-in is not the place's trip")
+      -- (alone, a dungeon after the open places; an estimated trip after the known ones; nothing to do there, last)
+      local last = -1
+      for i, g in ipairs(order) do
+        if not g.skipped then
+          local tier = (g.value > 0 and 0 or 4) + ((solo and g.cat.dungeon) and 2 or 0) + (g.tripEst and 1 or 0)
+          assert(tier >= last, string.format("%s at %d (%d) after one at %d", g.cat.name, i, tier, last))
+          last = tier
+        end
+      end
+      if solo then assert(not order[1].cat.dungeon, "alone, the first place is out of a dungeon: " .. order[1].cat.name) end
+      return order
+    end
+    check(true)
+    c.o.group = true
+    QB:MarkDirty()
+    local order = check(false)
+    print(string.format("xpm: from Lakeshire in a party: %s first (%.0f XP a minute); Ruins of Lordaeron's trip an estimate", order[1].cat.name, order[1].value))
+    c.o.group = false
   end }
 
   for _, case in ipairs(F62CASES) do

@@ -2578,7 +2578,8 @@ function UI:RefreshPrepView(v)
     if g.nearest then
       minsText = g.nearest < 1 and " \194\183 you're here" or string.format(a.dungeon and " \194\183 %d min to the entrance" or " \194\183 %d min away", math.floor(g.nearest + 0.5))
     end
-    if v.now and not banking and g.value and g.value > 0 then minsText = minsText .. string.format(" \194\183 %s XP a minute", QB.Comma(math.floor(g.value + 0.5))) end
+    -- ("est.": the way there is a guess, no giver, objective or entrance placed: Lists.lua's PlaceGroups)
+    if v.now and not banking and g.value and g.value > 0 then minsText = minsText .. string.format(" \194\183 %s%s XP a minute", g.tripEst and "est. " or "", QB.Comma(math.floor(g.value + 0.5))) end
     local lv = g.lvlN > 0 and string.format("L%d", math.floor(g.lvlSum / g.lvlN + 0.5)) or ""
     local zone = a.dungeon and (a.where ~= "" and a.where or "Dungeon") or (a.where or "")
     -- (a place with no zone of its own, the class quests: no empty part between two dots)
