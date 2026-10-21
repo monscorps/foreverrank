@@ -4,7 +4,9 @@
 -- reads nothing of runs: CardFrame.lua lays cards out, Runs.lua and the others say what is on them.
 --   Cards.Make(parent)    a card, 180 x 372 units
 --   Cards.Fill(card, c)   c = { guid, name, class, race, sex, kind, label, title, line, value, valueLabel, icon, headline,
---                         tip }; icon: an achievement's, at 36 in the picture's top-right corner
+--                         guild, tip }; icon: an achievement's, at 36 in the picture's top-right corner; guild: a guild
+--                         card (a guild achievement's), no member: the guild's name in white, the icon at 96 in the
+--                         picture
 --   Cards.Find(guid)      the unit to draw a member by: player, partyN or raidN, target, focus, mouseover, nameplate1
 --                         to 40; only one UnitIsVisible says is in sight and whose identity is plain
 --                         (C_Secrets.ShouldUnitIdentityBeSecret; SetUnit is RequiresDeclassifiedUnitIdentity)
@@ -184,6 +186,14 @@ local function picture(f, d)
   local U = UI()
   local cc = U.ClassColor(d.class)
   f.model:Hide(); f.tint:Hide(); f.portrait:Hide(); f.portraitEdge:Hide(); f.classIcon:Hide()
+  -- (a guild card: the achievement's icon at 96 where a race portrait sits, with its 1 px black edge)
+  if d.guild then
+    local icon = tonumber(d.icon)
+    local shown = icon ~= nil and f.portrait:SetTexture(icon) ~= false
+    f.portrait:SetShown(shown)
+    f.portraitEdge:SetShown(shown)
+    return "guild"
+  end
   local unit = Cards.Find(d.guid)
   if unit and type(f.model.SetUnit) == "function" then
     local ok = f.model:SetUnit(unit)
@@ -243,9 +253,9 @@ function Cards.Fill(f, d)
   end
   f.drew = picture(f, d)
   local icon = tonumber(d.icon)
-  local badge = icon ~= nil and f.badge:SetTexture(icon) ~= false
+  local badge = icon ~= nil and not d.guild and f.badge:SetTexture(icon) ~= false
   f.badge:SetShown(badge); f.badgeEdge:SetShown(badge)
-  color(f.name, U.ClassColor(d.class))
+  color(f.name, d.guild and WHITE or U.ClassColor(d.class))
   U.FitText(f.name, d.name or "?", 164)
   U.FitText(f.title, d.title or "", 164)
   f.line:SetText(d.line or "")

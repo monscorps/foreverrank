@@ -383,7 +383,7 @@ function CF:Announce(set, opts)
       card:ClearAllPoints()
       card:SetPoint("TOPLEFT", cx + (i - 1) * 192, -88)
       C.Cards.Fill(card, { guid = c.guid, name = c.name or "?", class = c.class, race = c.race, sex = c.sex, kind = c.kind, label = HL.LABEL[c.kind] or "",
-        title = c.title or "", line = c.line or "", value = c.value or "", valueLabel = c.valueLabel or "", icon = c.icon, headline = c.kind == "first",
+        title = c.title or "", line = c.line or "", value = c.value or "", valueLabel = c.valueLabel or "", icon = c.icon, headline = c.kind == "first", guild = c.guild,
         tip = function(tip) HL.CardTip(tip, set, c) end })
     else card:Hide() end
   end

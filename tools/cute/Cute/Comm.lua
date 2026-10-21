@@ -59,6 +59,8 @@
 --   1C, 1G, 1W                     the cards (Halls.lua): a set the officers published (1C|at|i/n|..., withdrawn by
 --                                  1C|at|x), the ask for the sets newer than a stamp (1G), a run's cards whispered to
 --                                  the officers (1W); handed to Halls as they come, 1W only whispered
+--   1A|id|time                     an achievement a member earned, for the officers (Achievements.lua): on GUILD, or
+--                                  whispered to each officer where the officers keep Achievements to themselves
 -- Only-you is routing, not hiding (Policy.lua P:Route): a value the officers keep to themselves never goes on GUILD. It
 -- goes in the same messages (1D, 1F, 1L, 1K) whispered to each officer online (Roster.lua R:OfficerTargets: the roster's
 -- ranks, the policy's threshold, the sender strings their own Cute's messages came under, each one the roster names
@@ -764,7 +766,8 @@ local function partsFor(ids, force, targets, gforce)
     local s = def and M.Encode(def, C.Sample:Value(id))
     if s ~= nil then
       local p = { id = id, key = id, kv = id .. "=" .. s, s = s }
-      if C.Policy:Route(id) == "self" then
+      -- (a hidden value for the officers alone, whatever its route: a member's recent earns, Achievements.lua)
+      if C.Policy:Route(id) == "self" or def.officers then
         for _, t in ipairs(targets) do
           local sent, q = state("v", t)
           if force == true or (sent[id] ~= s and q[id] ~= s) then told[t] = told[t] or {}; table.insert(told[t], p) end
@@ -1698,7 +1701,7 @@ end
 
 -- what a whisper may carry: the values, labels and kill claims the officers alone see, and a run's cards to them (1W,
 -- Halls.lua)
-local WHISPERED = { ["1D"] = true, ["1F"] = true, ["1L"] = true, ["1K"] = true, ["1W"] = true }
+local WHISPERED = { ["1D"] = true, ["1F"] = true, ["1L"] = true, ["1K"] = true, ["1W"] = true, ["1A"] = true }
 -- whispers that come before the roster is known (an officer's client, its roster slow at login): kept in memory and
 -- judged once it is (Roster.lua calls ReplayEarly), not dropped while the members count them as told. And the records
 -- and deltas from the guild channel too: a record made before the roster listed anyone would decide whose guild the
@@ -1783,8 +1786,10 @@ function M:Receive(text, channel, sender)
     local body = text:match("^1D|[^|]*|(.*)$")
     local had = CuteDB.roster[sender] ~= nil
     local dkv = decodeBody(body)
-    -- (the weekly values a reset replaces, kept for the halls' Last week before the record takes the new: Halls.lua)
+    -- (the weekly values a reset replaces, kept for the halls' Last week before the record takes the new: Halls.lua;
+    -- a member's recent earns and level for the officers' queue and firsts: Achievements.lua)
     if C.Halls then C.Halls:Seen(sender, dkv) end
+    if C.Achievements then C.Achievements:Seen(sender, dkv, whispered, kind) end
     R:Apply(sender, dkv, whispered)
     if not whispered then self:WantWhole(sender, had, true) end
   elseif kind == "1F" then
@@ -1792,6 +1797,7 @@ function M:Receive(text, channel, sender)
     -- field marked "s", from a sender this client held no record of, asks for the whole one)
     local had = CuteDB.roster[sender] ~= nil
     if C.Halls then C.Halls:Seen(sender, kv) end
+    if C.Achievements then C.Achievements:Seen(sender, kv, whispered, kind) end
     R:Apply(sender, kv, whispered)
     if not whispered then self:WantWhole(sender, had, (text:match("^1F|%d+|%d+|([^|]*)|") or ""):sub(-1) == "s") end
     -- (whispers that waited for this sender's record to carry its GUID are taken now)
@@ -1912,6 +1918,9 @@ function M:Receive(text, channel, sender)
     -- the cards' kinds: a published set and its withdrawal (1C), the ask for the sets held (1G), a run's cards to the
     -- officers (1W, whispered): Halls.lua
     C.Halls:Receive(kind, text, sender, whispered)
+  elseif kind == "1A" and C.Achievements then
+    -- an achievement a member earned (an officer's client takes it, a member's ignores it): Achievements.lua
+    C.Achievements:Receive(text, sender)
   end
 end
 

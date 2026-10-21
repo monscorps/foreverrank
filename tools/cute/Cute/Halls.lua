@@ -201,8 +201,9 @@ function H.HeadColor(kind)
   if kind == "s" then return C.Cards.BLOOPER end
   return WHITE
 end
--- text as a card may carry it on the wire: no | ; = and no comma (a space), cut to max bytes, UTF-8 whole
-local function clean(s, max) return C.Stats.CleanText((tostring(s or ""):gsub(",", " ")), max) end
+-- text as a card may carry it on the wire: no | ; = and no comma (a comma and the spaces after it one space), cut to max
+-- bytes, UTF-8 whole
+local function clean(s, max) return C.Stats.CleanText((tostring(s or ""):gsub(",%s*", " ")), max) end
 H.Clean = clean
 local function bare(s) return (tostring(s or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
 local function copy(t) local o = {}; for k, v in pairs(t) do o[k] = v end return o end
@@ -220,7 +221,8 @@ local function refresh() local U = C.UI; if U and U.frame and U.frame:IsShown() 
 H.Refresh = refresh
 
 -- may a card with this source show under the policy held now (12): a stat routed Everyone (s<stat>), every field a
--- run's award reads (r<run>.<CODE>), Achievements (a<id>, where the code exists); a card by hand has none
+-- run's award reads (r<run>.<CODE>), Achievements (a<id>), a boss's kills (b<encounter>, a first kill), the level
+-- (c<level>, the first at the cap); a card by hand has none
 function H.Open(source)
   if type(source) ~= "string" or source == "" then return true end
   local P, S = C.Policy, C.Stats
@@ -237,6 +239,10 @@ function H.Open(source)
   elseif kind == "a" then
     local id = S.byCode.ac
     return id == nil or P:Route(id) == "all"
+  elseif kind == "b" then
+    return rest:match("^%d+$") ~= nil and P:Route("e" .. rest) == "all"
+  elseif kind == "c" then
+    return rest:match("^%d+$") ~= nil and P:Route("level") == "all"
   end
   return false
 end
@@ -314,11 +320,15 @@ function H:Unqueue(ids)
   end
   for id in pairs(set) do H.ticked[id] = nil end
 end
--- an item another officer published greys in this one's queue: "Published by Brann"
+-- an item another officer published greys in this one's queue: "Published by Brann". By its source and its member (an
+-- achievement's source is the achievement's: another member's earn of it is not published)
 function H:Grey(set, by)
   local srcs = {}
-  for _, c in ipairs(set.cards or {}) do if type(c.source) == "string" and c.source ~= "" then srcs[c.source] = true end end
-  local function mark(it) if it.card and srcs[it.card.source] then it.pub = by; H.ticked[it.id] = nil end end
+  for _, c in ipairs(set.cards or {}) do if type(c.source) == "string" and c.source ~= "" then srcs[c.source .. "|" .. (c.sfx or sfxOf(c.guid) or "")] = true end end
+  local function mark(it)
+    local c = it.card
+    if c and srcs[tostring(c.source) .. "|" .. (c.sfx or sfxOf(c.guid) or "")] then it.pub = by; H.ticked[it.id] = nil end
+  end
   for _, r in ipairs(H.Rows()) do
     mark(r)
     for _, e in ipairs(r.entries or {}) do mark(e) end
@@ -493,7 +503,10 @@ function H.ChatLine(set)
   local head = H.PREFIX .. title .. ": "
   local cards = set.cards or {}
   local function fit(s) if #s <= LIMIT then return s end return s:sub(1, LIMIT) end
-  if #cards == 1 and (cards[1].source or ""):match("^a%d") then return fit(head .. (cards[1].name or "?") .. " earned " .. (cards[1].title or "") .. ".") end
+  -- (one card: an achievement earned, a boss's first kill, the cap reached)
+  local one = #cards == 1 and (cards[1].source or ""):sub(1, 1)
+  local VERB = { a = " earned ", b = " brought down ", c = " reached " }
+  if one and VERB[one] and (cards[1].source or ""):match("^%a%d") then return fit(head .. (cards[1].name or "?") .. VERB[one] .. (cards[1].title or "") .. ".") end
   local s = head
   for i, c in ipairs(cards) do
     local part = (i > 1 and ", " or "") .. (c.name or "?") .. " (" .. (c.title or "") .. ")"
@@ -526,6 +539,8 @@ function H:Publish(set, chatLine)
   setHeard()
   table.insert(mine(), now())
   H:Unqueue(set.from)
+  -- (what is left in this officer's own queue with the same source and member greys as the others' do)
+  self:Grey(out, out.by)
   if set.draftId then H:Unqueue({ set.draftId }) end
   H.draft = nil
   if chatLine and H.ChatState() then
@@ -619,7 +634,9 @@ function H:Took(set, sender, answer)
   set.byGuid, set.got = (not answer) and g or nil, now()
   local kept = {}
   for _, c in ipairs(set.cards) do
-    c.guid = c.sfx and R:GuidBySuffix(c.sfx) or nil
+    -- (a guild card, a guild achievement's: no member, the guild's own name; G is no GUID's last part, which is hex)
+    if c.sfx == "G" then c.guild = true; c.name = C.Achievements and C.Achievements.GuildName() or c.name end
+    c.guid = c.sfx and not c.guild and R:GuidBySuffix(c.sfx) or nil
     local rm = c.guid and R.byGuid[c.guid]
     if rm then c.name = (rm.name and C.Short(rm.name)) or c.name; c.class = rm.class or c.class end
     if H.Open(c.source) then kept[#kept + 1] = c end
@@ -1080,6 +1097,9 @@ function H.CardTip(tip, set, c)
   local line
   if code and C.CardFrame and C.CardFrame.RULE and C.CardFrame.RULE[code] then line = C.CardFrame.RULE[code] .. ", in a run."
   elseif sdef then line = "The guild's best at " .. sdef.label .. " (" .. (PERIOD_WORD[set.period or "a"] or "all time") .. ")."
+  elseif src:match("^a%d") then line = c.kind == "first" and "A guild first, as the officers judged it." or (c.guild and "An achievement the guild earned." or "An achievement a guild member earned.")
+  elseif src:match("^b%d") then line = "A guild first: the first kill two members' Cute agreed on."
+  elseif src:match("^c%d") then line = "A guild first: the first member at the level cap."
   elseif src == "" then line = "Written by the officers." end
   if line then tip:AddLine(line, 0.85, 0.85, 0.85, true) end
 end
@@ -1388,7 +1408,7 @@ local function queueEntries()
   end
   return out
 end
-local DIGEST_WORD = { run = { "run card today", "run cards today" }, ach = { "achievement today", "achievements today" } }
+local DIGEST_WORD = { run = { "run card today", "run cards today" }, ach = { "achievement today", "achievements today" }, first = { "guild first today", "guild firsts today" } }
 function H.DrawQueue(ui)
   local U, ROW = C.UI, C.UI.ROW
   local sf = ui.scroll
@@ -1464,15 +1484,26 @@ function H.DrawQueue(ui)
     r.fill:SetShown(H.ticked[it.id] == true)
     r.fill:SetVertexColor(1, 1, 1, can and 1 or 0.4)
     setIcon(r.icon, it)
-    color(r.name, U.ClassColor(c.class))
+    color(r.name, c.guild and WHITE or U.ClassColor(c.class))
     U.FitText(r.name, c.name or "?", 116)
     color(r.what, can and INK or MUTE)
-    U.FitText(r.what, it.what or c.title or "", whatW)
-    if it.pub then r.who:SetText("Published by " .. it.pub)
+    local whoW
+    if it.pub then whoW = measure(r.who, "Published by " .. it.pub)
     elseif it.lock or not H.Open(c.source) then
       local tw = measure(r.who, "Only you")
       r.lock:ClearAllPoints(); r.lock:SetPoint("RIGHT", r.who, "RIGHT", -(tw + 6), 0); r.lock:SetTexture(LOCK); r.lock:Show()
-    else r.who:SetText(U.Ago(it.at) or "") end
+      whoW = tw + 18
+    else whoW = measure(r.who, U.Ago(it.at) or "") end
+    -- (its mark in DIM before the right-hand words: "server" where the server shows it too, "Guild first?")
+    if it.mark then
+      local mw = math.min(96, measure(r.kind, it.mark) + 4)
+      r.kind:ClearAllPoints(); r.kind:SetPoint("RIGHT", r, "RIGHT", -(4 + math.min(whoW, RIGHT) + 10), 0)
+      r.kind:SetWidth(mw); r.kind:SetJustifyH("RIGHT"); color(r.kind, DIM); r.kind:Show()
+      U.FitText(r.kind, it.mark, mw)
+      local room = w - 176 - ind - (4 + math.min(whoW, RIGHT) + 10 + mw + 8)
+      r.what:SetWidth(room); whatW = room - 4
+    end
+    U.FitText(r.what, it.what or c.title or "", whatW)
     r.fn = function(_, which)
       if which == "RightButton" then
         if type(MenuUtil) == "table" and type(MenuUtil.CreateContextMenu) == "function" then
@@ -1491,6 +1522,9 @@ function H.DrawQueue(ui)
       tip:AddLine((c.title or "") .. ": " .. (c.name or "?"), 1, 1, 1)
       if c.line and c.line ~= "" then tip:AddLine(c.line, 0.85, 0.85, 0.85, true) end
       if c.value and c.value ~= "" then tip:AddLine(c.value .. " " .. (c.valueLabel or ""), 0.85, 0.85, 0.85) end
+      -- (a first: what it rests on; an earn the server shows too)
+      if it.rests then tip:AddLine("Guild first? " .. it.rests, 0.85, 0.85, 0.85, true)
+      elseif it.mark == "server" then tip:AddLine("Guild news or the server's guild line shows it too.", 0.7, 0.7, 0.7, true) end
       if it.pub then tip:AddLine("Published by " .. it.pub .. ".", 0.7, 0.7, 0.7, true)
       elseif not can then tip:AddLine("Only you and the officers see this: it cannot be published.", 0.7, 0.7, 0.7, true)
       else tip:AddLine("Click to tick it; right-click to remove it.", 0.5, 0.5, 0.5, true) end
@@ -1806,13 +1840,16 @@ function H.Diag()
   for _, r in ipairs(d.queue) do rows = rows + 1; if r.src == "draft" then drafts = drafts + 1 end; items = items + (r.entries and #r.entries or (r.card and 1 or 0)) end
   local newest = H.Newest()
   local quiet, why = quietNow()
-  return {
+  local out = {
     string.format("diag cards: %d sets held (newest %s), %d unseen | queue %d rows, %d items, %d drafts | officer %s", #d.sets, newest > 0 and (math.floor(now() - newest) .. " s ago") or "none",
       H.Unseen(), rows, items, drafts, tostring(officer())),
     string.format("diag cards: toasts shown %d, waiting %d, %d this hour, now %s | guild line filter %s, lines hidden %d, posted %d | refused %d | 1G %s, answers %d | 1W sent %d, held %d",
       H.toastsShown or 0, #H.toasts, recent(H.toastLog, HOUR), quiet and "free" or ("held: " .. tostring(why)), H.filterOK and "on" or "missing", H.hidden or 0, H.posted or 0, H.refused or 0,
       H.asked and "asked" or "not asked", H.answers or 0, H.wSent or 0, type(C.Char().pendingW) == "table" and #C.Char().pendingW or 0),
   }
+  -- (the achievements' own: Achievements.lua)
+  if C.Achievements and C.Achievements.Diag then for _, l in ipairs(C.Achievements.Diag()) do out[#out + 1] = l end end
+  return out
 end
 do
   local core = SlashCmdList.CUTE
