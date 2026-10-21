@@ -232,12 +232,13 @@ function Timer.Record(event, a1, a2)
   if Timer.frame and Timer.frame:IsShown() then Timer.Update() end
 end
 
--- the oldest quest still in the log that this character accepted since the timers began
+-- the oldest quest still in the log that this character accepted since the timers began (a row the work alone made,
+-- Timer.Tick for a quest held before the timers began, has no accept time: not one of them)
 local function oldestOpen()
   local best, at
   local log = QB.state and QB.state.log or {}
   for id, q in pairs(db().quests) do
-    if not q.d and log[id] and (not at or q.a < at) then best, at = id, q.a end
+    if type(q) == "table" and q.a and not q.d and log[id] and (not at or q.a < at) then best, at = id, q.a end
   end
   return best, at
 end

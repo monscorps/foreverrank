@@ -18544,6 +18544,24 @@ end)()
     assert(Tm.SpeedFactor() == 0.5, "the pace from five quests: " .. tostring(Tm.SpeedFactor()))
   end }
 
+  -- the strip's "quest 12m" (Timer.Text) reads the oldest quest accepted; a row the work made (Timer.Tick: no "a", the
+  -- quest was in the log before the timers began) is no quest accepted
+  F62CASES[#F62CASES + 1] = { "the timer strip with rows the work made: no error", function()
+    local c = char("Strip", { log = { { 127, 0 }, { 34, 0 } } })
+    local QB, Tm = c.QB, c.QB.Timer
+    Tm.Set(true)
+    Tm.Tick({ 127 }, 1)
+    assert(Tm.DB().quests[127] and not Tm.DB().quests[127].a, "a row without an accept time")
+    local ok, text = pcall(Tm.Text)
+    assert(ok and not text:find("quest ", 1, true), "the strip without the quest: " .. tostring(text))
+    Tm.DB().quests[34] = { a = c.env.time() - 600 }
+    for _ = 1, 3 do
+      ok, text = pcall(Tm.Text)
+      assert(ok and text:find("quest 10m", 1, true), "the oldest accepted: " .. tostring(text))
+    end
+    Tm.Set(false)
+  end }
+
   for _, case in ipairs(F62CASES) do
     case[2]()
     print("xpm: " .. case[1] .. ": ok")
