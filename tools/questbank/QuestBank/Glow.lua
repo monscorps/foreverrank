@@ -480,7 +480,7 @@ end
 local function said(why, done, refused, theirs)
   if why == "repair" then
     if #done > 0 then
-      QB:Print("The game's settings the interact light changed were still changed: the game closed or reloaded before QuestBank could put them back. They are back as you had them: " .. table.concat(done, ", ") .. ".")
+      QB:Print("The game's settings the interact light changed were still changed: the game closed or reloaded before " .. (QB.NAME or "QuestBank") .. " could put them back. They are back as you had them: " .. table.concat(done, ", ") .. ".")
     end
   elseif why then
     QB:Print(#done > 0 and ("The interact light is off, and the game's settings it changed are back as you had them: " .. table.concat(done, ", ") .. ".")
@@ -493,7 +493,9 @@ local function said(why, done, refused, theirs)
       .. table.concat(theirs, ", ") .. ".")
   end
   if #refused > 0 then
-    QB:Print("The game would not take back " .. table.concat(refused, ", ") .. ". QuestBank keeps the game's own value and tries again at your next login; Restore the game's settings tries now.")
+    -- (a host has no Restore button: QB.host)
+    QB:Print("The game would not take back " .. table.concat(refused, ", ") .. ". " .. (QB.NAME or "QuestBank") .. " keeps the game's own value and tries again at your next login"
+      .. (QB.host and "." or "; Restore the game's settings tries now."))
   end
 end
 

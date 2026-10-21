@@ -94,7 +94,7 @@ function G.Text(s)
   elseif k == "train" then return "Train at " .. (s.name or "your class trainer")
   elseif k == "grind" then return s.text or "Kill around here"
   elseif k == "corpse" then return "Run to your corpse"
-  elseif k == "reward" then return "Choose a reward: " .. (s.name or "QuestBank's pick") .. " is QuestBank's pick"
+  elseif k == "reward" then return "Choose a reward: " .. (s.name or "the marked one") .. " is " .. (QB.NAME or "QuestBank") .. "'s pick"
   end
   return s.text or ""
 end

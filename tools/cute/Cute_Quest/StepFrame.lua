@@ -282,7 +282,7 @@ function SF.Refresh()
   f.rows[1].text.qbText = nil -- (fitted again at the new width)
   for i = 1, 3 do
     local s = steps[i]
-    rowText(f.rows[i].text, s and G.Text(s) or (i == 1 and "Nothing to do: /qb" or ""), s and G.Short(s) or nil)
+    rowText(f.rows[i].text, s and G.Text(s) or (i == 1 and ("Nothing to do: " .. (QB.CMD or "/qb")) or ""), s and G.Short(s) or nil)
     f.rows[i]:SetShown(i == 1 or s ~= nil)
   end
   f.time:SetText(text or "")
@@ -400,12 +400,12 @@ function SF.Ask(kind)
   f.time:Hide(); f.remind:Hide()
   for _, t in ipairs(f.members) do t:Hide() end
   if kind == "ask" then
-    card.title:SetText("Let QuestBank guide you?")
+    card.title:SetText("Let " .. (QB.NAME or "QuestBank") .. " guide you?")
     card.accept:Hide(); card.other:Hide(); card.turnIn:Hide(); card.turnIn.label:Hide(); card.done:Hide()
     card.yes:Show(); card.no:Show()
     f:SetHeight(PAD * 2 + 48)
   else
-    card.title:SetText("QuestBank guides you from here. At quest givers:")
+    card.title:SetText((QB.NAME or "QuestBank") .. " guides you from here. At quest givers:")
     card.yes:Hide(); card.no:Hide()
     card.accept:Show(); card.other:Show(); card.turnIn:Show(); card.turnIn.label:Show(); card.done:Show()
     card.Words()

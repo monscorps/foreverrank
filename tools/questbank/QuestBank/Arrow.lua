@@ -209,8 +209,19 @@ function A.Target(here)
 end
 
 local NOTHING = { route = { "No stop to go to", nil }, handin = { "Nothing finished to hand in", "Finish a quest and the arrow finds its NPC" },
-                  pickup = { "Nothing on your pick-up list", "The ! on a quest on Available puts it there" }, pin = { "Nothing chosen yet", "Click a quest or a stop in QuestBank" },
+                  pickup = { "Nothing on your pick-up list", "The ! on a quest on Available puts it there" }, pin = { "Nothing chosen yet", nil },
                   corpse = { "Your corpse", nil } }
+-- the host's name in the arrow's words (QuestBank, or a host running this engine: QB.NAME, Bridge.lua), and how the
+-- arrow is kept up (a host's players are told of its Settings alone, never of /qb); the pin mode's empty line made
+-- once a name
+local function hostName() return QB.NAME or "QuestBank" end
+local function keepsUp() return QB.host and "Settings" or "Settings or /qb arrow" end
+local pinHint, pinHintFor
+local function pinNothing()
+  local n = hostName()
+  if n ~= pinHintFor then pinHintFor, pinHint = n, "Click a quest or a stop in " .. n end
+  return pinHint
+end
 local HEAD = { route = "Next stop: %s", handin = "Hand in at %s", pickup = "Pick up at %s", pin = "You chose: %s", corpse = "Run to %s" }
 
 -- world x runs north and world y west; facing counts anticlockwise from north, as SetRotation turns
@@ -453,16 +464,16 @@ function A:Menu()
     A:Update()
   end }
   -- the look: QuestBank's own arrow, or QuestTrail's compass (Settings has the same)
-  items[#items + 1] = { A.QT() and "Look: QuestTrail's compass" or "Look: QuestBank's arrow", function()
+  items[#items + 1] = { A.QT() and "Look: QuestTrail's compass" or ("Look: " .. hostName() .. "'s arrow"), function()
     set.arrowStyle = A.QT() and "questbank" or "compass"
     A:Restyle()
-    QB:Print(A.QT() and "The arrow is QuestTrail's compass. Its menu or Settings brings QuestBank's own arrow back." or "The arrow is QuestBank's own again.")
+    QB:Print(A.QT() and ("The arrow is QuestTrail's compass. Its menu or Settings brings " .. hostName() .. "'s own arrow back.") or ("The arrow is " .. hostName() .. "'s own again."))
     if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.UI:Refresh() end
   end }
   items[#items + 1] = { "Hide the arrow", function()
     A:Set(false)
-    QB:Print(temp and "Arrow hidden. A waypoint you click shows it again; Settings or /qb arrow keeps it up."
-      or "Direction arrow off. Settings or /qb arrow brings it back.")
+    QB:Print(temp and ("Arrow hidden. A waypoint you click shows it again; " .. keepsUp() .. " keeps it up.")
+      or ("Direction arrow off. " .. keepsUp() .. " brings it back."))
   end }
   QB.UI:ShowMenu("The arrow points at", items)
 end
@@ -731,7 +742,7 @@ function A:Create()
     if t and t.temp and t.on then
       GameTooltip:AddLine("Shown for now: it goes when you get there or its quest is done, and the arrow is back on your route.", 0.8, 0.8, 0.8, true)
     elseif t and t.temp then
-      GameTooltip:AddLine("Shown for this waypoint: it goes when you get there. Settings or /qb arrow keeps it up.", 0.8, 0.8, 0.8, true)
+      GameTooltip:AddLine("Shown for this waypoint: it goes when you get there. " .. keepsUp() .. " keeps it up.", 0.8, 0.8, 0.8, true)
     else
       GameTooltip:AddLine("Pointing at " .. MODES[m] .. ".", 0.8, 0.8, 0.8)
     end
@@ -946,7 +957,7 @@ function A:Update()
   A.hint = hint
   if not t then
     local m = A.Mode()
-    nothing.info = NOTHING[m][2] or (QB:Banking() and "Nothing banked yet" or "Nothing ready to hand in")
+    nothing.info = NOTHING[m][2] or (m == "pin" and pinNothing()) or (QB:Banking() and "Nothing banked yet" or "Nothing ready to hand in")
     A.g = nil
     self:Draw(NOTHING[m][1], nothing, me)
     return

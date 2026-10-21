@@ -636,7 +636,7 @@ function MV.Menu(d)
       end
     end
     root:CreateDivider()
-    root:CreateButton("QuestBank settings", function() if QB.UI then QB.UI:Open(5) end end)
+    root:CreateButton((QB.NAME or "QuestBank") .. " settings", function() if QB.UI then QB.UI:Open(5) end end)
   end)
 end
 function MV.OpenMenu(d)
@@ -722,6 +722,11 @@ function MV.Hook(before)
   if MV.blocked then Minimap:HookScript("OnMouseUp", QB.Safe(before, "minimap move")); return end
   local orig = Minimap:GetScript("OnMouseUp")
   MV.ourUp = function(self, button, ...)
+    -- (the minimap not the engine's now, a host's map module switched off: the game's own release, a ping)
+    if not QB.Mini.Owned() then
+      if orig then return orig(self, button, ...) end
+      return
+    end
     local now = GetTime()
     if MV.upAt == now and MV.upButton == button then
       if orig then return orig(self, button, ...) end

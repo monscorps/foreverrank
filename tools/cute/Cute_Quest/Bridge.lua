@@ -27,6 +27,33 @@ local UI = E.UI
 -- the arrow say those things
 function E:Print(msg) Cute.Print(msg) end
 E.quiet = true
+-- the engine's words name the host: "Choose a reward: X is Cute's pick", "Nothing to do: /cute quests", the minimap
+-- menu's "Cute settings"; and they leave out the /qb commands a Cute player is never told of (host: Settings alone)
+E.NAME, E.CMD, E.host = "Cute", "/cute quests", true
+-- the minimap is the engine's only while Cute's Map module is on (Minimap.lua, Mini.Owned): its wheel, Ctrl-wheel,
+-- Alt-drag, right-click menu, size and place, and the tracking menu's Target; off, the game's own
+function E.MapOn() return Cute.ModuleOn("map") end
+
+-- the engine's errors on Cute's list too (/cute errors), through Cute's public Cute.Safe: an error raised inside it is
+-- recorded with where it happened (Cute says so once a session, as for its own). A call the game blocked goes there as
+-- well, and nowhere else (Core.lua's Err.Blocked says nothing in chat). Under CUTE_DEV (the harness) Cute.Safe raises:
+-- the pcall keeps the engine's own record going either way
+local function toCute(msg, where)
+  pcall(Cute.Safe(function() error(msg, 0) end, "quest engine: " .. tostring(where or "?")))
+end
+local record, blocked = E.Err.Record, E.Err.Blocked
+function E.Err.Record(msg, stack, where)
+  record(msg, stack, where)
+  toCute(msg, where)
+end
+function E.Err.Blocked(event, who, fn, stack)
+  local kept = blocked(event, who, fn, stack)
+  if kept then
+    toCute(string.format("the game %s %s%s", event == "ADDON_ACTION_FORBIDDEN" and "forbade" or "blocked", tostring(E.Plain(fn) or "?"),
+      (InCombatLockdown and InCombatLockdown()) and " in combat" or ""), "blocked call")
+  end
+  return kept
+end
 -- a module that is a switch over the engine's flags (Map, Camp): off, every flag it names goes off and what they were
 -- is kept (s.cuteOff[id]); on, they come back as they were (a fresh install: the engine's defaults). Cute applies a
 -- module's state at every login, so on with nothing kept changes nothing: a flag a row set stays as the row set it,
@@ -66,9 +93,14 @@ function QB.Follow(id, keys, on)
 end
 
 -- QuestBank's tab numbers (its UI.lua: 1 Quest Log, 2 Plan, 3 Route, 4 Party, 5 Settings, 6 Now, 7 Journal, 8 Map)
--- as Cute's pages
+-- as Cute's pages; a page whose module is off (Route, the Guide, Journal) is the Quests page (Cute's own way with an
+-- off page is Race: a travel, train, grind or corpse step clicked in the step frame opened the guild's table)
 local PAGE = { [1] = "quests", [2] = "quests", [3] = "route", [4] = "guide", [5] = "settings", [6] = "quests", [7] = "journal", [8] = "quests" }
-function UI:Open(tab) Cute.Open(PAGE[tab] or "quests", tab == 5 and "quests" or nil) end
+function UI:Open(tab)
+  local page = PAGE[tab] or "quests"
+  if page ~= "quests" and page ~= "settings" and not Cute.ModuleOn(page) then page = "quests" end
+  Cute.Open(page, tab == 5 and "quests" or nil)
+end
 function UI:ShowTab(tab) self:Open(tab) end
 function UI:TogglePage(tab) self:Open(tab) end
 function UI:Toggle() Cute.Open("quests") end
@@ -92,19 +124,57 @@ function UI:CopyLink(title, url) Cute.Print(title .. ": " .. url) end
 function UI:PostDialog() end -- (Cute posts nothing: post.auto is off)
 function UI:ShowErrors()
   local list = QuestBankDB and QuestBankDB.errors or {}
-  Cute.Print(#list .. " quest engine errors" .. (#list > 0 and ", the newest first:" or "."))
+  local diag = QuestBankDB and type(QuestBankDB.diag) == "table" and QuestBankDB.diag or {}
+  local held = type(diag.blocked) == "table" and diag.blocked or {}
+  Cute.Print(#list .. " quest engine errors" .. (#list > 0 and ", the newest first:" or ".") .. (#held > 0 and (" " .. #held .. " calls the game blocked.") or ""))
   for i = 1, math.min(5, #list) do Cute.Print((list[i].where or "?") .. ": " .. tostring(list[i].msg)) end
+  for i = #held, math.max(1, #held - 2), -1 do Cute.Print("the game " .. (held[i].kind == "forbidden" and "forbade " or "blocked ") .. tostring(held[i].fn)) end
 end
 UI.frame, UI.tab, UI.lastTab, UI.postFrame, UI.scrollToQuest = nil, nil, nil, nil, nil
 
 -- the module's defaults, once: no QuestBank map page (the Map key is the game's), no posting, no update nag, no
--- level-up line, no welcome card (the choices are Settings rows), no minimap button (Cute has one)
+-- level-up line, no welcome card (the choices are Settings rows), no minimap button (Cute has one). And, once for a
+-- fresh install and once for a 0.7 save (0.7.0 shipped it on), no sharing with the whole guild: the engine's 1S (level,
+-- XP, class, GUID), 1Q (every quest and its progress) and 1R went to GUILD around the officers' Who sees what; Cute's
+-- own channel carries what the guild sees. Party sync stays
 local function firstRun()
   local s = E:Settings()
+  if not s.cuteGuildOff then
+    s.cuteGuildOff = true
+    if type(s.share) == "table" then s.share.guild = false end
+  end
   if s.cuteDefaults then return end
   s.cuteDefaults = true
   s.mapPage, s.post.auto, s.updates, s.clockLevelMsg, s.welcome = false, false, false, false, nil
   s.minimap.hide = true
+end
+
+-- PLAYER_ENTERING_WORLD for the engine's frames that wait on it (the light's settings, the minimap's size and tracking,
+-- the timers' session, the travel guide's re-plan, the arrow's dungeon check, ...): Cute loads this addon from its own
+-- handler of that event at a login or a /reload, and in play when a module is ticked, so they register for it while it
+-- is under way or long after it. Replayed a frame later to each frame that has not heard it since the load (one the
+-- game did deliver to is left alone), as QUEST_LOG_UPDATE is below
+local function enteringWorld()
+  local frames = {}
+  for _, key in ipairs({ "Camp", "Discover", "Game", "Legacy", "Glow", "Loot", "Target", "Survey", "Timer", "Travel", "Walk", "Arrow", "Mini" }) do
+    local m = E[key]
+    if type(m) == "table" then
+      for _, field in ipairs({ "frame", "eventFrame", "trackFrame" }) do
+        local fr = m[field]
+        if type(fr) == "table" and fr.GetScript and fr:GetScript("OnEvent") then frames[#frames + 1] = fr end
+      end
+    end
+  end
+  local heard = {}
+  for _, fr in ipairs(frames) do
+    fr:HookScript("OnEvent", function(self, event) if event == "PLAYER_ENTERING_WORLD" then heard[self] = true end end)
+  end
+  C_Timer.After(0, E.Safe(function()
+    for _, fr in ipairs(frames) do
+      local h = not heard[fr] and fr:GetScript("OnEvent")
+      if h then h(fr, "PLAYER_ENTERING_WORLD") end
+    end
+  end, "cute quest: entering the world"))
 end
 
 -- the login: this addon is loaded on demand, after PLAYER_LOGIN; the engine's login runs from here once the saved
@@ -118,6 +188,7 @@ f:SetScript("OnEvent", E.Safe(function(self, _, name)
   -- the modules' switches, now on the saved table (before the engine's login: its files read the flags as they start)
   for id, fn in pairs(QB.Toggles) do fn(Cute.ModuleOn(id)) end
   E:Login()
+  enteringWorld()
   -- the engine takes the log as read at the game's next QUEST_LOG_UPDATE, which after PLAYER_LOGIN comes at once;
   -- loaded on demand in the middle of a session it could wait minutes for one, so the log is read now
   if not E.logReady and E.eventFrame then

@@ -823,7 +823,7 @@ local function hearthSig(h) return h and (h.kind .. ":" .. h.name .. ":" .. h.c 
 function TV.HearthLine()
   if not QB.API.HasHearth() then return nil end
   local b = TV.Bind()
-  if not b then return "Hearthstone: QuestBank learns where it goes when you bind or use it" end
+  if not b then return "Hearthstone: " .. (QB.NAME or "QuestBank") .. " learns where it goes when you bind or use it" end
   local left = QB.API.HearthLeft()
   if left == nil then return "Hearthstone: " .. b.name end
   if left <= 0 then return "Hearthstone: " .. b.name .. ", ready" end
@@ -1524,13 +1524,13 @@ function TV.WayLines()
   local me = QB.API.WorldPosition()
   local t = A and A.Target(me)
   if not (t and t.c and t.wx and t.wy) then
-    out[1] = "The arrow points at nothing yet: click a quest or a stop in QuestBank, or right-click the arrow."
+    out[1] = "The arrow points at nothing yet: click a quest or a stop in " .. (QB.NAME or "QuestBank") .. ", or right-click the arrow."
   elseif not me then
-    out[1] = "QuestBank can't tell where you are here."
+    out[1] = (QB.NAME or "QuestBank") .. " can't tell where you are here."
   else
     local plan = TV.Route(me, t, TV.Opts(A.Mode()))
     if not plan then
-      out[1] = string.format("No way to %s that QuestBank knows from here.", t.name or "there")
+      out[1] = string.format("No way to %s that %s knows from here.", t.name or "there", QB.NAME or "QuestBank")
     else
       local steps = {}
       for _, l in ipairs(plan.legs) do
