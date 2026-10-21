@@ -10403,6 +10403,14 @@ do
     for _, m in ipairs(fs) do assert(m:find("^1F|%d+|%d+|%d+s|") and m:match("^1F|%d+|%d+|[^|]*|(.*)$"), "marked since, read by a 0.7 client as a record: " .. m) end
     assert(table.concat(fs, " "):find("zone=Feralas", 1, true), "with the zone: " .. table.concat(fs, " "))
     assert(a3.env.CuteDB.roster[b.sender].stats.zone == "Feralas" and a3.env.CuteDB.roster[b.sender].stats.level == 30, "Cobb holds her record as it is")
+    -- (an ask made for a reason, /cute resend here, wants every record whole: no since)
+    local r0 = #a3.sent
+    a3.env.SlashCmdList.CUTE("resend")
+    tickAll(3)
+    local resend
+    for k = r0 + 1, #a3.sent do if a3.sent[k].msg:sub(1, 3) == "1R|" then resend = a3.sent[k].msg end end
+    assert(resend and #(resend:match("|(%x*)$") or "") == 16, "/cute resend asks whole: " .. tostring(resend))
+    tickAll(60)
     fire(a3, "PLAYER_LOGOUT")
     leave(a3)
     -- (f) Cobb's file lost Cyra's record (0.7.0's partial roster deleted such), his hold still says he has the guild

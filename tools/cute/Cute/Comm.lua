@@ -186,7 +186,7 @@ function M:Wire(reloading)
     self.base, self.passAt = tonumber(w.base), tonumber(w.passAt)
     self.reloaded = true
     -- (an ask of this login that never left goes after the /reload)
-    self.askOwed = not (tonumber(w.asked) and tonumber(w.asked) >= tonumber(w.login)) or nil
+    self.askOwed = (not (tonumber(w.asked) and tonumber(w.asked) >= tonumber(w.login))) and "hello" or nil
   end
   ch.wire = { login = again and tonumber(w.login) or C.ServerNow(), sent = STATE.v.sent, labels = STATE.l.sent, claims = STATE.k.sent,
     told = STATE.v.sentTo, sentAt = M.sentAt, toldTo = self.toldTo, base = self.base, passAt = self.passAt, asked = again and tonumber(w.asked) or nil }
@@ -418,7 +418,7 @@ M.drops, M.paused = 0, nil
 local function asked(e, r)
   if not e.ask then return end
   if r == "sent" then M.askOwed = nil; M.askLeft = C.Now(); if M.AskLeft then M:AskLeft() end
-  elseif r ~= "gone" then M.askOwed = true; M:AskAgain() end
+  elseif r ~= "gone" then M.askOwed = e.hello and "hello" or true; M:AskAgain() end
 end
 -- (this login's record gone whole on GUILD for the first time: an ask whose since is later holds it, M:Answer)
 -- (and its first chunk gone: an ask heard before it is answered by that record, M.fullOut)
@@ -953,14 +953,15 @@ end
 
 -- the ask, with the stamp of the officers' word this client holds (Policy.lua P:Stamp), of the newest officers' word
 -- (1N) it holds (Rules.lua R.WordStamp) and the fingerprint of the policy it routes by (Policy.lua P:Fp)
--- (whole: no since, every record whole, M:AskWholes)
-function M:Ask(whole)
+-- (hello: the hello's own ask, which alone carries since: an ask made for a reason (/cute resend, the officers' button,
+-- a value dropped while in doubt, many records missing) wants every record whole)
+function M:Ask(hello)
   if not C.Roster:InGuild() then return end
   local guid = C.MyGUID()
   -- (one ask waiting at a time: a second would only be answered as the first)
   for _, m in ipairs(self.out) do if m.ask then return end end
   queue({ msg = "1R|" .. (guid and (guid:gsub("[|;=]", "")) or "") .. "|" .. string.format("%.0f", C.Policy:Stamp()) .. "|"
-    .. string.format("%.0f", C.Rules.WordStamp()) .. "|" .. C.Policy:Fp() .. ((not whole and self.SinceHex) and self:SinceHex() or ""), first = true, ask = true })
+    .. string.format("%.0f", C.Rules.WordStamp()) .. "|" .. C.Policy:Fp() .. ((hello and self.SinceHex) and self:SinceHex() or ""), first = true, ask = true, hello = hello })
 end
 -- an ask that never left (the client refused it, or an error on the way): asked again half a minute on, and when the
 -- lockdown ends (M:Restriction)
@@ -969,7 +970,7 @@ function M:AskAgain()
   self.askAgainDue = true
   C_Timer.After(30, C.Safe(function()
     M.askAgainDue = false
-    if M.askOwed and M.hello and not M:Locked() then M:Ask() elseif M.askOwed then M:AskAgain() end
+    if M.askOwed and M.hello and not M:Locked() then M:Ask(M.askOwed == "hello") elseif M.askOwed then M:AskAgain() end
   end, "comm: ask again"))
 end
 -- parts as messages under one head, each saying which of how many it is ("i/n|" after the head): a receiver takes
@@ -1347,7 +1348,7 @@ function M:AskWholes()
   -- place of a 1Q each)
   if #list > WHOLE_MAX then
     for _, sender in ipairs(list) do self.wholeAskedOf[sender] = true end
-    self:Ask(true)
+    self:Ask()
     return
   end
   for _, sender in ipairs(list) do
@@ -1431,7 +1432,7 @@ function M:Restriction(kind, state)
   self.lockEvent, self.lockSeen = nil, nil
   if self:Locked() then return end
   self:PayOwed()
-  if self.askOwed and self.hello then self:Ask() end
+  if self.askOwed and self.hello then self:Ask(self.askOwed == "hello") end
   M.Resume()
 end
 -- out of the guild: the hello is owed again, said on the next refresh in one (Roster.lua), and the hold with it
@@ -1765,7 +1766,7 @@ function M:Hello()
   -- never left goes now. The ask waits for the roster to read: answers that came before it would crowd the early
   -- buffer)
   if not self.reloaded or self.askOwed then
-    if C.Roster.trusted then self:Ask() else self.askDue = true end
+    if C.Roster.trusted then self:Ask(true) else self.askDue = true end
   end
   if C.Policy:Settled() then self:Release() end
   C_Timer.After(GAME_AFTER, C.Safe(function() M:FullGame(false) end, "comm: statistics"))
@@ -1773,13 +1774,13 @@ end
 
 -- the roster read for the first time (Roster.lua): the hello's ask, where it waited for it
 function M:RosterTrusted()
-  if self.askDue then self.askDue = nil; self:Ask() end
+  if self.askDue then self.askDue = nil; self:Ask(true) end
 end
 -- every loading screen (Core.lua): the lockdown may have ended with it (a dungeon left), so what waited goes.
 -- reloading: PLAYER_ENTERING_WORLD's isReloadingUi, at the first (M:Wire)
 function M:Start(reloading)
   if self.started then
-    if not self:Locked() then self:PayOwed(); if self.askOwed and self.hello then self:Ask() end; M.Resume() end
+    if not self:Locked() then self:PayOwed(); if self.askOwed and self.hello then self:Ask(self.askOwed == "hello") end; M.Resume() end
     return
   end
   if not (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) then return end
