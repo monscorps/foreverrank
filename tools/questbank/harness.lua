@@ -1822,16 +1822,18 @@ do
   assert(#owner.chat == n + 1 and owner.chat[#owner.chat]:find("counts 40 quests as a full log: with fewer, its Yes works.", 1, true), "/qb escort says so: " .. owner.chat[#owner.chat])
   QB.NoteAddons()
   assert(env.QuestBankDB.diag.addons.maxQuests == 40, "the uploads show the game's number")
-  -- an older build, whose prompt counts 25: said once a session, the number left as the game has it
+  -- an older build, whose prompt counts 25: nothing said unasked (the launch round; 6.1 said why Yes was grey, once a
+  -- session), /qb escort says it; the number left as the game has it
   env.MAX_QUESTS, env.MAX_QUESTLOG_QUESTS = 25, 25
   n = #owner.chat
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435)
+  assert(#owner.chat == n, "25 or more quests on such a client: nothing said unasked: " .. tostring(owner.chat[#owner.chat]))
+  env.SlashCmdList.QUESTBANK("escort")
   local said = owner.chat[#owner.chat]
-  assert(#owner.chat == n + 1 and said:find("Brann Steelhand started Escorting Erland", 1, true)
-    and said:find("counts 25 quests as a full log (yours holds 40), so its Yes stays grey", 1, true), "25 or more quests on such a client: why Yes is grey: " .. tostring(said))
+  assert(#owner.chat == n + 1 and said:find("counts 25 quests as a full log; yours holds 40. With 25 or more its Yes stays grey", 1, true), "/qb escort: why Yes is grey: " .. tostring(said))
   print("escort prompt, an older build:", said)
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435)
-  assert(#owner.chat == n + 1, "and says it once")
+  assert(#owner.chat == n + 1, "and nothing said again")
   assert(env.MAX_QUESTS == 25 and env.MAX_QUESTLOG_QUESTS == 25, "the game's numbers stay as the game has them")
   for _, arg in ipairs({ "off", "on", "" }) do env.SlashCmdList.QUESTBANK("escort " .. arg) end
   assert(env.MAX_QUESTS == 25 and owner.chat[#owner.chat]:find("QuestBank leaves the game's number alone", 1, true), "/qb escort, on or off: only says where things stand: " .. owner.chat[#owner.chat])
@@ -2417,7 +2419,7 @@ do
   local MVy, env = ylva.QB.MiniView, ylva.env
   local said = 0
   for _, line in ipairs(ylva.chat) do if line:find("QuestTrail is loaded", 1, true) then said = said + 1 end end
-  assert(MVy.blocked and not MVy.On() and ylva.QB:Settings().mmExtended ~= false and said == 1, "QuestTrail loaded: QuestBank's far zoom off this session, said once")
+  assert(MVy.blocked and not MVy.On() and ylva.QB:Settings().mmExtended ~= false and said == 0, "QuestTrail loaded: QuestBank's far zoom off this session, nothing said (the launch round)")
   env.Minimap.__scripts.OnMouseUp(env.Minimap, "RightButton")
   tick(ylva, 0)
   assert(ylva.gameClicks == 1 and #ylva.contextMenus == 0, "the release is the game's (and QuestTrail's): no menu of QuestBank's")
@@ -6022,18 +6024,14 @@ do
   assert(last() == "SelectAvailableQuest #3", "a greeting NPC: the third entry is the first you should take: " .. tostring(last()))
   owner.greetAvail = nil
   -- an escort a party member starts: the game's prompt is the player's. QuestBank presses nothing and hides nothing
-  -- (ConfirmAcceptQuest and StaticPopup_Hide error here), and says so once a session
+  -- (ConfirmAcceptQuest and StaticPopup_Hide error here), and says nothing (the launch round: 6.1 said so once a session)
   n = #owner.auto
   local said = #owner.chat
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(owner, 1)
-  local escortLine
-  for i = said + 1, #owner.chat do if owner.chat[i]:find("say yes in the game's prompt to join", 1, true) then escortLine = owner.chat[i] end end
-  assert(#owner.auto == n and escortLine and escortLine:find("Brann Steelhand started Escorting Erland", 1, true),
-    "an escort a party member starts: nothing pressed, and it says the prompt is yours: " .. tostring(owner.chat[#owner.chat]))
-  print("escort, Accept for me on:", escortLine)
+  assert(#owner.auto == n and #owner.chat == said, "an escort a party member starts: nothing pressed, nothing said: " .. tostring(owner.chat[#owner.chat]))
   said = #owner.chat
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(owner, 1)
-  assert(#owner.auto == n and #owner.chat == said, "said once a session")
+  assert(#owner.auto == n and #owner.chat == said, "and again: nothing")
   for i = 1, QB.LOG_SLOTS - #owner.log do table.insert(owner.log, { 9000000 + i, 0 }) end
   owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
   assert(QB.state.logCount == QB.LOG_SLOTS, "the log is full")
@@ -9211,7 +9209,9 @@ do
   local diag = ndb.diag and ndb.diag.xp
   assert(diag and diag[#diag].how == "complete" and diag[#diag].kind == "secret" and diag[#diag].id == 15, "the diagnostic ring notes a hidden XP number")
   assert(N2.Quest.Get(15).liveFull == liveBefore and noted() == notedBefore, "a hidden number teaches nothing")
+  N2:Settings().sayXP = true -- (the hand-in's line, asked for: the step frame's menu)
   newbie.ev(N2.eventFrame, "QUEST_TURNED_IN", 15, SECRET.num())
+  N2:Settings().sayXP = nil
   assert(diag[#diag].how == "turnin" and diag[#diag].kind == "secret", "a hidden hand-in number is noted the same way")
   assert((ndb.lock and ndb.lock[realm]) == lockBefore and N2.mode == modeBefore, "a hidden hand-in number is not a level lock")
   assert(said and said:find("hides its XP", 1, true) and not said:find("+0 XP", 1, true) and not said:find("paid no XP", 1, true), "chat says the game hid the number: " .. tostring(said))
@@ -12054,7 +12054,8 @@ do
   end
 
   -- the recorder: a call the game blocked and blamed on QuestBank is kept in QuestBankDB.diag.blocked, its stack with
-  -- QuestBank's own files by name and no other path, and said once in chat; another addon's is none of QuestBank's
+  -- QuestBank's own files by name and no other path, for /qb errors alone (said once in chat until the launch round);
+  -- another addon's is none of QuestBank's
   do
     local bf = MQ.blockedFrame
     M.env.debugstack = function() return table.concat({
@@ -12078,10 +12079,9 @@ do
       and st:find("[QuestBank/Pins.lua]:164: in function <QuestBank/Pins.lua:160>", 1, true) and st:find("[(game)]:331: in function 'AcquirePin'", 1, true)
       and st:find("[(addon)]:12: in function 'Thing'", 1, true) and st:find("QuestBank/Core.lua:50", 1, true) and st:find("[C]: in function 'SetPassThroughButtons'", 1, true),
       "its stack: QuestBank's files by name, no other path:\n" .. st)
-    assert(#M.chat == said + 1 and M.chat[#M.chat]:find("calling Frame:SetPassThroughButtons() in combat", 1, true) and M.chat[#M.chat]:find("/qb errors", 1, true),
-      "said in chat: " .. M.chat[#M.chat])
+    assert(#M.chat == said, "nothing said in chat: " .. tostring(M.chat[#M.chat]))
     print("blocked, kept:", (st:gsub("\n", " | ")))
-    -- the same call again: counted. Others: kept, the last 10. Said once
+    -- the same call again: counted. Others: kept, the last 10. Nothing said
     bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "QuestBank", "Frame:SetPassThroughButtons()")
     assert(#list == 1 and list[1].n == 2, "the same call again: counted")
     M.combat = false
@@ -12091,7 +12091,7 @@ do
     assert(list[#list].kind == "forbidden" and list[#list].fn == "UseQuestLogSpecialItem()", "forbidden ones too")
     bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "SomeOtherAddon", "CastSpellByName()")
     bf.__scripts.OnEvent(bf, "ADDON_ACTION_FORBIDDEN", "SomeOtherAddon", "CastSpellByName()")
-    assert(list[#list].fn == "UseQuestLogSpecialItem()" and #M.chat == said + 1, "another addon's: not kept, nothing said")
+    assert(list[#list].fn == "UseQuestLogSpecialItem()" and #M.chat == said, "another addon's: not kept, nothing said")
     -- /qb errors lists them to copy, newest first; /qb errors clear forgets them
     M.env.SlashCmdList.QUESTBANK("errors")
     local text = M.env.QuestBankErrors.eb:GetText()
@@ -17626,10 +17626,12 @@ end)()
       classID = classID, race = o.race or "Human", log = o.log or {}, done = o.done or {}, world = o.world or { 0, -9200, -2150 }, map = o.map or 1433,
       bagSlots = {}, bind = o.bind or "Lakeshire", trackerX = o.trackerX })
     if o.saved then c.env.QuestBankDB = o.saved end
+    if o.addons then c.addons = o.addons end
     c.known, c.buffs, c.resting = known or {}, {}, false
     login(c)
     return c
   end
+  local function said(c, fn) local n = #c.chat; fn(); return table.concat(c.chat, " | ", n + 1) end
   -- a frame's box in UIParent's units, its own scale counted (rectOf leaves a frame's scale out)
   local function placed(f, minH)
     GEN = GEN + 1
@@ -17717,6 +17719,55 @@ end)()
     QB:Settings().guide.x, QB:Settings().guide.y = nil, nil
     G.MemberSteps = real
     print(string.format("engine: %d layouts checked (four screens, two tracker places, three scales, alone and in a party of five)", seen))
+  end }
+
+  -- 2. "No chat lines unprompted" (the Guide's design: "No other chat lines from QuestBank unless the player asks"; the
+  -- audit of Cute 0.7.0's first hour): each hand-in said "<quest>: +450 XP" (or that the game hid the number, or that it
+  -- paid nothing); a hand-in run that outlived its hour said it ended; an escort said why the prompt's Yes was grey, or,
+  -- with Accept for me on, that the prompt was yours; a call the game blocked said so; QuestTrail loaded said so at every
+  -- load. None of them is said now (the blocked call is on /qb errors' list alone); the hand-in's line comes back with
+  -- "Say XP after each hand-in", off, in the step frame's menu
+  ENGCASES[#ENGCASES + 1] = { "nothing said unasked: hand-ins, a run that ends itself, escorts, a blocked call, QuestTrail", function()
+    local c = char("Hushed", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -8914, -133 }, map = 1429, log = { { 7, 1 }, { 33, 1 } } })
+    local env, QB = c.env, c.QB
+    for _, id in ipairs({ 7, 15, 18, 33 }) do assert(QB.Quest.Get(id), "quest " .. id .. " in the catalog") end
+    assert(QB:Settings().sayXP == nil, "the hand-in's line: off by default")
+    local function turnIn(id, xp) c.ev(QB.eventFrame, "QUEST_TURNED_IN", id, xp); tick(c, 1) end
+    assert(said(c, function() turnIn(7, 450) end) == "", "a hand-in: nothing said")
+    assert(said(c, function() turnIn(15, 0) end) == "", "a hand-in that paid nothing: nothing said")
+    assert(said(c, function() turnIn(18, SECRET.num()) end) == "", "a hand-in whose XP the game hides: nothing said")
+    -- a run that outlived its two hours ends by itself, and says nothing
+    local db = env.QuestBankDB
+    db.run = { started = env.time() - 130 * 60, key = QB:CharKey(), level = 5, xp = 0, done = {}, plan = {}, mode = "rush", predicted = 0, predictedT = 0 }
+    assert(said(c, function() QB:ReadState(); tick(c, 1) end) == "" and db.run == nil, "a run two hours old ends by itself: nothing said")
+    -- an escort, with Accept for me on, and with a log past an older prompt's count: nothing said; /qb escort tells
+    QB:Settings().autoAccept = "route"
+    assert(said(c, function() c.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(c, 1) end) == "",
+      "an escort, Accept for me on: nothing said")
+    env.MAX_QUESTS = 2
+    assert(said(c, function() c.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(c, 1) end) == "",
+      "an escort, the log past the prompt's count: nothing said")
+    assert(said(c, function() env.SlashCmdList.QUESTBANK("escort") end):find("Yes stays grey", 1, true), "/qb escort says why")
+    env.MAX_QUESTS = 40
+    QB:Settings().autoAccept = "off"
+    -- a call the game blocked: kept for /qb errors, nothing said
+    local bf = QB.blockedFrame
+    assert(said(c, function() bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "QuestBank", "Frame:SetPassThroughButtons()") end) == ""
+      and db.diag.blocked and db.diag.blocked[#db.diag.blocked].fn == "Frame:SetPassThroughButtons()", "a blocked call: on the list, nothing said")
+    -- asked for, in the step frame's menu: the hand-in's line again
+    QB:Settings().welcome = nil; QB.StepFrame.Apply()
+    QB.StepFrame:Menu(nil)
+    local item
+    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say XP after each hand%-in") then item = it end end
+    assert(item and item[1] == "Say XP after each hand-in: off", "the step frame's menu has the choice, off: " .. tostring(item and item[1]))
+    item[2]()
+    assert(QB:Settings().sayXP == true, "ticked: on")
+    local line = said(c, function() turnIn(33, 450) end)
+    assert(line:find(": +450 XP", 1, true), "asked for: the hand-in's line: " .. line)
+    -- QuestTrail loaded: its minimap, nothing said at the load
+    local qt = char("Trailed", "MAGE", "Mage", 8, {}, { level = 12, addons = { QuestTrail = { version = "3.0.6", loaded = true } } })
+    for _, l in ipairs(qt.chat) do assert(not l:find("QuestTrail", 1, true), "QuestTrail loaded: nothing said: " .. l) end
+    assert(qt.QB.MiniView.blocked, "and its minimap left to it")
   end }
 
   for _, case in ipairs(ENGCASES) do

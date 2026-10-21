@@ -98,11 +98,10 @@ end
 -- an action only available to the Blizzard UI". Both come with the addon blamed and the function, at the moment of
 -- the call, so the stack then is the one that tripped. QuestBankDB.diag.blocked keeps the last 10: the function, when
 -- (time()), in combat or not, and that stack with QuestBank's own files by name and every other file's path left out
--- ("(game)" for Blizzard's, "(addon)" for anyone else's). No names. Said once a session in chat, so the player can
--- tell us; /qb errors lists them to copy. (The client has no event for taint itself.)
+-- ("(game)" for Blizzard's, "(addon)" for anyone else's). No names. Nothing is said in chat: /qb errors lists them to
+-- copy (a host's error list too: Cute_Quest's Bridge.lua). (The client has no event for taint itself.)
 ----------------------------------------------------------------------------
 local OWN = ADDON:gsub("%p", "%%%0")
-local toldBlocked = false
 
 local function pathOut(path)
   local p = path:gsub("\\", "/")
@@ -170,11 +169,7 @@ function Err.Blocked(event, who, fn, stack)
     list[#list + 1] = { fn = fn, at = time and time() or 0, combat = combat, stack = clean, kind = kind, qb = QB.version }
     while #list > 10 do table.remove(list, 1) end
   end
-  if not toldBlocked then
-    toldBlocked = true
-    QB:Print(string.format("was stopped by the game from calling %s%s. That is a QuestBank bug, not something you did: /qb errors shows what to copy into the Discord.",
-      fn, combat and " in combat" or ""))
-  end
+  -- (said in chat once a session until the launch round: now the error list's alone, /qb errors)
   return true
 end
 
@@ -1769,15 +1764,11 @@ function QB.EscortLimit()
   return n, n < QB.LOG_SLOTS and QB.Game ~= nil and QB.Game.Forever()
 end
 
-local toldEscort
--- true when it said something (Auto.lua's line about the prompt is then left out)
-function QB:EscortPrompt(who, title)
+-- an escort started with your log past the prompt's count: true (Auto.lua's word about the prompt is left out too).
+-- Nothing is said unprompted (until the launch round, once a session in chat): /qb escort tells why the Yes is grey
+function QB:EscortPrompt()
   local limit, short = QB.EscortLimit()
-  if not short or toldEscort or (self.state.logCount or 0) < limit then return false end
-  toldEscort = true
-  self:Print(string.format("%s started %s. The game's prompt counts %d quests as a full log (yours holds %d), so its Yes stays grey: with fewer than %d quests you can join.",
-    who or "Someone", title or "a quest", limit, QB.LOG_SLOTS, limit))
-  return true
+  return (short and (self.state.logCount or 0) >= limit) and true or false
 end
 function QB:OnTheDay() return self:Banking() and "on the day" or "at your level" end
 
@@ -2308,7 +2299,8 @@ function Run.Start()
   QB:MarkDirty()
 end
 
-function Run.Stop()
+-- quietly: the run ended by itself (Run.Check), nothing said
+function Run.Stop(quietly)
   local run = Run.Get()
   if not run then return end
   run.ended = time()
@@ -2321,7 +2313,7 @@ function Run.Stop()
   -- the bank is cashed in: questing from here, until the next lock
   if QuestBankDB.held and not QB:Lock() then QuestBankDB.held[QB:CharKey()] = nil end
   QB.mode = QB:Mode()
-  if not QB.quiet then QB:Print(string.format("Run ended: %d quests, %s XP in %s.", n, QB.Comma(got), QB.Clock((run.ended - run.started) / 60))) end
+  if not (QB.quiet or quietly) then QB:Print(string.format("Run ended: %d quests, %s XP in %s.", n, QB.Comma(got), QB.Clock((run.ended - run.started) / 60))) end
   if n > 0 then Run.Offer("done", run) end
   QB:MarkDirty()
 end
@@ -2334,9 +2326,9 @@ function Run.Check(level)
   if not run or run.mode == "quest" then return end
   local mins = (time() - run.started) / 60
   if mins > 120 or (mins > 90 and (level or 0) >= (run.level or level or 0) + 3) then
-    QB:Print(mins > 120 and "Your hand-in run ended by itself: two hours have passed. Questing from here."
-      or "Your hand-in run ended by itself: the hour is over and you are three levels on. Questing from here.")
-    Run.Stop()
+    -- (said in chat until the launch round; the Route page shows the run, or that there is none)
+    if QB.tracing then QB.Trace("run: ended by itself after %d min", math.floor(mins)) end
+    Run.Stop(true)
   end
 end
 
@@ -2719,10 +2711,13 @@ local function onTurnIn(questID, xpReward)
   -- the lock, learned: a quest worth XP at this level paid none (the cap holds for every character on
   -- the realm, so it counts account-wide), until a hand-in at that level pays again
   local expected = q and QB.Model.XpAt(q, level) or 0
+  -- the line in chat for each hand-in only when asked for (sayXP, "Say XP after each hand-in": the step frame's menu);
+  -- off by default since the launch round, in QuestBank and in Cute (the step frame and the Route page show the XP)
+  local say = QB:Settings().sayXP == true
   if hidden then
     -- the game hid the number: nothing to learn about locks, no run to start; a run under way counts the plan's figure
     Run.Record(questID, predicted or 0, q and q.name)
-    if q then
+    if q and say then
       QB:Print(string.format("%s handed in. The game hides its XP from addons%s.", QB.Link.Format(q),
         (predicted and predicted > 0) and string.format("; the plan counted %s", QB.Comma(predicted)) or ""))
     end
@@ -2741,7 +2736,7 @@ local function onTurnIn(questID, xpReward)
   -- the first banked quest that pays after a lock starts the hand-in run by itself
   if not Run.Get() and predicted and QB.mode ~= "quest" and (xpReward or 0) > 0 then Run.Start() end
   Run.Record(questID, xpReward, q and q.name)
-  if not q then return end
+  if not (q and say) then return end
   if (xpReward or 0) == 0 and predicted and predicted > 0 then
     QB:Print(string.format("%s paid no XP (the level cap?). The plan counted %s for it.", QB.Link.Format(q), QB.Comma(predicted)))
     return

@@ -516,6 +516,9 @@ function SF:Menu(s)
     items[#items + 1] = { string.format("Scale: %d%%%s", sc * 100, (set.scale or 1) == sc and "  (now)" or ""), function() SF.SetScale(sc) end }
   end
   items[#items + 1] = { "Hide (Settings brings it back)", function() set.frame = false; SF.Apply() end }
+  -- (the launch round) a line in chat for each hand-in, only when asked for: Core.lua's onTurnIn reads sayXP
+  local qs = QB:Settings()
+  items[#items + 1] = { "Say XP after each hand-in: " .. (qs.sayXP == true and "on" or "off"), function() qs.sayXP = qs.sayXP ~= true end }
   items[#items + 1] = { "Settings", function() QB.UI:Open(5) end }
   QB.UI:ShowMenu("The next step", items)
 end

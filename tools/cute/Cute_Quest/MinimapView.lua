@@ -24,14 +24,12 @@ MV.cur = { r = nil, wx = nil, wy = nil }
 -- on unless switched off, or QuestTrail is loaded too (its own minimap takes the same scripts)
 function MV.On() return not MV.blocked and Minimap ~= nil and QB:Settings().mmExtended ~= false end
 
--- QuestTrail loaded as well: QuestBank leaves the minimap's scripts to it for the session
+-- QuestTrail loaded as well: QuestBank leaves the minimap's scripts to it for the session. (It said so in chat at every
+-- load until the launch round; /qb minimap debug tells it now)
 function MV.Guard()
   if not (C_AddOns and C_AddOns.IsAddOnLoaded) then return false end
   local ok, loaded = pcall(C_AddOns.IsAddOnLoaded, "QuestTrail")
-  if ok and plain(loaded) then
-    MV.blocked = true
-    QB:Print("QuestTrail is loaded: its minimap zooms and drags, QuestBank's far zoom is off.")
-  end
+  if ok and plain(loaded) then MV.blocked = true end
   return MV.blocked or false
 end
 
@@ -61,7 +59,7 @@ end
 
 -- whether the ground is drawn now (wheeled out past the game's widest, or dragged), and if not, why
 function MV.Extended(me)
-  if not MV.On() then return false, "off" end
+  if not MV.On() then return false, MV.blocked and "QuestTrail is loaded: its minimap" or "off" end
   if indoors() then return false, "indoors" end
   me = me or QB.API.WorldPosition()
   local ids = me and tilesOn(me.c)
