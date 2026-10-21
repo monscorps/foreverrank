@@ -17,8 +17,9 @@
 --            source the policy routes Only you now is dropped. Cute's own guild line from an officer is hidden
 --            (H.LineFilter), so a member with Cute sees a set once
 --   1G       every client once, a minute after its hello: the newest set it holds and the stamp of the records the
---            officers turned on (Records.lua). An officer holding newer ones answers with them (the last five, and 1O),
---            the lowest GUID first and the others only where no answer came meanwhile, once in half an hour an asker
+--            officers turned on (Records.lua). An officer holding newer ones answers with them (the last five, newest
+--            first, and 1O): the lowest GUID among the officers online with Cute at once, the others a few seconds on
+--            with what no answer begun meanwhile covers; once in half an hour an asker
 --   1W       a run's cards to the officers (9.3): the run's guild member with the smallest GUID among those with Runs on
 --            whispers them to each officer online, held while inside an instance; an officer takes 4 a sender an hour,
 --            one per run, and queues them
@@ -33,7 +34,7 @@
 --            as a set is, once a day an instance; no 1G asks for it or answers with it
 -- And the two weekly stats the halls read beside the runs' own: Deaths this week and Quests this week (section 10).
 local _, C = ...
-local H = { parts = {}, toasts = {}, ticked = {}, open = {}, answered = {}, waiting = {}, senders = {}, runsHeard = {} }
+local H = { parts = {}, toasts = {}, ticked = {}, open = {}, answered = {}, waiting = {}, senders = {}, runsHeard = {}, answerParts = {} }
 C.Halls = H
 
 local QUEUE_MAX, PER_SENDER, QUEUE_DAYS, DRAFTS, DIGEST_MAX = 100, 10, 30, 6, 60
@@ -608,6 +609,13 @@ function H:ReceiveSet(text, sender)
   local i, n, body = rest:match("^(%d+)/(%d+)|(.*)$")
   i, n = tonumber(i), tonumber(n)
   if not (i and n and i >= 1 and i <= n and n <= PARTS_MAX) then return end
+  -- (an officer's answer begun, any part of it: its stamp, for an officer about to answer the same ask, H:Answer; an
+  -- answer goes newest first, so its first part says the newest set it brings)
+  if answer then
+    local log, t = H.answerParts, gtime()
+    while log[1] and t - log[1].t > 120 do table.remove(log, 1) end
+    if #log < 64 then log[#log + 1] = { t = t, at = at } end
+  end
   -- (parts gathered by sender and stamp; a set half heard two minutes ago is forgotten, and 64 wait at most)
   local t, count = gtime(), 0
   for k, p in pairs(H.parts) do if t - p.t > 120 then H.parts[k] = nil else count = count + 1 end end
@@ -622,7 +630,7 @@ function H:ReceiveSet(text, sender)
   if p.k < n then return end
   H.parts[key] = nil
   -- (an answer heard, whatever it holds: another officer said it, H:Answer)
-  if answer then H.answerHeard = true; H.heardAnswerAt = math.max(H.heardAnswerAt or 0, at) end
+  if answer then H.answerHeard = true end
   local set = H.Parse(at, table.concat(p.got, ";"))
   if set then self:Took(set, sender, answer) end
 end
@@ -699,12 +707,15 @@ function H:Ask()
   H.asked = true
   C.Comm.Queue({ msg = "1G|" .. string.format("%.0f", H.Newest()) .. "|" .. string.format("%.0f", C.Records and C.Records.Stamp() or 0) })
 end
--- the lowest GUID among this officer and the officers the roster lists online answers first
+-- the lowest GUID among this officer and the officers online with Cute answers first: an officer whose record says they
+-- run Cute (the roster's row.addon), not marked untrusted; one online without Cute would answer nothing, and every
+-- officer with it would wait for the turn it never takes
 local function firstOfficer()
   local mine, before = C.MyGUID() or "", C.Comm.Before
   local thr = C.Policy:LineThreshold()
-  for _, m in ipairs(C.Roster.members or {}) do
-    if m.online and not m.self and m.rank <= thr and type(m.guid) == "string" and not C.Policy:Untrusted(m.guid) and before(m.guid, mine) then return false end
+  for _, row in ipairs(C.Roster:Rows()) do
+    if row.online and not row.me and row.addon and not row.untrusted and type(row.rank) == "number" and row.rank <= thr and type(row.guid) == "string"
+      and before(row.guid, mine) then return false end
   end
   return true
 end
@@ -721,12 +732,14 @@ function H:Asked(text, sender)
   H.waitingRec = math.min(H.waitingRec or ra, ra)
   if H.answering then return end
   H.answering = true
-  local heard0, recHeard0 = H.heardAnswerAt or 0, C.Records and C.Records.heardAt or 0
-  C_Timer.After(firstOfficer() and (1 + 0.4 * rnd()) or (4 + 4 * rnd()), C.Safe(function() H:Answer(heard0, recHeard0) end, "halls: answer"))
+  local askedAt, recHeard0 = gtime(), C.Records and C.Records.heardAt or 0
+  C_Timer.After(firstOfficer() and (1 + 0.4 * rnd()) or (4 + 4 * rnd()), C.Safe(function() H:Answer(askedAt, recHeard0) end, "halls: answer"))
 end
--- one answer covers every asker waiting: the sets newer than the oldest of theirs, the last five; 1O where this
--- officer's list of the records on is newer than the oldest asker's
-function H:Answer(heard0, recHeard0)
+-- one answer covers every asker waiting: the sets newer than the oldest of theirs, the last five, newest first; 1O
+-- where this officer's list of the records on is newer than the oldest asker's. Another officer's answer begun since
+-- the ask covers the sets up to the newest it began with: this one sends only what it holds newer than that (none, as
+-- a rule: both hold the guild's sets), so a second officer online costs the channel nothing
+function H:Answer(askedAt, recHeard0)
   H.answering = false
   local waiting, recSince = H.waiting, H.waitingRec
   H.waiting, H.waitingRec = {}, nil
@@ -740,12 +753,13 @@ function H:Answer(heard0, recHeard0)
     C.Comm.Queue({ msg = Rc.Message() })
     Rc.sent = (Rc.sent or 0) + 1
   end
-  -- (another officer's answer since, as new as this one's newest, said it: the askers count as answered all the same)
-  local heard = H.heardAnswerAt or 0
-  if H.Newest() <= since or (heard > (heard0 or 0) and heard >= H.Newest()) then return end
+  -- (another officer's answer begun since the ask said what it covers: the askers count as answered all the same)
+  local covered = since
+  for _, p in ipairs(H.answerParts) do if p.t >= (askedAt or 0) and p.at > covered then covered = p.at end end
+  if H.Newest() <= covered then return end
   local list = {}
-  for _, s in ipairs(H.Sets()) do if not s.rec and tonumber(s.at) > since and #list < ANSWER_SETS then list[#list + 1] = s end end
-  for i = #list, 1, -1 do for _, m in ipairs(H.Messages(list[i], true)) do C.Comm.Queue({ msg = m }) end end
+  for _, s in ipairs(H.Sets()) do if not s.rec and tonumber(s.at) > covered and #list < ANSWER_SETS then list[#list + 1] = s end end
+  for i = 1, #list do for _, m in ipairs(H.Messages(list[i], true)) do C.Comm.Queue({ msg = m }) end end
   H.answers = (H.answers or 0) + 1
 end
 

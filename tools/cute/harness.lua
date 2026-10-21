@@ -14091,6 +14091,46 @@ do local function cardsStage()
   end)
   said[#said + 1] = "the empty Records chip at both sizes"
 
+  ----------------------------------------------------------------------------
+  -- the reviewers' round on R2 to R4 (2026-10-22): each case where its fix is
+  ----------------------------------------------------------------------------
+  local function answerMsgs(c) local n = 0; for _, m in ipairs(c.sent) do if m.msg:find("^1C|%d+|a%x*|") then n = n + 1 end end return n end
+  local function bigCard(c, k) return { guid = c.o.guid, name = c.o.name, class = c.o.class, kind = "shout", title = string.rep("T", 23) .. k, line = string.rep("l", 56),
+    value = "12345", valueLabel = string.rep("v", 24), source = "" } end
+
+  -- 1G with five sets of five cards and two officers online: the one with the lowest GUID among the officers online
+  -- with Cute answers at once (an officer online without Cute takes nobody's turn), newest first, and the other hears
+  -- its newest begin and says nothing
+  isolated({ gmember("Yri", 1, "MAGE"), gmember("Ysa", 1, "PRIEST"), gmember("Yto", 1, "ROGUE"), gmember("Yum", 3, "HUNTER") }, function()
+    local ysa, yto = cchar("Ysa", 1, { class = "PRIEST" }), cchar("Yto", 1, { class = "ROGUE" })
+    login(ysa); login(yto)
+    tickAll(200)
+    for k = 1, 5 do
+      H(ysa).DB().lastSetAt, H(ysa).DB().mine = nil, {}
+      local cards = {}
+      for j = 1, 5 do cards[j] = bigCard(yto, k .. j) end
+      assert(H(ysa):Publish({ kind = "n", title = "Big " .. k, cards = cards }), "a set of five cards " .. k)
+      tickAll(10)
+    end
+    tickAll(30)
+    assert(#H(yto).Sets() == 5 and #H(yto).Sets()[1].cards == 5, "both officers hold five sets of five cards")
+    local yum = cchar("Yum", 3, { class = "HUNTER" })
+    login(yum)
+    local a0, b0 = answerMsgs(ysa), answerMsgs(yto)
+    tickAll(120)
+    assert(#H(yum).Sets() == 5, "the late member got the five sets: " .. #H(yum).Sets())
+    assert(answerMsgs(ysa) > a0 and answerMsgs(yto) == b0, "one officer answered, the other said nothing: " .. (answerMsgs(ysa) - a0) .. " and " .. (answerMsgs(yto) - b0))
+    local first, firstAt, askAt, k = nil, nil, nil, 0
+    for _, m in ipairs(yum.sent) do if m.msg:sub(1, 3) == "1G|" then askAt = m.at end end
+    for _, m in ipairs(ysa.sent) do
+      if m.msg:find("^1C|%d+|a%x*|") then k = k + 1; if k == a0 + 1 then first, firstAt = tonumber(m.msg:match("^1C|(%d+)|")), m.at end end
+    end
+    assert(first == H(ysa).Newest(), "the answer goes newest first")
+    -- (Yri, the lowest GUID, is online without Cute: Ysa's turn comes at once, not after the others' wait)
+    assert(askAt and firstAt and firstAt - askAt <= 3, "the first officer with Cute answers at once: " .. tostring(firstAt and askAt and firstAt - askAt))
+  end)
+  said[#said + 1] = "1G with five sets of five cards and two officers: the lowest GUID among those with Cute answers newest first, the other says nothing"
+
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end
 
