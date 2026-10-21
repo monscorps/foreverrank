@@ -212,7 +212,7 @@ function Mini.List(noStep)
       if d.m and d.m > 0 then
         local cid = firstId(d.ids)
         out[#out + 1] = { m = d.m, x = d.x, y = d.y, name = d.name, num = d.num, kind = "stop", when = d.when, lines = d.lines, late = d.late,
-                          cid = cid, ids = d.ids }
+                          cid = cid, ids = d.ids, pin = d }
         stopAt[keyOf(d)] = true
         local sorted = {}
         for id in pairs(d.ids or {}) do if type(id) == "number" then sorted[#sorted + 1] = id end end
@@ -518,7 +518,7 @@ local function newPin()
     if Mini.QT() and d.id and (d.kind == "obj" or d.kind == "turn") then Mini.QuestTooltip(self, d.id); return end
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:SetText(d.name or "", 1, 1, 1)
-    if d.when then GameTooltip:AddLine(d.when, 0.8, 0.8, 0.8) end
+    if d.when then GameTooltip:AddLine((d.pin and QB.Pins and QB.Pins.WhenNow) and QB.Pins.WhenNow(d.pin) or d.when, 0.8, 0.8, 0.8) end -- (counted as it shows)
     if d.kind == "turn" then GameTooltip:AddLine("Hand in here", 0.3, 0.9, 0.3) end
     for _, l in ipairs(d.lines or {}) do GameTooltip:AddDoubleLine(l[1], l[2], 0.9, 0.9, 0.9, 0.6, 0.8, 0.6) end
     if d.kind == "dungeon" then GameTooltip:AddLine(d.done and "Dungeon entrance. Its quests are all done." or "Dungeon entrance", 0.8, 0.8, 0.8) end

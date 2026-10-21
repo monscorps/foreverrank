@@ -18016,7 +18016,9 @@ end)()
     for _, d in ipairs(list) do if d.num and d.ids and d.ids[118] then stop = d end end
     assert(stop, "The Price of Shoes' stop on the map")
     assert(stop.title == "Smith Argus, Goldshire", "titled by its NPC and the town: " .. tostring(stop.title) .. " (named " .. tostring(stop.name) .. ")")
-    assert(stop.when:find("^Stop %d+ of %d+, %d+ min from now: ") or stop.when:find("^Stop %d+ of %d+, %d+ h %d+ min from now: "), "minutes from now: " .. stop.when)
+    -- (the review round: a route from where you stand counts down; a stop where it starts says so; case 18)
+    assert(not stop.when:find(", at %d+:%d%d") and (stop.when:find("^Stop %d+ of %d+, %d+ min from now: ") or stop.when:find("^Stop %d+ of %d+, %d+ h %d+ min from now: ")
+      or stop.when:find("^Stop %d+ of %d+, where the route starts: ")), "minutes from now: " .. stop.when)
     -- the tooltip's title line
     local pin = { data = stop, Route = function() return QB.Pins:Route() end }
     lines = {}
@@ -18439,6 +18441,42 @@ end)()
     lines = {}; F.__scripts.OnEnter(F); F.__scripts.OnLeave(F)
     assert(lines[1] == "Next stop: Goldshire", "its tooltip's head: " .. tostring(lines[1]))
     for _, l in ipairs(lines) do assert(not l:find("Elwynn Forest (", 1, true), "no zone and spot: " .. l) end
+  end }
+
+  -- 18. (the review round) A stop's "51 min from now" was the plan's figure, counted from when and where the route was
+  -- planned; the route is not planned again as you walk, so it went stale, and a route planned from elsewhere (banked:
+  -- from where you log out) was never from now. Now a route planned from where you stand counts down from the time it
+  -- was planned, as the tooltip shows; once the count is spent, or for a route planned from elsewhere, the stop says
+  -- where it falls along the route
+  ENGCASES[#ENGCASES + 1] = { "a route stop's minutes from now count down as time passes; past it, or banked, minutes into the route", function()
+    local c = char("Clocked", "WARRIOR", "Warrior", 1, {}, { level = 18, world = { 0, -8914, -133 }, map = 1429, log = { { 118, 1 } }, bind = "Goldshire" })
+    local QB = c.QB
+    planned(c)
+    local P = QB.Pins
+    local d
+    for _, x in ipairs(P:Build()) do if x.num and x.ids and x.ids[118] then d = x end end
+    assert(d and d.route and d.route.fromHere, "The Price of Shoes' stop, on a route from where you stand")
+    local leg = d.route.legs[d.num]
+    assert(leg.t >= 1.5, "a few minutes away: " .. leg.t)
+    local function whenLine()
+      lines = {}
+      P.Pin.OnMouseEnter({ data = d })
+      for _, l in ipairs(lines) do if l:find("^Stop %d+ of %d+, ") then return l end end
+      return "(no stop line) " .. table.concat(lines, " / ")
+    end
+    local m0 = math.floor(leg.t + 0.5)
+    local n0 = tonumber(whenLine():match(", (%d+) min from now: "))
+    assert(n0 and math.abs(n0 - leg.t) <= 1, "planned just now: " .. whenLine() .. " (" .. leg.t .. ")")
+    c.clock = c.clock + 60
+    assert(tonumber(whenLine():match(", (%d+) min from now: ")) == n0 - 1, "a minute on, a minute less: " .. whenLine())
+    c.clock = c.clock + 60 * leg.t
+    assert(whenLine():find(", " .. m0 .. " min into the route: ", 1, true), "the count spent: where it falls along the route: " .. whenLine())
+    -- a route not planned from where you stand: along the route, at once
+    P:Build()
+    for _, x in ipairs(P.list) do if x.num and x.ids and x.ids[118] then d = x end end
+    d.route.fromHere = false
+    assert(whenLine():find(" min into the route: ", 1, true), "a route planned from elsewhere: " .. whenLine())
+    d.route.fromHere = true
   end }
 
   for _, case in ipairs(ENGCASES) do
