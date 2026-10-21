@@ -18513,6 +18513,37 @@ end)()
     assert(Tm.SpeedFactor() == 2, "slow: 2 at most, " .. tostring(Tm.SpeedFactor()))
   end }
 
+  -- the review of 6.2's first build: the character's summary (QB:Snapshot, eight seconds after login and at logout)
+  -- was written as a new table, and every table kept beside it went: the work measured, the pace, the Guide's "Not
+  -- now", the run speed. The uploads had "quests = { }" and one level, the session's
+  F62CASES[#F62CASES + 1] = { "the work measured and the pace live past the login and logout snapshots", function()
+    local c = char("Keeper", { log = { { 127, 0 } } })
+    local QB, Tm, M = c.QB, c.QB.Timer, c.QB.Model
+    local ids = {}
+    for id, v in pairs(QB.Data.DO) do if v > 0 and v % 4096 >= 10 then ids[#ids + 1] = id end end
+    table.sort(ids)
+    for i = 1, 4 do
+      local _, work = M.Do(ids[i])
+      Tm.DB().quests[ids[i]] = { a = 1, w = work * 60 * 0.5, k = 5 }
+      Tm.Done(ids[i])
+      tick(c, 2)
+    end
+    assert(Tm.SpeedFactor() == 0.5, "four quests done in half the time: 0.5")
+    QB.Guide.DB().later[127] = 12345
+    QB:Snapshot("logout")
+    c.ev(QB.eventFrame, "PLAYER_LOGOUT")
+    local rows = Tm.DB().quests
+    for i = 1, 4 do assert(rows[ids[i]] and rows[ids[i]].w and rows[ids[i]].c, "the row of " .. ids[i] .. " is kept") end
+    assert(QB.Guide.DB().later[127] == 12345, "the Guide's Not now is kept")
+    local key = QB:CharKey()
+    assert(c.env.QuestBankDB.chars[key].reason == "logout" and c.env.QuestBankDB.chars[key].timer == Tm.DB(), "one table: the summary and what is kept beside it")
+    -- and the pace still counts them after the next completion
+    local _, work = M.Do(ids[5])
+    rows[ids[5]] = { a = 1, w = work * 60 * 0.5, k = 5 }
+    Tm.Done(ids[5])
+    assert(Tm.SpeedFactor() == 0.5, "the pace from five quests: " .. tostring(Tm.SpeedFactor()))
+  end }
+
   for _, case in ipairs(F62CASES) do
     case[2]()
     print("xpm: " .. case[1] .. ": ok")
