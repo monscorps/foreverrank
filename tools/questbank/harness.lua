@@ -17984,6 +17984,10 @@ end)()
   ENGCASES[#ENGCASES + 1] = { "the arrow's tooltip: the flights of this way, by continent; the last walk to the NPC", function()
     local c = char("Pierside", "MAGE", "Mage", 8, {}, { level = 21, world = { 0, -3709, -575 }, map = 1437, log = { { 3370, 1 } }, bind = "Menethil Harbor" })
     local env, QB = c.env, c.QB
+    -- (no fill: since the xpm stage the Guide picks the best place's set wherever it is, and Menethil's own pick-ups led
+    -- the arrow first, to "Menethil Harbor"; this case is the way to the hand-in in Darnassus)
+    QB.UI.Candidates = function() return {} end
+    for id in pairs(QB:Plan().auto) do QB:Plan().auto[id] = nil end
     local men, aub, rut = hubOf(c, "Menethil Harbor"), hubOf(c, "Auberdine"), hubOf(c, "Rut'theran Village")
     c.taxiKnown = { [men[6]] = true, [aub[6]] = true, [rut[6]] = true }
     fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
@@ -19346,7 +19350,10 @@ end)()
     QB.Pins:Build()
     local pin
     for _, d in ipairs(QB.Pins.list) do if d.num == shoes then pin = d end end
-    assert(pin and pin.when:find(", at %d+:%d%d: %+340 XP, %d+%% of a level$"), "the pin's tooltip: " .. tostring(pin and pin.when))
+    -- (with the engine stage's minutes: "Stop 6 of 6, 51 min from now: +340 XP, 2% of a level", or "into the route" on a
+    -- route planned from elsewhere; never "at 0:51")
+    assert(pin and (pin.when:find(" min from now: %+340 XP, %d+%% of a level$") or pin.when:find(" min into the route: %+340 XP, %d+%% of a level$"))
+      and not pin.when:find(", at %d+:%d%d"), "the pin's tooltip: " .. tostring(pin and pin.when))
     -- a stop that moves the level by a tenth or more still says the levels
     local big = { arrive = 21.2, leave = 21.5, rows = { { xp = 7500 } } }
     assert(M.Gain(big) == "level 21.2 to 21.5", M.Gain(big))
