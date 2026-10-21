@@ -1793,7 +1793,8 @@ local function trackRemovals(s)
         local q = Q.Get(id)
         local value = q and QB.Model.XpAt(q, s.level) or nil
         p.removed[id] = { title = title, at = time and time() or 0, value = value }
-        if QB.loggedIn and not QB.quiet then
+        -- (said only when asked for since the review round: "Say quest XP in chat", sayXP, the step frame's menu)
+        if QB.loggedIn and not QB.quiet and QB:Settings().sayXP == true then
           QB:Print(string.format("%s left your log without a hand-in%s. The route no longer counts it.", title,
             value and (" (worth about " .. QB.Comma(value) .. " XP)") or ""))
         end
@@ -1887,7 +1888,7 @@ function QB:ReadState()
     if e.complete and before == false and QB.loggedIn then
       local q = Q.Get(e.id)
       local value = q and QB.Model.XpAt(q, s.level)
-      if not QB.quiet then
+      if not QB.quiet and QB:Settings().sayXP == true then -- (asked for: sayXP, as the hand-in's line)
         QB:Print(string.format("%s is complete%s%s.", e.title, QB:Banking() and ": banked" or ", hand it in",
           value and value > 0 and (", worth about " .. QB.Comma(value) .. " XP " .. QB:OnTheDay()) or ""))
       end
@@ -2280,7 +2281,9 @@ function Run.Get()
   if run and run.key == QB:CharKey() then return run end
 end
 
-function Run.Start()
+-- quietly: the run started by itself (the first paying hand-in after a lock: onTurnIn), nothing said; the Route page's
+-- Start run says so
+function Run.Start(quietly)
   local r = QB.routeNow
   local run = { started = time(), key = QB:CharKey(), level = QB.state.level, xp = QB.state.xp, done = {}, plan = {},
                 mode = QB.mode == "quest" and "quest" or "rush",
@@ -2294,7 +2297,7 @@ function Run.Start()
   -- the game's pin doesn't follow the route (QuestBank never sets it: API.SetWaypoint); the arrow does, and TomTom's
   local hint = ""
   if not QB:Settings().arrow and not API.TomTom() then hint = " /qb arrow points you from stop to stop." end
-  if not QB.quiet then QB:Print("Hand-in run started. Each quest is ticked off with the XP it paid, and the rest is planned again from where you stand." .. hint) end
+  if not (QB.quiet or quietly) then QB:Print("Hand-in run started. Each quest is ticked off with the XP it paid, and the rest is planned again from where you stand." .. hint) end
   Run.ArmHour()
   QB:MarkDirty()
 end
@@ -2711,8 +2714,8 @@ local function onTurnIn(questID, xpReward)
   -- the lock, learned: a quest worth XP at this level paid none (the cap holds for every character on
   -- the realm, so it counts account-wide), until a hand-in at that level pays again
   local expected = q and QB.Model.XpAt(q, level) or 0
-  -- the line in chat for each hand-in only when asked for (sayXP, "Say XP after each hand-in": the step frame's menu);
-  -- off by default since the launch round, in QuestBank and in Cute (the step frame and the Route page show the XP)
+  -- the line in chat for each hand-in only when asked for (sayXP, "Say quest XP in chat": the step frame's menu); off
+  -- by default since the launch round, in QuestBank and in Cute (the step frame and the Route page show the XP)
   local say = QB:Settings().sayXP == true
   if hidden then
     -- the game hid the number: nothing to learn about locks, no run to start; a run under way counts the plan's figure
@@ -2734,7 +2737,7 @@ local function onTurnIn(questID, xpReward)
     locks[realm] = nil
   end
   -- the first banked quest that pays after a lock starts the hand-in run by itself
-  if not Run.Get() and predicted and QB.mode ~= "quest" and (xpReward or 0) > 0 then Run.Start() end
+  if not Run.Get() and predicted and QB.mode ~= "quest" and (xpReward or 0) > 0 then Run.Start(true) end
   Run.Record(questID, xpReward, q and q.name)
   if not (q and say) then return end
   if (xpReward or 0) == 0 and predicted and predicted > 0 then

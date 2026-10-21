@@ -822,9 +822,10 @@ function SF:Menu(s)
   elseif tracker() and set.hideTracker == false then
     items[#items + 1] = { "Hide the game's quest tracker while this shows", function() set.hideTracker = true; SF.Tracker(); lastVer = -1; SF.Refresh() end }
   end
-  -- (the launch round) a line in chat for each hand-in, only when asked for: Core.lua's onTurnIn reads sayXP
+  -- (the launch round) a line in chat for each hand-in, and (the review round) for a quest complete or dropped, only
+  -- when asked for: Core.lua reads sayXP
   local qs = QB:Settings()
-  items[#items + 1] = { "Say XP after each hand-in: " .. (qs.sayXP == true and "on" or "off"), function() qs.sayXP = qs.sayXP ~= true end }
+  items[#items + 1] = { "Say quest XP in chat: " .. (qs.sayXP == true and "on" or "off"), function() qs.sayXP = qs.sayXP ~= true end }
   items[#items + 1] = { "Settings", function() QB.UI:Open(5) end }
   QB.UI:ShowMenu("The next step", items)
 end

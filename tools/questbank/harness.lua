@@ -7360,7 +7360,8 @@ do
   local itemLine = false
   for _, l in ipairs(lines) do if l:find("Twilight Pendant") then itemLine = true; print("  tooltip:", l) end end
   assert(itemLine, "the tooltip counts the item in bags and bank")
-  -- the quest turns complete: chat says so
+  -- the quest turns complete: chat says so, asked for ("Say quest XP in chat": nothing unasked since the review round)
+  F:Settings().sayXP = true
   for _, e in ipairs(friend.log) do if e[1] == 1199 then e[2] = 1 end end
   friend.o.bagSlots = { { 5879, 10 } }
   friend.o.bank = {}
@@ -7369,6 +7370,7 @@ do
   print("friend's chat:", friend.chat[#friend.chat])
   assert(F:Mode() == "quest", "level 18 under a cap of 20: questing")
   assert(friend.chat[#friend.chat]:find("is complete, hand it in"), "completing a quest is announced, questing-style")
+  F:Settings().sayXP = nil
 end
 
 -- the friend talks to Guard Howe: the quest window shows Blackrock Bounty's XP, and the party hears it
@@ -17741,7 +17743,7 @@ end)()
   -- paid nothing); a hand-in run that outlived its hour said it ended; an escort said why the prompt's Yes was grey, or,
   -- with Accept for me on, that the prompt was yours; a call the game blocked said so; QuestTrail loaded said so at every
   -- load. None of them is said now (the blocked call is on /qb errors' list alone); the hand-in's line comes back with
-  -- "Say XP after each hand-in", off, in the step frame's menu
+  -- "Say quest XP in chat", off, in the step frame's menu
   ENGCASES[#ENGCASES + 1] = { "nothing said unasked: hand-ins, a run that ends itself, escorts, a blocked call, QuestTrail", function()
     local c = char("Hushed", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -8914, -133 }, map = 1429, log = { { 7, 1 }, { 33, 1 } } })
     local env, QB = c.env, c.QB
@@ -17773,8 +17775,8 @@ end)()
     QB:Settings().welcome = nil; QB.StepFrame.Apply()
     QB.StepFrame:Menu(nil)
     local item
-    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say XP after each hand%-in") then item = it end end
-    assert(item and item[1] == "Say XP after each hand-in: off", "the step frame's menu has the choice, off: " .. tostring(item and item[1]))
+    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say quest XP in chat") then item = it end end
+    assert(item and item[1] == "Say quest XP in chat: off", "the step frame's menu has the choice, off: " .. tostring(item and item[1]))
     item[2]()
     assert(QB:Settings().sayXP == true, "ticked: on")
     local line = said(c, function() turnIn(33, 450) end)
@@ -18477,6 +18479,41 @@ end)()
     d.route.fromHere = false
     assert(whenLine():find(" min into the route: ", 1, true), "a route planned from elsewhere: " .. whenLine())
     d.route.fromHere = true
+  end }
+
+  -- 19. (the review round) QuestBank still spoke unasked: "X is complete, hand it in, worth about N XP", "X left your log
+  -- without a hand-in", and "Hand-in run started" when the first paying hand-in after a lock started the run (its end
+  -- said nothing since the launch round). The Guide's design: no other chat lines unless the player asks. They come
+  -- with "Say quest XP in chat" (sayXP), off; the Route page's Start run still says the run started
+  ENGCASES[#ENGCASES + 1] = { "nothing said unasked: a quest complete, a quest dropped, a run started by a hand-in", function()
+    local c = char("Quietly", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -8914, -133 }, map = 1429, log = { { 7, 0 }, { 33, 0 }, { 15, 0 } } })
+    local QB = c.QB
+    planned(c)
+    local function complete(id) for _, e in ipairs(c.log) do if e[1] == id then e[2] = 1 end end; c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1) end
+    local function drop(id) for i, e in ipairs(c.log) do if e[1] == id then table.remove(c.log, i) break end end; c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1) end
+    local line = said(c, function() complete(7) end)
+    assert(line == "", "a quest complete: nothing said: " .. line)
+    line = said(c, function() drop(33) end)
+    assert(line == "", "a quest dropped: nothing said: " .. line)
+    -- the first paying hand-in after a lock starts the run: quietly
+    QB.mode = "rush"
+    QB.routeNow.byQuest = QB.routeNow.byQuest or {}
+    QB.routeNow.byQuest[7] = 450
+    line = said(c, function() c.ev(QB.eventFrame, "QUEST_TURNED_IN", 7, 450) end)
+    assert(line == "" and QB.Run.Get(), "a run started by a hand-in: nothing said: " .. line)
+    QB.Run.Stop(true)
+    -- asked for: the lines again
+    QB:Settings().sayXP = true
+    line = said(c, function() complete(15) end)
+    assert(line:find("is complete", 1, true), "asked for: a quest complete is said: " .. line)
+    line = said(c, function() drop(15) end)
+    assert(line:find("left your log", 1, true), "asked for: a quest dropped is said: " .. line)
+    -- the step frame's menu names what it turns on
+    QB:Settings().welcome = nil; QB.StepFrame.Apply()
+    QB.StepFrame:Menu(nil)
+    local item
+    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say quest XP in chat") then item = it end end
+    assert(item and item[1] == "Say quest XP in chat: on", "the menu's row: " .. tostring(item and item[1]))
   end }
 
   for _, case in ipairs(ENGCASES) do
