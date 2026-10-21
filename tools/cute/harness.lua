@@ -10840,6 +10840,31 @@ do
   end)
   said[#said + 1] = "the hold leaves a minute, so a part sent as the asker logged out goes again"
 
+  -- (r) an ask heard while this client's record waits for the policy (a /reload reads Guild Info again: seconds, or a
+  -- whole run inside an instance) is answered once it holds it. 0.7.1's first build dropped the answer whose time came
+  -- while it waited, and a /reload's release sends only what changed
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+    local off, r = char("Coraline", 1), char("Cobb", 3)
+    login(off); login(r)
+    tickAll(60)
+    local db = r.env.CuteDB
+    fire(r, "PLAYER_LOGOUT"); leave(r)
+    local r2 = char("Cobb", 3)
+    r2.infoSecret = true
+    login(r2, db, true)
+    local a = char("Cyra", 3)
+    login(a)
+    tickAll(60)
+    assert(r2.C.Comm.holding and not a.env.CuteDB.roster[r2.sender], "Cobb's record waits for Guild Info")
+    r2.infoSecret = false
+    fire(r2, "GUILD_ROSTER_UPDATE")
+    tickAll(30)
+    local rec = a.env.CuteDB.roster[r2.sender]
+    assert(not r2.C.Comm.holding and rec and rec.stats.guid == r2.o.guid, "her ask answered once he holds the policy")
+    for _, x in ipairs({ off, r2, a }) do leave(x) end
+  end)
+  said[#said + 1] = "an ask heard while the record waits for the policy is answered as it goes"
+
   print("core: " .. table.concat(said, "; "))
 end
 

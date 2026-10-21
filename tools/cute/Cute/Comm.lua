@@ -1403,10 +1403,10 @@ function M:AnswerSoon()
   local wait = 2 + (math.random and (38 * math.random()) or 10)
   C_Timer.After(wait, C.Safe(function()
     M.answering = false
-    if M.holding then return end
-    -- (while this client waits for the line, P.doubt, or the game holds addon chat back, the answer waits too: what
-    -- it would queue could not leave)
-    if not C.Policy:Settled() or M:Locked() then M.answerOwed = true; return end
+    -- (while this client waits for the line, P.doubt, or the game holds addon chat back, or its own record waits for the
+    -- policy, the answer waits too: what it would queue could not leave. Paid as that ends, M:PayOwed; 0.7.1's first
+    -- build dropped one whose time came while the record waited, and a /reload's release sends only what changed)
+    if M.holding or not C.Policy:Settled() or M:Locked() then M.answerOwed = true; return end
     M:Answer()
   end, "comm: answer"))
 end
