@@ -591,7 +591,7 @@ end
 local GAP_Y = 6
 function A.Place()
   local f = A.frame
-  if not f then return end
+  if not f or f.qbDragging then return end -- (in a drag: left where the cursor has it)
   local pos = QB:Settings().arrowPos
   if pos then
     if f.qbPos ~= pos then
@@ -641,8 +641,9 @@ function A:Create()
   f:EnableMouse(true)
   f:RegisterForDrag("LeftButton")
   f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  f:SetScript("OnDragStart", f.StartMoving)
+  f:SetScript("OnDragStart", function(self) self.qbDragging = true; self:StartMoving() end)
   f:SetScript("OnDragStop", function(self)
+    self.qbDragging = nil
     self:StopMovingOrSizing()
     local p, _, _, x, y = self:GetPoint()
     -- kept by its top, so the arrow stays put as the lines under it come and go

@@ -40,7 +40,7 @@ local trackerOut, trackerHooked, trackerWait = false, false, false -- (the game'
 -- (guide.trackerTold); its menu brings the tracker back
 local NOTE_S, NOTE_H = 60, 24
 local TRACKER_NOTE = "The game's quest tracker is hidden while this frame shows. Right-click here to show it."
-SF.noteUntil = nil
+SF.noteUntil, SF.notePending = nil, nil -- (pending: told when the steps next show, not under a welcome card)
 
 local function fs(parent, size, key, width)
   local t = parent:CreateFontString(nil, "OVERLAY")
@@ -470,6 +470,7 @@ function SF.Refresh()
   local text = G.TimeToLevel()
   local remind = (G.reminder and GetTime and GetTime() < G.reminder) and true or false
   local members = G.MemberSteps() -- (the list stands until G.memberVer moves: no table and no string a tick)
+  if SF.notePending then SF.notePending, SF.noteUntil = nil, (GetTime and GetTime() or 0) + NOTE_S end
   local note = (SF.noteUntil and GetTime and GetTime() < SF.noteUntil) and true or false
   local mins = steps[1] and minsNow(steps[1]) or nil -- (the step now's minutes, as you go: a number, no string a tick)
   if G.ver == lastVer and text == lastTime and remind == lastRemind and G.memberVer == lastMembers and note == lastNote and mins == lastMins then return end
@@ -676,7 +677,7 @@ function SF.Tracker()
     end
     if not trackerOut and not settings().trackerTold then
       settings().trackerTold = true
-      SF.noteUntil = (GetTime and GetTime() or 0) + NOTE_S
+      SF.notePending = true
     end
     trackerOut = true
     if t:GetAlpha() ~= 0 then t:SetAlpha(0) end
@@ -734,7 +735,7 @@ function SF:Menu(s)
   end
   items[#items + 1] = { "Hide (Settings brings it back)", function() set.frame = false; SF.Apply() end }
   -- the game's quest tracker: back, or out of sight again while the frame shows (Settings has the same row)
-  SF.noteUntil = nil -- (the menu found: the note has done its work)
+  SF.noteUntil, SF.notePending = nil, nil -- (the menu found: the note has done its work)
   if trackerOut then
     items[#items + 1] = { "Show the game's quest tracker", function() set.hideTracker = false; SF.Tracker(); lastVer = -1; SF.Refresh() end }
   elseif tracker() and set.hideTracker == false then

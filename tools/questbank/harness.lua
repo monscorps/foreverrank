@@ -17707,6 +17707,14 @@ end)()
     ar = placed(env.QuestBankArrow)
     assert(not env.QuestBankStep:IsShown() and ar.t <= 1000 - 182 - 4 and ar.t >= 1000 - 200, "the frame off: the arrow under the error text: " .. box(ar))
     QB:Settings().guide.frame = true; SF.Apply()
+    -- the arrow held in a drag: the frame growing under it does not move it from the cursor
+    local af = env.QuestBankArrow
+    af.__scripts.OnDragStart(af)
+    local held = af.__points[1].y
+    members = party; G.memberVer = G.memberVer + 1; SF.Refresh()
+    assert(af.__points[1].y == held, "in a drag: left where the cursor has it")
+    af.__scripts.OnDragStop(af)
+    QB:Settings().arrowPos = nil; members = none; G.memberVer = G.memberVer + 1; SF.Refresh(); A.Place()
     -- a place dragged to stays: the arrow's (arrowPos) and the frame's (then the arrow keeps its own default)
     QB:Settings().arrowPos = { "TOP", 300, -420 }
     A.Place()
@@ -17852,6 +17860,15 @@ end)()
     d.QB:Settings().welcome = nil; d.QB.StepFrame.Apply(); d.QB.StepFrame.Refresh()
     local g = d.env.QuestBankStep
     assert(d.env.ObjectiveTrackerFrame:GetAlpha() == 0 and not (g.note and g.note:IsShown()), "told before: hidden, nothing said")
+    -- a fresh install's welcome card first: the note's minute starts once the steps show, not under the card
+    local w = char("Welcomed", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local WSF = w.QB.StepFrame
+    WSF.Apply()
+    local wf = w.env.QuestBankStep
+    assert(wf.card and wf.card:IsShown() and w.env.ObjectiveTrackerFrame:GetAlpha() == 0, "the welcome card up, the tracker out of sight")
+    tick(w, 90)
+    w.QB:Settings().welcome = nil; WSF.Apply(); WSF.Refresh()
+    assert(wf.note:IsShown(), "the card answered a minute and a half on: the note shows now")
   end }
 
   -- 6. The owner's step frame (1-step-frame-handins): "Hand in In Nightmares" / "Hand in The Absent Minded
