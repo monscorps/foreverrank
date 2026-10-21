@@ -12474,6 +12474,44 @@ do
   end)
 end
 
+-- W17 (sub-project D): nothing a black box. Every head and row of the Quests tab carries its icon (the folded Other
+-- places and Best XP anywhere included); the quest to read shows its objectives with their cursors (a finished one the
+-- ready check) and the hand-in's glyph, its rewards in their quality's edge; the Hall of Shame names its leaders in
+-- their class's colours
+do
+  local function member(name, rank, class, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = class or "WARRIOR", level = level or 20, online = true } end
+  isolated({ member("Rone", 1, "WARRIOR", 20), member("Pim", 3, "MAGE", 19) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2, [33] = 1 } }))
+    local pim = newClient(charOf({ "Pim", 3, "Raider", "MAGE", 19 }))
+    login(c); login(pim); tickAll(30)
+    local QB = c.addons[2].private
+    local UI = c.C.UI
+    sizeAll(c, 1040, 640)
+    UI:Open("quests")
+    local L = qwin(c)
+    local heads = 0
+    for _, r in ipairs(L.hosts.quests.pool.items) do
+      if r:IsShown() and r:GetHeight() == 24 then heads = heads + 1; assert(r.slot:IsShown(), "a head with its icon: " .. tostring(r.name:GetText())) end
+    end
+    assert(heads >= 2, "the Questing head and the folded ones: " .. heads)
+    -- the quest to read
+    local q = QB.Quest.Get(7)
+    QB.Reader.Read(L, q)
+    local t = texts(c)
+    assert(t:find("Objectives", 1, true) and (t:find("|T131013", 1, true) or t:find("|T131023", 1, true) or t:find("|T131021", 1, true) or t:find("|A:Crosshair", 1, true)), "the objectives with their cursors:\n" .. t)
+    assert(t:find("|T132048", 1, true) or t:find("|A:UI%-QuestIcon%-TurnIn") or t:find("|A:QuestNormal", 1, true) or t:find("|T132049", 1, true), "the hand-in's or the giver's glyph")
+    check(L.frame, "W17 the quest to read, the look")
+    QB.Reader.Back(L)
+    -- the Hall of Shame's leaders in their class colours
+    UI:Open("shame")
+    local found
+    for _, card in ipairs(UI.cards.items) do if card:IsShown() and card.leader:GetText():find("|cff%x%x%x%x%x%x%a") then found = card end end
+    assert(found, "a leader named in a class colour")
+    leave(c); leave(pim)
+    print(string.format("windows W17: nothing a black box: %d heads each with its icon, the quest to read with its glyphs, the Hall of Shame's leaders in their class colours", heads))
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

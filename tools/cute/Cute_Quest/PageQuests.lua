@@ -28,17 +28,6 @@ local function placeOf(npc)
   local town = n and E.Travel and E.Travel.TownNear and E.Travel.TownNear(n[5], n[6], n[7], 200)
   return town or npc.place or (E.Data.MAPNAME and E.Data.MAPNAME[npc.m]) or nil
 end
--- an objective's kind for its cursor (QuestMap.lua's QM.ART letters): its spot's in the catalog, else "slain" a kill,
--- a count a collect, else a use
-local function kindOf(id, slot, text)
-  local QM, D = E.QuestMap, E.Data
-  if QM and QM.Spots and D.SPOT then
-    for _, sp in ipairs(QM.Spots(D.SPOT[id]) or {}) do if sp.slot == slot then return sp.kind end end
-  end
-  if type(text) == "string" and (text:find(" slain", 1, true) or text:find(" killed", 1, true)) then return "k" end
-  if type(text) == "string" and text:find("%d+%s*/%s*%d+") then return "c" end
-  return "u"
-end
 -- a held quest's objectives in a line, each its cursor at 12 px and "Kobold Vermin 3/8"; a finished one the ready check
 -- and the muted grey
 local MUTE = "|cff858585"
@@ -51,7 +40,7 @@ local function objectivesLine(e, L)
     if name and name ~= "" then
       local words = (have and need) and string.format("%s %d/%d", name, have, need) or name
       if plain(o.done) == true then parts[#parts + 1] = L.Inline("ready", 12) .. " " .. MUTE .. words .. "|r"
-      else parts[#parts + 1] = L.Inline(kindOf(e.id, slot, text), 12) .. " " .. words end
+      else parts[#parts + 1] = L.Inline(QB.ObjKind(e.id, slot, text), 12) .. " " .. words end
     end
   end
   return #parts > 0 and table.concat(parts, "   ") or nil
@@ -161,13 +150,14 @@ local function questing(ui, L, K)
   for i = 1, three do place(order[i]); shown[order[i].idx] = true end
   local rest = {}
   for _, g in ipairs(all) do if not shown[g.idx] then rest[#rest + 1] = g end end
+  -- (folded heads, each its icon: the map for the other places, the offer's ! for the best quests; a click opens one)
   if #rest > 0 then
-    out[#out + 1] = { kind = "note", bar = K.QUEST, x = 12, name = "Other places (" .. #rest .. ")", nameC = K.INK, bg = 0.035,
+    out[#out + 1] = { kind = "head", bar = K.QUEST, icon = { art = { nil, 134269 }, crop = true }, name = "Other places", who = #rest .. (#rest == 1 and " place" or " places"),
       fn = function() P.others = not P.others; redraw() end, tip = function(tip) tip:AddLine(P.others and "Click: fold them." or "Click: every other place with quests for you.", 1, 1, 1) end }
     if P.others then for _, g in ipairs(rest) do place(g) end end
   end
   -- the quests that pay the most for your time anywhere (the engine's candidates, by XP a minute; banking, by XP)
-  out[#out + 1] = { kind = "note", bar = K.QUEST, x = 12, name = banking() and "Highest XP anywhere" or "Best XP anywhere", nameC = K.INK, bg = 0.035,
+  out[#out + 1] = { kind = "head", bar = K.QUEST, icon = { art = "accept" }, name = banking() and "Highest XP anywhere" or "Best XP anywhere", who = P.best and "8 quests" or "folded",
     fn = function() P.best = not P.best; redraw() end, tip = function(tip) tip:AddLine(P.best and "Click: fold them." or "Click: the eight quests that pay the most for your time.", 1, 1, 1) end }
   if P.best then
     local D = E.Data

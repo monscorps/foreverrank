@@ -1536,7 +1536,7 @@ function UI:DrawShame()
       -- (a member the officers marked untrusted is in no ranking)
       for _, row in ipairs(rows) do
         local v = row.stats[def.id]
-        if row.addon and not row.untrusted and type(v) == "number" and C.Policy:CanSee(officer, row.me, def.id) then top[#top + 1] = { short = row.short, v = v, me = row.me } end
+        if row.addon and not row.untrusted and type(v) == "number" and C.Policy:CanSee(officer, row.me, def.id) then top[#top + 1] = { short = row.short, v = v, me = row.me, class = row.class } end
       end
       table.sort(top, function(a, b) if a.v == b.v then return a.short < b.short end return a.v > b.v end)
       local card = self.cards:Get()
@@ -1547,7 +1547,8 @@ function UI:DrawShame()
       card.title:SetText(def.label)
       if kept then card.leader:SetText(hex(MUTE) .. "only the officers see who leads|r")
       elseif top[1] and top[1].v > 0 then
-        card.leader:SetText(string.format("%s  %s%s|r", top[1].short, hex(DIM), UI.Format(def, top[1].v)))
+        -- (the leader's name in their class's colour, as every member's name is: the windows round)
+        card.leader:SetText(string.format("%s%s|r  %s%s|r", hex(top[1].class and classColor(top[1].class) or WHITE), top[1].short, hex(DIM), UI.Format(def, top[1].v)))
       else card.leader:SetText(hex(MUTE) .. "nobody yet|r") end
       local mine = C.Sample:Value(def.id)
       card.mine:SetText("You: " .. UI.Format(def, mine))

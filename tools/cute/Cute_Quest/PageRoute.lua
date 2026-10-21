@@ -44,15 +44,6 @@ local function yardsFromYou(stop)
   if not (me and w and me.c == w.c) then return nil end
   return math.sqrt((w.wx - me.wx) ^ 2 + (w.wy - me.wy) ^ 2)
 end
--- an objective's kind letter (QuestMap.lua's QM.ART), as the Quests tab reads it
-local function kindOf(id, slot, text)
-  local QM, D = E.QuestMap, E.Data
-  if QM and QM.Spots and D.SPOT then
-    for _, sp in ipairs(QM.Spots(D.SPOT[id]) or {}) do if sp.slot == slot then return sp.kind end end
-  end
-  if type(text) == "string" and (text:find(" slain", 1, true) or text:find(" killed", 1, true)) then return "k" end
-  return "c"
-end
 -- a quest on a stop: its glyph (ready: the hand-in; held: its first open objective's cursor; to take: the offer's !),
 -- its name, its progress, its XP or "take"; its click reads it
 local function questLine(ui, q, xp, take)
@@ -65,7 +56,7 @@ local function questLine(ui, q, xp, take)
         local text = plain(o.text)
         local name, have, need
         if E.Guide.ParseLine then name, have, need = E.Guide.ParseLine(text) else name = text end
-        glyph = { art = kindOf(q.id, slot, text) }
+        glyph = { art = QB.ObjKind(q.id, slot, text) }
         prog = (have and need) and string.format("%s %d/%d", name or "", have, need) or name
         break
       end

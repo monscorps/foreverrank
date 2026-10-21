@@ -57,6 +57,17 @@ local function questOf(s) return s and s.qid and E.Quest.Get(s.qid) or nil end
 -- skull for your corpse), its words with the count apart (Guide.lua G.Parts), its quest's name where the words do not
 -- carry it, the progress bar's colour (the quest gold for a quest's step; none for the others)
 local QUEST = { 1, 0.82, 0 }
+-- an objective's kind letter for its cursor (QuestMap.lua's QM.ART letters), for the pages' rows: its spot's in the
+-- catalog, else "slain" a kill, a count a collect, else a use
+function QB.ObjKind(id, slot, text)
+  local QM, D = E.QuestMap, E.Data
+  if QM and QM.Spots and D and D.SPOT then
+    for _, sp in ipairs(QM.Spots(D.SPOT[id]) or {}) do if sp.slot == slot then return sp.kind end end
+  end
+  if type(text) == "string" and (text:find(" slain", 1, true) or text:find(" killed", 1, true)) then return "k" end
+  if type(text) == "string" and text:find("%d+%s*/%s*%d+") then return "c" end
+  return "u"
+end
 local function classArt()
   local cls = E.state and E.state.class
   local tc = type(CLASS_ICON_TCOORDS) == "table" and cls and CLASS_ICON_TCOORDS[cls] -- (SharedConstants.lua:27)

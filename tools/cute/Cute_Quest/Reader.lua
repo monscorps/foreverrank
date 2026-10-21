@@ -120,11 +120,15 @@ function R.Draw(ui, scroll)
   -- the game's own words for a quest you hold; what the catalog knows of one you do not
   local text = log and logText(log.index)
   if text then y = y + 4; line(text, K.INK, 13) end
+  local L = ui.Look
   if log and log.objectives and #log.objectives > 0 then
     head("Objectives")
-    for _, o in ipairs(log.objectives) do
+    -- (each its cursor glyph, a finished one the ready check and the muted grey: the windows' look)
+    for slot, o in ipairs(log.objectives) do
       local t = plain(o.text) or ""
-      line((o.done and "Done: " or "") .. t, o.done and K.MUTE or K.INK, 13, 14, w - 20)
+      local done = plain(o.done) == true
+      local glyph = L and L.Inline(done and "ready" or QB.ObjKind(q.id, slot, t), 14) or ""
+      line(glyph .. " " .. t, done and K.MUTE or K.INK, 13, 8, w - 14)
     end
   elseif not log and q.tip then
     head("What it asks")
@@ -149,18 +153,26 @@ function R.Draw(ui, scroll)
   local host = Cute.Host(ui, "reader")
   host:ClearAllPoints(); host:SetPoint("TOPLEFT", 0, 0); host:SetSize(w, 10)
   host.icons = host.icons or {}
-  for _, t in ipairs(host.icons) do t:Hide() end
+  for _, t in ipairs(host.icons) do t:Hide(); if t.edge then t.edge:Hide() end end
   if #ids > 0 then
     head((rw and rw.c and #rw.c > 1) and "Rewards: choose one" or "Rewards")
     for i = 1, math.min(6, #ids) do
       local id = ids[i]
       local name, _, _, icon = E.API.ItemInfo(id)
       local t = host.icons[i]
-      if not t then t = host:CreateTexture(nil, "ARTWORK"); t:SetSize(28, 28); t:SetTexCoord(0.08, 0.92, 0.08, 0.92); host.icons[i] = t end
-      t:ClearAllPoints(); t:SetPoint("TOPLEFT", 6, -y); t:SetTexture(icon or 134400); t:Show()
+      if not t then
+        t = host:CreateTexture(nil, "ARTWORK"); t:SetSize(28, 28); t:SetTexCoord(0.08, 0.92, 0.08, 0.92); host.icons[i] = t
+        -- (a 1 px edge in the item's quality colour, as the windows draw an item)
+        t.edge = host:CreateTexture(nil, "BORDER"); t.edge:SetPoint("TOPLEFT", t, "TOPLEFT", -1, 1); t.edge:SetPoint("BOTTOMRIGHT", t, "BOTTOMRIGHT", 1, -1)
+      end
+      t:ClearAllPoints(); t:SetPoint("TOPLEFT", 7, -y - 1); t:SetTexture(icon or 134400); t:Show()
+      local okQ, qual = pcall(C_Item and C_Item.GetItemQualityByID or error, id)
+      qual = okQ and type(qual) == "number" and qual or 1
+      local e = L and L.QualityEdge(qual) or { 0, 0, 0 }
+      t.edge:SetColorTexture(e[1], e[2], e[3], 1); t.edge:Show()
       local y0 = y
       y = y + 7
-      line(name or ("Item " .. id), K.INK, 13, 40, w - 46)
+      line(name or ("Item " .. id), L and L.QualityName(qual) or K.INK, 13, 42, w - 48)
       y = math.max(y, y0 + 32)
     end
   end
@@ -169,7 +181,9 @@ function R.Draw(ui, scroll)
   if npc and npc.n then
     head(log and "Hand in" or "From")
     local place = npc.place or (E.Data.MAPNAME and E.Data.MAPNAME[npc.m])
-    line(npc.n .. (place and (DOT .. place) or ""), K.INK, 13)
+    -- (the hand-in's glyph or the offer's, as the map draws them)
+    local glyph = L and L.Inline(log and "turnin" or "accept", 16) or ""
+    line(glyph .. " " .. npc.n .. (place and (DOT .. place) or ""), K.INK, 13)
   end
   -- its buttons
   y = y + 10
