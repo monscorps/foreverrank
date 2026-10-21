@@ -11329,7 +11329,8 @@ do local function runsStage()
     local e = entry(G, who)
     G.dead[e.guid] = true
     if e.c then fire(e.c, "PLAYER_DEAD") end
-    each(G, function(c) fire(c, "UNIT_DIED", e.guid) end)
+    -- (G.diedSecret: UNIT_DIED is SecretWhenUnitIdentityRestricted, UnitDocumentation.lua: its GUID secret)
+    each(G, function(c) fire(c, "UNIT_DIED", G.diedSecret and G.diedSecret[e.guid] and secret("string") or e.guid) end)
   end
   local function rez(G, who)
     local e = entry(G, who)
@@ -11716,6 +11717,34 @@ do local function runsStage()
     assert(v.dm == 2000 and not cs[1].env.CuteDB.roster[key].suspect, "no honest member marked suspect: " .. tostring(v.dm))
   end)
   said[#said + 1] = "the meter's fights from before the run are no member's: an honest claim matches the others' rows"
+
+  -- (4.1, 4.4) a member's deaths this client could not see are no data, never 0: with a UNIT_DIED whose GUID came
+  -- secret, a member without Cute who died four times wins no Not a Scratch, Iron Wall or Steady Hands
+  isolated({ gmember("Ola", 1), gmember("Pim", 3), gmember("Qed", 3) }, function()
+    local cs = { gchar("Ola", 1), gchar("Pim", 3), gchar("Qed", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group({ cs[1], cs[2], cs[3], { name = "Mute", class = "WARRIOR" } })
+    G.diedSecret = { [guidOf("Mute")] = true }
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local dmg = { Ola = { [0] = 9000, [7] = 500 }, Pim = { [0] = 1000, [7] = 400 }, Qed = { [2] = 6000, [7] = 300 }, Mute = { [0] = 2000, [7] = 90000 } }
+    for _, enc in ipairs({ 1230, 1236, 1238, 1234 }) do
+      fight(G, 60, dmg, enc)
+      if enc ~= 1234 then die(G, cs[2]); tickAll(3); rez(G, cs[2]) end
+      for _ = 1, 2 do if enc == 1230 or enc == 1236 then die(G, "Mute"); tickAll(3); rez(G, "Mute") end end
+      tickAll(40)
+    end
+    -- (/cute diag runs says how many deaths came unseen)
+    local diag = table.concat(cs[1].C.RunsUI.Diag(), "\n")
+    assert(diag:find("UNIT_DIED secret 4", 1, true), "the diag counts the deaths it could not see:\n" .. diag)
+    zone(cs, "none", 0)
+    tickAll(25)
+    local rep = lastReport(cs[1])
+    assert(rep and #rep.cards >= 3, "a report: " .. cardsOf(rep))
+    for _, code in ipairs({ "NS", "IW", "SH" }) do assert(holderOf(rep, code) ~= sfx("Mute"), "a member whose deaths went unseen gets no " .. code .. ": " .. cardsOf(rep)) end
+  end)
+  said[#said + 1] = "deaths this client could not see are no data: no Not a Scratch, Iron Wall or Steady Hands from them"
 
   -- (20) an edited copy in the group: a 2Q, 2A or 2W from a member who is not the scribe is ignored; a 2A naming a
   -- suffix nobody saw is not shown; a 2V value out of bounds is dropped, one an observed value contradicts loses; a 2H

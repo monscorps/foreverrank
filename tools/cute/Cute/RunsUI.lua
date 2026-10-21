@@ -271,8 +271,8 @@ function RU.Diag()
   local lines = {}
   local snap = R():Snapshot()
   if snap then
-    lines[#lines + 1] = string.format("diag runs: run %s, %s, %d s, %d bosses, scribe %s | meter %s, %d sessions read", snap.id, snap.kind,
-      snap.t, snap.bosses, snap.scribe == "you" and "you" or "another member", snap.meter, snap.reads)
+    lines[#lines + 1] = string.format("diag runs: run %s, %s, %d s, %d bosses, scribe %s | meter %s, %d sessions read | UNIT_DIED secret %d", snap.id, snap.kind,
+      snap.t, snap.bosses, snap.scribe == "you" and "you" or "another member", snap.meter, snap.reads, snap.unseen)
   else
     local db = R().DB()
     lines[#lines + 1] = "diag runs: no run on | " .. #db.list .. " in the history, keeping " .. db.keep .. (db.show and "" or ", reports not shown")

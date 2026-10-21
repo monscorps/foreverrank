@@ -458,9 +458,12 @@ local function alive()
   run.wiped = nil
 end
 
--- a group member's death (UNIT_DIED, its GUID where plain), counted per member; yours is PLAYER_DEAD's
+-- a group member's death (UNIT_DIED, its GUID where plain), counted per member; yours is PLAYER_DEAD's. One whose GUID
+-- came secret (SecretWhenUnitIdentityRestricted, UnitDocumentation.lua) is nobody's, and from then on a member this
+-- client saw no death of has an unknown count, not 0 (MemberValues; /cute diag runs counts them)
 local function unitDied(guid)
   local run = R.run
+  if run and not run.ended and C.Plain(guid) == nil and guid ~= nil then run.unseen = (run.unseen or 0) + 1 end
   guid = C.Plain(guid)
   if not run or run.ended or type(guid) ~= "string" or guid == C.MyGUID() then return end
   local m = run.members[sfxOf(guid)]
@@ -670,7 +673,9 @@ function R.MemberValues(run, sfx, m, endT)
     if v.fd == nil and obs.fd then v.fd = obs.fd end
     if v.dt == nil and obs.dt then v.dt = obs.dt end
     if v.de == nil and tot and type(tot.dd) == "number" then v.de = tot.dd end
-    if v.de == nil then v.de = 0 end
+    -- (no death seen is none, while every UNIT_DIED of the run read: after one came secret it is no data, and no
+    -- award for no deaths reads it)
+    if v.de == nil and not run.unseen then v.de = 0 end
   end
   local l = run.loot and run.loot[sfx]
   if l then
@@ -891,7 +896,7 @@ function R:Snapshot()
   local s = self:Scribe()
   local scribe = (s == mySfx()) and "you" or (run.members[s] and run.members[s].n) or (g[s] and g[s].name) or "?"
   return { id = run.id, kind = run.kind, place = placeOf(run), t = el(run), bosses = run.nb, wipes = run.wipes, scribe = scribe, out = run.out,
-    meter = run.meterOK and "on" or ("off: " .. tostring(run.meterWhy)), reads = run.meter.reads or 0 }
+    meter = run.meterOK and "on" or ("off: " .. tostring(run.meterWhy)), reads = run.meter.reads or 0, unseen = run.unseen or 0 }
 end
 
 -- you stopped counting (outside past the grace while the scribe is in): "out", your last values
