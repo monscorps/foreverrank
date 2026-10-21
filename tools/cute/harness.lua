@@ -11385,6 +11385,303 @@ do local function runsStage()
     said[#said + 1] = "five clients, a full clear: one report everywhere within 20 s, the same five cards (" .. (cardsOf(first):gsub("%w+%.", "")) .. "), the leader the scribe, one 2A"
   end)
 
+  -- the keys a client's 2V messages carried, every one it sent
+  local function keysSent(c)
+    local out = {}
+    for _, m in ipairs(c.rsent) do
+      if m.msg:sub(1, 3) == "2V|" then
+        local body = m.msg:match("^2V|[^|]*|%d+|%d+/%d+|(.*)$") or ""
+        for k in body:gmatch("([%l]+)=") do out[k] = true end
+      end
+    end
+    return out
+  end
+  local function holderOf(rep, code) for _, x in ipairs(rep and rep.cards or {}) do if x[2] == code then return x[1] end end end
+  local function sfx(c) return (type(c) == "string" and guidOf(c) or c.o.guid):match("([^%-]+)$") end
+  -- a client of the same character again (a /reload, a relog, a crash): its saved file, its place, its group entry
+  local function again(G, old, db, reloading, extra, pre)
+    leave(old)
+    local o = { class = old.o.class, instance = old.o.instance, instanceID = old.o.instanceID, instName = old.o.instName }
+    for k, v in pairs(extra or {}) do o[k] = v end
+    local d = gchar(old.o.name, 3, o)
+    for _, e in ipairs(G.members) do if e.c == old then e.c = d end end
+    wire(d, G)
+    d.everMet = old.everMet
+    if pre then pre(d) end
+    login(d, db, reloading)
+    return d
+  end
+
+  -- (2) three with Cute, two without: the two get cards from the scribe's meter rows and UNIT_DIED; a member with no
+  -- data at all gets a THANKS card; every member one card
+  isolated({ gmember("Pia", 1), gmember("Quin", 3), gmember("Rue", 3), gmember("Sol", 3), gmember("Tam", 3) }, function()
+    local cs = { gchar("Pia", 1), gchar("Quin", 3), gchar("Rue", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group({ cs[1], cs[2], cs[3], { name = "Sol", class = "WARRIOR" }, { name = "Tam", class = "DRUID" } })
+    zone(cs, "party", 48, "Blackfathom Deeps")
+    tickAll(40)
+    local dmg = { Sol = { [0] = 20000 }, Quin = { [0] = 1200, [2] = 300 }, Rue = { [2] = 9000, [0] = 300 } }
+    for _, enc in ipairs({ 1240, 1242, 1243 }) do
+      fight(G, 60, dmg, enc)
+      for _ = 1, 2 do die(G, "Tam"); tickAll(4); rez(G, "Tam") end
+      tickAll(60)
+    end
+    zone(cs, "none", 0)
+    tickAll(20)
+    local rep = lastReport(cs[1])
+    assert(rep and #rep.cards == 5, "five cards: " .. cardsOf(rep))
+    assert(holderOf(rep, "HD") == sfx("Sol"), "the member without Cute who topped the meter: Headliner from the scribe's rows: " .. cardsOf(rep))
+    assert(holderOf(rep, "FI") == sfx("Tam"), "the one who died three times: Floor Inspector by UNIT_DIED: " .. cardsOf(rep))
+    local pia = holderOf(rep, "SH") == sfx(cs[1]) or holderOf(rep, "GC") == sfx(cs[1])
+    assert(pia, "a member with nothing gets a THANKS card: " .. cardsOf(rep))
+    local seen = {}
+    for _, x in ipairs(rep.cards) do assert(not seen[x[1]], "every member one card"); seen[x[1]] = true end
+    for _, c in ipairs(cs) do assert(cardsOf(lastReport(c)) == cardsOf(rep), c.o.name .. " shows the same") end
+  end)
+  said[#said + 1] = "two members without Cute carded from the meter's rows and UNIT_DIED, one with nothing thanked"
+
+  -- (3) the group disbands at the last boss's death: every client builds from the checkpoints; the five reports are
+  -- identical
+  isolated({ gmember("Una", 1), gmember("Vic", 3), gmember("Wes", 3), gmember("Xan", 3), gmember("Yul", 3) }, function()
+    local cs = { gchar("Una", 1), gchar("Vic", 3), gchar("Wes", 3), gchar("Xan", 3), gchar("Yul", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local dmg = { Una = { [7] = 30000, [0] = 2000 }, Vic = { [0] = 9000, [5] = 6 }, Wes = { [2] = 7000, [6] = 6 }, Xan = { [0] = 5000, [8] = 3000 }, Yul = { [0] = 4000 } }
+    for _, enc in ipairs({ 1230, 1236, 1238 }) do fight(G, 60, dmg, enc); tickAll(40) end
+    die(G, cs[5]); tickAll(5); rez(G, cs[5]); tickAll(5)
+    fight(G, 60, dmg, 1236); tickAll(40) -- (a fourth checkpoint, after the death)
+    fight(G, 60, dmg, 1234)
+    disband(G)
+    tickAll(5)
+    local first = lastReport(cs[1])
+    assert(first and #first.cards == 5, "built at the disband: " .. cardsOf(first))
+    for _, c in ipairs(cs) do
+      local rep = lastReport(c)
+      assert(rep and cardsOf(rep) == cardsOf(first) and rep.bosses == first.bosses and rep.deaths == first.deaths, c.o.name .. "'s own build the same: " .. cardsOf(rep) .. " / " .. cardsOf(first))
+      assert(rep.from == nil, "each built alone")
+    end
+  end)
+  said[#said + 1] = "a disband at the last boss: five reports built alone from the checkpoints, identical"
+
+  -- (6) a /reload resumes with no new run and deaths counting on; a relog within 30 minutes resumes; a crash restores
+  -- from the scribe's 2W; a /reload inside with the policy in doubt sends only 2H, t and o and builds no report until
+  -- the policy settles
+  isolated({ gmember("Ada", 1), gmember("Bix", 3), gmember("Cal", 3) }, function()
+    INFO[7] = infoLine({ vis = {}, threshold = 1 }, true, EPOCH)
+    local cs = { gchar("Ada", 1), gchar("Bix", 3), gchar("Cal", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local id = cs[2].C.Runs.Current().id
+    die(G, cs[2]); tickAll(3); rez(G, cs[2])
+    -- a /reload
+    local d = again(G, cs[2], cs[2].env.CuteDB, true)
+    tickAll(10)
+    assert(d.C.Runs.Current() and d.C.Runs.Current().id == id and rcount(d, "2H") == 0, "a /reload resumes the run, no hello")
+    die(G, d); tickAll(3); rez(G, d)
+    assert(d.C.Runs.Current().own.de == 2, "deaths counting on: " .. tostring(d.C.Runs.Current().own.de))
+    -- a relog within 30 minutes
+    tickAll(60)
+    local e = again(G, d, d.env.CuteDB, false)
+    tickAll(10)
+    assert(e.C.Runs.Current() and e.C.Runs.Current().id == id and rcount(e, "2H") == 1 and e.rsent[1].msg:find(id, 1, true), "a relog resumes, its hello with the saved id: " .. rkinds(e))
+    -- the scribe holds Bix's checkpoint (a kill); a crash: the file from before the run
+    fight(G, 30, nil, 1230)
+    tickAll(40)
+    local cp = cs[1].C.Runs.Current().members[sfx(e)].v
+    assert(cp and cp.de == 2, "the scribe holds Bix's checkpoint: " .. tostring(cp and cp.de))
+    local file = e.env.CuteDB
+    file.chars[e.C.Me()].run = nil
+    tickAll(40)
+    local f = again(G, e, file, false)
+    tickAll(30)
+    local r = f.C.Runs.Current()
+    assert(r and r.id == id and f.C.Runs.restored and r.own.de == 2, "a crash: the group's id adopted, the checkpoint back from the scribe's 2W: " .. rkinds(f) .. " " .. tostring(r and r.own.de))
+    -- a /reload inside with Guild Info unreadable: the policy in doubt, only the clock goes, no report until it settles
+    local g = again(G, f, f.env.CuteDB, true, nil, function(x) x.infoSecret = true end)
+    tickAll(30)
+    assert(not g.C.Policy:Settled(), "the policy in doubt after the /reload inside")
+    fight(G, 30, { Bix = { [0] = 5000 } }, 1236)
+    tickAll(40)
+    local keys = keysSent(g)
+    assert(keys.t and keys.o and not keys.de and not keys.dm, "in doubt: t and o alone")
+    zone({ cs[1] }, "none", 0)
+    tickAll(200)
+    assert(lastReport(cs[3]) and not lastReport(g), "the others have their report; Bix's waits for the policy")
+    g.infoSecret = false
+    g.o.instance = "none"
+    fire(g, "GUILD_ROSTER_UPDATE")
+    tickAll(30)
+    assert(g.C.Policy:Settled() and lastReport(g), "settled: Bix's report built")
+  end)
+  said[#said + 1] = "a /reload resumes with no hello and deaths counting on, a relog resumes with the saved id, a crash gets its checkpoint back by 2W, a /reload in doubt sends the clock alone and builds once settled"
+
+  -- (7) corpse runs and leaving: a ghost leaving the instance changes nothing; the scribe alive outside ends the run
+  -- after 3 minutes (10 in a raid); a member out mid-run is on the gone-early line
+  isolated({ gmember("Dax", 1), gmember("Eve", 3), gmember("Fox", 3) }, function()
+    local cs = { gchar("Dax", 1), gchar("Eve", 3), gchar("Fox", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    fight(G, 60, { Dax = { [0] = 900 } })
+    local id = cs[2].C.Runs.Current().id
+    die(G, cs[1])
+    zone({ cs[1] }, "none", 0)
+    tickAll(240)
+    assert(cs[1].C.Runs.Current() and cs[1].C.Runs.Current().id == id and cs[2].C.Runs.Current(), "a ghost outside changes nothing")
+    zone({ cs[1] }, "party", 36, "The Deadmines")
+    rez(G, cs[1])
+    tickAll(60)
+    leaveGroup(G, cs[3])
+    tickAll(5)
+    assert(not cs[3].C.Runs.Current() and not lastReport(cs[3]), "leaving at another time: no report, left early")
+    tickAll(150)
+    zone({ cs[1] }, "none", 0)
+    tickAll(170)
+    assert(cs[1].C.Runs.Current() and not lastReport(cs[1]), "the scribe outside alive, inside the grace")
+    tickAll(30)
+    local rep = lastReport(cs[1])
+    assert(rep and not cs[1].C.Runs.Current() and #rep.gone == 1 and rep.gone[1] == sfx(cs[3]), "past three minutes the run ends; Fox gone early: " .. tostring(rep and #rep.gone))
+    assert(lastReport(cs[2]) and lastReport(cs[2]).id == rep.id, "Eve has it too")
+  end)
+  isolated({ gmember("Gil", 1), gmember("Hal", 3) }, function()
+    local cs = { gchar("Gil", 1), gchar("Hal", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs, { raid = true })
+    zone(cs, "raid", 409, "Molten Core")
+    tickAll(40)
+    fight(G, 60, { Gil = { [0] = 900 } })
+    tickAll(250)
+    zone({ cs[1] }, "none", 0)
+    tickAll(300)
+    assert(cs[1].C.Runs.Current(), "a raid's scribe outside five minutes: still on")
+    tickAll(320)
+    assert(not cs[1].C.Runs.Current() and lastReport(cs[1]), "past ten minutes it ends")
+  end)
+  said[#said + 1] = "a ghost outside changes nothing, the scribe out alive ends after 3 minutes (10 in a raid), a member who left mid-run on the gone-early line"
+
+  -- (9) the open world: 2 together 15 minutes give a report with two cards and no blooper, 14 minutes none, one alone
+  -- none; entering a dungeon ends it and starts a Dungeon run
+  isolated({ gmember("Ira", 1), gmember("Jo", 3) }, function()
+    local cs = { gchar("Ira", 1), gchar("Jo", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local function together(map2)
+      local G = group(cs)
+      G.map[cs[1].o.guid], G.map[cs[2].o.guid] = 1429, map2 or 1429
+      return G
+    end
+    local G = together()
+    tickAll(31)
+    assert(cs[1].C.Runs.Current() and cs[1].C.Runs.Current().kind == "g", "a group run")
+    tickAll(900)
+    disband(G)
+    tickAll(5)
+    local rep = lastReport(cs[1])
+    assert(rep and rep.kind == "g" and #rep.cards == 2, "fifteen minutes together: two cards: " .. cardsOf(rep))
+    for _, x in ipairs(rep.cards) do assert(cs[1].C.Awards.BY[x[2]].kind ~= "blooper", "no blooper in two") end
+    local n = #cs[1].C.Runs.DB().list
+    G = together()
+    tickAll(31 + 14 * 60 - 60)
+    disband(G)
+    tickAll(5)
+    assert(#cs[1].C.Runs.DB().list == n and not cs[1].C.Runs.Current(), "fourteen minutes: none")
+    G = together(1430)
+    tickAll(95)
+    assert(not cs[1].C.Runs.Current(), "a mate on another map: none")
+    disband(G)
+    G = together()
+    tickAll(31 + 16 * 60)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(5)
+    assert(#cs[1].C.Runs.DB().list == n + 1 and cs[1].C.Runs.DB().list[1].kind == "g", "entering a dungeon ends the group run, its report")
+    assert(cs[1].C.Runs.Current() and cs[1].C.Runs.Current().kind == "d", "and starts a Dungeon run")
+  end)
+  said[#said + 1] = "the open world: two together fifteen minutes two cards no blooper, fourteen none, apart none, a dungeon entered ends it and starts one"
+
+  -- (10) privacy: the officers close Meter in runs: no meter key in any 2V, no meter award, no meter value in Send to
+  -- party; a member outside the guild in the group: no key of a code the guild set for itself in any 2V
+  isolated({ gmember("Kai", 1), gmember("Lux", 3), gmember("Mae", 3) }, function()
+    INFO[7] = infoLine({ vis = { run_meter = "self" }, threshold = 1 }, true, EPOCH)
+    local cs = { gchar("Kai", 1), gchar("Lux", 3), gchar("Mae", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    assert(cs[2].C.Policy:Settled() and cs[2].C.Policy:Route("run_meter") == "self", "Meter in runs closed by the line")
+    local G = group({ cs[1], cs[2], cs[3], { name = "Vex", class = "WARLOCK" } })
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local dmg = { Kai = { [0] = 900, [5] = 9 }, Lux = { [0] = 9000 }, Mae = { [2] = 9000 }, Vex = { [0] = 100 } }
+    for _, enc in ipairs({ 1230, 1236, 1238, 1234 }) do
+      fight(G, 60, dmg, enc)
+      cs[2].env.JumpOrAscendStart()
+      die(G, cs[3]); tickAll(3); rez(G, cs[3])
+      tickAll(60)
+    end
+    zone(cs, "none", 0)
+    tickAll(25)
+    local METER = { dm = true, hl = true, ab = true, tk = true, av = true, ["in"] = true, dp = true, mt = true }
+    local REUSED = { de = true, dt = true, fd = true, wy = true, ju = true, cn = true, lv = true, gd = true }
+    for _, c in ipairs(cs) do
+      for k in pairs(keysSent(c)) do
+        assert(not METER[k], c.o.name .. " sent a meter key with Meter in runs closed: " .. k)
+        assert(not REUSED[k], c.o.name .. " sent a guild-only key with a stranger in the group: " .. k)
+      end
+    end
+    local rep = lastReport(cs[1])
+    assert(rep and #rep.cards >= 3, "a report: " .. cardsOf(rep))
+    for _, x in ipairs(rep.cards) do for _, code in ipairs(cs[1].C.Awards.BY[x[2]].reads) do assert(code ~= "rm", "no meter award: " .. cardsOf(rep)) end end
+    local lines = cs[1].C.Awards.Text(rep, function() return "X" end)
+    assert(not table.concat(lines, "\n"):find("damage", 1, true), "no meter value on the party line")
+  end)
+  said[#said + 1] = "privacy: Meter in runs closed keeps every meter key, award and line off; a stranger in the group keeps the guild's codes out of every 2V"
+
+  -- (20) an edited copy in the group: a 2Q, 2A or 2W from a member who is not the scribe is ignored; a 2A naming a
+  -- suffix nobody saw is not shown; a 2V value out of bounds is dropped, one an observed value contradicts loses; a 2H
+  -- id older than 30 s before this client's start is ignored
+  isolated({ gmember("Nia", 1), gmember("Oz", 3), gmember("Pax", 3) }, function()
+    local cs = { gchar("Nia", 1), gchar("Oz", 3), gchar("Pax", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    fight(G, 60, { Pax = { [0] = 1000 } })
+    tickAll(5)
+    local oz, pax = cs[2], cs[3]
+    local run = oz.C.Runs.Current()
+    local id = run.id
+    local function from(c, msg) oz.C.RunComm:Receive("CuteRun", msg, "PARTY", c.sender) end
+    from(pax, "2Q|" .. id)
+    tickAll(25)
+    assert(oz.C.Runs.Current() and not oz.C.Runs.Current().ended, "a 2Q from a member who is not the scribe: ignored")
+    from(pax, "2A|" .. id .. "|1/1|k=d;c=" .. sfx(pax) .. ".HD.50")
+    tickAll(2)
+    assert(not oz.C.Runs.Current().got2A and not lastReport(oz), "a 2A from one who is not the scribe: ignored")
+    from(cs[1], "2A|" .. id .. "|1/1|k=d;c=ZZZZZZZZ.HD.50")
+    assert(not oz.C.Runs.Current().got2A, "a 2A naming a suffix nobody saw: not shown")
+    oz.C.Runs.asked = true
+    from(pax, "2W|" .. id .. "|" .. sfx(oz) .. "|1/1|de=9")
+    assert(not oz.C.Runs.restored, "a 2W from one who is not the scribe: ignored")
+    oz.C.Runs.asked = nil
+    from(pax, "2V|" .. id .. "|99|1/1|t=1z;in=zzz;dm=" .. oz.C.Comm.b36(999999))
+    local m = oz.C.Runs.Current().members[sfx(pax)]
+    assert(m.v and m.v["in"] == nil and m.v.t, "an interrupt count past its bounds dropped")
+    local v = oz.C.Runs.MemberValues(oz.C.Runs.Current(), sfx(pax), m, 200)
+    assert(v.dm == 1000, "the damage the meter showed this client wins over the claim: " .. tostring(v.dm))
+    from(pax, "2H|" .. oz.C.Comm.b36(run.start - 100) .. "-" .. sfx(pax) .. "|0.7.1|d." .. oz.C.Comm.b36(36))
+    assert(oz.C.Runs.Current().id == id, "a hello backdated past 30 s: ignored")
+  end)
+  said[#said + 1] = "an edited copy: 2Q, 2A, 2W from a non-scribe ignored, a 2A with an unknown suffix not shown, a value out of bounds dropped, the meter's word over a claim, a backdated hello ignored"
+
   -- (12) the choice, on tables alone (Awards.lua makes no client call): a member { sfx, guid, name, v }
   do
     local A = yezin.C.Awards

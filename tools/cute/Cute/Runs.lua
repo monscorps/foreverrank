@@ -240,7 +240,13 @@ function R:Start(kind, place)
   local t = now()
   local run = { id = b36(t) .. "-" .. sfxOf(me), kind = kind, start = t, at = t, lc = lootNow(), seq = 0, members = {}, own = {},
     bosses = {}, nb = 0, wipes = 0, dorder = 0, fought = false, together = 1, maps = {}, meter = { done = {}, tot = {} }, loot = {} }
-  if kind == "g" then run.map = place else run.inst = place end
+  if kind == "g" then run.map = place
+  else
+    run.inst = place
+    -- (the instance's name as GetInstanceInfo gives it inside)
+    local name = call("GetInstanceInfo")
+    run.place = (type(name) == "string" and name ~= "" and not C.IsKstring(name)) and name or nil
+  end
   self.run = run
   save(run)
   C.RunComm.counts, C.RunComm.results = {}, {}
@@ -330,6 +336,8 @@ function R:OwnValues()
   local t = el(run)
   v.t = run.out or run.ended or t
   v.o = run.out or 0
+  -- (deaths are known here to be none: an award for no deaths reads a 0, which a member's absent key is not)
+  v.de = v.de or 0
   if run.deadAt then v.dt = (v.dt or 0) + math.max(0, (run.out or t) - run.deadAt) end
   local mt = run.meter.tot[mySfx()]
   if mt then for k, x in pairs(mt) do if k ~= "dd" then v[k] = math.floor(x) end end; v.mt = 1 end
@@ -749,7 +757,6 @@ function R:GroupEnd(why)
   self:ReadMeter()
   self:ReadLoot()
   C.RunComm:Send("2Q", run.id)
-  self:Values(true)
   run.qAt = gtime()
   local id = run.id
   local function done()
@@ -1040,7 +1047,12 @@ function R:World(initial, reloading)
   if run then
     if run.kind == "g" then
       -- an instance entered ends a group run (its report where it lasted 15 minutes) and starts one there
-      if kind and inGroup() then self:End("instance"); if not self.run then self:Start(kind, inst) end end
+      -- (each client enters itself: each ends its own at once, with its own build)
+      if kind and inGroup() then
+        run.ended = el(run)
+        self:BuildOwn()
+        if not self.run then self:Start(kind, inst) end
+      end
       return
     end
     if inst == run.inst then run.outAt = nil; return end
