@@ -436,11 +436,16 @@ function Rec:After(sender, kv, delta)
   local g = C.Roster:GuidOf(sender)
   if type(e) ~= "table" or type(e.stats) ~= "table" or not g then return end
   local live = delta == true and Rec.loginAt ~= nil and gtime() - Rec.loginAt >= LIVE_AFTER
-  local clears
+  local clears, on, E
   for id, v in pairs(kv) do
     -- (only what the roster kept: a value it dropped as one that cannot be is none)
     if type(id) == "string" and type(v) == "number" and e.stats[id] == v and Rec.Kind(id) then
-      if id:sub(1, 1) == "c" then clears = clears or {}; clears[#clears + 1] = tonumber(id:sub(2))
+      local p = id:sub(1, 1)
+      if p == "c" then clears = clears or {}; clears[#clears + 1] = tonumber(id:sub(2))
+      elseif p == "g" then
+        -- (a statistics pass is a thousand of them: only the ones added are looked at)
+        on, E = on or Rec.List().codes, E or Rec.Entries()
+        if on[id] or E[id] then self:Seen(id, g, v, live, sender) end
       else self:Seen(id, g, v, live, sender) end
     end
   end
@@ -452,7 +457,9 @@ function Rec:Own(id, old, new)
   local live = C.Sample.loaded == true and (old ~= nil or (Rec.loginAt ~= nil and gtime() - Rec.loginAt >= LIVE_AFTER))
   self:Seen(id, C.MyGUID(), new, live)
 end
-C.Sample:OnValue(function(id, old, new) C.Safe(function() Rec:Own(id, old, new) end, "records: your value")() end)
+-- (the five-second ticker moves time played: a stat that holds no record returns here, making nothing)
+local own = C.Safe(function(id, old, new) Rec:Own(id, old, new) end, "records: your value")
+C.Sample:OnValue(function(id, old, new) if type(new) == "number" and Rec.Kind(id) then own(id, old, new) end end)
 
 ----------------------------------------------------------------------------
 -- 1O: the records on, from the officers (13.2)

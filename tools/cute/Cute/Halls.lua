@@ -684,6 +684,8 @@ function H:KeepLocal(set, key)
   end
   set.rec, set.key, set.day, set.got = true, key, day, now()
   keep(set)
+  -- (a toast of the first still waiting shows this one)
+  if again then for i, t in ipairs(H.toasts) do if t.rec and t.key == key then H.toasts[i] = set end end end
   d.recDay[key] = day
   if not again and H.Prefs().toast ~= false then self:Toast(set) end
   refresh()
