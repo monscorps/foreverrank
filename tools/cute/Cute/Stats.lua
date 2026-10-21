@@ -826,7 +826,8 @@ D("subzone", "Subzone", "leveling", { read = function() local z = Get("GetSubZon
   on = { "ZONE_CHANGED", "ZONE_CHANGED_INDOORS", "ZONE_CHANGED_NEW_AREA" } })
 D("group", "Grouped with", "leveling", { kind = "text", on = "GROUP_ROSTER_UPDATE", read = function()
   local names = {}
-  for i = 1, 4 do local n = Get("UnitName", "party" .. i); if type(n) == "string" then names[#names + 1] = n end end
+  -- (a Kstring is no name to send: the font draws it, its text is an escape, Core.lua C.IsKstring)
+  for i = 1, 4 do local n = Get("UnitName", "party" .. i); if type(n) == "string" and n ~= "" and not C.IsKstring(n) then names[#names + 1] = n end end
   return #names > 0 and table.concat(names, ", ") or ""
 end })
 D("logins", "Logins this week", "leveling", { track = true, hint = "logins, not reloads; the week starts on Monday" })

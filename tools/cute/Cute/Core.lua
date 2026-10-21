@@ -288,7 +288,7 @@ function C.WhatsNew()
   if C.firstRun then
     C.firstRun = false
     CuteDB.toldChanges = C.version
-    C.Print("welcome to the guild's dashboard: /cute opens it, /cute help lists the rest.")
+    C.Print("/cute or the elf on the minimap opens the guild window.")
     return
   end
   local line = type(C.CHANGES) == "table" and C.CHANGES[C.version] or nil
@@ -457,6 +457,13 @@ function C.InitDB()
       if rec.modules ~= nil and type(rec.modules) ~= "table" then rec.modules = {} end
     end
   end
+  -- (once: the times 0.7.0 kept for every statistic and discovery of every member, which nothing reads, Roster.lua)
+  if not CuteDB.slimAt and C.Stats and C.Stats.IsDynamic then
+    for _, e in pairs(CuteDB.roster) do
+      for id in pairs(e.at) do if type(id) == "string" and C.Stats.IsDynamic(id) then e.at[id] = nil end end
+    end
+    CuteDB.slimAt = true
+  end
   -- (a newer Cute's file, this one run after it: the version stays the newest that ran, so its one-time steps do not
   -- run again when it comes back)
   if not C.VersionNewer(was, C.version) then CuteDB.version = C.version end
@@ -534,13 +541,19 @@ C.frame:SetScript("OnEvent", C.Safe(function(_, event, a1, a2)
   end
 end, "core: events"))
 
+-- (Cute's own, then the quest engine's where Cute_Quest runs: its errors are kept in CuteQuestDB, which /qb errors alone
+-- listed)
 local function errorsList()
   local list = CuteDB and CuteDB.errors or {}
-  if #list == 0 then C.Print("no errors recorded.") return end
-  for _, e in ipairs(list) do
+  local engine = type(CuteQuestDB) == "table" and type(CuteQuestDB.errors) == "table" and CuteQuestDB.errors or {}
+  if #list == 0 and #engine == 0 then C.Print("no errors recorded.") return end
+  local function say(e, from)
+    if type(e) ~= "table" then return end
     -- (a | doubled: an error's text names a texture or a link, which chat would draw as one)
-    C.Print(string.format("%s (x%d, last %s) %s", (tostring(e.msg):gsub("|", "||")), e.count or 1, e.last or "", (tostring(e.where or ""):gsub("|", "||"))))
+    C.Print(string.format("%s%s (x%d, last %s) %s", from, (tostring(e.msg):gsub("|", "||")), tonumber(e.count) or 1, tostring(e.last or ""), (tostring(e.where or ""):gsub("|", "||"))))
   end
+  for _, e in ipairs(list) do say(e, "") end
+  for _, e in ipairs(engine) do say(e, "quests: ") end
 end
 
 -- /cute diag: what this client says about you, your gear and the channel's senders, and what the guild has learned
@@ -669,7 +682,10 @@ SlashCmdList.CUTE = C.Safe(function(msg)
   elseif msg == "diag" then for _, l in ipairs(C.Diag()) do C.Print(l) end
   elseif msg == "rules" then for _, l in ipairs(C.Rules.RulesReport()) do C.Print(l) end
   elseif msg == "help" then
-    C.Print("/cute opens the window; /cute race, prog, shame, statistics, officers or me opens that page, and so does a module's name (/cute guide switches the Guide on for this character when it is off); /cute settings opens Settings, /cute modules lists the modules and opens Settings there. /cute resend asks the guild to send their records again. To paste: /cute errors, /cute api (which client functions exist here), /cute diag (names, roster, senders and gear as this client gives them, what the guild has learned, the seed's state), /cute rules (each rule's threshold and who set it).")
+    C.Print("/cute opens the window, /cute settings its Settings; /cute race, prog, shame, statistics, officers, me or a module's name opens that page.")
+    C.Print("/cute modules lists the modules; /cute resend asks the guild for their records again; /cute help more: what to paste in a bug report.")
+  elseif msg == "help more" then
+    C.Print("To paste in a bug report: /cute errors; /cute diag (names, roster, channel and load as this client gives them, what the guild learned); /cute api (the client functions it has); /cute rules (each rule's threshold and who set it).")
   else
     local def, officer = pageFor(msg), C.Roster:MeOfficer()
     if not def then C.Print("no page or command \"" .. msg .. "\". /cute help lists them.")

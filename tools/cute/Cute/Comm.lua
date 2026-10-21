@@ -613,15 +613,31 @@ function whisper(told, make)
 end
 local function packer(head, kind) return function(parts) return pack(head, parts, nil, kind) end end
 
--- send what changed since the last send; slow stats wait for the flush (all = true) unless asked
+-- send what changed since the last send; slow stats wait for the flush (all = true) unless asked. The stats that change
+-- at every coin, kill, loot or step and say little each time (LAZY) go once in LAZY_EVERY seconds at most, the change
+-- waiting till then: 0.7.0 sent gold at every coin, a whisper to each officer online each time
+local LAZY, LAZY_EVERY = { gold = true, rested = true, bags_free = true, durability = true, subzone = true }, 10
+M.wentAt = {}
 function M:Changed(all)
   if not self.started or not C.Roster:InGuild() then return end
   -- before the hello nothing goes out: its full record carries it all; nor while the record waits for the policy
   if not self.hello or self.holding then return end
-  local ids = {}
+  local ids, t, soonest = {}, clock(), nil
   for id in pairs(C.Sample.dirty) do
     local def = defOf(id)
-    if def and (all or not def.slow) then ids[#ids + 1] = id; C.Sample.dirty[id] = nil end
+    if def and (all or not def.slow) then
+      local wait = (LAZY[id] and not all and self.wentAt[id]) and (self.wentAt[id] + LAZY_EVERY - t) or 0
+      if wait > 0 then soonest = math.min(soonest or wait, wait)
+      else
+        ids[#ids + 1] = id
+        C.Sample.dirty[id] = nil
+        if LAZY[id] then self.wentAt[id] = t end
+      end
+    end
+  end
+  if soonest and not self.lazyDue then
+    self.lazyDue = true
+    C_Timer.After(soonest, C.Safe(function() M.lazyDue = false; M:Changed() end, "comm: the changes held"))
   end
   table.sort(ids)
   if #ids == 0 then return end

@@ -1124,7 +1124,7 @@ local function msgs(c, kind) local n = 0; for _, m in ipairs(c.sent) do if m.msg
 -- (what is new in this version, and a first run's welcome, left out)
 local function chatLines(c)
   local out, news = {}, c.C.COLOR .. "Cute " .. c.C.version .. "|r: "
-  for _, m in ipairs(c.chat) do if m:sub(1, #news) ~= news and not m:find("|r: welcome to the guild's dashboard", 1, true) then out[#out + 1] = m end end
+  for _, m in ipairs(c.chat) do if m:sub(1, #news) ~= news and not m:find("|r: /cute or the elf on the minimap opens the guild window.", 1, true) then out[#out + 1] = m end end
   return out
 end
 local function sameColor(a, b) return a and b and math.abs(a[1] - b[1]) < 0.01 and math.abs(a[2] - b[2]) < 0.01 and math.abs(a[3] - b[3]) < 0.01 end
@@ -4499,7 +4499,7 @@ do
     -- Vera's first run (her saved variables empty) says hello, naming /cute, and not what is new in a version she never
     -- ran before; the version counts as told
     local news = V.COLOR .. "Cute " .. mine .. "|r: "
-    assert(told(vera, "welcome to the guild's dashboard: /cute opens it, /cute help lists the rest.") == 1 and told(vera, news) == 0 and vera.env.CuteDB.toldChanges == mine,
+    assert(told(vera, "/cute or the elf on the minimap opens the guild window.") == 1 and told(vera, news) == 0 and vera.env.CuteDB.toldChanges == mine,
       "a first run: the welcome, once, and no news:\n" .. table.concat(vera.chat, "\n"))
     -- a /reload is the same session: the update still shown, neither line said again
     local db = vera.env.CuteDB
@@ -4527,7 +4527,7 @@ do
     local old = newClient(char("Vera"))
     login(old, { toldChanges = "0.4.0" })
     tick(old, 20)
-    assert(told(old, news) == 1 and told(old, "welcome") == 0 and old.env.CuteDB.toldChanges == mine, "from 0.4.0: what is new, once")
+    assert(told(old, news) == 1 and told(old, "opens the guild window") == 0 and old.env.CuteDB.toldChanges == mine, "from 0.4.0: what is new, once")
     local said
     for _, m in ipairs(old.chat) do if m:sub(1, #news) == news then said = m:sub(#news + 1) end end
     assert(said == V.CHANGES[mine] and not said:find("\n", 1, true), "one line, Changes.lua's")
@@ -10654,6 +10654,36 @@ do
     assert(scans == 1, "twenty bag changes in a raid: one scan: " .. scans)
   end)
   said[#said + 1] = "a newer line beside ours read as ours, statistics in slices, the mount on its events, a raid's bags once a burst"
+
+  -- (o) /cute help is two short lines, the paste tools under /cute help more; a statistic or discovery that came keeps
+  -- no time of its own (the registry's stats do, for their tooltips), and a file's old ones go once at load; gold that
+  -- changes at every coin goes once in ten seconds, its last value always
+  isolated({ member("Coraline", 1), member("Cobb", 3) }, function()
+    local off = char("Coraline", 1)
+    local db = { policyClub = "7", roster = { ["Old-Forever"] = { seen = EPOCH + 900, stats = { g3001 = 4, level = 20 }, at = { g3001 = EPOCH, level = EPOCH } } } }
+    login(off, db)
+    local n0 = #off.chat
+    off.env.SlashCmdList.CUTE("help")
+    assert(#off.chat == n0 + 2 and off.chat[n0 + 2]:find("/cute help more", 1, true), "two lines of help")
+    off.env.SlashCmdList.CUTE("help more")
+    assert(#off.chat == n0 + 3 and off.chat[n0 + 3]:find("/cute diag", 1, true), "the paste tools under help more")
+    local old = db.roster["Old-Forever"]
+    assert(old.at.g3001 == nil and old.at.level == EPOCH, "a file's old statistic times gone at load, the rest kept")
+    local c = char("Cobb", 3, { withStats = true, money = 1000 })
+    login(c)
+    tickAll(40)
+    local e = off.env.CuteDB.roster[c.sender]
+    tickAll(100)
+    assert(e.stats.g2001 and e.at.g2001 == nil and e.at.level, "a statistic that came keeps no time, the level does")
+    local w0 = 0
+    for _, m in ipairs(c.sent) do if m.channel == "WHISPER" then w0 = w0 + 1 end end
+    for _ = 1, 30 do c.o.money = c.o.money + 3; fire(c, "PLAYER_MONEY"); tickAll(1) end
+    tickAll(12)
+    local w = -w0
+    for _, m in ipairs(c.sent) do if m.channel == "WHISPER" then w = w + 1 end end
+    assert(w <= 4 and e.stats.gold == c.o.money, "thirty seconds of gold at every coin: " .. w .. " whispers to the officer, the last value there")
+  end)
+  said[#said + 1] = "help in two lines, statistics keep no times, gold once in ten seconds"
 
   -- (n) /cute diag says what launch day needs to see, no name in it: the last send result each way, the lockdown as each
   -- function says it, whether this rank may speak in guild chat, how far this character holds the guild, the list

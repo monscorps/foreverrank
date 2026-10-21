@@ -1121,7 +1121,10 @@ function R:Apply(name, kv, whispered)
     end
     if keep then
       if not sameValue(old, v) then if old == nil then prev[id] = false else prev[id] = old end end
-      e.stats[id] = v; e.at[id] = t
+      -- (when a value came is kept for the registry's stats, whose tooltips say "Reported ... ago"; the statistics and
+      -- discoveries, a few hundred a member, keep none: half of a month-old file was their times)
+      e.stats[id] = v
+      if dynamic(id) then e.at[id] = nil else e.at[id] = t end
     end
   end
   -- (a discovery whose label came before a member's value for it is defined now: Stats.lua S.Found)
