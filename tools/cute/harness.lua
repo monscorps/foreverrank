@@ -386,6 +386,9 @@ BASE.Enum = {
   ItemConsumableSubclass = { Generic = 0, Potion = 1, Elixir = 2, Flasksphials = 3, Scroll = 4, Fooddrink = 5, Itemenhancement = 6, Bandage = 7, Other = 8 },
   BagIndex = { Keyring = -1, Backpack = 0, Bag_1 = 1, Bag_2 = 2, Bag_3 = 3, Bag_4 = 4, ReagentBag = 5 },
   SendAddonMessageResult = { Success = 0, InvalidMessage = 2, AddonMessageThrottle = 3, ChannelThrottle = 8, GeneralError = 9, AddOnMessageLockdown = 11 },
+  -- RestrictedActionsConstantsDocumentation.lua: the chat restriction (5) and its states
+  AddOnRestrictionType = { Combat = 0, Encounter = 1, ChallengeMode = 2, PvPMatch = 3, Map = 4, Chat = 5 },
+  AddOnRestrictionState = { Inactive = 0, Activating = 1, Active = 2 },
   -- the Camelot achievement stub reads this rule by name; no doc gives its value, so the mock's is made up and Cute looks it up
   GameRule = { AchievementsPanelDisabled = 77 },
 }
@@ -781,9 +784,15 @@ local function newClient(o)
   env.C_Club = {
     GetGuildClubId = api(function() return c.inGuild and 7 or nil end),
     GetClubMembers = api(function(id) local out = {}; if id == 7 then for i = 1, #GUILD do out[i] = i end end return out end),
+    -- (ClubDocumentation.lua: the club's memberCount, NeverSecret; c.memberCount stands in for a guild the list is
+    -- still loading for)
+    GetClubInfo = api(function(id) if id == 7 then return { clubId = 7, name = "Cute", clubType = 2, memberCount = c.memberCount or #GUILD } end end),
     GetMemberInfo = api(function(id, i)
       local m = id == 7 and GUILD[i]
       if not m then return nil end
+      -- (c.infoGaps: members whose info the client has not got yet, as at login: GetMemberInfo returns nothing)
+      if c.infoGaps and c.infoGaps[i] then return nil end
+      c.memberReads = (c.memberReads or 0) + 1
       -- (the server knows a character's level: a member whose client runs here is listed at the level it is)
       local level = m.level
       for _, x in ipairs(clients) do if x.o.guid == m.guid and type(x.o.level) == "number" then level = x.o.level end end
@@ -933,8 +942,14 @@ local function newClient(o)
     GetRecipeInfo = api(function(id) return { recipeID = id, learned = (o.learned or {})[id] == true } end),
     GetBaseProfessionInfo = api(function() return { professionID = 171, professionName = "Alchemy", skillLevel = 300, maxSkillLevel = 300 } end),
   }
+  -- the chat lockdown (ChatInfoDocumentation.lua, RestrictedActionsDocumentation.lua): c.chatLocked holds addon chat
+  -- back as a dungeon or an encounter does, every send answered 11; c.lock11 answers that many sends 11 while the
+  -- functions say nothing (a lockdown the client does not report)
+  env.C_RestrictedActions = { IsAddOnRestrictionActive = function(kind) return kind == 5 and c.chatLocked == true end }
   env.C_ChatInfo = {
-    RegisterAddonMessagePrefix = function(p) c.prefix = p; return true end,
+    RegisterAddonMessagePrefix = function(p) c.prefix = p; return c.prefixResult or 0 end,
+    InChatMessagingLockdown = function() return c.chatLocked == true end,
+    AreOutgoingAddonChatMessagesRestricted = function() return false end,
     -- GUILD, or a WHISPER to a target the channel names (a client's c.sender); a target no client online has is
     -- TargetOffline (12)
     SendAddonMessage = function(prefix, msg, channel, target)
@@ -945,6 +960,8 @@ local function newClient(o)
         for _, x in ipairs(clients) do if x.sender == target then to = x end end
         if not to then return 12 end
       end
+      if c.chatLocked then c.lockedSends = (c.lockedSends or 0) + 1; return 11 end
+      if c.lock11 and c.lock11 > 0 then c.lock11 = c.lock11 - 1; return 11 end
       if c.throttle and c.throttle > 0 then c.throttle = c.throttle - 1; return 3 end
       if c.fail and c.fail > 0 then c.fail = c.fail - 1; return 9 end
       c.sent[#c.sent + 1] = { msg = msg, at = c.clock, channel = channel, target = target }
@@ -1828,13 +1845,16 @@ do
   assert(byName.Garristan and not byName.Garristan.addon and byName.Garristan.level == 1 and byName.Garristan.zone == "Elwynn Forest", "Garristan is listed from the guild roster without the addon")
   assert(rows[1].class == "WARRIOR", "your own class is known")
   assert(yezin.C.Roster.updatedAt, "the roster knows when it last changed")
-  -- Kaka leaves the guild: gone after two roster reads
+  -- Kaka leaves the guild: gone after two roster reads a minute apart (two in a row seconds apart are one miss)
   local saved = GUILD[4]
   table.remove(GUILD, 4)
   fire(yezin, "GUILD_ROSTER_UPDATE")
   assert(yezin.env.CuteDB.roster["Kaka-Forever"], "one miss keeps the record")
   fire(yezin, "GUILD_ROSTER_UPDATE")
-  assert(not yezin.env.CuteDB.roster["Kaka-Forever"], "two misses prune it")
+  assert(yezin.env.CuteDB.roster["Kaka-Forever"], "a second read seconds on is the same miss")
+  tickAll(61)
+  fire(yezin, "GUILD_ROSTER_UPDATE")
+  assert(not yezin.env.CuteDB.roster["Kaka-Forever"], "two misses a minute apart prune it")
   table.insert(GUILD, 4, saved)
   fire(yezin, "GUILD_ROSTER_UPDATE")
   kaka.C.Comm:Full()
@@ -3164,7 +3184,7 @@ do
     assert(missing(again) == "2" and again.env.CuteDB.known.enchant[2].n == 2, "after a /reload: still known, still missing")
     -- Astrid and Bjorn leave the guild: their records are pruned, the knowledge stays
     table.remove(GUILD, 3); table.remove(GUILD, 2)
-    fire(again, "GUILD_ROSTER_UPDATE"); fire(again, "GUILD_ROSTER_UPDATE")
+    fire(again, "GUILD_ROSTER_UPDATE"); tickAll(61); fire(again, "GUILD_ROSTER_UPDATE")
     assert(not again.env.CuteDB.roster["Astrid-Forever"] and not again.env.CuteDB.roster["Bjorn-Forever"], "their records pruned")
     again.C.Sample:ReadAll()
     assert(missing(again) == "2" and again.env.CuteDB.known.enchant[2], "the neck stays learned after they left")
@@ -10165,6 +10185,134 @@ do
   said[#said + 1] = "a key that flips call by call saves and reads under one"
 
   print("the owner's client: " .. table.concat(said, "; "))
+end
+
+-- [stage: core] that stage's tests go right below this line
+-- core: Cute's channel, roster and rules hardened for a guild of hundreds (the robustness and scale audits of 0.7.0):
+-- the send queue survives an error and waits out the chat lockdown, a partial roster deletes nobody, a /reload asks
+-- nothing, an ask says since when it holds the guild, mixed versions answer each other, and the work per roster read
+-- and per rebuild stays bounded
+do
+  local function member(name, rank, extra) local m = { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = 30, online = true }; for k, v in pairs(extra or {}) do m[k] = v end; return m end
+  local function char(name, rank, extra) return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", "MAGE", 30 }, extra)) end
+  local function errorWith(c, s) for _, e in ipairs(c.env.CuteDB.errors or {}) do if e.msg:find(s, 1, true) then return e end end end
+  local function kinds(c, from) local out = {}; for i = from or 1, #c.sent do out[#out + 1] = c.sent[i].msg:sub(1, 2) end return table.concat(out, " ") end
+  local function count(c, kind, from) local n = 0; for i = from or 1, #c.sent do if c.sent[i].msg:sub(1, 2) == kind then n = n + 1 end end return n end
+  local function unlock(c) c.chatLocked = false; fire(c, "ADDON_RESTRICTION_STATE_CHANGED", 5, 0) end
+  local function lock(c) fire(c, "ADDON_RESTRICTION_STATE_CHANGED", 5, 1); c.chatLocked = true end
+  local said = {}
+
+  -- (a) an error while a message is on its way (its done, its covered check): recorded, that message gone, the queue
+  -- going on. 0.7.0's pump stopped for the session: nothing of the member's left until /reload
+  isolated({ member("Coraline", 1), member("Cobb", 3) }, function()
+    local off, mem = char("Coraline", 1), char("Cobb", 3)
+    login(off); login(mem)
+    tickAll(30)
+    assert(off.env.CuteDB.roster[mem.sender] and off.env.CuteDB.roster[mem.sender].stats.zone == "Duskwood", "the member's record arrived")
+    mem.env.CUTE_DEV = false
+    mem.C.Comm.Queue({ msg = "1X|boom", done = function() error("boom in done") end })
+    tickAll(3)
+    mem.C.Comm.Queue({ msg = "1X|bang", covered = function() error("boom in covered") end })
+    tickAll(3)
+    mem.env.CUTE_DEV = true
+    assert(errorWith(mem, "boom in done") and errorWith(mem, "boom in covered"), "both errors recorded")
+    mem.o.zone = "Tanaris"
+    fire(mem, "ZONE_CHANGED_NEW_AREA")
+    tickAll(6)
+    assert(off.env.CuteDB.roster[mem.sender].stats.zone == "Tanaris", "the queue went on after the errors: " .. tostring(off.env.CuteDB.roster[mem.sender].stats.zone))
+    assert(#mem.C.Comm.out == 0, "nothing stuck in the queue: " .. #mem.C.Comm.out)
+  end)
+  said[#said + 1] = "an error on a message's way is recorded and the queue goes on"
+
+  -- (b) the chat lockdown: a login inside a dungeon. Nothing is tried while the game holds addon chat back (no try
+  -- counted, nothing given up), the ask goes first as it ends and the guild answers it; result 11 alone (a lockdown the
+  -- functions do not report) is waited out the same way; a responder locked when an ask comes owes the answer rather
+  -- than queueing it, and pays it as its lockdown ends; a kill claim waits out five minutes of lockdown and a run of
+  -- throttles. 0.7.0 tried every ten seconds, gave each message up after five, and never asked again
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3), member("Cato", 3), member("Cass", 3) }, function()
+    local off, a = char("Coraline", 1), char("Cobb", 3)
+    login(off); login(a)
+    tickAll(30)
+    local c = char("Cyra", 3)
+    c.chatLocked = true
+    login(c)
+    tickAll(150)
+    assert(#c.sent == 0 and not errorWith(c, "addon message not sent"), "nothing sent, nothing given up while locked: " .. kinds(c))
+    assert(c.C.Comm:Locked() and c.C.Comm.LockReport and c.C.Comm:LockReport():find("^lockdown on"), "the lockdown said: " .. tostring(c.C.Comm.LockReport and c.C.Comm:LockReport()))
+    unlock(c)
+    tickAll(2)
+    assert(c.sent[1] and c.sent[1].msg:sub(1, 3) == "1R|", "the ask first, as the lockdown ends: " .. kinds(c))
+    tickAll(60)
+    assert(c.env.CuteDB.roster[off.sender] and c.env.CuteDB.roster[a.sender], "the guild answered her ask")
+    assert(off.env.CuteDB.roster[c.sender] and off.env.CuteDB.roster[c.sender].stats.guid == c.o.guid, "and has her record")
+    -- result 11 alone, six times in a row: waited out, nothing given up
+    c.lock11 = 6
+    c.o.zone = "Tanaris"
+    fire(c, "ZONE_CHANGED_NEW_AREA")
+    tickAll(100)
+    assert(off.env.CuteDB.roster[c.sender].stats.zone == "Tanaris" and not errorWith(c, "addon message not sent") and c.lock11 == 0, "result 11 waited out, no try counted")
+    -- a responder locked as an ask comes: the answer owed, not queued; paid as the lockdown ends
+    lock(a)
+    local d = char("Cato", 3)
+    login(d)
+    tickAll(45)
+    assert(a.C.Comm.answerOwed and not d.env.CuteDB.roster[a.sender], "the answer owed while locked")
+    local queued = 0
+    for _, m in ipairs(a.C.Comm.out) do if m.msg:sub(1, 2) == "1F" then queued = queued + 1 end end
+    assert(queued == 0, "no record queued behind the lockdown: " .. queued)
+    unlock(a)
+    tickAll(30)
+    assert(d.env.CuteDB.roster[a.sender] and d.env.CuteDB.roster[a.sender].stats.guid == a.o.guid and not a.C.Comm.answerOwed, "paid as it ended")
+    -- a kill claim through five minutes of lockdown, then a run of throttles: never given up
+    local before = count(a, "1K")
+    lock(a)
+    a.C.Comm:Claim(4242, EPOCH + a.clock, { [c.o.guid] = true })
+    tickAll(300)
+    a.chatLocked = false -- (no event: the queue asks again on its own)
+    a.throttle = 12
+    tickAll(60)
+    assert(count(a, "1K") == before + 1 and not errorWith(a, "addon message not sent"), "the claim went, late: " .. kinds(a))
+  end)
+  said[#said + 1] = "the chat lockdown waits without counting tries: the login ask goes as it ends, result 11 alone waited out, an answer owed and paid, a claim kept through five minutes and a run of throttles"
+
+  -- (c) a partial guild list deletes nobody: members the client has not read yet (GetMemberInfo gives nothing, as while
+  -- the club loads at login), or a list shorter than the club's memberCount, are no departure however many reads say
+  -- so; a member gone from two whole lists a minute apart is (0.7.0 took every list for whole: two reads at login a
+  -- second apart deleted the unread members' saved records)
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3), member("Cato", 3), member("Cass", 3) }, function()
+    local off = char("Coraline", 1)
+    local others = { char("Cobb", 3), char("Cyra", 3), char("Cato", 3) }
+    login(off)
+    for _, x in ipairs(others) do login(x) end
+    tickAll(30)
+    local db = off.env.CuteDB.roster
+    for _, x in ipairs(others) do assert(db[x.sender], "a record for each member") end
+    -- Cyra and Cato not read yet: two reads a second apart, then two a minute apart
+    off.infoGaps = { [3] = true, [4] = true }
+    for _ = 1, 2 do fire(off, "GUILD_ROSTER_UPDATE"); tickAll(1) end
+    tickAll(61)
+    for _ = 1, 2 do fire(off, "GUILD_ROSTER_UPDATE"); tickAll(61) end
+    assert(db[others[2].sender] and db[others[3].sender], "the unread members' records kept")
+    assert(not off.C.Roster.listedWhole, "the list said not whole")
+    off.infoGaps = nil
+    -- a list shorter than the club says
+    local gone = table.remove(GUILD, 2)
+    off.memberCount = #GUILD + 1
+    for _ = 1, 3 do fire(off, "GUILD_ROSTER_UPDATE"); tickAll(61) end
+    assert(db[others[1].sender], "a list shorter than the club's count deletes nobody")
+    -- whole lists: one read, another seconds on (one miss), a third a minute on (pruned)
+    off.memberCount = nil
+    fire(off, "GUILD_ROSTER_UPDATE"); tickAll(2)
+    fire(off, "GUILD_ROSTER_UPDATE")
+    assert(db[others[1].sender], "two whole lists seconds apart are one miss")
+    tickAll(61)
+    fire(off, "GUILD_ROSTER_UPDATE")
+    assert(not db[others[1].sender] and db[others[2].sender], "two whole lists a minute apart prune the one gone")
+    table.insert(GUILD, 2, gone)
+  end)
+  said[#said + 1] = "a partial roster deletes nobody: unread members, a list shorter than the club; two whole lists a minute apart prune"
+
+  print("core: " .. table.concat(said, "; "))
 end
 
 -- this pass's problems and layouts join the run's; the last pass prints them all

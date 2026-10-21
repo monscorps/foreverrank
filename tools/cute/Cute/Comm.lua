@@ -197,22 +197,64 @@ local function build(e)
   return e.head .. table.concat(list, ";"), kept, back
 end
 
--- one try at the client: sent, later (and how long to wait), gone (the officer it was whispered to logged off) or drop.
--- e.target: a whisper to that sender string (C_ChatInfo.SendAddonMessage's WHISPER and target, documented)
+-- one try at the client: sent, later (and how long to wait), locked (the game holds addon chat back), gone (the officer
+-- it was whispered to logged off) or drop. e.target: a whisper to that sender string (C_ChatInfo.SendAddonMessage's
+-- WHISPER and target, documented). The last result each way is kept for /cute diag (M.lastResult: GUILD, WHISPER)
+M.lastResult = {}
 local function send(e, msg)
   if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return "sent" end
   local ok, res
   if e.target then ok, res = pcall(C_ChatInfo.SendAddonMessage, PREFIX, msg, "WHISPER", e.target)
   else ok, res = pcall(C_ChatInfo.SendAddonMessage, PREFIX, msg, "GUILD") end
+  M.lastResult[e.target and "WHISPER" or "GUILD"] = { res = ok and C.Plain(res) or "threw", at = C.Now() }
   if not ok then return "drop", tostring(res) end
   res = C.Plain(res)
   if res == nil or res == true or res == 0 then return "sent" end
-  -- Enum.SendAddonMessageResult: 3 AddonMessageThrottle and 8 ChannelThrottle pass; 9 GeneralError and
-  -- 11 AddOnMessageLockdown pass too, given longer; 12 TargetOffline is an officer gone, who gets it when they ask
+  -- Enum.SendAddonMessageResult (ChatConstantsDocumentation.lua): 3 AddonMessageThrottle and 8 ChannelThrottle pass;
+  -- 9 GeneralError passes too, given longer; 11 AddOnMessageLockdown is the chat lockdown (M:Locked), waited out
+  -- without counting a try; 12 TargetOffline is an officer gone, who gets it when they ask
   if res == 3 or res == 8 then return "later", 3 end
-  if res == 9 or res == 11 then return "later", 10 end
+  if res == 9 then return "later", 10 end
+  if res == 11 then return "locked" end
   if res == 12 and e.target then return "gone" end
   return "drop", "result " .. tostring(res)
+end
+
+-- the chat lockdown: while the game holds addon chat back (an encounter, a challenge or PvP match, a map that restricts
+-- communication such as a dungeon or raid: SecretPredicatesDocumentation.lua, SecretInChatMessagingLockdown) a message
+-- sent is answered 11, AddOnMessageLockdown. Asked before each send: C_ChatInfo.InChatMessagingLockdown
+-- (ChatInfoDocumentation.lua:293), C_RestrictedActions.IsAddOnRestrictionActive with Enum.AddOnRestrictionType.Chat
+-- (RestrictedActionsDocumentation.lua:55, RestrictedActionsConstantsDocumentation.lua:31), and the state
+-- ADDON_RESTRICTION_STATE_CHANGED said last (RestrictedActionsDocumentation.lua:97: it comes before a restriction
+-- starts, while IsAddOnRestrictionActive still says false, and after one ends: its Activating counts for LOCK_POLL
+-- seconds, the functions saying the rest, so an end the event never told cannot hold the queue for good); a result 11
+-- counts as the lockdown for LOCK_POLL seconds where none of them says so. While it holds the queue waits, no try
+-- counted (0.7.0 counted 11 as a try and gave a message up after five, the hello's ask with it: a relog inside a
+-- dungeon heard nobody's record all session), the answers it owes wait as owed rather than queued, and it goes again
+-- when the lockdown ends
+local LOCK_POLL = 10
+M.lockEvent, M.lockSeen = nil, nil
+local function restrictionKind()
+  local kinds = Enum and Enum.AddOnRestrictionType
+  return type(kinds) == "table" and C.Plain(kinds.Chat) or nil
+end
+function M:Locked()
+  if self.lockEvent and C.Now() - self.lockEvent < LOCK_POLL then return true end
+  local CI = C_ChatInfo
+  if type(CI) == "table" and type(CI.InChatMessagingLockdown) == "function" and C.Get(CI.InChatMessagingLockdown) == true then return true end
+  local RA, kind = C_RestrictedActions, restrictionKind()
+  if type(RA) == "table" and type(RA.IsAddOnRestrictionActive) == "function" and kind ~= nil and C.Get(RA.IsAddOnRestrictionActive, kind) == true then return true end
+  return self.lockSeen ~= nil and C.Now() - self.lockSeen < LOCK_POLL
+end
+-- (for /cute diag: what each way of asking says now)
+function M:LockReport()
+  local function said(fn, ...) if type(fn) ~= "function" then return "missing" end local v = C.Get(fn, ...); return tostring(v) end
+  local CI, RA = type(C_ChatInfo) == "table" and C_ChatInfo or {}, type(C_RestrictedActions) == "table" and C_RestrictedActions or {}
+  local kind = restrictionKind()
+  return string.format("lockdown %s (InChatMessagingLockdown %s, restriction %s, event %s, result 11 %s) | AreOutgoingAddonChatMessagesRestricted %s",
+    self:Locked() and "on" or "off", said(CI.InChatMessagingLockdown), kind ~= nil and said(RA.IsAddOnRestrictionActive, kind) or "missing",
+    self.lockEvent and (math.floor(C.Now() - self.lockEvent) .. " s ago") or "never", self.lockSeen and (math.floor(C.Now() - self.lockSeen) .. " s ago") or "never",
+    said(CI.AreOutgoingAddonChatMessagesRestricted))
 end
 
 -- a message done with: its parts leave the queue; what the client took counts as gone that way. A value held back (the
@@ -258,28 +300,78 @@ local function nextUp()
   return head
 end
 
-local pumping = false
+-- the pump: one message a turn. Its next turn is booked before anything that may raise: an error on the way (in
+-- building, routing or marking a message) takes that message out of the queue, its values marked to go with the next
+-- change, and the queue goes on (0.7.0's stopped for the session: nothing of yours left until /reload). A turn booked
+-- again replaces the one booked before (book), so the end of a lockdown can start the queue at once without two pumps
+local pumping, booked, current = false, false, nil
 local pump
+local bookGen = 0
+local function book(sec)
+  bookGen = bookGen + 1
+  local g = bookGen
+  booked = true
+  C_Timer.After(sec, function() if g == bookGen then pump() end end)
+end
+M.drops, M.paused = 0, nil
+-- (the ask that left, or that will not: the hello's is sent again where it never left, M:AskAgain)
+local function asked(e, r)
+  if not e.ask then return end
+  if r == "sent" then M.askOwed = nil; M.askLeft = C.Now(); if M.AskLeft then M:AskLeft() end
+  elseif r ~= "gone" then M.askOwed = true; M:AskAgain() end
+end
 pump = C.Safe(function()
+  booked, current = false, nil
   local e = nextUp()
-  if not e then pumping = false return end
+  if not e then pumping = false; booked = true return end
+  -- (the lockdown: nothing goes, no try counted, the queue asked again in a while or when it ends)
+  if M:Locked() then M.paused = M.paused or C.Now(); book(LOCK_POLL) return end
+  M.paused = nil
+  current = e
   local msg, kept, back = build(e)
   local r, extra = "none", nil
   if msg then r, extra = send(e, msg) end
+  if r == "locked" then M.lockSeen = C.Now(); M.paused = C.Now(); book(LOCK_POLL) return end
   if r == "later" then
     e.tries = (e.tries or 0) + 1
-    if e.tries <= RETRIES then C_Timer.After(extra or 3, pump) return end
+    -- (a kill claim is never given up: a repeat kill's is kept nowhere else)
+    if e.tries <= RETRIES or e.kind == "k" then book(math.min(30, extra or 3)) return end
     r, extra = "drop", "still throttled after " .. RETRIES .. " tries"
   end
+  -- (a kill claim the client refused goes to the back of the queue, a few times)
+  if r == "drop" and e.kind == "k" and (e.again or 0) < 5 then
+    e.again, e.tries = (e.again or 0) + 1, 0
+    for i, x in ipairs(M.out) do if x == e then table.remove(M.out, i) break end end
+    M.out[#M.out + 1] = e
+    book(1)
+    return
+  end
   for i, x in ipairs(M.out) do if x == e then table.remove(M.out, i) break end end
+  -- (nothing left to send took no turn of the client's)
+  book(r == "none" and 0.05 or 1)
+  asked(e, r)
   mark(e, r, kept, back)
   if e.done then e.done() end
-  if r == "drop" then C.Err.Note("addon message not sent (" .. tostring(extra) .. "); its stats go with the next change", "comm: sending") end
-  -- (nothing left to send took no turn of the client's)
-  C_Timer.After(r == "none" and 0.05 or 1, pump)
-end, "comm: sending")
--- the queue going again: a message queued, or the policy held at last (M:PolicySettled)
-function M.Kick() if not pumping and #M.out > 0 then pumping = true; C_Timer.After(0.05, pump) end end
+  if r == "drop" then M.drops = M.drops + 1; C.Err.Note("addon message not sent (" .. tostring(extra) .. "); its stats go with the next change", "comm: sending") end
+  current = nil
+end, "comm: sending", function()
+  local e = current
+  current = nil
+  if booked then return end
+  -- (an error on the way: the message it came on leaves the queue, which would raise it again, and is done with as one
+  -- the client dropped; then the next turn)
+  if e then
+    for i, x in ipairs(M.out) do if x == e then table.remove(M.out, i) break end end
+    pcall(asked, e, "drop")
+    pcall(mark, e, "drop")
+    if e.done then pcall(e.done) end
+    M.drops = M.drops + 1
+  end
+  book(1)
+end)
+-- the queue going again: a message queued, or the policy held at last (M:PolicySettled), or the lockdown over
+function M.Kick() if not pumping and #M.out > 0 then pumping = true; book(0.05) end end
+function M.Resume() if pumping then book(0.05) else M.Kick() end end
 -- a delta to a way (the guild channel, or one officer) that already has one waiting goes into that one: a newer value
 -- of an id takes the older one's place, a new id joins it while the message fits, and it keeps its turn; what does not
 -- fit goes as a message of its own. Every value message still waiting that way behind it (a later delta, a record's
@@ -676,8 +768,20 @@ end
 function M:Ask()
   if not C.Roster:InGuild() then return end
   local guid = C.MyGUID()
+  -- (one ask waiting at a time: a second would only be answered as the first)
+  for _, m in ipairs(self.out) do if m.ask then return end end
   queue({ msg = "1R|" .. (guid and (guid:gsub("[|;=]", "")) or "") .. "|" .. string.format("%.0f", C.Policy:Stamp()) .. "|"
-    .. string.format("%.0f", C.Rules.WordStamp()) .. "|" .. C.Policy:Fp(), first = true })
+    .. string.format("%.0f", C.Rules.WordStamp()) .. "|" .. C.Policy:Fp() .. (self.SinceHex and self:SinceHex() or ""), first = true, ask = true })
+end
+-- an ask that never left (the client refused it, or an error on the way): asked again half a minute on, and when the
+-- lockdown ends (M:Restriction)
+function M:AskAgain()
+  if not self.askOwed or self.askAgainDue then return end
+  self.askAgainDue = true
+  C_Timer.After(30, C.Safe(function()
+    M.askAgainDue = false
+    if M.askOwed and M.hello and not M:Locked() then M:Ask() elseif M.askOwed then M:AskAgain() end
+  end, "comm: ask again"))
 end
 -- parts as messages under one head, each saying which of how many it is ("i/n|" after the head): a receiver takes
 -- the whole once every part is in (a policy, the officers' word), and none of more than 64 messages, so what does not
@@ -934,6 +1038,18 @@ local function takeAskers(field)
   M[field] = {}
   return out
 end
+-- the answer to the asks that came while it waited: the record (the guild's part where a fresh ask wants it, the
+-- officers' part to each officer who asked), and the statistics pass
+function M:Answer()
+  local guild = M.answerGuild
+  M.answerGuild = false
+  M:Full(takeAskers("askers"), not guild)
+end
+function M:AnswerGame()
+  local guild = M.answerGameGuild
+  M.answerGameGuild = false
+  M:FullGame(true, takeAskers("gameAskers"), not guild)
+end
 -- the hold, ended (this client holds the policy Guild Info names: Policy.lua P:Settled): the record goes, routed by
 -- the policy as it stands now, its Only-you part to every officer online and to the officers who asked meanwhile; then
 -- what changed while it waited, and the kills claimed meanwhile; an officer's client says the officers' word it holds,
@@ -970,20 +1086,35 @@ function M:PolicySettled(settled)
   if self.holding then self:Release() end
   -- (an officer's change made while it waited: sent now)
   if self.policyOwed and C.Roster:MeOfficer() then self:SendPolicy() end
-  -- (the answers that waited for it, once each, by the policy now)
+  self:PayOwed()
+  M.Kick()
+end
+-- the answers that waited (for the policy Guild Info names, or for the lockdown to end), once each, by the policy now
+function M:PayOwed()
+  if not C.Policy:Settled() or self:Locked() then return end
   if self.answerOwed and not self.holding then
     self.answerOwed = nil
-    local guild = M.answerGuild
-    M.answerGuild = false
-    self:Full(takeAskers("askers"), not guild)
+    self:Answer()
   end
   if self.gameOwed then
     self.gameOwed = nil
-    local guild = M.answerGameGuild
-    M.answerGameGuild = false
-    self:FullGame(true, takeAskers("gameAskers"), not guild)
+    self:AnswerGame()
   end
-  M.Kick()
+end
+-- ADDON_RESTRICTION_STATE_CHANGED (type, state: RestrictedActionsDocumentation.lua:97): for the chat restriction,
+-- Activating (1) and Active (2) hold the queue, Inactive (0) lets it go. The lockdown over: the answers owed go, an
+-- ask that never left goes again, the queue at once
+function M:Restriction(kind, state)
+  kind, state = C.Plain(kind), C.Plain(state)
+  if kind == nil or kind ~= restrictionKind() then return end
+  local states = Enum and Enum.AddOnRestrictionState
+  local inactive = type(states) == "table" and C.Plain(states.Inactive) or 0
+  if state ~= nil and state ~= inactive then self.lockEvent = C.Now() return end
+  self.lockEvent, self.lockSeen = nil, nil
+  if self:Locked() then return end
+  self:PayOwed()
+  if self.askOwed and self.hello then self:Ask() end
+  M.Resume()
 end
 -- out of the guild: the hello is owed again, said on the next refresh in one (Roster.lua), and the hold with it
 function M:Left()
@@ -1145,11 +1276,10 @@ function M:Receive(text, channel, sender)
       C_Timer.After(wait, C.Safe(function()
         M.answering = false
         if M.holding then return end
-        -- (while this client waits for the line, P.doubt, the answer waits too: what it would queue could not leave)
-        if not C.Policy:Settled() then M.answerOwed = true; return end
-        local guild = M.answerGuild
-        M.answerGuild = false
-        M:Full(takeAskers("askers"), not guild)
+        -- (while this client waits for the line, P.doubt, or the game holds addon chat back, the answer waits too: what
+        -- it would queue could not leave)
+        if not C.Policy:Settled() or M:Locked() then M.answerOwed = true; return end
+        M:Answer()
       end, "comm: answer"))
     end
     if #C.Stats.byCat.game > 0 or #C.Stats.byCat.found > 0 or next(C.Rules.OwnClaims()) ~= nil then
@@ -1161,10 +1291,8 @@ function M:Receive(text, channel, sender)
         local wait = GAME_AFTER - 30 + (math.random and (29 * math.random()) or 5)
         C_Timer.After(wait, C.Safe(function()
           M.answeringGame = false
-          if not C.Policy:Settled() then M.gameOwed = true; return end
-          local guild = M.answerGameGuild
-          M.answerGameGuild = false
-          M:FullGame(true, takeAskers("gameAskers"), not guild)
+          if not C.Policy:Settled() or M:Locked() then M.gameOwed = true; return end
+          M:AnswerGame()
         end, "comm: answer statistics"))
       end
     end
@@ -1297,20 +1425,39 @@ function M:Hello()
   C_Timer.After(GAME_AFTER, C.Safe(function() M:FullGame(false) end, "comm: statistics"))
 end
 
+-- every loading screen (Core.lua): the lockdown may have ended with it (a dungeon left), so what waited goes
 function M:Start()
-  if self.started then return end
+  if self.started then
+    if not self:Locked() then self:PayOwed(); if self.askOwed and self.hello then self:Ask() end; M.Resume() end
+    return
+  end
   if not (C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix) then return end
-  pcall(C_ChatInfo.RegisterAddonMessagePrefix, PREFIX)
+  -- (RegisterAddonMessagePrefixResult, ChatConstantsDocumentation.lua: 0 Success, 1 DuplicatePrefix; 2 InvalidPrefix
+  -- and 3 MaxPrefixes leave Cute deaf and mute, which is said once in chat and kept for /cute diag)
+  local ok, res = pcall(C_ChatInfo.RegisterAddonMessagePrefix, PREFIX)
+  res = ok and C.Plain(res) or "threw"
+  self.prefixResult = res
+  if not (res == nil or res == true or res == 0 or res == 1) then
+    C.Err.Record("the game did not register Cute's addon channel (result " .. tostring(res) .. "): nothing is heard or said until it does", "", "comm: prefix")
+  end
   self.started = true
   local f = CreateFrame("Frame")
   self.frame = f
-  f:SetScript("OnEvent", C.Safe(function(_, event, prefix, text, channel, sender)
-    if event ~= "CHAT_MSG_ADDON" then return end
-    prefix = C.Plain(prefix)
-    if #M.senders < 3 then M:Saw(sender, prefix) end
-    if prefix == PREFIX then M:Receive(text, channel, sender) end
-  end, "comm: receiving"))
+  -- (every addon's messages come here, DBM's and WeakAuras' in a raid too: Cute's prefix is picked out before anything
+  -- else runs, and only Cute's go through C.Safe; ADDON_RESTRICTION_STATE_CHANGED is the lockdown, M:Restriction)
+  local saw = C.Safe(function(sender, prefix) M:Saw(sender, prefix) end, "comm: senders")
+  local receive = C.Safe(function(text, channel, sender) M:Receive(text, channel, sender) end, "comm: receiving")
+  local restriction = C.Safe(function(kind, state) M:Restriction(kind, state) end, "comm: chat lockdown")
+  f:SetScript("OnEvent", function(_, event, a1, a2, a3, a4)
+    if event == "CHAT_MSG_ADDON" then
+      if C.Perf then C.Perf.Count("addon") end
+      local prefix = C.Plain(a1)
+      if #M.senders < 3 then saw(a4, prefix) end
+      if prefix == PREFIX then receive(a2, a3, a4) end
+    elseif event == "ADDON_RESTRICTION_STATE_CHANGED" then restriction(a1, a2) end
+  end)
   f:RegisterEvent("CHAT_MSG_ADDON")
+  pcall(f.RegisterEvent, f, "ADDON_RESTRICTION_STATE_CHANGED") -- (a client without the event says no)
   -- the hello, eight seconds in (or when you join a guild)
   C_Timer.After(8, C.Safe(function() M.helloDue = true; M:Hello() end, "comm: hello"))
   -- the slow stats, every two minutes
