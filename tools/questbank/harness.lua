@@ -11495,6 +11495,9 @@ do
              { text = "Red Burlap Bandana: 2/12", type = "item", finished = false, numFulfilled = 2, numRequired = 12 } },
   }
   login(M)
+  -- (a save from 5.4.4 on, at half size: these cases weigh the pins' art at it; a new install draws the game's own size,
+  -- windows D2)
+  MQ:Settings().mapIconPct = 50
   assert(QMm.provider, "on Forever the icons have their own provider on the world map")
   assert(#MQ.Pins.layers == 2 and MQ.Pins.watcher and MQ.Pins.watcher.__parent == M.map:GetCanvas(),
     "no hook on the world map (the mock's HookScript errors): both layers hear it shut as its providers, and a frame of QuestBank's on its canvas watches the keys")
@@ -14844,9 +14847,9 @@ end)()
   end }
 
   -- 12. QuestBank's quest icons half the game's size on the maps; where a click lands still the game's pin; a size you
-  -- set kept
+  -- set kept. (The windows round: a new install at the game's own size, windows D2; a save from 5.4.4 on at half)
   B3CASES[#B3CASES + 1] = { "quest icons half size", function()
-    local c = mage("Iconic")
+    local c = mage("Iconic", nil, nil, nil, nil, { settings = { mapIconPct = 50 } })
     local P = c.QB.Pins
     local poi = c.env.CreateFrame("Frame", nil, c.env.UIParent, "QuestBankPoiTemplate")
     P.StylePoi(poi, { complete = true })
@@ -14854,6 +14857,10 @@ end)()
     P.StyleOffer(offer, {})
     assert(poi.Disc.__w == 16 and poi.Glyph.__w == 16 and poi.__w == 20 and offer.Texture.__w == 16 and offer.__w == 22,
       "half the game's 32 px art, on the game's 20 and 22 px frames")
+    local new = mage("Newicons")
+    local p1 = new.env.CreateFrame("Frame", nil, new.env.UIParent, "QuestBankPoiTemplate")
+    new.QB.Pins.StylePoi(p1, {})
+    assert(p1.Disc.__w == 32 and p1.__w == 20, "a new install: the game's 32 px art")
     local mine = mage("Bigicons", nil, nil, nil, nil, { settings = { mapIconPct = 75 } })
     local p2 = mine.env.CreateFrame("Frame", nil, mine.env.UIParent, "QuestBankPoiTemplate")
     mine.QB.Pins.StylePoi(p2, {})
@@ -20799,6 +20806,23 @@ do
   tc, w, h, sx, sy = art(row.art)
   assert(tc[1] == 0 and math.abs(tc[2] - 0.68359375) < 1e-6 and math.abs(sx - sy) < 0.02 and sx <= 1.5, string.format("a list tile: the art across its width, unsqueezed: u %.3f, %.2f / %.2f", tc[2], sx, sy))
   print(string.format("windows D1: the journal's covers cut as the Encounter Journal cuts them (u to 0.684, v to 0.742), the header's at %.1fx at most, a tile filled", 1.5))
+end
+
+-- D2. A new install draws QuestBank's quest icons on the maps at the game's own size (mapIconPct 100): 5.4.4's half size
+-- drawn beside the game's full-size pins looked soft ("icons on map are scuffed as they are wrong size"). A save keeps
+-- the size it has, the one its player picked included
+do
+  local fresh = lookChar("Freshmaps")
+  assert(fresh.QB:Settings().mapIconPct == 100 and fresh.QB.Pins.IconScale() == 1, "a new install: the game's size")
+  fresh.env.SlashCmdList.QUESTBANK("")
+  fresh.QB.UI:ShowTab(5)
+  local v5 = fresh.QB.UI.views[5]
+  assert(v5.iconSize and v5.iconSize:GetText() == "Game's size", "its Settings button says so: " .. tostring(v5.iconSize and v5.iconSize:GetText()))
+  local kept = lookChar("Keptmaps", { saved = { settings = { v544 = true, v600 = true, mapIconPct = 50, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
+  assert(kept.QB:Settings().mapIconPct == 50 and kept.QB.Pins.IconScale() == 0.5, "a save at half size keeps it")
+  local picked = lookChar("Pickedmaps", { saved = { settings = { v544 = true, v600 = true, mapIconPct = 75, guide = { on = true, frame = true, locked = false, scale = 1 } } } })
+  assert(picked.QB:Settings().mapIconPct == 75, "a size picked stays")
+  print("windows D2: a new install's map icons at the game's size (100), a save's own size kept")
 end
 
 local seen = {}

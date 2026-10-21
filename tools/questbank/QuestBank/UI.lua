@@ -3988,7 +3988,8 @@ function UI:CreateSettingsView(parent)
   v.mapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
   v.mapLabel:SetPoint("LEFT", v.map, "RIGHT", 8, 0)
   v.mapLabel:SetText("Your zone on the game's world map")
-  -- QuestBank's quest icons on the maps (Pins.lua, mapIconPct): half the game's size by default; the button cycles
+  -- QuestBank's quest icons on the maps (Pins.lua, mapIconPct): the game's size for a new install, a save's own size
+  -- kept (half since 5.4.4); the button cycles
   UI.ICON_SIZES = { { 50, "Half size" }, { 75, "Three quarters" }, { 100, "Game's size" } }
   v.iconSize = button(p, "Half size", 110)
   v.iconSize:SetPoint("TOPLEFT", LEFT + 4, y0 - 416)
@@ -4580,7 +4581,7 @@ function UI:RefreshSettingsView(v)
   v.walkShow:SetChecked(set.walkShow ~= false)
   v.markerStyle:SetText(UI.MARKER_STYLES[set.markerStyle] or UI.MARKER_STYLES.questtrail)
   v.arrowStyle:SetText(UI.ARROW_STYLES[set.arrowStyle] or UI.ARROW_STYLES.questbank)
-  local sizeWord = "Half size"
+  local sizeWord = "Game's size"
   for _, o in ipairs(UI.ICON_SIZES) do if o[1] == tonumber(set.mapIconPct) then sizeWord = o[2] end end
   v.iconSize:SetText(sizeWord)
   -- QuestBank's map page: greyed out where the client has none (Classic Era)
