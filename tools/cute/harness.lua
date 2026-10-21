@@ -11965,7 +11965,7 @@ do local function runsStage()
     -- the cover, where Cute_Quest gives one, and a raid's mentions
     gus.env.Cute.QuestCover = function() return { texture = 1530011, texcoords = { 0, 0.684, 0, 0.742 } } end
     CF:Report(CF.rep)
-    assert(CF.cover:IsShown() and CF.label.__points[1].x == 146, "the cover, the label beside it")
+    assert(CF.cover:IsShown() and CF.label.__points[1].x == 146 and CF.title:GetText() == "The Deadmines", "the cover, the label beside it, the place whole: " .. CF.title:GetText())
     check(CF.frame, "runs: the report, a cover")
     gus.env.Cute.QuestCover = nil
     local raid = gus.C.RunsUI.Test(true)

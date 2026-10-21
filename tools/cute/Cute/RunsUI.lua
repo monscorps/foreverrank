@@ -96,7 +96,7 @@ function RU.Test(raid, nextOne)
     local i = 6
     for _, a in ipairs(A().LIST) do
       if #mentions >= 10 then break end
-      if a.kind ~= "thanks" and not used[a.code] and list[i] then mentions[#mentions + 1] = { list[i].sfx, a.code, 7 + i, a.kind }; i = i + 1 end
+      if a.kind ~= "thanks" and not used[a.code] and list[i] then mentions[#mentions + 1] = { list[i].sfx, a.code, A().SAMPLE_VALUE[a.code] or 1, a.kind }; i = i + 1 end
     end
   end
   local zone = call("GetRealZoneText")

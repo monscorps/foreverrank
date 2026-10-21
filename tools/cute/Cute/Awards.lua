@@ -485,6 +485,7 @@ end
 ----------------------------------------------------------------------------
 local SAMPLE_VALUE = { HD = 38, LF = 61, OS = 14, CW = 11, IW = 212000, BW = 44, TJ = 222, NS = 0, PW = 6, LB = 4, FH = 100, TB = 2140,
   NR = 23, DG = 1, CM = 18450, WL = 7, FI = 5, OA = 192, SP = 460, WF = 18000, LO = 3, PG = 341, NA = 6, BD = 2, GC = 2530, SH = 1 }
+A.SAMPLE_VALUE = SAMPLE_VALUE
 function A.Sample(draw, members)
   draw = math.max(1, math.floor(tonumber(draw) or 1))
   local pool = {}

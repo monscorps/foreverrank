@@ -133,13 +133,6 @@ function CF:Report(rep, opts)
   local U = C.UI
   self.rep, self.test = rep, opts.test
   local cards = rep.cards or {}
-  local n = math.max(1, #cards)
-  local w = CF.Width(#cards)
-  local h = CF.Height(rep)
-  f:SetSize(w, h)
-  -- (scaled to fit a narrow screen)
-  local uw = UIParent and UIParent:GetWidth() or 1600
-  f:SetScale((uw > 0 and uw < w + 40) and (uw - 40) / w or 1)
   -- the header: the cover (a dungeon's or a raid's, where Cute_Quest gives one) or the atlas beside the label
   local cover = rep.kind ~= "g" and rep.inst and Cute and type(Cute.QuestCover) == "function" and Cute.QuestCover(rep.inst) or nil
   local x0 = 16
@@ -171,8 +164,19 @@ function CF:Report(rep, opts)
   -- the facts on the right, 76 units each, ending 40 units from the edge
   local facts = rep.kind == "g" and { { A().Clock(rep.dur), "Time" }, { tostring(rep.wipes or 0), "Wipes" }, { tostring(rep.deaths or 0), "Deaths" } }
     or { { (rep.bosses or 0) .. "/" .. math.max(rep.known or 0, rep.bosses or 0), "Bosses" }, { A().Clock(rep.dur), "Time" }, { tostring(rep.wipes or 0), "Wipes" }, { tostring(rep.deaths or 0), "Deaths" } }
-  local right = w - 40
   local factsW = #facts * 76
+  -- the width: the cards', or wider where the header's place and line need it (never past five cards' 980), so a
+  -- report of two never cuts the place's name
+  local width = CF.title.GetUnboundedStringWidth or CF.title.GetStringWidth
+  CF.title:SetText(rep.place or "?"); CF.sub:SetText(when(rep))
+  local need = x0 + math.max(width(CF.title), width(CF.sub)) + 20 + factsW + 40
+  local w = math.max(CF.Width(#cards), math.min(980, math.ceil(need)))
+  local h = CF.Height(rep)
+  f:SetSize(w, h)
+  -- (scaled to fit a narrow screen)
+  local uw = UIParent and UIParent:GetWidth() or 1600
+  f:SetScale((uw > 0 and uw < w + 40) and (uw - 40) / w or 1)
+  local right = w - 40
   for i = 1, 4 do
     local fc, d = CF.facts[i], facts[i]
     if d then
