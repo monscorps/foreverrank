@@ -1,10 +1,11 @@
 ## Interface: 16001
 ## Title: |cffe8b24aCute|r
-## Notes: Cute's guild dashboard: the race to 60, readiness, the hall of shame, what the guild discovers in play and the officers' view, shared over the guild channel. More, like the Guide, switches on in Settings, Modules, and QuestBank's guiding as modules (Cute_Quest). /cute
+## Notes: The guild in one window (J), your quests and route in another (L). /cute
 ## Author: Mikal
 ## Version: 0.7.1
 ## X-License: GPL-3.0-or-later
 ## IconTexture: Interface\AddOns\Cute\art\logo.png
+## AddonCompartmentFunc: Cute_OnCompartment
 ## SavedVariables: CuteDB
 
 Core.lua
@@ -20,4 +21,7 @@ Comm.lua
 UI.lua
 Guide.lua
 Settings.lua
+Keys.lua
+Windows.lua
+Setup.lua
 Bindings.xml

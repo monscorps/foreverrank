@@ -1,8 +1,9 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Quests: the three places worth your time (the engine's Now view, its first three, by XP a minute), the rest folded
--- (the Available view's order), and the quests that pay the most XP a minute; a place opens to its quests. One list in
--- Cute's rows. The module is the folder's primary: its switch loads Cute_Quest, and switches the engine's guide (the
--- step band, the frame) on with it.
+-- Quests: the quest window's first tab (L). Its band is the step now (Cute's Guide draws it, with the guild's dungeon
+-- pick under it: Cute.Guide.Draw); then the three places worth your time (the engine's Now view, its first three, by XP
+-- a minute), the rest folded (the Available view's order), and the quests that pay the most XP a minute; a place opens
+-- to its quests. A quest row's click reads the quest (Reader.lua), Ctrl-click shows it on the arrow. The module is the
+-- folder's primary and the base: always on, it switches the engine's guide (the step band, the frame) on with it.
 local ADDON, QB = ...
 local Cute = Cute
 local E = QB.Engine
@@ -34,13 +35,13 @@ local function placeRow(g, K)
       tip:AddLine("Click: its quests.", 0.5, 0.5, 0.5)
     end }
 end
-local function questRow(q, st, value, who, K)
+local function questRow(q, st, value, who, K, ui)
   return { kind = "quest", name = q.name, val = E.Short(value) .. " XP", who = who or st.text, c = (E.state.log[q.id] and K.INK) or K.DIM,
-    fn = function(_, which) E.UI.QuestClick(q, st, which) end,
+    fn = function(_, which) QB.RowClick(ui, q, st, which) end,
     tip = function(tip) E.UI.QuestTooltip(tip, q, st, value) end }
 end
 
-local function items(K)
+local function items(K, ui)
   local out = {}
   if not E.logReady then out[1] = { kind = "note", name = "Reading your quest log.", c = K.MUTE }; return out end
   local order, _, _, _, hubName = E.UI.PlaceGroups(nil, true)
@@ -50,7 +51,7 @@ local function items(K)
     out[#out + 1] = placeRow(g, K)
     if P.open[g.idx] then
       for _, it in ipairs(g.quests) do
-        if it.grp <= 4 then out[#out + 1] = questRow(it.q, it.st, it.value, nil, K) end
+        if it.grp <= 4 then out[#out + 1] = questRow(it.q, it.st, it.value, nil, K, ui) end
       end
     end
   end
@@ -72,7 +73,7 @@ local function items(K)
     local q = E.Quest.Get(c.id)
     if q then
       local who = (c.T and E.Model.MinutesText and E.Model.MinutesText(c.T, c.est)) or minutes(c.mins) or (D.CAT[c.cat] and D.CAT[c.cat].name) or nil
-      out[#out + 1] = questRow(q, E:Status(q), c.full, who, K)
+      out[#out + 1] = questRow(q, E:Status(q), c.full, who, K, ui)
     end
   end
   return out
@@ -85,11 +86,19 @@ end
 
 function P.Draw(ui, scroll)
   if not E then return QB.NeedPage(ui, scroll, "quests") end
+  QB.Reader.Left(ui)
+  if QB.Reader.Open(ui) then return QB.Reader.Draw(ui, scroll) end
   local K, ROW = ui.COLORS, ui.ROW
   local w = scroll:Width()
-  local list = items(K)
+  -- the band (the step now) and the guild's dungeon pick, the core's (Guide.lua), then the places
+  local top, pick = 0, nil
+  if Cute.Guide and Cute.Guide.Draw then
+    top, pick = Cute.Guide.Draw(ui, 0)
+    if top > 0 then top = top + 8 end
+  end
+  local list = items(K, ui)
   local v = ui:List("quests", function(parent) return make(parent, ui) end)
-  v:Set(#list, 0, ROW, function(r, i, ly)
+  v:Set(#list, top, ROW, function(r, i, ly)
     local it = list[i]
     r:SetHeight(ROW)
     r:ClearAllPoints()
@@ -106,8 +115,11 @@ function P.Draw(ui, scroll)
     if it.who then r.who:ClearAllPoints(); r.who:SetPoint("RIGHT", -4, 0); r.who:SetWidth(146); r.who:SetJustifyH("RIGHT"); ui.Color(r.who, K.DIM); ui.FitText(r.who, it.who, 142); r.who:Show() else r.who:Hide() end
     if it.val then r.val:ClearAllPoints(); r.val:SetPoint("RIGHT", it.who and -154 or -4, 0); r.val:SetWidth(96); r.val:SetJustifyH("RIGHT"); ui.Color(r.val, K.INK); ui.FitText(r.val, it.val, 92); r.val:Show() else r.val:Hide() end
   end)
-  ui.virtual = function() v:Show(ui.scroll.bar:GetValue() or 0, ui.scroll:View()) end
-  scroll:SetContentHeight(#list * ROW + 8)
+  ui.virtual = function()
+    if pick then pick() end
+    v:Show(ui.scroll.bar:GetValue() or 0, ui.scroll:View())
+  end
+  scroll:SetContentHeight(top + #list * ROW + 8)
 end
 
 local ACCEPT = { { "Off", "off" }, { "On my route", "route" }, { "Worth taking", "worth" } }
@@ -131,7 +143,6 @@ function P.Settings(_, col)
     tip:AddLine("Say XP after each hand-in", 1, 1, 1)
     tip:AddLine("A line in chat as you hand a quest in, with the XP it paid, and as a quest is complete or leaves your log. Off, chat stays quiet: the step frame and the Route page show the XP.", 0.85, 0.85, 0.85, true)
   end)
-  col:Check("Share with your party", s.share.party ~= false, true, function(on) s.share.party = on end)
 end
 
 -- the switch: the engine's guide (the step band, the frame as its row says) with it; off, the arrow is put away and
@@ -157,9 +168,25 @@ function P.Toggle(on)
 end
 QB.Toggles.quests = P.Toggle
 
+-- (the band's Invite buttons follow combat and your group; the pick follows your quests)
 Cute:RegisterModule({
-  id = "quests", addon = ADDON, title = "Quests", order = 21,
-  notes = "The three places worth your time, the rest folded, the most XP a minute; the step now in the Guide.",
+  id = "quests", addon = ADDON, title = "Quests", order = 21, window = "quests", base = true,
+  notes = "The step now, the guild's dungeon pick, and the places worth your time by XP a minute.",
   page = P.Draw, settings = P.Settings, onToggle = P.Toggle,
-  events = { QUEST_LOG_UPDATE = redraw, QUEST_ACCEPTED = redraw, QUEST_TURNED_IN = redraw, PLAYER_LEVEL_UP = redraw, ZONE_CHANGED_NEW_AREA = redraw },
+  events = { QUEST_LOG_UPDATE = redraw, QUEST_ACCEPTED = redraw, QUEST_TURNED_IN = redraw, PLAYER_LEVEL_UP = redraw, ZONE_CHANGED_NEW_AREA = redraw,
+    PLAYER_REGEN_DISABLED = redraw, PLAYER_REGEN_ENABLED = redraw, GROUP_ROSTER_UPDATE = redraw },
 })
+
+-- Settings > Data you share (the Cute group): what the engine notes and shares, and where it goes. The guild never: the
+-- engine's guild sharing is off under Cute (Bridge.lua), Cute's own channel carries what the guild sees
+if E then
+  Cute.AddSection({ id = "share", title = "Data you share", group = "cute", order = 5, draw = function(_, col)
+    local s = E:Settings()
+    col:Head("Data you share")
+    -- (the engine's own switches: Game.lua's notes, Survey.lua's questions to the game; QuestBank's Settings has the same)
+    col:Check("Note what the game shows for foreverrank.com", s.noteGame ~= false, true, function(on) if E.Game and E.Game.SetOn then E.Game.SetOn(on) else s.noteGame = on end end)
+    col:Check("Learn quests from the game", s.survey ~= false, true, function(on) if E.Survey and E.Survey.SetOn then E.Survey.SetOn(on) else s.survey = on end end)
+    col:Check("Share your quests with your party", s.share.party ~= false, true, function(on) s.share.party = on end)
+    col:Note("The QuestBank Uploader sends what you found in the world to foreverrank.com, never a name or anything about your guild. It comes with Cute on Cute's page at foreverrank.com.")
+  end })
+end

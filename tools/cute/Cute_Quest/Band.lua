@@ -41,6 +41,10 @@ if not QB.dormant then
   }
 end
 
+-- the step band in the quest window's Quests tab (Cute's Guide.lua draws it): a click on the step reads its quest,
+-- Ctrl-click shows it on the arrow, a right-click is its menu (Not now, Drop: the step's own, never the frame's lock,
+-- scale and hide, which mean nothing in a window)
+local function questOf(s) return s and s.qid and E.Quest.Get(s.qid) or nil end
 Cute.QuestBand = {
   On = function() return Cute.ModuleOn("quests") and E.logReady == true end,
   -- why not, in a line (the engine reads the log at the game's first QUEST_LOG_UPDATE)
@@ -50,5 +54,22 @@ Cute.QuestBand = {
   TimeToLevel = function() return E.Guide.TimeToLevel() end,
   Members = function() return E.Guide.MemberSteps() end,
   Open = function() Cute.Open("quests") end,
-  Menu = function(s) if E.StepFrame and E.StepFrame.Menu then E.StepFrame:Menu(s) end end,
+  Read = function(s, ui) local q = questOf(s); if q and QB.Reader then QB.Reader.Read(ui, q) end end,
+  Arrow = function(s) local q = questOf(s); if q then E.UI.QuestClick(q, E:Status(q), "LeftButton") end end,
+  Menu = function(s)
+    local q = questOf(s)
+    if not q then return end
+    local name = E.UI.Short(q.name, 24)
+    E.UI:ShowMenu(q.name, { { "Not now", function() E.Guide.Skip(q.id, "later") end }, { "Drop " .. name, function() E.Guide.Skip(q.id, "drop") end } })
+  end,
 }
+-- the on-screen switches in Cute's menu (Quests (L) > Step frame, Direction arrow): the engine's own settings, the
+-- copy's (while QuestBank is loaded its settings are its own: none)
+Cute.OnScreen = function()
+  if QB.dormant then return {} end
+  local s = E:Settings()
+  return {
+    { "Step frame", function() return s.guide.frame == true end, function() s.guide.frame = not (s.guide.frame == true); if E.StepFrame then E.StepFrame.Apply() end end },
+    { "Direction arrow", function() return s.arrow == true end, function() if E.Arrow then E.Arrow:Set(not (s.arrow == true)) else s.arrow = not s.arrow end end },
+  }
+end

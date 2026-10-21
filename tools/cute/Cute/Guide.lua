@@ -1,8 +1,9 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The Guide: what should you do next, and with whom. What the rules (Rules.lua) make of the seed and the guild's play,
--- drawn around that one question:
+-- drawn around that one question, in the quest window's Quests tab (Cute_Quest's PageQuests.lua draws it there through
+-- the door Cute.Guide, G.Draw):
 --   band        the step now from the Quests module (Cute.QuestBand: the step, the next two, the time to level, three
---               of your party's steps), or one line saying to tick Quests, or what it waits for
+--               of your party's steps); its click reads the step's quest
 --   head        the next best thing, one line: the rules' pick from the dungeons in range at your level (guild mates
 --               online in range first, then what is left for you there: the bosses you have not killed, the quests
 --               open to you, a dungeon you have not been in; then the one closing soonest), or plainly that nothing
@@ -13,9 +14,10 @@
 --               are in one word, the bosses as pips (killed, not killed, doubted), the quests known for it as they
 --               stand for you, and the guild mates online in range, class-coloured, each with an Invite button
 --               (C_PartyInfo.InviteUnit, out of combat only)
--- Where the seed is stale or none shipped, everything runs on the guild's play alone. The page is one virtual list of
--- rows of one height (the window's kind: UI:List); G.Items works out only what the page draws: every dungeon in
--- range is weighed for the pick (its counts), the rows are the picked one's.
+-- Where the seed is stale or none shipped, everything runs on the guild's play alone. The rows are one virtual list of
+-- one height (the window's kind: UI:List); G.Items works out only what is drawn: every dungeon in range is weighed for
+-- the pick (its counts), the rows are the picked one's. Its two thresholds (guideWindow, guideAhead) are in Settings >
+-- Rules under "Dungeons and gear".
 local _, C = ...
 local G = { invited = {}, open = {} }
 C.Guide = G
@@ -203,7 +205,7 @@ function G.Invite(mate)
   if not f then return false end
   C.Get(f, mate.invite)
   G.invited[mate.guid or mate.invite] = C.Now()
-  if C.UI and C.UI.frame and C.UI.frame:IsShown() then C.UI:Refresh() end
+  if C.UI and C.UI.RefreshAll then C.UI.RefreshAll() end
   return true
 end
 local function invitedRecently(mate)
@@ -407,14 +409,14 @@ function G.CardRows(card, plan)
   elseif shown < #card.mates then
     local rest = {}
     for i = shown + 1, #card.mates do rest[#rest + 1] = card.mates[i].name .. " " .. card.mates[i].level end
-    add({ kind = "more", name = "and " .. (#card.mates - shown) .. " more online in range", c = K.DIM, fn = function() G.open[key] = true; C.UI:Draw() end,
+    add({ kind = "more", name = "and " .. (#card.mates - shown) .. " more online in range", c = K.DIM, fn = function() G.open[key] = true; C.UI.DrawAll() end,
       tip = function(tip)
         tip:AddLine("Online in range", 1, 1, 1)
         for _, n in ipairs(rest) do tip:AddLine(n, 0.8, 0.8, 0.8) end
         tip:AddLine("Click to show them all.", 0.45, 0.45, 0.45)
       end })
   elseif G.open[key] and #card.mates > MATES + 1 then
-    add({ kind = "more", name = "Show fewer", c = K.DIM, fn = function() G.open[key] = nil; C.UI:Draw() end })
+    add({ kind = "more", name = "Show fewer", c = K.DIM, fn = function() G.open[key] = nil; C.UI.DrawAll() end })
   end
   return out
 end
@@ -503,18 +505,19 @@ local PIP, PIP_GAP = 8, 3
 -- the kinds that sit under a card's name, a label column before them
 local UNDER = { bosses = true, quests = true, mate = true, more = true }
 
-function C.Guide_Draw(UI)
+-- the Quests tab's band and its dungeon pick (the quest window, Cute_Quest's PageQuests.lua, through Cute.Guide.Draw):
+-- the band is the step now from the quest module (Cute.QuestBand, Cute_Quest's Band.lua) big and white, the next two
+-- steps, the time to level, your party's steps; a click on the step reads its quest, Ctrl-click shows it on the arrow,
+-- a right-click is its menu. Under it the pick's line and its card's rows, a virtual list from y top in the scroll
+-- area. Returns the height the list takes and the function that shows its rows in view (the page's scroll calls it)
+function G.Draw(UI, y0)
+  y0 = y0 or 0
   local sf = UI.scroll
   local K = UI.COLORS
   local color, fitText, ROW = UI.Color, UI.FitText, UI.ROW
-  UI.header:Hide()
-  UI.rows:Clear()
-  UI.labels:Reset(); UI.labels:HideRest()
   local w = sf:Width()
   local officer = C.Roster:MeOfficer()
   local items, plan = G.Items(officer)
-  -- the band: the step now from the quest module (Cute.QuestBand, Cute_Quest's Band.lua) big and white, the next two
-  -- steps, the time to level, your party's steps; with the module off, one line saying where to switch it on
   local first, detail = G.Source()
   local y = 4
   local function bandRow(s, c, big, tip, fn)
@@ -544,15 +547,18 @@ function C.Guide_Draw(UI)
     return l
   end
   if UI.bandBig then UI.bandBig:Hide() end
-  local Q = Cute.QuestBand
-  local qm = C.Modules.byId.quests
-  local on = qm ~= nil and qm.active
-  if on and Q and Q.On() then
+  local Q = C.API.QuestBand
+  if Q and Q.On() then
     local steps = Q.Steps()
     local s1 = steps[1]
-    local text1 = s1 and Q.Text(s1) or "Nothing to do yet: Quests says why."
-    bandRow(text1, K.WHITE, true, function(tip) tip:AddLine(text1, 1, 1, 1, true); tip:AddLine("Click: the Quests page. Right-click: not now, drop, lock, scale, hide.", 0.5, 0.5, 0.5, true) end,
-      function(_, which) if which == "RightButton" and s1 then Q.Menu(s1) else Q.Open() end end)
+    local text1 = s1 and Q.Text(s1) or "Nothing to do yet: the places below are worth your time."
+    bandRow(text1, K.WHITE, true, function(tip) tip:AddLine(text1, 1, 1, 1, true); tip:AddLine("Click: read its quest. Ctrl-click: show it on the arrow. Right-click: Not now, Drop.", 0.5, 0.5, 0.5, true) end,
+      function(_, which)
+        if not s1 then return end
+        if which == "RightButton" then Q.Menu(s1)
+        elseif IsControlKeyDown and IsControlKeyDown() then if Q.Arrow then Q.Arrow(s1) end
+        elseif Q.Read then Q.Read(s1, UI) end
+      end)
     for i = 2, 3 do
       local s = steps[i]
       if s then local t = Q.Text(s); bandRow(t, K.DIM, false, function(tip) tip:AddLine(t, 1, 1, 1, true) end) end
@@ -568,15 +574,10 @@ function C.Guide_Draw(UI)
         for i = PARTY_ROWS + 1, #members do local m = members[i]; local c = UI.ClassColor(m.class); tip:AddLine(m.name .. ": " .. m.text, c[1], c[2], c[3], true) end
       end)
     end
-  elseif on or C.Modules.Waiting() then
-    -- (ticked, no step yet: the module says why, reading the log or a QuestBank too old for it; or its addon waits for
-    -- combat to end before it loads)
-    local why = on and ((Q and Q.Why and Q.Why()) or "Reading your quest log.") or "Quests loads after combat."
-    bandRow(why, K.DIM, false, function(tip) tip:AddLine(why, 1, 1, 1, true) end)
   else
-    bandRow("Tick Quests in Settings, Modules for the step now.", K.DIM, false,
-      function(tip) tip:AddLine("The quest engine's step frame, in this band: what to do now, the next two steps, the time to level, your party's steps.", 1, 1, 1, true) end,
-      function() C.UI:Open("settings", "modules") end)
+    -- (no step yet: the module says why, reading the log or a QuestBank too old for it)
+    local why = (Q and Q.Why and Q.Why()) or "Reading your quest log."
+    bandRow(why, K.DIM, false, function(tip) tip:AddLine(why, 1, 1, 1, true) end)
   end
   UI:SetBand(y + 4)
   -- what the page shows of yours draws it again when it changes (UI:ValueChanged)
@@ -648,7 +649,7 @@ function C.Guide_Draw(UI)
   if guildRow then shown[#shown + 1] = guildRow end
   for _, it in ipairs(items) do shown[#shown + 1] = it end
   local list = UI:List("guide", G.MakeRow)
-  list:Set(#shown, 0, ROW, function(r, i, ly)
+  list:Set(#shown, y0, ROW, function(r, i, ly)
     local it = shown[i]
     local kind = it.kind
     r:SetHeight(ROW)
@@ -727,24 +728,16 @@ function C.Guide_Draw(UI)
       r.name:SetText("")
     end
   end)
-  UI.virtual = function() list:Show(UI.scroll.bar:GetValue() or 0, UI.scroll:View()) end
-  sf:SetContentHeight(#shown * ROW + 8)
+  return #shown * ROW, function() list:Show(UI.scroll.bar:GetValue() or 0, UI.scroll:View()) end
 end
 
--- a built-in module, off until it is switched on in Settings > Modules (a character that ran 0.5.x, where it was a fixed
--- tab, too). Its section holds the two thresholds only it reads, the officers' to set. While it
--- is on, combat and your group draw the open page again (its Invite buttons follow them), and so do your quests
-local function redraw() if C.UI and C.UI.page == "guide" and C.UI.frame and C.UI.frame:IsShown() then C.UI:Refresh() end end
-C:RegisterModule({
-  id = "guide", title = "Guide", order = 20, builtin = true, default = false, tab = 64,
-  notes = "The step now from Quests, then the one dungeon to run: its bosses, quests and guild mates to invite; officers see the guild per dungeon in its tooltip.",
-  page = function(ui) C.Guide_Draw(ui) end,
-  settings = function(_, col)
-    col:Head("Levels")
-    col:Note(C.Roster:MeOfficer() and "White: set by an officer. A change goes to the guild on its own." or "White: set by an officer. Only officers can change them.")
-    col:Rule("guideWindow", "Members near your level")
-    col:Rule("guideAhead", "Dungeons ahead")
-    col:Broadcast()
-  end,
-  events = { PLAYER_REGEN_DISABLED = redraw, PLAYER_REGEN_ENABLED = redraw, GROUP_ROSTER_UPDATE = redraw, QUEST_TURNED_IN = redraw, QUEST_ACCEPTED = redraw },
-})
+-- (the launch round's windows) the Guide is no page of its own any more: its band is the Quests tab's, its pick the
+-- Quests tab's Dungeon rows (G.Draw), its two thresholds Settings > Rules' "Dungeons and gear". Its logic stays here, as
+-- guild knowledge a module addon reads through the door below. A character that ran it keeps its old choice, unread
+C.API.Guide = {
+  Items = function(officer) return G.Items(officer) end,
+  Pick = function(cards, level, soon, st) return G.Pick(cards, level, soon, st) end,
+  CardRows = function(card, plan) return G.CardRows(card, plan) end,
+  Draw = function(ui, top) return G.Draw(ui, top) end,
+  Invite = function(mate) return G.Invite(mate) end,
+}

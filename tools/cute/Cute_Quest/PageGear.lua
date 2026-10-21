@@ -1,5 +1,6 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Gear: the engine's Gear page (Gear.lua) on a host frame, its text in Cute's skin. One setting.
+-- Gear: the quest window's Gear tab, the engine's Gear page (Gear.lua) on a host frame, its text in Cute's skin. Its one
+-- row is in Settings > Dungeons and gear (PageJournal.lua).
 local ADDON, QB = ...
 local Cute = Cute
 local E = QB.Engine
@@ -15,12 +16,5 @@ function G.Draw(ui, scroll)
   scroll:SetContentHeight(H + 8)
 end
 
-function G.Settings(_, col)
-  if not E then return QB.NeedSettings(col, "Gear") end
-  local s = E:Settings()
-  col:Head("Gear")
-  col:Check("Quests up to 2 levels ahead", s.finderAhead == true, true, function(on) s.finderAhead = on; if E.Gear and E.Gear.RefreshSoon then E.Gear.RefreshSoon() end end)
-end
-
-Cute:RegisterModule({ id = "gear", addon = ADDON, title = "Gear", order = 25,
-  notes = "What you wear and the best upgrade for each slot: a quest reward in reach or a dungeon drop.", page = G.Draw, settings = G.Settings })
+Cute:RegisterModule({ id = "gear", addon = ADDON, title = "Gear", order = 25, window = "quests",
+  notes = "What you wear and the best upgrade for each slot: a quest reward in reach or a dungeon drop.", page = G.Draw })

@@ -2,10 +2,13 @@
 -- Modules: the window's pages and what joins them. Cute's core is the shell (the window and its tabs, the flat skin,
 -- Settings, the guild channel, the roster, the policy, the stats registry and the knowledge model); every page
 -- registers itself here, and the tabs and Settings' sections are drawn from this list:
---   C:RegisterModule({ id, title, order, page, settings, stats, events, officer, builtin, default })
---   page      function(ui, scroll): draws into the shared scroll area and the band with the window's own pieces
+--   C:RegisterModule({ id, title, order, page, settings, stats, events, officer, builtin, default, window, group, base })
+--   page      function(ui, scroll): draws into its window's scroll area and band with the window's own pieces
 --             (UI.Button, UI.Check, UI.Text, UI.FitText, the pools and virtual lists, ui:SetBand), so it looks like
 --             one addon
+--   window    the window its page is a tab of: "guild" (J, the default), "quests" (L), "map" (M)
+--   group     its Settings section's group: "cute", "guild" or "quests" (by its window where not said)
+--   base      always on (the quests window and its Route tab: no box, no choice)
 --   settings  function(ui, column): its own section in Settings, drawn with the column Settings.lua hands it
 --   stats     function(D): registry entries, D as Stats.lua's S.def; defined the first time the module is on in a
 --             session and kept until the next login
@@ -21,14 +24,18 @@
 --             its files call Cute:RegisterModule as they load. Switched off, its tab, section and events go at once
 --             and it is not loaded at the next login (Cute loads only what is on, and the game's AddOns list has it
 --             off for this character)
--- The choice is per character (CuteDB.chars[me].modules, by module id or, for an external one, its folder). Every
--- character starts with the dashboard alone, one that ran 0.5.x, where the Guide was a fixed tab, too.
+-- The choice is per character (CuteDB.chars[me].modules, by module id or, for an external one, its folder). A module
+-- addon whose toc says "## X-Cute-Base: 1" is the base, always on and loaded at every login (Cute_Quest: the quests
+-- window with its Route tab). A change in Settings > Modules is staged (M.Stage) and applies on reload (M.Commit): the
+-- engine's hooks on the world map, tooltips, minimap and taxi cannot be taken out by an addon, so a module switched in
+-- play left a dead engine running; the reload path is the login's.
 local _, C = ...
 local M = { list = {}, byId = {}, found = {}, failed = {}, pending = {} }
 C.Modules = M
 
 -- Settings' own sections and the Settings tab: no module takes these ids
-local RESERVED = { settings = true, general = true, vis = true, rules = true, modules = true }
+local RESERVED = { settings = true, general = true, vis = true, rules = true, modules = true, keys = true, columns = true }
+local WINDOWS = { guild = true, quests = true, map = true }
 
 local function note(msg) C.Err.Note(msg, "modules") end
 local function sortList()
@@ -61,6 +68,7 @@ function C:RegisterModule(def)
   end
   if def.events ~= nil and type(def.events) ~= "table" then note("module " .. id .. " was not registered: events is no table"); return false end
   def.order = tonumber(def.order) or 100
+  if def.window ~= nil and not WINDOWS[def.window] then note("module " .. id .. ": no window " .. tostring(def.window) .. ", the guild's"); def.window = nil end
   if not (def.core or def.builtin) then
     -- an external module: the folder it came from, as it says or as Cute is loading it now
     def.addon = type(def.addon) == "string" and def.addon or M.loading
@@ -100,7 +108,9 @@ function Cute:RegisterModule(def)
   return C:RegisterModule(def)
 end
 function Cute.Open(page, section) C.UI:Open(page, section) end
-function Cute.Refresh() if C.UI and C.UI.frame and C.UI.frame:IsShown() then C.UI:Refresh() end end
+function Cute.Refresh() if C.UI and C.UI.RefreshAll then C.UI.RefreshAll() end end
+-- a Settings section of a module addon's own, without a module (Settings.lua ST.Add)
+function Cute.AddSection(def) return C.SettingsPage.Add(def) end
 function Cute.Print(msg) C.Print(msg) end
 function Cute.Page() return C.UI and C.UI.page or nil end
 function Cute.ModuleOn(id) local def = M.byId[id]; return def ~= nil and def.active == true end
@@ -111,20 +121,28 @@ function Cute.Host(ui, key) return ui:Host(key) end
 ----------------------------------------------------------------------------
 -- on and off
 ----------------------------------------------------------------------------
--- whether a module (or an external module's folder, by key) is on for this character
+-- whether a module (or an external module's folder, by key) is on for this character; the base always is
 function M.OnKey(key, default)
+  if M.Base(key) then return true end
   local v = choices()[key]
   if v == nil then return default == true end
   return v == true
 end
 function M.On(def)
-  if def.core then return true end
+  if def.core or def.base then return true end
   return M.OnKey(def.key, def.default)
+end
+-- the base: a module that says so, or the folder of a module addon whose toc says "## X-Cute-Base: 1"
+function M.Base(key)
+  for _, a in ipairs(M.found) do if a.base and a.name == key then return true end end
+  for _, def in ipairs(M.list) do if def.key == key and def.base then return true end end
+  return false
 end
 -- the folder of a key ("Cute_Quest:route" is Cute_Quest's)
 local function folderOf(key) return key:match("^(.-):") or key end
 -- is any of an addon's modules wanted by this character: the primary's key (the folder) or one keyed under it
 function M.AddonWanted(name)
+  if M.Base(name) then return true end
   for key, v in pairs(choices()) do if v == true and folderOf(key) == name then return true end end
   return false
 end
@@ -190,9 +208,12 @@ function M.Page(id, officer)
   if def and def.page and def.active and (not def.officer or officer) then return def end
   return nil
 end
-function M.Pages(officer)
+-- the pages that show, in a window (window nil: every one)
+function M.Pages(officer, window)
   local out = {}
-  for _, def in ipairs(M.list) do if M.Page(def.id, officer) then out[#out + 1] = def end end
+  for _, def in ipairs(M.list) do
+    if M.Page(def.id, officer) and (window == nil or (def.window or "guild") == window) then out[#out + 1] = def end
+  end
   return out
 end
 -- the modules with a Settings section for this viewer
@@ -240,7 +261,8 @@ function M.Scan()
       -- (its row's title before it registers: "## X-Cute-Title", its primary's, else the toc's title, the AddOns list's)
       local own = plainTitle(C.Get(A.GetAddOnMetadata, i, "X-Cute-Title"), nil)
       out[#out + 1] = { name = name, title = own or plainTitle(title, name), notes = plainTitle(notes, nil),
-        lod = type(A.IsAddOnLoadOnDemand) == "function" and C.Get(A.IsAddOnLoadOnDemand, i) == true }
+        lod = type(A.IsAddOnLoadOnDemand) == "function" and C.Get(A.IsAddOnLoadOnDemand, i) == true,
+        base = tonumber(C.Get(A.GetAddOnMetadata, i, "X-Cute-Base")) == 1 }
     end
   end
   table.sort(out, function(a, b) return a.title:lower() < b.title:lower() end)
@@ -317,6 +339,49 @@ function M.Set(key, on)
   if C.UI and C.UI.frame and C.UI.frame:IsShown() then C.Safe(function() C.UI:Draw() end, "modules: set " .. key)() end
 end
 
+----------------------------------------------------------------------------
+-- the reload rule: a box in Settings > Modules stages its change (the box shows it at once), and the change applies on
+-- reload, where the login's one path loads what is on and leaves out what is off (Reload now, Undo; closing Settings
+-- asks, Setup.lua). Keys, layout and every other setting apply at once
+----------------------------------------------------------------------------
+M.staged = {}
+function M.InCombat() return inCombat() end
+-- a box's value with its change staged
+function M.StagedOn(key, on)
+  local v = M.staged[key]
+  if v == nil then return on end
+  return v
+end
+function M.Stage(key, on)
+  on = on and true or false
+  local def
+  for _, d in ipairs(M.list) do if d.key == key then def = d end end
+  if on == M.OnKey(key, def and def.default) then M.staged[key] = nil else M.staged[key] = on end
+end
+function M.Staged() return next(M.staged) ~= nil end
+-- a choice written for the next login, nothing applied now (the setup card's Start and M.Commit, each before a
+-- reload): this character's choice, and a module addon on or off in the game's AddOns list as M.Set leaves it
+function M.Choose(key, on)
+  on = on and true or false
+  choices()[key] = on
+  local name = folderOf(key)
+  if M.Found(name) then
+    if on then enable(name, true) elseif not M.AddonWanted(name) then enable(name, false) end
+  end
+end
+function M.Undo() M.staged = {} end
+-- the staged changes written (this character's choices, and a module addon on or off in the game's AddOns list as
+-- M.Set leaves it) and the interface reloaded (C_UI.Reload, documented with no restriction: UIManagerDocumentation.lua
+-- :65), where the login applies them. Never in a fight: Settings greys the button and its popup waits
+function M.Commit()
+  if not M.Staged() or inCombat() then return false end
+  for key, on in pairs(M.staged) do M.Choose(key, on) end
+  M.staged = {}
+  local reload = (type(C_UI) == "table" and C_UI.Reload) or ReloadUI
+  if type(reload) == "function" then reload() end
+  return true
+end
+
 -- what Settings > Modules lists: the built-in modules and the module addons the client has, each { key, title, on,
 -- status, notes }; an external one is named by its toc (X-Cute-Title, else the title) until it registers
 function M.Available(officer)
@@ -337,6 +402,7 @@ function M.Available(officer)
     end
   end
   for _, e in ipairs(out) do
+    e.base = M.Base(e.key)
     e.on = M.OnKey(e.key, e.def and e.def.default)
     -- a few words where something is not as the box says: waiting for combat to end, refused by the client, loaded
     -- but never registered, or switched off with stats that stay until the next login

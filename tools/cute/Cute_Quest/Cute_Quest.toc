@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: |cffe8b24aCute|r Quest
-## Notes: QuestBank's guiding as Cute modules: the step now in the Guide, and Quests, Route, Map, Journal, Gear and Camp, each a switch in Settings, Modules. Loads only while one is on.
+## Notes: Cute's quest window (L): the step now, the route, dungeons and gear, with QuestBank's guiding.
 ## Author: Mikal
 ## Version: 0.7.1
 ## X-License: GPL-3.0-or-later
@@ -9,6 +9,7 @@
 ## LoadOnDemand: 1
 ## X-Cute-Module: 1
 ## X-Cute-Title: Quests
+## X-Cute-Base: 1
 ## SavedVariables: CuteQuestDB
 
 Shim.lua
@@ -47,6 +48,7 @@ StepFrame.lua
 Tips.lua
 Bridge.lua
 Band.lua
+Reader.lua
 PageQuests.lua
 PageRoute.lua
 PageMap.lua

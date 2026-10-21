@@ -35,5 +35,5 @@ function Cp.Toggle(on)
 end
 QB.Toggles.camp = Cp.Toggle
 
-Cute:RegisterModule({ id = "camp", addon = ADDON, title = "Camp", order = 26,
+Cute:RegisterModule({ id = "camp", addon = ADDON, title = "Camp", order = 26, group = "quests",
   notes = "The camp bar, the missing-buffs banner and the interact light.", settings = Cp.Settings, onToggle = Cp.Toggle })

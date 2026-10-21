@@ -120,9 +120,10 @@ function QB.Follow(id, keys, on)
 end
 
 -- QuestBank's tab numbers (its UI.lua: 1 Quest Log, 2 Plan, 3 Route, 4 Party, 5 Settings, 6 Now, 7 Journal, 8 Map)
--- as Cute's pages; a page whose module is off (Route, the Guide, Journal) is the Quests page (Cute's own way with an
--- off page is Race: a travel, train, grind or corpse step clicked in the step frame opened the guild's table)
-local PAGE = { [1] = "quests", [2] = "quests", [3] = "route", [4] = "guide", [5] = "settings", [6] = "quests", [7] = "journal", [8] = "quests" }
+-- as the quest window's tabs (the party is the Quests tab's band); a tab whose module is off (Dungeons) is the Quests
+-- tab (Cute's own way with an off page is Race: a travel, train, grind or corpse step clicked in the step frame opened
+-- the guild's table)
+local PAGE = { [1] = "quests", [2] = "quests", [3] = "route", [4] = "quests", [5] = "settings", [6] = "quests", [7] = "journal", [8] = "quests" }
 local function pageOf(tab)
   local page = PAGE[tab] or "quests"
   if page ~= "quests" and page ~= "settings" and not Cute.ModuleOn(page) then page = "quests" end
@@ -130,7 +131,7 @@ local function pageOf(tab)
 end
 function UI:Open(tab) Cute.Open(pageOf(tab), tab == 5 and "quests" or nil) end
 -- the page a click opens, by name, for the engine's words ("Click: the Quests page.": Arrow.lua)
-local TITLE = { quests = "Quests", route = "Route", guide = "Guide", settings = "Settings", journal = "Journal" }
+local TITLE = { quests = "Quests", route = "Route", settings = "Settings", journal = "Dungeons", gear = "Gear" }
 function UI.PageName(tab) return TITLE[pageOf(tab)] or "Quests" end
 function UI:ShowTab(tab) self:Open(tab) end
 function UI:TogglePage(tab) self:Open(tab) end
@@ -189,15 +190,58 @@ UI.frame, UI.tab, UI.lastTab, UI.postFrame, UI.scrollToQuest = nil, nil, nil, ni
 -- no sharing with the whole guild (Cute has no row for it): the engine's 1S (level, XP, class, GUID), 1Q (every quest
 -- and its progress) and 1R went to GUILD around the officers' Who sees what, and with it off the engine takes nothing
 -- from GUILD either (Sync.lua S:Receive); Cute's own channel carries what the guild sees. Party sync stays
+-- The second pass (cuteDefaults 2, once for a 0.7 save too): the quest icons on the game's map at the game's own size
+-- (QuestBank 5.4.4 halved them at the owner's word; half-size art beside the game's full-size pins looked soft), low-level
+-- quests as the game's own option has them (not C_Minimap.IsFilteredOut(Enum.MinimapTrackingFilter.TrivialQuests), as
+-- Camelot/InterfaceOverrides.lua:24 reads it; Cute never writes that option), and the minimap's flags given back from
+-- the Map module's keeping: they are the Route tab's rows now (QB.MAP_FLAGS, the Map module's, is the world map's two)
+QB.MAP_FLAGS = { "mapIcons", "pins" }
+local MINI_FLAGS = { "minimapPins", "minimapLines", "minimapGivers", "mmExtended" }
 local function firstRun()
   local s = E:Settings()
   s.cuteGuildOff = true
   if type(s.share) == "table" then s.share.guild = false end
-  if s.cuteDefaults then return end
-  s.cuteDefaults = true
-  s.mapPage, s.post.auto, s.updates, s.clockLevelMsg, s.welcome = false, false, false, false, nil
-  s.minimap.hide = true
+  if not s.cuteDefaults then
+    s.cuteDefaults = true
+    s.mapPage, s.post.auto, s.updates, s.clockLevelMsg, s.welcome = false, false, false, false, nil
+    s.minimap.hide = true
+  end
+  if s.cuteDefaults == true then
+    s.cuteDefaults = 2
+    s.mapIconPct = 100
+    local MF = type(Enum) == "table" and Enum.MinimapTrackingFilter or nil
+    if type(C_Minimap) == "table" and type(C_Minimap.IsFilteredOut) == "function" and MF and MF.TrivialQuests then
+      local ok, out = pcall(C_Minimap.IsFilteredOut, MF.TrivialQuests)
+      if ok and type(out) == "boolean" then s.mapLowLevel = not out end
+    end
+    local kept = type(s.cuteOff) == "table" and s.cuteOff.map or nil
+    if type(kept) == "table" then
+      for _, key in ipairs(MINI_FLAGS) do
+        if kept[key] ~= nil then s[key] = kept[key]; kept[key] = nil end
+      end
+    end
+  end
 end
+
+-- the setup card's door (Cute/Setup.lua): the engine's settings this copy keeps (never QuestBank's), whether this account
+-- saved any before this load, and the card's Start written into them. Camp on: the switch's keeping cleared, so the
+-- flags the card set stay as set when the module comes on at the reload (Bridge's QB.Follow)
+local savedBefore = false -- (read at ADDON_LOADED, before the engine fills its defaults in)
+Cute.QuestSetup = {
+  Settings = function() return E:Settings() end,
+  Saved = function() return savedBefore end,
+  Apply = function(p)
+    local s = E:Settings()
+    if p.step ~= nil then s.guide.frame = p.step and true or false; s.arrow = p.step and true or false end
+    if p.campOn then
+      if type(s.cuteOff) == "table" then s.cuteOff.camp = nil end
+      if p.camp ~= nil then s.campBar = p.camp and true or false; s.remind.buffs = p.camp and true or false end
+      if p.light ~= nil then s.glow.on = p.light and true or false end
+    end
+    if p.accept then s.autoAccept = p.accept end
+    if p.handin ~= nil then s.autoTurnIn = p.handin and true or false end
+  end,
+}
 
 -- PLAYER_ENTERING_WORLD for the engine's frames that wait on it (the light's settings, the minimap's size and tracking,
 -- the timers' session, the travel guide's re-plan, the arrow's dungeon check, ...): Cute loads this addon from its own
@@ -234,6 +278,7 @@ f:RegisterEvent("ADDON_LOADED")
 f:SetScript("OnEvent", E.Safe(function(self, _, name)
   if name ~= ADDON then return end
   self:UnregisterEvent("ADDON_LOADED")
+  savedBefore = type(CuteQuestDB) == "table" and type(CuteQuestDB.settings) == "table" and next(CuteQuestDB.settings) ~= nil
   firstRun()
   -- the modules' switches, now on the saved table (before the engine's login: its files read the flags as they start)
   for id, fn in pairs(QB.Toggles) do fn(Cute.ModuleOn(id)) end

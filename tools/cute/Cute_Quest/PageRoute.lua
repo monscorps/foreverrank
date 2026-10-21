@@ -1,6 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Route: the hand-in stops in order with the minutes to each, the first marked (the one target the arrow and the
--- minimap follow); the band holds the route's sum and the run button. Nothing here is clicked but the button.
+-- Route: the quest window's second tab, always there (the base). The hand-in stops in order with the minutes to each,
+-- the first marked (the one target the arrow and the minimap follow); the band holds the route's sum and the run
+-- button. Its section has the route's own rows and the minimap's (they belong to the base, not to the Map module: a
+-- player who keeps the game's map keeps them).
 local ADDON, QB = ...
 local Cute = Cute
 local E = QB.Engine
@@ -9,6 +11,8 @@ local function redraw() Cute.Refresh() end
 
 function R.Draw(ui, scroll)
   if not E then return QB.NeedPage(ui, scroll, "route") end
+  QB.Reader.Left(ui)
+  if QB.Reader.Open(ui) then return QB.Reader.Draw(ui, scroll) end
   local K, ROW = ui.COLORS, ui.ROW
   local w = scroll:Width()
   local r = (E.Target and E.Target.Route()) or E.routeNow or { legs = {} }
@@ -69,10 +73,18 @@ function R.Settings(_, col)
   col:Choice("Follow", { "The plan", "Ready now" }, s.routeQuest == "now" and "Ready now" or "The plan", function(v) s.routeQuest = v == "Ready now" and "now" or nil; E:MarkDirty() end)
   col:Check("Show the way step by step on the arrow", s.arrowTravel ~= false, true, function(on) s.arrowTravel = on; if E.Arrow and E.Arrow.Invalidate then E.Arrow.Invalidate() end end)
   col:Check("The hearthstone may be a step", s.arrowHearth ~= false, true, function(on) s.arrowHearth = on; if E.Arrow and E.Arrow.Invalidate then E.Arrow.Invalidate() end end)
+  -- the minimap's (Minimap.lua, MinimapView.lua): the route, one stroke unless the whole route is asked (6.1.1), the ! of
+  -- the quests you can take, the far view
+  local function mini() if E.Mini and E.Mini.Invalidate then E.Mini.Invalidate() end end
+  col:Check("Route on the minimap", s.minimapPins ~= false and s.minimapLines ~= false, true, function(on) s.minimapPins, s.minimapLines = on, on; mini() end)
+  col:Check("Show the whole route", s.wholeRoute == true, true, function(on) s.wholeRoute = on; mini() end)
+  col:Note("Off, one stroke: from you to where the arrow leads.")
+  col:Check("A ! on the minimap for quests you can take", s.minimapGivers == true, true, function(on) s.minimapGivers = on; mini() end)
+  col:Check("Minimap far view", s.mmExtended == true, true, function(on) s.mmExtended = on; mini() end)
 end
 
 Cute:RegisterModule({
-  id = "route", addon = ADDON, title = "Route", order = 22,
+  id = "route", addon = ADDON, title = "Route", order = 22, window = "quests", base = true,
   notes = "The hand-in stops in order with minutes; the first is where the arrow points.",
   page = R.Draw, settings = R.Settings,
   events = { QUEST_LOG_UPDATE = redraw, QUEST_TURNED_IN = redraw, ZONE_CHANGED_NEW_AREA = redraw },

@@ -1,6 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- Journal: the engine's Dungeon Journal (DungeonMap.lua) on a host frame inside Cute's scroll area, its cover and floor
--- art as they are. Its four kinds are the band's chips: on, white; off, muted; a click flips one. No section
+-- Dungeons (the module keeps its 0.7 id, journal): the quest window's Dungeons tab, the engine's Dungeon Journal
+-- (DungeonMap.lua) on a host frame inside the window's scroll area, its cover and floor art as they are. Its four kinds
+-- are the band's chips (on, white; off, muted; a click flips one) and the rows of Settings > Dungeons and gear, which
+-- holds the Gear tab's row too
 local ADDON, QB = ...
 local Cute = Cute
 local E = QB.Engine
@@ -31,5 +33,20 @@ function J.Draw(ui, scroll)
   scroll:SetContentHeight(H + 8)
 end
 
-Cute:RegisterModule({ id = "journal", addon = ADDON, title = "Journal", order = 24,
+Cute:RegisterModule({ id = "journal", addon = ADDON, title = "Dungeons", order = 24, window = "quests",
   notes = "Every dungeon: its bosses, their recorded loot, its quests, its floors.", page = J.Draw })
+
+-- Settings > Dungeons and gear, while either tab is on: the journal's kinds in one wrapping row, the gear finder's reach
+if E then
+  Cute.AddSection({ id = "dungeons", title = "Dungeons and gear", group = "quests", order = 24,
+    shown = function() return Cute.ModuleOn("journal") or Cute.ModuleOn("gear") end,
+    draw = function(_, col)
+      local s = E:Settings()
+      col:Head("Dungeons and gear")
+      local names = {}
+      for _, k in ipairs(KINDS) do names[#names + 1] = k[2] end
+      col:Checks("Journal shows", names, function(i) return s.djShow[KINDS[i][1]] == true end,
+        function(i, on) s.djShow[KINDS[i][1]] = on; if E.DMap then E.DMap.Refresh() end; Cute.Refresh() end)
+      col:Check("Gear: quests up to 2 levels ahead", s.finderAhead == true, true, function(on) s.finderAhead = on; if E.Gear and E.Gear.RefreshSoon then E.Gear.RefreshSoon() end end)
+    end })
+end

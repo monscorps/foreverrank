@@ -1,10 +1,14 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- The window: one frame with its pages and Settings, drawn flat and dark the way ElvUI and Shadowed Unit Frames
--- draw theirs: one-pixel black borders, near-black panels, white and grey text in the client's narrow font, class
--- colours on names and nothing else coloured unless it means something (green ready, red low). Numbers sit on the
--- right of their columns, text on the left; a two-pixel class-coloured bar marks every member's row, white for you.
--- The tabs are the modules that are on (Modules.lua), in their order, then Settings; the dashboard's pages, drawn
--- here, are the core's and always on:
+-- The windows: Guild (J, CuteFrame, this file's own pages), Quests (L, CuteQuestFrame, the pages of a module addon that
+-- says window = "quests") and Settings (CuteSettingsFrame, Settings.lua), all made by one builder (UI.BuildWindow): a
+-- 30 px header (the round logo, the title, the button to the game's own window, the cog, the close; it drags the window),
+-- a row of tabs under it where the window has pages, the content panel with its band, scroll area and footer, and the
+-- game's size grabber in the bottom-right corner. Drawn flat and dark the way ElvUI and Shadowed Unit Frames draw
+-- theirs: one-pixel black borders, near-black panels, white and grey text in the client's narrow font, class colours on
+-- names and nothing else coloured unless it means something (green ready, red low). Numbers sit on the right of their
+-- columns, text on the left; a two-pixel class-coloured bar marks every member's row, white for you.
+-- A window's tabs are the modules that are on and say that window (Modules.lua), in their order; the guild's pages,
+-- drawn here, are the core's and always on:
 --   Race           every member as a row: level, XP, zone, pace, the leveling stats
 --   Prog           readiness, item level, empty slots, the enchants you lack, consumables, what
 --                  you have met in play, the gaps only you see
@@ -14,23 +18,24 @@
 --                  every member (an empty state where there is neither)
 --   Officers       summaries, what the guild has learned, the officers' stats, the controls (officer ranks only)
 --   Me             your whole record, with what members see
--- A module's page (the Guide, Guide.lua; a module addon's) draws with the same pieces into the same scroll area.
+-- A module's page draws with the same pieces into its window's scroll area. The guild window is this table itself
+-- (C.UI): the other windows are tables that read its methods and keep their own state (UI.Window).
 -- Columns and cards come from the registry (Stats.lua); the policy (Policy.lua) decides which cells a member sees.
 -- Built on first open; nothing updates while it is hidden. A guild of a few hundred stays light: the tables and the
 -- Statistics ranking draw only the rows in view (a virtual list, filled as you scroll, the sorted list kept between
 -- scrolls), a redraw comes at most once a second and only for a value the open page shows, and a label's cut is
 -- measured once per text and width.
 local _, C = ...
-local UI = { page = "race", sort = {}, gameOpen = {} }
+local UI = { page = "race", sort = {}, gameOpen = {}, key = "guild", home = "race" }
 C.UI = UI
 
 local W, H = 1040, 640
 local MIN_W, MIN_H = 760, 420
-local HEAD = 56          -- the header strip
+local HEAD = 30          -- the header: logo, title, the game's window, cog, close
 local TABS = 26          -- the tab row
 local ROW = 20           -- a member row (compact: 17)
 local ROW_COMPACT = 17
-local FOOT = 18          -- the footer line inside the content panel
+local FOOT = 24          -- the footer inside the content panel, under its hairline
 local NAME_W = 150
 local WHITE = { 0.96, 0.96, 0.96 }
 local INK = { 0.86, 0.86, 0.86 }
@@ -45,7 +50,6 @@ local PANEL2 = { 0.11, 0.11, 0.11 }
 local LINE = { 0.2, 0.2, 0.2 }
 local FLAT = "Interface\\Buttons\\WHITE8x8"
 local LOGO = "Interface\\AddOns\\Cute\\art\\logo.png"
-local LOGO_WIDE = "Interface\\AddOns\\Cute\\art\\logo_wide.png"
 local BD = BackdropTemplateMixin and "BackdropTemplate" or nil
 
 -- the client's narrow sans, taken from a font object that uses it (NumberFontNormal is ARIALN on Blizzard's clients),
@@ -311,18 +315,19 @@ local function virtual(parent, make)
   return v
 end
 
--- ScrollFrame with a child and a thin flat bar, above the footer line
-local function scrollArea(parent)
+-- ScrollFrame with a child and a thin flat bar, above the footer (bottom: the room the footer takes, 0 for a window
+-- without one); win is the window it scrolls, whose virtual lists a scroll fills
+local function scrollArea(parent, win, bottom)
   local sf = CreateFrame("ScrollFrame", nil, parent)
   sf:SetPoint("TOPLEFT", 8, -8)
-  sf:SetPoint("BOTTOMRIGHT", -18, FOOT + 6)
+  sf:SetPoint("BOTTOMRIGHT", -18, bottom + 6)
   local child = CreateFrame("Frame", nil, sf)
   child:SetSize(100, 10)
   sf:SetScrollChild(child)
   local bar = CreateFrame("Slider", nil, parent)
   bar:SetOrientation("VERTICAL")
   bar:SetPoint("TOPRIGHT", -7, -8)
-  bar:SetPoint("BOTTOMRIGHT", -7, FOOT + 6)
+  bar:SetPoint("BOTTOMRIGHT", -7, bottom + 6)
   bar:SetWidth(6)
   local track = flat(bar, "BACKGROUND", PANEL2, 1)
   track:SetAllPoints()
@@ -332,19 +337,20 @@ local function scrollArea(parent)
   bar:SetMinMaxValues(0, 0)
   bar:SetValueStep(1)
   bar:SetValue(0)
-  -- a scroll draws the rows that come into view and nothing else (UI:OnScroll)
-  bar:SetScript("OnValueChanged", function(_, v) sf:SetVerticalScroll(v); UI:OnScroll() end)
+  -- a scroll draws the rows that come into view and nothing else (UI:OnScroll); an error in a page's fill is recorded,
+  -- never raised every scroll tick
+  bar:SetScript("OnValueChanged", C.Safe(function(_, v) sf:SetVerticalScroll(v); win:OnScroll() end, "scroll"))
   sf:EnableMouseWheel(true)
-  sf:SetScript("OnMouseWheel", function(_, delta)
+  sf:SetScript("OnMouseWheel", C.Safe(function(_, delta)
     local lo, hi = bar:GetMinMaxValues()
     bar:SetValue(math.max(lo, math.min(hi, bar:GetValue() - delta * 44)))
-  end)
+  end, "scroll: wheel"))
   sf:SetScript("OnSizeChanged", function(_, w) if w and w > 0 then child:SetWidth(w) end end)
   sf.child, sf.bar = child, bar
   -- the height in view
   function sf:View()
     local view = self:GetHeight() or 0
-    if view < 50 then view = (UI.frame:GetHeight() or H) - HEAD - TABS - FOOT - 32 end
+    if view < 50 then view = (win.frame:GetHeight() or H) - HEAD - (win.tabRow and (TABS + 4) or 0) - bottom - 32 end
     return view
   end
   function sf:SetContentHeight(h)
@@ -357,11 +363,12 @@ local function scrollArea(parent)
   end
   function sf:Width()
     local w = self:GetWidth() or 0
-    if w < 100 then w = (UI.frame:GetWidth() or W) - 2 - 8 - 18 end
+    if w < 100 then w = (win.frame:GetWidth() or W) - 2 - 8 - 18 - (win.insetX or 0) end
     return w
   end
   return sf
 end
+UI.ScrollArea = scrollArea
 
 ----------------------------------------------------------------------------
 -- values: how a stat shows in a cell, and in a tooltip
@@ -524,11 +531,44 @@ local function columnsFor(page, room)
 end
 
 ----------------------------------------------------------------------------
--- the window
+-- the windows: one builder
 ----------------------------------------------------------------------------
--- the tabs: one per module whose page shows (Modules.lua), then Settings, the shell's own. A module's tab is as wide as
--- it says, or fits its title
-local SETTINGS_TAB = { id = "settings", title = "Settings", tab = 80 }
+-- the windows Cute has, by key: their frame's global name, title, default and smallest size, whether they have tabs
+-- (pages of modules that say window = key) and a footer, the page they open on, and what the cog opens in Settings.
+-- J and L are 1040 x 640 down to 760 x 420; Settings 800 x 560 down to 760 x 420
+local SPEC = {
+  guild = { name = "CuteFrame", title = "Guild", w = W, h = H, minW = MIN_W, minH = MIN_H, tabs = true, foot = true, home = "race", cog = "general" },
+  quests = { name = "CuteQuestFrame", title = "Quests", w = W, h = H, minW = MIN_W, minH = MIN_H, tabs = true, foot = false, home = "quests", cog = "quests" },
+  settings = { name = "CuteSettingsFrame", title = "Settings", w = 800, h = 560, minW = 760, minH = 420, tabs = false, foot = false, home = "general" },
+}
+UI.SPEC = SPEC
+UI.windows = { guild = UI }
+-- a window by key, made (not built) the first time it is asked for: the guild window is UI itself, the others read its
+-- methods and the few constants a page reads (ui.COLORS, ui.ROW, ui.FONT) and keep their own state: nothing of the
+-- guild window's own (its frame, page, scroll and lists) shows through
+local STATICS = { COLORS = true, ROW = true, FONT = true, SHORT = true, SPEC = true, windows = true }
+local winMeta = { __index = function(_, k)
+  local v = UI[k]
+  if type(v) == "function" or STATICS[k] then return v end
+  return nil
+end }
+function UI.Window(key)
+  local win = UI.windows[key]
+  if win then return win end
+  local spec = SPEC[key]
+  if not spec then return nil end
+  win = setmetatable({ key = key, home = spec.home, page = spec.home, lists = {}, hosts = {} }, winMeta)
+  UI.windows[key] = win
+  return win
+end
+-- the window a page draws in: its module's (window = "quests"), the guild's otherwise
+function UI.WindowOf(page)
+  local def = C.Modules.byId[page]
+  return UI.Window(def and def.window or "guild")
+end
+
+-- the tabs: one per module whose page shows in this window (Modules.lua). A module's tab is as wide as it says, or fits
+-- its title
 function UI:Tab(m)
   local b = self.tabs[m.id]
   if b then return b end
@@ -545,14 +585,13 @@ function UI:Tab(m)
   b.under:SetPoint("BOTTOMRIGHT", -1, 1)
   b.under:SetHeight(2)
   b.under:Hide()
-  b:SetScript("OnClick", function() UI:Open(m.id) end)
+  b:SetScript("OnClick", C.Safe(function() UI:Open(m.id) end, "tab"))
   self.tabs[m.id] = b
   return b
 end
 function UI:DrawTabs(page, officer)
   local x = 0
-  local list = C.Modules.Pages(officer)
-  list[#list + 1] = SETTINGS_TAB
+  local list = C.Modules.Pages(officer, self.key)
   for _, b in pairs(self.tabs) do b.keep = false end
   -- more tabs than the row holds (every module on, the window narrow): each narrower by the same share, its title cut
   -- after a word where it must be, so the row never runs past the window
@@ -575,24 +614,41 @@ function UI:DrawTabs(page, officer)
   for _, b in pairs(self.tabs) do if not b.keep and b:IsShown() then b:Hide() end end
 end
 
-function UI:Build()
-  if self.frame then return end
-  self.sort = C.Settings().sort -- header clicks are remembered across sessions
-  local f = CreateFrame("Frame", "CuteFrame", UIParent, BD)
-  self.frame = f
-  f:SetSize(W, H)
+-- an atlas where the client has it, else the file (QuestBank's QB.Art pattern), so a missing atlas still draws
+local function art(t, atlas, file)
+  local info = atlas and type(C_Texture) == "table" and type(C_Texture.GetAtlasInfo) == "function" and C.Get(C_Texture.GetAtlasInfo, atlas)
+  if type(info) == "table" and t.SetAtlas then t:SetAtlas(atlas) else t:SetTexture(file) end
+end
+UI.Art = art
+-- the header's small square buttons: the cog and the close, 20 px, the game's art in a flat box
+local function headButton(parent, w)
+  local b = CreateFrame("Button", nil, parent, BD)
+  b:SetSize(w or 20, 20)
+  skin(b, PANEL2)
+  b:SetHighlightTexture(FLAT, "ADD")
+  b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.06)
+  return b
+end
+
+-- the builder: the frame, its header, tabs, content panel (band, scroll area, pools, footer) and the size grabber
+function UI.BuildWindow(win, key)
+  if win.frame then return end
+  local spec = SPEC[key]
+  win.key, win.spec = key, spec
+  win.home = win.home or spec.home
+  local f = CreateFrame("Frame", spec.name, UIParent, BD)
+  win.frame = f
+  f:SetSize(spec.w, spec.h)
   f:SetPoint("CENTER")
   f:SetFrameStrata("HIGH")
   f:SetToplevel(true)
   f:SetMovable(true)
   f:SetClampedToScreen(true)
   f:EnableMouse(true)
-  f:RegisterForDrag("LeftButton")
-  f:SetScript("OnDragStart", function(s) s:StartMoving() end)
-  f:SetScript("OnDragStop", function(s) s:StopMovingOrSizing(); UI:SavePos() end)
   if f.SetResizable then f:SetResizable(true) end
-  if f.SetResizeBounds then f:SetResizeBounds(MIN_W, MIN_H) end
-  skin(f, BG, 0.94)
+  if f.SetResizeBounds then f:SetResizeBounds(spec.minW, spec.minH) end
+  -- opaque: a frame under the window never shows through its edge
+  skin(f, BG, 1)
   -- the shadow the clean UIs draw: a soft dark edge just outside the border
   local shadow = CreateFrame("Frame", nil, f, BD)
   shadow:SetPoint("TOPLEFT", -4, 4)
@@ -603,93 +659,171 @@ function UI:Build()
     shadow:SetBackdropBorderColor(0, 0, 0, 0.7)
   end
   f:Hide()
-  tinsert(UISpecialFrames, "CuteFrame")
-  f:SetScript("OnShow", function() UI:Draw() end)
+  -- (a plain frame, never a UI panel: it opens and closes in a fight; Esc closes it)
+  tinsert(UISpecialFrames, spec.name)
+  f:SetScript("OnShow", C.Safe(function() win:Draw() end, "window: show"))
+  f:SetScript("OnHide", C.Safe(function() if win.OnClose then win:OnClose() end end, "window: hide"))
   -- a resize redraws once the grip has rested for a tenth of a second, not on every pixel
   f:SetScript("OnSizeChanged", function()
-    if UI.resizing then return end
-    UI.resizing = true
-    C_Timer.After(0.1, C.Safe(function() UI.resizing = false; if UI.frame:IsShown() then UI:Draw() end end, "resize"))
+    if win.resizing then return end
+    win.resizing = true
+    C_Timer.After(0.1, C.Safe(function() win.resizing = false; if win.frame:IsShown() then win:Draw() end end, "resize"))
   end)
 
-  -- header: the logo, the status line, the close X
+  -- the header, 30 px: it drags the window (always: a window has no lock). The round logo and the title on the left;
+  -- the cog and the close on the right, and left of them the button to the game's own window where it has one
   local head = CreateFrame("Frame", nil, f)
   head:SetPoint("TOPLEFT", 1, -1)
   head:SetPoint("TOPRIGHT", -1, -1)
   head:SetHeight(HEAD)
-  self.head = head
-  local logo = tex(head, "ARTWORK", LOGO_WIDE, 104, 52)
-  logo:SetPoint("LEFT", 8, 0)
+  head:EnableMouse(true)
+  head:RegisterForDrag("LeftButton")
+  head:SetScript("OnDragStart", function() f:StartMoving() end)
+  head:SetScript("OnDragStop", C.Safe(function() f:StopMovingOrSizing(); win:SavePos() end, "window: drag"))
+  win.head = head
+  local logo = tex(head, "ARTWORK", LOGO, 24, 24)
+  logo:SetPoint("LEFT", 5, 0)
+  if head.CreateMaskTexture and logo.AddMaskTexture then
+    local mask = head:CreateMaskTexture()
+    mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask:SetAllPoints(logo)
+    pcall(logo.AddMaskTexture, logo, mask)
+  end
+  win.title = text(head, 15, WHITE, "LEFT")
+  win.title:SetPoint("LEFT", 37, 0)
+  win.title:SetText(spec.title)
   local headLine = line(head)
   headLine:SetPoint("BOTTOMLEFT")
   headLine:SetPoint("BOTTOMRIGHT")
-  self.status = text(head, 11, DIM, "RIGHT", 420)
-  self.status:SetPoint("RIGHT", -40, 0)
-  local close = button(f, "x", 22, 22)
-  close:SetPoint("TOPRIGHT", -9, -9)
-  close:SetScript("OnClick", function() f:Hide() end)
+  -- the close: the game's minimise art, grey (UI-Panel-MinimizeButton-Up, 130832)
+  local close = headButton(f)
+  close:SetPoint("TOPRIGHT", -6, -6)
+  close.t = tex(close, "ARTWORK", "Interface\\Buttons\\UI-Panel-MinimizeButton-Up", 16, 16)
+  close.t:SetPoint("CENTER")
+  close.t:SetTexCoord(0.2, 0.8, 0.2, 0.8)
+  close.t:SetDesaturated(true)
+  close:SetScript("OnClick", C.Safe(function() f:Hide() end, "window: close"))
+  tooltip(close, function(tip) tip:AddLine("Close", 1, 1, 1) end)
+  win.close = close
+  local right = 6 + 20 + 4
+  if spec.cog then
+    -- the cog: Settings, at this window's first section (the questlog-icon-setting atlas, SharedUIPanelTemplates.xml:2316;
+    -- its file UI-OptionsButton, 851903)
+    local cog = headButton(f)
+    cog:SetPoint("TOPRIGHT", -right, -6)
+    cog.t = cog:CreateTexture(nil, "ARTWORK")
+    cog.t:SetSize(14, 14)
+    cog.t:SetPoint("CENTER")
+    art(cog.t, "questlog-icon-setting", "Interface\\Buttons\\UI-OptionsButton")
+    cog:SetScript("OnClick", C.Safe(function() UI.OpenSettings(spec.cog) end, "window: cog"))
+    tooltip(cog, function(tip) tip:AddLine("Settings", 1, 1, 1) end)
+    win.cog = cog
+    right = right + 24
+  end
+  -- (the game's window button: UI.lua's GameButton, the secure click on the game's micro button, sits here)
+  win.headRight = right
 
   -- tabs: flat, the open one white with a line under it; a hairline under the row
-  local tabs = CreateFrame("Frame", nil, f)
-  tabs:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 8, -4)
-  tabs:SetPoint("TOPRIGHT", head, "BOTTOMRIGHT", -8, -4)
-  tabs:SetHeight(TABS)
-  -- a tab for every module there is, shown or not (one that registers later gets its own as it first shows)
-  self.tabRow, self.tabs = tabs, {}
-  for _, m in ipairs(C.Modules.list) do if m.page then self:Tab(m) end end
-  self:Tab(SETTINGS_TAB)
-  local tabLine = line(f)
-  tabLine:SetPoint("TOPLEFT", tabs, "BOTTOMLEFT", 0, -1)
-  tabLine:SetPoint("TOPRIGHT", tabs, "BOTTOMRIGHT", 0, -1)
+  local top = head
+  if spec.tabs then
+    local tabs = CreateFrame("Frame", nil, f)
+    tabs:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 7, -3)
+    tabs:SetPoint("TOPRIGHT", head, "BOTTOMRIGHT", -7, -3)
+    tabs:SetHeight(TABS)
+    win.tabRow, win.tabs = tabs, {}
+    -- a tab for every module there is, shown or not (one that registers later gets its own as it first shows)
+    for _, m in ipairs(C.Modules.list) do if m.page and (m.window or "guild") == key then win:Tab(m) end end
+    local tabLine = line(f)
+    tabLine:SetPoint("TOPLEFT", tabs, "BOTTOMLEFT", 0, -1)
+    tabLine:SetPoint("TOPRIGHT", tabs, "BOTTOMRIGHT", 0, -1)
+    top = tabs
+  end
 
-  -- the content panel, with the footer along its bottom edge
+  -- the content panel, with the footer along its bottom edge under a hairline
   local content = CreateFrame("Frame", nil, f, BD)
-  content:SetPoint("TOPLEFT", tabs, "BOTTOMLEFT", 0, -4)
+  if spec.tabs then content:SetPoint("TOPLEFT", top, "BOTTOMLEFT", 0, -4) else content:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 7, -3) end
   content:SetPoint("BOTTOMRIGHT", -9, 9)
   skin(content, PANEL, 1)
-  self.content = content
-  self.scroll = scrollArea(content)
-  self.footer = text(content, 11, MUTE, "LEFT")
-  self.footer:SetPoint("BOTTOMLEFT", 10, 6)
-  self.footer:SetPoint("BOTTOMRIGHT", -40, 6)
-  self.footer:SetHeight(12)
+  win.content = content
+  local foot = spec.foot and FOOT or 0
+  win.foot = foot
+  win.scroll = scrollArea(content, win, foot)
+  if spec.foot then
+    local footLine = line(content)
+    footLine:SetPoint("BOTTOMLEFT", 1, FOOT)
+    footLine:SetPoint("BOTTOMRIGHT", -1, FOOT)
+    win.footer = text(content, 11, MUTE, "LEFT")
+    win.footer:SetPoint("BOTTOMLEFT", 10, 6)
+    win.footer:SetHeight(12)
+    -- the status on the right of the footer: who is online with Cute, and which Cute this is
+    win.status = text(content, 11, MUTE, "RIGHT")
+    win.status:SetPoint("BOTTOMRIGHT", -10, 6)
+    win.status:SetHeight(12)
+  end
+  local child = win.scroll.child
   -- the members' rows and the Statistics page's two columns are virtual lists: widgets for what is in view only
-  self.rows = virtual(self.scroll.child, function(parent) return UI:MakeRow(parent) end)
-  self.cards = pool(self.scroll.child, function(parent) return UI:MakeCard(parent) end)
-  self.labels = pool(self.scroll.child, function(parent) return text(parent, 12, INK) end)
-  self.buttons = pool(self.scroll.child, function(parent) return button(parent, "", 160) end)
-  self.checks = pool(self.scroll.child, function(parent) return check(parent) end)
-  self.catLines = virtual(self.scroll.child, function(parent) return UI:MakeLine(parent) end)
-  self.lines = virtual(self.scroll.child, function(parent) return UI:MakeLine(parent) end)
+  win.rows = virtual(child, function(parent) return UI:MakeRow(parent) end)
+  win.cards = pool(child, function(parent) return UI:MakeCard(parent) end)
+  win.labels = pool(child, function(parent) return text(parent, 12, INK) end)
+  win.buttons = pool(child, function(parent) return button(parent, "", 160) end)
+  win.checks = pool(child, function(parent) return check(parent) end)
+  win.lines = virtual(child, function(parent) return UI:MakeLine(parent) end)
+  -- the Statistics page's categories: a column of their own left of the list, with their own scroll bar, so a long
+  -- ranking never scrolls them away (shown by that page alone)
+  local catBox = CreateFrame("Frame", nil, content)
+  catBox:SetPoint("TOPLEFT", 8, -8)
+  catBox:SetPoint("BOTTOMLEFT", 8, foot + 6)
+  catBox:SetWidth(200)
+  catBox:Hide()
+  catBox.head = text(catBox, 11, DIM, "LEFT")
+  catBox.head:SetPoint("TOPLEFT", 4, -4)
+  catBox.head:SetText("Category")
+  win.catBox = catBox
+  win.catScroll = scrollArea(catBox, win, 0)
+  win.catScroll:ClearAllPoints(); win.catScroll:SetPoint("TOPLEFT", 0, -(ROW + 2)); win.catScroll:SetPoint("BOTTOMRIGHT", -10, 0)
+  win.catScroll.bar:ClearAllPoints(); win.catScroll.bar:SetPoint("TOPRIGHT", 0, -(ROW + 2)); win.catScroll.bar:SetPoint("BOTTOMRIGHT", 0, 0)
+  win.catLines = virtual(win.catScroll.child, function(parent) return UI:MakeLine(parent) end)
   -- the band: a strip above the scroll area for what stays in view while the rows scroll (a table's column header,
   -- the officers' summary, the Statistics page's headings); UI:SetBand gives it its height and moves the scroll area
-  self.band = CreateFrame("Frame", nil, self.content)
-  self.band:SetPoint("TOPLEFT", 8, -8)
-  self.band:SetPoint("TOPRIGHT", -18, -8)
-  self.band:SetHeight(1)
-  self.band:Hide()
-  self.bandLabels = pool(self.band, function(parent) return text(parent, 12, INK) end)
-  self.bandButtons = pool(self.band, function(parent) return button(parent, "", 160) end)
-  -- (a line in the band with a tooltip and a click: the Guide's next best thing and where its knowledge comes from)
-  self.bandLines = pool(self.band, function(parent) return UI:MakeLine(parent) end)
-  self.header = CreateFrame("Frame", nil, self.band)
-  self.header:SetPoint("TOPLEFT")
-  self.header:SetHeight(ROW)
-  self.headerLine = line(self.header)
-  self.headerLine:SetPoint("BOTTOMLEFT")
-  self.headerLine:SetPoint("BOTTOMRIGHT")
-  self.headerCells = pool(self.header, function(parent) return UI:MakeHeaderCell(parent) end)
+  win.band = CreateFrame("Frame", nil, content)
+  win.band:SetPoint("TOPLEFT", 8, -8)
+  win.band:SetPoint("TOPRIGHT", -18, -8)
+  win.band:SetHeight(1)
+  win.band:Hide()
+  win.bandLabels = pool(win.band, function(parent) return text(parent, 12, INK) end)
+  win.bandButtons = pool(win.band, function(parent) return button(parent, "", 160) end)
+  -- (a line in the band with a tooltip and a click: the Quests tab's step and where the pick's knowledge comes from)
+  win.bandLines = pool(win.band, function(parent) return UI:MakeLine(parent) end)
+  win.header = CreateFrame("Frame", nil, win.band)
+  win.header:SetPoint("TOPLEFT")
+  win.header:SetHeight(ROW)
+  win.headerLine = line(win.header)
+  win.headerLine:SetPoint("BOTTOMLEFT")
+  win.headerLine:SetPoint("BOTTOMRIGHT")
+  win.headerCells = pool(win.header, function(parent) return UI:MakeHeaderCell(parent) end)
+  -- the size grabber: the game's own (UI-ChatIM-SizeGrabber, 386862-386864), in the window's corner
   local grip = CreateFrame("Button", nil, f)
-  grip:SetSize(12, 12)
-  grip:SetPoint("BOTTOMRIGHT", -10, 10)
-  grip.t = flat(grip, "ARTWORK", MUTE, 1)
-  grip.t:SetAllPoints()
-  grip:SetHighlightTexture(FLAT, "ADD")
-  grip:SetScript("OnMouseDown", function() if f.StartSizing then f:StartSizing("BOTTOMRIGHT") end end)
-  grip:SetScript("OnMouseUp", function() f:StopMovingOrSizing(); UI:SavePos() end)
+  grip:SetSize(16, 16)
+  grip:SetPoint("BOTTOMRIGHT", -1, 1)
+  grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+  grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+  grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+  grip.cuteEdge = true -- (it belongs in the corner: the harness's edge rule leaves it there)
+  grip:SetScript("OnMouseDown", C.Safe(function() if f.StartSizing then f:StartSizing("BOTTOMRIGHT") end end, "window: size"))
+  grip:SetScript("OnMouseUp", C.Safe(function() f:StopMovingOrSizing(); win:SavePos() end, "window: size"))
   tooltip(grip, function(tip) tip:AddLine("Drag to resize", 1, 1, 1) end)
-  self:RestorePos()
+  win.grip = grip
+  win:RestorePos()
+  if win.OnBuilt then win:OnBuilt() end
+end
+function UI:Build()
+  if self.frame then return end
+  -- (the guild window's header clicks are remembered across sessions)
+  if self == UI then self.sort = C.Settings().sort end
+  UI.BuildWindow(self, self.key or "guild")
+  if self ~= UI then return end
   -- the footer's "2 min ago" keeps up while the window is open
+  local f = self.frame
   local function footTick()
     C_Timer.After(30, C.Safe(footTick, "footer"))
     if f:IsShown() then UI:DrawFooter() end
@@ -697,16 +831,23 @@ function UI:Build()
   C_Timer.After(30, C.Safe(footTick, "footer"))
 end
 
+-- where a window was left, and its size: the guild window's in CuteDB.pos (as since 0.1), the others' by key
+local function posOf(win, set)
+  if win == UI then if set ~= nil then CuteDB.pos = set end return CuteDB.pos end
+  if type(CuteDB.winPos) ~= "table" then CuteDB.winPos = {} end
+  if set ~= nil then CuteDB.winPos[win.key] = set end
+  return CuteDB.winPos[win.key]
+end
 function UI:SavePos()
   local f = self.frame
-  CuteDB.pos = { w = f:GetWidth(), h = f:GetHeight(), left = f:GetLeft(), top = f:GetTop() }
+  posOf(self, { w = f:GetWidth(), h = f:GetHeight(), left = f:GetLeft(), top = f:GetTop() })
 end
 -- the saved place, kept on screen: another resolution or UI scale may have saved it beyond this screen's edge
 function UI:RestorePos()
-  local p = CuteDB.pos
-  if not p then return end
-  local f = self.frame
-  if type(p.w) == "number" and type(p.h) == "number" then f:SetSize(math.max(MIN_W, p.w), math.max(MIN_H, p.h)) end
+  local p = posOf(self)
+  if type(p) ~= "table" then return end
+  local f, spec = self.frame, SPEC[self.key] or SPEC.guild
+  if type(p.w) == "number" and type(p.h) == "number" then f:SetSize(math.max(spec.minW, p.w), math.max(spec.minH, p.h)) end
   if type(p.left) ~= "number" or type(p.top) ~= "number" then return end
   local uw, uh = UIParent:GetWidth() or 0, UIParent:GetHeight() or 0
   local w, h = f:GetWidth() or W, f:GetHeight() or H
@@ -719,20 +860,35 @@ function UI:RestorePos()
   f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
 end
 
-function UI:Toggle()
-  self:Build()
-  if self.frame:IsShown() then self.frame:Hide() else self.frame:Show() end
+-- the guild window (J) shown or hidden; UI.ToggleWindow for any window by key
+function UI:Toggle() UI.ToggleWindow("guild") end
+function UI.ToggleWindow(key)
+  local win = UI.Window(key)
+  if not win then return end
+  if key ~= "guild" and key ~= "settings" and not C.Modules.Page(win.home, C.Roster:MeOfficer()) then return end
+  win:Build()
+  if win.frame:IsShown() then win.frame:Hide() else win:Open(win.page or win.home) end
 end
--- a page by its module's id, or Settings (at a section: "general", "vis", "rules", "modules" or a module's id). A page
--- whose module is off, or an officer's for a member, opens Race
+-- Settings at a section (general, keys, modules, columns, vis, rules, or a module's): its own window
+function UI.OpenSettings(section)
+  local win = UI.Window("settings")
+  win:Build()
+  if section and section ~= win.section then win.section = section; win.scrollTo = 0 end
+  if not win.frame:IsShown() then win.frame:Show() else win:Draw() end
+end
+-- a page by its module's id, in the window that page is in, or "settings" (at a section). A page whose module is off, or
+-- an officer's for a member, opens its window's first page (Race; Quests)
 function UI:Open(page, section)
-  self:Build()
-  page = page or self.page
-  if page ~= "settings" and not C.Modules.Page(page, C.Roster:MeOfficer()) then page = "race" end
-  if section and section ~= self.section then self.section = section; self.scrollTo = 0 end
-  if page ~= self.page then self.scrollTo = 0 end -- a new page starts at the top; a redraw keeps the place
-  self.page = page
-  if not self.frame:IsShown() then self.frame:Show() else self:Draw() end
+  if page == "settings" then return UI.OpenSettings(section) end
+  local win = page and UI.WindowOf(page) or self
+  win:Build()
+  page = page or win.page
+  local officer = C.Roster:MeOfficer()
+  if not C.Modules.Page(page, officer) or (C.Modules.byId[page].window or "guild") ~= win.key then page = win.home end
+  if not C.Modules.Page(page, officer) and win ~= UI then return end
+  if page ~= win.page then win.scrollTo = 0 end -- a new page starts at the top; a redraw keeps the place
+  win.page = page
+  if not win.frame:IsShown() then win.frame:Show() else win:Draw() end
 end
 -- a redraw, at most one a second while the window shows and none while it is hidden (it draws as it opens), so a
 -- burst of guild messages or roster events draws once
@@ -742,8 +898,13 @@ function UI:Refresh()
   if self.refreshing then return end
   self.refreshing = true
   local wait = math.min(1, math.max(0.05, 1 - (clock() - (self.drawnAt or -10))))
-  C_Timer.After(wait, C.Safe(function() UI.refreshing = false; if UI.frame:IsShown() then UI:Draw() end end, "refresh"))
+  local win = self
+  C_Timer.After(wait, C.Safe(function() win.refreshing = false; if win.frame:IsShown() then win:Draw() end end, "refresh"))
 end
+-- every window that is open draws again (a module addon's Cute.Refresh: its page may be in any of them); DrawAll at once,
+-- for a click
+function UI.RefreshAll() for _, win in pairs(UI.windows) do win:Refresh() end end
+function UI.DrawAll() for _, win in pairs(UI.windows) do if rawget(win, "frame") and win.frame:IsShown() then win:Draw() end end end
 -- one of your own values changed (Sample.lua): nothing to do unless the open page shows it and its text changed. On a
 -- table page your row is the first and moves nowhere, so only it is filled again, once a second at most
 function UI:ValueChanged(id, old, new)
@@ -823,14 +984,14 @@ function UI:MakeHeaderCell(parent)
   b.label:SetPoint("RIGHT", -4, 0)
   b:SetHighlightTexture(FLAT, "ADD")
   b:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
-  b:SetScript("OnClick", function(self)
+  b:SetScript("OnClick", C.Safe(function(self)
     if not self.id then return end
     -- (the race sorts by level, highest first, until a header is clicked)
     local s = UI.sort[UI.page] or (UI.page == "race" and { id = "level", desc = true }) or {}
     if s.id == self.id then s.desc = not s.desc else s = { id = self.id, desc = true } end
     UI.sort[UI.page] = s
     UI:Draw()
-  end)
+  end, "header: sort"))
   tooltip(b, function(tip, self)
     if not self.def then tip:AddLine(self.label:GetText() or "", 1, 1, 1) return end
     tip:AddLine(self.def.label, 1, 1, 1)
@@ -864,12 +1025,12 @@ function UI:MakeRow(parent)
   r.name:SetPoint("LEFT", 8, 0)
   r.cells = {}
   -- on the Officers page a click picks the member, for the band's Mark untrusted (DrawOfficers)
-  r:SetScript("OnClick", function(self)
+  r:SetScript("OnClick", C.Safe(function(self)
     local row = self.row
     if UI.page ~= "officers" or not row or row.me or not row.guid or not row.addon then return end
     UI.picked = UI.picked ~= row.guid and row.guid or nil
     UI:Draw()
-  end)
+  end, "row: pick"))
   tooltip(r, function(tip, self)
     local row = self.row
     if not row then return end
@@ -1362,9 +1523,10 @@ function UI:DrawOfficers()
       say(table.concat(parts, " ") .. " Click a row for why.", DIM)
     end
   end
-  local labels = { { "Visibility settings", function() UI:Open("settings", "vis") end },
+  -- (named as Settings names them: Who sees what, Broadcast now)
+  local labels = { { "Who sees what", function() UI.OpenSettings("vis") end },
     { "Ask everyone to resend", function() C.Comm:Ask(); C.Print("asked the guild to send their records again.") end },
-    { "Broadcast policy now", function() C.Comm:Broadcast() end },
+    { "Broadcast now", function() C.Comm:Broadcast() end },
     { picked and picked.untrusted and "Trust again" or "Mark untrusted", function()
       if not picked then return end
       C.Policy:SetUntrusted(picked.guid, not picked.untrusted)
@@ -1383,7 +1545,7 @@ function UI:DrawOfficers()
     b:SetWidth(160)
     b:SetLabel(d[1])
     b:SetOn(d[3] ~= false)
-    b:SetScript("OnClick", d[2])
+    b:SetScript("OnClick", C.Safe(d[2], "officers: " .. d[1]))
     -- (a pooled band button may come from Settings' steps, with their tooltip)
     b:SetScript("OnEnter", nil); b:SetScript("OnLeave", nil)
     if d[4] then tooltip(b, d[4]) end
@@ -1521,7 +1683,8 @@ function UI:MakeLine(parent)
   r.who:SetPoint("RIGHT", -4, 0)
   -- (both buttons: a row's fn hears which, the Guide's band row opens a step's menu on the right one)
   r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  r:SetScript("OnClick", function(self, which) if self.fn then self.fn(self, which) end end)
+  -- (a page's click, a module's code among them: an error recorded, never raised)
+  r:SetScript("OnClick", C.Safe(function(self, which) if self.fn then self.fn(self, which) end end, "row: click"))
   tooltip(r, function(tip, self) if self.tip then self.tip(tip, self) end end)
   return r
 end
@@ -1552,6 +1715,7 @@ function UI:DrawGame()
   local board = S.Board()
   if #board.cats == 0 then
     self.catLines:Clear(); self.lines:Clear()
+    self.catBox:Hide(); self:SetInset(0)
     if self.gameNoteLabel then self.gameNoteLabel:Hide() end
     say(6, 6, w - 12, "Nothing discovered yet. " .. (S.gameNote or "No statistics yet."), INK)
     say(6, 26, w - 12, "Bosses, dungeons, raids and reputations show here as the guild meets them; the counters stay on the other pages.", MUTE)
@@ -1562,14 +1726,38 @@ function UI:DrawGame()
   local officer = C.Roster:MeOfficer()
   local rows = rowsShown()
   local leftW = math.max(160, math.floor(w * 0.25))
-  local rightX = leftW + 12
-  local rightW = w - rightX
-  -- the open category: the one clicked, else the first with stats in it
+  -- the categories in a column of their own (the list beside it scrolls alone): the inset gives the list the rest
+  self:SetInset(leftW + 12)
+  local box = self.catBox
+  box:SetWidth(leftW + 10)
+  box:Show()
+  w = math.max(100, w - leftW - 12)
+  local rightX, rightW = 0, w
+  -- the tree folded as the game's own Statistics tab folds it: the top categories, and the children of the open one's
+  -- family; a parent counts its children's statistics with its own and lists them under their names
+  local byId, kids = {}, {}
+  for _, cat in ipairs(board.cats) do byId[cat.id] = cat end
+  for _, cat in ipairs(board.cats) do
+    if cat.parent ~= -1 and byId[cat.parent] then kids[cat.parent] = kids[cat.parent] or {}; table.insert(kids[cat.parent], cat) end
+  end
+  local function countOf(cat)
+    if cat.count then return cat.count end
+    local n = #cat.stats
+    for _, k in ipairs(kids[cat.id] or {}) do n = n + #k.stats end
+    return n
+  end
+  local function topOf(cat) local c = cat; while c and c.parent ~= -1 and byId[c.parent] do c = byId[c.parent] end return c end
+  -- the open category: the one clicked, else the first with anything in it
   local sel = self.gameCat
-  if not (sel ~= nil and board.byCat[sel] and #board.byCat[sel] > 0) then
+  if not (sel ~= nil and byId[sel] and countOf(byId[sel]) > 0) then
     sel = nil
-    for _, cat in ipairs(board.cats) do if #cat.stats > 0 then sel = cat.id; break end end
+    for _, cat in ipairs(board.cats) do if countOf(cat) > 0 then sel = cat.id; break end end
     self.gameCat = sel
+  end
+  local family = sel and topOf(byId[sel]) or nil
+  local shownCats = {}
+  for _, cat in ipairs(board.cats) do
+    if cat.parent == -1 or not byId[cat.parent] or (family and topOf(cat) == family) then shownCats[#shownCats + 1] = cat end
   end
   -- the headings stay in the band; the two lists scroll under them
   local function head(x, width, s, justify)
@@ -1582,26 +1770,25 @@ function UI:DrawGame()
   end
   self:SetBand(ROW + 2)
   -- left: the categories
-  head(4, leftW - 8, "Category")
   local top = 0
-  self.catLines:Set(#board.cats, top, ROW, function(r, i, y)
-    local cat = board.cats[i]
-    -- (a parent with children counts theirs and opens the first)
-    local n = cat.count or #cat.stats
-    local opens = #cat.stats > 0 and cat.id or cat.first
+  local cw = leftW
+  self.catLines:Set(#shownCats, top, ROW, function(r, i, y)
+    local cat = shownCats[i]
+    local n = countOf(cat)
+    local opens = cat.id
     local open = cat.id == sel
     r.cat, r.def, r.member = cat, nil, nil
     r:SetPoint("TOPLEFT", 0, -y)
-    r:SetWidth(leftW)
+    r:SetWidth(cw)
     r:SetHeight(ROW)
     r.bg:SetColorTexture(1, 1, 1, open and 0.06 or (i % 2 == 0 and 0.03 or 0))
     r.bar:SetShown(open)
     r.bar:SetColorTexture(WHITE[1], WHITE[2], WHITE[3], 1)
-    local indent = cat.parent ~= -1 and 14 or 0
+    local indent = (cat.parent ~= -1 and byId[cat.parent]) and 14 or 0
     r.name:SetPoint("LEFT", 8 + indent, 0)
-    r.name:SetWidth(leftW - 8 - indent - 40)
+    r.name:SetWidth(cw - 8 - indent - 40)
     color(r.name, open and WHITE or (n > 0 and INK or MUTE))
-    fitText(r.name, cat.name, leftW - 12 - indent - 40)
+    fitText(r.name, cat.name, cw - 12 - indent - 40)
     r.val:Show()
     r.val:SetPoint("RIGHT", -4, 0)
     r.val:SetWidth(34)
@@ -1616,10 +1803,10 @@ function UI:DrawGame()
       if n > 0 then tip:AddLine("Click to open.", 0.45, 0.45, 0.45) end
     end
   end)
-  local leftY = top + #board.cats * ROW
+  local leftY = top + #shownCats * ROW
   -- a client without the game's statistics says so under the categories, wrapped to the column
   if S.gameNote and #S.byCat.game == 0 then
-    if not self.gameNoteLabel then self.gameNoteLabel = text(sf.child, 11, MUTE, "LEFT") end
+    if not self.gameNoteLabel then self.gameNoteLabel = text(self.catScroll.child, 11, MUTE, "LEFT") end
     local note = self.gameNoteLabel
     note:ClearAllPoints()
     note:SetPoint("TOPLEFT", 6, -(leftY + 8))
@@ -1640,28 +1827,48 @@ function UI:DrawGame()
   head(rightX + 8, nw - 8, "Name")
   head(rightX + rightW - ww - vw - 4, vw, "You", "RIGHT")
   head(rightX + rightW - ww - 4, ww, "Leader", "RIGHT")
-  local defs = (sel ~= nil and board.byCat[sel]) or {}
+  -- the open category's own statistics, then each child's under the child's name
+  local defs = {}
+  local heads = {}
+  for _, def in ipairs((sel ~= nil and board.byCat[sel]) or {}) do defs[#defs + 1] = def end
+  for _, k in ipairs(sel and kids[sel] or {}) do
+    if #k.stats > 0 then
+      heads[#defs + 1] = k
+      for _, def in ipairs(k.stats) do defs[#defs + 1] = def end
+    end
+  end
   local items = {}
   for i, def in ipairs(defs) do
+    if heads[i] then items[#items + 1] = { head = heads[i] } end
     self.shownIds[def.id] = true
-    -- every member's value as this viewer may see it; the leader among those (a member the officers marked untrusted
-    -- is in no ranking)
-    local ranked, best = {}, nil
+    -- who sees it, asked once a stat (the policy's route, not once a member and stat: a guild of hundreds drew a
+    -- category's thousands of routes a draw); the leader among the values this viewer may see, found without a table
+    -- a member, and above 0 (a leader at 0 named the first in the roster for what nobody has done; a standing is a value
+    -- below 0 too). A member the officers marked untrusted is in no ranking
+    local everyone = officer or C.Policy:Route(def.id) == "all"
+    local leads0 = def.learned == "rep"
+    local open = self.gameOpen[def.id] == true
+    local best, bestV
     for _, row in ipairs(rows) do
-      if row.addon and not row.untrusted then
-        local hidden = not C.Policy:CanSee(officer, row.me, def.id)
+      if row.addon and not row.untrusted and (everyone or row.me) then
         local v = row.stats[def.id]
-        local e = { row = row, v = (not hidden and type(v) == "number") and v or nil, hidden = hidden, at = row.at and row.at[def.id] }
-        ranked[#ranked + 1] = e
-        if e.v and (not best or e.v > best.v or (e.v == best.v and row.sort < best.row.sort)) then best = e end
+        if type(v) == "number" and (v > 0 or leads0) and (not bestV or v > bestV or (v == bestV and row.sort < best.sort)) then best, bestV = row, v end
       end
     end
-    local open = self.gameOpen[def.id] == true
     -- (a stat the officers keep: a member sees their own value alone, so names no leader, themselves included)
-    local kept = not officer and C.Policy:Route(def.id) == "self"
+    local kept = not everyone
     if kept then best = nil end
-    items[#items + 1] = { def = def, i = i, best = best, open = open, kept = kept }
+    items[#items + 1] = { def = def, i = i, best = best and { row = best, v = bestV } or nil, open = open, kept = kept }
     if open then
+      -- every member's value as this viewer may see it, for the open stat alone
+      local ranked = {}
+      for _, row in ipairs(rows) do
+        if row.addon and not row.untrusted then
+          local hidden = not (everyone or row.me)
+          local v = row.stats[def.id]
+          ranked[#ranked + 1] = { row = row, v = (not hidden and type(v) == "number") and v or nil, hidden = hidden, at = row.at and row.at[def.id] }
+        end
+      end
       -- values first, highest on top; then the members whose value is kept from you; then the unreported
       table.sort(ranked, function(a, b)
         if (a.v ~= nil) ~= (b.v ~= nil) then return a.v ~= nil end
@@ -1687,6 +1894,23 @@ function UI:DrawGame()
   end
   self.lines:Set(#items, top, ROW, function(r, i, y)
     local it = items[i]
+    if it.head then
+      -- a child category's name over its statistics: no value, no click
+      r.cat, r.def, r.member = nil, nil, nil
+      r:SetHeight(ROW)
+      r:SetPoint("TOPLEFT", rightX, -y)
+      r:SetWidth(rightW)
+      r.bg:SetColorTexture(1, 1, 1, 0.035)
+      r.bar:Hide()
+      r.name:SetPoint("LEFT", 8, 0)
+      r.name:SetWidth(rightW - 16)
+      color(r.name, DIM)
+      fitText(r.name, it.head.name, rightW - 20)
+      r.val:Hide(); r.who:Hide()
+      r.fn = nil
+      r.tip = function(tip) tip:AddLine(it.head.path or it.head.name, 1, 1, 1) end
+      return
+    end
     local def = it.def
     r.cat, r.def = nil, def
     r:SetHeight(ROW)
@@ -1762,19 +1986,21 @@ function UI:DrawGame()
       end
     end
   end)
+  local win = self
   self.virtual = function()
-    local off, view = UI.scroll.bar:GetValue() or 0, UI.scroll:View()
-    UI.catLines:Show(off, view)
-    UI.lines:Show(off, view)
+    win.catLines:Show(win.catScroll.bar:GetValue() or 0, win.catScroll:View())
+    win.lines:Show(win.scroll.bar:GetValue() or 0, win.scroll:View())
   end
   local y = top + #items * ROW
   if #defs == 0 then say(rightX + 8, y, rightW - 16, "Nothing in this category.", MUTE); y = y + 20 end
   self.labels:HideRest()
-  sf:SetContentHeight(math.max(leftY, y) + 8)
+  self.catScroll:SetContentHeight(leftY + 8)
+  sf:SetContentHeight(y + 8)
 end
 
--- the footer: when the roster last changed
+-- the footer: when the roster last changed (the guild window's; another window has none, or its own)
 function UI:DrawFooter()
+  if self ~= UI or not self.footer then return end
   local s
   if not C.Roster:InGuild() then s = "Not in a guild"
   elseif not C.Roster.updatedAt then s = "No reports yet"
@@ -1784,18 +2010,23 @@ end
 
 -- the whole draw runs under C.Safe: an error anywhere in it (the client swallows one with scriptErrors off) lands in
 -- /cute errors as "draw", and drawing is reset on every path, so the next Refresh, ValueChanged or scroll draws
--- again instead of returning early for the rest of the session (0.6.0 left the flag set)
+-- again instead of returning early for the rest of the session (0.6.0 left the flag set). Each window draws its own:
+-- Settings its sections (Settings.lua), the others the open page of a module that says that window
 local function drawBody(self)
   self.drawnAt = clock()
   self.draws = (self.draws or 0) + 1
   -- the page says which stats it shows (a change to another draws nothing) and, for a virtual list, how to scroll
   self.shownIds, self.virtual = {}, nil
+  local settings = self.key == "settings"
   local page = self.page
   local officer = C.Roster:MeOfficer()
-  -- a page whose module went off (or an officer's, for a member) gives way to Race
-  local mod = page ~= "settings" and C.Modules.Page(page, officer) or nil
-  if page ~= "settings" and not mod then page = "race"; self.page = page; mod = C.Modules.Page(page, officer) end
-  self:DrawTabs(page, officer)
+  -- a page whose module went off (or an officer's, for a member) gives way to its window's first page
+  local mod
+  if not settings then
+    mod = C.Modules.Page(page, officer)
+    if not mod or (mod.window or "guild") ~= self.key then page = self.home; self.page = page; mod = C.Modules.Page(page, officer) end
+    if self.tabRow then self:DrawTabs(page, officer) end
+  end
   -- the scroll place survives a redraw; a page change starts at the top
   local bar = self.scroll.bar
   local keep = self.scrollTo or bar:GetValue() or 0
@@ -1810,16 +2041,16 @@ local function drawBody(self)
   self.checks:Reset(); self.checks:HideRest()
   self.labels:Reset()
   if page ~= "game" and self.gameNoteLabel then self.gameNoteLabel:Hide() end
-  if page ~= "settings" and C.Settings_Hide then C.Settings_Hide(self) end
+  if page ~= "game" and self.catBox and self.catBox:IsShown() then self.catBox:Hide(); self:SetInset(0) end
   -- the virtual lists a page does not fill are cleared after it, so a page change hides the last page's rows
   local rowsGen, linesGen, catGen = self.rows.gen, self.lines.gen, self.catLines.gen
   local gens = {}
   for key, v in pairs(self.lists) do gens[key] = v.gen end
   self.drawGen = (self.drawGen or 0) + 1
-  -- (the Guide's big band line is its own FontString, not a pooled one: hidden before any page draws, shown by its own)
+  -- (the Quests tab's big band line is its own FontString, not a pooled one: hidden before any page draws)
   if self.bandBig then self.bandBig:Hide() end
-  if page == "settings" then C.Settings_Draw(self)
-  else C.Safe(function() mod.page(self, self.scroll) end, "page: " .. page)() end
+  if settings then C.Settings_Draw(self)
+  elseif mod then C.Safe(function() mod.page(self, self.scroll) end, "page: " .. page)() end
   if self.rows.gen == rowsGen then self.rows:Clear() end
   if self.lines.gen == linesGen then self.lines:Clear() end
   if self.catLines.gen == catGen then self.catLines:Clear() end
@@ -1834,20 +2065,23 @@ local function drawBody(self)
   self:DrawStatus(officer)
   self:DrawFooter()
 end
-local drawSafe = C.Safe(drawBody, "draw", function() UI.drawing = false end)
+local function drawDone(win) win.drawing = false end
 function UI:Draw()
+  if not rawget(self, "frame") then return end -- (a window never opened has nothing to draw)
   self.drawing = true
-  drawSafe(self)
+  local win = self
+  C.Safe(drawBody, "draw", function() drawDone(win) end)(self)
 end
--- the status line: who is online with the addon, your view, and "update available" while a guild mate runs a newer
--- Cute than yours (Core.lua C.SawVersion, which draws it again when one arrives)
+-- the status, at the footer's right: who is online with the addon and which Cute this is (a screenshot names its
+-- build), and "update available" while a guild mate runs a newer Cute than yours (Core.lua C.SawVersion, which draws it
+-- again when one arrives)
+local DOT = "  \194\183  "
 function UI:DrawStatus(officer)
-  if not self.status then return end
-  if officer == nil then officer = C.Roster:MeOfficer() end
+  if self ~= UI or not self.status then return end
   local online = 0
   for _, r in ipairs(C.Roster:Rows()) do if r.online and r.addon then online = online + 1 end end
-  local s = string.format("%d online with the addon  |  %s view", online, officer and "officer" or "member")
-  if C.newer then s = s .. "  |  " .. C.COLOR .. "update available|r" end
+  local s = string.format("%d online with Cute%sCute %s", online, DOT, tostring(C.version))
+  if C.newer then s = s .. DOT .. C.COLOR .. "update available|r" end
   self.status:SetText(s)
 end
 
@@ -1861,6 +2095,8 @@ local DISC = "Interface\\Minimap\\UI-Minimap-Background"
 local ROUND = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 local GLOW = "Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight"
 function UI:OnWorld()
+  -- (the keys this character chose, once a session: Keys.lua)
+  if C.Keys then C.Keys.Start() end
   if not C.Settings().minimap then if self.mini then self.mini:Hide() end return end
   if self.mini then self.mini:Show(); return end
   if not Minimap then return end
@@ -1891,30 +2127,40 @@ function UI:OnWorld()
   ring:SetPoint("TOPLEFT")
   b.icon, b.ring = icon, ring
   b:SetHighlightTexture(GLOW, "ADD")
+  -- around the minimap's edge: a circle on the round minimap, the square's edge where a minimap addon made it square
+  -- (GetMinimapShape is theirs to define, as LibDBIcon reads it; the game has none, and its minimap is round)
   local function place()
     local angle = math.rad(C.Settings().minimapPos or 220)
     local r = (Minimap:GetWidth() or 140) / 2 + 10
+    local x, y = math.cos(angle) * r, math.sin(angle) * r
+    local shape = type(GetMinimapShape) == "function" and C.Plain(select(2, pcall(GetMinimapShape))) or "ROUND"
+    if shape ~= "ROUND" and type(shape) == "string" then
+      local d = r * 1.4142
+      x = math.max(-r, math.min(r, math.cos(angle) * d))
+      y = math.max(-r, math.min(r, math.sin(angle) * d))
+    end
     b:ClearAllPoints()
-    b:SetPoint("CENTER", Minimap, "CENTER", math.cos(angle) * r, math.sin(angle) * r)
+    b:SetPoint("CENTER", Minimap, "CENTER", x, y)
   end
-  b:SetScript("OnDragStart", function(self)
-    self:SetScript("OnUpdate", function()
-      local mx, my = Minimap:GetCenter()
-      local cx, cy = GetCursorPosition()
-      local scale = Minimap:GetEffectiveScale()
-      if not (mx and cx) then return end
-      cx, cy = cx / scale, cy / scale
-      C.Settings().minimapPos = math.deg(math.atan2(cy - my, cx - mx))
-      place()
-    end)
-  end)
+  -- (every frame while dragged: an error is recorded once a frame at most, never raised)
+  local drag = C.Safe(function()
+    local mx, my = Minimap:GetCenter()
+    local cx, cy = GetCursorPosition()
+    local scale = Minimap:GetEffectiveScale()
+    if not (mx and cx) then return end
+    cx, cy = cx / scale, cy / scale
+    C.Settings().minimapPos = math.deg(math.atan2(cy - my, cx - mx))
+    place()
+  end, "minimap button: drag")
+  b:SetScript("OnDragStart", function(self) self:SetScript("OnUpdate", drag) end)
   b:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
-  b:SetScript("OnClick", function(_, which)
-    if which == "RightButton" then UI:Open("settings") else UI:Toggle() end
-  end)
+  -- a click: the guild window; a right-click: the menu of every window, tab and Settings section (Windows.lua)
+  b:SetScript("OnClick", C.Safe(function(self, which)
+    if which == "RightButton" then C.Windows.Menu(self) else UI:Toggle() end
+  end, "minimap button"))
   tooltip(b, function(tip)
     tip:AddLine("Cute", 1, 1, 1)
-    tip:AddLine("Click: the dashboard. Right-click: settings. Drag to move.", 0.7, 0.7, 0.7, true)
+    tip:AddLine("Click: guild. Right-click: menu. Drag: move.", 0.7, 0.7, 0.7, true)
   end)
   place()
 end
@@ -1932,9 +2178,10 @@ local function columns(page, head)
     end
   end
 end
-C:RegisterModule({ id = "race", title = "Race", order = 10, core = true, tab = 64, page = function(ui) ui:DrawTable("race") end, settings = columns("race", "Columns") })
-C:RegisterModule({ id = "prog", title = "Prog", order = 30, core = true, tab = 64, page = function(ui) ui:DrawTable("prog") end, settings = columns("prog", "Columns") })
-C:RegisterModule({ id = "shame", title = "Hall of Shame", order = 40, core = true, tab = 110, page = function(ui) ui:DrawShame() end, settings = columns("shame", "Cards") })
+-- (each page's list under its own name in Settings > Columns)
+C:RegisterModule({ id = "race", title = "Race", order = 10, core = true, tab = 64, page = function(ui) ui:DrawTable("race") end, settings = columns("race", "Race") })
+C:RegisterModule({ id = "prog", title = "Prog", order = 30, core = true, tab = 64, page = function(ui) ui:DrawTable("prog") end, settings = columns("prog", "Prog") })
+C:RegisterModule({ id = "shame", title = "Hall of Shame", order = 40, core = true, tab = 110, page = function(ui) ui:DrawShame() end, settings = columns("shame", "Hall of Shame cards") })
 C:RegisterModule({ id = "game", title = "Statistics", order = 50, core = true, tab = 80, page = function(ui) ui:DrawGame() end })
-C:RegisterModule({ id = "officers", title = "Officers", order = 60, core = true, officer = true, tab = 80, page = function(ui) ui:DrawOfficers() end, settings = columns("officers", "Columns") })
+C:RegisterModule({ id = "officers", title = "Officers", order = 60, core = true, officer = true, tab = 80, page = function(ui) ui:DrawOfficers() end, settings = columns("officers", "Officers") })
 C:RegisterModule({ id = "me", title = "Me", order = 70, core = true, tab = 48, page = function(ui) ui:DrawMe() end })
