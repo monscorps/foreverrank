@@ -297,6 +297,9 @@ end
 -- client cannot know (one may wait out the ten-minute pass, or a responder's lockdown, or not come at all): each
 -- responder judges that by the answer it gave (M:Borne), and answers a since it does not bear out whole
 local SYNCED_AFTER = 100 -- seconds after the ask left: most answers have come
+-- (and a minute short of the logout: what went on GUILD as it came, still on its way, or sent in its last second (the
+-- server's time counts whole seconds, and a part goes again only where it went after the since) is sent again)
+local HOLD_MARGIN = 60
 function M:AskLeft()
   local w = self.wire
   if w then w.asked = C.ServerNow() end
@@ -306,7 +309,7 @@ end
 function M:Logout()
   local club = C.Roster:ClubId()
   if club == nil or not self.syncedAt or C.Now() - self.syncedAt < SYNCED_AFTER or self.lost then return end
-  C.Char().hold = { club = tostring(club), at = math.floor(C.ServerNow()) }
+  C.Char().hold = { club = tostring(club), at = math.floor(C.ServerNow()) - HOLD_MARGIN }
 end
 -- the since an ask carries, in hex after the policy's fingerprint (a 0.6 or 0.7 client reads that field as a
 -- fingerprint, which it never answers by, and takes one of another length for none; 0.5.x takes the whole ask for a

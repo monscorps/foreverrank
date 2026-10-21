@@ -10813,6 +10813,33 @@ do
   end)
   said[#said + 1] = "a since the responder's last answer to that asker does not bear out is answered whole: a pass deferred, an answer owed through a lockdown, an ask passed by"
 
+  -- (q) the hold leaves a minute: what went on GUILD in the second the asker logged out (still on its way, as the game's
+  -- server time counts whole seconds) is sent again at its next ask. 0.7.1's first build held the logout's own second
+  -- and a part sent in it, "after" nothing, was never sent again
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+    local off, a, b = char("Coraline", 1), char("Cobb", 3), char("Cyra", 3)
+    b.env.GetServerTime = function() return EPOCH + math.floor(b.clock) end
+    local db = {}
+    login(off); login(a, db); login(b)
+    tickAll(200)
+    b.o.zone = "Feralas"
+    b.C.Sample:Set("zone", "Feralas")
+    tick(b, 1)
+    tick(a, 1); tick(off, 1)
+    fire(a, "PLAYER_LOGOUT"); leave(a)
+    local hold = db.chars["Cobb-Forever"].hold.at
+    assert(hold <= EPOCH + a.clock - 60, "the hold a minute before the logout: " .. (EPOCH + a.clock - hold))
+    tick(b, 1)
+    assert(b.sent[#b.sent].msg:find("zone=Feralas", 1, true), "her zone went in the second he logged out")
+    tickAll(10)
+    local a2 = char("Cobb", 3)
+    login(a2, db)
+    tickAll(120)
+    assert(cyraOf(a2).stats.zone == "Feralas", "his next ask has it: " .. tostring(cyraOf(a2).stats.zone))
+    for _, x in ipairs({ off, b, a2 }) do leave(x) end
+  end)
+  said[#said + 1] = "the hold leaves a minute, so a part sent as the asker logged out goes again"
+
   print("core: " .. table.concat(said, "; "))
 end
 
