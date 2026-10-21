@@ -153,7 +153,7 @@ end
 function R.Group()
   local t = gtime()
   if groupCache and groupCache.gen == groupGen and t - groupAt < 5 then return groupCache end
-  local out = { n = 0, units = 1, gen = groupGen, canon = {} }
+  local out = { n = 0, units = 1, gen = groupGen, exact = {}, first = {} }
   local me = C.MyGUID()
   if me then
     local e = unitInfo("player") or { unit = "player", guid = me, sfx = sfxOf(me) }
@@ -171,9 +171,11 @@ function R.Group()
       if e and e.guid ~= me and not out[e.sfx] then
         out[e.sfx] = e
         out.n = out.n + 1
-        local k1, k2 = e.name and C.Canon(e.name), e.full and C.Canon(e.full)
-        if k1 then out.canon[k1] = e end
-        if k2 then out.canon[k2] = e end
+        -- (a unit's whole name, its name and realm or surname, or its name alone where it has neither; and its first
+        -- name. A key two units share names neither: false)
+        local whole, first = (e.full and C.Canon(e.full)) or (e.name and C.Canon(e.name)), e.name and C.Canon(e.name)
+        if whole then if out.exact[whole] == nil then out.exact[whole] = e elseif out.exact[whole] ~= e then out.exact[whole] = false end end
+        if first then if out.first[first] == nil then out.first[first] = e elseif out.first[first] ~= e then out.first[first] = false end end
       end
     end
     for sfx, e in pairs(out) do
@@ -183,16 +185,27 @@ function R.Group()
   groupCache, groupAt = out, t
   return out
 end
--- the group member a sender string names (CHAT_MSG_ADDON's): by its name, your realm cut (C.Canon), or its first word;
--- you as { me = true }
+-- the group member a sender string names (CHAT_MSG_ADDON's), your realm cut (C.Canon): by a unit's whole name, else
+-- yours; else by its first word where one unit has it and it is not yours too. You as { me = true }. Namesakes take
+-- nobody for anybody: a key two units share, or a first word yours shares, names nobody (counted for /cute diag runs),
+-- so your own messages, which the game hands back, are never filed as a namesake's
 function R.UnitOf(sender)
   local key = C.Canon(sender)
   if not key then return nil end
   local g = R.Group()
-  local e = g.canon[key] or g.canon[key:match("^(%S+)") or ""]
+  local first, _, full = C.MyName()
+  local myWhole, myFirst = full and C.Canon(full), first and C.Canon(first)
+  local e = g.exact[key]
   if e then return e end
-  local mine = C.Canon((C.MyName()))
-  if mine and (key == mine or key:match("^(%S+)") == mine) then return { me = true } end
+  if e == nil and key == myWhole then return { me = true } end
+  local w = key:match("^(%S+)")
+  local f = w and g.first[w]
+  if e == nil and f ~= false and not (f and w == myFirst) then
+    if f then return f end
+    if w == myFirst then return { me = true } end
+    return nil
+  end
+  R.namesakes = (R.namesakes or 0) + 1
   return nil
 end
 

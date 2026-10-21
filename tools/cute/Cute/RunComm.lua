@@ -285,7 +285,7 @@ function RC.Report()
   local CI = C_ChatInfo
   local restricted = type(CI) == "table" and type(CI.AreOutgoingAddonChatMessagesRestricted) == "function" and C.Get(CI.AreOutgoingAddonChatMessagesRestricted)
   local lockdown = type(CI) == "table" and type(CI.InChatMessagingLockdown) == "function" and C.Get(CI.InChatMessagingLockdown)
-  return string.format("group channel: sent %s | waiting %d%s, %d past the cap | result 11: %d, %s | outgoing restricted %s | chat lockdown %s | addon chat restricted %s | from no group unit %d",
+  return string.format("group channel: sent %s | waiting %d%s, %d past the cap | result 11: %d, %s | outgoing restricted %s | chat lockdown %s | addon chat restricted %s | from no group unit %d (namesakes %d)",
     #kinds > 0 and table.concat(kinds, ", ") or "nothing", #RC.out, RC.held and (" (held: " .. RC.held.why .. ")") or "", RC.capped or 0,
-    RC.n11 or 0, #r11 > 0 and table.concat(r11, ", ", math.max(1, #r11 - 5)) or "none", tostring(restricted), tostring(lockdown), tostring(RC.Restricted()), RC.unknown or 0)
+    RC.n11 or 0, #r11 > 0 and table.concat(r11, ", ", math.max(1, #r11 - 5)) or "none", tostring(restricted), tostring(lockdown), tostring(RC.Restricted()), RC.unknown or 0, C.Runs and C.Runs.namesakes or 0)
 end

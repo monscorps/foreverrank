@@ -11980,6 +11980,30 @@ do local function runsStage()
   end)
   said[#said + 1] = "an untrusted member is nobody's scribe, the leader included; a 2A value past its award's bounds not shown"
 
+  -- (13.1) namesakes: Brann of another realm in Brann's group takes nobody for anybody. Your own messages, which the
+  -- game hands back to you, are never filed as theirs; theirs are theirs; a third member tells the two apart by their
+  -- whole names
+  isolated({ gmember("Brann", 1), gmember("Kit", 3), { name = "Brann-Other", guid = guidOf("BrannOther"), rank = 3, rankName = "Raider", class = "MAGE", level = 30, online = true } }, function()
+    local me = gchar("Brann", 1)
+    local other = gchar("Brann", 3, { realm = "Other", guid = guidOf("BrannOther") })
+    local kit = gchar("Kit", 3)
+    for _, c in ipairs({ me, other, kit }) do login(c) end
+    tickAll(40)
+    local G = group({ me, other, kit })
+    zone({ me, other, kit }, "party", 36, "The Deadmines")
+    tickAll(40)
+    fight(G, 60, { Brann = { [0] = 900 }, BrannOther = { [0] = 700 }, Kit = { [0] = 500 } }, 1230)
+    tickAll(40)
+    -- (your checkpoints again and again: your echo, with the higher number, would win were it filed as theirs)
+    for _ = 1, 3 do me.C.Runs:Values(); tickAll(3) end
+    local om = me.C.Runs.Current().members[sfx(other)]
+    assert(om and om.v and om.v.dm == 700, "the namesake's checkpoint is theirs, not your echo: " .. tostring(om and om.v and om.v.dm))
+    local km = kit.C.Runs.Current().members
+    assert(km[sfx(me)].v and km[sfx(me)].v.dm == 900 and km[sfx(other)].v and km[sfx(other)].v.dm == 700,
+      "Kit tells the two apart: " .. tostring(km[sfx(me)].v and km[sfx(me)].v.dm) .. " / " .. tostring(km[sfx(other)].v and km[sfx(other)].v.dm))
+  end)
+  said[#said + 1] = "namesakes take nobody for anybody: your echo never theirs, a third member tells two Branns apart"
+
   -- (4) the lockdown: a 2V answered 11 spends no try, the Chat restriction's Activating holds it and only its Inactive
   -- lets it go, once; a lockdown for the whole stay sends nothing inside, a disband inside gives each client its own
   -- report, and the id and the scribe settle once the group is out; the meter read only out of combat; a secret
