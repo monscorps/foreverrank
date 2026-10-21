@@ -673,7 +673,7 @@ function R:Build(run, why)
     n = #members, members = {}, at = now() }
   local function keep(sfx)
     local m = run.members[sfx]
-    if m then rep.members[sfx] = { n = m.n, c = m.c, r = m.r, s = m.s } end
+    if m then rep.members[sfx] = { n = m.n, c = m.c, r = m.r, s = m.s, g = m.g } end
   end
   for _, c in ipairs(cards) do keep(c[1]) end
   for _, c in ipairs(mentions) do keep(c[1]) end
@@ -875,6 +875,13 @@ R.Rebase = rebase
 function R:Heard(kind, rest, who)
   local run = self.run
   if kind == "2H" then return self:HeardHello(rest, who) end
+  -- (Send to party clicked by a group mate: the report on the screen says who, run or none: the run is over by then)
+  if kind == "2P" then
+    local id = rest:match("^([^|]+)")
+    self.posted = { by = who.name or "?", at = now(), id = id }
+    if C.CardFrame and C.CardFrame.Posted then C.CardFrame:Posted(id) end
+    return
+  end
   if not run then
     -- (a crash's return: the scribe's answer to a 2R, taken below; anything else needs a run)
     return
@@ -898,9 +905,6 @@ function R:Heard(kind, rest, who)
   elseif kind == "2A" then
     if who.sfx ~= self:Scribe() then return end
     self:HeardReport(body)
-  elseif kind == "2P" then
-    self.posted = { by = who.name or m and m.n or "?", at = now(), id = run.id }
-    if C.CardFrame and C.CardFrame.Posted then C.CardFrame:Posted(run.id, self.posted.by) end
   elseif kind == "2R" then
     -- (a member back from a crash: the scribe gives it back its last checkpoint)
     local sfx = body:match("^(%w+)$")
@@ -1003,7 +1007,7 @@ function R:HeardReport(body)
     deaths = unb36(kv.x or "") or 0, cards = list, mentions = mentions, gone = {}, n = #list, members = {}, at = now(), from = "scribe" }
   for sfx in (kv.g or ""):gmatch("%w+") do if run.members[sfx] then shown.gone[#shown.gone + 1] = sfx end end
   local me = mySfx()
-  local function keep(sfx) local m = run.members[sfx]; if m then shown.members[sfx] = { n = m.n, c = m.c, r = m.r, s = m.s } end end
+  local function keep(sfx) local m = run.members[sfx]; if m then shown.members[sfx] = { n = m.n, c = m.c, r = m.r, s = m.s, g = m.g } end end
   for _, c in ipairs(list) do keep(c[1]); if c[1] == me then shown.mine = { c[2], c[3] } end end
   for _, c in ipairs(mentions) do keep(c[1]) end
   for _, sfx in ipairs(shown.gone) do keep(sfx) end

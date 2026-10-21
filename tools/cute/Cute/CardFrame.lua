@@ -1,0 +1,299 @@
+-- SPDX-License-Identifier: GPL-3.0-or-later
+-- CardFrame: CuteCardFrame, the card screen (the run report's design, 8.3 and 8.4), in report mode: a run's header
+-- (the label, the place, the day and the members, the facts on the right; a dungeon's or a raid's cover where
+-- Cute_Quest gives one), up to five cards centred, the gone-early line, a raid's mentions, and Send to party, History
+-- and Close (a test report: Print to chat, Next and Close). A plain frame, strata DIALOG, dragged by its header, closed
+-- by Esc (UISpecialFrames) or Close; the windows design's tokens and type. Width 32 + n x 180 + (n - 1) x 12 units for
+-- n cards, at least 420; height 560, a raid's 662; scaled to fit where the screen is narrower.
+local _, C = ...
+local CF = { cards = {} }
+C.CardFrame = CF
+
+local W_MIN, H, MENTIONS_H = 420, 560, 102
+local WHITE, INK, DIM, MUTE = { 0.96, 0.96, 0.96 }, { 0.86, 0.86, 0.86 }, { 0.58, 0.58, 0.58 }, { 0.52, 0.52, 0.52 }
+local BG, LINE = { 0.035, 0.035, 0.035 }, { 0.2, 0.2, 0.2 }
+local DOT = " \194\183 " -- (a middle dot in Windows-1252; the file stays ASCII)
+local BD = BackdropTemplateMixin and "BackdropTemplate" or nil
+local LABEL = { d = "DUNGEON RECAP", r = "RAID RECAP", g = "GROUP RECAP" }
+local function color(fs, c) fs:SetTextColor(c[1], c[2], c[3]) end
+local function hex(c) return C.UI.Hex(c) end
+local function callable(name) return type(_G[name]) == "function" end
+local function call(name, ...) if not callable(name) then return nil end return C.Get(_G[name], ...) end
+local function A() return C.Awards end
+
+function CF.Width(n) return math.max(W_MIN, 32 + n * 180 + math.max(0, n - 1) * 12) end
+function CF.Height(rep) return (rep and rep.mentions and #rep.mentions > 0) and (H + MENTIONS_H) or H end
+
+local function build()
+  if CF.frame then return CF.frame end
+  local U = C.UI
+  local f = CreateFrame("Frame", "CuteCardFrame", UIParent, BD)
+  CF.frame = f
+  f:SetSize(980, H)
+  f:SetPoint("CENTER")
+  f:SetFrameStrata("DIALOG")
+  f:SetToplevel(true)
+  f:SetMovable(true)
+  f:SetClampedToScreen(true)
+  f:EnableMouse(true)
+  U.Skin(f, BG, 0.97)
+  f:Hide()
+  tinsert(UISpecialFrames, "CuteCardFrame")
+  -- the header: dragged by it
+  local head = CreateFrame("Frame", nil, f)
+  head:SetPoint("TOPLEFT", 1, -1)
+  head:SetPoint("TOPRIGHT", -1, -1)
+  head:SetHeight(71)
+  head:EnableMouse(true)
+  head:RegisterForDrag("LeftButton")
+  head:SetScript("OnDragStart", function() f:StartMoving() end)
+  head:SetScript("OnDragStop", function() f:StopMovingOrSizing() end)
+  CF.head = head
+  local rule = U.Flat(f, "ARTWORK", LINE, 1)
+  rule:SetHeight(1)
+  rule:SetPoint("TOPLEFT", 1, -72)
+  rule:SetPoint("TOPRIGHT", -1, -72)
+  CF.cover = f:CreateTexture(nil, "ARTWORK")
+  CF.cover:SetSize(130, 72)
+  CF.cover:SetPoint("TOPLEFT", 1, -1)
+  CF.atlas = f:CreateTexture(nil, "ARTWORK")
+  CF.atlas:SetSize(20, 20)
+  CF.label = U.Text(f, 11, WHITE, "LEFT", 300)
+  CF.title = U.Text(f, 20, WHITE, "LEFT", 420)
+  CF.sub = U.Text(f, 11, DIM, "LEFT", 420)
+  CF.facts = {}
+  for i = 1, 4 do
+    local v = U.Text(f, 15, WHITE, "RIGHT", 76)
+    local l = U.Text(f, 11, DIM, "RIGHT", 76)
+    CF.facts[i] = { v = v, l = l }
+  end
+  CF.x = U.Button(f, "x", 20, 20)
+  CF.x:SetPoint("TOPRIGHT", -8, -8)
+  CF.x:SetScript("OnClick", function() f:Hide() end)
+  -- the cards
+  for i = 1, 5 do CF.cards[i] = C.Cards.Make(f) end
+  CF.gone = U.Text(f, 11, DIM, "LEFT", 900)
+  CF.mentions = {}
+  for i = 1, 10 do CF.mentions[i] = U.Text(f, 11, INK, "LEFT", 466) end
+  CF.posted = U.Text(f, 11, DIM, "RIGHT", 220)
+  CF.buttons = {}
+  for i = 1, 3 do
+    local b = U.Button(f, "", 90, 24)
+    b:SetScript("OnClick", function(self) if self.fn then self.fn() end end)
+    b:SetScript("OnEnter", C.Safe(function(self)
+      if not self.why then return end
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:AddLine(self.why, 1, 1, 1, true)
+      GameTooltip:Show()
+    end, "card screen: tooltip"))
+    b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    CF.buttons[i] = b
+  end
+  return f
+end
+
+-- a member's name as this client knows it, and their class colour code
+local function nameOf(rep, sfx)
+  local m = rep.members and rep.members[sfx]
+  return m and m.n or nil
+end
+local function classed(rep, sfx)
+  local m = rep.members and rep.members[sfx]
+  local name = m and m.n or "?"
+  return "|cff" .. hex(C.UI.ClassColor(m and m.c)):sub(5) .. name .. "|r"
+end
+-- the day, the time and the members, as the header's line says them: "Tuesday 21:40, a dot, 5 members"
+local function when(rep)
+  local t = rep.start
+  local s = (date and t) and date("%A %H:%M", t) or ""
+  return s .. DOT .. rep.n .. (rep.n == 1 and " member" or " members")
+end
+
+-- the Send to party button's state (8.4): greyed with the reason where the game blocks the post or the report is not
+-- ready to go
+function CF.SendState(rep)
+  if not rep then return false, "No report" end
+  if rep.test then return true end
+  if not (C.RunComm.Channel()) then return false, "Not in a group" end
+  if C.Runs.sentFor == rep.id then return false, "Sent" end
+  if not C.Policy:Settled() then return false, "Waiting for Guild Info" end
+  local IE = C_InstanceEncounter
+  if call("InCombatLockdown") == true or (type(IE) == "table" and type(IE.IsEncounterInProgress) == "function" and C.Get(IE.IsEncounterInProgress) == true) then
+    return false, "After the fight"
+  end
+  local CI = C_ChatInfo
+  if type(CI) == "table" and type(CI.InChatMessagingLockdown) == "function" and C.Get(CI.InChatMessagingLockdown) == true then return false, "Outside the instance" end
+  return true
+end
+
+-- the report on the screen. opts.test: the test report (TEST RECAP; Print to chat, Next, Close)
+function CF:Report(rep, opts)
+  opts = opts or {}
+  local f = build()
+  local U = C.UI
+  self.rep, self.test = rep, opts.test
+  local cards = rep.cards or {}
+  local n = math.max(1, #cards)
+  local w = CF.Width(#cards)
+  local h = CF.Height(rep)
+  f:SetSize(w, h)
+  -- (scaled to fit a narrow screen)
+  local uw = UIParent and UIParent:GetWidth() or 1600
+  f:SetScale((uw > 0 and uw < w + 40) and (uw - 40) / w or 1)
+  -- the header: the cover (a dungeon's or a raid's, where Cute_Quest gives one) or the atlas beside the label
+  local cover = rep.kind ~= "g" and rep.inst and Cute and type(Cute.QuestCover) == "function" and Cute.QuestCover(rep.inst) or nil
+  local x0 = 16
+  if cover then
+    local ok = pcall(function()
+      CF.cover:SetTexture(cover.texture or cover[1])
+      local tc = cover.texcoords or cover[2]
+      if type(tc) == "table" then CF.cover:SetTexCoord(tc[1], tc[2], tc[3], tc[4]) end
+    end)
+    CF.cover:SetShown(ok)
+    if ok then x0 = 146 end
+  else CF.cover:Hide() end
+  local label = opts.test and "TEST RECAP" or (LABEL[rep.kind] or "RECAP")
+  local labelColor = (rep.kind == "g") and WHITE or C.Cards.GROUP
+  CF.atlas:ClearAllPoints()
+  if not cover and rep.kind ~= "g" then
+    CF.atlas:SetAtlas(rep.kind == "r" and "Raid" or "Dungeon")
+    CF.atlas:SetPoint("TOPLEFT", x0, -8)
+    CF.atlas:Show()
+    CF.label:SetPoint("TOPLEFT", x0 + 24, -12)
+  else
+    CF.atlas:Hide()
+    CF.label:SetPoint("TOPLEFT", x0, -12)
+  end
+  color(CF.label, labelColor)
+  CF.label:SetText(label)
+  CF.title:ClearAllPoints(); CF.title:SetPoint("TOPLEFT", x0, -30)
+  CF.sub:ClearAllPoints(); CF.sub:SetPoint("TOPLEFT", x0, -54)
+  -- the facts on the right, 76 units each, ending 40 units from the edge
+  local facts = rep.kind == "g" and { { A().Clock(rep.dur), "Time" }, { tostring(rep.wipes or 0), "Wipes" }, { tostring(rep.deaths or 0), "Deaths" } }
+    or { { (rep.bosses or 0) .. "/" .. math.max(rep.known or 0, rep.bosses or 0), "Bosses" }, { A().Clock(rep.dur), "Time" }, { tostring(rep.wipes or 0), "Wipes" }, { tostring(rep.deaths or 0), "Deaths" } }
+  local right = w - 40
+  local factsW = #facts * 76
+  for i = 1, 4 do
+    local fc, d = CF.facts[i], facts[i]
+    if d then
+      local x = right - (#facts - i + 1) * 76
+      fc.v:ClearAllPoints(); fc.v:SetPoint("TOPLEFT", x, -18); fc.v:SetText(d[1]); fc.v:Show()
+      fc.l:ClearAllPoints(); fc.l:SetPoint("TOPLEFT", x, -40); fc.l:SetText(d[2]); fc.l:Show()
+    else fc.v:Hide(); fc.l:Hide() end
+  end
+  -- (the title and its line take the room the facts leave)
+  local room = right - factsW - x0 - 12
+  CF.title:SetWidth(room); CF.sub:SetWidth(room)
+  U.FitText(CF.title, rep.place or "?", room - 4)
+  U.FitText(CF.sub, when(rep), room - 4)
+  -- the cards, centred
+  local total = #cards * 180 + math.max(0, #cards - 1) * 12
+  local cx = math.floor((w - total) / 2)
+  for i = 1, 5 do
+    local card = CF.cards[i]
+    local c = cards[i]
+    if c then
+      local a = A().Of(c[2])
+      local m = rep.members and rep.members[c[1]] or {}
+      local v, what = A().Show(c[2], c[3])
+      card:ClearAllPoints()
+      card:SetPoint("TOPLEFT", cx + (i - 1) * 192, -88)
+      C.Cards.Fill(card, { guid = m.g or CF.GuidOf(rep, c[1]), name = m.n or "?", class = m.c, race = m.r, sex = m.s, kind = a and a.kind,
+        label = a and A().KINDS[a.kind] or "", title = a and a.title or c[2], line = a and a.quip or "", value = v, valueLabel = what, headline = i == 1 and not rep.test and (a and a.kind ~= "thanks"),
+        tip = function(tip) CF.Tip(tip, rep, c) end })
+    else card:Hide() end
+  end
+  -- the gone-early line, or a raid's mentions in two columns of five
+  local y = 472
+  local gone = rep.gone or {}
+  if #gone > 0 then
+    local names = {}
+    for i = 1, math.min(8, #gone) do names[i] = classed(rep, gone[i]) end
+    local s = "Gone before the end: " .. table.concat(names, ", ") .. (#gone > 8 and (" and " .. (#gone - 8) .. " more") or "")
+    CF.gone:ClearAllPoints(); CF.gone:SetPoint("TOPLEFT", 16, -y); CF.gone:SetWidth(w - 32)
+    CF.gone:SetText(s); CF.gone:Show()
+  else CF.gone:Hide() end
+  local mentions = rep.mentions or {}
+  for i = 1, 10 do
+    local fs, mn = CF.mentions[i], mentions[i]
+    if mn then
+      local a = A().Of(mn[2])
+      local v, what = A().Show(mn[2], mn[3])
+      local kc = a and C.Cards.KindColor(a.kind) or WHITE
+      local col, row = (i - 1) >= 5 and 1 or 0, (i - 1) % 5
+      fs:ClearAllPoints()
+      fs:SetPoint("TOPLEFT", 16 + col * 474, -(y + (#gone > 0 and 18 or 0) + row * 18))
+      fs:SetWidth(466)
+      U.FitText(fs, "|cff" .. hex(kc):sub(5) .. (a and a.title or mn[2]) .. "|r" .. DOT .. classed(rep, mn[1]) .. DOT .. "|cff949494" .. v .. " " .. what .. "|r", 462)
+      fs:Show()
+    else fs:Hide() end
+  end
+  -- the buttons, from the right: Close, History, Send to party (a test: Close, Next, Print to chat)
+  local by = h - 58
+  local list
+  if opts.test then
+    list = { { "Close", 80, function() f:Hide() end }, { "Next", 90, function() if C.RunsUI and C.RunsUI.Test then C.RunsUI.Test(rep.kind == "r", true) end end },
+      { "Print to chat", 120, function() if C.RunsUI then C.RunsUI.PrintToChat(rep) end end } }
+  else
+    list = { { "Close", 80, function() f:Hide() end }, { "History", 90, function() f:Hide(); C.UI:Open("runs") end },
+      { "Send to party", 120, function() if C.RunsUI then C.RunsUI.SendToParty(rep) end end } }
+  end
+  local bx = w - 16
+  for i, d in ipairs(list) do
+    local b = CF.buttons[i]
+    b:SetWidth(d[2])
+    bx = bx - d[2]
+    b:ClearAllPoints()
+    b:SetPoint("TOPLEFT", bx, -by)
+    b:SetLabel(d[1])
+    b.fn = d[3]
+    b.why = nil
+    b:SetOn(true)
+    bx = bx - 8
+  end
+  CF.sendButton = (not opts.test) and CF.buttons[3] or nil
+  CF.posted:ClearAllPoints()
+  CF.posted:SetPoint("TOPRIGHT", f, "TOPLEFT", bx, -(by + 6))
+  CF.posted:SetText("")
+  CF:DrawSend()
+  f:Show()
+end
+
+-- the GUID behind a suffix: the run's member, else the roster's
+function CF.GuidOf(rep, sfx)
+  local run = C.Runs.run
+  local m = run and run.members and run.members[sfx]
+  if m then return m.g end
+  if sfx == (C.MyGUID() or ""):match("([^%-]+)$") then return C.MyGUID() end
+  return C.Roster and C.Roster.GuidBySuffix and C.Roster:GuidBySuffix(sfx) or nil
+end
+
+-- a card's tooltip: its rule in one line, and the member's other values this client may show
+local RULE = {
+  HD = "The most damage, at least 1.25 fair shares", LF = "The most healing, at least 1.25 fair shares", OS = "The most interrupts, at least 5 (8 in a raid)",
+  CW = "The most dispels, at least 5 (10 in a raid)", IW = "The most damage taken, no deaths, two bosses or more", BW = "The most absorbs, at least 1.25 fair shares",
+  TJ = "Top two in damage and at least 15% of the healing", NS = "No deaths, three or more in the group", PW = "Quests handed in that another member handed in too, at least 3",
+  LB = "The best drop, rare or better", FH = "A roll of 100", TB = "The most yards, 1.2 times the median", NR = "The most lines typed, at least 15",
+  DG = "A level gained", CM = "The most gold looted", WL = "The most consumables used, at least 3", FI = "The most deaths, at least 3",
+  OA = "The run's first death", SP = "The longest dead, three minutes or more", WF = "The most avoidable damage, 1.5 times the median",
+  LO = "Asked where everyone was", PG = "The most jumps, at least 100", NA = "The most need rolls, at least 4", BD = "The lowest roll, 5 or less",
+  GC = "In the run with us", SH = "Deaths at most the group's middle" }
+function CF.Tip(tip, rep, c)
+  local a = A().Of(c[2])
+  tip:AddLine((a and a.title or c[2]) .. ": " .. (nameOf(rep, c[1]) or "?"), 1, 1, 1)
+  if RULE[c[2]] then tip:AddLine(RULE[c[2]] .. ".", 0.85, 0.85, 0.85, true) end
+end
+
+-- Send to party's state on the button: greyed with the reason, or live; "Brann posted" beside it where another
+-- member's 2P came (the button stays live: nobody can tell a post went)
+function CF:DrawSend()
+  local b = self.sendButton
+  if not (b and self.frame and self.rep) then return end
+  local ok, why = CF.SendState(self.rep)
+  b:SetOn(ok and true or false)
+  b:SetLabel(ok and "Send to party" or why)
+  b.why = ok and "Posts the report in your group's chat as plain text, for those without Cute." or nil
+  local posted = C.Runs.posted
+  if posted and posted.id == self.rep.id then self.posted:SetText(posted.by .. " posted") else self.posted:SetText("") end
+end
+function CF:Posted(id) if self.frame and self.frame:IsShown() and self.rep and self.rep.id == id then self:DrawSend() end end

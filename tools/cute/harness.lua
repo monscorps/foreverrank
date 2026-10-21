@@ -11377,6 +11377,13 @@ do local function runsStage()
       assert(rep and rep.id == first.id and cardsOf(rep) == cardsOf(first), c.o.name .. "'s report the same cards: " .. cardsOf(rep) .. " / " .. cardsOf(first))
       assert(not c.C.Runs.Current(), c.o.name .. " has no run on")
       assert(c == cs[1] or rep.from == "scribe", c.o.name .. " shows the scribe's report, not one of its own")
+      -- (the run stats from this client's own build: a run, and its own card's kind)
+      local S = c.C.Sample
+      local mine = rep.mine and c.C.Awards.Of(rep.mine[1])
+      local honor = (mine and (mine.kind == "star" or mine.kind == "shout")) and 1 or 0
+      local roast = (mine and mine.kind == "blooper") and 1 or 0
+      assert(S:Counter("runs") == 1 and S:Counter("runs_week") == 1 and S:Counter("honors") == honor and S:Counter("honors_week") == honor
+        and S:Counter("roasts") == roast and S:Counter("roasts_week") == roast, c.o.name .. "'s run stats: " .. S:Counter("runs") .. " " .. S:Counter("honors") .. " " .. S:Counter("roasts"))
       pace(c)
     end
     local a = 0
@@ -11819,6 +11826,239 @@ do local function runsStage()
       assert(lastReport(cs[5]) and cardsOf(lastReport(cs[5])) == cardsOf(rep) and #lastReport(cs[5]).mentions == #rep.mentions, "the raid sees the scribe's")
       said[#said + 1] = string.format("a raid of 40: five cards and %d mentions, no member twice, three messages at most at the end, a late member answered %d time%s", #rep.mentions, answers, answers == 1 and "" or "s")
     end)
+  end
+
+  -- (5) pictures: SetUnit only on a unit in sight whose identity is plain, found in the order of 8.2 (a target and a
+  -- nameplate included); without one the race model by display id (where the testers switched it on); else the icons,
+  -- the race's portrait for a known race and sex, the class icon alone where either is unknown or the portrait does not
+  -- load; no reason line; your own card always a model
+  isolated({ gmember("Ayla", 1), gmember("Bram", 3), gmember("Cira", 3), gmember("Dorn", 3), gmember("Esk", 3) }, function()
+    local c = gchar("Ayla", 1, { race = "Dwarf", sex = 3 })
+    login(c)
+    tickAll(40)
+    local G = group({ c, { name = "Bram", class = "WARRIOR", race = "Orc", sex = 2 }, { name = "Cira", class = "PRIEST", race = "Human", sex = 3 }, { name = "Dorn", class = "HUNTER", race = "Troll", sex = 2 } })
+    G.hidden[guidOf("Cira")] = true
+    G.secretId[guidOf("Dorn")] = true
+    local Cd = c.C.Cards
+    assert(Cd.Find(c.o.guid) == "player" and Cd.Find(guidOf("Bram")) == "party1", "the player, then the party")
+    assert(Cd.Find(guidOf("Cira")) == nil and Cd.Find(guidOf("Dorn")) == nil, "out of sight, or of secret identity: no unit")
+    -- (a guild mate out of the group, as the target, then on a nameplate)
+    G.members[#G.members + 1] = { name = "Esk", guid = guidOf("Esk"), class = "MAGE", race = "Gnome", sex = 2 }
+    G.raid = false
+    c.units.target = nil
+    table.remove(G.members)
+    G.extra = { name = "Esk", guid = guidOf("Esk"), class = "MAGE", race = "Gnome", sex = 2 }
+    local holder = c.C.UI.frame or UIParent
+    local card = Cd.Make(c.env.UIParent)
+    local function fill(name, class, race, sex, guid) Cd.Fill(card, { guid = guid or guidOf(name), name = name, class = class, race = race, sex = sex, kind = "star", label = "GOLD STAR", title = "T", line = "L", value = "1", valueLabel = "x" }) end
+    fill("Bram", "WARRIOR", "Orc", 2)
+    assert(card.drew == "model" and card.model.__unit == "party1" and card.model:IsShown(), "a member in sight: their model by SetUnit")
+    fill("Ayla", "MAGE", "Dwarf", 3, c.o.guid)
+    assert(card.drew == "model" and card.model.__unit == "player", "your own card: always a model")
+    fill("Cira", "PRIEST", "Human", 3)
+    assert(card.drew == "icons" and card.portrait:IsShown() and card.portrait.__tex == 236447 and card.classIcon.__tex == 626004 and card.classIcon.__w == 32,
+      "out of sight: the class colour, Human female's portrait and the priest's icon at its corner")
+    c.env.CuteDB.settings.raceModel = true
+    fill("Dorn", "HUNTER", "Troll", 2)
+    assert(card.drew == "race" and card.model.__display == 59071 and card.model:IsShown(), "the race model where the testers switched it on: Troll male's display")
+    c.env.CuteDB.settings.raceModel = nil
+    fill("Esk", "MAGE", "Gnome", nil)
+    assert(card.drew == "icons" and not card.portrait:IsShown() and card.classIcon.__w == 72, "the sex unknown: the class icon alone, large")
+    rawset(card.portrait, "SetTexture", function() return false end)
+    fill("Cira", "PRIEST", "Human", 3)
+    assert(card.drew == "icons" and not card.portrait:IsShown() and card.classIcon.__w == 72, "a portrait that does not load: the class icon alone")
+    rawset(card.portrait, "SetTexture", nil)
+    for _, fs in ipairs({ card.name, card.title, card.line, card.value, card.valueLabel, card.label }) do
+      assert(not fs:GetText():lower():find("range") and not fs:GetText():lower():find("sight"), "no reason line on a card")
+    end
+    -- (a target and a nameplate are units too, in that order)
+    G.members[#G.members + 1] = G.extra
+    G.raid = false
+    c.units.target = guidOf("Esk")
+    local u = Cd.Find(guidOf("Esk"))
+    assert(u == "party4" or u == "target", "a guild mate as the target is found: " .. tostring(u))
+    table.remove(G.members)
+    c.units.target, c.units.nameplate7 = nil, nil
+    assert(Cd.Find(guidOf("Esk")) == nil, "nowhere: no unit")
+  end)
+  said[#said + 1] = "pictures: SetUnit only in sight and plain, your own card a model, the race model by display id where switched on, the portrait and class icon, the class icon alone where race, sex or the file fails"
+
+  -- (11) chat lines, (18) the card screen and the Runs tab laid out: Send to party at most 255 bytes a line, only in the
+  -- click, greyed in an encounter, in the chat lockdown, without a group and with the policy in doubt; another member's
+  -- 2P shows who posted and leaves the button live; Print to chat sends nothing; Warm Feet never on the party line;
+  -- the posting lines never counted as typed; CuteCardFrame in report, raid (662 high) and test mode, with and without
+  -- a cover, the Runs tab with rows and empty, Settings > Runs, at J's default and minimum sizes
+  isolated({ gmember("Fen", 1), gmember("Gus", 3), gmember("Hob", 3) }, function()
+    local cs = { gchar("Fen", 1, { class = "WARRIOR", race = "Human" }), gchar("Gus", 3, { class = "PRIEST", race = "Dwarf", sex = 3 }), gchar("Hob", 3, { class = "ROGUE", race = "Gnome" }) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    -- the empty Runs tab: "No runs yet." and its button
+    local gus = cs[2]
+    gus.C.UI:Open("runs")
+    assert(texts(gus):find("No runs yet.", 1, true), "the empty Runs tab says so")
+    check(gus.C.UI.frame, "runs: the empty Runs tab")
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    gus.C.UI:Open("runs")
+    assert(texts(gus):find("Now: The Deadmines", 1, true), "the band: the run on now")
+    check(gus.C.UI.frame, "runs: the Runs tab with a run on")
+    local dmg = { Fen = { [7] = 30000, [0] = 2000 }, Gus = { [2] = 9000, [6] = 7 }, Hob = { [0] = 9000, [5] = 6, [8] = 9000 } }
+    for _, enc in ipairs({ 1230, 1236, 1238, 1234 }) do fight(G, 60, dmg, enc); tickAll(60) end
+    zone(cs, "none", 0)
+    tickAll(25)
+    local CF = gus.C.CardFrame
+    assert(CF.frame and CF.frame:IsShown() and CF.rep and CF.rep.from == "scribe", "the report on the screen")
+    local h = CF.frame:GetHeight()
+    assert(h == 560 and CF.frame:GetWidth() == gus.C.CardFrame.Width(#CF.rep.cards), "the report's size: " .. h)
+    check(CF.frame, "runs: the report, no cover")
+    -- Send to party's states
+    local function state() local ok, why = CF.SendState(CF.rep); return ok and "live" or why end
+    gus.encounter = true; assert(state() == "After the fight", "greyed in an encounter: " .. state()); gus.encounter = false
+    gus.chatLocked = true; assert(state() == "Outside the instance", "greyed in the chat lockdown"); gus.chatLocked = false
+    gus.C.Policy.doubt = true; assert(state() == "Waiting for Guild Info", "greyed while the policy is in doubt"); gus.C.Policy.doubt = nil
+    local keep = gus.group; gus.group = nil; assert(state() == "Not in a group", "greyed without a group"); gus.group = keep
+    assert(state() == "live", "live otherwise")
+    -- the click: every line in it, on PARTY, at most 255 bytes, nothing the font cannot draw but names; the lines never
+    -- counted as typed; then Sent, and the others see who posted
+    local typed = 0
+    gus.C.Sample:OnChat(function() typed = typed + 1 end)
+    local n0 = #gus.chatOut
+    CF:DrawSend()
+    press(CF.sendButton)
+    local posted = {}
+    for i = n0 + 1, #gus.chatOut do posted[#posted + 1] = gus.chatOut[i] end
+    assert(#posted >= 2 and typed == 0, "lines posted, none counted as typed: " .. #posted .. ", " .. typed)
+    for _, l in ipairs(posted) do
+      assert(l.hw and l.kind == "PARTY" and #l.text <= 255 and not undrawable(l.text), "a line in the click, on PARTY, within 255 bytes: " .. l.text)
+    end
+    assert(posted[1].text:find("^Cute recap") and not table.concat((function() local t = {}; for _, l in ipairs(posted) do t[#t + 1] = l.text end return t end)(), "\n"):find("Warm Feet", 1, true), "the header first; Warm Feet never on the party line")
+    assert(state() == "Sent", "Sent after the post")
+    tickAll(3)
+    local fen = cs[1].C.CardFrame
+    assert(fen.frame:IsShown() and fen.posted:GetText() == "Gus posted" and fen.sendButton:IsEnabled(), "another member's 2P: who posted, the button live")
+    -- (Warm Feet's line left out wherever it is on a card)
+    local wf = cs[1].C.Awards.Text({ place = "X", kind = "d", dur = 60, cards = { { "a", "WF", 9000 }, { "b", "FI", 4 } }, gone = {} }, function() return "Y" end)
+    assert(#wf == 2 and not table.concat(wf):find("Warm Feet", 1, true), "Warm Feet off the party line")
+    -- History: the Runs tab, the report's row; a click opens it again; right-click offers to delete it
+    press(CF.buttons[2])
+    assert(gus.C.UI.page == "runs" and not CF.frame:IsShown(), "History opens the Runs tab")
+    local row
+    for _, r in ipairs(gus.C.UI.lists.runs.items) do if r:IsShown() then row = r end end
+    assert(row and row.name:GetText() == "The Deadmines", "the history's row: " .. tostring(row and row.name:GetText()))
+    check(gus.C.UI.frame, "runs: the Runs tab, a report in the history")
+    gus.C.UI.frame:SetSize(760, 420)
+    gus.C.UI:Draw()
+    check(gus.C.UI.frame, "runs: the Runs tab, small")
+    gus.C.UI.frame:SetSize(1040, 640)
+    row.__scripts.OnClick(row, "LeftButton")
+    assert(CF.frame:IsShown(), "a row's click opens its report")
+    row.__scripts.OnClick(row, "RightButton")
+    local menu = gus.menus[#gus.menus]
+    assert(menu and menu[2] and menu[2].text == "Delete from history", "right-click: Delete from history")
+    -- Settings > Runs
+    gus.C.UI:Open("settings", "runs")
+    assert(texts(gus):find("Show the report when a run ends", 1, true) and texts(gus):find("Long groups outside instances", 1, true), "Settings > Runs: its rows")
+    check(gus.C.UI.frame, "runs: Settings > Runs")
+    -- the cover, where Cute_Quest gives one, and a raid's mentions
+    gus.env.Cute.QuestCover = function() return { texture = 1530011, texcoords = { 0, 0.684, 0, 0.742 } } end
+    CF:Report(CF.rep)
+    assert(CF.cover:IsShown() and CF.label.__points[1].x == 146, "the cover, the label beside it")
+    check(CF.frame, "runs: the report, a cover")
+    gus.env.Cute.QuestCover = nil
+    local raid = gus.C.RunsUI.Test(true)
+    assert(CF.frame:GetHeight() == 662 and #raid.mentions >= 5 and CF.label:GetText() == "TEST RECAP", "a raid's test: 662 high, the mentions: " .. CF.frame:GetHeight())
+    check(CF.frame, "runs: a raid's test report")
+    -- the test: Print to chat sends nothing; Next draws another set
+    local sent0, chat0 = #gus.chatOut, #gus.chat
+    local t1 = gus.C.RunsUI.Test(false)
+    press(CF.buttons[3])
+    assert(#gus.chatOut == sent0 and #gus.chat > chat0, "Print to chat: in your chat frame, nothing sent")
+    press(CF.buttons[2])
+    local t2 = CF.rep
+    assert(t2 ~= t1 and cardsOf(t2) ~= cardsOf(t1), "Next: another set of awards")
+    check(CF.frame, "runs: the test report")
+    -- the slash words
+    gus.env.SlashCmdList.CUTE("run test")
+    assert(CF.frame:IsShown() and CF.rep.test, "/cute run test")
+    gus.env.SlashCmdList.CUTE("run")
+    assert(CF.rep.id == lastReport(gus).id, "/cute run: the last report")
+    local d0 = #gus.chat
+    gus.env.SlashCmdList.CUTE("diag runs")
+    local diag = table.concat(gus.chat, "\n", d0 + 1)
+    assert(diag:find("diag runs: no run on", 1, true) and diag:find("group channel: sent", 1, true) and not diag:find("Fen", 1, true), "/cute diag runs, no name:\n" .. diag)
+    gus.env.SlashCmdList.CUTE("race")
+    assert(gus.C.UI.page == "race", "the core's words still the core's")
+  end)
+  said[#said + 1] = "the card screen and the Runs tab: Send to party in the click, within 255 bytes, greyed in an encounter, the lockdown, no group, a policy in doubt, who posted shown and the button live, Print to chat sends nothing, Warm Feet off the line, the posting never typed; laid out with and without a cover, a raid's 662, the tab with rows and empty, Settings > Runs, J at both sizes; /cute run, run test, diag runs"
+
+  -- the run stats and the run fields: in the registry for every client (Runs on or off), the fields under Runs in Who
+  -- sees what, each lifetime count revealing its week; the stats bumped by this client's own build
+  do
+    local S, P = yezin.C.Stats, yezin.C.Policy
+    for _, id in ipairs({ "runs", "runs_week", "honors", "honors_week", "roasts", "roasts_week" }) do assert(S.byId[id] and S.byId[id].cat == "runs", "the run stat " .. id) end
+    assert(S.byId.runs.code == "ru" and S.byId.honors.code == "ho" and S.byId.roasts.code == "rx" and S.byCode.rm == "run_meter" and S.byCode.rl == "run_loot", "codes for life")
+    for _, pair in ipairs({ { "runs", "runs_week" }, { "honors", "honors_week" }, { "roasts", "roasts_week" } }) do
+      local saved = yezin.env.CuteDB.policy
+      yezin.env.CuteDB.policy = { vis = { [pair[2]] = "self" } }
+      assert(P:Route(pair[1]) == "self", pair[1] .. " goes its week's way")
+      yezin.env.CuteDB.policy = saved
+    end
+    yezin.C.UI:Open("settings", "vis")
+    assert(texts(yezin):find("Meter in runs", 1, true) and texts(yezin):find("Yards in runs", 1, true), "the run fields in Who sees what")
+    assert(S.HIDDEN.sex and S.HIDDEN_ORDER[#S.HIDDEN_ORDER] == "sex", "sex rides beside the GUID")
+  end
+  said[#said + 1] = "the run stats and fields in the registry, Who sees what lists the fields, each count reveals its week"
+
+  -- (19) memory: a raid run's saved state bounded (40 members, 16 quests each); the history at its cap; what the new
+  -- stats add to a member's full record, counted
+  do
+    local function size(v, seen)
+      seen = seen or {}
+      if type(v) == "string" then return #v + 2 end
+      if type(v) == "number" then return 8 end
+      if type(v) ~= "table" or seen[v] then return 1 end
+      seen[v] = true
+      local n = 4
+      for k, x in pairs(v) do n = n + size(k, seen) + size(x, seen) end
+      return n
+    end
+    local Rn = yezin.C.Runs
+    local run = { id = "x-1", kind = "r", inst = 409, start = 0, at = 0, seq = 0, members = {}, own = { q = {} }, bosses = {}, nb = 8, wipes = 0, dorder = 0,
+      maps = {}, meter = { done = {}, tot = {} }, loot = {} }
+    for i = 1, 16 do run.own.q[i] = 9000 + i end
+    for i = 1, 40 do
+      local g = string.format("Player-4242-0B%06X", i)
+      local sx = g:match("([^%-]+)$")
+      local v = { t = 9000, o = 0, de = 9, dt = 300, fd = 100, dm = 9999999, hl = 9999999, ab = 999999, tk = 9999999, av = 999999, ["in"] = 40, dp = 40, mt = 1,
+        ch = 99, wy = 3, yd = 99999, ju = 999, cn = 30, lv = 1, gd = 999999, lq = 4, ln = 9, q = {} }
+      for k = 1, 16 do v.q[k] = 9000 + k end
+      run.members[sx] = { g = g, n = "Member" .. i, c = "MAGE", r = "Human", s = 2, first = 0, obs = { de = 9, fd = 100, dt = 300 }, v = v, seq = 9, hello = "0.7.1" }
+      run.meter.tot[sx] = { dm = 9999999, hl = 9999999, ab = 999999, tk = 9999999, av = 999999, ["in"] = 40, dp = 40, dd = 9 }
+      run.loot[sx] = { hr = 99, lr = 1, nd = 4, wn = 2, lq = 4 }
+    end
+    for i = 1, 200 do run.meter.done[i] = true end
+    local runBytes = size(run)
+    assert(runBytes < 48 * 1024, "a raid run's saved state: " .. runBytes .. " bytes")
+    local db = Rn.DB()
+    local saved = { list = db.list, keep = db.keep }
+    db.list, db.keep = {}, 50
+    for i = 1, 60 do
+      local rep = { id = "h" .. i, kind = "d", place = "The Deadmines", start = i, dur = 2500, bosses = 5, known = 5, wipes = 1, deaths = 7, n = 5, members = {}, cards = {}, mentions = {}, gone = {} }
+      for k = 1, 5 do local sx = string.format("0C%06X", k); rep.members[sx] = { n = "Member" .. k, c = "MAGE", r = "Human", s = 2, g = "Player-4242-" .. sx }; rep.cards[k] = { sx, "HD", 38, "star" } end
+      Rn.Keep(rep)
+    end
+    local histBytes = size(db.list)
+    assert(#db.list == 50 and histBytes < 50 * 1000, "the history at its cap, under a kilobyte a report: " .. #db.list .. ", " .. histBytes)
+    db.list, db.keep = saved.list, saved.keep
+    local M = yezin.C.Comm
+    local added = 0
+    for _, id in ipairs({ "runs", "runs_week", "honors", "honors_week", "roasts", "roasts_week", "sex" }) do
+      local v = id == "sex" and 3 or 1234
+      added = added + #id + 2 + #M.Encode(yezin.C.Stats.byId[id], v)
+    end
+    assert(added <= 150, "the new stats add at most 150 bytes to a full record: " .. added)
+    said[#said + 1] = string.format("memory: a raid run's saved state %d KB, the history of 50 %d KB, the new stats %d bytes of a full record", math.floor(runBytes / 1024 + 0.5), math.floor(histBytes / 1024 + 0.5), added)
   end
 
   -- (12) the choice, on tables alone (Awards.lua makes no client call): a member { sfx, guid, name, v }
