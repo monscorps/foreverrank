@@ -11877,6 +11877,44 @@ do local function runsStage()
   end)
   said[#said + 1] = "one member in 45 s early: the rest keep their own id, the early one joins it with the 2Q, one report; a forged back-dated answer moves nobody in the run a while, and a newcomer takes the scribe's"
 
+  -- (13.1) an edited copy floods the scribe with newcomer hellos and 2Rs, one a second for five minutes: one answer
+  -- waits at a time, a sender is answered once a minute at most, the queue stays short, and the scribe's end goes at
+  -- once
+  isolated({ gmember("Nia", 1), gmember("Oz", 3), gmember("Pax", 3) }, function()
+    local cs = { gchar("Nia", 1), gchar("Oz", 3), gchar("Pax", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local nia, pax = cs[1], cs[3]
+    fight(G, 60, { Pax = { [0] = 1000 }, Nia = { [0] = 900 } }, 1230)
+    tickAll(40)
+    local id = nia.C.Runs.Current().id
+    local b36 = nia.C.Comm.b36
+    local mark, longest = #nia.rsent, 0
+    for i = 1, 300 do
+      local t = nia.C.ServerNow()
+      nia.C.RunComm:Receive("CuteRun", "2H|" .. b36(t) .. "-X" .. i .. "|0.7.1|d." .. b36(36), "PARTY", pax.sender)
+      nia.C.RunComm:Receive("CuteRun", "2R|" .. id .. "|" .. sfx(pax), "PARTY", pax.sender)
+      tickAll(1)
+      longest = math.max(longest, #nia.C.RunComm.out)
+    end
+    local answers, ws = 0, 0
+    for k = mark + 1, #nia.rsent do
+      local m = nia.rsent[k].msg
+      if m:match("^2H|.*%.a$") then answers = answers + 1 elseif m:sub(1, 3) == "2W|" then ws = ws + 1 end
+    end
+    assert(answers <= 6 and ws <= 6 and longest <= 4, "a flood answered once a minute, the queue short: " .. answers .. " answers, " .. ws .. " 2W, queue " .. longest)
+    local q0 = #nia.rsent
+    assert(nia.C.Runs:EndRun(), "the leader's End run")
+    tickAll(5)
+    local q
+    for k = q0 + 1, #nia.rsent do if nia.rsent[k].msg:sub(1, 3) == "2Q|" then q = true end end
+    assert(q, "the scribe's 2Q goes at once after the flood: " .. rkinds(nia, q0 + 1))
+  end)
+  said[#said + 1] = "a flood of hellos and 2Rs: one answer waiting at a time, once a minute a sender, the queue short, the end at once"
+
   -- (4) the lockdown: a 2V answered 11 spends no try, the Chat restriction's Activating holds it and only its Inactive
   -- lets it go, once; a lockdown for the whole stay sends nothing inside, a disband inside gives each client its own
   -- report, and the id and the scribe settle once the group is out; the meter read only out of combat; a secret

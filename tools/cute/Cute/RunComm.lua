@@ -13,14 +13,16 @@
 --   2R|<run>|<suffix>                a member back from a crash asks for its last checkpoint
 --   2W|<run>|<suffix>|<i>/<n>|k=v;... the scribe: that member's last checkpoint, back
 -- The queue is its own: it waits while the game says addon chat is restricted (RC.Restricted, asked before each send)
--- and tries on a dungeon's map whose chat is locked down (a result 11 holds it there); one message a second; hellos, 2E, 2Q, 2A, 2R and 2W ahead of 2P and 2V; a newer 2V takes the place of one waiting; a
--- checkpoint waits for the end of combat. Results as Comm reads them (Enum.SendAddonMessageResult,
--- ChatConstantsDocumentation.lua): 3 and 8 (throttle) try again in 3 s, 9 (GeneralError) in 10 s, five times (a
--- checkpoint as often as it takes); 5 (NotInGroup) empties the queue;
--- 11 (AddOnMessageLockdown) spends no try and drops nothing: the queue waits for ADDON_RESTRICTION_STATE_CHANGED with
--- the Chat type and the Inactive state (RestrictedActionsDocumentation.lua:97; it also fires Activating just before a
--- restriction starts), and C_RestrictedActions.IsAddOnRestrictionActive, which reads false during any of the event's
--- dispatches, is read only on a 5-second timer (through Comm's M:Locked), never inside the event.
+-- and tries on a dungeon's map whose chat is locked down (a result 11 holds it there); one message a second; hellos,
+-- 2E, 2Q, 2A, 2R and 2W ahead of 2P and 2V; a newer 2V takes the place of one waiting, as a newer answer to a
+-- newcomer does; 30 wait at most (the group's end takes the last one's place); a checkpoint waits for the end of
+-- combat. Results as Comm reads them (Enum.SendAddonMessageResult, ChatConstantsDocumentation.lua): 3 and 8
+-- (throttle) try again in 3 s, 9 (GeneralError) in 10 s, five times (a checkpoint as often as it takes); 5
+-- (NotInGroup) empties the queue; 11 (AddOnMessageLockdown) spends no try and drops nothing: the queue waits for
+-- ADDON_RESTRICTION_STATE_CHANGED with the Chat type and the Inactive state (RestrictedActionsDocumentation.lua:97; it
+-- also fires Activating just before a restriction starts), and C_RestrictedActions.IsAddOnRestrictionActive, which
+-- reads false during any of the event's dispatches, is read only on a 5-second timer (RC.Restricted), never inside
+-- the event.
 -- A message is taken only from a sender whose name is a group unit's, and a GUID suffix in it only where that unit's
 -- GUID ends with it (Runs.lua says who is heard for what).
 local _, C = ...
@@ -72,11 +74,22 @@ end
 -- Send(kind, body, opts): body a message's text after its kind and bar ("<run>|..."), or a function giving the whole
 -- messages as they leave (a 2V is built as it goes, by the policy then: Runs.lua). opts.ooc: wait for the end of combat
 -- (a checkpoint); opts.key: a message waiting with the same key is replaced in its place (the newest 2V)
+-- (CAP messages wait at most: past it a new one is dropped, but the group's end, 2E, 2Q and 2A, which takes the place
+-- of the last that waits)
+local CAP = 30
+local ENDS = { ["2E"] = true, ["2Q"] = true, ["2A"] = true }
 function RC:Send(kind, body, opts)
   opts = opts or {}
   local e = { kind = kind, body = body, ooc = opts.ooc, key = opts.key, at = clock(), tries = 0 }
   if e.key then
     for i, x in ipairs(self.out) do if x.key == e.key and not x.msgs then self.out[i] = e; self:Kick(); return true end end
+  end
+  if #self.out >= CAP then
+    local gone
+    if ENDS[kind] then for i = #self.out, 1, -1 do local x = self.out[i]; if not x.msgs and not ENDS[x.kind] then gone = i break end end end
+    RC.capped = (RC.capped or 0) + 1
+    if not gone then return false end
+    table.remove(self.out, gone)
   end
   local pos = #self.out + 1
   for i, x in ipairs(self.out) do if (FIRST[x.kind] or 3) > (FIRST[kind] or 3) and not x.msgs then pos = i break end end
@@ -272,7 +285,7 @@ function RC.Report()
   local CI = C_ChatInfo
   local restricted = type(CI) == "table" and type(CI.AreOutgoingAddonChatMessagesRestricted) == "function" and C.Get(CI.AreOutgoingAddonChatMessagesRestricted)
   local lockdown = type(CI) == "table" and type(CI.InChatMessagingLockdown) == "function" and C.Get(CI.InChatMessagingLockdown)
-  return string.format("group channel: sent %s | waiting %d%s | result 11: %d, %s | outgoing restricted %s | chat lockdown %s | addon chat restricted %s | from no group unit %d",
-    #kinds > 0 and table.concat(kinds, ", ") or "nothing", #RC.out, RC.held and (" (held: " .. RC.held.why .. ")") or "",
+  return string.format("group channel: sent %s | waiting %d%s, %d past the cap | result 11: %d, %s | outgoing restricted %s | chat lockdown %s | addon chat restricted %s | from no group unit %d",
+    #kinds > 0 and table.concat(kinds, ", ") or "nothing", #RC.out, RC.held and (" (held: " .. RC.held.why .. ")") or "", RC.capped or 0,
     RC.n11 or 0, #r11 > 0 and table.concat(r11, ", ", math.max(1, #r11 - 5)) or "none", tostring(restricted), tostring(lockdown), tostring(RC.Restricted()), RC.unknown or 0)
 end

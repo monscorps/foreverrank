@@ -239,6 +239,7 @@ local function flags(run, answer)
   return run.kind .. "." .. b36(run.inst or run.map or 0) .. (answer and ".a" or "")
 end
 -- (built as it leaves, with the id the run holds then: a hello held by a lockdown says the id settled meanwhile)
+-- An answer waits one at a time (it says the group's id: one covers every newcomer waiting)
 function R:Hello(answer)
   local run = self.run
   if not run then return end
@@ -247,7 +248,18 @@ function R:Hello(answer)
     -- (when this client's own hello left: an answer to it is taken in the minute after, R:Offer)
     if not answer and not run.helloAt then run.helloAt = gtime() end
     return { "2H|" .. run.id .. "|" .. C.version .. "|" .. flags(run, answer) }
-  end)
+  end, answer and { key = "2Ha" } or nil)
+end
+-- a sender answered (a hello or a 2R) once a minute at most: an edited copy's flood of hellos keeps nobody's queue
+-- busy, and the scribe's end goes on time
+local ONCE = 60
+function R.Once(what, sfx)
+  R.onceAt = R.onceAt or {}
+  local key = what .. sfx
+  local t = gtime()
+  if R.onceAt[key] and t - R.onceAt[key] < ONCE then return false end
+  R.onceAt[key] = t
+  return true
 end
 
 function R:Start(kind, place)
@@ -1024,7 +1036,7 @@ function R:Heard(kind, rest, who)
   elseif kind == "2R" then
     -- (a member back from a crash: the scribe gives it back its last checkpoint)
     local sfx = body:match("^(%w+)$")
-    if sfx ~= who.sfx or not self:IsScribe() or not (m and m.v) then return end
+    if sfx ~= who.sfx or not self:IsScribe() or not (m and m.v) or not R.Once("2R", sfx) then return end
     local kv = encode(m.v)
     C.RunComm:Send("2W", function() return C.RunComm.Pack("2W|" .. run.id .. "|" .. sfx .. "|", kv) end)
   elseif kind == "2W" then
@@ -1088,6 +1100,7 @@ function R:HeardHello(rest, who)
   -- a newcomer (its start later than ours by more than 30 s): the scribe answers at once, another holder after 2 to
   -- 6 s where no answer was heard meanwhile
   if t > myT + 30 then
+    if not R.Once("2H", who.sfx) then return end
     if self:IsScribe() then self:Hello(true)
     else
       local asked = gtime()
