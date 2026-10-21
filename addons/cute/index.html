@@ -378,7 +378,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
     <h1>The whole guild in one window.</h1>
     <p>The guild's own addon for Forever's November release. Every member's client shares its character over the guild channel, and one window shows the whole guild: the race to 60, readiness, the hall of shame, the statistics, the officers' view. Officers decide who sees what.</p>
     <div class="cu-cta">
-      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.7.1<!--/@v--></span>, <!--@kb-->1292<!--/@kb--> KB</small></a>
+      <a class="cu-dl" href="Cute.zip">Download Cute <small><span id="cu-ver"><!--@v-->0.7.2<!--/@v--></span>, <!--@kb-->1363<!--/@kb--> KB</small></a>
       <span class="cu-note">Free, GPL. No server, no accounts, nothing leaves the guild. Unzip into <code>Interface\AddOns</code> and type <code>/cute</code>.</span>
     </div>
   </div>
@@ -453,7 +453,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
 <section class="cu-sec" id="stats">
   <div class="cu-wrap">
     <h2>What it tracks</h2>
-    <p class="cu-lede"><!--@n-->109<!--/@n--> stats in <!--@v-->0.7.1<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It starts with what research and the beta showed about Forever and learns the rest as the guild plays, setting the research aside where the game turns out different. It is a work in progress and the list changes weekly; this is today's.</p>
+    <p class="cu-lede"><!--@n-->109<!--/@n--> stats in <!--@v-->0.7.2<!--/@v-->, plus whatever statistics the server keeps and Forever's Legacy Challenges. It starts with what research and the beta showed about Forever and learns the rest as the guild plays, setting the research aside where the game turns out different. It is a work in progress and the list changes weekly; this is today's.</p>
     <details class="cu-fold">
       <summary>Show the list: <!--@n:leveling-->42<!--/@n:leveling--> for the race, <!--@n:prog-->39<!--/@n:prog--> for prog, <!--@n:funny-->18<!--/@n:funny--> for the hall of shame, <!--@n:officer-->10<!--/@n:officer--> for the officers</summary>
       <div class="cu-bar">
@@ -471,8 +471,8 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-wrap">
     <h2>Install</h2>
     <ol class="cu-steps">
-      <li>Download <a href="Cute.zip">Cute.zip</a> and unzip it. You get two folders, <code>Cute</code> and <code>Cute_Quest</code>.</li>
-      <li>Put both in <code>Interface\AddOns</code>, next to your other addons. <code>Cute_Quest</code> loads only while one of its modules is on.</li>
+      <li>Download <a href="Cute.zip">Cute.zip</a> and unzip it. You get two folders, <code>Cute</code> and <code>Cute_Quest</code>. Windows' Extract All puts them inside one more <code>Cute</code> folder: take the two out of it, or the game will not find them.</li>
+      <li>Put both in <code>Interface\AddOns</code>, next to your other addons, so the game finds <code>Interface\AddOns\Cute\Cute.toc</code> and <code>Interface\AddOns\Cute_Quest\Cute_Quest.toc</code>. <code>Cute_Quest</code> loads only while one of its modules is on.</li>
       <li>Log in and type <code>/cute</code>, or click the elf on the minimap. Your record reaches the guild within seconds (inside a dungeon, once you leave it). Officer ranks get the Officers page and change Who sees what and the Rules in Settings, and save Who sees what to Guild Info where their rank may edit it; members see those greyed. The Guide, Quests, Route, Map, Journal, Gear and Camp switch on in Settings, Modules; with Quests on, the Guide shows your next step.</li>
     </ol>
   </div>
@@ -482,6 +482,7 @@ footer.cu-foot { display: block; max-width: none; margin: 3.5rem 0 0; padding: 0
   <div class="cu-wrap">
     <h2>Changelog</h2>
     <ul class="cu-log">
+      <li><b>0.7.2</b>The guild channel rides out errors and the dungeon chat lockdown, a /reload no longer floods the guild, big guilds cost far less, a half-loaded roster deletes nobody, and /cute diag says what the channel is doing; the quest modules rank by XP a minute, share nothing with the guild, leave the minimap alone unless Map is on, and say Cute, not QuestBank.</li>
       <li><b>0.7.1</b>Camp shows missing buffs until you have them, your party's too; Quests can hide the game's quest tracker; Map leaves grey quests off and draws one line at a time.</li>
       <li><b>0.7.0</b>QuestBank's guiding inside Cute: the step now on the Guide, and Quests, Route, Journal, Gear, Map and Camp as modules you switch on.</li>
       <li><b>0.6.1</b>Every check in Settings is a row that takes the click anywhere on it, and /cute guide switches the Guide on; an error the game swallows no longer stops the window, Rule 0 or the saved choice, and lands in /cute errors with where it happened.</li>

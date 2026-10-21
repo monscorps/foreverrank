@@ -2,6 +2,7 @@
 -- One line per version, newest first: Core.lua prints this version's at the first login on it.
 local _, C = ...
 C.CHANGES = {
+  ["0.7.2"] = "The guild channel rides out errors and the dungeon chat lockdown, a /reload no longer floods the guild, big guilds cost far less, a half-loaded roster deletes nobody, and /cute diag says what the channel is doing; the quest modules rank by XP a minute, share nothing with the guild, leave the minimap alone unless Map is on, and say Cute, not QuestBank.",
   ["0.7.1"] = "Camp shows missing buffs until you have them, your party's too; Quests can hide the game's quest tracker; Map leaves grey quests off and draws one line at a time.",
   ["0.7.0"] = "QuestBank's guiding inside Cute: the step now on the Guide, and Quests, Route, Journal, Gear, Map and Camp as modules you switch on.",
   ["0.6.1"] = "Every check in Settings is a row that takes the click anywhere on it, and /cute guide switches the Guide on; an error the game swallows no longer stops the window, Rule 0 or the saved choice, and lands in /cute errors with where it happened.",

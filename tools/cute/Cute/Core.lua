@@ -10,7 +10,7 @@
 -- in Settings > Modules, per character. Nothing leaves the guild's addon channel (and the whispers to the officers that
 -- carry what they keep to themselves, Comm.lua); there is no server.
 local ADDON, C = ...
-C.version = "0.7.1"
+C.version = "0.7.2"
 C.REGVER = 4 -- the stat registry's wire version (informational: a client ignores ids it does not know)
 C.COLOR = "|cffe8b24a"
 

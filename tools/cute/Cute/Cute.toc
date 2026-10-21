@@ -2,7 +2,7 @@
 ## Title: |cffe8b24aCute|r
 ## Notes: Cute's guild dashboard: the race to 60, readiness, the hall of shame, what the guild discovers in play and the officers' view, shared over the guild channel. More, like the Guide, switches on in Settings, Modules, and QuestBank's guiding as modules (Cute_Quest). /cute
 ## Author: Mikal
-## Version: 0.7.1
+## Version: 0.7.2
 ## X-License: GPL-3.0-or-later
 ## IconTexture: Interface\AddOns\Cute\art\logo.png
 ## SavedVariables: CuteDB
