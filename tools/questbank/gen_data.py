@@ -3284,10 +3284,11 @@ lines.append("D.OPEN = {" + ",".join("[%d]=true" % i for i in OPEN) + "}")
 # a map Forever redrew (Eastern Plaguelands, Stormwind: their guide coordinates are the old frame's)
 # ---------------------------------------------------------------------------
 SELFTEST_FIND = "--selftest-find" in sys.argv
-# (item, uiMap, x %, y %): the library books where the guides place them
+# (item, uiMap, x %, y %): the library books where the guides place them. Not Rumi of Gnomeregan (208860): the guides
+# give "Loch Modan 35.6, 48.9 or Westfall 52.7, 53.7", an either/or and so no place; players' files place it
 FIND_SEED_BOOKS = [
     (203755, 1429, 65.4, 70.1), (203754, 1455, 76.1, 10.2), (207972, 1454, 38.5, 78.2), (208185, 1420, 59.5, 52.3),
-    (210177, 1421, 43.4, 41.2), (208800, 1413, 62.7, 36.3), (208860, 1432, 35.6, 48.9), (208860, 1436, 52.7, 53.7),
+    (210177, 1421, 43.4, 41.2), (208800, 1413, 62.7, 36.3),
     (209844, 1421, 63.5, 63.1), (209843, 1439, 59.6, 22.2), (209850, 1432, 74.5, 19.6), (209845, 1436, 45.4, 70.4),
     (209847, 1413, 56.3, 8.8), (209846, 1413, 52.8, 54.7), (209851, 1442, 74.4, 85.7), (209849, 1431, 6.7, 28.5),
     (209848, 1437, 33.6, 47.9), (215683, 1441, 34.0, 40.0), (215815, 1416, 48.5, 57.6), (215816, 1417, 73.0, 65.0),
@@ -3366,6 +3367,8 @@ def find_selftest():
     assert all(r[3] == 0 and r[1] == 0 for r in g), "a guide's place: no object, no files"
     for item, m, x, y in FIND_SEED_BOOKS:
         assert m in UIMAP and _ITEM_NAME.get(item), (item, m)
+    twice = sorted({b[0] for b in FIND_SEED_BOOKS if [c[0] for c in FIND_SEED_BOOKS].count(b[0]) > 1})
+    assert not twice, "a book seeded at two places is a guide's either/or, no place: %r" % twice
     assert {r[4] for r in g if r[0] == "b"} <= set(_ITEM_NAME.values()), "titles as the client names the books"
     assert [r for r in g if r[0] == "k"] == [["k", 0, "610,220", 0, 216523, "g"]], "the cage, by its key"
     assert not FIND_SECRET_KEYS & {k for k, *_ in FIND_SEED_LOCKS} and not FIND_REDRAWN & {m for _, m, *_ in FIND_SEED_BOOKS}
@@ -3390,7 +3393,17 @@ lines.append("D.FIND = {\n" + ",\n".join("[%d]={%s}" % (m, ",".join("{%s}" % ","
     lua_text(v) if isinstance(v, str) else str(v) for v in r) for r in rs)) for m, rs in FIND.items()) + "\n}")
 FIND_COUNT = collections.Counter((r[0], r[5]) for rs in FIND.values() for r in rs)
 FIND_WORD = {"b": ("book", "books"), "k": ("locked object", "locked objects"), "h": ("looted object", "looted objects"), "r": ("rare", "rares")}
-print("finds: %s" % (", ".join("%d %s from %s" % (n, FIND_WORD[k][n != 1], {"p": "players' games", "g": "the guides"}[s])
+
+
+def find_count(kind, src, n):
+    """n rows of one kind and source as GAPS.md says them: books by title, at so many places."""
+    if kind != "b":
+        return "%d %s" % (n, FIND_WORD[kind][n != 1])
+    titles = len({r[4] for rs in FIND.values() for r in rs if r[0] == "b" and r[5] == src})
+    return "%d %s at %d %s" % (titles, FIND_WORD["b"][titles != 1], n, "place" if n == 1 else "places")
+
+
+print("finds: %s" % (", ".join("%s from %s" % (find_count(k, s, n), {"p": "players' games", "g": "the guides"}[s])
                                for (k, s), n in sorted(FIND_COUNT.items())) or "none"))
 lines.append("")
 
@@ -3552,7 +3565,7 @@ def gap_report():
            "Instant follow-ups planned on the day: %d. Race-limited quests: %d. Quests in mutually exclusive groups: %d." % (
                len(FOLLOW), len(RACE), len(EXCL)),
            "Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: %d." % len(TEXT_NAMED),
-           "Finds (D.FIND): %s." % (", ".join("%d %s from %s" % (n, FIND_WORD[k][n != 1], {"p": "players' games (two files agree)", "g": "the guides"}[src])
+           "Finds (D.FIND): %s." % (", ".join("%s from %s" % (find_count(k, src, n), {"p": "players' games (two files agree)", "g": "the guides"}[src])
                                               for (k, src), n in sorted(FIND_COUNT.items())) or "none"),
            ("World map icons: objective spots for %d quests (%d from CMaNGOS spawns, %d from its quest outlines only, %d from "
             "Wowhead Forever's quest pages, %d from players' games alone; %d more have players' spots beside those); %d quests "
