@@ -11082,6 +11082,20 @@ do
   end)
   said[#said + 1] = "the officers to whisper to follow an unread name online"
 
+  -- (aa) a file 0.7.0 wrote keeps no statistic it stored as 0 from "--" (never recorded), in the records held and those
+  -- parked, even where the first slimming pass ran: a 0.7.1 sender never sends that id again, so the 0 stayed for good
+  -- beside the "-" of members heard since
+  isolated({ member("Coraline", 1) }, function()
+    local db = { slimAt = true, policyClub = "7", roster = { ["Old-Forever"] = { seen = EPOCH + 900, stats = { g3001 = 0, g3002 = 5, level = 20 }, at = {} } },
+      policies = { ["8"] = { roster = { ["Far-Forever"] = { seen = EPOCH + 900, stats = { g3001 = 0, level = 20 }, at = {} } } } } }
+    local c = char("Coraline", 1)
+    login(c, db)
+    local old = db.roster["Old-Forever"].stats
+    assert(old.g3001 == nil and old.g3002 == 5 and old.level == 20, "a stored 0 statistic gone, the rest kept")
+    assert(db.policies["8"].roster["Far-Forever"].stats.g3001 == nil and db.policies["8"].roster["Far-Forever"].stats.level == 20, "and in a parked guild's records")
+  end)
+  said[#said + 1] = "a file's statistics stored as 0 from never recorded go once at load"
+
   print("core: " .. table.concat(said, "; "))
 end
 

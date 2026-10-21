@@ -450,12 +450,25 @@ function C.InitDB()
       if rec.modules ~= nil and type(rec.modules) ~= "table" then rec.modules = {} end
     end
   end
-  -- (once: the times 0.7.0 kept for every statistic and discovery of every member, which nothing reads, Roster.lua)
-  if not CuteDB.slimAt and C.Stats and C.Stats.IsDynamic then
-    for _, e in pairs(CuteDB.roster) do
-      for id in pairs(e.at) do if type(id) == "string" and C.Stats.IsDynamic(id) then e.at[id] = nil end end
+  -- (once: the times 0.7.0 kept for every statistic and discovery of every member, which nothing reads, Roster.lua;
+  -- and the statistics it kept as 0 from "--", never recorded, which are nothing now (Stats.lua S.Quantity, Roster.lua
+  -- R:Apply): a sender never sends that id again, so the 0 stayed for good. In the records held and those parked with
+  -- another guild; slimAt 2, so a file the first pass ran on (true) gets the second)
+  local slim = CuteDB.slimAt == true and 1 or tonumber(CuteDB.slimAt) or 0
+  if slim < 2 and C.Stats and C.Stats.IsDynamic then
+    local function slimmed(roster)
+      for _, e in pairs(type(roster) == "table" and roster or {}) do
+        if type(e) == "table" and type(e.at) == "table" then
+          for id in pairs(e.at) do if type(id) == "string" and C.Stats.IsDynamic(id) then e.at[id] = nil end end
+        end
+        if type(e) == "table" and type(e.stats) == "table" then
+          for id, v in pairs(e.stats) do if v == 0 and type(id) == "string" and id:match("^g%d+$") then e.stats[id] = nil end end
+        end
+      end
     end
-    CuteDB.slimAt = true
+    slimmed(CuteDB.roster)
+    for _, p in pairs(type(CuteDB.policies) == "table" and CuteDB.policies or {}) do if type(p) == "table" then slimmed(p.roster) end end
+    CuteDB.slimAt = 2
   end
   -- (a newer Cute's file, this one run after it: the version stays the newest that ran, so its one-time steps do not
   -- run again when it comes back)
