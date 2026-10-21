@@ -209,8 +209,19 @@ function A.Target(here)
 end
 
 local NOTHING = { route = { "No stop to go to", nil }, handin = { "Nothing finished to hand in", "Finish a quest and the arrow finds its NPC" },
-                  pickup = { "Nothing on your pick-up list", "The ! on a quest on Available puts it there" }, pin = { "Nothing chosen yet", "Click a quest or a stop in QuestBank" },
+                  pickup = { "Nothing on your pick-up list", "The ! on a quest on Available puts it there" }, pin = { "Nothing chosen yet", nil },
                   corpse = { "Your corpse", nil } }
+-- the host's name in the arrow's words (QuestBank, or a host running this engine: QB.NAME, Bridge.lua), and how the
+-- arrow is kept up (a host's players are told of its Settings alone, never of /qb); the pin mode's empty line made
+-- once a name
+local function hostName() return QB.NAME or "QuestBank" end
+local function keepsUp() return QB.host and "Settings" or "Settings or /qb arrow" end
+local pinHint, pinHintFor
+local function pinNothing()
+  local n = hostName()
+  if n ~= pinHintFor then pinHintFor, pinHint = n, "Click a quest or a stop in " .. n end
+  return pinHint
+end
 local HEAD = { route = "Next stop: %s", handin = "Hand in at %s", pickup = "Pick up at %s", pin = "You chose: %s", corpse = "Run to %s" }
 
 -- world x runs north and world y west; facing counts anticlockwise from north, as SetRotation turns
@@ -305,6 +316,7 @@ function A:Show(name, p, about, tomtom)
   A.back = nil
   A.Invalidate()
   self:Create()
+  if A.inside then A.away = true; self.frame:Hide() return false end -- (inside: shown as you leave)
   self.frame:Show()
   self:Update()
   return A.temp == t
@@ -453,22 +465,35 @@ function A:Menu()
     A:Update()
   end }
   -- the look: QuestBank's own arrow, or QuestTrail's compass (Settings has the same)
-  items[#items + 1] = { A.QT() and "Look: QuestTrail's compass" or "Look: QuestBank's arrow", function()
+  items[#items + 1] = { A.QT() and "Look: QuestTrail's compass" or ("Look: " .. hostName() .. "'s arrow"), function()
     set.arrowStyle = A.QT() and "questbank" or "compass"
     A:Restyle()
-    QB:Print(A.QT() and "The arrow is QuestTrail's compass. Its menu or Settings brings QuestBank's own arrow back." or "The arrow is QuestBank's own again.")
+    QB:Print(A.QT() and ("The arrow is QuestTrail's compass. Its menu or Settings brings " .. hostName() .. "'s own arrow back.") or ("The arrow is " .. hostName() .. "'s own again."))
     if QB.UI and QB.UI.frame and QB.UI.frame:IsShown() then QB.UI:Refresh() end
   end }
   items[#items + 1] = { "Hide the arrow", function()
     A:Set(false)
-    QB:Print(temp and "Arrow hidden. A waypoint you click shows it again; Settings or /qb arrow keeps it up."
-      or "Direction arrow off. Settings or /qb arrow brings it back.")
+    QB:Print(temp and ("Arrow hidden. A waypoint you click shows it again; " .. keepsUp() .. " keeps it up.")
+      or ("Direction arrow off. " .. keepsUp() .. " brings it back."))
   end }
   QB.UI:ShowMenu("The arrow points at", items)
 end
 
--- the steps in the tooltip: each one left with its minutes, the total, the flight paths QuestBank counts on, and the
--- hearthstone
+-- who the last walk goes to: a route stop's one hand-in NPC (6.1 said "Walk to Darnassus" right after the portal into
+-- Darnassus: the stop's town), else the target's name (a stop of several hand-ins, a pick-up's giver, a place clicked)
+function A.WalkTo(t)
+  if t and t.kind == "route" and t.qid and not t.obj and (t.quests or 1) == 1 then
+    local q = QB.Quest.Get(t.qid)
+    local who = q and q.turn and q.turn.n
+    if type(who) == "string" and who ~= "" then return who end
+  end
+  return t and t.name
+end
+
+-- the steps in the tooltip: each one left with its minutes, the total, the flight paths this way flies on (the
+-- continent of each flight in it: 6.1 counted the continent you stand on, "17 of 18 known here", while the way's one
+-- flight was on the other), and the hearthstone
+local NO_LEGS, flownOn = {}, {}
 local function tipSteps(t, g)
   local plan = g.plan
   if plan and #plan.legs > 1 then
@@ -476,15 +501,25 @@ local function tipSteps(t, g)
     for i, l in ipairs(plan.legs) do
       local c = i == 1 and 1 or 0.7
       local icon = l.icon or foot
-      GameTooltip:AddDoubleLine((icon and inline(icon) or "") .. (l.step or ("Walk to " .. t.name)),
+      GameTooltip:AddDoubleLine((icon and inline(icon) or "") .. (l.step or ("Walk to " .. (A.WalkTo(t) or "it"))),
         string.format("%d min", max(1, floor(l.walk + l.min + 0.5))), c, c, c, c, c, c)
     end
     GameTooltip:AddLine(string.format("About %d min in all.", max(1, floor((g.eta or plan.min) + 0.5))), 0.8, 0.8, 0.8)
   end
-  local n, total, read = TV.Known(QB.faction or QB.API.Faction(), A.me and A.me.c or t.c)
-  -- (none on an open map off the two continents, Zephras Isle: no line)
-  if total > 0 then
-    GameTooltip:AddLine((read or TV.tells) and string.format("Flight paths: %d of %d known here", n, total) or "Flight paths: not read yet, so all count", 0.8, 0.8, 0.8)
+  -- (a way with no flight: no line)
+  for k in pairs(flownOn) do flownOn[k] = nil end
+  local fac = QB.faction or QB.API.Faction()
+  for _, l in ipairs(plan and plan.legs or NO_LEGS) do
+    local c = l.kind == "fly" and l.start and l.start.c
+    local name = c and TV.CONT_NAME and TV.CONT_NAME[c]
+    if name and not flownOn[c] then
+      flownOn[c] = true
+      local n, total, read = TV.Known(fac, c)
+      if total > 0 then
+        GameTooltip:AddLine((read or TV.tells) and string.format("Flight paths on %s: %d of %d known", name, n, total)
+          or string.format("Flight paths on %s: not read yet, so all count", name), 0.8, 0.8, 0.8)
+      end
+    end
   end
   local hearth = TV.HearthLine()
   if hearth then GameTooltip:AddLine(hearth, 0.8, 0.8, 0.8, true) end
@@ -548,6 +583,59 @@ function A.Tint(f, c)
   f.tint:SetVertexColor(r, g, b)
 end
 
+-- where the arrow stands: where it was dragged to (arrowPos, kept by its top), else under the step frame wherever that
+-- stands (StepFrame.lua, SF.Box: followed as the frame moves, grows, shrinks or scales), else where the step frame
+-- would start (under the game's error text); moved left as far as it takes to stay 16 px clear of the quest tracker's
+-- header, as the step frame is. (6.1 put the arrow at TOP 0 -170 and the step frame at -140: the arrow sat on the
+-- frame's second and third rows and its time line.) TALL: the arrow at its tallest, its frame and the lines under it
+local GAP_Y, GAP_X, TALL = 6, 8, 143
+-- does the arrow, the middle of its top at x, y (across from the screen's middle, down from its top), stand on the
+-- step frame's box (SF.Box: bx, top, bottom, half)
+local function onFrame(x, y, bx, top, bottom, half)
+  return bx ~= nil and x - WIDTH / 2 < bx + half and bx - half < x + WIDTH / 2 and y < bottom and top < y + TALL
+end
+function A.Place()
+  local f = A.frame
+  if not f or f.qbDragging then return end -- (in a drag: left where the cursor has it)
+  local SF = QB.StepFrame
+  local bx, top, bottom, half = nil, nil, nil, nil
+  if SF and SF.Box then bx, top, bottom, half = SF.Box() end
+  local pos = QB:Settings().arrowPos
+  -- (the review round) where it was dragged to, unless the step frame stands there now: a 6.1 save's arrow, dragged out
+  -- from under the frame of then to TOP 0 -245, met today's frame 50 px lower and 16 px taller; or the frame grew or
+  -- was dragged onto it. Then under the frame, as by default; the place is kept for when the frame goes
+  if pos and not (pos[1] == "TOP" and onFrame(tonumber(pos[2]) or 0, -(tonumber(pos[3]) or 0), bx, top, bottom, half)) then
+    if f.qbPos ~= pos then
+      f.qbPos, f.qbX, f.qbY = pos, nil, nil
+      f:ClearAllPoints()
+      f:SetPoint(pos[1], UIParent, pos[1], pos[2], pos[3])
+    end
+    return
+  end
+  local x, y = bx or 0, bottom and (bottom + GAP_Y) or (SF and SF.TOP_Y or 190)
+  local W = UIParent:GetWidth() or 1920
+  local lim = (SF and SF.TrackerLeft) and (SF.TrackerLeft(W) - 16) or W
+  -- (the review round) never past the screen's bottom nor down onto the camp bar's place (Camp.lua, Camp.BarTop: a
+  -- tall frame on a short screen, a party's lines at 120%): beside the frame then, on its left, else on its right,
+  -- where it fits
+  if bottom then
+    local floor = (UIParent:GetHeight() or 768) - 8
+    local camp = QB.Camp and QB.Camp.BarTop and QB.Camp.BarTop()
+    if camp and camp - 4 < floor then floor = camp - 4 end
+    if y + TALL > floor then
+      local left, right = bx - half - GAP_X - WIDTH / 2, bx + half + GAP_X + WIDTH / 2
+      if W / 2 + left - WIDTH / 2 >= 0 then x, y = left, top
+      elseif W / 2 + right + WIDTH / 2 <= lim then x, y = right, top end
+    end
+  end
+  local over = W / 2 + x + WIDTH / 2 - lim
+  if over > 0 then x = x - over end
+  if f.qbX == x and f.qbY == y and not f.qbPos then return end
+  f.qbPos, f.qbX, f.qbY = nil, x, y
+  f:ClearAllPoints()
+  f:SetPoint("TOP", UIParent, "TOP", x, -y)
+end
+
 function A:Create()
   if self.frame then return self.frame end
   local T = QB.Data.TEX
@@ -567,15 +655,16 @@ function A:Create()
       QB:Settings().arrowPos = pos
     end
   end
-  if pos then f:SetPoint(pos[1], UIParent, pos[1], pos[2], pos[3]) else f:SetPoint("TOP", 0, -170) end
+  A.Place()
   f:SetFrameStrata("MEDIUM")
   f:SetClampedToScreen(true)
   f:SetMovable(true)
   f:EnableMouse(true)
   f:RegisterForDrag("LeftButton")
   f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-  f:SetScript("OnDragStart", f.StartMoving)
+  f:SetScript("OnDragStart", function(self) self.qbDragging = true; self:StartMoving() end)
   f:SetScript("OnDragStop", function(self)
+    self.qbDragging = nil
     self:StopMovingOrSizing()
     local p, _, _, x, y = self:GetPoint()
     -- kept by its top, so the arrow stays put as the lines under it come and go
@@ -586,6 +675,7 @@ function A:Create()
       self:SetPoint(p, UIParent, p, x, y)
     end
     QB:Settings().arrowPos = { p, x, y }
+    self.qbPos = QB:Settings().arrowPos -- (placed: A.Place leaves it there)
   end)
   -- the game style's puck: the game's tutorial arrow, greyed so your heading colours it, with its glow (the old quest
   -- arrow where the client lacks it); a ping behind it
@@ -698,12 +788,14 @@ function A:Create()
     if t and t.temp and t.on then
       GameTooltip:AddLine("Shown for now: it goes when you get there or its quest is done, and the arrow is back on your route.", 0.8, 0.8, 0.8, true)
     elseif t and t.temp then
-      GameTooltip:AddLine("Shown for this waypoint: it goes when you get there. Settings or /qb arrow keeps it up.", 0.8, 0.8, 0.8, true)
+      GameTooltip:AddLine("Shown for this waypoint: it goes when you get there. " .. keepsUp() .. " keeps it up.", 0.8, 0.8, 0.8, true)
     else
       GameTooltip:AddLine("Pointing at " .. MODES[m] .. ".", 0.8, 0.8, 0.8)
     end
-    GameTooltip:AddLine(t and t.temp and t.on and "Click: the Route page. Drag: move. Right-click: back to your route."
-      or "Click: the Route page. Drag: move. Right-click: choose what it points at, skip a quest, or hide it.", 0.6, 0.6, 0.6, true)
+    -- (the page a click opens: a host's own name for it, Cute's Quests while its Route module is off: UI.PageName)
+    local page = (QB.UI and QB.UI.PageName and QB.UI.PageName(3)) or "Route"
+    GameTooltip:AddLine(t and t.temp and t.on and ("Click: the " .. page .. " page. Drag: move. Right-click: back to your route.")
+      or ("Click: the " .. page .. " page. Drag: move. Right-click: choose what it points at, skip a quest, or hide it."), 0.6, 0.6, 0.6, true)
     if A.Waypoint() then
       GameTooltip:AddLine("Shift-click: the waypoint in chat, with the game's map pin.", 0.6, 0.6, 0.6, true)
     end
@@ -913,7 +1005,7 @@ function A:Update()
   A.hint = hint
   if not t then
     local m = A.Mode()
-    nothing.info = NOTHING[m][2] or (QB:Banking() and "Nothing banked yet" or "Nothing ready to hand in")
+    nothing.info = NOTHING[m][2] or (m == "pin" and pinNothing()) or (QB:Banking() and "Nothing banked yet" or "Nothing ready to hand in")
     A.g = nil
     self:Draw(NOTHING[m][1], nothing, me)
     return
@@ -948,7 +1040,7 @@ function A:Update()
   end
   -- the label: "Showing X" while a click is shown for now (the arrow up), "Hand in X here" at a hand-in in reach
   -- (Target.lua), else the target's name
-  self:Draw((t.temp and t.on) and ("Showing " .. t.name) or t.label or t.name, g, me, t.labelShort)
+  self:Draw((t.temp and t.on) and ("Showing " .. t.name) or t.label or t.stopWords or t.name, g, me, t.labelShort) -- (stopWords: a stop's place, Target.lua)
 end
 
 -- QuestTrail's first line, laid out as one centred line: the step's icon, the step (blue) and what to do at the
@@ -1163,10 +1255,37 @@ function A:Set(on)
   QB:Settings().arrow = on and true or false
   A.temp = nil -- on: it points where its mode says; off: hidden, the waypoint's showing too
   self:Create()
+  if on and A.inside then A.away = true; self.frame:Hide() return end -- (inside: back as you leave)
+  A.away = nil
   self.frame:SetShown(on and true or false)
   if on then self:Update() end
 end
 
+-- (the launch round) inside a dungeon, a raid or a battleground (Travel.lua, TV.Inside) the arrow said "Leave the
+-- dungeon first" for a whole run: it goes away at the loading screen in, whatever turns it on or shows a place clicked
+-- meanwhile (A.away: it was up, or asked for), and is back at the loading screen out where it is still wanted (the
+-- switch on, or a place shown for now). Read at each loading screen and new zone, never per frame
+function A.Inside()
+  local inside = (TV.Inside and TV.Inside()) and true or false
+  if inside == (A.inside == true) then return inside end
+  A.inside = inside
+  local f = A.frame
+  if inside then
+    if f and f:IsShown() then A.away = true; f:Hide() end
+  elseif A.away then
+    A.away = nil
+    if f and (QB:Settings().arrow or A.temp) then f:Show(); A:Update() end
+  end
+  return inside
+end
+
 function A:Init()
+  if not A.eventFrame then
+    local ev = CreateFrame("Frame")
+    A.eventFrame = ev
+    ev:SetScript("OnEvent", QB.Safe(function() A.Inside() end, "arrow: instance"))
+    for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }) do pcall(ev.RegisterEvent, ev, e) end
+  end
+  A.Inside()
   if QB:Settings().arrow then self:Set(true) end
 end

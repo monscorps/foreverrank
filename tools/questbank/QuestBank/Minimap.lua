@@ -212,7 +212,7 @@ function Mini.List(noStep)
       if d.m and d.m > 0 then
         local cid = firstId(d.ids)
         out[#out + 1] = { m = d.m, x = d.x, y = d.y, name = d.name, num = d.num, kind = "stop", when = d.when, lines = d.lines, late = d.late,
-                          cid = cid, ids = d.ids }
+                          cid = cid, ids = d.ids, pin = d }
         stopAt[keyOf(d)] = true
         local sorted = {}
         for id in pairs(d.ids or {}) do if type(id) == "number" then sorted[#sorted + 1] = id end end
@@ -518,7 +518,7 @@ local function newPin()
     if Mini.QT() and d.id and (d.kind == "obj" or d.kind == "turn") then Mini.QuestTooltip(self, d.id); return end
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:SetText(d.name or "", 1, 1, 1)
-    if d.when then GameTooltip:AddLine(d.when, 0.8, 0.8, 0.8) end
+    if d.when then GameTooltip:AddLine((d.pin and QB.Pins and QB.Pins.WhenNow) and QB.Pins.WhenNow(d.pin) or d.when, 0.8, 0.8, 0.8) end -- (counted as it shows)
     if d.kind == "turn" then GameTooltip:AddLine("Hand in here", 0.3, 0.9, 0.3) end
     for _, l in ipairs(d.lines or {}) do GameTooltip:AddDoubleLine(l[1], l[2], 0.9, 0.9, 0.9, 0.6, 0.8, 0.6) end
     if d.kind == "dungeon" then GameTooltip:AddLine(d.done and "Dungeon entrance. Its quests are all done." or "Dungeon entrance", 0.8, 0.8, 0.8) end
@@ -695,6 +695,8 @@ end
 -- Where you stand is read into one table kept for it (20 times a second; nothing keeps it past the update)
 local here = {}
 function Mini.Update(dt)
+  local owned = Mini.Owned()
+  if owned ~= Mini.wasOwned then Mini.OwnerChanged(owned) end -- (a host's map module came on, or went off)
   local me = QB.API.WorldPosition(nil, here)
   Mini.Place(me, QB.MiniView.Tick(dt, me))
 end
@@ -1020,6 +1022,10 @@ end
 
 -- QuestBank's data, read again: the places' yards, the list and its groups
 function Mini.Invalidate()
+  if Mini.ready then
+    local owned = Mini.Owned()
+    if owned ~= Mini.wasOwned then Mini.OwnerChanged(owned) end -- (a host's map module just came on, or went off)
+  end
   worldOf, cache.list, grp.list = {}, nil, nil
   if QB.Target then QB.Target.Invalidate() end
 end
@@ -1171,13 +1177,40 @@ function Mini.ResetFree()
   return a + b
 end
 
+-- the minimap the engine's, or no more (Mini.Update: a host's map module switched in play): on, the hooks once and,
+-- coming back on, the engine's size, place and tracking again; off, what the engine set goes back (Mini.Release). Out of
+-- a fight: in one, tried again at the next update
+function Mini.OwnerChanged(owned)
+  local fight = InCombatLockdown and InCombatLockdown()
+  if owned then
+    if not Mini.hooked then Mini.Hooks() end
+    if Mini.wasOwned == false then
+      if fight then return end
+      Mini.ApplyFree()
+      Mini.ApplyTracking()
+    end
+  elseif Mini.wasOwned then
+    if fight then return end
+    Mini.Release()
+  end
+  Mini.wasOwned = owned
+end
+
+-- Whose the minimap's mouse, size, place and tracking menu are: QuestBank's from its login. A host that runs this
+-- engine as one of its modules (Cute_Quest, Bridge.lua) sets QB.MapOn, and the minimap is the engine's only while that
+-- says yes (Cute's Map module): until then nothing of it is touched (no hook, no size or place put back, Target
+-- tracking left as the game has it), and once it says no again every hook hands the game its own way (a right-click
+-- is the game's ping again, the wheel the game's zoom). The pins and the route drawn on it follow their own switches
+function Mini.Owned() return QB.MapOn == nil or QB.MapOn() == true end
+
 function Mini:Init()
   if self.ready then return end
   self.ready = true
   if not (Minimap and QB.Model and QB.Model.World) then return end
   local f = CreateFrame("Frame")
+  Mini.eventFrame = f -- (a host loaded in the middle of PLAYER_ENTERING_WORLD replays it here: Bridge.lua)
   f:SetScript("OnEvent", QB.Safe(function(_, event)
-    if event == "PLAYER_ENTERING_WORLD" or event == "EDIT_MODE_LAYOUTS_UPDATED" then
+    if (event == "PLAYER_ENTERING_WORLD" or event == "EDIT_MODE_LAYOUTS_UPDATED") and Mini.Owned() then
       -- after Edit Mode has put its own size and place back
       local again = function()
         Mini.ApplyFree()
@@ -1192,17 +1225,28 @@ function Mini:Init()
   for _, e in ipairs({ "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "MINIMAP_UPDATE_ZOOM", "EDIT_MODE_LAYOUTS_UPDATED" }) do
     pcall(f.RegisterEvent, f, e)
   end
-  -- the mouse: Ctrl-wheel sizes, the wheel zooms; Alt-drag moves the minimap, a plain drag pans its view, a click
-  -- pings and a right-click opens its menu (MinimapView.lua; with QuestTrail loaded, its own)
+  overlayFrame()
+  if Mini.Owned() then Mini.Hooks() end
+end
+
+-- the mouse: Ctrl-wheel sizes, the wheel zooms; Alt-drag moves the minimap, a plain drag pans its view, a click pings
+-- and a right-click opens its menu (MinimapView.lua; with QuestTrail loaded, its own); the tracking menu's Target and
+-- Focus. Once, the first time the minimap is the engine's (Mini.Owned: at the login, or as a host's map module comes on)
+function Mini.Hooks()
+  if Mini.hooked or not Minimap then return end
+  Mini.hooked = true
   local MV = QB.MiniView
   MV.Guard()
+  local game = Minimap:GetScript("OnMouseWheel")
   Minimap:EnableMouseWheel(true)
-  Minimap:SetScript("OnMouseWheel", QB.Safe(function(_, delta) Mini.Wheel(delta) end, "minimap wheel"))
+  Minimap:SetScript("OnMouseWheel", QB.Safe(function(self, delta)
+    if Mini.Owned() then Mini.Wheel(delta) elseif game then game(self, delta) end
+  end, "minimap wheel"))
   Minimap:HookScript("OnMouseDown", QB.Safe(function(_, button)
+    if not Mini.Owned() then return end
     if IsAltKeyDown and IsAltKeyDown() then Mini.DragStart(button) else MV.MouseDown(button) end
   end, "minimap mouse"))
   MV.Hook(Mini.DragStop)
-  overlayFrame()
   Mini.InitTracking()
 end
 
@@ -1262,30 +1306,56 @@ function Mini.TrackOn(which)
   return ok and type(info) == "table" and plain(info.active) == true
 end
 
+-- (the review round) what the game had before the engine first set Target or Focus, for Mini.Release
+local trackWas = {}
+local function keepWas(which, i)
+  if trackWas[which] ~= nil then return end
+  local ok, info = pcall(C_Minimap.GetTrackingInfo, i)
+  trackWas[which] = ok and type(info) == "table" and plain(info.active) == true
+end
+
 function Mini.SetTrack(which, on)
   trackDB()[which] = on and true or false
   local i = trackIndex(which)
-  if i and C_Minimap.SetTracking then pcall(C_Minimap.SetTracking, i, on and true or false) end
+  if i and C_Minimap.SetTracking then keepWas(which, i); pcall(C_Minimap.SetTracking, i, on and true or false) end
 end
 
--- after a loading screen: the saved choices, when the game's own menu does not carry them
+-- after a loading screen: the saved choices, when the game's own menu does not carry them (and the minimap is the
+-- engine's: Mini.Owned)
 function Mini.ApplyTracking()
-  if showAll() then return false end
+  if showAll() or not Mini.Owned() then return false end
   local saved = trackDB()
   local n = 0
   for which in pairs(NAMES) do
     if saved[which] ~= nil then
       local i = trackIndex(which)
-      if i and C_Minimap.SetTracking then pcall(C_Minimap.SetTracking, i, saved[which] == true); n = n + 1 end
+      if i and C_Minimap.SetTracking then keepWas(which, i); pcall(C_Minimap.SetTracking, i, saved[which] == true); n = n + 1 end
     end
   end
   return n
 end
 
+-- (the review round) the minimap the engine's no more (a host's Map module switched off in play): Target and Focus
+-- tracking as the game had them before the engine first set them, and the game's size and place (Edit Mode's anchor)
+-- where the engine had sized or moved it. The engine's own choices are kept: they come back with the minimap
+-- (Mini.OwnerChanged). (The launch round handed the mouse back and left Target on and its size and place as they were)
+function Mini.Release()
+  for which, was in pairs(trackWas) do
+    local i = trackIndex(which)
+    if i and C_Minimap.SetTracking then pcall(C_Minimap.SetTracking, i, was) end
+    trackWas[which] = nil
+  end
+  local c, db = container(), freeDB()
+  if c and (db.scale or db.x) then
+    c:SetScale(db.orig or 1)
+    if MinimapCluster and MinimapCluster.ApplySystemAnchor then pcall(MinimapCluster.ApplySystemAnchor, MinimapCluster) end
+  end
+end
+
 function Mini.TrackingMenu(owner, root)
-  if showAll() or not root then return end
+  if showAll() or not root or not Mini.Owned() then return end
   if root.CreateDivider then root:CreateDivider() end
-  if root.CreateTitle then root:CreateTitle("QuestBank") end
+  if root.CreateTitle then root:CreateTitle(QB.NAME or "QuestBank") end
   for _, which in ipairs({ "target", "focus" }) do
     if trackIndex(which) and root.CreateCheckbox then
       root:CreateCheckbox(NAMES[which] .. " on the minimap",
@@ -1302,9 +1372,11 @@ function Mini.InitTracking()
     pcall(Menu.ModifyMenu, "MENU_MINIMAP_TRACKING", function(owner, root) QB.Try("minimap tracking menu", Mini.TrackingMenu, owner, root) end)
   end
   local f = CreateFrame("Frame")
+  Mini.trackFrame = f
   f:SetScript("OnEvent", QB.Safe(function()
     Mini.ApplyTracking()
     C_Timer.After(3, QB.Safe(Mini.ApplyTracking, "minimap tracking")) -- the game may reset it a moment after the load
   end, "minimap tracking"))
   pcall(f.RegisterEvent, f, "PLAYER_ENTERING_WORLD")
+  Mini.ApplyTracking() -- (hooked after the login's loading screen: a host's map module switched on in play)
 end

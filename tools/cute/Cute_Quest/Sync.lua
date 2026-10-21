@@ -127,12 +127,18 @@ function S:Broadcast(force)
   if force then QB:Print("Shared your quests with " .. table.concat(chans, " and "):lower() .. ".") end
 end
 
+-- (the review round) the names you sent your quests to (/qb sync Name): a whispered ask ("1R") is answered for them
+-- alone, and never inside a host (Cute: what the guild sees is its officers' to say). Until the review round anyone's
+-- whispered ask got your level, XP, class, GUID's tail and every quest back, whatever the share settings
+S.asked = {}
+local function baseName(n) return type(n) == "string" and (n:match("^([^%-]+)") or n):lower() or nil end
 function S:Whisper(name)
   if not self.ready or not name or name == "" then return end
   queue(statusMsg(), "WHISPER", name)
   for _, m in ipairs((questMsgs())) do queue(m, "WHISPER", name) end
   queue("1R", "WHISPER", name)
-  QB:Print("Sent your quests to " .. name .. " and asked for theirs. They need QuestBank too.")
+  S.asked[baseName(name)] = true
+  QB:Print("Sent your quests to " .. name .. ". Theirs come once they /qb sync you too; they need QuestBank.")
 end
 
 -- 1G|text: your Guide's first step, for the others' step frames (6.0, Guide.lua). Sent to the group when it changes,
@@ -307,8 +313,11 @@ function S:Receive(msg, channel, sender)
   elseif kind == "1R" then
     local target = channel == "WHISPER" and sender or nil
     if target then
-      queue(statusMsg(), "WHISPER", target)
-      for _, q in ipairs((questMsgs())) do queue(q, "WHISPER", target) end
+      -- (only to someone you sent yours to, and never inside a host: S.asked)
+      if not QB.host and S.asked[baseName(target)] then
+        queue(statusMsg(), "WHISPER", target)
+        for _, q in ipairs((questMsgs())) do queue(q, "WHISPER", target) end
+      end
     else
       self.lastStatus, self.lastQuests = nil, nil
       self:Changed()

@@ -1822,16 +1822,18 @@ do
   assert(#owner.chat == n + 1 and owner.chat[#owner.chat]:find("counts 40 quests as a full log: with fewer, its Yes works.", 1, true), "/qb escort says so: " .. owner.chat[#owner.chat])
   QB.NoteAddons()
   assert(env.QuestBankDB.diag.addons.maxQuests == 40, "the uploads show the game's number")
-  -- an older build, whose prompt counts 25: said once a session, the number left as the game has it
+  -- an older build, whose prompt counts 25: nothing said unasked (the launch round; 6.1 said why Yes was grey, once a
+  -- session), /qb escort says it; the number left as the game has it
   env.MAX_QUESTS, env.MAX_QUESTLOG_QUESTS = 25, 25
   n = #owner.chat
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435)
+  assert(#owner.chat == n, "25 or more quests on such a client: nothing said unasked: " .. tostring(owner.chat[#owner.chat]))
+  env.SlashCmdList.QUESTBANK("escort")
   local said = owner.chat[#owner.chat]
-  assert(#owner.chat == n + 1 and said:find("Brann Steelhand started Escorting Erland", 1, true)
-    and said:find("counts 25 quests as a full log (yours holds 40), so its Yes stays grey", 1, true), "25 or more quests on such a client: why Yes is grey: " .. tostring(said))
+  assert(#owner.chat == n + 1 and said:find("counts 25 quests as a full log; yours holds 40. With 25 or more its Yes stays grey", 1, true), "/qb escort: why Yes is grey: " .. tostring(said))
   print("escort prompt, an older build:", said)
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435)
-  assert(#owner.chat == n + 1, "and says it once")
+  assert(#owner.chat == n + 1, "and nothing said again")
   assert(env.MAX_QUESTS == 25 and env.MAX_QUESTLOG_QUESTS == 25, "the game's numbers stay as the game has them")
   for _, arg in ipairs({ "off", "on", "" }) do env.SlashCmdList.QUESTBANK("escort " .. arg) end
   assert(env.MAX_QUESTS == 25 and owner.chat[#owner.chat]:find("QuestBank leaves the game's number alone", 1, true), "/qb escort, on or off: only says where things stand: " .. owner.chat[#owner.chat])
@@ -2417,7 +2419,7 @@ do
   local MVy, env = ylva.QB.MiniView, ylva.env
   local said = 0
   for _, line in ipairs(ylva.chat) do if line:find("QuestTrail is loaded", 1, true) then said = said + 1 end end
-  assert(MVy.blocked and not MVy.On() and ylva.QB:Settings().mmExtended ~= false and said == 1, "QuestTrail loaded: QuestBank's far zoom off this session, said once")
+  assert(MVy.blocked and not MVy.On() and ylva.QB:Settings().mmExtended ~= false and said == 0, "QuestTrail loaded: QuestBank's far zoom off this session, nothing said (the launch round)")
   env.Minimap.__scripts.OnMouseUp(env.Minimap, "RightButton")
   tick(ylva, 0)
   assert(ylva.gameClicks == 1 and #ylva.contextMenus == 0, "the release is the game's (and QuestTrail's): no menu of QuestBank's")
@@ -6022,18 +6024,14 @@ do
   assert(last() == "SelectAvailableQuest #3", "a greeting NPC: the third entry is the first you should take: " .. tostring(last()))
   owner.greetAvail = nil
   -- an escort a party member starts: the game's prompt is the player's. QuestBank presses nothing and hides nothing
-  -- (ConfirmAcceptQuest and StaticPopup_Hide error here), and says so once a session
+  -- (ConfirmAcceptQuest and StaticPopup_Hide error here), and says nothing (the launch round: 6.1 said so once a session)
   n = #owner.auto
   local said = #owner.chat
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(owner, 1)
-  local escortLine
-  for i = said + 1, #owner.chat do if owner.chat[i]:find("say yes in the game's prompt to join", 1, true) then escortLine = owner.chat[i] end end
-  assert(#owner.auto == n and escortLine and escortLine:find("Brann Steelhand started Escorting Erland", 1, true),
-    "an escort a party member starts: nothing pressed, and it says the prompt is yours: " .. tostring(owner.chat[#owner.chat]))
-  print("escort, Accept for me on:", escortLine)
+  assert(#owner.auto == n and #owner.chat == said, "an escort a party member starts: nothing pressed, nothing said: " .. tostring(owner.chat[#owner.chat]))
   said = #owner.chat
   owner.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(owner, 1)
-  assert(#owner.auto == n and #owner.chat == said, "said once a session")
+  assert(#owner.auto == n and #owner.chat == said, "and again: nothing")
   for i = 1, QB.LOG_SLOTS - #owner.log do table.insert(owner.log, { 9000000 + i, 0 }) end
   owner.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(owner, 1)
   assert(QB.state.logCount == QB.LOG_SLOTS, "the log is full")
@@ -7362,7 +7360,8 @@ do
   local itemLine = false
   for _, l in ipairs(lines) do if l:find("Twilight Pendant") then itemLine = true; print("  tooltip:", l) end end
   assert(itemLine, "the tooltip counts the item in bags and bank")
-  -- the quest turns complete: chat says so
+  -- the quest turns complete: chat says so, asked for ("Say quest XP in chat": nothing unasked since the review round)
+  F:Settings().sayXP = true
   for _, e in ipairs(friend.log) do if e[1] == 1199 then e[2] = 1 end end
   friend.o.bagSlots = { { 5879, 10 } }
   friend.o.bank = {}
@@ -7371,6 +7370,7 @@ do
   print("friend's chat:", friend.chat[#friend.chat])
   assert(F:Mode() == "quest", "level 18 under a cap of 20: questing")
   assert(friend.chat[#friend.chat]:find("is complete, hand it in"), "completing a quest is announced, questing-style")
+  F:Settings().sayXP = nil
 end
 
 -- the friend talks to Guard Howe: the quest window shows Blackrock Bounty's XP, and the party hears it
@@ -8511,7 +8511,7 @@ do
   lines = {}; F.__scripts.OnEnter(F)
   local tip = table.concat(lines, "\n")
   assert(tip:find("|A:flightmaster:14:14|a Fly to Lakeshire | ", 1, true) and tip:find("Walk to Lakeshire | %d+ min") and tip:find("About %d+ min in all%.")
-    and tip:find("Flight paths: 2 of 18 known here", 1, true) and lines[#lines - 1]:find("^Click: the Route page")
+    and tip:find("Flight paths on Eastern Kingdoms: 2 of 18 known", 1, true) and lines[#lines - 1]:find("^Click: the Route page")
     and lines[#lines]:find("^Shift%-click: the waypoint in chat"), "the tooltip lists the steps (a waypoint: Shift-click last): " .. tip)
   sheet("Arrow: at the flight master")
   -- on the way there, the arrow points at it; the minimap pins it and draws the line to it
@@ -8714,7 +8714,7 @@ do
   aimAt("Gadgetzan", 1, gz[3] + 30, gz[4])
   look()
   lines = {}; F.__scripts.OnEnter(F)
-  assert(has("fly") and table.concat(lines, "\n"):find("Flight paths: not read yet, so all count", 1, true), "assumed: " .. table.concat(lines, " / "))
+  assert(has("fly") and table.concat(lines, "\n"):find("Flight paths on [%a ]+: not read yet, so all count"), "assumed: " .. table.concat(lines, " / "))
   sheet("Arrow: a long way, every flight path counted")
   c.env.C_TaxiMap = saveTaxi
 
@@ -9218,7 +9218,9 @@ do
   local diag = ndb.diag and ndb.diag.xp
   assert(diag and diag[#diag].how == "complete" and diag[#diag].kind == "secret" and diag[#diag].id == 15, "the diagnostic ring notes a hidden XP number")
   assert(N2.Quest.Get(15).liveFull == liveBefore and noted() == notedBefore, "a hidden number teaches nothing")
+  N2:Settings().sayXP = true -- (the hand-in's line, asked for: the step frame's menu)
   newbie.ev(N2.eventFrame, "QUEST_TURNED_IN", 15, SECRET.num())
+  N2:Settings().sayXP = nil
   assert(diag[#diag].how == "turnin" and diag[#diag].kind == "secret", "a hidden hand-in number is noted the same way")
   assert((ndb.lock and ndb.lock[realm]) == lockBefore and N2.mode == modeBefore, "a hidden hand-in number is not a level lock")
   assert(said and said:find("hides its XP", 1, true) and not said:find("+0 XP", 1, true) and not said:find("paid no XP", 1, true), "chat says the game hid the number: " .. tostring(said))
@@ -11872,7 +11874,7 @@ do
     end
     -- the tooltip: the place, each quest as the game titles it with its XP, which stop it is, the click
     local t = tipOf(one)
-    assert(t:find("^" .. one.data.name:gsub("%p", "%%%0") .. "\n%[%d+%] ") and t:find("Stop 1 of %d+, at ") and t:find("<Click to show it on the arrow for now>", 1, true) and not t:find("Click: ", 1, true),
+    assert(t:find("^" .. (one.data.title or one.data.name):gsub("%p", "%%%0") .. "\n%[%d+%] ") and t:find("Stop 1 of %d+, %d+ min from now") and t:find("<Click to show it on the arrow for now>", 1, true) and not t:find("Click: ", 1, true),
       "a stop's tooltip: " .. t)
     -- the mouse on a quest pin: the inner glow, as the game's HighlightTexture; the button held: the pressed disc and
     -- the glyph a pixel right and down; let go: as it was
@@ -12062,7 +12064,8 @@ do
   end
 
   -- the recorder: a call the game blocked and blamed on QuestBank is kept in QuestBankDB.diag.blocked, its stack with
-  -- QuestBank's own files by name and no other path, and said once in chat; another addon's is none of QuestBank's
+  -- QuestBank's own files by name and no other path, for /qb errors alone (said once in chat until the launch round);
+  -- another addon's is none of QuestBank's
   do
     local bf = MQ.blockedFrame
     M.env.debugstack = function() return table.concat({
@@ -12086,10 +12089,9 @@ do
       and st:find("[QuestBank/Pins.lua]:164: in function <QuestBank/Pins.lua:160>", 1, true) and st:find("[(game)]:331: in function 'AcquirePin'", 1, true)
       and st:find("[(addon)]:12: in function 'Thing'", 1, true) and st:find("QuestBank/Core.lua:50", 1, true) and st:find("[C]: in function 'SetPassThroughButtons'", 1, true),
       "its stack: QuestBank's files by name, no other path:\n" .. st)
-    assert(#M.chat == said + 1 and M.chat[#M.chat]:find("calling Frame:SetPassThroughButtons() in combat", 1, true) and M.chat[#M.chat]:find("/qb errors", 1, true),
-      "said in chat: " .. M.chat[#M.chat])
+    assert(#M.chat == said, "nothing said in chat: " .. tostring(M.chat[#M.chat]))
     print("blocked, kept:", (st:gsub("\n", " | ")))
-    -- the same call again: counted. Others: kept, the last 10. Said once
+    -- the same call again: counted. Others: kept, the last 10. Nothing said
     bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "QuestBank", "Frame:SetPassThroughButtons()")
     assert(#list == 1 and list[1].n == 2, "the same call again: counted")
     M.combat = false
@@ -12099,7 +12101,7 @@ do
     assert(list[#list].kind == "forbidden" and list[#list].fn == "UseQuestLogSpecialItem()", "forbidden ones too")
     bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "SomeOtherAddon", "CastSpellByName()")
     bf.__scripts.OnEvent(bf, "ADDON_ACTION_FORBIDDEN", "SomeOtherAddon", "CastSpellByName()")
-    assert(list[#list].fn == "UseQuestLogSpecialItem()" and #M.chat == said + 1, "another addon's: not kept, nothing said")
+    assert(list[#list].fn == "UseQuestLogSpecialItem()" and #M.chat == said, "another addon's: not kept, nothing said")
     -- /qb errors lists them to copy, newest first; /qb errors clear forgets them
     M.env.SlashCmdList.QUESTBANK("errors")
     local text = M.env.QuestBankErrors.eb:GetText()
@@ -17023,10 +17025,16 @@ end)()
     SF.Apply(); SF.Refresh()
     local f = c.env.QuestBankStep
     assert(f and f:IsShown(), "the frame is up")
-    -- (a row too long for the frame shows the step's short form, else is cut with "...": Arrow.lua's A.Fit)
-    local function rowIs(t, s) local got, full = t:GetText(), G.Text(s); return got == full or got == G.Short(s) or (got:sub(-3) == "..." and full:sub(1, #got - 3) == got:sub(1, -4)) end
-    assert(rowIs(f.now, G.steps[1]) and rowIs(f.next1, G.steps[2]) and rowIs(f.next2, G.steps[3]),
-      "the three lines: " .. tostring(f.now:GetText()) .. " | " .. tostring(f.next1:GetText()) .. " | " .. tostring(f.next2:GetText()))
+    -- (the launch round: the step now's name, who and where under it; the next two, name and place on one line; a row
+    -- too long for the frame is cut with "...", the place kept)
+    local function rowIs(t, want) local got = t:GetText(); return got == want or got:find("...", 1, true) ~= nil end
+    local function nextRow(s, prev)
+      local p = G.Place(s)
+      if (s.leg and prev.leg == s.leg) or (p and p == G.Place(prev)) then p = nil end
+      return p and (G.Title(s) .. " - " .. p) or G.Title(s)
+    end
+    assert(rowIs(f.now, G.Title(G.steps[1])) and rowIs(f.rows[1].where, G.Where(G.steps[1]) or "") and rowIs(f.next1, nextRow(G.steps[2], G.steps[1])) and rowIs(f.next2, nextRow(G.steps[3], G.steps[2])),
+      "the three steps: " .. tostring(f.now:GetText()) .. " / " .. tostring(f.rows[1].where:GetText()) .. " | " .. tostring(f.next1:GetText()) .. " | " .. tostring(f.next2:GetText()))
     local r, g = f.next1:GetTextColor()
     assert(r < 0.8 and g < 0.8, "the next steps greyed")
     assert(f.time:GetText():find(" to level 6$"), "the time line: " .. tostring(f.time:GetText()))
@@ -17067,9 +17075,9 @@ end)()
   end }
 
   -- a pick-up too long for the row (6.0.0's review: "Accept Dwarven Outfitters from Sten Stou..." cut at the giver's
-  -- name): the row says "Accept Dwarven Outfitters" and its tooltip the whole line with the giver; a row that says
-  -- it all has no tooltip
-  G6CASES[#G6CASES + 1] = { "the step frame: a long pick-up shows Accept X, the giver in the row's tooltip", function()
+  -- name). The launch round: the row names the quest beside the pick-up's icon, the step now's second line the giver
+  -- and where, and every row has a tooltip with the whole step and the giver
+  G6CASES[#G6CASES + 1] = { "the step frame: a pick-up names its quest, the giver under it and in every row's tooltip", function()
     local c = newClient({ name = "Coldridge", level = 1, cap = 60, faction = "Alliance", className = "Warrior", class = "WARRIOR", classID = 1,
       race = "Dwarf", log = {}, done = {}, world = { 0, -6215, 330 }, map = 1426, bagSlots = {}, bind = "Kharanos" })
     login(c)
@@ -17077,25 +17085,24 @@ end)()
     QB:Settings().welcome = nil
     settle(c); SF.Apply(); SF.Refresh()
     local f = c.env.QuestBankStep
-    local cut = 0
+    local pickups = 0
     for i = 1, 3 do
       local s = G.steps[i]
-      local t = f.rows[i].text
       if s then
-        local full = G.Text(s)
         lines = {}
         f.rows[i].__scripts.OnEnter(f.rows[i])
-        if t:GetText() == full then
-          assert(#lines == 0, "a row that says it all has no tooltip: " .. table.concat(lines, " | "))
-        else
-          assert(s.kind == "accept" and t:GetText() == G.Short(s) and not t:GetText():find("...", 1, true), "a cut pick-up row says Accept X: " .. t:GetText())
-          assert(#lines == 1 and lines[1] == full, "its tooltip is the whole line: " .. table.concat(lines, " | "))
-          cut = cut + 1
+        assert(lines[1] == G.Text(s), "every row's tooltip starts with the whole step: " .. table.concat(lines, " | "))
+        if s.kind == "accept" then
+          local giver = c.QB.Data.NPC[s.npc][1]
+          assert(table.concat(lines, " | "):find(giver, 1, true), "a pick-up's tooltip names the giver: " .. table.concat(lines, " | "))
+          assert(f.rows[i].text:GetText():find(G.Title(s):sub(1, 6), 1, true) and not f.rows[i].text:GetText():find("^Accept "), "the row names the quest beside the pick-up's icon: " .. f.rows[i].text:GetText())
+          if i == 1 then assert((f.rows[1].where:GetText() or ""):find(giver, 1, true), "the step now's second line: the giver: " .. tostring(f.rows[1].where:GetText())) end
+          pickups = pickups + 1
         end
         f.rows[i].__scripts.OnLeave(f.rows[i])
       end
     end
-    assert(cut >= 1, "a pick-up row too long for the frame (Sten Stoutarm's)")
+    assert(pickups >= 1, "a pick-up among the steps (Sten Stoutarm's)")
     assert(G.Short(G.steps[1]) == "Accept Dwarven Outfitters" and G.Short({ kind = "handin" }) == nil, "the short form is the pick-up's alone")
   end }
 
@@ -17621,6 +17628,1012 @@ end)()
   for _, case in ipairs(G6CASES) do
     case[2]()
     print("6.0 guide: " .. case[1] .. ": ok")
+  end
+end)()
+
+-- [stage: engine] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- The launch round's engine: the quest engine as a new member meets it, and the owner's screenshots of 2026-10-21.
+-- Each case is in ENGCASES, in order, and failed on 6.1.1's files
+----------------------------------------------------------------------------
+;(function()
+  local ENGCASES = {}
+  -- a character out in the world (6.1.1's char(): a fresh install, the arrow and the Guide on)
+  local function char(name, class, className, classID, known, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 20, cap = 60, faction = o.faction or "Alliance", className = className, class = class,
+      classID = classID, race = o.race or "Human", log = o.log or {}, done = o.done or {}, world = o.world or { 0, -9200, -2150 }, map = o.map or 1433,
+      bagSlots = {}, bind = o.bind or "Lakeshire", trackerX = o.trackerX })
+    if o.saved then c.env.QuestBankDB = o.saved end
+    if o.addons then c.addons = o.addons end
+    c.known, c.buffs, c.resting = known or {}, {}, false
+    login(c)
+    return c
+  end
+  local function said(c, fn) local n = #c.chat; fn(); return table.concat(c.chat, " | ", n + 1) end
+  -- a frame's box in UIParent's units, its own scale counted (rectOf leaves a frame's scale out)
+  local function placed(f, minH)
+    GEN = GEN + 1
+    local p = f.__points[1]
+    local sc = f:GetScale() or 1
+    local rr = rectOf(p.rel or f.__parent)
+    local ax, ay = anchorXY(rr, p.relPoint)
+    ax, ay = ax + (p.x or 0) * sc, ay + (p.y or 0) * sc
+    local w, h = (f:GetWidth() or 0) * sc, math.max(f:GetHeight() or 0, minH or 0) * sc
+    local l = p.point:find("LEFT") and ax or (p.point:find("RIGHT") and ax - w or ax - w / 2)
+    local t = p.point:find("TOP") and ay or (p.point:find("BOTTOM") and ay + h or ay + h / 2)
+    return { l = l, r = l + w, t = t, b = t - h }
+  end
+  local function apart(a, b) return a.r <= b.l or b.r <= a.l or a.b >= b.t or b.b >= a.t end
+  local function box(r) return string.format("%d..%d x %d..%d", r.l, r.r, r.b, r.t) end
+
+  -- 1. "The step frame and the arrow sit on top of each other": 6.1 put the step frame at TOP 0 -140 (at its scale) and
+  -- the arrow at TOP 0 -170, 98 px tall, so the arrow's puck covered the frame's next steps and its time line; both sat
+  -- under the game's error text (UIErrorsFrame, TOP 0 -122, 512 x 60). Now the frame starts under that text and the
+  -- arrow under the frame, following it as it grows (the party's lines) and scales; both clear of the tracker's header
+  ENGCASES[#ENGCASES + 1] = { "the step frame and the arrow never overlap, nor the game's error text or the tracker's header", function()
+    local c = char("Stacka", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local env, QB = c.env, c.QB
+    local SF, A, G = QB.StepFrame, QB.Arrow, QB.Guide
+    QB:Settings().welcome = nil; SF.Apply()
+    A:Set(true)
+    local hp = env.ObjectiveTrackerFrame.__points[1]
+    local party = {}
+    for i, n in ipairs({ "Ada", "Bo", "Cy", "Di" }) do party[i] = { name = n, class = "MAGE", text = "Kill Kobold Vermin " .. i .. "/8" } end
+    local none, real = {}, G.MemberSteps
+    local members = none
+    G.MemberSteps = function() return members end
+    local seen = 0
+    for _, ui in ipairs({ { 1600, 1000 }, { 1024, 768 }, { 800, 600 }, { 760, 768 } }) do
+      for _, bars in ipairs({ -5, -100 }) do
+        for _, sc in ipairs({ 0.8, 1, 1.2 }) do
+          for _, grp in ipairs({ none, party }) do
+            env.UIParent:SetSize(ui[1], ui[2])
+            hp.x = bars
+            members = grp
+            G.memberVer = G.memberVer + 1 -- (the frame redraws the party's lines)
+            SF.SetScale(sc)
+            SF.Apply(); SF.Refresh()
+            A:Update()
+            local W, H = ui[1], ui[2]
+            local where = string.format("%dx%d, right bars %d, scale %.1f, %d in the party", W, H, bars, sc, #grp)
+            local sf, af = env.QuestBankStep, env.QuestBankArrow
+            assert(sf:IsShown() and af:IsShown(), where .. ": both up")
+            local sr, ar = placed(sf), placed(af, 143) -- (the arrow at its tallest: the steps' row and the hint line)
+            GEN = GEN + 1
+            local hr = rectOf(env.ObjectiveTrackerFrame.Header)
+            local err = { l = W / 2 - 256, r = W / 2 + 256, t = H - 122, b = H - 182 }
+            -- (under it, or beside it where under would run onto the camp bar's place: the review round's case 10)
+            assert(apart(sr, ar) and (ar.t <= sr.b - 4 or ar.r <= sr.l - 4 or ar.l >= sr.r + 4), where .. ": the arrow off the step frame: " .. box(ar) .. " against " .. box(sr))
+            assert(sr.t <= err.b - 4 and ar.t <= err.b - 4, where .. ": both under the game's error text: " .. box(sr) .. ", " .. box(ar))
+            assert(apart(sr, hr) and apart(ar, hr), where .. ": both clear of the tracker's header " .. box(hr) .. ": " .. box(sr) .. ", " .. box(ar))
+            assert(sr.l >= 0 and sr.r <= W and ar.l >= 0 and ar.r <= W and ar.b >= 0, where .. ": both on the screen: " .. box(sr) .. ", " .. box(ar))
+            seen = seen + 1
+          end
+        end
+      end
+    end
+    -- the frame grows (the party's lines come): the arrow follows at once, with no look of its own
+    env.UIParent:SetSize(1600, 1000); hp.x = -5; SF.SetScale(1)
+    members = none; G.memberVer = G.memberVer + 1; SF.Refresh()
+    local before = placed(env.QuestBankArrow).t
+    members = party; G.memberVer = G.memberVer + 1; SF.Refresh()
+    local sr, ar = placed(env.QuestBankStep), placed(env.QuestBankArrow)
+    assert(ar.t < before and ar.t <= sr.b - 4, "the party's lines came: the arrow moved down with the frame's bottom: " .. box(ar) .. " against " .. box(sr))
+    -- the step frame away: the arrow where the frame would start, under the error text
+    members = none
+    QB:Settings().guide.frame = false; SF.Apply()
+    ar = placed(env.QuestBankArrow)
+    assert(not env.QuestBankStep:IsShown() and ar.t <= 1000 - 182 - 4 and ar.t >= 1000 - 200, "the frame off: the arrow under the error text: " .. box(ar))
+    QB:Settings().guide.frame = true; SF.Apply()
+    -- the arrow held in a drag: the frame growing under it does not move it from the cursor
+    local af = env.QuestBankArrow
+    af.__scripts.OnDragStart(af)
+    local held = af.__points[1].y
+    members = party; G.memberVer = G.memberVer + 1; SF.Refresh()
+    assert(af.__points[1].y == held, "in a drag: left where the cursor has it")
+    af.__scripts.OnDragStop(af)
+    QB:Settings().arrowPos = nil; members = none; G.memberVer = G.memberVer + 1; SF.Refresh(); A.Place()
+    -- a place dragged to stays: the arrow's (arrowPos) and the frame's (then the arrow keeps its own default)
+    QB:Settings().arrowPos = { "TOP", 300, -420 }
+    A.Place()
+    local p = env.QuestBankArrow.__points[1]
+    assert(p.point == "TOP" and p.x == 300 and p.y == -420, "the arrow dragged: kept where it was put")
+    QB:Settings().arrowPos = nil
+    QB:Settings().guide.x, QB:Settings().guide.y = -500, 200
+    SF.Apply()
+    p = env.QuestBankArrow.__points[1]
+    local _, _, fb = SF.Box()
+    assert(p.point == "TOP" and p.x == -500 and p.y == -(fb + 6), "the frame dragged away: the arrow under it there: " .. tostring(p.x) .. ", " .. tostring(p.y))
+    QB:Settings().guide.x, QB:Settings().guide.y = nil, nil
+    G.MemberSteps = real
+    print(string.format("engine: %d layouts checked (four screens, two tracker places, three scales, alone and in a party of five)", seen))
+  end }
+
+  -- 2. "No chat lines unprompted" (the Guide's design: "No other chat lines from QuestBank unless the player asks"; the
+  -- audit of Cute 0.7.0's first hour): each hand-in said "<quest>: +450 XP" (or that the game hid the number, or that it
+  -- paid nothing); a hand-in run that outlived its hour said it ended; an escort said why the prompt's Yes was grey, or,
+  -- with Accept for me on, that the prompt was yours; a call the game blocked said so; QuestTrail loaded said so at every
+  -- load. None of them is said now (the blocked call is on /qb errors' list alone); the hand-in's line comes back with
+  -- "Say quest XP in chat", off, in the step frame's menu
+  ENGCASES[#ENGCASES + 1] = { "nothing said unasked: hand-ins, a run that ends itself, escorts, a blocked call, QuestTrail", function()
+    local c = char("Hushed", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -8914, -133 }, map = 1429, log = { { 7, 1 }, { 33, 1 } } })
+    local env, QB = c.env, c.QB
+    for _, id in ipairs({ 7, 15, 18, 33 }) do assert(QB.Quest.Get(id), "quest " .. id .. " in the catalog") end
+    assert(QB:Settings().sayXP == nil, "the hand-in's line: off by default")
+    local function turnIn(id, xp) c.ev(QB.eventFrame, "QUEST_TURNED_IN", id, xp); tick(c, 1) end
+    assert(said(c, function() turnIn(7, 450) end) == "", "a hand-in: nothing said")
+    assert(said(c, function() turnIn(15, 0) end) == "", "a hand-in that paid nothing: nothing said")
+    assert(said(c, function() turnIn(18, SECRET.num()) end) == "", "a hand-in whose XP the game hides: nothing said")
+    -- a run that outlived its two hours ends by itself, and says nothing
+    local db = env.QuestBankDB
+    db.run = { started = env.time() - 130 * 60, key = QB:CharKey(), level = 5, xp = 0, done = {}, plan = {}, mode = "rush", predicted = 0, predictedT = 0 }
+    assert(said(c, function() QB:ReadState(); tick(c, 1) end) == "" and db.run == nil, "a run two hours old ends by itself: nothing said")
+    -- an escort, with Accept for me on, and with a log past an older prompt's count: nothing said; /qb escort tells
+    QB:Settings().autoAccept = "route"
+    assert(said(c, function() c.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(c, 1) end) == "",
+      "an escort, Accept for me on: nothing said")
+    env.MAX_QUESTS = 2
+    assert(said(c, function() c.ev(QB.eventFrame, "QUEST_ACCEPT_CONFIRM", "Brann Steelhand", "Escorting Erland", 435); tick(c, 1) end) == "",
+      "an escort, the log past the prompt's count: nothing said")
+    assert(said(c, function() env.SlashCmdList.QUESTBANK("escort") end):find("Yes stays grey", 1, true), "/qb escort says why")
+    env.MAX_QUESTS = 40
+    QB:Settings().autoAccept = "off"
+    -- a call the game blocked: kept for /qb errors, nothing said
+    local bf = QB.blockedFrame
+    assert(said(c, function() bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "QuestBank", "Frame:SetPassThroughButtons()") end) == ""
+      and db.diag.blocked and db.diag.blocked[#db.diag.blocked].fn == "Frame:SetPassThroughButtons()", "a blocked call: on the list, nothing said")
+    -- asked for, in the step frame's menu: the hand-in's line again
+    QB:Settings().welcome = nil; QB.StepFrame.Apply()
+    QB.StepFrame:Menu(nil)
+    local item
+    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say quest XP in chat") then item = it end end
+    assert(item and item[1] == "Say quest XP in chat: off", "the step frame's menu has the choice, off: " .. tostring(item and item[1]))
+    item[2]()
+    assert(QB:Settings().sayXP == true, "ticked: on")
+    local line = said(c, function() turnIn(33, 450) end)
+    assert(line:find(": +450 XP", 1, true), "asked for: the hand-in's line: " .. line)
+    -- QuestTrail loaded: its minimap, nothing said at the load
+    local qt = char("Trailed", "MAGE", "Mage", 8, {}, { level = 12, addons = { QuestTrail = { version = "3.0.6", loaded = true } } })
+    for _, l in ipairs(qt.chat) do assert(not l:find("QuestTrail", 1, true), "QuestTrail loaded: nothing said: " .. l) end
+    assert(qt.QB.MiniView.blocked, "and its minimap left to it")
+  end }
+
+  -- 4. "In a dungeon the arrow says Leave the dungeon first for the whole run": inside a dungeon, a raid or a
+  -- battleground the arrow has nothing to steer by; it goes away at the loading screen in (whatever turns it on or
+  -- shows a click meanwhile) and is back at the loading screen out. The Deeprun Tram is an instance the travel guide
+  -- steers through: the arrow stays
+  ENGCASES[#ENGCASES + 1] = { "the arrow away inside a dungeon, back as you leave; the tram keeps it", function()
+    local c = char("Delver", "WARRIOR", "Warrior", 1, {}, { level = 20 })
+    local env, QB = c.env, c.QB
+    local A = QB.Arrow
+    A:Set(true); A:Update()
+    local F = env.QuestBankArrow
+    assert(F:IsShown(), "out in the world: the arrow up")
+    local ev = A.eventFrame
+    assert(ev and ev.__scripts.OnEvent, "the arrow hears the loading screens")
+    local function load(inside, inst)
+      env.IsInInstance = function() return inside, inside and "party" or "none" end
+      c.instance = inst
+      ev.__scripts.OnEvent(ev, "PLAYER_ENTERING_WORLD", false, false)
+      tick(c, 1)
+    end
+    load(true, { "The Deadmines", 1, 36 })
+    assert(not F:IsShown(), "in the Deadmines: the arrow away, not Leave the dungeon first: " .. tostring(F.dist:GetText()))
+    A:Set(true)
+    assert(not F:IsShown() and QB:Settings().arrow == true, "switched on inside: still away, the switch kept")
+    A:Show("Mr. Smite", { c = 0, wx = -11000, wy = 1500 })
+    assert(not F:IsShown(), "a place clicked inside: still away")
+    A:EndTemp(nil, true)
+    for _ = 1, 3 do tick(c, 1) end
+    assert(not F:IsShown(), "and stays away for the run")
+    load(false, nil)
+    assert(F:IsShown() and F.dist:GetText() ~= "Leave the dungeon first", "out again: the arrow back")
+    -- off while you were inside: stays off as you leave
+    load(true, { "The Deadmines", 1, 36 })
+    A:Set(false)
+    load(false, nil)
+    assert(not F:IsShown(), "switched off inside: off as you leave")
+    A:Set(true)
+    -- the tram: an instance map the guide steers through
+    load(true, { "Deeprun Tram", 0, 369 })
+    assert(F:IsShown(), "on the Deeprun Tram: the arrow stays")
+    load(false, nil)
+    env.IsInInstance = nil
+  end }
+
+  -- 5. The game's quest tracker out of sight while the step frame shows (6.1.1, the owner's ask) said nowhere where it
+  -- went. The first time it goes, the frame says so in one line for a minute (never again, never in chat); its
+  -- right-click menu shows it again ("Show the game's quest tracker") and hides it again
+  ENGCASES[#ENGCASES + 1] = { "the quest tracker hidden: said once in the frame, the frame's menu brings it back", function()
+    local c = char("Tracky", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local env, QB = c.env, c.QB
+    local SF, T = QB.StepFrame, env.ObjectiveTrackerFrame
+    local n0 = #c.chat
+    QB:Settings().welcome = nil; SF.Apply(); SF.Refresh()
+    local f = env.QuestBankStep
+    assert(T:GetAlpha() == 0, "the tracker out of sight by default")
+    assert(f.note and f.note:IsShown() and f.note:GetText():find("quest tracker is hidden", 1, true) and f.note:GetText():find("Right-click", 1, true),
+      "the first time: the frame says where it went: " .. tostring(f.note and f.note:GetText()))
+    assert(QB:Settings().guide.trackerTold == true, "told once, for good")
+    for i = n0 + 1, #c.chat do assert(not c.chat[i]:find("tracker", 1, true), "nothing in chat: " .. c.chat[i]) end
+    for _, pr in ipairs(checkLayout(f, "step frame with the tracker's note")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+    tick(c, 70); SF.Refresh()
+    assert(not f.note:IsShown(), "a minute on: the line goes")
+    -- the menu: Show the game's quest tracker, and hide it again
+    local function menuItem(pat)
+      SF:Menu(QB.Guide.Steps()[1])
+      for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find(pat) then return it end end
+    end
+    local show = menuItem("^Show the game's quest tracker")
+    assert(show, "the menu has Show the game's quest tracker")
+    show[2]()
+    assert(QB:Settings().guide.hideTracker == false and T:GetAlpha() == 1, "shown again")
+    local hide = menuItem("^Hide the game's quest tracker")
+    assert(hide and not menuItem("^Show the game's quest tracker"), "then the menu offers to hide it")
+    hide[2]()
+    assert(QB:Settings().guide.hideTracker == true and T:GetAlpha() == 0, "hidden again")
+    SF.Refresh()
+    assert(not f.note:IsShown(), "and no second note")
+    -- the next login with that save: no note
+    local d = char("Tracky", "WARRIOR", "Warrior", 1, {}, { level = 5, saved = env.QuestBankDB })
+    d.QB:Settings().welcome = nil; d.QB.StepFrame.Apply(); d.QB.StepFrame.Refresh()
+    local g = d.env.QuestBankStep
+    assert(d.env.ObjectiveTrackerFrame:GetAlpha() == 0 and not (g.note and g.note:IsShown()), "told before: hidden, nothing said")
+    -- a fresh install's welcome card first: the note's minute starts once the steps show, not under the card
+    local w = char("Welcomed", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local WSF = w.QB.StepFrame
+    WSF.Apply()
+    local wf = w.env.QuestBankStep
+    assert(wf.card and wf.card:IsShown() and w.env.ObjectiveTrackerFrame:GetAlpha() == 0, "the welcome card up, the tracker out of sight")
+    tick(w, 90)
+    w.QB:Settings().welcome = nil; WSF.Apply(); WSF.Refresh()
+    assert(wf.note:IsShown(), "the card answered a minute and a half on: the note shows now")
+  end }
+
+  -- 6. The owner's step frame (1-step-frame-handins): "Hand in In Nightmares" / "Hand in The Absent Minded
+  -- Prospector" / "Hand in Ziz Fizziks", the quest's name and nothing else, so nobody could tell one stop from three
+  -- trips, and the Prospector's name belongs to five quests handed in at four places. Now each step carries its leg of
+  -- the route (G.Replan: s.stop, s.mins, s.way, s.leg) and the frame shows the kind's game icon, the name, who and where
+  -- under it with the minutes, and the next two with their place and "+N min" where a new trip starts; every row's
+  -- tooltip has the whole step, the NPC and the place, the minutes and the XP
+  ENGCASES[#ENGCASES + 1] = { "each step says where: its icon, name, who and where, minutes; a tooltip on every row", function()
+    local c = char("Wayfarer", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -8914, -133 }, map = 1429, log = { { 7, 1 }, { 33, 0 } } })
+    local env, QB = c.env, c.QB
+    local G, SF, D = QB.Guide, QB.StepFrame, QB.Data
+    QB:Settings().welcome = nil
+    QB:SetAdded(15, true); QB:SetAdded(18, true)
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1)
+    QB.Model.Finish(); QB:Recompute(true); QB.Model.Finish(); tick(c, 1)
+    G.Replan()
+    -- a real plan: the steps made for a leg carry it; the minutes once a leg
+    local r = QB.Target.Route()
+    local tagged = 0
+    for i, s in ipairs(G.steps) do
+      if s.leg then
+        local leg = r.legs[s.leg]
+        assert(leg and s.stop == QB.Travel.StopPlace(leg.stop) and s.mins == leg.travel and s.way == leg.kind, "a step carries its leg: " .. G.Text(s))
+        assert(not s.stop:find("%(%d+, %d+%)$"), "its place in words, not a zone and a spot: " .. s.stop)
+        tagged = tagged + 1
+        if i > 1 and G.steps[i - 1].leg == s.leg then assert(G.Mins(s, G.steps[i - 1]) == nil, "the minutes once a leg: " .. G.Text(s)) end
+      end
+      assert(G.Title(s) ~= "" and (G.Place(s) == nil or type(G.Place(s)) == "string"), "a name and a place for each step")
+    end
+    assert(tagged >= 1, "the route's steps carry their legs: " .. #G.steps .. " steps")
+    -- the owner's three hand-ins, as the Guide made them that day
+    local function npc(name) for i, n in ipairs(D.NPC) do if n[1] == name then return i end end end
+    local function hand(qid, who, stop, mins, leg)
+      local i = assert(npc(who), who)
+      local n = D.NPC[i]
+      return { kind = "handin", qid = qid, n = 1, npc = i, m = n[2], x = n[3], y = n[4], c = n[5], wx = n[6], wy = n[7], stop = stop, mins = mins, leg = leg }
+    end
+    local keep = G.steps
+    G.steps = { hand(3370, "Mathrengyl Bearwalker", "Darnassus", 11.2, 1), hand(731, "Archaeologist Hollee", "Auberdine", 4.4, 2),
+                hand(1483, "Ziz Fizziks", "Stonetalon Mountains (59, 62)", 9, 3) }
+    G.ver = G.ver + 1
+    SF.Apply(); SF.Refresh()
+    local f = env.QuestBankStep
+    local r1, r2, r3 = f.rows[1], f.rows[2], f.rows[3]
+    assert(r1.text:GetText() == "In Nightmares" and r1.where:GetText() == "Mathrengyl Bearwalker - Darnassus" and r1.mins:GetText() == "11 min",
+      "the step now: " .. r1.text:GetText() .. " / " .. r1.where:GetText() .. " / " .. r1.mins:GetText())
+    assert(r1.icon:IsShown() and (r1.icon.__atlas == "QuestTurnin" or r1.icon.__tex == D.TEX.questActive), "the hand-in's ? beside it: " .. tostring(r1.icon.__tex))
+    assert(r2.text:GetText():find(" - Auberdine$") and r2.text:GetText():find("^The Absent Mind") and r2.mins:GetText() == "+4 min",
+      "the next: name and place, the trip's minutes: " .. r2.text:GetText() .. " / " .. r2.mins:GetText())
+    assert(r3.text:GetText():find("^Ziz F") and r3.text:GetText():find("Stonetalon Mountains", 1, true) and r3.mins:GetText() == "+9 min",
+      "the third: " .. r3.text:GetText() .. " / " .. r3.mins:GetText())
+    -- the Prospector's five quests share a name: who and where tell them apart
+    local other = hand(729, "Prospector Remtravel", "Darkshore (35, 85)", 6, 2)
+    assert(QB.Quest.Get(729).name == QB.Quest.Get(731).name and G.Where(other) ~= G.Where(G.steps[2]), "one name, two hand-ins: " .. G.Where(other) .. " / " .. G.Where(G.steps[2]))
+    -- one trip, two hand-ins: the minutes once
+    G.steps[2].leg = 1
+    G.ver = G.ver + 1; SF.Refresh()
+    assert(r2.mins:GetText() == "" and r2.text:GetText() == "The Absent Minded Prospector", "the same trip as the step before: its name alone, no minutes: " .. r2.text:GetText())
+    -- every row's tooltip: the whole step, the NPC and the place, the minutes and the XP
+    for i = 1, 3 do
+      lines = {}
+      f.rows[i].__scripts.OnEnter(f.rows[i])
+      local tip = table.concat(lines, " | ")
+      local s = G.steps[i]
+      assert(lines[1] == G.Text(s) and tip:find(D.NPC[s.npc][1], 1, true) and tip:find(G.Place(s), 1, true) and tip:find(" XP", 1, true),
+        "row " .. i .. "'s tooltip: " .. tip)
+      if i ~= 2 then assert(tip:find("about %d+ min there"), "row " .. i .. "'s minutes: " .. tip) end
+      f.rows[i].__scripts.OnLeave(f.rows[i])
+    end
+    -- the arrow leads there: the step now's minutes are the arrow's, from where you stand
+    local A = QB.Arrow
+    local sv = { A.g, A.t }
+    A:Set(true)
+    A.g, A.t = { eta = 3.4, trail = {} }, { c = G.steps[1].c, wx = G.steps[1].wx + 5, wy = G.steps[1].wy }
+    SF.Refresh()
+    assert(r1.mins:GetText() == "3 min", "the arrow's minutes for the step now: " .. r1.mins:GetText())
+    A.g, A.t = sv[1], sv[2]
+    -- the layout at every scale, an item button up or not: nothing cut, nothing on anything
+    for _, sc in ipairs({ 0.8, 1, 1.2 }) do
+      SF.SetScale(sc); G.ver = G.ver + 1; SF.Refresh()
+      for _, pr in ipairs(checkLayout(f, "step frame, three trips, at " .. sc)) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+      STAGE_LAYOUTS[#STAGE_LAYOUTS + 1] = dumpLayout(f, "Step frame: three trips at " .. sc)
+    end
+    SF.SetScale(1)
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
+  -- 7. The owner's arrow at Menethil's pier, bound for a hand-in in Darnassus (2-arrow-boat-darnassus): its tooltip said
+  -- "Flight paths: 17 of 18 known here", the Eastern Kingdoms' count, while the way's one flight is on Kalimdor, and
+  -- ended "Walk to Darnassus" after the portal into Darnassus. Now each flight's continent is named and counted, and the
+  -- last walk names the NPC the quest goes to; /qb way says the same
+  ENGCASES[#ENGCASES + 1] = { "the arrow's tooltip: the flights of this way, by continent; the last walk to the NPC", function()
+    local c = char("Pierside", "MAGE", "Mage", 8, {}, { level = 21, world = { 0, -3709, -575 }, map = 1437, log = { { 3370, 1 } }, bind = "Menethil Harbor" })
+    local env, QB = c.env, c.QB
+    local men, aub, rut = hubOf(c, "Menethil Harbor"), hubOf(c, "Auberdine"), hubOf(c, "Rut'theran Village")
+    c.taxiKnown = { [men[6]] = true, [aub[6]] = true, [rut[6]] = true }
+    fireTV(c, "PLAYER_ENTERING_WORLD"); tick(c, 3.1)
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1)
+    QB.Model.Finish(); QB:Recompute(true); QB.Model.Finish()
+    local A = QB.Arrow
+    A:Set(true); A:Update()
+    local F = env.QuestBankArrow
+    local t = A.t
+    assert(t and t.kind == "route" and t.qid == 3370, "the arrow leads to In Nightmares' hand-in: " .. tostring(t and t.name))
+    lines = {}; F.__scripts.OnEnter(F)
+    local tip = table.concat(lines, " / ")
+    F.__scripts.OnLeave(F)
+    assert(tip:find("Walk to Mathrengyl Bearwalker", 1, true) and not tip:find("Walk to Darnassus", 1, true), "the last walk names the NPC: " .. tip)
+    assert(not tip:find("known here", 1, true), "no count of where you stand: " .. tip)
+    local flies = false
+    for _, l in ipairs(A.g and A.g.plan and A.g.plan.legs or {}) do if l.kind == "fly" then flies = true end end
+    assert(flies and tip:find("Flight paths on Kalimdor: %d+ of %d+ known") and not tip:find("on Eastern Kingdoms", 1, true),
+      "the way's flight is on Kalimdor, and so is the count: " .. tip)
+    print("engine: the owner's arrow at Menethil: " .. tip)
+    local n0 = #c.chat
+    env.SlashCmdList.QUESTBANK("way")
+    assert(table.concat(c.chat, " / ", n0 + 1):find("Walk to Mathrengyl Bearwalker", 1, true), "/qb way: the same last walk: " .. table.concat(c.chat, " / ", n0 + 1))
+    -- a way with no flight in it: no flight line at all
+    local W = { c = 0, wx = -3709 + 60, wy = -575 }
+    A:Show("A spot on the pier", W)
+    A:Update()
+    lines = {}; F.__scripts.OnEnter(F)
+    assert(not table.concat(lines, " / "):find("Flight paths", 1, true), "a walk along the pier: no flight line: " .. table.concat(lines, " / "))
+    F.__scripts.OnLeave(F)
+  end }
+
+  -- 8. The owner's world map (4-map-tooltip): the route's stop at Smith Argus was titled "Elwynn Forest (42, 65)" (a stop
+  -- out of a flight master's town is named after its zone and spot, Model.lua) beside the Goldshire label, and said
+  -- "Stop 6 of 6, at 0:51", which reads as a clock. Now its title names the NPC and the town (the stop's town, else the
+  -- inn town within 150 yards, else the zone) and the stop says how many minutes from now
+  ENGCASES[#ENGCASES + 1] = { "a route stop's tooltip: the NPC and the town, minutes from now", function()
+    local c = char("Shoemaker", "WARRIOR", "Warrior", 1, {}, { level = 18, world = { 0, -9460, 60 }, map = 1429, log = { { 118, 1 } }, bind = "Goldshire" })
+    local QB = c.QB
+    c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1)
+    QB.Model.Finish(); QB:Recompute(true); QB.Model.Finish()
+    local list = QB.Pins:Build()
+    local stop
+    for _, d in ipairs(list) do if d.num and d.ids and d.ids[118] then stop = d end end
+    assert(stop, "The Price of Shoes' stop on the map")
+    assert(stop.title == "Smith Argus, Goldshire", "titled by its NPC and the town: " .. tostring(stop.title) .. " (named " .. tostring(stop.name) .. ")")
+    -- (the review round: a route from where you stand counts down; a stop where it starts says so; case 18)
+    assert(not stop.when:find(", at %d+:%d%d") and (stop.when:find("^Stop %d+ of %d+, %d+ min from now: ") or stop.when:find("^Stop %d+ of %d+, %d+ h %d+ min from now: ")
+      or stop.when:find("^Stop %d+ of %d+, where the route starts: ")), "minutes from now: " .. stop.when)
+    -- the tooltip's title line
+    local pin = { data = stop, Route = function() return QB.Pins:Route() end }
+    lines = {}
+    QB.Pins.Pin.OnMouseEnter(pin)
+    assert(lines[1] == "Smith Argus, Goldshire", "the tooltip's title: " .. tostring(lines[1]))
+    -- a stop in a flight master's town of one NPC: that NPC and the town; several NPCs: the town
+    local P = QB.Pins
+    local D = QB.Data
+    local function idx(name) for i, n in ipairs(D.NPC) do if n[1] == name then return i end end end
+    local mm = idx("Marshal McBride")
+    assert(P.StopTitle({ town = true, name = "Northshire Abbey", npcs = { mm } }) == "Marshal McBride, Northshire Abbey", "one NPC in a town")
+    assert(P.StopTitle({ town = true, name = "Northshire Abbey", npcs = { mm, idx("Eagan Peltskinner") } }) == "Northshire Abbey", "several: the town")
+  end }
+
+  -- 9. The owner's reward window (5-reward-glow): QuestBank's pick was the map pins' round additive glow, 170 px of
+  -- gold on a HIGH frame over the quest window: it read as the game's own selection and washed the item's name out, and
+  -- nothing said it was QuestBank's or why; a first choice taken for want of a pick (nothing fits you, or the game had
+  -- not sent the items) looked the same. Now a thin outline in the frame's ink round the pick's icon, inside the quest
+  -- window's own frames, nothing over the name, nothing additive or gold; one line by the Complete Quest button says
+  -- whose pick it is and why (the stats it gives, the class's own first); a first choice is grey and says so
+  ENGCASES[#ENGCASES + 1] = { "the reward pick: QuestBank's own mark, the name readable, one line says why; a first choice says so", function()
+    local function window(c, rc, unloaded)
+      local env = c.env
+      env.QuestFrame = env.QuestFrame or newObj("Frame", nil, env.UIParent)
+      env.QuestFrame:SetSize(338, 496); env.QuestFrame:SetPoint("TOPLEFT", env.UIParent, "TOPLEFT", 16, -116)
+      env.QuestFrameCompleteQuestButton = env.QuestFrameCompleteQuestButton or newObj("Button", nil, env.QuestFrame)
+      env.QuestFrameCompleteQuestButton:SetSize(120, 22); env.QuestFrameCompleteQuestButton:SetPoint("BOTTOMLEFT", env.QuestFrame, "BOTTOMLEFT", 6, 4)
+      local rf = newObj("Frame", nil, env.QuestFrame)
+      rf:SetSize(285, 200); rf:SetPoint("TOPLEFT", env.QuestFrame, "TOPLEFT", 20, -80)
+      rf.RewardButtons = {}
+      for i = 1, 2 do
+        local b = newObj("Button", nil, rf)
+        b:SetSize(147, 41); b:SetPoint("TOPLEFT", rf, "TOPLEFT", (i - 1) * 148, -30)
+        b.Icon = b:CreateTexture(nil, "BORDER"); b.Icon:SetSize(39, 39); b.Icon:SetPoint("TOPLEFT", b, "TOPLEFT", 0, 0)
+        b.Name = b:CreateFontString(nil, "OVERLAY"); b.Name:SetPoint("LEFT", b.Icon, "RIGHT", 6, 0); b.Name:SetText("Item " .. rc[i])
+        rf.RewardButtons[i] = b
+      end
+      env.QuestInfoFrame = { rewardsFrame = rf }
+      c.window = { id = 3369, xp = 1650, title = "In Nightmares", rc = rc, unloaded = unloaded }
+      c.auto = {}
+      c.ev(c.QB.eventFrame, "QUEST_COMPLETE")
+      tick(c, 1)
+      return rf
+    end
+    local function gold(o) local v = o.__vertex or o.__color; return v and v[1] > 0.9 and v[2] > 0.7 and v[2] < 0.9 and v[3] < 0.5 end
+    local function check(c, rf, want, pick, line)
+      local QB, SF, G = c.QB, c.QB.StepFrame, c.QB.Guide
+      for _, a in ipairs(c.auto) do assert(not a:find("^GetQuestReward"), "nothing chosen: " .. a) end
+      assert(G.reward and G.reward.index == want and G.reward.pick == pick, "the pick: " .. tostring(G.reward and G.reward.index) .. " " .. tostring(G.reward and G.reward.pick))
+      local m, b = SF.mark, rf.RewardButtons[want]
+      assert(m and m:IsShown() and m:GetParent() == rf and (m.__frameStrata == nil or m.__frameStrata ~= "HIGH"), "the mark inside the reward frame, not over the window")
+      for _, x in ipairs(ALL) do
+        if x.__parent == m and x.__kind == "Texture" then
+          assert(x.__blend ~= "ADD" and not gold(x), "a mark of its own: no additive glow, no gold")
+        end
+      end
+      GEN = GEN + 1
+      local mr, nr, ir = rectOf(m), rectOf(b.Name), rectOf(b.Icon)
+      assert(mr.r <= ir.r + 3 and mr.l >= ir.l - 3 and not (mr.r > nr.l + 1), "round the icon, clear of the name: " .. mr.l .. ".." .. mr.r .. " name from " .. nr.l)
+      local w = SF.why
+      assert(w and w:IsShown() and w:GetText() == line, "the line by Complete Quest: " .. tostring(w and w:GetText()))
+      return m
+    end
+    -- a mage: Talbar Mantle (cloth) over Quagmire Galoshes (mail); its stats, the class's own first
+    local c = char("Mageling", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
+    c.QB:Settings().autoTurnIn = true
+    c.env.C_Item.GetItemStats = function(link)
+      if link:find("item:10657", 1, true) then return { ITEM_MOD_STAMINA_SHORT = 2, ITEM_MOD_INTELLECT_SHORT = 4 } end
+      return { ITEM_MOD_STAMINA_SHORT = 4, ITEM_MOD_INTELLECT_SHORT = 4 }
+    end
+    local rf = window(c, { 10657, 10658 })
+    local m = check(c, rf, 1, true, "QuestBank's pick: +4 Intellect, +2 Stamina")
+    local ink = m.edges and m.edges[1].__color
+    -- the line beside the Complete Quest button, two lines at most, inside the window, on nothing
+    GEN = GEN + 1
+    local wr, br, qr = rectOf(c.QB.StepFrame.why), rectOf(c.env.QuestFrameCompleteQuestButton), rectOf(c.env.QuestFrame)
+    assert(wr.l >= br.r + 4 and wr.r <= qr.r - 6 and wr.t - wr.b <= 2 * 12 and wr.b >= qr.b and not (wr.l < br.r and br.l < wr.r),
+      string.format("the line beside the button, in the window: %d..%d x %d..%d, the button to %d, the window to %d", wr.l, wr.r, wr.b, wr.t, br.r, qr.r))
+    for _, rb in ipairs(rf.RewardButtons) do local rr = rectOf(rb); assert(wr.t <= rr.b or wr.b >= rr.t, "the line on no reward") end
+    c.QB.StepFrame.Refresh()
+    assert(c.QB.Guide.Text(c.QB.Guide.Steps()[1]):find("is QuestBank's pick", 1, true), "the step says whose pick")
+    c.ev(c.QB.eventFrame, "QUEST_FINISHED")
+    assert(not c.QB.StepFrame.mark:IsShown() and not c.QB.StepFrame.why:IsShown(), "the window shut: the mark and the line go")
+    -- a paladin: mail at 21, the Galoshes
+    local p = char("Paladine", "PALADIN", "Paladin", 2, {}, { level = 21, log = { { 3369, 1 } } })
+    p.QB:Settings().autoTurnIn = true
+    p.env.C_Item.GetItemStats = c.env.C_Item.GetItemStats
+    check(p, window(p, { 10657, 10658 }), 2, true, "QuestBank's pick: +4 Stamina, +4 Intellect")
+    -- nothing known fits among the window's items (the mage's pick, Talbar Mantle, is not one of them): the first
+    -- choice, its mark plainly weaker, said so
+    local u = char("Unfitted", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
+    u.QB:Settings().autoTurnIn = true
+    local um = check(u, window(u, { 10658, 2140 }), 1, false, "First choice: no better pick known")
+    local grey = um.edges and um.edges[1].__color
+    assert(ink and grey and (ink[1] ~= grey[1] or ink[4] ~= grey[4]), "a first choice looks unlike a pick")
+    u.QB.StepFrame.Refresh()
+    assert(u.QB.Guide.Text(u.QB.Guide.Steps()[1]) == "Choose a reward: first choice, no better pick known", "the step says so: " .. u.QB.Guide.Text(u.QB.Guide.Steps()[1]))
+    -- (the review round) on the window's parchment (QuestBG-Parchment, a light tan: the owner's 5-reward-choice) the
+    -- pick's ring stands out, 3:1 at least, with a line of the frame's ink inside it against the dark icon; a first
+    -- choice's plainly less, and no inner line. (The launch round's ring was the frame's ink, a cream: 1.2:1 there)
+    local PARCH = { 0.84, 0.76, 0.60 }
+    local function lum(c) local function ch(v) return v <= 0.03928 and v / 12.92 or ((v + 0.055) / 1.055) ^ 2.4 end return 0.2126 * ch(c[1]) + 0.7152 * ch(c[2]) + 0.0722 * ch(c[3]) end
+    local function onParch(c)
+      local a = c[4] or 1
+      local mix = { c[1] * a + PARCH[1] * (1 - a), c[2] * a + PARCH[2] * (1 - a), c[3] * a + PARCH[3] * (1 - a) }
+      local l1, l2 = lum(mix), lum(PARCH)
+      if l1 < l2 then l1, l2 = l2, l1 end
+      return (l1 + 0.05) / (l2 + 0.05)
+    end
+    assert(onParch(ink) >= 3, string.format("the pick's ring on parchment: %.1f:1", onParch(ink)))
+    assert(onParch(grey) < onParch(ink) - 1, string.format("a first choice's ring weaker: %.1f:1 against %.1f:1", onParch(grey), onParch(ink)))
+    assert(m.inner and m.inner[1]:IsShown() and m.inner[1].__color and m.inner[1].__color[1] > 0.8 and not (um.inner and um.inner[1]:IsShown()),
+      "the pick's inner line in the frame's ink (against the icon), none on a first choice")
+    -- (the review round) the game has not sent the items yet: nothing marked, the line says it is reading them; once
+    -- they come (QUEST_ITEM_UPDATE), the pick. (The launch round marked the first choice "no better pick known" for good)
+    local q = char("Hasty", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
+    q.QB:Settings().autoTurnIn = true
+    q.env.C_Item.GetItemStats = nil
+    local unl = { [10657] = true, [10658] = true }
+    local qrf = window(q, { 10657, 10658 }, unl)
+    local QG, QSF = q.QB.Guide, q.QB.StepFrame
+    assert(QG.reward and QG.reward.reading and not QG.reward.pick, "the items not sent yet: reading them")
+    assert(not (QSF.mark and QSF.mark:IsShown()) and QSF.why and QSF.why:IsShown() and QSF.why:GetText() == "Reading the rewards...",
+      "nothing marked, the line says so: " .. tostring(QSF.why and QSF.why:GetText()))
+    QSF.Refresh()
+    assert(QG.Text(QG.Steps()[1]) == "Choose a reward: reading the rewards...", "the step says so: " .. QG.Text(QG.Steps()[1]))
+    unl[10657], unl[10658] = nil, nil
+    local ev = QG.rewardFrame
+    assert(ev and ev.qbOn and ev.__scripts.OnEvent, "the Guide hears the items come")
+    ev.__scripts.OnEvent(ev, "QUEST_ITEM_UPDATE"); tick(q, 1)
+    check(q, qrf, 1, true, "QuestBank's pick: item level 26, the best you can use here")
+    q.ev(q.QB.eventFrame, "QUEST_FINISHED")
+    assert(not ev.qbOn, "the window shut: no more listening")
+    -- the links not loaded, but the window tells the items' ids (GetQuestItemInfo's sixth value): the pick at once
+    local k = char("Knowing", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
+    k.QB:Settings().autoTurnIn = true
+    k.env.C_Item.GetItemStats = nil
+    k.env.GetQuestItemInfo = function(kind, i) local id = k.window and k.window.rc and k.window.rc[i]; return "Item", 134400, 1, 2, true, id end
+    check(k, window(k, { 10657, 10658 }, { [10657] = true, [10658] = true }), 1, true, "QuestBank's pick: item level 26, the best you can use here")
+    -- no stats from the client: the item level
+    local n = char("Plainly", "MAGE", "Mage", 8, {}, { level = 21, log = { { 3369, 1 } } })
+    n.QB:Settings().autoTurnIn = true
+    n.env.C_Item.GetItemStats = nil
+    check(n, window(n, { 10657, 10658 }), 1, true, "QuestBank's pick: item level 26, the best you can use here")
+  end }
+
+  -- 10. (the review round) A step frame dragged from its default place left the arrow there (TOP 0 -190): nudged 20 px,
+  -- the frame stood on it as soon as it grew; a 6.1 save's arrow, dragged out from under the frame of then (TOP 0 -245),
+  -- sat on today's frame, 50 px lower and 16 px taller; and a tall frame on a short screen (a party at 120%) pushed the
+  -- arrow down onto the camp bar's place (CENTER 0 -190, 40 px). Now the arrow stands under the frame wherever it is,
+  -- follows a drag at once, leaves a dragged place the frame stands on, and goes beside the frame where under it would
+  -- run onto the camp bar
+  ENGCASES[#ENGCASES + 1] = { "the arrow under the step frame wherever it stands; a 6.1 arrow on it moves; beside it over the camp bar", function()
+    local c = char("Nudger", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local env, QB = c.env, c.QB
+    local SF, A, G = QB.StepFrame, QB.Arrow, QB.Guide
+    QB:Settings().welcome = nil; SF.Apply(); A:Set(true); A:Update()
+    local sf, af = env.QuestBankStep, env.QuestBankArrow
+    local party = {}
+    for i, n in ipairs({ "Ada", "Bo", "Cy", "Di" }) do party[i] = { name = n, class = "MAGE", text = "Kill Kobold Vermin " .. i .. "/8" } end
+    local none, real = {}, G.MemberSteps
+    local members = none
+    G.MemberSteps = function() return members end
+    local function grow(list) members = list; G.memberVer = G.memberVer + 1; SF.Refresh() end
+    local function under(what)
+      local sr, ar = placed(sf), placed(af, 143)
+      assert(apart(sr, ar) and ar.t <= sr.b - 4 and math.abs((ar.l + ar.r) / 2 - (sr.l + sr.r) / 2) < 1, what .. ": the arrow under the frame: " .. box(ar) .. " against " .. box(sr))
+    end
+    -- a drag that ends 20 px right of the default place (the game leaves a moved frame on a point of its own choosing:
+    -- its middle is what counts)
+    local h = sf:GetHeight()
+    rawset(sf, "GetCenter", function() return 800 + 20, 1000 - 190 - h / 2 end)
+    sf.__scripts.OnDragStart(sf); sf.__scripts.OnDragStop(sf)
+    local s = QB:Settings().guide
+    assert(s.x == 20 and math.abs(s.y - (500 - 190 - h / 2)) < 0.01, "kept by its middle: " .. tostring(s.x) .. ", " .. tostring(s.y))
+    under("dragged 20 px")
+    grow(party)
+    under("dragged 20 px, then grown")
+    -- dragged up the middle, at 120%
+    rawset(sf, "GetCenter", function() return 800, 700 end)
+    sf.__scripts.OnDragStart(sf); sf.__scripts.OnDragStop(sf)
+    under("dragged up the middle")
+    SF.SetScale(1.2)
+    under("dragged up the middle, at 120%")
+    -- to the screen's middle: under it the arrow would reach the camp bar's place (its top 170 px under the middle):
+    -- beside it
+    rawset(sf, "GetCenter", function() return 800, 500 end)
+    sf.__scripts.OnDragStart(sf); sf.__scripts.OnDragStop(sf)
+    local sr, ar = placed(sf), placed(af, 143)
+    assert(apart(sr, ar) and ar.b >= 500 - 170 + 4 and ar.l >= 0, "dragged to the middle: beside it, above the camp bar: " .. box(ar) .. " against " .. box(sr))
+    SF.SetScale(1); grow(none)
+    s.x, s.y = nil, nil; SF.Apply()
+    under("back at its default place")
+    -- a 6.1 save: its arrow dragged out from under the frame of then, to TOP 0 -245. Today's frame stands there: the
+    -- arrow goes under it, and the place is kept
+    QB:Settings().arrowPos = { "TOP", 0, -245 }
+    A.Place()
+    under("a 6.1 arrow at TOP 0 -245")
+    assert(QB:Settings().arrowPos and QB:Settings().arrowPos[3] == -245, "its place kept")
+    -- the frame away: the arrow where it was put
+    QB:Settings().guide.frame = false; SF.Apply()
+    local p = af.__points[1]
+    assert(p.point == "TOP" and p.x == 0 and p.y == -245, "the frame off: the arrow where it was dragged: " .. tostring(p.y))
+    QB:Settings().guide.frame = true; SF.Apply()
+    -- a place clear of the frame stays
+    QB:Settings().arrowPos = { "TOP", 300, -420 }
+    A.Place()
+    p = af.__points[1]
+    assert(p.x == 300 and p.y == -420, "an arrow dragged clear of the frame: kept")
+    QB:Settings().arrowPos = nil; A.Place()
+    -- 1024 x 768 at 120% with a party of five and the trainer line: under the frame the arrow would run onto the camp
+    -- bar's place; beside the frame, clear of it, the tracker's header and the screen's edges
+    env.UIParent:SetSize(1024, 768)
+    SF.SetScale(1.2)
+    G.reminder = env.GetTime() + 600
+    grow(party)
+    SF.Apply()
+    sr, ar = placed(sf), placed(af, 143)
+    local campTop = 768 / 2 - 190 + 20
+    GEN = GEN + 1
+    local hr = rectOf(env.ObjectiveTrackerFrame.Header)
+    assert(apart(sr, ar) and ar.b >= campTop + 4 and ar.l >= 0 and apart(ar, hr), "beside the frame, above the camp bar's place (top " .. campTop .. "): " .. box(ar) .. " against " .. box(sr))
+    assert(sr.b - 6 - 143 < campTop + 4, "(a frame this tall: under it the arrow would reach the camp bar: " .. box(sr) .. ")")
+    G.reminder = nil
+    env.UIParent:SetSize(1600, 1000)
+    SF.SetScale(1); grow(none)
+    G.MemberSteps = real
+  end }
+
+  -- the review round's cases (11 on): a step of the Guide's made by hand, as the owner's frame had it (case 6's hand)
+  local function npcIdx(D, name) for i, n in ipairs(D.NPC) do if n[1] == name then return i end end end
+  local function handStep(QB, qid, who, stop, mins, leg, way)
+    local D = QB.Data
+    local i = assert(npcIdx(D, who), who)
+    local n = D.NPC[i]
+    return { kind = "handin", qid = qid, n = 1, npc = i, m = n[2], x = n[3], y = n[4], c = n[5], wx = n[6], wy = n[7], stop = stop, mins = mins, leg = leg, way = way or "foot" }
+  end
+  local function rowTip(r) lines = {}; r.__scripts.OnEnter(r); r.__scripts.OnLeave(r); return table.concat(lines, " | ") end
+  local function planned(c)
+    c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1)
+    c.QB.Model.Finish(); c.QB:Recompute(true); c.QB.Model.Finish(); tick(c, 1)
+    c.QB.Guide.Replan()
+  end
+
+  -- 11. (the review round) The tracker's note says "Right-click here to show it.", and a right-click on the note (the
+  -- bare frame under the steps) did nothing: only the steps took one. And the note was marked told as the tracker went
+  -- out of sight, before it showed: a /reload under the welcome card lost it for good. Now a right-click anywhere on the
+  -- frame is its menu, and the note is told once it shows
+  ENGCASES[#ENGCASES + 1] = { "the tracker's note: a right-click on it is the menu; a reload under the welcome card keeps it to tell", function()
+    local w = char("Reloader", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    w.QB.StepFrame.Apply()
+    local wf = w.env.QuestBankStep
+    assert(wf.card and wf.card:IsShown() and w.env.ObjectiveTrackerFrame:GetAlpha() == 0, "a fresh install: the welcome card up, the tracker out of sight")
+    assert(not w.QB:Settings().guide.trackerTold, "not told yet: the note has not shown")
+    -- a /reload before the card is answered: the note still to tell
+    local d = char("Reloader", "WARRIOR", "Warrior", 1, {}, { level = 5, saved = w.env.QuestBankDB })
+    d.QB:Settings().welcome = nil; d.QB.StepFrame.Apply(); d.QB.StepFrame.Refresh()
+    local f = d.env.QuestBankStep
+    assert(f.note:IsShown() and d.QB:Settings().guide.trackerTold == true, "the card answered after the reload: the note shows, and is told now")
+    -- a right-click on the frame itself, where the note is: the frame's menu, Show the game's quest tracker in it
+    assert(f.__scripts.OnMouseUp, "the frame takes a click of its own")
+    d.QB.UI.lastMenu = nil
+    f.__scripts.OnMouseUp(f, "LeftButton")
+    assert(d.QB.UI.lastMenu == nil, "a left click (a drag's end): no menu")
+    f.__scripts.OnMouseUp(f, "RightButton")
+    local found = false
+    for _, it in ipairs(d.QB.UI.lastMenu or {}) do if it[1] == "Show the game's quest tracker" then found = true end end
+    assert(found, "a right-click on the note: the frame's menu with Show the game's quest tracker")
+  end }
+
+  -- 12. (the review round) An objective step took its quest's hand-in stop for its place and its leg's minutes: Blackrock
+  -- Menace's kills read "Blackrock Menace - Lakeshire" with the trip to Lakeshire, while the arrow led out to the
+  -- Blackrock camps, and the hand-in after it lost its place (the same leg). Now an objective says where its spot is
+  -- (the town within 150 yards, else the zone), a Do step its dungeon, neither carries a leg, and the hand-in after an
+  -- objective keeps its place
+  ENGCASES[#ENGCASES + 1] = { "an objective step says where the objective is, not the hand-in's town; the hand-in keeps its place", function()
+    -- (out at the Blackrock camps, 540 yards from Marshal Marris: the mock's maps put every spot where you stand)
+    local c = char("Menaced", "WARRIOR", "Warrior", 1, {}, { level = 18, world = { 0, -8747, -2223 }, log = { { 20, 0 }, { 391, 0 } } })
+    local QB = c.QB
+    local G, SF, TV, D = QB.Guide, QB.StepFrame, QB.Travel, QB.Data
+    QB:Settings().welcome = nil
+    planned(c)
+    local objs, hand, dos, texts = {}, nil, nil, {}
+    for _, s in ipairs(G.steps) do
+      texts[#texts + 1] = G.Text(s) .. " @ " .. tostring(G.Place(s))
+      if s.kind == "objective" and s.qid == 20 then objs[#objs + 1] = s end
+      if s.kind == "handin" and s.qid == 20 then hand = s end
+      if s.kind == "objective" and s.obj == "d" then dos = s end
+    end
+    assert(#objs >= 1, "Blackrock Menace's objective steps: " .. table.concat(texts, " / "))
+    local away = false
+    for _, s in ipairs(objs) do
+      local want = TV.TownNear(s.c, s.wx, s.wy, 150) or D.MAPNAME[s.m]
+      assert(G.Place(s) == want and s.leg == nil and G.Mins(s) == nil,
+        "an objective's place is its spot's: " .. tostring(G.Place(s)) .. " against " .. tostring(want) .. " (" .. G.Text(s) .. ", leg " .. tostring(s.leg) .. ")")
+      if want ~= "Lakeshire" then
+        away = true
+        assert(not G.Where(s):find("Lakeshire", 1, true), "out of town, not the hand-in's town: " .. G.Where(s))
+      end
+    end
+    assert(away, "a spot out of Lakeshire among them: " .. table.concat(texts, " / "))
+    if hand then assert(G.Place(hand) == "Lakeshire" and hand.leg ~= nil, "the hand-in: Lakeshire, on its leg: " .. tostring(G.Place(hand))) end
+    if dos then assert(dos.dungeon and G.Place(dos) == dos.dungeon and dos.leg == nil, "a Do step: its dungeon: " .. tostring(G.Place(dos))) end
+    -- the frame: an objective out of town, then the hand-in at Lakeshire: the hand-in's place shows
+    local keep = G.steps
+    local far
+    for _, s in ipairs(objs) do if G.Place(s) ~= "Lakeshire" then far = s end end
+    G.steps = { far, hand or handStep(QB, 20, "Marshal Marris", "Lakeshire", 6, 1) }
+    G.ver = G.ver + 1; SF.Apply(); SF.Refresh()
+    local r1, r2 = c.env.QuestBankStep.rows[1], c.env.QuestBankStep.rows[2]
+    assert(not r1.where:GetText():find("Lakeshire", 1, true), "the objective now: not Lakeshire: " .. r1.where:GetText())
+    assert(r2.text:GetText():find(" %- Lakeshire$"), "the hand-in after an objective keeps its place: " .. r2.text:GetText())
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
+  -- 20. (the review round) The step now's minutes stood at the plan's figure for its leg whenever the arrow led elsewhere
+  -- (off, away in a dungeon, or at the stop's first NPC while the step is at its second): "11 min" as you walked. Now the
+  -- arrow's count where it leads to that stop, else on your continent on a walk the yards from where you stand at the
+  -- planner's pace, read again as you move; else the plan's
+  ENGCASES[#ENGCASES + 1] = { "the step now's minutes as you go: the arrow's at its stop, else from where you stand, else the plan's", function()
+    local c = char("Strider", "WARRIOR", "Warrior", 1, {}, { level = 10, world = { 0, -9460, 60 }, map = 1429 })
+    local QB = c.QB
+    local G, SF, A = QB.Guide, QB.StepFrame, QB.Arrow
+    QB:Settings().welcome = nil; SF.Apply()
+    A:Set(false)
+    local keep = G.steps
+    G.steps = { handStep(QB, 20, "Marshal Marris", "Lakeshire", 30, 1, "foot") }
+    local r1 = c.env.QuestBankStep.rows[1]
+    local function mins() G.ver = G.ver + 1; SF.Refresh(); return tonumber((r1.mins:GetText() or ""):match("^(%d+) min$")), r1.mins:GetText() end
+    local m1, t1 = mins()
+    assert(m1 and m1 < 30 and m1 >= 5, "the arrow off: from where you stand, not the plan's 30: " .. tostring(t1))
+    standAt(c, 0, -9370, -1100)
+    local m2, t2 = mins()
+    assert(m2 and m2 < m1, "halfway there: fewer: " .. m1 .. " then " .. tostring(t2))
+    -- over the sea: the plan's
+    G.steps = { handStep(QB, 3370, "Mathrengyl Bearwalker", "Darnassus", 11.2, 1, "boat") }
+    local m3, t3 = mins()
+    assert(m3 == 11, "on another continent: the plan's 11: " .. tostring(t3))
+    -- the arrow at the stop's first NPC, the step at another of its NPCs: the arrow's count all the same
+    G.steps = { handStep(QB, 20, "Marshal Marris", "Lakeshire", 30, 1, "foot") }
+    A:Set(true)
+    local route, sv = QB.Target.Route, { A.g, A.t }
+    QB.Target.Route = function() return { legs = { { stop = { name = "Lakeshire", seen = { [G.steps[1].npc] = true } } } } } end
+    A.g, A.t = { eta = 2.6, trail = {} }, { kind = "route", stop = "Lakeshire", c = 0, wx = -9282 + 200, wy = -2296 }
+    local m4, t4 = mins()
+    QB.Target.Route, A.g, A.t = route, sv[1], sv[2]
+    assert(m4 == 3, "the arrow leads to that stop: its 3: " .. tostring(t4))
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
+  -- 13. (the review round) The next steps' tooltips said "about 11 min there" from the leg's minutes, counted from the
+  -- stop before them, not from now: the second NPC at the step now's stop said 11 while the row above said 3, and the
+  -- next trip 4 while it was 7 away. Now they count from now: the step now's minutes and each new trip's after it
+  ENGCASES[#ENGCASES + 1] = { "the next steps' tooltips count the minutes from now", function()
+    local c = char("Counter", "WARRIOR", "Warrior", 1, {}, { level = 20 })
+    local QB = c.QB
+    local G, SF, A = QB.Guide, QB.StepFrame, QB.Arrow
+    QB:Settings().welcome = nil; SF.Apply()
+    local keep = G.steps
+    G.steps = { handStep(QB, 3370, "Mathrengyl Bearwalker", "Darnassus", 11.2, 1, "boat"), handStep(QB, 741, "Chief Archaeologist Greywhisker", "Darnassus", 11.2, 1, "boat"),
+                handStep(QB, 731, "Archaeologist Hollee", "Auberdine", 4.4, 2, "fly") }
+    G.ver = G.ver + 1; SF.Refresh()
+    local rows = c.env.QuestBankStep.rows
+    local function there(i) return tonumber(rowTip(rows[i]):match("about (%d+) min there")) end
+    -- the arrow leads to the step now: 3 min; the second NPC there 3 too, the next trip 3 + 4
+    A:Set(true)
+    local sv = { A.g, A.t }
+    A.g, A.t = { eta = 3.2, trail = {} }, { c = G.steps[1].c, wx = G.steps[1].wx, wy = G.steps[1].wy }
+    G.ver = G.ver + 1; SF.Refresh()
+    assert(rows[1].mins:GetText() == "3 min", "the step now: the arrow's 3: " .. rows[1].mins:GetText())
+    assert(there(2) == 3, "the second NPC at that stop: 3 from now: " .. rowTip(rows[2]))
+    assert(there(3) == 7, "the next trip: 3 and +4, 7 from now (the row says +4): " .. rowTip(rows[3]))
+    A.g, A.t = sv[1], sv[2]
+    -- the arrow off: the plan's 11 for the step now (Darnassus, over the sea), and on from it
+    A:Set(false)
+    G.ver = G.ver + 1; SF.Refresh()
+    assert(rows[1].mins:GetText() == "11 min", "the arrow off: the plan's minutes: " .. rows[1].mins:GetText())
+    assert(there(2) == 11 and there(3) == 15, "from now: 11 and 15: " .. rowTip(rows[2]) .. " / " .. rowTip(rows[3]))
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
+  -- 14. (the review round) "Hand in 3 quests at Marshal Dughan" showed one quest's XP in its tooltip, the lowest id's.
+  -- Now a hand-in of several quests at one NPC carries their XP together (Replan adds up the leg's rows)
+  ENGCASES[#ENGCASES + 1] = { "a hand-in of several quests at one NPC: its tooltip has their XP together", function()
+    local c = char("Pairs", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -9460, 60 }, map = 1429, log = { { 7, 1 }, { 15, 1 } } })
+    local QB = c.QB
+    local G, SF = QB.Guide, QB.StepFrame
+    QB:Settings().welcome = nil
+    planned(c)
+    local s, texts = nil, {}
+    for _, x in ipairs(G.steps) do
+      texts[#texts + 1] = G.Text(x)
+      if x.kind == "handin" and (x.n or 0) > 1 then s = x end
+    end
+    assert(s, "one step for Marshal McBride's two: " .. table.concat(texts, " / "))
+    local want = 0
+    for _, leg in ipairs(QB.Target.Route().legs) do
+      for _, row in ipairs(leg.rows) do if row.q.turnIdx == s.npc and QB.state.log[row.q.id] then want = want + (row.xp or 0) end end
+    end
+    assert(want > (QB:Value(s.qid) or 0), "two quests pay more than one: " .. want)
+    local keep = G.steps
+    G.steps = { s }
+    G.ver = G.ver + 1; SF.Apply(); SF.Refresh()
+    local tip = rowTip(c.env.QuestBankStep.rows[1])
+    assert(tip:find(QB.Comma(want) .. " XP", 1, true), "the tooltip: both quests' XP, " .. QB.Comma(want) .. ": " .. tip)
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
+  -- 15. (the review round) The step now's who-and-where line was cut at its end: "Chief Archaeologist Greywhisker -
+  -- Da...". Now it is cut as the next steps' rows are: the name before the place
+  ENGCASES[#ENGCASES + 1] = { "the step now's who and where: a long name is cut before the place", function()
+    local c = char("Digger", "MAGE", "Mage", 8, {}, { level = 20 })
+    local QB = c.QB
+    local G, SF = QB.Guide, QB.StepFrame
+    QB:Settings().welcome = nil; SF.Apply()
+    local keep = G.steps
+    G.steps = { handStep(QB, 741, "Chief Archaeologist Greywhisker", "Darnassus", 11.2, 1, "boat") }
+    for _, sc in ipairs({ 0.8, 1, 1.2 }) do
+      SF.SetScale(sc); G.ver = G.ver + 1; SF.Refresh()
+      local w = c.env.QuestBankStep.rows[1].where:GetText()
+      assert(w:find(" %- Darnassus$") and w:find("^Chief Archaeolog"), "at " .. sc .. ": the place kept, the name cut: " .. w)
+      for _, pr in ipairs(checkLayout(c.env.QuestBankStep, "step frame, a long NPC's name at " .. sc)) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+    end
+    SF.SetScale(1)
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
+  -- 16. (the review round) A step with no quest (travel, train, grind, a corpse) said "Click: the way there." while its
+  -- click opens the Route page, and in Cute with Route off the Quests page. Now it names the page, as the arrow does
+  ENGCASES[#ENGCASES + 1] = { "a step with no quest: its tooltip names the page its click opens", function()
+    local c = char("Traveller", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local QB = c.QB
+    local G, SF = QB.Guide, QB.StepFrame
+    QB:Settings().welcome = nil; SF.Apply()
+    local keep = G.steps
+    G.steps = { { kind = "travel", text = "Fly to Ironforge", c = 0, wx = -4821, wy = -1155 } }
+    G.ver = G.ver + 1; SF.Refresh()
+    local r1 = c.env.QuestBankStep.rows[1]
+    local tip = rowTip(r1)
+    assert(tip:find("Click: the Route page.", 1, true) and not tip:find("the way there", 1, true), "QuestBank: the Route page: " .. tip)
+    local had = QB.UI.PageName
+    QB.UI.PageName = function() return "Quests" end
+    tip = rowTip(r1)
+    assert(tip:find("Click: the Quests page.", 1, true), "a host's page: " .. tip)
+    QB.UI.PageName = had
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+  end }
+
+  -- 17. (the review round) One stop, two names: the map's pin said "Smith Argus, Goldshire" and the step frame "Smith
+  -- Argus - Goldshire", while the arrow and its tooltip still said "Elwynn Forest (42, 65)" (Model.lua's name for a stop
+  -- out of a town, kept for matching). Now the arrow names its place as the others do
+  ENGCASES[#ENGCASES + 1] = { "a stop out of town: the arrow names its place, as the map's pins and the step frame do", function()
+    local c = char("Argus", "WARRIOR", "Warrior", 1, {}, { level = 18, world = { 0, -8914, -133 }, map = 1429, log = { { 118, 1 } }, bind = "Goldshire" })
+    local env, QB = c.env, c.QB
+    planned(c)
+    local leg = QB.Target.Route().legs[1]
+    assert(leg and not leg.stop.town and leg.stop.name:find("%(%d+, %d+%)$"), "a stop out of a town, named by its zone and spot: " .. tostring(leg and leg.stop.name))
+    local A = QB.Arrow
+    A:Set(true); A:Update()
+    local F = env.QuestBankArrow
+    assert(A.t and A.t.kind == "route" and not A.t.near, "the arrow leads to the stop")
+    assert(F.name:GetText() == "Goldshire", "the arrow names the place: " .. tostring(F.name:GetText()))
+    lines = {}; F.__scripts.OnEnter(F); F.__scripts.OnLeave(F)
+    assert(lines[1] == "Next stop: Goldshire", "its tooltip's head: " .. tostring(lines[1]))
+    for _, l in ipairs(lines) do assert(not l:find("Elwynn Forest (", 1, true), "no zone and spot: " .. l) end
+  end }
+
+  -- 18. (the review round) A stop's "51 min from now" was the plan's figure, counted from when and where the route was
+  -- planned; the route is not planned again as you walk, so it went stale, and a route planned from elsewhere (banked:
+  -- from where you log out) was never from now. Now a route planned from where you stand counts down from the time it
+  -- was planned, as the tooltip shows; once the count is spent, or for a route planned from elsewhere, the stop says
+  -- where it falls along the route
+  ENGCASES[#ENGCASES + 1] = { "a route stop's minutes from now count down as time passes; past it, or banked, minutes into the route", function()
+    local c = char("Clocked", "WARRIOR", "Warrior", 1, {}, { level = 18, world = { 0, -8914, -133 }, map = 1429, log = { { 118, 1 } }, bind = "Goldshire" })
+    local QB = c.QB
+    planned(c)
+    local P = QB.Pins
+    local d
+    for _, x in ipairs(P:Build()) do if x.num and x.ids and x.ids[118] then d = x end end
+    assert(d and d.route and d.route.fromHere, "The Price of Shoes' stop, on a route from where you stand")
+    local leg = d.route.legs[d.num]
+    assert(leg.t >= 1.5, "a few minutes away: " .. leg.t)
+    local function whenLine()
+      lines = {}
+      P.Pin.OnMouseEnter({ data = d })
+      for _, l in ipairs(lines) do if l:find("^Stop %d+ of %d+, ") then return l end end
+      return "(no stop line) " .. table.concat(lines, " / ")
+    end
+    local m0 = math.floor(leg.t + 0.5)
+    local n0 = tonumber(whenLine():match(", (%d+) min from now: "))
+    assert(n0 and math.abs(n0 - leg.t) <= 1, "planned just now: " .. whenLine() .. " (" .. leg.t .. ")")
+    c.clock = c.clock + 60
+    assert(tonumber(whenLine():match(", (%d+) min from now: ")) == n0 - 1, "a minute on, a minute less: " .. whenLine())
+    c.clock = c.clock + 60 * leg.t
+    assert(whenLine():find(", " .. m0 .. " min into the route: ", 1, true), "the count spent: where it falls along the route: " .. whenLine())
+    -- a route not planned from where you stand: along the route, at once
+    P:Build()
+    for _, x in ipairs(P.list) do if x.num and x.ids and x.ids[118] then d = x end end
+    d.route.fromHere = false
+    assert(whenLine():find(" min into the route: ", 1, true), "a route planned from elsewhere: " .. whenLine())
+    d.route.fromHere = true
+  end }
+
+  -- 19. (the review round) QuestBank still spoke unasked: "X is complete, hand it in, worth about N XP", "X left your log
+  -- without a hand-in", and "Hand-in run started" when the first paying hand-in after a lock started the run (its end
+  -- said nothing since the launch round). The Guide's design: no other chat lines unless the player asks. They come
+  -- with "Say quest XP in chat" (sayXP), off; the Route page's Start run still says the run started
+  ENGCASES[#ENGCASES + 1] = { "nothing said unasked: a quest complete, a quest dropped, a run started by a hand-in", function()
+    local c = char("Quietly", "WARRIOR", "Warrior", 1, {}, { level = 5, world = { 0, -8914, -133 }, map = 1429, log = { { 7, 0 }, { 33, 0 }, { 15, 0 } } })
+    local QB = c.QB
+    planned(c)
+    local function complete(id) for _, e in ipairs(c.log) do if e[1] == id then e[2] = 1 end end; c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1) end
+    local function drop(id) for i, e in ipairs(c.log) do if e[1] == id then table.remove(c.log, i) break end end; c.ev(QB.eventFrame, "QUEST_LOG_UPDATE"); tick(c, 1) end
+    local line = said(c, function() complete(7) end)
+    assert(line == "", "a quest complete: nothing said: " .. line)
+    line = said(c, function() drop(33) end)
+    assert(line == "", "a quest dropped: nothing said: " .. line)
+    -- the first paying hand-in after a lock starts the run: quietly
+    QB.mode = "rush"
+    QB.routeNow.byQuest = QB.routeNow.byQuest or {}
+    QB.routeNow.byQuest[7] = 450
+    line = said(c, function() c.ev(QB.eventFrame, "QUEST_TURNED_IN", 7, 450) end)
+    assert(line == "" and QB.Run.Get(), "a run started by a hand-in: nothing said: " .. line)
+    QB.Run.Stop(true)
+    -- asked for: the lines again
+    QB:Settings().sayXP = true
+    line = said(c, function() complete(15) end)
+    assert(line:find("is complete", 1, true), "asked for: a quest complete is said: " .. line)
+    line = said(c, function() drop(15) end)
+    assert(line:find("left your log", 1, true), "asked for: a quest dropped is said: " .. line)
+    -- the step frame's menu names what it turns on
+    QB:Settings().welcome = nil; QB.StepFrame.Apply()
+    QB.StepFrame:Menu(nil)
+    local item
+    for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find("^Say quest XP in chat") then item = it end end
+    assert(item and item[1] == "Say quest XP in chat: on", "the menu's row: " .. tostring(item and item[1]))
+  end }
+
+  -- 21. (the review round) A whispered "1R" from anyone got your level, XP, class, GUID's tail and every quest back,
+  -- whatever the share settings: /qb sync <you> from anyone got round them (and Cute's officers' Who sees what). Now a
+  -- whispered ask is answered only to someone you sent yours to (/qb sync Name), and inside a host never
+  ENGCASES[#ENGCASES + 1] = { "a whispered ask for your quests: answered only to whom you sent yours; never inside a host", function()
+    local c = char("Private", "WARRIOR", "Warrior", 1, {}, { level = 5, log = { { 7, 0 } } })
+    local QB = c.QB
+    local S = QB.Sync
+    tick(c, 20)
+    assert(S.ready, "party sync ready")
+    local function clear() for k = #S.out, 1, -1 do S.out[k] = nil end end
+    local function sentTo(name) local n = 0; for _, m in ipairs(S.out) do if m[3] == name then n = n + 1 end end; return n end
+    clear()
+    S:Receive("1R", "WHISPER", "Stranger-Forever")
+    assert(sentTo("Stranger-Forever") == 0, "a stranger's ask: nothing sent")
+    S:Whisper("Friend")
+    clear()
+    S:Receive("1R", "WHISPER", "Friend-Forever")
+    assert(sentTo("Friend-Forever") >= 2, "the friend you sent yours to: theirs answered: " .. sentTo("Friend-Forever"))
+    clear()
+    QB.host = true
+    S:Receive("1R", "WHISPER", "Friend-Forever")
+    QB.host = nil
+    assert(sentTo("Friend-Forever") == 0, "inside a host: never answered")
+  end }
+
+  -- 22. (the review round) The step frame grew a line for each member of the group with a step: a raid of ten QuestBank
+  -- players at 120% on a 668 px screen ran the frame past the camp bar's place and the arrow off the screen's bottom.
+  -- Now a party's four lines show, and past four, three and a line for the rest
+  ENGCASES[#ENGCASES + 1] = { "the group's steps: a party's four lines, a raid's three and a line for the rest", function()
+    local c = char("Raider", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local env, QB = c.env, c.QB
+    local SF, A, G = QB.StepFrame, QB.Arrow, QB.Guide
+    QB:Settings().welcome = nil; SF.Apply(); A:Set(true); A:Update()
+    local raid = {}
+    for i = 1, 9 do raid[i] = { name = "Member" .. string.char(64 + i), class = "MAGE", text = "Kill Kobold Vermin " .. i .. "/8" } end
+    local party = { raid[1], raid[2], raid[3], raid[4] }
+    local real, list = G.MemberSteps, party
+    G.MemberSteps = function() return list end
+    local f = env.QuestBankStep
+    local function shown() local n, last = 0, nil; for _, t in ipairs(f.members) do if t:IsShown() then n, last = n + 1, t:GetText() end end; return n, last end
+    G.memberVer = G.memberVer + 1; SF.Refresh()
+    local n, last = shown()
+    assert(n == 4 and last:find("MemberD", 1, true), "a party of five: the four others: " .. n .. ", " .. tostring(last))
+    list = raid
+    G.memberVer = G.memberVer + 1; SF.Refresh()
+    n, last = shown()
+    assert(n == 4 and last == "and 6 more in your group", "a raid of ten: three and the rest in a line: " .. n .. ", " .. tostring(last))
+    -- 668 px of screen at 120% with the trainer's line: the frame and the arrow on the screen, clear of each other
+    env.UIParent:SetSize(1024, 668)
+    SF.SetScale(1.2)
+    G.reminder = env.GetTime() + 600
+    G.memberVer = G.memberVer + 1; SF.Apply(); SF.Refresh()
+    local sr, ar = placed(f), placed(env.QuestBankArrow, 143)
+    assert(apart(sr, ar) and sr.b >= 0 and ar.b >= 0, "a short screen: both on it, apart: " .. box(sr) .. ", " .. box(ar))
+    for _, pr in ipairs(checkLayout(f, "step frame, a raid's steps at 1.2")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+    G.reminder = nil
+    env.UIParent:SetSize(1600, 1000); SF.SetScale(1)
+    G.MemberSteps = real
+  end }
+
+  for _, case in ipairs(ENGCASES) do
+    case[2]()
+    print("engine: " .. case[1] .. ": ok")
   end
 end)()
 

@@ -211,14 +211,9 @@ end
 -- of popups on screen). Another popup still open keeps a slot written by QuestBank, and the game's next popup (the
 -- one that asks before deleting an item, say) can then run its Yes as QuestBank and be blocked. And ConfirmAcceptQuest
 -- with no click behind it may be refused. So the prompt is the game's and the Yes is yours: QuestBank presses nothing
--- and hides nothing, and says so once a session to whoever has Accept for me on.
-local toldEscort = false
-function Auto.Escort(who, title)
-  if not accepting() or toldEscort then return end
-  toldEscort = true
-  QB:Print(string.format("%s started %s: say yes in the game's prompt to join. Accept for me leaves escorts to you.",
-    who or "A party member", title or "a quest"))
-end
+-- and hides nothing. (It said so in chat once a session to whoever had Accept for me on, until the launch round: no
+-- line comes unasked now, and the game's own prompt is there to answer)
+function Auto.Escort() end
 
 function Auto.OnEvent(event, a1, a2)
   if event == "GOSSIP_SHOW" or event == "QUEST_GREETING" then Auto.Greeting(event)

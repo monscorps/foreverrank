@@ -1,6 +1,9 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
--- The step frame (6.0): the Guide's current step in one line, the next two greyed beneath, a quest-item button when the
--- step needs one, "about 14 min to level 6", the trainer reminder, and the party's steps. Small, movable (a drag;
+-- The step frame (6.0): the Guide's current step, the next two greyed beneath, a quest-item button when the step needs
+-- one, "about 14 min to level 6", the trainer reminder, and the party's steps. Each step says where (the launch round):
+-- the kind's game icon, its name, who and where ("Mathrengyl Bearwalker - Darnassus") and the minutes to get there for
+-- the step now; the next two, name and place on one line with the minutes where a new trip starts; every row's tooltip
+-- the whole step, the NPC and place, minutes and XP. Small, movable (a drag;
 -- locked in Settings or its menu), in the window's slate. A click on a step opens it in the window; a right-click is
 -- its menu: Not now (an hour), Drop (for good), Lock, Scale, Hide, Settings. The welcome (a fresh install) and the
 -- 5.x question are cards in the same frame (SF.Ask). Redrawn when the Guide's version, the time line, the
@@ -13,6 +16,10 @@ QB.StepFrame = SF
 
 local G = QB.Guide
 local WIDTH, PAD, ROW = 260, 12, 18 -- (PAD: the text sits inside the 12 px border art)
+-- the step now's row: its name, then who and where 20 px down (clear of the item button at the frame's top right);
+-- the text starts after the icon (TEXT_X) and leaves the minutes their column (MINS_W)
+local ROW1, TEXT_X, MINS_W = 34, 20, 44
+local INNER = WIDTH - PAD * 2
 local SLATE = { 0.055, 0.07, 0.095 }
 local LOOK = { INK = { 0.93, 0.88, 0.78 }, SOFT = { 0.62, 0.60, 0.54 }, GOLD = { 1, 0.82, 0.3 } }
 -- a host's skin (QB.Skin: Cute_Quest sets one before the login; QuestBank none): its font and its colours for
@@ -29,6 +36,13 @@ SF.SCALES = SCALES
 local function settings() return QB:Settings().guide end
 local function fighting() return InCombatLockdown and InCombatLockdown() or false end
 local trackerOut, trackerHooked, trackerWait = false, false, false -- (the game's quest tracker: SF.Tracker)
+-- the first time the tracker goes out of sight the frame says where it went, for NOTE_S seconds, once for good
+-- (guide.trackerTold, set as the note shows: a /reload under the welcome card still has it to tell); its menu brings
+-- the tracker back
+local NOTE_S, NOTE_H = 60, 24
+local MEMBER_LINES = 4 -- (the group's steps: SF.Refresh)
+local TRACKER_NOTE = "The game's quest tracker is hidden while this frame shows. Right-click here to show it."
+SF.noteUntil, SF.notePending = nil, nil -- (pending: told when the steps next show, not under a welcome card)
 
 local function fs(parent, size, key, width)
   local t = parent:CreateFontString(nil, "OVERLAY")
@@ -50,26 +64,153 @@ local function fs(parent, size, key, width)
   return t
 end
 
--- a row's words: whole when they fit, else the step's shorter form ("Accept X" without the giver, G.Short), else cut
--- with "..." (Arrow.lua's A.Fit measures the string). A row that does not say it all gets the whole line in its
--- tooltip, so the giver's name is a hover away
+-- a row's words: whole when they fit, else the step's shorter form, else cut with "..." (Arrow.lua's A.Fit measures
+-- the string)
 local function rowText(t, text, short)
+  t.qbA, t.qbB = nil, nil
   if QB.Arrow and QB.Arrow.Fit then QB.Arrow.Fit(t, text, short, t:GetWidth() or WIDTH) else t:SetText(text) end
 end
+-- a next step's two parts on one line, "name - place": whole when they fit, else the name cut with "..." so the place
+-- stays (it tells apart the steps of a chain that share one name), else both cut. Set again only when they change
+local function rowTwo(t, a, b)
+  if not b or b == "" then return rowText(t, a, nil) end
+  if t.qbA == a and t.qbB == b then return end
+  t.qbA, t.qbB, t.qbText, t.qbShort = a, b, nil, nil
+  local width = t:GetWidth() or WIDTH
+  local tail = " - " .. b
+  t:SetText(a .. tail)
+  if (t:GetStringWidth() or 0) <= width then return end
+  t:SetText(tail)
+  if width - (t:GetStringWidth() or 0) < 40 then
+    -- (a place out in a zone, "Stonetalon Mountains (59, 62)": the zone alone here; the tooltip has the spot)
+    local zone = b:gsub(" %(%d+, %d+%)$", "")
+    if zone ~= b then tail = " - " .. zone; t:SetText(tail) end
+  end
+  if width - (t:GetStringWidth() or 0) < 40 then
+    local whole = a .. tail
+    t.qbText = nil
+    if QB.Arrow and QB.Arrow.Fit then QB.Arrow.Fit(t, whole, nil, width) else t:SetText(whole) end
+    t.qbA, t.qbB = a, b
+    return
+  end
+  local cut, dots = a, ""
+  repeat
+    t:SetText(cut .. dots .. tail)
+    if (t:GetStringWidth() or 0) <= width then return end
+    cut, dots = cut:gsub("[%z\1-\127\194-\244][\128-\191]*$", ""), "..." -- one letter off the end (a whole UTF-8 one)
+  until #cut <= 1
+end
+
+-- the kind's game icon (the atlas where the client has it, else a file): the pick-up's !, the hand-in's ?, the
+-- objective's cursor (QuestMap.lua's QM.ART), the travel step's own (the arrow's), a tombstone for your corpse
+local ICON = { accept = { "QuestNormal", "questAvail" }, handin = { "QuestTurnin", "questActive" }, reward = { "QuestTurnin", "questActive" },
+               corpse = { "Navigation-Tombstone-Icon", "unknown" }, train = { nil, "book" }, travel = { "FlightPath", "map" } }
+local function stepIcon(tex, s)
+  local atlas, file
+  local QM = QB.QuestMap
+  if s.kind == "objective" then
+    local art = QM and QM.ART and (s.obj == "d" and s.dungeon and QM.ART.dungeon or QM.ART[s.obj] or QM.ART.u)
+    if art then atlas, file = art.atlas, art.file end
+  elseif s.kind == "grind" then
+    local art = QM and QM.ART and QM.ART.k
+    if art then atlas, file = art.atlas, art.file end
+  elseif s.kind == "travel" and (s.atlas or s.icon) then
+    atlas, file = s.atlas, s.icon
+  else
+    local ic = ICON[s.kind]
+    if ic then atlas, file = ic[1], QB.Data.TEX[ic[2]] end
+  end
+  if tex.qbAtlas ~= atlas or tex.qbFile ~= file then
+    tex.qbAtlas, tex.qbFile = atlas, file
+    QB.Art(tex, atlas, file or QB.Data.TEX.questGeneric)
+  end
+  tex:Show()
+end
+
+-- the minutes to the step now, as you go: the arrow's own count while it leads there (to the same place, or to the stop
+-- the step is at: the route's target is its stop's first NPC, and the step may be at another); else, on your continent
+-- and on foot (a leg the plan walks, or an objective's spot), the yards from where you stand at the planner's pace
+-- (Model.lua's M.Between: DETOUR, RUN, M.Factor mounted or not), read again once you have moved 20 yards; else the
+-- plan's for the step's leg (G.Mins). (The launch round kept the plan's figure whenever the arrow led elsewhere, off,
+-- or away in a dungeon: "11 min" as you walked.) A number, no table and no string a tick
+local hereBuf, walkX, walkY, walkSX, walkSY, walkMins = {}, nil, nil, nil, nil, nil
+local function leadsThere(s, t)
+  if s.wx and t.wx and t.c == s.c and (t.wx - s.wx) ^ 2 + (t.wy - s.wy) ^ 2 < 900 then return true end
+  if not (s.leg and s.npc and t.stop and not t.obj) then return false end
+  local r = QB.Target and QB.Target.Route and QB.Target.Route()
+  local leg = r and r.legs and r.legs[s.leg]
+  local stop = leg and leg.stop
+  return stop ~= nil and stop.name == t.stop and stop.seen ~= nil and stop.seen[s.npc] == true
+end
+local function onFoot(s)
+  if not (s.wx and (s.way == "foot" or not s.leg)) then return nil end
+  local me = QB.API.WorldPosition(nil, hereBuf)
+  if not (me and me.c == s.c) then return nil end
+  if walkSX == s.wx and walkSY == s.wy and walkX and (me.wx - walkX) ^ 2 + (me.wy - walkY) ^ 2 < 400 then return walkMins end
+  local M = QB.Model
+  local yards = math.sqrt((s.wx - me.wx) ^ 2 + (s.wy - me.wy) ^ 2)
+  local mins = yards * (M.DETOUR or 1.3) / (M.RUN or 7) / 60 * (M.Factor and M.Factor((QB:Mounted())) or 1)
+  walkX, walkY, walkSX, walkSY, walkMins = me.wx, me.wy, s.wx, s.wy, math.floor(mins + 0.5)
+  return walkMins
+end
+local function minsNow(s)
+  local A = QB.Arrow
+  local g, t, f = A and A.g, A and A.t, A and A.frame
+  if g and g.eta and t and f and f:IsShown() and leadsThere(s, t) then return math.floor(g.eta + 0.5) end
+  return onFoot(s) or G.Mins(s)
+end
+SF.MinsNow = minsNow
+
+-- the minutes to a step from now, for its tooltip: the step now's (minsNow), and for a next one those and each new
+-- trip's on the way to it (G.Mins: the rows' "+N min") while every step between is on a leg of the route; nil past an
+-- objective (how long one takes is nobody's guess). (The launch round said "about 11 min there" from the leg's
+-- minutes, counted from the stop before: 11 for the second NPC at the stop the row above put 3 min away)
+local function minsFromNow(steps, i)
+  local total = minsNow(steps[1])
+  if i == 1 or not (total and steps[1].leg) then return i == 1 and total or nil end
+  for j = 2, i do
+    local s = steps[j]
+    if not s.leg then return nil end
+    total = total + (G.Mins(s, steps[j - 1]) or 0)
+  end
+  return total
+end
+
+-- every row's tooltip: the whole step, who and where (the NPC's spot on its map), the minutes and the XP, the clicks
 local function rowEnter(self)
-  local s = G.Steps()[self.i]
-  local full = s and G.Text(s) or ""
-  if full == "" or self.text:GetText() == full then return end
+  local steps = G.Steps()
+  local s = steps[self.i]
+  if not s then return end
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-  local INK = tone("INK")
-  GameTooltip:AddLine(full, INK[1], INK[2], INK[3], true)
+  local INK, SOFT = tone("INK"), tone("SOFT")
+  GameTooltip:AddLine(G.Text(s), INK[1], INK[2], INK[3], true)
+  local where = G.Where(s)
+  if where then
+    GameTooltip:AddLine(where .. ((s.npc and s.x and s.y) and string.format(" (%.0f, %.0f)", s.x, s.y) or ""), INK[1], INK[2], INK[3], true)
+  end
+  local mins = minsFromNow(steps, self.i)
+  local trip = not (mins and mins > 0) and self.i > 1 and G.Mins(s, steps[self.i - 1]) or nil
+  local when = (mins and mins > 0) and string.format("about %d min there", mins) or (trip and string.format("a trip of about %d min", trip)) or nil
+  -- (the XP of every quest a hand-in of several takes, Replan's s.xp; the launch round gave the lowest id's alone)
+  local xp
+  if (s.n or 1) > 1 and s.xp then xp = s.xp > 0 and s.xp or nil else xp = s.qid and QB:Value(s.qid) end
+  if when or xp then
+    GameTooltip:AddDoubleLine(when or " ", xp and (QB.Comma(xp) .. " XP") or "", SOFT[1], SOFT[2], SOFT[3], SOFT[1], SOFT[2], SOFT[3])
+  end
+  -- (a step with no quest opens the Route page, or a host's page for it: UI.PageName, Cute's Quests while its Route
+  -- module is off; the launch round said "the way there" whatever opened)
+  GameTooltip:AddLine(s.qid and "Click: the quest. Right-click: Not now, Drop, the game's quest tracker and more."
+    or ("Click: the " .. ((QB.UI and QB.UI.PageName and QB.UI.PageName(3)) or "Route") .. " page. Right-click: the game's quest tracker and more."),
+    SOFT[1], SOFT[2], SOFT[3], true)
   GameTooltip:Show()
 end
 local function rowLeave() if GameTooltip:GetOwner() then GameTooltip:Hide() end end
 
+local place, arrowFollows -- (below: where the frame stands, and the arrow under it)
+
 local function build()
   local f = CreateFrame("Frame", "QuestBankStep", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-  f:SetSize(WIDTH, PAD * 2 + ROW * 4)
+  f:SetSize(WIDTH, PAD * 2 + ROW1 + ROW * 3)
   f:SetFrameStrata("MEDIUM")
   f:SetClampedToScreen(true)
   f:SetMovable(true)
@@ -86,20 +227,46 @@ local function build()
     f:SetBackdropBorderColor(gold[1], gold[2], gold[3], 0.5)
   end
   f:SetScript("OnDragStart", function(self) if not settings().locked then self:StartMoving() end end)
+  -- (the review round) a right-click anywhere on the frame is its menu, as on a step: the tracker's note under the steps
+  -- says "Right-click here", and only the steps took one (a welcome card's own buttons answer for it)
+  f:SetScript("OnMouseUp", QB.Safe(function(self, button)
+    if button == "RightButton" and not (self.card and self.card:IsShown()) then SF:Menu(G.Steps()[1]) end
+  end, "step frame"))
+  -- (the review round) kept by its middle against the screen's, where the drag left it, whatever point the game
+  -- anchors a moved frame by (place() anchors it so again); the arrow follows it at once
   f:SetScript("OnDragStop", QB.Safe(function(self)
     self:StopMovingOrSizing()
-    local _, _, _, x, y = self:GetPoint(1)
-    if type(x) == "number" and type(y) == "number" then settings().x, settings().y = x, y end
+    local cx, cy = self:GetCenter()
+    local fs, us = self:GetEffectiveScale() or 1, UIParent:GetEffectiveScale() or 1
+    if type(cx) == "number" and type(cy) == "number" and fs > 0 then
+      settings().x = cx - (UIParent:GetWidth() or 0) * us / (2 * fs)
+      settings().y = cy - (UIParent:GetHeight() or 0) * us / (2 * fs)
+      place(self)
+    end
+    arrowFollows()
   end, "step frame"))
-  -- three rows: the step now, the two next; each a button for its click and menu
+  -- three rows: the step now (its name, then who and where with the minutes), the two next (name and place, the
+  -- minutes where a new trip starts); each a button for its click and menu, with the kind's icon
   f.rows = {}
   for i = 1, 3 do
     local b = CreateFrame("Button", nil, f)
-    b:SetSize(WIDTH - PAD * 2, ROW)
-    b:SetPoint("TOPLEFT", PAD, -PAD - (i - 1) * ROW)
+    local now = i == 1
+    b:SetSize(INNER, now and ROW1 or ROW)
+    b:SetPoint("TOPLEFT", PAD, -PAD - (now and 0 or ROW1 + (i - 2) * ROW))
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    b.text = fs(b, i == 1 and 12 or 11, i == 1 and "INK" or "SOFT", WIDTH - PAD * 2)
-    b.text:SetPoint("LEFT", 0, 0)
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetSize(now and 16 or 14, now and 16 or 14)
+    b.icon:SetPoint("TOPLEFT", now and 0 or 1, now and 0 or -2)
+    b.icon:Hide()
+    b.text = fs(b, now and 12 or 11, now and "INK" or "SOFT", now and (INNER - TEXT_X) or (INNER - TEXT_X - MINS_W))
+    b.text:SetPoint("TOPLEFT", TEXT_X, now and -1 or -2)
+    b.mins = fs(b, 10, "SOFT", MINS_W)
+    b.mins:SetJustifyH("RIGHT")
+    b.mins:SetPoint("TOPRIGHT", 0, now and -21 or -3)
+    if now then
+      b.where = fs(b, 10, "SOFT", INNER - TEXT_X - MINS_W)
+      b.where:SetPoint("TOPLEFT", TEXT_X, -21)
+    end
     b.i = i
     b:SetScript("OnClick", QB.Safe(function(self, button)
       local s = G.Steps()[self.i]
@@ -118,10 +285,16 @@ local function build()
   end
   f.now, f.next1, f.next2 = f.rows[1].text, f.rows[2].text, f.rows[3].text
   f.time = fs(f, 10, "SOFT", WIDTH - PAD * 2)
-  f.time:SetPoint("TOPLEFT", PAD, -PAD - ROW * 3)
+  f.time:SetPoint("TOPLEFT", PAD, -PAD - ROW1 - ROW * 2)
   f.remind = fs(f, 10, "GOLD", WIDTH - PAD * 2)
   f.remind:SetPoint("TOPLEFT", PAD, -PAD - ROW * 4)
   f.remind:Hide()
+  -- the once-ever note where the game's quest tracker went (SF.Tracker): two lines, wrapped
+  f.note = fs(f, 10, "SOFT", WIDTH - PAD * 2)
+  f.note:SetWordWrap(true)
+  f.note:SetHeight(NOTE_H)
+  f.note:SetText(TRACKER_NOTE)
+  f.note:Hide()
   f.members = {}
   f.elapsed = 0
   f:SetScript("OnUpdate", QB.Safe(function(self, dt)
@@ -154,10 +327,15 @@ local function trackerLeft(W)
 end
 SF.TrackerLeft = trackerLeft
 
--- where the frame stands: where it was dragged to, else the top's middle, 140 px down, moved left as far as it takes to
--- stay 16 px clear of the tracker's header (6.1.1: "it won't let me minimise my quest list": on a narrow screen of UI
--- or with right action bars, the frame there, in a strata above the tracker's, reached over the minimise button)
-local function place(f)
+-- where the frame stands: where it was dragged to, else the top's middle, TOP_Y down whatever its scale, moved left as
+-- far as it takes to stay 16 px clear of the tracker's header (6.1.1: "it won't let me minimise my quest list": on a
+-- narrow screen of UI or with right action bars, the frame there, in a strata above the tracker's, reached over the
+-- minimise button). TOP_Y: the game's error text (UIErrorsFrame, Blizzard_UIErrorsFrame: TOP 0 -122, 512 x 60) ends
+-- 182 px down, so "Not enough rage" never lands on the steps; 6.1 stood at 140 (at its scale), under that text and under
+-- the arrow. The arrow stands under the frame (Arrow.lua, A.Place: SF.Below)
+local TOP_Y = 190
+SF.TOP_Y = TOP_Y
+function place(f)
   local s = settings()
   local sc = s.scale or 1
   f:ClearAllPoints()
@@ -165,8 +343,34 @@ local function place(f)
   if type(s.x) == "number" and type(s.y) == "number" then f:SetPoint("CENTER", UIParent, "CENTER", s.x, s.y) return end
   local W = UIParent:GetWidth() or 1920
   local over = W / 2 + WIDTH * sc / 2 - (trackerLeft(W) - 16)
-  f:SetPoint("TOP", UIParent, "TOP", over > 0 and -over / sc or 0, -140)
+  f.qbX = over > 0 and -over or 0 -- (its middle across from the screen's, in UIParent's units: SF.Box)
+  f:SetPoint("TOP", UIParent, "TOP", f.qbX / sc, -TOP_Y / sc)
 end
+
+-- where the frame stands, for the arrow (Arrow.lua, A.Place): its middle across from the screen's middle, its top and
+-- its bottom down from the screen's top and its half width, in UIParent's units; nil while it is away. At its default
+-- place or where it was dragged to (place(): its middle against the screen's, at its scale). (Until the review round
+-- a dragged frame said nothing, and the arrow stood at the frame's default place: on the frame nudged a little)
+function SF.Box()
+  local f = SF.frame
+  if not (f and f:IsShown()) then return nil end
+  local s = settings()
+  local sc = f:GetScale() or 1
+  local h = (f:GetHeight() or 0) * sc
+  if type(s.x) == "number" and type(s.y) == "number" then
+    local mid = (UIParent:GetHeight() or 768) / 2 - s.y * sc
+    return s.x * sc, mid - h / 2, mid + h / 2, WIDTH * sc / 2
+  end
+  return f.qbX or 0, TOP_Y, TOP_Y + h, WIDTH * sc / 2
+end
+-- its middle across and its bottom (SF.Box)
+function SF.Below()
+  local x, _, bottom = SF.Box()
+  if not x then return nil end
+  return x, bottom
+end
+-- the arrow placed again (its default place follows the frame's place, height, scale and showing)
+function arrowFollows() if QB.Arrow and QB.Arrow.Place then QB.Arrow.Place() end end
 
 -- the quest-item button: the game's secure button for the first step's quest item (type item, item:<id>), as
 -- Camp.lua's icons; made, set, shown and hidden out of a fight only, else the change waits (SF.pendingItem) for the
@@ -208,6 +412,9 @@ function SF.RefreshItem(s)
   end
 end
 
+-- what the lines were last drawn from (SF.Refresh); -1: draw them again
+local lastVer, lastTime, lastRemind, lastMembers, lastNote, lastMins = -1, nil, false, -1, false, nil
+
 -- the fight over (PLAYER_REGEN_ENABLED, from Core.lua's frame): a change that waited goes through now. The frame
 -- shown: its next refresh does it all; hidden (Hide in a fight, the Guide turned off): its OnUpdate never runs, so the
 -- button would stand on screen for good without this
@@ -223,30 +430,130 @@ function SF.OnRegen()
   end
 end
 
--- the reward window's pick (G.reward), marked with QuestBank's own glow (Pins.Glow, the game's quest-POI glow) over
--- the game's button (QuestInfoFrame.rewardsFrame.RewardButtons[index], QuestInfo.lua); never the button itself
+-- the reward window's pick (G.reward), marked as QuestBank's own and never as the game's: a thin outline round the
+-- item's icon, inside the window's reward frame (it scrolls and clips with it), nothing over the item's name and nothing
+-- gold or additive (the game's own choice is a gold glow over the whole button, QuestInfoItemHighlight); and one line
+-- beside the Complete Quest button, whose pick it is and why: "QuestBank's pick: +4 Intellect, +2 Stamina" (the item's
+-- stats, the class's own first: C_Item.GetItemStats), else its item level. The outline (the review round): 2 px near
+-- black, which reads on the window's parchment (QuestFramePanelTemplate's QuestBG-Parchment, a light tan) as on a dark
+-- frame, with a 1 px line of the frame's ink inside it against the item's dark icon (the launch round's ink alone, a
+-- cream, all but vanished on the parchment). A first choice for want of a pick (G.reward.pick false: nothing known fits)
+-- is 1 px of the same dark at a third, no inner line, and says so; while the window's items are still coming
+-- (G.reward.reading) nothing is marked and the line says that. (6.1 drew the map pins' round additive glow, 170 px of
+-- gold on a HIGH frame: it read as the game's own selection and washed the name out.) The button itself is never
+-- touched
+local RING = { 0.08, 0.06, 0.04 }
+local STAT_WORD = { STRENGTH = "Strength", AGILITY = "Agility", STAMINA = "Stamina", INTELLECT = "Intellect", SPIRIT = "Spirit" }
+local STAT_FIRST = { WARRIOR = "STRENGTH", PALADIN = "STRENGTH", ROGUE = "AGILITY", HUNTER = "AGILITY", MAGE = "INTELLECT", WARLOCK = "INTELLECT",
+                     PRIEST = "INTELLECT", DRUID = "INTELLECT", SHAMAN = "INTELLECT" }
+local STAT_ORDER = { "STRENGTH", "AGILITY", "STAMINA", "INTELLECT", "SPIRIT" }
+-- "+4 Intellect, +2 Stamina": the item's main stats as the client gives them (ITEM_MOD_<STAT>_SHORT), the class's own
+-- first, then Stamina, two at most; nil when the client gives none
+local function statsLine(link)
+  local get = C_Item and C_Item.GetItemStats
+  if type(get) ~= "function" or type(link) ~= "string" then return nil end
+  local ok, t = pcall(get, link)
+  if not (ok and type(t) == "table") then return nil end
+  local have = {}
+  for k, v in pairs(t) do
+    local stat = type(k) == "string" and k:match("^ITEM_MOD_(%u+)_SHORT$")
+    v = QB.Plain(v)
+    if stat and STAT_WORD[stat] and type(v) == "number" and v > 0 then have[stat] = v end
+  end
+  local out, first = {}, STAT_FIRST[QB.state and QB.state.class or ""]
+  local function add(stat) if have[stat] and #out < 2 then out[#out + 1] = "+" .. have[stat] .. " " .. STAT_WORD[stat]; have[stat] = nil end end
+  if first then add(first) end
+  add("STAMINA")
+  for _, stat in ipairs(STAT_ORDER) do add(stat) end
+  return #out > 0 and table.concat(out, ", ") or nil
+end
+local function whyLine(r)
+  if r.reading then return "Reading the rewards..." end
+  if not r.pick then return "First choice: no better pick known" end
+  local why = statsLine(r.link)
+  if not why and r.item and QB.UI and QB.UI.ItemFacts then
+    local _, _, _, ilvl = QB.UI.ItemFacts(r.item)
+    if type(ilvl) == "number" and ilvl > 0 then why = "item level " .. ilvl .. ", the best you can use here" end
+  end
+  return (QB.NAME or "QuestBank") .. "'s pick: " .. (why or "the best you can use here")
+end
 function SF.MarkReward()
   local r = G.reward
   local rf = QuestInfoFrame and QuestInfoFrame.rewardsFrame
   local buttons = rf and rf.RewardButtons
-  local b = r and buttons and buttons[r.index]
-  if not b then
-    if SF.mark and SF.mark:IsShown() then SF.mark:Hide() end
+  local b = r and r.index and buttons and buttons[r.index]
+  local m = SF.mark
+  local anchor = QuestFrameCompleteQuestButton
+  if not b and not (r and r.reading and buttons and anchor) then
+    if m and m:IsShown() then m:Hide() end
+    if SF.why and SF.why:IsShown() then SF.why:Hide() end
     return
   end
-  if not SF.mark then
-    SF.mark = CreateFrame("Frame", nil, UIParent)
-    SF.mark:SetFrameStrata("HIGH")
-    SF.mark.kind = { glow = 170 }
-    if QB.Pins and QB.Pins.Glow then QB.Pins.Glow(SF.mark, tone("GOLD")) end
+  if b then
+    local parent = b:GetParent() or UIParent -- (the window's reward frame: QuestInfo.lua swaps the map's and the window's)
+    if not m then
+      m = CreateFrame("Frame", nil, parent)
+      SF.mark = m
+      m.edges, m.inner = {}, {}
+      for i = 1, 4 do m.edges[i] = m:CreateTexture(nil, "OVERLAY"); m.inner[i] = m:CreateTexture(nil, "OVERLAY") end
+    end
+    if m:GetParent() ~= parent then m:SetParent(parent) end
+    m:SetFrameLevel((b:GetFrameLevel() or 1) + 2)
+    local icon = rawget(b, "Icon") or rawget(b, "icon") -- (the template's parentKey; a plain field)
+    local edge = r.pick and 2 or 1
+    m:ClearAllPoints()
+    m:SetPoint("TOPLEFT", icon or b, "TOPLEFT", -edge, edge)
+    m:SetPoint("BOTTOMRIGHT", icon or b, icon and "BOTTOMRIGHT" or "BOTTOMLEFT", edge, -edge)
+    if not icon then m:SetWidth((b:GetHeight() or 40) + edge * 2) end -- (a button with no icon of its name: its square end)
+    -- four sides of `width` px, `inset` px in from the mark's edges
+    local function ring(e, width, inset)
+      e[1]:ClearAllPoints(); e[1]:SetPoint("TOPLEFT", inset, -inset); e[1]:SetPoint("TOPRIGHT", -inset, -inset); e[1]:SetHeight(width)
+      e[2]:ClearAllPoints(); e[2]:SetPoint("BOTTOMLEFT", inset, inset); e[2]:SetPoint("BOTTOMRIGHT", -inset, inset); e[2]:SetHeight(width)
+      e[3]:ClearAllPoints(); e[3]:SetPoint("TOPLEFT", inset, -inset); e[3]:SetPoint("BOTTOMLEFT", inset, inset); e[3]:SetWidth(width)
+      e[4]:ClearAllPoints(); e[4]:SetPoint("TOPRIGHT", -inset, -inset); e[4]:SetPoint("BOTTOMRIGHT", -inset, inset); e[4]:SetWidth(width)
+    end
+    ring(m.edges, edge, 0)
+    for i = 1, 4 do m.edges[i]:SetColorTexture(RING[1], RING[2], RING[3], r.pick and 1 or 0.33) end
+    if r.pick then
+      ring(m.inner, 1, edge)
+      local c = tone("INK")
+      for i = 1, 4 do m.inner[i]:SetColorTexture(c[1], c[2], c[3], 1); m.inner[i]:Show() end
+    else
+      for i = 1, 4 do m.inner[i]:Hide() end
+    end
+    m:Show()
+  elseif m and m:IsShown() then
+    m:Hide()
   end
-  SF.mark:ClearAllPoints()
-  SF.mark:SetPoint("TOPLEFT", b, "TOPLEFT", -4, 4)
-  SF.mark:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 4, -4)
-  SF.mark:Show()
+  -- the line: beside the Complete Quest button (QuestFrame.xml: the reward panel's, at the window's bottom left), else
+  -- under the marked button
+  local w = SF.why
+  local host = QuestFrame or UIParent
+  if not w then
+    local holder = CreateFrame("Frame", nil, host)
+    holder:SetSize(1, 1)
+    w = fs(holder, 10, "INK", 190) -- (two lines at most, beside the button: as tall as it is)
+    w:SetWordWrap(true)
+    w.holder = holder
+    SF.why = w
+  end
+  local holder = w.holder
+  if holder:GetParent() ~= host then holder:SetParent(host) end
+  holder:SetFrameLevel(((anchor and anchor:GetFrameLevel()) or (b and b:GetFrameLevel()) or 1) + 1)
+  holder:ClearAllPoints(); w:ClearAllPoints()
+  if anchor then
+    holder:SetPoint("LEFT", anchor, "RIGHT", 8, 0)
+    w:SetPoint("LEFT", anchor, "RIGHT", 8, 0)
+  else
+    holder:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -4)
+    w:SetPoint("TOPLEFT", b, "BOTTOMLEFT", 0, -4)
+  end
+  local wc = tone(r.pick and "INK" or "SOFT")
+  w:SetTextColor(wc[1], wc[2], wc[3])
+  w:SetText(whyLine(r))
+  holder:Show(); w:Show()
 end
 
-local lastVer, lastTime, lastRemind, lastMembers = -1, nil, false, -1
 -- the lines, when something changed (and the item button, once a fight is over)
 function SF.Refresh()
   local f = SF.frame
@@ -257,38 +564,73 @@ function SF.Refresh()
   local text = G.TimeToLevel()
   local remind = (G.reminder and GetTime and GetTime() < G.reminder) and true or false
   local members = G.MemberSteps() -- (the list stands until G.memberVer moves: no table and no string a tick)
-  if G.ver == lastVer and text == lastTime and remind == lastRemind and G.memberVer == lastMembers then return end
-  lastVer, lastTime, lastRemind, lastMembers = G.ver, text, remind, G.memberVer
+  if SF.notePending then
+    SF.notePending, SF.noteUntil = nil, (GetTime and GetTime() or 0) + NOTE_S
+    settings().trackerTold = true
+  end
+  local note = (SF.noteUntil and GetTime and GetTime() < SF.noteUntil) and true or false
+  local mins = steps[1] and minsNow(steps[1]) or nil -- (the step now's minutes, as you go: a number, no string a tick)
+  if G.ver == lastVer and text == lastTime and remind == lastRemind and G.memberVer == lastMembers and note == lastNote and mins == lastMins then return end
+  lastVer, lastTime, lastRemind, lastMembers, lastNote, lastMins = G.ver, text, remind, G.memberVer, note, mins
   -- the first row makes room for the item button only while one shows (in a fight, as the button stands)
   local itemUp = fighting() and (f.item ~= nil and f.item:IsShown()) or (not fighting() and G.ItemFor(steps[1]) ~= nil)
-  f.rows[1].text:SetWidth(WIDTH - PAD * 2 - (itemUp and 30 or 0))
-  f.rows[1].text.qbText = nil -- (fitted again at the new width)
+  f.rows[1].text:SetWidth(INNER - TEXT_X - (itemUp and 30 or 0))
+  f.rows[1].text.qbText, f.rows[1].text.qbA = nil, nil -- (fitted again at the new width)
   for i = 1, 3 do
-    local s = steps[i]
-    rowText(f.rows[i].text, s and G.Text(s) or (i == 1 and "Nothing to do: /qb" or ""), s and G.Short(s) or nil)
-    f.rows[i]:SetShown(i == 1 or s ~= nil)
+    local s, r = steps[i], f.rows[i]
+    if i == 1 then
+      rowText(r.text, s and G.Title(s) or ("Nothing to do: " .. (QB.CMD or "/qb")), nil)
+      -- (who and where cut as the next steps' rows are, the name before the place: "Chief Archaeologist Greywhisker
+      -- - Da..." lost the place)
+      local who, place = s and G.Who(s), s and G.Place(s)
+      if who and place and who ~= place then rowTwo(r.where, who, place) else rowText(r.where, who or place or "", nil) end
+      r.mins:SetText((mins and mins > 0) and (mins .. " min") or "")
+    elseif s then
+      -- (the place once a trip: a step at the place of the one before it, or on its leg, gives its name alone)
+      local place, prev = G.Place(s), steps[i - 1]
+      if prev and ((s.leg and prev.leg == s.leg) or (place and place == G.Place(prev))) then place = nil end
+      rowTwo(r.text, G.Title(s), place)
+      local m = G.Mins(s, steps[i - 1])
+      r.mins:SetText(m and ("+" .. m .. " min") or "")
+    end
+    if s then stepIcon(r.icon, s) else r.icon:Hide() end
+    r:SetShown(i == 1 or s ~= nil)
   end
   f.time:SetText(text or "")
   f.remind:SetText(remind and "New spells at your class trainer" or "")
   f.remind:SetShown(remind)
-  local y = PAD + ROW * 3 + (text and ROW or 0)
+  local y = PAD + ROW1 + ROW * 2 + (text and ROW or 0)
   if remind then
     f.remind:ClearAllPoints()
     f.remind:SetPoint("TOPLEFT", PAD, -y)
     y = y + ROW
   end
-  for i, m in ipairs(members) do
+  f.note:SetShown(note)
+  if note then
+    f.note:ClearAllPoints()
+    f.note:SetPoint("TOPLEFT", PAD, -y)
+    y = y + NOTE_H + 4
+  end
+  -- the group's steps, MEMBER_LINES at most: a party's four, else three and a line for the rest (the review round: a
+  -- raid of QuestBank players grew the frame a line each, past the camp bar's place and off a short screen)
+  local lines = #members > MEMBER_LINES and MEMBER_LINES or #members
+  for i = 1, lines do
+    local m = members[i]
     local t = f.members[i]
     if not t then t = fs(f, 10, "SOFT", WIDTH - PAD * 2); f.members[i] = t end
     t:ClearAllPoints()
     t:SetPoint("TOPLEFT", PAD, -y)
-    local name = (QB.Sync and QB.Sync.ColorName) and QB.Sync.ColorName(m.name, m.class) or m.name
-    t:SetText(name .. ": " .. m.text)
+    if i == MEMBER_LINES and #members > MEMBER_LINES then
+      t:SetText(string.format("and %d more in your group", #members - MEMBER_LINES + 1))
+    else
+      local name = (QB.Sync and QB.Sync.ColorName) and QB.Sync.ColorName(m.name, m.class) or m.name
+      t:SetText(name .. ": " .. m.text)
+    end
     t:Show()
     y = y + ROW
   end
-  for i = #members + 1, #f.members do f.members[i]:Hide() end
-  f:SetHeight(y + PAD)
+  for i = lines + 1, #f.members do f.members[i]:Hide() end
+  if f:GetHeight() ~= y + PAD then f:SetHeight(y + PAD); arrowFollows() end
   SF.RefreshItem(steps[1])
   SF.MarkReward()
 end
@@ -380,15 +722,15 @@ function SF.Ask(kind)
   f.card = f.card or buildCard(f)
   local card = f.card
   for i = 1, 3 do f.rows[i]:Hide() end
-  f.time:Hide(); f.remind:Hide()
+  f.time:Hide(); f.remind:Hide(); f.note:Hide()
   for _, t in ipairs(f.members) do t:Hide() end
   if kind == "ask" then
-    card.title:SetText("Let QuestBank guide you?")
+    card.title:SetText("Let " .. (QB.NAME or "QuestBank") .. " guide you?")
     card.accept:Hide(); card.other:Hide(); card.turnIn:Hide(); card.turnIn.label:Hide(); card.done:Hide()
     card.yes:Show(); card.no:Show()
     f:SetHeight(PAD * 2 + 48)
   else
-    card.title:SetText("QuestBank guides you from here. At quest givers:")
+    card.title:SetText((QB.NAME or "QuestBank") .. " guides you from here. At quest givers:")
     card.yes:Hide(); card.no:Hide()
     card.accept:Show(); card.other:Show(); card.turnIn:Show(); card.turnIn.label:Show(); card.done:Show()
     card.Words()
@@ -396,6 +738,7 @@ function SF.Ask(kind)
   end
   card:Show()
   f:Show()
+  arrowFollows()
   SF.RefreshItem(nil) -- (no item button over a card)
 end
 
@@ -443,6 +786,7 @@ function SF.Tracker()
         if fighting() then trackerWait = true else self:SetAlpha(0) end
       end)
     end
+    if not trackerOut and not settings().trackerTold then SF.notePending = true end
     trackerOut = true
     if t:GetAlpha() ~= 0 then t:SetAlpha(0) end
   elseif trackerOut then
@@ -466,6 +810,7 @@ function SF.Apply()
   if want then SF.Refresh() else SF.RefreshItem(nil) end
   if SF.AskPending then SF.AskPending() end
   SF.Tracker()
+  arrowFollows()
 end
 
 -- the frame's scale, and the item button's with it (a child of UIParent: the frame's scale does not reach it); the
@@ -475,9 +820,11 @@ function SF.SetScale(sc)
   local f = SF.frame
   if not f then return end
   f:SetScale(sc)
+  if f.qbX then place(f) end -- (at its default place: kept clear of the tracker at the new size)
   if f.item then
     if fighting() then SF.pendingItem = true else f.item:SetScale(sc) end
   end
+  arrowFollows()
 end
 
 function SF:Menu(s)
@@ -495,6 +842,18 @@ function SF:Menu(s)
     items[#items + 1] = { string.format("Scale: %d%%%s", sc * 100, (set.scale or 1) == sc and "  (now)" or ""), function() SF.SetScale(sc) end }
   end
   items[#items + 1] = { "Hide (Settings brings it back)", function() set.frame = false; SF.Apply() end }
+  -- the game's quest tracker: back, or out of sight again while the frame shows (Settings has the same row)
+  if SF.noteUntil or SF.notePending then set.trackerTold = true end
+  SF.noteUntil, SF.notePending = nil, nil -- (the menu found: the note has done its work)
+  if trackerOut then
+    items[#items + 1] = { "Show the game's quest tracker", function() set.hideTracker = false; SF.Tracker(); lastVer = -1; SF.Refresh() end }
+  elseif tracker() and set.hideTracker == false then
+    items[#items + 1] = { "Hide the game's quest tracker while this shows", function() set.hideTracker = true; SF.Tracker(); lastVer = -1; SF.Refresh() end }
+  end
+  -- (the launch round) a line in chat for each hand-in, and (the review round) for a quest complete or dropped, only
+  -- when asked for: Core.lua reads sayXP
+  local qs = QB:Settings()
+  items[#items + 1] = { "Say quest XP in chat: " .. (qs.sayXP == true and "on" or "off"), function() qs.sayXP = qs.sayXP ~= true end }
   items[#items + 1] = { "Settings", function() QB.UI:Open(5) end }
   QB.UI:ShowMenu("The next step", items)
 end

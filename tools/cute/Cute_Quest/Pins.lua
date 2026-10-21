@@ -684,7 +684,7 @@ Pin.OnMouseEnter = QB.Safe(function(self)
   if not d then return end
   local QM = QB.QuestMap
   GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-  GameTooltip:AddLine(d.name, 1, 0.82, 0)
+  GameTooltip:AddLine(d.title or d.name, 1, 0.82, 0)
   if not d.num then
     local many = #(d.quests or {}) > 1
     GameTooltip:AddLine(many and P.Word("QUEST_HUB_TOOLTIP_AVAILABLE_QUESTS_HEADER", "Available Quests") or P.Word("AVAILABLE_QUEST", "Available quest"), 1, 1, 1, true)
@@ -696,7 +696,7 @@ Pin.OnMouseEnter = QB.Safe(function(self)
     GameTooltip:AddLine(#d.pickups > 1 and P.Word("QUEST_HUB_TOOLTIP_AVAILABLE_QUESTS_HEADER", "Available Quests") or P.Word("AVAILABLE_QUEST", "Available quest"), 1, 1, 1, true)
     QM.QuestLines(GameTooltip, d.pickups, d.labels)
   end
-  if d.when then GameTooltip:AddLine(d.when, 0.8, 0.8, 0.8) end
+  if d.when then GameTooltip:AddLine(P.WhenNow(d), 0.8, 0.8, 0.8) end
   -- the quest icons leave the NPC under this pin to it: what they would have shown there
   if QM and QM.AlsoHere then
     local map = self.layer and self.layer:GetMap()
@@ -811,6 +811,55 @@ end
 -- planned route while that page shows it)
 function P:Route() return QB.Target.Route() end
 
+-- (the launch round) a stop's title: the NPC its pin stands on and the town, "Smith Argus, Goldshire" (6.1 titled a
+-- stop out of a flight master's town by its zone and spot, "Elwynn Forest (42, 65)", beside the map's own Goldshire):
+-- the place as Travel.lua's TV.StopPlace words it (the stop's town, else the inn town within 150 yards, else the zone).
+-- A stop of several NPCs: the place alone. Its name (Model.lua) stays as it is: stops are matched by it
+function P.StopTitle(s)
+  local D = QB.Data
+  local npcs = s and s.npcs
+  local n = npcs and npcs[1] and D.NPC[npcs[1]]
+  if not n then return s and s.name end
+  local town = QB.Travel.StopPlace(s)
+  if #npcs > 1 then return town or s.name end
+  if not town or town == n[1] then return n[1] end
+  return n[1] .. ", " .. town
+end
+-- the minutes to a stop in words, true when read: a route planned from where you stand counts down from the time it was
+-- planned (first seen here: P:Update runs at each re-plan's QB:Changed), "51 min from now", "1 h 05 min from now"; once
+-- that count is spent, or on a route planned from elsewhere (banked: from where you log out), where the stop falls
+-- along the route, "51 min into the route" (or "where the route starts"). (6.1's "at 0:51" read as a clock; the launch round's "from now" was the
+-- plan's figure, stale as you went: the route is not planned again as you walk.) The tooltips read it again as they
+-- show (P.WhenNow)
+local planned = setmetatable({}, { __mode = "k" }) -- a route -> GetTime() when first seen (a re-plan makes a new one)
+local function minutes(t)
+  t = math.max(0, math.floor(t + 0.5))
+  if t < 60 then return t .. " min" end
+  return string.format("%d h %02d min", math.floor(t / 60), t % 60)
+end
+local function fromNow(t, r)
+  t = t or 0
+  if r and r.fromHere then
+    local now = GetTime and GetTime() or 0
+    local at = planned[r]
+    if not at then at = now; planned[r] = at end
+    local left = t - (now - at) / 60
+    if left >= 0.5 then return minutes(left) .. " from now" end
+  end
+  if t < 0.5 then return "where the route starts" end
+  return minutes(t) .. " into the route"
+end
+-- a stop's line as it reads now (the list's reads as at P:Build): its minutes counted again
+function P.WhenNow(d)
+  local w = d and d.when
+  if not (w and d.ago and d.route) then return w end
+  local now = fromNow(d.t, d.route)
+  if now == d.ago then return w end
+  local a, b = w:find(d.ago, 1, true)
+  if not a then return w end
+  return w:sub(1, a - 1) .. now .. w:sub(b + 1)
+end
+
 function P:Build()
   local list = {}
   local r = self:Route()
@@ -832,9 +881,11 @@ function P:Build()
         -- who: the NPC the pin stands on (a stop stands at its first NPC, and may be named for its town or place);
         -- ids: the quests it lists. The quest icons (QuestMap.lua) read both
         local first = s.npcs and s.npcs[1] and QB.Data.NPC[s.npcs[1]]
-        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, who = first and first[1] or nil, ids = ids, icon = T.questActive, stop = s,
+        local ago = fromNow(leg.t, r) -- (and t, route, ago: P.WhenNow counts it again as a tooltip shows)
+        list[#list + 1] = { m = s.m, x = s.x, y = s.y, num = i, name = s.name, title = P.StopTitle(s), who = first and first[1] or nil, ids = ids, icon = T.questActive, stop = s,
                             quests = quests, ready = ready, family = family, late = (leg.late and r.goal == "hour") or nil,
-                            when = string.format("Stop %d of %d, at %s: %s", i, #r.legs, QB.Clock(leg.t), QB.Model.Gain(leg)), lines = lines }
+                            when = string.format("Stop %d of %d, %s: %s", i, #r.legs, ago, QB.Model.Gain(leg)), lines = lines,
+                            t = leg.t, route = r, ago = ago }
       end
     end
   end

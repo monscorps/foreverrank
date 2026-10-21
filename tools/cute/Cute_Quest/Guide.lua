@@ -94,7 +94,11 @@ function G.Text(s)
   elseif k == "train" then return "Train at " .. (s.name or "your class trainer")
   elseif k == "grind" then return s.text or "Kill around here"
   elseif k == "corpse" then return "Run to your corpse"
-  elseif k == "reward" then return "Choose a reward: " .. (s.name or "QuestBank's pick") .. " is QuestBank's pick"
+  elseif k == "reward" then
+    local r = G.reward
+    if r and r.qid == s.qid and r.reading then return "Choose a reward: reading the rewards..." end
+    if r and r.qid == s.qid and not r.pick then return "Choose a reward: first choice, no better pick known" end
+    return "Choose a reward: " .. (s.name or "the marked one") .. " is " .. (QB.NAME or "QuestBank") .. "'s pick"
   end
   return s.text or ""
 end
@@ -104,6 +108,58 @@ end
 function G.Short(s)
   if s and s.kind == "accept" then return "Accept " .. questName(s.qid) end
   return nil
+end
+
+-- (the launch round) the step frame's words in parts: the owner's frame read "Hand in In Nightmares" / "Hand in The
+-- Absent Minded Prospector" / "Hand in Ziz Fizziks", one stop or three trips nobody could tell, and five quests share
+-- the Prospector's name. Now a step carries its leg of the route (s.stop, s.mins, s.way, s.leg: Replan) and the frame
+-- shows, beside the kind's game icon, the name (G.Title), who and where (G.Where, "Mathrengyl Bearwalker - Darnassus";
+-- G.Place, the stop alone) and the minutes to that stop (G.Mins)
+-- the name: a quest's for a pick-up or a hand-in (the icon says which), "3 quests to hand in" for several, else the
+-- step's own words
+function G.Title(s)
+  if not s then return "" end
+  local k = s.kind
+  if k == "accept" then return questName(s.qid) end
+  if k == "handin" then return (s.n and s.n > 1) and string.format("%d quests to hand in", s.n) or questName(s.qid) end
+  return G.Text(s)
+end
+-- where: the leg's stop (the town, or a place out in a zone), an objective's own (Replan: spotPlace), else the zone the
+-- step's spot is in
+function G.Place(s)
+  if not s then return nil end
+  return s.stop or (s.m and QB.Data.MAPNAME and QB.Data.MAPNAME[s.m]) or nil
+end
+-- (the review round) an objective's place: its dungeon for a Do step, else the town within 150 yards of its spot, else
+-- the spot's zone. (The launch round gave it its quest's hand-in stop and that leg's trip: Blackrock Menace's kills
+-- read "Blackrock Menace - Lakeshire" out at the Blackrock camps, and the hand-in after them lost its place)
+local function spotPlace(s)
+  if s.obj == "d" and s.dungeon then return s.dungeon end
+  local TV = QB.Travel
+  return (TV and TV.TownNear and TV.TownNear(s.c, s.wx, s.wy, 150)) or (s.m and QB.Data.MAPNAME and QB.Data.MAPNAME[s.m]) or nil
+end
+-- who: the NPC of a pick-up or a hand-in, the quest of an objective spot; nil where nobody is to be found (a dungeon's
+-- Do step, travel, training)
+function G.Who(s)
+  if not s then return nil end
+  if (s.kind == "accept" or s.kind == "handin") and s.npc then return npcName(s.npc) end
+  if s.kind == "objective" and s.obj ~= "d" and s.qid then return questName(s.qid) end
+  return nil
+end
+-- who and where: G.Who, then the place; the place alone where nobody is to be found
+function G.Where(s)
+  if not s then return nil end
+  local place, who = G.Place(s), G.Who(s)
+  if who and place and who ~= place then return who .. " - " .. place end
+  return who or place
+end
+-- the minutes to the step's stop from the stop before it (the plan's leg), where a new leg starts: nil on the leg of the
+-- step before it (prev), for a step of no leg, and under half a minute
+function G.Mins(s, prev)
+  if not (s and s.leg and s.mins) then return nil end
+  if prev and prev.leg == s.leg then return nil end
+  if s.mins < 0.5 then return nil end
+  return math.floor(s.mins + 0.5)
 end
 
 -- the place of a stop's NPC, in continent yards and on its map (Data.lua's D.NPC row: name, uiMap, x, y, continent,
@@ -637,29 +693,71 @@ function G.ItemFor(s)
 end
 
 -- a hand-in with a reward to choose: the Guide holds QuestBank's pick (UI.BestReward's gear, else the first trinket,
--- else the first) and the frame marks it; nothing is chosen for you. G.reward = { qid, index, name } while the window
--- with the choice is open; the list is made again so the step says so
+-- else the first) and the frame marks it; nothing is chosen for you. G.reward = { qid, n, index, name, ... } while the
+-- window with the choice is open; the list is made again so the step says so
+-- (the review round) the window's items as the client sends them: while a choice's link is missing, the pick is read
+-- again a fifth of a second after QUEST_ITEM_UPDATE (the quest window's own event, QuestFrame.lua) or
+-- GET_ITEM_INFO_RECEIVED. (The launch round read them once, 0.05 s after QUEST_COMPLETE: a link not loaded yet left
+-- "First choice: no better pick known" up all the while, a better pick known)
+local rewardFrame, rewardSoon = nil, false
+local function rereadRewards()
+  rewardSoon = false
+  local r = G.reward
+  if r and r.unloaded then G.HoldReward(r.qid, r.n) end
+end
+local function watchRewards(on)
+  if on and not rewardFrame then
+    rewardFrame = CreateFrame("Frame")
+    G.rewardFrame = rewardFrame
+    rewardFrame:SetScript("OnEvent", QB.Safe(function()
+      if rewardSoon or not (G.reward and G.reward.unloaded) then return end
+      rewardSoon = true
+      C_Timer.After(0.2, QB.Safe(rereadRewards, "guide: rewards"))
+    end, "guide: rewards"))
+  end
+  if not rewardFrame or (on and true or false) == (rewardFrame.qbOn == true) then return end
+  rewardFrame.qbOn = on and true or nil
+  for _, e in ipairs({ "QUEST_ITEM_UPDATE", "GET_ITEM_INFO_RECEIVED" }) do
+    if on then pcall(rewardFrame.RegisterEvent, rewardFrame, e) else pcall(rewardFrame.UnregisterEvent, rewardFrame, e) end
+  end
+end
 function G.HoldReward(qid, n)
   local level = QB.state.level or 1
   local UI = QB.UI
   local best = UI and UI.BestReward and (UI.BestReward(qid, "gear", level) or UI.BestReward(qid, "trinket", level)) or nil
-  local index, name = 1, nil
+  -- (the launch round) a pick only where the Gear finder's best is among the items the window gives; else the first
+  -- choice, marked and said as no more than that (nothing known fits you: 6.1 marked it as a pick all the same). link:
+  -- the pick's, for the frame's line (its stats). (The review round) an item whose link is not loaded yet is told by
+  -- its id all the same (GetQuestItemInfo's sixth value, as QuestInfo.lua and Discover.lua read it); with an item not
+  -- told at all and a pick known, the window is still being read (reading: no mark yet, the line says so)
+  local index, name, link, firstName, firstLink, untold, unloaded = nil, nil, nil, nil, nil, false, false
   if type(GetQuestItemLink) == "function" then
     for i = 1, n do
-      local ok, link = pcall(GetQuestItemLink, "choice", i)
-      link = ok and plain(link) or nil
-      local id = type(link) == "string" and tonumber(link:match("item:(%d+)"))
-      if id and best and id == best then index = i end
-      if i == index and type(link) == "string" then name = link:match("%[(.-)%]") end
+      local ok, l = pcall(GetQuestItemLink, "choice", i)
+      l = ok and plain(l) or nil
+      if type(l) ~= "string" then l, unloaded = nil, true end
+      local id = l and tonumber(l:match("item:(%d+)"))
+      if not id and type(GetQuestItemInfo) == "function" then
+        local okI, _, _, _, _, _, itemID = pcall(GetQuestItemInfo, "choice", i)
+        itemID = okI and plain(itemID) or nil
+        if type(itemID) == "number" and itemID > 0 then id = itemID end
+      end
+      if not id then untold = true end
+      if i == 1 and l then firstName, firstLink = l:match("%[(.-)%]"), l end
+      if id and best and id == best and not index then index, name, link = i, l and l:match("%[(.-)%]"), l end
     end
   end
-  G.reward = { qid = qid, index = index, name = name }
+  local reading = best ~= nil and not index and untold
+  G.reward = { qid = qid, n = n, index = index or ((not reading) and 1 or nil), name = index and name or firstName, link = index and link or firstLink,
+               item = index and best or nil, pick = index ~= nil, reading = reading or nil, unloaded = unloaded or nil }
+  watchRewards(unloaded)
   G.Replan()
   if QB.StepFrame and QB.StepFrame.MarkReward then QB.StepFrame.MarkReward() end
 end
 function G.DropReward()
   if not G.reward then return end
   G.reward = nil
+  watchRewards(false)
   G.Replan()
   if QB.StepFrame and QB.StepFrame.MarkReward then QB.StepFrame.MarkReward() end
 end
@@ -724,10 +822,12 @@ function G.Replan()
   -- a hand-in in reach: first, whatever its value (Target.lua)
   if cur and cur.name and cur.near and not k then
     local s = step("handin")
-    s.qid, s.n, s.near = cur.qid, cur.quests, true
+    s.qid, s.n, s.near, s.xp = cur.qid, cur.quests, true, 0
     placeNpc(s, cur.near)
     G.steps[1] = s
-    for id in pairs(cur.ids or {}) do if type(id) == "number" then doneQ[id] = true end end
+    for id in pairs(cur.ids or {}) do
+      if type(id) == "number" then doneQ[id] = true; s.xp = s.xp + ((QB:Value(id)) or 0) end
+    end
   end
   local pickups = readPickups()
   local function pickupsAt(stop)
@@ -741,9 +841,11 @@ function G.Replan()
       end
     end
   end
-  for _, leg in ipairs(legs) do
+  for li, leg in ipairs(legs) do
     local stop = leg.stop
     if stop then
+      local n0 = #G.steps
+      local place = QB.Travel.StopPlace(stop) -- ("Northshire Abbey", not "Elwynn Forest (48, 43)")
       -- the objectives of this stop's quests still open (the target's quest is moved first below); one with no spot
       -- in the world gets its Do step (doStep) and no hand-in until it is complete
       for _, row in ipairs(leg.rows or {}) do
@@ -762,17 +864,23 @@ function G.Replan()
           local s = byNpc[idx]
           if not s then
             s = step("handin")
-            s.qid, s.n = e.id, 0
+            s.qid, s.n, s.xp = e.id, 0, 0
             placeNpc(s, idx)
             byNpc[idx] = s
             G.steps[#G.steps + 1] = s
           end
-          s.n = s.n + 1
+          s.n, s.xp = s.n + 1, s.xp + (row.xp or 0) -- (the quests' XP together: the frame's tooltip)
           if e.id < s.qid then s.qid = e.id end
           doneQ[e.id] = true
         end
       end
       pickupsAt(stop)
+      -- the leg on each step made for the stop (its hand-ins and pick-ups): its stop's name, the minutes to it from the
+      -- stop before, how, which leg. An objective on the way is where its spot is, on no trip of the route's (below)
+      for i = n0 + 1, #G.steps do
+        local s = G.steps[i]
+        if s.kind ~= "objective" then s.stop, s.mins, s.way, s.leg = place, leg.travel, leg.kind, li end
+      end
     end
   end
   -- the quests held and not done that the route leaves out (Model.lua's route.waiting: a dungeon's, nothing to hand
@@ -799,6 +907,7 @@ function G.Replan()
     local s = step("accept")
     s.qid = d.qid
     placeNpc(s, d.idx)
+    s.stop = QB.Travel.TownNear(s.c, s.wx, s.wy, 150) or (s.m and QB.Data.MAPNAME and QB.Data.MAPNAME[s.m]) or nil -- (no stop of the route: its town or zone)
     G.steps[#G.steps + 1] = s
     doneQ[d.qid] = true
   end
@@ -814,6 +923,10 @@ function G.Replan()
         break
       end
     end
+  end
+  -- each objective's place, from its spot as it stands now (the target's above included)
+  for _, s in ipairs(G.steps) do
+    if s.kind == "objective" then s.stop = spotPlace(s) end
   end
   -- new spells to learn: Train at the trainer nearest a stop with a hand-in to come, before that hand-in; none within
   -- reach: the reminder line (once a level)

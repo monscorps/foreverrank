@@ -5166,6 +5166,209 @@ do
   end)
 end
 
+-- [stage: engine] that stage's tests go right below this line
+-- 36e (the launch round's engine, Cute's side). Cute_Quest inside Cute, as a new member meets it: the engine never
+-- talks to the whole guild (0.7.0's 1S, 1Q and 1R went to GUILD around the officers' Who sees what; off for a fresh
+-- install and once for a 0.7 save), the party still hears it; the minimap is the engine's only while the Map module is
+-- on (a right-click otherwise the game's ping, the wheel the game's zoom, no tracking entry, Target tracking left alone);
+-- a step without a quest clicked opens the Quests page, never Race; the engine's errors and a call the game blocked are
+-- on /cute errors; PLAYER_ENTERING_WORLD reaches the engine's frames once whether Cute loads it in that event or in
+-- play; the engine's words name Cute, never QuestBank or /qb; a hand-in says nothing
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  local function copy(t) if type(t) ~= "table" then return t end local o = {} for k, v in pairs(t) do o[k] = copy(v) end return o end
+  isolated({ member("Rone", 1), member("Pim", 3) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true)
+    local QB = c.addons[2].private
+    -- PLAYER_ENTERING_WORLD, ticked in play: every frame of the engine's that waits on it hears it once, a frame later
+    local heardPEW = {}
+    for _, key in ipairs({ "Travel", "Glow", "Timer", "Target", "Mini" }) do
+      local m = QB[key]
+      local fr = m and (m.eventFrame or m.frame)
+      assert(fr, "the engine's " .. key .. " has its event frame")
+      heardPEW[key] = 0
+      fr:HookScript("OnEvent", function(_, event) if event == "PLAYER_ENTERING_WORLD" then heardPEW[key] = heardPEW[key] + 1 end end)
+    end
+    tick(c, 6)
+    for key, n in pairs(heardPEW) do assert(n == 1, "ticked in play: the engine's " .. key .. " heard PLAYER_ENTERING_WORLD once: " .. n) end
+    local s = c.env.CuteQuestDB.settings
+    -- the guild: nothing of the engine's to GUILD, its own hello at 12 s included; the party still hears it
+    assert(s.share.guild == false and s.share.party == true and s.cuteGuildOff == true, "a fresh install: the engine shares with the party alone")
+    tick(c, 20)
+    for _, m in ipairs(c.outbox) do assert(m[3] ~= "GUILD", "nothing of the engine's to the guild: " .. tostring(m[2]):sub(1, 40)) end
+    -- (the look above can see one: with the switch on, the engine's share goes to GUILD)
+    s.share.guild = true; QB.Sync:Broadcast(true); tick(c, 1)
+    local seenGuild = false
+    for _, m in ipairs(c.outbox) do if m[3] == "GUILD" then seenGuild = true end end
+    assert(seenGuild, "with the switch on a share goes to GUILD: the look sees it")
+    s.share.guild = false
+    for k = #c.outbox, 1, -1 do c.outbox[k] = nil end
+    -- the minimap with the Map module off: the game's own
+    local Mini, mini = QB.Mini, c.env.Minimap
+    assert(not Mini.Owned() and not Mini.hooked, "Map off: the minimap is not the engine's, nothing hooked")
+    local clicks, wheels, menus = c.gameClicks or 0, c.gameWheel or 0, #c.contextMenus
+    mini.__scripts.OnMouseUp(mini, "RightButton"); tick(c, 1)
+    mini.__scripts.OnMouseWheel(mini, 1)
+    assert((c.gameClicks or 0) == clicks + 1 and #c.contextMenus == menus and (c.gameWheel or 0) == wheels + 1, "Map off: a right-click is the game's ping, the wheel the game's zoom")
+    assert(c.menus == nil or c.menus.MENU_MINIMAP_TRACKING == nil, "Map off: no entry in the game's tracking menu")
+    assert(c.tracking[2].active == false, "Map off: Target tracking left as the game has it")
+    -- Map on: the engine's (its menu on a right-click, Target tracking)
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1)
+    assert(Mini.Owned() and Mini.hooked, "Map on: the minimap is the engine's")
+    menus = #c.contextMenus
+    mini.__scripts.OnMouseUp(mini, "RightButton"); tick(c, 1)
+    assert(#c.contextMenus == menus + 1, "Map on: a right-click opens the engine's menu")
+    local named = false
+    for _, e in ipairs(c.contextMenus[#c.contextMenus]) do
+      assert(not (e.text or ""):find("QuestBank", 1, true), "the minimap's menu names Cute: " .. tostring(e.text))
+      if e.text == "Cute settings" then named = true end
+    end
+    assert(named, "the menu's last line: Cute settings")
+    assert(c.tracking[2].active == true, "Map on: Target on the minimap")
+    -- (the review round) the engine's size for the minimap while Map is on (Ctrl-wheel)
+    local cont = c.env.MinimapCluster.MinimapContainer
+    local s0 = cont:GetScale() or 1
+    c.env.MinimapCluster.__anchored = nil
+    Mini.SetScale(1.5)
+    assert(math.abs((cont:GetScale() or 1) - 1.5) < 0.01, "Map on: the engine sizes the minimap")
+    -- Map off again: the game's again (the minimap's own update, a frame of the game's, sees it too)
+    local ov = c.env.QuestBankMinimap
+    local function frameTick() if ov and ov.__scripts.OnUpdate then ov.__scripts.OnUpdate(ov, 1) end end
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1); frameTick()
+    clicks, wheels, menus = c.gameClicks or 0, c.gameWheel or 0, #c.contextMenus
+    mini.__scripts.OnMouseUp(mini, "RightButton"); tick(c, 1)
+    mini.__scripts.OnMouseWheel(mini, 1)
+    assert((c.gameClicks or 0) == clicks + 1 and #c.contextMenus == menus and (c.gameWheel or 0) == wheels + 1, "Map off again: the game's ping and zoom")
+    -- (the review round) and what the engine set goes back: Target tracking as the game had it before, the game's size
+    -- and place (Edit Mode's anchor); the engine's own choices kept for Map on again
+    assert(c.tracking[2].active == false, "Map off again: Target tracking back as the game had it")
+    assert(math.abs((cont:GetScale() or 1) - s0) < 0.01 and c.env.MinimapCluster.__anchored, "Map off again: the game's size and place: " .. tostring(cont:GetScale()))
+    assert(Mini.FreeDB().scale == 1.5 and Mini.TrackDB().target == true, "the engine's size and Target kept for Map on again")
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1); frameTick()
+    assert(c.tracking[2].active == true and math.abs((cont:GetScale() or 1) - 1.5) < 0.01, "Map on again: Target and the engine's size back")
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1); frameTick()
+    assert(c.tracking[2].active == false and math.abs((cont:GetScale() or 1) - s0) < 0.01, "and off: the game's again")
+    -- a step without a quest (travel, train, grind, corpse) clicked: the Quests page, never Race; Route on: Route
+    QB.UI:Open(3)
+    assert(c.C.UI.page == "quests", "Route off: a travel step opens Quests: " .. tostring(c.C.UI.page))
+    QB.Arrow:Set(true)
+    local arrowTip = tipOf(c.env.QuestBankArrow)
+    assert(arrowTip:find("Click: the Quests page.", 1, true) and not arrowTip:find("Route page", 1, true), "the arrow's click, as it is: " .. arrowTip)
+    -- (the review round) and a step with no quest in the step frame: its tooltip names the page its click opens
+    do
+      local G0, SF0 = QB.Guide, QB.StepFrame
+      local keep0 = G0.steps
+      G0.steps = { { kind = "travel", text = "Fly to Ironforge", c = 0, wx = -4821, wy = -1155 } }
+      G0.ver = G0.ver + 1; SF0.Apply(); SF0.Refresh()
+      local row = c.env.QuestBankStep.rows[1]
+      local rowTip = tipOf(row)
+      if row.__scripts.OnLeave then row.__scripts.OnLeave(row) end
+      assert(rowTip:find("Click: the Quests page.", 1, true) and not rowTip:find("the way there", 1, true), "a travel step's click, as it is: " .. rowTip)
+      G0.steps = keep0; G0.ver = G0.ver + 1; SF0.Refresh()
+    end
+    c.C.Modules.Set("Cute_Quest:route", true); tick(c, 1)
+    QB.UI:Open(3)
+    assert(c.C.UI.page == "route", "Route on: the Route page: " .. tostring(c.C.UI.page))
+    -- (the review round) a stop out of a town on the Route page: its place in words, as the map's pins, the step frame
+    -- and the arrow name it, not Model.lua's zone and spot (kept for matching)
+    do
+      local D = QB.Data
+      local argus
+      for i, n in ipairs(D.NPC) do if n[1] == "Smith Argus" then argus = i end end
+      local keepPlan, keepMode = QB.routePlan, QB.Target.Mode
+      QB.Target.Mode = function() return "plan" end
+      QB.routePlan = { legs = { { stop = { name = "Elwynn Forest (42, 65)", npcs = { argus }, m = 1429, x = 42, y = 65 }, rows = {}, t = 51, travel = 4, kind = "foot", arrive = 5, leave = 5 } },
+                       xp = 0, level = 5, t = 51, byQuest = {} }
+      c.C.UI:Open("route")
+      local shown = texts(c)
+      assert(shown:find("1. Goldshire", 1, true) and not shown:find("Elwynn Forest (", 1, true), "the Route page's stop: its place:\n" .. shown)
+      QB.routePlan, QB.Target.Mode = keepPlan, keepMode
+    end
+    c.C.Modules.Set("Cute_Quest:route", false); tick(c, 1)
+    -- the engine's words: Cute's name, no /qb
+    local G, SF, A = QB.Guide, QB.StepFrame, QB.Arrow
+    assert(G.Text({ kind = "reward", name = "Talbar Mantle" }) == "Choose a reward: Talbar Mantle is Cute's pick", "the reward step names Cute")
+    local keep = G.steps
+    G.steps = {}
+    G.ver = G.ver + 1
+    SF.Refresh()
+    local sfr = c.env.QuestBankStep
+    assert(sfr and sfr.now:GetText() == "Nothing to do: /cute quests", "an empty step frame points at Cute's page: " .. tostring(sfr and sfr.now:GetText()))
+    G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
+    s.arrowMode = "pin"; s.arrowPin = nil
+    A:Set(true); A:Update()
+    assert(c.env.QuestBankArrow.dist:GetText() == "Click a quest or a stop in Cute", "the arrow's empty line names Cute: " .. tostring(c.env.QuestBankArrow.dist:GetText()))
+    s.arrowMode = nil
+    A:Menu()
+    local looked = false
+    for _, e in ipairs(c.contextMenus[#c.contextMenus]) do
+      if (e.text or ""):find("^Look: ") then looked = e.text end
+      assert(not (e.text or ""):find("QuestBank", 1, true) and not (e.text or ""):find("/qb", 1, true), "the arrow's menu names Cute: " .. tostring(e.text))
+    end
+    assert(looked == "Look: Cute's arrow", "the arrow's look: " .. tostring(looked))
+    -- a hand-in: nothing said
+    local n0 = #c.chat
+    fire(c, "QUEST_TURNED_IN", next(c.o.log), 450); tick(c, 1)
+    assert(#c.chat == n0, "a hand-in: nothing said: " .. tostring(c.chat[#c.chat]))
+    -- the engine's errors and a call the game blocked: on /cute errors. (The review round) a blocked call is noted
+    -- quietly, no line in chat (Cute's "ran into a problem" included); an engine error says so once a session, as
+    -- Cute's own do; a repeat of either goes no further than the engine's own count (no Cute.Safe each time: an error
+    -- in an OnUpdate repeats twenty times a second)
+    c.env.CUTE_DEV = false
+    local safeCalls, realSafe = 0, c.env.Cute.Safe
+    c.env.Cute.Safe = function(...) safeCalls = safeCalls + 1; return realSafe(...) end
+    local bf = QB.blockedFrame
+    local b0 = #c.chat
+    for _ = 1, 3 do bf.__scripts.OnEvent(bf, "ADDON_ACTION_BLOCKED", "Cute_Quest", "Frame:SetPassThroughButtons()") end
+    assert(#c.chat == b0, "a blocked call: nothing in chat: " .. tostring(c.chat[#c.chat]))
+    assert(safeCalls == 0, "a blocked call: noted, never raised through Cute.Safe: " .. safeCalls)
+    for _ = 1, 3 do QB.Err.Record("an engine probe error", "", "probe") end
+    assert(safeCalls == 1, "an engine error three times: to Cute once: " .. safeCalls)
+    c.env.Cute.Safe = realSafe
+    c.env.CUTE_DEV = true
+    local list, probe, held = c.env.CuteDB.errors or {}, nil, nil
+    for _, e in ipairs(list) do
+      if e.msg == "an engine probe error" and e.where == "quest engine: probe" then probe = e end
+      if e.msg:find("the game blocked Frame:SetPassThroughButtons()", 1, true) and e.where == "quest engine: blocked call" then held = e end
+    end
+    assert(probe and held, "both on Cute's list: " .. #list)
+    for i = n0 + 1, #c.chat do assert(not c.chat[i]:find("stopped by the game", 1, true) and not c.chat[i]:find("/qb", 1, true), "no engine line about it: " .. c.chat[i]) end
+    local e0 = #c.chat
+    c.env.SlashCmdList.CUTE("errors")
+    assert(table.concat(c.chat, "\n", e0 + 1):find("an engine probe error", 1, true), "/cute errors lists the engine's")
+    c.env.CuteDB.errors, c.env.CuteQuestDB.errors = nil, nil
+    if c.env.CuteQuestDB.diag then c.env.CuteQuestDB.diag.blocked = nil end
+    local db, qdb = c.env.CuteDB, copy(c.env.CuteQuestDB)
+    leave(c)
+    -- a 0.7 save, its guild sharing on: off once, at the next load; the next login loads the engine inside
+    -- PLAYER_ENTERING_WORLD (Quests on): each frame hears it once, the game's delivery or the replay, never both
+    qdb.settings.cuteGuildOff, qdb.settings.share.guild = nil, true
+    local d = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    d.env.CuteQuestDB = qdb
+    local count, realLoad = {}, d.loadAddon
+    d.loadAddon = function(a)
+      realLoad(a)
+      if a.name ~= "Cute_Quest" then return end
+      for key in pairs(heardPEW) do
+        local m = a.private[key]
+        local fr = m and (m.eventFrame or m.frame)
+        count[key] = 0
+        if fr then fr:HookScript("OnEvent", function(_, event) if event == "PLAYER_ENTERING_WORLD" then count[key] = count[key] + 1 end end) end
+      end
+    end
+    login(d, db); tickAll(6)
+    local DQ = d.addons[2].private
+    assert(d.addons[2].loaded and DQ.loginDone, "loaded by Cute at the login")
+    for key in pairs(heardPEW) do assert(count[key] == 1, "loaded inside PLAYER_ENTERING_WORLD: the engine's " .. key .. " heard it once: " .. tostring(count[key])) end
+    local ds = d.env.CuteQuestDB.settings
+    assert(ds.share.guild == false and ds.cuteGuildOff == true and ds.share.party == true, "a 0.7 save: guild sharing off once, the party kept")
+    leave(d)
+    print("cute quest: nothing to the guild (a fresh install, a 0.7 save once); the minimap the engine's only with Map on, the game's ping and zoom otherwise; a travel step opens Quests; the engine's errors and blocked calls on /cute errors; PLAYER_ENTERING_WORLD once; the engine's words name Cute; a hand-in says nothing")
+  end)
+end
+
 -- 36c: QuestBank loaded beside Cute: Cute_Quest's copy sleeps. Its files return at their second line (no catalog built, no
 -- event frame, no /qb of its own), the engine the pages read is QuestBankAPI (QuestBank's own table), the band draws
 -- QuestBank's step, the module toggles set none of QuestBank's settings, and QuestBank's step frame is left as it is

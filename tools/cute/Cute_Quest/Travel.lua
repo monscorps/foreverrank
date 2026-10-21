@@ -53,6 +53,7 @@ local KIND = { b = "boat", z = "zeppelin", t = "tram", p = "portal" }
 local STRONG = { t = true, n = true, f = true } -- evidence the world map's word never overrides
 local CONT_MAP = { [0] = 1415, [1] = 1414 }
 local CONT_NAME = { [0] = "Eastern Kingdoms", [1] = "Kalimdor" }
+TV.CONT_NAME = CONT_NAME
 -- each kind of step: its step line, and what to do at its start
 local STEP = {
   fly = { "Fly to %s", "Talk to the flight master" }, boat = { "Boat to %s", "Wait for the boat" },
@@ -819,11 +820,37 @@ end
 
 local function hearthSig(h) return h and (h.kind .. ":" .. h.name .. ":" .. h.c .. ":" .. floor(h.wx) .. ":" .. floor(h.wy)) or "-" end
 
+-- (the launch round) places in words for the step frame and the map's stops. The inn town within `yards` of a spot
+-- (D.BIND: the towns with an inn, Goldshire 77 yards from Smith Argus), the nearest; nil out in the wilds
+local NO_BIND = {}
+function TV.TownNear(c, wx, wy, yards)
+  if not (c and wx and wy) then return nil end
+  local lim, best, town = (yards or 150) ^ 2, nil, nil
+  for _, b in ipairs(QB.Data.BIND or NO_BIND) do
+    if b[2] == c then
+      local d = (b[3] - wx) ^ 2 + (b[4] - wy) ^ 2
+      if d <= lim and (not best or d < best) then best, town = d, b[1] end
+    end
+  end
+  return town
+end
+-- a route stop's place: its flight master's town, else the inn town within 150 yards of its first NPC, else that NPC's
+-- own place or zone; never a zone and a spot ("Elwynn Forest (42, 65)", Model.lua's name for a stop out of a town:
+-- the spot is the tooltip's)
+function TV.StopPlace(s)
+  if not s then return nil end
+  if s.town then return s.name end
+  local D = QB.Data
+  local n = s.npcs and s.npcs[1] and D.NPC[s.npcs[1]]
+  if not n then return s.name end
+  return TV.TownNear(n[5], n[6], n[7], 150) or n[12] or (D.MAPNAME and D.MAPNAME[n[2]]) or s.name
+end
+
 -- the hearthstone in a line, for the arrow's tooltip and /qb way; nil with no hearthstone
 function TV.HearthLine()
   if not QB.API.HasHearth() then return nil end
   local b = TV.Bind()
-  if not b then return "Hearthstone: QuestBank learns where it goes when you bind or use it" end
+  if not b then return "Hearthstone: " .. (QB.NAME or "QuestBank") .. " learns where it goes when you bind or use it" end
   local left = QB.API.HearthLeft()
   if left == nil then return "Hearthstone: " .. b.name end
   if left <= 0 then return "Hearthstone: " .. b.name .. ", ready" end
@@ -1187,6 +1214,9 @@ local function yes(fn, ...)
   local ok, v = pcall(fn, ...)
   return ok and plain(v) == true
 end
+-- inside a dungeon, a raid or a battleground: nothing to steer by (the Deeprun Tram, an instance map the guide steers
+-- through, is not inside). The arrow goes away there (Arrow.lua, A.Inside)
+function TV.Inside() return instanceMap() ~= TRAM_MAP and inInstance() end
 
 -- yards from you to the way a ride's step sails: its track from the step's pier to the far one (the loop's other half
 -- left out), never the pier itself, so standing on it or near it is not "on the boat's way". A leg of 2,000 yards or
@@ -1524,17 +1554,17 @@ function TV.WayLines()
   local me = QB.API.WorldPosition()
   local t = A and A.Target(me)
   if not (t and t.c and t.wx and t.wy) then
-    out[1] = "The arrow points at nothing yet: click a quest or a stop in QuestBank, or right-click the arrow."
+    out[1] = "The arrow points at nothing yet: click a quest or a stop in " .. (QB.NAME or "QuestBank") .. ", or right-click the arrow."
   elseif not me then
-    out[1] = "QuestBank can't tell where you are here."
+    out[1] = (QB.NAME or "QuestBank") .. " can't tell where you are here."
   else
     local plan = TV.Route(me, t, TV.Opts(A.Mode()))
     if not plan then
-      out[1] = string.format("No way to %s that QuestBank knows from here.", t.name or "there")
+      out[1] = string.format("No way to %s that %s knows from here.", t.name or "there", QB.NAME or "QuestBank")
     else
       local steps = {}
       for _, l in ipairs(plan.legs) do
-        steps[#steps + 1] = string.format("%s (%d min)", l.step or ("Walk to " .. (t.name or "it")), max(1, floor(l.walk + l.min + 0.5)))
+        steps[#steps + 1] = string.format("%s (%d min)", l.step or ("Walk to " .. ((A.WalkTo and A.WalkTo(t)) or t.name or "it")), max(1, floor(l.walk + l.min + 0.5)))
       end
       out[1] = string.format("Way to %s, about %d min: %s.", t.name or "it", max(1, floor(plan.min + 0.5)), table.concat(steps, ". "))
     end

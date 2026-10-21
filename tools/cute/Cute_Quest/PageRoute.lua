@@ -29,12 +29,18 @@ function R.Draw(ui, scroll)
   ui:SetBand(ROW + 8)
   -- the legs
   local items = {}
+  -- (the review round) a stop by its place in words, as the map's pins, the step frame and the arrow name it
+  -- (TV.StopPlace: "Goldshire", not Model.lua's "Elwynn Forest (42, 65)"); its tooltip titled as its pin is (the NPC and
+  -- the town: P.StopTitle)
+  local TV, Pn = E.Travel, E.Pins
   for i, leg in ipairs(r.legs or {}) do
     local n = #(leg.rows or {})
-    items[#items + 1] = { name = i .. ". " .. (leg.stop and leg.stop.name or "?"), val = math.floor((leg.t or 0) + 0.5) .. " min",
+    local stop = leg.stop
+    local place = stop and ((TV and TV.StopPlace and TV.StopPlace(stop)) or stop.name) or "?"
+    items[#items + 1] = { name = i .. ". " .. place, val = math.floor((leg.t or 0) + 0.5) .. " min",
       who = n .. (n == 1 and " quest" or " quests"), first = i == 1,
       tip = function(tip)
-        tip:AddLine(leg.stop and leg.stop.name or "?", 1, 1, 1)
+        tip:AddLine(stop and ((Pn and Pn.StopTitle and Pn.StopTitle(stop)) or place) or "?", 1, 1, 1)
         for _, row in ipairs(leg.rows or {}) do tip:AddDoubleLine(row.q and row.q.name or "?", E.Comma(row.xp or 0) .. " XP", 0.85, 0.85, 0.85, 0.6, 0.6, 0.6) end
       end }
   end
