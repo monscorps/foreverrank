@@ -241,6 +241,33 @@ def empty():
 
 # ----------------------------------------------------------------------------------- the XP seen
 CUT_DAY = "2026-10-02"  # Blizzard's dungeon-XP cut landed with build 70170 late on 2026-10-01; hand-ins dated before this day are pre-cut
+AT_CUT = 16  # a hand-in's time is read to the minute ("2026-10-22 18:04"): the uploader cuts the seconds off before it
+             # sends, so the dedup of seen_at must not tell a file counted to the second from its minute-cut re-upload
+
+
+def _at(v):
+    """A dated row's time cut to the minute (a date alone stays a date), or the value as it was when it is no string."""
+    return v[:AT_CUT] if isinstance(v, str) else v
+
+
+def cut_seen_at(acc):
+    """Once per disc.json: the seen_at keys stored to the second ("qid:at" and "live:qid:xp:at") cut to the minute, as
+    merge_seen now reads every time, so an upload counted before the cut is not counted again when it comes back cut.
+    meta.seen_at_cut marks it done."""
+    meta = acc.setdefault("meta", {})
+    if meta.get("seen_at_cut") == AT_CUT:
+        return 0
+    old = acc.get("seen_at") or {}
+    out, moved = {}, 0
+    for tag, v in old.items():
+        parts = tag.split(":", 3 if tag.startswith("live:") else 1)
+        parts[-1] = _at(parts[-1])
+        new = ":".join(parts)
+        moved += new != tag
+        out[new] = v
+    acc["seen_at"] = out
+    meta["seen_at_cut"] = AT_CUT
+    return moved
 
 
 def merge_seen(acc, kind, data):
@@ -262,6 +289,7 @@ def merge_seen(acc, kind, data):
     except (TypeError, ValueError):
         era = 0
     seen = acc.setdefault("seen", {})
+    cut_seen_at(acc)
     counted = acc.setdefault("seen_at", {})  # "qid:at" of hand-ins already counted: the same growing file comes back upload after upload
     n = 0
 
@@ -284,7 +312,7 @@ def merge_seen(acc, kind, data):
     mine = set()
     for t in data.get("turnins") or []:
         if isinstance(t, dict) and not t.get("hidden") and isinstance(t.get("xp"), (int, float)):
-            tag = "%s:%s" % (t.get("id"), t.get("at"))
+            tag = "%s:%s" % (t.get("id"), _at(t.get("at")))  # to the minute: the same hand-in with or without its seconds
             try:
                 mine.add((int(t.get("id")), int(t["xp"])))
             except (TypeError, ValueError):
@@ -302,7 +330,7 @@ def merge_seen(acc, kind, data):
             except (TypeError, ValueError):
                 pass
             if v.get("at"):  # a dated reading (3.4.6+) counts once across uploads; older ones carry no date
-                tag = "live:%s:%s:%s" % (qid, v["full"], v["at"])
+                tag = "live:%s:%s:%s" % (qid, v["full"], _at(v["at"]))
                 if tag in counted:
                     continue
                 counted[tag] = 1
@@ -1062,6 +1090,23 @@ def selftest():
     assert n == 4 and acc2["seen"] == {"971": {"6550:22:70170:turnin:9": 2}, "166": {"9750:20:0:turnin:9": 1}, "386": {"4200:22:70170:npc:3": 1}}, acc2["seen"]
     assert merge_seen(acc2, "questbank-savedvars", upload) == 0, "the same file uploaded again adds no votes"
     assert merge_seen(acc2, "export", {"turnins": [{"id": 1, "xp": 5, "level": 1}]}) == 0, "exports carry no hand-ins"
+    # hand-in times to the minute: the uploader cuts them (never the second leaves the client), so a file counted with
+    # seconds and sent again cut to the minute is one vote; two players' hand-ins of a quest a minute apart are two
+    secs = {"disc": {"v": 1, "q": {}, "build": 70338}, "turnins": [{"id": 300, "xp": 900, "level": 12, "at": "2026-10-22 18:04:31"}]}
+    cut = {"disc": {"v": 1, "q": {}, "build": 70338}, "turnins": [{"id": 300, "xp": 900, "level": 12, "at": "2026-10-22 18:04"}]}
+    mate = {"disc": {"v": 1, "q": {}, "build": 70338}, "turnins": [{"id": 300, "xp": 900, "level": 12, "at": "2026-10-22 18:05"}]}
+    acc8 = empty()
+    assert merge_seen(acc8, "questbank-savedvars", secs) == 1 and merge_seen(acc8, "questbank-savedvars", cut) == 0, acc8["seen_at"]
+    assert merge_seen(acc8, "questbank-savedvars", mate) == 1 and acc8["seen"]["300"] == {"900:12:70338:turnin:9": 2}, acc8["seen"]
+    assert set(acc8["seen_at"]) == {"300:2026-10-22 18:04", "300:2026-10-22 18:05"}, acc8["seen_at"]
+    # a disc.json counted before the cut keeps its keys to the second: they are cut to the minute once, the first time
+    # it merges, so a file it counted then is not counted again when it comes back cut
+    old = empty()
+    old["seen_at"] = {"300:2026-10-22 18:04:31": 1, "live:386:4200:2026-10-02": 1, "live:9:50:2026-10-02 10:11:12": 1}
+    assert merge_seen(old, "questbank-savedvars", cut) == 0 and old["meta"]["seen_at_cut"] == 16, old["seen_at"]
+    assert set(old["seen_at"]) == {"300:2026-10-22 18:04", "live:386:4200:2026-10-02", "live:9:50:2026-10-02 10:11"}, old["seen_at"]
+    old["seen_at"]["300:2026-10-22 18:06:59"] = 1  # written after the migration: left alone, the migration ran once
+    assert merge_seen(old, "questbank-savedvars", secs) == 0 and "300:2026-10-22 18:06:59" in old["seen_at"], old["seen_at"]
 
     # what players' games showed: an old ForeverProbe file still merges, then QuestBank 3.6.0's game block on Forever;
     # a QuestBank.lua from Classic Era adds nothing, its notes and its game block alike
@@ -1300,6 +1345,9 @@ def main():
         print(json.dumps({"kind": kind, "data": data}, indent=1, ensure_ascii=False))
         return
     acc = json.load(open(a.out)) if os.path.exists(a.out) else empty()
+    moved = cut_seen_at(acc)
+    if moved:
+        print("hand-ins counted before: %d key(s) cut to the minute, once" % moved)
     stamp = lambda t: datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     pulled = stamp(datetime.datetime.now(datetime.timezone.utc).timestamp())
     if a.rebuild:
