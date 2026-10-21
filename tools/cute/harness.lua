@@ -11176,7 +11176,11 @@ do local function runsStage()
     i = tonumber(unit:match("^raid(%d+)$"))
     if i then return G.raid and G.members[i] or nil end
     local g = c.units and c.units[unit]
-    if g then for _, e in ipairs(G.members) do if e.guid == g then return e end end end
+    if g then
+      for _, e in ipairs(G.members) do if e.guid == g then return e end end
+      -- (a unit out of the group, a target or a nameplate the scenario names: G.extra)
+      if G.extra and G.extra.guid == g then return G.extra end
+    end
     return nil
   end
   local function inside(c) return c.o.instance == "party" or c.o.instance == "raid" end
@@ -12292,14 +12296,15 @@ do local function runsStage()
     for _, fs in ipairs({ card.name, card.title, card.line, card.value, card.valueLabel, card.label }) do
       assert(not fs:GetText():lower():find("range") and not fs:GetText():lower():find("sight"), "no reason line on a card")
     end
-    -- (a target and a nameplate are units too, in that order)
-    G.members[#G.members + 1] = G.extra
-    G.raid = false
+    -- (a guild mate out of the group is found as the target, then on a nameplate once the target is cleared, in 8.2's
+    -- order, and drawn by SetUnit there; nowhere, no unit)
     c.units.target = guidOf("Esk")
-    local u = Cd.Find(guidOf("Esk"))
-    assert(u == "party4" or u == "target", "a guild mate as the target is found: " .. tostring(u))
-    table.remove(G.members)
-    c.units.target, c.units.nameplate7 = nil, nil
+    assert(Cd.Find(guidOf("Esk")) == "target", "a guild mate out of the group as the target: " .. tostring(Cd.Find(guidOf("Esk"))))
+    fill("Esk", "MAGE", "Gnome", 2)
+    assert(card.drew == "model" and card.model.__unit == "target", "the target's model by SetUnit: " .. tostring(card.drew) .. " " .. tostring(card.model.__unit))
+    c.units.target, c.units.nameplate7 = nil, guidOf("Esk")
+    assert(Cd.Find(guidOf("Esk")) == "nameplate7", "then on a nameplate: " .. tostring(Cd.Find(guidOf("Esk"))))
+    c.units.nameplate7 = nil
     assert(Cd.Find(guidOf("Esk")) == nil, "nowhere: no unit")
   end)
   said[#said + 1] = "pictures: SetUnit only in sight and plain, your own card a model, the race model by display id where switched on, the portrait and class icon, the class icon alone where race, sex or the file fails"
@@ -12691,6 +12696,12 @@ do local function runsStage()
       ms[3].v.de = 4
       cards = A.Pick(ms, { n = 3, bosses = 1, runId = "x" }, ALL)
       assert(holder(cards, "GC") == ms[3].sfx or holder(cards, "FI") == ms[3].sfx, "deaths above the median: Good Company, or a blooper: " .. codes(cards))
+      -- (two with nothing: Steady Hands to the first by GUID, so the next gets Good Company)
+      local four = { ms[1], ms[2], mem("Cy2", { t = 900, de = 0 }), mem("Dee", { t = 900, de = 0 }) }
+      local a3, a4 = four[3], four[4]
+      if a4.guid < a3.guid then a3, a4 = a4, a3 end
+      cards = A.Pick(four, { n = 4, bosses = 1, runId = "x" }, ALL)
+      assert(holder(cards, "SH") == a3.sfx and holder(cards, "GC") == a4.sfx, "Steady Hands taken, the next empty-handed member Good Company: " .. codes(cards))
     end
     -- thresholds at their edges: Off Switch at 5 (8 in a raid), Floor Inspector at 3, Pogo Stick at 100, Spectator at 180 s,
     -- Narrator at 15, a share at 1.25 fair shares
