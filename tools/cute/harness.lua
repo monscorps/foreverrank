@@ -10735,7 +10735,8 @@ do
     local out = table.concat(c.chat, "\n", n0 + 1)
     for _, want in ipairs({ "diag channel: GUILD result 0 ", "| WHISPER ", "| prefix 0 | CanSpeakInGuildChat true",
       "diag lockdown off (InChatMessagingLockdown false, restriction false, event never, result 11 never) | AreOutgoingAddonChatMessagesRestricted false",
-      "diag sync: holds the guild to nothing | this login fresh, its record whole ", "diag list: 2 of 2 read (0 not read), whole | unsure namesakes 0",
+      "diag sync: holds the guild to nothing | this login fresh, its record whole ", "| answers owed: record no, pass no; askers 1, 0 waiting",
+      "diag list: 2 of 2 read (0 not read), whole | unsure namesakes 0",
       "diag perf: refresh ", "rebuild ", "receive ", "| last minute: addon " }) do
       assert(out:find(want, 1, true), "/cute diag says " .. want .. ":\n" .. out)
     end

@@ -482,6 +482,13 @@ function M:SyncReport()
   return string.format("sync: holds the guild to %s | this login %s, its record %s, %s | asked %s",
     held, self.reloaded and "reloaded" or "fresh", self.base and ("whole " .. math.floor(C.ServerNow() - self.base) .. " s ago") or "not whole yet",
     self.passAt and ("a pass " .. math.floor(C.Now() - self.passAt) .. " s ago") or "no pass forced", self.askOwed and "not yet (owed)" or (self.askLeft and (math.floor(C.Now() - self.askLeft) .. " s ago") or "not this login"))
+    .. self:OweReport()
+end
+-- (the answers this client owes, and the askers it keeps how it answered, M.owe: waiting, an answer not gone yet)
+function M:OweReport()
+  local waiting = 0
+  for _, list in pairs(self.owe) do local e = list[#list]; if e and (e.rec == true or e.pass == true) then waiting = waiting + 1 end end
+  return string.format(" | answers owed: record %s, pass %s; askers %d, %d waiting", self.answerOwed and "yes" or "no", self.gameOwed and "yes" or "no", oweN, waiting)
 end
 -- (for /cute diag: what each way of asking says now)
 function M:LockReport()
