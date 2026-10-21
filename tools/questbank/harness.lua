@@ -18740,6 +18740,30 @@ end)()
     assert(#picked == 6 and Tm.SpeedFactor() == 1, "six dungeon's and group quests done fast: the pace stays 1, " .. tostring(Tm.SpeedFactor()))
   end }
 
+  -- the review: questing, the first stop kept changed for any order 5% more levels an hour; with hand-ins alone (no work
+  -- left, route.W 0) that is 5% fewer minutes, and on a short route a few seconds: the arrow's stop changed for 18
+  -- seconds saved. As for the other goals, the minutes saved must be half a minute at least (SWITCH_MIN)
+  F62CASES[#F62CASES + 1] = { "the planner, questing: the first stop kept for 18 seconds saved", function()
+    local c = char("Keepsake")
+    local M, D = c.QB.Model, c.QB.Data
+    local function npc(name, wx, wy)
+      D.NPC[#D.NPC + 1] = { name, 2521, 50, 50, 2991, wx, wy, 0, 0, 0, 0 }
+      return #D.NPC
+    end
+    local A, B = npc("East Post", 3400, 1000), npc("West Post", 2700, 1000)
+    local start = { c = 2991, wx = 3000, wy = 1000 }
+    local function entry(id, idx) return { q = { id = id, turnIdx = idx, lvl = 21, base = 4000, mult = 1, name = "Quest " .. id }, st = { code = "banked" } } end
+    local entries = { entry(990011, A), entry(990012, B) }
+    local opts = { level = 21, xp = 0, goal = "rate", fac = "A", start = start, noHearth = true }
+    local free = M.Plan(entries, opts)
+    local tA = free.t
+    assert(free.legs[1].stop.npcs[1] == B and free.W == 0, "the free plan: the west post first")
+    local prev = { legs = { { stop = { npcs = { A } } } } }
+    local kept = M.Plan(entries, opts, prev)
+    assert(kept.legs[1].stop.npcs[1] == A, "the east post kept first: " .. kept.legs[1].stop.name)
+    assert(kept.t / tA > 1 + M.SWITCH and kept.t - tA < 0.5, string.format("5%% more minutes, under half a minute: %.2f against %.2f", kept.t, tA))
+  end }
+
   for _, case in ipairs(F62CASES) do
     case[2]()
     print("xpm: " .. case[1] .. ": ok")

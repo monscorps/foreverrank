@@ -949,8 +949,10 @@ local SWITCH, SWITCH_MIN = 0.05, 0.5
 M.SWITCH = SWITCH
 local function clearly(P, a, b, start)
   if P.goal == "rate" then
+    -- (the same levels at the end, as nearly always: the minutes decide, and only by half a minute or more,
+    -- SWITCH_MIN, as for the other goals; a short hand-in route is 5% quicker for seconds)
     local ra, rb = perHour(P, a[2], a[3]), perHour(P, b[2], b[3])
-    if ra > rb + math.max(SWITCH * math.abs(rb), 1e-9) then return true end
+    if ra > rb + math.max(SWITCH * math.abs(rb), 1e-9) and (math.abs(a[2] - b[2]) > 1e-6 or b[3] - a[3] >= SWITCH_MIN) then return true end
     if ra < rb - 1e-9 then return false end
   else
     for k = P.goal == "hour" and 1 or 2, 2 do
