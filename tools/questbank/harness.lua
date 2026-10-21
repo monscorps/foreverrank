@@ -18816,6 +18816,15 @@ end)()
     assert(calls == 1, "a quest a member takes is an event: " .. calls)
   end }
 
+  -- the review: at the level cap a stop said "+2,450 XP, 1% of a level", XP never earned
+  F62CASES[#F62CASES + 1] = { "a stop at the level cap: no XP claimed", function()
+    local c = char("Capstone")
+    local M, CAP = c.QB.Model, c.QB.CAP
+    local words = M.Gain({ arrive = CAP, leave = CAP, rows = { { xp = 2450 } } })
+    assert(not words:find("XP,", 1, true) and words:find("level cap", 1, true), "at the cap: " .. words)
+    assert(M.Gain({ arrive = 21.2, leave = 21.25, rows = { { xp = 340 } } }):find("^%+340 XP"), "under it, the XP")
+  end }
+
   for _, case in ipairs(F62CASES) do
     case[2]()
     print("xpm: " .. case[1] .. ": ok")

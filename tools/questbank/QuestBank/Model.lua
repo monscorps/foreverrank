@@ -188,6 +188,8 @@ function M.Gain(leg, sep)
   for _, row in ipairs(leg.rows or {}) do xp = xp + (row.xp or 0) end
   local a, b = leg.arrive or 0, leg.leave or 0
   if b - a >= 0.1 then return string.format("level %.1f%s%.1f", a, sep or " to ", b) end
+  -- (at the level cap, the level lock's or the game's: no XP is earned, whatever the quests pay)
+  if a >= (QB.CAP or 60) then return "at the level cap, no XP" end
   if xp <= 0 then return "no XP yet" end
   local T = QB.Data.TO_NEXT
   local need = T[floor(a)] or T[#T]
