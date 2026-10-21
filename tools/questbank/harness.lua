@@ -18133,6 +18133,149 @@ end)()
   end
 end)()
 
+-- [stage: xpm] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- XP a minute (docs/superpowers/specs/2026-10-21-questbank-xp-per-minute-design.md). The owner: "quests + time walking &
+-- time to do quest comparatively to XP it gives. I would rather go in a zone with 3 quests for 5k each than one with 15
+-- for 15k total." Each case is in F62CASES, a level-21 character as 6.1.1's char() makes one
+----------------------------------------------------------------------------
+;(function()
+  local F62CASES = {}
+  local function char(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = o.level or 21, cap = 60, faction = o.faction or "Alliance", className = o.className or "Mage",
+      class = o.class or "MAGE", classID = o.classID or 8, race = o.race or "Human", log = o.log or {}, done = o.done or {},
+      world = o.world or { 0, -9200, -2150 }, map = o.map or 1433, bagSlots = {}, bind = o.bind or "Lakeshire", xp = o.xp })
+    if o.saved then c.env.QuestBankDB = o.saved end
+    c.known, c.buffs, c.resting = {}, {}, false
+    if o.party then c.party, c.o.group = o.party, true end
+    login(c)
+    return c
+  end
+  local function frame(c, dt)
+    c.clock = c.clock + dt
+    table.sort(c.timers, function(a, b) return a.t < b.t end)
+    while c.timers[1] and c.timers[1].t <= c.clock do table.remove(c.timers, 1).f() end
+    for _, f in ipairs(c.frames) do
+      local u = f.__scripts.OnUpdate
+      if u and f:IsVisible() then u(f, dt) end
+    end
+  end
+  local function settle(c)
+    c.ev(c.QB.eventFrame, "QUEST_LOG_UPDATE")
+    for _ = 1, 5 do frame(c, 0.1) end
+    c.QB.Model.Finish()
+    c.QB:Recompute(true)
+    c.QB.Model.Finish()
+    for _ = 1, 3 do frame(c, 0.1) end
+    if c.QB.Guide then c.QB.Guide.Replan() end
+  end
+
+  -- 2. a quest's minutes by what it asks: a named mob's tusk is quick (An Unwelcome Guest, 34), ten sunfish at 45% are
+  -- not (Selling Fish, 127), a letter carried is no work (Messenger to Darkshire, 146), an escort is six minutes
+  -- (Therylune's Escape, 945), and a Forever quest nobody has data for takes its zone's median, said "est." (98197)
+  F62CASES[#F62CASES + 1] = { "a quest's minutes by what it asks; est. where nothing is known", function()
+    local c = char("Minna")
+    local M = c.QB.Model
+    local t34, est34 = M.QuestMinutes(34, 0, 1, 1)
+    local t127 = M.QuestMinutes(127, 0, 1, 1)
+    local _, est146, walk146, work146 = M.QuestMinutes(146, 0, 1, 1)
+    local _, _, _, work945 = M.QuestMinutes(945, 0, 1, 1)
+    local t98197, est98197 = M.QuestMinutes(98197, 0, 1, 1)
+    assert(t34 < 5 and not est34, "An Unwelcome Guest under five minutes: " .. tostring(t34))
+    assert(t127 > 15, "Selling Fish over fifteen: " .. tostring(t127))
+    assert(work146 == 0 and walk146 > 0 and not est146, "a letter carried: no work, the walk alone: " .. tostring(work146) .. ", " .. tostring(walk146))
+    assert(work945 >= 6, "an escort, six minutes: " .. tostring(work945))
+    assert(est98197 and t98197 > 0.5, "nothing known: the zone's median, an estimate: " .. tostring(t98197))
+    assert(M.MinutesText(t98197, est98197):find("est.", 1, true) and not M.MinutesText(t34, est34):find("est.", 1, true),
+      "the words say est. for the estimate alone: " .. M.MinutesText(t98197, est98197) .. " / " .. M.MinutesText(t34, est34))
+    -- the trip, the mount and the pace: the trip adds, a mount shortens the walk, a quick character the work
+    local base = M.QuestMinutes(127, 0, 1, 1)
+    assert(math.abs(M.QuestMinutes(127, 5, 1, 1) - base - 5) < 1e-6, "the trip adds its minutes")
+    assert(M.QuestMinutes(127, 0, 0.6, 1) < base and M.QuestMinutes(127, 0, 1, 0.5) < base, "a mount and a quick pace shorten it")
+    -- a group quest is a party's work: three times it alone
+    local grp
+    for id, r in pairs(c.QB.Data.Q) do
+      local v = c.QB.Data.DO[id] or 0
+      if not grp and math.floor(r[10] / 2) % 2 == 1 and r[10] % 2 == 0 and v > 0 and v % 4096 > 20 then grp = id end
+    end
+    local _, _, _, wSolo = M.QuestMinutes(grp, 0, 1, 1)
+    local _, _, _, wParty = M.QuestMinutes(grp, 0, 1, 1, true)
+    assert(grp and math.abs(wSolo - 3 * wParty) < 1e-6, "a group quest alone is three times the work: " .. tostring(grp))
+  end }
+
+  -- 6. the work measured (Timer.lua, from Discover.lua's look of the log): each look where objectives moved gives the
+  -- time since the last one, never more than 90 seconds (a walk or a break between counts no more), shared among the
+  -- quests that moved in it; the first time a quest is complete its row says when and at what level. At most 300
+  -- quests, and nothing but numbers
+  F62CASES[#F62CASES + 1] = { "the work measured: 90 seconds at most, shared in a look, 300 quests, numbers only", function()
+    local c = char("Tamsin", { log = { { 127, 0 }, { 34, 0 } } })
+    local Tm, f = c.QB.Timer, c.QB.Discover.frame
+    c.objectives = { [127] = { { text = "Spotted Sunfish: 0/10", type = "item", finished = false, numFulfilled = 0, numRequired = 10 } },
+                     [34] = { { text = "Bellygrub's Tusk: 0/1", type = "item", finished = false, numFulfilled = 0, numRequired = 1 } } }
+    local function look(dt) f.__scripts.OnEvent(f, "QUEST_LOG_UPDATE"); tick(c, dt) end
+    look(0); tick(c, 15); look(1) -- (past the first seconds after login: a look learns where things stand)
+    local rows = Tm.DB().quests
+    c.objectives[127][1].numFulfilled = 1
+    look(0)
+    local w0 = rows[127] and rows[127].w or 0
+    tick(c, 600)
+    c.objectives[127][1].numFulfilled = 2
+    look(0)
+    assert(rows[127] and math.abs(rows[127].w - w0 - 90) < 1e-6 and rows[127].k == 2, "ten minutes away count 90 seconds: " .. tostring(rows[127] and rows[127].w))
+    tick(c, 40)
+    c.objectives[127][1].numFulfilled = 3
+    c.objectives[34][1].numFulfilled, c.objectives[34][1].finished = 1, true
+    look(0)
+    assert(math.abs(rows[127].w - w0 - 110) < 1e-6 and math.abs(rows[34].w - 20) < 1e-6, "two quests in one look share its 40 seconds: " .. rows[127].w .. ", " .. rows[34].w)
+    assert(rows[34].c and rows[34].lv == 21 and not rows[127].c, "complete: when, and at what level")
+    local cBefore = rows[34].c
+    tick(c, 30); c.objectives[34][1].numFulfilled = 1; look(0)
+    assert(rows[34].c == cBefore, "the first time only")
+    -- 300 quests at most, ids and numbers only
+    local ids = {}
+    for i = 1, 320 do ids[1] = 600000 + i; tick(c, 1); Tm.Tick(ids, 1) end
+    local n = 0
+    for id, q in pairs(rows) do
+      n = n + 1
+      assert(type(id) == "number" and type(q) == "table", "a row per quest id")
+      for k, v in pairs(q) do assert(type(k) == "string" and #k <= 2 and type(v) == "number", "a row holds numbers: " .. tostring(k) .. " = " .. tostring(v)) end
+    end
+    assert(n <= Tm.QUESTS and n >= Tm.QUESTS - 1 and rows[600320] and rows[600320].k == 1, "the table stays at 300 quests, the newest kept: " .. n)
+  end }
+
+  -- 7. this character's pace: the median of measured against estimated work over the last 20 completions, from 0.5 to 2;
+  -- five quests done in a fifth of the time make it 0.5, and the quest minutes follow
+  F62CASES[#F62CASES + 1] = { "the pace: 0.5 after five fast completions, and the minutes follow", function()
+    local c = char("Brisk")
+    local Tm, M = c.QB.Timer, c.QB.Model
+    assert(Tm.SpeedFactor() == 1, "nothing measured: 1")
+    local before = M.QuestMinutes(127, 0, 1, Tm.SpeedFactor())
+    local rows = Tm.DB().quests
+    local ids = {}
+    for id, v in pairs(c.QB.Data.DO) do if v > 0 and v % 4096 >= 10 then ids[#ids + 1] = id end end
+    table.sort(ids)
+    local function done(id, ratio)
+      local _, work = M.Do(id)
+      rows[id] = { a = 1, w = work * 60 * ratio, k = 5 }
+      Tm.Done(id)
+      tick(c, 2)
+    end
+    for i = 1, 5 do done(ids[i], 0.2) end
+    assert(Tm.SpeedFactor() == 0.5, "five fast completions: 0.5, " .. tostring(Tm.SpeedFactor()))
+    assert(M.QuestMinutes(127, 0, 1, Tm.SpeedFactor()) < before, "the minutes follow the pace")
+    -- twenty slow ones after them: the last twenty count, up to 2 at most
+    for i = 6, 25 do done(ids[i], 10) end
+    assert(Tm.SpeedFactor() == 2, "slow: 2 at most, " .. tostring(Tm.SpeedFactor()))
+  end }
+
+  for _, case in ipairs(F62CASES) do
+    case[2]()
+    print("xpm: " .. case[1] .. ": ok")
+    collectgarbage("collect")
+  end
+end)()
+
 ----------------------------------------------------------------------------
 -- 5.4.2: memory, and the lag that grew through a session ("QuestBank made me lag towards the end, using 80 MB").
 -- The trails' graph was built again from scratch at each point noted, inside the minimap's update (half a second at

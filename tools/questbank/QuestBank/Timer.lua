@@ -3,7 +3,11 @@
 -- this level, the oldest quest in your log and the hand-in run while one is on. Kept per character in
 -- QuestBankDB.chars[key].timer:
 --   levels[lvl] = { at = time() you reached it, played = seconds logged in at that level }
---   quests[qid] = { a = accepted (time()), d = handed in }    (the newest 300; the oldest handed-in go first)
+--   quests[qid] = { a = accepted (time()), d = handed in,    (the newest 300; the oldest handed-in go first)
+--                   w = seconds of work at its objectives, k = looks it moved in, c = first complete (time()), lv = level then }
+--   The work is measured from Discover.lua's look of the log (Timer.Tick): what the quest minutes estimate (Model.lua,
+--   D.DO) is checked against it for this character's pace (Timer.SpeedFactor), and players' uploads bring it to the
+--   next release's estimates (probe_pull.py's disc.json "dur"). Ids and numbers only
 -- Only reads and its own frame: nothing of the game's is touched. The strip is off until Settings turns it on
 -- (settings.clock.show, or a context profile's clockShow: QB:Opt), and its ticker only runs while it is shown.
 local _, QB = ...
@@ -73,21 +77,93 @@ function Timer.QuestTime(qid)
   return (q.d or clock()) - q.a, q.d ~= nil
 end
 
-local function trim(t)
+-- (keep: the quest just noted, never the one to go)
+local function trim(t, keep)
   local n = 0
   for _ in pairs(t.quests) do n = n + 1 end
   while n > QUESTS do
     local oldest, at
     for id, q in pairs(t.quests) do
       local when = q.d or q.a or 0
-      if q.d and (not at or when < at) then oldest, at = id, when end
+      if q.d and id ~= keep and (not at or when < at) then oldest, at = id, when end
     end
     if not oldest then -- nothing handed in to drop: the oldest accepted goes
-      for id, q in pairs(t.quests) do if not at or (q.a or 0) < at then oldest, at = id, q.a or 0 end end
+      for id, q in pairs(t.quests) do if id ~= keep and (not at or (q.a or 0) < at) then oldest, at = id, q.a or 0 end end
     end
     t.quests[oldest] = nil
     n = n - 1
   end
+end
+
+-- the work at a quest's objectives: each look of the log where objectives moved (Discover.lua) brings the seconds since
+-- the last such look, TICK_MAX at most (a walk, a break or a logout between two counts no more), shared equally among
+-- the quests that moved in it (ids[1..n]): w on each one's row, and 1 to k
+local TICK_MAX = 90
+Timer.TICK_MAX = TICK_MAX
+local lastTick
+function Timer.Tick(ids, n)
+  n = n or #ids
+  if n <= 0 then return end
+  local t = now()
+  local dt = lastTick and math.max(0, math.min(t - lastTick, TICK_MAX)) or 0
+  lastTick = t
+  local share, rows, added = dt / n, db().quests, false
+  for i = 1, n do
+    local id = ids[i]
+    local q = rows[id]
+    if type(q) ~= "table" then q = {}; rows[id] = q; added = id end
+    q.w = (q.w or 0) + share
+    q.k = (q.k or 0) + 1
+  end
+  if added then trim(db(), added) end
+end
+
+-- the first time a quest is complete: when, and at what level (its work is whole: the pace below counts it)
+local paceVer = 0
+function Timer.Done(id)
+  local t = db()
+  local q = t.quests[id]
+  if type(q) == "table" and q.c then return end
+  if type(q) ~= "table" then q = {}; t.quests[id] = q; trim(t, id) end
+  q.c, q.lv = clock(), level()
+  paceVer = paceVer + 1
+end
+
+-- this character's pace: the median of the work measured against the work estimated (D.DO, not an estimate from the
+-- zone) over the last PACE_N quests completed with work measured, from 0.5 to 2; 1 with fewer than PACE_MIN. Worked out
+-- again after a completion, into tables kept for it
+local PACE_N, PACE_MIN = 20, 3
+Timer.PACE_N, Timer.PACE_MIN = PACE_N, PACE_MIN
+local paceAt, paceKey, pace = -1, nil, 1
+local paceRows, paceRatio = {}, {}
+local function byNewest(a, b) return a[1] > b[1] end
+function Timer.SpeedFactor()
+  local key = QB:CharKey()
+  if paceAt == paceVer and paceKey == key then return pace end
+  paceAt, paceKey, pace = paceVer, key, 1
+  local M = QB.Model
+  local n = 0
+  for id, q in pairs(db().quests) do
+    if type(q) == "table" and q.c and q.w and q.w > 0 and M and M.Do then
+      local _, work, est = M.Do(id)
+      if work and work > 0 and not est then
+        n = n + 1
+        local r = paceRows[n]
+        if not r then r = {}; paceRows[n] = r end
+        r[1], r[2] = q.c, (q.w / 60) / work
+      end
+    end
+  end
+  for k = #paceRows, n + 1, -1 do paceRows[k] = nil end
+  if n < PACE_MIN then return pace end
+  table.sort(paceRows, byNewest)
+  local m = math.min(n, PACE_N)
+  for k = 1, m do paceRatio[k] = paceRows[k][2] end
+  for k = #paceRatio, m + 1, -1 do paceRatio[k] = nil end
+  table.sort(paceRatio)
+  local mid = m % 2 == 1 and paceRatio[(m + 1) / 2] or (paceRatio[m / 2] + paceRatio[m / 2 + 1]) / 2
+  pace = math.max(0.5, math.min(2, mid))
+  return pace
 end
 
 -- the XP gained since login, counted on every XP update (a level-up carries the rest of the old bar)
@@ -134,7 +210,7 @@ function Timer.Record(event, a1, a2)
     if type(id) ~= "number" then return end
     local t = db()
     t.quests[id] = { a = clock() }
-    trim(t)
+    trim(t, id)
   elseif event == "QUEST_TURNED_IN" then
     local id = plain(a1)
     if type(id) ~= "number" then return end

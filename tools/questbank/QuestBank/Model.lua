@@ -112,6 +112,89 @@ function M.Frac(level, xp)
 end
 
 ----------------------------------------------------------------------------
+-- quest minutes: what a quest costs in time, for XP a minute (the owner, 2026-10-21: "quests + time walking & time to do
+-- quest comparatively to XP it gives. I would rather go in a zone with 3 quests for 5k each than one with 15 for 15k
+-- total.")
+----------------------------------------------------------------------------
+local HANDIN = 0.5 -- minutes: take it, talk, hand it in
+M.HANDIN = HANDIN
+
+-- a quest's walk (giver, objectives, turn-in) and work (its objectives) in minutes, as gen_data.py estimates them
+-- (D.DO[id] = walk tenths * 4096 + work tenths, negative when the work is its zone's median: est true); nil unknown
+function M.Do(id)
+  local v = QB.Data.DO and QB.Data.DO[id]
+  if not v then return nil end
+  local est = v < 0
+  if est then v = -v end
+  return floor(v / 4096) / 10, (v % 4096) / 10, est
+end
+
+-- a party member holds it or can take it (Sync's members' quests): a group quest is the party's work
+function M.PartyHas(id)
+  local S = QB.Sync
+  if not (S and S.members) then return false end
+  for _, m in pairs(S.members) do if m.quests and m.quests[id] then return true end end
+  return false
+end
+
+-- the minutes a quest takes you: away (the trip to its giver; 0 held), its walk at the mount factor mf, its work at your
+-- pace kf (Timer.SpeedFactor: 1 until measured), a group quest's three times over alone (party: a member holds it),
+-- left (the share of its work still to do, 1 by default), and half a minute to take it and hand it in. A quest D.DO does
+-- not list counts as the median quest, an estimate. Returns the minutes, est (the work is an estimate), the walk and the
+-- work as counted. The part past the trip is kept per quest in one table until the data, the mount or the pace changes
+-- (QB.changed, mf, kf): numbers only
+local own, ownEst, ownWalk, ownWork = {}, {}, {}, {}
+local ownChanged, ownMf, ownKf
+function M.QuestMinutes(id, away, mf, kf, party, left)
+  mf, kf, left = mf or 1, kf or 1, left or 1
+  if ownChanged ~= QB.changed or ownMf ~= mf or ownKf ~= kf then
+    for k in pairs(own) do own[k] = nil end
+    ownChanged, ownMf, ownKf = QB.changed, mf, kf
+  end
+  local plain = not party and left == 1
+  if plain and own[id] then return (away or 0) + own[id], ownEst[id], ownWalk[id], ownWork[id] end
+  local walk, work, est = M.Do(id)
+  if not walk then walk, work, est = 3, 5, true end
+  local r = QB.Data.Q[id]
+  local f = r and r[10] or 0
+  walk = walk * mf
+  work = work * kf * left
+  if floor(f / 2) % 2 == 1 and f % 2 == 0 and not party then work = work * 3 end -- (a dungeon's run is a party's already)
+  local t = walk + work + HANDIN
+  if plain then own[id], ownEst[id], ownWalk[id], ownWork[id] = t, est, walk, work end
+  return (away or 0) + t, est, walk, work
+end
+
+-- "12 min", and "est. 12 min" for a quest whose work is its zone's median
+function M.MinutesText(t, est)
+  local m = math.max(1, floor((t or 0) + 0.5))
+  return (est and "est. " or "") .. m .. " min"
+end
+
+-- the floor a quest's XP a minute must reach: 60 XP a minute at level 20's scale, or six tenths of what this session has
+-- measured (Timer.XPPerHour), whichever is more
+function M.Floor(level)
+  local f = 60 * QB.Scale(level)
+  local rate = QB.Timer and QB.Timer.XPPerHour and QB.Timer.XPPerHour()
+  if rate and rate > 0 then f = math.max(f, 0.6 * rate / 60) end
+  return f
+end
+
+-- a stop's gain in words, for its tooltip: "level 21.4 to 21.6"; under a tenth of a level, its XP and the share of a
+-- level ("+340 XP, 1% of a level": "level 21.4 to 21.4" said nothing)
+function M.Gain(leg)
+  local xp = 0
+  for _, row in ipairs(leg.rows or {}) do xp = xp + (row.xp or 0) end
+  local a, b = leg.arrive or 0, leg.leave or 0
+  if b - a >= 0.1 then return string.format("level %.1f to %.1f", a, b) end
+  if xp <= 0 then return "no XP yet" end
+  local T = QB.Data.TO_NEXT
+  local need = T[floor(a)] or T[#T]
+  local pct = floor(xp / need * 100 + 0.5)
+  return "+" .. QB.Comma(xp) .. " XP, " .. (pct < 1 and "under 1%" or (pct .. "%")) .. " of a level"
+end
+
+----------------------------------------------------------------------------
 -- travel
 ----------------------------------------------------------------------------
 local B64

@@ -405,7 +405,9 @@ function Disc.Settle() settleUntil = math.max(settleUntil, now() + SETTLE) end
 -- a quest accepted (again, perhaps, after it was abandoned between two looks): what it has now isn't from here
 function Disc.Accepted(id) born[id] = now() end
 
--- look at the log: an objective that has more than last time (or is finished now) was ticked where you stand
+-- look at the log: an objective that has more than last time (or is finished now) was ticked where you stand; the
+-- quests that moved in this look share its time (Timer.Tick: ticked[1..nTicked], one list kept for it)
+local ticked = {}
 local function look()
   if not forever() then return end
   local L = C_QuestLog
@@ -415,6 +417,7 @@ local function look()
   local t = now()
   local settled = t >= settleUntil and seen ~= nil
   local fresh, since, here = {}, {}, nil
+  local nTicked = 0
   for li = 1, n do
     local okI, info = pcall(L.GetInfo, li)
     local id = okI and type(info) == "table" and not secret(info) and plainNum(info.questID) or nil
@@ -424,13 +427,16 @@ local function look()
         local cur, was = {}, seen and seen[id]
         since[id] = (was and born[id]) or t
         local old = settled and t - since[id] >= FRESH
+        local moved, whole, wasWhole = false, #objs > 0, was ~= nil
         for i, o in ipairs(objs) do
           if type(o) == "table" and not secret(o) then
             -- finished: true or false, or nil when the client hides it (unknown is not "not finished")
             local have, done = plainNum(o.numFulfilled), QB.Plain(o.finished)
             if type(done) ~= "boolean" then done = nil end
             cur[i] = { have, done }
+            if done ~= true then whole = false end
             local before = was and was[i]
+            if not (before and before[2] == true) then wasWhole = false end
             if old and before and ((have and before[1] and have > before[1]) or (done == true and before[2] == false)) then
               local kind = QB.Plain(o.type)
               kind = type(kind) == "string" and kind ~= "" and kind or nil
@@ -444,15 +450,24 @@ local function look()
                   end
                 end
                 if here then Disc.NoteSpot(id, i, kind, here[1], here[2], here[3]) end
+                -- (and the work it took, Timer.lua: not what came from the bank, the mail or a trade)
+                if not moved and not elsewhere() then
+                  moved = true
+                  nTicked = nTicked + 1
+                  ticked[nTicked] = id
+                end
               end
             end
           end
         end
+        -- complete since the last look, where its progress was seen made: the work is whole (Timer.lua)
+        if whole and old and was and not wasWhole and QB.Timer and QB.Timer.Done then QB.Timer.Done(id) end
         fresh[id] = cur
       end
     end
   end
   seen, born = fresh, since
+  if nTicked > 0 and QB.Timer and QB.Timer.Tick then QB.Timer.Tick(ticked, nTicked) end
 end
 Disc.Look = look
 
