@@ -776,7 +776,9 @@ function R:Finish(rep, shown)
   save(nil)
   self:Counting(false)
   if rep then
-    -- (a policy in doubt: no award is eligible, so this client's own report waits until it settles)
+    -- (a policy in doubt: no award is eligible, so this client's own report waits until it settles. A scribe's 2A
+    -- carries no member count: the header's is this client's own build's)
+    if shown and shown ~= rep then shown.n = rep.n end
     R.Keep(shown or rep)
     bump(rep)
     self:Show(shown or rep)
@@ -1053,7 +1055,7 @@ function R:HeardReport(body)
   run.got2A = true
   local shown = { id = run.id, kind = run.kind, inst = run.inst, map = run.map, place = placeOf(run), start = run.start,
     dur = unb36(kv.d or "") or el(run), bosses = unb36(kv.b or "") or run.nb, known = unb36(kv.n or "") or run.nb, wipes = unb36(kv.w or "") or run.wipes,
-    deaths = unb36(kv.x or "") or 0, cards = list, mentions = mentions, gone = {}, n = #list, members = {}, at = now(), from = "scribe" }
+    deaths = unb36(kv.x or "") or 0, cards = list, mentions = mentions, gone = {}, n = 0, members = {}, at = now(), from = "scribe" }
   for sfx in (kv.g or ""):gmatch("%w+") do if run.members[sfx] then shown.gone[#shown.gone + 1] = sfx end end
   local me = mySfx()
   local function keep(sfx) local m = run.members[sfx]; if m then shown.members[sfx] = { n = m.n, c = m.c, r = m.r, s = m.s, g = m.g } end end

@@ -11898,6 +11898,8 @@ do local function runsStage()
       for _, x in ipairs(rep.cards) do assert(not seen[x[1]]); seen[x[1]] = true end
       for _, x in ipairs(rep.mentions) do assert(not seen[x[1]], "no member twice"); seen[x[1]] = true end
       assert(lastReport(cs[5]) and cardsOf(lastReport(cs[5])) == cardsOf(rep) and #lastReport(cs[5]).mentions == #rep.mentions, "the raid sees the scribe's")
+      -- (the 2A carries no member count: the header's "members" is the client's own count, never its cards')
+      assert(rep.n >= 30 and lastReport(cs[5]).n == rep.n, "the raid's members on the header, not its cards: " .. rep.n .. " / " .. lastReport(cs[5]).n)
       said[#said + 1] = string.format("a raid of 40: five cards and %d mentions, no member twice, three messages at most at the end, a late member answered %d time%s", #rep.mentions, answers, answers == 1 and "" or "s")
     end)
   end
