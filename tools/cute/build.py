@@ -39,7 +39,7 @@ QUEST_TOC = os.path.join(QUEST, "Cute_Quest.toc")
 # QuestBank's engine, as Cute_Quest carries it: every file QuestBank.toc may list. UI.lua (the window) is never copied;
 # a file not here stops the build until it has been checked in Cute's harness
 ENGINE_KNOWN = {
-    "Data.lua", "Core.lua", "Lists.lua", "Discover.lua", "Survey.lua", "Game.lua", "Loot.lua", "Observe.lua", "Timer.lua",
+    "Data.lua", "Core.lua", "Lists.lua", "Discover.lua", "Survey.lua", "Game.lua", "Loot.lua", "Finds.lua", "Observe.lua", "Timer.lua",
     "Link.lua", "MinimapTiles.lua", "MinimapView.lua", "MinimapRoute.lua", "Minimap.lua", "DungeonMap.lua", "Glow.lua",
     "Walk.lua", "Camp.lua", "Model.lua", "Legacy.lua", "Travel.lua", "Pins.lua", "QuestMap.lua", "Pins.xml", "Arrow.lua",
     "Target.lua", "Sync.lua", "Auto.lua", "Guide.lua", "MapPage.lua", "Gear.lua", "StepFrame.lua", "Tips.lua",

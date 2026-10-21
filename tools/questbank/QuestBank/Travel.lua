@@ -23,7 +23,8 @@
 --     (the mean of the last few), n = rides, at = time() } }: each boat or zeppelin leg ridden to its far end, or off it
 --     through a loading screen. The graph takes the measured time from then on, and a landing more than LAND_YD from
 --     the seed's end in that end's place (the Southshore ferry: the client's track turns at Menethil Harbor; the owner
---     says it goes to Darkshore)
+--     says it goes to Darkshore). at is in minutes (6.2: the file is uploaded, and a time to the second never is). The
+--     same table keeps the crossings no D.LINK row knows under "x:" keys (Finds.lua)
 -- Only reads: QuestBank never takes a flight or uses the hearthstone for you.
 local _, QB = ...
 if QB.dormant then return end
@@ -178,7 +179,8 @@ local function rideKey(li, from)
   return l[2] .. ":" .. tostring(a[7]) .. ">" .. tostring(b[7])
 end
 TV.RideKey = rideKey
--- the table, kept to the keys of today's D.LINK (a ride of a link the data no longer has goes)
+-- the table, kept to the keys of today's D.LINK (a ride of a link the data no longer has goes) and the crossings no
+-- D.LINK row knows, "x:" keys (Finds.lua: a portal, the way to Zephras Isle), which are Finds.lua's to keep
 local ridesPruned = false
 local function rides()
   local db = QuestBankDB
@@ -190,7 +192,7 @@ local function rides()
     ridesPruned = true
     local ok = {}
     for li in ipairs(D.LINK) do ok[rideKey(li, 1)], ok[rideKey(li, 2)] = true, true end
-    for k in pairs(r) do if not ok[k] then r[k] = nil end end
+    for k in pairs(r) do if not ok[k] and not (type(k) == "string" and k:sub(1, 2) == "x:") then r[k] = nil end end
   end
   return r
 end
@@ -685,6 +687,8 @@ local function landed(w, secs)
   else
     flown[w.key] = { n = 1, secs = floor(secs + 0.5) }
   end
+  -- (and every character's, name-free, for foreverrank.com: disc.flown, Finds.lua)
+  if QB.Finds and QB.Finds.Flown then QB.Try("flown", QB.Finds.Flown, w.key, secs) end
   TV.flownLast = { key = w.key, secs = secs, model = w.model }
   TV.Refly()
 end
@@ -1317,7 +1321,7 @@ function TV.NoteRide(leg, me, secs)
   e.n = e.n + 1
   e.b = { leg.start.c, floor(leg.start.wx + 0.5), floor(leg.start.wy + 0.5) }
   e.l = { me.c, floor(me.wx + 0.5), floor(me.wy + 0.5) }
-  e.at = type(time) == "function" and time() or nil
+  e.at = type(time) == "function" and floor(time() / 60) or nil -- (in minutes: the saved file is uploaded, never a second)
   for k in pairs(graphs) do graphs[k] = nil end
   TV.ver = TV.ver + 1
 end

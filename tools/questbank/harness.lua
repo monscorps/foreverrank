@@ -18898,6 +18898,497 @@ end)()
   end
 end)()
 
+-- [stage: finds] that stage's tests go right below this line
+----------------------------------------------------------------------------
+-- 6.2: finds (docs/superpowers/specs/2026-10-21-cute-windows-design.md, 11.1-11.3). Objects by place (a chest looted
+-- outdoors, an object opened with a key, a book read), rares by their plates, crossings no D.LINK row knows, Travel's
+-- flights as disc.flown, the file's token; all under the loot notes' box, never while the game holds addons back, never
+-- with a hidden GUID, never a name or a text; and the uploader's data file into D.FIND. Each case is in FINDCASES, an
+-- Elwynn character of its own
+----------------------------------------------------------------------------
+;(function()
+  local FINDCASES = {}
+  local OBJ = "GameObject-0-4455-0-12-%d-0000A1B2C3"
+  local CRE = "Creature-0-4455-0-12-%d-0000A1B2C3"
+  -- a character standing at c.mp (map fractions) on c.o.map, c.o.world in world yards; c.klass[id] = { class,
+  -- subclass } for GetItemInfoInstant (none: the client has no row), c.names[id] its name, c.inInst inside an
+  -- instance, c.plates[unit] = { cls, guid, level }, c.text = { title, body, creator } the text open, c.restricted the
+  -- restriction type IsAddOnRestrictionActive says is on
+  local function char(name, o)
+    o = o or {}
+    local c = newClient({ name = name, level = 20, cap = 60, faction = "Alliance", className = "Mage", class = "MAGE", classID = 8,
+      race = "Human", log = {}, done = {}, world = o.world or { 0, -9450, 60 }, map = o.map or 1429, bagSlots = o.bags or {},
+      bind = "Goldshire", xp = 0 })
+    if o.saved then c.env.QuestBankDB = o.saved end
+    if o.finds then c.env.QuestBank_Finds = o.finds end
+    local env = c.env
+    c.mp = { 0.5, 0.5 }
+    env.C_Map.GetPlayerMapPosition = function()
+      if c.noPos or not c.mp then return nil end
+      return { x = c.mp[1], y = c.mp[2], GetXY = function(self) return self.x, self.y end }
+    end
+    env.C_Item.GetItemInfoInstant = function(id) local k = (c.klass or {})[id]; if not k then return nil end return id, "", "", "", 0, k[1], k[2] end
+    env.C_Item.GetItemNameByID = function(id) return (c.names or {})[id] end
+    env.IsInInstance = function() return c.inInst or false, c.inInst and "party" or "none" end
+    env.UnitClassification = function(unit) local p = (c.plates or {})[unit]; return p and p.cls or "normal" end
+    local guid, level = env.UnitGUID, env.UnitLevel
+    env.UnitGUID = function(unit) local p = (c.plates or {})[unit]; if p then return p.guid end return guid(unit) end
+    env.UnitLevel = function(unit) local p = (c.plates or {})[unit]; if p then return p.level end return level(unit) end
+    env.ItemTextGetItem = function() return c.text and c.text.title end
+    env.ItemTextGetText = function() return c.text and c.text.body end
+    env.ItemTextGetCreator = function() return c.text and c.text.creator end
+    env.C_RestrictedActions = { IsAddOnRestrictionActive = function(t) return c.restricted == t end }
+    login(c)
+    return c
+  end
+  local function ev(c, event, ...) local f = c.QB.Finds.frame; f.__scripts.OnEvent(f, event, ...) end
+  local function finds(c) return c.env.QuestBankDB.disc.find or {} end
+  -- every string in a table, deep: what a saved file would carry
+  local function strings(t, out, seen)
+    out, seen = out or {}, seen or {}
+    if seen[t] then return out end
+    seen[t] = true
+    for k, v in pairs(t) do
+      for _, x in ipairs({ k, v }) do
+        if type(x) == "string" then out[#out + 1] = x elseif type(x) == "table" then strings(x, out, seen) end
+      end
+    end
+    return out
+  end
+  local function carries(t, s)
+    for _, x in ipairs(strings(t)) do if x:find(s, 1, true) then return true end end
+    return false
+  end
+
+  FINDCASES[#FINDCASES + 1] = { "a chest looted outdoors keeps its spot and its items' kinds; creatures, lockboxes, fishing and dungeons add nothing", function()
+    local c = char("Chesty")
+    local DB = c.env.QuestBankDB
+    assert(c.QB.Finds.On() and c.QB.Finds.frame.__scripts.OnEvent, "the Forever client with the box ticked: the finds are on")
+    c.klass = { [2589] = { 7, 5 }, [118] = { 0, 1 }, [858] = { 0, 1 } }
+    c.mp = { 0.4123, 0.6544 }
+    c.loot = { { id = 2589, src = { { OBJ:format(2843), 1 } } }, { id = 118, src = { { OBJ:format(2843), 1 } } },
+               { id = 858, src = { { CRE:format(197), 1 } } } }
+    ev(c, "LOOT_OPENED", false, false)
+    local r = finds(c).o2843
+    assert(r and r.n == 1 and #r.p == 1 and r.p[1][1] == 1429 and r.p[1][2] == 412 and r.p[1][3] == 654 and r.p[1][4] == 1,
+      "the chest's spot, in thousandths of the map: " .. tostring(r and r.p and r.p[1] and table.concat(r.p[1], ",")))
+    assert(r.h["7.5"] == 1 and r.h["0.1"] == 1 and countOf(r.h) == 2 and r.v == 70170, "its items' class.subclass, once a window; the build")
+    assert(finds(c).c197 == nil, "a creature's loot is Loot.lua's, by map, never by spot")
+    -- again, a few yards on: the same point, moved to the mean; looted twice
+    c.mp = { 0.4180, 0.6500 }
+    ev(c, "LOOT_OPENED", false, false)
+    assert(#r.p == 1 and r.p[1][4] == 2 and r.p[1][2] == 415 and r.p[1][3] == 652 and r.n == 2 and r.h["7.5"] == 2, "merged within 15 thousandths")
+    -- a lockbox opened from the bags, fishing, a chest inside a dungeon, no position: nothing more
+    ev(c, "LOOT_OPENED", false, true)
+    c.fishing = true; ev(c, "LOOT_OPENED", false, false); c.fishing = false
+    c.inInst = true; ev(c, "LOOT_OPENED", false, false); c.inInst = false
+    c.noPos = true; ev(c, "LOOT_OPENED", false, false); c.noPos = false
+    assert(r.n == 2 and #r.p == 1, "an item, fishing, a dungeon or no position: nothing noted")
+    assert(DB.diag.finds.lo == 2, "diag: two loot windows with an object outdoors")
+    -- four points a map at most: past that the least seen goes, and a new one is left out while every kept one was seen twice
+    for i = 1, 4 do c.mp = { 0.1 * i, 0.1 }; ev(c, "LOOT_OPENED", false, false) end
+    assert(#r.p == 4, "four points on the map: " .. #r.p)
+    for i = 2, 4 do c.mp = { 0.1 * i, 0.1 }; ev(c, "LOOT_OPENED", false, false) end
+    c.mp = { 0.9, 0.9 }; ev(c, "LOOT_OPENED", false, false)
+    local xs = {}
+    for _, p in ipairs(r.p) do xs[#xs + 1] = p[2] end
+    table.sort(xs)
+    assert(#r.p == 4 and table.concat(xs, ",") == "200,300,400,415", "every kept point seen twice: the new one left out: " .. table.concat(xs, ","))
+    c.o.map, c.mp = 1436, { 0.5, 0.5 }
+    ev(c, "LOOT_OPENED", false, false)
+    assert(#r.p == 5, "another map keeps its own four")
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "an object opened keeps the key-class items in your bags; by the Interact key or the next object looted", function()
+    local c = char("Keyhold", { bags = { { 216523, 1 }, { 282406, 1 }, { 2589, 4 } } })
+    local F, D = c.QB.Finds, c.QB.Data
+    c.klass = { [216523] = { 13, 0 }, [2589] = { 7, 5 } }
+    local keep = D.OPEN
+    D.OPEN = { [3365] = true }
+    assert(table.concat(F.KeyCandidates(), ",") == "216523,282406", "a key, and an item the client has no row for: " .. table.concat(F.KeyCandidates(), ","))
+    c.soft = { name = "Rusted Cage", guid = OBJ:format(424080) }
+    c.mp = { 0.61, 0.22 }
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-1", 3365)
+    local r = finds(c).o424080
+    assert(r and table.concat(r.k, ",") == "216523,282406" and r.p[1][2] == 610 and r.p[1][3] == 220, "the cage, its key candidates, its spot")
+    -- no Interact key: the next object looted within ten seconds is the one opened; past that, no object is
+    c.soft = nil
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-2", 3365)
+    c.clock = c.clock + 3
+    c.loot = { { id = 2589, src = { { OBJ:format(500100), 1 } } } }
+    ev(c, "LOOT_OPENED", false, false)
+    assert(finds(c).o500100 and table.concat(finds(c).o500100.k, ",") == "216523,282406", "the chest opened, by its loot window")
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-3", 3365)
+    c.clock = c.clock + 11
+    c.loot = { { id = 2589, src = { { OBJ:format(500200), 1 } } } }
+    ev(c, "LOOT_OPENED", false, false)
+    assert(finds(c).o500200 and finds(c).o500200.k == nil, "eleven seconds on: looted, not opened")
+    -- another spell, or the same with no key in the bags: no key noted
+    c.soft = { guid = OBJ:format(500300) }
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-4", 133)
+    assert(finds(c).o500300 == nil, "a Fireball opens nothing")
+    c.o.bagSlots = { { 2589, 4 } }
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-5", 3365)
+    assert(finds(c).o500300 == nil, "no key in the bags: nothing to note")
+    D.OPEN = keep
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "a book read keeps the object, the spot and the title, never the text; an item read, a letter, the mailbox", function()
+    local c = char("Reader", { bags = { { 281347, 1 } } })
+    local DB = c.env.QuestBankDB
+    c.names = { [281347] = "Torn Page" }
+    c.text = { title = "Archmage Theocritus' Research Journal", body = "SECRET-PAGE-TEXT, the whole of it" }
+    c.soft = { guid = OBJ:format(410001) }
+    c.mp = { 0.654, 0.701 }
+    ev(c, "ITEM_TEXT_BEGIN")
+    local r = finds(c).o410001
+    assert(r and r.b == "Archmage Theocritus' Research Journal" and r.p[1][2] == 654 and r.p[1][3] == 701, "the book, its title and spot")
+    assert(not carries(DB, "SECRET-PAGE-TEXT"), "never the text")
+    -- an item in the bags of that name: an item read, no place; the object the Interact key points at gets nothing
+    c.text = { title = "Torn Page", body = "SECRET-PAGE-TEXT" }
+    c.soft = { guid = OBJ:format(410002) }
+    ev(c, "ITEM_TEXT_BEGIN")
+    assert(finds(c).i281347 and finds(c).i281347.b == "Torn Page" and finds(c).i281347.p == nil and finds(c).o410002 == nil, "the page read from the bags")
+    -- a letter someone wrote (its writer named), or anything read at the mailbox: nothing
+    c.text = { title = "Hi Helga", body = "SECRET-PAGE-TEXT", creator = "Brann" }
+    ev(c, "ITEM_TEXT_BEGIN")
+    c.text = { title = "From the mailbox" }
+    c.env.MailFrame = c.env.CreateFrame("Frame", "MailFrame", c.env.UIParent)
+    ev(c, "ITEM_TEXT_BEGIN")
+    c.env.MailFrame:Hide()
+    assert(finds(c).o410002 == nil and not carries(DB.disc, "Helga") and not carries(DB.disc, "Brann") and not carries(DB.disc, "mailbox"),
+      "a letter and the mailbox: nothing")
+    assert(DB.diag.finds.bw == 2 and DB.diag.finds.bo == 1 and DB.diag.finds.bi == 1, "diag: a letter and the mailbox left alone")
+    -- a title is one line of at most 60 bytes, with no escape code, cut on a whole character
+    c.text = { title = "|cffff0000Red|r\n" .. string.rep("long ", 20) .. "\195\166" }
+    c.soft = { guid = OBJ:format(410003) }
+    ev(c, "ITEM_TEXT_BEGIN")
+    local t = finds(c).o410003.b
+    assert(#t <= 60 and not t:find("[|%c]") and t:find("^cffff0000Red") , "cleaned: " .. t)
+    assert(c.QB.Finds.CleanTitle(string.rep("a", 59) .. "\195\166") == string.rep("a", 59), "never half a character")
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "a rare's plate keeps one point per cell, its level; a normal or hidden plate nothing", function()
+    local c = char("Spotter")
+    c.plates = { nameplate3 = { cls = "rareelite", guid = CRE:format(6582), level = 35 }, nameplate4 = { cls = "normal", guid = CRE:format(197), level = 5 },
+                 nameplate5 = { cls = "rare", guid = SECRET.str(), level = 40 } }
+    c.mp = { 0.300, 0.300 }
+    for _ = 1, 3 do ev(c, "NAME_PLATE_UNIT_ADDED", "nameplate3") end
+    local r = finds(c).c6582
+    assert(r and r.n == 1 and #r.p == 1 and r.p[1][4] == 1 and r.r == 35, "one note a cell, however often its plate shows")
+    c.mp = { 0.304, 0.302 }
+    ev(c, "NAME_PLATE_UNIT_ADDED", "nameplate3")
+    assert(r.n == 1, "the same cell")
+    c.mp = { 0.350, 0.300 }
+    ev(c, "NAME_PLATE_UNIT_ADDED", "nameplate3")
+    assert(r.n == 2 and #r.p == 2, "another cell: another point")
+    ev(c, "NAME_PLATE_UNIT_ADDED", "nameplate4")
+    ev(c, "NAME_PLATE_UNIT_ADDED", "nameplate5")
+    assert(finds(c).c197 == nil and countOf(finds(c)) == 1, "a normal plate and a hidden GUID: nothing")
+  end }
+
+  -- the crossings: a look a second, the clock moved by hand
+  local function look(c, sec) c.clock = c.clock + (sec or 1); c.QB.Finds.Look() end
+  local function at(c, map, mx, my, w) c.o.map, c.mp, c.o.world = map, { mx, my }, w end
+  local function stand(c, n) for _ = 1, n do look(c) end end
+  -- a new scene: the last look forgotten (the test moves the character as no game would)
+  local function fresh(c) local x = c.QB.Finds.cross; x.last, x.anchor, x.still = nil, nil, nil end
+  local function xkeys(c)
+    local out = {}
+    for k in pairs(c.env.QuestBankDB.disc.rides or {}) do if k:sub(1, 2) == "x:" then out[#out + 1] = k end end
+    table.sort(out)
+    return out
+  end
+
+  FINDCASES[#FINDCASES + 1] = { "a portal lands in disc.rides under an x: key; a flight, a hearth, a death, a summons and an instance door do not", function()
+    local c = char("Walker")
+    local DB = c.env.QuestBankDB
+    -- at the portal (stood there 12 s), three steps on, through: Elwynn to Teldrassil
+    fresh(c); at(c, 1429, 0.300, 0.400, { 0, -9000, 100 })
+    stand(c, 12)
+    for i = 1, 3 do at(c, 1429, 0.300 + i * 0.001, 0.400, { 0, -9000 + i * 6, 100 }); look(c) end
+    at(c, 1438, 0.555, 0.888, { 1, 9000, 900 })
+    look(c, 5)
+    local k = xkeys(c)
+    assert(#k == 1 and k[1] == "x:1429:300,400>1438:555,888", "the crossing's key: " .. table.concat(k, " "))
+    local e = DB.disc.rides[k[1]]
+    assert(e.n == 1 and e.t == 8 and e.b[1] == 0 and e.b[2] == -9000 and e.l[1] == 1 and e.l[2] == 9000 and type(e.at) == "number" and e.at < 1e9,
+      "from the stand, seconds since leaving it, the ends in world yards, when in minutes: " .. tostring(e.t))
+    -- again, a step to the side at each end: the same crossing, ridden twice
+    fresh(c); at(c, 1429, 0.305, 0.396, { 0, -9002, 102 }); stand(c, 11)
+    at(c, 1438, 0.560, 0.880, { 1, 9004, 904 }); look(c, 2)
+    assert(#xkeys(c) == 1 and DB.disc.rides[k[1]].n == 2 and DB.disc.rides[k[1]].t == 5, "merged: " .. table.concat(xkeys(c), " "))
+    -- a flight
+    fresh(c); at(c, 1429, 0.5, 0.5, { 0, -9100, 300 }); stand(c, 12)
+    c.taxi = true; look(c); at(c, 1438, 0.2, 0.2, { 1, 8000, 500 }); look(c, 30); c.taxi = false; look(c)
+    -- a hearth
+    fresh(c); at(c, 1429, 0.5, 0.5, { 0, -9100, 300 }); stand(c, 12)
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-9", 8690)
+    at(c, 1453, 0.6, 0.6, { 0, -8800, 600 }); look(c, 3)
+    -- a death: released, then alive at the graveyard far off
+    fresh(c); at(c, 1429, 0.5, 0.5, { 0, -9100, 300 }); stand(c, 12)
+    c.ghost = true; look(c); at(c, 1436, 0.4, 0.4, { 0, -10500, 1000 }); look(c, 20); c.ghost = false; look(c)
+    -- a summons offered, then a jump
+    fresh(c); at(c, 1429, 0.5, 0.5, { 0, -9100, 300 }); stand(c, 12)
+    ev(c, "CONFIRM_SUMMON")
+    at(c, 1440, 0.5, 0.5, { 1, 2000, 3000 }); look(c, 30)
+    -- an instance's door (two minutes on: the summons is no longer the reason)
+    c.clock = c.clock + 150
+    fresh(c); at(c, 1429, 0.5, 0.5, { 0, -9100, 300 }); stand(c, 12)
+    c.inInst = true; at(c, 1429, 0.1, 0.1, { 36, 0, 0 }); look(c, 4); look(c); c.inInst = false
+    at(c, 1429, 0.5, 0.5, { 0, -9100, 300 }); look(c, 4)
+    -- a boat leg D.LINK knows: Travel's to learn under its own key
+    local l = c.QB.Data.LINK[1]
+    fresh(c); at(c, l[4][4], l[4][5] / 100, l[4][6] / 100, { l[4][1], l[4][2] + 20, l[4][3] }); stand(c, 12)
+    at(c, l[5][4], l[5][5] / 100, l[5][6] / 100, { l[5][1], l[5][2], l[5][3] + 40 }); look(c, 6)
+    assert(#xkeys(c) == 1, "a flight, a hearth, a death, a summons, a door, a boat leg: no crossing: " .. table.concat(xkeys(c), " "))
+    assert(DB.diag.finds.xt == 2 and DB.diag.finds.xl == 1 and DB.diag.finds.xk == 2, "diag: two teleports, a boat leg, two crossings")
+    -- a walk is no jump
+    fresh(c); at(c, 1429, 0.5, 0.5, { 0, -9100, 300 }); look(c); at(c, 1429, 0.51, 0.5, { 0, -9100, 340 }); look(c)
+    assert(#xkeys(c) == 1, "forty yards in a second: a walk")
+    -- with no stand before it (a walk-in portal), the last place before the jump
+    fresh(c); at(c, 1429, 0.700, 0.700, { 0, -9500, 900 }); look(c)
+    at(c, 1429, 0.701, 0.700, { 0, -9500, 906 }); look(c)
+    at(c, 2521, 0.400, 0.500, { 2991, 3000, 1500 }); look(c, 3)
+    assert(table.concat(xkeys(c), " "):find("x:1429:701,700>2521:400,500", 1, true), "the walk-in portal: " .. table.concat(xkeys(c), " "))
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "Travel keeps the x: crossings when it prunes disc.rides to D.LINK's legs; a boat leg's time in minutes", function()
+    local saved = { disc = { v = 1, q = {}, npc = {}, offer = {}, chain = {}, item = {},
+      rides = { ["x:1429:300,400>1438:555,888"] = { n = 1, t = 8, b = { 0, -9000, 100 }, l = { 1, 9000, 900 }, at = 29000000 },
+                ["b:Gone>Away"] = { n = 1, t = 60 } } } }
+    local c = char("Pruner", { saved = saved })
+    c.QB.Travel.RideLearned(1, 1)
+    local r = c.env.QuestBankDB.disc.rides
+    assert(r["x:1429:300,400>1438:555,888"] and r["b:Gone>Away"] == nil, "a crossing stays, a leg D.LINK no longer has goes")
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "nothing noted while the game holds addons back, or with a hidden GUID", function()
+    local c = char("Held", { bags = { { 216523, 1 } } })
+    local F, D = c.QB.Finds, c.QB.Data
+    c.klass = { [216523] = { 13, 0 } }
+    local keep = D.OPEN
+    D.OPEN = { [3365] = true }
+    c.plates = { nameplate1 = { cls = "rare", guid = CRE:format(6583), level = 30 } }
+    c.text = { title = "A Held Book" }
+    c.soft = { guid = OBJ:format(420001) }
+    c.loot = { { id = 2589, src = { { OBJ:format(420002), 1 } } } }
+    local function all()
+      ev(c, "LOOT_OPENED", false, false)
+      ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-1", 3365)
+      ev(c, "ITEM_TEXT_BEGIN")
+      ev(c, "NAME_PLATE_UNIT_ADDED", "nameplate1")
+    end
+    -- the event (a fight starting: Combat, Activating), then over (Inactive)
+    ev(c, "ADDON_RESTRICTION_STATE_CHANGED", 0, 1)
+    all()
+    assert(countOf(finds(c)) == 0, "a restriction on: nothing noted")
+    ev(c, "ADDON_RESTRICTION_STATE_CHANGED", 0, 0)
+    -- the game's own answer, without the event
+    c.restricted = 1
+    all()
+    assert(countOf(finds(c)) == 0, "IsAddOnRestrictionActive(Encounter): nothing noted")
+    c.restricted = nil
+    -- hidden GUIDs
+    c.loot = { { id = 2589, src = { { SECRET.str(), 1 } } } }
+    c.soft = { guid = SECRET.str() }
+    c.plates.nameplate1.guid = SECRET.str()
+    all()
+    assert(countOf(finds(c)) == 0, "a hidden GUID: nothing noted")
+    c.loot = { { id = 2589, src = { { OBJ:format(420002), 1 } } } }
+    c.soft = { guid = OBJ:format(420001) }
+    c.plates.nameplate1.guid = CRE:format(6583)
+    all()
+    assert(finds(c).o420002 and finds(c).o420001 and finds(c).o420001.b == "A Held Book" and finds(c).c6583, "the restriction over: noted again")
+    assert(F.Held() == false)
+    D.OPEN = keep
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "the caps: 400 objects, 200 rares, 100 crossings, the oldest out", function()
+    local c = char("Hoarder")
+    local F = c.QB.Finds
+    local DB = c.env.QuestBankDB
+    for i = 1, 401 do F.Record("o" .. (100000 + i)) end
+    F.Record("i281347")
+    for i = 1, 201 do F.Record("c" .. (200000 + i)) end
+    local no, nr = F.Count()
+    assert(no == 400 and nr == 200, "objects and items read together, rares apart: " .. no .. ", " .. nr)
+    assert(finds(c).o100001 == nil and finds(c).o100002 == nil and finds(c).o100003 and finds(c).i281347 and finds(c).c200001 == nil and finds(c).c200201,
+      "the ones touched longest ago went")
+    local rides = DB.disc.rides or {}
+    DB.disc.rides = rides
+    -- (a grid 40 thousandths apart: no two merge)
+    local function ends(i) return { m = 1429, x = (i % 20) * 40 + 20, y = math.floor(i / 20) * 40 + 20, c = 0, wx = i, wy = 0 },
+                                   { m = 1438, x = 500, y = (i % 20) * 40 + 20, c = 1, wx = i, wy = 0 } end
+    rides["b:Menethil Harbor>Theramore"] = { n = 1, t = 300, at = 0 }
+    local first
+    for i = 1, 101 do
+      local a, b = ends(i)
+      local k = F.NoteCrossing(a, b, 10)
+      first = first or k
+      if i < 101 then rides[k].at = i end
+    end
+    local _, _, nx = F.Count()
+    assert(nx == 100 and rides[first] == nil and rides["b:Menethil Harbor>Theramore"], "100 crossings, the oldest out, a boat leg never counted")
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "Travel's measured flight joins disc.flown, name-free, with Frequent Flier's rank", function()
+    local c = char("Flier")
+    local TV, F, DB = c.QB.Travel, c.QB.Finds, c.env.QuestBankDB
+    TV.WatchFlight(1, 2, "12>34", 2)
+    c.taxi = true
+    tick(c, 2)
+    tick(c, 118)
+    c.taxi = false
+    tick(c, 2)
+    local e = DB.disc.flown and DB.disc.flown["12>34"]
+    assert(e and e.n == 1 and e.secs >= 117 and e.secs <= 121 and e.ff == 0, "the flight, in disc.flown: " .. tostring(e and e.secs))
+    local L = c.QB.Legacy
+    local rank = L.Rank
+    L.Rank = function(node) return node == L.NODE.FLIER and 1 or 0 end
+    F.Flown("12>34", 100)
+    assert(DB.disc.flown["12>34"].n == 1 and DB.disc.flown["12>34"].secs == 100 and DB.disc.flown["12>34"].ff == 1, "a new rank starts over")
+    F.Flown("12>34", 110)
+    assert(DB.disc.flown["12>34"].n == 2 and DB.disc.flown["12>34"].secs == 105, "the mean")
+    L.Rank = rank
+    F.Flown("bad key", 100); F.Flown("1>2", -5)
+    assert(countOf(DB.disc.flown) == 1, "only flights")
+    assert(not carries(DB.disc.flown, "Flier"), "no character in it")
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "a quest's work, measured in three looks or more, is copied into disc.qtime with no character and no time", function()
+    local c = char("Worker")
+    local Disc, DB = c.QB.Discover, c.env.QuestBankDB
+    c.log = { { 500, 0 } }
+    c.objectives = { [500] = { { type = "monster", text = "Ogre slain: 0/3", numFulfilled = 0, numRequired = 3, finished = false } } }
+    Disc.Look()
+    c.clock = c.clock + 5
+    Disc.Look()
+    for i = 1, 3 do
+      c.clock = c.clock + 20
+      local o = c.objectives[500][1]
+      o.numFulfilled, o.finished = i, i == 3
+      Disc.Look()
+    end
+    local s = DB.disc.qtime and DB.disc.qtime[500]
+    assert(s and #s == 3 and s[1] == 40 and s[2] == 3 and s[3] == 20,
+      "one sample: 40 s of work in three looks at level 20, three numbers and no time: " .. table.concat(s or {}, ","))
+    assert(not carries(DB.disc.qtime, "Worker"), "no character")
+    -- complete again later (an item lost and found): no second sample
+    local o = c.objectives[500][1]
+    o.numFulfilled, o.finished = 2, false
+    c.clock = c.clock + 20; Disc.Look()
+    o.numFulfilled, o.finished = 3, true
+    c.clock = c.clock + 20; Disc.Look()
+    assert(#DB.disc.qtime[500] == 3, "the first completion only")
+    -- two looks are too few to measure
+    c.log = { { 501, 0 } }
+    c.objectives[501] = { { type = "monster", text = "x", numFulfilled = 0, numRequired = 1, finished = false } }
+    Disc.Look(); c.clock = c.clock + 5; Disc.Look()
+    c.objectives[501][1].numFulfilled, c.objectives[501][1].finished = 1, true
+    c.clock = c.clock + 20; Disc.Look()
+    assert(DB.disc.qtime[501] == nil, "one look: no sample")
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "the file's token: made once, kept, each file its own", function()
+    local c = char("Tokened")
+    local t = c.env.QuestBankDB.disc.token
+    assert(type(t) == "string" and #t == 16 and t:find("^%x+$"), "16 hex characters: " .. tostring(t))
+    local c2 = char("Tokened", { saved = c.env.QuestBankDB })
+    assert(c2.env.QuestBankDB.disc.token == t, "the same file keeps its token")
+    local c3 = char("Other")
+    c3.clock = c3.clock + 1.234
+    assert(c3.env.QuestBankDB.disc.token ~= nil, "every file has one")
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "the box unticked clears the finds, the crossings and the flights; Travel's boat legs stay", function()
+    local c = char("Boxed")
+    local G, F, DB = c.QB.Game, c.QB.Finds, c.env.QuestBankDB
+    c.loot = { { id = 2589, src = { { OBJ:format(2843), 1 } } } }
+    ev(c, "LOOT_OPENED", false, false)
+    F.Flown("12>34", 90)
+    F.NoteCrossing({ m = 1429, x = 1, y = 1, c = 0, wx = 1, wy = 1 }, { m = 1438, x = 2, y = 2, c = 1, wx = 2, wy = 2 }, 5)
+    DB.disc.rides["b:Menethil Harbor>Theramore"] = { n = 1, t = 300 }
+    G.SetOn(false)
+    assert(DB.disc.find == nil and DB.disc.flown == nil and DB.disc.findN == nil and #xkeys(c) == 0 and DB.disc.rides["b:Menethil Harbor>Theramore"],
+      "unticked: the finds gone, the boat leg kept")
+    ev(c, "LOOT_OPENED", false, false)
+    F.Flown("12>34", 90)
+    assert(DB.disc.find == nil and DB.disc.flown == nil, "and nothing noted while it is off")
+    G.SetOn(true)
+    ev(c, "LOOT_OPENED", false, false)
+    assert(finds(c).o2843, "ticked again: noted")
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "QuestBank_Finds rows load under D.FIND, never over Data.lua's; a row outside the schema is refused", function()
+    local file = { v = 1, at = 20261022, rows = {
+      { 1429, "b", 0, "412,654", 2, "A Guide Book" },
+      { 1429, "h", 2843, "100,200;110,210", 3, "7.5" },
+      { 1438, "r", 6582, "555,888", 2, 35 },
+      { 1435, "k", 0, "610,220", 2, 216523 },
+      { 1429, "b", 0, "1,1", 2, "|cffff0000Red|r" },
+      { 1429, "x", 1, "1,1", 2, 5 },
+      { 9999999, "h", 1, "1,1", 2, "7.5" },
+      { 1429, "h", 1, "1,1", 2, "os.exit()" },
+      { 1429, "h", "2843", "1,1", 2, "7.5" },
+      { 1429, "r", 6583, "nope", 2, 35 },
+    } }
+    local c = char("Datafile", { finds = file })
+    local D, F = c.QB.Data, c.QB.Finds
+    local function rows(m) return (D.FIND or {})[m] or {} end
+    local function has(m, kind, id, extra, src)
+      for _, r in ipairs(rows(m)) do if r[1] == kind and r[2] == id and (extra == nil or r[5] == extra) and (src == nil or r[6] == src) then return r end end
+    end
+    assert(has(1429, "b", 0, "A Guide Book", "f") and has(1429, "h", 2843, "7.5", "f") and has(1438, "r", 6582, 35, "f") and has(1435, "k", 0, 216523, "f"),
+      "the four good rows, from the file")
+    assert(F.dataAt == 20261022, "its stamp")
+    local n = 0
+    for _, list in pairs(D.FIND) do for _, r in ipairs(list) do if r[6] == "f" then n = n + 1 end end end
+    assert(n == 4, "six rows outside the schema refused: " .. n)
+    -- a row Data.lua carries stays Data.lua's: loaded again over a Data row of the same find, the file adds nothing
+    D.FIND = { [1429] = { { "h", 2843, "500,500", 4, "7.5", "p" } } }
+    assert(F.LoadData() == 3 and #rows(1429) == 2 and has(1429, "h", 2843, nil, "p") and not has(1429, "h", 2843, nil, "f"), "never over Data.lua's")
+    assert(F.LoadData() == 0, "loaded twice: nothing new")
+    -- no file, or one of another version: nothing
+    c.env.QuestBank_Finds = { v = 2, rows = { { 1429, "b", 0, "1,1", 2, "New" } } }
+    assert(F.LoadData() == 0, "another version")
+  end }
+
+  FINDCASES[#FINDCASES + 1] = { "a walk through a session: a look a second makes next to no garbage", function()
+    local c = char("Strider")
+    -- (the mock's map answers made once and filled again, as the client's cost QuestBank nothing: what is left is
+    -- QuestBank's own)
+    local env, pos, vec, wpos = c.env, {}, {}, {}
+    local function xy(self) return self.x, self.y end
+    pos.GetXY, wpos.GetXY = xy, xy
+    env.C_Map.GetPlayerMapPosition = function() pos.x, pos.y = c.mp[1], c.mp[2]; return pos end
+    env.CreateVector2D = function(x, y) vec.x, vec.y = x, y; return vec end
+    env.C_Map.GetWorldPosFromMapPos = function() wpos.x, wpos.y = c.o.world[2], c.o.world[3]; return c.o.world[1], wpos end
+    fresh(c); at(c, 1429, 0.2, 0.2, { 0, -9000, 100 })
+    look(c)
+    if jit then jit.off(); jit.flush() end
+    collectgarbage("collect")
+    collectgarbage("stop")
+    local before = collectgarbage("count")
+    for i = 1, 300 do
+      -- ten yards a second, a stand every minute (moved in place: the test's own tables are no garbage of QuestBank's)
+      if i % 60 < 48 then c.mp[1], c.o.world[2] = 0.2 + i * 0.0005, -9000 + i * 10 end
+      look(c)
+    end
+    local kb = collectgarbage("count") - before
+    collectgarbage("restart")
+    if jit then jit.on() end
+    assert(kb < 8, string.format("five minutes of looks: %.1f KB", kb))
+    print(string.format("finds: five minutes of looks, walking with a stand a minute: %.1f KB", kb))
+  end }
+
+  for _, case in ipairs(FINDCASES) do
+    case[2]()
+    print("finds: " .. case[1] .. ": ok")
+    collectgarbage("collect")
+  end
+end)()
+
 ----------------------------------------------------------------------------
 -- 5.4.2: memory, and the lag that grew through a session ("QuestBank made me lag towards the end, using 80 MB").
 -- The trails' graph was built again from scratch at each point noted, inside the minimap's update (half a second at
