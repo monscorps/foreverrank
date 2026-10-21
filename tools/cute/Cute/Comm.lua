@@ -201,7 +201,7 @@ function M:AskLeft()
   local w = self.wire
   if w then w.asked = C.ServerNow() end
   self.syncedAt = C.Now()
-  if self.AskWholes then self:AskWholes() end
+  if self.AskWholesSoon then self:AskWholesSoon() end
 end
 function M:Logout()
   local club = C.Roster:ClubId()
@@ -953,13 +953,14 @@ end
 
 -- the ask, with the stamp of the officers' word this client holds (Policy.lua P:Stamp), of the newest officers' word
 -- (1N) it holds (Rules.lua R.WordStamp) and the fingerprint of the policy it routes by (Policy.lua P:Fp)
-function M:Ask()
+-- (whole: no since, every record whole, M:AskWholes)
+function M:Ask(whole)
   if not C.Roster:InGuild() then return end
   local guid = C.MyGUID()
   -- (one ask waiting at a time: a second would only be answered as the first)
   for _, m in ipairs(self.out) do if m.ask then return end end
   queue({ msg = "1R|" .. (guid and (guid:gsub("[|;=]", "")) or "") .. "|" .. string.format("%.0f", C.Policy:Stamp()) .. "|"
-    .. string.format("%.0f", C.Rules.WordStamp()) .. "|" .. C.Policy:Fp() .. (self.SinceHex and self:SinceHex() or ""), first = true, ask = true })
+    .. string.format("%.0f", C.Rules.WordStamp()) .. "|" .. C.Policy:Fp() .. ((not whole and self.SinceHex) and self:SinceHex() or ""), first = true, ask = true })
 end
 -- an ask that never left (the client refused it, or an error on the way): asked again half a minute on, and when the
 -- lockdown ends (M:Restriction)
@@ -1314,25 +1315,41 @@ end
 -- wire), once a session, unless a whole one came meanwhile (any record chunk not marked "s"). Not before this client's
 -- own ask left and a minute on, whose answers bring most (after a /reload, which asks nothing, at once)
 M.partialOf, M.wholeOf = {}, {}
+local WHOLE_MAX = 10
 function M:WantWhole(sender, had, partial)
   if not partial then self.wholeOf[sender] = true return end
   if had or self.wholeOf[sender] then return end
   self.partialOf[sender] = true
-  self:AskWholes()
+  self:AskWholesSoon()
+end
+-- (the senders gathered five seconds, a burst of parts asked for together; a minute after this login's ask left at
+-- the soonest, AskLeft calling it then)
+function M:AskWholesSoon()
+  if self.wholesDue or next(self.partialOf) == nil then return end
+  local wait = 5
+  if not self.reloaded then
+    if not self.syncedAt then return end
+    wait = math.max(5, 61 - (C.Now() - self.syncedAt))
+  end
+  self.wholesDue = true
+  C_Timer.After(wait, C.Safe(function() M.wholesDue = false; M:AskWholes() end, "comm: whole records"))
 end
 function M:AskWholes()
   if not self.hello or next(self.partialOf) == nil then return end
-  if not (self.reloaded or (self.syncedAt and C.Now() - self.syncedAt >= 60)) then
-    if self.syncedAt and not self.wholesDue then
-      self.wholesDue = true
-      C_Timer.After(61 - (C.Now() - self.syncedAt), C.Safe(function() M.wholesDue = false; M:AskWholes() end, "comm: whole records"))
-    end
-    return
-  end
   local list = {}
-  for sender in pairs(self.partialOf) do list[#list + 1] = sender end
+  for sender in pairs(self.partialOf) do
+    local m = C.Roster:SenderMember(sender)
+    if not (self.wholeOf[sender] or self.wholeAskedOf[sender]) and m and type(m.guid) == "string" and not m.self then list[#list + 1] = sender end
+  end
   table.sort(list)
   self.partialOf = {}
+  -- (many records missing, as 0.7.0's partial roster left some files: one ask without since, every record whole, in
+  -- place of a 1Q each)
+  if #list > WHOLE_MAX then
+    for _, sender in ipairs(list) do self.wholeAskedOf[sender] = true end
+    self:Ask(true)
+    return
+  end
   for _, sender in ipairs(list) do
     local m = C.Roster:SenderMember(sender)
     if not (self.wholeOf[sender] or self.wholeAskedOf[sender]) and m and type(m.guid) == "string" and not m.self then

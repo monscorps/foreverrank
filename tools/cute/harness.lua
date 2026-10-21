@@ -10418,6 +10418,30 @@ do
     for _, x in ipairs({ off, b, a4 }) do leave(x) end
   end)
   said[#said + 1] = "a /reload asks nothing and resends nothing; a login asks since its hold and is sent what changed; a record lost is asked for whole by GUID"
+  -- (f2) a file that lost many records (0.7.0's partial roster could delete dozens): one ask without since, every
+  -- record whole, in place of a 1Q each
+  do
+    local guild = { member("Coraline", 1) }
+    for i = 1, 14 do guild[#guild + 1] = member("Qq" .. i, 3) end
+    isolated(guild, function()
+      local c = char("Coraline", 1)
+      login(c)
+      tickAll(80)
+      local s0 = #c.sent
+      for i = 1, 12 do
+        c.C.Comm:Receive("1F|1|1|4s|guid=" .. guidOf("Qq" .. i) .. ";level=u", "GUILD", "Qq" .. i .. "-Forever")
+      end
+      tickAll(10)
+      local asks, wholes = {}, 0
+      for k = s0 + 1, #c.sent do
+        local m = c.sent[k].msg
+        if m:sub(1, 3) == "1R|" then asks[#asks + 1] = m end
+        if m:sub(1, 3) == "1Q|" then wholes = wholes + 1 end
+      end
+      assert(#asks == 1 and #(asks[1]:match("|(%x*)$") or "") == 16 and wholes == 0, "twelve records missing: one ask without since, no 1Q: " .. #asks .. " asks, " .. wholes .. " 1Q")
+    end)
+  end
+  said[#said + 1] = "a file missing many records asks once, whole"
 
   -- (g) mixed versions: a 0.5.x ask (no stamp) gets the record and never the statistics pass; a 0.7 ask (no since) the
   -- whole record and the pass; asks within ten minutes of a pass wait for the next one, whoever asks
