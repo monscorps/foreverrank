@@ -197,6 +197,12 @@ function Timer.XPPerHour()
 end
 function Timer.SessionXP() return gain end
 
+-- the quests' XP this session (their rewards at the hand-in; the catalog's figure where the game hides it) an hour, as
+-- it stood at the last hand-in ten minutes into the session or later: the floor of XP a minute reads it (Model.lua's
+-- Floor), so the floor moves at a hand-in, a real event, and never with a kill or the clock. nil until then
+local questGain, questRate = 0, nil
+function Timer.QuestXPPerHour() return questRate end
+
 function Timer.Record(event, a1, a2)
   if event == "PLAYER_XP_UPDATE" then Timer.NoteXP(); return end
   if event == "PLAYER_LEVEL_UP" then
@@ -222,6 +228,16 @@ function Timer.Record(event, a1, a2)
     if type(id) ~= "number" then return end
     local q = db().quests[id]
     if q and not q.d then q.d = clock() end
+    -- (the payload: questID, xpReward, moneyReward; QuestLogDocumentation.lua's QuestTurnedIn)
+    local x = plain(a2)
+    if type(x) ~= "number" then
+      local v = QB.Quest and QB.Quest.Get(id)
+      x = v and QB.Model and QB.Model.XpAt and QB.Model.XpAt(v, level()) or 0
+    end
+    questGain = questGain + x
+    since = since or now()
+    local secs = now() - since
+    if secs >= 600 then questRate = questGain / (secs / 3600) end
   elseif event == "PLAYER_ENTERING_WORLD" then
     sessionLevel, sessionStart = level(), now()
     if not since then Timer.NoteXP() end

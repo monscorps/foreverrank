@@ -18764,6 +18764,31 @@ end)()
     assert(kept.t / tA > 1 + M.SWITCH and kept.t - tA < 0.5, string.format("5%% more minutes, under half a minute: %.2f against %.2f", kept.t, tA))
   end }
 
+  -- the review: the floor's measured part (Model.lua's Floor: six tenths of what you make) read all the XP of the
+  -- session, kills too, against quests' rewards alone, and moved with the clock: ten minutes of kills put most quests
+  -- under it, and any re-plan after could make the kept first stop cheap. It reads the quests' XP now, as it stood at
+  -- the last hand-in (a real event): kills move no floor, nor does the clock between hand-ins
+  F62CASES[#F62CASES + 1] = { "the floor: the quests' XP alone, moved by a hand-in, not by kills or the clock", function()
+    local c = char("Floor")
+    local QB, Tm, M = c.QB, c.QB.Timer, c.QB.Model
+    local base = 60 * QB.Scale(21)
+    local function xp(n) c.xp = (c.xp or 0) + n; Tm.Record("PLAYER_XP_UPDATE", "player") end
+    xp(0)
+    for _ = 1, 17 do tick(c, 36); xp(150) end
+    assert(Tm.XPPerHour() and Tm.XPPerHour() > 14000, "ten minutes of kills: the time to level counts them")
+    assert(M.Floor(21) == base, "kills raise no floor: " .. M.Floor(21))
+    xp(3000)
+    Tm.Record("QUEST_TURNED_IN", 20, 3000, 0)
+    local F = M.Floor(21)
+    assert(F > base, "a hand-in measured: the floor from the quests' XP, " .. F)
+    tick(c, 600)
+    for _ = 1, 10 do xp(150) end
+    assert(M.Floor(21) == F, "between hand-ins the floor holds: " .. M.Floor(21) .. " against " .. F)
+    -- (a reward the game hides: the catalog's figure)
+    Tm.Record("QUEST_TURNED_IN", 34, nil, 0)
+    assert(M.Floor(21) ~= F, "the next hand-in moves it")
+  end }
+
   for _, case in ipairs(F62CASES) do
     case[2]()
     print("xpm: " .. case[1] .. ": ok")

@@ -171,11 +171,12 @@ function M.MinutesText(t, est)
   return (est and "est. " or "") .. m .. " min"
 end
 
--- the floor a quest's XP a minute must reach: 60 XP a minute at level 20's scale, or six tenths of what this session has
--- measured (Timer.XPPerHour), whichever is more
+-- the floor a quest's XP a minute must reach: 60 XP a minute at level 20's scale, or six tenths of the quests' XP this
+-- session has measured, whichever is more (Timer.QuestXPPerHour: the quests' rewards alone, as they stood at the last
+-- hand-in, so the floor holds still between hand-ins; all the XP, kills too, would put most quests under it)
 function M.Floor(level)
   local f = 60 * QB.Scale(level)
-  local rate = QB.Timer and QB.Timer.XPPerHour and QB.Timer.XPPerHour()
+  local rate = QB.Timer and QB.Timer.QuestXPPerHour and QB.Timer.QuestXPPerHour()
   if rate and rate > 0 then f = math.max(f, 0.6 * rate / 60) end
   return f
 end
