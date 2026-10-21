@@ -11388,6 +11388,48 @@ do
   end)
 end
 
+-- (the merge review) Say XP after each hand-in does in Cute what its tooltip says, as in QuestBank: ticked, a line as a
+-- quest is complete and as one leaves the log without a hand-in, beside the hand-in's (the engine's copy is quiet,
+-- QB.quiet, but sayXP is the player's own ask); off, none of them
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 5, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 5 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true }))
+    login(c); tickAll(5)
+    c.C.Modules.Set("Cute_Quest", true); tick(c, 6)
+    local QB = c.addons[2].private
+    local s = c.env.CuteQuestDB.settings
+    assert(QB.quiet == true and QB.loggedIn, "the copy quiet, logged in")
+    local function said(fn) local n0 = #c.chat; fn(); return table.concat(c.chat, "\n", n0 + 1) end
+    c.C.UI:Open("settings", "quests")
+    local say = checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Say XP after each hand-in" end)
+    assert(say and not say:GetChecked(), "the Say XP row, off")
+    click(say)
+    assert(s.sayXP == true, "ticked: the engine's sayXP on")
+    local id = next(c.o.log)
+    c.complete = { [id] = true }
+    local done = said(function() fire(c, "QUEST_LOG_UPDATE"); tick(c, 1) end)
+    assert(QB.wasComplete[id] == true and done:find(" is complete", 1, true), "ticked: a quest complete is said: " .. done)
+    c.o.log[id] = nil
+    local gone = said(function() fire(c, "QUEST_LOG_UPDATE"); tick(c, 1) end)
+    assert(QB:Plan().removed[id] and gone:find("left your log without a hand-in", 1, true), "ticked: a quest gone from the log is said: " .. gone)
+    for _, l in ipairs({ done, gone }) do assert(l:find("^" .. c.C.COLOR .. "Cute|r: "), "with Cute's prefix: " .. l) end
+    -- off: quiet again
+    click(checkBox(c, function(cb) return cb.label and cb.label:GetText() == "Say XP after each hand-in" end))
+    assert(s.sayXP == false, "unticked")
+    c.o.log[id] = 1
+    c.complete = {}
+    fire(c, "QUEST_LOG_UPDATE"); tick(c, 1)
+    c.complete = { [id] = true }
+    assert(said(function() fire(c, "QUEST_LOG_UPDATE"); tick(c, 1) end) == "", "off: a quest complete says nothing")
+    c.o.log[id] = nil
+    assert(said(function() fire(c, "QUEST_LOG_UPDATE"); tick(c, 1) end) == "", "off: a quest gone says nothing")
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print("merge1: Say XP in Cute: ticked, a quest complete and one gone from the log are said with Cute's prefix; off, nothing")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

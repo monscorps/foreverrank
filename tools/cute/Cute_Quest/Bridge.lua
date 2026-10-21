@@ -22,9 +22,10 @@ end
 QB.Engine = QB
 local E = QB
 local UI = E.UI
--- the engine's chat lines carry Cute's prefix; and the copy is quiet (Core.lua QB.quiet): a quest complete or gone from
--- the log, a waypoint clicked, a run's start and end and the errors line stay out of chat, since the step frame and
--- the arrow say those things
+-- the engine's chat lines carry Cute's prefix; and the copy is quiet (Core.lua QB.quiet): a waypoint clicked, a run's
+-- start and end and the errors line stay out of chat, since the step frame and the arrow say those things. A quest
+-- complete or gone from the log is said only when asked for (sayXP, the Quests section's "Say XP after each hand-in"),
+-- as the hand-in's line is
 function E:Print(msg) Cute.Print(msg) end
 E.quiet = true
 -- the engine's words name the host: "Choose a reward: X is Cute's pick", "Nothing to do: /cute quests", the minimap

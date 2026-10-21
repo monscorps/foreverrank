@@ -796,8 +796,9 @@ end
 -- helpers
 ----------------------------------------------------------------------------
 -- (a host that runs this engine inside its own addon replaces QB.Print with its own prefix, and sets QB.quiet: the
--- lines a step frame and an arrow already say, a quest complete or gone from the log, a waypoint clicked, a run's start
--- and end, and the errors line, stay out of chat)
+-- lines a step frame and an arrow already say, a waypoint clicked, a run's start and end, and the errors line, stay out
+-- of chat. A quest complete or gone from the log is said only when the player asks, sayXP, in a host too: the merge
+-- review, Cute's "Say XP after each hand-in" says so)
 function QB:Print(msg)
   if DEFAULT_CHAT_FRAME then
     DEFAULT_CHAT_FRAME:AddMessage("|cffc6af8dQuestBank|r " .. msg)
@@ -1811,8 +1812,9 @@ local function trackRemovals(s)
         local q = Q.Get(id)
         local value = q and QB.Model.XpAt(q, s.level) or nil
         p.removed[id] = { title = title, at = time and time() or 0, value = value }
-        -- (said only when asked for since the review round: "Say quest XP in chat", sayXP, the step frame's menu)
-        if QB.loggedIn and not QB.quiet and QB:Settings().sayXP == true then
+        -- (said only when asked for since the review round: "Say quest XP in chat", sayXP, the step frame's menu; and
+        -- then in a quiet host too, as the hand-in's line is: the player's own ask, the merge review)
+        if QB.loggedIn and QB:Settings().sayXP == true then
           QB:Print(string.format("%s left your log without a hand-in%s. The route no longer counts it.", title,
             value and (" (worth about " .. QB.Comma(value) .. " XP)") or ""))
         end
@@ -1906,7 +1908,7 @@ function QB:ReadState()
     if e.complete and before == false and QB.loggedIn then
       local q = Q.Get(e.id)
       local value = q and QB.Model.XpAt(q, s.level)
-      if not QB.quiet and QB:Settings().sayXP == true then -- (asked for: sayXP, as the hand-in's line)
+      if QB:Settings().sayXP == true then -- (asked for: sayXP, as the hand-in's line, in a quiet host too)
         QB:Print(string.format("%s is complete%s%s.", e.title, QB:Banking() and ": banked" or ", hand it in",
           value and value > 0 and (", worth about " .. QB.Comma(value) .. " XP " .. QB:OnTheDay()) or ""))
       end
