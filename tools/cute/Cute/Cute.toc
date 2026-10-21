@@ -19,6 +19,7 @@ Roster.lua
 Policy.lua
 Comm.lua
 UI.lua
+Look.lua
 Guide.lua
 Settings.lua
 Keys.lua

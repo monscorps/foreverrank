@@ -188,7 +188,11 @@ local function checkRow(parent)
 end
 UI.Check, UI.CheckRow, UI.Button, UI.Text, UI.Skin, UI.Flat = check, checkRow, button, text, skin, flat
 -- (for Guide.lua, which draws its page with the window's own pieces)
-UI.COLORS = { WHITE = WHITE, INK = INK, DIM = DIM, MUTE = MUTE, GOOD = GOOD, WARN = WARN, BAD = BAD }
+-- (the windows round, Look.lua) the categories' colours, for the 2 px bars and progress bars only, never text: QUEST the
+-- game's quest gold, GROUP a teal no game colour set uses, NEW for what was seen in play and QuestBank's data lacks; EDGE
+-- for boxes and the route's rail
+UI.COLORS = { WHITE = WHITE, INK = INK, DIM = DIM, MUTE = MUTE, GOOD = GOOD, WARN = WARN, BAD = BAD, LINE = LINE, PANEL2 = PANEL2,
+  EDGE = { 0.42, 0.42, 0.42 }, NEW = { 0.47, 0.69, 1 }, QUEST = { 1, 0.82, 0 }, GROUP = { 0.31, 0.82, 0.77 } }
 UI.Color, UI.Hex, UI.Dimmed, UI.ROW = color, hex, dimmed, ROW
 UI.ClassColor = function(class) return classColor(class) end
 local function tooltip(owner, fill)
@@ -250,7 +254,8 @@ local function fitText(fs, s, room)
 end
 UI.FitText = fitText
 
-local function pool(parent, make)
+local pool
+function pool(parent, make)
   local p = { items = {}, used = 0 }
   function p:Get()
     self.used = self.used + 1
@@ -263,6 +268,8 @@ local function pool(parent, make)
   function p:HideRest() for i = self.used + 1, #self.items do self.items[i]:Hide() end end
   return p
 end
+
+UI.Pool = function(parent, make) return pool(parent, make) end
 
 -- a list drawn only where it shows: of n items, item i sits at top + (i - 1) * h in the scroll child, and only the
 -- ones in view, with MARGIN more either side, get a widget. Widget k holds the items i with (i - 1) % size == k - 1, so
@@ -363,7 +370,7 @@ local function scrollArea(parent, win, bottom)
   end
   function sf:Width()
     local w = self:GetWidth() or 0
-    if w < 100 then w = (win.frame:GetWidth() or W) - 2 - 8 - 18 - (win.insetX or 0) end
+    if w < 100 then w = (win.frame:GetWidth() or W) - 2 - 8 - 18 - (win.insetX or 0) - (win.sideW and (win.sideW + 12) or 0) end
     return w
   end
   return sf
@@ -546,7 +553,7 @@ UI.windows = { guild = UI }
 -- a window by key, made (not built) the first time it is asked for: the guild window is UI itself, the others read its
 -- methods and the few constants a page reads (ui.COLORS, ui.ROW, ui.FONT) and keep their own state: nothing of the
 -- guild window's own (its frame, page, scroll and lists) shows through
-local STATICS = { COLORS = true, ROW = true, FONT = true, SHORT = true, SPEC = true, windows = true }
+local STATICS = { COLORS = true, ROW = true, FONT = true, SHORT = true, SPEC = true, windows = true, Look = true }
 local winMeta = { __index = function(_, k)
   local v = UI[k]
   if type(v) == "function" or STATICS[k] then return v end
@@ -962,12 +969,21 @@ end
 -- a frame of a page's own under the scroll child (a module that attaches a view it draws itself: the quest engine's
 -- journal and gear pages); hidden by the next draw that does not ask for it, as the virtual lists are cleared
 UI.hosts = {}
-function UI:Host(key)
+-- (side: a host in the side column's scroll area, UI:Side)
+function UI:Host(key, side)
   local f = self.hosts[key]
-  if not f then f = CreateFrame("Frame", nil, self.scroll.child); self.hosts[key] = f end
+  if not f then f = CreateFrame("Frame", nil, side and self.sideScroll.child or self.scroll.child); self.hosts[key] = f end
   f.gen = self.drawGen
   f:Show()
   return f
+end
+-- the scroll area and its bar between the band (bandH), the room on the left (insetX) and the side column (sideW)
+function UI:PlaceScroll()
+  local h, side = self.bandH or 0, self.sideW and (self.sideW + 12) or 0
+  self.scroll:SetPoint("TOPLEFT", 8 + (self.insetX or 0), -8 - h)
+  self.scroll:SetPoint("BOTTOMRIGHT", -18 - side, (self.foot or 0) + 6)
+  self.scroll.bar:SetPoint("TOPRIGHT", -7 - side, -8 - h)
+  self.scroll.bar:SetPoint("BOTTOMRIGHT", -7 - side, (self.foot or 0) + 6)
 end
 -- the band's height (0 hides it); the scroll area and its bar start under it
 function UI:SetBand(h)
@@ -975,15 +991,36 @@ function UI:SetBand(h)
   self.bandH = h
   self.band:SetHeight(math.max(h, 1))
   self.band:SetShown(h > 0)
-  self.scroll:SetPoint("TOPLEFT", 8 + (self.insetX or 0), -8 - h)
-  self.scroll.bar:SetPoint("TOPRIGHT", -7, -8 - h)
+  self:PlaceScroll()
+  if self.side and self.side:IsShown() then self.side:SetPoint("TOPRIGHT", -7, -8 - h) end
 end
 -- room kept on the left of the scroll area and the band (Settings' list of sections); 0 gives it back
 function UI:SetInset(x)
   if (self.insetX or 0) == x then return end
   self.insetX = x
   self.band:SetPoint("TOPLEFT", 8 + x, -8)
-  self.scroll:SetPoint("TOPLEFT", 8 + x, -8 - (self.bandH or 0))
+  self:PlaceScroll()
+end
+-- (the windows round) a column of its own on the right of the scroll area, under the band, with its own scroll bar
+-- (the Quests tab's Dungeon, Gear and Party beside the questing at 1000 px and more): w wide, the scroll area keeps the
+-- rest. Its pieces are hosts (UI:Host(key, true)); a draw that asks for no column gives the room back. Returns its
+-- scroll area
+function UI:Side(w)
+  if not self.side then
+    local side = CreateFrame("Frame", nil, self.content)
+    self.side = side
+    self.sideScroll = UI.ScrollArea(side, self, 0)
+    self.sideScroll:ClearAllPoints(); self.sideScroll:SetPoint("TOPLEFT", 0, 0); self.sideScroll:SetPoint("BOTTOMRIGHT", -12, 0)
+    self.sideScroll.bar:ClearAllPoints(); self.sideScroll.bar:SetPoint("TOPRIGHT", 0, 0); self.sideScroll.bar:SetPoint("BOTTOMRIGHT", 0, 0)
+  end
+  self.sideGen = self.drawGen
+  self.side:ClearAllPoints()
+  self.side:SetPoint("TOPRIGHT", -7, -8 - (self.bandH or 0))
+  self.side:SetPoint("BOTTOMRIGHT", -7, (self.foot or 0) + 6)
+  self.side:SetWidth(w)
+  self.side:Show()
+  if self.sideW ~= w then self.sideW = w; self:PlaceScroll() end
+  return self.sideScroll
 end
 
 function UI:OnScroll()
@@ -2077,8 +2114,8 @@ local function drawBody(self)
   local gens = {}
   for key, v in pairs(self.lists) do gens[key] = v.gen end
   self.drawGen = (self.drawGen or 0) + 1
-  -- (the Quests tab's big band line is its own FontString, not a pooled one: hidden before any page draws)
-  if self.bandBig then self.bandBig:Hide() end
+  -- (the Quests tab's band is a kit of its own, not pooled pieces: hidden before any page draws, Guide.lua G.DrawBand)
+  if self.bandKit then self.bandKit:Hide() end
   if settings then C.Settings_Draw(self)
   elseif mod then C.Safe(function() mod.page(self, self.scroll) end, "page: " .. page)() end
   if self.rows.gen == rowsGen then self.rows:Clear() end
@@ -2086,6 +2123,8 @@ local function drawBody(self)
   if self.catLines.gen == catGen then self.catLines:Clear() end
   for key, v in pairs(self.lists) do if v.gen == gens[key] then v:Clear() end end
   for _, f in pairs(self.hosts) do if f.gen ~= self.drawGen and f:IsShown() then f:Hide() end end
+  -- (a page that asked for no side column: its room back to the scroll area)
+  if self.side and self.sideGen ~= self.drawGen and self.side:IsShown() then self.side:Hide(); self.sideW = nil; self:PlaceScroll() end
   self.labels:HideRest()
   self.bandLabels:HideRest(); self.bandButtons:HideRest(); self.bandLines:HideRest()
   local _, maxv = bar:GetMinMaxValues()

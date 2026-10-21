@@ -1,29 +1,26 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- The Guide: what should you do next, and with whom. What the rules (Rules.lua) make of the seed and the guild's play,
--- drawn around that one question, in the quest window's Quests tab (Cute_Quest's PageQuests.lua draws it there through
--- the door Cute.Guide, G.Draw):
---   band        the step now from the Quests module (Cute.QuestBand: the step, the next two, the time to level, three
---               of your party's steps); its click reads the step's quest
---   head        the next best thing, one line: the rules' pick from the dungeons in range at your level (guild mates
---               online in range first, then what is left for you there: the bosses you have not killed, the quests
---               open to you, a dungeon you have not been in; then the one closing soonest), or plainly that nothing
---               fits. Officers get the guild's line at its right (where most members are and the dungeon that holds
---               them). The tooltip holds the reasons, every dungeon in range with its counts, where the knowledge
---               comes from, the guild's counts and what the guild learned in play
---   card        the picked dungeon alone: its name, a level bar with its range drawn against your level, how sure we
---               are in one word, the bosses as pips (killed, not killed, doubted), the quests known for it as they
---               stand for you, and the guild mates online in range, class-coloured, each with an Invite button
---               (C_PartyInfo.InviteUnit, out of combat only)
--- Where the seed is stale or none shipped, everything runs on the guild's play alone. The rows are one virtual list of
--- one height (the window's kind: UI:List); G.Items works out only what is drawn: every dungeon in range is weighed for
--- the pick (its counts), the rows are the picked one's. Its two thresholds (guideWindow, guideAhead) are in Settings >
--- Rules under "Dungeons and gear".
+-- drawn around that one question on the quest window's Quests tab (Cute_Quest's PageQuests.lua draws it there through
+-- the door Cute.Guide), in the windows' look (Look.lua):
+--   band        the step now from the Quests module (Cute.QuestBand): its icon, its words with the count apart and its
+--               progress, the next two, your level and the XP bar (G.DrawBand); its click reads the step's quest
+--   the pick    the next best thing: the rules' pick from the dungeons in range at your level (guild mates online in
+--               range first, then what is left for you there: the bosses you have not killed, the quests open to you,
+--               a dungeon you have not been in; then the one closing soonest) as a card (G.DrawPick): its art, its name
+--               and the reason in a phrase, its range against your level, its bosses' faces (killed, left, doubted),
+--               the quests for it, the best drop, up to four mates online in range in their class colours and Invite
+--               (C_PartyInfo.InviteUnit, out of combat only). Its tooltip holds the reasons, every dungeon in range
+--               with its counts, where the knowledge comes from, the bosses and their loot, the quests as they stand
+--               for you, every mate in range, and for officers the guild's line and what it learned in play. Nothing
+--               fits: the pick's own sentence, plainly, on one row
+-- Where the seed is stale or none shipped, everything runs on the guild's play alone. G.Items works out only what is
+-- drawn: every dungeon in range is weighed for the pick (its counts), the card is the picked one's. Its two thresholds
+-- (guideWindow, guideAhead) are in Settings > Rules under "Dungeons and gear".
 local _, C = ...
 local G = { invited = {}, open = {} }
 C.Guide = G
 
 local INVITED = 60 -- seconds an invited mate's button says so
-local PARTY_ROWS = 3 -- the band shows this many of your group's steps; the rest in one line's tooltip
 local MATES = 4    -- mates a card shows before "and N more"
 
 local function plural(n, one, many) return n .. " " .. (n == 1 and one or many) end
@@ -468,273 +465,322 @@ end
 ----------------------------------------------------------------------------
 -- the page
 ----------------------------------------------------------------------------
--- the pips' and the level bar's colours, the page's mock the same (addons/cute/index.html). Each mark is 3:1 at least
--- on what it sits on: a pip on its row, hovered or not, and a range on the track (a doubted pip and a range below you
--- were 1.5:1, there and hardly seen). The track is the scale alone and stays faint; in range is the window's green
-local PIP_COLOR = { killed = { 0.96, 0.96, 0.96 }, left = { 0.62, 0.62, 0.62 }, doubted = { 0.42, 0.42, 0.42 } }
-local BAR_COLOR = { track = { 0.16, 0.16, 0.16 }, above = { 0.58, 0.58, 0.58 }, below = { 0.47, 0.47, 0.47 } }
-
--- a row of the Guide's list: the window's line (a background, the mark on the left, the name, a value and a right
--- column, the tooltip and the click) with the Guide's pieces added: a label column, the level bar (its track, the range
--- on it and your level), the pips and an Invite button. Each fill shows what its kind uses and hides the rest
-function G.MakeRow(parent)
-  local UI = C.UI
-  local K = UI.COLORS
-  local r = UI:MakeLine(parent)
-  r.label = UI.Text(r, 11, K.DIM, "LEFT")
-  r.track = UI.Flat(r, "ARTWORK", BAR_COLOR.track, 1)
-  r.track:SetHeight(4)
-  r.seg = UI.Flat(r, "ARTWORK", K.GOOD, 1)
-  r.seg:SetHeight(4)
-  r.mark = UI.Flat(r, "OVERLAY", K.WHITE, 1)
-  r.mark:SetSize(2, 12)
-  r.pips = {}
-  r.invite = UI.Button(r, "Invite", 58, 16)
-  r.invite:SetScript("OnClick", C.Safe(function(self) if self.mate then G.Invite(self.mate) end end, "guide: invite"))
-  r.invite:SetScript("OnEnter", C.Safe(function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    if self.why then GameTooltip:AddLine(self.why, 1, 1, 1, true) end
-    GameTooltip:Show()
+----------------------------------------------------------------------------
+-- the Quests tab's band and the guild's pick, in the windows' look (Look.lua)
+----------------------------------------------------------------------------
+-- The band (the quest window's Quests tab, over both its columns): the step now from the quest module
+-- (Cute.QuestBand, C.API.QuestBand) at 15 px white with the step's icon at 24, its quest's name after it in dim where
+-- the words do not carry it, the count at the right and a 2 px bar of its progress in the quest gold; the next two at
+-- 14 px and 12 px, dim; your level, how far into it and the time to the next, over a 6 px XP bar (your XP white, the
+-- planned quests' green, a tick a level). A click on the step reads its quest, Ctrl-click shows it on the arrow, a
+-- right-click is its menu (Not now, Drop). Before the log is read, one line says so. Returns the band's height
+local BAND_STEP, BAND_NEXT = 34, 17
+local function bandKit(UI)
+  local kit = UI.bandKit
+  if kit then return kit end
+  local L, K = UI.Look, UI.COLORS
+  kit = CreateFrame("Frame", nil, UI.band)
+  kit:SetPoint("TOPLEFT")
+  kit:SetPoint("TOPRIGHT")
+  kit:SetHeight(10)
+  local step = CreateFrame("Button", nil, kit)
+  step:SetHeight(BAND_STEP)
+  step:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  step.icon = L.MakeSlot(step, 24)
+  step.icon:SetPoint("LEFT", 0, 0)
+  step.text = UI.Text(step, 15, K.WHITE, "LEFT")
+  step.quest = UI.Text(step, 11, K.DIM, "LEFT")
+  step.count = UI.Text(step, 13, K.INK, "RIGHT")
+  step:SetHighlightTexture("Interface\\Buttons\\WHITE8x8", "ADD")
+  step:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.04)
+  step:SetScript("OnClick", C.Safe(function(self, which) if self.fn then self.fn(self, which) end end, "band: the step"))
+  step:SetScript("OnEnter", C.Safe(function(self)
+    if not self.tip then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); self.tip(GameTooltip); GameTooltip:Show()
   end, "tooltip"))
-  r.invite:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  -- (what a fill hides first, kept once: the fill runs for every row in view on each draw and scroll step)
-  r.pieces = { r.label, r.track, r.seg, r.mark, r.invite, r.val, r.who }
-  return r
+  step:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  kit.step = step
+  kit.track = L.Flat(kit, "ARTWORK", { 0.16, 0.16, 0.16 }, 1)
+  kit.track:SetHeight(2)
+  kit.fill = L.Flat(kit, "OVERLAY", K.QUEST, 1)
+  kit.fill:SetHeight(2)
+  kit.next = {}
+  for i = 1, 2 do
+    local r = CreateFrame("Button", nil, kit)
+    r:SetHeight(BAND_NEXT)
+    r.icon = L.MakeSlot(r, 14)
+    r.icon:SetPoint("LEFT", 5, 0)
+    r.text = UI.Text(r, 12, K.DIM, "LEFT")
+    r:SetScript("OnEnter", C.Safe(function(self)
+      if not self.tip then return end
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); self.tip(GameTooltip); GameTooltip:Show()
+    end, "tooltip"))
+    r:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    kit.next[i] = r
+  end
+  kit.level = CreateFrame("Button", nil, kit)
+  kit.level:SetHeight(16)
+  kit.level.text = UI.Text(kit.level, 12, K.INK, "LEFT")
+  kit.level.text:SetPoint("LEFT", 0, 0)
+  kit.level:SetScript("OnEnter", C.Safe(function(self)
+    if not self.tip then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT"); self.tip(GameTooltip); GameTooltip:Show()
+  end, "tooltip"))
+  kit.level:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  kit.xp = L.MakeXP(kit)
+  kit.line = L.Flat(kit, "ARTWORK", K.LINE, 1)
+  kit.line:SetHeight(1)
+  kit.why = UI.Text(kit, 12, K.DIM, "LEFT")
+  UI.bandKit = kit
+  return kit
 end
-local PIP, PIP_GAP = 8, 3
--- the kinds that sit under a card's name, a label column before them
-local UNDER = { bosses = true, quests = true, mate = true, more = true }
+function G.DrawBand(UI)
+  local K, L = UI.COLORS, UI.Look
+  local put, fitText = L.Put, UI.FitText
+  local kit = bandKit(UI)
+  kit:Show()
+  local w = (UI.band:GetWidth() or 0)
+  if w < 100 then w = UI.scroll:Width() end
+  local Q = C.API.QuestBand
+  local y = 2
+  for _, r in ipairs(kit.next) do r:Hide() end
+  kit.step:Hide(); kit.track:Hide(); kit.fill:Hide(); kit.level:Hide(); kit.xp:Hide(); kit.why:Hide()
+  if not (Q and Q.On()) then
+    -- (no step yet: the module says why, reading the log or a QuestBank too old for it)
+    local why = (Q and Q.Why and Q.Why()) or "Reading your quest log."
+    put(kit.why, "TOPLEFT", 0, -y - 2, w, why, K.DIM, "LEFT", 12)
+    y = y + 22
+  else
+    local steps = Q.Steps()
+    local s1 = steps[1]
+    local look = s1 and Q.Look and Q.Look(s1) or {}
+    local st = kit.step
+    st:ClearAllPoints(); st:SetPoint("TOPLEFT", 0, -y); st:SetWidth(w); st:Show()
+    L.FillSlot(st.icon, look.icon)
+    local words = s1 and (look.words or Q.Text(s1)) or "Nothing to do yet: the places below are worth your time."
+    local count = (look.have and look.need) and (look.have .. "/" .. look.need) or nil
+    local right = count and 60 or 0
+    put(st.text, "LEFT", 32, 0, w - 32 - right - 8, words, K.WHITE, "LEFT", 15)
+    local tw = math.min(w - 32 - right - 8, math.ceil((st.text.GetUnboundedStringWidth or st.text.GetStringWidth)(st.text) or 0))
+    local qroom = w - 32 - tw - 8 - right - 8
+    if look.quest and qroom > 40 then put(st.quest, "LEFT", 32 + tw + 8, -1, qroom, look.quest, K.DIM, "LEFT", 11) else st.quest:Hide() end
+    if count then put(st.count, "RIGHT", 0, 0, right, count, K.INK, "RIGHT", 13) else st.count:Hide() end
+    st.fn = function(_, which)
+      if not s1 then return end
+      if which == "RightButton" then Q.Menu(s1)
+      elseif IsControlKeyDown and IsControlKeyDown() then if Q.Arrow then Q.Arrow(s1) end
+      elseif Q.Read then Q.Read(s1, UI) end
+    end
+    st.tip = function(tip)
+      tip:AddLine(s1 and Q.Text(s1) or words, 1, 1, 1, true)
+      if look.quest then tip:AddLine(look.quest, 0.8, 0.8, 0.8, true) end
+      if s1 then tip:AddLine("Click: read its quest. Ctrl-click: show it on the arrow. Right-click: Not now, Drop.", 0.5, 0.5, 0.5, true) end
+    end
+    y = y + BAND_STEP + 1
+    -- the step's progress in its category's colour (the quest gold), where it has a count
+    if count and look.need > 0 then
+      kit.track:ClearAllPoints(); kit.track:SetPoint("TOPLEFT", 0, -y); kit.track:SetWidth(w); kit.track:Show()
+      local c = look.bar or K.QUEST
+      kit.fill:SetColorTexture(c[1], c[2], c[3], 1)
+      kit.fill:ClearAllPoints(); kit.fill:SetPoint("TOPLEFT", 0, -y)
+      kit.fill:SetWidth(math.max(1, math.floor(w * math.min(1, look.have / look.need) + 0.5)))
+      kit.fill:SetShown(look.have > 0)
+    end
+    y = y + 4
+    for i = 2, 3 do
+      local s = steps[i]
+      local r = kit.next[i - 1]
+      if s then
+        local lk = Q.Look and Q.Look(s) or {}
+        r:ClearAllPoints(); r:SetPoint("TOPLEFT", 0, -y); r:SetWidth(w); r:Show()
+        L.FillSlot(r.icon, lk.icon and { art = lk.icon.art, poi = lk.icon.poi, desat = lk.icon.desat } or nil)
+        local t = lk.short or Q.Text(s)
+        put(r.text, "LEFT", 32, 0, w - 40, t, K.DIM, "LEFT", 12)
+        local full = Q.Text(s)
+        r.tip = function(tip) tip:AddLine(full, 1, 1, 1, true) end
+        y = y + BAND_NEXT
+      end
+    end
+    -- the level: where you stand in it, the time to the next, over the XP bar (what the plan adds in green)
+    local xp = Q.XP and Q.XP() or nil
+    if xp then
+      y = y + 4
+      local ttl, _, measured = Q.TimeToLevel()
+      local line = "Level " .. xp.level .. (xp.frac and (L.DOT .. math.floor(xp.frac * 100) .. "%") or "") .. (ttl and (L.DOT .. ttl) or "")
+      kit.level:ClearAllPoints(); kit.level:SetPoint("TOPLEFT", 0, -y); kit.level:SetWidth(w); kit.level:Show()
+      kit.level.text:SetWidth(w)
+      UI.Color(kit.level.text, K.INK)
+      fitText(kit.level.text, line, w - 4)
+      kit.level.tip = function(tip)
+        tip:AddLine(line, 1, 1, 1, true)
+        if xp.planned and xp.planned > 0 then tip:AddLine(string.format("The planned quests add %s XP: the green on the bar.", xp.plannedText or tostring(xp.planned)), 0.8, 0.8, 0.8, true) end
+        tip:AddLine(measured and "The time from your XP an hour at this level." or "The time from the plan's XP a minute.", 0.6, 0.6, 0.6, true)
+      end
+      y = y + 18
+      if xp.from then
+        kit.xp:ClearAllPoints(); kit.xp:SetPoint("TOPLEFT", 0, -y); kit.xp:Show()
+        L.FillXP(kit.xp, w, xp.from, xp.to, xp.at, xp.gains)
+        y = y + 6
+      end
+    end
+  end
+  y = y + 8
+  kit.line:ClearAllPoints(); kit.line:SetPoint("TOPLEFT", 0, -y); kit.line:SetPoint("TOPRIGHT", 0, -y)
+  kit:SetHeight(y + 1)
+  UI:SetBand(y + 2)
+  -- what the page shows of yours draws it again when it changes (UI:ValueChanged)
+  UI.shownIds.level = true
+  return y + 2
+end
 
--- the Quests tab's band and its dungeon pick (the quest window, Cute_Quest's PageQuests.lua, through Cute.Guide.Draw):
--- the band is the step now from the quest module (Cute.QuestBand, Cute_Quest's Band.lua) big and white, the next two
--- steps, the time to level, your party's steps; a click on the step reads its quest, Ctrl-click shows it on the arrow,
--- a right-click is its menu. Under it the pick's line and its card's rows, a virtual list from y top in the scroll
--- area. Returns the height the list takes and the function that shows its rows in view (the page's scroll calls it)
-function G.Draw(UI, y0)
-  y0 = y0 or 0
-  local sf = UI.scroll
-  local K = UI.COLORS
-  local color, fitText, ROW = UI.Color, UI.FitText, UI.ROW
-  local w = sf:Width()
+-- the pick's reason in one dim phrase, after the card's name: "3 mates online", "4 bosses left", "2 quests"
+local function why(card)
+  if #card.mates > 0 then return plural(#card.mates, "mate online", "mates online") end
+  if card.left > 0 then return plural(card.left, "boss left", "bosses left") end
+  if card.quests > 0 then return plural(card.quests, "quest", "quests") end
+  if card.unexplored then return "not been in" end
+  return nil
+end
+-- the Invite on the card: the mates it shows (four at most) not in your group and not invited this minute, each by the
+-- name their own Cute speaks under (G.Invite: never in a fight, only where the client lets you invite)
+local function invitable(card)
+  local out = {}
+  for i = 1, math.min(MATES, #card.mates) do
+    local m = card.mates[i]
+    if not m.grouped and m.invite and not invitedRecently(m) then out[#out + 1] = m end
+  end
+  return out
+end
+G.Invitable = invitable
+
+-- The guild's pick, the Quests tab's Dungeon section (its right column, or under the questing at the narrow size): a
+-- head ("Dungeon", the group's teal bar, the Dungeon atlas, "the guild's pick" on its right), then the picked dungeon as
+-- a card (Look.lua's pattern C): its art, its name and the reason, its level range against yours, its bosses' faces
+-- (killed, left, doubted) and how many are left, the quests for it, the best drop for you, the mates online in range and
+-- Invite. Its tooltip holds the reasons, where the knowledge comes from, the dungeon's bosses and loot, its quests, every
+-- mate in range, and for officers the guild's line and what it learned in play. A click opens the Dungeons tab on it.
+-- With no pick, the pick's own sentence as one dim row. Into host from y, w wide; returns the height it took
+function G.DrawPick(UI, host, y, w, narrow)
+  local K, L = UI.COLORS, UI.Look
   local officer = C.Roster:MeOfficer()
   local items, plan = G.Items(officer)
   local first, detail = G.Source()
-  local y = 4
-  local function bandRow(s, c, big, tip, fn)
-    local l = UI.bandLines:Get()
-    l:ClearAllPoints()
-    l:SetPoint("TOPLEFT", 0, -y)
-    local h = big and (ROW + 6) or ROW
-    l:SetSize(w, h)
-    l.bg:SetColorTexture(1, 1, 1, big and 0.05 or 0)
-    l.bar:SetShown(big)
-    l.bar:SetColorTexture(K.WHITE[1], K.WHITE[2], K.WHITE[3], 1)
-    l.val:Hide(); l.who:Hide()
-    l.fn, l.tip = fn, tip
-    if big then
-      UI.bandBig = UI.bandBig or UI.Text(UI.band, 15, K.WHITE)
-      UI.bandBig:ClearAllPoints(); UI.bandBig:SetPoint("LEFT", l, "LEFT", 8, 0); UI.bandBig:SetWidth(w - 16)
-      fitText(UI.bandBig, s, w - 20)
-      UI.bandBig:Show()
-      l.name:Hide()
-    else
-      l.name:ClearAllPoints(); l.name:SetPoint("LEFT", 8, 0); l.name:SetWidth(w - 16); l.name:SetJustifyH("LEFT")
-      color(l.name, c)
-      fitText(l.name, s, w - 20)
-      l.name:Show()
-    end
-    y = y + h
-    return l
-  end
-  if UI.bandBig then UI.bandBig:Hide() end
-  local Q = C.API.QuestBand
-  if Q and Q.On() then
-    local steps = Q.Steps()
-    local s1 = steps[1]
-    local text1 = s1 and Q.Text(s1) or "Nothing to do yet: the places below are worth your time."
-    bandRow(text1, K.WHITE, true, function(tip) tip:AddLine(text1, 1, 1, 1, true); tip:AddLine("Click: read its quest. Ctrl-click: show it on the arrow. Right-click: Not now, Drop.", 0.5, 0.5, 0.5, true) end,
-      function(_, which)
-        if not s1 then return end
-        if which == "RightButton" then Q.Menu(s1)
-        elseif IsControlKeyDown and IsControlKeyDown() then if Q.Arrow then Q.Arrow(s1) end
-        elseif Q.Read then Q.Read(s1, UI) end
-      end)
-    for i = 2, 3 do
-      local s = steps[i]
-      if s then local t = Q.Text(s); bandRow(t, K.DIM, false, function(tip) tip:AddLine(t, 1, 1, 1, true) end) end
-    end
-    local ttl, _, measured = Q.TimeToLevel()
-    if ttl then bandRow(ttl, K.MUTE, false, function(tip) tip:AddLine(measured and "From your XP an hour at this level." or "From the plan's XP a minute.", 1, 1, 1, true) end) end
-    -- your party's steps, three at most; the rest in one line's tooltip (a raid of forty would fill the band)
-    local members = Q.Members()
-    for i = 1, math.min(PARTY_ROWS, #members) do local m = members[i]; bandRow(m.name .. ": " .. m.text, UI.ClassColor(m.class)) end
-    if #members > PARTY_ROWS then
-      bandRow("and " .. (#members - PARTY_ROWS) .. " more in your group", K.DIM, false, function(tip)
-        tip:AddLine("Your group's steps", 1, 1, 1)
-        for i = PARTY_ROWS + 1, #members do local m = members[i]; local c = UI.ClassColor(m.class); tip:AddLine(m.name .. ": " .. m.text, c[1], c[2], c[3], true) end
-      end)
-    end
-  else
-    -- (no step yet: the module says why, reading the log or a QuestBank too old for it)
-    local why = (Q and Q.Why and Q.Why()) or "Reading your quest log."
-    bandRow(why, K.DIM, false, function(tip) tip:AddLine(why, 1, 1, 1, true) end)
-  end
-  UI:SetBand(y + 4)
-  -- what the page shows of yours draws it again when it changes (UI:ValueChanged)
-  UI.shownIds.level = true
-  local level = plan.level
-  local combat = G.InCombat()
-  local invites = true
-  local can = type(C_PartyInfo) == "table" and C_PartyInfo.CanInvite or nil
-  if type(can) == "function" and C.Get(can) == false then invites = false end
-  -- the columns from the right: how sure (a card's word) or a count; the level bar beside it; the range left of the bar
-  local ww = math.min(260, math.floor(w * 0.34)) -- the head's right column (the officer's guild line, a note's)
-  local word = 74                                -- a card's word
-  local count = 150                              -- a card part's count
-  local bw = math.max(90, math.min(180, math.floor(w * 0.18)))
-  local lo, hi = plan.lo, plan.hi
-  local function xOf(l, x0) return x0 + math.floor((l - lo) / math.max(1, hi - lo) * bw + 0.5) end
-  -- the level bar of a dungeon, its right edge `right` from the row's: the range on the track, green where your level is
-  -- in it, grey where it is above you, dim where it is below; your level a white tick. Returns the bar's left edge
-  local function levelBar(r, d, right)
-    local x0 = w - right - bw
-    r.track:ClearAllPoints(); r.track:SetPoint("LEFT", x0, 0); r.track:SetWidth(bw); r.track:Show()
-    if d.min then
-      local a, b = xOf(d.min, x0), xOf(d.max + 1, x0)
-      local c = (level >= d.min and level <= d.max) and K.GOOD or (d.min > level and BAR_COLOR.above or BAR_COLOR.below)
-      r.seg:ClearAllPoints(); r.seg:SetPoint("LEFT", a, 0); r.seg:SetWidth(math.max(2, b - a)); r.seg:SetColorTexture(c[1], c[2], c[3], 1); r.seg:Show()
-    end
-    r.mark:ClearAllPoints(); r.mark:SetPoint("LEFT", xOf(level + 0.5, x0) - 1, 0); r.mark:Show()
-    return x0
-  end
-  local function put(fs, point, x, width, s, c, justify)
-    fs:ClearAllPoints()
-    fs:SetPoint(point, x, 0)
-    fs:SetWidth(width)
-    fs:SetJustifyH(justify)
-    color(fs, c)
-    fitText(fs, s, width - 4)
-    fs:Show()
-  end
-  -- the page: the pick's line as its head (the officer's guild line at its right), then the picked dungeon's rows;
-  -- the head's tooltip holds the reasons, the source, the guild's counts and the learned lines
-  local top = plan.next
   local learned = plan.learned or {}
-  -- the officer's guild line at the head's right where the right column holds it whole; else on a line of its own under
-  -- the head, so nothing on the page is cut (its counts stay in the head's tooltip either way)
-  local guildLine = officer and plan.guild and plan.guild.line or nil
-  local guildRow
-  if guildLine then
-    UI.measure = UI.measure or UI.Text(UI.band, 12, K.DIM, "RIGHT")
-    UI.measure:Hide()
-    UI.measure:SetText(guildLine)
-    local width = UI.measure.GetUnboundedStringWidth or UI.measure.GetStringWidth
-    if width(UI.measure) > ww - 4 then
-      local guild = plan.guild
-      guildRow = { kind = "note", name = guildLine, c = K.DIM, tip = function(tip) tip:AddLine(guildLine, 1, 1, 1, true); if guild.tip then guild.tip(tip) end end }
-      guildLine = nil
+  local art = C.API.QuestArt
+  host.pickHead = host.pickHead or L.MakeRow(host)
+  local hd = host.pickHead
+  hd:ClearAllPoints(); hd:SetPoint("TOPLEFT", 0, -y); hd:Show()
+  local y0 = y
+  y = y + L.FillRow(hd, { kind = "head", bar = K.GROUP, icon = { art = "dungeon" }, name = "Dungeon", who = "the guild's pick" }, w)
+  local top = plan.next
+  local guildTip = function(tip)
+    if officer and plan.guild then
+      tip:AddLine(" ")
+      tip:AddLine(plan.guild.line, 1, 1, 1, true)
+      if plan.guild.tip then plan.guild.tip(tip) end
     end
-  end
-  local shown = { { kind = "head", name = top.line, who = guildLine, tip = function(tip)
-    if top.tip then top.tip(tip) end
-    tip:AddLine(" ")
-    tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
-    -- (the guild's line and its counts, whole)
-    if officer and plan.guild and plan.guild.tip then tip:AddLine(" "); tip:AddLine(plan.guild.line, 1, 1, 1, true); plan.guild.tip(tip) end
     if officer and #learned > 0 then
       tip:AddLine(" "); tip:AddLine("Learned in play", 1, 1, 1)
       for _, l in ipairs(learned) do tip:AddLine(l, 0.8, 0.8, 0.8, true) end
     end
-  end } }
-  if guildRow then shown[#shown + 1] = guildRow end
-  for _, it in ipairs(items) do shown[#shown + 1] = it end
-  local list = UI:List("guide", G.MakeRow)
-  list:Set(#shown, y0, ROW, function(r, i, ly)
-    local it = shown[i]
-    local kind = it.kind
-    r:SetHeight(ROW)
-    r:SetPoint("TOPLEFT", 0, -ly)
-    r:SetWidth(w)
-    r.bg:SetColorTexture(1, 1, 1, (kind == "head" and 0.06) or (kind == "card" and 0.035) or 0)
-    r.bar:SetShown(kind == "card" and it.pick == true)
-    r.bar:SetColorTexture(K.WHITE[1], K.WHITE[2], K.WHITE[3], 1)
-    for _, piece in ipairs(r.pieces) do piece:Hide() end
-    for _, p in ipairs(r.pips) do p:Hide() end
-    r.fn, r.tip = it.fn, it.tip
-    r.invite.mate = nil
-    -- the left: the name's edge after a label column (a card's parts under its name)
-    local x = 8
-    if UNDER[kind] then put(r.label, "LEFT", 24, 50, it.label or "", K.DIM, "LEFT"); x = 78 end
-    -- the right, from the row's edge in: the right column, then a dungeon's bar and range, or a mate's Invite button
-    -- and level
-    local right = 4
-    local hasWho = it.who ~= nil and it.who ~= ""
-    if kind == "card" then
-      if hasWho then put(r.who, "RIGHT", -4, word, it.who, it.wc or K.DIM, "RIGHT") end
-      right = 4 + word + 8
-    elseif kind == "bosses" or kind == "quests" or kind == "more" then
-      if hasWho then put(r.who, "RIGHT", -4, count, it.who, it.wc or K.DIM, "RIGHT") end
-      right = 4 + count + 8
-    elseif kind == "mate" and it.mate then
-      -- a mate's name, level and Invite button side by side (or "in your group" where the button would be)
-      local mt = it.mate
-      local nameW = math.max(60, math.min(170, w - x - 190))
-      put(r.val, "LEFT", x + nameW + 4, 30, it.val, K.DIM, "LEFT")
-      local bx = x + nameW + 40
-      if mt.grouped then
-        put(r.who, "LEFT", bx, 110, it.who, K.DIM, "LEFT")
-      else
-        -- greyed in combat, where you cannot invite, where no name reaches them, and for a minute after an invite
-        local b = r.invite
-        local recent = invitedRecently(mt)
-        b:ClearAllPoints(); b:SetPoint("LEFT", bx, 0)
-        b:SetLabel(recent and "Invited" or "Invite")
-        b:SetOn(not combat and invites and mt.invite ~= nil and not recent)
-        b.mate = mt
-        b.why = (combat and "Not in combat: invites wait until it ends.") or (not invites and "Only your group's leader or an assistant can invite.")
-          or (mt.invite == nil and "The game encodes this name: invite them from the guild roster.") or (recent and "Invited.") or ("Invite " .. mt.name .. " to your group.")
-        b:Show()
+  end
+  local card = top.card
+  host.pickCard = host.pickCard or L.MakeCard(host)
+  host.pickNote = host.pickNote or L.MakeRow(host)
+  local cw = host.pickCard
+  if not card then
+    cw:Hide()
+    local nr = host.pickNote
+    nr:ClearAllPoints(); nr:SetPoint("TOPLEFT", 0, -y); nr:Show()
+    y = y + L.FillRow(nr, { kind = "note", x = 10, name = top.line, nameC = K.DIM, tip = function(tip)
+      tip:AddLine(top.line, 1, 1, 1, true)
+      if top.tip then tip:AddLine(" "); top.tip(tip) end
+      tip:AddLine(" "); tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
+      guildTip(tip)
+    end }, w)
+    host.pickShown = nil
+    return y - y0
+  end
+  host.pickNote:Hide()
+  local d = card.d
+  local pips = pipsOf(d)
+  local faces = {}
+  for i, p in ipairs(pips) do
+    local enc = bossesOf(d)[i]
+    faces[i] = { state = p.state, name = p.name, paint = art and art.Face and function(t) art.Face(t, d, enc, p.name) end or nil }
+  end
+  local mates = {}
+  for i = 1, math.min(MATES, #card.mates) do local m = card.mates[i]; mates[i] = { name = m.name, class = m.class } end
+  local combat = G.InCombat()
+  local can = canInvite()
+  local list = invitable(card)
+  local invite
+  if #card.mates > 0 then
+    local names = {}
+    for _, m in ipairs(list) do names[#names + 1] = m.name end
+    local whyNot = (combat and "Not in combat: invites wait until it ends.") or (not can and "Only your group's leader or an assistant can invite.")
+      or (#list == 0 and "Invited, or in your group.") or nil
+    invite = { on = not whyNot, label = (#list == 0 and not combat and can) and "Invited" or "Invite",
+      why = whyNot or ("Invite " .. some(names, 4) .. " to your group."),
+      fn = function()
+        if G.InCombat() or not canInvite() then return end
+        for _, m in ipairs(invitable(card)) do G.Invite(m) end
+      end }
+  end
+  local data = {
+    name = d.name .. (d.kind == "raid" and " (raid)" or ""), why = why(card), min = d.min, max = d.max, level = plan.level, raid = d.kind == "raid",
+    cover = art and art.Cover and function(t, aw, ah) art.Cover(t, d, aw, ah) end or nil,
+    faces = faces, left = (#pips > 0) and (card.left .. " left") or nil, quests = card.quests,
+    drop = art and art.Drop and art.Drop(d) or nil, mates = mates, invite = invite,
+    fn = art and art.OpenDungeon and function(_, which) if which ~= "RightButton" then art.OpenDungeon(d) end end or nil,
+    tip = function(tip)
+      tip:AddLine(top.line, 1, 1, 1, true)
+      if top.tip then tip:AddLine(" "); top.tip(tip) end
+      tip:AddLine(" ")
+      dungeonTip(d)(tip)
+      local rows = G.CardRows(card, plan)
+      for _, it in ipairs(rows) do
+        if it.kind == "quests" and it.tip then tip:AddLine(" "); it.tip(tip) end
       end
-      right = w - x - nameW
-    elseif hasWho then
-      put(r.who, "RIGHT", -4, ww, it.who, it.wc or K.DIM, "RIGHT")
-      right = 4 + ww + 4
-    end
-    if it.d and kind == "card" then
-      local x0 = levelBar(r, it.d, right)
-      r.val:ClearAllPoints(); r.val:SetPoint("RIGHT", r, "LEFT", x0 - 6, 0); r.val:SetWidth(44); r.val:SetJustifyH("RIGHT")
-      color(r.val, K.INK)
-      fitText(r.val, it.val, 42)
-      r.val:Show()
-      right = w - x0 + 6 + 44 + 6
-    end
-    -- the pips, one a boss, as many as the row holds
-    if kind == "bosses" and it.pips and #it.pips > 0 then
-      local fit = math.max(1, math.floor((w - x - right + PIP_GAP) / (PIP + PIP_GAP)))
-      for k = 1, math.min(#it.pips, fit) do
-        local p = r.pips[k]
-        if not p then p = UI.Flat(r, "ARTWORK", K.DIM, 1); p:SetSize(PIP, PIP); r.pips[k] = p end
-        local pc = PIP_COLOR[it.pips[k].state] or PIP_COLOR.left
-        p:SetColorTexture(pc[1], pc[2], pc[3], 1)
-        p:ClearAllPoints(); p:SetPoint("LEFT", x + (k - 1) * (PIP + PIP_GAP), 0)
-        p:Show()
+      if #card.mates > 0 then
+        tip:AddLine(" ")
+        tip:AddLine("Online in range", 1, 1, 1)
+        for _, m in ipairs(card.mates) do
+          local c = C.UI.ClassColor(m.class)
+          tip:AddDoubleLine(m.name .. " " .. m.level, m.grouped and "in your group" or "", c[1], c[2], c[3], 0.6, 0.6, 0.6)
+        end
       end
-    end
-    -- the name, in the room left between the two
-    local room = w - x - right
-    if it.name and it.name ~= "" and room > 16 then
-      put(r.name, "LEFT", x, room, it.name, it.c or ((kind == "head" or kind == "card") and K.WHITE or (kind == "note" and K.MUTE or K.INK)), "LEFT")
-    else
-      r.name:SetText("")
-    end
-  end)
-  return #shown * ROW, function() list:Show(UI.scroll.bar:GetValue() or 0, UI.scroll:View()) end
+      tip:AddLine(" "); tip:AddLine(first, 1, 1, 1, true); tip:AddLine(detail, 0.7, 0.7, 0.7, true)
+      guildTip(tip)
+      if art and art.OpenDungeon then tip:AddLine("Click: the Dungeons tab on it.", 0.45, 0.45, 0.45) end
+    end,
+  }
+  cw:ClearAllPoints(); cw:SetPoint("TOPLEFT", 0, -y - 4); cw:Show()
+  y = y + 4 + L.FillCard(cw, data, w, narrow) + 4
+  host.pickShown = { card = card, plan = plan, invitable = list }
+  return y - y0
+end
+
+-- the band and the pick in one list, for a host with no columns of its own (the harness's stand-in Quests tab for a
+-- character without Cute_Quest): the band, then the pick under it in the scroll area. Returns the height and a no-op
+-- for the scroll (nothing in it is virtual)
+function G.Draw(UI, y0)
+  G.DrawBand(UI)
+  local host = UI:Host("guide")
+  host:ClearAllPoints(); host:SetPoint("TOPLEFT", 0, 0)
+  local w = UI.scroll:Width()
+  host:SetSize(w, 10)
+  local h = G.DrawPick(UI, host, y0 or 0, w, false)
+  host:SetHeight(math.max(10, (y0 or 0) + h))
+  return (y0 or 0) + h, function() end
 end
 
 -- (the launch round's windows) the Guide is no page of its own any more: its band is the Quests tab's, its pick the
 -- Quests tab's Dungeon rows (G.Draw), its two thresholds Settings > Rules' "Dungeons and gear". Its logic stays here, as
 -- guild knowledge a module addon reads through the door below. A character that ran it keeps its old choice, unread
 C.API.Guide = {
+  DrawBand = function(ui) return G.DrawBand(ui) end,
+  DrawPick = function(ui, host, y, w, narrow) return G.DrawPick(ui, host, y, w, narrow) end,
   Items = function(officer) return G.Items(officer) end,
   Pick = function(cards, level, soon, st) return G.Pick(cards, level, soon, st) end,
   CardRows = function(card, plan) return G.CardRows(card, plan) end,

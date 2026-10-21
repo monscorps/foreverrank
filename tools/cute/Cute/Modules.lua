@@ -116,7 +116,9 @@ function Cute.Page() return C.UI and C.UI.page or nil end
 function Cute.ModuleOn(id) local def = M.byId[id]; return def ~= nil and def.active == true end
 function Cute.Safe(fn, where) return C.Safe(fn, where) end
 function Cute.Font() return C.UI and C.UI.FONT or "Fonts\\ARIALN.TTF" end
-function Cute.Host(ui, key) return ui:Host(key) end
+function Cute.Host(ui, key, side) return ui:Host(key, side) end
+-- (the windows round) a column of its own on the window's right, w wide (UI:Side); its hosts: Cute.Host(ui, key, true)
+function Cute.Side(ui, w) return ui:Side(w) end
 -- a window by key ("guild", "quests"): what a module's page draws in (Cute_Quest's step frame reads a quest in its own)
 function Cute.Window(key) return C.UI and C.UI.Window(key) or nil end
 

@@ -1176,12 +1176,25 @@ local function sizeAll(c, w, h)
     win.frame:SetSize(w, h)
   end
 end
-local function glist(c) local v = qwin(c).lists.guide; return v and v.items or {} end
--- the Guide's band, line by line (the next best thing, where the knowledge comes from), and a line's tooltip
-local function bandLine(c, i) local n = 0; for _, l in ipairs(qwin(c).bandLines and qwin(c).bandLines.items or {}) do if l:IsShown() then n = n + 1; if n == i then return l end end end end
--- the Guide's head row: the pick's line, the first row of its list (its tooltip holds the reasons, the source and, for
--- an officer, the guild's line and what the guild learned)
-local function guideHead(c) for _, r in ipairs(glist(c)) do if r:IsShown() and r.idx == 1 then return r end end end
+-- (the windows round) the guild's pick on the Quests tab: the host it is drawn on (the harness's stand-in tab's "guide";
+-- with Cute_Quest the right column's "questsSide", or "questsUnder" at the narrow size), its widgets (the head, the card or
+-- the note), and its card or note: the one whose tooltip holds the reasons, the source and, for an officer, the guild's
+-- line and what the guild learned (Guide.lua G.DrawPick)
+local function pickHost(c)
+  local hosts = qwin(c).hosts or {}
+  for _, k in ipairs({ "guide", "questsSide", "questsUnder" }) do
+    local h = hosts[k]
+    if h and h:IsShown() and ((h.pickCard and h.pickCard:IsShown()) or (h.pickNote and h.pickNote:IsShown())) then return h end
+  end
+end
+local function glist(c)
+  local h = pickHost(c)
+  if not h then return {} end
+  local out = {}
+  for _, k in ipairs({ "pickHead", "pickCard", "pickNote" }) do if h[k] and h[k]:IsShown() then out[#out + 1] = h[k] end end
+  return out
+end
+local function guideHead(c) local h = pickHost(c); if not h then return nil end; return (h.pickCard and h.pickCard:IsShown()) and h.pickCard or h.pickNote end
 local function tipOf(o) local l0 = #lines; if o.__scripts.OnEnter then o.__scripts.OnEnter(o) end; return table.concat(lines, "\n", l0 + 1) end
 -- a row's tooltip filler read into text, a double line as "left | right"
 local function tipText(fill) local out = {}; fill({ AddLine = function(_, t) out[#out + 1] = t end, AddDoubleLine = function(_, l, r) out[#out + 1] = l .. " | " .. r end }); return table.concat(out, "\n") end
@@ -4274,8 +4287,11 @@ do
     openGuide(cy)
     local first = texts(cy)
     local _, cyPlan = cy.C.Guide.Items(false)
-    assert(first:find(cyPlan.next.line, 1, true) and tipOf(guideHead(cy)):find(SEEDED and "From research and the beta, checked against this client" or "Nothing shipped with this copy", 1, true),
-      "the page opens on the pick, where it comes from in the head's tooltip")
+    -- (the windows round: the pick a card, its name on it and the whole line in its tooltip; no pick, the line itself)
+    local shown = cyPlan.next.card and cyPlan.next.card.d.name or cyPlan.next.line
+    local headTip = tipOf(guideHead(cy))
+    assert(first:find(shown, 1, true) and headTip:find(cyPlan.next.line, 1, true) and headTip:find(SEEDED and "From research and the beta, checked against this client" or "Nothing shipped with this copy", 1, true),
+      "the page opens on the pick, where it comes from in the head's tooltip:\n" .. headTip)
     -- /cute diag on the officer: the seed's state, with what was learned
     local d0 = #ruler.chat
     ruler.env.SlashCmdList.CUTE("diag")
@@ -4875,38 +4891,44 @@ do
     local function ltabs() local out = {}; for id, b in pairs(L.tabs) do if b:IsShown() then out[#out + 1] = { id = id, x = b.__points[1].x } end end; table.sort(out, function(p, q) return p.x < q.x end); for i, t in ipairs(out) do out[i] = t.id end; return table.concat(out, " ") end
     assert(ltabs() == "quests route", "the quest window's tabs: " .. ltabs())
     -- its band: the step now (the engine's first step for a level-5 warrior in Northshire with quest 7 in the log)
+    -- (the windows round: its words with the count apart, Guide.lua G.Parts)
     local t = texts(rone)
     local steps = QB.Guide.Steps()
-    assert(steps[1] and t:find(QB.Guide.Text(steps[1]), 1, true), "the step now in the band: " .. tostring(steps[1] and QB.Guide.Text(steps[1])) .. "\n" .. t)
+    local words = steps[1] and QB.Guide.Parts(steps[1])
+    assert(words and t:find(words, 1, true), "the step now in the band: " .. tostring(words) .. "\n" .. t)
     local sf = rone.env.QuestBankStep
     -- (the windows round: Cute's look is the stop of the route, on the world with no backdrop, its text outlined: W11)
     assert(sf and sf:IsShown() and not sf.__flat and sf.now.__fontFlags == "OUTLINE", "the step frame up, in Cute's look")
     check(L.frame, "the quest window, Quests with its band")
-    -- the officer's guild line whole: at the head's right where it fits, else on a line of its own under the head
+    -- (the windows round) the left column: Questing, its places in the engine's Now order, the other places and the best
+    -- XP anywhere folded; the guild's line in the pick's tooltip (the Dungeons tab off here: no pick drawn, the Items
+    -- still say it)
     local _, gp = rone.C.Guide.Items(true)
-    assert(gp.guild and gp.guild.line and texts(rone):find(gp.guild.line, 1, true), "the guild's line whole on the Quests tab, nothing cut: " .. tostring(gp.guild and gp.guild.line) .. "\n" .. texts(rone))
+    assert(gp.guild and gp.guild.line, "the guild's line for the officer")
     local tq = texts(rone)
-    assert(tq:find("Now", 1, true) and tq:find("Available", 1, true) and tq:find("Most XP a minute", 1, true), "the Quests tab's three heads:\n" .. tq)
-    -- (xpm) the page's first place is the engine's Now order[1], by XP a minute, its set's XP and minutes on the row
+    assert(tq:find("Questing", 1, true) and tq:find("Best XP anywhere", 1, true), "the Quests tab's heads:\n" .. tq)
+    -- (xpm) the page's first place is the engine's Now order[1], by XP a minute, its set's XP on the row
     do
       local order = QB.UI.PlaceGroups(nil, true)
       local rows = {}
-      for _, r in ipairs(L.lists.quests.items) do if r:IsShown() then rows[#rows + 1] = r end end
-      table.sort(rows, function(p, q) return p.idx < q.idx end)
+      for _, r in ipairs(L.hosts.quests.pool.items) do if r:IsShown() then rows[#rows + 1] = r end end
+      table.sort(rows, function(p, q) return p.__points[1].y > q.__points[1].y end)
       local g1 = order[1]
-      assert(g1 and rows[1].name:GetText() == "Now" and rows[2].name:GetText() == g1.cat.name,
+      assert(g1 and rows[1].name:GetText() == "Questing" and rows[2].name:GetText() == g1.cat.name,
         "the first place is the engine's: " .. tostring(rows[2] and rows[2].name:GetText()) .. " against " .. tostring(g1 and g1.cat.name))
       if #g1.set > 0 then
-        assert(rows[2].who:GetText():find("^%d+ quests?, %d+ min$") and rows[2].val:GetText() == QB.Short(g1.setXP) .. " XP",
-          "its set's quests, minutes and XP: " .. tostring(rows[2].who:GetText()) .. " / " .. tostring(rows[2].val:GetText()))
+        assert(rows[2].val:GetText() == QB.Comma(math.floor(g1.setXP / 10 + 0.5) * 10) .. " XP" and rows[2].line2:GetText():find("^%d+ quests?"),
+          "its set's XP and its quests: " .. tostring(rows[2].val:GetText()) .. " / " .. tostring(rows[2].line2:GetText()))
       end
     end
-    -- the right column (quests and minutes) keeps clear of the scroll view's edge and the window's
+    -- the right-hand values keep clear of the scroll view's edge and the window's
     local view, win = rectOf(L.scroll), rectOf(L.frame)
-    for _, row in ipairs(L.lists.quests.items) do
-      if row:IsShown() and row.who:IsShown() then
-        local rr = rectOf(row.who)
-        assert(rr and rr.r <= view.r - 4 and rr.r <= win.r - 24, string.format("the Quests tab's right column at the edge: '%s' ends %d px from the view's edge, %d from the window's", tostring(row.who:GetText()), view.r - rr.r, win.r - rr.r))
+    for _, row in ipairs(L.hosts.quests.pool.items) do
+      for _, fs in ipairs({ row.who, row.val }) do
+        if row:IsShown() and fs:IsShown() then
+          local rr = rectOf(fs)
+          assert(rr and rr.r <= view.r - 4 and rr.r <= win.r - 24, string.format("the Quests tab's right column at the edge: '%s' ends %d px from the view's edge, %d from the window's", tostring(fs:GetText()), view.r - rr.r, win.r - rr.r))
+        end
       end
     end
     -- Settings: the Quests group's sections, and Data you share in Cute's
@@ -5144,21 +5166,25 @@ do
     for i, n in ipairs({ "Ada", "Bo", "Cy", "Di", "Ed" }) do party[i] = { name = n, class = "MAGE", text = "Kill Kobold Vermin " .. i .. "/8" } end
     local real = QB.Guide.MemberSteps
     QB.Guide.MemberSteps = function() return party end
+    -- (the windows round: the party is the Quests tab's Party section, four at most, a row each: name and step)
     openGuide(c)
     local t = texts(c)
-    assert(t:find("Ada: Kill Kobold Vermin 1/8", 1, true) and t:find("Cy: Kill Kobold Vermin 3/8", 1, true) and not t:find("Di: Kill", 1, true) and not t:find("Ed: Kill", 1, true),
-      "three of the five in the band:\n" .. t)
-    assert(t:find("and 2 more in your group", 1, true), "the rest folded into one line:\n" .. t)
+    assert(t:find("Kill Kobold Vermin 1/8", 1, true) and t:find("Kill Kobold Vermin 4/8", 1, true) and not t:find("Kill Kobold Vermin 5/8", 1, true),
+      "four of the five in the Party section:\n" .. t)
+    assert(t:find("and 1 more in your group", 1, true), "the rest folded into one line:\n" .. t)
     local more
-    for _, l in ipairs(qwin(c).bandLines.items) do if l:IsShown() and l.name:GetText() == "and 2 more in your group" then more = l end end
-    assert(more and tipOf(more):find("Di: Kill Kobold Vermin 4/8", 1, true) and tipOf(more):find("Ed: Kill Kobold Vermin 5/8", 1, true), "its tooltip names them: " .. tostring(more and tipOf(more)))
-    check(qwin(c).frame, "guide, a party of five in the band")
-    party[4], party[5] = nil, nil
+    for _, k in ipairs({ "questsSide", "questsUnder" }) do
+      local h = qwin(c).hosts[k]
+      if h and h:IsShown() and h.pool then for _, r in ipairs(h.pool.items) do if r:IsShown() and r.name:GetText() == "and 1 more in your group" then more = r end end end
+    end
+    assert(more and tipOf(more):find("Ed: Kill Kobold Vermin 5/8", 1, true), "its tooltip names them: " .. tostring(more and tipOf(more)))
+    check(qwin(c).frame, "guide, a party of five on the Quests tab")
+    party[5] = nil
     redraw(c)
-    assert(not texts(c):find("more in your group", 1, true) and texts(c):find("Cy: Kill", 1, true), "three: no fold")
+    assert(not texts(c):find("more in your group", 1, true) and texts(c):find("Kill Kobold Vermin 4/8", 1, true), "four: no fold")
     QB.Guide.MemberSteps = real
     leave(c)
-    print("cute quest: the band shows three of the party's steps, the rest in one line's tooltip")
+    print("cute quest: the Quests tab's Party section shows four of the party's steps, the rest in one line's tooltip")
   end)
 end
 
@@ -6005,7 +6031,10 @@ do
       end
       return out
     end
-    local function rowOfMate(c, name) for _, r in ipairs(glist(c)) do if r:IsShown() and r.invite.mate and r.invite.mate.name == name then return r end end end
+    -- (the windows round) the pick is a card (Look.lua's pattern C): its mates' names in their class colours, four at
+    -- most, and one Invite for the ones it shows; the rest of the mates in its tooltip
+    local function pickCard(c) local h = guideHead(c); return h and h.invite and h or nil end
+    local function mateText(c, name) local cw = pickCard(c); for _, t in ipairs(cw and cw.mates or {}) do if t:IsShown() and t:GetText() == name then return t end end end
     local function views(label)
       for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
         for _, c in ipairs({ vee, gil }) do
@@ -6014,8 +6043,8 @@ do
           openGuide(c)
           local who = string.format("%s guide, %s, %dx%d", c == gil and "officer" or "member", label, size[1], size[2])
           check(qwin(c).frame, who)
-          for _, l in ipairs(qwin(c).bandLines.items) do if l:IsShown() then hover(l) end end
-          for _, l in ipairs(glist(c)) do if l:IsShown() then hover(l); if l.invite:IsShown() then hover(l.invite) end end end
+          if qwin(c).bandKit then hover(qwin(c).bandKit.step) end
+          for _, l in ipairs(glist(c)) do if l:IsShown() then hover(l); if l.invite and l.invite:IsShown() then hover(l.invite) end end end
           local bar = qwin(c).scroll.bar
           local _, max = bar:GetMinMaxValues()
           bar:SetValue(max)
@@ -6033,9 +6062,9 @@ do
       assert(plan.next.line == "Run The Deadmines: 6 guild mates online in range, 4 bosses you have not killed, 1 quest", "the next best thing: " .. plan.next.line)
       openGuide(vee)
       local band = guideHead(vee)
-      assert(band.name:GetText() == plan.next.line, "the list's head: " .. tostring(band.name:GetText()))
+      assert(band and band.name:GetText() == "The Deadmines" and band.why:GetText() == "6 mates online", "the card: its name and the reason: " .. tostring(band and band.why:GetText()))
       local why = tipOf(band)
-      assert(why:find("guild mates online in range first, then what is left for you there", 1, true) and why:find("The Deadmines | 6 mates, 4 bosses, 1 quest", 1, true), "its reason in the tooltip:\n" .. why)
+      assert(why:find(plan.next.line, 1, true) and why:find("guild mates online in range first, then what is left for you there", 1, true) and why:find("The Deadmines | 6 mates, 4 bosses, 1 quest", 1, true), "its reason in the tooltip:\n" .. why)
       -- the card's parts: four pips not killed; the quests for an Alliance priest at 20; six mates, four shown
       local u = under(list, at)
       local pips = {}
@@ -6048,47 +6077,44 @@ do
         and not qt:find("Horde", 1, true), "the quests' tooltip:\n" .. qt)
       assert(table.concat(u.mates, ", ") == "Bo 19, Lu 21, Ra 19, Mo 18" and u.more and u.more.name == "and 2 more online in range", "the mates nearest first, four shown: " .. table.concat(u.mates, ", "))
       assert(tipText(u.more.tip):find("Nox 22", 1, true) and not table.concat(u.mates, ","):find("Zed", 1, true) and not table.concat(u.mates, ","):find("Kay", 1, true), "the rest in its tooltip; Zed offline and Kay past the range left out")
-      -- the level bar: the range on the track, green, and Vee's tick; the mates class-coloured
-      local cr
-      for _, r in ipairs(glist(vee)) do if r:IsShown() and r.name:GetText() == "The Deadmines" then cr = r end end
-      assert(cr and cr.track:IsShown() and cr.seg:IsShown() and cr.mark:IsShown() and cr.bar:IsShown(), "the card's level bar and its mark as the pick")
-      local br = rowOfMate(vee, "Bo")
+      -- drawn: the range on its track and Vee's tick, the faces and "4 left", the quests, four mates class-coloured, the
+      -- rest of the six in the tooltip
+      local cw = pickCard(vee)
+      local faces = 0
+      for _, f in ipairs(cw.faces) do if f:IsShown() then faces = faces + 1 end end
+      assert(cw.track:IsShown() and cw.you:IsShown() and cw.bar:IsShown() and faces == 4 and cw.left:GetText() == "4 left" and cw.quests:GetText() == "1 quest", "the card's range, its tick, four faces, 4 left, its quest")
+      assert(mateText(vee, "Bo") and mateText(vee, "Mo") and not mateText(vee, "Nox") and why:find("Nox 22", 1, true) and why:find("Pi 23", 1, true), "four mates on the card, all six in its tooltip")
       local mc = vee.env.RAID_CLASS_COLORS.MAGE
-      assert(br and sameColor(br.name.__color, { mc.r, mc.g, mc.b }), "Bo's name in the mage's colour")
-      -- invites: Bo by the sender string his Cute speaks under, Lu by the roster's name; each says so for a minute
-      press(br.invite)
-      press(rowOfMate(vee, "Lu").invite)
-      assert(vee.invites[1] == "Bo-Forever" and vee.invites[2] == "Lu-Forever" and #vee.invites == 2, "the invites: " .. table.concat(vee.invites, ", "))
+      assert(sameColor(mateText(vee, "Bo").__color, { mc.r, mc.g, mc.b }), "Bo's name in the mage's colour")
+      -- Invite: the four shown, Bo by the sender string his Cute speaks under, Lu by the roster's name; then "Invited"
+      press(cw.invite)
+      assert(vee.invites[1] == "Bo-Forever" and vee.invites[2] == "Lu-Forever" and #vee.invites == 4, "the invites: " .. table.concat(vee.invites, ", "))
       tick(vee, 1)
-      assert(rowOfMate(vee, "Bo").invite.label:GetText() == "Invited" and rowOfMate(vee, "Bo").invite.__disabled, "Bo's button says invited")
-      -- never in combat: the buttons greyed as combat starts, a press inviting nobody; back after it
+      cw = pickCard(vee)
+      assert(cw.invite.label:GetText() == "Invited" and cw.invite.__disabled, "the button says invited")
+      vee.C.Guide.invited = {}
+      redraw(vee)
+      -- never in combat: greyed as combat starts, a press inviting nobody; back after it
       vee.combat = true
       fire(vee, "PLAYER_REGEN_DISABLED")
       tick(vee, 1)
-      local ra = rowOfMate(vee, "Ra")
-      assert(ra.invite.__disabled and tipOf(ra.invite):find("Not in combat", 1, true), "in combat the buttons are greyed")
-      press(ra.invite)
-      assert(#vee.invites == 2, "a press in combat invites nobody")
+      cw = pickCard(vee)
+      assert(cw.invite.__disabled and tipOf(cw.invite):find("Not in combat", 1, true), "in combat the button is greyed")
+      press(cw.invite)
+      assert(#vee.invites == 4, "a press in combat invites nobody")
       vee.combat = false
       fire(vee, "PLAYER_REGEN_ENABLED")
       tick(vee, 1)
-      assert(not rowOfMate(vee, "Ra").invite.__disabled, "after combat they are back")
-      -- in a group led by another the client says you cannot invite; Bo in your group says so, no button
+      assert(not pickCard(vee).invite.__disabled, "after combat it is back")
+      -- in a group led by another the client says you cannot invite; Bo in your group says so in the tooltip
       vee.o.cantInvite = true
       redraw(vee)
-      assert(rowOfMate(vee, "Ra").invite.__disabled and tipOf(rowOfMate(vee, "Ra").invite):find("leader or an assistant", 1, true), "where the client says you cannot invite")
+      assert(pickCard(vee).invite.__disabled and tipOf(pickCard(vee).invite):find("leader or an assistant", 1, true), "where the client says you cannot invite")
       vee.o.cantInvite = nil
       vee.o.party = { "Bo" }
       fire(vee, "GROUP_ROSTER_UPDATE")
       tick(vee, 1)
-      local inGroup
-      for _, r in ipairs(glist(vee)) do if r:IsShown() and r.name:GetText() == "Bo" then inGroup = r end end
-      assert(inGroup and not inGroup.invite:IsShown() and inGroup.who:GetText() == "in your group", "Bo in your group: no button")
-      -- the rest shown at a click, and fewer again
-      local moreRow
-      for _, r in ipairs(glist(vee)) do if r:IsShown() and r.name:GetText() == "and 2 more online in range" then moreRow = r end end
-      press(moreRow)
-      assert(rowOfMate(vee, "Pi") and rowOfMate(vee, "Nox"), "a click shows them all")
+      assert(tipOf(guideHead(vee)):find("Bo 19 | in your group", 1, true) and not tipOf(pickCard(vee).invite):find("Bo,", 1, true), "Bo in your group: said so, not invited")
       views("six mates shown")
       vee.C.Guide.open[36] = nil
       -- next to open (plan.soon, the pick's tooltip names the first): Blackfathom at 24 for Vee; Krol'dok and The Drowned
@@ -6101,7 +6127,7 @@ do
       -- the guild's version, for the officer
       local _, gp = gil.C.Guide.Items(true)
       openGuide(gil)
-      assert(gp.guild.line == "Most members are 18-23: The Deadmines" and guideHead(gil).who:GetText() == gp.guild.line, "the officer's head, the guild's line at its right: " .. tostring(gp.guild.line))
+      assert(gp.guild.line == "Most members are 18-23: The Deadmines" and tipOf(guideHead(gil)):find(gp.guild.line, 1, true), "the officer's card: the guild's line in its tooltip: " .. tostring(gp.guild.line))
       assert(tipOf(guideHead(gil)):find("8 of 10 members are between 18 and 23", 1, true), "its counts in the tooltip")
       -- the awaited dungeon found. Its tooltip says what places it; one member's entry does not (one edited copy's
       -- label and entry would): Gil alone in "the Drowned City", instance 9100, and Vee alone in "Drowned City" (9200)
@@ -7352,10 +7378,11 @@ do
       for _, c in ipairs({ gil, vee, bo }) do login(c) end
       tickAll(60)
       openGuide(vee)
-      local row
-      for _, r in ipairs(glist(vee)) do if r:IsShown() and r.invite.mate and r.invite.mate.name == "Bo" then row = r end end
-      assert(row and row.invite.mate.invite == "Bo-Forever", "a Kstring sender string is no name to invite: the roster's name: " .. tostring(row and row.invite.mate.invite))
-      press(row.invite)
+      -- (the windows round: the card's one Invite, for the mates it shows: Bo alone here)
+      local head = guideHead(vee)
+      local list = (pickHost(vee) and pickHost(vee).pickShown and pickHost(vee).pickShown.invitable) or {}
+      assert(list[1] and list[1].name == "Bo" and list[1].invite == "Bo-Forever", "a Kstring sender string is no name to invite: the roster's name: " .. tostring(list[1] and list[1].invite))
+      press(head.invite)
       assert(#vee.invites == 1 and vee.invites[1] == "Bo-Forever", "the invite went to the roster's name")
       for _, c in ipairs({ gil, vee, bo }) do leave(c) end
     end)
@@ -11942,8 +11969,8 @@ do
     local steps = QB.Guide.Steps()
     local s1 = steps[1]
     assert(s1 and s1.qid, "a step with a quest")
-    local band
-    for _, l in ipairs(L.bandLines.items) do if l:IsShown() and l.fn then band = l end end
+    local band = L.bandKit and L.bandKit.step
+    assert(band and band:IsShown() and band.fn, "the band's step")
     band.__scripts.OnClick(band, "LeftButton")
     local q = QB.Quest.Get(s1.qid)
     assert(L.reading and L.reading.id == s1.qid and texts(c):find(q.name, 1, true) and texts(c):find("Back", 1, true), "the step's click reads its quest:\n" .. texts(c))
@@ -11976,12 +12003,10 @@ do
       press((function() for _, b in ipairs(L.bandButtons.items) do if b:IsShown() and b.label:GetText() == "Back" then return b end end end)())
     end
     -- a list row: click reads; Ctrl-click shows it on the arrow and reads nothing
+    -- (the windows round: a quest's row is the one with a level, pattern A)
     local row
-    for _, r in ipairs(L.lists.quests.items) do if r:IsShown() and r.fn and r.tip and r.name:GetText() ~= "" and not r.name:GetText():find("^Show") then
-      local okRow = false
-      for _, x in ipairs({ "Now", "Available", "Most XP a minute", "Highest XP" }) do if r.name:GetText() == x then okRow = true end end
-      if not okRow and r.who:IsShown() and r.val:IsShown() and r.val:GetText():find(" XP$") and not r.who:GetText():find("quests?, ") then row = r end
-    end end
+    for _, r in ipairs(L.hosts.quests.pool.items) do if r:IsShown() and r.fn and r.tip and r.lvl:IsShown() then row = row or r end end
+    assert(row, "a quest's row on the Quests tab")
     if row then
       L.scroll.bar:SetMinMaxValues(0, 100); L.scroll.bar:SetValue(20)
       local at = L.scroll.bar:GetValue()
@@ -12201,6 +12226,79 @@ do
     assert(p.x == 300 and p.y == 800, "its own place once moved: " .. tostring(p.x))
     leave(c)
     print("windows W12: windows open centred; Settings beside the window whose cog opened it, where the screen has room, until moved; the engine's pieces in Cute's places")
+  end)
+end
+
+-- W13 (sub-project D): the Quests tab in the windows' look. The band over the whole width: the step's icon at 24 px, its
+-- words at 15 px with the count apart and its share on a 2 px bar, the next two at 14 px, the level line over the XP
+-- bar. Under it at 1000 px and more two columns, the right one 396 px with its own scroll bar: the questing on the left
+-- (Questing, its places with their picture or icon, the open place's quests as two-line rows: the quest POI or the
+-- offer's !, the level in its colour, line 2 the objectives with their cursors or whom it goes to or comes from); on
+-- the right the guild's pick as a card (its art the Encounter Journal's as the EJ cuts it, at 174 x 96), the gear
+-- upgrade, the party. At 760 one column, the right's sections after the questing. Every row an icon and its bar
+do
+  local function member(name, rank, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = level or 20, online = true } end
+  isolated({ member("Rone", 1, 20), member("Pim", 3, 19), member("Ada", 3, 21) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2, [33] = 1 } }))
+    login(c); tickAll(6)
+    for _, key in ipairs({ "Cute_Quest:journal", "Cute_Quest:gear" }) do c.C.Modules.Set(key, true) end
+    tick(c, 2)
+    local QB = c.addons[2].private
+    local UI = c.C.UI
+    sizeAll(c, 1040, 640)
+    UI:Open("quests")
+    local L = qwin(c)
+    -- the band
+    local kit = L.bandKit
+    local s1 = QB.Guide.Steps()[1]
+    assert(kit and kit:IsShown() and s1, "the band and a step")
+    local words, have, need = QB.Guide.Parts(s1)
+    assert(kit.step.icon:IsShown() and kit.step.icon:GetWidth() == 24 and kit.step.text.__size == 15 and kit.step.text:GetText():sub(1, 8) == words:sub(1, 8),
+      "the step: its icon at 24 px, its words at 15 px: " .. tostring(kit.step.text:GetText()))
+    if have then assert(kit.step.count:GetText() == have .. "/" .. need and kit.track:IsShown(), "the count apart and its bar") end
+    assert(kit.level:IsShown() and kit.level.text:GetText():find("^Level 20") and kit.xp:IsShown(), "the level line over the XP bar: " .. tostring(kit.level.text:GetText()))
+    -- two columns
+    assert(L.side and L.side:IsShown() and L.side:GetWidth() == 396 and L.hosts.questsSide:IsShown(), "the right column, 396 px")
+    local left = L.hosts.quests
+    local quests, places = 0, 0
+    for _, r in ipairs(left.pool.items) do
+      if r:IsShown() and (r.lvl:IsShown() or r.pic:IsShown() or r.slot:IsShown()) then
+        assert(r.slot:IsShown() or r.pic:IsShown(), "every row its icon: " .. tostring(r.name:GetText()))
+        assert(r.bar:IsShown(), "every row its category's bar: " .. tostring(r.name:GetText()))
+        if r.lvl:IsShown() then
+          quests = quests + 1
+          local q
+          for id, x in pairs(QB.Data.QN) do if x == r.name:GetText() then q = QB.Quest.Get(id) end end
+          if q then
+            local held = QB.state.log[q.id]
+            local want = held and (held.complete and "turnin" or "progress") or (q.repeatable and "repeatable" or "accept")
+            local art = c.C.UI.Look.ART[want]
+            assert(r.slot.tex.cuteArt == art, "a quest's icon by where it stands: " .. q.name .. " " .. want)
+            assert(r.lvl:GetText():find("^" .. q.lvl) and r.line2:GetText() ~= "", "its level and line 2: " .. q.name)
+          end
+        elseif r:GetHeight() == 40 then places = places + 1 end
+      end
+    end
+    assert(quests >= 1 and places >= 1, "places and their quests drawn: " .. places .. ", " .. quests)
+    -- the right column: the pick (the Deadmines for a member at 20 with mates at 19 and 21 when the seed is there)
+    local side = L.hosts.questsSide
+    assert(side.pickHead and side.pickHead:IsShown() and side.pickHead.name:GetText() == "Dungeon", "the Dungeon head")
+    if SEEDED then
+      local cw = side.pickCard
+      assert(cw and cw:IsShown() and cw.name:GetText() == "The Deadmines", "the guild's pick as a card")
+      local tc = cw.art.__tc
+      assert(cw.art:GetWidth() == 174 and tc and tc[1] < 0.01 and tc[2] <= 0.68359375 + 1e-6 and tc[2] > 0.67, "its art the Encounter Journal's at 174 x 96, as the EJ cuts it: " .. tostring(tc and tc[2]))
+    end
+    check(L.frame, "W13 the Quests tab, 1040x640")
+    -- 760: one column, the right's sections after the questing
+    sizeAll(c, 760, 420)
+    UI:Open("quests")
+    assert(not L.side:IsShown() and L.hosts.questsUnder:IsShown() and not L.hosts.questsSide:IsShown(), "one column at 760")
+    check(L.frame, "W13 the Quests tab, 760x420")
+    sizeAll(c, 1040, 640)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print(string.format("windows W13: the Quests tab in the look: the band (24 px icon, 15 px words, the count apart, the level over the XP bar), two columns at 1040 (the pick a card with the EJ's art), one at 760; %d places and %d quests drawn, each its icon and bar", places, quests))
   end)
 end
 
