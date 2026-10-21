@@ -695,7 +695,8 @@ end
 -- Where you stand is read into one table kept for it (20 times a second; nothing keeps it past the update)
 local here = {}
 function Mini.Update(dt)
-  if not Mini.hooked and Mini.Owned() then Mini.Hooks() end -- (a host's map module just came on)
+  local owned = Mini.Owned()
+  if owned ~= Mini.wasOwned then Mini.OwnerChanged(owned) end -- (a host's map module came on, or went off)
   local me = QB.API.WorldPosition(nil, here)
   Mini.Place(me, QB.MiniView.Tick(dt, me))
 end
@@ -1021,7 +1022,10 @@ end
 
 -- QuestBank's data, read again: the places' yards, the list and its groups
 function Mini.Invalidate()
-  if not Mini.hooked and Mini.ready and Mini.Owned() then Mini.Hooks() end -- (a host's map module just came on)
+  if Mini.ready then
+    local owned = Mini.Owned()
+    if owned ~= Mini.wasOwned then Mini.OwnerChanged(owned) end -- (a host's map module just came on, or went off)
+  end
   worldOf, cache.list, grp.list = {}, nil, nil
   if QB.Target then QB.Target.Invalidate() end
 end
@@ -1173,6 +1177,25 @@ function Mini.ResetFree()
   return a + b
 end
 
+-- the minimap the engine's, or no more (Mini.Update: a host's map module switched in play): on, the hooks once and,
+-- coming back on, the engine's size, place and tracking again; off, what the engine set goes back (Mini.Release). Out of
+-- a fight: in one, tried again at the next update
+function Mini.OwnerChanged(owned)
+  local fight = InCombatLockdown and InCombatLockdown()
+  if owned then
+    if not Mini.hooked then Mini.Hooks() end
+    if Mini.wasOwned == false then
+      if fight then return end
+      Mini.ApplyFree()
+      Mini.ApplyTracking()
+    end
+  elseif Mini.wasOwned then
+    if fight then return end
+    Mini.Release()
+  end
+  Mini.wasOwned = owned
+end
+
 -- Whose the minimap's mouse, size, place and tracking menu are: QuestBank's from its login. A host that runs this
 -- engine as one of its modules (Cute_Quest, Bridge.lua) sets QB.MapOn, and the minimap is the engine's only while that
 -- says yes (Cute's Map module): until then nothing of it is touched (no hook, no size or place put back, Target
@@ -1283,10 +1306,18 @@ function Mini.TrackOn(which)
   return ok and type(info) == "table" and plain(info.active) == true
 end
 
+-- (the review round) what the game had before the engine first set Target or Focus, for Mini.Release
+local trackWas = {}
+local function keepWas(which, i)
+  if trackWas[which] ~= nil then return end
+  local ok, info = pcall(C_Minimap.GetTrackingInfo, i)
+  trackWas[which] = ok and type(info) == "table" and plain(info.active) == true
+end
+
 function Mini.SetTrack(which, on)
   trackDB()[which] = on and true or false
   local i = trackIndex(which)
-  if i and C_Minimap.SetTracking then pcall(C_Minimap.SetTracking, i, on and true or false) end
+  if i and C_Minimap.SetTracking then keepWas(which, i); pcall(C_Minimap.SetTracking, i, on and true or false) end
 end
 
 -- after a loading screen: the saved choices, when the game's own menu does not carry them (and the minimap is the
@@ -1298,10 +1329,27 @@ function Mini.ApplyTracking()
   for which in pairs(NAMES) do
     if saved[which] ~= nil then
       local i = trackIndex(which)
-      if i and C_Minimap.SetTracking then pcall(C_Minimap.SetTracking, i, saved[which] == true); n = n + 1 end
+      if i and C_Minimap.SetTracking then keepWas(which, i); pcall(C_Minimap.SetTracking, i, saved[which] == true); n = n + 1 end
     end
   end
   return n
+end
+
+-- (the review round) the minimap the engine's no more (a host's Map module switched off in play): Target and Focus
+-- tracking as the game had them before the engine first set them, and the game's size and place (Edit Mode's anchor)
+-- where the engine had sized or moved it. The engine's own choices are kept: they come back with the minimap
+-- (Mini.OwnerChanged). (The launch round handed the mouse back and left Target on and its size and place as they were)
+function Mini.Release()
+  for which, was in pairs(trackWas) do
+    local i = trackIndex(which)
+    if i and C_Minimap.SetTracking then pcall(C_Minimap.SetTracking, i, was) end
+    trackWas[which] = nil
+  end
+  local c, db = container(), freeDB()
+  if c and (db.scale or db.x) then
+    c:SetScale(db.orig or 1)
+    if MinimapCluster and MinimapCluster.ApplySystemAnchor then pcall(MinimapCluster.ApplySystemAnchor, MinimapCluster) end
+  end
 end
 
 function Mini.TrackingMenu(owner, root)

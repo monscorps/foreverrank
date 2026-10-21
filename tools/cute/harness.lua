@@ -5157,12 +5157,29 @@ do
     end
     assert(named, "the menu's last line: Cute settings")
     assert(c.tracking[2].active == true, "Map on: Target on the minimap")
-    -- Map off again: the game's again
-    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1)
+    -- (the review round) the engine's size for the minimap while Map is on (Ctrl-wheel)
+    local cont = c.env.MinimapCluster.MinimapContainer
+    local s0 = cont:GetScale() or 1
+    c.env.MinimapCluster.__anchored = nil
+    Mini.SetScale(1.5)
+    assert(math.abs((cont:GetScale() or 1) - 1.5) < 0.01, "Map on: the engine sizes the minimap")
+    -- Map off again: the game's again (the minimap's own update, a frame of the game's, sees it too)
+    local ov = c.env.QuestBankMinimap
+    local function frameTick() if ov and ov.__scripts.OnUpdate then ov.__scripts.OnUpdate(ov, 1) end end
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1); frameTick()
     clicks, wheels, menus = c.gameClicks or 0, c.gameWheel or 0, #c.contextMenus
     mini.__scripts.OnMouseUp(mini, "RightButton"); tick(c, 1)
     mini.__scripts.OnMouseWheel(mini, 1)
     assert((c.gameClicks or 0) == clicks + 1 and #c.contextMenus == menus and (c.gameWheel or 0) == wheels + 1, "Map off again: the game's ping and zoom")
+    -- (the review round) and what the engine set goes back: Target tracking as the game had it before, the game's size
+    -- and place (Edit Mode's anchor); the engine's own choices kept for Map on again
+    assert(c.tracking[2].active == false, "Map off again: Target tracking back as the game had it")
+    assert(math.abs((cont:GetScale() or 1) - s0) < 0.01 and c.env.MinimapCluster.__anchored, "Map off again: the game's size and place: " .. tostring(cont:GetScale()))
+    assert(Mini.FreeDB().scale == 1.5 and Mini.TrackDB().target == true, "the engine's size and Target kept for Map on again")
+    c.C.Modules.Set("Cute_Quest:map", true); tick(c, 1); frameTick()
+    assert(c.tracking[2].active == true and math.abs((cont:GetScale() or 1) - 1.5) < 0.01, "Map on again: Target and the engine's size back")
+    c.C.Modules.Set("Cute_Quest:map", false); tick(c, 1); frameTick()
+    assert(c.tracking[2].active == false and math.abs((cont:GetScale() or 1) - s0) < 0.01, "and off: the game's again")
     -- a step without a quest (travel, train, grind, corpse) clicked: the Quests page, never Race; Route on: Route
     QB.UI:Open(3)
     assert(c.C.UI.page == "quests", "Route off: a travel step opens Quests: " .. tostring(c.C.UI.page))
