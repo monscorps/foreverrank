@@ -263,6 +263,42 @@ local function restoreOwe(src)
     end
   end
 end
+-- the kill claims not sent yet (M.pendingClaims, by their text: a repeat kill's is kept nowhere else), in the wire too
+M.pendingClaims = {}
+-- (a /reload in a raid's lockdown, after a wipe say: what waited for it to end goes once it does. The claims not sent
+-- go with the release, as those claimed while the record waits (M:Release); the answers owed (an ask kept waiting,
+-- M.owe) are owed again, whole where one wanted it whole. 0.7.1's first build lost both)
+function M:Rearm(claims)
+  local sent = STATE.k.sent
+  for text, c in pairs(type(claims) == "table" and claims or {}) do
+    local with = {}
+    for g in pairs(type(c) == "table" and type(c.with) == "table" and c.with or {}) do if type(g) == "string" then with[g] = true end end
+    if type(text) == "string" and type(c) == "table" and tonumber(c.enc) and tonumber(c.t) and not sent[text] and #self.waitingClaims < 64 then
+      self.pendingClaims[text] = { enc = tonumber(c.enc), t = tonumber(c.t), with = with }
+      self.waitingClaims[#self.waitingClaims + 1] = { enc = tonumber(c.enc), t = tonumber(c.t), with = with }
+    end
+  end
+  local rec, pass = false, false
+  for _, list in pairs(self.owe) do
+    for _, e in ipairs(list) do
+      if e.rec == true then
+        rec = true
+        waits.rec[#waits.rec + 1] = e
+        local n = tonumber(e.nr) or 0
+        if n == 0 then self.answerFull = true elseif not self.answerFull then self.answerSince = math.min(self.answerSince or n, n) end
+      end
+      if e.pass == true then
+        pass = true
+        waits.pass[#waits.pass + 1] = e
+        local n = tonumber(e.np) or 0
+        if n == 0 then self.gameFull = true elseif not self.gameFull then self.gameSince = math.min(self.gameSince or n, n) end
+      end
+    end
+  end
+  if rec then self.answerGuild, self.answerOwed = true, true end
+  if pass then self.answerGameGuild, self.gameOwed = true, true end
+  if rec or pass then self:OwedSoon() end
+end
 
 -- what went, kept across a /reload (CuteDB.chars[me].wire, the same tables live: the saved variables write them at
 -- logout and at a /reload): a /reload is the same login, so it sends again only what changed since the last send
@@ -282,13 +318,14 @@ function M:Wire(reloading)
     fill(self.toldTo, w.toldTo)
     self.base, self.passAt = tonumber(w.base), tonumber(w.passAt)
     restoreOwe(w.owe)
+    self:Rearm(w.claimsOwed)
     self.reloaded = true
     -- (an ask of this login that never left goes after the /reload)
     self.askOwed = (not (tonumber(w.asked) and tonumber(w.asked) >= tonumber(w.login))) and "hello" or nil
   end
   ch.wire = { login = again and tonumber(w.login) or C.ServerNow(), sent = STATE.v.sent, labels = STATE.l.sent, claims = STATE.k.sent,
     told = STATE.v.sentTo, sentAt = M.sentAt, toldTo = self.toldTo, base = self.base, passAt = self.passAt, asked = again and tonumber(w.asked) or nil,
-    owe = M.owe }
+    owe = M.owe, claimsOwed = M.pendingClaims }
   self.wire = ch.wire
 end
 -- the guild as this character holds it: CuteDB.chars[me].hold = { club, at }, everything sent on GUILD up to at. Moved
@@ -568,6 +605,8 @@ pump = C.Safe(function()
   mark(e, r, kept, back)
   if e.done then e.done() end
   if r == "drop" then M.drops = M.drops + 1; C.Perf.Count("drops"); C.Err.Note("addon message not sent (" .. tostring(extra) .. "); its stats go with the next change", "comm: sending") end
+  -- (a kill claim done with, sent or given up: no /reload sends it again)
+  if e.kind == "k" and e.parts then for _, p in ipairs(e.parts) do M.pendingClaims[p.key] = nil end end
   -- (a guild message given up: the answers queued before it are not sent for sure, M:Borne; the queue's last for the
   -- guild gone: they are)
   if r == "drop" and not e.target then M.epoch = M.epoch + 1 end
@@ -1035,6 +1074,13 @@ end
 M.waitingClaims = {}
 function M:Claim(enc, t, with)
   if not (self.started and self.hello and C.Roster:InGuild()) then return end
+  local n = 0
+  for _ in pairs(self.pendingClaims) do n = n + 1 end
+  if n < 64 then
+    local set = {}
+    for g in pairs(type(with) == "table" and with or {}) do if type(g) == "string" then set[g] = true end end
+    self.pendingClaims[claimText(enc, t, with)] = { enc = enc, t = t, with = set }
+  end
   if self.holding then
     if #self.waitingClaims < 64 then self.waitingClaims[#self.waitingClaims + 1] = { enc = enc, t = t, with = with } end
     return
@@ -1584,8 +1630,8 @@ function M:Left()
   self.holdGen = (self.holdGen or 0) + 1
   -- (another guild, or this one again: its hello asks, and its record goes whole, and no ask of this one is owed)
   self.reloaded, self.base, self.fullOut, self.helloQueued, self.helloPassQueued = nil, nil, nil, nil, nil
-  M.owe, oweN = {}, 0
-  if self.wire then self.wire.owe = M.owe end
+  M.owe, oweN, M.pendingClaims = {}, 0, {}
+  if self.wire then self.wire.owe, self.wire.claimsOwed = M.owe, M.pendingClaims end
   for k in pairs(waits) do waits[k] = {} end
 end
 

@@ -10916,6 +10916,35 @@ do
   end)
   said[#said + 1] = "a claim refused again and again goes to the back of the queue, the rest going past it"
 
+  -- (u) a /reload in a raid's lockdown (after a wipe, say) keeps what waited for it to end: a repeat kill's claim still
+  -- queued, and the record owed to a member who logged in meanwhile, both sent once it ends. 0.7.1's first build kept
+  -- neither: a repeat kill's claim is kept nowhere else, and nothing answered that member's ask again
+  isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
+    local off, a = char("Coraline", 1), char("Cobb", 3)
+    login(off); login(a)
+    tickAll(60)
+    lock(a)
+    a.C.Comm:Claim(4242, EPOCH + a.clock, { [off.o.guid] = true })
+    local b = char("Cyra", 3)
+    login(b, { roster = { ["Cobb-Forever"] = { seen = EPOCH + 100, stats = { guid = guidOf("Cobb"), level = 30, zone = "Old" }, at = {}, ch = true } } })
+    tickAll(60)
+    assert(a.C.Comm.answerOwed and count(a, "1K") == 0, "the claim waits, the answer is owed")
+    local db = a.env.CuteDB
+    fire(a, "PLAYER_LOGOUT"); leave(a)
+    local a2 = char("Cobb", 3)
+    a2.chatLocked = true
+    login(a2, db, true)
+    tickAll(60)
+    assert(count(a2, "1K") == 0 and b.env.CuteDB.roster[a2.sender].stats.zone == "Old", "still locked after the /reload")
+    unlock(a2)
+    tickAll(60)
+    assert(count(a2, "1K") == 1, "the claim went after the /reload: " .. kinds(a2))
+    local rec = b.env.CuteDB.roster[a2.sender]
+    assert(rec.stats.zone == "Duskwood", "and Cyra has the record owed her: " .. tostring(rec.stats.zone))
+    for _, x in ipairs({ off, a2, b }) do leave(x) end
+  end)
+  said[#said + 1] = "a /reload in the lockdown keeps a queued kill claim and an owed answer"
+
   print("core: " .. table.concat(said, "; "))
 end
 
