@@ -10754,7 +10754,7 @@ do
   -- (p) a since the responder cannot bear out is answered whole. The asker's hold moves at its logout whether or not
   -- every answer came, so each responder judges a since by the answer it gave that asker's ask before it: one that went
   -- after the since (a pass deferred behind the ten minutes, an answer owed through a lockdown and paid once the asker
-  -- had gone) or never (an ask passed by within three minutes of the last) bears out nothing. 0.7.1's first build took
+  -- had gone) or never (an ask passed by within three minutes of the last) bears out nothing. A first build took
   -- every since, and the asker never had what it missed
   local function cyraOf(c) return c.env.CuteDB.roster["Cyra-Forever"] end
   local function oldFile() return { chars = { ["Cobb-Forever"] = { guid = guidOf("Cobb"), counters = {}, hold = { club = "7", at = EPOCH + 100 } } },
@@ -10820,7 +10820,7 @@ do
   said[#said + 1] = "a since the responder's last answer to that asker does not bear out is answered whole: a pass deferred, an answer owed through a lockdown, an ask passed by"
 
   -- (q) the hold leaves a minute: what went on GUILD in the second the asker logged out (still on its way, as the game's
-  -- server time counts whole seconds) is sent again at its next ask. 0.7.1's first build held the logout's own second
+  -- server time counts whole seconds) is sent again at its next ask. A first build held the logout's own second
   -- and a part sent in it, "after" nothing, was never sent again
   isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
     local off, a, b = char("Coraline", 1), char("Cobb", 3), char("Cyra", 3)
@@ -10847,7 +10847,7 @@ do
   said[#said + 1] = "the hold leaves a minute, so a part sent as the asker logged out goes again"
 
   -- (r) an ask heard while this client's record waits for the policy (a /reload reads Guild Info again: seconds, or a
-  -- whole run inside an instance) is answered once it holds it. 0.7.1's first build dropped the answer whose time came
+  -- whole run inside an instance) is answered once it holds it. A first build dropped the answer whose time came
   -- while it waited, and a /reload's release sends only what changed
   isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
     local off, r = char("Coraline", 1), char("Cobb", 3)
@@ -10873,7 +10873,7 @@ do
 
   -- (s) an answer owed through a lockdown the event never ends (an open-world encounter: InChatMessagingLockdown alone,
   -- or a client the event never reaches) is paid within LOCK_POLL seconds of its end, the queue empty or not, and the
-  -- statistics pass with it. 0.7.1's first build paid it only at the event, a loading screen or the policy settling
+  -- statistics pass with it. A first build paid it only at the event, a loading screen or the policy settling
   -- (with his queue as it is, and with it empty, its pump stopped)
   for _, empty in ipairs({ false, true }) do isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
     local off, r = char("Coraline", 1), char("Cobb", 3, { withStats = true })
@@ -10899,7 +10899,7 @@ do
   said[#said + 1] = "an answer owed through a lockdown with no end event is paid as it ends"
 
   -- (t) a kill claim the client keeps answering "later" (9, GeneralError, every time) goes to the back of the queue
-  -- after RETRIES tries, and what waits behind it goes; it goes itself once the client takes it. 0.7.1's first build
+  -- after RETRIES tries, and what waits behind it goes; it goes itself once the client takes it. A first build
   -- retried it at the head of the queue for good, and nothing else of the member's ever left
   isolated({ member("Coraline", 1), member("Cobb", 3) }, function()
     local off, a = char("Coraline", 1), char("Cobb", 3)
@@ -10920,7 +10920,7 @@ do
   said[#said + 1] = "a claim refused again and again goes to the back of the queue, the rest going past it"
 
   -- (u) a /reload in a raid's lockdown (after a wipe, say) keeps what waited for it to end: a repeat kill's claim still
-  -- queued, and the record owed to a member who logged in meanwhile, both sent once it ends. 0.7.1's first build kept
+  -- queued, and the record owed to a member who logged in meanwhile, both sent once it ends. A first build kept
   -- neither: a repeat kill's claim is kept nowhere else, and nothing answered that member's ask again
   isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
     local off, a = char("Coraline", 1), char("Cobb", 3)
@@ -10949,7 +10949,7 @@ do
   said[#said + 1] = "a /reload in the lockdown keeps a queued kill claim and an owed answer"
 
   -- (v) a record asked for whole by GUID (1Q: a file that lost it, a since part from a sender it holds nothing of) is
-  -- answered with its statistics pass too. 0.7.1's first build sent the record alone, and the asker's later asks, all
+  -- answered with its statistics pass too. A first build sent the record alone, and the asker's later asks, all
   -- since its hold, never brought what the pass had said before it
   isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
     local off, a, b = char("Coraline", 1), char("Cobb", 3), char("Cyra", 3, { withStats = true })
@@ -10975,7 +10975,7 @@ do
   -- (w) an officer out of the guild by any road keeps none of its members' Only-you values: kicked while offline (a
   -- login out of any guild, half a minute on), or gone into another guild before half a minute was out (the records
   -- parked for the guild left, those values taken out first). An alt of another guild that was never one of its
-  -- officers parks an officer's file whole. 0.7.1's first build took them out only from an officer who stayed online
+  -- officers parks an officer's file whole. A first build took them out only from an officer who stayed online
   -- half a minute after leaving
   do
     local function club8(c)
@@ -11026,7 +11026,7 @@ do
   said[#said + 1] = "an officer out of the guild by any road keeps no Only-you values; another guild's alt parks them whole"
 
   -- (x) a client whose list never reads whole (ClubInfo.memberCount is Nilable) still keeps its file bounded: a record
-  -- unseen ninety days goes, and past the cap the longest unseen. 0.7.1's first build pruned by age and cap only at a
+  -- unseen ninety days goes, and past the cap the longest unseen. A first build pruned by age and cap only at a
   -- whole list, and such a file grew for good
   isolated({ member("Coraline", 1), member("Cobb", 3) }, function()
     local roster = { ["Gone-Forever"] = { seen = EPOCH + 1000 - 91 * 86400, stats = { level = 20 }, at = {}, ch = true } }
@@ -11043,7 +11043,7 @@ do
   said[#said + 1] = "a list that never reads whole still prunes by age and cap"
 
   -- (y) one member's records hold one version each: a copy that says 32 made-up versions fills nothing, and a real one
-  -- that two members run is still announced. 0.7.1's first build kept 32 versions for the whole guild, and one copy's
+  -- that two members run is still announced. A first build kept 32 versions for the whole guild, and one copy's
   -- 32 silenced every update after them for the session
   isolated({ member("Coraline", 1), member("Cobb", 3) }, function()
     local c = char("Coraline", 1)
@@ -11059,7 +11059,7 @@ do
 
   -- (z) the officers to whisper to follow who a sender string names: a member online whose name reads in no form (a
   -- Kstring the GUID call does not resolve) may be any one-word sender's namesake, so an officer known by one word is no
-  -- target while one is online, and one again once they are gone. 0.7.1's first build cached the list by the records
+  -- target while one is online, and one again once they are gone. A first build cached the list by the records
   -- and the officers alone: a stale officer was whispered, refused and queued again every change, or a resolved one
   -- told nothing
   isolated({ member("Coraline", 1), member("Cobb", 3), { name = "|Kq77|k", guid = guidOf("Kay"), rank = 3, rankName = "Raider", class = "MAGE", level = 30, online = false } }, function()
@@ -11099,8 +11099,8 @@ do
   said[#said + 1] = "a file's statistics stored as 0 from never recorded go once at load"
 
   -- (ab) an ask whole after a since-ask of the same login (/cute resend, the officers' button, many records missing) is
-  -- answered, record and pass, though it comes within ASK_AGAIN of the first: the first's answer was a part. 0.7.1's
-  -- first build passed it by as an ask made a moment ago (and a file missing many records, which marks each asked,
+  -- answered, record and pass, though it comes within ASK_AGAIN of the first: the first's answer was a part. A first
+  -- build passed it by as an ask made a moment ago (and a file missing many records, which marks each asked,
   -- never had them that session)
   isolated({ member("Coraline", 1), member("Cobb", 3), member("Cyra", 3) }, function()
     local off, a = char("Coraline", 1), char("Cobb", 3, { withStats = true })

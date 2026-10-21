@@ -242,7 +242,7 @@ end
 -- for (who). C.newer is the newest version newer than yours that two members run, it or one newer (two voices, as
 -- everything the guild learns: 0.7.0 took one member's word, so one edited copy's version had every client online say
 -- an update was out): the status line shows it (UI.lua). One version a member, the last it said (C.newerOf, by GUID:
--- 0.7.1's first build kept 32 versions for the whole guild, and one copy that said 32 made-up ones silenced every real
+-- a first build kept 32 versions for the whole guild, and one copy that said 32 made-up ones silenced every real
 -- update after them)
 C.newerOf = {}
 local function voicesAtLeast(v)

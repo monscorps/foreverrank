@@ -167,7 +167,7 @@ function R:Refresh(event)
       self:Changed()
       if C.UI and C.UI.Refresh then C.UI:Refresh() end
     elseif not self.leftAt then
-      -- (a login out of any guild is judged the same way: an officer kicked while offline. 0.7.1's first build judged
+      -- (a login out of any guild is judged the same way: an officer kicked while offline. A first build judged
       -- only one who stayed online half a minute after leaving)
       if not self.leftDone then self.leftAt = now() end
     elseif now() - self.leftAt >= LEFT_SURE then
@@ -287,7 +287,7 @@ function R:Refresh(event)
         end
       end
     end
-    -- (age and cap, whatever the list: at the session's first read, hourly, and with every prune. 0.7.1's first build
+    -- (age and cap, whatever the list: at the session's first read, hourly, and with every prune. A first build
     -- pruned them only at a whole list, and a client whose list never reads whole kept every record for good)
     if pruneNow or not self.expiredAt or now() - self.expiredAt >= PRUNE_EVERY then
       self.expiredAt = now()
@@ -817,7 +817,7 @@ function R:OfficerTargets()
   local thr = math.min(C.Policy:Threshold(), C.Policy:LineThreshold())
   -- (built again where a record changed who it is, or an officer came, went or moved, or what a sender string names
   -- did (a name, a namesake, an unread name online: R:SenderMember): not for every member online or off, 0.7.0's every
-  -- roster change. 0.7.1's first build left the names out, and kept an officer a sender string no longer named)
+  -- roster change. A first build left the names out, and kept an officer a sender string no longer named)
   local at = self.recVersion .. ":" .. tostring(self.nameVersion) .. ":" .. tostring(self.unread) .. ":" .. tostring(self.offSig)
   if self.targets and self.targetsAt == at and self.targetsThr == thr then return self.targets end
   local out = {}

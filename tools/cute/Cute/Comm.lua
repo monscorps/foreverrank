@@ -175,8 +175,8 @@ M.sentAt = { v = {}, l = {}, k = {} }
 -- had sent all of it (nothing for the guild left behind it, nothing for the guild given up meanwhile: M.epoch); false
 -- where it was not (an ask within ASK_AGAIN of the last, a pass within GAME_AGAIN, a message given up). An ask's since
 -- says the asker holds everything said on GUILD up to it, which it can only where this client's answer to its ask
--- before that time had all gone by then: M:Borne judges it, and a since it does not bear out is answered whole. (0.7.1's
--- first build took every since: a pass deferred behind the ten minutes, an answer owed through a lockdown and paid
+-- before that time had all gone by then: M:Borne judges it, and a since it does not bear out is answered whole. (A first
+-- build took every since: a pass deferred behind the ten minutes, an answer owed through a lockdown and paid
 -- once the asker had gone, an ask passed by, and the asker never had what it missed)
 M.owe, M.epoch = {}, 0
 local OWE_EACH, OWE_MAX = 4, 512
@@ -267,7 +267,7 @@ end
 M.pendingClaims = {}
 -- (a /reload in a raid's lockdown, after a wipe say: what waited for it to end goes once it does. The claims not sent
 -- go with the release, as those claimed while the record waits (M:Release); the answers owed (an ask kept waiting,
--- M.owe) are owed again, whole where one wanted it whole. 0.7.1's first build lost both)
+-- M.owe) are owed again, whole where one wanted it whole. A first build lost both)
 function M:Rearm(claims)
   local sent = STATE.k.sent
   for text, c in pairs(type(claims) == "table" and claims or {}) do
@@ -597,7 +597,7 @@ pump = C.Safe(function()
     r, extra = "drop", "still throttled after " .. RETRIES .. " tries"
   end
   -- (a kill claim the client refused, or kept answering "later", goes to the back of the queue, CLAIM_AGAIN times: a
-  -- repeat kill's is kept nowhere else, and one at the head holds nothing behind it. 0.7.1's first build retried it
+  -- repeat kill's is kept nowhere else, and one at the head holds nothing behind it. A first build retried it
   -- there for good, and nothing else left)
   if r == "drop" and e.kind == "k" and (e.again or 0) < CLAIM_AGAIN then
     e.again, e.tries = (e.again or 0) + 1, 0
@@ -1475,7 +1475,7 @@ function M:AnswerSoon()
   C_Timer.After(wait, C.Safe(function()
     M.answering = false
     -- (while this client waits for the line, P.doubt, or the game holds addon chat back, or its own record waits for the
-    -- policy, the answer waits too: what it would queue could not leave. Paid as that ends, M:PayOwed; 0.7.1's first
+    -- policy, the answer waits too: what it would queue could not leave. Paid as that ends, M:PayOwed; a first
     -- build dropped one whose time came while the record waited, and a /reload's release sends only what changed)
     if M.holding or not C.Policy:Settled() or M:Locked() then M.answerOwed = true; M:OwedSoon(); return end
     M:Answer()
@@ -1490,7 +1490,7 @@ end
 -- a member who holds no record of yours asks for it whole (1Q: after a since answer or a delta from a sender it holds
 -- none of), answered as a fresh ask wanting the whole record, the guild's part alone, once in ASK_AGAIN seconds, and
 -- the whole statistics pass with it (the ten-minute pass bounds it): its later asks, since its hold, would never bring
--- what the pass said before (0.7.1's first build sent the record alone)
+-- what the pass said before (a first build sent the record alone)
 M.wholeAsked, M.wholeAskedOf = {}, {}
 function M:AskedWhole(sender)
   local who = C.Roster:GuidOf(sender) or sender
@@ -1616,7 +1616,7 @@ function M:PolicySettled(settled)
 end
 -- an answer owed is looked at again every LOCK_POLL seconds until it is paid: a lockdown no event ends (one only
 -- InChatMessagingLockdown or a result 11 said, or a client the event never reaches) pays it within seconds of its end,
--- the queue empty or not (0.7.1's first build paid it only at the event, a loading screen or the policy settling)
+-- the queue empty or not (a first build paid it only at the event, a loading screen or the policy settling)
 function M:OwedSoon()
   if self.owedDue or not (self.answerOwed or self.gameOwed) then return end
   self.owedDue = true
@@ -1822,7 +1822,7 @@ function M:Receive(text, channel, sender)
     local t, who = C.Now(), g or sender
     local fresh = not (M.answered[who] and t - M.answered[who] < ASK_AGAIN)
     -- (an ask whole after a since-ask of the asker answered lately (its /cute resend, the officers' button, many records
-    -- missing: M:AskWholes) is answered once more, record and pass: the first's answer was a part. 0.7.1's first build
+    -- missing: M:AskWholes) is answered once more, record and pass: the first's answer was a part. A first build
     -- passed it by, and a file missing many records, which marks each one asked, never had them that session)
     local wider = not fresh and since == nil and stamp ~= nil and M.answeredSince[who] ~= nil
     if wider then fresh = true end
