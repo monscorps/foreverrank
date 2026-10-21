@@ -953,9 +953,11 @@ end
 -- what you hold and could fetch there, the near places up.
 -- The lists are kept while nothing they depend on changed (QB.changed, QB.dirtyVer, your level, the mode, your map, the
 -- level window, the places you skip, the candidates' own memo), and a second at most (the minutes as you walk): Cute
--- asks twice a redraw, and the same tables come back.
+-- asks twice a redraw, and the same tables come back. Kept weakly: while a caller holds them, gone with the next
+-- collection, so they cost no memory between refreshes (strongly kept, the two lists were about half a megabyte).
 -- Returns order (the places), groups (by category index), and where you stand (here, mf, hubName: UI.Here)
-local memoNow, memoAll, nowKept, posBuf = {}, {}, {}, {}
+local WEAK = { __mode = "v" }
+local memoNow, memoAll, nowKept, posBuf = setmetatable({}, WEAK), setmetatable({}, WEAK), {}, {}
 local CELL = 25 -- yards: the minutes are worked out again once you have moved this far
 -- the places you skip, told apart without a string: how many, and their keys' letters
 local function skipMark(set)
@@ -979,12 +981,13 @@ function UI.PlaceGroups(level, now)
     and mk.map == s.mapID and mk.cands == UI.candMemo and mk.above == above and mk.below == below and mk.skip == skip
     and mk.log == s.logCount and mk.done == QB.doneVer and clock >= mk.t then
     -- (within a second, as it was; after one, as it was while you stand in the same few yards)
-    if clock - mk.t < 1 then return mk.order, mk.groups, mk.here, mk.mf, mk.hub end
+    local o = mk.order
+    if clock - mk.t < 1 then return o, o.byCat, o.here, o.mf, o.hub end
     local wp = QB.API.WorldPosition(nil, posBuf)
     pc, px, py = wp and wp.c or -1, wp and math.floor(wp.wx / CELL) or 0, wp and math.floor(wp.wy / CELL) or 0
     if mk.pc == pc and mk.px == px and mk.py == py then
       mk.t = clock
-      return mk.order, mk.groups, mk.here, mk.mf, mk.hub
+      return o, o.byCat, o.here, o.mf, o.hub
     end
   end
   if not pc then
@@ -1165,7 +1168,9 @@ function UI.PlaceGroups(level, now)
     end
     for pos = 1, 3 do nowKept[pos] = order[pos] and order[pos].idx or nil end
   end
-  mk.order, mk.groups, mk.here, mk.mf, mk.hub = order, groups, here, mf, hubName
+  -- (what comes back with the order rides on it: the memo holds the order alone, weakly)
+  order.byCat, order.here, order.mf, order.hub = groups, here, mf, hubName
+  mk.order = order
   mk.level, mk.changed, mk.dirty, mk.banking, mk.map, mk.cands = level, QB.changed, QB.dirtyVer, banking, s.mapID, UI.candMemo
   mk.above, mk.below, mk.skip, mk.t, mk.log, mk.done, mk.pc, mk.px, mk.py = above, below, skip, clock, s.logCount, QB.doneVer, pc, px, py
   return order, groups, here, mf, hubName
