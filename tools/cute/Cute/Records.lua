@@ -349,7 +349,7 @@ function Rec.Card(id, e)
     c.value = clock(e.v)
   else
     c.kind = (def and def.cat == "funny") and "blooper" or "record"
-    c.title = def and def.label or id
+    c.title = def and def.label or ("Statistic " .. id:sub(2))
     c.line = "New guild record."
     c.value = def and C.UI.Format(def, e.v) or tostring(e.v)
   end
@@ -360,7 +360,7 @@ end
 function Rec:Announce(n, e)
   local id = "c" .. n
   local card = Rec.Card(id, e)
-  H():KeepLocal({ kind = "r", title = card.title, cards = { card } }, id)
+  H():KeepLocal({ kind = "r", title = "Fastest clear: " .. card.title, cards = { card } }, id)
   Rec.announced = Rec.announced + 1
 end
 -- another member's value takes a record that is on: a "Record?" row in this officer's Queue, the stat's own (one at a
@@ -519,7 +519,8 @@ end
 ----------------------------------------------------------------------------
 local GROUPS = { { "run", "In one run" }, { "week", "In a week" }, { "all", "All time" }, { "clear", "Fastest clears" } }
 -- the chip's lines: { head, within } and { id, e } in the groups' order; a statistic on with no holder yet listed for
--- officers (its switch to turn it off); the Fastest clears heading for officers always
+-- officers (its switch to turn it off), one this client cannot name (no statistics here) left out; the Fastest clears
+-- heading for officers always. And whether any record is held
 function Rec.Lines(isOfficer)
   local E = Rec.Entries()
   local by = { run = {}, week = {}, all = {}, clear = {} }
@@ -531,7 +532,7 @@ function Rec.Lines(isOfficer)
   local stats, clears = {}, {}
   for id, e in pairs(E) do
     if not seen[id] then
-      if id:match("^g%d+$") then stats[#stats + 1] = { id = id, e = e }
+      if id:match("^g%d+$") then if C.Stats.byId[id] then stats[#stats + 1] = { id = id, e = e } end
       elseif id:match("^c%d+$") then clears[#clears + 1] = { id = id, e = e, place = Rec.Place(tonumber(id:sub(2))) } end
     end
   end
@@ -543,14 +544,14 @@ function Rec.Lines(isOfficer)
   table.sort(clears, function(a, b) if a.place ~= b.place then return a.place < b.place end return a.id < b.id end)
   for _, x in ipairs(stats) do by.all[#by.all + 1] = x end
   by.clear = clears
-  local out = {}
+  local out, any = {}, false
   for _, g in ipairs(GROUPS) do
     if #by[g[1]] > 0 or (g[1] == "clear" and isOfficer) then
       out[#out + 1] = { head = g[2], within = g[1] }
-      for _, x in ipairs(by[g[1]]) do out[#out + 1] = x end
+      for _, x in ipairs(by[g[1]]) do out[#out + 1] = x; any = any or x.e ~= nil end
     end
   end
-  return out
+  return out, any
 end
 
 -- a row: the bar, the trophy, the stat, the holder, the value and the day; an officer's switch and Preview
@@ -587,17 +588,19 @@ function Rec.Draw(ui)
   local w = sf:Width()
   ui.rows:Clear()
   local isOfficer = C.Roster:MeOfficer()
-  local lines = Rec.Lines(isOfficer)
-  if #lines == 0 then
+  local lines, any = Rec.Lines(isOfficer)
+  -- (nothing held: a line saying so, an officer's switches under it)
+  local y0 = 0
+  if not any then
     Hl.Say(ui, 6, 6, w - 12, "No records yet: they fill in as the guild plays.")
-    sf:SetContentHeight(30)
-    return
+    y0 = 30
+    if #lines == 0 then sf:SetContentHeight(y0); return end
   end
   local rows = ui:List("records", makeRow)
   -- (on the right: the day, the value before it; an officer's Preview and switch after them)
   local OFF = isOfficer and 100 or 0
   local VAL = 90
-  rows:Set(#lines, 0, ROW, function(r, i, ly)
+  rows:Set(#lines, y0, ROW, function(r, i, ly)
     local x = lines[i]
     r:SetHeight(ROW)
     r:ClearAllPoints()
@@ -681,7 +684,7 @@ function Rec.Draw(ui)
     end
   end)
   ui.virtual = function() rows:Show(ui.scroll.bar:GetValue() or 0, ui.scroll:View()) end
-  sf:SetContentHeight(#lines * ROW + 8)
+  sf:SetContentHeight(y0 + #lines * ROW + 8)
 end
 -- the band's Add (officers): a game statistic as a record, on, filled with today's best
 function Rec.Band(ui, w)
