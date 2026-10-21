@@ -19218,6 +19218,58 @@ end)()
     assert(#xkeys(c) == 1, "off the zeppelin's track's far side: a crossing")
   end }
 
+  FINDCASES[#FINDCASES + 1] = { "a teleport, a hearth or a summons is told by when its loading screen began, however long it lasts", function()
+    local c = char("Blinker")
+    local DB = c.env.QuestBankDB
+    local function xt() return DB.diag.finds and DB.diag.finds.xt or 0 end
+    local t0 = xt()
+    -- a mage's Teleport: Stormwind (a spell of his own): the loading screen a second after the cast, out 10 s later
+    fresh(c); at(c, 1429, 0.5, 0.5, { 0, -9100, 300 }); stand(c, 12)
+    c.o.riding = true -- (IsPlayerSpell: yes)
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-20", 3561)
+    c.o.riding = false
+    c.clock = c.clock + 1; ev(c, "LOADING_SCREEN_ENABLED")
+    c.clock = c.clock + 9; ev(c, "PLAYER_ENTERING_WORLD")
+    at(c, 1453, 0.6, 0.6, { 0, -8800, 600 }); look(c, 1)
+    -- the hearth, Travel's cast already cleared when the first look comes, 12 s on
+    fresh(c); at(c, 1429, 0.5, 0.5, { 0, -9100, 300 }); stand(c, 12)
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-21", 8690)
+    c.clock = c.clock + 2; ev(c, "PLAYER_LEAVING_WORLD"); ev(c, "LOADING_SCREEN_ENABLED")
+    c.QB.Travel.cast = nil
+    c.clock = c.clock + 11; ev(c, "PLAYER_ENTERING_WORLD")
+    at(c, 1453, 0.6, 0.6, { 0, -8800, 600 }); look(c, 1)
+    -- a summons accepted 115 s after it was offered, a 6 s loading screen
+    fresh(c); at(c, 1429, 0.5, 0.5, { 0, -9100, 300 }); stand(c, 12)
+    ev(c, "CONFIRM_SUMMON")
+    c.clock = c.clock + 115; ev(c, "LOADING_SCREEN_ENABLED")
+    c.clock = c.clock + 5; ev(c, "PLAYER_ENTERING_WORLD")
+    at(c, 1440, 0.5, 0.5, { 1, 2000, 3000 }); look(c, 1)
+    assert(#xkeys(c) == 0 and xt() == t0 + 3, "a teleport, a hearth and a summons: no crossing: " .. table.concat(xkeys(c), " "))
+    -- a portal walked into a minute after a spell of one's own: a crossing
+    fresh(c); at(c, 1429, 0.300, 0.400, { 0, -9000, 100 }); stand(c, 12)
+    c.o.riding = true
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-22", 1459)
+    c.o.riding = false
+    c.clock = c.clock + 60; ev(c, "LOADING_SCREEN_ENABLED")
+    c.clock = c.clock + 7; ev(c, "PLAYER_ENTERING_WORLD")
+    at(c, 1438, 0.555, 0.888, { 1, 9000, 900 }); look(c, 1)
+    assert(#xkeys(c) == 1 and xt() == t0 + 3, "the portal, a minute after a buff: a crossing: " .. table.concat(xkeys(c), " "))
+    -- the mark lasts through looks before the world is back, and goes at the first look after it with no jump (a
+    -- /reload just after a hearth's cast)
+    stand(c, 3)
+    ev(c, "UNIT_SPELLCAST_SUCCEEDED", "player", "Cast-3-23", 8690)
+    ev(c, "LOADING_SCREEN_ENABLED")
+    look(c, 20); look(c)
+    assert(c.QB.Finds.cross.tele == true, "no world yet: the mark stays")
+    ev(c, "PLAYER_ENTERING_WORLD"); look(c)
+    assert(c.QB.Finds.cross.tele == false, "back in the world with no jump: the mark is gone")
+    fresh(c); at(c, 1429, 0.700, 0.700, { 0, -9500, 900 }); stand(c, 12)
+    c.clock = c.clock + 60; ev(c, "LOADING_SCREEN_ENABLED")
+    c.clock = c.clock + 2; ev(c, "PLAYER_ENTERING_WORLD")
+    at(c, 2521, 0.400, 0.500, { 2991, 3000, 1500 }); look(c, 1)
+    assert(#xkeys(c) == 2, "the next portal, its own: a crossing: " .. table.concat(xkeys(c), " "))
+  end }
+
   FINDCASES[#FINDCASES + 1] = { "Travel keeps the x: crossings when it prunes disc.rides to D.LINK's legs; a boat leg's time in minutes", function()
     local saved = { disc = { v = 1, q = {}, npc = {}, offer = {}, chain = {}, item = {},
       rides = { ["x:1429:300,400>1438:555,888"] = { n = 1, t = 8, b = { 0, -9000, 100 }, l = { 1, 9000, 900 }, at = 29000000 },

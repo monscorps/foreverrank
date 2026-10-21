@@ -42,7 +42,8 @@ local BEFORE_S = 180    -- seconds before a jump a stand still counts as where t
 local BEFORE_YD = 200   -- yards from the last place before the jump within which that stand is its start
 local JUMP = 300        -- yards within a look: a jump in place (Target.lua's)
 local LINK_YD = 300     -- yards from a D.LINK end, or from its track where the far side loads: that leg, Travel's to learn
-local CAST_S = 5        -- seconds after a hearth, a class teleport or a summons in which a jump is that
+local CAST_S = 5        -- seconds from a hearth or a class teleport to its loading screen (or, with none, its jump)
+local SUMMON_S = 120    -- seconds a summons offered stays one you can take
 local MEAN = 5          -- crossings and flights a learned time averages over
 local TICK = 1          -- seconds between looks
 Finds.POINTS, Finds.OBJECTS, Finds.RARES, Finds.CROSSINGS, Finds.KEYS = POINTS, OBJECTS, RARES, CROSSINGS, KEYS
@@ -480,7 +481,11 @@ end
 -- STILL_S seconds in the BEFORE_S before it (the pier, the tower, the portal), else the last place before it, to where
 -- you came out. Kept in disc.rides under an "x:" key, merged with one whose two ends lie within OS_NEAR of these
 ----------------------------------------------------------------------------
-local cross = { anchor = nil, still = nil, last = nil, castAt = -1000, summonAt = -1000 }
+-- cross.tele: a loading screen began within CAST_S of a hearth or a teleport of yours, within SUMMON_S of a summons,
+-- or while Travel saw the hearth cast: the jump past it is that, however long the screen lasts (the looks stop
+-- through it while the clock runs on); kept until a jump, or the first look with a position once you are back in the
+-- world (cross.back: PLAYER_ENTERING_WORLD)
+local cross = { anchor = nil, still = nil, last = nil, castAt = -1000, summonAt = -1000, tele = false, back = false }
 Finds.cross = cross
 
 local function yd(a, b)
@@ -501,6 +506,15 @@ end
 function Finds.Teleported() cross.castAt = now() end
 -- the game offered you a summons
 function Finds.Summoned() cross.summonAt = now() end
+-- whether a jump now would be a teleport, a hearth or a summons
+local function teleporting(t)
+  return t - cross.castAt <= CAST_S or t - cross.summonAt <= SUMMON_S or (QB.Travel and QB.Travel.cast ~= nil) or false
+end
+-- a loading screen began (LOADING_SCREEN_ENABLED, PLAYER_LEAVING_WORLD: LoadingScreenDocumentation.lua,
+-- SystemDocumentation.lua): whether what follows is a teleport is told now, by when it began
+function Finds.Loading()
+  if teleporting(now()) then cross.tele, cross.back = true, false end
+end
 
 -- a D.LINK row's track as numbers, { c, wx, wy, c, wx, wy, ... }, read once a row (only at a jump)
 local tracks = setmetatable({}, { __mode = "k" })
@@ -638,7 +652,7 @@ local here, anchor, lastAt, lastSpot = {}, { t = -1 }, {}, {}
 function Finds.Look()
   local t = now()
   if dead() or onTaxi() or inside() or not Finds.On() then
-    cross.last, cross.anchor, cross.still = nil, nil, nil
+    cross.last, cross.anchor, cross.still, cross.tele = nil, nil, nil, false
     return
   end
   local me = QB.API.WorldPosition(nil, here)
@@ -646,8 +660,8 @@ function Finds.Look()
   local last = cross.last
   if last and (me.c ~= last.c or yd(me, last) > JUMP) then
     local st = cross.still
-    local teleport = t - cross.castAt <= CAST_S or t - cross.summonAt <= 120 or (QB.Travel and QB.Travel.cast ~= nil)
-    cross.last, cross.anchor, cross.still = nil, nil, nil
+    local teleport = cross.tele or teleporting(t)
+    cross.last, cross.anchor, cross.still, cross.tele = nil, nil, nil, false
     if teleport then diag("xt"); return end
     local from
     if st and t - st.to <= BEFORE_S and yd(st, last) <= BEFORE_YD then from = st else from = last.spot end
@@ -657,6 +671,7 @@ function Finds.Look()
     Finds.NoteCrossing(from, to, max(1, floor(t - (from == st and st.to or last.t) + 0.5)))
     return
   end
+  if cross.back then cross.tele, cross.back = false, false end -- (back in the world, and no jump: no teleport)
   -- the stand: within STILL_YD of where it began for STILL_S seconds; its spot read once, when it becomes one
   local an = cross.anchor
   if an and yd(me, an) <= STILL_YD then
@@ -842,8 +857,11 @@ function Finds.OnEvent(event, a1, a2, a3)
     Finds.Plate(a1)
   elseif event == "CONFIRM_SUMMON" then
     Finds.Summoned()
+  elseif event == "LOADING_SCREEN_ENABLED" or event == "PLAYER_LEAVING_WORLD" then
+    Finds.Loading()
   elseif event == "PLAYER_ENTERING_WORLD" then
     opening, soft = nil, nil
+    if cross.tele then cross.back = true end
   end
 end
 
@@ -869,7 +887,8 @@ function Finds:Init()
   if not (G and G.Forever()) then return end -- Classic Era: nothing to note, as Loot.lua
   f:SetScript("OnEvent", QB.Safe(function(_, event, ...) Finds.OnEvent(event, ...) end, "finds"))
   for _, e in ipairs({ "ADDON_RESTRICTION_STATE_CHANGED", "LOOT_OPENED", "PLAYER_SOFT_INTERACT_CHANGED", "ITEM_TEXT_BEGIN",
-                       "NAME_PLATE_UNIT_ADDED", "CONFIRM_SUMMON", "PLAYER_ENTERING_WORLD" }) do
+                       "NAME_PLATE_UNIT_ADDED", "CONFIRM_SUMMON", "PLAYER_ENTERING_WORLD", "LOADING_SCREEN_ENABLED",
+                       "PLAYER_LEAVING_WORLD" }) do
     pcall(f.RegisterEvent, f, e)
   end
   if f.RegisterUnitEvent then pcall(f.RegisterUnitEvent, f, "UNIT_SPELLCAST_SUCCEEDED", "player") else pcall(f.RegisterEvent, f, "UNIT_SPELLCAST_SUCCEEDED") end
