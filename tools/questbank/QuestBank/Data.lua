@@ -6223,6 +6223,43 @@ D.TRAINER = {
 {13417,"Sagorne Creststrider",7,1,1938,-4223,1454,38.7,35.9}
 }
 
+-- [spell] = true: the client's opening spells (an open-lock effect of no skill's lock type, SpellEffect.csv): Finds.lua
+D.OPEN = {[3365]=true,[3366]=true,[5107]=true,[6247]=true,[6249]=true,[6477]=true,[6478]=true,[6527]=true,[6529]=true,[6658]=true,[6802]=true,[8517]=true,[10738]=true,[11437]=true,[11535]=true,[11792]=true,[13478]=true,[13564]=true,[13565]=true,[14125]=true,[15276]=true,[17432]=true,[18952]=true,[21248]=true,[21288]=true,[21651]=true,[22810]=true,[26587]=true,[26588]=true,[26868]=true,[423088]=true,[423632]=true,[461679]=true,[463320]=true,[1221363]=true,[1236393]=true,[1269930]=true,[1277271]=true,[1308379]=true,[1309310]=true,[1309978]=true,[1310156]=true,[1310491]=true}
+-- [uiMap] = {{kind, id, "x,y;x,y" (thousandths), files, extra, source}, ...}: what the world holds beyond quests (b a
+-- book and its title, k an object and the key Lock.csv names, h an object looted and its items' kind, r a rare and
+-- its level); source p what two players' files agree on, g a guide's place (Finds.lua; QuestBank_Finds adds f)
+D.FIND = {
+[1413]={{"b",0,"627,363",0,"Baxtan: On Destructive Magics","g"},{"b",0,"563,88",0,"Arcanic Systems Manual","g"},{"b",0,"528,547",0,"Secrets of the Dreamers","g"}},
+[1416]={{"b",0,"485,576",0,"Defensive Magics 101","g"}},
+[1417]={{"b",0,"730,650",0,"A Web of Lies: Debunking Myths and Legends","g"}},
+[1418]={{"b",0,"570,390",0,"Mummies: A Guide to the Unsavory Undead","g"}},
+[1419]={{"b",0,"553,322",0,"Conjurer's Codex","g"}},
+[1420]={{"b",0,"595,523",0,"The Apothecary's Metaphysical Primer","g"}},
+[1421]={{"b",0,"434,412",0,"Ataeric: On Arcane Curiosities","g"},{"b",0,"635,631",0,"The Dalaran Digest, Vol. 23","g"}},
+[1422]={{"b",0,"380,540",0,"Undead Potatoes","g"}},
+[1425]={{"b",0,"360,727",0,"Venomous Journeys","g"}},
+[1427]={{"b",0,"370,490",0,"A Mind of Metal","g"}},
+[1429]={{"b",0,"654,701",0,"Archmage Theocritus' Research Journal","g"}},
+[1431]={{"b",0,"67,285",0,"Crimes Against Anatomy","g"}},
+[1432]={{"b",0,"356,489",0,"Rumi of Gnomeregan: The Collected Works","g"},{"b",0,"745,196",0,"Runes of the Sorcerer-Kings","g"}},
+[1434]={{"b",0,"415,508",0,"Basilisks: Should Petrification be Feared?","g"}},
+[1435]={{"b",0,"610,220",0,"A Luddite's Guide to Caring for Your Demonic Pet","g"},{"k",0,"610,220",0,216523,"g"}},
+[1436]={{"b",0,"527,537",0,"Rumi of Gnomeregan: The Collected Works","g"},{"b",0,"454,704",0,"Bewitchments and Glamours","g"}},
+[1437]={{"b",0,"336,479",0,"Goaz Scrolls","g"}},
+[1439]={{"b",0,"596,222",0,"Nar'thalas Almanac, Vol. 74","g"}},
+[1441]={{"b",0,"340,400",0,"Geomancy: The Stone-Cold Truth","g"}},
+[1442]={{"b",0,"744,857",0,"Fury of the Land","g"}},
+[1443]={{"b",0,"550,280",0,"Demons and You","g"}},
+[1444]={{"b",0,"506,157",0,"The Liminal and the Arcane","g"}},
+[1445]={{"b",0,"570,210",0,"RwlRwlRwlRwl!","g"}},
+[1446]={{"b",0,"727,478",0,"Legends of the Tidesages","g"}},
+[1447]={{"b",0,"200,610",0,"Everyday Etiquette","g"}},
+[1448]={{"b",0,"652,32",0,"Northern Kalimdor - A Comprehensive Guide","g"}},
+[1452]={{"b",0,"610,380",0,"Ka-Boom!","g"}},
+[1454]={{"b",0,"385,782",0,"The Lessons of Ta'zo","g"}},
+[1455]={{"b",0,"761,102",0,"Archmage Antonidas: The Unabridged Autobiography","g"}}
+}
+
 -- [class token] = the levels the class learns a new spell at (codex/spellbook.json, the Forever client's tables)
 D.SPELL_LV = {
 DRUID = {1,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,36,40,42,44,50},

@@ -33,6 +33,8 @@ Icons and textures: file IDs from the Forever client's interface manifest; a mis
                                                          # fixture) as the build reads them; writes nothing
   python3 tools/questbank/gen_data.py --selftest-dur  # check players' times of a quest's work (disc.json "dur", made up)
                                                       # as D.DO takes them; writes nothing
+  python3 tools/questbank/gen_data.py --selftest-find  # check D.FIND: two players' files agree before a find ships, the
+                                                       # guides' seed rows carry "g"; writes nothing
 """
 import collections, csv, html, json, math, os, re, sys
 from travel import Travel, DETOUR, RUN
@@ -3255,6 +3257,139 @@ print("class trainers: %d placed, %d not on a map" % (len(TRAINERS), _TRAIN_OUT)
 lines.append("")
 
 
+# ---------------------------------------------------------------------------
+# D.OPEN: the client's own opening spells (SpellEffect.csv: an open-lock effect, 33, whose lock type is no gathering
+# or lockpicking skill, closing or blasting, named Opening or Unlocking): a cast of one on a game object is an object
+# opened, and Finds.lua notes the key-class items in the bags then. The client's mechanics, never a list of Forever's
+# objects: those are learned in play
+# ---------------------------------------------------------------------------
+_SKILL_LOCKS = {1, 2, 3, 4, 8, 11, 14, 16, 18}  # lockpicking, herbalism, mining, disarm trap, closing, attacking, blasting
+OPEN = sorted({int(r["SpellID"]) for r in csv.DictReader(open(os.path.join(_WI, "SpellEffect.csv")))
+               if r["Effect"] == "33" and int(r["EffectMiscValue_0"] or 0) not in _SKILL_LOCKS
+               and re.match(r"^(Opening|Unlocking)\b", _SPELL_NAME.get(r["SpellID"]) or "")})
+assert 3365 in OPEN and 6477 in OPEN and 2366 not in OPEN and 1804 not in OPEN, "the client's opening spells: %r" % OPEN[:20]
+lines.append("-- [spell] = true: the client's opening spells (an open-lock effect of no skill's lock type, SpellEffect.csv): Finds.lua")
+lines.append("D.OPEN = {" + ",".join("[%d]=true" % i for i in OPEN) + "}")
+
+# ---------------------------------------------------------------------------
+# D.FIND: what the world holds beyond quests, per map: { kind, id, "x,y;x,y" (thousandths), files, extra, source }.
+# kind b a book (extra its title), k an object opened with a key (extra the key the client's Lock.csv names), h an
+# object looted (extra its items' "class.subclass"), r a rare (extra its level); id the object or creature, 0 for a
+# guide's place with none. Source "p": what two players' files agree on (tools/probe_pull.py finds_rows over
+# disc.json's "find", the same rows the Worker serves to the uploader's data file); "g": seeded on day one from the
+# guides (docs/superpowers/specs/2026-10-21-forever-secrets-research.md, section 1: Warcraft Tavern, Icy Veins and
+# Inven, credited on the site), the library books by their titles only and the locked objects whose key Lock.csv
+# names, at the places they give. A secret chain's steps past its first are never seeded (spoiler-free: they show once
+# you or two guild mates found them), and nor are places the guides give inside a dungeon, without coordinates, or on
+# a map Forever redrew (Eastern Plaguelands, Stormwind: their guide coordinates are the old frame's)
+# ---------------------------------------------------------------------------
+SELFTEST_FIND = "--selftest-find" in sys.argv
+# (item, uiMap, x %, y %): the library books where the guides place them
+FIND_SEED_BOOKS = [
+    (203755, 1429, 65.4, 70.1), (203754, 1455, 76.1, 10.2), (207972, 1454, 38.5, 78.2), (208185, 1420, 59.5, 52.3),
+    (210177, 1421, 43.4, 41.2), (208800, 1413, 62.7, 36.3), (208860, 1432, 35.6, 48.9), (208860, 1436, 52.7, 53.7),
+    (209844, 1421, 63.5, 63.1), (209843, 1439, 59.6, 22.2), (209850, 1432, 74.5, 19.6), (209845, 1436, 45.4, 70.4),
+    (209847, 1413, 56.3, 8.8), (209846, 1413, 52.8, 54.7), (209851, 1442, 74.4, 85.7), (209849, 1431, 6.7, 28.5),
+    (209848, 1437, 33.6, 47.9), (215683, 1441, 34.0, 40.0), (215815, 1416, 48.5, 57.6), (215816, 1417, 73.0, 65.0),
+    (215817, 1443, 55.0, 28.0), (213165, 1434, 41.5, 50.8), (215820, 1418, 57.0, 39.0), (215822, 1445, 57.0, 21.0),
+    (215824, 1435, 61.0, 22.0), (220347, 1444, 50.6, 15.7), (220346, 1446, 72.7, 47.8), (220350, 1425, 36.0, 72.7),
+    (220352, 1427, 37.0, 49.0), (220353, 1419, 55.3, 32.2), (220348, 1447, 20.0, 61.0), (228134, 1448, 65.2, 3.2),
+    (228132, 1422, 38.0, 54.0), (228136, 1452, 61.0, 38.0),
+]
+# (key item, uiMap, x %, y %): locked objects whose key the client's Lock.csv names, at a guide's place. The Rusted
+# Cage Key's cage in the Swamp of Sorrows holds a library book (A Luddite's Guide, above)
+FIND_SEED_LOCKS = [(216523, 1435, 61.0, 22.0)]
+# the secret chains' keys past their first step (the Keystone chain's Fragments and Stone Key, the Dormant Runestone,
+# the Tome of Dalaran's Black Tome): never seeded
+FIND_SECRET_KEYS = {281350, 284092, 284093, 281358, 281359, 276561}
+FIND_REDRAWN = {1412, 1423, 1433, 1453}  # Mulgore, Eastern Plaguelands, Redridge, Stormwind: Forever redrew them (GAPS.md),
+                                         # so a guide's place there is in the old frame
+_ITEM_NAME = {int(r["ID"]): r["Display_lang"] for r in csv.DictReader(open(os.path.join(_WI, "ItemSparse.csv")))
+              if int(r["ID"]) in {b[0] for b in FIND_SEED_BOOKS} | {k[0] for k in FIND_SEED_LOCKS}}
+
+
+def find_rows(disc, keys=None):
+    """D.FIND as {uiMap: [rows]}: the players' rows two files agree on first, then the guides' seed where no players'
+    row of the same find (kind and id, or a book's title or a lock's key) stands on that map."""
+    sys.path.insert(0, os.path.dirname(HERE))
+    import probe_pull
+    lock = probe_pull.lock_keys(os.path.join(_WI, "Lock.csv")) if keys is None else keys
+    out = collections.defaultdict(list)
+    seen = set()
+    for m, kind, fid, spots, files, extra in probe_pull.finds_rows(disc, lock):
+        out[m].append([kind, fid, spots, files, extra, "p"])
+        seen.add((m, kind, fid if fid else extra))
+        if kind == "b":
+            seen.add((m, "b", extra))
+    spot = lambda x, y: "%d,%d" % (int(round(x * 10)), int(round(y * 10)))  # noqa: E731
+    for item, m, x, y in FIND_SEED_BOOKS:
+        title = _ITEM_NAME.get(item)
+        if title and m not in FIND_REDRAWN and (m, "b", title) not in seen:
+            seen.add((m, "b", title))
+            out[m].append(["b", 0, spot(x, y), 0, title, "g"])
+    for key, m, x, y in FIND_SEED_LOCKS:
+        if key in lock and key not in FIND_SECRET_KEYS and m not in FIND_REDRAWN and (m, "k", key) not in seen:
+            seen.add((m, "k", key))
+            out[m].append(["k", 0, spot(x, y), 0, key, "g"])
+    return {m: rows for m, rows in sorted(out.items())}
+
+
+def lua_text(s):
+    """A Lua string in ASCII: the client's font draws any other byte in a source file as a box, so UTF-8 travels as
+    three-digit decimal escapes (gen_known.py's rule)."""
+    out = []
+    for b in s.encode("utf-8"):
+        out.append("\\" + chr(b) if b in (0x22, 0x5C) else chr(b) if 32 <= b < 127 else "\\%03d" % b)
+    return '"' + "".join(out) + '"'
+
+
+def find_selftest():
+    """--selftest-find: two players' files that agree ship, one alone never does; the seed rows carry "g", on the maps
+    the guides name, titled as the client names the books; no secret chain's key and no redrawn map is seeded."""
+    sys.path.insert(0, os.path.dirname(HERE))
+    import probe_pull
+    acc = probe_pull.empty()
+    one = lambda x, y: {"p": [[1429, x, y, 1]], "h": {"7.5": 1}}  # noqa: E731
+    probe_pull.merge_find(acc, {"o2843": one(412, 654), "o9001": one(100, 100), "o9002": {"p": [[1429, 300, 300, 1]], "k": [216523]},
+                                "o410001": {"p": [[1429, 654, 701, 1]], "b": "Archmage Theocritus' Research Journal"}}, "tA", 1)
+    probe_pull.merge_find(acc, {"o2843": one(416, 650), "o9002": {"p": [[1429, 305, 302, 1]], "k": [216523]},
+                                "o410001": {"p": [[1429, 650, 700, 1]], "b": "Archmage Theocritus' Research Journal"}}, "tB", 2)
+    rows = find_rows(acc)
+    p = {(r[0], r[1]): r for r in rows.get(1429, []) if r[5] == "p"}
+    assert p.get(("h", 2843)) == ["h", 2843, "414,652", 2, "7.5", "p"], rows.get(1429)
+    assert ("h", 9001) not in p, "one file alone never ships"
+    assert p.get(("k", 9002)) == ["k", 9002, "303,301", 2, 216523, "p"], "a key Lock.csv names"
+    assert p.get(("b", 410001)) and [r for r in rows[1429] if r[0] == "b" and r[4] == "Archmage Theocritus' Research Journal"] == [p[("b", 410001)]], \
+        "the players' book stands for the guides' place of the same title"
+    g = [r for rs in rows.values() for r in rs if r[5] == "g"]
+    assert len(g) == len(FIND_SEED_BOOKS) - 1 + len(FIND_SEED_LOCKS), "every seed row but the book players placed: %d" % len(g)
+    assert all(r[3] == 0 and r[1] == 0 for r in g), "a guide's place: no object, no files"
+    for item, m, x, y in FIND_SEED_BOOKS:
+        assert m in UIMAP and _ITEM_NAME.get(item), (item, m)
+    assert {r[4] for r in g if r[0] == "b"} <= set(_ITEM_NAME.values()), "titles as the client names the books"
+    assert [r for r in g if r[0] == "k"] == [["k", 0, "610,220", 0, 216523, "g"]], "the cage, by its key"
+    assert not FIND_SECRET_KEYS & {k for k, *_ in FIND_SEED_LOCKS} and not FIND_REDRAWN & {m for _, m, *_ in FIND_SEED_BOOKS}
+    assert lua_text("Bjørn \"x\" \\") == '"Bj\\195\\184rn \\"x\\" \\\\"'
+    print("selftest-find: OK (%d players' rows from two files, %d seeded from the guides on %d maps)" % (
+        len(p), len(g), len({m for m, rs in rows.items() if any(r[5] == "g" for r in rs)})))
+
+
+if SELFTEST_FIND:
+    find_selftest()
+    raise SystemExit(0)
+FIND = find_rows(DISC)
+lines.append('-- [uiMap] = {{kind, id, "x,y;x,y" (thousandths), files, extra, source}, ...}: what the world holds beyond quests (b a')
+lines.append("-- book and its title, k an object and the key Lock.csv names, h an object looted and its items' kind, r a rare and")
+lines.append("-- its level); source p what two players' files agree on, g a guide's place (Finds.lua; QuestBank_Finds adds f)")
+lines.append("D.FIND = {\n" + ",\n".join("[%d]={%s}" % (m, ",".join("{%s}" % ",".join(
+    lua_text(v) if isinstance(v, str) else str(v) for v in r) for r in rs)) for m, rs in FIND.items()) + "\n}")
+FIND_COUNT = collections.Counter((r[0], r[5]) for rs in FIND.values() for r in rs)
+FIND_WORD = {"b": ("book", "books"), "k": ("locked object", "locked objects"), "h": ("looted object", "looted objects"), "r": ("rare", "rares")}
+print("finds: %s" % (", ".join("%d %s from %s" % (n, FIND_WORD[k][n != 1], {"p": "players' games", "g": "the guides"}[s])
+                               for (k, s), n in sorted(FIND_COUNT.items())) or "none"))
+lines.append("")
+
+
 # D.SPELL_LV: the levels each class learns a new spell at, from the site's spellbook (codex/spellbook.json, built by
 # tools/build_spellbook.py from the Forever client's tables; first ranks only, so a Train step comes at those levels):
 # the Guide adds a Train step at those levels
@@ -3412,6 +3547,8 @@ def gap_report():
            "Instant follow-ups planned on the day: %d. Race-limited quests: %d. Quests in mutually exclusive groups: %d." % (
                len(FOLLOW), len(RACE), len(EXCL)),
            "Turn-in NPCs found by the name in the quest's objective, where Wowhead links none: %d." % len(TEXT_NAMED),
+           "Finds (D.FIND): %s." % (", ".join("%d %s from %s" % (n, FIND_WORD[k][n != 1], {"p": "players' games (two files agree)", "g": "the guides"}[src])
+                                              for (k, src), n in sorted(FIND_COUNT.items())) or "none"),
            ("World map icons: objective spots for %d quests (%d from CMaNGOS spawns, %d from its quest outlines only, %d from "
             "Wowhead Forever's quest pages, %d from players' games alone; %d more have players' spots beside those); %d quests "
             "that start from an item show where it drops. %d quests need a profession or a reputation the addon can't check.") % (

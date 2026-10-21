@@ -19333,25 +19333,42 @@ end)()
       { 1429, "h", "2843", "1,1", 2, "7.5" },
       { 1429, "r", 6583, "nope", 2, 35 },
     } }
+    file.rows[#file.rows + 1] = { 1429, "b", 0, "5,5", 9, "Archmage Theocritus' Research Journal" } -- (Data.lua's guide row)
     local c = char("Datafile", { finds = file })
     local D, F = c.QB.Data, c.QB.Finds
+    -- Data.lua's own: the client's opening spells, and the guides' day-one seed (a library book, the cage by its key)
+    assert(D.OPEN[3365] and D.OPEN[6477] and not D.OPEN[2366], "D.OPEN: the client's opening spells, no gathering")
+    local seeded = 0
+    for _, r in ipairs(D.FIND[1429] or {}) do
+      if r[1] == "b" and r[5] == "Archmage Theocritus' Research Journal" then
+        assert(r[6] == "g" and r[3] == "654,701", "the guide's place stays Data.lua's, never the file's: " .. r[3] .. " " .. r[6])
+        seeded = seeded + 1
+      end
+    end
+    assert(seeded == 1, "one row for the book on Elwynn: " .. seeded)
+    local cage
+    for _, r in ipairs(D.FIND[1435] or {}) do if r[1] == "k" and r[5] == 216523 then cage = r end end
+    assert(cage and cage[6] == "g", "the Rusted Cage Key's cage, seeded")
     local function rows(m) return (D.FIND or {})[m] or {} end
     local function has(m, kind, id, extra, src)
       for _, r in ipairs(rows(m)) do if r[1] == kind and r[2] == id and (extra == nil or r[5] == extra) and (src == nil or r[6] == src) then return r end end
     end
-    assert(has(1429, "b", 0, "A Guide Book", "f") and has(1429, "h", 2843, "7.5", "f") and has(1438, "r", 6582, 35, "f") and has(1435, "k", 0, 216523, "f"),
-      "the four good rows, from the file")
+    assert(has(1429, "b", 0, "A Guide Book", "f") and has(1429, "h", 2843, "7.5", "f") and has(1438, "r", 6582, 35, "f"),
+      "the good rows, from the file")
+    assert(has(1435, "k", 0, 216523, "g") and not has(1435, "k", 0, 216523, "f"), "the cage Data.lua seeds stays its own")
     assert(F.dataAt == 20261022, "its stamp")
     local n = 0
     for _, list in pairs(D.FIND) do for _, r in ipairs(list) do if r[6] == "f" then n = n + 1 end end end
-    assert(n == 4, "six rows outside the schema refused: " .. n)
+    assert(n == 3, "six rows outside the schema refused, two Data.lua has left out: " .. n)
     -- a row Data.lua carries stays Data.lua's: loaded again over a Data row of the same find, the file adds nothing
+    local keep = D.FIND
     D.FIND = { [1429] = { { "h", 2843, "500,500", 4, "7.5", "p" } } }
-    assert(F.LoadData() == 3 and #rows(1429) == 2 and has(1429, "h", 2843, nil, "p") and not has(1429, "h", 2843, nil, "f"), "never over Data.lua's")
+    assert(F.LoadData() == 4 and #rows(1429) == 3 and has(1429, "h", 2843, nil, "p") and not has(1429, "h", 2843, nil, "f"), "never over Data.lua's")
     assert(F.LoadData() == 0, "loaded twice: nothing new")
     -- no file, or one of another version: nothing
     c.env.QuestBank_Finds = { v = 2, rows = { { 1429, "b", 0, "1,1", 2, "New" } } }
     assert(F.LoadData() == 0, "another version")
+    D.FIND = keep
   end }
 
   FINDCASES[#FINDCASES + 1] = { "a walk through a session: a look a second makes next to no garbage", function()
