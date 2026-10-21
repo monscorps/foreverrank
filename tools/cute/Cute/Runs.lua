@@ -40,6 +40,8 @@ local LATE = 120                     -- a member's run stopped this long before 
 local WAIT_Q, WAIT_A = 15, 20        -- the scribe waits for the last values; a client waits for the scribe's 2A
 local AFTER_KILL = 600               -- leaving the group this soon after a boss is no leaving early
 local RESUME = 1800                  -- a saved run a login resumes, at most this old
+local SETTLE, ANSWER = 4, 60         -- a newcomer judges an answer 4 s after its own hello left, and takes none after a minute
+local MAX_BACK = 4 * 3600            -- an id older than this is nobody's run (a raid lasts less)
 local SAMPLE, TICK = 30, 5
 
 ----------------------------------------------------------------------------
@@ -242,6 +244,8 @@ function R:Hello(answer)
   if not run then return end
   C.RunComm:Send("2H", function()
     if R.run ~= run then return nil end
+    -- (when this client's own hello left: an answer to it is taken in the minute after, R:Offer)
+    if not answer and not run.helloAt then run.helloAt = gtime() end
     return { "2H|" .. run.id .. "|" .. C.version .. "|" .. flags(run, answer) }
   end)
 end
@@ -1029,12 +1033,18 @@ function R:Heard(kind, rest, who)
     self.asked = nil
     local cp = decode(data, el(run))
     local o = run.own
+    -- (a count already held is never added to: the checkpoint's where this run has none yet, else the larger, so a
+    -- 2W can never count a thing twice)
     for k, x in pairs(cp) do
       if k == "fd" then if not o.fd or x < o.fd then o.fd = x end
       elseif k == "lq" then if not o.lq or x > o.lq then o.lq = x end
-      elseif k == "q" then o.q = o.q or {}; for _, qid in ipairs(x) do if #o.q < 16 then o.q[#o.q + 1] = qid end end
+      elseif k == "q" then
+        o.q = o.q or {}
+        local have = {}
+        for _, qid in ipairs(o.q) do have[qid] = true end
+        for _, qid in ipairs(x) do if #o.q < 16 and not have[qid] then o.q[#o.q + 1] = qid end end
       elseif k ~= "t" and k ~= "o" and k ~= "mt" and not (k == "dm" or k == "hl" or k == "ab" or k == "tk" or k == "av" or k == "in" or k == "dp") then
-        o[k] = (o[k] or 0) + x
+        o[k] = math.max(o[k] or 0, x)
       end
     end
     self.restored = true
@@ -1054,6 +1064,9 @@ function R:HeardHello(rest, who)
   if not (t and sfx) then return end
   if not run then return end
   if kind ~= run.kind or place ~= (run.inst or run.map or 0) then return end
+  -- (no run starts in the future, nor longer ago than a raid lasts: such an id is nobody's)
+  local n = now()
+  if t > n + 30 or t < n - MAX_BACK then return end
   local m = run.members[who.sfx]
   -- (the id this member says for this run, kind and place: its messages under it are heard, R:Heard)
   if m then m.hello = ver ~= "" and ver or true; m.id = id end
@@ -1062,15 +1075,9 @@ function R:HeardHello(rest, who)
     return
   end
   local myT, mySf = idTime(run.id)
-  -- the newcomer's way: an answer from the group with an id older than this client's, taken (from the scribe where
-  -- the leader said hello); then a 2R, in case this client counted in it before a crash
+  -- the newcomer's way: an answer with an id older than this client's, judged as R:Offer says
   if answer then
-    if t < myT and (not run.answered) and (who.sfx == self:Scribe() or not (R.Group().leader and run.members[R.Group().leader] and run.members[R.Group().leader].hello)) then
-      run.answered = true
-      adopt(run, id, t)
-      self.asked = true
-      C.RunComm:Send("2R", id .. "|" .. mySfx())
-    end
+    if t < myT then self:Offer(run, id, t, who) end
     return
   end
   -- within 30 s of this client's start: the smaller time, then the smaller suffix
@@ -1089,6 +1096,41 @@ function R:HeardHello(rest, who)
       end, "runs: answer"))
     end
   end
+end
+
+-- an answer to a newcomer (3.2): taken only by this client as one, from SETTLE to ANSWER seconds after its own hello
+-- left (a member in the run a while takes none, so an edited copy's answer moves nobody established), judged SETTLE
+-- seconds on so the hellos of members who started with it (0 to 3 s after their start) come first: from the leader
+-- where the leader said hello (on the leader's own client its own counts: a leader in late takes none, and the group
+-- takes its id with its 2Q), else the oldest offered; once, then a 2R, in case this client counted in it before a crash
+function R:Offer(run, id, t, who)
+  if run.answered or not run.helloAt then return end
+  local since = gtime() - run.helloAt
+  if since > ANSWER then return end
+  run.offers = run.offers or {}
+  local o = run.offers[who.sfx]
+  if not o or t < o.t then run.offers[who.sfx] = { id = id, t = t } end
+  if run.offerDue then return end
+  run.offerDue = true
+  C_Timer.After(math.max(0, SETTLE - since), C.Safe(function() R:TakeOffer(run) end, "runs: answer"))
+end
+function R:TakeOffer(run)
+  run.offerDue = nil
+  local offers = run.offers
+  run.offers = nil
+  if R.run ~= run or run.answered or type(offers) ~= "table" then return end
+  local g = R.Group()
+  local lead = g.leader
+  local lm = lead and run.members[lead]
+  local pick
+  if lead and (lead == mySfx() or (lm and lm.hello)) then pick = offers[lead]
+  else for _, o in pairs(offers) do if not pick or o.t < pick.t then pick = o end end end
+  local myT = idTime(run.id)
+  if not (pick and myT and pick.t < myT) then return end
+  run.answered = true
+  adopt(run, pick.id, pick.t)
+  self.asked = true
+  C.RunComm:Send("2R", pick.id .. "|" .. mySfx())
 end
 
 -- the scribe's 2A: codes, suffixes and numbers alone; the place and the names this client's own. An award this

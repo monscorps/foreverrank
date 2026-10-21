@@ -11809,6 +11809,74 @@ do local function runsStage()
   end)
   said[#said + 1] = "an edited copy: 2Q, 2A, 2W from a non-scribe ignored, a 2A with an unknown suffix not shown, a value out of bounds dropped, the meter's word over a claim, a backdated hello ignored"
 
+  -- (3.2) one member in 45 s before the rest: the leader and the three who came with it settle on one id among
+  -- themselves (an answer from a member who is not their scribe is no answer, the leader's own client included), the
+  -- early one is heard under the id its hello said and takes the group's with the 2Q; one report everywhere
+  isolated({ gmember("Sy", 1), gmember("Ab", 3), gmember("Bc", 3), gmember("Cd", 3), gmember("Ye", 3) }, function()
+    local cs = { gchar("Sy", 1), gchar("Ab", 3), gchar("Bc", 3), gchar("Cd", 3), gchar("Ye", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group(cs)
+    zone({ cs[5] }, "party", 36, "The Deadmines")
+    tickAll(45)
+    local early = cs[5].C.Runs.Current().id
+    zone({ cs[1], cs[2], cs[3], cs[4] }, "party", 36, "The Deadmines")
+    tickAll(40)
+    local id = cs[1].C.Runs.Current().id
+    for i = 2, 4 do assert(cs[i].C.Runs.Current().id == id, cs[i].o.name .. " on the leader's id: " .. cs[i].C.Runs.Current().id .. " / " .. id) end
+    assert(id ~= early, "the leader took no answer from the early one")
+    local dmg = { Sy = { [7] = 20000, [0] = 2000 }, Ab = { [0] = 9000, [5] = 6 }, Bc = { [2] = 7000 }, Cd = { [0] = 5000 }, Ye = { [0] = 4000, [8] = 3000 } }
+    for _, enc in ipairs({ 1230, 1236, 1238, 1234 }) do fight(G, 60, dmg, enc); tickAll(60) end
+    local ye = cs[1].C.Runs.Current().members[sfx(cs[5])]
+    assert(ye and ye.v and ye.v.dm, "the early one's checkpoints heard under its own id")
+    zone(cs, "none", 0)
+    tickAll(30)
+    for _, c in ipairs(cs) do
+      assert(not c.C.Runs.Current() and lastReport(c) and lastReport(c).id == id, c.o.name .. ": the group's report, no run left")
+    end
+  end)
+  -- (3.2, 13.1) an edited copy's answer, back-dated a day, to members in the run a while (a pug leader without Cute):
+  -- no answer is taken past a minute after this client's own hello, nor one older than a raid lasts; nobody moves,
+  -- asks for a checkpoint or counts anything twice. A newcomer takes the scribe's answer, not the forged one
+  isolated({ gmember("Oz", 3), gmember("Pax", 3), gmember("Mo", 3), gmember("Lu", 3) }, function()
+    local cs = { gchar("Oz", 3), gchar("Pax", 3), gchar("Mo", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group({ { name = "Pug", class = "WARRIOR" }, cs[1], cs[2], cs[3] })
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local oz = cs[1]
+    local run = oz.C.Runs.Current()
+    local id, start = run.id, run.start
+    die(G, oz); tickAll(3); rez(G, oz)
+    fight(G, 30, { Oz = { [0] = 900 }, Mo = { [0] = 800 } }, 1230)
+    tickAll(40)
+    local b36 = oz.C.Comm.b36
+    local function forged(to, t) to.C.RunComm:Receive("CuteRun", "2H|" .. b36(t) .. "-" .. sfx(cs[2]) .. "|0.7.1|d." .. b36(36) .. ".a", "PARTY", cs[2].sender) end
+    forged(cs[1], start - 86400); forged(cs[3], start - 86400); forged(cs[1], start - 600); forged(cs[3], start - 600)
+    tickAll(30)
+    for _, c in ipairs({ cs[1], cs[3] }) do
+      local r = c.C.Runs.Current()
+      assert(r.id == id and r.start == start and rcount(c, "2R") == 0, c.o.name .. ": a forged answer to a member in the run a while: ignored")
+    end
+    assert(oz.C.Runs.Current().own.de == 1, "nothing counted twice: " .. tostring(oz.C.Runs.Current().own.de))
+    -- the newcomer: in the group, then into the instance; the forged answer (a day back) comes first
+    local lu = gchar("Lu", 3)
+    login(lu)
+    tickAll(5)
+    G.members[#G.members + 1] = entryOf(lu)
+    wire(lu, G)
+    lu.everMet = {}
+    for _, e in ipairs(G.members) do table.insert(lu.everMet, e); if e.c and e.c ~= lu then e.c.everMet = e.c.everMet or {}; table.insert(e.c.everMet, G.members[#G.members]) end end
+    each(G, function(c) fire(c, "GROUP_ROSTER_UPDATE") end)
+    zone({ lu }, "party", 36, "The Deadmines")
+    tickAll(4)
+    forged(lu, start - 86400)
+    tickAll(30)
+    assert(lu.C.Runs.Current() and lu.C.Runs.Current().id == id, "the newcomer on the group's id: " .. tostring(lu.C.Runs.Current() and lu.C.Runs.Current().id) .. " / " .. id)
+  end)
+  said[#said + 1] = "one member in 45 s early: the rest keep their own id, the early one joins it with the 2Q, one report; a forged back-dated answer moves nobody in the run a while, and a newcomer takes the scribe's"
+
   -- (4) the lockdown: a 2V answered 11 spends no try, the Chat restriction's Activating holds it and only its Inactive
   -- lets it go, once; a lockdown for the whole stay sends nothing inside, a disband inside gives each client its own
   -- report, and the id and the scribe settle once the group is out; the meter read only out of combat; a secret
@@ -11888,7 +11956,10 @@ do local function runsStage()
     tickAll(10)
     zone({ cs[2] }, "none", 0); tickAll(3); zone({ cs[2] }, "party", 36, "The Deadmines")
     tickAll(50)
-    fight(G, 60, { Wa = { [0] = 1000 }, Xb = { [0] = 700 }, Yc = { [0] = 600 } }, 1230)
+    -- (a checkpoint each, held inside, as the timer after a kill queues it: no kill here, which with no seed would be
+    -- this instance's every known boss, a full clear)
+    fight(G, 60, { Wa = { [0] = 1000 }, Xb = { [0] = 700 }, Yc = { [0] = 600 } })
+    for _, c in ipairs(cs) do c.C.Runs:Values() end
     tickAll(30)
     local n = 0
     local ids = {}
