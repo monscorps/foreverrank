@@ -320,15 +320,41 @@ local function fit(label, s)
   return s
 end
 
--- a square icon with the game's frame round it, tinted in the item's quality colour
+-- a square icon with the game's frame round it, tinted in the item's quality colour. (The windows round) a host's skin
+-- with its own quality colours (QB.Skin.Quality: Cute's) has a flat 1 px edge in the quality's own colour round the
+-- icon instead (black for poor and common), and its names in the host's colours (lifted to read on its panels)
+local function skinned() return QB.Skin and QB.Skin.Quality and true or false end
 local function framedIcon(parent, size, layerSub)
   local icon = parent:CreateTexture(nil, "ARTWORK", nil, layerSub or 1)
   icon:SetSize(size, size)
   icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-  local rim = parent:CreateTexture(nil, "OVERLAY", nil, 1)
-  rim:SetTexture(QB.Data.TEX.iconFrame)
-  rim:SetAllPoints(icon)
+  local rim
+  if skinned() then
+    rim = parent:CreateTexture(nil, "ARTWORK", nil, (layerSub or 1) - 1)
+    rim:SetColorTexture(0, 0, 0, 1)
+    rim:SetPoint("TOPLEFT", icon, "TOPLEFT", -1, 1)
+    rim:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 1, -1)
+  else
+    rim = parent:CreateTexture(nil, "OVERLAY", nil, 1)
+    rim:SetTexture(QB.Data.TEX.iconFrame)
+    rim:SetAllPoints(icon)
+  end
   return icon, rim
+end
+local EDGE_BLACK = { [0] = true, [1] = true }
+-- an icon's frame in a quality's colour: the game's frame tinted, or the host's edge in the exact colour
+local function rimColor(rim, q, qc)
+  if skinned() then
+    if EDGE_BLACK[q or 1] then rim:SetColorTexture(0, 0, 0, 1) else rim:SetColorTexture(qc[1], qc[2], qc[3], 1) end
+  else
+    rim:SetVertexColor(qc[1], qc[2], qc[3])
+  end
+end
+-- a name's colour for a quality: the host's (lifted), else the game's
+local function nameColor(q, qc)
+  local f = QB.Skin and QB.Skin.Quality
+  if f then local c = f(q); if type(c) == "table" then return c end end
+  return qc
 end
 
 local function sourceText(c)
@@ -475,7 +501,7 @@ local function buildRow(f, i, slot)
   r.sub:SetPoint("TOPLEFT", ICON + 6, -20)
   -- the green arrow, then the upgrade: the source's face (a boss's, the quest's icon), the item's icon, three short
   -- lines (the item and its level, where from, the place)
-  r.arrow = r:CreateTexture(nil, "OVERLAY")
+  r.arrow = r:CreateTexture(nil, "OVERLAY", nil, 3)
   r.arrow:SetTexture(T.upgrade)
   r.arrow:SetTexCoord(UPGRADE_TC[1], UPGRADE_TC[2], UPGRADE_TC[3], UPGRADE_TC[4])
   r.arrow:SetSize(12, 13)
@@ -498,6 +524,18 @@ local function buildRow(f, i, slot)
   u.mark:SetPoint("BOTTOMRIGHT", u.face, "BOTTOMRIGHT", 3, -3)
   u.icon, u.rim = framedIcon(u, SMALL, 1)
   u.icon:SetPoint("TOPLEFT", SMALL + 6, -7)
+  if skinned() then
+    -- (the host's look: the bags' arrow at 10 px on the upgrade's own icon, as the bags mark one; the quest's glyph over
+    -- its POI disc, as the map draws a quest in your log)
+    r.arrow:SetParent(u)
+    r.arrow:SetSize(10, 10)
+    r.arrow:ClearAllPoints()
+    r.arrow:SetPoint("TOPLEFT", u.icon, "TOPLEFT", -2, 2)
+    u.glyph = u:CreateTexture(nil, "OVERLAY", nil, 1)
+    u.glyph:SetSize(SMALL * 0.62, SMALL * 0.62)
+    u.glyph:SetPoint("CENTER", u.face, "CENTER")
+    u.glyph:Hide()
+  end
   local tx = SMALL * 2 + 12
   local tw = COL - UP_X - tx - 2
   u.name = fs(u, "GameFontNormal", 11, INK, tw - 44)
@@ -560,10 +598,11 @@ local function showWorn(r, w)
     local qc = qualityColor(w.quality)
     s.icon:SetTexture(w.icon or QB.Data.TEX.unknown)
     s.icon:Show()
-    s.rim:SetVertexColor(qc[1], qc[2], qc[3])
+    rimColor(s.rim, w.quality, qc)
     s.rim:Show()
     s.back:Hide()
-    r.name:SetTextColor(qc[1], qc[2], qc[3])
+    local nc = nameColor(w.quality, qc)
+    r.name:SetTextColor(nc[1], nc[2], nc[3])
     fit(r.name, w.name or "loading...")
     r.sub:SetText(w.ilvl and string.format("%s, iL %d", r.slot.name, w.ilvl) or r.slot.name)
   else
@@ -589,8 +628,9 @@ local function showUpgrade(r, c)
   c.link = c.link or link
   local qc = qualityColor(quality) -- (white until the client names the item)
   u.icon:SetTexture(icon or QB.Data.TEX.unknown)
-  u.rim:SetVertexColor(qc[1], qc[2], qc[3])
-  u.name:SetTextColor(qc[1], qc[2], qc[3])
+  rimColor(u.rim, quality, qc)
+  local nc = nameColor(quality, qc)
+  u.name:SetTextColor(nc[1], nc[2], nc[3])
   fit(u.name, name or "loading...")
   u.ilvl:SetText(string.format("iL %d", c.ilvl))
   local src, place = sourceText(c)
@@ -598,7 +638,18 @@ local function showUpgrade(r, c)
   fit(u.place, place)
   u.face:SetDesaturated(false)
   u.face:SetVertexColor(1, 1, 1)
-  if c.q then
+  if u.glyph then u.glyph:Hide() end
+  if c.q and u.glyph then
+    -- (the host's look: the quest as the map draws it, the in-progress POI for one in your log, the offer's ! else)
+    if QB.state.log[c.q.id] then
+      QB.Art(u.face, "UI-QuestPoi-QuestNumber", 334391)
+      QB.Art(u.glyph, "Quest-In-Progress-Icon-yellow", QB.Data.TEX.questActive)
+      u.glyph:Show()
+    else
+      QB.Art(u.face, "QuestNormal", QB.Data.TEX.questAvail)
+    end
+    u.mark:SetShown(QB:IsAdded(c.q.id))
+  elseif c.q then
     u.face:SetTexture(c.q.icon or QB.Data.TEX.questGeneric)
     u.face:SetTexCoord(0.07, 0.93, 0.07, 0.93)
     u.mark:SetShown(QB:IsAdded(c.q.id))

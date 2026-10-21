@@ -35,6 +35,9 @@ if not QB.dormant then
   E.Skin = {
     font = Cute.Font(), INK = INK, SOFT = SOFT, ACCENT = WHITE, GOOD = { 0.45, 0.83, 0.47 }, QUEST = { 1, 0.82, 0 },
     stop = true, outline = true,
+    -- (the journal's tiles: the range on a plate in its colours, a white edge on the open one: DungeonMap.lua; the
+    -- Gear page's items: a 1 px edge in the quality's colour, names in Cute's lifted quality colours: Gear.lua)
+    tiles = true, Quality = function(q) return Cute.Look and Cute.Look.QualityName(q) or nil end,
     -- a flat fill and a 1 px edge, as Cute's window (UI.lua's skin)
     Backdrop = function(f)
       if not f.SetBackdrop then return end

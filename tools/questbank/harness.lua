@@ -21044,6 +21044,71 @@ do
   print("windows D5: Cute's default places: the step frame on the hidden tracker's corner (8 px left of it while kept), the arrow at TOP 0 -96, the camp bar the engine's; apart at 1920 x 1080 and 1366 x 768")
 end
 
+-- D6. The journal's list tiles under a host's skin that asks (Cute's QB.Skin.tiles): the level range on a 70% black plate
+-- under the name, each end in the game's colour for it against your level (red and orange read on the dark art), and
+-- the open tile a full 1 px white border; QuestBank's own tiles as they were (the gold edge, "LV 13-18")
+do
+  local c = lookChar("Tiles", { level = 20, skin = { font = "Fonts\\ARIALN.TTF", INK = { 0.86, 0.86, 0.86 }, SOFT = { 0.58, 0.58, 0.58 }, ACCENT = { 0.96, 0.96, 0.96 }, tiles = true } })
+  local DM = c.QB.DMap
+  DM.Open(DM.Find("deadmines"), "map")
+  local f = c.env.QuestBankDungeonMap
+  local open, other
+  for _, r in ipairs(f.rows) do if r:IsShown() then if r.cat.key == "d1581" then open = r elseif not other then other = r end end end
+  assert(open and other, "the Deadmines' tile and another")
+  assert(open.lvPlate and open.lvPlate:IsShown() and open.lvPlate.__color and math.abs(open.lvPlate.__color[4] - 0.7) < 0.01, "the range on a 70% black plate")
+  assert(open.lv:GetText():find("^|cff%x%x%x%x%x%x%d+|r") and not open.lv:GetText():find("LV", 1, true), "each end in its colour, no LV: " .. open.lv:GetText())
+  assert(open.__bdb and open.__bdb[1] == 1 and open.__bdb[2] == 1 and open.__bdb[3] == 1 and other.__bdb[1] == 0, "the open tile's 1 px white border, the others' black")
+  local q = lookChar("Plaintiles", { level = 20 })
+  q.QB.DMap.Open(q.QB.DMap.Find("deadmines"), "map")
+  local qf = q.env.QuestBankDungeonMap
+  local qr
+  for _, r in ipairs(qf.rows) do if r:IsShown() and r.cat.key == "d1581" then qr = r end end
+  assert(qr.lv:GetText():find("^LV %d+%-%d+$") and not (qr.lvPlate and qr.lvPlate:IsShown()) and qr.__bdb[1] == 1 and math.abs(qr.__bdb[2] - 0.82) < 0.01, "QuestBank's own: as before")
+  print("windows D6: the journal's tiles under Cute's skin: the range on a 70% plate in its colours, the open tile white-edged; QuestBank's own as before")
+end
+
+-- D7. The Gear page under a host's skin (Cute's QB.Skin.Quality): item icons with a 1 px edge in the item's quality
+-- colour and the bags' green arrow on an upgrade at 10 px, names in the host's lifted quality colours, a quest's source
+-- as the map draws the quest (one in your log: the in-progress quest POI; one to take: the offer's !); QuestBank's own as
+-- before (the game's icon frame, the quest's icon)
+do
+  local LIFT = { [2] = { 0.12, 1, 0 }, [3] = { 0.25, 0.58, 0.93 }, [4] = { 0.73, 0.41, 0.95 } }
+  local skin = { font = "Fonts\\ARIALN.TTF", INK = { 0.86, 0.86, 0.86 }, SOFT = { 0.58, 0.58, 0.58 }, ACCENT = { 0.96, 0.96, 0.96 },
+    Quality = function(q) return LIFT[q] or { 0.86, 0.86, 0.86 } end }
+  local function gearChar(name, sk, log)
+    local c = newClient({ name = name, level = 20, cap = 60, faction = "Alliance", className = "Paladin", class = "PALADIN", classID = 2, race = "Human",
+      log = log or {}, done = {}, world = { 0, -8914, -133 }, map = 1429, bagSlots = {}, bind = "Goldshire" })
+    if sk then c.QB.Skin = sk end
+    local env = c.env
+    c.equipped = { [5] = 900001 }
+    env.GetInventoryItemID = function(unit, slot) return unit == "player" and c.equipped[slot] or nil end
+    env.GetInventoryItemLink = function(unit, slot) local id = unit == "player" and c.equipped[slot]; return id and ("|cffffffff|Hitem:" .. id .. "::::::::20:::::::|h[Item " .. id .. "]|h|r") or nil end
+    local inst = env.C_Item.GetItemInfoInstant
+    env.C_Item.GetItemInfoInstant = function(id) if id == 900001 then return id, "Armor", "", "INVTYPE_CHEST", 133328, 4, 3 end return inst(id) end
+    c.itemLevel[900001] = 10; c.itemQuality[900001] = 2
+    login(c)
+    env.SlashCmdList.QUESTBANK("")
+    c.QB.UI:ShowTab(9); c.QB.UI:Refresh()
+    local f = c.QB.Gear.Frame()
+    for _, r in ipairs(f.rows) do if r.slot.name == "Chest" then return c, r end end
+  end
+  local c, chest = gearChar("Skinned", skin)
+  local b = chest.best
+  assert(chest.worn and b and chest.up:IsShown(), "a worn chest and its upgrade")
+  local nc = { chest.name:GetTextColor() }
+  assert(math.abs(nc[1] - 0.12) < 0.01 and math.abs(nc[2] - 1) < 0.01, "the worn name in the host's colour for its quality")
+  local rim = chest.button.rim
+  assert(rim.__tex == "color" and math.abs(rim.__color[2] - 1) < 0.01 and rim.__points[1].rel == chest.button.icon and rim.__points[1].x == -1, "a 1 px edge in the quality's colour round the icon")
+  assert(chest.arrow:GetWidth() == 10 and chest.arrow.__points[1].rel == chest.up.icon, "the green arrow at 10 px on the upgrade's icon")
+  if b.q then
+    local inLog = c.QB.state.log[b.q.id]
+    assert(chest.up.face.__atlas == (inLog and "UI-QuestPoi-QuestNumber" or "QuestNormal"), "the quest's source as the map draws it: " .. tostring(chest.up.face.__atlas))
+  end
+  local q, qchest = gearChar("Plaingear", nil)
+  assert(qchest.button.rim.__tex ~= "color" and qchest.arrow:GetWidth() == 12 and (not qchest.best or not qchest.best.q or qchest.up.face.__tex == qchest.best.q.icon), "QuestBank's own: the game's frame, the arrow between, the quest's icon")
+  print("windows D7: the Gear page under Cute's skin: quality edges, the arrow on the upgrade, lifted names, the quest's source as the map draws it; QuestBank's own as before")
+end
+
 local seen = {}
 local unique = {}
 for _, p in ipairs(problems) do if not seen[p] then seen[p] = true; unique[#unique + 1] = p end end

@@ -12377,6 +12377,52 @@ do
   end)
 end
 
+-- W15 (sub-project D): the Dungeons and Gear tabs in the look. Dungeons: the guild's pick as a card across the top
+-- (the Quests tab's own), then the journal, opened on the pick the first time; its tiles carry their range on a 70%
+-- plate and the open one a white edge (QuestBank's DungeonMap.lua under Cute's skin). Gear: the item icons in a 1 px
+-- edge of their quality's colour, the names in Cute's lifted colours (Gear.lua under Cute's skin)
+do
+  local function member(name, rank, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "MAGE", level = level or 20, online = true } end
+  isolated({ member("Rone", 1, 20), member("Pim", 3, 19), member("Ada", 3, 21) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2 } }))
+    login(c); tickAll(6)
+    for _, key in ipairs({ "Cute_Quest:journal", "Cute_Quest:gear" }) do c.C.Modules.Set(key, true) end
+    tick(c, 2)
+    local QB = c.addons[2].private
+    local UI = c.C.UI
+    sizeAll(c, 1040, 640)
+    UI:Open("journal")
+    local L = qwin(c)
+    local pick = L.hosts.journalPick
+    assert(pick and pick:IsShown() and pick.pickHead:IsShown(), "the pick across the top")
+    local f = c.env.QuestBankDungeonMap
+    if SEEDED then
+      assert(pick.pickCard:IsShown() and pick.pickCard:GetWidth() == L.scroll:Width(), "the card at the full width")
+      assert(f and f.cat and f.cat.name == "The Deadmines", "the journal opened on the pick: " .. tostring(f and f.cat and f.cat.name))
+    end
+    local open
+    for _, r in ipairs(f.rows) do if r:IsShown() and r.cat == f.cat then open = r end end
+    assert(open and open.lvPlate and open.lvPlate:IsShown() and open.__bdb[1] == 1, "the open tile: its range on a plate, its white edge")
+    check(L.frame, "W15 the Dungeons tab, 1040x640")
+    sizeAll(c, 760, 420); UI:Open("journal")
+    check(L.frame, "W15 the Dungeons tab, 760x420")
+    sizeAll(c, 1040, 640)
+    -- Gear: the skin's edges and names
+    UI:Open("gear")
+    local gf = QB.Gear.Frame()
+    assert(gf and gf:IsShown(), "the Gear page")
+    local rim = gf.rows[1].button.rim
+    assert(rim.__tex == "color" and rim.__points[1].x == -1, "an item's icon in its 1 px edge, not the game's frame")
+    check(L.frame, "W15 the Gear tab, 1040x640")
+    sizeAll(c, 760, 420); UI:Open("gear")
+    check(L.frame, "W15 the Gear tab, 760x420")
+    sizeAll(c, 1040, 640)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print("windows W15: the Dungeons tab with the pick's card across the top and the journal opened on it, its tiles plated and the open one white-edged; the Gear tab's items in their quality's edge")
+  end)
+end
+
 -- this pass's problems and layouts join the run's; the last pass prints them all
 for _, p in ipairs(problems) do table.insert(CUTE_RESULTS.problems, (SEEDED and "[seed] " or "[no seed] ") .. p) end
 for _, l in ipairs(layouts) do l.label = (SEEDED and "seed: " or "no seed: ") .. l.label; table.insert(CUTE_RESULTS.layouts, l) end

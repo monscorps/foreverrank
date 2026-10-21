@@ -573,6 +573,14 @@ DM.SetCover = setCover
 ----------------------------------------------------------------------------
 -- the list
 ----------------------------------------------------------------------------
+-- a level as a colour code, the game's colour for it against yours (GetQuestDifficultyColor), white where none
+local function rangeColor(level)
+  if type(GetQuestDifficultyColor) == "function" then
+    local ok, c = pcall(GetQuestDifficultyColor, level)
+    if ok and type(c) == "table" and type(c.r) == "number" then return string.format("|cff%02x%02x%02x", c.r * 255, c.g * 255, c.b * 255) end
+  end
+  return "|cffffffff"
+end
 local function listRow(i)
   local f = frame
   local r = f.rows[i]
@@ -584,7 +592,10 @@ local function listRow(i)
   r.shade = r:CreateTexture(nil, "BORDER")
   r.shade:SetAllPoints()
   r.shade:SetColorTexture(0, 0, 0, 0.35)
-  if r.SetBackdrop then
+  if r.SetBackdrop and QB.Skin and QB.Skin.tiles then
+    r:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    r:SetBackdropBorderColor(0, 0, 0, 1)
+  elseif r.SetBackdrop then
     r:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 10, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
     r:SetBackdropBorderColor(0.3, 0.24, 0.14, 0.9)
   end
@@ -593,6 +604,14 @@ local function listRow(i)
   r.hi:SetColorTexture(1, 0.82, 0.3, 0.08)
   r.name = fs(r, "GameFontNormalLarge", 15, GOLD, LIST_W - 32)
   r.name:SetPoint("TOPLEFT", 10, -8)
+  -- (the windows round) a host's tiles (QB.Skin.tiles: Cute's): the range on a 70% black plate, so its colours read on
+  -- the dark art, and a flat 1 px edge, white on the open tile
+  if QB.Skin and QB.Skin.tiles then
+    r.lvPlate = r:CreateTexture(nil, "ARTWORK")
+    r.lvPlate:SetColorTexture(0, 0, 0, 0.7)
+    r.lvPlate:SetPoint("BOTTOMLEFT", 6, 5)
+    r.lvPlate:SetSize(50, 15)
+  end
   r.lv = fs(r, "GameFontHighlightSmall", 10, INK, 80)
   r.lv:SetPoint("BOTTOMLEFT", 10, 7)
   r.quests = fs(r, "GameFontHighlightSmall", 10, INK, 90, "RIGHT")
@@ -618,12 +637,18 @@ function DM.FillList()
       setCover(r.art, d, cat, LIST_W - 12, ROW_H - 4)
       r.name:SetText(cat.name)
       local lv = DM.Levels(cat.key)
-      r.lv:SetText(lv[1] > 0 and string.format("LV %d-%d", lv[1], lv[2]) or "")
       local qn = #DM.Quests(cat.key)
       r.quests:SetText(qn > 0 and (qn .. (qn == 1 and " quest" or " quests")) or "")
-      if r.SetBackdropBorderColor then
-        local on = f.cat == cat
-        r:SetBackdropBorderColor(on and 1 or 0.3, on and 0.82 or 0.24, on and 0.3 or 0.14, 0.9)
+      local on = f.cat == cat
+      if r.lvPlate then
+        -- (each end of the range in the game's colour for it against your level, on its plate)
+        r.lv:SetText(lv[1] > 0 and (rangeColor(lv[1]) .. lv[1] .. "|r|cff949494-|r" .. rangeColor(lv[2]) .. lv[2] .. "|r") or "")
+        r.lvPlate:SetWidth(math.max(20, (r.lv:GetStringWidth() or 30) + 8))
+        r.lvPlate:SetShown(lv[1] > 0)
+        if r.SetBackdropBorderColor then r:SetBackdropBorderColor(on and 1 or 0, on and 1 or 0, on and 1 or 0, 1) end
+      else
+        r.lv:SetText(lv[1] > 0 and string.format("LV %d-%d", lv[1], lv[2]) or "")
+        if r.SetBackdropBorderColor then r:SetBackdropBorderColor(on and 1 or 0.3, on and 0.82 or 0.24, on and 0.3 or 0.14, 0.9) end
       end
       r:Show()
       y = y + ROW_H
