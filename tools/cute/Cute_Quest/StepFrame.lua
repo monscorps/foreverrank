@@ -29,6 +29,11 @@ SF.SCALES = SCALES
 local function settings() return QB:Settings().guide end
 local function fighting() return InCombatLockdown and InCombatLockdown() or false end
 local trackerOut, trackerHooked, trackerWait = false, false, false -- (the game's quest tracker: SF.Tracker)
+-- the first time the tracker goes out of sight the frame says where it went, for NOTE_S seconds, once for good
+-- (guide.trackerTold); its menu brings the tracker back
+local NOTE_S, NOTE_H = 60, 24
+local TRACKER_NOTE = "The game's quest tracker is hidden while this frame shows. Right-click here to show it."
+SF.noteUntil = nil
 
 local function fs(parent, size, key, width)
   local t = parent:CreateFontString(nil, "OVERLAY")
@@ -122,6 +127,12 @@ local function build()
   f.remind = fs(f, 10, "GOLD", WIDTH - PAD * 2)
   f.remind:SetPoint("TOPLEFT", PAD, -PAD - ROW * 4)
   f.remind:Hide()
+  -- the once-ever note where the game's quest tracker went (SF.Tracker): two lines, wrapped
+  f.note = fs(f, 10, "SOFT", WIDTH - PAD * 2)
+  f.note:SetWordWrap(true)
+  f.note:SetHeight(NOTE_H)
+  f.note:SetText(TRACKER_NOTE)
+  f.note:Hide()
   f.members = {}
   f.elapsed = 0
   f:SetScript("OnUpdate", QB.Safe(function(self, dt)
@@ -225,6 +236,9 @@ function SF.RefreshItem(s)
   end
 end
 
+-- what the lines were last drawn from (SF.Refresh); -1: draw them again
+local lastVer, lastTime, lastRemind, lastMembers, lastNote = -1, nil, false, -1, false
+
 -- the fight over (PLAYER_REGEN_ENABLED, from Core.lua's frame): a change that waited goes through now. The frame
 -- shown: its next refresh does it all; hidden (Hide in a fight, the Guide turned off): its OnUpdate never runs, so the
 -- button would stand on screen for good without this
@@ -263,7 +277,6 @@ function SF.MarkReward()
   SF.mark:Show()
 end
 
-local lastVer, lastTime, lastRemind, lastMembers = -1, nil, false, -1
 -- the lines, when something changed (and the item button, once a fight is over)
 function SF.Refresh()
   local f = SF.frame
@@ -274,8 +287,9 @@ function SF.Refresh()
   local text = G.TimeToLevel()
   local remind = (G.reminder and GetTime and GetTime() < G.reminder) and true or false
   local members = G.MemberSteps() -- (the list stands until G.memberVer moves: no table and no string a tick)
-  if G.ver == lastVer and text == lastTime and remind == lastRemind and G.memberVer == lastMembers then return end
-  lastVer, lastTime, lastRemind, lastMembers = G.ver, text, remind, G.memberVer
+  local note = (SF.noteUntil and GetTime and GetTime() < SF.noteUntil) and true or false
+  if G.ver == lastVer and text == lastTime and remind == lastRemind and G.memberVer == lastMembers and note == lastNote then return end
+  lastVer, lastTime, lastRemind, lastMembers, lastNote = G.ver, text, remind, G.memberVer, note
   -- the first row makes room for the item button only while one shows (in a fight, as the button stands)
   local itemUp = fighting() and (f.item ~= nil and f.item:IsShown()) or (not fighting() and G.ItemFor(steps[1]) ~= nil)
   f.rows[1].text:SetWidth(WIDTH - PAD * 2 - (itemUp and 30 or 0))
@@ -293,6 +307,12 @@ function SF.Refresh()
     f.remind:ClearAllPoints()
     f.remind:SetPoint("TOPLEFT", PAD, -y)
     y = y + ROW
+  end
+  f.note:SetShown(note)
+  if note then
+    f.note:ClearAllPoints()
+    f.note:SetPoint("TOPLEFT", PAD, -y)
+    y = y + NOTE_H + 4
   end
   for i, m in ipairs(members) do
     local t = f.members[i]
@@ -397,7 +417,7 @@ function SF.Ask(kind)
   f.card = f.card or buildCard(f)
   local card = f.card
   for i = 1, 3 do f.rows[i]:Hide() end
-  f.time:Hide(); f.remind:Hide()
+  f.time:Hide(); f.remind:Hide(); f.note:Hide()
   for _, t in ipairs(f.members) do t:Hide() end
   if kind == "ask" then
     card.title:SetText("Let " .. (QB.NAME or "QuestBank") .. " guide you?")
@@ -461,6 +481,10 @@ function SF.Tracker()
         if fighting() then trackerWait = true else self:SetAlpha(0) end
       end)
     end
+    if not trackerOut and not settings().trackerTold then
+      settings().trackerTold = true
+      SF.noteUntil = (GetTime and GetTime() or 0) + NOTE_S
+    end
     trackerOut = true
     if t:GetAlpha() ~= 0 then t:SetAlpha(0) end
   elseif trackerOut then
@@ -516,6 +540,13 @@ function SF:Menu(s)
     items[#items + 1] = { string.format("Scale: %d%%%s", sc * 100, (set.scale or 1) == sc and "  (now)" or ""), function() SF.SetScale(sc) end }
   end
   items[#items + 1] = { "Hide (Settings brings it back)", function() set.frame = false; SF.Apply() end }
+  -- the game's quest tracker: back, or out of sight again while the frame shows (Settings has the same row)
+  SF.noteUntil = nil -- (the menu found: the note has done its work)
+  if trackerOut then
+    items[#items + 1] = { "Show the game's quest tracker", function() set.hideTracker = false; SF.Tracker(); lastVer = -1; SF.Refresh() end }
+  elseif tracker() and set.hideTracker == false then
+    items[#items + 1] = { "Hide the game's quest tracker while this shows", function() set.hideTracker = true; SF.Tracker(); lastVer = -1; SF.Refresh() end }
+  end
   -- (the launch round) a line in chat for each hand-in, only when asked for: Core.lua's onTurnIn reads sayXP
   local qs = QB:Settings()
   items[#items + 1] = { "Say XP after each hand-in: " .. (qs.sayXP == true and "on" or "off"), function() qs.sayXP = qs.sayXP ~= true end }

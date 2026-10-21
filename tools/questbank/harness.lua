@@ -17813,6 +17813,46 @@ end)()
     env.IsInInstance = nil
   end }
 
+  -- 5. The game's quest tracker out of sight while the step frame shows (6.1.1, the owner's ask) said nowhere where it
+  -- went. The first time it goes, the frame says so in one line for a minute (never again, never in chat); its
+  -- right-click menu shows it again ("Show the game's quest tracker") and hides it again
+  ENGCASES[#ENGCASES + 1] = { "the quest tracker hidden: said once in the frame, the frame's menu brings it back", function()
+    local c = char("Tracky", "WARRIOR", "Warrior", 1, {}, { level = 5 })
+    local env, QB = c.env, c.QB
+    local SF, T = QB.StepFrame, env.ObjectiveTrackerFrame
+    local n0 = #c.chat
+    QB:Settings().welcome = nil; SF.Apply(); SF.Refresh()
+    local f = env.QuestBankStep
+    assert(T:GetAlpha() == 0, "the tracker out of sight by default")
+    assert(f.note and f.note:IsShown() and f.note:GetText():find("quest tracker is hidden", 1, true) and f.note:GetText():find("Right-click", 1, true),
+      "the first time: the frame says where it went: " .. tostring(f.note and f.note:GetText()))
+    assert(QB:Settings().guide.trackerTold == true, "told once, for good")
+    for i = n0 + 1, #c.chat do assert(not c.chat[i]:find("tracker", 1, true), "nothing in chat: " .. c.chat[i]) end
+    for _, pr in ipairs(checkLayout(f, "step frame with the tracker's note")) do STAGE_PROBLEMS[#STAGE_PROBLEMS + 1] = pr end
+    tick(c, 70); SF.Refresh()
+    assert(not f.note:IsShown(), "a minute on: the line goes")
+    -- the menu: Show the game's quest tracker, and hide it again
+    local function menuItem(pat)
+      SF:Menu(QB.Guide.Steps()[1])
+      for _, it in ipairs(QB.UI.lastMenu or {}) do if it[1]:find(pat) then return it end end
+    end
+    local show = menuItem("^Show the game's quest tracker")
+    assert(show, "the menu has Show the game's quest tracker")
+    show[2]()
+    assert(QB:Settings().guide.hideTracker == false and T:GetAlpha() == 1, "shown again")
+    local hide = menuItem("^Hide the game's quest tracker")
+    assert(hide and not menuItem("^Show the game's quest tracker"), "then the menu offers to hide it")
+    hide[2]()
+    assert(QB:Settings().guide.hideTracker == true and T:GetAlpha() == 0, "hidden again")
+    SF.Refresh()
+    assert(not f.note:IsShown(), "and no second note")
+    -- the next login with that save: no note
+    local d = char("Tracky", "WARRIOR", "Warrior", 1, {}, { level = 5, saved = env.QuestBankDB })
+    d.QB:Settings().welcome = nil; d.QB.StepFrame.Apply(); d.QB.StepFrame.Refresh()
+    local g = d.env.QuestBankStep
+    assert(d.env.ObjectiveTrackerFrame:GetAlpha() == 0 and not (g.note and g.note:IsShown()), "told before: hidden, nothing said")
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")
