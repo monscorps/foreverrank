@@ -18600,6 +18600,31 @@ end)()
     c.o.group = false
   end }
 
+  -- the review: a pick stays while it qualifies, and qualifying never asked whether it is still worth the time. A pick
+  -- under the floor of XP a minute now (made at a lower level, or by 6.1.1's rule, saved with the character) goes at
+  -- the next fill (a real event: the login's here), and its stop with it. (The Price of Shoes, 118, the owner's
+  -- screenshot, is not one: it carries Return to Verner and its next step back to Lakeshire, 2,375 XP, its bundle)
+  F62CASES[#F62CASES + 1] = { "a pick no longer worth the time goes at the next fill, and its stop with it", function()
+    local c = char("Saved", { world = { 0, -9260, -2200 } })
+    local QB, UI, M = c.QB, c.QB.UI, c.QB.Model
+    local F, waste = M.Floor(21), nil
+    for _, x in ipairs(UI:Candidates(nil)) do
+      local q = QB.Quest.Get(x.id)
+      if x.id == 118 then assert(not x.waste and x.lead >= 2000 and x.rate > F, "118 carries its way back: " .. x.rate) end
+      if not waste and x.waste and not x.locked and q.lvl <= 23 and (q.req or 1) <= 21 and QB:Status(q).code == "todo"
+        and not QB.QuestMap.Grey(q, 21) and q.turnIdx and q.turnIdx > 0 then waste = x end
+    end
+    assert(waste, "a quest under the floor at Lakeshire")
+    QB:Settings().guide.on = true
+    QB:Plan().auto[waste.id] = true
+    settle(c)
+    assert(not QB:Plan().auto[waste.id], "the pick under the floor is gone: " .. QB.Data.QN[waste.id])
+    for _, l in ipairs(QB.routePlan.legs) do for _, row in ipairs(l.rows) do assert(row.q.id ~= waste.id, "and its stop") end end
+    local n = 0
+    for _ in pairs(QB:Plan().auto) do n = n + 1 end
+    assert(n == QB.Guide.AUTO_MAX, "the fill took others in its place: " .. n)
+  end }
+
   for _, case in ipairs(F62CASES) do
     case[2]()
     print("xpm: " .. case[1] .. ": ok")
