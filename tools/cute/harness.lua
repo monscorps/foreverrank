@@ -12863,9 +12863,17 @@ do local function cardsStage()
       end
     end
   end
+  -- (a card's picture, as the runs stage mocks it: SetUnit a success for your own unit, the pose's calls documented)
+  MODEL.SetCamDistanceScale, MODEL.SetFacing, MODEL.SetAnimation = true, true, true
   local function equip(c)
     local env = c.env
     c.menus, c.filters, c.guildOut = {}, {}, {}
+    local origCreate = env.CreateFrame
+    env.CreateFrame = function(kind, name, parent, template)
+      local f = origCreate(kind, name, parent, template)
+      if kind == "PlayerModel" then rawset(f, "SetUnit", function(self, u) self.__unit = u; return u == "player" end) end
+      return f
+    end
     env.MenuUtil = { CreateContextMenu = function(owner, gen) local root = menuNode(); root.owner = owner; gen(owner, root); c.menus[#c.menus + 1] = root end }
     env.ChatFrameUtil = { AddMessageEventFilter = function(event, fn) c.filters[event] = c.filters[event] or {}; table.insert(c.filters[event], fn) end }
     env.C_InstanceEncounter = { IsEncounterInProgress = function() return c.encounter == true end }
@@ -12929,6 +12937,11 @@ do local function cardsStage()
     assert(rec.stats.deaths_week == 0, "the officer has the reset")
     assert(H(o).LastWeek(m.o.guid, "deaths_week") == 2 and H(o).LastWeek(m.o.guid, "quests_week") == 1, "the officer's roster keeps the value the reset replaced")
     assert(H(m).LastWeek(m.o.guid, "deaths_week") == 2, "and the member's own, by Sample")
+    -- a Last week hall from those values; This week's has nobody above 0 yet
+    local last = H(o):ComputeHall({ kind = "shame", period = "l", stats = { "deaths_week", "quests_week" } })
+    assert(#last.cards == 1 and last.cards[1].name == "Wim" and last.cards[1].value == "2" and last.cards[1].kind == "blooper" and last.cards[1].title == "Deaths this week"
+      and last.kind == "s" and last.title:find("^Week of ") and last.cards[1].source == "sdeaths_week", "Last week's hall: Wim's 2 deaths, no member twice")
+    assert(#H(o):ComputeHall({ kind = "shame", period = "w", stats = { "deaths_week" } }).cards == 0, "this week: nobody above 0")
     -- a week later still, last week's is the week just gone (its 0), and two weeks back is no week's
     o.dayShift, m.dayShift = 14 * 86400, 14 * 86400
     tickAll(601)
@@ -12937,6 +12950,391 @@ do local function cardsStage()
     assert(H(o).LastWeek(m.o.guid, "deaths_week") == nil, "a value from weeks ago is no last week's")
   end)
   said[#said + 1] = "Deaths this week and Quests this week: the core's, revealed by their lifetime counts, counted by Sample, reset on Monday, the value a reset replaced kept for Last week (yours and a member's)"
+
+  -- the window's pieces a scenario reads and clicks
+  local function chipOf(c, title) for _, l in ipairs(c.C.UI.bandLines.items) do if l:IsShown() and l.name:IsShown() and l.name:GetText() == title then return l end end end
+  local function buttonOf(c, label) for _, f in ipairs(c.frames) do if f.__kind == "Button" and f.label and f:IsVisible() and f.label:GetText() == label then return f end end end
+  local function rowsOf(c, key) local out = {}; local v = c.C.UI.lists[key]; for _, r in ipairs(v and v.items or {}) do if r:IsShown() and r.idx then out[r.idx] = r end end return out end
+  local function rowNamed(c, key, text)
+    for _, r in pairs(rowsOf(c, key)) do if r.name:GetText() == text or (r.what:IsShown() and r.what:GetText() == text) then return r end end
+  end
+  local function edits(c) local out = {}; for _, f in ipairs(c.frames) do if f.__kind == "EditBox" and f:IsVisible() then out[#out + 1] = f end end
+    table.sort(out, function(a, b) return a.__points[1].y > b.__points[1].y end) return out end
+  local function typeInto(e, text) e:SetText(text); e.__scripts.OnTextChanged(e, true) end
+  local function shownSets(c) return #H(c).Sets() end
+  local function runOf(list) local m = {}; for _, x in ipairs(list) do m[sfx(x)] = { g = x.o.guid, n = x.o.name, c = x.o.class, hello = true } end return { members = m } end
+
+  -- (15) the queue and publishing: a run's cards reach the officers by 1W from the guild member with the smallest GUID
+  -- among those with Runs on; compose 1 to 5 items, preview with the guild line, publish: every member shows the set
+  -- once; a 1C from a member or an officer marked untrusted is ignored; a published item greys in the other officers'
+  -- queues; withdraw; Publish greyed for 60 s after any set and after 10 in an hour, not after an answer; 10 rows per
+  -- sender; drafts never evicted; halls with no member twice and only Everyone stats; Update rolls a week's title on;
+  -- 1G answered once in half an hour with five sets at most, in News without a toast
+  isolated({ gmember("Ofa", 1, "WARRIOR"), gmember("Obi", 1, "PRIEST"), gmember("Mel", 3, "ROGUE"), gmember("Moe", 3, "DRUID"), gmember("Una", 1, "MAGE"), gmember("Neo", 3, "HUNTER") }, function()
+    local ofa, obi, mel, moe, una = cchar("Ofa", 1, { class = "WARRIOR" }), cchar("Obi", 1, { class = "PRIEST" }), cchar("Mel", 3, { class = "ROGUE" }), cchar("Moe", 3, { class = "DRUID" }), cchar("Una", 1, { class = "MAGE" })
+    for _, c in ipairs({ ofa, obi, mel, moe, una }) do login(c) end
+    tickAll(30)
+    -- (an officer three minutes into a login with no answer to its 1G waits: there is nothing newer to hear)
+    local ok, why = H(ofa).PublishState({ cards = { { name = "x" } } })
+    assert(not ok and why == "Checking for news", "Publish waits three minutes into a login: " .. tostring(why))
+    assert(not H(mel).PublishState() and select(2, H(mel).PublishState()) == "Officers only", "a member publishes nothing")
+    tickAll(170)
+    assert(msgs(mel, "1G") == 1 and msgs(ofa, "1G") == 1, "every client asked once, a minute after its hello")
+    ok, why = H(ofa).PublishState({ cards = { { name = "x" } } })
+    assert(ok, "three minutes on, Publish is free: " .. tostring(why))
+
+    -- 1W: Mel and Moe ran a dungeon; Mel, the smaller GUID, whispers the guild members' cards to each officer online
+    local t0 = ofa.env.GetServerTime() - 1900
+    local function rep(id, inst, start, cards) return { id = id, kind = "d", inst = inst, start = start, dur = 1800, bosses = 4, cards = cards, members = {} } end
+    local r1 = rep("run1-" .. sfx(mel), 36, t0, { { sfx(mel), "HD", 38 }, { sfx(moe), "FI", 5 }, { "ABCDEF01", "PW", 6 } })
+    H(mel):RunEnded(runOf({ mel, moe }), r1)
+    H(moe):RunEnded(runOf({ mel, moe }), r1)
+    tickAll(5)
+    local w = 0
+    for _, m in ipairs(mel.sent) do if m.msg:sub(1, 2) == "1W" then w = w + 1; assert(m.channel == "WHISPER", "1W whispered only") end end
+    assert(w == 3 and msgs(moe, "1W") == 0, "Mel whispered it to the three officers, Moe nothing: " .. w)
+    local rowsO = H(ofa).Rows()
+    local hd, digest
+    for _, r in ipairs(rowsO) do if r.card and r.card.title == "Headliner" then hd = r end if r.digest == "run" then digest = r end end
+    assert(hd and hd.card.name == "Mel" and hd.card.value == "38%" and digest and #digest.entries == 1 and digest.entries[1].card.title == "Floor Inspector",
+      "the GOLD STAR its own row, the blooper in the day's digest, the stranger's card nowhere")
+    -- a 1W from a sender not among its members, a fifth from one sender in the hour, and the same run again: dropped
+    local refused = H(ofa).refused or 0
+    moe.C.Comm.Queue({ msg = "1W|forged|k=d;i=10;s=" .. moe.C.Comm.b36(t0) .. ";d=1o0;b=4;c=" .. sfx(mel) .. ".HD.12;m=" .. sfx(mel), target = ofa.sender })
+    tickAll(3)
+    assert((H(ofa).refused or 0) == refused + 1, "a sender not among the run's members is refused")
+    for k = 2, 5 do H(mel):RunEnded(runOf({ mel, moe }), rep("run" .. k .. "-" .. sfx(mel), 36 + k, t0 + k * 2000, { { sfx(moe), "OS", 9 } })) end
+    tickAll(8)
+    assert(H(ofa).Item("rrun4-" .. sfx(mel) .. ".OS") and not H(ofa).Item("rrun5-" .. sfx(mel) .. ".OS"), "four runs from one sender in an hour, the fifth dropped")
+    moe.C.Comm.Queue({ msg = "1W|again-" .. sfx(moe) .. "|k=d;i=10;s=" .. moe.C.Comm.b36(t0 + 60) .. ";d=1o0;b=4;c=" .. sfx(moe) .. ".OS.9;m=" .. sfx(moe) .. "." .. sfx(mel), target = ofa.sender })
+    tickAll(3)
+    local again = 0
+    for _, r in ipairs(H(ofa).Rows()) do if r.id:find("again", 1, true) then again = again + 1 end end
+    assert(again == 0, "the same run from another member: once")
+
+    -- compose: Ofa ticks the Headliner and the digest's Floor Inspector, composes, previews with the guild line
+    ofa.C.UI:Open("shame")
+    assert(chipOf(ofa, "Hall of Shame") and chipOf(ofa, "News") and chipOf(ofa, "Queue"), "the officer's chips: Hall of Shame, News, Queue")
+    mel.C.UI:Open("shame")
+    assert(chipOf(mel, "Hall of Shame") and chipOf(mel, "Queue") == nil, "a member's: no Queue")
+    check(mel.C.UI.frame, "halls: a member's Hall of Shame chip")
+    check(ofa.C.UI.frame, "halls: the officer's Hall of Shame chip")
+    press(chipOf(ofa, "Queue"))
+    check(ofa.C.UI.frame, "halls: the queue")
+    assert(buttonOf(ofa, "Compose").__disabled, "Compose greyed with nothing ticked")
+    press(rowNamed(ofa, "halls.queue", "Mel"))
+    local head
+    for _, r in pairs(rowsOf(ofa, "halls.queue")) do if r.name:GetText():find("run card", 1, true) then head = r end end
+    press(head)
+    local fi
+    for _, r in pairs(rowsOf(ofa, "halls.queue")) do if r.what:IsShown() and r.what:GetText():find("Floor Inspector", 1, true) then fi = r end end
+    press(fi)
+    assert(#H(ofa).Ticked() == 2, "two ticked")
+    check(ofa.C.UI.frame, "halls: the queue, a digest open")
+    press(buttonOf(ofa, "Compose"))
+    assert(H(ofa).draft and #H(ofa).draft.cards == 2 and H(ofa).draft.title == "From the runs", "the composer: two cards, titled from the first item")
+    check(ofa.C.UI.frame, "halls: the composer")
+    local es = edits(ofa)
+    typeInto(es[3], "A line of our own")
+    assert(H(ofa).draft.cards[1].line == "A line of our own", "typing edits the card's line")
+    press(buttonOf(ofa, "Preview"))
+    local CF = ofa.C.CardFrame
+    assert(CF.frame:IsShown() and CF.preview and CF.label:GetText() == "GUILD NEWS PREVIEW", "the preview: " .. tostring(CF.label:GetText()))
+    assert(CF.gone:IsShown() and CF.gone:GetText():find("Guild chat: Cute \194\183 From the runs: Mel (Headliner), Moe (Floor Inspector)", 1, true), "the guild line under the cards: " .. tostring(CF.gone:GetText()))
+    check(CF.frame, "halls: the preview, two cards")
+    local sent0 = msgs(ofa, "1C")
+    press(buttonOf(ofa, "Publish"))
+    assert(#ofa.guildOut == 1 and ofa.guildOut[1].hw and ofa.guildOut[1].text == "Cute \194\183 From the runs: Mel (Headliner), Moe (Floor Inspector)", "one guild line, in the click")
+    assert(CF.frame:IsShown() and not CF.preview and CF.label:GetText() == "GUILD NEWS", "the officer sees it as everyone does")
+    tickAll(5)
+    assert(msgs(ofa, "1C") > sent0, "the set went as 1C")
+    for _, m in ipairs(ofa.sent) do if m.msg:sub(1, 2) == "1C" then assert(#m.msg <= 255 and m.channel == "GUILD", "a 1C within 255 bytes on GUILD") end end
+    for _, c in ipairs({ mel, moe, obi }) do
+      assert(shownSets(c) == 1 and #H(c).Sets()[1].cards == 2 and H(c).Sets()[1].cards[1].line == "A line of our own", c.o.name .. " holds the set")
+      assert(H(c).toastsShown == 1, c.o.name .. " was shown it once")
+      for _, l in ipairs(c.guildChat or {}) do assert(not l:find("Cute \194\183", 1, true), c.o.name .. " sees the guild line hidden: " .. l) end
+    end
+    for _, l in ipairs(ofa.guildChat or {}) do assert(not l:find("Cute \194\183", 1, true), "the publisher's own line hidden too") end
+    assert(H(mel).Sets()[1].by == "Ofa", "named by the publisher's roster entry")
+    check(mel.env.CuteToast, "halls: the toast")
+    -- (another officer's queue: the item Ofa published greys there)
+    local obiHd
+    for _, r in ipairs(H(obi).Rows()) do if r.card and r.card.title == "Headliner" then obiHd = r end end
+    assert(obiHd and obiHd.pub == "Ofa" and not H(obi).Tickable(obiHd), "Obi's Headliner greys: Published by Ofa")
+    -- (Ofa's own queue: the items gone)
+    for _, r in ipairs(H(ofa).Rows()) do assert(not (r.card and r.card.title == "Headliner"), "published items leave the queue") end
+    -- Publish greyed for 60 s after any set, then free
+    ok, why = H(obi).PublishState({ cards = { { name = "x" } } })
+    assert(not ok and why == "Wait a minute", "Obi's Publish greyed after Ofa's set: " .. tostring(why))
+    tickAll(61)
+    assert(H(obi).PublishState({ cards = { { name = "x" } } }), "and free a minute on")
+
+    -- a 1C from a member, and from an officer the officers marked untrusted: nobody's
+    mel.C.Comm.Queue({ msg = "1C|" .. (ofa.env.GetServerTime() + 5) .. "|1/1|h=n,Fake,Mel,,;c=" .. sfx(mel) .. ",Mel,ROGUE,,,S,,,Fake,Fake,1," })
+    tickAll(3)
+    assert(shownSets(moe) == 1, "a member's 1C ignored")
+    ofa.C.Policy:SetUntrusted(una.o.guid, true)
+    ofa.C.Comm:SendPolicy()
+    tickAll(5)
+    assert(moe.C.Policy:Untrusted(una.o.guid), "Una marked untrusted on Moe's client")
+    una.C.Halls.answerHeard = true
+    assert(H(una):Publish({ kind = "n", title = "Untrusted", cards = { { guid = moe.o.guid, name = "Moe", class = "DRUID", kind = "shout", title = "T", line = "L", source = "" } } }), "Una's own client publishes")
+    tickAll(5)
+    assert(shownSets(moe) == 1, "an untrusted officer's set ignored")
+
+    -- the queue's caps: 10 rows from one sender, drafts never evicted, 100 rows
+    for k = 1, 12 do H(ofa):Queue({ id = "x" .. k, src = "card", from = "Spam-Forever", card = { name = "Moe", kind = "shout", title = "t" .. k, source = "" } }) end
+    local spam = 0
+    for _, r in ipairs(H(ofa).Rows()) do if r.from == "Spam-Forever" then spam = spam + 1 end end
+    assert(spam == 10, "ten rows from one sender: " .. spam)
+    for k = 1, 6 do assert(H(ofa):SaveDraft({ mode = "set", kind = "n", title = "Draft " .. k, cards = {} }), "a draft saved") end
+    assert(not H(ofa):SaveDraft({ mode = "set", kind = "n", title = "Seventh", cards = {} }), "six drafts at most")
+    for k = 1, 120 do H(ofa):Queue({ id = "y" .. k, src = "card", from = "S" .. k, card = { name = "Moe", kind = "shout", title = "y", source = "" } }) end
+    local drafts = 0
+    for _, r in ipairs(H(ofa).Rows()) do if r.src == "draft" then drafts = drafts + 1 end end
+    assert(#H(ofa).Rows() == 100 and drafts == 6, "a hundred rows, the six drafts kept: " .. #H(ofa).Rows() .. ", " .. drafts)
+    ofa.C.UI:Open("shame")
+    check(ofa.C.UI.frame, "halls: the queue, full")
+
+    -- halls: no member twice, only Everyone stats. Mel leads Deaths and Fall deaths, Moe follows; Fall deaths closed
+    -- leaves its card
+    mel.C.Sample:Set("deaths", 9); mel.C.Sample:Set("falls", 7)
+    moe.C.Sample:Set("deaths", 5); moe.C.Sample:Set("falls", 2)
+    tickAll(5)
+    local hall = H(ofa):ComputeHall({ kind = "shame", period = "a", stats = { "deaths", "falls" } })
+    local function cardsText(h) local o = {}; for _, c in ipairs(h.cards) do o[#o + 1] = tostring(c.name) .. ":" .. tostring(c.title) .. "=" .. tostring(c.value) .. "/" .. tostring(c.kind) end return table.concat(o, " ") end
+    assert(#hall.cards == 2 and hall.cards[1].name == "Mel" and hall.cards[1].value == "9" and hall.cards[2].name == "Moe" and hall.cards[2].title == "Fall deaths"
+      and hall.cards[2].kind == "blooper" and hall.cards[1].line == H(ofa).SHAME_LINES[1] and hall.cards[2].line == H(ofa).SHAME_LINES[2], "no member twice: Fall deaths goes to Moe: " .. cardsText(hall))
+    ofa.C.Policy:Set("falls", "self")
+    hall = H(ofa):ComputeHall({ kind = "shame", period = "a", stats = { "deaths", "falls" } })
+    assert(#hall.cards == 1, "a stat routed Only you makes no card")
+    ofa.C.Policy:Set("falls", "all")
+    -- the stat picker: a submenu per category, the stats the period allows, Last week weekly ones alone
+    ofa.C.UI:Open("shame")
+    H(ofa).PickStat("a", function() end, ofa.C.UI.frame)
+    assert(menuEntry(ofa, "Hall of Shame", "Deaths") and menuEntry(ofa, "Leveling", "Quests done") and menuEntry(ofa, "Runs", "Runs") and menuEntry(ofa, "None"), "the picker: categories and their stats")
+    H(ofa).PickStat("l", function() end, ofa.C.UI.frame)
+    assert(menuEntry(ofa, "Hall of Shame", "Deaths this week") and not menuEntry(ofa, "Hall of Shame", "Deaths") and menuEntry(ofa, "Runs", "Runs this week"), "Last week: the weekly stats alone")
+    -- New hall in the composer: a Shame hall from the live Hall of Shame's ticked stats; a pick sets a card's stat
+    H(ofa).want = "queue"
+    ofa.C.UI:Open("shame")
+    press(buttonOf(ofa, "New hall"))
+    local d = H(ofa).draft
+    assert(d and d.mode == "hall" and d.hall.kind == "shame" and d.hall.stats[1] and d.hall.title == "All time", "New hall: a Shame hall from the live cards")
+    check(ofa.C.UI.frame, "halls: the composer, a new hall")
+    ofa.C.UI.frame:SetSize(760, 420)
+    ofa.C.UI:Draw()
+    check(ofa.C.UI.frame, "halls: the composer, a new hall, 760x420")
+    ofa.C.UI.frame:SetSize(1040, 640)
+    press(buttonOf(ofa, "Fame"))
+    assert(H(ofa).draft.hall.kind == "fame", "Fame chosen")
+    press(buttonOf(ofa, "This week"))
+    assert(H(ofa).draft.hall.period == "w" and H(ofa).draft.hall.title:find("^Week of "), "This week: the week's title")
+    H(ofa).draft.hall.stats, H(ofa).draft.hall.titles = { "deaths_week" }, {}
+    fire(mel, "PLAYER_DEAD")
+    tickAll(5)
+    local week0 = H(ofa).draft.hall.title
+    press(buttonOf(ofa, "Preview"))
+    assert(CF.preview and CF.label:GetText() == "HALL OF FAME PREVIEW" and CF.facts[1].l:GetText() == "Members ranked", "a hall's preview: Members ranked")
+    check(CF.frame, "halls: a hall's preview")
+    press(buttonOf(ofa, "Publish"))
+    tickAll(3)
+    local weekly = H(mel).Sets()[1]
+    assert(weekly and weekly.kind == "h" and weekly.period == "w" and weekly.title == week0 and weekly.cards[1].name == "Mel", "a This week hall published")
+    -- Update a week on: the week's title rolls on (Mel dies again in the new week)
+    ofa.dayShift, mel.dayShift = 7 * 86400, 7 * 86400
+    tickAll(601)
+    fire(mel, "PLAYER_DEAD")
+    tickAll(5)
+    assert(H(ofa):Update(H(ofa).Sets()[1]), "Update publishes it again")
+    tickAll(3)
+    assert(H(mel).Sets()[1].title ~= week0 and H(mel).Sets()[1].title == H(ofa).WeekTitle() and H(mel).Sets()[1].cards[1].name == "Mel", "Update rolls the week's title on: " .. H(mel).Sets()[1].title)
+    -- ten in an hour from one officer
+    H(ofa).mine = {}
+    for k = 1, 10 do H(ofa).mine[k] = ofa.env.GetServerTime() - 100 end
+    H(ofa).lastSetAt = nil
+    ok, why = H(ofa).PublishState({ cards = { { name = "x" } } })
+    assert(not ok and why == "10 sets this hour", "ten sets in an hour from one officer: " .. tostring(why))
+    H(ofa).mine = {}
+
+    -- withdraw: Ofa's right-click on a News row; gone from every member's News
+    H(ofa).OpenChip("news")
+    check(ofa.C.UI.frame, "halls: News, three sets")
+    local n0 = shownSets(mel)
+    local top = rowsOf(ofa, "halls.news")[1]
+    top.__scripts.OnClick(top, "RightButton")
+    assert(menuEntry(ofa, "Update") and menuEntry(ofa, "Withdraw"), "an officer's News row: Update and Withdraw")
+    menuEntry(ofa, "Withdraw").fn()
+    tickAll(3)
+    assert(shownSets(mel) == n0 - 1 and shownSets(ofa) == n0 - 1, "withdrawn from everyone's News")
+
+    -- 1G: a member logging in late is answered once, with the last five sets, in News without a toast; the others
+    -- officers hear the first answer and say nothing; an answer greys no officer's Publish
+    tickAll(61)
+    for k = 1, 4 do
+      H(ofa).lastSetAt = nil
+      assert(H(ofa):Publish({ kind = "n", title = "Set " .. k, cards = { { guid = moe.o.guid, name = "Moe", class = "DRUID", kind = "shout", title = "T" .. k, line = "L", source = "" } } }), "set " .. k)
+      tickAll(2)
+    end
+    tickAll(61)
+    local held = shownSets(ofa)
+    assert(held >= 6, "Ofa holds six sets or more: " .. held)
+    local neo = cchar("Neo", 3, { class = "HUNTER" })
+    login(neo)
+    local c1 = { ofa = msgs(ofa, "1C"), obi = msgs(obi, "1C") }
+    tickAll(90)
+    assert(shownSets(neo) == 5 and (H(neo).toastsShown or 0) == 0 and H(neo).Unseen() == 5, "the late member got the last five, in News, no toast: " .. shownSets(neo))
+    assert(msgs(obi, "1C") == c1.obi, "the other officer heard Ofa's answer and said nothing")
+    assert(H(obi).PublishState({ cards = { { name = "x" } } }), "an answer greys no officer's Publish")
+    -- (asked again within half an hour: not answered again)
+    local c2 = msgs(ofa, "1C")
+    neo.env.CuteDB.halls = nil
+    H(neo).asked = nil
+    H(neo):Ask()
+    tickAll(15)
+    assert(msgs(ofa, "1C") == c2 and shownSets(neo) == 0, "one answer an asker in half an hour")
+    H(neo).OpenChip("news")
+    assert(texts(neo):find("Nothing published yet.", 1, true) and buttonOf(neo, "Test announcement"), "a member's empty News: the line and the test")
+    check(neo.C.UI.frame, "halls: a member's empty News")
+  end)
+  said[#said + 1] = "the queue and publishing: 1W from the run's smallest GUID to each officer (a sender outside the run, a fifth in the hour and the same run again dropped), a GOLD STAR its own row and the rest in a digest, compose, preview with the guild line, publish in the click: every member shows the set once, the line hidden on Cute clients; a member's and an untrusted officer's 1C ignored; the item greys in the other officer's queue; Publish greyed a minute after any set, after ten in an hour and three minutes into a login, never after an answer; ten rows a sender, six drafts kept through a hundred rows; halls with no member twice and only Everyone stats, the picker by category and period, Update rolls the week on; withdraw; 1G answered once in half an hour with five sets, in News without a toast"
+
+  -- (16) showing: one toast at a time, three waiting, two an hour, the rest to News; none in combat, an encounter or an
+  -- instance until after; the setting off gives News alone; the guild line of a non-officer stays and a secret one is
+  -- left alone; the test announcement sends and keeps nothing
+  isolated({ gmember("Pia", 1, "PALADIN"), gmember("Rex", 3, "WARLOCK"), gmember("Sol", 3, "SHAMAN"), gmember("Tam", 3, "PRIEST"), gmember("Ula", 3, "MAGE") }, function()
+    local pia, rex, sol, tam, ula = cchar("Pia", 1, { class = "PALADIN" }), cchar("Rex", 3, { class = "WARLOCK" }), cchar("Sol", 3, { class = "SHAMAN" }), cchar("Tam", 3, { class = "PRIEST" }), cchar("Ula", 3, { class = "MAGE" })
+    for _, c in ipairs({ pia, rex, sol, tam, ula }) do login(c) end
+    tickAll(200)
+    sol.combat = true
+    tam.o.instance = "party"
+    H(ula).Prefs().toast = false
+    local function publish(k)
+      H(pia).lastSetAt, H(pia).mine = nil, {}
+      assert(H(pia):Publish({ kind = "n", title = "News " .. k, cards = { { guid = rex.o.guid, name = "Rex", class = "WARLOCK", kind = "shout", title = "T", line = "L", source = "" } } }), "published " .. k)
+    end
+    for k = 1, 6 do publish(k); tickAll(1) end
+    tickAll(2)
+    assert(shownSets(rex) == 6, "all six in News")
+    assert(H(rex).toastsShown == 1 and H(rex).toastNow and #H(rex).toasts == 3, "one toast at a time, three waiting, the rest to News: " .. #H(rex).toasts)
+    tickAll(25)
+    assert(H(rex).toastsShown == 2 and #H(rex).toasts == 0, "two an hour: " .. H(rex).toastsShown)
+    assert((H(sol).toastsShown or 0) == 0 and (H(tam).toastsShown or 0) == 0 and (H(ula).toastsShown or 0) == 0, "none in combat, inside an instance, or with the setting off")
+    sol.combat = false
+    fire(sol, "PLAYER_REGEN_ENABLED")
+    assert(H(sol).toastsShown == 1, "combat over: the waiting toast")
+    tam.o.instance = "none"
+    fire(tam, "PLAYER_ENTERING_WORLD", false, false)
+    tickAll(3)
+    assert(H(tam).toastsShown == 1, "out of the instance: the waiting toast")
+    assert(shownSets(ula) == 6 and (H(ula).toastsShown or 0) == 0, "the setting off: News alone")
+    -- the guild line: a non-officer's "Cute" line stays; a secret one is left alone
+    local n0 = #(rex.guildChat or {})
+    tam.env.C_ChatInfo.SendChatMessage("Cute \194\183 not an officer", "GUILD")
+    guildLine(pia, secret("string"))
+    assert(#rex.guildChat == n0 + 2 and rex.guildChat[n0 + 1] == "Cute \194\183 not an officer" and rex.guildChat[n0 + 2] == "<secret>", "a member's line and a secret one shown")
+    -- the test announcement: the toast and three cards, nothing sent or kept
+    local c0, s0 = msgs(rex, "1C"), shownSets(rex)
+    rex.env.SlashCmdList.CUTE("card test")
+    local CF = rex.C.CardFrame
+    assert(CF.frame:IsShown() and CF.label:GetText() == "GUILD NEWS" and CF.cards[1].label:GetText() == "ACHIEVEMENT" and CF.cards[2].label:GetText() == "GUILD FIRST"
+      and CF.cards[3].label:GetText() == "RECORD" and rex.env.CuteToast:IsShown(), "the test: the toast and three cards")
+    check(CF.frame, "halls: the test announcement, three cards")
+    tickAll(3)
+    assert(msgs(rex, "1C") == c0 and shownSets(rex) == s0, "nothing sent or kept")
+    rex.env.SlashCmdList.CUTE("card test hall")
+    assert(CF.frame:IsShown() and CF.label:GetText() == "HALL OF SHAME", "/cute card test hall: a Hall of Shame from the live cards")
+    check(CF.frame, "halls: a test Hall of Shame")
+    rex.C.UI:Open("settings", "shame")
+    assert(texts(rex):find("Announcements on my screen", 1, true) and buttonOf(rex, "Test announcement"), "Settings > Halls: the two rows")
+    check(rex.C.UI.frame, "halls: Settings > Halls")
+    rex.env.SlashCmdList.CUTE("diag cards")
+    local diag = table.concat(rex.chat, "\n", #rex.chat - 1)
+    assert(diag:find("diag cards: 6 sets held", 1, true) and not diag:find("Rex", 1, true), "/cute diag cards: counts, no name")
+  end)
+  said[#said + 1] = "showing: one toast at a time, three waiting, two an hour, the rest to News; none in combat or an instance until after, News alone with the setting off; a member's and a secret guild line shown; the test announcement shows the toast and three cards and sends and keeps nothing; /cute card test hall; Settings > Halls; /cute diag cards"
+
+  -- (12, 18, 19 for the cards) a source the policy closes: the item locked and unpublishable, a card dropped on receipt;
+  -- a draft opened, edited and cleared stays as saved; New card finds a member by name; an announcement of one to five
+  -- cards and every chip at J's default and minimum sizes; the store at its caps
+  isolated({ gmember("Vala", 1, "DRUID"), gmember("Wynd", 3, "HUNTER"), gmember("Xan", 3, "ROGUE") }, function()
+    local vala, wynd, xan = cchar("Vala", 1, { class = "DRUID" }), cchar("Wynd", 3, { class = "HUNTER" }), cchar("Xan", 3, { class = "ROGUE" })
+    for _, c in ipairs({ vala, wynd, xan }) do login(c) end
+    tickAll(200)
+    -- a closed source: Meter in runs Only you locks a Headliner item, and a card reading it is dropped on receipt
+    local hv = { id = "rlock.HD", src = "run", from = "Wynd-Forever", what = "Headliner", card = { guid = wynd.o.guid, name = "Wynd", class = "HUNTER", kind = "star", title = "Headliner", line = "q", value = "40%", valueLabel = "of the damage", source = "rlock.HD" } }
+    assert(H(vala):Queue(hv) and H(vala).Tickable(hv), "an open source: tickable")
+    vala.C.Policy:Set("run_meter", "self")
+    assert(not H(vala).Tickable(hv) and not H(vala).PublishState({ cards = { hv.card } }), "Meter in runs closed: the item locked, unpublishable")
+    H(vala).OpenChip("queue")
+    assert(texts(vala):find("Only you", 1, true), "the lock's word on the row")
+    check(vala.C.UI.frame, "halls: a locked item")
+    vala.C.Policy:Set("run_meter", "all")
+    xan.C.Policy:Set("run_meter", "self")
+    H(vala):Publish({ kind = "n", title = "Mixed", cards = { hv.card, { guid = xan.o.guid, name = "Xan", class = "ROGUE", kind = "shout", title = "By hand", line = "l", source = "" } } })
+    tickAll(5)
+    assert(#H(xan).Sets()[1].cards == 1 and H(xan).Sets()[1].cards[1].title == "By hand", "a card whose source the policy closes is dropped on receipt")
+    assert(#H(wynd).Sets()[1].cards == 2, "and kept where it is open")
+    -- a draft opened, edited and cleared: the saved one as it was
+    assert(H(vala):SaveDraft({ mode = "set", kind = "n", title = "Kept", cards = { { name = "Xan", class = "ROGUE", kind = "shout", title = "Before", line = "l", source = "" } } }), "saved")
+    H(vala).OpenChip("queue")
+    press(rowNamed(vala, "halls.queue", "Draft"))
+    assert(H(vala).draft and H(vala).draft.title == "Kept", "the draft opens in the composer")
+    H(vala).draft.cards[1].title = "After"
+    press(buttonOf(vala, "Clear"))
+    local saved
+    for _, r in ipairs(H(vala).Rows()) do if r.src == "draft" then saved = r end end
+    assert(saved and saved.set.cards[1].title == "Before", "cleared: the saved draft as it was")
+    -- New card: a member typed, a label from the menu, a title
+    press(buttonOf(vala, "New card"))
+    typeInto(edits(vala)[2], "wyn")
+    vala.C.UI:Draw()
+    assert(H(vala).draft.cards[1].guid == wynd.o.guid and texts(vala):find("Wynd", 1, true), "the member found by the start of a name")
+    press(buttonOf(vala, "SHOUT-OUT"))
+    menuEntry(vala, "GOLD STAR").fn()
+    typeInto(edits(vala)[3], "Kept us alive")
+    assert(H(vala).draft.cards[1].kind == "star" and H(vala).draft.cards[1].title == "Kept us alive", "the label and the title set")
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      vala.C.UI.frame:SetSize(size[1], size[2])
+      vala.C.UI:Draw()
+      check(vala.C.UI.frame, string.format("halls: New card, %dx%d", size[1], size[2]))
+    end
+    press(buttonOf(vala, "Clear"))
+    -- every chip at both sizes, an officer's and a member's
+    for _, size in ipairs({ { 1040, 640 }, { 760, 420 } }) do
+      for _, c in ipairs({ vala, wynd }) do
+        c.C.UI:Open("shame")
+        c.C.UI.frame:SetSize(size[1], size[2])
+        for _, chip in ipairs({ "shame", "news", "queue" }) do
+          H(c).OpenChip(chip)
+          check(c.C.UI.frame, string.format("halls: %s, %s, %dx%d", c == vala and "officer" or "member", chip, size[1], size[2]))
+        end
+      end
+    end
+    vala.C.UI.frame:SetSize(1040, 640); wynd.C.UI.frame:SetSize(1040, 640)
+    -- an announcement of one to five cards, the fifth set a hall's
+    local CF = wynd.C.CardFrame
+    for n = 1, 5 do
+      local set = { at = 1, kind = n == 5 and "h" or "n", title = n .. " cards", by = "Vala", period = n == 5 and "a" or nil, ranked = n == 5 and 40 or nil, cards = {} }
+      for k = 1, n do set.cards[k] = { guid = k == 1 and wynd.o.guid or nil, name = "Member" .. k, class = "HUNTER", race = "Dwarf", sex = 2, kind = H(wynd).KINDS[k], title = "A card title " .. k,
+        line = "A line that runs to two lines on the card, as long as it may.", value = "1,234", valueLabel = "a value label", icon = k == 2 and 236544 or nil } end
+      CF:Announce(set)
+      assert(CF.frame.__w == CF.Width(n), "the width for " .. n .. ": " .. CF.frame.__w)
+      check(CF.frame, "halls: an announcement of " .. n)
+    end
+    assert(CF.cards[2].badge:IsShown(), "an achievement's icon on its card")
+    -- the store at its caps: 30 sets of five cards, a hundred rows, six drafts
+    for k = 1, 40 do
+      local set = { at = 1000 + k, kind = "n", title = "Set " .. k, by = "Vala", cards = {} }
+      for j = 1, 5 do set.cards[j] = { sfx = "0A00000" .. j, name = "Member" .. j, class = "MAGE", kind = "shout", title = string.rep("t", 24), line = string.rep("l", 56), value = "12345", valueLabel = string.rep("v", 24), source = "sdeaths" } end
+      H(wynd):Took(set, vala.sender, true)
+    end
+    for k = 1, 130 do H(vala):Queue({ id = "cap" .. k, src = "card", from = "C" .. k, card = { name = "Xan", kind = "shout", title = string.rep("t", 24), line = string.rep("l", 56), source = "" } }) end
+    local setsBytes, queueBytes = #json(wynd.env.CuteDB.halls), #json(vala.env.CuteDB.halls)
+    assert(#H(wynd).Sets() == 30 and #H(vala).Rows() == 100, "the caps: 30 sets, 100 rows")
+    assert(setsBytes < 60000 and queueBytes < 60000, "the store bounded: " .. setsBytes .. " and " .. queueBytes .. " bytes")
+    said[#said + 1] = string.format("a closed source locks its item and drops its card on receipt; a draft cleared stays as saved; New card by a name's start; every chip and an announcement of one to five at both sizes; the store at its caps: sets %d KB, queue %d KB", math.ceil(setsBytes / 1024), math.ceil(queueBytes / 1024))
+  end)
 
   print("cards: " .. table.concat(said, "; "))
 end cardsStage() end

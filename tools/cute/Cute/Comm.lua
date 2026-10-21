@@ -56,6 +56,9 @@
 --                                  "0A000001"). Rules.lua rule 9 weighs it: a kill teaches where another member of the
 --                                  group names this one back within a minute. Sent at the kill, and each boss's first
 --                                  kill in a group again with the discoveries
+--   1C, 1G, 1W                     the cards (Halls.lua): a set the officers published (1C|at|i/n|..., withdrawn by
+--                                  1C|at|x), the ask for the sets newer than a stamp (1G), a run's cards whispered to
+--                                  the officers (1W); handed to Halls as they come, 1W only whispered
 -- Only-you is routing, not hiding (Policy.lua P:Route): a value the officers keep to themselves never goes on GUILD. It
 -- goes in the same messages (1D, 1F, 1L, 1K) whispered to each officer online (Roster.lua R:OfficerTargets: the roster's
 -- ranks, the policy's threshold, the sender strings their own Cute's messages came under, each one the roster names
@@ -1693,8 +1696,9 @@ function M:Saw(sender, prefix)
   self.senders[#self.senders + 1] = { sender = sender, prefix = prefix }
 end
 
--- what a whisper may carry: the values, labels and kill claims the officers alone see
-local WHISPERED = { ["1D"] = true, ["1F"] = true, ["1L"] = true, ["1K"] = true }
+-- what a whisper may carry: the values, labels and kill claims the officers alone see, and a run's cards to them (1W,
+-- Halls.lua)
+local WHISPERED = { ["1D"] = true, ["1F"] = true, ["1L"] = true, ["1K"] = true, ["1W"] = true }
 -- whispers that come before the roster is known (an officer's client, its roster slow at login): kept in memory and
 -- judged once it is (Roster.lua calls ReplayEarly), not dropped while the members count them as told. And the records
 -- and deltas from the guild channel too: a record made before the roster listed anyone would decide whose guild the
@@ -1904,6 +1908,10 @@ function M:Receive(text, channel, sender)
     self:ReceiveLabels(text:match("^1L|(.*)$"), sender)
   elseif kind == "1K" then
     self:ReceiveClaims(text:match("^1K|(.*)$"), sender)
+  elseif (kind == "1C" or kind == "1G" or kind == "1W") and C.Halls then
+    -- the cards' kinds: a published set and its withdrawal (1C), the ask for the sets held (1G), a run's cards to the
+    -- officers (1W, whispered): Halls.lua
+    C.Halls:Receive(kind, text, sender, whispered)
   end
 end
 

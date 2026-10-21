@@ -866,6 +866,8 @@ function R:Finish(rep, shown)
     R.Keep(shown or rep)
     bump(rep)
     self:Show(shown or rep)
+    -- (the run's cards to the officers, from the guild member who sends them: Halls.lua, 1W)
+    if C.Halls and C.Halls.RunEnded then C.Safe(function() C.Halls:RunEnded(run, shown or rep) end, "halls: run cards")() end
   end
 end
 -- out of any guild no policy can settle (Policy:Left keeps no line): the run ends with no report, and a line says why
