@@ -268,18 +268,20 @@ function Lines:Fit(canvas)
       marks, nm, thick * 0.5)
   end
   -- you, then the step and the spot on the way, then stop 1 (the first stroke gold, the rest blue); then stop to stop.
-  -- A stroke with both ends off this map is left out: it would cross the map touching neither
+  -- A stroke with both ends off this map is left out: it would cross the map touching neither. 6.1.1 ("just show one at
+  -- a time"): the first stroke alone, from you to where the arrow leads, unless "Show the whole route" (wholeRoute)
   local gold, blue = QB.Mini.GOLD, QB.Mini.BLUE
+  local whole = QB:Settings().wholeRoute == true
   local function inside(p) return p.x >= 0 and p.x <= 1 and p.y >= 0 and p.y <= 1 end
-  local prev, col, alpha = d.you, gold, 1
+  local prev, col, alpha, first = d.you, gold, 1, true
   local function to(p)
-    if prev and (inside(prev) or inside(p)) then stroke(prev, p, col, alpha, prev == d.you) end
-    prev, col, alpha = p, blue, 0.85
+    if (whole or first) and prev and (inside(prev) or inside(p)) then stroke(prev, p, col, alpha, prev == d.you) end
+    prev, col, alpha, first = p, blue, 0.85, false
   end
   for _, p in ipairs(d.via) do to(p) end
   local s = d.stops
   if s[1] and s[1].num == 1 then to(s[1]) end
-  for i = 2, #s do
+  for i = 2, whole and #s or 0 do
     if s[i].num == s[i - 1].num + 1 and (inside(s[i - 1]) or inside(s[i])) then stroke(s[i - 1], s[i], blue, 0.85) end
   end
   MR.HideFrom(ctx, ctx.used + 1)

@@ -20,6 +20,8 @@ function M.Settings(_, col)
   col:Check("A ! on the minimap for quests you can take", s.minimapGivers == true, true, function(on) s.minimapGivers = on; mini() end)
   -- (6.1.1) grey quests' ! on the world map and the minimap only when asked (the engine's QuestMap.lua givers)
   col:Check("Low-level quests", s.mapLowLevel == true, true, function(on) s.mapLowLevel = on; if E.QuestMap and E.QuestMap.Update then E.QuestMap:Update() end; mini() end)
+  -- (6.1.1) one stroke, you to where the arrow leads, unless the whole route is asked (Minimap.lua, MapPage.lua)
+  col:Check("Show the whole route", s.wholeRoute == true, true, function(on) s.wholeRoute = on; mini() end)
 end
 
 -- the switch: the engine's map flags with the box (QB.Follow keeps a row's choice across off and on). Before the

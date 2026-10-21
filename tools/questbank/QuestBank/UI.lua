@@ -3905,18 +3905,30 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("Alt-drag moves it, Ctrl and the wheel size it, the wheel zooms it.", 1, 1, 1, true)
     tip:AddLine("/qb minimap reset puts it back as the game had it.", 0.6, 0.6, 0.6, true)
   end)
+  -- (6.1.1) one stroke, you to where the arrow leads, on the minimap and the Map page; the whole route when asked ("just
+  -- show one at a time its easier to keep track of")
+  v.wholeRoute = checkRow(p, LEFT + 24, y0 - 248, "Show the whole route", 316)
+  v.wholeRoute:SetScript("OnClick", function(self)
+    QB:Settings().wholeRoute = self:GetChecked() and true or false
+    if QB.Mini then QB.Mini.Place() end
+    if QB.MapPage and QB.MapPage.lines then QB.MapPage.lines:RefreshAllData() end
+  end)
+  tooltip(v.wholeRoute, function(tip)
+    tip:AddLine("Show the whole route", GOLD[1], GOLD[2], GOLD[3])
+    tip:AddLine("Off: one line, from you to where the arrow leads now. On: on from there to every stop of the route in order. The numbered stops show either way.", 1, 1, 1, true)
+  end)
   -- its far zoom and drag (MinimapView.lua), your trails on it (Walk.lua); the other switches are on its own menu
-  v.mmExtended = checkRow(p, LEFT, y0 - 248, "Far zoom and drag", 340)
+  v.mmExtended = checkRow(p, LEFT, y0 - 276, "Far zoom and drag", 340)
   v.mmExtended:SetScript("OnClick", function(self) QB:Settings().mmExtended = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Update(0) end end)
   tooltip(v.mmExtended, function(tip)
     tip:AddLine("Far zoom and drag", GOLD[1], GOLD[2], GOLD[3])
     tip:AddLine("Wheel out past the game's widest, over the game's own minimap tiles. Drag to look around; it comes back to you.", 1, 1, 1, true)
   end)
-  v.walkShow = checkRow(p, LEFT, y0 - 276, "Your walked trails", 340)
+  v.walkShow = checkRow(p, LEFT, y0 - 304, "Your walked trails", 340)
   v.walkShow:SetScript("OnClick", function(self) QB:Settings().walkShow = self:GetChecked() and true or false; if QB.Mini then QB.Mini.Place() end end)
   -- how the markers are drawn (Minimap.lua, Arrow.lua): QuestTrail's look, or the game's own icons; the button cycles
   v.markerStyle = button(p, "QuestTrail", 90)
-  v.markerStyle:SetPoint("TOPLEFT", LEFT + 4, y0 - 304)
+  v.markerStyle:SetPoint("TOPLEFT", LEFT + 4, y0 - 332)
   UI.MARKER_STYLES = { questtrail = "QuestTrail", game = "Game icons" }
   v.markerStyle:SetScript("OnClick", QB.Safe(function()
     local set = QB:Settings()
@@ -3933,7 +3945,7 @@ function UI:CreateSettingsView(parent)
   v.minimapHint:SetPoint("LEFT", v.markerStyle, "RIGHT", 8, 0)
   v.minimapHint:SetText("Marker style. Right-click the minimap for the rest.")
   -- the Map: QuestBank's map page on the Map key and the sidebar (MapPage.lua), or the game's world map (UI.OpenMap)
-  v.mapPage = checkRow(p, LEFT, y0 - 332, "Map key opens QuestBank's map", 340)
+  v.mapPage = checkRow(p, LEFT, y0 - 360, "Map key opens QuestBank's map", 340)
   v.mapPage:SetScript("OnClick", function(self) QB:Settings().mapPage = self:GetChecked() and true or false; UI:Refresh() end)
   tooltip(v.mapPage, function(tip)
     tip:AddLine("QuestBank's map", GOLD[1], GOLD[2], GOLD[3])
@@ -3942,7 +3954,7 @@ function UI:CreateSettingsView(parent)
     if not (QB.MapPage and QB.MapPage.Available()) then tip:AddLine("Only on the Forever client.", 1, 0.5, 0.3, true) end
   end)
   v.map = button(p, "Game's map", 110)
-  v.map:SetPoint("TOPLEFT", LEFT + 4, y0 - 360)
+  v.map:SetPoint("TOPLEFT", LEFT + 4, y0 - 388)
   v.map:SetScript("OnClick", QB.Safe(function() UI.OpenMap() end, "settings: map"))
   v.mapLabel = text(p, "GameFontNormalSmall", 11, INK_SOFT, "LEFT", 250)
   v.mapLabel:SetPoint("LEFT", v.map, "RIGHT", 8, 0)
@@ -3950,7 +3962,7 @@ function UI:CreateSettingsView(parent)
   -- QuestBank's quest icons on the maps (Pins.lua, mapIconPct): half the game's size by default; the button cycles
   UI.ICON_SIZES = { { 50, "Half size" }, { 75, "Three quarters" }, { 100, "Game's size" } }
   v.iconSize = button(p, "Half size", 110)
-  v.iconSize:SetPoint("TOPLEFT", LEFT + 4, y0 - 388)
+  v.iconSize:SetPoint("TOPLEFT", LEFT + 4, y0 - 416)
   v.iconSize:SetScript("OnClick", QB.Safe(function()
     local set = QB:Settings()
     local i = 1
@@ -3971,7 +3983,7 @@ function UI:CreateSettingsView(parent)
     tip:AddLine("The game's own world map on your zone, with QuestBank's route and icons on it.", 1, 1, 1, true)
     tip:AddLine(QB.MapPage and QB.MapPage.KEYS or "Keys for it and for each page: Key Bindings, QuestBank.", 0.6, 0.6, 0.6, true)
   end)
-  yl = y0 - 428
+  yl = y0 - 456
 
   ----------------------------------------------------------------------------------------------------------------
   -- the modules, one heading each: the interact light (left), the camp bar, the timers, the health and mana
@@ -4469,6 +4481,7 @@ function UI:RefreshSettingsView(v)
   v.guideTracker:SetEnabled(gd.on == true)
   v.minimapGivers:SetChecked(set.minimapGivers ~= false)
   v.mapLow:SetChecked(set.mapLowLevel == true)
+  v.wholeRoute:SetChecked(set.wholeRoute == true)
   v.tipProgress:SetChecked(set.tipProgress ~= false)
   local newest = QB.newest
   v.verText:SetText(newest and string.format("You run QuestBank %s. |cff6cdc74%s runs %s: time to update.|r", QB.version, newest.who or "Someone", newest.version)

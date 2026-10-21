@@ -901,8 +901,9 @@ function Mini.Place(me, v)
   end
   Mini.Label(target and tinfo, f)
   if QB.tracing then traceTarget(target, tw, me) end
-  -- the strokes: you to the target (along the golden path when your trails know the way), on to the one target if the
-  -- target is the arrow's step, on to stop 1 if that is not it, then stop to stop, up to minimapSteps stops.
+  -- the strokes: you to the target (along the golden path when your trails know the way); with "Show the whole route"
+  -- (wholeRoute, 6.1.1: off, "just show one at a time") on to the one target if the target is the arrow's step, on to
+  -- stop 1 if that is not it, then stop to stop, up to minimapSteps stops.
   -- QuestTrail's look: each in its step's quest's colour (the first in the one target's; to a flight master, blue),
   -- the stroke setting's width and opacity; the game style, gold then blue
   local n, gold = 0, false
@@ -913,12 +914,14 @@ function Mini.Place(me, v)
     if qt then tcol = (aim and target == aim) and colourOf(aim) or TRAVEL end
     n = seg(1, mx, my, tx, ty, tcol, alpha, SIZE[target.kind] or 16, true)
     local prev, px, py = target, tx, ty
-    if aim and target ~= aim then
+    if set.wholeRoute ~= true then
+      -- (one stroke: the stops stay, the strokes between them only with the whole route)
+    elseif aim and target ~= aim then
       local ax, ay = MV.Point(v, aw.wx, aw.wy)
       n = seg(n + 1, px, py, ax, ay, qt and colourOf(aim) or BLUE, qt and alpha or 0.85, SIZE[aim.kind] or 16)
       prev, px, py = aim, ax, ay
     end
-    for num = 1, set.minimapSteps or 16 do
+    for num = 1, set.wholeRoute == true and (set.minimapSteps or 16) or 0 do
       local s = byNum[num]
       if not s then break end
       if s.d ~= prev then n = seg(n + 1, px, py, s.x, s.y, qt and colourOf(s.d) or BLUE, qt and alpha or 0.85, s.it and s.it.size or SIZE.stop) end

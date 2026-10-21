@@ -2016,6 +2016,10 @@ do
   -- stroke (you to stop 1, 21 px) keeps 6 px, the gap at its start giving way first
   local MR = QB.MiniRoute
   local stroke = MR.route.lines
+  -- (6.1.1: one stroke by default, you to where the arrow leads; the chain below with "Show the whole route")
+  assert(Mini.linesShown == 1, "one stroke at a time: " .. Mini.linesShown)
+  QB:Settings().wholeRoute = true
+  Mini.Place()
   assert(Mini.linesShown == 3 and stroke[1].__tex == ART .. "line_arrow.png" and math.abs(stroke[1].__stop[4] - 9) < 0.01 and math.abs(stroke[1].__start[4] - 3) < 0.01
     and stroke[1].__vertex[1] == pal[1][1] and stroke[1].__vertex[2] == pal[1][2] and stroke[1].__vertex[4] == 1 and stroke[1].__thick == 6,
     "you to stop 1, 1 to 2, 2 to 3: " .. tostring(Mini.linesShown) .. " (" .. tostring(stroke[1].__start and stroke[1].__start[4]) .. " to " .. tostring(stroke[1].__stop and stroke[1].__stop[4]) .. ")")
@@ -2118,6 +2122,7 @@ do
   Mini.Invalidate(); Mini.Place()
   assert(Mini.linesShown == 2, "two stops' strokes: you to 1, 1 to 2: " .. Mini.linesShown)
   QB:Settings().minimapSteps = nil
+  QB:Settings().wholeRoute = false
   -- a hand-in: the game's ? for a finished quest of your log, kept on the rim at 0.6 out of reach (1200 yards north)
   local tid
   for id in pairs(D.Q) do
@@ -3305,6 +3310,11 @@ do
     end
     return out
   end
+  -- (6.1.1: one stroke by default, you to where the arrow leads; the chain below with "Show the whole route")
+  assert(#shown() == 1, "one stroke at a time: " .. #shown())
+  QB:Settings().wholeRoute = true
+  MP.lines:RefreshAllData()
+  strokes = MP.lines.active[1]
   local drawn = shown()
   local w, h = strokes:GetWidth(), strokes:GetHeight()
   assert(count(P.pageProvider) == 5 and #MP.lines.active == 1 and #drawn == 3, "you to 1, 1 to 2, 2 to 3; 3 and 5 lie beside a stop off the map: " .. #drawn)
@@ -3428,6 +3438,7 @@ do
     and count(QM.pageProvider, "turn") == 0, "To pick up on: the !s alone")
   set.mapTurn, set.mapObj, set.mapDungeons = true, true, true
   MP.RefreshLayers()
+  QB:Settings().wholeRoute = false
   MP.Go(1429, "user")
 end
 
@@ -3963,7 +3974,7 @@ do
   local saveEntrance = dcat.entrance
   dcat.entrance = { m = 1429, x = 50.5, y = 54 }
   Mini.Invalidate(); Mini.Update(0)
-  assert(Mini.shown >= 6 and Mini.linesShown >= 2, "the sheet holds the stops, the objectives, the hand-in and the entrance: " .. tostring(Mini.shown))
+  assert(Mini.shown >= 6 and Mini.linesShown >= 1, "the sheet holds the stops, the objectives, the hand-in and the entrance, and the stroke (6.1.1: one): " .. tostring(Mini.shown))
   layouts[#layouts + 1] = dumpLayout(env.Minimap, "Minimap, native")
   Mini.Wheel(-1); Mini.Update(0)
   for _ = 1, 3 do c.clock = c.clock + 0.2; Mini.Update(0) end
@@ -13770,6 +13781,7 @@ end
     P.list = { { m = 1424, x = 49.5, y = 58.7, num = 1, name = "Southshore", ids = {}, quests = {}, lines = {} },
                { m = 1416, x = 57.2, y = 69.5, num = 2, name = "Henchman Valik", ids = {}, quests = {}, lines = {} },
                { m = 1416, x = 45, y = 50, num = 3, name = "Crushridge Hold", ids = {}, quests = {}, lines = {} } }
+    QB:Settings().wholeRoute = true -- (6.1.1: the chain only with "Show the whole route")
     MP.Go(1416, "user")
     MP.lines:RefreshAllData()
     local strokes = MP.lines.active[1]
@@ -13786,6 +13798,7 @@ end
     local h = strokes:GetHeight()
     assert(math.abs(ends[1].__stop[4] + h / 2) < 1 and math.abs(drawn[2].__start[4] + h / 2) < 1,
       "the strokes to and from stop 1 meet the map's bottom edge, the way Southshore lies")
+    QB:Settings().wholeRoute = false
     P.list = saveList
     P:Update()
   end }
@@ -18030,6 +18043,60 @@ end)()
     c.o.riding = true -- (IsPlayerSpell says yes to anything)
     local h = TV.Hearth("pin")
     assert(not h or h.kind ~= "recall", "a warrior: never Astral Recall, whatever IsPlayerSpell says")
+  end }
+
+  -- G. "we show line to where to go and a line to where to go after? just show one at a time its easier to keep track
+  -- of": the minimap (Minimap.lua's strokes) and the Map page (MapPage.lua's Lines) drew you to the one target, then on
+  -- to stop 1 and stop to stop. Now one stroke, you to where the arrow leads (Target.lua's target, or the arrow's step
+  -- toward it); "Show the whole route" (off) brings the rest back. The numbered stops stay. (The game's world map has
+  -- QuestBank's pins, never strokes)
+  F61CASES[#F61CASES + 1] = { "one stroke at a time: you to where the arrow leads; the whole route when asked", function()
+    local c = char("Liniel", "WARRIOR", "Warrior", 1, {}, { level = 20, map = 1429, world = { 0, -8530, 980 } })
+    local QB, env, Mini, P, MP = c.QB, c.env, c.QB.Mini, c.QB.Pins, c.QB.MapPage
+    local s = QB:Settings()
+    assert(s.wholeRoute == false, "the whole route: off by default")
+    -- the minimap: three stops by you (a flat world: 1 percent of map 1429 is 30 yards north-south, 40 east-west)
+    local saveWorld, savePos = env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition
+    env.C_Map.GetWorldPosFromMapPos = function(m, v) return 0, { x = -v.y * 3000, y = -v.x * 4000, GetXY = function(self) return self.x, self.y end } end
+    env.C_Map.GetPlayerMapPosition = function() return { x = 0.50, y = 0.50, GetXY = function(self) return self.x, self.y end } end
+    local function stop(m, x, y, num, name) return { m = m, x = x, y = y, num = num, name = name, when = "", ids = {}, lines = {} } end
+    P.list = { stop(1429, 50, 48, 1, "Goldshire"), stop(1429, 52, 50, 2, "Crossroads"), stop(1429, 55, 52, 3, "Third") }
+    c.miniRadius = 200
+    Mini.Invalidate(); Mini.Place()
+    local pins = 0
+    for _, ch in ipairs(c.frames) do if ch.__parent == env.QuestBankMinimap and ch.d and ch.d.num and ch:IsShown() then pins = pins + 1 end end
+    assert(Mini.linesShown == 1 and pins == 3, "the minimap: one stroke, you to stop 1, and the three stops: " .. Mini.linesShown .. " strokes, " .. pins .. " stops")
+    s.wholeRoute = true
+    Mini.Invalidate(); Mini.Place()
+    assert(Mini.linesShown == 3, "the whole route: you to 1, 1 to 2, 2 to 3: " .. Mini.linesShown)
+    s.wholeRoute = false
+    env.C_Map.GetWorldPosFromMapPos, env.C_Map.GetPlayerMapPosition = saveWorld, savePos
+    -- the Map page: three stops, you at 0.5, 0.3 of Elwynn (the client's world yards for it)
+    c.mapRects = { [1429] = { c = 0, x = -8530, y = 980, size = 1000 } }
+    standAt(c, 0, -8830, 480)
+    P.list = { stop(1429, 20, 20, 1, "One"), stop(1429, 60, 30, 2, "Two"), stop(1429, 40, 70, 3, "Three") }
+    local function drawn()
+      MP.Go(1429, "user")
+      MP.lines:RefreshAllData()
+      local strokes = MP.lines.active[1]
+      local n, seen = 0, {}
+      for _, l in ipairs(strokes and strokes.ctx and strokes.ctx.lines or {}) do
+        if l.__shown and not seen[l.of or l] then seen[l.of or l] = true; n = n + 1 end
+      end
+      return n
+    end
+    assert(drawn() == 1, "the Map page: one stroke: " .. drawn())
+    s.wholeRoute = true
+    assert(drawn() == 3, "the whole route on the Map page: " .. drawn())
+    -- the row in the map section
+    QB.UI:Open(5)
+    local v5 = QB.UI.views[5]
+    assert(v5.wholeRoute and v5.wholeRoute:GetChecked() and v5.wholeRoute.label:GetText() == "Show the whole route", "the map section's row")
+    v5.wholeRoute:SetChecked(false); v5.wholeRoute.__scripts.OnClick(v5.wholeRoute, "LeftButton")
+    assert(s.wholeRoute == false and drawn() == 1, "unticked: one stroke again")
+    -- a save from before: off
+    local old = char("Olwen", "WARRIOR", "Warrior", 1, {}, { level = 20, saved = { settings = { v544 = true, v600 = true } } })
+    assert(old.QB:Settings().wholeRoute == false, "an old save: off")
   end }
 
   for _, case in ipairs(F61CASES) do

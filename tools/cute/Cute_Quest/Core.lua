@@ -1331,6 +1331,7 @@ local DEFAULTS = {
   guide = { on = true, frame = true, locked = false, scale = 1, hideTracker = true },
   minimapGivers = true, -- a ! on the minimap for every quest you can take now (Minimap.lua)
   mapLowLevel = false, -- (6.1.1) quests the game counts as trivial (grey): their ! on the world map, the Map page and the minimap
+  wholeRoute = false, -- (6.1.1) the strokes on to the stops after the one the arrow leads to (Minimap.lua, MapPage.lua): one at a time
   tipProgress = true,   -- "Kobold Vermin: 3/8 (Kobold Camp Cleanup)" in mob and object tooltips (Tips.lua)
 }
 

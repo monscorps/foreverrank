@@ -4833,6 +4833,12 @@ do
     assert(rone.env.CuteQuestDB.settings.mapLowLevel == true, "ticked: the engine's setting on")
     click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Low-level quests" end))
     assert(rone.env.CuteQuestDB.settings.mapLowLevel == false, "and off again")
+    -- 6.1.1: one stroke, you to where the arrow leads; the whole route when asked (QuestBank's map section has it too)
+    local whole = checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Show the whole route" end)
+    assert(whole and not whole:GetChecked() and rone.env.CuteQuestDB.settings.wholeRoute == false, "Map: the whole route's row, off:\n" .. texts(rone))
+    click(whole)
+    assert(rone.env.CuteQuestDB.settings.wholeRoute == true, "ticked: the engine's setting on")
+    click(checkBox(rone, function(cb) return cb.label and cb.label:GetText() == "Show the whole route" end))
     rone.C.UI:Open("settings", "camp")
     assert(not texts(rone):find("Sleeping bag", 1, true) and not texts(rone):find("Sellers", 1, true) and texts(rone):find("Camp bar", 1, true), "Camp: the bar, the banner and the light alone:\n" .. texts(rone))
     -- 6.1.1: the party's buffs (QuestBank's camp section has the same row); six rows at most in Camp and in Map
