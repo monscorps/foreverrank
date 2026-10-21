@@ -241,27 +241,20 @@ end
 -- a guild member's version, as it arrives (Roster.lua) or as a saved record keeps it (at login), by the GUID it speaks
 -- for (who). C.newer is the newest version newer than yours that two members run, it or one newer (two voices, as
 -- everything the guild learns: 0.7.0 took one member's word, so one edited copy's version had every client online say
--- an update was out): the status line shows it (UI.lua)
-C.newerBy = {}
+-- an update was out): the status line shows it (UI.lua). One version a member, the last it said (C.newerOf, by GUID:
+-- 0.7.1's first build kept 32 versions for the whole guild, and one copy that said 32 made-up ones silenced every real
+-- update after them)
+C.newerOf = {}
 local function voicesAtLeast(v)
-  local seen, n = {}, 0
-  for other, set in pairs(C.newerBy) do
-    if not C.VersionNewer(v, other) then for g in pairs(set) do if not seen[g] then seen[g], n = true, n + 1 end end end
-  end
+  local n = 0
+  for _, other in pairs(C.newerOf) do if not C.VersionNewer(v, other) then n = n + 1 end end
   return n
 end
 function C.SawVersion(v, who)
   v = C.Plain(v)
-  if not C.VersionNewer(v, C.version) or type(who) ~= "string" then return end
-  local set = C.newerBy[v]
-  if not set then
-    local n = 0
-    for _ in pairs(C.newerBy) do n = n + 1 end
-    if n >= 32 then return end
-    set = {}
-    C.newerBy[v] = set
-  end
-  set[who] = true
+  if type(who) ~= "string" then return end
+  if not C.VersionNewer(v, C.version) then C.newerOf[who] = nil return end
+  C.newerOf[who] = v
   if voicesAtLeast(v) < 2 then return end
   if C.newer and not C.VersionNewer(v, C.newer) then return end
   C.newer = v

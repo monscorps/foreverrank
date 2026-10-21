@@ -11040,6 +11040,21 @@ do
   end)
   said[#said + 1] = "a list that never reads whole still prunes by age and cap"
 
+  -- (y) one member's records hold one version each: a copy that says 32 made-up versions fills nothing, and a real one
+  -- that two members run is still announced. 0.7.1's first build kept 32 versions for the whole guild, and one copy's
+  -- 32 silenced every update after them for the session
+  isolated({ member("Coraline", 1), member("Cobb", 3) }, function()
+    local c = char("Coraline", 1)
+    login(c)
+    tickAll(20)
+    for i = 1, 40 do c.C.SawVersion("9.0." .. i, guidOf("Cobb")) end
+    assert(c.C.newer == nil, "one voice announces nothing")
+    c.C.SawVersion("0.9.3", guidOf("Cyra"))
+    c.C.SawVersion("0.9.3", guidOf("Cato"))
+    assert(c.C.newer == "0.9.3", "two members' version announced after a copy's forty: " .. tostring(c.C.newer))
+  end)
+  said[#said + 1] = "a copy's made-up versions fill nothing, a real update still told"
+
   print("core: " .. table.concat(said, "; "))
 end
 
