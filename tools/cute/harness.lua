@@ -11156,8 +11156,9 @@ do local function runsStage()
     return newClient(charOf({ name, rank, rank <= 1 and "Officer" or "Raider", extra.class or "MAGE", 30 }, extra))
   end
   local function entryOf(x)
-    if type(x) == "table" and x.env then return { c = x, name = x.o.name, guid = x.o.guid, class = x.o.class, race = x.o.race or "Human", sex = x.o.sex or 2 } end
-    return { name = x.name, guid = guidOf(x.name), class = x.class or "ROGUE", race = x.race or "Orc", sex = x.sex or 3 }
+    -- (UnitName's second return: the realm of a member from another realm, nil for your own)
+    if type(x) == "table" and x.env then return { c = x, name = x.o.name, realm = x.o.realm ~= "Forever" and x.o.realm or nil, guid = x.o.guid, class = x.o.class, race = x.o.race or "Human", sex = x.o.sex or 2 } end
+    return { name = x.name, realm = x.realm, guid = x.guid or guidOf(x.name), class = x.class or "ROGUE", race = x.race or "Orc", sex = x.sex or 3 }
   end
   local function memberAt(c, unit)
     local G = c.group
@@ -11185,8 +11186,11 @@ do local function runsStage()
     c.wired = true
     local function at(u) return memberAt(c, u) end
     local origName, origPlayerInfo = env.UnitName, env.GetPlayerInfoByGUID
-    env.UnitName = function(u) if u == "player" then return origName(u) end local e = at(u); if e then return e.name end end
-    env.UnitGUID = function(u) if u == "player" then return o.guid end local e = at(u); return e and e.guid or nil end
+    -- (G.guidSecret: a member whose identity the client restricts, UnitGUID SecretWhenUnitIdentityRestricted and
+    -- UnitName SecretWhenUnitNameIdentityRestricted, UnitDocumentation.lua; UnitExists still says it is there)
+    local function hid(e) return e and c.group and c.group.guidSecret and c.group.guidSecret[e.guid] end
+    env.UnitName = function(u) if u == "player" then return origName(u) end local e = at(u); if hid(e) then return secret("string") end if e then return e.name, e.realm end end
+    env.UnitGUID = function(u) if u == "player" then return o.guid end local e = at(u); if hid(e) then return secret("string") end return e and e.guid or nil end
     env.UnitExists = function(u) if u == "player" then return true end return at(u) ~= nil end
     env.UnitClass = function(u) local e = at(u) or (u == "player" and { class = o.class }); if e then return e.class, e.class, CLASS_NUM[e.class] end end
     env.UnitRace = function(u) local e = at(u) or (u == "player" and { race = o.race or "Human" }); if e then return e.race, e.race, RACE_ID[e.race] end end
@@ -11286,7 +11290,7 @@ do local function runsStage()
   end
   local function group(list, o)
     o = o or {}
-    local G = { members = {}, leader = 1, raid = o.raid or #list > 5, dead = {}, hidden = {}, secretId = {}, map = {}, sessions = {}, lootInfos = {}, lootDrops = {}, sid = 0 }
+    local G = { members = {}, leader = 1, raid = o.raid or #list > 5, dead = {}, hidden = {}, secretId = {}, guidSecret = {}, map = {}, sessions = {}, lootInfos = {}, lootDrops = {}, sid = 0 }
     for i, x in ipairs(list) do G.members[i] = entryOf(x) end
     for _, e in ipairs(G.members) do
       if e.c then
@@ -11650,6 +11654,29 @@ do local function runsStage()
     assert(not table.concat(lines, "\n"):find("damage", 1, true), "no meter value on the party line")
   end)
   said[#said + 1] = "privacy: Meter in runs closed keeps every meter key, award and line off; a stranger in the group keeps the guild's codes out of every 2V"
+
+  -- (10, a member whose GUID does not read) a group member whose identity the client restricts is in the group all the
+  -- same: nobody can tell whether they are in the guild, so the codes the guild set for itself stay home
+  isolated({ gmember("Ren", 1), gmember("Sid", 3) }, function()
+    local cs = { gchar("Ren", 1), gchar("Sid", 3) }
+    for _, c in ipairs(cs) do login(c) end
+    tickAll(40)
+    local G = group({ cs[1], cs[2], { name = "Hush", class = "ROGUE" } })
+    G.guidSecret[guidOf("Hush")] = true
+    each(G, function(c) fire(c, "GROUP_ROSTER_UPDATE") end)
+    zone(cs, "party", 36, "The Deadmines")
+    tickAll(40)
+    local sid = cs[2]
+    sid.env.JumpOrAscendStart()
+    sid.o.money = sid.o.money + 400; fire(sid, "PLAYER_MONEY")
+    die(G, sid); tickAll(3); rez(G, sid)
+    fight(G, 30, { Sid = { [0] = 500 } }, 1230)
+    tickAll(40)
+    local keys = keysSent(sid)
+    assert(keys.t and keys.dm, "Sid's checkpoint went: " .. rkinds(sid))
+    for _, k in ipairs({ "de", "dt", "fd", "ju", "gd" }) do assert(not keys[k], "a guild-only key with a member whose GUID does not read: " .. k) end
+  end)
+  said[#said + 1] = "a member whose GUID does not read counts as a stranger: the guild's codes stay home"
 
   -- (20) an edited copy in the group: a 2Q, 2A or 2W from a member who is not the scribe is ignored; a 2A naming a
   -- suffix nobody saw is not shown; a 2V value out of bounds is dropped, one an observed value contradicts loses; a 2H

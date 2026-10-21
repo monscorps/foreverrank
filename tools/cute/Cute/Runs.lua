@@ -144,11 +144,12 @@ local function unitInfo(unit)
   return { unit = unit, guid = g, sfx = sfxOf(g), name = name, full = full, class = type(class) == "string" and class or nil,
     race = type(race) == "string" and race or nil, sex = (sex == 2 or sex == 3) and sex or nil }
 end
--- { [sfx] = { unit, guid, name, class, race, sex, me }, n = members, leader = sfx }
+-- { [sfx] = { unit, guid, name, class, race, sex, me }, n = members, units = the group's units (UnitExists: those
+-- whose GUID does not read are there all the same), leader = sfx }
 function R.Group()
   local t = gtime()
   if groupCache and groupCache.gen == groupGen and t - groupAt < 5 then return groupCache end
-  local out = { n = 0, gen = groupGen, canon = {} }
+  local out = { n = 0, units = 1, gen = groupGen, canon = {} }
   local me = C.MyGUID()
   if me then
     local e = unitInfo("player") or { unit = "player", guid = me, sfx = sfxOf(me) }
@@ -158,7 +159,10 @@ function R.Group()
   end
   if inGroup() then
     local raid = call("IsInRaid") == true
+    -- (a raid's units name you too: raidN for every member, partyN for the others)
+    out.units = raid and 0 or 1
     for _, u in ipairs(raid and RAID or PARTY) do
+      if call("UnitExists", u) == true then out.units = out.units + 1 end
       local e = unitInfo(u)
       if e and e.guid ~= me and not out[e.sfx] then
         out[e.sfx] = e
@@ -303,11 +307,14 @@ function R:IsScribe() return self:Scribe() == mySfx() end
 -- this client's own values, as a 2V carries them (by the policy as it leaves)
 ----------------------------------------------------------------------------
 -- may a key leave this client: its code routed Everyone; the reused codes only while every member of the group is in
--- the guild (the roster as last read); with the policy in doubt, the clock alone
+-- the guild (the roster as last read); with the policy in doubt, the clock alone. A member whose GUID does not read
+-- (UnitGUID is SecretWhenUnitIdentityRestricted, UnitDocumentation.lua) is nobody this client can find in the roster:
+-- with one in the group, the group is not all the guild's
 local function allGuild()
   local Ro = C.Roster
   if not (Ro and Ro.trusted) then return false end
   local g = R.Group()
+  if (g.units or 0) > g.n then return false end
   for sfx, e in pairs(g) do
     if type(e) == "table" and e.guid and not e.me and not Ro.byGuid[e.guid] then return false end
   end
