@@ -19154,6 +19154,70 @@ end)()
     assert(table.concat(xkeys(c), " "):find("x:1429:701,700>2521:400,500", 1, true), "the walk-in portal: " .. table.concat(xkeys(c), " "))
   end }
 
+  FINDCASES[#FINDCASES + 1] = { "a boat or zeppelin's loading screen, out at sea, is that D.LINK leg: no crossing, Travel's own key kept", function()
+    local c = char("Sailor")
+    local D, TV, DB = c.QB.Data, c.QB.Travel, c.env.QuestBankDB
+    local function leg(from, to)
+      for li, l in ipairs(D.LINK) do if l[4][7] == from and l[5][7] == to then return li, l end end
+      error("no D.LINK leg " .. from .. ">" .. to)
+    end
+    -- the leg's track as points, and where the client loads the far side: the last point before the track changes
+    -- continent or jumps 2,000 yards
+    local function track(l)
+      local tr = {}
+      for cc, x, y in l[6]:gmatch("(%-?%d+),(%-?[%d.]+),(%-?[%d.]+)") do tr[#tr + 1] = { tonumber(cc), tonumber(x), tonumber(y) } end
+      for i = 1, #tr - 1 do
+        local p, q = tr[i], tr[i + 1]
+        if p[1] ~= q[1] or (p[2] - q[2]) ^ 2 + (p[3] - q[3]) ^ 2 >= 2000 ^ 2 then return tr, i end
+      end
+    end
+    -- a ride from the leg's first pier: stood there 12 s, then 30 yards a second along the track to the last point
+    -- before the loading screen, out `past` yards beyond the first point after it, `gap` seconds on
+    local function ride(li, past, gap)
+      local l = D.LINK[li]
+      local tr, sw = track(l)
+      fresh(c); at(c, l[4][4], l[4][5] / 100, l[4][6] / 100, { l[4][1], l[4][2], l[4][3] }); stand(c, 12)
+      for i = 1, sw - 1 do
+        local p, q = tr[i], tr[i + 1]
+        local n = math.max(1, math.floor(math.sqrt((q[2] - p[2]) ^ 2 + (q[3] - p[3]) ^ 2) / 30))
+        for s = 1, n do
+          at(c, l[4][4], 0.3 + 0.2 * s / n, 0.4, { p[1], p[2] + (q[2] - p[2]) * s / n, p[3] + (q[3] - p[3]) * s / n }); look(c)
+        end
+      end
+      local p, q = tr[sw + 1], tr[sw + 2]
+      local len = math.sqrt((q[2] - p[2]) ^ 2 + (q[3] - p[3]) ^ 2)
+      at(c, l[5][4], 0.6, 0.7, { p[1], p[2] + (q[2] - p[2]) * past / len, p[3] + (q[3] - p[3]) * past / len }); look(c, gap)
+      look(c)
+    end
+    DB.disc.rides = DB.disc.rides or {}
+    local menethil, org, uc = leg("Menethil Harbor", "Theramore"), leg("Orgrimmar", "Grom'gol"), leg("Undercity", "Grom'gol")
+    -- Travel's own keys for the legs, as its ride lock learned them: left as they are
+    local kept = {}
+    for _, li in ipairs({ menethil, org, uc }) do
+      local k = TV.RideKey(li, 1)
+      DB.disc.rides[k] = { n = 3, t = 300, b = { 0, 1, 2 }, l = { 1, 3, 4 }, at = 29000000 }
+      kept[k] = DB.disc.rides[k]
+    end
+    local xl = DB.diag.finds and DB.diag.finds.xl or 0
+    ride(menethil, 150, 6)      -- the boat: Wetlands to Dustwallow, loaded 1,100 yards out
+    ride(org, 400, 15)          -- the zeppelin: a long loading screen, the far side 400 yards on
+    ride(uc, 100, 5)            -- one continent, the track jumping 14,000 yards
+    assert(#xkeys(c) == 0, "a boat or zeppelin ride: no crossing: " .. table.concat(xkeys(c), " "))
+    assert(DB.diag.finds.xl == xl + 3, "diag: three D.LINK legs left out: " .. tostring(DB.diag.finds.xl))
+    for k, e in pairs(kept) do
+      assert(DB.disc.rides[k] == e and e.n == 3 and e.t == 300 and e.at == 29000000, "Travel's own key kept as it was: " .. k)
+    end
+    -- the portal of D.LINK (no track): its two ends
+    local _, rl = leg("Rut'theran Village", "Darnassus")
+    fresh(c); at(c, rl[4][4], 0.5, 0.5, { rl[4][1], rl[4][2] + 5, rl[4][3] }); stand(c, 12)
+    at(c, rl[5][4], 0.4, 0.4, { rl[5][1], rl[5][2], rl[5][3] - 10 }); look(c, 3)
+    assert(#xkeys(c) == 0 and DB.diag.finds.xl == xl + 4, "the Rut'theran portal, end to end: D.LINK's")
+    -- a jump that starts on a track but lands nowhere near its far side is no ride
+    fresh(c); at(c, 1411, 0.5, 0.1, { 1, 1447, -5400 }); look(c)
+    at(c, 1438, 0.555, 0.888, { 1, 9000, 900 }); look(c, 4)
+    assert(#xkeys(c) == 1, "off the zeppelin's track's far side: a crossing")
+  end }
+
   FINDCASES[#FINDCASES + 1] = { "Travel keeps the x: crossings when it prunes disc.rides to D.LINK's legs; a boat leg's time in minutes", function()
     local saved = { disc = { v = 1, q = {}, npc = {}, offer = {}, chain = {}, item = {},
       rides = { ["x:1429:300,400>1438:555,888"] = { n = 1, t = 8, b = { 0, -9000, 100 }, l = { 1, 9000, 900 }, at = 29000000 },

@@ -41,7 +41,7 @@ local STILL_YD, STILL_S = 5, 10 -- a stand: within this many yards for this many
 local BEFORE_S = 180    -- seconds before a jump a stand still counts as where the crossing started
 local BEFORE_YD = 200   -- yards from the last place before the jump within which that stand is its start
 local JUMP = 300        -- yards within a look: a jump in place (Target.lua's)
-local LINK_YD = 300     -- yards from a D.LINK end: that boat or zeppelin leg, Travel's to learn
+local LINK_YD = 300     -- yards from a D.LINK end, or from its track where the far side loads: that leg, Travel's to learn
 local CAST_S = 5        -- seconds after a hearth, a class teleport or a summons in which a jump is that
 local MEAN = 5          -- crossings and flights a learned time averages over
 local TICK = 1          -- seconds between looks
@@ -502,7 +502,48 @@ function Finds.Teleported() cross.castAt = now() end
 -- the game offered you a summons
 function Finds.Summoned() cross.summonAt = now() end
 
--- the boat or zeppelin leg of D.LINK whose ends these are (Travel.lua learns those under their own keys)
+-- a D.LINK row's track as numbers, { c, wx, wy, c, wx, wy, ... }, read once a row (only at a jump)
+local tracks = setmetatable({}, { __mode = "k" })
+local function trackOf(l)
+  local tr = tracks[l]
+  if tr then return tr end
+  tr = {}
+  for c, x, y in tostring(l[6] or ""):gmatch("(%-?%d+),(%-?[%d.]+),(%-?[%d.]+)") do
+    tr[#tr + 1], tr[#tr + 2], tr[#tr + 3] = tonumber(c), tonumber(x), tonumber(y)
+  end
+  tracks[l] = tr
+  return tr
+end
+
+-- yards from p to the track's stretch from point i to point j (1-based points, j >= i), on p's continent only
+local function nearStretch(p, tr, i, j)
+  local best = math.huge
+  for k = max(i, 1), j do
+    local o = (k - 1) * 3
+    if tr[o + 1] == p.c then
+      local ax, ay = tr[o + 2], tr[o + 3]
+      local d = sqrt((ax - p.wx) ^ 2 + (ay - p.wy) ^ 2)
+      if d < best then best = d end
+      if k < j and tr[o + 4] == p.c then
+        local sx, sy = tr[o + 5] - ax, tr[o + 6] - ay
+        local len = sx * sx + sy * sy
+        local f = len > 0 and ((p.wx - ax) * sx + (p.wy - ay) * sy) / len or -1
+        if f > 0 and f < 1 then
+          d = sqrt((ax + f * sx - p.wx) ^ 2 + (ay + f * sy - p.wy) ^ 2)
+          if d < best then best = d end
+        end
+      end
+    end
+  end
+  return best
+end
+
+-- the boat, zeppelin or portal leg of D.LINK this jump is (Travel.lua learns those under their own keys): from one of
+-- its ends to the other (the portal's), or, on a ride, where the client loads the far side. That is out at sea, 770 to
+-- 1,100 yards from either pier (Data.lua's tracks), where the track changes continent or jumps SWITCH_YD or more: the
+-- jump starts within LINK_YD of the track's last two stretches into that point and ends within LINK_YD of its first two
+-- out of it (the boat sails on while the far side loads)
+local SWITCH_YD = 2000
 local function linkLeg(a, b)
   for _, l in ipairs(QB.Data.LINK or {}) do
     for from = 1, 2 do
@@ -510,9 +551,18 @@ local function linkLeg(a, b)
       if a.c == e1[1] and b.c == e2[1] and yd(a, { c = e1[1], wx = e1[2], wy = e1[3] }) <= LINK_YD
         and yd(b, { c = e2[1], wx = e2[2], wy = e2[3] }) <= LINK_YD then return l end
     end
+    local tr = trackOf(l)
+    local n = #tr / 3
+    for i = 1, n - 1 do
+      local o = (i - 1) * 3
+      if tr[o + 1] ~= tr[o + 4] or (tr[o + 2] - tr[o + 5]) ^ 2 + (tr[o + 3] - tr[o + 6]) ^ 2 >= SWITCH_YD * SWITCH_YD then
+        if nearStretch(a, tr, i - 2, i) <= LINK_YD and nearStretch(b, tr, i + 1, math.min(i + 3, n)) <= LINK_YD then return l end
+      end
+    end
   end
   return nil
 end
+Finds.LinkLeg = linkLeg
 
 local function crossKey(a, b) return string.format("x:%d:%d,%d>%d:%d,%d", a.m, a.x, a.y, b.m, b.x, b.y) end
 local function parseCross(k)
