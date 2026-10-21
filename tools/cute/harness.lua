@@ -72,7 +72,8 @@ for c in ("iljtfr'.,:;|!I ()[]"):gmatch(".") do CHAR[c] = 0.30 end
 for c in ("mwMW"):gmatch(".") do CHAR[c] = 0.86 end
 for c in ("ABCDEFGHJKLNOPQRSTUVXYZ"):gmatch(".") do CHAR[c] = 0.66 end
 for c in ("0123456789"):gmatch(".") do CHAR[c] = 0.56 end
-local function plain(s) return (s or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "") end
+-- (an inline texture or atlas, |T...|t or |A...|a, takes about one wide letter's room: counted as an M)
+local function plain(s) return (s or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "M"):gsub("|A.-|a", "M") end
 local function textWidth(s, size)
   local w = 0
   for c in plain(s):gmatch(".") do w = w + (CHAR[c] or 0.53) end
@@ -1437,7 +1438,8 @@ local function dumpLayout(root, label)
         local anc = ancestors(o)
         local it = { k = o.__kind, x = r.l - rr.l, y = rr.t - r.t, w = r.r - r.l, h = r.t - r.b, i = idx, a = o.__alpha, depth = #anc, lvl = 0 }
         if o.__kind == "FontString" then
-          it.text, it.size, it.j, it.wrap, it.c = plain(o.__text), o.__size, o.__justify, o.__wrap, o.__color
+          -- (the colour codes out; an inline texture or atlas kept for the page to draw: render_layout.py)
+          it.text, it.size, it.j, it.wrap, it.c = (o.__text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""), o.__size, o.__justify, o.__wrap, o.__color
         elseif o.__kind == "Texture" then
           if o.__layer == "HIGHLIGHT" or o.__layer == "MASK" then it = nil
           else
@@ -2072,7 +2074,9 @@ do
   local me, kakaRow, garristan, mutu = rowOf(yezin, "Yezin"), rowOf(yezin, "Kaka"), rowOf(yezin, "Garristan"), rowOf(yezin, "Mutu")
   assert(me and kakaRow and garristan and mutu, "the rows")
   assert(cellOf(me, "level").label.__justify == "RIGHT" and cellOf(me, "zone").label.__justify == "LEFT", "numbers right, text left")
-  assert(sameColor(me.bar.__color, { 0.96, 0.96, 0.96 }), "your bar is white")
+  -- (the windows round: you by your row's 0.06 background and your class's bar; white is the priest's colour)
+  local wc = yezin.env.RAID_CLASS_COLORS.WARRIOR
+  assert(sameColor(me.bar.__color, { wc.r, wc.g, wc.b }) and math.abs(me.bg.__color[4] - 0.06) < 0.001, "your bar your class's, your row lighter")
   assert(sameColor(mutu.bar.__color, { 0.78, 0.61, 0.43 }), "a warrior's bar is the warrior colour")
   assert(cellOf(garristan, "level").label:GetText() == "1" and cellOf(garristan, "zone").label:GetText() == "Elwynn Forest", "a member without the addon shows the guild's level and zone")
   assert(cellOf(garristan, "xp").label:GetText() == "", "and nothing else")
@@ -2081,7 +2085,8 @@ do
   for _, h in ipairs(yezin.C.UI.headerCells.items) do
     if h:IsShown() and h.def then
       if sameColor(h.label.__color, { 0.96, 0.96, 0.96 }) then whiteHeaders = whiteHeaders + 1; assert(h.id == "level", "the sorted column is the white one") else greyHeaders = greyHeaders + 1 end
-      assert(h.label.__justify == ((h.def.kind == "text" or h.def.kind == "pips") and "LEFT" or "RIGHT"), "headers align like their column")
+      -- (the windows round: the XP column's track and percent start at its left, its header with them)
+      assert(h.label.__justify == ((h.def.kind == "text" or h.def.kind == "pips" or h.def.id == "xp") and "LEFT" or "RIGHT"), "headers align like their column")
     end
   end
   assert(whiteHeaders == 1 and greyHeaders >= 5, "one white header, the rest grey")
@@ -12420,6 +12425,52 @@ do
     assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(c)
     print("windows W15: the Dungeons tab with the pick's card across the top and the journal opened on it, its tiles plated and the open one white-edged; the Gear tab's items in their quality's edge")
+  end)
+end
+
+-- W16 (sub-project D): J's tables in the look: the guild master's and the officers' rank icons (12 px) before their
+-- class-coloured names; your row by its 0.06 background and your class's bar, never a white bar (white is the priest's);
+-- the XP column a 40 px track, 3 px tall, and the percent; for an officer, a member's Only-you value in the muted grey
+-- with the chat's lock icon at 10 px (a member sees what they saw)
+do
+  local function member(name, rank, class, level) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank == 0 and "Guild Master" or (rank <= 1 and "Officer" or "Raider"), class = class, level = level, online = true } end
+  isolated({ member("Bo", 0, "PRIEST", 30), member("Rone", 1, "WARRIOR", 20), member("Pim", 3, "MAGE", 19) }, function()
+    local bo = newClient(charOf({ "Bo", 0, "Guild Master", "PRIEST", 30 }))
+    local rone = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }))
+    local pim = newClient(charOf({ "Pim", 3, "Raider", "MAGE", 19 }))
+    for _, c in ipairs({ bo, rone, pim }) do login(c) end
+    tickAll(40)
+    local UI = rone.C.UI
+    sizeAll(rone, 1040, 640)
+    UI:Open("race")
+    local function row(short) for _, r in ipairs(UI.rows.items) do if r:IsShown() and r.row and r.row.short == short then return r end end end
+    local rb, rr, rp = row("Bo"), row("Rone"), row("Pim")
+    assert(rb and rr and rp, "the three rows")
+    assert(rb.rank:IsShown() and rb.rank.__tex == 132062 and rb.rank:GetWidth() == 12, "the guild master's mark: UI-Group-LeaderIcon at 12 px")
+    assert(rr.rank:IsShown() and rr.rank.__tex == 132061, "an officer's mark: UI-GROUP-ASSISTANTICON")
+    assert(not (rp.rank and rp.rank:IsShown()), "a member: none")
+    local wc = rone.env.RAID_CLASS_COLORS.WARRIOR
+    assert(sameColor(rr.bar.__color, { wc.r, wc.g, wc.b }) and math.abs(rr.bg.__color[4] - 0.06) < 0.001, "you: your class's bar and the 0.06 background, no white bar")
+    -- the XP column: the track and the percent
+    local xc
+    for _, cell in ipairs(rp.cells) do if cell:IsShown() and cell.def and cell.def.id == "xp" then xc = cell end end
+    assert(xc and xc.track:IsShown() and xc.track:GetWidth() == 40 and xc.track:GetHeight() == 3 and xc.label:GetText():find("^%d+%%$"), "the XP column: a 40 px track and the percent: " .. tostring(xc and xc.label:GetText()))
+    check(UI.frame, "W16 race, the look, 1040x640")
+    -- the officers' page: a member's Only-you gold muted, with the lock
+    UI:Open("officers")
+    local op = row("Pim")
+    local gold
+    for _, cell in ipairs(op.cells) do if cell:IsShown() and cell.def and cell.def.id == "gold" then gold = cell end end
+    assert(gold and gold.label:GetText():find("|T130944:10:10|t", 1, true) and sameColor(gold.label.__color, rone.C.UI.COLORS.MUTE), "an Only-you value, for an officer: muted, the lock: " .. tostring(gold and gold.label:GetText()))
+    check(UI.frame, "W16 officers, the look, 1040x640")
+    sizeAll(rone, 760, 420)
+    UI:Open("race"); check(UI.frame, "W16 race, the look, 760x420")
+    UI:Open("officers"); check(UI.frame, "W16 officers, the look, 760x420")
+    sizeAll(rone, 1040, 640)
+    -- a member sees what they saw: no lock, no value
+    pim.C.UI:Open("race")
+    for _, c in ipairs({ bo, rone, pim }) do leave(c) end
+    print("windows W16: J's tables: the rank marks, you by your background and your class's bar, the XP track and its percent, an officer's Only-you values muted with the lock")
   end)
 end
 

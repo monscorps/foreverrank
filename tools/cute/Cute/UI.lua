@@ -6,7 +6,7 @@
 -- game's size grabber in the bottom-right corner. Drawn flat and dark the way ElvUI and Shadowed Unit Frames draw
 -- theirs: one-pixel black borders, near-black panels, white and grey text in the client's narrow font, class colours on
 -- names and nothing else coloured unless it means something (green ready, red low). Numbers sit on the right of their
--- columns, text on the left; a two-pixel class-coloured bar marks every member's row, white for you.
+-- columns, text on the left; a two-pixel class-coloured bar marks every member's row, yours by its lighter background.
 -- A window's tabs are the modules that are on and say that window (Modules.lua), in their order; the guild's pages,
 -- drawn here, are the core's and always on:
 --   Race           every member as a row: level, XP, zone, pace, the leveling stats
@@ -472,6 +472,7 @@ local function shortLabel(def) return SHORT[def.id] or def.label end
 -- the width a column takes
 local function colWidth(def)
   if def.kind == "flag" then return 44 end
+  if def.id == "xp" then return 84 end -- (the track and the percent)
   if def.kind == "text" then return 110 end
   if def.kind == "list" then return 62 end
   if def.kind == "pips" then return math.max(36, 8 + 7 * (def.pips or 8)) end
@@ -479,7 +480,8 @@ local function colWidth(def)
   return math.max(56, 12 + #shortLabel(def) * 7)
 end
 -- numbers on the right of their column, text (and pips, drawn from the left) on the left
-local function alignOf(def) return (def.kind == "text" or def.kind == "pips") and "LEFT" or "RIGHT" end
+-- (the XP column's track and percent start at its left: the windows round)
+local function alignOf(def) return (def.kind == "text" or def.kind == "pips" or def.id == "xp") and "LEFT" or "RIGHT" end
 
 ----------------------------------------------------------------------------
 -- which columns a page shows
@@ -1100,7 +1102,7 @@ function UI:MakeRow(parent)
   r:SetHeight(ROW)
   r.bg = flat(r, "BACKGROUND", WHITE, 0.03)
   r.bg:SetAllPoints()
-  -- the class bar: two pixels at the left edge, white for you
+  -- the class bar: two pixels at the left edge, in the class's colour (you: your row's lighter background)
   r.bar = flat(r, "ARTWORK", WHITE, 1)
   r.bar:SetPoint("TOPLEFT", 0, 0)
   r.bar:SetPoint("BOTTOMLEFT", 0, 0)
@@ -1109,6 +1111,7 @@ function UI:MakeRow(parent)
   r:GetHighlightTexture():SetVertexColor(1, 1, 1, 0.05)
   r.name = text(r, 12, INK, "LEFT", NAME_W - 12)
   r.name:SetPoint("LEFT", 8, 0)
+  r.nx = 8 -- (the name's left: after the rank's mark where there is one, DrawTable)
   r.cells = {}
   -- on the Officers page a click picks the member, for the band's Mark untrusted (DrawOfficers)
   r:SetScript("OnClick", C.Safe(function(self)
@@ -1144,10 +1147,7 @@ function UI:Cell(r, i)
     c.label = text(c, 12, INK, "LEFT")
     c.label:SetPoint("LEFT", 4, 0)
     c.label:SetPoint("RIGHT", -4, 0)
-    c.bar = flat(c, "ARTWORK", WHITE, 0.7)
-    c.bar:SetHeight(1)
-    c.bar:SetPoint("BOTTOMLEFT", 4, 3)
-    c.bar:Hide()
+    c.lx = 4 -- (its label's left: fillCell moves it for the XP column)
     c.pips = {}
     r.cells[i] = c
     tooltip(c, function(tip, self)
@@ -1233,11 +1233,13 @@ function UI:Cell(r, i)
 end
 
 local INVERSE = { empty_slots = true, unenchanted = true, old_gear = true }
-local function fillCell(c, def, row, hidden, w)
+local LOCK = "|T130944:10:10|t " -- (UI-ChatFrame-LockIcon: a value only the officers and its member see)
+local function fillCell(c, def, row, hidden, w, onlyYou)
   c.def, c.row, c.hidden = def, row, hidden
   c.label:SetJustifyH(alignOf(def))
+  if c.lx ~= 4 then c.label:SetPoint("LEFT", 4, 0); c.lx = 4 end -- (placed again only when it moved: a redraw places nothing)
   for _, p in ipairs(c.pips) do p:Hide() end
-  c.bar:Hide()
+  if c.track then c.bar:Hide(); c.track:Hide() end
   if hidden then
     c.label:SetText("-")
     color(c.label, MUTE)
@@ -1271,13 +1273,29 @@ local function fillCell(c, def, row, hidden, w)
     if n == 0 then color(c.label, INVERSE[def.id] and GOOD or MUTE) elseif INVERSE[def.id] then color(c.label, WARN) end
   end
   if def.id == "xp" and type(v) == "number" then
-    c.bar:SetWidth(math.max(1, (w - 8) * v / 100))
+    -- (the windows round) the XP column: a 40 px track, 3 px tall, your share of the level on it, the percent after;
+    -- made for the cells that show it
+    if not c.track then
+      c.track = flat(c, "ARTWORK", { 0.16, 0.16, 0.16 }, 1)
+      c.track:SetSize(40, 3)
+      c.track:SetPoint("LEFT", 4, 0)
+      c.bar = flat(c, "OVERLAY", WHITE, 0.75)
+      c.bar:SetHeight(3)
+      c.bar:SetPoint("LEFT", 4, 0)
+    end
+    c.track:Show()
+    c.bar:SetWidth(math.max(1, 40 * math.max(0, math.min(100, v)) / 100))
     c.bar:Show()
+    c.label:SetJustifyH("LEFT")
+    if c.lx ~= 49 then c.label:SetPoint("LEFT", 49, 0); c.lx = 49 end
+    if not s:find("%%$") then s = s .. "%" end
   end
   if def.id == "durability" and type(v) == "number" and v < 50 then color(c.label, BAD) end
   if def.id == "ready" and type(v) == "number" then color(c.label, v == 2 and GOOD or (v == 1 and WARN or BAD)) end
   if def.kind == "flag" then color(c.label, v and INK or MUTE) end
   if v == nil then color(c.label, MUTE) end
+  -- (an officer seeing a member's Only-you value: muted, with the lock)
+  if onlyYou and v ~= nil then color(c.label, MUTE); s = LOCK .. s end
   if def.kind == "text" then fitText(c.label, s, w - 8) else c.label:SetText(s) end
 end
 
@@ -1358,6 +1376,9 @@ function UI:DrawTable(page, y0)
   local cols, hidden = columnsFor(page, room)
   local officer = C.Roster:MeOfficer()
   local rows = sortedRows(page)
+  -- (worked out once a draw: an officer's view of the Only-you columns, the line's officer ranks for the marks)
+  for _, col in ipairs(cols) do col.onlyYou = officer and C.Policy:Route(col.def.id) == "self" or nil end
+  local officerRanks = C.Policy:LineThreshold()
   -- header: grey labels, the sorted one white, a hairline under the row
   self.header:Show()
   self.header:ClearAllPoints()
@@ -1414,12 +1435,24 @@ function UI:DrawTable(page, y0)
       r.layoutGen = layoutGen
     end
     local picked = page == "officers" and row.guid ~= nil and row.guid == self.picked
-    r.bg:SetColorTexture(1, 1, 1, picked and 0.1 or (i % 2 == 0 and 0.03 or 0))
+    -- (you by your row's 0.06 background, never a white bar: white is the priest's colour)
+    r.bg:SetColorTexture(1, 1, 1, picked and 0.1 or (row.me and 0.06) or (i % 2 == 0 and 0.03 or 0))
     local cc = row.class and classColor(row.class) or MUTE
     if not row.online then cc = dimmed(cc) end
-    local bc = row.me and WHITE or cc
-    r.bar:SetColorTexture(bc[1], bc[2], bc[3], 1)
+    r.bar:SetColorTexture(cc[1], cc[2], cc[3], 1)
     color(r.name, row.addon and cc or MUTE)
+    -- the guild master's mark, an officer's (the line's officer ranks), before the name
+    local rank = row.guild and row.guild.rank
+    local mark = rank == 0 and 132062 or ((type(rank) == "number" and rank <= officerRanks) and 132061 or nil)
+    local nx = mark and 20 or 8
+    if mark then
+      -- (the guild master's or an officer's mark before the name, 12 px: UI-Group-LeaderIcon, UI-GROUP-ASSISTANTICON;
+      -- made for the rows that show one)
+      if not r.rank then r.rank = tex(r, "ARTWORK", nil, 12, 12); r.rank:SetPoint("LEFT", 6, 0) end
+      r.rank:SetTexture(mark); r.rank:Show()
+    elseif r.rank then r.rank:Hide() end
+    if r.nx ~= nx then r.name:SetPoint("LEFT", nx, 0); r.nx = nx end
+    local nameRoom = NAME_W - 16 - (mark and 12 or 0)
     -- "(you)" and "(no addon)" only where they fit whole: a two-word name keeps its words, and the grey of a member
     -- without the addon says it already. An officer sees a member they marked untrusted, or whose addon sent what
     -- cannot be, marked so (the row's tooltip says why)
@@ -1427,12 +1460,12 @@ function UI:DrawTable(page, y0)
     if not suffix and officer then suffix = row.untrusted and "  (untrusted)" or (row.suspect and "  (suspect)" or nil) end
     if suffix then
       -- (fitText says whether the text fit whole: no label text is read back and compared)
-      if not fitText(r.name, row.short .. suffix, NAME_W - 16) then fitText(r.name, row.short, NAME_W - 16) end
-    else fitText(r.name, row.short, NAME_W - 16) end
+      if not fitText(r.name, row.short .. suffix, nameRoom) then fitText(r.name, row.short, nameRoom) end
+    else fitText(r.name, row.short, nameRoom) end
     for k, col in ipairs(cols) do
       local c = r.cells[k]
       if not c:IsShown() then c:Show() end
-      fillCell(c, col.def, row, not C.Policy:CanSee(officer, row.me, col.def.id), col.w)
+      fillCell(c, col.def, row, not C.Policy:CanSee(officer, row.me, col.def.id), col.w, col.onlyYou and not row.me)
     end
   end)
   self.virtual = function() UI.rows:Show(UI.scroll.bar:GetValue() or 0, UI.scroll:View()) end
@@ -2057,12 +2090,12 @@ function UI:DrawGame()
       r.member = e
       r:SetPoint("TOPLEFT", rightX + 16, -y)
       r:SetWidth(rightW - 16)
-      r.bg:SetColorTexture(1, 1, 1, 0.015)
+      -- (you by the 0.06 background and your class's bar, never a white bar: white is the priest's)
+      r.bg:SetColorTexture(1, 1, 1, e.row.me and 0.06 or 0.015)
       local cc = e.row.class and classColor(e.row.class) or MUTE
       if not e.row.online then cc = dimmed(cc) end
-      local bc = e.row.me and WHITE or cc
       r.bar:Show()
-      r.bar:SetColorTexture(bc[1], bc[2], bc[3], 1)
+      r.bar:SetColorTexture(cc[1], cc[2], cc[3], 1)
       r.name:SetPoint("LEFT", 8, 0)
       r.name:SetWidth(nw - 24)
       color(r.name, cc)
