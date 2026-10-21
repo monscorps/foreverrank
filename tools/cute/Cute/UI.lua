@@ -370,7 +370,7 @@ local function scrollArea(parent, win, bottom)
   end
   function sf:Width()
     local w = self:GetWidth() or 0
-    if w < 100 then w = (win.frame:GetWidth() or W) - 2 - 8 - 18 - (win.insetX or 0) - (win.sideW and (win.sideW + 12) or 0) end
+    if w < 100 then w = (win.frame:GetWidth() or W) - 2 - 8 - 18 - (win.insetX or 0) - (win.sideW and (win.sideW + 12) or 0) - (win.leftW and (win.leftW + 12) or 0) end
     return w
   end
   return sf
@@ -564,7 +564,7 @@ function UI.Window(key)
   if win then return win end
   local spec = SPEC[key]
   if not spec then return nil end
-  win = setmetatable({ key = key, home = spec.home, page = spec.home, lists = {}, hosts = {} }, winMeta)
+  win = setmetatable({ key = key, home = spec.home, page = spec.home, lists = {}, hosts = {}, kits = {} }, winMeta)
   UI.windows[key] = win
   return win
 end
@@ -969,6 +969,22 @@ end
 -- a frame of a page's own under the scroll child (a module that attaches a view it draws itself: the quest engine's
 -- journal and gear pages); hidden by the next draw that does not ask for it, as the virtual lists are cleared
 UI.hosts = {}
+-- a band kit: a frame of a page's own on the band, made once by make(frame) and kept by key; hidden by every draw
+-- until the page that uses it shows it again
+UI.kits = {}
+function UI:Kit(key, make)
+  local k = self.kits[key]
+  if not k then
+    k = CreateFrame("Frame", nil, self.band)
+    k:SetPoint("TOPLEFT")
+    k:SetPoint("TOPRIGHT")
+    k:SetHeight(10)
+    self.kits[key] = k
+    if make then make(k) end
+  end
+  k:Show()
+  return k
+end
 -- (side: a host in the side column's scroll area, UI:Side)
 function UI:Host(key, side)
   local f = self.hosts[key]
@@ -980,7 +996,7 @@ end
 -- the scroll area and its bar between the band (bandH), the room on the left (insetX) and the side column (sideW)
 function UI:PlaceScroll()
   local h, side = self.bandH or 0, self.sideW and (self.sideW + 12) or 0
-  self.scroll:SetPoint("TOPLEFT", 8 + (self.insetX or 0), -8 - h)
+  self.scroll:SetPoint("TOPLEFT", 8 + (self.insetX or 0) + (self.leftW and (self.leftW + 12) or 0), -8 - h)
   self.scroll:SetPoint("BOTTOMRIGHT", -18 - side, (self.foot or 0) + 6)
   self.scroll.bar:SetPoint("TOPRIGHT", -7 - side, -8 - h)
   self.scroll.bar:SetPoint("BOTTOMRIGHT", -7 - side, (self.foot or 0) + 6)
@@ -993,6 +1009,7 @@ function UI:SetBand(h)
   self.band:SetShown(h > 0)
   self:PlaceScroll()
   if self.side and self.side:IsShown() then self.side:SetPoint("TOPRIGHT", -7, -8 - h) end
+  if self.leftBox and self.leftBox:IsShown() then self.leftBox:SetPoint("TOPLEFT", 8 + (self.insetX or 0), -8 - h) end
 end
 -- room kept on the left of the scroll area and the band (Settings' list of sections); 0 gives it back
 function UI:SetInset(x)
@@ -1021,6 +1038,20 @@ function UI:Side(w)
   self.side:Show()
   if self.sideW ~= w then self.sideW = w; self:PlaceScroll() end
   return self.sideScroll
+end
+-- (the windows round) a box of its own on the left of the scroll area, under the band, that does not scroll (the Route
+-- tab's map): w wide, the scroll area keeps the rest; a draw that asks for none gives the room back. Returns the box
+function UI:LeftBox(w)
+  if not self.leftBox then self.leftBox = CreateFrame("Frame", nil, self.content) end
+  self.leftGen = self.drawGen
+  local b = self.leftBox
+  b:ClearAllPoints()
+  b:SetPoint("TOPLEFT", 8 + (self.insetX or 0), -8 - (self.bandH or 0))
+  b:SetPoint("BOTTOMLEFT", 8 + (self.insetX or 0), (self.foot or 0) + 6)
+  b:SetWidth(w)
+  b:Show()
+  if self.leftW ~= w then self.leftW = w; self:PlaceScroll() end
+  return b
 end
 
 function UI:OnScroll()
@@ -2114,8 +2145,11 @@ local function drawBody(self)
   local gens = {}
   for key, v in pairs(self.lists) do gens[key] = v.gen end
   self.drawGen = (self.drawGen or 0) + 1
-  -- (the Quests tab's band is a kit of its own, not pooled pieces: hidden before any page draws, Guide.lua G.DrawBand)
-  if self.bandKit then self.bandKit:Hide() end
+  -- (a page's band kit, its own pieces and not pooled ones, the Quests tab's and the Route tab's: hidden before any
+  -- page draws, shown by the page that uses it: UI:Kit)
+  for _, k in pairs(self.kits) do k:Hide() end
+  -- (the side column and the left box are the page's that asks for them this draw: the scroll area whole until then)
+  if self.sideW or self.leftW then self.sideW, self.leftW = nil, nil; self:PlaceScroll() end
   if settings then C.Settings_Draw(self)
   elseif mod then C.Safe(function() mod.page(self, self.scroll) end, "page: " .. page)() end
   if self.rows.gen == rowsGen then self.rows:Clear() end
@@ -2125,6 +2159,7 @@ local function drawBody(self)
   for _, f in pairs(self.hosts) do if f.gen ~= self.drawGen and f:IsShown() then f:Hide() end end
   -- (a page that asked for no side column: its room back to the scroll area)
   if self.side and self.sideGen ~= self.drawGen and self.side:IsShown() then self.side:Hide(); self.sideW = nil; self:PlaceScroll() end
+  if self.leftBox and self.leftGen ~= self.drawGen and self.leftBox:IsShown() then self.leftBox:Hide(); self.leftW = nil; self:PlaceScroll() end
   self.labels:HideRest()
   self.bandLabels:HideRest(); self.bandButtons:HideRest(); self.bandLines:HideRest()
   local _, maxv = bar:GetMinMaxValues()

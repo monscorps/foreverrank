@@ -477,12 +477,9 @@ end
 local BAND_STEP, BAND_NEXT = 34, 17
 local function bandKit(UI)
   local kit = UI.bandKit
-  if kit then return kit end
+  if kit then kit:Show() return kit end
   local L, K = UI.Look, UI.COLORS
-  kit = CreateFrame("Frame", nil, UI.band)
-  kit:SetPoint("TOPLEFT")
-  kit:SetPoint("TOPRIGHT")
-  kit:SetHeight(10)
+  kit = UI:Kit("quests")
   local step = CreateFrame("Button", nil, kit)
   step:SetHeight(BAND_STEP)
   step:RegisterForClicks("LeftButtonUp", "RightButtonUp")

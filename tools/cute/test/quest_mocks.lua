@@ -480,6 +480,10 @@ return function(env, c, o, newObj, api, secret)
       return { mapID = id, mapType = kind, parentMapID = kind == 1 and 0 or (kind == 3 and not ISLE[id]) and continentOf(id) or 947, name = mapName(id) }
     end),
     MapHasArt = api(function(id) return not (c.noArt or {})[id] end),
+    -- a zone's art layer as the game's map canvas reads it (MapDocumentation.lua: UiMapLayerInfo; the tiles row by row,
+    -- Blizzard_MapCanvasDetailLayer.lua:50-70): a Classic zone's 1002 x 668 in 256 px tiles, stand-in file ids
+    GetMapArtLayers = api(function(id) if (c.noArt or {})[id] then return {} end return { { layerWidth = 1002, layerHeight = 668, tileWidth = 256, tileHeight = 256, minScale = 1, maxScale = 1, additionalZoomSteps = 0 } } end),
+    GetMapArtLayerTextures = api(function(id, layer) if (c.noArt or {})[id] then return {} end local out = {}; for k = 1, 12 do out[k] = 900000 + k end; return out end),
     GetMapChildrenInfo = api(function(id)
       local out = {}
       if id == 947 then

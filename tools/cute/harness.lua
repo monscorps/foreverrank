@@ -4956,8 +4956,8 @@ do
     rone.C.UI:Open("route")
     assert(L.page == "route", "the Route tab")
     local tr = texts(rone)
-    assert(tr:find(" XP, level ", 1, true) and (tr:find("Start run", 1, true) or tr:find("End run", 1, true)), "the route's band: the summary and the run button:\n" .. tr)
-    assert(tr:find("^1%. ") or tr:find("\n1%. ") or tr:find("Nothing to hand in yet.", 1, true), "the legs numbered, or the empty line:\n" .. tr)
+    -- (the windows round: where the route takes you, the stops as a timeline; W14)
+    assert((tr:find("Level %d+%.%d to ") or tr:find("Nothing on the route yet", 1, true)) and (tr:find("Start run", 1, true) or tr:find("End run", 1, true)), "the route's band: the summary and the run button:\n" .. tr)
     check(L.frame, "the quest window, Route")
     rone.C.UI:Open("settings", "route")
     local tro = texts(rone)
@@ -5343,7 +5343,8 @@ do
                        xp = 0, level = 5, t = 51, byQuest = {} }
       c.C.UI:Open("route")
       local shown = texts(c)
-      assert(shown:find("1. Goldshire", 1, true) and not shown:find("Elwynn Forest (", 1, true), "the Route page's stop: its place:\n" .. shown)
+      -- (the windows round: its NPC and its place, "Smith Argus, Goldshire", on the timeline's stop)
+      assert(shown:find("Smith Argus, Goldshire", 1, true) and not shown:find("Elwynn Forest (", 1, true), "the Route page's stop: its place:\n" .. shown)
       QB.routePlan, QB.Target.Mode = keepPlan, keepMode
     end
     -- the engine's words: Cute's name, no /qb
@@ -12299,6 +12300,80 @@ do
     assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
     leave(c)
     print(string.format("windows W13: the Quests tab in the look: the band (24 px icon, 15 px words, the count apart, the level over the XP bar), two columns at 1040 (the pick a card with the EJ's art), one at 760; %d places and %d quests drawn, each its icon and bar", places, quests))
+  end)
+end
+
+-- W14 (sub-project D): the Route tab: the band says where the route takes you over the XP bar, a green segment a stop
+-- that pays; the map on the left (340 x 226, the zone's art tiles as the game lays them, the stops' pins at the game's
+-- size, merged with a count where they would touch, the one stroke from you to the target, you as the game's arrow);
+-- the stops as a timeline (pattern B), the first the target with its ring, the level-up rule where the route crosses a
+-- level; a stop's hover lights its pin, its click shows it on the arrow, a quest's reads it. None: one dim row
+do
+  local function member(name, rank) return { name = name .. "-Forever", guid = guidOf(name), rank = rank, rankName = rank <= 1 and "Officer" or "Raider", class = "WARRIOR", level = 20, online = true } end
+  isolated({ member("Rone", 1) }, function()
+    local c = newClient(charOf({ "Rone", 1, "Officer", "WARRIOR", 20 }, { modules = { "Cute_Quest" }, addonState = {}, quest = true, log = { [7] = 2, [33] = 1, [18] = 1, [15] = 1 } }))
+    login(c); tickAll(6)
+    local QB = c.addons[2].private
+    local UI = c.C.UI
+    sizeAll(c, 1040, 640)
+    UI:Open("route")
+    local L = qwin(c)
+    local r = QB.Target.Route()
+    local legs = r and r.legs or {}
+    local kit = L.kits.route
+    assert(kit and kit:IsShown(), "the route's band")
+    local host = L.hosts.route
+    local shown = 0
+    for _, st in ipairs(host.stops.items) do if st:IsShown() then shown = shown + 1 end end
+    if #legs > 0 then
+      assert(kit.line:GetText():find("^Level %d+%.%d to %d+%.%d"), "where the route takes you: " .. tostring(kit.line:GetText()))
+      local pay = 0
+      for _, leg in ipairs(legs) do local g = 0; for _, row in ipairs(leg.rows or {}) do g = g + (row.xp or 0) end; if g > 0 then pay = pay + 1 end end
+      local segs = 0
+      for _, sg in ipairs(kit.xp.segs) do if sg:IsShown() then segs = segs + 1 end end
+      assert(segs == pay, "a green segment a stop that pays: " .. segs .. " of " .. pay)
+      assert(shown == #legs, "a stop a leg: " .. shown .. " of " .. #legs)
+      local first
+      for _, st in ipairs(host.stops.items) do if st:IsShown() and st.ring:IsShown() then first = st end end
+      assert(first and first.node:IsShown() and first.node:GetWidth() == 24, "the target: its ring and its 24 px node")
+      -- the map: the box at 340 x 226, tiles, pins (merged where they would touch), the stroke, you
+      local box = L.leftBox
+      local m = box and box.map
+      assert(box:IsShown() and m and m:GetWidth() == 340 and m:GetHeight() == 226, "the map, 340 x 226")
+      local tiles, pins, merged = 0, 0, 0
+      for _, t in ipairs(m.tiles) do if t:IsShown() then tiles = tiles + 1 end end
+      for _, p in ipairs(m.pins) do if p:IsShown() then pins = pins + 1; assert(p:GetWidth() == 22, "a pin at the game's size"); if p.slot.badge:IsShown() then merged = merged + 1 end end end
+      assert(tiles > 0 and pins >= 1 and pins <= #legs and m.me:IsShown(), "the zone's tiles, the stops' pins, you: " .. tiles .. ", " .. pins)
+      -- a stop's hover lights its pin
+      first.__scripts.OnEnter(first)
+      local lit = 0
+      for _, p in ipairs(m.pins) do if p:IsShown() and p.glow:IsShown() then lit = lit + 1 end end
+      first.__scripts.OnLeave(first)
+      assert(lit == 1, "the target's hover lights its pin")
+      -- the level-up rule, where a stop's level after crosses a whole level
+      local crossings, prev = 0, (QB.state.level or 1) + (QB.state.xp or 0) / math.max(1, QB.state.xpMax or 1)
+      for _, leg in ipairs(legs) do if type(leg.leave) == "number" then if math.floor(leg.leave) > math.floor(prev) then crossings = crossings + 1 end; prev = leg.leave end end
+      local rules = 0
+      for _, rl in ipairs(host.rules.items) do if rl:IsShown() then rules = rules + 1; assert(rl.text:GetText():find("^Level %d+$"), "the rule's words") end end
+      assert(rules == crossings, "a rule a level crossed: " .. rules .. " of " .. crossings)
+      -- a quest's line reads it
+      for _, q in ipairs(first.qs) do if q:IsShown() then q.__scripts.OnClick(q, "LeftButton"); break end end
+      assert(L.reading, "a quest's line reads it")
+      QB.Reader.Back(L)
+    else
+      assert(texts(c):find("Nothing on the route yet: take a quest from Quests.", 1, true), "no route: one row says so")
+    end
+    check(L.frame, "W14 the Route tab, 1040x640")
+    sizeAll(c, 760, 420)
+    UI:Open("route")
+    check(L.frame, "W14 the Route tab, 760x420")
+    -- the map goes with the tab
+    UI:Open("quests")
+    assert(not L.leftBox:IsShown(), "the map's box gone with the Route tab")
+    sizeAll(c, 1040, 640)
+    assert(#(c.env.CuteQuestDB.errors or {}) == 0, "no engine error recorded")
+    leave(c)
+    print(string.format("windows W14: the Route tab: the band over the XP bar (a segment a paying stop), the map (tiles, pins at 22 px merged where they touch, the stroke, you), %d stops as a timeline with the target's ring and the level-up rules; a stop's hover lights its pin", #legs))
   end)
 end
 

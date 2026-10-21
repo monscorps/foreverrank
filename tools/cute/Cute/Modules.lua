@@ -119,6 +119,8 @@ function Cute.Font() return C.UI and C.UI.FONT or "Fonts\\ARIALN.TTF" end
 function Cute.Host(ui, key, side) return ui:Host(key, side) end
 -- (the windows round) a column of its own on the window's right, w wide (UI:Side); its hosts: Cute.Host(ui, key, true)
 function Cute.Side(ui, w) return ui:Side(w) end
+-- (the windows round) a box of its own on the window's left that does not scroll, w wide (UI:LeftBox)
+function Cute.LeftBox(ui, w) return ui:LeftBox(w) end
 -- a window by key ("guild", "quests"): what a module's page draws in (Cute_Quest's step frame reads a quest in its own)
 function Cute.Window(key) return C.UI and C.UI.Window(key) or nil end
 
