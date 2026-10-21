@@ -308,10 +308,11 @@ function A:Earn(e)
     if it and it.approx and not e.approx then it.t, it.approx = t, nil; if it.card then it.card.value = "Earned " .. dayText(t) end end
     return false
   end
-  remember(d, key, A.Day(t))
-  A.taken = A.taken + 1
-  return H():Queue({ id = id, src = "ach", from = e.from or "server", digest = "ach", what = info.name, mark = server and "server" or nil, t = t,
+  -- (remembered once queued: one the day's row had no room for may come again with tomorrow's ach_recent)
+  local ok = H():Queue({ id = id, src = "ach", from = e.from or "server", digest = "ach", what = info.name, mark = server and "server" or nil, t = t,
     approx = e.approx or nil, lock = not H().Open("a" .. e.id) or nil, card = achCard(info, m, t) })
+  if ok then remember(d, key, A.Day(t)); A.taken = A.taken + 1 end
+  return ok
 end
 -- a guild achievement from guild news: a guild card (no member: the guild's name, the achievement's icon)
 local function guildName()
@@ -328,11 +329,12 @@ function A:GuildEarn(id, t)
   local d = store()
   local key = "guild:" .. id
   if d.achSeen[key] then return false end
-  remember(d, key, A.Day(t))
-  return H():Queue({ id = "g:" .. id, src = "ach", from = "server", digest = "ach", what = info.name, mark = "server", t = t,
+  local ok = H():Queue({ id = "g:" .. id, src = "ach", from = "server", digest = "ach", what = info.name, mark = "server", t = t,
     lock = not H().Open("a" .. id) or nil,
     card = { guild = true, sfx = "G", name = clean(guildName(), 24), kind = "ach", title = clean(info.name, 24), line = clean(info.desc, 56),
       value = "Earned " .. dayText(t), valueLabel = clean(info.cat or "Guild achievement", 24), icon = info.icon, source = "a" .. id } })
+  if ok then remember(d, key, A.Day(t)) end
+  return ok
 end
 
 -- 1A (Comm.lua hands it over, on GUILD or whispered): an officer's client takes it; a member's ignores it

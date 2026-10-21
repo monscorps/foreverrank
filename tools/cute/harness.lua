@@ -13568,6 +13568,13 @@ do local function cardsStage()
     ada.C.Comm:SendPolicy()
     tickAll(5)
     assert(max.C.Rules.Get("achGuild") == 1 and A(ada).Taking(), "on again")
+    -- the guild card published: a member shows it under their own guild's name, the achievement's icon in the picture
+    H(ada).ticked[gc.id] = true
+    local gset = H(ada):Compose(H(ada).Ticked())
+    assert(#gset.cards == 1 and H(ada):Publish(gset, false), "the guild card published")
+    tickAll(5)
+    local gs = H(mia).Sets()[1]
+    assert(gs and gs.cards[1].guild and gs.cards[1].name == "Cute" and gs.cards[1].icon == 236544 and not gs.cards[1].guid, "a member shows the guild card under the guild's name")
     -- /cute diag cards: counts and states, no name
     local c0 = #ada.chat
     ada.env.SlashCmdList.CUTE("diag cards")
