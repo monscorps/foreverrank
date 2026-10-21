@@ -66,6 +66,19 @@ function T.Route()
   return plan
 end
 
+-- (the review round) a stop as the arrow names it: its place in words, as the map's pins and the step frame do
+-- (Travel.lua's TV.StopPlace: "Goldshire", never Model.lua's "Elwynn Forest (42, 65)", which stays the stop's name, for
+-- matching); and the tooltip's head with it. Worked out once a stop, no string a look
+local placeFor, placeName, placeShown, placeHead = nil, nil, nil, nil
+local function placeOf(st, name)
+  if st ~= placeFor or name ~= placeName then
+    placeFor, placeName = st, name
+    placeShown = (st and QB.Travel and QB.Travel.StopPlace and QB.Travel.StopPlace(st)) or name
+    placeHead = placeShown ~= name and ("Next stop: " .. placeShown:gsub("%%", "%%%%")) or nil
+  end
+  return placeShown, placeHead
+end
+
 -- stop 1 as the map's pins have it (Pins.lua's list, from T.Route), else the route's first leg
 local function stopOne()
   local P = QB.Pins
@@ -389,6 +402,7 @@ function T.Get(me)
   if not (d or leg) then return nothing() end
   local st = d and d.stop or (leg and leg.stop)
   local name = d and d.name or st.name
+  local shown, head = placeOf(st, name)
   local c, wx, wy
   if st and st.c and st.wx then
     c, wx, wy = st.c, st.wx, st.wy
@@ -435,13 +449,13 @@ function T.Get(me)
     cur.obj, cur.name, cur.c, cur.wx, cur.wy = true, s.name, s.c, s.wx, s.wy
     cur.m, cur.x, cur.y, cur.qid = s.sp.m, s.sp.x * 100, s.sp.y * 100, s.qid
     cur.quests, cur.what, cur.verb, cur.head = nil, nil, "Objective", "Objective: %s"
-    if cur.afterFor ~= name then cur.after, cur.afterFor = "Then hand it in at " .. name .. ".", name end
+    if cur.afterFor ~= name then cur.after, cur.afterFor = "Then hand it in at " .. shown .. ".", name end
   elseif pend and pend.ent then
     -- nothing to hand in there yet: the dungeon's entrance, to do the quest there
     cur.obj, cur.name, cur.c, cur.wx, cur.wy = true, pendName, pend.c, pend.wx, pend.wy
     cur.m, cur.x, cur.y, cur.qid = pend.ent.m, pend.ent.x, pend.ent.y, pend.qid
     cur.quests, cur.what, cur.verb, cur.head = pend.n, "to do there", "Enter", "Enter %s"
-    if changed then cur.after, cur.afterFor = "Then hand in at " .. name .. ".", nil end
+    if changed then cur.after, cur.afterFor = "Then hand in at " .. shown .. ".", nil end
   elseif pend then
     -- nothing to hand in there yet, and no way in known: the stop as it is, to finish the quest first ("Finish
     -- <quest>" on the arrow; its tooltip's head the same, the quest's name in it: no %s)
@@ -459,6 +473,7 @@ function T.Get(me)
     cur.qid = lowest(d, leg)
     cur.quests = d and d.quests and #d.quests or (leg and leg.rows and #leg.rows) or nil
     cur.what, cur.verb, cur.head, cur.after, cur.afterFor = "to hand in there", nil, nil, nil, nil
+    if shown ~= name then cur.label, cur.head = shown, head end
   end
   if changed then
     T.ver = T.ver + 1

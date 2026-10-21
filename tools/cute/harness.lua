@@ -5186,9 +5186,36 @@ do
     QB.Arrow:Set(true)
     local arrowTip = tipOf(c.env.QuestBankArrow)
     assert(arrowTip:find("Click: the Quests page.", 1, true) and not arrowTip:find("Route page", 1, true), "the arrow's click, as it is: " .. arrowTip)
+    -- (the review round) and a step with no quest in the step frame: its tooltip names the page its click opens
+    do
+      local G0, SF0 = QB.Guide, QB.StepFrame
+      local keep0 = G0.steps
+      G0.steps = { { kind = "travel", text = "Fly to Ironforge", c = 0, wx = -4821, wy = -1155 } }
+      G0.ver = G0.ver + 1; SF0.Apply(); SF0.Refresh()
+      local row = c.env.QuestBankStep.rows[1]
+      local rowTip = tipOf(row)
+      if row.__scripts.OnLeave then row.__scripts.OnLeave(row) end
+      assert(rowTip:find("Click: the Quests page.", 1, true) and not rowTip:find("the way there", 1, true), "a travel step's click, as it is: " .. rowTip)
+      G0.steps = keep0; G0.ver = G0.ver + 1; SF0.Refresh()
+    end
     c.C.Modules.Set("Cute_Quest:route", true); tick(c, 1)
     QB.UI:Open(3)
     assert(c.C.UI.page == "route", "Route on: the Route page: " .. tostring(c.C.UI.page))
+    -- (the review round) a stop out of a town on the Route page: its place in words, as the map's pins, the step frame
+    -- and the arrow name it, not Model.lua's zone and spot (kept for matching)
+    do
+      local D = QB.Data
+      local argus
+      for i, n in ipairs(D.NPC) do if n[1] == "Smith Argus" then argus = i end end
+      local keepPlan, keepMode = QB.routePlan, QB.Target.Mode
+      QB.Target.Mode = function() return "plan" end
+      QB.routePlan = { legs = { { stop = { name = "Elwynn Forest (42, 65)", npcs = { argus }, m = 1429, x = 42, y = 65 }, rows = {}, t = 51, travel = 4, kind = "foot", arrive = 5, leave = 5 } },
+                       xp = 0, level = 5, t = 51, byQuest = {} }
+      c.C.UI:Open("route")
+      local shown = texts(c)
+      assert(shown:find("1. Goldshire", 1, true) and not shown:find("Elwynn Forest (", 1, true), "the Route page's stop: its place:\n" .. shown)
+      QB.routePlan, QB.Target.Mode = keepPlan, keepMode
+    end
     c.C.Modules.Set("Cute_Quest:route", false); tick(c, 1)
     -- the engine's words: Cute's name, no /qb
     local G, SF, A = QB.Guide, QB.StepFrame, QB.Arrow
@@ -5203,18 +5230,6 @@ do
     s.arrowMode = "pin"; s.arrowPin = nil
     A:Set(true); A:Update()
     assert(c.env.QuestBankArrow.dist:GetText() == "Click a quest or a stop in Cute", "the arrow's empty line names Cute: " .. tostring(c.env.QuestBankArrow.dist:GetText()))
-    -- (the review round) and a step with no quest in the step frame: its tooltip names the page its click opens
-    do
-      local G0, SF0 = QB.Guide, QB.StepFrame
-      local keep0 = G0.steps
-      G0.steps = { { kind = "travel", text = "Fly to Ironforge", c = 0, wx = -4821, wy = -1155 } }
-      G0.ver = G0.ver + 1; SF0.Apply(); SF0.Refresh()
-      local row = c.env.QuestBankStep.rows[1]
-      local rowTip = tipOf(row)
-      if row.__scripts.OnLeave then row.__scripts.OnLeave(row) end
-      assert(rowTip:find("Click: the Quests page.", 1, true) and not rowTip:find("the way there", 1, true), "a travel step's click, as it is: " .. rowTip)
-      G0.steps = keep0; G0.ver = G0.ver + 1; SF0.Refresh()
-    end
     s.arrowMode = nil
     A:Menu()
     local looked = false

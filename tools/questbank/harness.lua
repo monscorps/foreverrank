@@ -18422,6 +18422,25 @@ end)()
     G.steps = keep; G.ver = G.ver + 1; SF.Refresh()
   end }
 
+  -- 17. (the review round) One stop, two names: the map's pin said "Smith Argus, Goldshire" and the step frame "Smith
+  -- Argus - Goldshire", while the arrow and its tooltip still said "Elwynn Forest (42, 65)" (Model.lua's name for a stop
+  -- out of a town, kept for matching). Now the arrow names its place as the others do
+  ENGCASES[#ENGCASES + 1] = { "a stop out of town: the arrow names its place, as the map's pins and the step frame do", function()
+    local c = char("Argus", "WARRIOR", "Warrior", 1, {}, { level = 18, world = { 0, -8914, -133 }, map = 1429, log = { { 118, 1 } }, bind = "Goldshire" })
+    local env, QB = c.env, c.QB
+    planned(c)
+    local leg = QB.Target.Route().legs[1]
+    assert(leg and not leg.stop.town and leg.stop.name:find("%(%d+, %d+%)$"), "a stop out of a town, named by its zone and spot: " .. tostring(leg and leg.stop.name))
+    local A = QB.Arrow
+    A:Set(true); A:Update()
+    local F = env.QuestBankArrow
+    assert(A.t and A.t.kind == "route" and not A.t.near, "the arrow leads to the stop")
+    assert(F.name:GetText() == "Goldshire", "the arrow names the place: " .. tostring(F.name:GetText()))
+    lines = {}; F.__scripts.OnEnter(F); F.__scripts.OnLeave(F)
+    assert(lines[1] == "Next stop: Goldshire", "its tooltip's head: " .. tostring(lines[1]))
+    for _, l in ipairs(lines) do assert(not l:find("Elwynn Forest (", 1, true), "no zone and spot: " .. l) end
+  end }
+
   for _, case in ipairs(ENGCASES) do
     case[2]()
     print("engine: " .. case[1] .. ": ok")
