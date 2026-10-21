@@ -380,7 +380,7 @@ function G.Fill(level)
   -- place out of a dungeon: a run is a party's)
   for k in pairs(best) do best[k] = nil end
   if QB.UI and QB.UI.PlaceGroups and not QB:Banking() then
-    local grouped = IsInGroup and IsInGroup() and true or false
+    local grouped = QB.UI.Grouped and QB.UI.Grouped() or false -- (as the Now view tells it: Lists.lua)
     for _, g in ipairs(QB.UI.PlaceGroups(level, true)) do
       if not g.skipped and (grouped or not g.cat.dungeon) then
         for _, it in ipairs(g.set) do if it.grp == 2 then best[it.id] = true end end
